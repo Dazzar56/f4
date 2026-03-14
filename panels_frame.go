@@ -198,6 +198,31 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	}
 
+	// Esc clears command line if it's not empty
+	if e.VirtualKeyCode == vtinput.VK_ESCAPE && !pf.cmdLine.IsEmpty() {
+		pf.cmdLine.Clear()
+		return true
+	}
+
+	// Ctrl+Enter inserts selected file name
+	if e.VirtualKeyCode == vtinput.VK_RETURN && ctrl {
+		var name string
+		if pf.activeIdx == 0 {
+			name = pf.left.GetSelectedName()
+		} else {
+			name = pf.right.GetSelectedName()
+		}
+		if name != "" {
+			txt := pf.cmdLine.Edit.GetText()
+			// Add space if needed
+			if txt != "" && txt[len(txt)-1] != ' ' {
+				pf.cmdLine.InsertString(" ")
+			}
+			pf.cmdLine.InsertString(name)
+		}
+		return true
+	}
+
 	// If menu is active, it takes all input
 	if pf.menuActive {
 		if e.VirtualKeyCode == vtinput.VK_ESCAPE {

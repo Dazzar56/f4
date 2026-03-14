@@ -15,4 +15,5 @@ type Panel interface {
 	IsFocused() bool
 	SetPosition(x1, y1, x2, y2 int)
 	GetPosition() (int, int, int, int)
+	GetSelectedName() string
 }

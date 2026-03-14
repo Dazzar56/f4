@@ -134,3 +134,14 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 func (fp *FileSystemPanel) ProcessMouse(e *vtinput.InputEvent) bool {
 	return fp.table.ProcessMouse(e)
 }
+
+func (fp *FileSystemPanel) GetSelectedName() string {
+	if len(fp.entries) == 0 || fp.table.SelectPos < 0 || fp.table.SelectPos >= len(fp.entries) {
+		return ""
+	}
+	entry := fp.entries[fp.table.SelectPos]
+	if entry.name == ".." {
+		return ""
+	}
+	return entry.name
+}

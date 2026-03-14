@@ -70,3 +70,7 @@ func (cl *CommandLine) Clear() {
 func (cl *CommandLine) IsEmpty() bool {
 	return cl.Edit.GetText() == ""
 }
+// InsertString adds text to the command line.
+func (cl *CommandLine) InsertString(text string) {
+	cl.Edit.InsertString(text)
+}
