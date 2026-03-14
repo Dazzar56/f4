@@ -30,6 +30,8 @@ func main() {
 
 	// 3. Настраиваем FrameManager
 	vtui.FrameManager.Init(scr)
+	// Синхронизируем строки vtui с нашей локализацией
+	vtui.UIStrings.DesktopWelcome = Msg("Desktop.Welcome")
 
 	// Применяем пользовательскую палитру из системной папки конфигов
 	configDir, err := os.UserConfigDir()

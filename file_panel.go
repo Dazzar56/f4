@@ -27,7 +27,7 @@ func (f *fileEntry) GetCellText(col int) string {
 		return f.name
 	case 1:
 		if f.isDir {
-			return "UP-DIR"
+			return Msg("Panel.UpDir")
 		}
 		return fmt.Sprintf("%d", f.size)
 	}
@@ -45,8 +45,8 @@ type FileSystemPanel struct {
 func NewFileSystemPanel(x, y, w, h int, path string) *FileSystemPanel {
 	absPath, _ := filepath.Abs(path)
 	cols := []vtui.TableColumn{
-		{Title: "Name", Width: w - 15},
-		{Title: "Size", Width: 12, Alignment: vtui.AlignRight},
+		{Title: Msg("Panel.Column.Name"), Width: w - 15},
+		{Title: Msg("Panel.Column.Size"), Width: 12, Alignment: vtui.AlignRight},
 	}
 
 	fp := &FileSystemPanel{

@@ -53,7 +53,7 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 	pf.right.Show(scr)
 
 	// Командная строка (заглушка)
-	scr.Write(0, scr.Height()-1, vtui.StringToCharInfo("> ", vtui.SetRGBFore(0, 0xFFFFFF)))
+	scr.Write(0, scr.Height()-1, vtui.StringToCharInfo(Msg("Panels.Prompt"), vtui.SetRGBFore(0, 0xFFFFFF)))
 }
 
 func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
