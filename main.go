@@ -20,9 +20,6 @@ func main() {
 	}
 	defer restore()
 
-	fmt.Print("\x1b[?25l") // Hide cursor
-	defer fmt.Print("\x1b[?25h")
-
 	// 2. Initialize ScreenBuf
 	width, height, _ := term.GetSize(int(os.Stdin.Fd()))
 	scr := vtui.NewScreenBuf()
