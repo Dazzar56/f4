@@ -95,6 +95,11 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 	}
 
 	panelH := h - reservedBottom
+	if pf.pty != nil {
+		pf.pty.SetSize(w, panelH)
+		pf.termView.SetPosition(0, 0, w-1, panelH-1)
+		pf.termView.Resize(w, panelH)
+	}
 	leftW := w / 2
 	rightW := w - leftW
 
@@ -203,21 +208,23 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		pf.showPanels = !pf.showPanels
 		return true
 	}
-	// Terminal input routing
-	if !pf.showPanels {
-		pf.pty.Write([]byte(pf.translateInput(e)))
-		return true
-	}
 
 	// Enter handling
 	if e.VirtualKeyCode == vtinput.VK_RETURN {
 		if !pf.cmdLine.IsEmpty() {
-			// Placeholder for actual command execution
-			vtui.DebugLog("EXECUTE COMMAND: %s", pf.cmdLine.Edit.GetText())
+			cmd := pf.cmdLine.Edit.GetText()
+			if pf.pty != nil {
+				pf.pty.Write([]byte(cmd + "\r"))
+			}
 			pf.cmdLine.Clear()
 			return true
+		} else if !pf.showPanels {
+			if pf.pty != nil {
+				pf.pty.Write([]byte("\r"))
+			}
+			return true
 		}
-		// If command line is empty, Enter is passed to panels (to enter dir)
+		// If command line is empty and panels visible, Enter is passed to panels (to enter dir)
 	}
 
 	// 2. Try global hotkeys handled by PanelsFrame
@@ -317,19 +324,3 @@ func (pf *PanelsFrame) openSubMenu(index int) {
 	vtui.FrameManager.Push(menu)
 }
 func (pf *PanelsFrame) IsDone() bool             { return pf.done }
-func (pf *PanelsFrame) translateInput(e *vtinput.InputEvent) string {
-	if e.Char != 0 {
-		return string(e.Char)
-	}
-	switch e.VirtualKeyCode {
-	case vtinput.VK_RETURN: return "\r"
-	case vtinput.VK_UP:     return "\x1b[A"
-	case vtinput.VK_DOWN:   return "\x1b[B"
-	case vtinput.VK_RIGHT:  return "\x1b[C"
-	case vtinput.VK_LEFT:   return "\x1b[D"
-	case vtinput.VK_BACK:   return "\x7f"
-	case vtinput.VK_TAB:    return "\t"
-	case vtinput.VK_ESCAPE: return "\x1b"
-	}
-	return ""
-}

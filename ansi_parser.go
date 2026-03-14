@@ -3,6 +3,7 @@ package main
 import (
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/unxed/vtui"
 )
@@ -23,6 +24,7 @@ type AnsiParser struct {
 	CurParam  strings.Builder
 	Attr      uint64
 	term      *TerminalView
+	runeBuf   []byte
 }
 
 func NewAnsiParser(t *TerminalView) *AnsiParser {
@@ -38,8 +40,20 @@ func (p *AnsiParser) Process(data []byte) {
 		case StateGround:
 			if b == 0x1b {
 				p.State = StateEsc
-			} else {
+				p.runeBuf = p.runeBuf[:0]
+			} else if b < 0x80 {
 				p.term.PutChar(rune(b), p.Attr)
+				p.runeBuf = p.runeBuf[:0]
+			} else {
+				p.runeBuf = append(p.runeBuf, b)
+				if utf8.FullRune(p.runeBuf) {
+					r, _ := utf8.DecodeRune(p.runeBuf)
+					p.term.PutChar(r, p.Attr)
+					p.runeBuf = p.runeBuf[:0]
+				} else if len(p.runeBuf) >= 4 {
+					p.term.PutChar(rune(p.runeBuf[0]), p.Attr)
+					p.runeBuf = p.runeBuf[1:]
+				}
 			}
 		case StateEsc:
 			if b == '[' {

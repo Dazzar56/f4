@@ -26,6 +26,13 @@ func NewTerminalView(w, h int) *TerminalView {
 	return tv
 }
 
+func (tv *TerminalView) Resize(w, h int) {
+	if tv.Width == w && tv.Height == h {
+		return
+	}
+	tv.ResetBuffer(w, h)
+}
+
 func (tv *TerminalView) ResetBuffer(w, h int) {
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
@@ -37,6 +44,8 @@ func (tv *TerminalView) ResetBuffer(w, h int) {
 		}
 	}
 	tv.Width, tv.Height = w, h
+	tv.CursorX = 0
+	tv.CursorY = h - 1 // Start output at the bottom
 }
 
 func (tv *TerminalView) PutChar(r rune, attr uint64) {
@@ -145,13 +154,10 @@ func (tv *TerminalView) EraseLine(mode int, attr uint64) {
 }
 
 func (tv *TerminalView) Show(scr *vtui.ScreenBuf) {
+	tv.ScreenObject.Show(scr)
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
 	for y, line := range tv.Lines {
-		scr.Write(0, y, line)
-	}
-	if tv.IsVisible() {
-		scr.SetCursorPos(tv.CursorX, tv.CursorY)
-		scr.SetCursorVisible(true)
+		scr.Write(tv.X1, tv.Y1+y, line)
 	}
 }
