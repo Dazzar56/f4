@@ -10,7 +10,7 @@ import (
 	"github.com/unxed/vtui"
 )
 
-// fileEntry реализует vtui.TableRow для отображения в таблице.
+// fileEntry implements vtui.TableRow for display in a table.
 type fileEntry struct {
 	name  string
 	size  int64
@@ -34,7 +34,7 @@ func (f *fileEntry) GetCellText(col int) string {
 	return ""
 }
 
-// FileSystemPanel — панель, отображающая файлы на диске.
+// FileSystemPanel is a panel displaying files on disk.
 type FileSystemPanel struct {
 	vtui.ScreenObject
 	table  *vtui.Table
@@ -66,7 +66,7 @@ func (fp *FileSystemPanel) Refresh() {
 
 	fp.entries = make([]*fileEntry, 0, len(files)+1)
 
-	// Добавляем ".." для выхода наверх
+	// Add ".." to go up
 	fp.entries = append(fp.entries, &fileEntry{name: "..", isDir: true})
 
 	for _, f := range files {
@@ -79,7 +79,7 @@ func (fp *FileSystemPanel) Refresh() {
 		})
 	}
 
-	// Сортировка: сначала папки, потом файлы
+	// Sort: directories first, then files
 	sort.Slice(fp.entries, func(i, j int) bool {
 		if fp.entries[i].isDir != fp.entries[j].isDir {
 			return fp.entries[i].isDir
@@ -105,9 +105,9 @@ func (fp *FileSystemPanel) SetPosition(x1, y1, x2, y2 int) {
 }
 
 func (fp *FileSystemPanel) Resize(w, h int) {
-	// Ресайзим саму таблицу
+	// Resize the table itself
 	fp.table.SetPosition(fp.X1, fp.Y1, fp.X1+w-1, fp.Y1+h-1)
-	// Адаптируем колонки: "Name" забирает всё свободное место
+	// Adapt columns: "Name" takes all available space
 	nameW := w - 15
 	if nameW < 5 { nameW = 5 } // Minimum safety width
 	fp.table.Columns[0].Width = nameW
@@ -116,7 +116,7 @@ func (fp *FileSystemPanel) Resize(w, h int) {
 func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 	if !e.KeyDown { return false }
 
-	// Обработка перехода по директориям
+	// Handle directory navigation
 	if e.VirtualKeyCode == vtinput.VK_RETURN {
 		selected := fp.entries[fp.table.SelectPos]
 		if selected.isDir {

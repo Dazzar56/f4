@@ -5,8 +5,8 @@ import (
 	"github.com/unxed/vtui"
 )
 
-// Panel — это интерфейс любого контента, который может быть помещен в "половинку" менеджера.
-// Это может быть список файлов, дерево папок или даже панель быстрого просмотра (Viewer).
+// A Panel is an interface for any content that can be placed in the "half" of the manager.
+// This could be a file list, a folder tree, or even a quick view panel (Viewer).
 type Panel interface {
 	Show(scr *vtui.ScreenBuf)
 	ProcessKey(e *vtinput.InputEvent) bool

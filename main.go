@@ -12,7 +12,7 @@ import (
 )
 
 func main() {
-	// 1. Входим в Raw Mode
+	// 1. Enter Raw Mode
 	restore, err := vtinput.Enable()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -20,20 +20,20 @@ func main() {
 	}
 	defer restore()
 
-	fmt.Print("\x1b[?25l") // Скрыть курсор
+	fmt.Print("\x1b[?25l") // Hide cursor
 	defer fmt.Print("\x1b[?25h")
 
-	// 2. Инициализируем ScreenBuf
+	// 2. Initialize ScreenBuf
 	width, height, _ := term.GetSize(int(os.Stdin.Fd()))
 	scr := vtui.NewScreenBuf()
 	scr.AllocBuf(width, height)
 
-	// 3. Настраиваем FrameManager
+	// 3. Configure FrameManager
 	vtui.FrameManager.Init(scr)
-	// Синхронизируем строки vtui с нашей локализацией
+	// Sync vtui strings with our localization
 	vtui.UIStrings.DesktopWelcome = Msg("Desktop.Welcome")
 
-	// Применяем пользовательскую палитру из системной папки конфигов
+	// Apply custom palette from system config directory
 	configDir, err := os.UserConfigDir()
 	if err == nil {
 		configPath := filepath.Join(configDir, "f4", "farcolors.ini")
@@ -41,14 +41,14 @@ func main() {
 		InitColors(ini)
 	}
 
-	// Слой 0: Рабочий стол (фон)
+	// Layer 0: Desktop (background)
 	vtui.FrameManager.Push(vtui.NewDesktop())
 
-	// Слой 1: Панели (ядро f4)
+	// Layer 1: Panels (f4 core)
 	panels := NewPanelsFrame()
-	panels.ResizeConsole(width, height) // Инициализируем размеры панелей перед пушем
+	panels.ResizeConsole(width, height) // Initialize panel sizes before pushing
 	vtui.FrameManager.Push(panels)
 
-	// 4. Запуск!
+	// 4. Run!
 	vtui.FrameManager.Run()
 }

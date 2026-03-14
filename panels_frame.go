@@ -5,12 +5,12 @@ import (
 	"github.com/unxed/vtui"
 )
 
-// PanelsFrame — главный фрейм менеджера f4, содержит левую и правую панели.
+// PanelsFrame is the main frame of the f4 manager, containing left and right panels.
 type PanelsFrame struct {
 	vtui.ScreenObject
 	left      Panel
 	right     Panel
-	activeIdx int // 0 для левой, 1 для правой
+	activeIdx int // 0 for left, 1 for right
 
 	done      bool
 }
@@ -22,7 +22,7 @@ func NewPanelsFrame() *PanelsFrame {
 }
 
 func (pf *PanelsFrame) ResizeConsole(w, h int) {
-	panelH := h - 2 // Оставляем место под командную строку и статус
+	panelH := h - 2 // Leave space for command line and status
 	leftW := w / 2
 	rightW := w - leftW
 
@@ -33,14 +33,14 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 		pf.left.SetPosition(0, 0, leftW-1, panelH-1)
 		pf.right.SetPosition(leftW, 0, w-1, panelH-1)
 
-		// Специальные методы для адаптации колонок (если это FileSystemPanel)
+		// Special methods for column adaptation (if it's FileSystemPanel)
 		if fsp, ok := pf.left.(*FileSystemPanel); ok { fsp.Resize(leftW, panelH) }
 		if fsp, ok := pf.right.(*FileSystemPanel); ok { fsp.Resize(rightW, panelH) }
 	}
 }
 
 func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
-	// При ресайзе нужно будет обновлять координаты
+	// Coordinates will need to be updated on resize
 	if pf.activeIdx == 0 {
 		pf.left.SetFocus(true)
 		pf.right.SetFocus(false)
@@ -52,20 +52,20 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 	pf.left.Show(scr)
 	pf.right.Show(scr)
 
-	// Командная строка (заглушка)
+	// Command line (stub)
 	scr.Write(0, scr.Height()-1, vtui.StringToCharInfo(Msg("Panels.Prompt"), vtui.SetRGBFore(0, 0xFFFFFF)))
 }
 
 func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	if !e.KeyDown { return false }
 
-	// F1 вызывает справку
+	// F1 invokes help
 	if e.VirtualKeyCode == vtinput.VK_F1 {
 		pf.ShowHelp()
 		return true
 	}
 
-	// Tab переключает панели
+	// Tab switches panels
 	if e.VirtualKeyCode == vtinput.VK_TAB {
 		pf.activeIdx = 1 - pf.activeIdx
 		return true
@@ -78,7 +78,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 }
 
 func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
-	// Определяем, в какую панель попал клик
+	// Determine which panel was clicked
 	mx, my := int(e.MouseX), int(e.MouseY)
 
 	x1, y1, x2, y2 := pf.left.GetPosition()
