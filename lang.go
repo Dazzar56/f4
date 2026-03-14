@@ -9,7 +9,7 @@ var Lng = map[string]string{
 	"Panel.Column.Size": "Size",
 	"Panel.UpDir":       "UP-DIR",
 	"Panels.Prompt":     "> ",
-	"Desktop.Welcome":   " f4 project - Ctrl+Q to exit ",
+	"Desktop.Welcome":   " f4 project | Ctrl+Q to exit ",
 }
 
 // Msg retrieves a localized string by key.
