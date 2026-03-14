@@ -88,29 +88,32 @@ func (pf *PanelsFrame) initPTY() {
 
 func (pf *PanelsFrame) ResizeConsole(w, h int) {
 	pf.lastW, pf.lastH = w, h
-
 	pf.menuBar.SetPosition(0, 0, w-1, 0)
 
-	// Calculate content area (panels or terminal)
 	contentY1 := 0
-	contentY2 := h - 2 // One line for CommandLine, the rest for content
+
+	// 1. Terminal Area: Fills everything except KeyBar
+	termY2 := h - 1
 	if pf.showKeyBar {
-		contentY2 = h - 3 // One for CommandLine, one for KeyBar
+		termY2 = h - 2
 	}
-	contentH := contentY2 - contentY1 + 1
-	if contentH < 0 {
-		contentH = 0
-	}
+	termH := termY2 - contentY1 + 1
+	if termH < 0 { termH = 0 }
 
-	// Resize PTY and TerminalView
 	if pf.pty != nil {
-		pf.pty.SetSize(w, contentH)
-		pf.termView.SetPosition(0, contentY1, w-1, contentY2)
-		pf.termView.Resize(w, contentH)
+		pf.pty.SetSize(w, termH)
+		pf.termView.SetPosition(0, contentY1, w-1, termY2)
+		pf.termView.Resize(w, termH)
 	}
 
-	// Resize Panels
-	panelH := contentH
+	// 2. Panel Area: Leaves one additional line for the f4 CommandLine
+	panelY2 := h - 2
+	if pf.showKeyBar {
+		panelY2 = h - 3
+	}
+	panelH := panelY2 - contentY1 + 1
+	if panelH < 0 { panelH = 0 }
+
 	leftW := w / 2
 	rightW := w - leftW
 
@@ -118,8 +121,8 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 		pf.left = NewFileSystemPanel(0, contentY1, leftW, panelH, ".")
 		pf.right = NewFileSystemPanel(leftW, contentY1, rightW, panelH, ".")
 	} else {
-		pf.left.SetPosition(0, contentY1, leftW-1, contentY2)
-		pf.right.SetPosition(leftW, contentY1, w-1, contentY2)
+		pf.left.SetPosition(0, contentY1, leftW-1, panelY2)
+		pf.right.SetPosition(leftW, contentY1, w-1, panelY2)
 
 		// Special methods for column adaptation (if it's FileSystemPanel)
 		if fsp, ok := pf.left.(*FileSystemPanel); ok { fsp.Resize(leftW, panelH) }
@@ -127,13 +130,10 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 	}
 
 	if pf.showKeyBar {
-		// CommandLine on penultimate line, KeyBar on the last one
-		pf.cmdLine.SetPosition(0, h-2, w-1, h-2)
+		// KeyBar on the last line
 		pf.keyBar.SetPosition(0, h-1, w-1, h-1)
 		pf.keyBar.SetVisible(true)
 	} else {
-		// CommandLine on the very last line
-		pf.cmdLine.SetPosition(0, h-1, w-1, h-1)
 		pf.keyBar.SetVisible(false)
 	}
 }
