@@ -1,3 +1,4 @@
+//go:build !windows
 package main
 
 import (
@@ -45,6 +46,18 @@ func NewPTY() (*PTY, error) {
 		Master: master,
 		Slave:  slave,
 	}, nil
+}
+
+func (p *PTY) Write(b []byte) (int, error) {
+	return p.Master.Write(b)
+}
+
+func (p *PTY) Read(b []byte) (int, error) {
+	return p.Master.Read(b)
+}
+
+func (p *PTY) Wait() error {
+	return p.Cmd.Wait()
 }
 
 func (p *PTY) Run(name string, args ...string) error {

@@ -23,7 +23,7 @@ type PanelsFrame struct {
 	lastH      int
 
 	// Integrated Terminal
-	pty      *PTY
+	pty      PtyBackend
 	termView *TerminalView
 	parser   *AnsiParser
 
@@ -74,7 +74,7 @@ func (pf *PanelsFrame) initPTY() {
 	go func() {
 		buf := make([]byte, 4096)
 		for {
-			n, err := pf.pty.Master.Read(buf)
+			n, err := pf.pty.Read(buf)
 			if err != nil {
 				return
 			}
@@ -169,7 +169,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			return true
 		}
 		// Convert input event back to ANSI for shell
-		pf.pty.Master.Write([]byte(pf.translateInput(e)))
+		pf.pty.Write([]byte(pf.translateInput(e)))
 		return true
 	}
 

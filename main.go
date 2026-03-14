@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"runtime"
 
 	"github.com/unxed/vtinput"
 	"path/filepath"
@@ -13,10 +12,6 @@ import (
 )
 
 func main() {
-	if runtime.GOOS == "windows" {
-		fmt.Println("Terminal support is currently Unix-only")
-		return
-	}
 
 	// 1. Enter Raw Mode
 	restore, err := vtinput.Enable()
