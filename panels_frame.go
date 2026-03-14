@@ -256,6 +256,21 @@ func (pf *PanelsFrame) openSubMenu(index int) {
 		pf.menuBar.Active = true
 	}
 
+	// Handle switching between top menu items with Left/Right arrows
+	menu.OnLeft = func() {
+		pf.menuBar.Active = true
+		// Simulate Left key on MenuBar to update its SelectPos
+		pf.menuBar.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_LEFT})
+		pf.openSubMenu(pf.menuBar.SelectPos)
+	}
+
+	menu.OnRight = func() {
+		pf.menuBar.Active = true
+		// Simulate Right key on MenuBar
+		pf.menuBar.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT})
+		pf.openSubMenu(pf.menuBar.SelectPos)
+	}
+
 	vtui.FrameManager.Push(menu)
 }
 func (pf *PanelsFrame) IsDone() bool             { return pf.done }
