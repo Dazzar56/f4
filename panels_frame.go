@@ -15,12 +15,17 @@ type PanelsFrame struct {
 	cmdLine   *CommandLine
 	keyBar    *vtui.KeyBar
 
+	showKeyBar bool
+	lastW      int
+	lastH      int
+
 	done      bool
 }
 
 func NewPanelsFrame() *PanelsFrame {
 	pf := &PanelsFrame{activeIdx: 0}
 	pf.SetHelp("Panels")
+	pf.showKeyBar = true
 
 	pf.cmdLine = NewCommandLine(Msg("Panels.Prompt"))
 	pf.keyBar = vtui.NewKeyBar()
@@ -40,7 +45,14 @@ func NewPanelsFrame() *PanelsFrame {
 }
 
 func (pf *PanelsFrame) ResizeConsole(w, h int) {
-	panelH := h - 2 // Leave space for command line and keybar
+	pf.lastW, pf.lastH = w, h
+	// Reserved rows: 1 for CommandLine, +1 for KeyBar if shown
+	reservedBottom := 1
+	if pf.showKeyBar {
+		reservedBottom++
+	}
+
+	panelH := h - reservedBottom
 	leftW := w / 2
 	rightW := w - leftW
 
@@ -56,8 +68,16 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 		if fsp, ok := pf.right.(*FileSystemPanel); ok { fsp.Resize(rightW, panelH) }
 	}
 
-	pf.cmdLine.SetPosition(0, h-2, w-1, h-2)
-	pf.keyBar.SetPosition(0, h-1, w-1, h-1)
+	if pf.showKeyBar {
+		// CommandLine on penultimate line, KeyBar on the last one
+		pf.cmdLine.SetPosition(0, h-2, w-1, h-2)
+		pf.keyBar.SetPosition(0, h-1, w-1, h-1)
+		pf.keyBar.SetVisible(true)
+	} else {
+		// CommandLine on the very last line
+		pf.cmdLine.SetPosition(0, h-1, w-1, h-1)
+		pf.keyBar.SetVisible(false)
+	}
 }
 
 func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
@@ -73,7 +93,9 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 	pf.right.Show(scr)
 
 	pf.cmdLine.Show(scr)
-	pf.keyBar.Show(scr)
+	if pf.showKeyBar {
+		pf.keyBar.Show(scr)
+	}
 }
 
 func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
@@ -86,17 +108,14 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	if !e.KeyDown { return false }
 
 	// Orchestration: who gets the input?
-	// 1. Text input always goes to CommandLine (if no Alt/Ctrl modifiers that panels use)
-	if e.Char != 0 && !alt && !ctrl {
-		pf.cmdLine.SetFocus(true)
-		return pf.cmdLine.ProcessKey(e)
-	}
 
-	// 2. F1 invokes help
+	// 1. F1 invokes help (global)
 	if e.VirtualKeyCode == vtinput.VK_F1 {
 		pf.ShowHelp()
 		return true
 	}
+
+	// 2. Try global hotkeys handled by PanelsFrame
 
 	// Tab switches panels
 	if e.VirtualKeyCode == vtinput.VK_TAB {
@@ -104,10 +123,32 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	}
 
-	if pf.activeIdx == 0 {
-		return pf.left.ProcessKey(e)
+	// Ctrl+B toggles KeyBar
+	if e.VirtualKeyCode == vtinput.VK_B && ctrl {
+		pf.showKeyBar = !pf.showKeyBar
+		pf.ResizeConsole(pf.lastW, pf.lastH)
+		return true
 	}
-	return pf.right.ProcessKey(e)
+
+	// 3. Try Active Panel
+	panelHandled := false
+	if pf.activeIdx == 0 {
+		panelHandled = pf.left.ProcessKey(e)
+	} else {
+		panelHandled = pf.right.ProcessKey(e)
+	}
+
+	if panelHandled {
+		return true
+	}
+
+	// 4. Fallback: pass to CommandLine (handles text, Backspace, Delete, etc.)
+	if pf.cmdLine.ProcessKey(e) {
+		pf.cmdLine.SetFocus(true)
+		return true
+	}
+
+	return false
 }
 
 func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
