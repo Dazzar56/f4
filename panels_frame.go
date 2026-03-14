@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
@@ -223,9 +224,22 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		if !pf.cmdLine.IsEmpty() {
 			cmd := pf.cmdLine.Edit.GetText()
 			if pf.pty != nil {
+				// 1. Determine current path of active panel
+				var path string
+				if pf.activeIdx == 0 {
+					if fsp, ok := pf.left.(*FileSystemPanel); ok { path = fsp.path }
+				} else {
+					if fsp, ok := pf.right.(*FileSystemPanel); ok { path = fsp.path }
+				}
+
+				// 2. Sync PTY directory (send cd) and then the command
+				if path != "" {
+					pf.pty.Write([]byte(fmt.Sprintf(" cd %q\r", path)))
+				}
 				pf.pty.Write([]byte(cmd + "\r"))
 			}
 			pf.cmdLine.Clear()
+			pf.showPanels = false // Auto-hide panels to show output
 			return true
 		} else if !pf.showPanels {
 			if pf.pty != nil {
