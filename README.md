@@ -69,3 +69,42 @@ A base interface/struct `ScreenObject` (analogous to `scrobj.hpp`), implemented 
 Project folder structure: `f4_project` -> `f4`, `vtui`, `vtinput`.
 Development is carried out via small patches in the `ap` format (https://github.com/unxed/ap).
 
+---
+
+#### Getting Started (Ubuntu)
+
+**1. Install Prerequisites**
+Ensure you have Go (1.24 or newer) installed:
+```bash
+sudo apt update
+sudo apt install golang git
+```
+
+**2. Setup Directory Structure**
+The project consists of three main components that must reside in the same parent directory:
+```bash
+mkdir f4_project && cd f4_project
+# Place f4, vtui, and vtinput folders here.
+# If you are cloning:
+# git clone https://github.com/unxed/f4.git
+# git clone https://github.com/unxed/vtui.git
+# git clone https://github.com/unxed/vtinput.git
+```
+
+**3. Build**
+```bash
+cd f4
+go mod tidy
+go build -o f4
+```
+
+**4. Run**
+```bash
+./f4
+```
+
+**5. Debug Mode**
+To enable detailed logging to `debug.log`, run with the `VTUI_DEBUG` environment variable:
+```bash
+VTUI_DEBUG=1 ./f4
+```
