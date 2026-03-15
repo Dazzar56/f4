@@ -1,47 +1,128 @@
 package main
 
-import "github.com/unxed/vtinput"
+import (
+	"fmt"
+	"github.com/unxed/vtinput"
+)
+
+func formatCSI(mod int, char string) string {
+	if mod > 1 {
+		return fmt.Sprintf("\x1b[1;%d%s", mod, char)
+	}
+	return "\x1b[" + char
+}
+
+func formatCSIOrSS3(mod int, char string) string {
+	if mod > 1 {
+		return fmt.Sprintf("\x1b[1;%d%s", mod, char)
+	}
+	return "\x1bO" + char
+}
+
+func formatTilde(mod int, code int) string {
+	if mod > 1 {
+		return fmt.Sprintf("\x1b[%d;%d~", code, mod)
+	}
+	return fmt.Sprintf("\x1b[%d~", code)
+}
 
 // TranslateInput converts f4 input events into ANSI sequences that interactive shell apps expect.
 func TranslateInput(e *vtinput.InputEvent) string {
-	if e.Char != 0 && (e.ControlKeyState&0xFF) == 0 {
-		return string(e.Char)
+	// Ignore standalone modifier key presses
+	switch e.VirtualKeyCode {
+	case vtinput.VK_SHIFT, vtinput.VK_LSHIFT, vtinput.VK_RSHIFT,
+		vtinput.VK_CONTROL, vtinput.VK_LCONTROL, vtinput.VK_RCONTROL,
+		vtinput.VK_MENU, vtinput.VK_LMENU, vtinput.VK_RMENU,
+		vtinput.VK_CAPITAL, vtinput.VK_NUMLOCK, vtinput.VK_SCROLL:
+		return ""
 	}
 
 	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
-	
-	if ctrl && e.VirtualKeyCode >= 'A' && e.VirtualKeyCode <= 'Z' {
-		// Basic Ctrl+Key mapping (Ctrl+A = 1, ..., Ctrl+O = 15, ...)
-		return string(byte(e.VirtualKeyCode - 'A' + 1))
+	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
+	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
+
+	mod := 1
+	if shift { mod += 1 }
+	if alt { mod += 2 }
+	if ctrl { mod += 4 }
+
+	// Handle Character Input
+	if e.Char != 0 {
+		if !ctrl && !alt {
+			return string(e.Char)
+		}
+
+		ch := e.Char
+		if ctrl {
+			if ch >= 'a' && ch <= 'z' {
+				ch = ch - 'a' + 1
+			} else if ch >= 'A' && ch <= 'Z' {
+				ch = ch - 'A' + 1
+			} else if ch == '[' || ch == '{' {
+				ch = 27
+			} else if ch == '\\' || ch == '|' {
+				ch = 28
+			} else if ch == ']' || ch == '}' {
+				ch = 29
+			} else if ch == '^' || ch == '~' {
+				ch = 30
+			} else if ch == '_' || ch == '?' {
+				ch = 31
+			} else if ch == '@' {
+				ch = 0
+			}
+		}
+
+		out := ""
+		if alt {
+			out += "\x1b"
+		}
+		out += string(ch)
+		return out
 	}
 
+	// Handle Special Keys (Arrows, F-keys, etc.)
 	switch e.VirtualKeyCode {
-	case vtinput.VK_RETURN: return "\r"
-	case vtinput.VK_UP:     return "\x1b[A"
-	case vtinput.VK_DOWN:   return "\x1b[B"
-	case vtinput.VK_RIGHT:  return "\x1b[C"
-	case vtinput.VK_LEFT:   return "\x1b[D"
-	case vtinput.VK_BACK:   return "\x7f"
-	case vtinput.VK_TAB:    return "\t"
-	case vtinput.VK_ESCAPE: return "\x1b"
-	case vtinput.VK_F1:     return "\x1bOP"
-	case vtinput.VK_F2:     return "\x1bOQ"
-	case vtinput.VK_F3:     return "\x1bOR"
-	case vtinput.VK_F4:     return "\x1bOS"
-	case vtinput.VK_F5:     return "\x1b[15~"
-	case vtinput.VK_F6:     return "\x1b[17~"
-	case vtinput.VK_F7:     return "\x1b[18~"
-	case vtinput.VK_F8:     return "\x1b[19~"
-	case vtinput.VK_F9:     return "\x1b[20~"
-	case vtinput.VK_F10:    return "\x1b[21~"
-	case vtinput.VK_F11:    return "\x1b[23~"
-	case vtinput.VK_F12:    return "\x1b[24~"
-	case vtinput.VK_HOME:	return "\x1b[1~"
-	case vtinput.VK_END:	return "\x1b[4~"
-	case vtinput.VK_PRIOR:	return "\x1b[5~" // PgUp
-	case vtinput.VK_NEXT:	return "\x1b[6~" // PgDn
-	case vtinput.VK_INSERT:	return "\x1b[2~"
-	case vtinput.VK_DELETE:	return "\x1b[3~"
+	case vtinput.VK_UP:     return formatCSI(mod, "A")
+	case vtinput.VK_DOWN:   return formatCSI(mod, "B")
+	case vtinput.VK_RIGHT:  return formatCSI(mod, "C")
+	case vtinput.VK_LEFT:   return formatCSI(mod, "D")
+	case vtinput.VK_HOME:   return formatCSI(mod, "H")
+	case vtinput.VK_END:    return formatCSI(mod, "F")
+
+	case vtinput.VK_F1:     return formatCSIOrSS3(mod, "P")
+	case vtinput.VK_F2:     return formatCSIOrSS3(mod, "Q")
+	case vtinput.VK_F3:     return formatCSIOrSS3(mod, "R")
+	case vtinput.VK_F4:     return formatCSIOrSS3(mod, "S")
+
+	case vtinput.VK_F5:     return formatTilde(mod, 15)
+	case vtinput.VK_F6:     return formatTilde(mod, 17)
+	case vtinput.VK_F7:     return formatTilde(mod, 18)
+	case vtinput.VK_F8:     return formatTilde(mod, 19)
+	case vtinput.VK_F9:     return formatTilde(mod, 20)
+	case vtinput.VK_F10:    return formatTilde(mod, 21)
+	case vtinput.VK_F11:    return formatTilde(mod, 23)
+	case vtinput.VK_F12:    return formatTilde(mod, 24)
+
+	case vtinput.VK_INSERT: return formatTilde(mod, 2)
+	case vtinput.VK_DELETE: return formatTilde(mod, 3)
+	case vtinput.VK_PRIOR:  return formatTilde(mod, 5)
+	case vtinput.VK_NEXT:   return formatTilde(mod, 6)
+
+	case vtinput.VK_RETURN:
+		if alt { return "\x1b\r" }
+		return "\r"
+	case vtinput.VK_BACK:
+		if alt { return "\x1b\x7f" }
+		return "\x7f"
+	case vtinput.VK_TAB:
+		if shift { return "\x1b[Z" }
+		if alt { return "\x1b\t" }
+		return "\t"
+	case vtinput.VK_ESCAPE:
+		if alt { return "\x1b\x1b" }
+		return "\x1b"
 	}
+
 	return ""
 }
