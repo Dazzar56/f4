@@ -25,6 +25,8 @@ type TerminalView struct {
 	// Saved state for main screen
 	savedX, savedY int
 	decSavedX, decSavedY int
+
+	Palette [16]uint32
 }
 
 func NewTerminalView(w, h int) *TerminalView {
@@ -60,6 +62,24 @@ func (tv *TerminalView) ResetBuffer(w, h int) {
 
 	tv.Lines = makeBuf()
 	tv.AltLines = makeBuf()
+
+	// Initialize palette in ANSI order using far2l colors
+	// ANSI: 0:Black, 1:Red, 2:Green, 3:Yellow, 4:Blue, 5:Magenta, 6:Cyan, 7:White
+	// Far:  0:Black, 1:Blue, 2:Green, 3:Cyan, 4:Red, 5:Magenta, 6:Yellow, 7:White
+	tv.Palette[0] = far2lPalette[0] // Black
+	tv.Palette[1] = far2lPalette[4] // Red
+	tv.Palette[2] = far2lPalette[2] // Green
+	tv.Palette[3] = far2lPalette[6] // Yellow
+	tv.Palette[4] = far2lPalette[1] // Blue
+	tv.Palette[5] = far2lPalette[5] // Magenta
+	tv.Palette[6] = far2lPalette[3] // Cyan
+	tv.Palette[7] = far2lPalette[7] // White
+	// Same for bright colors (8-15)
+	for i := 0; i < 8; i++ {
+		winIdx := []int{0, 4, 2, 6, 1, 5, 3, 7}[i]
+		tv.Palette[i+8] = far2lPalette[winIdx+8]
+	}
+
 	tv.Width, tv.Height = w, h
 	tv.ScrollTop = 0
 	tv.ScrollBottom = h - 1

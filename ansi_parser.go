@@ -72,6 +72,8 @@ func (p *AnsiParser) Process(data []byte) {
 				p.CurParam.Reset()
 			} else if b == ']' {
 				p.State = StateOSC
+				p.Params = nil
+				p.CurParam.Reset()
 			} else if b == '_' {
 				p.State = StateAPC
 			} else if b == '7' {
@@ -103,9 +105,13 @@ func (p *AnsiParser) Process(data []byte) {
 			}
 		case StateOSC:
 			if b == 0x07 { // BEL
+				p.handleOSC()
 				p.State = StateGround
 			} else if b == 0x1b { // ESC
+				p.handleOSC()
 				p.State = StateEsc
+			} else {
+				p.CurParam.WriteByte(b)
 			}
 		case StateAPC:
 			if b == 0x07 { // BEL
@@ -127,7 +133,14 @@ func (p *AnsiParser) handleCSI(cmd byte) {
 
 	switch cmd {
 	case 'm':
-		for _, n := range args { p.handleSGR(n) }
+		if len(args) == 0 {
+			p.handleSGR(args, 0) // Default reset
+		} else {
+			for i := 0; i < len(args); {
+				consumed := p.handleSGR(args, i)
+				i += consumed
+			}
+		}
 	case 'H', 'f':
 		row, col := 1, 1
 		if len(args) > 0 && args[0] != 0 { row = args[0] }
@@ -220,24 +233,120 @@ func (p *AnsiParser) handleCSI(cmd byte) {
 	}
 }
 
-var ansiToFar = []int{0, 4, 2, 6, 1, 5, 3, 7}
+func (p *AnsiParser) handleOSC() {
+	s := p.CurParam.String()
+	p.CurParam.Reset()
+	if s == "" { return }
 
-func (p *AnsiParser) handleSGR(n int) {
-	if n == 0 {
+	parts := strings.Split(s, ";")
+	if len(parts) < 3 { return }
+
+	cmd, _ := strconv.Atoi(parts[0])
+	if cmd != 4 { return } // We only support OSC 4 (Set Palette)
+
+	idx, _ := strconv.Atoi(parts[1])
+	if idx < 0 || idx >= 16 { return }
+
+	colorStr := parts[2]
+	var rgbVal uint32
+	parsed := false
+
+	if strings.HasPrefix(colorStr, "#") && len(colorStr) >= 7 {
+		v, err := strconv.ParseUint(colorStr[1:7], 16, 32)
+		if err == nil {
+			rgbVal = uint32(v)
+			parsed = true
+		}
+	} else if strings.HasPrefix(colorStr, "rgb:") {
+		// format rgb:RR/GG/BB
+		rgbParts := strings.Split(colorStr[4:], "/")
+		if len(rgbParts) == 3 {
+			r, _ := strconv.ParseUint(rgbParts[0], 16, 8)
+			g, _ := strconv.ParseUint(rgbParts[1], 16, 8)
+			b, _ := strconv.ParseUint(rgbParts[2], 16, 8)
+			rgbVal = uint32((r << 16) | (g << 8) | b)
+			parsed = true
+		}
+	}
+
+	if parsed {
+		p.term.Palette[idx] = rgbVal
+	}
+}
+
+func (p *AnsiParser) handleSGR(args []int, i int) int {
+	if len(args) == 0 {
 		p.Attr = DefaultTermAttr
-		return
+		return 1
 	}
-	if n >= 30 && n <= 37 {
-		p.Attr = vtui.SetRGBFore(p.Attr, far2lPalette[ansiToFar[n-30]])
-	} else if n >= 40 && n <= 47 {
-		p.Attr = vtui.SetRGBBack(p.Attr, far2lPalette[ansiToFar[n-40]])
-	} else if n >= 90 && n <= 97 {
-		p.Attr = vtui.SetRGBFore(p.Attr, far2lPalette[ansiToFar[n-90]+8])
-	} else if n >= 100 && n <= 107 {
-		p.Attr = vtui.SetRGBBack(p.Attr, far2lPalette[ansiToFar[n-100]+8])
-	} else if n == 39 {
+
+	n := args[i]
+	switch {
+	case n == 0:
+		p.Attr = DefaultTermAttr
+	case n == 1:
+		p.Attr |= vtui.ForegroundIntensity
+	case n == 2:
+		p.Attr |= vtui.ForegroundDim
+	case n == 4:
+		p.Attr |= vtui.CommonLvbUnderscore
+	case n == 5:
+		// Blink - ignored in many TUIs or mapped to intensity
+	case n == 7:
+		p.Attr |= vtui.CommonLvbReverse
+	case n == 9:
+		p.Attr |= vtui.CommonLvbStrikeout
+	case n == 22:
+		p.Attr &= ^(vtui.ForegroundIntensity | vtui.ForegroundDim)
+	case n == 24:
+		p.Attr &= ^vtui.CommonLvbUnderscore
+	case n == 27:
+		p.Attr &= ^vtui.CommonLvbReverse
+	case n == 29:
+		p.Attr &= ^vtui.CommonLvbStrikeout
+
+	case n >= 30 && n <= 37:
+		p.Attr = vtui.SetRGBFore(p.Attr, p.term.Palette[n-30])
+	case n == 38:
+		if i+2 < len(args) {
+			if args[i+1] == 5 { // 256 colors
+				idx := args[i+2]
+				if idx >= 0 && idx < 256 {
+					p.Attr = vtui.SetRGBFore(p.Attr, vtui.XTerm256Palette[idx])
+				}
+				return 3
+			} else if args[i+1] == 2 && i+4 < len(args) { // TrueColor
+				r, g, b := uint32(args[i+2]), uint32(args[i+3]), uint32(args[i+4])
+				p.Attr = vtui.SetRGBFore(p.Attr, (r<<16)|(g<<8)|b)
+				return 5
+			}
+		}
+	case n == 39:
 		p.Attr = vtui.SetRGBFore(p.Attr, vtui.GetRGBFore(vtui.Palette[ColCommandLineUserScreen]))
-	} else if n == 49 {
+
+	case n >= 40 && n <= 47:
+		p.Attr = vtui.SetRGBBack(p.Attr, p.term.Palette[n-40])
+	case n == 48:
+		if i+2 < len(args) {
+			if args[i+1] == 5 { // 256 colors
+				idx := args[i+2]
+				if idx >= 0 && idx < 256 {
+					p.Attr = vtui.SetRGBBack(p.Attr, vtui.XTerm256Palette[idx])
+				}
+				return 3
+			} else if args[i+1] == 2 && i+4 < len(args) { // TrueColor
+				r, g, b := uint32(args[i+2]), uint32(args[i+3]), uint32(args[i+4])
+				p.Attr = vtui.SetRGBBack(p.Attr, (r<<16)|(g<<8)|b)
+				return 5
+			}
+		}
+	case n == 49:
 		p.Attr = vtui.SetRGBBack(p.Attr, vtui.GetRGBBack(vtui.Palette[ColCommandLineUserScreen]))
+
+	case n >= 90 && n <= 97:
+		p.Attr = vtui.SetRGBFore(p.Attr, p.term.Palette[n-90+8])
+	case n >= 100 && n <= 107:
+		p.Attr = vtui.SetRGBBack(p.Attr, p.term.Palette[n-100+8])
 	}
+	return 1
 }

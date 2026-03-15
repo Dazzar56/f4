@@ -42,6 +42,68 @@ func TestAnsiParser_CPR(t *testing.T) {
 		t.Errorf("Expected CPR response %q, got %q", expected, string(pty.written))
 	}
 }
+func TestAnsiParser_SGR_Advanced(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	p := NewAnsiParser(tv, nil)
+
+	// 1. Test TrueColor Foreground (38;2;R;G;B)
+	p.Process([]byte("\x1b[38;2;255;128;64m"))
+	expectedRGB := uint32(0xFF8040)
+	if vtui.GetRGBFore(p.Attr) != expectedRGB {
+		t.Errorf("TrueColor Fore: expected %06X, got %06X", expectedRGB, vtui.GetRGBFore(p.Attr))
+	}
+	if (p.Attr & vtui.ForegroundTrueColor) == 0 {
+		t.Error("TrueColor Fore: ForegroundTrueColor flag not set")
+	}
+
+	// 2. Test 256-color Background (48;5;Index)
+	// Index 208 is usually orange #ff8700
+	p.Process([]byte("\x1b[48;5;208m"))
+	expectedBG := uint32(0xFF8700)
+	if vtui.GetRGBBack(p.Attr) != expectedBG {
+		t.Errorf("256-color Back: expected %06X, got %06X", expectedBG, vtui.GetRGBBack(p.Attr))
+	}
+
+	// 3. Test Styles: Bold (1) and Underline (4)
+	p.Process([]byte("\x1b[1;4m"))
+	if (p.Attr & vtui.ForegroundIntensity) == 0 {
+		t.Error("Style: Bold flag not set")
+	}
+	if (p.Attr & vtui.CommonLvbUnderscore) == 0 {
+		t.Error("Style: Underline flag not set")
+	}
+
+	// 4. Test Reset (0)
+	p.Process([]byte("\x1b[0m"))
+	if p.Attr != DefaultTermAttr {
+		t.Errorf("Reset: expected %v, got %v", DefaultTermAttr, p.Attr)
+	}
+}
+func TestAnsiParser_DynamicPalette(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	p := NewAnsiParser(tv, nil)
+
+	// 1. Change Palette index 1 (ANSI Red) to Pure Purple #FF00FF
+	// Format: OSC 4 ; index ; color BEL
+	p.Process([]byte("\x1b]4;1;#FF00FF\x07"))
+
+	// 2. Set foreground to ANSI 31 (Red)
+	p.Process([]byte("\x1b[31m"))
+
+	gotColor := vtui.GetRGBFore(p.Attr)
+	if gotColor != 0xFF00FF {
+		t.Errorf("Dynamic Palette: expected Purple #FF00FF, got %06X", gotColor)
+	}
+
+	// 3. Test rgb:RR/GG/BB format (used by some versions of far2l)
+	// Change index 4 (ANSI Blue) to #112233
+	p.Process([]byte("\x1b]4;4;rgb:11/22/33\x07"))
+	p.Process([]byte("\x1b[34m")) // SGR 34 is ANSI Blue
+	gotColor = vtui.GetRGBFore(p.Attr)
+	if gotColor != 0x112233 {
+		t.Errorf("Dynamic Palette (rgb format): expected #112233, got %06X", gotColor)
+	}
+}
 
 func TestAnsiParser_SaveRestoreCursor_ESC(t *testing.T) {
 	tv := NewTerminalView(80, 24)
