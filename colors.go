@@ -20,6 +20,7 @@ const (
 
 	ColCommandLinePrompt
 	ColCommandLineText
+	ColCommandLineSelectedText
 
 	LastF4PaletteColor
 )
@@ -59,6 +60,7 @@ func SetDefaultF4Palette() {
 	vtui.Palette[ColCommandLineUserScreen] = vtui.SetRGBBoth(0, lightGray, black)
 	vtui.Palette[ColCommandLinePrompt] = vtui.SetRGBBoth(0, 0x00FFFF, black)
 	vtui.Palette[ColCommandLineText] = vtui.SetRGBBoth(0, white, black)
+	vtui.Palette[ColCommandLineSelectedText] = vtui.SetRGBBoth(0, black, cyan)
 }
 
 // colorMap links farcolors.ini keys to vtui.Palette indices.
@@ -91,6 +93,7 @@ var colorMap = map[string]int{
 	"CommandLine.UserScreen":     ColCommandLineUserScreen,
 	"CommandLine.Prompt":         ColCommandLinePrompt,
 	"CommandLine.Text":           ColCommandLineText,
+	"CommandLine.Text.Selected":  ColCommandLineSelectedText,
 	"KeyBar.Numbers":             vtui.ColKeyBarNum,
 	"KeyBar.Labels":              vtui.ColKeyBarText,
 }

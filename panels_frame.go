@@ -2,6 +2,10 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"os/user"
+	"strings"
+
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
@@ -60,6 +64,45 @@ func NewPanelsFrame() *PanelsFrame {
 	pf.initPTY()
 
 	return pf
+}
+
+func (pf *PanelsFrame) buildPrompt() []vtui.CharInfo {
+	var path string
+	if pf.activeIdx == 0 {
+		if fsp, ok := pf.left.(*FileSystemPanel); ok { path = fsp.path }
+	} else {
+		if fsp, ok := pf.right.(*FileSystemPanel); ok { path = fsp.path }
+	}
+
+	usr, _ := user.Current()
+	username := "user"
+	home := ""
+	if usr != nil {
+		username = usr.Username
+		home = usr.HomeDir
+	}
+
+	host, _ := os.Hostname()
+	if host == "" { host = "localhost" }
+
+	displayPath := path
+	if home != "" && strings.HasPrefix(displayPath, home) {
+		displayPath = "~" + displayPath[len(home):]
+	}
+
+	bg := vtui.GetRGBBack(vtui.Palette[ColCommandLineUserScreen])
+	// Используем цвета, максимально похожие на классический bash
+	greenAttr := vtui.SetRGBBoth(0, 0x8AE234, bg) // Ярко-зеленый
+	blueAttr := vtui.SetRGBBoth(0, 0x729FCF, bg)  // Ярко-синий
+	defAttr := vtui.SetRGBBoth(0, 0xFFFFFF, bg)   // Белый
+
+	var prompt []vtui.CharInfo
+	prompt = append(prompt, vtui.StringToCharInfo(username+"@"+host, greenAttr)...)
+	prompt = append(prompt, vtui.StringToCharInfo(":", defAttr)...)
+	prompt = append(prompt, vtui.StringToCharInfo(displayPath, blueAttr)...)
+	prompt = append(prompt, vtui.StringToCharInfo("$ ", defAttr)...)
+
+	return prompt
 }
 
 func (pf *PanelsFrame) initPTY() {
@@ -170,15 +213,14 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 			cmdLineY = pf.lastH - 2
 		}
 		if pf.showPanels {
-			pf.cmdLine.SetPrompt(Msg("Panels.Prompt"))
-			// Explicitly set X to 0 and Y to the calculated position
+			pf.cmdLine.SetRichPrompt(pf.buildPrompt())
 			pf.cmdLine.SetPosition(0, cmdLineY, pf.lastW-1, cmdLineY)
 		} else {
+			pf.cmdLine.SetRichPrompt(nil)
 			pf.cmdLine.SetPrompt("")
 			tx, ty := pf.termView.CursorX, pf.termView.CursorY
-			// Adjust for terminal's own coordinates
 			_, termY1, _, _ := pf.termView.GetPosition()
-			pf.cmdLine.SetPosition(tx, termY1+ty, pf.lastW-1, ty)
+			pf.cmdLine.SetPosition(tx, termY1+ty, pf.lastW-1, termY1+ty)
 		}
 		if pf.cmdLine.IsVisible() {
 			pf.cmdLine.Show(scr)
