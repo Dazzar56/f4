@@ -541,7 +541,12 @@ func (ev *EditorView) getLineFragments(lineIdx, width int) []lineFragment {
 	}
 
 	if len(fragments) == 0 {
-		fragments = append(fragments, lineFragment{startOffset: startOffset, endByteInLine: 1})
+		// Для пустой строки создаем один пустой фрагмент
+		fragments = append(fragments, lineFragment{
+			startOffset: startOffset,
+			startByteInLine: 0,
+			endByteInLine: 0,
+		})
 	}
 	return fragments
 }

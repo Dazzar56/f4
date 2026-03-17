@@ -62,3 +62,36 @@ func TestLineIndex_Empty(t *testing.T) {
 		t.Error("Line 0 offset should be 0 even for empty file")
 	}
 }
+
+func TestLineIndex_DeepConsistency(t *testing.T) {
+	// Проверяем, что серия инкрементальных обновлений дает тот же результат,
+	// что и полный Rebuild.
+	text := []byte("Line 1\nLine 2\nLine 3")
+	pt := New(text)
+	li := NewLineIndex()
+	li.Rebuild(pt)
+	
+	// 1. Вставка в середину с переносом
+	insertData := []byte("New\nData")
+	offset := 7 // Начало "Line 2"
+	pt.Insert(offset, insertData)
+	li.UpdateAfterInsert(offset, insertData)
+	
+	// 2. Удаление части текста
+	pt.Delete(2, 10)
+	li.UpdateAfterDelete(2, 10)
+	
+	// Сравниваем с эталоном
+	liExpected := NewLineIndex()
+	liExpected.Rebuild(pt)
+	
+	if li.LineCount() != liExpected.LineCount() {
+		t.Errorf("Consistency fail: LineCount %d != %d", li.LineCount(), liExpected.LineCount())
+	}
+	
+	for i := 0; i < li.LineCount(); i++ {
+		if li.GetLineOffset(i) != liExpected.GetLineOffset(i) {
+			t.Errorf("Consistency fail at line %d: offset %d != %d", i, li.GetLineOffset(i), liExpected.GetLineOffset(i))
+		}
+	}
+}

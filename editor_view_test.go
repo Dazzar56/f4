@@ -352,3 +352,47 @@ func TestEditorView_BracketedPaste(t *testing.T) {
 		t.Errorf("Post-paste cursor error: Line %d, Pos %d", ev.CursorLine, ev.CursorPos)
 	}
 }
+func TestEditorView_ExtremeBounds(t *testing.T) {
+	pt := piecetable.New([]byte("A"))
+	ev := NewEditorView(pt, "")
+
+	// 1. Backspace в начале файла не должен ничего ломать
+	ev.CursorLine = 0
+	ev.CursorPos = 0
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_BACK})
+	if pt.String() != "A" {
+		t.Error("Backspace at file start modified the text")
+	}
+
+	// 2. Delete в конце файла не должен ничего ломать
+	ev.CursorPos = 1
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DELETE})
+	if pt.String() != "A" {
+		t.Error("Delete at file end modified the text")
+	}
+}
+
+func TestEditorView_EmptyLinesWrap(t *testing.T) {
+	// Файл из трех пустых строк (только переносы)
+	pt := piecetable.New([]byte("\n\n"))
+	ev := NewEditorView(pt, "")
+	ev.WordWrap = true
+	ev.X1, ev.Y1, ev.X2, ev.Y2 = 0, 0, 10, 10
+
+	if ev.li.LineCount() != 3 {
+		t.Errorf("Expected 3 lines, got %d", ev.li.LineCount())
+	}
+
+	// Проверяем, что getLineFragments не возвращает nil для пустой строки
+	frags := ev.getLineFragments(0, 10)
+	if len(frags) == 0 {
+		t.Fatal("Empty line fragments should not be empty")
+	}
+
+	// Навигация по пустым строкам
+	ev.CursorLine = 0
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
+	if ev.CursorLine != 1 {
+		t.Errorf("Down on empty lines failed: expected line 1, got %d", ev.CursorLine)
+	}
+}
