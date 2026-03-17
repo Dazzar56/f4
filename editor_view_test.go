@@ -4,6 +4,7 @@ import (
 	"os"
 	"testing"
 	"github.com/unxed/f4/piecetable"
+	"github.com/unxed/vtui"
 	"github.com/unxed/vtinput"
 )
 
@@ -248,6 +249,70 @@ func TestEditorView_WordWrapNavigation(t *testing.T) {
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_UP})
 	if ev.CursorPos != 5 {
 		t.Errorf("WordWrap Up: expected byte pos 5, got %d", ev.CursorPos)
+	}
+}
+func TestEditorView_UTF8Editing(t *testing.T) {
+	// "Привет" - русские буквы занимают по 2 байта
+	pt := piecetable.New([]byte("Привет"))
+	ev := NewEditorView(pt, "")
+	ev.CursorPos = 4 // После "Пр" (4 байта)
+
+	// 1. Вставляем еще одну букву (2 байта)
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'и'})
+	if ev.CursorPos != 6 {
+		t.Errorf("UTF8 typing: expected pos 6, got %d", ev.CursorPos)
+	}
+
+	// 2. Backspace должен удалить ровно один символ (2 байта)
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_BACK})
+	if pt.String() != "Привет" {
+		t.Errorf("UTF8 backspace failed: %q", pt.String())
+	}
+	if ev.CursorPos != 4 {
+		t.Errorf("UTF8 backspace pos: expected 4, got %d", ev.CursorPos)
+	}
+}
+
+func TestEditorView_WideCharWrap(t *testing.T) {
+	// "A世B" -> A(1), 世(2), B(1). Всего 4 ячейки.
+	// Ширина 2.
+	// Ожидаемые фрагменты: ["A ", "世", "B "]
+	// (世 не влезает в первую строку после A, должна перенестись целиком)
+	pt := piecetable.New([]byte("A世B"))
+	ev := NewEditorView(pt, "")
+	ev.WordWrap = true
+
+	frags := ev.getLineFragments(0, 2)
+	if len(frags) < 2 {
+		t.Fatalf("Expected at least 2 fragments, got %d", len(frags))
+	}
+
+	// Проверяем, что фрагмент не заканчивается на "половине" иероглифа
+	for i, f := range frags {
+		for _, cell := range f.cells {
+			if cell.info.Char == vtui.WideCharFiller && i == 0 {
+				t.Error("WideCharFiller found at the beginning of fragment 0. Wide character was split!")
+			}
+		}
+	}
+}
+
+func TestEditorView_SelectionWrapping(t *testing.T) {
+	pt := piecetable.New([]byte("1234567890"))
+	ev := NewEditorView(pt, "")
+	ev.WordWrap = true
+	ev.X1, ev.Y1, ev.X2, ev.Y2 = 0, 0, 4, 2 // Ширина 5
+
+	// Выделяем "456" (с 3-й по 6-ю позицию)
+	// Это захватывает конец первого фрагмента "12345" и начало второго "67890"
+	ev.CursorPos = 3
+	ev.selActive = true
+	ev.selAnchorOffset = 3
+	ev.CursorPos = 6
+
+	min, max := ev.getSelectionRange()
+	if min != 3 || max != 6 {
+		t.Errorf("Wrapped selection range failed: [%d:%d]", min, max)
 	}
 }
 func TestEditorView_BracketedPaste(t *testing.T) {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"unicode/utf8"
 	"github.com/unxed/f4/piecetable"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
@@ -289,15 +290,21 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 			offset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 			if offset > 0 {
 				if ev.CursorPos == 0 {
+					// Склеиваем с предыдущей строкой (удаляем \n)
 					prevLen := ev.getLineLength(ev.CursorLine - 1)
 					ev.pt.Delete(offset-1, 1)
 					ev.li.UpdateAfterDelete(offset-1, 1)
 					ev.CursorLine--
 					ev.CursorPos = prevLen
 				} else {
-					ev.pt.Delete(offset-1, 1)
-					ev.li.UpdateAfterDelete(offset-1, 1)
-					ev.CursorPos--
+					// Удаляем UTF-8 символ перед курсором
+					lineStart := ev.li.GetLineOffset(ev.CursorLine)
+					lineData := ev.pt.GetRange(lineStart, ev.CursorPos)
+					_, size := utf8.DecodeLastRune(lineData)
+
+					ev.pt.Delete(offset-size, size)
+					ev.li.UpdateAfterDelete(offset-size, size)
+					ev.CursorPos -= size
 				}
 			}
 		}
@@ -311,8 +318,14 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		} else {
 			offset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 			if offset < ev.pt.Size() {
-				ev.pt.Delete(offset, 1)
-				ev.li.UpdateAfterDelete(offset, 1)
+				// Удаляем UTF-8 символ под курсором
+				peekLen := 4
+				if ev.pt.Size()-offset < 4 { peekLen = ev.pt.Size() - offset }
+				data := ev.pt.GetRange(offset, peekLen)
+				_, size := utf8.DecodeRune(data)
+
+				ev.pt.Delete(offset, size)
+				ev.li.UpdateAfterDelete(offset, size)
 			}
 		}
 		ev.ensureCursorVisible()
@@ -500,9 +513,17 @@ func (ev *EditorView) getLineFragments(lineIdx, width int) []lineFragment {
 		end := i + width
 		if end > len(cells) { end = len(cells) }
 
-		fCells := make([]visualCell, 0, end-i)
+		fCells := make([]visualCell, 0, width)
 		fStartByte := currByte
-		for j := i; j < end; j++ {
+
+		// Если следующий символ — WideCharFiller, значит текущий фрагмент
+		// должен закончиться раньше, чтобы не разрывать широкий символ.
+		actualEnd := end
+		if actualEnd < len(cells) && cells[actualEnd].Char == vtui.WideCharFiller {
+			actualEnd--
+		}
+
+		for j := i; j < actualEnd; j++ {
 			fCells = append(fCells, visualCell{info: cells[j], byteOffset: currByte - fStartByte})
 			if cells[j].Char != vtui.WideCharFiller {
 				currByte += len(string(rune(cells[j].Char)))
@@ -515,6 +536,8 @@ func (ev *EditorView) getLineFragments(lineIdx, width int) []lineFragment {
 			startByteInLine: fStartByte,
 			endByteInLine: currByte,
 		})
+		// Корректируем шаг цикла, если мы завершили фрагмент раньше
+		i -= (end - actualEnd)
 	}
 
 	if len(fragments) == 0 {
