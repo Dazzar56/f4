@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"testing"
 	"github.com/unxed/f4/piecetable"
 	"github.com/unxed/vtinput"
@@ -8,7 +9,7 @@ import (
 
 func TestEditorView_TypingAndBackspace(t *testing.T) {
 	pt := piecetable.New([]byte("Hello"))
-	ev := NewEditorView(pt)
+	ev := NewEditorView(pt, "")
 	ev.CursorPos = 5 // Конец "Hello"
 
 	// 1. Печатаем '!'
@@ -32,7 +33,7 @@ func TestEditorView_TypingAndBackspace(t *testing.T) {
 
 func TestEditorView_LineNavigation(t *testing.T) {
 	pt := piecetable.New([]byte("Line1\nLine2"))
-	ev := NewEditorView(pt)
+	ev := NewEditorView(pt, "")
 	ev.CursorLine = 0
 	ev.CursorPos = 5 // Конец "Line1"
 
@@ -51,7 +52,7 @@ func TestEditorView_LineNavigation(t *testing.T) {
 
 func TestEditorView_EnterAndBackspaceMerging(t *testing.T) {
 	pt := piecetable.New([]byte("ABC"))
-	ev := NewEditorView(pt)
+	ev := NewEditorView(pt, "")
 	ev.CursorPos = 1 // Между A и B
 
 	// 1. Нажимаем Enter -> разрыв строки "A" и "BC"
@@ -79,7 +80,7 @@ func TestEditorView_StickyColumn(t *testing.T) {
 	// Short (5)
 	// LongLine (8)
 	pt := piecetable.New([]byte("LongLine\nShort\nLongLine"))
-	ev := NewEditorView(pt)
+	ev := NewEditorView(pt, "")
 
 	// Встаем в конец первой длинной строки
 	ev.CursorLine = 0
@@ -99,5 +100,39 @@ func TestEditorView_StickyColumn(t *testing.T) {
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
 	if ev.CursorLine != 2 || ev.CursorPos != 8 {
 		t.Errorf("Sticky column failed: expected Line 2, Pos 8. Got Line %d, Pos %d", ev.CursorLine, ev.CursorPos)
+	}
+}
+
+func TestEditorView_SaveFile(t *testing.T) {
+	// 1. Создаем временный файл
+	tmpFile := "test_save.txt"
+	defer os.Remove(tmpFile)
+	err := os.WriteFile(tmpFile, []byte("Original"), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 2. Открываем его в редакторе
+	pt := piecetable.New([]byte("Original"))
+	ev := NewEditorView(pt, tmpFile)
+
+	// 3. Имитируем ввод текста " + Edit" в конец
+	ev.CursorPos = 8
+	for _, char := range " + Edit" {
+		ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: char})
+	}
+
+	// 4. Имитируем нажатие F2 (Сохранение)
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F2})
+
+	// 5. Читаем файл с диска и проверяем, что данные записались
+	savedData, err := os.ReadFile(tmpFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expected := "Original + Edit"
+	if string(savedData) != expected {
+		t.Errorf("Save failed: expected %q on disk, got %q", expected, string(savedData))
 	}
 }

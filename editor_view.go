@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"github.com/unxed/f4/piecetable"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
@@ -19,17 +20,19 @@ type EditorView struct {
 	CursorPos        int // Текущая позиция в строке (в байтах)
 	DesiredCursorPos int // "Желаемая" позиция для навигации вверх/вниз
 
+	filePath   string
 	done       bool
 }
 
-func NewEditorView(pt *piecetable.PieceTable) *EditorView {
+func NewEditorView(pt *piecetable.PieceTable, path string) *EditorView {
 	ev := &EditorView{
-		pt: pt,
-		li: piecetable.NewLineIndex(),
+		pt:       pt,
+		li:       piecetable.NewLineIndex(),
+		filePath: path,
 	}
 	ev.li.Rebuild(pt)
 	ev.SetCanFocus(true)
-	ev.SetFocus(true) // Чтобы курсор был виден сразу при открытии
+	ev.SetFocus(true)
 	return ev
 }
 
@@ -107,6 +110,10 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 	switch e.VirtualKeyCode {
 	case vtinput.VK_ESCAPE, vtinput.VK_F10:
 		ev.done = true
+		return true
+
+	case vtinput.VK_F2:
+		ev.SaveToFile()
 		return true
 
 	case vtinput.VK_UP:
@@ -235,5 +242,17 @@ func (ev *EditorView) updateCursorToDesiredPos() {
 		ev.CursorPos = lineLen
 	} else {
 		ev.CursorPos = ev.DesiredCursorPos
+	}
+}
+func (ev *EditorView) SaveToFile() {
+	if ev.filePath == "" {
+		return
+	}
+	// Сохранение содержимого PieceTable на диск.
+	err := os.WriteFile(ev.filePath, ev.pt.Bytes(), 0644)
+	if err != nil {
+		vtui.DebugLog("EDITOR: Failed to save file: %v", err)
+	} else {
+		vtui.DebugLog("EDITOR: Saved file %s", ev.filePath)
 	}
 }

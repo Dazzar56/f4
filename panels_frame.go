@@ -271,14 +271,34 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	}
 
-	// F4 opens the internal editor on a test string
+	// F4 opens the internal editor for the selected file
 	if e.VirtualKeyCode == vtinput.VK_F4 {
-		testText := "Welcome to f4 Editor!\nThis is a Piece Table based engine.\nIt supports multiple lines.\nTry scrolling up and down.\nLine 5\nLine 6\nLine 7\nLine 8\nLine 9\nLine 10"
-		pt := piecetable.New([]byte(testText))
-		editor := NewEditorView(pt)
-		editor.SetPosition(0, 0, pf.lastW-1, pf.lastH-3) // Над коммандной строкой
-		vtui.FrameManager.Push(editor)
-		return true
+		var name string
+		var path string
+		if pf.activeIdx == 0 {
+			if fsp, ok := pf.left.(*FileSystemPanel); ok {
+				name = fsp.GetSelectedName()
+				path = fsp.vfs.Join(fsp.vfs.GetPath(), name)
+			}
+		} else {
+			if fsp, ok := pf.right.(*FileSystemPanel); ok {
+				name = fsp.GetSelectedName()
+				path = fsp.vfs.Join(fsp.vfs.GetPath(), name)
+			}
+		}
+
+		if path != "" {
+			data, err := os.ReadFile(path)
+			if err != nil {
+				// Если файла нет, открываем пустой редактор для создания
+				data = []byte("")
+			}
+			pt := piecetable.New(data)
+			editor := NewEditorView(pt, path)
+			editor.SetPosition(0, 0, pf.lastW-1, pf.lastH-3)
+			vtui.FrameManager.Push(editor)
+			return true
+		}
 	}
 
 	// F1 invokes help (global)
