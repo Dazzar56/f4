@@ -608,9 +608,27 @@ func (ev *EditorView) getLineFragments(lineIdx, width int) []lineFragment {
 		}
 
 		for j := i; j < actualEnd; j++ {
-			fCells = append(fCells, visualCell{info: cells[j], byteOffset: currByte - fStartByte})
+		fCells = append(fCells, visualCell{info: cells[j], byteOffset: currByte - fStartByte})
 			if cells[j].Char != vtui.WideCharFiller {
 				currByte += len(string(rune(cells[j].Char)))
+			}
+		}
+
+		// Защита от бесконечного цикла: если фрагмент пустой (actualEnd <= i),
+		// значит ширина окна меньше ширины символа. В этом случае забираем
+		// хотя бы один физический символ (даже если он широкий), чтобы сдвинуться.
+		if actualEnd <= i && i < len(cells) {
+			actualEnd = i + 1
+			if actualEnd < len(cells) && cells[actualEnd].Char == vtui.WideCharFiller {
+				actualEnd++ // Забираем широкого целиком
+			}
+			// Повторяем наполнение для этого спец-случая
+			fCells = nil
+			for j := i; j < actualEnd && j < len(cells); j++ {
+				fCells = append(fCells, visualCell{info: cells[j], byteOffset: currByte - fStartByte})
+				if cells[j].Char != vtui.WideCharFiller {
+					currByte += len(string(rune(cells[j].Char)))
+				}
 			}
 		}
 
@@ -620,8 +638,9 @@ func (ev *EditorView) getLineFragments(lineIdx, width int) []lineFragment {
 			startByteInLine: fStartByte,
 			endByteInLine: currByte,
 		})
-		// Корректируем шаг цикла, если мы завершили фрагмент раньше
-		i -= (end - actualEnd)
+
+		// Переходим к следующему фрагменту
+		i = i + (actualEnd - i) - width // Корректировка шага цикла (т.к. цикл делает i += width)
 	}
 
 	if len(fragments) == 0 {

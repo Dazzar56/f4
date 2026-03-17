@@ -503,3 +503,22 @@ func TestEditorView_WordWrapScrolling(t *testing.T) {
 		t.Errorf("WordWrap scroll back failed: expected ScrollSubLine 0, got %d", ev.ScrollSubLine)
 	}
 }
+func TestEditorView_WordWrapInfiniteLoop(t *testing.T) {
+	// Текст с широким символом
+	pt := piecetable.New([]byte("A世B"))
+	ev := NewEditorView(pt, "")
+	ev.WordWrap = true
+
+	// Экстремально узкое окно (ширина 1)
+	// '世' занимает 2 колонки. Раньше это вызывало бесконечный цикл.
+	frags := ev.getLineFragments(0, 1)
+
+	if len(frags) == 0 {
+		t.Fatal("Should have produced fragments even for narrow window")
+	}
+	// Проверяем, что мы не зависли и прошли всю строку
+	lastFrag := frags[len(frags)-1]
+	if lastFrag.endByteInLine < 5 { // A(1) + 世(3) + B(1) = 5
+		t.Errorf("Fragments didn't cover the whole line: end at %d", lastFrag.endByteInLine)
+	}
+}

@@ -49,6 +49,29 @@ func TestLineIndex_GetLineAtOffset(t *testing.T) {
 		}
 	}
 }
+func TestLineIndex_AppendAtEOF(t *testing.T) {
+	// Проверка вставки в конец файла без \n
+	pt := New([]byte("NoNewline"))
+	li := NewLineIndex()
+	li.Rebuild(pt)
+
+	insertData := []byte(" + More")
+	pt.Insert(9, insertData)
+	li.UpdateAfterInsert(9, insertData)
+
+	if li.LineCount() != 1 {
+		t.Errorf("Expected 1 line, got %d", li.LineCount())
+	}
+
+	// Вставляем \n в середину
+	newline := []byte("\n")
+	pt.Insert(2, newline)
+	li.UpdateAfterInsert(2, newline)
+
+	if li.LineCount() != 2 {
+		t.Errorf("Expected 2 lines after inserting newline, got %d", li.LineCount())
+	}
+}
 
 func TestLineIndex_Empty(t *testing.T) {
 	pt := New([]byte(""))

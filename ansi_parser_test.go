@@ -215,3 +215,18 @@ func TestAnsiParser_REP_ECH(t *testing.T) {
 		}
 	}
 }
+func TestAnsiParser_SplitUTF8(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	p := NewAnsiParser(tv, nil)
+
+	// Символ 'П' (0xD0 0x9F) отправляем по частям
+	p.Process([]byte{0xD0})
+	if tv.Lines[tv.CursorY][0].Char == 0xD0 {
+		t.Error("Parser should not put incomplete UTF-8 byte on screen")
+	}
+
+	p.Process([]byte{0x9F})
+	if tv.Lines[tv.CursorY][0].Char != 'П' {
+		t.Errorf("Parser failed to assemble split UTF-8: expected 'П', got %c", rune(tv.Lines[tv.CursorY][0].Char))
+	}
+}
