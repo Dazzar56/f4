@@ -69,9 +69,9 @@ func NewPanelsFrame() *PanelsFrame {
 func (pf *PanelsFrame) buildPrompt() []vtui.CharInfo {
 	var path string
 	if pf.activeIdx == 0 {
-		if fsp, ok := pf.left.(*FileSystemPanel); ok { path = fsp.path }
+		if fsp, ok := pf.left.(*FileSystemPanel); ok { path = fsp.vfs.GetPath() }
 	} else {
-		if fsp, ok := pf.right.(*FileSystemPanel); ok { path = fsp.path }
+		if fsp, ok := pf.right.(*FileSystemPanel); ok { path = fsp.vfs.GetPath() }
 	}
 
 	usr, _ := user.Current()
@@ -161,8 +161,8 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 	rightW := w - leftW
 
 	if pf.left == nil {
-		pf.left = NewFileSystemPanel(0, contentY1, leftW, panelH, ".")
-		pf.right = NewFileSystemPanel(leftW, contentY1, rightW, panelH, ".")
+		pf.left = NewFileSystemPanel(0, contentY1, leftW, panelH, NewOSVFS("."))
+		pf.right = NewFileSystemPanel(leftW, contentY1, rightW, panelH, NewOSVFS("."))
 	} else {
 		pf.left.SetPosition(0, contentY1, leftW-1, panelY2)
 		pf.right.SetPosition(leftW, contentY1, w-1, panelY2)
@@ -342,9 +342,9 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				// 1. Determine current path of active panel
 				var path string
 				if pf.activeIdx == 0 {
-					if fsp, ok := pf.left.(*FileSystemPanel); ok { path = fsp.path }
+					if fsp, ok := pf.left.(*FileSystemPanel); ok { path = fsp.vfs.GetPath() }
 				} else {
-					if fsp, ok := pf.right.(*FileSystemPanel); ok { path = fsp.path }
+					if fsp, ok := pf.right.(*FileSystemPanel); ok { path = fsp.vfs.GetPath() }
 				}
 
 				// 2. Sync PTY directory (send cd) and then the command

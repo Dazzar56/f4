@@ -6,8 +6,8 @@ import (
 
 func TestFileEntry_GetCellText(t *testing.T) {
 	// Mock entries
-	file := &fileEntry{name: "test.txt", size: 1024, isDir: false}
-	dir := &fileEntry{name: "work", isDir: true}
+	file := &fileEntry{VFSItem: VFSItem{Name: "test.txt", Size: 1024, IsDir: false}}
+	dir := &fileEntry{VFSItem: VFSItem{Name: "work", IsDir: true}}
 
 	// 1. Column 0 (Name)
 	if file.GetCellText(0) != "test.txt" {

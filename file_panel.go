@@ -2,8 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"sort"
 
 	"github.com/unxed/vtinput"
@@ -12,24 +10,21 @@ import (
 
 // fileEntry implements vtui.TableRow for display in a table.
 type fileEntry struct {
-	name  string
-	size  int64
-	isDir bool
-	date  string
+	VFSItem
 }
 
 func (f *fileEntry) GetCellText(col int) string {
 	switch col {
 	case 0:
-		if f.isDir {
-			return "/" + f.name
+		if f.IsDir {
+			return "/" + f.Name
 		}
-		return f.name
+		return f.Name
 	case 1:
-		if f.isDir {
+		if f.IsDir {
 			return Msg("Panel.UpDir")
 		}
-		return fmt.Sprintf("%d", f.size)
+		return fmt.Sprintf("%d", f.Size)
 	}
 	return ""
 }
@@ -37,14 +32,14 @@ func (f *fileEntry) GetCellText(col int) string {
 // FileSystemPanel is a panel displaying files on disk.
 type FileSystemPanel struct {
 	vtui.ScreenObject
-	table  *vtui.Table
-	frame  *vtui.BorderedFrame
-	path   string
+	table   *vtui.Table
+	frame   *vtui.BorderedFrame
+	vfs     VFS
 	entries []*fileEntry
 }
 
-func NewFileSystemPanel(x, y, w, h int, path string) *FileSystemPanel {
-	absPath, _ := filepath.Abs(path)
+func NewFileSystemPanel(x, y, w, h int, vfs VFS) *FileSystemPanel {
+	path := vfs.GetPath()
 	// Initial column widths (will be adjusted by Resize)
 	cols := []vtui.TableColumn{
 		{Title: Msg("Panel.Column.Name"), Width: w - 15 - 2},
@@ -52,8 +47,8 @@ func NewFileSystemPanel(x, y, w, h int, path string) *FileSystemPanel {
 	}
 
 	fp := &FileSystemPanel{
-		path:  absPath,
-		frame: vtui.NewBorderedFrame(x, y, x+w-1, y+h-1, vtui.SingleBox, absPath),
+		vfs:   vfs,
+		frame: vtui.NewBorderedFrame(x, y, x+w-1, y+h-1, vtui.SingleBox, path),
 		table: vtui.NewTable(x+1, y+1, w-2, h-2, cols),
 	}
 	fp.frame.ColorBoxIdx = ColPanelBox
@@ -68,33 +63,28 @@ func NewFileSystemPanel(x, y, w, h int, path string) *FileSystemPanel {
 }
 
 func (fp *FileSystemPanel) Refresh() {
-	fp.frame.SetTitle(fp.path)
-	files, err := os.ReadDir(fp.path)
+	path := fp.vfs.GetPath()
+	fp.frame.SetTitle(path)
+	items, err := fp.vfs.ReadDir(path)
 	if err != nil {
 		return
 	}
 
-	fp.entries = make([]*fileEntry, 0, len(files)+1)
+	fp.entries = make([]*fileEntry, 0, len(items)+1)
 
 	// Add ".." to go up
-	fp.entries = append(fp.entries, &fileEntry{name: "..", isDir: true})
+	fp.entries = append(fp.entries, &fileEntry{VFSItem: VFSItem{Name: "..", IsDir: true}})
 
-	for _, f := range files {
-		info, _ := f.Info()
-		fp.entries = append(fp.entries, &fileEntry{
-			name:  f.Name(),
-			size:  info.Size(),
-			isDir: f.IsDir(),
-			date:  info.ModTime().Format("2006-01-02"),
-		})
+	for _, item := range items {
+		fp.entries = append(fp.entries, &fileEntry{VFSItem: item})
 	}
 
 	// Sort: directories first, then files
 	sort.Slice(fp.entries, func(i, j int) bool {
-		if fp.entries[i].isDir != fp.entries[j].isDir {
-			return fp.entries[i].isDir
+		if fp.entries[i].IsDir != fp.entries[j].IsDir {
+			return fp.entries[i].IsDir
 		}
-		return fp.entries[i].name < fp.entries[j].name
+		return fp.entries[i].Name < fp.entries[j].Name
 	})
 
 	rows := make([]vtui.TableRow, len(fp.entries))
@@ -136,17 +126,20 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 			return false
 		}
 		selected := fp.entries[fp.table.SelectPos]
-		if selected.isDir {
-			oldPath := fp.path
-			newPath := filepath.Join(fp.path, selected.name)
-			fp.path = filepath.Clean(newPath)
+		if selected.IsDir {
+			oldPath := fp.vfs.GetPath()
+			newPath := fp.vfs.Join(oldPath, selected.Name)
+
+			if err := fp.vfs.SetPath(newPath); err != nil {
+				return false
+			}
 			fp.Refresh()
 
-			if selected.name == ".." {
+			if selected.Name == ".." {
 				// We went up. Find the directory we came from.
-				dirToSelect := filepath.Base(oldPath)
+				dirToSelect := fp.vfs.Base(oldPath)
 				for i, entry := range fp.entries {
-					if entry.name == dirToSelect {
+					if entry.Name == dirToSelect {
 						fp.table.SelectPos = i
 						fp.table.EnsureVisible()
 						return true
@@ -172,8 +165,8 @@ func (fp *FileSystemPanel) GetSelectedName() string {
 		return ""
 	}
 	entry := fp.entries[fp.table.SelectPos]
-	if entry.name == ".." {
-		return filepath.Dir(fp.path)
+	if entry.Name == ".." {
+		return fp.vfs.Dir(fp.vfs.GetPath())
 	}
-	return entry.name
+	return entry.Name
 }
