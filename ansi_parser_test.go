@@ -178,3 +178,18 @@ func TestAnsiParser_DSR_Status(t *testing.T) {
 		t.Errorf("Expected DSR status response %q, got %q", expected, string(pty.written))
 	}
 }
+
+func TestAnsiParser_OSC4_Palette(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	p := NewAnsiParser(tv, nil)
+
+	// ANSI Color 1 — Red. По умолчанию в палитре f4 это 0xA00000.
+	// Меняем его через OSC 4 на ярко-зеленый #00FF00
+	// Формат: ESC ] 4 ; index ; color BEL
+	oscSeq := "\x1b]4;1;#00FF00\x07"
+	p.Process([]byte(oscSeq))
+
+	if tv.Palette[1] != 0x00FF00 {
+		t.Errorf("OSC 4 palette update failed. Expected #00FF00, got %06X", tv.Palette[1])
+	}
+}

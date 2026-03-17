@@ -95,3 +95,46 @@ func TestLineIndex_DeepConsistency(t *testing.T) {
 		}
 	}
 }
+func TestLineIndex_IncrementalStress(t *testing.T) {
+	// Псевдо-рандомный тест на выносливость индекса
+	pt := New([]byte("Initial Text\nLine 2\nLine 3"))
+	li := NewLineIndex()
+	li.Rebuild(pt)
+
+	ops := []struct {
+		insert bool
+		off    int
+		data   string
+	}{
+		{true, 5, "!!!\n!!!"},
+		{false, 2, "12345"}, // удаление 5 байт со смещения 2
+		{true, 0, "\nStart\n"},
+		{false, 10, "1"},
+		{true, 15, "End"},
+	}
+
+	for i, op := range ops {
+		if op.insert {
+			data := []byte(op.data)
+			pt.Insert(op.off, data)
+			li.UpdateAfterInsert(op.off, data)
+		} else {
+			length := len(op.data)
+			pt.Delete(op.off, length)
+			li.UpdateAfterDelete(op.off, length)
+		}
+
+		// Сравнение с честным Rebuild на каждом шаге
+		liRef := NewLineIndex()
+		liRef.Rebuild(pt)
+
+		if li.LineCount() != liRef.LineCount() {
+			t.Fatalf("Stress step %d: LineCount mismatch. Got %d, want %d", i, li.LineCount(), liRef.LineCount())
+		}
+		for j := 0; j < li.LineCount(); j++ {
+			if li.GetLineOffset(j) != liRef.GetLineOffset(j) {
+				t.Fatalf("Stress step %d: Offset mismatch at line %d", i, j)
+			}
+		}
+	}
+}
