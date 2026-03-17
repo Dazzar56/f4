@@ -353,6 +353,39 @@ func TestEditorView_UTF8Selection(t *testing.T) {
 		t.Errorf("UTF8 Selection failed: expected [0:2], got [%d:%d]", min, max)
 	}
 }
+func TestEditorView_HomeEnd(t *testing.T) {
+	pt := piecetable.New([]byte("Hello World"))
+	ev := NewEditorView(pt, "")
+
+	// 1. Тест End
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_END})
+	if ev.CursorPos != 11 {
+		t.Errorf("End failed: expected pos 11, got %d", ev.CursorPos)
+	}
+
+	// 2. Тест Home
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_HOME})
+	if ev.CursorPos != 0 {
+		t.Errorf("Home failed: expected pos 0, got %d", ev.CursorPos)
+	}
+}
+
+func TestEditorView_WideCharBackspace(t *testing.T) {
+	// "A世" -> 'A' (1), '世' (3 bytes)
+	pt := piecetable.New([]byte("A世"))
+	ev := NewEditorView(pt, "")
+	ev.CursorPos = 4 // В самом конце
+
+	// Нажимаем Backspace (удаляем '世')
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_BACK})
+
+	if pt.String() != "A" {
+		t.Errorf("Wide Backspace failed: expected 'A', got %q", pt.String())
+	}
+	if ev.CursorPos != 1 {
+		t.Errorf("Wide Backspace pos failed: expected 1, got %d", ev.CursorPos)
+	}
+}
 func TestEditorView_BracketedPaste(t *testing.T) {
 	pt := piecetable.New([]byte("Start-"))
 	ev := NewEditorView(pt, "")
@@ -432,5 +465,41 @@ func TestEditorView_EmptyLinesWrap(t *testing.T) {
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
 	if ev.CursorLine != 1 {
 		t.Errorf("Down on empty lines failed: expected line 1, got %d", ev.CursorLine)
+	}
+}
+
+func TestEditorView_WordWrapScrolling(t *testing.T) {
+	// Создаем длинный текст (одна логическая строка, разбитая на 5 фрагментов)
+	// Ширина 10, длина 45
+	text := "0123456789ABCDEFGHIJklmnopqrstuvwxyz012345678"
+	pt := piecetable.New([]byte(text))
+	ev := NewEditorView(pt, "")
+	ev.WordWrap = true
+	// Окно высотой 2 строки (X1, Y1, X2, Y2)
+	ev.X1, ev.Y1, ev.X2, ev.Y2 = 0, 0, 9, 1 
+	
+	ev.CursorLine = 0
+	ev.CursorPos = 0
+	ev.ensureCursorVisible()
+	
+	if ev.ScrollTop != 0 || ev.ScrollSubLine != 0 {
+		t.Error("Initial scroll should be 0:0")
+	}
+
+	// 1. Прыгаем в конец очень длинной строки (офсет 45)
+	ev.CursorPos = 45
+	ev.ensureCursorVisible()
+	
+	// Так как высота окна 2, а фрагментов 5, верхним должен стать 4-й фрагмент
+	// (чтобы 4-й и 5-й фрагменты были видны на экране)
+	if ev.ScrollSubLine != 3 {
+		t.Errorf("WordWrap scroll failed: expected ScrollSubLine 3, got %d", ev.ScrollSubLine)
+	}
+	
+	// 2. Прыгаем обратно в начало
+	ev.CursorPos = 0
+	ev.ensureCursorVisible()
+	if ev.ScrollSubLine != 0 {
+		t.Errorf("WordWrap scroll back failed: expected ScrollSubLine 0, got %d", ev.ScrollSubLine)
 	}
 }

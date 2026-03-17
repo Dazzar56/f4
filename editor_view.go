@@ -278,7 +278,6 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		handleNav()
 		lineLen := ev.getLineLength(ev.CursorLine)
 		if ev.CursorPos < lineLen {
-			// Читаем текущий символ под курсором, чтобы знать его размер в байтах
 			lineStart := ev.li.GetLineOffset(ev.CursorLine)
 			peekLen := 4
 			if lineLen-ev.CursorPos < 4 { peekLen = lineLen - ev.CursorPos }
@@ -289,6 +288,20 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 			ev.CursorLine++
 			ev.CursorPos = 0
 		}
+		ev.updateDesiredPos()
+		ev.ensureCursorVisible()
+		return true
+
+	case vtinput.VK_HOME:
+		handleNav()
+		ev.CursorPos = 0
+		ev.updateDesiredPos()
+		ev.ensureCursorVisible()
+		return true
+
+	case vtinput.VK_END:
+		handleNav()
+		ev.CursorPos = ev.getLineLength(ev.CursorLine)
 		ev.updateDesiredPos()
 		ev.ensureCursorVisible()
 		return true
@@ -369,18 +382,79 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 }
 
 func (ev *EditorView) ensureCursorVisible() {
+	width := ev.X2 - ev.X1 + 1
 	height := ev.Y2 - ev.Y1 + 1
-	if ev.CursorLine < ev.ScrollTop {
-		ev.ScrollTop = ev.CursorLine
-	} else if ev.CursorLine >= ev.ScrollTop+height {
-		ev.ScrollTop = ev.CursorLine - height + 1
+	if width <= 0 || height <= 0 { return }
+
+	if !ev.WordWrap {
+		// Классический скроллинг для режима без переносов
+		ev.ScrollSubLine = 0
+		if ev.CursorLine < ev.ScrollTop {
+			ev.ScrollTop = ev.CursorLine
+		} else if ev.CursorLine >= ev.ScrollTop+height {
+			ev.ScrollTop = ev.CursorLine - height + 1
+		}
+		if ev.CursorPos < ev.ScrollLeft {
+			ev.ScrollLeft = ev.CursorPos
+		} else if ev.CursorPos >= ev.ScrollLeft+width {
+			ev.ScrollLeft = ev.CursorPos - width + 1
+		}
+		return
 	}
 
-	width := ev.X2 - ev.X1 + 1
-	if ev.CursorPos < ev.ScrollLeft {
-		ev.ScrollLeft = ev.CursorPos
-	} else if ev.CursorPos >= ev.ScrollLeft+width {
-		ev.ScrollLeft = ev.CursorPos - width + 1
+	// Скроллинг для Word Wrap: считаем визуальные ряды
+	ev.ScrollLeft = 0
+
+	for {
+		// 1. Находим, на каком визуальном ряду сейчас курсор
+		cursorRow := -1
+		totalRows := 0
+
+		// Считаем ряды от начала документа до курсора
+		for l := 0; l <= ev.CursorLine; l++ {
+			frags := ev.getLineFragments(l, width)
+			for fIdx, f := range frags {
+				onThisFrag := (l == ev.CursorLine && ev.CursorPos >= f.startByteInLine && ev.CursorPos < f.endByteInLine)
+				// Краевой случай: курсор в самом конце строки
+				if !onThisFrag && l == ev.CursorLine && ev.CursorPos == ev.getLineLength(l) && fIdx == len(frags)-1 {
+					onThisFrag = true
+				}
+
+				if onThisFrag {
+					cursorRow = totalRows
+				}
+				totalRows++
+			}
+		}
+
+		// 2. Находим, какой визуальный ряд сейчас самый верхний (ScrollTop + ScrollSubLine)
+		startRow := 0
+		for l := 0; l < ev.ScrollTop; l++ {
+			startRow += len(ev.getLineFragments(l, width))
+		}
+		startRow += ev.ScrollSubLine
+
+		// 3. Проверяем видимость
+		if cursorRow < startRow {
+			// Скроллим вверх по одному визуальному ряду
+			if ev.ScrollSubLine > 0 {
+				ev.ScrollSubLine--
+			} else if ev.ScrollTop > 0 {
+				ev.ScrollTop--
+				ev.ScrollSubLine = len(ev.getLineFragments(ev.ScrollTop, width)) - 1
+			} else { break }
+		} else if cursorRow >= startRow+height {
+			// Скроллим вниз по одному визуальному ряду
+			maxSub := len(ev.getLineFragments(ev.ScrollTop, width)) - 1
+			if ev.ScrollSubLine < maxSub {
+				ev.ScrollSubLine++
+			} else {
+				ev.ScrollTop++
+				ev.ScrollSubLine = 0
+			}
+		} else {
+			break // Курсор виден
+		}
 	}
 }
 

@@ -55,3 +55,30 @@ func TestTerminalView_ScrollingRegion(t *testing.T) {
 		t.Error("Scroll region failed: line 5 should be cleared")
 	}
 }
+func TestTerminalView_AutoWrap(t *testing.T) {
+	width := 10
+	tv := NewTerminalView(width, 5)
+	tv.SetCursor(0, 0)
+
+	// Пишем 10 символов (заполняем строку)
+	for i := 0; i < 10; i++ {
+		tv.PutChar('X', 0)
+	}
+
+	if tv.CursorX != 10 { // На грани
+		t.Errorf("CursorX should be 10, got %d", tv.CursorX)
+	}
+
+	// Пишем 11-й символ. Должен произойти автоперенос.
+	tv.PutChar('Y', 0)
+
+	if tv.CursorY != 1 {
+		t.Errorf("Auto-wrap failed: CursorY should be 1, got %d", tv.CursorY)
+	}
+	if tv.CursorX != 1 {
+		t.Errorf("Auto-wrap failed: CursorX should be 1, got %d", tv.CursorX)
+	}
+	if tv.Lines[1][0].Char != 'Y' {
+		t.Errorf("Auto-wrap failed: 'Y' should be at (0, 1), got %c", rune(tv.Lines[1][0].Char))
+	}
+}
