@@ -190,3 +190,4 @@ func (f *MacroAssignFrame) ResizeConsole(w, h int) {}
 func (f *MacroAssignFrame) GetType() vtui.FrameType { return vtui.TypeDialog }
 func (f *MacroAssignFrame) SetExitCode(c int)       { f.done = true }
 func (f *MacroAssignFrame) IsDone() bool            { return f.done }
+func (f *MacroAssignFrame) IsBusy() bool            { return false }

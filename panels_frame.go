@@ -493,3 +493,4 @@ func (pf *PanelsFrame) openSubMenu(index int) {
 	vtui.FrameManager.Push(menu)
 }
 func (pf *PanelsFrame) IsDone() bool             { return pf.done }
+func (pf *PanelsFrame) IsBusy() bool             { return false }

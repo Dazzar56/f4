@@ -23,6 +23,9 @@ type EditorView struct {
 	selActive        bool
 	selAnchorOffset  int // Абсолютный офсет начала выделения
 
+	pasting          bool
+	pasteBuffer      []rune
+
 	filePath   string
 	done       bool
 }
@@ -46,6 +49,9 @@ func (ev *EditorView) Show(scr *vtui.ScreenBuf) {
 
 func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 	if !ev.IsVisible() { return }
+	// Оптимизация: во время активной вставки (Bracketed Paste) не обновляем буфер экрана.
+	// Это предотвращает тысячи тяжелых операций StringToCharInfo и аллокаций GetRange.
+	if ev.pasting { return }
 
 	width := ev.X2 - ev.X1 + 1
 	height := ev.Y2 - ev.Y1 + 1
@@ -125,6 +131,49 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 }
 
 func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
+	// 1. Обработка Bracketed Paste (события приходят вне KeyDown)
+	if e.Type == vtinput.PasteEventType {
+		if e.PasteStart {
+			ev.pasting = true
+			ev.pasteBuffer = nil
+		} else {
+			ev.pasting = false
+			if len(ev.pasteBuffer) > 0 {
+				if ev.selActive { ev.DeleteSelection() }
+				offset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
+				data := []byte(string(ev.pasteBuffer))
+				ev.pt.Insert(offset, data)
+				// Инкрементальное обновление вместо тяжелого Rebuild
+				ev.li.UpdateAfterInsert(offset, data)
+				
+				newOffset := offset + len(data)
+				ev.CursorLine = ev.li.GetLineAtOffset(newOffset)
+				ev.CursorPos = newOffset - ev.li.GetLineOffset(ev.CursorLine)
+				ev.DesiredCursorPos = ev.CursorPos
+				ev.ensureCursorVisible()
+			}
+		}
+		return true
+	}
+
+	// 2. Накопление символов в режиме вставки
+	if ev.pasting {
+		if e.Type == vtinput.KeyEventType && e.KeyDown {
+			if e.Char != 0 {
+				// Обрабатываем системные переносы внутри вставки
+				if e.Char == '\r' || e.Char == '\n' {
+					ev.pasteBuffer = append(ev.pasteBuffer, '\n')
+				} else {
+					ev.pasteBuffer = append(ev.pasteBuffer, e.Char)
+				}
+			} else if e.VirtualKeyCode == vtinput.VK_RETURN {
+				ev.pasteBuffer = append(ev.pasteBuffer, '\n')
+			}
+		}
+		return true
+	}
+
+	// 3. Обычная обработка клавиш
 	if !e.KeyDown { return false }
 
 	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
@@ -280,6 +329,7 @@ func (ev *EditorView) ResizeConsole(w, h int) {}
 func (ev *EditorView) GetType() vtui.FrameType { return vtui.TypeUser + 2 }
 func (ev *EditorView) SetExitCode(c int) { ev.done = true }
 func (ev *EditorView) IsDone() bool { return ev.done }
+func (ev *EditorView) IsBusy() bool { return ev.pasting }
 func (ev *EditorView) getLineLength(line int) int {
 	if line < 0 || line >= ev.li.LineCount() {
 		return 0
@@ -290,20 +340,22 @@ func (ev *EditorView) getLineLength(line int) int {
 		end = ev.li.GetLineOffset(line + 1)
 	}
 
-	realLen := end - start
-	if realLen <= 0 {
+	totalLen := end - start
+	if totalLen <= 0 {
 		return 0
 	}
 
-	data := ev.pt.GetRange(start, realLen)
-	// Учитываем переносы строк для ограничения курсора
-	if realLen > 0 && data[realLen-1] == '\n' {
-		realLen--
+	data := ev.pt.GetRange(start, totalLen)
+	
+	// Безопасно уменьшаем длину, если в конце есть переносы строк.
+	// Сначала проверяем \n, затем (если он был) проверяем стоящий перед ним \r.
+	if totalLen > 0 && data[totalLen-1] == '\n' {
+		totalLen--
+		if totalLen > 0 && data[totalLen-1] == '\r' {
+			totalLen--
+		}
 	}
-	if realLen > 0 && data[realLen-1] == '\r' {
-		realLen--
-	}
-	return realLen
+	return totalLen
 }
 
 func (ev *EditorView) updateCursorToDesiredPos() {
@@ -347,8 +399,8 @@ func (ev *EditorView) DeleteSelection() {
 	min, max := ev.getSelectionRange()
 	if max > min {
 		ev.pt.Delete(min, max-min)
-		// Для сложного удаления (через несколько строк) проще всего перестроить индекс
-		ev.li.Rebuild(ev.pt)
+		// Инкрементальное обновление
+		ev.li.UpdateAfterDelete(min, max-min)
 		ev.selActive = false
 		// Обновляем позицию курсора на начало бывшего выделения
 		ev.CursorLine = ev.li.GetLineAtOffset(min)

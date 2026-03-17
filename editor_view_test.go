@@ -221,3 +221,40 @@ func TestEditorView_DeleteSelectionMultiline(t *testing.T) {
 		t.Errorf("Cursor after multiline delete: expected Line 0, Pos 4. Got Line %d, Pos %d", ev.CursorLine, ev.CursorPos)
 	}
 }
+func TestEditorView_BracketedPaste(t *testing.T) {
+	pt := piecetable.New([]byte("Start-"))
+	ev := NewEditorView(pt, "")
+	ev.CursorLine = 0
+	ev.CursorPos = 6
+
+	// 1. Сигнал начала вставки (PasteStart: true)
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.PasteEventType, PasteStart: true})
+	if !ev.IsBusy() {
+		t.Error("Editor should be Busy during paste")
+	}
+
+	// 2. Имитируем символы: "A", "B", Enter (\n), "C"
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'A'})
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'B'})
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN})
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'C'})
+
+	// ВАЖНО: Модель не должна меняться до PasteStart: false
+	if pt.String() != "Start-" {
+		t.Errorf("Model changed prematurely during paste: %q", pt.String())
+	}
+
+	// 3. Сигнал конца вставки (PasteStart: false)
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.PasteEventType, PasteStart: false})
+
+	// Теперь всё должно быть в модели
+	expected := "Start-AB\nC"
+	if pt.String() != expected {
+		t.Errorf("Paste commit failed: expected %q, got %q", expected, pt.String())
+	}
+
+	// Проверяем позицию курсора (строка 1, позиция 1 - после 'C')
+	if ev.CursorLine != 1 || ev.CursorPos != 1 {
+		t.Errorf("Post-paste cursor error: Line %d, Pos %d", ev.CursorLine, ev.CursorPos)
+	}
+}
