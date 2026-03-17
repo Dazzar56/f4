@@ -63,3 +63,59 @@ func (li *LineIndex) GetLineAtOffset(offset int) int {
 	// Номер строки — это idx - 1
 	return idx - 1
 }
+
+// UpdateAfterInsert инкрементально обновляет индекс после вставки данных.
+func (li *LineIndex) UpdateAfterInsert(offset int, data []byte) {
+	lenData := len(data)
+	if lenData == 0 {
+		return
+	}
+
+	// 1. Находим строку, в которую была вставка
+	lineIdx := li.GetLineAtOffset(offset)
+
+	// 2. Ищем новые переносы строк во вставленном фрагменте
+	var newOffsets []int
+	currentOffset := offset
+	for _, b := range data {
+		currentOffset++
+		if b == '\n' {
+			newOffsets = append(newOffsets, currentOffset)
+		}
+	}
+
+	// 3. Сдвигаем все последующие смещения
+	for i := lineIdx + 1; i < len(li.offsets); i++ {
+		li.offsets[i] += lenData
+	}
+
+	// 4. Вставляем новые смещения строк, если они были
+	if len(newOffsets) > 0 {
+		// Создаем новый слайс для вставки
+		tail := append(newOffsets, li.offsets[lineIdx+1:]...)
+		li.offsets = append(li.offsets[:lineIdx+1], tail...)
+	}
+}
+
+// UpdateAfterDelete инкрементально обновляет индекс после удаления данных.
+func (li *LineIndex) UpdateAfterDelete(offset, length int) {
+	if length == 0 {
+		return
+	}
+
+	startLine := li.GetLineAtOffset(offset)
+	endLine := li.GetLineAtOffset(offset + length)
+
+	// 1. Определяем, сколько строк было удалено
+	linesRemoved := endLine - startLine
+
+	// 2. Сдвигаем все последующие смещения
+	for i := endLine + 1; i < len(li.offsets); i++ {
+		li.offsets[i] -= length
+	}
+
+	// 3. Удаляем смещения "схлопнувшихся" строк
+	if linesRemoved > 0 {
+		li.offsets = append(li.offsets[:startLine+1], li.offsets[endLine+1:]...)
+	}
+}

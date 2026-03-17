@@ -91,3 +91,31 @@ func TestPieceTable_Complex(t *testing.T) {
 		t.Errorf("Complex test failed:\nExpected: %s\nGot:      %s", expected, pt.String())
 	}
 }
+
+func TestPieceTable_GetRange(t *testing.T) {
+	pt := New([]byte("0123456789"))
+	pt.Insert(5, []byte("abc")) // "01234abc56789"
+
+	// 1. Range from original buffer
+	if string(pt.GetRange(1, 3)) != "123" {
+		t.Error("GetRange failed on original buffer")
+	}
+
+	// 2. Range from add buffer
+	if string(pt.GetRange(6, 1)) != "b" {
+		t.Error("GetRange failed on add buffer")
+	}
+
+	// 3. Range spanning multiple pieces
+	if string(pt.GetRange(4, 4)) != "4abc" {
+		t.Error("GetRange failed on spanning pieces")
+	}
+
+	// 4. Edge cases
+	if string(pt.GetRange(0, pt.Size())) != "01234abc56789" {
+		t.Error("GetRange failed on full range")
+	}
+	if pt.GetRange(-1, 5) != nil || pt.GetRange(0, 100) != nil {
+		t.Error("GetRange should return nil for invalid ranges")
+	}
+}
