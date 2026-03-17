@@ -11,6 +11,9 @@ var Lng = map[string]string{
 	"Panels.Prompt":     "> ",
 	"Desktop.Welcome":   " f4 project | Ctrl+Q to exit ",
 
+	// Macros
+	"Macro.AssignTitle":  " Assign Macro ",
+	"Macro.AssignPrompt": "Press the desired key combination",
 	// Top Menu
 	"Menu.Left":     "Left",
 	"Menu.Files":    "Files",

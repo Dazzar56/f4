@@ -231,6 +231,10 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 	if pf.showKeyBar {
 		pf.keyBar.Show(scr)
 	}
+	// Macro Recording Indicator
+	if MacroMgr != nil && MacroMgr.Recording {
+		scr.Write(0, 0, vtui.StringToCharInfo(" R ", vtui.SetRGBBoth(0, 0xFFFFFF, 0xFF0000)))
+	}
 
 	// Menu must be drawn LAST to appear on top of panels
 	if pf.menuActive {

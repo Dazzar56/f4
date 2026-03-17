@@ -48,6 +48,10 @@ func main() {
 		InitColors(ini)
 	}
 
+	// Initialize MacroManager
+	os.MkdirAll(filepath.Join(configDir, "f4"), 0755)
+	MacroMgr = NewMacroManager(filepath.Join(configDir, "f4", "key_macros.ini"))
+	vtui.FrameManager.EventFilter = MacroMgr.Filter
 	// Layer 0: Desktop (background)
 	vtui.FrameManager.Push(vtui.NewDesktop())
 
