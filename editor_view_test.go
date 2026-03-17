@@ -315,6 +315,44 @@ func TestEditorView_SelectionWrapping(t *testing.T) {
 		t.Errorf("Wrapped selection range failed: [%d:%d]", min, max)
 	}
 }
+func TestEditorView_WideCharNavigation(t *testing.T) {
+	// "A世B" -> 世 занимает 2 колонки.
+	pt := piecetable.New([]byte("A世B"))
+	ev := NewEditorView(pt, "")
+	ev.WordWrap = false
+	ev.CursorPos = 0 // На 'A'
+
+	// 1. Вправо -> должны попасть на '世' (смещение 1)
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT})
+	if ev.CursorPos != 1 {
+		t.Errorf("Navigate to Wide: expected pos 1, got %d", ev.CursorPos)
+	}
+
+	// 2. Вправо -> должны ПЕРЕПРЫГНУТЬ '世' (её размер 3 байта в UTF-8) и попасть на 'B' (смещение 1+3=4)
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT})
+	if ev.CursorPos != 4 {
+		t.Errorf("Navigate over Wide: expected pos 4, got %d", ev.CursorPos)
+	}
+}
+func TestEditorView_UTF8Selection(t *testing.T) {
+	// "Да" - 2 руны, 4 байта
+	pt := piecetable.New([]byte("Да"))
+	ev := NewEditorView(pt, "")
+	ev.CursorPos = 0
+
+	// Начинаем выделение: Shift + Right (одна буква 'Д')
+	ev.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_RIGHT,
+		ControlKeyState: vtinput.ShiftPressed,
+	})
+
+	if !ev.selActive { t.Fatal("Selection should be active") }
+	min, max := ev.getSelectionRange()
+	if min != 0 || max != 2 {
+		t.Errorf("UTF8 Selection failed: expected [0:2], got [%d:%d]", min, max)
+	}
+}
 func TestEditorView_BracketedPaste(t *testing.T) {
 	pt := piecetable.New([]byte("Start-"))
 	ev := NewEditorView(pt, "")

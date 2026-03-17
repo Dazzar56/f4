@@ -193,3 +193,25 @@ func TestAnsiParser_OSC4_Palette(t *testing.T) {
 		t.Errorf("OSC 4 palette update failed. Expected #00FF00, got %06X", tv.Palette[1])
 	}
 }
+func TestAnsiParser_REP_ECH(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	p := NewAnsiParser(tv, nil)
+
+	// 1. Тест REP (Repeat last char): пишем 'A' и повторяем 5 раз
+	p.Process([]byte("A\x1b[5b"))
+	line := tv.Lines[tv.CursorY]
+	for i := 0; i < 6; i++ {
+		if line[i].Char != 'A' {
+			t.Errorf("REP failed at pos %d: expected 'A', got %c", i, rune(line[i].Char))
+		}
+	}
+
+	// 2. Тест ECH (Erase characters): стираем 3 символа с позиции 0
+	tv.SetCursor(0, tv.CursorY)
+	p.Process([]byte("\x1b[3X"))
+	for i := 0; i < 3; i++ {
+		if line[i].Char != ' ' {
+			t.Errorf("ECH failed at pos %d: expected space, got %c", i, rune(line[i].Char))
+		}
+	}
+}

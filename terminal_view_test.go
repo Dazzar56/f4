@@ -32,3 +32,26 @@ func TestTerminalView_SaveRestoreCursor(t *testing.T) {
 		t.Errorf("Expected restored cursor at (42, 12), got (%d, %d)", tv.CursorX, tv.CursorY)
 	}
 }
+
+func TestTerminalView_ScrollingRegion(t *testing.T) {
+	tv := NewTerminalView(80, 10)
+	// Устанавливаем регион прокрутки: строки со 2 по 5 (1-based: 3;6)
+	tv.ScrollTop = 2
+	tv.ScrollBottom = 5
+
+	// Заполняем строку 5
+	tv.SetCursor(0, 5)
+	tv.PutChar('X', 0)
+
+	// Вызываем прокрутку в регионе (перенос строки на последней строке региона)
+	tv.SetCursor(0, 5)
+	tv.PutChar('\n', 0)
+
+	// Проверяем: строка 5 должна стать пустой, а 'X' должен уехать на строку 4
+	if tv.Lines[4][0].Char != 'X' {
+		t.Errorf("Scroll region failed: 'X' should be at line 4, got %c at line 5", rune(tv.Lines[5][0].Char))
+	}
+	if tv.Lines[5][0].Char != ' ' {
+		t.Error("Scroll region failed: line 5 should be cleared")
+	}
+}

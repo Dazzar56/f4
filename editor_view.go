@@ -261,7 +261,11 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 	case vtinput.VK_LEFT:
 		handleNav()
 		if ev.CursorPos > 0 {
-			ev.CursorPos--
+			// Ищем начало предыдущего UTF-8 символа в строке
+			lineStart := ev.li.GetLineOffset(ev.CursorLine)
+			data := ev.pt.GetRange(lineStart, ev.CursorPos)
+			_, size := utf8.DecodeLastRune(data)
+			ev.CursorPos -= size
 		} else if ev.CursorLine > 0 {
 			ev.CursorLine--
 			ev.CursorPos = ev.getLineLength(ev.CursorLine)
@@ -274,7 +278,13 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		handleNav()
 		lineLen := ev.getLineLength(ev.CursorLine)
 		if ev.CursorPos < lineLen {
-			ev.CursorPos++
+			// Читаем текущий символ под курсором, чтобы знать его размер в байтах
+			lineStart := ev.li.GetLineOffset(ev.CursorLine)
+			peekLen := 4
+			if lineLen-ev.CursorPos < 4 { peekLen = lineLen - ev.CursorPos }
+			data := ev.pt.GetRange(lineStart+ev.CursorPos, peekLen)
+			_, size := utf8.DecodeRune(data)
+			ev.CursorPos += size
 		} else if ev.CursorLine < ev.li.LineCount()-1 {
 			ev.CursorLine++
 			ev.CursorPos = 0
