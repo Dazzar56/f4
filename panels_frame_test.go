@@ -3,6 +3,7 @@ package main
 import (
 	"testing"
 	"github.com/unxed/vtui"
+	"github.com/unxed/vtinput"
 )
 
 func TestPanelsFrame_Layout(t *testing.T) {
@@ -37,5 +38,49 @@ func TestPanelsFrame_Layout(t *testing.T) {
 	}
 	if pf.keyBar.IsVisible() {
 		t.Error("KeyBar should be invisible")
+	}
+}
+
+func TestPanelsFrame_KeyHandling(t *testing.T) {
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+
+	// 1. Test Tab to switch active panel
+	if pf.activeIdx != 1 {
+		t.Fatalf("Initial active panel should be right (1), got %d", pf.activeIdx)
+	}
+	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_TAB})
+	if pf.activeIdx != 0 {
+		t.Error("Tab did not switch active panel to left (0)")
+	}
+	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_TAB})
+	if pf.activeIdx != 1 {
+		t.Error("Tab did not switch active panel back to right (1)")
+	}
+
+	// 2. Test Ctrl+O to toggle panels
+	if !pf.showPanels {
+		t.Fatal("Panels should be visible initially")
+	}
+	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_O, ControlKeyState: vtinput.LeftCtrlPressed})
+	if pf.showPanels {
+		t.Error("Ctrl+O did not hide panels")
+	}
+	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_O, ControlKeyState: vtinput.LeftCtrlPressed})
+	if !pf.showPanels {
+		t.Error("Ctrl+O did not show panels again")
+	}
+
+	// 3. Test Ctrl+Enter to insert filename
+	// Set focus on left panel and select the first "real" file (not "..")
+	pf.activeIdx = 0
+	if fsp, ok := pf.left.(*FileSystemPanel); ok {
+		fsp.table.SelectPos = 1 // Assuming ".." is at 0
+	}
+	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN, ControlKeyState: vtinput.LeftCtrlPressed})
+
+	expectedName := pf.left.GetSelectedName()
+	if pf.cmdLine.Edit.GetText() != " "+expectedName {
+		t.Errorf("Ctrl+Enter failed: expected ' %s', got '%s'", expectedName, pf.cmdLine.Edit.GetText())
 	}
 }

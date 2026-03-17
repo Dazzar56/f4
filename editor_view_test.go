@@ -522,3 +522,37 @@ func TestEditorView_WordWrapInfiniteLoop(t *testing.T) {
 		t.Errorf("Fragments didn't cover the whole line: end at %d", lastFrag.endByteInLine)
 	}
 }
+func TestEditorView_F6_ToggleWordWrap(t *testing.T) {
+	pt := piecetable.New([]byte("some text"))
+	ev := NewEditorView(pt, "")
+	ev.WordWrap = true
+
+	// Press F6
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F6})
+	if ev.WordWrap {
+		t.Error("F6 failed to disable WordWrap")
+	}
+
+	// Press F6 again
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F6})
+	if !ev.WordWrap {
+		t.Error("F6 failed to re-enable WordWrap")
+	}
+}
+
+func TestEditorView_WideCharDelete(t *testing.T) {
+	// "A世" -> 'A' (1), '世' (3 bytes)
+	pt := piecetable.New([]byte("A世"))
+	ev := NewEditorView(pt, "")
+	ev.CursorPos = 1 // Before '世'
+
+	// Press Delete
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DELETE})
+
+	if pt.String() != "A" {
+		t.Errorf("Wide Delete failed: expected 'A', got %q", pt.String())
+	}
+	if ev.CursorPos != 1 {
+		t.Errorf("Cursor position after Wide Delete should remain 1, got %d", ev.CursorPos)
+	}
+}

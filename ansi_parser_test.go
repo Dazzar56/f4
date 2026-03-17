@@ -230,3 +230,60 @@ func TestAnsiParser_SplitUTF8(t *testing.T) {
 		t.Errorf("Parser failed to assemble split UTF-8: expected 'П', got %c", rune(tv.Lines[tv.CursorY][0].Char))
 	}
 }
+func TestAnsiParser_MovementAndErase(t *testing.T) {
+	tv := NewTerminalView(10, 5)
+	p := NewAnsiParser(tv, nil)
+
+	// 1. Test CUP (H) - Cursor Position
+	p.Process([]byte("\x1b[3;4H")) // 1-based, so should be 2,3
+	if tv.CursorY != 2 || tv.CursorX != 3 {
+		t.Errorf("CUP failed: expected (3,2), got (%d,%d)", tv.CursorX, tv.CursorY)
+	}
+
+	// 2. Test relative movements (A, B, C, D)
+	p.Process([]byte("\x1b[2A")) // Up 2
+	if tv.CursorY != 0 {
+		t.Errorf("CUU failed: expected Y=0, got %d", tv.CursorY)
+	}
+	p.Process([]byte("\x1b[3B")) // Down 3
+	if tv.CursorY != 3 {
+		t.Errorf("CUD failed: expected Y=3, got %d", tv.CursorY)
+	}
+	p.Process([]byte("\x1b[5C")) // Forward 5
+	if tv.CursorX != 8 { // 3 + 5 = 8
+		t.Errorf("CUF failed: expected X=8, got %d", tv.CursorX)
+	}
+	p.Process([]byte("\x1b[4D")) // Backward 4
+	if tv.CursorX != 4 { // 8 - 4 = 4
+		t.Errorf("CUB failed: expected X=4, got %d", tv.CursorX)
+	}
+
+	// 3. Test ED (Erase Display) and EL (Erase Line)
+	tv.PutChar('X', DefaultTermAttr)
+	p.Process([]byte("\x1b[2J")) // Erase entire screen
+	if tv.Lines[3][5].Char != ' ' {
+		t.Error("ED(2) failed to clear screen")
+	}
+	tv.SetCursor(0, 0)
+
+	// 4. Test Alternate Screen Buffer
+	p.Process([]byte("Main"))
+	p.Process([]byte("\x1b[?1049h")) // Switch to alt
+	if !tv.UseAltScreen {
+		t.Fatal("Failed to switch to alternate screen")
+	}
+	if tv.Lines[0][0].Char != 'M' {
+		t.Error("Main screen content was affected by alt screen switch")
+	}
+	p.Process([]byte("Alt")) // Write to alt screen
+	if tv.AltLines[0][0].Char != 'A' {
+		t.Error("Failed to write to alt screen")
+	}
+	p.Process([]byte("\x1b[?1049l")) // Switch back to main
+	if tv.UseAltScreen {
+		t.Fatal("Failed to switch back to main screen")
+	}
+	if tv.Lines[0][0].Char != 'M' {
+		t.Error("Main screen content was lost")
+	}
+}

@@ -335,8 +335,8 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		}
 		if name != "" {
 			txt := pf.cmdLine.Edit.GetText()
-			// Add space if needed
-			if txt != "" && txt[len(txt)-1] != ' ' {
+			// Add space if the line is empty, or if it's not empty and doesn't end with a space.
+			if len(txt) == 0 || txt[len(txt)-1] != ' ' {
 				pf.cmdLine.InsertString(" ")
 			}
 			pf.cmdLine.InsertString(name)
