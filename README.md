@@ -119,7 +119,7 @@ To achieve near-instantaneous text insertion for large clipboard buffers (compar
 3.  **Event Draining (Burst Processing):** The `FrameManager` implements an "event draining" loop with a 2ms micro-timeout. It aggressively consumes all pending input events from the OS buffer before attempting a single render pass. This ensures that even if the terminal sends data in chunks, the entire burst is processed as a single visual update.
 4.  **Zero-Allocation Rendering:** The `vtui` core is designed to minimize heap allocations during the `Flush()` cycle. By comparing the logical buffer with a physical screen "shadow," only the minimum necessary ANSI sequences are sent to the terminal.
 
-### Why vtui for f4?
+### Why vtui?
 
 While `tcell` and `tview` are industry standards for Go-based terminal applications, `f4` utilizes `vtui` to achieve a higher level of interactive performance and UX consistency.
 
@@ -127,7 +127,7 @@ While `tcell` and `tview` are industry standards for Go-based terminal applicati
 2. **Optimized Rendering:** Unlike `tview` which often re-renders widgets, `vtui` uses a `ScreenBuf` approach to send only modified terminal cells, ensuring best performance.
 3. **Stateful Interaction:** `vtui` architecture provides a robust, stateful hierarchy for handling nested modal dialogs and focus cycles, mimicking Turbo Vision/Delphi/WinForms: ideal for complex application like file manager (or spreadsheet, or database client, or mp3 player, etc).
 
-# vtui vs. tcell + tview/cview
+#### vtui vs. tcell + tview/cview
 
 | Criterion | tcell + tview/cview | vtui (f4) |
 | :--- | :--- | :--- |
