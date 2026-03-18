@@ -1,6 +1,8 @@
 package main
 
 import (
+	"strings"
+	"time"
 	"os"
 	"testing"
 	"github.com/unxed/f4/piecetable"
@@ -554,5 +556,45 @@ func TestEditorView_WideCharDelete(t *testing.T) {
 	}
 	if ev.CursorPos != 1 {
 		t.Errorf("Cursor position after Wide Delete should remain 1, got %d", ev.CursorPos)
+	}
+}
+func TestEditorView_LongLinePerformance(t *testing.T) {
+	t.Parallel()
+
+	// Создаем одну очень длинную строку (100 КБ), чтобы симулировать проблему.
+	// Без фикса это вызывало бы O(N*M) чтений и зависание.
+	longLine := strings.Repeat("a", 100*1024)
+	pt := piecetable.New([]byte(longLine))
+	ev := NewEditorView(pt, "")
+	ev.SetPosition(0, 0, 79, 24) // 80x25 viewport
+
+	// Устанавливаем курсор в середину строки
+	ev.CursorPos = 50 * 1024
+
+	// Оборачиваем тест в таймаут. Если редактор "зависнет", тест упадет.
+	done := make(chan struct{})
+	go func() {
+		// Имитируем 100 нажатий "вправо". Это сильно нагрузит ensureCursorVisible.
+		for i := 0; i < 100; i++ {
+			ev.ProcessKey(&vtinput.InputEvent{
+				Type:           vtinput.KeyEventType,
+				KeyDown:        true,
+				VirtualKeyCode: vtinput.VK_RIGHT,
+			})
+		}
+		// Переход в конец строки — еще одна дорогая операция без кэширования
+		ev.ProcessKey(&vtinput.InputEvent{
+			Type:           vtinput.KeyEventType,
+			KeyDown:        true,
+			VirtualKeyCode: vtinput.VK_END,
+		})
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Успех: все операции завершились за отведенное время.
+	case <-time.After(200 * time.Millisecond): // 200мс — щедрый таймаут. Зависание длилось бы секунды.
+		t.Fatal("Performance test timed out. EditorView is likely still hanging on long lines.")
 	}
 }
