@@ -31,6 +31,9 @@ func ShowDemoDialog() {
 	// 3. ComboBox
 	dlg.AddItem(vtui.NewText(x1+2, y1+7, "Encoding:", vtui.Palette[vtui.ColDialogText]))
 	items := []string{"UTF-8", "CP866 (OEM)", "Windows-1251", "KOI8-R"}
+	for i := 0; i < 15; i++ {
+		items = append(items, "Item "+string(rune('A'+i)))
+	}
 	combo := vtui.NewComboBox(x1+12, y1+7, 20, items)
 	combo.Edit.SetText("UTF-8")
 	dlg.AddItem(combo)

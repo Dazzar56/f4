@@ -60,6 +60,16 @@ func main() {
 	panels.ResizeConsole(width, height) // Initialize panel sizes before pushing
 	vtui.FrameManager.Push(panels)
 
+	// Создаем тестовую панель с большим количеством файлов для скроллбара
+	if fsp, ok := panels.left.(*FileSystemPanel); ok {
+		for i := 0; i < 50; i++ {
+			fsp.entries = append(fsp.entries, &fileEntry{VFSItem: VFSItem{Name: fmt.Sprintf("test_file_%d.txt", i), Size: 1024}})
+		}
+		rows := make([]vtui.TableRow, len(fsp.entries))
+		for i, e := range fsp.entries { rows[i] = e }
+		fsp.table.SetRows(rows)
+	}
+
 	// --- Initialize Plugins ---
 	pluginManager := NewPluginManager()
 	pluginManager.LoadAll()
