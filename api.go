@@ -22,5 +22,5 @@ func (c *coreAPI) Log(msg string) {
 
 func (c *coreAPI) Message(msg string) {
 	vtui.DebugLog("PLUGIN MESSAGE BOX: %s", msg)
-	// TODO: Actually show a vtui.Dialog
+	vtui.ShowMessage(" Plugin Message ", msg, []string{"&Ok"})
 }
