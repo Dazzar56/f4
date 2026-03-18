@@ -52,14 +52,30 @@ func ShowDemoDialog() {
 	// 5. Вертикальное меню (VMenu)
 	menu := vtui.NewVMenu(" Operations ")
 	menu.SetHelp("MenuOperationsTopic")
-	menu.SetPosition(x1+34, y1+8, x1+58, y1+13)
+	menu.SetPosition(x1+34, y1+8, x1+58, y1+10) // Высота 3 строки для меню
 	menu.AddItem("&Copy File")
 	menu.AddItem("&Move File")
 	menu.AddSeparator()
 	menu.AddItem("&Delete File")
 	dlg.AddItem(menu)
 
+	// 5. ListBox (список недавно открытых файлов)
+	recentLabel := vtui.NewText(x1+34, y1+11, "&Recently used:", vtui.Palette[vtui.ColDialogText])
+	dlg.AddItem(recentLabel)
+
+	recentFiles := []string{
+		"config.go", "main.go", "utils.go", "README.md",
+		"LICENSE", "go.mod", "ansi_parser.go", "vfs.go",
+	}
+	// ListBox в позиции y1+12, высотой 2 строки (занимает 12, 13)
+	lb := vtui.NewListBox(x1+34, y1+12, 24, 2, recentFiles)
+	lb.ColorTextIdx = vtui.ColDialogEdit // Текст как в поле ввода (черный на бирюзовом)
+	lb.ColorSelectedTextIdx = vtui.ColDialogEditSelected // Выделение (белый на черном/бирюзовом)
+	recentLabel.FocusLink = lb
+	dlg.AddItem(lb)
+
 	// 6. Кнопки
+	// Кнопки на y1+15. Теперь между ListBox (y1+13) и кнопками есть пустая строка (y1+14)
 	btnOk := vtui.NewButton(x1+dlgWidth/2-10, y1+15, "&Ok")
 	btnOk.OnClick = func() { dlg.SetExitCode(0) }
 	dlg.AddItem(btnOk)
