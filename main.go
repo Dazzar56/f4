@@ -76,8 +76,8 @@ func main() {
 
 	// --- Initialize Plugins ---
 	pluginManager := NewPluginManager()
-	pluginManager.LoadAll()
 	defer pluginManager.CloseAll()
+	go pluginManager.LoadAll() // Lazy load to prevent UI freezing
 
 	// 4. Run!
 	vtui.FrameManager.Run()

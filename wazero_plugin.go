@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"os"
+	"path/filepath"
 
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
@@ -24,12 +25,21 @@ func NewWasmPlugin(path string) *WasmPlugin {
 func (p *WasmPlugin) Init(hostApi HostAPI) error {
 	p.api = hostApi
 	ctx := context.Background()
-	p.rt = wazero.NewRuntime(ctx)
+	config := wazero.NewRuntimeConfig()
+	cacheDir, err := os.UserCacheDir()
+	if err == nil {
+		cachePath := filepath.Join(cacheDir, "f4", "wazero")
+		os.MkdirAll(cachePath, 0755)
+		if cache, err := wazero.NewCompilationCacheWithDir(cachePath); err == nil {
+			config = config.WithCompilationCache(cache)
+		}
+	}
+	p.rt = wazero.NewRuntimeWithConfig(ctx, config)
 
 	wasi_snapshot_preview1.MustInstantiate(ctx, p.rt)
 
 	// Expose Modern F4 API
-	_, err := p.rt.NewHostModuleBuilder("env").
+	_, err = p.rt.NewHostModuleBuilder("env").
 		NewFunctionBuilder().WithFunc(p.f4Log).Export("F4_Log").
 		NewFunctionBuilder().WithFunc(p.f4GetVersion).Export("F4_GetVersion").
 		NewFunctionBuilder().WithFunc(p.f4Message).Export("F4_Message").

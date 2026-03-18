@@ -22,5 +22,8 @@ func (c *coreAPI) Log(msg string) {
 
 func (c *coreAPI) Message(msg string) {
 	vtui.DebugLog("PLUGIN MESSAGE BOX: %s", msg)
-	vtui.ShowMessage(" Plugin Message ", msg, []string{"&Ok"})
+	// Safely push to the main UI thread to avoid race conditions from background plugin loads
+	vtui.FrameManager.PostTask(func() {
+		vtui.ShowMessage(" Plugin Message ", msg, []string{"&Ok"})
+	})
 }
