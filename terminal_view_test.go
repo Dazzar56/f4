@@ -33,27 +33,55 @@ func TestTerminalView_SaveRestoreCursor(t *testing.T) {
 	}
 }
 
-func TestTerminalView_ScrollingRegion(t *testing.T) {
-	tv := NewTerminalView(80, 10)
-	// Set scrolling region: lines 2 to 5 (1-based: 3;6)
-	tv.ScrollTop = 2
-	tv.ScrollBottom = 5
+func TestTerminalView_HistoryAndReflow(t *testing.T) {
+	// Создаем терминал шириной 10
+	tv := NewTerminalView(10, 5)
 
-	// Filling line 5
-	tv.SetCursor(0, 5)
-	tv.PutChar('X', 0)
-
-	// Call scroll in region (newline on the last line of region)
-	tv.SetCursor(0, 5)
-	tv.PutChar('\n', 0)
-
-	// Check: line 5 should be empty, and 'X' should move to line 4
-	if tv.Lines[4][0].Char != 'X' {
-		t.Errorf("Scroll region failed: 'X' should be at line 4, got %c at line 5", rune(tv.Lines[5][0].Char))
+	// Пишем длинную строку без пробелов (Hard Wrap)
+	text := "1234567890ABCDE" // 15 символов
+	for _, r := range text {
+		tv.PutChar(r, DefaultTermAttr)
 	}
-	if tv.Lines[5][0].Char != ' ' {
-		t.Error("Scroll region failed: line 5 should be cleared")
+
+	// Проверяем PieceTable
+	if tv.pt.String() != text {
+		t.Errorf("History mismatch: expected %q, got %q", text, tv.pt.String())
 	}
+
+	// Проверяем фрагментацию при ширине 10
+	// Должно быть 2 фрагмента: "1234567890" и "ABCDE"
+	frags := tv.engine.GetFragments(0)
+	if len(frags) != 2 {
+		t.Errorf("Expected 2 fragments at width 10, got %d", len(frags))
+	}
+
+	// Ресайзим до 5
+	tv.Resize(5, 5)
+	// Теперь должно быть 3 фрагмента по 5 символов
+	frags = tv.engine.GetFragments(0)
+	if len(frags) != 3 {
+		t.Errorf("Reflow failed: expected 3 fragments at width 5, got %d", len(frags))
+	}
+}
+
+func TestTerminalView_StylesPreservation(t *testing.T) {
+	tv := NewTerminalView(80, 5)
+
+	red := uint64(0xFF0000) << 16
+	blue := uint64(0x0000FF) << 16
+
+	// Пишем "RED" красным и "BLUE" синим
+	for _, r := range "RED" { tv.PutChar(r, red) }
+	for _, r := range "BLUE" { tv.PutChar(r, blue) }
+
+	// Проверяем атрибуты в логе через getAttrAt
+	// "RED" — оффсеты 0, 1, 2
+	if tv.getAttrAt(0) != red { t.Error("Style at offset 0 should be RED") }
+	if tv.getAttrAt(2) != red { t.Error("Style at offset 2 should be RED") }
+
+	// "BLUE" — оффсеты 3, 4, 5, 6
+	if tv.getAttrAt(3) != blue { t.Error("Style at offset 3 should be BLUE") }
+	if tv.getAttrAt(6) != blue { t.Error("Style at offset 6 should be BLUE") }
 }
 func TestTerminalView_AutoWrap(t *testing.T) {
 	width := 10
