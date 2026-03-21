@@ -22,6 +22,11 @@ const (
 	ColCommandLineText
 	ColCommandLineSelectedText
 
+	ColViewerText
+	ColViewerStatus
+	ColViewerArrows
+	ColViewerScrollbar
+
 	LastF4PaletteColor
 )
 
@@ -67,6 +72,12 @@ func SetDefaultF4Palette() {
 	// KeyBar (Match far2l: LightGray on DarkGray for numbers, DarkGray on Teal for labels)
 	vtui.Palette[vtui.ColKeyBarNum] = vtui.SetRGBBoth(0, 0xD3D7CF, 0x2E3436)
 	vtui.Palette[vtui.ColKeyBarText] = vtui.SetRGBBoth(0, 0x2E3436, 0x06989A)
+
+	// Viewer (Match far2l: LightGray on Black)
+	vtui.Palette[ColViewerText] = vtui.SetRGBBoth(0, lightGray, black)
+	vtui.Palette[ColViewerStatus] = vtui.SetRGBBoth(0, black, lightGray)
+	vtui.Palette[ColViewerArrows] = vtui.SetRGBBoth(0, yellow, black)
+	vtui.Palette[ColViewerScrollbar] = vtui.SetRGBBoth(0, 0x808080, black)
 }
 
 // colorMap links farcolors.ini keys to vtui.Palette indices.
@@ -102,6 +113,10 @@ var colorMap = map[string]int{
 	"CommandLine.Text.Selected":  ColCommandLineSelectedText,
 	"KeyBar.Numbers":             vtui.ColKeyBarNum,
 	"KeyBar.Labels":              vtui.ColKeyBarText,
+	"Viewer.Text":                ColViewerText,
+	"Viewer.Status":              ColViewerStatus,
+	"Viewer.Arrows":              ColViewerArrows,
+	"Viewer.Scrollbar":           ColViewerScrollbar,
 }
 
 // InitColors parses the farcolors section and applies it to the vtui.Palette

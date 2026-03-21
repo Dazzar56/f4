@@ -12,6 +12,10 @@ var Lng = map[string]string{
 	"Edit.NewFileTitle":  " Create New File ",
 	"Edit.NewFilePrompt": "File &name:",
 	"Desktop.Welcome":   " f4 project | Ctrl+Q to exit ",
+	"Viewer.Title":      " View ",
+	"Viewer.ModeText":   "Text",
+	"Viewer.ModeHex":    "Hex",
+	"Viewer.SearchTitle": " Search ",
 
 	// Macros
 	"Macro.AssignTitle":  " Assign Macro ",
@@ -41,12 +45,19 @@ var Lng = map[string]string{
 	// KeyBar Alt
 	"KeyBar.AltF1": "Left",
 	"KeyBar.AltF2": "Right",
+	"KeyBar.AltF3": "Hex",
 
 	// KeyBar Editor
 	"KeyBar.EditorF1":  "Help",
 	"KeyBar.EditorF2":  "Save",
 	"KeyBar.EditorF3":  "Wrap",
 	"KeyBar.EditorF10": "Quit",
+	"KeyBar.ViewerF1": "Help",
+	"KeyBar.ViewerF2": "Wrap",
+	"KeyBar.ViewerF3": "Exit",
+	"KeyBar.ViewerF4": "Hex",
+	"KeyBar.ViewerF7": "Search",
+	"KeyBar.ViewerF10": "Quit",
 }
 
 // Msg retrieves a localized string by key.

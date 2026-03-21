@@ -139,6 +139,15 @@ func (pf *PanelsFrame) openEditor(path string) {
 	editor.SetPosition(0, 0, pf.lastW-1, pf.lastH-2)
 	vtui.FrameManager.Push(editor)
 }
+func (pf *PanelsFrame) openViewer(path string) {
+	viewer, err := NewViewerView(path)
+	if err != nil {
+		vtui.DebugLog("PANELS: Failed to open viewer for %s: %v", path, err)
+		return
+	}
+	viewer.SetPosition(0, 0, pf.lastW-1, pf.lastH-2)
+	vtui.FrameManager.Push(viewer)
+}
 
 func (pf *PanelsFrame) ResizeConsole(w, h int) {
 	pf.lastW, pf.lastH = w, h
@@ -280,6 +289,27 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	// F10 exits the application (global, but can be overridden by terminal raw mode)
 	if e.VirtualKeyCode == vtinput.VK_F10 {
 		vtui.FrameManager.Shutdown()
+		return true
+	}
+
+	// F3: Viewer
+	if e.VirtualKeyCode == vtinput.VK_F3 {
+		var name string
+		var path string
+		if pf.activeIdx == 0 {
+			if fsp, ok := pf.left.(*FileSystemPanel); ok {
+				name = fsp.GetSelectedName()
+				path = fsp.vfs.Join(fsp.vfs.GetPath(), name)
+			}
+		} else {
+			if fsp, ok := pf.right.(*FileSystemPanel); ok {
+				name = fsp.GetSelectedName()
+				path = fsp.vfs.Join(fsp.vfs.GetPath(), name)
+			}
+		}
+		if path != "" {
+			pf.openViewer(path)
+		}
 		return true
 	}
 
