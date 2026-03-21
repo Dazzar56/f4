@@ -4,12 +4,22 @@ import (
 	"sync"
 
 	"github.com/unxed/vtui"
+	"github.com/unxed/vtui/piecetable"
+	"github.com/unxed/vtui/textlayout"
 )
 
-// TerminalView acts as a buffer for the background shell output.
+// StyleChange фиксирует момент смены атрибутов в байтовом потоке лога.
+type StyleChange struct {
+	Offset int
+	Attr   uint64
+}
+
+// TerminalView объединяет классическую сетку CharInfo и бесконечный лог.
 type TerminalView struct {
 	vtui.ScreenObject
-	mu           sync.Mutex
+	mu sync.Mutex
+
+	// --- Состояние для ANSI Парсера (Grid) ---
 	Lines        [][]vtui.CharInfo
 	AltLines     [][]vtui.CharInfo
 	UseAltScreen bool
@@ -22,11 +32,20 @@ type TerminalView struct {
 	CursorX int
 	CursorY int
 
-	// Saved state for main screen
-	savedX, savedY int
+	// Состояние терминала (сохранение координат)
+	savedX, savedY       int
 	decSavedX, decSavedY int
+	Palette              [16]uint32
 
-	Palette [16]uint32
+	// --- Бесконечный лог (History & Reflow) ---
+	pt       *piecetable.PieceTable
+	li       *piecetable.LineIndex
+	engine   *textlayout.WrapEngine
+	styles   []StyleChange
+	lastAttr uint64
+
+	// Скроллинг истории (визуальный ряд)
+	ScrollTopRow int
 }
 
 func NewTerminalView(w, h int) *TerminalView {
@@ -38,23 +57,27 @@ func NewTerminalView(w, h int) *TerminalView {
 	return tv
 }
 
-func (tv *TerminalView) Resize(w, h int) {
-	if tv.Width == w && tv.Height == h {
-		return
-	}
-	tv.ResetBuffer(w, h)
-}
-
 func (tv *TerminalView) ResetBuffer(w, h int) {
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
 
+	// Инициализация PieceTable (только один раз)
+	if tv.pt == nil {
+		tv.pt = piecetable.New([]byte{})
+		tv.li = piecetable.NewLineIndex()
+		tv.engine = textlayout.NewWrapEngine(tv.pt, tv.li)
+		tv.styles = []StyleChange{{0, DefaultTermAttr}}
+		tv.lastAttr = DefaultTermAttr
+	}
+	tv.engine.SetWidth(w)
+
+	// Создание сеток (Grid)
 	makeBuf := func() [][]vtui.CharInfo {
 		b := make([][]vtui.CharInfo, h)
 		for i := range b {
 			b[i] = make([]vtui.CharInfo, w)
 			for j := range b[i] {
-				b[i][j] = vtui.CharInfo{Char: ' ', Attributes: vtui.Palette[ColCommandLineUserScreen]}
+				b[i][j] = vtui.CharInfo{Char: ' ', Attributes: DefaultTermAttr}
 			}
 		}
 		return b
@@ -63,7 +86,14 @@ func (tv *TerminalView) ResetBuffer(w, h int) {
 	tv.Lines = makeBuf()
 	tv.AltLines = makeBuf()
 
-	// Initialize palette in ANSI order using far2l colors
+	// Сброс параметров прокрутки и курсора
+	tv.Width, tv.Height = w, h
+	tv.ScrollTop = 0
+	tv.ScrollBottom = h - 1
+	tv.CursorX = 0
+	tv.CursorY = h - 1
+
+	// Палитра по умолчанию (ANSI order)
 	// ANSI: 0:Black, 1:Red, 2:Green, 3:Yellow, 4:Blue, 5:Magenta, 6:Cyan, 7:White
 	// Far:  0:Black, 1:Blue, 2:Green, 3:Cyan, 4:Red, 5:Magenta, 6:Yellow, 7:White
 	tv.Palette[0] = far2lPalette[0] // Black
@@ -74,32 +104,10 @@ func (tv *TerminalView) ResetBuffer(w, h int) {
 	tv.Palette[5] = far2lPalette[5] // Magenta
 	tv.Palette[6] = far2lPalette[3] // Cyan
 	tv.Palette[7] = far2lPalette[7] // White
-	// Same for bright colors (8-15)
 	for i := 0; i < 8; i++ {
 		winIdx := []int{0, 4, 2, 6, 1, 5, 3, 7}[i]
 		tv.Palette[i+8] = far2lPalette[winIdx+8]
 	}
-
-	tv.Width, tv.Height = w, h
-	tv.ScrollTop = 0
-	tv.ScrollBottom = h - 1
-	tv.CursorX = 0
-	tv.CursorY = h - 1
-}
-
-func (tv *TerminalView) SetAltScreen(enable bool) {
-	tv.mu.Lock()
-	defer tv.mu.Unlock()
-	if tv.UseAltScreen == enable {
-		return
-	}
-	if enable {
-		tv.savedX, tv.savedY = tv.CursorX, tv.CursorY
-		tv.CursorX, tv.CursorY = 0, 0
-	} else {
-		tv.CursorX, tv.CursorY = tv.savedX, tv.savedY
-	}
-	tv.UseAltScreen = enable
 }
 
 func (tv *TerminalView) getBuffer() [][]vtui.CharInfo {
@@ -113,6 +121,20 @@ func (tv *TerminalView) PutChar(r rune, attr uint64) {
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
 
+	// 1. Запись в бесконечный лог (если не AltScreen)
+	if !tv.UseAltScreen && r >= 0x20 {
+		offset := tv.pt.Size()
+		if attr != tv.lastAttr {
+			tv.styles = append(tv.styles, StyleChange{offset, attr})
+			tv.lastAttr = attr
+		}
+		buf := []byte(string(r))
+		tv.pt.Insert(offset, buf)
+		tv.li.UpdateAfterInsert(offset, buf)
+		tv.engine.InvalidateCache()
+	}
+
+	// 2. Обработка в текущей сетке (Grid)
 	if r == '\r' {
 		tv.CursorX = 0
 		return
@@ -138,7 +160,6 @@ func (tv *TerminalView) PutChar(r rune, attr uint64) {
 	buf := tv.getBuffer()
 	if tv.CursorX >= tv.Width {
 		tv.newline()
-		// newline might have switched buffer context if it scrolled
 		buf = tv.getBuffer()
 	}
 
@@ -147,28 +168,10 @@ func (tv *TerminalView) PutChar(r rune, attr uint64) {
 		tv.CursorX++
 	}
 }
-func (tv *TerminalView) RepeatLastChar(n int, r rune, attr uint64) {
-	for i := 0; i < n; i++ {
-		tv.PutChar(r, attr)
-	}
-}
-func (tv *TerminalView) EraseCharacter(n int, attr uint64) {
-	tv.mu.Lock()
-	defer tv.mu.Unlock()
-	buf := tv.getBuffer()
-	if tv.CursorY < 0 || tv.CursorY >= len(buf) {
-		return
-	}
-	line := buf[tv.CursorY]
-	for i := 0; i < n && (tv.CursorX+i) < tv.Width; i++ {
-		line[tv.CursorX+i] = vtui.CharInfo{Char: ' ', Attributes: attr}
-	}
-}
 
 func (tv *TerminalView) newline() {
 	tv.CursorX = 0
 	tv.CursorY++
-
 	if tv.CursorY > tv.ScrollBottom {
 		tv.scrollUp(tv.ScrollTop, tv.ScrollBottom, 1)
 		tv.CursorY = tv.ScrollBottom
@@ -182,15 +185,15 @@ func (tv *TerminalView) scrollUp(top, bottom, n int) {
 	if top >= bottom { return }
 
 	for i := 0; i < n; i++ {
-		// Shift lines within the region
 		copy(buf[top:bottom], buf[top+1:bottom+1])
-		// Clear the last line of the region
 		buf[bottom] = make([]vtui.CharInfo, tv.Width)
 		for j := range buf[bottom] {
-			buf[bottom][j] = vtui.CharInfo{Char: ' ', Attributes: vtui.Palette[ColCommandLineUserScreen]}
+			buf[bottom][j] = vtui.CharInfo{Char: ' ', Attributes: DefaultTermAttr}
 		}
 	}
 }
+
+// --- Методы API для AnsiParser ---
 
 func (tv *TerminalView) SetCursor(x, y int) {
 	tv.mu.Lock()
@@ -201,6 +204,7 @@ func (tv *TerminalView) SetCursor(x, y int) {
 	if y >= tv.Height { y = tv.Height - 1 }
 	tv.CursorX, tv.CursorY = x, y
 }
+
 func (tv *TerminalView) SaveCursor() {
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
@@ -211,6 +215,23 @@ func (tv *TerminalView) RestoreCursor() {
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
 	tv.CursorX, tv.CursorY = tv.decSavedX, tv.decSavedY
+}
+
+func (tv *TerminalView) RepeatLastChar(n int, r rune, attr uint64) {
+	for i := 0; i < n; i++ {
+		tv.PutChar(r, attr)
+	}
+}
+
+func (tv *TerminalView) EraseCharacter(n int, attr uint64) {
+	tv.mu.Lock()
+	defer tv.mu.Unlock()
+	buf := tv.getBuffer()
+	if tv.CursorY < 0 || tv.CursorY >= len(buf) { return }
+	line := buf[tv.CursorY]
+	for i := 0; i < n && (tv.CursorX+i) < tv.Width; i++ {
+		line[tv.CursorX+i] = vtui.CharInfo{Char: ' ', Attributes: attr}
+	}
 }
 
 func (tv *TerminalView) EraseDisplay(mode int, attr uint64) {
@@ -226,12 +247,8 @@ func (tv *TerminalView) EraseDisplay(mode int, attr uint64) {
 	} else if mode == 0 {
 		if tv.CursorY >= 0 && tv.CursorY < tv.Height {
 			line := buf[tv.CursorY]
-			start := tv.CursorX
-			if start < 0 {
-				start = 0
-			}
-			for j := start; j < tv.Width; j++ {
-				line[j] = vtui.CharInfo{Char: ' ', Attributes: attr}
+			for j := (tv.CursorX); j < tv.Width; j++ {
+				if j >= 0 { line[j] = vtui.CharInfo{Char: ' ', Attributes: attr} }
 			}
 		}
 		for i := tv.CursorY + 1; i < tv.Height; i++ {
@@ -247,40 +264,65 @@ func (tv *TerminalView) EraseDisplay(mode int, attr uint64) {
 func (tv *TerminalView) EraseLine(mode int, attr uint64) {
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
-	if tv.CursorY < 0 || tv.CursorY >= tv.Height {
-		return
-	}
 	buf := tv.getBuffer()
+	if tv.CursorY < 0 || tv.CursorY >= tv.Height { return }
 	line := buf[tv.CursorY]
 	start, end := 0, tv.Width
 	if mode == 0 {
 		start = tv.CursorX
-		if start < 0 { start = 0 }
-		if start > tv.Width { start = tv.Width }
 	} else if mode == 1 {
 		end = tv.CursorX + 1
-		if end > tv.Width { end = tv.Width }
 	}
 	for j := start; j < end; j++ {
-		line[j] = vtui.CharInfo{Char: ' ', Attributes: attr}
+		if j >= 0 && j < tv.Width {
+			line[j] = vtui.CharInfo{Char: ' ', Attributes: attr}
+		}
 	}
 }
+
+func (tv *TerminalView) SetAltScreen(enable bool) {
+	tv.mu.Lock()
+	defer tv.mu.Unlock()
+	if tv.UseAltScreen == enable { return }
+	if enable {
+		tv.savedX, tv.savedY = tv.CursorX, tv.CursorY
+		tv.CursorX, tv.CursorY = 0, 0
+	} else {
+		tv.CursorX, tv.CursorY = tv.savedX, tv.savedY
+	}
+	tv.UseAltScreen = enable
+}
+
+// --- Отрисовка (Display) ---
 
 func (tv *TerminalView) Show(scr *vtui.ScreenBuf) {
 	tv.ScreenObject.Show(scr)
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
 
+	// Пока используем отрисовку из сетки для совместимости.
+	// В будущем переключим Main Screen на отрисовку из PieceTable лога.
 	buf := tv.getBuffer()
 	for y, line := range buf {
 		scr.Write(tv.X1, tv.Y1+y, line)
 	}
-	if !tv.IsVisible() {
-		return
-	}
 
+	if !tv.IsVisible() { return }
+
+	// Курсор рисуем только в режиме AltScreen (интерактив)
 	if tv.UseAltScreen {
 		scr.SetCursorPos(tv.X1+tv.CursorX, tv.Y1+tv.CursorY)
 		scr.SetCursorVisible(true)
 	}
 }
+
+// Вспомогательные методы MDI
+func (tv *TerminalView) Resize(w, h int) {
+	if tv.Width == w && tv.Height == h { return }
+	tv.ResetBuffer(w, h)
+}
+func (tv *TerminalView) IsModal() bool { return false }
+func (tv *TerminalView) GetWindowNumber() int { return 0 }
+func (tv *TerminalView) SetWindowNumber(n int) {}
+func (tv *TerminalView) RequestFocus() bool { return true }
+func (tv *TerminalView) Close() {}
