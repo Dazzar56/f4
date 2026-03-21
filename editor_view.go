@@ -4,10 +4,10 @@ import (
 	"os"
 	"unicode/utf8"
 
-	"github.com/unxed/vtui/piecetable"
-	"github.com/unxed/vtui/textlayout"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
+	"github.com/unxed/vtui/piecetable"
+	"github.com/unxed/vtui/textlayout"
 )
 
 type visualCell struct {
@@ -90,29 +90,30 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 		return
 	}
 
-	ev.ensureEngineWidth() // Гарантируем актуальность ширины перед отрисовкой
+	ev.ensureEngineWidth()
 	height := ev.Y2 - ev.Y1 + 1
 
 	bgAttr := vtui.Palette[ColCommandLineUserScreen]
 	selAttr := vtui.Palette[vtui.ColDialogEditSelected]
 
+	// 1. Позиция курсора
 	curOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 	curVRow, curVCol := ev.engine.LogicalToVisual(curOffset)
 
+	// 2. Отрисовка
 	startLogLine, startFragIdx := ev.engine.GetLogLineAtVisualRow(ev.ScrollTopRow)
-	vRowsBeforeDocStart := ev.ScrollTopRow - startFragIdx
-
 	rowsRendered := 0
+
 	for logIdx := startLogLine; logIdx < ev.li.LineCount(); logIdx++ {
 		frags := ev.engine.GetFragments(logIdx)
-		for fIdx := 0; fIdx < len(frags); fIdx++ {
+		baseVRow := ev.engine.GetRowOffset(logIdx)
+
+		for fIdx, frag := range frags {
 			if logIdx == startLogLine && fIdx < startFragIdx {
 				continue
 			}
 
-			frag := frags[fIdx]
-			absVRow := vRowsBeforeDocStart + fIdx
-
+			absVRow := baseVRow + fIdx
 			currY := ev.Y1 + rowsRendered
 			scr.FillRect(ev.X1, currY, ev.X2, currY, ' ', bgAttr)
 
@@ -146,7 +147,6 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 				return
 			}
 		}
-		vRowsBeforeDocStart += len(frags)
 	}
 }
 
@@ -406,7 +406,7 @@ func (ev *EditorView) ensureCursorVisible() {
 	if !ev.WordWrap {
 		if vCol < ev.ScrollLeft {
 			ev.ScrollLeft = vCol
-		} else if vCol >= ev.ScrollLeft + width {
+		} else if vCol >= ev.ScrollLeft+width {
 			ev.ScrollLeft = vCol - width + 1
 		}
 	} else {
