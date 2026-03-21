@@ -101,3 +101,16 @@ func TestPanelsFrame_RefreshOnFocus(t *testing.T) {
 		t.Error("PanelsFrame should handle FocusEventType and return true")
 	}
 }
+func TestPanelsFrame_Labels(t *testing.T) {
+	pf := NewPanelsFrame()
+	ks := pf.GetKeyLabels()
+
+	if ks == nil {
+		t.Fatal("PanelsFrame labels are nil")
+	}
+
+	// F3 in panels should be "View" (or whatever you set in lang.go)
+	if ks.Normal[2] == "" {
+		t.Error("PanelsFrame F3 label should not be empty")
+	}
+}

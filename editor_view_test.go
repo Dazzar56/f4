@@ -143,6 +143,7 @@ func TestEditorView_SaveFile(t *testing.T) {
 		t.Errorf("Save failed: expected %q on disk, got %q", expected, string(savedData))
 	}
 }
+
 func TestEditorView_Selection(t *testing.T) {
 	pt := piecetable.New([]byte("Select Me"))
 	ev := NewEditorView(pt, "")
@@ -193,6 +194,7 @@ func TestEditorView_Selection(t *testing.T) {
 		t.Error("Selection should be cleared after delete")
 	}
 }
+
 func TestEditorView_DeleteSelectionMultiline(t *testing.T) {
 	// Three-line text
 	pt := piecetable.New([]byte("Line1\nLine2\nLine3"))
@@ -230,6 +232,7 @@ func TestEditorView_DeleteSelectionMultiline(t *testing.T) {
 		t.Errorf("Cursor after multiline delete: expected Line 0, Pos 4. Got Line %d, Pos %d", ev.CursorLine, ev.CursorPos)
 	}
 }
+
 func TestEditorView_WordWrapNavigation(t *testing.T) {
 	// Текст: "0123456789ABCDEFGHIJklmno" (25 символов)
 	// При ширине 10:
@@ -267,6 +270,7 @@ func TestEditorView_WordWrapNavigation(t *testing.T) {
 		t.Errorf("WordWrap Up: expected byte pos 15, got %d", ev.CursorPos)
 	}
 }
+
 func TestEditorView_UTF8Editing(t *testing.T) {
 	// "Привет" - Russian letters occupy 2 bytes each
 	pt := piecetable.New([]byte("Привет"))
@@ -323,6 +327,7 @@ func TestEditorView_SelectionWrapping(t *testing.T) {
 		t.Errorf("Wrapped selection range failed: [%d:%d]", min, max)
 	}
 }
+
 func TestEditorView_WideCharNavigation(t *testing.T) {
 	// "A世B" -> 世 occupies 2 columns.
 	pt := piecetable.New([]byte("A世B"))
@@ -343,6 +348,7 @@ func TestEditorView_WideCharNavigation(t *testing.T) {
 		t.Errorf("Navigate over Wide: expected pos 4, got %d", ev.CursorPos)
 	}
 }
+
 func TestEditorView_UTF8Selection(t *testing.T) {
 	// "Да" - 2 runes, 4 bytes
 	pt := piecetable.New([]byte("Да"))
@@ -363,6 +369,7 @@ func TestEditorView_UTF8Selection(t *testing.T) {
 		t.Errorf("UTF8 Selection failed: expected [0:2], got [%d:%d]", min, max)
 	}
 }
+
 func TestEditorView_HomeEnd(t *testing.T) {
 	pt := piecetable.New([]byte("Hello World"))
 	ev := NewEditorView(pt, "")
@@ -398,6 +405,7 @@ func TestEditorView_WideCharBackspace(t *testing.T) {
 		t.Errorf("Wide Backspace pos failed: expected 1, got %d", ev.CursorPos)
 	}
 }
+
 func TestEditorView_BracketedPaste(t *testing.T) {
 	pt := piecetable.New([]byte("Start-"))
 	ev := NewEditorView(pt, "")
@@ -436,6 +444,7 @@ func TestEditorView_BracketedPaste(t *testing.T) {
 		t.Errorf("Post-paste cursor error: Line %d, Pos %d", ev.CursorLine, ev.CursorPos)
 	}
 }
+
 func TestEditorView_ExtremeBounds(t *testing.T) {
 	pt := piecetable.New([]byte("A"))
 	ev := NewEditorView(pt, "")
@@ -542,7 +551,7 @@ func TestEditorView_F3_ToggleWordWrap(t *testing.T) {
 	ev := NewEditorView(pt, "")
 	ev.WordWrap = true
 
-	// Press F3
+	// Press F3 (Wait, make sure your code uses VK_F3 now)
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F3})
 	if ev.WordWrap {
 		t.Error("F3 failed to disable WordWrap")
@@ -552,6 +561,23 @@ func TestEditorView_F3_ToggleWordWrap(t *testing.T) {
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F3})
 	if !ev.WordWrap {
 		t.Error("F3 failed to re-enable WordWrap")
+	}
+}
+
+func TestEditorView_Labels(t *testing.T) {
+	pt := piecetable.New([]byte(""))
+	ev := NewEditorView(pt, "test.txt")
+	ks := ev.GetKeyLabels()
+
+	if ks == nil {
+		t.Fatal("EditorView.GetKeyLabels() returned nil")
+	}
+
+	if ks.Normal[1] != "Save" { // F2
+		t.Errorf("Expected F2 to be 'Save', got %q", ks.Normal[1])
+	}
+	if ks.Normal[9] != "Quit" { // F10
+		t.Errorf("Expected F10 to be 'Quit', got %q", ks.Normal[9])
 	}
 }
 
@@ -572,6 +598,7 @@ func TestEditorView_WideCharDelete(t *testing.T) {
 		t.Errorf("Cursor position after Wide Delete should remain 1, got %d", ev.CursorPos)
 	}
 }
+
 func TestEditorView_PageNavigation(t *testing.T) {
 	// Create 20 lines of text
 	var buf []byte
@@ -613,6 +640,7 @@ func TestEditorView_PageNavigation(t *testing.T) {
 		t.Errorf("Shift+PgDn range failed: expected [0:25], got [%d:%d]", min, max)
 	}
 }
+
 func TestEditorView_LongLinePerformance(t *testing.T) {
 	t.Parallel()
 
