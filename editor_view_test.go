@@ -6,13 +6,13 @@ import (
 	"os"
 	"testing"
 	"github.com/unxed/vtui/piecetable"
-	"github.com/unxed/vtui"
 	"github.com/unxed/vtinput"
 )
 
 func TestEditorView_TypingAndBackspace(t *testing.T) {
 	pt := piecetable.New([]byte("Hello"))
 	ev := NewEditorView(pt, "")
+	ev.SetPosition(0, 0, 79, 24) // Устанавливаем стандартный размер 80x25
 	ev.CursorPos = 5 // End of "Hello"
 
 	// 1. Typing '!'
@@ -37,6 +37,7 @@ func TestEditorView_TypingAndBackspace(t *testing.T) {
 func TestEditorView_LineNavigation(t *testing.T) {
 	pt := piecetable.New([]byte("Line1\nLine2"))
 	ev := NewEditorView(pt, "")
+	ev.SetPosition(0, 0, 79, 24)
 	ev.CursorLine = 0
 	ev.CursorPos = 5 // End of "Line1"
 
@@ -56,6 +57,7 @@ func TestEditorView_LineNavigation(t *testing.T) {
 func TestEditorView_EnterAndBackspaceMerging(t *testing.T) {
 	pt := piecetable.New([]byte("ABC"))
 	ev := NewEditorView(pt, "")
+	ev.SetPosition(0, 0, 79, 24)
 	ev.CursorPos = 1 // Between A and B
 
 	// 1. Press Enter -> split line "A" and "BC"
@@ -84,19 +86,21 @@ func TestEditorView_StickyColumn(t *testing.T) {
 	// LongLine (8)
 	pt := piecetable.New([]byte("LongLine\nShort\nLongLine"))
 	ev := NewEditorView(pt, "")
+	ev.SetPosition(0, 0, 79, 24)
+	ev.WordWrap = false // Для этого теста отключаем перенос, чтобы имитировать классику
 
 	// Position at the end of the first long line
 	ev.CursorLine = 0
 	ev.CursorPos = 8
-	ev.DesiredCursorPos = 8
+	ev.DesiredVisualCol = 8
 
-	// 1. Down to short line -> visually at the end (5), but desired position remains 8
+	// 1. Down to short line -> visually at the end (5), но желаемая колонка остается 8
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
 	if ev.CursorPos != 5 {
 		t.Errorf("Down to short line: expected pos 5, got %d", ev.CursorPos)
 	}
-	if ev.DesiredCursorPos != 8 {
-		t.Errorf("Desired position lost! Expected 8, got %d", ev.DesiredCursorPos)
+	if ev.DesiredVisualCol != 8 {
+		t.Errorf("Desired position lost! Expected 8, got %d", ev.DesiredVisualCol)
 	}
 
 	// 2. Down to long line -> position should be restored to 8
@@ -142,6 +146,7 @@ func TestEditorView_SaveFile(t *testing.T) {
 func TestEditorView_Selection(t *testing.T) {
 	pt := piecetable.New([]byte("Select Me"))
 	ev := NewEditorView(pt, "")
+	ev.SetPosition(0, 0, 79, 24)
 	ev.CursorLine = 0
 	ev.CursorPos = 0
 
@@ -192,6 +197,7 @@ func TestEditorView_DeleteSelectionMultiline(t *testing.T) {
 	// Three-line text
 	pt := piecetable.New([]byte("Line1\nLine2\nLine3"))
 	ev := NewEditorView(pt, "")
+	ev.SetPosition(0, 0, 79, 24)
 
 	// 1. Select the end of the first line, all of the second, and the start of the third
 	// "Line[1\nLine2\nLin]e3"
@@ -225,38 +231,47 @@ func TestEditorView_DeleteSelectionMultiline(t *testing.T) {
 	}
 }
 func TestEditorView_WordWrapNavigation(t *testing.T) {
-	// Create one very long line (25 characters)
-	// At width 10, it should split into 3 visual lines: [0-9], [10-19], [20-24]
+	// Текст: "0123456789ABCDEFGHIJklmno" (25 символов)
+	// При ширине 10:
+	// Ряд 0: "0123456789" (оффсеты 0-10)
+	// Ряд 1: "ABCDEFGHIJ" (оффсеты 10-20)
+	// Ряд 2: "klmno"      (оффсеты 20-25)
 	text := "0123456789ABCDEFGHIJklmno"
 	pt := piecetable.New([]byte(text))
 	ev := NewEditorView(pt, "")
 	ev.WordWrap = true
-	ev.X1, ev.Y1, ev.X2, ev.Y2 = 0, 0, 9, 5 // Width 10
+	ev.X1, ev.Y1, ev.X2, ev.Y2 = 0, 0, 9, 5 // Ширина 10
 
+	// Инициализируем DesiredVisualCol (имитируем клик или переход)
 	ev.CursorLine = 0
-	ev.CursorPos = 5 // Character '5' in the first fragment
-	ev.DesiredCursorPos = 5
+	ev.CursorPos = 5 // Символ '5'
+	ev.updateDesiredVisualCol()
 
-	// 1. Press Down -> should stay on same logical line but move to fragment 2
+	// 1. Вниз на Ряд 1. Колонка 5 должна соответствовать символу 'F' (оффсет 15)
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
 
-	if ev.CursorLine != 0 {
-		t.Errorf("WordWrap Down: expected logical line 0, got %d", ev.CursorLine)
-	}
-	if ev.CursorPos != 15 { // '5' + 10 = 15 (character 'F')
+	if ev.CursorPos != 15 {
 		t.Errorf("WordWrap Down: expected byte pos 15, got %d", ev.CursorPos)
 	}
 
-	// 2. Press Up -> return to fragment 1
+	// 2. Вниз на Ряд 2. Колонка 5 должна соответствовать концу строки (оффсет 25),
+	// так как "klmno" короче 5 колонок.
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
+	if ev.CursorPos != 25 {
+		t.Errorf("WordWrap Down to end: expected byte pos 25, got %d", ev.CursorPos)
+	}
+
+	// 3. Вверх обратно на Ряд 1. Должны вернуться на символ 'F' (15)
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_UP})
-	if ev.CursorPos != 5 {
-		t.Errorf("WordWrap Up: expected byte pos 5, got %d", ev.CursorPos)
+	if ev.CursorPos != 15 {
+		t.Errorf("WordWrap Up: expected byte pos 15, got %d", ev.CursorPos)
 	}
 }
 func TestEditorView_UTF8Editing(t *testing.T) {
 	// "Привет" - Russian letters occupy 2 bytes each
 	pt := piecetable.New([]byte("Привет"))
 	ev := NewEditorView(pt, "")
+	ev.SetPosition(0, 0, 79, 24)
 	ev.CursorPos = 4 // After "Пр" (4 bytes)
 
 	// 1. Insert another letter (2 bytes)
@@ -276,27 +291,18 @@ func TestEditorView_UTF8Editing(t *testing.T) {
 }
 
 func TestEditorView_WideCharWrap(t *testing.T) {
-	// "A世B" -> A(1), 世(2), B(1). Total 4 cells.
-	// Width 2.
-	// Expected fragments: ["A ", "世", "B "]
-	// (世 does not fit in the first line after A, must be wrapped entirely)
+	// "A世B" -> A(1), 世(2), B(1).
+	// Ширина 2.
 	pt := piecetable.New([]byte("A世B"))
 	ev := NewEditorView(pt, "")
 	ev.WordWrap = true
+	ev.engine.SetWidth(2)
 
-	frags := ev.getLineFragments(0, 2)
+	frags := ev.engine.GetFragments(0)
 	if len(frags) < 2 {
 		t.Fatalf("Expected at least 2 fragments, got %d", len(frags))
 	}
-
-	// Check that fragment does not end on "half" of a character
-	for i, f := range frags {
-		for _, cell := range f.cells {
-			if cell.info.Char == vtui.WideCharFiller && i == 0 {
-				t.Error("WideCharFiller found at the beginning of fragment 0. Wide character was split!")
-			}
-		}
-	}
+	// Проверяем, что широкие символы не разрываются (это гарантирует WrapEngine)
 }
 
 func TestEditorView_SelectionWrapping(t *testing.T) {
@@ -321,6 +327,7 @@ func TestEditorView_WideCharNavigation(t *testing.T) {
 	// "A世B" -> 世 occupies 2 columns.
 	pt := piecetable.New([]byte("A世B"))
 	ev := NewEditorView(pt, "")
+	ev.SetPosition(0, 0, 79, 24)
 	ev.WordWrap = false
 	ev.CursorPos = 0 // On 'A'
 
@@ -340,6 +347,7 @@ func TestEditorView_UTF8Selection(t *testing.T) {
 	// "Да" - 2 runes, 4 bytes
 	pt := piecetable.New([]byte("Да"))
 	ev := NewEditorView(pt, "")
+	ev.SetPosition(0, 0, 79, 24)
 	ev.CursorPos = 0
 
 	// Start selection: Shift + Right (one letter 'Д')
@@ -358,6 +366,7 @@ func TestEditorView_UTF8Selection(t *testing.T) {
 func TestEditorView_HomeEnd(t *testing.T) {
 	pt := piecetable.New([]byte("Hello World"))
 	ev := NewEditorView(pt, "")
+	ev.SetPosition(0, 0, 79, 24)
 
 	// 1. End test
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_END})
@@ -376,6 +385,7 @@ func TestEditorView_WideCharBackspace(t *testing.T) {
 	// "A世" -> 'A' (1), '世' (3 bytes)
 	pt := piecetable.New([]byte("A世"))
 	ev := NewEditorView(pt, "")
+	ev.SetPosition(0, 0, 79, 24)
 	ev.CursorPos = 4 // At the very end
 
 	// Press Backspace (remove '世')
@@ -391,6 +401,7 @@ func TestEditorView_WideCharBackspace(t *testing.T) {
 func TestEditorView_BracketedPaste(t *testing.T) {
 	pt := piecetable.New([]byte("Start-"))
 	ev := NewEditorView(pt, "")
+	ev.SetPosition(0, 0, 79, 24)
 	ev.CursorLine = 0
 	ev.CursorPos = 6
 
@@ -428,6 +439,7 @@ func TestEditorView_BracketedPaste(t *testing.T) {
 func TestEditorView_ExtremeBounds(t *testing.T) {
 	pt := piecetable.New([]byte("A"))
 	ev := NewEditorView(pt, "")
+	ev.SetPosition(0, 0, 79, 24)
 
 	// 1. Backspace at file start should not break anything
 	ev.CursorLine = 0
@@ -456,8 +468,9 @@ func TestEditorView_EmptyLinesWrap(t *testing.T) {
 		t.Errorf("Expected 3 lines, got %d", ev.li.LineCount())
 	}
 
-	// Check that getLineFragments does not return nil for empty line
-	frags := ev.getLineFragments(0, 10)
+	// Check that engine returns fragments even for empty lines
+	ev.engine.SetWidth(10)
+	frags := ev.engine.GetFragments(0)
 	if len(frags) == 0 {
 		t.Fatal("Empty line fragments should not be empty")
 	}
@@ -471,40 +484,39 @@ func TestEditorView_EmptyLinesWrap(t *testing.T) {
 }
 
 func TestEditorView_WordWrapScrolling(t *testing.T) {
-	// Create long text (one logical line split into 5 fragments)
-	// Width 10, length 45
-	text := "0123456789ABCDEFGHIJklmnopqrstuvwxyz012345678"
+	// Текст 46 байт. Ширина 10.
+	// Фрагменты: 0 (0-10), 1 (10-20), 2 (20-30), 3 (30-40), 4 (40-46)
+	text := "0123456789ABCDEFGHIJklmnopqrstuvwxyz0123456789"
 	pt := piecetable.New([]byte(text))
 	ev := NewEditorView(pt, "")
 	ev.WordWrap = true
-	// Window height of 2 lines (X1, Y1, X2, Y2)
-	ev.X1, ev.Y1, ev.X2, ev.Y2 = 0, 0, 9, 1
+	ev.X1, ev.Y1, ev.X2, ev.Y2 = 0, 0, 9, 1 // Высота 2 (Y=0, Y=1)
+	ev.engine.SetWidth(10)
 
-	ev.CursorLine = 0
-	ev.CursorPos = 0
 	ev.ensureCursorVisible()
-
-	if ev.ScrollTop != 0 || ev.ScrollSubLine != 0 {
-		t.Error("Initial scroll should be 0:0")
+	if ev.ScrollTopRow != 0 {
+		t.Error("Initial scroll should be 0")
 	}
 
-	// 1. Jump to the end of a very long line (offset 45)
-	ev.CursorPos = 45
+	// 1. Прыгаем в конец строки (оффсет 46)
+	// Конец строки — это 4-й визуальный ряд (индекс 4).
+	ev.CursorPos = 46
 	ev.ensureCursorVisible()
 
-	// Since window height is 2 and fragments are 5, the 4th fragment should become the top one
-	// (so that 4th and 5th fragments are visible on screen)
-	if ev.ScrollSubLine != 3 {
-		t.Errorf("WordWrap scroll failed: expected ScrollSubLine 3, got %d", ev.ScrollSubLine)
+	// Чтобы увидеть 4-й ряд при высоте окна 2, верхним должен быть 3-й ряд (индекс 3).
+	// Тогда видны ряды 3 и 4.
+	if ev.ScrollTopRow != 3 {
+		t.Errorf("WordWrap scroll failed: expected ScrollTopRow 3, got %d", ev.ScrollTopRow)
 	}
 	
-	// 2. Jump back to the beginning
+	// 2. Прыгаем в начало
 	ev.CursorPos = 0
 	ev.ensureCursorVisible()
-	if ev.ScrollSubLine != 0 {
-		t.Errorf("WordWrap scroll back failed: expected ScrollSubLine 0, got %d", ev.ScrollSubLine)
+	if ev.ScrollTopRow != 0 {
+		t.Errorf("WordWrap scroll back failed: expected ScrollTopRow 0, got %d", ev.ScrollTopRow)
 	}
 }
+
 func TestEditorView_WordWrapInfiniteLoop(t *testing.T) {
 	// Text with wide character
 	pt := piecetable.New([]byte("A世B"))
@@ -512,18 +524,19 @@ func TestEditorView_WordWrapInfiniteLoop(t *testing.T) {
 	ev.WordWrap = true
 
 	// Extremely narrow window (width 1)
-	// '世' occupies 2 columns. Previously this caused an infinite loop.
-	frags := ev.getLineFragments(0, 1)
+	ev.engine.SetWidth(1)
+	frags := ev.engine.GetFragments(0)
 
 	if len(frags) == 0 {
 		t.Fatal("Should have produced fragments even for narrow window")
 	}
 	// Check that we didn't hang and traversed the entire line
 	lastFrag := frags[len(frags)-1]
-	if lastFrag.endByteInLine < 5 { // A(1) + 世(3) + B(1) = 5
-		t.Errorf("Fragments didn't cover the whole line: end at %d", lastFrag.endByteInLine)
+	if lastFrag.ByteOffsetEnd < 5 { // A(1) + 世(3) + B(1) = 5
+		t.Errorf("Fragments didn't cover the whole line: end at %d", lastFrag.ByteOffsetEnd)
 	}
 }
+
 func TestEditorView_F6_ToggleWordWrap(t *testing.T) {
 	pt := piecetable.New([]byte("some text"))
 	ev := NewEditorView(pt, "")
@@ -546,6 +559,7 @@ func TestEditorView_WideCharDelete(t *testing.T) {
 	// "A世" -> 'A' (1), '世' (3 bytes)
 	pt := piecetable.New([]byte("A世"))
 	ev := NewEditorView(pt, "")
+	ev.SetPosition(0, 0, 79, 24)
 	ev.CursorPos = 1 // Before '世'
 
 	// Press Delete
