@@ -250,6 +250,37 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		ev.ensureCursorVisible()
 		return true
 
+	case vtinput.VK_PRIOR: // PgUp
+		handleNav()
+		height := ev.Y2 - ev.Y1 + 1
+		curOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
+		vRow, _ := ev.engine.LogicalToVisual(curOffset)
+		newVRow := vRow - height
+		if newVRow < 0 {
+			newVRow = 0
+		}
+		newOffset := ev.engine.VisualToLogical(newVRow, ev.DesiredVisualCol)
+		ev.CursorLine = ev.li.GetLineAtOffset(newOffset)
+		ev.CursorPos = newOffset - ev.li.GetLineOffset(ev.CursorLine)
+		ev.ensureCursorVisible()
+		return true
+
+	case vtinput.VK_NEXT: // PgDn
+		handleNav()
+		height := ev.Y2 - ev.Y1 + 1
+		curOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
+		vRow, _ := ev.engine.LogicalToVisual(curOffset)
+		newVRow := vRow + height
+		totalVRows := ev.engine.GetTotalVisualRows()
+		if newVRow >= totalVRows {
+			newVRow = totalVRows - 1
+		}
+		newOffset := ev.engine.VisualToLogical(newVRow, ev.DesiredVisualCol)
+		ev.CursorLine = ev.li.GetLineAtOffset(newOffset)
+		ev.CursorPos = newOffset - ev.li.GetLineOffset(ev.CursorLine)
+		ev.ensureCursorVisible()
+		return true
+
 	case vtinput.VK_LEFT:
 		handleNav()
 		if ev.CursorPos > 0 {
