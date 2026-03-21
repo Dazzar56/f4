@@ -64,6 +64,9 @@ func SetDefaultF4Palette() {
 
 	// Editor selection: inverse of UserScreen (Black on LightGray)
 	vtui.Palette[vtui.ColDialogEditSelected] = vtui.SetRGBBoth(0, black, lightGray)
+	// KeyBar (Match far2l: LightGray on DarkGray for numbers, DarkGray on Teal for labels)
+	vtui.Palette[vtui.ColKeyBarNum] = vtui.SetRGBBoth(0, 0xD3D7CF, 0x2E3436)
+	vtui.Palette[vtui.ColKeyBarText] = vtui.SetRGBBoth(0, 0x2E3436, 0x06989A)
 }
 
 // colorMap links farcolors.ini keys to vtui.Palette indices.
