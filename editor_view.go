@@ -488,6 +488,11 @@ func (ev *EditorView) GetType() vtui.FrameType { return vtui.TypeUser + 2 }
 func (ev *EditorView) SetExitCode(c int) { ev.done = true }
 func (ev *EditorView) IsDone() bool { return ev.done }
 func (ev *EditorView) IsBusy() bool { return ev.pasting }
+func (ev *EditorView) IsModal() bool { return false }
+func (ev *EditorView) GetWindowNumber() int { return 0 }
+func (ev *EditorView) SetWindowNumber(n int) {}
+func (ev *EditorView) RequestFocus() bool { return true }
+func (ev *EditorView) Close() { ev.done = true }
 func (ev *EditorView) getLineLength(line int) int {
 	if line < 0 || line >= ev.li.LineCount() {
 		return 0

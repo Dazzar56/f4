@@ -191,3 +191,8 @@ func (f *MacroAssignFrame) GetType() vtui.FrameType { return vtui.TypeDialog }
 func (f *MacroAssignFrame) SetExitCode(c int)       { f.done = true }
 func (f *MacroAssignFrame) IsDone() bool            { return f.done }
 func (f *MacroAssignFrame) IsBusy() bool            { return false }
+func (f *MacroAssignFrame) IsModal() bool { return true }
+func (f *MacroAssignFrame) GetWindowNumber() int { return 0 }
+func (f *MacroAssignFrame) SetWindowNumber(n int) {}
+func (f *MacroAssignFrame) RequestFocus() bool { return true }
+func (f *MacroAssignFrame) Close() { f.done = true }

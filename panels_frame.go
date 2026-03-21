@@ -429,3 +429,8 @@ func (pf *PanelsFrame) GetType() vtui.FrameType { return vtui.TypeUser + 1 }
 func (pf *PanelsFrame) SetExitCode(code int)     { pf.done = true }
 func (pf *PanelsFrame) IsDone() bool             { return pf.done }
 func (pf *PanelsFrame) IsBusy() bool             { return false }
+func (pf *PanelsFrame) IsModal() bool { return false }
+func (pf *PanelsFrame) GetWindowNumber() int { return 0 }
+func (pf *PanelsFrame) SetWindowNumber(n int) {}
+func (pf *PanelsFrame) RequestFocus() bool { return true }
+func (pf *PanelsFrame) Close() { pf.done = true }
