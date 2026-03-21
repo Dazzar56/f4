@@ -212,8 +212,9 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 		pf.termView.Show(scr)
 	}
 
-	// Command line logic depends on terminal state
-	if !pf.showPanels && pf.termView.UseAltScreen {
+	// Command line logic depends on terminal state and editor visibility
+	topType := vtui.FrameManager.GetTopFrameType()
+	if (!pf.showPanels && pf.termView.UseAltScreen) || topType == vtui.TypeUser+2 {
 		pf.cmdLine.SetVisible(false)
 	} else {
 		pf.cmdLine.SetVisible(true)
@@ -295,7 +296,8 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			}
 			pt := piecetable.New(data)
 			editor := NewEditorView(pt, path)
-			editor.SetPosition(0, 0, pf.lastW-1, pf.lastH-3)
+			// Cover everything except the KeyBar (h-1 is KeyBar, so h-2 is the bottom of editor)
+			editor.SetPosition(0, 0, pf.lastW-1, pf.lastH-2)
 			vtui.FrameManager.Push(editor)
 			return true
 		}

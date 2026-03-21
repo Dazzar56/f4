@@ -98,6 +98,9 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 	bgAttr := vtui.Palette[ColCommandLineUserScreen]
 	selAttr := vtui.Palette[vtui.ColDialogEditSelected]
 
+	// Clear the entire editor area to prevent underlying UI from "shining through"
+	scr.FillRect(ev.X1, ev.Y1, ev.X2, ev.Y2, ' ', bgAttr)
+
 	// 1. Позиция курсора
 	curOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 	curVRow, curVCol := ev.engine.LogicalToVisual(curOffset)
@@ -117,7 +120,6 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 
 			absVRow := baseVRow + fIdx
 			currY := ev.Y1 + rowsRendered
-			scr.FillRect(ev.X1, currY, ev.X2, currY, ' ', bgAttr)
 
 			ev.renderBytes = ev.renderBytes[:0]
 			ev.renderBytes = ev.pt.AppendRange(ev.renderBytes, frag.ByteOffsetStart, frag.ByteOffsetEnd-frag.ByteOffsetStart)
@@ -448,8 +450,8 @@ func (ev *EditorView) SetPosition(x1, y1, x2, y2 int) {
 }
 
 func (ev *EditorView) ResizeConsole(w, h int) {
-	// Редактор в f4 обычно занимает всё пространство кроме статус-бара (h-3)
-	ev.SetPosition(0, 0, w-1, h-3)
+	// Редактор в f4 занимает всё пространство до KeyBar (h-1)
+	ev.SetPosition(0, 0, w-1, h-2)
 }
 
 func (ev *EditorView) GetType() vtui.FrameType { return vtui.TypeUser + 2 }
