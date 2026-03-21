@@ -464,6 +464,14 @@ func (ev *EditorView) SetWindowNumber(n int) {}
 func (ev *EditorView) RequestFocus() bool { return true }
 func (ev *EditorView) Close() { ev.done = true }
 func (ev *EditorView) HasShadow() bool { return false }
+func (ev *EditorView) GetKeyLabels() *vtui.KeySet {
+	return &vtui.KeySet{
+		Normal: vtui.KeyBarLabels{
+			Msg("KeyBar.EditorF1"), Msg("KeyBar.EditorF2"), Msg("KeyBar.EditorF3"),
+			"", "", "", "", "", "", Msg("KeyBar.EditorF10"),
+		},
+	}
+}
 func (ev *EditorView) getLineLength(line int) int {
 	if line < 0 || line >= ev.li.LineCount() {
 		return 0

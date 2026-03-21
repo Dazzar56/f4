@@ -41,6 +41,12 @@ var Lng = map[string]string{
 	// KeyBar Alt
 	"KeyBar.AltF1": "Left",
 	"KeyBar.AltF2": "Right",
+
+	// KeyBar Editor
+	"KeyBar.EditorF1":  "Help",
+	"KeyBar.EditorF2":  "Save",
+	"KeyBar.EditorF3":  "Wrap",
+	"KeyBar.EditorF10": "Quit",
 }
 
 // Msg retrieves a localized string by key.

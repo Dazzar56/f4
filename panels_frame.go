@@ -58,17 +58,6 @@ func NewPanelsFrame() *PanelsFrame {
 	pf.cmdLine = NewCommandLine(Msg("Panels.Prompt"))
 	pf.keyBar = vtui.NewKeyBar()
 
-	// Initialize KeyBar labels
-	pf.keyBar.Normal = vtui.KeyBarLabels{
-		Msg("KeyBar.F1"), Msg("KeyBar.F2"), Msg("KeyBar.F3"), Msg("KeyBar.F4"),
-		Msg("KeyBar.F5"), Msg("KeyBar.F6"), Msg("KeyBar.F7"), Msg("KeyBar.F8"),
-		Msg("KeyBar.F9"), Msg("KeyBar.F10"), Msg("KeyBar.F11"), Msg("KeyBar.F12"),
-	}
-	pf.keyBar.Alt = vtui.KeyBarLabels{
-		Msg("KeyBar.AltF1"), Msg("KeyBar.AltF2"), "", "",
-		"", "", "", "", "", "", "", "",
-	}
-
 	pf.termView = NewTerminalView(80, 24)
 	// Parser will be fully initialized in initPTY once pty is ready
 	pf.initPTY()
@@ -473,3 +462,16 @@ func (pf *PanelsFrame) SetWindowNumber(n int) {}
 func (pf *PanelsFrame) RequestFocus() bool { return true }
 func (pf *PanelsFrame) Close() { pf.done = true }
 func (pf *PanelsFrame) HasShadow() bool { return false }
+func (pf *PanelsFrame) GetKeyLabels() *vtui.KeySet {
+	return &vtui.KeySet{
+		Normal: vtui.KeyBarLabels{
+			Msg("KeyBar.F1"), Msg("KeyBar.F2"), Msg("KeyBar.F3"), Msg("KeyBar.F4"),
+			Msg("KeyBar.F5"), Msg("KeyBar.F6"), Msg("KeyBar.F7"), Msg("KeyBar.F8"),
+			Msg("KeyBar.F9"), Msg("KeyBar.F10"), Msg("KeyBar.F11"), Msg("KeyBar.F12"),
+		},
+		Alt: vtui.KeyBarLabels{
+			Msg("KeyBar.AltF1"), Msg("KeyBar.AltF2"), "", "",
+			"", "", "", "", "", "", "", "",
+		},
+	}
+}
