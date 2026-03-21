@@ -61,6 +61,9 @@ func SetDefaultF4Palette() {
 	vtui.Palette[ColCommandLinePrompt] = vtui.SetRGBBoth(0, 0x00FFFF, black)
 	vtui.Palette[ColCommandLineText] = vtui.SetRGBBoth(0, white, black)
 	vtui.Palette[ColCommandLineSelectedText] = vtui.SetRGBBoth(0, black, cyan)
+
+	// Editor selection: inverse of UserScreen (Black on LightGray)
+	vtui.Palette[vtui.ColDialogEditSelected] = vtui.SetRGBBoth(0, black, lightGray)
 }
 
 // colorMap links farcolors.ini keys to vtui.Palette indices.
