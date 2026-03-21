@@ -9,6 +9,8 @@ var Lng = map[string]string{
 	"Panel.Column.Size": "Size",
 	"Panel.UpDir":       "UP-DIR",
 	"Panels.Prompt":     "> ",
+	"Edit.NewFileTitle":  " Create New File ",
+	"Edit.NewFilePrompt": "File &name:",
 	"Desktop.Welcome":   " f4 project | Ctrl+Q to exit ",
 
 	// Macros

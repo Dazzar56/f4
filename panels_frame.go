@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"github.com/unxed/vtui/piecetable"
 	"os/user"
 	"strings"
@@ -137,6 +138,18 @@ func (pf *PanelsFrame) initPTY() {
 		}
 	}()
 }
+func (pf *PanelsFrame) openEditor(path string) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		// If the file does not exist, open an empty editor for creation
+		data = []byte("")
+	}
+	pt := piecetable.New(data)
+	editor := NewEditorView(pt, path)
+	// Cover everything except the KeyBar (h-1 is KeyBar, so h-2 is the bottom of editor)
+	editor.SetPosition(0, 0, pf.lastW-1, pf.lastH-2)
+	vtui.FrameManager.Push(editor)
+}
 
 func (pf *PanelsFrame) ResizeConsole(w, h int) {
 	pf.lastW, pf.lastH = w, h
@@ -248,8 +261,17 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 }
 
 func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
+	if e.Type == vtinput.FocusEventType && e.SetFocus {
+		if fsp, ok := pf.left.(*FileSystemPanel); ok {
+			fsp.Refresh()
+		}
+		if fsp, ok := pf.right.(*FileSystemPanel); ok {
+			fsp.Refresh()
+		}
+		return true
+	}
 
-	//shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
+	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
 	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
 	//alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 
@@ -274,33 +296,47 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 
 	// F4 opens the internal editor for the selected file
 	if e.VirtualKeyCode == vtinput.VK_F4 {
-		var name string
-		var path string
-		if pf.activeIdx == 0 {
-			if fsp, ok := pf.left.(*FileSystemPanel); ok {
-				name = fsp.GetSelectedName()
-				path = fsp.vfs.Join(fsp.vfs.GetPath(), name)
+		if shift {
+			// Shift+F4: Create new file
+			var dir string
+			if pf.activeIdx == 0 {
+				if fsp, ok := pf.left.(*FileSystemPanel); ok {
+					dir = fsp.vfs.GetPath()
+				}
+			} else {
+				if fsp, ok := pf.right.(*FileSystemPanel); ok {
+					dir = fsp.vfs.GetPath()
+				}
 			}
-		} else {
-			if fsp, ok := pf.right.(*FileSystemPanel); ok {
-				name = fsp.GetSelectedName()
-				path = fsp.vfs.Join(fsp.vfs.GetPath(), name)
-			}
-		}
 
-		if path != "" {
-			data, err := os.ReadFile(path)
-			if err != nil {
-				// If the file does not exist, open an empty editor for creation
-				data = []byte("")
+			vtui.InputBox(Msg("Edit.NewFileTitle"), Msg("Edit.NewFilePrompt"), "", func(name string) {
+				if name == "" {
+					name = "newfile.txt"
+				}
+				fullPath := filepath.Join(dir, name)
+				pf.openEditor(fullPath)
+			})
+		} else {
+			// F4: Edit selected file
+			var name string
+			var path string
+			if pf.activeIdx == 0 {
+				if fsp, ok := pf.left.(*FileSystemPanel); ok {
+					name = fsp.GetSelectedName()
+					path = fsp.vfs.Join(fsp.vfs.GetPath(), name)
+				}
+			} else {
+				if fsp, ok := pf.right.(*FileSystemPanel); ok {
+					name = fsp.GetSelectedName()
+					path = fsp.vfs.Join(fsp.vfs.GetPath(), name)
+				}
 			}
-			pt := piecetable.New(data)
-			editor := NewEditorView(pt, path)
-			// Cover everything except the KeyBar (h-1 is KeyBar, so h-2 is the bottom of editor)
-			editor.SetPosition(0, 0, pf.lastW-1, pf.lastH-2)
-			vtui.FrameManager.Push(editor)
-			return true
+
+			if path != "" {
+				pf.openEditor(path)
+			}
 		}
+		return true
 	}
 
 	// F1 invokes help (global)

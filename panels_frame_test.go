@@ -84,3 +84,20 @@ func TestPanelsFrame_KeyHandling(t *testing.T) {
 		t.Errorf("Ctrl+Enter failed: expected ' %s', got '%s'", expectedName, pf.cmdLine.Edit.GetText())
 	}
 }
+func TestPanelsFrame_RefreshOnFocus(t *testing.T) {
+	pf := NewPanelsFrame()
+
+	// We need to verify Refresh was called.
+	// Since we don't have a mock VFS easily swappable here without refactoring,
+	// we check if the internal state handles the focus event without crashing
+	// and returns true.
+
+	handled := pf.ProcessKey(&vtinput.InputEvent{
+		Type:     vtinput.FocusEventType,
+		SetFocus: true,
+	})
+
+	if !handled {
+		t.Error("PanelsFrame should handle FocusEventType and return true")
+	}
+}
