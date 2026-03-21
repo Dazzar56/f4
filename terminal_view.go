@@ -2,6 +2,8 @@ package main
 
 import (
 	"sync"
+	"sort"
+	"unicode/utf8"
 
 	"github.com/unxed/vtui"
 	"github.com/unxed/vtui/piecetable"
@@ -122,16 +124,18 @@ func (tv *TerminalView) PutChar(r rune, attr uint64) {
 	defer tv.mu.Unlock()
 
 	// 1. Запись в бесконечный лог (если не AltScreen)
-	if !tv.UseAltScreen && r >= 0x20 {
-		offset := tv.pt.Size()
-		if attr != tv.lastAttr {
-			tv.styles = append(tv.styles, StyleChange{offset, attr})
-			tv.lastAttr = attr
+	if !tv.UseAltScreen {
+		if r >= 0x20 || r == '\n' {
+			offset := tv.pt.Size()
+			if attr != tv.lastAttr {
+				tv.styles = append(tv.styles, StyleChange{offset, attr})
+				tv.lastAttr = attr
+			}
+			buf := []byte(string(r))
+			tv.pt.Insert(offset, buf)
+			tv.li.UpdateAfterInsert(offset, buf)
+			tv.engine.InvalidateCache()
 		}
-		buf := []byte(string(r))
-		tv.pt.Insert(offset, buf)
-		tv.li.UpdateAfterInsert(offset, buf)
-		tv.engine.InvalidateCache()
 	}
 
 	// 2. Обработка в текущей сетке (Grid)
@@ -293,6 +297,17 @@ func (tv *TerminalView) SetAltScreen(enable bool) {
 	tv.UseAltScreen = enable
 }
 
+// getAttrAt ищет атрибут, действующий на данном байтовом оффсете.
+func (tv *TerminalView) getAttrAt(offset int) uint64 {
+	idx := sort.Search(len(tv.styles), func(i int) bool {
+		return tv.styles[i].Offset > offset
+	})
+	if idx > 0 {
+		return tv.styles[idx-1].Attr
+	}
+	return DefaultTermAttr
+}
+
 // --- Отрисовка (Display) ---
 
 func (tv *TerminalView) Show(scr *vtui.ScreenBuf) {
@@ -300,19 +315,75 @@ func (tv *TerminalView) Show(scr *vtui.ScreenBuf) {
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
 
-	// Пока используем отрисовку из сетки для совместимости.
-	// В будущем переключим Main Screen на отрисовку из PieceTable лога.
-	buf := tv.getBuffer()
-	for y, line := range buf {
-		scr.Write(tv.X1, tv.Y1+y, line)
+	if tv.UseAltScreen {
+		// В режиме AltScreen (интерактив) рисуем фиксированную сетку
+		for y, line := range tv.AltLines {
+			scr.Write(tv.X1, tv.Y1+y, line)
+		}
+		if tv.IsVisible() {
+			scr.SetCursorPos(tv.X1+tv.CursorX, tv.Y1+tv.CursorY)
+			scr.SetCursorVisible(true)
+		}
+		return
 	}
 
-	if !tv.IsVisible() { return }
+	// Режим Main Screen: Рисуем из PieceTable с динамической пересвёрткой
+	tv.engine.SetWidth(tv.Width)
+	totalRows := tv.engine.GetTotalVisualRows()
 
-	// Курсор рисуем только в режиме AltScreen (интерактив)
-	if tv.UseAltScreen {
-		scr.SetCursorPos(tv.X1+tv.CursorX, tv.Y1+tv.CursorY)
-		scr.SetCursorVisible(true)
+	// Всегда скроллим к концу при поступлении новых данных
+	if totalRows > tv.Height {
+		tv.ScrollTopRow = totalRows - tv.Height
+	} else {
+		tv.ScrollTopRow = 0
+	}
+
+	rowsRendered := 0
+	startLogLine, startFragIdx := tv.engine.GetLogLineAtVisualRow(tv.ScrollTopRow)
+
+	for logIdx := startLogLine; logIdx < tv.li.LineCount() && rowsRendered < tv.Height; logIdx++ {
+		frags := tv.engine.GetFragments(logIdx)
+		for fIdx, frag := range frags {
+			if logIdx == startLogLine && fIdx < startFragIdx {
+				continue
+			}
+
+			currY := tv.Y1 + rowsRendered
+			// Очищаем строку перед отрисовкой
+			scr.FillRect(tv.X1, currY, tv.X1+tv.Width-1, currY, ' ', DefaultTermAttr)
+
+			textBytes := tv.pt.GetRange(frag.ByteOffsetStart, frag.ByteOffsetEnd-frag.ByteOffsetStart)
+
+			// Накладываем атрибуты на каждый символ фрагмента
+			cells := make([]vtui.CharInfo, 0, frag.VisualWidth)
+			currentByte := 0
+			for currentByte < len(textBytes) {
+				r, size := utf8.DecodeRune(textBytes[currentByte:])
+				absPos := frag.ByteOffsetStart + currentByte
+
+				attr := tv.getAttrAt(absPos)
+				cells = append(cells, vtui.StringToCharInfo(string(r), attr)...)
+
+				currentByte += size
+			}
+
+			scr.Write(tv.X1, currY, cells)
+			rowsRendered++
+			if rowsRendered >= tv.Height {
+				break
+			}
+		}
+	}
+
+	// В режиме лога курсор обычно рисуется в конце последней строки
+	if tv.IsVisible() {
+		// Эмуляция курсора в конце вывода
+		lastOffset := tv.pt.Size()
+		vRow, vCol := tv.engine.LogicalToVisual(lastOffset)
+		if vRow >= tv.ScrollTopRow && vRow < tv.ScrollTopRow+tv.Height {
+			scr.SetCursorPos(tv.X1+vCol, tv.Y1+(vRow-tv.ScrollTopRow))
+			scr.SetCursorVisible(true)
+		}
 	}
 }
 
