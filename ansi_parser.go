@@ -10,9 +10,7 @@ import (
 )
 
 type ParserState int
-
-// DefaultTermAttr is palette-based: LightGray (7) on Black (0)
-const DefaultTermAttr uint64 = 0x07
+var DefaultTermAttr = vtui.SetRGBBoth(0, 0xC0C0C0, 0x000000) // Light Gray on Black
 
 const (
 	StateGround ParserState = iota
@@ -310,7 +308,7 @@ func (p *AnsiParser) handleSGR(args []int, i int) int {
 		p.Attr &= ^vtui.CommonLvbStrikeout
 
 	case n >= 30 && n <= 37:
-		p.Attr = (p.Attr & ^uint64(0x07|vtui.ForegroundTrueColor)) | uint64(n-30)
+		p.Attr = vtui.SetRGBFore(p.Attr, p.term.Palette[n-30])
 	case n == 38:
 		if i+2 < len(args) {
 			if args[i+1] == 5 { // 256 colors
@@ -326,11 +324,10 @@ func (p *AnsiParser) handleSGR(args []int, i int) int {
 			}
 		}
 	case n == 39:
-		p.Attr &= ^uint64(0x07 | vtui.ForegroundTrueColor | vtui.ForegroundIntensity)
-		p.Attr |= DefaultTermAttr & 0x07
+		p.Attr = vtui.SetRGBFore(p.Attr, vtui.GetRGBFore(vtui.Palette[ColCommandLineUserScreen]))
 
 	case n >= 40 && n <= 47:
-		p.Attr = (p.Attr & ^uint64(0x70|vtui.BackgroundTrueColor)) | (uint64(n-40) << 4)
+		p.Attr = vtui.SetRGBBack(p.Attr, p.term.Palette[n-40])
 	case n == 48:
 		if i+2 < len(args) {
 			if args[i+1] == 5 { // 256 colors
@@ -346,13 +343,12 @@ func (p *AnsiParser) handleSGR(args []int, i int) int {
 			}
 		}
 	case n == 49:
-		p.Attr &= ^uint64(0x70 | vtui.BackgroundTrueColor | vtui.BackgroundIntensity)
-		p.Attr |= DefaultTermAttr & 0x70
+		p.Attr = vtui.SetRGBBack(p.Attr, vtui.GetRGBBack(vtui.Palette[ColCommandLineUserScreen]))
 
 	case n >= 90 && n <= 97:
-		p.Attr = (p.Attr & ^uint64(0x07|vtui.ForegroundTrueColor)) | vtui.ForegroundIntensity | uint64(n-90)
+		p.Attr = vtui.SetRGBFore(p.Attr, p.term.Palette[n-90+8])
 	case n >= 100 && n <= 107:
-		p.Attr = (p.Attr & ^uint64(0x70|vtui.BackgroundTrueColor)) | vtui.BackgroundIntensity | (uint64(n-100) << 4)
+		p.Attr = vtui.SetRGBBack(p.Attr, p.term.Palette[n-100+8])
 	}
 	return 1
 }
