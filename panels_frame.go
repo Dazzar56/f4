@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 	"github.com/unxed/vtui/piecetable"
 	"os/user"
 	"strings"
@@ -44,17 +45,14 @@ func NewPanelsFrame() *PanelsFrame {
 
 	pf.menuBar = vtui.NewMenuBar(nil)
 	pf.menuBar.Items = []vtui.MenuBarItem{
-		{Label: "&" + Msg("Menu.Left"), SubItems: []vtui.MenuItem{{Text: Msg("Menu.Exit")}}},
-		{Label: "&" + Msg("Menu.Files"), SubItems: []vtui.MenuItem{{Text: "Placeholder"}}},
+		// Using Command routing (TV style) instead of hardcoded indices
+		{Label: "&" + Msg("Menu.Left"), SubItems: []vtui.MenuItem{{Text: Msg("Menu.Exit"), Command: vtui.CmQuit}}},
+		{Label: "&" + Msg("Menu.Files"), SubItems: []vtui.MenuItem{{Text: "&Copy", Command: vtui.CmCopy}}},
 		{Label: "&" + Msg("Menu.Commands"), SubItems: []vtui.MenuItem{{Text: "Placeholder"}}},
 		{Label: "&" + Msg("Menu.Options"), SubItems: []vtui.MenuItem{{Text: "Placeholder"}}},
 		{Label: "&" + Msg("Menu.Right"), SubItems: []vtui.MenuItem{{Text: "Placeholder"}}},
 	}
-	pf.menuBar.OnCommand = func(menuIdx, itemIdx int) {
-		if menuIdx == 0 && itemIdx == 0 {
-			vtui.FrameManager.Shutdown()
-		}
-	}
+	// We no longer need pf.menuBar.OnCommand for routing!
 	pf.cmdLine = NewCommandLine(Msg("Panels.Prompt"))
 	pf.keyBar = vtui.NewKeyBar()
 
@@ -364,6 +362,12 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	}
 
+	// F5 translates to Command
+	if e.VirtualKeyCode == vtinput.VK_F5 && !shift && !ctrl {
+		vtui.FrameManager.EmitCommand(vtui.CmCopy, nil)
+		return true
+	}
+
 	// Esc clears command line if it's not empty
 	if e.VirtualKeyCode == vtinput.VK_ESCAPE && !pf.cmdLine.IsEmpty() {
 		pf.cmdLine.Clear()
@@ -492,6 +496,56 @@ func (pf *PanelsFrame) SetWindowNumber(n int) {}
 func (pf *PanelsFrame) RequestFocus() bool { return true }
 func (pf *PanelsFrame) Close() { pf.done = true }
 func (pf *PanelsFrame) HasShadow() bool { return false }
+// HandleCommand intercepts global commands (like CmQuit or CmCopy)
+// sent by menus or other views.
+func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
+	switch cmd {
+	case vtui.CmQuit:
+		vtui.FrameManager.Shutdown()
+		return true
+
+	case vtui.CmCopy:
+		// Demonstrate Async Background Task with safe UI updates!
+		pf.startDemoAsyncTask()
+		return true
+	}
+	return pf.ScreenObject.HandleCommand(cmd, args)
+}
+
+func (pf *PanelsFrame) startDemoAsyncTask() {
+	// 1. Create a progress dialog (On the UI thread)
+	dlg := vtui.NewDialog(0, 0, 40, 6, " Background Task ")
+	dlg.Center(vtui.FrameManager.GetScreenSize(), 25)
+
+	lbl := vtui.NewText(dlg.X1+2, dlg.Y1+2, "Starting...", vtui.Palette[vtui.ColDialogText])
+	dlg.AddItem(lbl)
+	vtui.FrameManager.Push(dlg)
+
+	// 2. Launch the background worker
+	vtui.RunAsync(func(ctx *vtui.TaskContext) {
+		importTime := time.Now()
+
+		for i := 1; i <= 10; i++ {
+			// Check if task was cancelled (e.g. user pressed Esc)
+			if ctx.Err() != nil { return }
+
+			time.Sleep(200 * time.Millisecond) // Simulate work
+
+			// 3. SAFELY update UI using context
+			percent := i * 10
+			ctx.RunOnUI(func() {
+				lbl.SetText(fmt.Sprintf("Copying: %d%% done...", percent))
+			})
+		}
+
+		// 4. SAFELY close dialog when finished
+		ctx.RunOnUI(func() {
+			dlg.Close()
+			vtui.ShowMessage(" Done ", fmt.Sprintf("Finished in %v", time.Since(importTime)), []string{"&Ok"})
+		})
+	})
+}
+
 func (pf *PanelsFrame) GetKeyLabels() *vtui.KeySet {
 	return &vtui.KeySet{
 		Normal: vtui.KeyBarLabels{
