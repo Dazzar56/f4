@@ -215,7 +215,7 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 		return false
 	}
 
-	height := int64(vv.Y2 - vv.Y1 + 1)
+	//height := int64(vv.Y2 - vv.Y1 + 1)
 	step := int64(1)
 	if vv.HexMode {
 		step = 16
