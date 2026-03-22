@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"unicode/utf8"
+	"path/filepath"
 
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
@@ -54,9 +55,6 @@ func (vb *ViewerBar) Show(scr *vtui.ScreenBuf) {
 	vb.DisplayObject(scr)
 }
 func (vb *ViewerBar) DisplayObject(scr *vtui.ScreenBuf) {
-	if !vb.IsVisible() {
-		return
-	}
 	attr := vtui.Palette[ColViewerStatus]
 	vb.DrawBackground(scr, attr)
 
@@ -81,7 +79,7 @@ func (vb *ViewerBar) DisplayObject(scr *vtui.ScreenBuf) {
 
 	mode := Msg("Viewer.ModeText")
 	if vb.vv.HexMode { mode = Msg("Viewer.ModeHex") }
-	status := fmt.Sprintf(" %s │ %s │ %d%% ", vb.vv.path, mode, percent)
+	status := fmt.Sprintf(" %s │ %s │ %d%% ", filepath.Base(vb.vv.path), mode, percent)
 	scr.Write(vb.X1, vb.Y1, vtui.StringToCharInfo(status, attr))
 }
 

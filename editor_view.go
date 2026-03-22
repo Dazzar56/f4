@@ -5,6 +5,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 	"fmt"
+	"path/filepath"
 
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
@@ -79,11 +80,15 @@ func (eb *EditorBar) Show(scr *vtui.ScreenBuf) {
 	eb.DisplayObject(scr)
 }
 func (eb *EditorBar) DisplayObject(scr *vtui.ScreenBuf) {
-	if !eb.IsVisible() { return }
+	if !eb.IsVisible() { return } // Оставляем одну проверку для безопасности
 	attr := vtui.Palette[ColViewerStatus]
 	eb.DrawBackground(scr, attr)
-	status := fmt.Sprintf(" %s │ %d,%d ", eb.ev.filePath, eb.ev.CursorLine+1, eb.ev.CursorPos)
+	status := fmt.Sprintf(" %s │ %d,%d ", filepath.Base(eb.ev.filePath), eb.ev.CursorLine+1, eb.ev.CursorPos)
 	scr.Write(eb.X1, eb.Y1, vtui.StringToCharInfo(status, attr))
+}
+// GetTopBar возвращает верхнюю панель для тестов
+func (ev *EditorView) GetTopBar() *EditorBar {
+	return ev.topBar
 }
 
 func (ev *EditorView) clearCaches() {

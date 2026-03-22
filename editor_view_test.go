@@ -5,6 +5,7 @@ import (
 	"time"
 	"os"
 	"testing"
+	"github.com/unxed/vtui"
 	"github.com/unxed/vtui/piecetable"
 	"github.com/unxed/vtinput"
 )
@@ -730,5 +731,31 @@ func TestEditorView_WordNavigation(t *testing.T) {
 	})
 	if ev.CursorPos != 0 {
 		t.Errorf("Ctrl+Left (2) failed: expected pos 0, got %d", ev.CursorPos)
+	}
+}
+func TestEditorBar_Content(t *testing.T) {
+	vtui.SetDefaultPalette()
+	SetDefaultF4Palette()
+	pt := piecetable.New([]byte("abc"))
+	ev := NewEditorView(pt, "test.go")
+	ev.SetPosition(0, 0, 40, 10)
+	ev.CursorLine = 5
+	ev.CursorPos = 12
+
+	scr := vtui.NewScreenBuf()
+	scr.AllocBuf(41, 11)
+
+	ev.GetTopBar().Show(scr)
+
+	// В статус-баре должно быть "6,12" (Line+1, Pos)
+	foundLine := false
+	foundPos := false
+	for x := 0; x < 40; x++ {
+		if scr.GetCell(x, 0).Char == '6' { foundLine = true }
+		if scr.GetCell(x, 0).Char == '1' && scr.GetCell(x+1, 0).Char == '2' { foundPos = true }
+	}
+
+	if !foundLine || !foundPos {
+		t.Errorf("EditorBar did not display correct cursor info (6,12). Found Line:%v, Pos:%v", foundLine, foundPos)
 	}
 }

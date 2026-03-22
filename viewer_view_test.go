@@ -52,3 +52,32 @@ func TestViewerView_NavigationAndEOF(t *testing.T) {
 		t.Errorf("VK_DOWN should be blocked when eofVisible is true. Offset changed from %d to %d", oldOffset, vv.TopOffset)
 	}
 }
+
+func TestViewerBar_Content(t *testing.T) {
+	vtui.SetDefaultPalette()
+	SetDefaultF4Palette()
+	tmp := t.TempDir() + "/bar_test.txt"
+	os.WriteFile(tmp, []byte("Some content"), 0644)
+
+	vv, _ := NewViewerView(tmp)
+	vv.SetPosition(0, 0, 40, 10)
+
+	scr := vtui.NewScreenBuf()
+	scr.AllocBuf(41, 11)
+
+	vv.HexMode = true
+	vv.topBar.Show(scr)
+
+	// Проверяем, что в баре есть путь к файлу и режим "Hex"
+	// Проверяем всю доступную ширину буфера (40 колонок)
+	foundHex := false
+	foundPath := false
+	for x := 0; x <= 40; x++ {
+		cell := scr.GetCell(x, 0)
+		if cell.Char == 'H' { foundHex = true }
+		if cell.Char == 'b' { foundPath = true } // часть "bar_test.txt"
+	}
+
+	if !foundHex { t.Error("ViewerBar did not display 'Hex' mode") }
+	if !foundPath { t.Error("ViewerBar did not display file path") }
+}
