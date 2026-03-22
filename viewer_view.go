@@ -95,6 +95,9 @@ func (vb *ViewerBar) DisplayObject(scr *vtui.ScreenBuf) {
 
 func (vv *ViewerView) SetPosition(x1, y1, x2, y2 int) {
 	vv.ScreenObject.SetPosition(x1, y1, x2, y2)
+	if vv.topBar != nil {
+		vv.topBar.SetPosition(x1, y1, x2, y1)
+	}
 	if vv.menuBar != nil {
 		vv.menuBar.SetPosition(x1, 0, x2, 0)
 	}
