@@ -15,6 +15,7 @@ import (
 type ViewerView struct {
 	vtui.ScreenObject
 	topBar  *ViewerBar
+	menuBar *vtui.MenuBar
 	backend *ViewerBackend
 	path    string
 
@@ -38,6 +39,12 @@ func NewViewerView(path string) (*ViewerView, error) {
 		path:     path,
 		WrapMode: true,
 	}
+	vv.menuBar = vtui.NewMenuBar(nil)
+	vv.menuBar.Items = []vtui.MenuBarItem{
+		{Label: "&File", SubItems: []vtui.MenuItem{{Text: "E&xit", Command: vtui.CmQuit}}},
+		{Label: "&View", SubItems: []vtui.MenuItem{{Text: "&Hex", Command: vtui.CmDefault}, {Text: "&Wrap"}}},
+		{Label: "&Options", SubItems: []vtui.MenuItem{{Text: "&Settings"}}},
+	}
 	vv.topBar = &ViewerBar{vv: vv}
 	vv.topBar.SetVisible(true)
 	vv.SetCanFocus(true)
@@ -55,6 +62,9 @@ func (vb *ViewerBar) Show(scr *vtui.ScreenBuf) {
 	vb.DisplayObject(scr)
 }
 func (vb *ViewerBar) DisplayObject(scr *vtui.ScreenBuf) {
+	if !vb.IsVisible() {
+		return
+	}
 	attr := vtui.Palette[ColViewerStatus]
 	vb.DrawBackground(scr, attr)
 
@@ -85,9 +95,13 @@ func (vb *ViewerBar) DisplayObject(scr *vtui.ScreenBuf) {
 
 func (vv *ViewerView) SetPosition(x1, y1, x2, y2 int) {
 	vv.ScreenObject.SetPosition(x1, y1, x2, y2)
-	if vv.topBar != nil {
-		vv.topBar.SetPosition(x1, y1, x2, y1)
+	if vv.menuBar != nil {
+		vv.menuBar.SetPosition(x1, 0, x2, 0)
 	}
+}
+
+func (vv *ViewerView) GetMenuBar() *vtui.MenuBar {
+	return vv.menuBar
 }
 
 func (vv *ViewerView) Show(scr *vtui.ScreenBuf) {

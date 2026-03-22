@@ -29,6 +29,7 @@ type lineFragment struct {
 type EditorView struct {
 	vtui.ScreenObject
 	topBar *EditorBar
+	menuBar *vtui.MenuBar
 	pt     *piecetable.PieceTable
 	li     *piecetable.LineIndex
 	engine *textlayout.WrapEngine
@@ -63,6 +64,14 @@ func NewEditorView(pt *piecetable.PieceTable, path string) *EditorView {
 		filePath: path,
 		WordWrap: true,
 	}
+	ev.menuBar = vtui.NewMenuBar(nil)
+	ev.menuBar.Items = []vtui.MenuBarItem{
+		{Label: "&File", SubItems: []vtui.MenuItem{{Text: "&Save", Command: vtui.CmDefault}, {Text: "E&xit", Command: vtui.CmQuit}}},
+		{Label: "&Edit", SubItems: []vtui.MenuItem{{Text: "&Copy", Command: vtui.CmCopy}, {Text: "&Paste"}}},
+		{Label: "&Search", SubItems: []vtui.MenuItem{{Text: "&Find", Command: vtui.CmSearch}}},
+		{Label: "&Options", SubItems: []vtui.MenuItem{{Text: "&WordWrap"}}},
+	}
+
 	ev.topBar = &EditorBar{ev: ev}
 	ev.topBar.SetVisible(true)
 	ev.SetCanFocus(true)
@@ -549,6 +558,9 @@ func (ev *EditorView) SetPosition(x1, y1, x2, y2 int) {
 	if ev.topBar != nil {
 		ev.topBar.SetPosition(x1, y1, x2, y1)
 	}
+	if ev.menuBar != nil {
+		ev.menuBar.SetPosition(x1, 0, x2, 0)
+	}
 	ev.ensureEngineWidth()
 	ev.ensureCursorVisible()
 }
@@ -557,6 +569,8 @@ func (ev *EditorView) ResizeConsole(w, h int) {
 	// Редактор в f4 занимает всё пространство до KeyBar (h-1)
 	ev.SetPosition(0, 0, w-1, h-2)
 }
+
+func (ev *EditorView) GetMenuBar() *vtui.MenuBar { return ev.menuBar }
 
 func (ev *EditorView) GetType() vtui.FrameType { return vtui.TypeUser + 2 }
 func (ev *EditorView) SetExitCode(c int) { ev.done = true }

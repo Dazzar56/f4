@@ -125,6 +125,7 @@ func (pf *PanelsFrame) initPTY() {
 		}
 	}()
 }
+
 func (pf *PanelsFrame) openEditor(path string) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -134,16 +135,17 @@ func (pf *PanelsFrame) openEditor(path string) {
 	pt := piecetable.New(data)
 	editor := NewEditorView(pt, path)
 	// Cover everything except the KeyBar (h-1 is KeyBar, so h-2 is the bottom of editor)
-	editor.SetPosition(0, 0, pf.lastW-1, pf.lastH-2)
+	editor.ResizeConsole(pf.lastW, pf.lastH)
 	vtui.FrameManager.Push(editor)
 }
+
 func (pf *PanelsFrame) openViewer(path string) {
 	viewer, err := NewViewerView(path)
 	if err != nil {
 		vtui.DebugLog("PANELS: Failed to open viewer for %s: %v", path, err)
 		return
 	}
-	viewer.SetPosition(0, 0, pf.lastW-1, pf.lastH-2)
+	viewer.ResizeConsole(pf.lastW, pf.lastH)
 	vtui.FrameManager.Push(viewer)
 }
 
@@ -496,6 +498,7 @@ func (pf *PanelsFrame) SetWindowNumber(n int) {}
 func (pf *PanelsFrame) RequestFocus() bool { return true }
 func (pf *PanelsFrame) Close() { pf.done = true }
 func (pf *PanelsFrame) HasShadow() bool { return false }
+func (pf *PanelsFrame) GetMenuBar() *vtui.MenuBar { return pf.menuBar }
 // HandleCommand intercepts global commands (like CmQuit or CmCopy)
 // sent by menus or other views.
 func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
