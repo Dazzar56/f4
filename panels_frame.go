@@ -35,6 +35,7 @@ type PanelsFrame struct {
 	parser   *AnsiParser
 
 	done      bool
+	lastAlt   bool
 }
 
 func NewPanelsFrame() *PanelsFrame {
@@ -157,7 +158,8 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 
 	// 1. Terminal Area: Fills everything except KeyBar
 	termY2 := h - 1
-	if pf.showKeyBar {
+	// KeyBar only takes space if it's actually visible (not in AltScreen)
+	if pf.showKeyBar && !pf.termView.UseAltScreen {
 		termY2 = h - 2
 	}
 	termH := termY2 - contentY1 + 1
@@ -207,6 +209,12 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 }
 
 func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
+	// 0. Dynamic Layout Adjustment
+	if pf.termView.UseAltScreen != pf.lastAlt {
+		pf.lastAlt = pf.termView.UseAltScreen
+		pf.ResizeConsole(pf.lastW, pf.lastH)
+	}
+
 	if pf.showPanels {
 		pf.termView.SetVisible(false)
 		if pf.activeIdx == 0 {
@@ -248,10 +256,17 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 		}
 	}
 
-	// KeyBar is always at the bottom
-	if pf.showKeyBar {
-		pf.keyBar.Show(scr)
+	// KeyBar is at the bottom. It should only be hidden if a child process
+	// in the terminal uses the alternate screen buffer (e.g. vim, less).
+	isTop := vtui.FrameManager.GetTopFrameType() == vtui.TypeUser+1
+	if isTop { // Only the top-most user frame controls the keybar
+		if pf.showKeyBar && !pf.termView.UseAltScreen {
+			vtui.FrameManager.KeyBar = pf.keyBar
+		} else {
+			vtui.FrameManager.KeyBar = nil
+		}
 	}
+
 	// Macro Recording Indicator
 	if MacroMgr != nil && MacroMgr.Recording {
 		scr.Write(0, 0, vtui.StringToCharInfo(" R ", vtui.SetRGBBoth(0, 0xFFFFFF, 0xFF0000)))

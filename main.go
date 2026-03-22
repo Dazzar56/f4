@@ -35,8 +35,6 @@ func main() {
 
 	// 3. Configure FrameManager
 	vtui.FrameManager.Init(scr)
-	// Sync vtui strings with our localization
-	vtui.UIStrings.DesktopWelcome = Msg("Desktop.Welcome")
 	// Setup f4 specific palette extensions
 	SetDefaultF4Palette()
 

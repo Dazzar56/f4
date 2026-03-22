@@ -11,7 +11,6 @@ var Lng = map[string]string{
 	"Panels.Prompt":     "> ",
 	"Edit.NewFileTitle":  " Create New File ",
 	"Edit.NewFilePrompt": "File &name:",
-	"Desktop.Welcome":   " f4 project | Ctrl+Q to exit ",
 	"Viewer.Title":      " View ",
 	"Viewer.ModeText":   "Text",
 	"Viewer.ModeHex":    "Hex",
