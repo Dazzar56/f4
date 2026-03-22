@@ -21,6 +21,7 @@ type ViewerView struct {
 
 	// For Text mode: offsets of lines currently on screen
 	lineOffsets []int64
+	eofVisible  bool
 	done        bool
 }
 
@@ -51,35 +52,38 @@ func (vv *ViewerView) DisplayObject(scr *vtui.ScreenBuf) {
 
 	width := vv.X2 - vv.X1 + 1
 	height := vv.Y2 - vv.Y1 + 1
+	contentHeight := height - 1
 
 	bgAttr := vtui.Palette[ColViewerText]
 
 	// 1. Draw Background
 	scr.FillRect(vv.X1, vv.Y1, vv.X2, vv.Y2, ' ', bgAttr)
 
-	if vv.HexMode {
-		vv.renderHex(scr, width, height)
-	} else {
-		vv.renderText(scr, width, height)
+	if contentHeight > 0 {
+		if vv.HexMode {
+			vv.renderHex(scr, width, contentHeight)
+		} else {
+			vv.renderText(scr, width, contentHeight)
+		}
 	}
 
 	vv.drawStatus(scr)
 }
 
-func (vv *ViewerView) renderHex(scr *vtui.ScreenBuf, width, height int) {
+func (vv *ViewerView) renderHex(scr *vtui.ScreenBuf, width, contentHeight int) {
 	attr := vtui.Palette[ColViewerText]
 	offAttr := vtui.Palette[ColViewerArrows]
 
 	currOffset := vv.TopOffset &^ 0xF // Align to 16 bytes
 
-	for y := 0; y < height; y++ {
+	for y := 0; y < contentHeight; y++ {
 		if currOffset >= vv.backend.Size() {
 			break
 		}
 
 		data, _ := vv.backend.ReadAt(currOffset, 16)
 		line := fmt.Sprintf("%010X: ", currOffset)
-		scr.Write(vv.X1, vv.Y1+y, vtui.StringToCharInfo(line, offAttr))
+		scr.Write(vv.X1, vv.Y1+1+y, vtui.StringToCharInfo(line, offAttr))
 
 		// Hex part
 		hexStr := ""
@@ -93,7 +97,7 @@ func (vv *ViewerView) renderHex(scr *vtui.ScreenBuf, width, height int) {
 				hexStr += " "
 			}
 		}
-		scr.Write(vv.X1+12, vv.Y1+y, vtui.StringToCharInfo(hexStr, attr))
+		scr.Write(vv.X1+12, vv.Y1+1+y, vtui.StringToCharInfo(hexStr, attr))
 
 		// ASCII part
 		asciiStr := "│ "
@@ -104,18 +108,19 @@ func (vv *ViewerView) renderHex(scr *vtui.ScreenBuf, width, height int) {
 			}
 			asciiStr += string(r)
 		}
-		scr.Write(vv.X1+12+50, vv.Y1+y, vtui.StringToCharInfo(asciiStr, attr))
+		scr.Write(vv.X1+12+50, vv.Y1+1+y, vtui.StringToCharInfo(asciiStr, attr))
 
 		currOffset += 16
 	}
+	vv.eofVisible = currOffset >= vv.backend.Size()
 }
 
-func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, height int) {
+func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, contentHeight int) {
 	attr := vtui.Palette[ColViewerText]
 	currOffset := vv.TopOffset
 	vv.lineOffsets = vv.lineOffsets[:0]
 
-	for y := 0; y < height; y++ {
+	for y := 0; y < contentHeight; y++ {
 		vv.lineOffsets = append(vv.lineOffsets, currOffset)
 		if currOffset >= vv.backend.Size() {
 			break
@@ -152,7 +157,7 @@ func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, height int) {
 			lineLen += size
 		}
 
-		scr.Write(vv.X1, vv.Y1+y, vtui.StringToCharInfo(string(data[:lineLen]), attr))
+		scr.Write(vv.X1, vv.Y1+1+y, vtui.StringToCharInfo(string(data[:lineLen]), attr))
 		currOffset += int64(lineLen)
 
 		if !foundNewline && !vv.WrapMode {
@@ -175,6 +180,7 @@ func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, height int) {
 			currOffset = tempOff
 		}
 	}
+	vv.eofVisible = currOffset >= vv.backend.Size()
 }
 
 func (vv *ViewerView) drawStatus(scr *vtui.ScreenBuf) {
@@ -215,6 +221,8 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 		step = 16
 	}
 
+	contentHeight := int64(vv.Y2 - vv.Y1) // height - 1 (status line)
+
 	switch e.VirtualKeyCode {
 	case vtinput.VK_ESCAPE, vtinput.VK_F10, vtinput.VK_F3:
 		vv.done = true
@@ -232,13 +240,13 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 
 	case vtinput.VK_DOWN:
+		if vv.eofVisible {
+			return true
+		}
 		if vv.HexMode {
 			vv.TopOffset += step
 		} else if len(vv.lineOffsets) > 1 {
 			vv.TopOffset = vv.lineOffsets[1]
-		}
-		if vv.TopOffset >= vv.backend.Size() {
-			vv.TopOffset = vv.backend.Size() - 1
 		}
 		return true
 
@@ -254,22 +262,21 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 
 	case vtinput.VK_NEXT: // PgDn
-		if vv.HexMode {
-			vv.TopOffset += step * height
-		} else if len(vv.lineOffsets) > 0 {
-			// Use the offset of the last visible line to scroll
-			vv.TopOffset = vv.lineOffsets[len(vv.lineOffsets)-1]
+		if vv.eofVisible {
+			return true
 		}
-		if vv.TopOffset >= vv.backend.Size() {
-			vv.TopOffset = vv.backend.Size() - 1
+		if vv.HexMode {
+			vv.TopOffset += step * contentHeight
+		} else if len(vv.lineOffsets) > 0 {
+			vv.TopOffset = vv.lineOffsets[len(vv.lineOffsets)-1]
 		}
 		return true
 
 	case vtinput.VK_PRIOR: // PgUp
 		if vv.HexMode {
-			vv.TopOffset -= step * height
+			vv.TopOffset -= step * contentHeight
 		} else {
-			for i := 0; i < int(height); i++ {
+			for i := 0; i < int(contentHeight); i++ {
 				vv.TopOffset = vv.backend.FindLineStart(vv.TopOffset - 1)
 			}
 		}
@@ -284,9 +291,21 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 
 	case vtinput.VK_END:
 		if vv.HexMode {
-			vv.TopOffset = (vv.backend.Size() - 1) & ^0xF
+			lastLineOffset := (vv.backend.Size() - 1) &^ 0xF
+			vv.TopOffset = lastLineOffset - (contentHeight-1)*16
 		} else {
-			vv.TopOffset = vv.backend.FindLineStart(vv.backend.Size() - 1)
+			offset := vv.backend.Size() - 1
+			if offset < 0 { offset = 0 }
+			offset = vv.backend.FindLineStart(offset)
+
+			for i := 0; i < int(contentHeight)-1; i++ {
+				if offset <= 0 { break }
+				offset = vv.backend.FindLineStart(offset - 1)
+			}
+			vv.TopOffset = offset
+		}
+		if vv.TopOffset < 0 {
+			vv.TopOffset = 0
 		}
 		return true
 	}
