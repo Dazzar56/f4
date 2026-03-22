@@ -243,7 +243,7 @@ func TestEditorView_WordWrapNavigation(t *testing.T) {
 	pt := piecetable.New([]byte(text))
 	ev := NewEditorView(pt, "")
 	ev.WordWrap = true
-	ev.X1, ev.Y1, ev.X2, ev.Y2 = 0, 0, 9, 5 // Ширина 10
+	ev.SetPosition(0, 0, 9, 6) // Высота окна 7, высота текста 6 (Ширина 10)
 
 	// Инициализируем DesiredVisualCol (имитируем клик или переход)
 	ev.CursorLine = 0
@@ -313,7 +313,7 @@ func TestEditorView_SelectionWrapping(t *testing.T) {
 	pt := piecetable.New([]byte("1234567890"))
 	ev := NewEditorView(pt, "")
 	ev.WordWrap = true
-	ev.X1, ev.Y1, ev.X2, ev.Y2 = 0, 0, 4, 2 // Width 5
+	ev.SetPosition(0, 0, 4, 3) // Width 5, Text height 3
 
 	// Select "456" (from 3rd to 6th position)
 	// This captures the end of the first fragment "12345" and the start of the second "67890"
@@ -471,7 +471,7 @@ func TestEditorView_EmptyLinesWrap(t *testing.T) {
 	pt := piecetable.New([]byte("\n\n"))
 	ev := NewEditorView(pt, "")
 	ev.WordWrap = true
-	ev.X1, ev.Y1, ev.X2, ev.Y2 = 0, 0, 10, 10
+	ev.SetPosition(0, 0, 10, 11)
 
 	if ev.li.LineCount() != 3 {
 		t.Errorf("Expected 3 lines, got %d", ev.li.LineCount())
@@ -499,7 +499,7 @@ func TestEditorView_WordWrapScrolling(t *testing.T) {
 	pt := piecetable.New([]byte(text))
 	ev := NewEditorView(pt, "")
 	ev.WordWrap = true
-	ev.X1, ev.Y1, ev.X2, ev.Y2 = 0, 0, 9, 1 // Высота 2 (Y=0, Y=1)
+	ev.SetPosition(0, 0, 9, 2) // Высота 3, высота текста 2
 	ev.engine.SetWidth(10)
 
 	ev.ensureCursorVisible()
@@ -607,7 +607,7 @@ func TestEditorView_PageNavigation(t *testing.T) {
 	}
 	pt := piecetable.New(buf)
 	ev := NewEditorView(pt, "")
-	ev.SetPosition(0, 0, 79, 4) // Viewport height 5
+	ev.SetPosition(0, 0, 79, 5) // Text Viewport height 5
 	ev.CursorLine = 0
 	ev.CursorPos = 0
 

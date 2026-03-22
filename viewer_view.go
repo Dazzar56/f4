@@ -13,6 +13,7 @@ import (
 // ViewerView is a high-performance file viewer component.
 type ViewerView struct {
 	vtui.ScreenObject
+	topBar  *ViewerBar
 	backend *ViewerBackend
 	path    string
 
@@ -36,13 +37,66 @@ func NewViewerView(path string) (*ViewerView, error) {
 		path:     path,
 		WrapMode: true,
 	}
+	vv.topBar = &ViewerBar{vv: vv}
+	vv.topBar.SetVisible(true)
 	vv.SetCanFocus(true)
 	vv.SetFocus(true)
 	return vv, nil
 }
 
+type ViewerBar struct {
+	vtui.Bar
+	vv *ViewerView
+}
+
+func (vb *ViewerBar) Show(scr *vtui.ScreenBuf) {
+	vb.Bar.Show(scr)
+	vb.DisplayObject(scr)
+}
+func (vb *ViewerBar) DisplayObject(scr *vtui.ScreenBuf) {
+	if !vb.IsVisible() {
+		return
+	}
+	attr := vtui.Palette[ColViewerStatus]
+	vb.DrawBackground(scr, attr)
+
+	percent := 0
+	size := vb.vv.backend.Size()
+	if size > 0 {
+		viewHeightBytes := int64(vb.vv.Y2 - vb.vv.Y1)
+		if vb.vv.HexMode {
+			viewHeightBytes *= 16
+		} else {
+			viewHeightBytes *= 80
+		}
+		if size <= viewHeightBytes {
+			percent = 100
+		} else {
+			denominator := size - viewHeightBytes
+			percent = int((vb.vv.TopOffset * 100) / denominator)
+		}
+		if percent < 0 { percent = 0 }
+		if percent > 100 { percent = 100 }
+	}
+
+	mode := Msg("Viewer.ModeText")
+	if vb.vv.HexMode { mode = Msg("Viewer.ModeHex") }
+	status := fmt.Sprintf(" %s │ %s │ %d%% ", vb.vv.path, mode, percent)
+	scr.Write(vb.X1, vb.Y1, vtui.StringToCharInfo(status, attr))
+}
+
+func (vv *ViewerView) SetPosition(x1, y1, x2, y2 int) {
+	vv.ScreenObject.SetPosition(x1, y1, x2, y2)
+	if vv.topBar != nil {
+		vv.topBar.SetPosition(x1, y1, x2, y1)
+	}
+}
+
 func (vv *ViewerView) Show(scr *vtui.ScreenBuf) {
 	vv.ScreenObject.Show(scr)
+	if vv.topBar != nil {
+		vv.topBar.Show(scr)
+	}
 	vv.DisplayObject(scr)
 }
 
@@ -58,7 +112,7 @@ func (vv *ViewerView) DisplayObject(scr *vtui.ScreenBuf) {
 	bgAttr := vtui.Palette[ColViewerText]
 
 	// 1. Draw Background
-	scr.FillRect(vv.X1, vv.Y1, vv.X2, vv.Y2, ' ', bgAttr)
+	scr.FillRect(vv.X1, vv.Y1+1, vv.X2, vv.Y2, ' ', bgAttr)
 
 	if contentHeight > 0 {
 		if vv.HexMode {
@@ -68,7 +122,6 @@ func (vv *ViewerView) DisplayObject(scr *vtui.ScreenBuf) {
 		}
 	}
 
-	vv.drawStatus(scr)
 }
 
 func (vv *ViewerView) renderHex(scr *vtui.ScreenBuf, width, contentHeight int) {
@@ -183,46 +236,6 @@ func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, contentHeight int) 
 	}
 	vv.eofVisible = currOffset >= vv.backend.Size()
 }
-
-func (vv *ViewerView) drawStatus(scr *vtui.ScreenBuf) {
-	attr := vtui.Palette[ColViewerStatus]
-	scr.FillRect(vv.X1, vv.Y1, vv.X2, vv.Y1, ' ', attr)
-
-	percent := 0
-	size := vv.backend.Size()
-	if size > 0 {
-		// 1. Используем TopOffset как точку отсчета (позиция начала экрана в файле)
-		// 2. Для достижения 100% при прокрутке до конца, считаем, 
-		//    что 100% — это (Размер файла - Размер окна)
-		viewHeightBytes := int64(vv.Y2 - vv.Y1)
-		if vv.HexMode {
-			viewHeightBytes *= 16
-		} else {
-			viewHeightBytes *= 80 // Примерный коэффициент
-		}
-
-		// Если файл меньше окна, мы сразу в конце
-		if size <= viewHeightBytes {
-			percent = 100
-		} else {
-			// Процент = (текущий оффсет / (размер - видимая область)) * 100
-			denominator := size - viewHeightBytes
-			percent = int((vv.TopOffset * 100) / denominator)
-		}
-		
-		// Защита от выхода за границы 0-100
-		if percent < 0 { percent = 0 }
-		if percent > 100 { percent = 100 }
-	}
-
-	// ... вывод текста ...
-	mode := Msg("Viewer.ModeText")
-	if vv.HexMode { mode = Msg("Viewer.ModeHex") }
-
-	status := fmt.Sprintf(" %s │ %s │ %d%% ", vv.path, mode, percent)
-	scr.Write(vv.X1, vv.Y1, vtui.StringToCharInfo(status, attr))
-}
-
 func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 	if !e.KeyDown {
 		return false

@@ -4,6 +4,7 @@ import (
 	"os"
 	"unicode"
 	"unicode/utf8"
+	"fmt"
 
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
@@ -26,6 +27,7 @@ type lineFragment struct {
 // EditorView is a text editor component.
 type EditorView struct {
 	vtui.ScreenObject
+	topBar *EditorBar
 	pt     *piecetable.PieceTable
 	li     *piecetable.LineIndex
 	engine *textlayout.WrapEngine
@@ -60,9 +62,28 @@ func NewEditorView(pt *piecetable.PieceTable, path string) *EditorView {
 		filePath: path,
 		WordWrap: true,
 	}
+	ev.topBar = &EditorBar{ev: ev}
+	ev.topBar.SetVisible(true)
 	ev.SetCanFocus(true)
 	ev.SetFocus(true)
 	return ev
+}
+
+type EditorBar struct {
+	vtui.Bar
+	ev *EditorView
+}
+
+func (eb *EditorBar) Show(scr *vtui.ScreenBuf) {
+	eb.Bar.Show(scr)
+	eb.DisplayObject(scr)
+}
+func (eb *EditorBar) DisplayObject(scr *vtui.ScreenBuf) {
+	if !eb.IsVisible() { return }
+	attr := vtui.Palette[ColViewerStatus]
+	eb.DrawBackground(scr, attr)
+	status := fmt.Sprintf(" %s │ %d,%d ", eb.ev.filePath, eb.ev.CursorLine+1, eb.ev.CursorPos)
+	scr.Write(eb.X1, eb.Y1, vtui.StringToCharInfo(status, attr))
 }
 
 func (ev *EditorView) clearCaches() {
@@ -85,6 +106,9 @@ func (ev *EditorView) updateDesiredVisualCol() {
 
 func (ev *EditorView) Show(scr *vtui.ScreenBuf) {
 	ev.ScreenObject.Show(scr)
+	if ev.topBar != nil {
+		ev.topBar.Show(scr)
+	}
 	ev.DisplayObject(scr)
 }
 
@@ -94,13 +118,13 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 	}
 
 	ev.ensureEngineWidth()
-	height := ev.Y2 - ev.Y1 + 1
+	height := ev.Y2 - ev.Y1
 
 	bgAttr := vtui.Palette[ColCommandLineUserScreen]
 	selAttr := vtui.Palette[vtui.ColDialogEditSelected]
 
-	// Clear the entire editor area to prevent underlying UI from "shining through"
-	scr.FillRect(ev.X1, ev.Y1, ev.X2, ev.Y2, ' ', bgAttr)
+	// Clear the entire editor text area
+	scr.FillRect(ev.X1, ev.Y1+1, ev.X2, ev.Y2, ' ', bgAttr)
 
 	// 1. Позиция курсора
 	curOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
@@ -120,7 +144,7 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 			}
 
 			absVRow := baseVRow + fIdx
-			currY := ev.Y1 + rowsRendered
+			currY := ev.Y1 + 1 + rowsRendered
 
 			ev.renderBytes = ev.renderBytes[:0]
 			ev.renderBytes = ev.pt.AppendRange(ev.renderBytes, frag.ByteOffsetStart, frag.ByteOffsetEnd-frag.ByteOffsetStart)
@@ -255,7 +279,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 
 	case vtinput.VK_PRIOR: // PgUp
 		handleNav()
-		height := ev.Y2 - ev.Y1 + 1
+		height := ev.Y2 - ev.Y1
 		curOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 		vRow, _ := ev.engine.LogicalToVisual(curOffset)
 		newVRow := vRow - height
@@ -270,7 +294,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 
 	case vtinput.VK_NEXT: // PgDn
 		handleNav()
-		height := ev.Y2 - ev.Y1 + 1
+		height := ev.Y2 - ev.Y1
 		curOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 		vRow, _ := ev.engine.LogicalToVisual(curOffset)
 		newVRow := vRow + height
@@ -488,7 +512,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 
 func (ev *EditorView) ensureCursorVisible() {
 	width := ev.X2 - ev.X1 + 1
-	height := ev.Y2 - ev.Y1 + 1
+	height := ev.Y2 - ev.Y1
 	if width <= 0 || height <= 0 { return }
 
 	curOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
@@ -517,6 +541,9 @@ func (ev *EditorView) ProcessMouse(e *vtinput.InputEvent) bool { return false }
 
 func (ev *EditorView) SetPosition(x1, y1, x2, y2 int) {
 	ev.ScreenObject.SetPosition(x1, y1, x2, y2)
+	if ev.topBar != nil {
+		ev.topBar.SetPosition(x1, y1, x2, y1)
+	}
 	ev.ensureEngineWidth()
 	ev.ensureCursorVisible()
 }
