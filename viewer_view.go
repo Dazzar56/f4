@@ -184,27 +184,39 @@ func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, contentHeight int) 
 }
 
 func (vv *ViewerView) drawStatus(scr *vtui.ScreenBuf) {
-
 	attr := vtui.Palette[ColViewerStatus]
 	scr.FillRect(vv.X1, vv.Y1, vv.X2, vv.Y1, ' ', attr)
 
 	percent := 0
-	if vv.backend.Size() > 0 {
-		// Calculate percentage based on current view position relative to total file size.
-		// We add the view height so that 100% is reached when the bottom of the file
-		// is visible, not just the top.
-		viewHeight := int64(vv.Y2 - vv.Y1)
-		curr := vv.TopOffset + viewHeight
-		if curr > vv.backend.Size() {
-			curr = vv.backend.Size()
+	size := vv.backend.Size()
+	if size > 0 {
+		// 1. Используем TopOffset как точку отсчета (позиция начала экрана в файле)
+		// 2. Для достижения 100% при прокрутке до конца, считаем, 
+		//    что 100% — это (Размер файла - Размер окна)
+		viewHeightBytes := int64(vv.Y2 - vv.Y1)
+		if vv.HexMode {
+			viewHeightBytes *= 16
+		} else {
+			viewHeightBytes *= 80 // Примерный коэффициент
 		}
-		percent = int((curr * 100) / vv.backend.Size())
+
+		// Если файл меньше окна, мы сразу в конце
+		if size <= viewHeightBytes {
+			percent = 100
+		} else {
+			// Процент = (текущий оффсет / (размер - видимая область)) * 100
+			denominator := size - viewHeightBytes
+			percent = int((vv.TopOffset * 100) / denominator)
+		}
+		
+		// Защита от выхода за границы 0-100
+		if percent < 0 { percent = 0 }
+		if percent > 100 { percent = 100 }
 	}
 
+	// ... вывод текста ...
 	mode := Msg("Viewer.ModeText")
-	if vv.HexMode {
-		mode = Msg("Viewer.ModeHex")
-	}
+	if vv.HexMode { mode = Msg("Viewer.ModeHex") }
 
 	status := fmt.Sprintf(" %s │ %s │ %d%% ", vv.path, mode, percent)
 	scr.Write(vv.X1, vv.Y1, vtui.StringToCharInfo(status, attr))
