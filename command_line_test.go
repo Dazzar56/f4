@@ -88,3 +88,29 @@ func TestCommandLine_History(t *testing.T) {
 		t.Error("History browsing state should reset after typing")
 	}
 }
+func TestCommandLine_HistoryBoundaries(t *testing.T) {
+	cl := NewCommandLine("> ")
+	cl.AddHistory("cmd1")
+
+	// Go up once
+	cl.HistoryUp()
+	if cl.Edit.GetText() != "cmd1" { t.Fatal("Setup failed") }
+
+	// Go up again - should stay at cmd1
+	cl.HistoryUp()
+	if cl.Edit.GetText() != "cmd1" {
+		t.Error("HistoryUp should cap at the end of the list")
+	}
+
+	// Go down to clear
+	cl.HistoryDown()
+	if cl.Edit.GetText() != "" {
+		t.Error("HistoryDown should clear the line when at the start of history")
+	}
+
+	// Go down again - should stay empty and not crash
+	cl.HistoryDown()
+	if cl.historyPos != -1 || cl.Edit.GetText() != "" {
+		t.Error("HistoryDown should stay at -1 when already empty")
+	}
+}

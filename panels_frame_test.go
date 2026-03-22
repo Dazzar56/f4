@@ -146,3 +146,68 @@ func TestPanelsFrame_HistoryNavigation(t *testing.T) {
 		t.Error("Up Arrow should NOT trigger history when panels are visible")
 	}
 }
+func TestPanelsFrame_EnterAddsToHistory(t *testing.T) {
+	pf := NewPanelsFrame()
+	pf.cmdLine.Edit.SetText("ls -la")
+
+	// Simulate Enter
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_RETURN,
+	})
+
+	if len(pf.cmdLine.History) == 0 || pf.cmdLine.History[0] != "ls -la" {
+		t.Errorf("Command was not added to history on Enter. History: %v", pf.cmdLine.History)
+	}
+}
+
+func TestPanelsFrame_AltScreenTerminalHeight(t *testing.T) {
+	pf := NewPanelsFrame()
+	height := 25
+	pf.showKeyBar = true
+
+	// 1. Normal mode: terminal should leave space for KeyBar
+	pf.termView.UseAltScreen = false
+	pf.ResizeConsole(80, height)
+	// termY2 should be h-2 (23)
+	if pf.termView.Y2 != 23 {
+		t.Errorf("Normal mode: expected terminal Y2=23, got %d", pf.termView.Y2)
+	}
+
+	// 2. AltScreen mode: terminal should occupy the KeyBar's row
+	pf.termView.UseAltScreen = true
+	pf.ResizeConsole(80, height)
+	// termY2 should be h-1 (24)
+	if pf.termView.Y2 != 24 {
+		t.Errorf("AltScreen mode: expected terminal Y2=24, got %d", pf.termView.Y2)
+	}
+}
+
+func TestPanelsFrame_KeyBarSuppression(t *testing.T) {
+	vtui.SetDefaultPalette()
+	scr := vtui.NewScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+
+	pf := NewPanelsFrame()
+	pf.showKeyBar = true
+	pf.ResizeConsole(80, 25)
+
+	// We need to simulate the frame being on top to trigger the logic
+	vtui.FrameManager.Push(pf)
+
+	// 1. Normal mode: KeyBar should be registered
+	pf.termView.UseAltScreen = false
+	pf.Show(scr)
+	if vtui.FrameManager.KeyBar == nil {
+		t.Error("KeyBar should be registered in FrameManager in normal mode")
+	}
+
+	// 2. AltScreen mode: KeyBar should be removed from FrameManager
+	pf.termView.UseAltScreen = true
+	pf.Show(scr)
+	if vtui.FrameManager.KeyBar != nil {
+		t.Error("KeyBar should be UNregistered from FrameManager in AltScreen mode")
+	}
+}
