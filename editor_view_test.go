@@ -642,7 +642,8 @@ func TestEditorView_PageNavigation(t *testing.T) {
 }
 
 func TestEditorView_LongLinePerformance(t *testing.T) {
-	t.Parallel()
+	// Removed t.Parallel() to prevent CPU starvation and deadlocks
+	// when competing with other UI tests.
 
 	// Create one very long line (100 KB) to simulate the problem.
 	// Without the fix, this would cause O(N*M) reads and hanging.

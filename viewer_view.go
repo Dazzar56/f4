@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"unicode/utf8"
 
@@ -253,7 +254,7 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 
 	case vtinput.VK_DOWN:
 		if vv.eofVisible {
-			return true
+			return true // Prevent scrolling past End of File
 		}
 		if vv.HexMode {
 			vv.TopOffset += step
@@ -275,7 +276,7 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 
 	case vtinput.VK_NEXT: // PgDn
 		if vv.eofVisible {
-			return true
+			return true // Prevent paging past End of File
 		}
 		if vv.HexMode {
 			vv.TopOffset += step * contentHeight
@@ -303,21 +304,82 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 
 	case vtinput.VK_END:
 		if vv.HexMode {
-			lastLineOffset := (vv.backend.Size() - 1) &^ 0xF
-			vv.TopOffset = lastLineOffset - (contentHeight-1)*16
-		} else {
-			offset := vv.backend.Size() - 1
-			if offset < 0 { offset = 0 }
-			offset = vv.backend.FindLineStart(offset)
-
-			for i := 0; i < int(contentHeight)-1; i++ {
-				if offset <= 0 { break }
-				offset = vv.backend.FindLineStart(offset - 1)
+			if vv.backend.Size() == 0 {
+				vv.TopOffset = 0
+			} else {
+				lastLineOffset := (vv.backend.Size() - 1) &^ 0xF
+				vv.TopOffset = lastLineOffset - (contentHeight-1)*16
+				if vv.TopOffset < 0 {
+					vv.TopOffset = 0
+				}
 			}
-			vv.TopOffset = offset
-		}
-		if vv.TopOffset < 0 {
-			vv.TopOffset = 0
+		} else {
+			if vv.backend.Size() == 0 {
+				vv.TopOffset = 0
+			} else {
+				// Estimate a safe starting point a few kilobytes back
+				width := vv.X2 - vv.X1 + 1
+				chunkSize := contentHeight * int64(width) * 4
+				if chunkSize < 4096 { chunkSize = 4096 }
+
+				startOff := vv.backend.Size() - chunkSize
+				if startOff < 0 { startOff = 0 }
+				startOff = vv.backend.FindLineStart(startOff)
+
+				// Simulate rendering forward to find exact visual line offsets
+				data, _ := vv.backend.ReadAt(startOff, int(vv.backend.Size()-startOff))
+				var offsets []int64
+				currOff := startOff
+
+				for len(data) > 0 {
+					offsets = append(offsets, currOff)
+
+					lineLen := 0
+					visualWidth := 0
+					foundNewline := false
+
+					for lineLen < len(data) {
+						r, size := utf8.DecodeRune(data[lineLen:])
+						if r == '\n' {
+							lineLen += size
+							foundNewline = true
+							break
+						}
+						if r == '\r' {
+							lineLen += size
+							continue
+						}
+
+						rw := runewidth.RuneWidth(r)
+						if vv.WrapMode && visualWidth+rw > width {
+							break
+						}
+						visualWidth += rw
+						lineLen += size
+					}
+
+					currOff += int64(lineLen)
+					data = data[lineLen:]
+
+					if !foundNewline && !vv.WrapMode {
+						// Skip to the next newline in no-wrap mode
+						idx := bytes.IndexByte(data, '\n')
+						if idx >= 0 {
+							currOff += int64(idx + 1)
+							data = data[idx+1:]
+						} else {
+							currOff += int64(len(data))
+							data = nil
+						}
+					}
+				}
+
+				if int64(len(offsets)) <= contentHeight {
+					vv.TopOffset = startOff
+				} else {
+					vv.TopOffset = offsets[len(offsets)-int(contentHeight)]
+				}
+			}
 		}
 		return true
 	}
