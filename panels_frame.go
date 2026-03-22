@@ -379,9 +379,9 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	// Ctrl+Enter inserts selected file name
 	if e.VirtualKeyCode == vtinput.VK_RETURN && ctrl {
 		var name string
-		if pf.activeIdx == 0 {
+		if pf.activeIdx == 0 && pf.left != nil {
 			name = pf.left.GetSelectedName()
-		} else {
+		} else if pf.activeIdx == 1 && pf.right != nil {
 			name = pf.right.GetSelectedName()
 		}
 		if name != "" {
@@ -463,9 +463,9 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 
 	// 3. Try Active Panel
 	panelHandled := false
-	if pf.activeIdx == 0 {
+	if pf.activeIdx == 0 && pf.left != nil {
 		panelHandled = pf.left.ProcessKey(e)
-	} else {
+	} else if pf.activeIdx == 1 && pf.right != nil {
 		panelHandled = pf.right.ProcessKey(e)
 	}
 
@@ -486,16 +486,20 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 	// Determine which panel was clicked
 	mx, my := int(e.MouseX), int(e.MouseY)
 
-	x1, y1, x2, y2 := pf.left.GetPosition()
-	if mx >= x1 && mx <= x2 && my >= y1 && my <= y2 {
-		pf.activeIdx = 0
-		return pf.left.ProcessMouse(e)
+	if pf.left != nil {
+		x1, y1, x2, y2 := pf.left.GetPosition()
+		if mx >= x1 && mx <= x2 && my >= y1 && my <= y2 {
+			pf.activeIdx = 0
+			return pf.left.ProcessMouse(e)
+		}
 	}
 
-	x1, y1, x2, y2 = pf.right.GetPosition()
-	if mx >= x1 && mx <= x2 && my >= y1 && my <= y2 {
-		pf.activeIdx = 1
-		return pf.right.ProcessMouse(e)
+	if pf.right != nil {
+		x1, y1, x2, y2 := pf.right.GetPosition()
+		if mx >= x1 && mx <= x2 && my >= y1 && my <= y2 {
+			pf.activeIdx = 1
+			return pf.right.ProcessMouse(e)
+		}
 	}
 
 	return false

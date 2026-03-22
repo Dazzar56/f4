@@ -34,3 +34,57 @@ func TestCommandLine_Input(t *testing.T) {
 		t.Error("CommandLine should be empty after backspace")
 	}
 }
+
+func TestCommandLine_History(t *testing.T) {
+	vtui.SetDefaultPalette()
+	SetDefaultF4Palette()
+	cl := NewCommandLine("> ")
+
+	// 1. Test adding history
+	cl.AddHistory("ls -la")
+	cl.AddHistory("cd /tmp")
+	cl.AddHistory("ls -la") // Duplicate of a previous one, but not the latest
+
+	if len(cl.History) != 3 {
+		t.Errorf("Expected history length 3, got %d", len(cl.History))
+	}
+
+	// 2. Test navigation
+	cl.HistoryUp() // Should be "ls -la" (index 0)
+	if cl.Edit.GetText() != "ls -la" {
+		t.Errorf("HistoryUp(1) failed: expected 'ls -la', got '%s'", cl.Edit.GetText())
+	}
+
+	cl.HistoryUp() // Should be "cd /tmp" (index 1)
+	if cl.Edit.GetText() != "cd /tmp" {
+		t.Errorf("HistoryUp(2) failed: expected 'cd /tmp', got '%s'", cl.Edit.GetText())
+	}
+
+	cl.HistoryDown() // Back to "ls -la" (index 0)
+	if cl.Edit.GetText() != "ls -la" {
+		t.Errorf("HistoryDown(1) failed: expected 'ls -la', got '%s'", cl.Edit.GetText())
+	}
+
+	cl.HistoryDown() // Should clear the line
+	if cl.Edit.GetText() != "" {
+		t.Errorf("HistoryDown(2) failed: expected empty string, got '%s'", cl.Edit.GetText())
+	}
+
+	// 3. Test duplicate prevention (consecutive)
+	cl.AddHistory("pwd")
+	cl.AddHistory("pwd")
+	if len(cl.History) != 4 { // Only one "pwd" should be added
+		t.Errorf("Duplicate history prevention failed, length: %d", len(cl.History))
+	}
+
+	// 4. Test reset on typing
+	cl.HistoryUp() // "pwd"
+	cl.ProcessKey(&vtinput.InputEvent{
+		Type:    vtinput.KeyEventType,
+		KeyDown: true,
+		Char:    ' ',
+	})
+	if cl.historyPos != -1 {
+		t.Error("History browsing state should reset after typing")
+	}
+}

@@ -114,3 +114,35 @@ func TestPanelsFrame_Labels(t *testing.T) {
 		t.Error("PanelsFrame F3 label should not be empty")
 	}
 }
+func TestPanelsFrame_HistoryNavigation(t *testing.T) {
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25) // Initialize panels
+	pf.showPanels = false    // Hide panels to enable history intercept
+	pf.cmdLine.AddHistory("git status")
+
+	// Press Up Arrow
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_UP,
+	})
+
+	if pf.cmdLine.Edit.GetText() != "git status" {
+		t.Errorf("PanelsFrame failed to pass Up Arrow to history. Got '%s'", pf.cmdLine.Edit.GetText())
+	}
+
+	// Reset, show panels, try again
+	pf.cmdLine.Clear()
+	pf.cmdLine.historyPos = -1
+	pf.showPanels = true
+
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_UP,
+	})
+
+	if pf.cmdLine.Edit.GetText() != "" {
+		t.Error("Up Arrow should NOT trigger history when panels are visible")
+	}
+}
