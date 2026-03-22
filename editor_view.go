@@ -66,7 +66,7 @@ func NewEditorView(pt *piecetable.PieceTable, path string) *EditorView {
 	}
 	ev.menuBar = vtui.NewMenuBar(nil)
 	ev.menuBar.Items = []vtui.MenuBarItem{
-		{Label: "&File", SubItems: []vtui.MenuItem{{Text: "&Save", Command: vtui.CmDefault}, {Text: "E&xit", Command: vtui.CmQuit}}},
+		{Label: "&File", SubItems: []vtui.MenuItem{{Text: "&Save", Command: vtui.CmDefault}, {Text: "E&xit", Command: vtui.CmClose}}},
 		{Label: "&Edit", SubItems: []vtui.MenuItem{{Text: "&Copy", Command: vtui.CmCopy}, {Text: "&Paste"}}},
 		{Label: "&Search", SubItems: []vtui.MenuItem{{Text: "&Find", Command: vtui.CmSearch}}},
 		{Label: "&Options", SubItems: []vtui.MenuItem{{Text: "&WordWrap"}}},
@@ -571,6 +571,14 @@ func (ev *EditorView) ResizeConsole(w, h int) {
 }
 
 func (ev *EditorView) GetMenuBar() *vtui.MenuBar { return ev.menuBar }
+
+func (ev *EditorView) HandleCommand(cmd int, args any) bool {
+	if cmd == vtui.CmClose {
+		ev.done = true
+		return true
+	}
+	return ev.ScreenObject.HandleCommand(cmd, args)
+}
 
 func (ev *EditorView) GetType() vtui.FrameType { return vtui.TypeUser + 2 }
 func (ev *EditorView) SetExitCode(c int) { ev.done = true }

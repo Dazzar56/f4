@@ -41,7 +41,7 @@ func NewViewerView(path string) (*ViewerView, error) {
 	}
 	vv.menuBar = vtui.NewMenuBar(nil)
 	vv.menuBar.Items = []vtui.MenuBarItem{
-		{Label: "&File", SubItems: []vtui.MenuItem{{Text: "E&xit", Command: vtui.CmQuit}}},
+		{Label: "&File", SubItems: []vtui.MenuItem{{Text: "E&xit", Command: vtui.CmClose}}},
 		{Label: "&View", SubItems: []vtui.MenuItem{{Text: "&Hex", Command: vtui.CmDefault}, {Text: "&Wrap"}}},
 		{Label: "&Options", SubItems: []vtui.MenuItem{{Text: "&Settings"}}},
 	}
@@ -102,6 +102,14 @@ func (vv *ViewerView) SetPosition(x1, y1, x2, y2 int) {
 
 func (vv *ViewerView) GetMenuBar() *vtui.MenuBar {
 	return vv.menuBar
+}
+
+func (vv *ViewerView) HandleCommand(cmd int, args any) bool {
+	if cmd == vtui.CmClose {
+		vv.done = true
+		return true
+	}
+	return vv.ScreenObject.HandleCommand(cmd, args)
 }
 
 func (vv *ViewerView) Show(scr *vtui.ScreenBuf) {
