@@ -759,3 +759,18 @@ func TestEditorBar_Content(t *testing.T) {
 		t.Errorf("EditorBar did not display correct cursor info (6,12). Found Line:%v, Pos:%v", foundLine, foundPos)
 	}
 }
+func TestEditorView_HandleClose(t *testing.T) {
+	pt := piecetable.New([]byte("test"))
+	ev := NewEditorView(pt, "file.txt")
+
+	if ev.IsDone() {
+		t.Fatal("Editor should not be done initially")
+	}
+
+	// Send CmClose command (simulating menu "Exit" click)
+	ev.HandleCommand(vtui.CmClose, nil)
+
+	if !ev.IsDone() {
+		t.Error("EditorView failed to set IsDone after receiving CmClose")
+	}
+}

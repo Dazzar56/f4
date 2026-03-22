@@ -81,3 +81,19 @@ func TestViewerBar_Content(t *testing.T) {
 	if !foundHex { t.Error("ViewerBar did not display 'Hex' mode") }
 	if !foundPath { t.Error("ViewerBar did not display file path") }
 }
+func TestViewerView_HandleClose(t *testing.T) {
+	tmp := t.TempDir() + "/close_test.txt"
+	os.WriteFile(tmp, []byte("content"), 0644)
+	vv, _ := NewViewerView(tmp)
+
+	if vv.IsDone() {
+		t.Fatal("Viewer should not be done initially")
+	}
+
+	// Send CmClose
+	vv.HandleCommand(vtui.CmClose, nil)
+
+	if !vv.IsDone() {
+		t.Error("ViewerView failed to set IsDone after receiving CmClose")
+	}
+}
