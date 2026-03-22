@@ -406,6 +406,8 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	if e.VirtualKeyCode == vtinput.VK_RETURN {
 		if !pf.cmdLine.IsEmpty() {
 			cmd := pf.cmdLine.Edit.GetText()
+			pf.cmdLine.AddHistory(cmd)
+			pf.cmdLine.historyPos = -1 // Reset history browsing on new command
 			if pf.pty != nil {
 				// 1. Determine current path of active panel
 				var path string
@@ -435,6 +437,17 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 
 	// 2. Try global hotkeys handled by PanelsFrame
 
+	// Handle command history when panels are hidden
+	if !pf.showPanels {
+		switch e.VirtualKeyCode {
+		case vtinput.VK_UP:
+			pf.cmdLine.HistoryUp()
+			return true
+		case vtinput.VK_DOWN:
+			pf.cmdLine.HistoryDown()
+			return true
+		}
+	}
 	// Tab switches panels
 	if e.VirtualKeyCode == vtinput.VK_TAB {
 		pf.activeIdx = 1 - pf.activeIdx
