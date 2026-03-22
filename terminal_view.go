@@ -304,6 +304,31 @@ func (tv *TerminalView) EraseLine(mode int, attr uint64) {
 	}
 }
 
+// resolveAttr performs "late binding" for palette colors.
+// It converts a potentially palette-indexed attribute to a full TrueColor attribute.
+func (tv *TerminalView) resolveAttr(attr uint64) uint64 {
+	finalAttr := attr
+	// Resolve Foreground
+	if (attr & vtui.ForegroundTrueColor) == 0 {
+		idx := attr & 0x7
+		if (attr & vtui.ForegroundIntensity) != 0 {
+			idx += 8
+		}
+		finalAttr = vtui.SetRGBFore(finalAttr, tv.Palette[idx])
+	}
+
+	// Resolve Background
+	if (attr & vtui.BackgroundTrueColor) == 0 {
+		idx := (attr >> 4) & 0x7
+		if (attr & vtui.BackgroundIntensity) != 0 {
+			idx += 8
+		}
+		finalAttr = vtui.SetRGBBack(finalAttr, tv.Palette[idx])
+	}
+
+	return finalAttr
+}
+
 func (tv *TerminalView) SetAltScreen(enable bool) {
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
@@ -332,11 +357,15 @@ func (tv *TerminalView) Show(scr *vtui.ScreenBuf) {
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
 
-	// Очищаем всю область терминала черным цветом
-	scr.FillRect(tv.X1, tv.Y1, tv.X1+tv.Width-1, tv.Y1+tv.Height-1, ' ', DefaultTermAttr)
+	// Fill the terminal area with the default color
+	scr.FillRect(tv.X1, tv.Y1, tv.X1+tv.Width-1, tv.Y1+tv.Height-1, ' ', tv.resolveAttr(DefaultTermAttr))
 
 	if tv.UseAltScreen {
-		for y, line := range tv.AltLines {
+		line := make([]vtui.CharInfo, tv.Width)
+		for y, rawLine := range tv.AltLines {
+			for x, cell := range rawLine {
+				line[x] = vtui.CharInfo{Char: cell.Char, Attributes: tv.resolveAttr(cell.Attributes)}
+			}
 			scr.Write(tv.X1, tv.Y1+y, line)
 		}
 		if tv.IsVisible() {
@@ -380,7 +409,8 @@ func (tv *TerminalView) Show(scr *vtui.ScreenBuf) {
 			for currentByte < len(textBytes) {
 				r, size := utf8.DecodeRune(textBytes[currentByte:])
 				attr := tv.getAttrAt(frag.ByteOffsetStart + currentByte)
-				cells = append(cells, vtui.StringToCharInfo(string(r), attr)...)
+				resolvedAttr := tv.resolveAttr(attr)
+				cells = append(cells, vtui.StringToCharInfo(string(r), resolvedAttr)...)
 				currentByte += size
 			}
 

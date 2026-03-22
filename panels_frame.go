@@ -233,7 +233,18 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 
 	// Command line logic depends on terminal state and editor visibility
 	topType := vtui.FrameManager.GetTopFrameType()
-	if (!pf.showPanels && pf.termView.UseAltScreen) || topType == vtui.TypeUser+2 {
+	// Smart hide: don't show cmdline if panels are hidden and it's empty,
+	// unless some other frame is on top (like Editor).
+	hideCmd := false
+	if topType == vtui.TypeUser+2 {
+		hideCmd = true
+	} else if !pf.showPanels {
+		if pf.termView.UseAltScreen || pf.cmdLine.IsEmpty() {
+			hideCmd = true
+		}
+	}
+
+	if hideCmd {
 		pf.cmdLine.SetVisible(false)
 	} else {
 		pf.cmdLine.SetVisible(true)

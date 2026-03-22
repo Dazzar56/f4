@@ -90,7 +90,9 @@ func TestAnsiParser_DynamicPalette(t *testing.T) {
 	// 2. Set foreground to ANSI 31 (Red)
 	p.Process([]byte("\x1b[31m"))
 
-	gotColor := vtui.GetRGBFore(p.Attr)
+	// We must resolve the attribute using terminal's current palette (late binding)
+	resolvedAttr := p.term.resolveAttr(p.Attr)
+	gotColor := vtui.GetRGBFore(resolvedAttr)
 	if gotColor != 0xFF00FF {
 		t.Errorf("Dynamic Palette: expected Purple #FF00FF, got %06X", gotColor)
 	}
@@ -99,7 +101,8 @@ func TestAnsiParser_DynamicPalette(t *testing.T) {
 	// Change index 4 (ANSI Blue) to #112233
 	p.Process([]byte("\x1b]4;4;rgb:11/22/33\x07"))
 	p.Process([]byte("\x1b[34m")) // SGR 34 is ANSI Blue
-	gotColor = vtui.GetRGBFore(p.Attr)
+	resolvedAttr = p.term.resolveAttr(p.Attr)
+	gotColor = vtui.GetRGBFore(resolvedAttr)
 	if gotColor != 0x112233 {
 		t.Errorf("Dynamic Palette (rgb format): expected #112233, got %06X", gotColor)
 	}
