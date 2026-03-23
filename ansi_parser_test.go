@@ -337,3 +337,48 @@ func TestAnsiParser_OSC_Advanced(t *testing.T) {
 		t.Errorf("Window title failed: expected 'far2l console', got '%s'", tv.Title)
 	}
 }
+func TestAnsiParser_SGR_IntensityPersistence(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	p := NewAnsiParser(tv, nil)
+
+	// 1. Set Bold (Intensity)
+	p.Process([]byte("\x1b[1m"))
+	if (p.Attr & vtui.ForegroundIntensity) == 0 {
+		t.Fatal("Intensity flag not set")
+	}
+
+	// 2. Set "Bright Red" using 90-range code
+	// HYPOTHESIS: This should either clear the manual Intensity flag OR we must
+	// ensure that Flush doesn't produce double-brightening.
+	p.Process([]byte("\x1b[91m"))
+
+	if vtui.GetIndexFore(p.Attr) != 9 {
+		t.Errorf("Expected index 9, got %d", vtui.GetIndexFore(p.Attr))
+	}
+
+	// If Intensity flag is still there, attributesToANSI will produce "\x1b[1;38;5;9m"
+	// which is "Bold + Bright Red".
+	if (p.Attr & vtui.ForegroundIntensity) != 0 {
+		t.Log("Note: Intensity flag persists after 90-range SGR. Check if this causes 'dirty' colors on host.")
+	}
+}
+
+func TestAnsiParser_DefaultColorRestoration(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	p := NewAnsiParser(tv, nil)
+
+	// Set some non-default colors
+	p.Process([]byte("\x1b[32;44m")) // Green on Blue
+
+	// Restore default foreground (39)
+	p.Process([]byte("\x1b[39m"))
+	if vtui.GetIndexFore(p.Attr) != vtui.GetIndexFore(DefaultTermAttr) {
+		t.Errorf("SGR 39 failed to restore default index. Expected %d, got %d",
+			vtui.GetIndexFore(DefaultTermAttr), vtui.GetIndexFore(p.Attr))
+	}
+
+	// Check if background is still blue
+	if vtui.GetIndexBack(p.Attr) != 4 {
+		t.Errorf("SGR 39 corrupted background. Expected 4, got %d", vtui.GetIndexBack(p.Attr))
+	}
+}

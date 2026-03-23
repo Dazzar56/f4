@@ -5,6 +5,7 @@ import (
 	"sync"
 	"unicode/utf8"
 
+	"github.com/mattn/go-runewidth"
 	"github.com/unxed/vtui"
 	"github.com/unxed/vtui/piecetable"
 	"github.com/unxed/vtui/textlayout"
@@ -188,15 +189,26 @@ func (tv *TerminalView) PutChar(r rune, attr uint64) {
 		return
 	}
 
+	w := runewidth.RuneWidth(r)
+	if w <= 0 {
+		w = 1
+	}
+
 	buf := tv.getBuffer()
-	if tv.CursorX >= tv.Width {
+	// If the character is too wide to fit in the current line, wrap first
+	if tv.CursorX+w > tv.Width {
 		tv.newline()
 		buf = tv.getBuffer()
 	}
 
-	if tv.CursorY >= 0 && tv.CursorY < len(buf) && tv.CursorX >= 0 && tv.CursorX < tv.Width {
+	if tv.CursorY >= 0 && tv.CursorY < len(buf) && tv.CursorX >= 0 && tv.CursorX+w <= tv.Width {
+		// Write the actual character
 		buf[tv.CursorY][tv.CursorX] = vtui.CharInfo{Char: uint64(r), Attributes: attr}
-		tv.CursorX++
+		// Fill subsequent cells for wide characters
+		for i := 1; i < w; i++ {
+			buf[tv.CursorY][tv.CursorX+i] = vtui.CharInfo{Char: vtui.WideCharFiller, Attributes: attr}
+		}
+		tv.CursorX += w
 	}
 }
 

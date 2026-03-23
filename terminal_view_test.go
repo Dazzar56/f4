@@ -104,6 +104,29 @@ func TestTerminalView_ScrollModes(t *testing.T) {
 		t.Errorf("Scroll Down failed. Row 2: %c, Row 0: %c", tv.Lines[2][0].Char, tv.Lines[0][0].Char)
 	}
 }
+func TestTerminalView_WideCharAlignment(t *testing.T) {
+	tv := NewTerminalView(10, 2)
+	tv.SetCursor(0, 0)
+
+	// '世' is a wide character (2 columns)
+	tv.PutChar('世', DefaultTermAttr)
+
+	// HYPOTHESIS: If wide characters aren't handled, cursor only moves by 1
+	if tv.CursorX != 2 {
+		t.Errorf("Wide char positioning failed: expected CursorX=2, got %d. This will cause attribute shift!", tv.CursorX)
+	}
+
+	// Check if the second cell is marked as a filler to prevent overdrawing
+	if tv.Lines[0][1].Char != vtui.WideCharFiller {
+		t.Errorf("Wide char filler missing at index 1. Got U+%04X", tv.Lines[0][1].Char)
+	}
+
+	// Write 'A' after '世'
+	tv.PutChar('A', DefaultTermAttr)
+	if tv.Lines[0][2].Char != 'A' {
+		t.Errorf("Character after wide char misaligned: expected 'A' at index 2, got %c", rune(tv.Lines[0][2].Char))
+	}
+}
 func TestTerminalView_AutoWrap(t *testing.T) {
 	width := 10
 	tv := NewTerminalView(width, 5)
