@@ -303,19 +303,22 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		// Editor view checks paste events internally, so we let it fall through if panels are shown
 	}
 
-	if !e.KeyDown {
-		return false
-	}
-
 	// Raw input mode for interactive terminal apps (like far2l inside f4)
 	if !pf.showPanels && pf.termView.UseAltScreen {
-		// Guest app is interactive (Alt Screen). Forward all keys including Ctrl+O.
-		if pf.pty != nil {
-			if seq := TranslateInput(e, pf.termView.Win32InputMode, pf.termView.ApplicationCursorKeys); seq != "" {
-				pf.pty.Write([]byte(seq))
+		// Only forward KeyUp events if the guest app explicitly requested Win32 Input Mode.
+		// Legacy apps (like mc) would interpret forwarded KeyUp escape sequences as new keypresses.
+		if e.KeyDown || pf.termView.Win32InputMode {
+			if pf.pty != nil {
+				if seq := TranslateInput(e, pf.termView.Win32InputMode, pf.termView.ApplicationCursorKeys); seq != "" {
+					pf.pty.Write([]byte(seq))
+				}
 			}
 		}
 		return true
+	}
+
+	if !e.KeyDown {
+		return false
 	}
 
 	// F10 exits the application (global, but can be overridden by terminal raw mode)
