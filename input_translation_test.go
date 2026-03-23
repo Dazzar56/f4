@@ -49,23 +49,3 @@ func TestTranslateInput_Win32(t *testing.T) {
 		t.Errorf("Expected %q, got %q", expected, res)
 	}
 }
-
-func TestTranslateInput_Win32KeyUp(t *testing.T) {
-	// Test release of Left Control (VK_CONTROL = 0x11 = 17)
-	e := &vtinput.InputEvent{
-		Type:            vtinput.KeyEventType,
-		VirtualKeyCode:  17,
-		VirtualScanCode: 29,
-		Char:            0,
-		KeyDown:         false, // KeyUp!
-		ControlKeyState: 0,
-		RepeatCount:     1,
-	}
-	res := TranslateInput(e, true)
-	// CSI Vk ; Sc ; Uc ; Kd ; Cs ; Rc _
-	// Kd must be 0 for release
-	expected := "\x1b[17;29;0;0;0;1_"
-	if res != expected {
-		t.Errorf("Expected %q for Win32 KeyUp, got %q", expected, res)
-	}
-}

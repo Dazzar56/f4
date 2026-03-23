@@ -276,7 +276,6 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 }
 
 func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
-	// 1. Handle non-keyboard events first (Focus, Paste)
 	if e.Type == vtinput.FocusEventType && e.SetFocus {
 		if fsp, ok := pf.left.(*FileSystemPanel); ok {
 			fsp.Refresh()
@@ -287,6 +286,11 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	}
 
+	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
+	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
+	//alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
+
+	// Handle bracketed paste for terminal apps
 	if e.Type == vtinput.PasteEventType {
 		if !pf.showPanels && pf.termView.BracketedPasteMode && pf.pty != nil {
 			if e.PasteStart {
@@ -299,210 +303,9 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		// Editor view checks paste events internally, so we let it fall through if panels are shown
 	}
 
-	// 2. Terminal Forwarding (Crucial: MUST handle both KeyDown and KeyUp for Win32/Kitty modes)
-	if !pf.showPanels && pf.termView.UseAltScreen {
-		// Guest app is interactive (Alt Screen). Forward all keys including KeyUp.
-		if pf.pty != nil && e.Type == vtinput.KeyEventType {
-			pf.pty.Write([]byte(TranslateInput(e, pf.termView.Win32InputMode)))
-			return true
-		}
-	}
-
-	// 3. UI logic from this point onwards only cares about KeyDown
 	if !e.KeyDown {
 		return false
 	}
-
-	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
-	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
-
-	// F10 exits the application
-	if e.VirtualKeyCode == vtinput.VK_F10 {
-		vtui.FrameManager.Shutdown()
-		return true
-	}
-
-	// F3: Viewer
-	if e.VirtualKeyCode == vtinput.VK_F3 {
-		var name string
-		var path string
-		if pf.activeIdx == 0 {
-			if fsp, ok := pf.left.(*FileSystemPanel); ok {
-				name = fsp.GetSelectedName()
-				path = fsp.vfs.Join(fsp.vfs.GetPath(), name)
-			}
-		} else {
-			if fsp, ok := pf.right.(*FileSystemPanel); ok {
-				name = fsp.GetSelectedName()
-				path = fsp.vfs.Join(fsp.vfs.GetPath(), name)
-			}
-		}
-		if path != "" {
-			pf.openViewer(path)
-		}
-		return true
-	}
-
-	// F4 opens the internal editor
-	if e.VirtualKeyCode == vtinput.VK_F4 {
-		if shift {
-			// Shift+F4: Create new file
-			var dir string
-			if pf.activeIdx == 0 {
-				if fsp, ok := pf.left.(*FileSystemPanel); ok {
-					dir = fsp.vfs.GetPath()
-				}
-			} else {
-				if fsp, ok := pf.right.(*FileSystemPanel); ok {
-					dir = fsp.vfs.GetPath()
-				}
-			}
-
-			vtui.InputBox(Msg("Edit.NewFileTitle"), Msg("Edit.NewFilePrompt"), "", func(name string) {
-				if name == "" {
-					name = "newfile.txt"
-				}
-				fullPath := filepath.Join(dir, name)
-				pf.openEditor(fullPath)
-			})
-		} else {
-			// F4: Edit selected file
-			var name string
-			var path string
-			if pf.activeIdx == 0 {
-				if fsp, ok := pf.left.(*FileSystemPanel); ok {
-					name = fsp.GetSelectedName()
-					path = fsp.vfs.Join(fsp.vfs.GetPath(), name)
-				}
-			} else {
-				if fsp, ok := pf.right.(*FileSystemPanel); ok {
-					name = fsp.GetSelectedName()
-					path = fsp.vfs.Join(fsp.vfs.GetPath(), name)
-				}
-			}
-
-			if path != "" {
-				pf.openEditor(path)
-			}
-		}
-		return true
-	}
-
-	// F1 invokes help
-	if e.VirtualKeyCode == vtinput.VK_F1 {
-		pf.ShowHelp()
-		return true
-	}
-
-	// F5 translates to Command
-	if e.VirtualKeyCode == vtinput.VK_F5 && !shift && !ctrl {
-		vtui.FrameManager.EmitCommand(vtui.CmCopy, nil)
-		return true
-	}
-
-	// Esc clears command line if it's not empty
-	if e.VirtualKeyCode == vtinput.VK_ESCAPE && !pf.cmdLine.IsEmpty() {
-		pf.cmdLine.Clear()
-		return true
-	}
-
-	// Ctrl+Enter inserts selected file name
-	if e.VirtualKeyCode == vtinput.VK_RETURN && ctrl {
-		var name string
-		if pf.activeIdx == 0 && pf.left != nil {
-			name = pf.left.GetSelectedName()
-		} else if pf.activeIdx == 1 && pf.right != nil {
-			name = pf.right.GetSelectedName()
-		}
-		if name != "" {
-			txt := pf.cmdLine.Edit.GetText()
-			if len(txt) == 0 || txt[len(txt)-1] != ' ' {
-				pf.cmdLine.InsertString(" ")
-			}
-			pf.cmdLine.InsertString(name)
-		}
-		return true
-	}
-
-	// Ctrl+O toggles panels visibility
-	if e.VirtualKeyCode == vtinput.VK_O && ctrl {
-		pf.showPanels = !pf.showPanels
-		return true
-	}
-
-	// Enter handling
-	if e.VirtualKeyCode == vtinput.VK_RETURN {
-		if !pf.cmdLine.IsEmpty() {
-			cmd := pf.cmdLine.Edit.GetText()
-			pf.cmdLine.AddHistory(cmd)
-			pf.cmdLine.historyPos = -1
-			if pf.pty != nil {
-				var path string
-				if pf.activeIdx == 0 {
-					if fsp, ok := pf.left.(*FileSystemPanel); ok { path = fsp.vfs.GetPath() }
-				} else {
-					if fsp, ok := pf.right.(*FileSystemPanel); ok { path = fsp.vfs.GetPath() }
-				}
-				if path != "" {
-					pf.pty.Write([]byte(fmt.Sprintf(" cd %q\r", path)))
-				}
-				pf.pty.Write([]byte(cmd + "\r"))
-			}
-			pf.cmdLine.Clear()
-			pf.showPanels = false
-			return true
-		} else if !pf.showPanels {
-			if pf.pty != nil {
-				pf.pty.Write([]byte("\r"))
-			}
-			return true
-		}
-	}
-
-	// Handle command history when panels are hidden
-	if !pf.showPanels {
-		switch e.VirtualKeyCode {
-		case vtinput.VK_UP:
-			pf.cmdLine.HistoryUp()
-			return true
-		case vtinput.VK_DOWN:
-			pf.cmdLine.HistoryDown()
-			return true
-		}
-	}
-
-	// Tab switches panels
-	if e.VirtualKeyCode == vtinput.VK_TAB {
-		pf.activeIdx = 1 - pf.activeIdx
-		return true
-	}
-
-	// Ctrl+B toggles KeyBar
-	if e.VirtualKeyCode == vtinput.VK_B && ctrl {
-		pf.showKeyBar = !pf.showKeyBar
-		pf.ResizeConsole(pf.lastW, pf.lastH)
-		return true
-	}
-
-	// Try Active Panel
-	panelHandled := false
-	if pf.activeIdx == 0 && pf.left != nil {
-		panelHandled = pf.left.ProcessKey(e)
-	} else if pf.activeIdx == 1 && pf.right != nil {
-		panelHandled = pf.right.ProcessKey(e)
-	}
-
-	if panelHandled {
-		return true
-	}
-
-	// Fallback: pass to CommandLine
-	if pf.cmdLine.ProcessKey(e) {
-		pf.cmdLine.SetFocus(true)
-		return true
-	}
-
-	return false
 
 	// Raw input mode for interactive terminal apps (like far2l inside f4)
 	if !pf.showPanels && pf.termView.UseAltScreen {
@@ -689,7 +492,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 
 	// 3. Try Active Panel
-	panelHandled = false
+	panelHandled := false
 	if pf.activeIdx == 0 && pf.left != nil {
 		panelHandled = pf.left.ProcessKey(e)
 	} else if pf.activeIdx == 1 && pf.right != nil {
