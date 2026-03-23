@@ -37,7 +37,7 @@ type TerminalView struct {
 	// Состояние терминала (сохранение координат)
 	savedX, savedY       int
 	decSavedX, decSavedY int
-	Palette              [16]uint32
+	Palette              [256]uint32
 
 	// --- Бесконечный лог (History & Reflow) ---
 	pt              *piecetable.PieceTable
@@ -98,6 +98,7 @@ func (tv *TerminalView) ResetBuffer(w, h int) {
 	tv.CursorY = h - 1
 
 	// Палитра по умолчанию (ANSI order)
+	copy(tv.Palette[:], vtui.XTerm256Palette[:])
 	tv.Palette[0] = far2lPalette[0] // Black
 	tv.Palette[1] = far2lPalette[4] // Red
 	tv.Palette[2] = far2lPalette[2] // Green
@@ -329,6 +330,11 @@ func (tv *TerminalView) getAttrAt(offset int) uint64 {
 
 func (tv *TerminalView) Show(scr *vtui.ScreenBuf) {
 	tv.ScreenObject.Show(scr)
+
+	scr.ActivePalette = &tv.Palette
+	scr.SetOverlayMode(false)
+	defer func() { scr.SetOverlayMode(true) }()
+
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
 

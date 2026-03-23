@@ -67,8 +67,8 @@ func TestTerminalView_HistoryAndReflow(t *testing.T) {
 func TestTerminalView_StylesPreservation(t *testing.T) {
 	tv := NewTerminalView(80, 5)
 
-	red := uint64(0xFF0000) << 16
-	blue := uint64(0x0000FF) << 16
+	red := vtui.SetIndexFore(0, 1)
+	blue := vtui.SetIndexFore(0, 4)
 
 	// Пишем "RED" красным и "BLUE" синим
 	for _, r := range "RED" { tv.PutChar(r, red) }

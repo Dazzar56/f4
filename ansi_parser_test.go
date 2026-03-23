@@ -57,11 +57,9 @@ func TestAnsiParser_SGR_Advanced(t *testing.T) {
 	}
 
 	// 2. Test 256-color Background (48;5;Index)
-	// Index 208 is usually orange #ff8700
 	p.Process([]byte("\x1b[48;5;208m"))
-	expectedBG := uint32(0xFF8700)
-	if vtui.GetRGBBack(p.Attr) != expectedBG {
-		t.Errorf("256-color Back: expected %06X, got %06X", expectedBG, vtui.GetRGBBack(p.Attr))
+	if vtui.GetIndexBack(p.Attr) != 208 {
+		t.Errorf("256-color Back: expected 208, got %d", vtui.GetIndexBack(p.Attr))
 	}
 
 	// 3. Test Styles: Bold (1) and Underline (4)
@@ -90,7 +88,7 @@ func TestAnsiParser_DynamicPalette(t *testing.T) {
 	// 2. Set foreground to ANSI 31 (Red)
 	p.Process([]byte("\x1b[31m"))
 
-	gotColor := vtui.GetRGBFore(p.Attr)
+	gotColor := tv.Palette[vtui.GetIndexFore(p.Attr)]
 	if gotColor != 0xFF00FF {
 		t.Errorf("Dynamic Palette: expected Purple #FF00FF, got %06X", gotColor)
 	}
@@ -99,7 +97,7 @@ func TestAnsiParser_DynamicPalette(t *testing.T) {
 	// Change index 4 (ANSI Blue) to #112233
 	p.Process([]byte("\x1b]4;4;rgb:11/22/33\x07"))
 	p.Process([]byte("\x1b[34m")) // SGR 34 is ANSI Blue
-	gotColor = vtui.GetRGBFore(p.Attr)
+	gotColor = tv.Palette[vtui.GetIndexFore(p.Attr)]
 	if gotColor != 0x112233 {
 		t.Errorf("Dynamic Palette (rgb format): expected #112233, got %06X", gotColor)
 	}

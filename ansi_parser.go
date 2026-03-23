@@ -10,7 +10,7 @@ import (
 )
 
 type ParserState int
-var DefaultTermAttr = vtui.SetRGBBoth(0, 0xC0C0C0, 0x000000) // Light Gray on Black
+var DefaultTermAttr = vtui.SetIndexBoth(0, 7, 0) // Light Gray on Black (standard ANSI indices)
 
 const (
 	StateGround ParserState = iota
@@ -308,13 +308,13 @@ func (p *AnsiParser) handleSGR(args []int, i int) int {
 		p.Attr &= ^vtui.CommonLvbStrikeout
 
 	case n >= 30 && n <= 37:
-		p.Attr = vtui.SetRGBFore(p.Attr, p.term.Palette[n-30])
+		p.Attr = vtui.SetIndexFore(p.Attr, uint8(n-30))
 	case n == 38:
 		if i+2 < len(args) {
 			if args[i+1] == 5 { // 256 colors
 				idx := args[i+2]
 				if idx >= 0 && idx < 256 {
-					p.Attr = vtui.SetRGBFore(p.Attr, vtui.XTerm256Palette[idx])
+					p.Attr = vtui.SetIndexFore(p.Attr, uint8(idx))
 				}
 				return 3
 			} else if args[i+1] == 2 && i+4 < len(args) { // TrueColor
@@ -324,16 +324,16 @@ func (p *AnsiParser) handleSGR(args []int, i int) int {
 			}
 		}
 	case n == 39:
-		p.Attr = vtui.SetRGBFore(p.Attr, vtui.GetRGBFore(vtui.Palette[ColCommandLineUserScreen]))
+		p.Attr = vtui.SetIndexFore(p.Attr, vtui.GetIndexFore(DefaultTermAttr))
 
 	case n >= 40 && n <= 47:
-		p.Attr = vtui.SetRGBBack(p.Attr, p.term.Palette[n-40])
+		p.Attr = vtui.SetIndexBack(p.Attr, uint8(n-40))
 	case n == 48:
 		if i+2 < len(args) {
 			if args[i+1] == 5 { // 256 colors
 				idx := args[i+2]
 				if idx >= 0 && idx < 256 {
-					p.Attr = vtui.SetRGBBack(p.Attr, vtui.XTerm256Palette[idx])
+					p.Attr = vtui.SetIndexBack(p.Attr, uint8(idx))
 				}
 				return 3
 			} else if args[i+1] == 2 && i+4 < len(args) { // TrueColor
@@ -343,12 +343,12 @@ func (p *AnsiParser) handleSGR(args []int, i int) int {
 			}
 		}
 	case n == 49:
-		p.Attr = vtui.SetRGBBack(p.Attr, vtui.GetRGBBack(vtui.Palette[ColCommandLineUserScreen]))
+		p.Attr = vtui.SetIndexBack(p.Attr, vtui.GetIndexBack(DefaultTermAttr))
 
 	case n >= 90 && n <= 97:
-		p.Attr = vtui.SetRGBFore(p.Attr, p.term.Palette[n-90+8])
+		p.Attr = vtui.SetIndexFore(p.Attr, uint8(n-90+8))
 	case n >= 100 && n <= 107:
-		p.Attr = vtui.SetRGBBack(p.Attr, p.term.Palette[n-100+8])
+		p.Attr = vtui.SetIndexBack(p.Attr, uint8(n-100+8))
 	}
 	return 1
 }
