@@ -88,11 +88,11 @@ func (pf *PanelsFrame) buildPrompt() []vtui.CharInfo {
 		displayPath = "~" + displayPath[len(home):]
 	}
 
-	bg := vtui.GetRGBBack(vtui.Palette[ColCommandLineUserScreen])
-	// Use colors as close as possible to classic bash
-	greenAttr := vtui.SetRGBBoth(0, 0x8AE234, bg) // Bright green
-	blueAttr := vtui.SetRGBBoth(0, 0x729FCF, bg)  // Bright blue
-	defAttr := vtui.SetRGBBoth(0, 0xFFFFFF, bg)   // White
+	baseAttr := vtui.Palette[ColCommandLineUserScreen]
+	// Use colors as close as possible to classic bash, while keeping the base background
+	greenAttr := vtui.SetRGBFore(baseAttr, 0x8AE234) // Bright green
+	blueAttr := vtui.SetRGBFore(baseAttr, 0x729FCF)  // Bright blue
+	defAttr := vtui.SetRGBFore(baseAttr, 0xFFFFFF)   // White
 
 	var prompt []vtui.CharInfo
 	prompt = append(prompt, vtui.StringToCharInfo(username+"@"+host, greenAttr)...)
@@ -252,6 +252,8 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 			pf.cmdLine.SetPosition(tx, termY1+ty, pf.lastW-1, termY1+ty)
 		}
 		if pf.cmdLine.IsVisible() {
+			// CommandLine now uses ThemePalette[0] for background via OverlayMode,
+			// which matches the terminal background perfectly.
 			pf.cmdLine.Show(scr)
 		}
 	}

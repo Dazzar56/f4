@@ -332,8 +332,11 @@ func (tv *TerminalView) Show(scr *vtui.ScreenBuf) {
 	tv.ScreenObject.Show(scr)
 
 	scr.ActivePalette = &tv.Palette
+	// Terminal content must always be rendered without Early Binding
+	// to allow the host terminal to use its native indexed palette.
+	prevOverlay := scr.OverlayMode
 	scr.SetOverlayMode(false)
-	defer func() { scr.SetOverlayMode(true) }()
+	defer func() { scr.SetOverlayMode(prevOverlay) }()
 
 	tv.mu.Lock()
 	defer tv.mu.Unlock()

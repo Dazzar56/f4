@@ -32,6 +32,11 @@ const (
 
 // SetDefaultF4Palette ensures the palette is large enough and sets f4-specific default colors.
 func SetDefaultF4Palette() {
+	// Initialize ThemePalette to match the "Tango/Ubuntu" gray theme from far2l
+	vtui.ThemePalette[0] = 0x2E3436 // Default Background (Dark Gray)
+	vtui.ThemePalette[7] = 0xD3D7CF // Default Text (Light Gray)
+	vtui.ThemePalette[8] = 0x555753 // Bold/Intensity Background
+
 	if len(vtui.Palette) < LastF4PaletteColor {
 		newPal := make([]uint64, LastF4PaletteColor)
 		copy(newPal, vtui.Palette)
@@ -39,11 +44,11 @@ func SetDefaultF4Palette() {
 	}
 
 	black := uint32(0x000000)
-	white := uint32(0xFFFFFF)
+	//white := uint32(0xFFFFFF)
 	cyan := uint32(0x00A0A0)
 	blue := uint32(0x0000A0)
 	yellow := uint32(0xFFFF00)
-	lightGray := uint32(0xC0C0C0)
+	//lightGray := uint32(0xC0C0C0)
 
 	// Panels (LightCyan on Blue)
 	vtui.Palette[ColPanelText] = vtui.SetRGBBoth(0, 0x00FFFF, blue)
@@ -61,23 +66,23 @@ func SetDefaultF4Palette() {
 	vtui.Palette[ColPanelSelectedInfo] = vtui.Palette[ColPanelSelectedText]
 	vtui.Palette[ColPanelScrollbar] = vtui.Palette[ColPanelBox]
 
-	// Command line / User screen
-	vtui.Palette[ColCommandLineUserScreen] = vtui.SetRGBBoth(0, lightGray, black)
-	vtui.Palette[ColCommandLinePrompt] = vtui.SetRGBBoth(0, 0x00FFFF, black)
-	vtui.Palette[ColCommandLineText] = vtui.SetRGBBoth(0, white, black)
-	vtui.Palette[ColCommandLineSelectedText] = vtui.SetRGBBoth(0, black, cyan)
+	// Command line / User screen (Using terminal default background, Index 0)
+	vtui.Palette[ColCommandLineUserScreen] = vtui.SetIndexBoth(0, 7, 0)
+	vtui.Palette[ColCommandLinePrompt] = vtui.SetIndexBoth(0, 11, 0) // Light Cyan on Black
+	vtui.Palette[ColCommandLineText] = vtui.SetIndexBoth(0, 15, 0)   // White on Black
+	vtui.Palette[ColCommandLineSelectedText] = vtui.SetIndexBoth(0, 0, 11) // Black on Light Cyan
 
-	// Editor selection: inverse of UserScreen (Black on LightGray)
-	vtui.Palette[vtui.ColDialogEditSelected] = vtui.SetRGBBoth(0, black, lightGray)
+	// Editor selection: inverse of UserScreen
+	vtui.Palette[vtui.ColDialogEditSelected] = vtui.SetIndexBoth(0, 0, 7)
 	// KeyBar (Match far2l: LightGray on DarkGray for numbers, DarkGray on Teal for labels)
 	vtui.Palette[vtui.ColKeyBarNum] = vtui.SetRGBBoth(0, 0xD3D7CF, 0x2E3436)
 	vtui.Palette[vtui.ColKeyBarText] = vtui.SetRGBBoth(0, 0x2E3436, 0x06989A)
 
 	// Viewer (Match far2l: LightGray on Black)
-	vtui.Palette[ColViewerText] = vtui.SetRGBBoth(0, lightGray, black)
-	vtui.Palette[ColViewerStatus] = vtui.SetRGBBoth(0, black, lightGray)
-	vtui.Palette[ColViewerArrows] = vtui.SetRGBBoth(0, yellow, black)
-	vtui.Palette[ColViewerScrollbar] = vtui.SetRGBBoth(0, 0x808080, black)
+	vtui.Palette[ColViewerText] = vtui.SetIndexBoth(0, 7, 0)
+	vtui.Palette[ColViewerStatus] = vtui.SetIndexBoth(0, 0, 7)
+	vtui.Palette[ColViewerArrows] = vtui.SetIndexBoth(0, 14, 0)
+	vtui.Palette[ColViewerScrollbar] = vtui.SetIndexBoth(0, 8, 0)
 }
 
 // colorMap links farcolors.ini keys to vtui.Palette indices.
