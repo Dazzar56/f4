@@ -558,8 +558,8 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 }
 
 func (pf *PanelsFrame) startDemoAsyncTask() {
-	// 1. Create a progress dialog (On the UI thread)
-	dlg := vtui.NewDialog(0, 0, 40, 6, " Background Task ")
+	// 1. Create a progress window (Non-modal)
+	dlg := vtui.NewWindow(0, 0, 40, 6, " Background Task ")
 	dlg.Center(vtui.FrameManager.GetScreenSize(), 25)
 
 	lbl := vtui.NewText(dlg.X1+2, dlg.Y1+2, "Starting...", vtui.Palette[vtui.ColDialogText])
