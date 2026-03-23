@@ -210,6 +210,7 @@ func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, contentHeight int) 
 		}
 
 		lineLen := 0
+		textLen := 0
 		visualWidth := 0
 		foundNewline := false
 
@@ -232,9 +233,10 @@ func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, contentHeight int) 
 			}
 			visualWidth += rw
 			lineLen += size
+			textLen = lineLen
 		}
 
-		scr.Write(vv.X1, vv.Y1+1+y, vtui.StringToCharInfo(string(data[:lineLen]), attr))
+		scr.Write(vv.X1, vv.Y1+1+y, vtui.StringToCharInfo(string(data[:textLen]), attr))
 		currOffset += int64(lineLen)
 
 		if !foundNewline && !vv.WrapMode {
