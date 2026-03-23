@@ -5,9 +5,12 @@ import (
 	"github.com/unxed/vtinput"
 )
 
-func formatCSI(mod int, char string) string {
+func formatCSI(mod int, char string, appCursorKeys bool) string {
 	if mod > 1 {
 		return fmt.Sprintf("\x1b[1;%d%s", mod, char)
+	}
+	if appCursorKeys {
+		return "\x1bO" + char
 	}
 	return "\x1b[" + char
 }
@@ -27,7 +30,7 @@ func formatTilde(mod int, code int) string {
 }
 
 // TranslateInput converts f4 input events into ANSI sequences that interactive shell apps expect.
-func TranslateInput(e *vtinput.InputEvent, win32Mode bool) string {
+func TranslateInput(e *vtinput.InputEvent, win32Mode bool, appCursorKeys bool) string {
 	if win32Mode && e.Type == vtinput.KeyEventType {
 		kd := 0
 		if e.KeyDown { kd = 1 }
@@ -91,12 +94,16 @@ func TranslateInput(e *vtinput.InputEvent, win32Mode bool) string {
 
 	// Handle Special Keys (Arrows, F-keys, etc.)
 	switch e.VirtualKeyCode {
-	case vtinput.VK_UP:     return formatCSI(mod, "A")
-	case vtinput.VK_DOWN:   return formatCSI(mod, "B")
-	case vtinput.VK_RIGHT:  return formatCSI(mod, "C")
-	case vtinput.VK_LEFT:   return formatCSI(mod, "D")
-	case vtinput.VK_HOME:   return formatCSI(mod, "H")
-	case vtinput.VK_END:    return formatCSI(mod, "F")
+	case vtinput.VK_UP:     return formatCSI(mod, "A", appCursorKeys)
+	case vtinput.VK_DOWN:   return formatCSI(mod, "B", appCursorKeys)
+	case vtinput.VK_RIGHT:  return formatCSI(mod, "C", appCursorKeys)
+	case vtinput.VK_LEFT:   return formatCSI(mod, "D", appCursorKeys)
+	case vtinput.VK_HOME:
+		if appCursorKeys && mod == 1 { return "\x1bOH" }
+		return formatCSI(mod, "H", false)
+	case vtinput.VK_END:
+		if appCursorKeys && mod == 1 { return "\x1bOF" }
+		return formatCSI(mod, "F", false)
 
 	case vtinput.VK_F1:     return formatCSIOrSS3(mod, "P")
 	case vtinput.VK_F2:     return formatCSIOrSS3(mod, "Q")

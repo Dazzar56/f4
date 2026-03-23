@@ -52,8 +52,9 @@ type TerminalView struct {
 	ScrollTopRow int
 
 	Title              string
-	Win32InputMode     bool
-	BracketedPasteMode bool
+	Win32InputMode        bool
+	BracketedPasteMode    bool
+	ApplicationCursorKeys bool
 }
 
 func NewTerminalView(w, h int) *TerminalView {

@@ -311,7 +311,9 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	if !pf.showPanels && pf.termView.UseAltScreen {
 		// Guest app is interactive (Alt Screen). Forward all keys including Ctrl+O.
 		if pf.pty != nil {
-			pf.pty.Write([]byte(TranslateInput(e, pf.termView.Win32InputMode)))
+			if seq := TranslateInput(e, pf.termView.Win32InputMode, pf.termView.ApplicationCursorKeys); seq != "" {
+				pf.pty.Write([]byte(seq))
+			}
 		}
 		return true
 	}

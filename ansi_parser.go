@@ -186,6 +186,8 @@ func (p *AnsiParser) handleCSI(cmd byte) {
 		for _, s := range p.Params {
 			s = strings.TrimLeft(s, "?")
 			switch s {
+			case "1":
+				p.term.ApplicationCursorKeys = isSet
 			case "1049", "47":
 				p.term.SetAltScreen(isSet)
 				if isSet {
