@@ -4,13 +4,14 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
 
 // fileEntry implements vtui.TableRow for display in a table.
 type fileEntry struct {
-	vtui.VFSItem
+	vfs.VFSItem
 }
 
 func (f *fileEntry) GetCellText(col int) string {
@@ -34,11 +35,11 @@ type FileSystemPanel struct {
 	vtui.ScreenObject
 	table   *vtui.Table
 	frame   *vtui.BorderedFrame
-	vfs     vtui.VFS
+	vfs     vfs.VFS
 	entries []*fileEntry
 }
 
-func NewFileSystemPanel(x, y, w, h int, vfs vtui.VFS) *FileSystemPanel {
+func NewFileSystemPanel(x, y, w, h int, vfs vfs.VFS) *FileSystemPanel {
 	path := vfs.GetPath()
 	// Initial column widths (will be adjusted by Resize)
 	cols := []vtui.TableColumn{
@@ -73,7 +74,7 @@ func (fp *FileSystemPanel) Refresh() {
 	fp.entries = make([]*fileEntry, 0, len(items)+1)
 
 	// Add ".." to go up
-	fp.entries = append(fp.entries, &fileEntry{VFSItem: vtui.VFSItem{Name: "..", IsDir: true}})
+	fp.entries = append(fp.entries, &fileEntry{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}})
 
 	for _, item := range items {
 		fp.entries = append(fp.entries, &fileEntry{VFSItem: item})

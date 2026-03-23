@@ -13,7 +13,7 @@ import (
 
 // ViewerView is a high-performance file viewer component.
 type ViewerView struct {
-	vtui.ScreenObject
+	vtui.BaseFrame
 	topBar  *ViewerBar
 	menuBar *vtui.MenuBar
 	backend *ViewerBackend
@@ -26,7 +26,6 @@ type ViewerView struct {
 	// For Text mode: offsets of lines currently on screen
 	lineOffsets []int64
 	eofVisible  bool
-	done        bool
 }
 
 func NewViewerView(path string) (*ViewerView, error) {
@@ -109,7 +108,7 @@ func (vv *ViewerView) GetMenuBar() *vtui.MenuBar {
 
 func (vv *ViewerView) HandleCommand(cmd int, args any) bool {
 	if cmd == vtui.CmClose {
-		vv.done = true
+		vv.SetExitCode(-1)
 		return true
 	}
 	return vv.ScreenObject.HandleCommand(cmd, args)
@@ -276,7 +275,7 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 
 	switch e.VirtualKeyCode {
 	case vtinput.VK_ESCAPE, vtinput.VK_F10, vtinput.VK_F3:
-		vv.done = true
+		vv.SetExitCode(-1)
 		return true
 
 	case vtinput.VK_F2:
@@ -427,16 +426,6 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 
 func (vv *ViewerView) ProcessMouse(e *vtinput.InputEvent) bool { return false }
 func (vv *ViewerView) ResizeConsole(w, h int)                 { vv.SetPosition(0, 0, w-1, h-2) }
-func (vv *ViewerView) GetType() vtui.FrameType               { return vtui.TypeUser + 3 }
-func (vv *ViewerView) SetExitCode(c int)                     { vv.done = true }
-func (vv *ViewerView) IsDone() bool                          { return vv.done }
-func (vv *ViewerView) IsBusy() bool                          { return false }
-func (vv *ViewerView) IsModal() bool                         { return false }
-func (vv *ViewerView) GetWindowNumber() int                  { return 0 }
-func (vv *ViewerView) SetWindowNumber(n int)                 {}
-func (vv *ViewerView) RequestFocus() bool                    { return true }
-func (vv *ViewerView) Close()                                { vv.done = true }
-func (vv *ViewerView) HasShadow() bool                       { return false }
 func (vv *ViewerView) GetKeyLabels() *vtui.KeySet {
 	return &vtui.KeySet{
 		Normal: vtui.KeyBarLabels{
@@ -445,3 +434,5 @@ func (vv *ViewerView) GetKeyLabels() *vtui.KeySet {
 		},
 	}
 }
+
+func (vv *ViewerView) GetType() vtui.FrameType { return vtui.TypeUser + 3 }

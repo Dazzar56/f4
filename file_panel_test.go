@@ -2,13 +2,13 @@ package main
 
 import (
 	"testing"
-	"github.com/unxed/vtui"
+	"github.com/unxed/f4/vfs"
 )
 
 func TestFileEntry_GetCellText(t *testing.T) {
 	// Mock entries
-	file := &fileEntry{VFSItem: vtui.VFSItem{Name: "test.txt", Size: 1024, IsDir: false}}
-	dir := &fileEntry{VFSItem: vtui.VFSItem{Name: "work", IsDir: true}}
+	file := &fileEntry{VFSItem: vfs.VFSItem{Name: "test.txt", Size: 1024, IsDir: false}}
+	dir := &fileEntry{VFSItem: vfs.VFSItem{Name: "work", IsDir: true}}
 
 	// 1. Column 0 (Name)
 	if file.GetCellText(0) != "test.txt" {

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui/piecetable"
 	"os/user"
 	"strings"
@@ -15,7 +16,7 @@ import (
 
 // PanelsFrame is the main frame of the f4 manager, containing left and right panels.
 type PanelsFrame struct {
-	vtui.ScreenObject
+	vtui.BaseFrame
 	left      Panel
 	right     Panel
 	activeIdx int // 0 for left, 1 for right
@@ -34,7 +35,6 @@ type PanelsFrame struct {
 	termView *TerminalView
 	parser   *AnsiParser
 
-	done      bool
 	lastAlt   bool
 }
 
@@ -183,8 +183,8 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 	rightW := w - leftW
 
 	if pf.left == nil {
-		pf.left = NewFileSystemPanel(0, contentY1, leftW, panelH, vtui.NewOSVFS("."))
-		pf.right = NewFileSystemPanel(leftW, contentY1, rightW, panelH, vtui.NewOSVFS("."))
+		pf.left = NewFileSystemPanel(0, contentY1, leftW, panelH, vfs.NewOSVFS("."))
+		pf.right = NewFileSystemPanel(leftW, contentY1, rightW, panelH, vfs.NewOSVFS("."))
 	} else {
 		pf.left.SetPosition(0, contentY1, leftW-1, panelY2)
 		pf.right.SetPosition(leftW, contentY1, w-1, panelY2)
@@ -540,17 +540,6 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 	return false
 }
 
-func (pf *PanelsFrame) GetType() vtui.FrameType { return vtui.TypeUser + 1 }
-func (pf *PanelsFrame) SetExitCode(code int)     { pf.done = true }
-func (pf *PanelsFrame) IsDone() bool             { return pf.done }
-func (pf *PanelsFrame) IsBusy() bool             { return false }
-func (pf *PanelsFrame) IsModal() bool { return false }
-func (pf *PanelsFrame) GetWindowNumber() int { return 0 }
-func (pf *PanelsFrame) SetWindowNumber(n int) {}
-func (pf *PanelsFrame) RequestFocus() bool { return true }
-func (pf *PanelsFrame) Close() { pf.done = true }
-func (pf *PanelsFrame) HasShadow() bool { return false }
-func (pf *PanelsFrame) GetMenuBar() *vtui.MenuBar { return pf.menuBar }
 // HandleCommand intercepts global commands (like CmQuit or CmCopy)
 // sent by menus or other views.
 func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
@@ -615,3 +604,7 @@ func (pf *PanelsFrame) GetKeyLabels() *vtui.KeySet {
 		},
 	}
 }
+
+func (pf *PanelsFrame) GetType() vtui.FrameType { return vtui.TypeUser + 1 }
+
+func (pf *PanelsFrame) SetExitCode(code int)     { pf.Done = true; pf.ExitCode = code }

@@ -27,7 +27,7 @@ type lineFragment struct {
 
 // EditorView is a text editor component.
 type EditorView struct {
-	vtui.ScreenObject
+	vtui.BaseFrame
 	topBar *EditorBar
 	menuBar *vtui.MenuBar
 	pt     *piecetable.PieceTable
@@ -51,7 +51,6 @@ type EditorView struct {
 	renderCells []vtui.CharInfo // Reusable buffer for row rendering
 
 	filePath string
-	done     bool
 }
 
 func NewEditorView(pt *piecetable.PieceTable, path string) *EditorView {
@@ -249,7 +248,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 
 	switch e.VirtualKeyCode {
 	case vtinput.VK_ESCAPE, vtinput.VK_F10:
-		ev.done = true
+		ev.SetExitCode(-1)
 		return true
 
 	case vtinput.VK_F2:
@@ -574,22 +573,12 @@ func (ev *EditorView) GetMenuBar() *vtui.MenuBar { return ev.menuBar }
 
 func (ev *EditorView) HandleCommand(cmd int, args any) bool {
 	if cmd == vtui.CmClose {
-		ev.done = true
+		ev.SetExitCode(-1)
 		return true
 	}
 	return ev.ScreenObject.HandleCommand(cmd, args)
 }
 
-func (ev *EditorView) GetType() vtui.FrameType { return vtui.TypeUser + 2 }
-func (ev *EditorView) SetExitCode(c int) { ev.done = true }
-func (ev *EditorView) IsDone() bool { return ev.done }
-func (ev *EditorView) IsBusy() bool { return ev.pasting }
-func (ev *EditorView) IsModal() bool { return false }
-func (ev *EditorView) GetWindowNumber() int { return 0 }
-func (ev *EditorView) SetWindowNumber(n int) {}
-func (ev *EditorView) RequestFocus() bool { return true }
-func (ev *EditorView) Close() { ev.done = true }
-func (ev *EditorView) HasShadow() bool { return false }
 func (ev *EditorView) GetKeyLabels() *vtui.KeySet {
 	return &vtui.KeySet{
 		Normal: vtui.KeyBarLabels{
@@ -668,3 +657,5 @@ func (ev *EditorView) DeleteSelection() {
 		ev.CursorPos = min - ev.li.GetLineOffset(ev.CursorLine)
 	}
 }
+func (ev *EditorView) GetType() vtui.FrameType { return vtui.TypeUser + 2 }
+func (ev *EditorView) IsBusy() bool { return ev.pasting }

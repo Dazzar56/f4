@@ -9,6 +9,8 @@ import (
 
 	"github.com/unxed/vtui"
 	"golang.org/x/term"
+
+	"github.com/unxed/f4/vfs"
 )
 
 func main() {
@@ -65,7 +67,7 @@ func main() {
 	// Create test panel with many files for scrollbar
 	if fsp, ok := panels.left.(*FileSystemPanel); ok {
 		for i := 0; i < 50; i++ {
-			fsp.entries = append(fsp.entries, &fileEntry{VFSItem: vtui.VFSItem{Name: fmt.Sprintf("test_file_%d.txt", i), Size: 1024}})
+			fsp.entries = append(fsp.entries, &fileEntry{VFSItem: vfs.VFSItem{Name: fmt.Sprintf("test_file_%d.txt", i), Size: 1024}})
 		}
 		rows := make([]vtui.TableRow, len(fsp.entries))
 		for i, e := range fsp.entries { rows[i] = e }
