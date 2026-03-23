@@ -49,6 +49,10 @@ type TerminalView struct {
 
 	// Скроллинг истории (визуальный ряд)
 	ScrollTopRow int
+
+	Title              string
+	Win32InputMode     bool
+	BracketedPasteMode bool
 }
 
 func NewTerminalView(w, h int) *TerminalView {
@@ -217,6 +221,62 @@ func (tv *TerminalView) scrollUp(top, bottom, n int) {
 		for j := range buf[bottom] {
 			buf[bottom][j] = vtui.CharInfo{Char: ' ', Attributes: DefaultTermAttr}
 		}
+	}
+}
+func (tv *TerminalView) scrollDown(top, bottom, n int) {
+	buf := tv.getBuffer()
+	if top < 0 { top = 0 }
+	if bottom >= len(buf) { bottom = len(buf) - 1 }
+	if top >= bottom { return }
+
+	for i := 0; i < n; i++ {
+		// To move lines DOWN, we must copy from bottom to top to avoid overwriting
+		for y := bottom; y > top; y-- {
+			buf[y] = buf[y-1]
+		}
+		// Clear the newly inserted top line
+		buf[top] = make([]vtui.CharInfo, tv.Width)
+		for j := range buf[top] {
+			buf[top][j] = vtui.CharInfo{Char: ' ', Attributes: DefaultTermAttr}
+		}
+	}
+}
+
+func (tv *TerminalView) DeleteCharacters(n int, attr uint64) {
+	tv.mu.Lock()
+	defer tv.mu.Unlock()
+	buf := tv.getBuffer()
+	if tv.CursorY < 0 || tv.CursorY >= len(buf) { return }
+	line := buf[tv.CursorY]
+	if tv.CursorX < 0 || tv.CursorX >= tv.Width { return }
+
+	if tv.CursorX+n < tv.Width {
+		copy(line[tv.CursorX:], line[tv.CursorX+n:])
+	}
+
+	clearStart := tv.Width - n
+	if clearStart < tv.CursorX { clearStart = tv.CursorX }
+	for i := clearStart; i < tv.Width; i++ {
+		line[i] = vtui.CharInfo{Char: ' ', Attributes: attr}
+	}
+}
+
+func (tv *TerminalView) InsertBlankCharacters(n int, attr uint64) {
+	tv.mu.Lock()
+	defer tv.mu.Unlock()
+	buf := tv.getBuffer()
+	if tv.CursorY < 0 || tv.CursorY >= len(buf) { return }
+	line := buf[tv.CursorY]
+	if tv.CursorX < 0 || tv.CursorX >= tv.Width { return }
+
+	if tv.CursorX+n < tv.Width {
+		copy(line[tv.CursorX+n:], line[tv.CursorX:])
+	}
+
+	end := tv.CursorX + n
+	if end > tv.Width { end = tv.Width }
+	for i := tv.CursorX; i < end; i++ {
+		line[i] = vtui.CharInfo{Char: ' ', Attributes: attr}
 	}
 }
 

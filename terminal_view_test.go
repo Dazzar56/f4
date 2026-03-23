@@ -83,6 +83,27 @@ func TestTerminalView_StylesPreservation(t *testing.T) {
 	if tv.getAttrAt(3) != blue { t.Error("Style at offset 3 should be BLUE") }
 	if tv.getAttrAt(6) != blue { t.Error("Style at offset 6 should be BLUE") }
 }
+func TestTerminalView_ScrollModes(t *testing.T) {
+	tv := NewTerminalView(10, 5)
+
+	// Setup: fill with 0..4
+	for i := 0; i < 5; i++ {
+		tv.SetCursor(0, i)
+		tv.PutChar(rune('0'+i), DefaultTermAttr)
+	}
+
+	// 1. Scroll Up (Text moves up, deletion at top, insertion at bottom)
+	tv.scrollUp(1, 3, 1) // Lines 1,2,3 affected
+	if tv.Lines[1][0].Char != '2' || tv.Lines[2][0].Char != '3' || tv.Lines[3][0].Char != ' ' {
+		t.Errorf("Scroll Up failed. Row 1: %c, Row 3: %c", tv.Lines[1][0].Char, tv.Lines[3][0].Char)
+	}
+
+	// 2. Scroll Down (Text moves down, deletion at bottom, insertion at top)
+	tv.scrollDown(0, 4, 2)
+	if tv.Lines[2][0].Char != '0' || tv.Lines[0][0].Char != ' ' || tv.Lines[1][0].Char != ' ' {
+		t.Errorf("Scroll Down failed. Row 2: %c, Row 0: %c", tv.Lines[2][0].Char, tv.Lines[0][0].Char)
+	}
+}
 func TestTerminalView_AutoWrap(t *testing.T) {
 	width := 10
 	tv := NewTerminalView(width, 5)

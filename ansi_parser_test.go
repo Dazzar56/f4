@@ -285,3 +285,55 @@ func TestAnsiParser_MovementAndErase(t *testing.T) {
 		t.Error("Main screen content was lost")
 	}
 }
+func TestAnsiParser_Win32PasteModes(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	p := NewAnsiParser(tv, nil)
+
+	// Enable modes
+	p.Process([]byte("\x1b[?9001h\x1b[?2004h"))
+	if !tv.Win32InputMode || !tv.BracketedPasteMode {
+		t.Error("Failed to enable Win32InputMode or BracketedPasteMode")
+	}
+
+	// Disable modes
+	p.Process([]byte("\x1b[?9001l\x1b[?2004l"))
+	if tv.Win32InputMode || tv.BracketedPasteMode {
+		t.Error("Failed to disable Win32InputMode or BracketedPasteMode")
+	}
+}
+
+func TestAnsiParser_AdvancedCSI(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	p := NewAnsiParser(tv, nil)
+
+	// Ensure we are at the top-left
+	tv.SetCursor(0, 0)
+
+	// Test Delete Characters (P)
+	p.Process([]byte("12345")) // Write at (0,0). Cursor moves to (5,0)
+	tv.SetCursor(1, 0)         // Move to '2'
+	p.Process([]byte("\x1b[2P")) // Delete 2 characters ('2' and '3')
+	// Result should be "145" at index 0, 1, 2 of line 0
+	if tv.Lines[0][1].Char != '4' || tv.Lines[0][2].Char != '5' {
+		t.Errorf("Delete characters failed. Found %c (U+%04X) at [0][1]", rune(tv.Lines[0][1].Char), tv.Lines[0][1].Char)
+	}
+
+	// Test Insert Blank Characters (@)
+	tv.SetCursor(1, 0)
+	p.Process([]byte("\x1b[2@")) // Insert 2 blanks at pos 1
+	// Result should be "1  45"
+	if tv.Lines[0][1].Char != ' ' || tv.Lines[0][2].Char != ' ' || tv.Lines[0][3].Char != '4' {
+		t.Errorf("Insert blank characters failed. Found %c at [0][3]", rune(tv.Lines[0][3].Char))
+	}
+}
+
+func TestAnsiParser_OSC_Advanced(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	p := NewAnsiParser(tv, nil)
+
+	// Test window title OSC 2
+	p.Process([]byte("\x1b]2;far2l console\x07"))
+	if tv.Title != "far2l console" {
+		t.Errorf("Window title failed: expected 'far2l console', got '%s'", tv.Title)
+	}
+}

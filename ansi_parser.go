@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"fmt"
 	"strconv"
 	"strings"
@@ -163,16 +164,63 @@ func (p *AnsiParser) handleCSI(cmd byte) {
 		p.term.ScrollTop = top - 1
 		p.term.ScrollBottom = bottom - 1
 		p.term.SetCursor(0, 0)
+	case 'c':
+		if p.pty != nil {
+			p.pty.Write([]byte("\x1b[?1;2c"))
+		}
+	case 't':
+		if len(args) > 0 && p.pty != nil {
+			if args[0] == 18 {
+				resp := fmt.Sprintf("\x1b[8;%d;%dt", p.term.Height, p.term.Width)
+				p.pty.Write([]byte(resp))
+			} else if args[0] == 14 {
+				resp := fmt.Sprintf("\x1b[4;%d;%dt", p.term.Height*16, p.term.Width*8)
+				p.pty.Write([]byte(resp))
+			} else if args[0] == 16 {
+				resp := fmt.Sprintf("\x1b[6;16;8t")
+				p.pty.Write([]byte(resp))
+			}
+		}
 	case 'h', 'l': // DECSET / DECRST
 		isSet := cmd == 'h'
 		for _, s := range p.Params {
-			if s == "?1049" {
+			s = strings.TrimLeft(s, "?")
+			switch s {
+			case "1049", "47":
 				p.term.SetAltScreen(isSet)
 				if isSet {
 					p.term.EraseDisplay(2, p.Attr)
 				}
+			case "9001":
+				p.term.Win32InputMode = isSet
+			case "2004":
+				p.term.BracketedPasteMode = isSet
 			}
 		}
+	case 'L': // Insert blank lines
+		n := 1
+		if len(args) > 0 && args[0] != 0 { n = args[0] }
+		p.term.scrollDown(p.term.CursorY, p.term.ScrollBottom, n)
+	case 'M': // Delete lines
+		n := 1
+		if len(args) > 0 && args[0] != 0 { n = args[0] }
+		p.term.scrollUp(p.term.CursorY, p.term.ScrollBottom, n)
+	case 'P': // Delete characters
+		n := 1
+		if len(args) > 0 && args[0] != 0 { n = args[0] }
+		p.term.DeleteCharacters(n, p.Attr)
+	case '@': // Insert blank characters
+		n := 1
+		if len(args) > 0 && args[0] != 0 { n = args[0] }
+		p.term.InsertBlankCharacters(n, p.Attr)
+	case 'S': // Scroll up (text moves up)
+		n := 1
+		if len(args) > 0 && args[0] != 0 { n = args[0] }
+		p.term.scrollUp(p.term.ScrollTop, p.term.ScrollBottom, n)
+	case 'T': // Scroll down (text moves down)
+		n := 1
+		if len(args) > 0 && args[0] != 0 { n = args[0] }
+		p.term.scrollDown(p.term.ScrollTop, p.term.ScrollBottom, n)
 	case 'A':
 		n := 1
 		if len(args) > 0 && args[0] != 0 { n = args[0] }
@@ -240,18 +288,38 @@ func (p *AnsiParser) handleOSC() {
 	p.CurParam.Reset()
 	if s == "" { return }
 
-	parts := strings.Split(s, ";")
-	if len(parts) < 3 { return }
+	parts := strings.SplitN(s, ";", 2)
+	if len(parts) < 2 { return }
 
-	cmd, _ := strconv.Atoi(parts[0])
-	if cmd != 4 { return } // We only support OSC 4 (Set Palette)
+	cmd, err := strconv.Atoi(parts[0])
+	if err != nil { return }
 
-	idx, _ := strconv.Atoi(parts[1])
-	if idx < 0 || idx >= 16 { return }
+	if cmd == 0 || cmd == 2 {
+		p.term.Title = parts[1]
+		return
+	}
 
-	colorStr := parts[2]
-	var rgbVal uint32
-	parsed := false
+	if cmd == 52 {
+		subparts := strings.SplitN(parts[1], ";", 2)
+		if len(subparts) == 2 {
+			decoded, err := base64.StdEncoding.DecodeString(subparts[1])
+			if err == nil {
+				vtui.SetClipboard(string(decoded))
+			}
+		}
+		return
+	}
+
+	if cmd == 4 {
+		subparts := strings.SplitN(parts[1], ";", 2)
+		if len(subparts) < 2 { return }
+
+		idx, _ := strconv.Atoi(subparts[0])
+		if idx < 0 || idx >= 256 { return }
+
+		colorStr := subparts[1]
+		var rgbVal uint32
+		parsed := false
 
 	if strings.HasPrefix(colorStr, "#") && len(colorStr) >= 7 {
 		v, err := strconv.ParseUint(colorStr[1:7], 16, 32)
@@ -271,8 +339,9 @@ func (p *AnsiParser) handleOSC() {
 		}
 	}
 
-	if parsed {
-		p.term.Palette[idx] = rgbVal
+		if parsed {
+			p.term.Palette[idx] = rgbVal
+		}
 	}
 }
 

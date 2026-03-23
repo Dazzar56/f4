@@ -25,10 +25,27 @@ func TestTranslateInput(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := TranslateInput(tt.e)
+			got := TranslateInput(tt.e, false)
 			if got != tt.want {
 				t.Errorf("TranslateInput() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestTranslateInput_Win32(t *testing.T) {
+	e := &vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		VirtualKeyCode:  65,
+		VirtualScanCode: 30,
+		Char:            'A',
+		KeyDown:         true,
+		ControlKeyState: 8,
+		RepeatCount:     1,
+	}
+	res := TranslateInput(e, true)
+	expected := "\x1b[65;30;65;1;8;1_"
+	if res != expected {
+		t.Errorf("Expected %q, got %q", expected, res)
 	}
 }

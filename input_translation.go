@@ -27,7 +27,15 @@ func formatTilde(mod int, code int) string {
 }
 
 // TranslateInput converts f4 input events into ANSI sequences that interactive shell apps expect.
-func TranslateInput(e *vtinput.InputEvent) string {
+func TranslateInput(e *vtinput.InputEvent, win32Mode bool) string {
+	if win32Mode && e.Type == vtinput.KeyEventType {
+		kd := 0
+		if e.KeyDown { kd = 1 }
+		// Format: CSI Vk ; Sc ; Uc ; Kd ; Cs ; Rc _
+		return fmt.Sprintf("\x1b[%d;%d;%d;%d;%d;%d_",
+			e.VirtualKeyCode, e.VirtualScanCode, e.Char, kd, e.ControlKeyState, e.RepeatCount)
+	}
+
 	// Ignore standalone modifier key presses
 	switch e.VirtualKeyCode {
 	case vtinput.VK_SHIFT, vtinput.VK_LSHIFT, vtinput.VK_RSHIFT,

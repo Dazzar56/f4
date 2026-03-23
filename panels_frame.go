@@ -290,6 +290,19 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
 	//alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 
+	// Handle bracketed paste for terminal apps
+	if e.Type == vtinput.PasteEventType {
+		if !pf.showPanels && pf.termView.BracketedPasteMode && pf.pty != nil {
+			if e.PasteStart {
+				pf.pty.Write([]byte("\x1b[200~"))
+			} else {
+				pf.pty.Write([]byte("\x1b[201~"))
+			}
+			return true
+		}
+		// Editor view checks paste events internally, so we let it fall through if panels are shown
+	}
+
 	if !e.KeyDown {
 		return false
 	}
@@ -298,7 +311,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	if !pf.showPanels && pf.termView.UseAltScreen {
 		// Guest app is interactive (Alt Screen). Forward all keys including Ctrl+O.
 		if pf.pty != nil {
-			pf.pty.Write([]byte(TranslateInput(e)))
+			pf.pty.Write([]byte(TranslateInput(e, pf.termView.Win32InputMode)))
 		}
 		return true
 	}
