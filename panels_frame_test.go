@@ -173,17 +173,41 @@ func TestPanelsFrame_Clone(t *testing.T) {
 func TestPanelsFrame_Clone_TerminalData(t *testing.T) {
 	pf := NewPanelsFrame()
 
-	// Simulate some terminal output
-	pf.termView.PutChar('H', 0)
-	pf.termView.PutChar('i', 0)
+	// 1. Simulate complex terminal output (2 lines)
+	// We add a trailing newline so "L2" becomes history.
+	// CloneStateFrom intentionally wipes the current ACTIVE line to avoid duplicate prompt.
+	pf.termView.PutChar('L', 0)
+	pf.termView.PutChar('1', 0)
+	pf.termView.PutChar('\n', 0)
+	pf.termView.PutChar('L', 0)
+	pf.termView.PutChar('2', 0)
+	pf.termView.PutChar('\n', 0)
 
 	clone := pf.Clone()
 
-	if clone.termView.pt.String() != "Hi" {
+	// 2. Check if log is deep-copied
+	if clone.termView.pt.String() != "L1\nL2\n" {
 		t.Errorf("Terminal log not cloned. Got %q", clone.termView.pt.String())
 	}
-	if clone.termView.CursorX != pf.termView.CursorX {
-		t.Error("Terminal CursorX not cloned")
+
+	// 3. CRITICAL: Check if LineIndex is correctly pointing to the NEW pt
+	// Expected 3 lines: L1\n, L2\n, and the new active empty line.
+	if clone.termView.li.LineCount() != 3 {
+		t.Errorf("Terminal LineIndex not synced in clone. Expected 3 lines, got %d", clone.termView.li.LineCount())
+	}
+
+	// 4. Check if visual grid is copied
+	// Note: We check the PREVIOUS line because the current line was wiped by CloneStateFrom
+	if clone.termView.Lines[pf.termView.CursorY-1][0].Char != 'L' {
+		t.Error("Terminal visual grid (Lines) history not copied to clone")
+	}
+
+	// 5. Verify prompt reset logic
+	if clone.termView.CursorX != 0 {
+		t.Errorf("Expected clone CursorX to be 0 after prompt wipe, got %d", clone.termView.CursorX)
+	}
+	if clone.termView.Lines[clone.termView.CursorY][0].Char != ' ' {
+		t.Error("Current terminal line was not cleared during clone")
 	}
 }
 func TestPanelsFrame_Labels(t *testing.T) {

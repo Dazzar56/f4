@@ -66,6 +66,63 @@ func NewTerminalView(w, h int) *TerminalView {
 	return tv
 }
 
+func (tv *TerminalView) CloneStateFrom(other *TerminalView) {
+	other.mu.Lock()
+	defer other.mu.Unlock()
+	tv.mu.Lock()
+	defer tv.mu.Unlock()
+
+	// 1. Match dimensions and re-allocate grids
+	tv.Width = other.Width
+	tv.Height = other.Height
+
+	allocGrid := func(src [][]vtui.CharInfo) [][]vtui.CharInfo {
+		dst := make([][]vtui.CharInfo, len(src))
+		for y := range src {
+			dst[y] = make([]vtui.CharInfo, len(src[y]))
+			copy(dst[y], src[y])
+		}
+		return dst
+	}
+	tv.Lines = allocGrid(other.Lines)
+	tv.AltLines = allocGrid(other.AltLines)
+
+	// 2. Deep copy the PieceTable (History)
+	tv.pt = piecetable.New(other.pt.Bytes())
+
+	// 3. Re-initialize indices and engine to point to the NEW pt
+	tv.li = piecetable.NewLineIndex()
+	tv.li.Rebuild(tv.pt)
+	tv.engine = textlayout.NewWrapEngine(tv.pt, tv.li)
+	tv.engine.SetWidth(tv.Width)
+
+	// 4. Copy terminal state metadata
+	tv.styles = append([]StyleChange(nil), other.styles...)
+	tv.lastAttr = other.lastAttr
+	tv.lastLineOffset = other.lastLineOffset
+	tv.Palette = other.Palette
+	tv.CursorX, tv.CursorY = other.CursorX, other.CursorY
+	tv.UseAltScreen = other.UseAltScreen
+	tv.ScrollTop, tv.ScrollBottom = other.ScrollTop, other.ScrollBottom
+
+	// 5. CRITICAL: Wipe the current active line to avoid duplicate prompt.
+	// The parent's prompt is already in the copied PieceTable and Lines grid.
+	// We remove it so the new shell's prompt has a clean space to print into.
+	if tv.lastLineOffset < tv.pt.Size() {
+		tv.pt.Delete(tv.lastLineOffset, tv.pt.Size()-tv.lastLineOffset)
+		tv.li.Rebuild(tv.pt)
+		tv.engine.InvalidateFrom(tv.li.LineCount() - 1)
+	}
+
+	// Clear the active visual row and reset horizontal cursor
+	if tv.CursorY >= 0 && tv.CursorY < len(tv.Lines) {
+		for x := range tv.Lines[tv.CursorY] {
+			tv.Lines[tv.CursorY][x] = vtui.CharInfo{Char: ' ', Attributes: DefaultTermAttr}
+		}
+	}
+	tv.CursorX = 0
+}
+
 func (tv *TerminalView) ResetBuffer(w, h int) {
 	tv.mu.Lock()
 	defer tv.mu.Unlock()

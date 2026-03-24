@@ -650,7 +650,10 @@ func (pf *PanelsFrame) GetTitle() string {
 
 func (pf *PanelsFrame) Clone() *PanelsFrame {
 	clone := NewPanelsFrame()
-	clone.ResizeConsole(pf.lastW, pf.lastH)
+	// Only resize if parent has been sized, otherwise keep default 80x24
+	if pf.lastW > 0 && pf.lastH > 0 {
+		clone.ResizeConsole(pf.lastW, pf.lastH)
+	}
 
 	if fsp, ok := pf.left.(*FileSystemPanel); ok {
 		clone.left.(*FileSystemPanel).vfs.SetPath(fsp.vfs.GetPath())
@@ -668,16 +671,8 @@ func (pf *PanelsFrame) Clone() *PanelsFrame {
 	clone.showKeyBar = pf.showKeyBar
 	clone.showPanels = pf.showPanels
 
-	if pf.termView != nil && pf.termView.pt != nil {
-		bytes := pf.termView.pt.Bytes()
-		clone.termView.pt = piecetable.New(bytes)
-		clone.termView.li.Rebuild(clone.termView.pt)
-		clone.termView.CursorY = pf.termView.CursorY
-		clone.termView.CursorX = pf.termView.CursorX
-		// Copy terminal styles and state
-		clone.termView.styles = append([]StyleChange(nil), pf.termView.styles...)
-		clone.termView.lastAttr = pf.termView.lastAttr
-		clone.termView.lastLineOffset = pf.termView.lastLineOffset
+	if pf.termView != nil && clone.termView != nil {
+		clone.termView.CloneStateFrom(pf.termView)
 	}
 	return clone
 }
