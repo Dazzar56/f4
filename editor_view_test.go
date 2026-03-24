@@ -774,3 +774,18 @@ func TestEditorView_HandleClose(t *testing.T) {
 		t.Error("EditorView failed to set IsDone after receiving CmClose")
 	}
 }
+func TestEditorView_GetTitle(t *testing.T) {
+	pt := piecetable.New([]byte(""))
+
+	// With path
+	ev1 := NewEditorView(pt, "/var/log/syslog")
+	if ev1.GetTitle() != "Edit: syslog" {
+		t.Errorf("GetTitle failed for valid path: %s", ev1.GetTitle())
+	}
+
+	// Without path
+	ev2 := NewEditorView(pt, "")
+	if ev2.GetTitle() != "Editor" {
+		t.Errorf("GetTitle failed for empty path: %s", ev2.GetTitle())
+	}
+}

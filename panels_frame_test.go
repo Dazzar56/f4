@@ -40,6 +40,41 @@ func TestPanelsFrame_Layout(t *testing.T) {
 		t.Error("KeyBar should be invisible")
 	}
 }
+func TestPanelsFrame_CtrlW_CloseScreen(t *testing.T) {
+	// Initialize global FrameManager for the test
+	fm := vtui.FrameManager
+	fm.Init(vtui.NewScreenBuf())
+
+	// Create Screen 0
+	fm.Push(vtui.NewDesktop())
+	pf1 := NewPanelsFrame()
+	fm.Push(pf1)
+
+	// Create Screen 1
+	pf2 := NewPanelsFrame()
+	fm.AddScreen(pf2)
+
+	if fm.ActiveIdx != 1 {
+		t.Fatalf("Should be on Screen 1")
+	}
+
+	// Simulate Ctrl+W on pf2
+	handled := pf2.ProcessKey(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_W,
+		ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+
+	if !handled {
+		t.Error("PanelsFrame failed to handle Ctrl+W")
+	}
+
+	// Verify Screen 1 was closed and focus fell back to Screen 0
+	if fm.ActiveIdx != 0 {
+		t.Errorf("Screen was not closed via Ctrl+W, ActiveIdx is %d", fm.ActiveIdx)
+	}
+}
 
 func TestPanelsFrame_KeyHandling(t *testing.T) {
 	pf := NewPanelsFrame()

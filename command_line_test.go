@@ -34,6 +34,16 @@ func TestCommandLine_Input(t *testing.T) {
 		t.Error("CommandLine should be empty after backspace")
 	}
 }
+func TestCommandLine_InitialFocus(t *testing.T) {
+	cl := NewCommandLine("> ")
+
+	if !cl.Edit.IsFocused() {
+		t.Error("CommandLine's underlying Edit should be focused upon creation to ensure cursor visibility")
+	}
+	if !cl.IsFocused() {
+		t.Error("CommandLine should be focused upon creation")
+	}
+}
 
 func TestCommandLine_History(t *testing.T) {
 	vtui.SetDefaultPalette()

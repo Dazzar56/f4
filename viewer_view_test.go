@@ -97,3 +97,18 @@ func TestViewerView_HandleClose(t *testing.T) {
 		t.Error("ViewerView failed to set IsDone after receiving CmClose")
 	}
 }
+func TestViewerView_GetTitle(t *testing.T) {
+	// Need to use an existing file for NewViewerView, or mock the backend.
+	// For a simple title test, creating a temp file is easiest.
+	tmp := t.TempDir() + "/doc.txt"
+	os.WriteFile(tmp, []byte(""), 0644)
+
+	vv, err := NewViewerView(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if vv.GetTitle() != "View: doc.txt" {
+		t.Errorf("GetTitle failed: %s", vv.GetTitle())
+	}
+}
