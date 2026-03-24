@@ -196,3 +196,5 @@ func (f *MacroAssignFrame) GetWindowNumber() int { return 0 }
 func (f *MacroAssignFrame) SetWindowNumber(n int) {}
 func (f *MacroAssignFrame) RequestFocus() bool { return true }
 func (f *MacroAssignFrame) Close() { f.done = true }
+func (f *MacroAssignFrame) GetTitle() string { return "Macro Assign" }
+func (f *MacroAssignFrame) GetProgress() int { return -1 }

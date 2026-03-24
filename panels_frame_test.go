@@ -101,6 +101,56 @@ func TestPanelsFrame_RefreshOnFocus(t *testing.T) {
 		t.Error("PanelsFrame should handle FocusEventType and return true")
 	}
 }
+func TestPanelsFrame_Clone(t *testing.T) {
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(100, 30)
+
+	// Set some specific state
+	pf.activeIdx = 0
+	if fsp, ok := pf.left.(*FileSystemPanel); ok {
+		fsp.vfs.SetPath("/tmp")
+		fsp.table.SelectPos = 5
+	}
+
+	// Clone the panels
+	clone := pf.Clone()
+
+	// Verify state transfer
+	if clone.activeIdx != 0 {
+		t.Errorf("Clone failed to copy activeIdx: %d", clone.activeIdx)
+	}
+
+	if fsp, ok := clone.left.(*FileSystemPanel); ok {
+		if fsp.vfs.GetPath() != "/tmp" {
+			t.Errorf("Clone failed to copy VFS path: %s", fsp.vfs.GetPath())
+		}
+		if fsp.table.SelectPos != 5 {
+			t.Errorf("Clone failed to copy Table SelectPos: %d", fsp.table.SelectPos)
+		}
+	}
+
+	// Verify they are independent instances
+	clone.activeIdx = 1
+	if pf.activeIdx == 1 {
+		t.Error("Clone should be independent from its parent")
+	}
+}
+func TestPanelsFrame_Clone_TerminalData(t *testing.T) {
+	pf := NewPanelsFrame()
+
+	// Simulate some terminal output
+	pf.termView.PutChar('H', 0)
+	pf.termView.PutChar('i', 0)
+
+	clone := pf.Clone()
+
+	if clone.termView.pt.String() != "Hi" {
+		t.Errorf("Terminal log not cloned. Got %q", clone.termView.pt.String())
+	}
+	if clone.termView.CursorX != pf.termView.CursorX {
+		t.Error("Terminal CursorX not cloned")
+	}
+}
 func TestPanelsFrame_Labels(t *testing.T) {
 	pf := NewPanelsFrame()
 	ks := pf.GetKeyLabels()

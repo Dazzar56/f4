@@ -265,6 +265,11 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 		return false
 	}
 
+	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
+	if e.VirtualKeyCode == vtinput.VK_TAB && ctrl {
+		return false
+	}
+
 	//height := int64(vv.Y2 - vv.Y1 + 1)
 	step := int64(1)
 	if vv.HexMode {
@@ -436,3 +441,9 @@ func (vv *ViewerView) GetKeyLabels() *vtui.KeySet {
 }
 
 func (vv *ViewerView) GetType() vtui.FrameType { return vtui.TypeUser + 3 }
+func (vv *ViewerView) GetTitle() string {
+	if vv.path != "" {
+		return "View: " + filepath.Base(vv.path)
+	}
+	return "Viewer"
+}

@@ -235,6 +235,11 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
 	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
 
+	// Allow FrameManager to handle Ctrl+Tab for workspace switching
+	if e.VirtualKeyCode == vtinput.VK_TAB && ctrl {
+		return false
+	}
+
 	handleNav := func() {
 		if shift {
 			if !ev.selActive {
@@ -659,3 +664,9 @@ func (ev *EditorView) DeleteSelection() {
 }
 func (ev *EditorView) GetType() vtui.FrameType { return vtui.TypeUser + 2 }
 func (ev *EditorView) IsBusy() bool { return ev.pasting }
+func (ev *EditorView) GetTitle() string {
+	if ev.filePath != "" {
+		return "Edit: " + filepath.Base(ev.filePath)
+	}
+	return "Editor"
+}

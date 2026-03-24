@@ -130,14 +130,13 @@ func (pf *PanelsFrame) initPTY() {
 func (pf *PanelsFrame) openEditor(path string) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		// If the file does not exist, open an empty editor for creation
 		data = []byte("")
 	}
 	pt := piecetable.New(data)
 	editor := NewEditorView(pt, path)
-	// Cover everything except the KeyBar (h-1 is KeyBar, so h-2 is the bottom of editor)
 	editor.ResizeConsole(pf.lastW, pf.lastH)
-	vtui.FrameManager.Push(editor)
+	// Editor opens in a NEW workspace
+	vtui.FrameManager.AddScreen(editor)
 }
 
 func (pf *PanelsFrame) openViewer(path string) {
@@ -147,7 +146,8 @@ func (pf *PanelsFrame) openViewer(path string) {
 		return
 	}
 	viewer.ResizeConsole(pf.lastW, pf.lastH)
-	vtui.FrameManager.Push(viewer)
+	// Viewer opens in a NEW workspace
+	vtui.FrameManager.AddScreen(viewer)
 }
 
 func (pf *PanelsFrame) ResizeConsole(w, h int) {
@@ -484,7 +484,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		}
 	}
 	// Tab switches panels
-	if e.VirtualKeyCode == vtinput.VK_TAB {
+	if e.VirtualKeyCode == vtinput.VK_TAB && !ctrl {
 		pf.activeIdx = 1 - pf.activeIdx
 		return true
 	}
@@ -493,6 +493,13 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	if e.VirtualKeyCode == vtinput.VK_B && ctrl {
 		pf.showKeyBar = !pf.showKeyBar
 		pf.ResizeConsole(pf.lastW, pf.lastH)
+		return true
+	}
+
+	// Ctrl+W closes current screen
+	if e.VirtualKeyCode == vtinput.VK_W && ctrl {
+		vtui.FrameManager.Flash()
+		vtui.FrameManager.CloseActiveScreen()
 		return true
 	}
 
@@ -551,43 +558,58 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 	case vtui.CmCopy:
 		pf.startDemoAsyncTask()
 		return true
+
+	case vtui.CmResize: // Used as a hack for 'fork' command from FrameManager
+		if s, ok := args.(string); ok && s == "fork" {
+			vtui.FrameManager.AddScreen(pf.Clone())
+			return true
+		}
 	}
-	// Do not delegate to ScreenObject.HandleCommand if we don't want bubbling
-	// or if we want PanelsFrame to be the final consumer of these commands.
 	return false
 }
 
 func (pf *PanelsFrame) startDemoAsyncTask() {
-	// 1. Create a progress window (Non-modal)
-	dlg := vtui.NewWindow(0, 0, 40, 6, " Background Task ")
+	dlg := vtui.NewDialog(0, 0, 40, 8, " Copying... ")
 	dlg.Center(vtui.FrameManager.GetScreenSize(), 25)
-
 	lbl := vtui.NewText(dlg.X1+2, dlg.Y1+2, "Starting...", vtui.Palette[vtui.ColDialogText])
 	dlg.AddItem(lbl)
+
+	var taskCtx *vtui.TaskContext
+
+	btnBg := vtui.NewButton(dlg.X1+2, dlg.Y1+5, "&Background")
+	btnBg.OnClick = func() {
+		vtui.FrameManager.Flash()
+		fork := pf.Clone()
+		vtui.FrameManager.AddScreen(fork)
+	}
+	dlg.AddItem(btnBg)
+
+	btnCancel := vtui.NewButton(dlg.X1+20, dlg.Y1+5, "&Cancel")
+	btnCancel.OnClick = func() {
+		if taskCtx != nil { taskCtx.Cancel() }
+		dlg.Close()
+	}
+	dlg.AddItem(btnCancel)
+
 	vtui.FrameManager.Push(dlg)
 
-	// 2. Launch the background worker
-	vtui.RunAsync(func(ctx *vtui.TaskContext) {
-		importTime := time.Now()
-
+	taskCtx = vtui.RunAsync(func(ctx *vtui.TaskContext) {
 		for i := 1; i <= 10; i++ {
-			// Check if task was cancelled (e.g. user pressed Esc)
-			if ctx.Err() != nil { return }
-
-			time.Sleep(200 * time.Millisecond) // Simulate work
-
-			// 3. SAFELY update UI using context
+			if ctx.Err() != nil || dlg.IsDone() { return }
+			time.Sleep(100 * time.Millisecond)
 			percent := i * 10
 			ctx.RunOnUI(func() {
 				lbl.SetText(fmt.Sprintf("Copying: %d%% done...", percent))
+				dlg.SetProgress(percent)
 			})
 		}
 
-		// 4. SAFELY close dialog when finished
-		ctx.RunOnUI(func() {
-			dlg.Close()
-			vtui.ShowMessage(" Done ", fmt.Sprintf("Finished in %v", time.Since(importTime)), []string{"&Ok"})
-		})
+		if ctx.Err() == nil && !dlg.IsDone() {
+			ctx.RunOnUI(func() {
+				vtui.ShowMessageOn(dlg, " Done ", "Copy finished!", []string{"&Ok"})
+				dlg.Close()
+			})
+		}
 	})
 }
 
@@ -602,9 +624,60 @@ func (pf *PanelsFrame) GetKeyLabels() *vtui.KeySet {
 			Msg("KeyBar.AltF1"), Msg("KeyBar.AltF2"), "", "",
 			"", "", "", "", "", "", "", "",
 		},
+		Ctrl: vtui.KeyBarLabels{
+			"", "", "", "", "", "", "", "", "", "", "Fork", "Close",
+		},
 	}
 }
 
 func (pf *PanelsFrame) GetType() vtui.FrameType { return vtui.TypeUser + 1 }
 
 func (pf *PanelsFrame) SetExitCode(code int)     { pf.Done = true; pf.ExitCode = code }
+func (pf *PanelsFrame) GetTitle() string {
+	path := ""
+	// Show the path of the active panel
+	if pf.activeIdx == 0 {
+		if fsp, ok := pf.left.(*FileSystemPanel); ok { path = fsp.vfs.GetPath() }
+	} else {
+		if fsp, ok := pf.right.(*FileSystemPanel); ok { path = fsp.vfs.GetPath() }
+	}
+
+	if path != "" {
+		return "Panels: " + path
+	}
+	return "Panels"
+}
+
+func (pf *PanelsFrame) Clone() *PanelsFrame {
+	clone := NewPanelsFrame()
+	clone.ResizeConsole(pf.lastW, pf.lastH)
+
+	if fsp, ok := pf.left.(*FileSystemPanel); ok {
+		clone.left.(*FileSystemPanel).vfs.SetPath(fsp.vfs.GetPath())
+		clone.left.(*FileSystemPanel).Refresh()
+		clone.left.(*FileSystemPanel).table.SelectPos = fsp.table.SelectPos
+		clone.left.(*FileSystemPanel).table.TopPos = fsp.table.TopPos
+	}
+	if fsp, ok := pf.right.(*FileSystemPanel); ok {
+		clone.right.(*FileSystemPanel).vfs.SetPath(fsp.vfs.GetPath())
+		clone.right.(*FileSystemPanel).Refresh()
+		clone.right.(*FileSystemPanel).table.SelectPos = fsp.table.SelectPos
+		clone.right.(*FileSystemPanel).table.TopPos = fsp.table.TopPos
+	}
+	clone.activeIdx = pf.activeIdx
+	clone.showKeyBar = pf.showKeyBar
+	clone.showPanels = pf.showPanels
+
+	if pf.termView != nil && pf.termView.pt != nil {
+		bytes := pf.termView.pt.Bytes()
+		clone.termView.pt = piecetable.New(bytes)
+		clone.termView.li.Rebuild(clone.termView.pt)
+		clone.termView.CursorY = pf.termView.CursorY
+		clone.termView.CursorX = pf.termView.CursorX
+		// Copy terminal styles and state
+		clone.termView.styles = append([]StyleChange(nil), pf.termView.styles...)
+		clone.termView.lastAttr = pf.termView.lastAttr
+		clone.termView.lastLineOffset = pf.termView.lastLineOffset
+	}
+	return clone
+}
