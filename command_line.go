@@ -25,6 +25,7 @@ func NewCommandLine(prompt string) *CommandLine {
 	cl.Edit.ColorUnchangedIdx = ColCommandLineText
 	cl.Edit.ColorSelectedIdx = ColCommandLineSelectedText
 	cl.Edit.SetCanFocus(true)
+	cl.SetFocus(true) // Ensure cursor is active from the start
 	return cl
 }
 

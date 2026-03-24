@@ -276,13 +276,13 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 }
 
 func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
-	if e.Type == vtinput.FocusEventType && e.SetFocus {
-		if fsp, ok := pf.left.(*FileSystemPanel); ok {
-			fsp.Refresh()
+	if e.Type == vtinput.FocusEventType {
+		if e.SetFocus {
+			if fsp, ok := pf.left.(*FileSystemPanel); ok { fsp.Refresh() }
+			if fsp, ok := pf.right.(*FileSystemPanel); ok { fsp.Refresh() }
 		}
-		if fsp, ok := pf.right.(*FileSystemPanel); ok {
-			fsp.Refresh()
-		}
+		// Propagate focus to command line so its cursor state stays in sync
+		pf.cmdLine.ProcessKey(e)
 		return true
 	}
 
