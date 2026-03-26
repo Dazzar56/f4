@@ -47,7 +47,10 @@ func NewPanelsFrame() *PanelsFrame {
 	pf.menuBar = vtui.NewMenuBar(nil)
 	pf.menuBar.Items = []vtui.MenuBarItem{
 		// Using Command routing (TV style) instead of hardcoded indices
-		{Label: "&" + Msg("Menu.Left"), SubItems: []vtui.MenuItem{{Text: Msg("Menu.Exit"), Command: vtui.CmQuit}}},
+		{Label: "&" + Msg("Menu.Left"), SubItems: []vtui.MenuItem{
+			{Text: "Bac&kground", Command: vtui.CmBackground},
+			{Text: Msg("Menu.Exit"), Command: vtui.CmQuit},
+		}},
 		{Label: "&" + Msg("Menu.Files"), SubItems: []vtui.MenuItem{{Text: "&Copy", Command: vtui.CmCopy}}},
 		{Label: "&" + Msg("Menu.Commands"), SubItems: []vtui.MenuItem{{Text: "Placeholder"}}},
 		{Label: "&" + Msg("Menu.Options"), SubItems: []vtui.MenuItem{{Text: "Placeholder"}}},
@@ -557,6 +560,14 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 
 	case vtui.CmCopy:
 		pf.startDemoAsyncTask()
+		return true
+
+	case vtui.CmBackground:
+		if !SupportsBackgrounding() {
+			vtui.ShowMessage(" Background ", "Backgrounding is not supported on this OS.", []string{"&Ok"})
+			return true
+		}
+		vtui.FrameManager.Stop() // Clean exit from the main loop
 		return true
 
 	case vtui.CmResize: // Used as a hack for 'fork' command from FrameManager

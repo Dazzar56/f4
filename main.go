@@ -3,8 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-
-	"github.com/unxed/vtinput"
 	"path/filepath"
 
 	"github.com/unxed/vtui"
@@ -22,25 +20,21 @@ func main() {
 		return
 	}
 
-	// 1. Enter Raw Mode
-	restore, err := vtinput.Enable()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		return
-	}
-	defer restore()
+	ManageSessions()
+}
 
-	// 2. Initialize ScreenBuf
-	width, height, _ := term.GetSize(int(os.Stdin.Fd()))
+func InitCore() *vtui.ScreenBuf {
+	vtui.DebugLog("CORE: InitCore() called. PID: %d", os.Getpid())
+	width, height, _ := term.GetSize(0)
+	if width <= 0 { width = 80 }
+	if height <= 0 { height = 24 }
+
 	scr := vtui.NewScreenBuf()
 	scr.AllocBuf(width, height)
 
-	// 3. Configure FrameManager
 	vtui.FrameManager.Init(scr)
-	// Setup f4 specific palette extensions
 	SetDefaultF4Palette()
 
-	// Apply custom palette from system config directory
 	configDir, err := os.UserConfigDir()
 	if err == nil {
 		configPath := filepath.Join(configDir, "f4", "farcolors.ini")
@@ -48,23 +42,18 @@ func main() {
 		InitColors(ini)
 	}
 
-	// Initialize MacroManager
 	os.MkdirAll(filepath.Join(configDir, "f4"), 0755)
 	MacroMgr = NewMacroManager(filepath.Join(configDir, "f4", "key_macros.ini"))
 	vtui.FrameManager.EventFilter = MacroMgr.Filter
-	// Layer 0: Desktop (background)
 	vtui.FrameManager.Push(vtui.NewDesktop())
 
-	// Layer 1: Panels (f4 core)
 	panels := NewPanelsFrame()
-	panels.ResizeConsole(width, height) // Initialize panel sizes before pushing
+	panels.ResizeConsole(width, height)
 	vtui.FrameManager.Push(panels)
 
-	// Register global UI components owned by f4
 	vtui.FrameManager.MenuBar = panels.menuBar
 	vtui.FrameManager.KeyBar = panels.keyBar
 
-	// Create test panel with many files for scrollbar
 	if fsp, ok := panels.left.(*FileSystemPanel); ok {
 		for i := 0; i < 50; i++ {
 			fsp.entries = append(fsp.entries, &fileEntry{VFSItem: vfs.VFSItem{Name: fmt.Sprintf("test_file_%d.txt", i), Size: 1024}})
@@ -74,11 +63,9 @@ func main() {
 		fsp.table.SetRows(rows)
 	}
 
-	// --- Initialize Plugins ---
 	pluginManager := NewPluginManager()
-	defer pluginManager.CloseAll()
-	go pluginManager.LoadAll() // Lazy load to prevent UI freezing
+	go pluginManager.LoadAll()
 
-	// 4. Run!
-	vtui.FrameManager.Run()
+	vtui.DebugLog("CORE: Initialization complete")
+	return scr
 }
