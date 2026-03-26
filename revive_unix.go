@@ -250,17 +250,27 @@ func runServer(sockPath string) {
 		os.Stdin, os.Stdout = newStdin, newStdout
 
 		vtui.DebugLog("SERVER: Enabling raw mode on new Stdin...")
-		restore, err := vtinput.Enable()
-		if err != nil {
-			vtui.DebugLog("SERVER: CRITICAL: Failed to enable raw mode: %v", err)
-			os.Stdin, os.Stdout = oldStdin, oldStdout
-			syscall.Close(notifyPipeWriteEnd)
-			continue
+
+		// Set new Stdin/Stdout before calling Enable
+		os.Stdin, os.Stdout = newStdin, newStdout
+
+		var restore func()
+		// Only try to enable raw mode if we actually have a terminal.
+		// fds[0] is In, fds[1] is Out.
+		if term.IsTerminal(int(os.Stdin.Fd())) {
+			r, err := vtinput.Enable()
+			if err != nil {
+				vtui.DebugLog("SERVER: WARNING: Failed to enable raw mode: %v", err)
+			} else {
+				restore = r
+				vtui.DebugLog("SERVER: Raw mode enabled successfully.")
+			}
+		} else {
+			vtui.DebugLog("SERVER: FD %d is NOT a terminal, raw mode skipped.", os.Stdin.Fd())
 		}
-		vtui.DebugLog("SERVER: Raw mode enabled successfully.")
 
 		// Sync terminal size
-		if w, h, err := term.GetSize(int(os.Stdout.Fd())); err == nil {
+		if w, h, err := term.GetSize(int(os.Stdout.Fd())); err == nil && w > 0 && h > 0 {
 			vtui.DebugLog("SERVER: Terminal size: %dx%d", w, h)
 			scr.AllocBuf(w, h)
 			for _, s := range vtui.FrameManager.Screens {

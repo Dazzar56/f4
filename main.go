@@ -12,14 +12,39 @@ import (
 )
 
 func main() {
-	if len(os.Args) > 1 && os.Args[1] == "-test-plugins" {
-		vtui.DebugLog("--- TEST MODE ---")
-		pm := NewPluginManager()
-		pm.LoadAll()
-		pm.CloseAll()
+	var serverPath, clientPath string
+
+	for i := 1; i < len(os.Args); i++ {
+		switch os.Args[i] {
+		case "--server":
+			if i+1 < len(os.Args) {
+				serverPath = os.Args[i+1]
+				i++
+			}
+		case "--client":
+			if i+1 < len(os.Args) {
+				clientPath = os.Args[i+1]
+				i++
+			}
+		case "-test-plugins":
+			vtui.DebugLog("--- PLUGIN TEST MODE ---")
+			pm := NewPluginManager()
+			pm.LoadAll()
+			pm.CloseAll()
+			return
+		}
+	}
+
+	if serverPath != "" {
+		runServer(serverPath)
+		return
+	}
+	if clientPath != "" {
+		runClient(clientPath)
 		return
 	}
 
+	// If we are here, no special mode was requested
 	ManageSessions()
 }
 
@@ -63,8 +88,20 @@ func InitCore() *vtui.ScreenBuf {
 		fsp.table.SetRows(rows)
 	}
 
-	pluginManager := NewPluginManager()
-	go pluginManager.LoadAll()
+	noPlugins := false
+	for _, arg := range os.Args {
+		if arg == "--no-plugins" {
+			noPlugins = true
+			break
+		}
+	}
+
+	if !noPlugins {
+		pluginManager := NewPluginManager()
+		go pluginManager.LoadAll()
+	} else {
+		vtui.DebugLog("CORE: Plugins disabled by --no-plugins flag")
+	}
 
 	vtui.DebugLog("CORE: Initialization complete")
 	return scr
