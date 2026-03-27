@@ -55,6 +55,8 @@ type TerminalView struct {
 	Win32InputMode        bool
 	BracketedPasteMode    bool
 	ApplicationCursorKeys bool
+	KittyFlags            int
+	KittyFlagsStack       []int
 }
 
 func NewTerminalView(w, h int) *TerminalView {
@@ -104,6 +106,8 @@ func (tv *TerminalView) CloneStateFrom(other *TerminalView) {
 	tv.CursorX, tv.CursorY = other.CursorX, other.CursorY
 	tv.UseAltScreen = other.UseAltScreen
 	tv.ScrollTop, tv.ScrollBottom = other.ScrollTop, other.ScrollBottom
+	tv.KittyFlags = other.KittyFlags
+	tv.KittyFlagsStack = append([]int(nil), other.KittyFlagsStack...)
 
 	// 5. CRITICAL: Wipe the current active line to avoid duplicate prompt.
 	// The parent's prompt is already in the copied PieceTable and Lines grid.

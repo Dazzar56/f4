@@ -267,7 +267,52 @@ func (p *AnsiParser) handleCSI(cmd byte) {
 			p.term.SaveCursor()
 		}
 	case 'u':
-		if len(p.Params) == 0 || (len(p.Params) == 1 && p.Params[0] == "") {
+		s0 := ""
+		if len(p.Params) > 0 {
+			s0 = p.Params[0]
+		}
+		if s0 == "" {
+			p.term.RestoreCursor()
+		} else if strings.HasPrefix(s0, "=") {
+			flags, _ := strconv.Atoi(s0[1:])
+			mode := 1
+			if len(p.Params) > 1 {
+				mode, _ = strconv.Atoi(p.Params[1])
+			}
+			if mode == 1 {
+				p.term.KittyFlags = flags
+			} else if mode == 2 {
+				p.term.KittyFlags |= flags
+			} else if mode == 3 {
+				p.term.KittyFlags &= ^flags
+			}
+		} else if strings.HasPrefix(s0, ">") {
+			flags, _ := strconv.Atoi(s0[1:])
+			if len(p.term.KittyFlagsStack) >= 32 {
+				p.term.KittyFlagsStack = p.term.KittyFlagsStack[1:] // Limit stack size
+			}
+			p.term.KittyFlagsStack = append(p.term.KittyFlagsStack, p.term.KittyFlags)
+			p.term.KittyFlags = flags
+		} else if strings.HasPrefix(s0, "<") {
+			count, _ := strconv.Atoi(s0[1:])
+			if count <= 0 {
+				count = 1
+			}
+			for i := 0; i < count; i++ {
+				if len(p.term.KittyFlagsStack) == 0 {
+					p.term.KittyFlags = 0
+					break
+				}
+				last := len(p.term.KittyFlagsStack) - 1
+				p.term.KittyFlags = p.term.KittyFlagsStack[last]
+				p.term.KittyFlagsStack = p.term.KittyFlagsStack[:last]
+			}
+		} else if strings.HasPrefix(s0, "?") {
+			if p.pty != nil {
+				resp := fmt.Sprintf("\x1b[?%du", p.term.KittyFlags)
+				p.pty.Write([]byte(resp))
+			}
+		} else {
 			p.term.RestoreCursor()
 		}
 	case 'b': // REP - Repeat last character

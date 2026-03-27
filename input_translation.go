@@ -29,25 +29,7 @@ func formatTilde(mod int, code int) string {
 	return fmt.Sprintf("\x1b[%d~", code)
 }
 
-// TranslateInput converts f4 input events into ANSI sequences that interactive shell apps expect.
-func TranslateInput(e *vtinput.InputEvent, win32Mode bool, appCursorKeys bool) string {
-	if win32Mode && e.Type == vtinput.KeyEventType {
-		kd := 0
-		if e.KeyDown { kd = 1 }
-		// Format: CSI Vk ; Sc ; Uc ; Kd ; Cs ; Rc _
-		return fmt.Sprintf("\x1b[%d;%d;%d;%d;%d;%d_",
-			e.VirtualKeyCode, e.VirtualScanCode, e.Char, kd, e.ControlKeyState, e.RepeatCount)
-	}
-
-	// Ignore standalone modifier key presses
-	switch e.VirtualKeyCode {
-	case vtinput.VK_SHIFT, vtinput.VK_LSHIFT, vtinput.VK_RSHIFT,
-		vtinput.VK_CONTROL, vtinput.VK_LCONTROL, vtinput.VK_RCONTROL,
-		vtinput.VK_MENU, vtinput.VK_LMENU, vtinput.VK_RMENU,
-		vtinput.VK_CAPITAL, vtinput.VK_NUMLOCK, vtinput.VK_SCROLL:
-		return ""
-	}
-
+func TranslateLegacySpecialKey(e *vtinput.InputEvent, appCursorKeys bool) string {
 	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
 	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
@@ -57,42 +39,6 @@ func TranslateInput(e *vtinput.InputEvent, win32Mode bool, appCursorKeys bool) s
 	if alt { mod += 2 }
 	if ctrl { mod += 4 }
 
-	// Handle Character Input
-	if e.Char != 0 {
-		if !ctrl && !alt {
-			return string(e.Char)
-		}
-
-		ch := e.Char
-		if ctrl {
-			if ch >= 'a' && ch <= 'z' {
-				ch = ch - 'a' + 1
-			} else if ch >= 'A' && ch <= 'Z' {
-				ch = ch - 'A' + 1
-			} else if ch == '[' || ch == '{' {
-				ch = 27
-			} else if ch == '\\' || ch == '|' {
-				ch = 28
-			} else if ch == ']' || ch == '}' {
-				ch = 29
-			} else if ch == '^' || ch == '~' {
-				ch = 30
-			} else if ch == '_' || ch == '?' {
-				ch = 31
-			} else if ch == '@' {
-				ch = 0
-			}
-		}
-
-		out := ""
-		if alt {
-			out += "\x1b"
-		}
-		out += string(ch)
-		return out
-	}
-
-	// Handle Special Keys (Arrows, F-keys, etc.)
 	switch e.VirtualKeyCode {
 	case vtinput.VK_UP:     return formatCSI(mod, "A", appCursorKeys)
 	case vtinput.VK_DOWN:   return formatCSI(mod, "B", appCursorKeys)
@@ -137,6 +83,84 @@ func TranslateInput(e *vtinput.InputEvent, win32Mode bool, appCursorKeys bool) s
 	case vtinput.VK_ESCAPE:
 		if alt { return "\x1b\x1b" }
 		return "\x1b"
+	}
+
+	return ""
+}
+
+// TranslateInput converts f4 input events into ANSI sequences that interactive shell apps expect.
+func TranslateInput(e *vtinput.InputEvent, win32Mode bool, kittyFlags int, appCursorKeys bool) string {
+	if win32Mode && e.Type == vtinput.KeyEventType {
+		kd := 0
+		if e.KeyDown { kd = 1 }
+		// Format: CSI Vk ; Sc ; Uc ; Kd ; Cs ; Rc _
+		return fmt.Sprintf("\x1b[%d;%d;%d;%d;%d;%d_",
+			e.VirtualKeyCode, e.VirtualScanCode, e.Char, kd, e.ControlKeyState, e.RepeatCount)
+	}
+
+	if kittyFlags != 0 {
+		seq := TranslateKeyToKitty(e, kittyFlags, appCursorKeys)
+		if seq != "" {
+			return seq
+		}
+		if !e.KeyDown {
+			return ""
+		}
+	}
+
+	// Ignore standalone modifier key presses
+	switch e.VirtualKeyCode {
+	case vtinput.VK_SHIFT, vtinput.VK_LSHIFT, vtinput.VK_RSHIFT,
+		vtinput.VK_CONTROL, vtinput.VK_LCONTROL, vtinput.VK_RCONTROL,
+		vtinput.VK_MENU, vtinput.VK_LMENU, vtinput.VK_RMENU,
+		vtinput.VK_CAPITAL, vtinput.VK_NUMLOCK, vtinput.VK_SCROLL:
+		return ""
+	}
+
+	if !e.KeyDown {
+		return ""
+	}
+
+	if spec := TranslateLegacySpecialKey(e, appCursorKeys); spec != "" {
+		return spec
+	}
+
+	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
+	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
+
+	// Handle Character Input
+	if e.Char != 0 {
+		if !ctrl && !alt {
+			return string(e.Char)
+		}
+
+		ch := e.Char
+		if ctrl {
+			if ch >= 'a' && ch <= 'z' {
+				ch = ch - 'a' + 1
+			} else if ch >= 'A' && ch <= 'Z' {
+				ch = ch - 'A' + 1
+			} else if ch == '[' || ch == '{' {
+				ch = 27
+			} else if ch == '\\' || ch == '|' {
+				ch = 28
+			} else if ch == ']' || ch == '}' {
+				ch = 29
+			} else if ch == '^' || ch == '~' {
+				ch = 30
+			} else if ch == '_' || ch == '?' {
+				ch = 31
+			} else if ch == '@' {
+				ch = 0
+			}
+		}
+
+		out := ""
+		if alt {
+			out += "\x1b"
+		}
+		out += string(ch)
+		return out
 	}
 
 	return ""

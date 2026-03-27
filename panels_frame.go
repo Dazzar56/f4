@@ -310,9 +310,9 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	if !pf.showPanels && pf.termView.UseAltScreen {
 		// Only forward KeyUp events if the guest app explicitly requested Win32 Input Mode.
 		// Legacy apps (like mc) would interpret forwarded KeyUp escape sequences as new keypresses.
-		if e.KeyDown || pf.termView.Win32InputMode {
+		if e.KeyDown || pf.termView.Win32InputMode || pf.termView.KittyFlags != 0 {
 			if pf.pty != nil {
-				if seq := TranslateInput(e, pf.termView.Win32InputMode, pf.termView.ApplicationCursorKeys); seq != "" {
+				if seq := TranslateInput(e, pf.termView.Win32InputMode, pf.termView.KittyFlags, pf.termView.ApplicationCursorKeys); seq != "" {
 					pf.pty.Write([]byte(seq))
 				}
 			}
