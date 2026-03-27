@@ -51,7 +51,14 @@ func NewPanelsFrame() *PanelsFrame {
 			{Text: "Bac&kground", Command: vtui.CmBackground},
 			{Text: Msg("Menu.Exit"), Command: vtui.CmQuit},
 		}},
-		{Label: "&" + Msg("Menu.Files"), SubItems: []vtui.MenuItem{{Text: "&Copy", Command: vtui.CmCopy}}},
+		{Label: "&" + Msg("Menu.Files"), SubItems: []vtui.MenuItem{
+			{Text: "&" + Msg("KeyBar.F3"), Command: vtui.CmView},
+			{Text: "&" + Msg("KeyBar.F4"), Command: vtui.CmEdit},
+			{Text: "&" + Msg("KeyBar.F5"), Command: vtui.CmCopy},
+			{Text: "&" + Msg("KeyBar.F6"), Command: vtui.CmMove},
+			{Text: "&" + Msg("KeyBar.F7"), Command: vtui.CmMkDir},
+			{Text: "&" + Msg("KeyBar.F8"), Command: vtui.CmDelete},
+		}},
 		{Label: "&" + Msg("Menu.Commands"), SubItems: []vtui.MenuItem{{Text: "Placeholder"}}},
 		{Label: "&" + Msg("Menu.Options"), SubItems: []vtui.MenuItem{{Text: "Placeholder"}}},
 		{Label: "&" + Msg("Menu.Right"), SubItems: []vtui.MenuItem{{Text: "Placeholder"}}},
@@ -338,233 +345,38 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	}
 
-	// F3: Viewer
-	if e.VirtualKeyCode == vtinput.VK_F3 {
-		var name string
-		var path string
-		if pf.activeIdx == 0 {
-			if fsp, ok := pf.left.(*FileSystemPanel); ok {
-				name = fsp.GetSelectedName()
-				path = fsp.vfs.Join(fsp.vfs.GetPath(), name)
-			}
-		} else {
-			if fsp, ok := pf.right.(*FileSystemPanel); ok {
-				name = fsp.GetSelectedName()
-				path = fsp.vfs.Join(fsp.vfs.GetPath(), name)
-			}
-		}
-		if path != "" {
-			pf.openViewer(path)
-		}
-		return true
-	}
-
-	// F4 opens the internal editor for the selected file
-	if e.VirtualKeyCode == vtinput.VK_F4 {
-		if shift {
-			// Shift+F4: Create new file
-			var dir string
-			if pf.activeIdx == 0 {
-				if fsp, ok := pf.left.(*FileSystemPanel); ok {
-					dir = fsp.vfs.GetPath()
-				}
-			} else {
-				if fsp, ok := pf.right.(*FileSystemPanel); ok {
-					dir = fsp.vfs.GetPath()
-				}
-			}
-
-			vtui.InputBox(Msg("Edit.NewFileTitle"), Msg("Edit.NewFilePrompt"), "", func(name string) {
-				if name == "" {
-					name = "newfile.txt"
-				}
-				fullPath := filepath.Join(dir, name)
-				pf.openEditor(fullPath)
-			})
-		} else {
-			// F4: Edit selected file
-			var name string
-			var path string
-			if pf.activeIdx == 0 {
-				if fsp, ok := pf.left.(*FileSystemPanel); ok {
-					name = fsp.GetSelectedName()
-					path = fsp.vfs.Join(fsp.vfs.GetPath(), name)
-				}
-			} else {
-				if fsp, ok := pf.right.(*FileSystemPanel); ok {
-					name = fsp.GetSelectedName()
-					path = fsp.vfs.Join(fsp.vfs.GetPath(), name)
-				}
-			}
-
-			if path != "" {
-				pf.openEditor(path)
-			}
-		}
-		return true
-	}
-
-	// F1: Help
-	if e.VirtualKeyCode == vtinput.VK_F1 {
+	// Standard keys for file operations
+	switch e.VirtualKeyCode {
+	case vtinput.VK_F1:
 		pf.ShowHelp()
 		return true
-	}
-
-	// F3: Viewer
-	if e.VirtualKeyCode == vtinput.VK_F3 {
-		var fsp *FileSystemPanel
-		var ok bool
-		if pf.activeIdx == 0 {
-			fsp, ok = pf.left.(*FileSystemPanel)
-		} else {
-			fsp, ok = pf.right.(*FileSystemPanel)
-		}
-		if ok {
-			name := fsp.GetSelectedName()
-			path := fsp.vfs.Join(fsp.vfs.GetPath(), name)
-			pf.openViewer(path)
-		}
-		return true
-	}
-
-	// F4: Editor
-	if e.VirtualKeyCode == vtinput.VK_F4 {
-		var fsp *FileSystemPanel
-		var ok bool
-		if pf.activeIdx == 0 {
-			fsp, ok = pf.left.(*FileSystemPanel)
-		} else {
-			fsp, ok = pf.right.(*FileSystemPanel)
-		}
-		if !ok { return true }
-
+	case vtinput.VK_F3:
+		return pf.HandleCommand(vtui.CmView, nil)
+	case vtinput.VK_F4:
 		if shift {
-			// Shift+F4: Create new file
-			dir := fsp.vfs.GetPath()
-			vtui.InputBox(Msg("Edit.NewFileTitle"), Msg("Edit.NewFilePrompt"), "", func(name string) {
-				if name == "" { name = "newfile.txt" }
-				pf.openEditor(filepath.Join(dir, name))
-			})
-		} else {
-			name := fsp.GetSelectedName()
-			path := fsp.vfs.Join(fsp.vfs.GetPath(), name)
-			pf.openEditor(path)
-		}
-		return true
-	}
-
-	// F5: Copy / F6: Rename/Move
-	if e.VirtualKeyCode == vtinput.VK_F5 || e.VirtualKeyCode == vtinput.VK_F6 {
-		isMove := e.VirtualKeyCode == vtinput.VK_F6
-		var fspSrc, fspDst *FileSystemPanel
-		var okSrc, okDst bool
-
-		if pf.activeIdx == 0 {
-			fspSrc, okSrc = pf.left.(*FileSystemPanel)
-			fspDst, okDst = pf.right.(*FileSystemPanel)
-		} else {
-			fspSrc, okSrc = pf.right.(*FileSystemPanel)
-			fspDst, okDst = pf.left.(*FileSystemPanel)
-		}
-		if !okSrc || !okDst { return true }
-
-		name := fspSrc.GetSelectedName()
-		if name == "" || name == ".." { return true }
-
-		title := Msg("Copy.Title")
-		prompt := Msg("Copy.Prompt")
-		if isMove {
-			title = Msg("Move.Title")
-			prompt = Msg("Move.Prompt")
-		}
-
-		srcVfs, dstVfs := fspSrc.vfs, fspDst.vfs
-
-		// Custom Dialog for Copy/Move options
-		dlg := vtui.NewDialog(0, 0, 50, 11, title)
-		dlg.Center(pf.lastW, pf.lastH)
-		dlg.ShowClose = true
-
-		dlg.AddItem(vtui.NewLabel(dlg.X1+2, dlg.Y1+2, fmt.Sprintf(prompt, 1), nil))
-		editDest := vtui.NewEdit(dlg.X1+2, dlg.Y1+3, 46, dstVfs.GetPath())
-		dlg.AddItem(editDest)
-
-		chkFork := vtui.NewCheckbox(dlg.X1+2, dlg.Y1+5, Msg("Op.ClonePanels"), false)
-		dlg.AddItem(chkFork)
-
-		btnOk := vtui.NewButton(dlg.X1+10, dlg.Y1+8, Msg("Copy.Btn"))
-		if isMove { btnOk = vtui.NewButton(dlg.X1+10, dlg.Y1+8, Msg("Move.Btn")) }
-
-		btnOk.OnClick = func() {
-			dest := editDest.GetText()
-			forked := chkFork.State == 1
-			dlg.Close()
-			if dest != "" {
-				go pf.ExecuteFileOp(srcVfs, dstVfs, name, dest, isMove, forked)
+			var fsp *FileSystemPanel
+			var ok bool
+			if pf.activeIdx == 0 { fsp, ok = pf.left.(*FileSystemPanel) } else { fsp, ok = pf.right.(*FileSystemPanel) }
+			if ok {
+				dir := fsp.vfs.GetPath()
+				vtui.InputBox(Msg("Edit.NewFileTitle"), Msg("Edit.NewFilePrompt"), "", func(name string) {
+					if name == "" { name = "newfile.txt" }
+					pf.openEditor(filepath.Join(dir, name))
+				})
+				return true
 			}
 		}
-		dlg.AddItem(btnOk)
-
-		btnCancel := vtui.NewButton(dlg.X1+25, dlg.Y1+8, "Cancel")
-		btnCancel.OnClick = func() { dlg.Close() }
-		dlg.AddItem(btnCancel)
-
-		vtui.FrameManager.Push(dlg)
-		return true
-	}
-
-	// F7: Make Directory
-	if e.VirtualKeyCode == vtinput.VK_F7 {
-		var fsp *FileSystemPanel
-		var ok bool
-		if pf.activeIdx == 0 {
-			fsp, ok = pf.left.(*FileSystemPanel)
-		} else {
-			fsp, ok = pf.right.(*FileSystemPanel)
-		}
-		if !ok { return true }
-
-		panel := fsp
-		activeVfs := fsp.vfs
-
-		vtui.InputBox(Msg("MakeFolder.Title"), Msg("MakeFolder.Prompt"), "", func(name string) {
-			if name == "" { return }
-			fullPath := activeVfs.Join(activeVfs.GetPath(), name)
-			if err := activeVfs.MkDir(fullPath); err != nil {
-				vtui.ShowMessage(" Error ", fmt.Sprintf(Msg("Operation.Error"), err.Error()), []string{"&Ok"})
-			}
-			pf.RefreshAll()
-			panel.SelectName(name)
-		})
-		return true
-	}
-
-	// F8: Delete
-	if e.VirtualKeyCode == vtinput.VK_F8 {
-		var fsp *FileSystemPanel
-		var ok bool
-		if pf.activeIdx == 0 {
-			fsp, ok = pf.left.(*FileSystemPanel)
-		} else {
-			fsp, ok = pf.right.(*FileSystemPanel)
-		}
-		if !ok { return true }
-
-		activeVfs := fsp.vfs
-		name := fsp.GetSelectedName()
-		if name == "" || name == ".." { return true }
-
-		msg := fmt.Sprintf(Msg("Delete.Confirm"), name)
-		dlg := vtui.ShowMessage(Msg("Delete.Title"), msg, []string{Msg("Delete.Btn"), "Cancel"})
-		dlg.OnResult = func(code int) {
-			if code == 0 {
-				fullPath := activeVfs.Join(activeVfs.GetPath(), name)
-				if err := activeVfs.Remove(fullPath); err != nil {
-					vtui.ShowMessage(" Error ", fmt.Sprintf(Msg("Operation.Error"), err.Error()), []string{"&Ok"})
-				}
-				pf.RefreshAll()
-			}
-		}
+		return pf.HandleCommand(vtui.CmEdit, nil)
+	case vtinput.VK_F5:
+		return pf.HandleCommand(vtui.CmCopy, nil)
+	case vtinput.VK_F6:
+		return pf.HandleCommand(vtui.CmMove, nil)
+	case vtinput.VK_F7:
+		return pf.HandleCommand(vtui.CmMkDir, nil)
+	case vtinput.VK_F8:
+		return pf.HandleCommand(vtui.CmDelete, nil)
+	case vtinput.VK_F10:
+		vtui.FrameManager.Shutdown()
 		return true
 	}
 	if e.VirtualKeyCode == vtinput.VK_ESCAPE && !pf.cmdLine.IsEmpty() {
@@ -716,8 +528,125 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 		vtui.FrameManager.Shutdown()
 		return true
 
-	case vtui.CmCopy:
-		pf.startDemoAsyncTask()
+	case vtui.CmView:
+		var fsp *FileSystemPanel
+		var ok bool
+		if pf.activeIdx == 0 { fsp, ok = pf.left.(*FileSystemPanel) } else { fsp, ok = pf.right.(*FileSystemPanel) }
+		if ok {
+			name := fsp.GetSelectedName()
+			path := fsp.vfs.Join(fsp.vfs.GetPath(), name)
+			pf.openViewer(path)
+		}
+		return true
+
+	case vtui.CmEdit:
+		var fsp *FileSystemPanel
+		var ok bool
+		if pf.activeIdx == 0 { fsp, ok = pf.left.(*FileSystemPanel) } else { fsp, ok = pf.right.(*FileSystemPanel) }
+		if ok {
+			name := fsp.GetSelectedName()
+			path := fsp.vfs.Join(fsp.vfs.GetPath(), name)
+			pf.openEditor(path)
+		}
+		return true
+
+	case vtui.CmCopy, vtui.CmMove:
+		isMove := cmd == vtui.CmMove
+		var fspSrc, fspDst *FileSystemPanel
+		var okSrc, okDst bool
+
+		if pf.activeIdx == 0 {
+			fspSrc, okSrc = pf.left.(*FileSystemPanel)
+			fspDst, okDst = pf.right.(*FileSystemPanel)
+		} else {
+			fspSrc, okSrc = pf.right.(*FileSystemPanel)
+			fspDst, okDst = pf.left.(*FileSystemPanel)
+		}
+		if !okSrc || !okDst { return true }
+
+		name := fspSrc.GetSelectedName()
+		if name == "" || name == ".." { return true }
+
+		title := Msg("Copy.Title")
+		prompt := Msg("Copy.Prompt")
+		if isMove {
+			title = Msg("Move.Title")
+			prompt = Msg("Move.Prompt")
+		}
+
+		srcVfs, dstVfs := fspSrc.vfs, fspDst.vfs
+		dlg := vtui.NewDialog(0, 0, 50, 11, title)
+		dlg.Center(pf.lastW, pf.lastH)
+		dlg.ShowClose = true
+
+		dlg.AddItem(vtui.NewLabel(dlg.X1+2, dlg.Y1+2, fmt.Sprintf(prompt, 1), nil))
+		editDest := vtui.NewEdit(dlg.X1+2, dlg.Y1+3, 46, dstVfs.GetPath())
+		dlg.AddItem(editDest)
+
+		chkFork := vtui.NewCheckbox(dlg.X1+2, dlg.Y1+5, Msg("Op.ClonePanels"), false)
+		dlg.AddItem(chkFork)
+
+		btnOk := vtui.NewButton(dlg.X1+10, dlg.Y1+8, Msg("Copy.Btn"))
+		if isMove { btnOk = vtui.NewButton(dlg.X1+10, dlg.Y1+8, Msg("Move.Btn")) }
+
+		btnOk.OnClick = func() {
+			dest := editDest.GetText()
+			forked := chkFork.State == 1
+			dlg.Close()
+			if dest != "" {
+				go pf.ExecuteFileOp(srcVfs, dstVfs, name, dest, isMove, forked)
+			}
+		}
+		dlg.AddItem(btnOk)
+
+		btnCancel := vtui.NewButton(dlg.X1+25, dlg.Y1+8, "Cancel")
+		btnCancel.OnClick = func() { dlg.Close() }
+		dlg.AddItem(btnCancel)
+
+		vtui.FrameManager.Push(dlg)
+		return true
+
+	case vtui.CmMkDir:
+		var fsp *FileSystemPanel
+		var ok bool
+		if pf.activeIdx == 0 { fsp, ok = pf.left.(*FileSystemPanel) } else { fsp, ok = pf.right.(*FileSystemPanel) }
+		if !ok { return true }
+
+		panel := fsp
+		activeVfs := fsp.vfs
+
+		vtui.InputBox(Msg("MakeFolder.Title"), Msg("MakeFolder.Prompt"), "", func(name string) {
+			if name == "" { return }
+			fullPath := activeVfs.Join(activeVfs.GetPath(), name)
+			if err := activeVfs.MkDir(fullPath); err != nil {
+				vtui.ShowMessage(" Error ", fmt.Sprintf(Msg("Operation.Error"), err.Error()), []string{"&Ok"})
+			}
+			pf.RefreshAll()
+			panel.SelectName(name)
+		})
+		return true
+
+	case vtui.CmDelete:
+		var fsp *FileSystemPanel
+		var ok bool
+		if pf.activeIdx == 0 { fsp, ok = pf.left.(*FileSystemPanel) } else { fsp, ok = pf.right.(*FileSystemPanel) }
+		if !ok { return true }
+
+		activeVfs := fsp.vfs
+		name := fsp.GetSelectedName()
+		if name == "" || name == ".." { return true }
+
+		msg := fmt.Sprintf(Msg("Delete.Confirm"), name)
+		dlg := vtui.ShowMessage(Msg("Delete.Title"), msg, []string{Msg("Delete.Btn"), "Cancel"})
+		dlg.OnResult = func(code int) {
+			if code == 0 {
+				fullPath := activeVfs.Join(activeVfs.GetPath(), name)
+				if err := activeVfs.Remove(fullPath); err != nil {
+					vtui.ShowMessage(" Error ", fmt.Sprintf(Msg("Operation.Error"), err.Error()), []string{"&Ok"})
+				}
+				pf.RefreshAll()
+			}
+		}
 		return true
 
 	case vtui.CmBackground:
@@ -737,50 +666,6 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 	return false
 }
 
-func (pf *PanelsFrame) startDemoAsyncTask() {
-	dlg := vtui.NewDialog(0, 0, 40, 8, " Copying... ")
-	dlg.Center(vtui.FrameManager.GetScreenSize(), 25)
-	lbl := vtui.NewText(dlg.X1+2, dlg.Y1+2, "Starting...", vtui.Palette[vtui.ColDialogText])
-	dlg.AddItem(lbl)
-
-	var taskCtx *vtui.TaskContext
-
-	btnBg := vtui.NewButton(dlg.X1+2, dlg.Y1+5, "&Background")
-	btnBg.OnClick = func() {
-		vtui.FrameManager.Flash()
-		fork := pf.Clone()
-		vtui.FrameManager.AddScreen(fork)
-	}
-	dlg.AddItem(btnBg)
-
-	btnCancel := vtui.NewButton(dlg.X1+20, dlg.Y1+5, "&Cancel")
-	btnCancel.OnClick = func() {
-		if taskCtx != nil { taskCtx.Cancel() }
-		dlg.Close()
-	}
-	dlg.AddItem(btnCancel)
-
-	vtui.FrameManager.Push(dlg)
-
-	taskCtx = vtui.RunAsync(func(ctx *vtui.TaskContext) {
-		for i := 1; i <= 10; i++ {
-			if ctx.Err() != nil || dlg.IsDone() { return }
-			time.Sleep(100 * time.Millisecond)
-			percent := i * 10
-			ctx.RunOnUI(func() {
-				lbl.SetText(fmt.Sprintf("Copying: %d%% done...", percent))
-				dlg.SetProgress(percent)
-			})
-		}
-
-		if ctx.Err() == nil && !dlg.IsDone() {
-			ctx.RunOnUI(func() {
-				vtui.ShowMessageOn(dlg, " Done ", "Copy finished!", []string{"&Ok"})
-				dlg.Close()
-			})
-		}
-	})
-}
 
 func (pf *PanelsFrame) GetKeyLabels() *vtui.KeySet {
 	return &vtui.KeySet{
