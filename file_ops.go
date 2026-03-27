@@ -15,12 +15,13 @@ type FileOpState struct {
 	SkipAll      bool
 }
 
-func (pf *PanelsFrame) ExecuteFileOp(srcVfs, dstVfs vfs.VFS, name, destBase string, isMove bool) {
+func (pf *PanelsFrame) ExecuteFileOp(srcVfs, dstVfs vfs.VFS, name, destBase string, isMove bool, forked bool) {
 	title := " Copying... "
 	if isMove { title = " Moving... " }
 	state := &FileOpState{}
 
 	dlg := vtui.NewDialog(0, 0, 50, 8, title)
+	dlg.AttentionSuppressed = true
 	dlg.Center(vtui.FrameManager.GetScreenSize(), 25)
 	lbl := vtui.NewText(dlg.X1+2, dlg.Y1+2, "Starting...", vtui.Palette[vtui.ColDialogText])
 	dlg.AddItem(lbl)
@@ -30,7 +31,15 @@ func (pf *PanelsFrame) ExecuteFileOp(srcVfs, dstVfs vfs.VFS, name, destBase stri
 	btnCancel.OnClick = func() { if taskCtx != nil { taskCtx.Cancel() }; dlg.Close() }
 	dlg.AddItem(btnCancel)
 
-	vtui.FrameManager.PostTask(func() { vtui.FrameManager.Push(dlg) })
+	vtui.FrameManager.PostTask(func() {
+		if forked {
+			clone := pf.Clone()
+			vtui.FrameManager.AddScreen(clone)
+			vtui.FrameManager.Push(dlg)
+		} else {
+			vtui.FrameManager.AddScreenHeadless(dlg)
+		}
+	})
 
 	taskCtx = vtui.RunAsync(func(ctx *vtui.TaskContext) {
 		srcPath := srcVfs.Join(srcVfs.GetPath(), name)

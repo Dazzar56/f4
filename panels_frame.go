@@ -279,6 +279,15 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 }
 
 func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
+	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
+	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
+
+	// Alt+F5: Dummy Long Operation for debugging
+	if e.VirtualKeyCode == vtinput.VK_F5 && alt && !ctrl && e.KeyDown {
+		pf.showDummyOpDialog()
+		return true
+	}
+
 	if e.Type == vtinput.FocusEventType {
 		if e.SetFocus {
 			if fsp, ok := pf.left.(*FileSystemPanel); ok { fsp.Refresh() }
@@ -290,8 +299,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 
 	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
-	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
-	//alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
+	// ctrl и alt уже объявлены выше в начале функции
 
 	// Handle bracketed paste for terminal apps
 	if e.Type == vtinput.PasteEventType {
@@ -471,10 +479,37 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		}
 
 		srcVfs, dstVfs := fspSrc.vfs, fspDst.vfs
-		vtui.InputBox(title, fmt.Sprintf(prompt, 1), dstVfs.GetPath(), func(destPath string) {
-			if destPath == "" { return }
-			go pf.ExecuteFileOp(srcVfs, dstVfs, name, destPath, isMove)
-		})
+
+		// Custom Dialog for Copy/Move options
+		dlg := vtui.NewDialog(0, 0, 50, 11, title)
+		dlg.Center(pf.lastW, pf.lastH)
+		dlg.ShowClose = true
+
+		dlg.AddItem(vtui.NewLabel(dlg.X1+2, dlg.Y1+2, fmt.Sprintf(prompt, 1), nil))
+		editDest := vtui.NewEdit(dlg.X1+2, dlg.Y1+3, 46, dstVfs.GetPath())
+		dlg.AddItem(editDest)
+
+		chkFork := vtui.NewCheckbox(dlg.X1+2, dlg.Y1+5, Msg("Op.ClonePanels"), false)
+		dlg.AddItem(chkFork)
+
+		btnOk := vtui.NewButton(dlg.X1+10, dlg.Y1+8, Msg("Copy.Btn"))
+		if isMove { btnOk = vtui.NewButton(dlg.X1+10, dlg.Y1+8, Msg("Move.Btn")) }
+
+		btnOk.OnClick = func() {
+			dest := editDest.GetText()
+			forked := chkFork.State == 1
+			dlg.Close()
+			if dest != "" {
+				go pf.ExecuteFileOp(srcVfs, dstVfs, name, dest, isMove, forked)
+			}
+		}
+		dlg.AddItem(btnOk)
+
+		btnCancel := vtui.NewButton(dlg.X1+25, dlg.Y1+8, "Cancel")
+		btnCancel.OnClick = func() { dlg.Close() }
+		dlg.AddItem(btnCancel)
+
+		vtui.FrameManager.Push(dlg)
 		return true
 	}
 
@@ -520,7 +555,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		if name == "" || name == ".." { return true }
 
 		msg := fmt.Sprintf(Msg("Delete.Confirm"), name)
-		dlg := vtui.ShowMessage(Msg("Delete.Title"), msg, []string{Msg("Delete.Btn"), "&Cancel"})
+		dlg := vtui.ShowMessage(Msg("Delete.Title"), msg, []string{Msg("Delete.Btn"), "Cancel"})
 		dlg.OnResult = func(code int) {
 			if code == 0 {
 				fullPath := activeVfs.Join(activeVfs.GetPath(), name)
@@ -767,6 +802,81 @@ func (pf *PanelsFrame) GetKeyLabels() *vtui.KeySet {
 func (pf *PanelsFrame) GetType() vtui.FrameType { return vtui.TypeUser + 1 }
 
 func (pf *PanelsFrame) SetExitCode(code int)     { pf.Done = true; pf.ExitCode = code }
+func (pf *PanelsFrame) showDummyOpDialog() {
+	dlg := vtui.NewDialog(0, 0, 50, 10, Msg("Op.DummyTitle"))
+	dlg.Center(vtui.FrameManager.GetScreenSize(), 25)
+
+	dlg.AddItem(vtui.NewText(dlg.X1+2, dlg.Y1+2, Msg("Op.DummyText"), vtui.Palette[vtui.ColDialogText]))
+
+	chkClone := vtui.NewCheckbox(dlg.X1+2, dlg.Y1+5, Msg("Op.ClonePanels"), false)
+	dlg.AddItem(chkClone)
+
+	btnStart := vtui.NewButton(dlg.X1+10, dlg.Y1+7, "&Start")
+	btnStart.OnClick = func() {
+		mode := chkClone.State == 1
+		dlg.Close()
+		go pf.ExecuteDummyOp(mode)
+	}
+	dlg.AddItem(btnStart)
+
+	btnCancel := vtui.NewButton(dlg.X1+25, dlg.Y1+7, "&Cancel")
+	btnCancel.OnClick = func() { dlg.Close() }
+	dlg.AddItem(btnCancel)
+
+	vtui.FrameManager.Push(dlg)
+}
+
+func (pf *PanelsFrame) ExecuteDummyOp(forked bool) {
+	title := " Processing... "
+
+	// Mode 1 (Headless): Workspace = [Desktop, Dialog]
+	// Mode 2 (Forked): Workspace = [Desktop, ClonedPanels, Dialog]
+
+	dlg := vtui.NewDialog(0, 0, 45, 8, title)
+	dlg.AttentionSuppressed = true
+	dlg.Center(vtui.FrameManager.GetScreenSize(), 25)
+	lbl := vtui.NewText(dlg.X1+2, dlg.Y1+2, "Initializing...", vtui.Palette[vtui.ColDialogText])
+	dlg.AddItem(lbl)
+
+	btnCancel := vtui.NewButton(dlg.X1+16, dlg.Y1+5, "&Cancel")
+	var taskCtx *vtui.TaskContext
+	btnCancel.OnClick = func() { if taskCtx != nil { taskCtx.Cancel() }; dlg.Close() }
+	dlg.AddItem(btnCancel)
+
+	// Create and switch to the new workspace
+	vtui.FrameManager.PostTask(func() {
+		if forked {
+			clone := pf.Clone()
+			vtui.FrameManager.AddScreen(clone)
+			vtui.FrameManager.Push(dlg)
+		} else {
+			vtui.FrameManager.AddScreenHeadless(dlg)
+		}
+	})
+
+	taskCtx = vtui.RunAsync(func(ctx *vtui.TaskContext) {
+		totalSteps := 300 // 5 minutes = 300 seconds
+		for i := 1; i <= totalSteps; i++ {
+			if ctx.Err() != nil || dlg.IsDone() { return }
+
+			time.Sleep(1 * time.Second)
+			percent := (i * 100) / totalSteps
+
+			ctx.RunOnUI(func() {
+				lbl.SetText(fmt.Sprintf("Step %d of %d...", i, totalSteps))
+				dlg.SetProgress(percent)
+				vtui.FrameManager.Redraw()
+			})
+		}
+
+		ctx.RunOnUI(func() {
+			if ctx.Err() == nil && !dlg.IsDone() {
+				vtui.ShowMessageOn(dlg, " Done ", "Dummy operation finished!", []string{"&Ok"})
+				dlg.Close()
+			}
+		})
+	})
+}
 func (pf *PanelsFrame) RefreshAll() {
 	if fsp, ok := pf.left.(*FileSystemPanel); ok {
 		fsp.Refresh()

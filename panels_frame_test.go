@@ -2,6 +2,7 @@ package main
 
 import (
 	"testing"
+	"time"
 	"github.com/unxed/vtui"
 	"github.com/unxed/vtinput"
 )
@@ -364,5 +365,36 @@ func TestExecuteFileOp_BackgroundButtonTrigger(t *testing.T) {
 
 	if len(fm.Screens) != initialScreens + 1 {
 		t.Errorf("Backgrounding failed to create a new screen. Got %d, want %d", len(fm.Screens), initialScreens+1)
+	}
+}
+func TestExecuteDummyOp_HeadlessMode(t *testing.T) {
+	fm := vtui.FrameManager
+	fm.Init(vtui.NewScreenBuf())
+	pf := NewPanelsFrame()
+	fm.Push(pf)
+
+	initialScreens := len(fm.Screens)
+
+	// Trigger Mode 1 (Headless)
+	go pf.ExecuteDummyOp(false)
+
+	// Manually process the task queue (since we are not in fm.Run loop)
+	select {
+	case task := <-fm.TaskChan:
+		task()
+	case <-time.After(1 * time.Second):
+		t.Fatal("ExecuteDummyOp did not post workspace creation task")
+	}
+
+	if len(fm.Screens) != initialScreens + 1 {
+		t.Fatalf("Headless screen not created. Got %d", len(fm.Screens))
+	}
+
+	newScreen := fm.Screens[len(fm.Screens)-1]
+	if len(newScreen.Frames) != 1 { // Только диалог, без Desktop
+		t.Errorf("Headless screen should have 1 frame, got %d", len(newScreen.Frames))
+	}
+	if !newScreen.Transparent {
+		t.Error("Headless screen should be transparent")
 	}
 }
