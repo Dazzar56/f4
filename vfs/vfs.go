@@ -49,9 +49,10 @@ type VFS interface {
 	Create(path string) (io.WriteCloser, error)
 }
 
-// ReadAtCloser combines io.ReaderAt and io.Closer.
+// ReadAtCloser combines io.ReaderAt, io.Reader and io.Closer.
 type ReadAtCloser interface {
 	io.ReaderAt
+	io.Reader
 	io.Closer
 	Size() int64
 }

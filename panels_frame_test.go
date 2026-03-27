@@ -320,3 +320,49 @@ func TestPanelsFrame_KeyBarSuppression(t *testing.T) {
 		t.Error("KeyBar should be UNregistered from FrameManager in AltScreen mode")
 	}
 }
+func TestPanelsFrame_RefreshAll(t *testing.T) {
+	pf := NewPanelsFrame()
+	// Test that RefreshAll doesn't crash on freshly initialized panels
+	pf.RefreshAll()
+}
+func TestPanelsFrame_CloneIndependence(t *testing.T) {
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+
+	// Set path in original
+	fsp := pf.left.(*FileSystemPanel)
+	origPath := t.TempDir()
+	fsp.vfs.SetPath(origPath)
+
+	// Clone
+	clone := pf.Clone()
+
+	// Change path in clone
+	newPath := t.TempDir()
+	clone.left.(*FileSystemPanel).vfs.SetPath(newPath)
+
+	// Verify original is unchanged
+	if pf.left.(*FileSystemPanel).vfs.GetPath() != origPath {
+		t.Error("Cloned PanelsFrame shares VFS state with parent!")
+	}
+}
+
+func TestExecuteFileOp_BackgroundButtonTrigger(t *testing.T) {
+	// This test ensures that the logic inside Background button click works
+	fm := vtui.FrameManager
+	fm.Init(vtui.NewScreenBuf())
+
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+	fm.Push(pf)
+
+	initialScreens := len(fm.Screens)
+
+	// Simulate what Background button does:
+	fork := pf.Clone()
+	fm.AddScreen(fork)
+
+	if len(fm.Screens) != initialScreens + 1 {
+		t.Errorf("Backgrounding failed to create a new screen. Got %d, want %d", len(fm.Screens), initialScreens+1)
+	}
+}

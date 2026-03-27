@@ -23,7 +23,10 @@ func (f *fileEntry) GetCellText(col int) string {
 		return f.Name
 	case 1:
 		if f.IsDir {
-			return Msg("Panel.UpDir")
+			if f.Name == ".." {
+				return Msg("Panel.UpDir")
+			}
+			return ""
 		}
 		return fmt.Sprintf("%d", f.Size)
 	}
@@ -170,4 +173,15 @@ func (fp *FileSystemPanel) GetSelectedName() string {
 		return fp.vfs.Dir(fp.vfs.GetPath())
 	}
 	return entry.Name
+}
+
+// SelectName searches for an entry by name and moves the cursor to it.
+func (fp *FileSystemPanel) SelectName(name string) {
+	for i, entry := range fp.entries {
+		if entry.Name == name {
+			fp.table.SelectPos = i
+			fp.table.EnsureVisible()
+			break
+		}
+	}
 }

@@ -73,6 +73,7 @@ type osFileWrapper struct {
 }
 
 func (f *osFileWrapper) Size() int64 { return f.size }
+func (f *osFileWrapper) Read(p []byte) (n int, err error) { return f.File.Read(p) }
 
 func (v *OSVFS) Open(path string) (ReadAtCloser, error) {
 	f, err := os.Open(path)

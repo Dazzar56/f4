@@ -22,7 +22,38 @@ func TestFileEntry_GetCellText(t *testing.T) {
 	if file.GetCellText(1) != "1024" {
 		t.Errorf("File size mismatch: %s", file.GetCellText(1))
 	}
-	if dir.GetCellText(1) != "UP-DIR" {
-		t.Errorf("Dir size placeholder mismatch: %s", dir.GetCellText(1))
+
+	// Regular directories should have an empty size column
+	if dir.GetCellText(1) != "" {
+		t.Errorf("Regular dir should have empty size column, got: %q", dir.GetCellText(1))
+	}
+
+	// Only ".." directory should have the UP-DIR placeholder
+	upDir := &fileEntry{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}
+	if upDir.GetCellText(1) != "UP-DIR" {
+		t.Errorf("Parent dir (..) should have UP-DIR placeholder, got: %q", upDir.GetCellText(1))
+	}
+}
+
+func TestFileSystemPanel_SelectName(t *testing.T) {
+	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS("."))
+
+	// Mock entries
+	fp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
+		{VFSItem: vfs.VFSItem{Name: "a_folder", IsDir: true}},
+		{VFSItem: vfs.VFSItem{Name: "z_folder", IsDir: true}},
+	}
+
+	fp.SelectName("z_folder")
+
+	if fp.table.SelectPos != 2 {
+		t.Errorf("SelectName failed: expected index 2, got %d", fp.table.SelectPos)
+	}
+
+	// Should not change position if name not found
+	fp.SelectName("non_existent")
+	if fp.table.SelectPos != 2 {
+		t.Errorf("SelectName should not change position on failure, got %d", fp.table.SelectPos)
 	}
 }

@@ -396,19 +396,142 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	}
 
-	// F1 invokes help (global)
+	// F1: Help
 	if e.VirtualKeyCode == vtinput.VK_F1 {
 		pf.ShowHelp()
 		return true
 	}
 
-	// F5 translates to Command
-	if e.VirtualKeyCode == vtinput.VK_F5 && !shift && !ctrl {
-		vtui.FrameManager.EmitCommand(vtui.CmCopy, nil)
+	// F3: Viewer
+	if e.VirtualKeyCode == vtinput.VK_F3 {
+		var fsp *FileSystemPanel
+		var ok bool
+		if pf.activeIdx == 0 {
+			fsp, ok = pf.left.(*FileSystemPanel)
+		} else {
+			fsp, ok = pf.right.(*FileSystemPanel)
+		}
+		if ok {
+			name := fsp.GetSelectedName()
+			path := fsp.vfs.Join(fsp.vfs.GetPath(), name)
+			pf.openViewer(path)
+		}
 		return true
 	}
 
-	// Esc clears command line if it's not empty
+	// F4: Editor
+	if e.VirtualKeyCode == vtinput.VK_F4 {
+		var fsp *FileSystemPanel
+		var ok bool
+		if pf.activeIdx == 0 {
+			fsp, ok = pf.left.(*FileSystemPanel)
+		} else {
+			fsp, ok = pf.right.(*FileSystemPanel)
+		}
+		if !ok { return true }
+
+		if shift {
+			// Shift+F4: Create new file
+			dir := fsp.vfs.GetPath()
+			vtui.InputBox(Msg("Edit.NewFileTitle"), Msg("Edit.NewFilePrompt"), "", func(name string) {
+				if name == "" { name = "newfile.txt" }
+				pf.openEditor(filepath.Join(dir, name))
+			})
+		} else {
+			name := fsp.GetSelectedName()
+			path := fsp.vfs.Join(fsp.vfs.GetPath(), name)
+			pf.openEditor(path)
+		}
+		return true
+	}
+
+	// F5: Copy / F6: Rename/Move
+	if e.VirtualKeyCode == vtinput.VK_F5 || e.VirtualKeyCode == vtinput.VK_F6 {
+		isMove := e.VirtualKeyCode == vtinput.VK_F6
+		var fspSrc, fspDst *FileSystemPanel
+		var okSrc, okDst bool
+
+		if pf.activeIdx == 0 {
+			fspSrc, okSrc = pf.left.(*FileSystemPanel)
+			fspDst, okDst = pf.right.(*FileSystemPanel)
+		} else {
+			fspSrc, okSrc = pf.right.(*FileSystemPanel)
+			fspDst, okDst = pf.left.(*FileSystemPanel)
+		}
+		if !okSrc || !okDst { return true }
+
+		name := fspSrc.GetSelectedName()
+		if name == "" || name == ".." { return true }
+
+		title := Msg("Copy.Title")
+		prompt := Msg("Copy.Prompt")
+		if isMove {
+			title = Msg("Move.Title")
+			prompt = Msg("Move.Prompt")
+		}
+
+		srcVfs, dstVfs := fspSrc.vfs, fspDst.vfs
+		vtui.InputBox(title, fmt.Sprintf(prompt, 1), dstVfs.GetPath(), func(destPath string) {
+			if destPath == "" { return }
+			go pf.ExecuteFileOp(srcVfs, dstVfs, name, destPath, isMove)
+		})
+		return true
+	}
+
+	// F7: Make Directory
+	if e.VirtualKeyCode == vtinput.VK_F7 {
+		var fsp *FileSystemPanel
+		var ok bool
+		if pf.activeIdx == 0 {
+			fsp, ok = pf.left.(*FileSystemPanel)
+		} else {
+			fsp, ok = pf.right.(*FileSystemPanel)
+		}
+		if !ok { return true }
+
+		panel := fsp
+		activeVfs := fsp.vfs
+
+		vtui.InputBox(Msg("MakeFolder.Title"), Msg("MakeFolder.Prompt"), "", func(name string) {
+			if name == "" { return }
+			fullPath := activeVfs.Join(activeVfs.GetPath(), name)
+			if err := activeVfs.MkDir(fullPath); err != nil {
+				vtui.ShowMessage(" Error ", fmt.Sprintf(Msg("Operation.Error"), err.Error()), []string{"&Ok"})
+			}
+			pf.RefreshAll()
+			panel.SelectName(name)
+		})
+		return true
+	}
+
+	// F8: Delete
+	if e.VirtualKeyCode == vtinput.VK_F8 {
+		var fsp *FileSystemPanel
+		var ok bool
+		if pf.activeIdx == 0 {
+			fsp, ok = pf.left.(*FileSystemPanel)
+		} else {
+			fsp, ok = pf.right.(*FileSystemPanel)
+		}
+		if !ok { return true }
+
+		activeVfs := fsp.vfs
+		name := fsp.GetSelectedName()
+		if name == "" || name == ".." { return true }
+
+		msg := fmt.Sprintf(Msg("Delete.Confirm"), name)
+		dlg := vtui.ShowMessage(Msg("Delete.Title"), msg, []string{Msg("Delete.Btn"), "&Cancel"})
+		dlg.OnResult = func(code int) {
+			if code == 0 {
+				fullPath := activeVfs.Join(activeVfs.GetPath(), name)
+				if err := activeVfs.Remove(fullPath); err != nil {
+					vtui.ShowMessage(" Error ", fmt.Sprintf(Msg("Operation.Error"), err.Error()), []string{"&Ok"})
+				}
+				pf.RefreshAll()
+			}
+		}
+		return true
+	}
 	if e.VirtualKeyCode == vtinput.VK_ESCAPE && !pf.cmdLine.IsEmpty() {
 		pf.cmdLine.Clear()
 		return true
@@ -644,6 +767,14 @@ func (pf *PanelsFrame) GetKeyLabels() *vtui.KeySet {
 func (pf *PanelsFrame) GetType() vtui.FrameType { return vtui.TypeUser + 1 }
 
 func (pf *PanelsFrame) SetExitCode(code int)     { pf.Done = true; pf.ExitCode = code }
+func (pf *PanelsFrame) RefreshAll() {
+	if fsp, ok := pf.left.(*FileSystemPanel); ok {
+		fsp.Refresh()
+	}
+	if fsp, ok := pf.right.(*FileSystemPanel); ok {
+		fsp.Refresh()
+	}
+}
 func (pf *PanelsFrame) GetTitle() string {
 	path := ""
 	// Show the path of the active panel
