@@ -3,6 +3,8 @@ package main
 import (
 	"testing"
 	"github.com/unxed/f4/vfs"
+	"github.com/unxed/vtinput"
+	"github.com/unxed/vtui"
 )
 
 func TestFileEntry_GetCellText(t *testing.T) {
@@ -55,5 +57,51 @@ func TestFileSystemPanel_SelectName(t *testing.T) {
 	fp.SelectName("non_existent")
 	if fp.table.SelectPos != 2 {
 		t.Errorf("SelectName should not change position on failure, got %d", fp.table.SelectPos)
+	}
+}
+
+func TestFileSystemPanel_MultiSelect(t *testing.T) {
+	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS("."))
+
+	// Mock entries
+	fp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
+		{VFSItem: vfs.VFSItem{Name: "file1.txt", IsDir: false}},
+		{VFSItem: vfs.VFSItem{Name: "file2.txt", IsDir: false}},
+		{VFSItem: vfs.VFSItem{Name: "file3.txt", IsDir: false}},
+	}
+	fp.table.SetRows([]vtui.TableRow{fp.entries[0], fp.entries[1], fp.entries[2], fp.entries[3]})
+
+	fp.table.SelectPos = 1 // On file1.txt
+
+	// Press Insert
+	fp.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_INSERT})
+
+	// Check if selected
+	if !fp.entries[1].Selected {
+		t.Error("file1.txt should be selected after Insert")
+	}
+
+	// Cursor should move to file2.txt
+	if fp.table.SelectPos != 2 {
+		t.Errorf("Cursor should move to 2, got %d", fp.table.SelectPos)
+	}
+
+	// Press Shift+Down
+	fp.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN, ControlKeyState: vtinput.ShiftPressed,
+	})
+
+	if !fp.entries[2].Selected {
+		t.Error("file2.txt should be selected after Shift+Down")
+	}
+	if fp.table.SelectPos != 3 {
+		t.Errorf("Cursor should move to 3, got %d", fp.table.SelectPos)
+	}
+
+	// GetSelectedNames
+	names := fp.GetSelectedNames()
+	if len(names) != 2 || names[0] != "file1.txt" || names[1] != "file2.txt" {
+		t.Errorf("GetSelectedNames returned wrong result: %v", names)
 	}
 }

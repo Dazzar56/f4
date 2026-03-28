@@ -12,6 +12,11 @@ import (
 // fileEntry implements vtui.TableRow for display in a table.
 type fileEntry struct {
 	vfs.VFSItem
+	Selected bool
+}
+
+func (f *fileEntry) IsSelected() bool {
+	return f.Selected
 }
 
 func (f *fileEntry) GetCellText(col int) string {
@@ -59,6 +64,8 @@ func NewFileSystemPanel(x, y, w, h int, vfs vfs.VFS) *FileSystemPanel {
 	fp.frame.ColorTitleIdx = ColPanelTitle
 	fp.table.ColorTextIdx = ColPanelText
 	fp.table.ColorSelectedTextIdx = ColPanelCursor
+	fp.table.ColorItemSelectTextIdx = ColPanelSelectedText
+	fp.table.ColorItemSelectCursorIdx = ColPanelSelectedCursor
 	fp.table.ColorTitleIdx = ColPanelColumnTitle
 	fp.table.ColorBoxIdx = ColPanelBox
 	fp.SetCanFocus(true)
@@ -124,6 +131,42 @@ func (fp *FileSystemPanel) Resize(w, h int) {
 func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 	if !e.KeyDown { return false }
 
+	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
+
+	// Handle Insert
+	if e.VirtualKeyCode == vtinput.VK_INSERT {
+		if len(fp.entries) > 0 && fp.table.SelectPos >= 0 && fp.table.SelectPos < len(fp.entries) {
+			if fp.entries[fp.table.SelectPos].Name != ".." {
+				fp.entries[fp.table.SelectPos].Selected = !fp.entries[fp.table.SelectPos].Selected
+			}
+			if fp.table.SelectPos < len(fp.entries)-1 {
+				fp.table.SelectPos++
+				fp.table.EnsureVisible()
+			}
+			return true
+		}
+	}
+
+	// Handle Shift+Up / Shift+Down
+	if shift && (e.VirtualKeyCode == vtinput.VK_UP || e.VirtualKeyCode == vtinput.VK_DOWN) {
+		if len(fp.entries) > 0 && fp.table.SelectPos >= 0 && fp.table.SelectPos < len(fp.entries) {
+			if fp.entries[fp.table.SelectPos].Name != ".." {
+				fp.entries[fp.table.SelectPos].Selected = !fp.entries[fp.table.SelectPos].Selected
+			}
+			if e.VirtualKeyCode == vtinput.VK_UP {
+				if fp.table.SelectPos > 0 {
+					fp.table.SelectPos--
+				}
+			} else {
+				if fp.table.SelectPos < len(fp.entries)-1 {
+					fp.table.SelectPos++
+				}
+			}
+			fp.table.EnsureVisible()
+			return true
+		}
+	}
+
 	// Handle directory navigation
 	if e.VirtualKeyCode == vtinput.VK_RETURN {
 		if len(fp.entries) == 0 || fp.table.SelectPos < 0 || fp.table.SelectPos >= len(fp.entries) {
@@ -184,4 +227,21 @@ func (fp *FileSystemPanel) SelectName(name string) {
 			break
 		}
 	}
+}
+
+// GetSelectedNames returns a list of selected files. If none are selected, returns the focused one.
+func (fp *FileSystemPanel) GetSelectedNames() []string {
+	var names []string
+	for _, e := range fp.entries {
+		if e.Selected && e.Name != ".." {
+			names = append(names, e.Name)
+		}
+	}
+	if len(names) == 0 {
+		name := fp.GetSelectedName()
+		if name != "" && name != ".." {
+			names = append(names, name)
+		}
+	}
+	return names
 }

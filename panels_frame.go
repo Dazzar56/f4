@@ -564,8 +564,8 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 		}
 		if !okSrc || !okDst { return true }
 
-		name := fspSrc.GetSelectedName()
-		if name == "" || name == ".." { return true }
+		names := fspSrc.GetSelectedNames()
+		if len(names) == 0 { return true }
 
 		title := Msg("Copy.Title")
 		prompt := Msg("Copy.Prompt")
@@ -579,7 +579,7 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 		dlg.Center(pf.lastW, pf.lastH)
 		dlg.ShowClose = true
 
-		dlg.AddItem(vtui.NewLabel(dlg.X1+2, dlg.Y1+2, fmt.Sprintf(prompt, 1), nil))
+		dlg.AddItem(vtui.NewLabel(dlg.X1+2, dlg.Y1+2, fmt.Sprintf(prompt, len(names)), nil))
 		editDest := vtui.NewEdit(dlg.X1+2, dlg.Y1+3, 46, dstVfs.GetPath())
 		dlg.AddItem(editDest)
 
@@ -594,7 +594,7 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 			forked := chkFork.State == 1
 			dlg.Close()
 			if dest != "" {
-				go pf.ExecuteFileOp(srcVfs, dstVfs, name, dest, isMove, forked)
+				go pf.ExecuteFileOp(srcVfs, dstVfs, names, dest, isMove, forked)
 			}
 		}
 		dlg.AddItem(btnOk)
@@ -633,16 +633,24 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 		if !ok { return true }
 
 		activeVfs := fsp.vfs
-		name := fsp.GetSelectedName()
-		if name == "" || name == ".." { return true }
+		names := fsp.GetSelectedNames()
+		if len(names) == 0 { return true }
 
-		msg := fmt.Sprintf(Msg("Delete.Confirm"), name)
+		msgName := names[0]
+		if len(names) > 1 {
+			msgName = fmt.Sprintf("%d items", len(names))
+		}
+
+		msg := fmt.Sprintf(Msg("Delete.Confirm"), msgName)
 		dlg := vtui.ShowMessage(Msg("Delete.Title"), msg, []string{Msg("Delete.Btn"), "Cancel"})
 		dlg.OnResult = func(code int) {
 			if code == 0 {
-				fullPath := activeVfs.Join(activeVfs.GetPath(), name)
-				if err := activeVfs.Remove(fullPath); err != nil {
-					vtui.ShowMessage(" Error ", fmt.Sprintf(Msg("Operation.Error"), err.Error()), []string{"&Ok"})
+				for _, name := range names {
+					fullPath := activeVfs.Join(activeVfs.GetPath(), name)
+					if err := activeVfs.Remove(fullPath); err != nil {
+						vtui.ShowMessage(" Error ", fmt.Sprintf(Msg("Operation.Error"), err.Error()), []string{"&Ok"})
+						break
+					}
 				}
 				pf.RefreshAll()
 			}

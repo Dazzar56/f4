@@ -15,7 +15,7 @@ type FileOpState struct {
 	SkipAll      bool
 }
 
-func (pf *PanelsFrame) ExecuteFileOp(srcVfs, dstVfs vfs.VFS, name, destBase string, isMove bool, forked bool) {
+func (pf *PanelsFrame) ExecuteFileOp(srcVfs, dstVfs vfs.VFS, names []string, destBase string, isMove bool, forked bool) {
 	title := " Copying... "
 	if isMove { title = " Moving... " }
 	state := &FileOpState{}
@@ -42,29 +42,42 @@ func (pf *PanelsFrame) ExecuteFileOp(srcVfs, dstVfs vfs.VFS, name, destBase stri
 	})
 
 	taskCtx = vtui.RunAsync(func(ctx *vtui.TaskContext) {
-		srcPath := srcVfs.Join(srcVfs.GetPath(), name)
+		var opErr error
+		for i, name := range names {
+			if ctx.Err() != nil { break }
+			srcPath := srcVfs.Join(srcVfs.GetPath(), name)
 
-		// If move is on the same VFS, try Rename first
-		if isMove && srcVfs == dstVfs {
-			destPath := dstVfs.Join(destBase, name)
-			if err := srcVfs.Rename(srcPath, destPath); err == nil {
-				ctx.RunOnUI(func() { dlg.Close(); pf.RefreshAll() })
-				return
+			ctx.RunOnUI(func() { lbl.SetText(fmt.Sprintf("Processing: %s", name)) })
+
+			// If move is on the same VFS, try Rename first
+			if isMove && srcVfs == dstVfs {
+				destPath := dstVfs.Join(destBase, name)
+				if err := srcVfs.Rename(srcPath, destPath); err == nil {
+					percent := ((i + 1) * 100) / len(names)
+					ctx.RunOnUI(func() { dlg.SetProgress(percent) })
+					continue
+				}
 			}
-		}
 
-		// Fallback to recursive copy
-		// Fallback to recursive copy
-		err := pf.recursiveCopy(ctx, dlg, lbl, srcVfs, srcPath, dstVfs, destBase, name, state)
+			err := pf.recursiveCopy(ctx, dlg, lbl, srcVfs, srcPath, dstVfs, destBase, name, state)
+			if err != nil {
+				opErr = err
+				break
+			}
+			if isMove {
+				srcVfs.Remove(srcPath)
+			}
 
-		if isMove && err == nil {
-			err = srcVfs.Remove(srcPath)
+			percent := ((i + 1) * 100) / len(names)
+			ctx.RunOnUI(func() {
+				dlg.SetProgress(percent)
+			})
 		}
 
 		ctx.RunOnUI(func() {
 			dlg.Close()
-			if err != nil {
-				vtui.ShowMessage(" Error ", fmt.Sprintf(Msg("Operation.Error"), err.Error()), []string{"&Ok"})
+			if opErr != nil {
+				vtui.ShowMessage(" Error ", fmt.Sprintf(Msg("Operation.Error"), opErr.Error()), []string{"&Ok"})
 			}
 			pf.RefreshAll()
 		})
