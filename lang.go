@@ -45,6 +45,13 @@ var Lng = map[string]string{
 	"Menu.Options":  "Options",
 	"Menu.Right":    "Right",
 	"Menu.Exit":     "Exit",
+	// Files Menu specific strings
+	"Menu.Files.View":   "View",
+	"Menu.Files.Edit":   "Edit",
+	"Menu.Files.Copy":   "Copy",
+	"Menu.Files.RenMov": "Rename or move",
+	"Menu.Files.MkDir":  "Make folder",
+	"Menu.Files.Delete": "Delete",
 
 	// KeyBar Normal
 	"KeyBar.F1":  "Help",
