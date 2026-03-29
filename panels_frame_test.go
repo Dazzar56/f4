@@ -3,6 +3,7 @@ package main
 import (
 	"testing"
 	"time"
+	"strings"
 	"github.com/unxed/vtui"
 	"github.com/unxed/vtinput"
 )
@@ -398,3 +399,69 @@ func TestExecuteDummyOp_HeadlessMode(t *testing.T) {
 		t.Error("Headless screen should be transparent")
 	}
 }
+
+func TestPanelsFrame_TerminalForwarding_Legacy(t *testing.T) {
+	pf := NewPanelsFrame()
+	pf.showPanels = false
+	pf.termView.UseAltScreen = true
+	
+	// Mock PTY
+	pty := &mockPty{}
+	pf.pty = pty
+
+	// 1. Ctrl+W should be FORWARDED (Legacy mode has no Kitty/Win32 flags)
+	// For letters, TranslateInput expects the Char field to be populated.
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_W, Char: 'w', ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+	if !strings.Contains(string(pty.written), "\x17") { // 0x17 is Ctrl+W byte
+		t.Error("Ctrl+W should be forwarded to terminal in legacy mode")
+	}
+	pty.written = nil
+
+	// 2. Ctrl+Tab should NOT be forwarded (returns false, handled by FrameManager)
+	handled := pf.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_TAB, ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+	if handled {
+		t.Error("Ctrl+Tab should NOT be handled by PanelsFrame in legacy mode")
+	}
+	if len(pty.written) > 0 {
+		t.Error("PTY received bytes for Ctrl+Tab in legacy mode")
+	}
+}
+
+func TestPanelsFrame_TerminalForwarding_Advanced(t *testing.T) {
+	pf := NewPanelsFrame()
+	pf.showPanels = false
+	pf.termView.UseAltScreen = true
+	pf.termView.Win32InputMode = true // Advanced mode
+	
+	pty := &mockPty{}
+	pf.pty = pty
+
+	// 1. Ctrl+Tab should be FORWARDED in Advanced mode
+	handled := pf.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_TAB, ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+	if !handled {
+		t.Error("Ctrl+Tab should be handled by PanelsFrame in Advanced mode")
+	}
+	if len(pty.written) == 0 {
+		t.Error("PTY did not receive Win32 sequence for Ctrl+Tab")
+	}
+	pty.written = nil
+
+	// 2. Shift+Ctrl+Tab should NOT be forwarded in any mode
+	handled = pf.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_TAB, ControlKeyState: vtinput.LeftCtrlPressed | vtinput.ShiftPressed,
+	})
+	if handled {
+		t.Error("Shift+Ctrl+Tab was erroneously forwarded to PTY")
+	}
+}
+

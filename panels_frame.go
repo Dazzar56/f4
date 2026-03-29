@@ -323,6 +323,19 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 
 	// Raw input mode for interactive terminal apps (like far2l inside f4)
 	if !pf.showPanels && pf.termView.UseAltScreen {
+		isCtrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
+		isShift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
+
+		if e.VirtualKeyCode == vtinput.VK_TAB && isCtrl {
+			if isShift {
+				return false
+			}
+			isAdvanced := pf.termView.Win32InputMode || pf.termView.KittyFlags != 0
+			if !isAdvanced {
+				return false
+			}
+		}
+
 		// Only forward KeyUp events if the guest app explicitly requested Win32 Input Mode.
 		// Legacy apps (like mc) would interpret forwarded KeyUp escape sequences as new keypresses.
 		if e.KeyDown || pf.termView.Win32InputMode || pf.termView.KittyFlags != 0 {
