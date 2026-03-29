@@ -464,4 +464,24 @@ func TestPanelsFrame_TerminalForwarding_Advanced(t *testing.T) {
 		t.Error("Shift+Ctrl+Tab was erroneously forwarded to PTY")
 	}
 }
+func TestPanelsFrame_FilesMenuLabels(t *testing.T) {
+	pf := NewPanelsFrame()
+
+	// Items[1] is the "Files" menu
+	filesMenu := pf.menuBar.Items[1]
+	if filesMenu.Label != "&Files" {
+		t.Errorf("Expected Files menu label '&Files', got %q", filesMenu.Label)
+	}
+
+	// SubItems[3] should be "Rename or move"
+	renMove := filesMenu.SubItems[3]
+	expected := "&" + Msg("Menu.Files.RenMov")
+	if renMove.Text != expected {
+		t.Errorf("Expected Files item %q, got %q", expected, renMove.Text)
+	}
+
+	if renMove.Shortcut != "F6" {
+		t.Errorf("Expected shortcut 'F6', got %q", renMove.Shortcut)
+	}
+}
 
