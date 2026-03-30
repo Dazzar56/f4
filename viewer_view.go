@@ -26,7 +26,6 @@ type ViewerView struct {
 	// For Text mode: offsets of lines currently on screen
 	lineOffsets []int64
 	eofVisible  bool
-	ScrollBar   *vtui.ScrollBar
 }
 
 func NewViewerView(path string) (*ViewerView, error) {
@@ -38,10 +37,6 @@ func NewViewerView(path string) (*ViewerView, error) {
 		backend:  backend,
 		path:     path,
 		WrapMode: true,
-	}
-	vv.ScrollBar = vtui.NewScrollBar(0, 0, 0)
-	vv.ScrollBar.OnScroll = func(v int) {
-		vv.TopOffset = int64(v)
 	}
 	vv.menuBar = vtui.NewMenuBar(nil)
 	vv.menuBar.Items = []vtui.MenuBarItem{
@@ -105,9 +100,6 @@ func (vv *ViewerView) SetPosition(x1, y1, x2, y2 int) {
 	if vv.menuBar != nil {
 		vv.menuBar.SetPosition(x1, 0, x2, 0)
 	}
-	if vv.ScrollBar != nil {
-		vv.ScrollBar.SetPosition(x2, y1+1, x2, y2)
-	}
 }
 
 func (vv *ViewerView) GetMenuBar() *vtui.MenuBar {
@@ -136,10 +128,12 @@ func (vv *ViewerView) DisplayObject(scr *vtui.ScreenBuf) {
 	}
 
 	width := vv.X2 - vv.X1 + 1
-	contentHeight := vv.Y2 - vv.Y1
+	height := vv.Y2 - vv.Y1 + 1
+	contentHeight := height - 1
 
 	bgAttr := vtui.Palette[ColViewerText]
 
+	// 1. Draw Background
 	scr.FillRect(vv.X1, vv.Y1+1, vv.X2, vv.Y2, ' ', bgAttr)
 
 	if contentHeight > 0 {
@@ -150,16 +144,6 @@ func (vv *ViewerView) DisplayObject(scr *vtui.ScreenBuf) {
 		}
 	}
 
-	if vv.backend.Size() > 0 {
-		// In text mode, max scroll is total size minus visible rows (approximate for variable line length)
-		maxScroll := vv.backend.Size()
-		if !vv.HexMode {
-			// Small heuristic: we can't scroll past the last visible line
-			// TopOffset is in bytes, contentHeight is in lines.
-		}
-		vv.ScrollBar.SetParams(int(vv.TopOffset), 0, int(maxScroll))
-		vv.ScrollBar.Show(scr)
-	}
 }
 
 func (vv *ViewerView) renderHex(scr *vtui.ScreenBuf, width, contentHeight int) {
@@ -167,7 +151,6 @@ func (vv *ViewerView) renderHex(scr *vtui.ScreenBuf, width, contentHeight int) {
 	offAttr := vtui.Palette[ColViewerArrows]
 
 	currOffset := vv.TopOffset &^ 0xF // Align to 16 bytes
-	vv.eofVisible = false
 
 	for y := 0; y < contentHeight; y++ {
 		if currOffset >= vv.backend.Size() {
@@ -212,7 +195,6 @@ func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, contentHeight int) 
 	attr := vtui.Palette[ColViewerText]
 	currOffset := vv.TopOffset
 	vv.lineOffsets = vv.lineOffsets[:0]
-	vv.eofVisible = false
 
 	for y := 0; y < contentHeight; y++ {
 		vv.lineOffsets = append(vv.lineOffsets, currOffset)
@@ -288,14 +270,13 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 		return false
 	}
 
+	//height := int64(vv.Y2 - vv.Y1 + 1)
 	step := int64(1)
 	if vv.HexMode {
 		step = 16
 	}
 
-	// Calculate contentHeight exactly as in DisplayObject: Y2 - Y1
-	contentHeight := int64(vv.Y2 - vv.Y1)
-	if contentHeight < 1 { contentHeight = 1 }
+	contentHeight := int64(vv.Y2 - vv.Y1) // height - 1 (status line)
 
 	switch e.VirtualKeyCode {
 	case vtinput.VK_ESCAPE, vtinput.VK_F10, vtinput.VK_F3:
@@ -448,14 +429,7 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 	return false
 }
 
-func (vv *ViewerView) ProcessMouse(e *vtinput.InputEvent) bool {
-	if e.ButtonState != 0 {
-		if (e.KeyDown && int(e.MouseX) == vv.X2) || vv.ScrollBar.IsDragging() {
-			return vv.ScrollBar.ProcessMouse(e)
-		}
-	}
-	return false
-}
+func (vv *ViewerView) ProcessMouse(e *vtinput.InputEvent) bool { return false }
 func (vv *ViewerView) ResizeConsole(w, h int)                 { vv.SetPosition(0, 0, w-1, h-2) }
 func (vv *ViewerView) GetKeyLabels() *vtui.KeySet {
 	return &vtui.KeySet{
