@@ -26,6 +26,8 @@ type ViewerView struct {
 	// For Text mode: offsets of lines currently on screen
 	lineOffsets []int64
 	eofVisible  bool
+
+	scrollBar *vtui.ScrollBar
 }
 
 func NewViewerView(path string) (*ViewerView, error) {
@@ -38,6 +40,7 @@ func NewViewerView(path string) (*ViewerView, error) {
 		path:     path,
 		WrapMode: true,
 	}
+	vv.scrollBar = vtui.NewScrollBar(0, 0, 0)
 	vv.menuBar = vtui.NewMenuBar(nil)
 	vv.menuBar.Items = []vtui.MenuBarItem{
 		{Label: "&File", SubItems: []vtui.MenuItem{{Text: "E&xit", Command: vtui.CmClose}}},
@@ -100,6 +103,9 @@ func (vv *ViewerView) SetPosition(x1, y1, x2, y2 int) {
 	if vv.menuBar != nil {
 		vv.menuBar.SetPosition(x1, 0, x2, 0)
 	}
+	if vv.scrollBar != nil {
+		vv.scrollBar.SetPosition(x2, y1+1, x2, y2)
+	}
 }
 
 func (vv *ViewerView) GetMenuBar() *vtui.MenuBar {
@@ -128,6 +134,9 @@ func (vv *ViewerView) DisplayObject(scr *vtui.ScreenBuf) {
 	}
 
 	width := vv.X2 - vv.X1 + 1
+	if vv.scrollBar != nil {
+		width-- // Не рисуем текст поверх скроллбара
+	}
 	height := vv.Y2 - vv.Y1 + 1
 	contentHeight := height - 1
 
@@ -144,6 +153,10 @@ func (vv *ViewerView) DisplayObject(scr *vtui.ScreenBuf) {
 		}
 	}
 
+	if vv.scrollBar != nil && vv.backend.Size() > 0 {
+		vv.scrollBar.SetParams(int(vv.TopOffset), 0, int(vv.backend.Size()))
+		vv.scrollBar.Show(scr)
+	}
 }
 
 func (vv *ViewerView) renderHex(scr *vtui.ScreenBuf, width, contentHeight int) {
@@ -429,7 +442,33 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 	return false
 }
 
-func (vv *ViewerView) ProcessMouse(e *vtinput.InputEvent) bool { return false }
+func (vv *ViewerView) ProcessMouse(e *vtinput.InputEvent) bool {
+	if e.Type == vtinput.MouseEventType && e.KeyDown && e.ButtonState == vtinput.FromLeft1stButtonPressed {
+		mx, my := int(e.MouseX), int(e.MouseY)
+		if vv.scrollBar != nil && mx == vv.scrollBar.X1 && my >= vv.scrollBar.Y1 && my <= vv.scrollBar.Y2 {
+			h := vv.scrollBar.Y2 - vv.scrollBar.Y1 + 1
+			if my == vv.scrollBar.Y1 {
+				vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_UP})
+			} else if my == vv.scrollBar.Y2 {
+				vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
+			} else if my < vv.scrollBar.Y1+h/2 {
+				vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_PRIOR})
+			} else {
+				vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_NEXT})
+			}
+			return true
+		}
+	}
+	if e.WheelDirection != 0 {
+		if e.WheelDirection > 0 {
+			vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_UP})
+		} else {
+			vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
+		}
+		return true
+	}
+	return false
+}
 func (vv *ViewerView) ResizeConsole(w, h int)                 { vv.SetPosition(0, 0, w-1, h-2) }
 func (vv *ViewerView) GetKeyLabels() *vtui.KeySet {
 	return &vtui.KeySet{

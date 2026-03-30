@@ -52,6 +52,103 @@ func TestViewerView_NavigationAndEOF(t *testing.T) {
 		t.Errorf("VK_DOWN should be blocked when eofVisible is true. Offset changed from %d to %d", oldOffset, vv.TopOffset)
 	}
 }
+func TestViewerView_MouseScrollbar(t *testing.T) {
+	vtui.SetDefaultPalette()
+	// Create a file with enough content to scroll
+	content := "L1\nL2\nL3\nL4\nL5\nL6\nL7\nL8\nL9\nL10\n" // 10 lines, 33 bytes (3 per line + 1 for last \n)
+	tmp := t.TempDir() + "/test_mouse.txt"
+	os.WriteFile(tmp, []byte(content), 0644)
+
+	vv, err := NewViewerView(tmp)
+	if err != nil {
+		t.Fatalf("Failed to create ViewerView: %v", err)
+	}
+
+	// Setup viewport: 11 columns (X=0..10), 5 rows (Y=0..4)
+	// Top bar at Y=0. Content area Y=1..4 (4 lines).
+	// Scrollbar at X=10, Y=1..4.
+	vv.SetPosition(0, 0, 10, 4)
+
+	// Create a dummy ScreenBuf to pass to Show() for initial rendering.
+	scr := vtui.NewScreenBuf()
+	scr.AllocBuf(11, 5) // width 11 (0..10), height 5 (0..4)
+
+	// IMPORTANT: Call Show initially to populate vv.lineOffsets and set vv.TopOffset.
+	// Without this, the navigation logic in ProcessKey has no context.
+	vv.Show(scr)
+
+	// Ensure we start at the top
+	vv.TopOffset = 0
+
+	// Check initial state, especially if TopOffset is correctly 0 and eofVisible is false.
+	// With 10 lines and 4 content rows, we are definitely not at EOF.
+	if vv.TopOffset != 0 {
+		t.Errorf("Initial TopOffset expected 0, got %d", vv.TopOffset)
+	}
+	if vv.eofVisible {
+		t.Error("Initial eofVisible expected false, got true")
+	}
+
+	// --- Test 1: Mouse wheel down ---
+	oldOff := vv.TopOffset
+	vv.ProcessMouse(&vtinput.InputEvent{Type: vtinput.MouseEventType, WheelDirection: -1})
+	vv.Show(scr) // Re-render to update internal state (like vv.lineOffsets)
+
+	if vv.TopOffset == oldOff {
+		t.Error("Test 1: Mouse wheel down failed to increase TopOffset")
+	}
+	if vv.TopOffset != 3 { // Expected to move to start of L2 (offset 3)
+		t.Errorf("Test 1: Expected TopOffset 3, got %d", vv.TopOffset)
+	}
+
+	// --- Test 2: Click on bottom arrow ---
+	oldOff = vv.TopOffset // Should be 3
+	vv.ProcessMouse(&vtinput.InputEvent{
+		Type:        vtinput.MouseEventType,
+		KeyDown:     true, // Important for click events
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+		MouseX:      10, // Scrollbar X position
+		MouseY:      4,  // Bottom arrow Y position (vv.Y2)
+	})
+	vv.Show(scr) // Re-render
+
+	if vv.TopOffset == oldOff {
+		t.Error("Test 2: Click on bottom arrow failed to increase TopOffset")
+	}
+	if vv.TopOffset != 6 { // Expected to move to start of L3 (offset 6)
+		t.Errorf("Test 2: Expected TopOffset 6, got %d", vv.TopOffset)
+	}
+
+	// --- Test 3: Mouse wheel up ---
+	oldOff = vv.TopOffset // Should be 6
+	vv.ProcessMouse(&vtinput.InputEvent{Type: vtinput.MouseEventType, WheelDirection: 1})
+	vv.Show(scr)
+
+	if vv.TopOffset == oldOff {
+		t.Error("Test 3: Mouse wheel up failed to decrease TopOffset")
+	}
+	if vv.TopOffset != 3 { // Expected to move to start of L2
+		t.Errorf("Test 3: Expected TopOffset 3, got %d", vv.TopOffset)
+	}
+
+	// --- Test 4: Click on top arrow ---
+	oldOff = vv.TopOffset // Should be 3
+	vv.ProcessMouse(&vtinput.InputEvent{
+		Type:        vtinput.MouseEventType,
+		KeyDown:     true,
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+		MouseX:      10, // Scrollbar X position
+		MouseY:      1,  // Top arrow Y position (vv.Y1+1)
+	})
+	vv.Show(scr)
+
+	if vv.TopOffset == oldOff {
+		t.Error("Test 4: Click on top arrow failed to decrease TopOffset")
+	}
+	if vv.TopOffset != 0 { // Expected to move to start of L1
+		t.Errorf("Test 4: Expected TopOffset 0, got %d", vv.TopOffset)
+	}
+}
 
 func TestViewerBar_Content(t *testing.T) {
 	vtui.SetDefaultPalette()
