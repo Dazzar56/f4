@@ -256,3 +256,27 @@ func TestFileSystemPanel_MouseClick_Edges(t *testing.T) {
 	}
 }
 
+func TestFileSystemPanel_RightClick_ResetOnRelease(t *testing.T) {
+	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS("."))
+	fp.viewMode = ViewModeDetailed
+	fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "f1"}}}
+
+	// 1. Right click once -> Selects
+	fp.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: true, MouseX: 5, MouseY: 2, ButtonState: vtinput.RightmostButtonPressed,
+	})
+	if !fp.entries[0].Selected { t.Fatal("Should be selected") }
+
+	// 2. Release button -> Resets tracker
+	fp.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: false, MouseX: 5, MouseY: 2, ButtonState: 0,
+	})
+
+	// 3. Right click again -> Should toggle (Unselect) even though it's the same index
+	fp.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: true, MouseX: 5, MouseY: 2, ButtonState: vtinput.RightmostButtonPressed,
+	})
+	if fp.entries[0].Selected {
+		t.Error("Item should have been unselected after button release and re-click")
+	}
+}

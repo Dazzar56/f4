@@ -762,3 +762,30 @@ func TestPanelsFrame_FilesMenuLabels(t *testing.T) {
 	}
 }
 
+func TestPanelsFrame_ProcessMouse_RightDoubleClickNoEnter(t *testing.T) {
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+
+	tmp := t.TempDir()
+	runnablePath := filepath.Join(tmp, "run.sh")
+	os.WriteFile(runnablePath, []byte("echo"), 0755)
+
+	fsp := pf.left.(*FileSystemPanel)
+	fsp.vfs.SetPath(tmp)
+	fsp.ReadDirectory() // "run.sh" at index 1
+
+	// Double click with RIGHT button. Row 1 -> Y=3
+	pf.ProcessMouse(&vtinput.InputEvent{
+		Type:        vtinput.MouseEventType,
+		KeyDown:     true,
+		MouseX:      5,
+		MouseY:      3,
+		ButtonState: vtinput.RightmostButtonPressed,
+		MouseEventFlags: vtinput.DoubleClick,
+	})
+
+	// Panels should NOT hide. Right double-click should only toggle selection.
+	if !pf.showPanels {
+		t.Error("Right double-click should NOT simulate Enter")
+	}
+}
