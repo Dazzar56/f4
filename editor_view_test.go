@@ -236,7 +236,7 @@ func TestEditorView_DeleteSelectionMultiline(t *testing.T) {
 
 func TestEditorView_WordWrapNavigation(t *testing.T) {
 	// Текст: "0123456789ABCDEFGHIJklmno" (25 символов)
-	// При ширине 10:
+	// При чистой ширине 10:
 	// Ряд 0: "0123456789" (оффсеты 0-10)
 	// Ряд 1: "ABCDEFGHIJ" (оффсеты 10-20)
 	// Ряд 2: "klmno"      (оффсеты 20-25)
@@ -244,7 +244,8 @@ func TestEditorView_WordWrapNavigation(t *testing.T) {
 	pt := piecetable.New([]byte(text))
 	ev := NewEditorView(pt, "")
 	ev.WordWrap = true
-	ev.SetPosition(0, 0, 9, 6) // Высота окна 7, высота текста 6 (Ширина 10)
+	// Set width to 11 so that width minus scrollbar (11-1) is exactly 10.
+	ev.SetPosition(0, 0, 10, 6)
 
 	// Инициализируем DesiredVisualCol (имитируем клик или переход)
 	ev.CursorLine = 0

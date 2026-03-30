@@ -76,8 +76,7 @@ func TestMultiFileRow_GetCellText(t *testing.T) {
 }
 
 func TestFileSystemPanel_CursorMapping(t *testing.T) {
-	fp := NewFileSystemPanel(0, 0, 80, 10, vfs.NewOSVFS(".")) // Height ~8
-	h := fp.getVisualHeight()
+	fp := NewFileSystemPanel(0, 0, 80, 10, vfs.NewOSVFS("."))
 
 	// Simulate 20 items manually so Refresh() doesn't wipe them
 	fp.entries = make([]*fileEntry, 20)
@@ -85,20 +84,22 @@ func TestFileSystemPanel_CursorMapping(t *testing.T) {
 		fp.entries[i] = &fileEntry{VFSItem: vfs.VFSItem{Name: "file"}}
 	}
 
-	// 1. Medium Mode (Column-Major)
-	fp.viewMode = ViewModeMedium
-	fp.SetCursorIndex(3) // Index 3, Col 0, Pos 3
-	if fp.table.SelectPos != 3 || fp.table.SelectCol != 0 {
-		t.Errorf("Medium mapping index 3: expected pos 3 col 0, got pos %d col %d", fp.table.SelectPos, fp.table.SelectCol)
+	// 1. Medium Mode (Row-Major)
+	fp.SetViewMode(ViewModeMedium)
+	fp.Refresh()
+	fp.SetCursorIndex(3) // Index 3: Row 1, Col 1
+	if fp.table.SelectPos != 1 || fp.table.SelectCol != 1 {
+		t.Errorf("Medium mapping index 3: expected pos 1 col 1, got pos %d col %d", fp.table.SelectPos, fp.table.SelectCol)
 	}
 
-	fp.SetCursorIndex(h + 2) // Index h+2, Col 1, Pos 2
+	fp.SetCursorIndex(5) // Index 5: Row 2, Col 1
 	if fp.table.SelectPos != 2 || fp.table.SelectCol != 1 {
-		t.Errorf("Medium mapping index %d: expected pos 2 col 1, got pos %d col %d", h+2, fp.table.SelectPos, fp.table.SelectCol)
+		t.Errorf("Medium mapping index 5: expected pos 2 col 1, got pos %d col %d", fp.table.SelectPos, fp.table.SelectCol)
 	}
 
 	// 2. Detailed Mode
-	fp.viewMode = ViewModeDetailed
+	fp.SetViewMode(ViewModeDetailed)
+	fp.Refresh()
 	fp.SetCursorIndex(5)
 	if fp.table.SelectPos != 5 || fp.table.SelectCol != 0 {
 		t.Errorf("Detailed mapping failed: expected pos 5, got %d", fp.table.SelectPos)
@@ -181,6 +182,7 @@ func TestFileSystemPanel_ProcessMouse(t *testing.T) {
 		{VFSItem: vfs.VFSItem{Name: "f1"}},
 		{VFSItem: vfs.VFSItem{Name: "f2"}},
 	}
+	fp.Refresh()
 
 	// Left Click on f1 (Index 1). Table at Y=1, header is 1, so row 0 is Y=2, row 1 is Y=3.
 	fp.ProcessMouse(&vtinput.InputEvent{
@@ -188,8 +190,8 @@ func TestFileSystemPanel_ProcessMouse(t *testing.T) {
 		MouseX: 5, MouseY: 3, ButtonState: vtinput.FromLeft1stButtonPressed,
 	})
 
-	if fp.cursorIdx != 1 {
-		t.Errorf("Expected cursorIdx 1, got %d", fp.cursorIdx)
+	if fp.GetCursorIndex() != 1 {
+		t.Errorf("Expected cursorIdx 1, got %d", fp.GetCursorIndex())
 	}
 
 	// Right click on f2 (Index 2). Data row 2 is Y=4.
@@ -198,8 +200,8 @@ func TestFileSystemPanel_ProcessMouse(t *testing.T) {
 		MouseX: 5, MouseY: 4, ButtonState: vtinput.RightmostButtonPressed,
 	})
 
-	if fp.cursorIdx != 2 {
-		t.Errorf("Expected cursorIdx 2, got %d", fp.cursorIdx)
+	if fp.GetCursorIndex() != 2 {
+		t.Errorf("Expected cursorIdx 2, got %d", fp.GetCursorIndex())
 	}
 	if !fp.entries[2].Selected {
 		t.Error("Right click selection failed")
@@ -235,15 +237,15 @@ func TestFileSystemPanel_ProcessMouse(t *testing.T) {
 func TestFileSystemPanel_MouseClick_Edges(t *testing.T) {
 	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS("."))
 	fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: ".."}}}
-	fp.cursorIdx = 0
+	fp.SetCursorIndex(0)
 
 	// 1. Click on panel border (Y=0)
 	fp.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: true,
 		MouseX: 5, MouseY: 0, ButtonState: vtinput.FromLeft1stButtonPressed,
 	})
-	if fp.cursorIdx != 0 {
-		t.Errorf("Clicking on border should not change selection. Got %d", fp.cursorIdx)
+	if fp.GetCursorIndex() != 0 {
+		t.Errorf("Clicking on border should not change selection. Got %d", fp.GetCursorIndex())
 	}
 
 	// 2. Click on table header (Y=1)
@@ -251,8 +253,8 @@ func TestFileSystemPanel_MouseClick_Edges(t *testing.T) {
 		Type: vtinput.MouseEventType, KeyDown: true,
 		MouseX: 5, MouseY: 1, ButtonState: vtinput.FromLeft1stButtonPressed,
 	})
-	if fp.cursorIdx != 0 {
-		t.Errorf("Clicking on header should not change selection. Got %d", fp.cursorIdx)
+	if fp.GetCursorIndex() != 0 {
+		t.Errorf("Clicking on header should not change selection. Got %d", fp.GetCursorIndex())
 	}
 }
 

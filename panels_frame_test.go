@@ -83,6 +83,7 @@ func TestPanelsFrame_ProcessMouse_DoubleClick(t *testing.T) {
 
 func TestPanelsFrame_ProcessMouse_DoubleClickFile(t *testing.T) {
 	pf := NewPanelsFrame()
+	// Initialize panels with enough height
 	pf.ResizeConsole(80, 25)
 
 	tmp := t.TempDir()
@@ -90,10 +91,13 @@ func TestPanelsFrame_ProcessMouse_DoubleClickFile(t *testing.T) {
 	os.WriteFile(runnablePath, []byte("echo"), 0755)
 
 	fsp := pf.left.(*FileSystemPanel)
+	fsp.SetViewMode(ViewModeDetailed)
 	fsp.vfs.SetPath(tmp)
 	fsp.ReadDirectory() // ".." at index 0, "run.sh" at index 1
+	fsp.Refresh()       // Ensure table is in sync with ReadDirectory
 
-	// Double click on "run.sh" in left panel. Row 1 -> Y=3
+	// Double click on "run.sh" in left panel.
+	// Panel at (0,0), Table at (1,1), Header at Y=1, Row 0 at Y=2, Row 1 (run.sh) at Y=3.
 	pf.ProcessMouse(&vtinput.InputEvent{
 		Type:        vtinput.MouseEventType,
 		KeyDown:     true,

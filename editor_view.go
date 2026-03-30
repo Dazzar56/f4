@@ -50,7 +50,8 @@ type EditorView struct {
 	renderBytes []byte          // Reusable buffer for text data
 	renderCells []vtui.CharInfo // Reusable buffer for row rendering
 
-	filePath string
+	filePath  string
+	scrollBar *vtui.ScrollBar
 }
 
 func NewEditorView(pt *piecetable.PieceTable, path string) *EditorView {
@@ -62,6 +63,11 @@ func NewEditorView(pt *piecetable.PieceTable, path string) *EditorView {
 		engine:   textlayout.NewWrapEngine(pt, li),
 		filePath: path,
 		WordWrap: true,
+	}
+	ev.scrollBar = vtui.NewScrollBar(0, 0, 0)
+	ev.scrollBar.OnScroll = func(v int) {
+		ev.ScrollTopRow = v
+		vtui.FrameManager.Redraw()
 	}
 	ev.menuBar = vtui.NewMenuBar(nil)
 	ev.menuBar.Items = []vtui.MenuBarItem{
@@ -104,6 +110,9 @@ func (ev *EditorView) clearCaches() {
 }
 func (ev *EditorView) ensureEngineWidth() {
 	width := ev.X2 - ev.X1 + 1
+	if ev.scrollBar != nil {
+		width--
+	}
 	if width < 1 {
 		width = 1
 	}
@@ -132,12 +141,17 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 
 	ev.ensureEngineWidth()
 	height := ev.Y2 - ev.Y1
+	width := ev.X2 - ev.X1 + 1
+	if ev.scrollBar != nil {
+		width--
+	}
 
 	bgAttr := vtui.Palette[ColCommandLineUserScreen]
 	selAttr := vtui.Palette[vtui.ColDialogEditSelected]
 
 	// Clear the entire editor text area
 	scr.FillRect(ev.X1, ev.Y1+1, ev.X2, ev.Y2, ' ', bgAttr)
+	scr.PushClipRect(ev.X1, ev.Y1+1, ev.X1+width-1, ev.Y2)
 
 	// 1. Позиция курсора
 	curOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
@@ -178,8 +192,19 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 
 			rowsRendered++
 			if rowsRendered >= height {
-				return
+				goto DoneRendering
 			}
+		}
+	}
+
+DoneRendering:
+	scr.PopClipRect()
+
+	if ev.scrollBar != nil {
+		totalRows := ev.engine.GetTotalVisualRows()
+		if totalRows > height {
+			ev.scrollBar.SetParams(ev.ScrollTopRow, 0, totalRows-height)
+			ev.scrollBar.Show(scr)
 		}
 	}
 }
@@ -555,7 +580,25 @@ func (ev *EditorView) ensureCursorVisible() {
 	}
 }
 
-func (ev *EditorView) ProcessMouse(e *vtinput.InputEvent) bool { return false }
+func (ev *EditorView) ProcessMouse(e *vtinput.InputEvent) bool {
+	if e.Type != vtinput.MouseEventType {
+		return false
+	}
+
+	if ev.scrollBar != nil && int(e.MouseX) == ev.scrollBar.X1 && ev.engine.GetTotalVisualRows() > (ev.Y2-ev.Y1) {
+		return ev.scrollBar.ProcessMouse(e)
+	}
+
+	if e.WheelDirection != 0 {
+		if e.WheelDirection > 0 {
+			ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_UP})
+		} else {
+			ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
+		}
+		return true
+	}
+	return false
+}
 
 func (ev *EditorView) SetPosition(x1, y1, x2, y2 int) {
 	ev.ScreenObject.SetPosition(x1, y1, x2, y2)
@@ -564,6 +607,9 @@ func (ev *EditorView) SetPosition(x1, y1, x2, y2 int) {
 	}
 	if ev.menuBar != nil {
 		ev.menuBar.SetPosition(x1, 0, x2, 0)
+	}
+	if ev.scrollBar != nil {
+		ev.scrollBar.SetPosition(x2, y1+1, x2, y2)
 	}
 	ev.ensureEngineWidth()
 	ev.ensureCursorVisible()
