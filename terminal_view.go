@@ -371,8 +371,7 @@ func (tv *TerminalView) SaveCursor() {
 }
 
 func (tv *TerminalView) RestoreCursor() {
-	tv.mu.Lock()
-	defer tv.mu.Unlock()
+	// Mutex is now handled by SafeRender or callers.
 	tv.CursorX, tv.CursorY = tv.decSavedX, tv.decSavedY
 }
 
@@ -463,25 +462,29 @@ func (tv *TerminalView) getAttrAt(offset int) uint64 {
 }
 
 func (tv *TerminalView) Show(scr *vtui.ScreenBuf) {
-	tv.ScreenObject.Show(scr)
+	// Mutex is now locked for the entire rendering path by SafeRender.
+	// No direct mutex lock/unlock here.
+	tv.SafeRender(scr, tv.DisplayObject)
+}
 
-	scr.ActivePalette = &tv.Palette
+func (tv *TerminalView) DisplayObject(scr *vtui.ScreenBuf) {
 	// Terminal content must always be rendered without Early Binding
 	// to allow the host terminal to use its native indexed palette.
 	prevOverlay := scr.OverlayMode
 	scr.SetOverlayMode(false)
 	defer func() { scr.SetOverlayMode(prevOverlay) }()
 
-	tv.mu.Lock()
-	defer tv.mu.Unlock()
+	scr.ActivePalette = &tv.Palette // Set active palette for this render pass
 
-	// Очищаем всю область терминала черным цветом
+	// Clear the entire terminal area with black background
 	scr.FillRect(tv.X1, tv.Y1, tv.X1+tv.Width-1, tv.Y1+tv.Height-1, ' ', DefaultTermAttr)
 
 	if tv.UseAltScreen {
 		for y, line := range tv.AltLines {
 			scr.Write(tv.X1, tv.Y1+y, line)
 		}
+		// Cursor position and visibility are handled globally by ScreenBuf.Flush() now.
+		// We just need to ensure the correct coordinates are set before Flush().
 		if tv.IsVisible() {
 			scr.SetCursorPos(tv.X1+tv.CursorX, tv.Y1+tv.CursorY)
 			scr.SetCursorVisible(true)
@@ -498,7 +501,7 @@ func (tv *TerminalView) Show(scr *vtui.ScreenBuf) {
 		tv.ScrollTopRow = 0
 	}
 
-	// Рассчитываем вертикальный отступ для короткого лога (прижимаем к низу)
+	// Calculate vertical padding for short logs (pinned to bottom)
 	yPadding := 0
 	if totalRows < tv.Height {
 		yPadding = tv.Height - totalRows
