@@ -652,7 +652,7 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 			}
 			
 			handled := p.ProcessMouse(e)
-			if handled && (e.MouseEventFlags & vtinput.DoubleClick) != 0 {
+			if handled && (e.MouseEventFlags & vtinput.DoubleClick) != 0 && e.ButtonState == vtinput.FromLeft1stButtonPressed {
 				vtui.DebugLog("MOUSE: Double click detected, simulating Enter")
 				pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN})
 			}
