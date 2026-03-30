@@ -463,7 +463,7 @@ func TestPanelsFrame_ReturnExecution(t *testing.T) {
 	// Настраиваем VFS и выбираем этот файл на панели
 	fsp := pf.right.(*FileSystemPanel)
 	fsp.vfs.SetPath(tmp)
-	fsp.Refresh()
+	fsp.ReadDirectory()
 	fsp.SelectName("runme.sh")
 
 	// Проверяем начальное состояние
@@ -481,6 +481,84 @@ func TestPanelsFrame_ReturnExecution(t *testing.T) {
 	// После запуска исполняемого файла панели должны скрыться, чтобы показать терминал
 	if pf.showPanels {
 		t.Error("Panels should be hidden after executing a terminal-runnable file")
+	}
+}
+func TestPanelsFrame_CommandLineEnter(t *testing.T) {
+	pf := NewPanelsFrame()
+	pty := &mockPty{} // Используем mock из ansi_parser_test.go
+	pf.pty = pty
+
+	// Вводим команду в консоль
+	pf.cmdLine.Edit.SetText("ls -la")
+
+	// Нажимаем Enter
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_RETURN,
+	})
+
+	// Панели должны скрыться
+	if pf.showPanels {
+		t.Error("Panels should hide after command execution from command line")
+	}
+	// PTY должен получить команду
+	if !strings.Contains(string(pty.written), "ls -la\r") {
+		t.Errorf("PTY did not receive command. Got: %q", string(pty.written))
+	}
+}
+
+func TestPanelsFrame_DirectoryEnter(t *testing.T) {
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+	tmp := t.TempDir()
+	sub := filepath.Join(tmp, "work_dir")
+	os.Mkdir(sub, 0755)
+
+	fsp := pf.right.(*FileSystemPanel)
+	fsp.vfs.SetPath(tmp)
+	fsp.ReadDirectory() // Populate entries
+	fsp.SelectName("work_dir")
+
+	// Нажимаем Enter на директории
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_RETURN,
+	})
+
+	// Панели НЕ должны скрываться
+	if !pf.showPanels {
+		t.Error("Panels should NOT hide when entering a directory")
+	}
+	// Путь должен измениться
+	if fsp.vfs.GetPath() != sub {
+		t.Errorf("VFS path did not change. Expected %s, got %s", sub, fsp.vfs.GetPath())
+	}
+}
+
+func TestPanelsFrame_NonRunnableOpen(t *testing.T) {
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+	tmp := t.TempDir()
+	docPath := filepath.Join(tmp, "readme.txt")
+	os.WriteFile(docPath, []byte("some text"), 0644)
+
+	fsp := pf.right.(*FileSystemPanel)
+	fsp.vfs.SetPath(tmp)
+	fsp.ReadDirectory()
+	fsp.SelectName("readme.txt")
+
+	// Нажимаем Enter на текстовом файле
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_RETURN,
+	})
+
+	// Панели должны остаться видимыми (так как открытие идет через внешнюю ОС)
+	if !pf.showPanels {
+		t.Error("Panels should stay visible when opening non-runnable files via OS associations")
 	}
 }
 

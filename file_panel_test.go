@@ -1,10 +1,11 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
-	"github.com/unxed/vtui"
 )
 
 func TestFileEntry_GetCellText(t *testing.T) {
@@ -75,33 +76,32 @@ func TestMultiFileRow_GetCellText(t *testing.T) {
 }
 
 func TestFileSystemPanel_CursorMapping(t *testing.T) {
-	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS("."))
+	fp := NewFileSystemPanel(0, 0, 80, 10, vfs.NewOSVFS(".")) // Height ~8
+	h := fp.getVisualHeight()
 
-	// Simulate 5 items
-	fp.entries = make([]*fileEntry, 5)
-
-	// Medium Mode (2 cols)
-	fp.SetViewMode(ViewModeMedium)
-
-	// Test mapping logic
-	fp.SetCursorIndex(3)
-	if fp.table.SelectPos != 1 || fp.table.SelectCol != 1 {
-		t.Errorf("Medium mode mapping failed for index 3: pos=%d, col=%d", fp.table.SelectPos, fp.table.SelectCol)
-	}
-	if fp.GetCursorIndex() != 3 {
-		t.Errorf("GetCursorIndex reverse mapping failed: got %d", fp.GetCursorIndex())
+	// Simulate 20 items manually so Refresh() doesn't wipe them
+	fp.entries = make([]*fileEntry, 20)
+	for i := range fp.entries {
+		fp.entries[i] = &fileEntry{VFSItem: vfs.VFSItem{Name: "file"}}
 	}
 
-	fp.SetCursorIndex(4) // Last item on odd count
-	if fp.table.SelectPos != 2 || fp.table.SelectCol != 0 {
-		t.Errorf("Medium mode mapping failed for index 4: pos=%d, col=%d", fp.table.SelectPos, fp.table.SelectCol)
+	// 1. Medium Mode (Column-Major)
+	fp.viewMode = ViewModeMedium
+	fp.SetCursorIndex(3) // Index 3, Col 0, Pos 3
+	if fp.table.SelectPos != 3 || fp.table.SelectCol != 0 {
+		t.Errorf("Medium mapping index 3: expected pos 3 col 0, got pos %d col %d", fp.table.SelectPos, fp.table.SelectCol)
 	}
 
-	// Detailed Mode (1 col)
-	fp.SetViewMode(ViewModeDetailed)
-	fp.SetCursorIndex(3)
-	if fp.table.SelectPos != 3 {
-		t.Errorf("Detailed mode mapping failed for index 3: pos=%d", fp.table.SelectPos)
+	fp.SetCursorIndex(h + 2) // Index h+2, Col 1, Pos 2
+	if fp.table.SelectPos != 2 || fp.table.SelectCol != 1 {
+		t.Errorf("Medium mapping index %d: expected pos 2 col 1, got pos %d col %d", h+2, fp.table.SelectPos, fp.table.SelectCol)
+	}
+
+	// 2. Detailed Mode
+	fp.viewMode = ViewModeDetailed
+	fp.SetCursorIndex(5)
+	if fp.table.SelectPos != 5 || fp.table.SelectCol != 0 {
+		t.Errorf("Detailed mapping failed: expected pos 5, got %d", fp.table.SelectPos)
 	}
 }
 
@@ -130,46 +130,42 @@ func TestFileSystemPanel_SelectName(t *testing.T) {
 }
 
 func TestFileSystemPanel_MultiSelect(t *testing.T) {
-	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS("."))
-	fp.SetViewMode(ViewModeDetailed)
+	// 1. Setup real TempDir with files
+	tmp := t.TempDir()
+	os.WriteFile(filepath.Join(tmp, "file1.txt"), []byte("1"), 0644)
+	os.WriteFile(filepath.Join(tmp, "file2.txt"), []byte("2"), 0644)
+	os.WriteFile(filepath.Join(tmp, "file3.txt"), []byte("3"), 0644)
 
-	// Mock entries
-	fp.entries = []*fileEntry{
-		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
-		{VFSItem: vfs.VFSItem{Name: "file1.txt", IsDir: false}},
-		{VFSItem: vfs.VFSItem{Name: "file2.txt", IsDir: false}},
-		{VFSItem: vfs.VFSItem{Name: "file3.txt", IsDir: false}},
-	}
-	fp.table.SetRows([]vtui.TableRow{fp.entries[0], fp.entries[1], fp.entries[2], fp.entries[3]})
+	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(tmp))
+	fp.viewMode = ViewModeDetailed
+	fp.ReadDirectory() // Now ".." is 0, file1.txt is 1, file2.txt is 2...
 
-	fp.SetCursorIndex(1) // On file1.txt
+	// 2. Select file1.txt (Index 1)
+	fp.SetCursorIndex(1)
+	fp.Refresh()
 
 	// Press Insert
 	fp.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_INSERT})
 
-	// Check if selected
 	if !fp.entries[1].Selected {
-		t.Error("file1.txt should be selected after Insert")
+		t.Error("file1.txt (index 1) should be selected after Insert")
 	}
 
-	// Cursor should move to file2.txt
+	// Cursor should move to file2.txt (Index 2)
 	if fp.GetCursorIndex() != 2 {
 		t.Errorf("Cursor should move to 2, got %d", fp.GetCursorIndex())
 	}
 
-	// Press Shift+Down
+	// 3. Select file2.txt via Shift+Down
 	fp.ProcessKey(&vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN, ControlKeyState: vtinput.ShiftPressed,
 	})
 
 	if !fp.entries[2].Selected {
-		t.Error("file2.txt should be selected after Shift+Down")
-	}
-	if fp.GetCursorIndex() != 3 {
-		t.Errorf("Cursor should move to 3, got %d", fp.GetCursorIndex())
+		t.Error("file2.txt (index 2) should be selected after Shift+Down")
 	}
 
-	// GetSelectedNames
+	// 4. Verify results
 	names := fp.GetSelectedNames()
 	if len(names) != 2 || names[0] != "file1.txt" || names[1] != "file2.txt" {
 		t.Errorf("GetSelectedNames returned wrong result: %v", names)

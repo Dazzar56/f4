@@ -925,10 +925,10 @@ func (pf *PanelsFrame) ExecuteDummyOp(forked bool) {
 }
 func (pf *PanelsFrame) RefreshAll() {
 	if fsp, ok := pf.left.(*FileSystemPanel); ok {
-		fsp.Refresh()
+		fsp.ReadDirectory()
 	}
 	if fsp, ok := pf.right.(*FileSystemPanel); ok {
-		fsp.Refresh()
+		fsp.ReadDirectory()
 	}
 }
 func (pf *PanelsFrame) GetTitle() string {

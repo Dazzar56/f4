@@ -66,11 +66,13 @@ func (f *fileEntry) GetCellText(col int) string {
 // FileSystemPanel is a panel displaying files on disk.
 type FileSystemPanel struct {
 	vtui.ScreenObject
-	table    *vtui.Table
-	frame    *vtui.BorderedFrame
-	vfs      vfs.VFS
-	entries  []*fileEntry
-	viewMode ViewMode
+	table     *vtui.Table
+	frame     *vtui.BorderedFrame
+	vfs       vfs.VFS
+	entries   []*fileEntry
+	viewMode  ViewMode
+	cursorIdx int
+	topIdx    int
 }
 
 func NewFileSystemPanel(x, y, w, h int, vfs vfs.VFS) *FileSystemPanel {
@@ -93,6 +95,7 @@ func NewFileSystemPanel(x, y, w, h int, vfs vfs.VFS) *FileSystemPanel {
 	fp.SetCanFocus(true)
 	fp.SetPosition(x, y, x+w-1, y+h-1)
 	fp.SetViewMode(ViewModeMedium)
+	fp.ReadDirectory()
 	return fp
 }
 
@@ -105,31 +108,70 @@ func (fp *FileSystemPanel) SetViewMode(mode ViewMode) {
 		fp.table.SelectCol = 0
 	}
 	fp.Resize(fp.X2-fp.X1+1, fp.Y2-fp.Y1+1)
-	fp.Refresh()
+}
+
+func (fp *FileSystemPanel) getVisualHeight() int {
+	h := fp.table.Y2 - fp.table.Y1 + 1
+	if fp.table.ShowHeader {
+		h--
+	}
+	if h < 1 {
+		return 1
+	}
+	return h
 }
 
 func (fp *FileSystemPanel) GetCursorIndex() int {
-	if fp.viewMode == ViewModeMedium {
-		idx := fp.table.SelectPos*2 + fp.table.SelectCol
-		if idx >= len(fp.entries) {
-			return len(fp.entries) - 1
-		}
-		return idx
-	}
-	return fp.table.SelectPos
+	return fp.cursorIdx
 }
 
 func (fp *FileSystemPanel) SetCursorIndex(idx int) {
-	if fp.viewMode == ViewModeMedium {
-		fp.table.SelectPos = idx / 2
-		fp.table.SelectCol = idx % 2
-	} else {
-		fp.table.SelectPos = idx
+	if idx < 0 {
+		idx = 0
 	}
-	fp.table.EnsureVisible()
+	if idx >= len(fp.entries) {
+		idx = len(fp.entries) - 1
+	}
+	fp.cursorIdx = idx
+	fp.ensureCursorVisible()
 }
 
-func (fp *FileSystemPanel) Refresh() {
+func (fp *FileSystemPanel) ensureCursorVisible() {
+	if len(fp.entries) == 0 {
+		return
+	}
+	height := fp.getVisualHeight()
+
+	if fp.viewMode == ViewModeDetailed {
+		if fp.cursorIdx < fp.topIdx {
+			fp.topIdx = fp.cursorIdx
+		} else if fp.cursorIdx >= fp.topIdx+height {
+			fp.topIdx = fp.cursorIdx - height + 1
+		}
+		fp.table.SelectPos = fp.cursorIdx - fp.topIdx
+		fp.table.SelectCol = 0
+	} else {
+		// Medium mode: scroll by columns
+		if fp.cursorIdx < fp.topIdx {
+			for fp.cursorIdx < fp.topIdx {
+				fp.topIdx -= height
+			}
+		} else if fp.cursorIdx >= fp.topIdx+2*height {
+			for fp.cursorIdx >= fp.topIdx+2*height {
+				fp.topIdx += height
+			}
+		}
+		if fp.topIdx < 0 {
+			fp.topIdx = 0
+		}
+		relIdx := fp.cursorIdx - fp.topIdx
+		fp.table.SelectPos = relIdx % height
+		fp.table.SelectCol = relIdx / height
+	}
+	fp.table.TopPos = 0
+}
+
+func (fp *FileSystemPanel) ReadDirectory() {
 	path := fp.vfs.GetPath()
 	fp.frame.SetTitle(path)
 	items, err := fp.vfs.ReadDir(path)
@@ -138,38 +180,45 @@ func (fp *FileSystemPanel) Refresh() {
 	}
 
 	fp.entries = make([]*fileEntry, 0, len(items)+1)
-
-	// Add ".." to go up
 	fp.entries = append(fp.entries, &fileEntry{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}})
-
 	for _, item := range items {
 		fp.entries = append(fp.entries, &fileEntry{VFSItem: item})
 	}
 
-	// Sort: directories first, then files
 	sort.Slice(fp.entries, func(i, j int) bool {
-		if fp.entries[i].IsDir != fp.entries[j].IsDir {
-			return fp.entries[i].IsDir
-		}
+		if fp.entries[i].Name == ".." { return true }
+		if fp.entries[j].Name == ".." { return false }
+		if fp.entries[i].IsDir != fp.entries[j].IsDir { return fp.entries[i].IsDir }
 		return fp.entries[i].Name < fp.entries[j].Name
 	})
+	fp.Refresh()
+}
+
+func (fp *FileSystemPanel) Refresh() {
+	height := fp.getVisualHeight()
+	fp.ensureCursorVisible()
 
 	if fp.viewMode == ViewModeDetailed {
-		rows := make([]vtui.TableRow, len(fp.entries))
-		for i, e := range fp.entries {
-			rows[i] = e
+		displayCount := height
+		if displayCount > len(fp.entries)-fp.topIdx {
+			displayCount = len(fp.entries) - fp.topIdx
+		}
+		if displayCount < 0 { displayCount = 0 }
+
+		rows := make([]vtui.TableRow, displayCount)
+		for i := 0; i < displayCount; i++ {
+			rows[i] = fp.entries[fp.topIdx+i]
 		}
 		fp.table.SetRows(rows)
 	} else {
-		rowCount := (len(fp.entries) + 1) / 2
-		rows := make([]vtui.TableRow, rowCount)
-		for i := 0; i < rowCount; i++ {
-			mRow := &multiFileRow{
-				entries: make([]*fileEntry, 0, 2),
+		rows := make([]vtui.TableRow, height)
+		for i := 0; i < height; i++ {
+			mRow := &multiFileRow{entries: make([]*fileEntry, 0, 2)}
+			if fp.topIdx+i < len(fp.entries) {
+				mRow.entries = append(mRow.entries, fp.entries[fp.topIdx+i])
 			}
-			mRow.entries = append(mRow.entries, fp.entries[i*2])
-			if i*2+1 < len(fp.entries) {
-				mRow.entries = append(mRow.entries, fp.entries[i*2+1])
+			if fp.topIdx+height+i < len(fp.entries) {
+				mRow.entries = append(mRow.entries, fp.entries[fp.topIdx+height+i])
 			}
 			rows[i] = mRow
 		}
@@ -208,83 +257,111 @@ func (fp *FileSystemPanel) Resize(w, h int) {
 			{Title: Msg("Panel.Column.Name"), Width: w - 2 - colW - 1},
 		}
 	}
+	fp.Refresh()
 }
 
 func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
-	if !e.KeyDown { return false }
+	if !e.KeyDown {
+		return false
+	}
 
+	height := fp.getVisualHeight()
 	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
 
-	// Handle Insert
-	if e.VirtualKeyCode == vtinput.VK_INSERT {
-		idx := fp.GetCursorIndex()
-		if len(fp.entries) > 0 && idx >= 0 && idx < len(fp.entries) {
-			if fp.entries[idx].Name != ".." {
-				fp.entries[idx].Selected = !fp.entries[idx].Selected
+	switch e.VirtualKeyCode {
+	case vtinput.VK_INSERT:
+		if fp.cursorIdx >= 0 && fp.cursorIdx < len(fp.entries) {
+			if fp.entries[fp.cursorIdx].Name != ".." {
+				fp.entries[fp.cursorIdx].Selected = !fp.entries[fp.cursorIdx].Selected
 			}
-			if idx < len(fp.entries)-1 {
-				fp.SetCursorIndex(idx + 1)
-			}
-			return true
-		}
-	}
-
-	// Handle Shift+Arrows
-	if shift && (e.VirtualKeyCode == vtinput.VK_UP || e.VirtualKeyCode == vtinput.VK_DOWN || e.VirtualKeyCode == vtinput.VK_LEFT || e.VirtualKeyCode == vtinput.VK_RIGHT) {
-		idx := fp.GetCursorIndex()
-		if len(fp.entries) > 0 && idx >= 0 && idx < len(fp.entries) {
-			if fp.entries[idx].Name != ".." {
-				fp.entries[idx].Selected = !fp.entries[idx].Selected
-			}
-			handled := fp.table.ProcessKey(e)
-			if handled && fp.viewMode == ViewModeMedium {
-				if fp.GetCursorIndex() >= len(fp.entries) {
-					fp.table.SelectCol--
-				}
-			}
-			return true
-		}
-	}
-
-	// Handle directory navigation
-	if e.VirtualKeyCode == vtinput.VK_RETURN {
-		idx := fp.GetCursorIndex()
-		if len(fp.entries) == 0 || idx < 0 || idx >= len(fp.entries) {
-			return false
-		}
-		selected := fp.entries[idx]
-		if selected.IsDir {
-			oldPath := fp.vfs.GetPath()
-			newPath := fp.vfs.Join(oldPath, selected.Name)
-
-			if err := fp.vfs.SetPath(newPath); err != nil {
-				return false
-			}
+			fp.SetCursorIndex(fp.cursorIdx + 1)
 			fp.Refresh()
+		}
+		return true
 
-			if selected.Name == ".." {
-				// We went up. Find the directory we came from.
-				dirToSelect := fp.vfs.Base(oldPath)
-				for i, entry := range fp.entries {
-					if entry.Name == dirToSelect {
-						fp.SetCursorIndex(i)
-						return true
-					}
-				}
+	case vtinput.VK_UP:
+		if shift && fp.cursorIdx >= 0 && fp.cursorIdx < len(fp.entries) && fp.entries[fp.cursorIdx].Name != ".." {
+			fp.entries[fp.cursorIdx].Selected = !fp.entries[fp.cursorIdx].Selected
+		}
+		fp.SetCursorIndex(fp.cursorIdx - 1)
+		fp.Refresh()
+		return true
+
+	case vtinput.VK_DOWN:
+		if shift && fp.cursorIdx >= 0 && fp.cursorIdx < len(fp.entries) && fp.entries[fp.cursorIdx].Name != ".." {
+			fp.entries[fp.cursorIdx].Selected = !fp.entries[fp.cursorIdx].Selected
+		}
+		fp.SetCursorIndex(fp.cursorIdx + 1)
+		fp.Refresh()
+		return true
+
+	case vtinput.VK_LEFT:
+		if fp.viewMode == ViewModeMedium {
+			if shift && fp.cursorIdx >= 0 && fp.cursorIdx < len(fp.entries) && fp.entries[fp.cursorIdx].Name != ".." {
+				fp.entries[fp.cursorIdx].Selected = !fp.entries[fp.cursorIdx].Selected
 			}
-
-			fp.SetCursorIndex(0)
+			fp.SetCursorIndex(fp.cursorIdx - height)
+			fp.Refresh()
 			return true
 		}
-	}
 
-	handled := fp.table.ProcessKey(e)
-	if handled && fp.viewMode == ViewModeMedium {
-		if fp.GetCursorIndex() >= len(fp.entries) {
-			fp.table.SelectCol--
+	case vtinput.VK_RIGHT:
+		if fp.viewMode == ViewModeMedium {
+			if shift && fp.cursorIdx >= 0 && fp.cursorIdx < len(fp.entries) && fp.entries[fp.cursorIdx].Name != ".." {
+				fp.entries[fp.cursorIdx].Selected = !fp.entries[fp.cursorIdx].Selected
+			}
+			fp.SetCursorIndex(fp.cursorIdx + height)
+			fp.Refresh()
+			return true
+		}
+
+	case vtinput.VK_PRIOR: // PgUp
+		fp.SetCursorIndex(fp.cursorIdx - height)
+		if fp.viewMode == ViewModeMedium {
+			fp.SetCursorIndex(fp.cursorIdx - height) // PgUp in Medium moves 2 columns
+		}
+		fp.Refresh()
+		return true
+
+	case vtinput.VK_NEXT: // PgDn
+		fp.SetCursorIndex(fp.cursorIdx + height)
+		if fp.viewMode == ViewModeMedium {
+			fp.SetCursorIndex(fp.cursorIdx + height)
+		}
+		fp.Refresh()
+		return true
+
+	case vtinput.VK_HOME:
+		fp.SetCursorIndex(0)
+		fp.Refresh()
+		return true
+
+	case vtinput.VK_END:
+		fp.SetCursorIndex(len(fp.entries) - 1)
+		fp.Refresh()
+		return true
+
+	case vtinput.VK_RETURN:
+		if fp.cursorIdx >= 0 && fp.cursorIdx < len(fp.entries) {
+			selected := fp.entries[fp.cursorIdx]
+			if selected.IsDir {
+				oldPath := fp.vfs.GetPath()
+				newPath := fp.vfs.Join(oldPath, selected.Name)
+				if err := fp.vfs.SetPath(newPath); err == nil {
+					fp.topIdx = 0
+					fp.cursorIdx = 0
+					fp.ReadDirectory()
+					if selected.Name == ".." {
+						dirToSelect := fp.vfs.Base(oldPath)
+						fp.SelectName(dirToSelect)
+					}
+					return true
+				}
+			}
 		}
 	}
-	return handled
+
+	return false
 }
 
 func (fp *FileSystemPanel) ProcessMouse(e *vtinput.InputEvent) bool {
@@ -308,6 +385,7 @@ func (fp *FileSystemPanel) SelectName(name string) {
 	for i, entry := range fp.entries {
 		if entry.Name == name {
 			fp.SetCursorIndex(i)
+			fp.Refresh()
 			break
 		}
 	}
