@@ -177,7 +177,7 @@ func TestFileSystemPanel_ProcessMouse(t *testing.T) {
 	fp.SetViewMode(ViewModeDetailed)
 
 	fp.entries = []*fileEntry{
-		{VFSItem: vfs.VFSItem{Name: ".."}},
+		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
 		{VFSItem: vfs.VFSItem{Name: "f1"}},
 		{VFSItem: vfs.VFSItem{Name: "f2"}},
 	}

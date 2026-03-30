@@ -80,6 +80,7 @@ func TestPanelsFrame_ProcessMouse_DoubleClick(t *testing.T) {
 		t.Error("Double click on '..' should have changed directory")
 	}
 }
+
 func TestPanelsFrame_ProcessMouse_DoubleClickFile(t *testing.T) {
 	pf := NewPanelsFrame()
 	pf.ResizeConsole(80, 25)
@@ -107,6 +108,7 @@ func TestPanelsFrame_ProcessMouse_DoubleClickFile(t *testing.T) {
 		t.Error("Double clicking a runnable file should hide the panels")
 	}
 }
+
 func TestPanelsFrame_CtrlW_CloseScreen(t *testing.T) {
 	// Initialize global FrameManager for the test
 	fm := vtui.FrameManager
