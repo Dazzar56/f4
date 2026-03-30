@@ -127,16 +127,15 @@ func (ev *EditorView) updateDesiredVisualCol() {
 }
 
 func (ev *EditorView) Show(scr *vtui.ScreenBuf) {
-	ev.ScreenObject.Show(scr)
-	if ev.topBar != nil {
-		ev.topBar.Show(scr)
-	}
-	ev.DisplayObject(scr)
+	ev.SafeRender(scr, ev.DisplayObject)
 }
 
 func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
-	if !ev.IsVisible() || ev.pasting {
+	if ev.pasting {
 		return
+	}
+	if ev.topBar != nil {
+		ev.topBar.DisplayObject(scr)
 	}
 
 	ev.ensureEngineWidth()
