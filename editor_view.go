@@ -28,13 +28,13 @@ type lineFragment struct {
 // EditorView is a text editor component.
 type EditorView struct {
 	vtui.BaseFrame
+	vtui.ListViewer
 	topBar *EditorBar
 	menuBar *vtui.MenuBar
 	pt     *piecetable.PieceTable
 	li     *piecetable.LineIndex
 	engine *textlayout.WrapEngine
 
-	ScrollTopRow int // Индекс первой видимой ВИЗУАЛЬНОЙ строки
 	ScrollLeft   int // Горизонтальный скролл (когда WordWrap=false)
 
 	WordWrap         bool
@@ -50,7 +50,8 @@ type EditorView struct {
 	renderBytes []byte          // Reusable buffer for text data
 	renderCells []vtui.CharInfo // Reusable buffer for row rendering
 
-	filePath string
+	filePath  string
+	ScrollBar *vtui.ScrollBar
 }
 
 func NewEditorView(pt *piecetable.PieceTable, path string) *EditorView {
@@ -63,6 +64,8 @@ func NewEditorView(pt *piecetable.PieceTable, path string) *EditorView {
 		filePath: path,
 		WordWrap: true,
 	}
+	ev.ScrollBar = vtui.NewScrollBar(0, 0, 0)
+	ev.ScrollBar.OnScroll = func(v int) { ev.TopPos = v }
 	ev.menuBar = vtui.NewMenuBar(nil)
 	ev.menuBar.Items = []vtui.MenuBarItem{
 		{Label: "&File", SubItems: []vtui.MenuItem{{Text: "&Save", Command: vtui.CmDefault}, {Text: "E&xit", Command: vtui.CmClose}}},
@@ -87,6 +90,7 @@ func (eb *EditorBar) Show(scr *vtui.ScreenBuf) {
 	eb.Bar.Show(scr)
 	eb.DisplayObject(scr)
 }
+
 func (eb *EditorBar) DisplayObject(scr *vtui.ScreenBuf) {
 	if !eb.IsVisible() { return } // Оставляем одну проверку для безопасности
 	attr := vtui.Palette[ColViewerStatus]
@@ -104,11 +108,21 @@ func (ev *EditorView) clearCaches() {
 }
 func (ev *EditorView) ensureEngineWidth() {
 	width := ev.X2 - ev.X1 + 1
-	if width < 1 {
-		width = 1
-	}
+	if width < 1 { width = 1 }
 	ev.engine.SetWidth(width)
 	ev.engine.ToggleWrap(ev.WordWrap)
+}
+
+func (ev *EditorView) syncListViewer() {
+	ev.ensureEngineWidth()
+	height := ev.Y2 - ev.Y1
+	if height < 1 { height = 1 }
+	ev.ViewHeight = height
+	ev.ItemCount = ev.engine.GetTotalVisualRows()
+	
+	curOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
+	vRow, _ := ev.engine.LogicalToVisual(curOffset)
+	ev.SelectPos = vRow
 }
 
 func (ev *EditorView) updateDesiredVisualCol() {
@@ -130,21 +144,18 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 		return
 	}
 
-	ev.ensureEngineWidth()
-	height := ev.Y2 - ev.Y1
+	ev.syncListViewer()
+	height := ev.ViewHeight
 
 	bgAttr := vtui.Palette[ColCommandLineUserScreen]
 	selAttr := vtui.Palette[vtui.ColDialogEditSelected]
 
-	// Clear the entire editor text area
 	scr.FillRect(ev.X1, ev.Y1+1, ev.X2, ev.Y2, ' ', bgAttr)
 
-	// 1. Позиция курсора
 	curOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
-	curVRow, curVCol := ev.engine.LogicalToVisual(curOffset)
+	_, curVCol := ev.engine.LogicalToVisual(curOffset)
 
-	// 2. Отрисовка
-	startLogLine, startFragIdx := ev.engine.GetLogLineAtVisualRow(ev.ScrollTopRow)
+	startLogLine, startFragIdx := ev.engine.GetLogLineAtVisualRow(ev.TopPos)
 	rowsRendered := 0
 
 	for logIdx := startLogLine; logIdx < ev.li.LineCount(); logIdx++ {
@@ -171,21 +182,27 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 
 			scr.Write(ev.X1-ev.ScrollLeft, currY, ev.renderCells)
 
-			if absVRow == curVRow {
+			if absVRow == ev.SelectPos {
 				scr.SetCursorPos(ev.X1+curVCol-ev.ScrollLeft, currY)
 				scr.SetCursorVisible(true)
 			}
 
 			rowsRendered++
 			if rowsRendered >= height {
-				return
+				goto end
 			}
 		}
+	}
+
+end:
+	if ev.ItemCount > height {
+		ev.ScrollBar.SetParams(ev.TopPos, 0, ev.ItemCount-height)
+		ev.ScrollBar.Show(scr)
 	}
 }
 
 func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
-	ev.ensureEngineWidth()
+	ev.syncListViewer()
 	// 1. Processing Bracketed Paste (events arrive outside KeyDown)
 	if e.Type == vtinput.PasteEventType {
 		if e.PasteStart {
@@ -206,7 +223,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 				ev.CursorLine = ev.li.GetLineAtOffset(newOffset)
 				ev.CursorPos = newOffset - ev.li.GetLineOffset(ev.CursorLine)
 				ev.updateDesiredVisualCol()
-				ev.ensureCursorVisible()
+				ev.ensureHorizontalScroll()
 			}
 		}
 		return true
@@ -264,7 +281,6 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		ev.WordWrap = !ev.WordWrap
 		ev.ScrollLeft = 0
 		ev.clearCaches()
-		ev.ensureCursorVisible()
 		return true
 
 	case vtinput.VK_C:
@@ -273,57 +289,14 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 			return true
 		}
 
-	case vtinput.VK_UP:
+	case vtinput.VK_UP, vtinput.VK_DOWN, vtinput.VK_PRIOR, vtinput.VK_NEXT:
 		handleNav()
-		curOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
-		vRow, _ := ev.engine.LogicalToVisual(curOffset)
-		if vRow > 0 {
-			newOffset := ev.engine.VisualToLogical(vRow-1, ev.DesiredVisualCol)
+		if ev.HandleNavKey(e.VirtualKeyCode) {
+			newOffset := ev.engine.VisualToLogical(ev.SelectPos, ev.DesiredVisualCol)
 			ev.CursorLine = ev.li.GetLineAtOffset(newOffset)
 			ev.CursorPos = newOffset - ev.li.GetLineOffset(ev.CursorLine)
+			ev.ensureHorizontalScroll()
 		}
-		ev.ensureCursorVisible()
-		return true
-
-	case vtinput.VK_DOWN:
-		handleNav()
-		curOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
-		vRow, _ := ev.engine.LogicalToVisual(curOffset)
-		newOffset := ev.engine.VisualToLogical(vRow+1, ev.DesiredVisualCol)
-		ev.CursorLine = ev.li.GetLineAtOffset(newOffset)
-		ev.CursorPos = newOffset - ev.li.GetLineOffset(ev.CursorLine)
-		ev.ensureCursorVisible()
-		return true
-
-	case vtinput.VK_PRIOR: // PgUp
-		handleNav()
-		height := ev.Y2 - ev.Y1
-		curOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
-		vRow, _ := ev.engine.LogicalToVisual(curOffset)
-		newVRow := vRow - height
-		if newVRow < 0 {
-			newVRow = 0
-		}
-		newOffset := ev.engine.VisualToLogical(newVRow, ev.DesiredVisualCol)
-		ev.CursorLine = ev.li.GetLineAtOffset(newOffset)
-		ev.CursorPos = newOffset - ev.li.GetLineOffset(ev.CursorLine)
-		ev.ensureCursorVisible()
-		return true
-
-	case vtinput.VK_NEXT: // PgDn
-		handleNav()
-		height := ev.Y2 - ev.Y1
-		curOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
-		vRow, _ := ev.engine.LogicalToVisual(curOffset)
-		newVRow := vRow + height
-		totalVRows := ev.engine.GetTotalVisualRows()
-		if newVRow >= totalVRows {
-			newVRow = totalVRows - 1
-		}
-		newOffset := ev.engine.VisualToLogical(newVRow, ev.DesiredVisualCol)
-		ev.CursorLine = ev.li.GetLineAtOffset(newOffset)
-		ev.CursorPos = newOffset - ev.li.GetLineOffset(ev.CursorLine)
-		ev.ensureCursorVisible()
 		return true
 
 	case vtinput.VK_LEFT:
@@ -374,7 +347,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 			}
 		}
 		ev.updateDesiredVisualCol()
-		ev.ensureCursorVisible()
+		ev.ensureHorizontalScroll()
 		return true
 
 	case vtinput.VK_RIGHT:
@@ -427,21 +400,21 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 			}
 		}
 		ev.updateDesiredVisualCol()
-		ev.ensureCursorVisible()
+		ev.ensureHorizontalScroll()
 		return true
 
 	case vtinput.VK_HOME:
 		handleNav()
 		ev.CursorPos = 0
 		ev.updateDesiredVisualCol()
-		ev.ensureCursorVisible()
+		ev.ensureHorizontalScroll()
 		return true
 
 	case vtinput.VK_END:
 		handleNav()
 		ev.CursorPos = ev.getLineLength(ev.CursorLine)
 		ev.updateDesiredVisualCol()
-		ev.ensureCursorVisible()
+		ev.ensureHorizontalScroll()
 		return true
 
 	case vtinput.VK_BACK:
@@ -472,7 +445,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 			}
 		}
 		ev.updateDesiredVisualCol()
-		ev.ensureCursorVisible()
+		ev.ensureHorizontalScroll()
 		return true
 
 	case vtinput.VK_DELETE:
@@ -492,7 +465,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 				ev.engine.InvalidateFrom(ev.CursorLine)
 			}
 		}
-		ev.ensureCursorVisible()
+		ev.ensureHorizontalScroll()
 		return true
 
 	case vtinput.VK_RETURN:
@@ -506,7 +479,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		ev.CursorLine++
 		ev.CursorPos = 0
 		ev.DesiredVisualCol = 0
-		ev.ensureCursorVisible()
+		ev.ensureHorizontalScroll()
 		return true
 	}
 
@@ -521,29 +494,20 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		ev.engine.InvalidateFrom(ev.CursorLine)
 		ev.CursorPos += len(data)
 		ev.updateDesiredVisualCol()
-		ev.ensureCursorVisible()
+		ev.ensureHorizontalScroll()
 		return true
 	}
 
 	return false
 }
 
-func (ev *EditorView) ensureCursorVisible() {
+func (ev *EditorView) ensureHorizontalScroll() {
 	width := ev.X2 - ev.X1 + 1
-	height := ev.Y2 - ev.Y1
-	if width <= 0 || height <= 0 { return }
+	if width <= 0 { return }
 
 	curOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
-	vRow, vCol := ev.engine.LogicalToVisual(curOffset)
+	_, vCol := ev.engine.LogicalToVisual(curOffset)
 
-	// 1. Вертикальный скролл
-	if vRow < ev.ScrollTopRow {
-		ev.ScrollTopRow = vRow
-	} else if vRow >= ev.ScrollTopRow + height {
-		ev.ScrollTopRow = vRow - height + 1
-	}
-
-	// 2. Горизонтальный скролл (только если WordWrap выключен)
 	if !ev.WordWrap {
 		if vCol < ev.ScrollLeft {
 			ev.ScrollLeft = vCol
@@ -555,7 +519,14 @@ func (ev *EditorView) ensureCursorVisible() {
 	}
 }
 
-func (ev *EditorView) ProcessMouse(e *vtinput.InputEvent) bool { return false }
+func (ev *EditorView) ProcessMouse(e *vtinput.InputEvent) bool {
+	if e.ButtonState != 0 {
+		if (e.KeyDown && int(e.MouseX) == ev.X2) || ev.ScrollBar.IsDragging() {
+			return ev.ScrollBar.ProcessMouse(e)
+		}
+	}
+	return false
+}
 
 func (ev *EditorView) SetPosition(x1, y1, x2, y2 int) {
 	ev.ScreenObject.SetPosition(x1, y1, x2, y2)
@@ -565,8 +536,10 @@ func (ev *EditorView) SetPosition(x1, y1, x2, y2 int) {
 	if ev.menuBar != nil {
 		ev.menuBar.SetPosition(x1, 0, x2, 0)
 	}
-	ev.ensureEngineWidth()
-	ev.ensureCursorVisible()
+	if ev.ScrollBar != nil {
+		ev.ScrollBar.SetPosition(x2, y1+1, x2, y2)
+	}
+	ev.syncListViewer()
 }
 
 func (ev *EditorView) ResizeConsole(w, h int) {

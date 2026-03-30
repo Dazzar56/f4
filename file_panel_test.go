@@ -6,6 +6,7 @@ import (
 	"testing"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
+	"github.com/unxed/vtui"
 )
 
 func TestFileEntry_GetCellText(t *testing.T) {
@@ -84,15 +85,18 @@ func TestFileSystemPanel_CursorMapping(t *testing.T) {
 	for i := range fp.entries {
 		fp.entries[i] = &fileEntry{VFSItem: vfs.VFSItem{Name: "file"}}
 	}
+	fp.ItemCount = 20
 
 	// 1. Medium Mode (Column-Major)
 	fp.viewMode = ViewModeMedium
 	fp.SetCursorIndex(3) // Index 3, Col 0, Pos 3
+	fp.Refresh()
 	if fp.table.SelectPos != 3 || fp.table.SelectCol != 0 {
 		t.Errorf("Medium mapping index 3: expected pos 3 col 0, got pos %d col %d", fp.table.SelectPos, fp.table.SelectCol)
 	}
 
 	fp.SetCursorIndex(h + 2) // Index h+2, Col 1, Pos 2
+	fp.Refresh()
 	if fp.table.SelectPos != 2 || fp.table.SelectCol != 1 {
 		t.Errorf("Medium mapping index %d: expected pos 2 col 1, got pos %d col %d", h+2, fp.table.SelectPos, fp.table.SelectCol)
 	}
@@ -100,6 +104,7 @@ func TestFileSystemPanel_CursorMapping(t *testing.T) {
 	// 2. Detailed Mode
 	fp.viewMode = ViewModeDetailed
 	fp.SetCursorIndex(5)
+	fp.Refresh()
 	if fp.table.SelectPos != 5 || fp.table.SelectCol != 0 {
 		t.Errorf("Detailed mapping failed: expected pos 5, got %d", fp.table.SelectPos)
 	}
@@ -141,7 +146,7 @@ func TestFileSystemPanel_MultiSelect(t *testing.T) {
 	fp.ReadDirectory() // Now ".." is 0, file1.txt is 1, file2.txt is 2...
 
 	// 2. Select file1.txt (Index 1)
-	fp.SetCursorIndex(1)
+	fp.SetSelectPos(1)
 	fp.Refresh()
 
 	// Press Insert
@@ -152,8 +157,8 @@ func TestFileSystemPanel_MultiSelect(t *testing.T) {
 	}
 
 	// Cursor should move to file2.txt (Index 2)
-	if fp.GetCursorIndex() != 2 {
-		t.Errorf("Cursor should move to 2, got %d", fp.GetCursorIndex())
+	if fp.SelectPos != 2 {
+		t.Errorf("Cursor should move to 2, got %d", fp.SelectPos)
 	}
 
 	// 3. Select file2.txt via Shift+Down
@@ -169,5 +174,53 @@ func TestFileSystemPanel_MultiSelect(t *testing.T) {
 	names := fp.GetSelectedNames()
 	if len(names) != 2 || names[0] != "file1.txt" || names[1] != "file2.txt" {
 		t.Errorf("GetSelectedNames returned wrong result: %v", names)
+	}
+}
+func TestFileSystemPanel_ScrollBarMouse(t *testing.T) {
+	fp := NewFileSystemPanel(0, 0, 20, 5, vfs.NewOSVFS(t.TempDir()))
+	// Add many mock entries
+	fp.entries = make([]*fileEntry, 50)
+	for i := range fp.entries {
+		fp.entries[i] = &fileEntry{VFSItem: vfs.VFSItem{Name: "file"}}
+	}
+	fp.ItemCount = 50
+	fp.SetVisible(true)
+	fp.Show(vtui.NewScreenBuf())
+
+	// ScrollBar for 0,0,20,5 is at Y: 1..3
+	// Click on the "Down" arrow (Y=3)
+	fp.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: true,
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+		MouseX: 19, MouseY: 3,
+	})
+
+	if fp.TopPos == 0 {
+		t.Error("FileSystemPanel should have scrolled after scrollbar click")
+	}
+}
+func TestFileSystemPanel_MediumModeScrolling(t *testing.T) {
+	// Panel with height 7 -> frame 0..6. Table 1..5. Header at 1. Data at 2,3,4,5 (4 rows)
+	fp := NewFileSystemPanel(0, 0, 40, 7, vfs.NewOSVFS(t.TempDir()))
+	fp.SetViewMode(ViewModeMedium)
+
+	// Data rows 4 * 2 columns = 8
+	if fp.ViewHeight != 8 {
+		t.Errorf("Expected ViewHeight 8 in Medium mode, got %d", fp.ViewHeight)
+	}
+
+	// Add 15 entries.
+	fp.entries = make([]*fileEntry, 15)
+	for i := range fp.entries { fp.entries[i] = &fileEntry{VFSItem: vfs.VFSItem{Name: "f"}} }
+	fp.ItemCount = 15
+
+	// Select index 7 (last item in first screen)
+	fp.SetSelectPos(7)
+	if fp.TopPos != 0 { t.Error("TopPos should be 0 at index 7") }
+
+	// Move down to index 10 (should scroll)
+	fp.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
+	if fp.TopPos == 0 {
+		t.Error("Medium mode should scroll at index 10")
 	}
 }

@@ -13,7 +13,8 @@ import (
 func TestEditorView_TypingAndBackspace(t *testing.T) {
 	pt := piecetable.New([]byte("Hello"))
 	ev := NewEditorView(pt, "")
-	ev.SetPosition(0, 0, 79, 24) // Устанавливаем стандартный размер 80x25
+	ev.SetPosition(0, 0, 79, 24)
+	ev.SetVisible(true)
 	ev.CursorPos = 5 // End of "Hello"
 
 	// 1. Typing '!'
@@ -39,6 +40,7 @@ func TestEditorView_LineNavigation(t *testing.T) {
 	pt := piecetable.New([]byte("Line1\nLine2"))
 	ev := NewEditorView(pt, "")
 	ev.SetPosition(0, 0, 79, 24)
+	ev.SetVisible(true)
 	ev.CursorLine = 0
 	ev.CursorPos = 5 // End of "Line1"
 
@@ -59,6 +61,7 @@ func TestEditorView_EnterAndBackspaceMerging(t *testing.T) {
 	pt := piecetable.New([]byte("ABC"))
 	ev := NewEditorView(pt, "")
 	ev.SetPosition(0, 0, 79, 24)
+	ev.SetVisible(true)
 	ev.CursorPos = 1 // Between A and B
 
 	// 1. Press Enter -> split line "A" and "BC"
@@ -81,22 +84,20 @@ func TestEditorView_EnterAndBackspaceMerging(t *testing.T) {
 }
 
 func TestEditorView_StickyColumn(t *testing.T) {
-	// Creating text:
-	// LongLine (8)
-	// Short (5)
-	// LongLine (8)
 	pt := piecetable.New([]byte("LongLine\nShort\nLongLine"))
 	ev := NewEditorView(pt, "")
 	ev.SetPosition(0, 0, 79, 24)
-	ev.WordWrap = false // Для этого теста отключаем перенос, чтобы имитировать классику
+	ev.SetVisible(true)
+	ev.WordWrap = false
+	ev.syncListViewer()
 
-	// Position at the end of the first long line
 	ev.CursorLine = 0
 	ev.CursorPos = 8
 	ev.DesiredVisualCol = 8
 
-	// 1. Down to short line -> visually at the end (5), но желаемая колонка остается 8
+	// 1. Down to short line
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
+	ev.syncListViewer()
 	if ev.CursorPos != 5 {
 		t.Errorf("Down to short line: expected pos 5, got %d", ev.CursorPos)
 	}
@@ -149,6 +150,7 @@ func TestEditorView_Selection(t *testing.T) {
 	pt := piecetable.New([]byte("Select Me"))
 	ev := NewEditorView(pt, "")
 	ev.SetPosition(0, 0, 79, 24)
+	ev.SetVisible(true)
 	ev.CursorLine = 0
 	ev.CursorPos = 0
 
@@ -201,6 +203,7 @@ func TestEditorView_DeleteSelectionMultiline(t *testing.T) {
 	pt := piecetable.New([]byte("Line1\nLine2\nLine3"))
 	ev := NewEditorView(pt, "")
 	ev.SetPosition(0, 0, 79, 24)
+	ev.SetVisible(true)
 
 	// 1. Select the end of the first line, all of the second, and the start of the third
 	// "Line[1\nLine2\nLin]e3"
@@ -235,38 +238,36 @@ func TestEditorView_DeleteSelectionMultiline(t *testing.T) {
 }
 
 func TestEditorView_WordWrapNavigation(t *testing.T) {
-	// Текст: "0123456789ABCDEFGHIJklmno" (25 символов)
-	// При ширине 10:
-	// Ряд 0: "0123456789" (оффсеты 0-10)
-	// Ряд 1: "ABCDEFGHIJ" (оффсеты 10-20)
-	// Ряд 2: "klmno"      (оффсеты 20-25)
 	text := "0123456789ABCDEFGHIJklmno"
 	pt := piecetable.New([]byte(text))
 	ev := NewEditorView(pt, "")
 	ev.WordWrap = true
-	ev.SetPosition(0, 0, 9, 6) // Высота окна 7, высота текста 6 (Ширина 10)
+	ev.SetPosition(0, 0, 9, 6)
+	ev.SetVisible(true)
+	ev.syncListViewer()
 
-	// Инициализируем DesiredVisualCol (имитируем клик или переход)
 	ev.CursorLine = 0
-	ev.CursorPos = 5 // Символ '5'
+	ev.CursorPos = 5
 	ev.updateDesiredVisualCol()
 
-	// 1. Вниз на Ряд 1. Колонка 5 должна соответствовать символу 'F' (оффсет 15)
+	// 1. Down to Row 1
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
+	ev.syncListViewer()
 
 	if ev.CursorPos != 15 {
 		t.Errorf("WordWrap Down: expected byte pos 15, got %d", ev.CursorPos)
 	}
 
-	// 2. Вниз на Ряд 2. Колонка 5 должна соответствовать концу строки (оффсет 25),
-	// так как "klmno" короче 5 колонок.
+	// 2. Down to Row 2
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
+	ev.syncListViewer()
 	if ev.CursorPos != 25 {
 		t.Errorf("WordWrap Down to end: expected byte pos 25, got %d", ev.CursorPos)
 	}
 
-	// 3. Вверх обратно на Ряд 1. Должны вернуться на символ 'F' (15)
+	// 3. Up back to Row 1
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_UP})
+	ev.syncListViewer()
 	if ev.CursorPos != 15 {
 		t.Errorf("WordWrap Up: expected byte pos 15, got %d", ev.CursorPos)
 	}
@@ -277,6 +278,7 @@ func TestEditorView_UTF8Editing(t *testing.T) {
 	pt := piecetable.New([]byte("Привет"))
 	ev := NewEditorView(pt, "")
 	ev.SetPosition(0, 0, 79, 24)
+	ev.SetVisible(true)
 	ev.CursorPos = 4 // After "Пр" (4 bytes)
 
 	// 1. Insert another letter (2 bytes)
@@ -315,6 +317,7 @@ func TestEditorView_SelectionWrapping(t *testing.T) {
 	ev := NewEditorView(pt, "")
 	ev.WordWrap = true
 	ev.SetPosition(0, 0, 4, 3) // Width 5, Text height 3
+	ev.SetVisible(true)
 
 	// Select "456" (from 3rd to 6th position)
 	// This captures the end of the first fragment "12345" and the start of the second "67890"
@@ -334,6 +337,7 @@ func TestEditorView_WideCharNavigation(t *testing.T) {
 	pt := piecetable.New([]byte("A世B"))
 	ev := NewEditorView(pt, "")
 	ev.SetPosition(0, 0, 79, 24)
+	ev.SetVisible(true)
 	ev.WordWrap = false
 	ev.CursorPos = 0 // On 'A'
 
@@ -355,6 +359,7 @@ func TestEditorView_UTF8Selection(t *testing.T) {
 	pt := piecetable.New([]byte("Да"))
 	ev := NewEditorView(pt, "")
 	ev.SetPosition(0, 0, 79, 24)
+	ev.SetVisible(true)
 	ev.CursorPos = 0
 
 	// Start selection: Shift + Right (one letter 'Д')
@@ -375,6 +380,7 @@ func TestEditorView_HomeEnd(t *testing.T) {
 	pt := piecetable.New([]byte("Hello World"))
 	ev := NewEditorView(pt, "")
 	ev.SetPosition(0, 0, 79, 24)
+	ev.SetVisible(true)
 
 	// 1. End test
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_END})
@@ -394,6 +400,7 @@ func TestEditorView_WideCharBackspace(t *testing.T) {
 	pt := piecetable.New([]byte("A世"))
 	ev := NewEditorView(pt, "")
 	ev.SetPosition(0, 0, 79, 24)
+	ev.SetVisible(true)
 	ev.CursorPos = 4 // At the very end
 
 	// Press Backspace (remove '世')
@@ -411,6 +418,7 @@ func TestEditorView_BracketedPaste(t *testing.T) {
 	pt := piecetable.New([]byte("Start-"))
 	ev := NewEditorView(pt, "")
 	ev.SetPosition(0, 0, 79, 24)
+	ev.SetVisible(true)
 	ev.CursorLine = 0
 	ev.CursorPos = 6
 
@@ -450,6 +458,7 @@ func TestEditorView_ExtremeBounds(t *testing.T) {
 	pt := piecetable.New([]byte("A"))
 	ev := NewEditorView(pt, "")
 	ev.SetPosition(0, 0, 79, 24)
+	ev.SetVisible(true)
 
 	// 1. Backspace at file start should not break anything
 	ev.CursorLine = 0
@@ -468,11 +477,12 @@ func TestEditorView_ExtremeBounds(t *testing.T) {
 }
 
 func TestEditorView_EmptyLinesWrap(t *testing.T) {
-	// File of three empty lines (breaks only)
 	pt := piecetable.New([]byte("\n\n"))
 	ev := NewEditorView(pt, "")
 	ev.WordWrap = true
 	ev.SetPosition(0, 0, 10, 11)
+	ev.SetVisible(true)
+	ev.syncListViewer()
 
 	if ev.li.LineCount() != 3 {
 		t.Errorf("Expected 3 lines, got %d", ev.li.LineCount())
@@ -487,6 +497,8 @@ func TestEditorView_EmptyLinesWrap(t *testing.T) {
 
 	// Empty line navigation
 	ev.CursorLine = 0
+	ev.CursorPos = 0
+	ev.syncListViewer()
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
 	if ev.CursorLine != 1 {
 		t.Errorf("Down on empty lines failed: expected line 1, got %d", ev.CursorLine)
@@ -494,36 +506,35 @@ func TestEditorView_EmptyLinesWrap(t *testing.T) {
 }
 
 func TestEditorView_WordWrapScrolling(t *testing.T) {
-	// Текст 46 байт. Ширина 10.
-	// Фрагменты: 0 (0-10), 1 (10-20), 2 (20-30), 3 (30-40), 4 (40-46)
 	text := "0123456789ABCDEFGHIJklmnopqrstuvwxyz0123456789"
 	pt := piecetable.New([]byte(text))
 	ev := NewEditorView(pt, "")
 	ev.WordWrap = true
-	ev.SetPosition(0, 0, 9, 2) // Высота 3, высота текста 2
+	ev.SetPosition(0, 0, 9, 2)
+	ev.SetVisible(true)
 	ev.engine.SetWidth(10)
 
-	ev.ensureCursorVisible()
-	if ev.ScrollTopRow != 0 {
+	ev.EnsureVisible()
+	if ev.TopPos != 0 {
 		t.Error("Initial scroll should be 0")
 	}
 
 	// 1. Прыгаем в конец строки (оффсет 46)
 	// Конец строки — это 4-й визуальный ряд (индекс 4).
 	ev.CursorPos = 46
-	ev.ensureCursorVisible()
+	ev.syncListViewer()
+	ev.EnsureVisible()
 
-	// Чтобы увидеть 4-й ряд при высоте окна 2, верхним должен быть 3-й ряд (индекс 3).
-	// Тогда видны ряды 3 и 4.
-	if ev.ScrollTopRow != 3 {
-		t.Errorf("WordWrap scroll failed: expected ScrollTopRow 3, got %d", ev.ScrollTopRow)
+	if ev.TopPos != 3 {
+		t.Errorf("WordWrap scroll failed: expected TopPos 3, got %d", ev.TopPos)
 	}
-	
+
 	// 2. Прыгаем в начало
 	ev.CursorPos = 0
-	ev.ensureCursorVisible()
-	if ev.ScrollTopRow != 0 {
-		t.Errorf("WordWrap scroll back failed: expected ScrollTopRow 0, got %d", ev.ScrollTopRow)
+	ev.syncListViewer()
+	ev.EnsureVisible()
+	if ev.TopPos != 0 {
+		t.Errorf("WordWrap scroll back failed: expected TopPos 0, got %d", ev.TopPos)
 	}
 }
 
@@ -587,6 +598,7 @@ func TestEditorView_WideCharDelete(t *testing.T) {
 	pt := piecetable.New([]byte("A世"))
 	ev := NewEditorView(pt, "")
 	ev.SetPosition(0, 0, 79, 24)
+	ev.SetVisible(true)
 	ev.CursorPos = 1 // Before '世'
 
 	// Press Delete
@@ -601,19 +613,20 @@ func TestEditorView_WideCharDelete(t *testing.T) {
 }
 
 func TestEditorView_PageNavigation(t *testing.T) {
-	// Create 20 lines of text
 	var buf []byte
 	for i := 0; i < 20; i++ {
 		buf = append(buf, []byte("Line\n")...)
 	}
 	pt := piecetable.New(buf)
 	ev := NewEditorView(pt, "")
-	ev.SetPosition(0, 0, 79, 5) // Text Viewport height 5
+	ev.SetPosition(0, 0, 79, 5)
+	ev.syncListViewer()
 	ev.CursorLine = 0
 	ev.CursorPos = 0
 
 	// 1. PgDn
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_NEXT})
+	ev.syncListViewer()
 	if ev.CursorLine != 5 {
 		t.Errorf("PgDn failed: expected line 5, got %d", ev.CursorLine)
 	}
@@ -635,6 +648,7 @@ func TestEditorView_PageNavigation(t *testing.T) {
 	if !ev.selActive {
 		t.Fatal("Shift+PgDn should activate selection")
 	}
+	ev.syncListViewer()
 	min, max := ev.getSelectionRange()
 	// Selection from offset 0 to start of line 5 (5 characters "Line\n" * 5 = 25)
 	if min != 0 || max != 25 {
@@ -643,23 +657,17 @@ func TestEditorView_PageNavigation(t *testing.T) {
 }
 
 func TestEditorView_LongLinePerformance(t *testing.T) {
-	// Removed t.Parallel() to prevent CPU starvation and deadlocks
-	// when competing with other UI tests.
-
-	// Create one very long line (100 KB) to simulate the problem.
-	// Without the fix, this would cause O(N*M) reads and hanging.
 	longLine := strings.Repeat("a", 100*1024)
 	pt := piecetable.New([]byte(longLine))
 	ev := NewEditorView(pt, "")
-	ev.SetPosition(0, 0, 79, 24) // 80x25 viewport
+	ev.SetPosition(0, 0, 79, 24)
+	ev.SetVisible(true)
 
-	// Set cursor in the middle of the line
 	ev.CursorPos = 50 * 1024
 
-	// Wrap test in timeout. If editor "hangs", test fails.
 	done := make(chan struct{})
 	go func() {
-		// Simulate 100 "right" presses. This heavily loads ensureCursorVisible.
+		// Simulate 100 "right" presses.
 		for i := 0; i < 100; i++ {
 			ev.ProcessKey(&vtinput.InputEvent{
 				Type:           vtinput.KeyEventType,
@@ -667,7 +675,6 @@ func TestEditorView_LongLinePerformance(t *testing.T) {
 				VirtualKeyCode: vtinput.VK_RIGHT,
 			})
 		}
-		// Moving to end of line — another expensive operation without caching
 		ev.ProcessKey(&vtinput.InputEvent{
 			Type:           vtinput.KeyEventType,
 			KeyDown:        true,
@@ -745,6 +752,10 @@ func TestEditorBar_Content(t *testing.T) {
 	scr := vtui.NewScreenBuf()
 	scr.AllocBuf(41, 11)
 
+	// Make sure we have enough data to calculate percentages without division by zero
+	ev.ItemCount = 100
+	ev.ViewHeight = 10
+
 	ev.GetTopBar().Show(scr)
 
 	// В статус-баре должно быть "6,12" (Line+1, Pos)
@@ -789,3 +800,31 @@ func TestEditorView_GetTitle(t *testing.T) {
 		t.Errorf("GetTitle failed for empty path: %s", ev2.GetTitle())
 	}
 }
+
+func TestEditorView_ScrollBarMouse(t *testing.T) {
+	pt := piecetable.New([]byte("L1\nL2\nL3\nL4\nL5\nL6\nL7\nL8\nL9\nL10"))
+	ev := NewEditorView(pt, "")
+	// Width 10, Height 3 (Y1=0, Y2=2 -> 2 lines of content)
+	ev.SetPosition(0, 0, 9, 2)
+	ev.SetVisible(true)
+	ev.syncListViewer()
+
+	if ev.TopPos != 0 {
+		t.Fatal("Should start at TopPos 0")
+	}
+
+	// Important: ScrollBar.Max is updated during rendering
+	ev.DisplayObject(vtui.NewScreenBuf())
+
+	// Click on the "Down" area of the scrollbar (Y=2)
+	ev.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: true,
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+		MouseX: 9, MouseY: 2,
+	})
+
+	if ev.TopPos == 0 {
+		t.Error("Editor should have scrolled after scrollbar click")
+	}
+}
+

@@ -16,7 +16,8 @@ func TestViewerView_NavigationAndEOF(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	vv.SetPosition(0, 0, 10, 3) // Height 4 (Y:0..3). 1 line status, 3 lines content.
+	vv.SetPosition(0, 0, 10, 3)
+	vv.SetVisible(true)
 
 	scr := vtui.NewScreenBuf()
 	scr.AllocBuf(11, 4)
@@ -110,5 +111,27 @@ func TestViewerView_GetTitle(t *testing.T) {
 
 	if vv.GetTitle() != "View: doc.txt" {
 		t.Errorf("GetTitle failed: %s", vv.GetTitle())
+	}
+}
+func TestViewerView_ScrollBarMouse(t *testing.T) {
+	tmp := t.TempDir() + "/scroll.txt"
+	content := ""
+	for i := 0; i < 100; i++ { content += "Line\n" }
+	os.WriteFile(tmp, []byte(content), 0644)
+
+	vv, _ := NewViewerView(tmp)
+	vv.SetPosition(0, 0, 10, 5)
+	vv.SetVisible(true)
+	vv.DisplayObject(vtui.NewScreenBuf())
+
+	// Click on the scrollbar "Down" area (Y=5)
+	vv.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: true,
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+		MouseX: 10, MouseY: 5,
+	})
+
+	if vv.TopOffset <= 0 {
+		t.Errorf("Viewer TopOffset should increase after scrollbar click, got %d", vv.TopOffset)
 	}
 }
