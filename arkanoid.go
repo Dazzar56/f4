@@ -37,6 +37,7 @@ type ArkanoidFrame struct {
 	gameOver    bool
 	message     string
 	flashTimer  int
+	retroMode   bool
 }
 
 func NewArkanoidFrame() *ArkanoidFrame {
@@ -197,6 +198,9 @@ func (af *ArkanoidFrame) Show(scr *vtui.ScreenBuf) {
 
 	// Draw paddle (clamped to frame width)
 	paddleAttr := vtui.SetRGBBoth(0, 0xC0C0C0, 0)
+	if af.retroMode {
+		paddleAttr = vtui.SetRGBBoth(0, 0xFF00FF, 0)
+	}
 	for i := 0; i < af.paddleW; i++ {
 		px := x1 + af.paddleX + i
 		if px < x1 + width - 2 {
@@ -208,10 +212,18 @@ func (af *ArkanoidFrame) Show(scr *vtui.ScreenBuf) {
 	for _, br := range af.bricks {
 		if br.hp > 0 {
 			brickW := (width - 2) / 10
+			attr := br.attr
+			if af.retroMode {
+				if br.y%2 == 0 {
+					attr = vtui.SetRGBBoth(0, 0x00FFFF, 0)
+				} else {
+					attr = vtui.SetRGBBoth(0, 0xFF00FF, 0)
+				}
+			}
 			for i := 0; i < brickW; i++ {
 				bx := x1 + br.x + i
 				if bx < x1 + width - 2 {
-					scr.Write(bx, y1+br.y, vtui.StringToCharInfo(string(brickChar), br.attr))
+					scr.Write(bx, y1+br.y, vtui.StringToCharInfo(string(brickChar), attr))
 				}
 			}
 		}
@@ -219,6 +231,9 @@ func (af *ArkanoidFrame) Show(scr *vtui.ScreenBuf) {
 
 	// Draw ball
 	ballAttr := vtui.SetRGBBoth(0, 0xFFFFFF, 0)
+	if af.retroMode {
+		ballAttr = vtui.SetRGBBoth(0, 0x00FFFF, 0)
+	}
 	scr.Write(x1+int(af.ballX), y1+int(af.ballY), vtui.StringToCharInfo(string(ballChar), ballAttr))
 
 	// Draw score and lives
@@ -248,6 +263,13 @@ func (af *ArkanoidFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	af.mu.Lock()
 	defer af.mu.Unlock()
 	width := af.X2 - af.X1 + 1
+
+	// Ctrl+P toggle retro mode
+	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
+	if ctrl && e.VirtualKeyCode == 'P' {
+		af.retroMode = !af.retroMode
+		return true
+	}
 
 	switch e.VirtualKeyCode {
 	case vtinput.VK_LEFT:
