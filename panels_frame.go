@@ -255,6 +255,7 @@ func (pf *PanelsFrame) executeFile(dir, name, path string) {
 
 func (pf *PanelsFrame) ResizeConsole(w, h int) {
 	pf.lastW, pf.lastH = w, h
+	pf.SetPosition(0, 0, w-1, h-1) // Update hit-box for FrameManager hit-testing
 	pf.menuBar.SetPosition(0, 0, w-1, 0)
 
 	contentY1 := 0
@@ -634,24 +635,34 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 }
 
 func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
-	// Determine which panel was clicked
 	mx, my := int(e.MouseX), int(e.MouseY)
+	vtui.DebugLog("MOUSE: PanelsFrame.ProcessMouse at (%d,%d) state:%X", mx, my, e.ButtonState)
 
-	if pf.left != nil {
-		x1, y1, x2, y2 := pf.left.GetPosition()
+	checkPanel := func(p Panel, isLeft bool) bool {
+		if p == nil { return false }
+		x1, y1, x2, y2 := p.GetPosition()
 		if mx >= x1 && mx <= x2 && my >= y1 && my <= y2 {
-			pf.activeIdx = 0
-			return pf.left.ProcessMouse(e)
+			targetIdx := 1
+			if isLeft { targetIdx = 0 }
+
+			if pf.activeIdx != targetIdx && e.ButtonState != 0 {
+				vtui.DebugLog("MOUSE: Switching panel focus to %d", targetIdx)
+				pf.activeIdx = targetIdx
+				vtui.FrameManager.Redraw()
+			}
+			
+			handled := p.ProcessMouse(e)
+			if handled && (e.MouseEventFlags & vtinput.DoubleClick) != 0 {
+				vtui.DebugLog("MOUSE: Double click detected, simulating Enter")
+				pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN})
+			}
+			return handled || e.ButtonState != 0
 		}
+		return false
 	}
 
-	if pf.right != nil {
-		x1, y1, x2, y2 := pf.right.GetPosition()
-		if mx >= x1 && mx <= x2 && my >= y1 && my <= y2 {
-			pf.activeIdx = 1
-			return pf.right.ProcessMouse(e)
-		}
-	}
+	if checkPanel(pf.left, true) { return true }
+	if checkPanel(pf.right, false) { return true }
 
 	return false
 }

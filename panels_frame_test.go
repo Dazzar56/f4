@@ -45,6 +45,41 @@ func TestPanelsFrame_Layout(t *testing.T) {
 		t.Error("KeyBar should be invisible")
 	}
 }
+func TestPanelsFrame_ProcessMouse_DoubleClick(t *testing.T) {
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+
+	// Active is initially right (1)
+	if pf.activeIdx != 1 {
+		t.Fatalf("Expected initial activeIdx 1, got %d", pf.activeIdx)
+	}
+
+	tmp := t.TempDir()
+	fsp := pf.left.(*FileSystemPanel)
+	fsp.vfs.SetPath(tmp)
+	fsp.ReadDirectory() // Will contain ".." at index 0
+
+	initialPath := fsp.vfs.GetPath()
+
+	// Double click on ".." in left panel.
+	// Left panel 0..39. Table start Y=1. Header Y=1. Row 0 at Y=2.
+	pf.ProcessMouse(&vtinput.InputEvent{
+		Type:        vtinput.MouseEventType,
+		KeyDown:     true,
+		MouseX:      5,
+		MouseY:      2,
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+		MouseEventFlags: vtinput.DoubleClick,
+	})
+
+	if pf.activeIdx != 0 {
+		t.Errorf("Expected activeIdx 0 after left click, got %d", pf.activeIdx)
+	}
+
+	if fsp.vfs.GetPath() == initialPath {
+		t.Error("Double click on '..' should have changed directory")
+	}
+}
 func TestPanelsFrame_CtrlW_CloseScreen(t *testing.T) {
 	// Initialize global FrameManager for the test
 	fm := vtui.FrameManager
