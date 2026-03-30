@@ -1,7 +1,10 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
+	"runtime"
 	"time"
 	"strings"
 	"github.com/unxed/vtui"
@@ -405,6 +408,79 @@ func TestPanelsFrame_CloneIndependence(t *testing.T) {
 	// Verify original is unchanged
 	if pf.left.(*FileSystemPanel).vfs.GetPath() != origPath {
 		t.Error("Cloned PanelsFrame shares VFS state with parent!")
+	}
+}
+func TestIsTerminalRunnable(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// 1. Обычный текстовый файл -> false
+	txtFile := filepath.Join(tmpDir, "test.txt")
+	os.WriteFile(txtFile, []byte("hello"), 0644)
+	if isTerminalRunnable(txtFile) {
+		t.Error("Text file should not be terminal-runnable")
+	}
+
+	// 2. Файл с расширением .sh -> true
+	shFile := filepath.Join(tmpDir, "test.sh")
+	os.WriteFile(shFile, []byte("echo hi"), 0644)
+	if !isTerminalRunnable(shFile) {
+		t.Error(".sh file should be terminal-runnable")
+	}
+
+	// 3. Файл с шебангом без расширения -> true
+	binFile := filepath.Join(tmpDir, "my-tool")
+	os.WriteFile(binFile, []byte("#!/usr/bin/env bash\necho hi"), 0644)
+	if !isTerminalRunnable(binFile) {
+		t.Error("File with shebang should be terminal-runnable")
+	}
+
+	// 4. Директория -> false
+	subDir := filepath.Join(tmpDir, "folder")
+	os.Mkdir(subDir, 0755)
+	if isTerminalRunnable(subDir) {
+		t.Error("Directory should not be terminal-runnable")
+	}
+
+	// 5. Unix Executable Bit (если не на Windows)
+	if runtime.GOOS != "windows" {
+		execFile := filepath.Join(tmpDir, "compiled-bin")
+		os.WriteFile(execFile, []byte{0x7f, 'E', 'L', 'F'}, 0755)
+		if !isTerminalRunnable(execFile) {
+			t.Error("File with executable bit should be terminal-runnable on Unix")
+		}
+	}
+}
+
+func TestPanelsFrame_ReturnExecution(t *testing.T) {
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+
+	// Создаем временный запускаемый файл
+	tmp := t.TempDir()
+	runnablePath := filepath.Join(tmp, "runme.sh")
+	os.WriteFile(runnablePath, []byte("echo 1"), 0755)
+
+	// Настраиваем VFS и выбираем этот файл на панели
+	fsp := pf.right.(*FileSystemPanel)
+	fsp.vfs.SetPath(tmp)
+	fsp.Refresh()
+	fsp.SelectName("runme.sh")
+
+	// Проверяем начальное состояние
+	if !pf.showPanels {
+		t.Fatal("Panels should be visible initially")
+	}
+
+	// Имитируем нажатие Enter
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_RETURN,
+	})
+
+	// После запуска исполняемого файла панели должны скрыться, чтобы показать терминал
+	if pf.showPanels {
+		t.Error("Panels should be hidden after executing a terminal-runnable file")
 	}
 }
 

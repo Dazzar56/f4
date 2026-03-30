@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
+	"runtime"
 	"path/filepath"
 	"time"
 	"github.com/unxed/f4/vfs"
@@ -183,6 +185,72 @@ func (pf *PanelsFrame) openViewer(path string) {
 	viewer.ResizeConsole(pf.lastW, pf.lastH)
 	// Viewer opens in a NEW workspace
 	vtui.FrameManager.AddScreen(viewer)
+}
+
+func isTerminalRunnable(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil || info.IsDir() {
+		return false
+	}
+
+	// 1. Check executable bit on Unix
+	if runtime.GOOS != "windows" && info.Mode().Perm()&0111 != 0 {
+		return true
+	}
+
+	// 2. Check common executable/script extensions
+	ext := strings.ToLower(filepath.Ext(path))
+	terminalExts := map[string]bool{
+		".exe": true, ".bat": true, ".cmd": true, ".com": true,
+		".sh": true, ".bash": true, ".py": true, ".pl": true,
+		".rb": true, ".js": true, ".php": true, ".lua": true,
+	}
+	if terminalExts[ext] {
+		return true
+	}
+
+	// 3. Check for Shebang
+	f, err := os.Open(path)
+	if err == nil {
+		defer f.Close()
+		buf := make([]byte, 2)
+		n, _ := f.Read(buf)
+		if n == 2 && string(buf) == "#!" {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (pf *PanelsFrame) executeFile(dir, name, path string) {
+	if isTerminalRunnable(path) {
+		if pf.pty != nil {
+			// Sync PTY to the file's directory
+			pf.pty.Write([]byte(fmt.Sprintf(" cd %q\r", dir)))
+			// Execute. Use ./ on Unix for current-dir security.
+			cmd := name
+			if runtime.GOOS != "windows" {
+				cmd = "./" + name
+			}
+			pf.pty.Write([]byte(cmd + "\r"))
+		}
+		pf.showPanels = false
+	} else {
+		// System Open
+		var cmd *exec.Cmd
+		switch runtime.GOOS {
+		case "linux":
+			cmd = exec.Command("xdg-open", path)
+		case "windows":
+			cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", path)
+		case "darwin":
+			cmd = exec.Command("open", path)
+		}
+		if cmd != nil {
+			_ = cmd.Start()
+		}
+	}
 }
 
 func (pf *PanelsFrame) ResizeConsole(w, h int) {
@@ -468,30 +536,47 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			pf.cmdLine.AddHistory(cmd)
 			pf.cmdLine.historyPos = -1 // Reset history browsing on new command
 			if pf.pty != nil {
-				// 1. Determine current path of active panel
 				var path string
 				if pf.activeIdx == 0 {
 					if fsp, ok := pf.left.(*FileSystemPanel); ok { path = fsp.vfs.GetPath() }
 				} else {
 					if fsp, ok := pf.right.(*FileSystemPanel); ok { path = fsp.vfs.GetPath() }
 				}
-
-				// 2. Sync PTY directory (send cd) and then the command
 				if path != "" {
 					pf.pty.Write([]byte(fmt.Sprintf(" cd %q\r", path)))
 				}
 				pf.pty.Write([]byte(cmd + "\r"))
 			}
 			pf.cmdLine.Clear()
-			pf.showPanels = false // Auto-hide panels to show output
+			pf.showPanels = false
 			return true
 		} else if !pf.showPanels {
 			if pf.pty != nil {
 				pf.pty.Write([]byte("\r"))
 			}
 			return true
+		} else {
+			// CommandLine is empty, panels are visible.
+			// 1. Try passing to panel to handle directory entry.
+			var handled bool
+			if pf.activeIdx == 0 {
+				handled = pf.left.ProcessKey(e)
+			} else {
+				handled = pf.right.ProcessKey(e)
+			}
+
+			// 2. If panel didn't handle it, it's a file. Execute or open it.
+			if !handled {
+				var fsp *FileSystemPanel
+				if pf.activeIdx == 0 { fsp = pf.left.(*FileSystemPanel) } else { fsp = pf.right.(*FileSystemPanel) }
+				name := fsp.GetSelectedName()
+				if name != "" && name != ".." {
+					path := fsp.vfs.Join(fsp.vfs.GetPath(), name)
+					pf.executeFile(fsp.vfs.GetPath(), name, path)
+				}
+			}
+			return true
 		}
-		// If command line is empty and panels visible, Enter is passed to panels (to enter dir)
 	}
 
 	// 2. Try global hotkeys handled by PanelsFrame
