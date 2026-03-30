@@ -171,3 +171,88 @@ func TestFileSystemPanel_MultiSelect(t *testing.T) {
 		t.Errorf("GetSelectedNames returned wrong result: %v", names)
 	}
 }
+
+func TestFileSystemPanel_ProcessMouse(t *testing.T) {
+	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS("."))
+	fp.SetViewMode(ViewModeDetailed)
+
+	fp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: ".."}},
+		{VFSItem: vfs.VFSItem{Name: "f1"}},
+		{VFSItem: vfs.VFSItem{Name: "f2"}},
+	}
+
+	// Left Click on f1 (Index 1). Table at Y=1, header is 1, so row 0 is Y=2, row 1 is Y=3.
+	fp.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: true,
+		MouseX: 5, MouseY: 3, ButtonState: vtinput.FromLeft1stButtonPressed,
+	})
+
+	if fp.cursorIdx != 1 {
+		t.Errorf("Expected cursorIdx 1, got %d", fp.cursorIdx)
+	}
+
+	// Right click on f2 (Index 2). Data row 2 is Y=4.
+	fp.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: true,
+		MouseX: 5, MouseY: 4, ButtonState: vtinput.RightmostButtonPressed,
+	})
+
+	if fp.cursorIdx != 2 {
+		t.Errorf("Expected cursorIdx 2, got %d", fp.cursorIdx)
+	}
+	if !fp.entries[2].Selected {
+		t.Error("Right click selection failed")
+	}
+
+	// Right click again without button release (dragging simulation) - should NOT unselect
+	fp.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: true,
+		MouseX: 6, MouseY: 4, ButtonState: vtinput.RightmostButtonPressed,
+	})
+
+	if !fp.entries[2].Selected {
+		t.Error("Right click drag shouldn't unselect the same item")
+	}
+
+	// Release button
+	fp.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: false,
+		MouseX: 6, MouseY: 4, ButtonState: 0,
+	})
+
+	// Click again - SHOULD unselect
+	fp.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: true,
+		MouseX: 6, MouseY: 4, ButtonState: vtinput.RightmostButtonPressed,
+	})
+
+	if fp.entries[2].Selected {
+		t.Error("New right click should toggle selection")
+	}
+}
+
+func TestFileSystemPanel_MouseClick_Edges(t *testing.T) {
+	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS("."))
+	fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: ".."}}}
+	fp.cursorIdx = 0
+
+	// 1. Click on panel border (Y=0)
+	fp.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: true,
+		MouseX: 5, MouseY: 0, ButtonState: vtinput.FromLeft1stButtonPressed,
+	})
+	if fp.cursorIdx != 0 {
+		t.Errorf("Clicking on border should not change selection. Got %d", fp.cursorIdx)
+	}
+
+	// 2. Click on table header (Y=1)
+	fp.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: true,
+		MouseX: 5, MouseY: 1, ButtonState: vtinput.FromLeft1stButtonPressed,
+	})
+	if fp.cursorIdx != 0 {
+		t.Errorf("Clicking on header should not change selection. Got %d", fp.cursorIdx)
+	}
+}
+

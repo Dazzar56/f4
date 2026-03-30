@@ -70,19 +70,21 @@ type FileSystemPanel struct {
 	frame     *vtui.BorderedFrame
 	vfs       vfs.VFS
 	entries   []*fileEntry
-	viewMode  ViewMode
-	cursorIdx int
-	topIdx    int
+	viewMode            ViewMode
+	cursorIdx           int
+	topIdx              int
+	lastRightClickedIdx int
 }
 
 func NewFileSystemPanel(x, y, w, h int, vfs vfs.VFS) *FileSystemPanel {
 	path := vfs.GetPath()
 
 	fp := &FileSystemPanel{
-		vfs:      vfs,
-		frame:    vtui.NewBorderedFrame(x, y, x+w-1, y+h-1, vtui.SingleBox, path),
-		table:    vtui.NewTable(x+1, y+1, w-2, h-2, nil),
-		viewMode: ViewModeMedium,
+		vfs:                 vfs,
+		frame:               vtui.NewBorderedFrame(x, y, x+w-1, y+h-1, vtui.SingleBox, path),
+		table:               vtui.NewTable(x+1, y+1, w-2, h-2, nil),
+		viewMode:            ViewModeMedium,
+		lastRightClickedIdx: -1,
 	}
 	fp.frame.ColorBoxIdx = ColPanelBox
 	fp.frame.ColorTitleIdx = ColPanelTitle
@@ -365,7 +367,72 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 }
 
 func (fp *FileSystemPanel) ProcessMouse(e *vtinput.InputEvent) bool {
-	return fp.table.ProcessMouse(e)
+	if e.Type != vtinput.MouseEventType {
+		return false
+	}
+
+	if e.ButtonState == 0 {
+		fp.lastRightClickedIdx = -1
+	}
+
+	// 1. Handle Wheel
+	if e.WheelDirection != 0 {
+		height := fp.getVisualHeight()
+		step := 1
+		if fp.viewMode == ViewModeMedium { step = height }
+		if e.WheelDirection > 0 {
+			fp.SetCursorIndex(fp.cursorIdx - step)
+		} else {
+			fp.SetCursorIndex(fp.cursorIdx + step)
+		}
+		fp.Refresh()
+		return true
+	}
+
+	// 2. Handle Clicks
+	if e.ButtonState != 0 {
+		mx, my := int(e.MouseX), int(e.MouseY)
+		tx1, ty1, tx2, ty2 := fp.table.GetPosition()
+
+		headerOffset := 0
+		if fp.table.ShowHeader { headerOffset = 1 }
+
+		if my >= ty1+headerOffset && my <= ty2 && mx >= tx1 && mx <= tx2 {
+			row := my - (ty1 + headerOffset)
+			col := 0
+
+			if fp.viewMode == ViewModeMedium {
+				colWidth := (tx2 - tx1 + 1 - 1) / 2
+				if mx >= tx1+colWidth+1 { col = 1 }
+			}
+
+			height := fp.getVisualHeight()
+			var clickedIdx int
+			if fp.viewMode == ViewModeDetailed {
+				clickedIdx = fp.topIdx + row
+			} else {
+				clickedIdx = fp.topIdx + (col * height) + row
+			}
+
+			if clickedIdx >= 0 && clickedIdx < len(fp.entries) {
+				vtui.DebugLog("MOUSE: Panel click at (%d,%d) index:%d entry:%s mode:%v", mx, my, clickedIdx, fp.entries[clickedIdx].Name, fp.viewMode)
+				fp.SetCursorIndex(clickedIdx)
+
+				if e.ButtonState == vtinput.RightmostButtonPressed && e.KeyDown {
+					if fp.entries[clickedIdx].Name != ".." && fp.lastRightClickedIdx != clickedIdx {
+						fp.entries[clickedIdx].Selected = !fp.entries[clickedIdx].Selected
+						fp.lastRightClickedIdx = clickedIdx
+					}
+				}
+				fp.Refresh()
+				return true
+			}
+		} else {
+			vtui.DebugLog("MOUSE: Panel click OUTSIDE data area. Table: (%d,%d)-(%d,%d) Mouse: (%d,%d)", tx1, ty1, tx2, ty2, mx, my)
+		}
+	}
+
+	return false
 }
 
 func (fp *FileSystemPanel) GetSelectedName() string {
