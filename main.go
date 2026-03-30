@@ -80,12 +80,12 @@ func InitCore() *vtui.ScreenBuf {
 	vtui.FrameManager.KeyBar = panels.keyBar
 
 	if fsp, ok := panels.left.(*FileSystemPanel); ok {
+		// Just populate entries and refresh.
+		// SetViewMode or Refresh will handle creating the correct TableRow wrappers (Medium vs Detailed).
 		for i := 0; i < 50; i++ {
 			fsp.entries = append(fsp.entries, &fileEntry{VFSItem: vfs.VFSItem{Name: fmt.Sprintf("test_file_%d.txt", i), Size: 1024}})
 		}
-		rows := make([]vtui.TableRow, len(fsp.entries))
-		for i, e := range fsp.entries { rows[i] = e }
-		fsp.table.SetRows(rows)
+		fsp.Refresh()
 	}
 
 	noPlugins := false

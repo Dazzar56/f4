@@ -48,6 +48,9 @@ func NewPanelsFrame() *PanelsFrame {
 	pf.menuBar.Items = []vtui.MenuBarItem{
 		// Using Command routing (TV style) instead of hardcoded indices
 		{Label: "&" + Msg("Menu.Left"), SubItems: []vtui.MenuItem{
+			{Text: "&" + Msg("Menu.Left.Medium"), Command: vtui.CmLeftMedium},
+			{Text: "&" + Msg("Menu.Left.Detailed"), Command: vtui.CmLeftDetailed},
+			{Separator: true},
 			{Text: "Bac&kground", Command: vtui.CmBackground},
 			{Text: Msg("Menu.Exit"), Command: vtui.CmQuit},
 		}},
@@ -61,7 +64,10 @@ func NewPanelsFrame() *PanelsFrame {
 		}},
 		{Label: "&" + Msg("Menu.Commands"), SubItems: []vtui.MenuItem{{Text: "Placeholder"}}},
 		{Label: "&" + Msg("Menu.Options"), SubItems: []vtui.MenuItem{{Text: "Placeholder"}}},
-		{Label: "&" + Msg("Menu.Right"), SubItems: []vtui.MenuItem{{Text: "Placeholder"}}},
+		{Label: "&" + Msg("Menu.Right"), SubItems: []vtui.MenuItem{
+			{Text: "&" + Msg("Menu.Left.Medium"), Command: vtui.CmRightMedium},
+			{Text: "&" + Msg("Menu.Left.Detailed"), Command: vtui.CmRightDetailed},
+		}},
 	}
 	// We no longer need pf.menuBar.OnCommand for routing!
 	pf.cmdLine = NewCommandLine(Msg("Panels.Prompt"))
@@ -72,6 +78,25 @@ func NewPanelsFrame() *PanelsFrame {
 	pf.initPTY()
 
 	return pf
+}
+
+func getMenuText(current, target ViewMode, label string) string {
+	if current == target {
+		return "√" + label
+	}
+	return " " + label
+}
+
+func (pf *PanelsFrame) updateMenuCheckmarks() {
+	if pf.left == nil || pf.right == nil { return }
+	lMode := pf.left.(*FileSystemPanel).viewMode
+	rMode := pf.right.(*FileSystemPanel).viewMode
+
+	pf.menuBar.Items[0].SubItems[0].Text = getMenuText(lMode, ViewModeMedium, "&"+Msg("Menu.Left.Medium"))
+	pf.menuBar.Items[0].SubItems[1].Text = getMenuText(lMode, ViewModeDetailed, "&"+Msg("Menu.Left.Detailed"))
+
+	pf.menuBar.Items[4].SubItems[0].Text = getMenuText(rMode, ViewModeMedium, "&"+Msg("Menu.Left.Medium"))
+	pf.menuBar.Items[4].SubItems[1].Text = getMenuText(rMode, ViewModeDetailed, "&"+Msg("Menu.Left.Detailed"))
 }
 
 func (pf *PanelsFrame) buildPrompt() []vtui.CharInfo {
@@ -216,6 +241,7 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 	}
 	// Set CommandLine's base position. Show() will override if in terminal prompt mode.
 	pf.cmdLine.SetPosition(0, cmdLineY, w-1, cmdLineY)
+	pf.updateMenuCheckmarks()
 }
 
 func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
@@ -388,6 +414,18 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return pf.HandleCommand(vtui.CmMkDir, nil)
 	case vtinput.VK_F8:
 		return pf.HandleCommand(vtui.CmDelete, nil)
+	case vtinput.VK_F9:
+		if !ctrl && !alt && !shift {
+			if pf.menuBar != nil && !pf.menuBar.Active {
+				pf.menuBar.Active = true
+				idx := 0
+				if pf.activeIdx == 1 {
+					idx = 4
+				}
+				pf.menuBar.ActivateSubMenu(idx)
+				return true
+			}
+		}
 	case vtinput.VK_F10:
 		vtui.FrameManager.Shutdown()
 		return true
@@ -683,6 +721,23 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 			vtui.FrameManager.AddScreen(pf.Clone())
 			return true
 		}
+
+	case vtui.CmLeftMedium:
+		if fsp, ok := pf.left.(*FileSystemPanel); ok { fsp.SetViewMode(ViewModeMedium) }
+		pf.updateMenuCheckmarks()
+		return true
+	case vtui.CmLeftDetailed:
+		if fsp, ok := pf.left.(*FileSystemPanel); ok { fsp.SetViewMode(ViewModeDetailed) }
+		pf.updateMenuCheckmarks()
+		return true
+	case vtui.CmRightMedium:
+		if fsp, ok := pf.right.(*FileSystemPanel); ok { fsp.SetViewMode(ViewModeMedium) }
+		pf.updateMenuCheckmarks()
+		return true
+	case vtui.CmRightDetailed:
+		if fsp, ok := pf.right.(*FileSystemPanel); ok { fsp.SetViewMode(ViewModeDetailed) }
+		pf.updateMenuCheckmarks()
+		return true
 	}
 	return false
 }
@@ -814,16 +869,20 @@ func (pf *PanelsFrame) Clone() *PanelsFrame {
 	}
 
 	if fsp, ok := pf.left.(*FileSystemPanel); ok {
-		clone.left.(*FileSystemPanel).vfs.SetPath(fsp.vfs.GetPath())
-		clone.left.(*FileSystemPanel).Refresh()
-		clone.left.(*FileSystemPanel).table.SelectPos = fsp.table.SelectPos
-		clone.left.(*FileSystemPanel).table.TopPos = fsp.table.TopPos
+		cloneFsp := clone.left.(*FileSystemPanel)
+		cloneFsp.vfs.SetPath(fsp.vfs.GetPath())
+		cloneFsp.SetViewMode(fsp.viewMode)
+		cloneFsp.table.SelectPos = fsp.table.SelectPos
+		cloneFsp.table.SelectCol = fsp.table.SelectCol
+		cloneFsp.table.TopPos = fsp.table.TopPos
 	}
 	if fsp, ok := pf.right.(*FileSystemPanel); ok {
-		clone.right.(*FileSystemPanel).vfs.SetPath(fsp.vfs.GetPath())
-		clone.right.(*FileSystemPanel).Refresh()
-		clone.right.(*FileSystemPanel).table.SelectPos = fsp.table.SelectPos
-		clone.right.(*FileSystemPanel).table.TopPos = fsp.table.TopPos
+		cloneFsp := clone.right.(*FileSystemPanel)
+		cloneFsp.vfs.SetPath(fsp.vfs.GetPath())
+		cloneFsp.SetViewMode(fsp.viewMode)
+		cloneFsp.table.SelectPos = fsp.table.SelectPos
+		cloneFsp.table.SelectCol = fsp.table.SelectCol
+		cloneFsp.table.TopPos = fsp.table.TopPos
 	}
 	clone.activeIdx = pf.activeIdx
 	clone.showKeyBar = pf.showKeyBar
@@ -832,5 +891,6 @@ func (pf *PanelsFrame) Clone() *PanelsFrame {
 	if pf.termView != nil && clone.termView != nil {
 		clone.termView.CloneStateFrom(pf.termView)
 	}
+	clone.updateMenuCheckmarks()
 	return clone
 }

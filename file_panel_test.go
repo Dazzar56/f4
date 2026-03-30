@@ -36,9 +36,78 @@ func TestFileEntry_GetCellText(t *testing.T) {
 		t.Errorf("Parent dir (..) should have UP-DIR placeholder, got: %q", upDir.GetCellText(1))
 	}
 }
+func TestFileSystemPanel_Initialization(t *testing.T) {
+	// Verify that NewFileSystemPanel initializes with valid geometry to prevent collapsed panels
+	x, y, w, h := 10, 5, 40, 20
+	fp := NewFileSystemPanel(x, y, w, h, vfs.NewOSVFS("."))
+
+	if fp.X1 != x || fp.Y1 != y || fp.X2 != x+w-1 || fp.Y2 != y+h-1 {
+		t.Errorf("Panel coordinates not initialized correctly: got (%d,%d)-(%d,%d)", fp.X1, fp.Y1, fp.X2, fp.Y2)
+	}
+
+	// Internal table must match panel interior (excluding borders)
+	tx1, ty1, tx2, ty2 := fp.table.GetPosition()
+	if tx1 != x+1 || ty1 != y+1 || tx2 != x+w-2 || ty2 != y+h-2 {
+		t.Errorf("Internal table coordinates mismatch: got (%d,%d)-(%d,%d)", tx1, ty1, tx2, ty2)
+	}
+
+	if fp.viewMode != ViewModeMedium {
+		t.Errorf("Default view mode should be Medium, got %v", fp.viewMode)
+	}
+
+	if !fp.table.CellSelection {
+		t.Error("Medium mode should have CellSelection enabled on the table")
+	}
+}
+func TestMultiFileRow_GetCellText(t *testing.T) {
+	file := &fileEntry{VFSItem: vfs.VFSItem{Name: "test.txt", IsDir: false}}
+	dir := &fileEntry{VFSItem: vfs.VFSItem{Name: "work", IsDir: true}}
+	upDir := &fileEntry{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}
+
+	mRow := &multiFileRow{entries: []*fileEntry{file, dir}}
+	mRow2 := &multiFileRow{entries: []*fileEntry{upDir}}
+
+	if mRow.GetCellText(0) != "test.txt" { t.Errorf("Expected 'test.txt', got %q", mRow.GetCellText(0)) }
+	if mRow.GetCellText(1) != "/work" { t.Errorf("Expected '/work', got %q", mRow.GetCellText(1)) }
+	if mRow.GetCellText(2) != "" { t.Errorf("Out of bounds should be empty") }
+
+	if mRow2.GetCellText(0) != ".." { t.Errorf("Expected '..', got %q", mRow2.GetCellText(0)) }
+}
+
+func TestFileSystemPanel_CursorMapping(t *testing.T) {
+	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS("."))
+
+	// Simulate 5 items
+	fp.entries = make([]*fileEntry, 5)
+
+	// Medium Mode (2 cols)
+	fp.SetViewMode(ViewModeMedium)
+
+	// Test mapping logic
+	fp.SetCursorIndex(3)
+	if fp.table.SelectPos != 1 || fp.table.SelectCol != 1 {
+		t.Errorf("Medium mode mapping failed for index 3: pos=%d, col=%d", fp.table.SelectPos, fp.table.SelectCol)
+	}
+	if fp.GetCursorIndex() != 3 {
+		t.Errorf("GetCursorIndex reverse mapping failed: got %d", fp.GetCursorIndex())
+	}
+
+	fp.SetCursorIndex(4) // Last item on odd count
+	if fp.table.SelectPos != 2 || fp.table.SelectCol != 0 {
+		t.Errorf("Medium mode mapping failed for index 4: pos=%d, col=%d", fp.table.SelectPos, fp.table.SelectCol)
+	}
+
+	// Detailed Mode (1 col)
+	fp.SetViewMode(ViewModeDetailed)
+	fp.SetCursorIndex(3)
+	if fp.table.SelectPos != 3 {
+		t.Errorf("Detailed mode mapping failed for index 3: pos=%d", fp.table.SelectPos)
+	}
+}
 
 func TestFileSystemPanel_SelectName(t *testing.T) {
 	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS("."))
+	fp.SetViewMode(ViewModeDetailed)
 
 	// Mock entries
 	fp.entries = []*fileEntry{
@@ -62,6 +131,7 @@ func TestFileSystemPanel_SelectName(t *testing.T) {
 
 func TestFileSystemPanel_MultiSelect(t *testing.T) {
 	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS("."))
+	fp.SetViewMode(ViewModeDetailed)
 
 	// Mock entries
 	fp.entries = []*fileEntry{
@@ -72,7 +142,7 @@ func TestFileSystemPanel_MultiSelect(t *testing.T) {
 	}
 	fp.table.SetRows([]vtui.TableRow{fp.entries[0], fp.entries[1], fp.entries[2], fp.entries[3]})
 
-	fp.table.SelectPos = 1 // On file1.txt
+	fp.SetCursorIndex(1) // On file1.txt
 
 	// Press Insert
 	fp.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_INSERT})
@@ -83,8 +153,8 @@ func TestFileSystemPanel_MultiSelect(t *testing.T) {
 	}
 
 	// Cursor should move to file2.txt
-	if fp.table.SelectPos != 2 {
-		t.Errorf("Cursor should move to 2, got %d", fp.table.SelectPos)
+	if fp.GetCursorIndex() != 2 {
+		t.Errorf("Cursor should move to 2, got %d", fp.GetCursorIndex())
 	}
 
 	// Press Shift+Down
@@ -95,8 +165,8 @@ func TestFileSystemPanel_MultiSelect(t *testing.T) {
 	if !fp.entries[2].Selected {
 		t.Error("file2.txt should be selected after Shift+Down")
 	}
-	if fp.table.SelectPos != 3 {
-		t.Errorf("Cursor should move to 3, got %d", fp.table.SelectPos)
+	if fp.GetCursorIndex() != 3 {
+		t.Errorf("Cursor should move to 3, got %d", fp.GetCursorIndex())
 	}
 
 	// GetSelectedNames

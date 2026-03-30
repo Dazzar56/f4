@@ -52,6 +52,8 @@ var Lng = map[string]string{
 	"Menu.Files.RenMov": "Rename or move",
 	"Menu.Files.MkDir":  "Make folder",
 	"Menu.Files.Delete": "Delete",
+	"Menu.Left.Medium":   "Medium",
+	"Menu.Left.Detailed": "Detailed",
 
 	// KeyBar Normal
 	"KeyBar.F1":  "Help",

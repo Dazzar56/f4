@@ -121,6 +121,62 @@ func TestPanelsFrame_KeyHandling(t *testing.T) {
 		t.Errorf("Ctrl+Enter failed: expected ' %s', got '%s'", expectedName, pf.cmdLine.Edit.GetText())
 	}
 }
+func TestPanelsFrame_F9_MenuActivation(t *testing.T) {
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+
+	// Active panel is Right (1)
+	pf.activeIdx = 1
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_F9,
+	})
+
+	if !pf.menuBar.Active {
+		t.Error("F9 should activate the menu bar")
+	}
+	if pf.menuBar.SelectPos != 4 {
+		t.Errorf("F9 with Right panel active should select menu index 4, got %d", pf.menuBar.SelectPos)
+	}
+
+	// Reset
+	pf.menuBar.Active = false
+	pf.activeIdx = 0
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_F9,
+	})
+
+	if !pf.menuBar.Active {
+		t.Error("F9 should activate the menu bar")
+	}
+	if pf.menuBar.SelectPos != 0 {
+		t.Errorf("F9 with Left panel active should select menu index 0, got %d", pf.menuBar.SelectPos)
+	}
+}
+func TestPanelsFrame_ViewModeCommands(t *testing.T) {
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+
+	handled := pf.HandleCommand(vtui.CmLeftDetailed, nil)
+	if !handled { t.Error("CmLeftDetailed not handled") }
+	if pf.left.(*FileSystemPanel).viewMode != ViewModeDetailed {
+		t.Error("Left panel mode not changed to Detailed")
+	}
+
+	pf.HandleCommand(vtui.CmRightDetailed, nil)
+	if pf.right.(*FileSystemPanel).viewMode != ViewModeDetailed {
+		t.Error("Right panel mode not changed to Detailed")
+	}
+
+	// Menu checkmarks
+	menuText := pf.menuBar.Items[0].SubItems[1].Text
+	if !strings.HasPrefix(menuText, "√") {
+		t.Errorf("Menu checkmark not updated, got %q", menuText)
+	}
+}
 func TestPanelsFrame_RefreshOnFocus(t *testing.T) {
 	pf := NewPanelsFrame()
 
@@ -163,6 +219,9 @@ func TestPanelsFrame_Clone(t *testing.T) {
 		}
 		if fsp.table.SelectPos != 5 {
 			t.Errorf("Clone failed to copy Table SelectPos: %d", fsp.table.SelectPos)
+		}
+		if fsp.viewMode != pf.left.(*FileSystemPanel).viewMode {
+			t.Error("Clone failed to copy ViewMode")
 		}
 	}
 
