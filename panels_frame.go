@@ -744,7 +744,7 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 			forked := chkFork.State == 1
 			dlg.Close()
 			if dest != "" {
-				go pf.ExecuteFileOp(srcVfs, dstVfs, names, dest, isMove, forked)
+				go ExecuteFileOp(pf, srcVfs, dstVfs, names, dest, isMove, forked, pf.RefreshAll)
 			}
 		}
 		dlg.AddItem(btnOk)

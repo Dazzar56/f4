@@ -2,10 +2,11 @@ package main
 
 import (
 	"context"
-	"strings"
-	"os"
 	"fmt"
 	"io"
+	"os"
+	"strings"
+
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 )
@@ -15,9 +16,11 @@ type FileOpState struct {
 	SkipAll      bool
 }
 
-func (pf *PanelsFrame) ExecuteFileOp(srcVfs, dstVfs vfs.VFS, names []string, destBase string, isMove bool, forked bool) {
+func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, destBase string, isMove bool, forked bool, onComplete func()) {
 	title := " Copying... "
-	if isMove { title = " Moving... " }
+	if isMove {
+		title = " Moving... "
+	}
 	state := &FileOpState{}
 
 	dlg := vtui.NewDialog(0, 0, 50, 8, title)
@@ -28,7 +31,12 @@ func (pf *PanelsFrame) ExecuteFileOp(srcVfs, dstVfs vfs.VFS, names []string, des
 
 	btnCancel := vtui.NewButton(dlg.X1+20, dlg.Y1+5, "&Cancel")
 	var taskCtx *vtui.TaskContext
-	btnCancel.OnClick = func() { if taskCtx != nil { taskCtx.Cancel() }; dlg.Close() }
+	btnCancel.OnClick = func() {
+		if taskCtx != nil {
+			taskCtx.Cancel()
+		}
+		dlg.Close()
+	}
 	dlg.AddItem(btnCancel)
 
 	vtui.FrameManager.PostTask(func() {
@@ -44,7 +52,9 @@ func (pf *PanelsFrame) ExecuteFileOp(srcVfs, dstVfs vfs.VFS, names []string, des
 	taskCtx = vtui.RunAsync(func(ctx *vtui.TaskContext) {
 		var opErr error
 		for i, name := range names {
-			if ctx.Err() != nil { break }
+			if ctx.Err() != nil {
+				break
+			}
 			srcPath := srcVfs.Join(srcVfs.GetPath(), name)
 
 			ctx.RunOnUI(func() { lbl.SetText(fmt.Sprintf("Processing: %s", name)) })
@@ -59,7 +69,7 @@ func (pf *PanelsFrame) ExecuteFileOp(srcVfs, dstVfs vfs.VFS, names []string, des
 				}
 			}
 
-			err := pf.recursiveCopy(ctx, dlg, lbl, srcVfs, srcPath, dstVfs, destBase, name, state)
+			err := recursiveCopy(ctx, dlg, lbl, srcVfs, srcPath, dstVfs, destBase, name, state)
 			if err != nil {
 				opErr = err
 				break
@@ -80,21 +90,31 @@ func (pf *PanelsFrame) ExecuteFileOp(srcVfs, dstVfs vfs.VFS, names []string, des
 				vtui.ShowMessage(" Error ", fmt.Sprintf(Msg("Operation.Error"), opErr.Error()), []string{"&Ok"})
 			}
 			pf.RefreshAll()
+			if onComplete != nil {
+				onComplete()
+			}
 		})
 	})
 }
 
-func (pf *PanelsFrame) recursiveCopy(ctx *vtui.TaskContext, dlg *vtui.Dialog, lbl *vtui.Text, srcVfs vfs.VFS, srcPath string, dstVfs vfs.VFS, dstBase, name string, state *FileOpState) error {
-	if ctx.Err() != nil { return ctx.Err() }
+func recursiveCopy(ctx *vtui.TaskContext, dlg *vtui.Dialog, lbl *vtui.Text, srcVfs vfs.VFS, srcPath string, dstVfs vfs.VFS, dstBase, name string, state *FileOpState) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 
 	stat, err := srcVfs.Stat(srcPath)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 
 	destPath := dstVfs.Join(dstBase, name)
-	
+
 	// Robust self-copy protection
-	absSrc, _ := srcVfs.Abs(srcPath)
-	absDst, _ := dstVfs.Abs(destPath)
+	absSrc, errSrc := srcVfs.Abs(srcPath)
+	absDst, errDst := dstVfs.Abs(destPath)
+	if errSrc != nil || errDst != nil {
+		return fmt.Errorf("vfs path error")
+	}
 	if absSrc == absDst {
 		return fmt.Errorf("cannot copy folder into itself (source equals destination)")
 	}
@@ -108,16 +128,22 @@ func (pf *PanelsFrame) recursiveCopy(ctx *vtui.TaskContext, dlg *vtui.Dialog, lb
 
 	if stat.IsDir {
 		if !exists {
-			if err := dstVfs.MkDir(destPath); err != nil { return err }
+			if err := dstVfs.MkDir(destPath); err != nil {
+				return err
+			}
 		} else if !dstStat.IsDir {
 			return fmt.Errorf("cannot overwrite file with folder: %s", name)
 		}
 
 		items, err := srcVfs.ReadDir(srcPath)
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 		for _, item := range items {
-			if item.Name == ".." { continue }
-			if err := pf.recursiveCopy(ctx, dlg, lbl, srcVfs, srcVfs.Join(srcPath, item.Name), dstVfs, destPath, item.Name, state); err != nil {
+			if item.Name == ".." {
+				continue
+			}
+			if err := recursiveCopy(ctx, dlg, lbl, srcVfs, srcVfs.Join(srcPath, item.Name), dstVfs, destPath, item.Name, state); err != nil {
 				return err
 			}
 		}
@@ -127,24 +153,28 @@ func (pf *PanelsFrame) recursiveCopy(ctx *vtui.TaskContext, dlg *vtui.Dialog, lb
 	// Copy file
 	ctx.RunOnUI(func() { lbl.SetText(fmt.Sprintf("Copying: %s", name)) })
 
-	// Copy file
 	if exists {
 		if dstStat.IsDir {
 			return fmt.Errorf("cannot overwrite folder with file: %s", name)
 		}
-		if state.SkipAll { return nil }
+		if state.SkipAll {
+			return nil
+		}
 		if !state.OverwriteAll {
-			choice := pf.AskOverwrite(ctx, name)
+			choice := AskOverwrite(ctx, name)
 			switch choice {
-			case 1: state.OverwriteAll = true
-			case 2: return nil // Skip
-			case 3: state.SkipAll = true; return nil
-			case 4: return context.Canceled // Cancel
+			case 1:
+				state.OverwriteAll = true
+			case 2:
+				return nil // Skip
+			case 3:
+				state.SkipAll = true
+				return nil
+			case 4:
+				return context.Canceled // Cancel
 			}
 		}
 	}
-
-	ctx.RunOnUI(func() { lbl.SetText(fmt.Sprintf("Copying: %s", name)) })
 
 	var srcFile vfs.ReadAtCloser
 	var dstFile io.WriteCloser
@@ -152,20 +182,32 @@ func (pf *PanelsFrame) recursiveCopy(ctx *vtui.TaskContext, dlg *vtui.Dialog, lb
 	// Open Source with Retry
 	for {
 		srcFile, err = srcVfs.Open(srcPath)
-		if err == nil { break }
-		choice := pf.AskError(ctx, "Cannot open source file", err)
-		if choice == 1 { return nil } // Skip
-		if choice == 2 { return context.Canceled } // Abort
+		if err == nil {
+			break
+		}
+		choice := AskError(ctx, "Cannot open source file", err)
+		if choice == 1 {
+			return nil
+		} // Skip
+		if choice == 2 {
+			return context.Canceled
+		} // Abort
 	}
 	defer srcFile.Close()
 
 	// Create Destination with Retry
 	for {
 		dstFile, err = dstVfs.Create(destPath)
-		if err == nil { break }
-		choice := pf.AskError(ctx, "Cannot create destination file", err)
-		if choice == 1 { return nil } // Skip
-		if choice == 2 { return context.Canceled } // Abort
+		if err == nil {
+			break
+		}
+		choice := AskError(ctx, "Cannot create destination file", err)
+		if choice == 1 {
+			return nil
+		} // Skip
+		if choice == 2 {
+			return context.Canceled
+		} // Abort
 	}
 	defer dstFile.Close()
 
@@ -175,9 +217,9 @@ func (pf *PanelsFrame) recursiveCopy(ctx *vtui.TaskContext, dlg *vtui.Dialog, lb
 }
 
 // AskOverwrite shows a modal dialog from the background thread and waits for the result.
-func (pf *PanelsFrame) AskOverwrite(ctx *vtui.TaskContext, name string) int {
+func AskOverwrite(ctx *vtui.TaskContext, name string) int {
 	resultChan := make(chan int, 1)
-	
+
 	ctx.RunOnUI(func() {
 		msg := fmt.Sprintf("File already exists:\n%s\n\nOverwrite?", name)
 		title := " Conflict "
@@ -185,7 +227,9 @@ func (pf *PanelsFrame) AskOverwrite(ctx *vtui.TaskContext, name string) int {
 
 		dlg := vtui.ShowMessage(title, msg, buttons)
 		dlg.OnResult = func(code int) {
-			if code < 0 { code = 4 } // Map ESC/Close to Cancel
+			if code < 0 {
+				code = 4
+			} // Map ESC/Close to Cancel
 			resultChan <- code
 		}
 	})
@@ -199,19 +243,22 @@ func (pf *PanelsFrame) AskOverwrite(ctx *vtui.TaskContext, name string) int {
 }
 
 // AskError handles I/O errors by asking user for Retry/Skip/Abort
-func (pf *PanelsFrame) AskError(ctx *vtui.TaskContext, op string, err error) int {
+func AskError(ctx *vtui.TaskContext, op string, err error) int {
 	resultChan := make(chan int, 1)
 	ctx.RunOnUI(func() {
 		msg := fmt.Sprintf("%s:\n%s\n\n%s", op, err.Error(), "What to do?")
 		dlg := vtui.ShowMessage(" Error ", msg, []string{Msg("Btn.Retry"), "&Skip", "&Abort"})
 		dlg.OnResult = func(code int) {
-			if code < 0 { code = 2 }
+			if code < 0 {
+				code = 2
+			}
 			resultChan <- code
 		}
 	})
 	select {
-	case res := <-resultChan: return res
-	case <-ctx.Done(): return 2
+	case res := <-resultChan:
+		return res
+	case <-ctx.Done():
+		return 2
 	}
 }
-
