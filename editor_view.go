@@ -610,6 +610,7 @@ func (ev *EditorView) SetPosition(x1, y1, x2, y2 int) {
 	}
 	if ev.scrollBar != nil {
 		ev.scrollBar.SetPosition(x2, y1+1, x2, y2)
+		ev.scrollBar.PgStep = y2 - y1
 	}
 	ev.ensureEngineWidth()
 	ev.ensureCursorVisible()
