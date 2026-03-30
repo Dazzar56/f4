@@ -383,6 +383,12 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
 	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
+	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
+	// Arkanoid easter egg :)
+	if e.VirtualKeyCode == vtinput.VK_A && ctrl && alt && !shift && e.KeyDown {
+		vtui.FrameManager.Push(NewArkanoidFrame())
+		return true
+	}
 
 	// Alt+F5: Dummy Long Operation for debugging
 	if e.VirtualKeyCode == vtinput.VK_F5 && alt && !ctrl && e.KeyDown {
@@ -399,9 +405,6 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		pf.cmdLine.ProcessKey(e)
 		return true
 	}
-
-	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
-	// ctrl и alt уже объявлены выше в начале функции
 
 	// Handle bracketed paste for terminal apps
 	if e.Type == vtinput.PasteEventType {
