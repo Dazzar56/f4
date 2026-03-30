@@ -14,13 +14,22 @@ type fileEntry struct {
 	vfs.VFSItem
 	Selected bool
 }
-type multiFileRow struct {
-	entries []*fileEntry
+type mediumRow struct {
+	fp *FileSystemPanel
+	r  int
 }
 
-func (m *multiFileRow) GetCellText(col int) string {
-	if col >= len(m.entries) { return "" }
-	e := m.entries[col]
+func (m *mediumRow) GetCellText(col int) string {
+	H := m.fp.table.ViewHeight
+	if H <= 0 { H = 1 }
+	idx := m.r
+	if col == 1 {
+		idx += H
+	}
+	if idx >= len(m.fp.entries) {
+		return ""
+	}
+	e := m.fp.entries[idx]
 	if e.IsDir {
 		if e.Name == ".." { return ".." }
 		return "/" + e.Name
@@ -28,9 +37,17 @@ func (m *multiFileRow) GetCellText(col int) string {
 	return e.Name
 }
 
-func (m *multiFileRow) IsColSelected(col int) bool {
-	if col >= len(m.entries) { return false }
-	return m.entries[col].Selected
+func (m *mediumRow) IsColSelected(col int) bool {
+	H := m.fp.table.ViewHeight
+	if H <= 0 { H = 1 }
+	idx := m.r
+	if col == 1 {
+		idx += H
+	}
+	if idx >= len(m.fp.entries) {
+		return false
+	}
+	return m.fp.entries[idx].Selected
 }
 
 type ViewMode int
@@ -92,7 +109,7 @@ func NewFileSystemPanel(x, y, w, h int, vfs vfs.VFS) *FileSystemPanel {
 	fp.table.ColorItemSelectCursorIdx = ColPanelSelectedCursor
 	fp.table.ColorTitleIdx = ColPanelColumnTitle
 	fp.table.ColorBoxIdx = ColPanelBox
-	fp.table.ShowScrollBar = true
+	fp.table.ShowScrollBar = false
 	fp.SetCanFocus(true)
 	fp.SetPosition(x, y, x+w-1, y+h-1)
 	fp.SetViewMode(ViewModeMedium)
@@ -115,7 +132,12 @@ func (fp *FileSystemPanel) GetCursorIndex() int {
 	if fp.viewMode == ViewModeDetailed {
 		return fp.table.SelectPos
 	}
-	idx := fp.table.SelectPos*2 + fp.table.SelectCol
+	H := fp.table.ViewHeight
+	if H <= 0 { H = 1 }
+	idx := fp.table.SelectPos
+	if fp.table.SelectCol == 1 {
+		idx += H
+	}
 	if idx >= len(fp.entries) {
 		return len(fp.entries) - 1
 	}
@@ -133,8 +155,25 @@ func (fp *FileSystemPanel) SetCursorIndex(idx int) {
 		fp.table.SetSelectPos(idx)
 		fp.table.SelectCol = 0
 	} else {
-		fp.table.SetSelectPos(idx / 2)
-		fp.table.SelectCol = idx % 2
+		H := fp.table.ViewHeight
+		if H <= 0 { H = 1 }
+
+		rel := idx - fp.table.TopPos
+		if rel >= 0 && rel < H {
+			fp.table.SelectCol = 0
+			fp.table.SelectPos = fp.table.TopPos + rel
+		} else if rel >= H && rel < 2*H {
+			fp.table.SelectCol = 1
+			fp.table.SelectPos = fp.table.TopPos + (rel - H)
+		} else if rel < 0 {
+			fp.table.TopPos = idx
+			fp.table.SelectCol = 0
+			fp.table.SelectPos = idx
+		} else {
+			fp.table.TopPos = idx - 2*H + 1
+			fp.table.SelectCol = 1
+			fp.table.SelectPos = fp.table.TopPos + H - 1
+		}
 	}
 }
 
@@ -162,6 +201,7 @@ func (fp *FileSystemPanel) ReadDirectory() {
 }
 
 func (fp *FileSystemPanel) Refresh() {
+	idx := fp.GetCursorIndex()
 	if fp.viewMode == ViewModeDetailed {
 		rows := make([]vtui.TableRow, len(fp.entries))
 		for i, e := range fp.entries {
@@ -169,19 +209,13 @@ func (fp *FileSystemPanel) Refresh() {
 		}
 		fp.table.SetRows(rows)
 	} else {
-		rows := make([]vtui.TableRow, (len(fp.entries)+1)/2)
+		rows := make([]vtui.TableRow, len(fp.entries))
 		for i := 0; i < len(rows); i++ {
-			mRow := &multiFileRow{entries: make([]*fileEntry, 0, 2)}
-			if i*2 < len(fp.entries) {
-				mRow.entries = append(mRow.entries, fp.entries[i*2])
-			}
-			if i*2+1 < len(fp.entries) {
-				mRow.entries = append(mRow.entries, fp.entries[i*2+1])
-			}
-			rows[i] = mRow
+			rows[i] = &mediumRow{fp: fp, r: i}
 		}
 		fp.table.SetRows(rows)
 	}
+	fp.SetCursorIndex(idx)
 }
 
 func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
@@ -243,6 +277,42 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 				fp.entries[idx].Selected = !fp.entries[idx].Selected
 			}
 		}
+
+		if fp.viewMode == ViewModeMedium {
+			idx := fp.GetCursorIndex()
+			H := fp.table.ViewHeight
+			if H <= 0 { H = 1 }
+
+			switch e.VirtualKeyCode {
+			case vtinput.VK_UP:
+				idx--
+			case vtinput.VK_DOWN:
+				idx++
+			case vtinput.VK_LEFT:
+				idx -= H
+			case vtinput.VK_RIGHT:
+				idx += H
+			case vtinput.VK_PRIOR:
+				idx -= H * 2
+			case vtinput.VK_NEXT:
+				idx += H * 2
+			case vtinput.VK_HOME:
+				idx = 0
+			case vtinput.VK_END:
+				idx = len(fp.entries) - 1
+			}
+
+			if idx < 0 {
+				idx = 0
+			}
+			if idx >= len(fp.entries) {
+				idx = len(fp.entries) - 1
+			}
+
+			fp.SetCursorIndex(idx)
+			return true
+		}
+
 		return fp.table.ProcessKey(e)
 
 	case vtinput.VK_RETURN:

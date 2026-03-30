@@ -60,19 +60,29 @@ func TestFileSystemPanel_Initialization(t *testing.T) {
 		t.Error("Medium mode should have CellSelection enabled on the table")
 	}
 }
-func TestMultiFileRow_GetCellText(t *testing.T) {
-	file := &fileEntry{VFSItem: vfs.VFSItem{Name: "test.txt", IsDir: false}}
-	dir := &fileEntry{VFSItem: vfs.VFSItem{Name: "work", IsDir: true}}
-	upDir := &fileEntry{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}
+func TestMediumRow_GetCellText(t *testing.T) {
+	fp := NewFileSystemPanel(0, 0, 80, 10, vfs.NewOSVFS("."))
+	fp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "test.txt", IsDir: false}},
+		{VFSItem: vfs.VFSItem{Name: "work", IsDir: true}},
+		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
+	}
+	fp.SetViewMode(ViewModeMedium)
 
-	mRow := &multiFileRow{entries: []*fileEntry{file, dir}}
-	mRow2 := &multiFileRow{entries: []*fileEntry{upDir}}
+	mRow := &mediumRow{fp: fp, r: 0}
 
 	if mRow.GetCellText(0) != "test.txt" { t.Errorf("Expected 'test.txt', got %q", mRow.GetCellText(0)) }
-	if mRow.GetCellText(1) != "/work" { t.Errorf("Expected '/work', got %q", mRow.GetCellText(1)) }
-	if mRow.GetCellText(2) != "" { t.Errorf("Out of bounds should be empty") }
+	if mRow.GetCellText(1) != "" { t.Errorf("Out of bounds should be empty") }
 
-	if mRow2.GetCellText(0) != ".." { t.Errorf("Expected '..', got %q", mRow2.GetCellText(0)) }
+	fp.entries = make([]*fileEntry, 10)
+	for i := 0; i < 10; i++ {
+		fp.entries[i] = &fileEntry{VFSItem: vfs.VFSItem{Name: "f"}}
+	}
+	fp.entries[0].Name = "Left"
+	fp.entries[7].Name = "Right"
+	mRow = &mediumRow{fp: fp, r: 0}
+	if mRow.GetCellText(0) != "Left" { t.Errorf("Expected 'Left', got %q", mRow.GetCellText(0)) }
+	if mRow.GetCellText(1) != "Right" { t.Errorf("Expected 'Right', got %q", mRow.GetCellText(1)) }
 }
 
 func TestFileSystemPanel_CursorMapping(t *testing.T) {
@@ -84,17 +94,17 @@ func TestFileSystemPanel_CursorMapping(t *testing.T) {
 		fp.entries[i] = &fileEntry{VFSItem: vfs.VFSItem{Name: "file"}}
 	}
 
-	// 1. Medium Mode (Row-Major)
+	// 1. Medium Mode (Column-Major)
 	fp.SetViewMode(ViewModeMedium)
 	fp.Refresh()
-	fp.SetCursorIndex(3) // Index 3: Row 1, Col 1
-	if fp.table.SelectPos != 1 || fp.table.SelectCol != 1 {
-		t.Errorf("Medium mapping index 3: expected pos 1 col 1, got pos %d col %d", fp.table.SelectPos, fp.table.SelectCol)
+	fp.SetCursorIndex(3) // Index 3: Row 3, Col 0
+	if fp.table.SelectPos != 3 || fp.table.SelectCol != 0 {
+		t.Errorf("Medium mapping index 3: expected pos 3 col 0, got pos %d col %d", fp.table.SelectPos, fp.table.SelectCol)
 	}
 
-	fp.SetCursorIndex(5) // Index 5: Row 2, Col 1
-	if fp.table.SelectPos != 2 || fp.table.SelectCol != 1 {
-		t.Errorf("Medium mapping index 5: expected pos 2 col 1, got pos %d col %d", fp.table.SelectPos, fp.table.SelectCol)
+	fp.SetCursorIndex(10) // Index 10 with H=7 -> Col 1, Row 3
+	if fp.table.SelectPos != 3 || fp.table.SelectCol != 1 {
+		t.Errorf("Medium mapping index 10: expected pos 3 col 1, got pos %d col %d", fp.table.SelectPos, fp.table.SelectCol)
 	}
 
 	// 2. Detailed Mode
