@@ -993,6 +993,12 @@ func (pf *PanelsFrame) Clone() *PanelsFrame {
 		cloneFsp := clone.left.(*FileSystemPanel)
 		cloneFsp.vfs.SetPath(fsp.vfs.GetPath())
 		cloneFsp.SetViewMode(fsp.viewMode)
+		cloneFsp.ReadDirectory()
+		if len(cloneFsp.entries) == len(fsp.entries) {
+			for i := range cloneFsp.entries {
+				cloneFsp.entries[i].Selected = fsp.entries[i].Selected
+			}
+		}
 		cloneFsp.table.SelectPos = fsp.table.SelectPos
 		cloneFsp.table.SelectCol = fsp.table.SelectCol
 		cloneFsp.table.TopPos = fsp.table.TopPos
@@ -1001,6 +1007,12 @@ func (pf *PanelsFrame) Clone() *PanelsFrame {
 		cloneFsp := clone.right.(*FileSystemPanel)
 		cloneFsp.vfs.SetPath(fsp.vfs.GetPath())
 		cloneFsp.SetViewMode(fsp.viewMode)
+		cloneFsp.ReadDirectory()
+		if len(cloneFsp.entries) == len(fsp.entries) {
+			for i := range cloneFsp.entries {
+				cloneFsp.entries[i].Selected = fsp.entries[i].Selected
+			}
+		}
 		cloneFsp.table.SelectPos = fsp.table.SelectPos
 		cloneFsp.table.SelectCol = fsp.table.SelectCol
 		cloneFsp.table.TopPos = fsp.table.TopPos
