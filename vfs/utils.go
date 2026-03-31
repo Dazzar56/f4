@@ -1,0 +1,44 @@
+package vfs
+
+import (
+	"path/filepath"
+	"runtime"
+	"strings"
+)
+
+// IsTerminalRunnable checks if a file can be executed in the built-in terminal.
+func IsTerminalRunnable(v VFS, path string) bool {
+	info, err := v.Stat(path)
+	if err != nil || info.IsDir {
+		return false
+	}
+
+	// 1. Check executable bit on Unix
+	if runtime.GOOS != "windows" && info.IsExecutable {
+		return true
+	}
+
+	// 2. Check common executable/script extensions
+	ext := strings.ToLower(filepath.Ext(info.Name))
+	terminalExts := map[string]bool{
+		".exe": true, ".bat": true, ".cmd": true, ".com": true,
+		".sh": true, ".bash": true, ".py": true, ".pl": true,
+		".rb": true, ".js": true, ".php": true, ".lua": true,
+	}
+	if terminalExts[ext] {
+		return true
+	}
+
+	// 3. Check for Shebang
+	f, err := v.Open(path)
+	if err == nil {
+		defer f.Close()
+		buf := make([]byte, 2)
+		n, _ := f.Read(buf)
+		if n == 2 && string(buf) == "#!" {
+			return true
+		}
+	}
+
+	return false
+}

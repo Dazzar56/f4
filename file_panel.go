@@ -88,6 +88,7 @@ type FileSystemPanel struct {
 	vfs       vfs.VFS
 	entries   []*fileEntry
 	viewMode            ViewMode
+	cursorIdx           int
 	lastRightClickedIdx int
 }
 
@@ -129,51 +130,49 @@ func (fp *FileSystemPanel) SetViewMode(mode ViewMode) {
 }
 
 func (fp *FileSystemPanel) GetCursorIndex() int {
-	if fp.viewMode == ViewModeDetailed {
-		return fp.table.SelectPos
+	if fp.cursorIdx >= len(fp.entries) {
+		fp.cursorIdx = len(fp.entries) - 1
 	}
-	H := fp.table.ViewHeight
-	if H <= 0 { H = 1 }
-	idx := fp.table.SelectPos
-	if fp.table.SelectCol == 1 {
-		idx += H
+	if fp.cursorIdx < 0 {
+		fp.cursorIdx = 0
 	}
-	if idx >= len(fp.entries) {
-		return len(fp.entries) - 1
-	}
-	return idx
+	return fp.cursorIdx
 }
 
 func (fp *FileSystemPanel) SetCursorIndex(idx int) {
-	if idx < 0 {
-		idx = 0
+	if len(fp.entries) == 0 {
+		fp.cursorIdx = 0
+		return
 	}
-	if idx >= len(fp.entries) {
-		idx = len(fp.entries) - 1
-	}
+	if idx < 0 { idx = 0 }
+	if idx >= len(fp.entries) { idx = len(fp.entries) - 1 }
+	fp.cursorIdx = idx
+
+	// Sync table visual state
 	if fp.viewMode == ViewModeDetailed {
-		fp.table.SetSelectPos(idx)
+		fp.table.SetSelectPos(fp.cursorIdx)
 		fp.table.SelectCol = 0
 	} else {
 		H := fp.table.ViewHeight
 		if H <= 0 { H = 1 }
 
-		rel := idx - fp.table.TopPos
-		if rel >= 0 && rel < H {
-			fp.table.SelectCol = 0
-			fp.table.SelectPos = fp.table.TopPos + rel
-		} else if rel >= H && rel < 2*H {
-			fp.table.SelectCol = 1
-			fp.table.SelectPos = fp.table.TopPos + (rel - H)
-		} else if rel < 0 {
-			fp.table.TopPos = idx
-			fp.table.SelectCol = 0
-			fp.table.SelectPos = idx
-		} else {
-			fp.table.TopPos = idx - 2*H + 1
-			fp.table.SelectCol = 1
-			fp.table.SelectPos = fp.table.TopPos + H - 1
+		// In Medium mode, table.SelectPos is the ROW (0..H-1)
+		// and table.SelectCol is the COLUMN (0..1)
+		// Absolute index = table.TopPos + row + col*H
+
+		// 1. Ensure TopPos is sane for the current cursor
+		if fp.cursorIdx < fp.table.TopPos {
+			fp.table.TopPos = fp.cursorIdx
+		} else if fp.cursorIdx >= fp.table.TopPos + 2*H {
+			fp.table.TopPos = fp.cursorIdx - 2*H + 1
 		}
+
+		rel := fp.cursorIdx - fp.table.TopPos
+		fp.table.SelectCol = rel / H
+		fp.table.SelectPos = rel % H
+
+		// If we landed on a column that is theoretically correct but visually empty,
+		// the table will handle it during Show, but we keep the absolute index.
 	}
 }
 
@@ -262,58 +261,46 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 	switch e.VirtualKeyCode {
 	case vtinput.VK_INSERT:
 		idx := fp.GetCursorIndex()
-		if idx >= 0 && idx < len(fp.entries) {
-			if fp.entries[idx].Name != ".." {
-				fp.entries[idx].Selected = !fp.entries[idx].Selected
-			}
-			fp.SetCursorIndex(idx + 1)
+		if idx < len(fp.entries) && fp.entries[idx].Name != ".." {
+			fp.entries[idx].Selected = !fp.entries[idx].Selected
 		}
+		fp.SetCursorIndex(idx + 1)
 		return true
 
 	case vtinput.VK_UP, vtinput.VK_DOWN, vtinput.VK_LEFT, vtinput.VK_RIGHT, vtinput.VK_PRIOR, vtinput.VK_NEXT, vtinput.VK_HOME, vtinput.VK_END:
 		if shift {
 			idx := fp.GetCursorIndex()
-			if idx >= 0 && idx < len(fp.entries) && fp.entries[idx].Name != ".." {
+			if idx < len(fp.entries) && fp.entries[idx].Name != ".." {
 				fp.entries[idx].Selected = !fp.entries[idx].Selected
 			}
 		}
 
+		idx := fp.GetCursorIndex()
+		H := fp.table.ViewHeight
+		if H <= 0 { H = 1 }
+
 		if fp.viewMode == ViewModeMedium {
-			idx := fp.GetCursorIndex()
-			H := fp.table.ViewHeight
-			if H <= 0 { H = 1 }
-
 			switch e.VirtualKeyCode {
-			case vtinput.VK_UP:
-				idx--
-			case vtinput.VK_DOWN:
-				idx++
-			case vtinput.VK_LEFT:
-				idx -= H
-			case vtinput.VK_RIGHT:
-				idx += H
-			case vtinput.VK_PRIOR:
-				idx -= H * 2
-			case vtinput.VK_NEXT:
-				idx += H * 2
-			case vtinput.VK_HOME:
-				idx = 0
-			case vtinput.VK_END:
-				idx = len(fp.entries) - 1
+			case vtinput.VK_UP: idx--
+			case vtinput.VK_DOWN: idx++
+			case vtinput.VK_LEFT: idx -= H
+			case vtinput.VK_RIGHT: idx += H
+			case vtinput.VK_PRIOR: idx -= H * 2
+			case vtinput.VK_NEXT: idx += H * 2
+			case vtinput.VK_HOME: idx = 0
+			case vtinput.VK_END: idx = len(fp.entries) - 1
+			default: return false
 			}
-
-			if idx < 0 {
-				idx = 0
-			}
-			if idx >= len(fp.entries) {
-				idx = len(fp.entries) - 1
-			}
-
 			fp.SetCursorIndex(idx)
 			return true
+		} else {
+			// In Detailed mode, we let the table handle navigation but sync our index back
+			handled := fp.table.ProcessKey(e)
+			if handled {
+				fp.cursorIdx = fp.table.SelectPos
+			}
+			return handled
 		}
-
-		return fp.table.ProcessKey(e)
 
 	case vtinput.VK_RETURN:
 		idx := fp.GetCursorIndex()
@@ -348,10 +335,28 @@ func (fp *FileSystemPanel) ProcessMouse(e *vtinput.InputEvent) bool {
 	}
 
 	handled := fp.table.ProcessMouse(e)
+	if handled {
+		// Sync absolute index from table's visual selection
+		if fp.viewMode == ViewModeDetailed {
+			fp.cursorIdx = fp.table.SelectPos
+		} else {
+			H := fp.table.ViewHeight
+			if H <= 0 { H = 1 }
+			newIdx := fp.table.TopPos + fp.table.SelectPos + fp.table.SelectCol*H
+
+			// Fix for "click in empty space": if we selected an empty slot,
+			// snap to the last valid entry.
+			if newIdx >= len(fp.entries) {
+				fp.SetCursorIndex(len(fp.entries) - 1)
+			} else {
+				fp.cursorIdx = newIdx
+			}
+		}
+	}
 
 	if e.ButtonState != 0 && e.KeyDown {
 		idx := fp.GetCursorIndex()
-		if idx >= 0 && idx < len(fp.entries) {
+		if idx < len(fp.entries) {
 			if e.ButtonState == vtinput.RightmostButtonPressed {
 				if fp.entries[idx].Name != ".." && fp.lastRightClickedIdx != idx {
 					fp.entries[idx].Selected = !fp.entries[idx].Selected

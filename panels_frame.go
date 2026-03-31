@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
-	"path/filepath"
 	"time"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui/piecetable"
@@ -198,41 +197,6 @@ func (pf *PanelsFrame) openViewer(v vfs.VFS, path string) {
 	vtui.FrameManager.AddScreen(viewer)
 }
 
-func isTerminalRunnable(v vfs.VFS, path string) bool {
-	info, err := v.Stat(path)
-	if err != nil || info.IsDir {
-		return false
-	}
-
-	// 1. Check executable bit on Unix
-	if runtime.GOOS != "windows" && info.IsExecutable {
-		return true
-	}
-
-	// 2. Check common executable/script extensions
-	ext := strings.ToLower(filepath.Ext(info.Name))
-	terminalExts := map[string]bool{
-		".exe": true, ".bat": true, ".cmd": true, ".com": true,
-		".sh": true, ".bash": true, ".py": true, ".pl": true,
-		".rb": true, ".js": true, ".php": true, ".lua": true,
-	}
-	if terminalExts[ext] {
-		return true
-	}
-
-	// 3. Check for Shebang
-	f, err := v.Open(path)
-	if err == nil {
-		defer f.Close()
-		buf := make([]byte, 2)
-		n, _ := f.Read(buf)
-		if n == 2 && string(buf) == "#!" {
-			return true
-		}
-	}
-
-	return false
-}
 
 func (pf *PanelsFrame) executeFile(v vfs.VFS, dir, name, path string) {
 	if _, isLocal := v.(*vfs.OSVFS); !isLocal {
@@ -240,7 +204,7 @@ func (pf *PanelsFrame) executeFile(v vfs.VFS, dir, name, path string) {
 		return
 	}
 
-	if isTerminalRunnable(v, path) {
+	if vfs.IsTerminalRunnable(v, path) {
 		if pf.pty != nil {
 			// Sync PTY to the file's directory
 			pf.pty.Write([]byte(fmt.Sprintf(" cd %q\r", dir)))

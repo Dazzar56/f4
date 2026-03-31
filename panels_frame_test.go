@@ -416,28 +416,28 @@ func TestIsTerminalRunnable(t *testing.T) {
 	// 1. Обычный текстовый файл -> false
 	txtFile := filepath.Join(tmpDir, "test.txt")
 	os.WriteFile(txtFile, []byte("hello"), 0644)
-	if isTerminalRunnable(v, txtFile) {
+	if vfs.IsTerminalRunnable(v, txtFile) {
 		t.Error("Text file should not be terminal-runnable")
 	}
 
 	// 2. Файл с расширением .sh -> true
 	shFile := filepath.Join(tmpDir, "test.sh")
 	os.WriteFile(shFile, []byte("echo hi"), 0644)
-	if !isTerminalRunnable(v, shFile) {
+	if !vfs.IsTerminalRunnable(v, shFile) {
 		t.Error(".sh file should be terminal-runnable")
 	}
 
 	// 3. Файл с шебангом без расширения -> true
 	binFile := filepath.Join(tmpDir, "my-tool")
 	os.WriteFile(binFile, []byte("#!/usr/bin/env bash\necho hi"), 0644)
-	if !isTerminalRunnable(v, binFile) {
+	if !vfs.IsTerminalRunnable(v, binFile) {
 		t.Error("File with shebang should be terminal-runnable")
 	}
 
 	// 4. Директория -> false
 	subDir := filepath.Join(tmpDir, "folder")
 	os.Mkdir(subDir, 0755)
-	if isTerminalRunnable(v, subDir) {
+	if vfs.IsTerminalRunnable(v, subDir) {
 		t.Error("Directory should not be terminal-runnable")
 	}
 
@@ -445,7 +445,7 @@ func TestIsTerminalRunnable(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		execFile := filepath.Join(tmpDir, "compiled-bin")
 		os.WriteFile(execFile, []byte{0x7f, 'E', 'L', 'F'}, 0755)
-		if !isTerminalRunnable(v, execFile) {
+		if !vfs.IsTerminalRunnable(v, execFile) {
 			t.Error("File with executable bit should be terminal-runnable on Unix")
 		}
 	}
