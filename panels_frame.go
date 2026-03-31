@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"runtime"
@@ -171,16 +170,19 @@ func (pf *PanelsFrame) initPTY() {
 }
 
 func (pf *PanelsFrame) openEditor(v vfs.VFS, path string) {
-	var data []byte
+	var f vfs.ReadAtCloser
+	var pt *piecetable.PieceTable
 	if v != nil {
-		if f, err := v.Open(path); err == nil {
-			data, _ = io.ReadAll(f)
-			f.Close()
-		}
+		f, _ = v.Open(path)
+	}
+	if f != nil {
+		pt = piecetable.NewWithBuffer(NewFileBuffer(f))
+	} else {
+		pt = piecetable.New(nil)
 	}
 
-	pt := piecetable.New(data)
 	editor := NewEditorView(pt, v, path)
+	editor.SetFile(f)
 	editor.ResizeConsole(pf.lastW, pf.lastH)
 	// Editor opens in a NEW workspace
 	vtui.FrameManager.AddScreen(editor)

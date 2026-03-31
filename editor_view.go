@@ -52,7 +52,20 @@ type EditorView struct {
 
 	vfs       vfs.VFS
 	filePath  string
+	file      vfs.ReadAtCloser
 	scrollBar *vtui.ScrollBar
+}
+
+func (ev *EditorView) SetFile(f vfs.ReadAtCloser) {
+	ev.file = f
+}
+
+func (ev *EditorView) Close() {
+	if ev.file != nil {
+		ev.file.Close()
+		ev.file = nil
+	}
+	ev.BaseFrame.Close()
 }
 
 func NewEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string) *EditorView {
@@ -272,7 +285,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 
 	switch e.VirtualKeyCode {
 	case vtinput.VK_ESCAPE, vtinput.VK_F10:
-		ev.SetExitCode(-1)
+		ev.Close()
 		return true
 
 	case vtinput.VK_F2:
@@ -619,7 +632,7 @@ func (ev *EditorView) GetMenuBar() *vtui.MenuBar { return ev.menuBar }
 
 func (ev *EditorView) HandleCommand(cmd int, args any) bool {
 	if cmd == vtui.CmClose {
-		ev.SetExitCode(-1)
+		ev.Close()
 		return true
 	}
 	return ev.ScreenObject.HandleCommand(cmd, args)
@@ -666,19 +679,45 @@ func (ev *EditorView) SaveToFile() {
 		return
 	}
 	// Saving PieceTable content to VFS.
-	f, err := ev.vfs.Create(ev.filePath)
+	tmpPath := ev.filePath + ".f4tmp"
+	f, err := ev.vfs.Create(tmpPath)
 	if err != nil {
-		vtui.DebugLog("EDITOR: Failed to open file for saving: %v", err)
+		vtui.DebugLog("EDITOR: Failed to open temp file for saving: %v", err)
 		return
 	}
-	defer f.Close()
 
-	_, err = f.Write(ev.pt.Bytes())
+	ev.pt.ForEachRange(func(data []byte) {
+		f.Write(data)
+	})
+	f.Close()
+
+	if ev.file != nil {
+		ev.file.Close()
+		ev.file = nil
+	}
+
+	err = ev.vfs.Rename(tmpPath, ev.filePath)
 	if err != nil {
-		vtui.DebugLog("EDITOR: Failed to write file: %v", err)
-	} else {
-		vtui.DebugLog("EDITOR: Saved file %s", ev.filePath)
-		vtui.GlobalEvents.Publish(vtui.Event{Type: vtui.EvFileChanged})
+		ev.vfs.Remove(ev.filePath)
+		err = ev.vfs.Rename(tmpPath, ev.filePath)
+	}
+
+	if err != nil {
+		vtui.DebugLog("EDITOR: Failed to rename temp file: %v", err)
+		return
+	}
+
+	vtui.DebugLog("EDITOR: Saved file %s", ev.filePath)
+	vtui.GlobalEvents.Publish(vtui.Event{Type: vtui.EvFileChanged})
+
+	newFile, err := ev.vfs.Open(ev.filePath)
+	if err == nil {
+		ev.file = newFile
+		newPt := piecetable.NewWithBuffer(NewFileBuffer(newFile))
+		ev.pt = newPt
+		ev.li.Rebuild(newPt)
+		ev.engine = textlayout.NewWrapEngine(ev.pt, ev.li)
+		ev.ensureEngineWidth()
 	}
 }
 
