@@ -44,20 +44,25 @@ func NewViewerView(v vfs.VFS, path string) (*ViewerView, error) {
 		WrapMode: true,
 	}
 	vv.scrollBar = vtui.NewScrollBar(0, 0, 0)
-	vv.scrollBar.SetOnScroll(func(v int) {
-		// Used during dragging: snap to line start
-		vv.TopOffset = vv.backend.FindLineStart(int64(v))
-		vtui.FrameManager.Redraw()
-	})
-	vv.scrollBar.SetOnStep(func(step int) {
-		// Used for arrows and track clicks: perform logical steps
-		switch step {
-		case -1: vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_UP})
-		case 1:  vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
-		case -2: vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_PRIOR})
-		case 2:  vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_NEXT})
+	vv.scrollBar.SetOwner(vv)
+	vv.scrollBar.ScrollCommand = vv.AddCallback(func(args any) {
+		if v, ok := args.(int); ok {
+			// Used during dragging: snap to line start
+			vv.TopOffset = vv.backend.FindLineStart(int64(v))
+			vtui.FrameManager.Redraw()
 		}
-		vtui.FrameManager.Redraw()
+	})
+	vv.scrollBar.StepCommand = vv.AddCallback(func(args any) {
+		if step, ok := args.(int); ok {
+			// Used for arrows and track clicks: perform logical steps
+			switch step {
+			case -1: vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_UP})
+			case 1:  vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
+			case -2: vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_PRIOR})
+			case 2:  vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_NEXT})
+			}
+			vtui.FrameManager.Redraw()
+		}
 	})
 	vv.menuBar = vtui.NewMenuBar(nil)
 	vv.menuBar.Items = []vtui.MenuBarItem{

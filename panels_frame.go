@@ -78,9 +78,6 @@ func NewPanelsFrame() *PanelsFrame {
 	// Parser will be fully initialized in initPTY once pty is ready
 	pf.initPTY()
 
-	vtui.GlobalEvents.Subscribe(vtui.EvFileChanged, func(e vtui.Event) {
-		pf.RefreshAll()
-	})
 
 	return pf
 }
@@ -581,6 +578,13 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 
 	return false
 }
+func (pf *PanelsFrame) HandleBroadcast(cmd int, args any) bool {
+	if cmd == vtui.CmFileChanged {
+		pf.RefreshAll()
+		return true
+	}
+	return pf.BaseFrame.HandleBroadcast(cmd, args)
+}
 
 func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 	mx, my := int(e.MouseX), int(e.MouseY)
@@ -733,7 +737,7 @@ func (pf *PanelsFrame) showDummyOpDialog() {
 	dlg.AddItem(chkClone)
 
 	btnStart := vtui.NewButton(dlg.X1+10, dlg.Y1+7, "&Start")
-	btnStart.SetOnClick(func() {
+	btnStart.Command = dlg.AddCommand(func() {
 		mode := chkClone.State == 1
 		dlg.Close()
 		go pf.ExecuteDummyOp(mode)
@@ -741,7 +745,7 @@ func (pf *PanelsFrame) showDummyOpDialog() {
 	dlg.AddItem(btnStart)
 
 	btnCancel := vtui.NewButton(dlg.X1+25, dlg.Y1+7, "&Cancel")
-	btnCancel.SetOnClick(func() { dlg.Close() })
+	btnCancel.Command = dlg.AddCommand(func() { dlg.Close() })
 	dlg.AddItem(btnCancel)
 
 	vtui.FrameManager.Push(dlg)
@@ -759,7 +763,7 @@ func (pf *PanelsFrame) RunProgressTask(title, startMsg string, forked bool, work
 
 	btnCancel := vtui.NewButton(dlg.X1+20, dlg.Y1+5, "&Cancel")
 	var taskCtx *vtui.TaskContext
-	btnCancel.SetOnClick(func() {
+	btnCancel.Command = dlg.AddCommand(func() {
 		if taskCtx != nil { taskCtx.Cancel() }
 		dlg.Close()
 	})

@@ -366,7 +366,8 @@ func runSessionPicker(sessions []SessionInfo) *SessionInfo {
 	dlg.AddItem(lb)
 
 	var selected *SessionInfo
-	lb.SetOnAction(func(idx int) {
+	lb.ActionCommand = dlg.AddCallback(func(args any) {
+		idx := args.(int)
 		if idx < len(sessions) {
 			selected = &sessions[idx]
 		} else {
@@ -376,7 +377,7 @@ func runSessionPicker(sessions []SessionInfo) *SessionInfo {
 	})
 
 	btnOk := vtui.NewButton(dlg.X1+10, dlg.Y2-2, "&Ok")
-	btnOk.SetOnClick(func() {
+	btnOk.Command = dlg.AddCommand(func() {
 		if lb.ActionCommand != 0 {
 			lb.HandleCommand(lb.ActionCommand, lb.SelectPos)
 		}
@@ -384,7 +385,7 @@ func runSessionPicker(sessions []SessionInfo) *SessionInfo {
 	dlg.AddItem(btnOk)
 
 	btnCancel := vtui.NewButton(dlg.X1+30, dlg.Y2-2, "&Cancel")
-	btnCancel.SetOnClick(func() { dlg.SetExitCode(-1) })
+	btnCancel.Command = dlg.AddCommand(func() { dlg.SetExitCode(-1) })
 	dlg.AddItem(btnCancel)
 
 	vtui.FrameManager.Push(dlg)

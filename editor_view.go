@@ -80,9 +80,12 @@ func NewEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string) *EditorVie
 		WordWrap: true,
 	}
 	ev.scrollBar = vtui.NewScrollBar(0, 0, 0)
-	ev.scrollBar.SetOnScroll(func(v int) {
-		ev.ScrollTopRow = v
-		vtui.FrameManager.Redraw()
+	ev.scrollBar.SetOwner(ev)
+	ev.scrollBar.ScrollCommand = ev.AddCallback(func(args any) {
+		if v, ok := args.(int); ok {
+			ev.ScrollTopRow = v
+			vtui.FrameManager.Redraw()
+		}
 	})
 	ev.menuBar = vtui.NewMenuBar(nil)
 	ev.menuBar.Items = []vtui.MenuBarItem{
@@ -708,7 +711,7 @@ func (ev *EditorView) SaveToFile() {
 	}
 
 	vtui.DebugLog("EDITOR: Saved file %s", ev.filePath)
-	vtui.GlobalEvents.Publish(vtui.Event{Type: vtui.EvFileChanged})
+	vtui.FrameManager.Broadcast(vtui.CmFileChanged, nil)
 
 	newFile, err := ev.vfs.Open(ev.filePath)
 	if err == nil {
