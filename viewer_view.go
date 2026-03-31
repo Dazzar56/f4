@@ -44,12 +44,12 @@ func NewViewerView(v vfs.VFS, path string) (*ViewerView, error) {
 		WrapMode: true,
 	}
 	vv.scrollBar = vtui.NewScrollBar(0, 0, 0)
-	vv.scrollBar.OnScroll = func(v int) {
+	vv.scrollBar.SetOnScroll(func(v int) {
 		// Used during dragging: snap to line start
 		vv.TopOffset = vv.backend.FindLineStart(int64(v))
 		vtui.FrameManager.Redraw()
-	}
-	vv.scrollBar.OnStep = func(step int) {
+	})
+	vv.scrollBar.SetOnStep(func(step int) {
 		// Used for arrows and track clicks: perform logical steps
 		switch step {
 		case -1: vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_UP})
@@ -58,7 +58,7 @@ func NewViewerView(v vfs.VFS, path string) (*ViewerView, error) {
 		case 2:  vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_NEXT})
 		}
 		vtui.FrameManager.Redraw()
-	}
+	})
 	vv.menuBar = vtui.NewMenuBar(nil)
 	vv.menuBar.Items = []vtui.MenuBarItem{
 		{Label: "&File", SubItems: []vtui.MenuItem{{Text: "E&xit", Command: vtui.CmClose}}},
@@ -123,7 +123,7 @@ func (vv *ViewerView) HandleCommand(cmd int, args any) bool {
 		vv.SetExitCode(-1)
 		return true
 	}
-	return vv.ScreenObject.HandleCommand(cmd, args)
+	return vv.BaseFrame.HandleCommand(cmd, args)
 }
 
 func (vv *ViewerView) Show(scr *vtui.ScreenBuf) {

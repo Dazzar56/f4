@@ -733,15 +733,15 @@ func (pf *PanelsFrame) showDummyOpDialog() {
 	dlg.AddItem(chkClone)
 
 	btnStart := vtui.NewButton(dlg.X1+10, dlg.Y1+7, "&Start")
-	btnStart.OnClick = func() {
+	btnStart.SetOnClick(func() {
 		mode := chkClone.State == 1
 		dlg.Close()
 		go pf.ExecuteDummyOp(mode)
-	}
+	})
 	dlg.AddItem(btnStart)
 
 	btnCancel := vtui.NewButton(dlg.X1+25, dlg.Y1+7, "&Cancel")
-	btnCancel.OnClick = func() { dlg.Close() }
+	btnCancel.SetOnClick(func() { dlg.Close() })
 	dlg.AddItem(btnCancel)
 
 	vtui.FrameManager.Push(dlg)
@@ -759,10 +759,10 @@ func (pf *PanelsFrame) RunProgressTask(title, startMsg string, forked bool, work
 
 	btnCancel := vtui.NewButton(dlg.X1+20, dlg.Y1+5, "&Cancel")
 	var taskCtx *vtui.TaskContext
-	btnCancel.OnClick = func() {
+	btnCancel.SetOnClick(func() {
 		if taskCtx != nil { taskCtx.Cancel() }
 		dlg.Close()
-	}
+	})
 	dlg.AddItem(btnCancel)
 
 	vtui.FrameManager.PostTask(func() {

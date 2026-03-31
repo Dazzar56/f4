@@ -80,10 +80,10 @@ func NewEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string) *EditorVie
 		WordWrap: true,
 	}
 	ev.scrollBar = vtui.NewScrollBar(0, 0, 0)
-	ev.scrollBar.OnScroll = func(v int) {
+	ev.scrollBar.SetOnScroll(func(v int) {
 		ev.ScrollTopRow = v
 		vtui.FrameManager.Redraw()
-	}
+	})
 	ev.menuBar = vtui.NewMenuBar(nil)
 	ev.menuBar.Items = []vtui.MenuBarItem{
 		{Label: "&File", SubItems: []vtui.MenuItem{{Text: "&Save", Command: vtui.CmDefault}, {Text: "E&xit", Command: vtui.CmClose}}},
@@ -635,7 +635,7 @@ func (ev *EditorView) HandleCommand(cmd int, args any) bool {
 		ev.Close()
 		return true
 	}
-	return ev.ScreenObject.HandleCommand(cmd, args)
+	return ev.BaseFrame.HandleCommand(cmd, args)
 }
 
 func (ev *EditorView) GetKeyLabels() *vtui.KeySet {
