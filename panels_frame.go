@@ -459,48 +459,29 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	// Standard keys for file operations
 	switch e.VirtualKeyCode {
 	case vtinput.VK_F1:
-		pf.ShowHelp()
-		return true
+		return vtui.FrameManager.EmitCommand(vtui.CmHelp, nil)
 	case vtinput.VK_F3:
-		return pf.HandleCommand(vtui.CmView, nil)
+		return vtui.FrameManager.EmitCommand(vtui.CmView, nil)
 	case vtinput.VK_F4:
 		if shift {
-			var fsp *FileSystemPanel
-			var ok bool
-			if pf.activeIdx == 0 { fsp, ok = pf.left.(*FileSystemPanel) } else { fsp, ok = pf.right.(*FileSystemPanel) }
-			if ok {
-				dir := fsp.vfs.GetPath()
-				vtui.InputBox(Msg("Edit.NewFileTitle"), Msg("Edit.NewFilePrompt"), "", func(name string) {
-					if name == "" { name = "newfile.txt" }
-					pf.openEditor(filepath.Join(dir, name))
-				})
-				return true
-			}
+			return vtui.FrameManager.EmitCommand(vtui.CmNew, nil)
 		}
-		return pf.HandleCommand(vtui.CmEdit, nil)
+		return vtui.FrameManager.EmitCommand(vtui.CmEdit, nil)
 	case vtinput.VK_F5:
-		return pf.HandleCommand(vtui.CmCopy, nil)
+		return vtui.FrameManager.EmitCommand(vtui.CmCopy, nil)
 	case vtinput.VK_F6:
-		return pf.HandleCommand(vtui.CmMove, nil)
+		return vtui.FrameManager.EmitCommand(vtui.CmMove, nil)
 	case vtinput.VK_F7:
-		return pf.HandleCommand(vtui.CmMkDir, nil)
+		return vtui.FrameManager.EmitCommand(vtui.CmMkDir, nil)
 	case vtinput.VK_F8:
-		return pf.HandleCommand(vtui.CmDelete, nil)
+		return vtui.FrameManager.EmitCommand(vtui.CmDelete, nil)
 	case vtinput.VK_F9:
 		if !ctrl && !alt && !shift {
-			if pf.menuBar != nil && !pf.menuBar.Active {
-				pf.menuBar.Active = true
-				idx := 0
-				if pf.activeIdx == 1 {
-					idx = 4
-				}
-				pf.menuBar.ActivateSubMenu(idx)
-				return true
-			}
+			pf.HandleCommand(vtui.CmDefault, "activate_menu")
+			return true
 		}
 	case vtinput.VK_F10:
-		vtui.FrameManager.Shutdown()
-		return true
+		return vtui.FrameManager.EmitCommand(vtui.CmQuit, nil)
 	}
 	if e.VirtualKeyCode == vtinput.VK_ESCAPE && !pf.cmdLine.IsEmpty() {
 		pf.cmdLine.Clear()
@@ -676,6 +657,43 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 	switch cmd {
 	case vtui.CmQuit:
 		vtui.FrameManager.Shutdown()
+		return true
+
+	case vtui.CmHelp:
+		pf.ShowHelp()
+		return true
+
+	case vtui.CmDefault:
+		if s, ok := args.(string); ok && s == "activate_menu" {
+			if pf.menuBar != nil && !pf.menuBar.Active {
+				pf.menuBar.Active = true
+				idx := 0
+				if pf.activeIdx == 1 {
+					idx = 4
+				}
+				pf.menuBar.ActivateSubMenu(idx)
+				return true
+			}
+		}
+		return false
+
+	case vtui.CmNew:
+		var fsp *FileSystemPanel
+		var ok bool
+		if pf.activeIdx == 0 {
+			fsp, ok = pf.left.(*FileSystemPanel)
+		} else {
+			fsp, ok = pf.right.(*FileSystemPanel)
+		}
+		if ok {
+			dir := fsp.vfs.GetPath()
+			vtui.InputBox(Msg("Edit.NewFileTitle"), Msg("Edit.NewFilePrompt"), "", func(name string) {
+				if name == "" {
+					name = "newfile.txt"
+				}
+				pf.openEditor(filepath.Join(dir, name))
+			})
+		}
 		return true
 
 	case vtui.CmView:

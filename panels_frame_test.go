@@ -793,3 +793,22 @@ func TestPanelsFrame_ProcessMouse_RightDoubleClickNoEnter(t *testing.T) {
 		t.Error("Right double-click should NOT simulate Enter")
 	}
 }
+
+func TestPanelsFrame_CommandRouting_FKeys(t *testing.T) {
+	pf := NewPanelsFrame()
+	// Mock exit behavior to check F10
+	fm := vtui.FrameManager
+	fm.Init(vtui.NewScreenBuf())
+	fm.Push(pf)
+
+	// Simulate F10
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_F10,
+	})
+
+	if !fm.IsShutdown() {
+		t.Error("F10 did not trigger CmQuit through EmitCommand")
+	}
+}
