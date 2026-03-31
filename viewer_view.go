@@ -44,6 +44,21 @@ func NewViewerView(v vfs.VFS, path string) (*ViewerView, error) {
 		WrapMode: true,
 	}
 	vv.scrollBar = vtui.NewScrollBar(0, 0, 0)
+	vv.scrollBar.OnScroll = func(v int) {
+		// Used during dragging: snap to line start
+		vv.TopOffset = vv.backend.FindLineStart(int64(v))
+		vtui.FrameManager.Redraw()
+	}
+	vv.scrollBar.OnStep = func(step int) {
+		// Used for arrows and track clicks: perform logical steps
+		switch step {
+		case -1: vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_UP})
+		case 1:  vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
+		case -2: vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_PRIOR})
+		case 2:  vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_NEXT})
+		}
+		vtui.FrameManager.Redraw()
+	}
 	vv.menuBar = vtui.NewMenuBar(nil)
 	vv.menuBar.Items = []vtui.MenuBarItem{
 		{Label: "&File", SubItems: []vtui.MenuItem{{Text: "E&xit", Command: vtui.CmClose}}},
@@ -434,21 +449,11 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 }
 
 func (vv *ViewerView) ProcessMouse(e *vtinput.InputEvent) bool {
-	if e.Type == vtinput.MouseEventType && e.KeyDown && e.ButtonState == vtinput.FromLeft1stButtonPressed {
-		mx, my := int(e.MouseX), int(e.MouseY)
-		if vv.scrollBar != nil && mx == vv.scrollBar.X1 && my >= vv.scrollBar.Y1 && my <= vv.scrollBar.Y2 {
-			h := vv.scrollBar.Y2 - vv.scrollBar.Y1 + 1
-			if my == vv.scrollBar.Y1 {
-				vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_UP})
-			} else if my == vv.scrollBar.Y2 {
-				vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
-			} else if my < vv.scrollBar.Y1+h/2 {
-				vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_PRIOR})
-			} else {
-				vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_NEXT})
-			}
-			return true
-		}
+	if e.Type != vtinput.MouseEventType {
+		return false
+	}
+	if vv.scrollBar != nil && vv.scrollBar.ProcessMouse(e) {
+		return true
 	}
 	if e.WheelDirection != 0 {
 		if e.WheelDirection > 0 {
