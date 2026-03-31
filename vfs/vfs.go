@@ -7,11 +7,12 @@ import (
 
 // VFSItem represents a generic file or directory entry.
 type VFSItem struct {
-	Name  string
-	Size  int64
-	IsDir bool
-	MTime time.Time
-	Mode  string
+	Name         string
+	Size         int64
+	IsDir        bool
+	MTime        time.Time
+	Mode         string
+	IsExecutable bool
 }
 
 // VFSCapabilities defines what the current VFS implementation can do efficiently.

@@ -1,12 +1,12 @@
 package main
 
 import (
-	"os"
 	"unicode"
 	"unicode/utf8"
 	"fmt"
 	"path/filepath"
 
+	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 	"github.com/unxed/vtui/piecetable"
@@ -28,7 +28,7 @@ type lineFragment struct {
 // EditorView is a text editor component.
 type EditorView struct {
 	vtui.BaseFrame
-	topBar *EditorBar
+	topBar  *TopBar
 	menuBar *vtui.MenuBar
 	pt     *piecetable.PieceTable
 	li     *piecetable.LineIndex
@@ -50,17 +50,19 @@ type EditorView struct {
 	renderBytes []byte          // Reusable buffer for text data
 	renderCells []vtui.CharInfo // Reusable buffer for row rendering
 
+	vfs       vfs.VFS
 	filePath  string
 	scrollBar *vtui.ScrollBar
 }
 
-func NewEditorView(pt *piecetable.PieceTable, path string) *EditorView {
+func NewEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string) *EditorView {
 	li := piecetable.NewLineIndex()
 	li.Rebuild(pt)
 	ev := &EditorView{
 		pt:       pt,
 		li:       li,
 		engine:   textlayout.NewWrapEngine(pt, li),
+		vfs:      v,
 		filePath: path,
 		WordWrap: true,
 	}
@@ -77,31 +79,23 @@ func NewEditorView(pt *piecetable.PieceTable, path string) *EditorView {
 		{Label: "&Options", SubItems: []vtui.MenuItem{{Text: "&WordWrap"}}},
 	}
 
-	ev.topBar = &EditorBar{ev: ev}
+	ev.topBar = NewTopBar(func() string {
+		base := ""
+		if ev.vfs != nil {
+			base = ev.vfs.Base(ev.filePath)
+		} else {
+			base = filepath.Base(ev.filePath)
+		}
+		return fmt.Sprintf(" %s │ %d,%d ", base, ev.CursorLine+1, ev.CursorPos)
+	})
 	ev.topBar.SetVisible(true)
 	ev.SetCanFocus(true)
 	ev.SetFocus(true)
 	return ev
 }
 
-type EditorBar struct {
-	vtui.Bar
-	ev *EditorView
-}
-
-func (eb *EditorBar) Show(scr *vtui.ScreenBuf) {
-	eb.Bar.Show(scr)
-	eb.DisplayObject(scr)
-}
-func (eb *EditorBar) DisplayObject(scr *vtui.ScreenBuf) {
-	if !eb.IsVisible() { return } // Оставляем одну проверку для безопасности
-	attr := vtui.Palette[ColViewerStatus]
-	eb.DrawBackground(scr, attr)
-	status := fmt.Sprintf(" %s │ %d,%d ", filepath.Base(eb.ev.filePath), eb.ev.CursorLine+1, eb.ev.CursorPos)
-	scr.Write(eb.X1, eb.Y1, vtui.StringToCharInfo(status, attr))
-}
 // GetTopBar возвращает верхнюю панель для тестов
-func (ev *EditorView) GetTopBar() *EditorBar {
+func (ev *EditorView) GetTopBar() *TopBar {
 	return ev.topBar
 }
 
@@ -585,8 +579,8 @@ func (ev *EditorView) ProcessMouse(e *vtinput.InputEvent) bool {
 		return false
 	}
 
-	if ev.scrollBar != nil && int(e.MouseX) == ev.scrollBar.X1 && ev.engine.GetTotalVisualRows() > (ev.Y2-ev.Y1) {
-		return ev.scrollBar.ProcessMouse(e)
+	if ev.scrollBar != nil && ev.scrollBar.ProcessMouse(e) {
+		return true
 	}
 
 	if e.WheelDirection != 0 {
@@ -668,13 +662,20 @@ func (ev *EditorView) getLineLength(line int) int {
 }
 
 func (ev *EditorView) SaveToFile() {
-	if ev.filePath == "" {
+	if ev.filePath == "" || ev.vfs == nil {
 		return
 	}
-	// Saving PieceTable content to disk.
-	err := os.WriteFile(ev.filePath, ev.pt.Bytes(), 0644)
+	// Saving PieceTable content to VFS.
+	f, err := ev.vfs.Create(ev.filePath)
 	if err != nil {
-		vtui.DebugLog("EDITOR: Failed to save file: %v", err)
+		vtui.DebugLog("EDITOR: Failed to open file for saving: %v", err)
+		return
+	}
+	defer f.Close()
+
+	_, err = f.Write(ev.pt.Bytes())
+	if err != nil {
+		vtui.DebugLog("EDITOR: Failed to write file: %v", err)
 	} else {
 		vtui.DebugLog("EDITOR: Saved file %s", ev.filePath)
 		vtui.GlobalEvents.Publish(vtui.Event{Type: vtui.EvFileChanged})

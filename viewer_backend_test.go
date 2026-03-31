@@ -3,6 +3,8 @@ package main
 import (
 	"os"
 	"testing"
+
+	"github.com/unxed/f4/vfs"
 )
 
 func TestViewerBackend_ReadAndFindLineStart(t *testing.T) {
@@ -10,7 +12,8 @@ func TestViewerBackend_ReadAndFindLineStart(t *testing.T) {
 	content := "line1\nline2\nline3"
 	os.WriteFile(tmp, []byte(content), 0644)
 
-	vb, err := NewViewerBackend(tmp)
+	v := vfs.NewOSVFS(t.TempDir())
+	vb, err := NewViewerBackend(v, tmp)
 	if err != nil {
 		t.Fatal(err)
 	}

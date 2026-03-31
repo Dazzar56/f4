@@ -6,6 +6,7 @@ import (
 	"unicode/utf8"
 	"path/filepath"
 
+	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 	"github.com/mattn/go-runewidth"
@@ -14,9 +15,10 @@ import (
 // ViewerView is a high-performance file viewer component.
 type ViewerView struct {
 	vtui.BaseFrame
-	topBar  *ViewerBar
+	topBar  *TopBar
 	menuBar *vtui.MenuBar
 	backend *ViewerBackend
+	vfs     vfs.VFS
 	path    string
 
 	HexMode   bool
@@ -30,13 +32,14 @@ type ViewerView struct {
 	scrollBar *vtui.ScrollBar
 }
 
-func NewViewerView(path string) (*ViewerView, error) {
-	backend, err := NewViewerBackend(path)
+func NewViewerView(v vfs.VFS, path string) (*ViewerView, error) {
+	backend, err := NewViewerBackend(v, path)
 	if err != nil {
 		return nil, err
 	}
 	vv := &ViewerView{
 		backend:  backend,
+		vfs:      v,
 		path:     path,
 		WrapMode: true,
 	}
@@ -47,53 +50,41 @@ func NewViewerView(path string) (*ViewerView, error) {
 		{Label: "&View", SubItems: []vtui.MenuItem{{Text: "&Hex", Command: vtui.CmDefault}, {Text: "&Wrap"}}},
 		{Label: "&Options", SubItems: []vtui.MenuItem{{Text: "&Settings"}}},
 	}
-	vv.topBar = &ViewerBar{vv: vv}
+	vv.topBar = NewTopBar(func() string {
+		percent := 0
+		size := vv.backend.Size()
+		if size > 0 {
+			viewHeightBytes := int64(vv.Y2 - vv.Y1)
+			if vv.HexMode {
+				viewHeightBytes *= 16
+			} else {
+				viewHeightBytes *= 80
+			}
+			if size <= viewHeightBytes {
+				percent = 100
+			} else {
+				denominator := size - viewHeightBytes
+				percent = int((vv.TopOffset * 100) / denominator)
+			}
+			if percent < 0 { percent = 0 }
+			if percent > 100 { percent = 100 }
+		}
+		mode := Msg("Viewer.ModeText")
+		if vv.HexMode { mode = Msg("Viewer.ModeHex") }
+		base := ""
+		if vv.vfs != nil {
+			base = vv.vfs.Base(vv.path)
+		} else {
+			base = filepath.Base(vv.path)
+		}
+		return fmt.Sprintf(" %s │ %s │ %d%% ", base, mode, percent)
+	})
 	vv.topBar.SetVisible(true)
 	vv.SetCanFocus(true)
 	vv.SetFocus(true)
 	return vv, nil
 }
 
-type ViewerBar struct {
-	vtui.Bar
-	vv *ViewerView
-}
-
-func (vb *ViewerBar) Show(scr *vtui.ScreenBuf) {
-	vb.Bar.Show(scr)
-	vb.DisplayObject(scr)
-}
-func (vb *ViewerBar) DisplayObject(scr *vtui.ScreenBuf) {
-	if !vb.IsVisible() {
-		return
-	}
-	attr := vtui.Palette[ColViewerStatus]
-	vb.DrawBackground(scr, attr)
-
-	percent := 0
-	size := vb.vv.backend.Size()
-	if size > 0 {
-		viewHeightBytes := int64(vb.vv.Y2 - vb.vv.Y1)
-		if vb.vv.HexMode {
-			viewHeightBytes *= 16
-		} else {
-			viewHeightBytes *= 80
-		}
-		if size <= viewHeightBytes {
-			percent = 100
-		} else {
-			denominator := size - viewHeightBytes
-			percent = int((vb.vv.TopOffset * 100) / denominator)
-		}
-		if percent < 0 { percent = 0 }
-		if percent > 100 { percent = 100 }
-	}
-
-	mode := Msg("Viewer.ModeText")
-	if vb.vv.HexMode { mode = Msg("Viewer.ModeHex") }
-	status := fmt.Sprintf(" %s │ %s │ %d%% ", filepath.Base(vb.vv.path), mode, percent)
-	scr.Write(vb.X1, vb.Y1, vtui.StringToCharInfo(status, attr))
-}
 
 func (vv *ViewerView) SetPosition(x1, y1, x2, y2 int) {
 	vv.ScreenObject.SetPosition(x1, y1, x2, y2)

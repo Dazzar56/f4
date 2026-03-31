@@ -3,16 +3,20 @@ package main
 import (
 	"os"
 	"testing"
+
+	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
 
 func TestViewerView_NavigationAndEOF(t *testing.T) {
 	vtui.SetDefaultPalette()
-	tmp := t.TempDir() + "/test.txt"
+	tmpDir := t.TempDir()
+	tmp := tmpDir + "/test.txt"
 	os.WriteFile(tmp, []byte("L1\nL2\nL3\nL4\nL5"), 0644) // 5 lines total
 
-	vv, err := NewViewerView(tmp)
+	v := vfs.NewOSVFS(tmpDir)
+	vv, err := NewViewerView(v, tmp)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,10 +60,12 @@ func TestViewerView_MouseScrollbar(t *testing.T) {
 	vtui.SetDefaultPalette()
 	// Create a file with enough content to scroll
 	content := "L1\nL2\nL3\nL4\nL5\nL6\nL7\nL8\nL9\nL10\n" // 10 lines, 33 bytes (3 per line + 1 for last \n)
-	tmp := t.TempDir() + "/test_mouse.txt"
+	tmpDir := t.TempDir()
+	tmp := tmpDir + "/test_mouse.txt"
 	os.WriteFile(tmp, []byte(content), 0644)
 
-	vv, err := NewViewerView(tmp)
+	v := vfs.NewOSVFS(tmpDir)
+	vv, err := NewViewerView(v, tmp)
 	if err != nil {
 		t.Fatalf("Failed to create ViewerView: %v", err)
 	}
@@ -153,10 +159,12 @@ func TestViewerView_MouseScrollbar(t *testing.T) {
 func TestViewerBar_Content(t *testing.T) {
 	vtui.SetDefaultPalette()
 	SetDefaultF4Palette()
-	tmp := t.TempDir() + "/bar_test.txt"
+	tmpDir := t.TempDir()
+	tmp := tmpDir + "/bar_test.txt"
 	os.WriteFile(tmp, []byte("Some content"), 0644)
 
-	vv, _ := NewViewerView(tmp)
+	v := vfs.NewOSVFS(tmpDir)
+	vv, _ := NewViewerView(v, tmp)
 	vv.SetPosition(0, 0, 40, 10)
 
 	scr := vtui.NewScreenBuf()
@@ -179,9 +187,11 @@ func TestViewerBar_Content(t *testing.T) {
 	if !foundPath { t.Error("ViewerBar did not display file path") }
 }
 func TestViewerView_HandleClose(t *testing.T) {
-	tmp := t.TempDir() + "/close_test.txt"
+	tmpDir := t.TempDir()
+	tmp := tmpDir + "/close_test.txt"
 	os.WriteFile(tmp, []byte("content"), 0644)
-	vv, _ := NewViewerView(tmp)
+	v := vfs.NewOSVFS(tmpDir)
+	vv, _ := NewViewerView(v, tmp)
 
 	if vv.IsDone() {
 		t.Fatal("Viewer should not be done initially")
@@ -197,10 +207,12 @@ func TestViewerView_HandleClose(t *testing.T) {
 func TestViewerView_GetTitle(t *testing.T) {
 	// Need to use an existing file for NewViewerView, or mock the backend.
 	// For a simple title test, creating a temp file is easiest.
-	tmp := t.TempDir() + "/doc.txt"
+	tmpDir := t.TempDir()
+	tmp := tmpDir + "/doc.txt"
 	os.WriteFile(tmp, []byte(""), 0644)
 
-	vv, err := NewViewerView(tmp)
+	v := vfs.NewOSVFS(tmpDir)
+	vv, err := NewViewerView(v, tmp)
 	if err != nil {
 		t.Fatal(err)
 	}

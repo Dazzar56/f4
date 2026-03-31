@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"runtime"
@@ -95,8 +96,10 @@ func getMenuText(current, target ViewMode, label string) string {
 
 func (pf *PanelsFrame) updateMenuCheckmarks() {
 	if pf.left == nil || pf.right == nil { return }
-	lMode := pf.left.(*FileSystemPanel).viewMode
-	rMode := pf.right.(*FileSystemPanel).viewMode
+	
+	lMode, rMode := ViewModeMedium, ViewModeMedium
+	if fsp, ok := pf.left.(*FileSystemPanel); ok { lMode = fsp.viewMode }
+	if fsp, ok := pf.right.(*FileSystemPanel); ok { rMode = fsp.viewMode }
 
 	pf.menuBar.Items[0].SubItems[0].Text = getMenuText(lMode, ViewModeMedium, "&"+Msg("Menu.Left.Medium"))
 	pf.menuBar.Items[0].SubItems[1].Text = getMenuText(lMode, ViewModeDetailed, "&"+Msg("Menu.Left.Detailed"))
@@ -168,20 +171,24 @@ func (pf *PanelsFrame) initPTY() {
 	}()
 }
 
-func (pf *PanelsFrame) openEditor(path string) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		data = []byte("")
+func (pf *PanelsFrame) openEditor(v vfs.VFS, path string) {
+	var data []byte
+	if v != nil {
+		if f, err := v.Open(path); err == nil {
+			data, _ = io.ReadAll(f)
+			f.Close()
+		}
 	}
+
 	pt := piecetable.New(data)
-	editor := NewEditorView(pt, path)
+	editor := NewEditorView(pt, v, path)
 	editor.ResizeConsole(pf.lastW, pf.lastH)
 	// Editor opens in a NEW workspace
 	vtui.FrameManager.AddScreen(editor)
 }
 
-func (pf *PanelsFrame) openViewer(path string) {
-	viewer, err := NewViewerView(path)
+func (pf *PanelsFrame) openViewer(v vfs.VFS, path string) {
+	viewer, err := NewViewerView(v, path)
 	if err != nil {
 		vtui.DebugLog("PANELS: Failed to open viewer for %s: %v", path, err)
 		return
@@ -191,19 +198,19 @@ func (pf *PanelsFrame) openViewer(path string) {
 	vtui.FrameManager.AddScreen(viewer)
 }
 
-func isTerminalRunnable(path string) bool {
-	info, err := os.Stat(path)
-	if err != nil || info.IsDir() {
+func isTerminalRunnable(v vfs.VFS, path string) bool {
+	info, err := v.Stat(path)
+	if err != nil || info.IsDir {
 		return false
 	}
 
 	// 1. Check executable bit on Unix
-	if runtime.GOOS != "windows" && info.Mode().Perm()&0111 != 0 {
+	if runtime.GOOS != "windows" && info.IsExecutable {
 		return true
 	}
 
 	// 2. Check common executable/script extensions
-	ext := strings.ToLower(filepath.Ext(path))
+	ext := strings.ToLower(filepath.Ext(info.Name))
 	terminalExts := map[string]bool{
 		".exe": true, ".bat": true, ".cmd": true, ".com": true,
 		".sh": true, ".bash": true, ".py": true, ".pl": true,
@@ -214,7 +221,7 @@ func isTerminalRunnable(path string) bool {
 	}
 
 	// 3. Check for Shebang
-	f, err := os.Open(path)
+	f, err := v.Open(path)
 	if err == nil {
 		defer f.Close()
 		buf := make([]byte, 2)
@@ -227,8 +234,13 @@ func isTerminalRunnable(path string) bool {
 	return false
 }
 
-func (pf *PanelsFrame) executeFile(dir, name, path string) {
-	if isTerminalRunnable(path) {
+func (pf *PanelsFrame) executeFile(v vfs.VFS, dir, name, path string) {
+	if _, isLocal := v.(*vfs.OSVFS); !isLocal {
+		vtui.ShowMessage(" Error ", "Cannot execute files on a remote file system.", []string{"&Ok"})
+		return
+	}
+
+	if isTerminalRunnable(v, path) {
 		if pf.pty != nil {
 			// Sync PTY to the file's directory
 			pf.pty.Write([]byte(fmt.Sprintf(" cd %q\r", dir)))
@@ -454,12 +466,6 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return false
 	}
 
-	// F10 exits the application (global, but can be overridden by terminal raw mode)
-	if e.VirtualKeyCode == vtinput.VK_F10 {
-		vtui.FrameManager.Shutdown()
-		return true
-	}
-
 	// Standard keys for file operations
 	switch e.VirtualKeyCode {
 	case vtinput.VK_F1:
@@ -479,11 +485,6 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return vtui.FrameManager.EmitCommand(vtui.CmMkDir, nil)
 	case vtinput.VK_F8:
 		return vtui.FrameManager.EmitCommand(vtui.CmDelete, nil)
-	case vtinput.VK_F9:
-		if !ctrl && !alt && !shift {
-			pf.HandleCommand(vtui.CmDefault, "activate_menu")
-			return true
-		}
 	case vtinput.VK_F10:
 		return vtui.FrameManager.EmitCommand(vtui.CmQuit, nil)
 	}
@@ -561,7 +562,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				name := fsp.GetSelectedName()
 				if name != "" && name != ".." {
 					path := fsp.vfs.Join(fsp.vfs.GetPath(), name)
-					pf.executeFile(fsp.vfs.GetPath(), name, path)
+					pf.executeFile(fsp.vfs, fsp.vfs.GetPath(), name, path)
 				}
 			}
 			return true
@@ -591,13 +592,6 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	if e.VirtualKeyCode == vtinput.VK_B && ctrl {
 		pf.showKeyBar = !pf.showKeyBar
 		pf.ResizeConsole(pf.lastW, pf.lastH)
-		return true
-	}
-
-	// Ctrl+W closes current screen
-	if e.VirtualKeyCode == vtinput.VK_W && ctrl {
-		vtui.FrameManager.Flash()
-		vtui.FrameManager.CloseActiveScreen()
 		return true
 	}
 
@@ -655,6 +649,23 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 	return false
 }
 
+func (pf *PanelsFrame) getActivePanel() *FileSystemPanel {
+	if pf.activeIdx == 0 {
+		if fsp, ok := pf.left.(*FileSystemPanel); ok { return fsp }
+	} else {
+		if fsp, ok := pf.right.(*FileSystemPanel); ok { return fsp }
+	}
+	return nil
+}
+
+func (pf *PanelsFrame) getInactivePanel() *FileSystemPanel {
+	if pf.activeIdx == 1 {
+		if fsp, ok := pf.left.(*FileSystemPanel); ok { return fsp }
+	} else {
+		if fsp, ok := pf.right.(*FileSystemPanel); ok { return fsp }
+	}
+	return nil
+}
 // HandleCommand intercepts global commands (like CmQuit or CmCopy)
 // sent by menus or other views.
 func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
@@ -667,74 +678,40 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 		pf.ShowHelp()
 		return true
 
-	case vtui.CmDefault:
-		if s, ok := args.(string); ok && s == "activate_menu" {
-			if pf.menuBar != nil && !pf.menuBar.Active {
-				pf.menuBar.Active = true
-				idx := 0
-				if pf.activeIdx == 1 {
-					idx = 4
-				}
-				pf.menuBar.ActivateSubMenu(idx)
-				return true
-			}
-		}
-		return false
-
 	case vtui.CmNew:
-		var fsp *FileSystemPanel
-		var ok bool
-		if pf.activeIdx == 0 {
-			fsp, ok = pf.left.(*FileSystemPanel)
-		} else {
-			fsp, ok = pf.right.(*FileSystemPanel)
-		}
-		if ok {
+		if fsp := pf.getActivePanel(); fsp != nil {
 			dir := fsp.vfs.GetPath()
+			activeVfs := fsp.vfs
 			vtui.InputBox(Msg("Edit.NewFileTitle"), Msg("Edit.NewFilePrompt"), "", func(name string) {
 				if name == "" {
 					name = "newfile.txt"
 				}
-				pf.openEditor(filepath.Join(dir, name))
+				pf.openEditor(activeVfs, activeVfs.Join(dir, name))
 			})
 		}
 		return true
 
 	case vtui.CmView:
-		var fsp *FileSystemPanel
-		var ok bool
-		if pf.activeIdx == 0 { fsp, ok = pf.left.(*FileSystemPanel) } else { fsp, ok = pf.right.(*FileSystemPanel) }
-		if ok {
+		if fsp := pf.getActivePanel(); fsp != nil {
 			name := fsp.GetSelectedName()
 			path := fsp.vfs.Join(fsp.vfs.GetPath(), name)
-			pf.openViewer(path)
+			pf.openViewer(fsp.vfs, path)
 		}
 		return true
 
 	case vtui.CmEdit:
-		var fsp *FileSystemPanel
-		var ok bool
-		if pf.activeIdx == 0 { fsp, ok = pf.left.(*FileSystemPanel) } else { fsp, ok = pf.right.(*FileSystemPanel) }
-		if ok {
+		if fsp := pf.getActivePanel(); fsp != nil {
 			name := fsp.GetSelectedName()
 			path := fsp.vfs.Join(fsp.vfs.GetPath(), name)
-			pf.openEditor(path)
+			pf.openEditor(fsp.vfs, path)
 		}
 		return true
 
 	case vtui.CmCopy, vtui.CmMove:
 		isMove := cmd == vtui.CmMove
-		var fspSrc, fspDst *FileSystemPanel
-		var okSrc, okDst bool
-
-		if pf.activeIdx == 0 {
-			fspSrc, okSrc = pf.left.(*FileSystemPanel)
-			fspDst, okDst = pf.right.(*FileSystemPanel)
-		} else {
-			fspSrc, okSrc = pf.right.(*FileSystemPanel)
-			fspDst, okDst = pf.left.(*FileSystemPanel)
-		}
-		if !okSrc || !okDst { return true }
+		fspSrc := pf.getActivePanel()
+		fspDst := pf.getInactivePanel()
+		if fspSrc == nil || fspDst == nil { return true }
 
 		names := fspSrc.GetSelectedNames()
 		if len(names) == 0 { return true }
@@ -779,13 +756,10 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 		return true
 
 	case vtui.CmMkDir:
-		var fsp *FileSystemPanel
-		var ok bool
-		if pf.activeIdx == 0 { fsp, ok = pf.left.(*FileSystemPanel) } else { fsp, ok = pf.right.(*FileSystemPanel) }
-		if !ok { return true }
+		panel := pf.getActivePanel()
+		if panel == nil { return true }
 
-		panel := fsp
-		activeVfs := fsp.vfs
+		activeVfs := panel.vfs
 
 		vtui.InputBox(Msg("MakeFolder.Title"), Msg("MakeFolder.Prompt"), "", func(name string) {
 			if name == "" { return }
@@ -799,10 +773,8 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 		return true
 
 	case vtui.CmDelete:
-		var fsp *FileSystemPanel
-		var ok bool
-		if pf.activeIdx == 0 { fsp, ok = pf.left.(*FileSystemPanel) } else { fsp, ok = pf.right.(*FileSystemPanel) }
-		if !ok { return true }
+		fsp := pf.getActivePanel()
+		if fsp == nil { return true }
 
 		activeVfs := fsp.vfs
 		names := fsp.GetSelectedNames()
@@ -908,24 +880,24 @@ func (pf *PanelsFrame) showDummyOpDialog() {
 	vtui.FrameManager.Push(dlg)
 }
 
-func (pf *PanelsFrame) ExecuteDummyOp(forked bool) {
-	title := " Processing... "
-
-	// Mode 1 (Headless): Workspace = [Desktop, Dialog]
-	// Mode 2 (Forked): Workspace = [Desktop, ClonedPanels, Dialog]
-
-	dlg := vtui.NewDialog(0, 0, 45, 8, title)
+// RunProgressTask encapsulates the boilerplate for creating a progress dialog,
+// running a background task with cancellation, and optionally forking the workspace.
+func (pf *PanelsFrame) RunProgressTask(title, startMsg string, forked bool, worker func(ctx *vtui.TaskContext, update func(msg string, percent int)) error, onComplete func(err error)) {
+	dlg := vtui.NewDialog(0, 0, 50, 8, title)
 	dlg.AttentionSuppressed = true
 	dlg.Center(vtui.FrameManager.GetScreenSize(), 25)
-	lbl := vtui.NewText(dlg.X1+2, dlg.Y1+2, "Initializing...", vtui.Palette[vtui.ColDialogText])
+
+	lbl := vtui.NewText(dlg.X1+2, dlg.Y1+2, startMsg, vtui.Palette[vtui.ColDialogText])
 	dlg.AddItem(lbl)
 
-	btnCancel := vtui.NewButton(dlg.X1+16, dlg.Y1+5, "&Cancel")
+	btnCancel := vtui.NewButton(dlg.X1+20, dlg.Y1+5, "&Cancel")
 	var taskCtx *vtui.TaskContext
-	btnCancel.OnClick = func() { if taskCtx != nil { taskCtx.Cancel() }; dlg.Close() }
+	btnCancel.OnClick = func() {
+		if taskCtx != nil { taskCtx.Cancel() }
+		dlg.Close()
+	}
 	dlg.AddItem(btnCancel)
 
-	// Create and switch to the new workspace
 	vtui.FrameManager.PostTask(func() {
 		if forked {
 			clone := pf.Clone()
@@ -937,26 +909,40 @@ func (pf *PanelsFrame) ExecuteDummyOp(forked bool) {
 	})
 
 	taskCtx = vtui.RunAsync(func(ctx *vtui.TaskContext) {
-		totalSteps := 300 // 5 minutes = 300 seconds
-		for i := 1; i <= totalSteps; i++ {
-			if ctx.Err() != nil || dlg.IsDone() { return }
-
-			time.Sleep(1 * time.Second)
-			percent := (i * 100) / totalSteps
-
+		update := func(msg string, percent int) {
 			ctx.RunOnUI(func() {
-				lbl.SetText(fmt.Sprintf("Step %d of %d...", i, totalSteps))
-				dlg.SetProgress(percent)
+				if msg != "" {
+					// Pad string to overwrite old text
+					padded := msg
+					for len([]rune(padded)) < 46 { padded += " " }
+					lbl.SetText(padded)
+				}
+				if percent >= 0 { dlg.SetProgress(percent) }
 				vtui.FrameManager.Redraw()
 			})
 		}
-
+		err := worker(ctx, update)
 		ctx.RunOnUI(func() {
-			if ctx.Err() == nil && !dlg.IsDone() {
-				vtui.ShowMessageOn(dlg, " Done ", "Dummy operation finished!", []string{"&Ok"})
-				dlg.Close()
-			}
+			dlg.Close()
+			if onComplete != nil { onComplete(err) }
 		})
+	})
+}
+func (pf *PanelsFrame) ExecuteDummyOp(forked bool) {
+	pf.RunProgressTask(" Processing... ", "Initializing...", forked, func(ctx *vtui.TaskContext, update func(msg string, percent int)) error {
+		totalSteps := 300 // 5 minutes = 300 seconds
+		for i := 1; i <= totalSteps; i++ {
+			if ctx.Err() != nil { return ctx.Err() }
+			time.Sleep(1 * time.Second)
+			update(fmt.Sprintf("Step %d of %d...", i, totalSteps), (i*100)/totalSteps)
+		}
+		return nil
+	}, func(err error) {
+		if err == nil {
+			// Find the active screen to attach the completion message
+			top := vtui.FrameManager.GetTopFrame()
+			vtui.ShowMessageOn(top, " Done ", "Dummy operation finished!", []string{"&Ok"})
+		}
 	})
 }
 func (pf *PanelsFrame) RefreshAll() {

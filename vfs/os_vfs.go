@@ -30,10 +30,11 @@ func (v *OSVFS) ReadDir(path string) ([]VFSItem, error) {
 	for _, e := range entries {
 		info, _ := e.Info()
 		items = append(items, VFSItem{
-			Name:  e.Name(),
-			Size:  info.Size(),
-			IsDir: e.IsDir(),
-			MTime: info.ModTime(),
+			Name:         e.Name(),
+			Size:         info.Size(),
+			IsDir:        e.IsDir(),
+			MTime:        info.ModTime(),
+			IsExecutable: info.Mode().Perm()&0111 != 0,
 		})
 	}
 	return items, nil
@@ -43,10 +44,11 @@ func (v *OSVFS) Stat(path string) (VFSItem, error) {
 	info, err := os.Stat(path)
 	if err != nil { return VFSItem{}, err }
 	return VFSItem{
-		Name:  info.Name(),
-		Size:  info.Size(),
-		IsDir: info.IsDir(),
-		MTime: info.ModTime(),
+		Name:         info.Name(),
+		Size:         info.Size(),
+		IsDir:        info.IsDir(),
+		MTime:        info.ModTime(),
+		IsExecutable: info.Mode().Perm()&0111 != 0,
 	}, nil
 }
 

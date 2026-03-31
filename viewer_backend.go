@@ -2,28 +2,24 @@ package main
 
 import (
 	"io"
-	"os"
+
+	"github.com/unxed/f4/vfs"
 )
 
 // ViewerBackend provides efficient random access to a potentially huge file.
 type ViewerBackend struct {
-	file *os.File
+	file vfs.ReadAtCloser
 	size int64
 }
 
-func NewViewerBackend(path string) (*ViewerBackend, error) {
-	f, err := os.Open(path)
+func NewViewerBackend(v vfs.VFS, path string) (*ViewerBackend, error) {
+	f, err := v.Open(path)
 	if err != nil {
-		return nil, err
-	}
-	info, err := f.Stat()
-	if err != nil {
-		f.Close()
 		return nil, err
 	}
 	return &ViewerBackend{
 		file: f,
-		size: info.Size(),
+		size: f.Size(),
 	}, nil
 }
 

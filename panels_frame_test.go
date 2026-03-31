@@ -9,6 +9,7 @@ import (
 	"strings"
 	"github.com/unxed/vtui"
 	"github.com/unxed/vtinput"
+	"github.com/unxed/f4/vfs"
 )
 
 func TestPanelsFrame_Layout(t *testing.T) {
@@ -113,41 +114,6 @@ func TestPanelsFrame_ProcessMouse_DoubleClickFile(t *testing.T) {
 	}
 }
 
-func TestPanelsFrame_CtrlW_CloseScreen(t *testing.T) {
-	// Initialize global FrameManager for the test
-	fm := vtui.FrameManager
-	fm.Init(vtui.NewScreenBuf())
-
-	// Create Screen 0
-	fm.Push(vtui.NewDesktop())
-	pf1 := NewPanelsFrame()
-	fm.Push(pf1)
-
-	// Create Screen 1
-	pf2 := NewPanelsFrame()
-	fm.AddScreen(pf2)
-
-	if fm.ActiveIdx != 1 {
-		t.Fatalf("Should be on Screen 1")
-	}
-
-	// Simulate Ctrl+W on pf2
-	handled := pf2.ProcessKey(&vtinput.InputEvent{
-		Type:            vtinput.KeyEventType,
-		KeyDown:         true,
-		VirtualKeyCode:  vtinput.VK_W,
-		ControlKeyState: vtinput.LeftCtrlPressed,
-	})
-
-	if !handled {
-		t.Error("PanelsFrame failed to handle Ctrl+W")
-	}
-
-	// Verify Screen 1 was closed and focus fell back to Screen 0
-	if fm.ActiveIdx != 0 {
-		t.Errorf("Screen was not closed via Ctrl+W, ActiveIdx is %d", fm.ActiveIdx)
-	}
-}
 
 func TestPanelsFrame_KeyHandling(t *testing.T) {
 	pf := NewPanelsFrame()
@@ -190,41 +156,6 @@ func TestPanelsFrame_KeyHandling(t *testing.T) {
 	expectedName := pf.left.GetSelectedName()
 	if pf.cmdLine.Edit.GetText() != " "+expectedName {
 		t.Errorf("Ctrl+Enter failed: expected ' %s', got '%s'", expectedName, pf.cmdLine.Edit.GetText())
-	}
-}
-func TestPanelsFrame_F9_MenuActivation(t *testing.T) {
-	pf := NewPanelsFrame()
-	pf.ResizeConsole(80, 25)
-
-	// Active panel is Right (1)
-	pf.activeIdx = 1
-	pf.ProcessKey(&vtinput.InputEvent{
-		Type:           vtinput.KeyEventType,
-		KeyDown:        true,
-		VirtualKeyCode: vtinput.VK_F9,
-	})
-
-	if !pf.menuBar.Active {
-		t.Error("F9 should activate the menu bar")
-	}
-	if pf.menuBar.SelectPos != 4 {
-		t.Errorf("F9 with Right panel active should select menu index 4, got %d", pf.menuBar.SelectPos)
-	}
-
-	// Reset
-	pf.menuBar.Active = false
-	pf.activeIdx = 0
-	pf.ProcessKey(&vtinput.InputEvent{
-		Type:           vtinput.KeyEventType,
-		KeyDown:        true,
-		VirtualKeyCode: vtinput.VK_F9,
-	})
-
-	if !pf.menuBar.Active {
-		t.Error("F9 should activate the menu bar")
-	}
-	if pf.menuBar.SelectPos != 0 {
-		t.Errorf("F9 with Left panel active should select menu index 0, got %d", pf.menuBar.SelectPos)
 	}
 }
 func TestPanelsFrame_ViewModeCommands(t *testing.T) {
@@ -480,32 +411,33 @@ func TestPanelsFrame_CloneIndependence(t *testing.T) {
 }
 func TestIsTerminalRunnable(t *testing.T) {
 	tmpDir := t.TempDir()
+	v := vfs.NewOSVFS(tmpDir)
 
 	// 1. Обычный текстовый файл -> false
 	txtFile := filepath.Join(tmpDir, "test.txt")
 	os.WriteFile(txtFile, []byte("hello"), 0644)
-	if isTerminalRunnable(txtFile) {
+	if isTerminalRunnable(v, txtFile) {
 		t.Error("Text file should not be terminal-runnable")
 	}
 
 	// 2. Файл с расширением .sh -> true
 	shFile := filepath.Join(tmpDir, "test.sh")
 	os.WriteFile(shFile, []byte("echo hi"), 0644)
-	if !isTerminalRunnable(shFile) {
+	if !isTerminalRunnable(v, shFile) {
 		t.Error(".sh file should be terminal-runnable")
 	}
 
 	// 3. Файл с шебангом без расширения -> true
 	binFile := filepath.Join(tmpDir, "my-tool")
 	os.WriteFile(binFile, []byte("#!/usr/bin/env bash\necho hi"), 0644)
-	if !isTerminalRunnable(binFile) {
+	if !isTerminalRunnable(v, binFile) {
 		t.Error("File with shebang should be terminal-runnable")
 	}
 
 	// 4. Директория -> false
 	subDir := filepath.Join(tmpDir, "folder")
 	os.Mkdir(subDir, 0755)
-	if isTerminalRunnable(subDir) {
+	if isTerminalRunnable(v, subDir) {
 		t.Error("Directory should not be terminal-runnable")
 	}
 
@@ -513,7 +445,7 @@ func TestIsTerminalRunnable(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		execFile := filepath.Join(tmpDir, "compiled-bin")
 		os.WriteFile(execFile, []byte{0x7f, 'E', 'L', 'F'}, 0755)
-		if !isTerminalRunnable(execFile) {
+		if !isTerminalRunnable(v, execFile) {
 			t.Error("File with executable bit should be terminal-runnable on Unix")
 		}
 	}

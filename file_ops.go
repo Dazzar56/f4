@@ -23,81 +23,38 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 	}
 	state := &FileOpState{}
 
-	dlg := vtui.NewDialog(0, 0, 50, 8, title)
-	dlg.AttentionSuppressed = true
-	dlg.Center(vtui.FrameManager.GetScreenSize(), 25)
-	lbl := vtui.NewText(dlg.X1+2, dlg.Y1+2, "Starting...", vtui.Palette[vtui.ColDialogText])
-	dlg.AddItem(lbl)
-
-	btnCancel := vtui.NewButton(dlg.X1+20, dlg.Y1+5, "&Cancel")
-	var taskCtx *vtui.TaskContext
-	btnCancel.OnClick = func() {
-		if taskCtx != nil {
-			taskCtx.Cancel()
-		}
-		dlg.Close()
-	}
-	dlg.AddItem(btnCancel)
-
-	vtui.FrameManager.PostTask(func() {
-		if forked {
-			clone := pf.Clone()
-			vtui.FrameManager.AddScreen(clone)
-			vtui.FrameManager.Push(dlg)
-		} else {
-			vtui.FrameManager.AddScreenHeadless(dlg)
-		}
-	})
-
-	taskCtx = vtui.RunAsync(func(ctx *vtui.TaskContext) {
-		var opErr error
+	pf.RunProgressTask(title, "Starting...", forked, func(ctx *vtui.TaskContext, update func(msg string, percent int)) error {
 		for i, name := range names {
-			if ctx.Err() != nil {
-				break
-			}
+			if ctx.Err() != nil { return ctx.Err() }
+
 			srcPath := srcVfs.Join(srcVfs.GetPath(), name)
+			update(fmt.Sprintf("Processing: %s", name), -1)
 
-			ctx.RunOnUI(func() { lbl.SetText(fmt.Sprintf("Processing: %s", name)) })
-
-			// If move is on the same VFS, try Rename first
 			if isMove && srcVfs == dstVfs {
 				destPath := dstVfs.Join(destBase, name)
 				if err := srcVfs.Rename(srcPath, destPath); err == nil {
-					percent := ((i + 1) * 100) / len(names)
-					ctx.RunOnUI(func() { dlg.SetProgress(percent) })
+					update("", ((i+1)*100)/len(names))
 					continue
 				}
 			}
 
-			err := recursiveCopy(ctx, dlg, lbl, srcVfs, srcPath, dstVfs, destBase, name, state)
-			if err != nil {
-				opErr = err
-				break
-			}
-			if isMove {
-				srcVfs.Remove(srcPath)
-			}
+			err := recursiveCopy(ctx, update, srcVfs, srcPath, dstVfs, destBase, name, state)
+			if err != nil { return err }
 
-			percent := ((i + 1) * 100) / len(names)
-			ctx.RunOnUI(func() {
-				dlg.SetProgress(percent)
-			})
+			if isMove { srcVfs.Remove(srcPath) }
+			update("", ((i+1)*100)/len(names))
 		}
-
-		ctx.RunOnUI(func() {
-			dlg.Close()
-			if opErr != nil {
-				vtui.ShowMessage(" Error ", fmt.Sprintf(Msg("Operation.Error"), opErr.Error()), []string{"&Ok"})
-			}
-			pf.RefreshAll()
-			if onComplete != nil {
-				onComplete()
-			}
-		})
+		return nil
+	}, func(err error) {
+		if err != nil && err != context.Canceled {
+			vtui.ShowMessage(" Error ", fmt.Sprintf(Msg("Operation.Error"), err.Error()), []string{"&Ok"})
+		}
+		pf.RefreshAll()
+		if onComplete != nil { onComplete() }
 	})
 }
 
-func recursiveCopy(ctx *vtui.TaskContext, dlg *vtui.Dialog, lbl *vtui.Text, srcVfs vfs.VFS, srcPath string, dstVfs vfs.VFS, dstBase, name string, state *FileOpState) error {
+func recursiveCopy(ctx *vtui.TaskContext, update func(msg string, percent int), srcVfs vfs.VFS, srcPath string, dstVfs vfs.VFS, dstBase, name string, state *FileOpState) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -143,7 +100,7 @@ func recursiveCopy(ctx *vtui.TaskContext, dlg *vtui.Dialog, lbl *vtui.Text, srcV
 			if item.Name == ".." {
 				continue
 			}
-			if err := recursiveCopy(ctx, dlg, lbl, srcVfs, srcVfs.Join(srcPath, item.Name), dstVfs, destPath, item.Name, state); err != nil {
+			if err := recursiveCopy(ctx, update, srcVfs, srcVfs.Join(srcPath, item.Name), dstVfs, destPath, item.Name, state); err != nil {
 				return err
 			}
 		}
@@ -151,7 +108,7 @@ func recursiveCopy(ctx *vtui.TaskContext, dlg *vtui.Dialog, lbl *vtui.Text, srcV
 	}
 
 	// Copy file
-	ctx.RunOnUI(func() { lbl.SetText(fmt.Sprintf("Copying: %s", name)) })
+	update(fmt.Sprintf("Copying: %s", name), -1)
 
 	if exists {
 		if dstStat.IsDir {
