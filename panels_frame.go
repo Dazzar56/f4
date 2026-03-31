@@ -79,6 +79,10 @@ func NewPanelsFrame() *PanelsFrame {
 	// Parser will be fully initialized in initPTY once pty is ready
 	pf.initPTY()
 
+	vtui.GlobalEvents.Subscribe(vtui.EvFileChanged, func(e vtui.Event) {
+		pf.RefreshAll()
+	})
+
 	return pf
 }
 

@@ -677,8 +677,10 @@ func (ev *EditorView) SaveToFile() {
 		vtui.DebugLog("EDITOR: Failed to save file: %v", err)
 	} else {
 		vtui.DebugLog("EDITOR: Saved file %s", ev.filePath)
+		vtui.GlobalEvents.Publish(vtui.Event{Type: vtui.EvFileChanged})
 	}
 }
+
 func (ev *EditorView) getSelectionRange() (int, int) {
 	if !ev.selActive { return 0, 0 }
 	cursorOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
