@@ -6,9 +6,17 @@ This document outlines the core principles of user experience (UX) and navigatio
 
 The goal is to create an environment that is instantly familiar to veterans of TUI applications while remaining discoverable and consistent for new users. We achieve this by ensuring that every navigation key has a clear, context-dependent purpose, maximizing user efficiency and respecting "muscle memory".
 
-### 1. The Three Tiers of Navigation
+### 1. The Four Tiers of Navigation
 
-Every interactive screen in `vtui` adheres to a three-tiered navigation hierarchy. This ensures there is always a way to move focus, from the most reliable method to the most context-specific.
+Every interactive screen in `vtui` adheres to a hierarchical navigation model. This ensures there is always a way to move focus, from global workspace management to specific character input.
+
+#### Tier 0: Global Workspace Switching (`Ctrl+Tab` / `Ctrl+Shift+Tab`)
+
+This is the highest level of navigation, allowing the user to jump between entire application states (Screens).
+
+*   **Rule:** `Ctrl+Tab` cycles forward through active screens; `Ctrl+Shift+Tab` cycles backward.
+*   **Visuals:** A switcher overlay appears in the center of the screen, showing titles and progress of all workspaces.
+*   **Commit:** The switch is finalized only when the `Ctrl` key is released.
 
 #### Tier 1: The Reliable Cycle (`Tab` / `Shift+Tab`)
 
@@ -63,6 +71,22 @@ Hotkeys provide the fastest way to activate a specific function.
 *   **Action:** `Enter` or `Double-Click` triggers the primary action for the selected item (e.g., opening a file, confirming a choice).
 *   **`ListBox` as a `Table`:** `ListBox` is implemented as a single-column `Table` and inherits all its navigation behaviors, ensuring consistency.
 
+#### Text Input (`Edit`)
+
+*   **Navigation:**
+    *   `Left`/`Right`: Move the cursor by one character.
+    *   `Ctrl+Left`/`Ctrl+Right`: Jump to the beginning of the previous/next word.
+    *   `Home`/`End`: Jump to the beginning/end of the line.
+*   **Selection:** Holding `Shift` while using any navigation key creates or expands a selection. `Ctrl+C` and `Ctrl+Ins` copy to the system clipboard.
+*   **Auto-Clear Logic:** Fields that are opened with a default "unchanged" value (grayed out) will automatically clear their entire content the moment the user starts typing, unless a navigation key is pressed first.
+
+#### Dropdowns (`ComboBox`)
+
+*   **Interaction:** Combines an `Edit` field with a hidden `VMenu`.
+*   **Activation:** `Alt+Down` or clicking the down arrow (`↓`) icon opens the list.
+*   **Selection:** Selecting an item from the list automatically populates the `Edit` field and returns focus to it.
+*   **`DropdownOnly` Mode:** If enabled, the user cannot type custom text and must select from the provided options using `Enter` or the mouse.
+
 #### File Panels (`f4` Specific)
 
 File panels are a special, highly optimized version of a `Table`.
@@ -78,9 +102,9 @@ File panels are a special, highly optimized version of a `Table`.
     *   Activated by `F9` or `Alt+<char>`.
     *   When active, `Left`/`Right` cycles through the main menu items (`File`, `Edit`, etc.), automatically opening their respective submenus.
     *   `Down` or `Enter` opens the submenu for the currently selected item.
-    *   `Esc` deactivates the menu bar.
+    *   **Multi-level `Esc`:** `Esc` closes an open submenu but keeps the `MenuBar` active. A second `Esc` deactivates the `MenuBar` entirely.
 *   **`VMenu` (Vertical/Submenu):**
-    *   **As a Submenu:** If opened from a `MenuBar`, `Left`/`Right` closes the current submenu and opens the adjacent one from the `MenuBar`. `Up` on the first item or `Down` on the last item wraps around within the `VMenu`.
+    *   **As a Submenu:** If opened from a `MenuBar`, `Left`/`Right` closes the current submenu and opens the adjacent one from the `MenuBar`. `Up` on the first item or `Down` on the last item wraps around within the `VMenu` to provide fast circular access.
     *   **As a Standalone Dialog:** If opened as a context menu (not tied to a `MenuBar`), its boundary behavior follows the standard `Tier 2` rule: `Up` on the first item or `Down` on the last will pass focus to the previous/next element in the parent dialog.
 *   **Rationale:** This dual behavior makes menus feel integrated when part of a larger structure, but behave like any other standard list widget when used for context-specific actions.
 
