@@ -167,9 +167,22 @@ func (fp *FileSystemPanel) SetCursorIndex(idx int) {
 			fp.table.TopPos = fp.cursorIdx - 2*H + 1
 		}
 
+		// Far-style 2-column scrolling: ensure cursorIdx is in [TopPos, TopPos + 2*H)
+		if fp.cursorIdx < fp.table.TopPos {
+			fp.table.TopPos = fp.cursorIdx
+		} else if fp.cursorIdx >= fp.table.TopPos+2*H {
+			fp.table.TopPos = fp.cursorIdx - 2*H + 1
+		}
+
+		if fp.table.TopPos < 0 {
+			fp.table.TopPos = 0
+		}
+
 		rel := fp.cursorIdx - fp.table.TopPos
 		fp.table.SelectCol = rel / H
-		fp.table.SelectPos = rel % H
+		// Table internal rendering expects SelectPos to be absolute index in its row space
+		// to correctly calculate vertical offset: y = Y1 + (SelectPos - TopPos)
+		fp.table.SelectPos = fp.table.TopPos + (rel % H)
 
 		// If we landed on a column that is theoretically correct but visually empty,
 		// the table will handle it during Show, but we keep the absolute index.
