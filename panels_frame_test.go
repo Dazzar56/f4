@@ -290,7 +290,7 @@ func TestPanelsFrame_HistoryNavigation(t *testing.T) {
 	pf := NewPanelsFrame()
 	pf.ResizeConsole(80, 25) // Initialize panels
 	pf.showPanels = false    // Hide panels to enable history intercept
-	pf.cmdLine.AddHistory("git status")
+	pf.cmdLine.Edit.AddHistory("git status")
 
 	// Press Up Arrow
 	pf.ProcessKey(&vtinput.InputEvent{
@@ -305,7 +305,7 @@ func TestPanelsFrame_HistoryNavigation(t *testing.T) {
 
 	// Reset, show panels, try again
 	pf.cmdLine.Clear()
-	pf.cmdLine.historyPos = -1
+	pf.cmdLine.Edit.HistoryPos = -1
 	pf.showPanels = true
 
 	pf.ProcessKey(&vtinput.InputEvent{
@@ -329,8 +329,8 @@ func TestPanelsFrame_EnterAddsToHistory(t *testing.T) {
 		VirtualKeyCode: vtinput.VK_RETURN,
 	})
 
-	if len(pf.cmdLine.History) == 0 || pf.cmdLine.History[0] != "ls -la" {
-		t.Errorf("Command was not added to history on Enter. History: %v", pf.cmdLine.History)
+	if len(pf.cmdLine.Edit.History) == 0 || pf.cmdLine.Edit.History[0] != "ls -la" {
+		t.Errorf("Command was not added to history on Enter. History: %v", pf.cmdLine.Edit.History)
 	}
 }
 

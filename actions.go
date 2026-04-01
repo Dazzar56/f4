@@ -6,6 +6,73 @@ import (
 	"github.com/unxed/vtui"
 )
 
+import (
+	"os/exec"
+	"runtime"
+	"github.com/unxed/f4/vfs"
+	"github.com/unxed/vtui/piecetable"
+)
+
+func actionOpenEditor(pf *PanelsFrame, v vfs.VFS, path string) {
+	var f vfs.ReadAtCloser
+	var pt *piecetable.PieceTable
+	if v != nil {
+		f, _ = v.Open(path)
+	}
+	if f != nil {
+		pt = piecetable.NewWithBuffer(NewFileBuffer(f))
+	} else {
+		pt = piecetable.New(nil)
+	}
+
+	editor := NewEditorView(pt, v, path)
+	editor.SetFile(f)
+	editor.ResizeConsole(pf.lastW, pf.lastH)
+	vtui.FrameManager.AddScreen(editor)
+}
+
+func actionOpenViewer(pf *PanelsFrame, v vfs.VFS, path string) {
+	viewer, err := NewViewerView(v, path)
+	if err != nil {
+		vtui.DebugLog("PANELS: Failed to open viewer for %s: %v", path, err)
+		return
+	}
+	viewer.ResizeConsole(pf.lastW, pf.lastH)
+	vtui.FrameManager.AddScreen(viewer)
+}
+
+func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
+	if _, isLocal := v.(*vfs.OSVFS); !isLocal {
+		vtui.ShowMessage(" Error ", "Cannot execute files on a remote file system.", []string{"&Ok"})
+		return
+	}
+
+	if vfs.IsTerminalRunnable(v, path) {
+		if pf.pty != nil {
+			pf.pty.Write([]byte(fmt.Sprintf(" cd %q\r", dir)))
+			cmd := name
+			if runtime.GOOS != "windows" {
+				cmd = "./" + name
+			}
+			pf.pty.Write([]byte(cmd + "\r"))
+		}
+		pf.showPanels = false
+	} else {
+		var cmd *exec.Cmd
+		switch runtime.GOOS {
+		case "linux":
+			cmd = exec.Command("xdg-open", path)
+		case "windows":
+			cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", path)
+		case "darwin":
+			cmd = exec.Command("open", path)
+		}
+		if cmd != nil {
+			_ = cmd.Start()
+		}
+	}
+}
+
 func actionNewFile(pf *PanelsFrame) {
 	if fsp := pf.getActivePanel(); fsp != nil {
 		dir := fsp.vfs.GetPath()
@@ -14,7 +81,7 @@ func actionNewFile(pf *PanelsFrame) {
 			if name == "" {
 				name = "newfile.txt"
 			}
-			pf.openEditor(activeVfs, activeVfs.Join(dir, name))
+			actionOpenEditor(pf, activeVfs, activeVfs.Join(dir, name))
 		})
 	}
 }
@@ -23,7 +90,7 @@ func actionViewFile(pf *PanelsFrame) {
 	if fsp := pf.getActivePanel(); fsp != nil {
 		name := fsp.GetSelectedName()
 		path := fsp.vfs.Join(fsp.vfs.GetPath(), name)
-		pf.openViewer(fsp.vfs, path)
+		actionOpenViewer(pf, fsp.vfs, path)
 	}
 }
 
@@ -31,7 +98,7 @@ func actionEditFile(pf *PanelsFrame) {
 	if fsp := pf.getActivePanel(); fsp != nil {
 		name := fsp.GetSelectedName()
 		path := fsp.vfs.Join(fsp.vfs.GetPath(), name)
-		pf.openEditor(fsp.vfs, path)
+		actionOpenEditor(pf, fsp.vfs, path)
 	}
 }
 

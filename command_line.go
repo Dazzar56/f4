@@ -11,16 +11,15 @@ type CommandLine struct {
 	Edit       *vtui.Edit
 	Prompt     string
 	RichPrompt []vtui.CharInfo
-	History    []string
-	historyPos int
 }
 
 func NewCommandLine(prompt string) *CommandLine {
 	cl := &CommandLine{
-		Prompt:     prompt,
-		Edit:       vtui.NewEdit(0, 0, 10, ""),
-		historyPos: -1,
+		Prompt: prompt,
+		Edit:   vtui.NewEdit(0, 0, 10, ""),
 	}
+	cl.Edit.DeduplicateHistory = false
+	cl.Edit.HistoryLimit = 100
 	cl.Edit.ColorTextIdx = ColCommandLineText
 	cl.Edit.ColorUnchangedIdx = ColCommandLineText
 	cl.Edit.ColorSelectedIdx = ColCommandLineSelectedText
@@ -83,7 +82,7 @@ func (cl *CommandLine) DisplayObject(scr *vtui.ScreenBuf) {
 
 func (cl *CommandLine) ProcessKey(e *vtinput.InputEvent) bool {
 	handled := cl.Edit.ProcessKey(e)
-	if handled && cl.historyPos != -1 {
+	if handled && cl.Edit.HistoryPos != -1 {
 		// If a key was handled by the edit control, it means the text was modified.
 		// We should exit history browsing mode.
 		// We exclude simple cursor movements from this logic.
@@ -93,7 +92,7 @@ func (cl *CommandLine) ProcessKey(e *vtinput.InputEvent) bool {
 			isNav = true
 		}
 		if !isNav {
-			cl.historyPos = -1
+			cl.Edit.HistoryPos = -1
 		}
 	}
 	return handled
@@ -114,41 +113,4 @@ func (cl *CommandLine) IsEmpty() bool {
 // InsertString adds text to the command line.
 func (cl *CommandLine) InsertString(text string) {
 	cl.Edit.InsertString(text)
-}
-// AddHistory adds a new command to the top of the history list.
-func (cl *CommandLine) AddHistory(cmd string) {
-	if cmd == "" {
-		return
-	}
-	// Avoid adding duplicates at the top
-	if len(cl.History) > 0 && cl.History[0] == cmd {
-		return
-	}
-	cl.History = append([]string{cmd}, cl.History...)
-	// Limit history size to 100 entries
-	if len(cl.History) > 100 {
-		cl.History = cl.History[:100]
-	}
-}
-
-// HistoryUp moves to the previous command in history.
-func (cl *CommandLine) HistoryUp() {
-	if len(cl.History) == 0 {
-		return
-	}
-	if cl.historyPos < len(cl.History)-1 {
-		cl.historyPos++
-		cl.Edit.SetText(cl.History[cl.historyPos])
-	}
-}
-
-// HistoryDown moves to the next command in history, or clears the line.
-func (cl *CommandLine) HistoryDown() {
-	if cl.historyPos > 0 {
-		cl.historyPos--
-		cl.Edit.SetText(cl.History[cl.historyPos])
-	} else if cl.historyPos == 0 {
-		cl.historyPos = -1
-		cl.Edit.SetText("")
-	}
 }

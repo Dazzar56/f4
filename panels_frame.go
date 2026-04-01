@@ -1,13 +1,10 @@
 package main
 
 import (
-	"fmt"
 	"os"
-	"os/exec"
-	"runtime"
+	"fmt"
 	"time"
 	"github.com/unxed/f4/vfs"
-	"github.com/unxed/vtui/piecetable"
 	"os/user"
 	"strings"
 
@@ -169,71 +166,6 @@ func (pf *PanelsFrame) initPTY() {
 	}()
 }
 
-func (pf *PanelsFrame) openEditor(v vfs.VFS, path string) {
-	var f vfs.ReadAtCloser
-	var pt *piecetable.PieceTable
-	if v != nil {
-		f, _ = v.Open(path)
-	}
-	if f != nil {
-		pt = piecetable.NewWithBuffer(NewFileBuffer(f))
-	} else {
-		pt = piecetable.New(nil)
-	}
-
-	editor := NewEditorView(pt, v, path)
-	editor.SetFile(f)
-	editor.ResizeConsole(pf.lastW, pf.lastH)
-	// Editor opens in a NEW workspace
-	vtui.FrameManager.AddScreen(editor)
-}
-
-func (pf *PanelsFrame) openViewer(v vfs.VFS, path string) {
-	viewer, err := NewViewerView(v, path)
-	if err != nil {
-		vtui.DebugLog("PANELS: Failed to open viewer for %s: %v", path, err)
-		return
-	}
-	viewer.ResizeConsole(pf.lastW, pf.lastH)
-	// Viewer opens in a NEW workspace
-	vtui.FrameManager.AddScreen(viewer)
-}
-
-
-func (pf *PanelsFrame) executeFile(v vfs.VFS, dir, name, path string) {
-	if _, isLocal := v.(*vfs.OSVFS); !isLocal {
-		vtui.ShowMessage(" Error ", "Cannot execute files on a remote file system.", []string{"&Ok"})
-		return
-	}
-
-	if vfs.IsTerminalRunnable(v, path) {
-		if pf.pty != nil {
-			// Sync PTY to the file's directory
-			pf.pty.Write([]byte(fmt.Sprintf(" cd %q\r", dir)))
-			// Execute. Use ./ on Unix for current-dir security.
-			cmd := name
-			if runtime.GOOS != "windows" {
-				cmd = "./" + name
-			}
-			pf.pty.Write([]byte(cmd + "\r"))
-		}
-		pf.showPanels = false
-	} else {
-		// System Open
-		var cmd *exec.Cmd
-		switch runtime.GOOS {
-		case "linux":
-			cmd = exec.Command("xdg-open", path)
-		case "windows":
-			cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", path)
-		case "darwin":
-			cmd = exec.Command("open", path)
-		}
-		if cmd != nil {
-			_ = cmd.Start()
-		}
-	}
-}
 
 func (pf *PanelsFrame) ResizeConsole(w, h int) {
 	pf.lastW, pf.lastH = w, h
@@ -488,8 +420,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	if e.VirtualKeyCode == vtinput.VK_RETURN {
 		if !pf.cmdLine.IsEmpty() {
 			cmd := pf.cmdLine.Edit.GetText()
-			pf.cmdLine.AddHistory(cmd)
-			pf.cmdLine.historyPos = -1 // Reset history browsing on new command
+			pf.cmdLine.Edit.AddHistory(cmd)
 			if pf.pty != nil {
 				var path string
 				if fsp, ok := pf.panels[pf.activeIdx].(*FileSystemPanel); ok { path = fsp.vfs.GetPath() }
@@ -520,7 +451,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				name := fsp.GetSelectedName()
 				if name != "" && name != ".." {
 					path := fsp.vfs.Join(fsp.vfs.GetPath(), name)
-					pf.executeFile(fsp.vfs, fsp.vfs.GetPath(), name, path)
+					actionExecute(pf, fsp.vfs, fsp.vfs.GetPath(), name, path)
 				}
 			}
 			return true
@@ -533,10 +464,10 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	if !pf.showPanels {
 		switch e.VirtualKeyCode {
 		case vtinput.VK_UP:
-			pf.cmdLine.HistoryUp()
+			pf.cmdLine.Edit.HistoryUp()
 			return true
 		case vtinput.VK_DOWN:
-			pf.cmdLine.HistoryDown()
+			pf.cmdLine.Edit.HistoryDown()
 			return true
 		}
 	}
