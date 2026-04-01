@@ -449,6 +449,14 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return vtui.FrameManager.EmitCommand(vtui.CmDelete, nil)
 	case vtinput.VK_F10:
 		return vtui.FrameManager.EmitCommand(vtui.CmQuit, nil)
+	case vtinput.VK_F9:
+		pos := 0 // Left
+		if pf.activeIdx == 1 {
+			pos = 4 // Right
+		}
+		pf.menuBar.Active = true
+		pf.menuBar.ActivateSubMenu(pos)
+		return true
 	}
 	if e.VirtualKeyCode == vtinput.VK_ESCAPE && !pf.cmdLine.IsEmpty() {
 		pf.cmdLine.Clear()

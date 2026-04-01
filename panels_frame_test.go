@@ -744,3 +744,35 @@ func TestPanelsFrame_CommandRouting_FKeys(t *testing.T) {
 		t.Error("F10 did not trigger CmQuit through EmitCommand")
 	}
 }
+func TestPanelsFrame_F9Context(t *testing.T) {
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+
+	// 1. Test Left Panel context
+	pf.activeIdx = 0
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_F9,
+	})
+
+	if pf.menuBar.SelectPos != 0 {
+		t.Errorf("F9 on left panel: expected menu index 0, got %d", pf.menuBar.SelectPos)
+	}
+	if !pf.menuBar.Active {
+		t.Error("MenuBar should be active after F9")
+	}
+
+	// 2. Test Right Panel context
+	pf.menuBar.Active = false // Reset
+	pf.activeIdx = 1
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_F9,
+	})
+
+	if pf.menuBar.SelectPos != 4 {
+		t.Errorf("F9 on right panel: expected menu index 4, got %d", pf.menuBar.SelectPos)
+	}
+}
