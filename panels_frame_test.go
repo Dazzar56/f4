@@ -56,7 +56,7 @@ func TestPanelsFrame_ProcessMouse_DoubleClick(t *testing.T) {
 	}
 
 	tmp := t.TempDir()
-	fsp := pf.left.(*FileSystemPanel)
+	fsp := pf.panels[0].(*FileSystemPanel)
 	fsp.vfs.SetPath(tmp)
 	fsp.ReadDirectory() // Will contain ".." at index 0
 
@@ -91,7 +91,7 @@ func TestPanelsFrame_ProcessMouse_DoubleClickFile(t *testing.T) {
 	runnablePath := filepath.Join(tmp, "run.sh")
 	os.WriteFile(runnablePath, []byte("echo"), 0755)
 
-	fsp := pf.left.(*FileSystemPanel)
+	fsp := pf.panels[0].(*FileSystemPanel)
 	fsp.SetViewMode(ViewModeDetailed)
 	fsp.vfs.SetPath(tmp)
 	fsp.ReadDirectory() // ".." at index 0, "run.sh" at index 1
@@ -148,12 +148,12 @@ func TestPanelsFrame_KeyHandling(t *testing.T) {
 	// 3. Test Ctrl+Enter to insert filename
 	// Set focus on left panel and select the first "real" file (not "..")
 	pf.activeIdx = 0
-	if fsp, ok := pf.left.(*FileSystemPanel); ok {
+	if fsp, ok := pf.panels[0].(*FileSystemPanel); ok {
 		fsp.table.SelectPos = 1 // Assuming ".." is at 0
 	}
 	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN, ControlKeyState: vtinput.LeftCtrlPressed})
 
-	expectedName := pf.left.GetSelectedName()
+	expectedName := pf.panels[0].GetSelectedName()
 	if pf.cmdLine.Edit.GetText() != " "+expectedName {
 		t.Errorf("Ctrl+Enter failed: expected ' %s', got '%s'", expectedName, pf.cmdLine.Edit.GetText())
 	}
@@ -164,12 +164,12 @@ func TestPanelsFrame_ViewModeCommands(t *testing.T) {
 
 	handled := pf.HandleCommand(vtui.CmLeftDetailed, nil)
 	if !handled { t.Error("CmLeftDetailed not handled") }
-	if pf.left.(*FileSystemPanel).viewMode != ViewModeDetailed {
+	if pf.panels[0].(*FileSystemPanel).viewMode != ViewModeDetailed {
 		t.Error("Left panel mode not changed to Detailed")
 	}
 
 	pf.HandleCommand(vtui.CmRightDetailed, nil)
-	if pf.right.(*FileSystemPanel).viewMode != ViewModeDetailed {
+	if pf.panels[1].(*FileSystemPanel).viewMode != ViewModeDetailed {
 		t.Error("Right panel mode not changed to Detailed")
 	}
 
@@ -202,7 +202,7 @@ func TestPanelsFrame_Clone(t *testing.T) {
 
 	// Set some specific state
 	pf.activeIdx = 0
-	if fsp, ok := pf.left.(*FileSystemPanel); ok {
+	if fsp, ok := pf.panels[0].(*FileSystemPanel); ok {
 		fsp.vfs.SetPath("/tmp")
 		fsp.table.SelectPos = 5
 	}
@@ -215,14 +215,14 @@ func TestPanelsFrame_Clone(t *testing.T) {
 		t.Errorf("Clone failed to copy activeIdx: %d", clone.activeIdx)
 	}
 
-	if fsp, ok := clone.left.(*FileSystemPanel); ok {
+	if fsp, ok := clone.panels[0].(*FileSystemPanel); ok {
 		if fsp.vfs.GetPath() != "/tmp" {
 			t.Errorf("Clone failed to copy VFS path: %s", fsp.vfs.GetPath())
 		}
 		if fsp.table.SelectPos != 5 {
 			t.Errorf("Clone failed to copy Table SelectPos: %d", fsp.table.SelectPos)
 		}
-		if fsp.viewMode != pf.left.(*FileSystemPanel).viewMode {
+		if fsp.viewMode != pf.panels[0].(*FileSystemPanel).viewMode {
 			t.Error("Clone failed to copy ViewMode")
 		}
 	}
@@ -393,7 +393,7 @@ func TestPanelsFrame_CloneIndependence(t *testing.T) {
 	pf.ResizeConsole(80, 25)
 
 	// Set path in original
-	fsp := pf.left.(*FileSystemPanel)
+	fsp := pf.panels[0].(*FileSystemPanel)
 	origPath := t.TempDir()
 	fsp.vfs.SetPath(origPath)
 
@@ -402,10 +402,10 @@ func TestPanelsFrame_CloneIndependence(t *testing.T) {
 
 	// Change path in clone
 	newPath := t.TempDir()
-	clone.left.(*FileSystemPanel).vfs.SetPath(newPath)
+	clone.panels[0].(*FileSystemPanel).vfs.SetPath(newPath)
 
 	// Verify original is unchanged
-	if pf.left.(*FileSystemPanel).vfs.GetPath() != origPath {
+	if pf.panels[0].(*FileSystemPanel).vfs.GetPath() != origPath {
 		t.Error("Cloned PanelsFrame shares VFS state with parent!")
 	}
 }
@@ -461,7 +461,7 @@ func TestPanelsFrame_ReturnExecution(t *testing.T) {
 	os.WriteFile(runnablePath, []byte("echo 1"), 0755)
 
 	// Настраиваем VFS и выбираем этот файл на панели
-	fsp := pf.right.(*FileSystemPanel)
+	fsp := pf.panels[1].(*FileSystemPanel)
 	fsp.vfs.SetPath(tmp)
 	fsp.ReadDirectory()
 	fsp.SelectName("runme.sh")
@@ -515,7 +515,7 @@ func TestPanelsFrame_DirectoryEnter(t *testing.T) {
 	sub := filepath.Join(tmp, "work_dir")
 	os.Mkdir(sub, 0755)
 
-	fsp := pf.right.(*FileSystemPanel)
+	fsp := pf.panels[1].(*FileSystemPanel)
 	fsp.vfs.SetPath(tmp)
 	fsp.ReadDirectory() // Populate entries
 	fsp.SelectName("work_dir")
@@ -544,7 +544,7 @@ func TestPanelsFrame_NonRunnableOpen(t *testing.T) {
 	docPath := filepath.Join(tmp, "readme.txt")
 	os.WriteFile(docPath, []byte("some text"), 0644)
 
-	fsp := pf.right.(*FileSystemPanel)
+	fsp := pf.panels[1].(*FileSystemPanel)
 	fsp.vfs.SetPath(tmp)
 	fsp.ReadDirectory()
 	fsp.SelectName("readme.txt")
@@ -706,7 +706,7 @@ func TestPanelsFrame_ProcessMouse_RightDoubleClickNoEnter(t *testing.T) {
 	runnablePath := filepath.Join(tmp, "run.sh")
 	os.WriteFile(runnablePath, []byte("echo"), 0755)
 
-	fsp := pf.left.(*FileSystemPanel)
+	fsp := pf.Left().(*FileSystemPanel)
 	fsp.vfs.SetPath(tmp)
 	fsp.ReadDirectory() // "run.sh" at index 1
 

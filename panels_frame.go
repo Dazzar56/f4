@@ -18,8 +18,7 @@ import (
 // PanelsFrame is the main frame of the f4 manager, containing left and right panels.
 type PanelsFrame struct {
 	vtui.BaseFrame
-	left      Panel
-	right     Panel
+	panels    [2]Panel
 	activeIdx int // 0 for left, 1 for right
 
 	menuBar   *vtui.MenuBar
@@ -38,6 +37,10 @@ type PanelsFrame struct {
 
 	lastAlt   bool
 }
+func (pf *PanelsFrame) Left() Panel  { return pf.panels[0] }
+func (pf *PanelsFrame) Right() Panel { return pf.panels[1] }
+func (pf *PanelsFrame) Active() Panel  { return pf.panels[pf.activeIdx] }
+func (pf *PanelsFrame) Passive() Panel { return pf.panels[1-pf.activeIdx] }
 
 func NewPanelsFrame() *PanelsFrame {
 	pf := &PanelsFrame{activeIdx: 1}
@@ -90,11 +93,11 @@ func getMenuText(current, target ViewMode, label string) string {
 }
 
 func (pf *PanelsFrame) updateMenuCheckmarks() {
-	if pf.left == nil || pf.right == nil { return }
-	
+	if pf.panels[0] == nil || pf.panels[1] == nil { return }
+
 	lMode, rMode := ViewModeMedium, ViewModeMedium
-	if fsp, ok := pf.left.(*FileSystemPanel); ok { lMode = fsp.viewMode }
-	if fsp, ok := pf.right.(*FileSystemPanel); ok { rMode = fsp.viewMode }
+	if fsp, ok := pf.panels[0].(*FileSystemPanel); ok { lMode = fsp.viewMode }
+	if fsp, ok := pf.panels[1].(*FileSystemPanel); ok { rMode = fsp.viewMode }
 
 	pf.menuBar.Items[0].SubItems[0].Text = getMenuText(lMode, ViewModeMedium, "&"+Msg("Menu.Left.Medium"))
 	pf.menuBar.Items[0].SubItems[1].Text = getMenuText(lMode, ViewModeDetailed, "&"+Msg("Menu.Left.Detailed"))
@@ -105,10 +108,8 @@ func (pf *PanelsFrame) updateMenuCheckmarks() {
 
 func (pf *PanelsFrame) buildPrompt() []vtui.CharInfo {
 	var path string
-	if pf.activeIdx == 0 {
-		if fsp, ok := pf.left.(*FileSystemPanel); ok { path = fsp.vfs.GetPath() }
-	} else {
-		if fsp, ok := pf.right.(*FileSystemPanel); ok { path = fsp.vfs.GetPath() }
+	if fsp, ok := pf.Active().(*FileSystemPanel); ok {
+		path = fsp.vfs.GetPath()
 	}
 
 	usr, _ := user.Current()
@@ -265,16 +266,18 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 	leftW := w / 2
 	rightW := w - leftW
 
-	if pf.left == nil {
-		pf.left = NewFileSystemPanel(0, contentY1, leftW, panelH, vfs.NewOSVFS("."))
-		pf.right = NewFileSystemPanel(leftW, contentY1, rightW, panelH, vfs.NewOSVFS("."))
+	if pf.panels[0] == nil {
+		pf.panels[0] = NewFileSystemPanel(0, contentY1, leftW, panelH, vfs.NewOSVFS("."))
+		pf.panels[1] = NewFileSystemPanel(leftW, contentY1, rightW, panelH, vfs.NewOSVFS("."))
 	} else {
-		pf.left.SetPosition(0, contentY1, leftW-1, panelY2)
-		pf.right.SetPosition(leftW, contentY1, w-1, panelY2)
+		pf.panels[0].SetPosition(0, contentY1, leftW-1, panelY2)
+		pf.panels[1].SetPosition(leftW, contentY1, w-1, panelY2)
 
-		// Special methods for column adaptation (if it's FileSystemPanel)
-		if fsp, ok := pf.left.(*FileSystemPanel); ok { fsp.Resize(leftW, panelH) }
-		if fsp, ok := pf.right.(*FileSystemPanel); ok { fsp.Resize(rightW, panelH) }
+		for i, p := range pf.panels {
+			width := leftW
+			if i == 1 { width = rightW }
+			if fsp, ok := p.(*FileSystemPanel); ok { fsp.Resize(width, panelH) }
+		}
 	}
 
 	cmdLineY := h - 1
@@ -301,15 +304,10 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 
 	if pf.showPanels {
 		pf.termView.SetVisible(false)
-		if pf.activeIdx == 0 {
-			pf.left.SetFocus(true)
-			pf.right.SetFocus(false)
-		} else {
-			pf.left.SetFocus(false)
-			pf.right.SetFocus(true)
+		for i, p := range pf.panels {
+			p.SetFocus(pf.activeIdx == i)
+			p.Show(scr)
 		}
-		pf.left.Show(scr)
-		pf.right.Show(scr)
 	} else {
 		pf.termView.SetVisible(true)
 		pf.termView.Show(scr)
@@ -377,8 +375,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 
 	if e.Type == vtinput.FocusEventType {
 		if e.SetFocus {
-			if fsp, ok := pf.left.(*FileSystemPanel); ok { fsp.Refresh() }
-			if fsp, ok := pf.right.(*FileSystemPanel); ok { fsp.Refresh() }
+			pf.RefreshAll()
 		}
 		// Propagate focus to command line so its cursor state stays in sync
 		pf.cmdLine.ProcessKey(e)
@@ -458,12 +455,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 
 	// Ctrl+Enter inserts selected file name
 	if e.VirtualKeyCode == vtinput.VK_RETURN && ctrl {
-		var name string
-		if pf.activeIdx == 0 && pf.left != nil {
-			name = pf.left.GetSelectedName()
-		} else if pf.activeIdx == 1 && pf.right != nil {
-			name = pf.right.GetSelectedName()
-		}
+		name := pf.Active().GetSelectedName()
 		if name != "" {
 			txt := pf.cmdLine.Edit.GetText()
 			// Add space if the line is empty, or if it's not empty and doesn't end with a space.
@@ -490,11 +482,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			pf.cmdLine.historyPos = -1 // Reset history browsing on new command
 			if pf.pty != nil {
 				var path string
-				if pf.activeIdx == 0 {
-					if fsp, ok := pf.left.(*FileSystemPanel); ok { path = fsp.vfs.GetPath() }
-				} else {
-					if fsp, ok := pf.right.(*FileSystemPanel); ok { path = fsp.vfs.GetPath() }
-				}
+				if fsp, ok := pf.panels[pf.activeIdx].(*FileSystemPanel); ok { path = fsp.vfs.GetPath() }
 				if path != "" {
 					pf.pty.Write([]byte(fmt.Sprintf(" cd %q\r", path)))
 				}
@@ -509,19 +497,16 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			}
 			return true
 		} else {
+
 			// CommandLine is empty, panels are visible.
+
 			// 1. Try passing to panel to handle directory entry.
-			var handled bool
-			if pf.activeIdx == 0 {
-				handled = pf.left.ProcessKey(e)
-			} else {
-				handled = pf.right.ProcessKey(e)
-			}
+			handled := pf.Active().ProcessKey(e)
 
 			// 2. If panel didn't handle it, it's a file. Execute or open it.
 			if !handled {
-				var fsp *FileSystemPanel
-				if pf.activeIdx == 0 { fsp = pf.left.(*FileSystemPanel) } else { fsp = pf.right.(*FileSystemPanel) }
+				fsp := pf.getActivePanel()
+				if fsp == nil { return true }
 				name := fsp.GetSelectedName()
 				if name != "" && name != ".." {
 					path := fsp.vfs.Join(fsp.vfs.GetPath(), name)
@@ -559,12 +544,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 
 	// 3. Try Active Panel
-	panelHandled := false
-	if pf.activeIdx == 0 && pf.left != nil {
-		panelHandled = pf.left.ProcessKey(e)
-	} else if pf.activeIdx == 1 && pf.right != nil {
-		panelHandled = pf.right.ProcessKey(e)
-	}
+	panelHandled := pf.Active().ProcessKey(e)
 
 	if panelHandled {
 		return true
@@ -588,54 +568,37 @@ func (pf *PanelsFrame) HandleBroadcast(cmd int, args any) bool {
 
 func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 	mx, my := int(e.MouseX), int(e.MouseY)
-	vtui.DebugLog("MOUSE: PanelsFrame.ProcessMouse at (%d,%d) state:%X", mx, my, e.ButtonState)
 
-	checkPanel := func(p Panel, isLeft bool) bool {
-		if p == nil { return false }
+	for i, p := range pf.panels {
+		if p == nil { continue }
 		x1, y1, x2, y2 := p.GetPosition()
 		if mx >= x1 && mx <= x2 && my >= y1 && my <= y2 {
-			targetIdx := 1
-			if isLeft { targetIdx = 0 }
-
-			if pf.activeIdx != targetIdx && e.ButtonState != 0 {
-				vtui.DebugLog("MOUSE: Switching panel focus to %d", targetIdx)
-				pf.activeIdx = targetIdx
+			if pf.activeIdx != i && e.ButtonState != 0 {
+				pf.activeIdx = i
 				vtui.FrameManager.Redraw()
 			}
-			
+
 			handled := p.ProcessMouse(e)
-			if handled && (e.MouseEventFlags & vtinput.DoubleClick) != 0 && e.ButtonState == vtinput.FromLeft1stButtonPressed {
-				vtui.DebugLog("MOUSE: Double click detected, simulating Enter")
+			if handled && (e.MouseEventFlags&vtinput.DoubleClick) != 0 && e.ButtonState == vtinput.FromLeft1stButtonPressed {
 				pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN})
 			}
 			return handled || e.ButtonState != 0
 		}
-		return false
 	}
-
-	if checkPanel(pf.left, true) { return true }
-	if checkPanel(pf.right, false) { return true }
 
 	return false
 }
 
 func (pf *PanelsFrame) getActivePanel() *FileSystemPanel {
-	if pf.activeIdx == 0 {
-		if fsp, ok := pf.left.(*FileSystemPanel); ok { return fsp }
-	} else {
-		if fsp, ok := pf.right.(*FileSystemPanel); ok { return fsp }
-	}
+	if fsp, ok := pf.Active().(*FileSystemPanel); ok { return fsp }
 	return nil
 }
 
 func (pf *PanelsFrame) getInactivePanel() *FileSystemPanel {
-	if pf.activeIdx == 1 {
-		if fsp, ok := pf.left.(*FileSystemPanel); ok { return fsp }
-	} else {
-		if fsp, ok := pf.right.(*FileSystemPanel); ok { return fsp }
-	}
+	if fsp, ok := pf.Passive().(*FileSystemPanel); ok { return fsp }
 	return nil
 }
+
 // HandleCommand intercepts global commands (like CmQuit or CmCopy)
 // sent by menus or other views.
 func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
@@ -687,19 +650,19 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 		}
 
 	case vtui.CmLeftMedium:
-		if fsp, ok := pf.left.(*FileSystemPanel); ok { fsp.SetViewMode(ViewModeMedium) }
+		if fsp, ok := pf.panels[0].(*FileSystemPanel); ok { fsp.SetViewMode(ViewModeMedium) }
 		pf.updateMenuCheckmarks()
 		return true
 	case vtui.CmLeftDetailed:
-		if fsp, ok := pf.left.(*FileSystemPanel); ok { fsp.SetViewMode(ViewModeDetailed) }
+		if fsp, ok := pf.panels[0].(*FileSystemPanel); ok { fsp.SetViewMode(ViewModeDetailed) }
 		pf.updateMenuCheckmarks()
 		return true
 	case vtui.CmRightMedium:
-		if fsp, ok := pf.right.(*FileSystemPanel); ok { fsp.SetViewMode(ViewModeMedium) }
+		if fsp, ok := pf.panels[1].(*FileSystemPanel); ok { fsp.SetViewMode(ViewModeMedium) }
 		pf.updateMenuCheckmarks()
 		return true
 	case vtui.CmRightDetailed:
-		if fsp, ok := pf.right.(*FileSystemPanel); ok { fsp.SetViewMode(ViewModeDetailed) }
+		if fsp, ok := pf.panels[1].(*FileSystemPanel); ok { fsp.SetViewMode(ViewModeDetailed) }
 		pf.updateMenuCheckmarks()
 		return true
 	}
@@ -817,20 +780,15 @@ func (pf *PanelsFrame) ExecuteDummyOp(forked bool) {
 	})
 }
 func (pf *PanelsFrame) RefreshAll() {
-	if fsp, ok := pf.left.(*FileSystemPanel); ok {
-		fsp.ReadDirectory()
-	}
-	if fsp, ok := pf.right.(*FileSystemPanel); ok {
-		fsp.ReadDirectory()
+	for _, p := range pf.panels {
+		if fsp, ok := p.(*FileSystemPanel); ok { fsp.ReadDirectory() }
 	}
 }
+
 func (pf *PanelsFrame) GetTitle() string {
 	path := ""
-	// Show the path of the active panel
-	if pf.activeIdx == 0 {
-		if fsp, ok := pf.left.(*FileSystemPanel); ok { path = fsp.vfs.GetPath() }
-	} else {
-		if fsp, ok := pf.right.(*FileSystemPanel); ok { path = fsp.vfs.GetPath() }
+	if fsp, ok := pf.Active().(*FileSystemPanel); ok {
+		path = fsp.vfs.GetPath()
 	}
 
 	if path != "" {
@@ -841,39 +799,27 @@ func (pf *PanelsFrame) GetTitle() string {
 
 func (pf *PanelsFrame) Clone() *PanelsFrame {
 	clone := NewPanelsFrame()
-	// Only resize if parent has been sized, otherwise keep default 80x24
 	if pf.lastW > 0 && pf.lastH > 0 {
 		clone.ResizeConsole(pf.lastW, pf.lastH)
 	}
 
-	if fsp, ok := pf.left.(*FileSystemPanel); ok {
-		cloneFsp := clone.left.(*FileSystemPanel)
-		cloneFsp.vfs.SetPath(fsp.vfs.GetPath())
-		cloneFsp.SetViewMode(fsp.viewMode)
-		cloneFsp.ReadDirectory()
-		if len(cloneFsp.entries) == len(fsp.entries) {
-			for i := range cloneFsp.entries {
-				cloneFsp.entries[i].Selected = fsp.entries[i].Selected
+	for i, p := range pf.panels {
+		if fsp, ok := p.(*FileSystemPanel); ok {
+			cloneFsp := clone.panels[i].(*FileSystemPanel)
+			cloneFsp.vfs.SetPath(fsp.vfs.GetPath())
+			cloneFsp.SetViewMode(fsp.viewMode)
+			cloneFsp.ReadDirectory()
+			if len(cloneFsp.entries) == len(fsp.entries) {
+				for j := range cloneFsp.entries {
+					cloneFsp.entries[j].Selected = fsp.entries[j].Selected
+				}
 			}
+			cloneFsp.table.SelectPos = fsp.table.SelectPos
+			cloneFsp.table.SelectCol = fsp.table.SelectCol
+			cloneFsp.table.TopPos = fsp.table.TopPos
 		}
-		cloneFsp.table.SelectPos = fsp.table.SelectPos
-		cloneFsp.table.SelectCol = fsp.table.SelectCol
-		cloneFsp.table.TopPos = fsp.table.TopPos
 	}
-	if fsp, ok := pf.right.(*FileSystemPanel); ok {
-		cloneFsp := clone.right.(*FileSystemPanel)
-		cloneFsp.vfs.SetPath(fsp.vfs.GetPath())
-		cloneFsp.SetViewMode(fsp.viewMode)
-		cloneFsp.ReadDirectory()
-		if len(cloneFsp.entries) == len(fsp.entries) {
-			for i := range cloneFsp.entries {
-				cloneFsp.entries[i].Selected = fsp.entries[i].Selected
-			}
-		}
-		cloneFsp.table.SelectPos = fsp.table.SelectPos
-		cloneFsp.table.SelectCol = fsp.table.SelectCol
-		cloneFsp.table.TopPos = fsp.table.TopPos
-	}
+
 	clone.activeIdx = pf.activeIdx
 	clone.showKeyBar = pf.showKeyBar
 	clone.showPanels = pf.showPanels
