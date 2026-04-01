@@ -14,7 +14,8 @@ This project is built around several core philosophical and technical principles
 4. **Memory Management:** Go has a Garbage Collector (GC), but we use local optimizations (like a zero-allocation rendering loop) to bypass GC lag where it matters, keeping UI freezes unnoticeable.
 5. **Far Heritage:** Copying all successful concepts from Far (screen buffer, frame manager, etc.) and keeping internal structures and their names as close to the original C++ versions as possible.
 6. **Iterative Scope:** First, replicate 1:1 everything in `far2l` that is personally needed by the author (on Linux). Next, cover everything else in `far2l`. Finally, port useful additions that appeared in Far3.
-7. **Bazaar Policy:** Openness to community contributions and patches.
+7. **Consistent UX:** Adherence to a strict set of [Navigation and Interaction Guidelines](UX_GUIDELINES.md) that blend the best of classic TUI paradigms.
+8. **Bazaar Policy:** Openness to community contributions and patches.
 
 *Trade-offs:* The compiled binary is currently ~10MB, which might not fit in highly constrained environments like home routers.
 
