@@ -71,18 +71,18 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 		btnOk = vtui.NewButton(dlg.X1+10, dlg.Y1+8, Msg("Move.Btn"))
 	}
 
-	btnOk.Command = dlg.AddCommand(func() {
+	btnOk.OnClick = func() {
 		dest := editDest.GetText()
 		forked := chkFork.State == 1
 		dlg.Close()
 		if dest != "" {
 			go ExecuteFileOp(pf, srcVfs, dstVfs, names, dest, isMove, forked, pf.RefreshAll)
 		}
-	})
+	}
 	dlg.AddItem(btnOk)
 
 	btnCancel := vtui.NewButton(dlg.X1+25, dlg.Y1+8, "Cancel")
-	btnCancel.Command = dlg.AddCommand(func() { dlg.Close() })
+	btnCancel.OnClick = func() { dlg.Close() }
 	dlg.AddItem(btnCancel)
 
 	vtui.FrameManager.Push(dlg)
