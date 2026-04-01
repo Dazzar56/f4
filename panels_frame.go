@@ -49,6 +49,7 @@ func NewPanelsFrame() *PanelsFrame {
 	pf.showPanels = true
 
 	pf.menuBar = vtui.NewMenuBar(nil)
+	pf.menuBar.SetOwner(pf)
 	pf.menuBar.Items = []vtui.MenuBarItem{
 		// Using Command routing (TV style) instead of hardcoded indices
 		{Label: "&" + Msg("Menu.Left"), SubItems: []vtui.MenuItem{
@@ -76,6 +77,7 @@ func NewPanelsFrame() *PanelsFrame {
 	// We no longer need pf.menuBar.OnCommand for routing!
 	pf.cmdLine = NewCommandLine(Msg("Panels.Prompt"))
 	pf.keyBar = vtui.NewKeyBar()
+	pf.keyBar.SetOwner(pf)
 
 	pf.termView = NewTerminalView(80, 24)
 	// Parser will be fully initialized in initPTY once pty is ready
