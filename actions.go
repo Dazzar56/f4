@@ -55,8 +55,7 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 	}
 
 	srcVfs, dstVfs := fspSrc.vfs, fspDst.vfs
-	dlg := vtui.NewDialog(0, 0, 50, 11, title)
-	dlg.Center(pf.lastW, pf.lastH)
+	dlg := vtui.NewCenteredDialog(50, 11, title)
 	dlg.ShowClose = true
 
 	dlg.AddItem(vtui.NewLabel(dlg.X1+2, dlg.Y1+2, fmt.Sprintf(prompt, len(names)), nil))

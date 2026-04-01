@@ -701,8 +701,7 @@ func (pf *PanelsFrame) GetType() vtui.FrameType { return vtui.TypeUser + 1 }
 
 func (pf *PanelsFrame) SetExitCode(code int)     { pf.Done = true; pf.ExitCode = code }
 func (pf *PanelsFrame) showDummyOpDialog() {
-	dlg := vtui.NewDialog(0, 0, 50, 10, Msg("Op.DummyTitle"))
-	dlg.Center(vtui.FrameManager.GetScreenSize(), 25)
+	dlg := vtui.NewCenteredDialog(50, 10, Msg("Op.DummyTitle"))
 
 	dlg.AddItem(vtui.NewText(dlg.X1+2, dlg.Y1+2, Msg("Op.DummyText"), vtui.Palette[vtui.ColDialogText]))
 
@@ -727,9 +726,8 @@ func (pf *PanelsFrame) showDummyOpDialog() {
 // RunProgressTask encapsulates the boilerplate for creating a progress dialog,
 // running a background task with cancellation, and optionally forking the workspace.
 func (pf *PanelsFrame) RunProgressTask(title, startMsg string, forked bool, worker func(ctx *vtui.TaskContext, update func(msg string, percent int)) error, onComplete func(err error)) {
-	dlg := vtui.NewDialog(0, 0, 50, 8, title)
+	dlg := vtui.NewCenteredDialog(50, 8, title)
 	dlg.AttentionSuppressed = true
-	dlg.Center(vtui.FrameManager.GetScreenSize(), 25)
 
 	lbl := vtui.NewText(dlg.X1+2, dlg.Y1+2, startMsg, vtui.Palette[vtui.ColDialogText])
 	dlg.AddItem(lbl)
