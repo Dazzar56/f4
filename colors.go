@@ -133,3 +133,4 @@ func InitColors(ini *IniFile) {
 		}
 	}
 }
+

@@ -52,8 +52,8 @@ func TestAnsiParser_SGR_Advanced(t *testing.T) {
 	if vtui.GetRGBFore(p.Attr) != expectedRGB {
 		t.Errorf("TrueColor Fore: expected %06X, got %06X", expectedRGB, vtui.GetRGBFore(p.Attr))
 	}
-	if (p.Attr & vtui.ForegroundTrueColor) == 0 {
-		t.Error("TrueColor Fore: ForegroundTrueColor flag not set")
+	if (p.Attr & vtui.IsFgRGB) == 0 {
+		t.Error("TrueColor Fore: IsFgRGB flag not set")
 	}
 
 	// 2. Test 256-color Background (48;5;Index)
