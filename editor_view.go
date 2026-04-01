@@ -300,9 +300,16 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		ev.ensureCursorVisible()
 		return true
 
-	case vtinput.VK_C:
+	case vtinput.VK_C, vtinput.VK_INSERT:
 		if ctrl && ev.selActive {
 			ev.CopySelection()
+			return true
+		}
+
+	case vtinput.VK_X:
+		if ctrl && ev.selActive {
+			ev.CopySelection()
+			ev.DeleteSelection()
 			return true
 		}
 
@@ -506,6 +513,9 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 
 	case vtinput.VK_DELETE:
 		if ev.selActive {
+			if shift {
+				ev.CopySelection()
+			}
 			ev.DeleteSelection()
 		} else {
 			offset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
