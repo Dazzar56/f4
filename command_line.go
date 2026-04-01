@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
+	"github.com/mattn/go-runewidth"
 )
 
 // CommandLine is a simplified Edit control used for shell input.
@@ -38,7 +39,7 @@ func (cl *CommandLine) SetPosition(x1, y1, x2, y2 int) {
 			}
 		}
 	} else {
-		promptLen = len(cl.Prompt)
+		promptLen = runewidth.StringWidth(cl.Prompt)
 	}
 	cl.Edit.SetPosition(x1+promptLen, y1, x2, y2)
 }

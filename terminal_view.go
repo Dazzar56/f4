@@ -221,9 +221,10 @@ func (tv *TerminalView) PutChar(r rune, attr uint64) {
 				tv.styles = append(tv.styles, StyleChange{offset, attr})
 				tv.lastAttr = attr
 			}
-			buf := []byte(string(r))
-			tv.pt.Insert(offset, buf)
-			tv.li.UpdateAfterInsert(offset, buf)
+			var buf [4]byte
+			n := utf8.EncodeRune(buf[:], r)
+			tv.pt.Insert(offset, buf[:n])
+			tv.li.UpdateAfterInsert(offset, buf[:n])
 			tv.engine.InvalidateFrom(tv.li.LineCount() - 1)
 		}
 	}

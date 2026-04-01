@@ -362,9 +362,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 	case vtinput.VK_LEFT:
 		handleNav()
 		if ctrl {
-			lineStart := ev.li.GetLineOffset(ev.CursorLine)
-			lineData := ev.pt.GetRange(lineStart, ev.getLineLength(ev.CursorLine))
-			runes := []rune(string(lineData))
+			runes := ev.getLogicalLineRunes(ev.CursorLine)
 
 			// Find current rune position
 			currRuneIdx := 0
@@ -414,9 +412,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		handleNav()
 		lineLen := ev.getLineLength(ev.CursorLine)
 		if ctrl {
-			lineStart := ev.li.GetLineOffset(ev.CursorLine)
-			lineData := ev.pt.GetRange(lineStart, lineLen)
-			runes := []rune(string(lineData))
+			runes := ev.getLogicalLineRunes(ev.CursorLine)
 
 			// Find current rune position
 			currRuneIdx := len(runes)
@@ -646,6 +642,11 @@ func (ev *EditorView) GetKeyLabels() *vtui.KeySet {
 			"", "", "", "", "", "", Msg("KeyBar.EditorF10"),
 		},
 	}
+}
+func (ev *EditorView) getLogicalLineRunes(line int) []rune {
+	lineStart := ev.li.GetLineOffset(line)
+	lineData := ev.pt.GetRange(lineStart, ev.getLineLength(line))
+	return []rune(string(lineData))
 }
 func (ev *EditorView) getLineLength(line int) int {
 	if line < 0 || line >= ev.li.LineCount() {
