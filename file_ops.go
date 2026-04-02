@@ -32,7 +32,7 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 
 			if isMove && srcVfs == dstVfs {
 				destPath := dstVfs.Join(destBase, name)
-				if err := srcVfs.Rename(srcPath, destPath); err == nil {
+				if err := srcVfs.Rename(ctx.Context, srcPath, destPath); err == nil {
 					update("", ((i+1)*100)/len(names))
 					continue
 				}
@@ -41,7 +41,7 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 			err := recursiveCopy(ctx, update, srcVfs, srcPath, dstVfs, destBase, name, state)
 			if err != nil { return err }
 
-			if isMove { srcVfs.Remove(srcPath) }
+			if isMove { srcVfs.Remove(ctx.Context, srcPath) }
 			update("", ((i+1)*100)/len(names))
 		}
 		return nil
@@ -59,7 +59,7 @@ func recursiveCopy(ctx *vtui.TaskContext, update func(msg string, percent int), 
 		return ctx.Err()
 	}
 
-	stat, err := srcVfs.Stat(srcPath)
+	stat, err := srcVfs.Stat(ctx.Context, srcPath)
 	if err != nil {
 		return err
 	}
@@ -80,19 +80,19 @@ func recursiveCopy(ctx *vtui.TaskContext, update func(msg string, percent int), 
 	}
 
 	// Check if destination already exists
-	dstStat, err := dstVfs.Stat(destPath)
+	dstStat, err := dstVfs.Stat(ctx.Context, destPath)
 	exists := err == nil
 
 	if stat.IsDir {
 		if !exists {
-			if err := dstVfs.MkDir(destPath); err != nil {
+			if err := dstVfs.MkDir(ctx.Context, destPath); err != nil {
 				return err
 			}
 		} else if !dstStat.IsDir {
 			return fmt.Errorf("cannot overwrite file with folder: %s", name)
 		}
 
-		items, err := srcVfs.ReadDir(srcPath)
+		items, err := srcVfs.ReadDir(ctx.Context, srcPath)
 		if err != nil {
 			return err
 		}
@@ -138,7 +138,7 @@ func recursiveCopy(ctx *vtui.TaskContext, update func(msg string, percent int), 
 
 	// Open Source with Retry
 	for {
-		srcFile, err = srcVfs.Open(srcPath)
+		srcFile, err = srcVfs.Open(ctx.Context, srcPath)
 		if err == nil {
 			break
 		}
@@ -154,7 +154,7 @@ func recursiveCopy(ctx *vtui.TaskContext, update func(msg string, percent int), 
 
 	// Create Destination with Retry
 	for {
-		dstFile, err = dstVfs.Create(destPath)
+		dstFile, err = dstVfs.Create(ctx.Context, destPath)
 		if err == nil {
 			break
 		}

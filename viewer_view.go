@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"unicode/utf8"
 	"path/filepath"
@@ -33,7 +34,7 @@ type ViewerView struct {
 }
 
 func NewViewerView(v vfs.VFS, path string) (*ViewerView, error) {
-	backend, err := NewViewerBackend(v, path)
+	backend, err := NewViewerBackend(context.Background(), v, path)
 	if err != nil {
 		return nil, err
 	}

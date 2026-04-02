@@ -1,6 +1,7 @@
 package vfs
 
 import (
+	"context"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -13,8 +14,8 @@ var terminalExts = map[string]bool{
 }
 
 // IsTerminalRunnable checks if a file can be executed in the built-in terminal.
-func IsTerminalRunnable(v VFS, path string) bool {
-	info, err := v.Stat(path)
+func IsTerminalRunnable(ctx context.Context, v VFS, path string) bool {
+	info, err := v.Stat(ctx, path)
 	if err != nil || info.IsDir {
 		return false
 	}
@@ -31,7 +32,7 @@ func IsTerminalRunnable(v VFS, path string) bool {
 	}
 
 	// 3. Check for Shebang
-	f, err := v.Open(path)
+	f, err := v.Open(ctx, path)
 	if err == nil {
 		defer f.Close()
 		buf := make([]byte, 2)

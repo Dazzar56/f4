@@ -1,15 +1,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
-
-	"github.com/unxed/vtui"
-)
-
-import (
 	"os/exec"
 	"runtime"
+
 	"github.com/unxed/f4/vfs"
+	"github.com/unxed/vtui"
 	"github.com/unxed/vtui/piecetable"
 )
 
@@ -17,7 +15,7 @@ func actionOpenEditor(pf *PanelsFrame, v vfs.VFS, path string) {
 	var f vfs.ReadAtCloser
 	var pt *piecetable.PieceTable
 	if v != nil {
-		f, _ = v.Open(path)
+		f, _ = v.Open(context.Background(), path)
 	}
 	if f != nil {
 		pt = piecetable.NewWithBuffer(NewFileBuffer(f))
@@ -47,7 +45,7 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 		return
 	}
 
-	if vfs.IsTerminalRunnable(v, path) {
+	if vfs.IsTerminalRunnable(context.Background(), v, path) {
 		if pf.pty != nil {
 			pf.pty.Write([]byte(fmt.Sprintf(" cd %q\r", dir)))
 			cmd := name
@@ -167,7 +165,7 @@ func actionMkDir(pf *PanelsFrame) {
 			return
 		}
 		fullPath := activeVfs.Join(activeVfs.GetPath(), name)
-		if err := activeVfs.MkDir(fullPath); err != nil {
+		if err := activeVfs.MkDir(context.Background(), fullPath); err != nil {
 			vtui.ShowMessage(" Error ", fmt.Sprintf(Msg("Operation.Error"), err.Error()), []string{"&Ok"})
 		}
 		pf.RefreshAll()
@@ -198,7 +196,7 @@ func actionDelete(pf *PanelsFrame) {
 		if code == 0 {
 			for _, name := range names {
 				fullPath := activeVfs.Join(activeVfs.GetPath(), name)
-				if err := activeVfs.Remove(fullPath); err != nil {
+				if err := activeVfs.Remove(context.Background(), fullPath); err != nil {
 					vtui.ShowMessage(" Error ", fmt.Sprintf(Msg("Operation.Error"), err.Error()), []string{"&Ok"})
 					break
 				}

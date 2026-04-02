@@ -1,6 +1,7 @@
 package vfs
 
 import (
+	"context"
 	"testing"
 )
 
@@ -10,26 +11,26 @@ func TestOSVFS_Mutations(t *testing.T) {
 
 	// Test MkDir
 	newDirPath := vfs.Join(tmpDir, "new_folder")
-	err := vfs.MkDir(newDirPath)
+	err := vfs.MkDir(context.Background(), newDirPath)
 	if err != nil {
 		t.Fatalf("MkDir failed: %v", err)
 	}
 
-	stat, err := vfs.Stat(newDirPath)
+	stat, err := vfs.Stat(context.Background(), newDirPath)
 	if err != nil || !stat.IsDir {
 		t.Errorf("MkDir did not create a directory properly")
 	}
 
 	// Test Create & Open (Write/Read)
 	filePath := vfs.Join(newDirPath, "test.txt")
-	wc, err := vfs.Create(filePath)
+	wc, err := vfs.Create(context.Background(), filePath)
 	if err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}
 	wc.Write([]byte("VFS Test Data"))
 	wc.Close()
 
-	rc, err := vfs.Open(filePath)
+	rc, err := vfs.Open(context.Background(), filePath)
 	if err != nil {
 		t.Fatalf("Open failed: %v", err)
 	}
@@ -47,28 +48,28 @@ func TestOSVFS_Mutations(t *testing.T) {
 
 	// Test Rename
 	renamedPath := vfs.Join(newDirPath, "renamed.txt")
-	err = vfs.Rename(filePath, renamedPath)
+	err = vfs.Rename(context.Background(), filePath, renamedPath)
 	if err != nil {
 		t.Fatalf("Rename failed: %v", err)
 	}
 
-	_, err = vfs.Stat(filePath)
+	_, err = vfs.Stat(context.Background(), filePath)
 	if err == nil {
 		t.Error("Old file still exists after rename")
 	}
 
-	stat, err = vfs.Stat(renamedPath)
+	stat, err = vfs.Stat(context.Background(), renamedPath)
 	if err != nil || stat.Name != "renamed.txt" {
 		t.Error("Renamed file not found or invalid")
 	}
 
 	// Test Remove
-	err = vfs.Remove(newDirPath)
+	err = vfs.Remove(context.Background(), newDirPath)
 	if err != nil {
 		t.Fatalf("Remove failed: %v", err)
 	}
 
-	_, err = vfs.Stat(newDirPath)
+	_, err = vfs.Stat(context.Background(), newDirPath)
 	if err == nil {
 		t.Error("Directory still exists after Remove")
 	}

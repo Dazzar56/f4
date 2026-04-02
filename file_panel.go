@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"sort"
 
@@ -192,7 +193,8 @@ func (fp *FileSystemPanel) SetCursorIndex(idx int) {
 func (fp *FileSystemPanel) ReadDirectory() {
 	path := fp.vfs.GetPath()
 	fp.frame.SetTitle(path)
-	items, err := fp.vfs.ReadDir(path)
+	// TODO: Make this truly asynchronous in Phase 2
+	items, err := fp.vfs.ReadDir(context.Background(), path)
 	if err != nil {
 		return
 	}

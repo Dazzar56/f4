@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"testing"
 
@@ -13,7 +14,7 @@ func TestViewerBackend_ReadAndFindLineStart(t *testing.T) {
 	os.WriteFile(tmp, []byte(content), 0644)
 
 	v := vfs.NewOSVFS(t.TempDir())
-	vb, err := NewViewerBackend(v, tmp)
+	vb, err := NewViewerBackend(context.Background(), v, tmp)
 	if err != nil {
 		t.Fatal(err)
 	}

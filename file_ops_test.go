@@ -144,7 +144,7 @@ func TestRecursiveCopy_MoveCrossVFS(t *testing.T) {
 	err := recursiveCopy(tCtx, dummyUpdate, srcVfs, srcFile, dstVfs, tmpDst, name, &FileOpState{})
 	if err != nil { t.Fatalf("Copy part of move failed: %v", err) }
 
-	err = srcVfs.Remove(srcFile)
+	err = srcVfs.Remove(context.Background(), srcFile)
 	if err != nil { t.Fatalf("Delete part of move failed: %v", err) }
 
 	// Verify
@@ -252,7 +252,7 @@ func TestMkDir_ErrorHandling(t *testing.T) {
 	// Try to create a folder where a file already exists
 	os.WriteFile(filepath.Join(tmp, "blocked"), []byte("data"), 0644)
 
-	err := v.MkDir(filepath.Join(tmp, "blocked"))
+	err := v.MkDir(context.Background(), filepath.Join(tmp, "blocked"))
 	if err == nil {
 		t.Error("MkDir should have failed when creating a directory over a file")
 	}
@@ -265,7 +265,7 @@ func TestDelete_NonExistent(t *testing.T) {
 	// Deleting non-existent file should return error in OSVFS (RemoveAll)
 	// Actually RemoveAll in Go returns nil if path doesn't exist.
 	// This matches our idempotency principles, so let's verify it.
-	err := v.Remove(filepath.Join(tmp, "not_there"))
+	err := v.Remove(context.Background(), filepath.Join(tmp, "not_there"))
 	if err != nil {
 		t.Errorf("Remove should be idempotent and return nil for non-existent paths, got %v", err)
 	}

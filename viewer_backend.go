@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"io"
 
 	"github.com/unxed/f4/vfs"
@@ -12,8 +13,8 @@ type ViewerBackend struct {
 	size int64
 }
 
-func NewViewerBackend(v vfs.VFS, path string) (*ViewerBackend, error) {
-	f, err := v.Open(path)
+func NewViewerBackend(ctx context.Context, v vfs.VFS, path string) (*ViewerBackend, error) {
+	f, err := v.Open(ctx, path)
 	if err != nil {
 		return nil, err
 	}

@@ -1,6 +1,7 @@
 package vfs
 
 import (
+	"context"
 	"io"
 	"os"
 	"path/filepath"
@@ -23,7 +24,8 @@ func (v *OSVFS) SetPath(path string) error {
 	return nil
 }
 
-func (v *OSVFS) ReadDir(path string) ([]VFSItem, error) {
+func (v *OSVFS) ReadDir(ctx context.Context, path string) ([]VFSItem, error) {
+	if ctx.Err() != nil { return nil, ctx.Err() }
 	entries, err := os.ReadDir(path)
 	if err != nil { return nil, err }
 	items := make([]VFSItem, 0, len(entries))
@@ -40,7 +42,8 @@ func (v *OSVFS) ReadDir(path string) ([]VFSItem, error) {
 	return items, nil
 }
 
-func (v *OSVFS) Stat(path string) (VFSItem, error) {
+func (v *OSVFS) Stat(ctx context.Context, path string) (VFSItem, error) {
+	if ctx.Err() != nil { return VFSItem{}, ctx.Err() }
 	info, err := os.Stat(path)
 	if err != nil { return VFSItem{}, err }
 	return VFSItem{
@@ -56,9 +59,9 @@ func (v *OSVFS) Join(elem ...string) string      { return filepath.Join(elem...)
 func (v *OSVFS) Abs(path string) (string, error) { return filepath.Abs(path) }
 func (v *OSVFS) Base(path string) string         { return filepath.Base(path) }
 func (v *OSVFS) Dir(path string) string          { return filepath.Dir(path) }
-func (v *OSVFS) MkDir(path string) error         { return os.MkdirAll(path, 0755) }
-func (v *OSVFS) Remove(path string) error        { return os.RemoveAll(path) }
-func (v *OSVFS) Rename(old, new string) error    { return os.Rename(old, new) }
+func (v *OSVFS) MkDir(ctx context.Context, path string) error         { if ctx.Err() != nil { return ctx.Err() }; return os.MkdirAll(path, 0755) }
+func (v *OSVFS) Remove(ctx context.Context, path string) error        { if ctx.Err() != nil { return ctx.Err() }; return os.RemoveAll(path) }
+func (v *OSVFS) Rename(ctx context.Context, old, new string) error    { if ctx.Err() != nil { return ctx.Err() }; return os.Rename(old, new) }
 
 func (v *OSVFS) GetCapabilities() VFSCapabilities {
 	return VFSCapabilities{
@@ -77,7 +80,8 @@ type osFileWrapper struct {
 func (f *osFileWrapper) Size() int64 { return f.size }
 func (f *osFileWrapper) Read(p []byte) (n int, err error) { return f.File.Read(p) }
 
-func (v *OSVFS) Open(path string) (ReadAtCloser, error) {
+func (v *OSVFS) Open(ctx context.Context, path string) (ReadAtCloser, error) {
+	if ctx.Err() != nil { return nil, ctx.Err() }
 	f, err := os.Open(path)
 	if err != nil { return nil, err }
 	info, err := f.Stat()
@@ -88,6 +92,7 @@ func (v *OSVFS) Open(path string) (ReadAtCloser, error) {
 	return &osFileWrapper{File: f, size: info.Size()}, nil
 }
 
-func (v *OSVFS) Create(path string) (io.WriteCloser, error) {
+func (v *OSVFS) Create(ctx context.Context, path string) (io.WriteCloser, error) {
+	if ctx.Err() != nil { return nil, ctx.Err() }
 	return os.Create(path)
 }

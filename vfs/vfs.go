@@ -1,6 +1,7 @@
 package vfs
 
 import (
+	"context"
 	"io"
 	"time"
 )
@@ -27,27 +28,27 @@ type VFSCapabilities struct {
 type VFS interface {
 	GetPath() string
 	SetPath(path string) error
-	ReadDir(path string) ([]VFSItem, error)
-	Stat(path string) (VFSItem, error)
+	ReadDir(ctx context.Context, path string) ([]VFSItem, error)
+	Stat(ctx context.Context, path string) (VFSItem, error)
 	Join(elem ...string) string
 	Abs(path string) (string, error)
 	Base(path string) string
 	Dir(path string) string
 
 	// Mutations
-	MkDir(path string) error
-	Remove(path string) error
-	Rename(oldpath, newpath string) error
+	MkDir(ctx context.Context, path string) error
+	Remove(ctx context.Context, path string) error
+	Rename(ctx context.Context, oldpath, newpath string) error
 
 	// Advanced / Remote Operations
 	GetCapabilities() VFSCapabilities
 
 	// Random Access (required for high-performance Viewer/Editor)
 	// Open returns a ReadAtCloser for the file.
-	Open(path string) (ReadAtCloser, error)
+	Open(ctx context.Context, path string) (ReadAtCloser, error)
 
 	// Create returns a WriteCloser for new files.
-	Create(path string) (io.WriteCloser, error)
+	Create(ctx context.Context, path string) (io.WriteCloser, error)
 }
 
 // ReadAtCloser combines io.ReaderAt, io.Reader and io.Closer.

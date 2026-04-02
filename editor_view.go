@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"unicode"
 	"unicode/utf8"
 	"fmt"
@@ -692,7 +693,7 @@ func (ev *EditorView) SaveToFile() {
 	}
 	// Saving PieceTable content to VFS.
 	tmpPath := ev.filePath + ".f4tmp"
-	f, err := ev.vfs.Create(tmpPath)
+	f, err := ev.vfs.Create(context.Background(), tmpPath)
 	if err != nil {
 		vtui.DebugLog("EDITOR: Failed to open temp file for saving: %v", err)
 		return
@@ -708,10 +709,10 @@ func (ev *EditorView) SaveToFile() {
 		ev.file = nil
 	}
 
-	err = ev.vfs.Rename(tmpPath, ev.filePath)
+	err = ev.vfs.Rename(context.Background(), tmpPath, ev.filePath)
 	if err != nil {
-		ev.vfs.Remove(ev.filePath)
-		err = ev.vfs.Rename(tmpPath, ev.filePath)
+		ev.vfs.Remove(context.Background(), ev.filePath)
+		err = ev.vfs.Rename(context.Background(), tmpPath, ev.filePath)
 	}
 
 	if err != nil {
@@ -722,7 +723,7 @@ func (ev *EditorView) SaveToFile() {
 	vtui.DebugLog("EDITOR: Saved file %s", ev.filePath)
 	vtui.FrameManager.Broadcast(vtui.CmFileChanged, nil)
 
-	newFile, err := ev.vfs.Open(ev.filePath)
+	newFile, err := ev.vfs.Open(context.Background(), ev.filePath)
 	if err == nil {
 		ev.file = newFile
 		newPt := piecetable.NewWithBuffer(NewFileBuffer(newFile))
