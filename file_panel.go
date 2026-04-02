@@ -241,6 +241,10 @@ func (fp *FileSystemPanel) ReadDirectory() {
 
 			vtui.FrameManager.PostTask(func() {
 				if ctx.Err() != nil { return }
+
+				// Запоминаем, на каком файле стоял пользователь ПРЯМО СЕЙЧАС
+				currentSelected := fp.GetSelectedName()
+
 				fp.entries = append(fp.entries, newEntries...)
 				sort.Slice(fp.entries, func(i, j int) bool {
 					if fp.entries[i].Name == ".." { return true }
@@ -250,7 +254,11 @@ func (fp *FileSystemPanel) ReadDirectory() {
 				})
 				fp.Refresh()
 
-				if fp.pendingSelection != "" {
+				// Если пользователь уже куда-то навел курсор, удерживаем его там.
+				// Если нет — пробуем восстановить pendingSelection (например, при выходе из папки)
+				if currentSelected != "" && currentSelected != ".." {
+					fp.SelectName(currentSelected)
+				} else if fp.pendingSelection != "" {
 					fp.SelectName(fp.pendingSelection)
 				}
 			})

@@ -3,9 +3,11 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"sort"
 	"testing"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
+	"github.com/unxed/vtui"
 )
 
 func TestFileEntry_GetCellText(t *testing.T) {
@@ -298,5 +300,52 @@ func TestFileSystemPanel_RightClick_ResetOnRelease(t *testing.T) {
 	})
 	if fp.entries[0].Selected {
 		t.Error("Item should have been unselected after button release and re-click")
+	}
+}
+func TestFileSystemPanel_IncrementalInteraction(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewScreenBuf())
+	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(t.TempDir()))
+
+	// Симулируем прилет первого чанка
+	chunk1 := []vfs.VFSItem{
+		{Name: "file_A", IsDir: false},
+		{Name: "file_Z", IsDir: false},
+	}
+
+	// Вручную вызываем логику обработки чанка (имитируя прилет из горутины)
+	// (Для простоты теста берем кусок логики из ReadDirectory)
+	fp.entries = append(fp.entries, &fileEntry{VFSItem: chunk1[0]}, &fileEntry{VFSItem: chunk1[1]})
+	fp.Refresh()
+
+	// Пользователь выбирает file_Z (это индекс 2, так как 0 это "..")
+	fp.SelectName("file_Z")
+	if fp.GetSelectedName() != "file_Z" {
+		t.Fatalf("Failed to select file_Z, got %s", fp.GetSelectedName())
+	}
+
+	// Симулируем прилет второго чанка с файлом, который встанет В НАЧАЛО списка после сортировки
+	chunk2 := []vfs.VFSItem{
+		{Name: "file_0_first", IsDir: false},
+	}
+
+	// Эмуляция PostTask для второго чанка:
+	currentSelected := fp.GetSelectedName() // "file_Z"
+	fp.entries = append(fp.entries, &fileEntry{VFSItem: chunk2[0]})
+	sort.Slice(fp.entries, func(i, j int) bool {
+		if fp.entries[i].Name == ".." { return true }
+		if fp.entries[j].Name == ".." { return false }
+		return fp.entries[i].Name < fp.entries[j].Name
+	})
+	fp.Refresh()
+	fp.SelectName(currentSelected) // Удерживаем курсор
+
+	// Проверяем: file_Z теперь должен быть на индексе 3, но курсор должен быть все еще на нем
+	if fp.GetSelectedName() != "file_Z" {
+		t.Errorf("Cursor jumped! Expected 'file_Z', got '%s'", fp.GetSelectedName())
+	}
+
+	// Проверяем, что индекс реально изменился (был 2, стал 3)
+	if fp.GetCursorIndex() != 3 {
+		t.Errorf("Index should have shifted to 3, got %d", fp.GetCursorIndex())
 	}
 }
