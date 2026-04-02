@@ -4,8 +4,11 @@ import (
 	"context"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/unxed/f4/vfs"
+	"github.com/unxed/vtui"
+	"github.com/unxed/vtui/piecetable"
 )
 
 func TestViewerBackend_ReadAndFindLineStart(t *testing.T) {
@@ -25,9 +28,24 @@ func TestViewerBackend_ReadAndFindLineStart(t *testing.T) {
 	}
 
 	// ReadAt Test
-	data, _ := vb.ReadAt(6, 5) // "line2" starts at offset 6
+	vtui.FrameManager.Init(vtui.NewScreenBuf())
+	var data []byte
+	var errLoop error
+	for i := 0; i < 100; i++ {
+		data, errLoop = vb.ReadAt(6, 5)
+		if errLoop == piecetable.ErrLoading {
+			select {
+			case task := <-vtui.FrameManager.TaskChan:
+				task()
+			case <-time.After(100 * time.Millisecond):
+			}
+			continue
+		}
+		break
+	}
+
 	if string(data) != "line2" {
-		t.Errorf("ReadAt failed: expected 'line2', got '%s'", string(data))
+		t.Errorf("ReadAt failed: expected 'line2', got '%s', err: %v", string(data), errLoop)
 	}
 
 	// FindLineStart Test (offset inside "line2")

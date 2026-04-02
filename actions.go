@@ -15,23 +15,39 @@ func actionOpenEditor(pf *PanelsFrame, v vfs.VFS, path string) {
 	vtui.RunAsync(func(ctx *vtui.TaskContext) {
 		var f vfs.ReadAtCloser
 		var pt *piecetable.PieceTable
+		var buf *AsyncBuffer
+
 		if v != nil {
-			f, _ = v.Open(ctx.Context, path)
+			var err error
+			f, err = v.Open(ctx.Context, path)
+			if err != nil {
+				ctx.RunOnUI(func() {
+					vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to open file:\n%v", err), []string{"&Ok"})
+				})
+				return
+			}
 		}
-		if ctx.Err() != nil {
-			if f != nil { f.Close() }
-			return
-		}
+
 		if f != nil {
-			pt = piecetable.NewWithBuffer(NewFileBuffer(f))
+			buf = NewAsyncBuffer(ctx.Context, f)
+			pt = piecetable.NewWithBuffer(buf)
 		} else {
 			pt = piecetable.New(nil)
 		}
 
 		ctx.RunOnUI(func() {
+			if ctx.Err() != nil {
+				if buf != nil { buf.Close() }
+				if f != nil { f.Close() }
+				return
+			}
+			
 			editor := NewEditorView(pt, v, path)
-			editor.SetFile(f)
+			editor.file = f
+			editor.asyncBuf = buf
 			editor.ResizeConsole(pf.lastW, pf.lastH)
+			editor.StartIndexing()
+
 			vtui.FrameManager.AddScreen(editor)
 		})
 	})

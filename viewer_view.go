@@ -10,6 +10,7 @@ import (
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
+	"github.com/unxed/vtui/piecetable"
 	"github.com/mattn/go-runewidth"
 )
 
@@ -178,7 +179,12 @@ func (vv *ViewerView) renderHex(scr *vtui.ScreenBuf, width, contentHeight int) {
 			break
 		}
 
-		data, _ := vv.backend.ReadAt(currOffset, 16)
+		data, err := vv.backend.ReadAt(currOffset, 16)
+		if err == piecetable.ErrLoading {
+			scr.Write(vv.X1, vv.Y1+1+y, vtui.StringToCharInfo(" [ Loading... ] ", attr))
+			break
+		}
+
 		line := fmt.Sprintf("%010X: ", currOffset)
 		scr.Write(vv.X1, vv.Y1+1+y, vtui.StringToCharInfo(line, offAttr))
 
@@ -224,7 +230,11 @@ func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, contentHeight int) 
 		}
 
 		// Read a generous chunk to handle wrapping
-		data, _ := vv.backend.ReadAt(currOffset, width*4)
+		data, err := vv.backend.ReadAt(currOffset, width*4)
+		if err == piecetable.ErrLoading {
+			scr.Write(vv.X1, vv.Y1+1+y, vtui.StringToCharInfo(" [ Loading... ] ", attr))
+			break
+		}
 		if len(data) == 0 {
 			break
 		}

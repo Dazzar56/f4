@@ -36,7 +36,7 @@ func IsTerminalRunnable(ctx context.Context, v VFS, path string) bool {
 	if err == nil {
 		defer f.Close()
 		buf := make([]byte, 2)
-		n, _ := f.Read(buf)
+		n, _ := f.Read(ctx, buf)
 		if n == 2 && string(buf) == "#!" {
 			return true
 		}

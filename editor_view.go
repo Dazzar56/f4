@@ -5,6 +5,8 @@ import (
 	"unicode/utf8"
 	"fmt"
 	"path/filepath"
+	"context"
+	"time"
 
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
@@ -48,6 +50,8 @@ type EditorView struct {
 	pasting     bool
 	saving      bool
 	pasteBuffer []rune
+	asyncBuf    *AsyncBuffer
+	indexCancel context.CancelFunc
 	renderBytes []byte          // Reusable buffer for text data
 	renderCells []vtui.CharInfo // Reusable buffer for row rendering
 
@@ -57,14 +61,15 @@ type EditorView struct {
 	scrollBar *vtui.ScrollBar
 }
 
-func (ev *EditorView) SetFile(f vfs.ReadAtCloser) {
-	ev.file = f
-}
-
 func (ev *EditorView) Close() {
+	if ev.indexCancel != nil {
+		ev.indexCancel()
+	}
+	if ev.asyncBuf != nil {
+		ev.asyncBuf.Close()
+	}
 	if ev.file != nil {
 		ev.file.Close()
-		ev.file = nil
 	}
 	ev.BaseFrame.Close()
 }
@@ -183,7 +188,15 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 			currY := ev.Y1 + 1 + rowsRendered
 
 			ev.renderBytes = ev.renderBytes[:0]
-			ev.renderBytes = ev.pt.AppendRange(ev.renderBytes, frag.ByteOffsetStart, frag.ByteOffsetEnd-frag.ByteOffsetStart)
+			var err error
+			ev.renderBytes, err = ev.pt.AppendRange(ev.renderBytes, frag.ByteOffsetStart, frag.ByteOffsetEnd-frag.ByteOffsetStart)
+
+			if err == piecetable.ErrLoading {
+				scr.Write(ev.X1-ev.ScrollLeft, currY, vtui.StringToCharInfo(" [ Loading... ] ", bgAttr))
+				rowsRendered++
+				if rowsRendered >= height { goto DoneRendering }
+				continue
+			}
 
 			if ev.selActive {
 				selMin, selMax := ev.getSelectionRange()
@@ -405,9 +418,11 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		} else {
 			if ev.CursorPos > 0 {
 				lineStart := ev.li.GetLineOffset(ev.CursorLine)
-				data := ev.pt.GetRange(lineStart, ev.CursorPos)
-				_, size := utf8.DecodeLastRune(data)
-				ev.CursorPos -= size
+				data, _ := ev.pt.GetRange(lineStart, ev.CursorPos)
+				if data != nil {
+					_, size := utf8.DecodeLastRune(data)
+					ev.CursorPos -= size
+				}
 			} else if ev.CursorLine > 0 {
 				ev.CursorLine--
 				ev.CursorPos = ev.getLineLength(ev.CursorLine)
@@ -456,9 +471,11 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 				lineStart := ev.li.GetLineOffset(ev.CursorLine)
 				peekLen := 4
 				if lineLen-ev.CursorPos < 4 { peekLen = lineLen - ev.CursorPos }
-				data := ev.pt.GetRange(lineStart+ev.CursorPos, peekLen)
-				_, size := utf8.DecodeRune(data)
-				ev.CursorPos += size
+				data, _ := ev.pt.GetRange(lineStart+ev.CursorPos, peekLen)
+				if data != nil {
+					_, size := utf8.DecodeRune(data)
+					ev.CursorPos += size
+				}
 			} else if ev.CursorLine < ev.li.LineCount()-1 {
 				ev.CursorLine++
 				ev.CursorPos = 0
@@ -499,8 +516,11 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 				} else {
 					// Remove the UTF-8 character before the cursor
 					lineStart := ev.li.GetLineOffset(ev.CursorLine)
-					lineData := ev.pt.GetRange(lineStart, ev.CursorPos)
-					_, size := utf8.DecodeLastRune(lineData)
+					lineData, _ := ev.pt.GetRange(lineStart, ev.CursorPos)
+					size := 1
+					if lineData != nil {
+						_, size = utf8.DecodeLastRune(lineData)
+					}
 
 					ev.pt.Delete(offset-size, size)
 					ev.li.UpdateAfterDelete(offset-size, size)
@@ -525,8 +545,11 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 				// Remove the UTF-8 character under the cursor
 				peekLen := 4
 				if ev.pt.Size()-offset < 4 { peekLen = ev.pt.Size() - offset }
-				data := ev.pt.GetRange(offset, peekLen)
-				_, size := utf8.DecodeRune(data)
+				data, _ := ev.pt.GetRange(offset, peekLen)
+				size := 1
+				if data != nil {
+					_, size = utf8.DecodeRune(data)
+				}
 
 				ev.pt.Delete(offset, size)
 				ev.li.UpdateAfterDelete(offset, size)
@@ -639,6 +662,55 @@ func (ev *EditorView) ResizeConsole(w, h int) {
 
 func (ev *EditorView) GetMenuBar() *vtui.MenuBar { return ev.menuBar }
 
+func (ev *EditorView) StartIndexing() {
+	if ev.asyncBuf == nil { return }
+	if ev.indexCancel != nil { ev.indexCancel() }
+
+	ctx, cancel := context.WithCancel(context.Background())
+	ev.indexCancel = cancel
+
+	go func() {
+		absPos := 0
+		chunkSize := 64 * 1024
+		buf := ev.asyncBuf
+		li := ev.li
+
+		for absPos < buf.Size() {
+			select {
+			case <-ctx.Done(): return
+			default:
+			}
+
+			if ev.IsDone() { return }
+
+			data, err := buf.Read(absPos, chunkSize)
+			if err == piecetable.ErrLoading {
+				time.Sleep(50 * time.Millisecond)
+				continue
+			}
+			if err != nil { break }
+
+			var newOffsets []int
+			for i, b := range data {
+				if b == '\n' {
+					newOffsets = append(newOffsets, absPos+i+1)
+				}
+			}
+
+			if len(newOffsets) > 0 {
+				vtui.FrameManager.PostTask(func() {
+					if ctx.Err() != nil { return }
+					li.AppendOffsets(newOffsets)
+					ev.engine.InvalidateCache()
+					vtui.FrameManager.Redraw()
+				})
+			}
+			absPos += len(data)
+		}
+		vtui.DebugLog("INDEXER: Finished for %s", ev.filePath)
+	}()
+}
+
 func (ev *EditorView) HandleCommand(cmd int, args any) bool {
 	if cmd == vtui.CmClose {
 		ev.Close()
@@ -657,7 +729,7 @@ func (ev *EditorView) GetKeyLabels() *vtui.KeySet {
 }
 func (ev *EditorView) getLogicalLineRunes(line int) []rune {
 	lineStart := ev.li.GetLineOffset(line)
-	lineData := ev.pt.GetRange(lineStart, ev.getLineLength(line))
+	lineData, _ := ev.pt.GetRange(lineStart, ev.getLineLength(line))
 	return []rune(string(lineData))
 }
 func (ev *EditorView) getLineLength(line int) int {
@@ -675,7 +747,10 @@ func (ev *EditorView) getLineLength(line int) int {
 		return 0
 	}
 
-	data := ev.pt.GetRange(start, totalLen)
+	data, err := ev.pt.GetRange(start, totalLen)
+	if err == piecetable.ErrLoading || len(data) == 0 {
+		return totalLen
+	}
 
 	// Safely decrease length if there are line breaks at the end.
 	// First check for \n, then (if present) check for \r before it.
@@ -708,17 +783,20 @@ func (ev *EditorView) SaveToFile() {
 			return
 		}
 
-		ev.pt.ForEachRange(func(data []byte) {
-			f.Write(data)
+		saveErr := ev.pt.ForEachRange(func(data []byte) error {
+			_, errWrite := f.Write(data)
+			return errWrite
 		})
 		f.Close()
-
-		ctx.RunOnUI(func() {
-			if ev.file != nil {
-				ev.file.Close()
-				ev.file = nil
-			}
-		})
+		
+		if saveErr != nil {
+			ev.vfs.Remove(ctx.Context, tmpPath)
+			ctx.RunOnUI(func() {
+				ev.saving = false
+				vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to save data:\n%v", saveErr), []string{"&Ok"})
+			})
+			return
+		}
 
 		err = ev.vfs.Rename(ctx.Context, tmpPath, ev.filePath)
 		if err != nil {
@@ -739,14 +817,16 @@ func (ev *EditorView) SaveToFile() {
 		var newPt *piecetable.PieceTable
 		var newLi *piecetable.LineIndex
 		var newEngine *textlayout.WrapEngine
-		
+		var newBuf *AsyncBuffer
+
 		if err == nil {
-			newPt = piecetable.NewWithBuffer(NewFileBuffer(newFile))
+			newBuf = NewAsyncBuffer(ctx.Context, newFile)
+			newPt = piecetable.NewWithBuffer(newBuf)
 			newLi = piecetable.NewLineIndex()
-			newLi.Rebuild(newPt)
+			newLi.Rebuild(newPt) // This will trigger background indexing
 			newEngine = textlayout.NewWrapEngine(newPt, newLi)
 		}
-		
+
 		ctx.RunOnUI(func() {
 			ev.saving = false
 			vtui.DebugLog("EDITOR: Saved file %s", ev.filePath)
@@ -754,10 +834,13 @@ func (ev *EditorView) SaveToFile() {
 
 			if err == nil {
 				ev.file = newFile
+				if ev.asyncBuf != nil { ev.asyncBuf.Close() }
+				ev.asyncBuf = newBuf
 				ev.pt = newPt
 				ev.li = newLi
 				ev.engine = newEngine
 				ev.ensureEngineWidth()
+				ev.StartIndexing()
 			}
 		})
 	})
@@ -774,9 +857,11 @@ func (ev *EditorView) getSelectionRange() (int, int) {
 func (ev *EditorView) CopySelection() {
 	min, max := ev.getSelectionRange()
 	if max > min {
-		data := ev.pt.GetRange(min, max-min)
-		vtui.SetClipboard(string(data))
-		vtui.DebugLog("EDITOR: Copied %d bytes to clipboard", max-min)
+		data, _ := ev.pt.GetRange(min, max-min)
+		if data != nil {
+			vtui.SetClipboard(string(data))
+			vtui.DebugLog("EDITOR: Copied %d bytes to clipboard", max-min)
+		}
 	}
 }
 

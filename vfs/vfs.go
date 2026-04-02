@@ -51,10 +51,10 @@ type VFS interface {
 	Create(ctx context.Context, path string) (io.WriteCloser, error)
 }
 
-// ReadAtCloser combines io.ReaderAt, io.Reader and io.Closer.
+// ReadAtCloser combines reader interfaces with context support.
 type ReadAtCloser interface {
-	io.ReaderAt
-	io.Reader
+	ReadAt(ctx context.Context, p []byte, off int64) (n int, err error)
+	Read(ctx context.Context, p []byte) (n int, err error)
 	io.Closer
 	Size() int64
 }

@@ -3,14 +3,25 @@ package main
 import (
 	"context"
 	"io"
+	"sync"
 
 	"github.com/unxed/f4/vfs"
+	"github.com/unxed/vtui"
+	"github.com/unxed/vtui/piecetable"
 )
 
-// ViewerBackend provides efficient random access to a potentially huge file.
+// ViewerBackend provides async random access to a file using small cache window.
 type ViewerBackend struct {
 	file vfs.ReadAtCloser
 	size int64
+
+	mu          sync.Mutex
+	cacheOff    int64
+	cacheData   []byte
+	isFetching  bool
+	
+	ctx         context.Context
+	cancelCtx   context.CancelFunc
 }
 
 func NewViewerBackend(ctx context.Context, v vfs.VFS, path string) (*ViewerBackend, error) {
@@ -18,13 +29,18 @@ func NewViewerBackend(ctx context.Context, v vfs.VFS, path string) (*ViewerBacke
 	if err != nil {
 		return nil, err
 	}
+	
+	bCtx, bCancel := context.WithCancel(context.Background())
 	return &ViewerBackend{
-		file: f,
-		size: f.Size(),
+		file:      f,
+		size:      f.Size(),
+		ctx:       bCtx,
+		cancelCtx: bCancel,
 	}, nil
 }
 
 func (b *ViewerBackend) Close() error {
+	b.cancelCtx()
 	return b.file.Close()
 }
 
@@ -32,20 +48,55 @@ func (b *ViewerBackend) Size() int64 {
 	return b.size
 }
 
-// ReadAt reads length bytes starting from offset.
 func (b *ViewerBackend) ReadAt(offset int64, length int) ([]byte, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	
 	if offset >= b.size {
 		return nil, io.EOF
 	}
 	if offset+int64(length) > b.size {
 		length = int(b.size - offset)
 	}
-	buf := make([]byte, length)
-	_, err := b.file.ReadAt(buf, offset)
-	return buf, err
+	
+	// Check cache hit
+	if b.cacheData != nil && offset >= b.cacheOff && (offset+int64(length)) <= (b.cacheOff+int64(len(b.cacheData))) {
+		start := offset - b.cacheOff
+		return b.cacheData[start : start+int64(length)], nil
+	}
+	
+	// Cache miss -> Trigger fetch in background
+	if !b.isFetching {
+		b.isFetching = true
+		
+		fetchOff := offset - 64*1024
+		if fetchOff < 0 { fetchOff = 0 }
+		fetchLen := 256 * 1024 // We only keep 256KB in memory
+		if fetchOff+int64(fetchLen) > b.size {
+			fetchLen = int(b.size - fetchOff)
+		}
+		
+		go func() {
+			buf := make([]byte, fetchLen)
+			n, err := b.file.ReadAt(b.ctx, buf, fetchOff)
+			
+			vtui.FrameManager.PostTask(func() {
+				b.mu.Lock()
+				if b.ctx.Err() == nil {
+					if err == nil || err == io.EOF {
+						b.cacheOff = fetchOff
+						b.cacheData = buf[:n]
+					}
+				}
+				b.isFetching = false
+				b.mu.Unlock()
+				vtui.FrameManager.Redraw()
+			})
+		}()
+	}
+	return nil, piecetable.ErrLoading
 }
 
-// FindLineStart looks backwards from the given offset to find the start of the current line.
 func (b *ViewerBackend) FindLineStart(offset int64) int64 {
 	if offset <= 0 {
 		return 0
@@ -54,13 +105,14 @@ func (b *ViewerBackend) FindLineStart(offset int64) int64 {
 	curr := offset
 	for curr > 0 {
 		start := curr - chunkSize
-		if start < 0 {
-			start = 0
-		}
+		if start < 0 { start = 0 }
+		
 		data, err := b.ReadAt(start, int(curr-start))
-		if err != nil {
-			return 0
+		if err == piecetable.ErrLoading {
+			return offset // Keep current pos until loaded
 		}
+		if err != nil { return 0 }
+		
 		for i := len(data) - 1; i >= 0; i-- {
 			if data[i] == '\n' {
 				return start + int64(i) + 1

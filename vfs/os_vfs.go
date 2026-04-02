@@ -101,7 +101,15 @@ type osFileWrapper struct {
 }
 
 func (f *osFileWrapper) Size() int64 { return f.size }
-func (f *osFileWrapper) Read(p []byte) (n int, err error) { return f.File.Read(p) }
+func (f *osFileWrapper) Read(ctx context.Context, p []byte) (n int, err error) {
+	if ctx.Err() != nil { return 0, ctx.Err() }
+	return f.File.Read(p)
+}
+
+func (f *osFileWrapper) ReadAt(ctx context.Context, p []byte, off int64) (n int, err error) {
+	if ctx.Err() != nil { return 0, ctx.Err() }
+	return f.File.ReadAt(p, off)
+}
 
 func (v *OSVFS) Open(ctx context.Context, path string) (ReadAtCloser, error) {
 	if ctx.Err() != nil { return nil, ctx.Err() }

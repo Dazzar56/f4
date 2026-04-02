@@ -40,7 +40,7 @@ func TestOSVFS_Mutations(t *testing.T) {
 	}
 
 	buf := make([]byte, 4)
-	n, err := rc.ReadAt(buf, 4)
+	n, err := rc.ReadAt(context.Background(), buf, 4)
 	rc.Close()
 	if err != nil || string(buf[:n]) != "Test" {
 		t.Errorf("ReadAt failed. Expected 'Test', got %q", string(buf[:n]))

@@ -171,9 +171,22 @@ func recursiveCopy(ctx *vtui.TaskContext, update func(msg string, percent int), 
 	}
 	defer dstFile.Close()
 
-	// Simple byte-by-byte copy (can be optimized with buffers)
-	_, err = io.Copy(dstFile, srcFile)
-	return err
+	// io.Copy doesn't support context-aware readers, so we implement a simple loop
+	buf := make([]byte, 128*1024) // 128KB buffer
+	for {
+		if ctx.Err() != nil { return ctx.Err() }
+		n, rerr := srcFile.Read(ctx.Context, buf)
+		if n > 0 {
+			if _, werr := dstFile.Write(buf[:n]); werr != nil {
+				return werr
+			}
+		}
+		if rerr != nil {
+			if rerr == io.EOF { break }
+			return rerr
+		}
+	}
+	return nil
 }
 
 // AskOverwrite shows a modal dialog from the background thread and waits for the result.

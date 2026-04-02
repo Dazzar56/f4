@@ -90,7 +90,8 @@ func (tv *TerminalView) CloneStateFrom(other *TerminalView) {
 	tv.AltLines = allocGrid(other.AltLines)
 
 	// 2. Deep copy the PieceTable (History)
-	tv.pt = piecetable.New(other.pt.Bytes())
+	bytes, _ := other.pt.Bytes()
+	tv.pt = piecetable.New(bytes)
 
 	// 3. Re-initialize indices and engine to point to the NEW pt
 	tv.li = piecetable.NewLineIndex()
@@ -518,7 +519,7 @@ func (tv *TerminalView) Show(scr *vtui.ScreenBuf) {
 			currY := tv.Y1 + yPadding + rowsRendered
 			if currY > tv.Y1+tv.Height-1 { break }
 
-			textBytes := tv.pt.GetRange(frag.ByteOffsetStart, frag.ByteOffsetEnd-frag.ByteOffsetStart)
+			textBytes, _ := tv.pt.GetRange(frag.ByteOffsetStart, frag.ByteOffsetEnd-frag.ByteOffsetStart)
 			cells := make([]vtui.CharInfo, 0, frag.VisualWidth)
 			currentByte := 0
 			for currentByte < len(textBytes) {

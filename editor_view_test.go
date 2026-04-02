@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"strings"
 	"time"
 	"os"
@@ -125,6 +126,9 @@ func TestEditorView_SaveFile(t *testing.T) {
 	pt := piecetable.New([]byte("Original"))
 	v := vfs.NewOSVFS(t.TempDir())
 	ev := NewEditorView(pt, v, tmpFile)
+	// Add mock file object to editor so SaveToFile logic triggers cleanly
+	f, _ := v.Open(context.Background(), tmpFile)
+	ev.file = f
 
 	// 3. Simulate typing text " + Edit" at the end
 	ev.CursorPos = 8

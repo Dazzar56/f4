@@ -4,6 +4,7 @@ import (
 	"os"
 	"testing"
 	"context"
+	"time"
 
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
@@ -25,9 +26,22 @@ func TestViewerView_NavigationAndEOF(t *testing.T) {
 
 	scr := vtui.NewScreenBuf()
 	scr.AllocBuf(11, 4)
+	vtui.FrameManager.Init(scr)
 
-	// 1. Initial Render
+	// 1. Initial Render (Triggers async fetch)
 	vv.Show(scr)
+
+	// Wait for background loader
+	select {
+	case task := <-vtui.FrameManager.TaskChan:
+		task()
+	case <-time.After(1 * time.Second):
+		t.Fatal("Timeout waiting for initial fetch")
+	}
+
+	// Re-render to populate lineOffsets
+	vv.Show(scr)
+
 	if vv.TopOffset != 0 {
 		t.Errorf("Initial offset should be 0, got %d", vv.TopOffset)
 	}
@@ -44,7 +58,18 @@ func TestViewerView_NavigationAndEOF(t *testing.T) {
 
 	// 3. Jump to End (L3, L4, L5 visible)
 	vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_END})
-	vv.Show(scr)
+
+	// VK_END triggers FindLineStart which triggers another fetch
+	timeout := time.After(1 * time.Second)
+	for !vv.eofVisible {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			vv.Show(scr)
+		case <-timeout:
+			t.Fatal("Timeout waiting for EOF fetch")
+		}
+	}
 
 	if !vv.eofVisible {
 		t.Error("EOF should be visible after VK_END")
@@ -79,9 +104,19 @@ func TestViewerView_MouseScrollbar(t *testing.T) {
 	// Create a dummy ScreenBuf to pass to Show() for initial rendering.
 	scr := vtui.NewScreenBuf()
 	scr.AllocBuf(11, 5) // width 11 (0..10), height 5 (0..4)
+	vtui.FrameManager.Init(scr)
 
 	// IMPORTANT: Call Show initially to populate vv.lineOffsets and set vv.TopOffset.
 	// Without this, the navigation logic in ProcessKey has no context.
+	vv.Show(scr)
+
+	// Wait for background loader
+	select {
+	case task := <-vtui.FrameManager.TaskChan:
+		task()
+	case <-time.After(1 * time.Second):
+		t.Fatal("Timeout waiting for scrollbar initial fetch")
+	}
 	vv.Show(scr)
 
 	// Ensure we start at the top
