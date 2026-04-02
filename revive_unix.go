@@ -309,6 +309,9 @@ func runServer(sockPath string) {
 		reader.Close()
 
 		if restore != nil {
+			// Ensure all pending escape sequences are sent before restoring terminal
+			os.Stdout.Sync()
+
 			// 2. CRITICAL: Clear O_NONBLOCK that Go automatically sets.
 			// Shared FD description means bash will also get EAGAIN if we don't.
 			clearNonBlock := func(f *os.File) {
