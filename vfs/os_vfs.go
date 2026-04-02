@@ -57,10 +57,18 @@ func (v *OSVFS) ReadDir(ctx context.Context, path string, onChunk func([]VFSItem
 				mtime = info.ModTime()
 				isExec = info.Mode().Perm()&0111 != 0
 			}
+			isDir := e.IsDir()
+			if info != nil && (info.Mode()&os.ModeSymlink != 0) {
+				// Resolve symlink to check if target is a directory
+				if target, err := os.Stat(filepath.Join(path, e.Name())); err == nil {
+					isDir = target.IsDir()
+				}
+			}
+
 			items = append(items, VFSItem{
 				Name:         e.Name(),
 				Size:         size,
-				IsDir:        e.IsDir(),
+				IsDir:        isDir,
 				MTime:        mtime,
 				IsExecutable: isExec,
 			})

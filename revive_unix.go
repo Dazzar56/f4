@@ -128,11 +128,21 @@ func startNewSession() {
 
 	cmd := exec.Command(os.Args[0], "--server", sockPath)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true} // Detach from terminal
+
+	// Crucial for GUI startup: redirect daemon's own I/O to null so it doesn't
+	// hold the parent's pipe/TTY.
+	null, _ := os.Open(os.DevNull)
+	cmd.Stdin = null
+	cmd.Stdout = null
+	cmd.Stderr = null
+
 	if err := cmd.Start(); err != nil {
 		vtui.DebugLog("SESSION: Failed to start daemon: %v", err)
+		if null != nil { null.Close() }
 		fmt.Println("Failed to start daemon:", err)
 		return
 	}
+	if null != nil { null.Close() }
 
 	// Wait for the server to create the socket
 	for i := 0; i < 50; i++ {

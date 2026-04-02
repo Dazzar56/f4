@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 	"os"
+	"runtime"
 	"path/filepath"
 	"fmt"
 )
@@ -76,6 +77,42 @@ func TestOSVFS_Mutations(t *testing.T) {
 	if err == nil {
 		t.Error("Directory still exists after Remove")
 	}
+}
+
+func TestOSVFS_Symlinks(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Symlinks on Windows require special privileges")
+	}
+
+	tmpDir := t.TempDir()
+	v := NewOSVFS(tmpDir)
+
+	// 1. Create a real directory
+	targetDir := filepath.Join(tmpDir, "target_dir")
+	os.Mkdir(targetDir, 0755)
+
+	// 2. Create a symlink to that directory
+	linkPath := filepath.Join(tmpDir, "link_to_dir")
+	err := os.Symlink(targetDir, linkPath)
+	if err != nil {
+		t.Fatalf("Failed to create symlink: %v", err)
+	}
+
+	// 3. Read directory and check if link_to_dir is marked as IsDir
+	found := false
+	err = v.ReadDir(context.Background(), tmpDir, func(items []VFSItem) {
+		for _, itm := range items {
+			if itm.Name == "link_to_dir" {
+				found = true
+				if !itm.IsDir {
+					t.Error("Symlink to directory was not recognized as a directory")
+				}
+			}
+		}
+	})
+
+	if err != nil { t.Fatalf("ReadDir failed: %v", err) }
+	if !found { t.Error("Symlink entry not found in ReadDir") }
 }
 
 func TestOSVFS_Capabilities(t *testing.T) {

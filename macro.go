@@ -49,14 +49,19 @@ func KeyStr(vk uint16, mods uint32) string {
 
 // Filter is hooked into FrameManager. Returns true if the event was consumed.
 func (m *MacroManager) Filter(e *vtinput.InputEvent) bool {
-	if e.Type != vtinput.KeyEventType || !e.KeyDown {
+	if e.Type != vtinput.KeyEventType {
 		return false
 	}
 
-	// Ctrl+. toggles recording
-	isCtrlDot := e.VirtualKeyCode == vtinput.VK_OEM_PERIOD && (e.ControlKeyState&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed)) != 0
+	// Ctrl+. toggles recording. We check both VK and Char for better terminal compatibility.
+	isCtrlDot := (e.VirtualKeyCode == vtinput.VK_OEM_PERIOD || e.Char == '.') &&
+		(e.ControlKeyState&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed)) != 0
 
 	if isCtrlDot {
+		if !e.KeyDown {
+			return true // Consume KeyUp of the trigger
+		}
+		vtui.DebugLog("MACRO: Ctrl+. intercepted. Previous recording state: %v", m.Recording)
 		vtui.DebugLog("MACRO: Ctrl+. intercepted. Previous recording state: %v", m.Recording)
 		if m.Recording {
 			m.Recording = false
@@ -72,8 +77,14 @@ func (m *MacroManager) Filter(e *vtinput.InputEvent) bool {
 	}
 
 	if m.Recording {
-		m.Buffer = append(m.Buffer, e)
-		return false // Let it pass to the UI
+		if e.KeyDown {
+			m.Buffer = append(m.Buffer, e)
+		}
+		return false // Let it pass to the UI so user sees what they type
+	}
+
+	if !e.KeyDown {
+		return false
 	}
 
 	// Check if this key triggers a macro
@@ -165,16 +176,13 @@ func (f *MacroAssignFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return false
 	}
 
-	// Ignore standalone modifiers
+	// Only ignore "pure" modifiers without any other key
 	switch e.VirtualKeyCode {
 	case vtinput.VK_SHIFT, vtinput.VK_LSHIFT, vtinput.VK_RSHIFT,
 		vtinput.VK_CONTROL, vtinput.VK_LCONTROL, vtinput.VK_RCONTROL,
 		vtinput.VK_MENU, vtinput.VK_LMENU, vtinput.VK_RMENU,
 		vtinput.VK_CAPITAL, vtinput.VK_NUMLOCK, vtinput.VK_SCROLL:
 		return false
-	case vtinput.VK_ESCAPE:
-		f.done = true
-		return true
 	}
 
 	key := KeyStr(e.VirtualKeyCode, e.ControlKeyState)

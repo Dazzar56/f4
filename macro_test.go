@@ -109,3 +109,74 @@ func TestMacroPlaybackLogic(t *testing.T) {
 		t.Error("Filter should return true when triggering a macro")
 	}
 }
+func TestMacro_KeyUpConsumption(t *testing.T) {
+	mgr := NewMacroManager("unused.ini")
+
+	// Start recording
+	ctrlDot := &vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_OEM_PERIOD, ControlKeyState: vtinput.LeftCtrlPressed,
+	}
+	mgr.Filter(ctrlDot)
+
+	// Release trigger (KeyUp)
+	ctrlDotUp := &vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: false,
+		VirtualKeyCode: vtinput.VK_OEM_PERIOD, ControlKeyState: vtinput.LeftCtrlPressed,
+	}
+
+	if !mgr.Filter(ctrlDotUp) {
+		t.Error("KeyUp for Ctrl+. should be consumed by the filter")
+	}
+
+	// Normal key release during recording should NOT be added to buffer
+	keyAUp := &vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: false,
+		VirtualKeyCode: vtinput.VK_A, Char: 'a',
+	}
+	mgr.Filter(keyAUp)
+	if len(mgr.Buffer) != 0 {
+		t.Errorf("KeyUp should not be recorded in macro buffer, got length %d", len(mgr.Buffer))
+	}
+}
+
+func TestMacro_AssignEsc(t *testing.T) {
+	mgr := NewMacroManager(os.TempDir() + "/esc.ini")
+	mgr.Recording = true
+	mgr.Buffer = []*vtinput.InputEvent{{Char: 'h', KeyDown: true}}
+
+	assign := &MacroAssignFrame{mgr: mgr}
+	escEvent := &vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_ESCAPE,
+	}
+
+	// Previously this would close the dialog without assigning.
+	// Now it should assign the macro to Esc.
+	assign.ProcessKey(escEvent)
+
+	key := KeyStr(vtinput.VK_ESCAPE, 0)
+	if _, ok := mgr.Macros[key]; !ok {
+		t.Error("Failed to assign macro to ESC key")
+	}
+	if !assign.IsDone() {
+		t.Error("Assign frame should be done after assignment")
+	}
+}
+
+func TestMacro_CharTrigger(t *testing.T) {
+	mgr := NewMacroManager("unused.ini")
+
+	// Test trigger using Char instead of VK (for terminals that map dot differently)
+	event := &vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		Char: '.', VirtualKeyCode: 0, ControlKeyState: vtinput.LeftCtrlPressed,
+	}
+
+	if !mgr.Filter(event) {
+		t.Error("Macro recording should start via Char '.' detection")
+	}
+	if !mgr.Recording {
+		t.Error("Manager failed to enter recording state via Char trigger")
+	}
+}
