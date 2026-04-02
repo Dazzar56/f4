@@ -107,9 +107,14 @@ go build -o f4
 ```
 
 **5. Debug Mode**
-To enable detailed logging to `debug.log`, run with the `VTUI_DEBUG` environment variable:
+To enable detailed logging to `debug.log`, run with the `--debug` flag:
 ```bash
-VTUI_DEBUG=1 ./f4
+./f4 --debug
+```
+
+You can also specify a custom log file using `--log`:
+```bash
+./f4 --log /tmp/f4_trace.log
 ```
 
 ---

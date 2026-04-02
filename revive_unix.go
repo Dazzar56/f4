@@ -124,10 +124,12 @@ func ManageSessions() {
 func startNewSession() {
 	pid := os.Getpid()
 	sockPath := filepath.Join(sessionDir(), fmt.Sprintf("f4-new-%d-%d.sock", pid, time.Now().Unix()))
+	vtui.DebugLog("SESSION: Starting new daemon server at %s", sockPath)
 
 	cmd := exec.Command(os.Args[0], "--server", sockPath)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true} // Detach from terminal
 	if err := cmd.Start(); err != nil {
+		vtui.DebugLog("SESSION: Failed to start daemon: %v", err)
 		fmt.Println("Failed to start daemon:", err)
 		return
 	}
@@ -145,6 +147,9 @@ func startNewSession() {
 
 func runClient(sockPath string) {
 	vtui.DebugLog("CLIENT: Start runClient, target socket: %s", sockPath)
+	if !term.IsTerminal(int(os.Stdin.Fd())) {
+		vtui.DebugLog("CLIENT: WARNING: os.Stdin (fd %d) is not a terminal!", os.Stdin.Fd())
+	}
 
 	clntPath := filepath.Join(sessionDir(), fmt.Sprintf("clnt-%d-%d.ipc", os.Getpid(), time.Now().UnixNano()))
 	laddr, _ := net.ResolveUnixAddr("unixgram", clntPath)

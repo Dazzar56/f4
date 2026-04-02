@@ -13,6 +13,13 @@ func main() {
 
 	for i := 1; i < len(os.Args); i++ {
 		switch os.Args[i] {
+		case "--debug":
+			os.Setenv("VTUI_DEBUG", "1")
+		case "--log":
+			if i+1 < len(os.Args) {
+				os.Setenv("VTUI_DEBUG", os.Args[i+1])
+				i++
+			}
 		case "--server":
 			if i+1 < len(os.Args) {
 				serverPath = os.Args[i+1]
@@ -47,7 +54,10 @@ func main() {
 
 func InitCore() *vtui.ScreenBuf {
 	vtui.DebugLog("CORE: InitCore() called. PID: %d", os.Getpid())
-	width, height, _ := term.GetSize(0)
+	width, height, err := term.GetSize(0)
+	if err != nil {
+		vtui.DebugLog("CORE: term.GetSize(0) failed: %v", err)
+	}
 	if width <= 0 { width = 80 }
 	if height <= 0 { height = 24 }
 

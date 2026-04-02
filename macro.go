@@ -57,15 +57,16 @@ func (m *MacroManager) Filter(e *vtinput.InputEvent) bool {
 	isCtrlDot := e.VirtualKeyCode == vtinput.VK_OEM_PERIOD && (e.ControlKeyState&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed)) != 0
 
 	if isCtrlDot {
+		vtui.DebugLog("MACRO: Ctrl+. intercepted. Previous recording state: %v", m.Recording)
 		if m.Recording {
 			m.Recording = false
-			vtui.DebugLog("MACRO: Stopped recording, showing assign dialog")
 			m.showAssignDialog()
 		} else {
 			m.Recording = true
 			m.Buffer = make([]*vtinput.InputEvent, 0)
 			vtui.DebugLog("MACRO: Started recording")
 		}
+		vtui.DebugLog("MACRO: Current Recording state: %v", m.Recording)
 		vtui.FrameManager.Redraw()
 		return true
 	}
@@ -91,6 +92,7 @@ func (m *MacroManager) showAssignDialog() {
 }
 
 func (m *MacroManager) Load() {
+	vtui.DebugLog("MACRO: Loading macros from %s", m.iniPath)
 	m.Macros = make(map[string][]*vtinput.InputEvent)
 	ini := LoadIni(m.iniPath)
 	if sec, ok := ini.data["Macros"]; ok {
@@ -118,6 +120,7 @@ func (m *MacroManager) Load() {
 }
 
 func (m *MacroManager) Save() {
+	vtui.DebugLog("MACRO: Saving macros to %s", m.iniPath)
 	f, err := os.Create(m.iniPath)
 	if err != nil {
 		return

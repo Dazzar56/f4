@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"syscall"
 	"unsafe"
+
+	"github.com/unxed/vtui"
 )
 
 // PTY handles pseudo-terminal allocation and process execution.
@@ -54,6 +56,21 @@ func (p *PTY) Write(b []byte) (int, error) {
 
 func (p *PTY) Read(b []byte) (int, error) {
 	return p.Master.Read(b)
+}
+
+func (p *PTY) Close() error {
+	vtui.DebugLog("PTY: Closing PTY and killing child process")
+	if p.Cmd != nil && p.Cmd.Process != nil {
+		p.Cmd.Process.Kill()
+	}
+	var err error
+	if p.Master != nil {
+		err = p.Master.Close()
+	}
+	if p.Slave != nil {
+		p.Slave.Close()
+	}
+	return err
 }
 
 func (p *PTY) Wait() error {

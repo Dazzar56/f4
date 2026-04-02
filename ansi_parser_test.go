@@ -21,6 +21,7 @@ func (m *mockPty) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 func (m *mockPty) Read(b []byte) (int, error)            { return 0, nil }
+func (m *mockPty) Close() error                          { return nil }
 func (m *mockPty) SetSize(cols, rows int)                {}
 func (m *mockPty) Wait() error                           { return nil }
 func (m *mockPty) Run(name string, args ...string) error { return nil }

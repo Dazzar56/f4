@@ -383,6 +383,7 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 			if selected.IsDir {
 				oldPath := fp.vfs.GetPath()
 				newPath := fp.vfs.Join(oldPath, selected.Name)
+				vtui.DebugLog("PANEL: Navigating %q -> %q", oldPath, newPath)
 				if err := fp.vfs.SetPath(newPath); err == nil {
 					if selected.Name == ".." {
 						fp.pendingSelection = fp.vfs.Base(oldPath)
@@ -391,6 +392,8 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 					}
 					fp.ReadDirectory()
 					return true
+				} else {
+					vtui.DebugLog("PANEL: Navigation failed: %v", err)
 				}
 			}
 		}

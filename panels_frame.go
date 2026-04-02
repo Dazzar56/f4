@@ -545,6 +545,9 @@ func (pf *PanelsFrame) getInactivePanel() *FileSystemPanel {
 func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 	switch cmd {
 	case vtui.CmQuit:
+		if pf.pty != nil {
+			pf.pty.Close()
+		}
 		vtui.FrameManager.Shutdown()
 		return true
 
