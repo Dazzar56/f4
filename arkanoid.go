@@ -217,8 +217,8 @@ func (af *ArkanoidFrame) update() {
 
 		// Киберспортсмен: ИИ реагирует достаточно быстро, чтобы не отставать от мяча
 		reactStep := 1
-		//if af.score > 1000 || af.autoSpeed > 0 { reactStep = 8 }
-		//if af.score > 3000 || af.autoSpeed > 2 { reactStep = 16 }
+		if af.score > 1000 || af.autoSpeed > 0 { reactStep = 2 }
+		if af.score > 3000 || af.autoSpeed > 2 { reactStep = 4 }
 
 		if af.paddleX < targetX {
 			af.paddleX += reactStep
