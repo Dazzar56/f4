@@ -157,7 +157,57 @@ func (af *ArkanoidFrame) update() {
 
 	// AI Autoplay logic
 	if af.autoPlay && !af.gameOver {
-		targetX := int(af.ballX) - af.paddleW/2
+		var targetX int
+		// If ball is moving down, predict impact and aim. Otherwise, just center under the ball.
+		if af.ballDY > 0 {
+			// 1. Find the lowest-level active brick to aim for.
+			var targetBrick *brick
+			for i := len(af.bricks) - 1; i >= 0; i-- {
+				if af.bricks[i].hp > 0 {
+					targetBrick = &af.bricks[i]
+					break
+				}
+			}
+
+			// 2. Simulate ball path to predict its X-coordinate at paddle level.
+			simX, simY := af.ballX, af.ballY
+			simDX := af.ballDX
+			paddleLevelY := float64(height - 2)
+
+			// This is a simplified prediction; a more accurate one would account for time steps.
+			// Using a loop limit to prevent hangs in edge cases.
+			for i := 0; i < 200 && simY < paddleLevelY; i++ {
+				simX += simDX
+				simY += af.ballDY
+
+				if simX <= 0 || simX >= float64(width) {
+					simDX = -simDX
+				}
+			}
+			impactX := simX
+
+			// 3. If a target brick exists, calculate the aim offset.
+			if targetBrick != nil {
+				brickW := 4 // From drawing logic
+				brickCenterX := float64(targetBrick.x + brickW/2)
+
+				// Aiming factor: determines how strongly the AI tries to deflect the ball.
+				// A small value leads to more subtle, human-like adjustments.
+				aimingFactor := 0.25
+				offset := (brickCenterX - impactX) * aimingFactor
+
+				// The desired paddle center should be offset from the impact point
+				// to create the correct angle.
+				desiredPaddleCenter := impactX - offset
+				targetX = int(desiredPaddleCenter - float64(af.paddleW)/2)
+			} else {
+				// No bricks left, just center on the predicted impact point.
+				targetX = int(impactX) - af.paddleW/2
+			}
+		} else {
+			// Ball is moving up, just track its current X position.
+			targetX = int(af.ballX) - af.paddleW/2
+		}
 		reactStep := 1
 		if af.score > 1000 || af.autoSpeed > 0 { reactStep = 2 }
 		if af.score > 3000 || af.autoSpeed > 2 { reactStep = 4 }
