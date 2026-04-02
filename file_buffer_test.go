@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 	"time"
+	"os"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 	"github.com/unxed/vtui/piecetable"
@@ -50,5 +51,68 @@ func TestAsyncBuffer_LoadingCycle(t *testing.T) {
 	}
 	if string(data) != "This " {
 		t.Errorf("Wrong data: expected 'This ', got %q", string(data))
+	}
+}
+
+func TestAsyncBuffer_BoundaryRead(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewScreenBuf())
+
+	// Content: 0123456789ABCDEFGHIJ (20 bytes)
+	content := []byte("0123456789ABCDEFGHIJ")
+	tmp := t.TempDir() + "/boundary.txt"
+	os.WriteFile(tmp, content, 0644)
+
+	v := vfs.NewOSVFS(t.TempDir())
+	f, _ := v.Open(context.Background(), tmp)
+
+	// Chunk size 10.
+	buf := NewAsyncBuffer(context.Background(), f)
+	buf.chunkSize = 10
+	defer buf.Close()
+
+	// 1. Read spanning across chunk 0 and chunk 1: "89AB"
+	// Indices 8, 9 (Chunk 0) and 10, 11 (Chunk 1)
+	for {
+		_, err := buf.Read(8, 4)
+		if err == piecetable.ErrLoading {
+			task := <-vtui.FrameManager.TaskChan
+			task()
+			continue
+		}
+		break
+	}
+
+	data, _ := buf.Read(8, 4)
+	if string(data) != "89AB" {
+		t.Errorf("Boundary read failed: expected '89AB', got %q", string(data))
+	}
+}
+
+func TestAsyncBuffer_PartialChunkAtEOF(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewScreenBuf())
+	content := []byte("Short") // 5 bytes
+	tmp := t.TempDir() + "/eof.txt"
+	os.WriteFile(tmp, content, 0644)
+
+	v := vfs.NewOSVFS(t.TempDir())
+	f, _ := v.Open(context.Background(), tmp)
+
+	buf := NewAsyncBuffer(context.Background(), f)
+	buf.chunkSize = 100 // Chunk is larger than file
+	defer buf.Close()
+
+	for {
+		_, err := buf.Read(0, 5)
+		if err == piecetable.ErrLoading {
+			task := <-vtui.FrameManager.TaskChan
+			task()
+			continue
+		}
+		break
+	}
+
+	data, _ := buf.Read(0, 5)
+	if string(data) != "Short" {
+		t.Errorf("EOF chunk failed: expected 'Short', got %q", string(data))
 	}
 }

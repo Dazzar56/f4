@@ -848,3 +848,33 @@ func TestEditorView_AsyncIndexing(t *testing.T) {
 		t.Errorf("Indexer failed: expected 3 lines, got %d", ev.li.LineCount())
 	}
 }
+func TestEditorView_StartIndexing_RestartSafety(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewScreenBuf())
+	v := vfs.NewOSVFS(t.TempDir())
+
+	// Create a dummy file
+	tmp := t.TempDir() + "/restart.txt"
+	os.WriteFile(tmp, []byte("line1\nline2"), 0644)
+	f, _ := v.Open(context.Background(), tmp)
+
+	buf := NewAsyncBuffer(context.Background(), f)
+	pt := piecetable.NewWithBuffer(buf)
+	ev := NewEditorView(pt, v, tmp)
+	ev.asyncBuf = buf
+
+	// 1. Start indexing
+	ev.StartIndexing()
+	oldCancel := ev.indexCancel
+	if oldCancel == nil { t.Fatal("indexCancel should be set") }
+
+	// 2. Start again immediately
+	ev.StartIndexing()
+
+	// 3. Verify it is still set and didn't panic
+	if ev.indexCancel == nil {
+		t.Error("indexCancel should not be nil after restart")
+	}
+
+	// Clean up
+	ev.Close()
+}

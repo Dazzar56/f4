@@ -3,6 +3,9 @@ package vfs
 import (
 	"context"
 	"testing"
+	"os"
+	"path/filepath"
+	"fmt"
 )
 
 func TestOSVFS_Mutations(t *testing.T) {
@@ -93,5 +96,30 @@ func TestOSVFS_SearchStub(t *testing.T) {
 	}
 	if ch != nil {
 		t.Error("Search stub should return nil channel for OSVFS")
+	}
+}
+func TestOSVFS_ReadDir_Cancellation(t *testing.T) {
+	tmpDir := t.TempDir()
+	// Create 100 files to ensure multiple chunks/iterations
+	for i := 0; i < 100; i++ {
+		os.WriteFile(filepath.Join(tmpDir, fmt.Sprintf("file%d.txt", i)), []byte("data"), 0644)
+	}
+
+	v := NewOSVFS(tmpDir)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	count := 0
+	// Start ReadDir and cancel immediately
+	cancel()
+
+	err := v.ReadDir(ctx, tmpDir, func(items []VFSItem) {
+		count += len(items)
+	})
+
+	if err != context.Canceled {
+		t.Errorf("Expected context.Canceled error, got %v", err)
+	}
+	if count > 0 {
+		t.Errorf("Callback should not have been called after cancellation, but got %d items", count)
 	}
 }
