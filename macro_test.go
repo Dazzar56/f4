@@ -159,8 +159,8 @@ func TestMacro_AssignEsc(t *testing.T) {
 	if _, ok := mgr.Macros[key]; !ok {
 		t.Error("Failed to assign macro to ESC key")
 	}
-	if !assign.IsDone() {
-		t.Error("Assign frame should be done after assignment")
+	if !assign.Done {
+		t.Error("Assign frame should be Done after assignment")
 	}
 }
 

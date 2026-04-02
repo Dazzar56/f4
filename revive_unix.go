@@ -339,6 +339,9 @@ func runServer(sockPath string) {
 		// CLOSE the notify pipe to signal the client it can exit.
 		syscall.Close(notifyPipeWriteEnd)
 
+		// Ensure we don't hold the terminal if the session is logically closed
+		os.Stdout.Sync()
+
 		// CRITICAL: If the system assigned us standard FDs (0, 1, 2) for the new session,
 		// we MUST NOT close them, or os.Stdin/os.Stdout in the server process will become
 		// invalid (EBADF) for all future connections.

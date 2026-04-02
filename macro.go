@@ -62,10 +62,11 @@ func (m *MacroManager) Filter(e *vtinput.InputEvent) bool {
 			return true // Consume KeyUp of the trigger
 		}
 		vtui.DebugLog("MACRO: Ctrl+. intercepted. Previous recording state: %v", m.Recording)
-		vtui.DebugLog("MACRO: Ctrl+. intercepted. Previous recording state: %v", m.Recording)
 		if m.Recording {
 			m.Recording = false
-			m.showAssignDialog()
+			vtui.FrameManager.PostTask(func() {
+				m.showAssignDialog()
+			})
 		} else {
 			m.Recording = true
 			m.Buffer = make([]*vtinput.InputEvent, 0)
@@ -73,9 +74,9 @@ func (m *MacroManager) Filter(e *vtinput.InputEvent) bool {
 		}
 		vtui.DebugLog("MACRO: Current Recording state: %v", m.Recording)
 		vtui.FrameManager.Redraw()
-		return true
+		return true // Trigger is ALWAYS consumed
 	}
-
+	
 	if m.Recording {
 		if e.KeyDown {
 			m.Buffer = append(m.Buffer, e)
@@ -150,13 +151,12 @@ func (m *MacroManager) Save() {
 
 // MacroAssignFrame is a modal frame that captures a key combination to assign a macro.
 type MacroAssignFrame struct {
-	vtui.ScreenObject
+	vtui.BaseFrame
 	mgr  *MacroManager
-	done bool
 }
 
 func (f *MacroAssignFrame) Show(scr *vtui.ScreenBuf) {
-	f.ScreenObject.Show(scr)
+	f.BaseFrame.Show(scr)
 
 	w, h := 42, 5
 	x := (scr.Width() - w) / 2
@@ -184,8 +184,7 @@ func (f *MacroAssignFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		vtinput.VK_CAPITAL, vtinput.VK_NUMLOCK, vtinput.VK_SCROLL:
 		return false
 	case vtinput.VK_ESCAPE:
-		f.done = true
-		vtui.FrameManager.RemoveFrame(f)
+		f.SetExitCode(-1)
 		return true
 	}
 
@@ -193,8 +192,7 @@ func (f *MacroAssignFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	f.mgr.Macros[key] = f.mgr.Buffer
 	f.mgr.Buffer = nil
 	f.mgr.Save()
-	f.done = true
-	vtui.FrameManager.RemoveFrame(f)
+	f.SetExitCode(0)
 	vtui.FrameManager.Redraw()
 	return true
 }
@@ -202,15 +200,6 @@ func (f *MacroAssignFrame) ProcessKey(e *vtinput.InputEvent) bool {
 func (f *MacroAssignFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 	return true // Block clicks from falling through
 }
-func (f *MacroAssignFrame) ResizeConsole(w, h int) {}
 func (f *MacroAssignFrame) GetType() vtui.FrameType { return vtui.TypeDialog }
-func (f *MacroAssignFrame) SetExitCode(c int)       { f.done = true }
-func (f *MacroAssignFrame) IsDone() bool            { return f.done }
-func (f *MacroAssignFrame) IsBusy() bool            { return false }
-func (f *MacroAssignFrame) IsModal() bool { return true }
-func (f *MacroAssignFrame) GetWindowNumber() int { return 0 }
-func (f *MacroAssignFrame) SetWindowNumber(n int) {}
-func (f *MacroAssignFrame) RequestFocus() bool { return true }
-func (f *MacroAssignFrame) Close() { f.done = true }
-func (f *MacroAssignFrame) GetTitle() string { return "Macro Assign" }
-func (f *MacroAssignFrame) GetProgress() int { return -1 }
+func (f *MacroAssignFrame) IsModal() bool           { return true }
+func (f *MacroAssignFrame) GetTitle() string        { return "Macro Assign" }
