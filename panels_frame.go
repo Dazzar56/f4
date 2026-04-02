@@ -295,8 +295,9 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
 	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
-	// Arkanoid easter egg: Ctrl+Shift+A
-	if e.VirtualKeyCode == 'A' && ctrl && shift && !alt && e.KeyDown {
+
+	// Arkanoid easter egg: Ctrl+Alt+A
+	if e.VirtualKeyCode == 'A' && alt && ctrl && e.KeyDown {
 		vtui.FrameManager.Push(NewArkanoidFrame())
 		return true
 	}

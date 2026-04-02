@@ -566,10 +566,11 @@ func (af *ArkanoidFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 
 	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
-	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
+	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
+	//shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
 
-	// Ctrl+Shift+A: Toggle Auto-play
-	if e.VirtualKeyCode == 'A' && ctrl && shift {
+	// Ctrl+Alt+A: Toggle Auto-play
+	if e.VirtualKeyCode == 'A' && alt && ctrl && e.KeyDown {
 		af.autoPlay = !af.autoPlay
 		return true
 	}
