@@ -25,9 +25,9 @@ type brick struct {
 }
 
 type scorePopup struct {
-	text  string
-	attr  uint64
-	timer int
+	val    int
+	colors []uint64
+	timer  int
 }
 
 // ArkanoidFrame implements the classic game as a vtui.Frame
@@ -39,7 +39,7 @@ type ArkanoidFrame struct {
 	ballX, ballY float64
 	ballDX, ballDY float64
 	bricks       []brick
-	popups       []scorePopup
+	popup        scorePopup
 	lives        int
 	score        int
 	combo        int
@@ -86,7 +86,7 @@ func (af *ArkanoidFrame) resetLevel() {
 	af.ballDX, af.ballDY = 0.5, -0.5
 	af.gameOver = false
 	af.message = ""
-	af.popups = nil
+	af.popup = scorePopup{}
 
 	// Create bricks
 	af.bricks = nil
@@ -164,12 +164,14 @@ func (af *ArkanoidFrame) update() {
 		if af.paddleX+af.paddleW >= width { af.paddleX = width - 1 - af.paddleW }
 	}
 
+	// DOS-style Speed Progression: мяч ускоряется со временем
+	speedBoost := 1.0 + float64(af.score)/5000.0
+	if speedBoost > 2.5 { speedBoost = 2.5 }
+
 	// AI Autoplay logic
 	if af.autoPlay && !af.gameOver {
 		var targetX int
-		// If ball is moving down, predict impact and aim. Otherwise, just center under the ball.
 		if af.ballDY > 0 {
-			// 1. Find the lowest-level active brick to aim for.
 			var targetBrick *brick
 			for i := len(af.bricks) - 1; i >= 0; i-- {
 				if af.bricks[i].hp > 0 {
@@ -178,59 +180,57 @@ func (af *ArkanoidFrame) update() {
 				}
 			}
 
-			// 2. Simulate ball path to predict its X-coordinate at paddle level.
 			simX, simY := af.ballX, af.ballY
-			simDX := af.ballDX
+			simDX, simDY := af.ballDX*speedBoost, af.ballDY*speedBoost
 			paddleLevelY := float64(height - 2)
 
-			// This is a simplified prediction; a more accurate one would account for time steps.
-			// Using a loop limit to prevent hangs in edge cases.
-			for i := 0; i < 200 && simY < paddleLevelY; i++ {
+			// Точная симуляция с учетом ускорения
+			for i := 0; i < 1000 && simY < paddleLevelY; i++ {
 				simX += simDX
-				simY += af.ballDY
+				simY += simDY
 
-				if simX <= 0 || simX >= float64(width) {
+				if simX <= 0 {
+					simX = -simX
+					simDX = -simDX
+				} else if simX >= float64(width) {
+					simX = float64(width) - (simX - float64(width))
 					simDX = -simDX
 				}
 			}
-			impactX := simX
 
-			// 3. If a target brick exists, calculate the aim offset.
 			if targetBrick != nil {
-				brickW := 4 // From drawing logic
-				brickCenterX := float64(targetBrick.x + brickW/2)
+				brickCenterX := float64(targetBrick.x + 2)
+				offset := (brickCenterX - simX) * 0.4
 
-				// Aiming factor: determines how strongly the AI tries to deflect the ball.
-				// A small value leads to more subtle, human-like adjustments.
-				aimingFactor := 0.25
-				offset := (brickCenterX - impactX) * aimingFactor
+				// Защита от промахов: ИИ не бьет самым краем ракетки
+				maxOffset := float64(af.paddleW)/2.0 - 1.0
+				if offset > maxOffset { offset = maxOffset }
+				if offset < -maxOffset { offset = -maxOffset }
 
-				// The desired paddle center should be offset from the impact point
-				// to create the correct angle.
-				desiredPaddleCenter := impactX - offset
-				targetX = int(desiredPaddleCenter - float64(af.paddleW)/2)
+				targetX = int(simX - offset - float64(af.paddleW)/2.0)
 			} else {
-				// No bricks left, just center on the predicted impact point.
-				targetX = int(impactX) - af.paddleW/2
+				targetX = int(simX) - af.paddleW/2
 			}
 		} else {
-			// Ball is moving up, just track its current X position.
 			targetX = int(af.ballX) - af.paddleW/2
 		}
+
+		// Киберспортсмен: ИИ реагирует достаточно быстро, чтобы не отставать от мяча
 		reactStep := 1
-		if af.score > 1000 || af.autoSpeed > 0 { reactStep = 2 }
-		if af.score > 3000 || af.autoSpeed > 2 { reactStep = 4 }
-		for i := 0; i < reactStep; i++ {
-			if af.paddleX < targetX { af.paddleX++ }
-			if af.paddleX > targetX { af.paddleX-- }
+		//if af.score > 1000 || af.autoSpeed > 0 { reactStep = 8 }
+		//if af.score > 3000 || af.autoSpeed > 2 { reactStep = 16 }
+
+		if af.paddleX < targetX {
+			af.paddleX += reactStep
+			if af.paddleX > targetX { af.paddleX = targetX }
+		} else if af.paddleX > targetX {
+			af.paddleX -= reactStep
+			if af.paddleX < targetX { af.paddleX = targetX }
 		}
+
 		if af.paddleX < 0 { af.paddleX = 0 }
 		if af.paddleX+af.paddleW >= width { af.paddleX = width - 1 - af.paddleW }
 	}
-
-	// DOS-style Speed Progression: мяч ускоряется со временем
-	speedBoost := 1.0 + float64(af.score)/5000.0
-	if speedBoost > 2.5 { speedBoost = 2.5 }
 
 	// Update ball position
 	af.ballX += af.ballDX * speedBoost
@@ -263,15 +263,13 @@ func (af *ArkanoidFrame) update() {
 		}
 	}
 
-	// Update popups
-	newPopups := af.popups[:0]
-	for i := range af.popups {
-		af.popups[i].timer--
-		if af.popups[i].timer > 0 {
-			newPopups = append(newPopups, af.popups[i])
+	// Update popup
+	if af.popup.timer > 0 {
+		af.popup.timer--
+		if af.popup.timer == 0 {
+			af.popup.colors = nil
 		}
 	}
-	af.popups = newPopups
 
 	// Update brick decay
 	for i := range af.bricks {
@@ -288,7 +286,7 @@ func (af *ArkanoidFrame) update() {
 			if by == br.y && bx >= br.x && bx < br.x+brickW {
 				br.hp--
 				if br.hp <= 0 {
-					br.decay = 12 // Начинаем таяние (3 стадии по 4 кадра)
+					br.decay = 12 // Начинаем таяние
 				}
 				af.ballDY = -af.ballDY
 
@@ -297,19 +295,27 @@ func (af *ArkanoidFrame) update() {
 				af.combo++
 				af.score += points
 
-				// Создаем сочное уведомление об очках
 				popupAttr := br.attr
-				if !af.classicMode && br.y%2 == 0 {
-					popupAttr = vtui.SetRGBBoth(0, 0x00FFFF, 0)
-				} else if !af.classicMode {
-					popupAttr = vtui.SetRGBBoth(0, 0xFF00FF, 0)
+				if !af.classicMode {
+					if br.y%2 == 0 {
+						popupAttr = vtui.SetRGBBoth(0, 0x00FFFF, 0)
+					} else {
+						popupAttr = vtui.SetRGBBoth(0, 0xFF00FF, 0)
+					}
 				}
 
-				af.popups = append(af.popups, scorePopup{
-					text:  fmt.Sprintf("+%d", points),
-					attr:  popupAttr,
-					timer: 20, // Длительность показа
-				})
+				// Накапливаем очки и цвета в едином попапе
+				if af.popup.timer > 0 {
+					af.popup.val += points
+					// Добавляем цвет в цикл, если он отличается от последнего
+					if len(af.popup.colors) == 0 || af.popup.colors[len(af.popup.colors)-1] != popupAttr {
+						af.popup.colors = append(af.popup.colors, popupAttr)
+					}
+				} else {
+					af.popup.val = points
+					af.popup.colors = []uint64{popupAttr}
+				}
+				af.popup.timer = 40 // Обновляем таймер, чтобы висел дольше
 
 				if af.combo > 0 && af.combo % 4 == 0 {
 					af.multiplier++
@@ -451,13 +457,19 @@ func (af *ArkanoidFrame) Show(scr *vtui.ScreenBuf) {
 		}
 	}
 
-	// Отрисовка всплывающих очков в центре
-	if len(af.popups) > 0 {
-		// Берем самый свежий попап
-		p := af.popups[len(af.popups)-1]
-		msgX := x1 + (intW-len(p.text))/2
-		msgY := y1 + height/2
-		scr.Write(msgX, msgY, vtui.StringToCharInfo(p.text, p.attr))
+	// Отрисовка комбо-очков в центре
+	if af.popup.timer > 0 && len(af.popup.colors) > 0 {
+		text := fmt.Sprintf("+%d", af.popup.val)
+		msgX := x1 + (intW-len(text))/2
+		
+		// Попап плавно поднимается вверх (от 0 до 3 строк смещения)
+		msgY := y1 + height/2 + 2 - (40 - af.popup.timer)/12
+
+		// Мигание цветами сбитых кирпичей (смена каждые 6 кадров)
+		colorIdx := (af.popup.timer / 6) % len(af.popup.colors)
+		attr := af.popup.colors[colorIdx]
+
+		scr.Write(msgX, msgY, vtui.StringToCharInfo(text, attr))
 	}
 
 	// Мяч (эволюционирует от Cyan до Yellow)
