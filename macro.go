@@ -176,16 +176,14 @@ func (f *MacroAssignFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return false
 	}
 
-	// Ignore standalone modifiers
+	// Only ignore "pure" modifiers without any other key.
+	// Everything else (including Esc and Alt-combos) can be a macro.
 	switch e.VirtualKeyCode {
 	case vtinput.VK_SHIFT, vtinput.VK_LSHIFT, vtinput.VK_RSHIFT,
 		vtinput.VK_CONTROL, vtinput.VK_LCONTROL, vtinput.VK_RCONTROL,
 		vtinput.VK_MENU, vtinput.VK_LMENU, vtinput.VK_RMENU,
 		vtinput.VK_CAPITAL, vtinput.VK_NUMLOCK, vtinput.VK_SCROLL:
 		return false
-	case vtinput.VK_ESCAPE:
-		f.SetExitCode(-1)
-		return true
 	}
 
 	key := KeyStr(e.VirtualKeyCode, e.ControlKeyState)

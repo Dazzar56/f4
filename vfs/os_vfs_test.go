@@ -88,21 +88,21 @@ func TestOSVFS_Symlinks(t *testing.T) {
 	v := NewOSVFS(tmpDir)
 
 	// 1. Create a real directory
-	targetDir := filepath.Join(tmpDir, "target_dir")
+	targetDir := filepath.Join(tmpDir, "real_folder")
 	os.Mkdir(targetDir, 0755)
 
 	// 2. Create a symlink to that directory
-	linkPath := filepath.Join(tmpDir, "link_to_dir")
+	linkPath := filepath.Join(tmpDir, "link_folder")
 	err := os.Symlink(targetDir, linkPath)
 	if err != nil {
 		t.Fatalf("Failed to create symlink: %v", err)
 	}
 
-	// 3. Read directory and check if link_to_dir is marked as IsDir
+	// 3. Read directory and check if link_folder is marked as IsDir
 	found := false
 	err = v.ReadDir(context.Background(), tmpDir, func(items []VFSItem) {
 		for _, itm := range items {
-			if itm.Name == "link_to_dir" {
+			if itm.Name == "link_folder" {
 				found = true
 				if !itm.IsDir {
 					t.Error("Symlink to directory was not recognized as a directory")
