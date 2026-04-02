@@ -28,7 +28,7 @@ type VFSCapabilities struct {
 type VFS interface {
 	GetPath() string
 	SetPath(path string) error
-	ReadDir(ctx context.Context, path string) ([]VFSItem, error)
+	ReadDir(ctx context.Context, path string, onChunk func([]VFSItem)) error
 	Stat(ctx context.Context, path string) (VFSItem, error)
 	Join(elem ...string) string
 	Abs(path string) (string, error)

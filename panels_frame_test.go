@@ -59,7 +59,10 @@ func TestPanelsFrame_ProcessMouse_DoubleClick(t *testing.T) {
 	tmp := t.TempDir()
 	fsp := pf.panels[0].(*FileSystemPanel)
 	fsp.vfs.SetPath(tmp)
-	fsp.ReadDirectory() // Will contain ".." at index 0
+
+	// Bypass async load
+	fsp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
+	fsp.Refresh()
 
 	initialPath := fsp.vfs.GetPath()
 
@@ -95,8 +98,12 @@ func TestPanelsFrame_ProcessMouse_DoubleClickFile(t *testing.T) {
 	fsp := pf.panels[0].(*FileSystemPanel)
 	fsp.SetViewMode(ViewModeDetailed)
 	fsp.vfs.SetPath(tmp)
-	fsp.ReadDirectory() // ".." at index 0, "run.sh" at index 1
-	fsp.Refresh()       // Ensure table is in sync with ReadDirectory
+
+	fsp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
+		{VFSItem: vfs.VFSItem{Name: "run.sh", IsDir: false}},
+	}
+	fsp.Refresh()
 
 	// Double click on "run.sh" in left panel.
 	// Panel at (0,0), Table at (1,1), Header at Y=1, Row 0 at Y=2, Row 1 (run.sh) at Y=3.
@@ -464,7 +471,12 @@ func TestPanelsFrame_ReturnExecution(t *testing.T) {
 	// Настраиваем VFS и выбираем этот файл на панели
 	fsp := pf.panels[1].(*FileSystemPanel)
 	fsp.vfs.SetPath(tmp)
-	fsp.ReadDirectory()
+
+	fsp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
+		{VFSItem: vfs.VFSItem{Name: "runme.sh", IsDir: false}},
+	}
+	fsp.Refresh()
 	fsp.SelectName("runme.sh")
 
 	// Проверяем начальное состояние
@@ -518,7 +530,12 @@ func TestPanelsFrame_DirectoryEnter(t *testing.T) {
 
 	fsp := pf.panels[1].(*FileSystemPanel)
 	fsp.vfs.SetPath(tmp)
-	fsp.ReadDirectory() // Populate entries
+
+	fsp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
+		{VFSItem: vfs.VFSItem{Name: "work_dir", IsDir: true}},
+	}
+	fsp.Refresh()
 	fsp.SelectName("work_dir")
 
 	// Нажимаем Enter на директории
@@ -547,7 +564,12 @@ func TestPanelsFrame_NonRunnableOpen(t *testing.T) {
 
 	fsp := pf.panels[1].(*FileSystemPanel)
 	fsp.vfs.SetPath(tmp)
-	fsp.ReadDirectory()
+
+	fsp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
+		{VFSItem: vfs.VFSItem{Name: "readme.txt", IsDir: false}},
+	}
+	fsp.Refresh()
 	fsp.SelectName("readme.txt")
 
 	// Нажимаем Enter на текстовом файле
@@ -594,11 +616,14 @@ func TestExecuteDummyOp_HeadlessMode(t *testing.T) {
 	go pf.ExecuteDummyOp(false)
 
 	// Manually process the task queue (since we are not in fm.Run loop)
-	select {
-	case task := <-fm.TaskChan:
-		task()
-	case <-time.After(1 * time.Second):
-		t.Fatal("ExecuteDummyOp did not post workspace creation task")
+	timeout := time.After(1 * time.Second)
+	for len(fm.Screens) == initialScreens {
+		select {
+		case task := <-fm.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("ExecuteDummyOp did not post workspace creation task")
+		}
 	}
 
 	if len(fm.Screens) != initialScreens + 1 {
@@ -709,7 +734,12 @@ func TestPanelsFrame_ProcessMouse_RightDoubleClickNoEnter(t *testing.T) {
 
 	fsp := pf.Left().(*FileSystemPanel)
 	fsp.vfs.SetPath(tmp)
-	fsp.ReadDirectory() // "run.sh" at index 1
+
+	fsp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
+		{VFSItem: vfs.VFSItem{Name: "run.sh", IsDir: false}},
+	}
+	fsp.Refresh()
 
 	// Double click with RIGHT button. Row 1 -> Y=3
 	pf.ProcessMouse(&vtinput.InputEvent{

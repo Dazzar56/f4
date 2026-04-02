@@ -92,7 +92,10 @@ func recursiveCopy(ctx *vtui.TaskContext, update func(msg string, percent int), 
 			return fmt.Errorf("cannot overwrite file with folder: %s", name)
 		}
 
-		items, err := srcVfs.ReadDir(ctx.Context, srcPath)
+		var items []vfs.VFSItem
+		err := srcVfs.ReadDir(ctx.Context, srcPath, func(chunk []vfs.VFSItem) {
+			items = append(items, chunk...)
+		})
 		if err != nil {
 			return err
 		}

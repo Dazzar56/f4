@@ -91,6 +91,11 @@ type FileSystemPanel struct {
 	viewMode            ViewMode
 	cursorIdx           int
 	lastRightClickedIdx int
+
+	loadCtx          context.Context
+	cancelLoad       context.CancelFunc
+	isLoading        bool
+	pendingSelection string
 }
 
 func NewFileSystemPanel(x, y, w, h int, vfs vfs.VFS) *FileSystemPanel {
@@ -190,28 +195,74 @@ func (fp *FileSystemPanel) SetCursorIndex(idx int) {
 	}
 }
 
+func (fp *FileSystemPanel) updateTitle(err error) {
+	title := fp.vfs.GetPath()
+	if err != nil && err != context.Canceled {
+		title += " [Error]"
+	} else if fp.isLoading {
+		title += " [Loading...]"
+	}
+	fp.frame.SetTitle(title)
+}
+
 func (fp *FileSystemPanel) ReadDirectory() {
-	path := fp.vfs.GetPath()
-	fp.frame.SetTitle(path)
-	// TODO: Make this truly asynchronous in Phase 2
-	items, err := fp.vfs.ReadDir(context.Background(), path)
-	if err != nil {
-		return
+	if fp.cancelLoad != nil {
+		fp.cancelLoad()
+		fp.cancelLoad = nil
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	fp.loadCtx = ctx
+	fp.cancelLoad = cancel
+	fp.isLoading = true
+	fp.updateTitle(nil)
+
+	// Запоминаем выделение, чтобы восстановить его, когда прилетят новые файлы
+	if fp.pendingSelection == "" {
+		oldName := fp.GetSelectedName()
+		if oldName != "" && oldName != ".." {
+			fp.pendingSelection = oldName
+		}
 	}
 
-	fp.entries = make([]*fileEntry, 0, len(items)+1)
-	fp.entries = append(fp.entries, &fileEntry{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}})
-	for _, item := range items {
-		fp.entries = append(fp.entries, &fileEntry{VFSItem: item})
-	}
-
-	sort.Slice(fp.entries, func(i, j int) bool {
-		if fp.entries[i].Name == ".." { return true }
-		if fp.entries[j].Name == ".." { return false }
-		if fp.entries[i].IsDir != fp.entries[j].IsDir { return fp.entries[i].IsDir }
-		return fp.entries[i].Name < fp.entries[j].Name
-	})
+	fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
+	fp.SetCursorIndex(0)
 	fp.Refresh()
+
+	path := fp.vfs.GetPath()
+
+	go func() {
+		err := fp.vfs.ReadDir(ctx, path, func(chunk []vfs.VFSItem) {
+			if ctx.Err() != nil { return }
+
+			newEntries := make([]*fileEntry, len(chunk))
+			for i, item := range chunk {
+				newEntries[i] = &fileEntry{VFSItem: item}
+			}
+
+			vtui.FrameManager.PostTask(func() {
+				if ctx.Err() != nil { return }
+				fp.entries = append(fp.entries, newEntries...)
+				sort.Slice(fp.entries, func(i, j int) bool {
+					if fp.entries[i].Name == ".." { return true }
+					if fp.entries[j].Name == ".." { return false }
+					if fp.entries[i].IsDir != fp.entries[j].IsDir { return fp.entries[i].IsDir }
+					return fp.entries[i].Name < fp.entries[j].Name
+				})
+				fp.Refresh()
+
+				if fp.pendingSelection != "" {
+					fp.SelectName(fp.pendingSelection)
+				}
+			})
+		})
+
+		vtui.FrameManager.PostTask(func() {
+			if ctx.Err() != nil { return }
+			fp.isLoading = false
+			fp.updateTitle(err)
+			fp.Refresh()
+		})
+	}()
 }
 
 func (fp *FileSystemPanel) Refresh() {
@@ -325,12 +376,12 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 				oldPath := fp.vfs.GetPath()
 				newPath := fp.vfs.Join(oldPath, selected.Name)
 				if err := fp.vfs.SetPath(newPath); err == nil {
-					fp.ReadDirectory()
-					fp.SetCursorIndex(0)
 					if selected.Name == ".." {
-						dirToSelect := fp.vfs.Base(oldPath)
-						fp.SelectName(dirToSelect)
+						fp.pendingSelection = fp.vfs.Base(oldPath)
+					} else {
+						fp.pendingSelection = ""
 					}
+					fp.ReadDirectory()
 					return true
 				}
 			}

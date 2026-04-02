@@ -149,7 +149,15 @@ func TestFileSystemPanel_MultiSelect(t *testing.T) {
 
 	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(tmp))
 	fp.viewMode = ViewModeDetailed
-	fp.ReadDirectory() // Now ".." is 0, file1.txt is 1, file2.txt is 2...
+
+	// Bypass async ReadDirectory for precise testing
+	fp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
+		{VFSItem: vfs.VFSItem{Name: "file1.txt"}},
+		{VFSItem: vfs.VFSItem{Name: "file2.txt"}},
+		{VFSItem: vfs.VFSItem{Name: "file3.txt"}},
+	}
+	fp.Refresh()
 
 	// 2. Select file1.txt (Index 1)
 	fp.SetCursorIndex(1)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"time"
 	"path/filepath"
 )
 
@@ -24,22 +25,44 @@ func (v *OSVFS) SetPath(path string) error {
 	return nil
 }
 
-func (v *OSVFS) ReadDir(ctx context.Context, path string) ([]VFSItem, error) {
-	if ctx.Err() != nil { return nil, ctx.Err() }
-	entries, err := os.ReadDir(path)
-	if err != nil { return nil, err }
-	items := make([]VFSItem, 0, len(entries))
-	for _, e := range entries {
-		info, _ := e.Info()
-		items = append(items, VFSItem{
-			Name:         e.Name(),
-			Size:         info.Size(),
-			IsDir:        e.IsDir(),
-			MTime:        info.ModTime(),
-			IsExecutable: info.Mode().Perm()&0111 != 0,
-		})
+func (v *OSVFS) ReadDir(ctx context.Context, path string, onChunk func([]VFSItem)) error {
+	f, err := os.Open(path)
+	if err != nil { return err }
+	defer f.Close()
+
+	for {
+		if ctx.Err() != nil { return ctx.Err() }
+		entries, err := f.ReadDir(1000)
+		if err != nil {
+			if err == io.EOF { break }
+			return err
+		}
+
+		items := make([]VFSItem, 0, len(entries))
+		for _, e := range entries {
+			info, _ := e.Info()
+			var size int64
+			var mtime time.Time
+			var isExec bool
+			if info != nil {
+				size = info.Size()
+				mtime = info.ModTime()
+				isExec = info.Mode().Perm()&0111 != 0
+			}
+			items = append(items, VFSItem{
+				Name:         e.Name(),
+				Size:         size,
+				IsDir:        e.IsDir(),
+				MTime:        mtime,
+				IsExecutable: isExec,
+			})
+		}
+
+		if len(items) > 0 && onChunk != nil {
+			onChunk(items)
+		}
 	}
-	return items, nil
+	return nil
 }
 
 func (v *OSVFS) Stat(ctx context.Context, path string) (VFSItem, error) {
