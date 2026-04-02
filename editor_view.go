@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"unicode"
 	"unicode/utf8"
 	"fmt"
@@ -47,6 +46,7 @@ type EditorView struct {
 	selAnchorOffset int // Абсолютное смещение начала выделения
 
 	pasting     bool
+	saving      bool
 	pasteBuffer []rune
 	renderBytes []byte          // Reusable buffer for text data
 	renderCells []vtui.CharInfo // Reusable buffer for row rendering
@@ -220,6 +220,7 @@ DoneRendering:
 
 func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 	ev.ensureEngineWidth()
+	if ev.saving { return true }
 	// 1. Processing Bracketed Paste (events arrive outside KeyDown)
 	if e.Type == vtinput.PasteEventType {
 		if e.PasteStart {
@@ -688,50 +689,78 @@ func (ev *EditorView) getLineLength(line int) int {
 }
 
 func (ev *EditorView) SaveToFile() {
-	if ev.filePath == "" || ev.vfs == nil {
+	if ev.filePath == "" || ev.vfs == nil || ev.saving {
 		return
 	}
-	// Saving PieceTable content to VFS.
-	tmpPath := ev.filePath + ".f4tmp"
-	f, err := ev.vfs.Create(context.Background(), tmpPath)
-	if err != nil {
-		vtui.DebugLog("EDITOR: Failed to open temp file for saving: %v", err)
-		return
-	}
+	
+	ev.saving = true
+	
+	vtui.RunAsync(func(ctx *vtui.TaskContext) {
+		// Saving PieceTable content to VFS.
+		tmpPath := ev.filePath + ".f4tmp"
+		f, err := ev.vfs.Create(ctx.Context, tmpPath)
+		if err != nil {
+			ctx.RunOnUI(func() { 
+				ev.saving = false
+				vtui.DebugLog("EDITOR: Failed to open temp file for saving: %v", err) 
+				vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to save file:\n%v", err), []string{"&Ok"})
+			})
+			return
+		}
 
-	ev.pt.ForEachRange(func(data []byte) {
-		f.Write(data)
+		ev.pt.ForEachRange(func(data []byte) {
+			f.Write(data)
+		})
+		f.Close()
+
+		ctx.RunOnUI(func() {
+			if ev.file != nil {
+				ev.file.Close()
+				ev.file = nil
+			}
+		})
+
+		err = ev.vfs.Rename(ctx.Context, tmpPath, ev.filePath)
+		if err != nil {
+			ev.vfs.Remove(ctx.Context, ev.filePath)
+			err = ev.vfs.Rename(ctx.Context, tmpPath, ev.filePath)
+		}
+
+		if err != nil {
+			ctx.RunOnUI(func() { 
+				ev.saving = false
+				vtui.DebugLog("EDITOR: Failed to rename temp file: %v", err) 
+				vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to save file:\n%v", err), []string{"&Ok"})
+			})
+			return
+		}
+
+		newFile, err := ev.vfs.Open(ctx.Context, ev.filePath)
+		var newPt *piecetable.PieceTable
+		var newLi *piecetable.LineIndex
+		var newEngine *textlayout.WrapEngine
+		
+		if err == nil {
+			newPt = piecetable.NewWithBuffer(NewFileBuffer(newFile))
+			newLi = piecetable.NewLineIndex()
+			newLi.Rebuild(newPt)
+			newEngine = textlayout.NewWrapEngine(newPt, newLi)
+		}
+		
+		ctx.RunOnUI(func() {
+			ev.saving = false
+			vtui.DebugLog("EDITOR: Saved file %s", ev.filePath)
+			vtui.FrameManager.Broadcast(vtui.CmFileChanged, nil)
+
+			if err == nil {
+				ev.file = newFile
+				ev.pt = newPt
+				ev.li = newLi
+				ev.engine = newEngine
+				ev.ensureEngineWidth()
+			}
+		})
 	})
-	f.Close()
-
-	if ev.file != nil {
-		ev.file.Close()
-		ev.file = nil
-	}
-
-	err = ev.vfs.Rename(context.Background(), tmpPath, ev.filePath)
-	if err != nil {
-		ev.vfs.Remove(context.Background(), ev.filePath)
-		err = ev.vfs.Rename(context.Background(), tmpPath, ev.filePath)
-	}
-
-	if err != nil {
-		vtui.DebugLog("EDITOR: Failed to rename temp file: %v", err)
-		return
-	}
-
-	vtui.DebugLog("EDITOR: Saved file %s", ev.filePath)
-	vtui.FrameManager.Broadcast(vtui.CmFileChanged, nil)
-
-	newFile, err := ev.vfs.Open(context.Background(), ev.filePath)
-	if err == nil {
-		ev.file = newFile
-		newPt := piecetable.NewWithBuffer(NewFileBuffer(newFile))
-		ev.pt = newPt
-		ev.li.Rebuild(newPt)
-		ev.engine = textlayout.NewWrapEngine(ev.pt, ev.li)
-		ev.ensureEngineWidth()
-	}
 }
 
 func (ev *EditorView) getSelectionRange() (int, int) {
@@ -765,7 +794,7 @@ func (ev *EditorView) DeleteSelection() {
 	}
 }
 func (ev *EditorView) GetType() vtui.FrameType { return vtui.TypeUser + 2 }
-func (ev *EditorView) IsBusy() bool { return ev.pasting }
+func (ev *EditorView) IsBusy() bool { return ev.pasting || ev.saving }
 func (ev *EditorView) GetTitle() string {
 	if ev.filePath != "" {
 		return "Edit: " + filepath.Base(ev.filePath)

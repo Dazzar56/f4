@@ -133,9 +133,21 @@ func TestEditorView_SaveFile(t *testing.T) {
 	}
 
 	// 4. Simulate pressing F2 (Save)
+	vtui.FrameManager.Init(vtui.NewScreenBuf()) // Needed for PostTask to work
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F2})
 
-	// 5. Read file from disk and check that data was written
+	// 5. Wait for async save to finish by processing tasks
+	timeout := time.After(1 * time.Second)
+	for ev.saving {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Timeout waiting for async save to complete")
+		}
+	}
+
+	// 6. Read file from disk and check that data was written
 	savedData, err := os.ReadFile(tmpFile)
 	if err != nil {
 		t.Fatal(err)

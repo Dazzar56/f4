@@ -33,8 +33,8 @@ type ViewerView struct {
 	scrollBar *vtui.ScrollBar
 }
 
-func NewViewerView(v vfs.VFS, path string) (*ViewerView, error) {
-	backend, err := NewViewerBackend(context.Background(), v, path)
+func NewViewerView(ctx context.Context, v vfs.VFS, path string) (*ViewerView, error) {
+	backend, err := NewViewerBackend(ctx, v, path)
 	if err != nil {
 		return nil, err
 	}

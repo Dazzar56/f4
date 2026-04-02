@@ -105,6 +105,9 @@ func TestPanelsFrame_ProcessMouse_DoubleClickFile(t *testing.T) {
 	}
 	fsp.Refresh()
 
+	// Must init frame manager to catch async tasks from actionExecute
+	vtui.FrameManager.Init(vtui.NewScreenBuf())
+
 	// Double click on "run.sh" in left panel.
 	// Panel at (0,0), Table at (1,1), Header at Y=1, Row 0 at Y=2, Row 1 (run.sh) at Y=3.
 	pf.ProcessMouse(&vtinput.InputEvent{
@@ -115,6 +118,15 @@ func TestPanelsFrame_ProcessMouse_DoubleClickFile(t *testing.T) {
 		ButtonState: vtinput.FromLeft1stButtonPressed,
 		MouseEventFlags: vtinput.DoubleClick,
 	})
+
+	// Wait for the async task that actually executes the file
+	timeout := time.After(1 * time.Second)
+	select {
+	case task := <-vtui.FrameManager.TaskChan:
+		task()
+	case <-timeout:
+		t.Fatal("actionExecute did not post a UI task")
+	}
 
 	// Executing a file should hide the panels
 	if pf.showPanels {
@@ -484,12 +496,23 @@ func TestPanelsFrame_ReturnExecution(t *testing.T) {
 		t.Fatal("Panels should be visible initially")
 	}
 
+	vtui.FrameManager.Init(vtui.NewScreenBuf()) // For TaskChan
+
 	// Имитируем нажатие Enter
 	pf.ProcessKey(&vtinput.InputEvent{
 		Type:           vtinput.KeyEventType,
 		KeyDown:        true,
 		VirtualKeyCode: vtinput.VK_RETURN,
 	})
+
+	// Ждем асинхронного выполнения
+	timeout := time.After(1 * time.Second)
+	select {
+	case task := <-vtui.FrameManager.TaskChan:
+		task()
+	case <-timeout:
+		t.Fatal("actionExecute did not post a UI task")
+	}
 
 	// После запуска исполняемого файла панели должны скрыться, чтобы показать терминал
 	if pf.showPanels {

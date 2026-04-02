@@ -12,31 +12,44 @@ import (
 )
 
 func actionOpenEditor(pf *PanelsFrame, v vfs.VFS, path string) {
-	var f vfs.ReadAtCloser
-	var pt *piecetable.PieceTable
-	if v != nil {
-		f, _ = v.Open(context.Background(), path)
-	}
-	if f != nil {
-		pt = piecetable.NewWithBuffer(NewFileBuffer(f))
-	} else {
-		pt = piecetable.New(nil)
-	}
+	vtui.RunAsync(func(ctx *vtui.TaskContext) {
+		var f vfs.ReadAtCloser
+		var pt *piecetable.PieceTable
+		if v != nil {
+			f, _ = v.Open(ctx.Context, path)
+		}
+		if ctx.Err() != nil {
+			if f != nil { f.Close() }
+			return
+		}
+		if f != nil {
+			pt = piecetable.NewWithBuffer(NewFileBuffer(f))
+		} else {
+			pt = piecetable.New(nil)
+		}
 
-	editor := NewEditorView(pt, v, path)
-	editor.SetFile(f)
-	editor.ResizeConsole(pf.lastW, pf.lastH)
-	vtui.FrameManager.AddScreen(editor)
+		ctx.RunOnUI(func() {
+			editor := NewEditorView(pt, v, path)
+			editor.SetFile(f)
+			editor.ResizeConsole(pf.lastW, pf.lastH)
+			vtui.FrameManager.AddScreen(editor)
+		})
+	})
 }
 
 func actionOpenViewer(pf *PanelsFrame, v vfs.VFS, path string) {
-	viewer, err := NewViewerView(v, path)
-	if err != nil {
-		vtui.DebugLog("PANELS: Failed to open viewer for %s: %v", path, err)
-		return
-	}
-	viewer.ResizeConsole(pf.lastW, pf.lastH)
-	vtui.FrameManager.AddScreen(viewer)
+	vtui.RunAsync(func(ctx *vtui.TaskContext) {
+		viewer, err := NewViewerView(ctx.Context, v, path)
+		ctx.RunOnUI(func() {
+			if err != nil {
+				vtui.DebugLog("PANELS: Failed to open viewer for %s: %v", path, err)
+				vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to open file:\n%v", err), []string{"&Ok"})
+				return
+			}
+			viewer.ResizeConsole(pf.lastW, pf.lastH)
+			vtui.FrameManager.AddScreen(viewer)
+		})
+	})
 }
 
 func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
@@ -45,30 +58,35 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 		return
 	}
 
-	if vfs.IsTerminalRunnable(context.Background(), v, path) {
-		if pf.pty != nil {
-			pf.pty.Write([]byte(fmt.Sprintf(" cd %q\r", dir)))
-			cmd := name
-			if runtime.GOOS != "windows" {
-				cmd = "./" + name
+	vtui.RunAsync(func(ctx *vtui.TaskContext) {
+		runnable := vfs.IsTerminalRunnable(ctx.Context, v, path)
+		ctx.RunOnUI(func() {
+			if runnable {
+				if pf.pty != nil {
+					pf.pty.Write([]byte(fmt.Sprintf(" cd %q\r", dir)))
+					cmd := name
+					if runtime.GOOS != "windows" {
+						cmd = "./" + name
+					}
+					pf.pty.Write([]byte(cmd + "\r"))
+				}
+				pf.showPanels = false
+			} else {
+				var cmd *exec.Cmd
+				switch runtime.GOOS {
+				case "linux":
+					cmd = exec.Command("xdg-open", path)
+				case "windows":
+					cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", path)
+				case "darwin":
+					cmd = exec.Command("open", path)
+				}
+				if cmd != nil {
+					_ = cmd.Start()
+				}
 			}
-			pf.pty.Write([]byte(cmd + "\r"))
-		}
-		pf.showPanels = false
-	} else {
-		var cmd *exec.Cmd
-		switch runtime.GOOS {
-		case "linux":
-			cmd = exec.Command("xdg-open", path)
-		case "windows":
-			cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", path)
-		case "darwin":
-			cmd = exec.Command("open", path)
-		}
-		if cmd != nil {
-			_ = cmd.Start()
-		}
-	}
+		})
+	})
 }
 
 func actionNewFile(pf *PanelsFrame) {
@@ -165,11 +183,16 @@ func actionMkDir(pf *PanelsFrame) {
 			return
 		}
 		fullPath := activeVfs.Join(activeVfs.GetPath(), name)
-		if err := activeVfs.MkDir(context.Background(), fullPath); err != nil {
-			vtui.ShowMessage(" Error ", fmt.Sprintf(Msg("Operation.Error"), err.Error()), []string{"&Ok"})
-		}
-		pf.RefreshAll()
-		panel.SelectName(name)
+		vtui.RunAsync(func(ctx *vtui.TaskContext) {
+			err := activeVfs.MkDir(ctx.Context, fullPath)
+			ctx.RunOnUI(func() {
+				if err != nil {
+					vtui.ShowMessage(" Error ", fmt.Sprintf(Msg("Operation.Error"), err.Error()), []string{"&Ok"})
+				}
+				pf.RefreshAll()
+				panel.SelectName(name)
+			})
+		})
 	})
 }
 
@@ -194,14 +217,22 @@ func actionDelete(pf *PanelsFrame) {
 	dlg := vtui.ShowMessage(Msg("Delete.Title"), msg, []string{Msg("Delete.Btn"), "Cancel"})
 	dlg.OnResult = func(code int) {
 		if code == 0 {
-			for _, name := range names {
-				fullPath := activeVfs.Join(activeVfs.GetPath(), name)
-				if err := activeVfs.Remove(context.Background(), fullPath); err != nil {
-					vtui.ShowMessage(" Error ", fmt.Sprintf(Msg("Operation.Error"), err.Error()), []string{"&Ok"})
-					break
+			pf.RunProgressTask(" Deleting... ", "Preparing...", false, func(ctx *vtui.TaskContext, update func(msg string, percent int)) error {
+				for i, name := range names {
+					if ctx.Err() != nil { return ctx.Err() }
+					update(fmt.Sprintf("Deleting: %s", name), (i*100)/len(names))
+					fullPath := activeVfs.Join(activeVfs.GetPath(), name)
+					if err := activeVfs.Remove(ctx.Context, fullPath); err != nil {
+						return err
+					}
 				}
-			}
-			pf.RefreshAll()
+				return nil
+			}, func(err error) {
+				if err != nil && err != context.Canceled {
+					vtui.ShowMessage(" Error ", fmt.Sprintf(Msg("Operation.Error"), err.Error()), []string{"&Ok"})
+				}
+				pf.RefreshAll()
+			})
 		}
 	}
 }

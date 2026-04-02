@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"testing"
+	"context"
 
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
@@ -16,7 +17,7 @@ func TestViewerView_NavigationAndEOF(t *testing.T) {
 	os.WriteFile(tmp, []byte("L1\nL2\nL3\nL4\nL5"), 0644) // 5 lines total
 
 	v := vfs.NewOSVFS(tmpDir)
-	vv, err := NewViewerView(v, tmp)
+	vv, err := NewViewerView(context.Background(), v, tmp)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +66,7 @@ func TestViewerView_MouseScrollbar(t *testing.T) {
 	os.WriteFile(tmp, []byte(content), 0644)
 
 	v := vfs.NewOSVFS(tmpDir)
-	vv, err := NewViewerView(v, tmp)
+	vv, err := NewViewerView(context.Background(), v, tmp)
 	if err != nil {
 		t.Fatalf("Failed to create ViewerView: %v", err)
 	}
@@ -164,7 +165,7 @@ func TestViewerBar_Content(t *testing.T) {
 	os.WriteFile(tmp, []byte("Some content"), 0644)
 
 	v := vfs.NewOSVFS(tmpDir)
-	vv, _ := NewViewerView(v, tmp)
+	vv, _ := NewViewerView(context.Background(), v, tmp)
 	vv.SetPosition(0, 0, 40, 10)
 
 	scr := vtui.NewScreenBuf()
@@ -191,7 +192,7 @@ func TestViewerView_HandleClose(t *testing.T) {
 	tmp := tmpDir + "/close_test.txt"
 	os.WriteFile(tmp, []byte("content"), 0644)
 	v := vfs.NewOSVFS(tmpDir)
-	vv, _ := NewViewerView(v, tmp)
+	vv, _ := NewViewerView(context.Background(), v, tmp)
 
 	if vv.IsDone() {
 		t.Fatal("Viewer should not be done initially")
@@ -212,7 +213,7 @@ func TestViewerView_GetTitle(t *testing.T) {
 	os.WriteFile(tmp, []byte(""), 0644)
 
 	v := vfs.NewOSVFS(tmpDir)
-	vv, err := NewViewerView(v, tmp)
+	vv, err := NewViewerView(context.Background(), v, tmp)
 	if err != nil {
 		t.Fatal(err)
 	}
