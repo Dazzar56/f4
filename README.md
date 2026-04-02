@@ -39,7 +39,9 @@ And, since we are targeting the latest versions of Windows, we can afford not to
 Initially we considered JSON-RPC approach, but rejected it due to possible input lag, so plugins will run within the same address space or host memory:
 
 1. **WASM (`wazero`):** For heavy system plugins (archivers, VFS, parsers). Write in Go, C, C++, Zig, Rust, etc.—anything that compiles to WASM. Provides 100% portability (a single `.wasm` file for all OSes) and sandboxed security.
-2. **Lua (`gopher-lua`):** For fast macros, scripting, and UI customization.
+2. **Asynchronous VFS:** Built from the ground up to be non-blocking, supporting live streaming of directory contents and lazy-loading of file data. See [VFS Architecture](VFS.md).
+3. **FISH+ Protocol (Coming Soon):** A revolutionary remote file management protocol that offloads indexing, searching, and patching to the server. See [FISH+ Concept](FISH+.md).
+4. **Lua (`gopher-lua`):** For fast macros, scripting, and UI customization.
 3. **Python:** Just as Lua. Planned for future integration.
 4. **API Universality:** The plugin API will ideally support adapter wrappers for *any* existing Far API: Far2, Far3, far2m, and far2l.
 5. **Internal Plugins:** The most critical plugins (like network protocols) will be statically linked into the binary but will use the exact same HostAPI as external plugins.
