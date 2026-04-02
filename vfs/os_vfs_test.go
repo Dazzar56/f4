@@ -83,3 +83,15 @@ func TestOSVFS_Capabilities(t *testing.T) {
 		t.Error("OSVFS should support RandomAccess, ServerSideCopy, and ServerSideMove")
 	}
 }
+
+func TestOSVFS_SearchStub(t *testing.T) {
+	v := NewOSVFS(".")
+	// Check that calling Search doesn't panic and returns nil for now
+	ch, err := v.Search(context.Background(), "path", "pattern")
+	if err != nil {
+		t.Errorf("Search stub should not return error, got %v", err)
+	}
+	if ch != nil {
+		t.Error("Search stub should return nil channel for OSVFS")
+	}
+}

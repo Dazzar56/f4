@@ -1,0 +1,54 @@
+package main
+
+import (
+	"context"
+	"testing"
+	"time"
+	"github.com/unxed/f4/vfs"
+	"github.com/unxed/vtui"
+	"github.com/unxed/vtui/piecetable"
+)
+
+func TestAsyncBuffer_LoadingCycle(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewScreenBuf())
+
+	content := []byte("This is a test file content for async buffer.")
+	tmp := t.TempDir() + "/test.txt"
+	v := vfs.NewOSVFS(t.TempDir())
+	wc, _ := v.Create(context.Background(), tmp)
+	wc.Write(content)
+	wc.Close()
+
+	f, _ := v.Open(context.Background(), tmp)
+	// Create buffer with very small chunks (10 bytes) to trigger multi-chunk logic
+	buf := NewAsyncBuffer(context.Background(), f)
+	buf.chunkSize = 10
+	defer buf.Close()
+
+	// 1. Initial read should return ErrLoading
+	data, err := buf.Read(0, 5)
+	if err != piecetable.ErrLoading {
+		t.Errorf("Expected ErrLoading, got %v", err)
+	}
+	if data != nil {
+		t.Error("Data should be nil when loading")
+	}
+
+	// 2. Process tasks (the fetch goroutine should have posted a task)
+	timeout := time.After(1 * time.Second)
+	select {
+	case task := <-vtui.FrameManager.TaskChan:
+		task()
+	case <-timeout:
+		t.Fatal("Timeout waiting for fetch task")
+	}
+
+	// 3. Second read should succeed
+	data, err = buf.Read(0, 5)
+	if err != nil {
+		t.Errorf("Read failed after fetch: %v", err)
+	}
+	if string(data) != "This " {
+		t.Errorf("Wrong data: expected 'This ', got %q", string(data))
+	}
+}

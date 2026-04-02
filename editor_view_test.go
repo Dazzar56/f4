@@ -808,3 +808,43 @@ func TestEditorView_GetTitle(t *testing.T) {
 		t.Errorf("GetTitle failed for empty path: %s", ev2.GetTitle())
 	}
 }
+func TestEditorView_AsyncIndexing(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewScreenBuf())
+
+	content := "Line 1\nLine 2\nLine 3"
+	tmp := t.TempDir() + "/idx_test.txt"
+	os.WriteFile(tmp, []byte(content), 0644)
+
+	v := vfs.NewOSVFS(t.TempDir())
+	f, _ := v.Open(context.Background(), tmp)
+
+	// Open editor with AsyncBuffer
+	buf := NewAsyncBuffer(context.Background(), f)
+	pt := piecetable.NewWithBuffer(buf)
+	ev := NewEditorView(pt, v, tmp)
+	ev.asyncBuf = buf
+	ev.file = f
+
+	// Initial LineCount should be 1 (empty or unindexed)
+	if ev.li.LineCount() != 1 {
+		t.Errorf("Expected 1 line initially, got %d", ev.li.LineCount())
+	}
+
+	// Start background indexing
+	ev.StartIndexing()
+
+	// Wait and pump tasks
+	timeout := time.After(2 * time.Second)
+	for ev.li.LineCount() < 3 {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Timeout waiting for indexer to find 3 lines")
+		}
+	}
+
+	if ev.li.LineCount() != 3 {
+		t.Errorf("Indexer failed: expected 3 lines, got %d", ev.li.LineCount())
+	}
+}
