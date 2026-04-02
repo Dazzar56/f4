@@ -20,7 +20,14 @@ const (
 type brick struct {
 	x, y int
 	hp   int
+	decay int // Таймер "таяния"
 	attr uint64
+}
+
+type scorePopup struct {
+	text  string
+	attr  uint64
+	timer int
 }
 
 // ArkanoidFrame implements the classic game as a vtui.Frame
@@ -32,6 +39,7 @@ type ArkanoidFrame struct {
 	ballX, ballY float64
 	ballDX, ballDY float64
 	bricks       []brick
+	popups       []scorePopup
 	lives        int
 	score        int
 	combo        int
@@ -78,6 +86,7 @@ func (af *ArkanoidFrame) resetLevel() {
 	af.ballDX, af.ballDY = 0.5, -0.5
 	af.gameOver = false
 	af.message = ""
+	af.popups = nil
 
 	// Create bricks
 	af.bricks = nil
@@ -254,6 +263,23 @@ func (af *ArkanoidFrame) update() {
 		}
 	}
 
+	// Update popups
+	newPopups := af.popups[:0]
+	for i := range af.popups {
+		af.popups[i].timer--
+		if af.popups[i].timer > 0 {
+			newPopups = append(newPopups, af.popups[i])
+		}
+	}
+	af.popups = newPopups
+
+	// Update brick decay
+	for i := range af.bricks {
+		if af.bricks[i].decay > 0 {
+			af.bricks[i].decay--
+		}
+	}
+
 	// Brick collision
 	for i := range af.bricks {
 		br := &af.bricks[i]
@@ -261,11 +287,29 @@ func (af *ArkanoidFrame) update() {
 			brickW := width / 10
 			if by == br.y && bx >= br.x && bx < br.x+brickW {
 				br.hp--
+				if br.hp <= 0 {
+					br.decay = 12 // Начинаем таяние (3 стадии по 4 кадра)
+				}
 				af.ballDY = -af.ballDY
 
-				// Накопление комбо и множителя без текста
+				// Накопление комбо и множителя
+				points := 10 * af.multiplier
 				af.combo++
-				af.score += 10 * af.multiplier
+				af.score += points
+
+				// Создаем сочное уведомление об очках
+				popupAttr := br.attr
+				if !af.classicMode && br.y%2 == 0 {
+					popupAttr = vtui.SetRGBBoth(0, 0x00FFFF, 0)
+				} else if !af.classicMode {
+					popupAttr = vtui.SetRGBBoth(0, 0xFF00FF, 0)
+				}
+
+				af.popups = append(af.popups, scorePopup{
+					text:  fmt.Sprintf("+%d", points),
+					attr:  popupAttr,
+					timer: 20, // Длительность показа
+				})
 
 				if af.combo > 0 && af.combo % 4 == 0 {
 					af.multiplier++
@@ -376,7 +420,21 @@ func (af *ArkanoidFrame) Show(scr *vtui.ScreenBuf) {
 	if margin < 0 { margin = 0 }
 
 	for _, br := range af.bricks {
+		var charToDraw rune
 		if br.hp > 0 {
+			charToDraw = brickChar
+		} else if br.decay > 0 {
+			// Эффект таяния: ▓ -> ▒ -> ░
+			if br.decay > 8 {
+				charToDraw = '▓'
+			} else if br.decay > 4 {
+				charToDraw = '▒'
+			} else {
+				charToDraw = '░'
+			}
+		}
+
+		if charToDraw != 0 {
 			attr := br.attr
 			if !af.classicMode {
 				if br.y%2 == 0 {
@@ -387,10 +445,19 @@ func (af *ArkanoidFrame) Show(scr *vtui.ScreenBuf) {
 			}
 			brickStr := ""
 			for i := 0; i < brickW; i++ {
-				brickStr += string(brickChar)
+				brickStr += string(charToDraw)
 			}
 			scr.Write(x1+br.x, y1+br.y, vtui.StringToCharInfo(brickStr, attr))
 		}
+	}
+
+	// Отрисовка всплывающих очков в центре
+	if len(af.popups) > 0 {
+		// Берем самый свежий попап
+		p := af.popups[len(af.popups)-1]
+		msgX := x1 + (intW-len(p.text))/2
+		msgY := y1 + height/2
+		scr.Write(msgX, msgY, vtui.StringToCharInfo(p.text, p.attr))
 	}
 
 	// Мяч (эволюционирует от Cyan до Yellow)
