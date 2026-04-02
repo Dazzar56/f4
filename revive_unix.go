@@ -272,14 +272,13 @@ func runServer(sockPath string) {
 
 		var restore func()
 		// Only try to enable raw mode if we actually have a terminal.
-		// fds[0] is In, fds[1] is Out.
 		if term.IsTerminal(int(os.Stdin.Fd())) {
-			r, err := vtinput.Enable()
+			r, err := vtui.PrepareTerminal()
 			if err != nil {
-				vtui.DebugLog("SERVER: WARNING: Failed to enable raw mode: %v", err)
+				vtui.DebugLog("SERVER: WARNING: Failed to prepare terminal: %v", err)
 			} else {
 				restore = r
-				vtui.DebugLog("SERVER: Raw mode enabled successfully.")
+				vtui.DebugLog("SERVER: Raw mode and environment enabled successfully.")
 			}
 		} else {
 			vtui.DebugLog("SERVER: FD %d is NOT a terminal, raw mode skipped.", os.Stdin.Fd())
