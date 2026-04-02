@@ -176,13 +176,17 @@ func (f *MacroAssignFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return false
 	}
 
-	// Only ignore "pure" modifiers without any other key
+	// Ignore standalone modifiers
 	switch e.VirtualKeyCode {
 	case vtinput.VK_SHIFT, vtinput.VK_LSHIFT, vtinput.VK_RSHIFT,
 		vtinput.VK_CONTROL, vtinput.VK_LCONTROL, vtinput.VK_RCONTROL,
 		vtinput.VK_MENU, vtinput.VK_LMENU, vtinput.VK_RMENU,
 		vtinput.VK_CAPITAL, vtinput.VK_NUMLOCK, vtinput.VK_SCROLL:
 		return false
+	case vtinput.VK_ESCAPE:
+		f.done = true
+		vtui.FrameManager.RemoveFrame(f)
+		return true
 	}
 
 	key := KeyStr(e.VirtualKeyCode, e.ControlKeyState)
@@ -190,6 +194,7 @@ func (f *MacroAssignFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	f.mgr.Buffer = nil
 	f.mgr.Save()
 	f.done = true
+	vtui.FrameManager.RemoveFrame(f)
 	vtui.FrameManager.Redraw()
 	return true
 }
