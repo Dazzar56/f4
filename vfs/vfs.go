@@ -42,6 +42,7 @@ type VFS interface {
 
 	// Advanced / Remote Operations
 	GetCapabilities() VFSCapabilities
+	Search(ctx context.Context, path string, pattern string) (chan int64, error)
 
 	// Random Access (required for high-performance Viewer/Editor)
 	// Open returns a ReadAtCloser for the file.

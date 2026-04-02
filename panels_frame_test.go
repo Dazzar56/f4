@@ -119,16 +119,18 @@ func TestPanelsFrame_ProcessMouse_DoubleClickFile(t *testing.T) {
 		MouseEventFlags: vtinput.DoubleClick,
 	})
 
-	// Wait for the async task that actually executes the file
+	// Wait for the async task that actually executes the file.
+	// Since other tasks (like ReadDirectory) might be in the queue,
+	// we process the channel in a loop until panels are hidden.
 	timeout := time.After(1 * time.Second)
-	select {
-	case task := <-vtui.FrameManager.TaskChan:
-		task()
-	case <-timeout:
-		t.Fatal("actionExecute did not post a UI task")
+	for pf.showPanels {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("actionExecute did not hide the panels within 1s")
+		}
 	}
-
-	// Executing a file should hide the panels
 	if pf.showPanels {
 		t.Error("Double clicking a runnable file should hide the panels")
 	}
@@ -507,14 +509,14 @@ func TestPanelsFrame_ReturnExecution(t *testing.T) {
 
 	// Ждем асинхронного выполнения
 	timeout := time.After(1 * time.Second)
-	select {
-	case task := <-vtui.FrameManager.TaskChan:
-		task()
-	case <-timeout:
-		t.Fatal("actionExecute did not post a UI task")
+	for pf.showPanels {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("actionExecute did not hide the panels within 1s")
+		}
 	}
-
-	// После запуска исполняемого файла панели должны скрыться, чтобы показать терминал
 	if pf.showPanels {
 		t.Error("Panels should be hidden after executing a terminal-runnable file")
 	}

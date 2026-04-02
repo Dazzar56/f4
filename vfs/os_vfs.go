@@ -91,8 +91,13 @@ func (v *OSVFS) GetCapabilities() VFSCapabilities {
 		HasServerSideCopy: true,
 		HasServerSideMove: true,
 		HasRandomAccess:   true,
-		HasSearch:         false, // TODO: Implement via local Find
+		HasSearch:         false,
 	}
+}
+
+func (v *OSVFS) Search(ctx context.Context, path string, pattern string) (chan int64, error) {
+	// OSVFS uses local streaming search implemented in actions.go
+	return nil, nil
 }
 
 type osFileWrapper struct {

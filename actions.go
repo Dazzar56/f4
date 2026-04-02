@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os/exec"
 	"runtime"
+	"strings"
+	"time"
 
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
@@ -64,6 +66,62 @@ func actionOpenViewer(pf *PanelsFrame, v vfs.VFS, path string) {
 			}
 			viewer.ResizeConsole(pf.lastW, pf.lastH)
 			vtui.FrameManager.AddScreen(viewer)
+		})
+	})
+}
+
+func actionViewerSearch(vv *ViewerView) {
+	vtui.InputBox(Msg("Viewer.SearchTitle"), "Search for:", "", func(pattern string) {
+		if pattern == "" { return }
+		title := " Searching... "
+		msg := fmt.Sprintf("Looking for: %s", pattern)
+		
+		vtui.FrameManager.PostTask(func() {
+			dlg := vtui.NewCenteredDialog(50, 8, title)
+			lbl := vtui.NewLabel(dlg.X1+2, dlg.Y1+2, msg, nil)
+			dlg.AddItem(lbl)
+			btnCancel := vtui.NewButton(dlg.X1+20, dlg.Y1+5, "&Cancel")
+			dlg.AddItem(btnCancel)
+			vtui.FrameManager.AddScreenHeadless(dlg)
+			
+			_ = vtui.RunAsync(func(ctx *vtui.TaskContext) {
+				btnCancel.OnClick = func() { ctx.Cancel(); dlg.Close() }
+				foundOffset := int64(-1)
+				currOff := vv.TopOffset + 1
+				fileSize := vv.backend.Size()
+				patternLower := strings.ToLower(pattern)
+				
+				for currOff < fileSize {
+					if ctx.Err() != nil { return }
+					percent := int((currOff * 100) / fileSize)
+					ctx.RunOnUI(func() { dlg.SetProgress(percent) })
+					
+					data, err := vv.backend.ReadAt(currOff, 256*1024)
+					if err == piecetable.ErrLoading {
+						time.Sleep(20 * time.Millisecond)
+						continue
+					}
+					if err != nil || len(data) == 0 { break }
+					
+					idx := strings.Index(strings.ToLower(string(data)), patternLower)
+					if idx != -1 {
+						foundOffset = currOff + int64(idx)
+						break
+					}
+					currOff += int64(len(data)) - int64(len(patternLower))
+					if currOff < 0 { currOff = 0 }
+				}
+				
+				ctx.RunOnUI(func() {
+					dlg.Close()
+					if foundOffset != -1 {
+						vv.TopOffset = vv.backend.FindLineStart(foundOffset)
+						vtui.FrameManager.Redraw()
+					} else if ctx.Err() == nil {
+						vtui.ShowMessage(" Search ", "Pattern not found.", []string{"&Ok"})
+					}
+				})
+			})
 		})
 	})
 }

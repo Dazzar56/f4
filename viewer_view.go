@@ -1,7 +1,7 @@
 package main
 
 import (
-	"bytes"
+	"time"
 	"context"
 	"fmt"
 	"unicode/utf8"
@@ -124,6 +124,10 @@ func (vv *ViewerView) GetMenuBar() *vtui.MenuBar {
 func (vv *ViewerView) HandleCommand(cmd int, args any) bool {
 	if cmd == vtui.CmClose {
 		vv.SetExitCode(-1)
+		return true
+	}
+	if cmd == vtui.CmSearch {
+		actionViewerSearch(vv)
 		return true
 	}
 	return vv.BaseFrame.HandleCommand(cmd, args)
@@ -382,78 +386,69 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 			} else {
 				lastLineOffset := (vv.backend.Size() - 1) &^ 0xF
 				vv.TopOffset = lastLineOffset - (contentHeight-1)*16
-				if vv.TopOffset < 0 {
-					vv.TopOffset = 0
-				}
+				if vv.TopOffset < 0 { vv.TopOffset = 0 }
 			}
-		} else {
-			if vv.backend.Size() == 0 {
-				vv.TopOffset = 0
-			} else {
-				// Estimate a safe starting point a few kilobytes back
-				width := vv.X2 - vv.X1 + 1
-				chunkSize := contentHeight * int64(width) * 4
-				if chunkSize < 4096 { chunkSize = 4096 }
+			return true
+		}
 
-				startOff := vv.backend.Size() - chunkSize
-				if startOff < 0 { startOff = 0 }
-				startOff = vv.backend.FindLineStart(startOff)
+		if vv.backend.Size() == 0 {
+			vv.TopOffset = 0
+			return true
+		}
 
-				// Simulate rendering forward to find exact visual line offsets
-				data, _ := vv.backend.ReadAt(startOff, int(vv.backend.Size()-startOff))
-				var offsets []int64
-				currOff := startOff
+		vtui.RunAsync(func(ctx *vtui.TaskContext) {
+			width := vv.X2 - vv.X1 + 1
+			if vv.scrollBar != nil { width-- }
 
-				for len(data) > 0 {
-					offsets = append(offsets, currOff)
+			chunkSize := contentHeight * int64(width) * 4
+			if chunkSize < 16*1024 { chunkSize = 16*1024 }
 
+			startOff := vv.backend.Size() - chunkSize
+			if startOff < 0 { startOff = 0 }
+			startOff = vv.backend.FindLineStart(startOff)
+
+			var offsets []int64
+			currOff := startOff
+
+			for currOff < vv.backend.Size() {
+				if ctx.Err() != nil { return }
+				data, err := vv.backend.ReadAt(currOff, 64*1024)
+				if err == piecetable.ErrLoading {
+					time.Sleep(20 * time.Millisecond)
+					continue
+				}
+				if err != nil || len(data) == 0 { break }
+
+				scanPos := 0
+				for scanPos < len(data) {
+					offsets = append(offsets, currOff + int64(scanPos))
 					lineLen := 0
 					visualWidth := 0
 					foundNewline := false
-
-					for lineLen < len(data) {
-						r, size := utf8.DecodeRune(data[lineLen:])
-						if r == '\n' {
-							lineLen += size
-							foundNewline = true
-							break
-						}
-						if r == '\r' {
-							lineLen += size
-							continue
-						}
-
+					for scanPos+lineLen < len(data) {
+						r, size := utf8.DecodeRune(data[scanPos+lineLen:])
+						if r == '\n' { lineLen += size; foundNewline = true; break }
+						if r == '\r' { lineLen += size; continue }
 						rw := runewidth.RuneWidth(r)
-						if vv.WrapMode && visualWidth+rw > width {
-							break
-						}
+						if vv.WrapMode && visualWidth+rw > width { break }
 						visualWidth += rw
 						lineLen += size
 					}
-
-					currOff += int64(lineLen)
-					data = data[lineLen:]
-
-					if !foundNewline && !vv.WrapMode {
-						// Skip to the next newline in no-wrap mode
-						idx := bytes.IndexByte(data, '\n')
-						if idx >= 0 {
-							currOff += int64(idx + 1)
-							data = data[idx+1:]
-						} else {
-							currOff += int64(len(data))
-							data = nil
-						}
-					}
+					scanPos += lineLen
+					if !foundNewline && !vv.WrapMode { break }
 				}
+				currOff += int64(scanPos)
+			}
 
+			ctx.RunOnUI(func() {
 				if int64(len(offsets)) <= contentHeight {
 					vv.TopOffset = startOff
 				} else {
 					vv.TopOffset = offsets[len(offsets)-int(contentHeight)]
 				}
-			}
-		}
+				vtui.FrameManager.Redraw()
+			})
+		})
 		return true
 	}
 
