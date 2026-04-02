@@ -137,11 +137,12 @@ func startNewSession() {
 	cmd.Stderr = null
 
 	if err := cmd.Start(); err != nil {
-		vtui.DebugLog("SESSION: Failed to start daemon: %v", err)
+		vtui.DebugLog("SESSION: CRITICAL: Failed to spawn daemon process (path: %s): %v", os.Args[0], err)
 		if null != nil { null.Close() }
 		fmt.Println("Failed to start daemon:", err)
 		return
 	}
+	vtui.DebugLog("SESSION: Daemon spawned successfully (PID: %d). Attaching client.", cmd.Process.Pid)
 	if null != nil { null.Close() }
 
 	// Wait for the server to create the socket
@@ -186,10 +187,10 @@ func runClient(sockPath string) {
 
 	n, oobn, err := conn.WriteMsgUnix([]byte("ATTACH"), oob, raddr)
 	if err != nil {
-		vtui.DebugLog("CLIENT: CRITICAL: WriteMsgUnix failed: %v", err)
+		vtui.DebugLog("CLIENT: ATTACH FAILURE: Failed to send FDs to daemon at %s: %v", sockPath, err)
 		return
 	}
-	vtui.DebugLog("CLIENT: Sent %d bytes, %d oob bytes. Closing write-end of pipe.", n, oobn)
+	vtui.DebugLog("CLIENT: FDs transmitted (sent %d bytes, %d oob). Relinquishing terminal control.", n, oobn)
 	syscall.Close(notifyPipe[1])
 
 	vtui.DebugLog("CLIENT: Waiting for server signal on pipe %d...", notifyPipe[0])
@@ -220,23 +221,23 @@ func runServer(sockPath string) {
 	writeSessionInfo(sockPath)
 	defer removeSessionInfo(sockPath)
 
+	vtui.DebugLog("SERVER: Daemon listener active on %s. Standing by.", sockPath)
 	for {
-		vtui.DebugLog("SERVER: LOOP START. Waiting for connection on %s...", sockPath)
 		buf := make([]byte, 32)
 		oob := make([]byte, 1024)
 
 		conn.SetReadDeadline(time.Now().Add(5 * time.Second))
-		n, oobn, flags, from, err := conn.ReadMsgUnix(buf, oob)
+		n, oobn, _, from, err := conn.ReadMsgUnix(buf, oob)
 		if err != nil {
 			if strings.Contains(err.Error(), "timeout") {
-				// vtui.DebugLog("SERVER: Idle wait...")
 				continue
 			}
-			vtui.DebugLog("SERVER: ReadMsgUnix ERROR: %v", err)
+			vtui.DebugLog("SERVER: IPC error on %s: %v", sockPath, err)
 			time.Sleep(1 * time.Second)
 			continue
 		}
-		vtui.DebugLog("SERVER: RECEIVED PACKET. From:%v Body:%d bytes (%q) OOB:%d bytes Flags:%X", from, n, buf[:n], oobn, flags)
+
+		vtui.DebugLog("SERVER: Connection received from client %v (Message: %q).", from, string(buf[:n]))
 
 		scms, err := syscall.ParseSocketControlMessage(oob[:oobn])
 		if err != nil {

@@ -767,9 +767,10 @@ func (ev *EditorView) SaveToFile() {
 	if ev.filePath == "" || ev.vfs == nil || ev.saving {
 		return
 	}
-	
+
 	ev.saving = true
-	
+	vtui.DebugLog("EDITOR: Saving %s...", ev.filePath)
+
 	vtui.RunAsync(func(ctx *vtui.TaskContext) {
 		// Saving PieceTable content to VFS.
 		tmpPath := ev.filePath + ".f4tmp"
@@ -829,7 +830,9 @@ func (ev *EditorView) SaveToFile() {
 
 		ctx.RunOnUI(func() {
 			ev.saving = false
-			vtui.DebugLog("EDITOR: Saved file %s", ev.filePath)
+			if err == nil {
+				vtui.DebugLog("EDITOR: Successfully saved %s (%d bytes)", ev.filePath, ev.pt.Size())
+			}
 			vtui.FrameManager.Broadcast(vtui.CmFileChanged, nil)
 
 			if err == nil {

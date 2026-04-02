@@ -17,7 +17,7 @@ func (c *coreAPI) GetVersion() string {
 }
 
 func (c *coreAPI) Log(msg string) {
-	vtui.DebugLog("PLUGIN: %s", msg)
+	vtui.DebugLog("PLUGIN.LOG: %s", msg)
 }
 
 func (c *coreAPI) Message(msg string) {

@@ -22,8 +22,10 @@ func NewOSVFS(initialPath string) *OSVFS {
 func (v *OSVFS) GetPath() string { return v.currentPath }
 
 func (v *OSVFS) SetPath(path string) error {
-	vtui.DebugLog("VFS: SetPath(%q)", path)
 	abs, err := filepath.Abs(path)
+	if err == nil {
+		vtui.DebugLog("VFS: Path changed to %q", abs)
+	}
 	if err != nil { return err }
 	v.currentPath = abs
 	return nil

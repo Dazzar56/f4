@@ -425,6 +425,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				var path string
 				if fsp, ok := pf.panels[pf.activeIdx].(*FileSystemPanel); ok { path = fsp.vfs.GetPath() }
 				if path != "" {
+					vtui.DebugLog("SHELL: Executing %q in %s", cmd, path)
 					pf.pty.Write([]byte(fmt.Sprintf(" cd %q\r", path)))
 				}
 				pf.pty.Write([]byte(cmd + "\r"))

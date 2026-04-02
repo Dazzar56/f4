@@ -33,6 +33,7 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 			if isMove && srcVfs == dstVfs {
 				destPath := dstVfs.Join(destBase, name)
 				if err := srcVfs.Rename(ctx.Context, srcPath, destPath); err == nil {
+					vtui.DebugLog("FILEOP: Optimized server-side rename: %s -> %s", srcPath, destPath)
 					update("", ((i+1)*100)/len(names))
 					continue
 				}
@@ -125,9 +126,11 @@ func recursiveCopy(ctx *vtui.TaskContext, update func(msg string, percent int), 
 			switch choice {
 			case 1:
 				state.OverwriteAll = true
+				vtui.DebugLog("FILEOP: User chose OVERWRITE ALL for %s", name)
 			case 2:
 				return nil // Skip
 			case 3:
+				vtui.DebugLog("FILEOP: User chose SKIP ALL")
 				state.SkipAll = true
 				return nil
 			case 4:
