@@ -499,3 +499,61 @@ func (fp *FileSystemPanel) GetSelectedNames() []string {
 	}
 	return names
 }
+// GetSuccessorName determines which file should receive focus after the current
+// selection (or focused item) is deleted or moved.
+func (fp *FileSystemPanel) GetSuccessorName() string {
+	if len(fp.entries) <= 1 {
+		return ".."
+	}
+
+	anySelected := false
+	for _, e := range fp.entries {
+		if e.Selected && e.Name != ".." {
+			anySelected = true
+			break
+		}
+	}
+
+	var firstIdx, lastIdx int
+
+	if anySelected {
+		// If something is selected, we only care about the selection range
+		firstIdx = len(fp.entries)
+		lastIdx = -1
+		for i, e := range fp.entries {
+			if e.Selected && e.Name != ".." {
+				if i < firstIdx { firstIdx = i }
+				if i > lastIdx { lastIdx = i }
+			}
+		}
+	} else {
+		// If nothing selected, the "range" is just the current cursor
+		firstIdx = fp.cursorIdx
+		lastIdx = fp.cursorIdx
+	}
+
+	// Helper to check if an item at index i is about to be removed
+	isToBeRemoved := func(i int) bool {
+		if anySelected {
+			return fp.entries[i].Selected && fp.entries[i].Name != ".."
+		}
+		return i == fp.cursorIdx
+	}
+
+	// 1. Try to find the first valid item AFTER the removed block
+	for i := lastIdx + 1; i < len(fp.entries); i++ {
+		if !isToBeRemoved(i) {
+			return fp.entries[i].Name
+		}
+	}
+
+	// 2. If no "next" item, try to find the first valid item BEFORE the removed block
+	for i := firstIdx - 1; i >= 0; i-- {
+		if !isToBeRemoved(i) && fp.entries[i].Name != ".." {
+			return fp.entries[i].Name
+		}
+	}
+
+	// 3. Fallback to parent directory entry
+	return ".."
+}

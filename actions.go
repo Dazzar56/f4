@@ -238,6 +238,10 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 	btnOk.OnClick = func() {
 		dest := editDest.GetText()
 		forked := chkFork.State == 1
+		if isMove && dest != "" {
+			// Calculate and set successor BEFORE the items disappear
+			fspSrc.pendingSelection = fspSrc.GetSuccessorName()
+		}
 		dlg.Close()
 		if dest != "" {
 			go ExecuteFileOp(pf, srcVfs, dstVfs, names, dest, isMove, forked, pf.RefreshAll)
@@ -369,6 +373,7 @@ func actionDelete(pf *PanelsFrame) {
 
 	btnCancel.OnClick = func() { dlg.Close() }
 	btnDel.OnClick = func() {
+		fsp.pendingSelection = fsp.GetSuccessorName()
 		dlg.Close()
 		pf.RunProgressTask(" Deleting... ", "Preparing...", false, func(ctx *vtui.TaskContext, update func(msg string, percent int)) error {
 			for i, name := range names {

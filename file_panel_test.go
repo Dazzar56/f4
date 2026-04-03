@@ -417,3 +417,49 @@ func TestFileSystemPanel_IncrementalInteraction(t *testing.T) {
 		t.Errorf("Index should have shifted to 3, got %d", fp.GetCursorIndex())
 	}
 }
+func TestFileSystemPanel_GetSuccessorName(t *testing.T) {
+	fp := &FileSystemPanel{}
+
+	setupEntries := func(names ...string) {
+		fp.cursorIdx = 0 // Reset state between cases
+		fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
+		for _, n := range names {
+			fp.entries = append(fp.entries, &fileEntry{VFSItem: vfs.VFSItem{Name: n}})
+		}
+	}
+
+	// Case 1: Single item in the middle. Focus on B. Successor should be C.
+	setupEntries("A", "B", "C")
+	fp.cursorIdx = 2 // B (Index 0 is .., 1 is A, 2 is B)
+	if res := fp.GetSuccessorName(); res != "C" {
+		t.Errorf("Case 1 failed: expected 'C', got %q", res)
+	}
+
+	// Case 2: Single item at the end. Focus on C. Successor should be B.
+	fp.cursorIdx = 3 // C
+	if res := fp.GetSuccessorName(); res != "B" {
+		t.Errorf("Case 2 failed: expected 'B', got %q", res)
+	}
+
+	// Case 3: Multiple selected in the middle. Select A, B. Successor should be C.
+	setupEntries("A", "B", "C", "D")
+	fp.entries[1].Selected = true // A
+	fp.entries[2].Selected = true // B
+	if res := fp.GetSuccessorName(); res != "C" {
+		t.Errorf("Case 3 failed: expected 'C', got %q", res)
+	}
+
+	// Case 4: Multiple selected at the end. Select C, D. Successor should be B.
+	setupEntries("A", "B", "C", "D")
+	fp.entries[3].Selected = true // C
+	fp.entries[4].Selected = true // D
+	if res := fp.GetSuccessorName(); res != "B" {
+		t.Errorf("Case 4 failed: expected 'B', got %q", res)
+	}
+
+	// Case 5: Empty list (only .. exists)
+	setupEntries()
+	if res := fp.GetSuccessorName(); res != ".." {
+		t.Errorf("Case 5 failed: expected '..', got %q", res)
+	}
+}
