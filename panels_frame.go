@@ -752,12 +752,19 @@ func (pf *PanelsFrame) Clone() *PanelsFrame {
 			cloneFsp := clone.panels[i].(*FileSystemPanel)
 			cloneFsp.vfs.SetPath(fsp.vfs.GetPath())
 			cloneFsp.SetViewMode(fsp.viewMode)
-			cloneFsp.ReadDirectory()
-			if len(cloneFsp.entries) == len(fsp.entries) {
-				for j := range cloneFsp.entries {
-					cloneFsp.entries[j].Selected = fsp.entries[j].Selected
+			cloneFsp.cursorIdx = fsp.cursorIdx
+
+			// Copy entries immediately so the visual state is valid before async reload
+			cloneFsp.entries = make([]*fileEntry, len(fsp.entries))
+			for j, e := range fsp.entries {
+				cloneFsp.entries[j] = &fileEntry{
+					VFSItem:  e.VFSItem,
+					Selected: e.Selected,
 				}
 			}
+			cloneFsp.Refresh() // Populate table rows from copied entries
+
+			cloneFsp.ReadDirectory()
 			cloneFsp.table.SelectPos = fsp.table.SelectPos
 			cloneFsp.table.SelectCol = fsp.table.SelectCol
 			cloneFsp.table.TopPos = fsp.table.TopPos

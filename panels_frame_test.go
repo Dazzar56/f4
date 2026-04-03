@@ -436,6 +436,58 @@ func TestPanelsFrame_CloneIndependence(t *testing.T) {
 		t.Error("Cloned PanelsFrame shares VFS state with parent!")
 	}
 }
+func TestPanelsFrame_Clone_Comprehensive(t *testing.T) {
+	vtui.SetDefaultPalette()
+	SetDefaultF4Palette()
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+
+	// 1. Setup specific state on the left panel
+	fsp := pf.Left().(*FileSystemPanel)
+	fsp.SetViewMode(ViewModeDetailed)
+	fsp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
+		{VFSItem: vfs.VFSItem{Name: "file1"}},
+		{VFSItem: vfs.VFSItem{Name: "file2"}, Selected: true},
+		{VFSItem: vfs.VFSItem{Name: "file3"}},
+	}
+	fsp.Refresh()
+	fsp.SetCursorIndex(2) // On "file2"
+
+	// 2. Setup terminal state
+	pf.termView.PutChar('f', 0)
+	pf.termView.PutChar('o', 0)
+	pf.termView.PutChar('o', 0)
+	pf.termView.PutChar('\n', 0)
+
+	// 3. Perform Clone
+	clone := pf.Clone()
+
+	// 4. Verify Panel State
+	cloneFsp := clone.Left().(*FileSystemPanel)
+	if cloneFsp.viewMode != ViewModeDetailed {
+		t.Error("Clone failed to preserve ViewMode")
+	}
+	if cloneFsp.GetCursorIndex() != 2 {
+		t.Errorf("Clone failed to preserve cursor index: expected 2, got %d", cloneFsp.GetCursorIndex())
+	}
+	if cloneFsp.GetSelectedName() != "file2" {
+		t.Errorf("Clone failed to preserve selection: expected 'file2', got %q", cloneFsp.GetSelectedName())
+	}
+	if !cloneFsp.entries[2].Selected {
+		t.Error("Clone failed to preserve individual item selection flag")
+	}
+
+	// 5. Verify Terminal State
+	if !strings.HasPrefix(clone.termView.pt.String(), "foo\n") {
+		t.Errorf("Clone failed to preserve terminal history: %q", clone.termView.pt.String())
+	}
+
+	// 6. Verify Active Panel index
+	if clone.activeIdx != pf.activeIdx {
+		t.Errorf("Clone failed to preserve active panel index: %d", clone.activeIdx)
+	}
+}
 func TestIsTerminalRunnable(t *testing.T) {
 	tmpDir := t.TempDir()
 	v := vfs.NewOSVFS(tmpDir)
