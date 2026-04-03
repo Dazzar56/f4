@@ -168,10 +168,15 @@ func TestPanelsFrame_KeyHandling(t *testing.T) {
 	}
 
 	// 3. Test Ctrl+Enter to insert filename
-	// Set focus on left panel and select the first "real" file (not "..")
 	pf.activeIdx = 0
 	if fsp, ok := pf.panels[0].(*FileSystemPanel); ok {
-		fsp.table.SelectPos = 1 // Assuming ".." is at 0
+		// Mock entries to avoid async dependency
+		fsp.entries = []*fileEntry{
+			{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
+			{VFSItem: vfs.VFSItem{Name: "testfile.txt"}},
+		}
+		fsp.Refresh()
+		fsp.SetCursorIndex(1)
 	}
 	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN, ControlKeyState: vtinput.LeftCtrlPressed})
 

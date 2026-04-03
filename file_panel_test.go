@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"time"
 	"sort"
 	"testing"
 	"github.com/unxed/f4/vfs"
@@ -39,6 +40,71 @@ func TestFileEntry_GetCellText(t *testing.T) {
 		t.Errorf("Parent dir (..) should have UP-DIR placeholder, got: %q", upDir.GetCellText(1))
 	}
 }
+
+func TestFileSystemPanel_NavigateUp_Selection(t *testing.T) {
+	vtui.SetDefaultPalette()
+	vtui.FrameManager.Init(vtui.NewScreenBuf())
+
+	tmp := t.TempDir()
+	sub := filepath.Join(tmp, "target_folder")
+	os.Mkdir(sub, 0755)
+	os.WriteFile(filepath.Join(tmp, "other.txt"), []byte(""), 0644)
+
+	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(sub))
+
+	// Drain tasks to finish loading the initial directory
+	timeout := time.After(1 * time.Second)
+	for fp.isLoading {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Timeout waiting for initial load")
+		}
+	}
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		default:
+			goto done1
+		}
+	}
+	done1:
+
+	// Simulate pressing Enter on ".."
+	fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
+	fp.SetCursorIndex(0)
+	fp.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN})
+
+	// Wait for the parent directory to finish loading
+	timeout = time.After(1 * time.Second)
+	for fp.isLoading {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Timeout waiting for parent load")
+		}
+	}
+
+	// Pump any remaining UI rendering/selection tasks
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		default:
+			goto done2
+		}
+	}
+	done2:
+
+	// Ensure that after returning to the parent directory, the cursor is on the folder we just exited
+	if fp.GetSelectedName() != "target_folder" {
+		t.Errorf("Expected cursor to land on 'target_folder', got %q", fp.GetSelectedName())
+	}
+}
+
 func TestFileSystemPanel_Initialization(t *testing.T) {
 	// Verify that NewFileSystemPanel initializes with valid geometry to prevent collapsed panels
 	x, y, w, h := 10, 5, 40, 20
@@ -306,6 +372,9 @@ func TestFileSystemPanel_IncrementalInteraction(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewScreenBuf())
 	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(t.TempDir()))
 
+	// Ensure we have '..' as initial state
+	fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
+
 	// Симулируем прилет первого чанка
 	chunk1 := []vfs.VFSItem{
 		{Name: "file_A", IsDir: false},
@@ -313,7 +382,6 @@ func TestFileSystemPanel_IncrementalInteraction(t *testing.T) {
 	}
 
 	// Вручную вызываем логику обработки чанка (имитируя прилет из горутины)
-	// (Для простоты теста берем кусок логики из ReadDirectory)
 	fp.entries = append(fp.entries, &fileEntry{VFSItem: chunk1[0]}, &fileEntry{VFSItem: chunk1[1]})
 	fp.Refresh()
 

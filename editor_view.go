@@ -164,6 +164,12 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 	bgAttr := vtui.Palette[ColCommandLineUserScreen]
 	selAttr := vtui.Palette[vtui.ColDialogEditSelected]
 
+	if ev.saving {
+		scr.FillRect(ev.X1, ev.Y1+1, ev.X2, ev.Y2, ' ', bgAttr)
+		scr.Write(ev.X1, ev.Y1+1, vtui.StringToCharInfo(" [ Saving... ] ", bgAttr))
+		return
+	}
+
 	// Clear the entire editor text area
 	scr.FillRect(ev.X1, ev.Y1+1, ev.X2, ev.Y2, ' ', bgAttr)
 	scr.PushClipRect(ev.X1, ev.Y1+1, ev.X1+width-1, ev.Y2)
@@ -789,8 +795,6 @@ func (ev *EditorView) getLineLength(line int) int {
 	return totalLen
 }
 
-
-
 func (ev *EditorView) SaveToFile(afterSave func()) {
 	if ev.filePath == "" || ev.vfs == nil || ev.saving {
 		return
@@ -799,6 +803,15 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 	ev.saving = true
 	vtui.DebugLog("EDITOR: Saving %s...", ev.filePath)
 	
+	// Stop indexing to prevent async reads on closed buffers
+	if ev.indexCancel != nil {
+		ev.indexCancel()
+		ev.indexCancel = nil
+	}
+
+	// Capture visible offset for preloading before we destroy the current engine
+	visStart := ev.engine.VisualToLogical(ev.ScrollTopRow, 0)
+
 	vtui.RunAsync(func(ctx *vtui.TaskContext) {
 		// Saving PieceTable content to VFS.
 		tmpPath := ev.filePath + ".f4tmp"
@@ -818,6 +831,10 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 		})
 		f.Close()
 		
+		// Close original file before rename to avoid locking issues
+		if ev.asyncBuf != nil { ev.asyncBuf.Close() }
+		if ev.file != nil { ev.file.Close(); ev.file = nil }
+
 		if saveErr != nil {
 			ev.vfs.Remove(ctx.Context, tmpPath)
 			ctx.RunOnUI(func() {
@@ -857,6 +874,16 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 		}
 
 		ctx.RunOnUI(func() {
+			// PRELOAD CACHE TO PREVENT SCREEN FLICKER
+			for i := 0; i < 50; i++ { // max 500ms
+				if ctx.Err() != nil { break }
+				_, e := newBuf.Read(visStart, 4096)
+				if e != piecetable.ErrLoading { break }
+				time.Sleep(10 * time.Millisecond)
+			}
+		})
+
+		ctx.RunOnUI(func() {
 			ev.saving = false
 			if err == nil {
 				vtui.DebugLog("EDITOR: Successfully saved %s (%d bytes)", ev.filePath, ev.pt.Size())
@@ -869,7 +896,6 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 					afterSave()
 				}
 				ev.file = newFile
-				if ev.asyncBuf != nil { ev.asyncBuf.Close() }
 				ev.asyncBuf = newBuf
 				ev.pt = newPt
 				ev.li = newLi

@@ -107,6 +107,7 @@ func NewFileSystemPanel(x, y, w, h int, vfs vfs.VFS) *FileSystemPanel {
 		table:               vtui.NewTable(x+1, y+1, w-2, h-2, nil),
 		viewMode:            ViewModeMedium,
 		lastRightClickedIdx: -1,
+		//entries:             []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}},
 	}
 	fp.frame.ColorBoxIdx = ColPanelBox
 	fp.frame.ColorTitleIdx = ColPanelTitle
@@ -224,13 +225,10 @@ func (fp *FileSystemPanel) ReadDirectory() {
 		}
 	}
 
-	fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
-	fp.SetCursorIndex(0)
-	fp.Refresh()
-
 	path := fp.vfs.GetPath()
 
 	go func() {
+		firstChunk := true
 		err := fp.vfs.ReadDir(ctx, path, func(chunk []vfs.VFSItem) {
 			if ctx.Err() != nil { return }
 
@@ -244,6 +242,12 @@ func (fp *FileSystemPanel) ReadDirectory() {
 
 				// Запоминаем, на каком файле стоял пользователь ПРЯМО СЕЙЧАС
 				currentSelected := fp.GetSelectedName()
+
+				if firstChunk {
+					fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
+					fp.SetCursorIndex(0)
+					firstChunk = false
+				}
 
 				fp.entries = append(fp.entries, newEntries...)
 				sort.Slice(fp.entries, func(i, j int) bool {
@@ -266,6 +270,15 @@ func (fp *FileSystemPanel) ReadDirectory() {
 
 		vtui.FrameManager.PostTask(func() {
 			if ctx.Err() != nil { return }
+			if firstChunk {
+				fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
+				fp.SetCursorIndex(0)
+			}
+			if fp.pendingSelection != "" {
+				fp.SelectName(fp.pendingSelection)
+				fp.pendingSelection = ""
+			}
+
 			fp.isLoading = false
 			fp.updateTitle(err)
 			fp.Refresh()

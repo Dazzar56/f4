@@ -309,9 +309,6 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 
 	if e.Type == vtinput.FocusEventType {
-		if e.SetFocus {
-			pf.RefreshAll()
-		}
 		// Propagate focus to command line so its cursor state stays in sync
 		pf.cmdLine.ProcessKey(e)
 		return true
@@ -414,6 +411,9 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	// Ctrl+O toggles panels visibility
 	if e.VirtualKeyCode == vtinput.VK_O && ctrl {
 		pf.showPanels = !pf.showPanels
+		if pf.showPanels {
+			pf.RefreshAll()
+		}
 		return true
 	}
 
