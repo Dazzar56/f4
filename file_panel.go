@@ -245,7 +245,6 @@ func (fp *FileSystemPanel) ReadDirectory() {
 
 				if firstChunk {
 					fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
-					fp.SetCursorIndex(0)
 					firstChunk = false
 				}
 
@@ -256,15 +255,38 @@ func (fp *FileSystemPanel) ReadDirectory() {
 					if fp.entries[i].IsDir != fp.entries[j].IsDir { return fp.entries[i].IsDir }
 					return fp.entries[i].Name < fp.entries[j].Name
 				})
-				fp.Refresh()
 
-				// Если пользователь уже куда-то навел курсор, удерживаем его там.
-				// Если нет — пробуем восстановить pendingSelection (например, при выходе из папки)
-				if currentSelected != "" && currentSelected != ".." {
-					fp.SelectName(currentSelected)
-				} else if fp.pendingSelection != "" {
-					fp.SelectName(fp.pendingSelection)
+				// Try to snap focus as soon as the target item appears in the stream
+				snapped := false
+				if fp.pendingSelection != "" {
+					for i, entry := range fp.entries {
+						if entry.Name == fp.pendingSelection {
+							fp.SetCursorIndex(i)
+							fp.pendingSelection = "" // Target found and focused
+							snapped = true
+							break
+						}
+					}
 				}
+
+				// If we have an active selection from the user, keep it
+				if !snapped && currentSelected != "" && currentSelected != ".." {
+					for i, entry := range fp.entries {
+						if entry.Name == currentSelected {
+							fp.SetCursorIndex(i)
+							snapped = true
+							break
+						}
+					}
+				}
+
+				// If we couldn't snap to anything specific yet, and it's the first time
+				// we see data, or the current index is out of bounds, default to 0.
+				if !snapped && (fp.cursorIdx >= len(fp.entries) || fp.cursorIdx < 0) {
+					fp.SetCursorIndex(0)
+				}
+
+				fp.Refresh()
 			})
 		})
 
