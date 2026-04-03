@@ -234,6 +234,7 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 	if isMove {
 		btnOk = vtui.NewButton(0, 0, Msg("Move.Btn"))
 	}
+	btnOk.IsDefault = true
 
 	btnOk.OnClick = func() {
 		dest := editDest.GetText()
@@ -264,6 +265,9 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
 	vbox.Apply()
 
+	editDest.SelectAll()
+	dlg.SetFocusedItem(editDest)
+
 	vtui.FrameManager.Push(dlg)
 }
 
@@ -284,6 +288,7 @@ func actionMkDir(pf *PanelsFrame) {
 	dlg.AddItem(editName)
 
 	btnOk := vtui.NewButton(0, 0, "&Ok")
+	btnOk.IsDefault = true
 	btnCancel := vtui.NewButton(0, 0, "Cancel")
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnCancel)
@@ -299,6 +304,8 @@ func actionMkDir(pf *PanelsFrame) {
 	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
 	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
 	vbox.Apply()
+
+	dlg.SetFocusedItem(editName)
 
 	btnCancel.OnClick = func() { dlg.Close() }
 	btnOk.OnClick = func() {
