@@ -916,3 +916,164 @@ func TestEditorView_UnsavedChanges(t *testing.T) {
 		t.Error("Editor should be modified after deletion")
 	}
 }
+
+func TestEditorView_Navigation_DocumentBoundaries(t *testing.T) {
+	pt := piecetable.New([]byte("Line 1\nLine 2\nLine 3"))
+	ev := NewEditorView(pt, nil, "")
+	ev.SetPosition(0, 0, 80, 24)
+	
+	// 1. Ctrl+End -> End of file
+	ev.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_END, ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+	if ev.CursorLine != 2 || ev.CursorPos != 6 {
+		t.Errorf("Ctrl+End failed: expected line 2 pos 6, got %d:%d", ev.CursorLine, ev.CursorPos)
+	}
+
+	// 2. Ctrl+Home -> Start of file
+	ev.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_HOME, ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+	if ev.CursorLine != 0 || ev.CursorPos != 0 {
+		t.Errorf("Ctrl+Home failed: expected 0:0, got %d:%d", ev.CursorLine, ev.CursorPos)
+	}
+}
+
+func TestEditorView_SelectAll(t *testing.T) {
+	pt := piecetable.New([]byte("First\nSecond"))
+	ev := NewEditorView(pt, nil, "")
+	
+	// Ctrl+A
+	ev.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_A, ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+	
+	if !ev.selActive { t.Fatal("Selection should be active after Ctrl+A") }
+	min, max := ev.getSelectionRange()
+	if min != 0 || max != pt.Size() {
+		t.Errorf("Ctrl+A range failed: [0:%d], got [%d:%d]", pt.Size(), min, max)
+	}
+	// Cursor should jump to EOF in Far
+	if ev.CursorLine != 1 || ev.CursorPos != 6 {
+		t.Errorf("Ctrl+A cursor pos failed, got %d:%d", ev.CursorLine, ev.CursorPos)
+	}
+}
+
+func TestEditorView_ShiftAliasSelection(t *testing.T) {
+	pt := piecetable.New([]byte("ABCDE"))
+	ev := NewEditorView(pt, nil, "")
+	ev.CursorPos = 0
+
+	// Shift + Ctrl + D (Right alias)
+	ev.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_D, ControlKeyState: vtinput.LeftCtrlPressed | vtinput.ShiftPressed,
+	})
+
+	if !ev.selActive { t.Fatal("Shift + Alias should trigger selection") }
+	if ev.selAnchorOffset != 0 || ev.CursorPos != 1 {
+		t.Errorf("Selection anchor or cursor wrong: anchor=%d, pos=%d", ev.selAnchorOffset, ev.CursorPos)
+	}
+}
+func TestEditorView_FarNavigation_Document(t *testing.T) {
+	pt := piecetable.New([]byte("Line 1\nLine 2\nLine 3"))
+	ev := NewEditorView(pt, nil, "")
+	ev.SetPosition(0, 0, 80, 24)
+
+	// 1. Ctrl+End -> В самый конец файла
+	ev.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_END, ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+	if ev.CursorLine != 2 || ev.CursorPos != 6 {
+		t.Errorf("Ctrl+End failed: expected line 2 pos 6, got %d:%d", ev.CursorLine, ev.CursorPos)
+	}
+
+	// 2. Ctrl+Home -> В самое начало файла
+	ev.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_HOME, ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+	if ev.CursorLine != 0 || ev.CursorPos != 0 {
+		t.Errorf("Ctrl+Home failed: expected line 0 pos 0, got %d:%d", ev.CursorLine, ev.CursorPos)
+	}
+}
+
+func TestEditorView_FarSelectAll(t *testing.T) {
+	pt := piecetable.New([]byte("Line 1\nLine 2"))
+	ev := NewEditorView(pt, nil, "")
+
+	ev.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_A, ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+
+	if !ev.selActive { t.Fatal("Selection should be active after Ctrl+A") }
+	min, max := ev.getSelectionRange()
+	if min != 0 || max != pt.Size() {
+		t.Errorf("Ctrl+A range failed: [0:%d], got [%d:%d]", pt.Size(), min, max)
+	}
+	// В Far курсор прыгает в конец после выделения всего текста
+	if ev.CursorLine != 1 || ev.CursorPos != 6 {
+		t.Errorf("Ctrl+A cursor pos failed, got %d:%d", ev.CursorLine, ev.CursorPos)
+	}
+}
+
+func TestEditorView_FarNavigationAliases(t *testing.T) {
+	pt := piecetable.New([]byte("First line\nSecond line\nThird line"))
+	ev := NewEditorView(pt, nil, "")
+	ev.SetPosition(0, 0, 80, 24)
+	ev.CursorLine = 1
+	ev.CursorPos = 0
+
+	// 1. Ctrl+E -> Вверх
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_E, ControlKeyState: vtinput.LeftCtrlPressed})
+	if ev.CursorLine != 0 { t.Errorf("Ctrl+E (Up) failed, line: %d", ev.CursorLine) }
+
+	// 2. Ctrl+X -> Вниз (без выделения)
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_X, ControlKeyState: vtinput.LeftCtrlPressed})
+	if ev.CursorLine != 1 { t.Errorf("Ctrl+X (Down) failed, line: %d", ev.CursorLine) }
+
+	// 3. Ctrl+S -> Влево (на один символ, а не на слово!)
+	ev.CursorPos = 4
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_S, ControlKeyState: vtinput.LeftCtrlPressed})
+	if ev.CursorPos != 3 { t.Errorf("Ctrl+S (Left) failed: expected 3, got %d", ev.CursorPos) }
+
+	// 4. Ctrl+D -> Вправо (на один символ)
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_D, ControlKeyState: vtinput.LeftCtrlPressed})
+	if ev.CursorPos != 4 { t.Errorf("Ctrl+D (Right) failed: expected 4, got %d", ev.CursorPos) }
+}
+
+func TestEditorView_FarX_CutVsDown(t *testing.T) {
+	pt := piecetable.New([]byte("Some selected text\nNext line"))
+	ev := NewEditorView(pt, nil, "")
+	ev.SetPosition(0, 0, 80, 24)
+
+	// 1. С выделением Ctrl+X должен сработать как Cut
+	ev.selActive = true
+	ev.selAnchorOffset = 0
+	ev.CursorPos = 4 // Выделено "Some"
+
+	ev.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_X, ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+
+	if pt.String() != " selected text\nNext line" {
+		t.Errorf("Ctrl+X (Cut) failed: text is %q", pt.String())
+	}
+
+	// 2. Без выделения Ctrl+X должен сработать как Down (навигация Far)
+	ev.selActive = false
+	ev.CursorLine = 0
+	ev.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_X, ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+	if ev.CursorLine != 1 {
+		t.Error("Ctrl+X without selection should move cursor down")
+	}
+}

@@ -308,9 +308,16 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 
 	switch e.VirtualKeyCode {
-	case vtinput.VK_ESCAPE, vtinput.VK_F10:
-		ev.tryClose()
-		return true
+	case vtinput.VK_A:
+		if ctrl {
+			ev.selActive = true
+			ev.selAnchorOffset = 0
+			lastLine := ev.li.LineCount() - 1
+			ev.CursorLine = lastLine
+			ev.CursorPos = ev.getLineLength(lastLine)
+			ev.ensureCursorVisible()
+			return true
+		}
 
 	case vtinput.VK_F2:
 		ev.SaveToFile(nil)
@@ -329,14 +336,8 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 			return true
 		}
 
-	case vtinput.VK_X:
-		if ctrl && ev.selActive {
-			ev.CopySelection()
-			ev.DeleteSelection()
-			return true
-		}
-
-	case vtinput.VK_UP:
+	case vtinput.VK_UP, vtinput.VK_E:
+		if e.VirtualKeyCode == vtinput.VK_E && !ctrl { break }
 		handleNav()
 		curOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 		vRow, _ := ev.engine.LogicalToVisual(curOffset)
@@ -348,7 +349,15 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		ev.ensureCursorVisible()
 		return true
 
-	case vtinput.VK_DOWN:
+	case vtinput.VK_DOWN, vtinput.VK_X:
+		if e.VirtualKeyCode == vtinput.VK_X {
+			if !ctrl { break }
+			if ev.selActive {
+				ev.CopySelection()
+				ev.DeleteSelection()
+				return true
+			}
+		}
 		handleNav()
 		curOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 		vRow, _ := ev.engine.LogicalToVisual(curOffset)
@@ -389,9 +398,12 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		ev.ensureCursorVisible()
 		return true
 
-	case vtinput.VK_LEFT:
+	case vtinput.VK_LEFT, vtinput.VK_S:
+		isAlias := e.VirtualKeyCode == vtinput.VK_S
+		if isAlias && !ctrl { break }
 		handleNav()
-		if ctrl {
+		// Jump by word only if it's the real Left arrow + Ctrl
+		if ctrl && !isAlias {
 			runes := ev.getLogicalLineRunes(ev.CursorLine)
 
 			// Find current rune position
@@ -440,10 +452,13 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		ev.ensureCursorVisible()
 		return true
 
-	case vtinput.VK_RIGHT:
+	case vtinput.VK_RIGHT, vtinput.VK_D:
+		isAlias := e.VirtualKeyCode == vtinput.VK_D
+		if isAlias && !ctrl { break }
 		handleNav()
 		lineLen := ev.getLineLength(ev.CursorLine)
-		if ctrl {
+		// Jump by word only if it's the real Right arrow + Ctrl
+		if ctrl && !isAlias {
 			runes := ev.getLogicalLineRunes(ev.CursorLine)
 
 			// Find current rune position
@@ -495,6 +510,9 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 
 	case vtinput.VK_HOME:
 		handleNav()
+		if ctrl {
+			ev.CursorLine = 0
+		}
 		ev.CursorPos = 0
 		ev.updateDesiredVisualCol()
 		ev.ensureCursorVisible()
@@ -502,6 +520,9 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 
 	case vtinput.VK_END:
 		handleNav()
+		if ctrl {
+			ev.CursorLine = ev.li.LineCount() - 1
+		}
 		ev.CursorPos = ev.getLineLength(ev.CursorLine)
 		ev.updateDesiredVisualCol()
 		ev.ensureCursorVisible()
