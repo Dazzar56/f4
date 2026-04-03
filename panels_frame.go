@@ -709,7 +709,7 @@ func (pf *PanelsFrame) RunProgressTask(title, startMsg string, forked bool, work
 	}
 
 	vtui.FrameManager.PostTask(func() {
-		if forked {
+		if forked && pf != nil {
 			clone := pf.Clone()
 			vtui.FrameManager.AddScreen(clone)
 			vtui.FrameManager.Push(dlg)
@@ -755,8 +755,13 @@ func (pf *PanelsFrame) ExecuteDummyOp(forked bool) {
 	})
 }
 func (pf *PanelsFrame) RefreshAll() {
+	if pf == nil {
+		return
+	}
 	for _, p := range pf.panels {
-		if fsp, ok := p.(*FileSystemPanel); ok { fsp.ReadDirectory() }
+		if fsp, ok := p.(*FileSystemPanel); ok {
+			fsp.ReadDirectory()
+		}
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/unxed/f4/vfs"
@@ -16,7 +17,7 @@ type FileOpState struct {
 	SkipAll      bool
 }
 
-func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, destBase string, isMove bool, forked bool, onComplete func()) {
+func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, destInput string, isMove bool, forked bool, onComplete func()) {
 	title := " Copying... "
 	if isMove {
 		title = " Moving... "
@@ -24,25 +25,82 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 	state := &FileOpState{}
 
 	pf.RunProgressTask(title, "Starting...", forked, func(ctx *vtui.TaskContext, update func(msg string, percent int)) error {
+		// 1. Resolve destination path
+		destPath := destInput
+		if !filepath.IsAbs(destPath) && !strings.HasPrefix(destPath, "/") {
+			destPath = dstVfs.Join(dstVfs.GetPath(), destPath)
+		}
+
+		// 2. Determine if target is a directory
+		isTargetDir := len(names) > 1
+		if !isTargetDir {
+			if strings.HasSuffix(destInput, "/") || strings.HasSuffix(destInput, "\\") {
+				isTargetDir = true
+			} else if stat, err := dstVfs.Stat(ctx.Context, destPath); err == nil && stat.IsDir {
+				isTargetDir = true
+			} else if destInput == "." || destInput == ".." {
+				isTargetDir = true
+			}
+		}
+
+		// 3. Set pending selection for the successor in the source panel
+		if isMove && pf != nil {
+			if fspSrc := pf.getActivePanel(); fspSrc != nil {
+				fspSrc.pendingSelection = fspSrc.GetSuccessorName()
+			}
+		}
+
+		// 4. Ensure destination directory exists.
+		// If we are copying INTO a dir, ensure destPath exists.
+		// If we are RENAMING, ensure the directory containing the new name exists.
+		dirToEnsure := destPath
+		if !isTargetDir {
+			dirToEnsure = dstVfs.Dir(destPath)
+		}
+
+		if dirToEnsure != "" && dirToEnsure != "." {
+			st, err := dstVfs.Stat(ctx.Context, dirToEnsure)
+			if err != nil {
+				// Path doesn't exist, try to create it (MkDir in OSVFS is MkdirAll)
+				if mkErr := dstVfs.MkDir(ctx.Context, dirToEnsure); mkErr != nil {
+					return mkErr
+				}
+			} else if !st.IsDir {
+				return fmt.Errorf("target path component is not a directory: %s", dirToEnsure)
+			}
+		}
+
+		// 5. Process items
 		for i, name := range names {
-			if ctx.Err() != nil { return ctx.Err() }
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 
 			srcPath := srcVfs.Join(srcVfs.GetPath(), name)
+			targetItemPath := destPath
+			if isTargetDir {
+				targetItemPath = dstVfs.Join(destPath, name)
+			}
+
 			update(fmt.Sprintf("Processing: %s", name), -1)
 
+			// Optimized Move (Rename) within same VFS
 			if isMove && srcVfs == dstVfs {
-				destPath := dstVfs.Join(destBase, name)
-				if err := srcVfs.Rename(ctx.Context, srcPath, destPath); err == nil {
-					vtui.DebugLog("FILEOP: Optimized server-side rename: %s -> %s", srcPath, destPath)
+				if err := srcVfs.Rename(ctx.Context, srcPath, targetItemPath); err == nil {
+					vtui.DebugLog("FILEOP: Optimized server-side rename: %s -> %s", srcPath, targetItemPath)
 					update("", ((i+1)*100)/len(names))
 					continue
 				}
 			}
 
-			err := recursiveCopy(ctx, update, srcVfs, srcPath, dstVfs, destBase, name, state)
-			if err != nil { return err }
+			err := recursiveCopy(ctx, update, srcVfs, srcPath, dstVfs, targetItemPath, state)
+			if err != nil {
+				return err
+			}
 
-			if isMove { srcVfs.Remove(ctx.Context, srcPath) }
+			if isMove {
+				srcVfs.Remove(ctx.Context, srcPath)
+			}
 			update("", ((i+1)*100)/len(names))
 		}
 		return nil
@@ -50,12 +108,16 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 		if err != nil && err != context.Canceled {
 			vtui.ShowMessage(" Error ", fmt.Sprintf(Msg("Operation.Error"), err.Error()), []string{"&Ok"})
 		}
-		pf.RefreshAll()
-		if onComplete != nil { onComplete() }
+		if pf != nil {
+			pf.RefreshAll()
+		}
+		if onComplete != nil {
+			onComplete()
+		}
 	})
 }
 
-func recursiveCopy(ctx *vtui.TaskContext, update func(msg string, percent int), srcVfs vfs.VFS, srcPath string, dstVfs vfs.VFS, dstBase, name string, state *FileOpState) error {
+func recursiveCopy(ctx *vtui.TaskContext, update func(msg string, percent int), srcVfs vfs.VFS, srcPath string, dstVfs vfs.VFS, destPath string, state *FileOpState) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -64,8 +126,6 @@ func recursiveCopy(ctx *vtui.TaskContext, update func(msg string, percent int), 
 	if err != nil {
 		return err
 	}
-
-	destPath := dstVfs.Join(dstBase, name)
 
 	// Robust self-copy protection
 	absSrc, errSrc := srcVfs.Abs(srcPath)
@@ -90,7 +150,7 @@ func recursiveCopy(ctx *vtui.TaskContext, update func(msg string, percent int), 
 				return err
 			}
 		} else if !dstStat.IsDir {
-			return fmt.Errorf("cannot overwrite file with folder: %s", name)
+			return fmt.Errorf("cannot overwrite file with folder: %s", dstVfs.Base(destPath))
 		}
 
 		var items []vfs.VFSItem
@@ -104,7 +164,7 @@ func recursiveCopy(ctx *vtui.TaskContext, update func(msg string, percent int), 
 			if item.Name == ".." {
 				continue
 			}
-			if err := recursiveCopy(ctx, update, srcVfs, srcVfs.Join(srcPath, item.Name), dstVfs, destPath, item.Name, state); err != nil {
+			if err := recursiveCopy(ctx, update, srcVfs, srcVfs.Join(srcPath, item.Name), dstVfs, dstVfs.Join(destPath, item.Name), state); err != nil {
 				return err
 			}
 		}
@@ -112,21 +172,22 @@ func recursiveCopy(ctx *vtui.TaskContext, update func(msg string, percent int), 
 	}
 
 	// Copy file
-	update(fmt.Sprintf("Copying: %s", name), -1)
+	itemName := dstVfs.Base(destPath)
+	update(fmt.Sprintf("Copying: %s", itemName), -1)
 
 	if exists {
 		if dstStat.IsDir {
-			return fmt.Errorf("cannot overwrite folder with file: %s", name)
+			return fmt.Errorf("cannot overwrite folder with file: %s", itemName)
 		}
 		if state.SkipAll {
 			return nil
 		}
 		if !state.OverwriteAll {
-			choice := AskOverwrite(ctx, name)
+			choice := AskOverwrite(ctx, itemName)
 			switch choice {
 			case 1:
 				state.OverwriteAll = true
-				vtui.DebugLog("FILEOP: User chose OVERWRITE ALL for %s", name)
+				vtui.DebugLog("FILEOP: User chose OVERWRITE ALL for %s", itemName)
 			case 2:
 				return nil // Skip
 			case 3:

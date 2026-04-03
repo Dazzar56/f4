@@ -238,10 +238,6 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 	btnOk.OnClick = func() {
 		dest := editDest.GetText()
 		forked := chkFork.State == 1
-		if isMove && dest != "" {
-			// Calculate and set successor BEFORE the items disappear
-			fspSrc.pendingSelection = fspSrc.GetSuccessorName()
-		}
 		dlg.Close()
 		if dest != "" {
 			go ExecuteFileOp(pf, srcVfs, dstVfs, names, dest, isMove, forked, pf.RefreshAll)

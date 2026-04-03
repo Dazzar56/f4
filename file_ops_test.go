@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 )
@@ -33,10 +34,10 @@ func TestRecursiveCopy(t *testing.T) {
 	tCtx := vtui.RunAsync(func(c *vtui.TaskContext) {})
 	defer tCtx.Cancel()
 
-	dummyUpdate := func(msg string, pct int) {}
+	dummyUpdate := func(msg string, percent int) {}
 
 	// Perform copy: folder1 from tmpSrc to tmpDst
-	err := recursiveCopy(tCtx, dummyUpdate, srcVfs, filepath.Join(tmpSrc, "folder1"), dstVfs, tmpDst, "folder1_copy", &FileOpState{})
+	err := recursiveCopy(tCtx, dummyUpdate, srcVfs, filepath.Join(tmpSrc, "folder1"), dstVfs, filepath.Join(tmpDst, "folder1_copy"), &FileOpState{})
 	if err != nil {
 		t.Fatalf("recursiveCopy failed: %v", err)
 	}
@@ -69,12 +70,9 @@ func TestRecursiveCopy_Cancel(t *testing.T) {
 
 	// Cancel immediately
 	cancel()
+	dummyUpdate := func(msg string, percent int) {}
 
-	// Cancel immediately
-	cancel()
-	dummyUpdate := func(msg string, pct int) {}
-
-	err := recursiveCopy(tCtx, dummyUpdate, srcVfs, largeFile, dstVfs, tmpDst, "large_copy.bin", &FileOpState{})
+	err := recursiveCopy(tCtx, dummyUpdate, srcVfs, largeFile, dstVfs, filepath.Join(tmpDst, "large_copy.bin"), &FileOpState{})
 	if err == nil || !strings.Contains(err.Error(), "context canceled") {
 		t.Errorf("Expected context canceled error, got %v", err)
 	}
@@ -88,13 +86,13 @@ func TestRecursiveCopy_SelfCopy(t *testing.T) {
 	tCtx := vtui.RunAsync(func(c *vtui.TaskContext) {})
 	defer tCtx.Cancel()
 
-	dummyUpdate := func(msg string, pct int) {}
+	dummyUpdate := func(msg string, percent int) {}
 
 	// Try to copy "src_folder" into "src_folder/sub"
 	srcPath := filepath.Join(tmp, "src_folder")
 	// Use OSVFS for proper absolute path normalization
 	err := recursiveCopy(tCtx, dummyUpdate, srcVfs,
-		srcPath, srcVfs, srcPath, "sub", &FileOpState{})
+		srcPath, srcVfs, filepath.Join(srcPath, "sub"), &FileOpState{})
 
 	if err == nil || !strings.Contains(err.Error(), "folder into itself") {
 		t.Errorf("Expected self-copy error, got %v", err)
@@ -115,11 +113,11 @@ func TestRecursiveCopy_ConflictTypeMismatch(t *testing.T) {
 
 	tCtx := vtui.RunAsync(func(c *vtui.TaskContext) {})
 	defer tCtx.Cancel()
-	dummyUpdate := func(msg string, pct int) {}
+	dummyUpdate := func(msg string, percent int) {}
 
 	// Try to copy folder over file - should return error immediately
 	err := recursiveCopy(tCtx, dummyUpdate, srcVfs,
-		filepath.Join(tmpSrc, name), dstVfs, tmpDst, name, &FileOpState{})
+		filepath.Join(tmpSrc, name), dstVfs, filepath.Join(tmpDst, name), &FileOpState{})
 
 	if err == nil || !strings.Contains(err.Error(), "cannot overwrite file with folder") {
 		t.Errorf("Expected type mismatch error, got %v", err)
@@ -138,10 +136,10 @@ func TestRecursiveCopy_MoveCrossVFS(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewScreenBuf())
 	tCtx := vtui.RunAsync(func(c *vtui.TaskContext) {})
 	defer tCtx.Cancel()
-	dummyUpdate := func(msg string, pct int) {}
+	dummyUpdate := func(msg string, percent int) {}
 
 	// Execute Move
-	err := recursiveCopy(tCtx, dummyUpdate, srcVfs, srcFile, dstVfs, tmpDst, name, &FileOpState{})
+	err := recursiveCopy(tCtx, dummyUpdate, srcVfs, srcFile, dstVfs, filepath.Join(tmpDst, name), &FileOpState{})
 	if err != nil { t.Fatalf("Copy part of move failed: %v", err) }
 
 	err = srcVfs.Remove(context.Background(), srcFile)
@@ -168,10 +166,10 @@ func TestRecursiveCopy_FileOverFolderMismatch(t *testing.T) {
 	dstVfs := vfs.NewOSVFS(tmpDst)
 	//pf := &PanelsFrame{}
 	tCtx := vtui.RunAsync(func(c *vtui.TaskContext) {})
-	dummyUpdate := func(msg string, pct int) {}
+	dummyUpdate := func(msg string, percent int) {}
 
 	err := recursiveCopy(tCtx, dummyUpdate, srcVfs,
-		filepath.Join(tmpSrc, name), dstVfs, tmpDst, name, &FileOpState{})
+		filepath.Join(tmpSrc, name), dstVfs, filepath.Join(tmpDst, name), &FileOpState{})
 
 	if err == nil || !strings.Contains(err.Error(), "cannot overwrite folder with file") {
 		t.Errorf("Expected folder-over-file error, got %v", err)
@@ -199,11 +197,11 @@ func TestRecursiveCopy_OverwriteAllState(t *testing.T) {
 
 	srcVfs := vfs.NewOSVFS(tmpSrc)
 	dstVfs := vfs.NewOSVFS(tmpDst)
-	dummyUpdate := func(msg string, pct int) {}
+	dummyUpdate := func(msg string, percent int) {}
 
 	// Should not call AskOverwrite because OverwriteAll is true
 	err := recursiveCopy(tCtx, dummyUpdate, srcVfs,
-		filepath.Join(tmpSrc, "f1.txt"), dstVfs, tmpDst, "f1.txt", state)
+		filepath.Join(tmpSrc, "f1.txt"), dstVfs, filepath.Join(tmpDst, "f1.txt"), state)
 
 	if err != nil { t.Errorf("Copy failed even with OverwriteAll: %v", err) }
 
@@ -225,10 +223,10 @@ func TestRecursiveCopy_SkipAllState(t *testing.T) {
 
 	srcVfs := vfs.NewOSVFS(tmpSrc)
 	dstVfs := vfs.NewOSVFS(tmpDst)
-	dummyUpdate := func(msg string, pct int) {}
+	dummyUpdate := func(msg string, percent int) {}
 
 	err := recursiveCopy(tCtx, dummyUpdate, srcVfs,
-		filepath.Join(tmpSrc, fileName), dstVfs, tmpDst, fileName, state)
+		filepath.Join(tmpSrc, fileName), dstVfs, filepath.Join(tmpDst, fileName), state)
 
 	if err != nil { t.Fatalf("Expected no error on skip, got %v", err) }
 
@@ -275,4 +273,95 @@ func TestFileOps_RefreshAllNoPanic(t *testing.T) {
 	pf := NewPanelsFrame()
 	// Ensure refresh doesn't crash even if panels are not fully docked
 	pf.RefreshAll()
+}
+
+func TestFileOp_PathLogic(t *testing.T) {
+	tmpSrc := t.TempDir()
+	tmpDst := t.TempDir()
+
+	srcVfs := vfs.NewOSVFS(tmpSrc)
+	dstVfs := vfs.NewOSVFS(tmpDst)
+
+	vtui.FrameManager.Init(vtui.NewScreenBuf())
+
+	t.Run("Copy and Rename", func(t *testing.T) {
+		os.WriteFile(filepath.Join(tmpSrc, "old.txt"), []byte("data"), 0644)
+		tCtx := vtui.RunAsync(func(c *vtui.TaskContext) {})
+
+		// Target is a new filename, not a directory
+		ExecuteFileOp(nil, srcVfs, dstVfs, []string{"old.txt"}, "new.txt", false, false, nil)
+
+		// Drain task queue
+		for i := 0; i < 50; i++ {
+			select {
+			case task := <-vtui.FrameManager.TaskChan: task()
+			default: time.Sleep(5 * time.Millisecond)
+			}
+		}
+
+		if _, err := os.Stat(filepath.Join(tmpDst, "new.txt")); os.IsNotExist(err) {
+			t.Error("Rename copy failed: new.txt not found")
+		}
+		tCtx.Cancel()
+	})
+
+	t.Run("Multiple files to new directory", func(t *testing.T) {
+		os.WriteFile(filepath.Join(tmpSrc, "f1.txt"), []byte("1"), 0644)
+		os.WriteFile(filepath.Join(tmpSrc, "f2.txt"), []byte("2"), 0644)
+
+		// Target "new_dir" doesn't exist, but we have multiple files
+		ExecuteFileOp(nil, srcVfs, dstVfs, []string{"f1.txt", "f2.txt"}, "new_dir", false, false, nil)
+
+		for i := 0; i < 100; i++ {
+			select {
+			case task := <-vtui.FrameManager.TaskChan: task()
+			default: time.Sleep(5 * time.Millisecond)
+			}
+		}
+
+		if stat, err := os.Stat(filepath.Join(tmpDst, "new_dir")); err != nil || !stat.IsDir() {
+			t.Error("Target directory not created for multi-file copy")
+		}
+		if _, err := os.Stat(filepath.Join(tmpDst, "new_dir", "f1.txt")); err != nil {
+			t.Error("f1.txt missing in new directory")
+		}
+	})
+
+	t.Run("Single file to new subfolder with rename", func(t *testing.T) {
+		os.WriteFile(filepath.Join(tmpSrc, "source.txt"), []byte("content"), 0644)
+
+		// Target: "deep/path/target.txt" (subfolders don't exist)
+		ExecuteFileOp(nil, srcVfs, dstVfs, []string{"source.txt"}, "deep/path/target.txt", false, false, nil)
+
+		for i := 0; i < 50; i++ {
+			select {
+			case task := <-vtui.FrameManager.TaskChan: task()
+			default: time.Sleep(5 * time.Millisecond)
+			}
+		}
+
+		finalPath := filepath.Join(tmpDst, "deep", "path", "target.txt")
+		if _, err := os.Stat(finalPath); os.IsNotExist(err) {
+			t.Error("Failed to create parent directories during rename-copy")
+		}
+	})
+
+	t.Run("Single file to new subfolder with trailing slash", func(t *testing.T) {
+		os.WriteFile(filepath.Join(tmpSrc, "source2.txt"), []byte("content"), 0644)
+
+		// Target: "new_dir/" (trailing slash should force directory creation)
+		ExecuteFileOp(nil, srcVfs, dstVfs, []string{"source2.txt"}, "new_dir/", false, false, nil)
+
+		for i := 0; i < 50; i++ {
+			select {
+			case task := <-vtui.FrameManager.TaskChan: task()
+			default: time.Sleep(5 * time.Millisecond)
+			}
+		}
+
+		finalPath := filepath.Join(tmpDst, "new_dir", "source2.txt")
+		if _, err := os.Stat(finalPath); os.IsNotExist(err) {
+			t.Error("Trailing slash did not trigger directory creation for single file")
+		}
+	})
 }
