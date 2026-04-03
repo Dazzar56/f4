@@ -6,7 +6,6 @@ import (
 	"time"
 	"os"
 	"testing"
-	"io"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 	"github.com/unxed/vtui/piecetable"
@@ -138,9 +137,7 @@ func TestEditorView_SaveFile(t *testing.T) {
 	}
 
 	// 4. Simulate pressing F2 (Save)
-	scr := vtui.NewScreenBuf()
-	scr.Writer = io.Discard
-	vtui.FrameManager.Init(scr) // Needed for PostTask to work
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf()) // Needed for PostTask to work
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F2})
 
 	// 5. Wait for async save to finish by processing tasks
@@ -812,9 +809,7 @@ func TestEditorView_GetTitle(t *testing.T) {
 	}
 }
 func TestEditorView_AsyncIndexing(t *testing.T) {
-	scr := vtui.NewScreenBuf()
-	scr.Writer = io.Discard
-	vtui.FrameManager.Init(scr)
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	content := "Line 1\nLine 2\nLine 3"
 	tmp := t.TempDir() + "/idx_test.txt"
@@ -854,9 +849,7 @@ func TestEditorView_AsyncIndexing(t *testing.T) {
 	}
 }
 func TestEditorView_StartIndexing_RestartSafety(t *testing.T) {
-	scr := vtui.NewScreenBuf()
-	scr.Writer = io.Discard
-	vtui.FrameManager.Init(scr)
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	v := vfs.NewOSVFS(t.TempDir())
 
 	// Create a dummy file
@@ -886,9 +879,7 @@ func TestEditorView_StartIndexing_RestartSafety(t *testing.T) {
 	ev.Close()
 }
 func TestEditorView_UnsavedChanges(t *testing.T) {
-	scr := vtui.NewScreenBuf()
-	scr.Writer = io.Discard
-	vtui.FrameManager.Init(scr)
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pt := piecetable.New([]byte("line1"))
 	ev := NewEditorView(pt, nil, "test.txt")
 

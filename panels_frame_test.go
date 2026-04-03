@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"os"
-	"io"
 	"path/filepath"
 	"testing"
 	"runtime"
@@ -107,9 +106,7 @@ func TestPanelsFrame_ProcessMouse_DoubleClickFile(t *testing.T) {
 	fsp.Refresh()
 
 	// Must init frame manager to catch async tasks from actionExecute
-	scr := vtui.NewScreenBuf()
-	scr.Writer = io.Discard
-	vtui.FrameManager.Init(scr)
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	// Double click on "run.sh" in left panel.
 	// Panel at (0,0), Table at (1,1), Header at Y=1, Row 0 at Y=2, Row 1 (run.sh) at Y=3.
@@ -691,7 +688,7 @@ func TestExecuteFileOp_BackgroundButtonTrigger(t *testing.T) {
 }
 func TestExecuteDummyOp_HeadlessMode(t *testing.T) {
 	fm := vtui.FrameManager
-	fm.Init(vtui.NewScreenBuf())
+	fm.Init(vtui.NewSilentScreenBuf())
 	pf := NewPanelsFrame()
 	fm.Push(pf)
 
@@ -902,9 +899,7 @@ func TestLayout_F4InternalDialogs_Validity(t *testing.T) {
 		// We need to capture the dialog created by showDummyOpDialog.
 		// Since it pushes to the real FrameManager, we'll initialize it.
 		fm := vtui.FrameManager
-		scr := vtui.NewScreenBuf()
-		scr.Writer = io.Discard
-		fm.Init(scr)
+		fm.Init(vtui.NewSilentScreenBuf())
 		
 		pf.showDummyOpDialog()
 		top := fm.GetTopFrame()

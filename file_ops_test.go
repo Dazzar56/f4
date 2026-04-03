@@ -4,7 +4,6 @@ import (
 	"context"
 	"strings"
 	"os"
-	"io"
 	"path/filepath"
 	"testing"
 	"time"
@@ -29,9 +28,7 @@ func TestRecursiveCopy(t *testing.T) {
 	//pf := &PanelsFrame{}
 
 	// Initialize FrameManager to provide TaskChan for RunOnUI
-	scr := vtui.NewScreenBuf()
-	scr.Writer = io.Discard
-	vtui.FrameManager.Init(scr)
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	// Create a real TaskContext
 	tCtx := vtui.RunAsync(func(c *vtui.TaskContext) {})
@@ -66,9 +63,7 @@ func TestRecursiveCopy_Cancel(t *testing.T) {
 	srcVfs := vfs.NewOSVFS(tmpSrc)
 	dstVfs := vfs.NewOSVFS(tmpDst)
 	//pf := &PanelsFrame{}
-	scr := vtui.NewScreenBuf()
-	scr.Writer = io.Discard
-	vtui.FrameManager.Init(scr)
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	tCtx := &vtui.TaskContext{Context: ctx, Cancel: cancel}
@@ -128,6 +123,7 @@ func TestRecursiveCopy_ConflictTypeMismatch(t *testing.T) {
 		t.Errorf("Expected type mismatch error, got %v", err)
 	}
 }
+
 func TestRecursiveCopy_MoveCrossVFS(t *testing.T) {
 	tmpSrc := t.TempDir()
 	tmpDst := t.TempDir()
@@ -138,9 +134,7 @@ func TestRecursiveCopy_MoveCrossVFS(t *testing.T) {
 
 	srcVfs := vfs.NewOSVFS(tmpSrc)
 	dstVfs := vfs.NewOSVFS(tmpDst)
-	scr := vtui.NewScreenBuf()
-	scr.Writer = io.Discard
-	vtui.FrameManager.Init(scr)
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	tCtx := vtui.RunAsync(func(c *vtui.TaskContext) {})
 	defer tCtx.Cancel()
 	dummyUpdate := func(msg string, percent int) {}
@@ -289,9 +283,7 @@ func TestFileOp_PathLogic(t *testing.T) {
 	srcVfs := vfs.NewOSVFS(tmpSrc)
 	dstVfs := vfs.NewOSVFS(tmpDst)
 
-	scr := vtui.NewScreenBuf()
-	scr.Writer = io.Discard
-	vtui.FrameManager.Init(scr)
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	t.Run("Copy and Rename", func(t *testing.T) {
 		os.WriteFile(filepath.Join(tmpSrc, "old.txt"), []byte("data"), 0644)

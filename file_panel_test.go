@@ -2,7 +2,6 @@ package main
 
 import (
 	"os"
-	"io"
 	"path/filepath"
 	"time"
 	"sort"
@@ -44,9 +43,7 @@ func TestFileEntry_GetCellText(t *testing.T) {
 
 func TestFileSystemPanel_NavigateUp_Selection(t *testing.T) {
 	vtui.SetDefaultPalette()
-	scr := vtui.NewScreenBuf()
-	scr.Writer = io.Discard
-	vtui.FrameManager.Init(scr)
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	tmp := t.TempDir()
 	sub := filepath.Join(tmp, "target_folder")
@@ -372,9 +369,7 @@ func TestFileSystemPanel_RightClick_ResetOnRelease(t *testing.T) {
 	}
 }
 func TestFileSystemPanel_IncrementalInteraction(t *testing.T) {
-	scr := vtui.NewScreenBuf()
-	scr.Writer = io.Discard
-	vtui.FrameManager.Init(scr)
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(t.TempDir()))
 
 	// Ensure we have '..' as initial state
@@ -469,9 +464,7 @@ func TestFileSystemPanel_GetSuccessorName(t *testing.T) {
 	}
 }
 func TestFileSystemPanel_AsyncPendingSelection(t *testing.T) {
-	scr := vtui.NewScreenBuf()
-	scr.Writer = io.Discard
-	vtui.FrameManager.Init(scr)
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS("."))
 
 	// Target: we want to select "target.txt" which will arrive in the second chunk
@@ -527,7 +520,7 @@ func TestFileSystemPanel_AsyncPendingSelection(t *testing.T) {
 	}
 }
 func TestFileSystemPanel_NavigateDown_CursorReset(t *testing.T) {
-	vtui.FrameManager.Init(vtui.NewScreenBuf())
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	tmp := t.TempDir()
 	sub := filepath.Join(tmp, "subdir")
 	os.Mkdir(sub, 0755)
