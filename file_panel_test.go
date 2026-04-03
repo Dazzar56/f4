@@ -463,3 +463,59 @@ func TestFileSystemPanel_GetSuccessorName(t *testing.T) {
 		t.Errorf("Case 5 failed: expected '..', got %q", res)
 	}
 }
+func TestFileSystemPanel_AsyncPendingSelection(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewScreenBuf())
+	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS("."))
+
+	// Target: we want to select "target.txt" which will arrive in the second chunk
+	fp.pendingSelection = "target.txt"
+	fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
+	fp.cursorIdx = 0
+
+	// 1. Simulate First Chunk (doesn't contain our target)
+	chunk1 := []vfs.VFSItem{{Name: "aaa.txt"}, {Name: "bbb.txt"}}
+
+	// Replicating the logic from ReadDirectory's onChunk callback
+	newEntries := make([]*fileEntry, len(chunk1))
+	for i, item := range chunk1 { newEntries[i] = &fileEntry{VFSItem: item} }
+
+	fp.entries = append(fp.entries, newEntries...)
+	sort.Slice(fp.entries, func(i, j int) bool { return fp.entries[i].Name < fp.entries[j].Name })
+
+	// Run snapping logic (simplified from file_panel.go)
+	for i, entry := range fp.entries {
+		if entry.Name == fp.pendingSelection {
+			fp.SetCursorIndex(i)
+			fp.pendingSelection = ""
+			break
+		}
+	}
+
+	if fp.pendingSelection == "" || fp.GetSelectedName() == "target.txt" {
+		t.Error("Snapped prematurely to non-existent item")
+	}
+
+	// 2. Simulate Second Chunk (contains our target)
+	chunk2 := []vfs.VFSItem{{Name: "target.txt"}, {Name: "zzz.txt"}}
+	newEntries2 := make([]*fileEntry, len(chunk2))
+	for i, item := range chunk2 { newEntries2[i] = &fileEntry{VFSItem: item} }
+
+	fp.entries = append(fp.entries, newEntries2...)
+	sort.Slice(fp.entries, func(i, j int) bool { return fp.entries[i].Name < fp.entries[j].Name })
+
+	// Run snapping logic again
+	for i, entry := range fp.entries {
+		if entry.Name == fp.pendingSelection {
+			fp.SetCursorIndex(i)
+			fp.pendingSelection = ""
+			break
+		}
+	}
+
+	if fp.pendingSelection != "" {
+		t.Error("Failed to clear pendingSelection after item arrived")
+	}
+	if fp.GetSelectedName() != "target.txt" {
+		t.Errorf("Cursor failed to snap to 'target.txt'. Currently on: %q", fp.GetSelectedName())
+	}
+}
