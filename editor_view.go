@@ -273,7 +273,9 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		if e.Type == vtinput.KeyEventType && e.KeyDown {
 			if e.Char != 0 {
 				// Handle system line breaks inside the paste
-				if e.Char == '\r' || e.Char == '\n' {
+				if e.Char == '\r' {
+					// Ignore \r to prevent double line breaks
+				} else if e.Char == '\n' {
 					ev.pasteBuffer = append(ev.pasteBuffer, '\n')
 				} else {
 					ev.pasteBuffer = append(ev.pasteBuffer, e.Char)
@@ -442,9 +444,11 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 			if ev.CursorPos > 0 {
 				lineStart := ev.li.GetLineOffset(ev.CursorLine)
 				data, _ := ev.pt.GetRange(lineStart, ev.CursorPos)
-				if data != nil {
+				if data != nil && len(data) > 0 {
 					_, size := utf8.DecodeLastRune(data)
 					ev.CursorPos -= size
+				} else {
+					ev.CursorPos--
 				}
 			} else if ev.CursorLine > 0 {
 				ev.CursorLine--
@@ -498,9 +502,11 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 				peekLen := 4
 				if lineLen-ev.CursorPos < 4 { peekLen = lineLen - ev.CursorPos }
 				data, _ := ev.pt.GetRange(lineStart+ev.CursorPos, peekLen)
-				if data != nil {
+				if data != nil && len(data) > 0 {
 					_, size := utf8.DecodeRune(data)
 					ev.CursorPos += size
+				} else {
+					ev.CursorPos++
 				}
 			} else if ev.CursorLine < ev.li.LineCount()-1 {
 				ev.CursorLine++
@@ -897,15 +903,14 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 			newEngine = textlayout.NewWrapEngine(newPt, newLi)
 		}
 
-		ctx.RunOnUI(func() {
-			// PRELOAD CACHE TO PREVENT SCREEN FLICKER
-			for i := 0; i < 50; i++ { // max 500ms
-				if ctx.Err() != nil { break }
-				_, e := newBuf.Read(visStart, 4096)
-				if e != piecetable.ErrLoading { break }
-				time.Sleep(10 * time.Millisecond)
-			}
-		})
+		// PRELOAD CACHE TO PREVENT SCREEN FLICKER
+		// This MUST be outside RunOnUI to prevent blocking the main thread for 500ms.
+		for i := 0; i < 50; i++ { // max 500ms
+			if ctx.Err() != nil { break }
+			_, e := newBuf.Read(visStart, 4096)
+			if e != piecetable.ErrLoading { break }
+			time.Sleep(10 * time.Millisecond)
+		}
 
 		ctx.RunOnUI(func() {
 			ev.saving = false
