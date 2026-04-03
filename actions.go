@@ -314,8 +314,9 @@ func actionMkDir(pf *PanelsFrame) {
 				if err != nil {
 					vtui.ShowMessage(" Error ", fmt.Sprintf(Msg("Operation.Error"), err.Error()), []string{"&Ok"})
 				}
+				// Set pending selection so the panel snaps to the new folder after the async reload
+				panel.pendingSelection = name
 				pf.RefreshAll()
-				panel.SelectName(name)
 			})
 		})
 	}
