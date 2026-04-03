@@ -670,6 +670,9 @@ func (pf *PanelsFrame) showDummyOpDialog() {
 	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
 	vbox.Apply()
 
+	// Set default focus to Start button
+	dlg.SetFocusedItem(btnStart)
+
 	btnCancel.OnClick = func() { dlg.Close() }
 	btnStart.OnClick = func() {
 		mode := chkClone.State == 1
