@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
@@ -95,6 +96,7 @@ type FileSystemPanel struct {
 	loadCtx          context.Context
 	cancelLoad       context.CancelFunc
 	isLoading        bool
+	loadingTimer     *time.Timer
 	pendingSelection string
 }
 
@@ -211,11 +213,25 @@ func (fp *FileSystemPanel) ReadDirectory() {
 		fp.cancelLoad()
 		fp.cancelLoad = nil
 	}
+	if fp.loadingTimer != nil {
+		fp.loadingTimer.Stop()
+		fp.loadingTimer = nil
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	fp.loadCtx = ctx
 	fp.cancelLoad = cancel
 	fp.isLoading = true
-	fp.updateTitle(nil)
+
+	// Delay the "Loading..." indicator to avoid flickering on fast operations
+	fp.loadingTimer = time.AfterFunc(300*time.Millisecond, func() {
+		vtui.FrameManager.PostTask(func() {
+			if fp.isLoading {
+				fp.updateTitle(nil)
+				vtui.FrameManager.Redraw()
+			}
+		})
+	})
 
 	// Запоминаем выделение, чтобы восстановить его, когда прилетят новые файлы
 	if fp.pendingSelection == "" {
@@ -291,7 +307,14 @@ func (fp *FileSystemPanel) ReadDirectory() {
 		})
 
 		vtui.FrameManager.PostTask(func() {
-			if ctx.Err() != nil { return }
+			if ctx.Err() != nil {
+				return
+			}
+			if fp.loadingTimer != nil {
+				fp.loadingTimer.Stop()
+				fp.loadingTimer = nil
+			}
+
 			if firstChunk {
 				fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
 				fp.SetCursorIndex(0)
