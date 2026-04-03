@@ -78,10 +78,16 @@ func actionViewerSearch(vv *ViewerView) {
 		
 		vtui.FrameManager.PostTask(func() {
 			dlg := vtui.NewCenteredDialog(50, 8, title)
-			lbl := vtui.NewLabel(dlg.X1+2, dlg.Y1+2, msg, nil)
+			lbl := vtui.NewLabel(0, 0, msg, nil)
 			dlg.AddItem(lbl)
-			btnCancel := vtui.NewButton(dlg.X1+20, dlg.Y1+5, "&Cancel")
+			btnCancel := vtui.NewButton(0, 0, "&Cancel")
 			dlg.AddItem(btnCancel)
+
+			vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 50-4, 8-4)
+			vbox.Add(lbl, vtui.Margins{}, vtui.AlignCenter)
+			vbox.Add(btnCancel, vtui.Margins{Top: 1}, vtui.AlignCenter)
+			vbox.Apply()
+
 			vtui.FrameManager.AddScreenHeadless(dlg)
 			
 			_ = vtui.RunAsync(func(ctx *vtui.TaskContext) {
@@ -269,7 +275,35 @@ func actionMkDir(pf *PanelsFrame) {
 
 	activeVfs := panel.vfs
 
-	vtui.InputBox(Msg("MakeFolder.Title"), Msg("MakeFolder.Prompt"), "", func(name string) {
+	dlg := vtui.NewCenteredDialog(40, 8, Msg("MakeFolder.Title"))
+	dlg.ShowClose = true
+
+	editName := vtui.NewEdit(0, 0, 10, "")
+	lblPrompt := vtui.NewLabel(0, 0, Msg("MakeFolder.Prompt"), editName)
+	dlg.AddItem(lblPrompt)
+	dlg.AddItem(editName)
+
+	btnOk := vtui.NewButton(0, 0, "&Ok")
+	btnCancel := vtui.NewButton(0, 0, "Cancel")
+	dlg.AddItem(btnOk)
+	dlg.AddItem(btnCancel)
+
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 40-4, 8-4)
+	vbox.Add(lblPrompt, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(editName, vtui.Margins{Top: 1}, vtui.AlignFill)
+
+	hbox := vtui.NewHBoxLayout(0, 0, 40-4, 1)
+	hbox.HorizontalAlign = vtui.AlignCenter
+	hbox.Spacing = 2
+	hbox.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
+	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
+	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Apply()
+
+	btnCancel.OnClick = func() { dlg.Close() }
+	btnOk.OnClick = func() {
+		name := editName.GetText()
+		dlg.Close()
 		if name == "" {
 			return
 		}
@@ -284,7 +318,9 @@ func actionMkDir(pf *PanelsFrame) {
 				panel.SelectName(name)
 			})
 		})
-	})
+	}
+
+	vtui.FrameManager.Push(dlg)
 }
 
 func actionDelete(pf *PanelsFrame) {
@@ -304,26 +340,54 @@ func actionDelete(pf *PanelsFrame) {
 		msgName = fmt.Sprintf("%d items", len(names))
 	}
 
+	title := Msg("Delete.Title")
 	msg := fmt.Sprintf(Msg("Delete.Confirm"), msgName)
-	dlg := vtui.ShowMessage(Msg("Delete.Title"), msg, []string{Msg("Delete.Btn"), "Cancel"})
-	dlg.OnResult = func(code int) {
-		if code == 0 {
-			pf.RunProgressTask(" Deleting... ", "Preparing...", false, func(ctx *vtui.TaskContext, update func(msg string, percent int)) error {
-				for i, name := range names {
-					if ctx.Err() != nil { return ctx.Err() }
-					update(fmt.Sprintf("Deleting: %s", name), (i*100)/len(names))
-					fullPath := activeVfs.Join(activeVfs.GetPath(), name)
-					if err := activeVfs.Remove(ctx.Context, fullPath); err != nil {
-						return err
-					}
-				}
-				return nil
-			}, func(err error) {
-				if err != nil && err != context.Canceled {
-					vtui.ShowMessage(" Error ", fmt.Sprintf(Msg("Operation.Error"), err.Error()), []string{"&Ok"})
-				}
-				pf.RefreshAll()
-			})
-		}
+	lines := vtui.WrapText(msg, 46)
+
+	dlg := vtui.NewCenteredDialog(50, 6+len(lines), title)
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 50-4, (6+len(lines))-4)
+
+	for _, l := range lines {
+		t := vtui.NewText(0, 0, l, vtui.Palette[vtui.ColDialogText])
+		dlg.AddItem(t)
+		vbox.Add(t, vtui.Margins{}, vtui.AlignCenter)
 	}
+
+	btnDel := vtui.NewButton(0, 0, Msg("Delete.Btn"))
+	btnCancel := vtui.NewButton(0, 0, "Cancel")
+	dlg.AddItem(btnDel)
+	dlg.AddItem(btnCancel)
+
+	hbox := vtui.NewHBoxLayout(0, 0, 50-4, 1)
+	hbox.HorizontalAlign = vtui.AlignCenter
+	hbox.Spacing = 2
+	hbox.Add(btnDel, vtui.Margins{}, vtui.AlignTop)
+	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
+	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Apply()
+
+	btnCancel.OnClick = func() { dlg.Close() }
+	btnDel.OnClick = func() {
+		dlg.Close()
+		pf.RunProgressTask(" Deleting... ", "Preparing...", false, func(ctx *vtui.TaskContext, update func(msg string, percent int)) error {
+			for i, name := range names {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				update(fmt.Sprintf("Deleting: %s", name), (i*100)/len(names))
+				fullPath := activeVfs.Join(activeVfs.GetPath(), name)
+				if err := activeVfs.Remove(ctx.Context, fullPath); err != nil {
+					return err
+				}
+			}
+			return nil
+		}, func(err error) {
+			if err != nil && err != context.Canceled {
+				vtui.ShowMessage(" Error ", fmt.Sprintf(Msg("Operation.Error"), err.Error()), []string{"&Ok"})
+			}
+			pf.RefreshAll()
+		})
+	}
+
+	vtui.FrameManager.Push(dlg)
 }
