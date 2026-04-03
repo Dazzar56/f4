@@ -329,6 +329,9 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		ev.clearCaches()
 		ev.ensureCursorVisible()
 		return true
+	case vtinput.VK_ESCAPE, vtinput.VK_F10:
+		ev.tryClose()
+		return true
 
 	case vtinput.VK_C, vtinput.VK_INSERT:
 		if ctrl && ev.selActive {
