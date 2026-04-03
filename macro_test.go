@@ -56,7 +56,7 @@ func TestMacroRecordingAndPlayback(t *testing.T) {
 		ControlKeyState: vtinput.LeftCtrlPressed,
 	}
 
-	assignFrame := &MacroAssignFrame{mgr: mgr}
+	assignFrame := NewMacroAssignFrame(mgr)
 	assignFrame.ProcessKey(ctrlF1)
 
 	if _, ok := mgr.Macros[KeyStr(vtinput.VK_F1, vtinput.LeftCtrlPressed)]; !ok {
@@ -143,7 +143,7 @@ func TestMacro_AssignRobustness(t *testing.T) {
 	// Clean manager for testing
 	mgr := &MacroManager{Macros: make(map[string][]*vtinput.InputEvent)}
 	mgr.Buffer = []*vtinput.InputEvent{{Char: 'x', KeyDown: true}}
-	f := &MacroAssignFrame{mgr: mgr}
+	f := NewMacroAssignFrame(mgr)
 
 	// 1. Standalone modifiers should be ignored (dialog stays open)
 	f.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_SHIFT})
@@ -210,7 +210,7 @@ func TestMacro_AssignEsc(t *testing.T) {
 	mgr.Recording = true
 	mgr.Buffer = []*vtinput.InputEvent{{Char: 'h', KeyDown: true}}
 
-	assign := &MacroAssignFrame{mgr: mgr}
+	assign := NewMacroAssignFrame(mgr)
 	escEvent := &vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
 		VirtualKeyCode: vtinput.VK_ESCAPE,
@@ -243,5 +243,38 @@ func TestMacro_CharTrigger(t *testing.T) {
 	}
 	if !mgr.Recording {
 		t.Error("Manager failed to enter recording state via Char trigger")
+	}
+}
+func TestMacro_AssignFrame_Structure(t *testing.T) {
+	mgr := &MacroManager{Macros: make(map[string][]*vtinput.InputEvent)}
+	f := NewMacroAssignFrame(mgr)
+
+	// Check that it's a proper window with a child (the prompt text)
+	if len(f.GetChildren()) == 0 {
+		t.Error("MacroAssignFrame should have at least one child (prompt)")
+	}
+
+	// Verify focus logic: it should NOT allow Tab to cycle away
+	// because any key (including Tab) must be captured as a macro.
+	tabEvent := &vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_TAB,
+	}
+
+	mgr.Buffer = []*vtinput.InputEvent{{Char: 't', KeyDown: true}}
+	handled := f.ProcessKey(tabEvent)
+
+	if !handled {
+		t.Error("MacroAssignFrame should handle (capture) Tab key")
+	}
+	if !f.IsDone() {
+		t.Error("MacroAssignFrame should close after capturing a key")
+	}
+
+	// Verify that macro was assigned to Tab
+	tabKey := KeyStr(vtinput.VK_TAB, 0)
+	if _, ok := mgr.Macros[tabKey]; !ok {
+		t.Error("Macro failed to assign to Tab key")
 	}
 }

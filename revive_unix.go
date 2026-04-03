@@ -374,8 +374,7 @@ func runSessionPicker(sessions []SessionInfo) *SessionInfo {
 	vtui.FrameManager.Init(scr)
 	SetDefaultF4Palette()
 
-	dlg := vtui.NewDialog(0, 0, 50, 15, " Select Session ")
-	dlg.Center(width, height)
+	dlg := vtui.NewCenteredDialog(50, 15, " Select Session ")
 
 	var items []string
 	for _, s := range sessions {
@@ -383,7 +382,7 @@ func runSessionPicker(sessions []SessionInfo) *SessionInfo {
 	}
 	items = append(items, "--- Start New Session ---")
 
-	lb := vtui.NewListBox(dlg.X1+2, dlg.Y1+2, 46, 9, items)
+	lb := vtui.NewListBox(0, 0, 10, 9, items)
 	dlg.AddItem(lb)
 
 	var selected *SessionInfo
@@ -396,17 +395,29 @@ func runSessionPicker(sessions []SessionInfo) *SessionInfo {
 		dlg.SetExitCode(1)
 	}
 
-	btnOk := vtui.NewButton(dlg.X1+10, dlg.Y2-2, "&Ok")
+	btnOk := vtui.NewButton(0, 0, "&Ok")
+	btnCancel := vtui.NewButton(0, 0, "Cancel")
+	dlg.AddItem(btnOk)
+	dlg.AddItem(btnCancel)
+
+	// Layout Engine
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 50-4, 15-4)
+	vbox.Add(lb, vtui.Margins{}, vtui.AlignFill)
+
+	hbox := vtui.NewHBoxLayout(0, 0, 50-4, 1)
+	hbox.HorizontalAlign = vtui.AlignCenter
+	hbox.Spacing = 2
+	hbox.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
+	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
+	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Apply()
+
 	btnOk.OnClick = func() {
 		if lb.OnAction != nil {
 			lb.OnAction(lb.SelectPos)
 		}
 	}
-	dlg.AddItem(btnOk)
-
-	btnCancel := vtui.NewButton(dlg.X1+30, dlg.Y2-2, "&Cancel")
 	btnCancel.OnClick = func() { dlg.SetExitCode(-1) }
-	dlg.AddItem(btnCancel)
 
 	vtui.FrameManager.Push(dlg)
 	reader := vtinput.NewReader(os.Stdin)

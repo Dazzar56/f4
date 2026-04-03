@@ -99,7 +99,7 @@ func (m *MacroManager) Filter(e *vtinput.InputEvent) bool {
 }
 
 func (m *MacroManager) showAssignDialog() {
-	frame := &MacroAssignFrame{mgr: m}
+	frame := NewMacroAssignFrame(m)
 	vtui.FrameManager.Push(frame)
 }
 
@@ -151,27 +151,33 @@ func (m *MacroManager) Save() {
 
 // MacroAssignFrame is a modal frame that captures a key combination to assign a macro.
 type MacroAssignFrame struct {
-	vtui.BaseFrame
-	mgr  *MacroManager
+	vtui.Window
+	mgr *MacroManager
 }
 
-func (f *MacroAssignFrame) Show(scr *vtui.ScreenBuf) {
-	f.BaseFrame.Show(scr)
+func NewMacroAssignFrame(m *MacroManager) *MacroAssignFrame {
+	width, height := 42, 5
+	base := vtui.NewCenteredDialog(width, height, Msg("Macro.AssignTitle"))
+	f := &MacroAssignFrame{
+		Window: *base,
+		mgr:    m,
+	}
 
-	w, h := 42, 5
-	x := (scr.Width() - w) / 2
-	y := (scr.Height() - h) / 2
+	prompt := vtui.NewText(0, 0, Msg("Macro.AssignPrompt"), vtui.Palette[vtui.ColDialogText])
+	f.AddItem(prompt)
 
-	box := vtui.NewBorderedFrame(x, y, x+w-1, y+h-1, vtui.DoubleBox, Msg("Macro.AssignTitle"))
-	box.ColorBoxIdx = ColPanelBox
-	box.ColorTitleIdx = ColPanelTitle
-	box.DisplayObject(scr)
+	vbox := vtui.NewVBoxLayout(f.X1+2, f.Y1+2, width-4, height-4)
+	vbox.Add(prompt, vtui.Margins{}, vtui.AlignCenter)
+	vbox.Apply()
 
-	msg := Msg("Macro.AssignPrompt")
-	scr.Write(x+(w-len(msg))/2, y+2, vtui.StringToCharInfo(msg, vtui.Palette[ColPanelText]))
+	return f
 }
 
 func (f *MacroAssignFrame) ProcessKey(e *vtinput.InputEvent) bool {
+	if e.Type == vtinput.FocusEventType {
+		return f.Window.ProcessKey(e)
+	}
+
 	if !e.KeyDown {
 		return false
 	}
@@ -187,6 +193,9 @@ func (f *MacroAssignFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 
 	key := KeyStr(e.VirtualKeyCode, e.ControlKeyState)
+	if f.mgr.Macros == nil {
+		f.mgr.Macros = make(map[string][]*vtinput.InputEvent)
+	}
 	f.mgr.Macros[key] = f.mgr.Buffer
 	f.mgr.Buffer = nil
 	f.mgr.Save()
