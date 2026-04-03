@@ -95,8 +95,8 @@ func NewEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string) *EditorVie
 	ev.menuBar = vtui.NewMenuBar(nil)
 	ev.menuBar.Items = []vtui.MenuBarItem{
 		{Label: "&File", SubItems: []vtui.MenuItem{{Text: "&Save", Command: vtui.CmDefault}, {Text: "E&xit", Command: vtui.CmClose}}},
-		{Label: "&Edit", SubItems: []vtui.MenuItem{{Text: "&Copy", Command: vtui.CmCopy}, {Text: "&Paste"}}},
-		{Label: "&Search", SubItems: []vtui.MenuItem{{Text: "&Find", Command: vtui.CmSearch}}},
+		{Label: "&Edit", SubItems: []vtui.MenuItem{{Text: "&Copy", Command: CmCopy}, {Text: "&Paste"}}},
+		{Label: "&Search", SubItems: []vtui.MenuItem{{Text: "&Find", Command: CmSearch}}},
 		{Label: "&Options", SubItems: []vtui.MenuItem{{Text: "&WordWrap"}}},
 	}
 
@@ -909,7 +909,7 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 			if err == nil {
 				vtui.DebugLog("EDITOR: Successfully saved %s (%d bytes)", ev.filePath, ev.pt.Size())
 			}
-			vtui.FrameManager.Broadcast(vtui.CmFileChanged, nil)
+			vtui.FrameManager.Broadcast(CmFileChanged, nil)
 
 			if err == nil {
 				ev.modified = false

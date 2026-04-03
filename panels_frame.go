@@ -52,25 +52,25 @@ func NewPanelsFrame() *PanelsFrame {
 	pf.menuBar.Items = []vtui.MenuBarItem{
 		// Using Command routing (TV style) instead of hardcoded indices
 		{Label: "&" + Msg("Menu.Left"), SubItems: []vtui.MenuItem{
-			{Text: "&" + Msg("Menu.Left.Medium"), Command: vtui.CmLeftMedium},
-			{Text: "&" + Msg("Menu.Left.Detailed"), Command: vtui.CmLeftDetailed},
+			{Text: "&" + Msg("Menu.Left.Medium"), Command: CmLeftMedium},
+			{Text: "&" + Msg("Menu.Left.Detailed"), Command: CmLeftDetailed},
 			{Separator: true},
-			{Text: "Bac&kground", Command: vtui.CmBackground},
+			{Text: "Bac&kground", Command: CmBackground},
 			{Text: Msg("Menu.Exit"), Command: vtui.CmQuit},
 		}},
 		{Label: "&" + Msg("Menu.Files"), SubItems: []vtui.MenuItem{
-			{Text: "&" + Msg("Menu.Files.View"), Shortcut: "F3", Command: vtui.CmView},
-			{Text: "&" + Msg("Menu.Files.Edit"), Shortcut: "F4", Command: vtui.CmEdit},
-			{Text: "&" + Msg("Menu.Files.Copy"), Shortcut: "F5", Command: vtui.CmCopy},
-			{Text: "&" + Msg("Menu.Files.RenMov"), Shortcut: "F6", Command: vtui.CmMove},
-			{Text: "&" + Msg("Menu.Files.MkDir"), Shortcut: "F7", Command: vtui.CmMkDir},
-			{Text: "&" + Msg("Menu.Files.Delete"), Shortcut: "F8", Command: vtui.CmDelete},
+			{Text: "&" + Msg("Menu.Files.View"), Shortcut: "F3", Command: CmView},
+			{Text: "&" + Msg("Menu.Files.Edit"), Shortcut: "F4", Command: CmEdit},
+			{Text: "&" + Msg("Menu.Files.Copy"), Shortcut: "F5", Command: CmCopy},
+			{Text: "&" + Msg("Menu.Files.RenMov"), Shortcut: "F6", Command: CmMove},
+			{Text: "&" + Msg("Menu.Files.MkDir"), Shortcut: "F7", Command: CmMkDir},
+			{Text: "&" + Msg("Menu.Files.Delete"), Shortcut: "F8", Command: CmDelete},
 		}},
 		{Label: "&" + Msg("Menu.Commands"), SubItems: []vtui.MenuItem{{Text: "Placeholder"}}},
 		{Label: "&" + Msg("Menu.Options"), SubItems: []vtui.MenuItem{{Text: "Placeholder"}}},
 		{Label: "&" + Msg("Menu.Right"), SubItems: []vtui.MenuItem{
-			{Text: "&" + Msg("Menu.Left.Medium"), Command: vtui.CmRightMedium},
-			{Text: "&" + Msg("Menu.Left.Detailed"), Command: vtui.CmRightDetailed},
+			{Text: "&" + Msg("Menu.Left.Medium"), Command: CmRightMedium},
+			{Text: "&" + Msg("Menu.Left.Detailed"), Command: CmRightDetailed},
 		}},
 	}
 	// We no longer need pf.menuBar.OnCommand for routing!
@@ -365,20 +365,20 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	case vtinput.VK_F1:
 		return vtui.FrameManager.EmitCommand(vtui.CmHelp, nil)
 	case vtinput.VK_F3:
-		return vtui.FrameManager.EmitCommand(vtui.CmView, nil)
+		return vtui.FrameManager.EmitCommand(CmView, nil)
 	case vtinput.VK_F4:
 		if shift {
-			return vtui.FrameManager.EmitCommand(vtui.CmNew, nil)
+			return vtui.FrameManager.EmitCommand(CmNew, nil)
 		}
-		return vtui.FrameManager.EmitCommand(vtui.CmEdit, nil)
+		return vtui.FrameManager.EmitCommand(CmEdit, nil)
 	case vtinput.VK_F5:
-		return vtui.FrameManager.EmitCommand(vtui.CmCopy, nil)
+		return vtui.FrameManager.EmitCommand(CmCopy, nil)
 	case vtinput.VK_F6:
-		return vtui.FrameManager.EmitCommand(vtui.CmMove, nil)
+		return vtui.FrameManager.EmitCommand(CmMove, nil)
 	case vtinput.VK_F7:
-		return vtui.FrameManager.EmitCommand(vtui.CmMkDir, nil)
+		return vtui.FrameManager.EmitCommand(CmMkDir, nil)
 	case vtinput.VK_F8:
-		return vtui.FrameManager.EmitCommand(vtui.CmDelete, nil)
+		return vtui.FrameManager.EmitCommand(CmDelete, nil)
 	case vtinput.VK_F10:
 		return vtui.FrameManager.EmitCommand(vtui.CmQuit, nil)
 	case vtinput.VK_F9:
@@ -504,7 +504,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	return false
 }
 func (pf *PanelsFrame) HandleBroadcast(cmd int, args any) bool {
-	if cmd == vtui.CmFileChanged {
+	if cmd == CmFileChanged {
 		pf.RefreshAll()
 		return true
 	}
@@ -559,31 +559,31 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 		pf.ShowHelp()
 		return true
 
-	case vtui.CmNew:
+	case CmNew:
 		actionNewFile(pf)
 		return true
 
-	case vtui.CmView:
+	case CmView:
 		actionViewFile(pf)
 		return true
 
-	case vtui.CmEdit:
+	case CmEdit:
 		actionEditFile(pf)
 		return true
 
-	case vtui.CmCopy, vtui.CmMove:
-		actionCopyMove(pf, cmd == vtui.CmMove)
+	case CmCopy, CmMove:
+		actionCopyMove(pf, cmd == CmMove)
 		return true
 
-	case vtui.CmMkDir:
+	case CmMkDir:
 		actionMkDir(pf)
 		return true
 
-	case vtui.CmDelete:
+	case CmDelete:
 		actionDelete(pf)
 		return true
 
-	case vtui.CmBackground:
+	case CmBackground:
 		if !SupportsBackgrounding() {
 			vtui.ShowMessage(" Background ", "Backgrounding is not supported on this OS.", []string{"&Ok"})
 			return true
@@ -597,19 +597,19 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 			return true
 		}
 
-	case vtui.CmLeftMedium:
+	case CmLeftMedium:
 		if fsp, ok := pf.panels[0].(*FileSystemPanel); ok { fsp.SetViewMode(ViewModeMedium) }
 		pf.updateMenuCheckmarks()
 		return true
-	case vtui.CmLeftDetailed:
+	case CmLeftDetailed:
 		if fsp, ok := pf.panels[0].(*FileSystemPanel); ok { fsp.SetViewMode(ViewModeDetailed) }
 		pf.updateMenuCheckmarks()
 		return true
-	case vtui.CmRightMedium:
+	case CmRightMedium:
 		if fsp, ok := pf.panels[1].(*FileSystemPanel); ok { fsp.SetViewMode(ViewModeMedium) }
 		pf.updateMenuCheckmarks()
 		return true
-	case vtui.CmRightDetailed:
+	case CmRightDetailed:
 		if fsp, ok := pf.panels[1].(*FileSystemPanel); ok { fsp.SetViewMode(ViewModeDetailed) }
 		pf.updateMenuCheckmarks()
 		return true

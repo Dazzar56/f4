@@ -189,13 +189,13 @@ func TestPanelsFrame_ViewModeCommands(t *testing.T) {
 	pf := NewPanelsFrame()
 	pf.ResizeConsole(80, 25)
 
-	handled := pf.HandleCommand(vtui.CmLeftDetailed, nil)
+	handled := pf.HandleCommand(CmLeftDetailed, nil)
 	if !handled { t.Error("CmLeftDetailed not handled") }
 	if pf.panels[0].(*FileSystemPanel).viewMode != ViewModeDetailed {
 		t.Error("Left panel mode not changed to Detailed")
 	}
 
-	pf.HandleCommand(vtui.CmRightDetailed, nil)
+	pf.HandleCommand(CmRightDetailed, nil)
 	if pf.panels[1].(*FileSystemPanel).viewMode != ViewModeDetailed {
 		t.Error("Right panel mode not changed to Detailed")
 	}

@@ -126,7 +126,7 @@ func (vv *ViewerView) HandleCommand(cmd int, args any) bool {
 		vv.SetExitCode(-1)
 		return true
 	}
-	if cmd == vtui.CmSearch {
+	if cmd == CmSearch {
 		actionViewerSearch(vv)
 		return true
 	}
