@@ -878,3 +878,41 @@ func TestEditorView_StartIndexing_RestartSafety(t *testing.T) {
 	// Clean up
 	ev.Close()
 }
+func TestEditorView_UnsavedChanges(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewScreenBuf())
+	pt := piecetable.New([]byte("line1"))
+	ev := NewEditorView(pt, nil, "test.txt")
+
+	// 1. Initially not modified
+	if ev.modified {
+		t.Error("Editor should not be marked as modified initially")
+	}
+
+	// 2. Modify text (typing) -> should be modified
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: '!'})
+	if !ev.modified {
+		t.Error("Editor should be modified after typing")
+	}
+
+	// 3. Test tryClose when NOT modified
+	ev.modified = false
+	ev.tryClose()
+	if !ev.IsDone() {
+		t.Error("Editor should close immediately if not modified")
+	}
+
+	// 4. Test tryClose when modified (should NOT close immediately)
+	ev.Done = false
+	ev.modified = true
+	ev.tryClose()
+	if ev.IsDone() {
+		t.Error("Editor should NOT close immediately if modified (should show dialog)")
+	}
+
+	// 5. Verify deletion also triggers modified
+	ev.modified = false
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_BACK})
+	if !ev.modified {
+		t.Error("Editor should be modified after deletion")
+	}
+}

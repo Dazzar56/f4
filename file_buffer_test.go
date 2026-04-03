@@ -35,16 +35,30 @@ func TestAsyncBuffer_LoadingCycle(t *testing.T) {
 		t.Error("Data should be nil when loading")
 	}
 
-	// 2. Process tasks (the fetch goroutine should have posted a task)
-	timeout := time.After(1 * time.Second)
-	select {
-	case task := <-vtui.FrameManager.TaskChan:
-		task()
-	case <-timeout:
-		t.Fatal("Timeout waiting for fetch task")
+	// 2. Process tasks (wait for the fetch goroutine to post and for us to run the task)
+	success := false
+	deadline := time.Now().Add(1 * time.Second)
+	for time.Now().Before(deadline) {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		default:
+			time.Sleep(10 * time.Millisecond)
+		}
+
+		// Check if data is now available
+		data, err = buf.Read(0, 5)
+		if err == nil {
+			success = true
+			break
+		}
 	}
 
-	// 3. Second read should succeed
+	if !success {
+		t.Fatalf("Read failed after fetch: %v", err)
+	}
+
+	// 3. Verify data content
 	data, err = buf.Read(0, 5)
 	if err != nil {
 		t.Errorf("Read failed after fetch: %v", err)

@@ -40,6 +40,7 @@ type EditorView struct {
 	ScrollLeft   int // Горизонтальный скролл (когда WordWrap=false)
 
 	WordWrap         bool
+	modified         bool
 	CursorLine       int // Текущая логическая строка (для плагинов)
 	CursorPos        int // Позиция в байтах (для плагинов)
 	DesiredVisualCol int // Колонка, в которую мы хотим попасть при навигации Up/Down
@@ -253,6 +254,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 				newOffset := offset + len(data)
 				ev.CursorLine = ev.li.GetLineAtOffset(newOffset)
 				ev.CursorPos = newOffset - ev.li.GetLineOffset(ev.CursorLine)
+				ev.modified = true
 				ev.updateDesiredVisualCol()
 				ev.ensureCursorVisible()
 			}
@@ -301,11 +303,11 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 
 	switch e.VirtualKeyCode {
 	case vtinput.VK_ESCAPE, vtinput.VK_F10:
-		ev.Close()
+		ev.tryClose()
 		return true
 
 	case vtinput.VK_F2:
-		ev.SaveToFile()
+		ev.SaveToFile(nil)
 		return true
 
 	case vtinput.VK_F3:
@@ -503,6 +505,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		if ev.selActive {
 			ev.DeleteSelection()
 		} else {
+			ev.modified = true
 			offset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 			if offset > 0 {
 				if ev.CursorPos == 0 {
@@ -540,6 +543,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 			}
 			ev.DeleteSelection()
 		} else {
+			ev.modified = true
 			offset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 			if offset < ev.pt.Size() {
 				// Remove the UTF-8 character under the cursor
@@ -563,6 +567,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		if ev.selActive {
 			ev.DeleteSelection()
 		}
+		ev.modified = true
 		offset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 		ev.pt.Insert(offset, []byte("\n"))
 		ev.li.UpdateAfterInsert(offset, []byte("\n"))
@@ -578,6 +583,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		if ev.selActive {
 			ev.DeleteSelection()
 		}
+		ev.modified = true
 		offset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 		data := []byte(string(e.Char))
 		ev.pt.Insert(offset, data)
@@ -713,10 +719,30 @@ func (ev *EditorView) StartIndexing() {
 
 func (ev *EditorView) HandleCommand(cmd int, args any) bool {
 	if cmd == vtui.CmClose {
-		ev.Close()
+		ev.tryClose()
 		return true
 	}
 	return ev.BaseFrame.HandleCommand(cmd, args)
+}
+
+func (ev *EditorView) tryClose() {
+	if !ev.modified {
+		ev.Close()
+		return
+	}
+
+	msg := "The file has been modified.\nDo you want to save it?"
+	dlg := vtui.ShowMessage(" Confirm ", msg, []string{"&Save", "&Don't Save", "Cancel"})
+	dlg.OnResult = func(code int) {
+		switch code {
+		case 0: // Save
+			ev.SaveToFile(func() {
+				ev.Close()
+			})
+		case 1: // Don't save
+			ev.Close()
+		}
+	}
 }
 
 func (ev *EditorView) GetKeyLabels() *vtui.KeySet {
@@ -763,14 +789,16 @@ func (ev *EditorView) getLineLength(line int) int {
 	return totalLen
 }
 
-func (ev *EditorView) SaveToFile() {
+
+
+func (ev *EditorView) SaveToFile(afterSave func()) {
 	if ev.filePath == "" || ev.vfs == nil || ev.saving {
 		return
 	}
-
+	
 	ev.saving = true
 	vtui.DebugLog("EDITOR: Saving %s...", ev.filePath)
-
+	
 	vtui.RunAsync(func(ctx *vtui.TaskContext) {
 		// Saving PieceTable content to VFS.
 		tmpPath := ev.filePath + ".f4tmp"
@@ -836,6 +864,10 @@ func (ev *EditorView) SaveToFile() {
 			vtui.FrameManager.Broadcast(vtui.CmFileChanged, nil)
 
 			if err == nil {
+				ev.modified = false
+				if afterSave != nil {
+					afterSave()
+				}
 				ev.file = newFile
 				if ev.asyncBuf != nil { ev.asyncBuf.Close() }
 				ev.asyncBuf = newBuf
@@ -871,6 +903,7 @@ func (ev *EditorView) CopySelection() {
 func (ev *EditorView) DeleteSelection() {
 	min, max := ev.getSelectionRange()
 	if max > min {
+		ev.modified = true
 		ev.pt.Delete(min, max-min)
 		// Incremental update
 		ev.li.UpdateAfterDelete(min, max-min)
