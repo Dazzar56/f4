@@ -385,7 +385,7 @@ func TestPanelsFrame_AltScreenTerminalHeight(t *testing.T) {
 
 func TestPanelsFrame_KeyBarSuppression(t *testing.T) {
 	vtui.SetDefaultPalette()
-	scr := vtui.NewScreenBuf()
+	scr := vtui.NewSilentScreenBuf()
 	scr.AllocBuf(80, 25)
 	vtui.FrameManager.Init(scr)
 
@@ -555,7 +555,7 @@ func TestPanelsFrame_ReturnExecution(t *testing.T) {
 		t.Fatal("Panels should be visible initially")
 	}
 
-	vtui.FrameManager.Init(vtui.NewScreenBuf()) // For TaskChan
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf()) // For TaskChan
 
 	// Имитируем нажатие Enter
 	pf.ProcessKey(&vtinput.InputEvent{
@@ -670,7 +670,7 @@ func TestPanelsFrame_NonRunnableOpen(t *testing.T) {
 func TestExecuteFileOp_BackgroundButtonTrigger(t *testing.T) {
 	// This test ensures that the logic inside Background button click works
 	fm := vtui.FrameManager
-	fm.Init(vtui.NewScreenBuf())
+	fm.Init(vtui.NewSilentScreenBuf())
 
 	pf := NewPanelsFrame()
 	pf.ResizeConsole(80, 25)
@@ -843,7 +843,7 @@ func TestPanelsFrame_CommandRouting_FKeys(t *testing.T) {
 	pf := NewPanelsFrame()
 	// Mock exit behavior to check F10
 	fm := vtui.FrameManager
-	fm.Init(vtui.NewScreenBuf())
+	fm.Init(vtui.NewSilentScreenBuf())
 	fm.Push(pf)
 
 	// Simulate F10

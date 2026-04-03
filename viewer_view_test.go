@@ -203,7 +203,7 @@ func TestViewerBar_Content(t *testing.T) {
 	vv, _ := NewViewerView(context.Background(), v, tmp)
 	vv.SetPosition(0, 0, 40, 10)
 
-	scr := vtui.NewScreenBuf()
+	scr := vtui.NewSilentScreenBuf()
 	scr.AllocBuf(41, 11)
 
 	vv.HexMode = true

@@ -761,7 +761,7 @@ func TestEditorBar_Content(t *testing.T) {
 	ev.CursorLine = 5
 	ev.CursorPos = 12
 
-	scr := vtui.NewScreenBuf()
+	scr := vtui.NewSilentScreenBuf()
 	scr.AllocBuf(41, 11)
 
 	ev.GetTopBar().Show(scr)
