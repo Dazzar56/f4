@@ -50,6 +50,7 @@ type EditorView struct {
 
 	pasting     bool
 	saving      bool
+	edited      bool
 	pasteBuffer []rune
 	asyncBuf    *AsyncBuffer
 	indexCancel context.CancelFunc
@@ -306,6 +307,19 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 			}
 		} else {
 			ev.selActive = false
+		}
+	}
+
+	// Any key that can reach this point and is not a pure navigation key 
+	// should stop the background indexer to prevent index corruption.
+	if !ev.edited {
+		switch e.VirtualKeyCode {
+		case vtinput.VK_UP, vtinput.VK_DOWN, vtinput.VK_LEFT, vtinput.VK_RIGHT,
+			vtinput.VK_PRIOR, vtinput.VK_NEXT, vtinput.VK_HOME, vtinput.VK_END:
+			// ignore navigation
+		default:
+			ev.edited = true
+			if ev.indexCancel != nil { ev.indexCancel() }
 		}
 	}
 
@@ -741,7 +755,7 @@ func (ev *EditorView) StartIndexing() {
 
 			if len(newOffsets) > 0 {
 				vtui.FrameManager.PostTask(func() {
-					if ctx.Err() != nil { return }
+					if ctx.Err() != nil || ev.edited { return }
 					li.AppendOffsets(newOffsets)
 					ev.engine.InvalidateCache()
 					vtui.FrameManager.Redraw()
@@ -831,8 +845,9 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 	}
 	
 	ev.saving = true
+	ev.edited = true
 	vtui.DebugLog("EDITOR: Saving %s...", ev.filePath)
-	
+
 	// Stop indexing to prevent async reads on closed buffers
 	if ev.indexCancel != nil {
 		ev.indexCancel()
