@@ -27,9 +27,7 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 	pf.RunProgressTask(title, "Starting...", forked, func(ctx *vtui.TaskContext, update func(msg string, percent int)) error {
 		// 1. Resolve destination path
 		destPath := destInput
-		if !filepath.IsAbs(destPath) && !strings.HasPrefix(destPath, "/") && !strings.Contains(destPath, "/") && !strings.Contains(destPath, "\\") {
-			destPath = srcVfs.Join(srcVfs.GetPath(), destPath)
-		} else if !filepath.IsAbs(destPath) && !strings.HasPrefix(destPath, "/") {
+		if !filepath.IsAbs(destPath) && !strings.HasPrefix(destPath, "/") {
 			destPath = dstVfs.Join(dstVfs.GetPath(), destPath)
 		}
 
