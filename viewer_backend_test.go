@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"os"
+	"io"
 	"testing"
 	"time"
 
@@ -28,7 +29,9 @@ func TestViewerBackend_ReadAndFindLineStart(t *testing.T) {
 	}
 
 	// ReadAt Test
-	vtui.FrameManager.Init(vtui.NewScreenBuf())
+	scr := vtui.NewScreenBuf()
+	scr.Writer = io.Discard
+	vtui.FrameManager.Init(scr)
 	var data []byte
 	var errLoop error
 	for i := 0; i < 100; i++ {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"os"
+	"io"
 	"path/filepath"
 	"testing"
 	"time"
@@ -28,7 +29,9 @@ func TestRecursiveCopy(t *testing.T) {
 	//pf := &PanelsFrame{}
 
 	// Initialize FrameManager to provide TaskChan for RunOnUI
-	vtui.FrameManager.Init(vtui.NewScreenBuf())
+	scr := vtui.NewScreenBuf()
+	scr.Writer = io.Discard
+	vtui.FrameManager.Init(scr)
 
 	// Create a real TaskContext
 	tCtx := vtui.RunAsync(func(c *vtui.TaskContext) {})
@@ -63,7 +66,9 @@ func TestRecursiveCopy_Cancel(t *testing.T) {
 	srcVfs := vfs.NewOSVFS(tmpSrc)
 	dstVfs := vfs.NewOSVFS(tmpDst)
 	//pf := &PanelsFrame{}
-	vtui.FrameManager.Init(vtui.NewScreenBuf())
+	scr := vtui.NewScreenBuf()
+	scr.Writer = io.Discard
+	vtui.FrameManager.Init(scr)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	tCtx := &vtui.TaskContext{Context: ctx, Cancel: cancel}
@@ -133,7 +138,9 @@ func TestRecursiveCopy_MoveCrossVFS(t *testing.T) {
 
 	srcVfs := vfs.NewOSVFS(tmpSrc)
 	dstVfs := vfs.NewOSVFS(tmpDst)
-	vtui.FrameManager.Init(vtui.NewScreenBuf())
+	scr := vtui.NewScreenBuf()
+	scr.Writer = io.Discard
+	vtui.FrameManager.Init(scr)
 	tCtx := vtui.RunAsync(func(c *vtui.TaskContext) {})
 	defer tCtx.Cancel()
 	dummyUpdate := func(msg string, percent int) {}
@@ -282,7 +289,9 @@ func TestFileOp_PathLogic(t *testing.T) {
 	srcVfs := vfs.NewOSVFS(tmpSrc)
 	dstVfs := vfs.NewOSVFS(tmpDst)
 
-	vtui.FrameManager.Init(vtui.NewScreenBuf())
+	scr := vtui.NewScreenBuf()
+	scr.Writer = io.Discard
+	vtui.FrameManager.Init(scr)
 
 	t.Run("Copy and Rename", func(t *testing.T) {
 		os.WriteFile(filepath.Join(tmpSrc, "old.txt"), []byte("data"), 0644)

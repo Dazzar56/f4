@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"os"
+	"io"
 	"path/filepath"
 	"testing"
 	"runtime"
@@ -106,7 +107,9 @@ func TestPanelsFrame_ProcessMouse_DoubleClickFile(t *testing.T) {
 	fsp.Refresh()
 
 	// Must init frame manager to catch async tasks from actionExecute
-	vtui.FrameManager.Init(vtui.NewScreenBuf())
+	scr := vtui.NewScreenBuf()
+	scr.Writer = io.Discard
+	vtui.FrameManager.Init(scr)
 
 	// Double click on "run.sh" in left panel.
 	// Panel at (0,0), Table at (1,1), Header at Y=1, Row 0 at Y=2, Row 1 (run.sh) at Y=3.
@@ -888,4 +891,27 @@ func TestPanelsFrame_F9Context(t *testing.T) {
 	if pf.menuBar.SelectPos != 4 {
 		t.Errorf("F9 on right panel: expected menu index 4, got %d", pf.menuBar.SelectPos)
 	}
+}
+
+func TestLayout_F4InternalDialogs_Validity(t *testing.T) {
+	vtui.SetDefaultPalette()
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+
+	t.Run("DummyOpDialog", func(t *testing.T) {
+		// We need to capture the dialog created by showDummyOpDialog.
+		// Since it pushes to the real FrameManager, we'll initialize it.
+		fm := vtui.FrameManager
+		scr := vtui.NewScreenBuf()
+		scr.Writer = io.Discard
+		fm.Init(scr)
+		
+		pf.showDummyOpDialog()
+		top := fm.GetTopFrame()
+		if dlg, ok := top.(vtui.Container); ok {
+			vtui.AssertLayout(t, dlg)
+		} else {
+			t.Fatal("Top frame is not a container")
+		}
+	})
 }

@@ -218,8 +218,8 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 
 	cmdLineY := h - 1
 	if pf.showKeyBar {
-		// KeyBar on the last line
-		pf.keyBar.SetPosition(0, h-1, w-1, h-1)
+		// KeyBar on the last line (DELIBERATELY BROKEN)
+		pf.keyBar.SetPosition(0, 0, w-1, 0)
 		pf.keyBar.SetVisible(true)
 		cmdLineY = h - 2 // CommandLine is above KeyBar
 	} else {

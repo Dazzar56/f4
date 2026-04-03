@@ -5,13 +5,16 @@ import (
 	"testing"
 	"time"
 	"os"
+	"io"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 	"github.com/unxed/vtui/piecetable"
 )
 
 func TestAsyncBuffer_LoadingCycle(t *testing.T) {
-	vtui.FrameManager.Init(vtui.NewScreenBuf())
+	scr := vtui.NewScreenBuf()
+	scr.Writer = io.Discard
+	vtui.FrameManager.Init(scr)
 
 	content := []byte("This is a test file content for async buffer.")
 	tmp := t.TempDir() + "/test.txt"
@@ -69,7 +72,9 @@ func TestAsyncBuffer_LoadingCycle(t *testing.T) {
 }
 
 func TestAsyncBuffer_BoundaryRead(t *testing.T) {
-	vtui.FrameManager.Init(vtui.NewScreenBuf())
+	scr := vtui.NewScreenBuf()
+	scr.Writer = io.Discard
+	vtui.FrameManager.Init(scr)
 
 	// Content: 0123456789ABCDEFGHIJ (20 bytes)
 	content := []byte("0123456789ABCDEFGHIJ")
@@ -103,7 +108,9 @@ func TestAsyncBuffer_BoundaryRead(t *testing.T) {
 }
 
 func TestAsyncBuffer_PartialChunkAtEOF(t *testing.T) {
-	vtui.FrameManager.Init(vtui.NewScreenBuf())
+	scr := vtui.NewScreenBuf()
+	scr.Writer = io.Discard
+	vtui.FrameManager.Init(scr)
 	content := []byte("Short") // 5 bytes
 	tmp := t.TempDir() + "/eof.txt"
 	os.WriteFile(tmp, content, 0644)

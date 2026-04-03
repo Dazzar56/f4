@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"io"
 	"testing"
 	"context"
 	"time"
@@ -25,6 +26,7 @@ func TestViewerView_NavigationAndEOF(t *testing.T) {
 	vv.SetPosition(0, 0, 10, 3) // Height 4 (Y:0..3). 1 line status, 3 lines content.
 
 	scr := vtui.NewScreenBuf()
+	scr.Writer = io.Discard
 	scr.AllocBuf(11, 4)
 	vtui.FrameManager.Init(scr)
 
@@ -103,6 +105,7 @@ func TestViewerView_MouseScrollbar(t *testing.T) {
 
 	// Create a dummy ScreenBuf to pass to Show() for initial rendering.
 	scr := vtui.NewScreenBuf()
+	scr.Writer = io.Discard
 	scr.AllocBuf(11, 5) // width 11 (0..10), height 5 (0..4)
 	vtui.FrameManager.Init(scr)
 
