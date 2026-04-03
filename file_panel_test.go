@@ -526,3 +526,46 @@ func TestFileSystemPanel_AsyncPendingSelection(t *testing.T) {
 		t.Errorf("Cursor failed to snap to 'target.txt'. Currently on: %q", fp.GetSelectedName())
 	}
 }
+func TestFileSystemPanel_NavigateDown_CursorReset(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewScreenBuf())
+	tmp := t.TempDir()
+	sub := filepath.Join(tmp, "subdir")
+	os.Mkdir(sub, 0755)
+
+	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(tmp))
+
+	// Mock that we are standing on "subdir" (index 1, as index 0 is "..")
+	fp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
+		{VFSItem: vfs.VFSItem{Name: "subdir", IsDir: true}},
+	}
+	fp.cursorIdx = 1
+	fp.Refresh()
+
+	// 1. Press Enter on "subdir"
+	fp.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN})
+
+	if fp.pendingSelection != ".." {
+		t.Errorf("Expected pendingSelection to be '..', got %q", fp.pendingSelection)
+	}
+
+	// 2. Simulate data arrival for the new directory
+	// Even if the new directory has a file with the same name as the old one,
+	// we must stay on ".."
+	chunk := []vfs.VFSItem{{Name: "subdir"}} // coincidentally same name
+	newEntries := []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}, {VFSItem: chunk[0]}}
+	fp.entries = newEntries
+
+	// Run snapping logic from ReadDirectory
+	for i, entry := range fp.entries {
+		if entry.Name == fp.pendingSelection {
+			fp.SetCursorIndex(i)
+			fp.pendingSelection = ""
+			break
+		}
+	}
+
+	if fp.GetCursorIndex() != 0 {
+		t.Errorf("Cursor did not reset to '..'. Index is %d", fp.GetCursorIndex())
+	}
+}

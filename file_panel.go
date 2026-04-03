@@ -446,7 +446,8 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 					if selected.Name == ".." {
 						fp.pendingSelection = fp.vfs.Base(oldPath)
 					} else {
-						fp.pendingSelection = ""
+						// When entering a folder, always reset cursor to ".."
+						fp.pendingSelection = ".."
 					}
 					fp.ReadDirectory()
 					return true
