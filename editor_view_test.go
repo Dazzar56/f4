@@ -978,6 +978,96 @@ func TestEditorView_ShiftAliasSelection(t *testing.T) {
 		t.Errorf("Selection anchor or cursor wrong: anchor=%d, pos=%d", ev.selAnchorOffset, ev.CursorPos)
 	}
 }
+func TestEditorView_FarNavigation_FullCoverage(t *testing.T) {
+	pt := piecetable.New([]byte("Line 1\nLine 2\nLine 3"))
+	ev := NewEditorView(pt, nil, "")
+	ev.SetPosition(0, 0, 80, 24)
+
+	// 1. Ctrl+End -> End of file
+	ev.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_END, ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+	if ev.CursorLine != 2 || ev.CursorPos != 6 {
+		t.Errorf("Ctrl+End failed: expected 2:6, got %d:%d", ev.CursorLine, ev.CursorPos)
+	}
+
+	// 2. Ctrl+Home -> Start of file
+	ev.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_HOME, ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+	if ev.CursorLine != 0 || ev.CursorPos != 0 {
+		t.Errorf("Ctrl+Home failed: expected 0:0, got %d:%d", ev.CursorLine, ev.CursorPos)
+	}
+
+	// 3. Shift + Ctrl + End -> Select to end of file
+	ev.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_END, ControlKeyState: vtinput.LeftCtrlPressed | vtinput.ShiftPressed,
+	})
+	if !ev.selActive { t.Fatal("Shift+Ctrl+End should activate selection") }
+	min, max := ev.getSelectionRange()
+	if min != 0 || max != pt.Size() {
+		t.Errorf("Shift+Ctrl+End selection range failed: [0:%d], got [%d:%d]", pt.Size(), min, max)
+	}
+}
+
+func TestEditorView_FarAliases_FullCoverage(t *testing.T) {
+	pt := piecetable.New([]byte("First word\nSecond line"))
+	ev := NewEditorView(pt, nil, "")
+	ev.SetPosition(0, 0, 80, 24)
+
+	// 1. Ctrl+S should move 1 char left, NOT 1 word
+	ev.CursorPos = 10
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_S, ControlKeyState: vtinput.LeftCtrlPressed})
+	if ev.CursorPos != 9 { t.Errorf("Ctrl+S (alias) moved more than 1 char: pos %d", ev.CursorPos) }
+
+	// 2. Ctrl+D should move 1 char right, NOT 1 word
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_D, ControlKeyState: vtinput.LeftCtrlPressed})
+	if ev.CursorPos != 10 { t.Errorf("Ctrl+D (alias) moved more than 1 char: pos %d", ev.CursorPos) }
+
+	// 3. Shift + Ctrl + D -> Select 1 char
+	ev.selActive = false
+	ev.CursorPos = 0
+	ev.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_D, ControlKeyState: vtinput.LeftCtrlPressed | vtinput.ShiftPressed,
+	})
+	if !ev.selActive || ev.CursorPos != 1 { t.Error("Shift + Alias selection failed") }
+}
+
+func TestEditorView_FarX_SmartCut(t *testing.T) {
+	pt := piecetable.New([]byte("Select me\nNext line"))
+	ev := NewEditorView(pt, nil, "")
+	ev.SetPosition(0, 0, 80, 24)
+
+	// Scenario A: Selection active -> Ctrl+X is CUT
+	ev.selActive = true
+	ev.selAnchorOffset = 0
+	ev.CursorPos = 6 // "Select"
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_X, ControlKeyState: vtinput.LeftCtrlPressed})
+	if pt.String() != " me\nNext line" { t.Errorf("Ctrl+X Cut failed: %q", pt.String()) }
+
+	// Scenario B: No selection -> Ctrl+X is DOWN
+	ev.selActive = false
+	ev.CursorLine = 0
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_X, ControlKeyState: vtinput.LeftCtrlPressed})
+	if ev.CursorLine != 1 { t.Error("Ctrl+X Down failed") }
+}
+
+func TestEditorView_FarSelectAll_Behavior(t *testing.T) {
+	pt := piecetable.New([]byte("All\nText"))
+	ev := NewEditorView(pt, nil, "")
+
+	ev.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_A, ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+
+	if !ev.selActive || ev.selAnchorOffset != 0 { t.Error("Ctrl+A anchor should be 0") }
+	if ev.CursorLine != 1 || ev.CursorPos != 4 { t.Errorf("Ctrl+A cursor should be at EOF, got %d:%d", ev.CursorLine, ev.CursorPos) }
+}
 func TestEditorView_FarNavigation_Document(t *testing.T) {
 	pt := piecetable.New([]byte("Line 1\nLine 2\nLine 3"))
 	ev := NewEditorView(pt, nil, "")
