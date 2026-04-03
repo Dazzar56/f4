@@ -8,6 +8,8 @@ import (
 	"os/user"
 	"strings"
 
+	"github.com/mattn/go-runewidth"
+
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
@@ -637,24 +639,43 @@ func (pf *PanelsFrame) GetType() vtui.FrameType { return vtui.TypeUser + 1 }
 
 func (pf *PanelsFrame) SetExitCode(code int)     { pf.Done = true; pf.ExitCode = code }
 func (pf *PanelsFrame) showDummyOpDialog() {
-	dlg := vtui.NewCenteredDialog(50, 10, Msg("Op.DummyTitle"))
+	msg := Msg("Op.DummyText")
+	lines := vtui.WrapText(msg, 50-4)
 
-	dlg.AddItem(vtui.NewText(dlg.X1+2, dlg.Y1+2, Msg("Op.DummyText"), vtui.Palette[vtui.ColDialogText]))
+	dlg := vtui.NewCenteredDialog(50, 10+len(lines)-1, Msg("Op.DummyTitle"))
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 50-4, (10+len(lines)-1)-4)
 
-	chkClone := vtui.NewCheckbox(dlg.X1+2, dlg.Y1+5, Msg("Op.ClonePanels"), false)
+	for _, l := range lines {
+		t := vtui.NewText(0, 0, l, vtui.Palette[vtui.ColDialogText])
+		dlg.AddItem(t)
+		vbox.Add(t, vtui.Margins{}, vtui.AlignLeft)
+	}
+
+	chkClone := vtui.NewCheckbox(0, 0, Msg("Op.ClonePanels"), false)
 	dlg.AddItem(chkClone)
 
-	btnStart := vtui.NewButton(dlg.X1+10, dlg.Y1+7, "&Start")
+	btnStart := vtui.NewButton(0, 0, "&Start")
+	btnCancel := vtui.NewButton(0, 0, "&Cancel")
+	dlg.AddItem(btnStart)
+	dlg.AddItem(btnCancel)
+
+	vbox.Add(chkClone, vtui.Margins{Top: 1}, vtui.AlignLeft)
+
+	hbox := vtui.NewHBoxLayout(0, 0, 50-4, 1)
+	hbox.HorizontalAlign = vtui.AlignCenter
+	hbox.Spacing = 2
+	hbox.Add(btnStart, vtui.Margins{}, vtui.AlignTop)
+	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
+
+	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Apply()
+
+	btnCancel.OnClick = func() { dlg.Close() }
 	btnStart.OnClick = func() {
 		mode := chkClone.State == 1
 		dlg.Close()
 		go pf.ExecuteDummyOp(mode)
 	}
-	dlg.AddItem(btnStart)
-
-	btnCancel := vtui.NewButton(dlg.X1+25, dlg.Y1+7, "&Cancel")
-	btnCancel.OnClick = func() { dlg.Close() }
-	dlg.AddItem(btnCancel)
 
 	vtui.FrameManager.Push(dlg)
 }
@@ -665,16 +686,24 @@ func (pf *PanelsFrame) RunProgressTask(title, startMsg string, forked bool, work
 	dlg := vtui.NewCenteredDialog(50, 8, title)
 	dlg.AttentionSuppressed = true
 
-	lbl := vtui.NewText(dlg.X1+2, dlg.Y1+2, startMsg, vtui.Palette[vtui.ColDialogText])
+	lbl := vtui.NewText(0, 0, startMsg, vtui.Palette[vtui.ColDialogText])
 	dlg.AddItem(lbl)
 
-	btnCancel := vtui.NewButton(dlg.X1+20, dlg.Y1+5, "&Cancel")
+	btnCancel := vtui.NewButton(0, 0, "&Cancel")
+	dlg.AddItem(btnCancel)
+
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 50-4, 8-4)
+	vbox.Add(lbl, vtui.Margins{}, vtui.AlignCenter)
+	vbox.Add(btnCancel, vtui.Margins{Top: 1}, vtui.AlignCenter)
+	vbox.Apply()
+
 	var taskCtx *vtui.TaskContext
 	btnCancel.OnClick = func() {
-		if taskCtx != nil { taskCtx.Cancel() }
+		if taskCtx != nil {
+			taskCtx.Cancel()
+		}
 		dlg.Close()
 	}
-	dlg.AddItem(btnCancel)
 
 	vtui.FrameManager.PostTask(func() {
 		if forked {
@@ -690,10 +719,9 @@ func (pf *PanelsFrame) RunProgressTask(title, startMsg string, forked bool, work
 		update := func(msg string, percent int) {
 			ctx.RunOnUI(func() {
 				if msg != "" {
-					// Pad string to overwrite old text
-					padded := msg
-					for len([]rune(padded)) < 46 { padded += " " }
-					lbl.SetText(padded)
+					// Ensure message fits in the progress dialog width
+					safeMsg := runewidth.Truncate(msg, 46, "...")
+					lbl.SetText(safeMsg)
 				}
 				if percent >= 0 { dlg.SetProgress(percent) }
 				vtui.FrameManager.Redraw()
