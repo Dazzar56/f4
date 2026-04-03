@@ -910,3 +910,56 @@ func TestLayout_F4InternalDialogs_Validity(t *testing.T) {
 		}
 	})
 }
+func TestLayout_F4ActionDialogs_Validity(t *testing.T) {
+	vtui.SetDefaultPalette()
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+	fm := vtui.FrameManager
+
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	fm.Init(scr)
+
+	// Helper to setup active panel with some files
+	setupPanel := func() {
+		pf.activeIdx = 0
+		fsp := pf.panels[0].(*FileSystemPanel)
+		fsp.entries = []*fileEntry{
+			{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
+			{VFSItem: vfs.VFSItem{Name: "file1.txt"}},
+		}
+		fsp.Refresh()
+		fsp.SetCursorIndex(1)
+	}
+
+	t.Run("CopyDialog", func(t *testing.T) {
+		setupPanel()
+		actionCopyMove(pf, false)
+		dlg := fm.GetTopFrame().(vtui.Container)
+		vtui.AssertLayout(t, dlg)
+		fm.Pop()
+	})
+
+	t.Run("MoveDialog", func(t *testing.T) {
+		setupPanel()
+		actionCopyMove(pf, true)
+		dlg := fm.GetTopFrame().(vtui.Container)
+		vtui.AssertLayout(t, dlg)
+		fm.Pop()
+	})
+
+	t.Run("MkDirDialog", func(t *testing.T) {
+		actionMkDir(pf)
+		dlg := fm.GetTopFrame().(vtui.Container)
+		vtui.AssertLayout(t, dlg)
+		fm.Pop()
+	})
+
+	t.Run("DeleteDialog", func(t *testing.T) {
+		setupPanel()
+		actionDelete(pf)
+		dlg := fm.GetTopFrame().(vtui.Container)
+		vtui.AssertLayout(t, dlg)
+		fm.Pop()
+	})
+}

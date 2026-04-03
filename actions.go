@@ -279,7 +279,7 @@ func actionMkDir(pf *PanelsFrame) {
 
 	activeVfs := panel.vfs
 
-	dlg := vtui.NewCenteredDialog(40, 8, Msg("MakeFolder.Title"))
+	dlg := vtui.NewCenteredDialog(40, 9, Msg("MakeFolder.Title"))
 	dlg.ShowClose = true
 
 	editName := vtui.NewEdit(0, 0, 10, "")

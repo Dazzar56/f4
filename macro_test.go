@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/unxed/vtinput"
+	"github.com/unxed/vtui"
 )
 
 func TestMacroRecordingAndPlayback(t *testing.T) {
@@ -253,6 +254,9 @@ func TestMacro_AssignFrame_Structure(t *testing.T) {
 	if len(f.GetChildren()) == 0 {
 		t.Error("MacroAssignFrame should have at least one child (prompt)")
 	}
+
+	// Validate Layout
+	vtui.AssertLayout(t, f)
 
 	// Verify focus logic: it should NOT allow Tab to cycle away
 	// because any key (including Tab) must be captured as a macro.

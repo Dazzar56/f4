@@ -257,3 +257,31 @@ func TestViewerView_GetTitle(t *testing.T) {
 		t.Errorf("GetTitle failed: %s", vv.GetTitle())
 	}
 }
+func TestLayout_ViewerSearchDialog_Validity(t *testing.T) {
+	vtui.SetDefaultPalette()
+	tmp := t.TempDir() + "/search_layout.txt"
+	os.WriteFile(tmp, []byte("data"), 0644)
+
+	fm := vtui.FrameManager
+	fm.Init(vtui.NewSilentScreenBuf())
+
+	// actionViewerSearch uses vtui.InputBox, which is already tested in vtui.
+	// But we can check if the progress dialog it creates is valid.
+	// We simulate the part of actionViewerSearch that creates the progress dlg.
+
+	title := " Searching... "
+	msg := "Looking for: pattern"
+
+	dlg := vtui.NewCenteredDialog(50, 8, title)
+	lbl := vtui.NewLabel(0, 0, msg, nil)
+	dlg.AddItem(lbl)
+	btnCancel := vtui.NewButton(0, 0, "&Cancel")
+	dlg.AddItem(btnCancel)
+
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 50-4, 8-4)
+	vbox.Add(lbl, vtui.Margins{}, vtui.AlignCenter)
+	vbox.Add(btnCancel, vtui.Margins{Top: 1}, vtui.AlignCenter)
+	vbox.Apply()
+
+	vtui.AssertLayout(t, dlg)
+}
