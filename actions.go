@@ -215,16 +215,18 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 	dlg := vtui.NewCenteredDialog(50, 11, title)
 	dlg.ShowClose = true
 
-	dlg.AddItem(vtui.NewLabel(dlg.X1+2, dlg.Y1+2, fmt.Sprintf(prompt, len(names)), nil))
-	editDest := vtui.NewEdit(dlg.X1+2, dlg.Y1+3, 46, dstVfs.GetPath())
+	promptLbl := vtui.NewLabel(0, 0, fmt.Sprintf(prompt, len(names)), nil)
+	dlg.AddItem(promptLbl)
+
+	editDest := vtui.NewEdit(0, 0, 10, dstVfs.GetPath())
 	dlg.AddItem(editDest)
 
-	chkFork := vtui.NewCheckbox(dlg.X1+2, dlg.Y1+5, Msg("Op.ClonePanels"), false)
+	chkFork := vtui.NewCheckbox(0, 0, Msg("Op.ClonePanels"), false)
 	dlg.AddItem(chkFork)
 
-	btnOk := vtui.NewButton(dlg.X1+10, dlg.Y1+8, Msg("Copy.Btn"))
+	btnOk := vtui.NewButton(0, 0, Msg("Copy.Btn"))
 	if isMove {
-		btnOk = vtui.NewButton(dlg.X1+10, dlg.Y1+8, Msg("Move.Btn"))
+		btnOk = vtui.NewButton(0, 0, Msg("Move.Btn"))
 	}
 
 	btnOk.OnClick = func() {
@@ -237,9 +239,24 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 	}
 	dlg.AddItem(btnOk)
 
-	btnCancel := vtui.NewButton(dlg.X1+25, dlg.Y1+8, "Cancel")
+	btnCancel := vtui.NewButton(0, 0, "Cancel")
 	btnCancel.OnClick = func() { dlg.Close() }
 	dlg.AddItem(btnCancel)
+
+	// Layout Engine
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 50-4, 11-4)
+	vbox.Add(promptLbl, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(editDest, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Add(chkFork, vtui.Margins{Top: 1}, vtui.AlignLeft)
+
+	hbox := vtui.NewHBoxLayout(0, 0, 50-4, 1)
+	hbox.HorizontalAlign = vtui.AlignCenter
+	hbox.Spacing = 2
+	hbox.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
+	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
+
+	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Apply()
 
 	vtui.FrameManager.Push(dlg)
 }
