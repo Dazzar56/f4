@@ -64,9 +64,6 @@ func InitCore() *vtui.ScreenBuf {
 	scr := vtui.NewScreenBuf()
 	scr.AllocBuf(width, height)
 
-	vtui.FrameManager.Init(scr)
-	SetDefaultF4Palette()
-
 	configDir, err := os.UserConfigDir()
 	if err == nil {
 		configPath := filepath.Join(configDir, "f4", "farcolors.ini")

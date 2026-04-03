@@ -1,10 +1,12 @@
 package main
 
-import "fmt"
+import "github.com/unxed/vtui"
 
-// Lng is a simple map-based localization storage.
-// In the future, this can load from JSON/TOML or embed.FS.
+// Lng contains f4-specific strings.
+// We also override some vtui internal strings here.
 var Lng = map[string]string{
+	"vtui.Ok":           "&Ok",
+	"vtui.Cancel":       "Cancel",
 	"Panel.Column.Name": "Name",
 	"Panel.Column.Size": "Size",
 	"Panel.UpDir":       "UP-DIR",
@@ -87,10 +89,15 @@ var Lng = map[string]string{
 	"KeyBar.ViewerF10": "Quit",
 }
 
-// Msg retrieves a localized string by key.
+// Msg is a proxy for vtui.Msg to keep f4 code clean.
 func Msg(key string) string {
-	if val, ok := Lng[key]; ok {
-		return val
-	}
-	return fmt.Sprintf("{%s}", key) // Return key in braces if not found
+	return vtui.Msg(key)
+}
+
+func init() {
+	InitLang()
+}
+// InitLang transfers all f4 strings to vtui localization engine.
+func InitLang() {
+	vtui.AddStrings(Lng)
 }
