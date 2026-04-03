@@ -906,16 +906,14 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 
 		newFile, err := ev.vfs.Open(ctx.Context, ev.filePath)
 		var newPt *piecetable.PieceTable
-		var newLi *piecetable.LineIndex
 		var newEngine *textlayout.WrapEngine
 		var newBuf *AsyncBuffer
 
 		if err == nil {
 			newBuf = NewAsyncBuffer(ctx.Context, newFile)
 			newPt = piecetable.NewWithBuffer(newBuf)
-			newLi = piecetable.NewLineIndex()
-			newLi.Rebuild(newPt) // This will trigger background indexing
-			newEngine = textlayout.NewWrapEngine(newPt, newLi)
+			// Reuse the existing LineIndex since the logical content is identical
+			newEngine = textlayout.NewWrapEngine(newPt, ev.li)
 		}
 
 		// PRELOAD CACHE TO PREVENT SCREEN FLICKER
@@ -942,10 +940,9 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 				ev.file = newFile
 				ev.asyncBuf = newBuf
 				ev.pt = newPt
-				ev.li = newLi
 				ev.engine = newEngine
 				ev.ensureEngineWidth()
-				ev.StartIndexing()
+				ev.edited = false
 			}
 		})
 	})
