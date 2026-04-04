@@ -9,6 +9,8 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/mattn/go-runewidth"
+
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
@@ -359,12 +361,40 @@ func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
 	fp.table.SetFocus(fp.IsFocused())
 	fp.table.Show(scr)
 	if fp.fastFindMode {
-		searchStr := " Search: " + fp.fastFindStr + " "
-		w := fp.X2 - fp.X1 + 1
-		if len(searchStr) > w-2 {
-			searchStr = searchStr[:w-2]
+		boxW := 24
+		boxH := 3
+
+		fx1 := fp.X1 + 9
+		if fx1+boxW-1 >= scr.Width() {
+			fx1 = scr.Width() - boxW
 		}
-		scr.Write(fp.X1+2, fp.Y2, vtui.StringToCharInfo(searchStr, vtui.Palette[ColPanelTitle]))
+		if fx1 < 0 {
+			fx1 = 0
+		}
+		fx2 := fx1 + boxW - 1
+
+		fy1 := fp.Y2 - 2
+		if fy1 < 0 {
+			fy1 = 0
+		}
+		fy2 := fy1 + boxH - 1
+
+		p := vtui.NewPainter(scr)
+
+		p.Fill(fx1, fy1, fx2, fy2, ' ', vtui.Palette[vtui.ColDialogText])
+		p.DrawBox(fx1, fy1, fx2, fy2, vtui.Palette[vtui.ColDialogBox], vtui.DoubleBox)
+		p.DrawTitle(fx1, fy1, fx2, Msg("Viewer.SearchTitle"), vtui.Palette[vtui.ColDialogBoxTitle])
+
+		searchStr := fp.fastFindStr
+		for runewidth.StringWidth(searchStr) > boxW-4 {
+			runes := []rune(searchStr)
+			searchStr = string(runes[1:])
+		}
+
+		p.DrawString(fx1+2, fy1+1, searchStr, vtui.Palette[vtui.ColDialogText])
+
+		scr.SetCursorPos(fx1+2+runewidth.StringWidth(searchStr), fy1+1)
+		scr.SetCursorVisible(true)
 	}
 }
 
