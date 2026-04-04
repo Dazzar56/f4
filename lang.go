@@ -36,6 +36,9 @@ var Lng = map[string]string{
 	"Viewer.ModeText":   "Text",
 	"Viewer.ModeHex":    "Hex",
 	"Viewer.SearchTitle": " Search ",
+	"Select.Title":      " Select ",
+	"Deselect.Title":    " Deselect ",
+	"Select.Mask":       "&Enter selection mask:",
 
 	// Macros
 	"Macro.AssignTitle":  " Assign Macro ",

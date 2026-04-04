@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"time"
+	"path/filepath"
 
 	"strings"
 	"unicode"
@@ -697,6 +698,39 @@ func (fp *FileSystemPanel) doFastFind(dir int) {
 		}
 	}
 }
+
+func (fp *FileSystemPanel) InvertSelection() {
+	for _, e := range fp.entries {
+		if e.Name != ".." {
+			e.Selected = !e.Selected
+		}
+	}
+	fp.Refresh()
+}
+
+func (fp *FileSystemPanel) ApplyMaskSelection(mask string, state bool) {
+	if mask == "" {
+		return
+	}
+	// Far style: *.* matches everything
+	if mask == "*.*" {
+		mask = "*"
+	}
+	maskLower := strings.ToLower(mask)
+
+	for _, e := range fp.entries {
+		if e.Name == ".." {
+			continue
+		}
+		nameLower := strings.ToLower(e.Name)
+		matched, _ := filepath.Match(maskLower, nameLower)
+		if matched {
+			e.Selected = state
+		}
+	}
+	fp.Refresh()
+}
+
 func (fp *FileSystemPanel) GetSuccessorName() string {
 	if len(fp.entries) <= 1 {
 		return ".."

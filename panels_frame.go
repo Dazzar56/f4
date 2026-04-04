@@ -379,8 +379,63 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return false
 	}
 
+	// Selection by mask (+, -, *) logic
+	// Intercepted only if command line is empty to allow typing these symbols into commands
+	if pf.cmdLine.IsEmpty() && !alt && !ctrl {
+		isSelectKey := false
+		var selectChar rune
+
+		switch e.VirtualKeyCode {
+		case vtinput.VK_ADD: isSelectKey = true; selectChar = '+'
+		case vtinput.VK_SUBTRACT: isSelectKey = true; selectChar = '-'
+		case vtinput.VK_MULTIPLY: isSelectKey = true; selectChar = '*'
+		default:
+			if e.Char == '+' || e.Char == '-' || e.Char == '*' {
+				isSelectKey = true
+				selectChar = e.Char
+			}
+		}
+
+		if isSelectKey {
+			fsp := pf.getActivePanel()
+			if fsp != nil {
+				switch selectChar {
+				case '*':
+					fsp.InvertSelection()
+				case '+':
+					vtui.InputBox(Msg("Select.Title"), Msg("Select.Mask"), "*", func(mask string) {
+						fsp.ApplyMaskSelection(mask, true)
+					})
+				case '-':
+					vtui.InputBox(Msg("Deselect.Title"), Msg("Select.Mask"), "*", func(mask string) {
+						fsp.ApplyMaskSelection(mask, false)
+					})
+				}
+				return true
+			}
+		}
+	}
 	// Standard keys for file operations
 	switch e.VirtualKeyCode {
+	case vtinput.VK_ADD, vtinput.VK_SUBTRACT, vtinput.VK_MULTIPLY:
+		// Numpad specific keys
+		if pf.cmdLine.IsEmpty() && !alt && !ctrl {
+			fsp := pf.getActivePanel()
+			if fsp == nil { return true }
+			switch e.VirtualKeyCode {
+			case vtinput.VK_MULTIPLY: fsp.InvertSelection()
+			case vtinput.VK_ADD:
+				vtui.InputBox(Msg("Select.Title"), Msg("Select.Mask"), "*", func(mask string) {
+					fsp.ApplyMaskSelection(mask, true)
+				})
+			case vtinput.VK_SUBTRACT:
+				vtui.InputBox(Msg("Deselect.Title"), Msg("Select.Mask"), "*", func(mask string) {
+					fsp.ApplyMaskSelection(mask, false)
+				})
+			}
+			return true
+		}
+
 	case vtinput.VK_F1:
 		return vtui.FrameManager.EmitCommand(vtui.CmHelp, nil)
 	case vtinput.VK_F3:
@@ -481,6 +536,27 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		}
 	}
 
+	// Selection by mask (+, -, *) logic for standard keyboard
+	if pf.cmdLine.IsEmpty() && !alt && !ctrl {
+		if e.Char == '*' || e.Char == '+' || e.Char == '-' {
+			fsp := pf.getActivePanel()
+			if fsp != nil {
+				switch e.Char {
+				case '*':
+					fsp.InvertSelection()
+				case '+':
+					vtui.InputBox(Msg("Select.Title"), Msg("Select.Mask"), "*", func(mask string) {
+						fsp.ApplyMaskSelection(mask, true)
+					})
+				case '-':
+					vtui.InputBox(Msg("Deselect.Title"), Msg("Select.Mask"), "*", func(mask string) {
+						fsp.ApplyMaskSelection(mask, false)
+					})
+				}
+				return true
+			}
+		}
+	}
 	// 2. Try global hotkeys handled by PanelsFrame
 
 	// Handle command history when panels are hidden

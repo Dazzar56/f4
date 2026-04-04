@@ -748,3 +748,47 @@ func TestFileSystemPanel_FastFind_MouseDeactivation(t *testing.T) {
 		t.Error("Mouse click should deactivate FastFind mode")
 	}
 }
+
+func TestFileSystemPanel_MaskSelection(t *testing.T) {
+	// Initialize with a dummy table to avoid Refresh() nil pointer panic
+	fp := &FileSystemPanel{
+		table: vtui.NewTable(0, 0, 10, 10, nil),
+		entries: []*fileEntry{
+			{VFSItem: vfs.VFSItem{Name: ".."}},
+			{VFSItem: vfs.VFSItem{Name: "readme.txt"}},
+			{VFSItem: vfs.VFSItem{Name: "source.go"}},
+			{VFSItem: vfs.VFSItem{Name: "config.json"}},
+			{VFSItem: vfs.VFSItem{Name: "main.go"}},
+		},
+	}
+
+	// 1. Select by mask *.go
+	fp.ApplyMaskSelection("*.go", true)
+	if !fp.entries[2].Selected || !fp.entries[4].Selected {
+		t.Error("Mask selection failed for *.go")
+	}
+	if fp.entries[1].Selected || fp.entries[3].Selected {
+		t.Error("Mask selection selected wrong files")
+	}
+	if fp.entries[0].Selected {
+		t.Error("Mask selection should never select '..'")
+	}
+
+	// 2. Invert selection
+	fp.InvertSelection()
+	if fp.entries[2].Selected || fp.entries[4].Selected {
+		t.Error("Inversion failed: .go files should be unselected")
+	}
+	if !fp.entries[1].Selected || !fp.entries[3].Selected {
+		t.Error("Inversion failed: other files should be selected")
+	}
+
+	// 3. Deselect by mask
+	fp.ApplyMaskSelection("*.json", false)
+	if fp.entries[3].Selected {
+		t.Error("Deselection failed for *.json")
+	}
+	if !fp.entries[1].Selected {
+		t.Error("Deselection removed wrong files")
+	}
+}
