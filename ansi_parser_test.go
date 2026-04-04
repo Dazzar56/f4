@@ -383,3 +383,35 @@ func TestAnsiParser_DefaultColorRestoration(t *testing.T) {
 		t.Errorf("SGR 39 corrupted background. Expected 4, got %d", vtui.GetIndexBack(p.Attr))
 	}
 }
+func TestAnsiParser_Robustness(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	p := NewAnsiParser(tv, nil)
+
+	// 1. Truncated CSI: should stay in StateCSI
+	p.Process([]byte("\x1b["))
+	if p.State != StateCSI {
+		t.Errorf("Expected state StateCSI, got %v", p.State)
+	}
+
+	// 2. Garbage inside CSI: should return to ground without crashing
+	p.Process([]byte("1;?#@")) // '@' is a valid terminator but parameters are junk
+	if p.State != StateGround {
+		t.Errorf("Expected return to StateGround after junk CSI, got %v", p.State)
+	}
+
+	// 3. Truncated OSC
+	p.Process([]byte("\x1b]"))
+	if p.State != StateOSC {
+		t.Errorf("Expected state StateOSC, got %v", p.State)
+	}
+
+	// 4. OSC terminated by ESC instead of BEL
+	p.Process([]byte("2;Title\x1b"))
+	// The handleOSC is called, then StateEsc is entered
+	if p.State != StateEsc {
+		t.Errorf("Expected transition from OSC to ESC, got %v", p.State)
+	}
+	if tv.Title != "Title" {
+		t.Error("OSC title failed with ESC terminator")
+	}
+}

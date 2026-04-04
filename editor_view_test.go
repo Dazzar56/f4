@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 	"os"
@@ -847,6 +848,59 @@ func TestEditorView_AsyncIndexing(t *testing.T) {
 
 	if ev.li.LineCount() != 3 {
 		t.Errorf("Indexer failed: expected 3 lines, got %d", ev.li.LineCount())
+	}
+}
+func TestEditorView_Indexer_EditInterference(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	// Create a large file with many lines
+	var sb strings.Builder
+	for i := 0; i < 1000; i++ {
+		sb.WriteString(fmt.Sprintf("Line %d\n", i))
+	}
+	tmp := t.TempDir() + "/race_test.txt"
+	os.WriteFile(tmp, []byte(sb.String()), 0644)
+
+	v := vfs.NewOSVFS(t.TempDir())
+	f, _ := v.Open(context.Background(), tmp)
+	buf := NewAsyncBuffer(context.Background(), f)
+	pt := piecetable.NewWithBuffer(buf)
+	ev := NewEditorView(pt, v, tmp)
+	ev.asyncBuf = buf
+	ev.file = f
+
+	// 1. Start indexing
+	ev.StartIndexing()
+
+	// 2. Immediately delete half of the file on the UI thread
+	// This should trigger the indexer cancellation via ev.edited = true
+	ev.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_BACK,
+	})
+
+	if !ev.edited {
+		t.Error("Editor should be marked as edited after Backspace")
+	}
+
+	// 3. Process any tasks that might have been queued by the indexer
+	// before it saw the cancellation.
+	timeout := time.After(200 * time.Millisecond)
+Loop:
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			break Loop
+		}
+	}
+
+	// 4. Verification: The LineIndex must remain consistent with the PieceTable size
+	// even if some stale background tasks were executed.
+	lastOffset := ev.li.GetLineOffset(ev.li.LineCount() - 1)
+	if lastOffset > pt.Size() {
+		t.Errorf("LineIndex corruption: last offset %d exceeds PieceTable size %d", lastOffset, pt.Size())
 	}
 }
 func TestEditorView_StartIndexing_RestartSafety(t *testing.T) {

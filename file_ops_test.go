@@ -389,3 +389,42 @@ func TestExecuteFileOp_DirFileConflict(t *testing.T) {
 		t.Errorf("Expected directory-over-file conflict error, got: %v", err)
 	}
 }
+func TestExecuteFileOp_StateTransitions(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	tmpSrc := t.TempDir()
+	tmpDst := t.TempDir()
+
+	// Create two files in source, and two existing files in dest to trigger conflicts
+	os.WriteFile(filepath.Join(tmpSrc, "a.txt"), []byte("new"), 0644)
+	os.WriteFile(filepath.Join(tmpSrc, "b.txt"), []byte("new"), 0644)
+	os.WriteFile(filepath.Join(tmpDst, "a.txt"), []byte("old"), 0644)
+	os.WriteFile(filepath.Join(tmpDst, "b.txt"), []byte("old"), 0644)
+
+	srcVfs := vfs.NewOSVFS(tmpSrc)
+	dstVfs := vfs.NewOSVFS(tmpDst)
+	state := &FileOpState{}
+
+	// Prepare TaskContext
+	tCtx := &vtui.TaskContext{Context: context.Background()}
+
+	// 1. Manually trigger first copy
+	// We simulate the user choosing "Overwrite All" by setting the state
+	state.OverwriteAll = true
+
+	err := recursiveCopy(tCtx, func(string, int){}, srcVfs,
+		filepath.Join(tmpSrc, "a.txt"), dstVfs, filepath.Join(tmpDst, "a.txt"), state)
+	if err != nil { t.Fatal(err) }
+
+	// 2. Trigger second copy with same state
+	err = recursiveCopy(tCtx, func(string, int){}, srcVfs,
+		filepath.Join(tmpSrc, "b.txt"), dstVfs, filepath.Join(tmpDst, "b.txt"), state)
+	if err != nil { t.Fatal(err) }
+
+	// 3. Verify both were overwritten
+	dataA, _ := os.ReadFile(filepath.Join(tmpDst, "a.txt"))
+	dataB, _ := os.ReadFile(filepath.Join(tmpDst, "b.txt"))
+
+	if string(dataA) != "new" || string(dataB) != "new" {
+		t.Error("OverwriteAll state was not respected across recursive calls")
+	}
+}
