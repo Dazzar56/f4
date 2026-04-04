@@ -300,7 +300,7 @@ func TestFileOp_PathLogic(t *testing.T) {
 			}
 		}
 
-		if _, err := os.Stat(filepath.Join(tmpDst, "new.txt")); os.IsNotExist(err) {
+		if _, err := os.Stat(filepath.Join(tmpSrc, "new.txt")); os.IsNotExist(err) {
 			t.Error("Rename copy failed: new.txt not found")
 		}
 		tCtx.Cancel()
@@ -320,10 +320,10 @@ func TestFileOp_PathLogic(t *testing.T) {
 			}
 		}
 
-		if stat, err := os.Stat(filepath.Join(tmpDst, "new_dir")); err != nil || !stat.IsDir() {
+		if stat, err := os.Stat(filepath.Join(tmpSrc, "new_dir")); err != nil || !stat.IsDir() {
 			t.Error("Target directory not created for multi-file copy")
 		}
-		if _, err := os.Stat(filepath.Join(tmpDst, "new_dir", "f1.txt")); err != nil {
+		if _, err := os.Stat(filepath.Join(tmpSrc, "new_dir", "f1.txt")); err != nil {
 			t.Error("f1.txt missing in new directory")
 		}
 	})

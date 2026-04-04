@@ -28,7 +28,13 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 		// 1. Resolve destination path
 		destPath := destInput
 		if !filepath.IsAbs(destPath) && !strings.HasPrefix(destPath, "/") {
-			destPath = dstVfs.Join(dstVfs.GetPath(), destPath)
+			// If it's just a filename (no separators), assume it's in the source directory (rename/local copy)
+			if !strings.ContainsAny(destInput, "/\\") && destInput != "." && destInput != ".." {
+				destPath = srcVfs.Join(srcVfs.GetPath(), destInput)
+				dstVfs = srcVfs // Ensure we use source VFS for local operations
+			} else {
+				destPath = dstVfs.Join(dstVfs.GetPath(), destPath)
+			}
 		}
 
 		// 2. Determine if target is a directory
