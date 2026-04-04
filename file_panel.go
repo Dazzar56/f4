@@ -6,6 +6,9 @@ import (
 	"sort"
 	"time"
 
+	"strings"
+	"unicode"
+
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
@@ -98,6 +101,8 @@ type FileSystemPanel struct {
 	isLoading        bool
 	loadingTimer     *time.Timer
 	pendingSelection string
+	fastFindMode bool
+	fastFindStr  string
 }
 
 func NewFileSystemPanel(x, y, w, h int, vfs vfs.VFS) *FileSystemPanel {
@@ -353,6 +358,14 @@ func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
 	fp.frame.Show(scr)
 	fp.table.SetFocus(fp.IsFocused())
 	fp.table.Show(scr)
+	if fp.fastFindMode {
+		searchStr := " Search: " + fp.fastFindStr + " "
+		w := fp.X2 - fp.X1 + 1
+		if len(searchStr) > w-2 {
+			searchStr = searchStr[:w-2]
+		}
+		scr.Write(fp.X1+2, fp.Y2, vtui.StringToCharInfo(searchStr, vtui.Palette[ColPanelTitle]))
+	}
 }
 
 func (fp *FileSystemPanel) SetPosition(x1, y1, x2, y2 int) {
@@ -389,6 +402,61 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 
 	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
+
+	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
+	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
+
+	if fp.fastFindMode {
+		if e.VirtualKeyCode == vtinput.VK_ESCAPE {
+			fp.fastFindMode = false
+			fp.fastFindStr = ""
+			vtui.FrameManager.Redraw()
+			return true
+		}
+		if e.VirtualKeyCode == vtinput.VK_BACK {
+			if len(fp.fastFindStr) > 0 {
+				runes := []rune(fp.fastFindStr)
+				fp.fastFindStr = string(runes[:len(runes)-1])
+				if len(fp.fastFindStr) == 0 {
+					fp.fastFindMode = false
+				} else {
+					fp.doFastFind(0)
+				}
+			}
+			vtui.FrameManager.Redraw()
+			return true
+		}
+		if e.VirtualKeyCode == vtinput.VK_UP {
+			fp.doFastFind(-1)
+			vtui.FrameManager.Redraw()
+			return true
+		}
+		if e.VirtualKeyCode == vtinput.VK_DOWN {
+			fp.doFastFind(1)
+			vtui.FrameManager.Redraw()
+			return true
+		}
+		if e.VirtualKeyCode == vtinput.VK_RETURN {
+			fp.fastFindMode = false
+			fp.fastFindStr = ""
+			vtui.FrameManager.Redraw()
+			// Проваливаемся ниже, чтобы обработать Enter как вход в файл/директорию
+		} else if e.Char != 0 && !ctrl {
+			fp.fastFindStr += string(e.Char)
+			fp.doFastFind(0)
+			vtui.FrameManager.Redraw()
+			return true
+		}
+	} else {
+		if e.Char != 0 && alt && !ctrl && unicode.IsPrint(e.Char) {
+			fp.fastFindMode = true
+			fp.fastFindStr = string(e.Char)
+			fp.doFastFind(0)
+			vtui.FrameManager.Redraw()
+			return true
+		}
+	}
+
 
 	switch e.VirtualKeyCode {
 	case vtinput.VK_INSERT:
@@ -470,6 +538,11 @@ func (fp *FileSystemPanel) ProcessMouse(e *vtinput.InputEvent) bool {
 		fp.lastRightClickedIdx = -1
 	}
 
+	if fp.fastFindMode && e.ButtonState != 0 {
+		fp.fastFindMode = false
+		vtui.FrameManager.Redraw()
+	}
+
 	handled := fp.table.ProcessMouse(e)
 	if handled {
 		// Sync absolute index from table's visual selection
@@ -547,6 +620,53 @@ func (fp *FileSystemPanel) GetSelectedNames() []string {
 }
 // GetSuccessorName determines which file should receive focus after the current
 // selection (or focused item) is deleted or moved.
+func (fp *FileSystemPanel) doFastFind(dir int) {
+	if fp.fastFindStr == "" {
+		return
+	}
+	searchLower := strings.ToLower(fp.fastFindStr)
+	startIdx := fp.GetCursorIndex()
+
+	if dir == 0 {
+		for i := 0; i < len(fp.entries); i++ {
+			if strings.HasPrefix(strings.ToLower(fp.entries[i].Name), searchLower) {
+				fp.SetCursorIndex(i)
+				fp.Refresh()
+				return
+			}
+		}
+	} else if dir == 1 {
+		for i := startIdx + 1; i < len(fp.entries); i++ {
+			if strings.HasPrefix(strings.ToLower(fp.entries[i].Name), searchLower) {
+				fp.SetCursorIndex(i)
+				fp.Refresh()
+				return
+			}
+		}
+		for i := 0; i <= startIdx; i++ {
+			if strings.HasPrefix(strings.ToLower(fp.entries[i].Name), searchLower) {
+				fp.SetCursorIndex(i)
+				fp.Refresh()
+				return
+			}
+		}
+	} else if dir == -1 {
+		for i := startIdx - 1; i >= 0; i-- {
+			if strings.HasPrefix(strings.ToLower(fp.entries[i].Name), searchLower) {
+				fp.SetCursorIndex(i)
+				fp.Refresh()
+				return
+			}
+		}
+		for i := len(fp.entries) - 1; i >= startIdx; i-- {
+			if strings.HasPrefix(strings.ToLower(fp.entries[i].Name), searchLower) {
+				fp.SetCursorIndex(i)
+				fp.Refresh()
+				return
+			}
+		}
+	}
+}
 func (fp *FileSystemPanel) GetSuccessorName() string {
 	if len(fp.entries) <= 1 {
 		return ".."

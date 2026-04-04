@@ -562,3 +562,90 @@ func TestFileSystemPanel_NavigateDown_CursorReset(t *testing.T) {
 		t.Errorf("Cursor did not reset to '..'. Index is %d", fp.GetCursorIndex())
 	}
 }
+func TestFileSystemPanel_FastFind(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(t.TempDir()))
+	fp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: ".."}},
+		{VFSItem: vfs.VFSItem{Name: "apple"}},
+		{VFSItem: vfs.VFSItem{Name: "banana"}},
+		{VFSItem: vfs.VFSItem{Name: "cherry"}},
+		{VFSItem: vfs.VFSItem{Name: "cat"}},
+	}
+	fp.Refresh()
+
+	// 1. Trigger FastFind with Alt+C
+	fp.ProcessKey(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		Char:            'c',
+		ControlKeyState: vtinput.LeftAltPressed,
+	})
+
+	if !fp.fastFindMode {
+		t.Fatal("FastFind mode should be active")
+	}
+	if fp.fastFindStr != "c" {
+		t.Errorf("Expected search string 'c', got %q", fp.fastFindStr)
+	}
+	if fp.GetSelectedName() != "cherry" {
+		t.Errorf("Cursor should jump to 'cherry', got %q", fp.GetSelectedName())
+	}
+
+	// 2. Append 'a'
+	fp.ProcessKey(&vtinput.InputEvent{
+		Type:    vtinput.KeyEventType,
+		KeyDown: true,
+		Char:    'a',
+	})
+
+	if fp.fastFindStr != "ca" {
+		t.Errorf("Expected search string 'ca', got %q", fp.fastFindStr)
+	}
+	if fp.GetSelectedName() != "cat" {
+		t.Errorf("Cursor should jump to 'cat', got %q", fp.GetSelectedName())
+	}
+
+	// 3. Backspace
+	fp.ProcessKey(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_BACK,
+	})
+	if fp.fastFindStr != "c" {
+		t.Errorf("Expected search string 'c' after backspace, got %q", fp.fastFindStr)
+	}
+	if fp.GetSelectedName() != "cherry" {
+		t.Errorf("Cursor should jump back to 'cherry', got %q", fp.GetSelectedName())
+	}
+
+	// 4. Down arrow (next match)
+	fp.ProcessKey(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_DOWN,
+	})
+	if fp.GetSelectedName() != "cat" {
+		t.Errorf("Down arrow should jump to 'cat', got %q", fp.GetSelectedName())
+	}
+
+	// 5. Up arrow (prev match)
+	fp.ProcessKey(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_UP,
+	})
+	if fp.GetSelectedName() != "cherry" {
+		t.Errorf("Up arrow should jump back to 'cherry', got %q", fp.GetSelectedName())
+	}
+
+	// 6. Escape to cancel
+	fp.ProcessKey(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_ESCAPE,
+	})
+	if fp.fastFindMode {
+		t.Error("Escape should exit FastFind mode")
+	}
+}
