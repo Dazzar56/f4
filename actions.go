@@ -400,3 +400,61 @@ func actionDelete(pf *PanelsFrame) {
 
 	vtui.FrameManager.Push(dlg)
 }
+
+func actionFindFile(pf *PanelsFrame) {
+	activePanel := pf.getActivePanel()
+	if activePanel == nil {
+		return
+	}
+
+	dlg := vtui.NewCenteredDialog(54, 13, Msg("FindFile.Title"))
+	dlg.ShowClose = true
+
+	lblMask := vtui.NewLabel(0, 0, Msg("FindFile.MaskPrompt"), nil)
+	editMask := vtui.NewEdit(0, 0, 20, "*")
+	lblMask.FocusLink = editMask
+
+	lblText := vtui.NewLabel(0, 0, Msg("FindFile.TextPrompt"), nil)
+	editText := vtui.NewEdit(0, 0, 20, "")
+	lblText.FocusLink = editText
+
+	btnFind := vtui.NewButton(0, 0, Msg("FindFile.BtnFind"))
+	btnFind.IsDefault = true
+	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
+
+	dlg.AddItem(lblMask)
+	dlg.AddItem(editMask)
+	dlg.AddItem(lblText)
+	dlg.AddItem(editText)
+	dlg.AddItem(btnFind)
+	dlg.AddItem(btnCancel)
+
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 54-4, 13-4)
+	vbox.Add(lblMask, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(editMask, vtui.Margins{Top: 1}, vtui.AlignFill)
+
+	vbox.Add(lblText, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	vbox.Add(editText, vtui.Margins{Top: 1}, vtui.AlignFill)
+
+	hbox := vtui.NewHBoxLayout(0, 0, 54-4, 1)
+	hbox.HorizontalAlign = vtui.AlignCenter
+	
+	hbox.Spacing = 2
+	hbox.Add(btnFind, vtui.Margins{}, vtui.AlignTop)
+	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
+
+	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Apply()
+
+	btnCancel.OnClick = func() { dlg.Close() }
+	btnFind.OnClick = func() {
+		mask := editMask.GetText()
+		text := editText.GetText()
+		dlg.Close()
+		if mask != "" {
+			ExecuteFindFile(pf, activePanel.vfs, activePanel.vfs.GetPath(), mask, text)
+		}
+	}
+
+	vtui.FrameManager.Push(dlg)
+}

@@ -17,4 +17,5 @@ const (
 	CmRightMedium
 	CmRightDetailed
 	CmFileChanged
+	CmFindFile
 )

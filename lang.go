@@ -56,6 +56,11 @@ var Lng = map[string]string{
 	"Menu.Files.Delete": "Delete",
 	"Menu.Left.Medium":   "Medium",
 	"Menu.Left.Detailed": "Detailed",
+	"Menu.Commands.FindFile": "Find file",
+	"FindFile.Title":         " Find File ",
+	"FindFile.MaskPrompt":    "A filemask or several filemasks:",
+	"FindFile.TextPrompt":    "Containing text:",
+	"FindFile.BtnFind":       "&Find",
 
 	// KeyBar Normal
 	"KeyBar.F1":  "Help",

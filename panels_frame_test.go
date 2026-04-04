@@ -962,4 +962,11 @@ func TestLayout_F4ActionDialogs_Validity(t *testing.T) {
 		vtui.AssertLayout(t, dlg)
 		fm.Pop()
 	})
+	t.Run("FindFileDialog", func(t *testing.T) {
+		setupPanel()
+		actionFindFile(pf)
+		dlg := fm.GetTopFrame().(vtui.Container)
+		vtui.AssertLayout(t, dlg)
+		fm.Pop()
+	})
 }

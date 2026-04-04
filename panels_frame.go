@@ -78,7 +78,9 @@ func NewPanelsFrame() *PanelsFrame {
 			{Text: "&" + Msg("Menu.Files.MkDir"), Shortcut: "F7", Command: CmMkDir},
 			{Text: "&" + Msg("Menu.Files.Delete"), Shortcut: "F8", Command: CmDelete},
 		}},
-		{Label: "&" + Msg("Menu.Commands"), SubItems: []vtui.MenuItem{{Text: "Placeholder"}}},
+		{Label: "&" + Msg("Menu.Commands"), SubItems: []vtui.MenuItem{
+			{Text: "&" + Msg("Menu.Commands.FindFile"), Shortcut: "Alt+F7", Command: CmFindFile},
+		}},
 		{Label: "&" + Msg("Menu.Options"), SubItems: []vtui.MenuItem{{Text: "Placeholder"}}},
 		{Label: "&" + Msg("Menu.Right"), SubItems: []vtui.MenuItem{
 			{Text: "&" + Msg("Menu.Left.Medium"), Command: CmRightMedium},
@@ -320,6 +322,11 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	if e.VirtualKeyCode == vtinput.VK_F5 && alt && !ctrl && e.KeyDown {
 		pf.showDummyOpDialog()
 		return true
+	}
+
+	// Alt+F7: Find file
+	if e.VirtualKeyCode == vtinput.VK_F7 && alt && !ctrl && !shift && e.KeyDown {
+		return vtui.FrameManager.EmitCommand(CmFindFile, nil)
 	}
 
 	if e.Type == vtinput.FocusEventType {
@@ -593,6 +600,9 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 
 	case CmDelete:
 		actionDelete(pf)
+		return true
+	case CmFindFile:
+		actionFindFile(pf)
 		return true
 
 	case CmBackground:
