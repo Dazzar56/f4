@@ -225,3 +225,33 @@ Loop:
 	}
 	buf.mu.Unlock()
 }
+func TestAsyncBuffer_RedundantFetchPrevention(t *testing.T) {
+	// Tests that the 'fetching' map correctly prevents multiple goroutines
+	// for the same chunk index.
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	v := vfs.NewOSVFS(t.TempDir())
+	tmp := t.TempDir() + "/redundant.txt"
+	os.WriteFile(tmp, make([]byte, 1000), 0644)
+	f, _ := v.Open(context.Background(), tmp)
+
+	buf := NewAsyncBuffer(context.Background(), f)
+	buf.chunkSize = 100
+	defer buf.Close()
+
+	// Trigger 10 simultaneous reads for the same offset
+	for i := 0; i < 10; i++ {
+		go func() {
+			_, _ = buf.Read(0, 5)
+		}()
+	}
+
+	// Give goroutines time to start
+	time.Sleep(10 * time.Millisecond)
+
+	buf.mu.Lock()
+	if len(buf.fetching) > 1 {
+		t.Errorf("Expected at most 1 in-flight fetch for chunk 0, got %d", len(buf.fetching))
+	}
+	buf.mu.Unlock()
+}

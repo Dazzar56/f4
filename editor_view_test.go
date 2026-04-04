@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 	"os"
@@ -1426,3 +1427,55 @@ func (m *mockFailingVFS) Rename(ctx context.Context, old, new string) error {
 	}
 	return m.VFS.Rename(ctx, old, new)
 }
+func TestEditorView_Save_DiskFullSimulation(t *testing.T) {
+	// Verifies that if writing to the temp file fails (e.g. disk full),
+	// the editor does not clear the modified flag and doesn't destroy memory state.
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	tmpFile := t.TempDir() + "/important.txt"
+	os.WriteFile(tmpFile, []byte("Stable Content"), 0644)
+
+	baseVfs := vfs.NewOSVFS(filepath.Dir(tmpFile))
+	failingVfs := &mockFailingWriteVFS{VFS: baseVfs}
+
+	pt := piecetable.New([]byte("Stable Content"))
+	ev := NewEditorView(pt, failingVfs, tmpFile)
+	f, _ := failingVfs.Open(context.Background(), tmpFile)
+	ev.file = f
+
+	// 1. Modify (at the end of the text)
+	ev.CursorPos = len("Stable Content")
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: '!'})
+
+	// 2. Attempt Save
+	ev.SaveToFile(nil)
+
+	// Pump tasks
+	timeout := time.After(1 * time.Second)
+	for ev.saving {
+		select {
+		case task := <-vtui.FrameManager.TaskChan: task()
+		case <-timeout: t.Fatal("Timeout")
+		}
+	}
+
+	// 3. Verify state
+	if !ev.modified {
+		t.Error("Editor cleared modified flag despite write failure!")
+	}
+	if ev.pt.String() != "Stable Content!" {
+		t.Error("Editor memory state was corrupted after failed save")
+	}
+}
+
+type mockFailingWriteVFS struct {
+	vfs.VFS
+}
+
+func (m *mockFailingWriteVFS) Create(ctx context.Context, path string) (io.WriteCloser, error) {
+	return &failingWriter{}, nil
+}
+
+type failingWriter struct{}
+func (f *failingWriter) Write(p []byte) (n int, err error) { return 0, fmt.Errorf("mock write failure") }
+func (f *failingWriter) Close() error { return nil }
