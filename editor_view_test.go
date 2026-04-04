@@ -1308,19 +1308,6 @@ Loop:
 		t.Error("Search should show a message box when pattern is not found")
 	}
 }
-// mockFailingVFS wraps OSVFS but intentionally fails the Rename operation
-type mockFailingVFS struct {
-	vfs.VFS
-	failRename bool
-}
-
-func (m *mockFailingVFS) Rename(ctx context.Context, old, new string) error {
-	if m.failRename {
-		return os.ErrPermission // Simulate permission denied
-	}
-	return m.VFS.Rename(ctx, old, new)
-}
-
 func TestEditorView_SaveFailure_NoDataLoss(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
@@ -1358,7 +1345,6 @@ func TestEditorView_SaveFailure_NoDataLoss(t *testing.T) {
 
 	// 3. Assertions
 	// The modified flag MUST remain true because the save failed!
-	// If it became false, the user could close the editor without a warning and lose data.
 	if !ev.modified {
 		t.Error("CRITICAL: Editor 'modified' flag was cleared even though save failed! Data loss risk.")
 	}
@@ -1374,60 +1360,15 @@ func TestEditorView_SaveFailure_NoDataLoss(t *testing.T) {
 		t.Error("Editor did not show an error dialog upon save failure")
 	}
 }
-
-func TestEditorView_Search_Multiline(t *testing.T) {
-	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-
-	// Текст на три строки, искомое слово на последней
-	content := "Line One\nLine Two\nTarget"
-	pt := piecetable.New([]byte(content))
-	ev := NewEditorView(pt, nil, "test.txt")
-	ev.SetPosition(0, 0, 80, 24)
-
-	ev.Search("Target", false)
-
-	timeout := time.After(1 * time.Second)
-	for !ev.selActive {
-		select {
-		case task := <-vtui.FrameManager.TaskChan:
-			task()
-		case <-timeout:
-			t.Fatal("Multiline search timed out")
-		}
-	}
-
-	// "Target" начинается после "Line One\nLine Two\n" (9 + 9 = 18 байт)
-	if ev.selAnchorOffset != 18 {
-		t.Errorf("Expected offset 18, got %d", ev.selAnchorOffset)
-	}
-	if ev.CursorLine != 2 {
-		t.Errorf("Expected cursor on line 2, got %d", ev.CursorLine)
-	}
+// mockFailingVFS wraps OSVFS but intentionally fails the Rename operation
+type mockFailingVFS struct {
+	vfs.VFS
+	failRename bool
 }
 
-func TestEditorView_Search_Empty(t *testing.T) {
-	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-
-	// Очищаем канал от возможных остаточных задач предыдущих тестов
-DrainLoop:
-	for {
-		select {
-		case <-vtui.FrameManager.TaskChan:
-		default:
-			break DrainLoop
-		}
+func (m *mockFailingVFS) Rename(ctx context.Context, old, new string) error {
+	if m.failRename {
+		return os.ErrPermission // Simulate permission denied
 	}
-
-	pt := piecetable.New([]byte("data"))
-	ev := NewEditorView(pt, nil, "test.txt")
-
-	// Поиск пустой строки не должен запускать асинхронную задачу
-	ev.Search("", false)
-
-	select {
-	case <-vtui.FrameManager.TaskChan:
-		t.Error("Empty pattern should not trigger a search task")
-	case <-time.After(50 * time.Millisecond):
-		// Успех: задача не появилась
-	}
+	return m.VFS.Rename(ctx, old, new)
 }

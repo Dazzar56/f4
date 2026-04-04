@@ -366,3 +366,26 @@ func TestFileOp_PathLogic(t *testing.T) {
 		}
 	})
 }
+func TestExecuteFileOp_DirFileConflict(t *testing.T) {
+	// Tests the logic when a directory is copied into a path occupied by a file
+	tmpSrc := t.TempDir()
+	tmpDst := t.TempDir()
+	srcVfs := vfs.NewOSVFS(tmpSrc)
+	dstVfs := vfs.NewOSVFS(tmpDst)
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	// Source: folder 'item'
+	os.Mkdir(filepath.Join(tmpSrc, "item"), 0755)
+	// Destination: file 'item'
+	os.WriteFile(filepath.Join(tmpDst, "item"), []byte("blocking"), 0644)
+
+	tCtx := vtui.RunAsync(func(c *vtui.TaskContext) {})
+	defer tCtx.Cancel()
+
+	err := recursiveCopy(tCtx, func(m string, p int) {}, srcVfs,
+		filepath.Join(tmpSrc, "item"), dstVfs, filepath.Join(tmpDst, "item"), &FileOpState{})
+
+	if err == nil || !strings.Contains(err.Error(), "cannot overwrite file with folder") {
+		t.Errorf("Expected directory-over-file conflict error, got: %v", err)
+	}
+}

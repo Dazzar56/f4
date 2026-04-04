@@ -187,3 +187,41 @@ func TestAsyncBuffer_ConcurrentAccess(t *testing.T) {
 		}
 	}
 }
+func TestAsyncBuffer_CancellationMidFetch(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	v := vfs.NewOSVFS(t.TempDir())
+	tmp := t.TempDir() + "/cancel.txt"
+	os.WriteFile(tmp, []byte("some content"), 0644)
+	f, _ := v.Open(context.Background(), tmp)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	buf := NewAsyncBuffer(ctx, f)
+	buf.chunkSize = 100
+
+	// 1. Trigger fetch
+	_, err := buf.Read(0, 5)
+	if err != piecetable.ErrLoading { t.Fatal("Expected ErrLoading") }
+
+	// 2. Cancel context while fetch is (presumably) in flight
+	cancel()
+
+	// 3. Pump tasks - the fetch result should be ignored because of b.ctx.Err()
+	timeout := time.After(100 * time.Millisecond)
+Loop:
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			break Loop
+		}
+	}
+
+	// 4. Verification: data should NOT be in 'loaded' map
+	buf.mu.Lock()
+	if len(buf.loaded) > 0 {
+		t.Error("Data was loaded into buffer after context cancellation")
+	}
+	buf.mu.Unlock()
+}
