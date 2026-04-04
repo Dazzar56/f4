@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"time"
 	"path/filepath"
 	"strings"
 
@@ -68,7 +69,21 @@ func ExecuteFindFile(pf *PanelsFrame, v vfs.VFS, startDir, mask, text string) {
 
 		searchTextLower := strings.ToLower(text)
 		var found []FoundFile
-		var count int
+		var lastUpdate time.Time // Used for throttling UI redraws
+
+		updateUI := func(dir string, force bool) {
+			now := time.Now()
+			if force || now.Sub(lastUpdate) > 50*time.Millisecond {
+				lastUpdate = now
+				currentCount := len(found) // Always use the actual length of the slice
+				displayDir := runewidth.Truncate(dir, 56, "...")
+				ctx.RunOnUI(func() {
+					lblDir.SetText("Scanning: " + displayDir)
+					lblFound.SetText(fmt.Sprintf("Found: %d", currentCount))
+					vtui.FrameManager.Redraw()
+				})
+			}
+		}
 
 		var walk func(dir string) error
 		walk = func(dir string) error {
@@ -76,11 +91,7 @@ func ExecuteFindFile(pf *PanelsFrame, v vfs.VFS, startDir, mask, text string) {
 				return ctx.Err()
 			}
 
-			ctx.RunOnUI(func() {
-				display := runewidth.Truncate(dir, 56, "...")
-				lblDir.SetText("Scanning: " + display)
-				vtui.FrameManager.Redraw()
-			})
+			updateUI(dir, false)
 
 			return v.ReadDir(ctx.Context, dir, func(chunk []vfs.VFSItem) {
 				for _, item := range chunk {
@@ -112,18 +123,15 @@ func ExecuteFindFile(pf *PanelsFrame, v vfs.VFS, startDir, mask, text string) {
 						}
 
 						// 3. Register Hit
-						count++
 						found = append(found, FoundFile{Path: itemPath, Item: item})
-						ctx.RunOnUI(func() {
-							lblFound.SetText(fmt.Sprintf("Found: %d", count))
-							vtui.FrameManager.Redraw()
-						})
+						updateUI(dir, false)
 					}
 				}
 			})
 		}
 
 		err := walk(startDir)
+		updateUI(startDir, true) // Guarantee final state rendering
 
 		ctx.RunOnUI(func() {
 			dlg.Close()
@@ -272,6 +280,7 @@ func ShowSearchResults(pf *PanelsFrame, v vfs.VFS, found []FoundFile) {
 		{Title: "Path", Width: 38},
 	}
 	srw.table = vtui.NewTable(0, 0, 72, 12, cols)
+	srw.table.SetOwner(srw) // Explicit owner for command routing
 	srw.table.ShowScrollBar = true
 
 	rows := make([]vtui.TableRow, len(found))
@@ -281,9 +290,13 @@ func ShowSearchResults(pf *PanelsFrame, v vfs.VFS, found []FoundFile) {
 	srw.table.SetRows(rows)
 
 	btnGo := vtui.NewButton(0, 0, "&Go to")
+	btnGo.SetOwner(srw)
 	btnView := vtui.NewButton(0, 0, "&View")
+	btnView.SetOwner(srw)
 	btnEdit := vtui.NewButton(0, 0, "&Edit")
+	btnEdit.SetOwner(srw)
 	btnClose := vtui.NewButton(0, 0, "&Close")
+	btnClose.SetOwner(srw)
 
 	btnGo.IsDefault = true
 
