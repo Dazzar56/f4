@@ -160,3 +160,26 @@ func TestOSVFS_ReadDir_Cancellation(t *testing.T) {
 		t.Errorf("Callback should not have been called after cancellation, but got %d items", count)
 	}
 }
+func TestOSVFS_SetPath_Validation(t *testing.T) {
+	tmpDir := t.TempDir()
+	v := NewOSVFS(tmpDir)
+
+	// 1. Existing dir -> Success
+	sub := filepath.Join(tmpDir, "exist")
+	os.Mkdir(sub, 0755)
+	if err := v.SetPath(sub); err != nil {
+		t.Errorf("SetPath failed for existing dir: %v", err)
+	}
+
+	// 2. Non-existent path -> Error
+	if err := v.SetPath(filepath.Join(tmpDir, "missing")); err == nil {
+		t.Error("SetPath should fail for non-existent path")
+	}
+
+	// 3. Path is a file -> Error
+	file := filepath.Join(tmpDir, "file.txt")
+	os.WriteFile(file, []byte("data"), 0644)
+	if err := v.SetPath(file); err == nil {
+		t.Error("SetPath should fail if path is a file")
+	}
+}

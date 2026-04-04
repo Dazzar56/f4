@@ -154,3 +154,54 @@ func TestTerminalView_AutoWrap(t *testing.T) {
 		t.Errorf("Auto-wrap failed: 'Y' should be at (0, 1), got %c", rune(tv.Lines[1][0].Char))
 	}
 }
+func TestTerminalView_PromptRewriteHeuristic(t *testing.T) {
+	// Tests the heuristic that prevents duplicate prompts in scrollback
+	// when a shell re-renders the same line.
+	tv := NewTerminalView(80, 24)
+	tv.UseAltScreen = false
+
+	// 1. Shell prints a prompt "$ "
+	tv.PutChar('$', 0)
+	tv.PutChar(' ', 0)
+	if tv.pt.Size() != 2 {
+		t.Errorf("Initial history size mismatch, got %d", tv.pt.Size())
+	}
+
+	// 2. Shell moves cursor back to 0 (X=0) and prints a DIFFERENT prompt "> "
+	tv.CursorX = 0
+	tv.PutChar('>', 0)
+
+	// Heuristic should have wiped the previous '$ ' from history
+	if tv.pt.Size() != 1 || tv.pt.String() != ">" {
+		t.Errorf("Prompt rewrite heuristic failed. History: %q, Size: %d",
+			tv.pt.String(), tv.pt.Size())
+	}
+}
+func TestTerminalView_PromptRewriteDetection(t *testing.T) {
+	// Tests the logic that prevents duplicate prompts in history
+	// when a shell re-renders the same line.
+	tv := NewTerminalView(80, 24)
+	tv.UseAltScreen = false // Logic only applies to scrollback history
+
+	// 1. Simulate shell printing a prompt "$ "
+	tv.PutChar('$', 0)
+	tv.PutChar(' ', 0)
+	initialSize := tv.pt.Size()
+	if initialSize != 2 {
+		t.Errorf("Expected history size 2, got %d", initialSize)
+	}
+
+	// 2. Shell moves cursor back to 0 and prints a DIFFERENT prompt "> "
+	// This happens in some advanced shells or during resize.
+	tv.CursorX = 0
+	tv.PutChar('>', 0)
+
+	// HEURISTIC: if CursorX is 0 and history for the current line exists, it should be wiped.
+	if tv.pt.Size() != 1 {
+		t.Errorf("Prompt rewrite detection failed: expected history size 1 ('>'), got %d (%q)",
+			tv.pt.Size(), tv.pt.String())
+	}
+	if tv.pt.String() != ">" {
+		t.Errorf("History corrupted: expected '>', got %q", tv.pt.String())
+	}
+}

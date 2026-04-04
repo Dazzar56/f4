@@ -177,9 +177,11 @@ func (vv *ViewerView) renderHex(scr *vtui.ScreenBuf, width, contentHeight int) {
 	offAttr := vtui.Palette[ColViewerArrows]
 
 	currOffset := vv.TopOffset &^ 0xF // Align to 16 bytes
+	//lastRowWasEOF := false
 
 	for y := 0; y < contentHeight; y++ {
 		if currOffset >= vv.backend.Size() {
+			//lastRowWasEOF = true
 			break
 		}
 
@@ -219,17 +221,21 @@ func (vv *ViewerView) renderHex(scr *vtui.ScreenBuf, width, contentHeight int) {
 
 		currOffset += 16
 	}
-	vv.eofVisible = currOffset >= vv.backend.Size()
+	vv.eofVisible = (currOffset >= vv.backend.Size())
 }
 
 func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, contentHeight int) {
+
+	
 	attr := vtui.Palette[ColViewerText]
 	currOffset := vv.TopOffset
 	vv.lineOffsets = vv.lineOffsets[:0]
+	//lastRowWasEOF := false
 
 	for y := 0; y < contentHeight; y++ {
 		vv.lineOffsets = append(vv.lineOffsets, currOffset)
 		if currOffset >= vv.backend.Size() {
+			//lastRowWasEOF = true
 			break
 		}
 
@@ -293,8 +299,9 @@ func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, contentHeight int) 
 			currOffset = tempOff
 		}
 	}
-	vv.eofVisible = currOffset >= vv.backend.Size()
+	vv.eofVisible = (currOffset >= vv.backend.Size())
 }
+
 func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 	if !e.KeyDown {
 		return false
@@ -334,7 +341,9 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 			return true // Prevent scrolling past End of File
 		}
 		if vv.HexMode {
-			vv.TopOffset += step
+			if vv.TopOffset+16 < vv.backend.Size() {
+				vv.TopOffset += 16
+			}
 		} else if len(vv.lineOffsets) > 1 {
 			vv.TopOffset = vv.lineOffsets[1]
 		}
@@ -352,11 +361,14 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 
 	case vtinput.VK_NEXT: // PgDn
-		if vv.eofVisible {
-			return true // Prevent paging past End of File
-		}
 		if vv.HexMode {
-			vv.TopOffset += step * contentHeight
+			vv.TopOffset += 16 * contentHeight
+			if vv.TopOffset >= vv.backend.Size() {
+				vv.TopOffset = (vv.backend.Size() - 1) &^ 0xF
+				if vv.TopOffset < 0 {
+					vv.TopOffset = 0
+				}
+			}
 		} else if len(vv.lineOffsets) > 0 {
 			vv.TopOffset = vv.lineOffsets[len(vv.lineOffsets)-1]
 		}
@@ -405,6 +417,14 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 
 			startOff := vv.backend.Size() - chunkSize
 			if startOff < 0 { startOff = 0 }
+
+			// Wait for data if jump is into un-cached region
+			for {
+				if ctx.Err() != nil { return }
+				_, err := vv.backend.ReadAt(startOff, 1024)
+				if err != piecetable.ErrLoading { break }
+				time.Sleep(20 * time.Millisecond)
+			}
 			startOff = vv.backend.FindLineStart(startOff)
 
 			var offsets []int64

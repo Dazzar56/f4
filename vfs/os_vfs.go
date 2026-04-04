@@ -23,10 +23,17 @@ func (v *OSVFS) GetPath() string { return v.currentPath }
 
 func (v *OSVFS) SetPath(path string) error {
 	abs, err := filepath.Abs(path)
-	if err == nil {
-		vtui.DebugLog("VFS: Path changed to %q", abs)
+	if err != nil {
+		return err
 	}
-	if err != nil { return err }
+	st, err := os.Stat(abs)
+	if err != nil {
+		return err
+	}
+	if !st.IsDir() {
+		return os.ErrInvalid
+	}
+	vtui.DebugLog("VFS: Path changed to %q", abs)
 	v.currentPath = abs
 	return nil
 }

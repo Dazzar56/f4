@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"sync"
 	"path/filepath"
 	"strings"
 
@@ -16,6 +17,7 @@ type Plugin interface {
 }
 
 type PluginManager struct {
+	mu      sync.Mutex
 	api     HostAPI
 	plugins []Plugin
 }
@@ -39,7 +41,9 @@ func (pm *PluginManager) LoadAll() {
 func (pm *PluginManager) loadInternal() {
 	p := &InternalHelloPlugin{}
 	if err := p.Init(pm.api); err == nil {
+		pm.mu.Lock()
 		pm.plugins = append(pm.plugins, p)
+		pm.mu.Unlock()
 		vtui.DebugLog("Loaded internal plugin: %s", p.GetName())
 	}
 }
@@ -63,7 +67,9 @@ func (pm *PluginManager) loadExternal(dir string) {
 		if strings.HasSuffix(entry.Name(), ".lua") {
 			p := NewLuaPlugin(path)
 			if err := p.Init(pm.api); err == nil {
+				pm.mu.Lock()
 				pm.plugins = append(pm.plugins, p)
+				pm.mu.Unlock()
 				vtui.DebugLog("Loaded Lua plugin: %s", p.GetName())
 			} else {
 				vtui.DebugLog("Failed Lua plugin %s: %v", path, err)
@@ -71,7 +77,9 @@ func (pm *PluginManager) loadExternal(dir string) {
 		} else if strings.HasSuffix(entry.Name(), ".wasm") {
 			p := NewWasmPlugin(path)
 			if err := p.Init(pm.api); err == nil {
+				pm.mu.Lock()
 				pm.plugins = append(pm.plugins, p)
+				pm.mu.Unlock()
 				vtui.DebugLog("Loaded WASM plugin: %s", p.GetName())
 			} else {
 				vtui.DebugLog("Failed WASM plugin %s: %v", path, err)
@@ -81,7 +89,10 @@ func (pm *PluginManager) loadExternal(dir string) {
 }
 
 func (pm *PluginManager) CloseAll() {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
 	for _, p := range pm.plugins {
 		p.Close()
 	}
+	pm.plugins = nil
 }
