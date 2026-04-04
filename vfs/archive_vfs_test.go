@@ -4,6 +4,8 @@ import (
 	"archive/zip"
 	"context"
 	"os"
+	"time"
+	"fmt"
 	"path/filepath"
 	"testing"
 )
@@ -137,6 +139,78 @@ func TestArchiveVFS_CreateFile(t *testing.T) {
 	if string(buf[:n]) != content {
 		t.Errorf("Content mismatch: got %q", string(buf[:n]))
 	}
+}
+func TestArchiveVFS_MkDir_Recursive(t *testing.T) {
+	tmpDir := t.TempDir()
+	zipPath := filepath.Join(tmpDir, "mkdir.zip")
+	createTestZip(t, zipPath)
+
+	osVfs := NewOSVFS(tmpDir)
+	arcVfs, _ := NewArchiveVFS(osVfs, zipPath)
+	ctx := context.Background()
+
+	// 1. Создаем глубокую папку
+	newPath := filepath.Join(zipPath, "a/b/c/")
+	err := arcVfs.MkDir(ctx, newPath)
+	if err != nil {
+		t.Fatalf("MkDir failed: %v", err)
+	}
+
+	// 2. Проверяем Stat
+	info, err := arcVfs.Stat(ctx, newPath)
+	if err != nil || !info.IsDir {
+		t.Errorf("Stat after MkDir failed: %v", err)
+	}
+
+	// 3. Проверяем ReadDir промежуточной папки
+	var items []VFSItem
+	arcVfs.ReadDir(ctx, filepath.Join(zipPath, "a/b"), func(chunk []VFSItem) {
+		items = append(items, chunk...)
+	})
+
+	found := false
+	for _, itm := range items {
+		if itm.Name == "c" && itm.IsDir { found = true }
+	}
+	if !found {
+		t.Error("Intermediate directory 'c' not found in 'a/b'")
+	}
+}
+
+func TestArchiveVFS_Stress_ConcurrentReadWrite(t *testing.T) {
+	// Проверяем, что одновременное чтение не падает при модификации
+	tmpDir := t.TempDir()
+	zipPath := filepath.Join(tmpDir, "stress.zip")
+	createTestZip(t, zipPath)
+
+	osVfs := NewOSVFS(tmpDir)
+	arcVfs, _ := NewArchiveVFS(osVfs, zipPath)
+	ctx := context.Background()
+
+	done := make(chan bool)
+
+	// Читатель
+	go func() {
+		for i := 0; i < 50; i++ {
+			var items []VFSItem
+			_ = arcVfs.ReadDir(ctx, "", func(chunk []VFSItem) {
+				items = append(items, chunk...)
+			})
+			time.Sleep(1 * time.Millisecond)
+		}
+		done <- true
+	}()
+
+	// Писатель
+	go func() {
+		for i := 0; i < 10; i++ {
+			_ = arcVfs.MkDir(ctx, filepath.Join(zipPath, fmt.Sprintf("dir%d", i)))
+			time.Sleep(5 * time.Millisecond)
+		}
+		done <- true
+	}()
+
+	for i := 0; i < 2; i++ { <-done }
 }
 func TestArchiveVFS_DeepNavigation(t *testing.T) {
 	tmpDir := t.TempDir()

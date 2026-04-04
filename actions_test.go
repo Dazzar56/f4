@@ -4,6 +4,10 @@ import (
 	"testing"
 	"os"
 	"context"
+	"strings"
+	"path/filepath"
+	"archive/zip"
+	"time"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 )
@@ -81,5 +85,79 @@ func TestActionViewerSearch_EmptyFile(t *testing.T) {
 
 	if foundOffset != -1 {
 		t.Error("Should not find anything in empty file")
+	}
+}
+func TestActionExtractArchive_Integrity(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	tmpDir := t.TempDir()
+	srcZip := filepath.Join(tmpDir, "source.zip")
+
+	// Создаем тестовый архив (используем хелпер из vfs_test если он доступен, либо создаем тут)
+	f, _ := os.Create(srcZip)
+	zw := zip.NewWriter(f)
+	fw, _ := zw.Create("extracted.txt")
+	fw.Write([]byte("content to extract"))
+	zw.Create("empty_dir/")
+	zw.Close()
+	f.Close()
+
+	destDir := filepath.Join(tmpDir, "output")
+	os.Mkdir(destDir, 0755)
+
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+	pf.activeIdx = 0 // Левая панель становится активной (источником)
+
+	left := pf.panels[0].(*FileSystemPanel)
+	right := pf.panels[1].(*FileSystemPanel)
+
+	left.vfs.SetPath(tmpDir)
+	// Добавляем ".." первым, как это делает реальный VFS
+	left.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
+		{VFSItem: vfs.VFSItem{Name: "source.zip", IsDir: false}},
+	}
+	left.SetCursorIndex(1) // Стоим на "source.zip"
+
+	right.vfs.SetPath(destDir)
+
+	// Запускаем извлечение
+	actionExtractArchive(pf)
+
+	// Ждем завершения фоновой задачи
+	timeout := time.After(3 * time.Second)
+	extracted := false
+	for !extracted {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			// Проверяем диалоги
+			if vtui.FrameManager.GetTopFrameType() == vtui.TypeDialog {
+				dlg := vtui.FrameManager.GetTopFrame()
+				// Если это диалог ошибки — падаем
+				if strings.Contains(dlg.GetTitle(), "Error") {
+					t.Fatalf("Extraction failed with error dialog: %q", dlg.GetTitle())
+				}
+				// Диалог " Extracting... " мы просто игнорируем, это нормальный ход процесса
+			}
+			// Проверяем, появился ли файл
+			if _, err := os.Stat(filepath.Join(destDir, "extracted.txt")); err == nil {
+				extracted = true
+			}
+		case <-timeout:
+			t.Fatal("Extraction timed out")
+		}
+	}
+
+	// Проверяем содержимое
+	data, _ := os.ReadFile(filepath.Join(destDir, "extracted.txt"))
+	if string(data) != "content to extract" {
+		t.Errorf("Extracted data mismatch: %q", string(data))
+	}
+
+	// Проверяем создание папки
+	if st, err := os.Stat(filepath.Join(destDir, "empty_dir")); err != nil || !st.IsDir() {
+		t.Error("Folder was not extracted correctly")
 	}
 }
