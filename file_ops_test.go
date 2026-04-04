@@ -5,6 +5,7 @@ import (
 	"strings"
 	"os"
 	"bytes"
+	"runtime"
 	"path/filepath"
 	"testing"
 	"time"
@@ -578,25 +579,24 @@ func TestExecuteFileOp_LargeFileIntegrity(t *testing.T) {
 	dstVfs := vfs.NewOSVFS(tmpDst)
 
 	// 2. Perform Copy
-	ExecuteFileOp(nil, srcVfs, dstVfs, []string{fileName}, tmpDst, false, false, nil)
+	done := make(chan struct{})
+	ExecuteFileOp(nil, srcVfs, dstVfs, []string{fileName}, tmpDst, false, false, func() {
+		close(done)
+	})
 
-	// 3. Pump tasks
+	// 3. Pump tasks until callback is triggered
 	timeout := time.After(2 * time.Second)
+loop:
 	for {
 		select {
+		case <-done:
+			break loop
 		case task := <-vtui.FrameManager.TaskChan:
 			task()
-		case <-time.After(10 * time.Millisecond):
-			// Check if target exists
-			if _, err := os.Stat(filepath.Join(tmpDst, fileName)); err == nil {
-				goto done
-			}
 		case <-timeout:
 			t.Fatal("Large file copy timed out")
 		}
 	}
-
-done:
 	// 4. Verify byte-for-byte
 	copiedData, err := os.ReadFile(filepath.Join(tmpDst, fileName))
 	if err != nil {
@@ -635,21 +635,34 @@ func TestExecuteFileOp_DeepIntegrity(t *testing.T) {
 	dstVfs := vfs.NewOSVFS(dstBase)
 
 	// 2. Perform recursive copy of "root"
-	ExecuteFileOp(nil, srcVfs, dstVfs, []string{"root"}, dstBase, false, false, nil)
+	done := make(chan struct{})
+	ExecuteFileOp(nil, srcVfs, dstVfs, []string{"root"}, dstBase, false, false, func() {
+		close(done)
+	})
 
-	// 3. Wait for completion
+	// 3. Wait for completion callback
 	timeout := time.After(5 * time.Second)
-	targetLarge := filepath.Join(dstBase, "root", "sub1", "sub2", "large.bin")
+loop:
 	for {
-		if _, err := os.Stat(targetLarge); err == nil {
-			break
-		}
 		select {
-		case task := <-vtui.FrameManager.TaskChan: task()
-		case <-time.After(10 * time.Millisecond):
-		case <-timeout: t.Fatal("Deep copy timed out")
+		case <-done:
+			break loop
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Deep copy timed out")
 		}
 	}
+
+	// Final drain to ensure all UI/stat tasks finished
+	for i := 0; i < 10; i++ {
+		select {
+		case task := <-vtui.FrameManager.TaskChan: task()
+		default:
+		}
+	}
+
+	targetLarge := filepath.Join(dstBase, "root", "sub1", "sub2", "large.bin")
 
 	// 4. Verify Large File
 	copiedLarge, _ := os.ReadFile(targetLarge)
@@ -661,5 +674,64 @@ func TestExecuteFileOp_DeepIntegrity(t *testing.T) {
 	f2, _ := os.ReadFile(filepath.Join(dstBase, "root", "sub1", "file2.txt"))
 	if string(f2) != "f2" {
 		t.Errorf("Small file corrupted or missing in subfolder, got %q", string(f2))
+	}
+}
+func TestExecuteFileOp_Move_PermissionDenied_Recovery(t *testing.T) {
+	// Tests that a Move operation handles partial failures (like permission denied)
+	// gracefully without deleting the source if the copy failed.
+	if runtime.GOOS == "windows" { t.Skip("Skipping Unix permission test on Windows") }
+
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
+
+	srcFile := filepath.Join(srcDir, "protected.txt")
+	os.WriteFile(srcFile, []byte("secret"), 0644)
+
+	// Make destination dir read-only
+	os.Chmod(dstDir, 0444)
+	defer os.Chmod(dstDir, 0755)
+
+	v := vfs.NewOSVFS("/")
+	ExecuteFileOp(nil, v, v, []string{srcFile}, dstDir, true, false, nil)
+
+	// Pump tasks. It should hit AskError. We simulate "Abort".
+	timeout := time.After(500 * time.Millisecond)
+loop:
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			if top := vtui.FrameManager.GetTopFrame(); top != nil {
+				top.SetExitCode(2) // Abort
+			}
+		case <-time.After(100 * time.Millisecond):
+			break loop
+		case <-timeout:
+			break loop
+		}
+	}
+
+	// Verify source was NOT deleted because copy failed
+	if _, err := os.Stat(srcFile); os.IsNotExist(err) {
+		t.Error("Source file was deleted even though Move failed due to permissions")
+	}
+}
+
+func TestExecuteFileOp_MoveIntoSelf_Circular(t *testing.T) {
+	// Prevents infinite recursion when trying to move/copy a parent into its own child.
+	tmp := t.TempDir()
+	parent := filepath.Join(tmp, "parent")
+	child := filepath.Join(parent, "child")
+	os.MkdirAll(child, 0755)
+
+	v := vfs.NewOSVFS("/")
+	tCtx := &vtui.TaskContext{Context: context.Background()}
+
+	// Move 'parent' into 'parent/child/oops'
+	err := recursiveCopy(tCtx, func(string, int){}, v, parent, v, filepath.Join(child, "oops"), &FileOpState{})
+
+	if err == nil || !strings.Contains(err.Error(), "folder into itself") {
+		t.Errorf("Expected circular copy protection error, got: %v", err)
 	}
 }

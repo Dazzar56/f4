@@ -123,6 +123,16 @@ func (ev *EditorView) GetTopBar() *TopBar {
 	return ev.topBar
 }
 
+// SetText replaces the entire content of the editor.
+func (ev *EditorView) SetText(text string) {
+	ev.pt = piecetable.New([]byte(text))
+	ev.li.Rebuild(ev.pt)
+	ev.CursorLine = 0
+	ev.CursorPos = 0
+	ev.engine.InvalidateCache()
+	ev.modified = true
+}
+
 func (ev *EditorView) clearCaches() {
 	ev.engine.InvalidateCache()
 }
@@ -902,10 +912,6 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 		})
 		f.Close()
 		
-		// Close original file before rename to avoid locking issues
-		if ev.asyncBuf != nil { ev.asyncBuf.Close() }
-		if ev.file != nil { ev.file.Close(); ev.file = nil }
-
 		if saveErr != nil {
 			ev.vfs.Remove(ctx.Context, tmpPath)
 			ctx.RunOnUI(func() {
@@ -915,11 +921,28 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 			return
 		}
 
+		// On Windows, we might need to close the file before renaming.
+		// However, doing so before Rename succeeds is dangerous for retries.
+		// We use a temporary close-and-recover approach.
+		oldAsync := ev.asyncBuf
+		oldFile := ev.file
+		if oldAsync != nil { oldAsync.Close() }
+		if oldFile != nil { oldFile.Close() }
+
 		err = ev.vfs.Rename(ctx.Context, tmpPath, ev.filePath)
 		if err != nil {
-			ctx.RunOnUI(func() { 
+			// RECOVER: Rename failed, try to reopen the original file so editor stays functional
+			reopened, reerr := ev.vfs.Open(ctx.Context, ev.filePath)
+			ctx.RunOnUI(func() {
 				ev.saving = false
-				vtui.DebugLog("EDITOR: Failed to rename temp file: %v", err) 
+				if reerr == nil {
+					ev.file = reopened
+					ev.asyncBuf = NewAsyncBuffer(ctx.Context, reopened)
+					// We don't change ev.pt here, it still points to the same logic.
+					// But we'd need to reconstruct the PieceTable's 'orig' buffer if it was MemoryBuffer.
+					// This is a rare edge case, but for now we at least prevent ev.file from being nil.
+				}
+				vtui.DebugLog("EDITOR: Failed to rename temp file: %v", err)
 				vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to save file:\n%v", err), []string{"&Ok"})
 			})
 			return

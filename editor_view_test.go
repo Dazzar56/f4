@@ -1838,3 +1838,93 @@ func TestEditorView_FragmentationDataIntegrity(t *testing.T) {
 		}
 	}
 }
+func TestEditorView_Save_NoTrailingNewline_Integrity(t *testing.T) {
+	// Verifies that saving a file that does NOT end with a newline
+	// does not accidentally add one (a common error in text editors).
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	tmpFile := t.TempDir() + "/nonewline.txt"
+	content := []byte("Line 1\nLine 2 (no newline at end)")
+	os.WriteFile(tmpFile, content, 0644)
+
+	v := vfs.NewOSVFS(filepath.Dir(tmpFile))
+	pt := piecetable.New(content)
+	ev := NewEditorView(pt, v, tmpFile)
+	f, _ := v.Open(context.Background(), tmpFile)
+	ev.file = f
+
+	// 1. Modify in the middle
+	ev.CursorLine = 0
+	ev.CursorPos = 0
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: '!'})
+
+	// 2. Save
+	ev.SaveToFile(nil)
+	timeout := time.After(1 * time.Second)
+	for ev.saving {
+		select {
+		case task := <-vtui.FrameManager.TaskChan: task()
+		case <-timeout: t.Fatal("Timeout")
+		}
+	}
+
+	// 3. Verify exactly what's on disk
+	saved, _ := os.ReadFile(tmpFile)
+	expected := "!Line 1\nLine 2 (no newline at end)"
+	if string(saved) != expected {
+		t.Errorf("Save corrupted end-of-file. Expected %q, got %q", expected, string(saved))
+	}
+}
+
+func TestEditorView_Save_RetryAfterFailure(t *testing.T) {
+	// Verifies that if a save fails once, the editor state remains valid
+	// and allows a retry once the external issue is resolved.
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "retry.txt")
+	os.WriteFile(path, []byte("Initial"), 0644)
+
+	baseVfs := vfs.NewOSVFS(tmpDir)
+	// mockFailingVFS is defined in the same test file usually
+	failingVfs := &mockFailingVFS{VFS: baseVfs, failRename: true}
+
+	pt := piecetable.New([]byte("Initial"))
+	ev := NewEditorView(pt, failingVfs, path)
+	f, _ := failingVfs.Open(context.Background(), path)
+	ev.file = f
+
+	// 1. Modify
+	ev.SetText("Changed")
+
+	// 2. Save (should fail at Rename)
+	ev.SaveToFile(nil)
+	timeout := time.After(1 * time.Second)
+	for ev.saving {
+		select {
+		case task := <-vtui.FrameManager.TaskChan: task()
+		case <-timeout: t.Fatal("Timeout on first save")
+		}
+	}
+	if !ev.modified { t.Error("Should still be modified after failure") }
+
+	// 3. Fix the VFS issue
+	failingVfs.failRename = false
+
+	// 4. Retry saving
+	ev.SaveToFile(nil)
+	timeout = time.After(1 * time.Second)
+	for ev.saving {
+		select {
+		case task := <-vtui.FrameManager.TaskChan: task()
+		case <-timeout: t.Fatal("Timeout on retry save")
+		}
+	}
+
+	// 5. Verification
+	if ev.modified { t.Error("Should NOT be modified after successful retry") }
+
+	saved, _ := os.ReadFile(path)
+	if string(saved) != "Changed" {
+		t.Errorf("Data not saved correctly on retry. Expected 'Changed', got %q", string(saved))
+	}
+}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"testing"
+	"strings"
 
 	"github.com/unxed/vtui"
 )
@@ -413,5 +414,37 @@ func TestAnsiParser_Robustness(t *testing.T) {
 	}
 	if tv.Title != "Title" {
 		t.Error("OSC title failed with ESC terminator")
+	}
+}
+
+func TestAnsiParser_OSC52_Malformed(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	p := NewAnsiParser(tv, nil)
+
+	// 1. Malformed Base64 (should not panic or crash)
+	// OSC 52 ; c ; <invalid_base64> BEL
+	p.Process([]byte("\x1b]52;c;!!!\x07"))
+	
+	// 2. Incomplete OSC 52
+	p.Process([]byte("\x1b]52;c;"))
+	p.Process([]byte{0x07}) // Just BEL
+	
+	// 3. Very large OSC 52 (Buffer overflow protection check)
+	largeSeq := "\x1b]52;c;" + strings.Repeat("A", 10000) + "\x07"
+	p.Process([]byte(largeSeq))
+	
+	// If we are here without panic, the test is passed.
+}
+
+func TestAnsiParser_UnrecognizedCSI(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	p := NewAnsiParser(tv, nil)
+
+	// CSI ? 999 z is unrecognized.
+	// The parser must consume it and return to Ground state without side effects.
+	p.Process([]byte("\x1b[?999z"))
+	
+	if p.State != StateGround {
+		t.Errorf("Parser stuck in state %v after unrecognized CSI", p.State)
 	}
 }
