@@ -425,6 +425,18 @@ func (fp *FileSystemPanel) Refresh() {
 
 func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
 	fp.frame.Show(scr)
+	// Sort indicator in top-left
+	sortChar := "n"
+	switch fp.sortMode {
+	case SortExt: sortChar = "x"
+	case SortTime: sortChar = "t"
+	case SortSize: sortChar = "s"
+	case SortUnsorted: sortChar = "u"
+	}
+	if fp.sortReverse {
+		sortChar = strings.ToUpper(sortChar)
+	}
+	scr.Write(fp.X1+2, fp.Y1, vtui.StringToCharInfo(sortChar, vtui.Palette[ColPanelTitle]))
 	fp.table.SetFocus(fp.IsFocused())
 	fp.table.Show(scr)
 	if fp.fastFindMode {

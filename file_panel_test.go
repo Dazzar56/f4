@@ -792,6 +792,38 @@ func TestFileSystemPanel_MaskSelection(t *testing.T) {
 		t.Error("Deselection removed wrong files")
 	}
 }
+
+func TestFileSystemPanel_SortIndicator(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	v := vfs.NewOSVFS(t.TempDir())
+	fp := NewFileSystemPanel(0, 0, 40, 24, v)
+
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.SetDefaultPalette()
+
+	// Set sort mode to Extension and reversed
+	fp.sortMode = SortExt
+	fp.sortReverse = true
+
+	fp.Show(scr)
+
+	// Indicator is drawn at X1+2, Y1.
+	cell := scr.GetCell(2, 0)
+	if cell.Char != 'X' {
+		t.Errorf("Sort indicator failed: expected 'X', got '%c'", rune(cell.Char))
+	}
+
+	// Normal size sort
+	fp.sortMode = SortSize
+	fp.sortReverse = false
+	fp.Show(scr)
+	cell = scr.GetCell(2, 0)
+	if cell.Char != 's' {
+		t.Errorf("Sort indicator failed: expected 's', got '%c'", rune(cell.Char))
+	}
+}
+
 func TestFileSystemPanel_Sorting(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	v := vfs.NewOSVFS(t.TempDir())

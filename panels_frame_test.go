@@ -185,7 +185,7 @@ func TestPanelsFrame_KeyHandling(t *testing.T) {
 		t.Errorf("Ctrl+Enter failed: expected ' %s', got '%s'", expectedName, pf.cmdLine.Edit.GetText())
 	}
 }
-func TestPanelsFrame_ViewModeCommands(t *testing.T) {
+func TestPanelsFrame_MenuCommands(t *testing.T) {
 	pf := NewPanelsFrame()
 	pf.ResizeConsole(80, 25)
 
@@ -200,10 +200,25 @@ func TestPanelsFrame_ViewModeCommands(t *testing.T) {
 		t.Error("Right panel mode not changed to Detailed")
 	}
 
+	// Sort mode commands
+	pf.HandleCommand(CmLeftSortTime, nil)
+	if pf.panels[0].(*FileSystemPanel).sortMode != SortTime {
+		t.Error("Left panel sort mode not changed to Time")
+	}
+
+	pf.HandleCommand(CmRightSortSize, nil)
+	if pf.panels[1].(*FileSystemPanel).sortMode != SortSize {
+		t.Error("Right panel sort mode not changed to Size")
+	}
+
 	// Menu checkmarks
 	menuText := pf.menuBar.Items[0].SubItems[1].Text
 	if !strings.HasPrefix(menuText, "√") {
 		t.Errorf("Menu checkmark not updated, got %q", menuText)
+	}
+	sortText := pf.menuBar.Items[0].SubItems[5].Text
+	if !strings.HasPrefix(sortText, "√") {
+		t.Errorf("Sort menu checkmark not updated, got %q", sortText)
 	}
 }
 func TestPanelsFrame_RefreshOnFocus(t *testing.T) {
@@ -251,6 +266,12 @@ func TestPanelsFrame_Clone(t *testing.T) {
 		}
 		if fsp.viewMode != pf.panels[0].(*FileSystemPanel).viewMode {
 			t.Error("Clone failed to copy ViewMode")
+		}
+		if fsp.sortMode != pf.panels[0].(*FileSystemPanel).sortMode {
+			t.Error("Clone failed to copy SortMode")
+		}
+		if fsp.sortReverse != pf.panels[0].(*FileSystemPanel).sortReverse {
+			t.Error("Clone failed to copy SortReverse")
 		}
 	}
 
@@ -445,6 +466,8 @@ func TestPanelsFrame_Clone_Comprehensive(t *testing.T) {
 	// 1. Setup specific state on the left panel
 	fsp := pf.Left().(*FileSystemPanel)
 	fsp.SetViewMode(ViewModeDetailed)
+	fsp.sortMode = SortSize
+	fsp.sortReverse = true
 	fsp.entries = []*fileEntry{
 		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
 		{VFSItem: vfs.VFSItem{Name: "file1"}},
@@ -467,6 +490,9 @@ func TestPanelsFrame_Clone_Comprehensive(t *testing.T) {
 	cloneFsp := clone.Left().(*FileSystemPanel)
 	if cloneFsp.viewMode != ViewModeDetailed {
 		t.Error("Clone failed to preserve ViewMode")
+	}
+	if cloneFsp.sortMode != SortSize || !cloneFsp.sortReverse {
+		t.Error("Clone failed to preserve sort state")
 	}
 	if cloneFsp.GetCursorIndex() != 2 {
 		t.Errorf("Clone failed to preserve cursor index: expected 2, got %d", cloneFsp.GetCursorIndex())

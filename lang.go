@@ -60,6 +60,11 @@ var Lng = map[string]string{
 	"Menu.Left.Medium":   "Medium",
 	"Menu.Left.Detailed": "Detailed",
 	"Menu.Commands.FindFile": "Find file",
+	"Menu.SortName":     "Name",
+	"Menu.SortExt":      "Extension",
+	"Menu.SortTime":     "Time",
+	"Menu.SortSize":     "Size",
+	"Menu.SortUnsorted": "Unsorted",
 	"FindFile.Title":         " Find File ",
 	"FindFile.MaskPrompt":    "A filemask or several filemasks:",
 	"FindFile.TextPrompt":    "Containing text:",
@@ -83,6 +88,11 @@ var Lng = map[string]string{
 	"KeyBar.AltF1": "Left",
 	"KeyBar.AltF2": "Right",
 	"KeyBar.AltF3": "Hex",
+	"KeyBar.CtrlF3": "Name",
+	"KeyBar.CtrlF4": "Ext",
+	"KeyBar.CtrlF5": "Time",
+	"KeyBar.CtrlF6": "Size",
+	"KeyBar.CtrlF7": "Unsort",
 
 	// KeyBar Editor
 	"KeyBar.EditorF1":  "Help",

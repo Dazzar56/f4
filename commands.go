@@ -23,4 +23,14 @@ const (
 	CmSortTime
 	CmSortSize
 	CmSortUnsorted
+	CmLeftSortName
+	CmLeftSortExt
+	CmLeftSortTime
+	CmLeftSortSize
+	CmLeftSortUnsorted
+	CmRightSortName
+	CmRightSortExt
+	CmRightSortTime
+	CmRightSortSize
+	CmRightSortUnsorted
 )

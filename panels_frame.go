@@ -67,6 +67,12 @@ func NewPanelsFrame() *PanelsFrame {
 			{Text: "&" + Msg("Menu.Left.Medium"), Command: CmLeftMedium},
 			{Text: "&" + Msg("Menu.Left.Detailed"), Command: CmLeftDetailed},
 			{Separator: true},
+			{Text: "&" + Msg("Menu.SortName"), Shortcut: "Ctrl+F3", Command: CmLeftSortName},
+			{Text: "&" + Msg("Menu.SortExt"), Shortcut: "Ctrl+F4", Command: CmLeftSortExt},
+			{Text: "&" + Msg("Menu.SortTime"), Shortcut: "Ctrl+F5", Command: CmLeftSortTime},
+			{Text: "&" + Msg("Menu.SortSize"), Shortcut: "Ctrl+F6", Command: CmLeftSortSize},
+			{Text: "&" + Msg("Menu.SortUnsorted"), Shortcut: "Ctrl+F7", Command: CmLeftSortUnsorted},
+			{Separator: true},
 			{Text: "Bac&kground", Command: CmBackground},
 			{Text: Msg("Menu.Exit"), Command: vtui.CmQuit},
 		}},
@@ -85,6 +91,12 @@ func NewPanelsFrame() *PanelsFrame {
 		{Label: "&" + Msg("Menu.Right"), SubItems: []vtui.MenuItem{
 			{Text: "&" + Msg("Menu.Left.Medium"), Command: CmRightMedium},
 			{Text: "&" + Msg("Menu.Left.Detailed"), Command: CmRightDetailed},
+			{Separator: true},
+			{Text: "&" + Msg("Menu.SortName"), Shortcut: "Ctrl+F3", Command: CmRightSortName},
+			{Text: "&" + Msg("Menu.SortExt"), Shortcut: "Ctrl+F4", Command: CmRightSortExt},
+			{Text: "&" + Msg("Menu.SortTime"), Shortcut: "Ctrl+F5", Command: CmRightSortTime},
+			{Text: "&" + Msg("Menu.SortSize"), Shortcut: "Ctrl+F6", Command: CmRightSortSize},
+			{Text: "&" + Msg("Menu.SortUnsorted"), Shortcut: "Ctrl+F7", Command: CmRightSortUnsorted},
 		}},
 	}
 	// We no longer need pf.menuBar.OnCommand for routing!
@@ -101,9 +113,12 @@ func NewPanelsFrame() *PanelsFrame {
 }
 
 func getMenuText(current, target ViewMode, label string) string {
-	if current == target {
-		return "√" + label
-	}
+	if current == target { return "√" + label }
+	return " " + label
+}
+
+func getSortMenuText(current, target SortMode, label string) string {
+	if current == target { return "√" + label }
 	return " " + label
 }
 
@@ -111,14 +126,25 @@ func (pf *PanelsFrame) updateMenuCheckmarks() {
 	if pf.panels[0] == nil || pf.panels[1] == nil { return }
 
 	lMode, rMode := ViewModeMedium, ViewModeMedium
-	if fsp, ok := pf.panels[0].(*FileSystemPanel); ok { lMode = fsp.viewMode }
-	if fsp, ok := pf.panels[1].(*FileSystemPanel); ok { rMode = fsp.viewMode }
+	lSort, rSort := SortName, SortName
+	if fsp, ok := pf.panels[0].(*FileSystemPanel); ok { lMode = fsp.viewMode; lSort = fsp.sortMode }
+	if fsp, ok := pf.panels[1].(*FileSystemPanel); ok { rMode = fsp.viewMode; rSort = fsp.sortMode }
 
 	pf.menuBar.Items[0].SubItems[0].Text = getMenuText(lMode, ViewModeMedium, "&"+Msg("Menu.Left.Medium"))
 	pf.menuBar.Items[0].SubItems[1].Text = getMenuText(lMode, ViewModeDetailed, "&"+Msg("Menu.Left.Detailed"))
+	pf.menuBar.Items[0].SubItems[3].Text = getSortMenuText(lSort, SortName, "&"+Msg("Menu.SortName"))
+	pf.menuBar.Items[0].SubItems[4].Text = getSortMenuText(lSort, SortExt, "&"+Msg("Menu.SortExt"))
+	pf.menuBar.Items[0].SubItems[5].Text = getSortMenuText(lSort, SortTime, "&"+Msg("Menu.SortTime"))
+	pf.menuBar.Items[0].SubItems[6].Text = getSortMenuText(lSort, SortSize, "&"+Msg("Menu.SortSize"))
+	pf.menuBar.Items[0].SubItems[7].Text = getSortMenuText(lSort, SortUnsorted, "&"+Msg("Menu.SortUnsorted"))
 
 	pf.menuBar.Items[4].SubItems[0].Text = getMenuText(rMode, ViewModeMedium, "&"+Msg("Menu.Left.Medium"))
 	pf.menuBar.Items[4].SubItems[1].Text = getMenuText(rMode, ViewModeDetailed, "&"+Msg("Menu.Left.Detailed"))
+	pf.menuBar.Items[4].SubItems[3].Text = getSortMenuText(rSort, SortName, "&"+Msg("Menu.SortName"))
+	pf.menuBar.Items[4].SubItems[4].Text = getSortMenuText(rSort, SortExt, "&"+Msg("Menu.SortExt"))
+	pf.menuBar.Items[4].SubItems[5].Text = getSortMenuText(rSort, SortTime, "&"+Msg("Menu.SortTime"))
+	pf.menuBar.Items[4].SubItems[6].Text = getSortMenuText(rSort, SortSize, "&"+Msg("Menu.SortSize"))
+	pf.menuBar.Items[4].SubItems[7].Text = getSortMenuText(rSort, SortUnsorted, "&"+Msg("Menu.SortUnsorted"))
 }
 
 func (pf *PanelsFrame) buildPrompt() []vtui.CharInfo {
@@ -716,20 +742,67 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 		if fsp, ok := pf.panels[1].(*FileSystemPanel); ok { fsp.SetViewMode(ViewModeDetailed) }
 		pf.updateMenuCheckmarks()
 		return true
+
+	
+	case CmLeftSortName:
+		if fsp, ok := pf.panels[0].(*FileSystemPanel); ok { fsp.SetSortMode(SortName) }
+		pf.updateMenuCheckmarks()
+		return true
+	case CmLeftSortExt:
+		if fsp, ok := pf.panels[0].(*FileSystemPanel); ok { fsp.SetSortMode(SortExt) }
+		pf.updateMenuCheckmarks()
+		return true
+	case CmLeftSortTime:
+		if fsp, ok := pf.panels[0].(*FileSystemPanel); ok { fsp.SetSortMode(SortTime) }
+		pf.updateMenuCheckmarks()
+		return true
+	case CmLeftSortSize:
+		if fsp, ok := pf.panels[0].(*FileSystemPanel); ok { fsp.SetSortMode(SortSize) }
+		pf.updateMenuCheckmarks()
+		return true
+	case CmLeftSortUnsorted:
+		if fsp, ok := pf.panels[0].(*FileSystemPanel); ok { fsp.SetSortMode(SortUnsorted) }
+		pf.updateMenuCheckmarks()
+		return true
+	case CmRightSortName:
+		if fsp, ok := pf.panels[1].(*FileSystemPanel); ok { fsp.SetSortMode(SortName) }
+		pf.updateMenuCheckmarks()
+		return true
+	case CmRightSortExt:
+		if fsp, ok := pf.panels[1].(*FileSystemPanel); ok { fsp.SetSortMode(SortExt) }
+		pf.updateMenuCheckmarks()
+		return true
+	case CmRightSortTime:
+		if fsp, ok := pf.panels[1].(*FileSystemPanel); ok { fsp.SetSortMode(SortTime) }
+		pf.updateMenuCheckmarks()
+		return true
+	case CmRightSortSize:
+		if fsp, ok := pf.panels[1].(*FileSystemPanel); ok { fsp.SetSortMode(SortSize) }
+		pf.updateMenuCheckmarks()
+		return true
+	case CmRightSortUnsorted:
+		if fsp, ok := pf.panels[1].(*FileSystemPanel); ok { fsp.SetSortMode(SortUnsorted) }
+		pf.updateMenuCheckmarks()
+		return true
 	case CmSortName:
 		if fsp := pf.getActivePanel(); fsp != nil { fsp.SetSortMode(SortName) }
+		pf.updateMenuCheckmarks()
 		return true
 	case CmSortExt:
 		if fsp := pf.getActivePanel(); fsp != nil { fsp.SetSortMode(SortExt) }
+		pf.updateMenuCheckmarks()
 		return true
 	case CmSortTime:
 		if fsp := pf.getActivePanel(); fsp != nil { fsp.SetSortMode(SortTime) }
+		pf.updateMenuCheckmarks()
 		return true
 	case CmSortSize:
 		if fsp := pf.getActivePanel(); fsp != nil { fsp.SetSortMode(SortSize) }
+		pf.updateMenuCheckmarks()
 		return true
 	case CmSortUnsorted:
 		if fsp := pf.getActivePanel(); fsp != nil { fsp.SetSortMode(SortUnsorted) }
+		pf.updateMenuCheckmarks()
 		return true
 	}
 	return false
@@ -748,7 +821,7 @@ func (pf *PanelsFrame) GetKeyLabels() *vtui.KeySet {
 			"", "", "", "", "", "", "", "",
 		},
 		Ctrl: vtui.KeyBarLabels{
-			"", "", "", "", "", "", "", "", "", "", "Fork", "Close",
+			"", "", Msg("KeyBar.CtrlF3"), Msg("KeyBar.CtrlF4"), Msg("KeyBar.CtrlF5"), Msg("KeyBar.CtrlF6"), Msg("KeyBar.CtrlF7"), "", "", "", "Fork", "Close",
 		},
 	}
 }
@@ -907,6 +980,8 @@ func (pf *PanelsFrame) Clone() *PanelsFrame {
 			cloneFsp.vfs.SetPath(fsp.vfs.GetPath())
 			cloneFsp.SetViewMode(fsp.viewMode)
 			cloneFsp.cursorIdx = fsp.cursorIdx
+			cloneFsp.sortMode = fsp.sortMode
+			cloneFsp.sortReverse = fsp.sortReverse
 
 			// Copy entries immediately so the visual state is valid before async reload
 			cloneFsp.entries = make([]*fileEntry, len(fsp.entries))
