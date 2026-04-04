@@ -47,6 +47,7 @@ type EditorView struct {
 	CursorPos        int // Позиция в байтах (для плагинов)
 	DesiredVisualCol int // Колонка, в которую мы хотим попасть при навигации Up/Down
 
+	ShowWhitespaces bool
 	selActive       bool
 	selAnchorOffset int // Абсолютное смещение начала выделения
 
@@ -88,6 +89,7 @@ func NewEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string) *EditorVie
 		vfs:      v,
 		filePath: path,
 		WordWrap: true,
+		ShowWhitespaces: false,
 	}
 	ev.scrollBar = vtui.NewScrollBar(0, 0, 0)
 	ev.scrollBar.SetOwner(ev)
@@ -218,12 +220,8 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 				continue
 			}
 
-			if ev.selActive {
-				selMin, selMax := ev.getSelectionRange()
-				ev.renderCells = vtui.FillCharInfoWithSelection(ev.renderCells, ev.renderBytes, bgAttr, selAttr, frag.ByteOffsetStart, selMin, selMax)
-			} else {
-				ev.renderCells = vtui.FillCharInfo(ev.renderCells, ev.renderBytes, bgAttr)
-			}
+			selMin, selMax := ev.getSelectionRange()
+			ev.renderCells = ev.fillCells(ev.renderCells, ev.renderBytes, bgAttr, selAttr, frag.ByteOffsetStart, ev.selActive, selMin, selMax)
 
 			scr.Write(ev.X1-ev.ScrollLeft, currY, ev.renderCells)
 
@@ -356,6 +354,10 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		ev.ScrollLeft = 0
 		ev.clearCaches()
 		ev.ensureCursorVisible()
+		return true
+
+	case vtinput.VK_F5:
+		ev.ShowWhitespaces = !ev.ShowWhitespaces
 		return true
 
 	case vtinput.VK_F7:
@@ -678,6 +680,41 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 	return false
 }
 
+func (ev *EditorView) fillCells(target []vtui.CharInfo, data []byte, defaultAttr, selAttr uint64, offset int, selActive bool, selMin, selMax int) []vtui.CharInfo {
+	target = target[:0]
+	currByte := 0
+	for len(data) > 0 {
+		r, size := utf8.DecodeRune(data)
+		data = data[size:]
+
+		attr := defaultAttr
+		if selActive {
+			absPos := offset + currByte
+			if absPos >= selMin && absPos < selMax {
+				attr = selAttr
+			}
+		}
+		currByte += size
+
+		displayRune, w := vtui.SanitizeRune(r)
+		if r == ' ' && ev.ShowWhitespaces {
+			displayRune = '·'
+		} else if r < 0x20 || r == 0x7F {
+			if !ev.ShowWhitespaces {
+				displayRune = ' '
+			}
+		}
+
+		if w > 0 {
+			target = append(target, vtui.CharInfo{Char: uint64(displayRune), Attributes: attr})
+			for i := 1; i < w; i++ {
+				target = append(target, vtui.CharInfo{Char: vtui.WideCharFiller, Attributes: attr})
+			}
+		}
+	}
+	return target
+}
+
 func (ev *EditorView) ensureCursorVisible() {
 	width := ev.X2 - ev.X1 + 1
 	height := ev.Y2 - ev.Y1
@@ -835,7 +872,7 @@ func (ev *EditorView) GetKeyLabels() *vtui.KeySet {
 	return &vtui.KeySet{
 		Normal: vtui.KeyBarLabels{
 			Msg("KeyBar.EditorF1"), Msg("KeyBar.EditorF2"), Msg("KeyBar.EditorF3"),
-			"", "", "", Msg("KeyBar.EditorF7"), "", "", Msg("KeyBar.EditorF10"),
+			"", Msg("KeyBar.EditorF5"), "", Msg("KeyBar.EditorF7"), "", "", Msg("KeyBar.EditorF10"),
 		},
 	}
 }

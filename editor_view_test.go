@@ -631,6 +631,56 @@ func TestEditorView_Labels(t *testing.T) {
 		t.Errorf("Expected F10 to be 'Quit', got %q", ks.Normal[9])
 	}
 }
+func TestEditorView_DefaultsAndToggles(t *testing.T) {
+	pt := piecetable.New([]byte("test content"))
+	ev := NewEditorView(pt, nil, "")
+
+	// 1. Check defaults
+	if ev.WordWrap {
+		t.Error("WordWrap should be OFF by default")
+	}
+	if ev.ShowWhitespaces {
+		t.Error("ShowWhitespaces should be OFF by default")
+	}
+
+	// 2. Toggle F3 (Wrap)
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F3})
+	if !ev.WordWrap {
+		t.Error("F3 failed to toggle WordWrap to ON")
+	}
+
+	// 3. Toggle F5 (Whitespaces)
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F5})
+	if !ev.ShowWhitespaces {
+		t.Error("F5 failed to toggle ShowWhitespaces to ON")
+	}
+}
+
+func TestEditorView_WhitespaceRendering(t *testing.T) {
+	SetDefaultF4Palette()
+	pt := piecetable.New([]byte("a b\tc")) // space and tab
+	ev := NewEditorView(pt, nil, "")
+	ev.ShowWhitespaces = true
+
+	cells := ev.fillCells(nil, []byte("a b\tc"), 0, 0, 0, false, 0, 0)
+
+	// '·' is U+00B7 (183)
+	if cells[1].Char != 183 {
+		t.Errorf("Expected dot for space when ShowWhitespaces is ON, got %d", cells[1].Char)
+	}
+	if cells[3].Char != 183 {
+		t.Errorf("Expected dot for tab when ShowWhitespaces is ON, got %d", cells[3].Char)
+	}
+
+	ev.ShowWhitespaces = false
+	cells = ev.fillCells(nil, []byte("a b\tc"), 0, 0, 0, false, 0, 0)
+	if cells[1].Char != ' ' {
+		t.Errorf("Expected space for space when ShowWhitespaces is OFF, got %d", cells[1].Char)
+	}
+	if cells[3].Char != ' ' {
+		t.Errorf("Expected space for tab when ShowWhitespaces is OFF, got %d", cells[3].Char)
+	}
+}
 
 func TestEditorView_WideCharDelete(t *testing.T) {
 	// "A世" -> 'A' (1), '世' (3 bytes)
