@@ -6,6 +6,7 @@ import (
 	"time"
 	"os"
 	"testing"
+	"path/filepath"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 	"github.com/unxed/vtui/piecetable"
@@ -1305,6 +1306,72 @@ Loop:
 
 	if !foundMessage {
 		t.Error("Search should show a message box when pattern is not found")
+	}
+}
+// mockFailingVFS wraps OSVFS but intentionally fails the Rename operation
+type mockFailingVFS struct {
+	vfs.VFS
+	failRename bool
+}
+
+func (m *mockFailingVFS) Rename(ctx context.Context, old, new string) error {
+	if m.failRename {
+		return os.ErrPermission // Simulate permission denied
+	}
+	return m.VFS.Rename(ctx, old, new)
+}
+
+func TestEditorView_SaveFailure_NoDataLoss(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	tmpFile := t.TempDir() + "/important.txt"
+	os.WriteFile(tmpFile, []byte("Original"), 0644)
+
+	// Use our failing VFS
+	baseVfs := vfs.NewOSVFS(filepath.Dir(tmpFile))
+	failingVfs := &mockFailingVFS{VFS: baseVfs, failRename: true}
+
+	pt := piecetable.New([]byte("Original"))
+	ev := NewEditorView(pt, failingVfs, tmpFile)
+	f, _ := failingVfs.Open(context.Background(), tmpFile)
+	ev.file = f
+
+	// 1. Modify the file
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'X'})
+	if !ev.modified { t.Fatal("Editor should be modified") }
+
+	// 2. Attempt to save (F2)
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F2})
+
+	// Process async tasks
+	timeout := time.After(2 * time.Second)
+	saveFinished := false
+	for !saveFinished {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			if !ev.saving { saveFinished = true }
+		case <-timeout:
+			t.Fatal("Timeout waiting for save operation")
+		}
+	}
+
+	// 3. Assertions
+	// The modified flag MUST remain true because the save failed!
+	// If it became false, the user could close the editor without a warning and lose data.
+	if !ev.modified {
+		t.Error("CRITICAL: Editor 'modified' flag was cleared even though save failed! Data loss risk.")
+	}
+
+	// Original file must remain untouched
+	data, _ := os.ReadFile(tmpFile)
+	if string(data) != "Original" {
+		t.Errorf("CRITICAL: Original file was corrupted during failed save. Got %q", string(data))
+	}
+
+	// Should have popped an error dialog
+	if vtui.FrameManager.GetTopFrameType() != vtui.TypeDialog {
+		t.Error("Editor did not show an error dialog upon save failure")
 	}
 }
 

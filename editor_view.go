@@ -908,11 +908,6 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 
 		err = ev.vfs.Rename(ctx.Context, tmpPath, ev.filePath)
 		if err != nil {
-			ev.vfs.Remove(ctx.Context, ev.filePath)
-			err = ev.vfs.Rename(ctx.Context, tmpPath, ev.filePath)
-		}
-
-		if err != nil {
 			ctx.RunOnUI(func() { 
 				ev.saving = false
 				vtui.DebugLog("EDITOR: Failed to rename temp file: %v", err) 

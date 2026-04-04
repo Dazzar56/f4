@@ -130,3 +130,60 @@ func TestAsyncBuffer_PartialChunkAtEOF(t *testing.T) {
 		t.Errorf("EOF chunk failed: expected 'Short', got %q", string(data))
 	}
 }
+func TestAsyncBuffer_ConcurrentAccess(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	// Create a decent sized file
+	content := make([]byte, 1024*1024) // 1MB
+	for i := range content { content[i] = byte(i % 256) }
+
+	tmp := t.TempDir() + "/concurrent.bin"
+	os.WriteFile(tmp, content, 0644)
+
+	v := vfs.NewOSVFS(t.TempDir())
+	f, _ := v.Open(context.Background(), tmp)
+
+	buf := NewAsyncBuffer(context.Background(), f)
+	buf.chunkSize = 64 * 1024 // 64KB chunks
+	defer buf.Close()
+
+	// Spin up a worker to constantly pump the UI task queue (simulating fm.Run)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		for {
+			select {
+			case <-ctx.Done(): return
+			case task := <-vtui.FrameManager.TaskChan:
+				task()
+			}
+		}
+	}()
+
+	// Fire 50 concurrent reads across different overlapping chunks
+	done := make(chan bool)
+	for i := 0; i < 50; i++ {
+		go func(offset int) {
+			for retries := 0; retries < 100; retries++ {
+				_, err := buf.Read(offset, 100)
+				if err == nil { break }
+				if err != piecetable.ErrLoading {
+					t.Errorf("Unexpected error: %v", err)
+					break
+				}
+				time.Sleep(5 * time.Millisecond)
+			}
+			done <- true
+		}(i * 10000) // Stagger offsets
+	}
+
+	// Wait for all goroutines
+	timeout := time.After(3 * time.Second)
+	for i := 0; i < 50; i++ {
+		select {
+		case <-done:
+		case <-timeout:
+			t.Fatal("Concurrency test deadlocked or timed out")
+		}
+	}
+}
