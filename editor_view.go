@@ -926,6 +926,9 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 		// We use a temporary close-and-recover approach.
 		oldAsync := ev.asyncBuf
 		oldFile := ev.file
+		// Check if the current PieceTable is actually using the file-backed buffer we are about to close.
+		needsBufferRecovery := oldAsync != nil && ev.pt.GetOriginalBuffer() == oldAsync
+
 		if oldAsync != nil { oldAsync.Close() }
 		if oldFile != nil { oldFile.Close() }
 
@@ -935,12 +938,11 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 			reopened, reerr := ev.vfs.Open(ctx.Context, ev.filePath)
 			ctx.RunOnUI(func() {
 				ev.saving = false
-				if reerr == nil {
+				if reerr == nil && needsBufferRecovery {
 					ev.file = reopened
-					ev.asyncBuf = NewAsyncBuffer(ctx.Context, reopened)
-					// We don't change ev.pt here, it still points to the same logic.
-					// But we'd need to reconstruct the PieceTable's 'orig' buffer if it was MemoryBuffer.
-					// This is a rare edge case, but for now we at least prevent ev.file from being nil.
+					newBuf := NewAsyncBuffer(ctx.Context, reopened)
+					ev.asyncBuf = newBuf
+					ev.pt.UpdateOriginalBuffer(newBuf)
 				}
 				vtui.DebugLog("EDITOR: Failed to rename temp file: %v", err)
 				vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to save file:\n%v", err), []string{"&Ok"})

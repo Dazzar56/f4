@@ -16,6 +16,33 @@ import (
 	"github.com/unxed/vtinput"
 )
 
+// waitPtString waits for a PieceTable to settle and returns its content as string.
+// Used for tests involving AsyncBuffers.
+func waitPtString(t *testing.T, pt *piecetable.PieceTable) string {
+	t.Helper()
+	timeout := time.After(2 * time.Second)
+	for {
+		select {
+		case <-timeout:
+			t.Fatal("Timeout waiting for PieceTable data")
+		default:
+			// Pump UI tasks to allow AsyncBuffer fetches to complete
+			select {
+			case task := <-vtui.FrameManager.TaskChan:
+				task()
+			default:
+				res, err := pt.Bytes()
+				if err == nil {
+					return string(res)
+				}
+				if err != piecetable.ErrLoading {
+					t.Fatalf("PieceTable read error: %v", err)
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+		}
+	}
+}
 func TestEditorView_TypingAndBackspace(t *testing.T) {
 	pt := piecetable.New([]byte("Hello"))
 	ev := NewEditorView(pt, nil, "")
@@ -1651,14 +1678,59 @@ func TestEditorView_Save_AtomicRenameFailure(t *testing.T) {
 	if !ev.modified {
 		t.Error("Editor cleared modified flag despite Rename failure")
 	}
-	if ev.pt.String() != "!Original Content" {
-		t.Errorf("Internal memory state corrupted after rename failure. Got %q", ev.pt.String())
+	got := waitPtString(t, ev.pt)
+	if got != "!Original Content" {
+		t.Errorf("Internal memory state corrupted after rename failure. Got %q", got)
 	}
 
 	// Original file MUST remain untouched
 	orig, _ := os.ReadFile(path)
 	if string(orig) != "Original Content" {
 		t.Error("Original file was corrupted after a failed atomic rename save")
+	}
+}
+func TestEditorView_Save_RenameFailure_Recovery_DataPreservation(t *testing.T) {
+	// Proves that when Rename fails, the editor correctly updates the internal
+	// PieceTable to point to the newly reopened VFS file buffer, preventing a crash
+	// when reading the original parts of the file afterwards.
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "persist.txt")
+	os.WriteFile(path, []byte("Original"), 0644)
+
+	// Mock VFS that fails Rename
+	baseVfs := vfs.NewOSVFS(tmpDir)
+	failingVfs := &mockFailingVFS{VFS: baseVfs, failRename: true}
+
+	f, _ := failingVfs.Open(context.Background(), path)
+	buf := NewAsyncBuffer(context.Background(), f)
+	pt := piecetable.NewWithBuffer(buf)
+	ev := NewEditorView(pt, failingVfs, path)
+	ev.file = f
+	ev.asyncBuf = buf
+
+	// Modify
+	ev.CursorPos = 8
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: '!'})
+
+	// Save (fails at rename stage)
+	ev.SaveToFile(nil)
+	timeout := time.After(2 * time.Second)
+	for ev.saving {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Timeout waiting for save failure recovery")
+		}
+	}
+
+	// The critical test: Can we still read the original part of the PieceTable?
+	// The recovery logic should have updated the underlying buffer using UpdateOriginalBuffer.
+	got := waitPtString(t, ev.pt)
+	if got != "Original!" {
+		t.Errorf("Data corrupted after recovery: expected 'Original!', got %q", got)
 	}
 }
 func TestEditorView_ModificationStress(t *testing.T) {
@@ -1926,5 +1998,10 @@ func TestEditorView_Save_RetryAfterFailure(t *testing.T) {
 	saved, _ := os.ReadFile(path)
 	if string(saved) != "Changed" {
 		t.Errorf("Data not saved correctly on retry. Expected 'Changed', got %q", string(saved))
+	}
+
+	// Verify memory state is also consistent
+	if waitPtString(t, ev.pt) != "Changed" {
+		t.Errorf("Memory state inconsistent after successful retry. Got %q", waitPtString(t, ev.pt))
 	}
 }

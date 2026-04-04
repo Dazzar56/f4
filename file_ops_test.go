@@ -520,6 +520,44 @@ func TestExecuteFileOp_SkipAll_Integrity(t *testing.T) {
 		t.Error("Files were overwritten despite SkipAll state")
 	}
 }
+func TestExecuteFileOp_Move_Skip_NoDataLoss(t *testing.T) {
+	// Verifies that skipping a file during a MOVE operation prevents
+	// the source directory from being deleted, averting data loss.
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	tmpSrc := t.TempDir()
+	tmpDst := t.TempDir()
+
+	srcFolder := filepath.Join(tmpSrc, "my_folder")
+	os.Mkdir(srcFolder, 0755)
+	os.WriteFile(filepath.Join(srcFolder, "f1.txt"), []byte("src1"), 0644)
+	os.WriteFile(filepath.Join(srcFolder, "f2.txt"), []byte("src2"), 0644)
+
+	// Pre-create destination to cause conflict and skip
+	dstFolder := filepath.Join(tmpDst, "my_folder")
+	os.Mkdir(dstFolder, 0755)
+	os.WriteFile(filepath.Join(dstFolder, "f1.txt"), []byte("dst1"), 0644)
+
+	srcVfs := vfs.NewOSVFS(tmpSrc)
+	dstVfs := vfs.NewOSVFS(tmpDst)
+
+	tCtx := &vtui.TaskContext{Context: context.Background()}
+	state := &FileOpState{SkipAll: true}
+
+	err := recursiveCopy(tCtx, func(string, int) {}, srcVfs, srcFolder, dstVfs, dstFolder, state)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Simulate the ExecuteFileOp deletion logic
+	if state.SkippedCount == 0 {
+		srcVfs.Remove(context.Background(), srcFolder)
+	}
+
+	// Assertion: The source folder MUST STILL EXIST because a file was skipped!
+	if _, err := os.Stat(filepath.Join(srcFolder, "f1.txt")); os.IsNotExist(err) {
+		t.Error("CRITICAL DATA LOSS: Skipped file was deleted from source folder!")
+	}
+}
 func TestExecuteFileOp_MoveAcrossVFS_Fallback(t *testing.T) {
 	// Tests that moving a file between two different VFS implementations
 	// (or when optimized Rename fails) correctly falls back to Copy + Delete.

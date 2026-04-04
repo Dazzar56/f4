@@ -15,6 +15,7 @@ import (
 type FileOpState struct {
 	OverwriteAll bool
 	SkipAll      bool
+	SkippedCount int
 }
 
 func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, destInput string, isMove bool, forked bool, onComplete func()) {
@@ -108,7 +109,7 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 				return err
 			}
 
-			if isMove {
+			if isMove && state.SkippedCount == 0 {
 				srcVfs.Remove(ctx.Context, srcPath)
 			}
 			update("", ((i+1)*100)/len(names))
@@ -190,6 +191,7 @@ func recursiveCopy(ctx *vtui.TaskContext, update func(msg string, percent int), 
 			return fmt.Errorf("cannot overwrite folder with file: %s", itemName)
 		}
 		if state.SkipAll {
+			state.SkippedCount++
 			return nil
 		}
 		if !state.OverwriteAll {
@@ -199,10 +201,12 @@ func recursiveCopy(ctx *vtui.TaskContext, update func(msg string, percent int), 
 				state.OverwriteAll = true
 				vtui.DebugLog("FILEOP: User chose OVERWRITE ALL for %s", itemName)
 			case 2:
+				state.SkippedCount++
 				return nil // Skip
 			case 3:
 				vtui.DebugLog("FILEOP: User chose SKIP ALL")
 				state.SkipAll = true
+				state.SkippedCount++
 				return nil
 			case 4:
 				return context.Canceled // Cancel
@@ -221,6 +225,7 @@ func recursiveCopy(ctx *vtui.TaskContext, update func(msg string, percent int), 
 		}
 		choice := AskError(ctx, "Cannot open source file", err)
 		if choice == 1 {
+			state.SkippedCount++
 			return nil
 		} // Skip
 		if choice == 2 {
@@ -237,6 +242,7 @@ func recursiveCopy(ctx *vtui.TaskContext, update func(msg string, percent int), 
 		}
 		choice := AskError(ctx, "Cannot create destination file", err)
 		if choice == 1 {
+			state.SkippedCount++
 			return nil
 		} // Skip
 		if choice == 2 {
