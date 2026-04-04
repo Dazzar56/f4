@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 	"os"
+	"io"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 	"github.com/unxed/vtui/piecetable"
@@ -293,4 +294,59 @@ func TestAsyncBuffer_ContextRace(t *testing.T) {
 		buf.Close()
 	}
 	// If no panic or deadlock occurred in 100 iterations, the mutex/PostTask logic is likely sound.
+}
+type mockErrorFile struct {
+	vfs.ReadAtCloser
+	errToReturn error
+}
+
+func (m *mockErrorFile) ReadAt(ctx context.Context, p []byte, off int64) (int, error) {
+	return 0, m.errToReturn
+}
+
+func TestAsyncBuffer_ErrorRecovery(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	f := &mockErrorFile{errToReturn: io.ErrUnexpectedEOF}
+	// Manual Size() for mock
+	buf := &AsyncBuffer{
+		file:     f,
+		size:     100,
+		ctx:      context.Background(),
+		loaded:   make(map[int][]byte),
+		fetching: make(map[int]bool),
+		chunkSize: 10,
+	}
+
+	// 1. Trigger read that fails
+	_, err := buf.Read(0, 5)
+	if err != piecetable.ErrLoading { t.Fatal("Should report loading") }
+
+	// 2. Process tasks to handle the failure
+	timeout := time.After(200 * time.Millisecond)
+Loop:
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			break Loop
+		}
+	}
+
+	// 3. Verify 'fetching' state was cleared so we can retry
+	buf.mu.Lock()
+	isFetching := buf.fetching[0]
+	buf.mu.Unlock()
+
+	if isFetching {
+		t.Error("Fetching flag was not cleared after read error")
+	}
+
+	// 4. Fix the error in mock and retry
+	f.errToReturn = nil
+	_, err = buf.Read(0, 5)
+	if err != piecetable.ErrLoading {
+		t.Fatal("Should trigger fetch again after error recovery")
+	}
 }
