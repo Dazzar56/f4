@@ -1222,7 +1222,11 @@ func (ev *EditorView) Search(pattern string, caseSensitive, reverse, next bool) 
 						foundOffset = readStart + idx
 						break
 					}
-					// Step back, ensuring overlap to catch
+					// Step back, ensuring overlap to catch split words
+					currOff = readStart + len(pattern) - 1
+					if currOff >= readStart+readSize {
+						currOff = readStart - 1
+					}
 				}
 			}
 

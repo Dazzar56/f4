@@ -1496,6 +1496,7 @@ func TestEditorView_Search_Backward(t *testing.T) {
 		t.Errorf("Backward search failed: expected offset 20, got %d", ev.selAnchorOffset)
 	}
 }
+
 func TestEditorView_Search_ShiftF7_Reverse(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
@@ -1552,6 +1553,7 @@ func TestEditorView_Search_ShiftF7_Reverse(t *testing.T) {
 		t.Errorf("Shift+F7 reverse (Next) failed: expected offset 11, got %d", ev.selAnchorOffset)
 	}
 }
+
 func TestEditorView_SaveFailure_NoDataLoss(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
