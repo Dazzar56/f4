@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"time"
+
 	"path/filepath"
 
 	"github.com/unxed/vtui"
@@ -156,4 +157,9 @@ func (v *OSVFS) Open(ctx context.Context, path string) (ReadAtCloser, error) {
 func (v *OSVFS) Create(ctx context.Context, path string) (io.WriteCloser, error) {
 	if ctx.Err() != nil { return nil, ctx.Err() }
 	return os.Create(path)
+}
+
+
+func (v *OSVFS) ParentVFS() VFS {
+	return nil // OSVFS is the root
 }

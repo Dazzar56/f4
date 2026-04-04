@@ -3,10 +3,13 @@ package main
 import "github.com/unxed/vtui"
 
 // HostAPI defines the functions f4 exposes to plugins.
+import "github.com/unxed/f4/vfs"
+
 type HostAPI interface {
 	GetVersion() string
 	Log(msg string)
 	Message(msg string)
+	RegisterVFSProvider(p vfs.VFSProvider)
 }
 
 // coreAPI implements HostAPI.
@@ -26,4 +29,8 @@ func (c *coreAPI) Message(msg string) {
 	vtui.FrameManager.PostTask(func() {
 		vtui.ShowMessage(" Plugin Message ", msg, []string{"&Ok"})
 	})
+}
+func (c *coreAPI) RegisterVFSProvider(p vfs.VFSProvider) {
+	vtui.DebugLog("CORE: Registering VFS Provider: %s", p.Name())
+	vfs.RegisterProvider(p)
 }

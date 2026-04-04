@@ -50,6 +50,35 @@ type VFS interface {
 
 	// Create returns a WriteCloser for new files.
 	Create(ctx context.Context, path string) (io.WriteCloser, error)
+	ParentVFS() VFS // Returns the underlying VFS if this is a virtual mount, or nil
+}
+
+// VFSProvider умеет определять, может ли он открыть путь, и создавать экземпляр VFS.
+type VFSProvider interface {
+	Name() string
+	// Priority: чем выше, тем раньше провайдер опрашивается (архивы обычно имеют низкий приоритет)
+	Priority() int
+	// CanOpen возвращает true, если провайдер понимает этот путь.
+	// parent — текущая VFS, в которой находится объект.
+	CanOpen(ctx context.Context, parent VFS, path string) bool
+	// Open создает новый экземпляр VFS.
+	Open(ctx context.Context, parent VFS, path string) (VFS, error)
+}
+
+var providers []VFSProvider
+
+func RegisterProvider(p VFSProvider) {
+	providers = append(providers, p)
+	// Сортируем по приоритету
+}
+
+func FindProvider(ctx context.Context, parent VFS, path string) VFSProvider {
+	for _, p := range providers {
+		if p.CanOpen(ctx, parent, path) {
+			return p
+		}
+	}
+	return nil
 }
 
 // ReadAtCloser combines reader interfaces with context support.

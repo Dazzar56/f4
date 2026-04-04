@@ -463,6 +463,10 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		}
 
 	case vtinput.VK_F1:
+		if shift {
+			actionArchiveCommands(pf)
+			return true
+		}
 		return vtui.FrameManager.EmitCommand(vtui.CmHelp, nil)
 	case vtinput.VK_F3:
 		if ctrl { return vtui.FrameManager.EmitCommand(CmSortName, nil) }

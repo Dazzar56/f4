@@ -34,4 +34,6 @@ const (
 	CmRightSortSize
 	CmRightSortUnsorted
 	CmSwapPanels
+	CmAddArchive
+	CmExtractArchive
 )

@@ -46,6 +46,14 @@ func (pm *PluginManager) loadInternal() {
 		pm.mu.Unlock()
 		vtui.DebugLog("Loaded internal plugin: %s", p.GetName())
 	}
+
+	pArc := &ArchivePlugin{}
+	if err := pArc.Init(pm.api); err == nil {
+		pm.mu.Lock()
+		pm.plugins = append(pm.plugins, pArc)
+		pm.mu.Unlock()
+		vtui.DebugLog("Loaded internal plugin: %s", pArc.GetName())
+	}
 }
 
 func (pm *PluginManager) loadExternal(dir string) {

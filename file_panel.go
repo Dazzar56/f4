@@ -615,6 +615,30 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 		idx := fp.GetCursorIndex()
 		if idx >= 0 && idx < len(fp.entries) {
 			selected := fp.entries[idx]
+
+			// Logic for leaving a virtual VFS (like an archive)
+			if selected.Name == ".." {
+
+				parent := fp.vfs.ParentVFS()
+				isRoot := false
+				// Проверка на корень для ArchiveVFS
+				if arcVfs, ok := fp.vfs.(*vfs.ArchiveVFS); ok {
+					isRoot = arcVfs.IsAtRoot()
+				} else if parent != nil {
+					// Fallback для других типов VFS
+					isRoot = (fp.vfs.GetPath() == parent.Join(parent.GetPath(), ".."))
+				}
+
+				if parent != nil && isRoot {
+					oldPath := fp.vfs.GetPath()
+					// For ArchiveVFS, GetPath() in root returns the archive file path
+					fp.vfs = parent
+					fp.pendingSelection = fp.vfs.Base(oldPath)
+					fp.ReadDirectory()
+					return true
+				}
+			}
+
 			if selected.IsDir {
 				oldPath := fp.vfs.GetPath()
 				newPath := fp.vfs.Join(oldPath, selected.Name)
@@ -623,13 +647,22 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 					if selected.Name == ".." {
 						fp.pendingSelection = fp.vfs.Base(oldPath)
 					} else {
-						// When entering a folder, always reset cursor to ".."
 						fp.pendingSelection = ".."
 					}
 					fp.ReadDirectory()
 					return true
-				} else {
-					vtui.DebugLog("PANEL: Navigation failed: %v", err)
+				}
+			} else {
+				// Просим VFS реестр подобрать провайдера для этого файла
+				fullPath := fp.vfs.Join(fp.vfs.GetPath(), selected.Name)
+				if provider := vfs.FindProvider(context.Background(), fp.vfs, fullPath); provider != nil {
+					newVfs, err := provider.Open(context.Background(), fp.vfs, fullPath)
+					if err == nil {
+						fp.vfs = newVfs
+						fp.pendingSelection = ".."
+						fp.ReadDirectory()
+						return true
+					}
 				}
 			}
 		}

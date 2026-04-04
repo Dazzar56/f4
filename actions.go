@@ -2,13 +2,18 @@ package main
 
 import (
 	"context"
+	"os"
 	"fmt"
 	"os/exec"
 	"runtime"
 	"strings"
 	"time"
 
+	"path/filepath"
+	"io"
+
 	"github.com/unxed/f4/vfs"
+	"github.com/mholt/archives"
 	"github.com/unxed/vtui"
 	"github.com/unxed/vtui/piecetable"
 )
@@ -438,7 +443,7 @@ func actionFindFile(pf *PanelsFrame) {
 
 	hbox := vtui.NewHBoxLayout(0, 0, 54-4, 1)
 	hbox.HorizontalAlign = vtui.AlignCenter
-	
+
 	hbox.Spacing = 2
 	hbox.Add(btnFind, vtui.Margins{}, vtui.AlignTop)
 	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
@@ -457,4 +462,140 @@ func actionFindFile(pf *PanelsFrame) {
 	}
 
 	vtui.FrameManager.Push(dlg)
+}
+
+func actionArchiveCommands(pf *PanelsFrame) {
+	panel := pf.getActivePanel()
+	if panel == nil { return }
+
+	menu := vtui.NewVMenu(" Archive Commands ")
+	menu.AddItem(vtui.MenuItem{Text: "&1. Add to archive"})
+	menu.AddItem(vtui.MenuItem{Text: "&2. Extract files"})
+
+	// Задаем размеры: ширина 30, высота = кол-во пунктов + 2 (рамки)
+	w, h := 30, menu.GetItemCount()+2
+	x := (pf.lastW - w) / 2
+	y := (pf.lastH - h) / 2
+	menu.SetPosition(x, y, x+w-1, y+h-1)
+
+	menu.OnAction = func(idx int) {
+		menu.Close()
+		switch idx {
+		case 0:
+			actionAddArchive(pf)
+		case 1:
+			actionExtractArchive(pf)
+		}
+	}
+
+	vtui.FrameManager.Push(menu)
+}
+
+func actionExtractArchive(pf *PanelsFrame) {
+	srcPanel := pf.getActivePanel()
+	dstPanel := pf.getInactivePanel()
+	if srcPanel == nil || dstPanel == nil { return }
+
+	name := srcPanel.GetSelectedName()
+	if name == "" || name == ".." { return }
+
+	srcPath := srcPanel.vfs.Join(srcPanel.vfs.GetPath(), name)
+	destDir := dstPanel.vfs.GetPath()
+
+	pf.RunProgressTask(" Extracting... ", "Identifying archive...", false, func(tctx *vtui.TaskContext, update func(msg string, percent int)) error {
+		f, err := os.Open(srcPath)
+		if err != nil { return err }
+		defer f.Close()
+
+		format, stream, err := archives.Identify(tctx.Context, srcPath, f)
+		if err != nil { return err }
+
+		ex, ok := format.(archives.Extractor)
+		if !ok { return fmt.Errorf("file is not an extractable archive") }
+
+		// Подсчитываем файлы для прогресс-бара (опционально, но полезно)
+		return ex.Extract(tctx.Context, stream, func(ctx context.Context, info archives.FileInfo) error {
+			if tctx.Err() != nil { return tctx.Err() }
+
+			update(fmt.Sprintf("Extracting: %s", info.NameInArchive), -1)
+
+			targetPath := filepath.Join(destDir, info.NameInArchive)
+
+			if info.IsDir() {
+				return os.MkdirAll(targetPath, 0755)
+			}
+
+			// Создаем подпапки если их нет
+			os.MkdirAll(filepath.Dir(targetPath), 0755)
+
+			out, err := os.Create(targetPath)
+			if err != nil { return err }
+			defer out.Close()
+
+			in, err := info.Open()
+			if err != nil { return err }
+			defer in.Close()
+
+			_, err = io.Copy(out, in)
+			return err
+		})
+	}, func(err error) {
+		if err != nil && err != context.Canceled {
+			vtui.ShowMessage(" Error ", fmt.Sprintf("Extraction failed:\n%v", err), []string{"&Ok"})
+		}
+		pf.RefreshAll()
+	})
+}
+
+func actionAddArchive(pf *PanelsFrame) {
+	panel := pf.getActivePanel()
+	if panel == nil { return }
+
+	names := panel.GetSelectedNames()
+	if len(names) == 0 { return }
+
+	// Default archive name
+	arcName := panel.vfs.Base(panel.vfs.GetPath())
+	if arcName == "." || arcName == "" { arcName = "archive" }
+	arcName += ".zip"
+
+	vtui.InputBox(" Add to archive ", "Archive name:", arcName, func(name string) {
+		if name == "" { return }
+
+		fullArcPath := panel.vfs.Join(panel.vfs.GetPath(), name)
+
+		pf.RunProgressTask(" Archiving... ", "Gathering files...", false, func(tctx *vtui.TaskContext, update func(msg string, percent int)) error {
+			// Convert names to archives.FileInfo
+			var files []archives.FileInfo
+			for i, n := range names {
+				if tctx.Err() != nil { return tctx.Err() }
+				update(fmt.Sprintf("Scanning: %s", n), (i*100)/len(names))
+
+				fullPath := panel.vfs.Join(panel.vfs.GetPath(), n)
+
+				// For OSVFS we can use archives.FilesFromDisk
+				if osvfs, ok := panel.vfs.(*vfs.OSVFS); ok {
+					absPath, _ := osvfs.Abs(fullPath)
+					moreFiles, err := archives.FilesFromDisk(tctx.Context, nil, map[string]string{absPath: n})
+					if err == nil {
+						files = append(files, moreFiles...)
+					}
+				}
+			}
+
+			out, err := os.Create(fullArcPath)
+			if err != nil { return err }
+			defer out.Close()
+
+			format := archives.Zip{}
+			// In archives library, Archive is a method that takes a writer and slice of FileInfo
+			return format.Archive(tctx.Context, out, files)
+
+		}, func(err error) {
+			if err != nil && err != context.Canceled {
+				vtui.ShowMessage(" Error ", fmt.Sprintf("Archiving failed:\n%v", err), []string{"&Ok"})
+			}
+			pf.RefreshAll()
+		})
+	})
 }
