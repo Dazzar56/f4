@@ -255,3 +255,42 @@ func TestAsyncBuffer_RedundantFetchPrevention(t *testing.T) {
 	}
 	buf.mu.Unlock()
 }
+
+func TestAsyncBuffer_ContextRace(t *testing.T) {
+	// Simulates the scenario where a context is cancelled exactly when data arrives.
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	
+	content := []byte("Race test content")
+	v := vfs.NewOSVFS(t.TempDir())
+	tmp := t.TempDir() + "/race.txt"
+	os.WriteFile(tmp, content, 0644)
+	f, _ := v.Open(context.Background(), tmp)
+
+	for i := 0; i < 100; i++ {
+		ctx, cancel := context.WithCancel(context.Background())
+		buf := NewAsyncBuffer(ctx, f)
+		buf.chunkSize = 5
+		
+		// Start fetch
+		go func() {
+			_, _ = buf.Read(0, 5)
+		}()
+		
+		// Immediate cancel to hit the race window in fetchChunk
+		cancel()
+		
+		// Pump tasks
+		timeout := time.After(10 * time.Millisecond)
+	loop:
+		for {
+			select {
+			case task := <-vtui.FrameManager.TaskChan:
+				task()
+			case <-timeout:
+				break loop
+			}
+		}
+		buf.Close()
+	}
+	// If no panic or deadlock occurred in 100 iterations, the mutex/PostTask logic is likely sound.
+}
