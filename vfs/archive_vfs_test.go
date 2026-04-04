@@ -248,6 +248,23 @@ func TestArchiveVFS_DeepNavigation(t *testing.T) {
 	}
 }
 
+func TestArchiveVFS_Stat_Missing(t *testing.T) {
+	tmpDir := t.TempDir()
+	zipPath := filepath.Join(tmpDir, "missing.zip")
+	createTestZip(t, zipPath)
+
+	osVfs := NewOSVFS(tmpDir)
+	arcVfs, _ := NewArchiveVFS(osVfs, zipPath)
+	ctx := context.Background()
+
+	// 1. Пытаемся получить Stat для несуществующего файла
+	_, err := arcVfs.Stat(ctx, arcVfs.Join(zipPath, "phantom.txt"))
+	if err == nil {
+		t.Error("Stat should return error for non-existent file in archive")
+	}
+}
+
+
 func TestArchiveVFS_ConcurrentAccess(t *testing.T) {
 	tmpDir := t.TempDir()
 	zipPath := filepath.Join(tmpDir, "concurrent.zip")

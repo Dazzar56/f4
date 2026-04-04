@@ -27,26 +27,49 @@ func (d dummyDirInfo) Sys() any           { return nil }
 
 type ArchiveVFS struct {
 	parent    VFS
-	arcPath   string // Абсолютный путь к файлу архива в родительской VFS
-	innerPath string // Путь внутри архива (относительно корня архива, "." для корня)
+	arcPath   string // Путь к файлу архива в родительской VFS
+	innerPath string // Путь внутри архива
 
 	format    archives.Format
 	arcFS     fs.FS
+
+	// Для вложенных архивов: ссылка на временный файл, который нужно закрыть (и удалить)
+	closer io.Closer
 }
 
 func NewArchiveVFS(parent VFS, path string) (*ArchiveVFS, error) {
-	absPath, _ := parent.Abs(path)
-	
-	// Используем стандартный контекст для открытия
-	arcFS, err := archives.FileSystem(context.Background(), absPath, nil)
+	var arcFS fs.FS
+	var err error
+	var finalPath string
+	var closer io.Closer
+
+	if osvfs, ok := parent.(*OSVFS); ok {
+		finalPath, _ = osvfs.Abs(path)
+		arcFS, err = archives.FileSystem(context.Background(), finalPath, nil)
+	} else {
+		// Логика для вложенных архивов
+		rc, openErr := parent.Open(context.Background(), path)
+		if openErr != nil { return nil, openErr }
+
+		if trc, ok := rc.(*tempReadAtCloser); ok {
+			finalPath = trc.tempPath
+			closer = trc // Запоминаем, чтобы закрыть/удалить позже
+			arcFS, err = archives.FileSystem(context.Background(), finalPath, nil)
+		} else {
+			rc.Close()
+			return nil, fmt.Errorf("parent VFS does not support nested archives")
+		}
+	}
+
 	if err != nil {
+		if closer != nil { closer.Close() }
 		return nil, err
 	}
 
-	// Нам нужно знать формат, чтобы понимать, применять ли эвристику ZIP
-	f, _ := os.Open(absPath)
+	// Определяем формат для эвристики ZIP
+	f, _ := os.Open(finalPath)
 	defer f.Close()
-	format, _, _ := archives.Identify(context.Background(), absPath, f)
+	format, _, _ := archives.Identify(context.Background(), finalPath, f)
 
 	return &ArchiveVFS{
 		parent:    parent,
@@ -54,6 +77,7 @@ func NewArchiveVFS(parent VFS, path string) (*ArchiveVFS, error) {
 		innerPath: ".",
 		format:    format,
 		arcFS:     arcFS,
+		closer:    closer,
 	}, nil
 }
 
@@ -327,7 +351,14 @@ func (v *ArchiveVFS) IsArchive(ctx context.Context, path string) bool {
 }
 
 func (v *ArchiveVFS) OpenArchive(ctx context.Context, path string) (VFS, error) {
-	return nil, fmt.Errorf("nested archives not supported")
+	return NewArchiveVFS(v, path)
+}
+
+func (v *ArchiveVFS) Close() error {
+	if v.closer != nil {
+		return v.closer.Close()
+	}
+	return nil
 }
 
 type tempReadAtCloser struct {

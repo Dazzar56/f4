@@ -631,7 +631,10 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 
 				if parent != nil && isRoot {
 					oldPath := fp.vfs.GetPath()
-					// For ArchiveVFS, GetPath() in root returns the archive file path
+
+					// Закрываем текущую систему (удаляем временные файлы)
+					fp.vfs.Close()
+
 					fp.vfs = parent
 					fp.pendingSelection = fp.vfs.Base(oldPath)
 					fp.ReadDirectory()

@@ -51,6 +51,8 @@ type VFS interface {
 	// Create returns a WriteCloser for new files.
 	Create(ctx context.Context, path string) (io.WriteCloser, error)
 	ParentVFS() VFS // Returns the underlying VFS if this is a virtual mount, or nil
+
+	Close() error
 }
 
 // VFSProvider умеет определять, может ли он открыть путь, и создавать экземпляр VFS.

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"archive/zip"
 	"time"
+	"github.com/mholt/archives"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 )
@@ -160,4 +161,21 @@ func TestActionExtractArchive_Integrity(t *testing.T) {
 	if st, err := os.Stat(filepath.Join(destDir, "empty_dir")); err != nil || !st.IsDir() {
 		t.Error("Folder was not extracted correctly")
 	}
+}
+
+// Вспомогательная функция для теста, чтобы не застревать в InputBox
+func ExecuteAddArchive_Internal(pf *PanelsFrame, panel *FileSystemPanel, fullArcPath string, names []string, onDone func()) {
+	pf.RunProgressTask(" Archiving... ", "Scanning...", false, func(tctx *vtui.TaskContext, update func(msg string, percent int)) error {
+		var files []archives.FileInfo
+		for _, n := range names {
+			absPath, _ := panel.vfs.Abs(panel.vfs.Join(panel.vfs.GetPath(), n))
+			moreFiles, _ := archives.FilesFromDisk(tctx.Context, nil, map[string]string{absPath: n})
+			files = append(files, moreFiles...)
+		}
+		out, _ := os.Create(fullArcPath)
+		defer out.Close()
+		return archives.Zip{}.Archive(tctx.Context, out, files)
+	}, func(err error) {
+		onDone()
+	})
 }
