@@ -88,7 +88,7 @@ func NewEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string) *EditorVie
 		engine:   textlayout.NewWrapEngine(pt, li),
 		vfs:      v,
 		filePath: path,
-		WordWrap: true,
+		WordWrap: false,
 		ShowWhitespaces: false,
 	}
 	ev.scrollBar = vtui.NewScrollBar(0, 0, 0)
