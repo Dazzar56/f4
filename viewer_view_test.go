@@ -285,3 +285,38 @@ func TestLayout_ViewerSearchDialog_Validity(t *testing.T) {
 
 	vtui.AssertLayout(t, dlg)
 }
+
+func TestViewerView_HexModeToggle(t *testing.T) {
+	vtui.SetDefaultPalette()
+	tmpDir := t.TempDir()
+	tmp := tmpDir + "/hex.txt"
+	// 32 bytes of data
+	data := make([]byte, 32)
+	for i := range data { data[i] = byte(i) }
+	os.WriteFile(tmp, data, 0644)
+
+	v := vfs.NewOSVFS(tmpDir)
+	vv, _ := NewViewerView(context.Background(), v, tmp)
+	
+	// Set an offset that is NOT aligned to 16
+	vv.TopOffset = 10
+
+	// Toggle Hex Mode
+	vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F4})
+
+	if !vv.HexMode {
+		t.Error("F4 failed to toggle HexMode")
+	}
+
+	// Hex mode MUST align TopOffset to 16-byte boundary
+	if vv.TopOffset != 0 {
+		t.Errorf("Hex mode failed to align offset: expected 0, got %d", vv.TopOffset)
+	}
+
+	// Toggle back to Text
+	vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F4})
+	if vv.HexMode {
+		t.Error("F4 failed to toggle back to TextMode")
+	}
+}
+
