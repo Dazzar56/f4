@@ -559,3 +559,54 @@ Loop:
 		t.Error("File was not moved correctly to destination")
 	}
 }
+func TestExecuteFileOp_LargeFileIntegrity(t *testing.T) {
+	// Verifies data integrity for files spanning multiple 128KB buffer chunks.
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	tmpSrc := t.TempDir()
+	tmpDst := t.TempDir()
+
+	// 1. Generate 512KB of pseudo-random data
+	data := make([]byte, 512*1024)
+	for i := range data {
+		data[i] = byte(i % 256)
+	}
+	fileName := "massive.bin"
+	os.WriteFile(filepath.Join(tmpSrc, fileName), data, 0644)
+
+	srcVfs := vfs.NewOSVFS(tmpSrc)
+	dstVfs := vfs.NewOSVFS(tmpDst)
+
+	// 2. Perform Copy
+	ExecuteFileOp(nil, srcVfs, dstVfs, []string{fileName}, tmpDst, false, false, nil)
+
+	// 3. Pump tasks
+	timeout := time.After(2 * time.Second)
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-time.After(10 * time.Millisecond):
+			// Check if target exists
+			if _, err := os.Stat(filepath.Join(tmpDst, fileName)); err == nil {
+				goto done
+			}
+		case <-timeout:
+			t.Fatal("Large file copy timed out")
+		}
+	}
+
+done:
+	// 4. Verify byte-for-byte
+	copiedData, err := os.ReadFile(filepath.Join(tmpDst, fileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(copiedData) != len(data) {
+		t.Errorf("Length mismatch: expected %d, got %d", len(data), len(copiedData))
+	}
+	for i := range data {
+		if data[i] != copiedData[i] {
+			t.Fatalf("Data corruption at byte %d", i)
+		}
+	}
+}

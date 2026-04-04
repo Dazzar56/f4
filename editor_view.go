@@ -570,10 +570,19 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 			offset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 			if offset > 0 {
 				if ev.CursorPos == 0 {
-					// Merge with the previous line (remove \n)
+					// Merge with the previous line (remove line break)
 					prevLen := ev.getLineLength(ev.CursorLine - 1)
-					ev.pt.Delete(offset-1, 1)
-					ev.li.UpdateAfterDelete(offset-1, 1)
+					delLen := 1
+					// Check for CRLF (\r\n)
+					if offset >= 2 {
+						prefix, _ := ev.pt.GetRange(offset-2, 2)
+						if len(prefix) == 2 && prefix[0] == '\r' && prefix[1] == '\n' {
+							delLen = 2
+						}
+					}
+
+					ev.pt.Delete(offset-delLen, delLen)
+					ev.li.UpdateAfterDelete(offset-delLen, delLen)
 					ev.engine.InvalidateFrom(ev.CursorLine - 1)
 					ev.CursorLine--
 					ev.CursorPos = prevLen

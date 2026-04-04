@@ -1660,3 +1660,89 @@ func TestEditorView_Save_AtomicRenameFailure(t *testing.T) {
 		t.Error("Original file was corrupted after a failed atomic rename save")
 	}
 }
+func TestEditorView_ModificationStress(t *testing.T) {
+	// Tests stability of LineIndex and navigation during randomized edits.
+	content := "Line 1\nLine 2\nLine 3\nLine 4\nLine 5"
+	pt := piecetable.New([]byte(content))
+	ev := NewEditorView(pt, nil, "")
+	ev.SetPosition(0, 0, 80, 24)
+	ev.WordWrap = true
+
+	// A sequence of mixed operations
+	ops := []struct {
+		char uint16
+		vk   uint16
+		ctrl bool
+	}{
+		{vk: vtinput.VK_END},
+		{char: 'a'}, {char: 'b'}, {char: 'c'},
+		{vk: vtinput.VK_RETURN},
+		{char: 'x'}, {char: 'y'}, {char: 'z'},
+		{vk: vtinput.VK_UP},
+		{vk: vtinput.VK_HOME},
+		{vk: vtinput.VK_DELETE}, {vk: vtinput.VK_DELETE},
+		{vk: vtinput.VK_BACK},
+		{char: ' '},
+		{vk: vtinput.VK_A, ctrl: true}, // Select all
+		{vk: vtinput.VK_DELETE},        // Wipe document
+		{char: 'R'}, {char: 'e'}, {char: 's'}, {char: 't'}, {char: 'a'}, {char: 'r'}, {char: 't'},
+	}
+
+	for i, op := range ops {
+		ctrlFlag := uint32(0)
+		if op.ctrl {
+			ctrlFlag = vtinput.LeftCtrlPressed
+		}
+		ev.ProcessKey(&vtinput.InputEvent{
+			Type:            vtinput.KeyEventType,
+			KeyDown:         true,
+			Char:            rune(op.char),
+			VirtualKeyCode:  op.vk,
+			ControlKeyState: ctrlFlag,
+		})
+
+		// After every op, verify LineIndex integrity
+		expectedLi := piecetable.NewLineIndex()
+		expectedLi.Rebuild(ev.pt)
+		if ev.li.LineCount() != expectedLi.LineCount() {
+			t.Fatalf("Step %d: LineCount mismatch. Got %d, want %d", i, ev.li.LineCount(), expectedLi.LineCount())
+		}
+	}
+
+	if ev.pt.String() != "Restart" {
+		t.Errorf("Stress test result mismatch: %q", ev.pt.String())
+	}
+}
+
+func TestEditorView_CRLFPieceTable(t *testing.T) {
+	// Verifies that \r\n line endings don't cause off-by-one errors in indices.
+	content := "Line1\r\nLine2\r\nLine3"
+	pt := piecetable.New([]byte(content))
+	ev := NewEditorView(pt, nil, "")
+	ev.SetPosition(0, 0, 80, 24)
+
+	// 1. Check initial line count
+	if ev.li.LineCount() != 3 {
+		t.Errorf("Expected 3 lines for CRLF content, got %d", ev.li.LineCount())
+	}
+
+	// 2. Navigation: Down from end of line 0
+	ev.CursorLine = 0
+	ev.CursorPos = 5 // After '1', before '\r'
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT})
+
+	if ev.CursorLine != 1 || ev.CursorPos != 0 {
+		t.Errorf("CRLF cross-line navigation failed. Target: 1:0, Got: %d:%d", ev.CursorLine, ev.CursorPos)
+	}
+
+	// 3. Backspace from start of line 1 (merging lines)
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_BACK})
+
+	// Expected: "Line1" + "Line2" ( \r\n removed )
+	if !strings.Contains(ev.pt.String(), "Line1Line2") {
+		t.Errorf("CRLF merge failed: %q", ev.pt.String())
+	}
+	if ev.li.LineCount() != 2 {
+		t.Errorf("LineCount after CRLF merge: expected 2, got %d", ev.li.LineCount())
+	}
+}
