@@ -1167,3 +1167,189 @@ func TestEditorView_FarX_CutVsDown(t *testing.T) {
 		t.Error("Ctrl+X without selection should move cursor down")
 	}
 }
+func TestEditorView_Search_Basic(t *testing.T) {
+	vtui.SetDefaultPalette()
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	content := "The quick brown fox jumps over the lazy dog"
+	pt := piecetable.New([]byte(content))
+	ev := NewEditorView(pt, nil, "test.txt")
+	ev.SetPosition(0, 0, 80, 24)
+
+	// Запускаем поиск слова "fox"
+	ev.Search("fox", false)
+
+	// Прокачиваем задачи из очереди (PostTask), так как поиск асинхронный
+	timeout := time.After(1 * time.Second)
+Loop:
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			// Если выделение стало активным, значит поиск завершился
+			if ev.selActive {
+				break Loop
+			}
+		case <-timeout:
+			t.Fatal("Search timed out")
+		}
+	}
+
+	// "fox" начинается с 16-го байта
+	if ev.selAnchorOffset != 16 {
+		t.Errorf("Expected search anchor at 16, got %d", ev.selAnchorOffset)
+	}
+
+	// Конец совпадения — 16 + 3 = 19. Проверяем позицию курсора.
+	actualOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
+	if actualOffset != 19 {
+		t.Errorf("Expected cursor at 19, got %d", actualOffset)
+	}
+}
+
+func TestEditorView_Search_Next(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	// Два вхождения слова "match"
+	pt := piecetable.New([]byte("match one, match two"))
+	ev := NewEditorView(pt, nil, "test.txt")
+	ev.SetPosition(0, 0, 80, 24)
+
+	// 1. Находим первое вхождение
+	ev.Search("match", false)
+
+	timeout := time.After(1 * time.Second)
+	for !ev.selActive {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("First search failed")
+		}
+	}
+
+	if ev.selAnchorOffset != 0 {
+		t.Errorf("First match should be at 0, got %d", ev.selAnchorOffset)
+	}
+
+	// 2. Ищем следующее (Find Next)
+	ev.selActive = false // Сбрасываем для проверки нового результата
+	ev.Search("match", true)
+
+	timeout = time.After(1 * time.Second)
+	for !ev.selActive {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Next search failed")
+		}
+	}
+
+	// Второе "match" начинается с 11-го байта
+	if ev.selAnchorOffset != 11 {
+		t.Errorf("Second match should be at 11, got %d", ev.selAnchorOffset)
+	}
+}
+
+func TestEditorView_Search_CaseInsensitive(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	pt := piecetable.New([]byte("ALL CAPS TEXT"))
+	ev := NewEditorView(pt, nil, "test.txt")
+	ev.SetPosition(0, 0, 80, 24)
+
+	// Ищем "caps" маленькими буквами
+	ev.Search("caps", false)
+
+	timeout := time.After(1 * time.Second)
+	for !ev.selActive {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Case-insensitive search failed")
+		}
+	}
+
+	if ev.selAnchorOffset != 4 {
+		t.Errorf("Should find 'CAPS' at offset 4, got %d", ev.selAnchorOffset)
+	}
+}
+func TestEditorView_Search_NotFound(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	pt := piecetable.New([]byte("some text"))
+	ev := NewEditorView(pt, nil, "test.txt")
+
+	// Ищем то, чего нет
+	ev.Search("missing", false)
+
+	// Ждем появления сообщения об ошибке (оно создается через ShowMessage)
+	timeout := time.After(1 * time.Second)
+	foundMessage := false
+Loop:
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			// Проверяем, не открылся ли диалог (сообщение об ошибке)
+			if vtui.FrameManager.GetTopFrameType() == vtui.TypeDialog {
+				foundMessage = true
+				break Loop
+			}
+		case <-timeout:
+			break Loop
+		}
+	}
+
+	if !foundMessage {
+		t.Error("Search should show a message box when pattern is not found")
+	}
+}
+
+func TestEditorView_Search_Multiline(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	// Текст на три строки, искомое слово на последней
+	content := "Line One\nLine Two\nTarget"
+	pt := piecetable.New([]byte(content))
+	ev := NewEditorView(pt, nil, "test.txt")
+	ev.SetPosition(0, 0, 80, 24)
+
+	ev.Search("Target", false)
+
+	timeout := time.After(1 * time.Second)
+	for !ev.selActive {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Multiline search timed out")
+		}
+	}
+
+	// "Target" начинается после "Line One\nLine Two\n" (9 + 9 = 18 байт)
+	if ev.selAnchorOffset != 18 {
+		t.Errorf("Expected offset 18, got %d", ev.selAnchorOffset)
+	}
+	if ev.CursorLine != 2 {
+		t.Errorf("Expected cursor on line 2, got %d", ev.CursorLine)
+	}
+}
+
+func TestEditorView_Search_Empty(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pt := piecetable.New([]byte("data"))
+	ev := NewEditorView(pt, nil, "test.txt")
+
+	// Поиск пустой строки не должен запускать асинхронную задачу
+	ev.Search("", false)
+
+	select {
+	case <-vtui.FrameManager.TaskChan:
+		t.Error("Empty pattern should not trigger a search task")
+	case <-time.After(100 * time.Millisecond):
+		// Успех: задача не появилась
+	}
+}

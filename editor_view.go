@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"context"
 	"time"
+	"strings"
 
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
@@ -40,6 +41,7 @@ type EditorView struct {
 	ScrollLeft   int // Горизонтальный скролл (когда WordWrap=false)
 
 	WordWrap         bool
+	lastSearch       string
 	modified         bool
 	CursorLine       int // Текущая логическая строка (для плагинов)
 	CursorPos        int // Позиция в байтах (для плагинов)
@@ -345,6 +347,15 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		ev.clearCaches()
 		ev.ensureCursorVisible()
 		return true
+
+	case vtinput.VK_F7:
+		if shift && ev.lastSearch != "" {
+			ev.Search(ev.lastSearch, true)
+		} else {
+			vtui.FrameManager.EmitCommand(CmSearch, nil)
+		}
+		return true
+	
 	case vtinput.VK_ESCAPE, vtinput.VK_F10:
 		ev.tryClose()
 		return true
@@ -772,6 +783,12 @@ func (ev *EditorView) HandleCommand(cmd int, args any) bool {
 		ev.tryClose()
 		return true
 	}
+	if cmd == CmSearch {
+		vtui.InputBox(Msg("Viewer.SearchTitle"), "Search for:", ev.lastSearch, func(p string) {
+			ev.Search(p, false)
+		})
+		return true
+	}
 	return ev.BaseFrame.HandleCommand(cmd, args)
 }
 
@@ -799,7 +816,7 @@ func (ev *EditorView) GetKeyLabels() *vtui.KeySet {
 	return &vtui.KeySet{
 		Normal: vtui.KeyBarLabels{
 			Msg("KeyBar.EditorF1"), Msg("KeyBar.EditorF2"), Msg("KeyBar.EditorF3"),
-			"", "", "", "", "", "", Msg("KeyBar.EditorF10"),
+			"", "", "", Msg("KeyBar.EditorF7"), "", "", Msg("KeyBar.EditorF10"),
 		},
 	}
 }
@@ -988,4 +1005,101 @@ func (ev *EditorView) GetTitle() string {
 		return "Edit: " + filepath.Base(ev.filePath)
 	}
 	return "Editor"
+}
+func (ev *EditorView) Search(pattern string, next bool) {
+	if pattern == "" {
+		return
+	}
+	ev.lastSearch = pattern
+
+	title := " Searching... "
+	msg := fmt.Sprintf("Looking for: %s", pattern)
+
+	vtui.FrameManager.PostTask(func() {
+		dlg := vtui.NewCenteredDialog(50, 8, title)
+		lbl := vtui.NewLabel(0, 0, msg, nil)
+		dlg.AddItem(lbl)
+		btnCancel := vtui.NewButton(0, 0, "&Cancel")
+		dlg.AddItem(btnCancel)
+
+		vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 50-4, 8-4)
+		vbox.Add(lbl, vtui.Margins{}, vtui.AlignCenter)
+		vbox.Add(btnCancel, vtui.Margins{Top: 1}, vtui.AlignCenter)
+		vbox.Apply()
+
+		vtui.FrameManager.AddScreenHeadless(dlg)
+
+		_ = vtui.RunAsync(func(ctx *vtui.TaskContext) {
+			btnCancel.OnClick = func() { ctx.Cancel(); dlg.Close() }
+
+			startOff := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
+			if next {
+				startOff++
+			}
+
+			foundOffset := -1
+			currOff := startOff
+			totalSize := ev.pt.Size()
+			patternLower := strings.ToLower(pattern)
+			chunkSize := 256 * 1024
+
+			for currOff < totalSize {
+				if ctx.Err() != nil {
+					return
+				}
+				percent := 0
+				if totalSize > 0 {
+					percent = int((currOff * 100) / totalSize)
+				}
+				ctx.RunOnUI(func() { dlg.SetProgress(percent) })
+
+				readSize := chunkSize
+				if currOff+readSize > totalSize {
+					readSize = totalSize - currOff
+				}
+
+				data, err := ev.pt.GetRange(currOff, readSize)
+				if err == piecetable.ErrLoading {
+					time.Sleep(20 * time.Millisecond)
+					continue
+				}
+				if len(data) == 0 {
+					break
+				}
+
+				idx := strings.Index(strings.ToLower(string(data)), patternLower)
+				if idx != -1 {
+					foundOffset = currOff + idx
+					break
+				}
+
+				advance := len(data) - len(patternLower)
+				if advance <= 0 {
+					advance = 1
+				}
+				currOff += advance
+				if len(data) < chunkSize {
+					break
+				}
+			}
+
+			ctx.RunOnUI(func() {
+				dlg.Close()
+				if foundOffset != -1 {
+					ev.selActive = true
+					ev.selAnchorOffset = foundOffset
+
+					endFound := foundOffset + len(pattern)
+					ev.CursorLine = ev.li.GetLineAtOffset(endFound)
+					ev.CursorPos = endFound - ev.li.GetLineOffset(ev.CursorLine)
+
+					ev.updateDesiredVisualCol()
+					ev.ensureCursorVisible()
+					vtui.FrameManager.Redraw()
+				} else if ctx.Err() == nil {
+					vtui.ShowMessage(" Search ", "Pattern not found.", []string{"&Ok"})
+				}
+			})
+		})
+	})
 }

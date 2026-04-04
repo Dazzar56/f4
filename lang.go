@@ -80,6 +80,7 @@ var Lng = map[string]string{
 	"KeyBar.EditorF1":  "Help",
 	"KeyBar.EditorF2":  "Save",
 	"KeyBar.EditorF3":  "Wrap",
+	"KeyBar.EditorF7":  "Search",
 	"KeyBar.EditorF10": "Quit",
 	"KeyBar.ViewerF1": "Help",
 	"KeyBar.ViewerF2": "Wrap",
