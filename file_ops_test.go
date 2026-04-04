@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"os"
+	"bytes"
 	"path/filepath"
 	"testing"
 	"time"
@@ -608,5 +609,57 @@ done:
 		if data[i] != copiedData[i] {
 			t.Fatalf("Data corruption at byte %d", i)
 		}
+	}
+}
+func TestExecuteFileOp_DeepIntegrity(t *testing.T) {
+	// Tests a deep directory structure with a mix of small files and one
+	// large binary file to ensure the recursive copy is robust.
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	srcBase := t.TempDir()
+	dstBase := t.TempDir()
+
+	// 1. Create structure:
+	// /root/file1.txt
+	// /root/sub1/file2.txt
+	// /root/sub1/sub2/large.bin (4MB)
+	os.MkdirAll(filepath.Join(srcBase, "root", "sub1", "sub2"), 0755)
+
+	largeData := make([]byte, 4*1024*1024)
+	for i := range largeData { largeData[i] = byte(i % 251) } // Prime to avoid simple patterns
+
+	os.WriteFile(filepath.Join(srcBase, "root", "file1.txt"), []byte("f1"), 0644)
+	os.WriteFile(filepath.Join(srcBase, "root", "sub1", "file2.txt"), []byte("f2"), 0644)
+	os.WriteFile(filepath.Join(srcBase, "root", "sub1", "sub2", "large.bin"), largeData, 0644)
+
+	srcVfs := vfs.NewOSVFS(srcBase)
+	dstVfs := vfs.NewOSVFS(dstBase)
+
+	// 2. Perform recursive copy of "root"
+	ExecuteFileOp(nil, srcVfs, dstVfs, []string{"root"}, dstBase, false, false, nil)
+
+	// 3. Wait for completion
+	timeout := time.After(5 * time.Second)
+	targetLarge := filepath.Join(dstBase, "root", "sub1", "sub2", "large.bin")
+	for {
+		if _, err := os.Stat(targetLarge); err == nil {
+			break
+		}
+		select {
+		case task := <-vtui.FrameManager.TaskChan: task()
+		case <-time.After(10 * time.Millisecond):
+		case <-timeout: t.Fatal("Deep copy timed out")
+		}
+	}
+
+	// 4. Verify Large File
+	copiedLarge, _ := os.ReadFile(targetLarge)
+	if !bytes.Equal(copiedLarge, largeData) {
+		t.Error("Large binary file corrupted during deep recursive copy")
+	}
+
+	// 5. Verify Small File in subfolder
+	f2, _ := os.ReadFile(filepath.Join(dstBase, "root", "sub1", "file2.txt"))
+	if string(f2) != "f2" {
+		t.Errorf("Small file corrupted or missing in subfolder, got %q", string(f2))
 	}
 }

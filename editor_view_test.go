@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 	"os"
+	"bytes"
 	"testing"
 	"path/filepath"
 	"github.com/unxed/f4/vfs"
@@ -1744,5 +1745,96 @@ func TestEditorView_CRLFPieceTable(t *testing.T) {
 	}
 	if ev.li.LineCount() != 2 {
 		t.Errorf("LineCount after CRLF merge: expected 2, got %d", ev.li.LineCount())
+	}
+}
+func TestEditorView_FragmentationDataIntegrity(t *testing.T) {
+	// Tests that a highly fragmented file (many pieces in the table)
+	// can be saved without a single byte being lost or swapped.
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "fragmented.txt")
+
+	// 1. Initial content
+	initial := []byte("Initial Content\n")
+	os.WriteFile(path, initial, 0644)
+
+	v := vfs.NewOSVFS(tmpDir)
+	f, _ := v.Open(context.Background(), path)
+	buf := NewAsyncBuffer(context.Background(), f)
+	pt := piecetable.NewWithBuffer(buf)
+	ev := NewEditorView(pt, v, path)
+	ev.file = f
+	ev.asyncBuf = buf
+
+	// 2. Perform 500 deterministic "random" edits to fragment the PieceTable
+	// We alternate between inserting and deleting to keep the size manageable
+	// but force piece splitting and buffer interleaving.
+	reference := append([]byte(nil), initial...)
+
+	for i := 0; i < 500; i++ {
+		pos := (i * 7) % (len(reference) + 1)
+		data := []byte(fmt.Sprintf("[%d]", i))
+
+		// Update reference
+		newRef := make([]byte, 0, len(reference)+len(data))
+		newRef = append(newRef, reference[:pos]...)
+		newRef = append(newRef, data...)
+		newRef = append(newRef, reference[pos:]...)
+		reference = newRef
+
+		// Update Editor
+		ev.CursorLine = ev.li.GetLineAtOffset(pos)
+		ev.CursorPos = pos - ev.li.GetLineOffset(ev.CursorLine)
+		for _, r := range string(data) {
+			ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: r})
+		}
+
+		// Occasional deletion
+		if i%3 == 0 && len(reference) > 10 {
+			delPos := (i * 13) % (len(reference) - 5)
+			reference = append(reference[:delPos], reference[delPos+5:]...)
+
+			ev.CursorLine = ev.li.GetLineAtOffset(delPos)
+			ev.CursorPos = delPos - ev.li.GetLineOffset(ev.CursorLine)
+			ev.selActive = true
+			ev.selAnchorOffset = delPos
+			// Move cursor by 5
+			newPos := delPos + 5
+			ev.CursorLine = ev.li.GetLineAtOffset(newPos)
+			ev.CursorPos = newPos - ev.li.GetLineOffset(ev.CursorLine)
+			ev.DeleteSelection()
+		}
+	}
+
+	// 3. Save the fragmented result
+	ev.SaveToFile(nil)
+
+	// Pump tasks
+	timeout := time.After(3 * time.Second)
+	for ev.saving {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Timeout waiting for fragmented file save")
+		}
+	}
+
+	// 4. Verify byte-for-byte consistency
+	savedData, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !bytes.Equal(savedData, reference) {
+		t.Errorf("DATA CORRUPTION: Saved data does not match expected reference.\nSaved len: %d, Ref len: %d", len(savedData), len(reference))
+		// Log start of difference for debugging
+		for i := 0; i < len(savedData) && i < len(reference); i++ {
+			if savedData[i] != reference[i] {
+				t.Errorf("First mismatch at byte %d: saved 0x%02x, ref 0x%02x", i, savedData[i], reference[i])
+				break
+			}
+		}
 	}
 }
