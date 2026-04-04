@@ -63,6 +63,15 @@ const (
 	ViewModeMedium ViewMode = iota
 	ViewModeDetailed
 )
+type SortMode int
+
+const (
+	SortName SortMode = iota
+	SortExt
+	SortTime
+	SortSize
+	SortUnsorted
+)
 
 func (f *fileEntry) IsSelected() bool {
 	return f.Selected
@@ -106,6 +115,9 @@ type FileSystemPanel struct {
 	pendingSelection string
 	fastFindMode bool
 	fastFindStr  string
+
+	sortMode    SortMode
+	sortReverse bool
 }
 
 func NewFileSystemPanel(x, y, w, h int, vfs vfs.VFS) *FileSystemPanel {
@@ -133,6 +145,65 @@ func NewFileSystemPanel(x, y, w, h int, vfs vfs.VFS) *FileSystemPanel {
 	fp.SetViewMode(ViewModeMedium)
 	fp.ReadDirectory()
 	return fp
+}
+
+func (fp *FileSystemPanel) SetSortMode(mode SortMode) {
+	if fp.sortMode == mode {
+		fp.sortReverse = !fp.sortReverse
+	} else {
+		fp.sortMode = mode
+		// Far по умолчанию сортирует время и размер по убыванию
+		if mode == SortTime || mode == SortSize {
+			fp.sortReverse = true
+		} else {
+			fp.sortReverse = false
+		}
+	}
+	fp.ReadDirectory()
+}
+
+func (fp *FileSystemPanel) sortEntries() {
+	if fp.sortMode == SortUnsorted || len(fp.entries) <= 1 {
+		return
+	}
+
+	sort.Slice(fp.entries, func(i, j int) bool {
+		ei, ej := fp.entries[i], fp.entries[j]
+
+		// ".." всегда сверху
+		if ei.Name == ".." { return true }
+		if ej.Name == ".." { return false }
+
+		// Папки всегда сверху
+		if ei.IsDir != ej.IsDir {
+			return ei.IsDir
+		}
+
+		res := false
+		switch fp.sortMode {
+		case SortName:
+			res = strings.ToLower(ei.Name) < strings.ToLower(ej.Name)
+		case SortExt:
+			extI := strings.ToLower(filepath.Ext(ei.Name))
+			extJ := strings.ToLower(filepath.Ext(ej.Name))
+			if extI != extJ {
+				res = extI < extJ
+			} else {
+				res = strings.ToLower(ei.Name) < strings.ToLower(ej.Name)
+			}
+		case SortTime:
+			res = ei.MTime.After(ej.MTime)
+		case SortSize:
+			res = ei.Size > ej.Size
+		default:
+			res = strings.ToLower(ei.Name) < strings.ToLower(ej.Name)
+		}
+
+		if fp.sortReverse {
+			return !res
+		}
+		return res
+	})
 }
 
 func (fp *FileSystemPanel) SetViewMode(mode ViewMode) {
@@ -273,12 +344,7 @@ func (fp *FileSystemPanel) ReadDirectory() {
 				}
 
 				fp.entries = append(fp.entries, newEntries...)
-				sort.Slice(fp.entries, func(i, j int) bool {
-					if fp.entries[i].Name == ".." { return true }
-					if fp.entries[j].Name == ".." { return false }
-					if fp.entries[i].IsDir != fp.entries[j].IsDir { return fp.entries[i].IsDir }
-					return fp.entries[i].Name < fp.entries[j].Name
-				})
+				fp.sortEntries()
 
 				// Try to snap focus as soon as the target item appears in the stream
 				snapped := false

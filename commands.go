@@ -18,4 +18,9 @@ const (
 	CmRightDetailed
 	CmFileChanged
 	CmFindFile
+	CmSortName
+	CmSortExt
+	CmSortTime
+	CmSortSize
+	CmSortUnsorted
 )

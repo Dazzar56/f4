@@ -439,17 +439,22 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	case vtinput.VK_F1:
 		return vtui.FrameManager.EmitCommand(vtui.CmHelp, nil)
 	case vtinput.VK_F3:
+		if ctrl { return vtui.FrameManager.EmitCommand(CmSortName, nil) }
 		return vtui.FrameManager.EmitCommand(CmView, nil)
 	case vtinput.VK_F4:
+		if ctrl { return vtui.FrameManager.EmitCommand(CmSortExt, nil) }
 		if shift {
 			return vtui.FrameManager.EmitCommand(CmNew, nil)
 		}
 		return vtui.FrameManager.EmitCommand(CmEdit, nil)
 	case vtinput.VK_F5:
+		if ctrl { return vtui.FrameManager.EmitCommand(CmSortTime, nil) }
 		return vtui.FrameManager.EmitCommand(CmCopy, nil)
 	case vtinput.VK_F6:
+		if ctrl { return vtui.FrameManager.EmitCommand(CmSortSize, nil) }
 		return vtui.FrameManager.EmitCommand(CmMove, nil)
 	case vtinput.VK_F7:
+		if ctrl { return vtui.FrameManager.EmitCommand(CmSortUnsorted, nil) }
 		return vtui.FrameManager.EmitCommand(CmMkDir, nil)
 	case vtinput.VK_F8:
 		return vtui.FrameManager.EmitCommand(CmDelete, nil)
@@ -710,6 +715,21 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 	case CmRightDetailed:
 		if fsp, ok := pf.panels[1].(*FileSystemPanel); ok { fsp.SetViewMode(ViewModeDetailed) }
 		pf.updateMenuCheckmarks()
+		return true
+	case CmSortName:
+		if fsp := pf.getActivePanel(); fsp != nil { fsp.SetSortMode(SortName) }
+		return true
+	case CmSortExt:
+		if fsp := pf.getActivePanel(); fsp != nil { fsp.SetSortMode(SortExt) }
+		return true
+	case CmSortTime:
+		if fsp := pf.getActivePanel(); fsp != nil { fsp.SetSortMode(SortTime) }
+		return true
+	case CmSortSize:
+		if fsp := pf.getActivePanel(); fsp != nil { fsp.SetSortMode(SortSize) }
+		return true
+	case CmSortUnsorted:
+		if fsp := pf.getActivePanel(); fsp != nil { fsp.SetSortMode(SortUnsorted) }
 		return true
 	}
 	return false

@@ -792,3 +792,52 @@ func TestFileSystemPanel_MaskSelection(t *testing.T) {
 		t.Error("Deselection removed wrong files")
 	}
 }
+func TestFileSystemPanel_Sorting(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	v := vfs.NewOSVFS(t.TempDir())
+	fp := NewFileSystemPanel(0, 0, 80, 24, v)
+
+	t1 := time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC)
+	t2 := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
+
+	fp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: ".."}},
+		{VFSItem: vfs.VFSItem{Name: "beta.txt", Size: 100, MTime: t1}},
+		{VFSItem: vfs.VFSItem{Name: "alpha.exe", Size: 50, MTime: t2}},
+		{VFSItem: vfs.VFSItem{Name: "folder", IsDir: true}},
+	}
+
+	// 1. Sort by Name
+	fp.sortMode = SortName
+	fp.sortReverse = false
+	fp.sortEntries()
+	// Expected: .., folder, alpha.exe, beta.txt
+	if fp.entries[1].Name != "folder" || fp.entries[2].Name != "alpha.exe" {
+		t.Errorf("SortName failed: index 1=%s, index 2=%s", fp.entries[1].Name, fp.entries[2].Name)
+	}
+
+	// 2. Sort by Size
+	fp.sortMode = SortSize
+	fp.sortReverse = false // Descending (large first)
+	fp.sortEntries()
+	// Expected: .., folder, beta.txt (100), alpha.exe (50)
+	if fp.entries[2].Name != "beta.txt" {
+		t.Errorf("SortSize failed: index 2=%s", fp.entries[2].Name)
+	}
+
+	// 3. Sort by Time
+	fp.sortMode = SortTime
+	fp.sortReverse = false // Descending (newest first)
+	fp.sortEntries()
+	// Expected: .., folder, alpha.exe (2024), beta.txt (2023)
+	if fp.entries[2].Name != "alpha.exe" {
+		t.Errorf("SortTime failed: index 2=%s", fp.entries[2].Name)
+	}
+
+	// 4. Test logic in SetSortMode
+	fp.SetSortMode(SortName) // Should set reverse = false
+	if fp.sortReverse { t.Error("SetSortMode(Name) should reset reverse to false") }
+
+	fp.SetSortMode(SortName) // Toggle reverse
+	if !fp.sortReverse { t.Error("SetSortMode(Name) second call should toggle reverse to true") }
+}
