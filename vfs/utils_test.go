@@ -50,3 +50,31 @@ func TestIsTerminalRunnable(t *testing.T) {
 		}
 	}
 }
+
+func TestIsTerminalRunnable_ShebangVariations(t *testing.T) {
+	tmpDir := t.TempDir()
+	v := NewOSVFS(tmpDir)
+	ctx := context.Background()
+
+	tests := []struct {
+		name    string
+		content string
+		want    bool
+	}{
+		{"Standard Bash", "#!/bin/bash\nexit 0", true},
+		{"Env Python", "#!/usr/bin/env python3\nprint(1)", true},
+		{"Short shebang", "#!", true}, // Minimum possible
+		{"No shebang", "echo hi", false},
+		{"Space before shebang", " #!/bin/sh", false}, // Invalid shebang
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(tmpDir, "script_"+tt.name)
+			os.WriteFile(path, []byte(tt.content), 0644)
+			if got := IsTerminalRunnable(ctx, v, path); got != tt.want {
+				t.Errorf("IsTerminalRunnable() for content %q = %v, want %v", tt.content, got, tt.want)
+			}
+		})
+	}
+}
