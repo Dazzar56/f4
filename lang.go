@@ -36,6 +36,8 @@ var Lng = map[string]string{
 	"Viewer.ModeText":   "Text",
 	"Viewer.ModeHex":    "Hex",
 	"Viewer.SearchTitle": " Search ",
+	"Search.CaseSensitive": "&Case sensitive",
+	"Search.Reverse":       "&Reverse search",
 	"Select.Title":      " Select ",
 	"Deselect.Title":    " Deselect ",
 	"Select.Mask":       "&Enter selection mask:",

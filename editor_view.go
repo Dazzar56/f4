@@ -41,8 +41,10 @@ type EditorView struct {
 	ScrollLeft   int // Горизонтальный скролл (когда WordWrap=false)
 
 	WordWrap         bool
-	lastSearch       string
-	modified         bool
+	lastSearch          string
+	searchCaseSensitive bool
+	searchReverse       bool
+	modified            bool
 	CursorLine       int // Текущая логическая строка (для плагинов)
 	CursorPos        int // Позиция в байтах (для плагинов)
 	DesiredVisualCol int // Колонка, в которую мы хотим попасть при навигации Up/Down
@@ -362,7 +364,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 
 	case vtinput.VK_F7:
 		if shift && ev.lastSearch != "" {
-			ev.Search(ev.lastSearch, true)
+			ev.Search(ev.lastSearch, ev.searchCaseSensitive, ev.searchReverse, true)
 		} else {
 			vtui.FrameManager.EmitCommand(CmSearch, nil)
 		}
@@ -840,9 +842,7 @@ func (ev *EditorView) HandleCommand(cmd int, args any) bool {
 		return true
 	}
 	if cmd == CmSearch {
-		vtui.InputBox(Msg("Viewer.SearchTitle"), "Search for:", ev.lastSearch, func(p string) {
-			ev.Search(p, false)
-		})
+		ev.showSearchDialog()
 		return true
 	}
 	return ev.BaseFrame.HandleCommand(cmd, args)
@@ -875,6 +875,56 @@ func (ev *EditorView) GetKeyLabels() *vtui.KeySet {
 			"", Msg("KeyBar.EditorF5"), "", Msg("KeyBar.EditorF7"), "", "", Msg("KeyBar.EditorF10"),
 		},
 	}
+}
+func (ev *EditorView) showSearchDialog() {
+	dlgW, dlgH := 50, 11
+	dlg := vtui.NewCenteredDialog(dlgW, dlgH, Msg("Viewer.SearchTitle"))
+	dlg.ShowClose = true
+
+	lblPrompt := vtui.NewLabel(0, 0, "Search for:", nil)
+	editPattern := vtui.NewEdit(0, 0, 30, ev.lastSearch)
+	lblPrompt.FocusLink = editPattern
+
+	chkCase := vtui.NewCheckbox(0, 0, Msg("Search.CaseSensitive"), false)
+	chkCase.State = 0
+	if ev.searchCaseSensitive { chkCase.State = 1 }
+
+	chkReverse := vtui.NewCheckbox(0, 0, Msg("Search.Reverse"), false)
+	chkReverse.State = 0
+	if ev.searchReverse { chkReverse.State = 1 }
+
+	btnFind := vtui.NewButton(0, 0, "&Find")
+	btnFind.IsDefault = true
+	btnCancel := vtui.NewButton(0, 0, "Cancel")
+
+	dlg.AddItem(lblPrompt); dlg.AddItem(editPattern)
+	dlg.AddItem(chkCase); dlg.AddItem(chkReverse)
+	dlg.AddItem(btnFind); dlg.AddItem(btnCancel)
+
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, dlgW-4, dlgH-4)
+	vbox.Add(lblPrompt, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(editPattern, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Add(chkCase, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	vbox.Add(chkReverse, vtui.Margins{}, vtui.AlignLeft)
+
+	hbox := vtui.NewHBoxLayout(0, 0, dlgW-4, 1)
+	hbox.HorizontalAlign = vtui.AlignCenter
+	hbox.Spacing = 2
+	hbox.Add(btnFind, vtui.Margins{}, vtui.AlignTop)
+	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
+	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Apply()
+
+	btnFind.OnClick = func() {
+		ev.lastSearch = editPattern.GetText()
+		ev.searchCaseSensitive = chkCase.State == 1
+		ev.searchReverse = chkReverse.State == 1
+		dlg.Close()
+		ev.Search(ev.lastSearch, ev.searchCaseSensitive, ev.searchReverse, false)
+	}
+	btnCancel.OnClick = func() { dlg.Close() }
+
+	vtui.FrameManager.Push(dlg)
 }
 func (ev *EditorView) getLogicalLineRunes(line int) []rune {
 	lineStart := ev.li.GetLineOffset(line)
@@ -1072,11 +1122,13 @@ func (ev *EditorView) GetTitle() string {
 	}
 	return "Editor"
 }
-func (ev *EditorView) Search(pattern string, next bool) {
+func (ev *EditorView) Search(pattern string, caseSensitive, reverse, next bool) {
 	if pattern == "" {
 		return
 	}
 	ev.lastSearch = pattern
+	ev.searchCaseSensitive = caseSensitive
+	ev.searchReverse = reverse
 
 	title := " Searching... "
 	msg := fmt.Sprintf("Looking for: %s", pattern)
@@ -1099,53 +1151,78 @@ func (ev *EditorView) Search(pattern string, next bool) {
 			btnCancel.OnClick = func() { ctx.Cancel(); dlg.Close() }
 
 			startOff := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
-			if next {
-				startOff++
-			}
-
 			foundOffset := -1
-			currOff := startOff
 			totalSize := ev.pt.Size()
-			patternLower := strings.ToLower(pattern)
 			chunkSize := 256 * 1024
 
-			for currOff < totalSize {
-				if ctx.Err() != nil {
-					return
+			match := func(data string) int {
+				searchData, searchPat := data, pattern
+				if !caseSensitive {
+					searchData, searchPat = strings.ToLower(data), strings.ToLower(pattern)
 				}
-				percent := 0
-				if totalSize > 0 {
-					percent = int((currOff * 100) / totalSize)
+				if reverse {
+					return strings.LastIndex(searchData, searchPat)
 				}
-				ctx.RunOnUI(func() { dlg.SetProgress(percent) })
+				return strings.Index(searchData, searchPat)
+			}
 
-				readSize := chunkSize
-				if currOff+readSize > totalSize {
-					readSize = totalSize - currOff
-				}
+			if !reverse {
+				currOff := startOff
+				if next { currOff++ }
 
-				data, err := ev.pt.GetRange(currOff, readSize)
-				if err == piecetable.ErrLoading {
-					time.Sleep(20 * time.Millisecond)
-					continue
-				}
-				if len(data) == 0 {
-					break
-				}
+				for currOff < totalSize {
+					if ctx.Err() != nil { return }
+					percent := 0
+					if totalSize > 0 { percent = int((currOff * 100) / totalSize) }
+					if totalSize > 0 {
+						ctx.RunOnUI(func() { dlg.SetProgress(percent) })
+					}
 
-				idx := strings.Index(strings.ToLower(string(data)), patternLower)
-				if idx != -1 {
-					foundOffset = currOff + idx
-					break
-				}
+					readSize := chunkSize
+					if currOff+readSize > totalSize { readSize = totalSize - currOff }
 
-				advance := len(data) - len(patternLower)
-				if advance <= 0 {
-					advance = 1
+					data, err := ev.pt.GetRange(currOff, readSize)
+					if err == piecetable.ErrLoading { time.Sleep(20 * time.Millisecond); continue }
+					if len(data) == 0 { break }
+
+					idx := match(string(data))
+					if idx != -1 {
+						foundOffset = currOff + idx
+						break
+					}
+					advance := len(data) - len(pattern)
+					if advance <= 0 { advance = 1 }
+					currOff += advance
+					if len(data) < chunkSize { break }
 				}
-				currOff += advance
-				if len(data) < chunkSize {
-					break
+			} else {
+				currOff := startOff
+				if next { currOff-- }
+
+				for currOff > 0 {
+					if ctx.Err() != nil { return }
+					if totalSize > 0 {
+						percent := int(((totalSize - currOff) * 100) / totalSize)
+						ctx.RunOnUI(func() { dlg.SetProgress(percent) })
+					}
+
+					readStart := currOff - chunkSize
+					if readStart < 0 { readStart = 0 }
+					readSize := currOff - readStart
+
+					data, err := ev.pt.GetRange(readStart, readSize)
+					if err == piecetable.ErrLoading {
+						time.Sleep(20 * time.Millisecond)
+						continue
+					}
+					if len(data) == 0 { break }
+
+					idx := match(string(data))
+					if idx != -1 {
+						foundOffset = readStart + idx
+						break
+					}
+					// Step back, ensuring overlap to catch
 				}
 			}
 

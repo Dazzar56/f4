@@ -1310,8 +1310,8 @@ func TestEditorView_Search_Basic(t *testing.T) {
 	ev := NewEditorView(pt, nil, "test.txt")
 	ev.SetPosition(0, 0, 80, 24)
 
-	// Запускаем поиск слова "fox"
-	ev.Search("fox", false)
+	// Запускаем поиск слова "fox" (вперед, регистронезависимо)
+	ev.Search("fox", false, false, false)
 
 	// Прокачиваем задачи из очереди (PostTask), так как поиск асинхронный
 	timeout := time.After(1 * time.Second)
@@ -1350,7 +1350,7 @@ func TestEditorView_Search_Next(t *testing.T) {
 	ev.SetPosition(0, 0, 80, 24)
 
 	// 1. Находим первое вхождение
-	ev.Search("match", false)
+	ev.Search("match", false, false, false)
 
 	timeout := time.After(1 * time.Second)
 	for !ev.selActive {
@@ -1368,7 +1368,7 @@ func TestEditorView_Search_Next(t *testing.T) {
 
 	// 2. Ищем следующее (Find Next)
 	ev.selActive = false // Сбрасываем для проверки нового результата
-	ev.Search("match", true)
+	ev.Search("match", false, false, true)
 
 	timeout = time.After(1 * time.Second)
 	for !ev.selActive {
@@ -1394,7 +1394,7 @@ func TestEditorView_Search_CaseInsensitive(t *testing.T) {
 	ev.SetPosition(0, 0, 80, 24)
 
 	// Ищем "caps" маленькими буквами
-	ev.Search("caps", false)
+	ev.Search("caps", false, false, false)
 
 	timeout := time.After(1 * time.Second)
 	for !ev.selActive {
@@ -1417,7 +1417,7 @@ func TestEditorView_Search_NotFound(t *testing.T) {
 	ev := NewEditorView(pt, nil, "test.txt")
 
 	// Ищем то, чего нет
-	ev.Search("missing", false)
+	ev.Search("missing", false, false, false)
 
 	// Ждем появления сообщения об ошибке (оно создается через ShowMessage)
 	timeout := time.After(1 * time.Second)
@@ -1439,6 +1439,117 @@ Loop:
 
 	if !foundMessage {
 		t.Error("Search should show a message box when pattern is not found")
+	}
+}
+func TestEditorView_Search_CaseSensitive(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	pt := piecetable.New([]byte("Match and match"))
+	ev := NewEditorView(pt, nil, "test.txt")
+	ev.SetPosition(0, 0, 80, 24)
+
+	// Ищем "match" (строчными) с учетом регистра. Должно найти второе слово.
+	ev.Search("match", true, false, false)
+
+	timeout := time.After(1 * time.Second)
+	for !ev.selActive {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Case-sensitive search timed out")
+		}
+	}
+
+	// "Match and " - 10 символов. "match" начинается с 10.
+	if ev.selAnchorOffset != 10 {
+		t.Errorf("Case-sensitive search failed: expected offset 10, got %d", ev.selAnchorOffset)
+	}
+}
+
+func TestEditorView_Search_Backward(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	pt := piecetable.New([]byte("first match, second match"))
+	ev := NewEditorView(pt, nil, "test.txt")
+	ev.SetPosition(0, 0, 80, 24)
+
+	// Ставим курсор в конец
+	ev.CursorLine = 0
+	ev.CursorPos = 25
+
+	// Ищем "match" назад
+	ev.Search("match", false, true, false)
+
+	timeout := time.After(1 * time.Second)
+	for !ev.selActive {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Backward search timed out")
+		}
+	}
+
+	// Второе "match" начинается на 20-м байте (префикс "first match, second " - 20 байт)
+	if ev.selAnchorOffset != 20 {
+		t.Errorf("Backward search failed: expected offset 20, got %d", ev.selAnchorOffset)
+	}
+}
+func TestEditorView_Search_ShiftF7_Reverse(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	// "one two three"
+	//  0123456789012
+	//  e: 2, 11, 12
+	content := "one two three"
+	pt := piecetable.New([]byte(content))
+	ev := NewEditorView(pt, nil, "test.txt")
+	ev.SetPosition(0, 0, 80, 24)
+
+	// 1. Initial backward search from end (next=false)
+	// Should find the 'e' at index 12.
+	ev.selActive = false
+	ev.CursorPos = 13
+	ev.Search("e", false, true, false)
+
+	timeout := time.After(1 * time.Second)
+	for !ev.selActive {
+		select {
+		case task := <-vtui.FrameManager.TaskChan: task()
+		case <-timeout: t.Fatal("Backward search 1 timed out")
+		}
+	}
+	if ev.selAnchorOffset != 12 {
+		t.Errorf("Expected offset 12, got %d", ev.selAnchorOffset)
+	}
+
+	// 2. "Find Next" backward search (Shift+F7)
+	// Cursor is at 13 (end of match). Reverse Next should skip index 12 and find 11.
+	ev.selActive = false
+	ev.searchReverse = true
+	ev.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_F7, ControlKeyState: vtinput.ShiftPressed,
+	})
+
+	timeout = time.After(1 * time.Second)
+	for !ev.selActive {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			if vtui.FrameManager.GetTopFrameType() == vtui.TypeDialog {
+				if vtui.FrameManager.GetTopFrame().GetTitle() == " Search " {
+					t.Fatal("Search reported 'Not found' unexpectedly")
+				}
+			}
+		case <-timeout:
+			t.Fatal("Shift+F7 backward search timed out")
+		}
+	}
+
+	if ev.selAnchorOffset != 11 {
+		t.Errorf("Shift+F7 reverse (Next) failed: expected offset 11, got %d", ev.selAnchorOffset)
 	}
 }
 func TestEditorView_SaveFailure_NoDataLoss(t *testing.T) {
