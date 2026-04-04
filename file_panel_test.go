@@ -649,3 +649,102 @@ func TestFileSystemPanel_FastFind(t *testing.T) {
 		t.Error("Escape should exit FastFind mode")
 	}
 }
+func TestFileSystemPanel_FastFind_Rendering(t *testing.T) {
+	vtui.SetDefaultPalette()
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+
+	fp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(t.TempDir()))
+	fp.fastFindMode = true
+	fp.fastFindStr = "test"
+
+	// Отрисовываем
+	fp.Show(scr)
+
+	// Проверяем наличие рамки и текста в буфере.
+	// Окно поиска рисуется снизу панели (Y2-2 = 17, 18, 19).
+	// Проверяем заголовок поиска (по умолчанию " Search " из Viewer.SearchTitle)
+	foundTitle := false
+	for x := 0; x < 80; x++ {
+		if scr.GetCell(x, 17).Char == 'S' && scr.GetCell(x+1, 17).Char == 'e' {
+			foundTitle = true
+			break
+		}
+	}
+	if !foundTitle {
+		t.Error("FastFind window title not found in ScreenBuf")
+	}
+
+	// Проверяем набранный текст "test" на строке ввода (Y=18)
+	foundText := false
+	for x := 0; x < 80; x++ {
+		if scr.GetCell(x, 18).Char == 't' && scr.GetCell(x+1, 18).Char == 'e' && scr.GetCell(x+2, 18).Char == 's' {
+			foundText = true
+			break
+		}
+	}
+	if !foundText {
+		t.Error("FastFind search string 'test' not found in ScreenBuf")
+	}
+}
+
+func TestFileSystemPanel_FastFind_LongString(t *testing.T) {
+	vtui.SetDefaultPalette()
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+
+	fp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(t.TempDir()))
+	fp.fastFindMode = true
+	// Строка длиной 26 символов. Окно вмещает 20.
+	// Ожидаемый результат после обрезки слева: "D_chars_to_scroll_TAIL"
+	fp.fastFindStr = "HEAD_chars_to_scroll_TAIL"
+
+	fp.Show(scr)
+
+	// Окно FastFind рисуется с X=9, текст начинается с X=11.
+	fieldX1, fieldX2 := 11, 31
+
+	// Проверяем наличие хвоста "TAIL"
+	foundTail := false
+	for x := fieldX1; x < fieldX2-3; x++ {
+		if scr.GetCell(x, 18).Char == 'T' && scr.GetCell(x+1, 18).Char == 'A' &&
+		   scr.GetCell(x+2, 18).Char == 'I' && scr.GetCell(x+3, 18).Char == 'L' {
+			foundTail = true
+			break
+		}
+	}
+	if !foundTail {
+		t.Error("Long search string tail 'TAIL' not rendered correctly")
+	}
+
+	// Проверяем отсутствие головы "HEAD" (она должна была уйти за левый край)
+	foundHead := false
+	for x := fieldX1; x < fieldX2-3; x++ {
+		if scr.GetCell(x, 18).Char == 'H' && scr.GetCell(x+1, 18).Char == 'E' &&
+		   scr.GetCell(x+2, 18).Char == 'A' && scr.GetCell(x+3, 18).Char == 'D' {
+			foundHead = true
+			break
+		}
+	}
+	if foundHead {
+		t.Error("Long search string head 'HEAD' should be scrolled out of view")
+	}
+}
+
+func TestFileSystemPanel_FastFind_MouseDeactivation(t *testing.T) {
+	fp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(t.TempDir()))
+	fp.fastFindMode = true
+
+	// Клик мышкой (любой кнопкой) должен выключать поиск
+	fp.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType,
+		KeyDown: true,
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+		MouseX: 5, MouseY: 5,
+	})
+
+	if fp.fastFindMode {
+		t.Error("Mouse click should deactivate FastFind mode")
+	}
+}

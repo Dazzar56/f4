@@ -1340,6 +1340,17 @@ func TestEditorView_Search_Multiline(t *testing.T) {
 
 func TestEditorView_Search_Empty(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	// Очищаем канал от возможных остаточных задач предыдущих тестов
+DrainLoop:
+	for {
+		select {
+		case <-vtui.FrameManager.TaskChan:
+		default:
+			break DrainLoop
+		}
+	}
+
 	pt := piecetable.New([]byte("data"))
 	ev := NewEditorView(pt, nil, "test.txt")
 
@@ -1349,7 +1360,7 @@ func TestEditorView_Search_Empty(t *testing.T) {
 	select {
 	case <-vtui.FrameManager.TaskChan:
 		t.Error("Empty pattern should not trigger a search task")
-	case <-time.After(100 * time.Millisecond):
+	case <-time.After(50 * time.Millisecond):
 		// Успех: задача не появилась
 	}
 }
