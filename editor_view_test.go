@@ -1561,3 +1561,52 @@ func (m *mockFailingWriteVFS) Create(ctx context.Context, path string) (io.Write
 type failingWriter struct{}
 func (f *failingWriter) Write(p []byte) (n int, err error) { return 0, fmt.Errorf("mock write failure") }
 func (f *failingWriter) Close() error { return nil }
+func TestEditorView_Save_IOErrorRecovery(t *testing.T) {
+	// Verifies that a failure during the streaming write phase of saving
+	// does not corrupt the Editor's memory state and does not clear the modified flag.
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "persist.txt")
+	os.WriteFile(path, []byte("Initial Data"), 0644)
+
+	// Mock VFS that allows Open/Stat/Rename but returns a failing writer for Create
+	baseVfs := vfs.NewOSVFS(tmpDir)
+	failingVfs := &mockFailingWriteVFS{VFS: baseVfs}
+
+	pt := piecetable.New([]byte("Initial Data"))
+	ev := NewEditorView(pt, failingVfs, path)
+	f, _ := failingVfs.Open(context.Background(), path)
+	ev.file = f
+
+	// 1. Modify the content
+	ev.CursorPos = 12
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: '!'})
+
+	// 2. Trigger Save
+	ev.SaveToFile(nil)
+
+	// Pump tasks to process the async save
+	timeout := time.After(1 * time.Second)
+	for ev.saving {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Timeout waiting for save failure")
+		}
+	}
+
+	// 3. Verify Integrity
+	if !ev.modified {
+		t.Error("Editor 'modified' flag was cleared despite IO failure")
+	}
+	if ev.pt.String() != "Initial Data!" {
+		t.Errorf("Memory state corrupted. Expected 'Initial Data!', got %q", ev.pt.String())
+	}
+
+	// Ensure temp file was cleaned up (handled by vfs.Remove in save logic)
+	if _, err := os.Stat(path + ".f4tmp"); !os.IsNotExist(err) {
+		t.Error("Temporary file was not cleaned up after failed save")
+	}
+}

@@ -461,3 +461,45 @@ done:
 		t.Error("Optimized rename bypassed overwrite protection and didn't show a dialog")
 	}
 }
+func TestExecuteFileOp_SkipAll_Integrity(t *testing.T) {
+	// Verifies that when a conflict occurs and user selects "Skip All",
+	// no subsequent files in the operation are modified.
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	tmpSrc := t.TempDir()
+	tmpDst := t.TempDir()
+
+	// src: file1, file2
+	// dst: file1 (conflict), file2 (should be skipped if SkipAll is active)
+	os.WriteFile(filepath.Join(tmpSrc, "f1.txt"), []byte("src1"), 0644)
+	os.WriteFile(filepath.Join(tmpSrc, "f2.txt"), []byte("src2"), 0644)
+	os.WriteFile(filepath.Join(tmpDst, "f1.txt"), []byte("dst1"), 0644)
+	os.WriteFile(filepath.Join(tmpDst, "f2.txt"), []byte("dst2"), 0644)
+
+	srcVfs := vfs.NewOSVFS(tmpSrc)
+	dstVfs := vfs.NewOSVFS(tmpDst)
+
+	tCtx := &vtui.TaskContext{Context: context.Background()}
+	state := &FileOpState{SkipAll: true} // Simulate user already pressed "Skip All"
+
+	// 1. Process f1.txt
+	err := recursiveCopy(tCtx, func(string, int) {}, srcVfs,
+		filepath.Join(tmpSrc, "f1.txt"), dstVfs, filepath.Join(tmpDst, "f1.txt"), state)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 2. Process f2.txt
+	err = recursiveCopy(tCtx, func(string, int) {}, srcVfs,
+		filepath.Join(tmpSrc, "f2.txt"), dstVfs, filepath.Join(tmpDst, "f2.txt"), state)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify both destination files remain original
+	d1, _ := os.ReadFile(filepath.Join(tmpDst, "f1.txt"))
+	d2, _ := os.ReadFile(filepath.Join(tmpDst, "f2.txt"))
+
+	if string(d1) != "dst1" || string(d2) != "dst2" {
+		t.Error("Files were overwritten despite SkipAll state")
+	}
+}
