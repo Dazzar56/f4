@@ -523,6 +523,10 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		}
 		return true
 	}
+	// Ctrl+U swaps panels
+	if e.VirtualKeyCode == vtinput.VK_U && ctrl {
+		return vtui.FrameManager.EmitCommand(CmSwapPanels, nil)
+	}
 
 	// Enter handling
 	if e.VirtualKeyCode == vtinput.VK_RETURN {
@@ -783,6 +787,11 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 	case CmRightSortUnsorted:
 		if fsp, ok := pf.panels[1].(*FileSystemPanel); ok { fsp.SetSortMode(SortUnsorted) }
 		pf.updateMenuCheckmarks()
+		return true
+	case CmSwapPanels:
+		pf.panels[0], pf.panels[1] = pf.panels[1], pf.panels[0]
+		pf.activeIdx = 1 - pf.activeIdx
+		pf.ResizeConsole(pf.lastW, pf.lastH)
 		return true
 	case CmSortName:
 		if fsp := pf.getActivePanel(); fsp != nil { fsp.SetSortMode(SortName) }

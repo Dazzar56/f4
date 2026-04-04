@@ -33,4 +33,5 @@ const (
 	CmRightSortTime
 	CmRightSortSize
 	CmRightSortUnsorted
+	CmSwapPanels
 )

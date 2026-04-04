@@ -436,6 +436,49 @@ func TestPanelsFrame_RefreshAll(t *testing.T) {
 	// Test that RefreshAll doesn't crash on freshly initialized panels
 	pf.RefreshAll()
 }
+func TestPanelsFrame_SwapPanels(t *testing.T) {
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+
+	pathL := t.TempDir() + "/left"
+	pathR := t.TempDir() + "/right"
+	os.MkdirAll(pathL, 0755)
+	os.MkdirAll(pathR, 0755)
+
+	fspL := pf.panels[0].(*FileSystemPanel)
+	fspR := pf.panels[1].(*FileSystemPanel)
+
+	fspL.vfs.SetPath(pathL)
+	fspR.vfs.SetPath(pathR)
+	fspL.SetViewMode(ViewModeDetailed)
+	fspR.SetViewMode(ViewModeMedium)
+
+	pf.activeIdx = 0 // Active is Left
+
+	// Execute Swap
+	pf.HandleCommand(CmSwapPanels, nil)
+
+	// 1. Verify instances are swapped in the array
+	if pf.panels[0] != fspR || pf.panels[1] != fspL {
+		t.Error("Panels instances were not swapped in pf.panels array")
+	}
+
+	// 2. Verify activeIdx followed the content
+	if pf.activeIdx != 1 {
+		t.Errorf("activeIdx should have moved to 1 to follow the panel, got %d", pf.activeIdx)
+	}
+
+	// 3. Verify positions were updated (fspR was Right, now should be Left)
+	x1, _, x2, _ := fspR.GetPosition()
+	if x1 != 0 || x2 != 39 {
+		t.Errorf("Swapped panel (Right->Left) has wrong X position: %d..%d", x1, x2)
+	}
+
+	// 4. Verify state preservation
+	if fspR.viewMode != ViewModeMedium {
+		t.Error("Swapped panel did not preserve its ViewMode")
+	}
+}
 func TestPanelsFrame_CloneIndependence(t *testing.T) {
 	pf := NewPanelsFrame()
 	pf.ResizeConsole(80, 25)
