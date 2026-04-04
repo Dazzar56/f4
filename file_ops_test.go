@@ -456,11 +456,26 @@ func TestExecuteFileOp_OptimizedRenameConflict(t *testing.T) {
 			goto done
 		}
 	}
-done:
-	if !foundDialog {
-		t.Error("Optimized rename bypassed overwrite protection and didn't show a dialog")
+	done:
+		if !foundDialog {
+			t.Error("Optimized rename bypassed overwrite protection and didn't show a dialog")
+		} else {
+			// CRITICAL: Properly close the dialog to unblock the worker goroutine.
+			// This prevents "directory not empty" errors during TempDir cleanup.
+			top := vtui.FrameManager.GetTopFrame()
+			if top != nil {
+				top.SetExitCode(-1) // Simulate Cancel/Esc
+				// Pump tasks to allow the worker to receive the result and exit
+				for i := 0; i < 10; i++ {
+					select {
+					case task := <-vtui.FrameManager.TaskChan:
+						task()
+					case <-time.After(10 * time.Millisecond):
+					}
+				}
+			}
+		}
 	}
-}
 func TestExecuteFileOp_SkipAll_Integrity(t *testing.T) {
 	// Verifies that when a conflict occurs and user selects "Skip All",
 	// no subsequent files in the operation are modified.
