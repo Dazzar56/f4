@@ -518,3 +518,44 @@ func TestExecuteFileOp_SkipAll_Integrity(t *testing.T) {
 		t.Error("Files were overwritten despite SkipAll state")
 	}
 }
+func TestExecuteFileOp_MoveAcrossVFS_Fallback(t *testing.T) {
+	// Tests that moving a file between two different VFS implementations
+	// (or when optimized Rename fails) correctly falls back to Copy + Delete.
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	tmpSrc := t.TempDir()
+	tmpDst := t.TempDir()
+
+	srcVfs := vfs.NewOSVFS(tmpSrc)
+	dstVfs := vfs.NewOSVFS(tmpDst)
+
+	fileName := "cross_vfs.txt"
+	os.WriteFile(filepath.Join(tmpSrc, fileName), []byte("payload"), 0644)
+
+	// Use ExecuteFileOp with isMove=true.
+	// Since they are different OSVFS instances (simulating different volumes/servers),
+	// the recursiveCopy logic will be used.
+	ExecuteFileOp(nil, srcVfs, dstVfs, []string{fileName}, tmpDst, true, false, nil)
+
+	// Drain task queue
+	timeout := time.After(1 * time.Second)
+Loop:
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-time.After(50 * time.Millisecond):
+			// Check if source is gone
+			if _, err := os.Stat(filepath.Join(tmpSrc, fileName)); os.IsNotExist(err) {
+				break Loop
+			}
+		case <-timeout:
+			t.Fatal("Move operation timed out")
+		}
+	}
+
+	// Verify result
+	if data, _ := os.ReadFile(filepath.Join(tmpDst, fileName)); string(data) != "payload" {
+		t.Error("File was not moved correctly to destination")
+	}
+}

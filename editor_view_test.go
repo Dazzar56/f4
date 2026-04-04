@@ -1610,3 +1610,53 @@ func TestEditorView_Save_IOErrorRecovery(t *testing.T) {
 		t.Error("Temporary file was not cleaned up after failed save")
 	}
 }
+func TestEditorView_Save_AtomicRenameFailure(t *testing.T) {
+	// Verifies that if the final Rename fails (e.g., target file is locked by another process),
+	// the editor does not lose data and keeps the internal state modified.
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "locked.txt")
+	os.WriteFile(path, []byte("Original Content"), 0644)
+
+	// Mock VFS that allows everything except the final Rename
+	baseVfs := vfs.NewOSVFS(tmpDir)
+	failingVfs := &mockFailingVFS{VFS: baseVfs, failRename: true}
+
+	pt := piecetable.New([]byte("Original Content"))
+	ev := NewEditorView(pt, failingVfs, path)
+	f, _ := failingVfs.Open(context.Background(), path)
+	ev.file = f
+
+	// 1. Modify the content
+	ev.CursorPos = 0
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: '!'})
+
+	// 2. Trigger Save
+	ev.SaveToFile(nil)
+
+	// Pump tasks to process the async save
+	timeout := time.After(1 * time.Second)
+	for ev.saving {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Timeout waiting for rename failure")
+		}
+	}
+
+	// 3. Verify Integrity
+	if !ev.modified {
+		t.Error("Editor cleared modified flag despite Rename failure")
+	}
+	if ev.pt.String() != "!Original Content" {
+		t.Errorf("Internal memory state corrupted after rename failure. Got %q", ev.pt.String())
+	}
+
+	// Original file MUST remain untouched
+	orig, _ := os.ReadFile(path)
+	if string(orig) != "Original Content" {
+		t.Error("Original file was corrupted after a failed atomic rename save")
+	}
+}

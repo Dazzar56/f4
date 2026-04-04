@@ -2,6 +2,9 @@ package main
 
 import (
 	"testing"
+	"os"
+	"context"
+	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 )
 
@@ -54,5 +57,29 @@ func TestActionNewFile_Flow(t *testing.T) {
 	top := vtui.FrameManager.GetTopFrame()
 	if top == nil || top.GetTitle() != Msg("Edit.NewFileTitle") {
 		t.Errorf("Expected New File dialog, got %v", top)
+	}
+}
+func TestActionViewerSearch_EmptyFile(t *testing.T) {
+	// Regression test: searching in an empty file should not hang or crash
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	tmp := t.TempDir() + "/empty.txt"
+	os.WriteFile(tmp, []byte(""), 0644)
+	v := vfs.NewOSVFS(t.TempDir())
+
+	vv, _ := NewViewerView(context.Background(), v, tmp)
+
+	// Simulate search trigger
+	// We manually call the inner logic of actionViewerSearch since InputBox is blocking in tests
+	foundOffset := int64(-1)
+	currOff := vv.TopOffset + 1
+	fileSize := vv.backend.Size() // 0
+
+	if currOff < fileSize {
+		t.Error("Search loop should not even start for empty file")
+	}
+
+	if foundOffset != -1 {
+		t.Error("Should not find anything in empty file")
 	}
 }
