@@ -92,10 +92,14 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 
 			// Optimized Move (Rename) within same VFS
 			if isMove && srcVfs == dstVfs {
-				if err := srcVfs.Rename(ctx.Context, srcPath, targetItemPath); err == nil {
-					vtui.DebugLog("FILEOP: Optimized server-side rename: %s -> %s", srcPath, targetItemPath)
-					update("", ((i+1)*100)/len(names))
-					continue
+				// Safety: Check if destination exists. If it does, fall through to the slow path
+				// to trigger the overwrite confirmation dialog.
+				if _, err := dstVfs.Stat(ctx.Context, targetItemPath); err != nil {
+					if err := srcVfs.Rename(ctx.Context, srcPath, targetItemPath); err == nil {
+						vtui.DebugLog("FILEOP: Optimized server-side rename: %s -> %s", srcPath, targetItemPath)
+						update("", ((i+1)*100)/len(names))
+						continue
+					}
 				}
 			}
 

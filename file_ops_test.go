@@ -428,3 +428,36 @@ func TestExecuteFileOp_StateTransitions(t *testing.T) {
 		t.Error("OverwriteAll state was not respected across recursive calls")
 	}
 }
+func TestExecuteFileOp_OptimizedRenameConflict(t *testing.T) {
+	// Verifies that optimized same-VFS renames don't silently overwrite files.
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	tmp := t.TempDir()
+	v := vfs.NewOSVFS(tmp)
+
+	os.WriteFile(filepath.Join(tmp, "src.txt"), []byte("source"), 0644)
+	os.WriteFile(filepath.Join(tmp, "dst.txt"), []byte("destination"), 0644)
+
+	// Execute Move
+	ExecuteFileOp(nil, v, v, []string{"src.txt"}, "dst.txt", true, false, nil)
+
+	// Drain task queue. Since we are moving a file onto an existing one,
+	// it should trigger AskOverwrite, which creates a dialog.
+	timeout := time.After(500 * time.Millisecond)
+	foundDialog := false
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			if vtui.FrameManager.GetTopFrameType() == vtui.TypeDialog {
+				foundDialog = true
+				goto done
+			}
+		case <-timeout:
+			goto done
+		}
+	}
+done:
+	if !foundDialog {
+		t.Error("Optimized rename bypassed overwrite protection and didn't show a dialog")
+	}
+}

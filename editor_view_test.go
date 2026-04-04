@@ -1467,6 +1467,88 @@ func TestEditorView_Save_DiskFullSimulation(t *testing.T) {
 		t.Error("Editor memory state was corrupted after failed save")
 	}
 }
+func TestEditorView_LargePaste_Consistency(t *testing.T) {
+	// Tests stability and index consistency when pasting large blocks of text.
+	pt := piecetable.New([]byte("Start\nEnd"))
+	ev := NewEditorView(pt, nil, "")
+	ev.SetPosition(0, 0, 80, 24)
+	ev.CursorLine = 1
+	ev.CursorPos = 0 // Before "End"
+
+	// Create 1MB block with many newlines
+	var sb strings.Builder
+	for i := 0; i < 5000; i++ {
+		sb.WriteString("pasted line content\n")
+	}
+	pasteData := sb.String()
+
+	// Simulate Bracketed Paste
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.PasteEventType, PasteStart: true})
+	for _, r := range pasteData {
+		ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: r})
+	}
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.PasteEventType, PasteStart: false})
+
+	// 1. Verify content
+	expectedSize := 5 + 1 + len(pasteData) + 3 // "Start" + \n + paste + "End"
+	if pt.Size() != expectedSize {
+		t.Errorf("Size mismatch after large paste: expected %d, got %d", expectedSize, pt.Size())
+	}
+
+	// 2. Verify LineIndex integrity
+	if ev.li.LineCount() != 5000+2 {
+		t.Errorf("Line count mismatch: expected 5002, got %d", ev.li.LineCount())
+	}
+
+	// 3. Verify cursor is at the end of the paste
+	if ev.CursorLine != 5001 || ev.CursorPos != 0 {
+		t.Errorf("Cursor misplaced after large paste: %d:%d", ev.CursorLine, ev.CursorPos)
+	}
+
+	// 4. Verify no crash on re-render
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	ev.Show(scr)
+}
+
+func TestEditorView_DeleteSelection_EOFBoundaries(t *testing.T) {
+	// Ensures deleting the very last character or line doesn't crash the editor.
+	content := "line1\nline2"
+	pt := piecetable.New([]byte(content))
+	ev := NewEditorView(pt, nil, "")
+	ev.SetPosition(0, 0, 80, 24)
+
+	// Select last line and the newline before it
+	ev.selActive = true
+	ev.selAnchorOffset = 5 // after "line1"
+	ev.CursorLine = 1
+	ev.CursorPos = 5 // at end of "line2"
+
+	ev.DeleteSelection()
+
+	if pt.String() != "line1" {
+		t.Errorf("EOF delete failed: expected 'line1', got %q", pt.String())
+	}
+	if ev.li.LineCount() != 1 {
+		t.Errorf("Line count mismatch: expected 1, got %d", ev.li.LineCount())
+	}
+	if ev.CursorLine != 0 || ev.CursorPos != 5 {
+		t.Errorf("Cursor misplaced after EOF delete: %d:%d", ev.CursorLine, ev.CursorPos)
+	}
+
+	// Test deleting the only remaining character
+	ev.selActive = true
+	ev.selAnchorOffset = 0
+	ev.CursorPos = 5
+	ev.DeleteSelection()
+
+	if pt.Size() != 0 {
+		t.Errorf("Failed to delete last line, size: %d", pt.Size())
+	}
+	if ev.CursorLine != 0 || ev.CursorPos != 0 {
+		t.Errorf("Cursor not at 0:0 after full delete: %d:%d", ev.CursorLine, ev.CursorPos)
+	}
+}
 
 type mockFailingWriteVFS struct {
 	vfs.VFS
