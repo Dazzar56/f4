@@ -15,6 +15,91 @@ import (
 	"github.com/unxed/vtui/piecetable"
 	"github.com/unxed/vtinput"
 )
+type mockStatefulHighlighter struct {
+	statesComputed int
+}
+
+func (m *mockStatefulHighlighter) Name() string { return "mock" }
+func (m *mockStatefulHighlighter) CanHighlight(f, c string) bool { return true }
+func (m *mockStatefulHighlighter) Highlight(line string, prev any, base uint64) ([]uint64, any) {
+	depth := 0
+	if prev != nil {
+		depth = prev.(int)
+	}
+	// Мы увеличиваем счетчик только когда prev == nil или когда это новый расчет (имитация)
+	return make([]uint64, len(line)), depth + 1
+}
+
+func TestEditor_StatefulHighlighting(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	content := "line1\nline2\nline3"
+	pt := piecetable.New([]byte(content))
+	ev := NewEditorView(pt, nil, "test.txt")
+	ev.SetPosition(0, 0, 80, 10)
+
+	mh := &mockStatefulHighlighter{}
+	ev.highlighter = mh
+
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+
+	// 1. Первый рендер
+	ev.Show(scr)
+
+	if len(ev.lineStates) != 3 {
+		t.Errorf("Expected 3 line states in cache, got %d", len(ev.lineStates))
+	}
+
+	// Проверяем цепочку состояний (1 -> 2 -> 3)
+	if ev.lineStates[0].(int) != 1 || ev.lineStates[1].(int) != 2 || ev.lineStates[2].(int) != 3 {
+		t.Errorf("State chain corrupted: %v", ev.lineStates)
+	}
+
+	// 2. Очищаем кэш состояний вручную и проверяем, что он пересчитывается
+	ev.invalidateStates(0)
+	if len(ev.lineStates) != 0 {
+		t.Error("invalidateStates(0) failed to clear cache")
+	}
+	ev.Show(scr)
+	if len(ev.lineStates) != 3 {
+		t.Error("Cache failed to re-populate")
+	}
+}
+
+func TestEditor_HighlightingInvalidation(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pt := piecetable.New([]byte("line1\nline2\nline3"))
+	ev := NewEditorView(pt, nil, "test.txt")
+	ev.SetPosition(0, 0, 80, 10)
+
+	mh := &mockStatefulHighlighter{}
+	ev.highlighter = mh
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+
+	// Наполняем кэш
+	ev.Show(scr)
+	if len(ev.lineStates) != 3 { t.Fatal("Setup failed") }
+
+	// 1. Редактируем вторую строку (индекс 1)
+	ev.CursorLine = 1
+	ev.CursorPos = 0
+	// Симулируем ввод символа '!'
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: '!'})
+
+	// Кэш должен быть инвалидирован НАЧИНАЯ со второй строки.
+	// То есть должна остаться только первая строка (индекс 0).
+	if len(ev.lineStates) != 1 {
+		t.Errorf("Cache not invalidated correctly. Expected length 1 (line 0 state), got %d", len(ev.lineStates))
+	}
+
+	// 2. Рендерим снова - кэш должен восстановиться
+	ev.Show(scr)
+	if len(ev.lineStates) != 3 {
+		t.Error("Cache failed to re-populate after invalidation")
+	}
+}
 
 // waitPtString waits for a PieceTable to settle and returns its content as string.
 // Used for tests involving AsyncBuffers.

@@ -84,11 +84,15 @@ type VFS interface {
 // Highlighter defines a capability to provide syntax coloring.
 type Highlighter interface {
 	Name() string
-	// CanHighlight returns true if this highlighter can handle the file (by extension or content).
+	// CanHighlight returns true if this highlighter can handle the file.
+	// content is usually the first line or a chunk of the file.
 	CanHighlight(filename string, content string) bool
-	// GetAttributes returns a slice of attributes for each character in the provided line.
-	// lineContent is the raw text, baseAttr is the default background/foreground.
-	GetAttributes(lineContent string, baseAttr uint64) []uint64
+	// Highlight processes a line of text.
+	// line: text to highlight.
+	// prevState: state returned by the previous line (nil for the first line).
+	// baseAttr: default text attributes.
+	// Returns: attributes for each character and the state for the next line.
+	Highlight(line string, prevState any, baseAttr uint64) (attrs []uint64, nextState any)
 }
 
 var highlighters []Highlighter

@@ -67,6 +67,7 @@ type EditorView struct {
 	file      vfs.ReadAtCloser
 	scrollBar   *vtui.ScrollBar
 	highlighter vfs.Highlighter
+	lineStates  []any // Cache of highlighter states per logical line
 }
 
 func (ev *EditorView) Close() {
@@ -142,6 +143,11 @@ func (ev *EditorView) SetText(text string) {
 func (ev *EditorView) clearCaches() {
 	ev.engine.InvalidateCache()
 }
+func (ev *EditorView) invalidateStates(fromLine int) {
+	if fromLine < len(ev.lineStates) {
+		ev.lineStates = ev.lineStates[:fromLine]
+	}
+}
 func (ev *EditorView) ensureEngineWidth() {
 	width := ev.X2 - ev.X1 + 1
 	if ev.scrollBar != nil {
@@ -210,12 +216,41 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 			lineLen = ev.pt.Size() - lineStart
 		}
 
-		// Токенизируем всю логическую строку целиком для правильного контекста
+		// Stateful Highlighting
 		var lineSyntax []uint64
-		if ev.highlighter != nil && lineLen > 0 {
-			lineData, err := ev.pt.GetRange(lineStart, lineLen)
-			if err == nil {
-				lineSyntax = ev.highlighter.GetAttributes(string(lineData), bgAttr)
+		if ev.highlighter != nil {
+			// Ensure we have computed states up to this line
+			for len(ev.lineStates) <= logIdx {
+				currIdx := len(ev.lineStates)
+				lStart := ev.li.GetLineOffset(currIdx)
+				lEnd := ev.pt.Size()
+				if currIdx+1 < ev.li.LineCount() {
+					lEnd = ev.li.GetLineOffset(currIdx + 1)
+				}
+
+				var prevState any
+				if currIdx > 0 {
+					prevState = ev.lineStates[currIdx-1]
+				}
+
+				lineData, err := ev.pt.GetRange(lStart, lEnd-lStart)
+				if err == piecetable.ErrLoading {
+					break // Wait for data
+				}
+
+				attrs, nextState := ev.highlighter.Highlight(string(lineData), prevState, bgAttr)
+				ev.lineStates = append(ev.lineStates, nextState)
+				if currIdx == logIdx {
+					lineSyntax = attrs
+				}
+			}
+			if logIdx < len(ev.lineStates) && lineSyntax == nil {
+				// State was already cached, but we need the actual attributes for the current visible line
+				lStart := ev.li.GetLineOffset(logIdx)
+				lineData, _ := ev.pt.GetRange(lStart, lineLen)
+				var prevState any
+				if logIdx > 0 { prevState = ev.lineStates[logIdx-1] }
+				lineSyntax, _ = ev.highlighter.Highlight(string(lineData), prevState, bgAttr)
 			}
 		}
 
@@ -304,6 +339,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 				ev.pt.Insert(offset, data)
 				// Incremental update instead of heavy Rebuild
 				ev.li.UpdateAfterInsert(offset, data)
+				ev.invalidateStates(ev.CursorLine)
 				ev.engine.InvalidateFrom(ev.CursorLine)
 
 				newOffset := offset + len(data)
@@ -633,6 +669,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 
 					ev.pt.Delete(offset-delLen, delLen)
 					ev.li.UpdateAfterDelete(offset-delLen, delLen)
+					ev.invalidateStates(ev.CursorLine - 1)
 					ev.engine.InvalidateFrom(ev.CursorLine - 1)
 					ev.CursorLine--
 					ev.CursorPos = prevLen
@@ -647,6 +684,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 
 					ev.pt.Delete(offset-size, size)
 					ev.li.UpdateAfterDelete(offset-size, size)
+					ev.invalidateStates(ev.CursorLine)
 					ev.engine.InvalidateFrom(ev.CursorLine)
 					ev.CursorPos -= size
 				}
@@ -677,6 +715,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 
 				ev.pt.Delete(offset, size)
 				ev.li.UpdateAfterDelete(offset, size)
+				ev.invalidateStates(ev.CursorLine)
 				ev.engine.InvalidateFrom(ev.CursorLine)
 			}
 		}
@@ -708,6 +747,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		data := []byte(string(e.Char))
 		ev.pt.Insert(offset, data)
 		ev.li.UpdateAfterInsert(offset, data)
+		ev.invalidateStates(ev.CursorLine)
 		ev.engine.InvalidateFrom(ev.CursorLine)
 		ev.CursorPos += len(data)
 		ev.updateDesiredVisualCol()

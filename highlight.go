@@ -41,22 +41,21 @@ type ChromaHighlighter struct{}
 func (c *ChromaHighlighter) Name() string { return "Chroma" }
 
 func (c *ChromaHighlighter) CanHighlight(filename string, content string) bool {
-	return lexers.Get(filename) != nil
+	return lexers.Get(filename) != nil || lexers.Analyse(content) != nil
 }
 
-func (c *ChromaHighlighter) GetAttributes(lineContent string, baseAttr uint64) []uint64 {
-	lexer := lexers.Get("") // Default
-	// Note: In a real implementation we'd cache the lexer per file session
-	// but for the API demonstration we tokenize the line.
-	lexer = lexers.Analyse(lineContent)
+func (c *ChromaHighlighter) Highlight(line string, prevState any, baseAttr uint64) ([]uint64, any) {
+	// Chroma is technically stateless per-line in this simple implementation,
+	// but we fulfill the interface.
+	lexer := lexers.Analyse(line)
 	if lexer == nil {
 		lexer = lexers.Fallback
 	}
 	lexer = chroma.Coalesce(lexer)
 
-	iterator, err := lexer.Tokenise(nil, lineContent)
+	iterator, err := lexer.Tokenise(nil, line)
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 
 	var attrs []uint64
@@ -67,5 +66,5 @@ func (c *ChromaHighlighter) GetAttributes(lineContent string, baseAttr uint64) [
 			attrs = append(attrs, attr)
 		}
 	}
-	return attrs
+	return attrs, nil
 }

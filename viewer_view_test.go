@@ -31,16 +31,19 @@ func TestViewerView_NavigationAndEOF(t *testing.T) {
 	// 1. Initial Render (Triggers async fetch)
 	vv.Show(scr)
 
-	// Wait for background loader
-	select {
-	case task := <-vtui.FrameManager.TaskChan:
-		task()
-	case <-time.After(1 * time.Second):
-		t.Fatal("Timeout waiting for initial fetch")
+	// Wait for background loader to provide data
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if time.Now().After(deadline) { t.Fatal("Timeout waiting for initial fetch") }
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			vv.Show(scr) // Update internal lineOffsets
+		default:
+			time.Sleep(10 * time.Millisecond)
+		}
+		if len(vv.lineOffsets) > 1 { break }
 	}
-
-	// Re-render to populate lineOffsets
-	vv.Show(scr)
 
 	if vv.TopOffset != 0 {
 		t.Errorf("Initial offset should be 0, got %d", vv.TopOffset)
@@ -319,4 +322,5 @@ func TestViewerView_HexModeToggle(t *testing.T) {
 		t.Error("F4 failed to toggle back to TextMode")
 	}
 }
+
 
