@@ -345,8 +345,11 @@ func actionMkDir(pf *PanelsFrame) {
 }
 
 func actionNewConnection(pf *PanelsFrame, nf *vfs.NetFoxVFS) {
-	dlg := vtui.NewCenteredDialog(48, 14, " SFTP Connection ")
+	dlg := vtui.NewCenteredDialog(48, 17, " New Connection ")
 	dlg.ShowClose = true
+
+	rbType := vtui.NewRadioGroup(0, 0, 1, []string{"SFTP", "FTP"})
+	rbType.Selected = 0
 
 	lblName := vtui.NewLabel(0, 0, "Connection &Name:", nil)
 	editName := vtui.NewEdit(0, 0, 20, "MyServer")
@@ -360,26 +363,29 @@ func actionNewConnection(pf *PanelsFrame, nf *vfs.NetFoxVFS) {
 	editPort := vtui.NewEdit(0, 0, 6, "22")
 	lblPort.FocusLink = editPort
 
+	rbType.OnChange = func(val int) {
+		if val == 0 { editPort.SetText("22") } else { editPort.SetText("21") }
+	}
+
 	lblUser := vtui.NewLabel(0, 0, "&User:", nil)
-	editUser := vtui.NewEdit(0, 0, 20, "root")
+	editUser := vtui.NewEdit(0, 0, 20, "anonymous")
 	lblUser.FocusLink = editUser
 
 	lblPass := vtui.NewLabel(0, 0, "Pass&word:", nil)
-	editPass := vtui.NewEdit(0, 0, 20, "") // Используем NewEdit вместо NewPswEdit
+	editPass := vtui.NewEdit(0, 0, 20, "")
 	lblPass.FocusLink = editPass
 
 	btnOk := vtui.NewButton(0, 0, "&Ok")
 	btnCancel := vtui.NewButton(0, 0, "Cancel")
 	btnOk.IsDefault = true
 
-	dlg.AddItem(lblName); dlg.AddItem(editName)
-	dlg.AddItem(lblHost); dlg.AddItem(editHost)
-	dlg.AddItem(lblPort); dlg.AddItem(editPort)
-	dlg.AddItem(lblUser); dlg.AddItem(editUser)
-	dlg.AddItem(lblPass); dlg.AddItem(editPass)
+	dlg.AddItem(rbType); dlg.AddItem(lblName); dlg.AddItem(editName)
+	dlg.AddItem(lblHost); dlg.AddItem(editHost); dlg.AddItem(lblPort); dlg.AddItem(editPort)
+	dlg.AddItem(lblUser); dlg.AddItem(editUser); dlg.AddItem(lblPass); dlg.AddItem(editPass)
 	dlg.AddItem(btnOk); dlg.AddItem(btnCancel)
 
-	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+1, 48-4, 14-2)
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+1, 48-4, 17-2)
+	vbox.Add(rbType, vtui.Margins{Bottom: 1}, vtui.AlignCenter)
 	vbox.Add(lblName, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(editName, vtui.Margins{}, vtui.AlignFill)
 
@@ -411,7 +417,10 @@ func actionNewConnection(pf *PanelsFrame, nf *vfs.NetFoxVFS) {
 	btnOk.OnClick = func() {
 		name := editName.GetText()
 		if name != "" {
+			tStr := "sftp"
+			if rbType.Selected == 1 { tStr = "ftp" }
 			nf.SaveConfig(name, vfs.NetFoxConfig{
+				Type: tStr,
 				Host: editHost.GetText(),
 				Port: editPort.GetText(),
 				User: editUser.GetText(),

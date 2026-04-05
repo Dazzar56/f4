@@ -24,7 +24,7 @@ type SFTPVFS struct {
 }
 
 func NewSFTPVFS(parent VFS, host, port, user, pass string) (*SFTPVFS, error) {
-	vtui.DebugLog("SFTP: Initiating connection to %s:%s (user: %s)", host, port, user)
+	vtui.DebugLog("NET: Initiating SFTP connection to %s:%s (user: %s)", host, port, user)
 	auths := []ssh.AuthMethod{}
 
 	// 1. SSH Agent

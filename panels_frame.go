@@ -1152,7 +1152,7 @@ func (pf *PanelsFrame) showDriveMenu(panelIdx int) {
 	menu := vtui.NewVMenu(" Drive ")
 	menu.AddItem(vtui.MenuItem{Text: "&1. Local ( / )"})
 	menu.AddItem(vtui.MenuItem{Text: "&2. Home ( ~ )"})
-	menu.AddItem(vtui.MenuItem{Text: "&3. NetFox (SFTP)"})
+	menu.AddItem(vtui.MenuItem{Text: "&3. NetFox"})
 
 	w, h := 26, menu.GetItemCount()+2
 	x := (pf.lastW - w) / 2

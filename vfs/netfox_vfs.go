@@ -12,6 +12,7 @@ import (
 )
 
 type NetFoxConfig struct {
+	Type string `json:"Type"` // "sftp" or "ftp"
 	Host string `json:"Host"`
 	Port string `json:"Port"`
 	User string `json:"User"`
@@ -171,12 +172,20 @@ func (v *NetFoxVFS) Close() error   { return nil }
 // NetFoxProvider intercepts Enter on connections and creates SFTP session
 type NetFoxProvider struct{}
 
-func (p *NetFoxProvider) Name() string  { return "NetFox (SFTP)" }
+func (p *NetFoxProvider) Name() string  { return "NetFox" }
 func (p *NetFoxProvider) Priority() int { return 100 }
 
 func (p *NetFoxProvider) CanOpen(ctx context.Context, parent VFS, pth string) bool {
-	_, ok := parent.(*NetFoxVFS)
-	return ok
+	nr, ok := parent.(*NetFoxVFS)
+	if !ok { return false }
+	// Проверяем, что это не корневой вызов net://
+	name := nr.Base(pth)
+	if name == "" || name == "." || name == "net://" { return false }
+
+	configs := nr.getConfigs()
+	cfg, ok := configs[name]
+	// Если тип не указан, считаем sftp для совместимости
+	return ok && (cfg.Type == "sftp" || cfg.Type == "")
 }
 
 func (p *NetFoxProvider) Open(ctx context.Context, parent VFS, pth string) (VFS, error) {
@@ -194,4 +203,33 @@ func (p *NetFoxProvider) Open(ctx context.Context, parent VFS, pth string) (VFS,
 	}
 
 	return NewSFTPVFS(parent, cfg.Host, port, cfg.User, cfg.Pass)
+}// FTPProvider handles FTP connections
+type FTPProvider struct{}
+
+func (p *FTPProvider) Name() string  { return "FTP" }
+func (p *FTPProvider) Priority() int { return 100 }
+
+func (p *FTPProvider) CanOpen(ctx context.Context, parent VFS, pth string) bool {
+	nr, ok := parent.(*NetFoxVFS)
+	if !ok { return false }
+	name := nr.Base(pth)
+	if name == "" || name == "." || name == "net://" { return false }
+
+	configs := nr.getConfigs()
+	cfg, ok := configs[name]
+	return ok && cfg.Type == "ftp"
+}
+
+func (p *FTPProvider) Open(ctx context.Context, parent VFS, pth string) (VFS, error) {
+	nr, _ := parent.(*NetFoxVFS)
+	name := nr.Base(pth)
+	configs := nr.getConfigs()
+	cfg := configs[name]
+
+	port := cfg.Port
+	if port == "" {
+		port = "21"
+	}
+
+	return NewFTPVFS(parent, cfg.Host, port, cfg.User, cfg.Pass)
 }
