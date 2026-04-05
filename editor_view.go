@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/unxed/f4/vfs"
+	"github.com/alecthomas/chroma/v2"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 	"github.com/unxed/vtui/piecetable"
@@ -66,6 +67,7 @@ type EditorView struct {
 	filePath  string
 	file      vfs.ReadAtCloser
 	scrollBar *vtui.ScrollBar
+	lexer     chroma.Lexer
 }
 
 func (ev *EditorView) Close() {
@@ -93,6 +95,7 @@ func NewEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string) *EditorVie
 		WordWrap: false,
 		ShowWhitespaces: false,
 	}
+	ev.lexer = DetectLexer(path, "")
 	ev.scrollBar = vtui.NewScrollBar(0, 0, 0)
 	ev.scrollBar.SetOwner(ev)
 	ev.scrollBar.OnScroll = func(v int) {
@@ -200,11 +203,41 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 	rowsRendered := 0
 
 	for logIdx := startLogLine; logIdx < ev.li.LineCount(); logIdx++ {
+		lineStart := ev.li.GetLineOffset(logIdx)
+		lineLen := 0
+		if logIdx+1 < ev.li.LineCount() {
+			lineLen = ev.li.GetLineOffset(logIdx+1) - lineStart
+		} else {
+			lineLen = ev.pt.Size() - lineStart
+		}
+
+		// Токенизируем всю логическую строку целиком для правильного контекста
+		var lineSyntax []uint64
+		if ev.lexer != nil && lineLen > 0 {
+			lineData, err := ev.pt.GetRange(lineStart, lineLen)
+			if err == nil {
+				iterator, terr := ev.lexer.Tokenise(nil, string(lineData))
+				if terr == nil {
+					for _, token := range iterator.Tokens() {
+						attr := GetSyntaxAttr(token.Type, bgAttr)
+						runes := []rune(token.Value)
+						for range runes {
+							lineSyntax = append(lineSyntax, attr)
+						}
+					}
+				}
+			}
+		}
+
 		frags := ev.engine.GetFragments(logIdx)
 		baseVRow := ev.engine.GetRowOffset(logIdx)
+		runesProcessedInLine := 0
 
 		for fIdx, frag := range frags {
 			if logIdx == startLogLine && fIdx < startFragIdx {
+				// Пропускаем подсветку для фрагментов выше области видимости
+				fragData, _ := ev.pt.GetRange(frag.ByteOffsetStart, frag.ByteOffsetEnd-frag.ByteOffsetStart)
+				runesProcessedInLine += len([]rune(string(fragData)))
 				continue
 			}
 
@@ -215,15 +248,28 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 			var err error
 			ev.renderBytes, err = ev.pt.AppendRange(ev.renderBytes, frag.ByteOffsetStart, frag.ByteOffsetEnd-frag.ByteOffsetStart)
 
+			fragRuneCount := len([]rune(string(ev.renderBytes)))
+
 			if err == piecetable.ErrLoading {
 				scr.Write(ev.X1-ev.ScrollLeft, currY, vtui.StringToCharInfo(" [ Loading... ] ", bgAttr))
+				runesProcessedInLine += fragRuneCount
 				rowsRendered++
 				if rowsRendered >= height { goto DoneRendering }
 				continue
 			}
 
 			selMin, selMax := ev.getSelectionRange()
-			ev.renderCells = ev.fillCells(ev.renderCells, ev.renderBytes, bgAttr, selAttr, frag.ByteOffsetStart, ev.selActive, selMin, selMax)
+
+			// Вырезаем кусок атрибутов именно для этого фрагмента
+			var fragSyntax []uint64
+			if runesProcessedInLine < len(lineSyntax) {
+				end := runesProcessedInLine + fragRuneCount
+				if end > len(lineSyntax) { end = len(lineSyntax) }
+				fragSyntax = lineSyntax[runesProcessedInLine:end]
+			}
+			runesProcessedInLine += fragRuneCount
+
+			ev.renderCells = ev.fillCells(ev.renderCells, ev.renderBytes, bgAttr, selAttr, frag.ByteOffsetStart, ev.selActive, selMin, selMax, fragSyntax)
 
 			scr.Write(ev.X1-ev.ScrollLeft, currY, ev.renderCells)
 
@@ -682,20 +728,26 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 	return false
 }
 
-func (ev *EditorView) fillCells(target []vtui.CharInfo, data []byte, defaultAttr, selAttr uint64, offset int, selActive bool, selMin, selMax int) []vtui.CharInfo {
+func (ev *EditorView) fillCells(target []vtui.CharInfo, data []byte, defaultAttr, selAttr uint64, offset int, selActive bool, selMin, selMax int, syntax []uint64) []vtui.CharInfo {
 	target = target[:0]
 	currByte := 0
+	charIdx := 0
 	for len(data) > 0 {
 		r, size := utf8.DecodeRune(data)
 		data = data[size:]
 
 		attr := defaultAttr
+		if charIdx < len(syntax) {
+			attr = syntax[charIdx]
+		}
+
 		if selActive {
 			absPos := offset + currByte
 			if absPos >= selMin && absPos < selMax {
 				attr = selAttr
 			}
 		}
+		charIdx++
 		currByte += size
 
 		displayRune, w := vtui.SanitizeRune(r)

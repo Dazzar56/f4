@@ -662,7 +662,7 @@ func TestEditorView_WhitespaceRendering(t *testing.T) {
 	ev := NewEditorView(pt, nil, "")
 	ev.ShowWhitespaces = true
 
-	cells := ev.fillCells(nil, []byte("a b\tc"), 0, 0, 0, false, 0, 0)
+	cells := ev.fillCells(nil, []byte("a b\tc"), 0, 0, 0, false, 0, 0, nil)
 
 	// '·' is U+00B7 (183)
 	if cells[1].Char != 183 {
@@ -673,7 +673,7 @@ func TestEditorView_WhitespaceRendering(t *testing.T) {
 	}
 
 	ev.ShowWhitespaces = false
-	cells = ev.fillCells(nil, []byte("a b\tc"), 0, 0, 0, false, 0, 0)
+	cells = ev.fillCells(nil, []byte("a b\tc"), 0, 0, 0, false, 0, 0, nil)
 	if cells[1].Char != ' ' {
 		t.Errorf("Expected space for space when ShowWhitespaces is OFF, got %d", cells[1].Char)
 	}
