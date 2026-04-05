@@ -192,6 +192,11 @@ func init() {
 type sftpNetFoxProtocol struct{}
 func (p *sftpNetFoxProtocol) Type() string { return "sftp" }
 func (p *sftpNetFoxProtocol) CreateConnectionUI(app vfs.App) (string, vfs.NetFoxConfig, bool) {
+	// NOTE: When implementing the real UI for SFTP connection (Host, User, Pass),
+	// use vtui.NewPasswordEdit for the password field to mask sensitive input.
+	// Example:
+	// passEdit := vtui.NewPasswordEdit(x, y, width, "")
+	// dlg.AddItem(passEdit)
 	// For truly isolated UI, we return a simple mock for now.
 	// In the future, this will use the "Dialog API" passed through App.
 	var name string
