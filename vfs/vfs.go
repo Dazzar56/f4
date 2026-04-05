@@ -139,6 +139,31 @@ func FindProvider(ctx context.Context, parent VFS, path string) VFSProvider {
 	}
 	return nil
 }
+// NetFoxConfig represents the storage format for a network connection.
+type NetFoxConfig struct {
+	Type string `json:"Type"` // "sftp" or "ftp"
+	Host string `json:"Host"`
+	Port string `json:"Port"`
+	User string `json:"User"`
+	Pass string `json:"Pass"`
+}
+// NetFoxProtocol defines how a specific network protocol (SFTP, FTP)
+// interacts with the NetFox connection manager.
+type NetFoxProtocol interface {
+	Type() string // e.g. "sftp"
+	// CreateConnectionUI should show a dialog and return a config if successful.
+	CreateConnectionUI(app App) (name string, cfg NetFoxConfig, ok bool)
+}
+
+var netfoxProtocols = make(map[string]NetFoxProtocol)
+
+func RegisterNetFoxProtocol(p NetFoxProtocol) {
+	netfoxProtocols[p.Type()] = p
+}
+
+func GetNetFoxProtocols() map[string]NetFoxProtocol {
+	return netfoxProtocols
+}
 
 // ReadAtCloser combines reader interfaces with context support.
 type ReadAtCloser interface {

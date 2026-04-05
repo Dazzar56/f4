@@ -186,6 +186,25 @@ func (p *sftpProvider) Open(ctx context.Context, parent vfs.VFS, pth string) (vf
 
 func init() {
 	vfs.RegisterProvider(&sftpProvider{})
+	vfs.RegisterNetFoxProtocol(&sftpNetFoxProtocol{})
+}
+
+type sftpNetFoxProtocol struct{}
+func (p *sftpNetFoxProtocol) Type() string { return "sftp" }
+func (p *sftpNetFoxProtocol) CreateConnectionUI(app vfs.App) (string, vfs.NetFoxConfig, bool) {
+	// For truly isolated UI, we return a simple mock for now.
+	// In the future, this will use the "Dialog API" passed through App.
+	var name string
+	var host string
+
+	// Mocking synchronous dialog flow for the sake of the example:
+	// In a real TUI, this would be an async chain of InputBoxes or a complex form.
+	app.Message(" SFTP ", "Click OK to create a test connection to localhost", []string{"&Ok", "Cancel"})
+
+	name = "Localhost SFTP"
+	host = "127.0.0.1"
+
+	return name, vfs.NetFoxConfig{Type: "sftp", Host: host, Port: "22", User: "root"}, true
 }
 
 type sftpFileWrapper struct {

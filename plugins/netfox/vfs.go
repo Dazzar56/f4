@@ -31,20 +31,20 @@ func NewNetFoxVFS(dbPath string) *NetFoxVFS {
 	return &NetFoxVFS{path: dbPath}
 }
 
-func (v *NetFoxVFS) getConfigs() map[string]NetFoxConfig {
+func (v *NetFoxVFS) getConfigs() map[string]vfs.NetFoxConfig {
 	data, _ := os.ReadFile(v.path)
-	var configs map[string]NetFoxConfig
+	var configs map[string]vfs.NetFoxConfig
 	json.Unmarshal(data, &configs)
-	if configs == nil { configs = make(map[string]NetFoxConfig) }
+	if configs == nil { configs = make(map[string]vfs.NetFoxConfig) }
 	return configs
 }
 
-func (v *NetFoxVFS) saveConfigs(configs map[string]NetFoxConfig) {
+func (v *NetFoxVFS) saveConfigs(configs map[string]vfs.NetFoxConfig) {
 	data, _ := json.MarshalIndent(configs, "", "  ")
 	os.WriteFile(v.path, data, 0644)
 }
 
-func (v *NetFoxVFS) SaveConfig(name string, cfg NetFoxConfig) {
+func (v *NetFoxVFS) SaveConfig(name string, cfg vfs.NetFoxConfig) {
 	configs := v.getConfigs()
 	configs[name] = cfg
 	v.saveConfigs(configs)
@@ -79,7 +79,7 @@ func (v *NetFoxVFS) Dir(p string) string          { return "net://" }
 func (v *NetFoxVFS) MkDir(ctx context.Context, p string) error {
 	name := v.Base(p)
 	configs := v.getConfigs()
-	configs[name] = NetFoxConfig{Host: name, Port: "22", User: "root"}
+	configs[name] = vfs.NetFoxConfig{Host: name, Port: "22", User: "root"}
 	v.saveConfigs(configs)
 	return nil
 }
@@ -129,7 +129,7 @@ type netfoxWriter struct {
 }
 func (w *netfoxWriter) Write(p []byte) (int, error) { return w.buf.Write(p) }
 func (w *netfoxWriter) Close() error {
-	var cfg NetFoxConfig
+	var cfg vfs.NetFoxConfig
 	json.Unmarshal(w.buf.Bytes(), &cfg)
 	configs := w.v.getConfigs()
 	configs[w.name] = cfg

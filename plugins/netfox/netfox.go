@@ -28,7 +28,7 @@ func (w *netFoxVFSWrapper) ProcessPanelKey(app vfs.App, e *vtinput.InputEvent) b
 	// Only F7 without ANY modifiers (Shift/Ctrl/Alt)
 	mods := vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed | vtinput.LeftAltPressed | vtinput.RightAltPressed | vtinput.ShiftPressed
 	if e.VirtualKeyCode == vtinput.VK_F7 && (e.ControlKeyState&uint32(mods)) == 0 {
-		actionNewConnection(app, w.NetFoxVFS)
+		actionNewConnectionMenu(app, w.NetFoxVFS)
 		return true
 	}
 	return false
@@ -42,19 +42,22 @@ func (p *NetFoxPlugin) Init(api vfs.HostAPI) error {
 	return nil
 }
 
-func actionNewConnection(app vfs.App, nf *NetFoxVFS) {
-	// To truly isolate UI, we would need a full Dialog API.
-	// For now, since this is an "Internal Go Plugin", we allow a limited
-	// callback for custom connection strings via InputBox.
-	app.InputBox(" New Connection ", "Host (sftp://user@host:port):", "", func(connStr string) {
-		if connStr == "" { return }
-		// Simplified: parse minimal string and save
-		nf.SaveConfig("NewServer", NetFoxConfig{
-			Type: "sftp",
-			Host: connStr,
-			User: "root",
-		})
-		app.RefreshAll()
+func actionNewConnectionMenu(app vfs.App, nf *NetFoxVFS) {
+	protocols := vfs.GetNetFoxProtocols()
+	var names []string
+	var types []string
+	for t := range protocols {
+		names = append(names, t)
+		types = append(types, t)
+	}
+
+	app.Menu(" New Connection ", names, func(idx int) {
+		if idx < 0 || idx >= len(types) { return }
+		p := protocols[types[idx]]
+		if name, cfg, ok := p.CreateConnectionUI(app); ok {
+			nf.SaveConfig(name, cfg)
+			app.RefreshAll()
+		}
 	})
 }
 
