@@ -318,6 +318,12 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 		fp.SetCursorIndex(0)
 		fp.Refresh()
 		vtui.FrameManager.Redraw()
+	} else if len(fp.entries) == 0 {
+		// Even if keeping entries, ensure .. is there if the list was empty
+		if !fp.vfs.IsAtRoot() || fp.vfs.ParentVFS() != nil {
+			fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
+			fp.Refresh()
+		}
 	}
 
 	// 2. Таймер для индикатора "Loading..." (появится через 200мс если VFS тормозит)
@@ -656,11 +662,12 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 				// Просим VFS реестр подобрать провайдера для этого файла
 				fullPath := fp.vfs.Join(fp.vfs.GetPath(), selected.Name)
 				if provider := vfs.FindProvider(context.Background(), fp.vfs, fullPath); provider != nil {
-					// Мгновенная реакция UI: очищаем панель и показываем загрузку
-					fp.entries = nil
+					// Мгновенная реакция UI: показываем ".." для возможности отмены
+					fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
 					fp.isLoading = true
 					fp.updateTitle(nil)
 					fp.Refresh()
+					fp.SetCursorIndex(0)
 					vtui.FrameManager.Redraw()
 
 					vtui.RunAsync(func(ctx *vtui.TaskContext) {

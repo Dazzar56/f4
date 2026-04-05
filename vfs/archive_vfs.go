@@ -87,7 +87,7 @@ func NewArchiveVFS(parent VFS, path string) (*ArchiveVFS, error) {
 
 func (v *ArchiveVFS) GetPath() string {
 	if v.innerPath == "." || v.innerPath == "" {
-		return v.arcPath
+		return filepath.ToSlash(filepath.Clean(v.arcPath))
 	}
 	// Убираем возможные двойные слеши и лишние точки
 	return filepath.ToSlash(filepath.Join(v.arcPath, v.innerPath))

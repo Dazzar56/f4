@@ -11,7 +11,10 @@ import (
 	"github.com/unxed/f4/vfs"
 )
 
+import "sync"
+
 type FTPVFS struct {
+	mu     sync.Mutex
 	parent vfs.VFS
 	conn   *ftp.ServerConn
 	cwd    string
@@ -34,6 +37,8 @@ func NewFTPVFS(parent vfs.VFS, host, port, user, pass string) (*FTPVFS, error) {
 func (v *FTPVFS) IsAtRoot() bool { return v.cwd == "/" || v.cwd == "" }
 func (v *FTPVFS) GetPath() string { return v.cwd }
 func (v *FTPVFS) SetPath(p string) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	target := p
 	if !path.IsAbs(p) { target = path.Join(v.cwd, p) }
 	if err := v.conn.ChangeDir(target); err != nil { return err }
@@ -42,6 +47,8 @@ func (v *FTPVFS) SetPath(p string) error {
 }
 
 func (v *FTPVFS) ReadDir(ctx context.Context, p string, onChunk func([]vfs.VFSItem)) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	target := p
 	if target == "/" || target == "." { target = "" }
 	entries, err := v.conn.List(target)
@@ -59,6 +66,8 @@ func (v *FTPVFS) ReadDir(ctx context.Context, p string, onChunk func([]vfs.VFSIt
 }
 
 func (v *FTPVFS) Stat(ctx context.Context, p string) (vfs.VFSItem, error) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	dir, base := path.Dir(p), path.Base(p)
 	entries, err := v.conn.List(dir)
 	if err != nil { return vfs.VFSItem{}, err }
