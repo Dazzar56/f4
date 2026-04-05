@@ -346,6 +346,34 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 			}
 		} else if len(vv.lineOffsets) > 1 {
 			vv.TopOffset = vv.lineOffsets[1]
+		} else {
+			// Fail-safe: if lineOffsets not populated (e.g. before first render),
+			// try to proactively find the next line start from current offset.
+			width := vv.X2 - vv.X1 + 1
+			if vv.scrollBar != nil {
+				width--
+			}
+			data, err := vv.backend.ReadAt(vv.TopOffset, width*4)
+			if err == nil && len(data) > 0 {
+				lineLen := 0
+				visualWidth := 0
+				for lineLen < len(data) {
+					r, size := utf8.DecodeRune(data[lineLen:])
+					if r == '\n' {
+						lineLen += size
+						break
+					}
+					rw := runewidth.RuneWidth(r)
+					if vv.WrapMode && visualWidth+rw > width {
+						break
+					}
+					visualWidth += rw
+					lineLen += size
+				}
+				if lineLen > 0 {
+					vv.TopOffset += int64(lineLen)
+				}
+			}
 		}
 		return true
 

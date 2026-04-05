@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"sync"
 	"path/filepath"
 	"strings"
 	"time"
@@ -26,6 +27,7 @@ func (d dummyDirInfo) IsDir() bool        { return true }
 func (d dummyDirInfo) Sys() any           { return nil }
 
 type ArchiveVFS struct {
+	mu        sync.Mutex
 	parent    VFS
 	arcPath   string // Путь к файлу архива в родительской VFS
 	innerPath string // Путь внутри архива
@@ -94,6 +96,8 @@ func (v *ArchiveVFS) GetPath() string {
 }
 
 func (v *ArchiveVFS) SetPath(path string) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	// Если нам передали полный путь (начинающийся с v.arcPath), отрезаем префикс.
 	// Это фиксит баг со скриншота.
 	newPath := filepath.ToSlash(filepath.Clean(path))
@@ -113,14 +117,22 @@ func (v *ArchiveVFS) SetPath(path string) error {
 }
 
 func (v *ArchiveVFS) ReadDir(ctx context.Context, path string, onChunk func([]VFSItem)) error {
+	v.mu.Lock()
 	fsPath := v.innerPath
 	// Если запрошен путь, отличный от текущего
 	if path != "" && path != v.GetPath() {
-		fsPath = strings.TrimPrefix(path, v.arcPath + "/")
+		if path == v.arcPath || path == v.arcPath+"/" {
+			fsPath = "."
+		} else {
+			fsPath = strings.TrimPrefix(path, v.arcPath+"/")
+		}
 	}
 
 	entries, err := fs.ReadDir(v.arcFS, fsPath)
-	if err != nil { return err }
+	if err != nil {
+		v.mu.Unlock()
+		return err
+	}
 
 	items := make([]VFSItem, 0, len(entries))
 	for _, e := range entries {
@@ -141,13 +153,18 @@ func (v *ArchiveVFS) ReadDir(ctx context.Context, path string, onChunk func([]VF
 			MTime: info.ModTime(),
 		})
 	}
+	v.mu.Unlock()
 	onChunk(items)
 	return nil
 }
 
 func (v *ArchiveVFS) Stat(ctx context.Context, path string) (VFSItem, error) {
-	fsPath := strings.TrimPrefix(path, v.arcPath + "/")
-	if fsPath == path { fsPath = "." }
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	fsPath := "."
+	if path != v.arcPath && path != v.arcPath+"/" {
+		fsPath = strings.TrimPrefix(path, v.arcPath+"/")
+	}
 
 	info, err := fs.Stat(v.arcFS, fsPath)
 	if err != nil { return VFSItem{}, err }
@@ -161,6 +178,8 @@ func (v *ArchiveVFS) Stat(ctx context.Context, path string) (VFSItem, error) {
 }
 
 func (v *ArchiveVFS) Open(ctx context.Context, path string) (ReadAtCloser, error) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	fsPath := strings.TrimPrefix(path, v.arcPath)
 	fsPath = strings.TrimPrefix(fsPath, "/")
 	if fsPath == "" { fsPath = "." }
@@ -197,6 +216,8 @@ func (v *ArchiveVFS) Dir(p string) string {
 }
 
 func (v *ArchiveVFS) Create(ctx context.Context, path string) (io.WriteCloser, error) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	inserter, ok := v.format.(archives.Inserter)
 	if !ok {
 		return nil, fmt.Errorf("format %v does not support modifications", v.format)
@@ -274,6 +295,8 @@ func (d dummyFileInfo) IsDir() bool        { return false }
 func (d dummyFileInfo) Sys() any           { return nil }
 
 func (v *ArchiveVFS) MkDir(ctx context.Context, path string) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	// Для архивов MkDir — это создание пустой записи с именем, кончающимся на /
 	fsPath := strings.TrimPrefix(path, v.arcPath)
 	fsPath = strings.TrimPrefix(fsPath, "/")
@@ -308,6 +331,8 @@ func (v *ArchiveVFS) MkDir(ctx context.Context, path string) error {
 }
 
 func (v *ArchiveVFS) Remove(ctx context.Context, path string) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	fsPath := strings.TrimPrefix(path, v.arcPath)
 	fsPath = strings.TrimPrefix(fsPath, "/")
 
