@@ -16,7 +16,7 @@ import (
 type ArchivePlugin struct{}
 
 func (p *ArchivePlugin) Init(api vfs.HostAPI) error {
-	api.RegisterVFSProvider(&vfs.ArchiveProvider{})
+	api.RegisterVFSProvider(&ArchiveProvider{})
 
 	api.RegisterGlobalHotkey(vtinput.VK_F1, vtinput.ShiftPressed, func(app vfs.App) {
 		actionArchiveCommands(app)

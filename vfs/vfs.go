@@ -1,6 +1,7 @@
 package vfs
 
 import (
+	"os"
 	"context"
 	"io"
 	"time"
@@ -142,4 +143,17 @@ type ReadAtCloser interface {
 	Read(ctx context.Context, p []byte) (n int, err error)
 	io.Closer
 	Size() int64
+}// TempFileWrapper is a helper for VFS that need to extract files to temp storage.
+type TempFileWrapper struct {
+	*os.File
+	SizeVal  int64
+	TempPath string
+}
+
+func (w *TempFileWrapper) Size() int64 { return w.SizeVal }
+func (w *TempFileWrapper) ReadAt(ctx context.Context, p []byte, off int64) (int, error) {
+	return w.File.ReadAt(p, off)
+}
+func (w *TempFileWrapper) Read(ctx context.Context, p []byte) (int, error) {
+	return w.File.Read(p)
 }

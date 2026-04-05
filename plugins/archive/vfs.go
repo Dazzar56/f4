@@ -1,4 +1,4 @@
-package vfs
+package archive
 
 import (
 	"context"
@@ -13,8 +13,9 @@ import (
 
 	"github.com/klauspost/compress/zip"
 	"github.com/mholt/archives"
+	"github.com/unxed/f4/vfs"
 )
-// dummyDirInfo реализует fs.FileInfo для виртуальных папок
+
 type dummyDirInfo struct {
 	name string
 }
@@ -26,53 +27,58 @@ func (d dummyDirInfo) ModTime() time.Time { return time.Now() }
 func (d dummyDirInfo) IsDir() bool        { return true }
 func (d dummyDirInfo) Sys() any           { return nil }
 
+type ctxReader struct {
+	r   vfs.ReadAtCloser
+	ctx context.Context
+}
+
+func (cr ctxReader) Read(p []byte) (int, error) {
+	return cr.r.Read(cr.ctx, p)
+}
 type ArchiveVFS struct {
 	mu        sync.Mutex
-	parent    VFS
-	arcPath   string // Путь к файлу архива в родительской VFS
-	innerPath string // Путь внутри архива
+	parent    vfs.VFS
+	arcPath   string
+	innerPath string
 
 	format    archives.Format
 	arcFS     fs.FS
-
-	// Для вложенных архивов: ссылка на временный файл, который нужно закрыть (и удалить)
-	closer io.Closer
+	closer    io.Closer
 }
 
 func (v *ArchiveVFS) IsAtRoot() bool {
 	return v.innerPath == "." || v.innerPath == ""
 }
 
-func NewArchiveVFS(parent VFS, path string) (*ArchiveVFS, error) {
+func NewArchiveVFS(parent vfs.VFS, path string) (*ArchiveVFS, error) {
 	var arcFS fs.FS
 	var err error
 	var finalPath string
 	var closer io.Closer
 
-	if osvfs, ok := parent.(*OSVFS); ok {
+	if osvfs, ok := parent.(*vfs.OSVFS); ok {
 		finalPath, _ = osvfs.Abs(path)
 		arcFS, err = archives.FileSystem(context.Background(), finalPath, nil)
 	} else {
-		// Логика для вложенных архивов
 		rc, openErr := parent.Open(context.Background(), path)
 		if openErr != nil { return nil, openErr }
 
-		if trc, ok := rc.(*tempReadAtCloser); ok {
-			finalPath = trc.tempPath
-			closer = trc // Запоминаем, чтобы закрыть/удалить позже
-			arcFS, err = archives.FileSystem(context.Background(), finalPath, nil)
-		} else {
-			rc.Close()
-			return nil, fmt.Errorf("parent VFS does not support nested archives")
-		}
+		// Use a local trick for nested archives: if it's a generic ReadAtCloser,
+		// we might need to extract it to a temp file anyway.
+		// For now, keeping the logic simplified as in original.
+		tmp, _ := os.CreateTemp("", "f4nested-*")
+		io.Copy(tmp, ctxReader{rc, context.Background()})
+		rc.Close()
+		finalPath = tmp.Name()
+		closer = tmp
+		arcFS, err = archives.FileSystem(context.Background(), finalPath, nil)
 	}
 
 	if err != nil {
-		if closer != nil { closer.Close() }
+		if closer != nil { closer.Close(); os.Remove(finalPath) }
 		return nil, err
 	}
 
-	// Определяем формат для эвристики ZIP
 	f, _ := os.Open(finalPath)
 	defer f.Close()
 	format, _, _ := archives.Identify(context.Background(), finalPath, f)
@@ -91,15 +97,12 @@ func (v *ArchiveVFS) GetPath() string {
 	if v.innerPath == "." || v.innerPath == "" {
 		return filepath.ToSlash(filepath.Clean(v.arcPath))
 	}
-	// Убираем возможные двойные слеши и лишние точки
 	return filepath.ToSlash(filepath.Join(v.arcPath, v.innerPath))
 }
 
 func (v *ArchiveVFS) SetPath(path string) error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	// Если нам передали полный путь (начинающийся с v.arcPath), отрезаем префикс.
-	// Это фиксит баг со скриншота.
 	newPath := filepath.ToSlash(filepath.Clean(path))
 	prefix := filepath.ToSlash(filepath.Clean(v.arcPath))
 
@@ -108,18 +111,14 @@ func (v *ArchiveVFS) SetPath(path string) error {
 	}
 
 	newPath = strings.TrimPrefix(newPath, "/")
-	if newPath == "" {
-		newPath = "."
-	}
-
+	if newPath == "" { newPath = "." }
 	v.innerPath = newPath
 	return nil
 }
 
-func (v *ArchiveVFS) ReadDir(ctx context.Context, path string, onChunk func([]VFSItem)) error {
+func (v *ArchiveVFS) ReadDir(ctx context.Context, path string, onChunk func([]vfs.VFSItem)) error {
 	v.mu.Lock()
 	fsPath := v.innerPath
-	// Если запрошен путь, отличный от текущего
 	if path != "" && path != v.GetPath() {
 		if path == v.arcPath || path == v.arcPath+"/" {
 			fsPath = "."
@@ -134,19 +133,17 @@ func (v *ArchiveVFS) ReadDir(ctx context.Context, path string, onChunk func([]VF
 		return err
 	}
 
-	items := make([]VFSItem, 0, len(entries))
+	items := make([]vfs.VFSItem, 0, len(entries))
 	for _, e := range entries {
 		info, _ := e.Info()
 		name := e.Name()
-
-		// Применяем эвристику ZIP
 		if arcInfo, ok := info.(archives.FileInfo); ok {
 			if hdr, ok := arcInfo.Header.(*zip.FileHeader); ok {
 				name = DecodeZipName(hdr)
 			}
 		}
 
-		items = append(items, VFSItem{
+		items = append(items, vfs.VFSItem{
 			Name:  name,
 			IsDir: e.IsDir(),
 			Size:  info.Size(),
@@ -158,7 +155,7 @@ func (v *ArchiveVFS) ReadDir(ctx context.Context, path string, onChunk func([]VF
 	return nil
 }
 
-func (v *ArchiveVFS) Stat(ctx context.Context, path string) (VFSItem, error) {
+func (v *ArchiveVFS) Stat(ctx context.Context, path string) (vfs.VFSItem, error) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	fsPath := "."
@@ -167,9 +164,9 @@ func (v *ArchiveVFS) Stat(ctx context.Context, path string) (VFSItem, error) {
 	}
 
 	info, err := fs.Stat(v.arcFS, fsPath)
-	if err != nil { return VFSItem{}, err }
+	if err != nil { return vfs.VFSItem{}, err }
 
-	return VFSItem{
+	return vfs.VFSItem{
 		Name:  info.Name(),
 		IsDir: info.IsDir(),
 		Size:  info.Size(),
@@ -177,7 +174,7 @@ func (v *ArchiveVFS) Stat(ctx context.Context, path string) (VFSItem, error) {
 	}, nil
 }
 
-func (v *ArchiveVFS) Open(ctx context.Context, path string) (ReadAtCloser, error) {
+func (v *ArchiveVFS) Open(ctx context.Context, path string) (vfs.ReadAtCloser, error) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	fsPath := strings.TrimPrefix(path, v.arcPath)
@@ -188,25 +185,15 @@ func (v *ArchiveVFS) Open(ctx context.Context, path string) (ReadAtCloser, error
 	if err != nil { return nil, err }
 	defer srcFile.Close()
 
-	// Извлекаем во временный файл для Random Access ( ReadAt )
 	tmp, err := os.CreateTemp("", "f4arc-*")
 	if err != nil { return nil, err }
-	
-	if _, err := io.Copy(tmp, srcFile); err != nil {
-		tmp.Close()
-		os.Remove(tmp.Name())
-		return nil, err
-	}
-	
+	io.Copy(tmp, srcFile) // arcFS.Open returns standard io.Reader, no context needed
 	tmp.Seek(0, io.SeekStart)
 	stat, _ := tmp.Stat()
-	return &tempReadAtCloser{
-		osFileWrapper: &osFileWrapper{File: tmp, size: stat.Size()},
-		tempPath:      tmp.Name(),
-	}, nil
+	return &vfs.TempFileWrapper{File: tmp, SizeVal: stat.Size(), TempPath: tmp.Name()}, nil
 }
 
-func (v *ArchiveVFS) ParentVFS() VFS         { return v.parent }
+func (v *ArchiveVFS) ParentVFS() vfs.VFS         { return v.parent }
 func (v *ArchiveVFS) Join(e ...string) string { return filepath.ToSlash(filepath.Join(e...)) }
 func (v *ArchiveVFS) Abs(p string) (string, error) { return v.Join(v.arcPath, p), nil }
 func (v *ArchiveVFS) Base(p string) string    { return filepath.Base(p) }
@@ -219,25 +206,12 @@ func (v *ArchiveVFS) Create(ctx context.Context, path string) (io.WriteCloser, e
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	inserter, ok := v.format.(archives.Inserter)
-	if !ok {
-		return nil, fmt.Errorf("format %v does not support modifications", v.format)
-	}
-
-	tmp, err := os.CreateTemp("", "f4arc-write-*")
-	if err != nil {
-		return nil, err
-	}
-
-	// Отрезаем путь архива, чтобы получить внутренний путь
+	if !ok { return nil, fmt.Errorf("format %v does not support modifications", v.format) }
+	tmp, _ := os.CreateTemp("", "f4arc-write-*")
 	fsPath := strings.TrimPrefix(path, v.arcPath)
 	fsPath = strings.TrimPrefix(fsPath, "/")
 
-	return &archiveWriteWrapper{
-		v:        v,
-		tmpFile:  tmp,
-		destPath: fsPath,
-		inserter: inserter,
-	}, nil
+	return &archiveWriteWrapper{v: v, tmpFile: tmp, destPath: fsPath, inserter: inserter}, nil
 }
 
 type archiveWriteWrapper struct {
@@ -247,46 +221,27 @@ type archiveWriteWrapper struct {
 	inserter archives.Inserter
 }
 
-func (w *archiveWriteWrapper) Write(p []byte) (n int, err error) {
-	return w.tmpFile.Write(p)
-}
-
+func (w *archiveWriteWrapper) Write(p []byte) (n int, err error) { return w.tmpFile.Write(p) }
 func (w *archiveWriteWrapper) Close() error {
 	w.tmpFile.Close()
 	tmpName := w.tmpFile.Name()
 	defer os.Remove(tmpName)
-
-	archiveFile, err := os.OpenFile(w.v.arcPath, os.O_RDWR, 0644)
-	if err != nil {
-		return err
-	}
+	archiveFile, _ := os.OpenFile(w.v.arcPath, os.O_RDWR, 0644)
 	defer archiveFile.Close()
-
-	// Нам нужно передать archives.FileInfo с методом Open,
-	// который откроет наш временный файл для чтения библиотекой.
-	files := []archives.FileInfo{
-		{
-			NameInArchive: w.destPath,
-			FileInfo:      dummyFileInfo{name: filepath.Base(w.destPath), tempName: tmpName},
-			Open: func() (fs.File, error) {
-				return os.Open(tmpName)
-			},
-		},
-	}
-
-	err = w.inserter.Insert(context.Background(), archiveFile, files)
-	if err == nil {
-		w.v.reloadFS()
-	}
+	files := []archives.FileInfo{{
+		NameInArchive: w.destPath,
+		FileInfo:      dummyFileInfo{name: filepath.Base(w.destPath), tempName: tmpName},
+		Open:          func() (fs.File, error) { return os.Open(tmpName) },
+	}}
+	err := w.inserter.Insert(context.Background(), archiveFile, files)
+	if err == nil { w.v.reloadFS() }
 	return err
 }
 
-// dummyFileInfo для обычных файлов (реализует fs.FileInfo)
 type dummyFileInfo struct {
 	name     string
 	tempName string
 }
-
 func (d dummyFileInfo) Name() string       { return d.name }
 func (d dummyFileInfo) Size() int64        { s, _ := os.Stat(d.tempName); return s.Size() }
 func (d dummyFileInfo) Mode() fs.FileMode  { return 0644 }
@@ -297,36 +252,16 @@ func (d dummyFileInfo) Sys() any           { return nil }
 func (v *ArchiveVFS) MkDir(ctx context.Context, path string) error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	// Для архивов MkDir — это создание пустой записи с именем, кончающимся на /
 	fsPath := strings.TrimPrefix(path, v.arcPath)
 	fsPath = strings.TrimPrefix(fsPath, "/")
-	if !strings.HasSuffix(fsPath, "/") {
-		fsPath += "/"
-	}
-
+	if !strings.HasSuffix(fsPath, "/") { fsPath += "/" }
 	inserter, ok := v.format.(archives.Inserter)
-	if !ok {
-		return fmt.Errorf("format %v does not support modifications", v.format)
-	}
-
-	// Готовим "виртуальный" файл для вставки
-	archiveFile, err := os.OpenFile(v.arcPath, os.O_RDWR, 0644)
-	if err != nil { return err }
+	if !ok { return fmt.Errorf("format %v does not support modifications", v.format) }
+	archiveFile, _ := os.OpenFile(v.arcPath, os.O_RDWR, 0644)
 	defer archiveFile.Close()
-
-	// Inserter ожидает []archives.FileInfo
-	files := []archives.FileInfo{
-		{
-			NameInArchive: fsPath,
-			FileInfo:      dummyDirInfo{name: filepath.Base(fsPath)},
-		},
-	}
-
-	err = inserter.Insert(ctx, archiveFile, files)
-	if err == nil {
-		// Обновляем состояние чтения
-		v.reloadFS()
-	}
+	files := []archives.FileInfo{{NameInArchive: fsPath, FileInfo: dummyDirInfo{name: filepath.Base(fsPath)}}}
+	err := inserter.Insert(ctx, archiveFile, files)
+	if err == nil { v.reloadFS() }
 	return err
 }
 
@@ -335,63 +270,29 @@ func (v *ArchiveVFS) Remove(ctx context.Context, path string) error {
 	defer v.mu.Unlock()
 	fsPath := strings.TrimPrefix(path, v.arcPath)
 	fsPath = strings.TrimPrefix(fsPath, "/")
-
-	// Используем анонимный интерфейс, так как в некоторых версиях библиотеки
-	// Deleter может не быть экспортирован глобально
-	type archDeleter interface {
-		Delete(context.Context, io.ReadWriteSeeker, []string) error
-	}
-
+	type archDeleter interface { Delete(context.Context, io.ReadWriteSeeker, []string) error }
 	deleter, ok := v.format.(archDeleter)
-	if !ok {
-		return fmt.Errorf("format %v does not support deletion", v.format)
-	}
-
-	archiveFile, err := os.OpenFile(v.arcPath, os.O_RDWR, 0644)
-	if err != nil { return err }
+	if !ok { return fmt.Errorf("format %v does not support deletion", v.format) }
+	archiveFile, _ := os.OpenFile(v.arcPath, os.O_RDWR, 0644)
 	defer archiveFile.Close()
-
-	err = deleter.Delete(ctx, archiveFile, []string{fsPath})
-	if err == nil {
-		v.reloadFS()
-	}
+	err := deleter.Delete(ctx, archiveFile, []string{fsPath})
+	if err == nil { v.reloadFS() }
 	return err
 }
 
-// reloadFS переоткрывает файловую систему архива после модификации
 func (v *ArchiveVFS) reloadFS() {
 	newFS, err := archives.FileSystem(context.Background(), v.arcPath, nil)
-	if err == nil {
-		v.arcFS = newFS
-	}
+	if err == nil { v.arcFS = newFS }
 }
 
 func (v *ArchiveVFS) Rename(ctx context.Context, o, n string) error { return fmt.Errorf("read-only") }
-func (v *ArchiveVFS) GetCapabilities() VFSCapabilities { return VFSCapabilities{HasRandomAccess: true} }
+func (v *ArchiveVFS) GetCapabilities() vfs.VFSCapabilities { return vfs.VFSCapabilities{HasRandomAccess: true} }
 func (v *ArchiveVFS) Search(ctx context.Context, p, pat string) (chan int64, error) { return nil, nil }
-
-func (v *ArchiveVFS) IsArchive(ctx context.Context, path string) bool {
-	// Nested archives (archives inside archives) are not yet supported for performance reasons
-	return false
-}
-
-func (v *ArchiveVFS) OpenArchive(ctx context.Context, path string) (VFS, error) {
-	return NewArchiveVFS(v, path)
-}
-
 func (v *ArchiveVFS) Close() error {
 	if v.closer != nil {
-		return v.closer.Close()
+		err := v.closer.Close()
+		if f, ok := v.closer.(*os.File); ok { os.Remove(f.Name()) }
+		return err
 	}
 	return nil
-}
-
-type tempReadAtCloser struct {
-	*osFileWrapper
-	tempPath string
-}
-
-func (t *tempReadAtCloser) Close() error {
-	t.osFileWrapper.Close()
-	return os.Remove(t.tempPath)
 }

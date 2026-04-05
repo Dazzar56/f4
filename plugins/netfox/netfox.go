@@ -15,7 +15,7 @@ import (
 type NetFoxPlugin struct{}
 
 type netFoxVFSWrapper struct {
-	*vfs.NetFoxVFS
+	*NetFoxVFS
 }
 // ctxReader wraps vfs.ReadAtCloser to implement standard io.Reader
 type ctxReader struct {
@@ -54,7 +54,7 @@ func (p *netFoxProvider) CanOpen(ctx context.Context, parent vfs.VFS, pth string
 	if err != nil { return false }
 	defer f.Close()
 
-	var cfg vfs.NetFoxConfig
+	var cfg NetFoxConfig
 	json.NewDecoder(ctxReader{f, ctx}).Decode(&cfg)
 	return cfg.Type == "sftp" || cfg.Type == ""
 }
@@ -66,7 +66,7 @@ func (p *netFoxProvider) Open(ctx context.Context, parent vfs.VFS, pth string) (
 	if err != nil { return nil, err }
 	defer f.Close()
 
-	var cfg vfs.NetFoxConfig
+	var cfg NetFoxConfig
 	// Сбрасываем указатель (если VFS поддерживает Seek)
 	if s, ok := f.(interface{ Seek(int64, int) (int64, error) }); ok {
 		s.Seek(0, 0)
@@ -94,7 +94,7 @@ func (p *ftpProvider) CanOpen(ctx context.Context, parent vfs.VFS, pth string) b
 	if err != nil { return false }
 	defer f.Close()
 
-	var cfg vfs.NetFoxConfig
+	var cfg NetFoxConfig
 	json.NewDecoder(ctxReader{f, ctx}).Decode(&cfg)
 	return cfg.Type == "ftp"
 }
@@ -106,7 +106,7 @@ func (p *ftpProvider) Open(ctx context.Context, parent vfs.VFS, pth string) (vfs
 	if err != nil { return nil, err }
 	defer f.Close()
 
-	var cfg vfs.NetFoxConfig
+	var cfg NetFoxConfig
 	if s, ok := f.(interface{ Seek(int64, int) (int64, error) }); ok {
 		s.Seek(0, 0)
 	}
@@ -123,12 +123,12 @@ func (p *NetFoxPlugin) Init(api vfs.HostAPI) error {
 
 	api.RegisterDrive("&3. NetFox", func() vfs.VFS {
 		cfgDir, _ := os.UserConfigDir()
-		return &netFoxVFSWrapper{vfs.NewNetFoxVFS(filepath.Join(cfgDir, "f4", "NetFox.json"))}
+		return &netFoxVFSWrapper{NewNetFoxVFS(filepath.Join(cfgDir, "f4", "NetFox.json"))}
 	})
 	return nil
 }
 
-func actionNewConnection(app vfs.App, nf *vfs.NetFoxVFS) {
+func actionNewConnection(app vfs.App, nf *NetFoxVFS) {
 	dlg := vtui.NewCenteredDialog(48, 17, " New Connection ")
 	dlg.ShowClose = true
 
@@ -204,7 +204,7 @@ func actionNewConnection(app vfs.App, nf *vfs.NetFoxVFS) {
 		if name != "" {
 			tStr := "sftp"
 			if rbType.Selected == 1 { tStr = "ftp" }
-			nf.SaveConfig(name, vfs.NetFoxConfig{
+			nf.SaveConfig(name, NetFoxConfig{
 				Type: tStr, Host: editHost.GetText(), Port: editPort.GetText(),
 				User: editUser.GetText(), Pass: editPass.GetText(),
 			})

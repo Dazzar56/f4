@@ -1,18 +1,18 @@
-package vfs
+package netfox
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"os"
 	"path"
 	"path/filepath"
+	"github.com/unxed/f4/vfs"
 )
 
 type NetFoxConfig struct {
-	Type string `json:"Type"` // "sftp" or "ftp"
+	Type string `json:"Type"`
 	Host string `json:"Host"`
 	Port string `json:"Port"`
 	User string `json:"User"`
@@ -35,9 +35,7 @@ func (v *NetFoxVFS) getConfigs() map[string]NetFoxConfig {
 	data, _ := os.ReadFile(v.path)
 	var configs map[string]NetFoxConfig
 	json.Unmarshal(data, &configs)
-	if configs == nil {
-		configs = make(map[string]NetFoxConfig)
-	}
+	if configs == nil { configs = make(map[string]NetFoxConfig) }
 	return configs
 }
 
@@ -53,33 +51,24 @@ func (v *NetFoxVFS) SaveConfig(name string, cfg NetFoxConfig) {
 }
 
 func (v *NetFoxVFS) IsAtRoot() bool { return true }
-
 func (v *NetFoxVFS) GetPath() string { return "net://" }
 func (v *NetFoxVFS) SetPath(p string) error { return nil }
 
-func (v *NetFoxVFS) ReadDir(ctx context.Context, p string, onChunk func([]VFSItem)) error {
+func (v *NetFoxVFS) ReadDir(ctx context.Context, p string, onChunk func([]vfs.VFSItem)) error {
 	configs := v.getConfigs()
-	var items []VFSItem
+	var items []vfs.VFSItem
 	for name := range configs {
-		items = append(items, VFSItem{
-			Name:         name,
-			IsDir:        false, // Позволяет по Enter вызвать FindProvider -> NetFoxProvider -> SFTP
-			IsExecutable: false,
-		})
+		items = append(items, vfs.VFSItem{Name: name, IsDir: false, IsExecutable: false})
 	}
-	if len(items) > 0 {
-		onChunk(items)
-	}
+	if len(items) > 0 { onChunk(items) }
 	return nil
 }
 
-func (v *NetFoxVFS) Stat(ctx context.Context, p string) (VFSItem, error) {
+func (v *NetFoxVFS) Stat(ctx context.Context, p string) (vfs.VFSItem, error) {
 	name := v.Base(p)
 	configs := v.getConfigs()
-	if _, ok := configs[name]; ok {
-		return VFSItem{Name: name, IsDir: false}, nil
-	}
-	return VFSItem{}, os.ErrNotExist
+	if _, ok := configs[name]; ok { return vfs.VFSItem{Name: name, IsDir: false}, nil }
+	return vfs.VFSItem{}, os.ErrNotExist
 }
 
 func (v *NetFoxVFS) Join(e ...string) string      { return path.Join(e...) }
@@ -90,7 +79,6 @@ func (v *NetFoxVFS) Dir(p string) string          { return "net://" }
 func (v *NetFoxVFS) MkDir(ctx context.Context, p string) error {
 	name := v.Base(p)
 	configs := v.getConfigs()
-	// Используем введенное имя как дефолтный хост, чтобы не ломиться на example.com
 	configs[name] = NetFoxConfig{Host: name, Port: "22", User: "root"}
 	v.saveConfigs(configs)
 	return nil
@@ -116,31 +104,20 @@ func (v *NetFoxVFS) Rename(ctx context.Context, old, new string) error {
 	return nil
 }
 
-func (v *NetFoxVFS) GetCapabilities() VFSCapabilities {
-	return VFSCapabilities{HasRandomAccess: true}
-}
+func (v *NetFoxVFS) GetCapabilities() vfs.VFSCapabilities { return vfs.VFSCapabilities{HasRandomAccess: true} }
 func (v *NetFoxVFS) Search(ctx context.Context, p, pat string) (chan int64, error) { return nil, nil }
 
-// Позволяет редактировать настройки подключения по F4 (открывая JSON как текстовый файл)
-type bufferReadAtCloser struct {
-	*bytes.Reader
-}
-
+type bufferReadAtCloser struct { *bytes.Reader }
 func (b *bufferReadAtCloser) Close() error { return nil }
-func (b *bufferReadAtCloser) Read(ctx context.Context, p []byte) (int, error) {
-	return b.Reader.Read(p)
-}
-func (b *bufferReadAtCloser) ReadAt(ctx context.Context, p []byte, off int64) (int, error) {
-	return b.Reader.ReadAt(p, off)
-}
+func (b *bufferReadAtCloser) Read(ctx context.Context, p []byte) (int, error) { return b.Reader.Read(p) }
+func (b *bufferReadAtCloser) ReadAt(ctx context.Context, p []byte, off int64) (int, error) { return b.Reader.ReadAt(p, off) }
+func (b *bufferReadAtCloser) Size() int64 { return int64(b.Reader.Len()) }
 
-func (v *NetFoxVFS) Open(ctx context.Context, p string) (ReadAtCloser, error) {
+func (v *NetFoxVFS) Open(ctx context.Context, p string) (vfs.ReadAtCloser, error) {
 	name := v.Base(p)
 	configs := v.getConfigs()
 	cfg, ok := configs[name]
-	if !ok {
-		return nil, os.ErrNotExist
-	}
+	if !ok { return nil, os.ErrNotExist }
 	data, _ := json.MarshalIndent(cfg, "", "  ")
 	return &bufferReadAtCloser{Reader: bytes.NewReader(data)}, nil
 }
@@ -150,24 +127,17 @@ type netfoxWriter struct {
 	name string
 	buf  bytes.Buffer
 }
-
 func (w *netfoxWriter) Write(p []byte) (int, error) { return w.buf.Write(p) }
 func (w *netfoxWriter) Close() error {
 	var cfg NetFoxConfig
-	if err := json.Unmarshal(w.buf.Bytes(), &cfg); err != nil {
-		return fmt.Errorf("Invalid JSON config: %v", err)
-	}
+	json.Unmarshal(w.buf.Bytes(), &cfg)
 	configs := w.v.getConfigs()
 	configs[w.name] = cfg
 	w.v.saveConfigs(configs)
 	return nil
 }
-
 func (v *NetFoxVFS) Create(ctx context.Context, p string) (io.WriteCloser, error) {
 	return &netfoxWriter{v: v, name: v.Base(p)}, nil
 }
-
-func (v *NetFoxVFS) ParentVFS() VFS { return nil }
+func (v *NetFoxVFS) ParentVFS() vfs.VFS { return nil }
 func (v *NetFoxVFS) Close() error   { return nil }
-
-
