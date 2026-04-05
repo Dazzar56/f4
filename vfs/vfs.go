@@ -26,11 +26,14 @@ type HostAPI interface {
 	GetVersion() string
 	Log(msg string)
 	Message(msg string)
+
 	RegisterHighlighter(p HighlighterProvider)
 	RegisterVFSProvider(p VFSProvider)
 	RegisterDrive(name string, factory func() VFS)
 	RegisterGlobalHotkey(vk uint16, mods uint32, handler func(app App))
+	RegisterPluginMenuItem(label string, handler func(app App))
 }
+
 // VFSItem represents a generic file or directory entry.
 type VFSItem struct {
 	Name         string

@@ -443,6 +443,12 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return vtui.FrameManager.EmitCommand(CmFindFile, nil)
 	}
 
+	// F11: Plugin Menu
+	if e.VirtualKeyCode == vtinput.VK_F11 && !alt && !ctrl && !shift && e.KeyDown {
+		pf.showPluginMenu()
+		return true
+	}
+
 	if e.Type == vtinput.FocusEventType {
 		// Propagate focus to command line so its cursor state stays in sync
 		pf.cmdLine.ProcessKey(e)
@@ -1210,6 +1216,23 @@ func (pf *PanelsFrame) Clone() *PanelsFrame {
 	clone.updateMenuCheckmarks()
 	return clone
 }
+
+func (pf *PanelsFrame) showPluginMenu() {
+	if len(PluginMenuItems) == 0 {
+		vtui.ShowMessage(" Plugins ", "No plugins registered for F11 menu.", []string{"&Ok"})
+		return
+	}
+	var labels []string
+	for _, itm := range PluginMenuItems {
+		labels = append(labels, itm.Label)
+	}
+	pf.Menu(" Plugins ", labels, func(idx int) {
+		if idx >= 0 && idx < len(PluginMenuItems) {
+			PluginMenuItems[idx].Handler(pf)
+		}
+	})
+}
+
 func (pf *PanelsFrame) showDriveMenu(panelIdx int) {
 	menu := vtui.NewVMenu(" Drive ")
 	for _, drv := range DriveRegistry {

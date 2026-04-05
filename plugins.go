@@ -19,6 +19,16 @@ type Plugin interface {
 	Close() error
 	GetName() string
 }
+type PluginMenuItem struct {
+	Label   string
+	Handler func(app vfs.App)
+}
+
+var PluginMenuItems []PluginMenuItem
+
+func RegisterPluginMenuItem(label string, handler func(app vfs.App)) {
+	PluginMenuItems = append(PluginMenuItems, PluginMenuItem{Label: label, Handler: handler})
+}
 
 type PluginManager struct {
 	mu      sync.Mutex

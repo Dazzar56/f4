@@ -8,7 +8,7 @@ import "github.com/unxed/f4/vfs"
 type coreAPI struct{}
 
 func (c *coreAPI) GetVersion() string {
-	return "f4 v0.1.0-alpha"
+	return "v0.1.0-alpha"
 }
 
 func (c *coreAPI) Log(msg string) {
@@ -36,4 +36,8 @@ func (c *coreAPI) RegisterDrive(name string, factory func() vfs.VFS) {
 
 func (c *coreAPI) RegisterGlobalHotkey(vk uint16, mods uint32, handler func(app vfs.App)) {
 	RegisterGlobalHotkey(vk, mods, handler)
+}
+
+func (c *coreAPI) RegisterPluginMenuItem(label string, handler func(app vfs.App)) {
+	RegisterPluginMenuItem(label, handler)
 }

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"sync"
 	"path"
 	"path/filepath"
 	"github.com/unxed/f4/vfs"
@@ -20,6 +21,7 @@ type NetFoxConfig struct {
 }
 
 type NetFoxVFS struct {
+	mu   sync.Mutex
 	path string
 }
 
@@ -32,7 +34,10 @@ func NewNetFoxVFS(dbPath string) *NetFoxVFS {
 }
 
 func (v *NetFoxVFS) getConfigs() map[string]vfs.NetFoxConfig {
-	data, _ := os.ReadFile(v.path)
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	data, err := os.ReadFile(v.path)
+	if err != nil { return make(map[string]vfs.NetFoxConfig) }
 	var configs map[string]vfs.NetFoxConfig
 	json.Unmarshal(data, &configs)
 	if configs == nil { configs = make(map[string]vfs.NetFoxConfig) }
@@ -40,6 +45,9 @@ func (v *NetFoxVFS) getConfigs() map[string]vfs.NetFoxConfig {
 }
 
 func (v *NetFoxVFS) saveConfigs(configs map[string]vfs.NetFoxConfig) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	os.MkdirAll(filepath.Dir(v.path), 0755)
 	data, _ := json.MarshalIndent(configs, "", "  ")
 	os.WriteFile(v.path, data, 0644)
 }
