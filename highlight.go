@@ -4,6 +4,7 @@ import (
 	"github.com/alecthomas/chroma/v2"
 	"github.com/alecthomas/chroma/v2/lexers"
 	"github.com/unxed/vtui"
+	"github.com/unxed/f4/vfs"
 )
 
 // SyntaxMap связывает типы токенов Chroma с цветами f4
@@ -34,26 +35,34 @@ func GetSyntaxAttr(t chroma.TokenType, baseAttr uint64) uint64 {
 	return baseAttr
 }
 
-// ChromaHighlighter implements vfs.Highlighter using the chroma library.
-// This is now an internal plugin capability.
-type ChromaHighlighter struct{}
+// ChromaProvider implements vfs.HighlighterProvider using the chroma library.
+type ChromaProvider struct{}
 
-func (c *ChromaHighlighter) Name() string { return "Chroma" }
+func (p *ChromaProvider) Name() string { return "Chroma" }
 
-func (c *ChromaHighlighter) CanHighlight(filename string, content string) bool {
-	return lexers.Get(filename) != nil || lexers.Analyse(content) != nil
+func (p *ChromaProvider) Match(filename string, content string) bool {
+	return lexers.Match(filename) != nil || lexers.Analyse(content) != nil
 }
 
-func (c *ChromaHighlighter) Highlight(line string, prevState any, baseAttr uint64) ([]uint64, any) {
-	// Chroma is technically stateless per-line in this simple implementation,
-	// but we fulfill the interface.
-	lexer := lexers.Analyse(line)
+func (p *ChromaProvider) Create(filename string, content string) vfs.Highlighter {
+	lexer := lexers.Match(filename)
+	if lexer == nil {
+		lexer = lexers.Analyse(content)
+	}
 	if lexer == nil {
 		lexer = lexers.Fallback
 	}
 	lexer = chroma.Coalesce(lexer)
+	return &ChromaHighlighter{lexer: lexer}
+}
 
-	iterator, err := lexer.Tokenise(nil, line)
+// ChromaHighlighter implements vfs.Highlighter.
+type ChromaHighlighter struct {
+	lexer chroma.Lexer
+}
+
+func (c *ChromaHighlighter) Highlight(line string, prevState any, baseAttr uint64) ([]uint64, any) {
+	iterator, err := c.lexer.Tokenise(nil, line)
 	if err != nil {
 		return nil, nil
 	}

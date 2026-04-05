@@ -114,7 +114,7 @@ func (pm *PluginManager) CloseAll() {
 type ChromaInternalPlugin struct{}
 
 func (p *ChromaInternalPlugin) Init(api vfs.HostAPI) error {
-	api.RegisterHighlighter(&ChromaHighlighter{})
+	api.RegisterHighlighter(&ChromaProvider{})
 	return nil
 }
 func (p *ChromaInternalPlugin) Close() error { return nil }

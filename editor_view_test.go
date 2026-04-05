@@ -19,8 +19,6 @@ type mockStatefulHighlighter struct {
 	statesComputed int
 }
 
-func (m *mockStatefulHighlighter) Name() string { return "mock" }
-func (m *mockStatefulHighlighter) CanHighlight(f, c string) bool { return true }
 func (m *mockStatefulHighlighter) Highlight(line string, prev any, base uint64) ([]uint64, any) {
 	depth := 0
 	if prev != nil {

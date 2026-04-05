@@ -26,7 +26,7 @@ type HostAPI interface {
 	GetVersion() string
 	Log(msg string)
 	Message(msg string)
-	RegisterHighlighter(h Highlighter)
+	RegisterHighlighter(p HighlighterProvider)
 	RegisterVFSProvider(p VFSProvider)
 	RegisterDrive(name string, factory func() VFS)
 	RegisterGlobalHotkey(vk uint16, mods uint32, handler func(app App))
@@ -82,11 +82,8 @@ type VFS interface {
 }
 
 // Highlighter defines a capability to provide syntax coloring.
+// Highlighter defines a capability to provide syntax coloring.
 type Highlighter interface {
-	Name() string
-	// CanHighlight returns true if this highlighter can handle the file.
-	// content is usually the first line or a chunk of the file.
-	CanHighlight(filename string, content string) bool
 	// Highlight processes a line of text.
 	// line: text to highlight.
 	// prevState: state returned by the previous line (nil for the first line).
@@ -95,16 +92,25 @@ type Highlighter interface {
 	Highlight(line string, prevState any, baseAttr uint64) (attrs []uint64, nextState any)
 }
 
-var highlighters []Highlighter
+// HighlighterProvider defines a factory for highlighters.
+type HighlighterProvider interface {
+	Name() string
+	// Match returns true if this provider can handle the file.
+	Match(filename string, content string) bool
+	// Create generates a new Highlighter instance for a specific file.
+	Create(filename string, content string) Highlighter
+}
 
-func RegisterHighlighter(h Highlighter) {
-	highlighters = append(highlighters, h)
+var highlighterProviders []HighlighterProvider
+
+func RegisterHighlighter(p HighlighterProvider) {
+	highlighterProviders = append(highlighterProviders, p)
 }
 
 func GetHighlighter(filename string, content string) Highlighter {
-	for _, h := range highlighters {
-		if h.CanHighlight(filename, content) {
-			return h
+	for _, p := range highlighterProviders {
+		if p.Match(filename, content) {
+			return p.Create(filename, content)
 		}
 	}
 	return nil
