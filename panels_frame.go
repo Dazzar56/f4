@@ -14,7 +14,6 @@ import (
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
-import "golang.org/x/crypto/ssh"
 
 type DriveEntry struct {
 	Name    string
@@ -43,10 +42,6 @@ func (pf *PanelsFrame) GetSelectedName() string   { return pf.Active().(*FileSys
 
 type PanelController interface {
 	ProcessPanelKey(pf *PanelsFrame, e *vtinput.InputEvent) bool
-}
-
-type SSHClientProvider interface {
-	SSHClient() *ssh.Client
 }
 
 // A Panel is an interface for any content that can be placed in the "half" of the manager.
@@ -1079,27 +1074,24 @@ func (pf *PanelsFrame) getActivePTYUnsafe() PtyBackend {
 		activeVfs = fsp.vfs
 	}
 
-	if scp, ok := activeVfs.(SSHClientProvider); ok {
+	if pp, ok := activeVfs.(vfs.PtyProvider); ok {
 		if pty, exists := pf.remotePtys[activeVfs]; exists {
 			return pty
 		}
 
-		sshClient := scp.SSHClient()
-		if sshClient == nil { return pf.pty }
-
-		pty, err := NewSSHPty(sshClient)
+		res, err := pp.OpenPty(pf.termView.Width, pf.termView.Height)
 		if err == nil {
-			vtui.DebugLog("Created new SSH PTY background session for VFS")
-			pty.SetSize(pf.termView.Width, pf.termView.Height)
-			pty.Run("") // Запускаем фоновый интерактивный bash
+			pty := res.(PtyBackend)
+			vtui.DebugLog("Created new remote PTY background session for VFS")
 			pf.remotePtys[activeVfs] = pty
 
-			// Выделенный цикл чтения для этого удаленного PTY
 			go func() {
 				buf := make([]byte, 4096)
 				for {
 					n, readErr := pty.Read(buf)
-					if readErr != nil { break }
+					if readErr != nil {
+						break
+					}
 
 					pf.ptyMutex.Lock()
 					if pf.getActivePTYUnsafe() == pty {
@@ -1114,8 +1106,6 @@ func (pf *PanelsFrame) getActivePTYUnsafe() PtyBackend {
 				pf.ptyMutex.Unlock()
 			}()
 			return pty
-		} else {
-			vtui.DebugLog("Failed to create SSH PTY: %v", err)
 		}
 	}
 	return pf.pty

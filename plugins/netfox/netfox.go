@@ -75,7 +75,7 @@ func (p *netFoxProvider) Open(ctx context.Context, parent vfs.VFS, pth string) (
 
 	port := cfg.Port
 	if port == "" { port = "22" }
-	return vfs.NewSFTPVFS(parent, cfg.Host, port, cfg.User, cfg.Pass)
+	return NewSFTPVFS(parent, cfg.Host, port, cfg.User, cfg.Pass)
 }
 
 // ftpProvider handles FTP connections from the NetFox list
@@ -114,7 +114,7 @@ func (p *ftpProvider) Open(ctx context.Context, parent vfs.VFS, pth string) (vfs
 
 	port := cfg.Port
 	if port == "" { port = "21" }
-	return vfs.NewFTPVFS(parent, cfg.Host, port, cfg.User, cfg.Pass)
+	return NewFTPVFS(parent, cfg.Host, port, cfg.User, cfg.Pass)
 }
 
 func (p *NetFoxPlugin) Init(api vfs.HostAPI) error {

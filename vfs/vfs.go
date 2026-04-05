@@ -75,6 +75,11 @@ type VFS interface {
 
 	Close() error
 }
+// PtyProvider allows a VFS to provide its own PTY implementation
+// (e.g. an SSH session for remote systems).
+type PtyProvider interface {
+	OpenPty(cols, rows int) (any, error)
+}
 
 // VFSProvider умеет определять, может ли он открыть путь, и создавать экземпляр VFS.
 type VFSProvider interface {
