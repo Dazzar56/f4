@@ -28,10 +28,8 @@ func actionOpenEditor(pf *PanelsFrame, v vfs.VFS, path string) {
 			var err error
 			f, err = v.Open(ctx.Context, path)
 			if err != nil {
-				ctx.RunOnUI(func() {
-					vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to open file:\n%v", err), []string{"&Ok"})
-				})
-				return
+				vtui.DebugLog("actionOpenEditor: Open failed (assuming new file): %v", err)
+				f = nil
 			}
 		}
 
@@ -138,25 +136,23 @@ func actionViewerSearch(vv *ViewerView) {
 }
 
 func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
-	if _, isLocal := v.(*vfs.OSVFS); !isLocal {
-		vtui.ShowMessage(" Error ", "Cannot execute files on a remote file system.", []string{"&Ok"})
-		return
-	}
-
 	vtui.RunAsync(func(ctx *vtui.TaskContext) {
 		runnable := vfs.IsTerminalRunnable(ctx.Context, v, path)
 		ctx.RunOnUI(func() {
 			if runnable {
-				if pf.pty != nil {
-					pf.pty.Write([]byte(fmt.Sprintf(" cd %q\r", dir)))
+				activePty := pf.getActivePTY()
+				if activePty != nil {
+					activePty.Write([]byte(fmt.Sprintf(" cd %q\r", dir)))
 					cmd := name
-					if runtime.GOOS != "windows" {
-						cmd = "./" + name
-					}
-					pf.pty.Write([]byte(cmd + "\r"))
+					if runtime.GOOS != "windows" { cmd = "./" + name }
+					activePty.Write([]byte(cmd + "\r"))
+					pf.showPanels = false
 				}
-				pf.showPanels = false
 			} else {
+				if _, isLocal := v.(*vfs.OSVFS); !isLocal {
+					vtui.ShowMessage(" Error ", "Cannot execute non-runnable files on a remote file system.", []string{"&Ok"})
+					return
+				}
 				var cmd *exec.Cmd
 				switch runtime.GOOS {
 				case "linux":
@@ -283,6 +279,10 @@ func actionMkDir(pf *PanelsFrame) {
 	}
 
 	activeVfs := panel.vfs
+	if nf, isNetFox := activeVfs.(*vfs.NetFoxVFS); isNetFox {
+		actionNewConnection(pf, nf)
+		return
+	}
 
 	dlg := vtui.NewCenteredDialog(40, 9, Msg("MakeFolder.Title"))
 	dlg.ShowClose = true
@@ -326,6 +326,7 @@ func actionMkDir(pf *PanelsFrame) {
 				if err != nil {
 					vtui.ShowMessage(" Error ", fmt.Sprintf(Msg("Operation.Error"), err.Error()), []string{"&Ok"})
 				}
+
 				// Set pending selection so the panel snaps to the new folder after the async reload
 				panel.pendingSelection = name
 				pf.RefreshAll()
@@ -333,6 +334,86 @@ func actionMkDir(pf *PanelsFrame) {
 		})
 	}
 
+	vtui.FrameManager.Push(dlg)
+}
+
+func actionNewConnection(pf *PanelsFrame, nf *vfs.NetFoxVFS) {
+	dlg := vtui.NewCenteredDialog(48, 14, " SFTP Connection ")
+	dlg.ShowClose = true
+
+	lblName := vtui.NewLabel(0, 0, "Connection &Name:", nil)
+	editName := vtui.NewEdit(0, 0, 20, "MyServer")
+	lblName.FocusLink = editName
+
+	lblHost := vtui.NewLabel(0, 0, "&Host or IP:", nil)
+	editHost := vtui.NewEdit(0, 0, 30, "")
+	lblHost.FocusLink = editHost
+
+	lblPort := vtui.NewLabel(0, 0, "&Port:", nil)
+	editPort := vtui.NewEdit(0, 0, 6, "22")
+	lblPort.FocusLink = editPort
+
+	lblUser := vtui.NewLabel(0, 0, "&User:", nil)
+	editUser := vtui.NewEdit(0, 0, 20, "root")
+	lblUser.FocusLink = editUser
+
+	lblPass := vtui.NewLabel(0, 0, "Pass&word:", nil)
+	editPass := vtui.NewEdit(0, 0, 20, "") // Используем NewEdit вместо NewPswEdit
+	lblPass.FocusLink = editPass
+
+	btnOk := vtui.NewButton(0, 0, "&Ok")
+	btnCancel := vtui.NewButton(0, 0, "Cancel")
+	btnOk.IsDefault = true
+
+	dlg.AddItem(lblName); dlg.AddItem(editName)
+	dlg.AddItem(lblHost); dlg.AddItem(editHost)
+	dlg.AddItem(lblPort); dlg.AddItem(editPort)
+	dlg.AddItem(lblUser); dlg.AddItem(editUser)
+	dlg.AddItem(lblPass); dlg.AddItem(editPass)
+	dlg.AddItem(btnOk); dlg.AddItem(btnCancel)
+
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+1, 48-4, 14-2)
+	vbox.Add(lblName, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(editName, vtui.Margins{}, vtui.AlignFill)
+
+	hbox1 := vtui.NewHBoxLayout(0, 0, 48-4, 2)
+	vboxHost := vtui.NewVBoxLayout(0, 0, 30, 2)
+	vboxHost.Add(lblHost, vtui.Margins{}, vtui.AlignLeft); vboxHost.Add(editHost, vtui.Margins{}, vtui.AlignFill)
+	vboxPort := vtui.NewVBoxLayout(0, 0, 10, 2)
+	vboxPort.Add(lblPort, vtui.Margins{}, vtui.AlignLeft); vboxPort.Add(editPort, vtui.Margins{}, vtui.AlignFill)
+	hbox1.Add(vboxHost, vtui.Margins{Right: 2}, vtui.AlignLeft); hbox1.Add(vboxPort, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(hbox1, vtui.Margins{Top: 1}, vtui.AlignFill)
+
+	hbox2 := vtui.NewHBoxLayout(0, 0, 48-4, 2)
+	vboxUser := vtui.NewVBoxLayout(0, 0, 20, 2)
+	vboxUser.Add(lblUser, vtui.Margins{}, vtui.AlignLeft); vboxUser.Add(editUser, vtui.Margins{}, vtui.AlignFill)
+	vboxPass := vtui.NewVBoxLayout(0, 0, 20, 2)
+	vboxPass.Add(lblPass, vtui.Margins{}, vtui.AlignLeft); vboxPass.Add(editPass, vtui.Margins{}, vtui.AlignFill)
+	hbox2.Add(vboxUser, vtui.Margins{Right: 2}, vtui.AlignLeft); hbox2.Add(vboxPass, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(hbox2, vtui.Margins{Top: 1}, vtui.AlignFill)
+
+	hboxBtns := vtui.NewHBoxLayout(0, 0, 48-4, 1)
+	hboxBtns.HorizontalAlign = vtui.AlignCenter; hboxBtns.Spacing = 2
+	hboxBtns.Add(btnOk, vtui.Margins{}, vtui.AlignTop); hboxBtns.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
+	vbox.Add(hboxBtns, vtui.Margins{Top: 1}, vtui.AlignFill)
+
+	vbox.Apply()
+	dlg.SetFocusedItem(editName)
+
+	btnCancel.OnClick = func() { dlg.Close() }
+	btnOk.OnClick = func() {
+		name := editName.GetText()
+		if name != "" {
+			nf.SaveConfig(name, vfs.NetFoxConfig{
+				Host: editHost.GetText(),
+				Port: editPort.GetText(),
+				User: editUser.GetText(),
+				Pass: editPass.GetText(),
+			})
+			pf.RefreshAll()
+		}
+		dlg.Close()
+	}
 	vtui.FrameManager.Push(dlg)
 }
 

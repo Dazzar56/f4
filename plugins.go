@@ -54,6 +54,13 @@ func (pm *PluginManager) loadInternal() {
 		pm.mu.Unlock()
 		vtui.DebugLog("Loaded internal plugin: %s", pArc.GetName())
 	}
+	pNR := &NetFoxPlugin{}
+	if err := pNR.Init(pm.api); err == nil {
+		pm.mu.Lock()
+		pm.plugins = append(pm.plugins, pNR)
+		pm.mu.Unlock()
+		vtui.DebugLog("Loaded internal plugin: %s", pNR.GetName())
+	}
 }
 
 func (pm *PluginManager) loadExternal(dir string) {

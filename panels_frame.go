@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"time"
 	"github.com/unxed/f4/vfs"
+	"sync"
 	"os/user"
 	"strings"
+	"path/filepath"
 
 	"github.com/mattn/go-runewidth"
 
@@ -42,9 +44,11 @@ type PanelsFrame struct {
 	lastH      int
 
 	// Integrated Terminal
-	pty      PtyBackend
-	termView *TerminalView
-	parser   *AnsiParser
+	pty        PtyBackend
+	remotePtys map[vfs.VFS]PtyBackend
+	ptyMutex   sync.Mutex
+	termView   *TerminalView
+	parser     *AnsiParser
 
 	lastAlt   bool
 }
@@ -194,16 +198,20 @@ func (pf *PanelsFrame) initPTY() {
 	shell := GetSystemShell()
 	pf.pty.Run(shell)
 
-	// Read loop
+	// Локальный PTY имеет свой выделенный цикл чтения.
 	go func() {
 		buf := make([]byte, 4096)
 		for {
 			n, err := pf.pty.Read(buf)
-			if err != nil {
-				return
+			if err != nil { return }
+
+			pf.ptyMutex.Lock()
+			// Отправляем вывод в терминал, только если локальный PTY сейчас активен
+			if pf.getActivePTYUnsafe() == pf.pty {
+				pf.parser.Process(buf[:n])
+				vtui.FrameManager.PostTask(vtui.FrameManager.Redraw)
 			}
-			pf.parser.Process(buf[:n])
-			vtui.FrameManager.Redraw()
+			pf.ptyMutex.Unlock()
 		}
 	}()
 }
@@ -226,7 +234,13 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 	if termH < 0 { termH = 0 }
 
 	if pf.pty != nil {
+		pf.ptyMutex.Lock()
 		pf.pty.SetSize(w, termH)
+		for _, remotePty := range pf.remotePtys {
+			remotePty.SetSize(w, termH)
+		}
+		pf.ptyMutex.Unlock()
+
 		pf.termView.SetPosition(0, contentY1, w-1, termY2)
 		pf.termView.Resize(w, termH)
 	}
@@ -343,6 +357,15 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		vtui.FrameManager.Push(NewArkanoidFrame())
 		return true
 	}
+	// Drive menus
+	if e.VirtualKeyCode == vtinput.VK_F1 && alt && !ctrl && !shift && e.KeyDown {
+		pf.showDriveMenu(0)
+		return true
+	}
+	if e.VirtualKeyCode == vtinput.VK_F2 && alt && !ctrl && !shift && e.KeyDown {
+		pf.showDriveMenu(1)
+		return true
+	}
 
 	// Alt+F5: Dummy Long Operation for debugging
 	if e.VirtualKeyCode == vtinput.VK_F5 && alt && !ctrl && e.KeyDown {
@@ -389,12 +412,11 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			}
 		}
 
-		// Only forward KeyUp events if the guest app explicitly requested Win32 Input Mode.
-		// Legacy apps (like mc) would interpret forwarded KeyUp escape sequences as new keypresses.
 		if e.KeyDown || pf.termView.Win32InputMode || pf.termView.KittyFlags != 0 {
-			if pf.pty != nil {
+			active := pf.getActivePTY()
+			if active != nil {
 				if seq := TranslateInput(e, pf.termView.Win32InputMode, pf.termView.KittyFlags, pf.termView.ApplicationCursorKeys); seq != "" {
-					pf.pty.Write([]byte(seq))
+					active.Write([]byte(seq))
 				}
 			}
 		}
@@ -537,21 +559,25 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		if !pf.cmdLine.IsEmpty() {
 			cmd := pf.cmdLine.Edit.GetText()
 			pf.cmdLine.Edit.AddHistory(cmd)
-			if pf.pty != nil {
+			
+			activePty := pf.getActivePTY()
+			if activePty != nil {
 				var path string
 				if fsp, ok := pf.panels[pf.activeIdx].(*FileSystemPanel); ok { path = fsp.vfs.GetPath() }
 				if path != "" {
 					vtui.DebugLog("SHELL: Executing %q in %s", cmd, path)
-					pf.pty.Write([]byte(fmt.Sprintf(" cd %q\r", path)))
+					activePty.Write([]byte(fmt.Sprintf(" cd %q\r", path)))
 				}
-				pf.pty.Write([]byte(cmd + "\r"))
+				activePty.Write([]byte(cmd + "\r"))
 			}
+			
 			pf.cmdLine.Clear()
 			pf.showPanels = false
 			return true
 		} else if !pf.showPanels {
-			if pf.pty != nil {
-				pf.pty.Write([]byte("\r"))
+			activePty := pf.getActivePTY()
+			if activePty != nil {
+				activePty.Write([]byte("\r"))
 			}
 			return true
 		} else {
@@ -564,7 +590,16 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			// 2. If panel didn't handle it, it's a file. Execute or open it.
 			if !handled {
 				fsp := pf.getActivePanel()
-				if fsp == nil { return true }
+				if fsp == nil {
+					return true
+				}
+				// Если это файл в NetFoxVFS, то у него точно есть провайдер (SFTP),
+				// либо мы его редактируем по F4. Нам не нужно запускать actionExecute
+				// для виртуальных файловых систем, которые не являются OSVFS.
+				if _, isOS := fsp.vfs.(*vfs.OSVFS); !isOS {
+					return true
+				}
+
 				name := fsp.GetSelectedName()
 				if name != "" && name != ".." {
 					path := fsp.vfs.Join(fsp.vfs.GetPath(), name)
@@ -598,7 +633,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 	// 2. Try global hotkeys handled by PanelsFrame
 
-	// Handle command history when panels are hidden
+	// Handle command history and raw typing when panels are hidden
 	if !pf.showPanels {
 		switch e.VirtualKeyCode {
 		case vtinput.VK_UP:
@@ -608,6 +643,15 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			pf.cmdLine.Edit.HistoryDown()
 			return true
 		}
+
+		// Направляем ВСЕ нажатия (включая Backspace) в активный терминал
+		active := pf.getActivePTY()
+		if active != nil {
+			if seq := TranslateInput(e, pf.termView.Win32InputMode, pf.termView.KittyFlags, pf.termView.ApplicationCursorKeys); seq != "" {
+				active.Write([]byte(seq))
+			}
+		}
+		return true
 	}
 	// Tab switches panels
 	if e.VirtualKeyCode == vtinput.VK_TAB && !ctrl {
@@ -968,6 +1012,63 @@ func (pf *PanelsFrame) RefreshAll() {
 		}
 	}
 }
+func (pf *PanelsFrame) getActivePTYUnsafe() PtyBackend {
+	if pf.remotePtys == nil {
+		pf.remotePtys = make(map[vfs.VFS]PtyBackend)
+	}
+
+	var activeVfs vfs.VFS
+	if fsp := pf.getActivePanel(); fsp != nil {
+		activeVfs = fsp.vfs
+	}
+
+	if sftp, isSFTP := activeVfs.(*vfs.SFTPVFS); isSFTP {
+		if pty, exists := pf.remotePtys[sftp]; exists {
+			return pty
+		}
+
+		sshClient := sftp.SSHClient()
+		if sshClient == nil { return pf.pty } // Fallback to local on error
+
+		pty, err := NewSSHPty(sshClient)
+		if err == nil {
+			vtui.DebugLog("Created new SSH PTY background session for SFTP")
+			pty.SetSize(pf.termView.Width, pf.termView.Height)
+			pty.Run("") // Запускаем фоновый интерактивный bash
+			pf.remotePtys[sftp] = pty
+
+			// Выделенный цикл чтения для этого удаленного PTY
+			go func() {
+				buf := make([]byte, 4096)
+				for {
+					n, readErr := pty.Read(buf)
+					if readErr != nil { break }
+
+					pf.ptyMutex.Lock()
+					if pf.getActivePTYUnsafe() == pty {
+						pf.parser.Process(buf[:n])
+						vtui.FrameManager.PostTask(vtui.FrameManager.Redraw)
+					}
+					pf.ptyMutex.Unlock()
+				}
+				pty.Close()
+				pf.ptyMutex.Lock()
+				delete(pf.remotePtys, sftp)
+				pf.ptyMutex.Unlock()
+			}()
+			return pty
+		} else {
+			vtui.DebugLog("Failed to create SSH PTY: %v", err)
+		}
+	}
+	return pf.pty
+}
+
+func (pf *PanelsFrame) getActivePTY() PtyBackend {
+	pf.ptyMutex.Lock()
+	defer pf.ptyMutex.Unlock()
+	return pf.getActivePTYUnsafe()
+}
 
 func (pf *PanelsFrame) GetTitle() string {
 	path := ""
@@ -1022,4 +1123,55 @@ func (pf *PanelsFrame) Clone() *PanelsFrame {
 	}
 	clone.updateMenuCheckmarks()
 	return clone
+}
+func (pf *PanelsFrame) showDriveMenu(panelIdx int) {
+	menu := vtui.NewVMenu(" Drive ")
+	menu.AddItem(vtui.MenuItem{Text: "&1. Local ( / )"})
+	menu.AddItem(vtui.MenuItem{Text: "&2. Home ( ~ )"})
+	menu.AddItem(vtui.MenuItem{Text: "&3. NetFox (SFTP)"})
+
+	w, h := 26, menu.GetItemCount()+2
+	x := (pf.lastW - w) / 2
+	y := (pf.lastH - h) / 2
+	if panelIdx == 0 {
+		x = pf.lastW/4 - w/2
+	} else {
+		x = pf.lastW*3/4 - w/2
+	}
+	if x < 0 {
+		x = 0
+	}
+	menu.SetPosition(x, y, x+w-1, y+h-1)
+
+	menu.OnAction = func(idx int) {
+		menu.Close()
+		if fsp, ok := pf.panels[panelIdx].(*FileSystemPanel); ok {
+			var newVFS vfs.VFS
+			switch idx {
+			case 0:
+				newVFS = vfs.NewOSVFS("/")
+			case 1:
+				home, _ := os.UserHomeDir()
+				newVFS = vfs.NewOSVFS(home)
+			case 2:
+				cfgDir, _ := os.UserConfigDir()
+				newVFS = vfs.NewNetFoxVFS(filepath.Join(cfgDir, "f4", "NetFox.json"))
+			}
+			if newVFS != nil {
+				if fsp.vfs != nil {
+					fsp.vfs.Close()
+					pf.ptyMutex.Lock()
+					if pty, ok := pf.remotePtys[fsp.vfs]; ok {
+						pty.Close()
+						delete(pf.remotePtys, fsp.vfs)
+					}
+					pf.ptyMutex.Unlock()
+				}
+				fsp.vfs = newVFS
+				fsp.ReadDirectory()
+				pf.RefreshAll()
+			}
+		}
+	}
+	vtui.FrameManager.Push(menu)
 }

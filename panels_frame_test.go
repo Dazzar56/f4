@@ -47,6 +47,15 @@ func TestPanelsFrame_Layout(t *testing.T) {
 		t.Error("KeyBar should be invisible")
 	}
 }
+func TestPanelsFrame_GetActivePTY(t *testing.T) {
+	pf := NewPanelsFrame()
+
+	// Default panels use OSVFS, so active PTY should be the local one
+	active := pf.getActivePTY()
+	if active != pf.pty {
+		t.Errorf("Expected active PTY to be the local PTY for OSVFS")
+	}
+}
 func TestPanelsFrame_ProcessMouse_DoubleClick(t *testing.T) {
 	pf := NewPanelsFrame()
 	pf.ResizeConsole(80, 25)

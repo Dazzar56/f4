@@ -659,13 +659,19 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 				// Просим VFS реестр подобрать провайдера для этого файла
 				fullPath := fp.vfs.Join(fp.vfs.GetPath(), selected.Name)
 				if provider := vfs.FindProvider(context.Background(), fp.vfs, fullPath); provider != nil {
-					newVfs, err := provider.Open(context.Background(), fp.vfs, fullPath)
-					if err == nil {
-						fp.vfs = newVfs
-						fp.pendingSelection = ".."
-						fp.ReadDirectory()
-						return true
-					}
+					vtui.RunAsync(func(ctx *vtui.TaskContext) {
+						newVfs, err := provider.Open(ctx.Context, fp.vfs, fullPath)
+						ctx.RunOnUI(func() {
+							if err != nil {
+								vtui.ShowMessage(" Connection Error ", fmt.Sprintf("Failed to connect to %s:\n%v", selected.Name, err), []string{"&Ok"})
+								return
+							}
+							fp.vfs = newVfs
+							fp.pendingSelection = ".."
+							fp.ReadDirectory()
+						})
+					})
+					return true
 				}
 			}
 		}
