@@ -6,19 +6,23 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/unxed/f4/vfs"
+	"github.com/unxed/f4/plugins/archive"
+	"github.com/unxed/f4/plugins/netfox"
+	"github.com/unxed/f4/plugins/hello_internal"
 	"github.com/unxed/vtui"
 )
 
 // Plugin represents a loaded module (Internal, WASM, or Lua).
 type Plugin interface {
-	Init(api HostAPI) error
+	Init(api vfs.HostAPI) error
 	Close() error
 	GetName() string
 }
 
 type PluginManager struct {
 	mu      sync.Mutex
-	api     HostAPI
+	api     vfs.HostAPI
 	plugins []Plugin
 }
 
@@ -39,27 +43,21 @@ func (pm *PluginManager) LoadAll() {
 }
 
 func (pm *PluginManager) loadInternal() {
-	p := &InternalHelloPlugin{}
-	if err := p.Init(pm.api); err == nil {
-		pm.mu.Lock()
-		pm.plugins = append(pm.plugins, p)
-		pm.mu.Unlock()
-		vtui.DebugLog("Loaded internal plugin: %s", p.GetName())
+	plugins := []Plugin{
+		&hello_internal.InternalHelloPlugin{},
+		&archive.ArchivePlugin{},
+		&netfox.NetFoxPlugin{},
 	}
 
-	pArc := &ArchivePlugin{}
-	if err := pArc.Init(pm.api); err == nil {
-		pm.mu.Lock()
-		pm.plugins = append(pm.plugins, pArc)
-		pm.mu.Unlock()
-		vtui.DebugLog("Loaded internal plugin: %s", pArc.GetName())
-	}
-	pNR := &NetFoxPlugin{}
-	if err := pNR.Init(pm.api); err == nil {
-		pm.mu.Lock()
-		pm.plugins = append(pm.plugins, pNR)
-		pm.mu.Unlock()
-		vtui.DebugLog("Loaded internal plugin: %s", pNR.GetName())
+	for _, p := range plugins {
+		if err := p.Init(pm.api); err == nil {
+			pm.mu.Lock()
+			pm.plugins = append(pm.plugins, p)
+			pm.mu.Unlock()
+			vtui.DebugLog("Loaded internal plugin: %s", p.GetName())
+		} else {
+			vtui.DebugLog("Failed to init internal plugin %T: %v", p, err)
+		}
 	}
 }
 

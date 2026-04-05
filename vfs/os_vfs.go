@@ -8,6 +8,8 @@ import (
 
 	"path/filepath"
 
+	"runtime"
+
 	"github.com/unxed/vtui"
 )
 
@@ -21,6 +23,14 @@ func NewOSVFS(initialPath string) *OSVFS {
 }
 
 func (v *OSVFS) GetPath() string { return v.currentPath }
+
+func (v *OSVFS) IsAtRoot() bool {
+	if runtime.GOOS == "windows" {
+		vol := filepath.VolumeName(v.currentPath)
+		return v.currentPath == vol+"\\" || v.currentPath == vol+"/" || v.currentPath == "/"
+	}
+	return v.currentPath == "/"
+}
 
 func (v *OSVFS) SetPath(path string) error {
 	abs, err := filepath.Abs(path)

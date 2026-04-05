@@ -8,13 +8,46 @@ import (
 	"sync"
 	"os/user"
 	"strings"
-	"path/filepath"
 
 	"github.com/mattn/go-runewidth"
 
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
+import "golang.org/x/crypto/ssh"
+
+type DriveEntry struct {
+	Name    string
+	Factory func() vfs.VFS
+}
+var DriveRegistry []DriveEntry
+
+func RegisterDrive(name string, factory func() vfs.VFS) {
+	DriveRegistry = append(DriveRegistry, DriveEntry{Name: name, Factory: factory})
+}
+
+type HotkeyEntry struct {
+	VK      uint16
+	Mods    uint32
+	Handler func(app vfs.App)
+}
+var GlobalHotkeys []HotkeyEntry
+
+func RegisterGlobalHotkey(vk uint16, mods uint32, handler func(app vfs.App)) {
+	GlobalHotkeys = append(GlobalHotkeys, HotkeyEntry{VK: vk, Mods: mods, Handler: handler})
+}
+func (pf *PanelsFrame) GetActivePanelVFS() vfs.VFS  { return pf.Active().(*FileSystemPanel).vfs }
+func (pf *PanelsFrame) GetPassivePanelVFS() vfs.VFS { return pf.Passive().(*FileSystemPanel).vfs }
+func (pf *PanelsFrame) GetSelectedNames() []string { return pf.Active().(*FileSystemPanel).GetSelectedNames() }
+func (pf *PanelsFrame) GetSelectedName() string   { return pf.Active().(*FileSystemPanel).GetSelectedName() }
+
+type PanelController interface {
+	ProcessPanelKey(pf *PanelsFrame, e *vtinput.InputEvent) bool
+}
+
+type SSHClientProvider interface {
+	SSHClient() *ssh.Client
+}
 
 // A Panel is an interface for any content that can be placed in the "half" of the manager.
 // This could be a file list, a folder tree, or even a quick view panel (Viewer).
@@ -368,6 +401,26 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
 
+	// Check global hotkeys
+	for _, hk := range GlobalHotkeys {
+		if e.VirtualKeyCode == hk.VK && e.ControlKeyState == hk.Mods && e.KeyDown {
+			hk.Handler(pf)
+			return true
+		}
+	}
+
+	// Panel Controller interception (allows plugins to override default keys)
+	if pf.showPanels {
+		fsp := pf.getActivePanel()
+		if fsp != nil {
+			if pc, ok := fsp.vfs.(PanelController); ok {
+				if pc.ProcessPanelKey(pf, e) {
+					return true
+				}
+			}
+		}
+	}
+
 	// Arkanoid easter egg: Ctrl+Alt+A
 	if e.VirtualKeyCode == 'A' && alt && ctrl && e.KeyDown {
 		vtui.FrameManager.Push(NewArkanoidFrame())
@@ -501,10 +554,6 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		}
 
 	case vtinput.VK_F1:
-		if shift {
-			actionArchiveCommands(pf)
-			return true
-		}
 		return vtui.FrameManager.EmitCommand(vtui.CmHelp, nil)
 	case vtinput.VK_F3:
 		if ctrl { return vtui.FrameManager.EmitCommand(CmSortName, nil) }
@@ -612,15 +661,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			// 2. If panel didn't handle it, it's a file. Execute or open it.
 			if !handled {
 				fsp := pf.getActivePanel()
-				if fsp == nil {
-					return true
-				}
-
-				_, isOS := fsp.vfs.(*vfs.OSVFS)
-				_, isSFTP := fsp.vfs.(*vfs.SFTPVFS)
-				if !isOS && !isSFTP {
-					return true
-				}
+				if fsp == nil { return true }
 
 				name := fsp.GetSelectedName()
 				if name != "" && name != ".." {
@@ -1030,25 +1071,28 @@ func (pf *PanelsFrame) getActivePTYUnsafe() PtyBackend {
 		pf.remotePtys = make(map[vfs.VFS]PtyBackend)
 	}
 
+	
+	
+	
 	var activeVfs vfs.VFS
 	if fsp := pf.getActivePanel(); fsp != nil {
 		activeVfs = fsp.vfs
 	}
 
-	if sftp, isSFTP := activeVfs.(*vfs.SFTPVFS); isSFTP {
-		if pty, exists := pf.remotePtys[sftp]; exists {
+	if scp, ok := activeVfs.(SSHClientProvider); ok {
+		if pty, exists := pf.remotePtys[activeVfs]; exists {
 			return pty
 		}
 
-		sshClient := sftp.SSHClient()
-		if sshClient == nil { return pf.pty } // Fallback to local on error
+		sshClient := scp.SSHClient()
+		if sshClient == nil { return pf.pty }
 
 		pty, err := NewSSHPty(sshClient)
 		if err == nil {
-			vtui.DebugLog("Created new SSH PTY background session for SFTP")
+			vtui.DebugLog("Created new SSH PTY background session for VFS")
 			pty.SetSize(pf.termView.Width, pf.termView.Height)
 			pty.Run("") // Запускаем фоновый интерактивный bash
-			pf.remotePtys[sftp] = pty
+			pf.remotePtys[activeVfs] = pty
 
 			// Выделенный цикл чтения для этого удаленного PTY
 			go func() {
@@ -1066,7 +1110,7 @@ func (pf *PanelsFrame) getActivePTYUnsafe() PtyBackend {
 				}
 				pty.Close()
 				pf.ptyMutex.Lock()
-				delete(pf.remotePtys, sftp)
+				delete(pf.remotePtys, activeVfs)
 				pf.ptyMutex.Unlock()
 			}()
 			return pty
@@ -1131,7 +1175,7 @@ func (pf *PanelsFrame) Clone() *PanelsFrame {
 			}
 			cloneFsp.Refresh() // Populate table rows from copied entries
 
-			cloneFsp.ReadDirectory()
+			cloneFsp.readDirectoryEx(true) // ВАЖНО: не удалять скопированные записи при первом чтении
 			cloneFsp.table.SelectPos = fsp.table.SelectPos
 			cloneFsp.table.SelectCol = fsp.table.SelectCol
 			cloneFsp.table.TopPos = fsp.table.TopPos
@@ -1150,9 +1194,9 @@ func (pf *PanelsFrame) Clone() *PanelsFrame {
 }
 func (pf *PanelsFrame) showDriveMenu(panelIdx int) {
 	menu := vtui.NewVMenu(" Drive ")
-	menu.AddItem(vtui.MenuItem{Text: "&1. Local ( / )"})
-	menu.AddItem(vtui.MenuItem{Text: "&2. Home ( ~ )"})
-	menu.AddItem(vtui.MenuItem{Text: "&3. NetFox"})
+	for _, drv := range DriveRegistry {
+		menu.AddItem(vtui.MenuItem{Text: drv.Name})
+	}
 
 	w, h := 26, menu.GetItemCount()+2
 	x := (pf.lastW - w) / 2
@@ -1170,30 +1214,22 @@ func (pf *PanelsFrame) showDriveMenu(panelIdx int) {
 	menu.OnAction = func(idx int) {
 		menu.Close()
 		if fsp, ok := pf.panels[panelIdx].(*FileSystemPanel); ok {
-			var newVFS vfs.VFS
-			switch idx {
-			case 0:
-				newVFS = vfs.NewOSVFS("/")
-			case 1:
-				home, _ := os.UserHomeDir()
-				newVFS = vfs.NewOSVFS(home)
-			case 2:
-				cfgDir, _ := os.UserConfigDir()
-				newVFS = vfs.NewNetFoxVFS(filepath.Join(cfgDir, "f4", "NetFox.json"))
-			}
-			if newVFS != nil {
-				if fsp.vfs != nil {
-					fsp.vfs.Close()
-					pf.ptyMutex.Lock()
-					if pty, ok := pf.remotePtys[fsp.vfs]; ok {
-						pty.Close()
-						delete(pf.remotePtys, fsp.vfs)
+			if idx >= 0 && idx < len(DriveRegistry) {
+				newVFS := DriveRegistry[idx].Factory()
+				if newVFS != nil {
+					if fsp.vfs != nil {
+						fsp.vfs.Close()
+						pf.ptyMutex.Lock()
+						if pty, ok := pf.remotePtys[fsp.vfs]; ok {
+							pty.Close()
+							delete(pf.remotePtys, fsp.vfs)
+						}
+						pf.ptyMutex.Unlock()
 					}
-					pf.ptyMutex.Unlock()
+					fsp.vfs = newVFS
+					fsp.ReadDirectory()
+					pf.RefreshAll()
 				}
-				fsp.vfs = newVFS
-				fsp.ReadDirectory()
-				pf.RefreshAll()
 			}
 		}
 	}

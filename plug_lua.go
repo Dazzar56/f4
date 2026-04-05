@@ -1,20 +1,21 @@
 package main
 
 import (
+	"github.com/unxed/f4/vfs"
 	lua "github.com/yuin/gopher-lua"
 )
 
 type LuaPlugin struct {
 	path string
 	L    *lua.LState
-	api  HostAPI
+	api  vfs.HostAPI
 }
 
 func NewLuaPlugin(path string) *LuaPlugin {
 	return &LuaPlugin{path: path}
 }
 
-func (p *LuaPlugin) Init(api HostAPI) error {
+func (p *LuaPlugin) Init(api vfs.HostAPI) error {
 	p.api = api
 	p.L = lua.NewState()
 

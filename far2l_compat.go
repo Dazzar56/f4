@@ -4,12 +4,13 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/unxed/f4/vfs"
 	"github.com/tetratelabs/wazero/api"
 )
 
 // InitFar2lCompat builds the fake PluginStartupInfo struct in WASM memory
 // and calls the C plugin's SetStartupInfoW.
-func InitFar2lCompat(ctx context.Context, mod api.Module, apiHost HostAPI) error {
+func InitFar2lCompat(ctx context.Context, mod api.Module, apiHost vfs.HostAPI) error {
 	// 1. Allocate memory in WASM for PluginStartupInfo.
 	// Since wazero doesn't have an easy "malloc" wrapper out of the box unless we call the guest's malloc,
 	// and we don't want to rely on the guest having `malloc` exported, 

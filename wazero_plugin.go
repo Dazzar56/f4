@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/unxed/f4/vfs"
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
@@ -12,7 +13,7 @@ import (
 
 type WasmPlugin struct {
 	path   string
-	api    HostAPI
+	api    vfs.HostAPI
 	rt     wazero.Runtime
 	mod    api.Module
 	isFar2l bool
@@ -22,7 +23,7 @@ func NewWasmPlugin(path string) *WasmPlugin {
 	return &WasmPlugin{path: path}
 }
 
-func (p *WasmPlugin) Init(hostApi HostAPI) error {
+func (p *WasmPlugin) Init(hostApi vfs.HostAPI) error {
 	p.api = hostApi
 	ctx := context.Background()
 	config := wazero.NewRuntimeConfig()

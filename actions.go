@@ -2,18 +2,13 @@ package main
 
 import (
 	"context"
-	"os"
 	"fmt"
 	"os/exec"
 	"runtime"
 	"strings"
 	"time"
 
-	"path/filepath"
-	"io"
-
 	"github.com/unxed/f4/vfs"
-	"github.com/mholt/archives"
 	"github.com/unxed/vtui"
 	"github.com/unxed/vtui/piecetable"
 )
@@ -279,160 +274,6 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 	vtui.FrameManager.Push(dlg)
 }
 
-func actionMkDir(pf *PanelsFrame) {
-	panel := pf.getActivePanel()
-	if panel == nil {
-		return
-	}
-
-	activeVfs := panel.vfs
-	if nf, isNetFox := activeVfs.(*vfs.NetFoxVFS); isNetFox {
-		actionNewConnection(pf, nf)
-		return
-	}
-
-	dlg := vtui.NewCenteredDialog(40, 9, Msg("MakeFolder.Title"))
-	dlg.ShowClose = true
-
-	editName := vtui.NewEdit(0, 0, 10, "")
-	lblPrompt := vtui.NewLabel(0, 0, Msg("MakeFolder.Prompt"), editName)
-	dlg.AddItem(lblPrompt)
-	dlg.AddItem(editName)
-
-	btnOk := vtui.NewButton(0, 0, "&Ok")
-	btnOk.IsDefault = true
-	btnCancel := vtui.NewButton(0, 0, "Cancel")
-	dlg.AddItem(btnOk)
-	dlg.AddItem(btnCancel)
-
-	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 40-4, 8-4)
-	vbox.Add(lblPrompt, vtui.Margins{}, vtui.AlignLeft)
-	vbox.Add(editName, vtui.Margins{Top: 1}, vtui.AlignFill)
-
-	hbox := vtui.NewHBoxLayout(0, 0, 40-4, 1)
-	hbox.HorizontalAlign = vtui.AlignCenter
-	hbox.Spacing = 2
-	hbox.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
-	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
-	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
-	vbox.Apply()
-
-	dlg.SetFocusedItem(editName)
-
-	btnCancel.OnClick = func() { dlg.Close() }
-	btnOk.OnClick = func() {
-		name := editName.GetText()
-		dlg.Close()
-		if name == "" {
-			return
-		}
-		fullPath := activeVfs.Join(activeVfs.GetPath(), name)
-		vtui.RunAsync(func(ctx *vtui.TaskContext) {
-			err := activeVfs.MkDir(ctx.Context, fullPath)
-			ctx.RunOnUI(func() {
-				if err != nil {
-					vtui.ShowMessage(" Error ", fmt.Sprintf(Msg("Operation.Error"), err.Error()), []string{"&Ok"})
-				}
-
-				// Set pending selection so the panel snaps to the new folder after the async reload
-				panel.pendingSelection = name
-				pf.RefreshAll()
-			})
-		})
-	}
-
-	vtui.FrameManager.Push(dlg)
-}
-
-func actionNewConnection(pf *PanelsFrame, nf *vfs.NetFoxVFS) {
-	dlg := vtui.NewCenteredDialog(48, 17, " New Connection ")
-	dlg.ShowClose = true
-
-	rbType := vtui.NewRadioGroup(0, 0, 1, []string{"SFTP", "FTP"})
-	rbType.Selected = 0
-
-	lblName := vtui.NewLabel(0, 0, "Connection &Name:", nil)
-	editName := vtui.NewEdit(0, 0, 20, "MyServer")
-	lblName.FocusLink = editName
-
-	lblHost := vtui.NewLabel(0, 0, "&Host or IP:", nil)
-	editHost := vtui.NewEdit(0, 0, 30, "")
-	lblHost.FocusLink = editHost
-
-	lblPort := vtui.NewLabel(0, 0, "&Port:", nil)
-	editPort := vtui.NewEdit(0, 0, 6, "22")
-	lblPort.FocusLink = editPort
-
-	rbType.OnChange = func(val int) {
-		if val == 0 { editPort.SetText("22") } else { editPort.SetText("21") }
-	}
-
-	lblUser := vtui.NewLabel(0, 0, "&User:", nil)
-	editUser := vtui.NewEdit(0, 0, 20, "anonymous")
-	lblUser.FocusLink = editUser
-
-	lblPass := vtui.NewLabel(0, 0, "Pass&word:", nil)
-	editPass := vtui.NewEdit(0, 0, 20, "")
-	lblPass.FocusLink = editPass
-
-	btnOk := vtui.NewButton(0, 0, "&Ok")
-	btnCancel := vtui.NewButton(0, 0, "Cancel")
-	btnOk.IsDefault = true
-
-	dlg.AddItem(rbType); dlg.AddItem(lblName); dlg.AddItem(editName)
-	dlg.AddItem(lblHost); dlg.AddItem(editHost); dlg.AddItem(lblPort); dlg.AddItem(editPort)
-	dlg.AddItem(lblUser); dlg.AddItem(editUser); dlg.AddItem(lblPass); dlg.AddItem(editPass)
-	dlg.AddItem(btnOk); dlg.AddItem(btnCancel)
-
-	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+1, 48-4, 17-2)
-	vbox.Add(rbType, vtui.Margins{Bottom: 1}, vtui.AlignCenter)
-	vbox.Add(lblName, vtui.Margins{}, vtui.AlignLeft)
-	vbox.Add(editName, vtui.Margins{}, vtui.AlignFill)
-
-	hbox1 := vtui.NewHBoxLayout(0, 0, 48-4, 2)
-	vboxHost := vtui.NewVBoxLayout(0, 0, 30, 2)
-	vboxHost.Add(lblHost, vtui.Margins{}, vtui.AlignLeft); vboxHost.Add(editHost, vtui.Margins{}, vtui.AlignFill)
-	vboxPort := vtui.NewVBoxLayout(0, 0, 10, 2)
-	vboxPort.Add(lblPort, vtui.Margins{}, vtui.AlignLeft); vboxPort.Add(editPort, vtui.Margins{}, vtui.AlignFill)
-	hbox1.Add(vboxHost, vtui.Margins{Right: 2}, vtui.AlignLeft); hbox1.Add(vboxPort, vtui.Margins{}, vtui.AlignLeft)
-	vbox.Add(hbox1, vtui.Margins{Top: 1}, vtui.AlignFill)
-
-	hbox2 := vtui.NewHBoxLayout(0, 0, 48-4, 2)
-	vboxUser := vtui.NewVBoxLayout(0, 0, 20, 2)
-	vboxUser.Add(lblUser, vtui.Margins{}, vtui.AlignLeft); vboxUser.Add(editUser, vtui.Margins{}, vtui.AlignFill)
-	vboxPass := vtui.NewVBoxLayout(0, 0, 20, 2)
-	vboxPass.Add(lblPass, vtui.Margins{}, vtui.AlignLeft); vboxPass.Add(editPass, vtui.Margins{}, vtui.AlignFill)
-	hbox2.Add(vboxUser, vtui.Margins{Right: 2}, vtui.AlignLeft); hbox2.Add(vboxPass, vtui.Margins{}, vtui.AlignLeft)
-	vbox.Add(hbox2, vtui.Margins{Top: 1}, vtui.AlignFill)
-
-	hboxBtns := vtui.NewHBoxLayout(0, 0, 48-4, 1)
-	hboxBtns.HorizontalAlign = vtui.AlignCenter; hboxBtns.Spacing = 2
-	hboxBtns.Add(btnOk, vtui.Margins{}, vtui.AlignTop); hboxBtns.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
-	vbox.Add(hboxBtns, vtui.Margins{Top: 1}, vtui.AlignFill)
-
-	vbox.Apply()
-	dlg.SetFocusedItem(editName)
-
-	btnCancel.OnClick = func() { dlg.Close() }
-	btnOk.OnClick = func() {
-		name := editName.GetText()
-		if name != "" {
-			tStr := "sftp"
-			if rbType.Selected == 1 { tStr = "ftp" }
-			nf.SaveConfig(name, vfs.NetFoxConfig{
-				Type: tStr,
-				Host: editHost.GetText(),
-				Port: editPort.GetText(),
-				User: editUser.GetText(),
-				Pass: editPass.GetText(),
-			})
-			pf.RefreshAll()
-		}
-		dlg.Close()
-	}
-	vtui.FrameManager.Push(dlg)
-}
-
 func actionDelete(pf *PanelsFrame) {
 	fsp := pf.getActivePanel()
 	if fsp == nil {
@@ -503,6 +344,67 @@ func actionDelete(pf *PanelsFrame) {
 	vtui.FrameManager.Push(dlg)
 }
 
+func actionMkDir(pf *PanelsFrame) {
+	panel := pf.getActivePanel()
+	if panel == nil {
+		return
+	}
+
+	activeVfs := panel.vfs
+
+	dlg := vtui.NewCenteredDialog(40, 9, Msg("MakeFolder.Title"))
+	dlg.ShowClose = true
+
+	editName := vtui.NewEdit(0, 0, 10, "")
+	lblPrompt := vtui.NewLabel(0, 0, Msg("MakeFolder.Prompt"), editName)
+	dlg.AddItem(lblPrompt)
+	dlg.AddItem(editName)
+
+	btnOk := vtui.NewButton(0, 0, "&Ok")
+	btnOk.IsDefault = true
+	btnCancel := vtui.NewButton(0, 0, "Cancel")
+	dlg.AddItem(btnOk)
+	dlg.AddItem(btnCancel)
+
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 40-4, 8-4)
+	vbox.Add(lblPrompt, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(editName, vtui.Margins{Top: 1}, vtui.AlignFill)
+
+	hbox := vtui.NewHBoxLayout(0, 0, 40-4, 1)
+	hbox.HorizontalAlign = vtui.AlignCenter
+	hbox.Spacing = 2
+	hbox.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
+	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
+	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Apply()
+
+	dlg.SetFocusedItem(editName)
+
+	btnCancel.OnClick = func() { dlg.Close() }
+	btnOk.OnClick = func() {
+		name := editName.GetText()
+		dlg.Close()
+		if name == "" {
+			return
+		}
+		fullPath := activeVfs.Join(activeVfs.GetPath(), name)
+		vtui.RunAsync(func(ctx *vtui.TaskContext) {
+			err := activeVfs.MkDir(ctx.Context, fullPath)
+			ctx.RunOnUI(func() {
+				if err != nil {
+					vtui.ShowMessage(" Error ", fmt.Sprintf(Msg("Operation.Error"), err.Error()), []string{"&Ok"})
+				}
+
+				// Set pending selection so the panel snaps to the new folder after the async reload
+				panel.pendingSelection = name
+				pf.RefreshAll()
+			})
+		})
+	}
+
+	vtui.FrameManager.Push(dlg)
+}
+
 func actionFindFile(pf *PanelsFrame) {
 	activePanel := pf.getActivePanel()
 	if activePanel == nil {
@@ -559,143 +461,4 @@ func actionFindFile(pf *PanelsFrame) {
 	}
 
 	vtui.FrameManager.Push(dlg)
-}
-
-func actionArchiveCommands(pf *PanelsFrame) {
-	panel := pf.getActivePanel()
-	if panel == nil { return }
-
-	menu := vtui.NewVMenu(" Archive Commands ")
-	menu.AddItem(vtui.MenuItem{Text: "&1. Add to archive"})
-	menu.AddItem(vtui.MenuItem{Text: "&2. Extract files"})
-
-	// Задаем размеры: ширина 30, высота = кол-во пунктов + 2 (рамки)
-	w, h := 30, menu.GetItemCount()+2
-	x := (pf.lastW - w) / 2
-	y := (pf.lastH - h) / 2
-	menu.SetPosition(x, y, x+w-1, y+h-1)
-
-	menu.OnAction = func(idx int) {
-		menu.Close()
-		switch idx {
-		case 0:
-			actionAddArchive(pf)
-		case 1:
-			actionExtractArchive(pf)
-		}
-	}
-
-	vtui.FrameManager.Push(menu)
-}
-
-func actionExtractArchive(pf *PanelsFrame) {
-	srcPanel := pf.getActivePanel()
-	dstPanel := pf.getInactivePanel()
-	if srcPanel == nil || dstPanel == nil { return }
-
-	name := srcPanel.GetSelectedName()
-	if name == "" || name == ".." { return }
-
-	srcPath := srcPanel.vfs.Join(srcPanel.vfs.GetPath(), name)
-	destDir := dstPanel.vfs.GetPath()
-
-	pf.RunProgressTask(" Extracting... ", "Identifying archive...", false, func(tctx *vtui.TaskContext, update func(msg string, percent int)) error {
-		f, err := os.Open(srcPath)
-		if err != nil { return err }
-		defer f.Close()
-
-		// Identify can consume bytes from the beginning.
-		format, _, err := archives.Identify(tctx.Context, srcPath, f)
-		if err != nil { return err }
-
-		ex, ok := format.(archives.Extractor)
-		if !ok { return fmt.Errorf("file is not an extractable archive") }
-
-		// Seek back to start before extraction.
-		f.Seek(0, io.SeekStart)
-
-		return ex.Extract(tctx.Context, f, func(ctx context.Context, info archives.FileInfo) error {
-			if tctx.Err() != nil { return tctx.Err() }
-
-			update(fmt.Sprintf("Extracting: %s", info.NameInArchive), -1)
-
-			targetPath := filepath.Join(destDir, info.NameInArchive)
-
-			if info.IsDir() {
-				return os.MkdirAll(targetPath, 0755)
-			}
-
-			// Создаем подпапки если их нет
-			os.MkdirAll(filepath.Dir(targetPath), 0755)
-
-			out, err := os.Create(targetPath)
-			if err != nil { return err }
-			defer out.Close()
-
-			in, err := info.Open()
-			if err != nil { return err }
-			defer in.Close()
-
-			_, err = io.Copy(out, in)
-			return err
-		})
-	}, func(err error) {
-		if err != nil && err != context.Canceled {
-			vtui.ShowMessage(" Error ", fmt.Sprintf("Extraction failed:\n%v", err), []string{"&Ok"})
-		}
-		pf.RefreshAll()
-	})
-}
-
-func actionAddArchive(pf *PanelsFrame) {
-	panel := pf.getActivePanel()
-	if panel == nil { return }
-
-	names := panel.GetSelectedNames()
-	if len(names) == 0 { return }
-
-	// Default archive name
-	arcName := panel.vfs.Base(panel.vfs.GetPath())
-	if arcName == "." || arcName == "" { arcName = "archive" }
-	arcName += ".zip"
-
-	vtui.InputBox(" Add to archive ", "Archive name:", arcName, func(name string) {
-		if name == "" { return }
-
-		fullArcPath := panel.vfs.Join(panel.vfs.GetPath(), name)
-
-		pf.RunProgressTask(" Archiving... ", "Gathering files...", false, func(tctx *vtui.TaskContext, update func(msg string, percent int)) error {
-			// Convert names to archives.FileInfo
-			var files []archives.FileInfo
-			for i, n := range names {
-				if tctx.Err() != nil { return tctx.Err() }
-				update(fmt.Sprintf("Scanning: %s", n), (i*100)/len(names))
-
-				fullPath := panel.vfs.Join(panel.vfs.GetPath(), n)
-
-				// For OSVFS we can use archives.FilesFromDisk
-				if osvfs, ok := panel.vfs.(*vfs.OSVFS); ok {
-					absPath, _ := osvfs.Abs(fullPath)
-					moreFiles, err := archives.FilesFromDisk(tctx.Context, nil, map[string]string{absPath: n})
-					if err == nil {
-						files = append(files, moreFiles...)
-					}
-				}
-			}
-
-			out, err := os.Create(fullArcPath)
-			if err != nil { return err }
-			defer out.Close()
-
-			format := archives.Zip{}
-			// In archives library, Archive is a method that takes a writer and slice of FileInfo
-			return format.Archive(tctx.Context, out, files)
-
-		}, func(err error) {
-			if err != nil && err != context.Canceled {
-				vtui.ShowMessage(" Error ", fmt.Sprintf("Archiving failed:\n%v", err), []string{"&Ok"})
-			}
-			pf.RefreshAll()
-		})
-	})
 }

@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 	"golang.org/x/term"
 )
@@ -67,6 +68,8 @@ func InitCore() *vtui.ScreenBuf {
 	vtui.FrameManager.Init(scr)
 	SetDefaultF4Palette()
 	InitLang()
+	RegisterDrive("&1. Local ( / )", func() vfs.VFS { return vfs.NewOSVFS("/") })
+	RegisterDrive("&2. Home ( ~ )", func() vfs.VFS { home, _ := os.UserHomeDir(); return vfs.NewOSVFS(home) })
 
 	configDir, err := os.UserConfigDir()
 	if err == nil {

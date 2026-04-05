@@ -1,18 +1,10 @@
 package main
 
 import "github.com/unxed/vtui"
-
-// HostAPI defines the functions f4 exposes to plugins.
 import "github.com/unxed/f4/vfs"
 
-type HostAPI interface {
-	GetVersion() string
-	Log(msg string)
-	Message(msg string)
-	RegisterVFSProvider(p vfs.VFSProvider)
-}
-
-// coreAPI implements HostAPI.
+// HostAPI defines the functions f4 exposes to plugins.
+// coreAPI implements vfs.HostAPI.
 type coreAPI struct{}
 
 func (c *coreAPI) GetVersion() string {
@@ -33,4 +25,11 @@ func (c *coreAPI) Message(msg string) {
 func (c *coreAPI) RegisterVFSProvider(p vfs.VFSProvider) {
 	vtui.DebugLog("CORE: Registering VFS Provider: %s", p.Name())
 	vfs.RegisterProvider(p)
+}
+func (c *coreAPI) RegisterDrive(name string, factory func() vfs.VFS) {
+	RegisterDrive(name, factory)
+}
+
+func (c *coreAPI) RegisterGlobalHotkey(vk uint16, mods uint32, handler func(app vfs.App)) {
+	RegisterGlobalHotkey(vk, mods, handler)
 }

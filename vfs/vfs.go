@@ -4,8 +4,28 @@ import (
 	"context"
 	"io"
 	"time"
+	"github.com/unxed/vtui"
 )
 
+// App defines the interface for plugin-to-core UI interactions.
+type App interface {
+	GetActivePanelVFS() VFS
+	GetPassivePanelVFS() VFS
+	GetSelectedNames() []string
+	GetSelectedName() string
+	RefreshAll()
+	RunProgressTask(title, startMsg string, forked bool, worker func(ctx *vtui.TaskContext, update func(msg string, percent int)) error, onComplete func(err error))
+}
+
+// HostAPI defines the functions f4 exposes to plugins.
+type HostAPI interface {
+	GetVersion() string
+	Log(msg string)
+	Message(msg string)
+	RegisterVFSProvider(p VFSProvider)
+	RegisterDrive(name string, factory func() VFS)
+	RegisterGlobalHotkey(vk uint16, mods uint32, handler func(app App))
+}
 // VFSItem represents a generic file or directory entry.
 type VFSItem struct {
 	Name         string
@@ -26,6 +46,7 @@ type VFSCapabilities struct {
 
 // VFS is the core interface for file operations in f4.
 type VFS interface {
+	IsAtRoot() bool
 	GetPath() string
 	SetPath(path string) error
 	ReadDir(ctx context.Context, path string, onChunk func([]VFSItem)) error

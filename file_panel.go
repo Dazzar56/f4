@@ -288,6 +288,10 @@ func (fp *FileSystemPanel) updateTitle(err error) {
 }
 
 func (fp *FileSystemPanel) ReadDirectory() {
+	fp.readDirectoryEx(false)
+}
+
+func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 	if fp.cancelLoad != nil {
 		fp.cancelLoad()
 		fp.cancelLoad = nil
@@ -302,8 +306,22 @@ func (fp *FileSystemPanel) ReadDirectory() {
 	fp.cancelLoad = cancel
 	fp.isLoading = true
 
-	// Delay the "Loading..." indicator to avoid flickering on fast operations
-	fp.loadingTimer = time.AfterFunc(300*time.Millisecond, func() {
+	// 1. Срочное обновление заголовка и состояния
+	path := fp.vfs.GetPath()
+	fp.updateTitle(nil)
+
+	if !keepEntries {
+		fp.entries = nil
+		if !fp.vfs.IsAtRoot() {
+			fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
+		}
+		fp.SetCursorIndex(0)
+		fp.Refresh()
+		vtui.FrameManager.Redraw()
+	}
+
+	// 2. Таймер для индикатора "Loading..." (появится через 200мс если VFS тормозит)
+	fp.loadingTimer = time.AfterFunc(200*time.Millisecond, func() {
 		vtui.FrameManager.PostTask(func() {
 			if fp.isLoading {
 				fp.updateTitle(nil)
@@ -312,7 +330,6 @@ func (fp *FileSystemPanel) ReadDirectory() {
 		})
 	})
 
-	// Запоминаем выделение, чтобы восстановить его, когда прилетят новые файлы
 	if fp.pendingSelection == "" {
 		oldName := fp.GetSelectedName()
 		if oldName != "" && oldName != ".." {
@@ -320,10 +337,8 @@ func (fp *FileSystemPanel) ReadDirectory() {
 		}
 	}
 
-	path := fp.vfs.GetPath()
-
 	go func() {
-		firstChunk := true
+		isFirstChunk := true
 		err := fp.vfs.ReadDir(ctx, path, func(chunk []vfs.VFSItem) {
 			if ctx.Err() != nil { return }
 
@@ -335,72 +350,58 @@ func (fp *FileSystemPanel) ReadDirectory() {
 			vtui.FrameManager.PostTask(func() {
 				if ctx.Err() != nil { return }
 
-				// Запоминаем, на каком файле стоял пользователь ПРЯМО СЕЙЧАС
-				currentSelected := fp.GetSelectedName()
-
-				if firstChunk {
-					fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
-					firstChunk = false
+				if isFirstChunk {
+					// Очищаем старые данные (если они были), оставляя только ".."
+					fp.entries = nil
+					if !fp.vfs.IsAtRoot() {
+						fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
+					}
+					isFirstChunk = false
 				}
 
+				currentSelected := fp.GetSelectedName()
 				fp.entries = append(fp.entries, newEntries...)
 				fp.sortEntries()
 
-				// Try to snap focus as soon as the target item appears in the stream
+				// Фокусировка на нужном файле
 				snapped := false
-				if fp.pendingSelection != "" {
+				target := fp.pendingSelection
+				if target == "" { target = currentSelected }
+
+				if target != "" {
 					for i, entry := range fp.entries {
-						if entry.Name == fp.pendingSelection {
+						if entry.Name == target {
 							fp.SetCursorIndex(i)
-							fp.pendingSelection = "" // Target found and focused
+							if entry.Name == fp.pendingSelection { fp.pendingSelection = "" }
 							snapped = true
 							break
 						}
 					}
 				}
 
-				// If we have an active selection from the user, keep it
-				if !snapped && currentSelected != "" && currentSelected != ".." {
-					for i, entry := range fp.entries {
-						if entry.Name == currentSelected {
-							fp.SetCursorIndex(i)
-							snapped = true
-							break
-						}
-					}
-				}
-
-				// If we couldn't snap to anything specific yet, and it's the first time
-				// we see data, or the current index is out of bounds, default to 0.
 				if !snapped && (fp.cursorIdx >= len(fp.entries) || fp.cursorIdx < 0) {
 					fp.SetCursorIndex(0)
 				}
 
 				fp.Refresh()
+				vtui.FrameManager.Redraw() // Рисуем каждый чанк!
 			})
 		})
 
 		vtui.FrameManager.PostTask(func() {
-			if ctx.Err() != nil {
-				return
-			}
-			if fp.loadingTimer != nil {
-				fp.loadingTimer.Stop()
-				fp.loadingTimer = nil
-			}
+			if ctx.Err() != nil { return }
+			if fp.loadingTimer != nil { fp.loadingTimer.Stop() }
 
-			if firstChunk {
-				fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
-				fp.SetCursorIndex(0)
-			}
+			fp.isLoading = false
+			fp.updateTitle(err)
+
 			if fp.pendingSelection != "" {
 				fp.SelectName(fp.pendingSelection)
 				fp.pendingSelection = ""
 			}
 
-			fp.isLoading = false
-			fp.updateTitle(err)
 			fp.Refresh()
+			vtui.FrameManager.Redraw()
 		})
 	}()
 }
@@ -620,14 +621,7 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 			if selected.Name == ".." {
 
 				parent := fp.vfs.ParentVFS()
-				isRoot := false
-				// Проверка на корень для ArchiveVFS
-				if arcVfs, ok := fp.vfs.(*vfs.ArchiveVFS); ok {
-					isRoot = arcVfs.IsAtRoot()
-				} else if parent != nil {
-					// Fallback для других типов VFS
-					isRoot = (fp.vfs.GetPath() == parent.Join(parent.GetPath(), ".."))
-				}
+				isRoot := fp.vfs.IsAtRoot()
 
 				if parent != nil && isRoot {
 					oldPath := fp.vfs.GetPath()
@@ -659,10 +653,20 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 				// Просим VFS реестр подобрать провайдера для этого файла
 				fullPath := fp.vfs.Join(fp.vfs.GetPath(), selected.Name)
 				if provider := vfs.FindProvider(context.Background(), fp.vfs, fullPath); provider != nil {
+					// Мгновенная реакция UI: очищаем панель и показываем загрузку
+					fp.entries = nil
+					fp.isLoading = true
+					fp.updateTitle(nil)
+					fp.Refresh()
+					vtui.FrameManager.Redraw()
+
 					vtui.RunAsync(func(ctx *vtui.TaskContext) {
 						newVfs, err := provider.Open(ctx.Context, fp.vfs, fullPath)
 						ctx.RunOnUI(func() {
 							if err != nil {
+								fp.isLoading = false
+								fp.updateTitle(err)
+								fp.ReadDirectory() // Возвращаемся к списку соединений
 								vtui.ShowMessage(" Connection Error ", fmt.Sprintf("Failed to connect to %s:\n%v", selected.Name, err), []string{"&Ok"})
 								return
 							}

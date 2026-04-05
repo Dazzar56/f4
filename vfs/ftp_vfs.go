@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jlaffaye/ftp"
+	"github.com/unxed/vtui"
 )
 
 type FTPVFS struct {
@@ -22,17 +23,27 @@ type FTPVFS struct {
 
 func NewFTPVFS(parent VFS, host, port, user, pass string) (*FTPVFS, error) {
 	addr := host + ":" + port
-	// Отключаем EPSV, так как он часто не проходит через NAT/Firewalls
-	c, err := ftp.Dial(addr, ftp.DialWithTimeout(15*time.Second), ftp.DialWithDisabledEPSV(true))
+	vtui.DebugLog("FTP: Dialing %s (timeout 15s)...", addr)
+
+	// Используем Dial с явным указанием контекста для поддержки отмены
+	c, err := ftp.Dial(addr,
+		ftp.DialWithTimeout(15*time.Second),
+		ftp.DialWithDisabledEPSV(true),
+		ftp.DialWithContext(context.Background()),
+	)
 	if err != nil {
+		vtui.DebugLog("FTP: Dial failed: %v", err)
 		return nil, err
 	}
 
+	vtui.DebugLog("FTP: Connected. Logging in as %q...", user)
 	err = c.Login(user, pass)
 	if err != nil {
+		vtui.DebugLog("FTP: Login failed: %v", err)
 		c.Quit()
 		return nil, err
 	}
+	vtui.DebugLog("FTP: Login successful.")
 
 	pwd, err := c.CurrentDir()
 	if err != nil {
@@ -49,6 +60,7 @@ func NewFTPVFS(parent VFS, host, port, user, pass string) (*FTPVFS, error) {
 		cwd:    pwd,
 	}, nil
 }
+func (v *FTPVFS) IsAtRoot() bool { return v.cwd == "/" || v.cwd == "" }
 
 func (v *FTPVFS) GetPath() string { return v.cwd }
 
@@ -57,11 +69,14 @@ func (v *FTPVFS) SetPath(p string) error {
 	if !path.IsAbs(p) {
 		target = path.Join(v.cwd, p)
 	}
+	vtui.DebugLog("FTP: CWD to %q", target)
 	err := v.conn.ChangeDir(target)
-	if err == nil {
-		v.cwd = target
+	if err != nil {
+		vtui.DebugLog("FTP: ChangeDir failed: %v", err)
+		return err
 	}
-	return err
+	v.cwd = target
+	return nil
 }
 
 func (v *FTPVFS) ReadDir(ctx context.Context, p string, onChunk func([]VFSItem)) error {
@@ -71,10 +86,13 @@ func (v *FTPVFS) ReadDir(ctx context.Context, p string, onChunk func([]VFSItem))
 		target = ""
 	}
 
+	vtui.DebugLog("FTP: List %q...", target)
 	entries, err := v.conn.List(target)
 	if err != nil {
+		vtui.DebugLog("FTP: List failed: %v", err)
 		return err
 	}
+	vtui.DebugLog("FTP: List returned %d items", len(entries))
 
 	var items []VFSItem
 	for _, e := range entries {

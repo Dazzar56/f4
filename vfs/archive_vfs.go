@@ -37,6 +37,10 @@ type ArchiveVFS struct {
 	closer io.Closer
 }
 
+func (v *ArchiveVFS) IsAtRoot() bool {
+	return v.innerPath == "." || v.innerPath == ""
+}
+
 func NewArchiveVFS(parent VFS, path string) (*ArchiveVFS, error) {
 	var arcFS fs.FS
 	var err error
@@ -79,10 +83,6 @@ func NewArchiveVFS(parent VFS, path string) (*ArchiveVFS, error) {
 		arcFS:     arcFS,
 		closer:    closer,
 	}, nil
-}
-
-func (v *ArchiveVFS) IsAtRoot() bool {
-	return v.innerPath == "." || v.innerPath == ""
 }
 
 func (v *ArchiveVFS) GetPath() string {

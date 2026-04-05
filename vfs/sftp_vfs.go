@@ -81,6 +81,7 @@ func NewSFTPVFS(parent VFS, host, port, user, pass string) (*SFTPVFS, error) {
 	
 	sftpClient, err := sftp.NewClient(sshClient)
 	if err != nil {
+		vtui.DebugLog("SFTP: Failed to create SFTP subsystem: %v", err)
 		sshClient.Close()
 		return nil, err
 	}
@@ -99,6 +100,8 @@ func NewSFTPVFS(parent VFS, host, port, user, pass string) (*SFTPVFS, error) {
 }
 
 func (v *SFTPVFS) GetPath() string { return v.path }
+
+func (v *SFTPVFS) IsAtRoot() bool { return v.path == "/" || v.path == "" }
 
 func (v *SFTPVFS) SetPath(p string) error {
 	if p == "" {
@@ -123,6 +126,7 @@ func (v *SFTPVFS) SetPath(p string) error {
 }
 
 func (v *SFTPVFS) ReadDir(ctx context.Context, p string, onChunk func([]VFSItem)) error {
+	vtui.DebugLog("SFTP: ReadDir %q", p)
 	entries, err := v.client.ReadDir(p)
 	if err != nil {
 		return err
