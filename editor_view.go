@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/unxed/f4/vfs"
-	"github.com/alecthomas/chroma/v2"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 	"github.com/unxed/vtui/piecetable"
@@ -66,8 +65,8 @@ type EditorView struct {
 	vfs       vfs.VFS
 	filePath  string
 	file      vfs.ReadAtCloser
-	scrollBar *vtui.ScrollBar
-	lexer     chroma.Lexer
+	scrollBar   *vtui.ScrollBar
+	highlighter vfs.Highlighter
 }
 
 func (ev *EditorView) Close() {
@@ -87,15 +86,15 @@ func NewEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string) *EditorVie
 	li := piecetable.NewLineIndex()
 	li.Rebuild(pt)
 	ev := &EditorView{
-		pt:       pt,
-		li:       li,
-		engine:   textlayout.NewWrapEngine(pt, li),
-		vfs:      v,
-		filePath: path,
-		WordWrap: false,
+		pt:              pt,
+		li:              li,
+		engine:          textlayout.NewWrapEngine(pt, li),
+		vfs:             v,
+		filePath:        path,
+		WordWrap:        false,
 		ShowWhitespaces: false,
 	}
-	ev.lexer = DetectLexer(path, "")
+	ev.highlighter = vfs.GetHighlighter(path, "")
 	ev.scrollBar = vtui.NewScrollBar(0, 0, 0)
 	ev.scrollBar.SetOwner(ev)
 	ev.scrollBar.OnScroll = func(v int) {
@@ -213,19 +212,10 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 
 		// Токенизируем всю логическую строку целиком для правильного контекста
 		var lineSyntax []uint64
-		if ev.lexer != nil && lineLen > 0 {
+		if ev.highlighter != nil && lineLen > 0 {
 			lineData, err := ev.pt.GetRange(lineStart, lineLen)
 			if err == nil {
-				iterator, terr := ev.lexer.Tokenise(nil, string(lineData))
-				if terr == nil {
-					for _, token := range iterator.Tokens() {
-						attr := GetSyntaxAttr(token.Type, bgAttr)
-						runes := []rune(token.Value)
-						for range runes {
-							lineSyntax = append(lineSyntax, attr)
-						}
-					}
-				}
+				lineSyntax = ev.highlighter.GetAttributes(string(lineData), bgAttr)
 			}
 		}
 

@@ -26,6 +26,10 @@ func (c *coreAPI) RegisterVFSProvider(p vfs.VFSProvider) {
 	vtui.DebugLog("CORE: Registering VFS Provider: %s", p.Name())
 	vfs.RegisterProvider(p)
 }
+func (c *coreAPI) RegisterHighlighter(h vfs.Highlighter) {
+	vtui.DebugLog("CORE: Registering Highlighter: %s", h.Name())
+	vfs.RegisterHighlighter(h)
+}
 func (c *coreAPI) RegisterDrive(name string, factory func() vfs.VFS) {
 	RegisterDrive(name, factory)
 }

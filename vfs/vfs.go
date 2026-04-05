@@ -22,6 +22,7 @@ type HostAPI interface {
 	GetVersion() string
 	Log(msg string)
 	Message(msg string)
+	RegisterHighlighter(h Highlighter)
 	RegisterVFSProvider(p VFSProvider)
 	RegisterDrive(name string, factory func() VFS)
 	RegisterGlobalHotkey(vk uint16, mods uint32, handler func(app App))
@@ -75,6 +76,32 @@ type VFS interface {
 
 	Close() error
 }
+
+// Highlighter defines a capability to provide syntax coloring.
+type Highlighter interface {
+	Name() string
+	// CanHighlight returns true if this highlighter can handle the file (by extension or content).
+	CanHighlight(filename string, content string) bool
+	// GetAttributes returns a slice of attributes for each character in the provided line.
+	// lineContent is the raw text, baseAttr is the default background/foreground.
+	GetAttributes(lineContent string, baseAttr uint64) []uint64
+}
+
+var highlighters []Highlighter
+
+func RegisterHighlighter(h Highlighter) {
+	highlighters = append(highlighters, h)
+}
+
+func GetHighlighter(filename string, content string) Highlighter {
+	for _, h := range highlighters {
+		if h.CanHighlight(filename, content) {
+			return h
+		}
+	}
+	return nil
+}
+
 // PtyProvider allows a VFS to provide its own PTY implementation
 // (e.g. an SSH session for remote systems).
 type PtyProvider interface {

@@ -34,14 +34,38 @@ func GetSyntaxAttr(t chroma.TokenType, baseAttr uint64) uint64 {
 	return baseAttr
 }
 
-// DetectLexer выбирает подходящий лексер на основе имени файла и содержимого
-func DetectLexer(filename string, content string) chroma.Lexer {
-	lexer := lexers.Get(filename)
-	if lexer == nil {
-		lexer = lexers.Analyse(content)
-	}
+// ChromaHighlighter implements vfs.Highlighter using the chroma library.
+// This is now an internal plugin capability.
+type ChromaHighlighter struct{}
+
+func (c *ChromaHighlighter) Name() string { return "Chroma" }
+
+func (c *ChromaHighlighter) CanHighlight(filename string, content string) bool {
+	return lexers.Get(filename) != nil
+}
+
+func (c *ChromaHighlighter) GetAttributes(lineContent string, baseAttr uint64) []uint64 {
+	lexer := lexers.Get("") // Default
+	// Note: In a real implementation we'd cache the lexer per file session
+	// but for the API demonstration we tokenize the line.
+	lexer = lexers.Analyse(lineContent)
 	if lexer == nil {
 		lexer = lexers.Fallback
 	}
-	return chroma.Coalesce(lexer)
+	lexer = chroma.Coalesce(lexer)
+
+	iterator, err := lexer.Tokenise(nil, lineContent)
+	if err != nil {
+		return nil
+	}
+
+	var attrs []uint64
+	for _, token := range iterator.Tokens() {
+		attr := GetSyntaxAttr(token.Type, baseAttr)
+		runes := []rune(token.Value)
+		for range runes {
+			attrs = append(attrs, attr)
+		}
+	}
+	return attrs
 }

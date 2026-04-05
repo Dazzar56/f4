@@ -44,6 +44,7 @@ func (pm *PluginManager) LoadAll() {
 
 func (pm *PluginManager) loadInternal() {
 	plugins := []Plugin{
+		&ChromaInternalPlugin{},
 		&hello_internal.InternalHelloPlugin{},
 		&archive.ArchivePlugin{},
 		&netfox.NetFoxPlugin{},
@@ -109,3 +110,12 @@ func (pm *PluginManager) CloseAll() {
 	}
 	pm.plugins = nil
 }
+// ChromaInternalPlugin wraps the chroma highlighting logic as a standard plugin.
+type ChromaInternalPlugin struct{}
+
+func (p *ChromaInternalPlugin) Init(api vfs.HostAPI) error {
+	api.RegisterHighlighter(&ChromaHighlighter{})
+	return nil
+}
+func (p *ChromaInternalPlugin) Close() error { return nil }
+func (p *ChromaInternalPlugin) GetName() string { return "Internal Syntax Highlighter" }
