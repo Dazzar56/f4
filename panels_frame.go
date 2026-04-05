@@ -313,19 +313,9 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 		if pf.showKeyBar {
 			cmdLineY = pf.lastH - 2
 		}
-		if pf.showPanels {
-			pf.cmdLine.SetRichPrompt(pf.buildPrompt())
-			pf.cmdLine.SetPosition(0, cmdLineY, pf.lastW-1, cmdLineY)
-		} else {
-			pf.cmdLine.SetRichPrompt(nil)
-			pf.cmdLine.SetPrompt("")
-			tx, ty := pf.termView.CursorX, pf.termView.CursorY
-			_, termY1, _, _ := pf.termView.GetPosition()
-			pf.cmdLine.SetPosition(tx, termY1+ty, pf.lastW-1, termY1+ty)
-		}
+		pf.cmdLine.SetRichPrompt(pf.buildPrompt())
+		pf.cmdLine.SetPosition(0, cmdLineY, pf.lastW-1, cmdLineY)
 		if pf.cmdLine.IsVisible() {
-			// CommandLine now uses ThemePalette[0] for background via OverlayMode,
-			// which matches the terminal background perfectly.
 			pf.cmdLine.Show(scr)
 		}
 	}
@@ -429,7 +419,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 
 	// Selection by mask (+, -, *) logic
 	// Intercepted only if command line is empty to allow typing these symbols into commands
-	if pf.cmdLine.IsEmpty() && !alt && !ctrl {
+	if pf.showPanels && pf.cmdLine.IsEmpty() && !alt && !ctrl {
 		isSelectKey := false
 		var selectChar rune
 
@@ -593,10 +583,10 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				if fsp == nil {
 					return true
 				}
-				// Если это файл в NetFoxVFS, то у него точно есть провайдер (SFTP),
-				// либо мы его редактируем по F4. Нам не нужно запускать actionExecute
-				// для виртуальных файловых систем, которые не являются OSVFS.
-				if _, isOS := fsp.vfs.(*vfs.OSVFS); !isOS {
+
+				_, isOS := fsp.vfs.(*vfs.OSVFS)
+				_, isSFTP := fsp.vfs.(*vfs.SFTPVFS)
+				if !isOS && !isSFTP {
 					return true
 				}
 
@@ -611,7 +601,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 
 	// Selection by mask (+, -, *) logic for standard keyboard
-	if pf.cmdLine.IsEmpty() && !alt && !ctrl {
+	if pf.showPanels && pf.cmdLine.IsEmpty() && !alt && !ctrl {
 		if e.Char == '*' || e.Char == '+' || e.Char == '-' {
 			fsp := pf.getActivePanel()
 			if fsp != nil {
@@ -633,30 +623,12 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 	// 2. Try global hotkeys handled by PanelsFrame
 
-	// Handle command history and raw typing when panels are hidden
-	if !pf.showPanels {
-		switch e.VirtualKeyCode {
-		case vtinput.VK_UP:
-			pf.cmdLine.Edit.HistoryUp()
-			return true
-		case vtinput.VK_DOWN:
-			pf.cmdLine.Edit.HistoryDown()
-			return true
-		}
-
-		// Направляем ВСЕ нажатия (включая Backspace) в активный терминал
-		active := pf.getActivePTY()
-		if active != nil {
-			if seq := TranslateInput(e, pf.termView.Win32InputMode, pf.termView.KittyFlags, pf.termView.ApplicationCursorKeys); seq != "" {
-				active.Write([]byte(seq))
-			}
-		}
-		return true
-	}
 	// Tab switches panels
 	if e.VirtualKeyCode == vtinput.VK_TAB && !ctrl {
-		pf.activeIdx = 1 - pf.activeIdx
-		return true
+		if pf.showPanels {
+			pf.activeIdx = 1 - pf.activeIdx
+			return true
+		}
 	}
 
 	// Ctrl+B toggles KeyBar
@@ -667,10 +639,19 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 
 	// 3. Try Active Panel
-	panelHandled := pf.Active().ProcessKey(e)
-
-	if panelHandled {
-		return true
+	if pf.showPanels {
+		if pf.Active().ProcessKey(e) {
+			return true
+		}
+	} else {
+		if e.VirtualKeyCode == vtinput.VK_UP {
+			pf.cmdLine.Edit.HistoryUp()
+			return true
+		}
+		if e.VirtualKeyCode == vtinput.VK_DOWN {
+			pf.cmdLine.Edit.HistoryDown()
+			return true
+		}
 	}
 
 	// 4. Fallback: pass to CommandLine (handles text, Backspace, Delete, etc.)

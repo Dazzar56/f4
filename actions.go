@@ -144,7 +144,12 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 				if activePty != nil {
 					activePty.Write([]byte(fmt.Sprintf(" cd %q\r", dir)))
 					cmd := name
-					if runtime.GOOS != "windows" { cmd = "./" + name }
+					_, isOS := v.(*vfs.OSVFS)
+					if isOS && runtime.GOOS == "windows" {
+						cmd = fmt.Sprintf("%q", name)
+					} else {
+						cmd = fmt.Sprintf("./%q", name)
+					}
 					activePty.Write([]byte(cmd + "\r"))
 					pf.showPanels = false
 				}

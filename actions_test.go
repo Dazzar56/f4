@@ -17,14 +17,30 @@ func TestActionExecute_RemoteRejection(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	// mockRemoteVFS does NOT satisfy the isLocal check in actionExecute
-	v := &mockFailingVFS{}
+	baseVfs := vfs.NewOSVFS(t.TempDir())
+	v := &mockFailingVFS{VFS: baseVfs}
 	pf := NewPanelsFrame()
 
 	actionExecute(pf, v, "/remote", "script.sh", "/remote/script.sh")
 
-	// Verify that an error message was shown
-	top := vtui.FrameManager.GetTopFrame()
-	if top == nil || top.GetType() != vtui.TypeDialog {
+	// Drain task queue to allow UI updates
+	timeout := time.After(1 * time.Second)
+	foundDialog := false
+Loop:
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			if vtui.FrameManager.GetTopFrameType() == vtui.TypeDialog {
+				foundDialog = true
+				break Loop
+			}
+		case <-timeout:
+			break Loop
+		}
+	}
+
+	if !foundDialog {
 		t.Error("Expected error dialog when attempting to execute on remote VFS")
 	}
 }
