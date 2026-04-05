@@ -32,11 +32,14 @@ func NewNetFoxVFS(dbPath string) *NetFoxVFS {
 }
 
 func (v *NetFoxVFS) getConfigs() map[string]NetFoxConfig {
-	data, _ := os.ReadFile(v.path)
-	var configs map[string]NetFoxConfig
-	json.Unmarshal(data, &configs)
-	if configs == nil {
-		configs = make(map[string]NetFoxConfig)
+	configs := make(map[string]NetFoxConfig)
+	data, err := os.ReadFile(v.path)
+	if err != nil {
+		return configs
+	}
+	if err := json.Unmarshal(data, &configs); err != nil {
+		// Если файл битый, возвращаем пустую карту вместо nil
+		return make(map[string]NetFoxConfig)
 	}
 	return configs
 }
