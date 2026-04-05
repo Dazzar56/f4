@@ -312,7 +312,7 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 
 	if !keepEntries {
 		fp.entries = nil
-		if !fp.vfs.IsAtRoot() {
+		if !fp.vfs.IsAtRoot() || fp.vfs.ParentVFS() != nil {
 			fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
 		}
 		fp.SetCursorIndex(0)
@@ -353,9 +353,9 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 				if isFirstChunk {
 					// Очищаем старые данные (если они были), оставляя только ".."
 					fp.entries = nil
-					if !fp.vfs.IsAtRoot() {
-						fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
-					}
+				if !fp.vfs.IsAtRoot() || fp.vfs.ParentVFS() != nil {
+					fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
+				}
 					isFirstChunk = false
 				}
 
@@ -388,14 +388,17 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 			})
 		})
 
-		vtui.FrameManager.PostTask(func() {
-			if ctx.Err() != nil { return }
-			if fp.loadingTimer != nil { fp.loadingTimer.Stop() }
+			vtui.FrameManager.PostTask(func() {
+				if ctx.Err() != nil { return }
+				if fp.loadingTimer != nil { fp.loadingTimer.Stop() }
 
-			fp.isLoading = false
-			fp.updateTitle(err)
+				fp.isLoading = false
+				fp.updateTitle(err)
+				if err != nil && err != context.Canceled {
+					vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to read directory:\n%v", err), []string{"&Ok"})
+				}
 
-			if fp.pendingSelection != "" {
+				if fp.pendingSelection != "" {
 				fp.SelectName(fp.pendingSelection)
 				fp.pendingSelection = ""
 			}
