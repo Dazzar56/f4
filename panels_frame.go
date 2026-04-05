@@ -33,6 +33,7 @@ type PanelsFrame struct {
 	vtui.BaseFrame
 	panels    [2]Panel
 	activeIdx int // 0 for left, 1 for right
+	executing bool
 
 	menuBar   *vtui.MenuBar
 	cmdLine   *CommandLine
@@ -285,8 +286,33 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 	pf.updateMenuCheckmarks()
 }
 
+func (pf *PanelsFrame) isPtyBusy() bool {
+	active := pf.getActivePTY()
+	if active == nil {
+		return false
+	}
+	if active.IsBusy() {
+		return true
+	}
+	// Managed execution signal from actionExecute
+	if pf.executing && pf.termView.Title == "f4:busy" {
+		return true
+	}
+	return false
+}
 func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
-	// 0. Dynamic Layout Adjustment
+	isBusy := pf.isPtyBusy()
+
+	// 0. Process auto-return from managed command execution
+	if pf.executing && pf.termView.Title == "f4:done" {
+		pf.executing = false
+		pf.termView.Title = ""
+		pf.showPanels = true
+		vtui.FrameManager.Redraw()
+		isBusy = false
+	}
+
+	// 1. Dynamic Layout Adjustment
 	if pf.termView.UseAltScreen != pf.lastAlt {
 		pf.lastAlt = pf.termView.UseAltScreen
 		pf.ResizeConsole(pf.lastW, pf.lastH)
@@ -305,7 +331,7 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 
 	// Command line logic depends on terminal state and editor visibility
 	topType := vtui.FrameManager.GetTopFrameType()
-	if (!pf.showPanels && pf.termView.UseAltScreen) || topType == vtui.TypeUser+2 {
+	if (!pf.showPanels && (pf.termView.UseAltScreen || isBusy)) || topType == vtui.TypeUser+2 {
 		pf.cmdLine.SetVisible(false)
 	} else {
 		pf.cmdLine.SetVisible(true)
@@ -321,10 +347,10 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 	}
 
 	// KeyBar is at the bottom. It should only be hidden if a child process
-	// in the terminal uses the alternate screen buffer (e.g. vim, less).
+	// in the terminal is running or using the alternate screen buffer.
 	isTop := vtui.FrameManager.GetTopFrameType() == vtui.TypeUser+1
 	if isTop { // Only the top-most user frame controls the keybar
-		if pf.showKeyBar && !pf.termView.UseAltScreen {
+		if pf.showKeyBar && !pf.termView.UseAltScreen && !isBusy {
 			vtui.FrameManager.KeyBar = pf.keyBar
 		} else {
 			vtui.FrameManager.KeyBar = nil
@@ -533,6 +559,9 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 
 	// Ctrl+O toggles panels visibility
 	if e.VirtualKeyCode == vtinput.VK_O && ctrl {
+		if !pf.showPanels && pf.isPtyBusy() {
+			return true // Prevent switching back while script is working
+		}
 		pf.showPanels = !pf.showPanels
 		if pf.showPanels {
 			pf.RefreshAll()
@@ -547,6 +576,9 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	// Enter handling
 	if e.VirtualKeyCode == vtinput.VK_RETURN {
 		if !pf.cmdLine.IsEmpty() {
+			if pf.isPtyBusy() {
+				return true // Prevent sending command if PTY is busy to avoid "garbage"
+			}
 			cmd := pf.cmdLine.Edit.GetText()
 			pf.cmdLine.Edit.AddHistory(cmd)
 			
@@ -1052,6 +1084,17 @@ func (pf *PanelsFrame) getActivePTY() PtyBackend {
 }
 
 func (pf *PanelsFrame) GetTitle() string {
+	if !pf.showPanels {
+		title := pf.termView.Title
+		if title == "f4:busy" || title == "f4:done" {
+			return "Terminal"
+		}
+		if title != "" {
+			return title
+		}
+		return "Terminal"
+	}
+
 	path := ""
 	if fsp, ok := pf.Active().(*FileSystemPanel); ok {
 		path = fsp.vfs.GetPath()

@@ -46,6 +46,7 @@ func (p *SSHPty) Read(b []byte) (int, error)  { return p.stdout.Read(b) }
 func (p *SSHPty) Write(b []byte) (int, error) { return p.stdin.Write(b) }
 func (p *SSHPty) Close() error                { return p.session.Close() }
 func (p *SSHPty) SetSize(cols, rows int)      { p.session.WindowChange(rows, cols) }
+func (p *SSHPty) IsBusy() bool                { return false } // Rely on pf.executing OSC trick
 func (p *SSHPty) Wait() error                 { return p.session.Wait() }
 
 func (p *SSHPty) Run(name string, args ...string) error {

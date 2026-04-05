@@ -26,6 +26,7 @@ func (m *mockPty) Close() error                          { return nil }
 func (m *mockPty) SetSize(cols, rows int)                {}
 func (m *mockPty) Wait() error                           { return nil }
 func (m *mockPty) Run(name string, args ...string) error { return nil }
+func (m *mockPty) IsBusy() bool                          { return false }
 
 func TestAnsiParser_CPR(t *testing.T) {
 	tv := NewTerminalView(80, 24)

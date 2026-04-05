@@ -142,30 +142,39 @@ func TestActionExtractArchive_Integrity(t *testing.T) {
 	// Запускаем извлечение
 	actionExtractArchive(pf)
 
-	// Ждем завершения фоновой задачи
-	timeout := time.After(3 * time.Second)
-	extracted := false
-	for !extracted {
+	// Wait for background task and monitor the progress dialog
+	timeout := time.After(5 * time.Second)
+	dialogShown := false
+	for {
 		select {
 		case task := <-vtui.FrameManager.TaskChan:
 			task()
-			// Проверяем диалоги
-			if vtui.FrameManager.GetTopFrameType() == vtui.TypeDialog {
+		case <-time.After(10 * time.Millisecond):
+			// Check if file exists periodically even if no UI tasks are pending
+			if _, err := os.Stat(filepath.Join(destDir, "extracted.txt")); err == nil {
+				goto extractionDone
+			}
+
+			topType := vtui.FrameManager.GetTopFrameType()
+			if topType == vtui.TypeDialog {
 				dlg := vtui.FrameManager.GetTopFrame()
-				// Если это диалог ошибки — падаем
 				if strings.Contains(dlg.GetTitle(), "Error") {
 					t.Fatalf("Extraction failed with error dialog: %q", dlg.GetTitle())
 				}
-				// Диалог " Extracting... " мы просто игнорируем, это нормальный ход процесса
-			}
-			// Проверяем, появился ли файл
-			if _, err := os.Stat(filepath.Join(destDir, "extracted.txt")); err == nil {
-				extracted = true
+				if strings.Contains(dlg.GetTitle(), "Extracting") {
+					dialogShown = true
+				}
+			} else if dialogShown {
+				// Progress dialog was shown and now it's gone - check file one last time
+				if _, err := os.Stat(filepath.Join(destDir, "extracted.txt")); err == nil {
+					goto extractionDone
+				}
 			}
 		case <-timeout:
 			t.Fatal("Extraction timed out")
 		}
 	}
+extractionDone:
 
 	// Проверяем содержимое
 	data, _ := os.ReadFile(filepath.Join(destDir, "extracted.txt"))

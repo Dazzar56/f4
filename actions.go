@@ -142,7 +142,6 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 			if runnable {
 				activePty := pf.getActivePTY()
 				if activePty != nil {
-					activePty.Write([]byte(fmt.Sprintf(" cd %q\r", dir)))
 					cmd := name
 					_, isOS := v.(*vfs.OSVFS)
 					if isOS && runtime.GOOS == "windows" {
@@ -150,7 +149,10 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 					} else {
 						cmd = fmt.Sprintf("./%q", name)
 					}
-					activePty.Write([]byte(cmd + "\r"))
+					// Wrap command in Title sequences to signal f4 about managed execution state
+					cmdToWire := fmt.Sprintf(" cd %q && { printf \"\\033]2;f4:busy\\007\"; %s ; } ; printf \"\\033]2;f4:done\\007\"\r", dir, cmd)
+					activePty.Write([]byte(cmdToWire))
+					pf.executing = true
 					pf.showPanels = false
 				}
 			} else {
@@ -593,14 +595,17 @@ func actionExtractArchive(pf *PanelsFrame) {
 		if err != nil { return err }
 		defer f.Close()
 
-		format, stream, err := archives.Identify(tctx.Context, srcPath, f)
+		// Identify can consume bytes from the beginning.
+		format, _, err := archives.Identify(tctx.Context, srcPath, f)
 		if err != nil { return err }
 
 		ex, ok := format.(archives.Extractor)
 		if !ok { return fmt.Errorf("file is not an extractable archive") }
 
-		// Подсчитываем файлы для прогресс-бара (опционально, но полезно)
-		return ex.Extract(tctx.Context, stream, func(ctx context.Context, info archives.FileInfo) error {
+		// Seek back to start before extraction.
+		f.Seek(0, io.SeekStart)
+
+		return ex.Extract(tctx.Context, f, func(ctx context.Context, info archives.FileInfo) error {
 			if tctx.Err() != nil { return tctx.Err() }
 
 			update(fmt.Sprintf("Extracting: %s", info.NameInArchive), -1)

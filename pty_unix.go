@@ -13,9 +13,10 @@ import (
 
 // PTY handles pseudo-terminal allocation and process execution.
 type PTY struct {
-	Master *os.File
-	Slave  *os.File
-	Cmd    *exec.Cmd
+	Master    *os.File
+	Slave     *os.File
+	Cmd       *exec.Cmd
+	shellPgrp int
 }
 
 func NewPTY() (*PTY, error) {
@@ -90,7 +91,23 @@ func (p *PTY) Run(name string, args ...string) error {
 	// Set initial size
 	p.SetSize(80, 24)
 
-	return p.Cmd.Start()
+	err := p.Cmd.Start()
+	if err == nil {
+		p.shellPgrp, _ = syscall.Getpgid(p.Cmd.Process.Pid)
+	}
+	return err
+}
+
+func (p *PTY) IsBusy() bool {
+	if p.Master == nil {
+		return false
+	}
+	var pgrp int
+	_, _, err := syscall.Syscall(syscall.SYS_IOCTL, p.Master.Fd(), syscall.TIOCGPGRP, uintptr(unsafe.Pointer(&pgrp)))
+	if err != 0 {
+		return false
+	}
+	return pgrp != p.shellPgrp
 }
 
 func (p *PTY) SetSize(cols, rows int) {

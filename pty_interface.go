@@ -9,4 +9,5 @@ type PtyBackend interface {
 	SetSize(cols, rows int)
 	Wait() error
 	Run(name string, args ...string) error
+	IsBusy() bool
 }

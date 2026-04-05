@@ -16,6 +16,7 @@ func (p *PTY) Read(b []byte) (int, error)   { return 0, nil }
 func (p *PTY) Close() error                 { return nil }
 func (p *PTY) SetSize(cols, rows int)       {}
 func (p *PTY) Wait() error                  { return nil }
+func (p *PTY) IsBusy() bool                 { return false }
 func (p *PTY) Run(name string, args ...string) error { return nil }
 
 func GetSystemShell() string {
