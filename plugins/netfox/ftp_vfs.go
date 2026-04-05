@@ -2,6 +2,7 @@ package netfox
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"os"
 	"path"
@@ -117,6 +118,35 @@ func (v *FTPVFS) Create(ctx context.Context, p string) (io.WriteCloser, error) {
 
 func (v *FTPVFS) ParentVFS() vfs.VFS { return v.parent }
 func (v *FTPVFS) Close() error      { return v.conn.Quit() }
+type ftpProvider struct{}
+func (p *ftpProvider) Name() string  { return "NetFox-FTP" }
+func (p *ftpProvider) Priority() int { return 100 }
+func (p *ftpProvider) CanOpen(ctx context.Context, parent vfs.VFS, pth string) bool {
+	w, ok := parent.(*netFoxVFSWrapper)
+	if !ok { return false }
+	item, err := w.Stat(ctx, pth)
+	if err != nil || item.IsDir { return false }
+	f, err := w.Open(ctx, pth)
+	if err != nil { return false }
+	defer f.Close()
+	var cfg NetFoxConfig
+	json.NewDecoder(ctxReader{f, ctx}).Decode(&cfg)
+	return cfg.Type == "ftp"
+}
+func (p *ftpProvider) Open(ctx context.Context, parent vfs.VFS, pth string) (vfs.VFS, error) {
+	w := parent.(*netFoxVFSWrapper)
+	f, _ := w.Open(ctx, pth)
+	defer f.Close()
+	var cfg NetFoxConfig
+	json.NewDecoder(ctxReader{f, ctx}).Decode(&cfg)
+	port := cfg.Port
+	if port == "" { port = "21" }
+	return NewFTPVFS(parent, cfg.Host, port, cfg.User, cfg.Pass)
+}
+
+func init() {
+	vfs.RegisterProvider(&ftpProvider{})
+}
 
 type ftpFileWrapper struct {
 	*os.File

@@ -8,6 +8,7 @@ import (
 	"sync"
 	"os/user"
 	"strings"
+	"context"
 
 	"github.com/mattn/go-runewidth"
 
@@ -982,7 +983,7 @@ func (pf *PanelsFrame) showDummyOpDialog() {
 
 // RunProgressTask encapsulates the boilerplate for creating a progress dialog,
 // running a background task with cancellation, and optionally forking the workspace.
-func (pf *PanelsFrame) RunProgressTask(title, startMsg string, forked bool, worker func(ctx *vtui.TaskContext, update func(msg string, percent int)) error, onComplete func(err error)) {
+func (pf *PanelsFrame) RunProgressTask(title, startMsg string, forked bool, worker func(ctx context.Context, update func(msg string, percent int)) error, onComplete func(err error)) {
 	dlg := vtui.NewCenteredDialog(50, 8, title)
 	dlg.AttentionSuppressed = true
 
@@ -1019,7 +1020,6 @@ func (pf *PanelsFrame) RunProgressTask(title, startMsg string, forked bool, work
 		update := func(msg string, percent int) {
 			ctx.RunOnUI(func() {
 				if msg != "" {
-					// Ensure message fits in the progress dialog width
 					safeMsg := runewidth.Truncate(msg, 46, "...")
 					lbl.SetText(safeMsg)
 				}
@@ -1027,7 +1027,7 @@ func (pf *PanelsFrame) RunProgressTask(title, startMsg string, forked bool, work
 				vtui.FrameManager.Redraw()
 			})
 		}
-		err := worker(ctx, update)
+		err := worker(ctx.Context, update)
 		ctx.RunOnUI(func() {
 			dlg.Close()
 			if onComplete != nil { onComplete(err) }
@@ -1035,7 +1035,7 @@ func (pf *PanelsFrame) RunProgressTask(title, startMsg string, forked bool, work
 	})
 }
 func (pf *PanelsFrame) ExecuteDummyOp(forked bool) {
-	pf.RunProgressTask(" Processing... ", "Initializing...", forked, func(ctx *vtui.TaskContext, update func(msg string, percent int)) error {
+	pf.RunProgressTask(" Processing... ", "Initializing...", forked, func(ctx context.Context, update func(msg string, percent int)) error {
 		totalSteps := 300 // 5 minutes = 300 seconds
 		for i := 1; i <= totalSteps; i++ {
 			if ctx.Err() != nil { return ctx.Err() }
@@ -1060,6 +1060,34 @@ func (pf *PanelsFrame) RefreshAll() {
 			fsp.ReadDirectory()
 		}
 	}
+}
+func (pf *PanelsFrame) Message(title, msg string, buttons []string) int {
+	resChan := make(chan int, 1)
+	vtui.FrameManager.PostTask(func() {
+		dlg := vtui.ShowMessage(title, msg, buttons)
+		dlg.OnResult = func(code int) { resChan <- code }
+	})
+	return <-resChan
+}
+
+func (pf *PanelsFrame) InputBox(title, prompt, history string, callback func(string)) {
+	vtui.FrameManager.PostTask(func() {
+		vtui.InputBox(title, prompt, history, callback)
+	})
+}
+
+func (pf *PanelsFrame) Menu(title string, items []string, callback func(int)) {
+	vtui.FrameManager.PostTask(func() {
+		menu := vtui.NewVMenu(title)
+		for _, itm := range items {
+			menu.AddItem(vtui.MenuItem{Text: itm})
+		}
+		menu.OnAction = func(idx int) {
+			menu.Close()
+			if callback != nil { callback(idx) }
+		}
+		vtui.FrameManager.Push(menu)
+	})
 }
 func (pf *PanelsFrame) getActivePTYUnsafe() PtyBackend {
 	if pf.remotePtys == nil {

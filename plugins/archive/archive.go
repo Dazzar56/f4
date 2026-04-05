@@ -10,7 +10,6 @@ import (
 	"github.com/mholt/archives"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
-	"github.com/unxed/vtui"
 )
 
 type ArchivePlugin struct{}
@@ -26,21 +25,14 @@ func (p *ArchivePlugin) Init(api vfs.HostAPI) error {
 }
 
 func actionArchiveCommands(app vfs.App) {
-	menu := vtui.NewVMenu(" Archive Commands ")
-	menu.AddItem(vtui.MenuItem{Text: "&1. Add to archive"})
-	menu.AddItem(vtui.MenuItem{Text: "&2. Extract files"})
-
-	menu.OnAction = func(idx int) {
-		menu.Close()
+	app.Menu(" Archive Commands ", []string{"&1. Add to archive", "&2. Extract files"}, func(idx int) {
 		switch idx {
 		case 0:
 			actionAddArchive(app)
 		case 1:
 			actionExtractArchive(app)
 		}
-	}
-
-	vtui.FrameManager.Push(menu)
+	})
 }
 
 func actionExtractArchive(app vfs.App) {
@@ -54,12 +46,12 @@ func actionExtractArchive(app vfs.App) {
 	srcPath := srcVfs.Join(srcVfs.GetPath(), name)
 	destDir := dstVfs.GetPath()
 
-	app.RunProgressTask(" Extracting... ", "Identifying archive...", false, func(tctx *vtui.TaskContext, update func(msg string, percent int)) error {
+	app.RunProgressTask(" Extracting... ", "Identifying archive...", false, func(ctx context.Context, update func(msg string, percent int)) error {
 		f, err := os.Open(srcPath)
 		if err != nil { return err }
 		defer f.Close()
 
-		format, _, err := archives.Identify(tctx.Context, srcPath, f)
+		format, _, err := archives.Identify(ctx, srcPath, f)
 		if err != nil { return err }
 
 		ex, ok := format.(archives.Extractor)
@@ -67,8 +59,8 @@ func actionExtractArchive(app vfs.App) {
 
 		f.Seek(0, io.SeekStart)
 
-		return ex.Extract(tctx.Context, f, func(ctx context.Context, info archives.FileInfo) error {
-			if tctx.Err() != nil { return tctx.Err() }
+		return ex.Extract(ctx, f, func(ctx context.Context, info archives.FileInfo) error {
+			if ctx.Err() != nil { return ctx.Err() }
 			update(fmt.Sprintf("Extracting: %s", info.NameInArchive), -1)
 			targetPath := filepath.Join(destDir, info.NameInArchive)
 			if info.IsDir() { return os.MkdirAll(targetPath, 0755) }
@@ -84,7 +76,7 @@ func actionExtractArchive(app vfs.App) {
 		})
 	}, func(err error) {
 		if err != nil && err != context.Canceled {
-			vtui.ShowMessage(" Error ", fmt.Sprintf("Extraction failed:\n%v", err), []string{"&Ok"})
+			app.Message(" Error ", fmt.Sprintf("Extraction failed:\n%v", err), []string{"&Ok"})
 		}
 		app.RefreshAll()
 	})
@@ -101,29 +93,29 @@ func actionAddArchive(app vfs.App) {
 	if arcName == "." || arcName == "" { arcName = "archive" }
 	arcName += ".zip"
 
-	vtui.InputBox(" Add to archive ", "Archive name:", arcName, func(name string) {
+	app.InputBox(" Add to archive ", "Archive name:", arcName, func(name string) {
 		if name == "" { return }
 		fullArcPath := activeVfs.Join(activeVfs.GetPath(), name)
 
-		app.RunProgressTask(" Archiving... ", "Gathering files...", false, func(tctx *vtui.TaskContext, update func(msg string, percent int)) error {
+		app.RunProgressTask(" Archiving... ", "Gathering files...", false, func(ctx context.Context, update func(msg string, percent int)) error {
 			var files []archives.FileInfo
 			for i, n := range names {
-				if tctx.Err() != nil { return tctx.Err() }
+				if ctx.Err() != nil { return ctx.Err() }
 				update(fmt.Sprintf("Scanning: %s", n), (i*100)/len(names))
 				fullPath := activeVfs.Join(activeVfs.GetPath(), n)
 				if osvfs, ok := activeVfs.(*vfs.OSVFS); ok {
 					absPath, _ := osvfs.Abs(fullPath)
-					moreFiles, err := archives.FilesFromDisk(tctx.Context, nil, map[string]string{absPath: n})
+					moreFiles, err := archives.FilesFromDisk(ctx, nil, map[string]string{absPath: n})
 					if err == nil { files = append(files, moreFiles...) }
 				}
 			}
 			out, err := os.Create(fullArcPath)
 			if err != nil { return err }
 			defer out.Close()
-			return archives.Zip{}.Archive(tctx.Context, out, files)
+			return archives.Zip{}.Archive(ctx, out, files)
 		}, func(err error) {
 			if err != nil && err != context.Canceled {
-				vtui.ShowMessage(" Error ", fmt.Sprintf("Archiving failed:\n%v", err), []string{"&Ok"})
+				app.Message(" Error ", fmt.Sprintf("Archiving failed:\n%v", err), []string{"&Ok"})
 			}
 			app.RefreshAll()
 		})

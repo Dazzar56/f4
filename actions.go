@@ -321,14 +321,14 @@ func actionDelete(pf *PanelsFrame) {
 	btnDel.OnClick = func() {
 		fsp.pendingSelection = fsp.GetSuccessorName()
 		dlg.Close()
-		pf.RunProgressTask(" Deleting... ", "Preparing...", false, func(ctx *vtui.TaskContext, update func(msg string, percent int)) error {
+		pf.RunProgressTask(" Deleting... ", "Preparing...", false, func(ctx context.Context, update func(msg string, percent int)) error {
 			for i, name := range names {
 				if ctx.Err() != nil {
 					return ctx.Err()
 				}
 				update(fmt.Sprintf("Deleting: %s", name), (i*100)/len(names))
 				fullPath := activeVfs.Join(activeVfs.GetPath(), name)
-				if err := activeVfs.Remove(ctx.Context, fullPath); err != nil {
+				if err := activeVfs.Remove(ctx, fullPath); err != nil {
 					return err
 				}
 			}

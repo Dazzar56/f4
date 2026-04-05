@@ -5,7 +5,6 @@ import (
 	"context"
 	"io"
 	"time"
-	"github.com/unxed/vtui"
 )
 
 // App defines the interface for plugin-to-core UI interactions.
@@ -15,7 +14,11 @@ type App interface {
 	GetSelectedNames() []string
 	GetSelectedName() string
 	RefreshAll()
-	RunProgressTask(title, startMsg string, forked bool, worker func(ctx *vtui.TaskContext, update func(msg string, percent int)) error, onComplete func(err error))
+	RunProgressTask(title, startMsg string, forked bool, worker func(ctx context.Context, update func(msg string, percent int)) error, onComplete func(err error))
+	// UI Bridge
+	Message(title, msg string, buttons []string) int
+	InputBox(title, prompt, history string, callback func(string))
+	Menu(title string, items []string, callback func(int))
 }
 
 // HostAPI defines the functions f4 exposes to plugins.

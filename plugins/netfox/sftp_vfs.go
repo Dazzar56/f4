@@ -2,6 +2,7 @@ package netfox
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net"
 	"os"
@@ -156,6 +157,35 @@ func (v *SFTPVFS) OpenPty(cols, rows int) (any, error) {
 	pty.SetSize(cols, rows)
 	pty.Run("")
 	return pty, nil
+}
+type sftpProvider struct{}
+func (p *sftpProvider) Name() string  { return "NetFox-SFTP" }
+func (p *sftpProvider) Priority() int { return 100 }
+func (p *sftpProvider) CanOpen(ctx context.Context, parent vfs.VFS, pth string) bool {
+	w, ok := parent.(*netFoxVFSWrapper)
+	if !ok { return false }
+	item, err := w.Stat(ctx, pth)
+	if err != nil || item.IsDir { return false }
+	f, err := w.Open(ctx, pth)
+	if err != nil { return false }
+	defer f.Close()
+	var cfg NetFoxConfig
+	json.NewDecoder(ctxReader{f, ctx}).Decode(&cfg)
+	return cfg.Type == "sftp" || cfg.Type == ""
+}
+func (p *sftpProvider) Open(ctx context.Context, parent vfs.VFS, pth string) (vfs.VFS, error) {
+	w := parent.(*netFoxVFSWrapper)
+	f, _ := w.Open(ctx, pth)
+	defer f.Close()
+	var cfg NetFoxConfig
+	json.NewDecoder(ctxReader{f, ctx}).Decode(&cfg)
+	port := cfg.Port
+	if port == "" { port = "22" }
+	return NewSFTPVFS(parent, cfg.Host, port, cfg.User, cfg.Pass)
+}
+
+func init() {
+	vfs.RegisterProvider(&sftpProvider{})
 }
 
 type sftpFileWrapper struct {

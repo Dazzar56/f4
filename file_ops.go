@@ -25,7 +25,7 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 	}
 	state := &FileOpState{}
 
-	pf.RunProgressTask(title, "Starting...", forked, func(ctx *vtui.TaskContext, update func(msg string, percent int)) error {
+	pf.RunProgressTask(title, "Starting...", forked, func(ctx context.Context, update func(msg string, percent int)) error {
 		// 1. Resolve destination path
 		destPath := destInput
 		if !filepath.IsAbs(destPath) && !strings.HasPrefix(destPath, "/") {
@@ -43,7 +43,7 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 		if !isTargetDir {
 			if strings.HasSuffix(destInput, "/") || strings.HasSuffix(destInput, "\\") {
 				isTargetDir = true
-			} else if stat, err := dstVfs.Stat(ctx.Context, destPath); err == nil && stat.IsDir {
+			} else if stat, err := dstVfs.Stat(ctx, destPath); err == nil && stat.IsDir {
 				isTargetDir = true
 			} else if destInput == "." || destInput == ".." {
 				isTargetDir = true
@@ -66,10 +66,10 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 		}
 
 		if dirToEnsure != "" && dirToEnsure != "." {
-			st, err := dstVfs.Stat(ctx.Context, dirToEnsure)
+			st, err := dstVfs.Stat(ctx, dirToEnsure)
 			if err != nil {
 				// Path doesn't exist, try to create it (MkDir in OSVFS is MkdirAll)
-				if mkErr := dstVfs.MkDir(ctx.Context, dirToEnsure); mkErr != nil {
+				if mkErr := dstVfs.MkDir(ctx, dirToEnsure); mkErr != nil {
 					return mkErr
 				}
 			} else if !st.IsDir {
@@ -95,8 +95,8 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 			if isMove && srcVfs == dstVfs {
 				// Safety: Check if destination exists. If it does, fall through to the slow path
 				// to trigger the overwrite confirmation dialog.
-				if _, err := dstVfs.Stat(ctx.Context, targetItemPath); err != nil {
-					if err := srcVfs.Rename(ctx.Context, srcPath, targetItemPath); err == nil {
+				if _, err := dstVfs.Stat(ctx, targetItemPath); err != nil {
+					if err := srcVfs.Rename(ctx, srcPath, targetItemPath); err == nil {
 						vtui.DebugLog("FILEOP: Optimized server-side rename: %s -> %s", srcPath, targetItemPath)
 						update("", ((i+1)*100)/len(names))
 						continue
@@ -110,7 +110,7 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 			}
 
 			if isMove && state.SkippedCount == 0 {
-				srcVfs.Remove(ctx.Context, srcPath)
+				srcVfs.Remove(ctx, srcPath)
 			}
 			update("", ((i+1)*100)/len(names))
 		}
@@ -128,12 +128,12 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 	})
 }
 
-func recursiveCopy(ctx *vtui.TaskContext, update func(msg string, percent int), srcVfs vfs.VFS, srcPath string, dstVfs vfs.VFS, destPath string, state *FileOpState) error {
+func recursiveCopy(ctx context.Context, update func(msg string, percent int), srcVfs vfs.VFS, srcPath string, dstVfs vfs.VFS, destPath string, state *FileOpState) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
 
-	stat, err := srcVfs.Stat(ctx.Context, srcPath)
+	stat, err := srcVfs.Stat(ctx, srcPath)
 	if err != nil {
 		return err
 	}
@@ -152,12 +152,12 @@ func recursiveCopy(ctx *vtui.TaskContext, update func(msg string, percent int), 
 	}
 
 	// Check if destination already exists
-	dstStat, err := dstVfs.Stat(ctx.Context, destPath)
+	dstStat, err := dstVfs.Stat(ctx, destPath)
 	exists := err == nil
 
 	if stat.IsDir {
 		if !exists {
-			if err := dstVfs.MkDir(ctx.Context, destPath); err != nil {
+			if err := dstVfs.MkDir(ctx, destPath); err != nil {
 				return err
 			}
 		} else if !dstStat.IsDir {
@@ -165,7 +165,7 @@ func recursiveCopy(ctx *vtui.TaskContext, update func(msg string, percent int), 
 		}
 
 		var items []vfs.VFSItem
-		err := srcVfs.ReadDir(ctx.Context, srcPath, func(chunk []vfs.VFSItem) {
+		err := srcVfs.ReadDir(ctx, srcPath, func(chunk []vfs.VFSItem) {
 			items = append(items, chunk...)
 		})
 		if err != nil {
@@ -219,7 +219,7 @@ func recursiveCopy(ctx *vtui.TaskContext, update func(msg string, percent int), 
 
 	// Open Source with Retry
 	for {
-		srcFile, err = srcVfs.Open(ctx.Context, srcPath)
+		srcFile, err = srcVfs.Open(ctx, srcPath)
 		if err == nil {
 			break
 		}
@@ -236,7 +236,7 @@ func recursiveCopy(ctx *vtui.TaskContext, update func(msg string, percent int), 
 
 	// Create Destination with Retry
 	for {
-		dstFile, err = dstVfs.Create(ctx.Context, destPath)
+		dstFile, err = dstVfs.Create(ctx, destPath)
 		if err == nil {
 			break
 		}
@@ -255,7 +255,7 @@ func recursiveCopy(ctx *vtui.TaskContext, update func(msg string, percent int), 
 	buf := make([]byte, 128*1024) // 128KB buffer
 	for {
 		if ctx.Err() != nil { return ctx.Err() }
-		n, rerr := srcFile.Read(ctx.Context, buf)
+		n, rerr := srcFile.Read(ctx, buf)
 		if n > 0 {
 			if _, werr := dstFile.Write(buf[:n]); werr != nil {
 				return werr
@@ -270,10 +270,10 @@ func recursiveCopy(ctx *vtui.TaskContext, update func(msg string, percent int), 
 }
 
 // AskOverwrite shows a modal dialog from the background thread and waits for the result.
-func AskOverwrite(ctx *vtui.TaskContext, name string) int {
+func AskOverwrite(ctx context.Context, name string) int {
 	resultChan := make(chan int, 1)
 
-	ctx.RunOnUI(func() {
+	vtui.FrameManager.PostTask(func() {
 		msg := fmt.Sprintf("File already exists:\n%s\n\nOverwrite?", name)
 		title := " Conflict "
 		buttons := []string{"&Overwrite", Msg("Btn.OverwriteAll"), "&Skip", Msg("Btn.SkipAll"), "&Cancel"}
@@ -296,9 +296,9 @@ func AskOverwrite(ctx *vtui.TaskContext, name string) int {
 }
 
 // AskError handles I/O errors by asking user for Retry/Skip/Abort
-func AskError(ctx *vtui.TaskContext, op string, err error) int {
+func AskError(ctx context.Context, op string, err error) int {
 	resultChan := make(chan int, 1)
-	ctx.RunOnUI(func() {
+	vtui.FrameManager.PostTask(func() {
 		msg := fmt.Sprintf("%s:\n%s\n\n%s", op, err.Error(), "What to do?")
 		dlg := vtui.ShowMessage(" Error ", msg, []string{Msg("Btn.Retry"), "&Skip", "&Abort"})
 		dlg.OnResult = func(code int) {
