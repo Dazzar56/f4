@@ -20,6 +20,14 @@ func actionOpenEditor(pf *PanelsFrame, v vfs.VFS, path string) {
 		var buf *AsyncBuffer
 
 		if v != nil {
+			// Safety check: prevent opening directories for editing
+			if stat, err := v.Stat(ctx.Context, path); err == nil && stat.IsDir {
+				ctx.RunOnUI(func() {
+					vtui.ShowMessage(" Error ", "Cannot edit a directory.", []string{"&Ok"})
+				})
+				return
+			}
+
 			var err error
 			f, err = v.Open(ctx.Context, path)
 			if err != nil {
@@ -55,6 +63,16 @@ func actionOpenEditor(pf *PanelsFrame, v vfs.VFS, path string) {
 
 func actionOpenViewer(pf *PanelsFrame, v vfs.VFS, path string) {
 	vtui.RunAsync(func(ctx *vtui.TaskContext) {
+		if v != nil {
+			// Safety check: prevent opening directories for viewing
+			if stat, err := v.Stat(ctx.Context, path); err == nil && stat.IsDir {
+				ctx.RunOnUI(func() {
+					vtui.ShowMessage(" Error ", "Cannot view a directory.", []string{"&Ok"})
+				})
+				return
+			}
+		}
+
 		viewer, err := NewViewerView(ctx.Context, v, path)
 		ctx.RunOnUI(func() {
 			if err != nil {
@@ -187,6 +205,14 @@ func actionNewFile(pf *PanelsFrame) {
 
 func actionViewFile(pf *PanelsFrame) {
 	if fsp := pf.getActivePanel(); fsp != nil {
+		idx := fsp.GetCursorIndex()
+		if idx < 0 || idx >= len(fsp.entries) {
+			return
+		}
+		if fsp.entries[idx].IsDir {
+			vtui.ShowMessage(" Error ", "Cannot view a directory.", []string{"&Ok"})
+			return
+		}
 		name := fsp.GetSelectedName()
 		path := fsp.vfs.Join(fsp.vfs.GetPath(), name)
 		actionOpenViewer(pf, fsp.vfs, path)
@@ -195,6 +221,14 @@ func actionViewFile(pf *PanelsFrame) {
 
 func actionEditFile(pf *PanelsFrame) {
 	if fsp := pf.getActivePanel(); fsp != nil {
+		idx := fsp.GetCursorIndex()
+		if idx < 0 || idx >= len(fsp.entries) {
+			return
+		}
+		if fsp.entries[idx].IsDir {
+			vtui.ShowMessage(" Error ", "Cannot edit a directory.", []string{"&Ok"})
+			return
+		}
 		name := fsp.GetSelectedName()
 		path := fsp.vfs.Join(fsp.vfs.GetPath(), name)
 		actionOpenEditor(pf, fsp.vfs, path)
