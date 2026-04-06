@@ -2,8 +2,10 @@ package main
 
 import (
 	"encoding/base64"
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
@@ -60,6 +62,114 @@ func TestTerminalView_HandleFar2lAPC(t *testing.T) {
 
 	if len(pty.written) == 0 || !strings.HasPrefix(string(pty.written), "\x1b_far2l") {
 		t.Errorf("Expected window size reply, got %q", string(pty.written))
+	}
+}
+
+func TestTerminalView_ProcessFar2lInteract_Clipboard(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	pty := &mockPty{}
+	tv.pty = pty
+
+	// 1. Test Clipboard Open (Handshake)
+	stk := vtinput.Far2lStack{}
+	stk.PushString("client-handshake-id-32-chars-minimum")
+	stk.PushU8('o') // open
+	stk.PushU8('c') // clipboard
+	stk.PushU8(1)   // request id
+
+	tv.ProcessFar2lInteract(stk)
+	// Should write something back to PTY (B64 of reply stack)
+	if len(pty.written) == 0 { t.Fatal("No reply for clipboard open") }
+	pty.written = nil
+
+	// 2. Test Chunked SetData
+	// First chunk: command 'S' expects size * 256 bytes.
+	stk = vtinput.Far2lStack{}
+	chunkData := make([]byte, 256)
+	copy(chunkData, "Part1-")
+	stk.PushBytes(chunkData)
+	stk.PushU16(1)  // size = 1 block (256 bytes)
+	stk.PushU8('S') // Sub-command: Set chunk
+	stk.PushU8('c') // Category: Clipboard
+	stk.PushU8(2)   // ID
+	tv.ProcessFar2lInteract(stk)
+
+	if len(tv.clipboardChunks) != 256 {
+		t.Errorf("Clipboard chunk not accumulated. Size: %d", len(tv.clipboardChunks))
+	}
+
+	// Finalize set: command 's' expects: data (bytes), len (U32), format (U32)
+	stk = vtinput.Far2lStack{}
+	stk.PushBytes([]byte("Part2"))
+	stk.PushU32(5)  // len
+	stk.PushU32(1)  // format (CF_TEXT)
+	stk.PushU8('s') // Sub-command: Finalize
+	stk.PushU8('c') // Category: Clipboard
+	stk.PushU8(3)   // ID
+	tv.ProcessFar2lInteract(stk)
+
+	got := vtui.GetClipboard()
+	if !strings.HasPrefix(got, "Part1-") || !strings.Contains(got, "Part2") {
+		t.Errorf("Chunked clipboard transfer failed. Got %q", got)
+	}
+	if len(tv.clipboardChunks) != 0 {
+		t.Error("Chunk buffer not cleared after finalization")
+	}
+}
+
+func TestTerminalView_ProcessFar2lInteract_Notification(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	tv := NewTerminalView(80, 24)
+
+	stk := vtinput.Far2lStack{}
+	stk.PushString("Alert Body")
+	stk.PushString("Title")
+	stk.PushU8('n') // Notification
+	stk.PushU8(1)   // ID
+
+	tv.ProcessFar2lInteract(stk)
+
+	// Pump task queue
+	foundDialog := false
+	timeout := time.After(500 * time.Millisecond)
+Loop:
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			if vtui.FrameManager.GetTopFrameType() == vtui.TypeDialog {
+				foundDialog = true
+				break Loop
+			}
+		case <-timeout:
+			break Loop
+		}
+	}
+
+	if !foundDialog {
+		t.Error("Notification APC did not result in a Message Box")
+	}
+}
+
+func TestTerminalView_ProcessFar2lInteract_FKeys(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	pty := &mockPty{}
+	tv.pty = pty
+
+	stk := vtinput.Far2lStack{}
+	// Push 12 pairs of (exists, string) for F1-F12
+	for i := 0; i < 12; i++ {
+		stk.PushString(fmt.Sprintf("F%d-Custom", i+1))
+		stk.PushU8(1)
+	}
+	stk.PushU8('f') // FKey titles
+	stk.PushU8(1)   // ID
+
+	// Should not panic and should send '1' as success status
+	tv.ProcessFar2lInteract(stk)
+
+	if len(pty.written) == 0 {
+		t.Error("No reply for FKey titles update")
 	}
 }
 
