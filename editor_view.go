@@ -451,6 +451,20 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 			ev.CopySelection()
 			return true
 		}
+		if shift && !ctrl && e.VirtualKeyCode == vtinput.VK_INSERT {
+			if text := vtui.GetClipboard(); text != "" {
+				ev.PasteText(text)
+			}
+			return true
+		}
+
+	case vtinput.VK_V:
+		if ctrl && !shift {
+			if text := vtui.GetClipboard(); text != "" {
+				ev.PasteText(text)
+			}
+			return true
+		}
 
 	case vtinput.VK_UP, vtinput.VK_E:
 		if e.VirtualKeyCode == vtinput.VK_E && !ctrl { break }
@@ -1182,6 +1196,22 @@ func (ev *EditorView) CopySelection() {
 	}
 }
 
+func (ev *EditorView) PasteText(text string) {
+	if ev.selActive { ev.DeleteSelection() }
+	offset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
+	data := []byte(text)
+	ev.pt.Insert(offset, data)
+	ev.li.UpdateAfterInsert(offset, data)
+	ev.invalidateStates(ev.CursorLine)
+	ev.engine.InvalidateFrom(ev.CursorLine)
+
+	newOffset := offset + len(data)
+	ev.CursorLine = ev.li.GetLineAtOffset(newOffset)
+	ev.CursorPos = newOffset - ev.li.GetLineOffset(ev.CursorLine)
+	ev.modified = true
+	ev.updateDesiredVisualCol()
+	ev.ensureCursorVisible()
+}
 func (ev *EditorView) DeleteSelection() {
 	min, max := ev.getSelectionRange()
 	if max > min {

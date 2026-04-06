@@ -141,6 +141,7 @@ func NewPanelsFrame() *PanelsFrame {
 	pf.termView = NewTerminalView(80, 24)
 	// Parser will be fully initialized in initPTY once pty is ready
 	pf.initPTY()
+	pf.termView.pty = pf.pty
 
 
 	return pf

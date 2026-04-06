@@ -4,8 +4,12 @@ import (
 	"sort"
 	"sync"
 	"unicode/utf8"
+	"encoding/base64"
 
 	"github.com/mattn/go-runewidth"
+	"strings"
+
+	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 	"github.com/unxed/vtui/piecetable"
 	"github.com/unxed/vtui/textlayout"
@@ -57,6 +61,9 @@ type TerminalView struct {
 	ApplicationCursorKeys bool
 	KittyFlags            int
 	KittyFlagsStack       []int
+
+	clipboardChunks []byte
+	pty             PtyBackend
 }
 
 func NewTerminalView(w, h int) *TerminalView {
@@ -109,6 +116,7 @@ func (tv *TerminalView) CloneStateFrom(other *TerminalView) {
 	tv.ScrollTop, tv.ScrollBottom = other.ScrollTop, other.ScrollBottom
 	tv.KittyFlags = other.KittyFlags
 	tv.KittyFlagsStack = append([]int(nil), other.KittyFlagsStack...)
+	tv.pty = other.pty
 
 	// 5. CRITICAL: Wipe the current active line to avoid duplicate prompt.
 	// The parent's prompt is already in the copied PieceTable and Lines grid.
@@ -556,3 +564,134 @@ func (tv *TerminalView) RequestFocus() bool   { return true }
 func (tv *TerminalView) Close()               {}
 func (tv *TerminalView) GetWindowNumber() int { return 0 }
 func (tv *TerminalView) SetWindowNumber(n int) {}
+
+func (tv *TerminalView) HandleFar2lAPC(s string) {
+	vtui.DebugLog("TERM_APC: Incoming Far2l sequence: %q", s)
+	if s == "far2l1" {
+		if tv.pty != nil { tv.pty.Write([]byte("\x1b_far2lok\x07")) }
+	} else if s == "far2l0" {
+		// Disable
+	} else if s == "far2lok" {
+		// Acknowledgement from the host terminal. This is not for the internal shell to process visually.
+		// Consume and do nothing.
+	} else if strings.HasPrefix(s, "far2l:") {
+		b64 := s[6:]
+		if m := len(b64) % 4; m != 0 {
+			b64 += strings.Repeat("=", 4-m)
+		}
+		decoded, _ := base64.StdEncoding.DecodeString(b64)
+		tv.ProcessFar2lInteract(decoded)
+	}
+}
+
+func (tv *TerminalView) ProcessFar2lInteract(data []byte) {
+	stk := (*vtinput.Far2lStack)(&data)
+	id := stk.PopU8()
+	cmd := stk.PopU8()
+	vtui.DebugLog("TERM_APC: ProcessFar2lInteract: cmd=%c, id=%d", cmd, id)
+
+	reply := vtinput.Far2lStack{}
+
+	switch cmd {
+	case 'c': // Clipboard
+		sub := stk.PopU8()
+		vtui.DebugLog("TERM_APC: Clipboard sub-command: %c", sub)
+		switch sub {
+		case 'o':
+			clientID := stk.PopString()
+			auth := 0
+			if vtui.GlobalClipboardAccessManager != nil {
+				auth = vtui.GlobalClipboardAccessManager.Authorize(clientID)
+			}
+			reply.PushU64(2) // FARTTY_FEATCLIP_CHUNKED_SET
+			reply.PushU8(uint8(auth))
+		case 'c':
+			tv.clipboardChunks = nil
+			reply.PushU8(1)
+		case 'e':
+			vtui.SetClipboard("")
+			tv.clipboardChunks = nil
+			reply.PushU8(1)
+		case 'a':
+			_ = stk.PopU32() // fmt
+			reply.PushU8(1)
+		case 'S':
+			size := stk.PopU16()
+			if size == 0 {
+				tv.clipboardChunks = nil
+			} else {
+				chunk := stk.PopBytes(int(size) << 8)
+				tv.clipboardChunks = append(tv.clipboardChunks, chunk...)
+			}
+		case 's':
+			_ = stk.PopU32() // fmt
+			len := stk.PopU32()
+			textBytes := stk.PopBytes(int(len))
+			fullData := append(tv.clipboardChunks, textBytes...)
+			tv.clipboardChunks = nil
+			vtui.SetClipboard(string(fullData))
+			reply.PushU8(1)
+		case 'g':
+			_ = stk.PopU32() // fmt
+			clipData := vtui.GetClipboard()
+			reply.PushU32(uint32(len(clipData)))
+			reply.PushBytes([]byte(clipData))
+			reply.PushU32(uint32(len(clipData)))
+		case 'i':
+			_ = stk.PopU32()
+			reply.PushU64(0)
+		case 'r':
+			_ = stk.PopString()
+			reply.PushU32(0xC000)
+		}
+	case 'w': // Window size
+		reply.PushU16(uint16(tv.Height))
+		reply.PushU16(uint16(tv.Width))
+	case 'h': // Cursor height
+		_ = stk.PopU8()
+	case 'n': // Desktop notification
+		text := stk.PopString()
+		title := stk.PopString()
+		vtui.FrameManager.PostTask(func() {
+			vtui.ShowMessage(" "+title+" ", text, []string{"&Ok"})
+		})
+	case 'f': // FKey titles
+		for i := 0; i < 12; i++ {
+			state := stk.PopU8()
+			if state != 0 {
+				_ = stk.PopString() // Just pop, we can ignore it for now or implement KeyBar update
+			}
+		}
+		reply.PushU8(1)
+	case 'x': // Extra features
+		feats := stk.PopU64()
+		if feats&2 != 0 { // FARTTY_FEAT_TERMINAL_SIZE
+			tv.SendFar2lTerminalSize()
+		}
+	case 'p': // Palette info
+		reply.PushU8(0)  // reserved
+		reply.PushU8(24) // bits
+	case 'i': // Image operations (stub)
+		_ = stk.PopU8() // subcmd
+		reply.PushU8(0)
+	}
+
+	if len(reply) > 0 || id != 0 {
+		reply.PushU8(id)
+		b64 := base64.StdEncoding.EncodeToString(reply)
+		if tv.pty != nil {
+			tv.pty.Write([]byte("\x1b_far2l" + b64 + "\x07"))
+		}
+	}
+}
+
+func (tv *TerminalView) SendFar2lTerminalSize() {
+	stk := vtinput.Far2lStack{}
+	stk.PushU16(uint16(tv.Height))
+	stk.PushU16(uint16(tv.Width))
+	stk.PushU8('S')
+	b64 := base64.StdEncoding.EncodeToString(stk)
+	if tv.pty != nil {
+		tv.pty.Write([]byte("\x1b_f2l:" + b64 + "\x07"))
+	}
+}

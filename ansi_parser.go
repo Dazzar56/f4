@@ -392,6 +392,15 @@ func (p *AnsiParser) handleOSC() {
 	}
 }
 
+func (p *AnsiParser) handleAPC() {
+	s := p.CurParam.String()
+	p.CurParam.Reset()
+
+	if strings.HasPrefix(s, "far2l") {
+		p.term.HandleFar2lAPC(s)
+	}
+}
+
 func (p *AnsiParser) handleSGR(args []int, i int) int {
 	if len(args) == 0 {
 		p.Attr = DefaultTermAttr

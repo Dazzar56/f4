@@ -6,6 +6,7 @@ import (
 
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
+	"github.com/unxed/vtinput"
 	"golang.org/x/term"
 )
 
@@ -68,6 +69,8 @@ func InitCore() *vtui.ScreenBuf {
 	vtui.FrameManager.Init(scr)
 	SetDefaultF4Palette()
 	InitLang()
+	vtinput.Logger = vtui.DebugLog // Pipe vtinput logs to vtui's debug logger
+	vtui.GlobalClipboardAccessManager = NewF4ClipboardAuth()
 	RegisterDrive("&1. Local ( / )", func() vfs.VFS { return vfs.NewOSVFS("/") })
 	RegisterDrive("&2. Home ( ~ )", func() vfs.VFS { home, _ := os.UserHomeDir(); return vfs.NewOSVFS(home) })
 

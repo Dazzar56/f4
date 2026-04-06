@@ -1,8 +1,11 @@
 package main
 
 import (
+	"encoding/base64"
+	"strings"
 	"testing"
 
+	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
 
@@ -30,6 +33,33 @@ func TestTerminalView_SaveRestoreCursor(t *testing.T) {
 	tv.RestoreCursor()
 	if tv.CursorX != 42 || tv.CursorY != 12 {
 		t.Errorf("Expected restored cursor at (42, 12), got (%d, %d)", tv.CursorX, tv.CursorY)
+	}
+}
+func TestTerminalView_HandleFar2lAPC(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	pty := &mockPty{}
+	tv.pty = pty
+
+	// Simulate far2l1 (enable)
+	tv.HandleFar2lAPC("far2l1")
+	if string(pty.written) != "\x1b_far2lok\x07" {
+		t.Errorf("Expected far2lok response, got %q", string(pty.written))
+	}
+
+	// Simulate far2l0 (disable)
+	tv.HandleFar2lAPC("far2l0") // Should not panic or write anything
+
+	// Simulate window size request via f2l
+	stk := vtinput.Far2lStack{}
+	stk.PushU8('w') // window size
+	stk.PushU8(0)   // id
+	b64 := base64.StdEncoding.EncodeToString(stk)
+
+	pty.written = nil // reset
+	tv.HandleFar2lAPC("far2l:" + b64)
+
+	if len(pty.written) == 0 || !strings.HasPrefix(string(pty.written), "\x1b_far2l") {
+		t.Errorf("Expected window size reply, got %q", string(pty.written))
 	}
 }
 
