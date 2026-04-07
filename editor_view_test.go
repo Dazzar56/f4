@@ -2672,3 +2672,106 @@ func TestEditorView_Undo_CleanState(t *testing.T) {
 		t.Error("Should BE modified after redo")
 	}
 }
+func TestEditorView_WordJumps_FarSpec(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	// line one (8 bytes) + \n + line two (8 bytes)
+	pt := piecetable.New([]byte("line one\nline two"))
+	ev := NewEditorView(pt, nil, "")
+	ev.li.Rebuild(pt) // Важно: пересобираем индексы
+	ev.SetPosition(0, 0, 80, 24)
+	ev.CursorLine = 0
+	ev.CursorPos = 0
+
+	// 1. Прыжок внутри строки к началу второго слова "one" (оффсет 5)
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT, ControlKeyState: vtinput.LeftCtrlPressed})
+	if ev.CursorPos != 5 { t.Errorf("Jump inside failed: expected 5, got %d", ev.CursorPos) }
+
+	// 2. Прыжок к концу строки (EOL оффсет 8)
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT, ControlKeyState: vtinput.LeftCtrlPressed})
+	if ev.CursorPos != 8 { t.Errorf("Jump to EOL failed: expected 8, got %d", ev.CursorPos) }
+
+	// 3. Прыжок через границу строки (EOL -> 0 следующей)
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT, ControlKeyState: vtinput.LeftCtrlPressed})
+	if ev.CursorLine != 1 || ev.CursorPos != 0 {
+		t.Errorf("Line cross failed: expected 1:0, got %d:%d", ev.CursorLine, ev.CursorPos)
+	}
+
+	// 4. Прыжок назад через начало строки (BOL -> End предыдущей)
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_LEFT, ControlKeyState: vtinput.LeftCtrlPressed})
+	if ev.CursorLine != 0 || ev.CursorPos != 8 {
+		t.Errorf("Line cross back failed: expected 0:8, got %d:%d", ev.CursorLine, ev.CursorPos)
+	}
+}
+
+func TestEditorView_WordJumps_VisualWrap(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	// Текст без пробелов. Ширина 5. Перенос на 5-м символе.
+	pt := piecetable.New([]byte("0123456789"))
+	ev := NewEditorView(pt, nil, "")
+	ev.li.Rebuild(pt)
+	ev.WordWrap = true
+	// Контентная ширина 5
+	ev.SetPosition(0, 0, 5, 10)
+	ev.CursorPos = 0
+
+	// Согласно спецификации, прыжок не может пересекать границу визуальной строки.
+	// В текущей реализации f4 курсор останавливается на последнем символе видимой строки (индекс 4).
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT, ControlKeyState: vtinput.LeftCtrlPressed})
+	if ev.CursorPos != 4 {
+		t.Errorf("Visual wrap stop fail: expected 4, got %d", ev.CursorPos)
+	}
+}
+
+func TestEditorView_WordJumps_EmptyLines(t *testing.T) {
+	pt := piecetable.New([]byte("top\n\n\nend"))
+	ev := NewEditorView(pt, nil, "")
+	ev.li.Rebuild(pt)
+	ev.CursorLine = 0
+	ev.CursorPos = 3
+
+	// Шагаем через пустые строки (два \n подряд)
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT, ControlKeyState: vtinput.LeftCtrlPressed})
+	if ev.CursorLine != 1 { t.Errorf("Step 1 fail: line %d", ev.CursorLine) }
+
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT, ControlKeyState: vtinput.LeftCtrlPressed})
+	if ev.CursorLine != 2 { t.Errorf("Step 2 fail: line %d", ev.CursorLine) }
+
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT, ControlKeyState: vtinput.LeftCtrlPressed})
+	if ev.CursorLine != 3 || ev.CursorPos != 0 { t.Errorf("Step 3 fail: %d:%d", ev.CursorLine, ev.CursorPos) }
+}
+func TestEditorView_WordSelection_Multiline(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	// "line1\nline2"
+	pt := piecetable.New([]byte("line1\nline2"))
+	ev := NewEditorView(pt, nil, "")
+	ev.li.Rebuild(pt)
+	ev.CursorPos = 0
+
+	// 1. Выделяем всё первое слово (до \n)
+	ev.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_RIGHT,
+		ControlKeyState: vtinput.LeftCtrlPressed | vtinput.ShiftPressed,
+	})
+
+	if ev.selAnchorOffset != 0 || ev.CursorPos != 5 {
+		t.Errorf("Initial multiline selection fail: anchor %d, pos %d", ev.selAnchorOffset, ev.CursorPos)
+	}
+
+	// 2. Прыгаем через EOL. Выделение должно расшириться на вторую строку
+	ev.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_RIGHT,
+		ControlKeyState: vtinput.LeftCtrlPressed | vtinput.ShiftPressed,
+	})
+
+	// Теперь курсор на 1:0. В байтах это 6 (line1 + \n)
+	if ev.CursorLine != 1 || ev.CursorPos != 0 {
+		t.Errorf("Selection cursor cross-line fail: %d:%d", ev.CursorLine, ev.CursorPos)
+	}
+
+	min, max := ev.getSelectionRange()
+	if min != 0 || max != 6 {
+		t.Errorf("Selection range across EOL fail: [%d:%d], expected [0:6]", min, max)
+	}
+}
