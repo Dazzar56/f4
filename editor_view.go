@@ -235,6 +235,10 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 				if currIdx+1 < ev.li.LineCount() {
 					lEnd = ev.li.GetLineOffset(currIdx + 1)
 				}
+				// Prevent highlighter from crashing on huge binary lines
+				if lEnd - lStart > 64*1024 {
+					lEnd = lStart + 64*1024
+				}
 
 				var prevState any
 				if currIdx > 0 {
@@ -1062,7 +1066,13 @@ func (ev *EditorView) showSearchDialog() {
 }
 func (ev *EditorView) getLogicalLineRunes(line int) []rune {
 	lineStart := ev.li.GetLineOffset(line)
-	lineData, _ := ev.pt.GetRange(lineStart, ev.getLineLength(line))
+	lineLen := ev.getLineLength(line)
+	// Prevent OOM on huge binary lines for word navigation
+	const maxRuneFetch = 32 * 1024
+	if lineLen > maxRuneFetch {
+		lineLen = maxRuneFetch
+	}
+	lineData, _ := ev.pt.GetRange(lineStart, lineLen)
 	return []rune(string(lineData))
 }
 func (ev *EditorView) getLineLength(line int) int {
@@ -1264,6 +1274,9 @@ func (ev *EditorView) PasteText(text string) {
 }
 func (ev *EditorView) DeleteSelection() {
 	min, max := ev.getSelectionRange()
+	// Safety clamp to prevent panic on stale selection ranges
+	if min < 0 { min = 0 }
+	if max > ev.pt.Size() { max = ev.pt.Size() }
 	if max > min {
 		if ev.indexCancel != nil {
 			ev.indexCancel()
