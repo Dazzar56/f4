@@ -362,7 +362,7 @@ func runServer(sockPath string) {
 }
 
 func runSessionPicker(sessions []SessionInfo) *SessionInfo {
-	restore, err := vtinput.Enable()
+	restore, err := vtui.PrepareTerminal()
 	if err != nil {
 		return nil
 	}

@@ -31,7 +31,7 @@ func runSessionPicker(sessions []SessionInfo) *SessionInfo {
 func ManageSessions() {
 	InitCore()
 
-	restore, err := vtinput.Enable()
+	restore, err := vtui.PrepareTerminal()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		return
