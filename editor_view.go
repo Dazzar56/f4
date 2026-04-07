@@ -418,7 +418,6 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		}
 	}
 
-
 	// Any key that can reach this point and is not a pure navigation key 
 	// should stop the background indexer to prevent index corruption.
 	if !ev.edited {
@@ -947,12 +946,15 @@ func (ev *EditorView) StartIndexing() {
 		li := ev.li
 		maxSize := buf.Size()
 
+		// BATCHING OPTIMIZATION: Collect offsets and update UI in larger chunks
+		// to reduce main thread overhead and prevent "redraw storms".
+		pendingOffsets := make([]int, 0, 1000)
+
 		for absPos < maxSize {
 			select {
 			case <-ctx.Done(): return
 			default:
 			}
-
 			if ev.IsDone() { return }
 
 			data, err := buf.Read(absPos, chunkSize)
@@ -962,24 +964,31 @@ func (ev *EditorView) StartIndexing() {
 			}
 			if err != nil { break }
 
-			var newOffsets []int
 			for i, b := range data {
 				if b == '\n' {
-					newOffsets = append(newOffsets, absPos+i+1)
+					pendingOffsets = append(pendingOffsets, absPos+i+1)
 				}
 			}
 
-			if len(newOffsets) > 0 {
+			absPos += len(data)
+
+			// Update UI if we have enough lines or reached EOF
+			if len(pendingOffsets) >= 500 || absPos >= maxSize {
+				currentBatch := pendingOffsets
+				pendingOffsets = make([]int, 0, 1000)
+
 				vtui.FrameManager.PostTask(func() {
 					if ctx.Err() != nil || ev.edited || ev.editSession != sessionID {
 						return
 					}
-					li.AppendOffsets(newOffsets, maxSize)
-					ev.engine.InvalidateCache()
+					// Incremental update: we only need to invalidate visual cache
+					// from the line that was previously the "last" one.
+					lastLineBefore := li.LineCount() - 1
+					li.AppendOffsets(currentBatch, maxSize)
+					ev.engine.InvalidateFrom(lastLineBefore)
 					vtui.FrameManager.Redraw()
 				})
 			}
-			absPos += len(data)
 		}
 		vtui.DebugLog("INDEXER: Finished for %s", ev.filePath)
 	}()

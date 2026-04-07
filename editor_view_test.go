@@ -1147,6 +1147,40 @@ func TestEditorView_UnsavedChanges(t *testing.T) {
 		t.Error("Editor should be modified after deletion")
 	}
 }
+
+func TestEditorView_Indexer_BatchingIntegrity(t *testing.T) {
+	// Verifies that the optimized batching indexer doesn't miss lines.
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	content := "L1\nL2\nL3\nL4\nL5\n"
+	tmpFile := t.TempDir() + "/batch.txt"
+	os.WriteFile(tmpFile, []byte(content), 0644)
+
+	v := vfs.NewOSVFS(t.TempDir())
+	f, _ := v.Open(context.Background(), tmpFile)
+	buf := NewAsyncBuffer(context.Background(), f)
+	pt := piecetable.NewWithBuffer(buf)
+	ev := NewEditorView(pt, v, tmpFile)
+	ev.asyncBuf = buf
+	ev.file = f
+
+	ev.StartIndexing()
+
+	// Wait and pump tasks
+	timeout := time.After(1 * time.Second)
+	for ev.li.LineCount() < 6 {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatalf("Batch indexer timed out. Lines found: %d", ev.li.LineCount())
+		}
+	}
+
+	if ev.li.LineCount() != 6 {
+		t.Errorf("Indexer missed lines. Expected 6, got %d", ev.li.LineCount())
+	}
+}
 func TestEditorView_Indexer_ModifierSafety(t *testing.T) {
 	// Regression test for the Ctrl+End hang:
 	// Modifier keys should NOT stop the indexer.
