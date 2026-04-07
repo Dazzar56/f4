@@ -2251,3 +2251,61 @@ func TestEditorView_Save_RetryAfterFailure(t *testing.T) {
 		t.Errorf("Memory state inconsistent after successful retry. Got %q", waitPtString(t, ev.pt))
 	}
 }
+func TestEditorView_BinaryRobustness(t *testing.T) {
+	// Tests that the editor doesn't crash on huge lines or out-of-bounds cursors.
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	t.Run("Empty file length", func(t *testing.T) {
+		ev := NewEditorView(piecetable.New(nil), nil, "")
+		if l := ev.getLineLength(0); l != 0 {
+			t.Errorf("Empty file: expected length 0, got %d", l)
+		}
+	})
+
+	t.Run("Single byte file", func(t *testing.T) {
+		ev := NewEditorView(piecetable.New([]byte("A")), nil, "")
+		if l := ev.getLineLength(0); l != 1 {
+			t.Errorf("Single byte: expected length 1, got %d", l)
+		}
+	})
+
+	t.Run("Huge binary line", func(t *testing.T) {
+		// 1MB of binary data with NO newlines
+		data := make([]byte, 1024*1024)
+		for i := range data { data[i] = 0x01 }
+		ev := NewEditorView(piecetable.New(data), nil, "")
+
+		// This used to load the whole 1MB, now it should be instant
+		start := time.Now()
+		l := ev.getLineLength(0)
+		if time.Since(start) > 10*time.Millisecond {
+			t.Error("getLineLength is too slow on long lines (likely loading whole buffer)")
+		}
+		if l != 1024*1024 {
+			t.Errorf("Huge line: expected %d, got %d", 1024*1024, l)
+		}
+	})
+
+	t.Run("Cursor clamping", func(t *testing.T) {
+		ev := NewEditorView(piecetable.New([]byte("abc")), nil, "")
+		ev.SetPosition(0, 0, 10, 10)
+
+		// Manually set invalid state
+		ev.CursorLine = 100
+		ev.CursorPos = 500
+
+		// Should not panic, should clamp to 0:3
+		ev.ensureCursorVisible()
+
+		if ev.CursorLine != 0 || ev.CursorPos != 3 {
+			t.Errorf("Clamping failed: got %d:%d, want 0:3", ev.CursorLine, ev.CursorPos)
+		}
+
+		ev.CursorLine = -1
+		ev.CursorPos = -1
+		ev.ensureCursorVisible()
+		if ev.CursorLine != 0 || ev.CursorPos != 0 {
+			t.Errorf("Negative clamping failed: got %d:%d, want 0:0", ev.CursorLine, ev.CursorPos)
+		}
+	})
+}

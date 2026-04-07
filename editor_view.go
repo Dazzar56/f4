@@ -830,9 +830,19 @@ func (ev *EditorView) fillCells(target []vtui.CharInfo, data []byte, defaultAttr
 }
 
 func (ev *EditorView) ensureCursorVisible() {
+	// Safety constraints for binary files or corrupted indices
+	if ev.CursorLine < 0 { ev.CursorLine = 0 }
+	if ev.CursorLine >= ev.li.LineCount() { ev.CursorLine = ev.li.LineCount() - 1 }
+	
+	lineLen := ev.getLineLength(ev.CursorLine)
+	if ev.CursorPos < 0 { ev.CursorPos = 0 }
+	if ev.CursorPos > lineLen { ev.CursorPos = lineLen }
+
 	curOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 	vRow, vCol := ev.engine.LogicalToVisual(curOffset)
-	vtui.DebugLog("EDITOR_NAV: Cursor: %d:%d (Off:%d) -> Visual: %d:%d", ev.CursorLine, ev.CursorPos, curOffset, vRow, vCol)
+	vtui.DebugLog("EDITOR_NAV: Cursor: %d:%d (Off:%d) -> Visual: %d:%d, TotalVRows: %d", 
+		ev.CursorLine, ev.CursorPos, curOffset, vRow, vCol, ev.engine.GetTotalVisualRows())
+	
 	width := ev.X2 - ev.X1 + 1
 	height := ev.Y2 - ev.Y1
 	if width <= 0 || height <= 0 { return }
@@ -1054,7 +1064,8 @@ func (ev *EditorView) getLineLength(line int) int {
 		return 0
 	}
 	start := ev.li.GetLineOffset(line)
-	end := ev.pt.Size()
+	size := ev.pt.Size()
+	end := size
 	if line+1 < ev.li.LineCount() {
 		end = ev.li.GetLineOffset(line + 1)
 	}
@@ -1064,16 +1075,21 @@ func (ev *EditorView) getLineLength(line int) int {
 		return 0
 	}
 
-	data, err := ev.pt.GetRange(start, totalLen)
-	if err == piecetable.ErrLoading || len(data) == 0 {
+	// Use a small buffer to check just the end of the line for line breaks
+	// to avoid loading massive binary lines entirely.
+	checkLen := 2
+	if totalLen < checkLen { checkLen = totalLen }
+
+	data, err := ev.pt.GetRange(start + totalLen - checkLen, checkLen)
+	if err != nil || len(data) == 0 {
 		return totalLen
 	}
 
 	// Safely decrease length if there are line breaks at the end.
-	// First check for \n, then (if present) check for \r before it.
-	if totalLen > 0 && data[totalLen-1] == '\n' {
+	// We work with the end of the returned buffer.
+	if data[len(data)-1] == '\n' {
 		totalLen--
-		if totalLen > 0 && data[totalLen-1] == '\r' {
+		if len(data) > 1 && data[len(data)-2] == '\r' {
 			totalLen--
 		}
 	}
