@@ -133,6 +133,13 @@ func (ev *EditorView) GetTopBar() *TopBar {
 
 // SetText replaces the entire content of the editor.
 func (ev *EditorView) SetText(text string) {
+	if ev.indexCancel != nil {
+		ev.indexCancel()
+		ev.indexCancel = nil
+	}
+	ev.edited = true
+	ev.editSession++
+
 	ev.pt = piecetable.New([]byte(text))
 	ev.li.Rebuild(ev.pt)
 	ev.CursorLine = 0
@@ -335,6 +342,12 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		} else {
 			ev.pasting = false
 			if len(ev.pasteBuffer) > 0 {
+				if ev.indexCancel != nil {
+					ev.indexCancel()
+					ev.indexCancel = nil
+				}
+				ev.edited = true
+
 				if ev.selActive { ev.DeleteSelection() }
 				offset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 				data := []byte(string(ev.pasteBuffer))
@@ -1206,6 +1219,12 @@ func (ev *EditorView) CopySelection() {
 }
 
 func (ev *EditorView) PasteText(text string) {
+	if ev.indexCancel != nil {
+		ev.indexCancel()
+		ev.indexCancel = nil
+	}
+	ev.edited = true
+
 	if ev.selActive { ev.DeleteSelection() }
 	offset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 	data := []byte(text)
@@ -1224,6 +1243,12 @@ func (ev *EditorView) PasteText(text string) {
 func (ev *EditorView) DeleteSelection() {
 	min, max := ev.getSelectionRange()
 	if max > min {
+		if ev.indexCancel != nil {
+			ev.indexCancel()
+			ev.indexCancel = nil
+		}
+		ev.edited = true
+
 		ev.modified = true
 		ev.pt.Delete(min, max-min)
 		// Incremental update

@@ -48,9 +48,19 @@ func NewViewerView(ctx context.Context, v vfs.VFS, path string) (*ViewerView, er
 	vv.scrollBar = vtui.NewScrollBar(0, 0, 0)
 	vv.scrollBar.SetOwner(vv)
 	vv.scrollBar.OnScroll = func(v int) {
-		// Used during dragging: snap to line start
-		vv.TopOffset = vv.backend.FindLineStart(int64(v))
-		vtui.FrameManager.Redraw()
+		newOff := int64(v)
+		if vv.HexMode {
+			newOff &= ^int64(0xF)
+		} else {
+			// Optimization: during fast drag, don't FindLineStart every pixel
+			// unless we are close to the target or moving slowly.
+			// For now, simple snap.
+			newOff = vv.backend.FindLineStart(newOff)
+		}
+		if newOff != vv.TopOffset {
+			vv.TopOffset = newOff
+			vtui.FrameManager.Redraw()
+		}
 	}
 	vv.scrollBar.OnStep = func(step int) {
 		// Used for arrows and track clicks: perform logical steps
