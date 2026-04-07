@@ -259,7 +259,12 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 			if logIdx < len(ev.lineStates) && lineSyntax == nil {
 				// State was already cached, but we need the actual attributes for the current visible line
 				lStart := ev.li.GetLineOffset(logIdx)
-				lineData, _ := ev.pt.GetRange(lStart, lineLen)
+				// Re-apply highlighter OOM protection for the rendering path
+				highlightLen := lineLen
+				if highlightLen > 64*1024 {
+					highlightLen = 64*1024
+				}
+				lineData, _ := ev.pt.GetRange(lStart, highlightLen)
 				var prevState any
 				if logIdx > 0 { prevState = ev.lineStates[logIdx-1] }
 				lineSyntax, _ = ev.highlighter.Highlight(string(lineData), prevState, bgAttr)

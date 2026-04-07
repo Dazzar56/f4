@@ -15,6 +15,20 @@ import (
 	"github.com/unxed/vtui/piecetable"
 	"github.com/unxed/vtinput"
 )
+// mockCrashingHighlighter fails the test if it receives a line longer than the safety limit.
+type mockCrashingHighlighter struct {
+	t *testing.T
+}
+const highlighterLimit = 64 * 1024
+func (m *mockCrashingHighlighter) Highlight(line string, prev any, base uint64) ([]uint64, any) {
+	if len(line) > highlighterLimit {
+		m.t.Errorf("FATAL: Highlighter received a line of %d bytes, which is over the safety limit of %d", len(line), highlighterLimit)
+	}
+	return nil, nil
+}
+func (m *mockCrashingHighlighter) Name() string { return "CrashingMock" }
+func (m *mockCrashingHighlighter) Match(filename, content string) bool { return true }
+func (m *mockCrashingHighlighter) Create(filename, content string) vtui.Highlighter { return m }
 type mockStatefulHighlighter struct {
 	statesComputed int
 }
@@ -2344,5 +2358,67 @@ func TestEditorView_DeleteBrokenUTF8(t *testing.T) {
 	}
 	if pt.String() != " A" {
 		t.Errorf("Expected ' A', got %q", pt.String())
+	}
+}
+func TestEditorView_Highlighter_OOM_Protection(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	// Create a single line of 100KB, which is > 64KB limit
+	longLine := make([]byte, 100*1024)
+	pt := piecetable.New(longLine)
+	ev := NewEditorView(pt, nil, "test.bin")
+	ev.SetPosition(0, 0, 80, 10)
+	ev.highlighter = &mockCrashingHighlighter{t: t}
+
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+
+	// If the fix is working, the mock highlighter will not receive the full 100KB
+	// and the test will pass without calling t.Errorf.
+	ev.Show(scr)
+}
+
+func TestEditorView_WordNavigation_OOM_Protection(t *testing.T) {
+	// Create a 100KB line, which is > 32KB rune fetch limit
+	longLine := strings.Repeat("a", 100*1024)
+	pt := piecetable.New([]byte(longLine))
+	ev := NewEditorView(pt, nil, "")
+	ev.CursorPos = 50 * 1024
+
+	// Without the fix, this would hang. With the fix, it's instant.
+	done := make(chan bool)
+	go func() {
+		ev.ProcessKey(&vtinput.InputEvent{
+			Type:            vtinput.KeyEventType,
+			KeyDown:         true,
+			VirtualKeyCode:  vtinput.VK_RIGHT,
+			ControlKeyState: vtinput.LeftCtrlPressed,
+		})
+		done <- true
+	}()
+
+	select {
+	case <-done:
+		// Success
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("Word navigation on long line timed out, OOM protection likely failed.")
+	}
+}
+
+func TestEditorView_DeleteSelection_Panic_Protection(t *testing.T) {
+	pt := piecetable.New([]byte("hello"))
+	ev := NewEditorView(pt, nil, "")
+
+	// Manually set an invalid selection range
+	ev.selActive = true
+	ev.selAnchorOffset = -100 // Invalid start
+	ev.CursorPos = 100        // Invalid end
+
+	// This call should not panic due to the new safety clamps.
+	// The clamps should resolve the range to [0:5].
+	ev.DeleteSelection()
+
+	if pt.String() != "" {
+		t.Errorf("Expected selection to be clamped to [0:5] and delete everything, got %q", pt.String())
 	}
 }
