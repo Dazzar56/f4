@@ -8,8 +8,9 @@ import (
 
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/f4/plugins/archive"
-	"github.com/unxed/f4/plugins/netfox"
+	"github.com/unxed/f4/plugins/chroma"
 	"github.com/unxed/f4/plugins/hello_internal"
+	"github.com/unxed/f4/plugins/netfox"
 	"github.com/unxed/vtui"
 )
 
@@ -54,7 +55,7 @@ func (pm *PluginManager) LoadAll() {
 
 func (pm *PluginManager) loadInternal() {
 	plugins := []Plugin{
-		&ChromaInternalPlugin{},
+		&chroma.Plugin{},
 		&hello_internal.InternalHelloPlugin{},
 		&archive.ArchivePlugin{},
 		&netfox.NetFoxPlugin{},
@@ -120,12 +121,3 @@ func (pm *PluginManager) CloseAll() {
 	}
 	pm.plugins = nil
 }
-// ChromaInternalPlugin wraps the chroma highlighting logic as a standard plugin.
-type ChromaInternalPlugin struct{}
-
-func (p *ChromaInternalPlugin) Init(api vfs.HostAPI) error {
-	api.RegisterHighlighter(&ChromaProvider{})
-	return nil
-}
-func (p *ChromaInternalPlugin) Close() error { return nil }
-func (p *ChromaInternalPlugin) GetName() string { return "Internal Syntax Highlighter" }

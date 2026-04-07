@@ -1,12 +1,24 @@
-package main
+package chroma
 
 import (
 	"github.com/alecthomas/chroma/v2"
 	"github.com/alecthomas/chroma/v2/lexers"
+	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 )
 
-// SyntaxMap связывает типы токенов Chroma с цветами f4
+// Plugin is the internal plugin wrapper for the Chroma syntax highlighter.
+type Plugin struct{}
+
+func (p *Plugin) Init(api vfs.HostAPI) error {
+	api.RegisterHighlighter(&ChromaProvider{})
+	return nil
+}
+
+func (p *Plugin) Close() error { return nil }
+func (p *Plugin) GetName() string { return "Internal Syntax Highlighter (Chroma)" }
+
+// SyntaxMap links Chroma token types to f4 colors
 var SyntaxMap = map[chroma.TokenType]uint32{
 	chroma.Comment:        0x555753, // Gray
 	chroma.Keyword:        0x729FCF, // Light Blue
@@ -18,9 +30,8 @@ var SyntaxMap = map[chroma.TokenType]uint32{
 	chroma.GenericHeading: 0x729FCF,
 }
 
-// GetSyntaxAttr возвращает атрибуты vtui для конкретного типа токена
+// GetSyntaxAttr returns vtui attributes for a specific token type
 func GetSyntaxAttr(t chroma.TokenType, baseAttr uint64) uint64 {
-	// Ищем наиболее точное совпадение (Keyword -> KeywordConstant и т.д.)
 	for t != chroma.None {
 		if color, ok := SyntaxMap[t]; ok {
 			return vtui.SetRGBFore(baseAttr, color)
@@ -34,7 +45,7 @@ func GetSyntaxAttr(t chroma.TokenType, baseAttr uint64) uint64 {
 	return baseAttr
 }
 
-// ChromaProvider implements HighlighterProvider using the chroma library.
+// ChromaProvider implements vtui.HighlighterProvider using the chroma library.
 type ChromaProvider struct{}
 
 func (p *ChromaProvider) Name() string { return "Chroma" }
@@ -55,7 +66,7 @@ func (p *ChromaProvider) Create(filename string, content string) vtui.Highlighte
 	return &ChromaHighlighter{lexer: lexer}
 }
 
-// ChromaHighlighter implements Highlighter.
+// ChromaHighlighter implements vtui.Highlighter.
 type ChromaHighlighter struct {
 	lexer chroma.Lexer
 }

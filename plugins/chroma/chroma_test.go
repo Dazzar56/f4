@@ -1,4 +1,4 @@
-package main
+package chroma
 
 import (
 	"testing"
@@ -10,19 +10,19 @@ func TestGetSyntaxAttr_Fallbacks(t *testing.T) {
 	vtui.SetDefaultPalette()
 	base := uint64(0)
 
-	// 1. Точное совпадение (Keyword)
+	// 1. Exact match (Keyword)
 	attr := GetSyntaxAttr(chroma.Keyword, base)
 	if vtui.GetRGBFore(attr) != SyntaxMap[chroma.Keyword] {
 		t.Errorf("Expected keyword color, got %06X", vtui.GetRGBFore(attr))
 	}
 
-	// 2. Наследование (KeywordConstant -> Keyword)
+	// 2. Inheritance (KeywordConstant -> Keyword)
 	attrSub := GetSyntaxAttr(chroma.KeywordConstant, base)
 	if vtui.GetRGBFore(attrSub) != SyntaxMap[chroma.Keyword] {
 		t.Errorf("Expected inherited keyword color for KeywordConstant, got %06X", vtui.GetRGBFore(attrSub))
 	}
 
-	// 3. Отсутствие совпадения -> возврат base
+	// 3. No match -> return base
 	attrNone := GetSyntaxAttr(chroma.Text, base)
 	if attrNone != base {
 		t.Error("Expected base attribute for unknown token type")
@@ -31,9 +31,9 @@ func TestGetSyntaxAttr_Fallbacks(t *testing.T) {
 
 func TestChromaHighlighter_HighlightLogic(t *testing.T) {
 	provider := &ChromaProvider{}
-	// Создаем хайлайтер для Go
+	// Create highlighter for Go
 	h := provider.Create("test.go", "package main")
-	
+
 	line := "func main() {"
 	attrs, nextState := h.Highlight(line, nil, 0)
 
@@ -41,7 +41,7 @@ func TestChromaHighlighter_HighlightLogic(t *testing.T) {
 		t.Errorf("Attributes length mismatch: expected %d, got %d", len(line), len(attrs))
 	}
 
-	// Первые 4 символа ("func") должны быть подсвечены как Keyword
+	// First 4 chars ("func") should be highlighted as Keyword
 	kwColor := SyntaxMap[chroma.Keyword]
 	for i := 0; i < 4; i++ {
 		if vtui.GetRGBFore(attrs[i]) != kwColor {
@@ -50,6 +50,6 @@ func TestChromaHighlighter_HighlightLogic(t *testing.T) {
 	}
 
 	if nextState != nil {
-		t.Log("Chroma highlighter returned a state (expected for multi-line support in future)")
+		t.Log("Chroma highlighter returned a state")
 	}
 }
