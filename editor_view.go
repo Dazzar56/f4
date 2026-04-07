@@ -1,7 +1,6 @@
 package main
 
 import (
-	"unicode"
 	"unicode/utf8"
 	"fmt"
 	"path/filepath"
@@ -700,33 +699,59 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		handleNav()
 		// Jump by word only if it's the real Left arrow + Ctrl
 		if ctrl && !isAlias {
-			runes := ev.getLogicalLineRunes(ev.CursorLine)
-
-			// Find current rune position
-			currRuneIdx := 0
-			byteAcc := 0
-			for i, r := range runes {
-				if byteAcc >= ev.CursorPos {
-					currRuneIdx = i
-					break
+			if ev.CursorPos > 0 {
+				runes := ev.getLogicalLineRunes(ev.CursorLine)
+				currRuneIdx := 0
+				byteAcc := 0
+				for i, r := range runes {
+					if byteAcc >= ev.CursorPos {
+						currRuneIdx = i
+						break
+					}
+					byteAcc += utf8.RuneLen(r)
+					if i == len(runes)-1 {
+						currRuneIdx = len(runes)
+					}
 				}
-				byteAcc += utf8.RuneLen(r)
-				if i == len(runes)-1 { currRuneIdx = len(runes) }
-			}
 
-			if currRuneIdx > 0 {
-				pos := currRuneIdx
-				// Skip spaces
-				for pos > 0 && unicode.IsSpace(runes[pos-1]) { pos-- }
-				// Skip word
-				for pos > 0 && !unicode.IsSpace(runes[pos-1]) { pos-- }
+				if currRuneIdx > 0 {
+					lineStart := ev.li.GetLineOffset(ev.CursorLine)
+					startVRow, _ := ev.engine.LogicalToVisual(lineStart + ev.CursorPos)
 
-				// Convert rune index back to byte offset
-				newBytePos := 0
-				for i := 0; i < pos; i++ {
-					newBytePos += utf8.RuneLen(runes[i])
+					currRuneIdx--
+					ev.CursorPos = 0
+					for i := 0; i < currRuneIdx; i++ {
+						ev.CursorPos += utf8.RuneLen(runes[i])
+					}
+					if shift {
+						handleNav()
+					}
+
+					vRow, _ := ev.engine.LogicalToVisual(lineStart + ev.CursorPos)
+					if vRow == startVRow {
+						for currRuneIdx > 0 {
+							prev, curr := runes[currRuneIdx-1], runes[currRuneIdx]
+							pCat, cCat := getCharCategory(prev), getCharCategory(curr)
+							if (pCat == catSpace && cCat == catWord) ||
+								(pCat == catSpace && cCat == catDivider) ||
+								(pCat == catDivider && cCat == catWord) {
+								break
+							}
+							currRuneIdx--
+							ev.CursorPos = 0
+							for i := 0; i < currRuneIdx; i++ {
+								ev.CursorPos += utf8.RuneLen(runes[i])
+							}
+							if shift {
+								handleNav()
+							}
+							vRow, _ = ev.engine.LogicalToVisual(lineStart + ev.CursorPos)
+							if vRow != startVRow {
+								break
+							}
+						}
+					}
 				}
-				ev.CursorPos = newBytePos
 			} else if ev.CursorLine > 0 {
 				ev.CursorLine--
 				ev.CursorPos = ev.getLineLength(ev.CursorLine)
@@ -757,32 +782,83 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		lineLen := ev.getLineLength(ev.CursorLine)
 		// Jump by word only if it's the real Right arrow + Ctrl
 		if ctrl && !isAlias {
-			runes := ev.getLogicalLineRunes(ev.CursorLine)
-
-			// Find current rune position
-			currRuneIdx := len(runes)
-			byteAcc := 0
-			for i, r := range runes {
-				if byteAcc >= ev.CursorPos {
-					currRuneIdx = i
-					break
+			lineLen := ev.getLineLength(ev.CursorLine)
+			if ev.CursorPos < lineLen {
+				runes := ev.getLogicalLineRunes(ev.CursorLine)
+				currRuneIdx := len(runes)
+				byteAcc := 0
+				for i, r := range runes {
+					if byteAcc >= ev.CursorPos {
+						currRuneIdx = i
+						break
+					}
+					byteAcc += utf8.RuneLen(r)
 				}
-				byteAcc += utf8.RuneLen(r)
-			}
 
-			if currRuneIdx < len(runes) {
-				pos := currRuneIdx
-				// Skip word
-				for pos < len(runes) && !unicode.IsSpace(runes[pos]) { pos++ }
-				// Skip spaces
-				for pos < len(runes) && unicode.IsSpace(runes[pos]) { pos++ }
+				if currRuneIdx < len(runes) {
+					lineStart := ev.li.GetLineOffset(ev.CursorLine)
+					startVRow, _ := ev.engine.LogicalToVisual(lineStart + ev.CursorPos)
 
-				// Convert rune index back to byte offset
-				newBytePos := 0
-				for i := 0; i < pos; i++ {
-					newBytePos += utf8.RuneLen(runes[i])
+					currRuneIdx++
+					ev.CursorPos = 0
+					for i := 0; i < currRuneIdx; i++ {
+						ev.CursorPos += utf8.RuneLen(runes[i])
+					}
+					if shift {
+						handleNav()
+					}
+
+					vRow, _ := ev.engine.LogicalToVisual(lineStart + ev.CursorPos)
+					if vRow == startVRow {
+						for currRuneIdx < len(runes) {
+							prev, curr := runes[currRuneIdx-1], runes[currRuneIdx]
+							pCat, cCat := getCharCategory(prev), getCharCategory(curr)
+							stop := false
+							if pCat == catWord && cCat == catDivider {
+								stop = true
+							}
+							if pCat == catSpace && cCat == catWord {
+								stop = true
+							}
+							if pCat == catSpace && cCat == catDivider {
+								stop = true
+							}
+							if pCat == catDivider && cCat == catWord {
+								stop = true
+							}
+							if pCat == catDivider && cCat == catDivider && prev != curr {
+								stop = true
+							}
+
+							if stop {
+								break
+							}
+
+							currRuneIdx++
+							ev.CursorPos = 0
+							for i := 0; i < currRuneIdx; i++ {
+								ev.CursorPos += utf8.RuneLen(runes[i])
+							}
+							if shift {
+								handleNav()
+							}
+
+							vRow, _ = ev.engine.LogicalToVisual(lineStart + ev.CursorPos)
+							if vRow != startVRow {
+								// Revert to the end of the previous visual line
+								currRuneIdx--
+								ev.CursorPos = 0
+								for i := 0; i < currRuneIdx; i++ {
+									ev.CursorPos += utf8.RuneLen(runes[i])
+								}
+								if shift {
+									handleNav()
+								}
+								break
+							}
+						}
+					}
 				}
-				ev.CursorPos = newBytePos
 			} else if ev.CursorLine < ev.li.LineCount()-1 {
 				ev.CursorLine++
 				ev.CursorPos = 0
@@ -1607,4 +1683,19 @@ func (ev *EditorView) Search(pattern string, caseSensitive, reverse, next bool) 
 			})
 		})
 	})
+}
+const (
+	catSpace = iota
+	catDivider
+	catWord
+)
+
+func getCharCategory(r rune) int {
+	if r == ' ' || r == '\t' {
+		return catSpace
+	}
+	if strings.ContainsRune("~!%^&*()+|{}:\"<>?`-=\\[];',./", r) {
+		return catDivider
+	}
+	return catWord
 }
