@@ -1703,6 +1703,16 @@ func TestEditorView_Search_ShiftF7_Reverse(t *testing.T) {
 		t.Errorf("Expected offset 12, got %d", ev.selAnchorOffset)
 	}
 
+	// Drain leftover tasks to ensure a clean state for the second search
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		default:
+			goto doneDrain
+		}
+	}
+doneDrain:
 	// 2. "Find Next" backward search (Shift+F7)
 	// Cursor is at 13 (end of match). Reverse Next should skip index 12 and find 11.
 	ev.selActive = false
