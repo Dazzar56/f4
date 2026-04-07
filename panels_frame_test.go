@@ -375,6 +375,33 @@ func TestPanelsFrame_HistoryNavigation(t *testing.T) {
 		t.Error("Up Arrow should NOT trigger history when panels are visible")
 	}
 }
+func TestPanelsFrame_HistoryNavigation_HiddenPanels(t *testing.T) {
+	pf := NewPanelsFrame()
+	pf.showPanels = false // Panels are hidden
+	pf.cmdLine.Edit.AddHistory("last command")
+
+	// Press Up Arrow - should trigger HistoryUp on the command line
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_UP,
+	})
+
+	if pf.cmdLine.Edit.GetText() != "last command" {
+		t.Errorf("Up arrow failed to cycle history with hidden panels. Got: %q", pf.cmdLine.Edit.GetText())
+	}
+
+	// Press Esc - should clear line and reset history position
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_ESCAPE,
+	})
+
+	if !pf.cmdLine.IsEmpty() || pf.cmdLine.Edit.HistoryPos != -1 {
+		t.Error("Esc failed to reset history state")
+	}
+}
 func TestPanelsFrame_EnterAddsToHistory(t *testing.T) {
 	pf := NewPanelsFrame()
 	pf.cmdLine.Edit.SetText("ls -la")
