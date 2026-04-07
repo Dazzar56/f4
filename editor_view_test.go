@@ -2515,42 +2515,83 @@ func TestEditorView_DeleteSelection_Panic_Protection(t *testing.T) {
 }
 
 func TestEditorView_UndoRedo(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pt := piecetable.New([]byte("Initial"))
 	ev := NewEditorView(pt, nil, "")
 	ev.SetPosition(0, 0, 80, 24)
-	ev.CursorPos = 7 // Move cursor to the end of "Initial"
+	ev.CursorPos = 7 // End of "Initial"
 
-	// 1. Type something
+	// --- 1. Basic Grouped Typing ---
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: ' '})
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'A'})
 	if ev.pt.String() != "Initial A" {
 		t.Errorf("Typing failed: %q", ev.pt.String())
 	}
 
-	// 2. Undo typing (should undo both chars because of grouping)
-	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_Z, ControlKeyState: vtinput.LeftCtrlPressed})
+	ev.Undo()
 	if ev.pt.String() != "Initial" {
-		t.Errorf("Undo failed: expected 'Initial', got %q", ev.pt.String())
+		t.Errorf("Undo typing failed: expected 'Initial', got %q", ev.pt.String())
 	}
 
-	// 3. Redo typing
-	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_Z, ControlKeyState: vtinput.LeftCtrlPressed | vtinput.ShiftPressed})
+	ev.Redo()
 	if ev.pt.String() != "Initial A" {
-		t.Errorf("Redo failed: expected 'Initial A', got %q", ev.pt.String())
+		t.Errorf("Redo typing failed: expected 'Initial A', got %q", ev.pt.String())
 	}
 
-	// 4. Test atomic Paste undo
+	// --- 2. Line Split & Merge ---
+	// Start with "Initial A" at cursor 0:7 (between 'Initial' and ' A')
+	ev.CursorPos = 7
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN})
+	// Now text is "Initial\n A", cursor is at 1:0
+	if ev.li.LineCount() != 2 {
+		t.Errorf("Split failed: expected 2 lines, got %d", ev.li.LineCount())
+	}
+
+	// Merge back using backspace at 1:0
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_BACK})
+	if ev.li.LineCount() != 1 || ev.pt.String() != "Initial A" {
+		t.Errorf("Merge failed: %q", ev.pt.String())
+	}
+
+	// Undo Merge -> back to "Initial\n A"
+	ev.Undo()
+	if ev.li.LineCount() != 2 {
+		t.Errorf("Undo Merge failed: expected 2 lines, got %d", ev.li.LineCount())
+	}
+
+	// Undo Split -> back to "Initial A"
+	ev.Undo()
+	if ev.li.LineCount() != 1 || ev.pt.String() != "Initial A" {
+		t.Errorf("Undo Split failed: %q", ev.pt.String())
+	}
+
+	// --- 3. Atomic Paste ---
+	// Move cursor to end: "Initial A" (len 9)
+	ev.CursorPos = 9
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.PasteEventType, PasteStart: true})
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: '1'})
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: '2'})
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.PasteEventType, PasteStart: false})
 
 	if ev.pt.String() != "Initial A12" {
-		t.Errorf("Paste failed: %q", ev.pt.String())
+		t.Errorf("Paste failed: expected 'Initial A12', got %q", ev.pt.String())
 	}
 
 	ev.Undo()
 	if ev.pt.String() != "Initial A" {
 		t.Errorf("Undo Paste failed: expected 'Initial A', got %q", ev.pt.String())
+	}
+
+	// --- 4. Redo Stack Branching ---
+	// Clear redo by new modification
+	ev.CursorPos = 9
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: '!'})
+	if len(ev.redoStack) != 0 {
+		t.Error("Redo stack was NOT cleared after a new edit")
+	}
+
+	ev.Redo() // Should do nothing
+	if ev.pt.String() != "Initial A!" {
+		t.Errorf("Redo worked when it shouldn't: %q", ev.pt.String())
 	}
 }
