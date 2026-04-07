@@ -2513,3 +2513,44 @@ func TestEditorView_DeleteSelection_Panic_Protection(t *testing.T) {
 		t.Errorf("Expected selection to be clamped to [0:5] and delete everything, got %q", pt.String())
 	}
 }
+
+func TestEditorView_UndoRedo(t *testing.T) {
+	pt := piecetable.New([]byte("Initial"))
+	ev := NewEditorView(pt, nil, "")
+	ev.SetPosition(0, 0, 80, 24)
+	ev.CursorPos = 7 // Move cursor to the end of "Initial"
+
+	// 1. Type something
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: ' '})
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'A'})
+	if ev.pt.String() != "Initial A" {
+		t.Errorf("Typing failed: %q", ev.pt.String())
+	}
+
+	// 2. Undo typing (should undo both chars because of grouping)
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_Z, ControlKeyState: vtinput.LeftCtrlPressed})
+	if ev.pt.String() != "Initial" {
+		t.Errorf("Undo failed: expected 'Initial', got %q", ev.pt.String())
+	}
+
+	// 3. Redo typing
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_Z, ControlKeyState: vtinput.LeftCtrlPressed | vtinput.ShiftPressed})
+	if ev.pt.String() != "Initial A" {
+		t.Errorf("Redo failed: expected 'Initial A', got %q", ev.pt.String())
+	}
+
+	// 4. Test atomic Paste undo
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.PasteEventType, PasteStart: true})
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: '1'})
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: '2'})
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.PasteEventType, PasteStart: false})
+
+	if ev.pt.String() != "Initial A12" {
+		t.Errorf("Paste failed: %q", ev.pt.String())
+	}
+
+	ev.Undo()
+	if ev.pt.String() != "Initial A" {
+		t.Errorf("Undo Paste failed: expected 'Initial A', got %q", ev.pt.String())
+	}
+}

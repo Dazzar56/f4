@@ -69,6 +69,26 @@ type EditorView struct {
 	scrollBar   *vtui.ScrollBar
 	highlighter vtui.Highlighter
 	lineStates  []any // Cache of highlighter states per logical line
+
+	// Undo/Redo
+	undoStack []editorState
+	redoStack []editorState
+	inGroup   bool
+	lastOp    undoOpType
+}
+
+type undoOpType int
+
+const (
+	opNone undoOpType = iota
+	opTyping
+	opOther
+)
+
+type editorState struct {
+	table piecetable.TableState
+	line  int
+	pos   int
 }
 
 func (ev *EditorView) Close() {
@@ -150,6 +170,93 @@ func (ev *EditorView) SetText(text string) {
 
 func (ev *EditorView) clearCaches() {
 	ev.engine.InvalidateCache()
+}
+func (ev *EditorView) saveUndo(op undoOpType) {
+	if ev.inGroup {
+		return
+	}
+
+	state := editorState{
+		table: ev.pt.GetState(),
+		line:  ev.CursorLine,
+		pos:   ev.CursorPos,
+	}
+
+	// Simple grouping for typing: don't push new state if we are just typing characters consecutively
+	if op == opTyping && ev.lastOp == opTyping && len(ev.undoStack) > 0 {
+		return
+	}
+
+	ev.undoStack = append(ev.undoStack, state)
+	if len(ev.undoStack) > 1000 {
+		ev.undoStack = ev.undoStack[1:]
+	}
+	ev.redoStack = nil // Any new action clears redo stack
+	ev.lastOp = op
+	vtui.DebugLog("EDITOR: Saved undo state (op:%d), stack size: %d", op, len(ev.undoStack))
+}
+
+func (ev *EditorView) Undo() {
+	if len(ev.undoStack) == 0 {
+		vtui.DebugLog("EDITOR: Undo called but stack is empty")
+		return
+	}
+
+	ev.edited = true // Stop indexer
+
+	// Save current state to redo stack
+	ev.redoStack = append(ev.redoStack, editorState{
+		table: ev.pt.GetState(),
+		line:  ev.CursorLine,
+		pos:   ev.CursorPos,
+	})
+
+	// Restore last state
+	last := len(ev.undoStack) - 1
+	state := ev.undoStack[last]
+	ev.undoStack = ev.undoStack[:last]
+
+	ev.pt.LoadState(state.table)
+	ev.li.Rebuild(ev.pt)
+	ev.CursorLine = state.line
+	ev.CursorPos = state.pos
+
+	ev.clearCaches()
+	ev.modified = true
+	ev.lastOp = opNone
+	ev.ensureCursorVisible()
+	vtui.DebugLog("EDITOR: Executed Undo, remaining: %d", len(ev.undoStack))
+}
+
+func (ev *EditorView) Redo() {
+	if len(ev.redoStack) == 0 {
+		vtui.DebugLog("EDITOR: Redo called but stack is empty")
+		return
+	}
+
+	ev.edited = true // Stop indexer
+
+	// Save current state to undo stack
+	ev.undoStack = append(ev.undoStack, editorState{
+		table: ev.pt.GetState(),
+		line:  ev.CursorLine,
+		pos:   ev.CursorPos,
+	})
+
+	last := len(ev.redoStack) - 1
+	state := ev.redoStack[last]
+	ev.redoStack = ev.redoStack[:last]
+
+	ev.pt.LoadState(state.table)
+	ev.li.Rebuild(ev.pt)
+	ev.CursorLine = state.line
+	ev.CursorPos = state.pos
+
+	ev.clearCaches()
+	ev.modified = true
+	ev.lastOp = opNone
+	ev.ensureCursorVisible()
+	vtui.DebugLog("EDITOR: Executed Redo, remaining: %d", len(ev.redoStack))
 }
 func (ev *EditorView) invalidateStates(fromLine int) {
 	if fromLine < len(ev.lineStates) {
@@ -357,11 +464,16 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 				}
 				ev.edited = true
 
-				if ev.selActive { ev.DeleteSelection() }
+				ev.saveUndo(opOther)
+				if ev.selActive {
+					ev.inGroup = true
+					ev.DeleteSelection()
+					ev.inGroup = false
+				}
+
 				offset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 				data := []byte(string(ev.pasteBuffer))
 				ev.pt.Insert(offset, data)
-				// Incremental update instead of heavy Rebuild
 				ev.li.UpdateAfterInsert(offset, data)
 				ev.invalidateStates(ev.CursorLine)
 				ev.engine.InvalidateFrom(ev.CursorLine)
@@ -437,6 +549,16 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 
 	switch e.VirtualKeyCode {
+	case vtinput.VK_Z:
+		if ctrl {
+			if shift {
+				ev.Redo()
+			} else {
+				ev.Undo()
+			}
+			return true
+		}
+
 	case vtinput.VK_A:
 		if ctrl {
 			ev.selActive = true
@@ -695,6 +817,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		if ev.selActive {
 			ev.DeleteSelection()
 		} else {
+			ev.saveUndo(opOther)
 			ev.modified = true
 			offset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 			if offset > 0 {
@@ -747,6 +870,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 			}
 			ev.DeleteSelection()
 		} else {
+			ev.saveUndo(opOther)
 			ev.modified = true
 			offset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 			if offset < ev.pt.Size() {
@@ -772,8 +896,11 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 
 	case vtinput.VK_RETURN:
+		ev.saveUndo(opOther)
 		if ev.selActive {
+			ev.inGroup = true
 			ev.DeleteSelection()
+			ev.inGroup = false
 		}
 		ev.modified = true
 		offset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
@@ -788,8 +915,11 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 
 	if e.Char != 0 && ctrl == false {
+		ev.saveUndo(opTyping)
 		if ev.selActive {
+			ev.inGroup = true
 			ev.DeleteSelection()
+			ev.inGroup = false
 		}
 		ev.modified = true
 		offset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
@@ -1277,7 +1407,13 @@ func (ev *EditorView) PasteText(text string) {
 	}
 	ev.edited = true
 
-	if ev.selActive { ev.DeleteSelection() }
+	ev.saveUndo(opOther)
+	ev.inGroup = true
+	if ev.selActive {
+		ev.DeleteSelection()
+	}
+	ev.inGroup = false
+
 	offset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 	data := []byte(text)
 	ev.pt.Insert(offset, data)
@@ -1303,6 +1439,8 @@ func (ev *EditorView) DeleteSelection() {
 			ev.indexCancel = nil
 		}
 		ev.edited = true
+
+		ev.saveUndo(opOther)
 
 		ev.modified = true
 		ev.pt.Delete(min, max-min)
