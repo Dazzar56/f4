@@ -306,18 +306,16 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 	fp.cancelLoad = cancel
 	fp.isLoading = true
 
-	// 1. Срочное обновление заголовка и состояния
+	// 1. Устанавливаем флаг, но НЕ обновляем UI немедленно, чтобы избежать мерцания
 	path := fp.vfs.GetPath()
-	fp.updateTitle(nil)
-	vtui.FrameManager.Redraw()
-
 	isFirstChunk := true
 
 	// 2. Таймер для индикатора "Loading..." (появится через 200мс если VFS тормозит)
 	fp.loadingTimer = time.AfterFunc(200*time.Millisecond, func() {
 		vtui.FrameManager.PostTask(func() {
-			if fp.isLoading {
-				if isFirstChunk && !keepEntries {
+			// Если данные всё еще не пришли (isFirstChunk == true), только тогда "портим" UI
+			if fp.isLoading && isFirstChunk {
+				if !keepEntries {
 					fp.entries = nil
 					if !fp.vfs.IsAtRoot() || fp.vfs.ParentVFS() != nil {
 						fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
@@ -325,6 +323,7 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 					fp.SetCursorIndex(0)
 					fp.Refresh()
 				}
+				// Теперь, когда таймаут вышел, показываем [Loading...] в заголовке
 				fp.updateTitle(nil)
 				vtui.FrameManager.Redraw()
 			}
@@ -392,6 +391,7 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 
 			vtui.FrameManager.PostTask(func() {
 				if ctx.Err() != nil { return }
+				// Останавливаем таймер. Если он не успел сработать — заголовок так и не моргнул.
 				if fp.loadingTimer != nil { fp.loadingTimer.Stop() }
 
 				fp.isLoading = false
