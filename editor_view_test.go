@@ -2649,3 +2649,26 @@ func TestEditorView_Undo_Advanced(t *testing.T) {
 		t.Error("Undo on empty stack corrupted data")
 	}
 }
+func TestEditorView_Undo_CleanState(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pt := piecetable.New([]byte("Original"))
+	ev := NewEditorView(pt, nil, "test.txt")
+
+	if ev.modified { t.Error("Should NOT be modified initially") }
+
+	// 1. Modify
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: '!'})
+	if !ev.modified { t.Error("Should BE modified after typing") }
+
+	// 2. Undo -> back to original
+	ev.Undo()
+	if ev.modified {
+		t.Error("Should NOT be modified after undoing all changes")
+	}
+
+	// 3. Redo -> back to modified
+	ev.Redo()
+	if !ev.modified {
+		t.Error("Should BE modified after redo")
+	}
+}

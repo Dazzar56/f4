@@ -71,10 +71,11 @@ type EditorView struct {
 	lineStates  []any // Cache of highlighter states per logical line
 
 	// Undo/Redo
-	undoStack []editorState
-	redoStack []editorState
-	inGroup   bool
-	lastOp    undoOpType
+	undoStack  []editorState
+	redoStack  []editorState
+	inGroup    bool
+	lastOp     undoOpType
+	cleanState piecetable.TableState // State of the file on disk
 }
 
 type undoOpType int
@@ -115,6 +116,7 @@ func NewEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string) *EditorVie
 		filePath:        path,
 		WordWrap:        false,
 		ShowWhitespaces: false,
+		cleanState:      pt.GetState(),
 	}
 	ev.highlighter = vtui.GetHighlighter(path, "")
 	ev.scrollBar = vtui.NewScrollBar(0, 0, 0)
@@ -203,6 +205,7 @@ func (ev *EditorView) saveUndo(op undoOpType) {
 		ev.undoStack = ev.undoStack[1:]
 	}
 	ev.lastOp = op
+	ev.modified = true // Mark as dirty, will be re-evaluated on Undo/Redo
 	vtui.DebugLog("EDITOR: Saved undo state (op:%d), stack size: %d", op, len(ev.undoStack))
 }
 
@@ -232,10 +235,11 @@ func (ev *EditorView) Undo() {
 	ev.CursorPos = state.pos
 
 	ev.clearCaches()
-	ev.modified = true
+	// Intelligent modified flag: if structure matches clean state, it's not modified
+	ev.modified = !ev.pt.GetState().Equals(ev.cleanState)
 	ev.lastOp = opNone
 	ev.ensureCursorVisible()
-	vtui.DebugLog("EDITOR: Executed Undo, remaining: %d", len(ev.undoStack))
+	vtui.DebugLog("EDITOR: Executed Undo, remaining: %d, modified: %v", len(ev.undoStack), ev.modified)
 }
 
 func (ev *EditorView) Redo() {
@@ -263,10 +267,11 @@ func (ev *EditorView) Redo() {
 	ev.CursorPos = state.pos
 
 	ev.clearCaches()
-	ev.modified = true
+	// Intelligent modified flag
+	ev.modified = !ev.pt.GetState().Equals(ev.cleanState)
 	ev.lastOp = opNone
 	ev.ensureCursorVisible()
-	vtui.DebugLog("EDITOR: Executed Redo, remaining: %d", len(ev.redoStack))
+	vtui.DebugLog("EDITOR: Executed Redo, remaining: %d, modified: %v", len(ev.redoStack), ev.modified)
 }
 func (ev *EditorView) invalidateStates(fromLine int) {
 	if fromLine < len(ev.lineStates) {
@@ -1383,6 +1388,7 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 				ev.file = newFile
 				ev.asyncBuf = newBuf
 				ev.pt = newPt
+				ev.cleanState = newPt.GetState()
 				ev.engine = newEngine
 				ev.ensureEngineWidth()
 				ev.edited = false
