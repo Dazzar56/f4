@@ -5,7 +5,7 @@ import "github.com/unxed/f4/vfs"
 type InternalHelloPlugin struct {}
 
 func (p *InternalHelloPlugin) Init(api vfs.HostAPI) error {
-	api.Message("Hello from Internal Go Plugin! F4 version: " + api.GetVersion())
+//	api.Message("Hello from Internal Go Plugin! F4 version: " + api.GetVersion())
 	return nil
 }
 

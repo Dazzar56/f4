@@ -135,6 +135,10 @@ func NewPanelsFrame() *PanelsFrame {
 	}
 	// We no longer need pf.menuBar.OnCommand for routing!
 	pf.cmdLine = NewCommandLine(Msg("Panels.Prompt"))
+	pf.cmdLine.Edit.HistoryID = "cmdline"
+	if vtui.GlobalHistoryProvider != nil {
+		pf.cmdLine.Edit.History = vtui.GlobalHistoryProvider.LoadHistory("cmdline")
+	}
 	pf.keyBar = vtui.NewKeyBar()
 	pf.keyBar.SetOwner(pf)
 

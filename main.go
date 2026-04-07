@@ -69,6 +69,7 @@ func InitCore() *vtui.ScreenBuf {
 	vtui.FrameManager.Init(scr)
 	SetDefaultF4Palette()
 	InitLang()
+	vtui.GlobalHistoryProvider = NewF4HistoryProvider()
 	vtinput.Logger = vtui.DebugLog // Pipe vtinput logs to vtui's debug logger
 	vtui.GlobalClipboardAccessManager = NewF4ClipboardAuth()
 	RegisterDrive("&1. Local ( / )", func() vfs.VFS { return vfs.NewOSVFS("/") })
