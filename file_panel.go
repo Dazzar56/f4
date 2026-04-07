@@ -309,27 +309,22 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 	// 1. Срочное обновление заголовка и состояния
 	path := fp.vfs.GetPath()
 	fp.updateTitle(nil)
+	vtui.FrameManager.Redraw()
 
-	if !keepEntries {
-		fp.entries = nil
-		if !fp.vfs.IsAtRoot() || fp.vfs.ParentVFS() != nil {
-			fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
-		}
-		fp.SetCursorIndex(0)
-		fp.Refresh()
-		vtui.FrameManager.Redraw()
-	} else if len(fp.entries) == 0 {
-		// Even if keeping entries, ensure .. is there if the list was empty
-		if !fp.vfs.IsAtRoot() || fp.vfs.ParentVFS() != nil {
-			fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
-			fp.Refresh()
-		}
-	}
+	isFirstChunk := true
 
 	// 2. Таймер для индикатора "Loading..." (появится через 200мс если VFS тормозит)
 	fp.loadingTimer = time.AfterFunc(200*time.Millisecond, func() {
 		vtui.FrameManager.PostTask(func() {
 			if fp.isLoading {
+				if isFirstChunk && !keepEntries {
+					fp.entries = nil
+					if !fp.vfs.IsAtRoot() || fp.vfs.ParentVFS() != nil {
+						fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
+					}
+					fp.SetCursorIndex(0)
+					fp.Refresh()
+				}
 				fp.updateTitle(nil)
 				vtui.FrameManager.Redraw()
 			}
@@ -357,11 +352,12 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 				if ctx.Err() != nil { return }
 
 				if isFirstChunk {
-					// Очищаем старые данные (если они были), оставляя только ".."
-					fp.entries = nil
-				if !fp.vfs.IsAtRoot() || fp.vfs.ParentVFS() != nil {
-					fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
-				}
+					if !keepEntries {
+						fp.entries = nil
+						if !fp.vfs.IsAtRoot() || fp.vfs.ParentVFS() != nil {
+							fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
+						}
+					}
 					isFirstChunk = false
 				}
 
@@ -404,14 +400,22 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 					vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to read directory:\n%v", err), []string{"&Ok"})
 				}
 
-				if fp.pendingSelection != "" {
-				fp.SelectName(fp.pendingSelection)
-				fp.pendingSelection = ""
-			}
+				if isFirstChunk && !keepEntries {
+					fp.entries = nil
+					if !fp.vfs.IsAtRoot() || fp.vfs.ParentVFS() != nil {
+						fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
+					}
+					fp.SetCursorIndex(0)
+				}
 
-			fp.Refresh()
-			vtui.FrameManager.Redraw()
-		})
+				if fp.pendingSelection != "" {
+					fp.SelectName(fp.pendingSelection)
+					fp.pendingSelection = ""
+				}
+
+				fp.Refresh()
+				vtui.FrameManager.Redraw()
+			})
 	}()
 }
 
