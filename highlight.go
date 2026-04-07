@@ -34,7 +34,7 @@ func GetSyntaxAttr(t chroma.TokenType, baseAttr uint64) uint64 {
 	return baseAttr
 }
 
-// ChromaProvider implements vfs.HighlighterProvider using the chroma library.
+// ChromaProvider implements HighlighterProvider using the chroma library.
 type ChromaProvider struct{}
 
 func (p *ChromaProvider) Name() string { return "Chroma" }
@@ -55,7 +55,7 @@ func (p *ChromaProvider) Create(filename string, content string) vtui.Highlighte
 	return &ChromaHighlighter{lexer: lexer}
 }
 
-// ChromaHighlighter implements vfs.Highlighter.
+// ChromaHighlighter implements Highlighter.
 type ChromaHighlighter struct {
 	lexer chroma.Lexer
 }
