@@ -114,9 +114,17 @@ func (v *OSVFS) Stat(ctx context.Context, path string) (VFSItem, error) {
 	}, nil
 }
 
-func (v *OSVFS) Join(elem ...string) string      { return filepath.Join(elem...) }
-func (v *OSVFS) Abs(path string) (string, error) { return filepath.Abs(path) }
-func (v *OSVFS) Base(path string) string         { return filepath.Base(path) }
+func (v *OSVFS) Join(elem ...string) string { return filepath.Join(elem...) }
+
+func (v *OSVFS) Abs(path string) (string, error) {
+	if filepath.IsAbs(path) {
+		return filepath.Clean(path), nil
+	}
+	// Correctly resolve relative to the VFS current path, not process CWD
+	return filepath.Join(v.currentPath, path), nil
+}
+
+func (v *OSVFS) Base(path string) string { return filepath.Base(path) }
 func (v *OSVFS) Dir(path string) string          { return filepath.Dir(path) }
 func (v *OSVFS) MkDir(ctx context.Context, path string) error         { if ctx.Err() != nil { return ctx.Err() }; return os.MkdirAll(path, 0755) }
 func (v *OSVFS) Remove(ctx context.Context, path string) error        { if ctx.Err() != nil { return ctx.Err() }; return os.RemoveAll(path) }

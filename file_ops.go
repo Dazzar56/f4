@@ -138,29 +138,35 @@ func recursiveCopy(ctx context.Context, update func(msg string, percent int), sr
 		return err
 	}
 
-	// Robust self-copy protection
-	absSrc, errSrc := srcVfs.Abs(srcPath)
-	absDst, errDst := dstVfs.Abs(destPath)
-	if errSrc != nil || errDst != nil {
-		return fmt.Errorf("vfs path error")
+	// Robust self-copy protection (including symlink resolution for local FS)
+	absSrc, _ := srcVfs.Abs(srcPath)
+	absDst, _ := dstVfs.Abs(destPath)
+
+	realSrc := absSrc
+	realDst := absDst
+
+	// For local OS files, resolve symlinks to catch circularity like "ln -s .. loop"
+	if _, ok := srcVfs.(*vfs.OSVFS); ok {
+		if resolved, err := filepath.EvalSymlinks(absSrc); err == nil {
+			realSrc = resolved
+		}
+	}
+	if _, ok := dstVfs.(*vfs.OSVFS); ok {
+		if resolved, err := filepath.EvalSymlinks(absDst); err == nil {
+			realDst = resolved
+		}
 	}
 
-	cleanSrc := filepath.Clean(absSrc)
-	cleanDst := filepath.Clean(absDst)
-
-	if cleanSrc == cleanDst {
+	if realSrc == realDst {
 		return fmt.Errorf("cannot copy folder into itself (source equals destination)")
 	}
 
-	// Check if cleanDst is a subfolder of cleanSrc.
-	// We append a separator to ensures we don't match "/home/user/dir" with "/home/user/dir_backup"
 	sep := string(os.PathSeparator)
-	prefix := cleanSrc
-	if !strings.HasSuffix(prefix, sep) {
-		prefix += sep
+	if !strings.HasSuffix(realSrc, sep) {
+		realSrc += sep
 	}
 
-	if strings.HasPrefix(cleanDst, prefix) {
+	if strings.HasPrefix(realDst, realSrc) {
 		return fmt.Errorf("cannot copy folder into itself (destination is a subfolder)")
 	}
 

@@ -226,14 +226,36 @@ func (w *archiveWriteWrapper) Close() error {
 	w.tmpFile.Close()
 	tmpName := w.tmpFile.Name()
 	defer os.Remove(tmpName)
-	archiveFile, _ := os.OpenFile(w.v.arcPath, os.O_RDWR, 0644)
-	defer archiveFile.Close()
+
+	// ATOMIC UPDATE:
+	// 1. Create a temporary archive file
+	tempArcPath := w.v.arcPath + ".tmp"
+	out, err := os.Create(tempArcPath)
+	if err != nil { return err }
+	defer func() { out.Close(); os.Remove(tempArcPath) }()
+
+	// 2. Open original archive for reading
+	in, err := os.Open(w.v.arcPath)
+	if err != nil { return err }
+	defer in.Close()
+
+	// 3. Prepare the new file entry
 	files := []archives.FileInfo{{
 		NameInArchive: w.destPath,
 		FileInfo:      dummyFileInfo{name: filepath.Base(w.destPath), tempName: tmpName},
 		Open:          func() (fs.File, error) { return os.Open(tmpName) },
 	}}
-	err := w.inserter.Insert(context.Background(), archiveFile, files)
+
+	// 4. Perform insertion into the NEW (temp) archive file.
+	// This ensures that if the process fails, the original archive is untouched.
+	err = w.inserter.Insert(context.Background(), out, files)
+	if err != nil { return err }
+
+	// 5. Finalize: Close files and swap
+	in.Close()
+	out.Close()
+
+	err = os.Rename(tempArcPath, w.v.arcPath)
 	if err == nil { w.v.reloadFS() }
 	return err
 }

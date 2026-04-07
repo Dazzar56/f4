@@ -806,3 +806,36 @@ func TestRecursiveCopy_SubfolderDeepRecursion(t *testing.T) {
 		t.Error("Recursive copy partially succeeded before failing, created nested child!")
 	}
 }
+
+func TestRecursiveCopy_SymlinkLoop(t *testing.T) {
+	// Tests protection against loops like "ln -s .. loop"
+	if runtime.GOOS == "windows" { t.Skip("Symlinks behave differently on Windows") }
+
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	tmp := t.TempDir()
+
+	src := filepath.Join(tmp, "source")
+	os.Mkdir(src, 0755)
+	os.WriteFile(filepath.Join(src, "data.txt"), []byte("hi"), 0644)
+
+	// Create a symlink INSIDE src that points to tmp (parent)
+	loopLink := filepath.Join(src, "loop")
+	os.Symlink(tmp, loopLink)
+
+	v := vfs.NewOSVFS("/")
+	tCtx := &vtui.TaskContext{Context: context.Background()}
+
+	// Attempt to copy "source" into "source/loop/backup"
+	// This would be infinite without EvalSymlinks because loopLink leads to tmp,
+	// and tmp contains source.
+	target := filepath.Join(loopLink, "backup")
+
+	err := recursiveCopy(tCtx, func(string, int){}, v, src, v, target, &FileOpState{})
+
+	if err == nil {
+		t.Fatal("Expected error for symlink loop recursion, but got nil")
+	}
+	if !strings.Contains(err.Error(), "folder into itself") {
+		t.Errorf("Wrong error message for symlink loop: %v", err)
+	}
+}

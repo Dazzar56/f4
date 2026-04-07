@@ -183,3 +183,41 @@ func TestOSVFS_SetPath_Validation(t *testing.T) {
 		t.Error("SetPath should fail if path is a file")
 	}
 }
+func TestOSVFS_Abs_Consistency(t *testing.T) {
+	// Test that Abs is relative to the VFS path, not process CWD
+	tmp := t.TempDir()
+	vfsPath := filepath.Join(tmp, "vfs_root")
+	os.Mkdir(vfsPath, 0755)
+
+	v := NewOSVFS(vfsPath)
+
+	// Even if we change process CWD (not recommended in tests, but for clarity)
+	abs, err := v.Abs("file.txt")
+	if err != nil { t.Fatal(err) }
+
+	expected := filepath.Join(vfsPath, "file.txt")
+	if abs != expected {
+		t.Errorf("Abs failed: expected %q, got %q", expected, abs)
+	}
+}
+func TestOSVFS_Abs_CWD_Independence(t *testing.T) {
+	// Create a folder structure: /tmp/root/subdir
+	tmp := t.TempDir()
+	vfsRoot := filepath.Join(tmp, "vfs_root")
+	os.MkdirAll(vfsRoot, 0755)
+
+	v := NewOSVFS(vfsRoot)
+
+	// Simulate process running in a completely different directory
+	// (we don't change os.Chdir because it's global and bad for parallel tests,
+	// but we check that VFS doesn't use it).
+
+	relPath := "somefile.txt"
+	abs, err := v.Abs(relPath)
+	if err != nil { t.Fatal(err) }
+
+	expected := filepath.Join(vfsRoot, relPath)
+	if abs != expected {
+		t.Errorf("OSVFS.Abs depends on process CWD! Expected %q, got %q", expected, abs)
+	}
+}
