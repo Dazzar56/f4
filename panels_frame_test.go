@@ -931,8 +931,43 @@ func TestPanelsFrame_CommandRouting_FKeys(t *testing.T) {
 		VirtualKeyCode: vtinput.VK_F10,
 	})
 
+	// Now it shouldn't be shutdown immediately. A dialog should be on top.
+	top := fm.GetTopFrame()
+	if top == nil || top.GetTitle() != Msg("Quit.Title") {
+		t.Fatalf("Expected quit confirmation dialog, got %v", top)
+	}
+
+	// Simulate clicking "Leave" (button 0 in the ShowMessage dialog)
+	if d, ok := top.(*vtui.Window); ok && d.OnResult != nil {
+		d.OnResult(0)
+	}
+
 	if !fm.IsShutdown() {
-		t.Error("F10 did not trigger CmQuit through EmitCommand")
+		t.Error("F10 followed by confirmation did not trigger Shutdown")
+	}
+}
+
+func TestPanelsFrame_QuitConfirmation_Cancel(t *testing.T) {
+	pf := NewPanelsFrame()
+	fm := vtui.FrameManager
+	fm.Init(vtui.NewSilentScreenBuf())
+	fm.Push(pf)
+
+	// Trigger Quit
+	pf.HandleCommand(vtui.CmQuit, nil)
+
+	top := fm.GetTopFrame()
+	if top == nil || top.GetTitle() != Msg("Quit.Title") {
+		t.Fatal("Quit dialog didn't appear")
+	}
+
+	// Simulate clicking "Cancel" (button 1)
+	if d, ok := top.(*vtui.Window); ok && d.OnResult != nil {
+		d.OnResult(1)
+	}
+
+	if fm.IsShutdown() {
+		t.Error("Application shut down even after exit was canceled")
 	}
 }
 func TestPanelsFrame_F9Context(t *testing.T) {
