@@ -55,7 +55,7 @@ func main() {
 }
 
 func InitCore() *vtui.ScreenBuf {
-	vtui.DebugLog("CORE: InitCore() called. PID: %d", os.Getpid())
+	vtui.DebugLog("=== F4 STARTUP [%s] PID:%d ===", vtui.GetVersionInfo(), os.Getpid())
 	width, height, err := term.GetSize(0)
 	if err != nil {
 		vtui.DebugLog("CORE: term.GetSize(0) failed: %v", err)
