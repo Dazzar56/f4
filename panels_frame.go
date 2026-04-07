@@ -784,10 +784,15 @@ func (pf *PanelsFrame) getInactivePanel() *FileSystemPanel {
 func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 	switch cmd {
 	case vtui.CmQuit:
-		if pf.pty != nil {
-			pf.pty.Close()
+		dlg := vtui.ShowMessage(Msg("Quit.Title"), Msg("Quit.Confirm"), []string{Msg("Quit.Btn"), Msg("vtui.Cancel")})
+		dlg.OnResult = func(code int) {
+			if code == 0 {
+				if pf.pty != nil {
+					pf.pty.Close()
+				}
+				vtui.FrameManager.Shutdown()
+			}
 		}
-		vtui.FrameManager.Shutdown()
 		return true
 
 	case vtui.CmHelp:

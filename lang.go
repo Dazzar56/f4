@@ -40,6 +40,9 @@ var Lng = map[string]string{
 	"Search.Reverse":       "&Reverse search",
 	"Select.Title":      " Select ",
 	"Deselect.Title":    " Deselect ",
+	"Quit.Title":        " Exit ",
+	"Quit.Confirm":      "Do you want to leave f4?",
+	"Quit.Btn":          "&Leave",
 	"Select.Mask":       "&Enter selection mask:",
 
 	// Macros
