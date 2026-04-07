@@ -273,7 +273,7 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 
 		frags := ev.engine.GetFragments(logIdx)
 		baseVRow := ev.engine.GetRowOffset(logIdx)
-		vtui.DebugLog("EDITOR_RENDER: Line %d, Frags: %d, BaseVRow: %d", logIdx, len(frags), baseVRow)
+		// vtui.DebugLog("EDITOR_RENDER: Line %d, Frags: %d, BaseVRow: %d", logIdx, len(frags), baseVRow)
 		runesProcessedInLine := 0
 
 		for fIdx, frag := range frags {
@@ -418,13 +418,19 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		}
 	}
 
+
 	// Any key that can reach this point and is not a pure navigation key 
 	// should stop the background indexer to prevent index corruption.
 	if !ev.edited {
 		switch e.VirtualKeyCode {
 		case vtinput.VK_UP, vtinput.VK_DOWN, vtinput.VK_LEFT, vtinput.VK_RIGHT,
-			vtinput.VK_PRIOR, vtinput.VK_NEXT, vtinput.VK_HOME, vtinput.VK_END:
-			// ignore navigation
+			vtinput.VK_PRIOR, vtinput.VK_NEXT, vtinput.VK_HOME, vtinput.VK_END,
+			// MODIFIER KEYS: We MUST whitelist Shift, Ctrl, and Alt/Menu.
+			// Otherwise, pressing Ctrl (as part of Ctrl+End) will mark the
+			// buffer as 'edited' and kill the background indexer prematurely,
+			// leading to desync between PieceTable and LineIndex.
+			vtinput.VK_SHIFT, vtinput.VK_CONTROL, vtinput.VK_MENU:
+			// ignore navigation and modifiers
 		default:
 			ev.edited = true
 			if ev.indexCancel != nil { ev.indexCancel() }
@@ -803,7 +809,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 }
 
 func (ev *EditorView) fillCells(target []vtui.CharInfo, data []byte, defaultAttr, selAttr uint64, offset int, selActive bool, selMin, selMax int, syntax []uint64) []vtui.CharInfo {
-	vtui.DebugLog("EDITOR_FILL: Off: %d, Len: %d, Sel: %v[%d:%d]", offset, len(data), selActive, selMin, selMax)
+	// vtui.DebugLog("EDITOR_FILL: Off: %d, Len: %d, Sel: %v[%d:%d]", offset, len(data), selActive, selMin, selMax)
 	target = target[:0]
 	currByte := 0
 	charIdx := 0

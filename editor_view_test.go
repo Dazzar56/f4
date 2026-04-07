@@ -1147,6 +1147,53 @@ func TestEditorView_UnsavedChanges(t *testing.T) {
 		t.Error("Editor should be modified after deletion")
 	}
 }
+func TestEditorView_Indexer_ModifierSafety(t *testing.T) {
+	// Regression test for the Ctrl+End hang:
+	// Modifier keys should NOT stop the indexer.
+	pt := piecetable.New([]byte("test content"))
+	ev := NewEditorView(pt, nil, "test.txt")
+
+	// Set a mock cancel function to track if it was called
+	cancelled := false
+	ev.indexCancel = func() { cancelled = true }
+	ev.edited = false
+
+	// 1. Pressing VK_CONTROL (part of Ctrl+End sequence)
+	ev.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_CONTROL,
+	})
+
+	if ev.edited {
+		t.Error("Modifier key (Ctrl) erroneously set the 'edited' flag")
+	}
+	if cancelled {
+		t.Error("Modifier key (Ctrl) erroneously cancelled the indexer")
+	}
+
+	// 2. Pressing VK_SHIFT (selection)
+	ev.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_SHIFT,
+	})
+
+	if ev.edited {
+		t.Error("Modifier key (Shift) erroneously set the 'edited' flag")
+	}
+
+	// 3. Verify that a REAL edit still cancels the indexer
+	ev.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		Char: 'a',
+	})
+
+	if !ev.edited {
+		t.Error("Real text input failed to set the 'edited' flag")
+	}
+	if !cancelled {
+		t.Error("Real text input failed to cancel the indexer")
+	}
+}
 
 func TestEditorView_Navigation_DocumentBoundaries(t *testing.T) {
 	pt := piecetable.New([]byte("Line 1\nLine 2\nLine 3"))
