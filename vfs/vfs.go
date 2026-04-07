@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"time"
+	"github.com/unxed/vtui"
 )
 
 // App defines the interface for plugin-to-core UI interactions.
@@ -27,7 +28,7 @@ type HostAPI interface {
 	Log(msg string)
 	Message(msg string)
 
-	RegisterHighlighter(p HighlighterProvider)
+	RegisterHighlighter(p vtui.HighlighterProvider)
 	RegisterVFSProvider(p VFSProvider)
 	RegisterDrive(name string, factory func() VFS)
 	RegisterGlobalHotkey(vk uint16, mods uint32, handler func(app App))
@@ -82,41 +83,6 @@ type VFS interface {
 	ParentVFS() VFS // Returns the underlying VFS if this is a virtual mount, or nil
 
 	Close() error
-}
-
-// Highlighter defines a capability to provide syntax coloring.
-// Highlighter defines a capability to provide syntax coloring.
-type Highlighter interface {
-	// Highlight processes a line of text.
-	// line: text to highlight.
-	// prevState: state returned by the previous line (nil for the first line).
-	// baseAttr: default text attributes.
-	// Returns: attributes for each character and the state for the next line.
-	Highlight(line string, prevState any, baseAttr uint64) (attrs []uint64, nextState any)
-}
-
-// HighlighterProvider defines a factory for highlighters.
-type HighlighterProvider interface {
-	Name() string
-	// Match returns true if this provider can handle the file.
-	Match(filename string, content string) bool
-	// Create generates a new Highlighter instance for a specific file.
-	Create(filename string, content string) Highlighter
-}
-
-var highlighterProviders []HighlighterProvider
-
-func RegisterHighlighter(p HighlighterProvider) {
-	highlighterProviders = append(highlighterProviders, p)
-}
-
-func GetHighlighter(filename string, content string) Highlighter {
-	for _, p := range highlighterProviders {
-		if p.Match(filename, content) {
-			return p.Create(filename, content)
-		}
-	}
-	return nil
 }
 
 // PtyProvider allows a VFS to provide its own PTY implementation

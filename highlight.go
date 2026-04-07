@@ -4,7 +4,6 @@ import (
 	"github.com/alecthomas/chroma/v2"
 	"github.com/alecthomas/chroma/v2/lexers"
 	"github.com/unxed/vtui"
-	"github.com/unxed/f4/vfs"
 )
 
 // SyntaxMap связывает типы токенов Chroma с цветами f4
@@ -44,7 +43,7 @@ func (p *ChromaProvider) Match(filename string, content string) bool {
 	return lexers.Match(filename) != nil || lexers.Analyse(content) != nil
 }
 
-func (p *ChromaProvider) Create(filename string, content string) vfs.Highlighter {
+func (p *ChromaProvider) Create(filename string, content string) vtui.Highlighter {
 	lexer := lexers.Match(filename)
 	if lexer == nil {
 		lexer = lexers.Analyse(content)

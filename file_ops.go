@@ -144,10 +144,23 @@ func recursiveCopy(ctx context.Context, update func(msg string, percent int), sr
 	if errSrc != nil || errDst != nil {
 		return fmt.Errorf("vfs path error")
 	}
-	if absSrc == absDst {
+
+	cleanSrc := filepath.Clean(absSrc)
+	cleanDst := filepath.Clean(absDst)
+
+	if cleanSrc == cleanDst {
 		return fmt.Errorf("cannot copy folder into itself (source equals destination)")
 	}
-	if strings.HasPrefix(absDst, absSrc+string(os.PathSeparator)) {
+
+	// Check if cleanDst is a subfolder of cleanSrc.
+	// We append a separator to ensures we don't match "/home/user/dir" with "/home/user/dir_backup"
+	sep := string(os.PathSeparator)
+	prefix := cleanSrc
+	if !strings.HasSuffix(prefix, sep) {
+		prefix += sep
+	}
+
+	if strings.HasPrefix(cleanDst, prefix) {
 		return fmt.Errorf("cannot copy folder into itself (destination is a subfolder)")
 	}
 

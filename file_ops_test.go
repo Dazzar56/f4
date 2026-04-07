@@ -773,3 +773,36 @@ func TestExecuteFileOp_MoveIntoSelf_Circular(t *testing.T) {
 		t.Errorf("Expected circular copy protection error, got: %v", err)
 	}
 }
+func TestRecursiveCopy_SubfolderDeepRecursion(t *testing.T) {
+	// Regression test for Note 7: vtinput/vtinput/vtinput...
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	tmp := t.TempDir()
+
+	// Create /parent/child
+	parent := filepath.Join(tmp, "parent")
+	child := filepath.Join(parent, "child")
+	os.MkdirAll(child, 0755)
+	os.WriteFile(filepath.Join(parent, "file.txt"), []byte("data"), 0644)
+
+	v := vfs.NewOSVFS("/")
+	tCtx := &vtui.TaskContext{Context: context.Background()}
+
+	// Attempt to copy /parent into /parent/child/backup
+	// This should be caught by the subfolder check
+	dest := filepath.Join(child, "backup")
+
+	err := recursiveCopy(tCtx, func(string, int){}, v, parent, v, dest, &FileOpState{})
+
+	if err == nil {
+		t.Fatal("Expected error when copying folder into its own deep subfolder, but got nil")
+	}
+
+	if !strings.Contains(err.Error(), "subfolder") {
+		t.Errorf("Expected 'subfolder' error message, got: %v", err)
+	}
+
+	// Verify that no deep structure was created before the error
+	if _, err := os.Stat(filepath.Join(dest, "child")); err == nil {
+		t.Error("Recursive copy partially succeeded before failing, created nested child!")
+	}
+}

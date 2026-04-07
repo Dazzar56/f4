@@ -52,6 +52,7 @@ type EditorView struct {
 	ShowWhitespaces bool
 	selActive       bool
 	selAnchorOffset int // Абсолютное смещение начала выделения
+	editSession     int // Unique ID to fence background tasks
 
 	pasting     bool
 	saving      bool
@@ -66,7 +67,7 @@ type EditorView struct {
 	filePath  string
 	file      vfs.ReadAtCloser
 	scrollBar   *vtui.ScrollBar
-	highlighter vfs.Highlighter
+	highlighter vtui.Highlighter
 	lineStates  []any // Cache of highlighter states per logical line
 }
 
@@ -95,7 +96,7 @@ func NewEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string) *EditorVie
 		WordWrap:        false,
 		ShowWhitespaces: false,
 	}
-	ev.highlighter = vfs.GetHighlighter(path, "")
+	ev.highlighter = vtui.GetHighlighter(path, "")
 	ev.scrollBar = vtui.NewScrollBar(0, 0, 0)
 	ev.scrollBar.SetOwner(ev)
 	ev.scrollBar.OnScroll = func(v int) {
@@ -887,6 +888,9 @@ func (ev *EditorView) StartIndexing() {
 	if ev.asyncBuf == nil { return }
 	if ev.indexCancel != nil { ev.indexCancel() }
 
+	ev.editSession++
+	sessionID := ev.editSession
+
 	ctx, cancel := context.WithCancel(context.Background())
 	ev.indexCancel = cancel
 
@@ -895,8 +899,9 @@ func (ev *EditorView) StartIndexing() {
 		chunkSize := 64 * 1024
 		buf := ev.asyncBuf
 		li := ev.li
+		maxSize := buf.Size()
 
-		for absPos < buf.Size() {
+		for absPos < maxSize {
 			select {
 			case <-ctx.Done(): return
 			default:
@@ -920,8 +925,10 @@ func (ev *EditorView) StartIndexing() {
 
 			if len(newOffsets) > 0 {
 				vtui.FrameManager.PostTask(func() {
-					if ctx.Err() != nil || ev.edited { return }
-					li.AppendOffsets(newOffsets)
+					if ctx.Err() != nil || ev.edited || ev.editSession != sessionID {
+						return
+					}
+					li.AppendOffsets(newOffsets, maxSize)
 					ev.engine.InvalidateCache()
 					vtui.FrameManager.Redraw()
 				})
