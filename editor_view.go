@@ -708,7 +708,10 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 					lineData, _ := ev.pt.GetRange(lineStart, ev.CursorPos)
 					size := 1
 					if lineData != nil {
-						_, size = utf8.DecodeLastRune(lineData)
+						r, rsize := utf8.DecodeLastRune(lineData)
+						if r != utf8.RuneError {
+							size = rsize
+						}
 					}
 
 					ev.pt.Delete(offset-size, size)
@@ -739,7 +742,10 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 				data, _ := ev.pt.GetRange(offset, peekLen)
 				size := 1
 				if data != nil {
-					_, size = utf8.DecodeRune(data)
+					r, rsize := utf8.DecodeRune(data)
+					if r != utf8.RuneError {
+						size = rsize
+					}
 				}
 
 				ev.pt.Delete(offset, size)
@@ -1385,6 +1391,9 @@ func (ev *EditorView) Search(pattern string, caseSensitive, reverse, next bool) 
 						break
 					}
 					// Step back, ensuring overlap to catch split words
+					if readStart == 0 {
+						break // Nowhere else to go
+					}
 					currOff = readStart + len(pattern) - 1
 					if currOff >= readStart+readSize {
 						currOff = readStart - 1

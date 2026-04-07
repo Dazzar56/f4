@@ -2309,3 +2309,40 @@ func TestEditorView_BinaryRobustness(t *testing.T) {
 		}
 	})
 }
+func TestEditorView_Search_Reverse_StartAtZero(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pt := piecetable.New([]byte("match"))
+	ev := NewEditorView(pt, nil, "")
+	ev.CursorPos = 0 // Start at beginning
+
+	// Reverse search from 0 should exit instantly, not hang
+	ev.Search("match", false, true, false)
+
+	timeout := time.After(200 * time.Millisecond)
+	select {
+	case task := <-vtui.FrameManager.TaskChan:
+		task()
+	case <-timeout:
+		t.Fatal("Reverse search at offset 0 hung")
+	}
+}
+
+func TestEditorView_DeleteBrokenUTF8(t *testing.T) {
+	// Manually insert "half" of a Russian 'П' (0xD0 0x9F)
+	pt := piecetable.New([]byte{0xD0, ' ', 'A'})
+	ev := NewEditorView(pt, nil, "")
+	ev.CursorPos = 1 // Cursor right after the broken byte 0xD0
+
+	// Backspace should not crash and should fall back to deleting 1 byte
+	ev.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_BACK,
+	})
+
+	if pt.Size() != 2 {
+		t.Errorf("Broken UTF-8 backspace failed, size: %d", pt.Size())
+	}
+	if pt.String() != " A" {
+		t.Errorf("Expected ' A', got %q", pt.String())
+	}
+}
