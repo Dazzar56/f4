@@ -2775,3 +2775,17 @@ func TestEditorView_WordSelection_Multiline(t *testing.T) {
 		t.Errorf("Selection range across EOL fail: [%d:%d], expected [0:6]", min, max)
 	}
 }
+func TestEditorView_WordJumps_DifferentDividers(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pt := piecetable.New([]byte("...///"))
+	ev := NewEditorView(pt, nil, "")
+	ev.li.Rebuild(pt)
+	ev.CursorPos = 0
+
+	// Ctrl+Right должен остановиться на первом слэше (смена типа разделителя)
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT, ControlKeyState: vtinput.LeftCtrlPressed})
+
+	if ev.CursorPos != 3 {
+		t.Errorf("EditorView expected stop on index 3, got %d", ev.CursorPos)
+	}
+}
