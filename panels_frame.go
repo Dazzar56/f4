@@ -423,6 +423,10 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		vtui.FrameManager.Push(NewArkanoidFrame())
 		return true
 	}
+	// Crash test hotkey: Ctrl+Alt+C
+	if e.VirtualKeyCode == vtinput.VK_C && alt && ctrl && e.KeyDown {
+		panic("Manual safe crash triggered by user (Ctrl+Alt+C) for testing!")
+	}
 	// Drive menus
 	if e.VirtualKeyCode == vtinput.VK_F1 && alt && !ctrl && !shift && e.KeyDown {
 		pf.showDriveMenu(0)
