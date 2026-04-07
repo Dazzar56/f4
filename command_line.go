@@ -89,7 +89,7 @@ func (cl *CommandLine) ProcessKey(e *vtinput.InputEvent) bool {
 		// We exclude simple cursor movements from this logic.
 		isNav := false
 		switch e.VirtualKeyCode {
-		case vtinput.VK_LEFT, vtinput.VK_RIGHT, vtinput.VK_HOME, vtinput.VK_END:
+		case vtinput.VK_LEFT, vtinput.VK_RIGHT, vtinput.VK_HOME, vtinput.VK_END, vtinput.VK_E, vtinput.VK_X:
 			isNav = true
 		}
 		if !isNav {

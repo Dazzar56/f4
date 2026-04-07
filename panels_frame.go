@@ -473,8 +473,8 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		// Editor view checks paste events internally, so we let it fall through if panels are shown
 	}
 
-	// Raw input mode for interactive terminal apps (like far2l inside f4)
-	if !pf.showPanels && pf.termView.UseAltScreen {
+	// Raw input mode for interactive terminal apps or active shell commands
+	if !pf.showPanels && (pf.termView.UseAltScreen || pf.isPtyBusy()) {
 		isCtrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
 		isShift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
 
@@ -595,6 +595,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 	if e.VirtualKeyCode == vtinput.VK_ESCAPE && !pf.cmdLine.IsEmpty() {
 		pf.cmdLine.Clear()
+		pf.cmdLine.Edit.HistoryPos = -1
 		return true
 	}
 
@@ -637,6 +638,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			}
 			cmd := pf.cmdLine.Edit.GetText()
 			pf.cmdLine.Edit.AddHistory(cmd)
+			pf.cmdLine.Edit.HistoryPos = -1
 			
 			activePty := pf.getActivePTY()
 			if activePty != nil {
@@ -724,11 +726,12 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			return true
 		}
 	} else {
-		if e.VirtualKeyCode == vtinput.VK_UP {
+		// Navigation keys when panels are hidden (Terminal is visible)
+		if e.VirtualKeyCode == vtinput.VK_UP || (e.VirtualKeyCode == vtinput.VK_E && ctrl) {
 			pf.cmdLine.Edit.HistoryUp()
 			return true
 		}
-		if e.VirtualKeyCode == vtinput.VK_DOWN {
+		if e.VirtualKeyCode == vtinput.VK_DOWN || (e.VirtualKeyCode == vtinput.VK_X && ctrl) {
 			pf.cmdLine.Edit.HistoryDown()
 			return true
 		}
