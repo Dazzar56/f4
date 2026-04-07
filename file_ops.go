@@ -104,7 +104,7 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 				}
 			}
 
-			err := recursiveCopy(ctx, update, srcVfs, srcPath, dstVfs, targetItemPath, state)
+			err := recursiveCopy(ctx, update, srcVfs, srcPath, dstVfs, targetItemPath, state, 0)
 			if err != nil {
 				return err
 			}
@@ -128,7 +128,10 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 	})
 }
 
-func recursiveCopy(ctx context.Context, update func(msg string, percent int), srcVfs vfs.VFS, srcPath string, dstVfs vfs.VFS, destPath string, state *FileOpState) error {
+func recursiveCopy(ctx context.Context, update func(msg string, percent int), srcVfs vfs.VFS, srcPath string, dstVfs vfs.VFS, destPath string, state *FileOpState, depth int) error {
+	if depth > 1000 {
+		return fmt.Errorf("maximum recursion depth exceeded (circular structure?)")
+	}
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -194,7 +197,7 @@ func recursiveCopy(ctx context.Context, update func(msg string, percent int), sr
 			if item.Name == ".." {
 				continue
 			}
-			if err := recursiveCopy(ctx, update, srcVfs, srcVfs.Join(srcPath, item.Name), dstVfs, dstVfs.Join(destPath, item.Name), state); err != nil {
+			if err := recursiveCopy(ctx, update, srcVfs, srcVfs.Join(srcPath, item.Name), dstVfs, dstVfs.Join(destPath, item.Name), state, depth+1); err != nil {
 				return err
 			}
 		}

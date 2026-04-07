@@ -257,6 +257,7 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 
 		frags := ev.engine.GetFragments(logIdx)
 		baseVRow := ev.engine.GetRowOffset(logIdx)
+		vtui.DebugLog("EDITOR_RENDER: Line %d, Frags: %d, BaseVRow: %d", logIdx, len(frags), baseVRow)
 		runesProcessedInLine := 0
 
 		for fIdx, frag := range frags {
@@ -774,6 +775,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 }
 
 func (ev *EditorView) fillCells(target []vtui.CharInfo, data []byte, defaultAttr, selAttr uint64, offset int, selActive bool, selMin, selMax int, syntax []uint64) []vtui.CharInfo {
+	vtui.DebugLog("EDITOR_FILL: Off: %d, Len: %d, Sel: %v[%d:%d]", offset, len(data), selActive, selMin, selMax)
 	target = target[:0]
 	currByte := 0
 	charIdx := 0
@@ -815,12 +817,12 @@ func (ev *EditorView) fillCells(target []vtui.CharInfo, data []byte, defaultAttr
 }
 
 func (ev *EditorView) ensureCursorVisible() {
+	curOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
+	vRow, vCol := ev.engine.LogicalToVisual(curOffset)
+	vtui.DebugLog("EDITOR_NAV: Cursor: %d:%d (Off:%d) -> Visual: %d:%d", ev.CursorLine, ev.CursorPos, curOffset, vRow, vCol)
 	width := ev.X2 - ev.X1 + 1
 	height := ev.Y2 - ev.Y1
 	if width <= 0 || height <= 0 { return }
-
-	curOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
-	vRow, vCol := ev.engine.LogicalToVisual(curOffset)
 
 	// 1. Вертикальный скролл
 	if vRow < ev.ScrollTopRow {
