@@ -1715,6 +1715,8 @@ func TestEditorView_Search_ShiftF7_Reverse(t *testing.T) {
 doneDrain:
 	// 2. "Find Next" backward search (Shift+F7)
 	// Cursor is at 13 (end of match). Reverse Next should skip index 12 and find 11.
+	// 2. "Find Next" backward search (Shift+F7)
+	// Cursor is at 13 (end of match). Reverse Next should skip index 12 and find 11.
 	ev.selActive = false
 	ev.searchReverse = true
 	ev.ProcessKey(&vtinput.InputEvent{
@@ -1722,19 +1724,26 @@ doneDrain:
 		VirtualKeyCode: vtinput.VK_F7, ControlKeyState: vtinput.ShiftPressed,
 	})
 
-	timeout = time.After(1 * time.Second)
-	for !ev.selActive {
+	// Use a more robust drain to handle async search completion
+	found := false
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && !found {
 		select {
 		case task := <-vtui.FrameManager.TaskChan:
 			task()
-			if vtui.FrameManager.GetTopFrameType() == vtui.TypeDialog {
-				if vtui.FrameManager.GetTopFrame().GetTitle() == " Search " {
-					t.Fatal("Search reported 'Not found' unexpectedly")
-				}
+			if ev.selActive {
+				found = true
 			}
-		case <-timeout:
-			t.Fatal("Shift+F7 backward search timed out")
+			// Check if we hit the "Not found" dialog
+			if top := vtui.FrameManager.GetTopFrame(); top != nil && top.GetTitle() == " Search " {
+				t.Fatal("Search reported 'Not found' unexpectedly")
+			}
+		case <-time.After(10 * time.Millisecond):
 		}
+	}
+
+	if !found {
+		t.Fatal("Shift+F7 backward search failed to find second match")
 	}
 
 	if ev.selAnchorOffset != 11 {
@@ -2593,5 +2602,50 @@ func TestEditorView_UndoRedo(t *testing.T) {
 	ev.Redo() // Should do nothing
 	if ev.pt.String() != "Initial A!" {
 		t.Errorf("Redo worked when it shouldn't: %q", ev.pt.String())
+	}
+}
+func TestEditorView_Undo_Advanced(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pt := piecetable.New([]byte("abcde"))
+	ev := NewEditorView(pt, nil, "")
+	ev.SetPosition(0, 0, 80, 24)
+	ev.CursorPos = 2 // On 'c'
+
+	// 1. Test Delete key (forward delete)
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DELETE})
+	if ev.pt.String() != "abde" {
+		t.Errorf("Delete failed: %q", ev.pt.String())
+	}
+	ev.Undo()
+	if ev.pt.String() != "abcde" {
+		t.Errorf("Undo Delete failed: %q", ev.pt.String())
+	}
+
+	// 2. Test Selection Replacement (Typing over)
+	// Select "bc"
+	ev.CursorPos = 1
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT, ControlKeyState: vtinput.ShiftPressed})
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT, ControlKeyState: vtinput.ShiftPressed})
+
+	// Type 'X' over "bc"
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'X'})
+	if ev.pt.String() != "aXde" {
+		t.Errorf("Replacement failed: %q", ev.pt.String())
+	}
+
+	// It MUST be one undo step
+	ev.Undo()
+	if ev.pt.String() != "abcde" {
+		t.Errorf("Undo Replacement failed: expected 'abcde', got %q. Grouping likely broken.", ev.pt.String())
+	}
+	if ev.CursorPos != 1 {
+		t.Errorf("Undo Replacement cursor failed: expected 1, got %d", ev.CursorPos)
+	}
+
+	// 3. Test Empty Stack Safety
+	ev.undoStack = nil
+	ev.Undo() // Should not panic
+	if ev.pt.String() != "abcde" {
+		t.Error("Undo on empty stack corrupted data")
 	}
 }

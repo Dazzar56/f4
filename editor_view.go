@@ -176,10 +176,21 @@ func (ev *EditorView) saveUndo(op undoOpType) {
 		return
 	}
 
+	ev.redoStack = nil // Redo stack MUST be cleared on any new modification
+
+	// If we are about to modify a selection, the "home" position for Undo
+	// is the start of that selection.
+	line, pos := ev.CursorLine, ev.CursorPos
+	if ev.selActive {
+		minOff, _ := ev.getSelectionRange()
+		line = ev.li.GetLineAtOffset(minOff)
+		pos = minOff - ev.li.GetLineOffset(line)
+	}
+
 	state := editorState{
 		table: ev.pt.GetState(),
-		line:  ev.CursorLine,
-		pos:   ev.CursorPos,
+		line:  line,
+		pos:   pos,
 	}
 
 	// Simple grouping for typing: don't push new state if we are just typing characters consecutively
@@ -191,7 +202,6 @@ func (ev *EditorView) saveUndo(op undoOpType) {
 	if len(ev.undoStack) > 1000 {
 		ev.undoStack = ev.undoStack[1:]
 	}
-	ev.redoStack = nil // Any new action clears redo stack
 	ev.lastOp = op
 	vtui.DebugLog("EDITOR: Saved undo state (op:%d), stack size: %d", op, len(ev.undoStack))
 }
@@ -1567,7 +1577,7 @@ func (ev *EditorView) Search(pattern string, caseSensitive, reverse, next bool) 
 					}
 					currOff = readStart + len(pattern) - 1
 					if currOff >= readStart+readSize {
-						currOff = readStart - 1
+						currOff = readStart
 					}
 				}
 			}
