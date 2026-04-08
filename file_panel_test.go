@@ -873,3 +873,10 @@ func TestFileSystemPanel_Sorting(t *testing.T) {
 	fp.SetSortMode(SortName) // Toggle reverse
 	if !fp.sortReverse { t.Error("SetSortMode(Name) second call should toggle reverse to true") }
 }
+
+/*
+func TestDummyFailure(t *testing.T) {
+    vtui.DebugLog("This is a trace log before failure.")
+    t.Fatal("Intentional failure for log dump test")
+}
+*/
