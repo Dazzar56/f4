@@ -1561,6 +1561,9 @@ func (ev *EditorView) Search(pattern string, caseSensitive, reverse, next bool) 
 	ev.searchCaseSensitive = caseSensitive
 	ev.searchReverse = reverse
 
+	vtui.DebugLog("EDITOR_SEARCH: Starting for %q (sensitive=%v, reverse=%v, next=%v). CursorPos=%d",
+		pattern, caseSensitive, reverse, next, ev.li.GetLineOffset(ev.CursorLine)+ev.CursorPos)
+
 	title := " Searching... "
 	msg := fmt.Sprintf("Looking for: %s", pattern)
 
@@ -1591,30 +1594,52 @@ func (ev *EditorView) Search(pattern string, caseSensitive, reverse, next bool) 
 				if !caseSensitive {
 					searchData, searchPat = strings.ToLower(data), strings.ToLower(pattern)
 				}
+				res := -1
 				if reverse {
-					return strings.LastIndex(searchData, searchPat)
+					res = strings.LastIndex(searchData, searchPat)
+				} else {
+					res = strings.Index(searchData, searchPat)
 				}
-				return strings.Index(searchData, searchPat)
+				if res != -1 {
+					vtui.DebugLog("EDITOR_SEARCH: Internal match found at relative index %d in chunk (chunk size %d)", res, len(data))
+				}
+				return res
 			}
 
 			if !reverse {
 				currOff := startOff
-				if next { currOff++ }
+				if next {
+					currOff++
+				}
+
+				vtui.DebugLog("EDITOR_SEARCH: Running forward search from offset %d", currOff)
 
 				for currOff < totalSize {
-					if ctx.Err() != nil { return }
+					if ctx.Err() != nil {
+						return
+					}
 					percent := 0
-					if totalSize > 0 { percent = int((currOff * 100) / totalSize) }
+					if totalSize > 0 {
+						percent = int((currOff * 100) / totalSize)
+					}
 					if totalSize > 0 {
 						ctx.RunOnUI(func() { dlg.SetProgress(percent) })
 					}
 
 					readSize := chunkSize
-					if currOff+readSize > totalSize { readSize = totalSize - currOff }
+					if currOff+readSize > totalSize {
+						readSize = totalSize - currOff
+					}
 
+					vtui.DebugLog("EDITOR_SEARCH: Reading segment at %d, size %d", currOff, readSize)
 					data, err := ev.pt.GetRange(currOff, readSize)
-					if err == piecetable.ErrLoading { time.Sleep(20 * time.Millisecond); continue }
-					if len(data) == 0 { break }
+					if err == piecetable.ErrLoading {
+						time.Sleep(20 * time.Millisecond)
+						continue
+					}
+					if len(data) == 0 {
+						break
+					}
 
 					idx := match(string(data))
 					if idx != -1 {
@@ -1622,40 +1647,54 @@ func (ev *EditorView) Search(pattern string, caseSensitive, reverse, next bool) 
 						break
 					}
 					advance := len(data) - len(pattern)
-					if advance <= 0 { advance = 1 }
+					if advance <= 0 {
+						advance = 1
+					}
 					currOff += advance
-					if len(data) < chunkSize { break }
+					if len(data) < chunkSize {
+						break
+					}
 				}
 			} else {
 				currOff := startOff
-				if next { currOff-- }
+				if next {
+					currOff--
+				}
 
-				for currOff > 0 {
-					if ctx.Err() != nil { return }
+				vtui.DebugLog("EDITOR_SEARCH: Running backward search from offset %d", currOff)
+
+				for currOff >= 0 {
+					if ctx.Err() != nil {
+						return
+					}
 					if totalSize > 0 {
 						percent := int(((totalSize - currOff) * 100) / totalSize)
 						ctx.RunOnUI(func() { dlg.SetProgress(percent) })
 					}
 
 					readStart := currOff - chunkSize
-					if readStart < 0 { readStart = 0 }
+					if readStart < 0 {
+						readStart = 0
+					}
 					readSize := currOff - readStart
 
+					vtui.DebugLog("EDITOR_SEARCH: Reading segment at %d, size %d", readStart, readSize)
 					data, err := ev.pt.GetRange(readStart, readSize)
 					if err == piecetable.ErrLoading {
 						time.Sleep(20 * time.Millisecond)
 						continue
 					}
-					if len(data) == 0 { break }
+					if len(data) == 0 {
+						break
+					}
 
 					idx := match(string(data))
 					if idx != -1 {
 						foundOffset = readStart + idx
 						break
 					}
-					// Step back, ensuring overlap to catch split words
 					if readStart == 0 {
-						break // Nowhere else to go
+						break
 					}
 					currOff = readStart + len(pattern) - 1
 					if currOff >= readStart+readSize {
@@ -1667,6 +1706,7 @@ func (ev *EditorView) Search(pattern string, caseSensitive, reverse, next bool) 
 			ctx.RunOnUI(func() {
 				dlg.Close()
 				if foundOffset != -1 {
+					vtui.DebugLog("EDITOR_SEARCH: UI update: Found pattern at offset %d. Updating cursor and selection.", foundOffset)
 					ev.selActive = true
 					ev.selAnchorOffset = foundOffset
 
@@ -1678,12 +1718,14 @@ func (ev *EditorView) Search(pattern string, caseSensitive, reverse, next bool) 
 					ev.ensureCursorVisible()
 					vtui.FrameManager.Redraw()
 				} else if ctx.Err() == nil {
+					vtui.DebugLog("EDITOR_SEARCH: UI update: Pattern NOT FOUND.")
 					vtui.ShowMessage(" Search ", "Pattern not found.", []string{"&Ok"})
 				}
 			})
 		})
 	})
 }
+
 const (
 	catSpace = iota
 	catDivider

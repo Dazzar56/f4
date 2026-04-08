@@ -1703,22 +1703,24 @@ func TestEditorView_Search_ShiftF7_Reverse(t *testing.T) {
 		t.Errorf("Expected offset 12, got %d", ev.selAnchorOffset)
 	}
 
-	// Drain leftover tasks to ensure a clean state for the second search
-	for {
+	// Drain leftover tasks AND WAIT for any pending async search logic to finish.
+	// This makes the test deterministic under load.
+	vtui.DebugLog("TEST_SEARCH: Pumping tasks after first search...")
+	pumpDeadline := time.Now().Add(500 * time.Millisecond)
+	for time.Now().Before(pumpDeadline) {
 		select {
 		case task := <-vtui.FrameManager.TaskChan:
 			task()
 		default:
-			goto doneDrain
+			time.Sleep(10 * time.Millisecond)
 		}
 	}
-doneDrain:
-	// 2. "Find Next" backward search (Shift+F7)
-	// Cursor is at 13 (end of match). Reverse Next should skip index 12 and find 11.
+
 	// 2. "Find Next" backward search (Shift+F7)
 	// Cursor is at 13 (end of match). Reverse Next should skip index 12 and find 11.
 	ev.selActive = false
 	ev.searchReverse = true
+	vtui.DebugLog("TEST_SEARCH: Triggering Search 2. Current CursorPos: %d", ev.CursorPos)
 	ev.ProcessKey(&vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
 		VirtualKeyCode: vtinput.VK_F7, ControlKeyState: vtinput.ShiftPressed,
