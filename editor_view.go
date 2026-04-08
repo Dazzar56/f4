@@ -731,11 +731,12 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 						for currRuneIdx > 0 {
 							prev, curr := runes[currRuneIdx-1], runes[currRuneIdx]
 							pCat, cCat := getCharCategory(prev), getCharCategory(curr)
-							if (pCat == catSpace && cCat == catWord) ||
-								(pCat == catSpace && cCat == catDivider) ||
-								(pCat == catDivider && cCat == catWord) {
-								break
-							}
+						if (shift && pCat != catSpace && cCat == catSpace) ||
+							(pCat == catSpace && cCat == catWord) ||
+							(pCat == catSpace && cCat == catDivider) ||
+							(pCat == catDivider && cCat == catWord) {
+							break
+						}
 							currRuneIdx--
 							ev.CursorPos = 0
 							for i := 0; i < currRuneIdx; i++ {
@@ -813,9 +814,12 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 							prev, curr := runes[currRuneIdx-1], runes[currRuneIdx]
 							pCat, cCat := getCharCategory(prev), getCharCategory(curr)
 							stop := false
-							if pCat == catWord && cCat == catDivider {
-								stop = true
-							}
+						if shift && pCat != catSpace && cCat == catSpace {
+							stop = true
+						}
+						if pCat == catWord && cCat == catDivider {
+							stop = true
+						}
 							if pCat == catSpace && cCat == catWord {
 								stop = true
 							}
