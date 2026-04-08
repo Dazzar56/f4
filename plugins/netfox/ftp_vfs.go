@@ -118,6 +118,9 @@ func (v *FTPVFS) Create(ctx context.Context, p string) (io.WriteCloser, error) {
 
 func (v *FTPVFS) ParentVFS() vfs.VFS { return v.parent }
 func (v *FTPVFS) Close() error      { return v.conn.Quit() }
+func (v *FTPVFS) Clone() vfs.VFS {
+	return v
+}
 type ftpProvider struct{}
 func (p *ftpProvider) Name() string  { return "NetFox-FTP" }
 func (p *ftpProvider) Priority() int { return 100 }

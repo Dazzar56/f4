@@ -149,3 +149,6 @@ func (v *NetFoxVFS) Create(ctx context.Context, p string) (io.WriteCloser, error
 }
 func (v *NetFoxVFS) ParentVFS() vfs.VFS { return nil }
 func (v *NetFoxVFS) Close() error   { return nil }
+func (v *NetFoxVFS) Clone() vfs.VFS {
+	return NewNetFoxVFS(v.path)
+}

@@ -180,4 +180,7 @@ func (v *OSVFS) Create(ctx context.Context, path string) (io.WriteCloser, error)
 func (v *OSVFS) ParentVFS() VFS {
 	return nil // OSVFS is the root
 }
+func (v *OSVFS) Clone() VFS {
+	return NewOSVFS(v.currentPath)
+}
 func (v *OSVFS) Close() error { return nil }

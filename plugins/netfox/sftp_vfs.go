@@ -150,6 +150,10 @@ func (v *SFTPVFS) Close() error {
 	if v.ssh != nil { return v.ssh.Close() }
 	return nil
 }
+func (v *SFTPVFS) Clone() vfs.VFS {
+	// Re-auth is complex; return self reference.
+	return v
+}
 
 func (v *SFTPVFS) OpenPty(cols, rows int) (any, error) {
 	pty, err := NewSSHPty(v.ssh)

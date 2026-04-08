@@ -82,6 +82,7 @@ type VFS interface {
 	Create(ctx context.Context, path string) (io.WriteCloser, error)
 	ParentVFS() VFS // Returns the underlying VFS if this is a virtual mount, or nil
 
+	Clone() VFS
 	Close() error
 }
 

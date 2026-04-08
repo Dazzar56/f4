@@ -318,3 +318,9 @@ func (v *ArchiveVFS) Close() error {
 	}
 	return nil
 }
+
+func (v *ArchiveVFS) Clone() vfs.VFS {
+	// Archive VFS is currently stateful and linked to temp files.
+	// For now, return self as cloning requires extracting everything again.
+	return v
+}

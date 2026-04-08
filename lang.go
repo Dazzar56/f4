@@ -7,6 +7,7 @@ import "github.com/unxed/vtui"
 var Lng = map[string]string{
 	"vtui.Ok":           "&Ok",
 	"vtui.Cancel":       "Cancel",
+	"Panel.Other":       "&Other panel",
 	"Panel.Column.Name": "Name",
 	"Panel.Column.Size": "Size",
 	"Panel.UpDir":       "UP-DIR",

@@ -1152,3 +1152,57 @@ func TestLayout_F4ActionDialogs_Validity(t *testing.T) {
 		fm.Pop()
 	})
 }
+
+func TestPanelsFrame_DriveMenu_OtherPanel(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+
+	pathR := t.TempDir() + "/right"
+	os.MkdirAll(pathR, 0755)
+	pf.panels[1].(*FileSystemPanel).vfs.SetPath(pathR)
+
+	// Open Alt+F1 (Left panel drive menu)
+	pf.showDriveMenu(0)
+
+	top := vtui.FrameManager.GetTopFrame()
+	menu, ok := top.(*vtui.VMenu)
+	if !ok { t.Fatal("Drive menu not opened") }
+
+	// Ensure "Other panel" is at index 0 and selected
+	if menu.GetTitle() != " Drive " || menu.SelectPos != 0 {
+		t.Errorf("Menu state invalid: title=%q, pos=%d", menu.GetTitle(), menu.SelectPos)
+	}
+
+	// Trigger "Other panel" (idx 0)
+	menu.OnAction(0)
+
+	// Left panel VFS path must now match Right panel's path
+	got := pf.panels[0].(*FileSystemPanel).vfs.GetPath()
+	if got != pathR {
+		t.Errorf("Path sync failed. Expected %q, got %q", pathR, got)
+	}
+}
+
+func TestPanelsFrame_DriveMenu_TerminalBusy(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+
+	// Simulate busy terminal
+	pf.showPanels = false
+	pf.termView.UseAltScreen = true
+
+	// Press Alt+F1
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_F1, ControlKeyState: vtinput.LeftAltPressed,
+	})
+
+	// Menu should NOT open
+	if vtui.FrameManager.GetTopFrameType() == vtui.TypeMenu {
+		t.Error("Drive menu opened while terminal was busy")
+	}
+}

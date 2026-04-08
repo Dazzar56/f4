@@ -438,33 +438,6 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	if e.VirtualKeyCode == vtinput.VK_C && alt && ctrl && e.KeyDown {
 		panic("Manual safe crash triggered by user (Ctrl+Alt+C) for testing!")
 	}
-	// Drive menus
-	if e.VirtualKeyCode == vtinput.VK_F1 && alt && !ctrl && !shift && e.KeyDown {
-		pf.showDriveMenu(0)
-		return true
-	}
-	if e.VirtualKeyCode == vtinput.VK_F2 && alt && !ctrl && !shift && e.KeyDown {
-		pf.showDriveMenu(1)
-		return true
-	}
-
-	// Alt+F5: Dummy Long Operation for debugging
-	if e.VirtualKeyCode == vtinput.VK_F5 && alt && !ctrl && e.KeyDown {
-		pf.showDummyOpDialog()
-		return true
-	}
-
-	// Alt+F7: Find file
-	if e.VirtualKeyCode == vtinput.VK_F7 && alt && !ctrl && !shift && e.KeyDown {
-		return vtui.FrameManager.EmitCommand(CmFindFile, nil)
-	}
-
-	// F11: Plugin Menu
-	if e.VirtualKeyCode == vtinput.VK_F11 && !alt && !ctrl && !shift && e.KeyDown {
-		pf.showPluginMenu()
-		return true
-	}
-
 	if e.Type == vtinput.FocusEventType {
 		// Propagate focus to command line so its cursor state stays in sync
 		pf.cmdLine.ProcessKey(e)
@@ -507,6 +480,33 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				}
 			}
 		}
+		return true
+	}
+
+	// Drive menus (Only if terminal is NOT busy)
+	if e.VirtualKeyCode == vtinput.VK_F1 && alt && !ctrl && !shift && e.KeyDown {
+		pf.showDriveMenu(0)
+		return true
+	}
+	if e.VirtualKeyCode == vtinput.VK_F2 && alt && !ctrl && !shift && e.KeyDown {
+		pf.showDriveMenu(1)
+		return true
+	}
+
+	// Alt+F5: Dummy Long Operation for debugging
+	if e.VirtualKeyCode == vtinput.VK_F5 && alt && !ctrl && e.KeyDown {
+		pf.showDummyOpDialog()
+		return true
+	}
+
+	// Alt+F7: Find file
+	if e.VirtualKeyCode == vtinput.VK_F7 && alt && !ctrl && !shift && e.KeyDown {
+		return vtui.FrameManager.EmitCommand(CmFindFile, nil)
+	}
+
+	// F11: Plugin Menu
+	if e.VirtualKeyCode == vtinput.VK_F11 && !alt && !ctrl && !shift && e.KeyDown {
+		pf.showPluginMenu()
 		return true
 	}
 
@@ -1265,9 +1265,11 @@ func (pf *PanelsFrame) showPluginMenu() {
 
 func (pf *PanelsFrame) showDriveMenu(panelIdx int) {
 	menu := vtui.NewVMenu(" Drive ")
+	menu.AddItem(vtui.MenuItem{Text: Msg("Panel.Other")})
 	for _, drv := range DriveRegistry {
 		menu.AddItem(vtui.MenuItem{Text: drv.Name})
 	}
+	menu.SetSelectPos(0)
 
 	w, h := 26, menu.GetItemCount()+2
 	x := (pf.lastW - w) / 2
@@ -1277,30 +1279,39 @@ func (pf *PanelsFrame) showDriveMenu(panelIdx int) {
 	} else {
 		x = pf.lastW*3/4 - w/2
 	}
-	if x < 0 {
-		x = 0
-	}
+	if x < 0 { x = 0 }
 	menu.SetPosition(x, y, x+w-1, y+h-1)
 
 	menu.OnAction = func(idx int) {
 		menu.Close()
-		if fsp, ok := pf.panels[panelIdx].(*FileSystemPanel); ok {
-			if idx >= 0 && idx < len(DriveRegistry) {
-				newVFS := DriveRegistry[idx].Factory()
-				if newVFS != nil {
-					if fsp.vfs != nil {
-						fsp.vfs.Close()
-						pf.ptyMutex.Lock()
-						if pty, ok := pf.remotePtys[fsp.vfs]; ok {
-							pty.Close()
-							delete(pf.remotePtys, fsp.vfs)
-						}
-						pf.ptyMutex.Unlock()
+		fsp, ok := pf.panels[panelIdx].(*FileSystemPanel)
+		if !ok { return }
+
+		if idx == 0 {
+			otherFsp := pf.panels[1-panelIdx].(*FileSystemPanel)
+			if fsp.vfs != nil { fsp.vfs.Close() }
+			fsp.vfs = otherFsp.vfs.Clone()
+			fsp.ReadDirectory()
+			pf.RefreshAll()
+			return
+		}
+
+		registryIdx := idx - 1
+		if registryIdx >= 0 && registryIdx < len(DriveRegistry) {
+			newVFS := DriveRegistry[registryIdx].Factory()
+			if newVFS != nil {
+				if fsp.vfs != nil {
+					fsp.vfs.Close()
+					pf.ptyMutex.Lock()
+					if pty, ok := pf.remotePtys[fsp.vfs]; ok {
+						pty.Close()
+						delete(pf.remotePtys, fsp.vfs)
 					}
-					fsp.vfs = newVFS
-					fsp.ReadDirectory()
-					pf.RefreshAll()
+					pf.ptyMutex.Unlock()
 				}
+				fsp.vfs = newVFS
+				fsp.ReadDirectory()
+				pf.RefreshAll()
 			}
 		}
 	}
