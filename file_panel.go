@@ -350,15 +350,13 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 			vtui.FrameManager.PostTask(func() {
 				if ctx.Err() != nil { return }
 
-				if isFirstChunk {
-					if !keepEntries {
-						fp.entries = nil
-						if !fp.vfs.IsAtRoot() || fp.vfs.ParentVFS() != nil {
-							fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
-						}
-					}
-					isFirstChunk = false
-				}
+                if isFirstChunk {
+                    fp.entries = nil
+                    if !fp.vfs.IsAtRoot() || fp.vfs.ParentVFS() != nil {
+                        fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
+                    }
+                    isFirstChunk = false
+                }
 
 				currentSelected := fp.GetSelectedName()
 				fp.entries = append(fp.entries, newEntries...)
@@ -400,13 +398,13 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 					vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to read directory:\n%v", err), []string{"&Ok"})
 				}
 
-				if isFirstChunk && !keepEntries {
-					fp.entries = nil
-					if !fp.vfs.IsAtRoot() || fp.vfs.ParentVFS() != nil {
-						fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
-					}
-					fp.SetCursorIndex(0)
-				}
+        if isFirstChunk {
+            fp.entries = nil
+            if !fp.vfs.IsAtRoot() || fp.vfs.ParentVFS() != nil {
+                fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
+            }
+            fp.SetCursorIndex(0)
+        }
 
 				if fp.pendingSelection != "" {
 					fp.SelectName(fp.pendingSelection)

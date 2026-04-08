@@ -732,6 +732,77 @@ func TestFileSystemPanel_FastFind_LongString(t *testing.T) {
 	}
 }
 
+func TestFileSystemPanel_ForkDuplication(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	tmp := t.TempDir()
+	os.WriteFile(filepath.Join(tmp, "file1.txt"), []byte("data"), 0644)
+	os.WriteFile(filepath.Join(tmp, "file2.txt"), []byte("data"), 0644)
+
+	fp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(tmp))
+
+	// Wait for initial load
+	timeout := time.After(1 * time.Second)
+	for fp.isLoading {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("timeout")
+		}
+	}
+	// Drain remaining tasks
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		default:
+			goto done1
+		}
+	}
+done1:
+
+	initialCount := len(fp.entries)
+	if initialCount != 3 { // "..", "file1.txt", "file2.txt"
+		t.Fatalf("Expected 3 entries initially, got %d", initialCount)
+	}
+
+	// Simulate what Clone() does
+	cloneFsp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(tmp))
+	// Copy entries like Clone()
+	cloneFsp.entries = make([]*fileEntry, len(fp.entries))
+	for j, e := range fp.entries {
+		cloneFsp.entries[j] = &fileEntry{VFSItem: e.VFSItem, Selected: e.Selected}
+	}
+	cloneFsp.Refresh()
+
+	// Call readDirectoryEx(true) like Clone()
+	cloneFsp.readDirectoryEx(true)
+
+	// Wait for clone load
+	timeout = time.After(1 * time.Second)
+	for cloneFsp.isLoading {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("timeout")
+		}
+	}
+	// Drain remaining tasks
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		default:
+			goto done2
+		}
+	}
+done2:
+
+	if len(cloneFsp.entries) != initialCount {
+		t.Errorf("Duplication bug! Expected %d entries, got %d", initialCount, len(cloneFsp.entries))
+	}
+}
 func TestFileSystemPanel_FastFind_MouseDeactivation(t *testing.T) {
 	fp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(t.TempDir()))
 	fp.fastFindMode = true
