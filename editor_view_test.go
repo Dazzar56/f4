@@ -2885,3 +2885,33 @@ func TestEditorView_Indexer_SessionFencing(t *testing.T) {
 		t.Error("CRITICAL: Stale indexer task was applied to a modified buffer!")
 	}
 }
+
+func TestEditorView_CursorScrollbarBoundary(t *testing.T) {
+	// Проверяем, что курсор не заходит на колонку скроллбара
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	// Создаем длинную строку
+	text := strings.Repeat("a", 100)
+	pt := piecetable.New([]byte(text))
+	ev := NewEditorView(pt, nil, "test.txt")
+
+	// Устанавливаем ширину 20 (X=0..19). Скроллбар будет на X=19.
+	ev.SetPosition(0, 0, 19, 10)
+	ev.WordWrap = false
+
+	// Прыгаем в конец (vCol = 100)
+	ev.CursorPos = 100
+	ev.ensureCursorVisible()
+
+	// Относительная позиция курсора на экране: vCol - ScrollLeft
+	relCursorX := 100 - ev.ScrollLeft
+
+	// Максимально допустимая позиция X для курсора — это 18 (так как 19 занято скроллбаром)
+	if relCursorX >= 19 {
+		t.Errorf("Cursor landed on scrollbar column! RelX: %d, Window X2: 19", relCursorX)
+	}
+
+	if relCursorX != 18 {
+		t.Errorf("Cursor should be exactly at the last available column (18), got %d", relCursorX)
+	}
+}

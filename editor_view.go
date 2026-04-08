@@ -1092,6 +1092,10 @@ func (ev *EditorView) ensureCursorVisible() {
 
 	width := ev.X2 - ev.X1 + 1
 	height := ev.Y2 - ev.Y1
+	
+	if ev.scrollBar != nil {
+		width--
+	}
 	if width <= 0 || height <= 0 { return }
 
 	// 1. Вертикальный скролл
@@ -1472,6 +1476,7 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 				ev.pt = newPt
 				ev.cleanState = newPt.GetState()
 				ev.engine = newEngine
+				ev.editSession++
 				ev.ensureEngineWidth()
 				ev.edited = false
 			}
