@@ -17,7 +17,7 @@ This project is built around several core philosophical and technical principles
 7. **Consistent UX:** Adherence to a strict set of [Navigation and Interaction Guidelines](UX_GUIDELINES.md) that blend the best of classic TUI paradigms.
 8. **Bazaar Policy:** Openness to community contributions and patches.
 
-*Trade-offs:* The compiled binary is currently ~10MB, which might not fit in highly constrained environments like home routers.
+*Trade-offs:* The compiled binary is currently ~20MB, which might not fit in highly constrained environments like home routers.
 
 ### UI & Input
 
