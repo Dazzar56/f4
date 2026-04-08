@@ -243,6 +243,7 @@ func (pf *PanelsFrame) initPTY() {
 			pf.ptyMutex.Lock()
 			// Отправляем вывод в терминал, только если локальный PTY сейчас активен
 			if pf.getActivePTYUnsafe() == pf.pty {
+				vtui.DebugLog("PTY_READ: Processing %d bytes from local PTY", n)
 				pf.parser.Process(buf[:n])
 				vtui.FrameManager.PostTask(vtui.FrameManager.Redraw)
 			}

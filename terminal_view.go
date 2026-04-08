@@ -137,6 +137,7 @@ func (tv *TerminalView) CloneStateFrom(other *TerminalView) {
 }
 
 func (tv *TerminalView) ResetBuffer(w, h int) {
+	vtui.DebugLog("TERM: ResetBuffer to %dx%d", w, h)
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
 
@@ -197,6 +198,7 @@ func (tv *TerminalView) getBuffer() [][]vtui.CharInfo {
 }
 
 func (tv *TerminalView) PutChar(r rune, attr uint64) {
+	// vtui.DebugLog("TERM: PutChar %q (U+%04X) at (%d,%d)", r, r, tv.CursorX, tv.CursorY)
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
 
@@ -285,6 +287,7 @@ func (tv *TerminalView) PutChar(r rune, attr uint64) {
 }
 
 func (tv *TerminalView) newline() {
+	// vtui.DebugLog("TERM: newline at Y=%d (ScrollBottom=%d)", tv.CursorY, tv.ScrollBottom)
 	tv.CursorX = 0
 	tv.CursorY++
 	if tv.CursorY > tv.ScrollBottom {
@@ -294,6 +297,7 @@ func (tv *TerminalView) newline() {
 }
 
 func (tv *TerminalView) scrollUp(top, bottom, n int) {
+	vtui.DebugLog("TERM: scrollUp [Top:%d Bottom:%d N:%d]", top, bottom, n)
 	buf := tv.getBuffer()
 	if top < 0 { top = 0 }
 	if bottom >= len(buf) { bottom = len(buf) - 1 }
@@ -308,6 +312,7 @@ func (tv *TerminalView) scrollUp(top, bottom, n int) {
 	}
 }
 func (tv *TerminalView) scrollDown(top, bottom, n int) {
+	vtui.DebugLog("TERM: scrollDown [Top:%d Bottom:%d N:%d]", top, bottom, n)
 	buf := tv.getBuffer()
 	if top < 0 { top = 0 }
 	if bottom >= len(buf) { bottom = len(buf) - 1 }
@@ -365,6 +370,7 @@ func (tv *TerminalView) InsertBlankCharacters(n int, attr uint64) {
 }
 
 func (tv *TerminalView) SetCursor(x, y int) {
+	// vtui.DebugLog("TERM: SetCursor to (%d,%d)", x, y)
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
 	if x < 0 { x = 0 }
@@ -450,6 +456,7 @@ func (tv *TerminalView) EraseLine(mode int, attr uint64) {
 }
 
 func (tv *TerminalView) SetAltScreen(enable bool) {
+	vtui.DebugLog("TERM: SetAltScreen %v", enable)
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
 	if tv.UseAltScreen == enable { return }

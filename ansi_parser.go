@@ -43,6 +43,7 @@ func NewAnsiParser(t *TerminalView, p PtyBackend) *AnsiParser {
 
 func (p *AnsiParser) Process(data []byte) {
 	for _, b := range data {
+		// vtui.DebugLog("PARSER: Byte 0x%02X State %v", b, p.State)
 		switch p.State {
 		case StateGround:
 			if b == 0x1b {
@@ -101,6 +102,7 @@ func (p *AnsiParser) Process(data []byte) {
 				// Intermediate bytes - ignore
 			} else if b >= 0x40 && b <= 0x7E {
 				p.Params = append(p.Params, p.CurParam.String())
+				vtui.DebugLog("PARSER: Executing CSI '%c' params: %v", b, p.Params)
 				p.handleCSI(b)
 				p.State = StateGround
 			}
@@ -320,6 +322,7 @@ func (p *AnsiParser) handleCSI(cmd byte) {
 		if len(args) > 0 && args[0] != 0 {
 			n = args[0]
 		}
+		vtui.DebugLog("PARSER: REP (repeat %q) count: %d", p.lastRune, n)
 		p.term.RepeatLastChar(n, p.lastRune, p.Attr)
 	case 'X': // ECH - Erase Character
 		n := 1
@@ -332,6 +335,7 @@ func (p *AnsiParser) handleCSI(cmd byte) {
 
 func (p *AnsiParser) handleOSC() {
 	s := p.CurParam.String()
+	vtui.DebugLog("PARSER: Executing OSC: %q", s)
 	p.CurParam.Reset()
 	if s == "" { return }
 
@@ -394,6 +398,7 @@ func (p *AnsiParser) handleOSC() {
 
 func (p *AnsiParser) handleAPC() {
 	s := p.CurParam.String()
+	vtui.DebugLog("PARSER: Executing APC: %q", s)
 	p.CurParam.Reset()
 
 	if strings.HasPrefix(s, "far2l") {
