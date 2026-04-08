@@ -12,7 +12,7 @@ This project is built around several core philosophical and technical principles
 2. **AI-Driven:** Active use of modern, powerful LLMs like Gemini 3.1 Pro for test-driven development and code generation. LLMs write Go exceptionally well.
 3. **Test-Driven Development (TDD):** Ensuring core stability and behavioral correctness from the start.
 4. **Memory Management:** Go has a Garbage Collector (GC), but we use local optimizations (like a zero-allocation rendering loop) to bypass GC lag where it matters, keeping UI freezes unnoticeable.
-5. **Far Heritage:** Copying all successful concepts from Far (screen buffer, frame manager, etc.) and keeping internal structures and their names as close to the original C++ versions as possible.
+5. **Far Heritage:** Copying all successful concepts from Far (screen buffer, frame manager, etc.). Keeping internal structures and their names as close to the original C++ versions as possible to lower the entry barrier for developers familiar with Far APIs.
 6. **Iterative Scope:** First, replicate 1:1 everything in `far2l` that is personally needed by the author (on Linux). Next, cover everything else in `far2l`. Finally, port useful additions that appeared in Far3.
 7. **Consistent UX:** Adherence to a strict set of [Navigation and Interaction Guidelines](UX_GUIDELINES.md) that blend the best of classic TUI paradigms.
 8. **Bazaar Policy:** Openness to community contributions and patches.
