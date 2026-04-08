@@ -14,11 +14,12 @@ import (
 )
 
 type NetFoxConfig struct {
-	Type string `json:"Type"`
-	Host string `json:"Host"`
-	Port string `json:"Port"`
-	User string `json:"User"`
-	Pass string `json:"Pass"`
+	Type    string            `json:"Type"`
+	Host    string            `json:"Host"`
+	Port    string            `json:"Port"`
+	User    string            `json:"User"`
+	Pass    string            `json:"Pass"`
+	Options map[string]string `json:"Options,omitempty"`
 }
 
 type NetFoxVFS struct {

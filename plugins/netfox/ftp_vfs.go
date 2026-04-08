@@ -6,13 +6,13 @@ import (
 	"io"
 	"os"
 	"path"
+	"sync"
 	"time"
 
 	"github.com/jlaffaye/ftp"
 	"github.com/unxed/f4/vfs"
+	"github.com/unxed/vtui"
 )
-
-import "sync"
 
 type FTPVFS struct {
 	mu     sync.Mutex
@@ -21,16 +21,29 @@ type FTPVFS struct {
 	cwd    string
 }
 
-func NewFTPVFS(parent vfs.VFS, host, port, user, pass string) (*FTPVFS, error) {
+func NewFTPVFS(parent vfs.VFS, host, port, user, pass string, options map[string]string) (*FTPVFS, error) {
 	addr := host + ":" + port
-	c, err := ftp.Dial(addr, ftp.DialWithTimeout(15*time.Second))
-	if err != nil { return nil, err }
+
+	dialOpts := []ftp.DialOption{ftp.DialWithTimeout(15 * time.Second)}
+	if val, ok := options["Passive"]; ok && val == "false" {
+		dialOpts = append(dialOpts, ftp.DialWithDisabledEPSV(true))
+	}
+
+	c, err := ftp.Dial(addr, dialOpts...)
+	if err != nil {
+		return nil, err
+	}
 
 	err = c.Login(user, pass)
-	if err != nil { c.Quit(); return nil, err }
+	if err != nil {
+		c.Quit()
+		return nil, err
+	}
 
 	pwd, err := c.CurrentDir()
-	if err != nil { pwd = "/" }
+	if err != nil {
+		pwd = "/"
+	}
 
 	return &FTPVFS{parent: parent, conn: c, cwd: pwd}, nil
 }
@@ -41,8 +54,12 @@ func (v *FTPVFS) SetPath(p string) error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	target := p
-	if !path.IsAbs(p) { target = path.Join(v.cwd, p) }
-	if err := v.conn.ChangeDir(target); err != nil { return err }
+	if !path.IsAbs(p) {
+		target = path.Join(v.cwd, p)
+	}
+	if err := v.conn.ChangeDir(target); err != nil {
+		return err
+	}
 	v.cwd = target
 	return nil
 }
@@ -51,12 +68,18 @@ func (v *FTPVFS) ReadDir(ctx context.Context, p string, onChunk func([]vfs.VFSIt
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	target := p
-	if target == "/" || target == "." { target = "" }
+	if target == "/" || target == "." {
+		target = ""
+	}
 	entries, err := v.conn.List(target)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	var items []vfs.VFSItem
 	for _, e := range entries {
-		if e.Name == "." || e.Name == ".." { continue }
+		if e.Name == "." || e.Name == ".." {
+			continue
+		}
 		items = append(items, vfs.VFSItem{
 			Name: e.Name, Size: int64(e.Size),
 			IsDir: e.Type == ftp.EntryTypeFolder, MTime: e.Time,
@@ -71,7 +94,9 @@ func (v *FTPVFS) Stat(ctx context.Context, p string) (vfs.VFSItem, error) {
 	defer v.mu.Unlock()
 	dir, base := path.Dir(p), path.Base(p)
 	entries, err := v.conn.List(dir)
-	if err != nil { return vfs.VFSItem{}, err }
+	if err != nil {
+		return vfs.VFSItem{}, err
+	}
 	for _, e := range entries {
 		if e.Name == base {
 			return vfs.VFSItem{
@@ -89,16 +114,22 @@ func (v *FTPVFS) Base(p string) string         { return path.Base(p) }
 func (v *FTPVFS) Dir(p string) string          { return path.Dir(p) }
 func (v *FTPVFS) MkDir(ctx context.Context, p string) error { return v.conn.MakeDir(p) }
 func (v *FTPVFS) Remove(ctx context.Context, p string) error {
-	if err := v.conn.Delete(p); err != nil { return v.conn.RemoveDir(p) }
+	if err := v.conn.Delete(p); err != nil {
+		return v.conn.RemoveDir(p)
+	}
 	return nil
 }
 func (v *FTPVFS) Rename(ctx context.Context, o, n string) error { return v.conn.Rename(o, n) }
-func (v *FTPVFS) GetCapabilities() vfs.VFSCapabilities { return vfs.VFSCapabilities{} }
-func (v *FTPVFS) Search(ctx context.Context, p, pat string) (chan int64, error) { return nil, nil }
+func (v *FTPVFS) GetCapabilities() vfs.VFSCapabilities          { return vfs.VFSCapabilities{} }
+func (v *FTPVFS) Search(ctx context.Context, p, pat string) (chan int64, error) {
+	return nil, nil
+}
 
 func (v *FTPVFS) Open(ctx context.Context, p string) (vfs.ReadAtCloser, error) {
 	resp, err := v.conn.Retr(p)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	tmp, _ := os.CreateTemp("", "f4ftp-*")
 	io.Copy(tmp, resp)
 	resp.Close()
@@ -117,20 +148,28 @@ func (v *FTPVFS) Create(ctx context.Context, p string) (io.WriteCloser, error) {
 }
 
 func (v *FTPVFS) ParentVFS() vfs.VFS { return v.parent }
-func (v *FTPVFS) Close() error      { return v.conn.Quit() }
+func (v *FTPVFS) Close() error       { return v.conn.Quit() }
 func (v *FTPVFS) Clone() vfs.VFS {
 	return v
 }
+
 type ftpProvider struct{}
+
 func (p *ftpProvider) Name() string  { return "NetFox-FTP" }
 func (p *ftpProvider) Priority() int { return 100 }
 func (p *ftpProvider) CanOpen(ctx context.Context, parent vfs.VFS, pth string) bool {
 	w, ok := parent.(*netFoxVFSWrapper)
-	if !ok { return false }
+	if !ok {
+		return false
+	}
 	item, err := w.Stat(ctx, pth)
-	if err != nil || item.IsDir { return false }
+	if err != nil || item.IsDir {
+		return false
+	}
 	f, err := w.Open(ctx, pth)
-	if err != nil { return false }
+	if err != nil {
+		return false
+	}
 	defer f.Close()
 	var cfg NetFoxConfig
 	json.NewDecoder(ctxReader{f, ctx}).Decode(&cfg)
@@ -143,12 +182,45 @@ func (p *ftpProvider) Open(ctx context.Context, parent vfs.VFS, pth string) (vfs
 	var cfg NetFoxConfig
 	json.NewDecoder(ctxReader{f, ctx}).Decode(&cfg)
 	port := cfg.Port
-	if port == "" { port = "21" }
-	return NewFTPVFS(parent, cfg.Host, port, cfg.User, cfg.Pass)
+	if port == "" {
+		port = "21"
+	}
+	return NewFTPVFS(parent, cfg.Host, port, cfg.User, cfg.Pass, cfg.Options)
+}
+
+type ftpProtocolHandler struct{}
+
+func (ph *ftpProtocolHandler) Prefix() string      { return "ftp" }
+func (ph *ftpProtocolHandler) DefaultPort() string { return "21" }
+func (ph *ftpProtocolHandler) BuildExtraUI(cfg *NetFoxConfig, x, y, w, h int) (vtui.UIElement, func()) {
+	passive := true
+	if val, ok := cfg.Options["Passive"]; ok {
+		passive = (val == "true")
+	}
+
+	chk := vtui.NewCheckbox(x, y, "Passive mode", false)
+	if passive {
+		chk.State = 1
+	} else {
+		chk.State = 0
+	}
+
+	save := func() {
+		if cfg.Options == nil {
+			cfg.Options = make(map[string]string)
+		}
+		if chk.State == 1 {
+			cfg.Options["Passive"] = "true"
+		} else {
+			cfg.Options["Passive"] = "false"
+		}
+	}
+	return chk, save
 }
 
 func init() {
 	vfs.RegisterProvider(&ftpProvider{})
+	RegisterProtocol(&ftpProtocolHandler{})
 }
 
 type ftpFileWrapper struct {
@@ -156,7 +228,10 @@ type ftpFileWrapper struct {
 	size int64
 	path string
 }
+
 func (w *ftpFileWrapper) Size() int64 { return w.size }
-func (w *ftpFileWrapper) ReadAt(ctx context.Context, p []byte, off int64) (int, error) { return w.File.ReadAt(p, off) }
+func (w *ftpFileWrapper) ReadAt(ctx context.Context, p []byte, off int64) (int, error) {
+	return w.File.ReadAt(p, off)
+}
 func (w *ftpFileWrapper) Read(ctx context.Context, p []byte) (int, error) { return w.File.Read(p) }
 func (w *ftpFileWrapper) Close() error { w.File.Close(); return os.Remove(w.path) }

@@ -5,6 +5,7 @@ import (
 
 	"github.com/mattn/go-runewidth"
 	"github.com/unxed/f4/vfs"
+	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
 
@@ -13,6 +14,65 @@ func padLabel(s string) string {
 		s += " "
 	}
 	return s
+}
+
+// protoUIContainer is a proxy that routes events and rendering to the selected 
+// protocol's UI block. By implementing vtui.Container but using custom Show/Focus logic,
+// it provides architectural isolation while remaining discoverable by the validator.
+type protoUIContainer struct {
+	vtui.ScreenObject
+	active string
+	uis    map[string]vtui.UIElement
+}
+
+func (p *protoUIContainer) GetChildren() []vtui.UIElement {
+	var children []vtui.UIElement
+	if ui, ok := p.uis[p.active]; ok && ui != nil {
+		children = append(children, ui)
+	}
+	return children
+}
+
+func (p *protoUIContainer) Show(scr *vtui.ScreenBuf) {
+	p.ScreenObject.Show(scr)
+	if ui, ok := p.uis[p.active]; ok && ui != nil {
+		ui.Show(scr)
+	}
+}
+
+func (p *protoUIContainer) ProcessKey(e *vtinput.InputEvent) bool {
+	if ui, ok := p.uis[p.active]; ok && ui != nil {
+		return ui.ProcessKey(e)
+	}
+	return false
+}
+
+func (p *protoUIContainer) ProcessMouse(e *vtinput.InputEvent) bool {
+	if ui, ok := p.uis[p.active]; ok && ui != nil {
+		return ui.ProcessMouse(e)
+	}
+	return false
+}
+
+func (p *protoUIContainer) CanFocus() bool {
+	if ui, ok := p.uis[p.active]; ok && ui != nil {
+		return ui.CanFocus()
+	}
+	return false
+}
+
+func (p *protoUIContainer) SetFocus(f bool) {
+	p.ScreenObject.SetFocus(f)
+	if ui, ok := p.uis[p.active]; ok && ui != nil {
+		ui.SetFocus(f)
+	}
+}
+
+func (p *protoUIContainer) WantsChars() bool {
+	if ui, ok := p.uis[p.active]; ok && ui != nil {
+		return ui.WantsChars()
+	}
+	return false
 }
 
 func showConnectionDialog(app vfs.App, nf *NetFoxVFS, oldName string) {
@@ -24,49 +84,48 @@ func showConnectionDialog(app vfs.App, nf *NetFoxVFS, oldName string) {
 		cfg = configs[oldName]
 	} else {
 		cfg.Type = "sftp"
-		cfg.Port = "22"
 	}
 
-	dlg := vtui.NewCenteredDialog(60, 15, " Site Connection ")
+	protos := GetProtocols()
+	if len(protos) == 0 {
+		protos = []string{"sftp", "ftp"}
+	}
+
+	currIdx := 0
+	for i, p := range protos {
+		if p == cfg.Type {
+			currIdx = i
+			break
+		}
+	}
+	activeProto := protos[currIdx]
+
+	// Height 18 provides enough room for main fields, extra options, and buttons with gaps
+	dlg := vtui.NewCenteredDialog(60, 18, " Site Connection ")
 	dlg.ShowClose = true
 
 	editName := vtui.NewEdit(0, 0, 40, name)
 
-	comboProto := vtui.NewComboBox(0, 0, 15, []string{"sftp", "ftp"})
+	comboProto := vtui.NewComboBox(0, 0, 15, protos)
 	comboProto.DropdownOnly = true
-	if cfg.Type == "ftp" {
-		comboProto.Menu.SetSelectPos(1)
-		comboProto.Edit.SetText("ftp")
-	} else {
-		comboProto.Menu.SetSelectPos(0)
-		comboProto.Edit.SetText("sftp")
-	}
+	comboProto.Menu.SetSelectPos(currIdx)
+	comboProto.Edit.SetText(activeProto)
 
 	editHost := vtui.NewEdit(0, 0, 40, cfg.Host)
 	editPort := vtui.NewEdit(0, 0, 10, cfg.Port)
+	if editPort.GetText() == "" {
+		if h, ok := handlers[activeProto]; ok {
+			editPort.SetText(h.DefaultPort())
+		}
+	}
 	editUser := vtui.NewEdit(0, 0, 40, cfg.User)
 	editPass := vtui.NewPasswordEdit(0, 0, 40, cfg.Pass)
 
-	// Dynamic port switching based on protocol change
-	origOnAction := comboProto.Menu.OnAction
-	comboProto.Menu.OnAction = func(idx int) {
-		if origOnAction != nil {
-			origOnAction(idx)
-		}
-		proto := comboProto.Menu.Items[idx].Text
-		currPort := editPort.GetText()
-		if proto == "sftp" && (currPort == "" || currPort == "21") {
-			editPort.SetText("22")
-		} else if proto == "ftp" && (currPort == "" || currPort == "22") {
-			editPort.SetText("21")
-		}
-	}
-
-	btnOk := vtui.NewButton(0, 0, "&Save")
-	btnCancel := vtui.NewButton(0, 0, "Cancel")
-	btnOk.IsDefault = true
-
-	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 56, 11)
+	editName.SelectAll()
+	editHost.SelectAll()
+	editPort.SelectAll()
+	editUser.SelectAll()
+	editPass.SelectAll()
 
 	makeRow := func(label string, edit vtui.UIElement) *vtui.HBoxLayout {
 		hbox := vtui.NewHBoxLayout(0, 0, 56, 1)
@@ -78,20 +137,85 @@ func showConnectionDialog(app vfs.App, nf *NetFoxVFS, oldName string) {
 		return hbox
 	}
 
+	// 1. Main fields (Y: 2-9)
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 56, 7)
+
 	vbox.Add(makeRow("&Name:", editName), vtui.Margins{}, vtui.AlignFill)
-	vbox.Add(makeRow("P&rotocol:", comboProto), vtui.Margins{Top: 1}, vtui.AlignFill)
-	vbox.Add(makeRow("&Host:", editHost), vtui.Margins{Top: 1}, vtui.AlignFill)
-	vbox.Add(makeRow("P&ort:", editPort), vtui.Margins{Top: 1}, vtui.AlignFill)
-	vbox.Add(makeRow("&User:", editUser), vtui.Margins{Top: 1}, vtui.AlignFill)
-	vbox.Add(makeRow("Pass&word:", editPass), vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Add(makeRow("P&rotocol:", comboProto), vtui.Margins{Top: 0}, vtui.AlignFill)
+	vbox.Add(makeRow("&Host:", editHost), vtui.Margins{Top: 0}, vtui.AlignFill)
+	vbox.Add(makeRow("P&ort:", editPort), vtui.Margins{Top: 0}, vtui.AlignFill)
+	vbox.Add(makeRow("&User:", editUser), vtui.Margins{Top: 0}, vtui.AlignFill)
+	vbox.Add(makeRow("Pass&word:", editPass), vtui.Margins{Top: 0}, vtui.AlignFill)
+	vbox.Apply()
 
-	sep := vtui.NewSeparator(0, 0, 56, true, true)
-	dlg.AddItem(sep)
-	vbox.Add(sep, vtui.Margins{Top: 1, Bottom: 1}, vtui.AlignFill)
+	// 2. Extra Protocol Area (Y: 11) - architectural proxy
+	extraX, extraY, extraW, extraH := dlg.X1+2, dlg.Y1+11, 56, 1
+	container := &protoUIContainer{
+		active: activeProto,
+		uis:    make(map[string]vtui.UIElement),
+	}
+	container.SetPosition(extraX, extraY, extraX+extraW-1, extraY+extraH-1)
 
+	extraSaves := make(map[string]func())
+	for _, p := range protos {
+		if h, ok := handlers[p]; ok {
+			ui, save := h.BuildExtraUI(&cfg, extraX, extraY, extraW, extraH)
+			if ui != nil {
+				// ARCHITECTURAL FIX: protocol-specific UIs belong to the proxy, 
+				// not to the main dialog. This ensures true protocol isolation.
+				ui.SetOwner(container)
+			}
+			container.uis[p] = ui
+			extraSaves[p] = save
+		}
+	}
+	dlg.AddItem(container)
+
+	origOnAction := comboProto.Menu.OnAction
+	comboProto.Menu.OnAction = func(idx int) {
+		if origOnAction != nil {
+			origOnAction(idx)
+		}
+		newProto := comboProto.Menu.Items[idx].Text
+		if newProto == activeProto {
+			return
+		}
+
+		if h, ok := handlers[newProto]; ok {
+			currPort := editPort.GetText()
+			oldH := handlers[activeProto]
+			if currPort == "" || (oldH != nil && currPort == oldH.DefaultPort()) {
+				editPort.SetText(h.DefaultPort())
+			}
+		}
+
+		container.active = newProto
+		activeProto = newProto
+
+		// Re-select all when switching protocol to keep UX consistent
+		editHost.SelectAll()
+		editPort.SelectAll()
+		editUser.SelectAll()
+		editPass.SelectAll()
+
+		vtui.FrameManager.Redraw()
+	}
+
+	// 3. Bottom Section (Y: 13-15)
+	btnOk := vtui.NewButton(0, 0, "&Save")
+	btnCancel := vtui.NewButton(0, 0, "Cancel")
+	btnOk.IsDefault = true
+
+	vboxBottom := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+13, 56, 3)
 	btnHbox := vtui.NewHBoxLayout(0, 0, 56, 1)
 	btnHbox.HorizontalAlign = vtui.AlignCenter
 	btnHbox.Spacing = 2
+	dlg.AddItem(btnOk)
+	dlg.AddItem(btnCancel)
+	btnHbox.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
+	btnHbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
+	vboxBottom.Add(btnHbox, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vboxBottom.Apply()
 
 	btnOk.OnClick = func() {
 		newName := editName.GetText()
@@ -104,11 +228,15 @@ func showConnectionDialog(app vfs.App, nf *NetFoxVFS, oldName string) {
 			return
 		}
 
-		cfg.Type = comboProto.Edit.GetText()
+		cfg.Type = activeProto
 		cfg.Host = editHost.GetText()
 		cfg.Port = editPort.GetText()
 		cfg.User = editUser.GetText()
 		cfg.Pass = editPass.GetText()
+
+		if save, ok := extraSaves[activeProto]; ok {
+			save()
+		}
 
 		if oldName != "" && oldName != newName {
 			nf.Remove(context.Background(), oldName)
@@ -121,15 +249,6 @@ func showConnectionDialog(app vfs.App, nf *NetFoxVFS, oldName string) {
 	btnCancel.OnClick = func() {
 		dlg.Close()
 	}
-
-	dlg.AddItem(btnOk)
-	dlg.AddItem(btnCancel)
-
-	btnHbox.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
-	btnHbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
-
-	vbox.Add(btnHbox, vtui.Margins{}, vtui.AlignFill)
-	vbox.Apply()
 
 	vtui.FrameManager.Push(dlg)
 }

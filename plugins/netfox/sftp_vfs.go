@@ -188,8 +188,17 @@ func (p *sftpProvider) Open(ctx context.Context, parent vfs.VFS, pth string) (vf
 	return NewSFTPVFS(parent, cfg.Host, port, cfg.User, cfg.Pass)
 }
 
+type sftpProtocolHandler struct{}
+
+func (ph *sftpProtocolHandler) Prefix() string      { return "sftp" }
+func (ph *sftpProtocolHandler) DefaultPort() string { return "22" }
+func (ph *sftpProtocolHandler) BuildExtraUI(cfg *NetFoxConfig, x, y, w, h int) (vtui.UIElement, func()) {
+	return nil, func() {}
+}
+
 func init() {
 	vfs.RegisterProvider(&sftpProvider{})
+	RegisterProtocol(&sftpProtocolHandler{})
 }
 
 type sftpFileWrapper struct {
