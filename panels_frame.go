@@ -241,13 +241,14 @@ func (pf *PanelsFrame) initPTY() {
 			if err != nil { return }
 
 			pf.ptyMutex.Lock()
-			// Отправляем вывод в терминал, только если локальный PTY сейчас активен
-			if pf.getActivePTYUnsafe() == pf.pty {
-				vtui.DebugLog("PTY_READ: Processing %d bytes from local PTY", n)
-				pf.parser.Process(buf[:n])
-				vtui.FrameManager.PostTask(vtui.FrameManager.Redraw)
-			}
+			shouldProcess := (pf.getActivePTYUnsafe() == pf.pty)
 			pf.ptyMutex.Unlock()
+
+			// Парсим данные вне глобального ptyMutex, чтобы не блокировать UI-поток
+			if shouldProcess {
+				pf.parser.Process(buf[:n])
+				vtui.FrameManager.Redraw()
+			}
 		}
 	}()
 }
@@ -1145,11 +1146,13 @@ func (pf *PanelsFrame) getActivePTYUnsafe() PtyBackend {
 					}
 
 					pf.ptyMutex.Lock()
-					if pf.getActivePTYUnsafe() == pty {
-						pf.parser.Process(buf[:n])
-						vtui.FrameManager.PostTask(vtui.FrameManager.Redraw)
-					}
+					shouldProcess := (pf.getActivePTYUnsafe() == pty)
 					pf.ptyMutex.Unlock()
+
+					if shouldProcess {
+						pf.parser.Process(buf[:n])
+						vtui.FrameManager.Redraw()
+					}
 				}
 				pty.Close()
 				pf.ptyMutex.Lock()
