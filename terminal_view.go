@@ -495,68 +495,19 @@ func (tv *TerminalView) Show(scr *vtui.ScreenBuf) {
 	// Очищаем всю область терминала черным цветом
 	scr.FillRect(tv.X1, tv.Y1, tv.X1+tv.Width-1, tv.Y1+tv.Height-1, ' ', DefaultTermAttr)
 
+	buf := tv.Lines
 	if tv.UseAltScreen {
-		for y, line := range tv.AltLines {
-			scr.Write(tv.X1, tv.Y1+y, line)
-		}
-		if tv.IsVisible() {
-			scr.SetCursorPos(tv.X1+tv.CursorX, tv.Y1+tv.CursorY)
-			scr.SetCursorVisible(true)
-		}
-		return
+		buf = tv.AltLines
 	}
 
-	tv.engine.SetWidth(tv.Width)
-	totalRows := tv.engine.GetTotalVisualRows()
-
-	if totalRows > tv.Height {
-		tv.ScrollTopRow = totalRows - tv.Height
-	} else {
-		tv.ScrollTopRow = 0
-	}
-
-	// Рассчитываем вертикальный отступ для короткого лога (прижимаем к низу)
-	yPadding := 0
-	if totalRows < tv.Height {
-		yPadding = tv.Height - totalRows
-	}
-
-	rowsRendered := 0
-	startLogLine, startFragIdx := tv.engine.GetLogLineAtVisualRow(tv.ScrollTopRow)
-
-	for logIdx := startLogLine; logIdx < tv.li.LineCount() && rowsRendered < tv.Height; logIdx++ {
-		frags := tv.engine.GetFragments(logIdx)
-		for fIdx, frag := range frags {
-			if logIdx == startLogLine && fIdx < startFragIdx {
-				continue
-			}
-
-			currY := tv.Y1 + yPadding + rowsRendered
-			if currY > tv.Y1+tv.Height-1 { break }
-
-			textBytes, _ := tv.pt.GetRange(frag.ByteOffsetStart, frag.ByteOffsetEnd-frag.ByteOffsetStart)
-			cells := make([]vtui.CharInfo, 0, frag.VisualWidth)
-			currentByte := 0
-			for currentByte < len(textBytes) {
-				r, size := utf8.DecodeRune(textBytes[currentByte:])
-				attr := tv.getAttrAt(frag.ByteOffsetStart + currentByte)
-				cells = append(cells, vtui.StringToCharInfo(string(r), attr)...)
-				currentByte += size
-			}
-
-			scr.Write(tv.X1, currY, cells)
-			rowsRendered++
-		}
+	for y, line := range buf {
+		if y >= tv.Height { break }
+		scr.Write(tv.X1, tv.Y1+y, line)
 	}
 
 	if tv.IsVisible() {
-		lastOffset := tv.pt.Size()
-		vRow, vCol := tv.engine.LogicalToVisual(lastOffset)
-		visualRowOnScreen := vRow - tv.ScrollTopRow
-		if visualRowOnScreen >= 0 && visualRowOnScreen < tv.Height {
-			scr.SetCursorPos(tv.X1+vCol, tv.Y1 + yPadding + visualRowOnScreen)
-			scr.SetCursorVisible(true)
-		}
+		scr.SetCursorPos(tv.X1+tv.CursorX, tv.Y1+tv.CursorY)
+		scr.SetCursorVisible(true)
 	}
 }
 
