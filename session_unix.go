@@ -104,6 +104,11 @@ func ManageSessions() {
 		return
 	}
 
+	if os.Getenv("F4_NESTED") != "" {
+		startNewSession()
+		return
+	}
+
 	sessions := listSessions()
 	if len(sessions) > 0 {
 		selected := runSessionPicker(sessions)
