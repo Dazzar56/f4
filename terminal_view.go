@@ -64,6 +64,8 @@ type TerminalView struct {
 
 	clipboardChunks []byte
 	pty             PtyBackend
+	pendingLog      []byte
+	pendingAttr     uint64
 }
 
 func NewTerminalView(w, h int) *TerminalView {
@@ -76,6 +78,7 @@ func NewTerminalView(w, h int) *TerminalView {
 }
 
 func (tv *TerminalView) CloneStateFrom(other *TerminalView) {
+	other.FlushLog()
 	other.mu.Lock()
 	defer other.mu.Unlock()
 	tv.mu.Lock()
@@ -137,7 +140,6 @@ func (tv *TerminalView) CloneStateFrom(other *TerminalView) {
 }
 
 func (tv *TerminalView) ResetBuffer(w, h int) {
-	vtui.DebugLog("TERM: ResetBuffer to %dx%d", w, h)
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
 
@@ -173,6 +175,8 @@ func (tv *TerminalView) ResetBuffer(w, h int) {
 	tv.ScrollBottom = h - 1
 	tv.CursorX = 0
 	tv.CursorY = h - 1
+	tv.pendingLog = tv.pendingLog[:0]
+	tv.pendingAttr = DefaultTermAttr
 
 	// Палитра по умолчанию (ANSI order)
 	copy(tv.Palette[:], vtui.XTerm256Palette[:])
@@ -197,46 +201,65 @@ func (tv *TerminalView) getBuffer() [][]vtui.CharInfo {
 	return tv.Lines
 }
 
+
+func (tv *TerminalView) FlushLog() {
+	tv.mu.Lock()
+	defer tv.mu.Unlock()
+	tv.flushLogUnsafe()
+}
+
+func (tv *TerminalView) flushLogUnsafe() {
+	if len(tv.pendingLog) == 0 {
+		return
+	}
+	offset := tv.pt.Size()
+	if tv.pendingAttr != tv.lastAttr {
+		tv.styles = append(tv.styles, StyleChange{Offset: offset, Attr: tv.pendingAttr})
+		tv.lastAttr = tv.pendingAttr
+	}
+	tv.pt.Insert(offset, tv.pendingLog)
+	tv.li.UpdateAfterInsert(offset, tv.pendingLog)
+	tv.engine.InvalidateFrom(tv.li.LineCount() - 2)
+
+	tv.pendingLog = tv.pendingLog[:0]
+}
+
 func (tv *TerminalView) PutChar(r rune, attr uint64) {
-	// vtui.DebugLog("TERM: PutChar %q (U+%04X) at (%d,%d)", r, r, tv.CursorX, tv.CursorY)
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
 
 	// 1. Запись в бесконечный лог (если не AltScreen)
 	if !tv.UseAltScreen {
 		if r == '\n' {
-			offset := tv.pt.Size()
-			tv.pt.Insert(offset, []byte("\n"))
-			tv.li.UpdateAfterInsert(offset, []byte("\n"))
-			tv.lastLineOffset = tv.pt.Size()
-			tv.engine.InvalidateFrom(tv.li.LineCount() - 2)
+			tv.pendingLog = append(tv.pendingLog, '\n')
+			tv.lastLineOffset = tv.pt.Size() + len(tv.pendingLog)
 		} else if r >= 0x20 {
-			// Если мы в начале строки и в логе уже что-то есть для этой строки —
-			// вероятно, это перерисовка промпта оболочкой. Удаляем старое.
-			if tv.CursorX == 0 && tv.pt.Size() > tv.lastLineOffset {
+			if tv.CursorX == 0 && (tv.pt.Size() + len(tv.pendingLog)) > tv.lastLineOffset {
+				tv.flushLogUnsafe()
 				tv.pt.Delete(tv.lastLineOffset, tv.pt.Size()-tv.lastLineOffset)
 				tv.li.UpdateAfterDelete(tv.lastLineOffset, tv.pt.Size()-tv.lastLineOffset)
-				// Откатываем стили
 				for i := len(tv.styles) - 1; i >= 0; i-- {
 					if tv.styles[i].Offset > tv.lastLineOffset {
 						tv.styles = tv.styles[:i]
 					} else {
 						tv.lastAttr = tv.styles[i].Attr
+						tv.pendingAttr = tv.lastAttr
 						break
 					}
 				}
 			}
 
-			offset := tv.pt.Size()
-			if attr != tv.lastAttr {
-				tv.styles = append(tv.styles, StyleChange{offset, attr})
-				tv.lastAttr = attr
+			if attr != tv.pendingAttr {
+				tv.flushLogUnsafe()
+				tv.pendingAttr = attr
 			}
 			var buf [4]byte
 			n := utf8.EncodeRune(buf[:], r)
-			tv.pt.Insert(offset, buf[:n])
-			tv.li.UpdateAfterInsert(offset, buf[:n])
-			tv.engine.InvalidateFrom(tv.li.LineCount() - 1)
+			tv.pendingLog = append(tv.pendingLog, buf[:n]...)
+
+			if len(tv.pendingLog) > 4096 {
+				tv.flushLogUnsafe()
+			}
 		}
 	}
 
@@ -269,16 +292,13 @@ func (tv *TerminalView) PutChar(r rune, attr uint64) {
 	}
 
 	buf := tv.getBuffer()
-	// If the character is too wide to fit in the current line, wrap first
 	if tv.CursorX+w > tv.Width {
 		tv.newline()
 		buf = tv.getBuffer()
 	}
 
 	if tv.CursorY >= 0 && tv.CursorY < len(buf) && tv.CursorX >= 0 && tv.CursorX+w <= tv.Width {
-		// Write the actual character
 		buf[tv.CursorY][tv.CursorX] = vtui.CharInfo{Char: uint64(r), Attributes: attr}
-		// Fill subsequent cells for wide characters
 		for i := 1; i < w; i++ {
 			buf[tv.CursorY][tv.CursorX+i] = vtui.CharInfo{Char: vtui.WideCharFiller, Attributes: attr}
 		}
@@ -297,34 +317,38 @@ func (tv *TerminalView) newline() {
 }
 
 func (tv *TerminalView) scrollUp(top, bottom, n int) {
-	vtui.DebugLog("TERM: scrollUp [Top:%d Bottom:%d N:%d]", top, bottom, n)
+	// Muted to avoid log flood during heavy outputs
+	// vtui.DebugLog("TERM: scrollUp [Top:%d Bottom:%d N:%d]", top, bottom, n)
 	buf := tv.getBuffer()
 	if top < 0 { top = 0 }
 	if bottom >= len(buf) { bottom = len(buf) - 1 }
 	if top >= bottom { return }
 
 	for i := 0; i < n; i++ {
+		recycledLine := buf[top]
 		copy(buf[top:bottom], buf[top+1:bottom+1])
-		buf[bottom] = make([]vtui.CharInfo, tv.Width)
+		buf[bottom] = recycledLine
 		for j := range buf[bottom] {
 			buf[bottom][j] = vtui.CharInfo{Char: ' ', Attributes: DefaultTermAttr}
 		}
 	}
 }
 func (tv *TerminalView) scrollDown(top, bottom, n int) {
-	vtui.DebugLog("TERM: scrollDown [Top:%d Bottom:%d N:%d]", top, bottom, n)
+	// Muted to avoid log flood during heavy outputs
+	// vtui.DebugLog("TERM: scrollDown [Top:%d Bottom:%d N:%d]", top, bottom, n)
 	buf := tv.getBuffer()
 	if top < 0 { top = 0 }
 	if bottom >= len(buf) { bottom = len(buf) - 1 }
 	if top >= bottom { return }
 
 	for i := 0; i < n; i++ {
+		recycledLine := buf[bottom]
 		// To move lines DOWN, we must copy from bottom to top to avoid overwriting
 		for y := bottom; y > top; y-- {
 			buf[y] = buf[y-1]
 		}
 		// Clear the newly inserted top line
-		buf[top] = make([]vtui.CharInfo, tv.Width)
+		buf[top] = recycledLine
 		for j := range buf[top] {
 			buf[top][j] = vtui.CharInfo{Char: ' ', Attributes: DefaultTermAttr}
 		}

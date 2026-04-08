@@ -205,7 +205,6 @@ func (ev *EditorView) saveUndo(op undoOpType) {
 	}
 	ev.lastOp = op
 	ev.modified = true // Mark as dirty, will be re-evaluated on Undo/Redo
-	vtui.DebugLog("EDITOR: Saved undo state (op:%d), stack size: %d", op, len(ev.undoStack))
 }
 
 func (ev *EditorView) Undo() {
@@ -1081,9 +1080,7 @@ func (ev *EditorView) ensureCursorVisible() {
 
 	curOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 	vRow, vCol := ev.engine.LogicalToVisual(curOffset)
-	vtui.DebugLog("EDITOR_NAV: Cursor: %d:%d (Off:%d) -> Visual: %d:%d, TotalVRows: %d", 
-		ev.CursorLine, ev.CursorPos, curOffset, vRow, vCol, ev.engine.GetTotalVisualRows())
-	
+
 	width := ev.X2 - ev.X1 + 1
 	height := ev.Y2 - ev.Y1
 	if width <= 0 || height <= 0 { return }

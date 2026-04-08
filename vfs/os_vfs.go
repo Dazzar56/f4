@@ -50,7 +50,6 @@ func (v *OSVFS) SetPath(path string) error {
 }
 
 func (v *OSVFS) ReadDir(ctx context.Context, path string, onChunk func([]VFSItem)) error {
-	vtui.DebugLog("VFS: ReadDir(%q)", path)
 	f, err := os.Open(path)
 	if err != nil {
 		vtui.DebugLog("VFS: ReadDir: failed to open dir %q: %v", path, err)

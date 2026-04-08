@@ -235,7 +235,7 @@ func (pf *PanelsFrame) initPTY() {
 
 	// Локальный PTY имеет свой выделенный цикл чтения.
 	go func() {
-		buf := make([]byte, 4096)
+		buf := make([]byte, 32768) // Увеличен буфер для быстрого потокового чтения
 		for {
 			n, err := pf.pty.Read(buf)
 			if err != nil { return }
@@ -246,7 +246,12 @@ func (pf *PanelsFrame) initPTY() {
 
 			// Парсим данные вне глобального ptyMutex, чтобы не блокировать UI-поток
 			if shouldProcess {
+				start := time.Now()
 				pf.parser.Process(buf[:n])
+				elapsed := time.Since(start)
+				if elapsed > 10*time.Millisecond {
+					vtui.DebugLog("PTY_PROFILE(Local): Parsed %d bytes in %v", n, elapsed)
+				}
 				vtui.FrameManager.Redraw()
 			}
 		}
@@ -1138,7 +1143,7 @@ func (pf *PanelsFrame) getActivePTYUnsafe() PtyBackend {
 			pf.remotePtys[activeVfs] = pty
 
 			go func() {
-				buf := make([]byte, 4096)
+				buf := make([]byte, 32768) // Увеличен буфер
 				for {
 					n, readErr := pty.Read(buf)
 					if readErr != nil {
@@ -1150,7 +1155,12 @@ func (pf *PanelsFrame) getActivePTYUnsafe() PtyBackend {
 					pf.ptyMutex.Unlock()
 
 					if shouldProcess {
+						start := time.Now()
 						pf.parser.Process(buf[:n])
+						elapsed := time.Since(start)
+						if elapsed > 10*time.Millisecond {
+							vtui.DebugLog("PTY_PROFILE(Remote): Parsed %d bytes in %v", n, elapsed)
+						}
 						vtui.FrameManager.Redraw()
 					}
 				}

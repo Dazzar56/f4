@@ -182,6 +182,7 @@ func TestTerminalView_HistoryAndReflow(t *testing.T) {
 	for _, r := range text {
 		tv.PutChar(r, DefaultTermAttr)
 	}
+	tv.FlushLog()
 
 	// Проверяем PieceTable
 	if tv.pt.String() != text {
@@ -213,6 +214,7 @@ func TestTerminalView_StylesPreservation(t *testing.T) {
 	// Пишем "RED" красным и "BLUE" синим
 	for _, r := range "RED" { tv.PutChar(r, red) }
 	for _, r := range "BLUE" { tv.PutChar(r, blue) }
+	tv.FlushLog()
 
 	// Проверяем атрибуты в логе через getAttrAt
 	// "RED" — оффсеты 0, 1, 2
@@ -303,6 +305,7 @@ func TestTerminalView_PromptRewriteHeuristic(t *testing.T) {
 	// 1. Shell prints a prompt "$ "
 	tv.PutChar('$', 0)
 	tv.PutChar(' ', 0)
+	tv.FlushLog()
 	if tv.pt.Size() != 2 {
 		t.Errorf("Initial history size mismatch, got %d", tv.pt.Size())
 	}
@@ -310,6 +313,7 @@ func TestTerminalView_PromptRewriteHeuristic(t *testing.T) {
 	// 2. Shell moves cursor back to 0 (X=0) and prints a DIFFERENT prompt "> "
 	tv.CursorX = 0
 	tv.PutChar('>', 0)
+	tv.FlushLog()
 
 	// Heuristic should have wiped the previous '$ ' from history
 	if tv.pt.Size() != 1 || tv.pt.String() != ">" {
@@ -326,6 +330,7 @@ func TestTerminalView_PromptRewriteDetection(t *testing.T) {
 	// 1. Simulate shell printing a prompt "$ "
 	tv.PutChar('$', 0)
 	tv.PutChar(' ', 0)
+	tv.FlushLog()
 	initialSize := tv.pt.Size()
 	if initialSize != 2 {
 		t.Errorf("Expected history size 2, got %d", initialSize)
@@ -335,6 +340,7 @@ func TestTerminalView_PromptRewriteDetection(t *testing.T) {
 	// This happens in some advanced shells or during resize.
 	tv.CursorX = 0
 	tv.PutChar('>', 0)
+	tv.FlushLog()
 
 	// HEURISTIC: if CursorX is 0 and history for the current line exists, it should be wiped.
 	if tv.pt.Size() != 1 {

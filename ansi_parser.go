@@ -123,6 +123,7 @@ func (p *AnsiParser) Process(data []byte) {
 			}
 		}
 	}
+	p.term.FlushLog()
 }
 
 func (p *AnsiParser) handleCSI(cmd byte) {

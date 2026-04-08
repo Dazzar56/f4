@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime/pprof"
 
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
@@ -12,6 +13,7 @@ import (
 
 func main() {
 	var serverPath, clientPath string
+	var cpuprofile string
 
 	for i := 1; i < len(os.Args); i++ {
 		switch os.Args[i] {
@@ -32,6 +34,11 @@ func main() {
 				clientPath = os.Args[i+1]
 				i++
 			}
+		case "--cpuprofile":
+			if i+1 < len(os.Args) {
+				cpuprofile = os.Args[i+1]
+				i++
+			}
 		case "-test-plugins":
 			vtui.DebugLog("--- PLUGIN TEST MODE ---")
 			pm := NewPluginManager()
@@ -48,6 +55,14 @@ func main() {
 	if clientPath != "" {
 		runClient(clientPath)
 		return
+	}
+	if cpuprofile != "" {
+		f, err := os.Create(cpuprofile)
+		if err != nil {
+			panic(err)
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
 	}
 
 	// If we are here, no special mode was requested
