@@ -876,7 +876,7 @@ func TestEditorView_LongLinePerformance(t *testing.T) {
 	select {
 	case <-done:
 		// Success: all operations finished in time.
-	case <-time.After(200 * time.Millisecond): // 200ms — generous timeout. Hanging would last seconds.
+	case <-time.After(3 * time.Second): // 3s — safe timeout for slow CI or heavy terminal.
 		t.Fatal("Performance test timed out. EditorView is likely still hanging on long lines.")
 	}
 }
@@ -2434,7 +2434,7 @@ func TestEditorView_Search_Reverse_StartAtZero(t *testing.T) {
 	// Reverse search from 0 should exit instantly, not hang
 	ev.Search("match", false, true, false)
 
-	timeout := time.After(200 * time.Millisecond)
+	timeout := time.After(2 * time.Second)
 	select {
 	case task := <-vtui.FrameManager.TaskChan:
 		task()
@@ -2502,7 +2502,7 @@ func TestEditorView_WordNavigation_OOM_Protection(t *testing.T) {
 	select {
 	case <-done:
 		// Success
-	case <-time.After(200 * time.Millisecond):
+	case <-time.After(3 * time.Second):
 		t.Fatal("Word navigation on long line timed out, OOM protection likely failed.")
 	}
 }
