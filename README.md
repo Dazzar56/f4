@@ -24,7 +24,7 @@ This project is built around several core philosophical and technical principles
 UI & input libraries are developed separately ([vtui](https://github.com/unxed/vtui), [vtinput](https://github.com/unxed/vtui))
 
 *   **Modern Terminals Only:** Primary target is actively developed terminals (Konsole, kitty, iTerm2, Windows Terminal). Other terminals won't allow replicating Far's UI accurately.
-*   **Input (`vtinput`):** Built as a separate library to handle advanced protocols like the Kitty Keyboard Protocol and Win32 Input Mode. This is strictly required for distinguishing combinations like `Ctrl+Enter` or `Shift+Tab`.
+*   **Input (`vtinput`):** Built as a separate library to handle advanced protocols like the [Kitty Keyboard Protocol](https://sw.kovidgoyal.net/kitty/keyboard-protocol/) and [Win32 Input Mode](https://github.com/microsoft/terminal/blob/main/doc/specs/%234999%20-%20Improved%20keyboard%20handling%20in%20Conpty.md). This is strictly required for distinguishing combinations like `Ctrl+Enter` or `Shift+Tab`.
 *   **Framework (`vtui`):** A custom UI framework built from scratch in the style of Far, borrowing responsive layout features (like window resizing and anchors) from Turbo Vision. Ideally, it should cover all capabilities of Far's UI kit and Turbo Vision (excluding non-relevant features like custom serialization engines).
 *   **Future Renderers:** We currently render exclusively via ANSI ESC sequences (yielding TrueColor out of the box). In the future, a custom GUI renderer (for example, via SDL or OpenGL) may be added, similar to `far2l`.
 
