@@ -617,9 +617,8 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	}
 
-
 	// Ctrl+O toggles panels visibility
-	if e.VirtualKeyCode == vtinput.VK_O && ctrl {
+	if e.VirtualKeyCode == vtinput.VK_O && ctrl && !alt && !shift {
 		if !pf.showPanels && pf.isPtyBusy() {
 			return true // Prevent switching back while script is working
 		}
