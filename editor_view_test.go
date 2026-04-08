@@ -2777,6 +2777,61 @@ func TestEditorView_WordSelection_Multiline(t *testing.T) {
 		t.Errorf("Selection range across EOL fail: [%d:%d], expected [0:6]", min, max)
 	}
 }
+func TestEditorView_WordSelection_Multiline_Left(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	// "line1\nline2"
+	//  01234 5 67890
+	pt := piecetable.New([]byte("line1\nline2"))
+	ev := NewEditorView(pt, nil, "")
+	ev.li.Rebuild(pt)
+	ev.CursorLine = 1
+	ev.CursorPos = 5 // end of "line2", absolute offset 11
+
+	// 1. Выделяем второе слово влево
+	ev.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_LEFT,
+		ControlKeyState: vtinput.LeftCtrlPressed | vtinput.ShiftPressed,
+	})
+
+	// Курсор должен остановиться в начале "line2" (6)
+	if ev.CursorLine != 1 || ev.CursorPos != 0 {
+		t.Errorf("First left jump fail: %d:%d", ev.CursorLine, ev.CursorPos)
+	}
+
+	min, max := ev.getSelectionRange()
+	if min != 6 || max != 11 {
+		t.Errorf("Selection range fail: [%d:%d], expected [6:11]", min, max)
+	}
+
+	// 2. Прыгаем еще раз влево, через границу строки (EOL)
+	ev.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_LEFT,
+		ControlKeyState: vtinput.LeftCtrlPressed | vtinput.ShiftPressed,
+	})
+
+	// Согласно спецификации, прыжок с позиции 0 упирается в конец предыдущей строки.
+	if ev.CursorLine != 0 || ev.CursorPos != 5 {
+		t.Errorf("Cross-line left jump fail: %d:%d, expected 0:5", ev.CursorLine, ev.CursorPos)
+	}
+
+	// 3. Последний прыжок влево к началу первого слова
+	ev.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_LEFT,
+		ControlKeyState: vtinput.LeftCtrlPressed | vtinput.ShiftPressed,
+	})
+
+	if ev.CursorLine != 0 || ev.CursorPos != 0 {
+		t.Errorf("Final left jump fail: %d:%d", ev.CursorLine, ev.CursorPos)
+	}
+
+	min, max = ev.getSelectionRange()
+	if min != 0 || max != 11 {
+		t.Errorf("Full cross-line selection range fail: [%d:%d], expected [0:11]", min, max)
+	}
+}
 func TestEditorView_WordJumps_DifferentDividers(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pt := piecetable.New([]byte("...///"))
