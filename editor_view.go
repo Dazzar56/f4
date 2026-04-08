@@ -213,7 +213,11 @@ func (ev *EditorView) Undo() {
 		return
 	}
 
-	ev.edited = true // Stop indexer
+	if !ev.edited {
+		ev.edited = true
+		if ev.indexCancel != nil { ev.indexCancel() }
+	}
+	ev.editSession++
 
 	// Save current state to redo stack
 	ev.redoStack = append(ev.redoStack, editorState{
@@ -246,7 +250,11 @@ func (ev *EditorView) Redo() {
 		return
 	}
 
-	ev.edited = true // Stop indexer
+	if !ev.edited {
+		ev.edited = true
+		if ev.indexCancel != nil { ev.indexCancel() }
+	}
+	ev.editSession++
 
 	// Save current state to undo stack
 	ev.undoStack = append(ev.undoStack, editorState{
@@ -545,18 +553,15 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 
 	// Any key that can reach this point and is not a pure navigation key 
 	// should stop the background indexer to prevent index corruption.
-	if !ev.edited {
-		switch e.VirtualKeyCode {
-		case vtinput.VK_UP, vtinput.VK_DOWN, vtinput.VK_LEFT, vtinput.VK_RIGHT,
-			vtinput.VK_PRIOR, vtinput.VK_NEXT, vtinput.VK_HOME, vtinput.VK_END,
-			// MODIFIER KEYS: We MUST whitelist Shift, Ctrl, and Alt/Menu.
-			// Otherwise, pressing Ctrl (as part of Ctrl+End) will mark the
-			// buffer as 'edited' and kill the background indexer prematurely,
-			// leading to desync between PieceTable and LineIndex.
-			vtinput.VK_SHIFT, vtinput.VK_CONTROL, vtinput.VK_MENU:
-			// ignore navigation and modifiers
-		default:
+	switch e.VirtualKeyCode {
+	case vtinput.VK_UP, vtinput.VK_DOWN, vtinput.VK_LEFT, vtinput.VK_RIGHT,
+		vtinput.VK_PRIOR, vtinput.VK_NEXT, vtinput.VK_HOME, vtinput.VK_END,
+		vtinput.VK_SHIFT, vtinput.VK_CONTROL, vtinput.VK_MENU:
+		// ignore navigation and modifiers
+	default:
+		if !ev.edited {
 			ev.edited = true
+			ev.editSession++
 			if ev.indexCancel != nil { ev.indexCancel() }
 		}
 	}
@@ -1494,11 +1499,11 @@ func (ev *EditorView) CopySelection() {
 }
 
 func (ev *EditorView) PasteText(text string) {
-	if ev.indexCancel != nil {
-		ev.indexCancel()
-		ev.indexCancel = nil
+	if !ev.edited {
+		ev.edited = true
+		if ev.indexCancel != nil { ev.indexCancel() }
 	}
-	ev.edited = true
+	ev.editSession++
 
 	ev.saveUndo(opOther)
 	ev.inGroup = true
@@ -1527,11 +1532,11 @@ func (ev *EditorView) DeleteSelection() {
 	if min < 0 { min = 0 }
 	if max > ev.pt.Size() { max = ev.pt.Size() }
 	if max > min {
-		if ev.indexCancel != nil {
-			ev.indexCancel()
-			ev.indexCancel = nil
+		if !ev.edited {
+			ev.edited = true
+			if ev.indexCancel != nil { ev.indexCancel() }
 		}
-		ev.edited = true
+		ev.editSession++
 
 		ev.saveUndo(opOther)
 

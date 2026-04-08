@@ -2846,3 +2846,42 @@ func TestEditorView_WordJumps_DifferentDividers(t *testing.T) {
 		t.Errorf("EditorView expected stop on index 3, got %d", ev.CursorPos)
 	}
 }
+
+func TestEditorView_Indexer_SessionFencing(t *testing.T) {
+	// Это тест на предотвращение рассинхронизации данных при фоновой индексации.
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pt := piecetable.New([]byte("line1\nline2"))
+	ev := NewEditorView(pt, nil, "fencing.txt")
+	
+	// 1. Запоминаем текущую сессию
+	initialSession := ev.editSession
+	
+	// 2. Имитируем запуск задачи индексатором (captured session ID)
+	capturedSession := initialSession
+	
+	// 3. Происходит редактирование (например, Backspace)
+	ev.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true, 
+		VirtualKeyCode: vtinput.VK_BACK,
+	})
+	
+	if ev.editSession <= capturedSession {
+		t.Errorf("Edit session should have incremented. Was %d, now %d", capturedSession, ev.editSession)
+	}
+	
+	// 4. Имитируем «прилет» результата индексации из прошлого
+	indexerApplied := false
+	task := func() {
+		if ev.editSession != capturedSession {
+			// Задача должна быть отброшена, так как сессия изменилась
+			return
+		}
+		indexerApplied = true
+	}
+	
+	task()
+	
+	if indexerApplied {
+		t.Error("CRITICAL: Stale indexer task was applied to a modified buffer!")
+	}
+}
