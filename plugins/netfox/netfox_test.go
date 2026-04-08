@@ -12,7 +12,7 @@ func TestNetFoxVFS_ConfigPersistence(t *testing.T) {
 	nf := NewNetFoxVFS(dbPath)
 
 	// 1. Test Saving
-	cfg := vfs.NetFoxConfig{Type: "sftp", Host: "1.2.3.4", User: "root"}
+	cfg := NetFoxConfig{Type: "sftp", Host: "1.2.3.4", User: "root"}
 	nf.SaveConfig("My Server", cfg)
 
 	// 2. Test Loading (via internal helper)

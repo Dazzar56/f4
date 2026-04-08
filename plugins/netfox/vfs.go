@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"fmt"
 	"sync"
 	"path"
 	"path/filepath"
@@ -33,18 +34,18 @@ func NewNetFoxVFS(dbPath string) *NetFoxVFS {
 	return &NetFoxVFS{path: dbPath}
 }
 
-func (v *NetFoxVFS) getConfigs() map[string]vfs.NetFoxConfig {
+func (v *NetFoxVFS) getConfigs() map[string]NetFoxConfig {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	data, err := os.ReadFile(v.path)
-	if err != nil { return make(map[string]vfs.NetFoxConfig) }
-	var configs map[string]vfs.NetFoxConfig
+	if err != nil { return make(map[string]NetFoxConfig) }
+	var configs map[string]NetFoxConfig
 	json.Unmarshal(data, &configs)
-	if configs == nil { configs = make(map[string]vfs.NetFoxConfig) }
+	if configs == nil { configs = make(map[string]NetFoxConfig) }
 	return configs
 }
 
-func (v *NetFoxVFS) saveConfigs(configs map[string]vfs.NetFoxConfig) {
+func (v *NetFoxVFS) saveConfigs(configs map[string]NetFoxConfig) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	os.MkdirAll(filepath.Dir(v.path), 0755)
@@ -52,7 +53,7 @@ func (v *NetFoxVFS) saveConfigs(configs map[string]vfs.NetFoxConfig) {
 	os.WriteFile(v.path, data, 0644)
 }
 
-func (v *NetFoxVFS) SaveConfig(name string, cfg vfs.NetFoxConfig) {
+func (v *NetFoxVFS) SaveConfig(name string, cfg NetFoxConfig) {
 	configs := v.getConfigs()
 	configs[name] = cfg
 	v.saveConfigs(configs)
@@ -65,8 +66,9 @@ func (v *NetFoxVFS) SetPath(p string) error { return nil }
 func (v *NetFoxVFS) ReadDir(ctx context.Context, p string, onChunk func([]vfs.VFSItem)) error {
 	configs := v.getConfigs()
 	var items []vfs.VFSItem
+	items = append(items, vfs.VFSItem{Name: "<Add connection>", IsDir: false, IsExecutable: true})
 	for name := range configs {
-		items = append(items, vfs.VFSItem{Name: name, IsDir: false, IsExecutable: false})
+		items = append(items, vfs.VFSItem{Name: name, IsDir: false, IsExecutable: true})
 	}
 	if len(items) > 0 { onChunk(items) }
 	return nil
@@ -74,8 +76,11 @@ func (v *NetFoxVFS) ReadDir(ctx context.Context, p string, onChunk func([]vfs.VF
 
 func (v *NetFoxVFS) Stat(ctx context.Context, p string) (vfs.VFSItem, error) {
 	name := v.Base(p)
+	if name == "<Add connection>" {
+		return vfs.VFSItem{Name: name, IsDir: false, IsExecutable: true}, nil
+	}
 	configs := v.getConfigs()
-	if _, ok := configs[name]; ok { return vfs.VFSItem{Name: name, IsDir: false}, nil }
+	if _, ok := configs[name]; ok { return vfs.VFSItem{Name: name, IsDir: false, IsExecutable: true}, nil }
 	return vfs.VFSItem{}, os.ErrNotExist
 }
 
@@ -85,15 +90,14 @@ func (v *NetFoxVFS) Base(p string) string         { return path.Base(p) }
 func (v *NetFoxVFS) Dir(p string) string          { return "net://" }
 
 func (v *NetFoxVFS) MkDir(ctx context.Context, p string) error {
-	name := v.Base(p)
-	configs := v.getConfigs()
-	configs[name] = vfs.NetFoxConfig{Host: name, Port: "22", User: "root"}
-	v.saveConfigs(configs)
-	return nil
+	return fmt.Errorf("folders in NetFox are not yet supported")
 }
 
 func (v *NetFoxVFS) Remove(ctx context.Context, p string) error {
 	name := v.Base(p)
+	if name == "<Add connection>" {
+		return fmt.Errorf("cannot remove <Add connection>")
+	}
 	configs := v.getConfigs()
 	delete(configs, name)
 	v.saveConfigs(configs)
@@ -123,6 +127,9 @@ func (b *bufferReadAtCloser) Size() int64 { return int64(b.Reader.Len()) }
 
 func (v *NetFoxVFS) Open(ctx context.Context, p string) (vfs.ReadAtCloser, error) {
 	name := v.Base(p)
+	if name == "<Add connection>" {
+		return nil, os.ErrNotExist
+	}
 	configs := v.getConfigs()
 	cfg, ok := configs[name]
 	if !ok { return nil, os.ErrNotExist }
@@ -137,7 +144,7 @@ type netfoxWriter struct {
 }
 func (w *netfoxWriter) Write(p []byte) (int, error) { return w.buf.Write(p) }
 func (w *netfoxWriter) Close() error {
-	var cfg vfs.NetFoxConfig
+	var cfg NetFoxConfig
 	json.Unmarshal(w.buf.Bytes(), &cfg)
 	configs := w.v.getConfigs()
 	configs[w.name] = cfg

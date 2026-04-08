@@ -14,6 +14,10 @@ type NetFoxPlugin struct{}
 type netFoxVFSWrapper struct {
 	*NetFoxVFS
 }
+func (w *netFoxVFSWrapper) Clone() vfs.VFS {
+	return &netFoxVFSWrapper{w.NetFoxVFS.Clone().(*NetFoxVFS)}
+}
+
 // ctxReader wraps vfs.ReadAtCloser to implement standard io.Reader
 type ctxReader struct {
 	r   vfs.ReadAtCloser
@@ -25,12 +29,46 @@ func (cr ctxReader) Read(p []byte) (int, error) {
 }
 
 func (w *netFoxVFSWrapper) ProcessPanelKey(app vfs.App, e *vtinput.InputEvent) bool {
-	// Only F7 without ANY modifiers (Shift/Ctrl/Alt)
-	mods := vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed | vtinput.LeftAltPressed | vtinput.RightAltPressed | vtinput.ShiftPressed
-	if e.VirtualKeyCode == vtinput.VK_F7 && (e.ControlKeyState&uint32(mods)) == 0 {
-		actionNewConnectionMenu(app, w.NetFoxVFS)
+	if !e.KeyDown {
+		return false
+	}
+
+	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
+	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
+	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
+	noMods := !shift && !ctrl && !alt
+
+	// F4 -> Edit existing connection
+	if e.VirtualKeyCode == vtinput.VK_F4 && noMods {
+		name := app.GetSelectedName()
+		if name != "" && name != ".." && name != "<Add connection>" {
+			showConnectionDialog(app, w.NetFoxVFS, name)
+		}
 		return true
 	}
+
+	// Shift+F4 -> Add new connection
+	if e.VirtualKeyCode == vtinput.VK_F4 && shift && !ctrl && !alt {
+		showConnectionDialog(app, w.NetFoxVFS, "")
+		return true
+	}
+
+	// Enter on <Add connection>
+	if e.VirtualKeyCode == vtinput.VK_RETURN && noMods {
+		if app.GetSelectedName() == "<Add connection>" {
+			showConnectionDialog(app, w.NetFoxVFS, "")
+			return true
+		}
+	}
+
+	// Protect <Add connection> from deletion via F8
+	if e.VirtualKeyCode == vtinput.VK_F8 && noMods {
+		names := app.GetSelectedNames()
+		if len(names) == 1 && names[0] == "<Add connection>" {
+			return true // Swallow to prevent core from deleting it
+		}
+	}
+
 	return false
 }
 
@@ -40,25 +78,6 @@ func (p *NetFoxPlugin) Init(api vfs.HostAPI) error {
 		return &netFoxVFSWrapper{NewNetFoxVFS(filepath.Join(cfgDir, "f4", "NetFox.json"))}
 	})
 	return nil
-}
-
-func actionNewConnectionMenu(app vfs.App, nf *NetFoxVFS) {
-	protocols := vfs.GetNetFoxProtocols()
-	var names []string
-	var types []string
-	for t := range protocols {
-		names = append(names, t)
-		types = append(types, t)
-	}
-
-	app.Menu(" New Connection ", names, func(idx int) {
-		if idx < 0 || idx >= len(types) { return }
-		p := protocols[types[idx]]
-		if name, cfg, ok := p.CreateConnectionUI(app); ok {
-			nf.SaveConfig(name, cfg)
-			app.RefreshAll()
-		}
-	})
 }
 
 func (p *NetFoxPlugin) Close() error { return nil }

@@ -42,7 +42,7 @@ func (pf *PanelsFrame) GetSelectedNames() []string { return pf.Active().(*FileSy
 func (pf *PanelsFrame) GetSelectedName() string   { return pf.Active().(*FileSystemPanel).GetSelectedName() }
 
 type PanelController interface {
-	ProcessPanelKey(pf *PanelsFrame, e *vtinput.InputEvent) bool
+	ProcessPanelKey(app vfs.App, e *vtinput.InputEvent) bool
 }
 
 // A Panel is an interface for any content that can be placed in the "half" of the manager.

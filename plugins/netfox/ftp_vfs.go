@@ -149,13 +149,6 @@ func (p *ftpProvider) Open(ctx context.Context, parent vfs.VFS, pth string) (vfs
 
 func init() {
 	vfs.RegisterProvider(&ftpProvider{})
-	vfs.RegisterNetFoxProtocol(&ftpNetFoxProtocol{})
-}
-
-type ftpNetFoxProtocol struct{}
-func (p *ftpNetFoxProtocol) Type() string { return "ftp" }
-func (p *ftpNetFoxProtocol) CreateConnectionUI(app vfs.App) (string, vfs.NetFoxConfig, bool) {
-	return "Public FTP", vfs.NetFoxConfig{Type: "ftp", Host: "ftp.gnu.org", Port: "21", User: "anonymous"}, true
 }
 
 type ftpFileWrapper struct {
