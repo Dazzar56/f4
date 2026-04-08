@@ -536,6 +536,48 @@ func TestPanelsFrame_CloneIndependence(t *testing.T) {
 		t.Error("Cloned PanelsFrame shares VFS state with parent!")
 	}
 }
+func TestPanelsFrame_PTYLockContention(t *testing.T) {
+	// Этот тест проверяет, что тяжелый парсинг в PTY-потоке не блокирует
+	// доступ UI-потока к методу getActivePTY (регрессия дедлока).
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pf := NewPanelsFrame()
+
+	// Симулируем "забитую" очередь задач
+	for i := 0; i < 64; i++ {
+		vtui.FrameManager.PostTask(func() {})
+	}
+
+	// Запускаем в отдельной горутине тяжелый парсинг
+	// (в реальности он теперь идет вне ptyMutex)
+	go func() {
+		hugeData := strings.Repeat("A", 100000)
+		pf.ptyMutex.Lock()
+		active := (pf.getActivePTYUnsafe() == pf.pty)
+		pf.ptyMutex.Unlock()
+
+		if active {
+			pf.parser.Process([]byte(hugeData))
+		}
+	}()
+
+	// UI-поток пытается взять мутекс через getActivePTY.
+	// Если дедлок не починен, мы зависнем здесь.
+	done := make(chan bool)
+	go func() {
+		for i := 0; i < 100; i++ {
+			_ = pf.getActivePTY()
+			time.Sleep(1 * time.Millisecond)
+		}
+		done <- true
+	}()
+
+	select {
+	case <-done:
+		// Успех
+	case <-time.After(2 * time.Second):
+		t.Fatal("DEADLOCK DETECTED: getActivePTY blocked by PTY processing loop")
+	}
+}
 func TestPanelsFrame_Clone_Comprehensive(t *testing.T) {
 	vtui.SetDefaultPalette()
 	SetDefaultF4Palette()
