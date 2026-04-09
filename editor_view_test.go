@@ -2915,11 +2915,7 @@ func TestEditorView_CursorScrollbarBoundary(t *testing.T) {
 		t.Errorf("Cursor should be exactly at the last available column (18), got %d", relCursorX)
 	}
 }
-func TestEditorView_SearchPersistence(t *testing.T) {
-	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
-	// 1. Создаем первый редактор и выполняем поиск
-	ev1 := NewEditorView(piecetable.New([]byte("data")), nil, "f1.txt")
 func TestEditorView_SearchPersistence(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 

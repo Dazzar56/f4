@@ -5,6 +5,7 @@ import (
 	"os"
 	"context"
 	"time"
+	"path/filepath"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 )

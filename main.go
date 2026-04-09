@@ -134,7 +134,7 @@ func InitCore() *vtui.ScreenBuf {
 	return scr
 }
 
-func getSessionIniPath() string {
+var getSessionIniPath = func() string {
 	configDir, _ := os.UserConfigDir()
 	return filepath.Join(configDir, "f4", "session.ini")
 }
