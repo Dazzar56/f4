@@ -94,6 +94,7 @@ func InitCore() *vtui.ScreenBuf {
 	vtui.GlobalClipboardAccessManager = NewF4ClipboardAuth()
 	RegisterDrive("&1. Local ( / )", func() vfs.VFS { return vfs.NewOSVFS("/") })
 	RegisterDrive("&2. Home ( ~ )", func() vfs.VFS { home, _ := os.UserHomeDir(); return vfs.NewOSVFS(home) })
+	RegisterDrive("&4. Null VFS (Test)", func() vfs.VFS { return vfs.NewNullVFS(50 * 1024 * 1024) }) // 50 MB/s
 
 	configDir, err := os.UserConfigDir()
 	if err == nil {
