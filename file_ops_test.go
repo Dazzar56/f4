@@ -839,3 +839,59 @@ func TestRecursiveCopy_SymlinkLoop(t *testing.T) {
 		t.Errorf("Wrong error message for symlink loop: %v", err)
 	}
 }
+func TestRecursiveCopy_ByteProgress(t *testing.T) {
+	t.Run("Single Large File (NullVFS)", func(t *testing.T) {
+		srcVfs := vfs.NewNullVFS(0) // Unlimited speed
+		dstVfs := vfs.NewNullVFS(0)
+
+		ctx := context.Background()
+		callCount := 0
+		totalBytes := 0
+
+		state := &FileOpState{
+			OverwriteAll: true,
+			OnBytes: func(n int) {
+				callCount++
+				totalBytes += n
+			},
+		}
+
+		err := recursiveCopy(ctx, func(m string, p int){}, srcVfs, "/1MB.bin", dstVfs, "/upload/test.bin", state, 0)
+		if err != nil { t.Fatalf("Copy failed: %v", err) }
+
+		// Buffer size in recursiveCopy is 128KB (131072 bytes).
+		// 1MB = 1048576 bytes. 1048576 / 131072 = 8 exactly.
+		if callCount != 8 { t.Errorf("Expected 8 calls to OnBytes, got %d", callCount) }
+		if totalBytes != 1024*1024 { t.Errorf("Expected 1048576 bytes total, got %d", totalBytes) }
+	})
+
+	t.Run("Multiple Small Files (OSVFS)", func(t *testing.T) {
+		tmpSrc := t.TempDir()
+		tmpDst := t.TempDir()
+		srcVfs := vfs.NewOSVFS(tmpSrc)
+		dstVfs := vfs.NewOSVFS(tmpDst)
+
+		os.WriteFile(filepath.Join(tmpSrc, "f1.txt"), []byte("Hello"), 0644)
+		os.WriteFile(filepath.Join(tmpSrc, "f2.txt"), []byte("World!"), 0644)
+
+		ctx := context.Background()
+		callCount := 0
+		totalBytes := 0
+
+		state := &FileOpState{
+			OverwriteAll: true,
+			OnBytes: func(n int) {
+				callCount++
+				totalBytes += n
+			},
+		}
+
+		err := recursiveCopy(ctx, func(m string, p int){}, srcVfs, tmpSrc, dstVfs, filepath.Join(tmpDst, "copied"), state, 0)
+		if err != nil { t.Fatalf("Copy failed: %v", err) }
+
+		// "Hello" (5) + "World!" (6) = 11 bytes.
+		// Expected 2 calls, one for each file.
+		if callCount != 2 { t.Errorf("Expected 2 calls to OnBytes, got %d", callCount) }
+		if totalBytes != 11 { t.Errorf("Expected 11 bytes total, got %d", totalBytes) }
+	})
+}

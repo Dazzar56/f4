@@ -16,6 +16,7 @@ type FileOpState struct {
 	OverwriteAll bool
 	SkipAll      bool
 	SkippedCount int
+	OnBytes      func(int)
 }
 
 func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, destInput string, isMove bool, forked bool, onComplete func()) {
@@ -23,7 +24,12 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 	if isMove {
 		title = " Moving... "
 	}
-	state := &FileOpState{}
+	state := &FileOpState{
+		OnBytes: func(n int) {
+			// Current implementation doesn't use byte-level progress for overall percentage yet.
+			// This will be connected to the Global Accumulator in Stage 4.
+		},
+	}
 
 	pf.RunProgressTask(title, "Starting...", forked, func(ctx context.Context, update func(msg string, percent int)) error {
 		// 1. Resolve destination path
@@ -103,7 +109,6 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 					}
 				}
 			}
-
 			err := recursiveCopy(ctx, update, srcVfs, srcPath, dstVfs, targetItemPath, state, 0)
 			if err != nil {
 				return err
@@ -281,6 +286,9 @@ func recursiveCopy(ctx context.Context, update func(msg string, percent int), sr
 		if n > 0 {
 			if _, werr := dstFile.Write(buf[:n]); werr != nil {
 				return werr
+			}
+			if state.OnBytes != nil {
+				state.OnBytes(n)
 			}
 		}
 		if rerr != nil {
