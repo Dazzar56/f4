@@ -1719,7 +1719,7 @@ func TestEditorView_Search_ShiftF7_Reverse(t *testing.T) {
 	// 2. "Find Next" backward search (Shift+F7)
 	// Cursor is at 13 (end of match). Reverse Next should skip index 12 and find 11.
 	ev.selActive = false
-	ev.searchReverse = true
+	LastEditorSearchReverse = true
 	vtui.DebugLog("TEST_SEARCH: Triggering Search 2. Current CursorPos: %d", ev.CursorPos)
 	ev.ProcessKey(&vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
@@ -2913,5 +2913,41 @@ func TestEditorView_CursorScrollbarBoundary(t *testing.T) {
 
 	if relCursorX != 18 {
 		t.Errorf("Cursor should be exactly at the last available column (18), got %d", relCursorX)
+	}
+}
+func TestEditorView_SearchPersistence(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	// 1. Создаем первый редактор и выполняем поиск
+	ev1 := NewEditorView(piecetable.New([]byte("data")), nil, "f1.txt")
+func TestEditorView_SearchPersistence(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	// 1. Выполняем поиск
+	ev1 := NewEditorView(piecetable.New([]byte("data")), nil, "f1.txt")
+	ev1.Search("pattern", true, true, false)
+
+	// Дожидаемся завершения асинхронного поиска
+	timeout := time.After(1 * time.Second)
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-time.After(10 * time.Millisecond):
+		}
+		if LastEditorSearch == "pattern" {
+			break
+		}
+		select {
+		case <-timeout:
+			t.Fatal("Search globals were not updated")
+		default:
+		}
+	}
+
+	// 2. Проверяем переменные
+	if LastEditorSearch != "pattern" || !LastEditorSearchCase || !LastEditorSearchReverse {
+		t.Errorf("Search parameters lost: %q, case:%v, rev:%v",
+			LastEditorSearch, LastEditorSearchCase, LastEditorSearchReverse)
 	}
 }

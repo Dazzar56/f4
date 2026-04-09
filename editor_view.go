@@ -27,6 +27,11 @@ type lineFragment struct {
 	endByteInLine    int // Byte where the fragment ends
 }
 
+var (
+	LastEditorSearch        string
+	LastEditorSearchCase    bool
+	LastEditorSearchReverse bool
+)
 // EditorView is a text editor component.
 type EditorView struct {
 	vtui.BaseFrame
@@ -40,9 +45,6 @@ type EditorView struct {
 	ScrollLeft   int // Горизонтальный скролл (когда WordWrap=false)
 
 	WordWrap         bool
-	lastSearch          string
-	searchCaseSensitive bool
-	searchReverse       bool
 	modified            bool
 	CursorLine       int // Текущая логическая строка (для плагинов)
 	CursorPos        int // Позиция в байтах (для плагинов)
@@ -604,8 +606,8 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 
 	case vtinput.VK_F7:
-		if shift && ev.lastSearch != "" {
-			ev.Search(ev.lastSearch, ev.searchCaseSensitive, ev.searchReverse, true)
+		if shift && LastEditorSearch != "" {
+			ev.Search(LastEditorSearch, LastEditorSearchCase, LastEditorSearchReverse, true)
 		} else {
 			vtui.FrameManager.EmitCommand(CmSearch, nil)
 		}
@@ -1271,16 +1273,16 @@ func (ev *EditorView) showSearchDialog() {
 	dlg.ShowClose = true
 
 	lblPrompt := vtui.NewLabel(0, 0, "Search for:", nil)
-	editPattern := vtui.NewEdit(0, 0, 30, ev.lastSearch)
+	editPattern := vtui.NewEdit(0, 0, 30, LastEditorSearch)
 	lblPrompt.FocusLink = editPattern
 
 	chkCase := vtui.NewCheckbox(0, 0, Msg("Search.CaseSensitive"), false)
 	chkCase.State = 0
-	if ev.searchCaseSensitive { chkCase.State = 1 }
+	if LastEditorSearchCase { chkCase.State = 1 }
 
 	chkReverse := vtui.NewCheckbox(0, 0, Msg("Search.Reverse"), false)
 	chkReverse.State = 0
-	if ev.searchReverse { chkReverse.State = 1 }
+	if LastEditorSearchReverse { chkReverse.State = 1 }
 
 	btnFind := vtui.NewButton(0, 0, "&Find")
 	btnFind.IsDefault = true
@@ -1305,11 +1307,12 @@ func (ev *EditorView) showSearchDialog() {
 	vbox.Apply()
 
 	btnFind.OnClick = func() {
-		ev.lastSearch = editPattern.GetText()
-		ev.searchCaseSensitive = chkCase.State == 1
-		ev.searchReverse = chkReverse.State == 1
+		LastEditorSearch = editPattern.GetText()
+		LastEditorSearchCase = chkCase.State == 1
+		LastEditorSearchReverse = chkReverse.State == 1
+		SaveSession()
 		dlg.Close()
-		ev.Search(ev.lastSearch, ev.searchCaseSensitive, ev.searchReverse, false)
+		ev.Search(LastEditorSearch, LastEditorSearchCase, LastEditorSearchReverse, false)
 	}
 	btnCancel.OnClick = func() { dlg.Close() }
 
@@ -1568,9 +1571,12 @@ func (ev *EditorView) Search(pattern string, caseSensitive, reverse, next bool) 
 	if pattern == "" {
 		return
 	}
-	ev.lastSearch = pattern
-	ev.searchCaseSensitive = caseSensitive
-	ev.searchReverse = reverse
+	if LastEditorSearch != pattern || LastEditorSearchCase != caseSensitive || LastEditorSearchReverse != reverse {
+		LastEditorSearch = pattern
+		LastEditorSearchCase = caseSensitive
+		LastEditorSearchReverse = reverse
+		SaveSession()
+	}
 
 	vtui.DebugLog("EDITOR_SEARCH: Starting for %q (sensitive=%v, reverse=%v, next=%v). CursorPos=%d",
 		pattern, caseSensitive, reverse, next, ev.li.GetLineOffset(ev.CursorLine)+ev.CursorPos)

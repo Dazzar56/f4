@@ -13,6 +13,10 @@ import (
 	"github.com/unxed/vtui/piecetable"
 )
 
+var (
+	LastFindFileMask = "*"
+	LastFindFileText = ""
+)
 func actionOpenEditor(pf *PanelsFrame, v vfs.VFS, path string) {
 	vtui.RunAsync(func(ctx *vtui.TaskContext) {
 		var f vfs.ReadAtCloser
@@ -449,11 +453,11 @@ func actionFindFile(pf *PanelsFrame) {
 	dlg.ShowClose = true
 
 	lblMask := vtui.NewLabel(0, 0, Msg("FindFile.MaskPrompt"), nil)
-	editMask := vtui.NewEdit(0, 0, 20, "*")
+	editMask := vtui.NewEdit(0, 0, 20, LastFindFileMask)
 	lblMask.FocusLink = editMask
 
 	lblText := vtui.NewLabel(0, 0, Msg("FindFile.TextPrompt"), nil)
-	editText := vtui.NewEdit(0, 0, 20, "")
+	editText := vtui.NewEdit(0, 0, 20, LastFindFileText)
 	lblText.FocusLink = editText
 
 	btnFind := vtui.NewButton(0, 0, Msg("FindFile.BtnFind"))
@@ -486,11 +490,12 @@ func actionFindFile(pf *PanelsFrame) {
 
 	btnCancel.OnClick = func() { dlg.Close() }
 	btnFind.OnClick = func() {
-		mask := editMask.GetText()
-		text := editText.GetText()
+		LastFindFileMask = editMask.GetText()
+		LastFindFileText = editText.GetText()
+		SaveSession()
 		dlg.Close()
-		if mask != "" {
-			ExecuteFindFile(pf, activePanel.vfs, activePanel.vfs.GetPath(), mask, text)
+		if LastFindFileMask != "" {
+			ExecuteFindFile(pf, activePanel.vfs, activePanel.vfs.GetPath(), LastFindFileMask, LastFindFileText)
 		}
 	}
 

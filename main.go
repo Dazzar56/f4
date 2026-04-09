@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/pprof"
+	"fmt"
 
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
@@ -104,6 +105,7 @@ func InitCore() *vtui.ScreenBuf {
 	os.MkdirAll(filepath.Join(configDir, "f4"), 0755)
 	MacroMgr = NewMacroManager(filepath.Join(configDir, "f4", "key_macros.ini"))
 	vtui.FrameManager.EventFilter = MacroMgr.Filter
+	LoadSession()
 	vtui.FrameManager.Push(vtui.NewDesktop())
 
 	panels := NewPanelsFrame()
@@ -130,4 +132,48 @@ func InitCore() *vtui.ScreenBuf {
 
 	vtui.DebugLog("CORE: Initialization complete")
 	return scr
+}
+
+func getSessionIniPath() string {
+	configDir, _ := os.UserConfigDir()
+	return filepath.Join(configDir, "f4", "session.ini")
+}
+
+func LoadSession() {
+	path := getSessionIniPath()
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return
+	}
+	ini := LoadIni(path)
+
+	LastEditorSearch = ini.GetString("EditorSearch", "Pattern", "")
+	LastEditorSearchCase = ini.GetString("EditorSearch", "CaseSensitive", "0") == "1"
+	LastEditorSearchReverse = ini.GetString("EditorSearch", "Reverse", "0") == "1"
+
+	LastFindFileMask = ini.GetString("FindFile", "Mask", "*")
+	LastFindFileText = ini.GetString("FindFile", "Text", "")
+	vtui.DebugLog("SESSION: Loaded state from %s", path)
+}
+
+func SaveSession() {
+	path := getSessionIniPath()
+	os.MkdirAll(filepath.Dir(path), 0755)
+
+	f, err := os.Create(path)
+	if err != nil {
+		vtui.DebugLog("SESSION: Failed to save state: %v", err)
+		return
+	}
+	defer f.Close()
+
+	fmt.Fprintln(f, "[EditorSearch]")
+	fmt.Fprintf(f, "Pattern = %s\n", LastEditorSearch)
+	fmt.Fprintf(f, "CaseSensitive = %d\n", map[bool]int{true: 1, false: 0}[LastEditorSearchCase])
+	fmt.Fprintf(f, "Reverse = %d\n", map[bool]int{true: 1, false: 0}[LastEditorSearchReverse])
+
+	fmt.Fprintln(f, "\n[FindFile]")
+	fmt.Fprintf(f, "Mask = %s\n", LastFindFileMask)
+	fmt.Fprintf(f, "Text = %s\n", LastFindFileText)
+
+	vtui.DebugLog("SESSION: Saved state to %s", path)
 }
