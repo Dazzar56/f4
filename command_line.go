@@ -96,6 +96,23 @@ func (cl *CommandLine) ProcessKey(e *vtinput.InputEvent) bool {
 			cl.Edit.HistoryPos = -1
 		}
 	}
+
+	// AutoComplete logic:
+	if handled && cl.Edit.HistoryPos == -1 && !cl.IsEmpty() {
+		isChar := e.Char != 0
+		isDel := e.VirtualKeyCode == vtinput.VK_BACK || e.VirtualKeyCode == vtinput.VK_DELETE
+		if isChar || isDel {
+			top := vtui.FrameManager.GetTopFrame()
+			_, isAc := top.(*vtui.AutoCompleteMenu)
+			if !isAc {
+				ac := vtui.NewAutoCompleteMenu(cl.Edit)
+				if ac.HasMatches() {
+					vtui.FrameManager.Push(ac)
+				}
+			}
+		}
+	}
+
 	return handled
 }
 
