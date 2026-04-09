@@ -1019,11 +1019,15 @@ func (pf *PanelsFrame) RunProgressTask(title, startMsg string, forked bool, work
 	lbl := vtui.NewText(0, 0, startMsg, vtui.Palette[vtui.ColDialogText])
 	dlg.AddItem(lbl)
 
+	pb := vtui.NewProgressBar(0, 0, 46)
+	dlg.AddItem(pb)
+
 	btnCancel := vtui.NewButton(0, 0, "&Cancel")
 	dlg.AddItem(btnCancel)
 
 	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 50-4, 8-4)
 	vbox.Add(lbl, vtui.Margins{}, vtui.AlignCenter)
+	vbox.Add(pb, vtui.Margins{Top: 1}, vtui.AlignFill)
 	vbox.Add(btnCancel, vtui.Margins{Top: 1}, vtui.AlignCenter)
 	vbox.Apply()
 
@@ -1052,7 +1056,10 @@ func (pf *PanelsFrame) RunProgressTask(title, startMsg string, forked bool, work
 					safeMsg := runewidth.Truncate(msg, 46, "...")
 					lbl.SetText(safeMsg)
 				}
-				if percent >= 0 { dlg.SetProgress(percent) }
+				if percent >= 0 {
+					pb.SetPercent(percent)
+					dlg.SetProgress(percent)
+				}
 				vtui.FrameManager.Redraw()
 			})
 		}
@@ -1069,7 +1076,7 @@ func (pf *PanelsFrame) ExecuteDummyOp(forked bool) {
 		for i := 1; i <= totalSteps; i++ {
 			if ctx.Err() != nil { return ctx.Err() }
 			time.Sleep(1 * time.Second)
-			update(fmt.Sprintf("Step %d of %d...", i, totalSteps), (i*100)/totalSteps)
+			update(fmt.Sprintf("File %d of %d", i, totalSteps), (i*100)/totalSteps)
 		}
 		return nil
 	}, func(err error) {
