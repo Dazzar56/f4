@@ -3,6 +3,7 @@ package main
 import (
 	"testing"
 	"strings"
+	"fmt"
 	"github.com/unxed/vtui"
 )
 
@@ -66,5 +67,30 @@ func TestFileOpProgressDialog_LongPathTruncation(t *testing.T) {
 	}
 	if !strings.HasSuffix(text, "...") {
 		t.Error("UpdateScan failed to add ellipsis")
+	}
+}
+func TestFileOpProgressDialog_TransferFormatting(t *testing.T) {
+	vtui.SetDefaultPalette()
+	dlg := NewFileOpProgressDialog(" Formatting Test ")
+
+	// Test the 3-column time/ETA/speed string
+	// format: "%-16s %-21s %15s" -> 16+1+21+1+15 = 54 characters
+	elapsed := "Time: 01:02:03"    // 14 chars
+	eta := "Remaining: 00:00:59" // 19 chars
+	speed := "10.5 MB/s"          // 9 chars
+
+	// Simulating the format logic from file_ops.go
+	timeSpeedText := fmt.Sprintf("%-16s %-21s %15s", elapsed, eta, speed)
+
+	dlg.UpdateTransfer("Copying", "file.txt", 50, "Total: 100MB", 10, timeSpeedText)
+
+	got := dlg.lblSpeed.GetText()
+	if len(got) > 54 {
+		t.Errorf("Transfer info string too long: %d chars, max 54", len(got))
+	}
+
+	// Check alignment (speed should be on the right)
+	if !strings.HasSuffix(got, speed) {
+		t.Errorf("Speed alignment failed. Expected suffix %q, got %q", speed, got)
 	}
 }

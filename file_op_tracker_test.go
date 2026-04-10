@@ -111,3 +111,23 @@ func TestFileOpTracker_SkippedFiles(t *testing.T) {
 		t.Errorf("Progress mismatch after skip: expected 30%%, got %d%%", totalPct)
 	}
 }
+func TestFileOpTracker_ProcessedBytes(t *testing.T) {
+	total := vfs.OpStats{Files: 1, Bytes: 1000}
+	tracker := NewFileOpTracker(total)
+
+	tracker.StartFile("f1", 1000)
+	tracker.UpdateBytes(450)
+
+	processed, _ := tracker.GetStats()
+	if processed.Bytes != 450 {
+		t.Errorf("GetStats should include in-progress bytes: expected 450, got %d", processed.Bytes)
+	}
+
+	tracker.UpdateBytes(50)
+	tracker.FileDone()
+
+	processed, _ = tracker.GetStats()
+	if processed.Bytes != 1000 {
+		t.Errorf("GetStats failed after FileDone: expected 1000, got %d", processed.Bytes)
+	}
+}
