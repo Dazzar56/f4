@@ -63,7 +63,7 @@ func (v *NullVFS) ReadDir(ctx context.Context, p string, onChunk func([]VFSItem)
 	} else if strings.HasPrefix(p, "/scenarios/bandwidth") {
 		items = append(items, VFSItem{Name: "huge.bin", Size: nullFiles["huge.bin"], IsDir: false})
 	} else if strings.HasPrefix(p, "/scenarios/iops") {
-		for i := 0; i < 1000; i++ {
+		for i := 0; i < 10000; i++ {
 			items = append(items, VFSItem{Name: fmt.Sprintf("small_%d.txt", i), Size: 1024, IsDir: false})
 		}
 	} else if strings.HasPrefix(p, "/scenarios/deep") {

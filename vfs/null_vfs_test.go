@@ -208,8 +208,8 @@ func TestNullVFS_Scenarios(t *testing.T) {
 		v.ReadDir(ctx, "/scenarios/iops", func(chunk []VFSItem) {
 			items = append(items, chunk...)
 		})
-		if len(items) != 1000 {
-			t.Errorf("Expected 1000 files in IOPS scenario, got %d", len(items))
+		if len(items) != 10000 {
+			t.Errorf("Expected 10000 files in IOPS scenario, got %d", len(items))
 		}
 	})
 
@@ -342,8 +342,8 @@ func TestNullVFS_ReadDirPaging(t *testing.T) {
 		if err != nil { t.Fatal(err) }
 
 		// 1000 items in chunks of 100 = 10 chunks
-		if itemCount != 1000 { t.Errorf("Expected 1000 items, got %d", itemCount) }
-		if chunkCount != 10 { t.Errorf("Expected 10 chunks, got %d", chunkCount) }
+		if itemCount != 10000 { t.Errorf("Expected 10000 items, got %d", itemCount) }
+		if chunkCount != 100 { t.Errorf("Expected 100 chunks, got %d", chunkCount) }
 	})
 
 	t.Run("Paging delay in slow zone", func(t *testing.T) {
@@ -356,8 +356,8 @@ func TestNullVFS_ReadDirPaging(t *testing.T) {
 		})
 		dur := time.Since(start)
 
-		if itemCount != 1000 {
-			t.Errorf("Expected 1000 items, got %d", itemCount)
+		if itemCount != 10000 {
+			t.Errorf("Expected 10000 items, got %d", itemCount)
 		}
 
 		// Initial meta throttle (100ms) + 9 inter-chunk delays (9 * 20ms = 180ms)
