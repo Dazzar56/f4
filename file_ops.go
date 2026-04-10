@@ -181,11 +181,18 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 				elapsed := now.Sub(startTime)
 				elapsedStr := fmt.Sprintf("Time: %02d:%02d:%02d", int(elapsed.Hours()), int(elapsed.Minutes())%60, int(elapsed.Seconds())%60)
 
+				// "Adult" ETA: Account for per-item overhead (metadata, open/close, latency)
+				// 32KB is a reasonable virtual 'weight' for one file operation.
+				const ItemOverhead = 32 * 1024
+				vProcessed := float64(processed.Bytes + (processed.Files+processed.Dirs)*ItemOverhead)
+				vTotal := float64(total.Bytes + (total.Files+total.Dirs)*ItemOverhead)
+
 				etaStr := "Remaining: ??:??:??"
-				if total.Bytes > 0 && processed.Bytes > 0 && currentSpeed > 0 {
-					bytesRemaining := total.Bytes - processed.Bytes
-					if bytesRemaining < 0 { bytesRemaining = 0 }
-					etaSecs := float64(bytesRemaining) / currentSpeed
+				// Use total average virtual speed for maximum ETA stability
+				if vTotal > 0 && vProcessed > 0 && elapsed.Seconds() > 0.5 {
+					ratio := vProcessed / vTotal
+					etaSecs := (elapsed.Seconds() / ratio) - elapsed.Seconds()
+					if etaSecs < 0 { etaSecs = 0 }
 					etaDur := time.Duration(etaSecs * float64(time.Second))
 					etaStr = fmt.Sprintf("Remaining: %02d:%02d:%02d", int(etaDur.Hours()), int(etaDur.Minutes())%60, int(etaDur.Seconds())%60)
 				}
