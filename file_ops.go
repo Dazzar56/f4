@@ -205,9 +205,19 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 				// Форматируем строку: 16 символов, 21 символ, 15 символов -> ровно 52 символа + пробелы = 54 (внутренняя ширина диалога 60-6)
 				timeSpeedText := fmt.Sprintf("%-16s %-21s %15s", elapsedStr, etaStr, speedStr)
 
-				// Логируем прогресс в дебаг, чтобы отслеживать ошибки (с дебаунсом в 5 секунд или 5%)
+				// Calculate virtual percentage for debugging/testing
+				vPct := 0
+				if vTotal > 0 {
+					vPct = int((vProcessed * 100) / vTotal)
+				}
+
+				// Log progress to debug (with 5% or 5s debounce)
 				if totalPct >= lastLoggedPct + 5 || now.Sub(lastLoggedTime) >= 5*time.Second {
-					vtui.DebugLog("FILEOP: %d%% | Proc: %d/%d B | %s | %s | %s", totalPct, processed.Bytes, total.Bytes, strings.TrimSpace(elapsedStr), strings.TrimSpace(etaStr), strings.TrimSpace(speedStr))
+					vtui.DebugLog("FILEOP: %d%% (V:%d%%) | Items: %d/%d | Proc: %d/%d B | %s | %s | %s",
+						totalPct, vPct,
+						processed.Files+processed.Dirs, total.Files+total.Dirs,
+						processed.Bytes, total.Bytes,
+						strings.TrimSpace(elapsedStr), strings.TrimSpace(etaStr), strings.TrimSpace(speedStr))
 					lastLoggedPct = totalPct
 					lastLoggedTime = now
 				}
