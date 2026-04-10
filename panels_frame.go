@@ -1033,10 +1033,12 @@ func (pf *PanelsFrame) RunProgressTask(title, startMsg string, forked bool, work
 
 	var taskCtx *vtui.TaskContext
 	btnCancel.OnClick = func() {
+		dlg.SetExitCode(1)
+	}
+	dlg.OnResult = func(code int) {
 		if taskCtx != nil {
 			taskCtx.Cancel()
 		}
-		dlg.Close()
 	}
 
 	vtui.FrameManager.PostTask(func() {

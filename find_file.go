@@ -46,10 +46,12 @@ func ExecuteFindFile(pf *PanelsFrame, v vfs.VFS, startDir, mask, text string) {
 
 	var taskCtx *vtui.TaskContext
 	btnCancel.OnClick = func() {
+		dlg.SetExitCode(1)
+	}
+	dlg.OnResult = func(code int) {
 		if taskCtx != nil {
 			taskCtx.Cancel()
 		}
-		dlg.Close()
 	}
 
 	// Since we are inside an action handler (UI thread), we can push directly

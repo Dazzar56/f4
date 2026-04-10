@@ -46,10 +46,12 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 
 	var taskCtx *vtui.TaskContext
 	dlg.btnCancel.OnClick = func() {
+		dlg.SetExitCode(1)
+	}
+	dlg.OnResult = func(code int) {
 		if taskCtx != nil {
 			taskCtx.Cancel()
 		}
-		dlg.Close()
 	}
 
 	vtui.FrameManager.PostTask(func() {
@@ -120,11 +122,20 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 
 		var totalStats vfs.OpStats
 		scanErr := error(nil)
+		lastScanUpdate := time.Now()
 		totalStats, scanErr = vfs.CalculateStats(ctx.Context, srcVfs, srcVfs.GetPath(), names, func(currentPath string, stats vfs.OpStats) {
-			ctx.RunOnUI(func() {
-				dlg.UpdateScan(currentPath, stats.Files, stats.Dirs)
-				vtui.FrameManager.Redraw()
-			})
+			now := time.Now()
+			if now.Sub(lastScanUpdate) > 50*time.Millisecond {
+				lastScanUpdate = now
+				ctx.RunOnUI(func() {
+					dlg.UpdateScan(currentPath, stats.Files, stats.Dirs)
+					vtui.FrameManager.Redraw()
+				})
+			}
+		})
+		ctx.RunOnUI(func() {
+			dlg.UpdateScan("", totalStats.Files, totalStats.Dirs)
+			vtui.FrameManager.Redraw()
 		})
 
 		if scanErr != nil {
@@ -450,18 +461,20 @@ func recursiveCopy(ctx context.Context, srcVfs vfs.VFS, srcPath string, dstVfs v
 // AskOverwrite shows a modal dialog from the background thread and waits for the result.
 func AskOverwrite(ctx context.Context, name string) int {
 	resultChan := make(chan int, 1)
+	var dlg *vtui.Window
 
 	vtui.FrameManager.PostTask(func() {
+		if ctx.Err() != nil { return }
 		msg := fmt.Sprintf("File already exists:\n%s\n\nOverwrite?", name)
 		title := " Conflict "
 		buttons := []string{"&Overwrite", Msg("Btn.OverwriteAll"), "&Skip", Msg("Btn.SkipAll"), "&Cancel"}
 
-		dlg := vtui.ShowMessage(title, msg, buttons)
+		dlg = vtui.ShowMessage(title, msg, buttons)
 		dlg.OnResult = func(code int) {
 			if code < 0 {
 				code = 4
 			} // Map ESC/Close to Cancel
-			resultChan <- code
+			select { case resultChan <- code: default: }
 		}
 	})
 
@@ -469,27 +482,37 @@ func AskOverwrite(ctx context.Context, name string) int {
 	case res := <-resultChan:
 		return res
 	case <-ctx.Done():
-		return 2 // Cancel if task is killed
+		vtui.FrameManager.PostTask(func() {
+			if dlg != nil && !dlg.IsDone() { dlg.Close() }
+		})
+		return 4 // 4 matches Cancel button index
 	}
 }
 
 // AskError handles I/O errors by asking user for Retry/Skip/Abort
 func AskError(ctx context.Context, op string, err error) int {
 	resultChan := make(chan int, 1)
+	var dlg *vtui.Window
+
 	vtui.FrameManager.PostTask(func() {
+		if ctx.Err() != nil { return }
 		msg := fmt.Sprintf("%s:\n%s\n\n%s", op, err.Error(), "What to do?")
-		dlg := vtui.ShowMessage(" Error ", msg, []string{Msg("Btn.Retry"), "&Skip", "&Abort"})
+		dlg = vtui.ShowMessage(" Error ", msg, []string{Msg("Btn.Retry"), "&Skip", "&Abort"})
 		dlg.OnResult = func(code int) {
 			if code < 0 {
 				code = 2
 			}
-			resultChan <- code
+			select { case resultChan <- code: default: }
 		}
 	})
+
 	select {
 	case res := <-resultChan:
 		return res
 	case <-ctx.Done():
-		return 2
+		vtui.FrameManager.PostTask(func() {
+			if dlg != nil && !dlg.IsDone() { dlg.Close() }
+		})
+		return 2 // 2 matches Abort button index
 	}
 }
