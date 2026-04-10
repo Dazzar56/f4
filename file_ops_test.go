@@ -885,3 +885,35 @@ func TestRecursiveCopy_ByteProgress(t *testing.T) {
 		if totalBytes != 11 { t.Errorf("Expected 11 bytes total, got %d", totalBytes) }
 	})
 }
+func TestFileOps_FormatSize(t *testing.T) {
+	tests := []struct {
+		bytes int64
+		want  string
+	}{
+		{500, "500 B"},
+		{1024, "1.0 KB"},
+		{1024 * 1024, "1.0 MB"},
+		{10 * 1024 * 1024 * 1024, "10.0 GB"},
+	}
+	for _, tt := range tests {
+		if got := formatSize(tt.bytes); got != tt.want {
+			t.Errorf("formatSize(%d) = %q, want %q", tt.bytes, got, tt.want)
+		}
+	}
+}
+
+func TestFileOps_CalculateStats_Integration(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	tmp := t.TempDir()
+	os.MkdirAll(filepath.Join(tmp, "a/b"), 0755)
+	os.WriteFile(filepath.Join(tmp, "a/f1.txt"), []byte("123"), 0644)
+	os.WriteFile(filepath.Join(tmp, "a/b/f2.txt"), []byte("4567"), 0644)
+
+	v := vfs.NewOSVFS(tmp)
+	stats, err := vfs.CalculateStats(context.Background(), v, tmp, []string{"a"}, nil)
+
+	if err != nil { t.Fatalf("CalculateStats failed: %v", err) }
+	if stats.Files != 2 || stats.Dirs != 2 || stats.Bytes != 7 {
+		t.Errorf("Stats mismatch: %+v", stats)
+	}
+}

@@ -86,3 +86,28 @@ func TestFileOpTracker_EmptyJob(t *testing.T) {
 		t.Errorf("Empty job should report 100%%, got %d", totalPct)
 	}
 }
+
+func TestFileOpTracker_SkippedFiles(t *testing.T) {
+	// Total: 10 files, 1000 bytes
+	total := vfs.OpStats{Files: 10, Bytes: 1000}
+	tracker := NewFileOpTracker(total)
+
+	// Process 2 files
+	tracker.StartFile("f1", 100); tracker.UpdateBytes(100); tracker.FileDone()
+	tracker.StartFile("f2", 100); tracker.UpdateBytes(100); tracker.FileDone()
+
+	// Skip 1 file (announced size was 100)
+	tracker.StartFile("f3", 100)
+	tracker.FileSkipped()
+
+	processed, _ := tracker.GetStats()
+	if processed.Files != 3 {
+		t.Errorf("Expected 3 files processed (including skipped), got %d", processed.Files)
+	}
+
+	_, totalPct, _ := tracker.GetProgress()
+	// (100 + 100 + 100) / 1000 = 30%
+	if totalPct != 30 {
+		t.Errorf("Progress mismatch after skip: expected 30%%, got %d%%", totalPct)
+	}
+}

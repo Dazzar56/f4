@@ -2,6 +2,7 @@ package main
 
 import (
 	"testing"
+	"strings"
 	"github.com/unxed/vtui"
 )
 
@@ -45,5 +46,25 @@ func TestFileOpProgressDialog_VisibilityModes(t *testing.T) {
 
 	if dlg.lblCurrent.GetText() != "Copying: file.txt" {
 		t.Errorf("Action text mismatch: %s", dlg.lblCurrent.GetText())
+	}
+}
+
+func TestFileOpProgressDialog_LongPathTruncation(t *testing.T) {
+	vtui.SetDefaultPalette()
+	dlg := NewFileOpProgressDialog(" Truncation Test ")
+
+	// Very long path should be truncated to fit 54 chars
+	longPath := "/home/user/very/long/directory/structure/that/definitely/exceeds/the/dialog/width/limit/filename.txt"
+	dlg.UpdateScan(longPath, 1, 1)
+
+	text := dlg.lblCurrent.GetText()
+	if len(text) > 54 {
+		t.Errorf("UpdateScan failed to truncate long path: length %d", len(text))
+	}
+	if !strings.HasPrefix(text, "Scanning: ") {
+		t.Error("UpdateScan lost the prefix")
+	}
+	if !strings.HasSuffix(text, "...") {
+		t.Error("UpdateScan failed to add ellipsis")
 	}
 }
