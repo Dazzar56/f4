@@ -333,7 +333,7 @@ func recursiveCopy(ctx context.Context, srcVfs vfs.VFS, srcPath string, dstVfs v
 		if state.Tracker != nil {
 			state.Tracker.DirDone()
 			if state.UpdateUI != nil {
-				state.UpdateUI(true)
+				state.UpdateUI(false)
 			}
 		}
 		return nil
@@ -343,7 +343,7 @@ func recursiveCopy(ctx context.Context, srcVfs vfs.VFS, srcPath string, dstVfs v
 	if state.Tracker != nil {
 		state.Tracker.StartFile(itemName, stat.Size)
 		if state.UpdateUI != nil {
-			state.UpdateUI(true)
+			state.UpdateUI(false)
 		}
 	}
 
@@ -441,7 +441,7 @@ func recursiveCopy(ctx context.Context, srcVfs vfs.VFS, srcPath string, dstVfs v
 	if state.Tracker != nil {
 		state.Tracker.FileDone()
 		if state.UpdateUI != nil {
-			state.UpdateUI(true)
+			state.UpdateUI(false)
 		}
 	}
 	return nil
