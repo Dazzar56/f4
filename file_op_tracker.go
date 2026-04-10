@@ -57,6 +57,17 @@ func (t *FileOpTracker) FileDone() {
 	t.currentFileBytes = 0
 	t.currentFileSize = 0
 }
+// FileSkipped records that a file was bypassed (e.g. user chose Skip)
+func (t *FileOpTracker) FileSkipped() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.processed.Files++
+	t.completedBytes += t.currentFileSize
+
+	t.currentFileName = ""
+	t.currentFileBytes = 0
+	t.currentFileSize = 0
+}
 
 // DirDone records a successfully created/processed directory.
 func (t *FileOpTracker) DirDone() {
@@ -104,5 +115,7 @@ func (t *FileOpTracker) GetProgress() (filePct, totalPct int, currentName string
 func (t *FileOpTracker) GetStats() (processed vfs.OpStats, total vfs.OpStats) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	return t.processed, t.total
+	processed = t.processed
+	processed.Bytes = t.completedBytes + t.currentFileBytes
+	return processed, t.total
 }

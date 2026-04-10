@@ -36,10 +36,8 @@ func TestRecursiveCopy(t *testing.T) {
 	tCtx := vtui.RunAsync(func(c *vtui.TaskContext) {})
 	defer tCtx.Cancel()
 
-	dummyUpdate := func(msg string, percent int) {}
-
 	// Perform copy: folder1 from tmpSrc to tmpDst
-	err := recursiveCopy(tCtx, dummyUpdate, srcVfs, filepath.Join(tmpSrc, "folder1"), dstVfs, filepath.Join(tmpDst, "folder1_copy"), &FileOpState{}, 0)
+	err := recursiveCopy(tCtx.Context, srcVfs, filepath.Join(tmpSrc, "folder1"), dstVfs, filepath.Join(tmpDst, "folder1_copy"), &FileOpState{}, 0)
 	if err != nil {
 		t.Fatalf("recursiveCopy failed: %v", err)
 	}
@@ -72,9 +70,8 @@ func TestRecursiveCopy_Cancel(t *testing.T) {
 
 	// Cancel immediately
 	cancel()
-	dummyUpdate := func(msg string, percent int) {}
 
-	err := recursiveCopy(tCtx, dummyUpdate, srcVfs, largeFile, dstVfs, filepath.Join(tmpDst, "large_copy.bin"), &FileOpState{}, 0)
+	err := recursiveCopy(tCtx.Context, srcVfs, largeFile, dstVfs, filepath.Join(tmpDst, "large_copy.bin"), &FileOpState{}, 0)
 	if err == nil || !strings.Contains(err.Error(), "context canceled") {
 		t.Errorf("Expected context canceled error, got %v", err)
 	}
@@ -88,12 +85,10 @@ func TestRecursiveCopy_SelfCopy(t *testing.T) {
 	tCtx := vtui.RunAsync(func(c *vtui.TaskContext) {})
 	defer tCtx.Cancel()
 
-	dummyUpdate := func(msg string, percent int) {}
-
 	// Try to copy "src_folder" into "src_folder/sub"
 	srcPath := filepath.Join(tmp, "src_folder")
 	// Use OSVFS for proper absolute path normalization
-	err := recursiveCopy(tCtx, dummyUpdate, srcVfs,
+	err := recursiveCopy(tCtx.Context, srcVfs,
 		srcPath, srcVfs, filepath.Join(srcPath, "sub"), &FileOpState{}, 0)
 
 	if err == nil || !strings.Contains(err.Error(), "folder into itself") {
@@ -115,10 +110,9 @@ func TestRecursiveCopy_ConflictTypeMismatch(t *testing.T) {
 
 	tCtx := vtui.RunAsync(func(c *vtui.TaskContext) {})
 	defer tCtx.Cancel()
-	dummyUpdate := func(msg string, percent int) {}
 
 	// Try to copy folder over file - should return error immediately
-	err := recursiveCopy(tCtx, dummyUpdate, srcVfs,
+	err := recursiveCopy(tCtx.Context, srcVfs,
 		filepath.Join(tmpSrc, name), dstVfs, filepath.Join(tmpDst, name), &FileOpState{}, 0)
 
 	if err == nil || !strings.Contains(err.Error(), "cannot overwrite file with folder") {
@@ -139,10 +133,9 @@ func TestRecursiveCopy_MoveCrossVFS(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	tCtx := vtui.RunAsync(func(c *vtui.TaskContext) {})
 	defer tCtx.Cancel()
-	dummyUpdate := func(msg string, percent int) {}
 
 	// Execute Move
-	err := recursiveCopy(tCtx, dummyUpdate, srcVfs, srcFile, dstVfs, filepath.Join(tmpDst, name), &FileOpState{}, 0)
+	err := recursiveCopy(tCtx.Context, srcVfs, srcFile, dstVfs, filepath.Join(tmpDst, name), &FileOpState{}, 0)
 	if err != nil { t.Fatalf("Copy part of move failed: %v", err) }
 
 	err = srcVfs.Remove(context.Background(), srcFile)
@@ -169,9 +162,8 @@ func TestRecursiveCopy_FileOverFolderMismatch(t *testing.T) {
 	dstVfs := vfs.NewOSVFS(tmpDst)
 	//pf := &PanelsFrame{}
 	tCtx := vtui.RunAsync(func(c *vtui.TaskContext) {})
-	dummyUpdate := func(msg string, percent int) {}
 
-	err := recursiveCopy(tCtx, dummyUpdate, srcVfs,
+	err := recursiveCopy(tCtx.Context, srcVfs,
 		filepath.Join(tmpSrc, name), dstVfs, filepath.Join(tmpDst, name), &FileOpState{}, 0)
 
 	if err == nil || !strings.Contains(err.Error(), "cannot overwrite folder with file") {
@@ -200,10 +192,9 @@ func TestRecursiveCopy_OverwriteAllState(t *testing.T) {
 
 	srcVfs := vfs.NewOSVFS(tmpSrc)
 	dstVfs := vfs.NewOSVFS(tmpDst)
-	dummyUpdate := func(msg string, percent int) {}
 
 	// Should not call AskOverwrite because OverwriteAll is true
-	err := recursiveCopy(tCtx, dummyUpdate, srcVfs,
+	err := recursiveCopy(tCtx.Context, srcVfs,
 		filepath.Join(tmpSrc, "f1.txt"), dstVfs, filepath.Join(tmpDst, "f1.txt"), state, 0)
 
 	if err != nil { t.Errorf("Copy failed even with OverwriteAll: %v", err) }
@@ -226,9 +217,8 @@ func TestRecursiveCopy_SkipAllState(t *testing.T) {
 
 	srcVfs := vfs.NewOSVFS(tmpSrc)
 	dstVfs := vfs.NewOSVFS(tmpDst)
-	dummyUpdate := func(msg string, percent int) {}
 
-	err := recursiveCopy(tCtx, dummyUpdate, srcVfs,
+	err := recursiveCopy(tCtx.Context, srcVfs,
 		filepath.Join(tmpSrc, fileName), dstVfs, filepath.Join(tmpDst, fileName), state, 0)
 
 	if err != nil { t.Fatalf("Expected no error on skip, got %v", err) }
@@ -384,7 +374,7 @@ func TestExecuteFileOp_DirFileConflict(t *testing.T) {
 	tCtx := vtui.RunAsync(func(c *vtui.TaskContext) {})
 	defer tCtx.Cancel()
 
-	err := recursiveCopy(tCtx, func(m string, p int) {}, srcVfs,
+	err := recursiveCopy(tCtx.Context, srcVfs,
 		filepath.Join(tmpSrc, "item"), dstVfs, filepath.Join(tmpDst, "item"), &FileOpState{}, 0)
 
 	if err == nil || !strings.Contains(err.Error(), "cannot overwrite file with folder") {
@@ -413,12 +403,12 @@ func TestExecuteFileOp_StateTransitions(t *testing.T) {
 	// We simulate the user choosing "Overwrite All" by setting the state
 	state.OverwriteAll = true
 
-	err := recursiveCopy(tCtx, func(string, int){}, srcVfs,
+	err := recursiveCopy(tCtx.Context, srcVfs,
 		filepath.Join(tmpSrc, "a.txt"), dstVfs, filepath.Join(tmpDst, "a.txt"), state, 0)
 	if err != nil { t.Fatal(err) }
 
 	// 2. Trigger second copy with same state
-	err = recursiveCopy(tCtx, func(string, int){}, srcVfs,
+	err = recursiveCopy(tCtx.Context, srcVfs,
 		filepath.Join(tmpSrc, "b.txt"), dstVfs, filepath.Join(tmpDst, "b.txt"), state, 0)
 	if err != nil { t.Fatal(err) }
 
@@ -499,14 +489,14 @@ func TestExecuteFileOp_SkipAll_Integrity(t *testing.T) {
 	state := &FileOpState{SkipAll: true} // Simulate user already pressed "Skip All"
 
 	// 1. Process f1.txt
-	err := recursiveCopy(tCtx, func(string, int) {}, srcVfs,
+	err := recursiveCopy(tCtx.Context, srcVfs,
 		filepath.Join(tmpSrc, "f1.txt"), dstVfs, filepath.Join(tmpDst, "f1.txt"), state, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// 2. Process f2.txt
-	err = recursiveCopy(tCtx, func(string, int) {}, srcVfs,
+	err = recursiveCopy(tCtx.Context, srcVfs,
 		filepath.Join(tmpSrc, "f2.txt"), dstVfs, filepath.Join(tmpDst, "f2.txt"), state, 0)
 	if err != nil {
 		t.Fatal(err)
@@ -543,7 +533,7 @@ func TestExecuteFileOp_Move_Skip_NoDataLoss(t *testing.T) {
 	tCtx := &vtui.TaskContext{Context: context.Background()}
 	state := &FileOpState{SkipAll: true}
 
-	err := recursiveCopy(tCtx, func(string, int) {}, srcVfs, srcFolder, dstVfs, dstFolder, state, 0)
+	err := recursiveCopy(tCtx.Context, srcVfs, srcFolder, dstVfs, dstFolder, state, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -767,7 +757,7 @@ func TestExecuteFileOp_MoveIntoSelf_Circular(t *testing.T) {
 	tCtx := &vtui.TaskContext{Context: context.Background()}
 
 	// Move 'parent' into 'parent/child/oops'
-	err := recursiveCopy(tCtx, func(string, int){}, v, parent, v, filepath.Join(child, "oops"), &FileOpState{}, 0)
+	err := recursiveCopy(tCtx.Context, v, parent, v, filepath.Join(child, "oops"), &FileOpState{}, 0)
 
 	if err == nil || !strings.Contains(err.Error(), "folder into itself") {
 		t.Errorf("Expected circular copy protection error, got: %v", err)
@@ -791,7 +781,7 @@ func TestRecursiveCopy_SubfolderDeepRecursion(t *testing.T) {
 	// This should be caught by the subfolder check
 	dest := filepath.Join(child, "backup")
 
-	err := recursiveCopy(tCtx, func(string, int){}, v, parent, v, dest, &FileOpState{}, 0)
+	err := recursiveCopy(tCtx.Context, v, parent, v, dest, &FileOpState{}, 0)
 
 	if err == nil {
 		t.Fatal("Expected error when copying folder into its own deep subfolder, but got nil")
@@ -830,7 +820,7 @@ func TestRecursiveCopy_SymlinkLoop(t *testing.T) {
 	// and tmp contains source.
 	target := filepath.Join(loopLink, "backup")
 
-	err := recursiveCopy(tCtx, func(string, int){}, v, src, v, target, &FileOpState{}, 0)
+	err := recursiveCopy(tCtx.Context, v, src, v, target, &FileOpState{}, 0)
 
 	if err == nil {
 		t.Fatal("Expected error for symlink loop recursion, but got nil")
@@ -856,7 +846,7 @@ func TestRecursiveCopy_ByteProgress(t *testing.T) {
 			},
 		}
 
-		err := recursiveCopy(ctx, func(m string, p int){}, srcVfs, "/1MB.bin", dstVfs, "/upload/test.bin", state, 0)
+		err := recursiveCopy(ctx, srcVfs, "/1MB.bin", dstVfs, "/upload/test.bin", state, 0)
 		if err != nil { t.Fatalf("Copy failed: %v", err) }
 
 		// Buffer size in recursiveCopy is 128KB (131072 bytes).
@@ -886,7 +876,7 @@ func TestRecursiveCopy_ByteProgress(t *testing.T) {
 			},
 		}
 
-		err := recursiveCopy(ctx, func(m string, p int){}, srcVfs, tmpSrc, dstVfs, filepath.Join(tmpDst, "copied"), state, 0)
+		err := recursiveCopy(ctx, srcVfs, tmpSrc, dstVfs, filepath.Join(tmpDst, "copied"), state, 0)
 		if err != nil { t.Fatalf("Copy failed: %v", err) }
 
 		// "Hello" (5) + "World!" (6) = 11 bytes.

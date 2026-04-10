@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/mattn/go-runewidth"
 	"github.com/unxed/vtui"
@@ -30,11 +31,11 @@ func NewFileOpProgressDialog(title string) *FileOpProgressDialog {
 
 	textColor := vtui.Palette[vtui.ColDialogText]
 
-	dlg.lblCurrent = vtui.NewText(0, 0, "Initializing...", textColor)
+	dlg.lblCurrent = vtui.NewText(0, 0, strings.Repeat(" ", 54), textColor)
 	dlg.pbCurrent = vtui.NewProgressBar(0, 0, width-6)
-	dlg.lblTotal = vtui.NewText(0, 0, "", textColor)
+	dlg.lblTotal = vtui.NewText(0, 0, strings.Repeat(" ", 54), textColor)
 	dlg.pbTotal = vtui.NewProgressBar(0, 0, width-6)
-	dlg.lblSpeed = vtui.NewText(0, 0, "", textColor)
+	dlg.lblSpeed = vtui.NewText(0, 0, strings.Repeat(" ", 54), textColor)
 
 	dlg.btnCancel = vtui.NewButton(0, 0, "&Cancel")
 
@@ -46,11 +47,11 @@ func NewFileOpProgressDialog(title string) *FileOpProgressDialog {
 	dlg.AddItem(dlg.btnCancel)
 
 	vbox := vtui.NewVBoxLayout(dlg.X1+3, dlg.Y1+2, width-6, height-4)
-	vbox.Add(dlg.lblCurrent, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(dlg.lblCurrent, vtui.Margins{}, vtui.AlignFill)
 	vbox.Add(dlg.pbCurrent, vtui.Margins{Top: 1}, vtui.AlignFill)
-	vbox.Add(dlg.lblTotal, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	vbox.Add(dlg.lblTotal, vtui.Margins{Top: 1}, vtui.AlignFill)
 	vbox.Add(dlg.pbTotal, vtui.Margins{Top: 1}, vtui.AlignFill)
-	vbox.Add(dlg.lblSpeed, vtui.Margins{Top: 1}, vtui.AlignCenter)
+	vbox.Add(dlg.lblSpeed, vtui.Margins{Top: 1}, vtui.AlignFill)
 
 	hbox := vtui.NewHBoxLayout(0, 0, width-6, 1)
 	hbox.HorizontalAlign = vtui.AlignCenter
@@ -64,8 +65,8 @@ func NewFileOpProgressDialog(title string) *FileOpProgressDialog {
 
 // UpdateScan sets the dialog to Scanning mode (hides progress bars).
 func (d *FileOpProgressDialog) UpdateScan(currentPath string, files, dirs int64) {
-	safePath := runewidth.Truncate(currentPath, 54, "...")
-	d.lblCurrent.SetText("Scanning: " + safePath)
+	safePath := runewidth.Truncate("Scanning: "+currentPath, 54, "...")
+	d.lblCurrent.SetText(safePath)
 	d.lblTotal.SetText(fmt.Sprintf("Found: %d files, %d folders", files, dirs))
 
 	d.pbCurrent.SetVisible(false)

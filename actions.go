@@ -359,23 +359,90 @@ func actionDelete(pf *PanelsFrame) {
 	btnDel.OnClick = func() {
 		fsp.pendingSelection = fsp.GetSuccessorName()
 		dlg.Close()
-		pf.RunProgressTask(" Deleting... ", "Preparing...", false, func(ctx context.Context, update func(msg string, percent int)) error {
-			for i, name := range names {
-				if ctx.Err() != nil {
-					return ctx.Err()
+
+		opDlg := NewFileOpProgressDialog(" Deleting... ")
+		var taskCtx *vtui.TaskContext
+		opDlg.btnCancel.OnClick = func() {
+			if taskCtx != nil { taskCtx.Cancel() }
+			opDlg.Close()
+		}
+
+		vtui.FrameManager.PostTask(func() {
+			vtui.FrameManager.AddScreenHeadless(opDlg)
+		})
+
+		taskCtx = vtui.RunAsync(func(ctx *vtui.TaskContext) {
+			defer ctx.RunOnUI(func() {
+				opDlg.Close()
+				pf.RefreshAll()
+			})
+
+			// Pre-scan for progress
+			var totalStats vfs.OpStats
+			scanErr := error(nil)
+			totalStats, scanErr = vfs.CalculateStats(ctx.Context, activeVfs, activeVfs.GetPath(), names, func(currentPath string, stats vfs.OpStats) {
+				ctx.RunOnUI(func() {
+					opDlg.UpdateScan(currentPath, stats.Files, stats.Dirs)
+					vtui.FrameManager.Redraw()
+				})
+			})
+
+			if scanErr != nil && scanErr != context.Canceled {
+				ctx.RunOnUI(func() { vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to scan files:\n%v", scanErr), []string{"&Ok"}) })
+				return
+			}
+			if ctx.Err() != nil { return }
+
+			tracker := NewFileOpTracker(totalStats)
+			lastUpdate := time.Now()
+
+			updateUI := func(force bool) {
+				now := time.Now()
+				if force || now.Sub(lastUpdate) >= 100*time.Millisecond {
+					lastUpdate = now
+					filePct, totalPct, currName := tracker.GetProgress()
+					processed, total := tracker.GetStats()
+
+					var totalText string
+					if total.Bytes > 0 {
+						// For delete, bytes deleted isn't super meaningful if it's very fast, but still nice.
+						totalText = fmt.Sprintf("Total: %d / %d items", processed.Files+processed.Dirs, total.Files+total.Dirs)
+					} else {
+						totalText = fmt.Sprintf("Total: %d / %d items", processed.Files+processed.Dirs, total.Files+total.Dirs)
+					}
+
+					ctx.RunOnUI(func() {
+						opDlg.UpdateTransfer("Deleting", currName, filePct, totalText, totalPct, "")
+						vtui.FrameManager.Redraw()
+					})
 				}
-				update(fmt.Sprintf("Deleting: %s", name), (i*100)/len(names))
+			}
+
+			updateUI(true)
+
+			for _, name := range names {
+				if ctx.Err() != nil { return }
 				fullPath := activeVfs.Join(activeVfs.GetPath(), name)
-				if err := activeVfs.Remove(ctx, fullPath); err != nil {
-					return err
+
+				// For delete we should ideally recursively traverse and track each file.
+				// But activeVfs.Remove handles recursive delete by itself usually (e.g. os.RemoveAll).
+				// So we won't get fine-grained updates unless we do it manually.
+				// For now, we just call Remove on the top level and mark it as done.
+				// This might jump progress if it's a huge folder.
+
+				tracker.StartFile(name, 0)
+				updateUI(true)
+
+				err := activeVfs.Remove(ctx.Context, fullPath)
+				if err != nil {
+					if err != context.Canceled {
+						ctx.RunOnUI(func() { vtui.ShowMessage(" Error ", fmt.Sprintf(Msg("Operation.Error"), err.Error()), []string{"&Ok"}) })
+					}
+					return
 				}
+				tracker.FileDone()
+				updateUI(true)
 			}
-			return nil
-		}, func(err error) {
-			if err != nil && err != context.Canceled {
-				vtui.ShowMessage(" Error ", fmt.Sprintf(Msg("Operation.Error"), err.Error()), []string{"&Ok"})
-			}
-			pf.RefreshAll()
 		})
 	}
 

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
@@ -17,6 +18,22 @@ type FileOpState struct {
 	SkipAll      bool
 	SkippedCount int
 	OnBytes      func(int)
+	Tracker      *FileOpTracker
+	UpdateUI     func(force bool)
+}
+
+// formatSize formats a byte count into a human-readable string.
+func formatSize(b int64) string {
+	const unit = 1024
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
+	}
+	div, exp := int64(unit), 0
+	for n := b / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
 }
 
 func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, destInput string, isMove bool, forked bool, onComplete func()) {
@@ -24,70 +41,183 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 	if isMove {
 		title = " Moving... "
 	}
-	state := &FileOpState{
-		OnBytes: func(n int) {
-			// Current implementation doesn't use byte-level progress for overall percentage yet.
-			// This will be connected to the Global Accumulator in Stage 4.
-		},
+
+	dlg := NewFileOpProgressDialog(title)
+
+	var taskCtx *vtui.TaskContext
+	dlg.btnCancel.OnClick = func() {
+		if taskCtx != nil {
+			taskCtx.Cancel()
+		}
+		dlg.Close()
 	}
 
-	pf.RunProgressTask(title, "Starting...", forked, func(ctx context.Context, update func(msg string, percent int)) error {
-		// 1. Resolve destination path
+	vtui.FrameManager.PostTask(func() {
+		if forked && pf != nil {
+			clone := pf.Clone()
+			vtui.FrameManager.AddScreen(clone)
+			vtui.FrameManager.Push(dlg)
+		} else {
+			vtui.FrameManager.AddScreenHeadless(dlg)
+		}
+	})
+
+	taskCtx = vtui.RunAsync(func(ctx *vtui.TaskContext) {
+		defer ctx.RunOnUI(func() {
+			dlg.Close()
+			if pf != nil {
+				pf.RefreshAll()
+			}
+			if onComplete != nil {
+				onComplete()
+			}
+		})
+
 		destPath := destInput
 		if !filepath.IsAbs(destPath) && !strings.HasPrefix(destPath, "/") {
-			// If it's just a filename (no separators), assume it's in the source directory (rename/local copy)
 			if !strings.ContainsAny(destInput, "/\\") && destInput != "." && destInput != ".." {
 				destPath = srcVfs.Join(srcVfs.GetPath(), destInput)
-				dstVfs = srcVfs // Ensure we use source VFS for local operations
+				dstVfs = srcVfs
 			} else {
 				destPath = dstVfs.Join(dstVfs.GetPath(), destPath)
 			}
 		}
 
-		// 2. Determine if target is a directory
 		isTargetDir := len(names) > 1
 		if !isTargetDir {
 			if strings.HasSuffix(destInput, "/") || strings.HasSuffix(destInput, "\\") {
 				isTargetDir = true
-			} else if stat, err := dstVfs.Stat(ctx, destPath); err == nil && stat.IsDir {
+			} else if stat, err := dstVfs.Stat(ctx.Context, destPath); err == nil && stat.IsDir {
 				isTargetDir = true
 			} else if destInput == "." || destInput == ".." {
 				isTargetDir = true
 			}
 		}
 
-		// 3. Set pending selection for the successor in the source panel
 		if isMove && pf != nil {
 			if fspSrc := pf.getActivePanel(); fspSrc != nil {
 				fspSrc.pendingSelection = fspSrc.GetSuccessorName()
 			}
 		}
 
-		// 4. Ensure destination directory exists.
-		// If we are copying INTO a dir, ensure destPath exists.
-		// If we are RENAMING, ensure the directory containing the new name exists.
 		dirToEnsure := destPath
 		if !isTargetDir {
 			dirToEnsure = dstVfs.Dir(destPath)
 		}
 
 		if dirToEnsure != "" && dirToEnsure != "." {
-			st, err := dstVfs.Stat(ctx, dirToEnsure)
+			st, err := dstVfs.Stat(ctx.Context, dirToEnsure)
 			if err != nil {
-				// Path doesn't exist, try to create it (MkDir in OSVFS is MkdirAll)
-				if mkErr := dstVfs.MkDir(ctx, dirToEnsure); mkErr != nil {
-					return mkErr
+				if mkErr := dstVfs.MkDir(ctx.Context, dirToEnsure); mkErr != nil {
+					ctx.RunOnUI(func() { vtui.ShowMessage(" Error ", fmt.Sprintf(Msg("Operation.Error"), mkErr.Error()), []string{"&Ok"}) })
+					return
 				}
 			} else if !st.IsDir {
-				return fmt.Errorf("target path component is not a directory: %s", dirToEnsure)
+				ctx.RunOnUI(func() { vtui.ShowMessage(" Error ", fmt.Sprintf("Target path component is not a directory: %s", dirToEnsure), []string{"&Ok"}) })
+				return
 			}
 		}
 
-		// 5. Process items
-		for i, name := range names {
-			if ctx.Err() != nil {
-				return ctx.Err()
+		var totalStats vfs.OpStats
+		scanErr := error(nil)
+		totalStats, scanErr = vfs.CalculateStats(ctx.Context, srcVfs, srcVfs.GetPath(), names, func(currentPath string, stats vfs.OpStats) {
+			ctx.RunOnUI(func() {
+				dlg.UpdateScan(currentPath, stats.Files, stats.Dirs)
+				vtui.FrameManager.Redraw()
+			})
+		})
+
+		if scanErr != nil {
+			if scanErr != context.Canceled {
+				ctx.RunOnUI(func() { vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to scan files:\n%v", scanErr), []string{"&Ok"}) })
 			}
+			return
+		}
+		if ctx.Err() != nil { return }
+
+		tracker := NewFileOpTracker(totalStats)
+
+		startTime := time.Now()
+		lastUpdate := startTime
+		lastSpeedUpdate := startTime
+		bytesSinceLastSpeedUpdate := int64(0)
+		currentSpeed := float64(0)
+
+		lastLoggedTime := startTime
+		lastLoggedPct := -1
+
+		updateUI := func(force bool) {
+			now := time.Now()
+			if force || now.Sub(lastUpdate) >= 100*time.Millisecond {
+				speedDur := now.Sub(lastSpeedUpdate).Seconds()
+				if speedDur >= 1.0 {
+					currentSpeed = float64(bytesSinceLastSpeedUpdate) / speedDur
+					lastSpeedUpdate = now
+					bytesSinceLastSpeedUpdate = 0
+				}
+				lastUpdate = now
+
+				filePct, totalPct, currName := tracker.GetProgress()
+				processed, total := tracker.GetStats()
+
+				var totalText string
+				if total.Bytes > 0 {
+					totalText = fmt.Sprintf("Total: %s / %s", formatSize(processed.Bytes), formatSize(total.Bytes))
+				} else {
+					totalText = fmt.Sprintf("Total: %d / %d items", processed.Files+processed.Dirs, total.Files+total.Dirs)
+				}
+
+				elapsed := now.Sub(startTime)
+				elapsedStr := fmt.Sprintf("Time: %02d:%02d:%02d", int(elapsed.Hours()), int(elapsed.Minutes())%60, int(elapsed.Seconds())%60)
+
+				etaStr := "Remaining: ??:??:??"
+				if total.Bytes > 0 && processed.Bytes > 0 && currentSpeed > 0 {
+					bytesRemaining := total.Bytes - processed.Bytes
+					if bytesRemaining < 0 { bytesRemaining = 0 }
+					etaSecs := float64(bytesRemaining) / currentSpeed
+					etaDur := time.Duration(etaSecs * float64(time.Second))
+					etaStr = fmt.Sprintf("Remaining: %02d:%02d:%02d", int(etaDur.Hours()), int(etaDur.Minutes())%60, int(etaDur.Seconds())%60)
+				}
+
+				speedStr := ""
+				if currentSpeed > 0 {
+					speedStr = formatSize(int64(currentSpeed)) + "/s"
+				}
+
+				// Форматируем строку: 16 символов, 21 символ, 15 символов -> ровно 52 символа + пробелы = 54 (внутренняя ширина диалога 60-6)
+				timeSpeedText := fmt.Sprintf("%-16s %-21s %15s", elapsedStr, etaStr, speedStr)
+
+				// Логируем прогресс в дебаг, чтобы отслеживать ошибки (с дебаунсом в 5 секунд или 5%)
+				if totalPct >= lastLoggedPct + 5 || now.Sub(lastLoggedTime) >= 5*time.Second {
+					vtui.DebugLog("FILEOP: %d%% | Proc: %d/%d B | %s | %s | %s", totalPct, processed.Bytes, total.Bytes, strings.TrimSpace(elapsedStr), strings.TrimSpace(etaStr), strings.TrimSpace(speedStr))
+					lastLoggedPct = totalPct
+					lastLoggedTime = now
+				}
+
+				action := "Copying"
+				if isMove { action = "Moving" }
+
+				ctx.RunOnUI(func() {
+					dlg.UpdateTransfer(action, currName, filePct, totalText, totalPct, timeSpeedText)
+					vtui.FrameManager.Redraw()
+				})
+			}
+		}
+
+		state := &FileOpState{
+			Tracker: tracker,
+			UpdateUI: updateUI,
+			OnBytes: func(n int) {
+				tracker.UpdateBytes(n)
+				bytesSinceLastSpeedUpdate += int64(n)
+				updateUI(false)
+			},
+		}
+
+		updateUI(true)
+
+		for _, name := range names {
+			if ctx.Err() != nil { return }
 
 			srcPath := srcVfs.Join(srcVfs.GetPath(), name)
 			targetItemPath := destPath
@@ -95,45 +225,42 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 				targetItemPath = dstVfs.Join(destPath, name)
 			}
 
-			update(fmt.Sprintf("Processing: %s", name), -1)
-
-			// Optimized Move (Rename) within same VFS
 			if isMove && srcVfs == dstVfs {
-				// Safety: Check if destination exists. If it does, fall through to the slow path
-				// to trigger the overwrite confirmation dialog.
-				if _, err := dstVfs.Stat(ctx, targetItemPath); err != nil {
-					if err := srcVfs.Rename(ctx, srcPath, targetItemPath); err == nil {
+				if _, err := dstVfs.Stat(ctx.Context, targetItemPath); err != nil {
+					if err := srcVfs.Rename(ctx.Context, srcPath, targetItemPath); err == nil {
 						vtui.DebugLog("FILEOP: Optimized server-side rename: %s -> %s", srcPath, targetItemPath)
-						update("", ((i+1)*100)/len(names))
+
+						itemStat, _ := dstVfs.Stat(ctx.Context, targetItemPath)
+						if itemStat.IsDir {
+							tracker.DirDone()
+						} else {
+							tracker.StartFile(name, itemStat.Size)
+							tracker.UpdateBytes(int(itemStat.Size))
+							tracker.FileDone()
+						}
+						updateUI(true)
 						continue
 					}
 				}
 			}
-			err := recursiveCopy(ctx, update, srcVfs, srcPath, dstVfs, targetItemPath, state, 0)
+
+			err := recursiveCopy(ctx.Context, srcVfs, srcPath, dstVfs, targetItemPath, state, 0)
 			if err != nil {
-				return err
+				if err != context.Canceled {
+					ctx.RunOnUI(func() { vtui.ShowMessage(" Error ", fmt.Sprintf(Msg("Operation.Error"), err.Error()), []string{"&Ok"}) })
+				}
+				return
 			}
 
 			if isMove && state.SkippedCount == 0 {
-				srcVfs.Remove(ctx, srcPath)
+				srcVfs.Remove(ctx.Context, srcPath)
 			}
-			update("", ((i+1)*100)/len(names))
-		}
-		return nil
-	}, func(err error) {
-		if err != nil && err != context.Canceled {
-			vtui.ShowMessage(" Error ", fmt.Sprintf(Msg("Operation.Error"), err.Error()), []string{"&Ok"})
-		}
-		if pf != nil {
-			pf.RefreshAll()
-		}
-		if onComplete != nil {
-			onComplete()
+			updateUI(true)
 		}
 	})
 }
 
-func recursiveCopy(ctx context.Context, update func(msg string, percent int), srcVfs vfs.VFS, srcPath string, dstVfs vfs.VFS, destPath string, state *FileOpState, depth int) error {
+func recursiveCopy(ctx context.Context, srcVfs vfs.VFS, srcPath string, dstVfs vfs.VFS, destPath string, state *FileOpState, depth int) error {
 	if depth > 1000 {
 		return fmt.Errorf("maximum recursion depth exceeded (circular structure?)")
 	}
@@ -146,14 +273,12 @@ func recursiveCopy(ctx context.Context, update func(msg string, percent int), sr
 		return err
 	}
 
-	// Robust self-copy protection (including symlink resolution for local FS)
 	absSrc, _ := srcVfs.Abs(srcPath)
 	absDst, _ := dstVfs.Abs(destPath)
 
 	realSrc := absSrc
 	realDst := absDst
 
-	// For local OS files, resolve symlinks to catch circularity like "ln -s .. loop"
 	if _, ok := srcVfs.(*vfs.OSVFS); ok {
 		if resolved, err := filepath.EvalSymlinks(absSrc); err == nil {
 			realSrc = resolved
@@ -178,7 +303,6 @@ func recursiveCopy(ctx context.Context, update func(msg string, percent int), sr
 		return fmt.Errorf("cannot copy folder into itself (destination is a subfolder)")
 	}
 
-	// Check if destination already exists
 	dstStat, err := dstVfs.Stat(ctx, destPath)
 	exists := err == nil
 
@@ -202,23 +326,43 @@ func recursiveCopy(ctx context.Context, update func(msg string, percent int), sr
 			if item.Name == ".." {
 				continue
 			}
-			if err := recursiveCopy(ctx, update, srcVfs, srcVfs.Join(srcPath, item.Name), dstVfs, dstVfs.Join(destPath, item.Name), state, depth+1); err != nil {
+			if err := recursiveCopy(ctx, srcVfs, srcVfs.Join(srcPath, item.Name), dstVfs, dstVfs.Join(destPath, item.Name), state, depth+1); err != nil {
 				return err
+			}
+		}
+		if state.Tracker != nil {
+			state.Tracker.DirDone()
+			if state.UpdateUI != nil {
+				state.UpdateUI(true)
 			}
 		}
 		return nil
 	}
 
-	// Copy file
 	itemName := dstVfs.Base(destPath)
-	update(fmt.Sprintf("Copying: %s", itemName), -1)
+	if state.Tracker != nil {
+		state.Tracker.StartFile(itemName, stat.Size)
+		if state.UpdateUI != nil {
+			state.UpdateUI(true)
+		}
+	}
+
+	skipFile := func() {
+		state.SkippedCount++
+		if state.Tracker != nil {
+			state.Tracker.FileSkipped()
+			if state.UpdateUI != nil {
+				state.UpdateUI(true)
+			}
+		}
+	}
 
 	if exists {
 		if dstStat.IsDir {
 			return fmt.Errorf("cannot overwrite folder with file: %s", itemName)
 		}
 		if state.SkipAll {
-			state.SkippedCount++
+			skipFile()
 			return nil
 		}
 		if !state.OverwriteAll {
@@ -228,12 +372,12 @@ func recursiveCopy(ctx context.Context, update func(msg string, percent int), sr
 				state.OverwriteAll = true
 				vtui.DebugLog("FILEOP: User chose OVERWRITE ALL for %s", itemName)
 			case 2:
-				state.SkippedCount++
+				skipFile()
 				return nil // Skip
 			case 3:
 				vtui.DebugLog("FILEOP: User chose SKIP ALL")
 				state.SkipAll = true
-				state.SkippedCount++
+				skipFile()
 				return nil
 			case 4:
 				return context.Canceled // Cancel
@@ -244,7 +388,6 @@ func recursiveCopy(ctx context.Context, update func(msg string, percent int), sr
 	var srcFile vfs.ReadAtCloser
 	var dstFile io.WriteCloser
 
-	// Open Source with Retry
 	for {
 		srcFile, err = srcVfs.Open(ctx, srcPath)
 		if err == nil {
@@ -252,16 +395,15 @@ func recursiveCopy(ctx context.Context, update func(msg string, percent int), sr
 		}
 		choice := AskError(ctx, "Cannot open source file", err)
 		if choice == 1 {
-			state.SkippedCount++
+			skipFile()
 			return nil
-		} // Skip
+		}
 		if choice == 2 {
 			return context.Canceled
-		} // Abort
+		}
 	}
 	defer srcFile.Close()
 
-	// Create Destination with Retry
 	for {
 		dstFile, err = dstVfs.Create(ctx, destPath)
 		if err == nil {
@@ -269,17 +411,16 @@ func recursiveCopy(ctx context.Context, update func(msg string, percent int), sr
 		}
 		choice := AskError(ctx, "Cannot create destination file", err)
 		if choice == 1 {
-			state.SkippedCount++
+			skipFile()
 			return nil
-		} // Skip
+		}
 		if choice == 2 {
 			return context.Canceled
-		} // Abort
+		}
 	}
 	defer dstFile.Close()
 
-	// io.Copy doesn't support context-aware readers, so we implement a simple loop
-	buf := make([]byte, 128*1024) // 128KB buffer
+	buf := make([]byte, 128*1024)
 	for {
 		if ctx.Err() != nil { return ctx.Err() }
 		n, rerr := srcFile.Read(ctx, buf)
@@ -294,6 +435,13 @@ func recursiveCopy(ctx context.Context, update func(msg string, percent int), sr
 		if rerr != nil {
 			if rerr == io.EOF { break }
 			return rerr
+		}
+	}
+
+	if state.Tracker != nil {
+		state.Tracker.FileDone()
+		if state.UpdateUI != nil {
+			state.UpdateUI(true)
 		}
 	}
 	return nil
