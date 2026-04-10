@@ -6,6 +6,8 @@ import (
 	"os"
 	"path"
 	"time"
+	"fmt"
+	"strings"
 )
 
 // NullVFS is a mock filesystem for testing UI responsiveness and file operations.
@@ -21,6 +23,7 @@ var nullFiles = map[string]int64{
 	"1MB.bin":   1024 * 1024,
 	"10MB.bin":  10 * 1024 * 1024,
 	"100MB.bin": 100 * 1024 * 1024,
+	"huge.bin":  512 * 1024 * 1024, // Centralized huge.bin size
 	"1GB.bin":   1024 * 1024 * 1024,
 }
 
@@ -45,46 +48,111 @@ func (v *NullVFS) SetPath(p string) error {
 
 func (v *NullVFS) ReadDir(ctx context.Context, p string, onChunk func([]VFSItem)) error {
 	p = path.Clean(p)
-	var items []VFSItem
+	v.throttleMeta(ctx, p)
 
-	// Only show dummy files at the root
+	var items []VFSItem
 	if p == "/" {
 		for name, size := range nullFiles {
-			items = append(items, VFSItem{
-				Name:  name,
-				Size:  size,
-				IsDir: false,
-				MTime: time.Now(),
-			})
+			items = append(items, VFSItem{Name: name, Size: size, IsDir: false, MTime: time.Now()})
 		}
-		items = append(items, VFSItem{
-			Name:  "upload",
-			Size:  0,
-			IsDir: true,
-			MTime: time.Now(),
-		})
+		items = append(items, VFSItem{Name: "upload", IsDir: true, MTime: time.Now()})
+		items = append(items, VFSItem{Name: "scenarios", IsDir: true, MTime: time.Now()})
+	} else if p == "/scenarios" {
+		items = append(items, VFSItem{Name: "bandwidth", IsDir: true}, VFSItem{Name: "iops", IsDir: true})
+		items = append(items, VFSItem{Name: "deep", IsDir: true}, VFSItem{Name: "slow", IsDir: true}, VFSItem{Name: "fast", IsDir: true})
+	} else if strings.HasPrefix(p, "/scenarios/bandwidth") {
+		items = append(items, VFSItem{Name: "huge.bin", Size: nullFiles["huge.bin"], IsDir: false})
+	} else if strings.HasPrefix(p, "/scenarios/iops") {
+		for i := 0; i < 1000; i++ {
+			items = append(items, VFSItem{Name: fmt.Sprintf("small_%d.txt", i), Size: 1024, IsDir: false})
+		}
+	} else if strings.HasPrefix(p, "/scenarios/deep") {
+		parts := strings.Split(strings.TrimPrefix(p, "/scenarios/deep"), "/")
+		level := len(parts) - 1
+		if level < 10 {
+			items = append(items, VFSItem{Name: "next_level", IsDir: true})
+		}
+		for i := 0; i < 10; i++ {
+			items = append(items, VFSItem{Name: fmt.Sprintf("file_%d.txt", i), Size: 512, IsDir: false})
+		}
+	} else if p == "/scenarios/slow" || p == "/scenarios/fast" {
+		items = append(items, VFSItem{Name: "test.bin", Size: 50 * 1024 * 1024, IsDir: false})
 	}
 
-	if len(items) > 0 && onChunk != nil {
-		onChunk(items)
+	if onChunk == nil || len(items) == 0 {
+		return nil
+	}
+
+	// Realistic paging: split into chunks of 100
+	chunkSize := 100
+	for i := 0; i < len(items); i += chunkSize {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		end := i + chunkSize
+		if end > len(items) {
+			end = len(items)
+		}
+		onChunk(items[i:end])
+
+		// Simulate inter-chunk delay on slow connections
+		if strings.Contains(p, "/slow") && end < len(items) {
+			select {
+			case <-time.After(20 * time.Millisecond):
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
 	}
 	return nil
 }
 
 func (v *NullVFS) Stat(ctx context.Context, p string) (VFSItem, error) {
 	p = path.Clean(p)
+	v.throttleMeta(ctx, p)
 	base := path.Base(p)
 
-	if p == "/" || base == "upload" {
+	// 1. Fixed directory resolution
+	if p == "/" || p == "/upload" || p == "/scenarios" || 
+	   p == "/scenarios/bandwidth" || p == "/scenarios/iops" || 
+	   p == "/scenarios/slow" || p == "/scenarios/fast" {
 		return VFSItem{Name: base, IsDir: true, MTime: time.Now()}, nil
 	}
 
+	// 2. Scenario-specific logic (Scoped to /scenarios prefix)
+	if strings.HasPrefix(p, "/scenarios/") {
+		if strings.HasPrefix(p, "/scenarios/deep") && (base == "next_level" || base == "deep") {
+			return VFSItem{Name: base, IsDir: true, MTime: time.Now()}, nil
+		}
+		if p == "/scenarios/bandwidth/huge.bin" {
+			return VFSItem{Name: base, Size: nullFiles["huge.bin"], IsDir: false}, nil
+		}
+		if strings.HasPrefix(p, "/scenarios/iops/") {
+			return VFSItem{Name: base, Size: 1024, IsDir: false}, nil
+		}
+		if strings.HasPrefix(p, "/scenarios/deep/") {
+			return VFSItem{Name: base, Size: 512, IsDir: false}, nil
+		}
+		if (strings.HasPrefix(p, "/scenarios/slow/") || strings.HasPrefix(p, "/scenarios/fast/")) && base == "test.bin" {
+			return VFSItem{Name: base, Size: 50 * 1024 * 1024, IsDir: false}, nil
+		}
+	}
+
+	// 3. Root static files
 	if size, ok := nullFiles[base]; ok && path.Dir(p) == "/" {
 		return VFSItem{Name: base, Size: size, IsDir: false, MTime: time.Now()}, nil
 	}
 
-	// For uploaded files, just pretend they exist with size 0
-	return VFSItem{Name: base, Size: 0, IsDir: false, MTime: time.Now()}, nil
+	// 4. Upload zone logic: allow recursive directory creation
+	if strings.HasPrefix(p, "/upload/") {
+		ext := path.Ext(p)
+		if ext == ".bin" || ext == ".txt" {
+			return VFSItem{Name: base, Size: 0, IsDir: false, MTime: time.Now()}, nil
+		}
+		return VFSItem{Name: base, IsDir: true, MTime: time.Now()}, nil
+	}
+
+	return VFSItem{}, os.ErrNotExist
 }
 
 func (v *NullVFS) Join(elem ...string) string { return path.Join(elem...) }
@@ -100,9 +168,21 @@ func (v *NullVFS) Base(p string) string { return path.Base(p) }
 func (v *NullVFS) Dir(p string) string  { return path.Dir(p) }
 
 // Mutations succeed silently
-func (v *NullVFS) MkDir(ctx context.Context, p string) error         { return nil }
-func (v *NullVFS) Remove(ctx context.Context, p string) error        { return nil }
-func (v *NullVFS) Rename(ctx context.Context, old, new string) error { return nil }
+func (v *NullVFS) MkDir(ctx context.Context, p string) error {
+	v.throttleMeta(ctx, p)
+	return nil
+}
+
+func (v *NullVFS) Remove(ctx context.Context, p string) error {
+	v.throttleMeta(ctx, p)
+	return nil
+}
+
+func (v *NullVFS) Rename(ctx context.Context, old, new string) error {
+	v.throttleMeta(ctx, old)
+	v.throttleMeta(ctx, new)
+	return nil
+}
 
 func (v *NullVFS) GetCapabilities() VFSCapabilities {
 	return VFSCapabilities{
@@ -118,15 +198,21 @@ func (v *NullVFS) Search(ctx context.Context, p string, pattern string) (chan in
 }
 
 func (v *NullVFS) Open(ctx context.Context, p string) (ReadAtCloser, error) {
-	base := path.Base(p)
-	size, ok := nullFiles[base]
-	if !ok {
-		size = 0 // "Uploaded" files
+	v.throttleMeta(ctx, p)
+	stat, _ := v.Stat(ctx, p)
+
+	speed := v.speedLimit
+	if strings.Contains(p, "/scenarios/slow") {
+		speed = 128 * 1024 // 128 KB/s
+	} else if strings.Contains(p, "/scenarios/fast") {
+		speed = 500 * 1024 * 1024 // 500 MB/s
 	}
-	return &nullReader{size: size, speed: v.speedLimit}, nil
+
+	return &nullReader{size: stat.Size, speed: speed}, nil
 }
 
 func (v *NullVFS) Create(ctx context.Context, p string) (io.WriteCloser, error) {
+	v.throttleMeta(ctx, p)
 	// Refuse overwriting static files, allow everything else
 	base := path.Base(p)
 	if _, ok := nullFiles[base]; ok && path.Dir(p) == "/" {
@@ -224,5 +310,16 @@ func throttle(ctx context.Context, n int, speed int64) error {
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
+	}
+}
+
+func (v *NullVFS) throttleMeta(ctx context.Context, p string) {
+	if strings.Contains(p, "/slow") {
+		timer := time.NewTimer(100 * time.Millisecond)
+		defer timer.Stop()
+		select {
+		case <-timer.C:
+		case <-ctx.Done():
+		}
 	}
 }

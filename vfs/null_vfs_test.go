@@ -18,8 +18,9 @@ func TestNullVFS_DirectoryListing(t *testing.T) {
 		}
 	})
 
-	if len(files) != 6 {
-		t.Errorf("Expected 6 items in root (5 files + 1 upload dir), got %d", len(files))
+	// 6 static files + 'upload' + 'scenarios' = 8
+	if len(files) != 8 {
+		t.Errorf("Expected 8 items in root, got %d", len(files))
 	}
 }
 
@@ -197,4 +198,172 @@ func TestNullVFS_BasicMethods(t *testing.T) {
 	if v.ParentVFS() != nil {
 		t.Error("NullVFS should not have a parent")
 	}
+}
+func TestNullVFS_Scenarios(t *testing.T) {
+	v := NewNullVFS(0)
+	ctx := context.Background()
+
+	t.Run("IOPS Scenario", func(t *testing.T) {
+		var items []VFSItem
+		v.ReadDir(ctx, "/scenarios/iops", func(chunk []VFSItem) {
+			items = append(items, chunk...)
+		})
+		if len(items) != 1000 {
+			t.Errorf("Expected 1000 files in IOPS scenario, got %d", len(items))
+		}
+	})
+
+	t.Run("Deep Scenario", func(t *testing.T) {
+		stat, err := v.Stat(ctx, "/scenarios/deep/next_level/next_level/file_0.txt")
+		if err != nil || stat.Size != 512 {
+			t.Errorf("Deep path resolution failed: %v, size: %d", err, stat.Size)
+		}
+	})
+
+	t.Run("Speed Zoning", func(t *testing.T) {
+		fSlow, _ := v.Open(ctx, "/scenarios/slow/test.bin")
+		if fSlow.(*nullReader).speed != 128*1024 {
+			t.Error("Slow zone speed not applied")
+		}
+
+		fFast, _ := v.Open(ctx, "/scenarios/fast/test.bin")
+		if fFast.(*nullReader).speed != 500*1024*1024 {
+			t.Error("Fast zone speed not applied")
+		}
+	})
+}
+func TestNullVFS_MetadataLatency(t *testing.T) {
+	v := NewNullVFS(0)
+	ctx := context.Background()
+
+	// 1. Stat in normal zone should be fast
+	start := time.Now()
+	_, _ = v.Stat(ctx, "/1MB.bin")
+	if time.Since(start) > 20*time.Millisecond {
+		t.Errorf("Stat in root took too long: %v", time.Since(start))
+	}
+
+	// 2. Stat in slow zone should be slow (~100ms)
+	start = time.Now()
+	_, _ = v.Stat(ctx, "/scenarios/slow/test.bin")
+	dur := time.Since(start)
+	if dur < 90*time.Millisecond {
+		t.Errorf("Stat in slow zone was too fast: %v", dur)
+	}
+}
+
+func TestNullVFS_MetadataMutationLatency(t *testing.T) {
+	v := NewNullVFS(0)
+	ctx := context.Background()
+
+	// 1. MkDir in slow zone
+	start := time.Now()
+	_ = v.MkDir(ctx, "/scenarios/slow/newdir")
+	if time.Since(start) < 90*time.Millisecond {
+		t.Errorf("MkDir in slow zone was too fast: %v", time.Since(start))
+	}
+
+	// 2. Remove in slow zone
+	start = time.Now()
+	_ = v.Remove(ctx, "/scenarios/slow/file.txt")
+	if time.Since(start) < 90*time.Millisecond {
+		t.Errorf("Remove in slow zone was too fast: %v", time.Since(start))
+	}
+
+	// 3. Rename (Double throttle if both paths are in slow zone)
+	start = time.Now()
+	_ = v.Rename(ctx, "/scenarios/slow/old", "/scenarios/slow/new")
+	dur := time.Since(start)
+	// Rename calls throttleMeta twice (for old and new path)
+	if dur < 180*time.Millisecond {
+		t.Errorf("Rename in slow zone should take ~200ms, got %v", dur)
+	}
+}
+
+func TestNullVFS_MetadataCancellation(t *testing.T) {
+	v := NewNullVFS(0)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Trigger cancellation while the simulated latency is active
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		cancel()
+	}()
+
+	start := time.Now()
+	// This would normally take 100ms
+	_ = v.MkDir(ctx, "/scenarios/slow/cancelled_op")
+	dur := time.Since(start)
+
+	if dur >= 80*time.Millisecond {
+		t.Errorf("Metadata operation did not respect context cancellation, took %v", dur)
+	}
+}
+func TestNullVFS_OpenCreateMetadataLatency(t *testing.T) {
+	v := NewNullVFS(0)
+	ctx := context.Background()
+
+	t.Run("Open in slow zone", func(t *testing.T) {
+		start := time.Now()
+		f, err := v.Open(ctx, "/scenarios/slow/test.bin")
+		if err != nil { t.Fatal(err) }
+		defer f.Close()
+
+		dur := time.Since(start)
+		if dur < 90*time.Millisecond {
+			t.Errorf("Open in slow zone was too fast: %v", dur)
+		}
+	})
+
+	t.Run("Create in slow zone", func(t *testing.T) {
+		start := time.Now()
+		// We use /upload prefix because root files are protected in NullVFS
+		w, err := v.Create(ctx, "/upload/scenarios/slow/newfile.bin")
+		if err != nil { t.Fatal(err) }
+		defer w.Close()
+
+		dur := time.Since(start)
+		if dur < 90*time.Millisecond {
+			t.Errorf("Create in slow zone was too fast: %v", dur)
+		}
+	})
+}
+func TestNullVFS_ReadDirPaging(t *testing.T) {
+	v := NewNullVFS(0)
+	ctx := context.Background()
+
+	t.Run("Paging in IOPS scenario", func(t *testing.T) {
+		chunkCount := 0
+		itemCount := 0
+		err := v.ReadDir(ctx, "/scenarios/iops", func(items []VFSItem) {
+			chunkCount++
+			itemCount += len(items)
+		})
+		if err != nil { t.Fatal(err) }
+
+		// 1000 items in chunks of 100 = 10 chunks
+		if itemCount != 1000 { t.Errorf("Expected 1000 items, got %d", itemCount) }
+		if chunkCount != 10 { t.Errorf("Expected 10 chunks, got %d", chunkCount) }
+	})
+
+	t.Run("Paging delay in slow zone", func(t *testing.T) {
+		start := time.Now()
+		chunkCount := 0
+		itemCount := 0
+		_ = v.ReadDir(ctx, "/scenarios/iops/slow", func(items []VFSItem) {
+			chunkCount++
+			itemCount += len(items)
+		})
+		dur := time.Since(start)
+
+		if itemCount != 1000 {
+			t.Errorf("Expected 1000 items, got %d", itemCount)
+		}
+
+		// Initial meta throttle (100ms) + 9 inter-chunk delays (9 * 20ms = 180ms)
+		// Total should be ~280ms. We use 250ms as a safe bound for CI.
+		if dur < 250*time.Millisecond {
+			t.Errorf("ReadDir paging in slow zone was too fast: %v (expected ~280ms)", dur)
+		}
+	})
 }
