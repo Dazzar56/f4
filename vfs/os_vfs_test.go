@@ -221,3 +221,22 @@ func TestOSVFS_Abs_CWD_Independence(t *testing.T) {
 		t.Errorf("OSVFS.Abs depends on process CWD! Expected %q, got %q", expected, abs)
 	}
 }
+
+func TestOSVFS_SetPath_Relative(t *testing.T) {
+	tmpDir := t.TempDir()
+	subDir := "my_sub_folder"
+	os.Mkdir(filepath.Join(tmpDir, subDir), 0755)
+
+	v := NewOSVFS(tmpDir)
+
+	// Test navigating into subfolder by relative name
+	err := v.SetPath(subDir)
+	if err != nil {
+		t.Fatalf("SetPath(relative) failed: %v", err)
+	}
+
+	expected, _ := filepath.Abs(filepath.Join(tmpDir, subDir))
+	if v.GetPath() != expected {
+		t.Errorf("Path mismatch: expected %q, got %q", expected, v.GetPath())
+	}
+}

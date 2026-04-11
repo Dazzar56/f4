@@ -61,7 +61,6 @@ func (m *MacroManager) Filter(e *vtinput.InputEvent) bool {
 		if !e.KeyDown {
 			return true // Consume KeyUp of the trigger
 		}
-		vtui.DebugLog("MACRO: Ctrl+. intercepted. Previous recording state: %v", m.Recording)
 		if m.Recording {
 			m.Recording = false
 			vtui.FrameManager.PostTask(func() {
@@ -72,11 +71,10 @@ func (m *MacroManager) Filter(e *vtinput.InputEvent) bool {
 			m.Buffer = make([]*vtinput.InputEvent, 0)
 			vtui.DebugLog("MACRO: Started recording")
 		}
-		vtui.DebugLog("MACRO: Current Recording state: %v", m.Recording)
 		vtui.FrameManager.Redraw()
 		return true // Trigger is ALWAYS consumed
 	}
-	
+
 	if m.Recording {
 		if e.KeyDown {
 			m.Buffer = append(m.Buffer, e)

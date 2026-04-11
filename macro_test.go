@@ -110,6 +110,26 @@ func TestMacroPlaybackLogic(t *testing.T) {
 		t.Error("Filter should return true when triggering a macro")
 	}
 }
+func TestMacro_FilterTriggerSwallowing_Order(t *testing.T) {
+	mgr := NewMacroManager("unused.ini")
+	mgr.Recording = true
+	mgr.Buffer = make([]*vtinput.InputEvent, 0)
+
+	// Trigger stop recording via Ctrl+.
+	stopEvent := &vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		Char: '.', ControlKeyState: vtinput.LeftCtrlPressed,
+	}
+
+	res := mgr.Filter(stopEvent)
+
+	if !res {
+		t.Error("Filter should swallow the stop trigger even if recording is active")
+	}
+	if len(mgr.Buffer) != 0 {
+		t.Errorf("Stop trigger should NOT be added to macro buffer, but buffer size is %d", len(mgr.Buffer))
+	}
+}
 func TestMacro_TriggerSwallowing(t *testing.T) {
 	mgr := NewMacroManager("unused.ini")
 

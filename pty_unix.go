@@ -60,8 +60,10 @@ func (p *PTY) Read(b []byte) (int, error) {
 }
 
 func (p *PTY) Close() error {
-	vtui.DebugLog("PTY: Closing PTY and killing child process")
+	vtui.DebugLog("PTY: Closing PTY and killing child process group")
 	if p.Cmd != nil && p.Cmd.Process != nil {
+		// Kill the whole process group because we used Setsid
+		_ = syscall.Kill(-p.Cmd.Process.Pid, syscall.SIGKILL)
 		p.Cmd.Process.Kill()
 	}
 	var err error

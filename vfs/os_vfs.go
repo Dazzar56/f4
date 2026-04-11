@@ -33,7 +33,11 @@ func (v *OSVFS) IsAtRoot() bool {
 }
 
 func (v *OSVFS) SetPath(path string) error {
-	abs, err := filepath.Abs(path)
+	target := path
+	if !filepath.IsAbs(path) {
+		target = filepath.Join(v.currentPath, path)
+	}
+	abs, err := filepath.Abs(target)
 	if err != nil {
 		return err
 	}
