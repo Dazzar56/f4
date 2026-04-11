@@ -167,6 +167,23 @@ func runClient(sockPath string) {
 		vtui.DebugLog("CLIENT: WARNING: os.Stdin (fd %d) is not a terminal!", os.Stdin.Fd())
 	}
 
+	var serverPID int
+	for _, s := range listSessions() {
+		if s.SockPath == sockPath {
+			serverPID = s.PID
+			break
+		}
+	}
+	if serverPID > 0 {
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, syscall.SIGWINCH)
+		go func() {
+			for range sigChan {
+				syscall.Kill(serverPID, syscall.SIGWINCH)
+			}
+		}()
+	}
+
 	clntPath := filepath.Join(sessionDir(), fmt.Sprintf("clnt-%d-%d.ipc", os.Getpid(), time.Now().UnixNano()))
 	laddr, _ := net.ResolveUnixAddr("unixgram", clntPath)
 
