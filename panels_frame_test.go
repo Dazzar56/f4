@@ -472,6 +472,47 @@ func TestPanelsFrame_RefreshAll(t *testing.T) {
 	// Test that RefreshAll doesn't crash on freshly initialized panels
 	pf.RefreshAll()
 }
+func TestPanelsFrame_ResizingIntegration(t *testing.T) {
+	vtui.SetDefaultPalette()
+	SetDefaultF4Palette()
+	pf := NewPanelsFrame()
+
+	// Initial size 80x25
+	pf.ResizeConsole(80, 25)
+
+	// 1. Verify initial positions of standard components
+	if pf.keyBar.Y1 != 24 {
+		t.Errorf("Initial KeyBar Y1: expected 24, got %d", pf.keyBar.Y1)
+	}
+	if pf.cmdLine.Y1 != 23 {
+		t.Errorf("Initial CommandLine Y1: expected 23, got %d", pf.cmdLine.Y1)
+	}
+
+	// 2. Perform resize to 120x40
+	pf.ResizeConsole(120, 40)
+
+	// 3. Verify that components moved/scaled correctly
+	if pf.keyBar.Y1 != 39 {
+		t.Errorf("Resized KeyBar Y1: expected 39, got %d", pf.keyBar.Y1)
+	}
+	if pf.keyBar.X2 != 119 {
+		t.Errorf("Resized KeyBar X2: expected 119, got %d", pf.keyBar.X2)
+	}
+	if pf.cmdLine.Y1 != 38 {
+		t.Errorf("Resized CommandLine Y1: expected 38, got %d", pf.cmdLine.Y1)
+	}
+
+	// 4. Verify panels scaled
+	leftX1, _, leftX2, _ := pf.panels[0].GetPosition()
+	rightX1, _, rightX2, _ := pf.panels[1].GetPosition()
+
+	if leftX1 != 0 || leftX2 != 59 {
+		t.Errorf("Resized Left Panel X range: expected 0..59, got %d..%d", leftX1, leftX2)
+	}
+	if rightX1 != 60 || rightX2 != 119 {
+		t.Errorf("Resized Right Panel X range: expected 60..119, got %d..%d", rightX1, rightX2)
+	}
+}
 func TestPanelsFrame_SwapPanels(t *testing.T) {
 	pf := NewPanelsFrame()
 	pf.ResizeConsole(80, 25)
