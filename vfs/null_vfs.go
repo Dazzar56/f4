@@ -8,6 +8,7 @@ import (
 	"time"
 	"fmt"
 	"strings"
+	"path/filepath"
 )
 
 // NullVFS is a mock filesystem for testing UI responsiveness and file operations.
@@ -42,7 +43,7 @@ func (v *NullVFS) IsAtRoot() bool {
 }
 
 func (v *NullVFS) SetPath(p string) error {
-	v.currentPath = path.Clean(p)
+	v.currentPath = filepath.ToSlash(filepath.Clean(p))
 	return nil
 }
 

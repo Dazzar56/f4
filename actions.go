@@ -167,7 +167,13 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 						cmd = fmt.Sprintf("./%q", name)
 					}
 					// Wrap command in Title sequences to signal f4 about managed execution state
-					cmdToWire := fmt.Sprintf(" cd %q && { printf \"\\033]2;f4:busy\\007\"; %s ; } ; printf \"\\033]2;f4:done\\007\"\r", dir, cmd)
+					var cmdToWire string
+					if runtime.GOOS == "windows" {
+						// Windows CMD/PowerShell style: && instead of ; and special handling for busy signal
+						cmdToWire = fmt.Sprintf("cd /d %q && (echo \x1b]2;f4:busy\x07 && %s) && echo \x1b]2;f4:done\x07\r", dir, cmd)
+					} else {
+						cmdToWire = fmt.Sprintf(" cd %q && { printf \"\\033]2;f4:busy\\007\"; %s ; } ; printf \"\\033]2;f4:done\\007\"\r", dir, cmd)
+					}
 					activePty.Write([]byte(cmdToWire))
 					pf.executing = true
 					pf.showPanels = false

@@ -83,6 +83,9 @@ func InitCore() *vtui.ScreenBuf {
 	if width <= 0 { width = 80 }
 	if height <= 0 { height = 24 }
 
+	// На Windows (особенно в legacy консоли) иногда нужно явно включить поддержку ESC-последовательностей.
+	// vtui.PrepareTerminal() сделает это позже, но буферу размер нужен сразу.
+
 	scr := vtui.NewScreenBuf()
 	scr.AllocBuf(width, height)
 
