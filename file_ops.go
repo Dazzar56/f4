@@ -76,7 +76,7 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 		})
 
 		destPath := destInput
-		if !filepath.IsAbs(destPath) && !strings.HasPrefix(destPath, "/") {
+		if !filepath.IsAbs(destPath) {
 			if !strings.ContainsAny(destInput, "/\\") && destInput != "." && destInput != ".." {
 				destPath = srcVfs.Join(srcVfs.GetPath(), destInput)
 				dstVfs = srcVfs

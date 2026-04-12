@@ -28,7 +28,8 @@ func (v *OSVFS) GetPath() string { return v.currentPath }
 func (v *OSVFS) IsAtRoot() bool {
 	if runtime.GOOS == "windows" {
 		vol := filepath.VolumeName(v.currentPath)
-		return v.currentPath == vol+"\\" || v.currentPath == vol+"/" || v.currentPath == "/"
+		p := filepath.Clean(v.currentPath)
+		return p == vol+"\\" || p == vol+"/" || p == vol || p == "\\" || p == "/"
 	}
 	return v.currentPath == "/"
 }

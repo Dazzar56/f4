@@ -104,6 +104,9 @@ func (p *PTY) Close() error {
 	defer p.mu.Unlock()
 	if p.process != nil {
 		windows.TerminateProcess(p.process.Process, 0)
+		windows.CloseHandle(p.process.Process)
+		windows.CloseHandle(p.process.Thread)
+		p.process = nil
 	}
 	windows.ClosePseudoConsole(p.console)
 	p.inWriter.Close()
@@ -125,5 +128,9 @@ func (p *PTY) IsBusy() bool {
 }
 
 func GetSystemShell() string {
-	return "cmd.exe"
+	shell := os.Getenv("COMSPEC")
+	if shell == "" {
+		return "cmd.exe"
+	}
+	return shell
 }
