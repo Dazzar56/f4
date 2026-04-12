@@ -343,7 +343,7 @@ func TestFileOp_PathLogic(t *testing.T) {
 		os.WriteFile(filepath.Join(tmpSrc, "source2.txt"), []byte("content"), 0644)
 
 		// Target: "new_dir/" (trailing slash should force directory creation)
-		ExecuteFileOp(nil, srcVfs, dstVfs, []string{"source2.txt"}, "new_dir/", false, false, nil)
+	ExecuteFileOp(nil, srcVfs, dstVfs, []string{"source2.txt"}, "new_dir"+string(os.PathSeparator), false, false, nil)
 
 		for i := 0; i < 50; i++ {
 			select {

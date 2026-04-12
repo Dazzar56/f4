@@ -1153,7 +1153,7 @@ func TestEditorView_Indexer_BatchingIntegrity(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	content := "L1\nL2\nL3\nL4\nL5\n"
-	tmpFile := t.TempDir() + "/batch.txt"
+	tmpFile := filepath.Join(t.TempDir(), "batch.txt")
 	os.WriteFile(tmpFile, []byte(content), 0644)
 
 	v := vfs.NewOSVFS(t.TempDir())
@@ -1756,7 +1756,7 @@ func TestEditorView_Search_ShiftF7_Reverse(t *testing.T) {
 func TestEditorView_SaveFailure_NoDataLoss(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
-	tmpFile := t.TempDir() + "/important.txt"
+	tmpFile := filepath.Join(t.TempDir(), "important.txt")
 	os.WriteFile(tmpFile, []byte("Original"), 0644)
 
 	// Use our failing VFS
@@ -1822,7 +1822,7 @@ func TestEditorView_Save_DiskFullSimulation(t *testing.T) {
 	// the editor does not clear the modified flag and doesn't destroy memory state.
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
-	tmpFile := t.TempDir() + "/important.txt"
+	tmpFile := filepath.Join(t.TempDir(), "important.txt")
 	os.WriteFile(tmpFile, []byte("Stable Content"), 0644)
 
 	baseVfs := vfs.NewOSVFS(filepath.Dir(tmpFile))
@@ -2277,7 +2277,7 @@ func TestEditorView_Save_NoTrailingNewline_Integrity(t *testing.T) {
 	// does not accidentally add one (a common error in text editors).
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
-	tmpFile := t.TempDir() + "/nonewline.txt"
+	tmpFile := filepath.Join(t.TempDir(), "nonewline.txt")
 	content := []byte("Line 1\nLine 2 (no newline at end)")
 	os.WriteFile(tmpFile, content, 0644)
 

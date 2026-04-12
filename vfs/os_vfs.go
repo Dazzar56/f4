@@ -5,7 +5,6 @@ import (
 	"io"
 	"os"
 	"time"
-	"strings"
 
 	"path/filepath"
 
@@ -36,8 +35,7 @@ func (v *OSVFS) IsAtRoot() bool {
 
 func (v *OSVFS) SetPath(path string) error {
 	target := path
-	// На Windows путь может начинаться с "/", что не является абсолютным в понимании filepath.IsAbs
-	if !filepath.IsAbs(path) && !strings.HasPrefix(path, "\\") && !strings.HasPrefix(path, "/") {
+	if !filepath.IsAbs(path) {
 		target = filepath.Join(v.currentPath, path)
 	}
 	abs, err := filepath.Abs(target)

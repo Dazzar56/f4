@@ -1,6 +1,7 @@
 package netfox
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 	"github.com/unxed/f4/vfs"
@@ -9,6 +10,8 @@ import (
 func TestNetFoxVFS_ConfigPersistence(t *testing.T) {
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test_net.json")
+	// Ensure the file is created for consistency in tests
+	os.WriteFile(dbPath, []byte("{}"), 0644)
 	nf := NewNetFoxVFS(dbPath)
 
 	// 1. Test Saving
