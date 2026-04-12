@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"runtime/pprof"
 	"fmt"
+	"runtime"
 
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
@@ -95,7 +96,15 @@ func InitCore() *vtui.ScreenBuf {
 	vtui.GlobalHistoryProvider = NewF4HistoryProvider()
 	vtinput.Logger = vtui.DebugLog // Pipe vtinput logs to vtui's debug logger
 	vtui.GlobalClipboardAccessManager = NewF4ClipboardAuth()
-	RegisterDrive("&1. Local ( / )", func() vfs.VFS { return vfs.NewOSVFS("/") })
+	rootLabel := "&1. Local ( / )"
+	rootPath := "/"
+	if runtime.GOOS == "windows" {
+		drive := os.Getenv("SystemDrive")
+		if drive == "" { drive = "C:" }
+		rootLabel = fmt.Sprintf("&1. Local ( %s\\ )", drive)
+		rootPath = drive + "\\"
+	}
+	RegisterDrive(rootLabel, func() vfs.VFS { return vfs.NewOSVFS(rootPath) })
 	RegisterDrive("&2. Home ( ~ )", func() vfs.VFS { home, _ := os.UserHomeDir(); return vfs.NewOSVFS(home) })
 	RegisterDrive("&4. Null VFS (Test)", func() vfs.VFS { return vfs.NewNullVFS(50 * 1024 * 1024) }) // 50 MB/s
 

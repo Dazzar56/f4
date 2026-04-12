@@ -81,7 +81,7 @@ func TestActionViewerSearch_EmptyFile(t *testing.T) {
 	// Regression test: searching in an empty file should not hang or crash
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
-	tmp := t.TempDir() + "/empty.txt"
+	tmp := filepath.Join(t.TempDir(), "empty.txt")
 	os.WriteFile(tmp, []byte(""), 0644)
 	v := vfs.NewOSVFS(t.TempDir())
 

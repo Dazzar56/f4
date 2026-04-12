@@ -120,10 +120,12 @@ func (v *ArchiveVFS) ReadDir(ctx context.Context, path string, onChunk func([]vf
 	v.mu.Lock()
 	fsPath := v.innerPath
 	if path != "" && path != v.GetPath() {
-		if path == v.arcPath || path == v.arcPath+"/" {
+		if path == v.arcPath || path == v.arcPath+"/" || path == v.arcPath+"\\" {
 			fsPath = "."
 		} else {
-			fsPath = strings.TrimPrefix(path, v.arcPath+"/")
+			fsPath = strings.TrimPrefix(path, v.arcPath)
+			fsPath = strings.TrimPrefix(fsPath, "/")
+			fsPath = strings.TrimPrefix(fsPath, "\\")
 		}
 	}
 

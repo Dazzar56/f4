@@ -48,7 +48,7 @@ func NewFTPVFS(parent vfs.VFS, host, port, user, pass string, options map[string
 	return &FTPVFS{parent: parent, conn: c, cwd: pwd}, nil
 }
 
-func (v *FTPVFS) IsAtRoot() bool { return v.cwd == "/" || v.cwd == "" }
+func (v *FTPVFS) IsAtRoot() bool { return v.cwd == "/" || v.cwd == "" || v.cwd == "." }
 func (v *FTPVFS) GetPath() string { return v.cwd }
 func (v *FTPVFS) SetPath(p string) error {
 	v.mu.Lock()

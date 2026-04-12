@@ -5,6 +5,7 @@ import (
 	"testing"
 	"context"
 	"time"
+	"path/filepath"
 
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
@@ -14,7 +15,7 @@ import (
 func TestViewerView_NavigationAndEOF(t *testing.T) {
 	vtui.SetDefaultPalette()
 	tmpDir := t.TempDir()
-	tmp := tmpDir + "/test.txt"
+	tmp := filepath.Join(tmpDir, "test.txt")
 	os.WriteFile(tmp, []byte("L1\nL2\nL3\nL4\nL5"), 0644) // 5 lines total
 
 	v := vfs.NewOSVFS(tmpDir)
@@ -90,7 +91,7 @@ func TestViewerView_MouseScrollbar(t *testing.T) {
 	// Create a file with enough content to scroll
 	content := "L1\nL2\nL3\nL4\nL5\nL6\nL7\nL8\nL9\nL10\n" // 10 lines, 33 bytes (3 per line + 1 for last \n)
 	tmpDir := t.TempDir()
-	tmp := tmpDir + "/test_mouse.txt"
+	tmp := filepath.Join(tmpDir, "test_mouse.txt")
 	os.WriteFile(tmp, []byte(content), 0644)
 
 	v := vfs.NewOSVFS(tmpDir)

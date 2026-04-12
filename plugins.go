@@ -50,7 +50,7 @@ func (pm *PluginManager) LoadAll() {
 	pm.loadInternal()
 
 	// 2. Load External Plugins (WASM & Lua) from ./plugins dir
-	pm.loadExternal("./plugins")
+	pm.loadExternal(filepath.Join(".", "plugins"))
 }
 
 func (pm *PluginManager) loadInternal() {
