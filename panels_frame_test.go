@@ -517,8 +517,8 @@ func TestPanelsFrame_SwapPanels(t *testing.T) {
 	pf := NewPanelsFrame()
 	pf.ResizeConsole(80, 25)
 
-	pathL := t.TempDir() + "/left"
-	pathR := t.TempDir() + "/right"
+	pathL := filepath.Join(t.TempDir(), "left")
+	pathR := filepath.Join(t.TempDir(), "right")
 	os.MkdirAll(pathL, 0755)
 	os.MkdirAll(pathR, 0755)
 
@@ -1201,7 +1201,7 @@ func TestPanelsFrame_DriveMenu_OtherPanel(t *testing.T) {
 	pf := NewPanelsFrame()
 	pf.ResizeConsole(80, 25)
 
-	pathR := t.TempDir() + "/right"
+	pathR := filepath.Join(t.TempDir(), "right")
 	os.MkdirAll(pathR, 0755)
 	pf.panels[1].(*FileSystemPanel).vfs.SetPath(pathR)
 

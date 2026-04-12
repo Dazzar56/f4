@@ -4,6 +4,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"path/filepath"
 
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
@@ -227,7 +228,7 @@ func TestMacro_KeyUpConsumption(t *testing.T) {
 }
 
 func TestMacro_AssignEsc(t *testing.T) {
-	mgr := NewMacroManager(os.TempDir() + "/esc.ini")
+	mgr := NewMacroManager(filepath.Join(os.TempDir(), "esc.ini"))
 	mgr.Recording = true
 	mgr.Buffer = []*vtinput.InputEvent{{Char: 'h', KeyDown: true}}
 

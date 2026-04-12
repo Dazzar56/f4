@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 	"time"
 	"os"
@@ -15,7 +16,7 @@ func TestAsyncBuffer_LoadingCycle(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	content := []byte("This is a test file content for async buffer.")
-	tmp := t.TempDir() + "/test.txt"
+	tmp := filepath.Join(t.TempDir(), "test.txt")
 	v := vfs.NewOSVFS(t.TempDir())
 	wc, _ := v.Create(context.Background(), tmp)
 	wc.Write(content)
@@ -74,7 +75,7 @@ func TestAsyncBuffer_BoundaryRead(t *testing.T) {
 
 	// Content: 0123456789ABCDEFGHIJ (20 bytes)
 	content := []byte("0123456789ABCDEFGHIJ")
-	tmp := t.TempDir() + "/boundary.txt"
+	tmp := filepath.Join(t.TempDir(), "boundary.txt")
 	os.WriteFile(tmp, content, 0644)
 
 	v := vfs.NewOSVFS(t.TempDir())
@@ -106,7 +107,7 @@ func TestAsyncBuffer_BoundaryRead(t *testing.T) {
 func TestAsyncBuffer_PartialChunkAtEOF(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	content := []byte("Short") // 5 bytes
-	tmp := t.TempDir() + "/eof.txt"
+	tmp := filepath.Join(t.TempDir(), "eof.txt")
 	os.WriteFile(tmp, content, 0644)
 
 	v := vfs.NewOSVFS(t.TempDir())
@@ -138,7 +139,7 @@ func TestAsyncBuffer_ConcurrentAccess(t *testing.T) {
 	content := make([]byte, 1024*1024) // 1MB
 	for i := range content { content[i] = byte(i % 256) }
 
-	tmp := t.TempDir() + "/concurrent.bin"
+	tmp := filepath.Join(t.TempDir(), "concurrent.bin")
 	os.WriteFile(tmp, content, 0644)
 
 	v := vfs.NewOSVFS(t.TempDir())
@@ -192,7 +193,7 @@ func TestAsyncBuffer_CancellationMidFetch(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	v := vfs.NewOSVFS(t.TempDir())
-	tmp := t.TempDir() + "/cancel.txt"
+	tmp := filepath.Join(t.TempDir(), "cancel.txt")
 	os.WriteFile(tmp, []byte("some content"), 0644)
 	f, _ := v.Open(context.Background(), tmp)
 
@@ -232,7 +233,7 @@ func TestAsyncBuffer_RedundantFetchPrevention(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	v := vfs.NewOSVFS(t.TempDir())
-	tmp := t.TempDir() + "/redundant.txt"
+	tmp := filepath.Join(t.TempDir(), "redundant.txt")
 	os.WriteFile(tmp, make([]byte, 1000), 0644)
 	f, _ := v.Open(context.Background(), tmp)
 
@@ -263,7 +264,7 @@ func TestAsyncBuffer_ContextRace(t *testing.T) {
 	
 	content := []byte("Race test content")
 	v := vfs.NewOSVFS(t.TempDir())
-	tmp := t.TempDir() + "/race.txt"
+	tmp := filepath.Join(t.TempDir(), "race.txt")
 	os.WriteFile(tmp, content, 0644)
 	f, _ := v.Open(context.Background(), tmp)
 

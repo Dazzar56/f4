@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"fmt"
+	"runtime"
 	"time"
 	"github.com/unxed/f4/vfs"
 	"sync"
@@ -656,7 +657,11 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				if fsp, ok := pf.panels[pf.activeIdx].(*FileSystemPanel); ok { path = fsp.vfs.GetPath() }
 				if path != "" {
 					vtui.DebugLog("SHELL: Executing %q in %s", cmd, path)
-					activePty.Write([]byte(fmt.Sprintf(" cd %q\r", path)))
+					if runtime.GOOS == "windows" {
+						activePty.Write([]byte(fmt.Sprintf("cd /d %q\r", path)))
+					} else {
+						activePty.Write([]byte(fmt.Sprintf(" cd %q\r", path)))
+					}
 				}
 				activePty.Write([]byte(cmd + "\r"))
 			}

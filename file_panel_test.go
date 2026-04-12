@@ -20,7 +20,7 @@ func TestFileEntry_GetCellText(t *testing.T) {
 	if file.GetCellText(0) != "test.txt" {
 		t.Errorf("File name mismatch: %s", file.GetCellText(0))
 	}
-	if dir.GetCellText(0) != "/work" {
+	if dir.GetCellText(0) != string(os.PathSeparator)+"work" {
 		t.Errorf("Dir name mismatch: %s", dir.GetCellText(0))
 	}
 

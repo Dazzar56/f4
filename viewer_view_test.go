@@ -2,10 +2,10 @@ package main
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 	"context"
 	"time"
-	"path/filepath"
 
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
@@ -200,7 +200,7 @@ func TestViewerBar_Content(t *testing.T) {
 	vtui.SetDefaultPalette()
 	SetDefaultF4Palette()
 	tmpDir := t.TempDir()
-	tmp := tmpDir + "/bar_test.txt"
+	tmp := filepath.Join(tmpDir, "bar_test.txt")
 	os.WriteFile(tmp, []byte("Some content"), 0644)
 
 	v := vfs.NewOSVFS(tmpDir)
@@ -228,7 +228,7 @@ func TestViewerBar_Content(t *testing.T) {
 }
 func TestViewerView_HandleClose(t *testing.T) {
 	tmpDir := t.TempDir()
-	tmp := tmpDir + "/close_test.txt"
+	tmp := filepath.Join(tmpDir, "close_test.txt")
 	os.WriteFile(tmp, []byte("content"), 0644)
 	v := vfs.NewOSVFS(tmpDir)
 	vv, _ := NewViewerView(context.Background(), v, tmp)
@@ -263,7 +263,7 @@ func TestViewerView_GetTitle(t *testing.T) {
 }
 func TestLayout_ViewerSearchDialog_Validity(t *testing.T) {
 	vtui.SetDefaultPalette()
-	tmp := t.TempDir() + "/search_layout.txt"
+	tmp := filepath.Join(t.TempDir(), "search_layout.txt")
 	os.WriteFile(tmp, []byte("data"), 0644)
 
 	fm := vtui.FrameManager
@@ -293,7 +293,7 @@ func TestLayout_ViewerSearchDialog_Validity(t *testing.T) {
 func TestViewerView_HexModeToggle(t *testing.T) {
 	vtui.SetDefaultPalette()
 	tmpDir := t.TempDir()
-	tmp := tmpDir + "/hex.txt"
+	tmp := filepath.Join(tmpDir, "hex.txt")
 	// 32 bytes of data
 	data := make([]byte, 32)
 	for i := range data { data[i] = byte(i) }

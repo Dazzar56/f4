@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -12,7 +13,7 @@ import (
 )
 
 func TestViewerBackend_ReadAndFindLineStart(t *testing.T) {
-	tmp := t.TempDir() + "/test.txt"
+	tmp := filepath.Join(t.TempDir(), "test.txt")
 	content := "line1\nline2\nline3"
 	os.WriteFile(tmp, []byte(content), 0644)
 

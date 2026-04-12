@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"sort"
 	"time"
 	"path/filepath"
@@ -40,7 +41,7 @@ func (m *mediumRow) GetCellText(col int) string {
 	e := m.fp.entries[idx]
 	if e.IsDir {
 		if e.Name == ".." { return ".." }
-		return "/" + e.Name
+		return string(os.PathSeparator) + e.Name
 	}
 	return e.Name
 }
@@ -82,7 +83,7 @@ func (f *fileEntry) GetCellText(col int) string {
 	case 0:
 		if f.IsDir {
 			if f.Name == ".." { return ".." }
-			return "/" + f.Name
+			return string(os.PathSeparator) + f.Name
 		}
 		return f.Name
 	case 1:

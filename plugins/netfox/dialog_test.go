@@ -2,6 +2,7 @@ package netfox
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 
 	"github.com/unxed/f4/vfs"
@@ -29,7 +30,7 @@ func TestConnectionDialogLayout(t *testing.T) {
 
 	// Create a temporary VFS
 	tmpDir := t.TempDir()
-	dbPath := tmpDir + "/test_netfox.json"
+	dbPath := filepath.Join(tmpDir, "test_netfox.json")
 	nf := NewNetFoxVFS(dbPath)
 
 	app := &mockApp{}
