@@ -208,7 +208,7 @@ func (m *mockScannerVFS) ReadDir(ctx context.Context, p string, onChunk func([]V
 	return nil
 }
 
-func (m *mockScannerVFS) Join(e ...string) string { return strings.Join(e, "/") }
+func (m *mockScannerVFS) Join(e ...string) string { return filepath.Join(e...) }
 
 // --- Mocks ---
 

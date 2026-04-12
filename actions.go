@@ -164,6 +164,8 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 					if isOS && runtime.GOOS == "windows" {
 						cmd = fmt.Sprintf("%q", name)
 					} else {
+						// On Unix we use ./ to ensure local execution,
+						// on Windows it is usually not required for CMD
 						cmd = fmt.Sprintf("./%q", name)
 					}
 					// Wrap command in Title sequences to signal f4 about managed execution state

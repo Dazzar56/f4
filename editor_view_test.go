@@ -975,7 +975,7 @@ func TestEditorView_GetTitle(t *testing.T) {
 	pt := piecetable.New([]byte(""))
 
 	// With path
-	ev1 := NewEditorView(pt, nil, "/var/log/syslog")
+	ev1 := NewEditorView(pt, nil, filepath.FromSlash("/var/log/syslog"))
 	if ev1.GetTitle() != "Edit: syslog" {
 		t.Errorf("GetTitle failed for valid path: %s", ev1.GetTitle())
 	}

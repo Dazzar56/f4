@@ -86,7 +86,7 @@ func TestLayout_SearchResultsDialog(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	v := vfs.NewOSVFS(t.TempDir())
-	found := []FoundFile{{Path: "/tmp/test.txt", Item: vfs.VFSItem{Name: "test.txt", Size: 123}}}
+	found := []FoundFile{{Path: filepath.FromSlash("/tmp/test.txt"), Item: vfs.VFSItem{Name: "test.txt", Size: 123}}}
 
 	pf := NewPanelsFrame()
 	ShowSearchResults(pf, v, found)

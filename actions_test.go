@@ -18,7 +18,7 @@ func TestActionExecute_RemoteRejection(t *testing.T) {
 	v := &mockFailingVFS{VFS: baseVfs}
 	pf := NewPanelsFrame()
 
-	actionExecute(pf, v, "/remote", "script.sh", "/remote/script.sh")
+	actionExecute(pf, v, filepath.FromSlash("/remote"), "script.sh", filepath.FromSlash("/remote/script.sh"))
 
 	// Drain task queue to allow UI updates
 	timeout := time.After(1 * time.Second)
