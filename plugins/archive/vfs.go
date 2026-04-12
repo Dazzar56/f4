@@ -129,6 +129,14 @@ func (v *ArchiveVFS) ReadDir(ctx context.Context, path string, onChunk func([]vf
 		}
 	}
 
+	normPath := filepath.ToSlash(path)
+	normArcPath := filepath.ToSlash(v.arcPath)
+	fsPath = "."
+	if normPath != normArcPath {
+		fsPath = strings.TrimPrefix(normPath, normArcPath)
+		fsPath = strings.TrimPrefix(fsPath, "/")
+	}
+
 	entries, err := fs.ReadDir(v.arcFS, fsPath)
 	if err != nil {
 		v.mu.Unlock()
