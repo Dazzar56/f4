@@ -160,9 +160,13 @@ func (v *ArchiveVFS) ReadDir(ctx context.Context, path string, onChunk func([]vf
 func (v *ArchiveVFS) Stat(ctx context.Context, path string) (vfs.VFSItem, error) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
+
+	normPath := filepath.ToSlash(path)
+	normArcPath := filepath.ToSlash(v.arcPath)
 	fsPath := "."
-	if path != v.arcPath && path != v.arcPath+"/" {
-		fsPath = strings.TrimPrefix(path, v.arcPath+"/")
+	if normPath != normArcPath {
+		fsPath = strings.TrimPrefix(normPath, normArcPath)
+		fsPath = strings.TrimPrefix(fsPath, "/")
 	}
 
 	info, err := fs.Stat(v.arcFS, fsPath)
@@ -179,9 +183,14 @@ func (v *ArchiveVFS) Stat(ctx context.Context, path string) (vfs.VFSItem, error)
 func (v *ArchiveVFS) Open(ctx context.Context, path string) (vfs.ReadAtCloser, error) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	fsPath := strings.TrimPrefix(path, v.arcPath)
-	fsPath = strings.TrimPrefix(fsPath, "/")
-	if fsPath == "" { fsPath = "." }
+
+	normPath := filepath.ToSlash(path)
+	normArcPath := filepath.ToSlash(v.arcPath)
+	fsPath := "."
+	if normPath != normArcPath {
+		fsPath = strings.TrimPrefix(normPath, normArcPath)
+		fsPath = strings.TrimPrefix(fsPath, "/")
+	}
 
 	srcFile, err := v.arcFS.Open(fsPath)
 	if err != nil { return nil, err }
@@ -210,7 +219,10 @@ func (v *ArchiveVFS) Create(ctx context.Context, path string) (io.WriteCloser, e
 	inserter, ok := v.format.(archives.Inserter)
 	if !ok { return nil, fmt.Errorf("format %v does not support modifications", v.format) }
 	tmp, _ := os.CreateTemp("", "f4arc-write-*")
-	fsPath := strings.TrimPrefix(path, v.arcPath)
+
+	normPath := filepath.ToSlash(path)
+	normArcPath := filepath.ToSlash(v.arcPath)
+	fsPath := strings.TrimPrefix(normPath, normArcPath)
 	fsPath = strings.TrimPrefix(fsPath, "/")
 
 	return &archiveWriteWrapper{v: v, tmpFile: tmp, destPath: fsPath, inserter: inserter}, nil
@@ -276,8 +288,12 @@ func (d dummyFileInfo) Sys() any           { return nil }
 func (v *ArchiveVFS) MkDir(ctx context.Context, path string) error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	fsPath := strings.TrimPrefix(path, v.arcPath)
+
+	normPath := filepath.ToSlash(path)
+	normArcPath := filepath.ToSlash(v.arcPath)
+	fsPath := strings.TrimPrefix(normPath, normArcPath)
 	fsPath = strings.TrimPrefix(fsPath, "/")
+
 	if !strings.HasSuffix(fsPath, "/") { fsPath += "/" }
 	inserter, ok := v.format.(archives.Inserter)
 	if !ok { return fmt.Errorf("format %v does not support modifications", v.format) }
@@ -292,8 +308,12 @@ func (v *ArchiveVFS) MkDir(ctx context.Context, path string) error {
 func (v *ArchiveVFS) Remove(ctx context.Context, path string) error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	fsPath := strings.TrimPrefix(path, v.arcPath)
+
+	normPath := filepath.ToSlash(path)
+	normArcPath := filepath.ToSlash(v.arcPath)
+	fsPath := strings.TrimPrefix(normPath, normArcPath)
 	fsPath = strings.TrimPrefix(fsPath, "/")
+
 	type archDeleter interface { Delete(context.Context, io.ReadWriteSeeker, []string) error }
 	deleter, ok := v.format.(archDeleter)
 	if !ok { return fmt.Errorf("format %v does not support deletion", v.format) }
