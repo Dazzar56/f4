@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"runtime/pprof"
 	"fmt"
+	"runtime"
 
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
@@ -80,6 +81,15 @@ func main() {
 func InitCore() *vtui.ScreenBuf {
 	vtui.DebugLog("=== F4 STARTUP [%s] PID:%d ===", vtui.GetVersionInfo(), os.Getpid())
 	vtui.ConfigDiskLogging(true)
+
+	// Environment Diagnostics
+	vtui.DebugLog("ENV: OS=%s ARCH=%s", runtime.GOOS, runtime.GOARCH)
+	if wt := os.Getenv("WT_SESSION"); wt != "" {
+		vtui.DebugLog("ENV: Running inside Windows Terminal (WT_SESSION set)")
+	}
+	if term := os.Getenv("TERM"); term != "" {
+		vtui.DebugLog("ENV: TERM=%s", term)
+	}
 	width, height, err := vtui.GetTerminalSize()
 	if err != nil {
 		vtui.DebugLog("CORE: term.GetSize(0) failed: %v", err)
