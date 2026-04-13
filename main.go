@@ -6,6 +6,7 @@ import (
 	"runtime/pprof"
 	"fmt"
 	"runtime"
+	"strings"
 
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
