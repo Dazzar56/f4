@@ -37,6 +37,11 @@ func main() {
 				clientPath = os.Args[i+1]
 				i++
 			}
+		case "--input":
+			if i+1 < len(os.Args) {
+				vtinput.InputMode = os.Args[i+1]
+				i++
+			}
 		case "--cpuprofile":
 			if i+1 < len(os.Args) {
 				cpuprofile = os.Args[i+1]
