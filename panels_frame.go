@@ -1362,9 +1362,29 @@ func (pf *PanelsFrame) showPluginMenu() {
 
 func (pf *PanelsFrame) showDriveMenu(panelIdx int) {
 	menu := vtui.NewVMenu(" Drive ")
-	menu.AddItem(vtui.MenuItem{Text: Msg("Panel.Other")})
-	for _, drv := range DriveRegistry {
-		menu.AddItem(vtui.MenuItem{Text: drv.Name})
+	menu.AddItem(vtui.MenuItem{Text: Msg("Panel.Other"), UserData: func(fsp *FileSystemPanel) {
+		otherFsp := pf.panels[1-panelIdx].(*FileSystemPanel)
+		if fsp.vfs != nil { fsp.vfs.Close() }
+		fsp.vfs = otherFsp.vfs.Clone()
+		fsp.ReadDirectory()
+		pf.RefreshAll()
+	}})
+
+	for _, drv := range getPlatformDrives() {
+		factory := drv.Factory
+		menu.AddItem(vtui.MenuItem{Text: drv.Name, UserData: func(fsp *FileSystemPanel) {
+			pf.switchToVFS(fsp, factory())
+		}})
+	}
+
+	if len(DriveRegistry) > 0 {
+		menu.AddSeparator()
+		for _, drv := range DriveRegistry {
+			factory := drv.Factory
+			menu.AddItem(vtui.MenuItem{Text: drv.Name, UserData: func(fsp *FileSystemPanel) {
+				pf.switchToVFS(fsp, factory())
+			}})
+		}
 	}
 	menu.SetSelectPos(0)
 
@@ -1384,33 +1404,26 @@ func (pf *PanelsFrame) showDriveMenu(panelIdx int) {
 		fsp, ok := pf.panels[panelIdx].(*FileSystemPanel)
 		if !ok { return }
 
-		if idx == 0 {
-			otherFsp := pf.panels[1-panelIdx].(*FileSystemPanel)
-			if fsp.vfs != nil { fsp.vfs.Close() }
-			fsp.vfs = otherFsp.vfs.Clone()
-			fsp.ReadDirectory()
-			pf.RefreshAll()
-			return
-		}
-
-		registryIdx := idx - 1
-		if registryIdx >= 0 && registryIdx < len(DriveRegistry) {
-			newVFS := DriveRegistry[registryIdx].Factory()
-			if newVFS != nil {
-				if fsp.vfs != nil {
-					fsp.vfs.Close()
-					pf.ptyMutex.Lock()
-					if pty, ok := pf.remotePtys[fsp.vfs]; ok {
-						pty.Close()
-						delete(pf.remotePtys, fsp.vfs)
-					}
-					pf.ptyMutex.Unlock()
-				}
-				fsp.vfs = newVFS
-				fsp.ReadDirectory()
-				pf.RefreshAll()
-			}
+		if action, ok := menu.Items[idx].UserData.(func(*FileSystemPanel)); ok {
+			action(fsp)
 		}
 	}
 	vtui.FrameManager.Push(menu)
+}
+
+func (pf *PanelsFrame) switchToVFS(fsp *FileSystemPanel, newVFS vfs.VFS) {
+	if newVFS != nil {
+		if fsp.vfs != nil {
+			fsp.vfs.Close()
+			pf.ptyMutex.Lock()
+			if pty, ok := pf.remotePtys[fsp.vfs]; ok {
+				pty.Close()
+				delete(pf.remotePtys, fsp.vfs)
+			}
+			pf.ptyMutex.Unlock()
+		}
+		fsp.vfs = newVFS
+		fsp.ReadDirectory()
+		pf.RefreshAll()
+	}
 }
