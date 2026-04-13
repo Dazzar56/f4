@@ -654,7 +654,66 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			cmd := pf.cmdLine.Edit.GetText()
 			pf.cmdLine.Edit.AddHistory(cmd)
 			pf.cmdLine.Edit.HistoryPos = -1
-			
+
+			trimmedCmd := strings.TrimSpace(cmd)
+			lowerCmd := strings.ToLower(trimmedCmd)
+			isDirChange := false
+			targetPath := ""
+
+			// Intercept drive letter changes (e.g., "C:", "D:\") on Windows
+			if runtime.GOOS == "windows" && len(trimmedCmd) >= 2 && len(trimmedCmd) <= 3 && trimmedCmd[1] == ':' {
+				if lowerCmd[0] >= 'a' && lowerCmd[0] <= 'z' {
+					isDirChange = true
+					targetPath = trimmedCmd
+					if len(trimmedCmd) == 2 {
+						targetPath += string(os.PathSeparator)
+					}
+				}
+			// Intercept standard 'cd' commands
+			} else if strings.HasPrefix(lowerCmd, "cd ") || strings.HasPrefix(lowerCmd, "chdir ") || (runtime.GOOS == "windows" && strings.HasPrefix(lowerCmd, "cd /d ")) {
+				prefixLen := 3
+				if strings.HasPrefix(lowerCmd, "cd /d ") {
+					prefixLen = 6
+				} else if strings.HasPrefix(lowerCmd, "chdir ") {
+					prefixLen = 6
+				}
+				isDirChange = true
+				targetPath = strings.TrimSpace(trimmedCmd[prefixLen:])
+				// Remove quotes if user typed: cd "C:\My Folder"
+				if strings.HasPrefix(targetPath, "\"") && strings.HasSuffix(targetPath, "\"") {
+					targetPath = targetPath[1 : len(targetPath)-1]
+				}
+			} else if lowerCmd == "cd.." || lowerCmd == "cd .." {
+				isDirChange = true
+				targetPath = ".."
+			} else if lowerCmd == "cd\\" || lowerCmd == "cd/" {
+				isDirChange = true
+				targetPath = string(os.PathSeparator)
+			}
+
+			// Apply to panel first
+			if isDirChange {
+				if fsp, ok := pf.panels[pf.activeIdx].(*FileSystemPanel); ok {
+					if err := fsp.vfs.SetPath(targetPath); err == nil {
+						fsp.pendingSelection = ".."
+						fsp.ReadDirectory()
+						pf.cmdLine.Clear()
+
+						// Sync the background PTY silently without hiding panels
+						activePty := pf.getActivePTY()
+						if activePty != nil {
+							if runtime.GOOS == "windows" {
+								activePty.Write([]byte(fmt.Sprintf("cd /d %q\r", fsp.vfs.GetPath())))
+							} else {
+								activePty.Write([]byte(fmt.Sprintf(" cd %q\r", fsp.vfs.GetPath())))
+							}
+						}
+						return true
+					}
+				}
+			}
+
+			// Fallthrough for regular commands or if directory change failed (to show error in terminal)
 			activePty := pf.getActivePTY()
 			if activePty != nil {
 				var path string
@@ -669,7 +728,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				}
 				activePty.Write([]byte(cmd + "\r"))
 			}
-			
+
 			pf.cmdLine.Clear()
 			pf.showPanels = false
 			return true
