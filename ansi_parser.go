@@ -345,6 +345,9 @@ func (p *AnsiParser) handleOSC() {
 
 	if cmd == 0 || cmd == 2 {
 		p.term.Title = parts[1]
+		if p.term.OnTitleChange != nil {
+			p.term.OnTitleChange(p.term.Title)
+		}
 		return
 	}
 

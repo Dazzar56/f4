@@ -144,6 +144,21 @@ func NewPanelsFrame() *PanelsFrame {
 	pf.keyBar.SetOwner(pf)
 
 	pf.termView = NewTerminalView(80, 24)
+	pf.termView.OnTitleChange = func(newTitle string) {
+		// Use PostTask to ensure state changes happen on the UI thread
+		vtui.FrameManager.PostTask(func() {
+			if newTitle == "f4:busy" {
+				pf.executing = true
+			} else if newTitle == "f4:done" {
+				if pf.executing {
+					pf.executing = false
+					pf.showPanels = true
+					pf.RefreshAll()
+					vtui.FrameManager.Redraw()
+				}
+			}
+		})
+	}
 	// Parser will be fully initialized in initPTY once pty is ready
 	pf.initPTY()
 	pf.termView.pty = pf.pty
@@ -344,15 +359,6 @@ func (pf *PanelsFrame) isPtyBusy() bool {
 }
 func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 	isBusy := pf.isPtyBusy()
-
-	// 0. Process auto-return from managed command execution
-	if pf.executing && pf.termView.Title == "f4:done" {
-		pf.executing = false
-		pf.termView.Title = ""
-		pf.showPanels = true
-		vtui.FrameManager.Redraw()
-		isBusy = false
-	}
 
 	// 1. Dynamic Layout Adjustment
 	if pf.termView.UseAltScreen != pf.lastAlt {
@@ -717,16 +723,34 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			activePty := pf.getActivePTY()
 			if activePty != nil {
 				var path string
-				if fsp, ok := pf.panels[pf.activeIdx].(*FileSystemPanel); ok { path = fsp.vfs.GetPath() }
+				if fsp, ok := pf.panels[pf.activeIdx].(*FileSystemPanel); ok {
+					path = fsp.vfs.GetPath()
+				}
 				if path != "" {
 					vtui.DebugLog("SHELL: Executing %q in %s", cmd, path)
-					if runtime.GOOS == "windows" {
-						activePty.Write([]byte(fmt.Sprintf("cd /d %q\r", path)))
+
+					// If panels are visible, wrap command to auto-return on success
+					if pf.showPanels {
+						var cmdToWire string
+						if runtime.GOOS == "windows" {
+							cmdToWire = fmt.Sprintf("cd /d %q & title f4:busy & %s && title f4:done\r", path, cmd)
+						} else {
+							cmdToWire = fmt.Sprintf(" cd %q && { printf \"\\033]2;f4:busy\\007\"; %s && printf \"\\033]2;f4:done\\007\"; }\r", path, cmd)
+						}
+						activePty.Write([]byte(cmdToWire))
+						pf.executing = true
 					} else {
-						activePty.Write([]byte(fmt.Sprintf(" cd %q\r", path)))
+						// Panels already hidden, just run normally
+						if runtime.GOOS == "windows" {
+							activePty.Write([]byte(fmt.Sprintf("cd /d %q\r", path)))
+						} else {
+							activePty.Write([]byte(fmt.Sprintf(" cd %q\r", path)))
+						}
+						activePty.Write([]byte(cmd + "\r"))
 					}
+				} else {
+					activePty.Write([]byte(cmd + "\r"))
 				}
-				activePty.Write([]byte(cmd + "\r"))
 			}
 
 			pf.cmdLine.Clear()

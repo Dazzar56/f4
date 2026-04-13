@@ -168,14 +168,14 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 						// on Windows it is usually not required for CMD
 						cmd = fmt.Sprintf("./%q", name)
 					}
-					// Wrap command in Title sequences to signal f4 about managed execution state
+					// Wrap command in Title sequences to signal f4 about managed execution state.
+					// We use && so f4:done is only sent if the command succeeded.
 					var cmdToWire string
 					if runtime.GOOS == "windows" {
 						// Windows CMD: Use `title` command because standard `echo` doesn't evaluate ANSI escapes.
-						// ConPTY automatically intercepts the console title change and sends the OSC 2 sequence to our parser!
-						cmdToWire = fmt.Sprintf("cd /d %q & title f4:busy & %s & title f4:done\r", dir, cmd)
+						cmdToWire = fmt.Sprintf("cd /d %q & title f4:busy & %s && title f4:done\r", dir, cmd)
 					} else {
-						cmdToWire = fmt.Sprintf(" cd %q && { printf \"\\033]2;f4:busy\\007\"; %s ; } ; printf \"\\033]2;f4:done\\007\"\r", dir, cmd)
+						cmdToWire = fmt.Sprintf(" cd %q && { printf \"\\033]2;f4:busy\\007\"; %s && printf \"\\033]2;f4:done\\007\"; }\r", dir, cmd)
 					}
 					activePty.Write([]byte(cmdToWire))
 					pf.executing = true

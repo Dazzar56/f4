@@ -66,6 +66,8 @@ type TerminalView struct {
 	pty             PtyBackend
 	pendingLog      []byte
 	pendingAttr     uint64
+
+	OnTitleChange func(string)
 }
 
 func NewTerminalView(w, h int) *TerminalView {
