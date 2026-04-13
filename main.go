@@ -20,31 +20,51 @@ func main() {
 	var cpuprofile string
 
 	for i := 1; i < len(os.Args); i++ {
-		switch os.Args[i] {
+		arg := os.Args[i]
+
+		// Handle --flag=value format
+		flagName := arg
+		flagVal := ""
+		if eqIdx := strings.IndexByte(arg, '='); eqIdx != -1 {
+			flagName = arg[:eqIdx]
+			flagVal = arg[eqIdx+1:]
+		}
+
+		switch flagName {
 		case "--debug":
 			os.Setenv("VTUI_DEBUG", "1")
 		case "--log":
-			if i+1 < len(os.Args) {
+			if flagVal != "" {
+				os.Setenv("VTUI_DEBUG", flagVal)
+			} else if i+1 < len(os.Args) {
 				os.Setenv("VTUI_DEBUG", os.Args[i+1])
 				i++
 			}
 		case "--server":
-			if i+1 < len(os.Args) {
+			if flagVal != "" {
+				serverPath = flagVal
+			} else if i+1 < len(os.Args) {
 				serverPath = os.Args[i+1]
 				i++
 			}
 		case "--client":
-			if i+1 < len(os.Args) {
+			if flagVal != "" {
+				clientPath = flagVal
+			} else if i+1 < len(os.Args) {
 				clientPath = os.Args[i+1]
 				i++
 			}
 		case "--input":
-			if i+1 < len(os.Args) {
+			if flagVal != "" {
+				vtinput.InputMode = flagVal
+			} else if i+1 < len(os.Args) {
 				vtinput.InputMode = os.Args[i+1]
 				i++
 			}
 		case "--cpuprofile":
-			if i+1 < len(os.Args) {
+			if flagVal != "" {
+				cpuprofile = flagVal
+			} else if i+1 < len(os.Args) {
 				cpuprofile = os.Args[i+1]
 				i++
 			}
