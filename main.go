@@ -79,8 +79,8 @@ func main() {
 }
 
 func InitCore() *vtui.ScreenBuf {
-	vtui.DebugLog("=== F4 STARTUP [%s] PID:%d ===", vtui.GetVersionInfo(), os.Getpid())
 	vtui.ConfigDiskLogging(true)
+	vtui.DebugLog("=== F4 STARTUP [%s] PID:%d ===", vtui.GetVersionInfo(), os.Getpid())
 
 	// Environment Diagnostics
 	vtui.DebugLog("ENV: OS=%s ARCH=%s", runtime.GOOS, runtime.GOARCH)
