@@ -27,11 +27,13 @@ func NewPTY() (*PTY, error) {
 	var inPipeOur, inPipePty windows.Handle
 	var outPipeOur, outPipePty windows.Handle
 
-	// Создаем пайпы для ввода-вывода
-	if err := windows.CreatePipe(&inPipeOur, &inPipePty, nil, 0); err != nil {
+	// Создаем пайпы для ввода-вывода (CreatePipe: readHandle, writeHandle)
+	// inPipe: PTY читает, мы пишем
+	if err := windows.CreatePipe(&inPipePty, &inPipeOur, nil, 0); err != nil {
 		return nil, err
 	}
-	if err := windows.CreatePipe(&outPipePty, &outPipeOur, nil, 0); err != nil {
+	// outPipe: мы читаем, PTY пишет
+	if err := windows.CreatePipe(&outPipeOur, &outPipePty, nil, 0); err != nil {
 		return nil, err
 	}
 
@@ -42,6 +44,10 @@ func NewPTY() (*PTY, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create pseudo console: %w (requires Windows 10+)", err)
 	}
+
+	// Закрываем наши копии хэндлов PTY, чтобы EOF корректно передавался при закрытии дочернего процесса
+	windows.CloseHandle(inPipePty)
+	windows.CloseHandle(outPipePty)
 
 	return &PTY{
 		console:   console,
