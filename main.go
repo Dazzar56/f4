@@ -10,7 +10,6 @@ import (
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 	"github.com/unxed/vtinput"
-	"golang.org/x/term"
 )
 
 func main() {
@@ -77,7 +76,7 @@ func main() {
 func InitCore() *vtui.ScreenBuf {
 	vtui.DebugLog("=== F4 STARTUP [%s] PID:%d ===", vtui.GetVersionInfo(), os.Getpid())
 	vtui.ConfigDiskLogging(true)
-	width, height, err := term.GetSize(0)
+	width, height, err := vtui.GetTerminalSize()
 	if err != nil {
 		vtui.DebugLog("CORE: term.GetSize(0) failed: %v", err)
 	}
