@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -20,6 +21,9 @@ type PTY struct {
 	process      *windows.ProcessInformation
 	inWriter     *os.File
 	outReader    *os.File
+
+	lastBusyCheck time.Time
+	lastBusyState bool
 }
 
 func NewPTY() (*PTY, error) {
@@ -126,10 +130,54 @@ func (p *PTY) Wait() error {
 }
 
 func (p *PTY) IsBusy() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	if p.process == nil { return false }
+
+	if time.Since(p.lastBusyCheck) < 50*time.Millisecond {
+		return p.lastBusyState
+	}
+
 	var exitCode uint32
 	err := windows.GetExitCodeProcess(p.process.Process, &exitCode)
-	return err == nil && exitCode == 259 // STILL_ACTIVE
+	if err != nil || exitCode != 259 { // 259 = STILL_ACTIVE
+		p.lastBusyState = false
+		p.lastBusyCheck = time.Now()
+		return false
+	}
+
+	snapshot, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
+	if err != nil {
+		p.lastBusyState = false
+		p.lastBusyCheck = time.Now()
+		return false
+	}
+	defer windows.CloseHandle(snapshot)
+
+	var pe32 windows.ProcessEntry32
+	pe32.Size = uint32(unsafe.Sizeof(pe32))
+
+	if err := windows.Process32First(snapshot, &pe32); err != nil {
+		p.lastBusyState = false
+		p.lastBusyCheck = time.Now()
+		return false
+	}
+
+	for {
+		if pe32.ParentProcessID == p.process.ProcessId {
+			p.lastBusyState = true
+			p.lastBusyCheck = time.Now()
+			return true
+		}
+		if err := windows.Process32Next(snapshot, &pe32); err != nil {
+			break
+		}
+	}
+
+	p.lastBusyState = false
+	p.lastBusyCheck = time.Now()
+	return false
 }
 
 func GetSystemShell() string {
