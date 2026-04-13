@@ -410,9 +410,13 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
 
-	// Check global hotkeys
+	// Check global hotkeys (ignoring Lock and Enhanced keys)
 	for _, hk := range GlobalHotkeys {
-		if e.VirtualKeyCode == hk.VK && e.ControlKeyState == hk.Mods && e.KeyDown {
+		hkCtrl := (hk.Mods & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
+		hkAlt := (hk.Mods & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
+		hkShift := (hk.Mods & vtinput.ShiftPressed) != 0
+
+		if e.VirtualKeyCode == hk.VK && e.KeyDown && ctrl == hkCtrl && alt == hkAlt && shift == hkShift {
 			hk.Handler(pf)
 			return true
 		}
@@ -1122,9 +1126,29 @@ func (pf *PanelsFrame) InputBox(title, prompt, history string, callback func(str
 func (pf *PanelsFrame) Menu(title string, items []string, callback func(int)) {
 	vtui.FrameManager.PostTask(func() {
 		menu := vtui.NewVMenu(title)
+
+		// Calculate dynamic width based on items and title
+		maxW := runewidth.StringWidth(title) + 10
 		for _, itm := range items {
 			menu.AddItem(vtui.MenuItem{Text: itm})
+			clean, _, _ := vtui.ParseAmpersandString(itm)
+			w := runewidth.StringWidth(clean) + 8 // padding for markers and borders
+			if w > maxW {
+				maxW = w
+			}
 		}
+
+		h := len(items) + 2
+		if h > 15 { h = 15 } // Max height limit
+
+		// Center relative to the PanelsFrame size
+		x := (pf.lastW - maxW) / 2
+		y := (pf.lastH - h) / 2
+		if x < 0 { x = 0 }
+		if y < 0 { y = 0 }
+
+		menu.SetPosition(x, y, x+maxW-1, y+h-1)
+
 		menu.OnAction = func(idx int) {
 			menu.Close()
 			if callback != nil { callback(idx) }

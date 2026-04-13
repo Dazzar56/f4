@@ -59,18 +59,58 @@ func actionExtractArchive(app vfs.App) {
 
 		f.Seek(0, io.SeekStart)
 
+		type extractState struct {
+			OverwriteAll bool
+			SkipAll      bool
+		}
+		state := &extractState{}
+
 		return ex.Extract(ctx, f, func(ctx context.Context, info archives.FileInfo) error {
 			if ctx.Err() != nil { return ctx.Err() }
 			update(fmt.Sprintf("Extracting: %s", info.NameInArchive), -1)
 			targetPath := filepath.Join(destDir, info.NameInArchive)
-			if info.IsDir() { return os.MkdirAll(targetPath, 0755) }
-			os.MkdirAll(filepath.Dir(targetPath), 0755)
+
+			if info.IsDir() {
+				return os.MkdirAll(targetPath, 0755)
+			}
+
+			// Check for conflict before creating the file
+			if _, err := os.Stat(targetPath); err == nil {
+				if state.SkipAll {
+					return nil // Silently skip
+				}
+				if !state.OverwriteAll {
+					msg := fmt.Sprintf("File already exists:\n%s\n\nOverwrite?", info.NameInArchive)
+					buttons := []string{"&Overwrite", "Overwrite &All", "&Skip", "S&kip All", "&Cancel"}
+					choice := app.Message(" Conflict ", msg, buttons)
+
+					switch choice {
+					case 0: // Overwrite
+						// Proceed
+					case 1: // Overwrite All
+						state.OverwriteAll = true
+					case 2: // Skip
+						return nil
+					case 3: // Skip All
+						state.SkipAll = true
+						return nil
+					default: // Cancel or closed dialog
+						return context.Canceled
+					}
+				}
+			}
+
+			if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+				return err
+			}
 			out, err := os.Create(targetPath)
 			if err != nil { return err }
 			defer out.Close()
+
 			in, err := info.Open()
 			if err != nil { return err }
 			defer in.Close()
+
 			_, err = io.Copy(out, in)
 			return err
 		})
