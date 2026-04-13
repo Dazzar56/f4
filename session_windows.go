@@ -44,3 +44,6 @@ func ManageSessions() {
 	vtui.FrameManager.Run(reader)
 	reader.Close()
 }
+
+func runServer(sockPath string) {}
+func runClient(sockPath string) {}

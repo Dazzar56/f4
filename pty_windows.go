@@ -4,7 +4,6 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"sync"
 	"unsafe"
@@ -90,11 +89,11 @@ func (p *PTY) Run(name string, args ...string) error {
 			Cb:    uint32(unsafe.Sizeof(windows.StartupInfoEx{})),
 			Flags: windows.STARTF_USESTDHANDLES,
 		},
-		AttributeList: attrList.List(),
+		ProcThreadAttributeList: attrList.List(),
 	}
 
 	pi := &windows.ProcessInformation{}
-	flags := windows.EXTENDED_STARTUPINFO_PRESENT | windows.CREATE_UNICODE_ENVIRONMENT
+	flags := uint32(windows.EXTENDED_STARTUPINFO_PRESENT | windows.CREATE_UNICODE_ENVIRONMENT)
 
 	err = windows.CreateProcess(nil, cmdLine, nil, nil, false, flags, nil, nil, &si.StartupInfo, pi)
 	if err != nil {
