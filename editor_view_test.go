@@ -665,7 +665,7 @@ func TestEditorView_WordWrapScrolling(t *testing.T) {
 	if ev.ScrollTopRow != 3 {
 		t.Errorf("WordWrap scroll failed: expected ScrollTopRow 3, got %d", ev.ScrollTopRow)
 	}
-	
+
 	// 2. Прыгаем в начало
 	ev.CursorPos = 0
 	ev.ensureCursorVisible()
@@ -1233,7 +1233,7 @@ func TestEditorView_Navigation_DocumentBoundaries(t *testing.T) {
 	pt := piecetable.New([]byte("Line 1\nLine 2\nLine 3"))
 	ev := NewEditorView(pt, nil, "")
 	ev.SetPosition(0, 0, 80, 24)
-	
+
 	// 1. Ctrl+End -> End of file
 	ev.ProcessKey(&vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
@@ -1256,13 +1256,13 @@ func TestEditorView_Navigation_DocumentBoundaries(t *testing.T) {
 func TestEditorView_SelectAll(t *testing.T) {
 	pt := piecetable.New([]byte("First\nSecond"))
 	ev := NewEditorView(pt, nil, "")
-	
+
 	// Ctrl+A
 	ev.ProcessKey(&vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
 		VirtualKeyCode: vtinput.VK_A, ControlKeyState: vtinput.LeftCtrlPressed,
 	})
-	
+
 	if !ev.selActive { t.Fatal("Selection should be active after Ctrl+A") }
 	min, max := ev.getSelectionRange()
 	if min != 0 || max != pt.Size() {
@@ -2124,7 +2124,7 @@ func TestEditorView_ModificationStress(t *testing.T) {
 	}
 
 	for i, op := range ops {
-		ctrlFlag := uint32(0)
+		ctrlFlag := vtinput.ControlKeyState(0)
 		if op.ctrl {
 			ctrlFlag = vtinput.LeftCtrlPressed
 		}
@@ -2852,23 +2852,23 @@ func TestEditorView_Indexer_SessionFencing(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pt := piecetable.New([]byte("line1\nline2"))
 	ev := NewEditorView(pt, nil, "fencing.txt")
-	
+
 	// 1. Запоминаем текущую сессию
 	initialSession := ev.editSession
-	
+
 	// 2. Имитируем запуск задачи индексатором (captured session ID)
 	capturedSession := initialSession
-	
+
 	// 3. Происходит редактирование (например, Backspace)
 	ev.ProcessKey(&vtinput.InputEvent{
-		Type: vtinput.KeyEventType, KeyDown: true, 
+		Type: vtinput.KeyEventType, KeyDown: true,
 		VirtualKeyCode: vtinput.VK_BACK,
 	})
-	
+
 	if ev.editSession <= capturedSession {
 		t.Errorf("Edit session should have incremented. Was %d, now %d", capturedSession, ev.editSession)
 	}
-	
+
 	// 4. Имитируем «прилет» результата индексации из прошлого
 	indexerApplied := false
 	task := func() {
@@ -2878,9 +2878,9 @@ func TestEditorView_Indexer_SessionFencing(t *testing.T) {
 		}
 		indexerApplied = true
 	}
-	
+
 	task()
-	
+
 	if indexerApplied {
 		t.Error("CRITICAL: Stale indexer task was applied to a modified buffer!")
 	}

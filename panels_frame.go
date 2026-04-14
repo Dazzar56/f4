@@ -29,12 +29,12 @@ func RegisterDrive(name string, factory func() vfs.VFS) {
 
 type HotkeyEntry struct {
 	VK      uint16
-	Mods    uint32
+	Mods    vtinput.ControlKeyState
 	Handler func(app vfs.App)
 }
 var GlobalHotkeys []HotkeyEntry
 
-func RegisterGlobalHotkey(vk uint16, mods uint32, handler func(app vfs.App)) {
+func RegisterGlobalHotkey(vk uint16, mods vtinput.ControlKeyState, handler func(app vfs.App)) {
 	GlobalHotkeys = append(GlobalHotkeys, HotkeyEntry{VK: vk, Mods: mods, Handler: handler})
 }
 func (pf *PanelsFrame) GetActivePanelVFS() vfs.VFS  { return pf.Active().(*FileSystemPanel).vfs }
@@ -966,7 +966,7 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 		pf.updateMenuCheckmarks()
 		return true
 
-	
+
 	case CmLeftSortName:
 		if fsp, ok := pf.panels[0].(*FileSystemPanel); ok { fsp.SetSortMode(SortName) }
 		pf.updateMenuCheckmarks()
@@ -1244,9 +1244,9 @@ func (pf *PanelsFrame) getActivePTYUnsafe() PtyBackend {
 		pf.remotePtys = make(map[vfs.VFS]PtyBackend)
 	}
 
-	
-	
-	
+
+
+
 	var activeVfs vfs.VFS
 	if fsp := pf.getActivePanel(); fsp != nil {
 		activeVfs = fsp.vfs
