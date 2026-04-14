@@ -95,6 +95,7 @@ func (v *OSVFS) ReadDir(ctx context.Context, path string, onChunk func([]VFSItem
 				IsDir:        isDir,
 				MTime:        mtime,
 				IsExecutable: isExec,
+				IsHidden:     isHidden(filepath.Join(path, e.Name()), e.Name(), info),
 			})
 		}
 
@@ -115,6 +116,7 @@ func (v *OSVFS) Stat(ctx context.Context, path string) (VFSItem, error) {
 		IsDir:        info.IsDir(),
 		MTime:        info.ModTime(),
 		IsExecutable: info.Mode().Perm()&0111 != 0,
+		IsHidden:     isHidden(path, info.Name(), info),
 	}, nil
 }
 

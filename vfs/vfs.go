@@ -44,6 +44,7 @@ type VFSItem struct {
 	MTime        time.Time
 	Mode         string
 	IsExecutable bool
+	IsHidden     bool
 }
 
 // VFSCapabilities defines what the current VFS implementation can do efficiently.

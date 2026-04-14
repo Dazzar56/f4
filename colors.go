@@ -17,6 +17,7 @@ const (
 	ColCommandLineUserScreen
 	ColPanelBox
 	ColPanelScrollbar
+	ColPanelDir
 
 	ColCommandLinePrompt
 	ColCommandLineText
@@ -63,6 +64,7 @@ func SetDefaultF4Palette() {
 	vtui.Palette[ColPanelInfoText] = vtui.Palette[ColPanelText]
 	vtui.Palette[ColPanelSelectedTitle] = vtui.Palette[ColPanelTitle]
 	vtui.Palette[ColPanelTotalInfo] = vtui.Palette[ColPanelText]
+	vtui.Palette[ColPanelDir] = vtui.SetRGBBoth(0, 0xFFFFFF, blue)
 	vtui.Palette[ColPanelSelectedInfo] = vtui.Palette[ColPanelSelectedText]
 	vtui.Palette[ColPanelScrollbar] = vtui.Palette[ColPanelBox]
 
@@ -104,6 +106,7 @@ var colorMap = map[string]int{
 	"Panel.Title.Column":         ColPanelColumnTitle,
 	"Panel.Box":                  ColPanelBox,
 	"Panel.Scrollbar":            ColPanelScrollbar,
+	"Panel.Dir":                  ColPanelDir,
 	"Dialog.Text":                vtui.ColDialogText,
 	"Dialog.Box":                 vtui.ColDialogBox,
 	"Dialog.Box.Title":           vtui.ColDialogBoxTitle,

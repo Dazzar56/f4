@@ -41,6 +41,7 @@ func (m *mediumRow) GetCellText(col int) string {
 	e := m.fp.entries[idx]
 	if e.IsDir {
 		if e.Name == ".." { return ".." }
+		if AppConfig.HighlightDir { return e.Name }
 		return string(os.PathSeparator) + e.Name
 	}
 	return e.Name
@@ -57,6 +58,22 @@ func (m *mediumRow) IsColSelected(col int) bool {
 		return false
 	}
 	return m.fp.entries[idx].Selected
+}
+func (m *mediumRow) GetCellAttr(col int, defaultAttr uint64) uint64 {
+	H := m.fp.table.ViewHeight
+	if H <= 0 { H = 1 }
+	idx := m.r
+	if col == 1 {
+		idx += H
+	}
+	if idx >= len(m.fp.entries) {
+		return defaultAttr
+	}
+	e := m.fp.entries[idx]
+	if AppConfig.HighlightDir && e.IsDir && e.Name != ".." {
+		return vtui.Palette[ColPanelDir]
+	}
+	return defaultAttr
 }
 
 type ViewMode int
@@ -83,6 +100,7 @@ func (f *fileEntry) GetCellText(col int) string {
 	case 0:
 		if f.IsDir {
 			if f.Name == ".." { return ".." }
+			if AppConfig.HighlightDir { return f.Name }
 			return string(os.PathSeparator) + f.Name
 		}
 		return f.Name
@@ -96,6 +114,12 @@ func (f *fileEntry) GetCellText(col int) string {
 		return fmt.Sprintf("%d", f.Size)
 	}
 	return ""
+}
+func (f *fileEntry) GetCellAttr(col int, defaultAttr uint64) uint64 {
+	if AppConfig.HighlightDir && f.IsDir && f.Name != ".." {
+		return vtui.Palette[ColPanelDir]
+	}
+	return defaultAttr
 }
 
 // FileSystemPanel is a panel displaying files on disk.
@@ -343,9 +367,13 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 		err := fp.vfs.ReadDir(ctx, path, func(chunk []vfs.VFSItem) {
 			if ctx.Err() != nil { return }
 
-			newEntries := make([]*fileEntry, len(chunk))
-			for i, item := range chunk {
-				newEntries[i] = &fileEntry{VFSItem: item}
+			newEntries := make([]*fileEntry, 0, len(chunk))
+			for _, item := range chunk {
+				// Hide hidden files if configured, but never hide '..'
+				if !AppConfig.ShowHiddenFiles && item.Name != ".." && item.IsHidden {
+					continue
+				}
+				newEntries = append(newEntries, &fileEntry{VFSItem: item})
 			}
 
 			vtui.FrameManager.PostTask(func() {

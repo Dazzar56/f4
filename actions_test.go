@@ -147,3 +147,20 @@ func TestSession_DiskPersistence(t *testing.T) {
 		t.Errorf("Disk persistence failed. Got Search:%q, Mask:%q", LastEditorSearch, LastFindFileMask)
 	}
 }
+func TestActionPanelSettings_Flow(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+
+	actionPanelSettings(pf)
+
+	top := vtui.FrameManager.GetTopFrame()
+	if top == nil || top.GetTitle() != Msg("PanelSettings.Title") {
+		t.Fatalf("Expected Panel Settings dialog, got %v", top)
+	}
+
+	top.SetExitCode(-1)
+	vtui.FrameManager.Pop()
+}

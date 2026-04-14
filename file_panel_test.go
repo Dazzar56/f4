@@ -12,6 +12,10 @@ import (
 )
 
 func TestFileEntry_GetCellText(t *testing.T) {
+	// Ensure predictable environment for this test
+	orig := AppConfig.HighlightDir
+	AppConfig.HighlightDir = false
+	defer func() { AppConfig.HighlightDir = orig }()
 	// Mock entries
 	file := &fileEntry{VFSItem: vfs.VFSItem{Name: "test.txt", Size: 1024, IsDir: false}}
 	dir := &fileEntry{VFSItem: vfs.VFSItem{Name: "work", IsDir: true}}
@@ -39,6 +43,90 @@ func TestFileEntry_GetCellText(t *testing.T) {
 	if upDir.GetCellText(1) != "UP-DIR" {
 		t.Errorf("Parent dir (..) should have UP-DIR placeholder, got: %q", upDir.GetCellText(1))
 	}
+}
+func TestFileEntry_HighlightDir(t *testing.T) {
+	vtui.SetDefaultPalette()
+	SetDefaultF4Palette()
+
+	dir := &fileEntry{VFSItem: vfs.VFSItem{Name: "work", IsDir: true}}
+
+	// 1. Without highlighting
+	AppConfig.HighlightDir = false
+	if dir.GetCellText(0) != string(os.PathSeparator)+"work" {
+		t.Errorf("Expected separator prefix when HighlightDir is false, got %q", dir.GetCellText(0))
+	}
+	if dir.GetCellAttr(0, 0) != 0 {
+		t.Error("Expected default attribute when HighlightDir is false")
+	}
+
+	// 2. With highlighting
+	AppConfig.HighlightDir = true
+	if dir.GetCellText(0) != "work" {
+		t.Errorf("Expected raw name when HighlightDir is true, got %q", dir.GetCellText(0))
+	}
+	if dir.GetCellAttr(0, 0) != vtui.Palette[ColPanelDir] {
+		t.Error("Expected ColPanelDir attribute when HighlightDir is true")
+	}
+
+	// Reset global state
+	AppConfig.HighlightDir = false
+}
+
+func TestFileSystemPanel_ShowHiddenFiles(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	tmp := t.TempDir()
+	os.WriteFile(filepath.Join(tmp, "normal.txt"), []byte(""), 0644)
+	os.WriteFile(filepath.Join(tmp, ".hidden.txt"), []byte(""), 0644)
+
+	v := vfs.NewOSVFS(tmp)
+
+	// 1. Show hidden files (Default)
+	AppConfig.ShowHiddenFiles = true
+	fp1 := NewFileSystemPanel(0, 0, 80, 24, v)
+
+	// Wait for load
+	time.Sleep(50 * time.Millisecond)
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		default:
+			goto done1
+		}
+	}
+	done1:
+
+	foundHidden := false
+	for _, e := range fp1.entries {
+		if e.Name == ".hidden.txt" { foundHidden = true }
+	}
+	if !foundHidden { t.Error("Hidden file should be visible") }
+
+	// 2. Hide hidden files
+	AppConfig.ShowHiddenFiles = false
+	fp2 := NewFileSystemPanel(0, 0, 80, 24, v)
+
+	// Wait for load
+	time.Sleep(50 * time.Millisecond)
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		default:
+			goto done2
+		}
+	}
+	done2:
+
+	foundHidden = false
+	for _, e := range fp2.entries {
+		if e.Name == ".hidden.txt" { foundHidden = true }
+	}
+	if foundHidden { t.Error("Hidden file should NOT be visible") }
+
+	// Reset global state
+	AppConfig.ShowHiddenFiles = true
 }
 
 func TestFileSystemPanel_NavigateUp_Selection(t *testing.T) {

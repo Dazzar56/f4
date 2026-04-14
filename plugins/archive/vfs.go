@@ -158,6 +158,7 @@ func (v *ArchiveVFS) ReadDir(ctx context.Context, path string, onChunk func([]vf
 			IsDir: e.IsDir(),
 			Size:  info.Size(),
 			MTime: info.ModTime(),
+			IsHidden: strings.HasPrefix(name, "."),
 		})
 	}
 	v.mu.Unlock()
@@ -185,6 +186,7 @@ func (v *ArchiveVFS) Stat(ctx context.Context, path string) (vfs.VFSItem, error)
 		IsDir: info.IsDir(),
 		Size:  info.Size(),
 		MTime: info.ModTime(),
+		IsHidden: strings.HasPrefix(info.Name(), "."),
 	}, nil
 }
 

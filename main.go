@@ -144,6 +144,7 @@ func InitCore() *vtui.ScreenBuf {
 	MacroMgr = NewMacroManager(filepath.Join(configDir, "f4", "key_macros.ini"))
 	vtui.FrameManager.EventFilter = MacroMgr.Filter
 	LoadSession()
+	LoadConfig()
 	vtui.FrameManager.Push(vtui.NewDesktop())
 
 	panels := NewPanelsFrame()

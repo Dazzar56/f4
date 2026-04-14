@@ -8,6 +8,7 @@ import (
 	"path"
 	"sync"
 	"time"
+	"strings"
 
 	"github.com/jlaffaye/ftp"
 	"github.com/unxed/f4/vfs"
@@ -83,6 +84,7 @@ func (v *FTPVFS) ReadDir(ctx context.Context, p string, onChunk func([]vfs.VFSIt
 		items = append(items, vfs.VFSItem{
 			Name: e.Name, Size: int64(e.Size),
 			IsDir: e.Type == ftp.EntryTypeFolder, MTime: e.Time,
+			IsHidden: strings.HasPrefix(e.Name, "."),
 		})
 	}
 	onChunk(items)
@@ -102,6 +104,7 @@ func (v *FTPVFS) Stat(ctx context.Context, p string) (vfs.VFSItem, error) {
 			return vfs.VFSItem{
 				Name: e.Name, Size: int64(e.Size),
 				IsDir: e.Type == ftp.EntryTypeFolder, MTime: e.Time,
+				IsHidden: strings.HasPrefix(e.Name, "."),
 			}, nil
 		}
 	}

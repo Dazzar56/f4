@@ -36,4 +36,5 @@ const (
 	CmSwapPanels
 	CmAddArchive
 	CmExtractArchive
+	CmPanelSettings
 )

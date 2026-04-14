@@ -9,6 +9,7 @@ import (
 	"path"
 	"path/filepath"
 	"time"
+	"strings"
 
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
@@ -105,6 +106,7 @@ func (v *SFTPVFS) ReadDir(ctx context.Context, p string, onChunk func([]vfs.VFSI
 		items = append(items, vfs.VFSItem{
 			Name: e.Name(), Size: e.Size(), IsDir: e.IsDir(),
 			MTime: e.ModTime(), IsExecutable: e.Mode().Perm()&0111 != 0,
+			IsHidden: strings.HasPrefix(e.Name(), "."),
 		})
 	}
 	onChunk(items)
@@ -117,6 +119,7 @@ func (v *SFTPVFS) Stat(ctx context.Context, p string) (vfs.VFSItem, error) {
 	return vfs.VFSItem{
 		Name: info.Name(), Size: info.Size(), IsDir: info.IsDir(),
 		MTime: info.ModTime(), IsExecutable: info.Mode().Perm()&0111 != 0,
+		IsHidden: strings.HasPrefix(info.Name(), "."),
 	}, nil
 }
 

@@ -122,7 +122,9 @@ func NewPanelsFrame() *PanelsFrame {
 		{Label: "&" + Msg("Menu.Commands"), SubItems: []vtui.MenuItem{
 			{Text: "&" + Msg("Menu.Commands.FindFile"), Shortcut: "Alt+F7", Command: CmFindFile},
 		}},
-		{Label: "&" + Msg("Menu.Options"), SubItems: []vtui.MenuItem{{Text: "Placeholder"}}},
+		{Label: "&" + Msg("Menu.Options"), SubItems: []vtui.MenuItem{
+			{Text: "&" + Msg("Menu.PanelSettings"), Command: CmPanelSettings},
+		}},
 		{Label: "&" + Msg("Menu.Right"), SubItems: []vtui.MenuItem{
 			{Text: "&" + Msg("Menu.Left.Medium"), Command: CmRightMedium},
 			{Text: "&" + Msg("Menu.Left.Detailed"), Command: CmRightDetailed},
@@ -933,6 +935,9 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 		return true
 	case CmFindFile:
 		actionFindFile(pf)
+		return true
+	case CmPanelSettings:
+		actionPanelSettings(pf)
 		return true
 
 	case CmBackground:
