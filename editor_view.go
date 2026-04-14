@@ -1385,13 +1385,29 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 	visStart := ev.engine.VisualToLogical(ev.ScrollTopRow, 0)
 
 	vtui.RunAsync(func(ctx *vtui.TaskContext) {
-		// Saving PieceTable content to VFS.
-		tmpPath := ev.filePath + ".f4tmp"
-		f, err := ev.vfs.Create(ctx.Context, tmpPath)
+		// To preserve original file ownership, permissions and xattrs (crucial for root-owned files),
+		// we write directly to the original file instead of using atomic rename via temp file.
+		oldAsync := ev.asyncBuf
+		oldFile := ev.file
+		needsBufferRecovery := oldAsync != nil && ev.pt.GetOriginalBuffer() == oldAsync
+
+		// Close reading handles so we can truncate and write
+		if oldAsync != nil { oldAsync.Close() }
+		if oldFile != nil { oldFile.Close() }
+
+		f, err := ev.vfs.Create(ctx.Context, ev.filePath)
 		if err != nil {
-			ctx.RunOnUI(func() { 
+			// RECOVER: Create failed, try to reopen the original file so editor stays functional
+			reopened, reerr := ev.vfs.Open(ctx.Context, ev.filePath)
+			ctx.RunOnUI(func() {
 				ev.saving = false
-				vtui.DebugLog("EDITOR: Failed to open temp file for saving: %v", err) 
+				if reerr == nil && needsBufferRecovery {
+					ev.file = reopened
+					newBuf := NewAsyncBuffer(ctx.Context, reopened)
+					ev.asyncBuf = newBuf
+					ev.pt.UpdateOriginalBuffer(newBuf)
+				}
+				vtui.DebugLog("EDITOR: Failed to open file for saving: %v", err)
 				vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to save file:\n%v", err), []string{"&Ok"})
 			})
 			return
@@ -1402,41 +1418,20 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 			return errWrite
 		})
 		f.Close()
-		
+
 		if saveErr != nil {
-			ev.vfs.Remove(ctx.Context, tmpPath)
 			ctx.RunOnUI(func() {
 				ev.saving = false
 				vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to save data:\n%v", saveErr), []string{"&Ok"})
-			})
-			return
-		}
 
-		// On Windows, we might need to close the file before renaming.
-		// However, doing so before Rename succeeds is dangerous for retries.
-		// We use a temporary close-and-recover approach.
-		oldAsync := ev.asyncBuf
-		oldFile := ev.file
-		// Check if the current PieceTable is actually using the file-backed buffer we are about to close.
-		needsBufferRecovery := oldAsync != nil && ev.pt.GetOriginalBuffer() == oldAsync
-
-		if oldAsync != nil { oldAsync.Close() }
-		if oldFile != nil { oldFile.Close() }
-
-		err = ev.vfs.Rename(ctx.Context, tmpPath, ev.filePath)
-		if err != nil {
-			// RECOVER: Rename failed, try to reopen the original file so editor stays functional
-			reopened, reerr := ev.vfs.Open(ctx.Context, ev.filePath)
-			ctx.RunOnUI(func() {
-				ev.saving = false
+				// Reopen reading handles after write failure
+				reopened, reerr := ev.vfs.Open(ctx.Context, ev.filePath)
 				if reerr == nil && needsBufferRecovery {
 					ev.file = reopened
 					newBuf := NewAsyncBuffer(ctx.Context, reopened)
 					ev.asyncBuf = newBuf
 					ev.pt.UpdateOriginalBuffer(newBuf)
 				}
-				vtui.DebugLog("EDITOR: Failed to rename temp file: %v", err)
-				vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to save file:\n%v", err), []string{"&Ok"})
 			})
 			return
 		}

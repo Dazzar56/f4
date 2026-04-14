@@ -14,8 +14,7 @@ import (
 )
 
 func main() {
-	vtui.SetupStderrLog()
-	vtui.DebugLog("MAIN: Starting with args: %v", os.Args)
+	var sudoDispatcher string
 
 	// Initialize SudoClient immediately for all process types
 	execPath, err := os.Executable()
@@ -24,6 +23,31 @@ func main() {
 	}
 	absExecPath, _ := filepath.Abs(execPath)
 	vfs.InitSudoClient(absExecPath, "")
+
+	if os.Getenv("F4_ASKPASS_PARENT") != "" {
+		vfs.RunSudoAskpass()
+		return
+	}
+
+	for i := 1; i < len(os.Args); i++ {
+		arg := os.Args[i]
+		if arg == "--sudo-dispatcher" {
+			if i+1 < len(os.Args) {
+				sudoDispatcher = os.Args[i+1]
+			}
+			break
+		} else if strings.HasPrefix(arg, "--sudo-dispatcher=") {
+			sudoDispatcher = arg[len("--sudo-dispatcher="):]
+			break
+		}
+	}
+	if sudoDispatcher != "" {
+		vfs.RunSudoDispatcher(sudoDispatcher)
+		return
+	}
+
+	vtui.SetupStderrLog()
+	vtui.DebugLog("MAIN: Starting with args: %v", os.Args)
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -44,8 +68,6 @@ func main() {
 	vtui.ConfigDiskLogging(false)
 	var serverPath, clientPath string
 	var cpuprofile string
-
-	var sudoDispatcher string
 
 	for i := 1; i < len(os.Args); i++ {
 		arg := os.Args[i]
@@ -110,15 +132,6 @@ func main() {
 				i++
 			}
 		}
-	}
-
-	if os.Getenv("F4_ASKPASS_PARENT") != "" {
-		vfs.RunSudoAskpass()
-		return
-	}
-	if sudoDispatcher != "" {
-		vfs.RunSudoDispatcher(sudoDispatcher)
-		return
 	}
 
 	for _, arg := range os.Args {

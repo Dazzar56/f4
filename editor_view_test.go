@@ -1761,7 +1761,7 @@ func TestEditorView_SaveFailure_NoDataLoss(t *testing.T) {
 
 	// Use our failing VFS
 	baseVfs := vfs.NewOSVFS(filepath.Dir(tmpFile))
-	failingVfs := &mockFailingVFS{VFS: baseVfs, failRename: true}
+	failingVfs := &mockFailingVFS{VFS: baseVfs, failCreate: true}
 
 	pt := piecetable.New([]byte("Original"))
 	ev := NewEditorView(pt, failingVfs, tmpFile)
@@ -1805,17 +1805,17 @@ func TestEditorView_SaveFailure_NoDataLoss(t *testing.T) {
 		t.Error("Editor did not show an error dialog upon save failure")
 	}
 }
-// mockFailingVFS wraps OSVFS but intentionally fails the Rename operation
+// mockFailingVFS wraps OSVFS but intentionally fails the Create operation
 type mockFailingVFS struct {
 	vfs.VFS
-	failRename bool
+	failCreate bool
 }
 
-func (m *mockFailingVFS) Rename(ctx context.Context, old, new string) error {
-	if m.failRename {
-		return os.ErrPermission // Simulate permission denied
+func (m *mockFailingVFS) Create(ctx context.Context, path string) (io.WriteCloser, error) {
+	if m.failCreate {
+		return nil, os.ErrPermission // Simulate permission denied
 	}
-	return m.VFS.Rename(ctx, old, new)
+	return m.VFS.Create(ctx, path)
 }
 func TestEditorView_Save_DiskFullSimulation(t *testing.T) {
 	// Verifies that if writing to the temp file fails (e.g. disk full),
@@ -2000,8 +2000,8 @@ func TestEditorView_Save_IOErrorRecovery(t *testing.T) {
 		t.Error("Temporary file was not cleaned up after failed save")
 	}
 }
-func TestEditorView_Save_AtomicRenameFailure(t *testing.T) {
-	// Verifies that if the final Rename fails (e.g., target file is locked by another process),
+func TestEditorView_Save_CreateFailure(t *testing.T) {
+	// Verifies that if the Create (truncate) fails (e.g., target file is locked or read-only),
 	// the editor does not lose data and keeps the internal state modified.
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
@@ -2009,9 +2009,9 @@ func TestEditorView_Save_AtomicRenameFailure(t *testing.T) {
 	path := filepath.Join(tmpDir, "locked.txt")
 	os.WriteFile(path, []byte("Original Content"), 0644)
 
-	// Mock VFS that allows everything except the final Rename
+	// Mock VFS that allows everything except the Create
 	baseVfs := vfs.NewOSVFS(tmpDir)
-	failingVfs := &mockFailingVFS{VFS: baseVfs, failRename: true}
+	failingVfs := &mockFailingVFS{VFS: baseVfs, failCreate: true}
 
 	pt := piecetable.New([]byte("Original Content"))
 	ev := NewEditorView(pt, failingVfs, path)
@@ -2032,27 +2032,27 @@ func TestEditorView_Save_AtomicRenameFailure(t *testing.T) {
 		case task := <-vtui.FrameManager.TaskChan:
 			task()
 		case <-timeout:
-			t.Fatal("Timeout waiting for rename failure")
+			t.Fatal("Timeout waiting for create failure")
 		}
 	}
 
 	// 3. Verify Integrity
 	if !ev.modified {
-		t.Error("Editor cleared modified flag despite Rename failure")
+		t.Error("Editor cleared modified flag despite Create failure")
 	}
 	got := waitPtString(t, ev.pt)
 	if got != "!Original Content" {
-		t.Errorf("Internal memory state corrupted after rename failure. Got %q", got)
+		t.Errorf("Internal memory state corrupted after create failure. Got %q", got)
 	}
 
 	// Original file MUST remain untouched
 	orig, _ := os.ReadFile(path)
 	if string(orig) != "Original Content" {
-		t.Error("Original file was corrupted after a failed atomic rename save")
+		t.Error("Original file was corrupted after a failed save")
 	}
 }
-func TestEditorView_Save_RenameFailure_Recovery_DataPreservation(t *testing.T) {
-	// Proves that when Rename fails, the editor correctly updates the internal
+func TestEditorView_Save_CreateFailure_Recovery_DataPreservation(t *testing.T) {
+	// Proves that when Create fails, the editor correctly updates the internal
 	// PieceTable to point to the newly reopened VFS file buffer, preventing a crash
 	// when reading the original parts of the file afterwards.
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
@@ -2061,9 +2061,9 @@ func TestEditorView_Save_RenameFailure_Recovery_DataPreservation(t *testing.T) {
 	path := filepath.Join(tmpDir, "persist.txt")
 	os.WriteFile(path, []byte("Original"), 0644)
 
-	// Mock VFS that fails Rename
+	// Mock VFS that fails Create
 	baseVfs := vfs.NewOSVFS(tmpDir)
-	failingVfs := &mockFailingVFS{VFS: baseVfs, failRename: true}
+	failingVfs := &mockFailingVFS{VFS: baseVfs, failCreate: true}
 
 	f, _ := failingVfs.Open(context.Background(), path)
 	buf := NewAsyncBuffer(context.Background(), f)
@@ -2076,7 +2076,7 @@ func TestEditorView_Save_RenameFailure_Recovery_DataPreservation(t *testing.T) {
 	ev.CursorPos = 8
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: '!'})
 
-	// Save (fails at rename stage)
+	// Save (fails at create stage)
 	ev.SaveToFile(nil)
 	timeout := time.After(2 * time.Second)
 	for ev.saving {
@@ -2320,7 +2320,7 @@ func TestEditorView_Save_RetryAfterFailure(t *testing.T) {
 
 	baseVfs := vfs.NewOSVFS(tmpDir)
 	// mockFailingVFS is defined in the same test file usually
-	failingVfs := &mockFailingVFS{VFS: baseVfs, failRename: true}
+	failingVfs := &mockFailingVFS{VFS: baseVfs, failCreate: true}
 
 	pt := piecetable.New([]byte("Initial"))
 	ev := NewEditorView(pt, failingVfs, path)
@@ -2330,7 +2330,7 @@ func TestEditorView_Save_RetryAfterFailure(t *testing.T) {
 	// 1. Modify
 	ev.SetText("Changed")
 
-	// 2. Save (should fail at Rename)
+	// 2. Save (should fail at Create)
 	ev.SaveToFile(nil)
 	timeout := time.After(1 * time.Second)
 	for ev.saving {
@@ -2342,7 +2342,7 @@ func TestEditorView_Save_RetryAfterFailure(t *testing.T) {
 	if !ev.modified { t.Error("Should still be modified after failure") }
 
 	// 3. Fix the VFS issue
-	failingVfs.failRename = false
+	failingVfs.failCreate = false
 
 	// 4. Retry saving
 	ev.SaveToFile(nil)
