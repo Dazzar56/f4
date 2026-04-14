@@ -79,6 +79,12 @@ func actionOpenViewer(pf *PanelsFrame, v vfs.VFS, path string) {
 
 		viewer, err := NewViewerView(ctx.Context, v, path)
 		ctx.RunOnUI(func() {
+			if ctx.Err() != nil {
+				if err == nil {
+					viewer.Close()
+				}
+				return
+			}
 			if err != nil {
 				vtui.DebugLog("PANELS: Failed to open viewer for %s: %v", path, err)
 				vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to open file:\n%v", err), []string{"&Ok"})

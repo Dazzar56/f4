@@ -133,7 +133,7 @@ func (vv *ViewerView) GetMenuBar() *vtui.MenuBar {
 
 func (vv *ViewerView) HandleCommand(cmd int, args any) bool {
 	if cmd == vtui.CmClose {
-		vv.SetExitCode(-1)
+		vv.Close()
 		return true
 	}
 	if cmd == CmSearch {
@@ -332,7 +332,7 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 
 	switch e.VirtualKeyCode {
 	case vtinput.VK_ESCAPE, vtinput.VK_F10, vtinput.VK_F3:
-		vv.SetExitCode(-1)
+		vv.Close()
 		return true
 
 	case vtinput.VK_F2:
@@ -530,7 +530,15 @@ func (vv *ViewerView) ProcessMouse(e *vtinput.InputEvent) bool {
 	}
 	return false
 }
-func (vv *ViewerView) ResizeConsole(w, h int)                 { vv.SetPosition(0, 0, w-1, h-2) }
+func (vv *ViewerView) ResizeConsole(w, h int) { vv.SetPosition(0, 0, w-1, h-2) }
+
+func (vv *ViewerView) Close() {
+	if vv.backend != nil {
+		vv.backend.Close()
+	}
+	vv.BaseFrame.Close()
+}
+
 func (vv *ViewerView) GetKeyLabels() *vtui.KeySet {
 	return &vtui.KeySet{
 		Normal: vtui.KeyBarLabels{
