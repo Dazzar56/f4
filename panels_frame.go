@@ -1438,7 +1438,7 @@ func (pf *PanelsFrame) showDriveMenu(panelIdx int) {
 	// 3. Plugins & custom drives
 	if len(DriveRegistry) > 0 {
 		menu.AddSeparator()
-		for i, drv := range DriveRegistry {
+		for _, drv := range DriveRegistry {
 			factory := drv.Factory
 
 			// Clean name: strip existing hotkeys/numbering if any
@@ -1463,8 +1463,7 @@ func (pf *PanelsFrame) showDriveMenu(panelIdx int) {
 				}
 			}
 
-			finalName := fmt.Sprintf("%d. %s", i+1, sb.String())
-			menu.AddItem(vtui.MenuItem{Text: finalName, UserData: func(fsp *FileSystemPanel) {
+			menu.AddItem(vtui.MenuItem{Text: sb.String(), UserData: func(fsp *FileSystemPanel) {
 				pf.switchToVFS(fsp, factory())
 			}})
 		}
