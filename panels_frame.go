@@ -122,6 +122,8 @@ func NewPanelsFrame() *PanelsFrame {
 		{Label: "&" + Msg("Menu.Commands"), SubItems: []vtui.MenuItem{
 			{Text: "&" + Msg("Menu.Commands.FindFile"), Shortcut: "Alt+F7", Command: CmFindFile},
 		}},
+		// Uncomment to test crash logging
+		//{Label: "&" + Msg("Menu.Options"), SubItems: []vtui.MenuItem{{Text: "Placeholder"}}},
 		{Label: "&" + Msg("Menu.Options"), SubItems: []vtui.MenuItem{
 			{Text: "&" + Msg("Menu.PanelSettings"), Command: CmPanelSettings},
 		}},

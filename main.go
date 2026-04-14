@@ -14,6 +14,23 @@ import (
 )
 
 func main() {
+	vtui.SetupStderrLog()
+	defer vtui.CleanupStderrLog()
+
+	defer func() {
+		if r := recover(); r != nil {
+			vtui.DebugLog("FATAL PANIC IN MAIN: %v", r)
+			crashPath := vtui.RecordCrash(r, nil)
+			vtui.Suspend()
+			vtui.CleanupStderrLog()
+			// We print to os.Stdout here because os.Stderr is redirected to the log file!
+			fmt.Fprintf(os.Stdout, "\n[f4] FATAL PANIC IN MAIN: %v\n", r)
+			if crashPath != "" {
+				fmt.Fprintf(os.Stdout, "[f4] Crash report saved to: %s\n", crashPath)
+			}
+			os.Exit(2)
+		}
+	}()
 	// Defer disk logging to prevent launcher processes from polluting rotation queue.
 	// Logging will be enabled in InitCore() for workers and standalone sessions.
 	vtui.ConfigDiskLogging(false)
