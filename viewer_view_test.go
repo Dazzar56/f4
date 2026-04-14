@@ -11,6 +11,28 @@ import (
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
+type mockCloseFile struct {
+	vfs.ReadAtCloser
+	closed bool
+}
+
+func (m *mockCloseFile) Close() error {
+	m.closed = true
+	return nil
+}
+func (m *mockCloseFile) Size() int64 { return 100 }
+func (m *mockCloseFile) ReadAt(ctx context.Context, p []byte, off int64) (int, error) {
+	return len(p), nil
+}
+
+type mockCloseVFS struct {
+	vfs.VFS
+	file *mockCloseFile
+}
+
+func (m *mockCloseVFS) Open(ctx context.Context, path string) (vfs.ReadAtCloser, error) {
+	return m.file, nil
+}
 
 func TestViewerView_NavigationAndEOF(t *testing.T) {
 	vtui.SetDefaultPalette()
@@ -226,22 +248,35 @@ func TestViewerBar_Content(t *testing.T) {
 	if !foundHex { t.Error("ViewerBar did not display 'Hex' mode") }
 	if !foundPath { t.Error("ViewerBar did not display file path") }
 }
-func TestViewerView_HandleClose(t *testing.T) {
-	tmpDir := t.TempDir()
-	tmp := filepath.Join(tmpDir, "close_test.txt")
-	os.WriteFile(tmp, []byte("content"), 0644)
-	v := vfs.NewOSVFS(tmpDir)
-	vv, _ := NewViewerView(context.Background(), v, tmp)
+func TestViewerView_FileClosure(t *testing.T) {
+	mockFile := &mockCloseFile{}
+	v := &mockCloseVFS{file: mockFile}
 
-	if vv.IsDone() {
-		t.Fatal("Viewer should not be done initially")
+	vv, err := NewViewerView(context.Background(), v, "test.txt")
+	if err != nil {
+		t.Fatalf("Failed to create viewer: %v", err)
 	}
 
-	// Send CmClose
+	// 1. Проверка закрытия через Close()
+	vv.Close()
+
+	if !vv.IsDone() {
+		t.Error("Close() did not set IsDone")
+	}
+	if !mockFile.closed {
+		t.Error("Close() did not close the underlying file")
+	}
+
+	// 2. Проверка закрытия через HandleCommand
+	mockFile.closed = false
+	vv.Done = false
 	vv.HandleCommand(vtui.CmClose, nil)
 
 	if !vv.IsDone() {
-		t.Error("ViewerView failed to set IsDone after receiving CmClose")
+		t.Error("CmClose did not set IsDone")
+	}
+	if !mockFile.closed {
+		t.Error("CmClose did not close the underlying file")
 	}
 }
 func TestViewerView_GetTitle(t *testing.T) {
