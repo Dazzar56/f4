@@ -46,7 +46,7 @@ func normalizeMods(mods vtinput.ControlKeyState) vtinput.ControlKeyState {
 }
 
 func KeyStr(vk uint16, mods vtinput.ControlKeyState) string {
-	return fmt.Sprintf("%X:%X", vk, normalizeMods(mods))
+	return fmt.Sprintf("%X:%X", vk, uint32(normalizeMods(mods)))
 }
 
 // Filter is hooked into FrameManager. Returns true if the event was consumed.
