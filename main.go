@@ -147,8 +147,7 @@ func InitCore() *vtui.ScreenBuf {
 	vtui.GlobalHistoryProvider = NewF4HistoryProvider()
 	vtinput.Logger = vtui.DebugLog // Pipe vtinput logs to vtui's debug logger
 	vtui.GlobalClipboardAccessManager = NewF4ClipboardAuth()
-	RegisterDrive("&~. Home", func() vfs.VFS { home, _ := os.UserHomeDir(); return vfs.NewOSVFS(home) })
-	RegisterDrive("&4. Null VFS (Test)", func() vfs.VFS { return vfs.NewNullVFS(50 * 1024 * 1024) }) // 50 MB/s
+	RegisterDrive("Null VFS", func() vfs.VFS { return vfs.NewNullVFS(50 * 1024 * 1024) }) // 50 MB/s
 
 	configDir, err := os.UserConfigDir()
 	if err == nil {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"runtime"
 	"time"
+	"unicode"
 	"github.com/unxed/f4/vfs"
 	"sync"
 	"os/user"
@@ -1397,6 +1398,11 @@ func (pf *PanelsFrame) showPluginMenu() {
 
 func (pf *PanelsFrame) showDriveMenu(panelIdx int) {
 	menu := vtui.NewVMenu(" Drive ")
+
+	usedHotkeys := make(map[rune]bool)
+	usedHotkeys['o'] = true // "Other panel"
+
+	// 1. Other panel (focused by default)
 	menu.AddItem(vtui.MenuItem{Text: Msg("Panel.Other"), UserData: func(fsp *FileSystemPanel) {
 		otherFsp := pf.panels[1-panelIdx].(*FileSystemPanel)
 		if fsp.vfs != nil { fsp.vfs.Close() }
@@ -1405,22 +1411,87 @@ func (pf *PanelsFrame) showDriveMenu(panelIdx int) {
 		pf.RefreshAll()
 	}})
 
+	// 2. Fixed platform paths (Root, Home)
 	for _, drv := range getPlatformDrives() {
 		factory := drv.Factory
-		menu.AddItem(vtui.MenuItem{Text: drv.Name, UserData: func(fsp *FileSystemPanel) {
+		name := drv.Name
+		if runtime.GOOS != "windows" {
+			if strings.HasPrefix(name, "/") {
+				name = "&" + name
+				usedHotkeys['/'] = true
+			} else if strings.HasPrefix(name, "~") {
+				name = "&" + name
+				usedHotkeys['~'] = true
+			}
+		} else {
+			if len(name) >= 2 && name[1] == ':' {
+				name = "&" + name
+				usedHotkeys[unicode.ToLower(rune(name[0]))] = true
+			}
+		}
+
+		menu.AddItem(vtui.MenuItem{Text: name, UserData: func(fsp *FileSystemPanel) {
 			pf.switchToVFS(fsp, factory())
 		}})
 	}
 
+	// 3. Plugins & custom drives
 	if len(DriveRegistry) > 0 {
 		menu.AddSeparator()
-		for _, drv := range DriveRegistry {
+		for i, drv := range DriveRegistry {
 			factory := drv.Factory
-			menu.AddItem(vtui.MenuItem{Text: drv.Name, UserData: func(fsp *FileSystemPanel) {
+
+			// Clean name: strip existing hotkeys/numbering if any
+			cleanName := drv.Name
+			if idx := strings.Index(cleanName, ". "); idx != -1 {
+				cleanName = cleanName[idx+2:]
+			}
+			cleanName = strings.ReplaceAll(cleanName, "&", "")
+
+			// Smart hotkey assignment from clean name
+			hotkeyAssigned := false
+			var sb strings.Builder
+			for _, r := range cleanName {
+				rl := unicode.ToLower(r)
+				if !hotkeyAssigned && unicode.IsLetter(r) && !usedHotkeys[rl] {
+					sb.WriteRune('&')
+					sb.WriteRune(r)
+					usedHotkeys[rl] = true
+					hotkeyAssigned = true
+				} else {
+					sb.WriteRune(r)
+				}
+			}
+
+			finalName := fmt.Sprintf("%d. %s", i+1, sb.String())
+			menu.AddItem(vtui.MenuItem{Text: finalName, UserData: func(fsp *FileSystemPanel) {
 				pf.switchToVFS(fsp, factory())
 			}})
 		}
 	}
+
+	// Обработка физических клавиш / и ~ (layout-independent)
+	menu.OnKeyDown = func(e *vtinput.InputEvent) bool {
+		var targetIndex = -1
+		if e.VirtualKeyCode == vtinput.VK_OEM_2 { // Клавиша /?
+			for i, item := range menu.Items {
+				if strings.Contains(item.Text, "/") { targetIndex = i; break }
+			}
+		} else if e.VirtualKeyCode == vtinput.VK_OEM_3 { // Клавиша ~` (ё)
+			for i, item := range menu.Items {
+				if strings.Contains(item.Text, "~") { targetIndex = i; break }
+			}
+		}
+
+		if targetIndex != -1 {
+			menu.SetSelectPos(targetIndex)
+			// Симулируем Enter
+			menu.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN})
+			return true
+		}
+		return false
+	}
+
 	menu.SetSelectPos(0)
 
 	w, h := 26, menu.GetItemCount()+2

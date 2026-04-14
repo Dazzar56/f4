@@ -18,7 +18,7 @@ func getPlatformDrives() []DriveEntry {
 			letter := string(rune('A' + i))
 			path := letter + ":\\"
 			drives = append(drives, DriveEntry{
-				Name: "&" + letter + ": Local",
+				Name: letter + ": Local",
 				Factory: func() vfs.VFS { return vfs.NewOSVFS(path) },
 			})
 		}
