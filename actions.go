@@ -181,8 +181,13 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 						// Windows CMD: Use `title` command because standard `echo` doesn't evaluate ANSI escapes.
 						cmdToWire = fmt.Sprintf("cd /d %q & title f4:busy & %s && title f4:done\r", dir, cmd)
 					} else {
-						cmdToWire = fmt.Sprintf(" cd %q && { printf \"\\033]2;f4:busy\\007\"; %s && printf \"\\033]2;f4:done\\007\"; }\r", dir, cmd)
+						// On Unix, use single quotes for paths to prevent Bash history expansion (the '!' problem).
+						// We also disable history expansion explicitly with 'set +H'.
+						sqDir := strings.ReplaceAll(dir, "'", "'\\''")
+						sqCmd := strings.ReplaceAll(cmd, "'", "'\\''")
+						cmdToWire = fmt.Sprintf(" set +H; cd '%s' && { printf \"\\033]2;f4:busy\\007\"; ./'%s' && printf \"\\033]2;f4:done\\007\"; }\r", sqDir, sqCmd)
 					}
+					vtui.DebugLog("ACTIONS: Sending to PTY: %q", cmdToWire)
 					activePty.Write([]byte(cmdToWire))
 					pf.executing = true
 					pf.showPanels = false

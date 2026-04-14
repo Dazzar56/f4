@@ -34,6 +34,7 @@ func (v *OSVFS) IsAtRoot() bool {
 }
 
 func (v *OSVFS) SetPath(path string) error {
+	vtui.DebugLog("VFS: SetPath(%q) called", path)
 	target := path
 	if !filepath.IsAbs(path) {
 		target = filepath.Join(v.currentPath, path)
@@ -44,9 +45,24 @@ func (v *OSVFS) SetPath(path string) error {
 	}
 	st, err := os.Stat(abs)
 	if err != nil {
+		if os.IsPermission(err) && globalSudoClient.IsAvailable() {
+			vtui.DebugLog("VFS: SetPath: Permission denied for %q, checking via sudo...", abs)
+			item, sudoErr := globalSudoClient.Stat(abs)
+			if sudoErr == nil {
+				if item.IsDir {
+					vtui.DebugLog("VFS: Path changed to %q (via sudo Stat)", abs)
+					v.currentPath = abs
+					return nil
+				}
+				vtui.DebugLog("VFS: SetPath(%q) FAILED: not a directory (via sudo Stat)", abs)
+				return os.ErrInvalid
+			}
+			return sudoErr
+		}
 		return err
 	}
 	if !st.IsDir() {
+		vtui.DebugLog("VFS: SetPath(%q) FAILED: not a directory", abs)
 		return os.ErrInvalid
 	}
 	vtui.DebugLog("VFS: Path changed to %q", abs)
@@ -57,7 +73,20 @@ func (v *OSVFS) SetPath(path string) error {
 func (v *OSVFS) ReadDir(ctx context.Context, path string, onChunk func([]VFSItem)) error {
 	f, err := os.Open(path)
 	if err != nil {
-		vtui.DebugLog("VFS: ReadDir: failed to open dir %q: %v", path, err)
+		if os.IsPermission(err) && globalSudoClient.IsAvailable() {
+			vtui.DebugLog("VFS: Permission denied for ReadDir(%q), attempting sudo...", path)
+			items, sudoErr := globalSudoClient.ReadDir(path)
+			if sudoErr == nil {
+				vtui.DebugLog("VFS: Sudo ReadDir(%q) SUCCESS, items: %d", path, len(items))
+				if len(items) > 0 && onChunk != nil {
+					onChunk(items)
+				}
+				return nil
+			}
+			vtui.DebugLog("VFS: Sudo ReadDir(%q) FAILED: %v", path, sudoErr)
+		} else {
+			vtui.DebugLog("VFS: ReadDir(%q) FAILED: %v (Permission: %v, SudoAvailable: %v)", path, err, os.IsPermission(err), globalSudoClient.IsAvailable())
+		}
 		return err
 	}
 	defer f.Close()
@@ -108,9 +137,22 @@ func (v *OSVFS) ReadDir(ctx context.Context, path string, onChunk func([]VFSItem
 }
 
 func (v *OSVFS) Stat(ctx context.Context, path string) (VFSItem, error) {
-	if ctx.Err() != nil { return VFSItem{}, ctx.Err() }
+	if ctx.Err() != nil {
+		return VFSItem{}, ctx.Err()
+	}
 	info, err := os.Stat(path)
-	if err != nil { return VFSItem{}, err }
+	if err != nil {
+		if os.IsPermission(err) && globalSudoClient.IsAvailable() {
+			vtui.DebugLog("VFS: Permission denied for Stat(%q), attempting sudo...", path)
+			item, sudoErr := globalSudoClient.Stat(path)
+			if sudoErr == nil {
+				vtui.DebugLog("VFS: Sudo Stat(%q) SUCCESS", path)
+				return item, nil
+			}
+			vtui.DebugLog("VFS: Sudo Stat(%q) FAILED: %v", path, sudoErr)
+		}
+		return VFSItem{}, err
+	}
 	return VFSItem{
 		Name:         info.Name(),
 		Size:         info.Size(),
@@ -133,9 +175,39 @@ func (v *OSVFS) Abs(path string) (string, error) {
 
 func (v *OSVFS) Base(path string) string { return filepath.Base(path) }
 func (v *OSVFS) Dir(path string) string          { return filepath.Dir(path) }
-func (v *OSVFS) MkDir(ctx context.Context, path string) error         { if ctx.Err() != nil { return ctx.Err() }; return os.MkdirAll(path, 0755) }
-func (v *OSVFS) Remove(ctx context.Context, path string) error        { if ctx.Err() != nil { return ctx.Err() }; return os.RemoveAll(path) }
-func (v *OSVFS) Rename(ctx context.Context, old, new string) error    { if ctx.Err() != nil { return ctx.Err() }; return os.Rename(old, new) }
+func (v *OSVFS) MkDir(ctx context.Context, path string) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	err := os.MkdirAll(path, 0755)
+	if err != nil && os.IsPermission(err) && globalSudoClient.IsAvailable() {
+		vtui.DebugLog("VFS: Permission denied for MkDir(%q), attempting sudo...", path)
+		return globalSudoClient.MkDir(path, 0755)
+	}
+	return err
+}
+
+func (v *OSVFS) Remove(ctx context.Context, path string) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	err := os.RemoveAll(path)
+	if err != nil && os.IsPermission(err) && globalSudoClient.IsAvailable() {
+		return globalSudoClient.Remove(path)
+	}
+	return err
+}
+
+func (v *OSVFS) Rename(ctx context.Context, old, new string) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	err := os.Rename(old, new)
+	if err != nil && os.IsPermission(err) && globalSudoClient.IsAvailable() {
+		return globalSudoClient.Rename(old, new)
+	}
+	return err
+}
 
 func (v *OSVFS) GetCapabilities() VFSCapabilities {
 	return VFSCapabilities{
@@ -169,8 +241,21 @@ func (f *osFileWrapper) ReadAt(ctx context.Context, p []byte, off int64) (n int,
 
 func (v *OSVFS) Open(ctx context.Context, path string) (ReadAtCloser, error) {
 	if ctx.Err() != nil { return nil, ctx.Err() }
+	vtui.DebugLog("VFS: Open(%q) starting...", path)
 	f, err := os.Open(path)
-	if err != nil { return nil, err }
+	if err != nil {
+		if os.IsPermission(err) && globalSudoClient.IsAvailable() {
+			vtui.DebugLog("VFS: Permission denied for Open(%q), attempting sudo...", path)
+			sudoF, sudoErr := globalSudoClient.Open(path, os.O_RDONLY, 0)
+			if sudoErr == nil {
+				info, _ := sudoF.Stat()
+				vtui.DebugLog("VFS: Sudo Open(%q) SUCCESS, size: %d", path, info.Size())
+				return &osFileWrapper{File: sudoF, size: info.Size()}, nil
+			}
+			vtui.DebugLog("VFS: Sudo Open(%q) FAILED: %v", path, sudoErr)
+		}
+		return nil, err
+	}
 	info, err := f.Stat()
 	if err != nil {
 		f.Close()
@@ -180,8 +265,15 @@ func (v *OSVFS) Open(ctx context.Context, path string) (ReadAtCloser, error) {
 }
 
 func (v *OSVFS) Create(ctx context.Context, path string) (io.WriteCloser, error) {
-	if ctx.Err() != nil { return nil, ctx.Err() }
-	return os.Create(path)
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	f, err := os.Create(path)
+	if err != nil && os.IsPermission(err) && globalSudoClient.IsAvailable() {
+		vtui.DebugLog("VFS: Permission denied for Create(%q), attempting sudo...", path)
+		return globalSudoClient.Open(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	}
+	return f, err
 }
 
 

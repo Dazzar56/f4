@@ -1,0 +1,84 @@
+//go:build !windows
+
+package vfs
+
+import (
+	"encoding/binary"
+	"encoding/json"
+	"io"
+	"net"
+	"os"
+	"syscall"
+	"github.com/unxed/vtui"
+)
+
+// sendMsg serializes the payload and sends it over the Unix socket, attaching a file descriptor if provided.
+func sendMsg(conn *net.UnixConn, msg any, fd int) error {
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+
+	lenBuf := make([]byte, 4)
+	binary.LittleEndian.PutUint32(lenBuf, uint32(len(data)))
+	if _, err := conn.Write(lenBuf); err != nil {
+		return err
+	}
+
+	var oob []byte
+	if fd >= 0 {
+		vtui.DebugLog("SUDO_IPC: Attaching FD=%d to message", fd)
+		oob = syscall.UnixRights(fd)
+	}
+
+	_, _, err = conn.WriteMsgUnix(data, oob, nil)
+	if err != nil {
+		vtui.DebugLog("SUDO_IPC: WriteMsgUnix FAILED: %v", err)
+	}
+	return err
+}
+
+// recvMsg reads a length-prefixed payload and parses it, extracting any passed file descriptor.
+func recvMsg(conn *net.UnixConn, msg any) (*os.File, error) {
+	lenBuf := make([]byte, 4)
+	if _, err := io.ReadFull(conn, lenBuf); err != nil {
+		return nil, err
+	}
+	length := binary.LittleEndian.Uint32(lenBuf)
+	vtui.DebugLog("SUDO_IPC: Incoming message length: %d", length)
+
+	buf := make([]byte, length)
+	oob := make([]byte, syscall.CmsgSpace(4))
+
+	n, oobn, _, _, err := conn.ReadMsgUnix(buf, oob)
+	if err != nil {
+		return nil, err
+	}
+
+	// Guarantee we read the full payload if fragmented
+	if uint32(n) < length {
+		if _, err := io.ReadFull(conn, buf[n:length]); err != nil {
+			return nil, err
+		}
+	}
+
+	if err = json.Unmarshal(buf[:length], msg); err != nil {
+		return nil, err
+	}
+
+	var f *os.File
+	if oobn > 0 {
+		scms, err := syscall.ParseSocketControlMessage(oob[:oobn])
+		if err == nil && len(scms) > 0 {
+			fds, err := syscall.ParseUnixRights(&scms[0])
+			if err == nil && len(fds) > 0 {
+				vtui.DebugLog("SUDO_IPC: Received FD=%d via SCM_RIGHTS", fds[0])
+				f = os.NewFile(uintptr(fds[0]), "sudo-fd")
+			}
+		} else {
+			vtui.DebugLog("SUDO_IPC: Failed to parse OOB data: %v", err)
+		}
+	}
+
+	return f, nil
+}

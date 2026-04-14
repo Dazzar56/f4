@@ -15,7 +15,15 @@ import (
 
 func main() {
 	vtui.SetupStderrLog()
-	defer vtui.CleanupStderrLog()
+	vtui.DebugLog("MAIN: Starting with args: %v", os.Args)
+
+	// Initialize SudoClient immediately for all process types
+	execPath, err := os.Executable()
+	if err != nil {
+		execPath = os.Args[0]
+	}
+	absExecPath, _ := filepath.Abs(execPath)
+	vfs.InitSudoClient(absExecPath, "")
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -36,6 +44,8 @@ func main() {
 	vtui.ConfigDiskLogging(false)
 	var serverPath, clientPath string
 	var cpuprofile string
+
+	var sudoDispatcher string
 
 	for i := 1; i < len(os.Args); i++ {
 		arg := os.Args[i]
@@ -92,6 +102,29 @@ func main() {
 			pm.LoadAll()
 			pm.CloseAll()
 			return
+		case "--sudo-dispatcher":
+			if flagVal != "" {
+				sudoDispatcher = flagVal
+			} else if i+1 < len(os.Args) {
+				sudoDispatcher = os.Args[i+1]
+				i++
+			}
+		}
+	}
+
+	if os.Getenv("F4_ASKPASS_PARENT") != "" {
+		vfs.RunSudoAskpass()
+		return
+	}
+	if sudoDispatcher != "" {
+		vfs.RunSudoDispatcher(sudoDispatcher)
+		return
+	}
+
+	for _, arg := range os.Args {
+		if arg == "--askpass" {
+			vfs.RunSudoAskpass()
+			return
 		}
 	}
 
@@ -111,6 +144,7 @@ func main() {
 		pprof.StartCPUProfile(f)
 		defer pprof.StopCPUProfile()
 	}
+
 
 	// If we are here, no special mode was requested
 	ManageSessions()

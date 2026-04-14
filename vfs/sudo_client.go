@@ -1,0 +1,251 @@
+package vfs
+
+import (
+	"errors"
+	"fmt"
+	"net"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"sync"
+	"time"
+	"github.com/unxed/vtui"
+	"strings"
+)
+
+// SudoClient manages a persistent connection to the elevated f4 dispatcher.
+type SudoClient struct {
+	mu       sync.Mutex
+	conn     *net.UnixConn
+	sockPath string
+	appPath  string
+	askPass  string // Command to run for asking password
+	attempts int
+}
+
+var globalSudoClient *SudoClient
+
+// InitSudoClient initializes the global SudoClient.
+func InitSudoClient(appPath, askPass string) {
+	globalSudoClient = &SudoClient{
+		appPath: appPath,
+		askPass: askPass,
+	}
+}
+
+// GetSudoClient returns the global instance.
+func GetSudoClient() *SudoClient {
+	return globalSudoClient
+}
+
+// IsAvailable checks if the SudoClient has been initialized.
+func (c *SudoClient) IsAvailable() bool {
+	res := c != nil
+	if !res {
+		vtui.DebugLog("SUDO_CLIENT: IsAvailable() returning FALSE (client is nil)")
+	}
+	return res
+}
+
+// Connect attempts to start the elevated dispatcher via sudo and connect to its socket.
+func (c *SudoClient) Connect() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.conn != nil {
+		return nil // Already connected
+	}
+
+	vtui.DebugLog("SUDO_CLIENT: Initializing connection... UID=%d GID=%d", os.Getuid(), os.Getgid())
+	c.sockPath = filepath.Join(os.TempDir(), fmt.Sprintf("f4-sudo-%d.sock", os.Getpid()))
+	os.Remove(c.sockPath)
+
+	// Start internal askpass server to handle dialog requests from the helper process
+	askPassSock := getAskpassSocketPath(os.Getpid())
+	go c.runAskpassServer(askPassSock)
+	// We don't remove askPassSock here, it will be removed by the server goroutine or on exit
+
+	cmd := exec.Command("sudo", "-A", c.appPath, "--sudo-dispatcher", c.sockPath)
+
+	env := os.Environ()
+	env = append(env, "SUDO_ASKPASS="+c.appPath)
+	env = append(env, fmt.Sprintf("F4_ASKPASS_PARENT=%d", os.Getpid()))
+	// Ensure the child has access to basic path
+	env = append(env, "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+	cmd.Env = env
+
+	// Capture subprocess stderr to main log
+	stderrPipe, _ := cmd.StderrPipe()
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			n, err := stderrPipe.Read(buf)
+			if n > 0 {
+				lines := strings.Split(string(buf[:n]), "\n")
+				for _, l := range lines {
+					if l != "" {
+						vtui.DebugLog("SUDO_SUBPROCESS: %s", l)
+					}
+				}
+			}
+			if err != nil { break }
+		}
+	}()
+
+	c.attempts = 0
+	vtui.DebugLog("SUDO_CLIENT: Spawning %q with SUDO_ASKPASS=%q", cmd.String(), c.appPath)
+	if err := cmd.Start(); err != nil {
+		vtui.DebugLog("SUDO_CLIENT: ERROR: Failed to start sudo: %v (Path: %q)", err, c.appPath)
+		return fmt.Errorf("failed to spawn sudo process: %w", err)
+	}
+	vtui.DebugLog("SUDO_CLIENT: sudo process started, PID: %d", cmd.Process.Pid)
+
+	// Wait up to 5 seconds for the socket to appear
+	vtui.DebugLog("SUDO_CLIENT: sudo process started, PID: %d. Monitoring exit status...", cmd.Process.Pid)
+
+	if fi, err := os.Stat(c.appPath); err == nil {
+		vtui.DebugLog("SUDO_CLIENT: Binary perms: %v, owner: %d:%d", fi.Mode(), fi.Sys(), fi.Sys())
+	} else {
+		vtui.DebugLog("SUDO_CLIENT: Cannot stat binary %q: %v", c.appPath, err)
+	}
+
+	c.attempts = 0
+	vtui.DebugLog("SUDO_CLIENT: Spawning %q with SUDO_ASKPASS=%q", cmd.String(), c.appPath)
+
+	vtui.DebugLog("SUDO_CLIENT: sudo process started, PID: %d. Monitoring exit status...", cmd.Process.Pid)
+	go func() {
+		vtui.DebugLog("SUDO_CLIENT: Stderr collector goroutine STARTED for PID %d", cmd.Process.Pid)
+		waitErr := cmd.Wait()
+		vtui.DebugLog("SUDO_CLIENT: Sudo process %d EXITED. Result: %v", cmd.Process.Pid, waitErr)
+	}()
+
+	// Wait up to 5 seconds for the socket to appear
+	var err error
+	for i := 0; i < 50; i++ {
+		if _, errStat := os.Stat(c.sockPath); errStat == nil {
+			var addr *net.UnixAddr
+			addr, err = net.ResolveUnixAddr("unix", c.sockPath)
+			if err == nil {
+				c.conn, err = net.DialUnix("unix", nil, addr)
+				if err == nil {
+					vtui.DebugLog("SUDO_CLIENT: Successfully connected to dispatcher.")
+					return nil
+				}
+				vtui.DebugLog("SUDO_CLIENT: DialUnix(%q) attempt %d failed: %v", c.sockPath, i, err)
+			} else {
+				vtui.DebugLog("SUDO_CLIENT: ResolveUnixAddr(%q) failed: %v", c.sockPath, err)
+			}
+			if os.IsPermission(err) {
+				if fi, statErr := os.Lstat(c.sockPath); statErr == nil {
+					// Use fmt.Sprintf for raw stat info to avoid missing Sys() fields in some environments
+					vtui.DebugLog("SUDO_CLIENT: CRITICAL: Socket %q access denied. Mode: %v, RawStat: %+v", c.sockPath, fi.Mode(), fi.Sys())
+				} else {
+					vtui.DebugLog("SUDO_CLIENT: Socket %q reported permission error, but Lstat failed: %v", c.sockPath, statErr)
+				}
+			}
+		} else {
+			if !os.IsNotExist(errStat) {
+				vtui.DebugLog("SUDO_CLIENT: os.Stat(%q) attempt %d failed with unexpected error: %v", c.sockPath, i, errStat)
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	vtui.DebugLog("SUDO_CLIENT: ERROR: Dispatcher socket timed out.")
+
+	return fmt.Errorf("failed to connect to elevated dispatcher: %v", err)
+	vtui.DebugLog("SUDO_CLIENT: ERROR: Dispatcher socket timed out.")
+
+	// Check if any canary files exist (dispatcher actually started)
+	if matches, _ := filepath.Glob("/tmp/f4-canary-*.txt"); len(matches) > 0 {
+		vtui.DebugLog("SUDO_CLIENT: DEBUG: Canary files found: %v. Dispatcher WAS running.", matches)
+	} else {
+		vtui.DebugLog("SUDO_CLIENT: DEBUG: No canary files found. Dispatcher never reached RunSudoDispatcher.")
+	}
+
+	if matches, _ := filepath.Glob("/tmp/f4-canary-*.txt"); len(matches) > 0 {
+		vtui.DebugLog("SUDO_CLIENT: DEBUG: Canary files found: %v. Dispatcher WAS running.", matches)
+	}
+
+	// Try to harvest logs from the dispatcher's private debug file
+	if logData, errLog := os.ReadFile("/tmp/f4-sudo-debug.txt"); errLog == nil {
+		lines := strings.Split(string(logData), "\n")
+		for _, l := range lines {
+			if l != "" {
+				vtui.DebugLog("SUDO_HARVESTED_LOG: %s", l)
+			}
+		}
+		// Clean up to avoid double-logging on next attempt
+		os.Remove("/tmp/f4-sudo-debug.txt")
+	}
+
+	return fmt.Errorf("failed to connect to elevated dispatcher: %v", err)
+}
+
+// SendRequest sends a command to the dispatcher and waits for the response.
+func (c *SudoClient) SendRequest(req SudoRequest) (SudoResponse, *os.File, error) {
+	if err := c.Connect(); err != nil {
+		return SudoResponse{}, nil, err
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	vtui.DebugLog("SUDO_CLIENT: Sending request: Cmd=%d, Path=%q", req.Cmd, req.Path)
+	if err := sendMsg(c.conn, req, -1); err != nil {
+		c.conn.Close()
+		c.conn = nil
+		return SudoResponse{}, nil, err
+	}
+
+	var resp SudoResponse
+	f, err := recvMsg(c.conn, &resp)
+	if err != nil {
+		c.conn.Close()
+		c.conn = nil
+		return SudoResponse{}, nil, err
+	}
+
+	if resp.Error != "" {
+		if f != nil {
+			f.Close()
+		}
+		return resp, nil, errors.New(resp.Error)
+	}
+
+	return resp, f, nil
+}
+
+// Open uses SudoClient to securely fetch a File Descriptor to a protected file.
+func (c *SudoClient) Open(path string, flags int, mode uint32) (*os.File, error) {
+	_, f, err := c.SendRequest(SudoRequest{Cmd: CmdOpen, Path: path, Flags: flags, Mode: mode})
+	return f, err
+}
+
+func (c *SudoClient) Stat(path string) (VFSItem, error) {
+	resp, _, err := c.SendRequest(SudoRequest{Cmd: CmdStat, Path: path})
+	return resp.Item, err
+}
+
+func (c *SudoClient) ReadDir(path string) ([]VFSItem, error) {
+	resp, _, err := c.SendRequest(SudoRequest{Cmd: CmdReadDir, Path: path})
+	return resp.Items, err
+}
+
+func (c *SudoClient) MkDir(path string, mode uint32) error {
+	_, _, err := c.SendRequest(SudoRequest{Cmd: CmdMkDir, Path: path, Mode: mode})
+	return err
+}
+
+func (c *SudoClient) Remove(path string) error {
+	_, _, err := c.SendRequest(SudoRequest{Cmd: CmdRemove, Path: path})
+	return err
+}
+
+func (c *SudoClient) Rename(oldPath, newPath string) error {
+	_, _, err := c.SendRequest(SudoRequest{Cmd: CmdRename, Path: oldPath, Path2: newPath})
+	return err
+}
+
+func getAskpassSocketPath(pid int) string {
+	return filepath.Join(os.TempDir(), fmt.Sprintf("f4-ap-%d.sock", pid))
+}
