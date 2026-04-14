@@ -17,13 +17,14 @@ type FileOpProgressDialog struct {
 	lblTotal   *vtui.Text
 	pbTotal    *vtui.ProgressBar
 	lblSpeed   *vtui.Text
+	lblHint    *vtui.Text
 	btnCancel  *vtui.Button
 }
 
 // NewFileOpProgressDialog creates a new initialized dialog.
 func NewFileOpProgressDialog(title string) *FileOpProgressDialog {
 	width := 60
-	height := 15 // Enough room for 5 lines of info + margins + buttons
+	height := 17
 	dlg := &FileOpProgressDialog{
 		Window: vtui.NewCenteredDialog(width, height, title),
 	}
@@ -36,6 +37,7 @@ func NewFileOpProgressDialog(title string) *FileOpProgressDialog {
 	dlg.lblTotal = vtui.NewText(0, 0, strings.Repeat(" ", 54), textColor)
 	dlg.pbTotal = vtui.NewProgressBar(0, 0, width-6)
 	dlg.lblSpeed = vtui.NewText(0, 0, strings.Repeat(" ", 54), textColor)
+	dlg.lblHint = vtui.NewText(0, 0, Msg("Op.SwitchHint"), vtui.Palette[vtui.ColDialogText])
 
 	dlg.btnCancel = vtui.NewButton(0, 0, "&Cancel")
 
@@ -44,6 +46,7 @@ func NewFileOpProgressDialog(title string) *FileOpProgressDialog {
 	dlg.AddItem(dlg.lblTotal)
 	dlg.AddItem(dlg.pbTotal)
 	dlg.AddItem(dlg.lblSpeed)
+	dlg.AddItem(dlg.lblHint)
 	dlg.AddItem(dlg.btnCancel)
 
 	vbox := vtui.NewVBoxLayout(dlg.X1+3, dlg.Y1+2, width-6, height-4)
@@ -52,6 +55,7 @@ func NewFileOpProgressDialog(title string) *FileOpProgressDialog {
 	vbox.Add(dlg.lblTotal, vtui.Margins{Top: 1}, vtui.AlignFill)
 	vbox.Add(dlg.pbTotal, vtui.Margins{Top: 1}, vtui.AlignFill)
 	vbox.Add(dlg.lblSpeed, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Add(dlg.lblHint, vtui.Margins{Top: 1}, vtui.AlignCenter)
 
 	hbox := vtui.NewHBoxLayout(0, 0, width-6, 1)
 	hbox.HorizontalAlign = vtui.AlignCenter

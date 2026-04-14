@@ -1112,7 +1112,7 @@ func (pf *PanelsFrame) showDummyOpDialog() {
 // RunProgressTask encapsulates the boilerplate for creating a progress dialog,
 // running a background task with cancellation, and optionally forking the workspace.
 func (pf *PanelsFrame) RunProgressTask(title, startMsg string, forked bool, worker func(ctx context.Context, update func(msg string, percent int)) error, onComplete func(err error)) {
-	dlg := vtui.NewCenteredDialog(50, 8, title)
+	dlg := vtui.NewCenteredDialog(50, 12, title)
 	dlg.AttentionSuppressed = true
 
 	lbl := vtui.NewText(0, 0, startMsg, vtui.Palette[vtui.ColDialogText])
@@ -1121,12 +1121,16 @@ func (pf *PanelsFrame) RunProgressTask(title, startMsg string, forked bool, work
 	pb := vtui.NewProgressBar(0, 0, 46)
 	dlg.AddItem(pb)
 
+	lblHint := vtui.NewText(0, 0, Msg("Op.SwitchHint"), vtui.Palette[vtui.ColDialogText])
+	dlg.AddItem(lblHint)
+
 	btnCancel := vtui.NewButton(0, 0, "&Cancel")
 	dlg.AddItem(btnCancel)
 
-	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 50-4, 8-4)
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 50-4, 10-4)
 	vbox.Add(lbl, vtui.Margins{}, vtui.AlignCenter)
 	vbox.Add(pb, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Add(lblHint, vtui.Margins{Top: 1}, vtui.AlignCenter)
 	vbox.Add(btnCancel, vtui.Margins{Top: 1}, vtui.AlignCenter)
 	vbox.Apply()
 

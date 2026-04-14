@@ -31,6 +31,7 @@ var Lng = map[string]string{
 	"Btn.Ignore":        "&Ignore",
 	"Operation.Error":   "Operation failed:\n%s",
 	"Op.ClonePanels":    "&Clone panels to new workspace",
+	"Op.SwitchHint":    "Ctrl+Tab to switch windows",
 	"Op.DummyTitle":     " Dummy Operation ",
 	"Op.DummyText":      "This is a dummy 5-minute operation.\nChoose background mode:",
 	"Viewer.Title":      " View ",
