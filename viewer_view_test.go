@@ -137,11 +137,19 @@ func TestViewerView_MouseScrollbar(t *testing.T) {
 	vv.Show(scr)
 
 	// Wait for background loader
-	select {
-	case task := <-vtui.FrameManager.TaskChan:
-		task()
-	case <-time.After(1 * time.Second):
-		t.Fatal("Timeout waiting for scrollbar initial fetch")
+	// Wait for background loader to populate cache and line offsets
+	deadline := time.Now().Add(2 * time.Second)
+	for len(vv.lineOffsets) < 2 {
+		if time.Now().After(deadline) {
+			t.Fatal("Timeout waiting for scrollbar initial fetch and line offsets")
+		}
+		vv.Show(scr) // Trigger ReadAt (miss) -> Fetch
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		default:
+			time.Sleep(10 * time.Millisecond)
+		}
 	}
 	vv.Show(scr)
 

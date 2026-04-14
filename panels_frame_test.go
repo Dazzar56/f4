@@ -1247,3 +1247,84 @@ func TestPanelsFrame_DriveMenu_TerminalBusy(t *testing.T) {
 		t.Error("Drive menu opened while terminal was busy")
 	}
 }
+
+func TestDriveMenu_SmartHotkeys(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+
+	// Сохраняем оригинал и подменяем реестр
+	oldRegistry := DriveRegistry
+	DriveRegistry = []DriveEntry{
+		{Name: "NetFox", Factory: func() vfs.VFS { return nil }},
+		{Name: "Null VFS", Factory: func() vfs.VFS { return nil }},
+	}
+	defer func() { DriveRegistry = oldRegistry }()
+
+	pf.showDriveMenu(0)
+	top := vtui.FrameManager.GetTopFrame()
+	menu, ok := top.(*vtui.VMenu)
+	if !ok { t.Fatalf("Expected VMenu on top, got %T", top) }
+
+	// 1. Проверка фокуса (Other panel по умолчанию)
+	if menu.SelectPos != 0 {
+		t.Errorf("Expected 'Other panel' (index 0) to be focused, got index %d", menu.SelectPos)
+	}
+
+	// 2. Ищем плагины в пунктах меню
+	var nfIdx, nullIdx int = -1, -1
+	for i, itm := range menu.Items {
+		cleanText := strings.ReplaceAll(itm.Text, "&", "")
+		if strings.Contains(cleanText, "NetFox") { nfIdx = i }
+		if strings.Contains(cleanText, "Null VFS") { nullIdx = i }
+	}
+
+	if nfIdx == -1 || nullIdx == -1 {
+		var items []string
+		for _, itm := range menu.Items { items = append(items, itm.Text) }
+		t.Fatalf("Plugins not found in menu. Items present: %v", items)
+	}
+
+	// 3. Проверка уникальности хоткеев
+	// NetFox (первый в списке) заберет 'N' -> "1. &NetFox"
+	// Null VFS (второй) увидит, что 'N' занята, и заберет 'u' -> "2. N&ull VFS"
+	nfText := menu.Items[nfIdx].Text
+	nullText := menu.Items[nullIdx].Text
+
+	if !strings.Contains(nfText, "&N") {
+		t.Errorf("NetFox should have 'N' as hotkey: %q", nfText)
+	}
+	if !strings.Contains(nullText, "N&u") {
+		t.Errorf("Null VFS should have 'u' as hotkey (N is taken): %q", nullText)
+	}
+
+	// Проверка нумерации (игнорируя Other и платформенные диски, просто наличие цифр)
+	if !strings.HasPrefix(nfText, "1. ") && !strings.Contains(nfText, " 1. ") {
+		t.Errorf("NetFox missing sequence number: %q", nfText)
+	}
+}
+
+func TestDriveMenu_PhysicalKeys(t *testing.T) {
+	if runtime.GOOS == "windows" { t.Skip("Skipping Linux-specific physical key test") }
+
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+
+	pf.showDriveMenu(0)
+	menu := vtui.FrameManager.GetTopFrame().(*vtui.VMenu)
+
+	// Inject VK_OEM_3 (tilde/backtick key)
+	// It should find the Home item and trigger selection
+	handled := menu.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_OEM_3,
+	})
+
+	if !handled {
+		t.Error("Drive menu failed to handle physical tilde key")
+	}
+	if !menu.IsDone() {
+		t.Error("Physical key should have triggered selection and closed the menu")
+	}
+}
