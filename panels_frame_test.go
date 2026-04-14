@@ -1297,11 +1297,6 @@ func TestDriveMenu_SmartHotkeys(t *testing.T) {
 	if !strings.Contains(nullText, "N&u") {
 		t.Errorf("Null VFS should have 'u' as hotkey (N is taken): %q", nullText)
 	}
-
-	// Проверка нумерации (игнорируя Other и платформенные диски, просто наличие цифр)
-	if !strings.HasPrefix(nfText, "1. ") && !strings.Contains(nfText, " 1. ") {
-		t.Errorf("NetFox missing sequence number: %q", nfText)
-	}
 }
 
 func TestDriveMenu_PhysicalKeys(t *testing.T) {

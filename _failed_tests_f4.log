@@ -1,0 +1,237 @@
+=== TEST FAILURE LOG DUMP ===
+[19:45:32.148] SESSION: Saved state to /tmp/f4-session-test2773728961/session.ini
+[19:45:32.148] SESSION: Loaded state from /tmp/f4-session-test2773728961/session.ini
+[19:45:32.150] TERM: SetAltScreen true
+[19:45:32.150] TERM: SetAltScreen false
+[19:45:32.151] CLIPBOARD: SetClipboard called, len: 0
+[19:45:32.151] VTUI_FAR2L: SetFar2lClipboard attempt, Enabled=false, text_len=0
+[19:45:32.151] CLIPBOARD: SetFar2lClipboard FAILED or DISABLED
+[19:45:32.240] CLIPBOARD: setOSClipboard SUCCESS
+[19:45:32.240] CLIPBOARD: SetClipboard called, len: 7500
+[19:45:32.240] VTUI_FAR2L: SetFar2lClipboard attempt, Enabled=false, text_len=7500
+[19:45:32.240] CLIPBOARD: SetFar2lClipboard FAILED or DISABLED
+[19:45:32.249] CLIPBOARD: setOSClipboard SUCCESS
+[19:45:33.479] AsyncBuffer: failed to fetch chunk 0: unexpected EOF
+[19:45:33.680]   Edit.ProcessKey: VK=0 Char=102
+[19:45:33.680]     Edit: Typing char 102
+[19:45:33.680]   Edit.ProcessKey: VK=8 Char=0
+[19:45:33.680]   Edit.ProcessKey: VK=0 Char=32
+[19:45:33.680]     Edit: Typing char 32
+[19:45:33.681] CONFIG: Saved application settings to /tmp/TestConfig_SaveAndLoad3368601031/001/settings.ini
+[19:45:33.681] CONFIG: Loaded application settings from /tmp/TestConfig_SaveAndLoad3368601031/001/settings.ini
+[19:45:33.685] EDITOR: Saving test_save.txt...
+[19:45:33.698] EDITOR: Successfully saved test_save.txt (15 bytes)
+[19:45:33.699] CLIPBOARD: SetClipboard called, len: 6
+[19:45:33.699] VTUI_FAR2L: SetFar2lClipboard attempt, Enabled=false, text_len=6
+[19:45:33.699] CLIPBOARD: SetFar2lClipboard FAILED or DISABLED
+[19:45:33.721] CLIPBOARD: setOSClipboard SUCCESS
+[19:45:33.721] EDITOR: Copied 6 bytes to clipboard
+[19:45:33.846] INDEXER: Finished for /tmp/TestEditorView_AsyncIndexing1887508930/001/idx_test.txt
+[19:45:34.104] INDEXER: Finished for /tmp/TestEditorView_Indexer_BatchingIntegrity3934903461/001/batch.txt
+[19:45:34.105] CLIPBOARD: SetClipboard called, len: 6
+[19:45:34.105] VTUI_FAR2L: SetFar2lClipboard attempt, Enabled=false, text_len=6
+[19:45:34.105] CLIPBOARD: SetFar2lClipboard FAILED or DISABLED
+[19:45:34.122] CLIPBOARD: setOSClipboard SUCCESS
+[19:45:34.122] EDITOR: Copied 6 bytes to clipboard
+[19:45:34.122] CLIPBOARD: SetClipboard called, len: 4
+[19:45:34.122] VTUI_FAR2L: SetFar2lClipboard attempt, Enabled=false, text_len=4
+[19:45:34.122] CLIPBOARD: SetFar2lClipboard FAILED or DISABLED
+[19:45:34.141] CLIPBOARD: setOSClipboard SUCCESS
+[19:45:34.141] EDITOR: Copied 4 bytes to clipboard
+[19:45:34.148] SESSION: Saved state to /home/unxed/.config/f4/session.ini
+[19:45:34.148] EDITOR_SEARCH: Starting for "fox" (sensitive=false, reverse=false, next=false). CursorPos=0
+[19:45:34.148] EDITOR_SEARCH: Running forward search from offset 0
+[19:45:34.148] EDITOR_SEARCH: Reading segment at 0, size 43
+[19:45:34.148] EDITOR_SEARCH: Internal match found at relative index 16 in chunk (chunk size 43)
+[19:45:34.148] EDITOR_SEARCH: UI update: Found pattern at offset 16. Updating cursor and selection.
+[19:45:34.149] SESSION: Saved state to /home/unxed/.config/f4/session.ini
+[19:45:34.149] EDITOR_SEARCH: Starting for "match" (sensitive=false, reverse=false, next=false). CursorPos=0
+[19:45:34.149] EDITOR_SEARCH: Running forward search from offset 0
+[19:45:34.149] EDITOR_SEARCH: Reading segment at 0, size 20
+[19:45:34.149] EDITOR_SEARCH: Internal match found at relative index 0 in chunk (chunk size 20)
+[19:45:34.149] EDITOR_SEARCH: UI update: Found pattern at offset 0. Updating cursor and selection.
+[19:45:34.149] EDITOR_SEARCH: Starting for "match" (sensitive=false, reverse=false, next=true). CursorPos=5
+[19:45:34.149] EDITOR_SEARCH: Running forward search from offset 6
+[19:45:34.149] EDITOR_SEARCH: Reading segment at 6, size 14
+[19:45:34.149] EDITOR_SEARCH: Internal match found at relative index 5 in chunk (chunk size 14)
+[19:45:34.149] EDITOR_SEARCH: UI update: Found pattern at offset 11. Updating cursor and selection.
+[19:45:34.150] SESSION: Saved state to /home/unxed/.config/f4/session.ini
+[19:45:34.150] EDITOR_SEARCH: Starting for "caps" (sensitive=false, reverse=false, next=false). CursorPos=0
+[19:45:34.150] EDITOR_SEARCH: Running forward search from offset 0
+[19:45:34.150] EDITOR_SEARCH: Reading segment at 0, size 13
+[19:45:34.150] EDITOR_SEARCH: Internal match found at relative index 4 in chunk (chunk size 13)
+[19:45:34.150] EDITOR_SEARCH: UI update: Found pattern at offset 4. Updating cursor and selection.
+[19:45:34.151] SESSION: Saved state to /home/unxed/.config/f4/session.ini
+[19:45:34.151] EDITOR_SEARCH: Starting for "missing" (sensitive=false, reverse=false, next=false). CursorPos=0
+[19:45:34.151] EDITOR_SEARCH: Running forward search from offset 0
+[19:45:34.151] EDITOR_SEARCH: Reading segment at 0, size 9
+[19:45:34.151] SESSION: Saved state to /home/unxed/.config/f4/session.ini
+[19:45:34.152] EDITOR_SEARCH: Starting for "match" (sensitive=true, reverse=false, next=false). CursorPos=0
+[19:45:34.152] EDITOR_SEARCH: UI update: Pattern NOT FOUND.
+[19:45:34.152] EDITOR_SEARCH: Running forward search from offset 0
+[19:45:34.152] EDITOR_SEARCH: Reading segment at 0, size 15
+[19:45:34.152] EDITOR_SEARCH: Internal match found at relative index 10 in chunk (chunk size 15)
+[19:45:34.152] EDITOR_SEARCH: UI update: Found pattern at offset 10. Updating cursor and selection.
+[19:45:34.152] SESSION: Saved state to /home/unxed/.config/f4/session.ini
+[19:45:34.152] EDITOR_SEARCH: Starting for "match" (sensitive=false, reverse=true, next=false). CursorPos=25
+[19:45:34.152] EDITOR_SEARCH: Running backward search from offset 25
+[19:45:34.152] EDITOR_SEARCH: Reading segment at 0, size 25
+[19:45:34.152] EDITOR_SEARCH: Internal match found at relative index 20 in chunk (chunk size 25)
+[19:45:34.152] EDITOR_SEARCH: UI update: Found pattern at offset 20. Updating cursor and selection.
+[19:45:34.153] SESSION: Saved state to /home/unxed/.config/f4/session.ini
+[19:45:34.153] EDITOR_SEARCH: Starting for "e" (sensitive=false, reverse=true, next=false). CursorPos=13
+[19:45:34.153] EDITOR_SEARCH: Running backward search from offset 13
+[19:45:34.153] EDITOR_SEARCH: Reading segment at 0, size 13
+[19:45:34.153] EDITOR_SEARCH: Internal match found at relative index 12 in chunk (chunk size 13)
+[19:45:34.153] EDITOR_SEARCH: UI update: Found pattern at offset 12. Updating cursor and selection.
+[19:45:34.153] TEST_SEARCH: Pumping tasks after first search...
+[19:45:34.659] TEST_SEARCH: Triggering Search 2. Current CursorPos: 13
+[19:45:34.659] EDITOR_SEARCH: Starting for "e" (sensitive=false, reverse=true, next=true). CursorPos=13
+[19:45:34.659] EDITOR_SEARCH: Running backward search from offset 12
+[19:45:34.659] EDITOR_SEARCH: Reading segment at 0, size 12
+[19:45:34.659] EDITOR_SEARCH: Internal match found at relative index 11 in chunk (chunk size 12)
+[19:45:34.659] EDITOR_SEARCH: UI update: Found pattern at offset 11. Updating cursor and selection.
+[19:45:34.660] EDITOR: Saving /tmp/TestEditorView_SaveFailure_NoDataLoss1599240011/001/important.txt...
+[19:45:34.660] EDITOR: Failed to rename temp file: permission denied
+[19:45:34.662] EDITOR: Saving /tmp/TestEditorView_Save_DiskFullSimulation3879187907/001/important.txt...
+[19:45:34.682] EDITOR: Saving /tmp/TestEditorView_Save_IOErrorRecovery1558278400/001/persist.txt...
+[19:45:34.684] EDITOR: Saving /tmp/TestEditorView_Save_AtomicRenameFailure1364422251/001/locked.txt...
+[19:45:34.685] EDITOR: Failed to rename temp file: permission denied
+[19:45:34.686] EDITOR: Saving /tmp/TestEditorView_Save_RenameFailure_Recovery_DataPreservation4016629249/001/persist.txt...
+[19:45:34.687] EDITOR: Failed to rename temp file: permission denied
+[19:45:34.830] EDITOR: Saving /tmp/TestEditorView_FragmentationDataIntegrity2230144346/001/fragmented.txt...
+[19:45:34.844] EDITOR: Successfully saved /tmp/TestEditorView_FragmentationDataIntegrity2230144346/001/fragmented.txt (1571 bytes)
+[19:45:34.844] EDITOR: Saving /tmp/TestEditorView_Save_NoTrailingNewline_Integrity1191602365/001/nonewline.txt...
+[19:45:34.855] EDITOR: Successfully saved /tmp/TestEditorView_Save_NoTrailingNewline_Integrity1191602365/001/nonewline.txt (34 bytes)
+[19:45:34.855] EDITOR: Saving /tmp/TestEditorView_Save_RetryAfterFailure1747595214/001/retry.txt...
+[19:45:34.855] EDITOR: Failed to rename temp file: permission denied
+[19:45:34.855] EDITOR: Saving /tmp/TestEditorView_Save_RetryAfterFailure1747595214/001/retry.txt...
+[19:45:34.866] EDITOR: Successfully saved /tmp/TestEditorView_Save_RetryAfterFailure1747595214/001/retry.txt (7 bytes)
+[19:45:34.868] SESSION: Saved state to /home/unxed/.config/f4/session.ini
+[19:45:34.868] EDITOR_SEARCH: Starting for "match" (sensitive=false, reverse=true, next=false). CursorPos=0
+[19:45:34.868] EDITOR_SEARCH: Running backward search from offset 0
+[19:45:34.868] EDITOR_SEARCH: Reading segment at 0, size 0
+[19:45:34.877] EDITOR: Executed Undo, remaining: 0, modified: false
+[19:45:34.877] EDITOR: Executed Redo, remaining: 0, modified: true
+[19:45:34.877] EDITOR: Executed Undo, remaining: 2, modified: true
+[19:45:34.877] EDITOR: Executed Undo, remaining: 1, modified: true
+[19:45:34.877] EDITOR: Executed Undo, remaining: 1, modified: true
+[19:45:34.877] EDITOR: Redo called but stack is empty
+[19:45:34.877] EDITOR: Executed Undo, remaining: 0, modified: false
+[19:45:34.877] EDITOR: Executed Undo, remaining: 0, modified: false
+[19:45:34.877] EDITOR: Undo called but stack is empty
+[19:45:34.877] EDITOR: Executed Undo, remaining: 0, modified: false
+[19:45:34.877] EDITOR: Executed Redo, remaining: 0, modified: true
+[19:45:34.878] SESSION: Saved state to /home/unxed/.config/f4/session.ini
+[19:45:34.878] EDITOR_SEARCH: Starting for "pattern" (sensitive=true, reverse=true, next=false). CursorPos=0
+[19:45:34.878] EDITOR_SEARCH: Running backward search from offset 0
+[19:45:34.878] EDITOR_SEARCH: Reading segment at 0, size 0
+[19:45:34.887] FILEOP: 100% (V:100%) | Items: 1/1 | Proc: 4/4 B | Time: 00:00:00 | Remaining: ??:??:?? | 
+[19:45:35.122] FILEOP: 50% (V:50%) | Items: 1/2 | Proc: 1/2 B | Time: 00:00:00 | Remaining: ??:??:?? | 
+[19:45:35.123] FILEOP: 100% (V:100%) | Items: 2/2 | Proc: 2/2 B | Time: 00:00:00 | Remaining: ??:??:?? | 
+[19:45:35.628] FILEOP: 100% (V:100%) | Items: 1/1 | Proc: 7/7 B | Time: 00:00:00 | Remaining: ??:??:?? | 
+[19:45:35.870] FILEOP: 100% (V:100%) | Items: 1/1 | Proc: 7/7 B | Time: 00:00:00 | Remaining: ??:??:?? | 
+[19:45:36.214] FILEOP: 100% (V:100%) | Items: 1/1 | Proc: 7/7 B | Time: 00:00:00 | Remaining: ??:??:?? | 
+[19:45:36.274] FILEOP: 100% (V:100%) | Items: 1/1 | Proc: 524288/524288 B | Time: 00:00:00 | Remaining: ??:??:?? | 
+[19:45:36.313] FILEOP: 100% (V:100%) | Items: 6/6 | Proc: 4194308/4194308 B | Time: 00:00:00 | Remaining: ??:??:?? | 
+[19:45:36.539] PANEL: Navigating "/tmp/TestFileSystemPanel_NavigateUp_Selection1398423246/001/target_folder" -> "/tmp/TestFileSystemPanel_NavigateUp_Selection1398423246/001"
+[19:45:36.539] VFS: Path changed to "/tmp/TestFileSystemPanel_NavigateUp_Selection1398423246/001"
+[19:45:36.542] VFS: ReadDir: failed to open dir "/tmp/TestFileSystemPanel_MultiSelect1985301523/001": open /tmp/TestFileSystemPanel_MultiSelect1985301523/001: no such file or directory
+[19:45:36.544] VFS: ReadDir: failed to open dir "/tmp/TestFileSystemPanel_IncrementalInteraction2778242348/001": open /tmp/TestFileSystemPanel_IncrementalInteraction2778242348/001: no such file or directory
+[19:45:36.545] PANEL: Navigating "/tmp/TestFileSystemPanel_NavigateDown_CursorReset1753478536/001" -> "/tmp/TestFileSystemPanel_NavigateDown_CursorReset1753478536/001/subdir"
+[19:45:36.545] VFS: Path changed to "/tmp/TestFileSystemPanel_NavigateDown_CursorReset1753478536/001/subdir"
+[19:45:36.546] VFS: ReadDir: failed to open dir "/tmp/TestFileSystemPanel_NavigateDown_CursorReset1753478536/001": open /tmp/TestFileSystemPanel_NavigateDown_CursorReset1753478536/001: no such file or directory
+[19:45:36.546] VFS: ReadDir: failed to open dir "/tmp/TestFileSystemPanel_NavigateDown_CursorReset1753478536/001/subdir": open /tmp/TestFileSystemPanel_NavigateDown_CursorReset1753478536/001/subdir: no such file or directory
+[19:45:36.554] VFS: ReadDir: failed to open dir "/tmp/TestFileSystemPanel_FastFind_MouseDeactivation2137046073/001": open /tmp/TestFileSystemPanel_FastFind_MouseDeactivation2137046073/001: no such file or directory
+[19:45:36.573] MACRO: Loading macros from test_macros.ini
+[19:45:36.573] MACRO: Started recording
+[19:45:36.573] MACRO: Saving macros to test_macros.ini
+[19:45:36.573] MACRO: Loading macros from test_macros.ini
+[19:45:36.573] MACRO: Loading macros from unused.ini
+[19:45:36.573] MACRO: Playing back macro for 71:0
+[19:45:36.573] MACRO: Loading macros from unused.ini
+[19:45:36.573] MACRO: Loading macros from unused.ini
+[19:45:36.573] MACRO: Started recording
+[19:45:36.573] MACRO: Saving macros to 
+[19:45:36.573] MACRO: Saving macros to 
+[19:45:36.573] MACRO: Loading macros from unused.ini
+[19:45:36.573] MACRO: Started recording
+[19:45:36.573] MACRO: Loading macros from /tmp/esc.ini
+[19:45:36.574] MACRO: Saving macros to /tmp/esc.ini
+[19:45:36.574] MACRO: Loading macros from unused.ini
+[19:45:36.574] MACRO: Started recording
+[19:45:36.574] MACRO: Saving macros to 
+[19:45:36.582] VFS: Path changed to "/tmp/TestPanelsFrame_ProcessMouse_DoubleClick652582194/001"
+[19:45:36.582] PANEL: Navigating "/tmp/TestPanelsFrame_ProcessMouse_DoubleClick652582194/001" -> "/tmp/TestPanelsFrame_ProcessMouse_DoubleClick652582194"
+[19:45:36.582] VFS: Path changed to "/tmp/TestPanelsFrame_ProcessMouse_DoubleClick652582194"
+[19:45:36.586] VFS: Path changed to "/tmp/TestPanelsFrame_ProcessMouse_DoubleClickFile1416831267/001"
+[19:45:36.588] VFS: ReadDir: failed to open dir "/tmp/TestPanelsFrame_ProcessMouse_DoubleClick652582194": open /tmp/TestPanelsFrame_ProcessMouse_DoubleClick652582194: no such file or directory
+[19:45:36.613] VFS: Path changed to "/tmp"
+[19:45:36.618] VFS: Path changed to "/tmp"
+[19:45:36.618] VFS: Path changed to "/home/unxed/far2l/f4_project/f4"
+[19:45:36.698] VFS: Path changed to "/tmp/TestPanelsFrame_SwapPanels1082051448/001/left"
+[19:45:36.698] VFS: Path changed to "/tmp/TestPanelsFrame_SwapPanels1082051448/002/right"
+[19:45:36.712] VFS: Path changed to "/tmp/TestPanelsFrame_CloneIndependence2356917703/001"
+[19:45:36.732] VFS: Path changed to "/tmp/TestPanelsFrame_CloneIndependence2356917703/001"
+[19:45:36.732] VFS: Path changed to "/home/unxed/far2l/f4_project/f4"
+[19:45:36.732] VFS: Path changed to "/tmp/TestPanelsFrame_CloneIndependence2356917703/002"
+[19:45:36.736] VFS: ReadDir: failed to open dir "/tmp/TestPanelsFrame_CloneIndependence2356917703/001": open /tmp/TestPanelsFrame_CloneIndependence2356917703/001: no such file or directory
+[19:45:36.875] VFS: Path changed to "/home/unxed/far2l/f4_project/f4"
+[19:45:36.875] VFS: Path changed to "/home/unxed/far2l/f4_project/f4"
+[19:45:36.880] VFS: Path changed to "/tmp/TestPanelsFrame_ReturnExecution3392198451/001"
+[19:45:36.892] VFS: Path changed to "/tmp/TestPanelsFrame_DirectoryEnter727669464/001"
+[19:45:36.892] PANEL: Navigating "/tmp/TestPanelsFrame_DirectoryEnter727669464/001" -> "/tmp/TestPanelsFrame_DirectoryEnter727669464/001/work_dir"
+[19:45:36.892] VFS: Path changed to "/tmp/TestPanelsFrame_DirectoryEnter727669464/001/work_dir"
+[19:45:36.897] VFS: ReadDir: failed to open dir "/tmp/TestPanelsFrame_DirectoryEnter727669464/001/work_dir": open /tmp/TestPanelsFrame_DirectoryEnter727669464/001/work_dir: no such file or directory
+[19:45:36.913] VFS: Path changed to "/tmp/TestPanelsFrame_NonRunnableOpen775236573/001"
+[19:45:36.931] VFS: Path changed to "/home/unxed/far2l/f4_project/f4"
+[19:45:36.931] VFS: Path changed to "/home/unxed/far2l/f4_project/f4"
+[19:45:36.931] FM: Switched to Screen 1 (Workspace: Panels: /home/unxed/far2l/f4_project/f4)
+[19:45:36.978] PTY_PROFILE(Local): Parsed 0 bytes in 15.036264ms
+[19:45:36.987] VFS: Path changed to "/tmp/TestPanelsFrame_ProcessMouse_RightDoubleClickNoEnter3631401126/001"
+[19:45:36.993] PTY_PROFILE(Local): Parsed 0 bytes in 19.042403ms
+[19:45:37.013] PTY_PROFILE(Local): Parsed 0 bytes in 24.331909ms
+[19:45:37.027] PTY_PROFILE(Local): Parsed 0 bytes in 23.364705ms
+[19:45:37.027] COMMAND: Emitting 1
+[19:45:37.027] COMMAND: Checking frame 0 (type 4)
+[19:45:37.028] COMMAND: Handled by frame 0
+[19:45:37.028] PTY: Closing PTY and killing child process group
+[19:45:37.072] PTY_PROFILE(Local): Parsed 0 bytes in 24.119374ms
+[19:45:37.093] PTY_PROFILE(Local): Parsed 0 bytes in 24.124358ms
+[19:45:37.111] PTY_PROFILE(Local): Parsed 0 bytes in 31.231525ms
+[19:45:37.114] PTY_PROFILE(Local): Parsed 0 bytes in 19.04116ms
+[19:45:37.133] PTY_PROFILE(Local): Parsed 0 bytes in 22.28427ms
+[19:45:37.193] VFS: Path changed to "/tmp/TestPanelsFrame_DriveMenu_OtherPanel2506008709/001/right"
+[19:45:37.193] COMMAND: Emitting 304
+[19:45:37.193] COMMAND: Checking frame 0 (type 2)
+[19:45:37.193] CMD: [0xc0006bd500] ID 304 dropped (no owner)
+[19:45:37.193] COMMAND: No one handled 304
+[19:45:37.196] FRAMEWORK: GetTopFrameType(), len(fm.frames) == 0
+[19:45:37.201] VFS: ReadDir: failed to open dir "/tmp/TestPanelsFrame_DriveMenu_OtherPanel2506008709/001/right": open /tmp/TestPanelsFrame_DriveMenu_OtherPanel2506008709/001/right: no such file or directory
+[19:45:37.201] VFS: ReadDir: failed to open dir "/tmp/TestPanelsFrame_DriveMenu_OtherPanel2506008709/001/right": open /tmp/TestPanelsFrame_DriveMenu_OtherPanel2506008709/001/right: no such file or directory
+[19:45:37.201] VFS: ReadDir: failed to open dir "/tmp/TestPanelsFrame_DriveMenu_OtherPanel2506008709/001/right": open /tmp/TestPanelsFrame_DriveMenu_OtherPanel2506008709/001/right: no such file or directory
+[19:45:37.205] COMMAND: Emitting 304
+[19:45:37.205] COMMAND: Checking frame 0 (type 2)
+[19:45:37.205] CMD: [0xc000b7d980] ID 304 dropped (no owner)
+[19:45:37.205] COMMAND: No one handled 304
+[19:45:37.212] PTY: Closing PTY and killing child process group
+[19:45:37.324] TERM_APC: Incoming Far2l sequence: "far2l1"
+[19:45:37.324] TERM_APC: Incoming Far2l sequence: "far2l0"
+[19:45:37.324] TERM_APC: Incoming Far2l sequence: "far2l:dwA="
+[19:45:37.324] TERM_APC: ProcessFar2lInteract: cmd=w, id=0
+[19:45:37.324] TERM_APC: ProcessFar2lInteract: cmd=c, id=1
+[19:45:37.324] TERM_APC: Clipboard sub-command: o
+[19:45:37.328] TERM_APC: ProcessFar2lInteract: cmd=c, id=2
+[19:45:37.328] TERM_APC: Clipboard sub-command: S
+[19:45:37.328] TERM_APC: ProcessFar2lInteract: cmd=c, id=3
+[19:45:37.328] TERM_APC: Clipboard sub-command: s
+[19:45:37.328] CLIPBOARD: SetClipboard called, len: 261
+[19:45:37.328] VTUI_FAR2L: SetFar2lClipboard attempt, Enabled=false, text_len=261
+[19:45:37.328] CLIPBOARD: SetFar2lClipboard FAILED or DISABLED
+[19:45:37.410] CLIPBOARD: setOSClipboard SUCCESS
+[19:45:37.410] CLIPBOARD: GetClipboard called
+[19:45:37.410] VTUI_FAR2L: GetFar2lClipboard attempt, Enabled=false
+[19:45:37.410] CLIPBOARD: GetFar2lClipboard FAILED or DISABLED
+[19:45:37.424] CLIPBOARD: getOSClipboard SUCCESS, len: 261
+[19:45:37.424] TERM_APC: ProcessFar2lInteract: cmd=n, id=1
+[19:45:37.424] TERM_APC: ProcessFar2lInteract: cmd=f, id=1
