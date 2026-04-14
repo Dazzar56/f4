@@ -29,21 +29,23 @@ func NewMacroManager(iniPath string) *MacroManager {
 	return mgr
 }
 
-func normalizeMods(mods uint32) uint32 {
-	var n uint32
-	if mods&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed) != 0 {
+func normalizeMods(mods vtinput.ControlKeyState) vtinput.ControlKeyState {
+	var n vtinput.ControlKeyState
+	if mods.Contains(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed) {
 		n |= vtinput.LeftCtrlPressed
 	}
-	if mods&(vtinput.LeftAltPressed|vtinput.RightAltPressed) != 0 {
+
+	if mods.Contains(vtinput.LeftAltPressed|vtinput.RightAltPressed) {
 		n |= vtinput.LeftAltPressed
 	}
-	if mods&vtinput.ShiftPressed != 0 {
+
+	if mods.Contains(vtinput.ShiftPressed) {
 		n |= vtinput.ShiftPressed
 	}
 	return n
 }
 
-func KeyStr(vk uint16, mods uint32) string {
+func KeyStr(vk uint16, mods vtinput.ControlKeyState) string {
 	return fmt.Sprintf("%X:%X", vk, normalizeMods(mods))
 }
 
@@ -120,7 +122,7 @@ func (m *MacroManager) Load() {
 						KeyDown:         true,
 						Char:            rune(char),
 						VirtualKeyCode:  uint16(vk),
-						ControlKeyState: uint32(mods),
+						ControlKeyState: vtinput.ControlKeyState(mods),
 					})
 				}
 			}

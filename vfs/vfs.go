@@ -6,6 +6,7 @@ import (
 	"io"
 	"time"
 	"github.com/unxed/vtui"
+	"github.com/unxed/vtinput"
 )
 
 // App defines the interface for plugin-to-core UI interactions.
@@ -31,7 +32,7 @@ type HostAPI interface {
 	RegisterHighlighter(p vtui.HighlighterProvider)
 	RegisterVFSProvider(p VFSProvider)
 	RegisterDrive(name string, factory func() VFS)
-	RegisterGlobalHotkey(vk uint16, mods uint32, handler func(app App))
+	RegisterGlobalHotkey(vk uint16, mods vtinput.ControlKeyState, handler func(app App))
 	RegisterPluginMenuItem(label string, handler func(app App))
 }
 
