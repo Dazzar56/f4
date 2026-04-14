@@ -719,7 +719,9 @@ func (fp *FileSystemPanel) ProcessMouse(e *vtinput.InputEvent) bool {
 		} else {
 			H := fp.table.ViewHeight
 			if H <= 0 { H = 1 }
-			newIdx := fp.table.TopPos + fp.table.SelectPos + fp.table.SelectCol*H
+			// SelectPos is already absolute (TopPos + row) in Medium mode,
+			// so we just add the column offset.
+			newIdx := fp.table.SelectPos + fp.table.SelectCol*H
 
 			// Fix for "click in empty space": if we selected an empty slot,
 			// snap to the last valid entry.
