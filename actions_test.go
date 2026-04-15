@@ -5,6 +5,7 @@ import (
 	"os"
 	"context"
 	"time"
+	"strings"
 	"path/filepath"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
@@ -58,6 +59,57 @@ func TestActionMkDir_Flow(t *testing.T) {
 	}
 
 	// Close it to clean up
+	top.SetExitCode(-1)
+	vtui.FrameManager.Pop()
+}
+func TestActionCopyMove_TrailingSlash(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+
+	// Ensure predictable paths for the test
+	fspSrc := pf.panels[0].(*FileSystemPanel)
+	fspDst := pf.panels[1].(*FileSystemPanel)
+	fspSrc.vfs.SetPath(filepath.FromSlash("/src/dir"))
+	fspDst.vfs.SetPath(filepath.FromSlash("/dst/dir"))
+
+	// Manually add an entry so actionCopyMove doesn't exit early
+	fspSrc.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "test.txt", IsDir: false}},
+	}
+	fspSrc.SetCursorIndex(0)
+	pf.activeIdx = 0 // Ensure the panel with the file is active
+
+	// Trigger Copy (false = isMove)
+	actionCopyMove(pf, false)
+
+	top := vtui.FrameManager.GetTopFrame()
+	dlg, ok := top.(vtui.Container)
+	if !ok {
+		t.Fatal("Copy dialog not found on top")
+	}
+
+	var editDest *vtui.Edit
+	for _, itm := range dlg.GetChildren() {
+		if e, ok := itm.(*vtui.Edit); ok {
+			editDest = e
+			break
+		}
+	}
+
+	if editDest == nil {
+		t.Fatal("Destination edit field not found in dialog")
+	}
+
+	txt := editDest.GetText()
+	sep := string(os.PathSeparator)
+	if !strings.HasSuffix(txt, sep) {
+		t.Errorf("Path in Copy dialog missing trailing slash: %q (expected it to end with %q)", txt, sep)
+	}
+
+	// Cleanup
 	top.SetExitCode(-1)
 	vtui.FrameManager.Pop()
 }
