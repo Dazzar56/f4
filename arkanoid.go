@@ -25,7 +25,6 @@ type brick struct {
 	x, y int
 	hp   int
 	decay int // Таймер "таяния"
-	attr uint64
 }
 
 type scorePopup struct {
@@ -56,7 +55,6 @@ type ArkanoidFrame struct {
 	gameOver        bool
 	message         string
 	flashTimer      int
-	classicMode     bool
 	autoPlay        bool
 }
 
@@ -97,12 +95,6 @@ func (af *ArkanoidFrame) initLevel() {
 
 	// Create bricks
 	af.bricks = nil
-	brickColors := []uint64{
-		vtui.SetRGBBoth(0, 0, 0xFF00FF), // Magenta
-		vtui.SetRGBBoth(0, 0, 0x00FFFF), // Cyan
-		vtui.SetRGBBoth(0, 0, 0xFF00FF),
-		vtui.SetRGBBoth(0, 0, 0x00FFFF),
-	}
 	gridStep := 5
 	margin := 6
 
@@ -113,7 +105,6 @@ func (af *ArkanoidFrame) initLevel() {
 				x:    c*gridStep + margin,
 				y:    r + 1,
 				hp:   1 + (af.level-1)/2,
-				attr: brickColors[(r+(af.level-1))%4],
 			})
 		}
 	}
@@ -156,21 +147,6 @@ func (af *ArkanoidFrame) update() {
 			af.mu.Lock()
 		}
 		return
-	}
-
-	scrW, scrH := vtui.FrameManager.GetScreenSize(), 25
-
-	// Рост окна (базовый 53x20)
-	if !af.classicMode && !af.gameOver && af.score > 0 {
-		growW := af.score / 150
-		growH := af.score / 400
-		targetW, targetH := 53+growW, 20+growH
-		if targetW > scrW { targetW = scrW }
-		if targetH > scrH-1 { targetH = scrH - 1 }
-		if targetW > (af.X2-af.X1+1) || targetH > (af.Y2-af.Y1+1) {
-			af.ChangeSize(targetW, targetH)
-			af.Center(scrW, scrH)
-		}
 	}
 
 	width, height := af.X2-af.X1-1, af.Y2-af.Y1-1
@@ -315,13 +291,9 @@ func (af *ArkanoidFrame) update() {
 				af.combo++
 				af.score += points
 
-				popupAttr := br.attr
-				if !af.classicMode {
-					if br.y%2 == 0 {
-						popupAttr = vtui.SetRGBBoth(0, 0x00FFFF, 0)
-					} else {
-						popupAttr = vtui.SetRGBBoth(0, 0xFF00FF, 0)
-					}
+				popupAttr := vtui.SetRGBBoth(0, 0xFF00FF, 0)
+				if br.y%2 == 0 {
+					popupAttr = vtui.SetRGBBoth(0, 0x00FFFF, 0)
 				}
 
 				// Накапливаем очки и цвета в едином попапе
@@ -390,15 +362,13 @@ func (af *ArkanoidFrame) Show(scr *vtui.ScreenBuf) {
 	cgaYellow := vtui.SetRGBBoth(0, 0xFFFF00, 0)
 
 	// Настройка рамки окна в стиле CGA через глобальную палитру
-	if !af.classicMode {
-		vtui.Palette[vtui.ColDialogHighlightBoxTitle] = cgaCyan
-		vtui.Palette[vtui.ColDialogBoxTitle] = cgaCyan
-		if af.autoPlay {
-			// Режим гармонии: рамка того же цвета, что и заголовок
-			vtui.Palette[vtui.ColDialogBox] = cgaCyan
-		} else {
-			vtui.Palette[vtui.ColDialogBox] = cgaMagenta
-		}
+	vtui.Palette[vtui.ColDialogHighlightBoxTitle] = cgaCyan
+	vtui.Palette[vtui.ColDialogBoxTitle] = cgaCyan
+	if af.autoPlay {
+		// Режим гармонии: рамка того же цвета, что и заголовок
+		vtui.Palette[vtui.ColDialogBox] = cgaCyan
+	} else {
+		vtui.Palette[vtui.ColDialogBox] = cgaMagenta
 	}
 
 	af.mu.Unlock()
@@ -409,12 +379,10 @@ func (af *ArkanoidFrame) Show(scr *vtui.ScreenBuf) {
 	//scrW := vtui.FrameManager.GetScreenSize()
 	width := af.X2 - af.X1 + 1
 
-	if !af.classicMode {
-		p := vtui.NewPainter(scr)
-		p.DrawBox(af.X1, af.Y1, af.X2, af.Y2, vtui.Palette[vtui.ColDialogBox], vtui.SingleBox)
-		titleAttr := vtui.Palette[vtui.ColDialogHighlightBoxTitle]
-		p.DrawTitle(af.X1, af.Y1, af.X2, " A R K A N O I D ", titleAttr)
-	}
+	p := vtui.NewPainter(scr)
+	p.DrawBox(af.X1, af.Y1, af.X2, af.Y2, vtui.Palette[vtui.ColDialogBox], vtui.SingleBox)
+	titleAttr := vtui.Palette[vtui.ColDialogHighlightBoxTitle]
+	p.DrawTitle(af.X1, af.Y1, af.X2, " A R K A N O I D ", titleAttr)
 
 	height := af.Y2 - af.Y1 + 1
 
@@ -456,11 +424,9 @@ func (af *ArkanoidFrame) Show(scr *vtui.ScreenBuf) {
 
 	// Ракетка (подсвечивается при удачном стринге)
 	paddleAttr := vtui.SetRGBBoth(0, 0xC0C0C0, 0)
-	if !af.classicMode {
-		paddleAttr = cgaCyan
-		if af.flashTimer > 0 {
-			paddleAttr = cgaWhite // Ракетка "вспыхивает" от гордости за игрока
-		}
+	paddleAttr = cgaCyan
+	if af.flashTimer > 0 {
+		paddleAttr = cgaWhite // Ракетка "вспыхивает" от гордости за игрока
 	}
 	for i := 0; i < af.paddleW; i++ {
 		px := x1 + af.paddleX + i
@@ -492,13 +458,9 @@ func (af *ArkanoidFrame) Show(scr *vtui.ScreenBuf) {
 		}
 
 		if charToDraw != 0 {
-			attr := br.attr
-			if !af.classicMode {
-				if br.y%2 == 0 {
-					attr = cgaCyan
-				} else {
-					attr = cgaMagenta
-				}
+			attr := cgaMagenta
+			if br.y%2 == 0 {
+				attr = cgaCyan
 			}
 			brickStr := ""
 			for i := 0; i < brickW; i++ {
@@ -525,21 +487,17 @@ func (af *ArkanoidFrame) Show(scr *vtui.ScreenBuf) {
 
 	// Мяч (эволюционирует от Cyan до Yellow)
 	ballAttr := cgaWhite
-	if !af.classicMode {
-		switch {
-		case af.combo > 12: ballAttr = cgaYellow
-		case af.combo > 8:  ballAttr = cgaWhite
-		case af.combo > 4:  ballAttr = cgaMagenta
-		default:           ballAttr = cgaCyan
-		}
+	switch {
+	case af.combo > 12: ballAttr = cgaYellow
+	case af.combo > 8:  ballAttr = cgaWhite
+	case af.combo > 4:  ballAttr = cgaMagenta
+	default:           ballAttr = cgaCyan
 	}
 	scr.Write(x1+int(af.ballX), y1+int(af.ballY), vtui.StringToCharInfo(string(ballChar), ballAttr))
 
 	// Подготовка данных для информационной панели
 	infoAttr := cgaMagenta
-	if af.classicMode {
-		infoAttr = vtui.Palette[vtui.ColDialogText]
-	} else if af.autoPlay {
+	if af.autoPlay {
 		infoAttr = cgaCyan
 	}
 
@@ -582,7 +540,7 @@ func (af *ArkanoidFrame) Show(scr *vtui.ScreenBuf) {
 	// Эффект вспышки CGA (без красного)
 	if af.flashTimer > 0 {
 		af.flashTimer--
-		if af.flashTimer > 4 && !af.classicMode {
+		if af.flashTimer > 4 {
 			// CGA "Shock" — инверсия/мигание цветом
 			flashColor := cgaMagenta
 			if af.combo > 5 { flashColor = cgaCyan }
@@ -623,12 +581,6 @@ func (af *ArkanoidFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	// Ctrl+Alt+A: Toggle Auto-play
 	if e.VirtualKeyCode == 'A' && alt && ctrl && e.KeyDown {
 		af.autoPlay = !af.autoPlay
-		return true
-	}
-
-	// Ctrl+P: Toggle classic mode
-	if ctrl && e.VirtualKeyCode == 'P' {
-		af.classicMode = !af.classicMode
 		return true
 	}
 
