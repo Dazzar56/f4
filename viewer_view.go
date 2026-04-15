@@ -168,6 +168,11 @@ func (vv *ViewerView) DisplayObject(scr *vtui.ScreenBuf) {
 	// 1. Draw Background
 	scr.FillRect(vv.X1, vv.Y1+1, vv.X2, vv.Y2, ' ', bgAttr)
 
+	if vv.Busy {
+		scr.Write(vv.X1, vv.Y1+1, vtui.StringToCharInfo(" [ Loading... ] ", bgAttr))
+		return
+	}
+
 	if contentHeight > 0 {
 		if vv.HexMode {
 			vv.renderHex(scr, width, contentHeight)
@@ -446,7 +451,9 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 			return true
 		}
 
+		vv.Busy = true
 		vtui.RunAsync(func(ctx *vtui.TaskContext) {
+			defer ctx.RunOnUI(func() { vv.Busy = false })
 			width := vv.X2 - vv.X1 + 1
 			if vv.scrollBar != nil { width-- }
 
@@ -457,11 +464,17 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 			if startOff < 0 { startOff = 0 }
 
 			// Wait for data if jump is into un-cached region
+			// We scan at most 1MB from the end to fill the screen
+			if startOff < vv.backend.Size() - 1024*1024 {
+				startOff = vv.backend.Size() - 1024*1024
+			}
+			if startOff < 0 { startOff = 0 }
+
 			for {
 				if ctx.Err() != nil { return }
 				_, err := vv.backend.ReadAt(startOff, 1024)
 				if err != piecetable.ErrLoading { break }
-				time.Sleep(20 * time.Millisecond)
+				time.Sleep(10 * time.Millisecond)
 			}
 			startOff = vv.backend.FindLineStart(startOff)
 

@@ -366,5 +366,37 @@ func TestViewerView_HexModeToggle(t *testing.T) {
 		t.Error("F4 failed to toggle back to TextMode")
 	}
 }
+func TestViewerView_EndJump_BusyState(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	tmp := filepath.Join(t.TempDir(), "large.txt")
+	// Создаем файл, гарантированно превышающий размер окна
+	os.WriteFile(tmp, []byte(strings.Repeat("line\n", 1000)), 0644)
+
+	v := vfs.NewOSVFS(t.TempDir())
+	vv, _ := NewViewerView(context.Background(), v, tmp)
+	vv.SetPosition(0, 0, 80, 24)
+
+	// Нажимаем End
+	vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_END})
+
+	if !vv.Busy {
+		t.Error("Viewer should be in Busy state during End jump calculation")
+	}
+
+	// Ждем завершения асинхронной задачи
+	timeout := time.After(2 * time.Second)
+	for vv.Busy {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("End jump timed out")
+		}
+	}
+
+	if vv.TopOffset == 0 {
+		t.Error("TopOffset should have moved away from 0 after End jump")
+	}
+}
 
 

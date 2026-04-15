@@ -109,9 +109,9 @@ func (b *ViewerBackend) FindLineStart(offset int64) int64 {
 		
 		data, err := b.ReadAt(start, int(curr-start))
 		if err == piecetable.ErrLoading {
-			return 0 // Signal loading by returning 0 to force scan from start
+			return offset // Stay at current offset while loading
 		}
-		if err != nil { return 0 }
+		if err != nil { return offset }
 		
 		for i := len(data) - 1; i >= 0; i-- {
 			if data[i] == '\n' {
