@@ -219,6 +219,10 @@ func (pf *PanelsFrame) buildPrompt() []vtui.CharInfo {
 	home := ""
 	if usr != nil {
 		username = usr.Username
+		// On Windows, username often contains host or domain (e.g. "HOST\User")
+		if idx := strings.LastIndex(username, "\\"); idx != -1 {
+			username = username[idx+1:]
+		}
 		home = usr.HomeDir
 	}
 
