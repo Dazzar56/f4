@@ -1323,3 +1323,39 @@ func TestDriveMenu_PhysicalKeys(t *testing.T) {
 		t.Error("Physical key should have triggered selection and closed the menu")
 	}
 }
+func TestPanelsFrame_ShiftInsert_Fallthrough(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+
+	// 1. Prepare clipboard
+	testText := "ClipboardPayload"
+	vtui.SetClipboard(testText)
+
+	// 2. Ensure panel is active (should NOT handle Shift+Ins)
+	pf.activeIdx = 0
+	fsp := pf.panels[0].(*FileSystemPanel)
+	fsp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "some_file.txt"}}}
+	fsp.Refresh()
+	fsp.SetFocus(true)
+
+	// 3. Send Shift+Ins
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_INSERT,
+		ControlKeyState: vtinput.ShiftPressed,
+	})
+
+	// 4. Verify text landed in CommandLine
+	got := pf.cmdLine.Edit.GetText()
+	if !strings.Contains(got, testText) {
+		t.Errorf("Shift+Ins failed to fallthrough to CommandLine. Got %q, expected to contain %q", got, testText)
+	}
+
+	// 5. Verify file was NOT selected (Index 0 should remain unselected)
+	if fsp.entries[0].Selected {
+		t.Error("File was erroneously selected by Shift+Ins")
+	}
+}

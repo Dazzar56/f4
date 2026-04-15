@@ -610,6 +610,9 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 
 	switch e.VirtualKeyCode {
 	case vtinput.VK_INSERT:
+		if shift || ctrl || alt {
+			return false
+		}
 		idx := fp.GetCursorIndex()
 		if idx < len(fp.entries) && fp.entries[idx].Name != ".." {
 			fp.entries[idx].Selected = !fp.entries[idx].Selected
