@@ -1,8 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"math/rand"
+	"os"
+	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 
@@ -40,18 +44,20 @@ type ArkanoidFrame struct {
 	ballDX, ballDY float64
 	bricks       []brick
 	popup        scorePopup
-	lives        int
-	score        int
-	combo        int
-	multiplier   int
-	autoSpeed    int
-	leftPressed  bool    // Состояние клавиши влево
-	rightPressed bool    // Состояние клавиши вправо
-	gameOver     bool
-	message      string
-	flashTimer   int
-	classicMode  bool
-	autoPlay     bool
+	lives           int
+	score           int
+	combo           int
+	multiplier      int
+	autoSpeed       int
+	level           int
+	levelClearTimer int
+	leftPressed     bool    // Состояние клавиши влево
+	rightPressed    bool    // Состояние клавиши вправо
+	gameOver        bool
+	message         string
+	flashTimer      int
+	classicMode     bool
+	autoPlay        bool
 }
 
 func NewArkanoidFrame() *ArkanoidFrame {
@@ -64,10 +70,11 @@ func NewArkanoidFrame() *ArkanoidFrame {
 		BaseWindow: *vtui.NewBaseWindow(x1, 2, x1+width-1, 2+height-1, " A R K A N O I D "),
 		lives:      3,
 		multiplier: 1,
+		level:      1,
 	}
 	af.Modal = true
 	af.ShowClose = true
-	af.resetLevel()
+	af.initLevel()
 
 	// Start the game loop
 	go af.gameLoop()
@@ -75,7 +82,7 @@ func NewArkanoidFrame() *ArkanoidFrame {
 	return af
 }
 
-func (af *ArkanoidFrame) resetLevel() {
+func (af *ArkanoidFrame) initLevel() {
 	af.mu.Lock()
 	defer af.mu.Unlock()
 
@@ -96,17 +103,17 @@ func (af *ArkanoidFrame) resetLevel() {
 		vtui.SetRGBBoth(0, 0, 0xFF00FF),
 		vtui.SetRGBBoth(0, 0, 0x00FFFF),
 	}
-	// Золотое сечение CGA: шаг 5, кирпич 4, поле 6. (6 + 9*5 + 4 + 6 = 61)
 	gridStep := 5
 	margin := 6
 
+	// HP scales with level, colors shift
 	for r := 0; r < 4; r++ {
 		for c := 0; c < 10; c++ {
 			af.bricks = append(af.bricks, brick{
 				x:    c*gridStep + margin,
 				y:    r + 1,
-				hp:   1,
-				attr: brickColors[r],
+				hp:   1 + (af.level-1)/2,
+				attr: brickColors[(r+(af.level-1))%4],
 			})
 		}
 	}
@@ -126,7 +133,8 @@ func (af *ArkanoidFrame) gameLoop() {
 		if delay < 5*time.Millisecond { delay = 5 * time.Millisecond }
 
 		time.Sleep(delay)
-		if af.gameOver {
+		// Авто-пауза при потере фокуса или Game Over
+		if af.gameOver || !af.IsFocused() {
 			continue
 		}
 		af.update()
@@ -137,6 +145,18 @@ func (af *ArkanoidFrame) gameLoop() {
 func (af *ArkanoidFrame) update() {
 	af.mu.Lock()
 	defer af.mu.Unlock()
+
+	// Анимация прохождения уровня и пауза
+	if af.levelClearTimer > 0 {
+		af.levelClearTimer--
+		if af.levelClearTimer == 0 {
+			af.level++
+			af.mu.Unlock()
+			af.initLevel()
+			af.mu.Lock()
+		}
+		return
+	}
 
 	scrW, scrH := vtui.FrameManager.GetScreenSize(), 25
 
@@ -332,8 +352,11 @@ func (af *ArkanoidFrame) update() {
 		af.multiplier = 1
 		af.flashTimer = 8 // Сильная вспышка при потере жизни
 		if af.lives <= 0 {
-			af.gameOver = true
-			af.message = "G A M E  O V E R"
+			if !af.gameOver {
+				af.gameOver = true
+				af.message = "G A M E  O V E R"
+				af.checkHighScore()
+			}
 		} else {
 			af.ballX, af.ballY = float64(width/2), float64(height-3)
 			af.ballDX, af.ballDY = (rand.Float64() - 0.5), -0.5
@@ -348,9 +371,11 @@ func (af *ArkanoidFrame) update() {
 			break
 		}
 	}
-	if cleared {
-		af.gameOver = true
-		af.message = "YOU WIN!"
+	if cleared && af.levelClearTimer == 0 {
+		af.levelClearTimer = 60 // 3 seconds animation
+		af.combo = 0
+		af.multiplier = 1
+		af.message = fmt.Sprintf("LEVEL %d CLEARED!", af.level)
 	}
 }
 
@@ -381,23 +406,49 @@ func (af *ArkanoidFrame) Show(scr *vtui.ScreenBuf) {
 	af.mu.Lock()
 	defer af.mu.Unlock()
 
-	scrW := vtui.FrameManager.GetScreenSize()
+	//scrW := vtui.FrameManager.GetScreenSize()
 	width := af.X2 - af.X1 + 1
 
-	// Динамическая смена типа рамки: одинарная до 1/2 экрана, потом двойная
 	if !af.classicMode {
-		boxType := vtui.SingleBox
-		if width > scrW/2 {
-			boxType = vtui.DoubleBox
-		}
-		// Перерисовываем рамку поверх базовой, так как boxType в BaseWindow приватный
 		p := vtui.NewPainter(scr)
-		p.DrawBox(af.X1, af.Y1, af.X2, af.Y2, vtui.Palette[vtui.ColDialogBox], boxType)
-		// Перерисовываем заголовок
+		p.DrawBox(af.X1, af.Y1, af.X2, af.Y2, vtui.Palette[vtui.ColDialogBox], vtui.SingleBox)
 		titleAttr := vtui.Palette[vtui.ColDialogHighlightBoxTitle]
 		p.DrawTitle(af.X1, af.Y1, af.X2, " A R K A N O I D ", titleAttr)
 	}
+
 	height := af.Y2 - af.Y1 + 1
+
+	// Анимация прохождения уровня (бегущая неоновая рамка)
+	if af.levelClearTimer > 0 {
+		c := cgaCyan
+		if (af.levelClearTimer/4)%2 == 0 { c = cgaMagenta }
+
+		single := []rune{'│', '─', '┌', '┐', '└', '┘'}
+		double := []rune{'║', '═', '╔', '╗', '╚', '╝'}
+
+		for y := af.Y1; y <= af.Y2; y++ {
+			for x := af.X1; x <= af.X2; x++ {
+				if x == af.X1 || x == af.X2 || y == af.Y1 || y == af.Y2 {
+					dist := (x - af.X1) + (y - af.Y1)
+					syms := single
+					if (dist+af.levelClearTimer)%2 == 0 { syms = double }
+
+					var char rune = syms[1] // ─
+					if x == af.X1 || x == af.X2 { char = syms[0] } // │
+					if x == af.X1 && y == af.Y1 { char = syms[2] } // ┌
+					if x == af.X2 && y == af.Y1 { char = syms[3] } // ┐
+					if x == af.X1 && y == af.Y2 { char = syms[4] } // └
+					if x == af.X2 && y == af.Y2 { char = syms[5] } // ┘
+
+					scr.Write(x, y, vtui.StringToCharInfo(string(char), c))
+				}
+			}
+		}
+
+		msgAttr := cgaYellow
+		msgX := af.X1 + 1 + (width-len(af.message))/2
+		scr.Write(msgX, af.Y1+1+(height-2)/2, vtui.StringToCharInfo(af.message, msgAttr))
+	}
 	x1, y1 := af.X1+1, af.Y1+1
 
 	// Фон игрового поля
@@ -516,7 +567,7 @@ func (af *ArkanoidFrame) Show(scr *vtui.ScreenBuf) {
 		speedStr = fmt.Sprintf(" SPD:%+d", af.autoSpeed)
 	}
 
-	coreInfo := fmt.Sprintf("[ SCORE: %06d LIVES: %d STREAK: %s%s ]", af.score, af.lives, streakStr, speedStr)
+	coreInfo := fmt.Sprintf("[ LVL: %d SCORE: %06d LIVES: %d STREAK: %s%s ]", af.level, af.score, af.lives, streakStr, speedStr)
 
 	// Динамические боковые линии под размер окна
 	sideLen := (intW - len([]rune(coreInfo)) - 2) / 2
@@ -581,6 +632,12 @@ func (af *ArkanoidFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	}
 
+	// Ctrl+H: High Scores
+	if ctrl && e.VirtualKeyCode == 'H' {
+		af.showHighScoresDialog()
+		return true
+	}
+
 	switch e.VirtualKeyCode {
 	case '+', '=', vtinput.VK_ADD:
 		if af.autoSpeed < 5 { af.autoSpeed++ }
@@ -614,4 +671,85 @@ func (af *ArkanoidFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 
 	// Вызываем базовую логику для перетаскивания и кнопок заголовка
 	return af.BaseWindow.ProcessMouse(e)
+}
+
+// --- High Scores System ---
+
+type ArkScore struct {
+	Name  string `json:"name"`
+	Score int    `json:"score"`
+	Level int    `json:"level"`
+}
+
+var ArkHighScores []ArkScore
+
+func loadArkScores() {
+	cfgDir, _ := os.UserConfigDir()
+	p := filepath.Join(cfgDir, "f4", "ark_scores.json")
+	data, err := os.ReadFile(p)
+	if err == nil {
+		json.Unmarshal(data, &ArkHighScores)
+	}
+}
+
+func saveArkScores() {
+	cfgDir, _ := os.UserConfigDir()
+	p := filepath.Join(cfgDir, "f4", "ark_scores.json")
+	data, _ := json.MarshalIndent(ArkHighScores, "", "  ")
+	os.WriteFile(p, data, 0644)
+}
+
+func (af *ArkanoidFrame) checkHighScore() {
+	loadArkScores()
+	isHigh := false
+	if len(ArkHighScores) < 10 {
+		isHigh = true
+	} else {
+		for _, hs := range ArkHighScores {
+			if af.score > hs.Score {
+				isHigh = true
+				break
+			}
+		}
+	}
+	if isHigh && af.score > 0 {
+		af.RunOnUI(func() {
+			vtui.InputBox(" New High Score! ", "Enter your name:", "Player", func(name string) {
+				if name != "" {
+					ArkHighScores = append(ArkHighScores, ArkScore{Name: name, Score: af.score, Level: af.level})
+					sort.Slice(ArkHighScores, func(i, j int) bool { return ArkHighScores[i].Score > ArkHighScores[j].Score })
+					if len(ArkHighScores) > 10 {
+						ArkHighScores = ArkHighScores[:10]
+					}
+					saveArkScores()
+					af.showHighScoresDialog()
+				}
+			})
+		})
+	}
+}
+
+func (af *ArkanoidFrame) showHighScoresDialog() {
+	loadArkScores()
+	af.RunOnUI(func() {
+		dlg := vtui.NewCenteredDialog(42, 15, " High Scores ")
+		dlg.ShowClose = true
+
+		var lines []string
+		for i, hs := range ArkHighScores {
+			lines = append(lines, fmt.Sprintf("%2d. %-12s %06d (Lvl %d)", i+1, hs.Name, hs.Score, hs.Level))
+		}
+		if len(lines) == 0 {
+			lines = append(lines, "No scores yet.")
+		}
+
+		lb := vtui.NewListBox(0, 0, 38, 11, lines)
+		dlg.AddItem(lb)
+
+		vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 38, 11)
+		vbox.Add(lb, vtui.Margins{}, vtui.AlignFill)
+		vbox.Apply()
+
+		vtui.FrameManager.Push(dlg)
+	})
 }
