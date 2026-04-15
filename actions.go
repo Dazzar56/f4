@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -285,7 +286,12 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 	promptLbl := vtui.NewLabel(0, 0, fmt.Sprintf(prompt, len(names)), nil)
 	dlg.AddItem(promptLbl)
 
-	editDest := vtui.NewEdit(0, 0, 10, dstVfs.GetPath())
+	initialDest := dstVfs.GetPath()
+	if initialDest != "" && !strings.HasSuffix(initialDest, "/") && !strings.HasSuffix(initialDest, "\\") {
+		initialDest += string(os.PathSeparator)
+	}
+
+	editDest := vtui.NewEdit(0, 0, 10, initialDest)
 	dlg.AddItem(editDest)
 
 	chkFork := vtui.NewCheckbox(0, 0, Msg("Op.ClonePanels"), false)
