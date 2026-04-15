@@ -455,6 +455,10 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		panic("Manual safe crash triggered by user (Ctrl+Alt+C) for testing!")
 	}
 	if e.Type == vtinput.FocusEventType {
+		// Reload macros from disk when regaining focus to share them across instances
+		if e.SetFocus && MacroMgr != nil {
+			MacroMgr.Load()
+		}
 		// Propagate focus to command line so its cursor state stays in sync
 		pf.cmdLine.ProcessKey(e)
 		return true

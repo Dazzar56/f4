@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/unxed/vtui"
 )
@@ -40,16 +41,16 @@ func SaveConfig() {
 	path := getConfigIniPath()
 	os.MkdirAll(filepath.Dir(path), 0755)
 
-	f, err := os.Create(path)
+	var sb strings.Builder
+	sb.WriteString("[Panel]\n")
+	sb.WriteString(fmt.Sprintf("ShowHiddenFiles = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.ShowHiddenFiles]))
+	sb.WriteString(fmt.Sprintf("HighlightDir = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.HighlightDir]))
+
+	err := os.WriteFile(path, []byte(sb.String()), 0644)
 	if err != nil {
 		vtui.DebugLog("CONFIG: Failed to save application settings: %v", err)
 		return
 	}
-	defer f.Close()
-
-	fmt.Fprintln(f, "[Panel]")
-	fmt.Fprintf(f, "ShowHiddenFiles = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.ShowHiddenFiles])
-	fmt.Fprintf(f, "HighlightDir = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.HighlightDir])
 
 	vtui.DebugLog("CONFIG: Saved application settings to %s", path)
 }

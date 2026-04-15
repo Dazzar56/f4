@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"path/filepath"
 
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
@@ -105,7 +106,7 @@ func (m *MacroManager) showAssignDialog() {
 
 func (m *MacroManager) Load() {
 	vtui.DebugLog("MACRO: Loading macros from %s", m.iniPath)
-	m.Macros = make(map[string][]*vtinput.InputEvent)
+	newMacros := make(map[string][]*vtinput.InputEvent)
 	ini := LoadIni(m.iniPath)
 	if sec, ok := ini.data["Macros"]; ok {
 		for key, val := range sec {
@@ -126,26 +127,29 @@ func (m *MacroManager) Load() {
 					})
 				}
 			}
-			m.Macros[key] = events
+			newMacros[key] = events
 		}
 	}
+	m.Macros = newMacros
 }
 
 func (m *MacroManager) Save() {
 	vtui.DebugLog("MACRO: Saving macros to %s", m.iniPath)
-	f, err := os.Create(m.iniPath)
-	if err != nil {
-		return
-	}
-	defer f.Close()
 
-	fmt.Fprintln(f, "[Macros]")
+	var sb strings.Builder
+	sb.WriteString("[Macros]\n")
 	for key, seq := range m.Macros {
 		var parts []string
 		for _, e := range seq {
 			parts = append(parts, fmt.Sprintf("%d:%d:%d", e.Char, e.VirtualKeyCode, normalizeMods(e.ControlKeyState)))
 		}
-		fmt.Fprintf(f, "%s=%s\n", key, strings.Join(parts, ","))
+		sb.WriteString(fmt.Sprintf("%s=%s\n", key, strings.Join(parts, ",")))
+	}
+
+	os.MkdirAll(filepath.Dir(m.iniPath), 0755)
+	err := os.WriteFile(m.iniPath, []byte(sb.String()), 0644)
+	if err != nil {
+		vtui.DebugLog("MACRO: Failed to save: %v", err)
 	}
 }
 

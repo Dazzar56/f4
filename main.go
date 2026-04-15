@@ -261,21 +261,21 @@ func SaveSession() {
 	path := getSessionIniPath()
 	os.MkdirAll(filepath.Dir(path), 0755)
 
-	f, err := os.Create(path)
+	var sb strings.Builder
+	sb.WriteString("[EditorSearch]\n")
+	sb.WriteString(fmt.Sprintf("Pattern = %s\n", LastEditorSearch))
+	sb.WriteString(fmt.Sprintf("CaseSensitive = %d\n", map[bool]int{true: 1, false: 0}[LastEditorSearchCase]))
+	sb.WriteString(fmt.Sprintf("Reverse = %d\n", map[bool]int{true: 1, false: 0}[LastEditorSearchReverse]))
+
+	sb.WriteString("\n[FindFile]\n")
+	sb.WriteString(fmt.Sprintf("Mask = %s\n", LastFindFileMask))
+	sb.WriteString(fmt.Sprintf("Text = %s\n", LastFindFileText))
+
+	err := os.WriteFile(path, []byte(sb.String()), 0644)
 	if err != nil {
 		vtui.DebugLog("SESSION: Failed to save state: %v", err)
 		return
 	}
-	defer f.Close()
-
-	fmt.Fprintln(f, "[EditorSearch]")
-	fmt.Fprintf(f, "Pattern = %s\n", LastEditorSearch)
-	fmt.Fprintf(f, "CaseSensitive = %d\n", map[bool]int{true: 1, false: 0}[LastEditorSearchCase])
-	fmt.Fprintf(f, "Reverse = %d\n", map[bool]int{true: 1, false: 0}[LastEditorSearchReverse])
-
-	fmt.Fprintln(f, "\n[FindFile]")
-	fmt.Fprintf(f, "Mask = %s\n", LastFindFileMask)
-	fmt.Fprintf(f, "Text = %s\n", LastFindFileText)
 
 	vtui.DebugLog("SESSION: Saved state to %s", path)
 }
