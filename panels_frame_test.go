@@ -556,6 +556,84 @@ func TestPanelsFrame_SwapPanels(t *testing.T) {
 		t.Error("Swapped panel did not preserve its ViewMode")
 	}
 }
+func TestPanelsFrame_Clone_SelectionPreservation(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	tmp := t.TempDir()
+	os.WriteFile(filepath.Join(tmp, "selected.txt"), []byte("data"), 0644)
+	os.WriteFile(filepath.Join(tmp, "normal.txt"), []byte("data"), 0644)
+
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+	fsp := pf.panels[0].(*FileSystemPanel)
+	fsp.vfs.SetPath(tmp)
+	fsp.ReadDirectory() // Explicitly start loading the temp directory
+
+	// 1. Wait for initial load to finish
+	timeout := time.After(2 * time.Second)
+	for fsp.isLoading {
+		select {
+		case task := <-vtui.FrameManager.TaskChan: task()
+		case <-timeout: t.Fatal("Timeout waiting for initial load")
+		}
+	}
+	// Drain UI queue
+	for i := 0; i < 10; i++ {
+		select {
+		case task := <-vtui.FrameManager.TaskChan: task()
+		default:
+		}
+	}
+
+	// 2. Select "selected.txt" (should be at index 2, as 0:.., 1:normal, 2:selected)
+	found := false
+	for _, e := range fsp.entries {
+		if e.Name == "selected.txt" {
+			e.Selected = true
+			found = true
+			break
+		}
+	}
+	if !found { t.Fatal("Setup failed: 'selected.txt' not found in entries") }
+
+	// 3. Perform Clone
+	clone := pf.Clone()
+	cloneFsp := clone.panels[0].(*FileSystemPanel)
+
+	// 4. Clone triggers async ReadDirectory. Wait for it.
+	timeout = time.After(2 * time.Second)
+	for cloneFsp.isLoading {
+		select {
+		case task := <-vtui.FrameManager.TaskChan: task()
+		case <-timeout: t.Fatal("Timeout waiting for clone load")
+		}
+	}
+	// Final drain
+	for i := 0; i < 10; i++ {
+		select {
+		case task := <-vtui.FrameManager.TaskChan: task()
+		default:
+		}
+	}
+
+	// 5. Verify preservation
+	foundInClone := false
+	for _, e := range cloneFsp.entries {
+		if e.Name == "selected.txt" {
+			foundInClone = true
+			if !e.Selected {
+				t.Error("Selection was lost after clone/reload")
+			}
+		}
+		if e.Name == "normal.txt" && e.Selected {
+			t.Error("'normal.txt' erroneously marked as selected in clone")
+		}
+	}
+	if !foundInClone {
+		t.Error("'selected.txt' missing in cloned panel entries")
+	}
+}
 func TestPanelsFrame_CloneIndependence(t *testing.T) {
 	pf := NewPanelsFrame()
 	pf.ResizeConsole(80, 25)

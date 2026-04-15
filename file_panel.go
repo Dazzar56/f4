@@ -362,6 +362,14 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 		}
 	}
 
+	// Capture currently selected names to restore them after the async reload
+	selectedNames := make(map[string]bool)
+	for _, e := range fp.entries {
+		if e.Selected && e.Name != ".." {
+			selectedNames[e.Name] = true
+		}
+	}
+
 	go func() {
 		isFirstChunk := true
 		err := fp.vfs.ReadDir(ctx, path, func(chunk []vfs.VFSItem) {
@@ -373,7 +381,11 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 				if !AppConfig.ShowHiddenFiles && item.Name != ".." && item.IsHidden {
 					continue
 				}
-				newEntries = append(newEntries, &fileEntry{VFSItem: item})
+				entry := &fileEntry{VFSItem: item}
+				if selectedNames[item.Name] {
+					entry.Selected = true
+				}
+				newEntries = append(newEntries, entry)
 			}
 
 			vtui.FrameManager.PostTask(func() {
