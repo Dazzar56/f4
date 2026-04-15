@@ -11,6 +11,7 @@ import (
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
+	"unicode"
 	"github.com/unxed/vtui/piecetable"
 	"github.com/unxed/vtui/textlayout"
 )
@@ -77,6 +78,12 @@ type EditorView struct {
 	inGroup    bool
 	lastOp     undoOpType
 	cleanState piecetable.TableState // State of the file on disk
+
+	// Autocomplete state
+	acEnabled     bool
+	acPrefix      string
+	acMatches     []string
+	acCurrentIdx  int
 }
 
 type undoOpType int
@@ -118,6 +125,21 @@ func NewEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string) *EditorVie
 		WordWrap:        false,
 		ShowWhitespaces: false,
 		cleanState:      pt.GetState(),
+	}
+	// Determine if AC should be enabled for this file
+	ev.acEnabled = false
+	if AppConfig.EditorAutoComplete && path != "" {
+		masks := strings.Split(AppConfig.EditorAutoCompleteMask, ";")
+		fileName := strings.ToLower(filepath.Base(path))
+		for _, mask := range masks {
+			mask = strings.TrimSpace(mask)
+			if mask == "" { continue }
+			matched, _ := filepath.Match(strings.ToLower(mask), fileName)
+			if matched {
+				ev.acEnabled = true
+				break
+			}
+		}
 	}
 	ev.highlighter = vtui.GetHighlighter(path, "")
 	ev.scrollBar = vtui.NewScrollBar(0, 0, 0)
@@ -459,6 +481,37 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 	}
 
 DoneRendering:
+	// 3. Draw Autocomplete Ghost Text
+	if ev.acEnabled && len(ev.acMatches) > 0 && ev.IsFocused() && !ev.pasting {
+		match := ev.acMatches[ev.acCurrentIdx]
+		if len(match) > len(ev.acPrefix) {
+			tail := match[len(ev.acPrefix):]
+			// Calculate exact visual position of cursor
+			curOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
+			vRow, vCol := ev.engine.LogicalToVisual(curOffset)
+
+			drawY := ev.Y1 + 1 + vRow - ev.ScrollTopRow
+			drawX := ev.X1 + vCol - ev.ScrollLeft
+
+			// Draw if visible
+			if drawY >= ev.Y1+1 && drawY <= ev.Y2 {
+				// We use DimColor of the standard text to make it look like a ghost suggestion
+				ghostAttr := vtui.DimColor(vtui.Palette[ColCommandLineUserScreen])
+				// Ensure it doesn't leak out of the editor frame
+				maxLen := ev.X2 - drawX
+				if ev.scrollBar != nil { maxLen-- }
+
+				if maxLen > 0 {
+					displayTail := tail
+					if len([]rune(displayTail)) > maxLen {
+						displayTail = string([]rune(displayTail)[:maxLen])
+					}
+					scr.Write(drawX, drawY, vtui.StringToCharInfo(displayTail, ghostAttr))
+				}
+			}
+		}
+	}
+
 	scr.PopClipRect()
 
 	if ev.scrollBar != nil {
@@ -536,6 +589,49 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 
 	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
 	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
+	// --- Autocomplete Interception ---
+	if ev.acEnabled && len(ev.acMatches) > 0 {
+		if e.VirtualKeyCode == vtinput.VK_TAB {
+			if (e.ControlKeyState & vtinput.ShiftPressed) != 0 {
+				// Shift+Tab: cycle matches
+				ev.acCurrentIdx = (ev.acCurrentIdx + 1) % len(ev.acMatches)
+				vtui.FrameManager.Redraw()
+				return true
+			} else if (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed | vtinput.LeftAltPressed | vtinput.RightAltPressed)) == 0 {
+				// Tab: Apply completion
+				match := ev.acMatches[ev.acCurrentIdx]
+				tail := match[len(ev.acPrefix):]
+				ev.acMatches = nil // Clear state
+
+				ev.saveUndo(opTyping)
+				ev.modified = true
+				offset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
+				data := []byte(tail)
+				ev.pt.Insert(offset, data)
+				ev.li.UpdateAfterInsert(offset, data)
+				ev.invalidateStates(ev.CursorLine)
+				ev.engine.InvalidateFrom(ev.CursorLine)
+				ev.CursorPos += len(data)
+				ev.updateDesiredVisualCol()
+				ev.ensureCursorVisible()
+				return true
+			}
+		} else if e.VirtualKeyCode == vtinput.VK_ESCAPE {
+			// Esc: Dismiss autocomplete
+			ev.acMatches = nil
+			vtui.FrameManager.Redraw()
+			return true
+		}
+
+		// Any movement or non-character key clears the AC state
+		if e.VirtualKeyCode == vtinput.VK_UP || e.VirtualKeyCode == vtinput.VK_DOWN ||
+		   e.VirtualKeyCode == vtinput.VK_LEFT || e.VirtualKeyCode == vtinput.VK_RIGHT ||
+		   e.VirtualKeyCode == vtinput.VK_HOME || e.VirtualKeyCode == vtinput.VK_END ||
+		   e.VirtualKeyCode == vtinput.VK_PRIOR || e.VirtualKeyCode == vtinput.VK_NEXT ||
+		   e.VirtualKeyCode == vtinput.VK_RETURN {
+			ev.acMatches = nil
+		}
+	}
 
 	// Allow FrameManager to handle Ctrl+Tab for workspace switching
 	if e.VirtualKeyCode == vtinput.VK_TAB && ctrl {
@@ -1032,6 +1128,10 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		ev.CursorPos += len(data)
 		ev.updateDesiredVisualCol()
 		ev.ensureCursorVisible()
+
+		if ev.acEnabled {
+			ev.updateAutocomplete()
+		}
 		return true
 	}
 
@@ -1752,4 +1852,110 @@ func getCharCategory(r rune) int {
 		return catDivider
 	}
 	return catWord
+}
+// updateAutocomplete scans nearby lines for words matching the current prefix.
+func (ev *EditorView) updateAutocomplete() {
+	ev.acMatches = nil
+	if ev.CursorPos == 0 {
+		return
+	}
+
+	lineStart := ev.li.GetLineOffset(ev.CursorLine)
+	lineData, _ := ev.pt.GetRange(lineStart, ev.CursorPos)
+	if len(lineData) == 0 {
+		return
+	}
+
+	runes := []rune(string(lineData))
+
+	// Find prefix by going backwards until non-word character
+	prefixStart := len(runes)
+	for i := len(runes) - 1; i >= 0; i-- {
+		r := runes[i]
+		if !(unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '-') {
+			break
+		}
+		prefixStart = i
+	}
+
+	if prefixStart == len(runes) {
+		return // No word char before cursor
+	}
+
+	ev.acPrefix = string(runes[prefixStart:])
+
+	// Minimum prefix length to trigger suggestions (like in far2l)
+	if len([]rune(ev.acPrefix)) < 2 {
+		return
+	}
+
+	// Scan lines around cursor
+	maxDelta := 256
+	startL := ev.CursorLine - maxDelta
+	if startL < 0 { startL = 0 }
+	endL := ev.CursorLine + maxDelta
+	if endL >= ev.li.LineCount() { endL = ev.li.LineCount() - 1 }
+
+	seen := make(map[string]bool)
+	var currentLineMatches []string
+	var otherLineMatches []string
+
+	// Fast word extractor
+	extractWords := func(lineIdx int) {
+		lStart := ev.li.GetLineOffset(lineIdx)
+		lLen := ev.getLineLength(lineIdx)
+		// Limit to 512 bytes per line to avoid lag on minified files
+		if lLen > 512 { lLen = 512 }
+
+		data, _ := ev.pt.GetRange(lStart, lLen)
+		if len(data) == 0 { return }
+
+		lRunes := []rune(string(data))
+		wordStart := -1
+
+		for i, r := range lRunes {
+			isWord := unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '-'
+			if isWord {
+				if wordStart == -1 { wordStart = i }
+			} else {
+				if wordStart != -1 {
+					word := string(lRunes[wordStart:i])
+					if strings.HasPrefix(word, ev.acPrefix) && word != ev.acPrefix && !seen[word] {
+						seen[word] = true
+						if lineIdx == ev.CursorLine {
+							currentLineMatches = append(currentLineMatches, word)
+						} else {
+							otherLineMatches = append(otherLineMatches, word)
+						}
+					}
+					wordStart = -1
+				}
+			}
+		}
+		// Check tail
+		if wordStart != -1 {
+			word := string(lRunes[wordStart:])
+			if strings.HasPrefix(word, ev.acPrefix) && word != ev.acPrefix && !seen[word] {
+				seen[word] = true
+				if lineIdx == ev.CursorLine {
+					currentLineMatches = append(currentLineMatches, word)
+				} else {
+					otherLineMatches = append(otherLineMatches, word)
+				}
+			}
+		}
+	}
+
+	// Prioritize current line, then others
+	extractWords(ev.CursorLine)
+	for i := startL; i <= endL; i++ {
+		if i != ev.CursorLine {
+			extractWords(i)
+		}
+	}
+
+	if len(currentLineMatches) > 0 || len(otherLineMatches) > 0 {
+		ev.acMatches = append(currentLineMatches, otherLineMatches...)
+		ev.acCurrentIdx = 0
+	}
 }

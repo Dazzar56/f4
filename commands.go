@@ -37,4 +37,5 @@ const (
 	CmAddArchive
 	CmExtractArchive
 	CmPanelSettings
+	CmEditorSettings
 )

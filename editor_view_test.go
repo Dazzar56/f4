@@ -2947,3 +2947,99 @@ func TestEditorView_SearchPersistence(t *testing.T) {
 			LastEditorSearch, LastEditorSearchCase, LastEditorSearchReverse)
 	}
 }
+func TestEditorView_Autocomplete_Logic(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	// Настраиваем конфиг
+	oldCfg := AppConfig
+	AppConfig.EditorAutoComplete = true
+	AppConfig.EditorAutoCompleteMask = "*.txt"
+	defer func() { AppConfig = oldCfg }()
+
+	// Создаем текст с повторяющимися словами
+	content := "apple application approach\nbanana\napple"
+	pt := piecetable.New([]byte(content))
+	ev := NewEditorView(pt, nil, "test.txt")
+	ev.SetPosition(0, 0, 80, 24)
+
+	if !ev.acEnabled {
+		t.Fatal("Autocomplete should be enabled for test.txt")
+	}
+
+	// 1. Проверка набора префикса
+	// Переходим в конец второй строки и начинаем писать "app"
+	ev.CursorLine = 1
+	ev.CursorPos = 6 // после "banana"
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN})
+	// Теперь CursorLine = 2, Pos = 0
+
+	for _, char := range "app" {
+		ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: char})
+	}
+
+	if ev.acPrefix != "app" {
+		t.Errorf("Wrong AC prefix: expected 'app', got %q", ev.acPrefix)
+	}
+
+	// Должно найти 3 слова: apple, application, approach
+	if len(ev.acMatches) < 3 {
+		t.Errorf("Expected at least 3 matches, got %d: %v", len(ev.acMatches), ev.acMatches)
+	}
+
+	// 2. Проверка переключения (Shift+Tab)
+	initialMatch := ev.acMatches[ev.acCurrentIdx]
+	ev.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_TAB, ControlKeyState: vtinput.ShiftPressed,
+	})
+	if ev.acMatches[ev.acCurrentIdx] == initialMatch {
+		t.Error("Shift+Tab failed to cycle matches")
+	}
+
+	// 3. Проверка применения (Tab)
+	// Допустим, выбрали "apple"
+	ev.acCurrentIdx = 0
+	for ev.acMatches[ev.acCurrentIdx] != "apple" {
+		ev.acCurrentIdx = (ev.acCurrentIdx + 1) % len(ev.acMatches)
+	}
+
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_TAB})
+
+	// "app" + "le" = "apple"
+	lastLine := ev.getLogicalLineRunes(2)
+	if string(lastLine) != "apple" {
+		t.Errorf("Autocomplete application failed: expected 'apple', got %q", string(lastLine))
+	}
+	if ev.acMatches != nil {
+		t.Error("AC matches should be cleared after application")
+	}
+}
+
+func TestEditorView_Autocomplete_Cancellation(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pt := piecetable.New([]byte("hello helicopter"))
+	ev := NewEditorView(pt, nil, "test.txt")
+	ev.acEnabled = true
+
+	// Начинаем писать "hel"
+	for _, char := range "hel" {
+		ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: char})
+	}
+	if len(ev.acMatches) == 0 { t.Fatal("Setup failed: no matches found") }
+
+	// Нажимаем стрелку вправо (или любую навигацию)
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT})
+
+	if ev.acMatches != nil {
+		t.Error("Autocomplete should be cancelled on navigation")
+	}
+
+	// Проверка ESC
+	for _, char := range "hel" {
+		ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: char})
+	}
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_ESCAPE})
+	if ev.acMatches != nil {
+		t.Error("Autocomplete should be cancelled on ESC")
+	}
+}

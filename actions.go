@@ -331,6 +331,52 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 
 	vtui.FrameManager.Push(dlg)
 }
+func actionEditorSettings(pf *PanelsFrame) {
+	dlg := vtui.NewCenteredDialog(54, 11, Msg("EditorSettings.Title"))
+	dlg.ShowClose = true
+
+	chkAuto := vtui.NewCheckbox(0, 0, Msg("EditorSettings.AutoComplete"), false)
+	chkAuto.State = 0
+	if AppConfig.EditorAutoComplete { chkAuto.State = 1 }
+
+	lblMask := vtui.NewLabel(0, 0, Msg("EditorSettings.Mask"), nil)
+	editMask := vtui.NewEdit(0, 0, 30, AppConfig.EditorAutoCompleteMask)
+	lblMask.FocusLink = editMask
+
+	btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))
+	btnOk.IsDefault = true
+	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
+
+	dlg.AddItem(chkAuto)
+	dlg.AddItem(lblMask)
+	dlg.AddItem(editMask)
+	dlg.AddItem(btnOk)
+	dlg.AddItem(btnCancel)
+
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 54-4, 11-4)
+	vbox.Add(chkAuto, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(lblMask, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	vbox.Add(editMask, vtui.Margins{}, vtui.AlignFill)
+
+	hbox := vtui.NewHBoxLayout(0, 0, 54-4, 1)
+	hbox.HorizontalAlign = vtui.AlignCenter
+	hbox.Spacing = 2
+	hbox.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
+	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
+
+	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Apply()
+
+	btnCancel.OnClick = func() { dlg.Close() }
+	btnOk.OnClick = func() {
+		AppConfig.EditorAutoComplete = chkAuto.State == 1
+		AppConfig.EditorAutoCompleteMask = editMask.GetText()
+		SaveConfig()
+		dlg.Close()
+	}
+
+	vtui.FrameManager.Push(dlg)
+}
 
 func actionDelete(pf *PanelsFrame) {
 	fsp := pf.getActivePanel()
