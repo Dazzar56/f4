@@ -885,6 +885,307 @@ func TestRecursiveCopy_ByteProgress(t *testing.T) {
 		if totalBytes != 11 { t.Errorf("Expected 11 bytes total, got %d", totalBytes) }
 	})
 }
+// --- UI Integration Tests for Conflict Resolution ---
+
+// Helper to pump UI tasks until a dialog with the given title appears
+func waitForDialog(t *testing.T, title string) vtui.Container {
+	t.Helper()
+	// Check if it's already on top and not closed
+	top := vtui.FrameManager.GetTopFrame()
+	if top != nil && top.GetTitle() == title && !top.IsDone() {
+		return top.(vtui.Container)
+	}
+
+	timeout := time.After(2 * time.Second)
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			top := vtui.FrameManager.GetTopFrame()
+			// Only return active dialogs, ignore stale closed ones
+			if top != nil && top.GetTitle() == title && !top.IsDone() {
+				return top.(vtui.Container)
+			}
+		case <-timeout:
+			t.Fatalf("Timeout waiting for dialog %q", title)
+		}
+	}
+}
+
+func getCleanText(item vtui.UIElement) string {
+	switch v := item.(type) {
+	case *vtui.Button:
+		clean, _, _ := vtui.ParseAmpersandString(v.GetText())
+		return strings.TrimSpace(strings.Trim(clean, "[]"))
+	case *vtui.Checkbox:
+		clean, _, _ := vtui.ParseAmpersandString(v.GetText())
+		return strings.TrimSpace(clean)
+	}
+	return ""
+}
+
+func clickDialogButton(t *testing.T, dlg vtui.Container, btnText string) {
+	t.Helper()
+	for _, itm := range dlg.GetChildren() {
+		if b, ok := itm.(*vtui.Button); ok {
+			if getCleanText(b) == btnText {
+				if b.OnClick != nil {
+					b.OnClick()
+					return
+				}
+			}
+		}
+	}
+	t.Fatalf("Button %q not found in dialog", btnText)
+}
+
+func setDialogCheckbox(t *testing.T, dlg vtui.Container, chkText string, state int) {
+	t.Helper()
+	for _, itm := range dlg.GetChildren() {
+		if c, ok := itm.(*vtui.Checkbox); ok {
+			if getCleanText(c) == chkText {
+				c.State = state
+				return
+			}
+		}
+	}
+	t.Fatalf("Checkbox %q not found in dialog", chkText)
+}
+
+func enterTextAndOk(t *testing.T, dlg vtui.Container, text string) {
+	t.Helper()
+	for _, itm := range dlg.GetChildren() {
+		if e, ok := itm.(*vtui.Edit); ok {
+			e.SetText(text)
+		}
+		if b, ok := itm.(*vtui.Button); ok {
+			if getCleanText(b) == "Ok" {
+				if b.OnClick != nil {
+					b.OnClick()
+					return
+				}
+			}
+		}
+	}
+	t.Fatalf("Failed to enter text and click Ok")
+}
+
+func TestFileOps_UI_RememberOverwrite(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	tmpSrc := t.TempDir()
+	tmpDst := t.TempDir()
+	os.WriteFile(filepath.Join(tmpSrc, "f1.txt"), []byte("new1"), 0644)
+	os.WriteFile(filepath.Join(tmpSrc, "f2.txt"), []byte("new2"), 0644)
+	os.WriteFile(filepath.Join(tmpDst, "f1.txt"), []byte("old1"), 0644)
+	os.WriteFile(filepath.Join(tmpDst, "f2.txt"), []byte("old2"), 0644)
+
+	done := make(chan struct{})
+	ExecuteFileOp(nil, vfs.NewOSVFS(tmpSrc), vfs.NewOSVFS(tmpDst), []string{"f1.txt", "f2.txt"}, tmpDst, false, false, func() { close(done) })
+
+	// Wait for first warning (f1.txt)
+	dlg := waitForDialog(t, " Warning ")
+
+	// Check "Remember choice" and click "Overwrite"
+	setDialogCheckbox(t, dlg, "Remember choice", 1)
+	clickDialogButton(t, dlg, "Overwrite")
+
+	// Now wait for done. If it asks again, it will trigger a fatal error.
+	timeout := time.After(2 * time.Second)
+pump1:
+	for {
+		select {
+		case <-done:
+			break pump1
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			if vtui.FrameManager.GetTopFrameType() == vtui.TypeDialog {
+				top := vtui.FrameManager.GetTopFrame()
+				// Only fail if a NEW active warning dialog appears
+				if top.GetTitle() == " Warning " && !top.IsDone() {
+					t.Fatalf("Dialog appeared again despite 'Remember choice'")
+				}
+			}
+		case <-timeout:
+			t.Fatalf("Timeout waiting for operation to complete")
+		}
+	}
+
+	d1, _ := os.ReadFile(filepath.Join(tmpDst, "f1.txt"))
+	d2, _ := os.ReadFile(filepath.Join(tmpDst, "f2.txt"))
+	if string(d1) != "new1" || string(d2) != "new2" {
+		t.Errorf("Files were not overwritten. f1:%s, f2:%s", d1, d2)
+	}
+}
+
+func TestFileOps_UI_RenameAndAppendUnsupported(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	tmpSrc := t.TempDir()
+	tmpDst := t.TempDir()
+	os.WriteFile(filepath.Join(tmpSrc, "f1.txt"), []byte("source"), 0644)
+	os.WriteFile(filepath.Join(tmpDst, "f1.txt"), []byte("dest1"), 0644)
+	os.WriteFile(filepath.Join(tmpDst, "f2.txt"), []byte("dest2"), 0644)
+
+	done := make(chan struct{})
+	ExecuteFileOp(nil, vfs.NewOSVFS(tmpSrc), vfs.NewOSVFS(tmpDst), []string{"f1.txt"}, tmpDst, false, false, func() { close(done) })
+
+	// 1. First warning (f1.txt)
+	dlg := waitForDialog(t, " Warning ")
+
+	// 2. Click Append -> should show "Unsupported"
+	clickDialogButton(t, dlg, "Append")
+	errDlg := waitForDialog(t, " Unsupported ")
+	clickDialogButton(t, errDlg, "Ok")
+
+	// 3. Warning should reappear for f1.txt
+	dlg2 := waitForDialog(t, " Warning ")
+
+	// 4. Click Rename
+	clickDialogButton(t, dlg2, "Rename")
+	renDlg := waitForDialog(t, " Rename ")
+	enterTextAndOk(t, renDlg, "f2.txt") // Rename to f2.txt, which ALSO exists
+
+	// 5. Warning should reappear for f2.txt
+	dlg3 := waitForDialog(t, " Warning ")
+
+	// 6. Click Overwrite
+	clickDialogButton(t, dlg3, "Overwrite")
+
+	timeout := time.After(2 * time.Second)
+pump2:
+	for {
+		select {
+		case <-done:
+			break pump2
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatalf("Timeout")
+		}
+	}
+
+	d2, _ := os.ReadFile(filepath.Join(tmpDst, "f2.txt"))
+	if string(d2) != "source" {
+		t.Errorf("Rename + Overwrite failed. f2.txt contains: %s", d2)
+	}
+}
+
+func TestFileOps_UI_MoveSkip(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	tmpSrc := t.TempDir()
+	tmpDst := t.TempDir()
+	os.WriteFile(filepath.Join(tmpSrc, "f1.txt"), []byte("source"), 0644)
+	os.WriteFile(filepath.Join(tmpDst, "f1.txt"), []byte("dest"), 0644)
+
+	done := make(chan struct{})
+	// isMove = true
+	ExecuteFileOp(nil, vfs.NewOSVFS(tmpSrc), vfs.NewOSVFS(tmpDst), []string{"f1.txt"}, tmpDst, true, false, func() { close(done) })
+
+	dlg := waitForDialog(t, " Warning ")
+	clickDialogButton(t, dlg, "Skip")
+
+	timeout := time.After(2 * time.Second)
+pump3:
+	for {
+		select {
+		case <-done:
+			break pump3
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatalf("Timeout")
+		}
+	}
+
+	if _, err := os.Stat(filepath.Join(tmpSrc, "f1.txt")); os.IsNotExist(err) {
+		t.Error("Source file was deleted despite being skipped in a Move operation")
+	}
+}
+
+func TestFileOps_ForkedWorkspace(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pf := NewPanelsFrame()
+	vtui.FrameManager.Push(pf)
+	initialScreens := len(vtui.FrameManager.Screens)
+
+	tmpSrc := t.TempDir()
+	tmpDst := t.TempDir()
+	os.WriteFile(filepath.Join(tmpSrc, "f1.txt"), []byte("data"), 0644)
+
+	done := make(chan struct{})
+	// forked = true
+	ExecuteFileOp(pf, vfs.NewOSVFS(tmpSrc), vfs.NewOSVFS(tmpDst), []string{"f1.txt"}, tmpDst, false, true, func() { close(done) })
+
+	// Process tasks until the background copy finishes
+	timeout := time.After(2 * time.Second)
+pump4:
+	for {
+		select {
+		case <-done:
+			break pump4
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatalf("Timeout")
+		}
+	}
+
+	// We expect that a new screen was created during the operation
+	if len(vtui.FrameManager.Screens) != initialScreens+1 {
+		t.Errorf("Forked operation did not create a new workspace screen. Screens: %d", len(vtui.FrameManager.Screens))
+	}
+}
+
+func TestFileOps_UI_ConcurrentConflicts(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	tmpSrc1, tmpDst1 := t.TempDir(), t.TempDir()
+	tmpSrc2, tmpDst2 := t.TempDir(), t.TempDir()
+
+	os.WriteFile(filepath.Join(tmpSrc1, "f.txt"), []byte("src1"), 0644)
+	os.WriteFile(filepath.Join(tmpDst1, "f.txt"), []byte("dst1"), 0644)
+
+	os.WriteFile(filepath.Join(tmpSrc2, "f.txt"), []byte("src2"), 0644)
+	os.WriteFile(filepath.Join(tmpDst2, "f.txt"), []byte("dst2"), 0644)
+
+	done1, done2 := make(chan struct{}), make(chan struct{})
+
+	ExecuteFileOp(nil, vfs.NewOSVFS(tmpSrc1), vfs.NewOSVFS(tmpDst1), []string{"f.txt"}, tmpDst1, false, false, func() { close(done1) })
+	ExecuteFileOp(nil, vfs.NewOSVFS(tmpSrc2), vfs.NewOSVFS(tmpDst2), []string{"f.txt"}, tmpDst2, false, false, func() { close(done2) })
+
+	// We expect TWO warning dialogs (processed sequentially by the TaskChan pump).
+	dlg1 := waitForDialog(t, " Warning ")
+	clickDialogButton(t, dlg1, "Overwrite")
+
+	dlg2 := waitForDialog(t, " Warning ")
+	clickDialogButton(t, dlg2, "Skip")
+
+	timeout := time.After(2 * time.Second)
+	d1Done, d2Done := false, false
+	for !d1Done || !d2Done {
+		select {
+		case <-done1:
+			d1Done = true
+			done1 = nil // Set to nil to prevent infinite loop on closed channel
+		case <-done2:
+			d2Done = true
+			done2 = nil // Set to nil to prevent infinite loop on closed channel
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatalf("Timeout waiting for concurrent ops")
+		}
+	}
+
+	c1, _ := os.ReadFile(filepath.Join(tmpDst1, "f.txt"))
+	c2, _ := os.ReadFile(filepath.Join(tmpDst2, "f.txt"))
+
+	if string(c1) != "src1" {
+		t.Errorf("Op1 overwrite failed")
+	}
+	if string(c2) != "dst2" {
+		t.Errorf("Op2 skip failed, got %s", c2)
+	}
+}
 func TestFileOps_FormatSize(t *testing.T) {
 	tests := []struct {
 		bytes int64

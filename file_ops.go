@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mattn/go-runewidth"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 )
@@ -385,31 +386,57 @@ func recursiveCopy(ctx context.Context, srcVfs vfs.VFS, srcPath string, dstVfs v
 		}
 	}
 
-	if exists {
+	destPathForFile := destPath
+
+	for {
+		dstStat, err := dstVfs.Stat(ctx, destPathForFile)
+		exists := err == nil
+
+		if !exists {
+			break
+		}
 		if dstStat.IsDir {
-			return fmt.Errorf("cannot overwrite folder with file: %s", itemName)
+			return fmt.Errorf("cannot overwrite folder with file: %s", dstVfs.Base(destPathForFile))
 		}
 		if state.SkipAll {
 			skipFile()
 			return nil
 		}
-		if !state.OverwriteAll {
-			choice := AskOverwrite(ctx, itemName)
-			switch choice {
-			case 1:
+		if state.OverwriteAll {
+			break
+		}
+
+		choice, remember := AskOverwrite(ctx, destPathForFile, stat, dstStat)
+		if choice == 1 { // Overwrite
+			if remember {
 				state.OverwriteAll = true
-				vtui.DebugLog("FILEOP: User chose OVERWRITE ALL for %s", itemName)
-			case 2:
-				skipFile()
-				return nil // Skip
-			case 3:
-				vtui.DebugLog("FILEOP: User chose SKIP ALL")
-				state.SkipAll = true
-				skipFile()
-				return nil
-			case 4:
-				return context.Canceled // Cancel
+				vtui.DebugLog("FILEOP: User chose OVERWRITE ALL")
 			}
+			break
+		} else if choice == 2 { // Skip
+			if remember {
+				state.SkipAll = true
+				vtui.DebugLog("FILEOP: User chose SKIP ALL")
+			}
+			skipFile()
+			return nil
+		} else if choice == 3 { // Rename
+			newName := AskRename(ctx, dstVfs.Base(destPathForFile))
+			if newName == "" {
+				return context.Canceled
+			}
+			destPathForFile = dstVfs.Join(dstVfs.Dir(destPathForFile), newName)
+			continue
+		} else if choice == 4 || choice == 5 { // Append, Resume
+			resultChan := make(chan int, 1)
+			vtui.FrameManager.PostTask(func() {
+				errDlg := vtui.ShowMessage(" Unsupported ", "Append/Resume not supported by current VFS implementation.", []string{"&Ok"})
+				errDlg.OnResult = func(c int) { resultChan <- c }
+			})
+			<-resultChan
+			continue
+		} else { // Cancel
+			return context.Canceled
 		}
 	}
 
@@ -433,7 +460,7 @@ func recursiveCopy(ctx context.Context, srcVfs vfs.VFS, srcPath string, dstVfs v
 	defer srcFile.Close()
 
 	for {
-		dstFile, err = dstVfs.Create(ctx, destPath)
+		dstFile, err = dstVfs.Create(ctx, destPathForFile)
 		if err == nil {
 			break
 		}
@@ -475,26 +502,130 @@ func recursiveCopy(ctx context.Context, srcVfs vfs.VFS, srcPath string, dstVfs v
 	return nil
 }
 
-// AskOverwrite shows a modal dialog from the background thread and waits for the result.
-func AskOverwrite(ctx context.Context, name string) int {
+// AskOverwrite shows a rich modal dialog for file conflicts.
+func AskOverwrite(ctx context.Context, destPath string, srcStat, dstStat vfs.VFSItem) (int, bool) {
 	resultChan := make(chan int, 1)
+	rememberChan := make(chan bool, 1)
 	var dlg *vtui.Window
 
 	vtui.FrameManager.PostTask(func() {
 		if ctx.Err() != nil { return }
-		msg := fmt.Sprintf("File already exists:\n%s\n\nOverwrite?", name)
-		title := " Conflict "
-		buttons := []string{"&Overwrite", Msg("Btn.OverwriteAll"), "&Skip", Msg("Btn.SkipAll"), "&Cancel"}
 
-		dlg = vtui.ShowMessage(title, msg, buttons)
+		width := 76
+		height := 13
+		dlg = vtui.NewCenteredDialog(width, height, " Warning ")
+
+		lbl1 := vtui.NewLabel(0, 0, "File already exists", nil)
+		truncPath := runewidth.Truncate(destPath, width-6, "...")
+		lbl2 := vtui.NewLabel(0, 0, truncPath, nil)
+
+		sep1 := vtui.NewSeparator(0, 0, width-4, true, true)
+
+		formatInfo := func(label string, stat vfs.VFSItem) string {
+			dateStr := stat.MTime.Format("02.01.2006 15:04:05")
+			return fmt.Sprintf("%-10s %15d  %s", label, stat.Size, dateStr)
+		}
+
+		lblNew := vtui.NewLabel(0, 0, formatInfo("New", srcStat), nil)
+		lblExist := vtui.NewLabel(0, 0, formatInfo("Existing", dstStat), nil)
+
+		sep2 := vtui.NewSeparator(0, 0, width-4, true, true)
+
+		chkRem := vtui.NewCheckbox(0, 0, "Reme&mber choice", false)
+
+		sep3 := vtui.NewSeparator(0, 0, width-4, true, true)
+
+		btnOver := vtui.NewButton(0, 0, "&Overwrite")
+		btnOver.IsDefault = true
+		btnSkip := vtui.NewButton(0, 0, "&Skip")
+		btnRen := vtui.NewButton(0, 0, "&Rename")
+		btnApp := vtui.NewButton(0, 0, "&Append")
+		btnRes := vtui.NewButton(0, 0, "Res&ume")
+		btnCan := vtui.NewButton(0, 0, "&Cancel")
+
+		dlg.AddItem(lbl1)
+		dlg.AddItem(lbl2)
+		dlg.AddItem(sep1)
+		dlg.AddItem(lblNew)
+		dlg.AddItem(lblExist)
+		dlg.AddItem(sep2)
+		dlg.AddItem(chkRem)
+		dlg.AddItem(sep3)
+		dlg.AddItem(btnOver)
+		dlg.AddItem(btnSkip)
+		dlg.AddItem(btnRen)
+		dlg.AddItem(btnApp)
+		dlg.AddItem(btnRes)
+		dlg.AddItem(btnCan)
+
+		vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, width-4, height-4)
+		vbox.Add(lbl1, vtui.Margins{}, vtui.AlignCenter)
+		vbox.Add(lbl2, vtui.Margins{}, vtui.AlignCenter)
+		vbox.Add(sep1, vtui.Margins{}, vtui.AlignFill)
+		vbox.Add(lblNew, vtui.Margins{}, vtui.AlignLeft)
+		vbox.Add(lblExist, vtui.Margins{}, vtui.AlignLeft)
+		vbox.Add(sep2, vtui.Margins{}, vtui.AlignFill)
+		vbox.Add(chkRem, vtui.Margins{}, vtui.AlignLeft)
+		vbox.Add(sep3, vtui.Margins{}, vtui.AlignFill)
+
+		hbox := vtui.NewHBoxLayout(0, 0, width-4, 1)
+		hbox.HorizontalAlign = vtui.AlignCenter
+		hbox.Spacing = 1
+		hbox.Add(btnOver, vtui.Margins{}, vtui.AlignTop)
+		hbox.Add(btnSkip, vtui.Margins{}, vtui.AlignTop)
+		hbox.Add(btnRen, vtui.Margins{}, vtui.AlignTop)
+		hbox.Add(btnApp, vtui.Margins{}, vtui.AlignTop)
+		hbox.Add(btnRes, vtui.Margins{}, vtui.AlignTop)
+		hbox.Add(btnCan, vtui.Margins{}, vtui.AlignTop)
+
+		vbox.Add(hbox, vtui.Margins{}, vtui.AlignFill)
+		vbox.Apply()
+
+		btnOver.OnClick = func() { resultChan <- 1; rememberChan <- (chkRem.State == 1); dlg.Close() }
+		btnSkip.OnClick = func() { resultChan <- 2; rememberChan <- (chkRem.State == 1); dlg.Close() }
+		btnRen.OnClick = func() { resultChan <- 3; rememberChan <- (chkRem.State == 1); dlg.Close() }
+		btnApp.OnClick = func() { resultChan <- 4; rememberChan <- (chkRem.State == 1); dlg.Close() }
+		btnRes.OnClick = func() { resultChan <- 5; rememberChan <- (chkRem.State == 1); dlg.Close() }
+		btnCan.OnClick = func() { resultChan <- 6; rememberChan <- false; dlg.Close() }
+
 		dlg.OnResult = func(code int) {
 			if code < 0 {
-				code = 4
-			} // Map ESC/Close to Cancel
-			select { case resultChan <- code: default: }
+				select {
+				case resultChan <- 6:
+					rememberChan <- false
+				default:
+				}
+			}
 		}
+		vtui.FrameManager.Push(dlg)
 	})
 
+	select {
+	case res := <-resultChan:
+		rem := <-rememberChan
+		return res, rem
+	case <-ctx.Done():
+		vtui.FrameManager.PostTask(func() {
+			if dlg != nil && !dlg.IsDone() { dlg.Close() }
+		})
+		return 6, false
+	}
+}
+
+func AskRename(ctx context.Context, oldName string) string {
+	resultChan := make(chan string, 1)
+	var dlg *vtui.Window
+	vtui.FrameManager.PostTask(func() {
+		if ctx.Err() != nil { return }
+		dlg = vtui.InputBox(" Rename ", "New name:", oldName, func(s string) {
+			select { case resultChan <- s: default: }
+		})
+		dlg.OnResult = func(code int) {
+			if code < 0 {
+				select { case resultChan <- "": default: }
+			}
+		}
+	})
 	select {
 	case res := <-resultChan:
 		return res
@@ -502,7 +633,7 @@ func AskOverwrite(ctx context.Context, name string) int {
 		vtui.FrameManager.PostTask(func() {
 			if dlg != nil && !dlg.IsDone() { dlg.Close() }
 		})
-		return 4 // 4 matches Cancel button index
+		return ""
 	}
 }
 
