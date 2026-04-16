@@ -529,6 +529,16 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return vtui.FrameManager.EmitCommand(CmFindFile, nil)
 	}
 
+	// Alt+F8: Command History
+	if e.VirtualKeyCode == vtinput.VK_F8 && alt && !ctrl && !shift && e.KeyDown {
+		if len(pf.cmdLine.Edit.History) > 0 {
+			pf.cmdLine.Edit.OpenHistory()
+		} else {
+			vtui.ShowMessage(" History ", "Command history is empty.", []string{"&Ok"})
+		}
+		return true
+	}
+
 	// F11: Plugin Menu
 	if e.VirtualKeyCode == vtinput.VK_F11 && !alt && !ctrl && !shift && e.KeyDown {
 		pf.showPluginMenu()
@@ -1065,8 +1075,8 @@ func (pf *PanelsFrame) GetKeyLabels() *vtui.KeySet {
 			Msg("KeyBar.F9"), Msg("KeyBar.F10"), Msg("KeyBar.F11"), Msg("KeyBar.F12"),
 		},
 		Alt: vtui.KeyBarLabels{
-			Msg("KeyBar.AltF1"), Msg("KeyBar.AltF2"), "", "",
-			"", "", "", "", "", "", "", "",
+			Msg("KeyBar.AltF1"), Msg("KeyBar.AltF2"), Msg("KeyBar.AltF3"), "",
+			"", "", Msg("KeyBar.AltF7"), Msg("KeyBar.AltF8"), "", "", "", "",
 		},
 		Ctrl: vtui.KeyBarLabels{
 			"", "", Msg("KeyBar.CtrlF3"), Msg("KeyBar.CtrlF4"), Msg("KeyBar.CtrlF5"), Msg("KeyBar.CtrlF6"), Msg("KeyBar.CtrlF7"), "", "", "", "Fork", "Close",
