@@ -62,6 +62,51 @@ func TestActionMkDir_Flow(t *testing.T) {
 	top.SetExitCode(-1)
 	vtui.FrameManager.Pop()
 }
+func TestActionDelete_SuccessorLogic(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+
+	tmp := t.TempDir()
+	fsp := pf.panels[0].(*FileSystemPanel)
+	fsp.vfs.SetPath(tmp)
+
+	// Создаем 4 файла: f1, f2, f3, f4
+	files := []string{"f1.txt", "f2.txt", "f3.txt", "f4.txt"}
+	for _, f := range files {
+		os.WriteFile(filepath.Join(tmp, f), []byte("data"), 0644)
+	}
+
+	// 1. Удаляем f2 и f3 (выделенные)
+	// Дожидаемся загрузки
+	fsp.ReadDirectory()
+	for fsp.isLoading {
+		select {
+		case task := <-vtui.FrameManager.TaskChan: task()
+		case <-time.After(1 * time.Second): t.Fatal("Timeout")
+		}
+	}
+
+	// Выделяем f2 и f3 (индексы 2 и 3, т.к. 0 - "..", 1 - "f1")
+	fsp.entries[2].Selected = true
+	fsp.entries[3].Selected = true
+
+	// По логике Successor, после удаления блока f2, f3 курсор должен встать на f4.
+	successor := fsp.GetSuccessorName()
+	if successor != "f4.txt" {
+		t.Errorf("Expected successor f4.txt, got %q", successor)
+	}
+
+	// 2. Удаляем последний файл (f4)
+	fsp.entries[2].Selected = false
+	fsp.entries[3].Selected = false
+	fsp.SetCursorIndex(4) // f4
+	successor = fsp.GetSuccessorName()
+	// Если удаляем последний, курсор прыгает на предыдущий (f3)
+	if successor != "f3.txt" {
+		t.Errorf("Expected successor f3.txt when deleting tail, got %q", successor)
+	}
+}
 func TestActionCopyMove_TrailingSlash(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	SetDefaultF4Palette()

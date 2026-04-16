@@ -1354,3 +1354,88 @@ func TestFileOps_CalculateStats_Integration(t *testing.T) {
 		t.Errorf("Stats mismatch: %+v", stats)
 	}
 }
+func TestExecuteFileOp_PathInterpretations(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	tmpSrc := t.TempDir()
+	tmpDst := t.TempDir()
+	srcVfs := vfs.NewOSVFS(tmpSrc)
+	dstVfs := vfs.NewOSVFS(tmpDst)
+
+	os.WriteFile(filepath.Join(tmpSrc, "f1.txt"), []byte("content"), 0644)
+
+	t.Run("Copy to dot", func(t *testing.T) {
+		// Копирование f1.txt в "." (текущая директория пассивной панели)
+		ExecuteFileOp(nil, srcVfs, dstVfs, []string{"f1.txt"}, ".", false, false, nil)
+
+		// Pump
+		for i := 0; i < 50; i++ {
+			select {
+			case task := <-vtui.FrameManager.TaskChan: task()
+			default: time.Sleep(2 * time.Millisecond)
+			}
+		}
+		if _, err := os.Stat(filepath.Join(tmpDst, "f1.txt")); err != nil {
+			t.Error("Copy to '.' failed to preserve filename in target")
+		}
+	})
+
+	t.Run("Copy with trailing slash (force dir)", func(t *testing.T) {
+		// Копирование f1.txt в "newdir/" -> f1.txt должен оказаться внутри newdir
+		target := "newdir" + string(os.PathSeparator)
+		ExecuteFileOp(nil, srcVfs, dstVfs, []string{"f1.txt"}, target, false, false, nil)
+
+		for i := 0; i < 50; i++ {
+			select {
+			case task := <-vtui.FrameManager.TaskChan: task()
+			default: time.Sleep(2 * time.Millisecond)
+			}
+		}
+		finalPath := filepath.Join(tmpDst, "newdir", "f1.txt")
+		if _, err := os.Stat(finalPath); err != nil {
+			t.Error("Trailing slash did not force directory creation")
+		}
+	})
+}
+
+type mockFailingRemoveVFS struct {
+	vfs.VFS
+}
+
+func (m *mockFailingRemoveVFS) Remove(ctx context.Context, path string) error {
+	return os.ErrPermission
+}
+
+func TestExecuteFileOp_Move_FinalizeFailure(t *testing.T) {
+	// Сценарий: Копирование прошло успешно, но удаление (Remove) исходника упало.
+	// Мы должны увидеть ошибку, а исходник должен остаться на месте.
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	tmpSrc := t.TempDir()
+	tmpDst := t.TempDir()
+
+	srcFile := filepath.Join(tmpSrc, "ghost.txt")
+	os.WriteFile(srcFile, []byte("data"), 0644)
+
+	// VFS который имитирует успех Copy, но провал Remove
+	srcVfs := &mockFailingRemoveVFS{VFS: vfs.NewOSVFS(tmpSrc)}
+	dstVfs := vfs.NewOSVFS(tmpDst)
+
+	ExecuteFileOp(nil, srcVfs, dstVfs, []string{"ghost.txt"}, tmpDst, true, false, nil)
+
+	// Pump
+	for i := 0; i < 100; i++ {
+		select {
+		case task := <-vtui.FrameManager.TaskChan: task()
+		default: time.Sleep(5 * time.Millisecond)
+		}
+	}
+
+	// 1. Файл должен был скопироваться
+	if _, err := os.Stat(filepath.Join(tmpDst, "ghost.txt")); err != nil {
+		t.Error("File was not even copied during move")
+	}
+
+	// 2. Но исходник не должен был удалиться из-за ошибки
+	if _, err := os.Stat(srcFile); os.IsNotExist(err) {
+		t.Error("Source file was deleted even though Remove returned error")
+	}
+}
