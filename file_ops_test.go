@@ -1141,23 +1141,42 @@ func TestFileOps_UI_ConcurrentConflicts(t *testing.T) {
 	tmpSrc1, tmpDst1 := t.TempDir(), t.TempDir()
 	tmpSrc2, tmpDst2 := t.TempDir(), t.TempDir()
 
-	os.WriteFile(filepath.Join(tmpSrc1, "f.txt"), []byte("src1"), 0644)
-	os.WriteFile(filepath.Join(tmpDst1, "f.txt"), []byte("dst1"), 0644)
+	os.WriteFile(filepath.Join(tmpSrc1, "f1.txt"), []byte("src1"), 0644)
+	os.WriteFile(filepath.Join(tmpDst1, "f1.txt"), []byte("dst1"), 0644)
 
-	os.WriteFile(filepath.Join(tmpSrc2, "f.txt"), []byte("src2"), 0644)
-	os.WriteFile(filepath.Join(tmpDst2, "f.txt"), []byte("dst2"), 0644)
+	os.WriteFile(filepath.Join(tmpSrc2, "f2.txt"), []byte("src2"), 0644)
+	os.WriteFile(filepath.Join(tmpDst2, "f2.txt"), []byte("dst2"), 0644)
 
 	done1, done2 := make(chan struct{}), make(chan struct{})
 
-	ExecuteFileOp(nil, vfs.NewOSVFS(tmpSrc1), vfs.NewOSVFS(tmpDst1), []string{"f.txt"}, tmpDst1, false, false, func() { close(done1) })
-	ExecuteFileOp(nil, vfs.NewOSVFS(tmpSrc2), vfs.NewOSVFS(tmpDst2), []string{"f.txt"}, tmpDst2, false, false, func() { close(done2) })
+	ExecuteFileOp(nil, vfs.NewOSVFS(tmpSrc1), vfs.NewOSVFS(tmpDst1), []string{"f1.txt"}, tmpDst1, false, false, func() { close(done1) })
+	ExecuteFileOp(nil, vfs.NewOSVFS(tmpSrc2), vfs.NewOSVFS(tmpDst2), []string{"f2.txt"}, tmpDst2, false, false, func() { close(done2) })
 
 	// We expect TWO warning dialogs (processed sequentially by the TaskChan pump).
-	dlg1 := waitForDialog(t, " Warning ")
-	clickDialogButton(t, dlg1, "Overwrite")
+	// Since operations are concurrent, we must check which dialog is which.
+	for i := 0; i < 2; i++ {
+		dlg := waitForDialog(t, " Warning ")
 
-	dlg2 := waitForDialog(t, " Warning ")
-	clickDialogButton(t, dlg2, "Skip")
+		isOp1 := false
+		isOp2 := false
+		for _, itm := range dlg.GetChildren() {
+			if txt, ok := itm.(*vtui.Text); ok {
+				if strings.Contains(txt.GetText(), "f1.txt") {
+					isOp1 = true
+				} else if strings.Contains(txt.GetText(), "f2.txt") {
+					isOp2 = true
+				}
+			}
+		}
+
+		if isOp1 {
+			clickDialogButton(t, dlg, "Overwrite")
+		} else if isOp2 {
+			clickDialogButton(t, dlg, "Skip")
+		} else {
+			t.Fatalf("Warning dialog path does not match either f1.txt or f2.txt")
+		}
+	}
 
 	timeout := time.After(2 * time.Second)
 	d1Done, d2Done := false, false
@@ -1176,14 +1195,131 @@ func TestFileOps_UI_ConcurrentConflicts(t *testing.T) {
 		}
 	}
 
-	c1, _ := os.ReadFile(filepath.Join(tmpDst1, "f.txt"))
-	c2, _ := os.ReadFile(filepath.Join(tmpDst2, "f.txt"))
+	c1, _ := os.ReadFile(filepath.Join(tmpDst1, "f1.txt"))
+	c2, _ := os.ReadFile(filepath.Join(tmpDst2, "f2.txt"))
 
 	if string(c1) != "src1" {
 		t.Errorf("Op1 overwrite failed")
 	}
 	if string(c2) != "dst2" {
 		t.Errorf("Op2 skip failed, got %s", c2)
+	}
+}
+func TestFileOps_UI_CancelDuringMove(t *testing.T) {
+	// Scenario: A Move operation hits a conflict. The user clicks "Cancel".
+	// CRITICAL REQUIREMENT: The source file must NOT be deleted.
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	tmpSrc := t.TempDir()
+	tmpDst := t.TempDir()
+
+	srcFile := filepath.Join(tmpSrc, "f1.txt")
+	dstFile := filepath.Join(tmpDst, "f1.txt")
+
+	os.WriteFile(srcFile, []byte("source_data"), 0644)
+	os.WriteFile(dstFile, []byte("target_data"), 0644)
+
+	done := make(chan struct{})
+	// isMove = true
+	ExecuteFileOp(nil, vfs.NewOSVFS(tmpSrc), vfs.NewOSVFS(tmpDst), []string{"f1.txt"}, tmpDst, true, false, func() { close(done) })
+
+	// Wait for warning dialog
+	dlg := waitForDialog(t, " Warning ")
+
+	// Click Cancel (Button 6)
+	clickDialogButton(t, dlg, "Cancel")
+
+	timeout := time.After(2 * time.Second)
+pump:
+	for {
+		select {
+		case <-done:
+			break pump
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatalf("Timeout")
+		}
+	}
+
+	// Assertions
+	dSrc, errSrc := os.ReadFile(srcFile)
+	if errSrc != nil {
+		t.Fatalf("CRITICAL DATA LOSS: Source file was deleted after Cancel! Err: %v", errSrc)
+	}
+	if string(dSrc) != "source_data" {
+		t.Errorf("Source file corrupted: got %q", string(dSrc))
+	}
+
+	dDst, _ := os.ReadFile(dstFile)
+	if string(dDst) != "target_data" {
+		t.Errorf("Destination file corrupted by cancelled move: got %q", string(dDst))
+	}
+}
+
+func TestFileOps_UI_RenameToEmpty(t *testing.T) {
+	// Scenario: User clicks "Rename" on conflict, but then cancels the prompt.
+	// Expected: Operation cancels safely without data loss.
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	tmpSrc := t.TempDir()
+	tmpDst := t.TempDir()
+
+	os.WriteFile(filepath.Join(tmpSrc, "f.txt"), []byte("src"), 0644)
+	os.WriteFile(filepath.Join(tmpDst, "f.txt"), []byte("dst"), 0644)
+
+	done := make(chan struct{})
+	ExecuteFileOp(nil, vfs.NewOSVFS(tmpSrc), vfs.NewOSVFS(tmpDst), []string{"f.txt"}, tmpDst, true, false, func() { close(done) })
+
+	dlg := waitForDialog(t, " Warning ")
+	clickDialogButton(t, dlg, "Rename")
+
+	renDlg := waitForDialog(t, " Rename ")
+	// Click Cancel in the Rename dialog
+	clickDialogButton(t, renDlg, "Cancel")
+
+	timeout := time.After(2 * time.Second)
+pump:
+	for {
+		select {
+		case <-done:
+			break pump
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatalf("Timeout")
+		}
+	}
+
+	if _, err := os.Stat(filepath.Join(tmpSrc, "f.txt")); os.IsNotExist(err) {
+		t.Error("CRITICAL DATA LOSS: Source deleted after cancelling rename prompt")
+	}
+}
+
+func TestFileOps_SameFile_Protection(t *testing.T) {
+	// Scenario: Trying to copy a file over itself.
+	// If unprotected, Create(O_TRUNC) will wipe the file to 0 bytes before Open() reads it.
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	tmp := t.TempDir()
+
+	targetFile := filepath.Join(tmp, "critical.txt")
+	os.WriteFile(targetFile, []byte("PRECIOUS_DATA"), 0644)
+
+	v := vfs.NewOSVFS(tmp)
+
+	// Direct call to recursiveCopy to bypass UI wrappers
+	tCtx := &vtui.TaskContext{Context: context.Background()}
+	err := recursiveCopy(tCtx.Context, v, targetFile, v, targetFile, &FileOpState{}, 0)
+
+	if err == nil {
+		t.Fatal("Expected error when copying file to itself, got nil")
+	}
+	if !strings.Contains(err.Error(), "source equals destination") {
+		t.Errorf("Unexpected error message: %v", err)
+	}
+
+	// Verify data is intact
+	data, _ := os.ReadFile(targetFile)
+	if string(data) != "PRECIOUS_DATA" {
+		t.Errorf("CRITICAL DATA LOSS: Same-file copy truncated the file! Contents: %q", string(data))
 	}
 }
 func TestFileOps_FormatSize(t *testing.T) {

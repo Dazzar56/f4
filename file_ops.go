@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mattn/go-runewidth"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 )
@@ -516,7 +515,7 @@ func AskOverwrite(ctx context.Context, destPath string, srcStat, dstStat vfs.VFS
 		dlg = vtui.NewCenteredDialog(width, height, " Warning ")
 
 		lbl1 := vtui.NewLabel(0, 0, "File already exists", nil)
-		truncPath := runewidth.Truncate(destPath, width-6, "...")
+		truncPath := vtui.TruncateMiddle(destPath, width-6)
 		lbl2 := vtui.NewLabel(0, 0, truncPath, nil)
 
 		sep1 := vtui.NewSeparator(0, 0, width-4, true, true)
