@@ -2,6 +2,7 @@ package netfox
 
 import (
 	"os"
+	"strings"
 	"path/filepath"
 	"testing"
 	"github.com/unxed/f4/vfs"
@@ -15,8 +16,17 @@ func TestNetFoxVFS_ConfigPersistence(t *testing.T) {
 	nf := NewNetFoxVFS(dbPath)
 
 	// 1. Test Saving
-	cfg := NetFoxConfig{Type: "sftp", Host: "1.2.3.4", User: "root"}
+	cfg := NetFoxConfig{Type: "sftp", Host: "1.2.3.4", User: "root", Pass: "plaintext_secret"}
 	nf.SaveConfig("My Server", cfg)
+
+	// Check if password was actually encrypted on disk
+	rawJSON, _ := os.ReadFile(dbPath)
+	if !strings.Contains(string(rawJSON), cryptoPrefix) {
+		t.Error("Password was not encrypted on disk")
+	}
+	if strings.Contains(string(rawJSON), "plaintext_secret") {
+		t.Error("Plaintext password leaked into JSON file")
+	}
 
 	// 2. Test Loading (via internal helper)
 	configs := nf.getConfigs()
@@ -25,6 +35,9 @@ func TestNetFoxVFS_ConfigPersistence(t *testing.T) {
 	}
 	if configs["My Server"].Host != "1.2.3.4" {
 		t.Errorf("Host mismatch. Got %s", configs["My Server"].Host)
+	}
+	if configs["My Server"].Pass != "plaintext_secret" {
+		t.Errorf("Decryption during load failed. Expected 'plaintext_secret', got %q", configs["My Server"].Pass)
 	}
 
 	// 3. Test ReadDir (visual representation)

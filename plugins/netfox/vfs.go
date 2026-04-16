@@ -43,6 +43,14 @@ func (v *NetFoxVFS) getConfigs() map[string]NetFoxConfig {
 	var configs map[string]NetFoxConfig
 	json.Unmarshal(data, &configs)
 	if configs == nil { configs = make(map[string]NetFoxConfig) }
+
+	// Transparently decrypt passwords
+	for k, cfg := range configs {
+		if cfg.Pass != "" {
+			cfg.Pass = deobfuscate(cfg.Pass)
+			configs[k] = cfg
+		}
+	}
 	return configs
 }
 
@@ -50,7 +58,17 @@ func (v *NetFoxVFS) saveConfigs(configs map[string]NetFoxConfig) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	os.MkdirAll(filepath.Dir(v.path), 0755)
-	data, _ := json.MarshalIndent(configs, "", "  ")
+
+	// Encrypt passwords before saving
+	encodedConfigs := make(map[string]NetFoxConfig)
+	for k, cfg := range configs {
+		if cfg.Pass != "" {
+			cfg.Pass = obfuscate(cfg.Pass)
+		}
+		encodedConfigs[k] = cfg
+	}
+
+	data, _ := json.MarshalIndent(encodedConfigs, "", "  ")
 	os.WriteFile(v.path, data, 0644)
 }
 
