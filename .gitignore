@@ -1,4 +1,3 @@
 debug*log
-plugins/hello_go/hello_go.wasm
-plugins/hello_c/hello_c.wasm
+plugins/dummy/f4-dummy-plugin
 f4.exe
