@@ -646,7 +646,7 @@ func actionFindFile(pf *PanelsFrame) {
 	vtui.FrameManager.Push(dlg)
 }
 func actionPanelSettings(pf *PanelsFrame) {
-	dlg := vtui.NewCenteredDialog(44, 11, Msg("PanelSettings.Title"))
+	dlg := vtui.NewCenteredDialog(44, 13, Msg("PanelSettings.Title"))
 	dlg.ShowClose = true
 
 	chkHidden := vtui.NewCheckbox(0, 0, Msg("PanelSettings.ShowHidden"), false)
@@ -661,6 +661,10 @@ func actionPanelSettings(pf *PanelsFrame) {
 	chkPaths.State = 0
 	if AppConfig.SavePanelPaths { chkPaths.State = 1 }
 
+	chkCursor := vtui.NewCheckbox(0, 0, Msg("PanelSettings.KeepCursor"), false)
+	chkCursor.State = 0
+	if AppConfig.KeepTerminalCursor { chkCursor.State = 1 }
+
 	btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))
 	btnOk.IsDefault = true
 	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
@@ -668,13 +672,15 @@ func actionPanelSettings(pf *PanelsFrame) {
 	dlg.AddItem(chkHidden)
 	dlg.AddItem(chkHighlight)
 	dlg.AddItem(chkPaths)
+	dlg.AddItem(chkCursor)
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnCancel)
 
-	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 44-4, 11-4)
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 44-4, 13-4)
 	vbox.Add(chkHidden, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkHighlight, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(chkPaths, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	vbox.Add(chkCursor, vtui.Margins{Top: 1}, vtui.AlignLeft)
 
 	hbox := vtui.NewHBoxLayout(0, 0, 44-4, 1)
 	hbox.HorizontalAlign = vtui.AlignCenter
@@ -690,6 +696,8 @@ func actionPanelSettings(pf *PanelsFrame) {
 		AppConfig.ShowHiddenFiles = chkHidden.State == 1
 		AppConfig.HighlightDir = chkHighlight.State == 1
 		AppConfig.SavePanelPaths = chkPaths.State == 1
+		AppConfig.KeepTerminalCursor = chkCursor.State == 1
+		vtui.ManageCursorStyle = !AppConfig.KeepTerminalCursor
 		SaveConfig()
 		dlg.Close()
 		pf.RefreshAll()

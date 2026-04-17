@@ -209,6 +209,7 @@ func InitCore() *vtui.ScreenBuf {
 	vtui.FrameManager.EventFilter = MacroMgr.Filter
 	LoadSession()
 	LoadConfig()
+	vtui.ManageCursorStyle = !AppConfig.KeepTerminalCursor
 	vtui.FrameManager.Push(vtui.NewDesktop())
 
 	panels := NewPanelsFrame()

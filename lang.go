@@ -81,6 +81,7 @@ var Lng = map[string]string{
 	"PanelSettings.ShowHidden": "Show &hidden and system files",
 	"PanelSettings.HighlightDir": "H&ighlight folders",
 	"PanelSettings.SavePaths":    "Save panel &paths on exit",
+	"PanelSettings.KeepCursor":   "Don't touch terminal &cursor style",
 	"FindFile.Title":         " Find File ",
 	"FindFile.MaskPrompt":    "A filemask or several filemasks:",
 	"FindFile.TextPrompt":    "Containing text:",
