@@ -641,7 +641,7 @@ func actionFindFile(pf *PanelsFrame) {
 	vtui.FrameManager.Push(dlg)
 }
 func actionPanelSettings(pf *PanelsFrame) {
-	dlg := vtui.NewCenteredDialog(44, 9, Msg("PanelSettings.Title"))
+	dlg := vtui.NewCenteredDialog(44, 11, Msg("PanelSettings.Title"))
 	dlg.ShowClose = true
 
 	chkHidden := vtui.NewCheckbox(0, 0, Msg("PanelSettings.ShowHidden"), false)
@@ -652,18 +652,24 @@ func actionPanelSettings(pf *PanelsFrame) {
 	chkHighlight.State = 0
 	if AppConfig.HighlightDir { chkHighlight.State = 1 }
 
+	chkWinProc := vtui.NewCheckbox(0, 0, Msg("PanelSettings.WinProcessedOut"), false)
+	chkWinProc.State = 0
+	if AppConfig.WindowsProcessedOutput { chkWinProc.State = 1 }
+
 	btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))
 	btnOk.IsDefault = true
 	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
 
 	dlg.AddItem(chkHidden)
 	dlg.AddItem(chkHighlight)
+	dlg.AddItem(chkWinProc)
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnCancel)
 
-	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 44-4, 9-4)
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 44-4, 11-4)
 	vbox.Add(chkHidden, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkHighlight, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	vbox.Add(chkWinProc, vtui.Margins{Top: 1}, vtui.AlignLeft)
 
 	hbox := vtui.NewHBoxLayout(0, 0, 44-4, 1)
 	hbox.HorizontalAlign = vtui.AlignCenter
@@ -678,7 +684,9 @@ func actionPanelSettings(pf *PanelsFrame) {
 	btnOk.OnClick = func() {
 		AppConfig.ShowHiddenFiles = chkHidden.State == 1
 		AppConfig.HighlightDir = chkHighlight.State == 1
+		AppConfig.WindowsProcessedOutput = chkWinProc.State == 1
 		SaveConfig()
+		vtui.WindowsProcessedOutput = AppConfig.WindowsProcessedOutput
 		dlg.Close()
 		pf.RefreshAll()
 	}

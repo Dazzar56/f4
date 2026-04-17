@@ -14,6 +14,7 @@ type F4Config struct {
 	HighlightDir           bool
 	EditorAutoComplete     bool
 	EditorAutoCompleteMask string
+	WindowsProcessedOutput bool
 }
 
 var AppConfig = F4Config{
@@ -21,6 +22,7 @@ var AppConfig = F4Config{
 	HighlightDir:           false,
 	EditorAutoComplete:     true,
 	EditorAutoCompleteMask: "*.go;*.c;*.cpp;*.h;*.hpp;*.py;*.js;*.ts;*.rs;*.java;*.sh;*.txt;*.md;*.html;*.css;*.json",
+	WindowsProcessedOutput: true,
 }
 
 var getConfigIniPath = func() string {
@@ -40,6 +42,7 @@ func LoadConfig() {
 
 	AppConfig.EditorAutoComplete = ini.GetString("Editor", "AutoComplete", "1") == "1"
 	AppConfig.EditorAutoCompleteMask = ini.GetString("Editor", "AutoCompleteMask", "*.go;*.c;*.cpp;*.h;*.hpp;*.py;*.js;*.ts;*.rs;*.java;*.sh;*.txt;*.md;*.html;*.css;*.json")
+	AppConfig.WindowsProcessedOutput = ini.GetString("System", "WindowsProcessedOutput", "1") == "1"
 
 	vtui.DebugLog("CONFIG: Loaded application settings from %s", path)
 }
@@ -56,6 +59,9 @@ func SaveConfig() {
 	sb.WriteString("\n[Editor]\n")
 	sb.WriteString(fmt.Sprintf("AutoComplete = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.EditorAutoComplete]))
 	sb.WriteString(fmt.Sprintf("AutoCompleteMask = %s\n", AppConfig.EditorAutoCompleteMask))
+
+	sb.WriteString("\n[System]\n")
+	sb.WriteString(fmt.Sprintf("WindowsProcessedOutput = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.WindowsProcessedOutput]))
 
 	err := os.WriteFile(path, []byte(sb.String()), 0644)
 	if err != nil {
