@@ -518,7 +518,7 @@ func AskOverwrite(ctx context.Context, destPath string, srcStat, dstStat vfs.VFS
 		truncPath := vtui.TruncateMiddle(destPath, width-6)
 		lbl2 := vtui.NewLabel(0, 0, truncPath, nil)
 
-		sep1 := vtui.NewSeparator(0, 0, width-4, true, true)
+		sep1 := vtui.NewSeparator(0, 0, width, true, true)
 
 		formatInfo := func(label string, stat vfs.VFSItem) string {
 			dateStr := stat.MTime.Format("02.01.2006 15:04:05")
@@ -528,11 +528,11 @@ func AskOverwrite(ctx context.Context, destPath string, srcStat, dstStat vfs.VFS
 		lblNew := vtui.NewLabel(0, 0, formatInfo("New", srcStat), nil)
 		lblExist := vtui.NewLabel(0, 0, formatInfo("Existing", dstStat), nil)
 
-		sep2 := vtui.NewSeparator(0, 0, width-4, true, true)
+		sep2 := vtui.NewSeparator(0, 0, width, true, true)
 
 		chkRem := vtui.NewCheckbox(0, 0, "Reme&mber choice", false)
 
-		sep3 := vtui.NewSeparator(0, 0, width-4, true, true)
+		sep3 := vtui.NewSeparator(0, 0, width, true, true)
 
 		btnOver := vtui.NewButton(0, 0, "&Overwrite")
 		btnOver.IsDefault = true
@@ -560,12 +560,12 @@ func AskOverwrite(ctx context.Context, destPath string, srcStat, dstStat vfs.VFS
 		vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, width-4, height-4)
 		vbox.Add(lbl1, vtui.Margins{}, vtui.AlignCenter)
 		vbox.Add(lbl2, vtui.Margins{}, vtui.AlignCenter)
-		vbox.Add(sep1, vtui.Margins{}, vtui.AlignFill)
+		vbox.Add(sep1, vtui.Margins{Left: -2, Right: -2}, vtui.AlignFill)
 		vbox.Add(lblNew, vtui.Margins{}, vtui.AlignLeft)
 		vbox.Add(lblExist, vtui.Margins{}, vtui.AlignLeft)
-		vbox.Add(sep2, vtui.Margins{}, vtui.AlignFill)
+		vbox.Add(sep2, vtui.Margins{Left: -2, Right: -2}, vtui.AlignFill)
 		vbox.Add(chkRem, vtui.Margins{}, vtui.AlignLeft)
-		vbox.Add(sep3, vtui.Margins{}, vtui.AlignFill)
+		vbox.Add(sep3, vtui.Margins{Left: -2, Right: -2}, vtui.AlignFill)
 
 		hbox := vtui.NewHBoxLayout(0, 0, width-4, 1)
 		hbox.HorizontalAlign = vtui.AlignCenter
