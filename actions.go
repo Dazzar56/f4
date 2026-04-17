@@ -19,6 +19,9 @@ var (
 	LastFindFileText = ""
 	LastLeftPath     = ""
 	LastRightPath    = ""
+	LastLeftCursor   = ""
+	LastRightCursor  = ""
+	LastActivePanel  = 1
 )
 func actionOpenEditor(pf *PanelsFrame, v vfs.VFS, path string) {
 	vtui.RunAsync(func(ctx *vtui.TaskContext) {

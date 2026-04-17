@@ -235,6 +235,9 @@ func TestSession_DiskPersistence(t *testing.T) {
 	LastFindFileMask = "*.log"
 	LastLeftPath = "/path/a"
 	LastRightPath = "/path/b"
+	LastLeftCursor = "file.a"
+	LastRightCursor = "file.b"
+	LastActivePanel = 0
 
 	SaveSession()
 
@@ -242,11 +245,14 @@ func TestSession_DiskPersistence(t *testing.T) {
 	LastEditorSearch = ""
 	LastLeftPath = ""
 	LastRightPath = ""
+	LastLeftCursor = ""
+	LastRightCursor = ""
+	LastActivePanel = 1
 	LoadSession()
 
-	if LastEditorSearch != "disk-test" || LastFindFileMask != "*.log" || LastLeftPath != "/path/a" || LastRightPath != "/path/b" {
-		t.Errorf("Disk persistence failed. Got Search:%q, Mask:%q, Left:%q, Right:%q",
-			LastEditorSearch, LastFindFileMask, LastLeftPath, LastRightPath)
+	if LastEditorSearch != "disk-test" || LastLeftPath != "/path/a" || LastLeftCursor != "file.a" || LastActivePanel != 0 {
+		t.Errorf("Disk persistence failed. Search:%q, LeftPath:%q, LeftCursor:%q, Active:%d",
+			LastEditorSearch, LastLeftPath, LastLeftCursor, LastActivePanel)
 	}
 }
 func TestActionPanelSettings_Flow(t *testing.T) {

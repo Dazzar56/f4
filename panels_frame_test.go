@@ -652,6 +652,28 @@ func TestPanelsFrame_GetPaths(t *testing.T) {
 		t.Errorf("GetPaths failed. Got %q, %q; want %q, %q", l, r, pathL, pathR)
 	}
 }
+func TestPanelsFrame_StateCapture(t *testing.T) {
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+
+	fspL := pf.panels[0].(*FileSystemPanel)
+	fspR := pf.panels[1].(*FileSystemPanel)
+
+	// Mock cursors
+	fspL.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "file.l"}}}
+	fspR.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "file.r"}}}
+	fspL.SetCursorIndex(0)
+	fspR.SetCursorIndex(0)
+
+	pf.activeIdx = 0 // Left active
+
+	lFile := fspL.GetSelectedName()
+	rFile := fspR.GetSelectedName()
+
+	if lFile != "file.l" || rFile != "file.r" || pf.activeIdx != 0 {
+		t.Errorf("State capture failed: L:%q, R:%q, Active:%d", lFile, rFile, pf.activeIdx)
+	}
+}
 func TestPanelsFrame_CloneIndependence(t *testing.T) {
 	pf := NewPanelsFrame()
 	pf.ResizeConsole(80, 25)

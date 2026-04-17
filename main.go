@@ -214,12 +214,17 @@ func InitCore() *vtui.ScreenBuf {
 	panels := NewPanelsFrame()
 	panels.ResizeConsole(width, height)
 	if AppConfig.SavePanelPaths {
+		lp := panels.panels[0].(*FileSystemPanel)
+		rp := panels.panels[1].(*FileSystemPanel)
 		if LastLeftPath != "" {
-			panels.panels[0].(*FileSystemPanel).vfs.SetPath(LastLeftPath)
+			lp.vfs.SetPath(LastLeftPath)
 		}
 		if LastRightPath != "" {
-			panels.panels[1].(*FileSystemPanel).vfs.SetPath(LastRightPath)
+			rp.vfs.SetPath(LastRightPath)
 		}
+		lp.pendingSelection = LastLeftCursor
+		rp.pendingSelection = LastRightCursor
+		panels.activeIdx = LastActivePanel
 		panels.RefreshAll()
 	}
 	vtui.FrameManager.Push(panels)
@@ -267,6 +272,10 @@ func LoadSession() {
 
 	LastLeftPath = ini.GetString("Session", "LeftPath", "")
 	LastRightPath = ini.GetString("Session", "RightPath", "")
+	LastLeftCursor = ini.GetString("Session", "LeftCursor", "")
+	LastRightCursor = ini.GetString("Session", "RightCursor", "")
+	activeStr := ini.GetString("Session", "ActivePanel", "1")
+	fmt.Sscanf(activeStr, "%d", &LastActivePanel)
 
 	vtui.DebugLog("SESSION: Loaded state from %s", path)
 }
@@ -280,6 +289,13 @@ func SaveSession() {
 			for _, f := range s.Frames {
 				if pf, ok := f.(*PanelsFrame); ok {
 					LastLeftPath, LastRightPath = pf.GetPaths()
+					LastActivePanel = pf.activeIdx
+					if fsp, ok := pf.panels[0].(*FileSystemPanel); ok {
+						LastLeftCursor = fsp.GetSelectedName()
+					}
+					if fsp, ok := pf.panels[1].(*FileSystemPanel); ok {
+						LastRightCursor = fsp.GetSelectedName()
+					}
 					goto found
 				}
 			}
@@ -300,6 +316,9 @@ func SaveSession() {
 	sb.WriteString("\n[Session]\n")
 	sb.WriteString(fmt.Sprintf("LeftPath = %s\n", LastLeftPath))
 	sb.WriteString(fmt.Sprintf("RightPath = %s\n", LastRightPath))
+	sb.WriteString(fmt.Sprintf("LeftCursor = %s\n", LastLeftCursor))
+	sb.WriteString(fmt.Sprintf("RightCursor = %s\n", LastRightCursor))
+	sb.WriteString(fmt.Sprintf("ActivePanel = %d\n", LastActivePanel))
 
 	err := os.WriteFile(path, []byte(sb.String()), 0644)
 	if err != nil {
