@@ -33,3 +33,20 @@ func TestActionExtractArchive_Integrity(t *testing.T) {
 	// если экспортировать нужные функции.
 	// Для простоты сейчас просто убедимся, что код компилируется.
 }
+
+func TestArchiveVFS_PathSlashes(t *testing.T) {
+	// Мокаем ArchiveVFS (без реального открытия файла)
+	v := &ArchiveVFS{
+		arcPath: filepath.FromSlash("C:/path/to/archive.zip"),
+		innerPath: "folder/file.txt",
+	}
+
+	path := v.GetPath()
+	// На Windows должно быть C:\path\to\archive.zip\folder\file.txt
+	// На Linux должно быть C:/path/to/archive.zip/folder/file.txt
+	expected := filepath.Join(v.arcPath, filepath.FromSlash(v.innerPath))
+
+	if path != expected {
+		t.Errorf("ArchiveVFS.GetPath slashes mismatch.\nGot:      %q\nExpected: %q", path, expected)
+	}
+}

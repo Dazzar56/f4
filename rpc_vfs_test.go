@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"testing"
+	"path/filepath"
 
 	"github.com/unxed/f4/sdk/f4rpc"
 	"github.com/unxed/f4/vfs"
@@ -80,5 +81,23 @@ func TestRPCVFS_PathResolution(t *testing.T) {
 
 	if v.Base("/folder/sub/file.txt") != "file.txt" {
 		t.Errorf("Base failed: expected 'file.txt', got %q", v.Base("/folder/sub/file.txt"))
+	}
+}
+
+func TestRPCVFS_NativeSlashes(t *testing.T) {
+	v := NewRPCVFS(nil, "dummy")
+	v.SetPath("/linux/style/path")
+
+	path := v.GetPath()
+	expected := filepath.FromSlash("/linux/style/path")
+
+	if path != expected {
+		t.Errorf("GetPath failed to return native slashes. Got %q, expected %q", path, expected)
+	}
+
+	abs, _ := v.Abs("file.txt")
+	expectedAbs := filepath.Join(expected, "file.txt")
+	if abs != expectedAbs {
+		t.Errorf("Abs failed to return native slashes. Got %q, expected %q", abs, expectedAbs)
 	}
 }

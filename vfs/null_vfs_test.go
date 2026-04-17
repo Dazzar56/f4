@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 	"io"
+	"path/filepath"
 )
 
 func TestNullVFS_DirectoryListing(t *testing.T) {
@@ -197,6 +198,17 @@ func TestNullVFS_BasicMethods(t *testing.T) {
 
 	if v.ParentVFS() != nil {
 		t.Error("NullVFS should not have a parent")
+	}
+}
+func TestNullVFS_NativeSlashes(t *testing.T) {
+	v := NewNullVFS(0)
+	v.SetPath("/test/path")
+
+	path := v.GetPath()
+	expected := filepath.FromSlash("/test/path")
+
+	if path != expected {
+		t.Errorf("NullVFS GetPath failed native slashes check. Got %q, expected %q", path, expected)
 	}
 }
 func TestNullVFS_Scenarios(t *testing.T) {
