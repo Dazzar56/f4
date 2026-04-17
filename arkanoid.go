@@ -361,27 +361,39 @@ func (af *ArkanoidFrame) Show(scr *vtui.ScreenBuf) {
 	cgaBlack := vtui.SetRGBBoth(0, 0, 0)
 	cgaYellow := vtui.SetRGBBoth(0, 0xFFFF00, 0)
 
-	// Настройка рамки окна в стиле CGA через глобальную палитру
-	vtui.Palette[vtui.ColDialogHighlightBoxTitle] = cgaCyan
-	vtui.Palette[vtui.ColDialogBoxTitle] = cgaCyan
+	// Сохраняем оригинальные цвета палитры, чтобы не испортить их другим окнам
+	origHighTitle := vtui.Palette[vtui.ColDialogHighlightBoxTitle]
+	origTitle := vtui.Palette[vtui.ColDialogBoxTitle]
+	origBox := vtui.Palette[vtui.ColDialogBox]
+
+	// Вычисляем атрибуты для рамки и заголовка в локальные переменные
+	titleAttr := cgaCyan
+	boxAttr := cgaMagenta
 	if af.autoPlay {
-		// Режим гармонии: рамка того же цвета, что и заголовок
-		vtui.Palette[vtui.ColDialogBox] = cgaCyan
-	} else {
-		vtui.Palette[vtui.ColDialogBox] = cgaMagenta
+		boxAttr = cgaCyan
 	}
+
+	// Настройка глобальной палитры ТОЛЬКО для вызова BaseWindow.Show
+	vtui.Palette[vtui.ColDialogHighlightBoxTitle] = titleAttr
+	vtui.Palette[vtui.ColDialogBoxTitle] = titleAttr
+	vtui.Palette[vtui.ColDialogBox] = boxAttr
 
 	af.mu.Unlock()
 	af.BaseWindow.Show(scr)
+
+	// Немедленно восстанавливаем палитру, чтобы не "отравлять" другие окна
+	vtui.Palette[vtui.ColDialogHighlightBoxTitle] = origHighTitle
+	vtui.Palette[vtui.ColDialogBoxTitle] = origTitle
+	vtui.Palette[vtui.ColDialogBox] = origBox
+
 	af.mu.Lock()
 	defer af.mu.Unlock()
 
-	//scrW := vtui.FrameManager.GetScreenSize()
 	width := af.X2 - af.X1 + 1
 
 	p := vtui.NewPainter(scr)
-	p.DrawBox(af.X1, af.Y1, af.X2, af.Y2, vtui.Palette[vtui.ColDialogBox], vtui.SingleBox)
-	titleAttr := vtui.Palette[vtui.ColDialogHighlightBoxTitle]
+	// Используем локальные boxAttr и titleAttr вместо палитры
+	p.DrawBox(af.X1, af.Y1, af.X2, af.Y2, boxAttr, vtui.SingleBox)
 	p.DrawTitle(af.X1, af.Y1, af.X2, " A R K A N O I D ", titleAttr)
 
 	height := af.Y2 - af.Y1 + 1
