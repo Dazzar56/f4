@@ -95,9 +95,10 @@ func NewArchiveVFS(parent vfs.VFS, path string) (*ArchiveVFS, error) {
 
 func (v *ArchiveVFS) GetPath() string {
 	if v.innerPath == "." || v.innerPath == "" {
-		return filepath.ToSlash(filepath.Clean(v.arcPath))
+		return filepath.Clean(v.arcPath)
 	}
-	return filepath.ToSlash(filepath.Join(v.arcPath, v.innerPath))
+	// Мы возвращаем нативный путь ОС, объединяя путь к архиву и внутренний путь
+	return filepath.Join(v.arcPath, filepath.FromSlash(v.innerPath))
 }
 
 func (v *ArchiveVFS) SetPath(path string) error {

@@ -30,24 +30,24 @@ func (v *RPCVFS) IsAtRoot() bool {
 	return v.path == "/" || v.path == ""
 }
 
-func (v *RPCVFS) GetPath() string {
-	return v.path
-}
-
 func (v *RPCVFS) SetPath(p string) error {
 	v.path = filepath.ToSlash(filepath.Clean(p))
 	return nil
 }
 
+func (v *RPCVFS) GetPath() string {
+	return filepath.FromSlash(v.path)
+}
+
 func (v *RPCVFS) Join(e ...string) string {
-	return filepath.ToSlash(filepath.Join(e...))
+	return filepath.Join(e...)
 }
 
 func (v *RPCVFS) Abs(p string) (string, error) {
 	if filepath.IsAbs(p) {
-		return filepath.ToSlash(filepath.Clean(p)), nil
+		return filepath.Clean(p), nil
 	}
-	return v.Join(v.path, p), nil
+	return filepath.Join(filepath.FromSlash(v.path), p), nil
 }
 
 func (v *RPCVFS) Base(p string) string {
@@ -55,7 +55,7 @@ func (v *RPCVFS) Base(p string) string {
 }
 
 func (v *RPCVFS) Dir(p string) string {
-	return filepath.ToSlash(filepath.Dir(p))
+	return filepath.Dir(p)
 }
 
 func (v *RPCVFS) ReadDir(ctx context.Context, path string, onChunk func([]vfs.VFSItem)) error {

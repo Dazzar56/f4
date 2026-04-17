@@ -36,10 +36,12 @@ func NewNullVFS(speedLimit int64) *NullVFS {
 	}
 }
 
-func (v *NullVFS) GetPath() string { return v.currentPath }
+func (v *NullVFS) GetPath() string {
+	return filepath.FromSlash(v.currentPath)
+}
 
 func (v *NullVFS) IsAtRoot() bool {
-	return v.currentPath == "/"
+	return v.currentPath == "/" || v.currentPath == ""
 }
 
 func (v *NullVFS) SetPath(p string) error {
