@@ -209,7 +209,6 @@ func InitCore() *vtui.ScreenBuf {
 	vtui.FrameManager.EventFilter = MacroMgr.Filter
 	LoadSession()
 	LoadConfig()
-	vtui.WindowsProcessedOutput = AppConfig.WindowsProcessedOutput
 	vtui.FrameManager.Push(vtui.NewDesktop())
 
 	panels := NewPanelsFrame()

@@ -80,7 +80,6 @@ var Lng = map[string]string{
 	"PanelSettings.Title": " Panel settings ",
 	"PanelSettings.ShowHidden": "Show &hidden and system files",
 	"PanelSettings.HighlightDir": "H&ighlight folders",
-	"PanelSettings.WinProcessedOut": "&Windows: Processed output",
 	"FindFile.Title":         " Find File ",
 	"FindFile.MaskPrompt":    "A filemask or several filemasks:",
 	"FindFile.TextPrompt":    "Containing text:",
