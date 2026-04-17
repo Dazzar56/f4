@@ -47,18 +47,18 @@ jobs:
 
     - name: Package
       run: |
-        cd build
         if [ "${{ matrix.goos }}" = "windows" ]; then
-          zip -r f4-${{ matrix.goos }}-${{ matrix.goarch }}.zip .
+          (cd build && zip -r ../f4-${{ matrix.goos }}-${{ matrix.goarch }}.zip .)
         else
-          tar -czvf f4-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz .
+          # Создаем архив в корне, упаковывая содержимое build (без самой папки build)
+          tar -czvf f4-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz -C build .
         fi
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
         name: f4-${{ matrix.goos }}-${{ matrix.goarch }}
-        path: build/f4-${{ matrix.goos }}-${{ matrix.goarch }}.*
+        path: f4-${{ matrix.goos }}-${{ matrix.goarch }}.*
         retention-days: 7
 
   release:
