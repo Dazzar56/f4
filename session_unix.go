@@ -18,6 +18,7 @@ import (
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 	"golang.org/x/term"
+	"golang.org/x/sys/unix"
 )
 
 type SessionInfo struct {
@@ -354,9 +355,9 @@ func runServer(sockPath string) {
 		devNull, err := os.OpenFile(os.DevNull, os.O_RDWR, 0)
 		if err == nil {
 			dnfd := int(devNull.Fd())
-			syscall.Dup2(dnfd, 0)
-			syscall.Dup2(dnfd, 1)
-			syscall.Dup2(dnfd, 2)
+			_ = unix.Dup2(dnfd, 0)
+			_ = unix.Dup2(dnfd, 1)
+			_ = unix.Dup2(dnfd, 2)
 			devNull.Close()
 		}
 
