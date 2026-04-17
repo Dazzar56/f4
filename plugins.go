@@ -5,6 +5,7 @@ import (
 	"sync"
 	"path/filepath"
 	"strings"
+	"runtime"
 
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/f4/plugins/archive"
@@ -82,32 +83,40 @@ func (pm *PluginManager) loadExternal(dir string) {
 
 	for _, entry := range entries {
 		if entry.IsDir() {
-			// In Far, plugins are usually in subdirectories
+			// Plugins are usually kept in subdirectories
 			pm.loadExternal(filepath.Join(dir, entry.Name()))
 			continue
 		}
 
-		path := filepath.Join(dir, entry.Name())
+		name := entry.Name()
+		// Ignore source files and scripts
+		if strings.HasSuffix(name, ".go") || strings.HasSuffix(name, ".sh") || strings.HasSuffix(name, ".md") {
+			continue
+		}
 
-		if strings.HasSuffix(entry.Name(), ".lua") {
-			p := NewLuaPlugin(path)
-			if err := p.Init(pm.api); err == nil {
-				pm.mu.Lock()
-				pm.plugins = append(pm.plugins, p)
-				pm.mu.Unlock()
-				vtui.DebugLog("Loaded Lua plugin: %s", p.GetName())
-			} else {
-				vtui.DebugLog("Failed Lua plugin %s: %v", path, err)
+		isExec := false
+		if runtime.GOOS == "windows" {
+			if strings.HasSuffix(strings.ToLower(name), ".exe") {
+				isExec = true
 			}
-		} else if strings.HasSuffix(entry.Name(), ".wasm") {
-			p := NewWasmPlugin(path)
+		} else {
+			if info, err := entry.Info(); err == nil {
+				if info.Mode()&0111 != 0 {
+					isExec = true
+				}
+			}
+		}
+
+		if isExec {
+			path := filepath.Join(dir, name)
+			p := NewRPCPlugin(path)
 			if err := p.Init(pm.api); err == nil {
 				pm.mu.Lock()
 				pm.plugins = append(pm.plugins, p)
 				pm.mu.Unlock()
-				vtui.DebugLog("Loaded WASM plugin: %s", p.GetName())
+				vtui.DebugLog("Loaded RPC plugin: %s", p.GetName())
 			} else {
-				vtui.DebugLog("Failed WASM plugin %s: %v", path, err)
+				vtui.DebugLog("Failed RPC plugin %s: %v", path, err)
 			}
 		}
 	}

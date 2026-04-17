@@ -119,6 +119,7 @@ func main() {
 				i++
 			}
 		case "-test-plugins":
+			vtui.ConfigDiskLogging(true)
 			vtui.DebugLog("--- PLUGIN TEST MODE ---")
 			pm := NewPluginManager()
 			pm.LoadAll()

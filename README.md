@@ -33,15 +33,14 @@ UI & input libraries are developed separately ([vtui](https://github.com/unxed/v
 *   **Built-in Terminal:** A fully-fledged built-in terminal running underneath the panels, just like `far2l`.
 *   **Windows Strategy:** First of all, we target recent Windows versions. There are two reasons for that. 1) They support ConPTY. A built-in terminal cannot be implemented properly without it. 2) They have Windows Terminal. So we can avoid the legacy Windows Console API entirely and rely purely on ESC sequence rendering. Windows Terminal supports all we need for proper input, clipboard operations, etc. At the same time, f4's modular architecture makes it possible to implement input/rendering/etc via Windows Console API in future (in fact, our Far-compatible internal architecture is ideally suited for this), so if you want f4 to run on your XP box you will not have to write too much code. Similarly, no one is stopping you from writing a layer for f4's built-in terminal that uses winpty instead of conpty to work on older Windows versions.
 
-### Plugin Architecture (Hybrid In-Process)
+### Plugin Architecture (Out-of-Process RPC)
 
-Initially we considered JSON-RPC approach, but rejected it due to possible input lag, so plugins will run within the same address space or host memory:
+`f4` uses an ultra-lean, **Out-of-Process** plugin model communicating via `stdin`/`stdout` using the **MessagePack** binary protocol.
 
-1. **WASM (`wazero`):** For heavy system plugins (archivers, VFS, parsers). Write in Go, C, C++, Zig, Rust, etc.—anything that compiles to WASM. Provides 100% portability (a single `.wasm` file for all OSes) and sandboxed security.
-2. **Lua (`gopher-lua`):** For fast macros, scripting, and UI customization.
-3. **Python:** Just as Lua. Planned for future integration.
-4. **API Universality:** The plugin API will ideally support adapter wrappers for *any* existing Far API: Far2, Far3, far2m, and far2l.
-5. **Internal Plugins:** The most critical plugins (like network protocols) will be statically linked into the binary but will use the exact same HostAPI as external plugins.
+1. **Language Agnostic**: Write plugins in Go, Python, Rust, Node.js, C++, or Lua. If it can speak MessagePack over standard I/O streams, it works.
+2. **Native Power**: Because plugins are native external processes, they have full access to the OS (sockets, CGO, external libraries) without the severe restrictions of WASI/WASM sandboxes.
+3. **Binary Efficiency**: MessagePack minimizes serialization overhead, preventing the input lag usually associated with JSON-RPC.
+4. **Internal Plugins:** The most critical components (like `NetFox` or native VFS) are statically linked into the binary but use the exact same `HostAPI` conceptual interface.
 
 ### Special Features
 
@@ -61,7 +60,7 @@ Initially we considered JSON-RPC approach, but rejected it due to possible input
 *   Base `f4` UI: Panels, CommandLine, KeyBar, MenuBar.
 *   `EditorView` powered by an optimized Piece Table (bracketed paste, UTF-8, zero-allocation render).
 *   Built-in Terminal (`TerminalView` + ANSI Parser + Unix PTY integration).
-*   Plugin Manager foundation (WASM via wazero, Lua via gopher-lua).
+*   Plugin Manager foundation.
 
 **Phase 3: Parity & VFS Expansion (Current)**
 *   Complete remaining standard Far dialogs (Search, Copy/Move, File Attributes, Configuration).

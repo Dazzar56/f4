@@ -9,10 +9,9 @@ require (
 	github.com/mattn/go-runewidth v0.0.15
 	github.com/mholt/archives v0.1.5
 	github.com/pkg/sftp v1.13.6
-	github.com/tetratelabs/wazero v1.11.0
 	github.com/unxed/vtinput v0.0.0
 	github.com/unxed/vtui v0.0.0
-	github.com/yuin/gopher-lua v1.1.1
+	github.com/vmihailenco/msgpack/v5 v5.4.1
 	golang.org/x/crypto v0.21.0
 	golang.org/x/sys v0.41.0
 	golang.org/x/term v0.40.0
@@ -27,6 +26,7 @@ require (
 	github.com/bodgit/windows v1.0.1 // indirect
 	github.com/dlclark/regexp2 v1.11.4 // indirect
 	github.com/dsnet/compress v0.0.2-0.20230904184137-39efe44ab707 // indirect
+	github.com/emmansun/base64 v0.9.0 // indirect
 	github.com/hashicorp/errwrap v1.0.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
@@ -40,6 +40,7 @@ require (
 	github.com/sorairolake/lzip-go v0.3.8 // indirect
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/ulikunitz/xz v0.5.15 // indirect
+	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	go4.org v0.0.0-20230225012048-214862532bf5 // indirect
 )
 
