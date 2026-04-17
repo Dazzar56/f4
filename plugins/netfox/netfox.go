@@ -81,4 +81,4 @@ func (p *NetFoxPlugin) Init(api vfs.HostAPI) error {
 }
 
 func (p *NetFoxPlugin) Close() error { return nil }
-func (p *NetFoxPlugin) GetName() string { return "NetFox Support" }
+func (p *NetFoxPlugin) GetName() string { return "NetFox" }
