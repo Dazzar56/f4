@@ -44,6 +44,6 @@ require (
 	go4.org v0.0.0-20230225012048-214862532bf5 // indirect
 )
 
-replace github.com/unxed/vtinput => ../vtinput
+replace github.com/unxed/vtinput => ./libs/vtinput
 
-replace github.com/unxed/vtui => ../vtui
+replace github.com/unxed/vtui => ./libs/vtui

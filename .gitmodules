@@ -1,0 +1,6 @@
+[submodule "libs/vtui"]
+	path = libs/vtui
+	url = https://github.com/unxed/vtui
+[submodule "libs/vtinput"]
+	path = libs/vtinput
+	url = https://github.com/unxed/vtinput

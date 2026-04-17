@@ -86,13 +86,11 @@ sudo apt update
 sudo apt install golang git
 ```
 
-**2. Setup Directory Structure**
-The project consists of three main components that must reside in the same parent directory:
+**2. Setup Project**
+Clone the repository with all dependencies (submodules):
 ```bash
-mkdir f4_project && cd f4_project
-git clone https://github.com/unxed/f4.git
-git clone https://github.com/unxed/vtui.git
-git clone https://github.com/unxed/vtinput.git
+git clone --recursive https://github.com/unxed/f4.git
+cd f4
 ```
 
 **3. Build**
