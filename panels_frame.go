@@ -234,6 +234,34 @@ func (pf *PanelsFrame) buildPrompt() []vtui.CharInfo {
 		displayPath = "~" + displayPath[len(home):]
 	}
 
+	userHostStr := username + "@" + host
+	sepStr := ":"
+	suffixStr := "$ "
+
+	if runtime.GOOS == "windows" {
+		sepStr = " "
+		suffixStr = ">"
+		// Windows prompt usually displays the absolute path without '~'
+		displayPath = path
+	}
+
+	maxPromptLen := pf.lastW / 2
+	if maxPromptLen < 30 {
+		maxPromptLen = pf.lastW - 15
+	}
+	if maxPromptLen < 15 {
+		maxPromptLen = 15
+	}
+
+	maxPathLen := maxPromptLen - runewidth.StringWidth(userHostStr) - runewidth.StringWidth(sepStr) - runewidth.StringWidth(suffixStr)
+	if maxPathLen < 10 {
+		maxPathLen = 10
+	}
+
+	if runewidth.StringWidth(displayPath) > maxPathLen {
+		displayPath = vtui.TruncateMiddle(displayPath, maxPathLen)
+	}
+
 	baseAttr := vtui.Palette[ColCommandLineUserScreen]
 	// Use colors as close as possible to classic bash, while keeping the base background
 	greenAttr := vtui.SetRGBFore(baseAttr, 0x8AE234) // Bright green
@@ -241,10 +269,10 @@ func (pf *PanelsFrame) buildPrompt() []vtui.CharInfo {
 	defAttr := vtui.SetRGBFore(baseAttr, 0xFFFFFF)   // White
 
 	var prompt []vtui.CharInfo
-	prompt = append(prompt, vtui.StringToCharInfo(username+"@"+host, greenAttr)...)
-	prompt = append(prompt, vtui.StringToCharInfo(":", defAttr)...)
+	prompt = append(prompt, vtui.StringToCharInfo(userHostStr, greenAttr)...)
+	prompt = append(prompt, vtui.StringToCharInfo(sepStr, defAttr)...)
 	prompt = append(prompt, vtui.StringToCharInfo(displayPath, blueAttr)...)
-	prompt = append(prompt, vtui.StringToCharInfo("$ ", defAttr)...)
+	prompt = append(prompt, vtui.StringToCharInfo(suffixStr, defAttr)...)
 
 	return prompt
 }
