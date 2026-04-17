@@ -100,28 +100,30 @@ func (c *SudoClient) Connect() error {
 	}
 	vtui.DebugLog("SUDO_CLIENT: sudo process started, PID: %d", cmd.Process.Pid)
 
-	// Wait up to 5 seconds for the socket to appear
-	vtui.DebugLog("SUDO_CLIENT: sudo process started, PID: %d. Monitoring exit status...", cmd.Process.Pid)
-
 	if fi, err := os.Stat(c.appPath); err == nil {
 		vtui.DebugLog("SUDO_CLIENT: Binary perms: %v, owner: %d:%d", fi.Mode(), fi.Sys(), fi.Sys())
 	} else {
 		vtui.DebugLog("SUDO_CLIENT: Cannot stat binary %q: %v", c.appPath, err)
 	}
 
-	c.attempts = 0
-	vtui.DebugLog("SUDO_CLIENT: Spawning %q with SUDO_ASKPASS=%q", cmd.String(), c.appPath)
-
-	vtui.DebugLog("SUDO_CLIENT: sudo process started, PID: %d. Monitoring exit status...", cmd.Process.Pid)
+	sudoExited := make(chan struct{})
 	go func() {
 		vtui.DebugLog("SUDO_CLIENT: Stderr collector goroutine STARTED for PID %d", cmd.Process.Pid)
 		waitErr := cmd.Wait()
 		vtui.DebugLog("SUDO_CLIENT: Sudo process %d EXITED. Result: %v", cmd.Process.Pid, waitErr)
+		close(sudoExited)
 	}()
 
-	// Wait up to 5 seconds for the socket to appear
+	// Wait up to 5 minutes for the socket to appear (user might take time to type password)
 	var err error
-	for i := 0; i < 50; i++ {
+	for i := 0; i < 3000; i++ {
+		select {
+		case <-sudoExited:
+			vtui.DebugLog("SUDO_CLIENT: Sudo process exited prematurely.")
+			return fmt.Errorf("sudo process exited prematurely")
+		default:
+		}
+
 		if _, errStat := os.Stat(c.sockPath); errStat == nil {
 			var addr *net.UnixAddr
 			addr, err = net.ResolveUnixAddr("unix", c.sockPath)
@@ -152,18 +154,11 @@ func (c *SudoClient) Connect() error {
 	}
 	vtui.DebugLog("SUDO_CLIENT: ERROR: Dispatcher socket timed out.")
 
-	return fmt.Errorf("failed to connect to elevated dispatcher: %v", err)
-	vtui.DebugLog("SUDO_CLIENT: ERROR: Dispatcher socket timed out.")
-
 	// Check if any canary files exist (dispatcher actually started)
 	if matches, _ := filepath.Glob("/tmp/f4-canary-*.txt"); len(matches) > 0 {
 		vtui.DebugLog("SUDO_CLIENT: DEBUG: Canary files found: %v. Dispatcher WAS running.", matches)
 	} else {
 		vtui.DebugLog("SUDO_CLIENT: DEBUG: No canary files found. Dispatcher never reached RunSudoDispatcher.")
-	}
-
-	if matches, _ := filepath.Glob("/tmp/f4-canary-*.txt"); len(matches) > 0 {
-		vtui.DebugLog("SUDO_CLIENT: DEBUG: Canary files found: %v. Dispatcher WAS running.", matches)
 	}
 
 	// Try to harvest logs from the dispatcher's private debug file
