@@ -15,7 +15,7 @@ import (
 	"github.com/unxed/vtui"
 )
 
-// Plugin represents a loaded module (Internal, WASM, or Lua).
+// Plugin represents a loaded module.
 type Plugin interface {
 	Init(api vfs.HostAPI) error
 	Close() error
@@ -50,7 +50,7 @@ func (pm *PluginManager) LoadAll() {
 	// 1. Load Internal Plugins
 	pm.loadInternal()
 
-	// 2. Load External Plugins (WASM & Lua) from ./plugins dir
+	// 2. Load External Plugins from ./plugins dir
 	pm.loadExternal(filepath.Join(".", "plugins"))
 }
 
