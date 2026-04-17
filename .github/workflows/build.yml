@@ -61,8 +61,9 @@ jobs:
         path: f4-${{ matrix.goos }}-${{ matrix.goarch }}.*
         retention-days: 7
 
+  # Эта джоба создает постоянные релизы при пуше тэгов v*.*.*
   release:
-    name: Create Release
+    name: Create Official Release
     needs: build
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
@@ -79,3 +80,27 @@ jobs:
       with:
         files: artifacts/*
         generate_release_notes: true
+
+  # Эта джоба обновляет "плавающий" nightly релиз при каждом пуше в main
+  nightly:
+    name: Update Nightly Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+        merge-multiple: true
+
+    - name: Update Nightly Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: nightly
+        name: "Continuous Build (Nightly)"
+        body: "Automated pre-release build of the latest main branch. Updated on ${{ github.event.head_commit.timestamp }}."
+        prerelease: true
+        files: artifacts/*
