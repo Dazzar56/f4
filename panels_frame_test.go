@@ -1437,3 +1437,78 @@ func TestPanelsFrame_ShiftInsert_Fallthrough(t *testing.T) {
 		t.Error("File was erroneously selected by Shift+Ins")
 	}
 }
+func TestPanelsFrame_PromptTruncation(t *testing.T) {
+	vtui.SetDefaultPalette()
+	SetDefaultF4Palette()
+	pf := NewPanelsFrame()
+
+	// Simulate standard 80-column terminal
+	width := 80
+	pf.ResizeConsole(width, 25)
+
+	fsp := pf.getActivePanel()
+
+	// Max allowed prompt length is width / 2 = 40.
+
+	t.Run("Short Path No Truncation", func(t *testing.T) {
+		// Use NullVFS to bypass real disk checks in tests
+		fsp.vfs = vfs.NewNullVFS(0)
+		fsp.vfs.SetPath(filepath.FromSlash("/home/user"))
+		prompt := pf.buildPrompt()
+
+		visibleLen := 0
+		for _, c := range prompt {
+			if c.Char != vtui.WideCharFiller { visibleLen++ }
+		}
+
+		// Path is short, should be preserved entirely
+		found := false
+		promptStr := ""
+		for _, c := range prompt {
+			if c.Char != vtui.WideCharFiller { promptStr += string(rune(c.Char)) }
+		}
+		if strings.Contains(promptStr, "home") { found = true }
+
+		if !found {
+			t.Errorf("Short path was lost in prompt: %q", promptStr)
+		}
+	})
+
+	t.Run("Extreme Long Path Truncation", func(t *testing.T) {
+		// Use NullVFS to bypass real disk checks in tests
+		fsp.vfs = vfs.NewNullVFS(0)
+		longPath := "/very/long/directory/path/that/exceeds/the/limit/of/forty/characters/definitely/and/must/be/shortened"
+		fsp.vfs.SetPath(filepath.FromSlash(longPath))
+		prompt := pf.buildPrompt()
+
+		visibleLen := 0
+		promptStr := ""
+		for _, c := range prompt {
+			if c.Char != vtui.WideCharFiller {
+				visibleLen++
+				promptStr += string(rune(c.Char))
+			}
+		}
+
+		// 1. Total length must be within bounds (approx 40)
+		if visibleLen > 45 { // 40 + small buffer for user@host
+			t.Errorf("Prompt too long: %d chars (%q)", visibleLen, promptStr)
+		}
+
+		// 2. Must contain ellipsis
+		if !strings.Contains(promptStr, "...") {
+			t.Errorf("Truncated prompt missing ellipsis: %q", promptStr)
+		}
+
+		// 3. Check OS-specific suffix
+		if runtime.GOOS == "windows" {
+			if !strings.HasSuffix(promptStr, ">") {
+				t.Errorf("Windows prompt should end with '>', got %q", promptStr)
+			}
+		} else {
+			if !strings.HasSuffix(promptStr, "$ ") {
+				t.Errorf("Unix prompt should end with '$ ', got %q", promptStr)
+			}
+		}
+	})
+}
