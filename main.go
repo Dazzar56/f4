@@ -213,6 +213,15 @@ func InitCore() *vtui.ScreenBuf {
 
 	panels := NewPanelsFrame()
 	panels.ResizeConsole(width, height)
+	if AppConfig.SavePanelPaths {
+		if LastLeftPath != "" {
+			panels.panels[0].(*FileSystemPanel).vfs.SetPath(LastLeftPath)
+		}
+		if LastRightPath != "" {
+			panels.panels[1].(*FileSystemPanel).vfs.SetPath(LastRightPath)
+		}
+		panels.RefreshAll()
+	}
 	vtui.FrameManager.Push(panels)
 
 	vtui.FrameManager.MenuBar = panels.menuBar
@@ -255,12 +264,28 @@ func LoadSession() {
 
 	LastFindFileMask = ini.GetString("FindFile", "Mask", "*")
 	LastFindFileText = ini.GetString("FindFile", "Text", "")
+
+	LastLeftPath = ini.GetString("Session", "LeftPath", "")
+	LastRightPath = ini.GetString("Session", "RightPath", "")
+
 	vtui.DebugLog("SESSION: Loaded state from %s", path)
 }
 
 func SaveSession() {
 	path := getSessionIniPath()
 	os.MkdirAll(filepath.Dir(path), 0755)
+
+	if AppConfig.SavePanelPaths && vtui.FrameManager != nil {
+		for _, s := range vtui.FrameManager.Screens {
+			for _, f := range s.Frames {
+				if pf, ok := f.(*PanelsFrame); ok {
+					LastLeftPath, LastRightPath = pf.GetPaths()
+					goto found
+				}
+			}
+		}
+	found:
+	}
 
 	var sb strings.Builder
 	sb.WriteString("[EditorSearch]\n")
@@ -271,6 +296,10 @@ func SaveSession() {
 	sb.WriteString("\n[FindFile]\n")
 	sb.WriteString(fmt.Sprintf("Mask = %s\n", LastFindFileMask))
 	sb.WriteString(fmt.Sprintf("Text = %s\n", LastFindFileText))
+
+	sb.WriteString("\n[Session]\n")
+	sb.WriteString(fmt.Sprintf("LeftPath = %s\n", LastLeftPath))
+	sb.WriteString(fmt.Sprintf("RightPath = %s\n", LastRightPath))
 
 	err := os.WriteFile(path, []byte(sb.String()), 0644)
 	if err != nil {

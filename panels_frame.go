@@ -940,6 +940,17 @@ func (pf *PanelsFrame) getInactivePanel() *FileSystemPanel {
 	return nil
 }
 
+func (pf *PanelsFrame) GetPaths() (string, string) {
+	l, r := "", ""
+	if fsp, ok := pf.panels[0].(*FileSystemPanel); ok {
+		l = fsp.vfs.GetPath()
+	}
+	if fsp, ok := pf.panels[1].(*FileSystemPanel); ok {
+		r = fsp.vfs.GetPath()
+	}
+	return l, r
+}
+
 // HandleCommand intercepts global commands (like CmQuit or CmCopy)
 // sent by menus or other views.
 func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
@@ -948,6 +959,7 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 		dlg := vtui.ShowMessage(Msg("Quit.Title"), Msg("Quit.Confirm"), []string{Msg("Quit.Btn"), Msg("vtui.Cancel")})
 		dlg.OnResult = func(code int) {
 			if code == 0 {
+				SaveSession()
 				if pf.pty != nil {
 					pf.pty.Close()
 				}

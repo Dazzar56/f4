@@ -634,6 +634,24 @@ func TestPanelsFrame_Clone_SelectionPreservation(t *testing.T) {
 		t.Error("'selected.txt' missing in cloned panel entries")
 	}
 }
+func TestPanelsFrame_GetPaths(t *testing.T) {
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+
+	tmp := t.TempDir()
+	pathL := filepath.Join(tmp, "left")
+	pathR := filepath.Join(tmp, "right")
+	os.MkdirAll(pathL, 0755)
+	os.MkdirAll(pathR, 0755)
+
+	pf.panels[0].(*FileSystemPanel).vfs.SetPath(pathL)
+	pf.panels[1].(*FileSystemPanel).vfs.SetPath(pathR)
+
+	l, r := pf.GetPaths()
+	if l != pathL || r != pathR {
+		t.Errorf("GetPaths failed. Got %q, %q; want %q, %q", l, r, pathL, pathR)
+	}
+}
 func TestPanelsFrame_CloneIndependence(t *testing.T) {
 	pf := NewPanelsFrame()
 	pf.ResizeConsole(80, 25)

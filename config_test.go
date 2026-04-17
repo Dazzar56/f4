@@ -21,6 +21,7 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	// 1. Set some non-default values
 	AppConfig.ShowHiddenFiles = false
 	AppConfig.HighlightDir = true
+	AppConfig.SavePanelPaths = false
 
 	// 2. Save
 	SaveConfig()
@@ -38,5 +39,8 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	}
 	if !AppConfig.HighlightDir {
 		t.Error("LoadConfig failed to restore HighlightDir")
+	}
+	if AppConfig.SavePanelPaths {
+		t.Error("LoadConfig failed to restore SavePanelPaths")
 	}
 }

@@ -233,15 +233,20 @@ func TestSession_DiskPersistence(t *testing.T) {
 
 	LastEditorSearch = "disk-test"
 	LastFindFileMask = "*.log"
+	LastLeftPath = "/path/a"
+	LastRightPath = "/path/b"
 
 	SaveSession()
 
 	// Сбрасываем и загружаем
 	LastEditorSearch = ""
+	LastLeftPath = ""
+	LastRightPath = ""
 	LoadSession()
 
-	if LastEditorSearch != "disk-test" || LastFindFileMask != "*.log" {
-		t.Errorf("Disk persistence failed. Got Search:%q, Mask:%q", LastEditorSearch, LastFindFileMask)
+	if LastEditorSearch != "disk-test" || LastFindFileMask != "*.log" || LastLeftPath != "/path/a" || LastRightPath != "/path/b" {
+		t.Errorf("Disk persistence failed. Got Search:%q, Mask:%q, Left:%q, Right:%q",
+			LastEditorSearch, LastFindFileMask, LastLeftPath, LastRightPath)
 	}
 }
 func TestActionPanelSettings_Flow(t *testing.T) {
@@ -256,6 +261,22 @@ func TestActionPanelSettings_Flow(t *testing.T) {
 	top := vtui.FrameManager.GetTopFrame()
 	if top == nil || top.GetTitle() != Msg("PanelSettings.Title") {
 		t.Fatalf("Expected Panel Settings dialog, got %v", top)
+	}
+
+	// Проверяем наличие чекбокса для сохранения путей
+	dlg := top.(vtui.Container)
+	found := false
+	for _, itm := range dlg.GetChildren() {
+		if chk, ok := itm.(*vtui.Checkbox); ok {
+			if strings.Contains(chk.GetText(), "paths") {
+				found = true
+				break
+			}
+		}
+	}
+
+	if !found {
+		t.Error("Save paths checkbox not found in Panel Settings dialog")
 	}
 
 	top.SetExitCode(-1)

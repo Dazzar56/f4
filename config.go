@@ -12,6 +12,7 @@ import (
 type F4Config struct {
 	ShowHiddenFiles        bool
 	HighlightDir           bool
+	SavePanelPaths         bool
 	EditorAutoComplete     bool
 	EditorAutoCompleteMask string
 }
@@ -19,6 +20,7 @@ type F4Config struct {
 var AppConfig = F4Config{
 	ShowHiddenFiles:        true,
 	HighlightDir:           false,
+	SavePanelPaths:         true,
 	EditorAutoComplete:     true,
 	EditorAutoCompleteMask: "*.go;*.c;*.cpp;*.h;*.hpp;*.py;*.js;*.ts;*.rs;*.java;*.sh;*.txt;*.md;*.html;*.css;*.json",
 }
@@ -37,6 +39,7 @@ func LoadConfig() {
 
 	AppConfig.ShowHiddenFiles = ini.GetString("Panel", "ShowHiddenFiles", "1") == "1"
 	AppConfig.HighlightDir = ini.GetString("Panel", "HighlightDir", "0") == "1"
+	AppConfig.SavePanelPaths = ini.GetString("Panel", "SavePanelPaths", "1") == "1"
 
 	AppConfig.EditorAutoComplete = ini.GetString("Editor", "AutoComplete", "1") == "1"
 	AppConfig.EditorAutoCompleteMask = ini.GetString("Editor", "AutoCompleteMask", "*.go;*.c;*.cpp;*.h;*.hpp;*.py;*.js;*.ts;*.rs;*.java;*.sh;*.txt;*.md;*.html;*.css;*.json")
@@ -52,6 +55,7 @@ func SaveConfig() {
 	sb.WriteString("[Panel]\n")
 	sb.WriteString(fmt.Sprintf("ShowHiddenFiles = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.ShowHiddenFiles]))
 	sb.WriteString(fmt.Sprintf("HighlightDir = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.HighlightDir]))
+	sb.WriteString(fmt.Sprintf("SavePanelPaths = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.SavePanelPaths]))
 
 	sb.WriteString("\n[Editor]\n")
 	sb.WriteString(fmt.Sprintf("AutoComplete = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.EditorAutoComplete]))
