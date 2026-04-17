@@ -90,6 +90,14 @@ jobs:
     permissions:
       contents: write
     steps:
+    - name: Checkout code (to get git info)
+      uses: actions/checkout@v4
+
+    - name: Set Release Metadata
+      run: |
+        echo "SHORT_SHA=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+        echo "BUILD_TIME=$(date +'%Y-%m-%d %H:%M:%S')" >> $GITHUB_ENV
+
     - name: Download all artifacts
       uses: actions/download-artifact@v4
       with:
@@ -101,6 +109,10 @@ jobs:
       with:
         tag_name: nightly
         name: "Continuous Build (Nightly)"
-        body: "Automated pre-release build of the latest main branch. Updated on ${{ github.event.head_commit.timestamp }}."
+        body: |
+          Automated pre-release build of the latest `main` branch.
+
+          **Commit:** `${{ env.SHORT_SHA }}`
+          **Built on:** `${{ env.BUILD_TIME }}`
         prerelease: true
         files: artifacts/*
