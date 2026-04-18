@@ -434,9 +434,20 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 				if fp.loadingTimer != nil { fp.loadingTimer.Stop() }
 
 				fp.isLoading = false
-				fp.updateTitle(err)
 				if err != nil && err != context.Canceled {
+					// Баг-фикс: если директория исчезла (например, удалена из другой панели),
+					// пытаемся подняться на уровень выше вместо показа ошибки.
+					if !fp.vfs.IsAtRoot() {
+						vtui.DebugLog("PANEL: Directory inaccessible, attempting to go up: %v", err)
+						fp.vfs.SetPath("..")
+						fp.ReadDirectory()
+						return
+					}
+
+					fp.updateTitle(err)
 					vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to read directory:\n%v", err), []string{"&Ok"})
+				} else {
+					fp.updateTitle(nil)
 				}
 
         if isFirstChunk {
