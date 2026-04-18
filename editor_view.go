@@ -1431,7 +1431,9 @@ func (ev *EditorView) showSearchDialog() {
 
 	lblPrompt := vtui.NewLabel(0, 0, "Search for:", nil)
 	editPattern := vtui.NewEdit(0, 0, 30, LastEditorSearch)
+	editPattern.SelectAll()
 	lblPrompt.FocusLink = editPattern
+	dlg.SetFocusedItem(editPattern)
 
 	chkCase := vtui.NewCheckbox(0, 0, Msg("Search.CaseSensitive"), false)
 	chkCase.State = 0

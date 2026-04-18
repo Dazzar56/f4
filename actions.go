@@ -618,7 +618,9 @@ func actionFindFile(pf *PanelsFrame) {
 
 	lblMask := vtui.NewLabel(0, 0, Msg("FindFile.MaskPrompt"), nil)
 	editMask := vtui.NewEdit(0, 0, 20, LastFindFileMask)
+	editMask.SelectAll()
 	lblMask.FocusLink = editMask
+	dlg.SetFocusedItem(editMask)
 
 	lblText := vtui.NewLabel(0, 0, Msg("FindFile.TextPrompt"), nil)
 	editText := vtui.NewEdit(0, 0, 20, LastFindFileText)
