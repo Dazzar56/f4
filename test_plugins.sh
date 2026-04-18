@@ -5,8 +5,8 @@ echo "1. Downloading Go dependencies..."
 go mod tidy
 
 echo "2. Building RPC Dummy Plugin..."
-cd plugins/dummy
-go build -o f4-dummy-plugin
+cd plugins/dummy_rpc
+go build -o f4-rpc-dummy-plugin
 cd ../..
 
 echo "3. Running f4 in test mode (Output will go to debug.log)..."

@@ -13,7 +13,7 @@ type DummyPlugin struct {
 func (p *DummyPlugin) Init(host *f4plugin.Host) ([]string, error) {
 	p.host = host
 	ver := host.GetVersion()
-	host.Log(fmt.Sprintf("Dummy Plugin initialized via F4-RPC! Host Version: %s", ver))
+	host.Log(fmt.Sprintf("RPC dummy plugin initialized via F4-RPC! Host Version: %s", ver))
 	// We deliberately log instead of triggering host.Message to avoid
 	// annoying popups on application startup.
 	return []string{"Dummy RPC VFS"}, nil

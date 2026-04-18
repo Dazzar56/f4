@@ -10,7 +10,7 @@ import (
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/f4/plugins/archive"
 	"github.com/unxed/f4/plugins/chroma"
-	"github.com/unxed/f4/plugins/hello_internal"
+	"github.com/unxed/f4/plugins/dummy_internal"
 	"github.com/unxed/f4/plugins/netfox"
 	"github.com/unxed/vtui"
 )
@@ -57,7 +57,7 @@ func (pm *PluginManager) LoadAll() {
 func (pm *PluginManager) loadInternal() {
 	plugins := []Plugin{
 		&chroma.Plugin{},
-		&hello_internal.InternalHelloPlugin{},
+		&dummy_internal.InternalDummyPlugin{},
 		&archive.ArchivePlugin{},
 		&netfox.NetFoxPlugin{},
 	}
