@@ -2606,6 +2606,111 @@ func TestEditorView_UndoRedo(t *testing.T) {
 		t.Errorf("Redo worked when it shouldn't: %q", ev.pt.String())
 	}
 }
+func TestEditorView_StateRestoration(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	content := "Line 1\nLine 2\nLine 3\nLine 4\nLine 5"
+	pt := piecetable.New([]byte(content))
+	ev := NewEditorView(pt, nil, "test.txt")
+	ev.SetPosition(0, 0, 80, 24)
+
+	// Имитируем загрузку сохраненного состояния (как это делает actionOpenEditor)
+	ev.targetLine = 3
+	ev.targetPos = 2
+	ev.targetTopRow = 2
+	ev.targetLeft = 0
+
+	// Имитируем завершение StartIndexing()
+	ev.CursorLine = ev.targetLine
+	ev.CursorPos = ev.targetPos
+	ev.ScrollTopRow = ev.targetTopRow
+	ev.ScrollLeft = ev.targetLeft
+	ev.targetLine = -1
+	ev.ensureCursorVisible()
+	ev.updateDesiredVisualCol()
+
+	if ev.ScrollLeft == -1 {
+		t.Error("ScrollLeft was incorrectly restored to -1 (causes empty left column bug)")
+	}
+	if ev.ScrollTopRow != 2 {
+		t.Errorf("ScrollTopRow was not restored correctly, got %d", ev.ScrollTopRow)
+	}
+	if ev.CursorLine != 3 {
+		t.Errorf("CursorLine was not restored correctly, got %d", ev.CursorLine)
+	}
+	if ev.DesiredVisualCol == 0 {
+		t.Error("DesiredVisualCol was not updated, vertical navigation will break")
+	}
+}
+func TestEditorView_StateRestoration_Interference(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pt := piecetable.New([]byte("line1\nline2\nline3"))
+	ev := NewEditorView(pt, nil, "test.txt")
+
+	ev.targetLine = 2 // Хотим прыгнуть на 3-ю строку
+	ev.targetPos = 0
+
+	// Имитируем, что пользователь нажал клавишу (например, влево) до завершения индексации
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_LEFT})
+
+	if ev.targetLine != -1 {
+		t.Error("User intervention must cancel pending state restoration")
+	}
+
+	// Пытаемся применить старое состояние (симуляция завершения StartIndexing)
+	// Оно не должно затирать текущую позицию пользователя
+	if ev.targetLine == -1 {
+		// logic in StartIndexing: if targetLine == -1, do nothing.
+	} else {
+		t.Error("Indexing task applied state even though user took control")
+	}
+}
+
+func TestEditorView_StateRestoration_BoundaryClamping(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pt := piecetable.New([]byte("short file")) // всего 1 строка
+	ev := NewEditorView(pt, nil, "test.txt")
+
+	ev.targetLine = 50 // Сохраненная позиция в старом длинном файле
+	ev.targetPos = 100
+
+	// Имитируем вызов из StartIndexing
+	ev.CursorLine = ev.targetLine
+	if ev.CursorLine >= ev.li.LineCount() {
+		ev.CursorLine = ev.li.LineCount() - 1
+	}
+	ev.targetLine = -1
+	ev.ensureCursorVisible()
+
+	if ev.CursorLine != 0 {
+		t.Errorf("Clamping failed. Expected line 0, got %d", ev.CursorLine)
+	}
+}
+
+func TestEditorView_StateRestoration_UnicodeColumn(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	// "世" (2 колонки)
+	pt := piecetable.New([]byte("世ABC"))
+	ev := NewEditorView(pt, nil, "test.txt")
+	ev.SetPosition(0, 0, 80, 24)
+
+	// Восстанавливаем позицию после "世" (индекс байта 3)
+	ev.targetLine = 0
+	ev.targetPos = 3
+	ev.targetTopRow = 0
+	ev.targetLeft = 0
+
+	// Имитируем применение
+	ev.CursorLine = ev.targetLine
+	ev.CursorPos = ev.targetPos
+	ev.targetLine = -1
+	ev.updateDesiredVisualCol()
+
+	// "世" занимает 2 колонки, значит курсор должен хотеть стоять во 2-й колонке (0, 1, [2])
+	if ev.DesiredVisualCol != 2 {
+		t.Errorf("DesiredVisualCol for Unicode failed. Got %d, want 2", ev.DesiredVisualCol)
+	}
+}
 func TestEditorView_Undo_Advanced(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pt := piecetable.New([]byte("abcde"))

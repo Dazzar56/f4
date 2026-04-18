@@ -84,6 +84,11 @@ type EditorView struct {
 	acPrefix      string
 	acMatches     []string
 	acCurrentIdx  int
+
+	targetLine   int
+	targetPos    int
+	targetTopRow int
+	targetLeft   int
 }
 
 type undoOpType int
@@ -101,6 +106,9 @@ type editorState struct {
 }
 
 func (ev *EditorView) Close() {
+	if GlobalFileState != nil && ev.filePath != "" {
+		GlobalFileState.SaveEditorState(ev.filePath, ev.CursorLine, ev.CursorPos, ev.ScrollTopRow, ev.ScrollLeft, ev.WordWrap)
+	}
 	if ev.indexCancel != nil {
 		ev.indexCancel()
 	}
@@ -125,6 +133,10 @@ func NewEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string) *EditorVie
 		WordWrap:        false,
 		ShowWhitespaces: false,
 		cleanState:      pt.GetState(),
+		targetLine:      -1,
+		targetPos:       -1,
+		targetTopRow:    -1,
+		targetLeft:      -1,
 	}
 	// Determine if AC should be enabled for this file
 	ev.acEnabled = false
@@ -524,6 +536,13 @@ DoneRendering:
 }
 
 func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
+	if e.Type == vtinput.KeyEventType && e.KeyDown {
+		if ev.targetLine != -1 {
+			ev.targetLine = -1 // User took control, abort target jump
+			ev.ensureCursorVisible()
+		}
+	}
+
 	ev.ensureEngineWidth()
 	if ev.saving { return true }
 	// 1. Processing Bracketed Paste (events arrive outside KeyDown)
@@ -1181,6 +1200,10 @@ func (ev *EditorView) fillCells(target []vtui.CharInfo, data []byte, defaultAttr
 }
 
 func (ev *EditorView) ensureCursorVisible() {
+	if ev.targetLine != -1 {
+		return // Skip clamping and scrolling while waiting for the target line to be indexed
+	}
+
 	// Safety constraints for binary files or corrupted indices
 	if ev.CursorLine < 0 { ev.CursorLine = 0 }
 	if ev.CursorLine >= ev.li.LineCount() { ev.CursorLine = ev.li.LineCount() - 1 }
@@ -1222,6 +1245,10 @@ func (ev *EditorView) ensureCursorVisible() {
 func (ev *EditorView) ProcessMouse(e *vtinput.InputEvent) bool {
 	if e.Type != vtinput.MouseEventType {
 		return false
+	}
+	if e.ButtonState != 0 && ev.targetLine != -1 {
+		ev.targetLine = -1
+		ev.ensureCursorVisible()
 	}
 
 	if ev.scrollBar != nil && ev.scrollBar.ProcessMouse(e) {
@@ -1318,11 +1345,41 @@ func (ev *EditorView) StartIndexing() {
 					// from the line that was previously the "last" one.
 					lastLineBefore := li.LineCount() - 1
 					li.AppendOffsets(currentBatch, maxSize)
+
+					if ev.targetLine != -1 && (li.LineCount() > ev.targetLine || absPos >= maxSize) {
+						ev.CursorLine = ev.targetLine
+						if ev.CursorLine >= li.LineCount() { ev.CursorLine = li.LineCount() - 1 }
+						if ev.CursorLine < 0 { ev.CursorLine = 0 }
+						ev.CursorPos = ev.targetPos
+						ev.ScrollTopRow = ev.targetTopRow
+						ev.ScrollLeft = ev.targetLeft
+						ev.targetLine = -1
+						ev.ensureCursorVisible()
+						ev.updateDesiredVisualCol()
+					}
+
 					ev.engine.InvalidateFrom(lastLineBefore)
 					vtui.FrameManager.Redraw()
 				})
 			}
 		}
+
+		vtui.FrameManager.PostTask(func() {
+			if ctx.Err() == nil && !ev.edited && ev.editSession == sessionID {
+				if ev.targetLine != -1 {
+					ev.CursorLine = ev.targetLine
+					if ev.CursorLine >= li.LineCount() { ev.CursorLine = li.LineCount() - 1 }
+					if ev.CursorLine < 0 { ev.CursorLine = 0 }
+					ev.CursorPos = ev.targetPos
+					ev.ScrollTopRow = ev.targetTopRow
+					ev.ScrollLeft = ev.targetLeft
+					ev.targetLine = -1
+					ev.ensureCursorVisible()
+					ev.updateDesiredVisualCol()
+					vtui.FrameManager.Redraw()
+				}
+			}
+		})
 		vtui.DebugLog("INDEXER: Finished for %s", ev.filePath)
 	}()
 }

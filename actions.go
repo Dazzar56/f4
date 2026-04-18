@@ -59,8 +59,17 @@ func actionOpenEditor(pf *PanelsFrame, v vfs.VFS, path string) {
 				if f != nil { f.Close() }
 				return
 			}
-			
+
 			editor := NewEditorView(pt, v, path)
+			if GlobalFileState != nil && path != "" {
+				if state := GlobalFileState.GetState(path); state != nil {
+					editor.WordWrap = state.EditorWrap
+					editor.targetLine = state.EditorLine
+					editor.targetPos = state.EditorPos
+					editor.targetTopRow = state.EditorTopRow
+					editor.targetLeft = state.EditorLeft
+				}
+			}
 			editor.file = f
 			editor.asyncBuf = buf
 			editor.ResizeConsole(pf.lastW, pf.lastH)
@@ -95,6 +104,17 @@ func actionOpenViewer(pf *PanelsFrame, v vfs.VFS, path string) {
 				vtui.DebugLog("PANELS: Failed to open viewer for %s: %v", path, err)
 				vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to open file:\n%v", err), []string{"&Ok"})
 				return
+			}
+			if GlobalFileState != nil && path != "" {
+				if state := GlobalFileState.GetState(path); state != nil {
+					viewer.TopOffset = state.ViewerOffset
+					if viewer.TopOffset > viewer.backend.Size() {
+						viewer.TopOffset = viewer.backend.Size() - 1
+					}
+					if viewer.TopOffset < 0 { viewer.TopOffset = 0 }
+					viewer.WrapMode = state.ViewerWrap
+					viewer.HexMode = state.ViewerHex
+				}
 			}
 			viewer.ResizeConsole(pf.lastW, pf.lastH)
 			vtui.FrameManager.AddScreen(viewer)

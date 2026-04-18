@@ -399,5 +399,28 @@ func TestViewerView_EndJump_BusyState(t *testing.T) {
 		t.Error("TopOffset should have moved away from 0 after End jump")
 	}
 }
+func TestViewerView_StateRestoration_Modes(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	tmp := filepath.Join(t.TempDir(), "test.txt")
+	os.WriteFile(tmp, []byte("data"), 0644)
+	v := vfs.NewOSVFS(t.TempDir())
+
+	GlobalFileState = &F4FileStateProvider{Data: make(map[string]*FileState), Limit: 10}
+	GlobalFileState.SaveViewerState(tmp, 0, false, true) // Wrap OFF, Hex ON
+
+	// Имитируем открытие (логика из actions.go)
+	vv, _ := NewViewerView(context.Background(), v, tmp)
+	if state := GlobalFileState.GetState(tmp); state != nil {
+		vv.WrapMode = state.ViewerWrap
+		vv.HexMode = state.ViewerHex
+	}
+
+	if !vv.HexMode {
+		t.Error("HexMode was not restored")
+	}
+	if vv.WrapMode {
+		t.Error("WrapMode was not restored (should be false)")
+	}
+}
 
 
