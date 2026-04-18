@@ -819,6 +819,36 @@ func TestFileSystemPanel_FastFind_LongString(t *testing.T) {
 		t.Error("Long search string head 'HEAD' should be scrolled out of view")
 	}
 }
+func TestFileSystemPanel_FastFind_XLat(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(t.TempDir()))
+	fp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "readme.txt"}},
+		{VFSItem: vfs.VFSItem{Name: "заметка.txt"}},
+	}
+	fp.Refresh()
+
+	// 1. Поиск "readme" через ввод "кефдьу" (в русской раскладке)
+	vtui.GlobalXlator.Track('ф') // Включаем русский контекст
+	fp.fastFindMode = true
+	fp.fastFindStr = "кефд" // "read"
+	fp.doFastFind(0)
+
+	if fp.GetSelectedName() != "readme.txt" {
+		t.Errorf("XLat FastFind failed: expected 'readme.txt', got %q", fp.GetSelectedName())
+	}
+
+	// 2. Поиск "заметка" через ввод "pfvt" (в английской раскладке)
+	vtui.GlobalXlator.Track('a') // Включаем английский контекст
+	fp.fastFindStr = "pfvt" // 'p'->'з', 'f'->'а', 'v'->'м', 't'->'е'
+	// Сбросим индекс, чтобы гарантированно найти файл с начала списка
+	fp.SetCursorIndex(0)
+	fp.doFastFind(0)
+
+	if fp.GetSelectedName() != "заметка.txt" {
+		t.Errorf("XLat FastFind (reverse) failed: expected 'заметка.txt', got %q", fp.GetSelectedName())
+	}
+}
 
 func TestFileSystemPanel_ForkDuplication(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())

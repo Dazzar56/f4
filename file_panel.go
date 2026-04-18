@@ -838,11 +838,17 @@ func (fp *FileSystemPanel) doFastFind(dir int) {
 		return
 	}
 	searchLower := strings.ToLower(fp.fastFindStr)
+	searchXlat := strings.ToLower(vtui.GlobalXlator.TranscodeString(fp.fastFindStr))
 	startIdx := fp.GetCursorIndex()
+
+	checkMatch := func(i int) bool {
+		nameLower := strings.ToLower(fp.entries[i].Name)
+		return strings.HasPrefix(nameLower, searchLower) || strings.HasPrefix(nameLower, searchXlat)
+	}
 
 	if dir == 0 {
 		for i := 0; i < len(fp.entries); i++ {
-			if strings.HasPrefix(strings.ToLower(fp.entries[i].Name), searchLower) {
+			if checkMatch(i) {
 				fp.SetCursorIndex(i)
 				fp.Refresh()
 				return
@@ -850,14 +856,14 @@ func (fp *FileSystemPanel) doFastFind(dir int) {
 		}
 	} else if dir == 1 {
 		for i := startIdx + 1; i < len(fp.entries); i++ {
-			if strings.HasPrefix(strings.ToLower(fp.entries[i].Name), searchLower) {
+			if checkMatch(i) {
 				fp.SetCursorIndex(i)
 				fp.Refresh()
 				return
 			}
 		}
 		for i := 0; i <= startIdx; i++ {
-			if strings.HasPrefix(strings.ToLower(fp.entries[i].Name), searchLower) {
+			if checkMatch(i) {
 				fp.SetCursorIndex(i)
 				fp.Refresh()
 				return
@@ -865,14 +871,14 @@ func (fp *FileSystemPanel) doFastFind(dir int) {
 		}
 	} else if dir == -1 {
 		for i := startIdx - 1; i >= 0; i-- {
-			if strings.HasPrefix(strings.ToLower(fp.entries[i].Name), searchLower) {
+			if checkMatch(i) {
 				fp.SetCursorIndex(i)
 				fp.Refresh()
 				return
 			}
 		}
 		for i := len(fp.entries) - 1; i >= startIdx; i-- {
-			if strings.HasPrefix(strings.ToLower(fp.entries[i].Name), searchLower) {
+			if checkMatch(i) {
 				fp.SetCursorIndex(i)
 				fp.Refresh()
 				return
