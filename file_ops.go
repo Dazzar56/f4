@@ -20,6 +20,7 @@ type FileOpState struct {
 	OnBytes      func(int)
 	Tracker      *FileOpTracker
 	UpdateUI     func(force bool)
+	Anchor       vtui.Frame
 }
 
 // formatSize formats a byte count into a human-readable string.
@@ -240,6 +241,7 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 				bytesSinceLastSpeedUpdate += int64(n)
 				updateUI(false)
 			},
+			Anchor: dlg,
 		}
 
 		updateUI(true)
@@ -405,7 +407,7 @@ func recursiveCopy(ctx context.Context, srcVfs vfs.VFS, srcPath string, dstVfs v
 			break
 		}
 
-		choice, remember := AskOverwrite(ctx, destPathForFile, stat, dstStat)
+		choice, remember := AskOverwrite(ctx, destPathForFile, stat, dstStat, state.Anchor)
 		if choice == 1 { // Overwrite
 			if remember {
 				state.OverwriteAll = true
@@ -420,7 +422,7 @@ func recursiveCopy(ctx context.Context, srcVfs vfs.VFS, srcPath string, dstVfs v
 			skipFile()
 			return nil
 		} else if choice == 3 { // Rename
-			newName := AskRename(ctx, dstVfs.Base(destPathForFile))
+			newName := AskRename(ctx, dstVfs.Base(destPathForFile), state.Anchor)
 			if newName == "" {
 				return context.Canceled
 			}
@@ -447,7 +449,7 @@ func recursiveCopy(ctx context.Context, srcVfs vfs.VFS, srcPath string, dstVfs v
 		if err == nil {
 			break
 		}
-		choice := AskError(ctx, "Cannot open source file", err)
+		choice := AskError(ctx, "Cannot open source file", err, state.Anchor)
 		if choice == 1 {
 			skipFile()
 			return nil
@@ -463,7 +465,7 @@ func recursiveCopy(ctx context.Context, srcVfs vfs.VFS, srcPath string, dstVfs v
 		if err == nil {
 			break
 		}
-		choice := AskError(ctx, "Cannot create destination file", err)
+		choice := AskError(ctx, "Cannot create destination file", err, state.Anchor)
 		if choice == 1 {
 			skipFile()
 			return nil
@@ -502,7 +504,7 @@ func recursiveCopy(ctx context.Context, srcVfs vfs.VFS, srcPath string, dstVfs v
 }
 
 // AskOverwrite shows a rich modal dialog for file conflicts.
-func AskOverwrite(ctx context.Context, destPath string, srcStat, dstStat vfs.VFSItem) (int, bool) {
+func AskOverwrite(ctx context.Context, destPath string, srcStat, dstStat vfs.VFSItem, anchor vtui.Frame) (int, bool) {
 	resultChan := make(chan int, 1)
 	rememberChan := make(chan bool, 1)
 	var dlg *vtui.Window
@@ -596,7 +598,11 @@ func AskOverwrite(ctx context.Context, destPath string, srcStat, dstStat vfs.VFS
 				}
 			}
 		}
-		vtui.FrameManager.Push(dlg)
+		if anchor != nil {
+			vtui.FrameManager.PushToFrameScreen(anchor, dlg)
+		} else {
+			vtui.FrameManager.Push(dlg)
+		}
 	})
 
 	select {
@@ -611,12 +617,12 @@ func AskOverwrite(ctx context.Context, destPath string, srcStat, dstStat vfs.VFS
 	}
 }
 
-func AskRename(ctx context.Context, oldName string) string {
+func AskRename(ctx context.Context, oldName string, anchor vtui.Frame) string {
 	resultChan := make(chan string, 1)
 	var dlg *vtui.Window
 	vtui.FrameManager.PostTask(func() {
 		if ctx.Err() != nil { return }
-		dlg = vtui.InputBox(" Rename ", "New name:", oldName, func(s string) {
+		dlg = vtui.InputBoxOn(anchor, " Rename ", "New name:", oldName, func(s string) {
 			select { case resultChan <- s: default: }
 		})
 		dlg.OnResult = func(code int) {
@@ -637,14 +643,18 @@ func AskRename(ctx context.Context, oldName string) string {
 }
 
 // AskError handles I/O errors by asking user for Retry/Skip/Abort
-func AskError(ctx context.Context, op string, err error) int {
+func AskError(ctx context.Context, op string, err error, anchor vtui.Frame) int {
 	resultChan := make(chan int, 1)
 	var dlg *vtui.Window
 
 	vtui.FrameManager.PostTask(func() {
 		if ctx.Err() != nil { return }
 		msg := fmt.Sprintf("%s:\n%s\n\n%s", op, err.Error(), "What to do?")
-		dlg = vtui.ShowMessage(" Error ", msg, []string{Msg("Btn.Retry"), "&Skip", "&Abort"})
+		if anchor != nil {
+			dlg = vtui.ShowMessageOn(anchor, " Error ", msg, []string{Msg("Btn.Retry"), "&Skip", "&Abort"})
+		} else {
+			dlg = vtui.ShowMessage(" Error ", msg, []string{Msg("Btn.Retry"), "&Skip", "&Abort"})
+		}
 		dlg.OnResult = func(code int) {
 			if code < 0 {
 				code = 2

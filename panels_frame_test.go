@@ -47,6 +47,45 @@ func TestPanelsFrame_Layout(t *testing.T) {
 		t.Error("KeyBar should be invisible")
 	}
 }
+func TestPanelsFrame_ArkanoidHotkey(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pf := NewPanelsFrame()
+	vtui.FrameManager.Push(pf) // Screen 0
+
+	initialScreens := len(vtui.FrameManager.Screens)
+
+	// 1. Запуск игры
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  'A',
+		ControlKeyState: vtinput.LeftAltPressed | vtinput.LeftCtrlPressed,
+	})
+
+	if len(vtui.FrameManager.Screens) != initialScreens+1 {
+		t.Fatalf("Expected %d screens, got %d", initialScreens+1, len(vtui.FrameManager.Screens))
+	}
+
+	arkScreen := vtui.FrameManager.Screens[len(vtui.FrameManager.Screens)-1]
+	if !arkScreen.Transparent {
+		t.Error("Arkanoid screen should be transparent (headless)")
+	}
+	if arkScreen.GetTitle() != "Arkanoid" {
+		t.Errorf("Expected Arkanoid title, got %s", arkScreen.GetTitle())
+	}
+
+	// 2. Пытаемся запустить еще раз (не должно создавать новый экран, а только переключить)
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  'A',
+		ControlKeyState: vtinput.LeftAltPressed | vtinput.LeftCtrlPressed,
+	})
+
+	if len(vtui.FrameManager.Screens) != initialScreens+1 {
+		t.Error("Second Arkanoid launch erroneously created a duplicate screen")
+	}
+}
 func TestPanelsFrame_GetActivePTY(t *testing.T) {
 	pf := NewPanelsFrame()
 

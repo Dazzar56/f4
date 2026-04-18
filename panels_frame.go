@@ -480,7 +480,16 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 
 	// Arkanoid easter egg: Ctrl+Alt+A
 	if e.VirtualKeyCode == 'A' && alt && ctrl && e.KeyDown {
-		vtui.FrameManager.Push(NewArkanoidFrame())
+		for i, s := range vtui.FrameManager.Screens {
+			for _, f := range s.Frames {
+				if f.GetTitle() == "Arkanoid" {
+					vtui.FrameManager.SwitchScreen(i)
+					return true
+				}
+			}
+		}
+		// Запускаем без десктопа, чтобы воркспейс был прозрачным
+		vtui.FrameManager.AddScreenHeadless(NewArkanoidFrame())
 		return true
 	}
 	// Crash test hotkey: Ctrl+Alt+C
