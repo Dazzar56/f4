@@ -504,6 +504,9 @@ func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
 	fp.table.SetFocus(fp.IsFocused())
 	fp.table.Show(scr)
 	if fp.fastFindMode {
+		if vtui.ManageCursorStyle {
+			os.Stdout.WriteString("\x1b[3 q") // Blinking underline
+		}
 		boxW := 24
 		boxH := 3
 
@@ -615,7 +618,7 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 			vtui.FrameManager.Redraw()
 			// Проваливаемся ниже, чтобы обработать Enter как вход в файл/директорию
 		} else if e.Char != 0 && !ctrl {
-			fp.fastFindStr += string(e.Char)
+			fp.fastFindStr += string(unicode.ToLower(e.Char))
 			fp.doFastFind(0)
 			vtui.FrameManager.Redraw()
 			return true
@@ -623,7 +626,7 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 	} else {
 		if e.Char != 0 && alt && !ctrl && unicode.IsPrint(e.Char) {
 			fp.fastFindMode = true
-			fp.fastFindStr = string(e.Char)
+			fp.fastFindStr = string(unicode.ToLower(e.Char))
 			fp.doFastFind(0)
 			vtui.FrameManager.Redraw()
 			return true

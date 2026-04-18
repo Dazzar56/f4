@@ -417,10 +417,16 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 
 	// Command line logic depends on terminal state and editor visibility
 	topType := vtui.FrameManager.GetTopFrameType()
+	isFastFind := false
+	if fsp := pf.getActivePanel(); fsp != nil && fsp.fastFindMode {
+		isFastFind = true
+	}
+
 	if (!pf.showPanels && (pf.termView.UseAltScreen || isBusy)) || topType == vtui.TypeUser+2 {
 		pf.cmdLine.SetVisible(false)
 	} else {
 		pf.cmdLine.SetVisible(true)
+		pf.cmdLine.Edit.HideCursor = isFastFind
 		cmdLineY := pf.lastH - 1
 		if pf.showKeyBar {
 			cmdLineY = pf.lastH - 2
