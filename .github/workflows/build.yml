@@ -34,16 +34,16 @@ jobs:
         GOARCH: ${{ matrix.goarch }}
         CGO_ENABLED: 0
       run: |
-        mkdir -p build/plugins/dummy
+        mkdir -p build/plugins/dummy_internal
         EXT=""
         if [ "$GOOS" = "windows" ]; then EXT=".exe"; fi
 
         # Build core
         go build -ldflags="-s -w" -o build/f4$EXT .
 
-        # Build dummy plugin
-        cd plugins/dummy
-        go build -ldflags="-s -w" -o ../../build/plugins/dummy/f4-dummy-plugin$EXT .
+        # Build internal dummy plugin
+        cd plugins/dummy_internal
+        go build -ldflags="-s -w" -o ../../build/plugins/dummy_internal/f4-internal-dummy-plugin$EXT .
 
     - name: Package
       run: |

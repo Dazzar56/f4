@@ -2,6 +2,5 @@ debug*log
 plugins/dummy/f4-dummy-plugin
 f4
 f4.exe
-plugins/dummy_internal/dummy_internal.go
 plugins/dummy_internal/f4-internal-dummy-plugin
 plugins/dummy_rpc/f4-rpc-dummy-plugin
