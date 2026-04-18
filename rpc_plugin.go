@@ -13,10 +13,11 @@ import (
 
 // RPCPlugin manages the lifecycle of an external process plugin.
 type RPCPlugin struct {
-	path string
-	cmd  *exec.Cmd
-	sess *f4rpc.Session
-	api  vfs.HostAPI
+	path    string
+	cmd     *exec.Cmd
+	sess    *f4rpc.Session
+	api     vfs.HostAPI
+	closing bool
 }
 
 func NewRPCPlugin(path string) *RPCPlugin {
@@ -77,7 +78,9 @@ func (p *RPCPlugin) Init(api vfs.HostAPI) error {
 
 	go func() {
 		err := p.sess.Serve()
-		vtui.DebugLog("RPC Plugin %q exited: %v", p.path, err)
+		if !p.closing {
+			vtui.DebugLog("RPC Plugin %q terminated unexpectedly: %v", p.path, err)
+		}
 	}()
 
 	// Query plugin for its capabilities (drives)
@@ -100,6 +103,7 @@ func (p *RPCPlugin) Init(api vfs.HostAPI) error {
 }
 
 func (p *RPCPlugin) Close() error {
+	p.closing = true
 	if p.cmd != nil && p.cmd.Process != nil {
 		p.cmd.Process.Kill()
 		p.cmd.Wait()
