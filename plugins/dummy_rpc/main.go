@@ -23,9 +23,6 @@ func (p *DummyPlugin) ReadDir(drive, path string) ([]f4plugin.VFSItem, error) {
 	p.host.Log(fmt.Sprintf("ReadDir called for %s", path))
 
 	var items []f4plugin.VFSItem
-	if path != "/" && path != "" {
-		items = append(items, f4plugin.VFSItem{Name: "..", IsDir: true})
-	}
 
 	for i := 1; i <= 10; i++ {
 		items = append(items, f4plugin.VFSItem{
