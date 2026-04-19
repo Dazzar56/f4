@@ -551,6 +551,36 @@ func TestFileSystemPanel_GetSuccessorName(t *testing.T) {
 		t.Errorf("Case 5 failed: expected '..', got %q", res)
 	}
 }
+func TestGetSelectedNames_ParentSafety(t *testing.T) {
+	fp := &FileSystemPanel{}
+	// Setup entries: 0: "..", 1: "file.txt"
+	fp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
+		{VFSItem: vfs.VFSItem{Name: "file.txt", IsDir: false}},
+	}
+
+	// Case 1: Cursor on ".."
+	fp.cursorIdx = 0
+	names := fp.GetSelectedNames()
+	if len(names) != 0 {
+		t.Errorf("Security violation: GetSelectedNames returned items when cursor was on '..': %v", names)
+	}
+
+	// Case 2: Cursor on "file.txt"
+	fp.cursorIdx = 1
+	names = fp.GetSelectedNames()
+	if len(names) != 1 || names[0] != "file.txt" {
+		t.Errorf("Failed to get item under cursor: %v", names)
+	}
+
+	// Case 3: "file.txt" selected, but cursor is on ".."
+	fp.entries[1].Selected = true
+	fp.cursorIdx = 0
+	names = fp.GetSelectedNames()
+	if len(names) != 1 || names[0] != "file.txt" {
+		t.Errorf("Failed to get selected items while cursor is on '..': %v", names)
+	}
+}
 func TestFileSystemPanel_AsyncPendingSelection(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS("."))
