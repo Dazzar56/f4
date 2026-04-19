@@ -153,14 +153,21 @@ func (v *OSVFS) Stat(ctx context.Context, path string) (VFSItem, error) {
 		}
 		return VFSItem{}, err
 	}
-	return VFSItem{
+
+	item := VFSItem{
 		Name:         info.Name(),
 		Size:         info.Size(),
 		IsDir:        info.IsDir(),
 		MTime:        info.ModTime(),
+		UnixMode:     uint32(info.Mode().Perm()),
 		IsExecutable: info.Mode().Perm()&0111 != 0,
 		IsHidden:     isHidden(path, info.Name(), info),
-	}, nil
+	}
+
+	// Platform specific time extraction
+	fillPlatformTimes(&item, info)
+
+	return item, nil
 }
 
 func (v *OSVFS) Join(elem ...string) string { return filepath.Join(elem...) }
@@ -207,6 +214,29 @@ func (v *OSVFS) Rename(ctx context.Context, old, new string) error {
 		return globalSudoClient.Rename(old, new)
 	}
 	return err
+}
+func (v *OSVFS) SetAttributes(ctx context.Context, path string, item VFSItem) error {
+	if ctx.Err() != nil { return ctx.Err() }
+
+	// Try native first
+	errMode := os.Chmod(path, os.FileMode(item.UnixMode))
+
+	var errOwn error
+	if runtime.GOOS != "windows" {
+		errOwn = os.Chown(path, item.Uid, item.Gid)
+	}
+
+	errTime := os.Chtimes(path, item.ATime, item.MTime)
+
+	// If any operation failed due to permissions, try sudo
+	if (os.IsPermission(errMode) || os.IsPermission(errOwn) || os.IsPermission(errTime)) && globalSudoClient.IsAvailable() {
+		vtui.DebugLog("VFS: SetAttributes permission denied, trying sudo for %q", path)
+		return globalSudoClient.SetAttributes(path, item)
+	}
+
+	if errMode != nil { return errMode }
+	if errOwn != nil { return errOwn }
+	return errTime
 }
 
 func (v *OSVFS) GetCapabilities() VFSCapabilities {

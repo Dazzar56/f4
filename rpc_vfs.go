@@ -83,8 +83,13 @@ func (v *RPCVFS) Remove(ctx context.Context, p string) error {
 	return fmt.Errorf("Remove not implemented in RPC VFS yet")
 }
 
+
 func (v *RPCVFS) Rename(ctx context.Context, old, new string) error {
 	return fmt.Errorf("Rename not implemented in RPC VFS yet")
+}
+
+func (v *RPCVFS) SetAttributes(ctx context.Context, path string, item vfs.VFSItem) error {
+	return fmt.Errorf("SetAttributes not implemented in RPC VFS yet")
 }
 
 func (v *RPCVFS) GetCapabilities() vfs.VFSCapabilities {

@@ -738,3 +738,24 @@ func actionPanelSettings(pf *PanelsFrame) {
 
 	vtui.FrameManager.Push(dlg)
 }
+
+func actionFileAttributes(pf *PanelsFrame) {
+	fsp := pf.getActivePanel()
+	if fsp == nil { return }
+	
+	name := fsp.GetSelectedName()
+	if name == "" || name == ".." { return }
+	
+	fullPath := fsp.vfs.Join(fsp.vfs.GetPath(), name)
+	
+	vtui.RunAsync(func(ctx *vtui.TaskContext) {
+		item, err := fsp.vfs.Stat(ctx.Context, fullPath)
+		ctx.RunOnUI(func() {
+			if err != nil {
+				vtui.ShowMessage(" Error ", err.Error(), []string{"&Ok"})
+				return
+			}
+			ShowAttributesDialog(pf, fsp.vfs, fullPath, item)
+		})
+	})
+}

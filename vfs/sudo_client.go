@@ -240,6 +240,10 @@ func (c *SudoClient) Rename(oldPath, newPath string) error {
 	_, _, err := c.SendRequest(SudoRequest{Cmd: CmdRename, Path: oldPath, Path2: newPath})
 	return err
 }
+func (c *SudoClient) SetAttributes(path string, item VFSItem) error {
+	_, _, err := c.SendRequest(SudoRequest{Cmd: CmdSetAttributes, Path: path, Item: item})
+	return err
+}
 
 func getAskpassSocketPath(pid int) string {
 	return filepath.Join(os.TempDir(), fmt.Sprintf("f4-ap-%d.sock", pid))

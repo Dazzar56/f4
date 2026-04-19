@@ -29,6 +29,7 @@ func (v *TerminalLogVFS) Dir(path string) string { return "term://" }
 func (v *TerminalLogVFS) MkDir(ctx context.Context, path string) error { return os.ErrPermission }
 func (v *TerminalLogVFS) Remove(ctx context.Context, path string) error { return os.ErrPermission }
 func (v *TerminalLogVFS) Rename(ctx context.Context, oldpath, newpath string) error { return os.ErrPermission }
+func (v *TerminalLogVFS) SetAttributes(ctx context.Context, path string, item vfs.VFSItem) error { return os.ErrPermission }
 func (v *TerminalLogVFS) GetCapabilities() vfs.VFSCapabilities { return vfs.VFSCapabilities{HasRandomAccess: true} }
 func (v *TerminalLogVFS) Search(ctx context.Context, path string, pattern string) (chan int64, error) { return nil, nil }
 func (v *TerminalLogVFS) Create(ctx context.Context, path string) (io.WriteCloser, error) { return nil, os.ErrPermission }

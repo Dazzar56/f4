@@ -583,12 +583,19 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 
 	// Drive menus (Only if terminal is NOT busy)
+
 	if e.VirtualKeyCode == vtinput.VK_F1 && alt && !ctrl && !shift && e.KeyDown {
 		pf.showDriveMenu(0)
 		return true
 	}
 	if e.VirtualKeyCode == vtinput.VK_F2 && alt && !ctrl && !shift && e.KeyDown {
 		pf.showDriveMenu(1)
+		return true
+	}
+
+	// Ctrl+A: Attributes
+	if e.VirtualKeyCode == vtinput.VK_A && ctrl && !alt && !shift && e.KeyDown {
+		actionFileAttributes(pf)
 		return true
 	}
 

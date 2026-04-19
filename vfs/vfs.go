@@ -45,6 +45,11 @@ type VFSItem struct {
 	Mode         string
 	IsExecutable bool
 	IsHidden     bool
+	// Metadata for Attributes dialog
+	ATime        time.Time // Last Access
+	CTime        time.Time // Creation (Win) or Status Change (Unix)
+	UnixMode     uint32    // Raw numeric mode for chmod
+	Uid, Gid     int       // Ownership
 }
 
 // VFSCapabilities defines what the current VFS implementation can do efficiently.
@@ -82,6 +87,10 @@ type VFS interface {
 
 	// Create returns a WriteCloser for new files.
 	Create(ctx context.Context, path string) (io.WriteCloser, error)
+
+	// SetAttributes updates file metadata (mode, ownership, times)
+	SetAttributes(ctx context.Context, path string, item VFSItem) error
+
 	ParentVFS() VFS // Returns the underlying VFS if this is a virtual mount, or nil
 
 	Clone() VFS

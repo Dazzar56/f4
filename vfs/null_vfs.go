@@ -187,6 +187,11 @@ func (v *NullVFS) Rename(ctx context.Context, old, new string) error {
 	return nil
 }
 
+func (v *NullVFS) SetAttributes(ctx context.Context, path string, item VFSItem) error {
+	v.throttleMeta(ctx, path)
+	return nil
+}
+
 func (v *NullVFS) GetCapabilities() VFSCapabilities {
 	return VFSCapabilities{
 		HasServerSideCopy: false,

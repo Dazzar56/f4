@@ -135,6 +135,10 @@ func (v *NetFoxVFS) Rename(ctx context.Context, old, new string) error {
 	return nil
 }
 
+func (v *NetFoxVFS) SetAttributes(ctx context.Context, path string, item vfs.VFSItem) error {
+	return os.ErrPermission
+}
+
 func (v *NetFoxVFS) GetCapabilities() vfs.VFSCapabilities { return vfs.VFSCapabilities{HasRandomAccess: true} }
 func (v *NetFoxVFS) Search(ctx context.Context, p, pat string) (chan int64, error) { return nil, nil }
 

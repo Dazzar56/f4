@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 	"strings"
+	"fmt"
 
 	"github.com/jlaffaye/ftp"
 	"github.com/unxed/f4/vfs"
@@ -123,6 +124,11 @@ func (v *FTPVFS) Remove(ctx context.Context, p string) error {
 	return nil
 }
 func (v *FTPVFS) Rename(ctx context.Context, o, n string) error { return v.conn.Rename(o, n) }
+
+func (v *FTPVFS) SetAttributes(ctx context.Context, path string, item vfs.VFSItem) error {
+	return fmt.Errorf("SetAttributes not supported for FTP")
+}
+
 func (v *FTPVFS) GetCapabilities() vfs.VFSCapabilities          { return vfs.VFSCapabilities{} }
 func (v *FTPVFS) Search(ctx context.Context, p, pat string) (chan int64, error) {
 	return nil, nil

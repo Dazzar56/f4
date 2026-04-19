@@ -143,6 +143,18 @@ func (v *SFTPVFS) Remove(ctx context.Context, p string) error {
 	return v.client.Remove(p)
 }
 func (v *SFTPVFS) Rename(ctx context.Context, o, n string) error { return v.client.Rename(o, n) }
+
+func (v *SFTPVFS) SetAttributes(ctx context.Context, path string, item vfs.VFSItem) error {
+	// SFTP supports chmod, chown and touch
+	if err := v.client.Chmod(path, os.FileMode(item.UnixMode)); err != nil {
+		return err
+	}
+	if err := v.client.Chown(path, item.Uid, item.Gid); err != nil {
+		return err
+	}
+	return v.client.Chtimes(path, item.ATime, item.MTime)
+}
+
 func (v *SFTPVFS) GetCapabilities() vfs.VFSCapabilities { return vfs.VFSCapabilities{HasRandomAccess: true} }
 func (v *SFTPVFS) Search(ctx context.Context, p, pat string) (chan int64, error) { return nil, nil }
 
