@@ -192,20 +192,13 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 				activePty := pf.getActivePTY()
 				if activePty != nil {
 					cmd := name
-					_, isOS := v.(*vfs.OSVFS)
-					if isOS && runtime.GOOS == "windows" {
-						cmd = fmt.Sprintf("%q", name)
-					} else {
-						// On Unix we use ./ to ensure local execution,
-						// on Windows it is usually not required for CMD
-						cmd = fmt.Sprintf("./%q", name)
-					}
 					// Wrap command in Title sequences to signal f4 about managed execution state.
 					// We use && so f4:done is only sent if the command succeeded.
 					var cmdToWire string
 					if runtime.GOOS == "windows" {
 						// Windows CMD: Use `title` command because standard `echo` doesn't evaluate ANSI escapes.
-						cmdToWire = fmt.Sprintf("cd /d %q & title f4:busy & %s && title f4:done\r", dir, cmd)
+						// We use %q to ensure name with spaces is handled correctly as a single command.
+						cmdToWire = fmt.Sprintf("cd /d %q & title f4:busy & %q && title f4:done\r", dir, cmd)
 					} else {
 						// On Unix, use single quotes for paths to prevent Bash history expansion (the '!' problem).
 						// We also disable history expansion explicitly with 'set +H'.
