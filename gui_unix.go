@@ -1,5 +1,3 @@
-package main
-
 //go:build !windows
 
 package main
