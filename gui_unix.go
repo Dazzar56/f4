@@ -1,5 +1,9 @@
 package main
 
+//go:build !windows
+
+package main
+
 import "github.com/unxed/vtui"
 
 func RunGui() {
