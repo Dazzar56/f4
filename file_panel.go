@@ -583,7 +583,13 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
 
 	if fp.fastFindMode {
-		if e.VirtualKeyCode == vtinput.VK_ESCAPE {
+		switch e.VirtualKeyCode {
+		case vtinput.VK_LEFT, vtinput.VK_RIGHT, vtinput.VK_PRIOR, vtinput.VK_NEXT, vtinput.VK_HOME, vtinput.VK_END:
+			fp.fastFindMode = false
+			fp.fastFindStr = ""
+			vtui.FrameManager.Redraw()
+			// Проваливаемся дальше, чтобы обработать саму навигацию
+		case vtinput.VK_ESCAPE:
 			fp.fastFindMode = false
 			fp.fastFindStr = ""
 			vtui.FrameManager.Redraw()

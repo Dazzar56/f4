@@ -736,6 +736,18 @@ func TestFileSystemPanel_FastFind(t *testing.T) {
 	if fp.fastFindMode {
 		t.Error("Escape should exit FastFind mode")
 	}
+
+	// 7. Navigation keys should deactivate FastFind
+	fp.fastFindMode = true
+	fp.fastFindStr = "c"
+	fp.ProcessKey(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_LEFT,
+	})
+	if fp.fastFindMode {
+		t.Error("Navigation key (Left) should deactivate FastFind mode")
+	}
 }
 func TestFileSystemPanel_FastFind_Rendering(t *testing.T) {
 	vtui.SetDefaultPalette()
