@@ -207,11 +207,11 @@ func (p *AnsiParser) handleCSI(cmd byte) {
 	case 'L': // Insert blank lines
 		n := 1
 		if len(args) > 0 && args[0] != 0 { n = args[0] }
-		p.term.scrollDown(p.term.CursorY, p.term.ScrollBottom, n)
+		p.term.ScrollDown(p.term.CursorY, p.term.ScrollBottom, n)
 	case 'M': // Delete lines
 		n := 1
 		if len(args) > 0 && args[0] != 0 { n = args[0] }
-		p.term.scrollUp(p.term.CursorY, p.term.ScrollBottom, n)
+		p.term.ScrollUp(p.term.CursorY, p.term.ScrollBottom, n)
 	case 'P': // Delete characters
 		n := 1
 		if len(args) > 0 && args[0] != 0 { n = args[0] }
@@ -223,11 +223,11 @@ func (p *AnsiParser) handleCSI(cmd byte) {
 	case 'S': // Scroll up (text moves up)
 		n := 1
 		if len(args) > 0 && args[0] != 0 { n = args[0] }
-		p.term.scrollUp(p.term.ScrollTop, p.term.ScrollBottom, n)
+		p.term.ScrollUp(p.term.ScrollTop, p.term.ScrollBottom, n)
 	case 'T': // Scroll down (text moves down)
 		n := 1
 		if len(args) > 0 && args[0] != 0 { n = args[0] }
-		p.term.scrollDown(p.term.ScrollTop, p.term.ScrollBottom, n)
+		p.term.ScrollDown(p.term.ScrollTop, p.term.ScrollBottom, n)
 	case 'A':
 		n := 1
 		if len(args) > 0 && args[0] != 0 { n = args[0] }
@@ -386,6 +386,9 @@ func (p *AnsiParser) handleOSC() {
 
 	if cmd == 0 || cmd == 2 {
 		p.term.Title = parts[1]
+		if p.term.Title == "f4:busy" {
+			p.term.SetMuted(false)
+		}
 		if p.term.OnTitleChange != nil {
 			p.term.OnTitleChange(p.term.Title)
 		}

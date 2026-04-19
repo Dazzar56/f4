@@ -83,6 +83,7 @@ type PanelsFrame struct {
 	parser     *AnsiParser
 
 	lastAlt   bool
+	lastBusy  bool
 }
 func (pf *PanelsFrame) Left() Panel  { return pf.panels[0] }
 func (pf *PanelsFrame) Right() Panel { return pf.panels[1] }
@@ -322,8 +323,8 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 
 	// 1. Terminal Area: Fills everything except KeyBar
 	termY2 := h - 1
-	// KeyBar only takes space if it's actually visible (not in AltScreen)
-	if pf.showKeyBar && !pf.termView.UseAltScreen {
+	// KeyBar only takes space if it's actually visible (not in AltScreen and not busy)
+	if pf.showKeyBar && !pf.termView.UseAltScreen && !pf.isPtyBusy() {
 		termY2 = h - 2
 	}
 	termH := termY2 - contentY1 + 1
@@ -399,8 +400,9 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 	isBusy := pf.isPtyBusy()
 
 	// 1. Dynamic Layout Adjustment
-	if pf.termView.UseAltScreen != pf.lastAlt {
+	if pf.termView.UseAltScreen != pf.lastAlt || isBusy != pf.lastBusy {
 		pf.lastAlt = pf.termView.UseAltScreen
+		pf.lastBusy = isBusy
 		pf.ResizeConsole(pf.lastW, pf.lastH)
 	}
 
@@ -793,31 +795,36 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				if fsp, ok := pf.panels[pf.activeIdx].(*FileSystemPanel); ok {
 					path = fsp.vfs.GetPath()
 				}
+
+				var fullWireCmd string
 				if path != "" {
 					vtui.DebugLog("SHELL: Executing %q in %s", cmd, path)
 
-					// If panels are visible, wrap command to auto-return on success
 					if pf.showPanels {
-						var cmdToWire string
 						if runtime.GOOS == "windows" {
-							cmdToWire = fmt.Sprintf("cd /d %q & title f4:busy & %s && title f4:done\r", path, cmd)
+							fullWireCmd = fmt.Sprintf("cd /d %q & title f4:busy & %s && title f4:done\r", path, cmd)
 						} else {
-							cmdToWire = fmt.Sprintf(" cd %q && { printf \"\\033]2;f4:busy\\007\"; %s && printf \"\\033]2;f4:done\\007\"; }\r", path, cmd)
+							sqPath := strings.ReplaceAll(path, "'", "'\\''")
+							fullWireCmd = fmt.Sprintf(" set +H; cd '%s' && { printf \"\\033]2;f4:busy\\007\"; %s && printf \"\\033]2;f4:done\\007\"; }\r", sqPath, cmd)
 						}
-						activePty.Write([]byte(cmdToWire))
 						pf.executing = true
 					} else {
-						// Panels already hidden, just run normally
 						if runtime.GOOS == "windows" {
-							activePty.Write([]byte(fmt.Sprintf("cd /d %q\r", path)))
+							fullWireCmd = fmt.Sprintf("cd /d %q\r%s\r", path, cmd)
 						} else {
-							activePty.Write([]byte(fmt.Sprintf(" cd %q\r", path)))
+							sqPath := strings.ReplaceAll(path, "'", "'\\''")
+							fullWireCmd = fmt.Sprintf(" set +H; cd '%s'\r%s\r", sqPath, cmd)
 						}
-						activePty.Write([]byte(cmd + "\r"))
 					}
 				} else {
-					activePty.Write([]byte(cmd + "\r"))
+					fullWireCmd = cmd + "\r"
 				}
+
+				pf.termView.PrintCleanCommand(cmd)
+				if pf.showPanels {
+					pf.termView.SetMuted(true)
+				}
+				activePty.Write([]byte(fullWireCmd))
 			}
 
 			pf.cmdLine.Clear()

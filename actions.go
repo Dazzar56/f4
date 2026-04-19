@@ -195,20 +195,28 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 					// Wrap command in Title sequences to signal f4 about managed execution state.
 					// We use && so f4:done is only sent if the command succeeded.
 					var cmdToWire string
-					if runtime.GOOS == "windows" {
-						// Windows CMD: Use `title` command because standard `echo` doesn't evaluate ANSI escapes.
-						// We use %q to ensure name with spaces is handled correctly as a single command.
-						cmdToWire = fmt.Sprintf("cd /d %q & title f4:busy & %q && title f4:done\r", dir, cmd)
-					} else {
-						// On Unix, use single quotes for paths to prevent Bash history expansion (the '!' problem).
-						// We also disable history expansion explicitly with 'set +H'.
-						sqDir := strings.ReplaceAll(dir, "'", "'\\''")
-						sqCmd := strings.ReplaceAll(cmd, "'", "'\\''")
-						cmdToWire = fmt.Sprintf(" set +H; cd '%s' && { printf \"\\033]2;f4:busy\\007\"; ./'%s' && printf \"\\033]2;f4:done\\007\"; }\r", sqDir, sqCmd)
-					}
-					vtui.DebugLog("ACTIONS: Sending to PTY: %q", cmdToWire)
-					activePty.Write([]byte(cmdToWire))
-					pf.executing = true
+				if runtime.GOOS == "windows" {
+					// Windows CMD: Use `title` command because standard `echo` doesn't evaluate ANSI escapes.
+					// We use %q to ensure name with spaces is handled correctly as a single command.
+					cmdToWire = fmt.Sprintf("cd /d %q & title f4:busy & %q && title f4:done\r", dir, cmd)
+				} else {
+					// On Unix, use single quotes for paths to prevent Bash history expansion (the '!' problem).
+					// We also disable history expansion explicitly with 'set +H'.
+					sqDir := strings.ReplaceAll(dir, "'", "'\\''")
+					sqCmd := strings.ReplaceAll(cmd, "'", "'\\''")
+					cmdToWire = fmt.Sprintf(" set +H; cd '%s' && { printf \"\\033]2;f4:busy\\007\"; ./'%s' && printf \"\\033]2;f4:done\\007\"; }\r", sqDir, sqCmd)
+				}
+				vtui.DebugLog("ACTIONS: Sending to PTY: %q", cmdToWire)
+
+				cleanCmd := "./" + cmd
+				if runtime.GOOS == "windows" {
+					cleanCmd = cmd
+				}
+				pf.termView.PrintCleanCommand(cleanCmd)
+				pf.termView.SetMuted(true)
+
+				activePty.Write([]byte(cmdToWire))
+				pf.executing = true
 					pf.showPanels = false
 				}
 			} else {
