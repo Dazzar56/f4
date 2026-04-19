@@ -838,15 +838,21 @@ func (fp *FileSystemPanel) SelectName(name string) {
 // GetSelectedNames returns a list of selected files. If none are selected, returns the focused one.
 func (fp *FileSystemPanel) GetSelectedNames() []string {
 	var names []string
+	// 1. Collect explicitly selected items (ins/shift+arrows)
 	for _, e := range fp.entries {
 		if e.Selected && e.Name != ".." {
 			names = append(names, e.Name)
 		}
 	}
+	// 2. If nothing is selected, fallback to the item under cursor
 	if len(names) == 0 {
-		name := fp.GetSelectedName()
-		if name != "" && name != ".." {
-			names = append(names, name)
+		idx := fp.GetCursorIndex()
+		if idx >= 0 && idx < len(fp.entries) {
+			entry := fp.entries[idx]
+			// CRITICAL: Prevent actions on parent directory ".."
+			if entry.Name != ".." {
+				names = append(names, entry.Name)
+			}
 		}
 	}
 	return names
