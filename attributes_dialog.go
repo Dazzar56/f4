@@ -182,7 +182,7 @@ func showAttributesWindows(pf *PanelsFrame, v vfs.VFS, path string, item vfs.VFS
 	rowBtns := vtui.NewHBoxLayout(0, 0, 54, 1)
 	rowBtns.HorizontalAlign = vtui.AlignCenter; rowBtns.Spacing = 2
 	rowBtns.Add(btnSet, vtui.Margins{}, vtui.AlignTop); rowBtns.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
-	dlg.AddItem(btnSet); dlg.AddItem(btnCancel); mainVBox.Add(rowBtns, vtui.Margins{Top: 0}, vtui.AlignFill)
+	dlg.AddItem(btnSet); dlg.AddItem(btnCancel); mainVBox.Add(rowBtns, vtui.Margins{Top: 1}, vtui.AlignFill)
 
 	// Apply first pass
 	mainVBox.Apply(); rowTime.Apply(); rowBtns.Apply()
