@@ -1945,12 +1945,17 @@ type mockFailingWriteVFS struct {
 }
 
 func (m *mockFailingWriteVFS) Create(ctx context.Context, path string) (io.WriteCloser, error) {
-	return &failingWriter{}, nil
+	// Fail if it's the temp file (atomic save) or if it's the target file itself (old direct save tests)
+	if strings.HasSuffix(path, ".f4tmp") || strings.HasSuffix(path, "important.txt") || strings.HasSuffix(path, "persist.txt") {
+		return &failingWriter{}, nil
+	}
+	return m.VFS.Create(ctx, path)
 }
 
 type failingWriter struct{}
 func (f *failingWriter) Write(p []byte) (n int, err error) { return 0, fmt.Errorf("mock write failure") }
 func (f *failingWriter) Close() error { return nil }
+
 func TestEditorView_Save_IOErrorRecovery(t *testing.T) {
 	// Verifies that a failure during the streaming write phase of saving
 	// does not corrupt the Editor's memory state and does not clear the modified flag.
@@ -2366,6 +2371,179 @@ func TestEditorView_Save_RetryAfterFailure(t *testing.T) {
 	if waitPtString(t, ev.pt) != "Changed" {
 		t.Errorf("Memory state inconsistent after successful retry. Got %q", waitPtString(t, ev.pt))
 	}
+}
+func TestEditorView_Save_MetadataIntegrity(t *testing.T) {
+	// Verifies that owner, group, and permissions are restored after atomic save.
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "meta.txt")
+	os.WriteFile(path, []byte("Original"), 0644)
+
+	// Mock metadata
+	expectedMeta := vfs.VFSItem{
+		Name:     "meta.txt",
+		UnixMode: 0600, // Private file
+		Uid:      1234,
+		Gid:      5678,
+		MTime:    time.Now().Add(-1 * time.Hour),
+		ATime:    time.Now().Add(-2 * time.Hour),
+	}
+
+	// Mock VFS to track calls
+	var capturedMeta vfs.VFSItem
+	var attrCalled bool
+
+	baseVfs := vfs.NewOSVFS(tmpDir)
+	mock := &mockMetadataVFS{
+		VFS: baseVfs,
+		statToReturn: expectedMeta,
+		onSetAttr: func(item vfs.VFSItem) {
+			capturedMeta = item
+			attrCalled = true
+		},
+	}
+
+	pt := piecetable.New([]byte("Original"))
+	ev := NewEditorView(pt, mock, path)
+	f, _ := mock.Open(context.Background(), path)
+	ev.file = f
+
+	// 1. Modify and Save
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: '!'})
+	ev.SaveToFile(nil)
+
+	// Pump tasks
+	timeout := time.After(2 * time.Second)
+	for ev.saving {
+		select {
+		case task := <-vtui.FrameManager.TaskChan: task()
+		case <-timeout: t.Fatal("Timeout")
+		}
+	}
+
+	// 2. Verification
+	if !attrCalled {
+		t.Error("vfs.SetAttributes was not called after save")
+	}
+	if capturedMeta.UnixMode != expectedMeta.UnixMode || capturedMeta.Uid != expectedMeta.Uid {
+		t.Errorf("Metadata mismatch. Expected mode %o UID %d, got mode %o UID %d",
+			expectedMeta.UnixMode, expectedMeta.Uid, capturedMeta.UnixMode, capturedMeta.Uid)
+	}
+}
+
+func TestEditorView_Save_Atomic_Cleanup(t *testing.T) {
+	// Verifies that failed save doesn't leave .f4tmp files behind.
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "unlucky.txt")
+	os.WriteFile(path, []byte("Untouched"), 0644)
+
+	// VFS that fails during writing
+	mock := &mockFailingWriteVFS{VFS: vfs.NewOSVFS(tmpDir)}
+	pt := piecetable.New([]byte("Untouched"))
+	ev := NewEditorView(pt, mock, path)
+	f, _ := mock.Open(context.Background(), path)
+	ev.file = f
+
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'X'})
+	ev.SaveToFile(nil)
+
+	// Pump tasks
+	timeout := time.After(1 * time.Second)
+	for ev.saving {
+		select {
+		case task := <-vtui.FrameManager.TaskChan: task()
+		case <-timeout: t.Fatal("Timeout")
+		}
+	}
+
+	// 1. Check original is intact
+	data, _ := os.ReadFile(path)
+	if string(data) != "Untouched" {
+		t.Error("Original file was corrupted after failed atomic save")
+	}
+
+	// 2. Check temp file is GONE
+	tempFile := path + ".f4tmp"
+	if _, err := os.Stat(tempFile); !os.IsNotExist(err) {
+		t.Error("Temporary file .f4tmp was leaked after failed save")
+	}
+}
+
+func TestEditorView_Save_AsyncRetry(t *testing.T) {
+	// Proves that save loop handles ErrLoading correctly by retrying.
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	// A buffer that returns ErrLoading twice then succeeds
+	loadingBuf := &mockRetryBuffer{
+		data:       []byte("AsyncData"),
+		failCounts: 2,
+	}
+	pt := piecetable.NewWithBuffer(loadingBuf)
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "async_save.txt")
+
+	ev := NewEditorView(pt, vfs.NewOSVFS(tmpDir), path)
+
+	// CRITICAL: Channel must be buffered to avoid deadlock when sending from a UI task
+	done := make(chan bool, 1)
+	go func() {
+		ev.SaveToFile(func() { done <- true })
+	}()
+
+	// Pump tasks and simulate time passing for retries
+	timeout := time.After(2 * time.Second)
+Loop:
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-done:
+			break Loop
+		case <-timeout:
+			t.Fatal("Save timed out - likely hung on ErrLoading")
+		default:
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+
+	saved, _ := os.ReadFile(path)
+	if string(saved) != "AsyncData" {
+		t.Errorf("Save failed after retries. Got %q", string(saved))
+	}
+}
+
+// --- Specialized Mocks for Save Tests ---
+
+type mockMetadataVFS struct {
+	vfs.VFS
+	statToReturn vfs.VFSItem
+	onSetAttr    func(vfs.VFSItem)
+}
+
+func (m *mockMetadataVFS) Stat(ctx context.Context, path string) (vfs.VFSItem, error) {
+	return m.statToReturn, nil
+}
+
+func (m *mockMetadataVFS) SetAttributes(ctx context.Context, path string, item vfs.VFSItem) error {
+	if m.onSetAttr != nil { m.onSetAttr(item) }
+	return nil
+}
+
+type mockRetryBuffer struct {
+	data       []byte
+	failCounts int
+}
+
+func (b *mockRetryBuffer) Size() int { return len(b.data) }
+func (b *mockRetryBuffer) Read(offset, length int) ([]byte, error) {
+	if b.failCounts > 0 {
+		b.failCounts--
+		return nil, piecetable.ErrLoading
+	}
+	end := offset + length
+	if end > len(b.data) { end = len(b.data) }
+	return b.data[offset:end], nil
 }
 func TestEditorView_BinaryRobustness(t *testing.T) {
 	// Tests that the editor doesn't crash on huge lines or out-of-bounds cursors.
