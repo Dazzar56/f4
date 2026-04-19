@@ -30,190 +30,179 @@ func ShowAttributesDialog(pf *PanelsFrame, v vfs.VFS, path string, item vfs.VFSI
 }
 
 func showAttributesUnix(pf *PanelsFrame, v vfs.VFS, path string, item vfs.VFSItem) {
-	width, height := 64, 21
+	// Увеличиваем высоту до 24, чтобы кнопкам было просторно
+	width, height := 70, 24
+
 	dlg := vtui.NewCenteredDialog(width, height, " Attributes ")
 	dlg.ShowClose = true
 
 	x, y := dlg.X1, dlg.Y1
-
-	// 1. Info Header
-	info := fmt.Sprintf("Change file attributes for:\n%s", vtui.TruncateMiddle(v.Base(path), 56))
-	for i, line := range vtui.WrapText(info, 56) {
-		dlg.AddItem(vtui.NewText(x+2, y+1+i, line, vtui.Palette[vtui.ColDialogText]))
-	}
-
-	// 2. Ownership
-	dlg.AddItem(vtui.NewGroupBox(x+2, y+4, x+61, y+7, " Ownership "))
-	ownerName := strconv.Itoa(item.Uid)
-	if u, err := user.LookupId(ownerName); err == nil {
-		ownerName = u.Username
-	}
-	groupName := strconv.Itoa(item.Gid)
-	if g, err := user.LookupGroupId(groupName); err == nil {
-		groupName = g.Name
-	}
-
-	editOwner := vtui.NewEdit(x+14, y+5, 12, ownerName)
-	editGroup := vtui.NewEdit(x+14, y+6, 12, groupName)
-	dlg.AddItem(vtui.NewLabel(x+4, y+5, "Owne&r:", editOwner)); dlg.AddItem(editOwner)
-	dlg.AddItem(vtui.NewLabel(x+4, y+6, "&Group:", editGroup)); dlg.AddItem(editGroup)
-
-	// 3. Permissions (3x3 Grid)
-	dlg.AddItem(vtui.NewGroupBox(x+2, y+8, x+61, y+14, " Permissions "))
-
-	makePermRow := func(label string, rowY int, bitOffset uint) (*vtui.Checkbox, *vtui.Checkbox, *vtui.Checkbox) {
-		lbl := vtui.NewText(x+4, rowY, padLabel(label), vtui.Palette[vtui.ColDialogText])
-		dlg.AddItem(lbl)
-		r := vtui.NewCheckbox(x+16, rowY, "Read", false); r.State = map[bool]int{true: 1}[(item.UnixMode & (0400 >> bitOffset)) != 0]
-		w := vtui.NewCheckbox(x+28, rowY, "Write", false); w.State = map[bool]int{true: 1}[(item.UnixMode & (0200 >> bitOffset)) != 0]
-		x_ := vtui.NewCheckbox(x+40, rowY, "Execute", false); x_.State = map[bool]int{true: 1}[(item.UnixMode & (0100 >> bitOffset)) != 0]
-		dlg.AddItem(r); dlg.AddItem(w); dlg.AddItem(x_)
-		return r, w, x_
-	}
-
-	uR, uW, uX := makePermRow("User:", y+9, 0)
-	gR, gW, gX := makePermRow("Group:", y+10, 3)
-	oR, oW, oX := makePermRow("Other:", y+11, 6)
-
-	editOctal := vtui.NewEdit(x+52, y+13, 6, fmt.Sprintf("%04o", item.UnixMode))
-	editOctal.Validator = &vtui.OctalValidator{MaxDigits: 4}
-	dlg.AddItem(vtui.NewLabel(x+46, y+13, "O&ct:", editOctal)); dlg.AddItem(editOctal)
-
 	const timeFormat = "02.01.2006 15:04:05"
 
-	// --- Sync Logic ---
-	syncing := false
-	allChecks := []*vtui.Checkbox{uR, uW, uX, gR, gW, gX, oR, oW, oX}
+	// Основной контейнер
+	mainVBox := vtui.NewVBoxLayout(x+3, y+2, width-6, height-4)
 
-	updateOctalFromChecks := func() {
-		if syncing { return }
-		syncing = true
-		var mode uint32
-		bits := []uint32{0400, 0200, 0100, 0040, 0020, 0010, 0004, 0002, 0001}
-		for i, cb := range allChecks {
-			if cb.State == 1 { mode |= bits[i] }
-		}
-		editOctal.SetText(fmt.Sprintf("%04o", mode))
-		syncing = false
-		vtui.FrameManager.Redraw()
+	// Header
+	info := fmt.Sprintf("Change file attributes for:\n%s", vtui.TruncateMiddle(v.Base(path), 60))
+	lines := vtui.WrapText(info, 60)
+	for _, l := range lines {
+		t := vtui.NewText(0, 0, l, vtui.Palette[vtui.ColDialogText])
+		dlg.AddItem(t); mainVBox.Add(t, vtui.Margins{}, vtui.AlignCenter)
 	}
 
-	updateChecksFromOctal := func(s string) {
-		if syncing { return }
-		var mode uint64
-		_, err := fmt.Sscanf(s, "%o", &mode)
-		if err != nil { return }
-		syncing = true
-		bits := []uint32{0400, 0200, 0100, 0040, 0020, 0010, 0004, 0002, 0001}
-		for i, cb := range allChecks {
-			if (uint32(mode) & bits[i]) != 0 { cb.State = 1 } else { cb.State = 0 }
-		}
-		syncing = false
-		vtui.FrameManager.Redraw()
-	}
+	// Ownership Group
+	gbOwnership := vtui.NewGroupBox(0, 0, 66, 4, " Ownership ")
+	dlg.AddItem(gbOwnership); mainVBox.Add(gbOwnership, vtui.Margins{Top: 1}, vtui.AlignFill)
 
-	for _, cb := range allChecks {
-		cb.OnChange = func(int) { updateOctalFromChecks() }
-	}
-	editOctal.OnTextChange = updateChecksFromOctal
+   	// Permissions Group
+	// Permissions Group
+	gbPerms := vtui.NewGroupBox(0, 0, 66, 7, " Permissions ")
+	dlg.AddItem(gbPerms); mainVBox.Add(gbPerms, vtui.Margins{Top: 0}, vtui.AlignFill)
 
-	// 4. Times
-	editMTime := vtui.NewEdit(x+24, y+16, 20, item.MTime.Format(timeFormat))
-	dlg.AddItem(vtui.NewLabel(x+4, y+16, "Modification time:", editMTime))
-	dlg.AddItem(editMTime)
+	// Time Row
+	editMTime := vtui.NewEdit(0, 0, 20, item.MTime.Format(timeFormat))
+	lblTime := vtui.NewLabel(0, 0, padLabel("M-Time:"), editMTime)
+	rowTime := vtui.NewHBoxLayout(0, 0, 66, 1)
+	rowTime.Add(lblTime, vtui.Margins{Left: 2, Right: 1}, vtui.AlignLeft); rowTime.Add(editMTime, vtui.Margins{}, vtui.AlignLeft)
+	dlg.AddItem(lblTime); dlg.AddItem(editMTime); mainVBox.Add(rowTime, vtui.Margins{Top: 0}, vtui.AlignFill)
 
-	// 5. Buttons
+	// Buttons
 	btnSet := vtui.NewButton(0, 0, "Set")
 	btnSet.IsDefault = true
 	btnCancel := vtui.NewButton(0, 0, "Cancel")
-	dlg.AddItem(btnSet); dlg.AddItem(btnCancel)
+	rowBtns := vtui.NewHBoxLayout(0, 0, 66, 1)
+	rowBtns.HorizontalAlign = vtui.AlignCenter; rowBtns.Spacing = 2
+	rowBtns.Add(btnSet, vtui.Margins{}, vtui.AlignTop); rowBtns.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
+	dlg.AddItem(btnSet); dlg.AddItem(btnCancel); mainVBox.Add(rowBtns, vtui.Margins{Top: 1}, vtui.AlignFill)
 
-	btnHbox := vtui.NewHBoxLayout(x+2, y+height-3, width-4, 1)
-	btnHbox.HorizontalAlign = vtui.AlignCenter
-	btnHbox.Spacing = 2
-	btnHbox.Add(btnSet, vtui.Margins{}, vtui.AlignTop)
-	btnHbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
-	btnHbox.Apply()
+	// --- ПЕРВЫЙ ПРОХОД: Позиционируем контейнеры в диалоге ---
+	mainVBox.Apply()
+	rowTime.Apply()
+	rowBtns.Apply()
+
+	// --- ВТОРОЙ ПРОХОД: Наполняем уже спозиционированные GroupBox ---
+
+	// Наполнение Ownership
+	ownerName := strconv.Itoa(item.Uid)
+	if u, err := user.LookupId(ownerName); err == nil { ownerName = u.Username }
+	groupName := strconv.Itoa(item.Gid)
+	if g, err := user.LookupGroupId(groupName); err == nil { groupName = g.Name }
+
+	editOwner := vtui.NewEdit(0, 0, 20, ownerName)
+	editGroup := vtui.NewEdit(0, 0, 20, groupName)
+
+	vboxOwner := vtui.NewVBoxLayout(gbOwnership.X1+2, gbOwnership.Y1+1, gbOwnership.X2-gbOwnership.X1-4, 2)
+
+	r1 := vtui.NewHBoxLayout(0,0, 60, 1); l1 := vtui.NewLabel(0,0, padLabel("Owne&r:"), editOwner)
+	r1.Add(l1, vtui.Margins{Right: 1}, vtui.AlignLeft); r1.Add(editOwner, vtui.Margins{}, vtui.AlignFill)
+	gbOwnership.AddItem(l1); gbOwnership.AddItem(editOwner); vboxOwner.Add(r1, vtui.Margins{}, vtui.AlignFill)
+
+	r2 := vtui.NewHBoxLayout(0,0, 60, 1); l2 := vtui.NewLabel(0,0, padLabel("&Group:"), editGroup)
+	r2.Add(l2, vtui.Margins{Right: 1}, vtui.AlignLeft); r2.Add(editGroup, vtui.Margins{}, vtui.AlignFill)
+	gbOwnership.AddItem(l2); gbOwnership.AddItem(editGroup); vboxOwner.Add(r2, vtui.Margins{Top: 0}, vtui.AlignFill)
+	vboxOwner.Apply(); r1.Apply(); r2.Apply()
+
+	// Наполнение Permissions
+	vboxPerms := vtui.NewVBoxLayout(gbPerms.X1+2, gbPerms.Y1+1, gbPerms.X2-gbPerms.X1-4, 5)
+	allChecks := []*vtui.Checkbox{}
+
+	makeRow := func(label string, bitOff uint) {
+		row := vtui.NewHBoxLayout(0,0, 60, 1)
+		lbl := vtui.NewText(0,0, padLabel(label), vtui.Palette[vtui.ColDialogText])
+		r := vtui.NewCheckbox(0,0, "Read", false); r.State = map[bool]int{true: 1}[(item.UnixMode & (0400 >> bitOff)) != 0]
+		w := vtui.NewCheckbox(0,0, "Write", false); w.State = map[bool]int{true: 1}[(item.UnixMode & (0200 >> bitOff)) != 0]
+		x_ := vtui.NewCheckbox(0,0, "Execute", false); x_.State = map[bool]int{true: 1}[(item.UnixMode & (0100 >> bitOff)) != 0]
+		row.Add(lbl, vtui.Margins{Right: 1}, vtui.AlignLeft); row.Add(r, vtui.Margins{Right: 1}, vtui.AlignLeft)
+		row.Add(w, vtui.Margins{Right: 1}, vtui.AlignLeft); row.Add(x_, vtui.Margins{}, vtui.AlignLeft)
+		gbPerms.AddItem(lbl); gbPerms.AddItem(r); gbPerms.AddItem(w); gbPerms.AddItem(x_)
+		vboxPerms.Add(row, vtui.Margins{}, vtui.AlignFill); allChecks = append(allChecks, r, w, x_)
+		row.Apply()
+	}
+	makeRow("User:", 0); makeRow("Group:", 3); makeRow("Other:", 6)
+
+	editOctal := vtui.NewEdit(0, 0, 6, fmt.Sprintf("%04o", item.UnixMode))
+	editOctal.Validator = &vtui.OctalValidator{MaxDigits: 4}
+	rowOct := vtui.NewHBoxLayout(0, 0, 60, 1)
+	lblOct := vtui.NewLabel(0, 0, padLabel("O&ct:"), editOctal)
+	rowOct.Add(lblOct, vtui.Margins{Right: 2}, vtui.AlignLeft); rowOct.Add(editOctal, vtui.Margins{}, vtui.AlignLeft)
+	gbPerms.AddItem(lblOct); gbPerms.AddItem(editOctal); vboxPerms.Add(rowOct, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vboxPerms.Apply()
+	for _, itm := range vboxPerms.Items { if h, ok := itm.Element.(*vtui.HBoxLayout); ok { h.Apply() } }
+
+	// Синхронизация (остается без изменений)
+	syncing := false
+	updateOct := func() {
+		if syncing { return }; syncing = true; var m uint32; b := []uint32{0400,0200,0100,0040,0020,0010,0004,0002,0001}
+		for i, c := range allChecks { if c.State == 1 { m |= b[i] } }; editOctal.SetText(fmt.Sprintf("%04o", m)); syncing = false; vtui.FrameManager.Redraw()
+	}
+	for _, c := range allChecks { c.OnChange = func(int) { updateOct() } }
+	editOctal.OnTextChange = func(s string) {
+		if syncing { return }; var m uint64; fmt.Sscanf(s, "%o", &m); syncing = true; b := []uint32{0400,0200,0100,0040,0020,0010,0004,0002,0001}
+		for i, c := range allChecks { if (uint32(m) & b[i]) != 0 { c.State = 1 } else { c.State = 0 } }; syncing = false; vtui.FrameManager.Redraw()
+	}
 
 	btnSet.OnClick = func() {
-		// 1. Resolve Ownership Names back to IDs
-		if u, err := user.Lookup(editOwner.GetText()); err == nil {
-			item.Uid, _ = strconv.Atoi(u.Uid)
-		} else {
-			id, _ := strconv.Atoi(editOwner.GetText())
-			item.Uid = id
-		}
-
-		if g, err := user.LookupGroup(editGroup.GetText()); err == nil {
-			item.Gid, _ = strconv.Atoi(g.Gid)
-		} else {
-			id, _ := strconv.Atoi(editGroup.GetText())
-			item.Gid = id
-		}
-
-		// 2. Reconstruct UnixMode from 9 checkboxes
-		var mode uint32
-		if uR.State == 1 { mode |= 0400 }; if uW.State == 1 { mode |= 0200 }; if uX.State == 1 { mode |= 0100 }
-		if gR.State == 1 { mode |= 0040 }; if gW.State == 1 { mode |= 0020 }; if gX.State == 1 { mode |= 0010 }
-		if oR.State == 1 { mode |= 0004 }; if oW.State == 1 { mode |= 0002 }; if oX.State == 1 { mode |= 0001 }
-		item.UnixMode = mode
-
-		newTime, err := time.Parse(timeFormat, editMTime.GetText())
-		if err == nil { item.MTime = newTime }
-
+		if u, err := user.Lookup(editOwner.GetText()); err == nil { item.Uid, _ = strconv.Atoi(u.Uid) } else { item.Uid, _ = strconv.Atoi(editOwner.GetText()) }
+		if g, err := user.LookupGroup(editGroup.GetText()); err == nil { item.Gid, _ = strconv.Atoi(g.Gid) } else { item.Gid, _ = strconv.Atoi(editGroup.GetText()) }
+		var m uint64; fmt.Sscanf(editOctal.GetText(), "%o", &m); item.UnixMode = uint32(m)
+		if t, err := time.Parse(timeFormat, editMTime.GetText()); err == nil { item.MTime = t }
 		vtui.RunAsync(func(ctx *vtui.TaskContext) {
 			err := v.SetAttributes(ctx.Context, path, item)
-			ctx.RunOnUI(func() {
-				if err != nil {
-					vtui.ShowMessage(" Error ", err.Error(), []string{"&Ok"})
-				} else {
-					dlg.Close()
-					pf.RefreshAll()
-				}
-			})
+			ctx.RunOnUI(func() { if err != nil { vtui.ShowMessage(" Error ", err.Error(), []string{"&Ok"}) } else { dlg.Close(); pf.RefreshAll() } })
 		})
 	}
 	btnCancel.OnClick = func() { dlg.Close() }
-
 	vtui.FrameManager.Push(dlg)
 }
 
 func showAttributesWindows(pf *PanelsFrame, v vfs.VFS, path string, item vfs.VFSItem) {
-	width, height := 50, 15
+	width, height := 60, 17
 	dlg := vtui.NewCenteredDialog(width, height, " Attributes ")
 	dlg.ShowClose = true
 	x, y := dlg.X1, dlg.Y1
-
-	dlg.AddItem(vtui.NewText(x+2, y+1, "File: "+v.Base(path), vtui.Palette[vtui.ColDialogText]))
-
 	const timeFormat = "02.01.2006 15:04:05"
 
-	chkRO := vtui.NewCheckbox(x+2, y+3, "&Read only", false)
-	chkHD := vtui.NewCheckbox(x+2, y+4, "&Hidden", false)
-	chkSY := vtui.NewCheckbox(x+2, y+5, "&System", false)
-	chkAR := vtui.NewCheckbox(x+2, y+6, "&Archive", false)
+	mainVBox := vtui.NewVBoxLayout(x+3, y+1, width-6, height-3)
 
-	dlg.AddItem(chkRO); dlg.AddItem(chkHD); dlg.AddItem(chkSY); dlg.AddItem(chkAR)
+	lblFile := vtui.NewText(0, 0, "File: "+vtui.TruncateMiddle(v.Base(path), 46), vtui.Palette[vtui.ColDialogText])
+	dlg.AddItem(lblFile); mainVBox.Add(lblFile, vtui.Margins{}, vtui.AlignLeft)
 
-	editMTime := vtui.NewEdit(x+18, y+8, 20, item.MTime.Format(timeFormat))
-	dlg.AddItem(vtui.NewLabel(x+2, y+8, "Last write:", editMTime))
-	dlg.AddItem(editMTime)
+	gbAttr := vtui.NewGroupBox(0, 0, 54, 6, " Flags ")
+	dlg.AddItem(gbAttr); mainVBox.Add(gbAttr, vtui.Margins{Top: 1}, vtui.AlignFill)
 
-	btnSet := vtui.NewButton(x+14, y+12, "{ Set }")
+	editMTime := vtui.NewEdit(0, 0, 20, item.MTime.Format(timeFormat))
+	lblTime := vtui.NewLabel(0, 0, padLabel("Last write:"), editMTime)
+	rowTime := vtui.NewHBoxLayout(0, 0, 54, 1)
+	rowTime.Add(lblTime, vtui.Margins{Right: 1}, vtui.AlignLeft); rowTime.Add(editMTime, vtui.Margins{}, vtui.AlignLeft)
+	dlg.AddItem(lblTime); dlg.AddItem(editMTime); mainVBox.Add(rowTime, vtui.Margins{Top: 1}, vtui.AlignFill)
+
+	btnSet := vtui.NewButton(0, 0, "Set")
 	btnSet.IsDefault = true
-	btnCancel := vtui.NewButton(x+26, y+12, "[ Cancel ]")
-	dlg.AddItem(btnSet); dlg.AddItem(btnCancel)
+	btnCancel := vtui.NewButton(0, 0, "Cancel")
+	rowBtns := vtui.NewHBoxLayout(0, 0, 54, 1)
+	rowBtns.HorizontalAlign = vtui.AlignCenter; rowBtns.Spacing = 2
+	rowBtns.Add(btnSet, vtui.Margins{}, vtui.AlignTop); rowBtns.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
+	dlg.AddItem(btnSet); dlg.AddItem(btnCancel); mainVBox.Add(rowBtns, vtui.Margins{Top: 0}, vtui.AlignFill)
+
+	// Apply first pass
+	mainVBox.Apply(); rowTime.Apply(); rowBtns.Apply()
+
+	// Apply second pass for GroupBox
+	gbVBox := vtui.NewVBoxLayout(gbAttr.X1+2, gbAttr.Y1+1, gbAttr.X2-gbAttr.X1-4, 4)
+	chkRO := vtui.NewCheckbox(0, 0, "&Read only", false); chkHD := vtui.NewCheckbox(0, 0, "&Hidden", false)
+	chkSY := vtui.NewCheckbox(0, 0, "&System", false); chkAR := vtui.NewCheckbox(0, 0, "&Archive", false)
+	gbAttr.AddItem(chkRO); gbAttr.AddItem(chkHD); gbAttr.AddItem(chkSY); gbAttr.AddItem(chkAR)
+	gbVBox.Add(chkRO, vtui.Margins{}, vtui.AlignLeft); gbVBox.Add(chkHD, vtui.Margins{}, vtui.AlignLeft)
+	gbVBox.Add(chkSY, vtui.Margins{}, vtui.AlignLeft); gbVBox.Add(chkAR, vtui.Margins{}, vtui.AlignLeft)
+	gbVBox.Apply()
 
 	btnSet.OnClick = func() {
-		newTime, _ := time.Parse(timeFormat, editMTime.GetText())
-		item.MTime = newTime
-		// Windows specific attribute logic would go here
+		if nt, err := time.Parse(timeFormat, editMTime.GetText()); err == nil { item.MTime = nt }
 		vtui.RunAsync(func(ctx *vtui.TaskContext) {
 			v.SetAttributes(ctx.Context, path, item)
 			ctx.RunOnUI(func() { dlg.Close(); pf.RefreshAll() })
 		})
 	}
 	btnCancel.OnClick = func() { dlg.Close() }
-
 	vtui.FrameManager.Push(dlg)
 }
