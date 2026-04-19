@@ -527,6 +527,35 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		// Editor view checks paste events internally, so we let it fall through if panels are shown
 	}
 
+	// Intercept F3/F4 for terminal log before raw input mode
+	if !pf.showPanels && e.KeyDown {
+		isCtrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
+		isShift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
+		isAlt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
+		isAppRunning := pf.termView.UseAltScreen || pf.isPtyBusy()
+
+		if !isAlt {
+			if e.VirtualKeyCode == vtinput.VK_F3 {
+				if isCtrl && isShift {
+					actionViewTerminalLog(pf)
+					return true
+				} else if !isCtrl && !isShift && !isAppRunning {
+					actionViewTerminalLog(pf)
+					return true
+				}
+			}
+			if e.VirtualKeyCode == vtinput.VK_F4 {
+				if isCtrl && isShift {
+					actionEditTerminalLog(pf)
+					return true
+				} else if !isCtrl && !isShift && !isAppRunning {
+					actionEditTerminalLog(pf)
+					return true
+				}
+			}
+		}
+	}
+
 	// Raw input mode for interactive terminal apps or active shell commands
 	if !pf.showPanels && (pf.termView.UseAltScreen || pf.isPtyBusy()) {
 		isCtrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0

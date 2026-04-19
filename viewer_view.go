@@ -28,8 +28,9 @@ type ViewerView struct {
 	TopOffset int64 // Current byte offset of the first visible line
 
 	// For Text mode: offsets of lines currently on screen
-	lineOffsets []int64
-	eofVisible  bool
+	lineOffsets   []int64
+	eofVisible    bool
+	lastKnownSize int64
 
 	scrollBar *vtui.ScrollBar
 }
@@ -155,6 +156,15 @@ func (vv *ViewerView) DisplayObject(scr *vtui.ScreenBuf) {
 	if !vv.IsVisible() {
 		return
 	}
+
+	// AUTO-SCROLL LOGIC (tail -f)
+	currentSize := vv.backend.Size()
+	if vv.eofVisible && currentSize > vv.lastKnownSize && !vv.Busy {
+		vv.lastKnownSize = currentSize
+		vv.jumpToEnd()
+		return
+	}
+	vv.lastKnownSize = currentSize
 
 	width := vv.X2 - vv.X1 + 1
 	if vv.scrollBar != nil {
@@ -435,95 +445,98 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 
 	case vtinput.VK_END:
-		if vv.HexMode {
-			if vv.backend.Size() == 0 {
-				vv.TopOffset = 0
-			} else {
-				lastLineOffset := (vv.backend.Size() - 1) &^ 0xF
-				vv.TopOffset = lastLineOffset - (contentHeight-1)*16
-				if vv.TopOffset < 0 { vv.TopOffset = 0 }
-			}
-			return true
-		}
-
-		if vv.backend.Size() == 0 {
-			vv.TopOffset = 0
-			return true
-		}
-
-		vv.Busy = true
-		vtui.RunAsync(func(ctx *vtui.TaskContext) {
-			defer ctx.RunOnUI(func() { vv.Busy = false })
-			width := vv.X2 - vv.X1 + 1
-			if vv.scrollBar != nil { width-- }
-
-			chunkSize := contentHeight * int64(width) * 4
-			if chunkSize < 16*1024 { chunkSize = 16*1024 }
-
-			startOff := vv.backend.Size() - chunkSize
-			if startOff < 0 { startOff = 0 }
-
-			// Wait for data if jump is into un-cached region
-			// We scan at most 1MB from the end to fill the screen
-			if startOff < vv.backend.Size() - 1024*1024 {
-				startOff = vv.backend.Size() - 1024*1024
-			}
-			if startOff < 0 { startOff = 0 }
-
-			for {
-				if ctx.Err() != nil { return }
-				_, err := vv.backend.ReadAt(startOff, 1024)
-				if err != piecetable.ErrLoading { break }
-				time.Sleep(10 * time.Millisecond)
-			}
-			startOff = vv.backend.FindLineStart(startOff)
-
-			var offsets []int64
-			currOff := startOff
-
-			for currOff < vv.backend.Size() {
-				if ctx.Err() != nil { return }
-				data, err := vv.backend.ReadAt(currOff, 64*1024)
-				if err == piecetable.ErrLoading {
-					time.Sleep(20 * time.Millisecond)
-					continue
-				}
-				if err != nil || len(data) == 0 { break }
-
-				scanPos := 0
-				for scanPos < len(data) {
-					offsets = append(offsets, currOff + int64(scanPos))
-					lineLen := 0
-					visualWidth := 0
-					foundNewline := false
-					for scanPos+lineLen < len(data) {
-						r, size := utf8.DecodeRune(data[scanPos+lineLen:])
-						if r == '\n' { lineLen += size; foundNewline = true; break }
-						if r == '\r' { lineLen += size; continue }
-						rw := runewidth.RuneWidth(r)
-						if vv.WrapMode && visualWidth+rw > width { break }
-						visualWidth += rw
-						lineLen += size
-					}
-					scanPos += lineLen
-					if !foundNewline && !vv.WrapMode { break }
-				}
-				currOff += int64(scanPos)
-			}
-
-			ctx.RunOnUI(func() {
-				if int64(len(offsets)) <= contentHeight {
-					vv.TopOffset = startOff
-				} else {
-					vv.TopOffset = offsets[len(offsets)-int(contentHeight)]
-				}
-				vtui.FrameManager.Redraw()
-			})
-		})
+		vv.jumpToEnd()
 		return true
 	}
 
 	return false
+}
+
+func (vv *ViewerView) jumpToEnd() {
+	contentHeight := int64(vv.Y2 - vv.Y1)
+	if vv.HexMode {
+		if vv.backend.Size() == 0 {
+			vv.TopOffset = 0
+		} else {
+			lastLineOffset := (vv.backend.Size() - 1) &^ 0xF
+			vv.TopOffset = lastLineOffset - (contentHeight-1)*16
+			if vv.TopOffset < 0 { vv.TopOffset = 0 }
+		}
+		return
+	}
+
+	if vv.backend.Size() == 0 {
+		vv.TopOffset = 0
+		return
+	}
+
+	vv.Busy = true
+	vtui.RunAsync(func(ctx *vtui.TaskContext) {
+		defer ctx.RunOnUI(func() { vv.Busy = false })
+		width := vv.X2 - vv.X1 + 1
+		if vv.scrollBar != nil { width-- }
+
+		chunkSize := contentHeight * int64(width) * 4
+		if chunkSize < 16*1024 { chunkSize = 16*1024 }
+
+		startOff := vv.backend.Size() - chunkSize
+		if startOff < 0 { startOff = 0 }
+
+		if startOff < vv.backend.Size() - 1024*1024 {
+			startOff = vv.backend.Size() - 1024*1024
+		}
+		if startOff < 0 { startOff = 0 }
+
+		for {
+			if ctx.Err() != nil { return }
+			_, err := vv.backend.ReadAt(startOff, 1024)
+			if err != piecetable.ErrLoading { break }
+			time.Sleep(10 * time.Millisecond)
+		}
+		startOff = vv.backend.FindLineStart(startOff)
+
+		var offsets []int64
+		currOff := startOff
+
+		for currOff < vv.backend.Size() {
+			if ctx.Err() != nil { return }
+			data, err := vv.backend.ReadAt(currOff, 64*1024)
+			if err == piecetable.ErrLoading {
+				time.Sleep(20 * time.Millisecond)
+				continue
+			}
+			if err != nil || len(data) == 0 { break }
+
+			scanPos := 0
+			for scanPos < len(data) {
+				offsets = append(offsets, currOff + int64(scanPos))
+				lineLen := 0
+				visualWidth := 0
+				foundNewline := false
+				for scanPos+lineLen < len(data) {
+					r, size := utf8.DecodeRune(data[scanPos+lineLen:])
+					if r == '\n' { lineLen += size; foundNewline = true; break }
+					if r == '\r' { lineLen += size; continue }
+					rw := runewidth.RuneWidth(r)
+					if vv.WrapMode && visualWidth+rw > width { break }
+					visualWidth += rw
+					lineLen += size
+				}
+				scanPos += lineLen
+				if !foundNewline && !vv.WrapMode { break }
+			}
+			currOff += int64(scanPos)
+		}
+
+		ctx.RunOnUI(func() {
+			if int64(len(offsets)) <= contentHeight {
+				vv.TopOffset = startOff
+			} else {
+				vv.TopOffset = offsets[len(offsets)-int(contentHeight)]
+			}
+			vtui.FrameManager.Redraw()
+		})
+	})
 }
 
 func (vv *ViewerView) ProcessMouse(e *vtinput.InputEvent) bool {

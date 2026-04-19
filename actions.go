@@ -254,6 +254,16 @@ func actionNewFile(pf *PanelsFrame) {
 	}
 }
 
+func actionViewTerminalLog(pf *PanelsFrame) {
+	v := &TerminalLogVFS{tv: pf.termView}
+	actionOpenViewer(pf, v, "Terminal Log")
+}
+
+func actionEditTerminalLog(pf *PanelsFrame) {
+	v := &TerminalLogVFS{tv: pf.termView}
+	actionOpenEditor(pf, v, "Terminal Log")
+}
+
 func actionViewFile(pf *PanelsFrame) {
 	if fsp := pf.getActivePanel(); fsp != nil {
 		idx := fsp.GetCursorIndex()

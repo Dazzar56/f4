@@ -45,6 +45,12 @@ func (b *ViewerBackend) Close() error {
 }
 
 func (b *ViewerBackend) Size() int64 {
+	if b.file != nil {
+		newSize := b.file.Size()
+		b.mu.Lock()
+		b.size = newSize
+		b.mu.Unlock()
+	}
 	return b.size
 }
 
