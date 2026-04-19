@@ -15,10 +15,11 @@ require (
 	golang.org/x/crypto v0.21.0
 	golang.org/x/sys v0.41.0
 	golang.org/x/term v0.40.0
-	golang.org/x/text v0.29.0
+	golang.org/x/text v0.36.0
 )
 
 require (
+	github.com/BurntSushi/xgb v0.0.0-20210121224620-deaf085860bc // indirect
 	github.com/STARRY-S/zip v0.2.3 // indirect
 	github.com/andybalholm/brotli v1.2.0 // indirect
 	github.com/bodgit/plumbing v1.3.0 // indirect
@@ -42,6 +43,7 @@ require (
 	github.com/ulikunitz/xz v0.5.15 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	go4.org v0.0.0-20230225012048-214862532bf5 // indirect
+	golang.org/x/image v0.39.0 // indirect
 )
 
 replace github.com/unxed/vtinput => ./libs/vtinput

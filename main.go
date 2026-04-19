@@ -68,6 +68,7 @@ func main() {
 	vtui.ConfigDiskLogging(false)
 	var serverPath, clientPath string
 	var cpuprofile string
+	var guiMode bool
 
 	for i := 1; i < len(os.Args); i++ {
 		arg := os.Args[i]
@@ -83,6 +84,8 @@ func main() {
 		switch flagName {
 		case "--debug":
 			os.Setenv("VTUI_DEBUG", "1")
+		case "--gui":
+			guiMode = true
 		case "--log":
 			if flagVal != "" {
 				os.Setenv("VTUI_DEBUG", flagVal)
@@ -159,6 +162,10 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
+	if guiMode {
+		RunGui()
+		return
+	}
 
 	// If we are here, no special mode was requested
 	ManageSessions()
@@ -180,16 +187,25 @@ func InitCore() *vtui.ScreenBuf {
 	if err != nil {
 		vtui.DebugLog("CORE: term.GetSize(0) failed: %v", err)
 	}
-	if width <= 0 { width = 80 }
-	if height <= 0 { height = 24 }
-
-	// На Windows (особенно в legacy консоли) иногда нужно явно включить поддержку ESC-последовательностей.
-	// vtui.PrepareTerminal() сделает это позже, но буферу размер нужен сразу.
+	if width <= 0 {
+		width = 80
+	}
+	if height <= 0 {
+		height = 24
+	}
 
 	scr := vtui.NewScreenBuf()
 	scr.AllocBuf(width, height)
 
 	vtui.FrameManager.Init(scr)
+
+	SetupUI()
+
+	vtui.DebugLog("CORE: Initialization complete")
+	return scr
+}
+
+func SetupUI() {
 	SetDefaultF4Palette()
 	InitLang()
 	vtui.GlobalHistoryProvider = NewF4HistoryProvider()
@@ -212,6 +228,9 @@ func InitCore() *vtui.ScreenBuf {
 	LoadConfig()
 	vtui.ManageCursorStyle = !AppConfig.KeepTerminalCursor
 	vtui.FrameManager.Push(vtui.NewDesktop())
+
+	width := vtui.FrameManager.GetScreenSize()
+	height := vtui.FrameManager.GetScreenHeight()
 
 	panels := NewPanelsFrame()
 	panels.ResizeConsole(width, height)
@@ -248,9 +267,6 @@ func InitCore() *vtui.ScreenBuf {
 	} else {
 		vtui.DebugLog("CORE: Plugins disabled by --no-plugins flag")
 	}
-
-	vtui.DebugLog("CORE: Initialization complete")
-	return scr
 }
 
 var getSessionIniPath = func() string {
