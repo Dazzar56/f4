@@ -1548,51 +1548,78 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 		// we write directly to the original file instead of using atomic rename via temp file.
 		oldAsync := ev.asyncBuf
 		oldFile := ev.file
-		needsBufferRecovery := oldAsync != nil && ev.pt.GetOriginalBuffer() == oldAsync
+		//needsBufferRecovery := oldAsync != nil && ev.pt.GetOriginalBuffer() == oldAsync
 
-		// Close reading handles so we can truncate and write
-		if oldAsync != nil { oldAsync.Close() }
-		if oldFile != nil { oldFile.Close() }
+		// Capture original metadata to restore it after atomic rename
+		originalStat, statErr := ev.vfs.Stat(ctx.Context, ev.filePath)
 
-		f, err := ev.vfs.Create(ctx.Context, ev.filePath)
+		tempPath := ev.filePath + ".f4tmp"
+		f, err := ev.vfs.Create(ctx.Context, tempPath)
 		if err != nil {
-			// RECOVER: Create failed, try to reopen the original file so editor stays functional
-			reopened, reerr := ev.vfs.Open(ctx.Context, ev.filePath)
 			ctx.RunOnUI(func() {
 				ev.saving = false
-				if reerr == nil && needsBufferRecovery {
-					ev.file = reopened
-					newBuf := NewAsyncBuffer(ctx.Context, reopened)
-					ev.asyncBuf = newBuf
-					ev.pt.UpdateOriginalBuffer(newBuf)
-				}
-				vtui.DebugLog("EDITOR: Failed to open file for saving: %v", err)
-				vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to save file:\n%v", err), []string{"&Ok"})
+				vtui.DebugLog("EDITOR: Failed to create temp file for saving: %v", err)
+				vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to create temporary file:\n%v", err), []string{"&Ok"})
 			})
 			return
 		}
 
-		saveErr := ev.pt.ForEachRange(func(data []byte) error {
-			_, errWrite := f.Write(data)
-			return errWrite
-		})
+		// Streaming write loop with retry logic for async loading.
+		// We use GetRange instead of ForEachRange to safely handle ErrLoading without closure mess.
+		var saveErr error
+		curr := 0
+		total := ev.pt.Size()
+		for curr < total {
+			if ctx.Err() != nil {
+				saveErr = ctx.Err()
+				break
+			}
+			take := 256 * 1024 // 256KB chunks
+			if curr+take > total {
+				take = total - curr
+			}
+			data, errRange := ev.pt.GetRange(curr, take)
+			if errRange == piecetable.ErrLoading {
+				time.Sleep(20 * time.Millisecond)
+				continue
+			}
+			if errRange != nil {
+				saveErr = errRange
+				break
+			}
+			if _, errWrite := f.Write(data); errWrite != nil {
+				saveErr = errWrite
+				break
+			}
+			curr += len(data)
+		}
 		f.Close()
 
 		if saveErr != nil {
+			ev.vfs.Remove(ctx.Context, tempPath)
 			ctx.RunOnUI(func() {
 				ev.saving = false
 				vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to save data:\n%v", saveErr), []string{"&Ok"})
-
-				// Reopen reading handles after write failure
-				reopened, reerr := ev.vfs.Open(ctx.Context, ev.filePath)
-				if reerr == nil && needsBufferRecovery {
-					ev.file = reopened
-					newBuf := NewAsyncBuffer(ctx.Context, reopened)
-					ev.asyncBuf = newBuf
-					ev.pt.UpdateOriginalBuffer(newBuf)
-				}
 			})
 			return
+		}
+
+		// Success: finalize the save atomically.
+		// Close reading handles to the OLD file so it can be replaced by Rename.
+		if oldAsync != nil { oldAsync.Close() }
+		if oldFile != nil { oldFile.Close() }
+
+		if err := ev.vfs.Rename(ctx.Context, tempPath, ev.filePath); err != nil {
+			ctx.RunOnUI(func() {
+				ev.saving = false
+				vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to finalize save (rename failed):\n%v", err), []string{"&Ok"})
+			})
+			return
+		}
+
+		// Restore original metadata (owner, group, perms, times)
+		if statErr == nil {
+			ev.vfs.SetAttributes(ctx.Context, ev.filePath, originalStat)
 		}
 
 		newFile, err := ev.vfs.Open(ctx.Context, ev.filePath)
