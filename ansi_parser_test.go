@@ -449,3 +449,81 @@ func TestAnsiParser_UnrecognizedCSI(t *testing.T) {
 		t.Errorf("Parser stuck in state %v after unrecognized CSI", p.State)
 	}
 }
+func TestAnsiParser_DECRQM(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	pty := &mockPty{}
+	p := NewAnsiParser(tv, pty)
+
+	// --- 1. DEC Private Modes ---
+
+	// Unknown Private Mode
+	p.Process([]byte("\x1b[?7777$p"))
+	if string(pty.written) != "\x1b[?7777;0$y" {
+		t.Errorf("Expected not recognized (0) for ?7777, got %q", string(pty.written))
+	}
+	pty.written = nil
+
+	// Mode 1: Application Cursor Keys
+	tv.ApplicationCursorKeys = false
+	p.Process([]byte("\x1b[?1$p"))
+	if string(pty.written) != "\x1b[?1;2$y" { t.Errorf("Mode 1 Reset fail: %q", string(pty.written)) }
+	pty.written = nil
+	tv.ApplicationCursorKeys = true
+	p.Process([]byte("\x1b[?1$p"))
+	if string(pty.written) != "\x1b[?1;1$y" { t.Errorf("Mode 1 Set fail: %q", string(pty.written)) }
+	pty.written = nil
+
+	// Mode 47 & 1049: Alt Screen
+	tv.UseAltScreen = false
+	p.Process([]byte("\x1b[?47$p"))
+	if string(pty.written) != "\x1b[?47;2$y" { t.Errorf("Mode 47 Reset fail") }
+	pty.written = nil
+	tv.UseAltScreen = true
+	p.Process([]byte("\x1b[?1049$p"))
+	if string(pty.written) != "\x1b[?1049;1$y" { t.Errorf("Mode 1049 Set fail") }
+	pty.written = nil
+
+	// Mode 2004: Bracketed Paste
+	tv.BracketedPasteMode = false
+	p.Process([]byte("\x1b[?2004$p"))
+	if string(pty.written) != "\x1b[?2004;2$y" { t.Errorf("Mode 2004 Reset fail") }
+	pty.written = nil
+	tv.BracketedPasteMode = true
+	p.Process([]byte("\x1b[?2004$p"))
+	if string(pty.written) != "\x1b[?2004;1$y" { t.Errorf("Mode 2004 Set fail") }
+	pty.written = nil
+
+	// Mode 9001: Win32 Input
+	tv.Win32InputMode = false
+	p.Process([]byte("\x1b[?9001$p"))
+	if string(pty.written) != "\x1b[?9001;2$y" { t.Errorf("Mode 9001 Reset fail") }
+	pty.written = nil
+	tv.Win32InputMode = true
+	p.Process([]byte("\x1b[?9001$p"))
+	if string(pty.written) != "\x1b[?9001;1$y" { t.Errorf("Mode 9001 Set fail") }
+	pty.written = nil
+
+	// --- 2. Standard Modes ---
+
+	// Standard mode (always 0/not recognized in our current implementation)
+	p.Process([]byte("\x1b[20$p"))
+	if string(pty.written) != "\x1b[20;0$y" {
+		t.Errorf("Expected not recognized for standard mode 20, got %q", string(pty.written))
+	}
+	pty.written = nil
+
+	// --- 3. Edge Cases & Negative Tests ---
+
+	// Wrong intermediate byte (e.g. # instead of $)
+	p.Process([]byte("\x1b[?1#p"))
+	if len(pty.written) > 0 {
+		t.Error("Should not respond to DECRQM with wrong intermediate byte")
+	}
+	pty.written = nil
+
+	// Missing parameters
+	p.Process([]byte("\x1b[$p"))
+	if len(pty.written) > 0 {
+		t.Error("Should not respond to DECRQM without parameters")
+	}
+}

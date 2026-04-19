@@ -23,14 +23,15 @@ const (
 
 // AnsiParser converts a stream of bytes into ScreenBuf operations.
 type AnsiParser struct {
-	State     ParserState
-	Params    []string
-	CurParam  strings.Builder
-	Attr      uint64
-	term      *TerminalView
-	pty       PtyBackend
-	runeBuf   []byte
-	lastRune  rune
+	State        ParserState
+	Params       []string
+	CurParam     strings.Builder
+	Intermediate string
+	Attr         uint64
+	term         *TerminalView
+	pty          PtyBackend
+	runeBuf      []byte
+	lastRune     rune
 }
 
 func NewAnsiParser(t *TerminalView, p PtyBackend) *AnsiParser {
@@ -72,6 +73,7 @@ func (p *AnsiParser) Process(data []byte) {
 				p.State = StateCSI
 				p.Params = nil
 				p.CurParam.Reset()
+				p.Intermediate = ""
 			} else if b == ']' {
 				p.State = StateOSC
 				p.Params = nil
@@ -99,7 +101,8 @@ func (p *AnsiParser) Process(data []byte) {
 			} else if b >= 0x3C && b <= 0x3F { // < = > ?
 				p.CurParam.WriteByte(b)
 			} else if b >= 0x20 && b <= 0x2F {
-				// Intermediate bytes - ignore
+				// Intermediate bytes
+				p.Intermediate += string(b)
 			} else if b >= 0x40 && b <= 0x7E {
 				p.Params = append(p.Params, p.CurParam.String())
 				p.handleCSI(b)
@@ -329,6 +332,44 @@ func (p *AnsiParser) handleCSI(cmd byte) {
 			n = args[0]
 		}
 		p.term.EraseCharacter(n, p.Attr)
+	case 'p': // DECRQM
+		if p.Intermediate == "$" {
+			p.handleDECRQM(args)
+		}
+	}
+}
+
+func (p *AnsiParser) handleDECRQM(args []int) {
+	if len(p.Params) == 0 || p.pty == nil {
+		return
+	}
+
+	// Ensure there is an actual mode number provided (not just an empty param or prefix)
+	modeStr := strings.TrimLeft(p.Params[0], "?<=>")
+	if modeStr == "" {
+		return
+	}
+
+	mode := args[0]
+	isDecPrivate := len(p.Params) > 0 && strings.HasPrefix(p.Params[0], "?")
+
+	state := 0 // 0 = not recognized
+	if isDecPrivate {
+		switch mode {
+		case 1:
+			if p.term.ApplicationCursorKeys { state = 1 } else { state = 2 }
+		case 47, 1049:
+			if p.term.UseAltScreen { state = 1 } else { state = 2 }
+		case 2004:
+			if p.term.BracketedPasteMode { state = 1 } else { state = 2 }
+		case 9001:
+			if p.term.Win32InputMode { state = 1 } else { state = 2 }
+		}
+		resp := fmt.Sprintf("\x1b[?%d;%d$y", mode, state)
+		p.pty.Write([]byte(resp))
+	} else {
+		resp := fmt.Sprintf("\x1b[%d;%d$y", mode, state)
+		p.pty.Write([]byte(resp))
 	}
 }
 
