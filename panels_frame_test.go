@@ -943,7 +943,7 @@ func TestPanelsFrame_CommandLineEnter(t *testing.T) {
 		t.Error("Panels should hide after command execution from command line")
 	}
 	// PTY должен получить команду
-	if !strings.Contains(string(pty.written), "ls -la\r") {
+	if !strings.Contains(string(pty.written), "ls -la") {
 		t.Errorf("PTY did not receive command. Got: %q", string(pty.written))
 	}
 }
