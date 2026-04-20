@@ -1237,6 +1237,9 @@ func (ev *EditorView) ensureCursorVisible() {
 		} else if vCol >= ev.ScrollLeft+width {
 			ev.ScrollLeft = vCol - width + 1
 		}
+		if ev.ScrollLeft < 0 {
+			ev.ScrollLeft = 0
+		}
 	} else {
 		ev.ScrollLeft = 0
 	}
@@ -1353,6 +1356,7 @@ func (ev *EditorView) StartIndexing() {
 						ev.CursorPos = ev.targetPos
 						ev.ScrollTopRow = ev.targetTopRow
 						ev.ScrollLeft = ev.targetLeft
+						if ev.ScrollLeft < 0 { ev.ScrollLeft = 0 }
 						ev.targetLine = -1
 						ev.ensureCursorVisible()
 						ev.updateDesiredVisualCol()
@@ -1373,6 +1377,7 @@ func (ev *EditorView) StartIndexing() {
 					ev.CursorPos = ev.targetPos
 					ev.ScrollTopRow = ev.targetTopRow
 					ev.ScrollLeft = ev.targetLeft
+					if ev.ScrollLeft < 0 { ev.ScrollLeft = 0 }
 					ev.targetLine = -1
 					ev.ensureCursorVisible()
 					ev.updateDesiredVisualCol()
