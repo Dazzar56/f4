@@ -172,9 +172,6 @@ func main() {
 }
 
 func InitCore() *vtui.ScreenBuf {
-	vtui.ConfigDiskLogging(true)
-	vtui.DebugLog("=== F4 STARTUP [%s] PID:%d ===", vtui.GetVersionInfo(), os.Getpid())
-
 	// Environment Diagnostics
 	vtui.DebugLog("ENV: OS=%s ARCH=%s", runtime.GOOS, runtime.GOARCH)
 	if wt := os.Getenv("WT_SESSION"); wt != "" {
@@ -206,6 +203,9 @@ func InitCore() *vtui.ScreenBuf {
 }
 
 func SetupUI() {
+	vtui.ConfigDiskLogging(true)
+	vtui.DebugLog("=== F4 STARTUP [%s] PID:%d ===", vtui.GetVersionInfo(), os.Getpid())
+
 	SetDefaultF4Palette()
 	InitLang()
 	vtui.GlobalHistoryProvider = NewF4HistoryProvider()
