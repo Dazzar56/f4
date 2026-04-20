@@ -229,8 +229,8 @@ func TestPanelsFrame_KeyHandling(t *testing.T) {
 	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN, ControlKeyState: vtinput.LeftCtrlPressed})
 
 	expectedName := pf.panels[0].GetSelectedName()
-	if pf.cmdLine.Edit.GetText() != " "+expectedName {
-		t.Errorf("Ctrl+Enter failed: expected ' %s', got '%s'", expectedName, pf.cmdLine.Edit.GetText())
+	if pf.cmdLine.Edit.GetText() != expectedName {
+		t.Errorf("Ctrl+Enter failed: expected '%s', got '%s'", expectedName, pf.cmdLine.Edit.GetText())
 	}
 }
 func TestPanelsFrame_MenuCommands(t *testing.T) {
