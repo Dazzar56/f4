@@ -374,9 +374,11 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 	vtui.FrameManager.Push(dlg)
 }
 func actionEditorSettings(pf *PanelsFrame) {
-	dlg := vtui.NewCenteredDialog(62, 19, Msg("EditorSettings.Title"))
+	width, height := 78, 19
+	dlg := vtui.NewCenteredDialog(width, height, Msg("EditorSettings.Title"))
 	dlg.ShowClose = true
 
+	// 1. Initialize Widgets
 	comboExpand := vtui.NewComboBox(0, 0, 40, []string{
 		"Do not expand tabs",
 		"Expand newly entered tabs to spaces",
@@ -387,86 +389,98 @@ func actionEditorSettings(pf *PanelsFrame) {
 		comboExpand.Menu.SetSelectPos(AppConfig.EditorExpandTabs)
 		comboExpand.Edit.SetText(comboExpand.Menu.Items[AppConfig.EditorExpandTabs].Text)
 	}
-
-	chkAutoIndent := vtui.NewCheckbox(0, 0, "Auto i&ndent", false)
-	if AppConfig.EditorAutoIndent { chkAutoIndent.State = 1 }
-
-	chkCursorEOL := vtui.NewCheckbox(0, 0, "Cursor beyond end of &line", false)
-	if AppConfig.EditorCursorBeyondEOL { chkCursorEOL.State = 1 }
-
-	chkEditorConfig := vtui.NewCheckbox(0, 0, "Use .&editorconfig settings files", false)
-	if AppConfig.EditorUseEditorConfig { chkEditorConfig.State = 1 }
-
-	chkAuto := vtui.NewCheckbox(0, 0, Msg("EditorSettings.AutoComplete"), false)
-	if AppConfig.EditorAutoComplete { chkAuto.State = 1 }
+	lblExpand := vtui.NewLabel(0, 0, "Expand t&abs:", comboExpand)
 
 	editTabSize := vtui.NewEdit(0, 0, 4, fmt.Sprintf("%d", AppConfig.EditorTabSize))
 	lblTabSize := vtui.NewLabel(0, 0, "Tab si&ze:", editTabSize)
 
-	lblMask := vtui.NewLabel(0, 0, Msg("EditorSettings.Mask"), nil)
+	chkAutoIndent := vtui.NewCheckbox(0, 0, "Auto i&ndent", false)
+	if AppConfig.EditorAutoIndent {
+		chkAutoIndent.State = 1
+	}
+
+	chkCursorEOL := vtui.NewCheckbox(0, 0, "Cursor beyond end of &line", false)
+	if AppConfig.EditorCursorBeyondEOL {
+		chkCursorEOL.State = 1
+	}
+
+	chkEditorConfig := vtui.NewCheckbox(0, 0, "Use .&editorconfig settings files", false)
+	if AppConfig.EditorUseEditorConfig {
+		chkEditorConfig.State = 1
+	}
+
+	chkAuto := vtui.NewCheckbox(0, 0, Msg("EditorSettings.AutoComplete"), false)
+	if AppConfig.EditorAutoComplete {
+		chkAuto.State = 1
+	}
+
 	editMask := vtui.NewEdit(0, 0, 56, AppConfig.EditorAutoCompleteMask)
-	lblMask.FocusLink = editMask
+	lblMask := vtui.NewLabel(0, 0, Msg("EditorSettings.Mask"), editMask)
 
 	btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))
 	btnOk.IsDefault = true
 	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
 
-	dlg.AddItem(vtui.NewLabel(0, 0, "Expand t&abs:", comboExpand))
+	// 2. Add to Dialog in desired focus order
+	dlg.AddItem(lblExpand)
 	dlg.AddItem(comboExpand)
+	dlg.AddItem(lblTabSize)
+	dlg.AddItem(editTabSize)
 	dlg.AddItem(chkAutoIndent)
 	dlg.AddItem(chkCursorEOL)
 	dlg.AddItem(chkEditorConfig)
 	dlg.AddItem(chkAuto)
-	dlg.AddItem(lblTabSize)
-	dlg.AddItem(editTabSize)
 	dlg.AddItem(lblMask)
 	dlg.AddItem(editMask)
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnCancel)
 
-	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 62-4, 19-4)
+	// 3. Layout Configuration
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, width-4, height-4)
 
-	rowTabs := vtui.NewHBoxLayout(0, 0, 58, 1)
-	rowTabs.Add(vtui.NewLabel(0, 0, "Expand t&abs:", comboExpand), vtui.Margins{Right: 1}, vtui.AlignLeft)
+	rowTabs := vtui.NewHBoxLayout(0, 0, width-4, 1)
+	rowTabs.Add(lblExpand, vtui.Margins{Right: 1}, vtui.AlignLeft)
 	rowTabs.Add(comboExpand, vtui.Margins{}, vtui.AlignFill)
 	vbox.Add(rowTabs, vtui.Margins{}, vtui.AlignFill)
 
-	rowTabSize := vtui.NewHBoxLayout(0, 0, 58, 1)
+	rowTabSize := vtui.NewHBoxLayout(0, 0, width-4, 1)
 	rowTabSize.Add(lblTabSize, vtui.Margins{Right: 1}, vtui.AlignLeft)
 	rowTabSize.Add(editTabSize, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(rowTabSize, vtui.Margins{Top: 1}, vtui.AlignFill)
 
-	col1 := vtui.NewVBoxLayout(0, 0, 28, 4)
+	col1 := vtui.NewVBoxLayout(0, 0, (width-4)/2, 4)
 	col1.Add(chkAutoIndent, vtui.Margins{}, vtui.AlignLeft)
 	col1.Add(chkEditorConfig, vtui.Margins{Top: 1}, vtui.AlignLeft)
 
-	col2 := vtui.NewVBoxLayout(0, 0, 28, 4)
+	col2 := vtui.NewVBoxLayout(0, 0, (width-4)/2, 4)
 	col2.Add(chkCursorEOL, vtui.Margins{}, vtui.AlignLeft)
 	col2.Add(chkAuto, vtui.Margins{Top: 1}, vtui.AlignLeft)
 
-	rowChecks := vtui.NewHBoxLayout(0, 0, 58, 4)
-	rowChecks.Add(col1, vtui.Margins{}, vtui.AlignLeft)
-	rowChecks.Add(col2, vtui.Margins{}, vtui.AlignLeft)
-
+	rowChecks := vtui.NewHBoxLayout(0, 0, width-4, 4)
+	rowChecks.Add(col1, vtui.Margins{}, vtui.AlignFill)
+	rowChecks.Add(col2, vtui.Margins{}, vtui.AlignFill)
 	vbox.Add(rowChecks, vtui.Margins{Top: 1}, vtui.AlignFill)
 
 	vbox.Add(lblMask, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(editMask, vtui.Margins{}, vtui.AlignFill)
 
-	hbox := vtui.NewHBoxLayout(0, 0, 58, 1)
+	hbox := vtui.NewHBoxLayout(0, 0, width-4, 1)
 	hbox.HorizontalAlign = vtui.AlignCenter
 	hbox.Spacing = 2
 	hbox.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
 	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
-
 	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
+
 	vbox.Apply()
 
+	// 4. Logic
 	btnCancel.OnClick = func() { dlg.Close() }
 	btnOk.OnClick = func() {
 		AppConfig.EditorExpandTabs = comboExpand.Menu.SelectPos
 		fmt.Sscanf(editTabSize.GetText(), "%d", &AppConfig.EditorTabSize)
-		if AppConfig.EditorTabSize <= 0 { AppConfig.EditorTabSize = 8 }
+		if AppConfig.EditorTabSize <= 0 {
+			AppConfig.EditorTabSize = 8
+		}
 
 		AppConfig.EditorAutoIndent = chkAutoIndent.State == 1
 		AppConfig.EditorCursorBeyondEOL = chkCursorEOL.State == 1
