@@ -146,3 +146,38 @@ tab_width = 4
 		t.Errorf("EditorConfig failed for .txt: style=%d, size=%d", evTxt.ExpandTabs, evTxt.TabSize)
 	}
 }
+
+func TestEditor_Tab_MaterializeBeyondEOL(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pt := piecetable.New([]byte("line"))
+	ev := NewEditorView(pt, nil, "test.txt")
+	ev.CursorBeyondEOL = true
+	ev.CursorPos = 4
+	ev.CursorVirtualSpaces = 2 // Virtual cursor at col 6
+	ev.ExpandTabs = 1 // Spaces
+	ev.TabSize = 4
+
+	// Press Tab at col 6
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_TAB})
+	
+	// Should materialize 2 virtual spaces + 2 spaces for tab (to reach col 8)
+	expected := "line    "
+	if ev.pt.String() != expected {
+		t.Errorf("Tab failed to materialize virtual spaces. Got %q, want %q", ev.pt.String(), expected)
+	}
+}
+
+func TestEditor_AutoIndent_EmptyLine(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	// Entering Enter on an empty line should not crash and should produce a new empty line
+	pt := piecetable.New(nil)
+	ev := NewEditorView(pt, nil, "test.txt")
+	ev.AutoIndent = true
+	
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN})
+	
+	if ev.li.LineCount() != 2 {
+		t.Errorf("Enter failed on empty file, lines: %d", ev.li.LineCount())
+	}
+}
+
