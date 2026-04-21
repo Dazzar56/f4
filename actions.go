@@ -374,33 +374,86 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 	vtui.FrameManager.Push(dlg)
 }
 func actionEditorSettings(pf *PanelsFrame) {
-	dlg := vtui.NewCenteredDialog(54, 11, Msg("EditorSettings.Title"))
+	dlg := vtui.NewCenteredDialog(62, 19, Msg("EditorSettings.Title"))
 	dlg.ShowClose = true
 
+	comboExpand := vtui.NewComboBox(0, 0, 40, []string{
+		"Do not expand tabs",
+		"Expand newly entered tabs to spaces",
+		"Expand all tabs to spaces",
+	})
+	comboExpand.DropdownOnly = true
+	if AppConfig.EditorExpandTabs >= 0 && AppConfig.EditorExpandTabs <= 2 {
+		comboExpand.Menu.SetSelectPos(AppConfig.EditorExpandTabs)
+		comboExpand.Edit.SetText(comboExpand.Menu.Items[AppConfig.EditorExpandTabs].Text)
+	}
+
+	chkAutoIndent := vtui.NewCheckbox(0, 0, "Auto i&ndent", false)
+	if AppConfig.EditorAutoIndent { chkAutoIndent.State = 1 }
+
+	chkCursorEOL := vtui.NewCheckbox(0, 0, "Cursor beyond end of &line", false)
+	if AppConfig.EditorCursorBeyondEOL { chkCursorEOL.State = 1 }
+
+	chkEditorConfig := vtui.NewCheckbox(0, 0, "Use .&editorconfig settings files", false)
+	if AppConfig.EditorUseEditorConfig { chkEditorConfig.State = 1 }
+
 	chkAuto := vtui.NewCheckbox(0, 0, Msg("EditorSettings.AutoComplete"), false)
-	chkAuto.State = 0
 	if AppConfig.EditorAutoComplete { chkAuto.State = 1 }
 
+	editTabSize := vtui.NewEdit(0, 0, 4, fmt.Sprintf("%d", AppConfig.EditorTabSize))
+	lblTabSize := vtui.NewLabel(0, 0, "Tab si&ze:", editTabSize)
+
 	lblMask := vtui.NewLabel(0, 0, Msg("EditorSettings.Mask"), nil)
-	editMask := vtui.NewEdit(0, 0, 30, AppConfig.EditorAutoCompleteMask)
+	editMask := vtui.NewEdit(0, 0, 56, AppConfig.EditorAutoCompleteMask)
 	lblMask.FocusLink = editMask
 
 	btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))
 	btnOk.IsDefault = true
 	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
 
+	dlg.AddItem(vtui.NewLabel(0, 0, "Expand t&abs:", comboExpand))
+	dlg.AddItem(comboExpand)
+	dlg.AddItem(chkAutoIndent)
+	dlg.AddItem(chkCursorEOL)
+	dlg.AddItem(chkEditorConfig)
 	dlg.AddItem(chkAuto)
+	dlg.AddItem(lblTabSize)
+	dlg.AddItem(editTabSize)
 	dlg.AddItem(lblMask)
 	dlg.AddItem(editMask)
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnCancel)
 
-	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 54-4, 11-4)
-	vbox.Add(chkAuto, vtui.Margins{}, vtui.AlignLeft)
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 62-4, 19-4)
+
+	rowTabs := vtui.NewHBoxLayout(0, 0, 58, 1)
+	rowTabs.Add(vtui.NewLabel(0, 0, "Expand t&abs:", comboExpand), vtui.Margins{Right: 1}, vtui.AlignLeft)
+	rowTabs.Add(comboExpand, vtui.Margins{}, vtui.AlignFill)
+	vbox.Add(rowTabs, vtui.Margins{}, vtui.AlignFill)
+
+	rowTabSize := vtui.NewHBoxLayout(0, 0, 58, 1)
+	rowTabSize.Add(lblTabSize, vtui.Margins{Right: 1}, vtui.AlignLeft)
+	rowTabSize.Add(editTabSize, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(rowTabSize, vtui.Margins{Top: 1}, vtui.AlignFill)
+
+	col1 := vtui.NewVBoxLayout(0, 0, 28, 4)
+	col1.Add(chkAutoIndent, vtui.Margins{}, vtui.AlignLeft)
+	col1.Add(chkEditorConfig, vtui.Margins{Top: 1}, vtui.AlignLeft)
+
+	col2 := vtui.NewVBoxLayout(0, 0, 28, 4)
+	col2.Add(chkCursorEOL, vtui.Margins{}, vtui.AlignLeft)
+	col2.Add(chkAuto, vtui.Margins{Top: 1}, vtui.AlignLeft)
+
+	rowChecks := vtui.NewHBoxLayout(0, 0, 58, 4)
+	rowChecks.Add(col1, vtui.Margins{}, vtui.AlignLeft)
+	rowChecks.Add(col2, vtui.Margins{}, vtui.AlignLeft)
+
+	vbox.Add(rowChecks, vtui.Margins{Top: 1}, vtui.AlignFill)
+
 	vbox.Add(lblMask, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(editMask, vtui.Margins{}, vtui.AlignFill)
 
-	hbox := vtui.NewHBoxLayout(0, 0, 54-4, 1)
+	hbox := vtui.NewHBoxLayout(0, 0, 58, 1)
 	hbox.HorizontalAlign = vtui.AlignCenter
 	hbox.Spacing = 2
 	hbox.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
@@ -411,6 +464,13 @@ func actionEditorSettings(pf *PanelsFrame) {
 
 	btnCancel.OnClick = func() { dlg.Close() }
 	btnOk.OnClick = func() {
+		AppConfig.EditorExpandTabs = comboExpand.Menu.SelectPos
+		fmt.Sscanf(editTabSize.GetText(), "%d", &AppConfig.EditorTabSize)
+		if AppConfig.EditorTabSize <= 0 { AppConfig.EditorTabSize = 8 }
+
+		AppConfig.EditorAutoIndent = chkAutoIndent.State == 1
+		AppConfig.EditorCursorBeyondEOL = chkCursorEOL.State == 1
+		AppConfig.EditorUseEditorConfig = chkEditorConfig.State == 1
 		AppConfig.EditorAutoComplete = chkAuto.State == 1
 		AppConfig.EditorAutoCompleteMask = editMask.GetText()
 		SaveConfig()

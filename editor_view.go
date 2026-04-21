@@ -4,6 +4,7 @@ import (
 	"unicode/utf8"
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"context"
 	"time"
 	"strings"
@@ -89,6 +90,78 @@ type EditorView struct {
 	targetPos    int
 	targetTopRow int
 	targetLeft   int
+
+	TabSize             int
+	ExpandTabs          int
+	AutoIndent          bool
+	CursorBeyondEOL     bool
+	CursorVirtualSpaces int
+	UseEditorConfig     bool
+}
+
+func (ev *EditorView) ApplyEditorConfig() {
+	if !ev.UseEditorConfig || ev.vfs == nil || ev.filePath == "" {
+		return
+	}
+
+	dir := ev.vfs.Dir(ev.filePath)
+	filename := ev.vfs.Base(ev.filePath)
+
+	configPath := ev.vfs.Join(dir, ".editorconfig")
+	f, err := ev.vfs.Open(context.Background(), configPath)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
+	data := make([]byte, 64*1024)
+	n, _ := f.Read(context.Background(), data)
+	content := string(data[:n])
+
+	lines := strings.Split(content, "\n")
+	inMatchingSection := false
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
+			continue
+		}
+
+		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+			section := line[1 : len(line)-1]
+			matched, _ := filepath.Match(section, filename)
+			if section == "*" || matched {
+				inMatchingSection = true
+			} else {
+				inMatchingSection = false
+			}
+			continue
+		}
+
+		if !inMatchingSection {
+			continue
+		}
+
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) == 2 {
+			key := strings.TrimSpace(parts[0])
+			val := strings.TrimSpace(parts[1])
+
+			switch key {
+			case "indent_style":
+				if val == "space" {
+					ev.ExpandTabs = 1
+				} else if val == "tab" {
+					ev.ExpandTabs = 0
+				}
+			case "indent_size", "tab_width":
+				if size, err := strconv.Atoi(val); err == nil && size > 0 {
+					ev.TabSize = size
+					ev.engine.SetTabSize(size)
+				}
+			}
+		}
+	}
 }
 
 type undoOpType int
@@ -137,7 +210,15 @@ func NewEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string) *EditorVie
 		targetPos:       -1,
 		targetTopRow:    -1,
 		targetLeft:      -1,
+		TabSize:         AppConfig.EditorTabSize,
+		ExpandTabs:      AppConfig.EditorExpandTabs,
+		AutoIndent:      AppConfig.EditorAutoIndent,
+		CursorBeyondEOL: AppConfig.EditorCursorBeyondEOL,
+		UseEditorConfig: AppConfig.EditorUseEditorConfig,
 	}
+	if ev.TabSize <= 0 { ev.TabSize = 8 }
+	ev.engine.SetTabSize(ev.TabSize)
+	ev.ApplyEditorConfig()
 	// Determine if AC should be enabled for this file
 	ev.acEnabled = false
 	if AppConfig.EditorAutoComplete && path != "" {
@@ -201,7 +282,7 @@ func (ev *EditorView) SetText(text string) {
 	ev.li.Rebuild(ev.pt)
 	ev.CursorLine = 0
 	ev.CursorPos = 0
-	ev.engine.InvalidateCache()
+	ev.engine.SetPointers(ev.pt, ev.li)
 	ev.modified = true
 }
 
@@ -335,7 +416,7 @@ func (ev *EditorView) ensureEngineWidth() {
 func (ev *EditorView) updateDesiredVisualCol() {
 	curOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 	_, vCol := ev.engine.LogicalToVisual(curOffset)
-	ev.DesiredVisualCol = vCol
+	ev.DesiredVisualCol = vCol + ev.CursorVirtualSpaces
 }
 
 func (ev *EditorView) Show(scr *vtui.ScreenBuf) {
@@ -476,12 +557,13 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 			}
 			runesProcessedInLine += fragRuneCount
 
-			ev.renderCells = ev.fillCells(ev.renderCells, ev.renderBytes, bgAttr, selAttr, frag.ByteOffsetStart, ev.selActive, selMin, selMax, fragSyntax)
+		_, startVCol := ev.engine.LogicalToVisual(frag.ByteOffsetStart)
+		ev.renderCells = ev.fillCells(ev.renderCells, ev.renderBytes, bgAttr, selAttr, frag.ByteOffsetStart, ev.selActive, selMin, selMax, fragSyntax, startVCol)
 
 			scr.Write(ev.X1-ev.ScrollLeft, currY, ev.renderCells)
 
 			if absVRow == curVRow {
-				scr.SetCursorPos(ev.X1+curVCol-ev.ScrollLeft, currY)
+				scr.SetCursorPos(ev.X1+curVCol+ev.CursorVirtualSpaces-ev.ScrollLeft, currY)
 				scr.SetCursorVisible(true)
 			}
 
@@ -545,6 +627,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 
 	ev.ensureEngineWidth()
 	if ev.saving { return true }
+	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 	// 1. Processing Bracketed Paste (events arrive outside KeyDown)
 	if e.Type == vtinput.PasteEventType {
 		if e.PasteStart {
@@ -608,6 +691,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 
 	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
 	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
+	//alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 	// --- Autocomplete Interception ---
 	if ev.acEnabled && len(ev.acMatches) > 0 {
 		if e.VirtualKeyCode == vtinput.VK_TAB {
@@ -761,6 +845,20 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 			newOffset := ev.engine.VisualToLogical(vRow-1, ev.DesiredVisualCol)
 			ev.CursorLine = ev.li.GetLineAtOffset(newOffset)
 			ev.CursorPos = newOffset - ev.li.GetLineOffset(ev.CursorLine)
+
+			lineLen := ev.getLineLength(ev.CursorLine)
+			vtui.DebugLog("DEBUG_UP: TargetRow:%d DesiredCol:%d ResultPos:%d LineLen:%d", vRow-1, ev.DesiredVisualCol, ev.CursorPos, lineLen)
+			if ev.CursorPos == lineLen && ev.CursorBeyondEOL {
+				_, endVCol := ev.engine.LogicalToVisual(ev.li.GetLineOffset(ev.CursorLine) + lineLen)
+				if ev.DesiredVisualCol > endVCol {
+					ev.CursorVirtualSpaces = ev.DesiredVisualCol - endVCol
+				} else {
+					ev.CursorVirtualSpaces = 0
+				}
+				vtui.DebugLog("DEBUG_UP_VIRT: EndVCol:%d ResultVirt:%d", endVCol, ev.CursorVirtualSpaces)
+			} else {
+				ev.CursorVirtualSpaces = 0
+			}
 		}
 		ev.ensureCursorVisible()
 		return true
@@ -780,6 +878,21 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		newOffset := ev.engine.VisualToLogical(vRow+1, ev.DesiredVisualCol)
 		ev.CursorLine = ev.li.GetLineAtOffset(newOffset)
 		ev.CursorPos = newOffset - ev.li.GetLineOffset(ev.CursorLine)
+
+		lineLen := ev.getLineLength(ev.CursorLine)
+		if ev.CursorPos == lineLen && ev.CursorBeyondEOL {
+			_, endVCol := ev.engine.LogicalToVisual(ev.li.GetLineOffset(ev.CursorLine) + lineLen)
+			vtui.DebugLog("DEBUG_DOWN: TargetRow:%d DesiredCol:%d ResultPos:%d LineLen:%d EndVCol:%d", vRow+1, ev.DesiredVisualCol, ev.CursorPos, lineLen, endVCol)
+			if ev.DesiredVisualCol > endVCol {
+				ev.CursorVirtualSpaces = ev.DesiredVisualCol - endVCol
+			} else {
+				ev.CursorVirtualSpaces = 0
+			}
+			vtui.DebugLog("DEBUG_DOWN_VIRT: ResultVirt:%d", ev.CursorVirtualSpaces)
+		} else {
+			vtui.DebugLog("DEBUG_DOWN_NO_VIRT: TargetRow:%d ResultPos:%d LineLen:%d", vRow+1, ev.CursorPos, lineLen)
+			ev.CursorVirtualSpaces = 0
+		}
 		ev.ensureCursorVisible()
 		return true
 
@@ -795,6 +908,18 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		newOffset := ev.engine.VisualToLogical(newVRow, ev.DesiredVisualCol)
 		ev.CursorLine = ev.li.GetLineAtOffset(newOffset)
 		ev.CursorPos = newOffset - ev.li.GetLineOffset(ev.CursorLine)
+
+		lineLen := ev.getLineLength(ev.CursorLine)
+		if ev.CursorPos == lineLen && ev.CursorBeyondEOL {
+			_, endVCol := ev.engine.LogicalToVisual(ev.li.GetLineOffset(ev.CursorLine) + lineLen)
+			if ev.DesiredVisualCol > endVCol {
+				ev.CursorVirtualSpaces = ev.DesiredVisualCol - endVCol
+			} else {
+				ev.CursorVirtualSpaces = 0
+			}
+		} else {
+			ev.CursorVirtualSpaces = 0
+		}
 		ev.ensureCursorVisible()
 		return true
 
@@ -811,6 +936,18 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		newOffset := ev.engine.VisualToLogical(newVRow, ev.DesiredVisualCol)
 		ev.CursorLine = ev.li.GetLineAtOffset(newOffset)
 		ev.CursorPos = newOffset - ev.li.GetLineOffset(ev.CursorLine)
+
+		lineLen := ev.getLineLength(ev.CursorLine)
+		if ev.CursorPos == lineLen && ev.CursorBeyondEOL {
+			_, endVCol := ev.engine.LogicalToVisual(ev.li.GetLineOffset(ev.CursorLine) + lineLen)
+			if ev.DesiredVisualCol > endVCol {
+				ev.CursorVirtualSpaces = ev.DesiredVisualCol - endVCol
+			} else {
+				ev.CursorVirtualSpaces = 0
+			}
+		} else {
+			ev.CursorVirtualSpaces = 0
+		}
 		ev.ensureCursorVisible()
 		return true
 
@@ -818,6 +955,13 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		isAlias := e.VirtualKeyCode == vtinput.VK_S
 		if isAlias && !ctrl { break }
 		handleNav()
+		if ev.CursorVirtualSpaces > 0 {
+			ev.CursorVirtualSpaces--
+			ev.updateDesiredVisualCol()
+			ev.ensureCursorVisible()
+			return true
+		}
+
 		// Jump by word only if it's the real Left arrow + Ctrl
 		if ctrl && !isAlias {
 			if ev.CursorPos > 0 {
@@ -904,7 +1048,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		lineLen := ev.getLineLength(ev.CursorLine)
 		// Jump by word only if it's the real Right arrow + Ctrl
 		if ctrl && !isAlias {
-			lineLen := ev.getLineLength(ev.CursorLine)
+			ev.CursorVirtualSpaces = 0
 			if ev.CursorPos < lineLen {
 				runes := ev.getLogicalLineRunes(ev.CursorLine)
 				currRuneIdx := len(runes)
@@ -1001,8 +1145,15 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 					ev.CursorPos++
 				}
 			} else if ev.CursorLine < ev.li.LineCount()-1 {
-				ev.CursorLine++
-				ev.CursorPos = 0
+				if ev.CursorBeyondEOL {
+					ev.CursorVirtualSpaces++
+				} else {
+					ev.CursorLine++
+					ev.CursorPos = 0
+					ev.CursorVirtualSpaces = 0
+				}
+			} else if ev.CursorBeyondEOL {
+				ev.CursorVirtualSpaces++
 			}
 		}
 		ev.updateDesiredVisualCol()
@@ -1015,6 +1166,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 			ev.CursorLine = 0
 		}
 		ev.CursorPos = 0
+		ev.CursorVirtualSpaces = 0
 		ev.updateDesiredVisualCol()
 		ev.ensureCursorVisible()
 		return true
@@ -1025,6 +1177,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 			ev.CursorLine = ev.li.LineCount() - 1
 		}
 		ev.CursorPos = ev.getLineLength(ev.CursorLine)
+		ev.CursorVirtualSpaces = 0
 		ev.updateDesiredVisualCol()
 		ev.ensureCursorVisible()
 		return true
@@ -1120,14 +1273,88 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		}
 		ev.modified = true
 		offset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
+		var indent []byte
+		if ev.AutoIndent {
+			lineRunes := ev.getLogicalLineRunes(ev.CursorLine)
+			for _, r := range lineRunes {
+				if r == ' ' || r == '\t' {
+					indent = append(indent, []byte(string(r))...)
+				} else {
+					break
+				}
+			}
+		}
+
+		if ev.CursorVirtualSpaces > 0 {
+			spaces := []byte(strings.Repeat(" ", ev.CursorVirtualSpaces))
+			ev.pt.Insert(offset, spaces)
+			ev.li.UpdateAfterInsert(offset, spaces)
+			offset += ev.CursorVirtualSpaces
+			ev.CursorVirtualSpaces = 0
+		}
+
 		ev.pt.Insert(offset, []byte("\n"))
 		ev.li.UpdateAfterInsert(offset, []byte("\n"))
 		ev.engine.InvalidateFrom(ev.CursorLine)
 		ev.CursorLine++
 		ev.CursorPos = 0
 		ev.DesiredVisualCol = 0
+
+		if len(indent) > 0 {
+			offset = ev.li.GetLineOffset(ev.CursorLine)
+			ev.pt.Insert(offset, indent)
+			ev.li.UpdateAfterInsert(offset, indent)
+			ev.CursorPos += len(indent)
+			ev.updateDesiredVisualCol()
+		}
+
 		ev.ensureCursorVisible()
 		return true
+
+	case vtinput.VK_TAB:
+		if !shift && !ctrl && !alt {
+			ev.saveUndo(opTyping)
+			if ev.selActive {
+				ev.inGroup = true
+				ev.DeleteSelection()
+				ev.inGroup = false
+			}
+			ev.modified = true
+			offset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
+
+			var data []byte
+			if ev.ExpandTabs > 0 {
+				_, vCol := ev.engine.LogicalToVisual(offset)
+				vCol += ev.CursorVirtualSpaces
+				spaces := ev.TabSize - (vCol % ev.TabSize)
+				vtui.DebugLog("DEBUG_TAB_EXPAND: Offset:%d BaseVCol:%d Virt:%d ResultSpaces:%d (TabSize:%d)", offset, vCol-ev.CursorVirtualSpaces, ev.CursorVirtualSpaces, spaces, ev.TabSize)
+				data = []byte(strings.Repeat(" ", spaces))
+			} else {
+				data = []byte("\t")
+			}
+
+			if ev.CursorVirtualSpaces > 0 {
+				virtSpaces := []byte(strings.Repeat(" ", ev.CursorVirtualSpaces))
+				ev.pt.Insert(offset, virtSpaces)
+				ev.li.UpdateAfterInsert(offset, virtSpaces)
+				offset += ev.CursorVirtualSpaces
+				ev.CursorPos += ev.CursorVirtualSpaces
+				ev.CursorVirtualSpaces = 0
+			}
+
+			ev.pt.Insert(offset, data)
+			ev.li.UpdateAfterInsert(offset, data)
+			ev.invalidateStates(ev.CursorLine)
+			ev.engine.InvalidateFrom(ev.CursorLine)
+			ev.CursorPos += len(data)
+			ev.updateDesiredVisualCol()
+			ev.ensureCursorVisible()
+
+			if ev.acEnabled {
+				ev.updateAutocomplete()
+			}
+			return true
+		}
 	}
 
 	if e.Char != 0 && ctrl == false {
@@ -1139,6 +1366,15 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		}
 		ev.modified = true
 		offset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
+		if ev.CursorVirtualSpaces > 0 {
+			spaces := []byte(strings.Repeat(" ", ev.CursorVirtualSpaces))
+			ev.pt.Insert(offset, spaces)
+			ev.li.UpdateAfterInsert(offset, spaces)
+			offset += ev.CursorVirtualSpaces
+			ev.CursorPos += ev.CursorVirtualSpaces
+			ev.CursorVirtualSpaces = 0
+		}
+
 		data := []byte(string(e.Char))
 		ev.pt.Insert(offset, data)
 		ev.li.UpdateAfterInsert(offset, data)
@@ -1157,11 +1393,15 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 	return false
 }
 
-func (ev *EditorView) fillCells(target []vtui.CharInfo, data []byte, defaultAttr, selAttr uint64, offset int, selActive bool, selMin, selMax int, syntax []uint64) []vtui.CharInfo {
+func (ev *EditorView) fillCells(target []vtui.CharInfo, data []byte, defaultAttr, selAttr uint64, offset int, selActive bool, selMin, selMax int, syntax []uint64, startVisualCol int) []vtui.CharInfo {
 	// vtui.DebugLog("EDITOR_FILL: Off: %d, Len: %d, Sel: %v[%d:%d]", offset, len(data), selActive, selMin, selMax)
 	target = target[:0]
 	currByte := 0
 	charIdx := 0
+	visualCol := startVisualCol
+	tabSize := ev.TabSize
+	if tabSize <= 0 { tabSize = 8 }
+
 	for len(data) > 0 {
 		r, size := utf8.DecodeRune(data)
 		data = data[size:]
@@ -1181,7 +1421,14 @@ func (ev *EditorView) fillCells(target []vtui.CharInfo, data []byte, defaultAttr
 		currByte += size
 
 		displayRune, w := vtui.SanitizeRune(r)
-		if r == ' ' && ev.ShowWhitespaces {
+		if r == '\t' {
+			w = tabSize - (visualCol % tabSize)
+			displayRune = ' '
+			if ev.ShowWhitespaces {
+				displayRune = '→'
+			}
+			vtui.DebugLog("DEBUG_FILL_TAB: VisualCol:%d TabSize:%d ResultWidth:%d DisplayRune:%d ShowWS:%v", visualCol, tabSize, w, displayRune, ev.ShowWhitespaces)
+		} else if r == ' ' && ev.ShowWhitespaces {
 			displayRune = '·'
 		} else if r < 0x20 || r == 0x7F {
 			if !ev.ShowWhitespaces {
@@ -1192,9 +1439,12 @@ func (ev *EditorView) fillCells(target []vtui.CharInfo, data []byte, defaultAttr
 		if w > 0 {
 			target = append(target, vtui.CharInfo{Char: uint64(displayRune), Attributes: attr})
 			for i := 1; i < w; i++ {
-				target = append(target, vtui.CharInfo{Char: vtui.WideCharFiller, Attributes: attr})
+				filler := uint64(vtui.WideCharFiller)
+				if r == '\t' { filler = ' ' }
+				target = append(target, vtui.CharInfo{Char: filler, Attributes: attr})
 			}
 		}
+		visualCol += w
 	}
 	return target
 }
@@ -1214,6 +1464,7 @@ func (ev *EditorView) ensureCursorVisible() {
 
 	curOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 	vRow, vCol := ev.engine.LogicalToVisual(curOffset)
+	vCol += ev.CursorVirtualSpaces
 
 	width := ev.X2 - ev.X1 + 1
 	height := ev.Y2 - ev.Y1

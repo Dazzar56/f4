@@ -16,6 +16,11 @@ type F4Config struct {
 	KeepTerminalCursor     bool
 	EditorAutoComplete     bool
 	EditorAutoCompleteMask string
+	EditorExpandTabs       int
+	EditorAutoIndent       bool
+	EditorCursorBeyondEOL  bool
+	EditorTabSize          int
+	EditorUseEditorConfig  bool
 }
 
 var AppConfig = F4Config{
@@ -25,6 +30,11 @@ var AppConfig = F4Config{
 	KeepTerminalCursor:     false,
 	EditorAutoComplete:     true,
 	EditorAutoCompleteMask: "*.go;*.c;*.cpp;*.h;*.hpp;*.py;*.js;*.ts;*.rs;*.java;*.sh;*.txt;*.md;*.html;*.css;*.json",
+	EditorExpandTabs:       0,
+	EditorAutoIndent:       true,
+	EditorCursorBeyondEOL:  false,
+	EditorTabSize:          4,
+	EditorUseEditorConfig:  true,
 }
 
 var getConfigIniPath = func() string {
@@ -47,6 +57,14 @@ func LoadConfig() {
 	AppConfig.EditorAutoComplete = ini.GetString("Editor", "AutoComplete", "1") == "1"
 	AppConfig.EditorAutoCompleteMask = ini.GetString("Editor", "AutoCompleteMask", "*.go;*.c;*.cpp;*.h;*.hpp;*.py;*.js;*.ts;*.rs;*.java;*.sh;*.txt;*.md;*.html;*.css;*.json")
 
+	AppConfig.EditorExpandTabs = 0
+	fmt.Sscanf(ini.GetString("Editor", "ExpandTabs", "0"), "%d", &AppConfig.EditorExpandTabs)
+	AppConfig.EditorAutoIndent = ini.GetString("Editor", "AutoIndent", "1") == "1"
+	AppConfig.EditorCursorBeyondEOL = ini.GetString("Editor", "CursorBeyondEOL", "0") == "1"
+	AppConfig.EditorUseEditorConfig = ini.GetString("Editor", "UseEditorConfig", "1") == "1"
+	AppConfig.EditorTabSize = 4
+	fmt.Sscanf(ini.GetString("Editor", "TabSize", "4"), "%d", &AppConfig.EditorTabSize)
+
 	vtui.DebugLog("CONFIG: Loaded application settings from %s", path)
 }
 
@@ -64,6 +82,12 @@ func SaveConfig() {
 	sb.WriteString("\n[Editor]\n")
 	sb.WriteString(fmt.Sprintf("AutoComplete = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.EditorAutoComplete]))
 	sb.WriteString(fmt.Sprintf("AutoCompleteMask = %s\n", AppConfig.EditorAutoCompleteMask))
+
+	sb.WriteString(fmt.Sprintf("ExpandTabs = %d\n", AppConfig.EditorExpandTabs))
+	sb.WriteString(fmt.Sprintf("AutoIndent = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.EditorAutoIndent]))
+	sb.WriteString(fmt.Sprintf("CursorBeyondEOL = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.EditorCursorBeyondEOL]))
+	sb.WriteString(fmt.Sprintf("UseEditorConfig = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.EditorUseEditorConfig]))
+	sb.WriteString(fmt.Sprintf("TabSize = %d\n", AppConfig.EditorTabSize))
 
 	err := os.WriteFile(path, []byte(sb.String()), 0644)
 	if err != nil {

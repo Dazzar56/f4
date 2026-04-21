@@ -758,19 +758,19 @@ func TestEditorView_WhitespaceRendering(t *testing.T) {
 	pt := piecetable.New([]byte("a b\tc")) // space and tab
 	ev := NewEditorView(pt, nil, "")
 	ev.ShowWhitespaces = true
-
-	cells := ev.fillCells(nil, []byte("a b\tc"), 0, 0, 0, false, 0, 0, nil)
+	cells := ev.fillCells(nil, []byte("a b\tc"), 0, 0, 0, false, 0, 0, nil, 0)
 
 	// '·' is U+00B7 (183)
 	if cells[1].Char != 183 {
 		t.Errorf("Expected dot for space when ShowWhitespaces is ON, got %d", cells[1].Char)
 	}
-	if cells[3].Char != 183 {
-		t.Errorf("Expected dot for tab when ShowWhitespaces is ON, got %d", cells[3].Char)
+	// '→' is U+2192 (8594)
+	if cells[3].Char != 8594 {
+		t.Errorf("Expected arrow for tab when ShowWhitespaces is ON, got %d", cells[3].Char)
 	}
 
 	ev.ShowWhitespaces = false
-	cells = ev.fillCells(nil, []byte("a b\tc"), 0, 0, 0, false, 0, 0, nil)
+	cells = ev.fillCells(nil, []byte("a b\tc"), 0, 0, 0, false, 0, 0, nil, 0)	
 	if cells[1].Char != ' ' {
 		t.Errorf("Expected space for space when ShowWhitespaces is OFF, got %d", cells[1].Char)
 	}
