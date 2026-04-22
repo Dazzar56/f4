@@ -435,9 +435,7 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 		}
 		pf.cmdLine.SetRichPrompt(pf.buildPrompt())
 		pf.cmdLine.SetPosition(0, cmdLineY, pf.lastW-1, cmdLineY)
-		if pf.cmdLine.IsVisible() {
-			pf.cmdLine.Show(scr)
-		}
+		pf.cmdLine.Show(scr)
 	}
 
 	// KeyBar is at the bottom. It should only be hidden if a child process
