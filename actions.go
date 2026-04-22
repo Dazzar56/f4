@@ -367,8 +367,6 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 
 	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
 	vbox.Apply()
-
-	editDest.SelectAll()
 	dlg.SetFocusedItem(editDest)
 
 	vtui.FrameManager.Push(dlg)
@@ -703,7 +701,6 @@ func actionFindFile(pf *PanelsFrame) {
 
 	lblMask := vtui.NewLabel(0, 0, Msg("FindFile.MaskPrompt"), nil)
 	editMask := vtui.NewEdit(0, 0, 20, LastFindFileMask)
-	editMask.SelectAll()
 	lblMask.FocusLink = editMask
 	dlg.SetFocusedItem(editMask)
 

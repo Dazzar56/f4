@@ -121,12 +121,6 @@ func showConnectionDialog(app vfs.App, nf *NetFoxVFS, oldName string) {
 	editUser := vtui.NewEdit(0, 0, 40, cfg.User)
 	editPass := vtui.NewPasswordEdit(0, 0, 40, cfg.Pass)
 
-	editName.SelectAll()
-	editHost.SelectAll()
-	editPort.SelectAll()
-	editUser.SelectAll()
-	editPass.SelectAll()
-
 	makeRow := func(label string, edit vtui.UIElement) *vtui.HBoxLayout {
 		hbox := vtui.NewHBoxLayout(0, 0, 56, 1)
 		l := vtui.NewLabel(0, 0, padLabel(label), edit)
@@ -191,12 +185,6 @@ func showConnectionDialog(app vfs.App, nf *NetFoxVFS, oldName string) {
 
 		container.active = newProto
 		activeProto = newProto
-
-		// Re-select all when switching protocol to keep UX consistent
-		editHost.SelectAll()
-		editPort.SelectAll()
-		editUser.SelectAll()
-		editPass.SelectAll()
 
 		vtui.FrameManager.Redraw()
 	}
