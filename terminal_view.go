@@ -68,6 +68,7 @@ type TerminalView struct {
 	pendingAttr     uint64
 
 	Muted           bool
+	lastCharWasCR   bool
 
 	OnTitleChange func(string)
 }
@@ -179,6 +180,7 @@ func (tv *TerminalView) ResetBuffer(w, h int) {
 	tv.ScrollBottom = h - 1
 	tv.CursorX = 0
 	tv.CursorY = h - 1
+	tv.lastCharWasCR = true
 	tv.pendingLog = tv.pendingLog[:0]
 	tv.pendingAttr = DefaultTermAttr
 
@@ -255,8 +257,9 @@ func (tv *TerminalView) PutChar(r rune, attr uint64) {
 		if r == '\n' {
 			tv.pendingLog = append(tv.pendingLog, '\n')
 			tv.lastLineOffset = tv.pt.Size() + len(tv.pendingLog)
+			tv.lastCharWasCR = false
 		} else if r >= 0x20 {
-			if tv.CursorX == 0 && (tv.pt.Size() + len(tv.pendingLog)) > tv.lastLineOffset {
+			if tv.lastCharWasCR && tv.CursorX == 0 && (tv.pt.Size()+len(tv.pendingLog)) > tv.lastLineOffset {
 				tv.flushLogUnsafe()
 				tv.pt.Delete(tv.lastLineOffset, tv.pt.Size()-tv.lastLineOffset)
 				tv.li.UpdateAfterDelete(tv.lastLineOffset, tv.pt.Size()-tv.lastLineOffset)
@@ -270,6 +273,7 @@ func (tv *TerminalView) PutChar(r rune, attr uint64) {
 					}
 				}
 			}
+			tv.lastCharWasCR = false
 
 			if attr != tv.pendingAttr {
 				tv.flushLogUnsafe()
@@ -288,6 +292,7 @@ func (tv *TerminalView) PutChar(r rune, attr uint64) {
 	// 2. Обработка в текущей сетке (Grid)
 	if r == '\r' {
 		tv.CursorX = 0
+		tv.lastCharWasCR = true
 		return
 	}
 	if r == '\n' {
@@ -441,6 +446,9 @@ func (tv *TerminalView) SetCursor(x, y int) {
 	if y < 0 { y = 0 }
 	if y >= tv.Height { y = tv.Height - 1 }
 	tv.CursorX, tv.CursorY = x, y
+	if x == 0 {
+		tv.lastCharWasCR = true
+	}
 }
 
 func (tv *TerminalView) SaveCursor() {
@@ -488,9 +496,13 @@ func (tv *TerminalView) EraseDisplay(mode int, attr uint64) {
 			tv.pendingLog = append(tv.pendingLog, '\n')
 		}
 		tv.flushLogUnsafe()
+		tv.lastLineOffset = tv.pt.Size()
 	}
 
 	if mode == 2 {
+		tv.CursorX = 0
+		tv.CursorY = 0
+		tv.lastCharWasCR = true
 		for i := range buf {
 			for j := range buf[i] {
 				buf[i][j] = vtui.CharInfo{Char: ' ', Attributes: attr}
@@ -718,6 +730,7 @@ func (tv *TerminalView) Resize(w, h int) {
 		if tv.CursorX >= w { tv.CursorX = w - 1 }
 		if tv.CursorY >= h { tv.CursorY = h - 1 }
 	}
+	tv.lastCharWasCR = (tv.CursorX == 0)
 }
 func (tv *TerminalView) IsModal() bool        { return false }
 func (tv *TerminalView) RequestFocus() bool   { return true }

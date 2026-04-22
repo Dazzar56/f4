@@ -311,7 +311,7 @@ func TestTerminalView_PromptRewriteHeuristic(t *testing.T) {
 	}
 
 	// 2. Shell moves cursor back to 0 (X=0) and prints a DIFFERENT prompt "> "
-	tv.CursorX = 0
+	tv.PutChar('\r', 0)
 	tv.PutChar('>', 0)
 	tv.FlushLog()
 
@@ -338,7 +338,7 @@ func TestTerminalView_PromptRewriteDetection(t *testing.T) {
 
 	// 2. Shell moves cursor back to 0 and prints a DIFFERENT prompt "> "
 	// This happens in some advanced shells or during resize.
-	tv.CursorX = 0
+	tv.PutChar('\r', 0)
 	tv.PutChar('>', 0)
 	tv.FlushLog()
 
@@ -349,5 +349,57 @@ func TestTerminalView_PromptRewriteDetection(t *testing.T) {
 	}
 	if tv.pt.String() != ">" {
 		t.Errorf("History corrupted: expected '>', got %q", tv.pt.String())
+	}
+}
+func TestTerminalView_AutoWrap_NoHistoryLoss(t *testing.T) {
+	// Verifies that auto-wrapping does NOT trigger prompt-rewrite heuristic.
+	tv := NewTerminalView(10, 5)
+	tv.UseAltScreen = false
+
+	// Write 10 chars to fill the first line
+	for i := 0; i < 10; i++ {
+		tv.PutChar('A', 0)
+	}
+	tv.FlushLog()
+
+	// Write 11th char - triggers auto-wrap. Cursor becomes (1, 1). lastCharWasCR is FALSE.
+	tv.PutChar('B', 0)
+	tv.FlushLog()
+
+	// Heuristic should NOT trigger. History should contain all 11 chars.
+	expected := "AAAAAAAAAAB"
+	if tv.pt.String() != expected {
+		t.Errorf("Auto-wrap caused data loss. Expected %q, got %q", expected, tv.pt.String())
+	}
+}
+
+func TestTerminalView_EraseDisplay_LogSync(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	tv.UseAltScreen = false
+
+	// 1. Write some content
+	for _, r := range "content" { tv.PutChar(r, 0) }
+	tv.FlushLog()
+
+	// 2. Execute 'clear' (mode 2)
+	tv.EraseDisplay(2, 0)
+
+	// Cursor must be homed
+	if tv.CursorX != 0 || tv.CursorY != 0 {
+		t.Errorf("EraseDisplay(2) failed to home cursor: (%d,%d)", tv.CursorX, tv.CursorY)
+	}
+
+	// lastLineOffset must point to the end of the newly added vertical padding
+	if tv.lastLineOffset != tv.pt.Size() {
+		t.Errorf("lastLineOffset mismatch after clear: %d vs %d", tv.lastLineOffset, tv.pt.Size())
+	}
+
+	// 3. Write new content after clear
+	tv.PutChar('X', 0)
+	tv.FlushLog()
+
+	// Verify 'X' is preserved and didn't trigger prompt-rewrite on the empty padding
+	if !strings.HasSuffix(tv.pt.String(), "X") {
+		t.Errorf("Content after clear was lost. Log: %q", tv.pt.String())
 	}
 }
