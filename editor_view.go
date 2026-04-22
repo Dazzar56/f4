@@ -1427,7 +1427,7 @@ func (ev *EditorView) fillCells(target []vtui.CharInfo, data []byte, defaultAttr
 			if ev.ShowWhitespaces {
 				displayRune = '→'
 			}
-			vtui.DebugLog("DEBUG_FILL_TAB: VisualCol:%d TabSize:%d ResultWidth:%d DisplayRune:%d ShowWS:%v", visualCol, tabSize, w, displayRune, ev.ShowWhitespaces)
+			// vtui.DebugLog("DEBUG_FILL_TAB: VisualCol:%d TabSize:%d ResultWidth:%d DisplayRune:%d ShowWS:%v", visualCol, tabSize, w, displayRune, ev.ShowWhitespaces)
 		} else if r == ' ' && ev.ShowWhitespaces {
 			displayRune = '·'
 		} else if r < 0x20 || r == 0x7F {

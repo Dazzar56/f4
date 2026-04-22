@@ -919,7 +919,7 @@ func (fp *FileSystemPanel) InvertSelection() {
 			e.Selected = !e.Selected
 		}
 	}
-	fp.Refresh()
+	vtui.FrameManager.Redraw()
 }
 
 func (fp *FileSystemPanel) ApplyMaskSelection(mask string, state bool) {
@@ -942,7 +942,7 @@ func (fp *FileSystemPanel) ApplyMaskSelection(mask string, state bool) {
 			e.Selected = state
 		}
 	}
-	fp.Refresh()
+	vtui.FrameManager.Redraw()
 }
 
 func (fp *FileSystemPanel) GetSuccessorName() string {
