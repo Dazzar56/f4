@@ -390,6 +390,7 @@ func actionEditorSettings(pf *PanelsFrame) {
 	lblExpand := vtui.NewLabel(0, 0, "Expand t&abs:", comboExpand)
 
 	editTabSize := vtui.NewEdit(0, 0, 4, fmt.Sprintf("%d", AppConfig.EditorTabSize))
+	editTabSize.ClearSelection()
 	lblTabSize := vtui.NewLabel(0, 0, "Tab si&ze:", editTabSize)
 
 	chkAutoIndent := vtui.NewCheckbox(0, 0, "Auto i&ndent", false)

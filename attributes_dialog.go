@@ -122,6 +122,7 @@ func showAttributesUnix(pf *PanelsFrame, v vfs.VFS, path string, item vfs.VFSIte
 
 	editOctal := vtui.NewEdit(0, 0, 6, fmt.Sprintf("%04o", item.UnixMode))
 	editOctal.Validator = &vtui.OctalValidator{MaxDigits: 4}
+	editOctal.ClearSelection()
 	rowOct := vtui.NewHBoxLayout(0, 0, 60, 1)
 	lblOct := vtui.NewLabel(0, 0, padLabel("O&ct:"), editOctal)
 	rowOct.Add(lblOct, vtui.Margins{Right: 2}, vtui.AlignLeft); rowOct.Add(editOctal, vtui.Margins{}, vtui.AlignLeft)
