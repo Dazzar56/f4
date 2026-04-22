@@ -38,12 +38,16 @@ jobs:
         EXT=""
         if [ "$GOOS" = "windows" ]; then EXT=".exe"; fi
 
+        # Prepare flags for truly static binary on Linux
+        LDFLAGS="-s -w"
+        if [ "$GOOS" = "linux" ]; then LDFLAGS="$LDFLAGS -extldflags '-static'"; fi
+
         # Build core
-        go build -ldflags="-s -w" -o build/f4$EXT .
+        go build -ldflags="$LDFLAGS" -o build/f4$EXT .
 
         # Build internal dummy plugin
         cd plugins/dummy_internal
-        go build -ldflags="-s -w" -o ../../build/plugins/dummy_internal/f4-internal-dummy-plugin$EXT .
+        go build -ldflags="$LDFLAGS" -o ../../build/plugins/dummy_internal/f4-internal-dummy-plugin$EXT .
 
     - name: Package
       run: |
