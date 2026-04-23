@@ -107,6 +107,22 @@ func main() {
 				clientPath = os.Args[i+1]
 				i++
 			}
+		case "--signal":
+			if flagVal != "" {
+				if flagVal == "busy" {
+					fmt.Print("\x1b]2;f4:busy\x07")
+				} else if flagVal == "done" {
+					fmt.Print("\x1b]2;f4:done\x07")
+				}
+			} else if i+1 < len(os.Args) {
+				if os.Args[i+1] == "busy" {
+					fmt.Print("\x1b]2;f4:busy\x07")
+				} else if os.Args[i+1] == "done" {
+					fmt.Print("\x1b]2;f4:done\x07")
+				}
+				i++
+			}
+			return
 		case "--input":
 			if flagVal != "" {
 				vtinput.InputMode = flagVal

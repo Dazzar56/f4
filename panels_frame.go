@@ -838,17 +838,19 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 						// Panels are visible: we are launching a one-shot command.
 						// We need f4:done to know when to show panels again.
 						if runtime.GOOS == "windows" {
-							fullWireCmd = fmt.Sprintf("cd /d %q & title f4:busy & %s && title f4:done\r", path, cmd)
+							f4Exe, _ := os.Executable()
+							fullWireCmd = fmt.Sprintf("cd /d %q & %q --signal busy & %s & %q --signal done\r", path, f4Exe, cmd, f4Exe)
 						} else {
 							sqPath := strings.ReplaceAll(path, "'", "'\\''")
-							fullWireCmd = fmt.Sprintf("set +H; cd '%s' && { printf \"\\033]2;f4:busy\\007\"; %s && printf \"\\033]2;f4:done\\007\"; }\r", sqPath, cmd)
+							fullWireCmd = fmt.Sprintf("set +H; cd '%s' && { printf \"\\033]2;f4:busy\\007\"; %s ; printf \"\\033]2;f4:done\\007\"; }\r", sqPath, cmd)
 						}
 						pf.executing = true
 					} else {
 						// Panels are hidden: user is in interactive shell.
 						// We just need to unmute after changing directory. No f4:done.
 						if runtime.GOOS == "windows" {
-							fullWireCmd = fmt.Sprintf("cd /d %q & title f4:busy & %s\r", path, cmd)
+							f4Exe, _ := os.Executable()
+							fullWireCmd = fmt.Sprintf("cd /d %q & %q --signal busy & %s\r", path, f4Exe, cmd)
 						} else {
 							sqPath := strings.ReplaceAll(path, "'", "'\\''")
 							fullWireCmd = fmt.Sprintf("set +H; cd '%s' && printf \"\\033]2;f4:busy\\007\" && %s\r", sqPath, cmd)
@@ -859,9 +861,10 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 					if pf.showPanels {
 						// If panels are shown, we still need the busy/done signals
 						if runtime.GOOS == "windows" {
-							fullWireCmd = fmt.Sprintf("title f4:busy & %s && title f4:done\r", cmd)
+							f4Exe, _ := os.Executable()
+							fullWireCmd = fmt.Sprintf("%q --signal busy & %s & %q --signal done\r", f4Exe, cmd, f4Exe)
 						} else {
-							fullWireCmd = fmt.Sprintf("{ printf \"\\033]2;f4:busy\\007\"; %s && printf \"\\033]2;f4:done\\007\"; }\r", cmd)
+							fullWireCmd = fmt.Sprintf("{ printf \"\\033]2;f4:busy\\007\"; %s ; printf \"\\033]2;f4:done\\007\"; }\r", cmd)
 						}
 						pf.executing = true
 					} else {
