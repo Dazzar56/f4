@@ -386,7 +386,7 @@ func (p *AnsiParser) handleOSC() {
 
 	if cmd == 0 || cmd == 2 {
 		p.term.Title = parts[1]
-		if strings.HasPrefix(p.term.Title, "f4:busy") {
+		if p.term.Title == "f4:busy" {
 			p.term.SetMuted(false)
 		}
 		if p.term.OnTitleChange != nil {

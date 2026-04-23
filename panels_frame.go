@@ -154,9 +154,9 @@ func NewPanelsFrame() *PanelsFrame {
 	pf.termView.OnTitleChange = func(newTitle string) {
 		// Use PostTask to ensure state changes happen on the UI thread
 		vtui.FrameManager.PostTask(func() {
-			if strings.HasPrefix(newTitle, "f4:busy") {
+			if newTitle == "f4:busy" {
 				pf.executing = true
-			} else if strings.HasPrefix(newTitle, "f4:done") {
+			} else if newTitle == "f4:done" {
 				if pf.executing {
 					pf.executing = false
 					pf.showPanels = true
@@ -391,7 +391,7 @@ func (pf *PanelsFrame) isPtyBusy() bool {
 		return true
 	}
 	// Managed execution signal from actionExecute
-	if pf.executing && strings.HasPrefix(pf.termView.Title, "f4:busy") {
+	if pf.executing && pf.termView.Title == "f4:busy" {
 		return true
 	}
 	return false
@@ -834,12 +834,12 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				if path != "" {
 					vtui.DebugLog("SHELL: Executing %q in %s", cmd, path)
 
-
 					if pf.showPanels {
 						// Panels are visible: we are launching a one-shot command.
 						// We need f4:done to know when to show panels again.
 						if runtime.GOOS == "windows" {
-							fullWireCmd = fmt.Sprintf("@cd /d %q & (title f4:busy) & %s & (title f4:done)\r", path, cmd)
+							f4Exe, _ := os.Executable()
+							fullWireCmd = fmt.Sprintf("cd /d %q & %q --signal busy & %s & %q --signal done\r", path, f4Exe, cmd, f4Exe)
 						} else {
 							sqPath := strings.ReplaceAll(path, "'", "'\\''")
 							fullWireCmd = fmt.Sprintf("set +H; cd '%s' && { printf \"\\033]2;f4:busy\\007\"; %s ; printf \"\\033]2;f4:done\\007\"; }\r", sqPath, cmd)
@@ -849,7 +849,8 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 						// Panels are hidden: user is in interactive shell.
 						// We just need to unmute after changing directory. No f4:done.
 						if runtime.GOOS == "windows" {
-							fullWireCmd = fmt.Sprintf("@cd /d %q & (title f4:busy) & %s\r", path, cmd)
+							f4Exe, _ := os.Executable()
+							fullWireCmd = fmt.Sprintf("cd /d %q & %q --signal busy & %s\r", path, f4Exe, cmd)
 						} else {
 							sqPath := strings.ReplaceAll(path, "'", "'\\''")
 							fullWireCmd = fmt.Sprintf("set +H; cd '%s' && printf \"\\033]2;f4:busy\\007\" && %s\r", sqPath, cmd)
@@ -860,7 +861,8 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 					if pf.showPanels {
 						// If panels are shown, we still need the busy/done signals
 						if runtime.GOOS == "windows" {
-							fullWireCmd = fmt.Sprintf("(title f4:busy) & %s & (title f4:done)\r", cmd)
+							f4Exe, _ := os.Executable()
+							fullWireCmd = fmt.Sprintf("%q --signal busy & %s & %q --signal done\r", f4Exe, cmd, f4Exe)
 						} else {
 							fullWireCmd = fmt.Sprintf("{ printf \"\\033]2;f4:busy\\007\"; %s ; printf \"\\033]2;f4:done\\007\"; }\r", cmd)
 						}
@@ -872,6 +874,8 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				}
 
 				pf.termView.PrintCleanCommand(cmd)
+				// Mute terminal output. It will be unmuted by the 'f4:busy' title sequence.
+				// This hides the complex command string from being echoed.
 				pf.termView.SetMuted(true)
 				activePty.Write([]byte(fullWireCmd))
 			}
