@@ -197,9 +197,8 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 					var cmdToWire string
 				if runtime.GOOS == "windows" {
 					f4Exe, _ := os.Executable()
-					// Windows CMD: use f4's internal signal to synchronously emit ANSI sequences.
-					// We use %q to ensure name with spaces is handled correctly as a single command.
 					cmdToWire = fmt.Sprintf("cd /d %q & %q --signal busy & %q & %q --signal done\r", dir, f4Exe, cmd, f4Exe)
+					vtui.DebugLog("ACTION: Prepared Windows command: %s", cmdToWire)
 				} else {
 					// On Unix, use single quotes for paths to prevent Bash history expansion (the '!' problem).
 					// We also disable history expansion explicitly with 'set +H'.

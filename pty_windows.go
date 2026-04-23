@@ -62,11 +62,16 @@ func NewPTY() (*PTY, error) {
 }
 
 func (p *PTY) Write(b []byte) (int, error) {
+	vtui.DebugLog("PTY_WIN: Writing %d bytes: %q", len(b), string(b))
 	return p.inWriter.Write(b)
 }
 
 func (p *PTY) Read(b []byte) (int, error) {
-	return p.outReader.Read(b)
+	n, err := p.outReader.Read(b)
+	if n > 0 {
+		vtui.DebugLog("PTY_WIN: Read %d bytes: %q", n, string(b[:n]))
+	}
+	return n, err
 }
 
 func (p *PTY) SetSize(cols, rows int) {
