@@ -28,6 +28,8 @@ const (
 	ColViewerArrows
 	ColViewerScrollbar
 
+	ColEditorCrosshair
+
 	LastF4PaletteColor
 )
 
@@ -85,6 +87,8 @@ func SetDefaultF4Palette() {
 	vtui.Palette[ColViewerStatus] = vtui.SetIndexBoth(0, 0, 7)
 	vtui.Palette[ColViewerArrows] = vtui.SetIndexBoth(0, 14, 0)
 	vtui.Palette[ColViewerScrollbar] = vtui.SetIndexBoth(0, 8, 0)
+
+	vtui.Palette[ColEditorCrosshair] = vtui.SetRGBBoth(0, 0xD3D7CF, 0x222222)
 }
 
 // colorMap links farcolors.ini keys to vtui.Palette indices.

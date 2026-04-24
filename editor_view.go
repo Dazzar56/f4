@@ -459,13 +459,36 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 		return
 	}
 
-	// Clear the entire editor text area
-	scr.FillRect(ev.X1, ev.Y1+1, ev.X2, ev.Y2, ' ', bgAttr)
-	scr.PushClipRect(ev.X1, ev.Y1+1, ev.X1+width-1, ev.Y2)
-
-	// 1. Позиция курсора
+	// Calculate crosshair parameters before usage
 	curOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 	curVRow, curVCol := ev.engine.LogicalToVisual(curOffset)
+
+	crossVRow, crossVCol := -1, -1
+	var crossAttr uint64
+	if AppConfig.EditorCrosshair && ev.IsFocused() {
+		crossVRow = curVRow
+		crossVCol = curVCol + ev.CursorVirtualSpaces
+		crossAttr = vtui.Palette[ColEditorCrosshair]
+	}
+
+	// Clear the entire editor text area
+	scr.FillRect(ev.X1, ev.Y1+1, ev.X2, ev.Y2, ' ', bgAttr)
+
+	if crossVRow != -1 {
+		// Horizontal line
+		cy := ev.Y1 + 1 + crossVRow - ev.ScrollTopRow
+		if cy >= ev.Y1+1 && cy <= ev.Y2 {
+			scr.FillRect(ev.X1, cy, ev.X1+width-1, cy, ' ', crossAttr)
+		}
+		// Vertical line
+		cx := ev.X1 + crossVCol - ev.ScrollLeft
+		if cx >= ev.X1 && cx < ev.X1+width {
+			scr.FillRect(cx, ev.Y1+1, cx, ev.Y2, ' ', crossAttr)
+		}
+	}
+
+	scr.PushClipRect(ev.X1, ev.Y1+1, ev.X1+width-1, ev.Y2)
+
 
 	// 2. Отрисовка
 	startLogLine, startFragIdx := ev.engine.GetLogLineAtVisualRow(ev.ScrollTopRow)
@@ -568,8 +591,9 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 			}
 			runesProcessedInLine += fragRuneCount
 
-		_, startVCol := ev.engine.LogicalToVisual(frag.ByteOffsetStart)
-		ev.renderCells = ev.fillCells(ev.renderCells, ev.renderBytes, bgAttr, selAttr, frag.ByteOffsetStart, ev.selActive, selMin, selMax, fragSyntax, startVCol)
+			_, startVCol := ev.engine.LogicalToVisual(frag.ByteOffsetStart)
+			isCrossRow := (absVRow == crossVRow)
+			ev.renderCells = ev.fillCells(ev.renderCells, ev.renderBytes, bgAttr, selAttr, frag.ByteOffsetStart, ev.selActive, selMin, selMax, fragSyntax, startVCol, isCrossRow, crossVCol, crossAttr)
 
 			scr.Write(ev.X1-ev.ScrollLeft, currY, ev.renderCells)
 
@@ -1428,8 +1452,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 	return false
 }
 
-func (ev *EditorView) fillCells(target []vtui.CharInfo, data []byte, defaultAttr, selAttr uint64, offset int, selActive bool, selMin, selMax int, syntax []uint64, startVisualCol int) []vtui.CharInfo {
-	// vtui.DebugLog("EDITOR_FILL: Off: %d, Len: %d, Sel: %v[%d:%d]", offset, len(data), selActive, selMin, selMax)
+func (ev *EditorView) fillCells(target []vtui.CharInfo, data []byte, defaultAttr, selAttr uint64, offset int, selActive bool, selMin, selMax int, syntax []uint64, startVisualCol int, isCrossRow bool, crossVCol int, crossAttr uint64) []vtui.CharInfo {
 	target = target[:0]
 	currByte := 0
 	charIdx := 0
@@ -1441,45 +1464,56 @@ func (ev *EditorView) fillCells(target []vtui.CharInfo, data []byte, defaultAttr
 		r, size := utf8.DecodeRune(data)
 		data = data[size:]
 
+		displayRune, w := vtui.SanitizeRune(r)
+		if r == '\t' {
+			w = tabSize - (visualCol % tabSize)
+			displayRune = ' '
+			if ev.ShowWhitespaces { displayRune = '→' }
+		} else if r == ' ' && ev.ShowWhitespaces {
+			displayRune = '·'
+		} else if r < 0x20 || r == 0x7F {
+			if !ev.ShowWhitespaces { displayRune = ' ' }
+		}
+
 		attr := defaultAttr
 		if charIdx < len(syntax) {
 			attr = syntax[charIdx]
 		}
 
+		// Horizontal crosshair line applies to the entire character in the active row
+		if isCrossRow && crossAttr != 0 {
+			if crossAttr&vtui.IsBgRGB != 0 {
+				attr = vtui.SetRGBBack(attr, vtui.GetRGBBack(crossAttr))
+			} else {
+				attr = vtui.SetIndexBack(attr, vtui.GetIndexBack(crossAttr))
+			}
+		}
+
 		if selActive {
 			absPos := offset + currByte
-			if absPos >= selMin && absPos < selMax {
-				attr = selAttr
-			}
+			if absPos >= selMin && absPos < selMax { attr = selAttr }
 		}
 		charIdx++
 		currByte += size
 
-		displayRune, w := vtui.SanitizeRune(r)
-		if r == '\t' {
-			w = tabSize - (visualCol % tabSize)
-			displayRune = ' '
-			if ev.ShowWhitespaces {
-				displayRune = '→'
-			}
-			// vtui.DebugLog("DEBUG_FILL_TAB: VisualCol:%d TabSize:%d ResultWidth:%d DisplayRune:%d ShowWS:%v", visualCol, tabSize, w, displayRune, ev.ShowWhitespaces)
-		} else if r == ' ' && ev.ShowWhitespaces {
-			displayRune = '·'
-		} else if r < 0x20 || r == 0x7F {
-			if !ev.ShowWhitespaces {
-				displayRune = ' '
-			}
-		}
-
 		if w > 0 {
-			target = append(target, vtui.CharInfo{Char: uint64(displayRune), Attributes: attr})
-			for i := 1; i < w; i++ {
-				filler := uint64(vtui.WideCharFiller)
-				if r == '\t' { filler = ' ' }
-				target = append(target, vtui.CharInfo{Char: filler, Attributes: attr})
+			charVal := uint64(displayRune)
+			for j := 0; j < w; j++ {
+				cellAttr := attr
+				// Vertical crosshair line: apply ONLY to the specific cell index
+				if !isCrossRow && (visualCol+j == crossVCol) && crossAttr != 0 {
+					if crossAttr&vtui.IsBgRGB != 0 {
+						cellAttr = vtui.SetRGBBack(cellAttr, vtui.GetRGBBack(crossAttr))
+					} else {
+						cellAttr = vtui.SetIndexBack(cellAttr, vtui.GetIndexBack(crossAttr))
+					}
+				}
+				target = append(target, vtui.CharInfo{Char: charVal, Attributes: cellAttr})
+				charVal = uint64(vtui.WideCharFiller)
+				if r == '\t' { charVal = ' ' }
 			}
+			visualCol += w
 		}
-		visualCol += w
 	}
 	return target
 }

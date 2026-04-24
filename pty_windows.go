@@ -9,8 +9,8 @@ import (
 	"time"
 	"unsafe"
 
-	"golang.org/x/sys/windows"
 	"github.com/unxed/vtui"
+	"golang.org/x/sys/windows"
 )
 
 // PTY для Windows реализован через ConPTY API (доступно в Windows 10+).

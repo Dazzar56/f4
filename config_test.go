@@ -22,6 +22,7 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	AppConfig.ShowHiddenFiles = false
 	AppConfig.HighlightDir = true
 	AppConfig.SavePanelPaths = false
+	AppConfig.EditorCrosshair = true
 
 	// 2. Save
 	SaveConfig()
@@ -29,6 +30,7 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	// 3. Reset to defaults
 	AppConfig.ShowHiddenFiles = true
 	AppConfig.HighlightDir = false
+	AppConfig.EditorCrosshair = false
 
 	// 4. Load
 	LoadConfig()
@@ -42,5 +44,8 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	}
 	if AppConfig.SavePanelPaths {
 		t.Error("LoadConfig failed to restore SavePanelPaths")
+	}
+	if !AppConfig.EditorCrosshair {
+		t.Error("LoadConfig failed to restore EditorCrosshair")
 	}
 }

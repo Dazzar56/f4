@@ -373,7 +373,7 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 	vtui.FrameManager.Push(dlg)
 }
 func actionEditorSettings(pf *PanelsFrame) {
-	width, height := 78, 19
+	width, height := 78, 20
 	dlg := vtui.NewCenteredDialog(width, height, Msg("EditorSettings.Title"))
 	dlg.ShowClose = true
 
@@ -414,6 +414,11 @@ func actionEditorSettings(pf *PanelsFrame) {
 		chkAuto.State = 1
 	}
 
+	chkCrosshair := vtui.NewCheckbox(0, 0, "Show cross&hair", false)
+	if AppConfig.EditorCrosshair {
+		chkCrosshair.State = 1
+	}
+
 	editMask := vtui.NewEdit(0, 0, 56, AppConfig.EditorAutoCompleteMask)
 	lblMask := vtui.NewLabel(0, 0, Msg("EditorSettings.Mask"), editMask)
 
@@ -430,6 +435,7 @@ func actionEditorSettings(pf *PanelsFrame) {
 	dlg.AddItem(chkCursorEOL)
 	dlg.AddItem(chkEditorConfig)
 	dlg.AddItem(chkAuto)
+	dlg.AddItem(chkCrosshair)
 	dlg.AddItem(lblMask)
 	dlg.AddItem(editMask)
 	dlg.AddItem(btnOk)
@@ -448,15 +454,16 @@ func actionEditorSettings(pf *PanelsFrame) {
 	rowTabSize.Add(editTabSize, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(rowTabSize, vtui.Margins{Top: 1}, vtui.AlignFill)
 
-	col1 := vtui.NewVBoxLayout(0, 0, (width-4)/2, 4)
+	col1 := vtui.NewVBoxLayout(0, 0, (width-4)/2, 5)
 	col1.Add(chkAutoIndent, vtui.Margins{}, vtui.AlignLeft)
 	col1.Add(chkEditorConfig, vtui.Margins{Top: 1}, vtui.AlignLeft)
 
-	col2 := vtui.NewVBoxLayout(0, 0, (width-4)/2, 4)
+	col2 := vtui.NewVBoxLayout(0, 0, (width-4)/2, 5)
 	col2.Add(chkCursorEOL, vtui.Margins{}, vtui.AlignLeft)
 	col2.Add(chkAuto, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	col2.Add(chkCrosshair, vtui.Margins{Top: 1}, vtui.AlignLeft)
 
-	rowChecks := vtui.NewHBoxLayout(0, 0, width-4, 4)
+	rowChecks := vtui.NewHBoxLayout(0, 0, width-4, 5)
 	rowChecks.Add(col1, vtui.Margins{}, vtui.AlignFill)
 	rowChecks.Add(col2, vtui.Margins{}, vtui.AlignFill)
 	vbox.Add(rowChecks, vtui.Margins{Top: 1}, vtui.AlignFill)
@@ -486,6 +493,7 @@ func actionEditorSettings(pf *PanelsFrame) {
 		AppConfig.EditorCursorBeyondEOL = chkCursorEOL.State == 1
 		AppConfig.EditorUseEditorConfig = chkEditorConfig.State == 1
 		AppConfig.EditorAutoComplete = chkAuto.State == 1
+		AppConfig.EditorCrosshair = chkCrosshair.State == 1
 		AppConfig.EditorAutoCompleteMask = editMask.GetText()
 		SaveConfig()
 		dlg.Close()

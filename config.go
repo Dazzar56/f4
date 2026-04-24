@@ -21,6 +21,7 @@ type F4Config struct {
 	EditorCursorBeyondEOL  bool
 	EditorTabSize          int
 	EditorUseEditorConfig  bool
+	EditorCrosshair        bool
 }
 
 var AppConfig = F4Config{
@@ -35,6 +36,7 @@ var AppConfig = F4Config{
 	EditorCursorBeyondEOL:  false,
 	EditorTabSize:          4,
 	EditorUseEditorConfig:  true,
+	EditorCrosshair:        false,
 }
 
 var getConfigIniPath = func() string {
@@ -62,6 +64,7 @@ func LoadConfig() {
 	AppConfig.EditorAutoIndent = ini.GetString("Editor", "AutoIndent", "1") == "1"
 	AppConfig.EditorCursorBeyondEOL = ini.GetString("Editor", "CursorBeyondEOL", "0") == "1"
 	AppConfig.EditorUseEditorConfig = ini.GetString("Editor", "UseEditorConfig", "1") == "1"
+	AppConfig.EditorCrosshair = ini.GetString("Editor", "Crosshair", "0") == "1"
 	AppConfig.EditorTabSize = 4
 	fmt.Sscanf(ini.GetString("Editor", "TabSize", "4"), "%d", &AppConfig.EditorTabSize)
 
@@ -87,6 +90,7 @@ func SaveConfig() {
 	sb.WriteString(fmt.Sprintf("AutoIndent = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.EditorAutoIndent]))
 	sb.WriteString(fmt.Sprintf("CursorBeyondEOL = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.EditorCursorBeyondEOL]))
 	sb.WriteString(fmt.Sprintf("UseEditorConfig = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.EditorUseEditorConfig]))
+	sb.WriteString(fmt.Sprintf("Crosshair = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.EditorCrosshair]))
 	sb.WriteString(fmt.Sprintf("TabSize = %d\n", AppConfig.EditorTabSize))
 
 	err := os.WriteFile(path, []byte(sb.String()), 0644)
