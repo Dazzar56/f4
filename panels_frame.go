@@ -728,6 +728,10 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	if e.VirtualKeyCode == vtinput.VK_RETURN && ctrl {
 		name := pf.Active().GetSelectedName()
 		if name != "" {
+			// Escape spaces for shell commands
+			if strings.Contains(name, " ") && !strings.HasPrefix(name, "\"") {
+				name = "\"" + name + "\""
+			}
 			txt := pf.cmdLine.Edit.GetText()
 			// Add space if the line is not empty and doesn't end with a space.
 			if len(txt) > 0 && txt[len(txt)-1] != ' ' {

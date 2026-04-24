@@ -3326,3 +3326,43 @@ func TestEditorView_Autocomplete_Cancellation(t *testing.T) {
 		t.Error("Autocomplete should be cancelled on ESC")
 	}
 }
+func TestEditor_InsertToggle(t *testing.T) {
+	pt := piecetable.New([]byte("data"))
+	ev := NewEditorView(pt, nil, "")
+
+	if ev.overtype {
+		t.Error("Editor should start in Insert mode")
+	}
+
+	// Нажимаем Insert
+	ev.ProcessKey(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_INSERT,
+	})
+
+	if !ev.overtype {
+		t.Error("Insert key failed to toggle Overtype mode")
+	}
+}
+
+func TestEditor_OverwriteMode(t *testing.T) {
+	pt := piecetable.New([]byte("abc"))
+	ev := NewEditorView(pt, nil, "")
+	ev.overtype = true
+	ev.CursorPos = 1 // Стоим на 'b'
+
+	// Пишем 'X' поверх 'b'
+	ev.ProcessKey(&vtinput.InputEvent{
+		Type:    vtinput.KeyEventType,
+		KeyDown: true,
+		Char:    'X',
+	})
+
+	if pt.String() != "aXc" {
+		t.Errorf("Overwrite failed: expected 'aXc', got %q", pt.String())
+	}
+	if ev.CursorPos != 2 {
+		t.Errorf("Cursor did not advance: expected 2, got %d", ev.CursorPos)
+	}
+}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"fmt"
 	"path/filepath"
 	"time"
 	"sort"
@@ -1052,6 +1053,36 @@ func TestFileSystemPanel_SortIndicator(t *testing.T) {
 	cell = scr.GetCell(2, 0)
 	if cell.Char != 's' {
 		t.Errorf("Sort indicator failed: expected 's', got '%c'", rune(cell.Char))
+	}
+}
+func TestFileSystemPanel_FastFind_Visibility(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	// Создаем много файлов, чтобы список мог скроллиться
+	v := vfs.NewOSVFS(t.TempDir())
+	fp := NewFileSystemPanel(0, 0, 40, 10, v)
+	fp.viewMode = ViewModeDetailed
+
+	for i := 0; i < 20; i++ {
+		fp.entries = append(fp.entries, &fileEntry{
+			VFSItem: vfs.VFSItem{Name: fmt.Sprintf("file_%02d", i)},
+		})
+	}
+	fp.Refresh()
+
+	// Включаем поиск
+	fp.fastFindMode = true
+	// Ищем файл, который находится в самом низу текущего экрана (Row 8-9)
+	// Окно поиска перекрывает нижние 2-3 строки.
+	fp.fastFindStr = "file_08"
+	fp.doFastFind(0)
+
+	// Проверяем, что панель отскроллилась вверх, чтобы "file_08" не был
+	// за окном поиска (в последних двух строках ViewHeight)
+	H := fp.table.ViewHeight // Должно быть 8 (10 минус рамки)
+	relRow := fp.cursorIdx - fp.table.TopPos
+
+	if relRow >= H-2 {
+		t.Errorf("Matched item is too low and obscured by search box. RelRow: %d, H: %d", relRow, H)
 	}
 }
 
