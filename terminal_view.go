@@ -213,7 +213,6 @@ func (tv *TerminalView) SetMuted(muted bool) {
 	defer tv.mu.Unlock()
 	tv.Muted = muted
 }
-
 func (tv *TerminalView) PrintCleanCommand(cleanCmd string) {
 	for _, r := range cleanCmd {
 		tv.PutChar(r, DefaultTermAttr)
@@ -248,9 +247,7 @@ func (tv *TerminalView) PutChar(r rune, attr uint64) {
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
 
-	if tv.Muted {
-		return
-	}
+	if tv.Muted { return }
 
 	// 1. Запись в бесконечный лог (если не AltScreen)
 	if !tv.UseAltScreen {

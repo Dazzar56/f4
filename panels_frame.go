@@ -841,7 +841,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 					if pf.showPanels {
 						// Panels are visible: we are launching a one-shot command.
 						if runtime.GOOS == "windows" {
-							fullWireCmd = fmt.Sprintf("@echo off & cd /d %q & <nul set /p=\"\x1b]2;f4:busy\x07\" & %s & <nul set /p=\"\x1b]2;f4:done\x07\" & echo on\r", path, cmd)
+							fullWireCmd = fmt.Sprintf("cd /d %q & %s\r", path, cmd)
 						} else {
 							sqPath := strings.ReplaceAll(path, "'", "'\\''")
 							fullWireCmd = fmt.Sprintf("set +H; cd '%s' && { printf \"\\033]2;f4:busy\\007\"; %s ; printf \"\\033]2;f4:done\\007\"; }\r", sqPath, cmd)
@@ -850,7 +850,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 					} else {
 						// Panels are hidden: user is in interactive shell.
 						if runtime.GOOS == "windows" {
-							fullWireCmd = fmt.Sprintf("@echo off & cd /d %q & <nul set /p=\"\x1b]2;f4:busy\x07\" & %s & echo on\r", path, cmd)
+							fullWireCmd = fmt.Sprintf("cd /d %q & %s\r", path, cmd)
 						} else {
 							sqPath := strings.ReplaceAll(path, "'", "'\\''")
 							fullWireCmd = fmt.Sprintf("set +H; cd '%s' && printf \"\\033]2;f4:busy\\007\" && %s\r", sqPath, cmd)
@@ -861,11 +861,11 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 					if pf.showPanels {
 						// If panels are shown, we still need the busy/done signals
 						if runtime.GOOS == "windows" {
-							fullWireCmd = fmt.Sprintf("@echo off & <nul set /p=\"\x1b]2;f4:busy\x07\" & %s & <nul set /p=\"\x1b]2;f4:done\x07\" & echo on\r", cmd)
+							fullWireCmd = cmd + "\r"
 						} else {
 							fullWireCmd = fmt.Sprintf("{ printf \"\\033]2;f4:busy\\007\"; %s ; printf \"\\033]2;f4:done\\007\"; }\r", cmd)
+							pf.executing = true
 						}
-						pf.executing = true
 					} else {
 						// If in terminal, just run the command
 						fullWireCmd = cmd + "\r"
@@ -873,9 +873,9 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				}
 
 				pf.termView.PrintCleanCommand(cmd)
-				// Mute terminal output. It will be unmuted by the 'f4:busy' title sequence.
-				// This hides the complex command string from being echoed.
-				pf.termView.SetMuted(true)
+				if runtime.GOOS != "windows" {
+					pf.termView.SetMuted(true)
+				}
 				activePty.Write([]byte(fullWireCmd))
 			}
 

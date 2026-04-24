@@ -194,12 +194,9 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 					cmd := name
 					// Wrap command in Title sequences to signal f4 about managed execution state.
 					// We use && so f4:done is only sent if the command succeeded.
-					var cmdToWire string
+				var cmdToWire string
 				if runtime.GOOS == "windows" {
-					// Windows CMD: Disable echo to hide the command chain, change dir,
-					// use set /p to synchronously emit ANSI signals without newlines, and restore echo.
-					cmdToWire = fmt.Sprintf("@echo off & cd /d %q & <nul set /p=\"\x1b]2;f4:busy\x07\" & %s & <nul set /p=\"\x1b]2;f4:done\x07\" & echo on\r", dir, cmd)
-					vtui.DebugLog("ACTION: Prepared Windows command: %s", cmdToWire)
+					cmdToWire = fmt.Sprintf("cd /d %q & %q\r", dir, cmd)
 				} else {
 					// On Unix, use single quotes for paths to prevent Bash history expansion (the '!' problem).
 					// We also disable history expansion explicitly with 'set +H'.
@@ -214,11 +211,13 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 					cleanCmd = cmd
 				}
 				pf.termView.PrintCleanCommand(cleanCmd)
-				pf.termView.SetMuted(true)
 
+				if runtime.GOOS != "windows" {
+					pf.termView.SetMuted(true)
+					pf.executing = true
+				}
 				activePty.Write([]byte(cmdToWire))
-				pf.executing = true
-					pf.showPanels = false
+				pf.showPanels = false
 				}
 			} else {
 				if _, isLocal := v.(*vfs.OSVFS); !isLocal {
