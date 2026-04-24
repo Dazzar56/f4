@@ -192,7 +192,18 @@ func (vv *ViewerView) DisplayObject(scr *vtui.ScreenBuf) {
 	}
 
 	if vv.scrollBar != nil && vv.backend.Size() > 0 {
-		vv.scrollBar.SetParams(int(vv.TopOffset), 0, int(vv.backend.Size()))
+		maxOffset := int(vv.backend.Size())
+		if vv.HexMode {
+			contentHeight := vv.Y2 - vv.Y1
+			if contentHeight > 0 {
+				lastLineOffset := int((vv.backend.Size() - 1) &^ 0xF)
+				maxOffset = lastLineOffset - (contentHeight-1)*16
+				if maxOffset < 0 { maxOffset = 0 }
+			}
+		} else if vv.eofVisible {
+			maxOffset = int(vv.TopOffset)
+		}
+		vv.scrollBar.SetParams(int(vv.TopOffset), 0, maxOffset)
 		vv.scrollBar.Show(scr)
 	}
 }
