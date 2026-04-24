@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"unicode/utf8"
 	"fmt"
 	"path/filepath"
@@ -47,6 +48,7 @@ type EditorView struct {
 	ScrollLeft   int // Горизонтальный скролл (когда WordWrap=false)
 
 	WordWrap         bool
+	overtype         bool
 	modified            bool
 	CursorLine       int // Текущая логическая строка (для плагинов)
 	CursorPos        int // Позиция в байтах (для плагинов)
@@ -423,6 +425,15 @@ func (ev *EditorView) Show(scr *vtui.ScreenBuf) {
 	ev.ScreenObject.Show(scr)
 	if ev.topBar != nil {
 		ev.topBar.Show(scr)
+	}
+	if ev.IsFocused() {
+		if vtui.ManageCursorStyle {
+			if ev.overtype {
+				os.Stdout.WriteString("\x1b[1 q") // Blinking Block
+			} else {
+				os.Stdout.WriteString("\x1b[3 q") // Blinking Underline
+			}
+		}
 	}
 	ev.DisplayObject(scr)
 }
@@ -825,6 +836,11 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 			if text := vtui.GetClipboard(); text != "" {
 				ev.PasteText(text)
 			}
+			return true
+		}
+		if !shift && !ctrl && !alt && e.VirtualKeyCode == vtinput.VK_INSERT {
+			ev.overtype = !ev.overtype
+			ev.ensureCursorVisible()
 			return true
 		}
 
@@ -1376,6 +1392,25 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		}
 
 		data := []byte(string(e.Char))
+
+		if ev.overtype {
+			lineLen := ev.getLineLength(ev.CursorLine)
+			if ev.CursorPos < lineLen {
+				peekLen := 4
+				if lineLen-ev.CursorPos < 4 { peekLen = lineLen - ev.CursorPos }
+				oldData, _ := ev.pt.GetRange(offset, peekLen)
+				size := 1
+				if oldData != nil && len(oldData) > 0 {
+					_, rsize := utf8.DecodeRune(oldData)
+					if rsize > 0 {
+						size = rsize
+					}
+				}
+				ev.pt.Delete(offset, size)
+				ev.li.UpdateAfterDelete(offset, size)
+			}
+		}
+
 		ev.pt.Insert(offset, data)
 		ev.li.UpdateAfterInsert(offset, data)
 		ev.invalidateStates(ev.CursorLine)

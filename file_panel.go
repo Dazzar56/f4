@@ -265,13 +265,16 @@ func (fp *FileSystemPanel) SetCursorIndex(idx int) {
 	if fp.viewMode == ViewModeDetailed {
 		fp.table.SetSelectPos(fp.cursorIdx)
 		fp.table.SelectCol = 0
+		if fp.fastFindMode {
+			H := fp.table.ViewHeight
+			if H > 2 && fp.cursorIdx >= fp.table.TopPos + H - 2 {
+				fp.table.TopPos = fp.cursorIdx - H + 3
+				if fp.table.TopPos < 0 { fp.table.TopPos = 0 }
+			}
+		}
 	} else {
 		H := fp.table.ViewHeight
 		if H <= 0 { H = 1 }
-
-		// In Medium mode, table.SelectPos is the ROW (0..H-1)
-		// and table.SelectCol is the COLUMN (0..1)
-		// Absolute index = table.TopPos + row + col*H
 
 		// 1. Ensure TopPos is sane for the current cursor
 		if fp.cursorIdx < fp.table.TopPos {
@@ -285,6 +288,15 @@ func (fp *FileSystemPanel) SetCursorIndex(idx int) {
 			fp.table.TopPos = fp.cursorIdx
 		} else if fp.cursorIdx >= fp.table.TopPos+2*H {
 			fp.table.TopPos = fp.cursorIdx - 2*H + 1
+		}
+
+		if fp.fastFindMode && H > 2 {
+			rel := fp.cursorIdx - fp.table.TopPos
+			row := rel % H
+			if row >= H - 2 {
+				shift := row - (H - 3)
+				fp.table.TopPos += shift
+			}
 		}
 
 		if fp.table.TopPos < 0 {
