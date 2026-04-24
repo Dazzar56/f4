@@ -3300,8 +3300,9 @@ func TestEditorView_Autocomplete_Logic(t *testing.T) {
 
 func TestEditorView_Autocomplete_Cancellation(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	pt := piecetable.New([]byte("hello helicopter"))
+	pt := piecetable.New([]byte("helicopter "))
 	ev := NewEditorView(pt, nil, "test.txt")
+	ev.CursorPos = 11 // Start at the end to avoid "middle of the word" check
 	ev.acEnabled = true
 
 	// Начинаем писать "hel"
