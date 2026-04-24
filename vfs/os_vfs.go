@@ -43,6 +43,12 @@ func (v *OSVFS) SetPath(path string) error {
 	if err != nil {
 		return err
 	}
+
+	// Resolve symlinks/junctions to avoid ACL issues on the link itself (e.g. "Documents and Settings")
+	if resolved, errEval := filepath.EvalSymlinks(abs); errEval == nil {
+		abs = resolved
+	}
+
 	st, err := os.Stat(abs)
 	if err != nil {
 		if os.IsPermission(err) && globalSudoClient.IsAvailable() {
