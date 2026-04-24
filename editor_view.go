@@ -730,16 +730,19 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 				ev.ensureCursorVisible()
 				return true
 			}
+		} else if e.VirtualKeyCode == vtinput.VK_ESCAPE {
+			// Esc: Dismiss autocomplete
+			ev.acMatches = nil
+			vtui.FrameManager.Redraw()
+			return true
 		}
 
-		// Any movement or non-character key clears the AC state.
-		// Escape and F10 are intentionally NOT swallowed here so they can trigger the exit dialog.
+		// Any movement or non-character key clears the AC state
 		if e.VirtualKeyCode == vtinput.VK_UP || e.VirtualKeyCode == vtinput.VK_DOWN ||
 		   e.VirtualKeyCode == vtinput.VK_LEFT || e.VirtualKeyCode == vtinput.VK_RIGHT ||
 		   e.VirtualKeyCode == vtinput.VK_HOME || e.VirtualKeyCode == vtinput.VK_END ||
 		   e.VirtualKeyCode == vtinput.VK_PRIOR || e.VirtualKeyCode == vtinput.VK_NEXT ||
-		   e.VirtualKeyCode == vtinput.VK_RETURN || e.VirtualKeyCode == vtinput.VK_ESCAPE ||
-		   e.VirtualKeyCode == vtinput.VK_F10 {
+		   e.VirtualKeyCode == vtinput.VK_RETURN {
 			ev.acMatches = nil
 		}
 	}

@@ -3326,7 +3326,6 @@ func TestEditorView_Autocomplete_Cancellation(t *testing.T) {
 		t.Error("Autocomplete should be cancelled on ESC")
 	}
 }
-
 func TestEditor_InsertToggle(t *testing.T) {
 	pt := piecetable.New([]byte("data"))
 	ev := NewEditorView(pt, nil, "")
@@ -3365,35 +3364,5 @@ func TestEditor_OverwriteMode(t *testing.T) {
 	}
 	if ev.CursorPos != 2 {
 		t.Errorf("Cursor did not advance: expected 2, got %d", ev.CursorPos)
-	}
-}
-func TestEditorView_EscExit_OnePress(t *testing.T) {
-	// Regression test for double-ESC bug when modified.
-	// Autocomplete state should be cleared but the event should fall through to the exit logic.
-	vtui.SetDefaultPalette()
-	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-
-	pt := piecetable.New([]byte("hello helicopter"))
-	ev := NewEditorView(pt, nil, "test.txt")
-	ev.acEnabled = true
-	ev.modified = true // Ensure tryClose() triggers a dialog
-
-	// 1. Trigger Autocomplete state
-	for _, char := range "hel" {
-		ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: char})
-	}
-	if len(ev.acMatches) == 0 { t.Fatal("Setup failed: no matches found") }
-
-	// 2. Press ESC
-	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_ESCAPE})
-
-	// 3. Autocomplete should be gone
-	if ev.acMatches != nil {
-		t.Error("Autocomplete should be cancelled")
-	}
-
-	// 4. Confirm dialog should be open on the FIRST press
-	if vtui.FrameManager.GetTopFrameType() != vtui.TypeDialog {
-		t.Error("Exit confirmation dialog should appear after first ESC press even if AC was active")
 	}
 }
