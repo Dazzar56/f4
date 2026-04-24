@@ -2237,7 +2237,20 @@ func (ev *EditorView) updateAutocomplete() {
 		return
 	}
 
+	lineLen := ev.getLineLength(ev.CursorLine)
 	lineStart := ev.li.GetLineOffset(ev.CursorLine)
+
+	// Disable if we are in the middle of a word (peek at the character under cursor)
+	if ev.CursorPos < lineLen {
+		dataUnder, _ := ev.pt.GetRange(lineStart+ev.CursorPos, 4)
+		if len(dataUnder) > 0 {
+			r, _ := utf8.DecodeRune(dataUnder)
+			if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '-' {
+				return
+			}
+		}
+	}
+
 	lineData, _ := ev.pt.GetRange(lineStart, ev.CursorPos)
 	if len(lineData) == 0 {
 		return
