@@ -422,5 +422,64 @@ func TestViewerView_StateRestoration_Modes(t *testing.T) {
 		t.Error("WrapMode was not restored (should be false)")
 	}
 }
+func TestViewerView_ScrollbarEOFAlignment(t *testing.T) {
+	vtui.SetDefaultPalette()
+	fm := vtui.FrameManager
+	fm.Init(vtui.NewSilentScreenBuf())
+
+	tmpDir := t.TempDir()
+	tmp := filepath.Join(tmpDir, "scroll_test.txt")
+	// Создаем файл из 50 строк
+	content := ""
+	for i := 0; i < 50; i++ {
+		content += "this is a test line for scrollbar alignment\n"
+	}
+	os.WriteFile(tmp, []byte(content), 0644)
+
+	v := vfs.NewOSVFS(tmpDir)
+	vv, _ := NewViewerView(context.Background(), v, tmp)
+	// Viewport: 1 строка статус, 10 строк контент.
+	vv.SetPosition(0, 0, 40, 10)
+
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(41, 11)
+
+	// --- 1. Проверка в текстовом режиме ---
+	// Прыгаем в конец
+	vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_END})
+
+	// Ждем завершения асинхронного расчета jumpToEnd
+	timeout := time.After(2 * time.Second)
+	for vv.Busy {
+		select {
+		case task := <-fm.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Timeout waiting for Text jumpToEnd")
+		}
+	}
+
+	// Вызываем Show, чтобы сработала логика SetParams внутри DisplayObject
+	vv.Show(scr)
+
+	if int(vv.TopOffset) != vv.scrollBar.Max {
+		t.Errorf("Text Mode: TopOffset (%d) != ScrollBar.Max (%d) at EOF", vv.TopOffset, vv.scrollBar.Max)
+	}
+
+	// --- 2. Проверка в Hex режиме ---
+	vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F4})
+	// В Hex режиме jumpToEnd отрабатывает мгновенно, если данные в кэше
+	vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_END})
+	vv.Show(scr)
+
+	if int(vv.TopOffset) != vv.scrollBar.Max {
+		t.Errorf("Hex Mode: TopOffset (%d) != ScrollBar.Max (%d) at EOF", vv.TopOffset, vv.scrollBar.Max)
+	}
+
+	// Дополнительно: проверяем, что TopOffset в Hex выровнен по 16 байт
+	if vv.TopOffset%16 != 0 {
+		t.Errorf("Hex Mode: TopOffset (%d) is not aligned to 16 bytes", vv.TopOffset)
+	}
+}
 
 
