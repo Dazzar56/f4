@@ -196,8 +196,9 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 					// We use && so f4:done is only sent if the command succeeded.
 					var cmdToWire string
 				if runtime.GOOS == "windows" {
-					f4Exe, _ := os.Executable()
-					cmdToWire = fmt.Sprintf("cd /d %q & %q --signal busy & %q & %q --signal done\r", dir, f4Exe, cmd, f4Exe)
+					// Windows CMD: Disable echo to hide the command chain, change dir,
+					// use set /p to synchronously emit ANSI signals without newlines, and restore echo.
+					cmdToWire = fmt.Sprintf("@echo off & cd /d %q & <nul set /p=\"\x1b]2;f4:busy\x07\" & %s & <nul set /p=\"\x1b]2;f4:done\x07\" & echo on\r", dir, cmd)
 					vtui.DebugLog("ACTION: Prepared Windows command: %s", cmdToWire)
 				} else {
 					// On Unix, use single quotes for paths to prevent Bash history expansion (the '!' problem).

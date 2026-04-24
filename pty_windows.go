@@ -10,6 +10,7 @@ import (
 	"unsafe"
 
 	"golang.org/x/sys/windows"
+	"github.com/unxed/vtui"
 )
 
 // PTY для Windows реализован через ConPTY API (доступно в Windows 10+).
@@ -62,14 +63,14 @@ func NewPTY() (*PTY, error) {
 }
 
 func (p *PTY) Write(b []byte) (int, error) {
-	vtui.DebugLog("PTY_WIN: Writing %d bytes: %q", len(b), string(b))
+	vtui.DebugLog("PTY_WIN_TRACE: Writing %d bytes: %q", len(b), string(b))
 	return p.inWriter.Write(b)
 }
 
 func (p *PTY) Read(b []byte) (int, error) {
 	n, err := p.outReader.Read(b)
 	if n > 0 {
-		vtui.DebugLog("PTY_WIN: Read %d bytes: %q", n, string(b[:n]))
+		vtui.DebugLog("PTY_WIN_TRACE: Read %d bytes: %q", n, string(b[:n]))
 	}
 	return n, err
 }

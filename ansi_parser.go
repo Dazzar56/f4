@@ -385,6 +385,7 @@ func (p *AnsiParser) handleOSC() {
 	if err != nil { return }
 
 	if cmd == 0 || cmd == 2 {
+		vtui.DebugLog("ANSI_OSC_TRACE: Received window title change: %q", parts[1])
 		p.term.Title = parts[1]
 		if p.term.Title == "f4:busy" {
 			p.term.SetMuted(false)
