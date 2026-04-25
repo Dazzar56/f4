@@ -556,6 +556,73 @@ func TestPanelsFrame_RefreshAll(t *testing.T) {
 	// Test that RefreshAll doesn't crash on freshly initialized panels
 	pf.RefreshAll()
 }
+
+func TestPanelsFrame_ManualRefresh(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+
+	// Setup a mock directory
+	tmp := t.TempDir()
+	fsp := pf.panels[0].(*FileSystemPanel)
+	fsp.vfs.SetPath(tmp)
+
+	// Press Ctrl+R
+	handled := pf.ProcessKey(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_R,
+		ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+
+	if !handled {
+		t.Error("Ctrl+R was not handled")
+	}
+
+	// It should trigger ReadDirectory
+	if !fsp.isLoading {
+		t.Error("Ctrl+R did not trigger panel refresh (isLoading should be true)")
+	}
+}
+
+func TestPanelsFrame_AutoRefresh(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+
+	// Setup a mock directory
+	tmp := t.TempDir()
+	fsp := pf.panels[0].(*FileSystemPanel)
+	fsp.vfs.SetPath(tmp)
+
+	// Emulate an initial read that populates MTime
+	fsp.lastDirMTime = time.Now().Add(-10 * time.Minute)
+	// Write a file to update actual directory MTime
+	os.WriteFile(filepath.Join(tmp, "test.txt"), []byte("data"), 0644)
+
+	// Emulate the timer expiration
+	pf.lastAutoRefresh = time.Now().Add(-5 * time.Second)
+
+	// Trigger Show which should fire the async stat check
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	pf.Show(scr)
+
+	// Pump the TaskChan to execute RunAsync and RunOnUI
+	timeout := time.After(2 * time.Second)
+pump:
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			if fsp.isLoading {
+				break pump // Success: it triggered a refresh
+			}
+		case <-timeout:
+			t.Fatal("AutoRefresh failed to trigger ReadDirectory after MTime change")
+		}
+	}
+}
 func TestPanelsFrame_ResizingIntegration(t *testing.T) {
 	vtui.SetDefaultPalette()
 	SetDefaultF4Palette()

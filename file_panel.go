@@ -143,6 +143,8 @@ type FileSystemPanel struct {
 
 	sortMode    SortMode
 	sortReverse bool
+
+	lastDirMTime time.Time
 }
 
 func NewFileSystemPanel(x, y, w, h int, vfs vfs.VFS) *FileSystemPanel {
@@ -384,6 +386,7 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 
 	go func() {
 		isFirstChunk := true
+		dirStat, _ := fp.vfs.Stat(ctx, path)
 		err := fp.vfs.ReadDir(ctx, path, func(chunk []vfs.VFSItem) {
 			if ctx.Err() != nil { return }
 
@@ -445,6 +448,7 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 				// Останавливаем таймер. Если он не успел сработать — заголовок так и не моргнул.
 				if fp.loadingTimer != nil { fp.loadingTimer.Stop() }
 
+				fp.lastDirMTime = dirStat.MTime
 				fp.isLoading = false
 				if err != nil && err != context.Canceled {
 					// Баг-фикс: если директория исчезла (например, удалена из другой панели),

@@ -84,6 +84,8 @@ type PanelsFrame struct {
 
 	lastAlt   bool
 	lastBusy  bool
+
+	lastAutoRefresh time.Time
 }
 func (pf *PanelsFrame) Left() Panel  { return pf.panels[0] }
 func (pf *PanelsFrame) Right() Panel { return pf.panels[1] }
@@ -406,6 +408,32 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 		pf.ResizeConsole(pf.lastW, pf.lastH)
 	}
 
+	now := time.Now()
+	if pf.showPanels && now.Sub(pf.lastAutoRefresh) > 2*time.Second {
+		pf.lastAutoRefresh = now
+		for _, p := range pf.panels {
+			if fsp, ok := p.(*FileSystemPanel); ok && !fsp.isLoading {
+				vfsPath := fsp.vfs.GetPath()
+				vfsInst := fsp.vfs
+				lastKnown := fsp.lastDirMTime
+				vtui.RunAsync(func(ctx *vtui.TaskContext) {
+					if stat, err := vfsInst.Stat(ctx.Context, vfsPath); err == nil && !stat.MTime.IsZero() {
+						ctx.RunOnUI(func() {
+							if !fsp.isLoading && fsp.vfs.GetPath() == vfsPath {
+								if !lastKnown.IsZero() && stat.MTime != lastKnown {
+									vtui.DebugLog("PANELS: Auto-refreshing %q due to MTime change", vfsPath)
+									fsp.ReadDirectory()
+								} else if lastKnown.IsZero() {
+									fsp.lastDirMTime = stat.MTime
+								}
+							}
+						})
+					}
+				})
+			}
+		}
+	}
+
 	if pf.showPanels {
 		pf.termView.SetVisible(false)
 		for i, p := range pf.panels {
@@ -684,6 +712,12 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			}
 			pf.cmdLine.InsertString(name)
 		}
+		return true
+	}
+
+	// Ctrl+R forces panels refresh
+	if e.VirtualKeyCode == vtinput.VK_R && ctrl && !alt && !shift {
+		pf.RefreshAll()
 		return true
 	}
 
