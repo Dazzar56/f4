@@ -592,7 +592,7 @@ func (tv *TerminalView) Show(scr *vtui.ScreenBuf) {
 		scr.Write(tv.X1, tv.Y1+y, line)
 	}
 
-	if tv.IsVisible() {
+	if tv.IsVisible() && tv.IsFocused() {
 		scr.SetCursorPos(tv.X1+tv.CursorX, tv.Y1+tv.CursorY)
 		scr.SetCursorVisible(true)
 	}

@@ -174,6 +174,13 @@ func NewFileSystemPanel(x, y, w, h int, vfs vfs.VFS) *FileSystemPanel {
 	return fp
 }
 
+func (fp *FileSystemPanel) SetFocus(f bool) {
+	fp.ScreenObject.SetFocus(f)
+	if !f && fp.fastFindMode {
+		fp.fastFindMode = false
+		fp.fastFindStr = ""
+	}
+}
 func (fp *FileSystemPanel) SetSortMode(mode SortMode) {
 	if fp.sortMode == mode {
 		fp.sortReverse = !fp.sortReverse

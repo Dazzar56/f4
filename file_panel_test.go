@@ -73,6 +73,18 @@ func TestFileEntry_HighlightDir(t *testing.T) {
 	AppConfig.HighlightDir = false
 }
 
+func TestFileSystemPanel_FocusLoss_FastFind(t *testing.T) {
+	fp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(t.TempDir()))
+	fp.fastFindMode = true
+	fp.fastFindStr = "test"
+
+	// Имитируем потерю фокуса файловой панелью (например, открыто меню)
+	fp.SetFocus(false)
+
+	if fp.fastFindMode || fp.fastFindStr != "" {
+		t.Error("Focus loss should deactivate FastFind mode")
+	}
+}
 func TestFileSystemPanel_ShowHiddenFiles(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 

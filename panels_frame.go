@@ -437,7 +437,7 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 	if pf.showPanels {
 		pf.termView.SetVisible(false)
 		for i, p := range pf.panels {
-			p.SetFocus(pf.activeIdx == i)
+			p.SetFocus(pf.IsFocused() && pf.activeIdx == i)
 			p.Show(scr)
 		}
 	} else {
@@ -531,12 +531,14 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		panic("Manual safe crash triggered by user (Ctrl+Alt+C) for testing!")
 	}
 	if e.Type == vtinput.FocusEventType {
+		pf.SetFocus(e.SetFocus)
 		// Reload macros from disk when regaining focus to share them across instances
 		if e.SetFocus && MacroMgr != nil {
 			MacroMgr.Load()
 		}
 		// Propagate focus to command line so its cursor state stays in sync
-		pf.cmdLine.ProcessKey(e)
+		pf.cmdLine.SetFocus(e.SetFocus)
+		pf.termView.SetFocus(e.SetFocus)
 		return true
 	}
 
