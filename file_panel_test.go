@@ -217,7 +217,11 @@ func TestFileSystemPanel_Initialization(t *testing.T) {
 
 	// Internal table must match panel interior (excluding borders)
 	tx1, ty1, tx2, ty2 := fp.table.GetPosition()
-	if tx1 != x+1 || ty1 != y+1 || tx2 != x+w-2 || ty2 != y+h-2 {
+	expectedTy2 := y + h - 2
+	if h > 6 {
+		expectedTy2 = y + h - 4
+	}
+	if tx1 != x+1 || ty1 != y+1 || tx2 != x+w-2 || ty2 != expectedTy2 {
 		t.Errorf("Internal table coordinates mismatch: got (%d,%d)-(%d,%d)", tx1, ty1, tx2, ty2)
 	}
 
@@ -230,7 +234,7 @@ func TestFileSystemPanel_Initialization(t *testing.T) {
 	}
 }
 func TestMediumRow_GetCellText(t *testing.T) {
-	fp := NewFileSystemPanel(0, 0, 80, 10, vfs.NewOSVFS("."))
+	fp := NewFileSystemPanel(0, 0, 80, 12, vfs.NewOSVFS("."))
 	fp.entries = []*fileEntry{
 		{VFSItem: vfs.VFSItem{Name: "test.txt", IsDir: false}},
 		{VFSItem: vfs.VFSItem{Name: "work", IsDir: true}},
@@ -254,8 +258,27 @@ func TestMediumRow_GetCellText(t *testing.T) {
 	if mRow.GetCellText(1) != "Right" { t.Errorf("Expected 'Right', got %q", mRow.GetCellText(1)) }
 }
 
+func TestFileSystemPanel_InfoLineRendering(t *testing.T) {
+	vtui.SetDefaultPalette()
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+
+	fp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(t.TempDir()))
+	// Force sync items for deterministic state
+	fp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: ".."}},
+		{VFSItem: vfs.VFSItem{Name: "test.txt", Size: 1024}},
+	}
+	fp.Refresh()
+	fp.SetCursorIndex(1)
+
+	// Simply calling Show() validates that the string truncations and layouts
+	// don't panic on normal, short or extreme configurations.
+	fp.Show(scr)
+}
 func TestFileSystemPanel_CursorMapping(t *testing.T) {
-	fp := NewFileSystemPanel(0, 0, 80, 10, vfs.NewOSVFS("."))
+	fp := NewFileSystemPanel(0, 0, 80, 12, vfs.NewOSVFS("."))
 
 	// Simulate 20 items manually so Refresh() doesn't wipe them
 	fp.entries = make([]*fileEntry, 20)

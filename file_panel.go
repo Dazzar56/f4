@@ -523,9 +523,95 @@ func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
 	if fp.sortReverse {
 		sortChar = strings.ToUpper(sortChar)
 	}
+
 	scr.Write(fp.X1+2, fp.Y1, vtui.StringToCharInfo(sortChar, vtui.Palette[ColPanelTitle]))
 	fp.table.SetFocus(fp.IsFocused())
 	fp.table.Show(scr)
+
+	if fp.Y2-fp.Y1+1 > 6 {
+		p := vtui.NewPainter(scr)
+		attrBox := vtui.Palette[ColPanelBox]
+		attrInfo := vtui.Palette[ColPanelInfoText]
+
+		p.DrawLine(fp.X1+1, fp.Y2-2, fp.X2-1, fp.Y2-2, '─', attrBox, false, false)
+		scr.Write(fp.X1, fp.Y2-2, vtui.StringToCharInfo("├", attrBox))
+		scr.Write(fp.X2, fp.Y2-2, vtui.StringToCharInfo("┤", attrBox))
+
+		p.Fill(fp.X1+1, fp.Y2-1, fp.X2-1, fp.Y2-1, ' ', attrInfo)
+
+		idx := fp.GetCursorIndex()
+		if idx >= 0 && idx < len(fp.entries) {
+			e := fp.entries[idx]
+
+			dateStr := e.MTime.Format("02.01.06 15:04")
+			sizeStr := ""
+			if e.IsDir {
+				if e.Name == ".." {
+					sizeStr = "UP-DIR"
+				} else {
+					sizeStr = "<DIR>"
+				}
+			} else {
+				sizeStr = fmt.Sprintf("%d", e.Size)
+			}
+
+			rightStr := fmt.Sprintf("%s %s", sizeStr, dateStr)
+			nameStr := e.Name
+
+			availW := (fp.X2 - 1) - (fp.X1 + 1) + 1
+			rightW := runewidth.StringWidth(rightStr)
+
+			if availW > rightW+1 {
+				nameStr = runewidth.Truncate(nameStr, availW-rightW-1, "")
+			} else {
+				nameStr = ""
+				rightStr = runewidth.Truncate(rightStr, availW, "")
+			}
+
+			p.DrawString(fp.X1+1, fp.Y2-1, nameStr, attrInfo)
+			if rightStr != "" {
+				p.DrawString(fp.X2-runewidth.StringWidth(rightStr), fp.Y2-1, rightStr, attrInfo)
+			}
+		}
+	}
+
+	var selSize int64
+	var selCount int
+	var totSize int64
+	var totCount int
+
+	for _, e := range fp.entries {
+		if e.Name != ".." {
+			totCount++
+			if !e.IsDir {
+				totSize += e.Size
+			}
+			if e.Selected {
+				selCount++
+				if !e.IsDir {
+					selSize += e.Size
+				}
+			}
+		}
+	}
+
+	totalStr := ""
+	if selCount > 0 {
+		totalStr = fmt.Sprintf(" %s (%d/%d) %s ", formatSize(selSize), selCount, totCount, formatSize(totSize))
+	} else if totCount > 0 {
+		totalStr = fmt.Sprintf(" %s (%d) ", formatSize(totSize), totCount)
+	}
+
+	if totalStr != "" {
+		attrTotal := vtui.Palette[ColPanelTitle]
+		totalW := runewidth.StringWidth(totalStr)
+		availBottom := fp.X2 - fp.X1 - 1
+		if totalW < availBottom {
+			p := vtui.NewPainter(scr)
+			p.DrawString(fp.X1+1+(availBottom-totalW)/2, fp.Y2, totalStr, attrTotal)
+		}
+	}
+
 	if fp.fastFindMode {
 		if vtui.ManageCursorStyle {
 			os.Stdout.WriteString("\x1b[3 q") // Blinking underline
@@ -570,8 +656,12 @@ func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
 func (fp *FileSystemPanel) SetPosition(x1, y1, x2, y2 int) {
 	fp.ScreenObject.SetPosition(x1, y1, x2, y2)
 	fp.frame.SetPosition(x1, y1, x2, y2)
-	// Table stays inside the frame
-	fp.table.SetPosition(x1+1, y1+1, x2-1, y2-1)
+	// Table stays inside the frame, reserving space for status info if tall enough
+	if y2-y1+1 > 6 {
+		fp.table.SetPosition(x1+1, y1+1, x2-1, y2-3)
+	} else {
+		fp.table.SetPosition(x1+1, y1+1, x2-1, y2-1)
+	}
 }
 
 func (fp *FileSystemPanel) Resize(w, h int) {
