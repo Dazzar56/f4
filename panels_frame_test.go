@@ -86,6 +86,51 @@ func TestPanelsFrame_ArkanoidHotkey(t *testing.T) {
 		t.Error("Second Arkanoid launch erroneously created a duplicate screen")
 	}
 }
+func TestPanelsFrame_SelectionByMask(t *testing.T) {
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+
+	fsp := pf.panels[1].(*FileSystemPanel)
+	pf.activeIdx = 1
+
+	// 1. Command line not empty -> should not intercept
+	pf.cmdLine.Edit.SetText("a")
+	handled := pf.ProcessKey(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		Char:           '+',
+	})
+	if !handled {
+		t.Error("Key should be handled by cmdLine")
+	}
+
+	// 2. Command line empty, fastFindMode active -> should not intercept
+	pf.cmdLine.Clear()
+	fsp.fastFindMode = true
+	handled = pf.ProcessKey(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		Char:           '+',
+	})
+	if !handled {
+		t.Error("Key should be handled by fastFindMode in active panel")
+	}
+
+	// 3. Command line empty, fastFindMode NOT active -> SHOULD intercept and show dialog
+	fsp.fastFindMode = false
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	handled = pf.ProcessKey(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		Char:           '+',
+	})
+	if !handled {
+		t.Error("Key should be intercepted for selection dialog")
+	}
+	if vtui.FrameManager.GetTopFrameType() != vtui.TypeDialog {
+		t.Error("Selection dialog was not shown")
+	}
+}
 func TestPanelsFrame_GetActivePTY(t *testing.T) {
 	pf := NewPanelsFrame()
 
