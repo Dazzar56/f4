@@ -108,14 +108,14 @@ func (f *fileEntry) GetCellText(col int) string {
 	case 1:
 		if f.IsDir {
 			if f.SizeCalculated {
-				return fmt.Sprintf("%d", f.Size)
+				return formatIntWithSpaces(f.Size)
 			}
 			if f.Name == ".." {
 				return Msg("Panel.UpDir")
 			}
 			return ""
 		}
-		return fmt.Sprintf("%d", f.Size)
+		return formatIntWithSpaces(f.Size)
 	}
 	return ""
 }
@@ -579,17 +579,17 @@ func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
 			sizeStr := ""
 			if e.IsDir {
 				if e.SizeCalculated {
-					sizeStr = fmt.Sprintf("%d", e.Size)
+					sizeStr = formatIntWithSpaces(e.Size)
 				} else if e.Name == ".." {
 					sizeStr = "UP-DIR"
 				} else {
 					sizeStr = "<DIR>"
 				}
 			} else {
-				sizeStr = fmt.Sprintf("%d", e.Size)
+				sizeStr = formatIntWithSpaces(e.Size)
 			}
 
-			rightStr := fmt.Sprintf("%s %s", sizeStr, dateStr)
+			rightStr := fmt.Sprintf("%s  %s", sizeStr, dateStr)
 			nameStr := e.Name
 
 			availW := (fp.X2 - 1) - (fp.X1 + 1) + 1

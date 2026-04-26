@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"io"
 	"os"
 	"path/filepath"
@@ -35,6 +36,20 @@ func formatSize(b int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
+}
+
+// formatIntWithSpaces converts an int64 to string with spaces as thousands separators.
+func formatIntWithSpaces(n int64) string {
+	s := strconv.FormatInt(n, 10)
+	l := len(s)
+	var res strings.Builder
+	for i, char := range s {
+		res.WriteRune(char)
+		if (l-i-1)%3 == 0 && i != l-1 {
+			res.WriteByte(' ')
+		}
+	}
+	return res.String()
 }
 
 func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, destInput string, isMove bool, forked bool, onComplete func()) {
