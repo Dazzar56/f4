@@ -837,16 +837,22 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 							fullWireCmd = fmt.Sprintf("cd /d %q & %s\r", path, cmd)
 						} else {
 							sqPath := strings.ReplaceAll(path, "'", "'\\''")
-							fullWireCmd = fmt.Sprintf("set +H; cd '%s' && { printf \"\\033]2;f4:busy\\007\"; %s ; printf \"\\033]2;f4:done\\007\"; }\r", sqPath, cmd)
+							// If command ends with &, don't use grouping as it breaks shell syntax and Done signal.
+							if strings.HasSuffix(strings.TrimSpace(cmd), "&") {
+								fullWireCmd = fmt.Sprintf("set +H; cd '%s' && %s\r", sqPath, cmd)
+							} else {
+								fullWireCmd = fmt.Sprintf("set +H; cd '%s' && { printf \"\\033]2;f4:busy\\007\"; %s ; printf \"\\033]2;f4:done\\007\"; }\r", sqPath, cmd)
+								pf.executing = true
+							}
 						}
-						pf.executing = true
 					} else {
-						// Panels are hidden: user is in interactive shell.
+						// Panels are hidden: user is in interactive shell. No need for busy/done signals
+						// as the shell prompt will naturally indicate when the command is finished.
 						if runtime.GOOS == "windows" {
 							fullWireCmd = fmt.Sprintf("cd /d %q & %s\r", path, cmd)
 						} else {
 							sqPath := strings.ReplaceAll(path, "'", "'\\''")
-							fullWireCmd = fmt.Sprintf("set +H; cd '%s' && printf \"\\033]2;f4:busy\\007\" && %s\r", sqPath, cmd)
+							fullWireCmd = fmt.Sprintf("set +H; cd '%s' && %s\r", sqPath, cmd)
 						}
 					}
 				} else {
@@ -896,16 +902,6 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				name := fsp.GetSelectedName()
 				if name != "" && name != ".." {
 					path := fsp.vfs.Join(fsp.vfs.GetPath(), name)
-
-					historyCmd := name
-					if strings.Contains(historyCmd, " ") && !strings.HasPrefix(historyCmd, "\"") && !strings.HasPrefix(historyCmd, "'") {
-						historyCmd = "\"" + historyCmd + "\""
-					}
-					if runtime.GOOS != "windows" && vfs.IsTerminalRunnable(context.Background(), fsp.vfs, path) {
-						historyCmd = "./" + historyCmd
-					}
-					pf.cmdLine.Edit.AddHistory(historyCmd)
-
 					actionExecute(pf, fsp.vfs, fsp.vfs.GetPath(), name, path)
 				}
 			}

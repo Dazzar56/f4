@@ -189,35 +189,49 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 		runnable := vfs.IsTerminalRunnable(ctx.Context, v, path)
 		ctx.RunOnUI(func() {
 			if runnable {
+				// Add to command history since it's a shell-executable file.
+				// This centralized logic ensures consistent history across manual and Enter launches.
+				historyCmd := name
+				if strings.Contains(historyCmd, " ") && !strings.HasPrefix(historyCmd, "\"") && !strings.HasPrefix(historyCmd, "'") {
+					historyCmd = "\"" + historyCmd + "\""
+				}
+				if runtime.GOOS != "windows" {
+					historyCmd = "./" + historyCmd
+				}
+				pf.cmdLine.Edit.AddHistory(historyCmd)
+				pf.cmdLine.Edit.HistoryPos = -1
+
 				activePty := pf.getActivePTY()
 				if activePty != nil {
 					cmd := name
 					// Wrap command in Title sequences to signal f4 about managed execution state.
 					// We use && so f4:done is only sent if the command succeeded.
-				var cmdToWire string
-				if runtime.GOOS == "windows" {
-					cmdToWire = fmt.Sprintf("cd /d %q & %q\r", dir, cmd)
-				} else {
-					// On Unix, use single quotes for paths to prevent Bash history expansion (the '!' problem).
-					// We also disable history expansion explicitly with 'set +H'.
-					sqDir := strings.ReplaceAll(dir, "'", "'\\''")
-					sqCmd := strings.ReplaceAll(cmd, "'", "'\\''")
-					cmdToWire = fmt.Sprintf(" set +H; cd '%s' && { printf \"\\033]2;f4:busy\\007\"; ./'%s' ; printf \"\\033]2;f4:done\\007\"; }\r", sqDir, sqCmd)
-				}
-				vtui.DebugLog("ACTIONS: Sending to PTY: %q", cmdToWire)
+					var cmdToWire string
+					if runtime.GOOS == "windows" {
+						cmdToWire = fmt.Sprintf("cd /d %q & %q\r", dir, cmd)
+					} else {
+						// On Unix, use single quotes for paths to prevent Bash history expansion (the '!' problem).
+						// We also disable history expansion explicitly with 'set +H'.
+						sqDir := strings.ReplaceAll(dir, "'", "'\\''")
+						sqCmd := strings.ReplaceAll(cmd, "'", "'\\''")
+						// Use grouping only for sh/bash compatible shells.
+						// Remove leading space to keep output clean in terminal history.
+						cmdToWire = fmt.Sprintf("set +H; cd '%s' && { printf \"\\033]2;f4:busy\\007\"; ./'%s' ; printf \"\\033]2;f4:done\\007\"; }\r", sqDir, sqCmd)
+					}
+					vtui.DebugLog("ACTIONS: Sending to PTY: %q", cmdToWire)
 
-				cleanCmd := "./" + cmd
-				if runtime.GOOS == "windows" {
-					cleanCmd = cmd
-				}
-				pf.termView.PrintCleanCommand(cleanCmd)
+					cleanCmd := "./" + cmd
+					if runtime.GOOS == "windows" {
+						cleanCmd = cmd
+					}
+					pf.termView.PrintCleanCommand(cleanCmd)
 
-				if runtime.GOOS != "windows" {
-					pf.termView.SetMuted(true)
-					pf.executing = true
-				}
-				activePty.Write([]byte(cmdToWire))
-				pf.showPanels = false
+					if runtime.GOOS != "windows" {
+						pf.termView.SetMuted(true)
+						pf.executing = true
+					}
+					activePty.Write([]byte(cmdToWire))
+					pf.showPanels = false
 				}
 			} else {
 				if _, isLocal := v.(*vfs.OSVFS); !isLocal {
