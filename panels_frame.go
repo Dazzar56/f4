@@ -437,7 +437,7 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 	if pf.showPanels {
 		pf.termView.SetVisible(false)
 		for i, p := range pf.panels {
-			p.SetFocus(pf.IsFocused() && pf.activeIdx == i)
+			p.SetFocus(pf.activeIdx == i)
 			p.Show(scr)
 		}
 	} else {
