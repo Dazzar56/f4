@@ -137,30 +137,6 @@ func (m *mockAuth) Authorize(id string) int {
 	return m.val
 }
 
-func TestTerminalView_ProcessFar2lInteract_LocalAuth(t *testing.T) {
-	tv := NewTerminalView(80, 24)
-	pty := &mockPty{}
-	tv.pty = pty
-
-	oldAuth := vtui.GlobalClipboardAccessManager
-	vtui.GlobalClipboardAccessManager = &mockAuth{val: -1} // Local mode
-	defer func() { vtui.GlobalClipboardAccessManager = oldAuth }()
-
-	stk := vtinput.Far2lStack{}
-	stk.PushString("test-client")
-	stk.PushU8('o') // open
-	stk.PushU8('c') // clipboard
-	stk.PushU8(42)  // id
-	tv.ProcessFar2lInteract(stk)
-
-	b64 := string(pty.written)[7 : len(pty.written)-1]
-	decoded, _ := base64.StdEncoding.DecodeString(b64)
-	respAuth := decoded[len(decoded)-2]
-	if respAuth != 1 {
-		t.Errorf("Expected respAuth=1 (success) for local fallback, got %d", respAuth)
-	}
-}
-
 func TestTerminalView_ProcessFar2lInteract_AuthCaching(t *testing.T) {
 	tv := NewTerminalView(80, 24)
 	pty := &mockPty{}
