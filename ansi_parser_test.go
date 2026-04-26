@@ -449,6 +449,15 @@ func TestAnsiParser_UnrecognizedCSI(t *testing.T) {
 		t.Errorf("Parser stuck in state %v after unrecognized CSI", p.State)
 	}
 }
+func TestAnsiParser_APC_Reset(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	p := NewAnsiParser(tv, nil)
+	p.CurParam.WriteString("old_garbage")
+	p.Process([]byte("\x1b_")) // Enter StateAPC
+	if p.CurParam.Len() != 0 {
+		t.Error("CurParam was not reset when entering APC state")
+	}
+}
 func TestAnsiParser_DECRQM(t *testing.T) {
 	tv := NewTerminalView(80, 24)
 	pty := &mockPty{}

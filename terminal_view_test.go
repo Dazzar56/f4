@@ -64,6 +64,17 @@ func TestTerminalView_HandleFar2lAPC(t *testing.T) {
 		t.Errorf("Expected window size reply, got %q", string(pty.written))
 	}
 }
+func TestTerminalView_HandleFar2lAPC_Garbage(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	pty := &mockPty{}
+	tv.pty = pty
+
+	// Test robustness: skip garbage before "far2l"
+	tv.HandleFar2lAPC("some-random-garbage-far2l1")
+	if string(pty.written) != "\x1b_far2lok\x07" {
+		t.Errorf("HandleFar2lAPC failed to skip garbage. Got %q", string(pty.written))
+	}
+}
 
 func TestTerminalView_ProcessFar2lInteract_Clipboard(t *testing.T) {
 	tv := NewTerminalView(80, 24)
@@ -114,6 +125,58 @@ func TestTerminalView_ProcessFar2lInteract_Clipboard(t *testing.T) {
 	}
 	if len(tv.clipboardChunks) != 0 {
 		t.Error("Chunk buffer not cleared after finalization")
+	}
+}
+type mockLocalAuth struct {
+	*F4ClipboardAuth
+}
+
+func (m *mockLocalAuth) Authorize(id string) int { return -1 }
+
+func TestTerminalView_ProcessFar2lInteract_LocalAuth(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	pty := &mockPty{}
+	tv.pty = pty
+
+	// Swap real auth manager with one that forces Local mode (-1)
+	oldAuth := vtui.GlobalClipboardAccessManager
+	vtui.GlobalClipboardAccessManager = &mockLocalAuth{}
+	defer func() { vtui.GlobalClipboardAccessManager = oldAuth }()
+
+	stk := vtinput.Far2lStack{}
+	stk.PushString("test-client")
+	stk.PushU8('o') // subcommand: open
+	stk.PushU8('c') // category: clipboard
+	stk.PushU8(42)  // request id
+
+	tv.ProcessFar2lInteract(stk)
+
+	rawResp := string(pty.written)
+	// Prefix is \x1b_far2l (7 bytes)
+	if !strings.HasPrefix(rawResp, "\x1b_far2l") || !strings.HasSuffix(rawResp, "\x07") {
+		t.Fatalf("Malformed response: %q", rawResp)
+	}
+
+	// Strip prefix and suffix to get base64 payload
+	b64 := rawResp[7 : len(rawResp)-1]
+	decoded, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		t.Fatalf("Failed to decode base64: %v. Raw string: %q", err, b64)
+	}
+	if len(decoded) < 2 {
+		t.Fatalf("Decoded response too short")
+	}
+
+	// decoded format: [payload bytes...] + [1 byte id]
+	// for clipboard open: [8 bytes flags] + [1 byte respAuth] + [1 byte id]
+	respAuth := decoded[len(decoded)-2]
+	if respAuth != 1 {
+		t.Errorf("Expected respAuth=1 for local fallback (-1), got %d", respAuth)
+	}
+
+	id := decoded[len(decoded)-1]
+	if id != 42 {
+		t.Errorf("Expected response ID=42, got %d", id)
 	}
 }
 
