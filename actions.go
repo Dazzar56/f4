@@ -703,12 +703,24 @@ func actionDelete(pf *PanelsFrame) {
 				tracker.StartFile(name, 0)
 				updateUI(true)
 
-				err := activeVfs.Remove(ctx.Context, fullPath)
-				if err != nil {
+				for {
+					err := activeVfs.Remove(ctx.Context, fullPath)
+					if err == nil {
+						break
+					}
 					if err == context.Canceled {
 						return // User cancelled, bail out
 					}
-					allErrors = append(allErrors, fmt.Sprintf("Error deleting '%s':\n%v", name, err))
+					
+					choice := AskError(ctx.Context, fmt.Sprintf("Cannot delete '%s'", name), err, opDlg)
+					if choice == 0 {
+						continue // Retry
+					} else if choice == 1 {
+						allErrors = append(allErrors, fmt.Sprintf("Skipped '%s':\n%v", name, err))
+						break // Skip
+					} else {
+						return // Abort
+					}
 				}
 
 				// In both success and failure (except cancel), we mark this item
@@ -719,12 +731,45 @@ func actionDelete(pf *PanelsFrame) {
 			// After the loop, if errors were collected, show them in a single dialog.
 			if len(allErrors) > 0 {
 				ctx.RunOnUI(func() {
-					maxErrors := 10
-					msg := strings.Join(allErrors, "\n\n")
-					if len(allErrors) > maxErrors {
-						msg = strings.Join(allErrors[:maxErrors], "\n\n") + fmt.Sprintf("\n\n...and %d more errors.", len(allErrors)-maxErrors)
+					dlgW, dlgH := 60, 15
+					scrH := vtui.FrameManager.GetScreenHeight()
+					if dlgH > scrH-2 {
+						dlgH = scrH - 2
 					}
-					vtui.ShowMessage(" Deletion Errors ", msg, []string{"&Ok"})
+					if dlgH < 8 { dlgH = 8 }
+
+					dlg := vtui.NewCenteredDialog(dlgW, dlgH, " Deletion Errors ")
+					dlg.ShowClose = true
+
+					var listItems []string
+					for _, errStr := range allErrors {
+						lines := vtui.WrapText(errStr, dlgW-6)
+						listItems = append(listItems, lines...)
+						listItems = append(listItems, strings.Repeat("-", dlgW-6))
+					}
+					if len(listItems) > 0 {
+						listItems = listItems[:len(listItems)-1] // Remove last separator
+					}
+
+					lb := vtui.NewListBox(0, 0, dlgW-4, dlgH-6, listItems)
+					btnOk := vtui.NewButton(0, 0, "&Ok")
+					btnOk.IsDefault = true
+					btnOk.OnClick = func() { dlg.Close() }
+
+					dlg.AddItem(lb)
+					dlg.AddItem(btnOk)
+
+					vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, dlgW-4, dlgH-4)
+					vbox.Add(lb, vtui.Margins{Bottom: 1}, vtui.AlignFill)
+
+					hbox := vtui.NewHBoxLayout(0, 0, dlgW-4, 1)
+					hbox.HorizontalAlign = vtui.AlignCenter
+					hbox.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
+
+					vbox.Add(hbox, vtui.Margins{}, vtui.AlignFill)
+					vbox.Apply()
+
+					vtui.FrameManager.Push(dlg)
 				})
 			}
 		})

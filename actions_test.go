@@ -93,7 +93,9 @@ func (m *mockDeletionFailingVFS) GetPath() string        { return "/tmp" }
 
 func TestActionDelete_BulkErrorAccumulation(t *testing.T) {
 	fm := vtui.FrameManager
-	fm.Init(vtui.NewSilentScreenBuf())
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	fm.Init(scr)
 	SetDefaultF4Palette()
 
 	pf := NewPanelsFrame()
@@ -154,6 +156,19 @@ Loop:
 		select {
 		case task := <-fm.TaskChan:
 			task()
+
+			// Если выскочил диалог ошибки удаления (AskError), нажимаем Skip
+			if fm.GetTopFrameType() == vtui.TypeDialog && strings.Contains(fm.GetTopFrame().GetTitle(), "Error") {
+				if dlg, ok := fm.GetTopFrame().(vtui.Container); ok {
+					for _, itm := range dlg.GetChildren() {
+						if b, ok := itm.(*vtui.Button); ok && strings.Contains(b.GetText(), "Skip") {
+							b.OnClick()
+							break
+						}
+					}
+				}
+			}
+
 			// Ждем, когда на вершине стека окажется диалог с заголовком " Deletion Errors "
 			if fm.GetTopFrameType() == vtui.TypeDialog && fm.GetTopFrame().GetTitle() == " Deletion Errors " {
 				break Loop
@@ -164,6 +179,9 @@ Loop:
 			time.Sleep(10 * time.Millisecond)
 		}
 	}
+
+	// Validate layout of the Deletion Errors dialog
+	vtui.AssertLayout(t, fm.GetTopFrame().(vtui.Container))
 
 	// 4. Проверяем результаты
 	// Должно быть 2 успешных удаления (f1.txt и f2.txt)
