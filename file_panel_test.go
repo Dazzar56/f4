@@ -30,7 +30,7 @@ func TestFileEntry_GetCellText(t *testing.T) {
 	}
 
 	// 2. Column 1 (Size)
-	if file.GetCellText(1) != "1024" {
+	if file.GetCellText(1) != "1 024" {
 		t.Errorf("File size mismatch: %s", file.GetCellText(1))
 	}
 
