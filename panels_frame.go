@@ -703,9 +703,17 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	if e.VirtualKeyCode == vtinput.VK_RETURN && ctrl {
 		name := pf.Active().GetSelectedName()
 		if name != "" {
-			// Escape spaces for shell commands
-			if strings.Contains(name, " ") && !strings.HasPrefix(name, "\"") {
-				name = "\"" + name + "\""
+			// Escape spaces and special characters for shell commands
+			if strings.ContainsAny(name, " &|;<>()$`\\\"'") {
+				if runtime.GOOS == "windows" {
+					if !strings.HasPrefix(name, "\"") {
+						name = "\"" + name + "\""
+					}
+				} else {
+					if !strings.HasPrefix(name, "'") {
+						name = "'" + strings.ReplaceAll(name, "'", "'\\''") + "'"
+					}
+				}
 			}
 			txt := pf.cmdLine.Edit.GetText()
 			// Add space if the line is not empty and doesn't end with a space.
@@ -773,8 +781,11 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				}
 				isDirChange = true
 				targetPath = strings.TrimSpace(trimmedCmd[prefixLen:])
-				// Remove quotes if user typed: cd "C:\My Folder"
-				if strings.HasPrefix(targetPath, "\"") && strings.HasSuffix(targetPath, "\"") {
+				// Remove quotes if user typed: cd "C:\My Folder" or cd '/tmp/a b'
+				if len(targetPath) >= 2 && targetPath[0] == '\'' && targetPath[len(targetPath)-1] == '\'' {
+					targetPath = targetPath[1 : len(targetPath)-1]
+					targetPath = strings.ReplaceAll(targetPath, "'\\''", "'")
+				} else if len(targetPath) >= 2 && targetPath[0] == '"' && targetPath[len(targetPath)-1] == '"' {
 					targetPath = targetPath[1 : len(targetPath)-1]
 				}
 			} else if lowerCmd == "cd.." || lowerCmd == "cd .." {
@@ -799,7 +810,8 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 							if runtime.GOOS == "windows" {
 								activePty.Write([]byte(fmt.Sprintf("cd /d %q\r", fsp.vfs.GetPath())))
 							} else {
-								activePty.Write([]byte(fmt.Sprintf(" cd %q\r", fsp.vfs.GetPath())))
+								sqPath := strings.ReplaceAll(fsp.vfs.GetPath(), "'", "'\\''")
+								activePty.Write([]byte(fmt.Sprintf(" cd '%s'\r", sqPath)))
 							}
 						}
 						return true
