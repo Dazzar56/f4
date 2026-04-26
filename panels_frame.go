@@ -658,6 +658,26 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return false
 	}
 
+	// Ctrl+F or Ctrl+Ins on panels: copy to clipboard
+	if pf.showPanels && pf.cmdLine.IsEmpty() && ctrl && !alt && !shift && e.KeyDown {
+		if fsp := pf.getActivePanel(); fsp != nil {
+			idx := fsp.GetCursorIndex()
+			if idx >= 0 && idx < len(fsp.entries) {
+				entry := fsp.entries[idx]
+				if entry.Name != ".." {
+					if e.VirtualKeyCode == 'F' {
+						fullPath := fsp.vfs.Join(fsp.vfs.GetPath(), entry.Name)
+						vtui.SetClipboard(fullPath)
+						return true
+					}
+					if e.VirtualKeyCode == vtinput.VK_INSERT {
+						vtui.SetClipboard(entry.Name)
+						return true
+					}
+				}
+			}
+		}
+	}
 	// Standard keys for file operations
 	switch e.VirtualKeyCode {
 	case vtinput.VK_F1:

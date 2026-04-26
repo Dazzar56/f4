@@ -1414,6 +1414,42 @@ func TestLayout_F4InternalDialogs_Validity(t *testing.T) {
 		}
 	})
 }
+func TestPanelsFrame_CopyShortcuts(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+
+	fsp := pf.panels[0].(*FileSystemPanel)
+	fsp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: ".."}},
+		{VFSItem: vfs.VFSItem{Name: "target.txt"}},
+	}
+	fsp.Refresh()
+	fsp.SetCursorIndex(1)
+	pf.activeIdx = 0
+
+	// 1. Test Ctrl+Ins (Filename)
+	vtui.SetClipboard("")
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_INSERT, ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+	if vtui.GetClipboard() != "target.txt" {
+		t.Errorf("Ctrl+Ins failed: expected 'target.txt', got %q", vtui.GetClipboard())
+	}
+
+	// 2. Test Ctrl+F (Full Path)
+	vtui.SetClipboard("")
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: 'F', ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+	expectedPath := fsp.vfs.Join(fsp.vfs.GetPath(), "target.txt")
+	if vtui.GetClipboard() != expectedPath {
+		t.Errorf("Ctrl+F failed: expected %q, got %q", expectedPath, vtui.GetClipboard())
+	}
+}
 func TestLayout_F4ActionDialogs_Validity(t *testing.T) {
 	vtui.SetDefaultPalette()
 	pf := NewPanelsFrame()
