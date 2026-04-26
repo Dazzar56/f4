@@ -23,6 +23,7 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	AppConfig.HighlightDir = true
 	AppConfig.SavePanelPaths = false
 	AppConfig.EditorCrosshair = true
+	AppConfig.CommandLineAutoComplete = false
 
 	// 2. Save
 	SaveConfig()
@@ -47,5 +48,8 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	}
 	if !AppConfig.EditorCrosshair {
 		t.Error("LoadConfig failed to restore EditorCrosshair")
+	}
+	if AppConfig.CommandLineAutoComplete {
+		t.Error("LoadConfig failed to restore CommandLineAutoComplete")
 	}
 }

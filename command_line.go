@@ -98,7 +98,7 @@ func (cl *CommandLine) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 
 	// AutoComplete logic:
-	if handled && cl.Edit.HistoryPos == -1 && !cl.IsEmpty() {
+	if AppConfig.CommandLineAutoComplete && handled && cl.Edit.HistoryPos == -1 && !cl.IsEmpty() {
 		isChar := e.Char != 0
 		isDel := e.VirtualKeyCode == vtinput.VK_BACK || e.VirtualKeyCode == vtinput.VK_DELETE
 		if isChar || isDel {

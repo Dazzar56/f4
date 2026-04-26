@@ -124,3 +124,30 @@ func TestCommandLine_HistoryBoundaries(t *testing.T) {
 		t.Error("HistoryDown should stay at -1 when already empty")
 	}
 }
+
+func TestCommandLine_AutoCompleteDisabled(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+	
+	cl := NewCommandLine("> ")
+	cl.SetPosition(0, 0, 10, 0)
+	cl.Edit.History = []string{"ls", "long-command"}
+
+	// 1. Выключаем глобальную настройку
+	oldCfg := AppConfig
+	AppConfig.CommandLineAutoComplete = false
+	defer func() { AppConfig = oldCfg }()
+
+	// 2. Симулируем ввод буквы 'l'
+	cl.ProcessKey(&vtinput.InputEvent{
+		Type:    vtinput.KeyEventType,
+		KeyDown: true,
+		Char:    'l',
+	})
+
+	// 3. Проверяем, что меню автодополнения НЕ появилось в FrameManager
+	top := vtui.FrameManager.GetTopFrame()
+	if _, isAc := top.(*vtui.AutoCompleteMenu); isAc {
+		t.Error("AutoCompleteMenu was shown even though CommandLineAutoComplete is false")
+	}
+}

@@ -407,6 +407,20 @@ func TestActionPanelSettings_Flow(t *testing.T) {
 		t.Error("Save paths checkbox not found in Panel Settings dialog")
 	}
 
+	// Проверяем наличие чекбокса автодополнения
+	foundAc := false
+	for _, itm := range dlg.GetChildren() {
+		if chk, ok := itm.(*vtui.Checkbox); ok {
+			if strings.Contains(strings.ToLower(chk.GetText()), "auto-completion") {
+				foundAc = true
+				break
+			}
+		}
+	}
+	if !foundAc {
+		t.Error("Command line auto-completion checkbox not found in Panel Settings dialog")
+	}
+
 	top.SetExitCode(-1)
 	vtui.FrameManager.Pop()
 }
