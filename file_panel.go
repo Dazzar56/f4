@@ -21,7 +21,8 @@ import (
 // fileEntry implements vtui.TableRow for display in a table.
 type fileEntry struct {
 	vfs.VFSItem
-	Selected bool
+	Selected       bool
+	SizeCalculated bool
 }
 type mediumRow struct {
 	fp *FileSystemPanel
@@ -106,6 +107,9 @@ func (f *fileEntry) GetCellText(col int) string {
 		return f.Name
 	case 1:
 		if f.IsDir {
+			if f.SizeCalculated {
+				return fmt.Sprintf("%d", f.Size)
+			}
 			if f.Name == ".." {
 				return Msg("Panel.UpDir")
 			}
@@ -394,6 +398,16 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 	go func() {
 		isFirstChunk := true
 		dirStat, _ := fp.vfs.Stat(ctx, path)
+		var upItemStat vfs.VFSItem
+		hasUpItemStat := false
+		if !fp.vfs.IsAtRoot() || fp.vfs.ParentVFS() != nil {
+			parentPath := fp.vfs.Dir(path)
+			if pStat, err := fp.vfs.Stat(ctx, parentPath); err == nil {
+				upItemStat = pStat
+				hasUpItemStat = true
+			}
+		}
+
 		err := fp.vfs.ReadDir(ctx, path, func(chunk []vfs.VFSItem) {
 			if ctx.Err() != nil { return }
 
@@ -413,13 +427,22 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 			vtui.FrameManager.PostTask(func() {
 				if ctx.Err() != nil { return }
 
-                if isFirstChunk {
-                    fp.entries = nil
-                    if !fp.vfs.IsAtRoot() || fp.vfs.ParentVFS() != nil {
-                        fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
-                    }
-                    isFirstChunk = false
-                }
+				if isFirstChunk {
+					fp.entries = nil
+					if !fp.vfs.IsAtRoot() || fp.vfs.ParentVFS() != nil {
+						upItem := vfs.VFSItem{Name: "..", IsDir: true}
+						if hasUpItemStat {
+							upItem.MTime = upItemStat.MTime
+							upItem.ATime = upItemStat.ATime
+							upItem.CTime = upItemStat.CTime
+							upItem.UnixMode = upItemStat.UnixMode
+							upItem.Uid = upItemStat.Uid
+							upItem.Gid = upItemStat.Gid
+						}
+						fp.entries = []*fileEntry{{VFSItem: upItem}}
+					}
+					isFirstChunk = false
+				}
 
 				currentSelected := fp.GetSelectedName()
 				fp.entries = append(fp.entries, newEntries...)
@@ -473,13 +496,22 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 					fp.updateTitle(nil)
 				}
 
-        if isFirstChunk {
-            fp.entries = nil
-            if !fp.vfs.IsAtRoot() || fp.vfs.ParentVFS() != nil {
-                fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
-            }
-            fp.SetCursorIndex(0)
-        }
+				if isFirstChunk {
+					fp.entries = nil
+					if !fp.vfs.IsAtRoot() || fp.vfs.ParentVFS() != nil {
+						upItem := vfs.VFSItem{Name: "..", IsDir: true}
+						if hasUpItemStat {
+							upItem.MTime = upItemStat.MTime
+							upItem.ATime = upItemStat.ATime
+							upItem.CTime = upItemStat.CTime
+							upItem.UnixMode = upItemStat.UnixMode
+							upItem.Uid = upItemStat.Uid
+							upItem.Gid = upItemStat.Gid
+						}
+						fp.entries = []*fileEntry{{VFSItem: upItem}}
+					}
+					fp.SetCursorIndex(0)
+				}
 
 				if fp.pendingSelection != "" {
 					fp.SelectName(fp.pendingSelection)
@@ -546,7 +578,9 @@ func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
 			dateStr := e.MTime.Format("02.01.06 15:04")
 			sizeStr := ""
 			if e.IsDir {
-				if e.Name == ".." {
+				if e.SizeCalculated {
+					sizeStr = fmt.Sprintf("%d", e.Size)
+				} else if e.Name == ".." {
 					sizeStr = "UP-DIR"
 				} else {
 					sizeStr = "<DIR>"

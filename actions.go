@@ -271,13 +271,77 @@ func actionViewFile(pf *PanelsFrame) {
 			return
 		}
 		if fsp.entries[idx].IsDir {
-			vtui.ShowMessage(" Error ", "Cannot view a directory.", []string{"&Ok"})
+			actionCalcDirSize(pf, fsp, idx)
 			return
 		}
 		name := fsp.GetSelectedName()
 		path := fsp.vfs.Join(fsp.vfs.GetPath(), name)
 		actionOpenViewer(pf, fsp.vfs, path)
 	}
+}
+
+func actionCalcDirSize(pf *PanelsFrame, fsp *FileSystemPanel, idx int) {
+	entry := fsp.entries[idx]
+	name := entry.Name
+	basePath := fsp.vfs.GetPath()
+
+	var targetPath string
+	if name == ".." {
+		targetPath = fsp.vfs.Dir(basePath)
+	} else {
+		targetPath = fsp.vfs.Join(basePath, name)
+	}
+
+	opDlg := NewFileOpProgressDialog(" Calculating Size... ")
+	var taskCtx *vtui.TaskContext
+	opDlg.btnCancel.OnClick = func() {
+		if taskCtx != nil {
+			taskCtx.Cancel()
+		}
+		opDlg.Close()
+	}
+
+	vtui.FrameManager.PostTask(func() {
+		vtui.FrameManager.AddScreenHeadless(opDlg)
+	})
+
+	taskCtx = vtui.RunAsync(func(ctx *vtui.TaskContext) {
+		var totalStats vfs.OpStats
+		lastScanUpdate := time.Now()
+		totalStats, scanErr := vfs.CalculateStats(ctx.Context, fsp.vfs, targetPath, []string{""}, func(currentPath string, stats vfs.OpStats) {
+			now := time.Now()
+			if now.Sub(lastScanUpdate) > 50*time.Millisecond {
+				lastScanUpdate = now
+				ctx.RunOnUI(func() {
+					opDlg.UpdateScan(currentPath, stats.Files, stats.Dirs)
+					vtui.FrameManager.Redraw()
+				})
+			}
+		})
+
+		ctx.RunOnUI(func() {
+			opDlg.Close()
+			if scanErr != nil && scanErr != context.Canceled {
+				vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to calculate size:\n%v", scanErr), []string{"&Ok"})
+				return
+			}
+			if ctx.Err() == nil {
+				entry.Size = totalStats.Bytes
+				entry.SizeCalculated = true
+				if fsp.sortMode == SortSize {
+					fsp.sortEntries()
+					// Keep cursor on the same item after re-sorting
+					for i, e := range fsp.entries {
+						if e == entry {
+							fsp.SetCursorIndex(i)
+							break
+						}
+					}
+				}
+				fsp.Refresh()
+			}
+		})
+	})
 }
 
 func actionEditFile(pf *PanelsFrame) {
