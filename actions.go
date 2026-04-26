@@ -687,8 +687,11 @@ func actionDelete(pf *PanelsFrame) {
 
 			updateUI(true)
 
+			var allErrors []string
 			for _, name := range names {
-				if ctx.Err() != nil { return }
+				if ctx.Err() != nil {
+					return
+				}
 				fullPath := activeVfs.Join(activeVfs.GetPath(), name)
 
 				// For delete we should ideally recursively traverse and track each file.
@@ -702,13 +705,27 @@ func actionDelete(pf *PanelsFrame) {
 
 				err := activeVfs.Remove(ctx.Context, fullPath)
 				if err != nil {
-					if err != context.Canceled {
-						ctx.RunOnUI(func() { vtui.ShowMessage(" Error ", fmt.Sprintf(Msg("Operation.Error"), err.Error()), []string{"&Ok"}) })
+					if err == context.Canceled {
+						return // User cancelled, bail out
 					}
-					return
+					allErrors = append(allErrors, fmt.Sprintf("Error deleting '%s':\n%v", name, err))
 				}
+
+				// In both success and failure (except cancel), we mark this item
+				// as 'processed' to advance the item-count based progress bar.
 				tracker.FileDone()
 				updateUI(true)
+			}
+			// After the loop, if errors were collected, show them in a single dialog.
+			if len(allErrors) > 0 {
+				ctx.RunOnUI(func() {
+					maxErrors := 10
+					msg := strings.Join(allErrors, "\n\n")
+					if len(allErrors) > maxErrors {
+						msg = strings.Join(allErrors[:maxErrors], "\n\n") + fmt.Sprintf("\n\n...and %d more errors.", len(allErrors)-maxErrors)
+					}
+					vtui.ShowMessage(" Deletion Errors ", msg, []string{"&Ok"})
+				})
 			}
 		})
 	}

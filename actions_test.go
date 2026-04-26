@@ -62,6 +62,128 @@ func TestActionMkDir_Flow(t *testing.T) {
 	top.SetExitCode(-1)
 	vtui.FrameManager.Pop()
 }
+type mockDeletionFailingVFS struct {
+	vfs.VFS
+	failedFiles  []string
+	deletedFiles []string
+}
+
+func (m *mockDeletionFailingVFS) Remove(ctx context.Context, path string) error {
+	name := filepath.Base(path)
+	for _, f := range m.failedFiles {
+		if f == name {
+			return os.ErrPermission
+		}
+	}
+	m.deletedFiles = append(m.deletedFiles, name)
+	return nil
+}
+
+func (m *mockDeletionFailingVFS) Stat(ctx context.Context, path string) (vfs.VFSItem, error) {
+	name := filepath.Base(path)
+	return vfs.VFSItem{Name: name, IsDir: false, Size: 10}, nil
+}
+
+func (m *mockDeletionFailingVFS) ReadDir(ctx context.Context, path string, onChunk func([]vfs.VFSItem)) error {
+	return nil
+}
+
+func (m *mockDeletionFailingVFS) Join(e ...string) string { return filepath.Join(e...) }
+func (m *mockDeletionFailingVFS) GetPath() string        { return "/tmp" }
+
+func TestActionDelete_BulkErrorAccumulation(t *testing.T) {
+	fm := vtui.FrameManager
+	fm.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+
+	// Создаем мок-VFS, который запретит удаление "fail.txt"
+	mv := &mockDeletionFailingVFS{
+		VFS:         vfs.NewOSVFS(t.TempDir()),
+		failedFiles: []string{"fail.txt"},
+	}
+
+	fsp := pf.panels[0].(*FileSystemPanel)
+	fsp.vfs = mv
+
+	// Подготавливаем список файлов: f1.txt (ок), fail.txt (ошибка), f2.txt (ок)
+	fsp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: ".."}},
+		{VFSItem: vfs.VFSItem{Name: "f1.txt"}},
+		{VFSItem: vfs.VFSItem{Name: "fail.txt"}},
+		{VFSItem: vfs.VFSItem{Name: "f2.txt"}},
+	}
+	// Выделяем все три файла
+	fsp.entries[1].Selected = true
+	fsp.entries[2].Selected = true
+	fsp.entries[3].Selected = true
+
+	// ВАЖНО: делаем панель с файлами активной
+	pf.activeIdx = 0
+
+	// 1. Инициируем удаление
+	actionDelete(pf)
+
+	// 2. Находим кнопку "Delete" в диалоге подтверждения и нажимаем её
+	frame := fm.GetTopFrame()
+	if frame == nil {
+		t.Fatal("Confirmation dialog was not shown")
+	}
+	top, ok := frame.(vtui.Container)
+	if !ok {
+		t.Fatal("Top frame is not a container")
+	}
+	var btnDel *vtui.Button
+	for _, itm := range top.GetChildren() {
+		if b, ok := itm.(*vtui.Button); ok && strings.Contains(b.GetText(), "Delete") {
+			btnDel = b
+			break
+		}
+	}
+	if btnDel == nil {
+		t.Fatal("Delete button not found in confirmation dialog")
+	}
+	btnDel.OnClick()
+
+	// 3. Прокручиваем очередь задач, ожидая появления диалога с итогами ошибок
+	timeout := time.After(2 * time.Second)
+Loop:
+	for {
+		select {
+		case task := <-fm.TaskChan:
+			task()
+			// Ждем, когда на вершине стека окажется диалог с заголовком " Deletion Errors "
+			if fm.GetTopFrameType() == vtui.TypeDialog && fm.GetTopFrame().GetTitle() == " Deletion Errors " {
+				break Loop
+			}
+		case <-timeout:
+			t.Fatal("Timeout waiting for error accumulation dialog")
+		default:
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+
+	// 4. Проверяем результаты
+	// Должно быть 2 успешных удаления (f1.txt и f2.txt)
+	if len(mv.deletedFiles) != 2 {
+		t.Errorf("Expected 2 files deleted, got %d: %v", len(mv.deletedFiles), mv.deletedFiles)
+	}
+
+	foundF1, foundF2 := false, false
+	for _, f := range mv.deletedFiles {
+		if f == "f1.txt" {
+			foundF1 = true
+		}
+		if f == "f2.txt" {
+			foundF2 = true
+		}
+	}
+	if !foundF1 || !foundF2 {
+		t.Errorf("One of the deletable files was skipped: %v", mv.deletedFiles)
+	}
+}
 func TestActionDelete_SuccessorLogic(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pf := NewPanelsFrame()
