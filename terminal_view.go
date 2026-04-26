@@ -69,14 +69,16 @@ type TerminalView struct {
 
 	Muted           bool
 	lastCharWasCR   bool
+	authCache       map[string]int
 
 	OnTitleChange func(string)
 }
 
 func NewTerminalView(w, h int) *TerminalView {
 	tv := &TerminalView{
-		Width:  w,
-		Height: h,
+		Width:     w,
+		Height:    h,
+		authCache: make(map[string]int),
 	}
 	tv.ResetBuffer(w, h)
 	return tv
@@ -116,6 +118,10 @@ func (tv *TerminalView) CloneStateFrom(other *TerminalView) {
 
 	// 4. Copy terminal state metadata
 	tv.styles = append([]StyleChange(nil), other.styles...)
+	tv.authCache = make(map[string]int)
+	for k, v := range other.authCache {
+		tv.authCache[k] = v
+	}
 	tv.lastAttr = other.lastAttr
 	tv.lastLineOffset = other.lastLineOffset
 	tv.Palette = other.Palette
@@ -778,9 +784,16 @@ func (tv *TerminalView) ProcessFar2lInteract(data []byte) {
 		switch sub {
 		case 'o':
 			clientID := stk.PopString()
-			auth := 0
-			if vtui.GlobalClipboardAccessManager != nil {
-				auth = vtui.GlobalClipboardAccessManager.Authorize(clientID)
+			auth, cached := tv.authCache[clientID]
+			if !cached {
+				if vtui.GlobalClipboardAccessManager != nil {
+					auth = vtui.GlobalClipboardAccessManager.Authorize(clientID)
+					// Only cache if the user didn't explicitly "Reject" (0)
+					// to allow them to change their mind on the next attempt.
+					if auth != 0 {
+						tv.authCache[clientID] = auth
+					}
+				}
 			}
 			respAuth := auth
 			if auth == -1 {

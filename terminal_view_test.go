@@ -127,6 +127,66 @@ func TestTerminalView_ProcessFar2lInteract_Clipboard(t *testing.T) {
 		t.Error("Chunk buffer not cleared after finalization")
 	}
 }
+type mockAuth struct {
+	val   int
+	calls int
+}
+
+func (m *mockAuth) Authorize(id string) int {
+	m.calls++
+	return m.val
+}
+
+func TestTerminalView_ProcessFar2lInteract_LocalAuth(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	pty := &mockPty{}
+	tv.pty = pty
+
+	oldAuth := vtui.GlobalClipboardAccessManager
+	vtui.GlobalClipboardAccessManager = &mockAuth{val: -1} // Local mode
+	defer func() { vtui.GlobalClipboardAccessManager = oldAuth }()
+
+	stk := vtinput.Far2lStack{}
+	stk.PushString("test-client")
+	stk.PushU8('o') // open
+	stk.PushU8('c') // clipboard
+	stk.PushU8(42)  // id
+	tv.ProcessFar2lInteract(stk)
+
+	b64 := string(pty.written)[7 : len(pty.written)-1]
+	decoded, _ := base64.StdEncoding.DecodeString(b64)
+	respAuth := decoded[len(decoded)-2]
+	if respAuth != 1 {
+		t.Errorf("Expected respAuth=1 (success) for local fallback, got %d", respAuth)
+	}
+}
+
+func TestTerminalView_ProcessFar2lInteract_AuthCaching(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	pty := &mockPty{}
+	tv.pty = pty
+
+	m := &mockAuth{val: 1} // Allow Once
+	oldAuth := vtui.GlobalClipboardAccessManager
+	vtui.GlobalClipboardAccessManager = m
+	defer func() { vtui.GlobalClipboardAccessManager = oldAuth }()
+
+	clientID := "id-for-caching-test"
+
+	// Call Authorize twice
+	for i := 0; i < 2; i++ {
+		stk := vtinput.Far2lStack{}
+		stk.PushString(clientID)
+		stk.PushU8('o')
+		stk.PushU8('c')
+		stk.PushU8(uint8(i))
+		tv.ProcessFar2lInteract(stk)
+	}
+
+	if m.calls != 1 {
+		t.Errorf("Authorize called %d times, expected 1 (caching should prevent duplicate prompts)", m.calls)
+	}
+}
 type mockLocalAuth struct {
 	*F4ClipboardAuth
 }
