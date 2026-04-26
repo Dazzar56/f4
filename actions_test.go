@@ -173,6 +173,10 @@ Loop:
 			if fm.GetTopFrameType() == vtui.TypeDialog && fm.GetTopFrame().GetTitle() == " Deletion Errors " {
 				break Loop
 			}
+
+			if fm.GetTopFrame() != nil && fm.GetTopFrame().IsDone() {
+				fm.Pop()
+			}
 		case <-timeout:
 			t.Fatal("Timeout waiting for error accumulation dialog")
 		default:
@@ -200,6 +204,135 @@ Loop:
 	}
 	if !foundF1 || !foundF2 {
 		t.Errorf("One of the deletable files was skipped: %v", mv.deletedFiles)
+	}
+}
+
+type mockRetryDeleteVFS struct {
+	vfs.VFS
+	attempts map[string]int
+	deleted  []string
+}
+
+func (m *mockRetryDeleteVFS) Remove(ctx context.Context, path string) error {
+	name := filepath.Base(path)
+	if m.attempts[name] > 0 {
+		m.attempts[name]--
+		return os.ErrPermission
+	}
+	m.deleted = append(m.deleted, name)
+	return nil
+}
+
+func (m *mockRetryDeleteVFS) Stat(ctx context.Context, path string) (vfs.VFSItem, error) {
+	return vfs.VFSItem{Name: filepath.Base(path)}, nil
+}
+
+func TestActionDelete_RetrySuccess(t *testing.T) {
+	fm := vtui.FrameManager
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	fm.Init(scr)
+	SetDefaultF4Palette()
+
+	mv := &mockRetryDeleteVFS{
+		VFS:      vfs.NewOSVFS(t.TempDir()),
+		attempts: map[string]int{"retry.txt": 1}, // Упадёт 1 раз
+	}
+
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+	fsp := pf.panels[0].(*FileSystemPanel)
+	fsp.vfs = mv
+	fsp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "retry.txt"}}}
+	pf.activeIdx = 0
+
+	actionDelete(pf)
+
+	// 1. Подтверждаем удаление
+	dlgConfirm := fm.GetTopFrame().(vtui.Container)
+	clickDialogButton(t, dlgConfirm, "Delete")
+
+	// 2. Ждем диалог ошибки и жмем Retry
+	timeout := time.After(2 * time.Second)
+	retryClicked := false
+Loop:
+	for {
+		if len(mv.deleted) == 1 {
+			break Loop
+		}
+		select {
+		case task := <-fm.TaskChan:
+			task()
+			if !retryClicked && fm.GetTopFrameType() == vtui.TypeDialog && strings.Contains(fm.GetTopFrame().GetTitle(), "Error") {
+				clickDialogButton(t, fm.GetTopFrame().(vtui.Container), "Retry")
+				retryClicked = true
+			}
+			if fm.GetTopFrame() != nil && fm.GetTopFrame().IsDone() {
+				fm.Pop()
+			}
+		case <-timeout:
+			t.Fatal("Timeout waiting for Retry to succeed")
+		default:
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+
+	if len(mv.deleted) != 1 || mv.deleted[0] != "retry.txt" {
+		t.Errorf("File was not deleted after Retry. Deleted: %v", mv.deleted)
+	}
+}
+
+func TestActionDelete_Abort(t *testing.T) {
+	fm := vtui.FrameManager
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	fm.Init(scr)
+	SetDefaultF4Palette()
+
+	mv := &mockDeletionFailingVFS{
+		VFS:         vfs.NewOSVFS(t.TempDir()),
+		failedFiles: []string{"abort.txt"},
+	}
+
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+	fsp := pf.panels[0].(*FileSystemPanel)
+	fsp.vfs = mv
+	fsp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "abort.txt"}},
+		{VFSItem: vfs.VFSItem{Name: "should_not_touch.txt"}},
+	}
+	fsp.entries[0].Selected = true
+	fsp.entries[1].Selected = true
+	pf.activeIdx = 0
+
+	actionDelete(pf)
+	clickDialogButton(t, fm.GetTopFrame().(vtui.Container), "Delete")
+
+	// Ждем ошибку и жмем Abort
+	timeout := time.After(2 * time.Second)
+Loop:
+	for {
+		select {
+		case task := <-fm.TaskChan:
+			task()
+			if fm.GetTopFrameType() == vtui.TypeDialog && strings.Contains(fm.GetTopFrame().GetTitle(), "Error") {
+				clickDialogButton(t, fm.GetTopFrame().(vtui.Container), "Abort")
+				break Loop
+			}
+			if fm.GetTopFrame() != nil && fm.GetTopFrame().IsDone() {
+				fm.Pop()
+			}
+		case <-timeout:
+			t.Fatal("Error dialog didn't appear")
+		default:
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+
+	// Проверяем, что список удаленных пуст (первый упал, второй не начинали)
+	if len(mv.deletedFiles) != 0 {
+		t.Errorf("Abort failed: some files were deleted: %v", mv.deletedFiles)
 	}
 }
 func TestActionDelete_SuccessorLogic(t *testing.T) {
