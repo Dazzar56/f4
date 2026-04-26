@@ -79,6 +79,7 @@ func (p *AnsiParser) Process(data []byte) {
 				p.Params = nil
 				p.CurParam.Reset()
 			} else if b == '_' {
+				p.CurParam.Reset()
 				p.State = StateAPC
 			} else if b == '7' {
 				p.term.SaveCursor()
@@ -120,9 +121,13 @@ func (p *AnsiParser) Process(data []byte) {
 			}
 		case StateAPC:
 			if b == 0x07 { // BEL
+				p.handleAPC()
 				p.State = StateGround
 			} else if b == 0x1b { // ESC
+				p.handleAPC()
 				p.State = StateEsc
+			} else {
+				p.CurParam.WriteByte(b)
 			}
 		}
 	}

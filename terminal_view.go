@@ -737,6 +737,13 @@ func (tv *TerminalView) SetWindowNumber(n int) {}
 
 func (tv *TerminalView) HandleFar2lAPC(s string) {
 	vtui.DebugLog("TERM_APC: Incoming Far2l sequence: %q", s)
+	// Robustness: skip any garbage before the actual marker
+	idx := strings.Index(s, "far2l")
+	if idx == -1 {
+		return
+	}
+	s = s[idx:]
+
 	if s == "far2l1" {
 		if tv.pty != nil { tv.pty.Write([]byte("\x1b_far2lok\x07")) }
 	} else if s == "far2l0" {
@@ -750,7 +757,9 @@ func (tv *TerminalView) HandleFar2lAPC(s string) {
 			b64 += strings.Repeat("=", 4-m)
 		}
 		decoded, _ := base64.StdEncoding.DecodeString(b64)
-		tv.ProcessFar2lInteract(decoded)
+		if len(decoded) > 0 {
+			tv.ProcessFar2lInteract(decoded)
+		}
 	}
 }
 
@@ -773,13 +782,17 @@ func (tv *TerminalView) ProcessFar2lInteract(data []byte) {
 			if vtui.GlobalClipboardAccessManager != nil {
 				auth = vtui.GlobalClipboardAccessManager.Authorize(clientID)
 			}
+			respAuth := auth
+			if auth == -1 {
+				respAuth = 1 // Tell child success, we'll handle it locally
+			}
 			reply.PushU64(2) // FARTTY_FEATCLIP_CHUNKED_SET
-			reply.PushU8(uint8(auth))
+			reply.PushU8(uint8(respAuth))
 		case 'c':
 			tv.clipboardChunks = nil
 			reply.PushU8(1)
 		case 'e':
-			vtui.SetClipboard("")
+			vtui.SetOSClipboard("")
 			tv.clipboardChunks = nil
 			reply.PushU8(1)
 		case 'a':
@@ -799,11 +812,11 @@ func (tv *TerminalView) ProcessFar2lInteract(data []byte) {
 			textBytes := stk.PopBytes(int(len))
 			fullData := append(tv.clipboardChunks, textBytes...)
 			tv.clipboardChunks = nil
-			vtui.SetClipboard(string(fullData))
+			vtui.SetOSClipboard(string(fullData))
 			reply.PushU8(1)
 		case 'g':
 			_ = stk.PopU32() // fmt
-			clipData := vtui.GetClipboard()
+			clipData := vtui.GetOSClipboard()
 			reply.PushU32(uint32(len(clipData)))
 			reply.PushBytes([]byte(clipData))
 			reply.PushU32(uint32(len(clipData)))
