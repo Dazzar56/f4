@@ -1034,6 +1034,18 @@ func TestPanelsFrame_ReturnExecution(t *testing.T) {
 	if pf.showPanels {
 		t.Error("Panels should be hidden after executing a terminal-runnable file")
 	}
+
+	if len(pf.cmdLine.Edit.History) == 0 {
+		t.Error("Executed file was not added to history")
+	} else {
+		expectedCmd := "runme.sh"
+		if runtime.GOOS != "windows" {
+			expectedCmd = "./runme.sh"
+		}
+		if pf.cmdLine.Edit.History[0] != expectedCmd {
+			t.Errorf("History mismatch: got %q, want %q", pf.cmdLine.Edit.History[0], expectedCmd)
+		}
+	}
 }
 func TestPanelsFrame_CommandLineEnter(t *testing.T) {
 	pf := NewPanelsFrame()

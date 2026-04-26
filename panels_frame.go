@@ -884,6 +884,16 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				name := fsp.GetSelectedName()
 				if name != "" && name != ".." {
 					path := fsp.vfs.Join(fsp.vfs.GetPath(), name)
+
+					historyCmd := name
+					if strings.Contains(historyCmd, " ") && !strings.HasPrefix(historyCmd, "\"") && !strings.HasPrefix(historyCmd, "'") {
+						historyCmd = "\"" + historyCmd + "\""
+					}
+					if runtime.GOOS != "windows" && vfs.IsTerminalRunnable(context.Background(), fsp.vfs, path) {
+						historyCmd = "./" + historyCmd
+					}
+					pf.cmdLine.Edit.AddHistory(historyCmd)
+
 					actionExecute(pf, fsp.vfs, fsp.vfs.GetPath(), name, path)
 				}
 			}
