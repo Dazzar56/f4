@@ -2513,22 +2513,6 @@ Loop:
 	}
 }
 
-// --- Specialized Mocks for Save Tests ---
-
-type mockMetadataVFS struct {
-	vfs.VFS
-	statToReturn vfs.VFSItem
-	onSetAttr    func(vfs.VFSItem)
-}
-
-func (m *mockMetadataVFS) Stat(ctx context.Context, path string) (vfs.VFSItem, error) {
-	return m.statToReturn, nil
-}
-
-func (m *mockMetadataVFS) SetAttributes(ctx context.Context, path string, item vfs.VFSItem) error {
-	if m.onSetAttr != nil { m.onSetAttr(item) }
-	return nil
-}
 
 type mockRetryBuffer struct {
 	data       []byte

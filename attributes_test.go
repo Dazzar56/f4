@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,287 @@ import (
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
+// mockMetadataVFS allows intercepting Stat and SetAttributes for testing.
+type mockMetadataVFS struct {
+	vfs.VFS
+	onSetAttr    func(vfs.VFSItem)
+	statErr      error
+	setAttrErr   error
+	statToReturn vfs.VFSItem
+}
+
+func (m *mockMetadataVFS) Stat(ctx context.Context, path string) (vfs.VFSItem, error) {
+	if m.statErr != nil {
+		return vfs.VFSItem{}, m.statErr
+	}
+	if m.statToReturn.Name != "" {
+		return m.statToReturn, nil
+	}
+	return m.VFS.Stat(ctx, path)
+}
+
+func (m *mockMetadataVFS) SetAttributes(ctx context.Context, path string, item vfs.VFSItem) error {
+	if m.setAttrErr != nil {
+		return m.setAttrErr
+	}
+	if m.onSetAttr != nil {
+		m.onSetAttr(item)
+	}
+	return nil
+}
+
+func TestAttributesDialog_StatFailure(t *testing.T) {
+	fm := vtui.FrameManager
+	fm.Init(vtui.NewSilentScreenBuf())
+
+	mockVFS := &mockMetadataVFS{
+		VFS:     vfs.NewOSVFS(t.TempDir()),
+		statErr: os.ErrPermission,
+	}
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+	fsp := pf.getActivePanel()
+	fsp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "locked.txt"}}}
+	fsp.vfs = mockVFS
+
+	// This should trigger an async Stat call that fails
+	actionFileAttributes(pf)
+
+	// Pump tasks and wait for the error dialog
+	timeout := time.After(1 * time.Second)
+	foundDialog := false
+Loop:
+	for {
+		select {
+		case task := <-fm.TaskChan:
+			task()
+			if fm.GetTopFrameType() == vtui.TypeDialog && strings.Contains(fm.GetTopFrame().GetTitle(), "Error") {
+				foundDialog = true
+				break Loop
+			}
+		case <-timeout:
+			break Loop
+		}
+	}
+
+	if !foundDialog {
+		t.Error("Expected an error dialog when initial Stat fails")
+	}
+}
+
+func TestAttributesDialog_SetAttributesFailure(t *testing.T) {
+	fm := vtui.FrameManager
+	fm.Init(vtui.NewSilentScreenBuf())
+
+	mockVFS := &mockMetadataVFS{
+		VFS:        vfs.NewOSVFS(t.TempDir()),
+		setAttrErr: os.ErrPermission,
+	}
+
+	item := vfs.VFSItem{Name: "file.txt"}
+	showAttributesUnix(nil, mockVFS, "/file.txt", item)
+	attrDlg := fm.GetTopFrame()
+
+	var btnSet *vtui.Button
+	walkUI(attrDlg.(vtui.UIElement), func(el vtui.UIElement) bool {
+		if b, ok := el.(*vtui.Button); ok && strings.Contains(b.GetText(), "Set") {
+			btnSet = b
+			return false
+		}
+		return true
+	})
+
+	if btnSet.OnClick != nil {
+		btnSet.OnClick()
+	}
+
+	timeout := time.After(1 * time.Second)
+	errorDialogShown := false
+Loop:
+	for {
+		select {
+		case task := <-fm.TaskChan:
+			task()
+			// Check if an error dialog appeared ON TOP of the attributes dialog
+			if fm.GetTopFrame() != attrDlg && fm.GetTopFrameType() == vtui.TypeDialog {
+				errorDialogShown = true
+				break Loop
+			}
+		case <-timeout:
+			break Loop
+		}
+	}
+
+	if !errorDialogShown {
+		t.Error("Expected an error dialog when SetAttributes fails")
+	}
+	if attrDlg.IsDone() {
+		t.Error("Attributes dialog should remain open after a SetAttributes failure")
+	}
+}
+
+func TestAttributesDialog_UnixSetAll(t *testing.T) {
+	fm := vtui.FrameManager
+	fm.Init(vtui.NewSilentScreenBuf())
+
+	var capturedItem vfs.VFSItem
+	mockVFS := &mockMetadataVFS{
+		VFS:       vfs.NewOSVFS(t.TempDir()),
+		onSetAttr: func(item vfs.VFSItem) { capturedItem = item },
+	}
+	item := vfs.VFSItem{Name: "test.sh", Uid: 1000, Gid: 1000, UnixMode: 0644, MTime: time.Now()}
+
+	showAttributesUnix(nil, mockVFS, "test.sh", item)
+	dlg := fm.GetTopFrame().(vtui.Container)
+
+	var editOwner, editGroup, editOctal, editMTime *vtui.Edit
+	var btnSet *vtui.Button
+
+	walkUI(dlg.(vtui.UIElement), func(el vtui.UIElement) bool {
+		if e, ok := el.(*vtui.Edit); ok {
+			if e.Validator != nil {
+				editOctal = e
+			} else if editOwner == nil {
+				editOwner = e // First edit is owner
+			} else if editGroup == nil {
+				editGroup = e // Second is group
+			} else {
+				editMTime = e
+			}
+		}
+		if b, ok := el.(*vtui.Button); ok && strings.Contains(b.GetText(), "Set") {
+			btnSet = b
+		}
+		return true
+	})
+
+	// Change values
+	newTime := "01.02.2030 10:20:30"
+	editOwner.SetText("root")
+	editGroup.SetText("wheel")
+	editOctal.SetText("0755")
+	editMTime.SetText(newTime)
+	// Trigger octal -> checkbox sync
+	editOctal.OnTextChange("0755")
+
+	// Click "Set"
+	if btnSet != nil && btnSet.OnClick != nil {
+		btnSet.OnClick()
+	}
+
+	// Wait for async SetAttributes call to happen with a 2-second timeout.
+	// We check UnixMode because it's initially 0 in capturedItem and becomes 0755 on success.
+	deadline := time.Now().Add(2 * time.Second)
+	for capturedItem.UnixMode == 0 && time.Now().Before(deadline) {
+		select {
+		case task := <-fm.TaskChan:
+			task()
+		default:
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+
+	if capturedItem.UnixMode != 0755 {
+		t.Errorf("Unix mode not set. Expected 0755, got %04o", capturedItem.UnixMode)
+	}
+	expectedTime, _ := time.Parse("02.01.2006 15:04:05", newTime)
+	if !capturedItem.MTime.Equal(expectedTime) {
+		t.Errorf("MTime not set. Expected %v, got %v", expectedTime, capturedItem.MTime)
+	}
+	// Verify that the VFS received the correct data from UI strings
+	if capturedItem.UnixMode != 0755 {
+		t.Errorf("Unix mode not set. Expected 0755, got %04o", capturedItem.UnixMode)
+	}
+}
+
+func TestAttributesDialog_WindowsSetFlags(t *testing.T) {
+	fm := vtui.FrameManager
+	fm.Init(vtui.NewSilentScreenBuf())
+
+	var capturedItem vfs.VFSItem
+	mockVFS := &mockMetadataVFS{
+		VFS:       vfs.NewOSVFS(t.TempDir()),
+		onSetAttr: func(item vfs.VFSItem) { capturedItem = item },
+	}
+
+	item := vfs.VFSItem{Name: "win.exe", MTime: time.Now()}
+	showAttributesWindows(nil, mockVFS, "win.exe", item)
+	dlg := fm.GetTopFrame().(vtui.Container)
+
+	var chkRO, chkHidden *vtui.Checkbox
+	var btnSet *vtui.Button
+
+	walkUI(dlg.(vtui.UIElement), func(el vtui.UIElement) bool {
+		if c, ok := el.(*vtui.Checkbox); ok {
+			if strings.Contains(c.GetText(), "Read only") { chkRO = c }
+			if strings.Contains(c.GetText(), "Hidden") { chkHidden = c }
+		}
+		if b, ok := el.(*vtui.Button); ok && strings.Contains(b.GetText(), "Set") {
+			btnSet = b
+		}
+		return true
+	})
+
+	// Toggle checkboxes
+	chkRO.State = 1
+	chkHidden.State = 1
+
+	if btnSet.OnClick != nil {
+		btnSet.OnClick()
+	}
+
+	// Wait for async SetAttributes call with a 2-second timeout
+	deadline := time.Now().Add(2 * time.Second)
+	for capturedItem.Name == "" && time.Now().Before(deadline) {
+		select {
+		case task := <-fm.TaskChan:
+			task()
+		default:
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+
+	// Verify the VFS call was made
+	if capturedItem.Name == "" {
+		t.Error("SetAttributes was not called after clicking Save in Windows attributes dialog")
+	}
+}
+
+func TestAttributesDialog_InvalidTime(t *testing.T) {
+	fm := vtui.FrameManager
+	fm.Init(vtui.NewSilentScreenBuf())
+
+	mockVFS := &mockMetadataVFS{VFS: vfs.NewOSVFS(t.TempDir())}
+	item := vfs.VFSItem{Name: "file.txt", MTime: time.Now()}
+
+	showAttributesUnix(nil, mockVFS, "file.txt", item)
+	dlg := fm.GetTopFrame().(vtui.Container)
+
+	var editMTime *vtui.Edit
+	var btnSet *vtui.Button
+
+	walkUI(dlg.(vtui.UIElement), func(el vtui.UIElement) bool {
+		if e, ok := el.(*vtui.Edit); ok && strings.Contains(e.GetText(), ":") {
+			editMTime = e
+		}
+		if b, ok := el.(*vtui.Button); ok && strings.Contains(b.GetText(), "Set") {
+			btnSet = b
+		}
+		return true
+	})
+
+	// Enter completely broken date
+	editMTime.SetText("99.99.9999 25:61:99")
+
+	if btnSet.OnClick != nil {
+		btnSet.OnClick()
+	}
+
+	// Since parsing fails, the dialog should remain open (IsDone == false)
+	if fm.GetTopFrame().IsDone() {
+		t.Error("Dialog should not close when date is invalid")
+	}
+}
 
 // walkUI is a local helper to find elements in nested containers
 func walkUI(el vtui.UIElement, fn func(vtui.UIElement) bool) bool {
