@@ -805,7 +805,9 @@ func (tv *TerminalView) ProcessFar2lInteract(data []byte) {
 			tv.clipboardChunks = nil
 			reply.PushU8(1)
 		case 'e':
-			vtui.SetOSClipboard("")
+			if !vtui.SetOSClipboard("") {
+				vtui.SetClipboard("")
+			}
 			tv.clipboardChunks = nil
 			reply.PushU8(1)
 		case 'a':
@@ -825,7 +827,9 @@ func (tv *TerminalView) ProcessFar2lInteract(data []byte) {
 			textBytes := stk.PopBytes(int(len))
 			fullData := append(tv.clipboardChunks, textBytes...)
 			tv.clipboardChunks = nil
-			vtui.SetOSClipboard(string(fullData))
+			if !vtui.SetOSClipboard(string(fullData)) {
+				vtui.SetClipboard(string(fullData))
+			}
 			reply.PushU8(1)
 		case 'g':
 			_ = stk.PopU32() // fmt
