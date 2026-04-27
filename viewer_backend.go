@@ -7,7 +7,7 @@ import (
 
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
-	"github.com/unxed/vtui/piecetable"
+	"github.com/unxed/f4/piecetable"
 )
 
 // ViewerBackend provides async random access to a file using small cache window.

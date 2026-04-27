@@ -8,7 +8,7 @@ import (
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
-	"github.com/unxed/vtui/piecetable"
+	"github.com/unxed/f4/piecetable"
 )
 
 func TestEditor_TabBehavior(t *testing.T) {

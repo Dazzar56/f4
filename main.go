@@ -14,6 +14,7 @@ import (
 )
 
 func main() {
+	vtui.AppName = "f4"
 	var sudoDispatcher string
 
 	// Initialize SudoClient immediately for all process types

@@ -14,8 +14,8 @@ import (
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 	"unicode"
-	"github.com/unxed/vtui/piecetable"
-	"github.com/unxed/vtui/textlayout"
+	"github.com/unxed/f4/piecetable"
+	"github.com/unxed/f4/textlayout"
 )
 
 type visualCell struct {

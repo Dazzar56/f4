@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
-	"github.com/unxed/vtui/piecetable"
+	"github.com/unxed/f4/piecetable"
 	"github.com/unxed/vtinput"
 )
 // mockCrashingHighlighter fails the test if it receives a line longer than the safety limit.
