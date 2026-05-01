@@ -4,7 +4,12 @@ import (
 	"context"
 	"testing"
 	"time"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 
+	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 	"github.com/unxed/vtinput"
 )
@@ -130,6 +135,144 @@ func TestQueueManager_ConcurrencyLimit(t *testing.T) {
 
 	if !task2Started {
 		t.Error("Task 2 never started")
+	}
+}
+func TestQueueManager_ConflictDetection(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "conflict.txt")
+	os.WriteFile(path, []byte("ver1"), 0644)
+
+	v := vfs.NewOSVFS(tmp)
+	st, _ := v.Stat(context.Background(), path)
+
+	qm := GlobalQueueManager
+	qm.mu.Lock()
+	qm.tasks = nil
+	qm.activeKeys = make(map[string]bool)
+	qm.mu.Unlock()
+
+	// 1. Ставим задачу в очередь с текущим состоянием файла
+	task := &QueueTask{
+		Type: "Copy",
+		Preconditions: []OpPrecondition{
+			{Vfs: v, Path: path, MTime: st.MTime, Size: st.Size, IsDir: false},
+		},
+		Run: func(ctx context.Context, r TaskReporter, a vtui.Frame) error { return nil },
+	}
+
+	// Блокируем очередь, чтобы задача не запустилась мгновенно
+	qm.mu.Lock()
+	qm.activeKeys["local_disk"] = true // Предполагаем linux ресурс ключ
+	if runtime.GOOS == "windows" { qm.activeKeys[filepath.VolumeName(tmp)] = true }
+	qm.mu.Unlock()
+
+	qm.Enqueue(task)
+
+	// 2. Изменяем файл на диске
+	time.Sleep(100 * time.Millisecond)
+	os.WriteFile(path, []byte("ver2-changed"), 0644)
+
+	// 3. Разблокируем очередь
+	qm.mu.Lock()
+	qm.activeKeys = make(map[string]bool)
+	qm.mu.Unlock()
+
+	// Ждем обработки
+	timeout := time.After(2 * time.Second)
+	for {
+		qm.mu.Lock()
+		state := task.State
+		qm.mu.Unlock()
+		if state == "Error" || state == "Done" { break }
+		select {
+		case task := <-vtui.FrameManager.TaskChan: task()
+		case <-timeout: t.Fatal("Task hung")
+		default: time.Sleep(10 * time.Millisecond)
+		}
+	}
+
+	if task.State != "Error" || task.ErrorMsg == nil {
+		t.Errorf("Expected conflict error, got state %s", task.State)
+	}
+}
+
+func TestQueueManager_ResourceIndependence(t *testing.T) {
+	qm := GlobalQueueManager
+	qm.mu.Lock()
+	qm.tasks = nil
+	qm.activeKeys = make(map[string]bool)
+	qm.mu.Unlock()
+
+	start := make(chan bool, 2)
+
+	task1 := &QueueTask{
+		ResKeys: []string{"disk_A"},
+		Run: func(ctx context.Context, r TaskReporter, a vtui.Frame) error {
+			start <- true
+			time.Sleep(200 * time.Millisecond)
+			return nil
+		},
+	}
+	task2 := &QueueTask{
+		ResKeys: []string{"disk_B"}, // Другой ресурс!
+		Run: func(ctx context.Context, r TaskReporter, a vtui.Frame) error {
+			start <- true
+			return nil
+		},
+	}
+
+	qm.Enqueue(task1)
+	qm.Enqueue(task2)
+
+	// Обе задачи должны запуститься почти одновременно, не дожидаясь друг друга
+	count := 0
+	timeout := time.After(1 * time.Second)
+Loop:
+	for count < 2 {
+		select {
+		case <-start:
+			count++
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatalf("Only %d tasks started, expected 2 (independence check)", count)
+			break Loop
+		}
+	}
+}
+
+func TestQueueFrame_ClearDone(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	qf := NewQueueFrame()
+
+	qm := GlobalQueueManager
+	qm.mu.Lock()
+	qm.tasks = []*QueueTask{
+		{ID: 1, State: "Done"},
+		{ID: 2, State: "Running"},
+		{ID: 3, State: "Error"},
+	}
+	qm.mu.Unlock()
+
+	// Нажимаем "Clear Done"
+	// В нашем коде btnClear это второй ребенок после таблицы и кнопки Cancel?
+	// Нет, лучше найдем по тексту.
+	var btnClear *vtui.Button
+	for _, child := range qf.GetChildren() {
+		if b, ok := child.(*vtui.Button); ok && strings.Contains(b.GetText(), "Clear") {
+			btnClear = b
+		}
+	}
+
+	btnClear.OnClick()
+
+	qm.mu.Lock()
+	count := len(qm.tasks)
+	qm.mu.Unlock()
+
+	if count != 1 {
+		t.Errorf("Clear Done failed. Remaining tasks: %d, expected 1 (the Running one)", count)
 	}
 }
 

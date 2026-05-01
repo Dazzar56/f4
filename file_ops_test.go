@@ -1439,3 +1439,39 @@ func TestExecuteFileOp_Move_FinalizeFailure(t *testing.T) {
 		t.Error("Source file was deleted even though Remove returned error")
 	}
 }
+func TestExecuteFileOp_ForegroundIntegrity(t *testing.T) {
+	// Проверяем, что Mode 2 (Foreground) по-прежнему работает без очереди
+	fm := vtui.FrameManager
+	fm.Init(vtui.NewSilentScreenBuf())
+
+	tmpSrc := t.TempDir()
+	tmpDst := t.TempDir()
+	os.WriteFile(filepath.Join(tmpSrc, "direct.txt"), []byte("data"), 0644)
+
+	srcVfs := vfs.NewOSVFS(tmpSrc)
+	dstVfs := vfs.NewOSVFS(tmpDst)
+
+	// Запускаем в режиме 2 (Foreground)
+	ExecuteFileOp(nil, srcVfs, dstVfs, []string{"direct.txt"}, tmpDst, false, 2, nil)
+
+	// В этом режиме должен сразу появиться диалог прогресса
+	foundDialog := false
+	timeout := time.After(1 * time.Second)
+Loop:
+	for {
+		select {
+		case task := <-fm.TaskChan:
+			task()
+			if fm.GetTopFrameType() == vtui.TypeDialog && strings.Contains(fm.GetTopFrame().GetTitle(), "Copying") {
+				foundDialog = true
+				break Loop
+			}
+		case <-timeout:
+			break Loop
+		}
+	}
+
+	if !foundDialog {
+		t.Error("Foreground mode (2) failed to show progress dialog immediately")
+	}
+}
