@@ -129,6 +129,14 @@ func TestActionDelete_BulkErrorAccumulation(t *testing.T) {
 	actionDelete(pf)
 
 	// 2. Находим кнопку "Delete" в диалоге подтверждения и нажимаем её
+	// In test, force mode to Foreground Lock (2) so it runs synchronously
+	dlgConfirm1 := fm.GetTopFrame().(vtui.Container)
+	for _, child := range dlgConfirm1.GetChildren() {
+		if c, ok := child.(*vtui.ComboBox); ok {
+			c.Menu.SetSelectPos(2) // Foreground
+		}
+	}
+
 	frame := fm.GetTopFrame()
 	if frame == nil {
 		t.Fatal("Confirmation dialog was not shown")
@@ -250,6 +258,11 @@ func TestActionDelete_RetrySuccess(t *testing.T) {
 
 	// 1. Подтверждаем удаление
 	dlgConfirm := fm.GetTopFrame().(vtui.Container)
+	for _, child := range dlgConfirm.GetChildren() {
+		if c, ok := child.(*vtui.ComboBox); ok {
+			c.Menu.SetSelectPos(2) // Foreground
+		}
+	}
 	clickDialogButton(t, dlgConfirm, "Delete")
 
 	// 2. Ждем диалог ошибки и жмем Retry
@@ -307,7 +320,13 @@ func TestActionDelete_Abort(t *testing.T) {
 	pf.activeIdx = 0
 
 	actionDelete(pf)
-	clickDialogButton(t, fm.GetTopFrame().(vtui.Container), "Delete")
+	dlgConfirm := fm.GetTopFrame().(vtui.Container)
+	for _, child := range dlgConfirm.GetChildren() {
+		if c, ok := child.(*vtui.ComboBox); ok {
+			c.Menu.SetSelectPos(2) // Foreground
+		}
+	}
+	clickDialogButton(t, dlgConfirm, "Delete")
 
 	// Ждем ошибку и жмем Abort
 	timeout := time.After(2 * time.Second)

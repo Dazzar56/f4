@@ -282,7 +282,7 @@ func TestFileOp_PathLogic(t *testing.T) {
 		tCtx := vtui.RunAsync(func(c *vtui.TaskContext) {})
 
 		// Target is a new filename, not a directory
-		ExecuteFileOp(nil, srcVfs, dstVfs, []string{"old.txt"}, "new.txt", false, false, nil)
+		ExecuteFileOp(nil, srcVfs, dstVfs, []string{"old.txt"}, "new.txt", false, 2, nil)
 
 		// Drain task queue
 		for i := 0; i < 50; i++ {
@@ -303,7 +303,7 @@ func TestFileOp_PathLogic(t *testing.T) {
 		os.WriteFile(filepath.Join(tmpSrc, "f2.txt"), []byte("2"), 0644)
 
 		// Target "new_dir" doesn't exist, but we have multiple files
-		ExecuteFileOp(nil, srcVfs, dstVfs, []string{"f1.txt", "f2.txt"}, "new_dir", false, false, nil)
+		ExecuteFileOp(nil, srcVfs, dstVfs, []string{"f1.txt", "f2.txt"}, "new_dir", false, 2, nil)
 
 		for i := 0; i < 100; i++ {
 			select {
@@ -324,7 +324,7 @@ func TestFileOp_PathLogic(t *testing.T) {
 		os.WriteFile(filepath.Join(tmpSrc, "source.txt"), []byte("content"), 0644)
 
 		// Target: "deep/path/target.txt" (subfolders don't exist)
-		ExecuteFileOp(nil, srcVfs, dstVfs, []string{"source.txt"}, "deep/path/target.txt", false, false, nil)
+		ExecuteFileOp(nil, srcVfs, dstVfs, []string{"source.txt"}, "deep/path/target.txt", false, 2, nil)
 
 		for i := 0; i < 50; i++ {
 			select {
@@ -343,7 +343,7 @@ func TestFileOp_PathLogic(t *testing.T) {
 		os.WriteFile(filepath.Join(tmpSrc, "source2.txt"), []byte("content"), 0644)
 
 		// Target: "new_dir/" (trailing slash should force directory creation)
-	ExecuteFileOp(nil, srcVfs, dstVfs, []string{"source2.txt"}, "new_dir"+string(os.PathSeparator), false, false, nil)
+	ExecuteFileOp(nil, srcVfs, dstVfs, []string{"source2.txt"}, "new_dir"+string(os.PathSeparator), false, 2, nil)
 
 		for i := 0; i < 50; i++ {
 			select {
@@ -430,7 +430,7 @@ func TestExecuteFileOp_OptimizedRenameConflict(t *testing.T) {
 	os.WriteFile(filepath.Join(tmp, "dst.txt"), []byte("destination"), 0644)
 
 	// Execute Move
-	ExecuteFileOp(nil, v, v, []string{"src.txt"}, "dst.txt", true, false, nil)
+	ExecuteFileOp(nil, v, v, []string{"src.txt"}, "dst.txt", true, 2, nil)
 
 	// Drain task queue. Since we are moving a file onto an existing one,
 	// it should trigger AskOverwrite, which creates a dialog.
@@ -565,7 +565,7 @@ func TestExecuteFileOp_MoveAcrossVFS_Fallback(t *testing.T) {
 	// Use ExecuteFileOp with isMove=true.
 	// Since they are different OSVFS instances (simulating different volumes/servers),
 	// the recursiveCopy logic will be used.
-	ExecuteFileOp(nil, srcVfs, dstVfs, []string{fileName}, tmpDst, true, false, nil)
+	ExecuteFileOp(nil, srcVfs, dstVfs, []string{fileName}, tmpDst, true, 2, nil)
 
 	// Drain task queue
 	timeout := time.After(1 * time.Second)
@@ -608,7 +608,7 @@ func TestExecuteFileOp_LargeFileIntegrity(t *testing.T) {
 
 	// 2. Perform Copy
 	done := make(chan struct{})
-	ExecuteFileOp(nil, srcVfs, dstVfs, []string{fileName}, tmpDst, false, false, func() {
+	ExecuteFileOp(nil, srcVfs, dstVfs, []string{fileName}, tmpDst, false, 2, func() {
 		close(done)
 	})
 
@@ -664,7 +664,7 @@ func TestExecuteFileOp_DeepIntegrity(t *testing.T) {
 
 	// 2. Perform recursive copy of "root"
 	done := make(chan struct{})
-	ExecuteFileOp(nil, srcVfs, dstVfs, []string{"root"}, dstBase, false, false, func() {
+	ExecuteFileOp(nil, srcVfs, dstVfs, []string{"root"}, dstBase, false, 2, func() {
 		close(done)
 	})
 
@@ -721,7 +721,7 @@ func TestExecuteFileOp_Move_PermissionDenied_Recovery(t *testing.T) {
 	defer os.Chmod(dstDir, 0755)
 
 	v := vfs.NewOSVFS("/")
-	ExecuteFileOp(nil, v, v, []string{srcFile}, dstDir, true, false, nil)
+	ExecuteFileOp(nil, v, v, []string{srcFile}, dstDir, true, 2, nil)
 
 	// Pump tasks. It should hit AskError. We simulate "Abort".
 	timeout := time.After(500 * time.Millisecond)
@@ -980,7 +980,7 @@ func TestFileOps_UI_RememberOverwrite(t *testing.T) {
 	os.WriteFile(filepath.Join(tmpDst, "f2.txt"), []byte("old2"), 0644)
 
 	done := make(chan struct{})
-	ExecuteFileOp(nil, vfs.NewOSVFS(tmpSrc), vfs.NewOSVFS(tmpDst), []string{"f1.txt", "f2.txt"}, tmpDst, false, false, func() { close(done) })
+	ExecuteFileOp(nil, vfs.NewOSVFS(tmpSrc), vfs.NewOSVFS(tmpDst), []string{"f1.txt", "f2.txt"}, tmpDst, false, 2, func() { close(done) })
 
 	// Wait for first warning (f1.txt)
 	dlg := waitForDialog(t, " Warning ")
@@ -1026,7 +1026,7 @@ func TestFileOps_UI_RenameAndAppendUnsupported(t *testing.T) {
 	os.WriteFile(filepath.Join(tmpDst, "f2.txt"), []byte("dest2"), 0644)
 
 	done := make(chan struct{})
-	ExecuteFileOp(nil, vfs.NewOSVFS(tmpSrc), vfs.NewOSVFS(tmpDst), []string{"f1.txt"}, tmpDst, false, false, func() { close(done) })
+	ExecuteFileOp(nil, vfs.NewOSVFS(tmpSrc), vfs.NewOSVFS(tmpDst), []string{"f1.txt"}, tmpDst, false, 2, func() { close(done) })
 
 	// 1. First warning (f1.txt)
 	dlg := waitForDialog(t, " Warning ")
@@ -1078,7 +1078,7 @@ func TestFileOps_UI_MoveSkip(t *testing.T) {
 
 	done := make(chan struct{})
 	// isMove = true
-	ExecuteFileOp(nil, vfs.NewOSVFS(tmpSrc), vfs.NewOSVFS(tmpDst), []string{"f1.txt"}, tmpDst, true, false, func() { close(done) })
+	ExecuteFileOp(nil, vfs.NewOSVFS(tmpSrc), vfs.NewOSVFS(tmpDst), []string{"f1.txt"}, tmpDst, true, 2, func() { close(done) })
 
 	dlg := waitForDialog(t, " Warning ")
 	clickDialogButton(t, dlg, "Skip")
@@ -1113,7 +1113,7 @@ func TestFileOps_ForkedWorkspace(t *testing.T) {
 
 	done := make(chan struct{})
 	// forked = true
-	ExecuteFileOp(pf, vfs.NewOSVFS(tmpSrc), vfs.NewOSVFS(tmpDst), []string{"f1.txt"}, tmpDst, false, true, func() { close(done) })
+	ExecuteFileOp(pf, vfs.NewOSVFS(tmpSrc), vfs.NewOSVFS(tmpDst), []string{"f1.txt"}, tmpDst, false, 1, func() { close(done) })
 
 	// Process tasks until the background copy finishes
 	timeout := time.After(2 * time.Second)
@@ -1149,8 +1149,8 @@ func TestFileOps_UI_ConcurrentConflicts(t *testing.T) {
 
 	done1, done2 := make(chan struct{}), make(chan struct{})
 
-	ExecuteFileOp(nil, vfs.NewOSVFS(tmpSrc1), vfs.NewOSVFS(tmpDst1), []string{"f1.txt"}, tmpDst1, false, false, func() { close(done1) })
-	ExecuteFileOp(nil, vfs.NewOSVFS(tmpSrc2), vfs.NewOSVFS(tmpDst2), []string{"f2.txt"}, tmpDst2, false, false, func() { close(done2) })
+	ExecuteFileOp(nil, vfs.NewOSVFS(tmpSrc1), vfs.NewOSVFS(tmpDst1), []string{"f1.txt"}, tmpDst1, false, 2, func() { close(done1) })
+	ExecuteFileOp(nil, vfs.NewOSVFS(tmpSrc2), vfs.NewOSVFS(tmpDst2), []string{"f2.txt"}, tmpDst2, false, 2, func() { close(done2) })
 
 	// We expect TWO warning dialogs (processed sequentially by the TaskChan pump).
 	// Since operations are concurrent, we must check which dialog is which.
@@ -1220,7 +1220,7 @@ func TestFileOps_UI_CancelDuringMove(t *testing.T) {
 
 	done := make(chan struct{})
 	// isMove = true
-	ExecuteFileOp(nil, vfs.NewOSVFS(tmpSrc), vfs.NewOSVFS(tmpDst), []string{"f1.txt"}, tmpDst, true, false, func() { close(done) })
+	ExecuteFileOp(nil, vfs.NewOSVFS(tmpSrc), vfs.NewOSVFS(tmpDst), []string{"f1.txt"}, tmpDst, true, 2, func() { close(done) })
 
 	// Wait for warning dialog
 	dlg := waitForDialog(t, " Warning ")
@@ -1267,7 +1267,7 @@ func TestFileOps_UI_RenameToEmpty(t *testing.T) {
 	os.WriteFile(filepath.Join(tmpDst, "f.txt"), []byte("dst"), 0644)
 
 	done := make(chan struct{})
-	ExecuteFileOp(nil, vfs.NewOSVFS(tmpSrc), vfs.NewOSVFS(tmpDst), []string{"f.txt"}, tmpDst, true, false, func() { close(done) })
+	ExecuteFileOp(nil, vfs.NewOSVFS(tmpSrc), vfs.NewOSVFS(tmpDst), []string{"f.txt"}, tmpDst, true, 2, func() { close(done) })
 
 	dlg := waitForDialog(t, " Warning ")
 	clickDialogButton(t, dlg, "Rename")
@@ -1365,7 +1365,7 @@ func TestExecuteFileOp_PathInterpretations(t *testing.T) {
 
 	t.Run("Copy to dot", func(t *testing.T) {
 		// Копирование f1.txt в "." (текущая директория пассивной панели)
-		ExecuteFileOp(nil, srcVfs, dstVfs, []string{"f1.txt"}, ".", false, false, nil)
+		ExecuteFileOp(nil, srcVfs, dstVfs, []string{"f1.txt"}, ".", false, 2, nil)
 
 		// Pump
 		for i := 0; i < 50; i++ {
@@ -1382,7 +1382,7 @@ func TestExecuteFileOp_PathInterpretations(t *testing.T) {
 	t.Run("Copy with trailing slash (force dir)", func(t *testing.T) {
 		// Копирование f1.txt в "newdir/" -> f1.txt должен оказаться внутри newdir
 		target := "newdir" + string(os.PathSeparator)
-		ExecuteFileOp(nil, srcVfs, dstVfs, []string{"f1.txt"}, target, false, false, nil)
+		ExecuteFileOp(nil, srcVfs, dstVfs, []string{"f1.txt"}, target, false, 2, nil)
 
 		for i := 0; i < 50; i++ {
 			select {
@@ -1419,7 +1419,7 @@ func TestExecuteFileOp_Move_FinalizeFailure(t *testing.T) {
 	srcVfs := &mockFailingRemoveVFS{VFS: vfs.NewOSVFS(tmpSrc)}
 	dstVfs := vfs.NewOSVFS(tmpDst)
 
-	ExecuteFileOp(nil, srcVfs, dstVfs, []string{"ghost.txt"}, tmpDst, true, false, nil)
+	ExecuteFileOp(nil, srcVfs, dstVfs, []string{"ghost.txt"}, tmpDst, true, 2, nil)
 
 	// Pump
 	for i := 0; i < 100; i++ {

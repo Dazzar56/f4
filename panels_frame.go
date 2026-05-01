@@ -1071,7 +1071,14 @@ func (pf *PanelsFrame) GetPaths() (string, string) {
 func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 	switch cmd {
 	case vtui.CmQuit:
-		dlg := vtui.ShowMessage(Msg("Quit.Title"), Msg("Quit.Confirm"), []string{Msg("Quit.Btn"), Msg("vtui.Cancel")})
+		msg := Msg("Quit.Confirm")
+		if GlobalQueueManager != nil {
+			active := GlobalQueueManager.ActiveTasksCount()
+			if active > 0 {
+				msg = fmt.Sprintf("There are %d active background operations!\nIf you exit, they will be aborted.\n\n%s", active, msg)
+			}
+		}
+		dlg := vtui.ShowMessage(Msg("Quit.Title"), msg, []string{Msg("Quit.Btn"), Msg("vtui.Cancel")})
 		dlg.OnResult = func(code int) {
 			if code == 0 {
 				SaveSession()
@@ -1246,8 +1253,8 @@ func (pf *PanelsFrame) showDummyOpDialog() {
 	msg := Msg("Op.DummyText")
 	lines := vtui.WrapText(msg, 50-4)
 
-	dlg := vtui.NewCenteredDialog(50, 10+len(lines)-1, Msg("Op.DummyTitle"))
-	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 50-4, (10+len(lines)-1)-4)
+	dlg := vtui.NewCenteredDialog(50, 11+len(lines)-1, Msg("Op.DummyTitle"))
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 50-4, (11+len(lines)-1)-4)
 
 	for _, l := range lines {
 		t := vtui.NewText(0, 0, l, vtui.Palette[vtui.ColDialogText])
@@ -1255,15 +1262,18 @@ func (pf *PanelsFrame) showDummyOpDialog() {
 		vbox.Add(t, vtui.Margins{}, vtui.AlignLeft)
 	}
 
-	chkClone := vtui.NewCheckbox(0, 0, Msg("Op.ClonePanels"), false)
-	dlg.AddItem(chkClone)
+	comboMode := vtui.NewComboBox(0, 0, 32, []string{"Queue (Default)", "Background panel clone", "Foreground lock"})
+	comboMode.DropdownOnly = true
+	comboMode.Menu.SetSelectPos(0)
+	comboMode.Edit.SetText(comboMode.Menu.Items[0].Text)
+	dlg.AddItem(comboMode)
 
 	btnStart := vtui.NewButton(0, 0, "&Start")
 	btnCancel := vtui.NewButton(0, 0, "&Cancel")
 	dlg.AddItem(btnStart)
 	dlg.AddItem(btnCancel)
 
-	vbox.Add(chkClone, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	vbox.Add(comboMode, vtui.Margins{Top: 1}, vtui.AlignCenter)
 
 	hbox := vtui.NewHBoxLayout(0, 0, 50-4, 1)
 	hbox.HorizontalAlign = vtui.AlignCenter
@@ -1279,7 +1289,7 @@ func (pf *PanelsFrame) showDummyOpDialog() {
 
 	btnCancel.OnClick = func() { dlg.Close() }
 	btnStart.OnClick = func() {
-		mode := chkClone.State == 1
+		mode := comboMode.Menu.SelectPos
 		dlg.Close()
 		go pf.ExecuteDummyOp(mode)
 	}
@@ -1353,22 +1363,50 @@ func (pf *PanelsFrame) RunProgressTask(title, startMsg string, forked bool, work
 		})
 	})
 }
-func (pf *PanelsFrame) ExecuteDummyOp(forked bool) {
-	pf.RunProgressTask(" Processing... ", "Initializing...", forked, func(ctx context.Context, update func(msg string, percent int)) error {
+type progressTaskReporter struct {
+	update func(msg string, percent int)
+}
+func (p *progressTaskReporter) UpdateScan(currentPath string, files, dirs int64) {
+	p.update("Scanning...", 0)
+}
+func (p *progressTaskReporter) UpdateTransfer(action, filename string, currentPct int, totalText string, totalPct int, speedText string) {
+	p.update(fmt.Sprintf("%s: %s", action, filename), totalPct)
+}
+func (p *progressTaskReporter) IsCancelled() bool { return false }
+
+func (pf *PanelsFrame) ExecuteDummyOp(mode int) {
+	desc := "Dummy 5-minute operation"
+	runFunc := func(ctx context.Context, reporter TaskReporter, anchor vtui.Frame) error {
 		totalSteps := 300 // 5 minutes = 300 seconds
 		for i := 1; i <= totalSteps; i++ {
 			if ctx.Err() != nil { return ctx.Err() }
 			time.Sleep(1 * time.Second)
-			update(fmt.Sprintf("File %d of %d", i, totalSteps), (i*100)/totalSteps)
+			reporter.UpdateTransfer("Processing", fmt.Sprintf("File %d of %d", i, totalSteps), (i*100)/totalSteps, "Dummy", (i*100)/totalSteps, "1 item/s")
 		}
 		return nil
-	}, func(err error) {
-		if err == nil {
-			// Find the active screen to attach the completion message
-			top := vtui.FrameManager.GetTopFrame()
-			vtui.ShowMessageOn(top, " Done ", "Dummy operation finished!", []string{"&Ok"})
-		}
-	})
+	}
+
+	if mode == 0 {
+		GlobalQueueManager.Enqueue(&QueueTask{
+			Type: "Dummy",
+			Desc: desc,
+			Run: runFunc,
+			OnComplete: func() {
+				vtui.ShowToast("Dummy operation finished successfully", 3*time.Second)
+			},
+		})
+	} else {
+		forked := (mode == 1)
+		pf.RunProgressTask(" Processing... ", "Initializing...", forked, func(ctx context.Context, update func(msg string, percent int)) error {
+			reporter := &progressTaskReporter{update: update}
+			return runFunc(ctx, reporter, nil)
+		}, func(err error) {
+			if err == nil {
+				top := vtui.FrameManager.GetTopFrame()
+				vtui.ShowMessageOn(top, " Done ", "Dummy operation finished!", []string{"&Ok"})
+			}
+		})
+	}
 }
 func (pf *PanelsFrame) RefreshAll() {
 	if pf == nil {

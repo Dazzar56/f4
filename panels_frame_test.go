@@ -664,6 +664,42 @@ func TestPanelsFrame_ResizingIntegration(t *testing.T) {
 		t.Errorf("Resized Right Panel X range: expected 60..119, got %d..%d", rightX1, rightX2)
 	}
 }
+func TestPanelsFrame_ExitWarning_ActiveTasks(t *testing.T) {
+	fm := vtui.FrameManager
+	fm.Init(vtui.NewSilentScreenBuf())
+	pf := NewPanelsFrame()
+	fm.Push(pf)
+
+	qm := GlobalQueueManager
+	qm.mu.Lock()
+	qm.tasks = []*QueueTask{{ID: 1, State: "Queued"}}
+	qm.mu.Unlock()
+
+	// Триггерим выход
+	pf.HandleCommand(vtui.CmQuit, nil)
+
+	// Находим диалог
+	top := fm.GetTopFrame()
+	if top == nil { t.Fatal("Exit dialog not shown") }
+
+	// Проверяем текст сообщения (должен содержать упоминание активных задач)
+	foundWarning := false
+	// Перебираем детей контейнера (диалога)
+	if container, ok := top.(vtui.Container); ok {
+		for _, child := range container.GetChildren() {
+			if txt, ok := child.(*vtui.Text); ok {
+				if strings.Contains(txt.GetText(), "active background operations") {
+					foundWarning = true
+					break
+				}
+			}
+		}
+	}
+
+	if !foundWarning {
+		t.Error("Exit dialog did not show warning about active background tasks")
+	}
+}
 func TestPanelsFrame_SwapPanels(t *testing.T) {
 	pf := NewPanelsFrame()
 	pf.ResizeConsole(80, 25)
@@ -1206,8 +1242,8 @@ func TestExecuteDummyOp_HeadlessMode(t *testing.T) {
 
 	initialScreens := len(fm.Screens)
 
-	// Trigger Mode 1 (Headless)
-	go pf.ExecuteDummyOp(false)
+	// Trigger Mode Foreground (2)
+	go pf.ExecuteDummyOp(2)
 
 	// Manually process the task queue (since we are not in fm.Run loop)
 	timeout := time.After(1 * time.Second)

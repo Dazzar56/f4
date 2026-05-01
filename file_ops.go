@@ -52,115 +52,84 @@ func formatIntWithSpaces(n int64) string {
 	return res.String()
 }
 
-func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, destInput string, isMove bool, forked bool, onComplete func()) {
-	title := " Copying... "
-	if isMove {
-		title = " Moving... "
-	}
-
-	dlg := NewFileOpProgressDialog(title)
-
-	var taskCtx *vtui.TaskContext
-	dlg.btnCancel.OnClick = func() {
-		dlg.SetExitCode(1)
-	}
-	dlg.OnResult = func(code int) {
-		if taskCtx != nil {
-			taskCtx.Cancel()
-		}
-	}
-
-	vtui.FrameManager.PostTask(func() {
-		if forked && pf != nil {
-			clone := pf.Clone()
-			vtui.FrameManager.AddScreen(clone)
-			vtui.FrameManager.Push(dlg)
+func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, destInput string, isMove bool, mode int, onComplete func()) {
+	destPath := destInput
+	if !filepath.IsAbs(destPath) {
+		if !strings.ContainsAny(destInput, "/\\") && destInput != "." && destInput != ".." {
+			destPath = srcVfs.Join(srcVfs.GetPath(), destInput)
+			dstVfs = srcVfs
 		} else {
-			vtui.FrameManager.AddScreenHeadless(dlg)
+			destPath = dstVfs.Join(dstVfs.GetPath(), destPath)
 		}
-	})
+	}
 
-	taskCtx = vtui.RunAsync(func(ctx *vtui.TaskContext) {
-		defer ctx.RunOnUI(func() {
-			dlg.Close()
-			if pf != nil {
-				pf.RefreshAll()
-			}
-			if onComplete != nil {
-				onComplete()
-			}
-		})
-
-		destPath := destInput
-		if !filepath.IsAbs(destPath) {
-			if !strings.ContainsAny(destInput, "/\\") && destInput != "." && destInput != ".." {
-				destPath = srcVfs.Join(srcVfs.GetPath(), destInput)
-				dstVfs = srcVfs
-			} else {
-				destPath = dstVfs.Join(dstVfs.GetPath(), destPath)
-			}
+	isTargetDir := len(names) > 1
+	if !isTargetDir {
+		if strings.HasSuffix(destInput, "/") || strings.HasSuffix(destInput, "\\") {
+			isTargetDir = true
+		} else if stat, err := dstVfs.Stat(context.Background(), destPath); err == nil && stat.IsDir {
+			isTargetDir = true
+		} else if destInput == "." || destInput == ".." {
+			isTargetDir = true
 		}
+	}
 
-		isTargetDir := len(names) > 1
-		if !isTargetDir {
-			if strings.HasSuffix(destInput, "/") || strings.HasSuffix(destInput, "\\") {
-				isTargetDir = true
-			} else if stat, err := dstVfs.Stat(ctx.Context, destPath); err == nil && stat.IsDir {
-				isTargetDir = true
-			} else if destInput == "." || destInput == ".." {
-				isTargetDir = true
-			}
+	if isMove && pf != nil {
+		if fspSrc := pf.getActivePanel(); fspSrc != nil {
+			fspSrc.pendingSelection = fspSrc.GetSuccessorName()
 		}
+	}
 
-		if isMove && pf != nil {
-			if fspSrc := pf.getActivePanel(); fspSrc != nil {
-				fspSrc.pendingSelection = fspSrc.GetSuccessorName()
-			}
+	var preconds []OpPrecondition
+	for _, name := range names {
+		if st, err := srcVfs.Stat(context.Background(), srcVfs.Join(srcVfs.GetPath(), name)); err == nil {
+			preconds = append(preconds, OpPrecondition{
+				Vfs: srcVfs, Path: srcVfs.Join(srcVfs.GetPath(), name), MTime: st.MTime, Size: st.Size, IsDir: st.IsDir,
+			})
 		}
+	}
 
+	actionDesc := "Copy"
+	if isMove {
+		actionDesc = "Move"
+	}
+	desc := fmt.Sprintf("%d item(s) -> %s", len(names), vtui.TruncateMiddle(destInput, 15))
+
+	runFunc := func(ctx context.Context, reporter TaskReporter, anchor vtui.Frame) error {
 		dirToEnsure := destPath
 		if !isTargetDir {
 			dirToEnsure = dstVfs.Dir(destPath)
 		}
 
 		if dirToEnsure != "" && dirToEnsure != "." {
-			st, err := dstVfs.Stat(ctx.Context, dirToEnsure)
+			st, err := dstVfs.Stat(ctx, dirToEnsure)
 			if err != nil {
-				if mkErr := dstVfs.MkDir(ctx.Context, dirToEnsure); mkErr != nil {
-					ctx.RunOnUI(func() { vtui.ShowMessage(" Error ", fmt.Sprintf(Msg("Operation.Error"), mkErr.Error()), []string{"&Ok"}) })
-					return
+				if mkErr := dstVfs.MkDir(ctx, dirToEnsure); mkErr != nil {
+					return fmt.Errorf("failed to create target dir: %w", mkErr)
 				}
 			} else if !st.IsDir {
-				ctx.RunOnUI(func() { vtui.ShowMessage(" Error ", fmt.Sprintf("Target path component is not a directory: %s", dirToEnsure), []string{"&Ok"}) })
-				return
+				return fmt.Errorf("target path component is not a directory: %s", dirToEnsure)
 			}
 		}
 
 		var totalStats vfs.OpStats
 		scanErr := error(nil)
 		lastScanUpdate := time.Now()
-		totalStats, scanErr = vfs.CalculateStats(ctx.Context, srcVfs, srcVfs.GetPath(), names, func(currentPath string, stats vfs.OpStats) {
+		totalStats, scanErr = vfs.CalculateStats(ctx, srcVfs, srcVfs.GetPath(), names, func(currentPath string, stats vfs.OpStats) {
 			now := time.Now()
 			if now.Sub(lastScanUpdate) > 50*time.Millisecond {
 				lastScanUpdate = now
-				ctx.RunOnUI(func() {
-					dlg.UpdateScan(currentPath, stats.Files, stats.Dirs)
-					vtui.FrameManager.Redraw()
-				})
+				reporter.UpdateScan(currentPath, stats.Files, stats.Dirs)
 			}
 		})
-		ctx.RunOnUI(func() {
-			dlg.UpdateScan("", totalStats.Files, totalStats.Dirs)
-			vtui.FrameManager.Redraw()
-		})
+		reporter.UpdateScan("", totalStats.Files, totalStats.Dirs)
 
 		if scanErr != nil {
-			if scanErr != context.Canceled {
-				ctx.RunOnUI(func() { vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to scan files:\n%v", scanErr), []string{"&Ok"}) })
-			}
-			return
+			return scanErr
 		}
-		if ctx.Err() != nil { return }
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 
 		tracker := NewFileOpTracker(totalStats)
 
@@ -197,18 +166,17 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 				elapsed := now.Sub(startTime)
 				elapsedStr := fmt.Sprintf("Time: %02d:%02d:%02d", int(elapsed.Hours()), int(elapsed.Minutes())%60, int(elapsed.Seconds())%60)
 
-				// "Adult" ETA: Account for per-item overhead (metadata, open/close, latency)
-				// 32KB is a reasonable virtual 'weight' for one file operation.
 				const ItemOverhead = 32 * 1024
 				vProcessed := float64(processed.Bytes + (processed.Files+processed.Dirs)*ItemOverhead)
 				vTotal := float64(total.Bytes + (total.Files+total.Dirs)*ItemOverhead)
 
 				etaStr := "Remaining: ??:??:??"
-				// Use total average virtual speed for maximum ETA stability
 				if vTotal > 0 && vProcessed > 0 && elapsed.Seconds() > 0.5 {
 					ratio := vProcessed / vTotal
 					etaSecs := (elapsed.Seconds() / ratio) - elapsed.Seconds()
-					if etaSecs < 0 { etaSecs = 0 }
+					if etaSecs < 0 {
+						etaSecs = 0
+					}
 					etaDur := time.Duration(etaSecs * float64(time.Second))
 					etaStr = fmt.Sprintf("Remaining: %02d:%02d:%02d", int(etaDur.Hours()), int(etaDur.Minutes())%60, int(etaDur.Seconds())%60)
 				}
@@ -218,17 +186,14 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 					speedStr = formatSize(int64(currentSpeed)) + "/s"
 				}
 
-				// Форматируем строку: 16 символов, 21 символ, 15 символов -> ровно 52 символа + пробелы = 54 (внутренняя ширина диалога 60-6)
 				timeSpeedText := fmt.Sprintf("%-16s %-21s %15s", elapsedStr, etaStr, speedStr)
 
-				// Calculate virtual percentage for debugging/testing
 				vPct := 0
 				if vTotal > 0 {
 					vPct = int((vProcessed * 100) / vTotal)
 				}
 
-				// Log progress to debug (with 5% or 5s debounce)
-				if totalPct >= lastLoggedPct + 5 || now.Sub(lastLoggedTime) >= 5*time.Second {
+				if totalPct >= lastLoggedPct+5 || now.Sub(lastLoggedTime) >= 5*time.Second {
 					vtui.DebugLog("FILEOP: %d%% (V:%d%%) | Items: %d/%d | Proc: %d/%d B | %s | %s | %s",
 						totalPct, vPct,
 						processed.Files+processed.Dirs, total.Files+total.Dirs,
@@ -239,12 +204,11 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 				}
 
 				action := "Copying"
-				if isMove { action = "Moving" }
+				if isMove {
+					action = "Moving"
+				}
 
-				ctx.RunOnUI(func() {
-					dlg.UpdateTransfer(action, currName, filePct, totalText, totalPct, timeSpeedText)
-					vtui.FrameManager.Redraw()
-				})
+				reporter.UpdateTransfer(action, currName, filePct, totalText, totalPct, timeSpeedText)
 			}
 		}
 
@@ -256,13 +220,15 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 				bytesSinceLastSpeedUpdate += int64(n)
 				updateUI(false)
 			},
-			Anchor: dlg,
+			Anchor: anchor,
 		}
 
 		updateUI(true)
 
 		for _, name := range names {
-			if ctx.Err() != nil { return }
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 
 			srcPath := srcVfs.Join(srcVfs.GetPath(), name)
 			targetItemPath := destPath
@@ -271,11 +237,11 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 			}
 
 			if isMove && srcVfs == dstVfs {
-				if _, err := dstVfs.Stat(ctx.Context, targetItemPath); err != nil {
-					if err := srcVfs.Rename(ctx.Context, srcPath, targetItemPath); err == nil {
+				if _, err := dstVfs.Stat(ctx, targetItemPath); err != nil {
+					if err := srcVfs.Rename(ctx, srcPath, targetItemPath); err == nil {
 						vtui.DebugLog("FILEOP: Optimized server-side rename: %s -> %s", srcPath, targetItemPath)
 
-						itemStat, _ := dstVfs.Stat(ctx.Context, targetItemPath)
+						itemStat, _ := dstVfs.Stat(ctx, targetItemPath)
 						if itemStat.IsDir {
 							tracker.DirDone()
 						} else {
@@ -289,20 +255,268 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 				}
 			}
 
-			err := recursiveCopy(ctx.Context, srcVfs, srcPath, dstVfs, targetItemPath, state, 0)
+			err := recursiveCopy(ctx, srcVfs, srcPath, dstVfs, targetItemPath, state, 0)
 			if err != nil {
-				if err != context.Canceled {
-					ctx.RunOnUI(func() { vtui.ShowMessage(" Error ", fmt.Sprintf(Msg("Operation.Error"), err.Error()), []string{"&Ok"}) })
-				}
-				return
+				return err
 			}
 
 			if isMove && state.SkippedCount == 0 {
-				srcVfs.Remove(ctx.Context, srcPath)
+				srcVfs.Remove(ctx, srcPath)
 			}
 			updateUI(true)
 		}
-	})
+		return nil
+	}
+
+	if mode == 0 { // Queue
+		rk1 := getResourceKey(srcVfs)
+		rk2 := getResourceKey(dstVfs)
+		var keys []string
+		if rk1 != "" {
+			keys = append(keys, rk1)
+		}
+		if rk2 != "" && rk2 != rk1 {
+			keys = append(keys, rk2)
+		}
+		task := &QueueTask{
+			Type:          actionDesc,
+			Desc:          desc,
+			Preconditions: preconds,
+			ResKeys:       keys,
+			Run:           runFunc,
+			OnComplete:    onComplete,
+		}
+		GlobalQueueManager.Enqueue(task)
+	} else { // Foreground or Background
+		title := " Copying... "
+		if isMove {
+			title = " Moving... "
+		}
+		dlg := NewFileOpProgressDialog(title)
+		var taskCtx *vtui.TaskContext
+		dlg.btnCancel.OnClick = func() { dlg.SetExitCode(1) }
+		dlg.OnResult = func(code int) {
+			if taskCtx != nil {
+				taskCtx.Cancel()
+			}
+		}
+
+		reporter := &DialogReporter{dlg: dlg}
+
+		vtui.FrameManager.PostTask(func() {
+			if mode == 1 && pf != nil {
+				clone := pf.Clone()
+				vtui.FrameManager.AddScreen(clone)
+				vtui.FrameManager.Push(dlg)
+			} else {
+				vtui.FrameManager.AddScreenHeadless(dlg)
+			}
+		})
+
+		taskCtx = vtui.RunAsync(func(ctx *vtui.TaskContext) {
+			err := runFunc(ctx.Context, reporter, dlg)
+			ctx.RunOnUI(func() {
+				dlg.Close()
+				if pf != nil {
+					pf.RefreshAll()
+				}
+				if onComplete != nil {
+					onComplete()
+				}
+				if err != nil && err != context.Canceled {
+					vtui.ShowMessage(" Error ", fmt.Sprintf("Operation failed:\n%v", err), []string{"&Ok"})
+				}
+			})
+		})
+	}
+}
+
+func ExecuteDeleteOp(pf *PanelsFrame, activeVfs vfs.VFS, names []string, mode int, onComplete func()) {
+	var preconds []OpPrecondition
+	for _, name := range names {
+		if st, err := activeVfs.Stat(context.Background(), activeVfs.Join(activeVfs.GetPath(), name)); err == nil {
+			preconds = append(preconds, OpPrecondition{
+				Vfs: activeVfs, Path: activeVfs.Join(activeVfs.GetPath(), name), MTime: st.MTime, Size: st.Size, IsDir: st.IsDir,
+			})
+		}
+	}
+	desc := fmt.Sprintf("Delete %d item(s)", len(names))
+
+	runFunc := func(ctx context.Context, reporter TaskReporter, anchor vtui.Frame) error {
+		var totalStats vfs.OpStats
+		scanErr := error(nil)
+		totalStats, scanErr = vfs.CalculateStats(ctx, activeVfs, activeVfs.GetPath(), names, func(currentPath string, stats vfs.OpStats) {
+			reporter.UpdateScan(currentPath, stats.Files, stats.Dirs)
+		})
+
+		if scanErr != nil && scanErr != context.Canceled {
+			return fmt.Errorf("failed to scan files: %w", scanErr)
+		}
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
+		tracker := NewFileOpTracker(totalStats)
+		lastUpdate := time.Now()
+
+		updateUI := func(force bool) {
+			now := time.Now()
+			if force || now.Sub(lastUpdate) >= 100*time.Millisecond {
+				lastUpdate = now
+				filePct, totalPct, currName := tracker.GetProgress()
+				processed, total := tracker.GetStats()
+
+				var totalText string
+				if total.Bytes > 0 {
+					totalText = fmt.Sprintf("Total: %d / %d items", processed.Files+processed.Dirs, total.Files+total.Dirs)
+				} else {
+					totalText = fmt.Sprintf("Total: %d / %d items", processed.Files+processed.Dirs, total.Files+total.Dirs)
+				}
+
+				reporter.UpdateTransfer("Deleting", currName, filePct, totalText, totalPct, "")
+			}
+		}
+
+		updateUI(true)
+
+		var allErrors []string
+		for _, name := range names {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			fullPath := activeVfs.Join(activeVfs.GetPath(), name)
+
+			tracker.StartFile(name, 0)
+			updateUI(true)
+
+			for {
+				err := activeVfs.Remove(ctx, fullPath)
+				if err == nil {
+					break
+				}
+				if err == context.Canceled {
+					return err
+				}
+
+				choice := AskError(ctx, fmt.Sprintf("Cannot delete '%s'", name), err, anchor)
+				if choice == 0 {
+					continue
+				} else if choice == 1 {
+					allErrors = append(allErrors, fmt.Sprintf("Skipped '%s':\n%v", name, err))
+					break
+				} else {
+					return context.Canceled
+				}
+			}
+
+			tracker.FileDone()
+			updateUI(true)
+		}
+		if len(allErrors) > 0 {
+			vtui.FrameManager.PostTask(func() {
+				dlgW, dlgH := 60, 15
+				scrH := vtui.FrameManager.GetScreenHeight()
+				if dlgH > scrH-2 {
+					dlgH = scrH - 2
+				}
+				if dlgH < 8 {
+					dlgH = 8
+				}
+
+				dlg := vtui.NewCenteredDialog(dlgW, dlgH, " Deletion Errors ")
+				dlg.ShowClose = true
+
+				var listItems []string
+				for _, errStr := range allErrors {
+					lines := vtui.WrapText(errStr, dlgW-6)
+					listItems = append(listItems, lines...)
+					listItems = append(listItems, strings.Repeat("-", dlgW-6))
+				}
+				if len(listItems) > 0 {
+					listItems = listItems[:len(listItems)-1]
+				}
+
+				lb := vtui.NewListBox(0, 0, dlgW-4, dlgH-6, listItems)
+				btnOk := vtui.NewButton(0, 0, "&Ok")
+				btnOk.IsDefault = true
+				btnOk.OnClick = func() { dlg.Close() }
+
+				dlg.AddItem(lb)
+				dlg.AddItem(btnOk)
+
+				vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, dlgW-4, dlgH-4)
+				vbox.Add(lb, vtui.Margins{Bottom: 1}, vtui.AlignFill)
+
+				hbox := vtui.NewHBoxLayout(0, 0, dlgW-4, 1)
+				hbox.HorizontalAlign = vtui.AlignCenter
+				hbox.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
+
+				vbox.Add(hbox, vtui.Margins{}, vtui.AlignFill)
+				vbox.Apply()
+
+				if anchor != nil {
+					vtui.FrameManager.PushToFrameScreen(anchor, dlg)
+				} else {
+					vtui.FrameManager.Push(dlg)
+				}
+			})
+		}
+		return nil
+	}
+
+	if mode == 0 { // Queue
+		rk := getResourceKey(activeVfs)
+		var keys []string
+		if rk != "" {
+			keys = append(keys, rk)
+		}
+		task := &QueueTask{
+			Type:          "Delete",
+			Desc:          desc,
+			Preconditions: preconds,
+			ResKeys:       keys,
+			Run:           runFunc,
+			OnComplete:    onComplete,
+		}
+		GlobalQueueManager.Enqueue(task)
+	} else {
+		dlg := NewFileOpProgressDialog(" Deleting... ")
+		var taskCtx *vtui.TaskContext
+		dlg.btnCancel.OnClick = func() { dlg.SetExitCode(1) }
+		dlg.OnResult = func(code int) {
+			if taskCtx != nil {
+				taskCtx.Cancel()
+			}
+		}
+
+		reporter := &DialogReporter{dlg: dlg}
+
+		vtui.FrameManager.PostTask(func() {
+			if mode == 1 && pf != nil {
+				clone := pf.Clone()
+				vtui.FrameManager.AddScreen(clone)
+				vtui.FrameManager.Push(dlg)
+			} else {
+				vtui.FrameManager.AddScreenHeadless(dlg)
+			}
+		})
+
+		taskCtx = vtui.RunAsync(func(ctx *vtui.TaskContext) {
+			err := runFunc(ctx.Context, reporter, dlg)
+			ctx.RunOnUI(func() {
+				dlg.Close()
+				if pf != nil {
+					pf.RefreshAll()
+				}
+				if onComplete != nil {
+					onComplete()
+				}
+				if err != nil && err != context.Canceled {
+					vtui.ShowMessage(" Error ", fmt.Sprintf("Deletion failed:\n%v", err), []string{"&Ok"})
+				}
+			})
+		})
+	}
 }
 
 func recursiveCopy(ctx context.Context, srcVfs vfs.VFS, srcPath string, dstVfs vfs.VFS, destPath string, state *FileOpState, depth int) error {

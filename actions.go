@@ -408,8 +408,11 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 	editDest := vtui.NewEdit(0, 0, 10, initialDest)
 	dlg.AddItem(editDest)
 
-	chkFork := vtui.NewCheckbox(0, 0, Msg("Op.ClonePanels"), false)
-	dlg.AddItem(chkFork)
+	comboMode := vtui.NewComboBox(0, 0, 32, []string{"Queue (Default)", "Background panel clone", "Foreground lock"})
+	comboMode.DropdownOnly = true
+	comboMode.Menu.SetSelectPos(0)
+	comboMode.Edit.SetText(comboMode.Menu.Items[0].Text)
+	dlg.AddItem(comboMode)
 
 	btnOk := vtui.NewButton(0, 0, Msg("Copy.Btn"))
 	if isMove {
@@ -419,10 +422,10 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 
 	btnOk.OnClick = func() {
 		dest := editDest.GetText()
-		forked := chkFork.State == 1
+		mode := comboMode.Menu.SelectPos
 		dlg.Close()
 		if dest != "" {
-			go ExecuteFileOp(pf, srcVfs, dstVfs, names, dest, isMove, forked, pf.RefreshAll)
+			go ExecuteFileOp(pf, srcVfs, dstVfs, names, dest, isMove, mode, pf.RefreshAll)
 		}
 	}
 	dlg.AddItem(btnOk)
@@ -435,7 +438,7 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 50-4, 11-4)
 	vbox.Add(promptLbl, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(editDest, vtui.Margins{Top: 1}, vtui.AlignFill)
-	vbox.Add(chkFork, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	vbox.Add(comboMode, vtui.Margins{Top: 1}, vtui.AlignCenter)
 
 	hbox := vtui.NewHBoxLayout(0, 0, 50-4, 1)
 	hbox.HorizontalAlign = vtui.AlignCenter
@@ -600,8 +603,8 @@ func actionDelete(pf *PanelsFrame) {
 	msg := fmt.Sprintf(Msg("Delete.Confirm"), msgName)
 	lines := vtui.WrapText(msg, 46)
 
-	dlg := vtui.NewCenteredDialog(50, 6+len(lines), title)
-	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 50-4, (6+len(lines))-4)
+	dlg := vtui.NewCenteredDialog(50, 8+len(lines), title)
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 50-4, (8+len(lines))-4)
 
 	for _, l := range lines {
 		t := vtui.NewText(0, 0, l, vtui.Palette[vtui.ColDialogText])
@@ -609,8 +612,16 @@ func actionDelete(pf *PanelsFrame) {
 		vbox.Add(t, vtui.Margins{}, vtui.AlignCenter)
 	}
 
+	comboMode := vtui.NewComboBox(0, 0, 32, []string{"Queue (Default)", "Background panel clone", "Foreground lock"})
+	comboMode.DropdownOnly = true
+	comboMode.Menu.SetSelectPos(0)
+	comboMode.Edit.SetText(comboMode.Menu.Items[0].Text)
+	dlg.AddItem(comboMode)
+	vbox.Add(comboMode, vtui.Margins{Top: 1}, vtui.AlignCenter)
+
 	btnDel := vtui.NewButton(0, 0, Msg("Delete.Btn"))
 	btnCancel := vtui.NewButton(0, 0, "Cancel")
+	btnDel.IsDefault = true
 	dlg.AddItem(btnDel)
 	dlg.AddItem(btnCancel)
 
@@ -624,156 +635,13 @@ func actionDelete(pf *PanelsFrame) {
 
 	btnCancel.OnClick = func() { dlg.Close() }
 	btnDel.OnClick = func() {
+		mode := comboMode.Menu.SelectPos
 		fsp.pendingSelection = fsp.GetSuccessorName()
 		dlg.Close()
-
-		opDlg := NewFileOpProgressDialog(" Deleting... ")
-		var taskCtx *vtui.TaskContext
-		opDlg.btnCancel.OnClick = func() {
-			if taskCtx != nil { taskCtx.Cancel() }
-			opDlg.Close()
-		}
-
-		vtui.FrameManager.PostTask(func() {
-			vtui.FrameManager.AddScreenHeadless(opDlg)
-		})
-
-		taskCtx = vtui.RunAsync(func(ctx *vtui.TaskContext) {
-			defer ctx.RunOnUI(func() {
-				opDlg.Close()
-				pf.RefreshAll()
-			})
-
-			// Pre-scan for progress
-			var totalStats vfs.OpStats
-			scanErr := error(nil)
-			totalStats, scanErr = vfs.CalculateStats(ctx.Context, activeVfs, activeVfs.GetPath(), names, func(currentPath string, stats vfs.OpStats) {
-				ctx.RunOnUI(func() {
-					opDlg.UpdateScan(currentPath, stats.Files, stats.Dirs)
-					vtui.FrameManager.Redraw()
-				})
-			})
-
-			if scanErr != nil && scanErr != context.Canceled {
-				ctx.RunOnUI(func() { vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to scan files:\n%v", scanErr), []string{"&Ok"}) })
-				return
-			}
-			if ctx.Err() != nil { return }
-
-			tracker := NewFileOpTracker(totalStats)
-			lastUpdate := time.Now()
-
-			updateUI := func(force bool) {
-				now := time.Now()
-				if force || now.Sub(lastUpdate) >= 100*time.Millisecond {
-					lastUpdate = now
-					filePct, totalPct, currName := tracker.GetProgress()
-					processed, total := tracker.GetStats()
-
-					var totalText string
-					if total.Bytes > 0 {
-						// For delete, bytes deleted isn't super meaningful if it's very fast, but still nice.
-						totalText = fmt.Sprintf("Total: %d / %d items", processed.Files+processed.Dirs, total.Files+total.Dirs)
-					} else {
-						totalText = fmt.Sprintf("Total: %d / %d items", processed.Files+processed.Dirs, total.Files+total.Dirs)
-					}
-
-					ctx.RunOnUI(func() {
-						opDlg.UpdateTransfer("Deleting", currName, filePct, totalText, totalPct, "")
-						vtui.FrameManager.Redraw()
-					})
-				}
-			}
-
-			updateUI(true)
-
-			var allErrors []string
-			for _, name := range names {
-				if ctx.Err() != nil {
-					return
-				}
-				fullPath := activeVfs.Join(activeVfs.GetPath(), name)
-
-				// For delete we should ideally recursively traverse and track each file.
-				// But activeVfs.Remove handles recursive delete by itself usually (e.g. os.RemoveAll).
-				// So we won't get fine-grained updates unless we do it manually.
-				// For now, we just call Remove on the top level and mark it as done.
-				// This might jump progress if it's a huge folder.
-
-				tracker.StartFile(name, 0)
-				updateUI(true)
-
-				for {
-					err := activeVfs.Remove(ctx.Context, fullPath)
-					if err == nil {
-						break
-					}
-					if err == context.Canceled {
-						return // User cancelled, bail out
-					}
-					
-					choice := AskError(ctx.Context, fmt.Sprintf("Cannot delete '%s'", name), err, opDlg)
-					if choice == 0 {
-						continue // Retry
-					} else if choice == 1 {
-						allErrors = append(allErrors, fmt.Sprintf("Skipped '%s':\n%v", name, err))
-						break // Skip
-					} else {
-						return // Abort
-					}
-				}
-
-				// In both success and failure (except cancel), we mark this item
-				// as 'processed' to advance the item-count based progress bar.
-				tracker.FileDone()
-				updateUI(true)
-			}
-			// After the loop, if errors were collected, show them in a single dialog.
-			if len(allErrors) > 0 {
-				ctx.RunOnUI(func() {
-					dlgW, dlgH := 60, 15
-					scrH := vtui.FrameManager.GetScreenHeight()
-					if dlgH > scrH-2 {
-						dlgH = scrH - 2
-					}
-					if dlgH < 8 { dlgH = 8 }
-
-					dlg := vtui.NewCenteredDialog(dlgW, dlgH, " Deletion Errors ")
-					dlg.ShowClose = true
-
-					var listItems []string
-					for _, errStr := range allErrors {
-						lines := vtui.WrapText(errStr, dlgW-6)
-						listItems = append(listItems, lines...)
-						listItems = append(listItems, strings.Repeat("-", dlgW-6))
-					}
-					if len(listItems) > 0 {
-						listItems = listItems[:len(listItems)-1] // Remove last separator
-					}
-
-					lb := vtui.NewListBox(0, 0, dlgW-4, dlgH-6, listItems)
-					btnOk := vtui.NewButton(0, 0, "&Ok")
-					btnOk.IsDefault = true
-					btnOk.OnClick = func() { dlg.Close() }
-
-					dlg.AddItem(lb)
-					dlg.AddItem(btnOk)
-
-					vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, dlgW-4, dlgH-4)
-					vbox.Add(lb, vtui.Margins{Bottom: 1}, vtui.AlignFill)
-
-					hbox := vtui.NewHBoxLayout(0, 0, dlgW-4, 1)
-					hbox.HorizontalAlign = vtui.AlignCenter
-					hbox.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
-
-					vbox.Add(hbox, vtui.Margins{}, vtui.AlignFill)
-					vbox.Apply()
-
-					vtui.FrameManager.Push(dlg)
-				})
-			}
-		})
+		go ExecuteDeleteOp(pf, activeVfs, names, mode, pf.RefreshAll)
 	}
+
+	dlg.SetFocusedItem(btnDel)
 
 	vtui.FrameManager.Push(dlg)
 }
@@ -786,7 +654,7 @@ func actionMkDir(pf *PanelsFrame) {
 
 	activeVfs := panel.vfs
 
-	dlg := vtui.NewCenteredDialog(40, 9, Msg("MakeFolder.Title"))
+	dlg := vtui.NewCenteredDialog(40, 11, Msg("MakeFolder.Title"))
 	dlg.ShowClose = true
 
 	editName := vtui.NewEdit(0, 0, 10, "")
@@ -794,15 +662,22 @@ func actionMkDir(pf *PanelsFrame) {
 	dlg.AddItem(lblPrompt)
 	dlg.AddItem(editName)
 
+	comboMode := vtui.NewComboBox(0, 0, 30, []string{"Queue (Default)", "Background panel clone", "Foreground lock"})
+	comboMode.DropdownOnly = true
+	comboMode.Menu.SetSelectPos(0)
+	comboMode.Edit.SetText(comboMode.Menu.Items[0].Text)
+	dlg.AddItem(comboMode)
+
 	btnOk := vtui.NewButton(0, 0, "&Ok")
 	btnOk.IsDefault = true
 	btnCancel := vtui.NewButton(0, 0, "Cancel")
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnCancel)
 
-	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 40-4, 8-4)
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 40-4, 11-4)
 	vbox.Add(lblPrompt, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(editName, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Add(comboMode, vtui.Margins{Top: 1}, vtui.AlignCenter)
 
 	hbox := vtui.NewHBoxLayout(0, 0, 40-4, 1)
 	hbox.HorizontalAlign = vtui.AlignCenter
@@ -817,23 +692,48 @@ func actionMkDir(pf *PanelsFrame) {
 	btnCancel.OnClick = func() { dlg.Close() }
 	btnOk.OnClick = func() {
 		name := editName.GetText()
+		mode := comboMode.Menu.SelectPos
 		dlg.Close()
 		if name == "" {
 			return
 		}
 		fullPath := activeVfs.Join(activeVfs.GetPath(), name)
-		vtui.RunAsync(func(ctx *vtui.TaskContext) {
-			err := activeVfs.MkDir(ctx.Context, fullPath)
-			ctx.RunOnUI(func() {
-				if err != nil {
-					vtui.ShowMessage(" Error ", fmt.Sprintf(Msg("Operation.Error"), err.Error()), []string{"&Ok"})
-				}
 
-				// Set pending selection so the panel snaps to the new folder after the async reload
-				panel.pendingSelection = name
-				pf.RefreshAll()
+		desc := fmt.Sprintf("Create folder %s", name)
+		runFunc := func(ctx context.Context, reporter TaskReporter, anchor vtui.Frame) error {
+			reporter.UpdateTransfer("Creating", name, 100, "Folder", 100, "")
+			err := activeVfs.MkDir(ctx, fullPath)
+			return err
+		}
+
+		if mode == 0 { // Queue
+			rk := getResourceKey(activeVfs)
+			var keys []string
+			if rk != "" { keys = append(keys, rk) }
+			task := &QueueTask{
+				Type:       "MkDir",
+				Desc:       desc,
+				ResKeys:    keys,
+				Run:        runFunc,
+				OnComplete: func() {
+					panel.pendingSelection = name
+					pf.RefreshAll()
+				},
+			}
+			GlobalQueueManager.Enqueue(task)
+		} else { // Background / Foreground
+			taskCtx := vtui.RunAsync(func(ctx *vtui.TaskContext) {
+				err := runFunc(ctx.Context, &DummyReporter{}, nil)
+				ctx.RunOnUI(func() {
+					if err != nil {
+						vtui.ShowMessage(" Error ", fmt.Sprintf(Msg("Operation.Error"), err.Error()), []string{"&Ok"})
+					}
+					panel.pendingSelection = name
+					pf.RefreshAll()
+				})
 			})
-		})
+			_ = taskCtx
+		}
 	}
 
 	vtui.FrameManager.Push(dlg)
