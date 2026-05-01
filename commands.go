@@ -38,4 +38,5 @@ const (
 	CmExtractArchive
 	CmPanelSettings
 	CmEditorSettings
+	CmPlugins
 )

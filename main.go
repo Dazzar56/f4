@@ -263,8 +263,8 @@ func SetupUI() {
 	}
 
 	if !noPlugins {
-		pluginManager := NewPluginManager()
-		go pluginManager.LoadAll()
+		GlobalPluginManager = NewPluginManager()
+		go GlobalPluginManager.LoadAll()
 	} else {
 		vtui.DebugLog("CORE: Plugins disabled by --no-plugins flag")
 	}

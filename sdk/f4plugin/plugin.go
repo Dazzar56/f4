@@ -4,6 +4,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/unxed/vtinput"
 	"github.com/unxed/f4/sdk/f4rpc"
 	"github.com/vmihailenco/msgpack/v5"
 )
@@ -11,6 +12,7 @@ import (
 // Host provides methods for the plugin to interact with the main f4 application.
 type Host struct {
 	sess *f4rpc.Session
+	onProgress func(msg string, percent int)
 }
 
 func (h *Host) Log(msg string) {
@@ -38,11 +40,38 @@ type VFSItem struct {
 	IsHidden     bool
 }
 
+type OpenReq struct { Drive, Path string }
+type OpenRes struct { ID uint32; Size int64 }
+type ReadAtReq struct { ID uint32; Len int; Off int64 }
+type CloseReq struct { ID uint32 }
+type WriteReq struct { ID uint32; Data []byte }
+type MkDirReq struct { Drive, Path string }
+type RemoveReq struct { Drive, Path string }
+type RenameReq struct { Drive, Old, New string }
+type HighlightReq struct { Line string; Prev any; Base uint64 }
+type HighlightRes struct { Attrs []uint64; Next any }
+type ProgressTaskReq struct { Title, StartMsg string; Forked bool }
+type ProgressUpdateReq struct { Msg string; Percent int }
+type HotkeyReq struct { VK uint16; Mods uint32 }
 // Plugin is the primary interface a plugin developer implements.
 type Plugin interface {
 	Init(host *Host) ([]string, error)
 	ReadDir(drive, path string) ([]VFSItem, error)
 	Stat(drive, path string) (VFSItem, error)
+	Open(drive, path string) (uint32, int64, error)
+	ReadAt(fileID uint32, length int, offset int64) ([]byte, error)
+	Create(drive, path string) (uint32, error)
+	Write(fileID uint32, data []byte) error
+	CloseFile(fileID uint32) error
+	MkDir(drive, path string) error
+	Remove(drive, path string) error
+	Rename(drive, old, new string) error
+
+	// Optional extensions
+	Highlight(line string, prev any, base uint64) ([]uint64, any, error)
+	ProcessKey(drive string, event vtinput.InputEvent) (bool, error)
+	OnHotkey(vk uint16, mods uint32) error
+	OnProgressTask() error
 }
 
 // Run attaches the plugin to stdin/stdout and starts the RPC server loop.
@@ -72,6 +101,94 @@ func Run(p Plugin) {
 		item, err := p.Stat(req["Drive"], req["Path"])
 		return item, err
 	})
+	sess.Register("VFS.Open", func(data msgpack.RawMessage) (any, error) {
+		var req OpenReq
+		if err := msgpack.Unmarshal(data, &req); err != nil { return nil, err }
+		id, size, err := p.Open(req.Drive, req.Path)
+		return OpenRes{ID: id, Size: size}, err
+	})
+
+	sess.Register("VFS.ReadAt", func(data msgpack.RawMessage) (any, error) {
+		var req ReadAtReq
+		if err := msgpack.Unmarshal(data, &req); err != nil { return nil, err }
+		return p.ReadAt(req.ID, req.Len, req.Off)
+	})
+
+	sess.Register("VFS.CloseFile", func(data msgpack.RawMessage) (any, error) {
+		var req CloseReq
+		if err := msgpack.Unmarshal(data, &req); err != nil { return nil, err }
+		return nil, p.CloseFile(req.ID)
+	})
+	sess.Register("VFS.Create", func(data msgpack.RawMessage) (any, error) {
+		var req OpenReq
+		if err := msgpack.Unmarshal(data, &req); err != nil { return nil, err }
+		id, err := p.Create(req.Drive, req.Path)
+		return OpenRes{ID: id}, err
+	})
+
+	sess.Register("VFS.Write", func(data msgpack.RawMessage) (any, error) {
+		var req WriteReq
+		if err := msgpack.Unmarshal(data, &req); err != nil { return nil, err }
+		return nil, p.Write(req.ID, req.Data)
+	})
+
+	sess.Register("VFS.MkDir", func(data msgpack.RawMessage) (any, error) {
+		var req MkDirReq
+		if err := msgpack.Unmarshal(data, &req); err != nil { return nil, err }
+		return nil, p.MkDir(req.Drive, req.Path)
+	})
+
+	sess.Register("VFS.Remove", func(data msgpack.RawMessage) (any, error) {
+		var req RemoveReq
+		if err := msgpack.Unmarshal(data, &req); err != nil { return nil, err }
+		return nil, p.Remove(req.Drive, req.Path)
+	})
+
+	sess.Register("VFS.Rename", func(data msgpack.RawMessage) (any, error) {
+		var req RenameReq
+		if err := msgpack.Unmarshal(data, &req); err != nil { return nil, err }
+		return nil, p.Rename(req.Drive, req.Old, req.New)
+	})
+	sess.Register("VFS.Highlight", func(data msgpack.RawMessage) (any, error) {
+		var req HighlightReq
+		if err := msgpack.Unmarshal(data, &req); err != nil { return nil, err }
+		attrs, next, err := p.Highlight(req.Line, req.Prev, req.Base)
+		return HighlightRes{Attrs: attrs, Next: next}, err
+	})
+
+	sess.Register("VFS.ProcessKey", func(data msgpack.RawMessage) (any, error) {
+		type PKReq struct { Drive string; Event vtinput.InputEvent }
+		var req PKReq
+		if err := msgpack.Unmarshal(data, &req); err != nil { return nil, err }
+		return p.ProcessKey(req.Drive, req.Event)
+	})
+
+	sess.Register("Plugin.OnHotkey", func(data msgpack.RawMessage) (any, error) {
+		var req HotkeyReq
+		if err := msgpack.Unmarshal(data, &req); err != nil { return nil, err }
+		return nil, p.OnHotkey(req.VK, req.Mods)
+	})
+
+	sess.Register("Plugin.OnProgressTask", func(data msgpack.RawMessage) (any, error) {
+		return nil, p.OnProgressTask()
+	})
 
 	_ = sess.Serve()
+}
+
+func (h *Host) RegisterHighlighter() {
+	_ = h.sess.Call("Host.RegisterHighlighter", nil, nil)
+}
+
+func (h *Host) RegisterGlobalHotkey(vk uint16, mods uint32) {
+	_ = h.sess.Call("Host.RegisterGlobalHotkey", HotkeyReq{VK: vk, Mods: mods}, nil)
+}
+
+func (h *Host) RunProgressTask(title, startMsg string, forked bool, onUpdate func(msg string, percent int)) {
+	h.onProgress = onUpdate
+	_ = h.sess.Call("Host.RunProgressTask", ProgressTaskReq{Title: title, StartMsg: startMsg, Forked: forked}, nil)
+}
+
+func (h *Host) UpdateProgress(msg string, percent int) {
+	_ = h.sess.Call("Host.UpdateProgress", ProgressUpdateReq{Msg: msg, Percent: percent}, nil)
 }

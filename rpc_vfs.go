@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 
+	"github.com/unxed/vtinput"
 	"github.com/unxed/f4/sdk/f4rpc"
 	"github.com/unxed/f4/vfs"
 )
@@ -16,6 +16,46 @@ type RPCVFS struct {
 	sess      *f4rpc.Session
 	driveName string
 	path      string
+}
+
+type rpcFileWrapper struct {
+	sess *f4rpc.Session
+	id   uint32
+	size int64
+}
+
+func (w *rpcFileWrapper) Size() int64 { return w.size }
+func (w *rpcFileWrapper) Read(ctx context.Context, p []byte) (int, error) { return 0, io.EOF }
+func (w *rpcFileWrapper) ReadAt(ctx context.Context, p []byte, off int64) (int, error) {
+	req := ReadAtReq{ID: w.id, Len: len(p), Off: off}
+	var data []byte
+	err := w.sess.Call("VFS.ReadAt", req, &data)
+	if len(data) > 0 {
+		copy(p, data)
+	}
+	if err != nil { return len(data), err }
+	if len(data) < len(p) { return len(data), io.EOF }
+	return len(data), nil
+}
+func (w *rpcFileWrapper) Close() error {
+	req := CloseReq{ID: w.id}
+	return w.sess.Call("VFS.CloseFile", req, nil)
+}
+type rpcWriteWrapper struct {
+	sess *f4rpc.Session
+	id   uint32
+}
+
+func (w *rpcWriteWrapper) Write(p []byte) (int, error) {
+	req := WriteReq{ID: w.id, Data: p}
+	err := w.sess.Call("VFS.Write", req, nil)
+	if err != nil { return 0, err }
+	return len(p), nil
+}
+
+func (w *rpcWriteWrapper) Close() error {
+	req := CloseReq{ID: w.id}
+	return w.sess.Call("VFS.CloseFile", req, nil)
 }
 
 func NewRPCVFS(sess *f4rpc.Session, driveName string) *RPCVFS {
@@ -70,22 +110,28 @@ func (v *RPCVFS) ReadDir(ctx context.Context, path string, onChunk func([]vfs.VF
 
 func (v *RPCVFS) Stat(ctx context.Context, path string) (vfs.VFSItem, error) {
 	var item vfs.VFSItem
+	// Provide a fallback dummy response for the root itself if the plugin doesn't handle it well
+	if path == "/" || path == "" {
+		return vfs.VFSItem{Name: v.driveName, IsDir: true}, nil
+	}
 	req := map[string]string{"Drive": v.driveName, "Path": path}
 	err := v.sess.Call("VFS.Stat", req, &item)
 	return item, err
 }
 
 func (v *RPCVFS) MkDir(ctx context.Context, p string) error {
-	return fmt.Errorf("MkDir not implemented in RPC VFS yet")
+	req := MkDirReq{Drive: v.driveName, Path: p}
+	return v.sess.Call("VFS.MkDir", req, nil)
 }
 
 func (v *RPCVFS) Remove(ctx context.Context, p string) error {
-	return fmt.Errorf("Remove not implemented in RPC VFS yet")
+	req := RemoveReq{Drive: v.driveName, Path: p}
+	return v.sess.Call("VFS.Remove", req, nil)
 }
 
-
 func (v *RPCVFS) Rename(ctx context.Context, old, new string) error {
-	return fmt.Errorf("Rename not implemented in RPC VFS yet")
+	req := RenameReq{Drive: v.driveName, Old: old, New: new}
+	return v.sess.Call("VFS.Rename", req, nil)
 }
 
 func (v *RPCVFS) SetAttributes(ctx context.Context, path string, item vfs.VFSItem) error {
@@ -101,13 +147,19 @@ func (v *RPCVFS) Search(ctx context.Context, p, pat string) (chan int64, error) 
 }
 
 func (v *RPCVFS) Open(ctx context.Context, p string) (vfs.ReadAtCloser, error) {
-	// For full support, this would ask the plugin for a file handle,
-	// and proxy ReadAt calls. For now, we return permission denied to prevent crashes.
-	return nil, os.ErrPermission
+	req := OpenReq{Drive: v.driveName, Path: p}
+	var res OpenRes
+	err := v.sess.Call("VFS.Open", req, &res)
+	if err != nil { return nil, err }
+	return &rpcFileWrapper{sess: v.sess, id: res.ID, size: res.Size}, nil
 }
 
 func (v *RPCVFS) Create(ctx context.Context, p string) (io.WriteCloser, error) {
-	return nil, os.ErrPermission
+	req := OpenReq{Drive: v.driveName, Path: p}
+	var res OpenRes
+	err := v.sess.Call("VFS.Create", req, &res)
+	if err != nil { return nil, err }
+	return &rpcWriteWrapper{sess: v.sess, id: res.ID}, nil
 }
 
 func (v *RPCVFS) ParentVFS() vfs.VFS {
@@ -122,4 +174,12 @@ func (v *RPCVFS) Clone() vfs.VFS {
 	clone := NewRPCVFS(v.sess, v.driveName)
 	clone.path = v.path
 	return clone
+}
+
+func (v *RPCVFS) ProcessPanelKey(app vfs.App, e *vtinput.InputEvent) bool {
+	type PKReq struct { Drive string; Event vtinput.InputEvent }
+	var handled bool
+	err := v.sess.Call("VFS.ProcessKey", PKReq{Drive: v.driveName, Event: *e}, &handled)
+	if err != nil { return false }
+	return handled
 }

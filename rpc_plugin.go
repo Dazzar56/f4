@@ -4,12 +4,82 @@ import (
 	"bufio"
 	"fmt"
 	"os/exec"
+	"context"
 
 	"github.com/unxed/f4/sdk/f4rpc"
 	"github.com/unxed/f4/vfs"
+	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 	"github.com/vmihailenco/msgpack/v5"
 )
+
+type HighlightReq struct {
+	Line string
+	Prev any
+	Base uint64
+}
+
+type HighlightRes struct {
+	Attrs []uint64
+	Next  any
+}
+
+type ProgressTaskReq struct {
+	Title    string
+	StartMsg string
+	Forked   bool
+}
+
+type ProgressUpdateReq struct {
+	Msg     string
+	Percent int
+}
+
+type HotkeyReq struct {
+	VK   uint16
+	Mods uint32
+}
+
+type OpenReq struct {
+	Drive string
+	Path  string
+}
+
+type OpenRes struct {
+	ID   uint32
+	Size int64
+}
+
+type ReadAtReq struct {
+	ID  uint32
+	Len int
+	Off int64
+}
+
+type WriteReq struct {
+	ID   uint32
+	Data []byte
+}
+
+type CloseReq struct {
+	ID uint32
+}
+
+type MkDirReq struct {
+	Drive string
+	Path  string
+}
+
+type RemoveReq struct {
+	Drive string
+	Path  string
+}
+
+type RenameReq struct {
+	Drive string
+	Old   string
+	New   string
+}
 
 // RPCPlugin manages the lifecycle of an external process plugin.
 type RPCPlugin struct {
@@ -75,6 +145,51 @@ func (p *RPCPlugin) Init(api vfs.HostAPI) error {
 	p.sess.Register("Host.GetVersion", func(data msgpack.RawMessage) (any, error) {
 		return api.GetVersion(), nil
 	})
+	p.sess.Register("Host.RegisterHighlighter", func(data msgpack.RawMessage) (any, error) {
+		api.RegisterHighlighter(&rpcHighlighterProvider{p})
+		return nil, nil
+	})
+
+	p.sess.Register("Host.RegisterGlobalHotkey", func(data msgpack.RawMessage) (any, error) {
+		var req HotkeyReq
+		msgpack.Unmarshal(data, &req)
+		api.RegisterGlobalHotkey(req.VK, vtinput.ControlKeyState(req.Mods), func(app vfs.App) {
+			_ = p.sess.Call("Plugin.OnHotkey", req, nil)
+		})
+		return nil, nil
+	})
+
+	var currentUpdateFunc func(string, int)
+	p.sess.Register("Host.RunProgressTask", func(data msgpack.RawMessage) (any, error) {
+		var req ProgressTaskReq
+		msgpack.Unmarshal(data, &req)
+		// We can't block the RPC handler, so we run the core task which will call back to the plugin
+		vtui.FrameManager.PostTask(func() {
+			// Find PanelsFrame to use its RunProgressTask
+			var pf *PanelsFrame
+			if len(vtui.FrameManager.Screens) > 0 {
+				for _, f := range vtui.FrameManager.Screens[vtui.FrameManager.ActiveIdx].Frames {
+					if p, ok := f.(*PanelsFrame); ok { pf = p; break }
+				}
+			}
+			if pf == nil { return }
+
+			pf.RunProgressTask(req.Title, req.StartMsg, req.Forked, func(ctx context.Context, update func(msg string, percent int)) error {
+				currentUpdateFunc = update
+				return p.sess.Call("Plugin.OnProgressTask", nil, nil)
+			}, nil)
+		})
+		return nil, nil
+	})
+
+	p.sess.Register("Host.UpdateProgress", func(data msgpack.RawMessage) (any, error) {
+		var req ProgressUpdateReq
+		msgpack.Unmarshal(data, &req)
+		if currentUpdateFunc != nil {
+			currentUpdateFunc(req.Msg, req.Percent)
+		}
+		return nil, nil
+	})
 
 	go func() {
 		err := p.sess.Serve()
@@ -102,6 +217,18 @@ func (p *RPCPlugin) Init(api vfs.HostAPI) error {
 	return nil
 }
 
+type rpcHighlighterProvider struct{ p *RPCPlugin }
+func (r *rpcHighlighterProvider) Name() string { return r.p.path }
+func (r *rpcHighlighterProvider) Match(f, c string) bool { return true }
+func (r *rpcHighlighterProvider) Create(f, c string) vtui.Highlighter { return &rpcHighlighter{r.p} }
+
+type rpcHighlighter struct{ p *RPCPlugin }
+func (h *rpcHighlighter) Highlight(line string, prev any, base uint64) ([]uint64, any) {
+	var res HighlightRes
+	err := h.p.sess.Call("VFS.Highlight", HighlightReq{Line: line, Prev: prev, Base: base}, &res)
+	if err != nil { return nil, nil }
+	return res.Attrs, res.Next
+}
 func (p *RPCPlugin) Close() error {
 	p.closing = true
 	if p.cmd != nil && p.cmd.Process != nil {

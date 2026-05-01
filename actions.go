@@ -865,6 +865,89 @@ func actionPanelSettings(pf *PanelsFrame) {
 
 	vtui.FrameManager.Push(dlg)
 }
+type dialogVFSAdapter struct {
+	v vfs.VFS
+}
+func (a *dialogVFSAdapter) GetPath() string { return a.v.GetPath() }
+func (a *dialogVFSAdapter) SetPath(p string) error { return a.v.SetPath(p) }
+func (a *dialogVFSAdapter) Join(e ...string) string { return a.v.Join(e...) }
+func (a *dialogVFSAdapter) Dir(p string) string { return a.v.Dir(p) }
+func (a *dialogVFSAdapter) Base(p string) string { return a.v.Base(p) }
+func (a *dialogVFSAdapter) ReadDir(ctx context.Context, p string, onChunk func([]vtui.FSItem)) error {
+	return a.v.ReadDir(ctx, p, func(chunk []vfs.VFSItem) {
+		var items []vtui.FSItem
+		for _, c := range chunk {
+			items = append(items, vtui.FSItem{Name: c.Name, IsDir: c.IsDir})
+		}
+		onChunk(items)
+	})
+}
+func actionManagePlugins(pf *PanelsFrame) {
+	width, height := 60, 16
+	dlg := vtui.NewCenteredDialog(width, height, " Manage Plugins (RPC) ")
+	dlg.ShowClose = true
+
+	lb := vtui.NewListBox(0, 0, 56, 10, AppConfig.RegisteredPlugins)
+
+	btnAdd := vtui.NewButton(0, 0, "&Add")
+	btnDel := vtui.NewButton(0, 0, "&Remove")
+	btnClose := vtui.NewButton(0, 0, "&Close")
+
+	dlg.AddItem(lb)
+	dlg.AddItem(btnAdd)
+	dlg.AddItem(btnDel)
+	dlg.AddItem(btnClose)
+
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, width-4, height-4)
+	vbox.Add(lb, vtui.Margins{Bottom: 1}, vtui.AlignFill)
+
+	hbox := vtui.NewHBoxLayout(0, 0, width-4, 1)
+	hbox.HorizontalAlign = vtui.AlignCenter
+	hbox.Spacing = 2
+	hbox.Add(btnAdd, vtui.Margins{}, vtui.AlignTop)
+	hbox.Add(btnDel, vtui.Margins{}, vtui.AlignTop)
+	hbox.Add(btnClose, vtui.Margins{}, vtui.AlignTop)
+
+	vbox.Add(hbox, vtui.Margins{}, vtui.AlignFill)
+	vbox.Apply()
+
+	btnAdd.OnClick = func() {
+		startPath := "."
+		if fsp := pf.getActivePanel(); fsp != nil {
+			if _, ok := fsp.vfs.(*vfs.OSVFS); ok {
+				startPath = fsp.vfs.GetPath()
+			}
+		}
+		pluginVfs := &dialogVFSAdapter{v: vfs.NewOSVFS(startPath)}
+		vtui.SelectFileDialog(" Add Plugin ", startPath, pluginVfs, func(path string) {
+			if path != "" {
+				AppConfig.RegisteredPlugins = append(AppConfig.RegisteredPlugins, path)
+				SaveConfig()
+				lb.Items = AppConfig.RegisteredPlugins
+				lb.UpdateRows()
+				vtui.FrameManager.Redraw()
+				if GlobalPluginManager != nil {
+					GlobalPluginManager.LoadExternalPlugin(path)
+				}
+			}
+		})
+	}
+
+	btnDel.OnClick = func() {
+		idx := lb.SelectPos
+		if idx >= 0 && idx < len(AppConfig.RegisteredPlugins) {
+			AppConfig.RegisteredPlugins = append(AppConfig.RegisteredPlugins[:idx], AppConfig.RegisteredPlugins[idx+1:]...)
+			SaveConfig()
+			lb.Items = AppConfig.RegisteredPlugins
+			lb.UpdateRows()
+			vtui.ShowMessageOn(dlg, " Info ", "Plugin removed from config.\nRestart f4 to fully unload the process.", []string{"&Ok"})
+		}
+	}
+
+	btnClose.OnClick = func() { dlg.Close() }
+
+	vtui.FrameManager.Push(dlg)
+}
 
 func actionFileAttributes(pf *PanelsFrame) {
 	fsp := pf.getActivePanel()

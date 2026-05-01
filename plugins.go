@@ -1,11 +1,7 @@
 package main
 
 import (
-	"os"
 	"sync"
-	"path/filepath"
-	"strings"
-	"runtime"
 
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/f4/plugins/archive"
@@ -37,6 +33,7 @@ type PluginManager struct {
 	api     vfs.HostAPI
 	plugins []Plugin
 }
+var GlobalPluginManager *PluginManager
 
 func NewPluginManager() *PluginManager {
 	return &PluginManager{
@@ -50,8 +47,22 @@ func (pm *PluginManager) LoadAll() {
 	// 1. Load Internal Plugins
 	pm.loadInternal()
 
-	// 2. Load External Plugins from ./plugins dir
-	pm.loadExternal(filepath.Join(".", "plugins"))
+	// 2. Load External Plugins from Config
+	for _, path := range AppConfig.RegisteredPlugins {
+		pm.LoadExternalPlugin(path)
+	}
+}
+
+func (pm *PluginManager) LoadExternalPlugin(path string) {
+	p := NewRPCPlugin(path)
+	if err := p.Init(pm.api); err == nil {
+		pm.mu.Lock()
+		pm.plugins = append(pm.plugins, p)
+		pm.mu.Unlock()
+		vtui.DebugLog("Loaded RPC plugin: %s", p.GetName())
+	} else {
+		vtui.DebugLog("Failed RPC plugin %s: %v", path, err)
+	}
 }
 
 func (pm *PluginManager) loadInternal() {
@@ -74,53 +85,6 @@ func (pm *PluginManager) loadInternal() {
 	}
 }
 
-func (pm *PluginManager) loadExternal(dir string) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		vtui.DebugLog("Cannot read plugins dir: %v", err)
-		return
-	}
-
-	for _, entry := range entries {
-		if entry.IsDir() {
-			// Plugins are usually kept in subdirectories
-			pm.loadExternal(filepath.Join(dir, entry.Name()))
-			continue
-		}
-
-		name := entry.Name()
-		// Ignore source files and scripts
-		if strings.HasSuffix(name, ".go") || strings.HasSuffix(name, ".sh") || strings.HasSuffix(name, ".md") {
-			continue
-		}
-
-		isExec := false
-		if runtime.GOOS == "windows" {
-			if strings.HasSuffix(strings.ToLower(name), ".exe") {
-				isExec = true
-			}
-		} else {
-			if info, err := entry.Info(); err == nil {
-				if info.Mode()&0111 != 0 {
-					isExec = true
-				}
-			}
-		}
-
-		if isExec {
-			path := filepath.Join(dir, name)
-			p := NewRPCPlugin(path)
-			if err := p.Init(pm.api); err == nil {
-				pm.mu.Lock()
-				pm.plugins = append(pm.plugins, p)
-				pm.mu.Unlock()
-				vtui.DebugLog("Loaded RPC plugin: %s", p.GetName())
-			} else {
-				vtui.DebugLog("Failed RPC plugin %s: %v", path, err)
-			}
-		}
-	}
-}
 
 func (pm *PluginManager) CloseAll() {
 	pm.mu.Lock()

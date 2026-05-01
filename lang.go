@@ -74,6 +74,7 @@ var Lng = map[string]string{
 	"Menu.SortUnsorted": "Unsorted",
 	"Menu.PanelSettings": "Panel settings",
 	"Menu.EditorSettings": "Editor settings",
+	"Menu.Options.Plugins": "Manage plugins",
 	"EditorSettings.Title": " Editor settings ",
 	"EditorSettings.AutoComplete": "Enable &Autocomplete",
 	"EditorSettings.Mask": "Active for f&ile masks:",
