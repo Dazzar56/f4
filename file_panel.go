@@ -951,6 +951,11 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 					}
 					fp.ReadDirectory()
 					return true
+				} else {
+					vtui.FrameManager.PostTask(func() {
+						vtui.ShowMessage(" Error ", fmt.Sprintf("Cannot access folder:\n%v", err), []string{"&Ok"})
+					})
+					return true
 				}
 			} else {
 				// Просим VFS реестр подобрать провайдера для этого файла

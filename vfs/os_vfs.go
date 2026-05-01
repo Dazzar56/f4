@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"path/filepath"
+	"strings"
 
 	"runtime"
 
@@ -46,7 +47,18 @@ func (v *OSVFS) SetPath(path string) error {
 
 	// Resolve symlinks/junctions to avoid ACL issues on the link itself (e.g. "Documents and Settings")
 	if resolved, errEval := filepath.EvalSymlinks(abs); errEval == nil {
-		abs = resolved
+		if runtime.GOOS == "windows" {
+			origVol := filepath.VolumeName(abs)
+			resVol := filepath.VolumeName(resolved)
+			// Prevent resolving mapped drives (e.g. T:\) into UNC paths (\\server\share)
+			if len(origVol) == 2 && origVol[1] == ':' && len(resVol) > 2 && strings.HasPrefix(resVol, `\\`) {
+				abs = origVol + strings.TrimPrefix(resolved, resVol)
+			} else {
+				abs = resolved
+			}
+		} else {
+			abs = resolved
+		}
 	}
 
 	st, err := os.Stat(abs)
