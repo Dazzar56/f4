@@ -23,6 +23,7 @@ type fileEntry struct {
 	vfs.VFSItem
 	Selected       bool
 	SizeCalculated bool
+	IsCached       bool
 }
 type mediumRow struct {
 	fp *FileSystemPanel
@@ -71,10 +72,14 @@ func (m *mediumRow) GetCellAttr(col int, defaultAttr uint64) uint64 {
 		return defaultAttr
 	}
 	e := m.fp.entries[idx]
+	attr := defaultAttr
 	if AppConfig.HighlightDir && e.IsDir && e.Name != ".." {
-		return vtui.Palette[ColPanelDir]
+		attr = vtui.Palette[ColPanelDir]
 	}
-	return defaultAttr
+	if e.IsCached {
+		attr = vtui.DimColor(attr)
+	}
+	return attr
 }
 
 type ViewMode int
@@ -120,13 +125,23 @@ func (f *fileEntry) GetCellText(col int) string {
 	return ""
 }
 func (f *fileEntry) GetCellAttr(col int, defaultAttr uint64) uint64 {
+	attr := defaultAttr
 	if AppConfig.HighlightDir && f.IsDir && f.Name != ".." {
-		return vtui.Palette[ColPanelDir]
+		attr = vtui.Palette[ColPanelDir]
 	}
-	return defaultAttr
+	if f.IsCached {
+		attr = vtui.DimColor(attr)
+	}
+	return attr
 }
 
 // FileSystemPanel is a panel displaying files on disk.
+const maxDirCache = 50
+
+type dirCacheEntry struct {
+	items []vfs.VFSItem
+	time  time.Time
+}
 type FileSystemPanel struct {
 	vtui.ScreenObject
 	table     *vtui.Table
@@ -149,6 +164,7 @@ type FileSystemPanel struct {
 	sortReverse bool
 
 	lastDirMTime time.Time
+	dirCache     map[string]dirCacheEntry
 }
 
 func NewFileSystemPanel(x, y, w, h int, vfs vfs.VFS) *FileSystemPanel {
@@ -160,6 +176,7 @@ func NewFileSystemPanel(x, y, w, h int, vfs vfs.VFS) *FileSystemPanel {
 		table:               vtui.NewTable(x+1, y+1, w-2, h-2, nil),
 		viewMode:            ViewModeMedium,
 		lastRightClickedIdx: -1,
+		dirCache:            make(map[string]dirCacheEntry),
 		//entries:             []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}},
 	}
 	fp.frame.ColorBoxIdx = ColPanelBox
@@ -178,6 +195,24 @@ func NewFileSystemPanel(x, y, w, h int, vfs vfs.VFS) *FileSystemPanel {
 	return fp
 }
 
+func (fp *FileSystemPanel) saveToCache(path string, items []vfs.VFSItem) {
+	if fp.dirCache == nil {
+		fp.dirCache = make(map[string]dirCacheEntry)
+	}
+	fp.dirCache[path] = dirCacheEntry{items: items, time: time.Now()}
+
+	if len(fp.dirCache) > maxDirCache {
+		var oldestPath string
+		var oldestTime time.Time
+		for p, entry := range fp.dirCache {
+			if oldestPath == "" || entry.time.Before(oldestTime) {
+				oldestPath = p
+				oldestTime = entry.time
+			}
+		}
+		delete(fp.dirCache, oldestPath)
+	}
+}
 func (fp *FileSystemPanel) SetFocus(f bool) {
 	fp.ScreenObject.SetFocus(f)
 	if !f && fp.fastFindMode {
@@ -358,6 +393,51 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 
 	// 1. Устанавливаем флаг, но НЕ обновляем UI немедленно, чтобы избежать мерцания
 	path := fp.vfs.GetPath()
+
+	if fp.pendingSelection == "" {
+		oldName := fp.GetSelectedName()
+		if oldName != "" && oldName != ".." {
+			fp.pendingSelection = oldName
+		}
+	}
+
+	hasCache := false
+	if !keepEntries {
+		if fp.dirCache == nil {
+			fp.dirCache = make(map[string]dirCacheEntry)
+		}
+		if cached, ok := fp.dirCache[path]; ok {
+			hasCache = true
+			vtui.DebugLog("PANEL: Using cached entries for %s", path)
+			fp.entries = nil
+
+			if !fp.vfs.IsAtRoot() || fp.vfs.ParentVFS() != nil {
+				fp.entries = append(fp.entries, &fileEntry{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}, IsCached: true})
+			}
+
+			for _, item := range cached.items {
+				if !AppConfig.ShowHiddenFiles && item.Name != ".." && item.IsHidden {
+					continue
+				}
+				fp.entries = append(fp.entries, &fileEntry{VFSItem: item, IsCached: true})
+			}
+
+			fp.sortEntries()
+
+			target := fp.pendingSelection
+			if target != "" {
+				for i, entry := range fp.entries {
+					if entry.Name == target {
+						fp.SetCursorIndex(i)
+						break
+					}
+				}
+			}
+			fp.Refresh()
+			vtui.FrameManager.Redraw()
+		}
+	}
+
 	isFirstChunk := true
 
 	// 2. Таймер для индикатора "Loading..." (появится через 200мс если VFS тормозит)
@@ -365,7 +445,7 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 		vtui.FrameManager.PostTask(func() {
 			// Если данные всё еще не пришли (isFirstChunk == true), только тогда "портим" UI
 			if fp.isLoading && isFirstChunk {
-				if !keepEntries {
+				if !keepEntries && !hasCache {
 					fp.entries = nil
 					if !fp.vfs.IsAtRoot() || fp.vfs.ParentVFS() != nil {
 						fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
@@ -380,13 +460,6 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 		})
 	})
 
-	if fp.pendingSelection == "" {
-		oldName := fp.GetSelectedName()
-		if oldName != "" && oldName != ".." {
-			fp.pendingSelection = oldName
-		}
-	}
-
 	// Capture currently selected names to restore them after the async reload
 	selectedNames := make(map[string]bool)
 	for _, e := range fp.entries {
@@ -396,7 +469,6 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 	}
 
 	go func() {
-		isFirstChunk := true
 		dirStat, _ := fp.vfs.Stat(ctx, path)
 		var upItemStat vfs.VFSItem
 		hasUpItemStat := false
@@ -408,7 +480,11 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 			}
 		}
 
+		var accumulated []vfs.VFSItem
+
 		err := fp.vfs.ReadDir(ctx, path, func(chunk []vfs.VFSItem) {
+			if ctx.Err() != nil { return }
+			accumulated = append(accumulated, chunk...)
 			if ctx.Err() != nil { return }
 
 			newEntries := make([]*fileEntry, 0, len(chunk))
@@ -473,13 +549,18 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 			})
 		})
 
-			vtui.FrameManager.PostTask(func() {
-				if ctx.Err() != nil { return }
-				// Останавливаем таймер. Если он не успел сработать — заголовок так и не моргнул.
-				if fp.loadingTimer != nil { fp.loadingTimer.Stop() }
+		vtui.FrameManager.PostTask(func() {
+			if ctx.Err() != nil { return }
 
-				fp.lastDirMTime = dirStat.MTime
-				fp.isLoading = false
+			if err == nil {
+				fp.saveToCache(path, accumulated)
+			}
+
+			// Останавливаем таймер. Если он не успел сработать — заголовок так и не моргнул.
+			if fp.loadingTimer != nil { fp.loadingTimer.Stop() }
+
+			fp.lastDirMTime = dirStat.MTime
+			fp.isLoading = false
 				if err != nil && err != context.Canceled {
 					// Баг-фикс: если директория исчезла (например, удалена из другой панели),
 					// пытаемся подняться на уровень выше вместо показа ошибки.

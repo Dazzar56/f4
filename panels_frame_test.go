@@ -1135,6 +1135,49 @@ func TestPanelsFrame_NonRunnableOpen(t *testing.T) {
 		t.Error("Panels should stay visible when opening non-runnable files via OS associations")
 	}
 }
+func TestPanelsFrame_SwitchVFS_CacheClear(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+
+	fsp := pf.panels[0].(*FileSystemPanel)
+	fsp.dirCache["/test/path"] = dirCacheEntry{}
+	if len(fsp.dirCache) != 1 {
+		t.Fatal("Cache setup failed")
+	}
+
+	pf.switchToVFS(fsp, vfs.NewOSVFS(t.TempDir()))
+
+	if len(fsp.dirCache) != 0 {
+		t.Error("switchToVFS should clear the directory cache")
+	}
+}
+
+func TestPanelsFrame_Clone_CachePreservation(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+
+	fsp := pf.panels[0].(*FileSystemPanel)
+	items := []vfs.VFSItem{{Name: "cached_item"}}
+	fsp.dirCache["/test/path"] = dirCacheEntry{items: items}
+
+	clone := pf.Clone()
+	cloneFsp := clone.panels[0].(*FileSystemPanel)
+
+	if len(cloneFsp.dirCache) != 1 {
+		t.Fatalf("Cache not cloned, length is %d", len(cloneFsp.dirCache))
+	}
+	if cached, ok := cloneFsp.dirCache["/test/path"]; !ok || len(cached.items) != 1 || cached.items[0].Name != "cached_item" {
+		t.Error("Cloned cache content is incorrect")
+	}
+
+	// Verify independence
+	cloneFsp.dirCache["/new/path"] = dirCacheEntry{}
+	if len(fsp.dirCache) != 1 {
+		t.Error("Cloned cache is not independent from original")
+	}
+}
 
 func TestExecuteFileOp_BackgroundButtonTrigger(t *testing.T) {
 	// This test ensures that the logic inside Background button click works

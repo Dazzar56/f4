@@ -44,6 +44,14 @@ func TestFileEntry_GetCellText(t *testing.T) {
 	if upDir.GetCellText(1) != "UP-DIR" {
 		t.Errorf("Parent dir (..) should have UP-DIR placeholder, got: %q", upDir.GetCellText(1))
 	}
+
+	// Test IsCached coloring
+	cachedFile := &fileEntry{VFSItem: vfs.VFSItem{Name: "cache.txt"}, IsCached: true}
+	baseAttr := uint64(0x00AABBCC) // Mock color
+	cachedAttr := cachedFile.GetCellAttr(0, baseAttr)
+	if cachedAttr == baseAttr {
+		t.Error("Cached file should return a modified (dimmed) attribute, got same")
+	}
 }
 func TestFileEntry_HighlightDir(t *testing.T) {
 	vtui.SetDefaultPalette()
@@ -1015,6 +1023,55 @@ func TestFileSystemPanel_FastFind_MouseDeactivation(t *testing.T) {
 		t.Error("Mouse click should deactivate FastFind mode")
 	}
 }
+func TestFileSystemPanel_DirectoryCache(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	v := vfs.NewOSVFS(t.TempDir())
+	fp := NewFileSystemPanel(0, 0, 40, 20, v)
+
+	// 1. Manually populate cache
+	items := []vfs.VFSItem{
+		{Name: "cached_file.txt", IsDir: false},
+	}
+	fp.saveToCache(v.GetPath(), items)
+
+	// 2. Call readDirectoryEx and intercept before goroutine returns
+	fp.readDirectoryEx(false)
+
+	// At this exact moment, UI should have the cached entries!
+	if len(fp.entries) < 2 { // ".." + "cached_file.txt"
+		t.Fatalf("Cache not applied immediately, entries len: %d", len(fp.entries))
+	}
+
+	found := false
+	for _, e := range fp.entries {
+		if e.Name == "cached_file.txt" {
+			found = true
+			if !e.IsCached {
+				t.Error("Cached entry IsCached flag not set")
+			}
+		}
+	}
+	if !found {
+		t.Error("Cached file not found in panel entries")
+	}
+}
+
+func TestFileSystemPanel_CacheEviction(t *testing.T) {
+	fp := &FileSystemPanel{}
+	for i := 0; i < 60; i++ {
+		fp.saveToCache(fmt.Sprintf("/path/%d", i), nil)
+		time.Sleep(1 * time.Millisecond) // Ensure time diff
+	}
+
+	if len(fp.dirCache) > maxDirCache {
+		t.Errorf("Cache exceeded max size: %d", len(fp.dirCache))
+	}
+
+	// The first inserted path "/path/0" should be evicted
+	if _, ok := fp.dirCache["/path/0"]; ok {
+		t.Error("Oldest entry was not evicted")
+	}
+}
 
 func TestFileSystemPanel_MaskSelection(t *testing.T) {
 	// Initialize with a dummy table to avoid Refresh() nil pointer panic
@@ -1177,3 +1234,109 @@ func TestDummyFailure(t *testing.T) {
     t.Fatal("Intentional failure for log dump test")
 }
 */
+// waitForLoad is a test helper to wait for a panel's async loading to complete.
+func waitForLoad(t *testing.T, fp *FileSystemPanel) {
+	t.Helper()
+	timeout := time.After(2 * time.Second)
+	for fp.isLoading {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Timeout waiting for panel to load")
+		}
+	}
+	// Drain any final UI tasks after isLoading becomes false
+	for i := 0; i < 5; i++ {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		default:
+			return
+		}
+	}
+}
+
+func TestFileSystemPanel_Cache_FullCycle(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	tmpDir := t.TempDir()
+	v := vfs.NewOSVFS(tmpDir)
+
+	// 1. Initial setup
+	os.WriteFile(filepath.Join(tmpDir, "a.txt"), []byte("a"), 0644)
+	os.WriteFile(filepath.Join(tmpDir, "b.txt"), []byte("b"), 0644)
+
+	fp := NewFileSystemPanel(0, 0, 40, 20, v)
+
+	// 2. Initial fresh read
+	waitForLoad(t, fp)
+
+	// 3. Verify cache was populated
+	if _, ok := fp.dirCache[tmpDir]; !ok {
+		t.Fatal("Cache not populated after initial read")
+	}
+	if len(fp.entries) != 3 { // .., a.txt, b.txt
+		t.Fatalf("Expected 3 entries, got %d", len(fp.entries))
+	}
+	for _, e := range fp.entries {
+		if e.IsCached {
+			t.Fatal("Initial read should not produce cached entries")
+		}
+	}
+
+	// 4. Set cursor and modify backend
+	fp.SelectName("b.txt")
+	os.WriteFile(filepath.Join(tmpDir, "c.txt"), []byte("c"), 0644)
+	os.Remove(filepath.Join(tmpDir, "a.txt"))
+
+	// 5. Trigger cached read
+	fp.readDirectoryEx(false)
+
+	// 6. IMMEDIATE CHECKS (before async finishes)
+	if len(fp.entries) != 3 {
+		t.Fatalf("Immediately after reload, should show 3 cached entries, got %d", len(fp.entries))
+	}
+	if fp.GetSelectedName() != "b.txt" {
+		t.Errorf("Cursor position lost, expected 'b.txt', got %q", fp.GetSelectedName())
+	}
+	foundA := false
+	for _, e := range fp.entries {
+		if e.Name == "c.txt" {
+			t.Error("'c.txt' should not be visible in cached view")
+		}
+		if e.Name == "a.txt" {
+			foundA = true
+		}
+		if e.Name != ".." && !e.IsCached {
+			t.Errorf("Entry %q should be marked as cached", e.Name)
+		}
+	}
+	if !foundA {
+		t.Error("'a.txt' should still be visible in cached view")
+	}
+
+	// 7. ASYNC CHECKS (let the real read complete)
+	waitForLoad(t, fp)
+
+	if len(fp.entries) != 3 { // .., b.txt, c.txt
+		t.Fatalf("After async update, expected 3 entries, got %d", len(fp.entries))
+	}
+	if fp.GetSelectedName() != "b.txt" {
+		t.Errorf("Cursor position lost after async update, expected 'b.txt', got %q", fp.GetSelectedName())
+	}
+	foundC := false
+	for _, e := range fp.entries {
+		if e.Name == "a.txt" {
+			t.Error("'a.txt' should have been removed after async update")
+		}
+		if e.Name == "c.txt" {
+			foundC = true
+		}
+		if e.IsCached {
+			t.Errorf("Entry %q should NOT be marked as cached after async update", e.Name)
+		}
+	}
+	if !foundC {
+		t.Error("'c.txt' not found after async update")
+	}
+}

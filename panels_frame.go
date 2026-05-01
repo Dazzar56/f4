@@ -1529,6 +1529,11 @@ func (pf *PanelsFrame) Clone() *PanelsFrame {
 			cloneFsp.sortMode = fsp.sortMode
 			cloneFsp.sortReverse = fsp.sortReverse
 
+			cloneFsp.dirCache = make(map[string]dirCacheEntry)
+			for k, v := range fsp.dirCache {
+				cloneFsp.dirCache[k] = v
+			}
+
 			// Copy entries immediately so the visual state is valid before async reload
 			cloneFsp.entries = make([]*fileEntry, len(fsp.entries))
 			for j, e := range fsp.entries {
@@ -1704,6 +1709,7 @@ func (pf *PanelsFrame) switchToVFS(fsp *FileSystemPanel, newVFS vfs.VFS) {
 			}
 			pf.ptyMutex.Unlock()
 		}
+		fsp.dirCache = make(map[string]dirCacheEntry)
 		fsp.vfs = newVFS
 		fsp.ReadDirectory()
 		pf.RefreshAll()
