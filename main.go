@@ -70,6 +70,7 @@ func main() {
 	var serverPath, clientPath string
 	var cpuprofile string
 	var guiMode bool
+	var version bool
 
 	for i := 1; i < len(os.Args); i++ {
 		arg := os.Args[i]
@@ -83,6 +84,8 @@ func main() {
 		}
 
 		switch flagName {
+		case "-v", "--version":
+			version = true;
 		case "--debug":
 			os.Setenv("VTUI_DEBUG", "1")
 		case "--gui":
@@ -137,6 +140,11 @@ func main() {
 				i++
 			}
 		}
+	}
+
+	if version {
+		fmt.Println(vtui.GetVersionInfo())
+        return
 	}
 
 	for _, arg := range os.Args {
