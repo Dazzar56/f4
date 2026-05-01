@@ -348,7 +348,7 @@ func NewQueueFrame() *QueueFrame {
 		{Title: "State", Width: 10},
 		{Title: "Type", Width: 8},
 		{Title: "Description / Current File", Width: descW},
-		{Title: "Prog", Width: 18},
+		{Title: "Progress", Width: 18},
 		{Title: "Speed", Width: 12},
 	}
 	qf.table = vtui.NewTable(0, 0, scrW-4, scrH-6, cols)
