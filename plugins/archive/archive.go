@@ -24,6 +24,17 @@ func (p *ArchivePlugin) Init(api vfs.HostAPI) error {
 	return nil
 }
 
+type ioCtxReader struct {
+	r   io.Reader
+	ctx context.Context
+}
+
+func (cr *ioCtxReader) Read(p []byte) (int, error) {
+	if cr.ctx.Err() != nil {
+		return 0, cr.ctx.Err()
+	}
+	return cr.r.Read(p)
+}
 func actionArchiveCommands(app vfs.App) {
 	app.Menu(" Archive Commands ", []string{"&1. Add to archive", "&2. Extract files"}, func(idx int) {
 		switch idx {
@@ -111,7 +122,7 @@ func actionExtractArchive(app vfs.App) {
 			if err != nil { return err }
 			defer in.Close()
 
-			_, err = io.Copy(out, in)
+			_, err = io.Copy(out, &ioCtxReader{r: in, ctx: ctx})
 			return err
 		})
 	}, func(err error) {

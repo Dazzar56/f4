@@ -209,7 +209,7 @@ func (v *ArchiveVFS) Open(ctx context.Context, path string) (vfs.ReadAtCloser, e
 
 	tmp, err := os.CreateTemp("", "f4arc-*")
 	if err != nil { return nil, err }
-	io.Copy(tmp, srcFile) // arcFS.Open returns standard io.Reader, no context needed
+	io.Copy(tmp, &ioCtxReader{r: srcFile, ctx: ctx}) // Use context-aware reader
 	tmp.Seek(0, io.SeekStart)
 	stat, _ := tmp.Stat()
 	return &vfs.TempFileWrapper{File: tmp, SizeVal: stat.Size(), TempPath: tmp.Name()}, nil

@@ -140,7 +140,7 @@ func (v *FTPVFS) Open(ctx context.Context, p string) (vfs.ReadAtCloser, error) {
 		return nil, err
 	}
 	tmp, _ := os.CreateTemp("", "f4ftp-*")
-	io.Copy(tmp, resp)
+	io.Copy(tmp, &ioCtxReader{r: resp, ctx: ctx})
 	resp.Close()
 	tmp.Seek(0, 0)
 	stat, _ := tmp.Stat()

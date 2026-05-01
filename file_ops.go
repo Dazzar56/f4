@@ -671,8 +671,6 @@ func recursiveCopy(ctx context.Context, srcVfs vfs.VFS, srcPath string, dstVfs v
 	}
 
 	var srcFile vfs.ReadAtCloser
-	var dstFile io.WriteCloser
-
 	for {
 		srcFile, err = srcVfs.Open(ctx, srcPath)
 		if err == nil {
@@ -689,6 +687,7 @@ func recursiveCopy(ctx context.Context, srcVfs vfs.VFS, srcPath string, dstVfs v
 	}
 	defer srcFile.Close()
 
+	var dstFile io.WriteCloser
 	for {
 		dstFile, err = dstVfs.Create(ctx, destPathForFile)
 		if err == nil {
@@ -703,7 +702,14 @@ func recursiveCopy(ctx context.Context, srcVfs vfs.VFS, srcPath string, dstVfs v
 			return context.Canceled
 		}
 	}
-	defer dstFile.Close()
+
+	copySuccess := false
+	defer func() {
+		dstFile.Close()
+		if !copySuccess {
+			dstVfs.Remove(context.Background(), destPathForFile)
+		}
+	}()
 
 	buf := make([]byte, 128*1024)
 	for {
@@ -722,6 +728,8 @@ func recursiveCopy(ctx context.Context, srcVfs vfs.VFS, srcPath string, dstVfs v
 			return rerr
 		}
 	}
+
+	copySuccess = true
 
 	if state.Tracker != nil {
 		state.Tracker.FileDone()

@@ -3,12 +3,24 @@ package netfox
 import (
 	"context"
 	"os"
+	"io"
 	"path/filepath"
 
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
 )
 
+type ioCtxReader struct {
+	r   io.Reader
+	ctx context.Context
+}
+
+func (cr *ioCtxReader) Read(p []byte) (int, error) {
+	if cr.ctx.Err() != nil {
+		return 0, cr.ctx.Err()
+	}
+	return cr.r.Read(p)
+}
 type NetFoxPlugin struct{}
 
 type netFoxVFSWrapper struct {

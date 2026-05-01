@@ -228,6 +228,36 @@ func TestRecursiveCopy_SkipAllState(t *testing.T) {
 		t.Error("File was overwritten despite SkipAll flag")
 	}
 }
+func TestRecursiveCopy_CancelCleanup(t *testing.T) {
+	tmpSrc := t.TempDir()
+	tmpDst := t.TempDir()
+
+	srcFile := filepath.Join(tmpSrc, "source.txt")
+	os.WriteFile(srcFile, []byte("some large content here"), 0644)
+
+	dstFile := filepath.Join(tmpDst, "source.txt")
+
+	srcVfs := vfs.NewOSVFS(tmpSrc)
+	dstVfs := vfs.NewOSVFS(tmpDst)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	state := &FileOpState{
+		OnBytes: func(n int) {
+			cancel()
+		},
+	}
+
+	err := recursiveCopy(ctx, srcVfs, srcFile, dstVfs, dstFile, state, 0)
+
+	if err != context.Canceled {
+		t.Errorf("Expected context.Canceled, got %v", err)
+	}
+
+	if _, err := os.Stat(dstFile); !os.IsNotExist(err) {
+		t.Error("Partial destination file was not deleted after cancellation")
+	}
+}
 func TestRecursiveCopy_AskError_Stub(t *testing.T) {
 	// Placeholder for UI-heavy error handling test.
 	// Just ensuring the frame instance can be created.
