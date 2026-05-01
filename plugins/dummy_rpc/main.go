@@ -70,9 +70,13 @@ func (p *DummyPlugin) OnHotkey(vk uint16, mods uint32) error {
 }
 
 func (p *DummyPlugin) OnProgressTask() error {
-	for i := 0; i <= 100; i += 10 {
+	for i := 0; i <= 100; i += 5 {
+		if p.host.IsProgressCancelled() {
+			p.host.Log("Progress task cancelled by user.")
+			return nil
+		}
 		p.host.UpdateProgress(fmt.Sprintf("RPC working... %d%%", i), i)
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}
 	return nil
 }

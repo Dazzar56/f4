@@ -80,6 +80,21 @@ type RenameReq struct {
 	Old   string
 	New   string
 }
+type AskOverwriteReq struct {
+	Path string
+	Src  vfs.VFSItem
+	Dst  vfs.VFSItem
+}
+
+type AskOverwriteRes struct {
+	Choice   int
+	Remember bool
+}
+
+type AskErrorReq struct {
+	Op  string
+	Err string
+}
 type SetAttrReq struct {
 	Drive string
 	Path  string
@@ -175,13 +190,18 @@ func (p *RPCPlugin) Init(api vfs.HostAPI) error {
 		return nil, nil
 	})
 
-	var currentUpdateFunc func(string, int)
+	// Session-local state for active progress task
+
+
+	// Session-local state for active progress task
+	var taskUpdate func(string, int)
+	var taskCtx context.Context
+	var taskAnchor vtui.Frame
+
 	p.sess.Register("Host.RunProgressTask", func(data msgpack.RawMessage) (any, error) {
 		var req ProgressTaskReq
 		msgpack.Unmarshal(data, &req)
-		// We can't block the RPC handler, so we run the core task which will call back to the plugin
 		vtui.FrameManager.PostTask(func() {
-			// Find PanelsFrame to use its RunProgressTask
 			var pf *PanelsFrame
 			if len(vtui.FrameManager.Screens) > 0 {
 				for _, f := range vtui.FrameManager.Screens[vtui.FrameManager.ActiveIdx].Frames {
@@ -191,9 +211,15 @@ func (p *RPCPlugin) Init(api vfs.HostAPI) error {
 			if pf == nil { return }
 
 			pf.RunProgressTask(req.Title, req.StartMsg, req.Forked, func(ctx context.Context, update func(msg string, percent int)) error {
-				currentUpdateFunc = update
+				taskUpdate = update
+				taskCtx = ctx
+				taskAnchor = vtui.FrameManager.GetTopFrame()
 				return p.sess.Call("Plugin.OnProgressTask", nil, nil)
-			}, nil)
+			}, func(err error) {
+				taskUpdate = nil
+				taskCtx = nil
+				taskAnchor = nil
+			})
 		})
 		return nil, nil
 	})
@@ -201,11 +227,35 @@ func (p *RPCPlugin) Init(api vfs.HostAPI) error {
 	p.sess.Register("Host.UpdateProgress", func(data msgpack.RawMessage) (any, error) {
 		var req ProgressUpdateReq
 		msgpack.Unmarshal(data, &req)
-		if currentUpdateFunc != nil {
-			currentUpdateFunc(req.Msg, req.Percent)
-		}
+		if taskUpdate != nil { taskUpdate(req.Msg, req.Percent) }
 		return nil, nil
 	})
+
+	p.sess.Register("Host.IsProgressCancelled", func(data msgpack.RawMessage) (any, error) {
+		if taskCtx != nil {
+			return taskCtx.Err() != nil, nil
+		}
+		return false, nil
+	})
+
+	p.sess.Register("Host.AskOverwrite", func(data msgpack.RawMessage) (any, error) {
+		var req AskOverwriteReq
+		msgpack.Unmarshal(data, &req)
+		ctx := taskCtx
+		if ctx == nil { ctx = context.Background() }
+		choice, remember := AskOverwrite(ctx, req.Path, req.Src, req.Dst, taskAnchor)
+		return AskOverwriteRes{Choice: choice, Remember: remember}, nil
+	})
+
+	p.sess.Register("Host.AskError", func(data msgpack.RawMessage) (any, error) {
+		var req AskErrorReq
+		msgpack.Unmarshal(data, &req)
+		ctx := taskCtx
+		if ctx == nil { ctx = context.Background() }
+		choice := AskError(ctx, req.Op, fmt.Errorf("%s", req.Err), taskAnchor)
+		return choice, nil
+	})
+	
 	p.sess.Register("Host.InputBox", func(data msgpack.RawMessage) (any, error) {
 		var req InputBoxReq
 		msgpack.Unmarshal(data, &req)

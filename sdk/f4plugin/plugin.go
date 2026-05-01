@@ -53,6 +53,9 @@ type HighlightRes struct { Attrs []uint64; Next any }
 type ProgressTaskReq struct { Title, StartMsg string; Forked bool }
 type ProgressUpdateReq struct { Msg string; Percent int }
 type HotkeyReq struct { VK uint16; Mods uint32 }
+type AskOverwriteReq struct { Path string; Src, Dst VFSItem }
+type AskOverwriteRes struct { Choice int; Remember bool }
+type AskErrorReq struct { Op string; Err string }
 type InputBoxReq struct { Title, Prompt, Default string }
 type MenuReq struct { Title string; Items []string }
 // Plugin is the primary interface a plugin developer implements.
@@ -193,6 +196,23 @@ func (h *Host) RunProgressTask(title, startMsg string, forked bool, onUpdate fun
 
 func (h *Host) UpdateProgress(msg string, percent int) {
 	_ = h.sess.Call("Host.UpdateProgress", ProgressUpdateReq{Msg: msg, Percent: percent}, nil)
+}
+func (h *Host) IsProgressCancelled() bool {
+	var cancelled bool
+	_ = h.sess.Call("Host.IsProgressCancelled", nil, &cancelled)
+	return cancelled
+}
+
+func (h *Host) AskOverwrite(path string, src, dst VFSItem) (int, bool) {
+	var res AskOverwriteRes
+	_ = h.sess.Call("Host.AskOverwrite", AskOverwriteReq{Path: path, Src: src, Dst: dst}, &res)
+	return res.Choice, res.Remember
+}
+
+func (h *Host) AskError(op string, err error) int {
+	var res int
+	_ = h.sess.Call("Host.AskError", AskErrorReq{Op: op, Err: err.Error()}, &res)
+	return res
 }
 func (h *Host) InputBox(title, prompt, defaultText string) string {
 	var res string

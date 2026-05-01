@@ -159,3 +159,22 @@ func TestRPCPlugin_SetAttributes_Proxy(t *testing.T) {
 		t.Errorf("Data corruption in SetAttributes proxy: %+v", capturedReq)
 	}
 }
+func TestRPCPlugin_Progress_Cancellation(t *testing.T) {
+	coreSess, pluginSess := setupTestSessions()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	// Inject a mock task context into core side manually
+	coreSess.Register("Host.IsProgressCancelled", func(data msgpack.RawMessage) (any, error) {
+		return ctx.Err() != nil, nil
+	})
+
+	var isCancelled bool
+	// 1. Initially not cancelled
+	err := pluginSess.Call("Host.IsProgressCancelled", nil, &isCancelled)
+	if err != nil || isCancelled { t.Errorf("Expected not cancelled, err: %v", err) }
+
+	// 2. Cancel and check again
+	cancel()
+	_ = pluginSess.Call("Host.IsProgressCancelled", nil, &isCancelled)
+	if !isCancelled { t.Error("Plugin failed to detect cancellation through RPC") }
+}
