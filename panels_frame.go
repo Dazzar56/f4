@@ -1074,22 +1074,31 @@ func (pf *PanelsFrame) GetPaths() (string, string) {
 func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 	switch cmd {
 	case vtui.CmQuit:
-		msg := Msg("Quit.Confirm")
+		active := 0
 		if GlobalQueueManager != nil {
-			active := GlobalQueueManager.ActiveTasksCount()
+			active = GlobalQueueManager.ActiveTasksCount()
+		}
+		if AppConfig.ConfirmExit || active > 0 {
+			msg := Msg("Quit.Confirm")
 			if active > 0 {
 				msg = fmt.Sprintf("There are %d active background operations!\nIf you exit, they will be aborted.\n\n%s", active, msg)
 			}
-		}
-		dlg := vtui.ShowMessage(Msg("Quit.Title"), msg, []string{Msg("Quit.Btn"), Msg("vtui.Cancel")})
-		dlg.OnResult = func(code int) {
-			if code == 0 {
-				SaveSession()
-				if pf.pty != nil {
-					pf.pty.Close()
+			dlg := vtui.ShowMessage(Msg("Quit.Title"), msg, []string{Msg("Quit.Btn"), Msg("vtui.Cancel")})
+			dlg.OnResult = func(code int) {
+				if code == 0 {
+					SaveSession()
+					if pf.pty != nil {
+						pf.pty.Close()
+					}
+					vtui.FrameManager.Shutdown()
 				}
-				vtui.FrameManager.Shutdown()
 			}
+		} else {
+			SaveSession()
+			if pf.pty != nil {
+				pf.pty.Close()
+			}
+			vtui.FrameManager.Shutdown()
 		}
 		return true
 

@@ -866,7 +866,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 	vtui.FrameManager.Push(dlg)
 }
 func actionConfirmationsSettings(pf *PanelsFrame) {
-	dlg := vtui.NewCenteredDialog(44, 15, Msg("ConfirmationsSettings.Title"))
+	dlg := vtui.NewCenteredDialog(44, 9, Msg("ConfirmationsSettings.Title"))
 	dlg.ShowClose = true
 
 	chkExit := vtui.NewCheckbox(0, 0, Msg("ConfirmationsSettings.Exit"), false)
@@ -881,7 +881,7 @@ func actionConfirmationsSettings(pf *PanelsFrame) {
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnCancel)
 
-	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 44-4, 15-4)
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 44-4, 9-4)
 	vbox.Add(chkExit, vtui.Margins{}, vtui.AlignLeft)
 
 	hbox := vtui.NewHBoxLayout(0, 0, 44-4, 1)
