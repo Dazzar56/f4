@@ -307,8 +307,8 @@ func TestQueueManager_BackgroundWorkspace(t *testing.T) {
 		}
 	}
 
-	// Проверяем, что второй экран содержит QueueFrame
-	qScreen := fm.Screens[len(fm.Screens)-1]
+	// Проверяем, что новый экран (вставленный в начало, индекс 0) содержит QueueFrame
+	qScreen := fm.Screens[0]
 	found := false
 	for _, f := range qScreen.Frames {
 		if _, ok := f.(*QueueFrame); ok {
@@ -317,12 +317,13 @@ func TestQueueManager_BackgroundWorkspace(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Error("QueueFrame not found in the new background screen")
+		t.Error("QueueFrame not found at index 0")
 	}
 
-	// Проверяем, что фокус НЕ переключился (активным остался экран 0)
-	if fm.ActiveIdx != 0 {
-		t.Errorf("Focus stolen by background queue creation. ActiveIdx: %d", fm.ActiveIdx)
+	// Проверяем, что фокус остался на исходном экране. 
+	// Так как мы вставили в начало, индекс активного экрана должен был сдвинуться на 1.
+	if fm.ActiveIdx != 1 {
+		t.Errorf("Focus pointer tracking failed. ActiveIdx: %d, expected 1", fm.ActiveIdx)
 	}
 }
 

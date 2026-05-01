@@ -1474,4 +1474,22 @@ Loop:
 	if !foundDialog {
 		t.Error("Foreground mode (2) failed to show progress dialog immediately")
 	}
+
+	// Ждем, пока операция реально закончится и закроет диалог.
+	// Это гарантирует, что все файловые дескрипторы закрыты до того,
+	// как t.TempDir начнет удалять папку.
+	timeout = time.After(2 * time.Second)
+	for fm.GetTopFrame() != nil {
+		select {
+		case task := <-fm.TaskChan:
+			task()
+			if top := fm.GetTopFrame(); top != nil && top.IsDone() {
+				fm.Pop()
+			}
+		case <-timeout:
+			t.Fatal("Foreground operation timed out before closing dialog")
+		default:
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
 }
