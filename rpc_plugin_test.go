@@ -3,6 +3,9 @@ package main
 import (
 	"io"
 	"testing"
+	"context"
+	"github.com/unxed/vtui"
+	"github.com/unxed/f4/vfs"
 	"github.com/unxed/f4/sdk/f4rpc"
 	"github.com/vmihailenco/msgpack/v5"
 )
@@ -122,5 +125,37 @@ func TestRPCPlugin_Progress_Proxy(t *testing.T) {
 
 	if updateMsg != "working" || updatePct != 50 {
 		t.Errorf("Progress proxy failed: msg=%q, pct=%d", updateMsg, updatePct)
+	}
+}
+func TestRPCPlugin_InputBox_Proxy(t *testing.T) {
+	coreSess, pluginSess := setupTestSessions()
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	coreSess.Register("Host.InputBox", func(data msgpack.RawMessage) (any, error) {
+		return "user_input", nil
+	})
+
+	var res string
+	err := pluginSess.Call("Host.InputBox", InputBoxReq{Title: "T", Prompt: "P"}, &res)
+	if err != nil { t.Fatalf("Call failed: %v", err) }
+	if res != "user_input" { t.Errorf("Expected 'user_input', got %q", res) }
+}
+
+func TestRPCPlugin_SetAttributes_Proxy(t *testing.T) {
+	coreSess, pluginSess := setupTestSessions()
+
+	v := &RPCVFS{sess: coreSess, driveName: "TestDrive"}
+	item := vfs.VFSItem{Name: "file", UnixMode: 0644}
+
+	var capturedReq SetAttrReq
+	pluginSess.Register("VFS.SetAttributes", func(data msgpack.RawMessage) (any, error) {
+		msgpack.Unmarshal(data, &capturedReq)
+		return nil, nil
+	})
+
+	err := v.SetAttributes(context.Background(), "/path/file", item)
+	if err != nil { t.Fatalf("SetAttributes failed: %v", err) }
+	if capturedReq.Item.UnixMode != 0644 || capturedReq.Path != "/path/file" {
+		t.Errorf("Data corruption in SetAttributes proxy: %+v", capturedReq)
 	}
 }

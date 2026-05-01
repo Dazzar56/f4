@@ -80,6 +80,22 @@ type RenameReq struct {
 	Old   string
 	New   string
 }
+type SetAttrReq struct {
+	Drive string
+	Path  string
+	Item  vfs.VFSItem
+}
+
+type InputBoxReq struct {
+	Title   string
+	Prompt  string
+	Default string
+}
+
+type MenuReq struct {
+	Title string
+	Items []string
+}
 
 // RPCPlugin manages the lifecycle of an external process plugin.
 type RPCPlugin struct {
@@ -189,6 +205,38 @@ func (p *RPCPlugin) Init(api vfs.HostAPI) error {
 			currentUpdateFunc(req.Msg, req.Percent)
 		}
 		return nil, nil
+	})
+	p.sess.Register("Host.InputBox", func(data msgpack.RawMessage) (any, error) {
+		var req InputBoxReq
+		msgpack.Unmarshal(data, &req)
+		resChan := make(chan string, 1)
+		vtui.FrameManager.PostTask(func() {
+			vtui.InputBox(req.Title, req.Prompt, req.Default, func(s string) {
+				resChan <- s
+			})
+		})
+		return <-resChan, nil
+	})
+
+	p.sess.Register("Host.Menu", func(data msgpack.RawMessage) (any, error) {
+		var req MenuReq
+		msgpack.Unmarshal(data, &req)
+		resChan := make(chan int, 1)
+		vtui.FrameManager.PostTask(func() {
+			// Find PanelsFrame for context-aware menu
+			var pf *PanelsFrame
+			if len(vtui.FrameManager.Screens) > 0 {
+				for _, f := range vtui.FrameManager.Screens[vtui.FrameManager.ActiveIdx].Frames {
+					if p, ok := f.(*PanelsFrame); ok { pf = p; break }
+				}
+			}
+			if pf != nil {
+				pf.Menu(req.Title, req.Items, func(idx int) { resChan <- idx })
+			} else {
+				resChan <- -1
+			}
+		})
+		return <-resChan, nil
 	})
 
 	go func() {

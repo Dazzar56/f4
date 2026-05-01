@@ -53,6 +53,8 @@ type HighlightRes struct { Attrs []uint64; Next any }
 type ProgressTaskReq struct { Title, StartMsg string; Forked bool }
 type ProgressUpdateReq struct { Msg string; Percent int }
 type HotkeyReq struct { VK uint16; Mods uint32 }
+type InputBoxReq struct { Title, Prompt, Default string }
+type MenuReq struct { Title string; Items []string }
 // Plugin is the primary interface a plugin developer implements.
 type Plugin interface {
 	Init(host *Host) ([]string, error)
@@ -191,4 +193,15 @@ func (h *Host) RunProgressTask(title, startMsg string, forked bool, onUpdate fun
 
 func (h *Host) UpdateProgress(msg string, percent int) {
 	_ = h.sess.Call("Host.UpdateProgress", ProgressUpdateReq{Msg: msg, Percent: percent}, nil)
+}
+func (h *Host) InputBox(title, prompt, defaultText string) string {
+	var res string
+	_ = h.sess.Call("Host.InputBox", InputBoxReq{Title: title, Prompt: prompt, Default: defaultText}, &res)
+	return res
+}
+
+func (h *Host) Menu(title string, items []string) int {
+	var res int
+	_ = h.sess.Call("Host.Menu", MenuReq{Title: title, Items: items}, &res)
+	return res
 }

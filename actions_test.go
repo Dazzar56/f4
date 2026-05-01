@@ -594,3 +594,65 @@ func TestActionPanelSettings_Flow(t *testing.T) {
 	top.SetExitCode(-1)
 	vtui.FrameManager.Pop()
 }
+func TestActionManagePlugins_Flow(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+
+	oldPlugins := AppConfig.RegisteredPlugins
+	AppConfig.RegisteredPlugins = []string{"/old/path"}
+	defer func() { AppConfig.RegisteredPlugins = oldPlugins }()
+
+	actionManagePlugins(pf)
+	top := vtui.FrameManager.GetTopFrame().(vtui.Container)
+
+	var lb *vtui.ListBox
+	for _, itm := range top.GetChildren() {
+		if l, ok := itm.(*vtui.ListBox); ok {
+			lb = l
+			break
+		}
+	}
+	if lb == nil { t.Fatal("ListBox not found") }
+
+	// 1. Test Remove
+	var btnRem *vtui.Button
+	for _, itm := range top.GetChildren() {
+		if b, ok := itm.(*vtui.Button); ok && strings.Contains(b.GetText(), "Remove") {
+			btnRem = b; break
+		}
+	}
+	btnRem.OnClick()
+
+	if len(AppConfig.RegisteredPlugins) != 0 {
+		t.Error("Plugin was not removed from config")
+	}
+
+	// 2. Test Add (simulating SelectFileDialog callback)
+	tmpDir := t.TempDir()
+	testFile := "my_plugin.sh"
+	os.WriteFile(filepath.Join(tmpDir, testFile), []byte("#!/bin/sh"), 0755)
+
+	pluginVfs := &dialogVFSAdapter{v: vfs.NewOSVFS(tmpDir)}
+	
+	foundFile := false
+	err := pluginVfs.ReadDir(context.Background(), tmpDir, func(items []vtui.FSItem) {
+		for _, itm := range items {
+			if itm.Name == testFile {
+				foundFile = true
+			}
+		}
+	})
+	if err != nil { t.Fatalf("Adapter ReadDir failed: %v", err) }
+	if !foundFile { t.Errorf("Adapter failed to find test file %s", testFile) }
+
+	newPath := filepath.Join(tmpDir, testFile)
+	AppConfig.RegisteredPlugins = append(AppConfig.RegisteredPlugins, newPath)
+	lb.Items = AppConfig.RegisteredPlugins
+	lb.UpdateRows()
+
+	if len(AppConfig.RegisteredPlugins) != 1 || AppConfig.RegisteredPlugins[0] != newPath {
+		t.Errorf("Failed to add new plugin. Current: %v", AppConfig.RegisteredPlugins)
+	}
+}	

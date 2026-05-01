@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"path/filepath"
 
@@ -133,9 +132,9 @@ func (v *RPCVFS) Rename(ctx context.Context, old, new string) error {
 	req := RenameReq{Drive: v.driveName, Old: old, New: new}
 	return v.sess.Call("VFS.Rename", req, nil)
 }
-
 func (v *RPCVFS) SetAttributes(ctx context.Context, path string, item vfs.VFSItem) error {
-	return fmt.Errorf("SetAttributes not implemented in RPC VFS yet")
+	req := SetAttrReq{Drive: v.driveName, Path: path, Item: item}
+	return v.sess.Call("VFS.SetAttributes", req, nil)
 }
 
 func (v *RPCVFS) GetCapabilities() vfs.VFSCapabilities {
