@@ -24,6 +24,7 @@ type F4Config struct {
 	EditorUseEditorConfig  bool
 	EditorCrosshair        bool
 	RegisteredPlugins      []string
+	ConfirmExit	       bool
 }
 
 var AppConfig = F4Config{
@@ -39,6 +40,7 @@ var AppConfig = F4Config{
 	EditorTabSize:          4,
 	EditorUseEditorConfig:  true,
 	EditorCrosshair:        false,
+	ConfirmExit:            true,
 }
 
 var getConfigIniPath = func() string {

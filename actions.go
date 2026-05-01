@@ -865,6 +865,44 @@ func actionPanelSettings(pf *PanelsFrame) {
 
 	vtui.FrameManager.Push(dlg)
 }
+func actionConfirmationsSettings(pf *PanelsFrame) {
+	dlg := vtui.NewCenteredDialog(44, 15, Msg("ConfirmationsSettings.Title"))
+	dlg.ShowClose = true
+
+	chkExit := vtui.NewCheckbox(0, 0, Msg("ConfirmationsSettings.Exit"), false)
+	chkExit.State = 0
+	if AppConfig.ConfirmExit { chkExit.State = 1 }
+
+	btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))
+	btnOk.IsDefault = true
+	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
+
+	dlg.AddItem(chkExit)
+	dlg.AddItem(btnOk)
+	dlg.AddItem(btnCancel)
+
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 44-4, 15-4)
+	vbox.Add(chkExit, vtui.Margins{}, vtui.AlignLeft)
+
+	hbox := vtui.NewHBoxLayout(0, 0, 44-4, 1)
+	hbox.HorizontalAlign = vtui.AlignCenter
+	hbox.Spacing = 2
+	hbox.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
+	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
+
+	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Apply()
+
+	btnCancel.OnClick = func() { dlg.Close() }
+	btnOk.OnClick = func() {
+		AppConfig.ConfirmExit = chkExit.State == 1
+		SaveConfig()
+		dlg.Close()
+		pf.RefreshAll()
+	}
+
+	vtui.FrameManager.Push(dlg)
+}
 type dialogVFSAdapter struct {
 	v vfs.VFS
 }
