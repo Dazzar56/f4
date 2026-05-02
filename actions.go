@@ -621,7 +621,7 @@ func actionDelete(pf *PanelsFrame) {
 
 	btnDel := vtui.NewButton(0, 0, Msg("Delete.Btn"))
 	btnCancel := vtui.NewButton(0, 0, "Cancel")
-	btnDel.IsDefault = true
+	btnCancel.IsDefault = true
 	dlg.AddItem(btnDel)
 	dlg.AddItem(btnCancel)
 
@@ -641,7 +641,7 @@ func actionDelete(pf *PanelsFrame) {
 		go ExecuteDeleteOp(pf, activeVfs, names, mode, pf.RefreshAll)
 	}
 
-	dlg.SetFocusedItem(btnDel)
+	dlg.SetFocusedItem(btnCancel)
 
 	vtui.FrameManager.Push(dlg)
 }
