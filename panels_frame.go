@@ -772,6 +772,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			return true // Prevent switching back while script is working
 		}
 		pf.showPanels = !pf.showPanels
+		vtui.FrameManager.HardRefresh()
 		if pf.showPanels {
 			pf.RefreshAll()
 		}
