@@ -5,6 +5,7 @@ import "github.com/unxed/vtui"
 const (
 	CmCopy = vtui.CmApp + iota
 	CmMove
+	CmRename
 	CmDelete
 	CmView
 	CmEdit

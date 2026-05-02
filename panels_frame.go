@@ -710,6 +710,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		if ctrl { return vtui.FrameManager.EmitCommand(CmSortTime, nil) }
 		return vtui.FrameManager.EmitCommand(CmCopy, nil)
 	case vtinput.VK_F6:
+		if shift { return vtui.FrameManager.EmitCommand(CmRename, nil) }
 		if ctrl { return vtui.FrameManager.EmitCommand(CmSortSize, nil) }
 		return vtui.FrameManager.EmitCommand(CmMove, nil)
 	case vtinput.VK_F7:
@@ -1135,6 +1136,10 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 		actionCopyMove(pf, cmd == CmMove)
 		return true
 
+	case CmRename:
+		actionRename(pf)
+		return true
+
 	case CmMkDir:
 		actionMkDir(pf)
 		return true
@@ -1266,6 +1271,9 @@ func (pf *PanelsFrame) GetKeyLabels() *vtui.KeySet {
 			Msg("KeyBar.F1"), Msg("KeyBar.F2"), Msg("KeyBar.F3"), Msg("KeyBar.F4"),
 			Msg("KeyBar.F5"), Msg("KeyBar.F6"), Msg("KeyBar.F7"), Msg("KeyBar.F8"),
 			Msg("KeyBar.F9"), Msg("KeyBar.F10"), Msg("KeyBar.F11"), Msg("KeyBar.F12"),
+		},
+		Shift: vtui.KeyBarLabels{
+			"", "", "", "", "", "Rename", "", "", "", "", "", "",
 		},
 		Alt: vtui.KeyBarLabels{
 			Msg("KeyBar.AltF1"), Msg("KeyBar.AltF2"), Msg("KeyBar.AltF3"), "",

@@ -461,6 +461,36 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 
 	vtui.FrameManager.Push(dlg)
 }
+func actionRename(pf *PanelsFrame) {
+	fsp := pf.getActivePanel()
+	if fsp == nil {
+		return
+	}
+
+	name := fsp.getRawSelectedName()
+	if name == "" || name == ".." {
+		return
+	}
+
+	vtui.InputBox(" Rename ", "Rename '"+name+"' to:", name, func(newName string) {
+		if newName == "" || newName == name {
+			return
+		}
+		oldPath := fsp.vfs.Join(fsp.vfs.GetPath(), name)
+		newPath := fsp.vfs.Join(fsp.vfs.GetPath(), newName)
+
+		vtui.RunAsync(func(ctx *vtui.TaskContext) {
+			err := fsp.vfs.Rename(ctx.Context, oldPath, newPath)
+			ctx.RunOnUI(func() {
+				if err != nil {
+					vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to rename:\n%v", err), []string{"&Ok"})
+				}
+				fsp.pendingSelection = newName
+				pf.RefreshAll()
+			})
+		})
+	})
+}
 func actionEditorSettings(pf *PanelsFrame) {
 	width, height := 78, 20
 	dlg := vtui.NewCenteredDialog(width, height, Msg("EditorSettings.Title"))
