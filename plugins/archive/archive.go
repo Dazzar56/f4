@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/klauspost/compress/zip"
 	"github.com/mholt/archives"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
@@ -163,7 +164,9 @@ func actionAddArchive(app vfs.App) {
 			out, err := os.Create(fullArcPath)
 			if err != nil { return err }
 			defer out.Close()
-			return archives.Zip{}.Archive(ctx, out, files)
+			return archives.Zip{
+				Compression: zip.Deflate,
+			}.Archive(ctx, out, files)
 		}, func(err error) {
 			if err != nil && err != context.Canceled {
 				app.Message(" Error ", fmt.Sprintf("Archiving failed:\n%v", err), []string{"&Ok"})

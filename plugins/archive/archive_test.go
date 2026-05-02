@@ -1,11 +1,14 @@
 package archive
 
 import (
-	"archive/zip"
+	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/klauspost/compress/zip"
+	"github.com/mholt/archives"
 	"github.com/unxed/vtui"
 )
 
@@ -48,5 +51,42 @@ func TestArchiveVFS_PathSlashes(t *testing.T) {
 
 	if path != expected {
 		t.Errorf("ArchiveVFS.GetPath slashes mismatch.\nGot:      %q\nExpected: %q", path, expected)
+	}
+}
+func TestZipCompression_Deflate(t *testing.T) {
+	tmpDir := t.TempDir()
+	arcPath := filepath.Join(tmpDir, "test.zip")
+
+	// 1. Создаем временный файл с данными, которые хорошо сжимаются
+	data := []byte(strings.Repeat("A", 1000))
+	filePath := filepath.Join(tmpDir, "data.txt")
+	os.WriteFile(filePath, data, 0644)
+
+	// 2. Создаем архив, используя ту же конфигурацию, что и в плагине
+	out, err := os.Create(arcPath)
+	if err != nil { t.Fatal(err) }
+
+	z := archives.Zip{
+		Compression: zip.Deflate,
+	}
+
+	files, err := archives.FilesFromDisk(context.Background(), nil, map[string]string{filePath: "data.txt"})
+	if err != nil { t.Fatal(err) }
+
+	err = z.Archive(context.Background(), out, files)
+	out.Close()
+
+	if err != nil { t.Fatalf("Archiving failed: %v", err) }
+
+	// 3. Открываем полученный файл и проверяем метод сжатия
+	r, err := zip.OpenReader(arcPath)
+	if err != nil { t.Fatalf("Failed to open resulting zip: %v", err) }
+	defer r.Close()
+
+	if len(r.File) == 0 { t.Fatal("Zip is empty") }
+
+	// zip.Deflate имеет значение 8, zip.Store (без сжатия) - 0.
+	if r.File[0].Method != zip.Deflate {
+		t.Errorf("Compression method mismatch. Got %d, want %d (Deflate)", r.File[0].Method, zip.Deflate)
 	}
 }

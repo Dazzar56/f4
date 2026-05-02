@@ -83,6 +83,10 @@ func NewArchiveVFS(parent vfs.VFS, path string) (*ArchiveVFS, error) {
 	defer f.Close()
 	format, _, _ := archives.Identify(context.Background(), finalPath, f)
 
+	if z, ok := format.(*archives.Zip); ok {
+		z.Compression = zip.Deflate
+	}
+
 	return &ArchiveVFS{
 		parent:    parent,
 		arcPath:   path,
