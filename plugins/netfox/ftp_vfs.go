@@ -41,6 +41,7 @@ func NewFTPVFS(parent vfs.VFS, host, port, user, pass string, options map[string
 		c.Quit()
 		return nil, err
 	}
+	vtui.DebugLog("NET: FTP logged in successfully")
 
 	pwd, err := c.CurrentDir()
 	if err != nil {
@@ -73,13 +74,18 @@ func (v *FTPVFS) ReadDir(ctx context.Context, p string, onChunk func([]vfs.VFSIt
 	if target == "/" || target == "." {
 		target = ""
 	}
+	vtui.DebugLog("FTP: ReadDir(%q) starting...", target)
 	entries, err := v.conn.List(target)
 	if err != nil {
+		vtui.DebugLog("FTP: ReadDir(%q) failed: %v", target, err)
 		return err
 	}
 	var items []vfs.VFSItem
 	for i, e := range entries {
-		if ctx.Err() != nil { return ctx.Err() }
+		if ctx.Err() != nil {
+			vtui.DebugLog("FTP: ReadDir(%q) aborted by context cancellation after %d items", target, i)
+			return ctx.Err()
+		}
 		if e.Name == "." || e.Name == ".." {
 			continue
 		}
@@ -93,6 +99,7 @@ func (v *FTPVFS) ReadDir(ctx context.Context, p string, onChunk func([]vfs.VFSIt
 			items = make([]vfs.VFSItem, 0, 500)
 		}
 	}
+	vtui.DebugLog("FTP: ReadDir(%q) finished, total: %d", target, len(entries))
 	return nil
 }
 
@@ -139,6 +146,7 @@ func (v *FTPVFS) Search(ctx context.Context, p, pat string) (chan int64, error) 
 }
 
 func (v *FTPVFS) Open(ctx context.Context, p string) (vfs.ReadAtCloser, error) {
+	vtui.DebugLog("FTP: Opening file %q for reading...", p)
 	resp, err := v.conn.Retr(p)
 	if err != nil {
 		return nil, err

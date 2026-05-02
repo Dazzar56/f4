@@ -71,6 +71,7 @@ func NewSFTPVFS(parent vfs.VFS, host, port, user, pass string) (*SFTPVFS, error)
 		sshClient.Close()
 		return nil, err
 	}
+	vtui.DebugLog("NET: SFTP session established successfully")
 
 	pwd, err := sftpClient.Getwd()
 	if err != nil || pwd == "" {
@@ -99,11 +100,18 @@ func (v *SFTPVFS) SetPath(p string) error {
 }
 
 func (v *SFTPVFS) ReadDir(ctx context.Context, p string, onChunk func([]vfs.VFSItem)) error {
+	vtui.DebugLog("SFTP: ReadDir(%q) starting...", p)
 	entries, err := v.client.ReadDir(p)
-	if err != nil { return err }
+	if err != nil {
+		vtui.DebugLog("SFTP: ReadDir(%q) failed: %v", p, err)
+		return err
+	}
 	var items []vfs.VFSItem
 	for i, e := range entries {
-		if ctx.Err() != nil { return ctx.Err() }
+		if ctx.Err() != nil {
+			vtui.DebugLog("SFTP: ReadDir(%q) aborted by context cancellation after %d items", p, i)
+			return ctx.Err()
+		}
 
 		isDir := e.IsDir()
 		// For SFTP: if it's a symlink, we must resolve it to see if it points to a directory.
@@ -124,6 +132,7 @@ func (v *SFTPVFS) ReadDir(ctx context.Context, p string, onChunk func([]vfs.VFSI
 			items = make([]vfs.VFSItem, 0, 500)
 		}
 	}
+	vtui.DebugLog("SFTP: ReadDir(%q) finished, total: %d", p, len(entries))
 	return nil
 }
 
@@ -165,6 +174,7 @@ func (v *SFTPVFS) GetCapabilities() vfs.VFSCapabilities { return vfs.VFSCapabili
 func (v *SFTPVFS) Search(ctx context.Context, p, pat string) (chan int64, error) { return nil, nil }
 
 func (v *SFTPVFS) Open(ctx context.Context, p string) (vfs.ReadAtCloser, error) {
+	vtui.DebugLog("SFTP: Opening file %q for reading...", p)
 	f, err := v.client.Open(p)
 	if err != nil { return nil, err }
 	info, err := f.Stat()
