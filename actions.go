@@ -187,8 +187,8 @@ func actionViewerSearch(vv *ViewerView) {
 func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 	vtui.RunAsync(func(ctx *vtui.TaskContext) {
 		runnable := vfs.IsTerminalRunnable(ctx.Context, v, path)
-		ctx.RunOnUI(func() {
-			if runnable {
+		if runnable {
+			ctx.RunOnUI(func() {
 				// Add to command history since it's a shell-executable file.
 				// This centralized logic ensures consistent history across manual and Enter launches.
 				historyCmd := name
@@ -233,25 +233,34 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 					activePty.Write([]byte(cmdToWire))
 					pf.showPanels = false
 				}
-			} else {
-				if _, isLocal := v.(*vfs.OSVFS); !isLocal {
+			})
+		} else {
+			if _, isLocal := v.(*vfs.OSVFS); !isLocal {
+				ctx.RunOnUI(func() {
 					vtui.ShowMessage(" Error ", "Cannot execute non-runnable files on a remote file system.", []string{"&Ok"})
-					return
-				}
-				var cmd *exec.Cmd
-				switch runtime.GOOS {
-				case "linux":
-					cmd = exec.Command("xdg-open", path)
-				case "windows":
-					cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", path)
-				case "darwin":
-					cmd = exec.Command("open", path)
-				}
-				if cmd != nil {
-					_ = cmd.Start()
+				})
+				return
+			}
+			var cmd *exec.Cmd
+			switch runtime.GOOS {
+			case "linux":
+				cmd = exec.Command("xdg-open", path)
+			case "windows":
+				cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", path)
+			case "darwin":
+				cmd = exec.Command("open", path)
+			}
+			if cmd != nil {
+				vtui.DebugLog("ACTIONS: Executing external command: %s", cmd.String())
+				err := cmd.Run()
+				if err != nil {
+					vtui.DebugLog("ACTIONS: External command failed: %v", err)
+					ctx.RunOnUI(func() {
+						vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to open file:\n%v", err), []string{"&Ok"})
+					})
 				}
 			}
-		})
+		}
 	})
 }
 
