@@ -155,14 +155,18 @@ func (c *SudoClient) Connect() error {
 	vtui.DebugLog("SUDO_CLIENT: ERROR: Dispatcher socket timed out.")
 
 	// Check if any canary files exist (dispatcher actually started)
-	if matches, _ := filepath.Glob("/tmp/f4-canary-*.txt"); len(matches) > 0 {
+	if matches, _ := filepath.Glob(filepath.Join(os.TempDir(), "f4-canary-*.txt")); len(matches) > 0 {
 		vtui.DebugLog("SUDO_CLIENT: DEBUG: Canary files found: %v. Dispatcher WAS running.", matches)
+		for _, m := range matches {
+			os.Remove(m)
+		}
 	} else {
 		vtui.DebugLog("SUDO_CLIENT: DEBUG: No canary files found. Dispatcher never reached RunSudoDispatcher.")
 	}
 
 	// Try to harvest logs from the dispatcher's private debug file
-	if logData, errLog := os.ReadFile("/tmp/f4-sudo-debug.txt"); errLog == nil {
+	debugLogPath := filepath.Join(os.TempDir(), fmt.Sprintf("f4-sudo-debug-%d.txt", os.Getuid()))
+	if logData, errLog := os.ReadFile(debugLogPath); errLog == nil {
 		lines := strings.Split(string(logData), "\n")
 		for _, l := range lines {
 			if l != "" {
@@ -170,7 +174,7 @@ func (c *SudoClient) Connect() error {
 			}
 		}
 		// Clean up to avoid double-logging on next attempt
-		os.Remove("/tmp/f4-sudo-debug.txt")
+		os.Remove(debugLogPath)
 	}
 
 	return fmt.Errorf("failed to connect to elevated dispatcher: %v", err)

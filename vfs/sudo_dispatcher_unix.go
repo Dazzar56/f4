@@ -18,14 +18,19 @@ import (
 func RunSudoDispatcher(sockPath string) {
 	fmt.Fprintf(os.Stderr, "SUDO_DISPATCHER: STARTING (EUID=%d, PID=%d)\n", os.Geteuid(), os.Getpid())
 	// Use a dedicated log file because stderr might be unreliable under sudo
-	debugLog, _ := os.OpenFile("/tmp/f4-sudo-debug.txt", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
+	sudoUid := os.Getenv("SUDO_UID")
+	if sudoUid == "" {
+		sudoUid = fmt.Sprintf("%d", os.Getuid())
+	}
+	debugLogPath := filepath.Join(os.TempDir(), fmt.Sprintf("f4-sudo-debug-%s.txt", sudoUid))
+	debugLog, _ := os.OpenFile(debugLogPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
 	if debugLog != nil {
 		fmt.Fprintf(debugLog, "[%s] DISPATCHER STARTING: EUID=%d PID=%d Sock=%q\n", time.Now().Format("15:04:05"), os.Geteuid(), os.Getpid(), sockPath)
 		defer debugLog.Close()
 	}
 
 	// Create a canary file to prove execution
-	canaryPath := fmt.Sprintf("/tmp/f4-canary-%d.txt", os.Getpid())
+	canaryPath := filepath.Join(os.TempDir(), fmt.Sprintf("f4-canary-%d.txt", os.Getpid()))
 	os.WriteFile(canaryPath, []byte(fmt.Sprintf("EUID=%d", os.Geteuid())), 0666)
 
 	fmt.Fprintf(os.Stderr, "SUDO_DISPATCHER: STARTING (EUID=%d, PID=%d)\n", os.Geteuid(), os.Getpid())

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 	"github.com/unxed/vtui"
@@ -18,7 +19,8 @@ func RunSudoAskpass() {
 	fmt.Fprintf(os.Stderr, "F4_ASKPASS: Helper started for parent PID %s\n", parentStr)
 
 	// Log environment to a file for debugging
-	debugLog, _ := os.OpenFile("/tmp/f4-sudo-debug.txt", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
+	debugLogPath := filepath.Join(os.TempDir(), fmt.Sprintf("f4-sudo-debug-%d.txt", os.Getuid()))
+	debugLog, _ := os.OpenFile(debugLogPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
 	if debugLog != nil {
 		fmt.Fprintf(debugLog, "[%s] ASKPASS: PID=%d, ParentPID=%s, Args=%v\n", time.Now().Format("15:04:05"), os.Getpid(), parentStr, os.Args)
 		fmt.Fprintf(debugLog, "[%s] ASKPASS: Environ=%v\n", time.Now().Format("15:04:05"), os.Environ())

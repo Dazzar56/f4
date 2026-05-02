@@ -32,7 +32,8 @@ func SupportsBackgrounding() bool {
 }
 
 func sessionDir() string {
-	dir := filepath.Join(os.TempDir(), "f4-sessions")
+	uid := os.Getuid()
+	dir := filepath.Join(os.TempDir(), fmt.Sprintf("f4-sessions-%d", uid))
 	os.MkdirAll(dir, 0700)
 	return dir
 }
