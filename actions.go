@@ -638,6 +638,11 @@ func actionDelete(pf *PanelsFrame) {
 		return
 	}
 
+	if AppConfig.ConfirmDelete == false {
+		go ExecuteDeleteOp(pf, activeVfs, names, AppConfig.DefaultFileOpMode, pf.RefreshAll)
+		return
+	}
+
 	msgName := names[0]
 	if len(names) > 1 {
 		msgName = fmt.Sprintf("%d items", len(names))
@@ -942,16 +947,22 @@ func actionConfirmationsSettings(pf *PanelsFrame) {
 	chkExit.State = 0
 	if AppConfig.ConfirmExit { chkExit.State = 1 }
 
+	chkDelete := vtui.NewCheckbox(0, 0, Msg("ConfirmationsSettings.Delete"), false)
+	chkDelete.State = 0
+	if AppConfig.ConfirmDelete { chkDelete.State = 1 }
+
 	btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))
 	btnOk.IsDefault = true
 	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
 
 	dlg.AddItem(chkExit)
+	dlg.AddItem(chkDelete)
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnCancel)
 
 	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 44-4, 9-4)
 	vbox.Add(chkExit, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(chkDelete, vtui.Margins{}, vtui.AlignLeft)
 
 	hbox := vtui.NewHBoxLayout(0, 0, 44-4, 1)
 	hbox.HorizontalAlign = vtui.AlignCenter
@@ -965,6 +976,7 @@ func actionConfirmationsSettings(pf *PanelsFrame) {
 	btnCancel.OnClick = func() { dlg.Close() }
 	btnOk.OnClick = func() {
 		AppConfig.ConfirmExit = chkExit.State == 1
+		AppConfig.ConfirmDelete = chkDelete.State == 1
 		SaveConfig()
 		dlg.Close()
 		pf.RefreshAll()

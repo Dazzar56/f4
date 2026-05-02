@@ -86,6 +86,7 @@ var Lng = map[string]string{
 	"PanelSettings.KeepCursor":   "Don't touch terminal &cursor style",
 	"ConfirmationsSettings.Title":  " Confirmations ",
 	"ConfirmationsSettings.Exit":   "Confirm on e&xit",
+	"ConfirmationsSettings.Delete":   "Confirm on &delete",
 	"FindFile.Title":         " Find File ",
 	"FindFile.MaskPrompt":    "A filemask or several filemasks:",
 	"FindFile.TextPrompt":    "Containing text:",
