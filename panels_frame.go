@@ -86,6 +86,8 @@ type PanelsFrame struct {
 	lastBusy  bool
 
 	lastAutoRefresh time.Time
+	lastKey      rune
+	lastKeyEvent time.Time
 }
 func (pf *PanelsFrame) Left() Panel  { return pf.panels[0] }
 func (pf *PanelsFrame) Right() Panel { return pf.panels[1] }
@@ -734,6 +736,58 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		pf.cmdLine.Edit.HistoryPos = -1
 		return true
 	}
+	// Vim-like hotkeys
+	if AppConfig.VimHotkeys && pf.showPanels && !alt && !ctrl && !shift && e.Char != 0 && pf.cmdLine.Edit.HistoryPos == -1 {
+		isFastFind := false
+		if fsp := pf.getActivePanel(); fsp != nil {
+			isFastFind = fsp.fastFindMode
+		}
+
+		// If fast find is active, Vim hotkeys must be ignored to allow searching by 'j', 'k', etc.
+		if !isFastFind {
+			now := time.Now()
+			key := e.Char
+			cmdLineText := pf.cmdLine.Edit.GetText()
+
+			// Double-press actions (dd, cc, mm)
+			if pf.lastKey == key && now.Sub(pf.lastKeyEvent) < 400*time.Millisecond && (cmdLineText == "" || cmdLineText == string(key)) {
+				var cmd int
+				switch key {
+				case 'd': cmd = CmDelete
+				case 'c': cmd = CmCopy
+				case 'm': cmd = CmMove
+				}
+				if cmd != 0 {
+					pf.cmdLine.Clear()
+					vtui.FrameManager.EmitCommand(cmd, nil)
+					pf.lastKey = 0
+					return true
+				}
+			}
+
+			// Single-key navigation (strictly only if command line is empty)
+			if cmdLineText == "" {
+				if fsp := pf.getActivePanel(); fsp != nil {
+					if key == 'j' {
+						fsp.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
+						return true
+					}
+					if key == 'k' {
+						fsp.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_UP})
+						return true
+					}
+				}
+			}
+
+			// Record current key as a potential prefix for the next event
+			if key == 'd' || key == 'c' || key == 'm' {
+				pf.lastKey = key
+				pf.lastKeyEvent = now
+			} else {
+				pf.lastKey = 0
+			}
+		}
+	}
 
 	// Ctrl+Enter inserts selected file name
 	if e.VirtualKeyCode == vtinput.VK_RETURN && ctrl {
@@ -995,6 +1049,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	if e.VirtualKeyCode == vtinput.VK_TAB && !ctrl {
 		if pf.showPanels {
 			pf.activeIdx = 1 - pf.activeIdx
+			pf.lastKey = 0
 			return true
 		}
 	}
@@ -1048,6 +1103,7 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 		if mx >= x1 && mx <= x2 && my >= y1 && my <= y2 {
 			if pf.activeIdx != i && e.ButtonState != 0 {
 				pf.activeIdx = i
+				pf.lastKey = 0
 				vtui.FrameManager.Redraw()
 			}
 

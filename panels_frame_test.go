@@ -1988,3 +1988,113 @@ func TestPanelsFrame_AutoRefresh_Locking(t *testing.T) {
 	}
 }
 
+type vimTestHandler struct {
+	vtui.BaseFrame
+	onCmd func(cmd int, args any) bool
+}
+
+func (v *vimTestHandler) HandleCommand(cmd int, args any) bool {
+	if v.onCmd != nil {
+		return v.onCmd(cmd, args)
+	}
+	return false
+}
+
+func (v *vimTestHandler) GetType() vtui.FrameType { return vtui.TypeUser }
+func (v *vimTestHandler) GetTitle() string       { return "VimHandler" }
+
+func TestPanelsFrame_VimHotkeys_Comprehensive(t *testing.T) {
+	vtui.SetDefaultPalette()
+	fm := vtui.FrameManager
+	fm.Init(vtui.NewSilentScreenBuf())
+
+	cmdCaught := 0
+	handler := &vimTestHandler{
+		onCmd: func(cmd int, args any) bool {
+			cmdCaught = cmd
+			return true
+		},
+	}
+
+	oldCfg := AppConfig
+	AppConfig.VimHotkeys = true
+	defer func() { AppConfig = oldCfg }()
+
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+	fsp := pf.panels[0].(*FileSystemPanel)
+	pf.activeIdx = 0
+
+	fsp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: ".."}},
+		{VFSItem: vfs.VFSItem{Name: "fileA"}},
+		{VFSItem: vfs.VFSItem{Name: "fileB"}},
+		{VFSItem: vfs.VFSItem{Name: "fileC"}},
+	}
+	fsp.Refresh()
+	fsp.SetCursorIndex(1) // On fileA
+
+	fm.Push(pf)
+	fm.Push(handler)
+
+	// 1. Basic j/k navigation
+	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'j'})
+	if fsp.GetCursorIndex() != 2 {
+		t.Errorf("Vim 'j' failed, expected index 2, got %d", fsp.GetCursorIndex())
+	}
+	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'k'})
+	if fsp.GetCursorIndex() != 1 {
+		t.Errorf("Vim 'k' failed, expected index 1, got %d", fsp.GetCursorIndex())
+	}
+
+	// 2. Action dd (Delete)
+	cmdCaught = 0
+	pf.cmdLine.Clear()
+	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'd'})
+	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'd'})
+	if cmdCaught != CmDelete {
+		t.Errorf("'dd' failed to emit CmDelete, got %d", cmdCaught)
+	}
+	if !pf.cmdLine.IsEmpty() {
+		t.Error("Command line should be cleared after Vim action")
+	}
+
+	// 3. Reset on Tab (Switch panel)
+	cmdCaught = 0
+	pf.cmdLine.Clear()
+	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'd'})
+	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_TAB})
+	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'd'})
+	if cmdCaught == CmDelete {
+		t.Error("Vim prefix should reset after switching panels via Tab")
+	}
+
+	// 4. Reset on Mouse click
+	cmdCaught = 0
+	pf.cmdLine.Clear()
+	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'c'})
+	pf.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: true, ButtonState: vtinput.FromLeft1stButtonPressed,
+		MouseX: 5, MouseY: 5,
+	})
+	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'c'})
+	if cmdCaught == CmCopy {
+		t.Error("Vim prefix should reset after mouse interaction")
+	}
+
+	// 5. Conflict with Fast Find
+	cmdCaught = 0
+	pf.cmdLine.Clear()
+	fsp.SetCursorIndex(1) // Reset cursor position after mouse click test
+	fsp.fastFindMode = true
+	// In fast find mode, 'j' should be passed to find logic, not navigation.
+	// `pf.ProcessKey` will return `false` because Vim logic is skipped,
+	// then it will fall through to `fsp.ProcessKey` which will handle fast-find and return `true`.
+	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'j'})
+	if fsp.GetCursorIndex() != 1 {
+		t.Error("'j' was handled as Vim navigation despite Fast Find being active")
+	}
+	if fsp.fastFindStr != "j" {
+		t.Errorf("Fast find string should be 'j', got %q", fsp.fastFindStr)
+	}
+}

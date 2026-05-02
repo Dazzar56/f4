@@ -880,6 +880,9 @@ func actionPanelSettings(pf *PanelsFrame) {
 	chkCmdAc := vtui.NewCheckbox(0, 0, "Enable command line &auto-completion", false)
 	chkCmdAc.State = 0
 	if AppConfig.CommandLineAutoComplete { chkCmdAc.State = 1 }
+	chkVim := vtui.NewCheckbox(0, 0, Msg("PanelSettings.VimHotkeys"), false)
+	chkVim.State = 0
+	if AppConfig.VimHotkeys { chkVim.State = 1 }
 
 	modes := []string{"Queue", "Background panel clone", "Foreground lock"}
 	comboMode := vtui.NewComboBox(0, 0, 30, modes)
@@ -897,6 +900,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 	dlg.AddItem(chkPaths)
 	dlg.AddItem(chkCursor)
 	dlg.AddItem(chkCmdAc)
+	dlg.AddItem(chkVim)
 	dlg.AddItem(lblMode)
 	dlg.AddItem(comboMode)
 	dlg.AddItem(btnOk)
@@ -908,6 +912,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 	vbox.Add(chkPaths, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(chkCursor, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(chkCmdAc, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	vbox.Add(chkVim, vtui.Margins{Top: 1}, vtui.AlignLeft)
 
 	rowMode := vtui.NewHBoxLayout(0, 0, 54-4, 1)
 	rowMode.Add(lblMode, vtui.Margins{Right: 1}, vtui.AlignLeft)
@@ -930,6 +935,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 		AppConfig.SavePanelPaths = chkPaths.State == 1
 		AppConfig.KeepTerminalCursor = chkCursor.State == 1
 		AppConfig.CommandLineAutoComplete = chkCmdAc.State == 1
+		AppConfig.VimHotkeys = chkVim.State == 1
 		AppConfig.DefaultFileOpMode = comboMode.Menu.SelectPos
 		vtui.ManageCursorStyle = !AppConfig.KeepTerminalCursor
 		SaveConfig()

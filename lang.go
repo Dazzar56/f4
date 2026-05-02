@@ -84,6 +84,7 @@ var Lng = map[string]string{
 	"PanelSettings.HighlightDir": "H&ighlight folders",
 	"PanelSettings.SavePaths":    "Save panel &paths on exit",
 	"PanelSettings.KeepCursor":   "Don't touch terminal &cursor style",
+	"PanelSettings.VimHotkeys":   "Enable &Vim-like hotkeys (j, k, dd, cc, mm)",
 	"ConfirmationsSettings.Title":  " Confirmations ",
 	"ConfirmationsSettings.Exit":   "Confirm on e&xit",
 	"ConfirmationsSettings.Delete":   "Confirm on &delete",
