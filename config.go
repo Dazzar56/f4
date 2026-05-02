@@ -29,7 +29,7 @@ type F4Config struct {
 
 var AppConfig = F4Config{
 	ShowHiddenFiles:        true,
-	HighlightDir:           false,
+	HighlightDir:           true,
 	SavePanelPaths:         true,
 	KeepTerminalCursor:     false,
 	EditorAutoComplete:     true,
@@ -56,7 +56,7 @@ func LoadConfig() {
 	ini := LoadIni(path)
 
 	AppConfig.ShowHiddenFiles = ini.GetString("Panel", "ShowHiddenFiles", "1") == "1"
-	AppConfig.HighlightDir = ini.GetString("Panel", "HighlightDir", "0") == "1"
+	AppConfig.HighlightDir = ini.GetString("Panel", "HighlightDir", "1") == "1"
 	AppConfig.SavePanelPaths = ini.GetString("Panel", "SavePanelPaths", "1") == "1"
 	AppConfig.KeepTerminalCursor = ini.GetString("Panel", "KeepTerminalCursor", "0") == "1"
 	AppConfig.CommandLineAutoComplete = ini.GetString("Panel", "CommandLineAutoComplete", "1") == "1"
