@@ -417,10 +417,15 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 	editDest := vtui.NewEdit(0, 0, 10, initialDest)
 	dlg.AddItem(editDest)
 
-	comboMode := vtui.NewComboBox(0, 0, 32, []string{"Queue (Default)", "Background panel clone", "Foreground lock"})
+	modes := []string{"Queue", "Background panel clone", "Foreground lock"}
+	comboMode := vtui.NewComboBox(0, 0, 32, modes)
 	comboMode.DropdownOnly = true
-	comboMode.Menu.SetSelectPos(0)
-	comboMode.Edit.SetText(comboMode.Menu.Items[0].Text)
+	defMode := AppConfig.DefaultFileOpMode
+	if defMode < 0 || defMode >= len(modes) {
+		defMode = 0
+	}
+	comboMode.Menu.SetSelectPos(defMode)
+	comboMode.Edit.SetText(modes[defMode])
 	dlg.AddItem(comboMode)
 
 	btnOk := vtui.NewButton(0, 0, Msg("Copy.Btn"))
@@ -651,10 +656,15 @@ func actionDelete(pf *PanelsFrame) {
 		vbox.Add(t, vtui.Margins{}, vtui.AlignCenter)
 	}
 
-	comboMode := vtui.NewComboBox(0, 0, 32, []string{"Queue (Default)", "Background panel clone", "Foreground lock"})
+	modes := []string{"Queue", "Background panel clone", "Foreground lock"}
+	comboMode := vtui.NewComboBox(0, 0, 32, modes)
 	comboMode.DropdownOnly = true
-	comboMode.Menu.SetSelectPos(0)
-	comboMode.Edit.SetText(comboMode.Menu.Items[0].Text)
+	defMode := AppConfig.DefaultFileOpMode
+	if defMode < 0 || defMode >= len(modes) {
+		defMode = 0
+	}
+	comboMode.Menu.SetSelectPos(defMode)
+	comboMode.Edit.SetText(modes[defMode])
 	dlg.AddItem(comboMode)
 	vbox.Add(comboMode, vtui.Margins{Top: 1}, vtui.AlignCenter)
 
@@ -701,10 +711,15 @@ func actionMkDir(pf *PanelsFrame) {
 	dlg.AddItem(lblPrompt)
 	dlg.AddItem(editName)
 
-	comboMode := vtui.NewComboBox(0, 0, 30, []string{"Queue (Default)", "Background panel clone", "Foreground lock"})
+	modes := []string{"Queue", "Background panel clone", "Foreground lock"}
+	comboMode := vtui.NewComboBox(0, 0, 30, modes)
 	comboMode.DropdownOnly = true
-	comboMode.Menu.SetSelectPos(0)
-	comboMode.Edit.SetText(comboMode.Menu.Items[0].Text)
+	defMode := AppConfig.DefaultFileOpMode
+	if defMode < 0 || defMode >= len(modes) {
+		defMode = 0
+	}
+	comboMode.Menu.SetSelectPos(defMode)
+	comboMode.Edit.SetText(modes[defMode])
 	dlg.AddItem(comboMode)
 
 	btnOk := vtui.NewButton(0, 0, "&Ok")
@@ -838,7 +853,7 @@ func actionFindFile(pf *PanelsFrame) {
 	vtui.FrameManager.Push(dlg)
 }
 func actionPanelSettings(pf *PanelsFrame) {
-	dlg := vtui.NewCenteredDialog(44, 15, Msg("PanelSettings.Title"))
+	dlg := vtui.NewCenteredDialog(60, 20, Msg("PanelSettings.Title"))
 	dlg.ShowClose = true
 
 	chkHidden := vtui.NewCheckbox(0, 0, Msg("PanelSettings.ShowHidden"), false)
@@ -861,6 +876,13 @@ func actionPanelSettings(pf *PanelsFrame) {
 	chkCmdAc.State = 0
 	if AppConfig.CommandLineAutoComplete { chkCmdAc.State = 1 }
 
+	modes := []string{"Queue", "Background panel clone", "Foreground lock"}
+	comboMode := vtui.NewComboBox(0, 0, 30, modes)
+	comboMode.DropdownOnly = true
+	comboMode.Menu.SetSelectPos(AppConfig.DefaultFileOpMode)
+	comboMode.Edit.SetText(modes[AppConfig.DefaultFileOpMode])
+	lblMode := vtui.NewLabel(0, 0, "Default operation &mode:", comboMode)
+
 	btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))
 	btnOk.IsDefault = true
 	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
@@ -870,17 +892,24 @@ func actionPanelSettings(pf *PanelsFrame) {
 	dlg.AddItem(chkPaths)
 	dlg.AddItem(chkCursor)
 	dlg.AddItem(chkCmdAc)
+	dlg.AddItem(lblMode)
+	dlg.AddItem(comboMode)
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnCancel)
 
-	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 44-4, 15-4)
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 54-4, 20-4)
 	vbox.Add(chkHidden, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkHighlight, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(chkPaths, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(chkCursor, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(chkCmdAc, vtui.Margins{Top: 1}, vtui.AlignLeft)
 
-	hbox := vtui.NewHBoxLayout(0, 0, 44-4, 1)
+	rowMode := vtui.NewHBoxLayout(0, 0, 54-4, 1)
+	rowMode.Add(lblMode, vtui.Margins{Right: 1}, vtui.AlignLeft)
+	rowMode.Add(comboMode, vtui.Margins{}, vtui.AlignFill)
+	vbox.Add(rowMode, vtui.Margins{Top: 1}, vtui.AlignFill)
+
+	hbox := vtui.NewHBoxLayout(0, 0, 54-4, 1)
 	hbox.HorizontalAlign = vtui.AlignCenter
 	hbox.Spacing = 2
 	hbox.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
@@ -896,6 +925,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 		AppConfig.SavePanelPaths = chkPaths.State == 1
 		AppConfig.KeepTerminalCursor = chkCursor.State == 1
 		AppConfig.CommandLineAutoComplete = chkCmdAc.State == 1
+		AppConfig.DefaultFileOpMode = comboMode.Menu.SelectPos
 		vtui.ManageCursorStyle = !AppConfig.KeepTerminalCursor
 		SaveConfig()
 		dlg.Close()
