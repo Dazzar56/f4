@@ -1340,6 +1340,85 @@ func TestFileSystemPanel_Cache_FullCycle(t *testing.T) {
 		t.Error("'c.txt' not found after async update")
 	}
 }
+func TestFileSystemPanel_LiveSelectionPreservation(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	tmpDir := t.TempDir()
+	v := vfs.NewOSVFS(tmpDir)
+
+	// 1. Setup: Panel with cached data
+	fp := NewFileSystemPanel(0, 0, 40, 20, v)
+	fp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
+		{VFSItem: vfs.VFSItem{Name: "item1"}, IsCached: true, Selected: true}, // Selected initially
+		{VFSItem: vfs.VFSItem{Name: "item2"}, IsCached: true},
+	}
+	fp.Refresh()
+	fp.SetCursorIndex(1) // Stand on item1
+
+	// 2. Simulate User Action: Deselect item1, Select item2 and move cursor to it
+	// (while the "real" scan is technically running in background)
+	fp.entries[1].Selected = false
+	fp.entries[2].Selected = true
+	fp.SetCursorIndex(2)
+
+	// 3. Simulate first "real" chunk arrival
+	chunk := []vfs.VFSItem{
+		{Name: "item1"},
+		{Name: "item2"},
+		{Name: "item3"},
+	}
+
+	// We'll manually call a reconstruction task similar to ReadDirectory
+	selectedNames := map[string]bool{"item1": true}
+	fp.pendingSelection = "item2"
+
+	newEntries := make([]*fileEntry, len(chunk))
+	for i, item := range chunk {
+		newEntries[i] = &fileEntry{VFSItem: item}
+	}
+
+	// This block mimics the PostTask in ReadDirectory
+	for _, e := range fp.entries {
+		if e.Name != ".." {
+			if e.Selected {
+				selectedNames[e.Name] = true
+			} else {
+				delete(selectedNames, e.Name)
+			}
+		}
+	}
+
+	fp.entries = nil
+	fp.entries = append(fp.entries, &fileEntry{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}})
+	fp.entries = append(fp.entries, newEntries...)
+	for _, e := range fp.entries {
+		if e.Name != ".." && selectedNames[e.Name] {
+			e.Selected = true
+		}
+	}
+
+	fp.sortEntries()
+	fp.SelectName(fp.pendingSelection)
+	fp.Refresh()
+
+	// 4. Verification
+	if fp.GetSelectedName() != "item2" {
+		t.Errorf("Cursor jump detected! Expected 'item2', got %q", fp.GetSelectedName())
+	}
+
+	foundSelected1 := false
+	foundSelected2 := false
+	for _, e := range fp.entries {
+		if e.Name == "item1" && e.Selected { foundSelected1 = true }
+		if e.Name == "item2" && e.Selected { foundSelected2 = true }
+	}
+	if foundSelected1 {
+		t.Error("Deselection was lost during cache-to-real transition")
+	}
+	if !foundSelected2 {
+		t.Error("Selection was lost during cache-to-real transition")
+	}
+}
 func TestFileSystemPanel_ReadDir_ContextCancel(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 

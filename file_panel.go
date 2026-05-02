@@ -397,9 +397,17 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 	path := fp.vfs.GetPath()
 
 	if fp.pendingSelection == "" {
-		oldName := fp.GetSelectedName()
+		oldName := fp.getRawSelectedName()
 		if oldName != "" && oldName != ".." {
 			fp.pendingSelection = oldName
+		}
+	}
+
+	// Capture currently selected names on the UI thread before starting async work
+	selectedNames := make(map[string]bool)
+	for _, e := range fp.entries {
+		if e.Selected && e.Name != ".." {
+			selectedNames[e.Name] = true
 		}
 	}
 
@@ -462,14 +470,6 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 		})
 	})
 
-	// Capture currently selected names to restore them after the async reload
-	selectedNames := make(map[string]bool)
-	for _, e := range fp.entries {
-		if e.Selected && e.Name != ".." {
-			selectedNames[e.Name] = true
-		}
-	}
-
 	go func() {
 		dirStat, _ := fp.vfs.Stat(ctx, path)
 		var upItemStat vfs.VFSItem
@@ -496,14 +496,29 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 					continue
 				}
 				entry := &fileEntry{VFSItem: item}
-				if selectedNames[item.Name] {
-					entry.Selected = true
-				}
 				newEntries = append(newEntries, entry)
 			}
 
 			vtui.FrameManager.PostTask(func() {
 				if ctx.Err() != nil { return }
+
+				// Sync interactive state: if the user started navigating or selecting
+				// while the cache was displayed, we must respect those changes.
+				uName := fp.getRawSelectedName()
+				if uName != "" && uName != ".." {
+					fp.pendingSelection = uName
+				}
+				
+				// Sync selections for currently visible items
+				for _, e := range fp.entries {
+					if e.Name != ".." {
+						if e.Selected {
+							selectedNames[e.Name] = true
+						} else {
+							delete(selectedNames, e.Name)
+						}
+					}
+				}
 
 				if isFirstChunk {
 					fp.entries = nil
@@ -524,6 +539,14 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 
 				currentSelected := fp.GetSelectedName()
 				fp.entries = append(fp.entries, newEntries...)
+
+				// Apply selections to all entries
+				for _, e := range fp.entries {
+					if e.Name != ".." && selectedNames[e.Name] {
+						e.Selected = true
+					}
+				}
+
 				fp.sortEntries()
 
 				// Фокусировка на нужном файле
@@ -1059,6 +1082,13 @@ func (fp *FileSystemPanel) GetSelectedName() string {
 	return entry.Name
 }
 
+func (fp *FileSystemPanel) getRawSelectedName() string {
+	idx := fp.GetCursorIndex()
+	if len(fp.entries) == 0 || idx < 0 || idx >= len(fp.entries) {
+		return ""
+	}
+	return fp.entries[idx].Name
+}
 // SelectName searches for an entry by name and moves the cursor to it.
 func (fp *FileSystemPanel) SelectName(name string) {
 	for i, entry := range fp.entries {
