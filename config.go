@@ -43,6 +43,7 @@ var AppConfig = F4Config{
 	EditorUseEditorConfig:  true,
 	EditorCrosshair:        false,
 	ConfirmExit:            true,
+	ConfirmDelete:          true,
 }
 
 var getConfigIniPath = func() string {
