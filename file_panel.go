@@ -165,6 +165,8 @@ type FileSystemPanel struct {
 
 	lastDirMTime time.Time
 	dirCache     map[string]dirCacheEntry
+
+	isCheckingRefresh bool
 }
 
 func NewFileSystemPanel(x, y, w, h int, vfs vfs.VFS) *FileSystemPanel {

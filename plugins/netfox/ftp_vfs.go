@@ -78,7 +78,8 @@ func (v *FTPVFS) ReadDir(ctx context.Context, p string, onChunk func([]vfs.VFSIt
 		return err
 	}
 	var items []vfs.VFSItem
-	for _, e := range entries {
+	for i, e := range entries {
+		if ctx.Err() != nil { return ctx.Err() }
 		if e.Name == "." || e.Name == ".." {
 			continue
 		}
@@ -87,8 +88,11 @@ func (v *FTPVFS) ReadDir(ctx context.Context, p string, onChunk func([]vfs.VFSIt
 			IsDir: e.Type == ftp.EntryTypeFolder, MTime: e.Time,
 			IsHidden: strings.HasPrefix(e.Name, "."),
 		})
+		if len(items) >= 500 || i == len(entries)-1 {
+			onChunk(items)
+			items = make([]vfs.VFSItem, 0, 500)
+		}
 	}
-	onChunk(items)
 	return nil
 }
 

@@ -1836,3 +1836,83 @@ func TestPanelsFrame_PromptTruncation(t *testing.T) {
 		}
 	})
 }
+
+type mockSlowStatVFS struct {
+	vfs.OSVFS
+	statCalls int
+	statBlock chan struct{}
+}
+
+func (m *mockSlowStatVFS) Stat(ctx context.Context, p string) (vfs.VFSItem, error) {
+	m.statCalls++
+	if m.statBlock != nil {
+		<-m.statBlock
+	}
+	return m.OSVFS.Stat(ctx, p)
+}
+
+func TestPanelsFrame_AutoRefresh_Locking(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+
+	// Дожидаемся завершения первичной инициализации обеих панелей,
+	// чтобы их фоновые вызовы Stat не перекрывались с нашим моком.
+	for pf.panels[0].(*FileSystemPanel).isLoading || pf.panels[1].(*FileSystemPanel).isLoading {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-time.After(1 * time.Second):
+			t.Fatal("Timeout waiting for initial load")
+		}
+	}
+
+	// Настраиваем VFS с блокирующим Stat
+	block := make(chan struct{})
+	mv := &mockSlowStatVFS{
+		OSVFS:     *vfs.NewOSVFS(t.TempDir()),
+		statBlock: block,
+	}
+
+	fsp := pf.panels[0].(*FileSystemPanel)
+	fsp.vfs = mv
+	fsp.lastDirMTime = time.Now().Add(-1 * time.Hour) // Эмулируем старое время
+	fsp.isCheckingRefresh = false
+
+	// 1. Первый вызов Show() должен инициировать авто-обновление
+	pf.lastAutoRefresh = time.Now().Add(-5 * time.Second)
+	pf.Show(vtui.NewSilentScreenBuf())
+
+	// Даем немного времени RunAsync запуститься
+	time.Sleep(20 * time.Millisecond)
+
+	if !fsp.isCheckingRefresh {
+		t.Error("Expected isCheckingRefresh to be true while Stat is pending")
+	}
+	if mv.statCalls != 1 {
+		t.Errorf("Expected 1 Stat call, got %d", mv.statCalls)
+	}
+
+	// 2. Повторный вызов Show() НЕ должен инициировать второй Stat, пока первый висит
+	pf.lastAutoRefresh = time.Now().Add(-5 * time.Second)
+	pf.Show(vtui.NewSilentScreenBuf())
+
+	if mv.statCalls > 1 {
+		t.Errorf("Anti-spam failed: Stat called %d times simultaneously", mv.statCalls)
+	}
+
+	// 3. Разблокируем Stat и проверяем сброс флага
+	close(block)
+
+	// Прокачиваем очередь задач до завершения Stat и RunOnUI
+	timeout := time.After(1 * time.Second)
+	for fsp.isCheckingRefresh {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("isCheckingRefresh was never reset to false")
+		}
+	}
+}
+

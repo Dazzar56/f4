@@ -415,13 +415,16 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 	if pf.showPanels && now.Sub(pf.lastAutoRefresh) > 2*time.Second {
 		pf.lastAutoRefresh = now
 		for _, p := range pf.panels {
-			if fsp, ok := p.(*FileSystemPanel); ok && !fsp.isLoading {
+			if fsp, ok := p.(*FileSystemPanel); ok && !fsp.isLoading && !fsp.isCheckingRefresh {
+				fsp.isCheckingRefresh = true
 				vfsPath := fsp.vfs.GetPath()
 				vfsInst := fsp.vfs
 				lastKnown := fsp.lastDirMTime
 				vtui.RunAsync(func(ctx *vtui.TaskContext) {
-					if stat, err := vfsInst.Stat(ctx.Context, vfsPath); err == nil && !stat.MTime.IsZero() {
-						ctx.RunOnUI(func() {
+					stat, err := vfsInst.Stat(ctx.Context, vfsPath)
+					ctx.RunOnUI(func() {
+						fsp.isCheckingRefresh = false
+						if err == nil && !stat.MTime.IsZero() {
 							if !fsp.isLoading && fsp.vfs.GetPath() == vfsPath {
 								if !lastKnown.IsZero() && stat.MTime != lastKnown {
 									vtui.DebugLog("PANELS: Auto-refreshing %q due to MTime change", vfsPath)
@@ -430,8 +433,8 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 									fsp.lastDirMTime = stat.MTime
 								}
 							}
-						})
-					}
+						}
+					})
 				})
 			}
 		}

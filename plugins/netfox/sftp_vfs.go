@@ -102,7 +102,9 @@ func (v *SFTPVFS) ReadDir(ctx context.Context, p string, onChunk func([]vfs.VFSI
 	entries, err := v.client.ReadDir(p)
 	if err != nil { return err }
 	var items []vfs.VFSItem
-	for _, e := range entries {
+	for i, e := range entries {
+		if ctx.Err() != nil { return ctx.Err() }
+
 		isDir := e.IsDir()
 		// For SFTP: if it's a symlink, we must resolve it to see if it points to a directory.
 		if !isDir && (e.Mode()&os.ModeSymlink != 0) {
@@ -116,8 +118,12 @@ func (v *SFTPVFS) ReadDir(ctx context.Context, p string, onChunk func([]vfs.VFSI
 			MTime: e.ModTime(), IsExecutable: e.Mode().Perm()&0111 != 0,
 			IsHidden: strings.HasPrefix(e.Name(), "."),
 		})
+
+		if len(items) >= 500 || i == len(entries)-1 {
+			onChunk(items)
+			items = make([]vfs.VFSItem, 0, 500)
+		}
 	}
-	onChunk(items)
 	return nil
 }
 

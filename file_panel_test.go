@@ -1340,3 +1340,35 @@ func TestFileSystemPanel_Cache_FullCycle(t *testing.T) {
 		t.Error("'c.txt' not found after async update")
 	}
 }
+func TestFileSystemPanel_ReadDir_ContextCancel(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	// Используем NullVFS, так как он поддерживает пагинацию и задержки
+	v := vfs.NewNullVFS(0)
+	fp := NewFileSystemPanel(0, 0, 40, 20, v)
+
+	// Запускаем чтение сценария IOPS (10 000 файлов)
+	v.SetPath("/scenarios/iops")
+	fp.ReadDirectory()
+
+	if !fp.isLoading { t.Fatal("Panel should be loading") }
+
+	// Имитируем отмену (например, переход в другую папку)
+	fp.cancelLoad()
+
+	// Прокачиваем задачи. Чанки не должны добавляться в список после отмены.
+	timeout := time.After(500 * time.Millisecond)
+loop:
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			break loop
+		}
+	}
+
+	if len(fp.entries) >= 10001 {
+		t.Errorf("ReadDir was not cancelled: got %d entries", len(fp.entries))
+	}
+}
