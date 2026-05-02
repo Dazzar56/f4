@@ -24,6 +24,7 @@ type SFTPVFS struct {
 	client *sftp.Client
 	ssh    *ssh.Client
 	path   string
+	title  string
 }
 
 func NewSFTPVFS(parent vfs.VFS, host, port, user, pass string) (*SFTPVFS, error) {
@@ -78,13 +79,24 @@ func NewSFTPVFS(parent vfs.VFS, host, port, user, pass string) (*SFTPVFS, error)
 		pwd = "/"
 	}
 
+	title := host
+	if user != "" {
+		title = user + "@" + host
+	}
+	if port != "22" && port != "" {
+		title += ":" + port
+	}
+
 	return &SFTPVFS{
 		parent: parent,
 		client: sftpClient,
 		ssh:    sshClient,
 		path:   pwd,
+		title:  title,
 	}, nil
 }
+
+func (v *SFTPVFS) GetTitle() string { return v.title }
 
 func (v *SFTPVFS) IsAtRoot() bool { return v.path == "/" || v.path == "" }
 func (v *SFTPVFS) GetPath() string { return v.path }

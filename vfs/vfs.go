@@ -96,6 +96,10 @@ type VFS interface {
 	Clone() VFS
 	Close() error
 }
+// TitleProvider allows a VFS to provide a custom display prefix (e.g. "user@host" for network drives).
+type TitleProvider interface {
+	GetTitle() string
+}
 
 // PtyProvider allows a VFS to provide its own PTY implementation
 // (e.g. an SSH session for remote systems).

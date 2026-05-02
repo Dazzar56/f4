@@ -366,6 +366,12 @@ func (fp *FileSystemPanel) SetCursorIndex(idx int) {
 
 func (fp *FileSystemPanel) updateTitle(err error) {
 	title := fp.vfs.GetPath()
+	if tp, ok := fp.vfs.(vfs.TitleProvider); ok {
+		if prefix := tp.GetTitle(); prefix != "" {
+			title = prefix + ":" + title
+		}
+	}
+
 	if err != nil && err != context.Canceled {
 		title += " [Error]"
 	} else if fp.isLoading {

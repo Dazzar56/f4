@@ -216,8 +216,12 @@ func (pf *PanelsFrame) updateMenuCheckmarks() {
 
 func (pf *PanelsFrame) buildPrompt() []vtui.CharInfo {
 	var path string
+	var vfsTitle string
 	if fsp, ok := pf.Active().(*FileSystemPanel); ok {
 		path = fsp.vfs.GetPath()
+		if tp, ok := fsp.vfs.(vfs.TitleProvider); ok {
+			vfsTitle = tp.GetTitle()
+		}
 	}
 
 	usr, _ := user.Current()
@@ -235,12 +239,17 @@ func (pf *PanelsFrame) buildPrompt() []vtui.CharInfo {
 	host, _ := os.Hostname()
 	if host == "" { host = "localhost" }
 
+	userHostStr := username + "@" + host
+	if vfsTitle != "" {
+		userHostStr = vfsTitle
+		home = "" // Do not use local home dir replacement for remote paths
+	}
+
 	displayPath := path
 	if home != "" && strings.HasPrefix(displayPath, home) {
 		displayPath = "~" + displayPath[len(home):]
 	}
 
-	userHostStr := username + "@" + host
 	sepStr := ":"
 	suffixStr := "$ "
 
@@ -1565,6 +1574,11 @@ func (pf *PanelsFrame) GetTitle() string {
 	path := ""
 	if fsp, ok := pf.Active().(*FileSystemPanel); ok {
 		path = fsp.vfs.GetPath()
+		if tp, ok := fsp.vfs.(vfs.TitleProvider); ok {
+			if prefix := tp.GetTitle(); prefix != "" {
+				path = prefix + ":" + path
+			}
+		}
 	}
 
 	if path != "" {

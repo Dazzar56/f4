@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"time"
 	"sort"
+	"strings"
 	"testing"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
@@ -93,6 +94,29 @@ func TestFileSystemPanel_FocusLoss_FastFind(t *testing.T) {
 		t.Error("Focus loss should deactivate FastFind mode")
 	}
 }
+
+type mockTitleVFS struct {
+	vfs.OSVFS
+	title string
+}
+
+func (m *mockTitleVFS) GetTitle() string { return m.title }
+
+func TestFileSystemPanel_UpdateTitle_WithProvider(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	v := &mockTitleVFS{OSVFS: *vfs.NewOSVFS("/tmp"), title: "user@host"}
+	fp := NewFileSystemPanel(0, 0, 40, 20, v)
+
+	// Reset loading flag to avoid [Loading...] suffix
+	fp.isLoading = false
+	fp.updateTitle(nil)
+
+	got := fp.frame.GetTitle()
+	if !strings.Contains(got, "user@host:") {
+		t.Errorf("Expected title to contain 'user@host:', got %q", got)
+	}
+}
+
 func TestFileSystemPanel_ShowHiddenFiles(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 

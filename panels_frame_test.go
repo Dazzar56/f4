@@ -821,10 +821,51 @@ func TestPanelsFrame_Clone_SelectionPreservation(t *testing.T) {
 		t.Error("'selected.txt' missing in cloned panel entries")
 	}
 }
-func TestPanelsFrame_GetPaths(t *testing.T) {
+
+func TestPanelsFrame_GetTitle_WithProvider(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pf := NewPanelsFrame()
 	pf.ResizeConsole(80, 25)
 
+	v := &mockTitleVFS{OSVFS: *vfs.NewOSVFS("/var"), title: "remote@server"}
+	fp := pf.panels[0].(*FileSystemPanel)
+	fp.vfs = v
+	pf.activeIdx = 0
+
+	title := pf.GetTitle()
+	if !strings.Contains(title, "Panels: remote@server:") {
+		t.Errorf("Expected title to contain 'Panels: remote@server:', got %q", title)
+	}
+}
+
+func TestPanelsFrame_Prompt_WithProvider(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+
+	v := &mockTitleVFS{OSVFS: *vfs.NewOSVFS("/etc"), title: "admin@prod"}
+	fp := pf.panels[0].(*FileSystemPanel)
+	fp.vfs = v
+	pf.activeIdx = 0
+
+	prompt := pf.buildPrompt()
+
+	// Convert prompt to string
+	promptStr := ""
+	for _, c := range prompt {
+		if c.Char != vtui.WideCharFiller {
+			promptStr += string(rune(c.Char))
+		}
+	}
+
+	if !strings.Contains(promptStr, "admin@prod") {
+		t.Errorf("Expected prompt to contain VFS title 'admin@prod', got %q", promptStr)
+	}
+}
+
+func TestPanelsFrame_GetPaths(t *testing.T) {
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
 	tmp := t.TempDir()
 	pathL := filepath.Join(tmp, "left")
 	pathR := filepath.Join(tmp, "right")

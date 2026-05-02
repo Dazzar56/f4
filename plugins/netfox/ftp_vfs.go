@@ -21,6 +21,7 @@ type FTPVFS struct {
 	parent vfs.VFS
 	conn   *ftp.ServerConn
 	cwd    string
+	title  string
 }
 
 func NewFTPVFS(parent vfs.VFS, host, port, user, pass string, options map[string]string) (*FTPVFS, error) {
@@ -48,8 +49,23 @@ func NewFTPVFS(parent vfs.VFS, host, port, user, pass string, options map[string
 		pwd = "/"
 	}
 
-	return &FTPVFS{parent: parent, conn: c, cwd: pwd}, nil
+	title := host
+	if user != "" && user != "anonymous" {
+		title = user + "@" + host
+	}
+	if port != "21" && port != "" {
+		title += ":" + port
+	}
+
+	return &FTPVFS{
+		parent: parent,
+		conn: c,
+		cwd: pwd,
+		title: title,
+	}, nil
 }
+
+func (v *FTPVFS) GetTitle() string { return v.title }
 
 func (v *FTPVFS) IsAtRoot() bool { return v.cwd == "/" || v.cwd == "" || v.cwd == "." }
 func (v *FTPVFS) GetPath() string { return v.cwd }
