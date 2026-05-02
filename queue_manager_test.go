@@ -275,6 +275,15 @@ func TestQueueFrame_ClearDone(t *testing.T) {
 		t.Errorf("Clear Done failed. Remaining tasks: %d, expected 1 (the Running one)", count)
 	}
 }
+func TestQueueFrame_GetTitle(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	qf := NewQueueFrame()
+
+	title := qf.GetTitle()
+	if strings.TrimSpace(title) != "Operations Queue" {
+		t.Errorf("QueueFrame title is missing or wrong: %q", title)
+	}
+}
 
 func TestQueueManager_BackgroundWorkspace(t *testing.T) {
 	fm := vtui.FrameManager
