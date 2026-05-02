@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/unxed/vtui"
@@ -46,17 +47,35 @@ var AppConfig = F4Config{
 	ConfirmDelete:          true,
 }
 
-var getConfigIniPath = func() string {
+var getUserConfigIniPath = func() string {
 	configDir, _ := os.UserConfigDir()
 	return filepath.Join(configDir, "f4", "settings.ini")
 }
 
-func LoadConfig() {
-	path := getConfigIniPath()
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return
+var getConfigIniPaths = func() []string {
+	userPath := getUserConfigIniPath()
+	if runtime.GOOS == "windows" {
+		progData := os.Getenv("ProgramData")
+		if progData != "" {
+			return []string{filepath.Join(progData, "f4", "settings.ini"), userPath}
+		}
+		return []string{userPath}
 	}
-	ini := LoadIni(path)
+	// For unix-like systems
+	return []string{"/etc/f4/settings.ini", userPath}
+}
+
+func LoadConfig() {
+	paths := getConfigIniPaths()
+	ini := &IniFile{data: make(map[string]map[string]string)}
+
+	for _, path := range paths {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			vtui.DebugLog("CONFIG: Loading and merging config from %s", path)
+			partialIni := LoadIni(path)
+			ini.Merge(partialIni)
+		}
+	}
 
 	AppConfig.ShowHiddenFiles = ini.GetString("Panel", "ShowHiddenFiles", "1") == "1"
 	AppConfig.HighlightDir = ini.GetString("Panel", "HighlightDir", "1") == "1"
@@ -83,11 +102,10 @@ func LoadConfig() {
 	AppConfig.EditorTabSize = 4
 	fmt.Sscanf(ini.GetString("Editor", "TabSize", "4"), "%d", &AppConfig.EditorTabSize)
 
-	vtui.DebugLog("CONFIG: Loaded application settings from %s", path)
 }
 
 func SaveConfig() {
-	path := getConfigIniPath()
+	path := getUserConfigIniPath()
 	os.MkdirAll(filepath.Dir(path), 0755)
 
 	var sb strings.Builder
