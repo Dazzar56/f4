@@ -768,15 +768,6 @@ func (tv *TerminalView) HandleFar2lAPC(s string) {
 		}
 	}
 }
-func (tv *TerminalView) HandleF4APC(cmd string) {
-	vtui.DebugLog("TERM_APC: Incoming f4 command: %q", cmd)
-	if cmd == "busy" {
-		tv.SetMuted(false)
-	}
-	if tv.OnTitleChange != nil {
-		tv.OnTitleChange("f4:" + cmd)
-	}
-}
 
 func (tv *TerminalView) ProcessFar2lInteract(data []byte) {
 	stk := (*vtinput.Far2lStack)(&data)
