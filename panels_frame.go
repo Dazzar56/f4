@@ -950,14 +950,22 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				}
 
 				var fullWireCmd string
-				isBackground := strings.HasSuffix(strings.TrimSpace(cmd), "&")
+				isBackground := false
+				if runtime.GOOS != "windows" {
+					isBackground = strings.HasSuffix(strings.TrimSpace(cmd), "&")
+				}
+
+				psCmdC := "powershell -NoProfile -Command [Console]::Write([char]27+']133;C'+[char]7)"
+				psCmdD := "powershell -NoProfile -Command [Console]::Write([char]27+']133;D'+[char]7)"
 
 				if runtime.GOOS == "windows" {
 					if path != "" {
-						fullWireCmd = fmt.Sprintf("cd /d %q & %s\r", path, cmd)
+						fullWireCmd = fmt.Sprintf("%s & cd /d %q & %s & %s\r", psCmdC, path, cmd, psCmdD)
 					} else {
-						fullWireCmd = cmd + "\r"
+						fullWireCmd = fmt.Sprintf("%s & %s & %s\r", psCmdC, cmd, psCmdD)
 					}
+					pf.executing = true
+					pf.returnToPanels = pf.showPanels
 				} else {
 					// Unix
 					if isBackground {
@@ -981,7 +989,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				}
 
 				pf.termView.PrintCleanCommand(cmd)
-				if runtime.GOOS != "windows" && !isBackground {
+				if !isBackground {
 					pf.termView.SetMuted(true)
 				}
 				activePty.Write([]byte(fullWireCmd))

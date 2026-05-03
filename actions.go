@@ -276,18 +276,18 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 				activePty := pf.getActivePTY()
 				if activePty != nil {
 					cmd := name
-					// Wrap command in Title sequences to signal f4 about managed execution state.
-					// We use && so f4:done is only sent if the command succeeded.
 					var cmdToWire string
+
+					// Используем максимально простую форму вызова PowerShell без вложенных кавычек
+					psCmdC := "powershell -NoProfile -Command [Console]::Write([char]27+']133;C'+[char]7)"
+					psCmdD := "powershell -NoProfile -Command [Console]::Write([char]27+']133;D'+[char]7)"
+
 					if runtime.GOOS == "windows" {
-						cmdToWire = fmt.Sprintf("cd /d %q & %q\r", dir, cmd)
+						cmdToWire = fmt.Sprintf("%s & cd /d %q & %q & %s\r", psCmdC, dir, cmd, psCmdD)
 					} else {
-						// On Unix, use single quotes for paths to prevent Bash history expansion (the '!' problem).
-						// We also disable history expansion explicitly with 'set +H'.
+						// On Unix, use single quotes for paths to prevent Bash history expansion
 						sqDir := strings.ReplaceAll(dir, "'", "'\\''")
 						sqCmd := strings.ReplaceAll(cmd, "'", "'\\''")
-						// Use grouping only for sh/bash compatible shells.
-						// Remove leading space to keep output clean in terminal history.
 						cmdToWire = fmt.Sprintf("set +H; cd '%s' && { printf \"\\033]2;f4:busy\\007\"; ./'%s' ; printf \"\\033]2;f4:done\\007\"; }\r", sqDir, sqCmd)
 					}
 					vtui.DebugLog("ACTIONS: Sending to PTY: %q", cmdToWire)
@@ -298,11 +298,10 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 					}
 					pf.termView.PrintCleanCommand(cleanCmd)
 
-					if runtime.GOOS != "windows" {
-						pf.termView.SetMuted(true)
-						pf.executing = true
-						pf.returnToPanels = true
-					}
+					pf.termView.SetMuted(true)
+					pf.executing = true
+					pf.returnToPanels = true
+
 					activePty.Write([]byte(cmdToWire))
 					pf.showPanels = false
 				}

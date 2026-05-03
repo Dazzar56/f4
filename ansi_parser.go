@@ -403,6 +403,13 @@ func (p *AnsiParser) handleOSC() {
 		}
 		return
 	}
+	if cmd == 133 {
+		// В последовательности OSC 133;C BEL, cmd это 133, а аргумент 'C' находится в parts[1]
+		if len(parts) > 1 {
+			p.term.HandleOSC133(parts[1])
+		}
+		return
+	}
 
 	if cmd == 52 {
 		subparts := strings.SplitN(parts[1], ";", 2)

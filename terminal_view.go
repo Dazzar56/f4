@@ -5,6 +5,7 @@ import (
 	"sync"
 	"unicode/utf8"
 	"encoding/base64"
+	"runtime"
 
 	"github.com/mattn/go-runewidth"
 	"strings"
@@ -262,7 +263,9 @@ func (tv *TerminalView) PutChar(r rune, attr uint64) {
 			tv.lastLineOffset = tv.pt.Size() + len(tv.pendingLog)
 			tv.lastCharWasCR = false
 		} else if r >= 0x20 {
-			if tv.lastCharWasCR && tv.CursorX == 0 && (tv.pt.Size()+len(tv.pendingLog)) > tv.lastLineOffset {
+			// На Windows cmd.exe всегда шлет \r\n, поэтому логика "удаления строки" (нужная для bash)
+			// здесь только вредит, затирая саму набранную команду.
+			if runtime.GOOS != "windows" && tv.lastCharWasCR && tv.CursorX == 0 && (tv.pt.Size()+len(tv.pendingLog)) > tv.lastLineOffset {
 				tv.flushLogUnsafe()
 				tv.pt.Delete(tv.lastLineOffset, tv.pt.Size()-tv.lastLineOffset)
 				tv.li.UpdateAfterDelete(tv.lastLineOffset, tv.pt.Size()-tv.lastLineOffset)
@@ -769,6 +772,19 @@ func (tv *TerminalView) HandleFar2lAPC(s string) {
 	}
 }
 
+func (tv *TerminalView) HandleOSC133(payload string) {
+	vtui.DebugLog("TERM_OSC133: %s", payload)
+	if payload == "C" {
+		tv.SetMuted(false)
+		if tv.OnTitleChange != nil {
+			tv.OnTitleChange("f4:busy")
+		}
+	} else if payload == "D" {
+		if tv.OnTitleChange != nil {
+			tv.OnTitleChange("f4:done")
+		}
+	}
+}
 func (tv *TerminalView) ProcessFar2lInteract(data []byte) {
 	stk := (*vtinput.Far2lStack)(&data)
 	id := stk.PopU8()
