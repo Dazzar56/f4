@@ -403,16 +403,27 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 	}
 
 	srcVfs, dstVfs := fspSrc.vfs, fspDst.vfs
-	dlg := vtui.NewCenteredDialog(50, 11, title)
-	dlg.ShowClose = true
-
-	promptLbl := vtui.NewLabel(0, 0, fmt.Sprintf(prompt, len(names)), nil)
-	dlg.AddItem(promptLbl)
 
 	initialDest := dstVfs.GetPath()
 	if initialDest != "" && !strings.HasSuffix(initialDest, "/") && !strings.HasSuffix(initialDest, "\\") {
 		initialDest += string(os.PathSeparator)
 	}
+	
+	if isMove && AppConfig.ConfirmMove == false {
+		go ExecuteFileOp(pf, srcVfs, dstVfs, names, initialDest, isMove, AppConfig.DefaultFileOpMode, pf.RefreshAll)
+		return;
+	}
+	
+	if isMove == false && AppConfig.ConfirmCopy == false {
+		go ExecuteFileOp(pf, srcVfs, dstVfs, names, initialDest, isMove, AppConfig.DefaultFileOpMode, pf.RefreshAll)
+		return;
+	}
+	
+	dlg := vtui.NewCenteredDialog(50, 11, title)
+	dlg.ShowClose = true
+
+	promptLbl := vtui.NewLabel(0, 0, fmt.Sprintf(prompt, len(names)), nil)
+	dlg.AddItem(promptLbl)
 
 	editDest := vtui.NewEdit(0, 0, 10, initialDest)
 	dlg.AddItem(editDest)
@@ -943,26 +954,38 @@ func actionConfirmationsSettings(pf *PanelsFrame) {
 	dlg := vtui.NewCenteredDialog(44, 9, Msg("ConfirmationsSettings.Title"))
 	dlg.ShowClose = true
 
-	chkExit := vtui.NewCheckbox(0, 0, Msg("ConfirmationsSettings.Exit"), false)
-	chkExit.State = 0
-	if AppConfig.ConfirmExit { chkExit.State = 1 }
+	chkCopy := vtui.NewCheckbox(0, 0, Msg("ConfirmationsSettings.Copy"), false)
+	chkCopy.State = 0
+	if AppConfig.ConfirmCopy { chkCopy.State = 1 }
+
+	chkMove := vtui.NewCheckbox(0, 0, Msg("ConfirmationsSettings.Move"), false)
+	chkMove.State = 0
+	if AppConfig.ConfirmMove { chkMove.State = 1 }
 
 	chkDelete := vtui.NewCheckbox(0, 0, Msg("ConfirmationsSettings.Delete"), false)
 	chkDelete.State = 0
 	if AppConfig.ConfirmDelete { chkDelete.State = 1 }
 
+	chkExit := vtui.NewCheckbox(0, 0, Msg("ConfirmationsSettings.Exit"), false)
+	chkExit.State = 0
+	if AppConfig.ConfirmExit { chkExit.State = 1 }
+
 	btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))
 	btnOk.IsDefault = true
 	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
 
-	dlg.AddItem(chkExit)
+	dlg.AddItem(chkCopy)
+	dlg.AddItem(chkMove)
 	dlg.AddItem(chkDelete)
+	dlg.AddItem(chkExit)
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnCancel)
 
 	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 44-4, 9-4)
-	vbox.Add(chkExit, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(chkCopy, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(chkMove, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkDelete, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(chkExit, vtui.Margins{}, vtui.AlignLeft)
 
 	hbox := vtui.NewHBoxLayout(0, 0, 44-4, 1)
 	hbox.HorizontalAlign = vtui.AlignCenter
@@ -975,8 +998,9 @@ func actionConfirmationsSettings(pf *PanelsFrame) {
 
 	btnCancel.OnClick = func() { dlg.Close() }
 	btnOk.OnClick = func() {
+		AppConfig.ConfirmCopy = chkCopy.State == 1
+		AppConfig.ConfirmMove = chkMove.State == 1
 		AppConfig.ConfirmExit = chkExit.State == 1
-		AppConfig.ConfirmDelete = chkDelete.State == 1
 		SaveConfig()
 		dlg.Close()
 		pf.RefreshAll()
