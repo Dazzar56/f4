@@ -6,16 +6,6 @@ If you are coming from the **Far3** or **far2m** plugin ecosystems, you are like
 
 This document will help you bridge the gap and understand how to build powerful Lua plugins for `f4`.
 
-## The Paradigm Shift
-
-| Feature | Far3 / far2m (In-Process Lua) | f4 (Out-of-Process RPC) |
-| :--- | :--- | :--- |
-| **Execution** | Embedded Lua state blocking the main UI thread. | Independent OS process running concurrently. |
-| **Memory** | Shared. You get raw pointers to Panel/File structures. | Isolated. You receive serialized copies of data (MessagePack). |
-| **Crashing** | A bad Lua script brings down the entire application. | A crashing Lua script only kills the plugin. `f4` survives. |
-| **I/O Operations** | Calling `io.read()` locks up the UI. | `f4` calls your plugin asynchronously; the UI stays fluid. |
-| **Lua Version** | Dictated by the host application's embedded engine. | Bring your own! Use LuaJIT, Lua 5.1, 5.3, or 5.4. |
-
 ## How Lua talks to f4
 
 Instead of calling C functions, your Lua plugin acts as a standalone console application.
