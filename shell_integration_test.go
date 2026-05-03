@@ -15,6 +15,7 @@ func TestPanelsFrame_CtrlEnter_Escaping(t *testing.T) {
 	vtui.SetDefaultPalette()
 	SetDefaultF4Palette()
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
 	fsp := pf.panels[0].(*FileSystemPanel)
@@ -57,6 +58,7 @@ func TestPanelsFrame_CtrlEnter_Escaping(t *testing.T) {
 func TestPanelsFrame_CD_QuotedParsing(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 	fsp := pf.panels[pf.activeIdx].(*FileSystemPanel)
 
@@ -88,6 +90,7 @@ func TestPanelsFrame_CD_QuotedParsing(t *testing.T) {
 
 func TestPanelsFrame_PTY_SyncEscaping(t *testing.T) {
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 	pty := &mockPty{}
 	pf.pty = pty

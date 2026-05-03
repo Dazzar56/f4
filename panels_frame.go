@@ -192,7 +192,7 @@ func getSortMenuText(current, target SortMode, label string) string {
 }
 
 func (pf *PanelsFrame) updateMenuCheckmarks() {
-	if pf.panels[0] == nil || pf.panels[1] == nil { return }
+	if pf.panels[0] == nil || pf.panels[1] == nil || pf.menuBar == nil || len(pf.menuBar.Items) < 5 { return }
 
 	lMode, rMode := ViewModeMedium, ViewModeMedium
 	lSort, rSort := SortName, SortName
@@ -295,38 +295,59 @@ func (pf *PanelsFrame) buildPrompt() []vtui.CharInfo {
 }
 
 func (pf *PanelsFrame) initPTY() {
-	p, err := NewPTY()
-	if err != nil {
-		return
-	}
-	pf.pty = p
-	pf.parser = NewAnsiParser(pf.termView, pf.pty)
-	shell := GetSystemShell()
-	pf.pty.Run(shell)
+	// Always initialize the parser to prevent nil dereference
+	pf.parser = NewAnsiParser(pf.termView, nil)
 
-	// Локальный PTY имеет свой выделенный цикл чтения.
+	p := pf.pty
+	if p == nil {
+		var err error
+		p, err = NewPTY()
+		if err != nil {
+			vtui.DebugLog("PTY: Failed to allocate local PTY: %v", err)
+			return
+		}
+		pf.pty = p
+		shell := GetSystemShell()
+		p.Run(shell)
+	}
+
+	pf.parser.pty = p
+
+	// Local PTY has its own dedicated read loop.
 	go func() {
-		buf := make([]byte, 32768) // Увеличен буфер для быстрого потокового чтения
+		buf := make([]byte, 32768)
 		for {
-			n, err := pf.pty.Read(buf)
-			if err != nil { return }
+			n, err := p.Read(buf)
+			if err != nil {
+				vtui.DebugLog("PTY: Local read loop exited: %v", err)
+				return
+			}
 
 			pf.ptyMutex.Lock()
-			shouldProcess := (pf.getActivePTYUnsafe() == pf.pty)
+			shouldProcess := (pf.getActivePTYUnsafe() == p)
 			pf.ptyMutex.Unlock()
 
-			// Парсим данные вне глобального ptyMutex, чтобы не блокировать UI-поток
 			if shouldProcess {
-				start := time.Now()
 				pf.parser.Process(buf[:n])
-				elapsed := time.Since(start)
-				if elapsed > 10*time.Millisecond {
-					vtui.DebugLog("PTY_PROFILE(Local): Parsed %d bytes in %v", n, elapsed)
-				}
 				vtui.FrameManager.Redraw()
 			}
 		}
 	}()
+}
+
+func (pf *PanelsFrame) Close() {
+	pf.ptyMutex.Lock()
+	defer pf.ptyMutex.Unlock()
+
+	if pf.pty != nil {
+		pf.pty.Close()
+		pf.pty = nil
+	}
+	for _, pty := range pf.remotePtys {
+		pty.Close()
+	}
+	pf.remotePtys = nil
+	pf.BaseFrame.Close()
 }
 
 

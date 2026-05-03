@@ -17,6 +17,7 @@ func TestPanelsFrame_Layout(t *testing.T) {
 	vtui.SetDefaultPalette()
 	SetDefaultF4Palette()
 	pf := NewPanelsFrame()
+	defer pf.Close()
 
 	// Simulate 80x25 terminal
 	pf.ResizeConsole(80, 25)
@@ -50,6 +51,7 @@ func TestPanelsFrame_Layout(t *testing.T) {
 func TestPanelsFrame_ArkanoidHotkey(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	vtui.FrameManager.Push(pf) // Screen 0
 
 	initialScreens := len(vtui.FrameManager.Screens)
@@ -88,6 +90,7 @@ func TestPanelsFrame_ArkanoidHotkey(t *testing.T) {
 }
 func TestPanelsFrame_SelectionByMask(t *testing.T) {
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
 	fsp := pf.panels[1].(*FileSystemPanel)
@@ -133,6 +136,7 @@ func TestPanelsFrame_SelectionByMask(t *testing.T) {
 }
 func TestPanelsFrame_GetActivePTY(t *testing.T) {
 	pf := NewPanelsFrame()
+	defer pf.Close()
 
 	// Default panels use OSVFS, so active PTY should be the local one
 	active := pf.getActivePTY()
@@ -142,6 +146,7 @@ func TestPanelsFrame_GetActivePTY(t *testing.T) {
 }
 func TestPanelsFrame_ProcessMouse_DoubleClick(t *testing.T) {
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
 	// Active is initially right (1)
@@ -179,9 +184,27 @@ func TestPanelsFrame_ProcessMouse_DoubleClick(t *testing.T) {
 	}
 }
 
+func setupMockPanelsFrame() *PanelsFrame {
+	pf := &PanelsFrame{activeIdx: 1, showPanels: true, showKeyBar: true}
+	pf.pty = &mockPty{}
+	pf.termView = NewTerminalView(80, 24)
+	// Initialize MenuBar with enough items to satisfy updateMenuCheckmarks (needs index 0 and 4)
+	pf.menuBar = vtui.NewMenuBar(nil)
+	pf.menuBar.Items = make([]vtui.MenuBarItem, 5)
+	for i := 0; i < 5; i++ {
+		pf.menuBar.Items[i].SubItems = make([]vtui.MenuItem, 8)
+	}
+	pf.cmdLine = NewCommandLine(">")
+	pf.keyBar = vtui.NewKeyBar()
+	// Use OSVFS because tests create real files in t.TempDir()
+	pf.panels[0] = NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS("."))
+	pf.panels[1] = NewFileSystemPanel(40, 0, 40, 20, vfs.NewOSVFS("."))
+	pf.initPTY()
+	return pf
+}
 func TestPanelsFrame_ProcessMouse_DoubleClickFile(t *testing.T) {
-	pf := NewPanelsFrame()
-	// Initialize panels with enough height
+	pf := setupMockPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
 	tmp := t.TempDir()
@@ -232,6 +255,7 @@ func TestPanelsFrame_ProcessMouse_DoubleClickFile(t *testing.T) {
 
 func TestPanelsFrame_KeyHandling(t *testing.T) {
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
 	// 1. Test Tab to switch active panel
@@ -280,6 +304,7 @@ func TestPanelsFrame_KeyHandling(t *testing.T) {
 }
 func TestPanelsFrame_MenuCommands(t *testing.T) {
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
 	handled := pf.HandleCommand(CmLeftDetailed, nil)
@@ -316,6 +341,7 @@ func TestPanelsFrame_MenuCommands(t *testing.T) {
 }
 func TestPanelsFrame_RefreshOnFocus(t *testing.T) {
 	pf := NewPanelsFrame()
+	defer pf.Close()
 
 	// We need to verify Refresh was called.
 	// Since we don't have a mock VFS easily swappable here without refactoring,
@@ -333,6 +359,7 @@ func TestPanelsFrame_RefreshOnFocus(t *testing.T) {
 }
 func TestPanelsFrame_Clone(t *testing.T) {
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(100, 30)
 
 	// Set some specific state
@@ -344,6 +371,7 @@ func TestPanelsFrame_Clone(t *testing.T) {
 
 	// Clone the panels
 	clone := pf.Clone()
+	defer clone.Close()
 
 	// Verify state transfer
 	if clone.activeIdx != 0 {
@@ -376,6 +404,7 @@ func TestPanelsFrame_Clone(t *testing.T) {
 }
 func TestPanelsFrame_Clone_TerminalData(t *testing.T) {
 	pf := NewPanelsFrame()
+	defer pf.Close()
 
 	// 1. Simulate complex terminal output (2 lines)
 	// We add a trailing newline so "L2" becomes history.
@@ -388,6 +417,7 @@ func TestPanelsFrame_Clone_TerminalData(t *testing.T) {
 	pf.termView.PutChar('\n', 0)
 
 	clone := pf.Clone()
+	defer clone.Close()
 
 	// 2. Check if log is deep-copied
 	if clone.termView.pt.String() != "L1\nL2\n" {
@@ -416,6 +446,7 @@ func TestPanelsFrame_Clone_TerminalData(t *testing.T) {
 }
 func TestPanelsFrame_Labels(t *testing.T) {
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	ks := pf.GetKeyLabels()
 
 	if ks == nil {
@@ -429,6 +460,7 @@ func TestPanelsFrame_Labels(t *testing.T) {
 }
 func TestPanelsFrame_HistoryNavigation(t *testing.T) {
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25) // Initialize panels
 	pf.showPanels = false    // Hide panels to enable history intercept
 	pf.cmdLine.Edit.AddHistory("git status")
@@ -461,6 +493,7 @@ func TestPanelsFrame_HistoryNavigation(t *testing.T) {
 }
 func TestPanelsFrame_HistoryNavigation_HiddenPanels(t *testing.T) {
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.showPanels = false // Panels are hidden
 	pf.cmdLine.Edit.AddHistory("last command")
 
@@ -488,6 +521,7 @@ func TestPanelsFrame_HistoryNavigation_HiddenPanels(t *testing.T) {
 }
 func TestPanelsFrame_EnterAddsToHistory(t *testing.T) {
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.cmdLine.Edit.SetText("ls -la")
 
 	// Simulate Enter
@@ -504,6 +538,9 @@ func TestPanelsFrame_EnterAddsToHistory(t *testing.T) {
 
 func TestPanelsFrame_AltScreenTerminalHeight(t *testing.T) {
 	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.pty = &mockPty{}
+	pf.parser = NewAnsiParser(pf.termView, pf.pty)
 	height := 25
 	pf.showKeyBar = true
 
@@ -531,6 +568,7 @@ func TestPanelsFrame_KeyBarSuppression(t *testing.T) {
 	vtui.FrameManager.Init(scr)
 
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.showKeyBar = true
 	pf.ResizeConsole(80, 25)
 
@@ -553,6 +591,7 @@ func TestPanelsFrame_KeyBarSuppression(t *testing.T) {
 }
 func TestPanelsFrame_RefreshAll(t *testing.T) {
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	// Test that RefreshAll doesn't crash on freshly initialized panels
 	pf.RefreshAll()
 }
@@ -560,6 +599,7 @@ func TestPanelsFrame_RefreshAll(t *testing.T) {
 func TestPanelsFrame_ManualRefresh(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
 	// Setup a mock directory
@@ -588,6 +628,7 @@ func TestPanelsFrame_ManualRefresh(t *testing.T) {
 func TestPanelsFrame_AutoRefresh(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
 	// Setup a mock directory
@@ -627,6 +668,7 @@ func TestPanelsFrame_ResizingIntegration(t *testing.T) {
 	vtui.SetDefaultPalette()
 	SetDefaultF4Palette()
 	pf := NewPanelsFrame()
+	defer pf.Close()
 
 	// Initial size 80x25
 	pf.ResizeConsole(80, 25)
@@ -668,6 +710,7 @@ func TestPanelsFrame_ExitWarning_ActiveTasks(t *testing.T) {
 	fm := vtui.FrameManager
 	fm.Init(vtui.NewSilentScreenBuf())
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	fm.Push(pf)
 
 	qm := GlobalQueueManager
@@ -702,6 +745,7 @@ func TestPanelsFrame_ExitWarning_ActiveTasks(t *testing.T) {
 }
 func TestPanelsFrame_SwapPanels(t *testing.T) {
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
 	pathL := filepath.Join(t.TempDir(), "left")
@@ -752,6 +796,7 @@ func TestPanelsFrame_Clone_SelectionPreservation(t *testing.T) {
 	os.WriteFile(filepath.Join(tmp, "normal.txt"), []byte("data"), 0644)
 
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 	fsp := pf.panels[0].(*FileSystemPanel)
 	fsp.vfs.SetPath(tmp)
@@ -786,6 +831,7 @@ func TestPanelsFrame_Clone_SelectionPreservation(t *testing.T) {
 
 	// 3. Perform Clone
 	clone := pf.Clone()
+	defer clone.Close()
 	cloneFsp := clone.panels[0].(*FileSystemPanel)
 
 	// 4. Clone triggers async ReadDirectory. Wait for it.
@@ -825,6 +871,7 @@ func TestPanelsFrame_Clone_SelectionPreservation(t *testing.T) {
 func TestPanelsFrame_GetTitle_WithProvider(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
 	v := &mockTitleVFS{OSVFS: *vfs.NewOSVFS("/var"), title: "remote@server"}
@@ -841,6 +888,7 @@ func TestPanelsFrame_GetTitle_WithProvider(t *testing.T) {
 func TestPanelsFrame_Prompt_WithProvider(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
 	v := &mockTitleVFS{OSVFS: *vfs.NewOSVFS("/etc"), title: "admin@prod"}
@@ -865,6 +913,7 @@ func TestPanelsFrame_Prompt_WithProvider(t *testing.T) {
 
 func TestPanelsFrame_GetPaths(t *testing.T) {
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 	tmp := t.TempDir()
 	pathL := filepath.Join(tmp, "left")
@@ -882,6 +931,7 @@ func TestPanelsFrame_GetPaths(t *testing.T) {
 }
 func TestPanelsFrame_StateCapture(t *testing.T) {
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
 	fspL := pf.panels[0].(*FileSystemPanel)
@@ -904,6 +954,7 @@ func TestPanelsFrame_StateCapture(t *testing.T) {
 }
 func TestPanelsFrame_CloneIndependence(t *testing.T) {
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
 	// Set path in original
@@ -913,6 +964,7 @@ func TestPanelsFrame_CloneIndependence(t *testing.T) {
 
 	// Clone
 	clone := pf.Clone()
+	defer clone.Close()
 
 	// Change path in clone
 	newPath := t.TempDir()
@@ -930,6 +982,7 @@ func TestPanelsFrame_CtrlO_HardRedraw(t *testing.T) {
 	fm.Init(scr)
 
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	fm.Push(pf)
 
 	// Ensure screen is "clean" initially
@@ -958,7 +1011,8 @@ func TestPanelsFrame_PTYLockContention(t *testing.T) {
 	// Этот тест проверяет, что тяжелый парсинг в PTY-потоке не блокирует
 	// доступ UI-потока к методу getActivePTY (регрессия дедлока).
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	pf := NewPanelsFrame()
+	pf := setupMockPanelsFrame()
+	defer pf.Close()
 
 	// Симулируем "забитую" очередь задач
 	for i := 0; i < 64; i++ {
@@ -1000,6 +1054,7 @@ func TestPanelsFrame_Clone_Comprehensive(t *testing.T) {
 	vtui.SetDefaultPalette()
 	SetDefaultF4Palette()
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
 	// 1. Setup specific state on the left panel
@@ -1024,6 +1079,7 @@ func TestPanelsFrame_Clone_Comprehensive(t *testing.T) {
 
 	// 3. Perform Clone
 	clone := pf.Clone()
+	defer clone.Close()
 
 	// 4. Verify Panel State
 	cloneFsp := clone.Left().(*FileSystemPanel)
@@ -1096,7 +1152,8 @@ func TestIsTerminalRunnable(t *testing.T) {
 }
 
 func TestPanelsFrame_ReturnExecution(t *testing.T) {
-	pf := NewPanelsFrame()
+	pf := setupMockPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
 	// Создаем временный запускаемый файл
@@ -1156,9 +1213,9 @@ func TestPanelsFrame_ReturnExecution(t *testing.T) {
 	}
 }
 func TestPanelsFrame_CommandLineEnter(t *testing.T) {
-	pf := NewPanelsFrame()
-	pty := &mockPty{} // Используем mock из ansi_parser_test.go
-	pf.pty = pty
+	pf := setupMockPanelsFrame()
+	pty := pf.pty.(*mockPty)
+	defer pf.Close()
 
 	// Вводим команду в консоль
 	pf.cmdLine.Edit.SetText("ls -la")
@@ -1182,6 +1239,7 @@ func TestPanelsFrame_CommandLineEnter(t *testing.T) {
 
 func TestPanelsFrame_DirectoryEnter(t *testing.T) {
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 	tmp := t.TempDir()
 	sub := filepath.Join(tmp, "work_dir")
@@ -1216,6 +1274,7 @@ func TestPanelsFrame_DirectoryEnter(t *testing.T) {
 
 func TestPanelsFrame_NonRunnableOpen(t *testing.T) {
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 	tmp := t.TempDir()
 	docPath := filepath.Join(tmp, "readme.txt")
@@ -1246,6 +1305,7 @@ func TestPanelsFrame_NonRunnableOpen(t *testing.T) {
 func TestPanelsFrame_SwitchVFS_CacheClear(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
 	fsp := pf.panels[0].(*FileSystemPanel)
@@ -1264,6 +1324,7 @@ func TestPanelsFrame_SwitchVFS_CacheClear(t *testing.T) {
 func TestPanelsFrame_Clone_CachePreservation(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
 	fsp := pf.panels[0].(*FileSystemPanel)
@@ -1271,6 +1332,7 @@ func TestPanelsFrame_Clone_CachePreservation(t *testing.T) {
 	fsp.dirCache["/test/path"] = dirCacheEntry{items: items}
 
 	clone := pf.Clone()
+	defer clone.Close()
 	cloneFsp := clone.panels[0].(*FileSystemPanel)
 
 	if len(cloneFsp.dirCache) != 1 {
@@ -1548,6 +1610,7 @@ func TestPanelsFrame_F9Context(t *testing.T) {
 func TestLayout_F4InternalDialogs_Validity(t *testing.T) {
 	vtui.SetDefaultPalette()
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
 	t.Run("DummyOpDialog", func(t *testing.T) {
@@ -1569,6 +1632,7 @@ func TestPanelsFrame_CopyShortcuts(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	SetDefaultF4Palette()
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
 	fsp := pf.panels[0].(*FileSystemPanel)
@@ -1604,6 +1668,7 @@ func TestPanelsFrame_CopyShortcuts(t *testing.T) {
 func TestLayout_F4ActionDialogs_Validity(t *testing.T) {
 	vtui.SetDefaultPalette()
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 	fm := vtui.FrameManager
 
@@ -1673,6 +1738,7 @@ func TestPanelsFrame_DriveMenu_OtherPanel(t *testing.T) {
 	SetDefaultF4Palette()
 
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
 	pathR := filepath.Join(t.TempDir(), "right")
@@ -1704,6 +1770,7 @@ func TestPanelsFrame_DriveMenu_OtherPanel(t *testing.T) {
 func TestPanelsFrame_DriveMenu_TerminalBusy(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
 	// Simulate busy terminal
@@ -1725,6 +1792,7 @@ func TestPanelsFrame_DriveMenu_TerminalBusy(t *testing.T) {
 func TestDriveMenu_SmartHotkeys(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
 	// Сохраняем оригинал и подменяем реестр
@@ -1778,6 +1846,7 @@ func TestDriveMenu_PhysicalKeys(t *testing.T) {
 
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
 	pf.showDriveMenu(0)
@@ -1801,6 +1870,7 @@ func TestPanelsFrame_ShiftInsert_Fallthrough(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	SetDefaultF4Palette()
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
 	// 1. Prepare clipboard
@@ -1837,6 +1907,7 @@ func TestPanelsFrame_PromptTruncation(t *testing.T) {
 	vtui.SetDefaultPalette()
 	SetDefaultF4Palette()
 	pf := NewPanelsFrame()
+	defer pf.Close()
 
 	// Simulate standard 80-column terminal
 	width := 80
@@ -1926,6 +1997,7 @@ func (m *mockSlowStatVFS) Stat(ctx context.Context, p string) (vfs.VFSItem, erro
 func TestPanelsFrame_AutoRefresh_Locking(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
 	// Дожидаемся завершения первичной инициализации обеих панелей,
@@ -2021,6 +2093,7 @@ func TestPanelsFrame_VimHotkeys_Comprehensive(t *testing.T) {
 	defer func() { AppConfig = oldCfg }()
 
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 	fsp := pf.panels[0].(*FileSystemPanel)
 	pf.activeIdx = 0

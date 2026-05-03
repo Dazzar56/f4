@@ -43,6 +43,9 @@ func NewAnsiParser(t *TerminalView, p PtyBackend) *AnsiParser {
 }
 
 func (p *AnsiParser) Process(data []byte) {
+	if p == nil {
+		return
+	}
 	for _, b := range data {
 		// vtui.DebugLog("PARSER: Byte 0x%02X State %v", b, p.State)
 		switch p.State {

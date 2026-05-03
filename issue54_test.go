@@ -22,6 +22,7 @@ func TestIssue54_History(t *testing.T) {
 	os.WriteFile(scriptPath, []byte("#!/bin/sh\necho 1"), 0755)
 
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
 	// 2. Setup the panel to point to this directory
