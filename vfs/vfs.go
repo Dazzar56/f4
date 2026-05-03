@@ -64,6 +64,7 @@ type VFSCapabilities struct {
 type VFS interface {
 	IsAtRoot() bool
 	GetPath() string
+	IsAbs(path string) bool
 	SetPath(path string) error
 	ReadDir(ctx context.Context, path string, onChunk func([]VFSItem)) error
 	Stat(ctx context.Context, path string) (VFSItem, error)

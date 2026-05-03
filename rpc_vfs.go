@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"io"
+	"path"
 	"path/filepath"
 
 	"github.com/unxed/vtinput"
@@ -77,6 +78,7 @@ func (v *RPCVFS) SetPath(p string) error {
 func (v *RPCVFS) GetPath() string {
 	return filepath.FromSlash(v.path)
 }
+func (v *RPCVFS) IsAbs(p string) bool { return path.IsAbs(p) }
 
 func (v *RPCVFS) Join(e ...string) string {
 	return filepath.Join(e...)

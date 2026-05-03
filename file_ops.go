@@ -54,7 +54,7 @@ func formatIntWithSpaces(n int64) string {
 
 func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, destInput string, isMove bool, mode int, onComplete func()) {
 	destPath := destInput
-	if !filepath.IsAbs(destPath) {
+	if !dstVfs.IsAbs(destPath) {
 		if !strings.ContainsAny(destInput, "/\\") && destInput != "." && destInput != ".." {
 			destPath = srcVfs.Join(srcVfs.GetPath(), destInput)
 			dstVfs = srcVfs

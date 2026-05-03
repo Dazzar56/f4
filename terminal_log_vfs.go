@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/unxed/f4/vfs"
 )
@@ -14,6 +15,7 @@ type TerminalLogVFS struct {
 
 func (v *TerminalLogVFS) IsAtRoot() bool { return true }
 func (v *TerminalLogVFS) GetPath() string { return "term://" }
+func (v *TerminalLogVFS) IsAbs(p string) bool { return strings.HasPrefix(p, "term://") }
 func (v *TerminalLogVFS) SetPath(path string) error { return nil }
 func (v *TerminalLogVFS) ReadDir(ctx context.Context, path string, onChunk func([]vfs.VFSItem)) error { return nil }
 func (v *TerminalLogVFS) Stat(ctx context.Context, path string) (vfs.VFSItem, error) {

@@ -69,6 +69,7 @@ func (v *FTPVFS) GetTitle() string { return v.title }
 
 func (v *FTPVFS) IsAtRoot() bool { return v.cwd == "/" || v.cwd == "" || v.cwd == "." }
 func (v *FTPVFS) GetPath() string { return v.cwd }
+func (v *FTPVFS) IsAbs(p string) bool { return path.IsAbs(p) }
 func (v *FTPVFS) SetPath(p string) error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
