@@ -1031,7 +1031,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 	vtui.FrameManager.Push(dlg)
 }
 func actionConfirmationsSettings(pf *PanelsFrame) {
-	dlg := vtui.NewCenteredDialog(44, 9, Msg("ConfirmationsSettings.Title"))
+	dlg := vtui.NewCenteredDialog(44, 11, Msg("ConfirmationsSettings.Title"))
 	dlg.ShowClose = true
 
 	chkCopy := vtui.NewCheckbox(0, 0, Msg("ConfirmationsSettings.Copy"), false)
