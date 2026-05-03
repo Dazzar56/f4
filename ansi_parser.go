@@ -17,6 +17,7 @@ var DefaultTermAttr = vtui.SetIndexBoth(0, 7, 0) // Light Gray on Black (standar
 const (
 	StateGround ParserState = iota
 	StateEsc
+	StateEscIntermediate
 	StateCSI
 	StateOSC
 	StateAPC
@@ -85,16 +86,21 @@ func (p *AnsiParser) Process(data []byte) {
 			} else if b == '_' {
 				p.CurParam.Reset()
 				p.State = StateAPC
-			} else if b == '7' {
-				p.term.SaveCursor()
-				p.State = StateGround
-			} else if b == '8' {
-				p.term.RestoreCursor()
-				p.State = StateGround
 			} else if b == '\\' {
 				// String Terminator (ST)
 				p.State = StateGround
+			} else if b >= 0x20 && b <= 0x2F {
+				// Промежуточные байты (например, '(' в ESC ( B)
+				p.State = StateEscIntermediate
 			} else {
+				p.handleEsc(b)
+				p.State = StateGround
+			}
+		case StateEscIntermediate:
+			if b >= 0x20 && b <= 0x2F {
+				// Продолжаем собирать промежуточные байты
+			} else {
+				// b — финальный байт (0x30-0x7E), завершаем последовательность
 				p.State = StateGround
 			}
 		case StateCSI:
@@ -136,6 +142,24 @@ func (p *AnsiParser) Process(data []byte) {
 		}
 	}
 	p.term.FlushLog()
+}
+func (p *AnsiParser) handleEsc(cmd byte) {
+	switch cmd {
+	case '7':
+		p.term.SaveCursor()
+	case '8':
+		p.term.RestoreCursor()
+	case 'M': // Reverse Index
+		p.term.ReverseIndex()
+	case 'D': // Index
+		p.term.Index()
+	case 'E': // Next Line
+		p.term.NextLine()
+	case 'c': // RIS - Reset to Initial State
+		p.term.ResetBuffer(p.term.Width, p.term.Height)
+	case '=', '>':
+		// Application/Numeric Keypad Mode - пока просто поглощаем
+	}
 }
 
 func (p *AnsiParser) handleCSI(cmd byte) {

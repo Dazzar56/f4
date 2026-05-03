@@ -1,0 +1,208 @@
+f4c1e2a4 AP 3.1
+
+# Summary: Исправление артефактов (лишние буквы B, 0) и улучшение навигации в терминале.
+#
+# Plan:
+#   1. В `ansi_parser.go` добавить состояние `StateEscIntermediate` для поглощения 
+#      двухбайтовых Escape-последовательностей (например, переключение кодировок ESC ( B).
+#   2. Реализовать обработку `ESC M` (Reverse Index) для скроллинга вверх, что критично для htop.
+#   3. Добавить в `terminal_view.go` методы `ReverseIndex`, `Index` и `NextLine`.
+#   4. Реализовать поддержку `ESC c` (RIS - Reset to Initial State) через вызов `ResetBuffer`.
+
+f4c1e2a4 FILE
+ansi_parser.go
+
+f4c1e2a4 REPLACE
+b8c1d2e3 anchor
+const (
+	StateGround ParserState = iota
+	StateEsc
+	StateCSI
+	StateOSC
+	StateAPC
+)
+f4c1e2a4 snippet
+const (
+	StateGround ParserState = iota
+	StateEsc
+	StateCSI
+	StateOSC
+	StateAPC
+)
+f4c1e2a4 content
+const (
+	StateGround ParserState = iota
+	StateEsc
+	StateEscIntermediate
+	StateCSI
+	StateOSC
+	StateAPC
+)
+
+f4c1e2a4 REPLACE
+b8c1d2e3 anchor
+		case StateEsc:
+			if b == '[' {
+				p.State = StateCSI
+				p.Params = nil
+				p.CurParam.Reset()
+				p.Intermediate = ""
+			} else if b == ']' {
+				p.State = StateOSC
+				p.Params = nil
+				p.CurParam.Reset()
+			} else if b == '_' {
+				p.CurParam.Reset()
+				p.State = StateAPC
+			} else if b == '7' {
+				p.term.SaveCursor()
+				p.State = StateGround
+			} else if b == '8' {
+				p.term.RestoreCursor()
+				p.State = StateGround
+			} else if b == '\\' {
+				// String Terminator (ST)
+				p.State = StateGround
+			} else {
+				p.State = StateGround
+			}
+f4c1e2a4 snippet
+		case StateEsc:
+			if b == '[' {
+				p.State = StateCSI
+				p.Params = nil
+				p.CurParam.Reset()
+				p.Intermediate = ""
+			} else if b == ']' {
+				p.State = StateOSC
+				p.Params = nil
+				p.CurParam.Reset()
+			} else if b == '_' {
+				p.CurParam.Reset()
+				p.State = StateAPC
+			} else if b == '7' {
+				p.term.SaveCursor()
+				p.State = StateGround
+			} else if b == '8' {
+				p.term.RestoreCursor()
+				p.State = StateGround
+			} else if b == '\\' {
+				// String Terminator (ST)
+				p.State = StateGround
+			} else {
+				p.State = StateGround
+			}
+f4c1e2a4 content
+		case StateEsc:
+			if b == '[' {
+				p.State = StateCSI
+				p.Params = nil
+				p.CurParam.Reset()
+				p.Intermediate = ""
+			} else if b == ']' {
+				p.State = StateOSC
+				p.Params = nil
+				p.CurParam.Reset()
+			} else if b == '_' {
+				p.CurParam.Reset()
+				p.State = StateAPC
+			} else if b == '\\' {
+				// String Terminator (ST)
+				p.State = StateGround
+			} else if b >= 0x20 && b <= 0x2F {
+				// Промежуточные байты (например, '(' в ESC ( B)
+				p.State = StateEscIntermediate
+			} else {
+				p.handleEsc(b)
+				p.State = StateGround
+			}
+		case StateEscIntermediate:
+			if b >= 0x20 && b <= 0x2F {
+				// Продолжаем собирать промежуточные байты
+			} else {
+				// b — финальный байт (0x30-0x7E), завершаем последовательность
+				p.State = StateGround
+			}
+
+f4c1e2a4 INSERT_AFTER
+f4c1e2a4 snippet
+	p.term.FlushLog()
+}
+f4c1e2a4 content
+
+func (p *AnsiParser) handleEsc(cmd byte) {
+	switch cmd {
+	case '7':
+		p.term.SaveCursor()
+	case '8':
+		p.term.RestoreCursor()
+	case 'M': // Reverse Index
+		p.term.ReverseIndex()
+	case 'D': // Index
+		p.term.Index()
+	case 'E': // Next Line
+		p.term.NextLine()
+	case 'c': // RIS - Reset to Initial State
+		p.term.ResetBuffer(p.term.Width, p.term.Height)
+	case '=', '>':
+		// Application/Numeric Keypad Mode - пока просто поглощаем
+	}
+}
+
+f4c1e2a4 FILE
+terminal_view.go
+
+f4c1e2a4 INSERT_AFTER
+f4c1e2a4 snippet
+func (tv *TerminalView) newline() {
+	// vtui.DebugLog("TERM: newline at Y=%d (ScrollBottom=%d)", tv.CursorY, tv.ScrollBottom)
+	tv.CursorX = 0
+	tv.CursorY++
+	if tv.CursorY > tv.ScrollBottom {
+		tv.scrollUp(tv.ScrollTop, tv.ScrollBottom, 1)
+		tv.CursorY = tv.ScrollBottom
+	}
+}
+f4c1e2a4 content
+
+func (tv *TerminalView) ReverseIndex() {
+	tv.mu.Lock()
+	defer tv.mu.Unlock()
+	if tv.Muted {
+		return
+	}
+	if tv.CursorY == tv.ScrollTop {
+		tv.scrollDown(tv.ScrollTop, tv.ScrollBottom, 1)
+	} else if tv.CursorY > 0 {
+		tv.CursorY--
+	}
+}
+
+func (tv *TerminalView) Index() {
+	tv.mu.Lock()
+	defer tv.mu.Unlock()
+	if tv.Muted {
+		return
+	}
+	tv.CursorY++
+	if tv.CursorY > tv.ScrollBottom {
+		tv.scrollUp(tv.ScrollTop, tv.ScrollBottom, 1)
+		tv.CursorY = tv.ScrollBottom
+	}
+}
+
+func (tv *TerminalView) NextLine() {
+	tv.mu.Lock()
+	defer tv.mu.Unlock()
+	if tv.Muted {
+		return
+	}
+	tv.CursorX = 0
+	tv.CursorY++
+	if tv.CursorY > tv.ScrollBottom {
+		tv.scrollUp(tv.ScrollTop, tv.ScrollBottom, 1)
+		tv.CursorY = tv.ScrollBottom
+	}
+}
+
+f4c1e2a4 END

@@ -350,6 +350,45 @@ func (tv *TerminalView) newline() {
 		tv.CursorY = tv.ScrollBottom
 	}
 }
+func (tv *TerminalView) ReverseIndex() {
+	tv.mu.Lock()
+	defer tv.mu.Unlock()
+	if tv.Muted {
+		return
+	}
+	if tv.CursorY == tv.ScrollTop {
+		tv.scrollDown(tv.ScrollTop, tv.ScrollBottom, 1)
+	} else if tv.CursorY > 0 {
+		tv.CursorY--
+	}
+}
+
+func (tv *TerminalView) Index() {
+	tv.mu.Lock()
+	defer tv.mu.Unlock()
+	if tv.Muted {
+		return
+	}
+	tv.CursorY++
+	if tv.CursorY > tv.ScrollBottom {
+		tv.scrollUp(tv.ScrollTop, tv.ScrollBottom, 1)
+		tv.CursorY = tv.ScrollBottom
+	}
+}
+
+func (tv *TerminalView) NextLine() {
+	tv.mu.Lock()
+	defer tv.mu.Unlock()
+	if tv.Muted {
+		return
+	}
+	tv.CursorX = 0
+	tv.CursorY++
+	if tv.CursorY > tv.ScrollBottom {
+		tv.scrollUp(tv.ScrollTop, tv.ScrollBottom, 1)
+		tv.CursorY = tv.ScrollBottom
+	}
+}
 
 func (tv *TerminalView) ScrollUp(top, bottom, n int) {
 	tv.mu.Lock()
