@@ -311,9 +311,14 @@ func (pf *PanelsFrame) initPTY() {
 			return
 		}
 		pf.pty = p
-		shell := GetSystemShell()
-		p.Run(shell)
-	}
+				shell := GetSystemShell()
+				p.Run(shell)
+				if runtime.GOOS == "windows" {
+					// Prime the shell: hide prompt, set up auto-done signal and clear screen
+					// $e]133;D\x07 is the shell integration "command finished" sequence
+					p.Write([]byte("@prompt $e]133;D\x07\r@cls\r"))
+				}
+			}
 
 	pf.parser.pty = p
 
@@ -953,11 +958,14 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				isBackground := strings.HasSuffix(strings.TrimSpace(cmd), "&")
 
 				if runtime.GOOS == "windows" {
+					// Use raw ESC sequences for start signal to ensure they bypass cmd's internal echo
 					if path != "" {
-						fullWireCmd = fmt.Sprintf("cd /d %q & %s\r", path, cmd)
+						fullWireCmd = fmt.Sprintf("@echo \x1b]133;B\x07 & @cd /d %q & %s\r", path, cmd)
 					} else {
-						fullWireCmd = cmd + "\r"
+						fullWireCmd = fmt.Sprintf("@echo \x1b]133;B\x07 & %s\r", cmd)
 					}
+					pf.executing = true
+					pf.returnToPanels = pf.showPanels
 				} else {
 					// Unix
 					if isBackground {
@@ -981,7 +989,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				}
 
 				pf.termView.PrintCleanCommand(cmd)
-				if runtime.GOOS != "windows" && !isBackground {
+				if !isBackground {
 					pf.termView.SetMuted(true)
 				}
 				activePty.Write([]byte(fullWireCmd))

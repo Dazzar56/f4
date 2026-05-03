@@ -404,6 +404,18 @@ func (p *AnsiParser) handleOSC() {
 		return
 	}
 
+	if cmd == 133 {
+		// Shell Integration (FTCS)
+		sub := parts[1]
+		vtui.DebugLog("ANSI_OSC_TRACE: Shell Integration signal: %q", sub)
+		if sub == "A" || sub == "B" || sub == "C" {
+			p.term.HandleF4APC("busy")
+		} else if strings.HasPrefix(sub, "D") {
+			p.term.HandleF4APC("done")
+		}
+		return
+	}
+
 	if cmd == 52 {
 		subparts := strings.SplitN(parts[1], ";", 2)
 		if len(subparts) == 2 {
