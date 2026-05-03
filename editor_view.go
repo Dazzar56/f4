@@ -1,21 +1,21 @@
 package main
 
 import (
-	"os"
-	"unicode/utf8"
+	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strconv"
-	"context"
-	"time"
 	"strings"
+	"time"
+	"unicode/utf8"
 
+	"github.com/unxed/f4/piecetable"
+	"github.com/unxed/f4/textlayout"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 	"unicode"
-	"github.com/unxed/f4/piecetable"
-	"github.com/unxed/f4/textlayout"
 )
 
 type visualCell struct {
@@ -24,10 +24,10 @@ type visualCell struct {
 }
 
 type lineFragment struct {
-	cells            []visualCell
-	startOffset      int // Absolute offset of the fragment start
-	startByteInLine  int // Byte in the logical line where the fragment starts
-	endByteInLine    int // Byte where the fragment ends
+	cells           []visualCell
+	startOffset     int // Absolute offset of the fragment start
+	startByteInLine int // Byte in the logical line where the fragment starts
+	endByteInLine   int // Byte where the fragment ends
 }
 
 var (
@@ -35,21 +35,22 @@ var (
 	LastEditorSearchCase    bool
 	LastEditorSearchReverse bool
 )
+
 // EditorView is a text editor component.
 type EditorView struct {
 	vtui.BaseFrame
 	topBar  *TopBar
 	menuBar *vtui.MenuBar
-	pt     *piecetable.PieceTable
-	li     *piecetable.LineIndex
-	engine *textlayout.WrapEngine
+	pt      *piecetable.PieceTable
+	li      *piecetable.LineIndex
+	engine  *textlayout.WrapEngine
 
 	ScrollTopRow int // Индекс первой видимой ВИЗУАЛЬНОЙ строки
 	ScrollLeft   int // Горизонтальный скролл (когда WordWrap=false)
 
 	WordWrap         bool
 	overtype         bool
-	modified            bool
+	modified         bool
 	CursorLine       int // Текущая логическая строка (для плагинов)
 	CursorPos        int // Позиция в байтах (для плагинов)
 	DesiredVisualCol int // Колонка, в которую мы хотим попасть при навигации Up/Down
@@ -68,9 +69,9 @@ type EditorView struct {
 	renderBytes []byte          // Reusable buffer for text data
 	renderCells []vtui.CharInfo // Reusable buffer for row rendering
 
-	vfs       vfs.VFS
-	filePath  string
-	file      vfs.ReadAtCloser
+	vfs         vfs.VFS
+	filePath    string
+	file        vfs.ReadAtCloser
 	scrollBar   *vtui.ScrollBar
 	highlighter vtui.Highlighter
 	lineStates  []any // Cache of highlighter states per logical line
@@ -83,10 +84,10 @@ type EditorView struct {
 	cleanState piecetable.TableState // State of the file on disk
 
 	// Autocomplete state
-	acEnabled     bool
-	acPrefix      string
-	acMatches     []string
-	acCurrentIdx  int
+	acEnabled    bool
+	acPrefix     string
+	acMatches    []string
+	acCurrentIdx int
 
 	targetLine   int
 	targetPos    int
@@ -218,7 +219,9 @@ func NewEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string) *EditorVie
 		CursorBeyondEOL: AppConfig.EditorCursorBeyondEOL,
 		UseEditorConfig: AppConfig.EditorUseEditorConfig,
 	}
-	if ev.TabSize <= 0 { ev.TabSize = 8 }
+	if ev.TabSize <= 0 {
+		ev.TabSize = 8
+	}
 	ev.engine.SetTabSize(ev.TabSize)
 	ev.ApplyEditorConfig()
 	// Determine if AC should be enabled for this file
@@ -228,7 +231,9 @@ func NewEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string) *EditorVie
 		fileName := strings.ToLower(filepath.Base(path))
 		for _, mask := range masks {
 			mask = strings.TrimSpace(mask)
-			if mask == "" { continue }
+			if mask == "" {
+				continue
+			}
 			matched, _ := filepath.Match(strings.ToLower(mask), fileName)
 			if matched {
 				ev.acEnabled = true
@@ -334,7 +339,9 @@ func (ev *EditorView) Undo() {
 
 	if !ev.edited {
 		ev.edited = true
-		if ev.indexCancel != nil { ev.indexCancel() }
+		if ev.indexCancel != nil {
+			ev.indexCancel()
+		}
 	}
 	ev.editSession++
 
@@ -371,7 +378,9 @@ func (ev *EditorView) Redo() {
 
 	if !ev.edited {
 		ev.edited = true
-		if ev.indexCancel != nil { ev.indexCancel() }
+		if ev.indexCancel != nil {
+			ev.indexCancel()
+		}
 	}
 	ev.editSession++
 
@@ -489,7 +498,6 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 
 	scr.PushClipRect(ev.X1, ev.Y1+1, ev.X1+width-1, ev.Y2)
 
-
 	// 2. Отрисовка
 	startLogLine, startFragIdx := ev.engine.GetLogLineAtVisualRow(ev.ScrollTopRow)
 	rowsRendered := 0
@@ -515,7 +523,7 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 					lEnd = ev.li.GetLineOffset(currIdx + 1)
 				}
 				// Prevent highlighter from crashing on huge binary lines
-				if lEnd - lStart > 64*1024 {
+				if lEnd-lStart > 64*1024 {
 					lEnd = lStart + 64*1024
 				}
 
@@ -541,11 +549,13 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 				// Re-apply highlighter OOM protection for the rendering path
 				highlightLen := lineLen
 				if highlightLen > 64*1024 {
-					highlightLen = 64*1024
+					highlightLen = 64 * 1024
 				}
 				lineData, _ := ev.pt.GetRange(lStart, highlightLen)
 				var prevState any
-				if logIdx > 0 { prevState = ev.lineStates[logIdx-1] }
+				if logIdx > 0 {
+					prevState = ev.lineStates[logIdx-1]
+				}
 				lineSyntax, _ = ev.highlighter.Highlight(string(lineData), prevState, bgAttr)
 			}
 		}
@@ -576,7 +586,9 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 				scr.Write(ev.X1-ev.ScrollLeft, currY, vtui.StringToCharInfo(" [ Loading... ] ", bgAttr))
 				runesProcessedInLine += fragRuneCount
 				rowsRendered++
-				if rowsRendered >= height { goto DoneRendering }
+				if rowsRendered >= height {
+					goto DoneRendering
+				}
 				continue
 			}
 
@@ -586,7 +598,9 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 			var fragSyntax []uint64
 			if runesProcessedInLine < len(lineSyntax) {
 				end := runesProcessedInLine + fragRuneCount
-				if end > len(lineSyntax) { end = len(lineSyntax) }
+				if end > len(lineSyntax) {
+					end = len(lineSyntax)
+				}
 				fragSyntax = lineSyntax[runesProcessedInLine:end]
 			}
 			runesProcessedInLine += fragRuneCount
@@ -628,7 +642,9 @@ DoneRendering:
 				ghostAttr := vtui.DimColor(vtui.Palette[ColCommandLineUserScreen])
 				// Ensure it doesn't leak out of the editor frame
 				maxLen := ev.X2 - drawX
-				if ev.scrollBar != nil { maxLen-- }
+				if ev.scrollBar != nil {
+					maxLen--
+				}
 
 				if maxLen > 0 {
 					displayTail := tail
@@ -661,7 +677,9 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 
 	ev.ensureEngineWidth()
-	if ev.saving { return true }
+	if ev.saving {
+		return true
+	}
 	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 	// 1. Processing Bracketed Paste (events arrive outside KeyDown)
 	if e.Type == vtinput.PasteEventType {
@@ -722,7 +740,9 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 
 	// 3. Regular key processing
-	if !e.KeyDown { return false }
+	if !e.KeyDown {
+		return false
+	}
 
 	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
 	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
@@ -763,10 +783,10 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 
 		// Any movement or non-character key clears the AC state
 		if e.VirtualKeyCode == vtinput.VK_UP || e.VirtualKeyCode == vtinput.VK_DOWN ||
-		   e.VirtualKeyCode == vtinput.VK_LEFT || e.VirtualKeyCode == vtinput.VK_RIGHT ||
-		   e.VirtualKeyCode == vtinput.VK_HOME || e.VirtualKeyCode == vtinput.VK_END ||
-		   e.VirtualKeyCode == vtinput.VK_PRIOR || e.VirtualKeyCode == vtinput.VK_NEXT ||
-		   e.VirtualKeyCode == vtinput.VK_RETURN {
+			e.VirtualKeyCode == vtinput.VK_LEFT || e.VirtualKeyCode == vtinput.VK_RIGHT ||
+			e.VirtualKeyCode == vtinput.VK_HOME || e.VirtualKeyCode == vtinput.VK_END ||
+			e.VirtualKeyCode == vtinput.VK_PRIOR || e.VirtualKeyCode == vtinput.VK_NEXT ||
+			e.VirtualKeyCode == vtinput.VK_RETURN {
 			ev.acMatches = nil
 		}
 	}
@@ -787,7 +807,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		}
 	}
 
-	// Any key that can reach this point and is not a pure navigation key 
+	// Any key that can reach this point and is not a pure navigation key
 	// should stop the background indexer to prevent index corruption.
 	switch e.VirtualKeyCode {
 	case vtinput.VK_UP, vtinput.VK_DOWN, vtinput.VK_LEFT, vtinput.VK_RIGHT,
@@ -798,7 +818,9 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		if !ev.edited {
 			ev.edited = true
 			ev.editSession++
-			if ev.indexCancel != nil { ev.indexCancel() }
+			if ev.indexCancel != nil {
+				ev.indexCancel()
+			}
 		}
 	}
 
@@ -846,7 +868,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 			vtui.FrameManager.EmitCommand(CmSearch, nil)
 		}
 		return true
-	
+
 	case vtinput.VK_ESCAPE, vtinput.VK_F10:
 		ev.tryClose()
 		return true
@@ -877,7 +899,9 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		}
 
 	case vtinput.VK_UP, vtinput.VK_E:
-		if e.VirtualKeyCode == vtinput.VK_E && !ctrl { break }
+		if e.VirtualKeyCode == vtinput.VK_E && !ctrl {
+			break
+		}
 		handleNav()
 		curOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 		vRow, _ := ev.engine.LogicalToVisual(curOffset)
@@ -905,7 +929,9 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 
 	case vtinput.VK_DOWN, vtinput.VK_X:
 		if e.VirtualKeyCode == vtinput.VK_X {
-			if !ctrl { break }
+			if !ctrl {
+				break
+			}
 			if ev.selActive {
 				ev.CopySelection()
 				ev.DeleteSelection()
@@ -993,7 +1019,9 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 
 	case vtinput.VK_LEFT, vtinput.VK_S:
 		isAlias := e.VirtualKeyCode == vtinput.VK_S
-		if isAlias && !ctrl { break }
+		if isAlias && !ctrl {
+			break
+		}
 		handleNav()
 		if ev.CursorVirtualSpaces > 0 {
 			ev.CursorVirtualSpaces--
@@ -1037,12 +1065,12 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 						for currRuneIdx > 0 {
 							prev, curr := runes[currRuneIdx-1], runes[currRuneIdx]
 							pCat, cCat := getCharCategory(prev), getCharCategory(curr)
-						if (shift && pCat != catSpace && cCat == catSpace) ||
-							(pCat == catSpace && cCat == catWord) ||
-							(pCat == catSpace && cCat == catDivider) ||
-							(pCat == catDivider && cCat == catWord) {
-							break
-						}
+							if (shift && pCat != catSpace && cCat == catSpace) ||
+								(pCat == catSpace && cCat == catWord) ||
+								(pCat == catSpace && cCat == catDivider) ||
+								(pCat == catDivider && cCat == catWord) {
+								break
+							}
 							currRuneIdx--
 							ev.CursorPos = 0
 							for i := 0; i < currRuneIdx; i++ {
@@ -1083,7 +1111,9 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 
 	case vtinput.VK_RIGHT, vtinput.VK_D:
 		isAlias := e.VirtualKeyCode == vtinput.VK_D
-		if isAlias && !ctrl { break }
+		if isAlias && !ctrl {
+			break
+		}
 		handleNav()
 		lineLen := ev.getLineLength(ev.CursorLine)
 		// Jump by word only if it's the real Right arrow + Ctrl
@@ -1120,12 +1150,12 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 							prev, curr := runes[currRuneIdx-1], runes[currRuneIdx]
 							pCat, cCat := getCharCategory(prev), getCharCategory(curr)
 							stop := false
-						if shift && pCat != catSpace && cCat == catSpace {
-							stop = true
-						}
-						if pCat == catWord && cCat == catDivider {
-							stop = true
-						}
+							if shift && pCat != catSpace && cCat == catSpace {
+								stop = true
+							}
+							if pCat == catWord && cCat == catDivider {
+								stop = true
+							}
 							if pCat == catSpace && cCat == catWord {
 								stop = true
 							}
@@ -1176,7 +1206,9 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 			if ev.CursorPos < lineLen {
 				lineStart := ev.li.GetLineOffset(ev.CursorLine)
 				peekLen := 4
-				if lineLen-ev.CursorPos < 4 { peekLen = lineLen - ev.CursorPos }
+				if lineLen-ev.CursorPos < 4 {
+					peekLen = lineLen - ev.CursorPos
+				}
 				data, _ := ev.pt.GetRange(lineStart+ev.CursorPos, peekLen)
 				if data != nil && len(data) > 0 {
 					_, size := utf8.DecodeRune(data)
@@ -1285,7 +1317,9 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 			if offset < ev.pt.Size() {
 				// Remove the UTF-8 character under the cursor
 				peekLen := 4
-				if ev.pt.Size()-offset < 4 { peekLen = ev.pt.Size() - offset }
+				if ev.pt.Size()-offset < 4 {
+					peekLen = ev.pt.Size() - offset
+				}
 				data, _ := ev.pt.GetRange(offset, peekLen)
 				size := 1
 				if data != nil {
@@ -1421,7 +1455,9 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 			lineLen := ev.getLineLength(ev.CursorLine)
 			if ev.CursorPos < lineLen {
 				peekLen := 4
-				if lineLen-ev.CursorPos < 4 { peekLen = lineLen - ev.CursorPos }
+				if lineLen-ev.CursorPos < 4 {
+					peekLen = lineLen - ev.CursorPos
+				}
 				oldData, _ := ev.pt.GetRange(offset, peekLen)
 				size := 1
 				if oldData != nil && len(oldData) > 0 {
@@ -1458,7 +1494,9 @@ func (ev *EditorView) fillCells(target []vtui.CharInfo, data []byte, defaultAttr
 	charIdx := 0
 	visualCol := startVisualCol
 	tabSize := ev.TabSize
-	if tabSize <= 0 { tabSize = 8 }
+	if tabSize <= 0 {
+		tabSize = 8
+	}
 
 	for len(data) > 0 {
 		r, size := utf8.DecodeRune(data)
@@ -1468,11 +1506,15 @@ func (ev *EditorView) fillCells(target []vtui.CharInfo, data []byte, defaultAttr
 		if r == '\t' {
 			w = tabSize - (visualCol % tabSize)
 			displayRune = ' '
-			if ev.ShowWhitespaces { displayRune = '→' }
+			if ev.ShowWhitespaces {
+				displayRune = '→'
+			}
 		} else if r == ' ' && ev.ShowWhitespaces {
 			displayRune = '·'
 		} else if r < 0x20 || r == 0x7F {
-			if !ev.ShowWhitespaces { displayRune = ' ' }
+			if !ev.ShowWhitespaces {
+				displayRune = ' '
+			}
 		}
 
 		attr := defaultAttr
@@ -1491,7 +1533,9 @@ func (ev *EditorView) fillCells(target []vtui.CharInfo, data []byte, defaultAttr
 
 		if selActive {
 			absPos := offset + currByte
-			if absPos >= selMin && absPos < selMax { attr = selAttr }
+			if absPos >= selMin && absPos < selMax {
+				attr = selAttr
+			}
 		}
 		charIdx++
 		currByte += size
@@ -1510,7 +1554,9 @@ func (ev *EditorView) fillCells(target []vtui.CharInfo, data []byte, defaultAttr
 				}
 				target = append(target, vtui.CharInfo{Char: charVal, Attributes: cellAttr})
 				charVal = uint64(vtui.WideCharFiller)
-				if r == '\t' { charVal = ' ' }
+				if r == '\t' {
+					charVal = ' '
+				}
 			}
 			visualCol += w
 		}
@@ -1524,12 +1570,20 @@ func (ev *EditorView) ensureCursorVisible() {
 	}
 
 	// Safety constraints for binary files or corrupted indices
-	if ev.CursorLine < 0 { ev.CursorLine = 0 }
-	if ev.CursorLine >= ev.li.LineCount() { ev.CursorLine = ev.li.LineCount() - 1 }
-	
+	if ev.CursorLine < 0 {
+		ev.CursorLine = 0
+	}
+	if ev.CursorLine >= ev.li.LineCount() {
+		ev.CursorLine = ev.li.LineCount() - 1
+	}
+
 	lineLen := ev.getLineLength(ev.CursorLine)
-	if ev.CursorPos < 0 { ev.CursorPos = 0 }
-	if ev.CursorPos > lineLen { ev.CursorPos = lineLen }
+	if ev.CursorPos < 0 {
+		ev.CursorPos = 0
+	}
+	if ev.CursorPos > lineLen {
+		ev.CursorPos = lineLen
+	}
 
 	curOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 	vRow, vCol := ev.engine.LogicalToVisual(curOffset)
@@ -1537,16 +1591,18 @@ func (ev *EditorView) ensureCursorVisible() {
 
 	width := ev.X2 - ev.X1 + 1
 	height := ev.Y2 - ev.Y1
-	
+
 	if ev.scrollBar != nil {
 		width--
 	}
-	if width <= 0 || height <= 0 { return }
+	if width <= 0 || height <= 0 {
+		return
+	}
 
 	// 1. Вертикальный скролл
 	if vRow < ev.ScrollTopRow {
 		ev.ScrollTopRow = vRow
-	} else if vRow >= ev.ScrollTopRow + height {
+	} else if vRow >= ev.ScrollTopRow+height {
 		ev.ScrollTopRow = vRow - height + 1
 	}
 
@@ -1613,8 +1669,12 @@ func (ev *EditorView) ResizeConsole(w, h int) {
 func (ev *EditorView) GetMenuBar() *vtui.MenuBar { return ev.menuBar }
 
 func (ev *EditorView) StartIndexing() {
-	if ev.asyncBuf == nil { return }
-	if ev.indexCancel != nil { ev.indexCancel() }
+	if ev.asyncBuf == nil {
+		return
+	}
+	if ev.indexCancel != nil {
+		ev.indexCancel()
+	}
 
 	ev.editSession++
 	sessionID := ev.editSession
@@ -1635,17 +1695,22 @@ func (ev *EditorView) StartIndexing() {
 
 		for absPos < maxSize {
 			select {
-			case <-ctx.Done(): return
+			case <-ctx.Done():
+				return
 			default:
 			}
-			if ev.IsDone() { return }
+			if ev.IsDone() {
+				return
+			}
 
 			data, err := buf.Read(absPos, chunkSize)
 			if err == piecetable.ErrLoading {
 				time.Sleep(50 * time.Millisecond)
 				continue
 			}
-			if err != nil { break }
+			if err != nil {
+				break
+			}
 
 			for i, b := range data {
 				if b == '\n' {
@@ -1671,12 +1736,18 @@ func (ev *EditorView) StartIndexing() {
 
 					if ev.targetLine != -1 && (li.LineCount() > ev.targetLine || absPos >= maxSize) {
 						ev.CursorLine = ev.targetLine
-						if ev.CursorLine >= li.LineCount() { ev.CursorLine = li.LineCount() - 1 }
-						if ev.CursorLine < 0 { ev.CursorLine = 0 }
+						if ev.CursorLine >= li.LineCount() {
+							ev.CursorLine = li.LineCount() - 1
+						}
+						if ev.CursorLine < 0 {
+							ev.CursorLine = 0
+						}
 						ev.CursorPos = ev.targetPos
 						ev.ScrollTopRow = ev.targetTopRow
 						ev.ScrollLeft = ev.targetLeft
-						if ev.ScrollLeft < 0 { ev.ScrollLeft = 0 }
+						if ev.ScrollLeft < 0 {
+							ev.ScrollLeft = 0
+						}
 						ev.targetLine = -1
 						ev.ensureCursorVisible()
 						ev.updateDesiredVisualCol()
@@ -1692,12 +1763,18 @@ func (ev *EditorView) StartIndexing() {
 			if ctx.Err() == nil && !ev.edited && ev.editSession == sessionID {
 				if ev.targetLine != -1 {
 					ev.CursorLine = ev.targetLine
-					if ev.CursorLine >= li.LineCount() { ev.CursorLine = li.LineCount() - 1 }
-					if ev.CursorLine < 0 { ev.CursorLine = 0 }
+					if ev.CursorLine >= li.LineCount() {
+						ev.CursorLine = li.LineCount() - 1
+					}
+					if ev.CursorLine < 0 {
+						ev.CursorLine = 0
+					}
 					ev.CursorPos = ev.targetPos
 					ev.ScrollTopRow = ev.targetTopRow
 					ev.ScrollLeft = ev.targetLeft
-					if ev.ScrollLeft < 0 { ev.ScrollLeft = 0 }
+					if ev.ScrollLeft < 0 {
+						ev.ScrollLeft = 0
+					}
 					ev.targetLine = -1
 					ev.ensureCursorVisible()
 					ev.updateDesiredVisualCol()
@@ -1762,19 +1839,26 @@ func (ev *EditorView) showSearchDialog() {
 
 	chkCase := vtui.NewCheckbox(0, 0, Msg("Search.CaseSensitive"), false)
 	chkCase.State = 0
-	if LastEditorSearchCase { chkCase.State = 1 }
+	if LastEditorSearchCase {
+		chkCase.State = 1
+	}
 
 	chkReverse := vtui.NewCheckbox(0, 0, Msg("Search.Reverse"), false)
 	chkReverse.State = 0
-	if LastEditorSearchReverse { chkReverse.State = 1 }
+	if LastEditorSearchReverse {
+		chkReverse.State = 1
+	}
 
 	btnFind := vtui.NewButton(0, 0, "&Find")
 	btnFind.IsDefault = true
 	btnCancel := vtui.NewButton(0, 0, "Cancel")
 
-	dlg.AddItem(lblPrompt); dlg.AddItem(editPattern)
-	dlg.AddItem(chkCase); dlg.AddItem(chkReverse)
-	dlg.AddItem(btnFind); dlg.AddItem(btnCancel)
+	dlg.AddItem(lblPrompt)
+	dlg.AddItem(editPattern)
+	dlg.AddItem(chkCase)
+	dlg.AddItem(chkReverse)
+	dlg.AddItem(btnFind)
+	dlg.AddItem(btnCancel)
 
 	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, dlgW-4, dlgH-4)
 	vbox.Add(lblPrompt, vtui.Margins{}, vtui.AlignLeft)
@@ -1832,9 +1916,11 @@ func (ev *EditorView) getLineLength(line int) int {
 	// Use a small buffer to check just the end of the line for line breaks
 	// to avoid loading massive binary lines entirely.
 	checkLen := 2
-	if totalLen < checkLen { checkLen = totalLen }
+	if totalLen < checkLen {
+		checkLen = totalLen
+	}
 
-	data, err := ev.pt.GetRange(start + totalLen - checkLen, checkLen)
+	data, err := ev.pt.GetRange(start+totalLen-checkLen, checkLen)
 	if err != nil || len(data) == 0 {
 		return totalLen
 	}
@@ -1854,7 +1940,7 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 	if ev.filePath == "" || ev.vfs == nil || ev.saving {
 		return
 	}
-	
+
 	ev.saving = true
 	ev.edited = true
 	vtui.DebugLog("EDITOR: Saving %s...", ev.filePath)
@@ -1931,8 +2017,12 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 
 		// Success: finalize the save atomically.
 		// Close reading handles to the OLD file so it can be replaced by Rename.
-		if oldAsync != nil { oldAsync.Close() }
-		if oldFile != nil { oldFile.Close() }
+		if oldAsync != nil {
+			oldAsync.Close()
+		}
+		if oldFile != nil {
+			oldFile.Close()
+		}
 
 		if err := ev.vfs.Rename(ctx.Context, tempPath, ev.filePath); err != nil {
 			ctx.RunOnUI(func() {
@@ -1962,9 +2052,13 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 		// PRELOAD CACHE TO PREVENT SCREEN FLICKER
 		// This MUST be outside RunOnUI to prevent blocking the main thread for 500ms.
 		for i := 0; i < 50; i++ { // max 500ms
-			if ctx.Err() != nil { break }
+			if ctx.Err() != nil {
+				break
+			}
 			_, e := newBuf.Read(visStart, 4096)
-			if e != piecetable.ErrLoading { break }
+			if e != piecetable.ErrLoading {
+				break
+			}
 			time.Sleep(10 * time.Millisecond)
 		}
 
@@ -1994,10 +2088,14 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 }
 
 func (ev *EditorView) getSelectionRange() (int, int) {
-	if !ev.selActive { return 0, 0 }
+	if !ev.selActive {
+		return 0, 0
+	}
 	cursorOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 	min, max := ev.selAnchorOffset, cursorOffset
-	if min > max { min, max = max, min }
+	if min > max {
+		min, max = max, min
+	}
 	return min, max
 }
 
@@ -2015,7 +2113,9 @@ func (ev *EditorView) CopySelection() {
 func (ev *EditorView) PasteText(text string) {
 	if !ev.edited {
 		ev.edited = true
-		if ev.indexCancel != nil { ev.indexCancel() }
+		if ev.indexCancel != nil {
+			ev.indexCancel()
+		}
 	}
 	ev.editSession++
 
@@ -2043,12 +2143,18 @@ func (ev *EditorView) PasteText(text string) {
 func (ev *EditorView) DeleteSelection() {
 	min, max := ev.getSelectionRange()
 	// Safety clamp to prevent panic on stale selection ranges
-	if min < 0 { min = 0 }
-	if max > ev.pt.Size() { max = ev.pt.Size() }
+	if min < 0 {
+		min = 0
+	}
+	if max > ev.pt.Size() {
+		max = ev.pt.Size()
+	}
 	if max > min {
 		if !ev.edited {
 			ev.edited = true
-			if ev.indexCancel != nil { ev.indexCancel() }
+			if ev.indexCancel != nil {
+				ev.indexCancel()
+			}
 		}
 		ev.editSession++
 
@@ -2066,7 +2172,7 @@ func (ev *EditorView) DeleteSelection() {
 	}
 }
 func (ev *EditorView) GetType() vtui.FrameType { return vtui.TypeUser + 2 }
-func (ev *EditorView) IsBusy() bool { return ev.pasting || ev.saving }
+func (ev *EditorView) IsBusy() bool            { return ev.pasting || ev.saving }
 func (ev *EditorView) GetTitle() string {
 	if ev.filePath != "" {
 		return "Edit: " + filepath.Base(ev.filePath)
@@ -2264,6 +2370,7 @@ func getCharCategory(r rune) int {
 	}
 	return catWord
 }
+
 // updateAutocomplete scans nearby lines for words matching the current prefix.
 func (ev *EditorView) updateAutocomplete() {
 	ev.acMatches = nil
@@ -2316,9 +2423,13 @@ func (ev *EditorView) updateAutocomplete() {
 	// Scan lines around cursor
 	maxDelta := 256
 	startL := ev.CursorLine - maxDelta
-	if startL < 0 { startL = 0 }
+	if startL < 0 {
+		startL = 0
+	}
 	endL := ev.CursorLine + maxDelta
-	if endL >= ev.li.LineCount() { endL = ev.li.LineCount() - 1 }
+	if endL >= ev.li.LineCount() {
+		endL = ev.li.LineCount() - 1
+	}
 
 	seen := make(map[string]bool)
 	var currentLineMatches []string
@@ -2329,10 +2440,14 @@ func (ev *EditorView) updateAutocomplete() {
 		lStart := ev.li.GetLineOffset(lineIdx)
 		lLen := ev.getLineLength(lineIdx)
 		// Limit to 512 bytes per line to avoid lag on minified files
-		if lLen > 512 { lLen = 512 }
+		if lLen > 512 {
+			lLen = 512
+		}
 
 		data, _ := ev.pt.GetRange(lStart, lLen)
-		if len(data) == 0 { return }
+		if len(data) == 0 {
+			return
+		}
 
 		lRunes := []rune(string(data))
 		wordStart := -1
@@ -2340,7 +2455,9 @@ func (ev *EditorView) updateAutocomplete() {
 		for i, r := range lRunes {
 			isWord := unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '-'
 			if isWord {
-				if wordStart == -1 { wordStart = i }
+				if wordStart == -1 {
+					wordStart = i
+				}
 			} else {
 				if wordStart != -1 {
 					word := string(lRunes[wordStart:i])

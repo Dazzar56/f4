@@ -1,8 +1,8 @@
 package main
 
 import (
-	"testing"
 	"github.com/unxed/f4/vfs"
+	"testing"
 )
 
 func TestFileOpTracker_SingleFile(t *testing.T) {
@@ -15,16 +15,26 @@ func TestFileOpTracker_SingleFile(t *testing.T) {
 
 	filePct, totalPct, name := tracker.GetProgress()
 
-	if name != "test.bin" { t.Errorf("Expected name test.bin, got %q", name) }
-	if filePct != 50 { t.Errorf("Expected 50%% file progress, got %d", filePct) }
-	if totalPct != 50 { t.Errorf("Expected 50%% total progress, got %d", totalPct) }
+	if name != "test.bin" {
+		t.Errorf("Expected name test.bin, got %q", name)
+	}
+	if filePct != 50 {
+		t.Errorf("Expected 50%% file progress, got %d", filePct)
+	}
+	if totalPct != 50 {
+		t.Errorf("Expected 50%% total progress, got %d", totalPct)
+	}
 
 	tracker.UpdateBytes(500)
 	tracker.FileDone()
 
 	filePct, totalPct, _ = tracker.GetProgress()
-	if filePct != 0 { t.Errorf("Expected 0%% file progress after FileDone, got %d", filePct) }
-	if totalPct != 100 { t.Errorf("Expected 100%% total progress, got %d", totalPct) }
+	if filePct != 0 {
+		t.Errorf("Expected 0%% file progress after FileDone, got %d", filePct)
+	}
+	if totalPct != 100 {
+		t.Errorf("Expected 100%% total progress, got %d", totalPct)
+	}
 }
 
 func TestFileOpTracker_MultiFile(t *testing.T) {
@@ -44,9 +54,13 @@ func TestFileOpTracker_MultiFile(t *testing.T) {
 	filePct, totalPct, _ := tracker.GetProgress()
 
 	// File 2 is at 50%
-	if filePct != 50 { t.Errorf("FilePct error: %d", filePct) }
+	if filePct != 50 {
+		t.Errorf("FilePct error: %d", filePct)
+	}
 	// Total is (100 + 50) / 200 = 75%
-	if totalPct != 75 { t.Errorf("TotalPct error: expected 75, got %d", totalPct) }
+	if totalPct != 75 {
+		t.Errorf("TotalPct error: expected 75, got %d", totalPct)
+	}
 }
 
 func TestFileOpTracker_ZeroBytesFallback(t *testing.T) {
@@ -93,8 +107,12 @@ func TestFileOpTracker_SkippedFiles(t *testing.T) {
 	tracker := NewFileOpTracker(total)
 
 	// Process 2 files
-	tracker.StartFile("f1", 100); tracker.UpdateBytes(100); tracker.FileDone()
-	tracker.StartFile("f2", 100); tracker.UpdateBytes(100); tracker.FileDone()
+	tracker.StartFile("f1", 100)
+	tracker.UpdateBytes(100)
+	tracker.FileDone()
+	tracker.StartFile("f2", 100)
+	tracker.UpdateBytes(100)
+	tracker.FileDone()
 
 	// Skip 1 file (announced size was 100)
 	tracker.StartFile("f3", 100)

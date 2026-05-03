@@ -2,10 +2,10 @@ package main
 
 import (
 	"encoding/json"
+	"github.com/unxed/vtui"
 	"os"
 	"path/filepath"
 	"sync"
-	"github.com/unxed/vtui"
 )
 
 type F4HistoryProvider struct {

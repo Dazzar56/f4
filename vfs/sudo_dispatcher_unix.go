@@ -56,17 +56,25 @@ func RunSudoDispatcher(sockPath string) {
 	}
 	defer l.Close()
 
-	if debugLog != nil { fmt.Fprintf(debugLog, "[%s] DISPATCHER: Socket created.\n", time.Now().Format("15:04:05")) }
+	if debugLog != nil {
+		fmt.Fprintf(debugLog, "[%s] DISPATCHER: Socket created.\n", time.Now().Format("15:04:05"))
+	}
 
 	fi, _ := os.Stat(sockPath)
 	fmt.Fprintf(os.Stderr, "SUDO_DISPATCHER: Socket created. Initial perms: %v\n", fi.Mode())
-	if debugLog != nil { fmt.Fprintf(debugLog, "[%s] DISPATCHER: Initial perms: %v\n", time.Now().Format("15:04:05"), fi.Mode()) }
+	if debugLog != nil {
+		fmt.Fprintf(debugLog, "[%s] DISPATCHER: Initial perms: %v\n", time.Now().Format("15:04:05"), fi.Mode())
+	}
 
 	fmt.Fprintf(os.Stderr, "SUDO_DISPATCHER: Setting permissions 0666...\n")
-	if debugLog != nil { fmt.Fprintf(debugLog, "[%s] DISPATCHER: Chmod 0666 starting...\n", time.Now().Format("15:04:05")) }
+	if debugLog != nil {
+		fmt.Fprintf(debugLog, "[%s] DISPATCHER: Chmod 0666 starting...\n", time.Now().Format("15:04:05"))
+	}
 	// Permissions 0666 allow the non-root f4 process to connect to the root-owned socket.
 	err = os.Chmod(sockPath, 0666)
-	if debugLog != nil { fmt.Fprintf(debugLog, "[%s] DISPATCHER: Chmod result: %v\n", time.Now().Format("15:04:05"), err) }
+	if debugLog != nil {
+		fmt.Fprintf(debugLog, "[%s] DISPATCHER: Chmod result: %v\n", time.Now().Format("15:04:05"), err)
+	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "SUDO_DISPATCHER: Chmod failed: %v\n", err)
 	}

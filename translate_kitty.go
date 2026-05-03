@@ -72,10 +72,9 @@ func TranslateKeyToKitty(e *vtinput.InputEvent, flags int, appCursorKeys bool) s
 	if (flags&1) != 0 && !kitty {
 		if legacy == "" && !isTextKey {
 			kitty = true
-		} else if !isTextKey && !(
-			(e.VirtualKeyCode == vtinput.VK_RETURN && !(ctrl || alt || shift)) ||
-				(e.VirtualKeyCode == vtinput.VK_TAB && !(ctrl || alt || shift)) ||
-				(e.VirtualKeyCode == vtinput.VK_BACK && !(ctrl || alt || shift))) {
+		} else if !isTextKey && !((e.VirtualKeyCode == vtinput.VK_RETURN && !(ctrl || alt || shift)) ||
+			(e.VirtualKeyCode == vtinput.VK_TAB && !(ctrl || alt || shift)) ||
+			(e.VirtualKeyCode == vtinput.VK_BACK && !(ctrl || alt || shift))) {
 			kitty = true
 		}
 
@@ -88,7 +87,7 @@ func TranslateKeyToKitty(e *vtinput.InputEvent, flags int, appCursorKeys bool) s
 		return ""
 	}
 
-	if (flags&8) == 0 {
+	if (flags & 8) == 0 {
 		switch e.VirtualKeyCode {
 		case vtinput.VK_NUMLOCK, vtinput.VK_CAPITAL, vtinput.VK_SCROLL,
 			vtinput.VK_LSHIFT, vtinput.VK_RSHIFT, vtinput.VK_SHIFT,
@@ -169,13 +168,21 @@ func TranslateKeyToKitty(e *vtinput.InputEvent, flags int, appCursorKeys bool) s
 
 	switch e.VirtualKeyCode {
 	case vtinput.VK_ESCAPE:
-		if keycode == 0 { keycode = 27 }
+		if keycode == 0 {
+			keycode = 27
+		}
 	case vtinput.VK_RETURN:
-		if keycode == 0 { keycode = 13 }
+		if keycode == 0 {
+			keycode = 13
+		}
 	case vtinput.VK_TAB:
-		if keycode == 0 { keycode = 9 }
+		if keycode == 0 {
+			keycode = 9
+		}
 	case vtinput.VK_SPACE:
-		if keycode == 0 { keycode = 32 }
+		if keycode == 0 {
+			keycode = 32
+		}
 	case vtinput.VK_SNAPSHOT:
 		keycode = 57361
 		suffix = 'u'
@@ -191,35 +198,65 @@ func TranslateKeyToKitty(e *vtinput.InputEvent, flags int, appCursorKeys bool) s
 	case vtinput.VK_BACK:
 		keycode = 127
 	case vtinput.VK_NUMPAD0:
-		if keycode == 0 { keycode = 57399 }
+		if keycode == 0 {
+			keycode = 57399
+		}
 	case vtinput.VK_NUMPAD1:
-		if keycode == 0 { keycode = 57400 }
+		if keycode == 0 {
+			keycode = 57400
+		}
 	case vtinput.VK_NUMPAD2:
-		if keycode == 0 { keycode = 57401 }
+		if keycode == 0 {
+			keycode = 57401
+		}
 	case vtinput.VK_NUMPAD3:
-		if keycode == 0 { keycode = 57402 }
+		if keycode == 0 {
+			keycode = 57402
+		}
 	case vtinput.VK_NUMPAD4:
-		if keycode == 0 { keycode = 57403 }
+		if keycode == 0 {
+			keycode = 57403
+		}
 	case vtinput.VK_NUMPAD5:
-		if keycode == 0 { keycode = 57404 }
+		if keycode == 0 {
+			keycode = 57404
+		}
 	case vtinput.VK_NUMPAD6:
-		if keycode == 0 { keycode = 57405 }
+		if keycode == 0 {
+			keycode = 57405
+		}
 	case vtinput.VK_NUMPAD7:
-		if keycode == 0 { keycode = 57406 }
+		if keycode == 0 {
+			keycode = 57406
+		}
 	case vtinput.VK_NUMPAD8:
-		if keycode == 0 { keycode = 57407 }
+		if keycode == 0 {
+			keycode = 57407
+		}
 	case vtinput.VK_NUMPAD9:
-		if keycode == 0 { keycode = 57408 }
+		if keycode == 0 {
+			keycode = 57408
+		}
 	case vtinput.VK_DECIMAL:
-		if keycode == 0 { keycode = 57409 }
+		if keycode == 0 {
+			keycode = 57409
+		}
 	case vtinput.VK_DIVIDE:
-		if keycode == 0 { keycode = 57410 }
+		if keycode == 0 {
+			keycode = 57410
+		}
 	case vtinput.VK_MULTIPLY:
-		if keycode == 0 { keycode = 57411 }
+		if keycode == 0 {
+			keycode = 57411
+		}
 	case vtinput.VK_SUBTRACT:
-		if keycode == 0 { keycode = 57412 }
+		if keycode == 0 {
+			keycode = 57412
+		}
 	case vtinput.VK_ADD:
-		if keycode == 0 { keycode = 57413 }
+		if keycode == 0 {
+			keycode = 57413
+		}
 	case vtinput.VK_CLEAR:
 		keycode = 57427
 		suffix = '~'

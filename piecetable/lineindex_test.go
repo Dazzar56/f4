@@ -125,11 +125,11 @@ func TestLineIndex_DeepConsistency(t *testing.T) {
 	// Compare with the reference
 	liExpected := NewLineIndex()
 	liExpected.Rebuild(pt)
-	
+
 	if li.LineCount() != liExpected.LineCount() {
 		t.Errorf("Consistency fail: LineCount %d != %d", li.LineCount(), liExpected.LineCount())
 	}
-	
+
 	for i := 0; i < li.LineCount(); i++ {
 		if li.GetLineOffset(i) != liExpected.GetLineOffset(i) {
 			t.Errorf("Consistency fail at line %d: offset %d != %d", i, li.GetLineOffset(i), liExpected.GetLineOffset(i))

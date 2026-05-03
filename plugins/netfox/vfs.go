@@ -4,14 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"github.com/unxed/f4/vfs"
 	"io"
 	"os"
-	"fmt"
-	"sync"
-	"strings"
 	"path"
 	"path/filepath"
-	"github.com/unxed/f4/vfs"
+	"strings"
+	"sync"
 )
 
 type NetFoxConfig struct {
@@ -40,10 +40,14 @@ func (v *NetFoxVFS) getConfigs() map[string]NetFoxConfig {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	data, err := os.ReadFile(v.path)
-	if err != nil { return make(map[string]NetFoxConfig) }
+	if err != nil {
+		return make(map[string]NetFoxConfig)
+	}
 	var configs map[string]NetFoxConfig
 	json.Unmarshal(data, &configs)
-	if configs == nil { configs = make(map[string]NetFoxConfig) }
+	if configs == nil {
+		configs = make(map[string]NetFoxConfig)
+	}
 
 	// Transparently decrypt passwords
 	for k, cfg := range configs {
@@ -79,9 +83,9 @@ func (v *NetFoxVFS) SaveConfig(name string, cfg NetFoxConfig) {
 	v.saveConfigs(configs)
 }
 
-func (v *NetFoxVFS) IsAtRoot() bool { return true }
-func (v *NetFoxVFS) GetPath() string { return "net://" }
-func (v *NetFoxVFS) IsAbs(p string) bool { return strings.HasPrefix(p, "net://") }
+func (v *NetFoxVFS) IsAtRoot() bool         { return true }
+func (v *NetFoxVFS) GetPath() string        { return "net://" }
+func (v *NetFoxVFS) IsAbs(p string) bool    { return strings.HasPrefix(p, "net://") }
 func (v *NetFoxVFS) SetPath(p string) error { return nil }
 
 func (v *NetFoxVFS) ReadDir(ctx context.Context, p string, onChunk func([]vfs.VFSItem)) error {
@@ -91,7 +95,9 @@ func (v *NetFoxVFS) ReadDir(ctx context.Context, p string, onChunk func([]vfs.VF
 	for name := range configs {
 		items = append(items, vfs.VFSItem{Name: name, IsDir: false, IsExecutable: true})
 	}
-	if len(items) > 0 { onChunk(items) }
+	if len(items) > 0 {
+		onChunk(items)
+	}
 	return nil
 }
 
@@ -101,7 +107,9 @@ func (v *NetFoxVFS) Stat(ctx context.Context, p string) (vfs.VFSItem, error) {
 		return vfs.VFSItem{Name: name, IsDir: false, IsExecutable: true}, nil
 	}
 	configs := v.getConfigs()
-	if _, ok := configs[name]; ok { return vfs.VFSItem{Name: name, IsDir: false, IsExecutable: true}, nil }
+	if _, ok := configs[name]; ok {
+		return vfs.VFSItem{Name: name, IsDir: false, IsExecutable: true}, nil
+	}
 	return vfs.VFSItem{}, os.ErrNotExist
 }
 
@@ -141,13 +149,20 @@ func (v *NetFoxVFS) SetAttributes(ctx context.Context, path string, item vfs.VFS
 	return os.ErrPermission
 }
 
-func (v *NetFoxVFS) GetCapabilities() vfs.VFSCapabilities { return vfs.VFSCapabilities{HasRandomAccess: true} }
+func (v *NetFoxVFS) GetCapabilities() vfs.VFSCapabilities {
+	return vfs.VFSCapabilities{HasRandomAccess: true}
+}
 func (v *NetFoxVFS) Search(ctx context.Context, p, pat string) (chan int64, error) { return nil, nil }
 
-type bufferReadAtCloser struct { *bytes.Reader }
+type bufferReadAtCloser struct{ *bytes.Reader }
+
 func (b *bufferReadAtCloser) Close() error { return nil }
-func (b *bufferReadAtCloser) Read(ctx context.Context, p []byte) (int, error) { return b.Reader.Read(p) }
-func (b *bufferReadAtCloser) ReadAt(ctx context.Context, p []byte, off int64) (int, error) { return b.Reader.ReadAt(p, off) }
+func (b *bufferReadAtCloser) Read(ctx context.Context, p []byte) (int, error) {
+	return b.Reader.Read(p)
+}
+func (b *bufferReadAtCloser) ReadAt(ctx context.Context, p []byte, off int64) (int, error) {
+	return b.Reader.ReadAt(p, off)
+}
 func (b *bufferReadAtCloser) Size() int64 { return int64(b.Reader.Len()) }
 
 func (v *NetFoxVFS) Open(ctx context.Context, p string) (vfs.ReadAtCloser, error) {
@@ -157,7 +172,9 @@ func (v *NetFoxVFS) Open(ctx context.Context, p string) (vfs.ReadAtCloser, error
 	}
 	configs := v.getConfigs()
 	cfg, ok := configs[name]
-	if !ok { return nil, os.ErrNotExist }
+	if !ok {
+		return nil, os.ErrNotExist
+	}
 	data, _ := json.MarshalIndent(cfg, "", "  ")
 	return &bufferReadAtCloser{Reader: bytes.NewReader(data)}, nil
 }
@@ -167,6 +184,7 @@ type netfoxWriter struct {
 	name string
 	buf  bytes.Buffer
 }
+
 func (w *netfoxWriter) Write(p []byte) (int, error) { return w.buf.Write(p) }
 func (w *netfoxWriter) Close() error {
 	var cfg NetFoxConfig
@@ -180,7 +198,7 @@ func (v *NetFoxVFS) Create(ctx context.Context, p string) (io.WriteCloser, error
 	return &netfoxWriter{v: v, name: v.Base(p)}, nil
 }
 func (v *NetFoxVFS) ParentVFS() vfs.VFS { return nil }
-func (v *NetFoxVFS) Close() error   { return nil }
+func (v *NetFoxVFS) Close() error       { return nil }
 func (v *NetFoxVFS) Clone() vfs.VFS {
 	return NewNetFoxVFS(v.path)
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
+
 // mockMetadataVFS allows intercepting Stat and SetAttributes for testing.
 type mockMetadataVFS struct {
 	vfs.VFS
@@ -224,8 +225,12 @@ func TestAttributesDialog_WindowsSetFlags(t *testing.T) {
 
 	walkUI(dlg.(vtui.UIElement), func(el vtui.UIElement) bool {
 		if c, ok := el.(*vtui.Checkbox); ok {
-			if strings.Contains(c.GetText(), "Read only") { chkRO = c }
-			if strings.Contains(c.GetText(), "Hidden") { chkHidden = c }
+			if strings.Contains(c.GetText(), "Read only") {
+				chkRO = c
+			}
+			if strings.Contains(c.GetText(), "Hidden") {
+				chkHidden = c
+			}
 		}
 		if b, ok := el.(*vtui.Button); ok && strings.Contains(b.GetText(), "Set") {
 			btnSet = b
@@ -478,7 +483,7 @@ func TestAttributesDialog_SetFlow(t *testing.T) {
 Loop:
 	for {
 		top := fm.GetTopFrame()
-		// CRITICAL: Exit when the dialog is marked Done. 
+		// CRITICAL: Exit when the dialog is marked Done.
 		// We don't wait for nil because cleanupDoneFrames only runs in the main loop.
 		if top == nil || top.IsDone() {
 			break Loop

@@ -1,9 +1,9 @@
 package chroma
 
 import (
-	"testing"
 	"github.com/alecthomas/chroma/v2"
 	"github.com/unxed/vtui"
+	"testing"
 )
 
 func TestGetSyntaxAttr_Fallbacks(t *testing.T) {

@@ -1,19 +1,19 @@
 package main
 
 import (
+	"encoding/base64"
+	"runtime"
 	"sort"
 	"sync"
 	"unicode/utf8"
-	"encoding/base64"
-	"runtime"
 
 	"github.com/mattn/go-runewidth"
 	"strings"
 
-	"github.com/unxed/vtinput"
-	"github.com/unxed/vtui"
 	"github.com/unxed/f4/piecetable"
 	"github.com/unxed/f4/textlayout"
+	"github.com/unxed/vtinput"
+	"github.com/unxed/vtui"
 )
 
 // StyleChange фиксирует момент смены атрибутов в байтовом потоке лога.
@@ -46,17 +46,17 @@ type TerminalView struct {
 	Palette              [256]uint32
 
 	// --- Бесконечный лог (History & Reflow) ---
-	pt              *piecetable.PieceTable
-	li              *piecetable.LineIndex
-	engine          *textlayout.WrapEngine
-	styles          []StyleChange
-	lastAttr        uint64
-	lastLineOffset  int // Смещение начала текущей строки в PieceTable
+	pt             *piecetable.PieceTable
+	li             *piecetable.LineIndex
+	engine         *textlayout.WrapEngine
+	styles         []StyleChange
+	lastAttr       uint64
+	lastLineOffset int // Смещение начала текущей строки в PieceTable
 
 	// Скроллинг истории (визуальный ряд)
 	ScrollTopRow int
 
-	Title              string
+	Title                 string
 	Win32InputMode        bool
 	BracketedPasteMode    bool
 	ApplicationCursorKeys bool
@@ -68,9 +68,9 @@ type TerminalView struct {
 	pendingLog      []byte
 	pendingAttr     uint64
 
-	Muted           bool
-	lastCharWasCR   bool
-	authCache       map[string]int
+	Muted         bool
+	lastCharWasCR bool
+	authCache     map[string]int
 
 	OnTitleChange func(string)
 }
@@ -214,7 +214,6 @@ func (tv *TerminalView) getBuffer() [][]vtui.CharInfo {
 	return tv.Lines
 }
 
-
 func (tv *TerminalView) SetMuted(muted bool) {
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
@@ -254,7 +253,9 @@ func (tv *TerminalView) PutChar(r rune, attr uint64) {
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
 
-	if tv.Muted { return }
+	if tv.Muted {
+		return
+	}
 
 	// 1. Запись в бесконечный лог (если не AltScreen)
 	if !tv.UseAltScreen {
@@ -352,7 +353,9 @@ func (tv *TerminalView) newline() {
 func (tv *TerminalView) ScrollUp(top, bottom, n int) {
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
-	if tv.Muted { return }
+	if tv.Muted {
+		return
+	}
 	tv.scrollUp(top, bottom, n)
 }
 
@@ -360,9 +363,15 @@ func (tv *TerminalView) scrollUp(top, bottom, n int) {
 	// Muted to avoid log flood during heavy outputs
 	// vtui.DebugLog("TERM: scrollUp [Top:%d Bottom:%d N:%d]", top, bottom, n)
 	buf := tv.getBuffer()
-	if top < 0 { top = 0 }
-	if bottom >= len(buf) { bottom = len(buf) - 1 }
-	if top >= bottom { return }
+	if top < 0 {
+		top = 0
+	}
+	if bottom >= len(buf) {
+		bottom = len(buf) - 1
+	}
+	if top >= bottom {
+		return
+	}
 
 	for i := 0; i < n; i++ {
 		recycledLine := buf[top]
@@ -376,7 +385,9 @@ func (tv *TerminalView) scrollUp(top, bottom, n int) {
 func (tv *TerminalView) ScrollDown(top, bottom, n int) {
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
-	if tv.Muted { return }
+	if tv.Muted {
+		return
+	}
 	tv.scrollDown(top, bottom, n)
 }
 
@@ -384,9 +395,15 @@ func (tv *TerminalView) scrollDown(top, bottom, n int) {
 	// Muted to avoid log flood during heavy outputs
 	// vtui.DebugLog("TERM: scrollDown [Top:%d Bottom:%d N:%d]", top, bottom, n)
 	buf := tv.getBuffer()
-	if top < 0 { top = 0 }
-	if bottom >= len(buf) { bottom = len(buf) - 1 }
-	if top >= bottom { return }
+	if top < 0 {
+		top = 0
+	}
+	if bottom >= len(buf) {
+		bottom = len(buf) - 1
+	}
+	if top >= bottom {
+		return
+	}
 
 	for i := 0; i < n; i++ {
 		recycledLine := buf[bottom]
@@ -405,18 +422,26 @@ func (tv *TerminalView) scrollDown(top, bottom, n int) {
 func (tv *TerminalView) DeleteCharacters(n int, attr uint64) {
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
-	if tv.Muted { return }
+	if tv.Muted {
+		return
+	}
 	buf := tv.getBuffer()
-	if tv.CursorY < 0 || tv.CursorY >= len(buf) { return }
+	if tv.CursorY < 0 || tv.CursorY >= len(buf) {
+		return
+	}
 	line := buf[tv.CursorY]
-	if tv.CursorX < 0 || tv.CursorX >= tv.Width { return }
+	if tv.CursorX < 0 || tv.CursorX >= tv.Width {
+		return
+	}
 
 	if tv.CursorX+n < tv.Width {
 		copy(line[tv.CursorX:], line[tv.CursorX+n:])
 	}
 
 	clearStart := tv.Width - n
-	if clearStart < tv.CursorX { clearStart = tv.CursorX }
+	if clearStart < tv.CursorX {
+		clearStart = tv.CursorX
+	}
 	for i := clearStart; i < tv.Width; i++ {
 		line[i] = vtui.CharInfo{Char: ' ', Attributes: attr}
 	}
@@ -425,18 +450,26 @@ func (tv *TerminalView) DeleteCharacters(n int, attr uint64) {
 func (tv *TerminalView) InsertBlankCharacters(n int, attr uint64) {
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
-	if tv.Muted { return }
+	if tv.Muted {
+		return
+	}
 	buf := tv.getBuffer()
-	if tv.CursorY < 0 || tv.CursorY >= len(buf) { return }
+	if tv.CursorY < 0 || tv.CursorY >= len(buf) {
+		return
+	}
 	line := buf[tv.CursorY]
-	if tv.CursorX < 0 || tv.CursorX >= tv.Width { return }
+	if tv.CursorX < 0 || tv.CursorX >= tv.Width {
+		return
+	}
 
 	if tv.CursorX+n < tv.Width {
 		copy(line[tv.CursorX+n:], line[tv.CursorX:])
 	}
 
 	end := tv.CursorX + n
-	if end > tv.Width { end = tv.Width }
+	if end > tv.Width {
+		end = tv.Width
+	}
 	for i := tv.CursorX; i < end; i++ {
 		line[i] = vtui.CharInfo{Char: ' ', Attributes: attr}
 	}
@@ -446,11 +479,21 @@ func (tv *TerminalView) SetCursor(x, y int) {
 	// vtui.DebugLog("TERM: SetCursor to (%d,%d)", x, y)
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
-	if tv.Muted { return }
-	if x < 0 { x = 0 }
-	if x >= tv.Width { x = tv.Width - 1 }
-	if y < 0 { y = 0 }
-	if y >= tv.Height { y = tv.Height - 1 }
+	if tv.Muted {
+		return
+	}
+	if x < 0 {
+		x = 0
+	}
+	if x >= tv.Width {
+		x = tv.Width - 1
+	}
+	if y < 0 {
+		y = 0
+	}
+	if y >= tv.Height {
+		y = tv.Height - 1
+	}
 	tv.CursorX, tv.CursorY = x, y
 	if x == 0 {
 		tv.lastCharWasCR = true
@@ -460,14 +503,18 @@ func (tv *TerminalView) SetCursor(x, y int) {
 func (tv *TerminalView) SaveCursor() {
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
-	if tv.Muted { return }
+	if tv.Muted {
+		return
+	}
 	tv.decSavedX, tv.decSavedY = tv.CursorX, tv.CursorY
 }
 
 func (tv *TerminalView) RestoreCursor() {
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
-	if tv.Muted { return }
+	if tv.Muted {
+		return
+	}
 	tv.CursorX, tv.CursorY = tv.decSavedX, tv.decSavedY
 }
 
@@ -480,9 +527,13 @@ func (tv *TerminalView) RepeatLastChar(n int, r rune, attr uint64) {
 func (tv *TerminalView) EraseCharacter(n int, attr uint64) {
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
-	if tv.Muted { return }
+	if tv.Muted {
+		return
+	}
 	buf := tv.getBuffer()
-	if tv.CursorY < 0 || tv.CursorY >= len(buf) { return }
+	if tv.CursorY < 0 || tv.CursorY >= len(buf) {
+		return
+	}
 	line := buf[tv.CursorY]
 	for i := 0; i < n && (tv.CursorX+i) < tv.Width; i++ {
 		line[tv.CursorX+i] = vtui.CharInfo{Char: ' ', Attributes: attr}
@@ -492,7 +543,9 @@ func (tv *TerminalView) EraseCharacter(n int, attr uint64) {
 func (tv *TerminalView) EraseDisplay(mode int, attr uint64) {
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
-	if tv.Muted { return }
+	if tv.Muted {
+		return
+	}
 	buf := tv.getBuffer()
 
 	// При очистке экрана утилитами вроде `clear` мы пушим пустые строки в лог,
@@ -518,7 +571,9 @@ func (tv *TerminalView) EraseDisplay(mode int, attr uint64) {
 		if tv.CursorY >= 0 && tv.CursorY < tv.Height {
 			line := buf[tv.CursorY]
 			for j := (tv.CursorX); j < tv.Width; j++ {
-				if j >= 0 { line[j] = vtui.CharInfo{Char: ' ', Attributes: attr} }
+				if j >= 0 {
+					line[j] = vtui.CharInfo{Char: ' ', Attributes: attr}
+				}
 			}
 		}
 		for i := tv.CursorY + 1; i < tv.Height; i++ {
@@ -534,9 +589,13 @@ func (tv *TerminalView) EraseDisplay(mode int, attr uint64) {
 func (tv *TerminalView) EraseLine(mode int, attr uint64) {
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
-	if tv.Muted { return }
+	if tv.Muted {
+		return
+	}
 	buf := tv.getBuffer()
-	if tv.CursorY < 0 || tv.CursorY >= tv.Height { return }
+	if tv.CursorY < 0 || tv.CursorY >= tv.Height {
+		return
+	}
 	line := buf[tv.CursorY]
 	start, end := 0, tv.Width
 	if mode == 0 {
@@ -555,7 +614,9 @@ func (tv *TerminalView) SetAltScreen(enable bool) {
 	vtui.DebugLog("TERM: SetAltScreen %v", enable)
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
-	if tv.UseAltScreen == enable { return }
+	if tv.UseAltScreen == enable {
+		return
+	}
 	if enable {
 		tv.savedX, tv.savedY = tv.CursorX, tv.CursorY
 		tv.CursorX, tv.CursorY = 0, 0
@@ -597,7 +658,9 @@ func (tv *TerminalView) Show(scr *vtui.ScreenBuf) {
 	}
 
 	for y, line := range buf {
-		if y >= tv.Height { break }
+		if y >= tv.Height {
+			break
+		}
 		scr.Write(tv.X1, tv.Y1+y, line)
 	}
 
@@ -637,9 +700,13 @@ func (tv *TerminalView) Resize(w, h int) {
 
 	// Сохраняем содержимое AltScreen (для TUI приложений типа nano/mc).
 	minH := h
-	if tv.Height < minH { minH = tv.Height }
+	if tv.Height < minH {
+		minH = tv.Height
+	}
 	minW := w
-	if tv.Width < minW { minW = tv.Width }
+	if tv.Width < minW {
+		minW = tv.Width
+	}
 
 	for y := 0; y < minH; y++ {
 		copy(newAltLines[y][:minW], tv.AltLines[y][:minW])
@@ -647,7 +714,7 @@ func (tv *TerminalView) Resize(w, h int) {
 
 	// Восстанавливаем Primary Screen из бесконечного лога (PieceTable)
 	totalRows := tv.engine.GetTotalVisualRows()
-	
+
 	rowsToDraw := totalRows
 	if rowsToDraw > h {
 		rowsToDraw = h
@@ -660,7 +727,9 @@ func (tv *TerminalView) Resize(w, h int) {
 	for vRow := startRow; vRow < totalRows; vRow++ {
 		logIdx, fragIdx := tv.engine.GetLogLineAtVisualRow(vRow)
 		frags := tv.engine.GetFragments(logIdx)
-		if fragIdx >= len(frags) { continue }
+		if fragIdx >= len(frags) {
+			continue
+		}
 		frag := frags[fragIdx]
 
 		data, _ := tv.pt.GetRange(frag.ByteOffsetStart, frag.ByteOffsetEnd-frag.ByteOffsetStart)
@@ -691,7 +760,9 @@ func (tv *TerminalView) Resize(w, h int) {
 			if r >= 0x7F {
 				rw = runewidth.RuneWidth(r)
 			}
-			if rw <= 0 { rw = 1 }
+			if rw <= 0 {
+				rw = 1
+			}
 
 			// Защита от переполнения новой ширины
 			if gridX+rw > w {
@@ -709,8 +780,10 @@ func (tv *TerminalView) Resize(w, h int) {
 
 	// Вычисляем новую позицию курсора. В f4 терминал всегда прижат к низу.
 	newCursorY := h - 1
-	if newCursorY < 0 { newCursorY = 0 }
-	
+	if newCursorY < 0 {
+		newCursorY = 0
+	}
+
 	newCursorX := 0
 	if totalRows > 0 {
 		lastLogIdx, lastFragIdx := tv.engine.GetLogLineAtVisualRow(totalRows - 1)
@@ -730,18 +803,24 @@ func (tv *TerminalView) Resize(w, h int) {
 
 	if !tv.UseAltScreen {
 		tv.CursorX = newCursorX
-		if tv.CursorX >= w { tv.CursorX = w - 1 }
+		if tv.CursorX >= w {
+			tv.CursorX = w - 1
+		}
 		tv.CursorY = newCursorY
 	} else {
-		if tv.CursorX >= w { tv.CursorX = w - 1 }
-		if tv.CursorY >= h { tv.CursorY = h - 1 }
+		if tv.CursorX >= w {
+			tv.CursorX = w - 1
+		}
+		if tv.CursorY >= h {
+			tv.CursorY = h - 1
+		}
 	}
 	tv.lastCharWasCR = (tv.CursorX == 0)
 }
-func (tv *TerminalView) IsModal() bool        { return false }
-func (tv *TerminalView) RequestFocus() bool   { return true }
-func (tv *TerminalView) Close()               {}
-func (tv *TerminalView) GetWindowNumber() int { return 0 }
+func (tv *TerminalView) IsModal() bool         { return false }
+func (tv *TerminalView) RequestFocus() bool    { return true }
+func (tv *TerminalView) Close()                {}
+func (tv *TerminalView) GetWindowNumber() int  { return 0 }
 func (tv *TerminalView) SetWindowNumber(n int) {}
 
 func (tv *TerminalView) HandleFar2lAPC(s string) {
@@ -754,7 +833,9 @@ func (tv *TerminalView) HandleFar2lAPC(s string) {
 	s = s[idx:]
 
 	if s == "far2l1" {
-		if tv.pty != nil { tv.pty.Write([]byte("\x1b_far2lok\x07")) }
+		if tv.pty != nil {
+			tv.pty.Write([]byte("\x1b_far2lok\x07"))
+		}
 	} else if s == "far2l0" {
 		// Disable
 	} else if s == "far2lok" {

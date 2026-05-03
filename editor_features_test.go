@@ -5,10 +5,10 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/unxed/f4/piecetable"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
-	"github.com/unxed/f4/piecetable"
 )
 
 func TestEditor_TabBehavior(t *testing.T) {
@@ -105,9 +105,15 @@ func TestEditor_CursorBeyondEOL(t *testing.T) {
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
 
 	// Should land at the end of line 2 but keep high DesiredVisualCol
-	if ev.CursorLine != 1 { t.Fatal("Move down failed") }
-	if ev.CursorPos != 9 { t.Errorf("Expected to land at EOL, got pos %d", ev.CursorPos) }
-	if ev.CursorVirtualSpaces <= 0 { t.Error("Virtual spaces lost on down move") }
+	if ev.CursorLine != 1 {
+		t.Fatal("Move down failed")
+	}
+	if ev.CursorPos != 9 {
+		t.Errorf("Expected to land at EOL, got pos %d", ev.CursorPos)
+	}
+	if ev.CursorVirtualSpaces <= 0 {
+		t.Error("Virtual spaces lost on down move")
+	}
 }
 
 func TestEditor_EditorConfigIntegration(t *testing.T) {
@@ -154,12 +160,12 @@ func TestEditor_Tab_MaterializeBeyondEOL(t *testing.T) {
 	ev.CursorBeyondEOL = true
 	ev.CursorPos = 4
 	ev.CursorVirtualSpaces = 2 // Virtual cursor at col 6
-	ev.ExpandTabs = 1 // Spaces
+	ev.ExpandTabs = 1          // Spaces
 	ev.TabSize = 4
 
 	// Press Tab at col 6
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_TAB})
-	
+
 	// Should materialize 2 virtual spaces + 2 spaces for tab (to reach col 8)
 	expected := "line    "
 	if ev.pt.String() != expected {
@@ -173,11 +179,10 @@ func TestEditor_AutoIndent_EmptyLine(t *testing.T) {
 	pt := piecetable.New(nil)
 	ev := NewEditorView(pt, nil, "test.txt")
 	ev.AutoIndent = true
-	
+
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN})
-	
+
 	if ev.li.LineCount() != 2 {
 		t.Errorf("Enter failed on empty file, lines: %d", ev.li.LineCount())
 	}
 }
-

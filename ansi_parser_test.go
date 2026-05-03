@@ -1,8 +1,8 @@
 package main
 
 import (
-	"testing"
 	"strings"
+	"testing"
 
 	"github.com/unxed/vtui"
 )
@@ -251,11 +251,11 @@ func TestAnsiParser_MovementAndErase(t *testing.T) {
 		t.Errorf("CUD failed: expected Y=3, got %d", tv.CursorY)
 	}
 	p.Process([]byte("\x1b[5C")) // Forward 5
-	if tv.CursorX != 8 { // 3 + 5 = 8
+	if tv.CursorX != 8 {         // 3 + 5 = 8
 		t.Errorf("CUF failed: expected X=8, got %d", tv.CursorX)
 	}
 	p.Process([]byte("\x1b[4D")) // Backward 4
-	if tv.CursorX != 4 { // 8 - 4 = 4
+	if tv.CursorX != 4 {         // 8 - 4 = 4
 		t.Errorf("CUB failed: expected X=4, got %d", tv.CursorX)
 	}
 
@@ -313,8 +313,8 @@ func TestAnsiParser_AdvancedCSI(t *testing.T) {
 	tv.SetCursor(0, 0)
 
 	// Test Delete Characters (P)
-	p.Process([]byte("12345")) // Write at (0,0). Cursor moves to (5,0)
-	tv.SetCursor(1, 0)         // Move to '2'
+	p.Process([]byte("12345"))   // Write at (0,0). Cursor moves to (5,0)
+	tv.SetCursor(1, 0)           // Move to '2'
 	p.Process([]byte("\x1b[2P")) // Delete 2 characters ('2' and '3')
 	// Result should be "145" at index 0, 1, 2 of line 0
 	if tv.Lines[0][1].Char != '4' || tv.Lines[0][2].Char != '5' {
@@ -425,15 +425,15 @@ func TestAnsiParser_OSC52_Malformed(t *testing.T) {
 	// 1. Malformed Base64 (should not panic or crash)
 	// OSC 52 ; c ; <invalid_base64> BEL
 	p.Process([]byte("\x1b]52;c;!!!\x07"))
-	
+
 	// 2. Incomplete OSC 52
 	p.Process([]byte("\x1b]52;c;"))
 	p.Process([]byte{0x07}) // Just BEL
-	
+
 	// 3. Very large OSC 52 (Buffer overflow protection check)
 	largeSeq := "\x1b]52;c;" + strings.Repeat("A", 10000) + "\x07"
 	p.Process([]byte(largeSeq))
-	
+
 	// If we are here without panic, the test is passed.
 }
 
@@ -444,7 +444,7 @@ func TestAnsiParser_UnrecognizedCSI(t *testing.T) {
 	// CSI ? 999 z is unrecognized.
 	// The parser must consume it and return to Ground state without side effects.
 	p.Process([]byte("\x1b[?999z"))
-	
+
 	if p.State != StateGround {
 		t.Errorf("Parser stuck in state %v after unrecognized CSI", p.State)
 	}
@@ -475,41 +475,57 @@ func TestAnsiParser_DECRQM(t *testing.T) {
 	// Mode 1: Application Cursor Keys
 	tv.ApplicationCursorKeys = false
 	p.Process([]byte("\x1b[?1$p"))
-	if string(pty.written) != "\x1b[?1;2$y" { t.Errorf("Mode 1 Reset fail: %q", string(pty.written)) }
+	if string(pty.written) != "\x1b[?1;2$y" {
+		t.Errorf("Mode 1 Reset fail: %q", string(pty.written))
+	}
 	pty.written = nil
 	tv.ApplicationCursorKeys = true
 	p.Process([]byte("\x1b[?1$p"))
-	if string(pty.written) != "\x1b[?1;1$y" { t.Errorf("Mode 1 Set fail: %q", string(pty.written)) }
+	if string(pty.written) != "\x1b[?1;1$y" {
+		t.Errorf("Mode 1 Set fail: %q", string(pty.written))
+	}
 	pty.written = nil
 
 	// Mode 47 & 1049: Alt Screen
 	tv.UseAltScreen = false
 	p.Process([]byte("\x1b[?47$p"))
-	if string(pty.written) != "\x1b[?47;2$y" { t.Errorf("Mode 47 Reset fail") }
+	if string(pty.written) != "\x1b[?47;2$y" {
+		t.Errorf("Mode 47 Reset fail")
+	}
 	pty.written = nil
 	tv.UseAltScreen = true
 	p.Process([]byte("\x1b[?1049$p"))
-	if string(pty.written) != "\x1b[?1049;1$y" { t.Errorf("Mode 1049 Set fail") }
+	if string(pty.written) != "\x1b[?1049;1$y" {
+		t.Errorf("Mode 1049 Set fail")
+	}
 	pty.written = nil
 
 	// Mode 2004: Bracketed Paste
 	tv.BracketedPasteMode = false
 	p.Process([]byte("\x1b[?2004$p"))
-	if string(pty.written) != "\x1b[?2004;2$y" { t.Errorf("Mode 2004 Reset fail") }
+	if string(pty.written) != "\x1b[?2004;2$y" {
+		t.Errorf("Mode 2004 Reset fail")
+	}
 	pty.written = nil
 	tv.BracketedPasteMode = true
 	p.Process([]byte("\x1b[?2004$p"))
-	if string(pty.written) != "\x1b[?2004;1$y" { t.Errorf("Mode 2004 Set fail") }
+	if string(pty.written) != "\x1b[?2004;1$y" {
+		t.Errorf("Mode 2004 Set fail")
+	}
 	pty.written = nil
 
 	// Mode 9001: Win32 Input
 	tv.Win32InputMode = false
 	p.Process([]byte("\x1b[?9001$p"))
-	if string(pty.written) != "\x1b[?9001;2$y" { t.Errorf("Mode 9001 Reset fail") }
+	if string(pty.written) != "\x1b[?9001;2$y" {
+		t.Errorf("Mode 9001 Reset fail")
+	}
 	pty.written = nil
 	tv.Win32InputMode = true
 	p.Process([]byte("\x1b[?9001$p"))
-	if string(pty.written) != "\x1b[?9001;1$y" { t.Errorf("Mode 9001 Set fail") }
+	if string(pty.written) != "\x1b[?9001;1$y" {
+		t.Errorf("Mode 9001 Set fail")
+	}
 	pty.written = nil
 
 	// --- 2. Standard Modes ---

@@ -2,9 +2,9 @@ package main
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
-	"path/filepath"
 
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
@@ -140,7 +140,9 @@ func TestMacro_TriggerSwallowing(t *testing.T) {
 		Char: '.', ControlKeyState: vtinput.LeftCtrlPressed,
 	}
 	mgr.Filter(startEvent)
-	if !mgr.Recording { t.Fatal("Should be recording") }
+	if !mgr.Recording {
+		t.Fatal("Should be recording")
+	}
 
 	// 2. Type 'A'
 	mgr.Filter(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'a', VirtualKeyCode: vtinput.VK_A})
@@ -152,8 +154,12 @@ func TestMacro_TriggerSwallowing(t *testing.T) {
 	}
 	res := mgr.Filter(stopEvent)
 
-	if !res { t.Error("Stop trigger should be consumed (return true)") }
-	if mgr.Recording { t.Error("Should have stopped recording") }
+	if !res {
+		t.Error("Stop trigger should be consumed (return true)")
+	}
+	if mgr.Recording {
+		t.Error("Should have stopped recording")
+	}
 
 	// 4. Verify buffer: should ONLY contain 'a', NOT the trigger dot
 	if len(mgr.Buffer) != 1 || mgr.Buffer[0].Char != 'a' {

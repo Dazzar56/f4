@@ -3,10 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -213,7 +213,7 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 		}
 
 		state := &FileOpState{
-			Tracker: tracker,
+			Tracker:  tracker,
 			UpdateUI: updateUI,
 			OnBytes: func(n int) {
 				tracker.UpdateBytes(n)
@@ -713,7 +713,9 @@ func recursiveCopy(ctx context.Context, srcVfs vfs.VFS, srcPath string, dstVfs v
 
 	buf := make([]byte, 128*1024)
 	for {
-		if ctx.Err() != nil { return ctx.Err() }
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		n, rerr := srcFile.Read(ctx, buf)
 		if n > 0 {
 			if _, werr := dstFile.Write(buf[:n]); werr != nil {
@@ -724,7 +726,9 @@ func recursiveCopy(ctx context.Context, srcVfs vfs.VFS, srcPath string, dstVfs v
 			}
 		}
 		if rerr != nil {
-			if rerr == io.EOF { break }
+			if rerr == io.EOF {
+				break
+			}
 			return rerr
 		}
 	}
@@ -747,7 +751,9 @@ func AskOverwrite(ctx context.Context, destPath string, srcStat, dstStat vfs.VFS
 	var dlg *vtui.Window
 
 	vtui.FrameManager.PostTask(func() {
-		if ctx.Err() != nil { return }
+		if ctx.Err() != nil {
+			return
+		}
 
 		width := 76
 		height := 13
@@ -848,7 +854,9 @@ func AskOverwrite(ctx context.Context, destPath string, srcStat, dstStat vfs.VFS
 		return res, rem
 	case <-ctx.Done():
 		vtui.FrameManager.PostTask(func() {
-			if dlg != nil && !dlg.IsDone() { dlg.Close() }
+			if dlg != nil && !dlg.IsDone() {
+				dlg.Close()
+			}
 		})
 		return 6, false
 	}
@@ -858,13 +866,21 @@ func AskRename(ctx context.Context, oldName string, anchor vtui.Frame) string {
 	resultChan := make(chan string, 1)
 	var dlg *vtui.Window
 	vtui.FrameManager.PostTask(func() {
-		if ctx.Err() != nil { return }
+		if ctx.Err() != nil {
+			return
+		}
 		dlg = vtui.InputBoxOn(anchor, " Rename ", "New name:", oldName, func(s string) {
-			select { case resultChan <- s: default: }
+			select {
+			case resultChan <- s:
+			default:
+			}
 		})
 		dlg.OnResult = func(code int) {
 			if code < 0 {
-				select { case resultChan <- "": default: }
+				select {
+				case resultChan <- "":
+				default:
+				}
 			}
 		}
 	})
@@ -873,7 +889,9 @@ func AskRename(ctx context.Context, oldName string, anchor vtui.Frame) string {
 		return res
 	case <-ctx.Done():
 		vtui.FrameManager.PostTask(func() {
-			if dlg != nil && !dlg.IsDone() { dlg.Close() }
+			if dlg != nil && !dlg.IsDone() {
+				dlg.Close()
+			}
 		})
 		return ""
 	}
@@ -885,7 +903,9 @@ func AskError(ctx context.Context, op string, err error, anchor vtui.Frame) int 
 	var dlg *vtui.Window
 
 	vtui.FrameManager.PostTask(func() {
-		if ctx.Err() != nil { return }
+		if ctx.Err() != nil {
+			return
+		}
 		msg := fmt.Sprintf("%s:\n%s\n\n%s", op, err.Error(), "What to do?")
 		if anchor != nil {
 			dlg = vtui.ShowMessageOn(anchor, " Error ", msg, []string{Msg("Btn.Retry"), "&Skip", "&Abort"})
@@ -896,7 +916,10 @@ func AskError(ctx context.Context, op string, err error, anchor vtui.Frame) int 
 			if code < 0 {
 				code = 2
 			}
-			select { case resultChan <- code: default: }
+			select {
+			case resultChan <- code:
+			default:
+			}
 		}
 	})
 
@@ -905,7 +928,9 @@ func AskError(ctx context.Context, op string, err error, anchor vtui.Frame) int 
 		return res
 	case <-ctx.Done():
 		vtui.FrameManager.PostTask(func() {
-			if dlg != nil && !dlg.IsDone() { dlg.Close() }
+			if dlg != nil && !dlg.IsDone() {
+				dlg.Close()
+			}
 		})
 		return 2 // 2 matches Abort button index
 	}

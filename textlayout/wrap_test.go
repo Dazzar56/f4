@@ -2,10 +2,10 @@ package textlayout
 
 import (
 	"bytes"
+	"github.com/unxed/f4/piecetable"
 	"reflect"
 	"testing"
 	"time"
-	"github.com/unxed/f4/piecetable"
 )
 
 func TestWrapEngine_SimpleWrap(t *testing.T) {
@@ -210,7 +210,9 @@ func TestWrapEngine_WrappedTabAlignment(t *testing.T) {
 	we.SetWidth(2)
 
 	frags := we.GetFragments(0)
-	if len(frags) < 2 { t.Fatal("Should wrap") }
+	if len(frags) < 2 {
+		t.Fatal("Should wrap")
+	}
 
 	lastFrag := frags[len(frags)-1]
 	// '3' (1) + tab (1) = 2
@@ -338,8 +340,10 @@ func TestWrapEngine_EndOfLineCursor(t *testing.T) {
 		t.Errorf("Cursor at EOF on first line: expected (0, 3), got (%d, %d)", row, col)
 	}
 }
+
 type loadingBuffer struct{}
-func (l *loadingBuffer) Size() int { return 100 }
+
+func (l *loadingBuffer) Size() int                               { return 100 }
 func (l *loadingBuffer) Read(offset, length int) ([]byte, error) { return nil, piecetable.ErrLoading }
 
 func TestWrapEngine_ErrLoading(t *testing.T) {
@@ -470,7 +474,9 @@ func TestWrapEngine_CacheResilience(t *testing.T) {
 
 	// Fill cache
 	we.GetTotalVisualRows()
-	if we.validUntil != 4 { t.Fatalf("Setup fail: validUntil=%d", we.validUntil) }
+	if we.validUntil != 4 {
+		t.Fatalf("Setup fail: validUntil=%d", we.validUntil)
+	}
 
 	// Shorten the document and index
 	pt.Delete(0, 10) // Delete almost everything
@@ -509,7 +515,9 @@ func TestWrapEngine_LogicalToVisual_CappedLine(t *testing.T) {
 	// Tests safety when a logical line is massive (binary) and indexing is capped at 64KB.
 	// Create 100KB of data with NO newlines.
 	data := make([]byte, 100*1024)
-	for i := range data { data[i] = 'a' }
+	for i := range data {
+		data[i] = 'a'
+	}
 
 	pt := piecetable.New(data)
 	li := piecetable.NewLineIndex()

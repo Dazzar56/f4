@@ -6,9 +6,9 @@ import (
 	"path"
 	"path/filepath"
 
-	"github.com/unxed/vtinput"
 	"github.com/unxed/f4/sdk/f4rpc"
 	"github.com/unxed/f4/vfs"
+	"github.com/unxed/vtinput"
 )
 
 // RPCVFS acts as a local proxy that forwards VFS calls to the plugin process over RPC.
@@ -24,7 +24,7 @@ type rpcFileWrapper struct {
 	size int64
 }
 
-func (w *rpcFileWrapper) Size() int64 { return w.size }
+func (w *rpcFileWrapper) Size() int64                                     { return w.size }
 func (w *rpcFileWrapper) Read(ctx context.Context, p []byte) (int, error) { return 0, io.EOF }
 func (w *rpcFileWrapper) ReadAt(ctx context.Context, p []byte, off int64) (int, error) {
 	req := ReadAtReq{ID: w.id, Len: len(p), Off: off}
@@ -33,14 +33,19 @@ func (w *rpcFileWrapper) ReadAt(ctx context.Context, p []byte, off int64) (int, 
 	if len(data) > 0 {
 		copy(p, data)
 	}
-	if err != nil { return len(data), err }
-	if len(data) < len(p) { return len(data), io.EOF }
+	if err != nil {
+		return len(data), err
+	}
+	if len(data) < len(p) {
+		return len(data), io.EOF
+	}
 	return len(data), nil
 }
 func (w *rpcFileWrapper) Close() error {
 	req := CloseReq{ID: w.id}
 	return w.sess.Call("VFS.CloseFile", req, nil)
 }
+
 type rpcWriteWrapper struct {
 	sess *f4rpc.Session
 	id   uint32
@@ -49,7 +54,9 @@ type rpcWriteWrapper struct {
 func (w *rpcWriteWrapper) Write(p []byte) (int, error) {
 	req := WriteReq{ID: w.id, Data: p}
 	err := w.sess.Call("VFS.Write", req, nil)
-	if err != nil { return 0, err }
+	if err != nil {
+		return 0, err
+	}
 	return len(p), nil
 }
 
@@ -151,7 +158,9 @@ func (v *RPCVFS) Open(ctx context.Context, p string) (vfs.ReadAtCloser, error) {
 	req := OpenReq{Drive: v.driveName, Path: p}
 	var res OpenRes
 	err := v.sess.Call("VFS.Open", req, &res)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	return &rpcFileWrapper{sess: v.sess, id: res.ID, size: res.Size}, nil
 }
 
@@ -159,7 +168,9 @@ func (v *RPCVFS) Create(ctx context.Context, p string) (io.WriteCloser, error) {
 	req := OpenReq{Drive: v.driveName, Path: p}
 	var res OpenRes
 	err := v.sess.Call("VFS.Create", req, &res)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	return &rpcWriteWrapper{sess: v.sess, id: res.ID}, nil
 }
 
@@ -178,9 +189,14 @@ func (v *RPCVFS) Clone() vfs.VFS {
 }
 
 func (v *RPCVFS) ProcessPanelKey(app vfs.App, e *vtinput.InputEvent) bool {
-	type PKReq struct { Drive string; Event vtinput.InputEvent }
+	type PKReq struct {
+		Drive string
+		Event vtinput.InputEvent
+	}
 	var handled bool
 	err := v.sess.Call("VFS.ProcessKey", PKReq{Drive: v.driveName, Event: *e}, &handled)
-	if err != nil { return false }
+	if err != nil {
+		return false
+	}
 	return handled
 }

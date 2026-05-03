@@ -1,6 +1,7 @@
 package main
 
 import "github.com/unxed/vtui"
+
 const (
 	ColPanelText = vtui.LastPaletteColor + iota
 	ColPanelSelectedText
@@ -72,8 +73,8 @@ func SetDefaultF4Palette() {
 
 	// Command line / User screen (Using terminal default background, Index 0)
 	vtui.Palette[ColCommandLineUserScreen] = vtui.SetIndexBoth(0, 7, 0)
-	vtui.Palette[ColCommandLinePrompt] = vtui.SetIndexBoth(0, 11, 0) // Light Cyan on Black
-	vtui.Palette[ColCommandLineText] = vtui.SetIndexBoth(0, 15, 0)   // White on Black
+	vtui.Palette[ColCommandLinePrompt] = vtui.SetIndexBoth(0, 11, 0)       // Light Cyan on Black
+	vtui.Palette[ColCommandLineText] = vtui.SetIndexBoth(0, 15, 0)         // White on Black
 	vtui.Palette[ColCommandLineSelectedText] = vtui.SetIndexBoth(0, 0, 11) // Black on Light Cyan
 
 	// Editor selection: inverse of UserScreen
@@ -93,42 +94,42 @@ func SetDefaultF4Palette() {
 
 // colorMap links farcolors.ini keys to vtui.Palette indices.
 var colorMap = map[string]int{
-	"Menu.Text":                  vtui.ColMenuText,
-	"Menu.Text.Selected":         vtui.ColMenuSelectedText,
-	"Menu.Highlight":             vtui.ColMenuHighlight,
-	"Menu.Highlight.Selected":    vtui.ColMenuSelectedHighlight,
-	"Menu.Box":                   vtui.ColMenuBox,
-	"Menu.Title":                 vtui.ColMenuTitle,
-	"Panel.Text":                 ColPanelText,
-	"Panel.Text.Selected":        ColPanelSelectedText,
-	"Panel.Text.Highlight":       ColPanelHighlightText,
-	"Panel.Text.Info":            ColPanelInfoText,
-	"Panel.Cursor":               ColPanelCursor,
-	"Panel.Cursor.Selected":      ColPanelSelectedCursor,
-	"Panel.Title":                ColPanelTitle,
-	"Panel.Title.Selected":       ColPanelSelectedTitle,
-	"Panel.Title.Column":         ColPanelColumnTitle,
-	"Panel.Box":                  ColPanelBox,
-	"Panel.Scrollbar":            ColPanelScrollbar,
-	"Panel.Dir":                  ColPanelDir,
-	"Dialog.Text":                vtui.ColDialogText,
-	"Dialog.Box":                 vtui.ColDialogBox,
-	"Dialog.Box.Title":           vtui.ColDialogBoxTitle,
-	"Dialog.Edit":                vtui.ColDialogEdit,
-	"Dialog.Button":              vtui.ColDialogButton,
-	"Dialog.Button.Selected":     vtui.ColDialogSelectedButton,
-	"Dialog.Edit.Unchanged":      vtui.ColDialogEditUnchanged,
-	"Dialog.Edit.Selected":       vtui.ColDialogEditSelected,
-	"CommandLine.UserScreen":     ColCommandLineUserScreen,
-	"CommandLine.Prompt":         ColCommandLinePrompt,
-	"CommandLine.Text":           ColCommandLineText,
-	"CommandLine.Text.Selected":  ColCommandLineSelectedText,
-	"KeyBar.Numbers":             vtui.ColKeyBarNum,
-	"KeyBar.Labels":              vtui.ColKeyBarText,
-	"Viewer.Text":                ColViewerText,
-	"Viewer.Status":              ColViewerStatus,
-	"Viewer.Arrows":              ColViewerArrows,
-	"Viewer.Scrollbar":           ColViewerScrollbar,
+	"Menu.Text":                 vtui.ColMenuText,
+	"Menu.Text.Selected":        vtui.ColMenuSelectedText,
+	"Menu.Highlight":            vtui.ColMenuHighlight,
+	"Menu.Highlight.Selected":   vtui.ColMenuSelectedHighlight,
+	"Menu.Box":                  vtui.ColMenuBox,
+	"Menu.Title":                vtui.ColMenuTitle,
+	"Panel.Text":                ColPanelText,
+	"Panel.Text.Selected":       ColPanelSelectedText,
+	"Panel.Text.Highlight":      ColPanelHighlightText,
+	"Panel.Text.Info":           ColPanelInfoText,
+	"Panel.Cursor":              ColPanelCursor,
+	"Panel.Cursor.Selected":     ColPanelSelectedCursor,
+	"Panel.Title":               ColPanelTitle,
+	"Panel.Title.Selected":      ColPanelSelectedTitle,
+	"Panel.Title.Column":        ColPanelColumnTitle,
+	"Panel.Box":                 ColPanelBox,
+	"Panel.Scrollbar":           ColPanelScrollbar,
+	"Panel.Dir":                 ColPanelDir,
+	"Dialog.Text":               vtui.ColDialogText,
+	"Dialog.Box":                vtui.ColDialogBox,
+	"Dialog.Box.Title":          vtui.ColDialogBoxTitle,
+	"Dialog.Edit":               vtui.ColDialogEdit,
+	"Dialog.Button":             vtui.ColDialogButton,
+	"Dialog.Button.Selected":    vtui.ColDialogSelectedButton,
+	"Dialog.Edit.Unchanged":     vtui.ColDialogEditUnchanged,
+	"Dialog.Edit.Selected":      vtui.ColDialogEditSelected,
+	"CommandLine.UserScreen":    ColCommandLineUserScreen,
+	"CommandLine.Prompt":        ColCommandLinePrompt,
+	"CommandLine.Text":          ColCommandLineText,
+	"CommandLine.Text.Selected": ColCommandLineSelectedText,
+	"KeyBar.Numbers":            vtui.ColKeyBarNum,
+	"KeyBar.Labels":             vtui.ColKeyBarText,
+	"Viewer.Text":               ColViewerText,
+	"Viewer.Status":             ColViewerStatus,
+	"Viewer.Arrows":             ColViewerArrows,
+	"Viewer.Scrollbar":          ColViewerScrollbar,
 }
 
 // InitColors parses the farcolors section and applies it to the vtui.Palette
@@ -140,4 +141,3 @@ func InitColors(ini *IniFile) {
 		}
 	}
 }
-

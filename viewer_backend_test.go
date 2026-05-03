@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/unxed/f4/piecetable"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
-	"github.com/unxed/f4/piecetable"
 )
 
 func TestViewerBackend_ReadAndFindLineStart(t *testing.T) {

@@ -1,8 +1,8 @@
 package main
 
 import (
-	"testing"
 	"github.com/unxed/vtinput"
+	"testing"
 )
 
 func TestTranslateKeyToKitty(t *testing.T) {
@@ -19,7 +19,7 @@ func TestTranslateKeyToKitty(t *testing.T) {
 				Char:           'a',
 				KeyDown:        true,
 			},
-			flags: 1, // Disambiguate on
+			flags: 1,  // Disambiguate on
 			want:  "", // Normal characters don't generate kitty sequences unless mode 8
 		},
 		{
@@ -58,7 +58,7 @@ func TestTranslateKeyToKitty(t *testing.T) {
 				Char:           'a',
 				KeyDown:        false,
 			},
-			flags: 3, // Disambiguate + Report Events
+			flags: 3,              // Disambiguate + Report Events
 			want:  "\x1b[97;1:3u", // 1 = modifiers (none), :3 = release
 		},
 		{
@@ -229,7 +229,7 @@ func TestTranslateKeyToKitty(t *testing.T) {
 				KeyDown:        true,
 			},
 			flags: 1,
-			want: "\x1b[57410u", // Should fall back to PUA code for divide
+			want:  "\x1b[57410u", // Should fall back to PUA code for divide
 		},
 		{
 			name: "Numpad Enter (Enhanced)",

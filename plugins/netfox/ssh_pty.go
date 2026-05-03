@@ -1,8 +1,8 @@
 package netfox
 
 import (
-	"io"
 	"golang.org/x/crypto/ssh"
+	"io"
 )
 
 type SSHPty struct {
@@ -13,7 +13,9 @@ type SSHPty struct {
 
 func NewSSHPty(client *ssh.Client) (*SSHPty, error) {
 	sess, err := client.NewSession()
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	modes := ssh.TerminalModes{ssh.ECHO: 1}
 	if err := sess.RequestPty("xterm-256color", 24, 80, modes); err != nil {
 		sess.Close()

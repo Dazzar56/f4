@@ -1,12 +1,12 @@
 package vfs
 
 import (
-	"os"
 	"context"
-	"io"
-	"time"
-	"github.com/unxed/vtui"
 	"github.com/unxed/vtinput"
+	"github.com/unxed/vtui"
+	"io"
+	"os"
+	"time"
 )
 
 // App defines the interface for plugin-to-core UI interactions.
@@ -46,10 +46,10 @@ type VFSItem struct {
 	IsExecutable bool
 	IsHidden     bool
 	// Metadata for Attributes dialog
-	ATime        time.Time // Last Access
-	CTime        time.Time // Creation (Win) or Status Change (Unix)
-	UnixMode     uint32    // Raw numeric mode for chmod
-	Uid, Gid     int       // Ownership
+	ATime    time.Time // Last Access
+	CTime    time.Time // Creation (Win) or Status Change (Unix)
+	UnixMode uint32    // Raw numeric mode for chmod
+	Uid, Gid int       // Ownership
 }
 
 // VFSCapabilities defines what the current VFS implementation can do efficiently.
@@ -97,6 +97,7 @@ type VFS interface {
 	Clone() VFS
 	Close() error
 }
+
 // TitleProvider allows a VFS to provide a custom display prefix (e.g. "user@host" for network drives).
 type TitleProvider interface {
 	GetTitle() string
@@ -135,13 +136,14 @@ func FindProvider(ctx context.Context, parent VFS, path string) VFSProvider {
 	}
 	return nil
 }
+
 // ReadAtCloser combines reader interfaces with context support.
 type ReadAtCloser interface {
 	ReadAt(ctx context.Context, p []byte, off int64) (n int, err error)
 	Read(ctx context.Context, p []byte) (n int, err error)
 	io.Closer
 	Size() int64
-}// TempFileWrapper is a helper for VFS that need to extract files to temp storage.
+} // TempFileWrapper is a helper for VFS that need to extract files to temp storage.
 type TempFileWrapper struct {
 	*os.File
 	SizeVal  int64

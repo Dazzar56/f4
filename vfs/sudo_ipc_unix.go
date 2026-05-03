@@ -5,11 +5,11 @@ package vfs
 import (
 	"encoding/binary"
 	"encoding/json"
+	"github.com/unxed/vtui"
 	"io"
 	"net"
 	"os"
 	"syscall"
-	"github.com/unxed/vtui"
 )
 
 // sendMsg serializes the payload and sends it over the Unix socket, attaching a file descriptor if provided.

@@ -54,6 +54,7 @@ func (ini *IniFile) Merge(other *IniFile) {
 		}
 	}
 }
+
 // GetString safely retrieves a value or returns the default.
 func (ini *IniFile) GetString(section, key, def string) string {
 	if sec, ok := ini.data[section]; ok {

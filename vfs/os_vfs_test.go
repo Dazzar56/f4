@@ -2,11 +2,11 @@ package vfs
 
 import (
 	"context"
-	"testing"
-	"os"
-	"runtime"
-	"path/filepath"
 	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
+	"testing"
 )
 
 func TestOSVFS_Mutations(t *testing.T) {
@@ -111,8 +111,12 @@ func TestOSVFS_Symlinks(t *testing.T) {
 		}
 	})
 
-	if err != nil { t.Fatalf("ReadDir failed: %v", err) }
-	if !found { t.Error("Symlink entry not found in ReadDir") }
+	if err != nil {
+		t.Fatalf("ReadDir failed: %v", err)
+	}
+	if !found {
+		t.Error("Symlink entry not found in ReadDir")
+	}
 }
 
 func TestOSVFS_Capabilities(t *testing.T) {
@@ -193,7 +197,9 @@ func TestOSVFS_Abs_Consistency(t *testing.T) {
 
 	// Even if we change process CWD (not recommended in tests, but for clarity)
 	abs, err := v.Abs("file.txt")
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	expected := filepath.Join(vfsPath, "file.txt")
 	if abs != expected {
@@ -214,7 +220,9 @@ func TestOSVFS_Abs_CWD_Independence(t *testing.T) {
 
 	relPath := "somefile.txt"
 	abs, err := v.Abs(relPath)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	expected := filepath.Join(vfsRoot, relPath)
 	if abs != expected {

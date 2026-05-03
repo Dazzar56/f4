@@ -90,7 +90,9 @@ func TestTerminalView_ProcessFar2lInteract_Clipboard(t *testing.T) {
 
 	tv.ProcessFar2lInteract(stk)
 	// Should write something back to PTY (B64 of reply stack)
-	if len(pty.written) == 0 { t.Fatal("No reply for clipboard open") }
+	if len(pty.written) == 0 {
+		t.Fatal("No reply for clipboard open")
+	}
 	pty.written = nil
 
 	// 2. Test Chunked SetData
@@ -127,6 +129,7 @@ func TestTerminalView_ProcessFar2lInteract_Clipboard(t *testing.T) {
 		t.Error("Chunk buffer not cleared after finalization")
 	}
 }
+
 type mockAuth struct {
 	val   int
 	calls int
@@ -163,6 +166,7 @@ func TestTerminalView_ProcessFar2lInteract_AuthCaching(t *testing.T) {
 		t.Errorf("Authorize called %d times, expected 1 (caching should prevent duplicate prompts)", m.calls)
 	}
 }
+
 type mockLocalAuth struct {
 	*F4ClipboardAuth
 }
@@ -311,18 +315,30 @@ func TestTerminalView_StylesPreservation(t *testing.T) {
 	blue := vtui.SetIndexFore(0, 4)
 
 	// Пишем "RED" красным и "BLUE" синим
-	for _, r := range "RED" { tv.PutChar(r, red) }
-	for _, r := range "BLUE" { tv.PutChar(r, blue) }
+	for _, r := range "RED" {
+		tv.PutChar(r, red)
+	}
+	for _, r := range "BLUE" {
+		tv.PutChar(r, blue)
+	}
 	tv.FlushLog()
 
 	// Проверяем атрибуты в логе через getAttrAt
 	// "RED" — оффсеты 0, 1, 2
-	if tv.getAttrAt(0) != red { t.Error("Style at offset 0 should be RED") }
-	if tv.getAttrAt(2) != red { t.Error("Style at offset 2 should be RED") }
+	if tv.getAttrAt(0) != red {
+		t.Error("Style at offset 0 should be RED")
+	}
+	if tv.getAttrAt(2) != red {
+		t.Error("Style at offset 2 should be RED")
+	}
 
 	// "BLUE" — оффсеты 3, 4, 5, 6
-	if tv.getAttrAt(3) != blue { t.Error("Style at offset 3 should be BLUE") }
-	if tv.getAttrAt(6) != blue { t.Error("Style at offset 6 should be BLUE") }
+	if tv.getAttrAt(3) != blue {
+		t.Error("Style at offset 3 should be BLUE")
+	}
+	if tv.getAttrAt(6) != blue {
+		t.Error("Style at offset 6 should be BLUE")
+	}
 }
 func TestTerminalView_ScrollModes(t *testing.T) {
 	tv := NewTerminalView(10, 5)
@@ -477,7 +493,9 @@ func TestTerminalView_EraseDisplay_LogSync(t *testing.T) {
 	tv.UseAltScreen = false
 
 	// 1. Write some content
-	for _, r := range "content" { tv.PutChar(r, 0) }
+	for _, r := range "content" {
+		tv.PutChar(r, 0)
+	}
 	tv.FlushLog()
 
 	// 2. Execute 'clear' (mode 2)

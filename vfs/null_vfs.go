@@ -2,13 +2,13 @@ package vfs
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path"
-	"time"
-	"fmt"
-	"strings"
 	"path/filepath"
+	"strings"
+	"time"
 )
 
 // NullVFS is a mock filesystem for testing UI responsiveness and file operations.
@@ -117,9 +117,9 @@ func (v *NullVFS) Stat(ctx context.Context, p string) (VFSItem, error) {
 	base := path.Base(p)
 
 	// 1. Fixed directory resolution
-	if p == "/" || p == "/upload" || p == "/scenarios" || 
-	   p == "/scenarios/bandwidth" || p == "/scenarios/iops" || 
-	   p == "/scenarios/slow" || p == "/scenarios/fast" {
+	if p == "/" || p == "/upload" || p == "/scenarios" ||
+		p == "/scenarios/bandwidth" || p == "/scenarios/iops" ||
+		p == "/scenarios/slow" || p == "/scenarios/fast" {
 		return VFSItem{Name: base, IsDir: true, MTime: time.Now()}, nil
 	}
 

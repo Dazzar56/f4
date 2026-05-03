@@ -11,6 +11,7 @@ import (
 )
 
 type ParserState int
+
 var DefaultTermAttr = vtui.SetIndexBoth(0, 7, 0) // Light Gray on Black (standard ANSI indices)
 
 const (
@@ -159,21 +160,33 @@ func (p *AnsiParser) handleCSI(cmd byte) {
 		}
 	case 'H', 'f':
 		row, col := 1, 1
-		if len(args) > 0 && args[0] != 0 { row = args[0] }
-		if len(args) > 1 && args[1] != 0 { col = args[1] }
+		if len(args) > 0 && args[0] != 0 {
+			row = args[0]
+		}
+		if len(args) > 1 && args[1] != 0 {
+			col = args[1]
+		}
 		p.term.SetCursor(col-1, row-1)
 	case 'J':
 		mode := 0
-		if len(args) > 0 { mode = args[0] }
+		if len(args) > 0 {
+			mode = args[0]
+		}
 		p.term.EraseDisplay(mode, p.Attr)
 	case 'K':
 		mode := 0
-		if len(args) > 0 { mode = args[0] }
+		if len(args) > 0 {
+			mode = args[0]
+		}
 		p.term.EraseLine(mode, p.Attr)
 	case 'r': // DECSTBM - Set Top and Bottom Margins
 		top, bottom := 1, p.term.Height
-		if len(args) > 0 && args[0] != 0 { top = args[0] }
-		if len(args) > 1 && args[1] != 0 { bottom = args[1] }
+		if len(args) > 0 && args[0] != 0 {
+			top = args[0]
+		}
+		if len(args) > 1 && args[1] != 0 {
+			bottom = args[1]
+		}
 		p.term.ScrollTop = top - 1
 		p.term.ScrollBottom = bottom - 1
 		p.term.SetCursor(0, 0)
@@ -214,47 +227,69 @@ func (p *AnsiParser) handleCSI(cmd byte) {
 		}
 	case 'L': // Insert blank lines
 		n := 1
-		if len(args) > 0 && args[0] != 0 { n = args[0] }
+		if len(args) > 0 && args[0] != 0 {
+			n = args[0]
+		}
 		p.term.ScrollDown(p.term.CursorY, p.term.ScrollBottom, n)
 	case 'M': // Delete lines
 		n := 1
-		if len(args) > 0 && args[0] != 0 { n = args[0] }
+		if len(args) > 0 && args[0] != 0 {
+			n = args[0]
+		}
 		p.term.ScrollUp(p.term.CursorY, p.term.ScrollBottom, n)
 	case 'P': // Delete characters
 		n := 1
-		if len(args) > 0 && args[0] != 0 { n = args[0] }
+		if len(args) > 0 && args[0] != 0 {
+			n = args[0]
+		}
 		p.term.DeleteCharacters(n, p.Attr)
 	case '@': // Insert blank characters
 		n := 1
-		if len(args) > 0 && args[0] != 0 { n = args[0] }
+		if len(args) > 0 && args[0] != 0 {
+			n = args[0]
+		}
 		p.term.InsertBlankCharacters(n, p.Attr)
 	case 'S': // Scroll up (text moves up)
 		n := 1
-		if len(args) > 0 && args[0] != 0 { n = args[0] }
+		if len(args) > 0 && args[0] != 0 {
+			n = args[0]
+		}
 		p.term.ScrollUp(p.term.ScrollTop, p.term.ScrollBottom, n)
 	case 'T': // Scroll down (text moves down)
 		n := 1
-		if len(args) > 0 && args[0] != 0 { n = args[0] }
+		if len(args) > 0 && args[0] != 0 {
+			n = args[0]
+		}
 		p.term.ScrollDown(p.term.ScrollTop, p.term.ScrollBottom, n)
 	case 'A':
 		n := 1
-		if len(args) > 0 && args[0] != 0 { n = args[0] }
+		if len(args) > 0 && args[0] != 0 {
+			n = args[0]
+		}
 		p.term.SetCursor(p.term.CursorX, p.term.CursorY-n)
 	case 'B':
 		n := 1
-		if len(args) > 0 && args[0] != 0 { n = args[0] }
+		if len(args) > 0 && args[0] != 0 {
+			n = args[0]
+		}
 		p.term.SetCursor(p.term.CursorX, p.term.CursorY+n)
 	case 'C':
 		n := 1
-		if len(args) > 0 && args[0] != 0 { n = args[0] }
+		if len(args) > 0 && args[0] != 0 {
+			n = args[0]
+		}
 		p.term.SetCursor(p.term.CursorX+n, p.term.CursorY)
 	case 'D':
 		n := 1
-		if len(args) > 0 && args[0] != 0 { n = args[0] }
+		if len(args) > 0 && args[0] != 0 {
+			n = args[0]
+		}
 		p.term.SetCursor(p.term.CursorX-n, p.term.CursorY)
 	case 'G', '`':
 		col := 1
-		if len(args) > 0 && args[0] != 0 { col = args[0] }
+		if len(args) > 0 && args[0] != 0 {
+			col = args[0]
+		}
 		p.term.SetCursor(col-1, p.term.CursorY)
 	case 'd':
 		row := 1
@@ -365,13 +400,29 @@ func (p *AnsiParser) handleDECRQM(args []int) {
 	if isDecPrivate {
 		switch mode {
 		case 1:
-			if p.term.ApplicationCursorKeys { state = 1 } else { state = 2 }
+			if p.term.ApplicationCursorKeys {
+				state = 1
+			} else {
+				state = 2
+			}
 		case 47, 1049:
-			if p.term.UseAltScreen { state = 1 } else { state = 2 }
+			if p.term.UseAltScreen {
+				state = 1
+			} else {
+				state = 2
+			}
 		case 2004:
-			if p.term.BracketedPasteMode { state = 1 } else { state = 2 }
+			if p.term.BracketedPasteMode {
+				state = 1
+			} else {
+				state = 2
+			}
 		case 9001:
-			if p.term.Win32InputMode { state = 1 } else { state = 2 }
+			if p.term.Win32InputMode {
+				state = 1
+			} else {
+				state = 2
+			}
 		}
 		resp := fmt.Sprintf("\x1b[?%d;%d$y", mode, state)
 		p.pty.Write([]byte(resp))
@@ -384,13 +435,19 @@ func (p *AnsiParser) handleDECRQM(args []int) {
 func (p *AnsiParser) handleOSC() {
 	s := p.CurParam.String()
 	p.CurParam.Reset()
-	if s == "" { return }
+	if s == "" {
+		return
+	}
 
 	parts := strings.SplitN(s, ";", 2)
-	if len(parts) < 2 { return }
+	if len(parts) < 2 {
+		return
+	}
 
 	cmd, err := strconv.Atoi(parts[0])
-	if err != nil { return }
+	if err != nil {
+		return
+	}
 
 	if cmd == 0 || cmd == 2 {
 		vtui.DebugLog("ANSI_OSC_TRACE: Received window title change: %q", parts[1])
@@ -424,32 +481,36 @@ func (p *AnsiParser) handleOSC() {
 
 	if cmd == 4 {
 		subparts := strings.SplitN(parts[1], ";", 2)
-		if len(subparts) < 2 { return }
+		if len(subparts) < 2 {
+			return
+		}
 
 		idx, _ := strconv.Atoi(subparts[0])
-		if idx < 0 || idx >= 256 { return }
+		if idx < 0 || idx >= 256 {
+			return
+		}
 
 		colorStr := subparts[1]
 		var rgbVal uint32
 		parsed := false
 
-	if strings.HasPrefix(colorStr, "#") && len(colorStr) >= 7 {
-		v, err := strconv.ParseUint(colorStr[1:7], 16, 32)
-		if err == nil {
-			rgbVal = uint32(v)
-			parsed = true
+		if strings.HasPrefix(colorStr, "#") && len(colorStr) >= 7 {
+			v, err := strconv.ParseUint(colorStr[1:7], 16, 32)
+			if err == nil {
+				rgbVal = uint32(v)
+				parsed = true
+			}
+		} else if strings.HasPrefix(colorStr, "rgb:") {
+			// format rgb:RR/GG/BB
+			rgbParts := strings.Split(colorStr[4:], "/")
+			if len(rgbParts) == 3 {
+				r, _ := strconv.ParseUint(rgbParts[0], 16, 8)
+				g, _ := strconv.ParseUint(rgbParts[1], 16, 8)
+				b, _ := strconv.ParseUint(rgbParts[2], 16, 8)
+				rgbVal = uint32((r << 16) | (g << 8) | b)
+				parsed = true
+			}
 		}
-	} else if strings.HasPrefix(colorStr, "rgb:") {
-		// format rgb:RR/GG/BB
-		rgbParts := strings.Split(colorStr[4:], "/")
-		if len(rgbParts) == 3 {
-			r, _ := strconv.ParseUint(rgbParts[0], 16, 8)
-			g, _ := strconv.ParseUint(rgbParts[1], 16, 8)
-			b, _ := strconv.ParseUint(rgbParts[2], 16, 8)
-			rgbVal = uint32((r << 16) | (g << 8) | b)
-			parsed = true
-		}
-	}
 
 		if parsed {
 			p.term.Palette[idx] = rgbVal

@@ -1,10 +1,10 @@
 package main
 
 import (
-	"testing"
-	"strings"
 	"fmt"
 	"github.com/unxed/vtui"
+	"strings"
+	"testing"
 )
 
 func TestFileOpProgressDialog_Layout(t *testing.T) {
@@ -75,9 +75,9 @@ func TestFileOpProgressDialog_TransferFormatting(t *testing.T) {
 
 	// Test the 3-column time/ETA/speed string
 	// format: "%-16s %-21s %15s" -> 16+1+21+1+15 = 54 characters
-	elapsed := "Time: 01:02:03"    // 14 chars
+	elapsed := "Time: 01:02:03"  // 14 chars
 	eta := "Remaining: 00:00:59" // 19 chars
-	speed := "10.5 MB/s"          // 9 chars
+	speed := "10.5 MB/s"         // 9 chars
 
 	// Simulating the format logic from file_ops.go
 	timeSpeedText := fmt.Sprintf("%-16s %-21s %15s", elapsed, eta, speed)

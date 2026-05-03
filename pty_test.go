@@ -2,9 +2,9 @@ package main
 
 import (
 	"os"
+	"runtime"
 	"testing"
 	"time"
-	"runtime"
 )
 
 func TestPTY_Lifecycle(t *testing.T) {

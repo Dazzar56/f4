@@ -2,10 +2,10 @@ package vfs
 
 import (
 	"context"
-	"testing"
-	"time"
 	"io"
 	"path/filepath"
+	"testing"
+	"time"
 )
 
 func TestNullVFS_DirectoryListing(t *testing.T) {
@@ -318,7 +318,9 @@ func TestNullVFS_OpenCreateMetadataLatency(t *testing.T) {
 	t.Run("Open in slow zone", func(t *testing.T) {
 		start := time.Now()
 		f, err := v.Open(ctx, "/scenarios/slow/test.bin")
-		if err != nil { t.Fatal(err) }
+		if err != nil {
+			t.Fatal(err)
+		}
 		defer f.Close()
 
 		dur := time.Since(start)
@@ -331,7 +333,9 @@ func TestNullVFS_OpenCreateMetadataLatency(t *testing.T) {
 		start := time.Now()
 		// We use /upload prefix because root files are protected in NullVFS
 		w, err := v.Create(ctx, "/upload/scenarios/slow/newfile.bin")
-		if err != nil { t.Fatal(err) }
+		if err != nil {
+			t.Fatal(err)
+		}
 		defer w.Close()
 
 		dur := time.Since(start)
@@ -351,11 +355,17 @@ func TestNullVFS_ReadDirPaging(t *testing.T) {
 			chunkCount++
 			itemCount += len(items)
 		})
-		if err != nil { t.Fatal(err) }
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		// 1000 items in chunks of 100 = 10 chunks
-		if itemCount != 10000 { t.Errorf("Expected 10000 items, got %d", itemCount) }
-		if chunkCount != 100 { t.Errorf("Expected 100 chunks, got %d", chunkCount) }
+		if itemCount != 10000 {
+			t.Errorf("Expected 10000 items, got %d", itemCount)
+		}
+		if chunkCount != 100 {
+			t.Errorf("Expected 100 chunks, got %d", chunkCount)
+		}
 	})
 
 	t.Run("Paging delay in slow zone", func(t *testing.T) {

@@ -1,34 +1,38 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
-	"io"
-	"strings"
-	"time"
-	"os"
-	"bytes"
-	"testing"
-	"path/filepath"
-	"github.com/unxed/f4/vfs"
-	"github.com/unxed/vtui"
 	"github.com/unxed/f4/piecetable"
+	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
+	"github.com/unxed/vtui"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
 )
+
 // mockCrashingHighlighter fails the test if it receives a line longer than the safety limit.
 type mockCrashingHighlighter struct {
 	t *testing.T
 }
+
 const highlighterLimit = 64 * 1024
+
 func (m *mockCrashingHighlighter) Highlight(line string, prev any, base uint64) ([]uint64, any) {
 	if len(line) > highlighterLimit {
 		m.t.Errorf("FATAL: Highlighter received a line of %d bytes, which is over the safety limit of %d", len(line), highlighterLimit)
 	}
 	return nil, nil
 }
-func (m *mockCrashingHighlighter) Name() string { return "CrashingMock" }
-func (m *mockCrashingHighlighter) Match(filename, content string) bool { return true }
+func (m *mockCrashingHighlighter) Name() string                                     { return "CrashingMock" }
+func (m *mockCrashingHighlighter) Match(filename, content string) bool              { return true }
 func (m *mockCrashingHighlighter) Create(filename, content string) vtui.Highlighter { return m }
+
 type mockStatefulHighlighter struct {
 	statesComputed int
 }
@@ -92,7 +96,9 @@ func TestEditor_HighlightingInvalidation(t *testing.T) {
 
 	// Наполняем кэш
 	ev.Show(scr)
-	if len(ev.lineStates) != 3 { t.Fatal("Setup failed") }
+	if len(ev.lineStates) != 3 {
+		t.Fatal("Setup failed")
+	}
 
 	// 1. Редактируем вторую строку (индекс 1)
 	ev.CursorLine = 1
@@ -144,7 +150,7 @@ func TestEditorView_TypingAndBackspace(t *testing.T) {
 	pt := piecetable.New([]byte("Hello"))
 	ev := NewEditorView(pt, nil, "")
 	ev.SetPosition(0, 0, 79, 24) // Устанавливаем стандартный размер 80x25
-	ev.CursorPos = 5 // End of "Hello"
+	ev.CursorPos = 5             // End of "Hello"
 
 	// 1. Typing '!'
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: '!'})
@@ -324,7 +330,7 @@ func TestEditorView_Selection(t *testing.T) {
 	// 2. Copying (Ctrl+C) - checking only the log or lack of panic
 	ev.ProcessKey(&vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
-		VirtualKeyCode: vtinput.VK_C,
+		VirtualKeyCode:  vtinput.VK_C,
 		ControlKeyState: vtinput.LeftCtrlPressed,
 	})
 
@@ -507,11 +513,13 @@ func TestEditorView_UTF8Selection(t *testing.T) {
 	// Start selection: Shift + Right (one letter 'Д')
 	ev.ProcessKey(&vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
-		VirtualKeyCode: vtinput.VK_RIGHT,
+		VirtualKeyCode:  vtinput.VK_RIGHT,
 		ControlKeyState: vtinput.ShiftPressed,
 	})
 
-	if !ev.selActive { t.Fatal("Selection should be active") }
+	if !ev.selActive {
+		t.Fatal("Selection should be active")
+	}
 	min, max := ev.getSelectionRange()
 	if min != 0 || max != 2 {
 		t.Errorf("UTF8 Selection failed: expected [0:2], got [%d:%d]", min, max)
@@ -948,8 +956,12 @@ func TestEditorBar_Content(t *testing.T) {
 	foundLine := false
 	foundPos := false
 	for x := 0; x < 40; x++ {
-		if scr.GetCell(x, 0).Char == '6' { foundLine = true }
-		if scr.GetCell(x, 0).Char == '1' && scr.GetCell(x+1, 0).Char == '2' { foundPos = true }
+		if scr.GetCell(x, 0).Char == '6' {
+			foundLine = true
+		}
+		if scr.GetCell(x, 0).Char == '1' && scr.GetCell(x+1, 0).Char == '2' {
+			foundPos = true
+		}
 	}
 
 	if !foundLine || !foundPos {
@@ -1096,7 +1108,9 @@ func TestEditorView_StartIndexing_RestartSafety(t *testing.T) {
 	// 1. Start indexing
 	ev.StartIndexing()
 	oldCancel := ev.indexCancel
-	if oldCancel == nil { t.Fatal("indexCancel should be set") }
+	if oldCancel == nil {
+		t.Fatal("indexCancel should be set")
+	}
 
 	// 2. Start again immediately
 	ev.StartIndexing()
@@ -1263,7 +1277,9 @@ func TestEditorView_SelectAll(t *testing.T) {
 		VirtualKeyCode: vtinput.VK_A, ControlKeyState: vtinput.LeftCtrlPressed,
 	})
 
-	if !ev.selActive { t.Fatal("Selection should be active after Ctrl+A") }
+	if !ev.selActive {
+		t.Fatal("Selection should be active after Ctrl+A")
+	}
 	min, max := ev.getSelectionRange()
 	if min != 0 || max != pt.Size() {
 		t.Errorf("Ctrl+A range failed: [0:%d], got [%d:%d]", pt.Size(), min, max)
@@ -1285,7 +1301,9 @@ func TestEditorView_ShiftAliasSelection(t *testing.T) {
 		VirtualKeyCode: vtinput.VK_D, ControlKeyState: vtinput.LeftCtrlPressed | vtinput.ShiftPressed,
 	})
 
-	if !ev.selActive { t.Fatal("Shift + Alias should trigger selection") }
+	if !ev.selActive {
+		t.Fatal("Shift + Alias should trigger selection")
+	}
 	if ev.selAnchorOffset != 0 || ev.CursorPos != 1 {
 		t.Errorf("Selection anchor or cursor wrong: anchor=%d, pos=%d", ev.selAnchorOffset, ev.CursorPos)
 	}
@@ -1318,7 +1336,9 @@ func TestEditorView_FarNavigation_FullCoverage(t *testing.T) {
 		Type: vtinput.KeyEventType, KeyDown: true,
 		VirtualKeyCode: vtinput.VK_END, ControlKeyState: vtinput.LeftCtrlPressed | vtinput.ShiftPressed,
 	})
-	if !ev.selActive { t.Fatal("Shift+Ctrl+End should activate selection") }
+	if !ev.selActive {
+		t.Fatal("Shift+Ctrl+End should activate selection")
+	}
 	min, max := ev.getSelectionRange()
 	if min != 0 || max != pt.Size() {
 		t.Errorf("Shift+Ctrl+End selection range failed: [0:%d], got [%d:%d]", pt.Size(), min, max)
@@ -1333,11 +1353,15 @@ func TestEditorView_FarAliases_FullCoverage(t *testing.T) {
 	// 1. Ctrl+S should move 1 char left, NOT 1 word
 	ev.CursorPos = 10
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_S, ControlKeyState: vtinput.LeftCtrlPressed})
-	if ev.CursorPos != 9 { t.Errorf("Ctrl+S (alias) moved more than 1 char: pos %d", ev.CursorPos) }
+	if ev.CursorPos != 9 {
+		t.Errorf("Ctrl+S (alias) moved more than 1 char: pos %d", ev.CursorPos)
+	}
 
 	// 2. Ctrl+D should move 1 char right, NOT 1 word
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_D, ControlKeyState: vtinput.LeftCtrlPressed})
-	if ev.CursorPos != 10 { t.Errorf("Ctrl+D (alias) moved more than 1 char: pos %d", ev.CursorPos) }
+	if ev.CursorPos != 10 {
+		t.Errorf("Ctrl+D (alias) moved more than 1 char: pos %d", ev.CursorPos)
+	}
 
 	// 3. Shift + Ctrl + D -> Select 1 char
 	ev.selActive = false
@@ -1346,7 +1370,9 @@ func TestEditorView_FarAliases_FullCoverage(t *testing.T) {
 		Type: vtinput.KeyEventType, KeyDown: true,
 		VirtualKeyCode: vtinput.VK_D, ControlKeyState: vtinput.LeftCtrlPressed | vtinput.ShiftPressed,
 	})
-	if !ev.selActive || ev.CursorPos != 1 { t.Error("Shift + Alias selection failed") }
+	if !ev.selActive || ev.CursorPos != 1 {
+		t.Error("Shift + Alias selection failed")
+	}
 }
 
 func TestEditorView_FarX_SmartCut(t *testing.T) {
@@ -1359,13 +1385,17 @@ func TestEditorView_FarX_SmartCut(t *testing.T) {
 	ev.selAnchorOffset = 0
 	ev.CursorPos = 6 // "Select"
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_X, ControlKeyState: vtinput.LeftCtrlPressed})
-	if pt.String() != " me\nNext line" { t.Errorf("Ctrl+X Cut failed: %q", pt.String()) }
+	if pt.String() != " me\nNext line" {
+		t.Errorf("Ctrl+X Cut failed: %q", pt.String())
+	}
 
 	// Scenario B: No selection -> Ctrl+X is DOWN
 	ev.selActive = false
 	ev.CursorLine = 0
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_X, ControlKeyState: vtinput.LeftCtrlPressed})
-	if ev.CursorLine != 1 { t.Error("Ctrl+X Down failed") }
+	if ev.CursorLine != 1 {
+		t.Error("Ctrl+X Down failed")
+	}
 }
 
 func TestEditorView_FarSelectAll_Behavior(t *testing.T) {
@@ -1377,8 +1407,12 @@ func TestEditorView_FarSelectAll_Behavior(t *testing.T) {
 		VirtualKeyCode: vtinput.VK_A, ControlKeyState: vtinput.LeftCtrlPressed,
 	})
 
-	if !ev.selActive || ev.selAnchorOffset != 0 { t.Error("Ctrl+A anchor should be 0") }
-	if ev.CursorLine != 1 || ev.CursorPos != 4 { t.Errorf("Ctrl+A cursor should be at EOF, got %d:%d", ev.CursorLine, ev.CursorPos) }
+	if !ev.selActive || ev.selAnchorOffset != 0 {
+		t.Error("Ctrl+A anchor should be 0")
+	}
+	if ev.CursorLine != 1 || ev.CursorPos != 4 {
+		t.Errorf("Ctrl+A cursor should be at EOF, got %d:%d", ev.CursorLine, ev.CursorPos)
+	}
 }
 func TestEditorView_FarNavigation_Document(t *testing.T) {
 	pt := piecetable.New([]byte("Line 1\nLine 2\nLine 3"))
@@ -1413,7 +1447,9 @@ func TestEditorView_FarSelectAll(t *testing.T) {
 		VirtualKeyCode: vtinput.VK_A, ControlKeyState: vtinput.LeftCtrlPressed,
 	})
 
-	if !ev.selActive { t.Fatal("Selection should be active after Ctrl+A") }
+	if !ev.selActive {
+		t.Fatal("Selection should be active after Ctrl+A")
+	}
 	min, max := ev.getSelectionRange()
 	if min != 0 || max != pt.Size() {
 		t.Errorf("Ctrl+A range failed: [0:%d], got [%d:%d]", pt.Size(), min, max)
@@ -1433,20 +1469,28 @@ func TestEditorView_FarNavigationAliases(t *testing.T) {
 
 	// 1. Ctrl+E -> Вверх
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_E, ControlKeyState: vtinput.LeftCtrlPressed})
-	if ev.CursorLine != 0 { t.Errorf("Ctrl+E (Up) failed, line: %d", ev.CursorLine) }
+	if ev.CursorLine != 0 {
+		t.Errorf("Ctrl+E (Up) failed, line: %d", ev.CursorLine)
+	}
 
 	// 2. Ctrl+X -> Вниз (без выделения)
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_X, ControlKeyState: vtinput.LeftCtrlPressed})
-	if ev.CursorLine != 1 { t.Errorf("Ctrl+X (Down) failed, line: %d", ev.CursorLine) }
+	if ev.CursorLine != 1 {
+		t.Errorf("Ctrl+X (Down) failed, line: %d", ev.CursorLine)
+	}
 
 	// 3. Ctrl+S -> Влево (на один символ, а не на слово!)
 	ev.CursorPos = 4
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_S, ControlKeyState: vtinput.LeftCtrlPressed})
-	if ev.CursorPos != 3 { t.Errorf("Ctrl+S (Left) failed: expected 3, got %d", ev.CursorPos) }
+	if ev.CursorPos != 3 {
+		t.Errorf("Ctrl+S (Left) failed: expected 3, got %d", ev.CursorPos)
+	}
 
 	// 4. Ctrl+D -> Вправо (на один символ)
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_D, ControlKeyState: vtinput.LeftCtrlPressed})
-	if ev.CursorPos != 4 { t.Errorf("Ctrl+D (Right) failed: expected 4, got %d", ev.CursorPos) }
+	if ev.CursorPos != 4 {
+		t.Errorf("Ctrl+D (Right) failed: expected 4, got %d", ev.CursorPos)
+	}
 }
 
 func TestEditorView_FarX_CutVsDown(t *testing.T) {
@@ -1695,8 +1739,10 @@ func TestEditorView_Search_ShiftF7_Reverse(t *testing.T) {
 	timeout := time.After(1 * time.Second)
 	for !ev.selActive {
 		select {
-		case task := <-vtui.FrameManager.TaskChan: task()
-		case <-timeout: t.Fatal("Backward search 1 timed out")
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Backward search 1 timed out")
 		}
 	}
 	if ev.selAnchorOffset != 12 {
@@ -1770,7 +1816,9 @@ func TestEditorView_SaveFailure_NoDataLoss(t *testing.T) {
 
 	// 1. Modify the file
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'X'})
-	if !ev.modified { t.Fatal("Editor should be modified") }
+	if !ev.modified {
+		t.Fatal("Editor should be modified")
+	}
 
 	// 2. Attempt to save (F2)
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F2})
@@ -1782,7 +1830,9 @@ func TestEditorView_SaveFailure_NoDataLoss(t *testing.T) {
 		select {
 		case task := <-vtui.FrameManager.TaskChan:
 			task()
-			if !ev.saving { saveFinished = true }
+			if !ev.saving {
+				saveFinished = true
+			}
 		case <-timeout:
 			t.Fatal("Timeout waiting for save operation")
 		}
@@ -1805,6 +1855,7 @@ func TestEditorView_SaveFailure_NoDataLoss(t *testing.T) {
 		t.Error("Editor did not show an error dialog upon save failure")
 	}
 }
+
 // mockFailingVFS wraps OSVFS but intentionally fails the Create operation
 type mockFailingVFS struct {
 	vfs.VFS
@@ -1844,8 +1895,10 @@ func TestEditorView_Save_DiskFullSimulation(t *testing.T) {
 	timeout := time.After(1 * time.Second)
 	for ev.saving {
 		select {
-		case task := <-vtui.FrameManager.TaskChan: task()
-		case <-timeout: t.Fatal("Timeout")
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Timeout")
 		}
 	}
 
@@ -1953,7 +2006,10 @@ func (m *mockFailingWriteVFS) Create(ctx context.Context, path string) (io.Write
 }
 
 type failingWriter struct{}
-func (f *failingWriter) Write(p []byte) (n int, err error) { return 0, fmt.Errorf("mock write failure") }
+
+func (f *failingWriter) Write(p []byte) (n int, err error) {
+	return 0, fmt.Errorf("mock write failure")
+}
 func (f *failingWriter) Close() error { return nil }
 
 func TestEditorView_Save_IOErrorRecovery(t *testing.T) {
@@ -2302,8 +2358,10 @@ func TestEditorView_Save_NoTrailingNewline_Integrity(t *testing.T) {
 	timeout := time.After(1 * time.Second)
 	for ev.saving {
 		select {
-		case task := <-vtui.FrameManager.TaskChan: task()
-		case <-timeout: t.Fatal("Timeout")
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Timeout")
 		}
 	}
 
@@ -2340,11 +2398,15 @@ func TestEditorView_Save_RetryAfterFailure(t *testing.T) {
 	timeout := time.After(1 * time.Second)
 	for ev.saving {
 		select {
-		case task := <-vtui.FrameManager.TaskChan: task()
-		case <-timeout: t.Fatal("Timeout on first save")
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Timeout on first save")
 		}
 	}
-	if !ev.modified { t.Error("Should still be modified after failure") }
+	if !ev.modified {
+		t.Error("Should still be modified after failure")
+	}
 
 	// 3. Fix the VFS issue
 	failingVfs.failCreate = false
@@ -2354,13 +2416,17 @@ func TestEditorView_Save_RetryAfterFailure(t *testing.T) {
 	timeout = time.After(1 * time.Second)
 	for ev.saving {
 		select {
-		case task := <-vtui.FrameManager.TaskChan: task()
-		case <-timeout: t.Fatal("Timeout on retry save")
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Timeout on retry save")
 		}
 	}
 
 	// 5. Verification
-	if ev.modified { t.Error("Should NOT be modified after successful retry") }
+	if ev.modified {
+		t.Error("Should NOT be modified after successful retry")
+	}
 
 	saved, _ := os.ReadFile(path)
 	if string(saved) != "Changed" {
@@ -2395,7 +2461,7 @@ func TestEditorView_Save_MetadataIntegrity(t *testing.T) {
 
 	baseVfs := vfs.NewOSVFS(tmpDir)
 	mock := &mockMetadataVFS{
-		VFS: baseVfs,
+		VFS:          baseVfs,
 		statToReturn: expectedMeta,
 		onSetAttr: func(item vfs.VFSItem) {
 			capturedMeta = item
@@ -2416,8 +2482,10 @@ func TestEditorView_Save_MetadataIntegrity(t *testing.T) {
 	timeout := time.After(2 * time.Second)
 	for ev.saving {
 		select {
-		case task := <-vtui.FrameManager.TaskChan: task()
-		case <-timeout: t.Fatal("Timeout")
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Timeout")
 		}
 	}
 
@@ -2452,8 +2520,10 @@ func TestEditorView_Save_Atomic_Cleanup(t *testing.T) {
 	timeout := time.After(1 * time.Second)
 	for ev.saving {
 		select {
-		case task := <-vtui.FrameManager.TaskChan: task()
-		case <-timeout: t.Fatal("Timeout")
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Timeout")
 		}
 	}
 
@@ -2513,7 +2583,6 @@ Loop:
 	}
 }
 
-
 type mockRetryBuffer struct {
 	data       []byte
 	failCounts int
@@ -2526,7 +2595,9 @@ func (b *mockRetryBuffer) Read(offset, length int) ([]byte, error) {
 		return nil, piecetable.ErrLoading
 	}
 	end := offset + length
-	if end > len(b.data) { end = len(b.data) }
+	if end > len(b.data) {
+		end = len(b.data)
+	}
 	return b.data[offset:end], nil
 }
 func TestEditorView_BinaryRobustness(t *testing.T) {
@@ -2550,7 +2621,9 @@ func TestEditorView_BinaryRobustness(t *testing.T) {
 	t.Run("Huge binary line", func(t *testing.T) {
 		// 1MB of binary data with NO newlines
 		data := make([]byte, 1024*1024)
-		for i := range data { data[i] = 0x01 }
+		for i := range data {
+			data[i] = 0x01
+		}
 		ev := NewEditorView(piecetable.New(data), nil, "")
 
 		// This used to load the whole 1MB, now it should be instant
@@ -2923,11 +2996,15 @@ func TestEditorView_Undo_CleanState(t *testing.T) {
 	pt := piecetable.New([]byte("Original"))
 	ev := NewEditorView(pt, nil, "test.txt")
 
-	if ev.modified { t.Error("Should NOT be modified initially") }
+	if ev.modified {
+		t.Error("Should NOT be modified initially")
+	}
 
 	// 1. Modify
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: '!'})
-	if !ev.modified { t.Error("Should BE modified after typing") }
+	if !ev.modified {
+		t.Error("Should BE modified after typing")
+	}
 
 	// 2. Undo -> back to original
 	ev.Undo()
@@ -2953,11 +3030,15 @@ func TestEditorView_WordJumps_FarSpec(t *testing.T) {
 
 	// 1. Прыжок внутри строки к началу второго слова "one" (оффсет 5)
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT, ControlKeyState: vtinput.LeftCtrlPressed})
-	if ev.CursorPos != 5 { t.Errorf("Jump inside failed: expected 5, got %d", ev.CursorPos) }
+	if ev.CursorPos != 5 {
+		t.Errorf("Jump inside failed: expected 5, got %d", ev.CursorPos)
+	}
 
 	// 2. Прыжок к концу строки (EOL оффсет 8)
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT, ControlKeyState: vtinput.LeftCtrlPressed})
-	if ev.CursorPos != 8 { t.Errorf("Jump to EOL failed: expected 8, got %d", ev.CursorPos) }
+	if ev.CursorPos != 8 {
+		t.Errorf("Jump to EOL failed: expected 8, got %d", ev.CursorPos)
+	}
 
 	// 3. Прыжок через границу строки (EOL -> 0 следующей)
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT, ControlKeyState: vtinput.LeftCtrlPressed})
@@ -3000,13 +3081,19 @@ func TestEditorView_WordJumps_EmptyLines(t *testing.T) {
 
 	// Шагаем через пустые строки (два \n подряд)
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT, ControlKeyState: vtinput.LeftCtrlPressed})
-	if ev.CursorLine != 1 { t.Errorf("Step 1 fail: line %d", ev.CursorLine) }
+	if ev.CursorLine != 1 {
+		t.Errorf("Step 1 fail: line %d", ev.CursorLine)
+	}
 
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT, ControlKeyState: vtinput.LeftCtrlPressed})
-	if ev.CursorLine != 2 { t.Errorf("Step 2 fail: line %d", ev.CursorLine) }
+	if ev.CursorLine != 2 {
+		t.Errorf("Step 2 fail: line %d", ev.CursorLine)
+	}
 
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT, ControlKeyState: vtinput.LeftCtrlPressed})
-	if ev.CursorLine != 3 || ev.CursorPos != 0 { t.Errorf("Step 3 fail: %d:%d", ev.CursorLine, ev.CursorPos) }
+	if ev.CursorLine != 3 || ev.CursorPos != 0 {
+		t.Errorf("Step 3 fail: %d:%d", ev.CursorLine, ev.CursorPos)
+	}
 }
 func TestEditorView_WordSelection_Multiline(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
@@ -3019,7 +3106,7 @@ func TestEditorView_WordSelection_Multiline(t *testing.T) {
 	// 1. Выделяем всё первое слово (до \n)
 	ev.ProcessKey(&vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
-		VirtualKeyCode: vtinput.VK_RIGHT,
+		VirtualKeyCode:  vtinput.VK_RIGHT,
 		ControlKeyState: vtinput.LeftCtrlPressed | vtinput.ShiftPressed,
 	})
 
@@ -3030,7 +3117,7 @@ func TestEditorView_WordSelection_Multiline(t *testing.T) {
 	// 2. Прыгаем через EOL. Выделение должно расшириться на вторую строку
 	ev.ProcessKey(&vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
-		VirtualKeyCode: vtinput.VK_RIGHT,
+		VirtualKeyCode:  vtinput.VK_RIGHT,
 		ControlKeyState: vtinput.LeftCtrlPressed | vtinput.ShiftPressed,
 	})
 
@@ -3057,7 +3144,7 @@ func TestEditorView_WordSelection_Multiline_Left(t *testing.T) {
 	// 1. Выделяем второе слово влево
 	ev.ProcessKey(&vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
-		VirtualKeyCode: vtinput.VK_LEFT,
+		VirtualKeyCode:  vtinput.VK_LEFT,
 		ControlKeyState: vtinput.LeftCtrlPressed | vtinput.ShiftPressed,
 	})
 
@@ -3074,7 +3161,7 @@ func TestEditorView_WordSelection_Multiline_Left(t *testing.T) {
 	// 2. Прыгаем еще раз влево, через границу строки (EOL)
 	ev.ProcessKey(&vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
-		VirtualKeyCode: vtinput.VK_LEFT,
+		VirtualKeyCode:  vtinput.VK_LEFT,
 		ControlKeyState: vtinput.LeftCtrlPressed | vtinput.ShiftPressed,
 	})
 
@@ -3086,7 +3173,7 @@ func TestEditorView_WordSelection_Multiline_Left(t *testing.T) {
 	// 3. Последний прыжок влево к началу первого слова
 	ev.ProcessKey(&vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
-		VirtualKeyCode: vtinput.VK_LEFT,
+		VirtualKeyCode:  vtinput.VK_LEFT,
 		ControlKeyState: vtinput.LeftCtrlPressed | vtinput.ShiftPressed,
 	})
 
@@ -3293,7 +3380,9 @@ func TestEditorView_Autocomplete_Cancellation(t *testing.T) {
 	for _, char := range "hel" {
 		ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: char})
 	}
-	if len(ev.acMatches) == 0 { t.Fatal("Setup failed: no matches found") }
+	if len(ev.acMatches) == 0 {
+		t.Fatal("Setup failed: no matches found")
+	}
 
 	// Нажимаем стрелку вправо (или любую навигацию)
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT})
