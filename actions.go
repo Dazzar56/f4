@@ -483,14 +483,14 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 		initialDest += string(os.PathSeparator)
 	}
 	
-	if isMove && AppConfig.ConfirmMove == false {
+	if isMove && !AppConfig.ConfirmMove {
 		go ExecuteFileOp(pf, srcVfs, dstVfs, names, initialDest, isMove, AppConfig.DefaultFileOpMode, pf.RefreshAll)
-		return;
+		return
 	}
 	
-	if isMove == false && AppConfig.ConfirmCopy == false {
+	if !isMove && !AppConfig.ConfirmCopy {
 		go ExecuteFileOp(pf, srcVfs, dstVfs, names, initialDest, isMove, AppConfig.DefaultFileOpMode, pf.RefreshAll)
-		return;
+		return
 	}
 	
 	dlg := vtui.NewCenteredDialog(50, 11, title)
