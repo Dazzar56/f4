@@ -1080,6 +1080,7 @@ func actionConfirmationsSettings(pf *PanelsFrame) {
 	btnOk.OnClick = func() {
 		AppConfig.ConfirmCopy = chkCopy.State == 1
 		AppConfig.ConfirmMove = chkMove.State == 1
+		AppConfig.ConfirmDelete = chkDelete.State == 1
 		AppConfig.ConfirmExit = chkExit.State == 1
 		SaveConfig()
 		dlg.Close()
