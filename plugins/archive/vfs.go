@@ -223,7 +223,12 @@ func (v *ArchiveVFS) Open(ctx context.Context, path string) (vfs.ReadAtCloser, e
 
 func (v *ArchiveVFS) ParentVFS() vfs.VFS         { return v.parent }
 func (v *ArchiveVFS) Join(e ...string) string { return filepath.ToSlash(filepath.Join(e...)) }
-func (v *ArchiveVFS) Abs(p string) (string, error) { return v.Join(v.arcPath, p), nil }
+func (v *ArchiveVFS) Abs(p string) (string, error) {
+	if v.IsAbs(p) {
+		return filepath.ToSlash(filepath.Clean(p)), nil
+	}
+	return v.Join(v.GetPath(), p), nil
+}
 func (v *ArchiveVFS) Base(p string) string    { return filepath.Base(p) }
 func (v *ArchiveVFS) Dir(p string) string {
 	if p == v.arcPath { return v.parent.Dir(v.arcPath) }

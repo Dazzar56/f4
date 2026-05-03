@@ -160,7 +160,12 @@ func (v *SFTPVFS) Stat(ctx context.Context, p string) (vfs.VFSItem, error) {
 }
 
 func (v *SFTPVFS) Join(e ...string) string { return path.Join(e...) }
-func (v *SFTPVFS) Abs(p string) (string, error) { return v.Join(v.path, p), nil }
+func (v *SFTPVFS) Abs(p string) (string, error) {
+	if path.IsAbs(p) {
+		return path.Clean(p), nil
+	}
+	return v.Join(v.path, p), nil
+}
 func (v *SFTPVFS) Base(p string) string { return path.Base(p) }
 func (v *SFTPVFS) Dir(p string) string { return path.Dir(p) }
 func (v *SFTPVFS) MkDir(ctx context.Context, p string) error { return v.client.MkdirAll(p) }

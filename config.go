@@ -13,10 +13,10 @@ import (
 type F4Config struct {
 	ShowHiddenFiles        bool
 	HighlightDir           bool
-	SavePanelPaths         bool
-	KeepTerminalCursor     bool
+	SavePanelPaths          bool
+	KeepTerminalCursor      bool
 	CommandLineAutoComplete bool
-	VimHotkeys             bool
+	VimHotkeys              bool
 	EditorAutoComplete     bool
 	EditorAutoCompleteMask string
 	EditorExpandTabs       int
@@ -36,10 +36,11 @@ type F4Config struct {
 var AppConfig = F4Config{
 	ShowHiddenFiles:        true,
 	HighlightDir:           true,
-	SavePanelPaths:         true,
-	KeepTerminalCursor:     false,
-	VimHotkeys:             false,
-	EditorAutoComplete:     true,
+	SavePanelPaths:          true,
+	KeepTerminalCursor:      false,
+	CommandLineAutoComplete: true,
+	VimHotkeys:              false,
+	EditorAutoComplete:      true,
 	EditorAutoCompleteMask: "*.go;*.c;*.cpp;*.h;*.hpp;*.py;*.js;*.ts;*.rs;*.java;*.sh;*.txt;*.md;*.html;*.css;*.json",
 	EditorExpandTabs:       0,
 	EditorAutoIndent:       true,
@@ -51,6 +52,7 @@ var AppConfig = F4Config{
 	ConfirmMove:            true,
 	ConfirmDelete:          true,
 	ConfirmExit:            true,
+	DefaultFileOpMode:      0,
 }
 
 var getUserConfigIniPath = func() string {
