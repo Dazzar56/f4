@@ -3,22 +3,22 @@
 package main
 
 import (
-	"strings"
 	"encoding/json"
-	"runtime"
 	"fmt"
 	"net"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
-	"golang.org/x/term"
 	"golang.org/x/sys/unix"
+	"golang.org/x/term"
 )
 
 type SessionInfo struct {
@@ -145,12 +145,16 @@ func startNewSession() {
 
 	if err := cmd.Start(); err != nil {
 		vtui.DebugLog("SESSION: CRITICAL: Failed to spawn daemon process (path: %s): %v", os.Args[0], err)
-		if null != nil { null.Close() }
+		if null != nil {
+			null.Close()
+		}
 		fmt.Println("Failed to start daemon:", err)
 		return
 	}
 	vtui.DebugLog("SESSION: Daemon spawned successfully (PID: %d). Attaching client.", cmd.Process.Pid)
-	if null != nil { null.Close() }
+	if null != nil {
+		null.Close()
+	}
 
 	// Wait for the server to create the socket
 	for i := 0; i < 50; i++ {
@@ -371,8 +375,12 @@ func runServer(sockPath string) {
 		// CRITICAL: If the system assigned us standard FDs (0, 1, 2) for the new session,
 		// we MUST NOT close them, or os.Stdin/os.Stdout in the server process will become
 		// invalid (EBADF) for all future connections.
-		if fds[0] > 2 { newStdin.Close() }
-		if fds[1] > 2 { newStdout.Close() }
+		if fds[0] > 2 {
+			newStdin.Close()
+		}
+		if fds[1] > 2 {
+			newStdout.Close()
+		}
 
 		// Restore original server Stdin/Stdout pointers so they aren't garbage collected.
 		os.Stdin, os.Stdout = oldStdin, oldStdout

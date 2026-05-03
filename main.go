@@ -1,16 +1,16 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
-	"runtime/pprof"
-	"fmt"
 	"runtime"
+	"runtime/pprof"
 	"strings"
 
 	"github.com/unxed/f4/vfs"
-	"github.com/unxed/vtui"
 	"github.com/unxed/vtinput"
+	"github.com/unxed/vtui"
 )
 
 func main() {
@@ -85,7 +85,7 @@ func main() {
 
 		switch flagName {
 		case "-v", "--version":
-			version = true;
+			version = true
 		case "--debug":
 			os.Setenv("VTUI_DEBUG", "1")
 		case "--gui":
@@ -144,7 +144,7 @@ func main() {
 
 	if version {
 		fmt.Println(vtui.GetVersionInfo())
-        return
+		return
 	}
 
 	for _, arg := range os.Args {

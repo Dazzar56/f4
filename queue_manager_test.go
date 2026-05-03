@@ -2,16 +2,16 @@ package main
 
 import (
 	"context"
-	"testing"
-	"time"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"testing"
+	"time"
 
 	"github.com/unxed/f4/vfs"
-	"github.com/unxed/vtui"
 	"github.com/unxed/vtinput"
+	"github.com/unxed/vtui"
 )
 
 func TestQueueManager_Lifecycle(t *testing.T) {
@@ -26,8 +26,8 @@ func TestQueueManager_Lifecycle(t *testing.T) {
 
 	executed := false
 	task := &QueueTask{
-		Type: "Test",
-		Desc: "Dummy",
+		Type:    "Test",
+		Desc:    "Dummy",
 		ResKeys: []string{"res1"},
 		Run: func(ctx context.Context, reporter TaskReporter, anchor vtui.Frame) error {
 			executed = true
@@ -164,7 +164,9 @@ func TestQueueManager_ConflictDetection(t *testing.T) {
 	// Блокируем очередь, чтобы задача не запустилась мгновенно
 	qm.mu.Lock()
 	qm.activeKeys["local_disk"] = true // Предполагаем linux ресурс ключ
-	if runtime.GOOS == "windows" { qm.activeKeys[filepath.VolumeName(tmp)] = true }
+	if runtime.GOOS == "windows" {
+		qm.activeKeys[filepath.VolumeName(tmp)] = true
+	}
 	qm.mu.Unlock()
 
 	qm.Enqueue(task)
@@ -184,11 +186,16 @@ func TestQueueManager_ConflictDetection(t *testing.T) {
 		qm.mu.Lock()
 		state := task.State
 		qm.mu.Unlock()
-		if state == "Error" || state == "Done" { break }
+		if state == "Error" || state == "Done" {
+			break
+		}
 		select {
-		case task := <-vtui.FrameManager.TaskChan: task()
-		case <-timeout: t.Fatal("Task hung")
-		default: time.Sleep(10 * time.Millisecond)
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Task hung")
+		default:
+			time.Sleep(10 * time.Millisecond)
 		}
 	}
 
@@ -302,7 +309,7 @@ func TestQueueManager_BackgroundWorkspace(t *testing.T) {
 	// Добавляем задачу
 	qm.Enqueue(&QueueTask{
 		Type: "Test",
-		Run: func(ctx context.Context, r TaskReporter, a vtui.Frame) error { return nil },
+		Run:  func(ctx context.Context, r TaskReporter, a vtui.Frame) error { return nil },
 	})
 
 	// Обрабатываем задачи UI (EnsureQueueWorkspace вызывается через PostTask)
@@ -329,7 +336,7 @@ func TestQueueManager_BackgroundWorkspace(t *testing.T) {
 		t.Error("QueueFrame not found at index 0")
 	}
 
-	// Проверяем, что фокус остался на исходном экране. 
+	// Проверяем, что фокус остался на исходном экране.
 	// Так как мы вставили в начало, индекс активного экрана должен был сдвинуться на 1.
 	if fm.ActiveIdx != 1 {
 		t.Errorf("Focus pointer tracking failed. ActiveIdx: %d, expected 1", fm.ActiveIdx)

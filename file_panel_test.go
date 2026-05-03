@@ -1,16 +1,16 @@
 package main
 
 import (
-	"os"
 	"fmt"
-	"path/filepath"
-	"time"
-	"sort"
-	"strings"
-	"testing"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"testing"
+	"time"
 )
 
 func TestFileEntry_GetCellText(t *testing.T) {
@@ -140,13 +140,17 @@ func TestFileSystemPanel_ShowHiddenFiles(t *testing.T) {
 			goto done1
 		}
 	}
-	done1:
+done1:
 
 	foundHidden := false
 	for _, e := range fp1.entries {
-		if e.Name == ".hidden.txt" { foundHidden = true }
+		if e.Name == ".hidden.txt" {
+			foundHidden = true
+		}
 	}
-	if !foundHidden { t.Error("Hidden file should be visible") }
+	if !foundHidden {
+		t.Error("Hidden file should be visible")
+	}
 
 	// 2. Hide hidden files
 	AppConfig.ShowHiddenFiles = false
@@ -162,13 +166,17 @@ func TestFileSystemPanel_ShowHiddenFiles(t *testing.T) {
 			goto done2
 		}
 	}
-	done2:
+done2:
 
 	foundHidden = false
 	for _, e := range fp2.entries {
-		if e.Name == ".hidden.txt" { foundHidden = true }
+		if e.Name == ".hidden.txt" {
+			foundHidden = true
+		}
 	}
-	if foundHidden { t.Error("Hidden file should NOT be visible") }
+	if foundHidden {
+		t.Error("Hidden file should NOT be visible")
+	}
 
 	// Reset global state
 	AppConfig.ShowHiddenFiles = true
@@ -203,7 +211,7 @@ func TestFileSystemPanel_NavigateUp_Selection(t *testing.T) {
 			goto done1
 		}
 	}
-	done1:
+done1:
 
 	// Simulate pressing Enter on ".."
 	fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
@@ -230,7 +238,7 @@ func TestFileSystemPanel_NavigateUp_Selection(t *testing.T) {
 			goto done2
 		}
 	}
-	done2:
+done2:
 
 	// Ensure that after returning to the parent directory, the cursor is on the folder we just exited
 	if fp.GetSelectedName() != "target_folder" {
@@ -276,8 +284,12 @@ func TestMediumRow_GetCellText(t *testing.T) {
 
 	mRow := &mediumRow{fp: fp, r: 0}
 
-	if mRow.GetCellText(0) != "test.txt" { t.Errorf("Expected 'test.txt', got %q", mRow.GetCellText(0)) }
-	if mRow.GetCellText(1) != "" { t.Errorf("Out of bounds should be empty") }
+	if mRow.GetCellText(0) != "test.txt" {
+		t.Errorf("Expected 'test.txt', got %q", mRow.GetCellText(0))
+	}
+	if mRow.GetCellText(1) != "" {
+		t.Errorf("Out of bounds should be empty")
+	}
 
 	fp.entries = make([]*fileEntry, 10)
 	for i := 0; i < 10; i++ {
@@ -286,8 +298,12 @@ func TestMediumRow_GetCellText(t *testing.T) {
 	fp.entries[0].Name = "Left"
 	fp.entries[7].Name = "Right"
 	mRow = &mediumRow{fp: fp, r: 0}
-	if mRow.GetCellText(0) != "Left" { t.Errorf("Expected 'Left', got %q", mRow.GetCellText(0)) }
-	if mRow.GetCellText(1) != "Right" { t.Errorf("Expected 'Right', got %q", mRow.GetCellText(1)) }
+	if mRow.GetCellText(0) != "Left" {
+		t.Errorf("Expected 'Left', got %q", mRow.GetCellText(0))
+	}
+	if mRow.GetCellText(1) != "Right" {
+		t.Errorf("Expected 'Right', got %q", mRow.GetCellText(1))
+	}
 }
 
 func TestFileSystemPanel_InfoLineRendering(t *testing.T) {
@@ -509,7 +525,9 @@ func TestFileSystemPanel_RightClick_ResetOnRelease(t *testing.T) {
 	fp.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: true, MouseX: 5, MouseY: 2, ButtonState: vtinput.RightmostButtonPressed,
 	})
-	if !fp.entries[0].Selected { t.Fatal("Should be selected") }
+	if !fp.entries[0].Selected {
+		t.Fatal("Should be selected")
+	}
 
 	// 2. Release button -> Resets tracker
 	fp.ProcessMouse(&vtinput.InputEvent{
@@ -556,8 +574,12 @@ func TestFileSystemPanel_IncrementalInteraction(t *testing.T) {
 	currentSelected := fp.GetSelectedName() // "file_Z"
 	fp.entries = append(fp.entries, &fileEntry{VFSItem: chunk2[0]})
 	sort.Slice(fp.entries, func(i, j int) bool {
-		if fp.entries[i].Name == ".." { return true }
-		if fp.entries[j].Name == ".." { return false }
+		if fp.entries[i].Name == ".." {
+			return true
+		}
+		if fp.entries[j].Name == ".." {
+			return false
+		}
 		return fp.entries[i].Name < fp.entries[j].Name
 	})
 	fp.Refresh()
@@ -663,7 +685,9 @@ func TestFileSystemPanel_AsyncPendingSelection(t *testing.T) {
 
 	// Replicating the logic from ReadDirectory's onChunk callback
 	newEntries := make([]*fileEntry, len(chunk1))
-	for i, item := range chunk1 { newEntries[i] = &fileEntry{VFSItem: item} }
+	for i, item := range chunk1 {
+		newEntries[i] = &fileEntry{VFSItem: item}
+	}
 
 	fp.entries = append(fp.entries, newEntries...)
 	sort.Slice(fp.entries, func(i, j int) bool { return fp.entries[i].Name < fp.entries[j].Name })
@@ -684,7 +708,9 @@ func TestFileSystemPanel_AsyncPendingSelection(t *testing.T) {
 	// 2. Simulate Second Chunk (contains our target)
 	chunk2 := []vfs.VFSItem{{Name: "target.txt"}, {Name: "zzz.txt"}}
 	newEntries2 := make([]*fileEntry, len(chunk2))
-	for i, item := range chunk2 { newEntries2[i] = &fileEntry{VFSItem: item} }
+	for i, item := range chunk2 {
+		newEntries2[i] = &fileEntry{VFSItem: item}
+	}
 
 	fp.entries = append(fp.entries, newEntries2...)
 	sort.Slice(fp.entries, func(i, j int) bool { return fp.entries[i].Name < fp.entries[j].Name })
@@ -907,7 +933,7 @@ func TestFileSystemPanel_FastFind_LongString(t *testing.T) {
 	foundTail := false
 	for x := fieldX1; x < fieldX2-3; x++ {
 		if scr.GetCell(x, 18).Char == 'T' && scr.GetCell(x+1, 18).Char == 'A' &&
-		   scr.GetCell(x+2, 18).Char == 'I' && scr.GetCell(x+3, 18).Char == 'L' {
+			scr.GetCell(x+2, 18).Char == 'I' && scr.GetCell(x+3, 18).Char == 'L' {
 			foundTail = true
 			break
 		}
@@ -920,7 +946,7 @@ func TestFileSystemPanel_FastFind_LongString(t *testing.T) {
 	foundHead := false
 	for x := fieldX1; x < fieldX2-3; x++ {
 		if scr.GetCell(x, 18).Char == 'H' && scr.GetCell(x+1, 18).Char == 'E' &&
-		   scr.GetCell(x+2, 18).Char == 'A' && scr.GetCell(x+3, 18).Char == 'D' {
+			scr.GetCell(x+2, 18).Char == 'A' && scr.GetCell(x+3, 18).Char == 'D' {
 			foundHead = true
 			break
 		}
@@ -950,7 +976,7 @@ func TestFileSystemPanel_FastFind_XLat(t *testing.T) {
 
 	// 2. Поиск "заметка" через ввод "pfvt" (в английской раскладке)
 	vtui.GlobalXlator.Track('a') // Включаем английский контекст
-	fp.fastFindStr = "pfvt" // 'p'->'з', 'f'->'а', 'v'->'м', 't'->'е'
+	fp.fastFindStr = "pfvt"      // 'p'->'з', 'f'->'а', 'v'->'м', 't'->'е'
 	// Сбросим индекс, чтобы гарантированно найти файл с начала списка
 	fp.SetCursorIndex(0)
 	fp.doFastFind(0)
@@ -1037,10 +1063,10 @@ func TestFileSystemPanel_FastFind_MouseDeactivation(t *testing.T) {
 
 	// Клик мышкой (любой кнопкой) должен выключать поиск
 	fp.ProcessMouse(&vtinput.InputEvent{
-		Type: vtinput.MouseEventType,
-		KeyDown: true,
+		Type:        vtinput.MouseEventType,
+		KeyDown:     true,
 		ButtonState: vtinput.FromLeft1stButtonPressed,
-		MouseX: 5, MouseY: 5,
+		MouseX:      5, MouseY: 5,
 	})
 
 	if fp.fastFindMode {
@@ -1246,10 +1272,14 @@ func TestFileSystemPanel_Sorting(t *testing.T) {
 
 	// 4. Test logic in SetSortMode
 	fp.SetSortMode(SortName) // Should set reverse = false
-	if fp.sortReverse { t.Error("SetSortMode(Name) should reset reverse to false") }
+	if fp.sortReverse {
+		t.Error("SetSortMode(Name) should reset reverse to false")
+	}
 
 	fp.SetSortMode(SortName) // Toggle reverse
-	if !fp.sortReverse { t.Error("SetSortMode(Name) second call should toggle reverse to true") }
+	if !fp.sortReverse {
+		t.Error("SetSortMode(Name) second call should toggle reverse to true")
+	}
 }
 
 /*
@@ -1433,8 +1463,12 @@ func TestFileSystemPanel_LiveSelectionPreservation(t *testing.T) {
 	foundSelected1 := false
 	foundSelected2 := false
 	for _, e := range fp.entries {
-		if e.Name == "item1" && e.Selected { foundSelected1 = true }
-		if e.Name == "item2" && e.Selected { foundSelected2 = true }
+		if e.Name == "item1" && e.Selected {
+			foundSelected1 = true
+		}
+		if e.Name == "item2" && e.Selected {
+			foundSelected2 = true
+		}
 	}
 	if foundSelected1 {
 		t.Error("Deselection was lost during cache-to-real transition")
@@ -1454,7 +1488,9 @@ func TestFileSystemPanel_ReadDir_ContextCancel(t *testing.T) {
 	v.SetPath("/scenarios/iops")
 	fp.ReadDirectory()
 
-	if !fp.isLoading { t.Fatal("Panel should be loading") }
+	if !fp.isLoading {
+		t.Fatal("Panel should be loading")
+	}
 
 	// Имитируем отмену (например, переход в другую папку)
 	fp.cancelLoad()

@@ -1,16 +1,16 @@
 package main
 
 import (
-	"os"
+	"context"
 	"fmt"
+	"github.com/unxed/f4/vfs"
+	"os"
+	"os/user"
 	"runtime"
+	"strings"
+	"sync"
 	"time"
 	"unicode"
-	"github.com/unxed/f4/vfs"
-	"sync"
-	"os/user"
-	"strings"
-	"context"
 
 	"github.com/mattn/go-runewidth"
 
@@ -22,6 +22,7 @@ type DriveEntry struct {
 	Name    string
 	Factory func() vfs.VFS
 }
+
 var DriveRegistry []DriveEntry
 
 func RegisterDrive(name string, factory func() vfs.VFS) {
@@ -33,6 +34,7 @@ type HotkeyEntry struct {
 	Mods    vtinput.ControlKeyState
 	Handler func(app vfs.App)
 }
+
 var GlobalHotkeys []HotkeyEntry
 
 func RegisterGlobalHotkey(vk uint16, mods vtinput.ControlKeyState, handler func(app vfs.App)) {
@@ -40,8 +42,12 @@ func RegisterGlobalHotkey(vk uint16, mods vtinput.ControlKeyState, handler func(
 }
 func (pf *PanelsFrame) GetActivePanelVFS() vfs.VFS  { return pf.Active().(*FileSystemPanel).vfs }
 func (pf *PanelsFrame) GetPassivePanelVFS() vfs.VFS { return pf.Passive().(*FileSystemPanel).vfs }
-func (pf *PanelsFrame) GetSelectedNames() []string { return pf.Active().(*FileSystemPanel).GetSelectedNames() }
-func (pf *PanelsFrame) GetSelectedName() string   { return pf.Active().(*FileSystemPanel).GetSelectedName() }
+func (pf *PanelsFrame) GetSelectedNames() []string {
+	return pf.Active().(*FileSystemPanel).GetSelectedNames()
+}
+func (pf *PanelsFrame) GetSelectedName() string {
+	return pf.Active().(*FileSystemPanel).GetSelectedName()
+}
 
 type PanelController interface {
 	ProcessPanelKey(app vfs.App, e *vtinput.InputEvent) bool
@@ -59,17 +65,18 @@ type Panel interface {
 	GetPosition() (int, int, int, int)
 	GetSelectedName() string
 }
+
 // PanelsFrame is the main frame of the f4 manager, containing left and right panels.
 type PanelsFrame struct {
 	vtui.BaseFrame
-	panels    [2]Panel
-	activeIdx int // 0 for left, 1 for right
-	executing bool
+	panels         [2]Panel
+	activeIdx      int // 0 for left, 1 for right
+	executing      bool
 	returnToPanels bool
 
-	menuBar   *vtui.MenuBar
-	cmdLine   *CommandLine
-	keyBar    *vtui.KeyBar
+	menuBar *vtui.MenuBar
+	cmdLine *CommandLine
+	keyBar  *vtui.KeyBar
 
 	showKeyBar bool
 	showPanels bool
@@ -83,15 +90,16 @@ type PanelsFrame struct {
 	termView   *TerminalView
 	parser     *AnsiParser
 
-	lastAlt   bool
-	lastBusy  bool
+	lastAlt  bool
+	lastBusy bool
 
 	lastAutoRefresh time.Time
-	lastKey      rune
-	lastKeyEvent time.Time
+	lastKey         rune
+	lastKeyEvent    time.Time
 }
-func (pf *PanelsFrame) Left() Panel  { return pf.panels[0] }
-func (pf *PanelsFrame) Right() Panel { return pf.panels[1] }
+
+func (pf *PanelsFrame) Left() Panel    { return pf.panels[0] }
+func (pf *PanelsFrame) Right() Panel   { return pf.panels[1] }
 func (pf *PanelsFrame) Active() Panel  { return pf.panels[pf.activeIdx] }
 func (pf *PanelsFrame) Passive() Panel { return pf.panels[1-pf.activeIdx] }
 
@@ -181,27 +189,38 @@ func NewPanelsFrame() *PanelsFrame {
 	pf.initPTY()
 	pf.termView.pty = pf.pty
 
-
 	return pf
 }
 
 func getMenuText(current, target ViewMode, label string) string {
-	if current == target { return "√" + label }
+	if current == target {
+		return "√" + label
+	}
 	return " " + label
 }
 
 func getSortMenuText(current, target SortMode, label string) string {
-	if current == target { return "√" + label }
+	if current == target {
+		return "√" + label
+	}
 	return " " + label
 }
 
 func (pf *PanelsFrame) updateMenuCheckmarks() {
-	if pf.panels[0] == nil || pf.panels[1] == nil || pf.menuBar == nil || len(pf.menuBar.Items) < 5 { return }
+	if pf.panels[0] == nil || pf.panels[1] == nil || pf.menuBar == nil || len(pf.menuBar.Items) < 5 {
+		return
+	}
 
 	lMode, rMode := ViewModeMedium, ViewModeMedium
 	lSort, rSort := SortName, SortName
-	if fsp, ok := pf.panels[0].(*FileSystemPanel); ok { lMode = fsp.viewMode; lSort = fsp.sortMode }
-	if fsp, ok := pf.panels[1].(*FileSystemPanel); ok { rMode = fsp.viewMode; rSort = fsp.sortMode }
+	if fsp, ok := pf.panels[0].(*FileSystemPanel); ok {
+		lMode = fsp.viewMode
+		lSort = fsp.sortMode
+	}
+	if fsp, ok := pf.panels[1].(*FileSystemPanel); ok {
+		rMode = fsp.viewMode
+		rSort = fsp.sortMode
+	}
 
 	pf.menuBar.Items[0].SubItems[0].Text = getMenuText(lMode, ViewModeMedium, "&"+Msg("Menu.Left.Medium"))
 	pf.menuBar.Items[0].SubItems[1].Text = getMenuText(lMode, ViewModeDetailed, "&"+Msg("Menu.Left.Detailed"))
@@ -243,7 +262,9 @@ func (pf *PanelsFrame) buildPrompt() []vtui.CharInfo {
 	}
 
 	host, _ := os.Hostname()
-	if host == "" { host = "localhost" }
+	if host == "" {
+		host = "localhost"
+	}
 
 	userHostStr := username + "@" + host
 	if vfsTitle != "" {
@@ -354,7 +375,6 @@ func (pf *PanelsFrame) Close() {
 	pf.BaseFrame.Close()
 }
 
-
 func (pf *PanelsFrame) ResizeConsole(w, h int) {
 	pf.lastW, pf.lastH = w, h
 	pf.SetPosition(0, 0, w-1, h-1) // Update hit-box for FrameManager hit-testing
@@ -369,7 +389,9 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 		termY2 = h - 2
 	}
 	termH := termY2 - contentY1 + 1
-	if termH < 0 { termH = 0 }
+	if termH < 0 {
+		termH = 0
+	}
 
 	if pf.pty != nil {
 		pf.ptyMutex.Lock()
@@ -389,7 +411,9 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 		panelY2 = h - 3
 	}
 	panelH := panelY2 - contentY1 + 1
-	if panelH < 0 { panelH = 0 }
+	if panelH < 0 {
+		panelH = 0
+	}
 
 	leftW := w / 2
 	rightW := w - leftW
@@ -403,8 +427,12 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 
 		for i, p := range pf.panels {
 			width := leftW
-			if i == 1 { width = rightW }
-			if fsp, ok := p.(*FileSystemPanel); ok { fsp.Resize(width, panelH) }
+			if i == 1 {
+				width = rightW
+			}
+			if fsp, ok := p.(*FileSystemPanel); ok {
+				fsp.Resize(width, panelH)
+			}
 		}
 	}
 
@@ -731,23 +759,35 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	case vtinput.VK_F1:
 		return vtui.FrameManager.EmitCommand(vtui.CmHelp, nil)
 	case vtinput.VK_F3:
-		if ctrl { return vtui.FrameManager.EmitCommand(CmSortName, nil) }
+		if ctrl {
+			return vtui.FrameManager.EmitCommand(CmSortName, nil)
+		}
 		return vtui.FrameManager.EmitCommand(CmView, nil)
 	case vtinput.VK_F4:
-		if ctrl { return vtui.FrameManager.EmitCommand(CmSortExt, nil) }
+		if ctrl {
+			return vtui.FrameManager.EmitCommand(CmSortExt, nil)
+		}
 		if shift {
 			return vtui.FrameManager.EmitCommand(CmNew, nil)
 		}
 		return vtui.FrameManager.EmitCommand(CmEdit, nil)
 	case vtinput.VK_F5:
-		if ctrl { return vtui.FrameManager.EmitCommand(CmSortTime, nil) }
+		if ctrl {
+			return vtui.FrameManager.EmitCommand(CmSortTime, nil)
+		}
 		return vtui.FrameManager.EmitCommand(CmCopy, nil)
 	case vtinput.VK_F6:
-		if shift { return vtui.FrameManager.EmitCommand(CmRename, nil) }
-		if ctrl { return vtui.FrameManager.EmitCommand(CmSortSize, nil) }
+		if shift {
+			return vtui.FrameManager.EmitCommand(CmRename, nil)
+		}
+		if ctrl {
+			return vtui.FrameManager.EmitCommand(CmSortSize, nil)
+		}
 		return vtui.FrameManager.EmitCommand(CmMove, nil)
 	case vtinput.VK_F7:
-		if ctrl { return vtui.FrameManager.EmitCommand(CmSortUnsorted, nil) }
+		if ctrl {
+			return vtui.FrameManager.EmitCommand(CmSortUnsorted, nil)
+		}
 		return vtui.FrameManager.EmitCommand(CmMkDir, nil)
 	case vtinput.VK_F8:
 		return vtui.FrameManager.EmitCommand(CmDelete, nil)
@@ -784,9 +824,12 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			if pf.lastKey == key && now.Sub(pf.lastKeyEvent) < 400*time.Millisecond && (cmdLineText == "" || cmdLineText == string(key)) {
 				var cmd int
 				switch key {
-				case 'd': cmd = CmDelete
-				case 'c': cmd = CmCopy
-				case 'm': cmd = CmMove
+				case 'd':
+					cmd = CmDelete
+				case 'c':
+					cmd = CmCopy
+				case 'm':
+					cmd = CmMove
 				}
 				if cmd != 0 {
 					pf.cmdLine.Clear()
@@ -893,7 +936,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 						targetPath += string(os.PathSeparator)
 					}
 				}
-			// Intercept standard 'cd' commands
+				// Intercept standard 'cd' commands
 			} else if strings.HasPrefix(lowerCmd, "cd ") || strings.HasPrefix(lowerCmd, "chdir ") || (runtime.GOOS == "windows" && strings.HasPrefix(lowerCmd, "cd /d ")) {
 				prefixLen := 3
 				if strings.HasPrefix(lowerCmd, "cd /d ") {
@@ -1014,7 +1057,9 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			// 2. If panel didn't handle it, it's a file. Execute or open it.
 			if !handled {
 				fsp := pf.getActivePanel()
-				if fsp == nil { return true }
+				if fsp == nil {
+					return true
+				}
 
 				name := fsp.GetSelectedName()
 				if name != "" && name != ".." {
@@ -1039,9 +1084,15 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			var selectChar rune
 
 			switch e.VirtualKeyCode {
-			case vtinput.VK_ADD: isSelectKey = true; selectChar = '+'
-			case vtinput.VK_SUBTRACT: isSelectKey = true; selectChar = '-'
-			case vtinput.VK_MULTIPLY: isSelectKey = true; selectChar = '*'
+			case vtinput.VK_ADD:
+				isSelectKey = true
+				selectChar = '+'
+			case vtinput.VK_SUBTRACT:
+				isSelectKey = true
+				selectChar = '-'
+			case vtinput.VK_MULTIPLY:
+				isSelectKey = true
+				selectChar = '*'
 			default:
 				if e.Char == '+' || e.Char == '-' || e.Char == '*' {
 					isSelectKey = true
@@ -1124,7 +1175,9 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 	mx, my := int(e.MouseX), int(e.MouseY)
 
 	for i, p := range pf.panels {
-		if p == nil { continue }
+		if p == nil {
+			continue
+		}
 		x1, y1, x2, y2 := p.GetPosition()
 		if mx >= x1 && mx <= x2 && my >= y1 && my <= y2 {
 			if pf.activeIdx != i && e.ButtonState != 0 {
@@ -1145,12 +1198,16 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 }
 
 func (pf *PanelsFrame) getActivePanel() *FileSystemPanel {
-	if fsp, ok := pf.Active().(*FileSystemPanel); ok { return fsp }
+	if fsp, ok := pf.Active().(*FileSystemPanel); ok {
+		return fsp
+	}
 	return nil
 }
 
 func (pf *PanelsFrame) getInactivePanel() *FileSystemPanel {
-	if fsp, ok := pf.Passive().(*FileSystemPanel); ok { return fsp }
+	if fsp, ok := pf.Passive().(*FileSystemPanel); ok {
+		return fsp
+	}
 	return nil
 }
 
@@ -1260,61 +1317,88 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 		}
 
 	case CmLeftMedium:
-		if fsp, ok := pf.panels[0].(*FileSystemPanel); ok { fsp.SetViewMode(ViewModeMedium) }
+		if fsp, ok := pf.panels[0].(*FileSystemPanel); ok {
+			fsp.SetViewMode(ViewModeMedium)
+		}
 		pf.updateMenuCheckmarks()
 		return true
 	case CmLeftDetailed:
-		if fsp, ok := pf.panels[0].(*FileSystemPanel); ok { fsp.SetViewMode(ViewModeDetailed) }
+		if fsp, ok := pf.panels[0].(*FileSystemPanel); ok {
+			fsp.SetViewMode(ViewModeDetailed)
+		}
 		pf.updateMenuCheckmarks()
 		return true
 	case CmRightMedium:
-		if fsp, ok := pf.panels[1].(*FileSystemPanel); ok { fsp.SetViewMode(ViewModeMedium) }
+		if fsp, ok := pf.panels[1].(*FileSystemPanel); ok {
+			fsp.SetViewMode(ViewModeMedium)
+		}
 		pf.updateMenuCheckmarks()
 		return true
 	case CmRightDetailed:
-		if fsp, ok := pf.panels[1].(*FileSystemPanel); ok { fsp.SetViewMode(ViewModeDetailed) }
+		if fsp, ok := pf.panels[1].(*FileSystemPanel); ok {
+			fsp.SetViewMode(ViewModeDetailed)
+		}
 		pf.updateMenuCheckmarks()
 		return true
 
-
 	case CmLeftSortName:
-		if fsp, ok := pf.panels[0].(*FileSystemPanel); ok { fsp.SetSortMode(SortName) }
+		if fsp, ok := pf.panels[0].(*FileSystemPanel); ok {
+			fsp.SetSortMode(SortName)
+		}
 		pf.updateMenuCheckmarks()
 		return true
 	case CmLeftSortExt:
-		if fsp, ok := pf.panels[0].(*FileSystemPanel); ok { fsp.SetSortMode(SortExt) }
+		if fsp, ok := pf.panels[0].(*FileSystemPanel); ok {
+			fsp.SetSortMode(SortExt)
+		}
 		pf.updateMenuCheckmarks()
 		return true
 	case CmLeftSortTime:
-		if fsp, ok := pf.panels[0].(*FileSystemPanel); ok { fsp.SetSortMode(SortTime) }
+		if fsp, ok := pf.panels[0].(*FileSystemPanel); ok {
+			fsp.SetSortMode(SortTime)
+		}
 		pf.updateMenuCheckmarks()
 		return true
 	case CmLeftSortSize:
-		if fsp, ok := pf.panels[0].(*FileSystemPanel); ok { fsp.SetSortMode(SortSize) }
+		if fsp, ok := pf.panels[0].(*FileSystemPanel); ok {
+			fsp.SetSortMode(SortSize)
+		}
 		pf.updateMenuCheckmarks()
 		return true
 	case CmLeftSortUnsorted:
-		if fsp, ok := pf.panels[0].(*FileSystemPanel); ok { fsp.SetSortMode(SortUnsorted) }
+		if fsp, ok := pf.panels[0].(*FileSystemPanel); ok {
+			fsp.SetSortMode(SortUnsorted)
+		}
 		pf.updateMenuCheckmarks()
 		return true
 	case CmRightSortName:
-		if fsp, ok := pf.panels[1].(*FileSystemPanel); ok { fsp.SetSortMode(SortName) }
+		if fsp, ok := pf.panels[1].(*FileSystemPanel); ok {
+			fsp.SetSortMode(SortName)
+		}
 		pf.updateMenuCheckmarks()
 		return true
 	case CmRightSortExt:
-		if fsp, ok := pf.panels[1].(*FileSystemPanel); ok { fsp.SetSortMode(SortExt) }
+		if fsp, ok := pf.panels[1].(*FileSystemPanel); ok {
+			fsp.SetSortMode(SortExt)
+		}
 		pf.updateMenuCheckmarks()
 		return true
 	case CmRightSortTime:
-		if fsp, ok := pf.panels[1].(*FileSystemPanel); ok { fsp.SetSortMode(SortTime) }
+		if fsp, ok := pf.panels[1].(*FileSystemPanel); ok {
+			fsp.SetSortMode(SortTime)
+		}
 		pf.updateMenuCheckmarks()
 		return true
 	case CmRightSortSize:
-		if fsp, ok := pf.panels[1].(*FileSystemPanel); ok { fsp.SetSortMode(SortSize) }
+		if fsp, ok := pf.panels[1].(*FileSystemPanel); ok {
+			fsp.SetSortMode(SortSize)
+		}
 		pf.updateMenuCheckmarks()
 		return true
 	case CmRightSortUnsorted:
-		if fsp, ok := pf.panels[1].(*FileSystemPanel); ok { fsp.SetSortMode(SortUnsorted) }
+		if fsp, ok := pf.panels[1].(*FileSystemPanel); ok {
+			fsp.SetSortMode(SortUnsorted)
+		}
 		pf.updateMenuCheckmarks()
 		return true
 	case CmSwapPanels:
@@ -1323,29 +1407,38 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 		pf.ResizeConsole(pf.lastW, pf.lastH)
 		return true
 	case CmSortName:
-		if fsp := pf.getActivePanel(); fsp != nil { fsp.SetSortMode(SortName) }
+		if fsp := pf.getActivePanel(); fsp != nil {
+			fsp.SetSortMode(SortName)
+		}
 		pf.updateMenuCheckmarks()
 		return true
 	case CmSortExt:
-		if fsp := pf.getActivePanel(); fsp != nil { fsp.SetSortMode(SortExt) }
+		if fsp := pf.getActivePanel(); fsp != nil {
+			fsp.SetSortMode(SortExt)
+		}
 		pf.updateMenuCheckmarks()
 		return true
 	case CmSortTime:
-		if fsp := pf.getActivePanel(); fsp != nil { fsp.SetSortMode(SortTime) }
+		if fsp := pf.getActivePanel(); fsp != nil {
+			fsp.SetSortMode(SortTime)
+		}
 		pf.updateMenuCheckmarks()
 		return true
 	case CmSortSize:
-		if fsp := pf.getActivePanel(); fsp != nil { fsp.SetSortMode(SortSize) }
+		if fsp := pf.getActivePanel(); fsp != nil {
+			fsp.SetSortMode(SortSize)
+		}
 		pf.updateMenuCheckmarks()
 		return true
 	case CmSortUnsorted:
-		if fsp := pf.getActivePanel(); fsp != nil { fsp.SetSortMode(SortUnsorted) }
+		if fsp := pf.getActivePanel(); fsp != nil {
+			fsp.SetSortMode(SortUnsorted)
+		}
 		pf.updateMenuCheckmarks()
 		return true
 	}
 	return false
 }
-
 
 func (pf *PanelsFrame) GetKeyLabels() *vtui.KeySet {
 	return &vtui.KeySet{
@@ -1369,7 +1462,7 @@ func (pf *PanelsFrame) GetKeyLabels() *vtui.KeySet {
 
 func (pf *PanelsFrame) GetType() vtui.FrameType { return vtui.TypeUser + 1 }
 
-func (pf *PanelsFrame) SetExitCode(code int)     { pf.Done = true; pf.ExitCode = code }
+func (pf *PanelsFrame) SetExitCode(code int) { pf.Done = true; pf.ExitCode = code }
 func (pf *PanelsFrame) showDummyOpDialog() {
 	msg := Msg("Op.DummyText")
 	lines := vtui.WrapText(msg, 50-4)
@@ -1480,13 +1573,17 @@ func (pf *PanelsFrame) RunProgressTask(title, startMsg string, forked bool, work
 		err := worker(ctx.Context, update)
 		ctx.RunOnUI(func() {
 			dlg.Close()
-			if onComplete != nil { onComplete(err) }
+			if onComplete != nil {
+				onComplete(err)
+			}
 		})
 	})
 }
+
 type progressTaskReporter struct {
 	update func(msg string, percent int)
 }
+
 func (p *progressTaskReporter) UpdateScan(currentPath string, files, dirs int64) {
 	p.update("Scanning...", 0)
 }
@@ -1500,7 +1597,9 @@ func (pf *PanelsFrame) ExecuteDummyOp(mode int) {
 	runFunc := func(ctx context.Context, reporter TaskReporter, anchor vtui.Frame) error {
 		totalSteps := 300 // 5 minutes = 300 seconds
 		for i := 1; i <= totalSteps; i++ {
-			if ctx.Err() != nil { return ctx.Err() }
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			time.Sleep(1 * time.Second)
 			reporter.UpdateTransfer("Processing", fmt.Sprintf("File %d of %d", i, totalSteps), (i*100)/totalSteps, "Dummy", (i*100)/totalSteps, "1 item/s")
 		}
@@ -1511,7 +1610,7 @@ func (pf *PanelsFrame) ExecuteDummyOp(mode int) {
 		GlobalQueueManager.Enqueue(&QueueTask{
 			Type: "Dummy",
 			Desc: desc,
-			Run: runFunc,
+			Run:  runFunc,
 			OnComplete: func() {
 				vtui.ShowToast("Dummy operation finished successfully", 3*time.Second)
 			},
@@ -1570,19 +1669,27 @@ func (pf *PanelsFrame) Menu(title string, items []string, callback func(int)) {
 		}
 
 		h := len(items) + 2
-		if h > 15 { h = 15 } // Max height limit
+		if h > 15 {
+			h = 15
+		} // Max height limit
 
 		// Center relative to the PanelsFrame size
 		x := (pf.lastW - maxW) / 2
 		y := (pf.lastH - h) / 2
-		if x < 0 { x = 0 }
-		if y < 0 { y = 0 }
+		if x < 0 {
+			x = 0
+		}
+		if y < 0 {
+			y = 0
+		}
 
 		menu.SetPosition(x, y, x+maxW-1, y+h-1)
 
 		menu.OnAction = func(idx int) {
 			menu.Close()
-			if callback != nil { callback(idx) }
+			if callback != nil {
+				callback(idx)
+			}
 		}
 		vtui.FrameManager.Push(menu)
 	})
@@ -1591,9 +1698,6 @@ func (pf *PanelsFrame) getActivePTYUnsafe() PtyBackend {
 	if pf.remotePtys == nil {
 		pf.remotePtys = make(map[vfs.VFS]PtyBackend)
 	}
-
-
-
 
 	var activeVfs vfs.VFS
 	if fsp := pf.getActivePanel(); fsp != nil {
@@ -1751,7 +1855,9 @@ func (pf *PanelsFrame) showDriveMenu(panelIdx int) {
 	// 1. Other panel (focused by default)
 	menu.AddItem(vtui.MenuItem{Text: Msg("Panel.Other"), UserData: func(fsp *FileSystemPanel) {
 		otherFsp := pf.panels[1-panelIdx].(*FileSystemPanel)
-		if fsp.vfs != nil { fsp.vfs.Close() }
+		if fsp.vfs != nil {
+			fsp.vfs.Close()
+		}
 		fsp.vfs = otherFsp.vfs.Clone()
 		fsp.ReadDirectory()
 		pf.RefreshAll()
@@ -1820,11 +1926,17 @@ func (pf *PanelsFrame) showDriveMenu(panelIdx int) {
 		var targetIndex = -1
 		if e.VirtualKeyCode == vtinput.VK_OEM_2 { // Клавиша /?
 			for i, item := range menu.Items {
-				if strings.Contains(item.Text, "/") { targetIndex = i; break }
+				if strings.Contains(item.Text, "/") {
+					targetIndex = i
+					break
+				}
 			}
 		} else if e.VirtualKeyCode == vtinput.VK_OEM_3 { // Клавиша ~` (ё)
 			for i, item := range menu.Items {
-				if strings.Contains(item.Text, "~") { targetIndex = i; break }
+				if strings.Contains(item.Text, "~") {
+					targetIndex = i
+					break
+				}
 			}
 		}
 
@@ -1847,13 +1959,17 @@ func (pf *PanelsFrame) showDriveMenu(panelIdx int) {
 	} else {
 		x = pf.lastW*3/4 - w/2
 	}
-	if x < 0 { x = 0 }
+	if x < 0 {
+		x = 0
+	}
 	menu.SetPosition(x, y, x+w-1, y+h-1)
 
 	menu.OnAction = func(idx int) {
 		menu.Close()
 		fsp, ok := pf.panels[panelIdx].(*FileSystemPanel)
-		if !ok { return }
+		if !ok {
+			return
+		}
 
 		if action, ok := menu.Items[idx].UserData.(func(*FileSystemPanel)); ok {
 			action(fsp)

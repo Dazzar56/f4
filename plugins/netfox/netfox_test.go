@@ -1,11 +1,11 @@
 package netfox
 
 import (
-	"os"
-	"strings"
-	"path/filepath"
-	"testing"
 	"github.com/unxed/f4/vfs"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
 )
 
 func TestNetFoxVFS_ConfigPersistence(t *testing.T) {
@@ -44,10 +44,14 @@ func TestNetFoxVFS_ConfigPersistence(t *testing.T) {
 	found := false
 	nf.ReadDir(nil, "", func(items []vfs.VFSItem) {
 		for _, itm := range items {
-			if itm.Name == "My Server" { found = true }
+			if itm.Name == "My Server" {
+				found = true
+			}
 		}
 	})
-	if !found { t.Error("ReadDir failed to list saved connection") }
+	if !found {
+		t.Error("ReadDir failed to list saved connection")
+	}
 
 	// 4. Test Removal
 	nf.Remove(nil, "My Server")

@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/unxed/vtinput"
-	"github.com/unxed/f4/vfs"
-	"github.com/unxed/vtui"
 	"github.com/unxed/f4/piecetable"
+	"github.com/unxed/f4/vfs"
+	"github.com/unxed/vtinput"
+	"github.com/unxed/vtui"
 )
 
 var (
@@ -23,8 +23,11 @@ var (
 	LastRightCursor  = ""
 	LastActivePanel  = 1
 )
+
 func actionFoldersHistory(pf *PanelsFrame) {
-	if vtui.GlobalHistoryProvider == nil { return }
+	if vtui.GlobalHistoryProvider == nil {
+		return
+	}
 	h := vtui.GlobalHistoryProvider.LoadHistory("folders")
 	if len(h) == 0 {
 		vtui.ShowMessage(" History ", "Folders history is empty.", []string{"&Ok"})
@@ -42,7 +45,9 @@ func actionFoldersHistory(pf *PanelsFrame) {
 		ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
 
 		idx := menu.SelectPos
-		if idx < 0 || idx >= len(menu.Items) { return false }
+		if idx < 0 || idx >= len(menu.Items) {
+			return false
+		}
 		path := menu.Items[idx].Text
 
 		if e.VirtualKeyCode == vtinput.VK_RETURN {
@@ -76,7 +81,9 @@ func actionFoldersHistory(pf *PanelsFrame) {
 			if menu.ItemCount == 0 {
 				menu.Close()
 			} else {
-				if menu.SelectPos >= menu.ItemCount { menu.SetSelectPos(menu.ItemCount - 1) }
+				if menu.SelectPos >= menu.ItemCount {
+					menu.SetSelectPos(menu.ItemCount - 1)
+				}
 				vtui.FrameManager.Redraw()
 			}
 			return true
@@ -88,9 +95,13 @@ func actionFoldersHistory(pf *PanelsFrame) {
 	scrW := vtui.FrameManager.GetScreenSize()
 	scrH := vtui.FrameManager.GetScreenHeight()
 	width := scrW - 10
-	if width > 100 { width = 100 }
+	if width > 100 {
+		width = 100
+	}
 	height := len(h) + 2
-	if height > 15 { height = 15 }
+	if height > 15 {
+		height = 15
+	}
 
 	menu.SetPosition((scrW-width)/2, (scrH-height)/2, (scrW-width)/2+width-1, (scrH-height)/2+height-1)
 	vtui.FrameManager.Push(menu)
@@ -127,8 +138,12 @@ func actionOpenEditor(pf *PanelsFrame, v vfs.VFS, path string) {
 
 		ctx.RunOnUI(func() {
 			if ctx.Err() != nil {
-				if buf != nil { buf.Close() }
-				if f != nil { f.Close() }
+				if buf != nil {
+					buf.Close()
+				}
+				if f != nil {
+					f.Close()
+				}
 				return
 			}
 
@@ -183,7 +198,9 @@ func actionOpenViewer(pf *PanelsFrame, v vfs.VFS, path string) {
 					if viewer.TopOffset > viewer.backend.Size() {
 						viewer.TopOffset = viewer.backend.Size() - 1
 					}
-					if viewer.TopOffset < 0 { viewer.TopOffset = 0 }
+					if viewer.TopOffset < 0 {
+						viewer.TopOffset = 0
+					}
 					viewer.WrapMode = state.ViewerWrap
 					viewer.HexMode = state.ViewerHex
 				}
@@ -196,10 +213,12 @@ func actionOpenViewer(pf *PanelsFrame, v vfs.VFS, path string) {
 
 func actionViewerSearch(vv *ViewerView) {
 	vtui.InputBox(Msg("Viewer.SearchTitle"), "Search for:", "", func(pattern string) {
-		if pattern == "" { return }
+		if pattern == "" {
+			return
+		}
 		title := " Searching... "
 		msg := fmt.Sprintf("Looking for: %s", pattern)
-		
+
 		vtui.FrameManager.PostTask(func() {
 			dlg := vtui.NewCenteredDialog(50, 8, title)
 			lbl := vtui.NewLabel(0, 0, msg, nil)
@@ -213,35 +232,41 @@ func actionViewerSearch(vv *ViewerView) {
 			vbox.Apply()
 
 			vtui.FrameManager.AddScreenHeadless(dlg)
-			
+
 			_ = vtui.RunAsync(func(ctx *vtui.TaskContext) {
 				btnCancel.OnClick = func() { ctx.Cancel(); dlg.Close() }
 				foundOffset := int64(-1)
 				currOff := vv.TopOffset + 1
 				fileSize := vv.backend.Size()
 				patternLower := strings.ToLower(pattern)
-				
+
 				for currOff < fileSize {
-					if ctx.Err() != nil { return }
+					if ctx.Err() != nil {
+						return
+					}
 					percent := int((currOff * 100) / fileSize)
 					ctx.RunOnUI(func() { dlg.SetProgress(percent) })
-					
+
 					data, err := vv.backend.ReadAt(currOff, 256*1024)
 					if err == piecetable.ErrLoading {
 						time.Sleep(20 * time.Millisecond)
 						continue
 					}
-					if err != nil || len(data) == 0 { break }
-					
+					if err != nil || len(data) == 0 {
+						break
+					}
+
 					idx := strings.Index(strings.ToLower(string(data)), patternLower)
 					if idx != -1 {
 						foundOffset = currOff + int64(idx)
 						break
 					}
 					currOff += int64(len(data)) - int64(len(patternLower))
-					if currOff < 0 { currOff = 0 }
+					if currOff < 0 {
+						currOff = 0
+					}
 				}
-				
+
 				ctx.RunOnUI(func() {
 					dlg.Close()
 					if foundOffset != -1 {
@@ -485,17 +510,17 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 		}
 		initialDest += sep
 	}
-	
+
 	if isMove && !AppConfig.ConfirmMove {
 		go ExecuteFileOp(pf, srcVfs, dstVfs, names, initialDest, isMove, AppConfig.DefaultFileOpMode, pf.RefreshAll)
 		return
 	}
-	
+
 	if !isMove && !AppConfig.ConfirmCopy {
 		go ExecuteFileOp(pf, srcVfs, dstVfs, names, initialDest, isMove, AppConfig.DefaultFileOpMode, pf.RefreshAll)
 		return
 	}
-	
+
 	dlg := vtui.NewCenteredDialog(50, 11, title)
 	dlg.ShowClose = true
 
@@ -856,12 +881,14 @@ func actionMkDir(pf *PanelsFrame) {
 		if mode == 0 { // Queue
 			rk := getResourceKey(activeVfs)
 			var keys []string
-			if rk != "" { keys = append(keys, rk) }
+			if rk != "" {
+				keys = append(keys, rk)
+			}
 			task := &QueueTask{
-				Type:       "MkDir",
-				Desc:       desc,
-				ResKeys:    keys,
-				Run:        runFunc,
+				Type:    "MkDir",
+				Desc:    desc,
+				ResKeys: keys,
+				Run:     runFunc,
 				OnComplete: func() {
 					panel.pendingSelection = name
 					pf.RefreshAll()
@@ -951,26 +978,38 @@ func actionPanelSettings(pf *PanelsFrame) {
 
 	chkHidden := vtui.NewCheckbox(0, 0, Msg("PanelSettings.ShowHidden"), false)
 	chkHidden.State = 0
-	if AppConfig.ShowHiddenFiles { chkHidden.State = 1 }
+	if AppConfig.ShowHiddenFiles {
+		chkHidden.State = 1
+	}
 
 	chkHighlight := vtui.NewCheckbox(0, 0, Msg("PanelSettings.HighlightDir"), false)
 	chkHighlight.State = 0
-	if AppConfig.HighlightDir { chkHighlight.State = 1 }
+	if AppConfig.HighlightDir {
+		chkHighlight.State = 1
+	}
 
 	chkPaths := vtui.NewCheckbox(0, 0, Msg("PanelSettings.SavePaths"), false)
 	chkPaths.State = 0
-	if AppConfig.SavePanelPaths { chkPaths.State = 1 }
+	if AppConfig.SavePanelPaths {
+		chkPaths.State = 1
+	}
 
 	chkCursor := vtui.NewCheckbox(0, 0, Msg("PanelSettings.KeepCursor"), false)
 	chkCursor.State = 0
-	if AppConfig.KeepTerminalCursor { chkCursor.State = 1 }
+	if AppConfig.KeepTerminalCursor {
+		chkCursor.State = 1
+	}
 
 	chkCmdAc := vtui.NewCheckbox(0, 0, "Enable command line &auto-completion", false)
 	chkCmdAc.State = 0
-	if AppConfig.CommandLineAutoComplete { chkCmdAc.State = 1 }
+	if AppConfig.CommandLineAutoComplete {
+		chkCmdAc.State = 1
+	}
 	chkVim := vtui.NewCheckbox(0, 0, Msg("PanelSettings.VimHotkeys"), false)
 	chkVim.State = 0
-	if AppConfig.VimHotkeys { chkVim.State = 1 }
+	if AppConfig.VimHotkeys {
+		chkVim.State = 1
+	}
 
 	modes := []string{"Queue", "Background panel clone", "Foreground lock"}
 	comboMode := vtui.NewComboBox(0, 0, 30, modes)
@@ -1039,19 +1078,27 @@ func actionConfirmationsSettings(pf *PanelsFrame) {
 
 	chkCopy := vtui.NewCheckbox(0, 0, Msg("ConfirmationsSettings.Copy"), false)
 	chkCopy.State = 0
-	if AppConfig.ConfirmCopy { chkCopy.State = 1 }
+	if AppConfig.ConfirmCopy {
+		chkCopy.State = 1
+	}
 
 	chkMove := vtui.NewCheckbox(0, 0, Msg("ConfirmationsSettings.Move"), false)
 	chkMove.State = 0
-	if AppConfig.ConfirmMove { chkMove.State = 1 }
+	if AppConfig.ConfirmMove {
+		chkMove.State = 1
+	}
 
 	chkDelete := vtui.NewCheckbox(0, 0, Msg("ConfirmationsSettings.Delete"), false)
 	chkDelete.State = 0
-	if AppConfig.ConfirmDelete { chkDelete.State = 1 }
+	if AppConfig.ConfirmDelete {
+		chkDelete.State = 1
+	}
 
 	chkExit := vtui.NewCheckbox(0, 0, Msg("ConfirmationsSettings.Exit"), false)
 	chkExit.State = 0
-	if AppConfig.ConfirmExit { chkExit.State = 1 }
+	if AppConfig.ConfirmExit {
+		chkExit.State = 1
+	}
 
 	btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))
 	btnOk.IsDefault = true
@@ -1092,14 +1139,16 @@ func actionConfirmationsSettings(pf *PanelsFrame) {
 
 	vtui.FrameManager.Push(dlg)
 }
+
 type dialogVFSAdapter struct {
 	v vfs.VFS
 }
-func (a *dialogVFSAdapter) GetPath() string { return a.v.GetPath() }
-func (a *dialogVFSAdapter) SetPath(p string) error { return a.v.SetPath(p) }
+
+func (a *dialogVFSAdapter) GetPath() string         { return a.v.GetPath() }
+func (a *dialogVFSAdapter) SetPath(p string) error  { return a.v.SetPath(p) }
 func (a *dialogVFSAdapter) Join(e ...string) string { return a.v.Join(e...) }
-func (a *dialogVFSAdapter) Dir(p string) string { return a.v.Dir(p) }
-func (a *dialogVFSAdapter) Base(p string) string { return a.v.Base(p) }
+func (a *dialogVFSAdapter) Dir(p string) string     { return a.v.Dir(p) }
+func (a *dialogVFSAdapter) Base(p string) string    { return a.v.Base(p) }
 func (a *dialogVFSAdapter) ReadDir(ctx context.Context, p string, onChunk func([]vtui.FSItem)) error {
 	return a.v.ReadDir(ctx, p, func(chunk []vfs.VFSItem) {
 		var items []vtui.FSItem
@@ -1178,13 +1227,17 @@ func actionManagePlugins(pf *PanelsFrame) {
 
 func actionFileAttributes(pf *PanelsFrame) {
 	fsp := pf.getActivePanel()
-	if fsp == nil { return }
-	
+	if fsp == nil {
+		return
+	}
+
 	name := fsp.GetSelectedName()
-	if name == "" || name == ".." { return }
-	
+	if name == "" || name == ".." {
+		return
+	}
+
 	fullPath := fsp.vfs.Join(fsp.vfs.GetPath(), name)
-	
+
 	vtui.RunAsync(func(ctx *vtui.TaskContext) {
 		item, err := fsp.vfs.Stat(ctx.Context, fullPath)
 		ctx.RunOnUI(func() {

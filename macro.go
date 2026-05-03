@@ -3,9 +3,9 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
-	"path/filepath"
 
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
@@ -32,11 +32,11 @@ func NewMacroManager(iniPath string) *MacroManager {
 
 func normalizeMods(mods vtinput.ControlKeyState) vtinput.ControlKeyState {
 	var n vtinput.ControlKeyState
-	if mods.Contains(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed) {
+	if mods.Contains(vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed) {
 		n |= vtinput.LeftCtrlPressed
 	}
 
-	if mods.Contains(vtinput.LeftAltPressed|vtinput.RightAltPressed) {
+	if mods.Contains(vtinput.LeftAltPressed | vtinput.RightAltPressed) {
 		n |= vtinput.LeftAltPressed
 	}
 

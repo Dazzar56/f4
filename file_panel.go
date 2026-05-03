@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"time"
-	"path/filepath"
 
 	"strings"
 	"unicode"
@@ -32,7 +32,9 @@ type mediumRow struct {
 
 func (m *mediumRow) GetCellText(col int) string {
 	H := m.fp.table.ViewHeight
-	if H <= 0 { H = 1 }
+	if H <= 0 {
+		H = 1
+	}
 	idx := m.r
 	if col == 1 {
 		idx += H
@@ -42,8 +44,12 @@ func (m *mediumRow) GetCellText(col int) string {
 	}
 	e := m.fp.entries[idx]
 	if e.IsDir {
-		if e.Name == ".." { return ".." }
-		if AppConfig.HighlightDir { return e.Name }
+		if e.Name == ".." {
+			return ".."
+		}
+		if AppConfig.HighlightDir {
+			return e.Name
+		}
 		return string(os.PathSeparator) + e.Name
 	}
 	return e.Name
@@ -51,7 +57,9 @@ func (m *mediumRow) GetCellText(col int) string {
 
 func (m *mediumRow) IsColSelected(col int) bool {
 	H := m.fp.table.ViewHeight
-	if H <= 0 { H = 1 }
+	if H <= 0 {
+		H = 1
+	}
 	idx := m.r
 	if col == 1 {
 		idx += H
@@ -63,7 +71,9 @@ func (m *mediumRow) IsColSelected(col int) bool {
 }
 func (m *mediumRow) GetCellAttr(col int, defaultAttr uint64) uint64 {
 	H := m.fp.table.ViewHeight
-	if H <= 0 { H = 1 }
+	if H <= 0 {
+		H = 1
+	}
 	idx := m.r
 	if col == 1 {
 		idx += H
@@ -83,10 +93,12 @@ func (m *mediumRow) GetCellAttr(col int, defaultAttr uint64) uint64 {
 }
 
 type ViewMode int
+
 const (
 	ViewModeMedium ViewMode = iota
 	ViewModeDetailed
 )
+
 type SortMode int
 
 const (
@@ -105,8 +117,12 @@ func (f *fileEntry) GetCellText(col int) string {
 	switch col {
 	case 0:
 		if f.IsDir {
-			if f.Name == ".." { return ".." }
-			if AppConfig.HighlightDir { return f.Name }
+			if f.Name == ".." {
+				return ".."
+			}
+			if AppConfig.HighlightDir {
+				return f.Name
+			}
 			return string(os.PathSeparator) + f.Name
 		}
 		return f.Name
@@ -144,10 +160,10 @@ type dirCacheEntry struct {
 }
 type FileSystemPanel struct {
 	vtui.ScreenObject
-	table     *vtui.Table
-	frame     *vtui.BorderedFrame
-	vfs       vfs.VFS
-	entries   []*fileEntry
+	table               *vtui.Table
+	frame               *vtui.BorderedFrame
+	vfs                 vfs.VFS
+	entries             []*fileEntry
 	viewMode            ViewMode
 	cursorIdx           int
 	lastRightClickedIdx int
@@ -157,8 +173,8 @@ type FileSystemPanel struct {
 	isLoading        bool
 	loadingTimer     *time.Timer
 	pendingSelection string
-	fastFindMode bool
-	fastFindStr  string
+	fastFindMode     bool
+	fastFindStr      string
 
 	sortMode    SortMode
 	sortReverse bool
@@ -246,8 +262,12 @@ func (fp *FileSystemPanel) sortEntries() {
 		ei, ej := fp.entries[i], fp.entries[j]
 
 		// ".." всегда сверху
-		if ei.Name == ".." { return true }
-		if ej.Name == ".." { return false }
+		if ei.Name == ".." {
+			return true
+		}
+		if ej.Name == ".." {
+			return false
+		}
 
 		// Папки всегда сверху
 		if ei.IsDir != ej.IsDir {
@@ -307,8 +327,12 @@ func (fp *FileSystemPanel) SetCursorIndex(idx int) {
 		fp.cursorIdx = 0
 		return
 	}
-	if idx < 0 { idx = 0 }
-	if idx >= len(fp.entries) { idx = len(fp.entries) - 1 }
+	if idx < 0 {
+		idx = 0
+	}
+	if idx >= len(fp.entries) {
+		idx = len(fp.entries) - 1
+	}
 	fp.cursorIdx = idx
 
 	// Sync table visual state
@@ -317,19 +341,23 @@ func (fp *FileSystemPanel) SetCursorIndex(idx int) {
 		fp.table.SelectCol = 0
 		if fp.fastFindMode {
 			H := fp.table.ViewHeight
-			if H > 2 && fp.cursorIdx >= fp.table.TopPos + H - 2 {
+			if H > 2 && fp.cursorIdx >= fp.table.TopPos+H-2 {
 				fp.table.TopPos = fp.cursorIdx - H + 3
-				if fp.table.TopPos < 0 { fp.table.TopPos = 0 }
+				if fp.table.TopPos < 0 {
+					fp.table.TopPos = 0
+				}
 			}
 		}
 	} else {
 		H := fp.table.ViewHeight
-		if H <= 0 { H = 1 }
+		if H <= 0 {
+			H = 1
+		}
 
 		// 1. Ensure TopPos is sane for the current cursor
 		if fp.cursorIdx < fp.table.TopPos {
 			fp.table.TopPos = fp.cursorIdx
-		} else if fp.cursorIdx >= fp.table.TopPos + 2*H {
+		} else if fp.cursorIdx >= fp.table.TopPos+2*H {
 			fp.table.TopPos = fp.cursorIdx - 2*H + 1
 		}
 
@@ -343,7 +371,7 @@ func (fp *FileSystemPanel) SetCursorIndex(idx int) {
 		if fp.fastFindMode && H > 2 {
 			rel := fp.cursorIdx - fp.table.TopPos
 			row := rel % H
-			if row >= H - 2 {
+			if row >= H-2 {
 				shift := row - (H - 3)
 				fp.table.TopPos += shift
 			}
@@ -491,9 +519,13 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 		var accumulated []vfs.VFSItem
 
 		err := fp.vfs.ReadDir(ctx, path, func(chunk []vfs.VFSItem) {
-			if ctx.Err() != nil { return }
+			if ctx.Err() != nil {
+				return
+			}
 			accumulated = append(accumulated, chunk...)
-			if ctx.Err() != nil { return }
+			if ctx.Err() != nil {
+				return
+			}
 
 			newEntries := make([]*fileEntry, 0, len(chunk))
 			for _, item := range chunk {
@@ -506,7 +538,9 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 			}
 
 			vtui.FrameManager.PostTask(func() {
-				if ctx.Err() != nil { return }
+				if ctx.Err() != nil {
+					return
+				}
 
 				// Sync interactive state: if the user started navigating or selecting
 				// while the cache was displayed, we must respect those changes.
@@ -514,7 +548,7 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 				if uName != "" && uName != ".." {
 					fp.pendingSelection = uName
 				}
-				
+
 				// Sync selections for currently visible items
 				for _, e := range fp.entries {
 					if e.Name != ".." {
@@ -558,13 +592,17 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 				// Фокусировка на нужном файле
 				snapped := false
 				target := fp.pendingSelection
-				if target == "" { target = currentSelected }
+				if target == "" {
+					target = currentSelected
+				}
 
 				if target != "" {
 					for i, entry := range fp.entries {
 						if entry.Name == target {
 							fp.SetCursorIndex(i)
-							if entry.Name == fp.pendingSelection { fp.pendingSelection = "" }
+							if entry.Name == fp.pendingSelection {
+								fp.pendingSelection = ""
+							}
 							snapped = true
 							break
 						}
@@ -581,61 +619,65 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 		})
 
 		vtui.FrameManager.PostTask(func() {
-			if ctx.Err() != nil { return }
+			if ctx.Err() != nil {
+				return
+			}
 
 			if err == nil {
 				fp.saveToCache(path, accumulated)
 			}
 
 			// Останавливаем таймер. Если он не успел сработать — заголовок так и не моргнул.
-			if fp.loadingTimer != nil { fp.loadingTimer.Stop() }
+			if fp.loadingTimer != nil {
+				fp.loadingTimer.Stop()
+			}
 
 			fp.lastDirMTime = dirStat.MTime
 			fp.isLoading = false
-				if err != nil && err != context.Canceled {
-					// Баг-фикс: если директория исчезла (например, удалена из другой панели),
-					// пытаемся подняться на уровень выше вместо показа ошибки.
-					if !fp.vfs.IsAtRoot() {
-						vtui.DebugLog("PANEL: Directory inaccessible, attempting to go up: %v", err)
-						fp.vfs.SetPath("..")
-						fp.ReadDirectory()
-						return
+			if err != nil && err != context.Canceled {
+				// Баг-фикс: если директория исчезла (например, удалена из другой панели),
+				// пытаемся подняться на уровень выше вместо показа ошибки.
+				if !fp.vfs.IsAtRoot() {
+					vtui.DebugLog("PANEL: Directory inaccessible, attempting to go up: %v", err)
+					fp.vfs.SetPath("..")
+					fp.ReadDirectory()
+					return
+				}
+
+				fp.updateTitle(err)
+				vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to read directory:\n%v", err), []string{"&Ok"})
+			} else {
+				fp.updateTitle(nil)
+			}
+
+			if isFirstChunk {
+				fp.entries = nil
+				if !fp.vfs.IsAtRoot() || fp.vfs.ParentVFS() != nil {
+					upItem := vfs.VFSItem{Name: "..", IsDir: true}
+					if hasUpItemStat {
+						upItem.MTime = upItemStat.MTime
+						upItem.ATime = upItemStat.ATime
+						upItem.CTime = upItemStat.CTime
+						upItem.UnixMode = upItemStat.UnixMode
+						upItem.Uid = upItemStat.Uid
+						upItem.Gid = upItemStat.Gid
 					}
-
-					fp.updateTitle(err)
-					vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to read directory:\n%v", err), []string{"&Ok"})
-				} else {
-					fp.updateTitle(nil)
+					fp.entries = []*fileEntry{{VFSItem: upItem}}
 				}
+				fp.SetCursorIndex(0)
+			}
 
-				if isFirstChunk {
-					fp.entries = nil
-					if !fp.vfs.IsAtRoot() || fp.vfs.ParentVFS() != nil {
-						upItem := vfs.VFSItem{Name: "..", IsDir: true}
-						if hasUpItemStat {
-							upItem.MTime = upItemStat.MTime
-							upItem.ATime = upItemStat.ATime
-							upItem.CTime = upItemStat.CTime
-							upItem.UnixMode = upItemStat.UnixMode
-							upItem.Uid = upItemStat.Uid
-							upItem.Gid = upItemStat.Gid
-						}
-						fp.entries = []*fileEntry{{VFSItem: upItem}}
-					}
-					fp.SetCursorIndex(0)
-				}
+			if fp.pendingSelection != "" {
+				fp.SelectName(fp.pendingSelection)
+				fp.pendingSelection = ""
+			} else if err == nil && !isFirstChunk {
+				// Path changed successfully, record in history
+				AddFolderHistory(path)
+			}
 
-				if fp.pendingSelection != "" {
-					fp.SelectName(fp.pendingSelection)
-					fp.pendingSelection = ""
-				} else if err == nil && !isFirstChunk {
-					// Path changed successfully, record in history
-					AddFolderHistory(path)
-				}
-
-				fp.Refresh()
-				vtui.FrameManager.Redraw()
-			})
+			fp.Refresh()
+			vtui.FrameManager.Redraw()
+		})
 	}()
 }
 
@@ -662,10 +704,14 @@ func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
 	// Sort indicator in top-left
 	sortChar := "n"
 	switch fp.sortMode {
-	case SortExt: sortChar = "x"
-	case SortTime: sortChar = "t"
-	case SortSize: sortChar = "s"
-	case SortUnsorted: sortChar = "u"
+	case SortExt:
+		sortChar = "x"
+	case SortTime:
+		sortChar = "t"
+	case SortSize:
+		sortChar = "s"
+	case SortUnsorted:
+		sortChar = "u"
 	}
 	if fp.sortReverse {
 		sortChar = strings.ToUpper(sortChar)
@@ -818,14 +864,18 @@ func (fp *FileSystemPanel) Resize(w, h int) {
 
 	if fp.viewMode == ViewModeDetailed {
 		nameW := w - 15 - 2
-		if nameW < 5 { nameW = 5 }
+		if nameW < 5 {
+			nameW = 5
+		}
 		fp.table.Columns = []vtui.TableColumn{
 			{Title: Msg("Panel.Column.Name"), Width: nameW},
 			{Title: Msg("Panel.Column.Size"), Width: 12, Alignment: vtui.AlignRight},
 		}
 	} else {
 		colW := (w - 2 - 1) / 2 // 2 borders, 1 separator
-		if colW < 5 { colW = 5 }
+		if colW < 5 {
+			colW = 5
+		}
 		fp.table.Columns = []vtui.TableColumn{
 			{Title: Msg("Panel.Column.Name"), Width: colW},
 			{Title: Msg("Panel.Column.Name"), Width: w - 2 - colW - 1},
@@ -901,7 +951,6 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 		}
 	}
 
-
 	switch e.VirtualKeyCode {
 	case vtinput.VK_INSERT:
 		if shift || ctrl || alt {
@@ -924,19 +973,30 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 
 		idx := fp.GetCursorIndex()
 		H := fp.table.ViewHeight
-		if H <= 0 { H = 1 }
+		if H <= 0 {
+			H = 1
+		}
 
 		if fp.viewMode == ViewModeMedium {
 			switch e.VirtualKeyCode {
-			case vtinput.VK_UP: idx--
-			case vtinput.VK_DOWN: idx++
-			case vtinput.VK_LEFT: idx -= H
-			case vtinput.VK_RIGHT: idx += H
-			case vtinput.VK_PRIOR: idx -= H * 2
-			case vtinput.VK_NEXT: idx += H * 2
-			case vtinput.VK_HOME: idx = 0
-			case vtinput.VK_END: idx = len(fp.entries) - 1
-			default: return false
+			case vtinput.VK_UP:
+				idx--
+			case vtinput.VK_DOWN:
+				idx++
+			case vtinput.VK_LEFT:
+				idx -= H
+			case vtinput.VK_RIGHT:
+				idx += H
+			case vtinput.VK_PRIOR:
+				idx -= H * 2
+			case vtinput.VK_NEXT:
+				idx += H * 2
+			case vtinput.VK_HOME:
+				idx = 0
+			case vtinput.VK_END:
+				idx = len(fp.entries) - 1
+			default:
+				return false
 			}
 			fp.SetCursorIndex(idx)
 			return true
@@ -1048,7 +1108,9 @@ func (fp *FileSystemPanel) ProcessMouse(e *vtinput.InputEvent) bool {
 			fp.cursorIdx = fp.table.SelectPos
 		} else {
 			H := fp.table.ViewHeight
-			if H <= 0 { H = 1 }
+			if H <= 0 {
+				H = 1
+			}
 			// SelectPos is already absolute (TopPos + row) in Medium mode,
 			// so we just add the column offset.
 			newIdx := fp.table.SelectPos + fp.table.SelectCol*H
@@ -1098,6 +1160,7 @@ func (fp *FileSystemPanel) getRawSelectedName() string {
 	}
 	return fp.entries[idx].Name
 }
+
 // SelectName searches for an entry by name and moves the cursor to it.
 func (fp *FileSystemPanel) SelectName(name string) {
 	for i, entry := range fp.entries {
@@ -1131,6 +1194,7 @@ func (fp *FileSystemPanel) GetSelectedNames() []string {
 	}
 	return names
 }
+
 // GetSuccessorName determines which file should receive focus after the current
 // selection (or focused item) is deleted or moved.
 func (fp *FileSystemPanel) doFastFind(dir int) {
@@ -1240,8 +1304,12 @@ func (fp *FileSystemPanel) GetSuccessorName() string {
 		lastIdx = -1
 		for i, e := range fp.entries {
 			if e.Selected && e.Name != ".." {
-				if i < firstIdx { firstIdx = i }
-				if i > lastIdx { lastIdx = i }
+				if i < firstIdx {
+					firstIdx = i
+				}
+				if i > lastIdx {
+					lastIdx = i
+				}
 			}
 		}
 	} else {

@@ -1,17 +1,17 @@
 package main
 
 import (
-	"time"
 	"context"
 	"fmt"
-	"unicode/utf8"
 	"path/filepath"
+	"time"
+	"unicode/utf8"
 
+	"github.com/mattn/go-runewidth"
+	"github.com/unxed/f4/piecetable"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
-	"github.com/unxed/f4/piecetable"
-	"github.com/mattn/go-runewidth"
 )
 
 // ViewerView is a high-performance file viewer component.
@@ -66,10 +66,14 @@ func NewViewerView(ctx context.Context, v vfs.VFS, path string) (*ViewerView, er
 	vv.scrollBar.OnStep = func(step int) {
 		// Used for arrows and track clicks: perform logical steps
 		switch step {
-		case -1: vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_UP})
-		case 1:  vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
-		case -2: vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_PRIOR})
-		case 2:  vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_NEXT})
+		case -1:
+			vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_UP})
+		case 1:
+			vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
+		case -2:
+			vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_PRIOR})
+		case 2:
+			vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_NEXT})
 		}
 		vtui.FrameManager.Redraw()
 	}
@@ -95,11 +99,17 @@ func NewViewerView(ctx context.Context, v vfs.VFS, path string) (*ViewerView, er
 				denominator := size - viewHeightBytes
 				percent = int((vv.TopOffset * 100) / denominator)
 			}
-			if percent < 0 { percent = 0 }
-			if percent > 100 { percent = 100 }
+			if percent < 0 {
+				percent = 0
+			}
+			if percent > 100 {
+				percent = 100
+			}
 		}
 		mode := Msg("Viewer.ModeText")
-		if vv.HexMode { mode = Msg("Viewer.ModeHex") }
+		if vv.HexMode {
+			mode = Msg("Viewer.ModeHex")
+		}
 		base := ""
 		if vv.vfs != nil {
 			base = vv.vfs.Base(vv.path)
@@ -113,7 +123,6 @@ func NewViewerView(ctx context.Context, v vfs.VFS, path string) (*ViewerView, er
 	vv.SetFocus(true)
 	return vv, nil
 }
-
 
 func (vv *ViewerView) SetPosition(x1, y1, x2, y2 int) {
 	vv.ScreenObject.SetPosition(x1, y1, x2, y2)
@@ -198,7 +207,9 @@ func (vv *ViewerView) DisplayObject(scr *vtui.ScreenBuf) {
 			if contentHeight > 0 {
 				lastLineOffset := int((vv.backend.Size() - 1) &^ 0xF)
 				maxOffset = lastLineOffset - (contentHeight-1)*16
-				if maxOffset < 0 { maxOffset = 0 }
+				if maxOffset < 0 {
+					maxOffset = 0
+				}
 			}
 		} else if vv.eofVisible {
 			maxOffset = int(vv.TopOffset)
@@ -262,7 +273,6 @@ func (vv *ViewerView) renderHex(scr *vtui.ScreenBuf, width, contentHeight int) {
 
 func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, contentHeight int) {
 
-	
 	attr := vtui.Palette[ColViewerText]
 	currOffset := vv.TopOffset
 	vv.lineOffsets = vv.lineOffsets[:0]
@@ -320,7 +330,9 @@ func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, contentHeight int) 
 			tempOff := currOffset
 			for {
 				b, err := vv.backend.ReadAt(tempOff, 1024)
-				if err != nil || len(b) == 0 { break }
+				if err != nil || len(b) == 0 {
+					break
+				}
 				found := false
 				for i, char := range b {
 					if char == '\n' {
@@ -329,7 +341,9 @@ func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, contentHeight int) 
 						break
 					}
 				}
-				if found { break }
+				if found {
+					break
+				}
 				tempOff += int64(len(b))
 			}
 			currOffset = tempOff
@@ -471,7 +485,9 @@ func (vv *ViewerView) jumpToEnd() {
 		} else {
 			lastLineOffset := (vv.backend.Size() - 1) &^ 0xF
 			vv.TopOffset = lastLineOffset - (contentHeight-1)*16
-			if vv.TopOffset < 0 { vv.TopOffset = 0 }
+			if vv.TopOffset < 0 {
+				vv.TopOffset = 0
+			}
 		}
 		return
 	}
@@ -485,23 +501,35 @@ func (vv *ViewerView) jumpToEnd() {
 	vtui.RunAsync(func(ctx *vtui.TaskContext) {
 		defer ctx.RunOnUI(func() { vv.Busy = false })
 		width := vv.X2 - vv.X1 + 1
-		if vv.scrollBar != nil { width-- }
+		if vv.scrollBar != nil {
+			width--
+		}
 
 		chunkSize := contentHeight * int64(width) * 4
-		if chunkSize < 16*1024 { chunkSize = 16*1024 }
+		if chunkSize < 16*1024 {
+			chunkSize = 16 * 1024
+		}
 
 		startOff := vv.backend.Size() - chunkSize
-		if startOff < 0 { startOff = 0 }
+		if startOff < 0 {
+			startOff = 0
+		}
 
-		if startOff < vv.backend.Size() - 1024*1024 {
+		if startOff < vv.backend.Size()-1024*1024 {
 			startOff = vv.backend.Size() - 1024*1024
 		}
-		if startOff < 0 { startOff = 0 }
+		if startOff < 0 {
+			startOff = 0
+		}
 
 		for {
-			if ctx.Err() != nil { return }
+			if ctx.Err() != nil {
+				return
+			}
 			_, err := vv.backend.ReadAt(startOff, 1024)
-			if err != piecetable.ErrLoading { break }
+			if err != piecetable.ErrLoading {
+				break
+			}
 			time.Sleep(10 * time.Millisecond)
 		}
 		startOff = vv.backend.FindLineStart(startOff)
@@ -510,31 +538,46 @@ func (vv *ViewerView) jumpToEnd() {
 		currOff := startOff
 
 		for currOff < vv.backend.Size() {
-			if ctx.Err() != nil { return }
+			if ctx.Err() != nil {
+				return
+			}
 			data, err := vv.backend.ReadAt(currOff, 64*1024)
 			if err == piecetable.ErrLoading {
 				time.Sleep(20 * time.Millisecond)
 				continue
 			}
-			if err != nil || len(data) == 0 { break }
+			if err != nil || len(data) == 0 {
+				break
+			}
 
 			scanPos := 0
 			for scanPos < len(data) {
-				offsets = append(offsets, currOff + int64(scanPos))
+				offsets = append(offsets, currOff+int64(scanPos))
 				lineLen := 0
 				visualWidth := 0
 				foundNewline := false
 				for scanPos+lineLen < len(data) {
 					r, size := utf8.DecodeRune(data[scanPos+lineLen:])
-					if r == '\n' { lineLen += size; foundNewline = true; break }
-					if r == '\r' { lineLen += size; continue }
+					if r == '\n' {
+						lineLen += size
+						foundNewline = true
+						break
+					}
+					if r == '\r' {
+						lineLen += size
+						continue
+					}
 					rw := runewidth.RuneWidth(r)
-					if vv.WrapMode && visualWidth+rw > width { break }
+					if vv.WrapMode && visualWidth+rw > width {
+						break
+					}
 					visualWidth += rw
 					lineLen += size
 				}
 				scanPos += lineLen
-				if !foundNewline && !vv.WrapMode { break }
+				if !foundNewline && !vv.WrapMode {
+					break
+				}
 			}
 			currOff += int64(scanPos)
 		}

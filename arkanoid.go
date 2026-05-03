@@ -22,8 +22,8 @@ const (
 )
 
 type brick struct {
-	x, y int
-	hp   int
+	x, y  int
+	hp    int
 	decay int // Таймер "таяния"
 }
 
@@ -36,13 +36,13 @@ type scorePopup struct {
 // ArkanoidFrame implements the classic game as a vtui.Frame
 type ArkanoidFrame struct {
 	vtui.BaseWindow
-	mu           sync.Mutex
-	paddleX      int
-	paddleW      int
-	ballX, ballY float64
-	ballDX, ballDY float64
-	bricks       []brick
-	popup        scorePopup
+	mu              sync.Mutex
+	paddleX         int
+	paddleW         int
+	ballX, ballY    float64
+	ballDX, ballDY  float64
+	bricks          []brick
+	popup           scorePopup
 	lives           int
 	score           int
 	combo           int
@@ -50,8 +50,8 @@ type ArkanoidFrame struct {
 	autoSpeed       int
 	level           int
 	levelClearTimer int
-	leftPressed     bool    // Состояние клавиши влево
-	rightPressed    bool    // Состояние клавиши вправо
+	leftPressed     bool // Состояние клавиши влево
+	rightPressed    bool // Состояние клавиши вправо
 	gameOver        bool
 	message         string
 	flashTimer      int
@@ -102,9 +102,9 @@ func (af *ArkanoidFrame) initLevel() {
 	for r := 0; r < 4; r++ {
 		for c := 0; c < 10; c++ {
 			af.bricks = append(af.bricks, brick{
-				x:    c*gridStep + margin,
-				y:    r + 1,
-				hp:   1 + (af.level-1)/2,
+				x:  c*gridStep + margin,
+				y:  r + 1,
+				hp: 1 + (af.level-1)/2,
 			})
 		}
 	}
@@ -121,7 +121,9 @@ func (af *ArkanoidFrame) gameLoop() {
 	for !af.IsDone() {
 		// Динамическая задержка на основе autoSpeed
 		delay := gameRate + time.Duration(af.autoSpeed*-8)*time.Millisecond
-		if delay < 5*time.Millisecond { delay = 5 * time.Millisecond }
+		if delay < 5*time.Millisecond {
+			delay = 5 * time.Millisecond
+		}
 
 		time.Sleep(delay)
 		// Авто-пауза при потере фокуса или Game Over
@@ -154,15 +156,25 @@ func (af *ArkanoidFrame) update() {
 	// Непрерывное управление ракеткой без системной задержки повтора
 	if !af.autoPlay && !af.gameOver {
 		moveStep := 2
-		if af.leftPressed { af.paddleX -= moveStep }
-		if af.rightPressed { af.paddleX += moveStep }
-		if af.paddleX < 0 { af.paddleX = 0 }
-		if af.paddleX+af.paddleW >= width { af.paddleX = width - 1 - af.paddleW }
+		if af.leftPressed {
+			af.paddleX -= moveStep
+		}
+		if af.rightPressed {
+			af.paddleX += moveStep
+		}
+		if af.paddleX < 0 {
+			af.paddleX = 0
+		}
+		if af.paddleX+af.paddleW >= width {
+			af.paddleX = width - 1 - af.paddleW
+		}
 	}
 
 	// DOS-style Speed Progression: мяч ускоряется со временем
 	speedBoost := 1.0 + float64(af.score)/5000.0
-	if speedBoost > 2.5 { speedBoost = 2.5 }
+	if speedBoost > 2.5 {
+		speedBoost = 2.5
+	}
 
 	// AI Autoplay logic
 	if af.autoPlay && !af.gameOver {
@@ -200,8 +212,12 @@ func (af *ArkanoidFrame) update() {
 
 				// Защита от промахов: ИИ не бьет самым краем ракетки
 				maxOffset := float64(af.paddleW)/2.0 - 1.0
-				if offset > maxOffset { offset = maxOffset }
-				if offset < -maxOffset { offset = -maxOffset }
+				if offset > maxOffset {
+					offset = maxOffset
+				}
+				if offset < -maxOffset {
+					offset = -maxOffset
+				}
 
 				targetX = int(simX - offset - float64(af.paddleW)/2.0)
 			} else {
@@ -213,19 +229,31 @@ func (af *ArkanoidFrame) update() {
 
 		// Киберспортсмен: ИИ реагирует достаточно быстро, чтобы не отставать от мяча
 		reactStep := 1
-		if af.score > 1000 || af.autoSpeed > 0 { reactStep = 2 }
-		if af.score > 3000 || af.autoSpeed > 2 { reactStep = 4 }
+		if af.score > 1000 || af.autoSpeed > 0 {
+			reactStep = 2
+		}
+		if af.score > 3000 || af.autoSpeed > 2 {
+			reactStep = 4
+		}
 
 		if af.paddleX < targetX {
 			af.paddleX += reactStep
-			if af.paddleX > targetX { af.paddleX = targetX }
+			if af.paddleX > targetX {
+				af.paddleX = targetX
+			}
 		} else if af.paddleX > targetX {
 			af.paddleX -= reactStep
-			if af.paddleX < targetX { af.paddleX = targetX }
+			if af.paddleX < targetX {
+				af.paddleX = targetX
+			}
 		}
 
-		if af.paddleX < 0 { af.paddleX = 0 }
-		if af.paddleX+af.paddleW >= width { af.paddleX = width - 1 - af.paddleW }
+		if af.paddleX < 0 {
+			af.paddleX = 0
+		}
+		if af.paddleX+af.paddleW >= width {
+			af.paddleX = width - 1 - af.paddleW
+		}
 	}
 
 	// Update ball position
@@ -309,7 +337,7 @@ func (af *ArkanoidFrame) update() {
 				}
 				af.popup.timer = 40 // Обновляем таймер, чтобы висел дольше
 
-				if af.combo > 0 && af.combo % 4 == 0 {
+				if af.combo > 0 && af.combo%4 == 0 {
 					af.multiplier++
 				}
 				break
@@ -401,7 +429,9 @@ func (af *ArkanoidFrame) Show(scr *vtui.ScreenBuf) {
 	// Анимация прохождения уровня (бегущая неоновая рамка)
 	if af.levelClearTimer > 0 {
 		c := cgaCyan
-		if (af.levelClearTimer/4)%2 == 0 { c = cgaMagenta }
+		if (af.levelClearTimer/4)%2 == 0 {
+			c = cgaMagenta
+		}
 
 		single := []rune{'│', '─', '┌', '┐', '└', '┘'}
 		double := []rune{'║', '═', '╔', '╗', '╚', '╝'}
@@ -411,14 +441,26 @@ func (af *ArkanoidFrame) Show(scr *vtui.ScreenBuf) {
 				if x == af.X1 || x == af.X2 || y == af.Y1 || y == af.Y2 {
 					dist := (x - af.X1) + (y - af.Y1)
 					syms := single
-					if (dist+af.levelClearTimer)%2 == 0 { syms = double }
+					if (dist+af.levelClearTimer)%2 == 0 {
+						syms = double
+					}
 
 					var char rune = syms[1] // ─
-					if x == af.X1 || x == af.X2 { char = syms[0] } // │
-					if x == af.X1 && y == af.Y1 { char = syms[2] } // ┌
-					if x == af.X2 && y == af.Y1 { char = syms[3] } // ┐
-					if x == af.X1 && y == af.Y2 { char = syms[4] } // └
-					if x == af.X2 && y == af.Y2 { char = syms[5] } // ┘
+					if x == af.X1 || x == af.X2 {
+						char = syms[0]
+					} // │
+					if x == af.X1 && y == af.Y1 {
+						char = syms[2]
+					} // ┌
+					if x == af.X2 && y == af.Y1 {
+						char = syms[3]
+					} // ┐
+					if x == af.X1 && y == af.Y2 {
+						char = syms[4]
+					} // └
+					if x == af.X2 && y == af.Y2 {
+						char = syms[5]
+					} // ┘
 
 					scr.Write(x, y, vtui.StringToCharInfo(string(char), c))
 				}
@@ -442,7 +484,7 @@ func (af *ArkanoidFrame) Show(scr *vtui.ScreenBuf) {
 	}
 	for i := 0; i < af.paddleW; i++ {
 		px := x1 + af.paddleX + i
-		if px < x1 + width - 2 {
+		if px < x1+width-2 {
 			scr.Write(px, y1+height-3, vtui.StringToCharInfo(string(paddleChar), paddleAttr))
 		}
 	}
@@ -452,7 +494,9 @@ func (af *ArkanoidFrame) Show(scr *vtui.ScreenBuf) {
 	//gridStep := 5
 	brickW := 4
 	margin := (intW - 49) / 2
-	if margin < 0 { margin = 0 }
+	if margin < 0 {
+		margin = 0
+	}
 
 	for _, br := range af.bricks {
 		var charToDraw rune
@@ -486,9 +530,9 @@ func (af *ArkanoidFrame) Show(scr *vtui.ScreenBuf) {
 	if af.popup.timer > 0 && len(af.popup.colors) > 0 {
 		text := fmt.Sprintf("+%d", af.popup.val)
 		msgX := x1 + (intW-len(text))/2
-		
+
 		// Попап плавно поднимается вверх (от 0 до 3 строк смещения)
-		msgY := y1 + height/2 + 2 - (40 - af.popup.timer)/12
+		msgY := y1 + height/2 + 2 - (40-af.popup.timer)/12
 
 		// Мигание цветами сбитых кирпичей (смена каждые 6 кадров)
 		colorIdx := (af.popup.timer / 6) % len(af.popup.colors)
@@ -500,10 +544,14 @@ func (af *ArkanoidFrame) Show(scr *vtui.ScreenBuf) {
 	// Мяч (эволюционирует от Cyan до Yellow)
 	ballAttr := cgaWhite
 	switch {
-	case af.combo > 12: ballAttr = cgaYellow
-	case af.combo > 8:  ballAttr = cgaWhite
-	case af.combo > 4:  ballAttr = cgaMagenta
-	default:           ballAttr = cgaCyan
+	case af.combo > 12:
+		ballAttr = cgaYellow
+	case af.combo > 8:
+		ballAttr = cgaWhite
+	case af.combo > 4:
+		ballAttr = cgaMagenta
+	default:
+		ballAttr = cgaCyan
 	}
 	scr.Write(x1+int(af.ballX), y1+int(af.ballY), vtui.StringToCharInfo(string(ballChar), ballAttr))
 
@@ -516,9 +564,17 @@ func (af *ArkanoidFrame) Show(scr *vtui.ScreenBuf) {
 	comboMeter := ""
 	if af.combo > 0 {
 		barLen := af.combo
-		if barLen > 6 { barLen = 6 } // Ограничиваем длину полоски
+		if barLen > 6 {
+			barLen = 6
+		} // Ограничиваем длину полоски
 		for i := 0; i < barLen; i++ {
-			if i < 2 { comboMeter += "░" } else if i < 4 { comboMeter += "▒" } else { comboMeter += "▓" }
+			if i < 2 {
+				comboMeter += "░"
+			} else if i < 4 {
+				comboMeter += "▒"
+			} else {
+				comboMeter += "▓"
+			}
 		}
 		if af.multiplier > 1 {
 			comboMeter += fmt.Sprintf(" x%d", af.multiplier)
@@ -541,9 +597,13 @@ func (af *ArkanoidFrame) Show(scr *vtui.ScreenBuf) {
 
 	// Динамические боковые линии под размер окна
 	sideLen := (intW - len([]rune(coreInfo)) - 2) / 2
-	if sideLen < 0 { sideLen = 0 }
+	if sideLen < 0 {
+		sideLen = 0
+	}
 	sideStr := ""
-	for i := 0; i < sideLen; i++ { sideStr += "═" }
+	for i := 0; i < sideLen; i++ {
+		sideStr += "═"
+	}
 
 	info := sideStr + " " + coreInfo + " " + sideStr
 	infoX := x1 + (intW-len([]rune(info)))/2
@@ -555,7 +615,9 @@ func (af *ArkanoidFrame) Show(scr *vtui.ScreenBuf) {
 		if af.flashTimer > 4 {
 			// CGA "Shock" — инверсия/мигание цветом
 			flashColor := cgaMagenta
-			if af.combo > 5 { flashColor = cgaCyan }
+			if af.combo > 5 {
+				flashColor = cgaCyan
+			}
 			scr.FillRect(x1, y1, x1+width-2, y1+height-3, ' ', flashColor)
 		}
 	}
@@ -604,10 +666,14 @@ func (af *ArkanoidFrame) ProcessKey(e *vtinput.InputEvent) bool {
 
 	switch e.VirtualKeyCode {
 	case '+', '=', vtinput.VK_ADD:
-		if af.autoSpeed < 5 { af.autoSpeed++ }
+		if af.autoSpeed < 5 {
+			af.autoSpeed++
+		}
 		return true
 	case '-', '_', vtinput.VK_SUBTRACT:
-		if af.autoSpeed > -5 { af.autoSpeed-- }
+		if af.autoSpeed > -5 {
+			af.autoSpeed--
+		}
 		return true
 	case vtinput.VK_ESCAPE:
 		af.Close()
@@ -617,7 +683,7 @@ func (af *ArkanoidFrame) ProcessKey(e *vtinput.InputEvent) bool {
 }
 
 func (af *ArkanoidFrame) GetType() vtui.FrameType { return vtui.TypeUser }
-func (af *ArkanoidFrame) GetTitle() string       { return "Arkanoid" }
+func (af *ArkanoidFrame) GetTitle() string        { return "Arkanoid" }
 
 func (af *ArkanoidFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 	if e.Type != vtinput.MouseEventType {

@@ -1,8 +1,8 @@
 package archive
 
 import (
-	"testing"
 	"path/filepath"
+	"testing"
 )
 
 func TestArchiveVFS_Abs(t *testing.T) {

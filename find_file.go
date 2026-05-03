@@ -3,14 +3,14 @@ package main
 import (
 	"context"
 	"fmt"
-	"time"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/mattn/go-runewidth"
 	"github.com/unxed/f4/vfs"
-	"github.com/unxed/vtui"
 	"github.com/unxed/vtinput"
+	"github.com/unxed/vtui"
 )
 
 type FoundFile struct {
@@ -97,8 +97,12 @@ func ExecuteFindFile(pf *PanelsFrame, v vfs.VFS, startDir, mask, text string) {
 
 			return v.ReadDir(ctx.Context, dir, func(chunk []vfs.VFSItem) {
 				for _, item := range chunk {
-					if ctx.Err() != nil { return }
-					if item.Name == ".." { continue }
+					if ctx.Err() != nil {
+						return
+					}
+					if item.Name == ".." {
+						continue
+					}
 
 					itemPath := v.Join(dir, item.Name)
 
@@ -108,14 +112,18 @@ func ExecuteFindFile(pf *PanelsFrame, v vfs.VFS, startDir, mask, text string) {
 						// 1. Check Mask
 						matched := false
 						for _, m := range masks {
-							if m == "" { continue }
+							if m == "" {
+								continue
+							}
 							match, _ := filepath.Match(m, item.Name)
 							if match {
 								matched = true
 								break
 							}
 						}
-						if !matched { continue }
+						if !matched {
+							continue
+						}
 
 						// 2. Check Text Content
 						if text != "" {

@@ -2,14 +2,14 @@ package main
 
 import (
 	"context"
+	"github.com/unxed/f4/piecetable"
+	"github.com/unxed/f4/vfs"
+	"github.com/unxed/vtui"
+	"io"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
-	"os"
-	"io"
-	"github.com/unxed/f4/vfs"
-	"github.com/unxed/vtui"
-	"github.com/unxed/f4/piecetable"
 )
 
 func TestAsyncBuffer_LoadingCycle(t *testing.T) {
@@ -137,7 +137,9 @@ func TestAsyncBuffer_ConcurrentAccess(t *testing.T) {
 
 	// Create a decent sized file
 	content := make([]byte, 1024*1024) // 1MB
-	for i := range content { content[i] = byte(i % 256) }
+	for i := range content {
+		content[i] = byte(i % 256)
+	}
 
 	tmp := filepath.Join(t.TempDir(), "concurrent.bin")
 	os.WriteFile(tmp, content, 0644)
@@ -155,7 +157,8 @@ func TestAsyncBuffer_ConcurrentAccess(t *testing.T) {
 	go func() {
 		for {
 			select {
-			case <-ctx.Done(): return
+			case <-ctx.Done():
+				return
 			case task := <-vtui.FrameManager.TaskChan:
 				task()
 			}
@@ -168,7 +171,9 @@ func TestAsyncBuffer_ConcurrentAccess(t *testing.T) {
 		go func(offset int) {
 			for retries := 0; retries < 100; retries++ {
 				_, err := buf.Read(offset, 100)
-				if err == nil { break }
+				if err == nil {
+					break
+				}
 				if err != piecetable.ErrLoading {
 					t.Errorf("Unexpected error: %v", err)
 					break
@@ -203,7 +208,9 @@ func TestAsyncBuffer_CancellationMidFetch(t *testing.T) {
 
 	// 1. Trigger fetch
 	_, err := buf.Read(0, 5)
-	if err != piecetable.ErrLoading { t.Fatal("Expected ErrLoading") }
+	if err != piecetable.ErrLoading {
+		t.Fatal("Expected ErrLoading")
+	}
 
 	// 2. Cancel context while fetch is (presumably) in flight
 	cancel()
@@ -261,7 +268,7 @@ func TestAsyncBuffer_RedundantFetchPrevention(t *testing.T) {
 func TestAsyncBuffer_ContextRace(t *testing.T) {
 	// Simulates the scenario where a context is cancelled exactly when data arrives.
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	
+
 	content := []byte("Race test content")
 	v := vfs.NewOSVFS(t.TempDir())
 	tmp := filepath.Join(t.TempDir(), "race.txt")
@@ -272,15 +279,15 @@ func TestAsyncBuffer_ContextRace(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		buf := NewAsyncBuffer(ctx, f)
 		buf.chunkSize = 5
-		
+
 		// Start fetch
 		go func() {
 			_, _ = buf.Read(0, 5)
 		}()
-		
+
 		// Immediate cancel to hit the race window in fetchChunk
 		cancel()
-		
+
 		// Pump tasks
 		timeout := time.After(10 * time.Millisecond)
 	loop:
@@ -296,6 +303,7 @@ func TestAsyncBuffer_ContextRace(t *testing.T) {
 	}
 	// If no panic or deadlock occurred in 100 iterations, the mutex/PostTask logic is likely sound.
 }
+
 type mockErrorFile struct {
 	vfs.ReadAtCloser
 	errToReturn error
@@ -311,17 +319,19 @@ func TestAsyncBuffer_ErrorRecovery(t *testing.T) {
 	f := &mockErrorFile{errToReturn: io.ErrUnexpectedEOF}
 	// Manual Size() for mock
 	buf := &AsyncBuffer{
-		file:     f,
-		size:     100,
-		ctx:      context.Background(),
-		loaded:   make(map[int][]byte),
-		fetching: make(map[int]bool),
+		file:      f,
+		size:      100,
+		ctx:       context.Background(),
+		loaded:    make(map[int][]byte),
+		fetching:  make(map[int]bool),
 		chunkSize: 10,
 	}
 
 	// 1. Trigger read that fails
 	_, err := buf.Read(0, 5)
-	if err != piecetable.ErrLoading { t.Fatal("Should report loading") }
+	if err != piecetable.ErrLoading {
+		t.Fatal("Should report loading")
+	}
 
 	// 2. Process tasks to handle the failure
 	timeout := time.After(200 * time.Millisecond)

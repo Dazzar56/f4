@@ -2,15 +2,15 @@ package main
 
 import (
 	"context"
+	"github.com/unxed/f4/vfs"
+	"github.com/unxed/vtinput"
+	"github.com/unxed/vtui"
 	"os"
 	"path/filepath"
-	"testing"
 	"runtime"
-	"time"
 	"strings"
-	"github.com/unxed/vtui"
-	"github.com/unxed/vtinput"
-	"github.com/unxed/f4/vfs"
+	"testing"
+	"time"
 )
 
 func TestPanelsFrame_Layout(t *testing.T) {
@@ -99,9 +99,9 @@ func TestPanelsFrame_SelectionByMask(t *testing.T) {
 	// 1. Command line not empty -> should not intercept
 	pf.cmdLine.Edit.SetText("a")
 	handled := pf.ProcessKey(&vtinput.InputEvent{
-		Type:           vtinput.KeyEventType,
-		KeyDown:        true,
-		Char:           '+',
+		Type:    vtinput.KeyEventType,
+		KeyDown: true,
+		Char:    '+',
 	})
 	if !handled {
 		t.Error("Key should be handled by cmdLine")
@@ -111,9 +111,9 @@ func TestPanelsFrame_SelectionByMask(t *testing.T) {
 	pf.cmdLine.Clear()
 	fsp.fastFindMode = true
 	handled = pf.ProcessKey(&vtinput.InputEvent{
-		Type:           vtinput.KeyEventType,
-		KeyDown:        true,
-		Char:           '+',
+		Type:    vtinput.KeyEventType,
+		KeyDown: true,
+		Char:    '+',
 	})
 	if !handled {
 		t.Error("Key should be handled by fastFindMode in active panel")
@@ -123,9 +123,9 @@ func TestPanelsFrame_SelectionByMask(t *testing.T) {
 	fsp.fastFindMode = false
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	handled = pf.ProcessKey(&vtinput.InputEvent{
-		Type:           vtinput.KeyEventType,
-		KeyDown:        true,
-		Char:           '+',
+		Type:    vtinput.KeyEventType,
+		KeyDown: true,
+		Char:    '+',
 	})
 	if !handled {
 		t.Error("Key should be intercepted for selection dialog")
@@ -167,11 +167,11 @@ func TestPanelsFrame_ProcessMouse_DoubleClick(t *testing.T) {
 	// Double click on ".." in left panel.
 	// Left panel 0..39. Table start Y=1. Header Y=1. Row 0 at Y=2.
 	pf.ProcessMouse(&vtinput.InputEvent{
-		Type:        vtinput.MouseEventType,
-		KeyDown:     true,
-		MouseX:      5,
-		MouseY:      2,
-		ButtonState: vtinput.FromLeft1stButtonPressed,
+		Type:            vtinput.MouseEventType,
+		KeyDown:         true,
+		MouseX:          5,
+		MouseY:          2,
+		ButtonState:     vtinput.FromLeft1stButtonPressed,
 		MouseEventFlags: vtinput.DoubleClick,
 	})
 
@@ -227,11 +227,11 @@ func TestPanelsFrame_ProcessMouse_DoubleClickFile(t *testing.T) {
 	// Double click on "run.sh" in left panel.
 	// Panel at (0,0), Table at (1,1), Header at Y=1, Row 0 at Y=2, Row 1 (run.sh) at Y=3.
 	pf.ProcessMouse(&vtinput.InputEvent{
-		Type:        vtinput.MouseEventType,
-		KeyDown:     true,
-		MouseX:      5,
-		MouseY:      3,
-		ButtonState: vtinput.FromLeft1stButtonPressed,
+		Type:            vtinput.MouseEventType,
+		KeyDown:         true,
+		MouseX:          5,
+		MouseY:          3,
+		ButtonState:     vtinput.FromLeft1stButtonPressed,
 		MouseEventFlags: vtinput.DoubleClick,
 	})
 
@@ -251,7 +251,6 @@ func TestPanelsFrame_ProcessMouse_DoubleClickFile(t *testing.T) {
 		t.Error("Double clicking a runnable file should hide the panels")
 	}
 }
-
 
 func TestPanelsFrame_KeyHandling(t *testing.T) {
 	pf := NewPanelsFrame()
@@ -308,7 +307,9 @@ func TestPanelsFrame_MenuCommands(t *testing.T) {
 	pf.ResizeConsole(80, 25)
 
 	handled := pf.HandleCommand(CmLeftDetailed, nil)
-	if !handled { t.Error("CmLeftDetailed not handled") }
+	if !handled {
+		t.Error("CmLeftDetailed not handled")
+	}
 	if pf.panels[0].(*FileSystemPanel).viewMode != ViewModeDetailed {
 		t.Error("Left panel mode not changed to Detailed")
 	}
@@ -723,7 +724,9 @@ func TestPanelsFrame_ExitWarning_ActiveTasks(t *testing.T) {
 
 	// Находим диалог
 	top := fm.GetTopFrame()
-	if top == nil { t.Fatal("Exit dialog not shown") }
+	if top == nil {
+		t.Fatal("Exit dialog not shown")
+	}
 
 	// Проверяем текст сообщения (должен содержать упоминание активных задач)
 	foundWarning := false
@@ -806,14 +809,17 @@ func TestPanelsFrame_Clone_SelectionPreservation(t *testing.T) {
 	timeout := time.After(2 * time.Second)
 	for fsp.isLoading {
 		select {
-		case task := <-vtui.FrameManager.TaskChan: task()
-		case <-timeout: t.Fatal("Timeout waiting for initial load")
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Timeout waiting for initial load")
 		}
 	}
 	// Drain UI queue
 	for i := 0; i < 10; i++ {
 		select {
-		case task := <-vtui.FrameManager.TaskChan: task()
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
 		default:
 		}
 	}
@@ -827,7 +833,9 @@ func TestPanelsFrame_Clone_SelectionPreservation(t *testing.T) {
 			break
 		}
 	}
-	if !found { t.Fatal("Setup failed: 'selected.txt' not found in entries") }
+	if !found {
+		t.Fatal("Setup failed: 'selected.txt' not found in entries")
+	}
 
 	// 3. Perform Clone
 	clone := pf.Clone()
@@ -838,14 +846,17 @@ func TestPanelsFrame_Clone_SelectionPreservation(t *testing.T) {
 	timeout = time.After(2 * time.Second)
 	for cloneFsp.isLoading {
 		select {
-		case task := <-vtui.FrameManager.TaskChan: task()
-		case <-timeout: t.Fatal("Timeout waiting for clone load")
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Timeout waiting for clone load")
 		}
 	}
 	// Final drain
 	for i := 0; i < 10; i++ {
 		select {
-		case task := <-vtui.FrameManager.TaskChan: task()
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
 		default:
 		}
 	}
@@ -1364,7 +1375,7 @@ func TestExecuteFileOp_BackgroundButtonTrigger(t *testing.T) {
 	fork := pf.Clone()
 	fm.AddScreen(fork)
 
-	if len(fm.Screens) != initialScreens + 1 {
+	if len(fm.Screens) != initialScreens+1 {
 		t.Errorf("Backgrounding failed to create a new screen. Got %d, want %d", len(fm.Screens), initialScreens+1)
 	}
 }
@@ -1390,7 +1401,7 @@ func TestExecuteDummyOp_HeadlessMode(t *testing.T) {
 		}
 	}
 
-	if len(fm.Screens) != initialScreens + 1 {
+	if len(fm.Screens) != initialScreens+1 {
 		t.Fatalf("Headless screen not created. Got %d", len(fm.Screens))
 	}
 
@@ -1407,7 +1418,7 @@ func TestPanelsFrame_TerminalForwarding_Legacy(t *testing.T) {
 	pf := NewPanelsFrame()
 	pf.showPanels = false
 	pf.termView.UseAltScreen = true
-	
+
 	// Mock PTY
 	pty := &mockPty{}
 	pf.pty = pty
@@ -1441,7 +1452,7 @@ func TestPanelsFrame_TerminalForwarding_Advanced(t *testing.T) {
 	pf.showPanels = false
 	pf.termView.UseAltScreen = true
 	pf.termView.Win32InputMode = true // Advanced mode
-	
+
 	pty := &mockPty{}
 	pf.pty = pty
 
@@ -1507,11 +1518,11 @@ func TestPanelsFrame_ProcessMouse_RightDoubleClickNoEnter(t *testing.T) {
 
 	// Double click with RIGHT button. Row 1 -> Y=3
 	pf.ProcessMouse(&vtinput.InputEvent{
-		Type:        vtinput.MouseEventType,
-		KeyDown:     true,
-		MouseX:      5,
-		MouseY:      3,
-		ButtonState: vtinput.RightmostButtonPressed,
+		Type:            vtinput.MouseEventType,
+		KeyDown:         true,
+		MouseX:          5,
+		MouseY:          3,
+		ButtonState:     vtinput.RightmostButtonPressed,
 		MouseEventFlags: vtinput.DoubleClick,
 	})
 
@@ -1618,7 +1629,7 @@ func TestLayout_F4InternalDialogs_Validity(t *testing.T) {
 		// Since it pushes to the real FrameManager, we'll initialize it.
 		fm := vtui.FrameManager
 		fm.Init(vtui.NewSilentScreenBuf())
-		
+
 		pf.showDummyOpDialog()
 		top := fm.GetTopFrame()
 		if dlg, ok := top.(vtui.Container); ok {
@@ -1750,7 +1761,9 @@ func TestPanelsFrame_DriveMenu_OtherPanel(t *testing.T) {
 
 	top := vtui.FrameManager.GetTopFrame()
 	menu, ok := top.(*vtui.VMenu)
-	if !ok { t.Fatal("Drive menu not opened") }
+	if !ok {
+		t.Fatal("Drive menu not opened")
+	}
 
 	// Ensure "Other panel" is at index 0 and selected
 	if menu.GetTitle() != " Drive " || menu.SelectPos != 0 {
@@ -1806,7 +1819,9 @@ func TestDriveMenu_SmartHotkeys(t *testing.T) {
 	pf.showDriveMenu(0)
 	top := vtui.FrameManager.GetTopFrame()
 	menu, ok := top.(*vtui.VMenu)
-	if !ok { t.Fatalf("Expected VMenu on top, got %T", top) }
+	if !ok {
+		t.Fatalf("Expected VMenu on top, got %T", top)
+	}
 
 	// 1. Проверка фокуса (Other panel по умолчанию)
 	if menu.SelectPos != 0 {
@@ -1817,13 +1832,19 @@ func TestDriveMenu_SmartHotkeys(t *testing.T) {
 	var nfIdx, nullIdx int = -1, -1
 	for i, itm := range menu.Items {
 		cleanText := strings.ReplaceAll(itm.Text, "&", "")
-		if strings.Contains(cleanText, "NetFox") { nfIdx = i }
-		if strings.Contains(cleanText, "Null VFS") { nullIdx = i }
+		if strings.Contains(cleanText, "NetFox") {
+			nfIdx = i
+		}
+		if strings.Contains(cleanText, "Null VFS") {
+			nullIdx = i
+		}
 	}
 
 	if nfIdx == -1 || nullIdx == -1 {
 		var items []string
-		for _, itm := range menu.Items { items = append(items, itm.Text) }
+		for _, itm := range menu.Items {
+			items = append(items, itm.Text)
+		}
 		t.Fatalf("Plugins not found in menu. Items present: %v", items)
 	}
 
@@ -1842,7 +1863,9 @@ func TestDriveMenu_SmartHotkeys(t *testing.T) {
 }
 
 func TestDriveMenu_PhysicalKeys(t *testing.T) {
-	if runtime.GOOS == "windows" { t.Skip("Skipping Linux-specific physical key test") }
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping Linux-specific physical key test")
+	}
 
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pf := NewPanelsFrame()
@@ -1886,9 +1909,9 @@ func TestPanelsFrame_ShiftInsert_Fallthrough(t *testing.T) {
 
 	// 3. Send Shift+Ins
 	pf.ProcessKey(&vtinput.InputEvent{
-		Type:           vtinput.KeyEventType,
-		KeyDown:        true,
-		VirtualKeyCode: vtinput.VK_INSERT,
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_INSERT,
 		ControlKeyState: vtinput.ShiftPressed,
 	})
 
@@ -1925,16 +1948,22 @@ func TestPanelsFrame_PromptTruncation(t *testing.T) {
 
 		visibleLen := 0
 		for _, c := range prompt {
-			if c.Char != vtui.WideCharFiller { visibleLen++ }
+			if c.Char != vtui.WideCharFiller {
+				visibleLen++
+			}
 		}
 
 		// Path is short, should be preserved entirely
 		found := false
 		promptStr := ""
 		for _, c := range prompt {
-			if c.Char != vtui.WideCharFiller { promptStr += string(rune(c.Char)) }
+			if c.Char != vtui.WideCharFiller {
+				promptStr += string(rune(c.Char))
+			}
 		}
-		if strings.Contains(promptStr, "home") { found = true }
+		if strings.Contains(promptStr, "home") {
+			found = true
+		}
 
 		if !found {
 			t.Errorf("Short path was lost in prompt: %q", promptStr)
@@ -2073,7 +2102,7 @@ func (v *vimTestHandler) HandleCommand(cmd int, args any) bool {
 }
 
 func (v *vimTestHandler) GetType() vtui.FrameType { return vtui.TypeUser }
-func (v *vimTestHandler) GetTitle() string       { return "VimHandler" }
+func (v *vimTestHandler) GetTitle() string        { return "VimHandler" }
 
 func TestPanelsFrame_VimHotkeys_Comprehensive(t *testing.T) {
 	vtui.SetDefaultPalette()

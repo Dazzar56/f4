@@ -4,12 +4,12 @@ package vfs
 
 import (
 	"fmt"
+	"github.com/unxed/vtui"
 	"net"
 	"os"
 	"path/filepath"
 	"strconv"
 	"time"
-	"github.com/unxed/vtui"
 )
 
 // RunSudoAskpass is executed when f4 is called with --askpass flag by sudo -A.

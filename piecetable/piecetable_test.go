@@ -1,8 +1,8 @@
 package piecetable
 
 import (
-	"testing"
 	"reflect"
+	"testing"
 )
 
 func TestPieceTable_Basic(t *testing.T) {
@@ -82,9 +82,9 @@ func TestPieceTable_Delete(t *testing.T) {
 func TestPieceTable_Complex(t *testing.T) {
 	pt := New([]byte("The quick brown fox jumps over the lazy dog"))
 
-	pt.Delete(16, 4) // "The quick brown jumps over the lazy dog"
-	pt.Insert(16, []byte("cat ")) // "The quick brown cat jumps over the lazy dog"
-	pt.Delete(0, 4) // "quick brown cat jumps over the lazy dog"
+	pt.Delete(16, 4)                  // "The quick brown jumps over the lazy dog"
+	pt.Insert(16, []byte("cat "))     // "The quick brown cat jumps over the lazy dog"
+	pt.Delete(0, 4)                   // "quick brown cat jumps over the lazy dog"
 	pt.Insert(pt.Size(), []byte(".")) // "quick brown cat jumps over the lazy dog."
 
 	expected := "quick brown cat jumps over the lazy dog."
@@ -311,7 +311,7 @@ func TestPieceTable_ReadAtBoundary(t *testing.T) {
 	// Specifically targets the logic that stitches data from multiple pieces.
 	// Piece 1: [0..9] (Original), Piece 2: [10..14] (Add), Piece 3: [15..24] (Original)
 	pt := New([]byte("012345678956789")) // "0123456789" then "56789"
-	pt.Insert(10, []byte("ABCDE"))        // Result: "0123456789ABCDE56789"
+	pt.Insert(10, []byte("ABCDE"))       // Result: "0123456789ABCDE56789"
 
 	// Pieces are:
 	// 0: Original, Start 0, Len 10 ("0123456789")
@@ -322,11 +322,11 @@ func TestPieceTable_ReadAtBoundary(t *testing.T) {
 		off, len int
 		expected string
 	}{
-		{9, 2, "9A"},   // Spans Piece 0 and 1
-		{14, 2, "E5"},  // Spans Piece 1 and 2
-		{10, 5, "ABCDE"}, // Exactly Piece 1
+		{9, 2, "9A"},                    // Spans Piece 0 and 1
+		{14, 2, "E5"},                   // Spans Piece 1 and 2
+		{10, 5, "ABCDE"},                // Exactly Piece 1
 		{0, 20, "0123456789ABCDE56789"}, // All pieces
-		{8, 9, "89ABCDE56"}, // Spans all three pieces
+		{8, 9, "89ABCDE56"},             // Spans all three pieces
 	}
 
 	for _, tt := range tests {
@@ -369,13 +369,14 @@ func TestPieceTable_MixedBuffer_ComplexRead(t *testing.T) {
 
 	for _, tt := range tests {
 		got, err := pt.GetRange(tt.off, tt.len)
-		if err != nil { t.Errorf("GetRange(%d,%d) err: %v", tt.off, tt.len, err) }
+		if err != nil {
+			t.Errorf("GetRange(%d,%d) err: %v", tt.off, tt.len, err)
+		}
 		if string(got) != tt.want {
 			t.Errorf("GetRange(%d,%d) = %q, want %q", tt.off, tt.len, string(got), tt.want)
 		}
 	}
 }
-
 
 func TestPieceTable_Delete_PieceRemoval(t *testing.T) {
 	// Verifies that deleting a range that exactly matches one or more pieces
@@ -385,12 +386,16 @@ func TestPieceTable_Delete_PieceRemoval(t *testing.T) {
 	pt.Insert(3, []byte("BBB")) // [CCC][BBB][AAA]
 
 	// We inserted at 0 and then in the middle, preventing the "append-at-end" merge optimization.
-	if len(pt.pieces) != 3 { t.Fatalf("Expected 3 pieces, got %d", len(pt.pieces)) }
+	if len(pt.pieces) != 3 {
+		t.Fatalf("Expected 3 pieces, got %d", len(pt.pieces))
+	}
 
 	// Delete "BBB" (offset 3, length 3)
 	pt.Delete(3, 3)
 
-	if pt.String() != "CCCAAA" { t.Errorf("Delete failed: %q", pt.String()) }
+	if pt.String() != "CCCAAA" {
+		t.Errorf("Delete failed: %q", pt.String())
+	}
 	if len(pt.pieces) != 2 {
 		t.Errorf("Piece was not removed from table, count: %d", len(pt.pieces))
 	}

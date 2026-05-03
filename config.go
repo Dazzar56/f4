@@ -11,48 +11,48 @@ import (
 )
 
 type F4Config struct {
-	ShowHiddenFiles        bool
-	HighlightDir           bool
+	ShowHiddenFiles         bool
+	HighlightDir            bool
 	SavePanelPaths          bool
 	KeepTerminalCursor      bool
 	CommandLineAutoComplete bool
 	VimHotkeys              bool
-	EditorAutoComplete     bool
-	EditorAutoCompleteMask string
-	EditorExpandTabs       int
-	EditorAutoIndent       bool
-	EditorCursorBeyondEOL  bool
-	EditorTabSize          int
-	EditorUseEditorConfig  bool
-	EditorCrosshair        bool
-	RegisteredPlugins      []string
-	ConfirmCopy            bool
-	ConfirmMove            bool
-	ConfirmDelete          bool
-	ConfirmExit            bool
-	DefaultFileOpMode      int
+	EditorAutoComplete      bool
+	EditorAutoCompleteMask  string
+	EditorExpandTabs        int
+	EditorAutoIndent        bool
+	EditorCursorBeyondEOL   bool
+	EditorTabSize           int
+	EditorUseEditorConfig   bool
+	EditorCrosshair         bool
+	RegisteredPlugins       []string
+	ConfirmCopy             bool
+	ConfirmMove             bool
+	ConfirmDelete           bool
+	ConfirmExit             bool
+	DefaultFileOpMode       int
 }
 
 var AppConfig = F4Config{
-	ShowHiddenFiles:        true,
-	HighlightDir:           true,
+	ShowHiddenFiles:         true,
+	HighlightDir:            true,
 	SavePanelPaths:          true,
 	KeepTerminalCursor:      false,
 	CommandLineAutoComplete: true,
 	VimHotkeys:              false,
 	EditorAutoComplete:      true,
-	EditorAutoCompleteMask: "*.go;*.c;*.cpp;*.h;*.hpp;*.py;*.js;*.ts;*.rs;*.java;*.sh;*.txt;*.md;*.html;*.css;*.json",
-	EditorExpandTabs:       0,
-	EditorAutoIndent:       true,
-	EditorCursorBeyondEOL:  false,
-	EditorTabSize:          4,
-	EditorUseEditorConfig:  true,
-	EditorCrosshair:        false,
-	ConfirmCopy:            true,
-	ConfirmMove:            true,
-	ConfirmDelete:          true,
-	ConfirmExit:            true,
-	DefaultFileOpMode:      0,
+	EditorAutoCompleteMask:  "*.go;*.c;*.cpp;*.h;*.hpp;*.py;*.js;*.ts;*.rs;*.java;*.sh;*.txt;*.md;*.html;*.css;*.json",
+	EditorExpandTabs:        0,
+	EditorAutoIndent:        true,
+	EditorCursorBeyondEOL:   false,
+	EditorTabSize:           4,
+	EditorUseEditorConfig:   true,
+	EditorCrosshair:         false,
+	ConfirmCopy:             true,
+	ConfirmMove:             true,
+	ConfirmDelete:           true,
+	ConfirmExit:             true,
+	DefaultFileOpMode:       0,
 }
 
 var getUserConfigIniPath = func() string {

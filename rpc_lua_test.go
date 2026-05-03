@@ -3,9 +3,9 @@ package main
 import (
 	"context"
 	"os/exec"
+	"strings"
 	"testing"
 	"time"
-	"strings"
 
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"

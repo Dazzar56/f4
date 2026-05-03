@@ -3,8 +3,8 @@
 package vfs
 
 import (
-	"golang.org/x/sys/windows"
 	"github.com/unxed/vtui"
+	"golang.org/x/sys/windows"
 )
 
 func init() {

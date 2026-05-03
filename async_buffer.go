@@ -5,9 +5,9 @@ import (
 	"io"
 	"sync"
 
+	"github.com/unxed/f4/piecetable"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
-	"github.com/unxed/f4/piecetable"
 )
 
 // AsyncBuffer provides non-blocking access to a file, returning ErrLoading
@@ -18,10 +18,10 @@ type AsyncBuffer struct {
 	ctx       context.Context
 	cancelCtx context.CancelFunc
 
-	mu         sync.Mutex
-	loaded     map[int][]byte // Chunk index -> Data
-	fetching   map[int]bool   // Chunk index -> is currently being fetched
-	chunkSize  int
+	mu        sync.Mutex
+	loaded    map[int][]byte // Chunk index -> Data
+	fetching  map[int]bool   // Chunk index -> is currently being fetched
+	chunkSize int
 }
 
 func NewAsyncBuffer(ctx context.Context, f vfs.ReadAtCloser) *AsyncBuffer {
@@ -66,10 +66,14 @@ func (b *AsyncBuffer) Read(offset, length int) ([]byte, error) {
 			cStart := i * b.chunkSize
 
 			takeStart := offset - cStart
-			if takeStart < 0 { takeStart = 0 }
+			if takeStart < 0 {
+				takeStart = 0
+			}
 
 			takeEnd := (offset + length) - cStart
-			if takeEnd > len(data) { takeEnd = len(data) }
+			if takeEnd > len(data) {
+				takeEnd = len(data)
+			}
 
 			if takeEnd > takeStart {
 				res = append(res, data[takeStart:takeEnd]...)

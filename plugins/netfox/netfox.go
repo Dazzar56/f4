@@ -2,8 +2,8 @@ package netfox
 
 import (
 	"context"
-	"os"
 	"io"
+	"os"
 	"path/filepath"
 
 	"github.com/unxed/f4/vfs"
@@ -21,11 +21,13 @@ func (cr *ioCtxReader) Read(p []byte) (int, error) {
 	}
 	return cr.r.Read(p)
 }
+
 type NetFoxPlugin struct{}
 
 type netFoxVFSWrapper struct {
 	*NetFoxVFS
 }
+
 func (w *netFoxVFSWrapper) Clone() vfs.VFS {
 	return &netFoxVFSWrapper{w.NetFoxVFS.Clone().(*NetFoxVFS)}
 }
@@ -92,5 +94,5 @@ func (p *NetFoxPlugin) Init(api vfs.HostAPI) error {
 	return nil
 }
 
-func (p *NetFoxPlugin) Close() error { return nil }
+func (p *NetFoxPlugin) Close() error    { return nil }
 func (p *NetFoxPlugin) GetName() string { return "NetFox" }

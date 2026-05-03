@@ -3,13 +3,13 @@ package netfox
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path"
+	"strings"
 	"sync"
 	"time"
-	"strings"
-	"fmt"
 
 	"github.com/jlaffaye/ftp"
 	"github.com/unxed/f4/vfs"
@@ -59,16 +59,16 @@ func NewFTPVFS(parent vfs.VFS, host, port, user, pass string, options map[string
 
 	return &FTPVFS{
 		parent: parent,
-		conn: c,
-		cwd: pwd,
-		title: title,
+		conn:   c,
+		cwd:    pwd,
+		title:  title,
 	}, nil
 }
 
 func (v *FTPVFS) GetTitle() string { return v.title }
 
-func (v *FTPVFS) IsAtRoot() bool { return v.cwd == "/" || v.cwd == "" || v.cwd == "." }
-func (v *FTPVFS) GetPath() string { return v.cwd }
+func (v *FTPVFS) IsAtRoot() bool      { return v.cwd == "/" || v.cwd == "" || v.cwd == "." }
+func (v *FTPVFS) GetPath() string     { return v.cwd }
 func (v *FTPVFS) IsAbs(p string) bool { return path.IsAbs(p) }
 func (v *FTPVFS) SetPath(p string) error {
 	v.mu.Lock()
@@ -140,15 +140,15 @@ func (v *FTPVFS) Stat(ctx context.Context, p string) (vfs.VFSItem, error) {
 	return vfs.VFSItem{}, os.ErrNotExist
 }
 
-func (v *FTPVFS) Join(e ...string) string      { return path.Join(e...) }
+func (v *FTPVFS) Join(e ...string) string { return path.Join(e...) }
 func (v *FTPVFS) Abs(p string) (string, error) {
 	if path.IsAbs(p) {
 		return path.Clean(p), nil
 	}
 	return path.Join(v.cwd, p), nil
 }
-func (v *FTPVFS) Base(p string) string         { return path.Base(p) }
-func (v *FTPVFS) Dir(p string) string          { return path.Dir(p) }
+func (v *FTPVFS) Base(p string) string                      { return path.Base(p) }
+func (v *FTPVFS) Dir(p string) string                       { return path.Dir(p) }
 func (v *FTPVFS) MkDir(ctx context.Context, p string) error { return v.conn.MakeDir(p) }
 func (v *FTPVFS) Remove(ctx context.Context, p string) error {
 	if err := v.conn.Delete(p); err != nil {
@@ -162,7 +162,7 @@ func (v *FTPVFS) SetAttributes(ctx context.Context, path string, item vfs.VFSIte
 	return fmt.Errorf("SetAttributes not supported for FTP")
 }
 
-func (v *FTPVFS) GetCapabilities() vfs.VFSCapabilities          { return vfs.VFSCapabilities{} }
+func (v *FTPVFS) GetCapabilities() vfs.VFSCapabilities { return vfs.VFSCapabilities{} }
 func (v *FTPVFS) Search(ctx context.Context, p, pat string) (chan int64, error) {
 	return nil, nil
 }
@@ -277,4 +277,4 @@ func (w *ftpFileWrapper) ReadAt(ctx context.Context, p []byte, off int64) (int, 
 	return w.File.ReadAt(p, off)
 }
 func (w *ftpFileWrapper) Read(ctx context.Context, p []byte) (int, error) { return w.File.Read(p) }
-func (w *ftpFileWrapper) Close() error { w.File.Close(); return os.Remove(w.path) }
+func (w *ftpFileWrapper) Close() error                                    { w.File.Close(); return os.Remove(w.path) }

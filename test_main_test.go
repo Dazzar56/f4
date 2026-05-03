@@ -1,9 +1,9 @@
 package main
 
 import (
+	"github.com/unxed/vtui"
 	"os"
 	"testing"
-	"github.com/unxed/vtui"
 )
 
 func TestMain(m *testing.M) {

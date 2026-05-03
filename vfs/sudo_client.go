@@ -3,14 +3,14 @@ package vfs
 import (
 	"errors"
 	"fmt"
+	"github.com/unxed/vtui"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
-	"github.com/unxed/vtui"
-	"strings"
 )
 
 // SudoClient manages a persistent connection to the elevated f4 dispatcher.
@@ -88,7 +88,9 @@ func (c *SudoClient) Connect() error {
 					}
 				}
 			}
-			if err != nil { break }
+			if err != nil {
+				break
+			}
 		}
 	}()
 

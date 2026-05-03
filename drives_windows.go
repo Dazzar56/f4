@@ -3,8 +3,8 @@
 package main
 
 import (
-	"golang.org/x/sys/windows"
 	"github.com/unxed/f4/vfs"
+	"golang.org/x/sys/windows"
 )
 
 func getPlatformDrives() []DriveEntry {
@@ -18,7 +18,7 @@ func getPlatformDrives() []DriveEntry {
 			letter := string(rune('A' + i))
 			path := letter + ":\\"
 			drives = append(drives, DriveEntry{
-				Name: letter + ": Local",
+				Name:    letter + ": Local",
 				Factory: func() vfs.VFS { return vfs.NewOSVFS(path) },
 			})
 		}

@@ -15,13 +15,13 @@ import (
 
 // PTY для Windows реализован через ConPTY API (доступно в Windows 10+).
 type PTY struct {
-	mu           sync.Mutex
-	console      windows.Handle
-	inPipe       windows.Handle
-	outPipe      windows.Handle
-	process      *windows.ProcessInformation
-	inWriter     *os.File
-	outReader    *os.File
+	mu        sync.Mutex
+	console   windows.Handle
+	inPipe    windows.Handle
+	outPipe   windows.Handle
+	process   *windows.ProcessInformation
+	inWriter  *os.File
+	outReader *os.File
 
 	lastBusyCheck time.Time
 	lastBusyState bool
@@ -89,10 +89,14 @@ func (p *PTY) Run(name string, args ...string) error {
 
 	var attrList *windows.ProcThreadAttributeListContainer
 	attrList, err := windows.NewProcThreadAttributeList(1)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 
 	err = attrList.Update(windows.PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE, unsafe.Pointer(p.console), unsafe.Sizeof(p.console))
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 
 	si := &windows.StartupInfoEx{
 		StartupInfo: windows.StartupInfo{
@@ -130,7 +134,9 @@ func (p *PTY) Close() error {
 }
 
 func (p *PTY) Wait() error {
-	if p.process == nil { return nil }
+	if p.process == nil {
+		return nil
+	}
 	_, err := windows.WaitForSingleObject(p.process.Process, windows.INFINITE)
 	return err
 }
@@ -139,7 +145,9 @@ func (p *PTY) IsBusy() bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if p.process == nil { return false }
+	if p.process == nil {
+		return false
+	}
 
 	if time.Since(p.lastBusyCheck) < 50*time.Millisecond {
 		return p.lastBusyState

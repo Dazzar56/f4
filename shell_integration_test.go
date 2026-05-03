@@ -1,14 +1,14 @@
 package main
 
 import (
+	"github.com/unxed/f4/vfs"
+	"github.com/unxed/vtinput"
+	"github.com/unxed/vtui"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
-	"github.com/unxed/vtinput"
-	"github.com/unxed/vtui"
-	"github.com/unxed/f4/vfs"
 )
 
 func TestPanelsFrame_CtrlEnter_Escaping(t *testing.T) {

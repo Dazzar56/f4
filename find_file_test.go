@@ -23,8 +23,10 @@ func TestFileContainsText_ChunkOverlap(t *testing.T) {
 	// if it was exposed. Since it's hardcoded to 128KB, we write 128KB of padding,
 	// then the secret word crossing the boundary.
 
-	padding := make([]byte, 128*1024 - 6) // Leaves 6 bytes at the end of the first chunk
-	for i := range padding { padding[i] = 'A' }
+	padding := make([]byte, 128*1024-6) // Leaves 6 bytes at the end of the first chunk
+	for i := range padding {
+		padding[i] = 'A'
+	}
 
 	data := append(padding, []byte("SECRETPASSWORD")...)
 	os.WriteFile(path, data, 0644)
