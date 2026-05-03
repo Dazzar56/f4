@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -485,7 +484,11 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 
 	initialDest := dstVfs.GetPath()
 	if initialDest != "" && !strings.HasSuffix(initialDest, "/") && !strings.HasSuffix(initialDest, "\\") {
-		initialDest += string(os.PathSeparator)
+		sep := "/"
+		if _, isOS := dstVfs.(*vfs.OSVFS); isOS && runtime.GOOS == "windows" {
+			sep = "\\"
+		}
+		initialDest += sep
 	}
 
 	editDest := vtui.NewEdit(0, 0, 10, initialDest)

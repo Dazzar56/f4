@@ -141,7 +141,12 @@ func (v *FTPVFS) Stat(ctx context.Context, p string) (vfs.VFSItem, error) {
 }
 
 func (v *FTPVFS) Join(e ...string) string      { return path.Join(e...) }
-func (v *FTPVFS) Abs(p string) (string, error) { return path.Join(v.cwd, p), nil }
+func (v *FTPVFS) Abs(p string) (string, error) {
+	if path.IsAbs(p) {
+		return path.Clean(p), nil
+	}
+	return path.Join(v.cwd, p), nil
+}
 func (v *FTPVFS) Base(p string) string         { return path.Base(p) }
 func (v *FTPVFS) Dir(p string) string          { return path.Dir(p) }
 func (v *FTPVFS) MkDir(ctx context.Context, p string) error { return v.conn.MakeDir(p) }
