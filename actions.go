@@ -229,6 +229,7 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 					if runtime.GOOS != "windows" {
 						pf.termView.SetMuted(true)
 						pf.executing = true
+						pf.returnToPanels = true
 					}
 					activePty.Write([]byte(cmdToWire))
 					pf.showPanels = false

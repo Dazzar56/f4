@@ -65,6 +65,7 @@ type PanelsFrame struct {
 	panels    [2]Panel
 	activeIdx int // 0 for left, 1 for right
 	executing bool
+	returnToPanels bool
 
 	menuBar   *vtui.MenuBar
 	cmdLine   *CommandLine
@@ -166,9 +167,12 @@ func NewPanelsFrame() *PanelsFrame {
 			} else if newTitle == "f4:done" {
 				if pf.executing {
 					pf.executing = false
-					pf.showPanels = true
-					pf.RefreshAll()
-					vtui.FrameManager.Redraw()
+					if pf.returnToPanels {
+						pf.showPanels = true
+						pf.returnToPanels = false
+						pf.RefreshAll()
+						vtui.FrameManager.Redraw()
+					}
 				}
 			}
 		})
@@ -940,51 +944,38 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				}
 
 				var fullWireCmd string
-				if path != "" {
-					vtui.DebugLog("SHELL: Executing %q in %s", cmd, path)
+				isBackground := strings.HasSuffix(strings.TrimSpace(cmd), "&")
 
-					if pf.showPanels {
-						// Panels are visible: we are launching a one-shot command.
-						if runtime.GOOS == "windows" {
-							fullWireCmd = fmt.Sprintf("cd /d %q & %s\r", path, cmd)
-						} else {
-							sqPath := strings.ReplaceAll(path, "'", "'\\''")
-							// If command ends with &, don't use grouping as it breaks shell syntax and Done signal.
-							if strings.HasSuffix(strings.TrimSpace(cmd), "&") {
-								fullWireCmd = fmt.Sprintf("set +H; cd '%s' && %s\r", sqPath, cmd)
-							} else {
-								fullWireCmd = fmt.Sprintf("set +H; cd '%s' && { printf \"\\033]2;f4:busy\\007\"; %s ; printf \"\\033]2;f4:done\\007\"; }\r", sqPath, cmd)
-								pf.executing = true
-							}
-						}
+				if runtime.GOOS == "windows" {
+					if path != "" {
+						fullWireCmd = fmt.Sprintf("cd /d %q & %s\r", path, cmd)
 					} else {
-						// Panels are hidden: user is in interactive shell. No need for busy/done signals
-						// as the shell prompt will naturally indicate when the command is finished.
-						if runtime.GOOS == "windows" {
-							fullWireCmd = fmt.Sprintf("cd /d %q & %s\r", path, cmd)
-						} else {
-							sqPath := strings.ReplaceAll(path, "'", "'\\''")
-							fullWireCmd = fmt.Sprintf("set +H; cd '%s' && %s\r", sqPath, cmd)
-						}
+						fullWireCmd = cmd + "\r"
 					}
 				} else {
-					// Command has no path context (e.g. running on a virtual VFS)
-					if pf.showPanels {
-						// If panels are shown, we still need the busy/done signals
-						if runtime.GOOS == "windows" {
-							fullWireCmd = cmd + "\r"
+					// Unix
+					if isBackground {
+						if path != "" {
+							sqPath := strings.ReplaceAll(path, "'", "'\\''")
+							fullWireCmd = fmt.Sprintf("set +H; cd '%s' && %s\r", sqPath, cmd)
 						} else {
-							fullWireCmd = fmt.Sprintf("{ printf \"\\033]2;f4:busy\\007\"; %s ; printf \"\\033]2;f4:done\\007\"; }\r", cmd)
-							pf.executing = true
+							fullWireCmd = cmd + "\r"
 						}
 					} else {
-						// If in terminal, just run the command
-						fullWireCmd = cmd + "\r"
+						// Managed foreground command
+						if path != "" {
+							sqPath := strings.ReplaceAll(path, "'", "'\\''")
+							fullWireCmd = fmt.Sprintf("set +H; cd '%s' && { printf \"\\033]2;f4:busy\\007\"; %s ; printf \"\\033]2;f4:done\\007\"; }\r", sqPath, cmd)
+						} else {
+							fullWireCmd = fmt.Sprintf("{ printf \"\\033]2;f4:busy\\007\"; %s ; printf \"\\033]2;f4:done\\007\"; }\r", cmd)
+						}
+						pf.executing = true
+						pf.returnToPanels = pf.showPanels
 					}
 				}
 
 				pf.termView.PrintCleanCommand(cmd)
-				if runtime.GOOS != "windows" {
+				if runtime.GOOS != "windows" && !isBackground {
 					pf.termView.SetMuted(true)
 				}
 				activePty.Write([]byte(fullWireCmd))
