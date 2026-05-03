@@ -26,8 +26,10 @@ type F4Config struct {
 	EditorUseEditorConfig  bool
 	EditorCrosshair        bool
 	RegisteredPlugins      []string
-	ConfirmExit            bool
+	ConfirmCopy            bool
+	ConfirmMove            bool
 	ConfirmDelete          bool
+	ConfirmExit            bool
 	DefaultFileOpMode      int
 }
 
@@ -46,8 +48,10 @@ var AppConfig = F4Config{
 	EditorTabSize:          4,
 	EditorUseEditorConfig:  true,
 	EditorCrosshair:        false,
-	ConfirmExit:            true,
+	ConfirmCopy:            true,
+	ConfirmMove:            true,
 	ConfirmDelete:          true,
+	ConfirmExit:            true,
 	DefaultFileOpMode:      0,
 }
 
@@ -88,8 +92,10 @@ func LoadConfig() {
 	AppConfig.CommandLineAutoComplete = ini.GetString("Panel", "CommandLineAutoComplete", "1") == "1"
 	AppConfig.VimHotkeys = ini.GetString("Panel", "VimHotkeys", "0") == "1"
 	fmt.Sscanf(ini.GetString("Panel", "DefaultFileOpMode", "0"), "%d", &AppConfig.DefaultFileOpMode)
-	AppConfig.ConfirmExit = ini.GetString("System", "ConfirmExit", "1") == "1"
+	AppConfig.ConfirmCopy = ini.GetString("System", "ConfirmCopy", "1") == "1"
+	AppConfig.ConfirmMove = ini.GetString("System", "ConfirmMove", "1") == "1"
 	AppConfig.ConfirmDelete = ini.GetString("System", "ConfirmDelete", "1") == "1"
+	AppConfig.ConfirmExit = ini.GetString("System", "ConfirmExit", "1") == "1"
 
 	AppConfig.EditorAutoComplete = ini.GetString("Editor", "AutoComplete", "1") == "1"
 	AppConfig.EditorAutoCompleteMask = ini.GetString("Editor", "AutoCompleteMask", "*.go;*.c;*.cpp;*.h;*.hpp;*.py;*.js;*.ts;*.rs;*.java;*.sh;*.txt;*.md;*.html;*.css;*.json")
@@ -124,8 +130,10 @@ func SaveConfig() {
 	sb.WriteString(fmt.Sprintf("DefaultFileOpMode = %d\n", AppConfig.DefaultFileOpMode))
 
 	sb.WriteString("\n[System]\n")
-	sb.WriteString(fmt.Sprintf("ConfirmExit = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.ConfirmExit]))
+	sb.WriteString(fmt.Sprintf("ConfirmCopy = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.ConfirmCopy]))
+	sb.WriteString(fmt.Sprintf("ConfirmMove = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.ConfirmMove]))
 	sb.WriteString(fmt.Sprintf("ConfirmDelete = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.ConfirmDelete]))
+	sb.WriteString(fmt.Sprintf("ConfirmExit = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.ConfirmExit]))
 	sb.WriteString("\n[Editor]\n")
 	sb.WriteString(fmt.Sprintf("AutoComplete = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.EditorAutoComplete]))
 	sb.WriteString(fmt.Sprintf("AutoCompleteMask = %s\n", AppConfig.EditorAutoCompleteMask))
