@@ -180,14 +180,45 @@ func (v *SFTPVFS) Base(p string) string                      { return path.Base(
 func (v *SFTPVFS) Dir(p string) string                       { return path.Dir(p) }
 func (v *SFTPVFS) MkDir(ctx context.Context, p string) error { return v.client.MkdirAll(p) }
 func (v *SFTPVFS) Remove(ctx context.Context, p string) error {
-	info, err := v.client.Stat(p)
+	info, err := v.client.Lstat(p)
 	if err != nil {
 		return err
 	}
-	if info.IsDir() {
-		return v.client.RemoveDirectory(p)
+	if !info.IsDir() {
+		return v.client.Remove(p)
 	}
-	return v.client.Remove(p)
+
+	// Рекурсивное удаление для SFTP
+	walker := v.client.Walk(p)
+	var items []string
+	for walker.Step() {
+		if err := walker.Err(); err != nil {
+			return err
+		}
+		items = append(items, walker.Path())
+	}
+
+	// Удаляем в обратном порядке (снизу вверх)
+	for i := len(items) - 1; i >= 0; i-- {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		itemPath := items[i]
+		st, err := v.client.Lstat(itemPath)
+		if err != nil {
+			continue
+		}
+		if st.IsDir() {
+			if err := v.client.RemoveDirectory(itemPath); err != nil {
+				return err
+			}
+		} else {
+			if err := v.client.Remove(itemPath); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 func (v *SFTPVFS) Rename(ctx context.Context, o, n string) error { return v.client.Rename(o, n) }
 

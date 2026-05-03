@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -553,12 +552,16 @@ func recursiveCopy(ctx context.Context, srcVfs vfs.VFS, srcPath string, dstVfs v
 		return fmt.Errorf("cannot copy folder into itself (source equals destination)")
 	}
 
-	sep := string(os.PathSeparator)
-	if !strings.HasSuffix(realSrc, sep) {
-		realSrc += sep
+	// Используем "/" как универсальный разделитель для внутренних проверок путей,
+	// чтобы избежать проблем при копировании между Windows и Linux серверами.
+	if !strings.HasSuffix(realSrc, "/") && !strings.HasSuffix(realSrc, "\\") {
+		realSrc += "/"
 	}
+	// Нормализуем оба пути к одному виду слэшей для корректного сравнения префиксов
+	compareSrc := filepath.ToSlash(realSrc)
+	compareDst := filepath.ToSlash(realDst)
 
-	if strings.HasPrefix(realDst, realSrc) {
+	if strings.HasPrefix(compareDst, compareSrc) {
 		return fmt.Errorf("cannot copy folder into itself (destination is a subfolder)")
 	}
 

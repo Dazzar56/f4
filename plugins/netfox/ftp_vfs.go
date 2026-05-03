@@ -151,10 +151,43 @@ func (v *FTPVFS) Base(p string) string                      { return path.Base(p
 func (v *FTPVFS) Dir(p string) string                       { return path.Dir(p) }
 func (v *FTPVFS) MkDir(ctx context.Context, p string) error { return v.conn.MakeDir(p) }
 func (v *FTPVFS) Remove(ctx context.Context, p string) error {
-	if err := v.conn.Delete(p); err != nil {
+	return v.removeRecursive(ctx, p)
+}
+
+func (v *FTPVFS) removeRecursive(ctx context.Context, p string) error {
+	// Пытаемся удалить как файл
+	err := v.conn.Delete(p)
+	if err == nil {
+		return nil
+	}
+
+	// Если не вышло, пробуем как папку
+	entries, err := v.conn.List(p)
+	if err != nil {
+		// Если список не получить, возможно это пустая папка, которую можно просто удалить
 		return v.conn.RemoveDir(p)
 	}
-	return nil
+
+	for _, e := range entries {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if e.Name == "." || e.Name == ".." {
+			continue
+		}
+		full := path.Join(p, e.Name)
+		if e.Type == ftp.EntryTypeFolder {
+			if err := v.removeRecursive(ctx, full); err != nil {
+				return err
+			}
+		} else {
+			if err := v.conn.Delete(full); err != nil {
+				return err
+			}
+		}
+	}
+
+	return v.conn.RemoveDir(p)
 }
 func (v *FTPVFS) Rename(ctx context.Context, o, n string) error { return v.conn.Rename(o, n) }
 
