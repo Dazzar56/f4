@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"github.com/unxed/vtui"
 )
 
 type F4HistoryProvider struct {
@@ -63,4 +64,23 @@ func (hp *F4HistoryProvider) SaveHistory(id string, history []string) {
 	hp.data[id] = history
 	hp.mu.Unlock()
 	hp.save()
+}
+
+func AddFolderHistory(path string) {
+	if path == "" || path == "." || vtui.GlobalHistoryProvider == nil {
+		return
+	}
+	h := vtui.GlobalHistoryProvider.LoadHistory("folders")
+	// Deduplicate and move to top
+	newHist := []string{path}
+	for _, item := range h {
+		if item != path {
+			newHist = append(newHist, item)
+		}
+	}
+	// Limit to 100 items
+	if len(newHist) > 100 {
+		newHist = newHist[:100]
+	}
+	vtui.GlobalHistoryProvider.SaveHistory("folders", newHist)
 }

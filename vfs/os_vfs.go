@@ -24,6 +24,7 @@ func NewOSVFS(initialPath string) *OSVFS {
 }
 
 func (v *OSVFS) GetPath() string { return v.currentPath }
+func (v *OSVFS) IsAbs(path string) bool { return filepath.IsAbs(path) }
 
 func (v *OSVFS) IsAtRoot() bool {
 	if runtime.GOOS == "windows" {

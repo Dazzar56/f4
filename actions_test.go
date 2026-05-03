@@ -18,6 +18,7 @@ func TestActionExecute_RemoteRejection(t *testing.T) {
 	baseVfs := vfs.NewOSVFS(t.TempDir())
 	v := &mockFailingVFS{VFS: baseVfs}
 	pf := NewPanelsFrame()
+	defer pf.Close()
 
 	actionExecute(pf, v, filepath.FromSlash("/remote"), "script.sh", filepath.FromSlash("/remote/script.sh"))
 
@@ -48,6 +49,7 @@ func TestActionMkDir_Flow(t *testing.T) {
 	SetDefaultF4Palette()
 
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25) // Crucial: initializes panels
 
 	// 1. Trigger MkDir action (should push InputBox)
@@ -99,6 +101,7 @@ func TestActionDelete_BulkErrorAccumulation(t *testing.T) {
 	SetDefaultF4Palette()
 
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
 	// Создаем мок-VFS, который запретит удаление "fail.txt"
@@ -248,6 +251,7 @@ func TestActionDelete_RetrySuccess(t *testing.T) {
 	}
 
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 	fsp := pf.panels[0].(*FileSystemPanel)
 	fsp.vfs = mv
@@ -308,6 +312,7 @@ func TestActionDelete_Abort(t *testing.T) {
 	}
 
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 	fsp := pf.panels[0].(*FileSystemPanel)
 	fsp.vfs = mv
@@ -357,6 +362,7 @@ Loop:
 func TestActionDelete_SuccessorLogic(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
 	tmp := t.TempDir()
@@ -404,6 +410,7 @@ func TestActionCopyMove_TrailingSlash(t *testing.T) {
 	SetDefaultF4Palette()
 
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
 	// Ensure predictable paths for the test
@@ -456,6 +463,7 @@ func TestActionNewFile_Flow(t *testing.T) {
 	SetDefaultF4Palette()
 
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25) // Crucial: initializes panels
 
 	pf.activeIdx = 0
@@ -494,6 +502,7 @@ func TestActionFindFile_Persistence(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	SetDefaultF4Palette()
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
 	LastFindFileMask = "*.tmp"
@@ -552,6 +561,7 @@ func TestActionPanelSettings_Flow(t *testing.T) {
 	SetDefaultF4Palette()
 
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
 	actionPanelSettings(pf)
@@ -598,6 +608,7 @@ func TestActionManagePlugins_Flow(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	SetDefaultF4Palette()
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
 	oldPlugins := AppConfig.RegisteredPlugins

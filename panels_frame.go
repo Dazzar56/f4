@@ -65,6 +65,7 @@ type PanelsFrame struct {
 	panels    [2]Panel
 	activeIdx int // 0 for left, 1 for right
 	executing bool
+	returnToPanels bool
 
 	menuBar   *vtui.MenuBar
 	cmdLine   *CommandLine
@@ -86,6 +87,8 @@ type PanelsFrame struct {
 	lastBusy  bool
 
 	lastAutoRefresh time.Time
+	lastKey      rune
+	lastKeyEvent time.Time
 }
 func (pf *PanelsFrame) Left() Panel  { return pf.panels[0] }
 func (pf *PanelsFrame) Right() Panel { return pf.panels[1] }
@@ -164,9 +167,12 @@ func NewPanelsFrame() *PanelsFrame {
 			} else if newTitle == "f4:done" {
 				if pf.executing {
 					pf.executing = false
-					pf.showPanels = true
-					pf.RefreshAll()
-					vtui.FrameManager.Redraw()
+					if pf.returnToPanels {
+						pf.showPanels = true
+						pf.returnToPanels = false
+						pf.RefreshAll()
+						vtui.FrameManager.Redraw()
+					}
 				}
 			}
 		})
@@ -190,7 +196,7 @@ func getSortMenuText(current, target SortMode, label string) string {
 }
 
 func (pf *PanelsFrame) updateMenuCheckmarks() {
-	if pf.panels[0] == nil || pf.panels[1] == nil { return }
+	if pf.panels[0] == nil || pf.panels[1] == nil || pf.menuBar == nil || len(pf.menuBar.Items) < 5 { return }
 
 	lMode, rMode := ViewModeMedium, ViewModeMedium
 	lSort, rSort := SortName, SortName
@@ -293,38 +299,59 @@ func (pf *PanelsFrame) buildPrompt() []vtui.CharInfo {
 }
 
 func (pf *PanelsFrame) initPTY() {
-	p, err := NewPTY()
-	if err != nil {
-		return
-	}
-	pf.pty = p
-	pf.parser = NewAnsiParser(pf.termView, pf.pty)
-	shell := GetSystemShell()
-	pf.pty.Run(shell)
+	// Always initialize the parser to prevent nil dereference
+	pf.parser = NewAnsiParser(pf.termView, nil)
 
-	// Локальный PTY имеет свой выделенный цикл чтения.
+	p := pf.pty
+	if p == nil {
+		var err error
+		p, err = NewPTY()
+		if err != nil {
+			vtui.DebugLog("PTY: Failed to allocate local PTY: %v", err)
+			return
+		}
+		pf.pty = p
+		shell := GetSystemShell()
+		p.Run(shell)
+	}
+
+	pf.parser.pty = p
+
+	// Local PTY has its own dedicated read loop.
 	go func() {
-		buf := make([]byte, 32768) // Увеличен буфер для быстрого потокового чтения
+		buf := make([]byte, 32768)
 		for {
-			n, err := pf.pty.Read(buf)
-			if err != nil { return }
+			n, err := p.Read(buf)
+			if err != nil {
+				vtui.DebugLog("PTY: Local read loop exited: %v", err)
+				return
+			}
 
 			pf.ptyMutex.Lock()
-			shouldProcess := (pf.getActivePTYUnsafe() == pf.pty)
+			shouldProcess := (pf.getActivePTYUnsafe() == p)
 			pf.ptyMutex.Unlock()
 
-			// Парсим данные вне глобального ptyMutex, чтобы не блокировать UI-поток
 			if shouldProcess {
-				start := time.Now()
 				pf.parser.Process(buf[:n])
-				elapsed := time.Since(start)
-				if elapsed > 10*time.Millisecond {
-					vtui.DebugLog("PTY_PROFILE(Local): Parsed %d bytes in %v", n, elapsed)
-				}
 				vtui.FrameManager.Redraw()
 			}
 		}
 	}()
+}
+
+func (pf *PanelsFrame) Close() {
+	pf.ptyMutex.Lock()
+	defer pf.ptyMutex.Unlock()
+
+	if pf.pty != nil {
+		pf.pty.Close()
+		pf.pty = nil
+	}
+	for _, pty := range pf.remotePtys {
+		pty.Close()
+	}
+	pf.remotePtys = nil
+	pf.BaseFrame.Close()
 }
 
 
@@ -663,6 +690,12 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	}
 
+	// Alt+F12: Folders History
+	if e.VirtualKeyCode == vtinput.VK_F12 && alt && !ctrl && !shift && e.KeyDown {
+		actionFoldersHistory(pf)
+		return true
+	}
+
 	// F11: Plugin Menu
 	if e.VirtualKeyCode == vtinput.VK_F11 && !alt && !ctrl && !shift && e.KeyDown {
 		pf.showPluginMenu()
@@ -733,6 +766,58 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		pf.cmdLine.Clear()
 		pf.cmdLine.Edit.HistoryPos = -1
 		return true
+	}
+	// Vim-like hotkeys
+	if AppConfig.VimHotkeys && pf.showPanels && !alt && !ctrl && !shift && e.Char != 0 && pf.cmdLine.Edit.HistoryPos == -1 {
+		isFastFind := false
+		if fsp := pf.getActivePanel(); fsp != nil {
+			isFastFind = fsp.fastFindMode
+		}
+
+		// If fast find is active, Vim hotkeys must be ignored to allow searching by 'j', 'k', etc.
+		if !isFastFind {
+			now := time.Now()
+			key := e.Char
+			cmdLineText := pf.cmdLine.Edit.GetText()
+
+			// Double-press actions (dd, cc, mm)
+			if pf.lastKey == key && now.Sub(pf.lastKeyEvent) < 400*time.Millisecond && (cmdLineText == "" || cmdLineText == string(key)) {
+				var cmd int
+				switch key {
+				case 'd': cmd = CmDelete
+				case 'c': cmd = CmCopy
+				case 'm': cmd = CmMove
+				}
+				if cmd != 0 {
+					pf.cmdLine.Clear()
+					vtui.FrameManager.EmitCommand(cmd, nil)
+					pf.lastKey = 0
+					return true
+				}
+			}
+
+			// Single-key navigation (strictly only if command line is empty)
+			if cmdLineText == "" {
+				if fsp := pf.getActivePanel(); fsp != nil {
+					if key == 'j' {
+						fsp.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
+						return true
+					}
+					if key == 'k' {
+						fsp.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_UP})
+						return true
+					}
+				}
+			}
+
+			// Record current key as a potential prefix for the next event
+			if key == 'd' || key == 'c' || key == 'm' {
+				pf.lastKey = key
+				pf.lastKeyEvent = now
+			} else {
+				pf.lastKey = 0
+			}
+		}
 	}
 
 	// Ctrl+Enter inserts selected file name
@@ -865,51 +950,38 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				}
 
 				var fullWireCmd string
-				if path != "" {
-					vtui.DebugLog("SHELL: Executing %q in %s", cmd, path)
+				isBackground := strings.HasSuffix(strings.TrimSpace(cmd), "&")
 
-					if pf.showPanels {
-						// Panels are visible: we are launching a one-shot command.
-						if runtime.GOOS == "windows" {
-							fullWireCmd = fmt.Sprintf("cd /d %q & %s\r", path, cmd)
-						} else {
-							sqPath := strings.ReplaceAll(path, "'", "'\\''")
-							// If command ends with &, don't use grouping as it breaks shell syntax and Done signal.
-							if strings.HasSuffix(strings.TrimSpace(cmd), "&") {
-								fullWireCmd = fmt.Sprintf("set +H; cd '%s' && %s\r", sqPath, cmd)
-							} else {
-								fullWireCmd = fmt.Sprintf("set +H; cd '%s' && { printf \"\\033]2;f4:busy\\007\"; %s ; printf \"\\033]2;f4:done\\007\"; }\r", sqPath, cmd)
-								pf.executing = true
-							}
-						}
+				if runtime.GOOS == "windows" {
+					if path != "" {
+						fullWireCmd = fmt.Sprintf("cd /d %q & %s\r", path, cmd)
 					} else {
-						// Panels are hidden: user is in interactive shell. No need for busy/done signals
-						// as the shell prompt will naturally indicate when the command is finished.
-						if runtime.GOOS == "windows" {
-							fullWireCmd = fmt.Sprintf("cd /d %q & %s\r", path, cmd)
-						} else {
-							sqPath := strings.ReplaceAll(path, "'", "'\\''")
-							fullWireCmd = fmt.Sprintf("set +H; cd '%s' && %s\r", sqPath, cmd)
-						}
+						fullWireCmd = cmd + "\r"
 					}
 				} else {
-					// Command has no path context (e.g. running on a virtual VFS)
-					if pf.showPanels {
-						// If panels are shown, we still need the busy/done signals
-						if runtime.GOOS == "windows" {
-							fullWireCmd = cmd + "\r"
+					// Unix
+					if isBackground {
+						if path != "" {
+							sqPath := strings.ReplaceAll(path, "'", "'\\''")
+							fullWireCmd = fmt.Sprintf("set +H; cd '%s' && %s\r", sqPath, cmd)
 						} else {
-							fullWireCmd = fmt.Sprintf("{ printf \"\\033]2;f4:busy\\007\"; %s ; printf \"\\033]2;f4:done\\007\"; }\r", cmd)
-							pf.executing = true
+							fullWireCmd = cmd + "\r"
 						}
 					} else {
-						// If in terminal, just run the command
-						fullWireCmd = cmd + "\r"
+						// Managed foreground command
+						if path != "" {
+							sqPath := strings.ReplaceAll(path, "'", "'\\''")
+							fullWireCmd = fmt.Sprintf("set +H; cd '%s' && { printf \"\\033]2;f4:busy\\007\"; %s ; printf \"\\033]2;f4:done\\007\"; }\r", sqPath, cmd)
+						} else {
+							fullWireCmd = fmt.Sprintf("{ printf \"\\033]2;f4:busy\\007\"; %s ; printf \"\\033]2;f4:done\\007\"; }\r", cmd)
+						}
+						pf.executing = true
+						pf.returnToPanels = pf.showPanels
 					}
 				}
 
 				pf.termView.PrintCleanCommand(cmd)
-				if runtime.GOOS != "windows" {
+				if runtime.GOOS != "windows" && !isBackground {
 					pf.termView.SetMuted(true)
 				}
 				activePty.Write([]byte(fullWireCmd))
@@ -995,6 +1067,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	if e.VirtualKeyCode == vtinput.VK_TAB && !ctrl {
 		if pf.showPanels {
 			pf.activeIdx = 1 - pf.activeIdx
+			pf.lastKey = 0
 			return true
 		}
 	}
@@ -1048,6 +1121,7 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 		if mx >= x1 && mx <= x2 && my >= y1 && my <= y2 {
 			if pf.activeIdx != i && e.ButtonState != 0 {
 				pf.activeIdx = i
+				pf.lastKey = 0
 				vtui.FrameManager.Redraw()
 			}
 
@@ -1277,7 +1351,7 @@ func (pf *PanelsFrame) GetKeyLabels() *vtui.KeySet {
 		},
 		Alt: vtui.KeyBarLabels{
 			Msg("KeyBar.AltF1"), Msg("KeyBar.AltF2"), Msg("KeyBar.AltF3"), "",
-			"", "", Msg("KeyBar.AltF7"), Msg("KeyBar.AltF8"), "", "", "", "",
+			"", "", Msg("KeyBar.AltF7"), Msg("KeyBar.AltF8"), "", "", "", Msg("KeyBar.AltF12"),
 		},
 		Ctrl: vtui.KeyBarLabels{
 			"", "", Msg("KeyBar.CtrlF3"), Msg("KeyBar.CtrlF4"), Msg("KeyBar.CtrlF5"), Msg("KeyBar.CtrlF6"), Msg("KeyBar.CtrlF7"), "", "", "", "Fork", "Close",

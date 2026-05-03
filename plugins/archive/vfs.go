@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"sync"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -104,6 +105,7 @@ func (v *ArchiveVFS) GetPath() string {
 	// Мы возвращаем нативный путь ОС, объединяя путь к архиву и внутренний путь
 	return filepath.Join(v.arcPath, filepath.FromSlash(v.innerPath))
 }
+func (v *ArchiveVFS) IsAbs(p string) bool { return path.IsAbs(p) || strings.HasPrefix(p, v.arcPath) }
 
 func (v *ArchiveVFS) SetPath(path string) error {
 	v.mu.Lock()

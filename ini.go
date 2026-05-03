@@ -40,6 +40,20 @@ func LoadIni(filename string) *IniFile {
 	return ini
 }
 
+// Merge overlays settings from another IniFile. Values in 'other' overwrite existing ones.
+func (ini *IniFile) Merge(other *IniFile) {
+	if other == nil {
+		return
+	}
+	for section, keys := range other.data {
+		if _, ok := ini.data[section]; !ok {
+			ini.data[section] = make(map[string]string)
+		}
+		for key, val := range keys {
+			ini.data[section][key] = val
+		}
+	}
+}
 // GetString safely retrieves a value or returns the default.
 func (ini *IniFile) GetString(section, key, def string) string {
 	if sec, ok := ini.data[section]; ok {

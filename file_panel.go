@@ -628,6 +628,9 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 				if fp.pendingSelection != "" {
 					fp.SelectName(fp.pendingSelection)
 					fp.pendingSelection = ""
+				} else if err == nil && !isFirstChunk {
+					// Path changed successfully, record in history
+					AddFolderHistory(path)
 				}
 
 				fp.Refresh()

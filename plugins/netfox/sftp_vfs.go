@@ -100,6 +100,7 @@ func (v *SFTPVFS) GetTitle() string { return v.title }
 
 func (v *SFTPVFS) IsAtRoot() bool { return v.path == "/" || v.path == "" }
 func (v *SFTPVFS) GetPath() string { return v.path }
+func (v *SFTPVFS) IsAbs(p string) bool { return path.IsAbs(p) }
 func (v *SFTPVFS) SetPath(p string) error {
 	var target string
 	if path.IsAbs(p) { target = p } else { target = v.Join(v.path, p) }

@@ -84,6 +84,7 @@ var Lng = map[string]string{
 	"PanelSettings.HighlightDir": "H&ighlight folders",
 	"PanelSettings.SavePaths":    "Save panel &paths on exit",
 	"PanelSettings.KeepCursor":   "Don't touch terminal &cursor style",
+	"PanelSettings.VimHotkeys":   "Enable &Vim-like hotkeys (j, k, dd, cc, mm)",
 	"ConfirmationsSettings.Title":  " Confirmations ",
 	"ConfirmationsSettings.Copy":   "Confirm on &copy",
 	"ConfirmationsSettings.Move":   "Confirm on &move",
@@ -93,6 +94,7 @@ var Lng = map[string]string{
 	"FindFile.MaskPrompt":    "A filemask or several filemasks:",
 	"FindFile.TextPrompt":    "Containing text:",
 	"FindFile.BtnFind":       "&Find",
+	"History.FoldersTitle":   " Folders History ",
 
 	// KeyBar Normal
 	"KeyBar.F1":  "Help",
@@ -114,6 +116,7 @@ var Lng = map[string]string{
 	"KeyBar.AltF3": "Hex",
 	"KeyBar.AltF7": "Find",
 	"KeyBar.AltF8": "History",
+	"KeyBar.AltF12": "Folders",
 	"KeyBar.CtrlF3": "Name",
 	"KeyBar.CtrlF4": "Ext",
 	"KeyBar.CtrlF5": "Time",

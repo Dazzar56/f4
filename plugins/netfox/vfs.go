@@ -8,6 +8,7 @@ import (
 	"os"
 	"fmt"
 	"sync"
+	"strings"
 	"path"
 	"path/filepath"
 	"github.com/unxed/f4/vfs"
@@ -80,6 +81,7 @@ func (v *NetFoxVFS) SaveConfig(name string, cfg NetFoxConfig) {
 
 func (v *NetFoxVFS) IsAtRoot() bool { return true }
 func (v *NetFoxVFS) GetPath() string { return "net://" }
+func (v *NetFoxVFS) IsAbs(p string) bool { return strings.HasPrefix(p, "net://") }
 func (v *NetFoxVFS) SetPath(p string) error { return nil }
 
 func (v *NetFoxVFS) ReadDir(ctx context.Context, p string, onChunk func([]vfs.VFSItem)) error {
