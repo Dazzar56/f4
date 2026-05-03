@@ -1064,7 +1064,7 @@ func actionConfirmationsSettings(pf *PanelsFrame) {
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnCancel)
 
-	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 44-4, 9-4)
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 44-4, 11-4)
 	vbox.Add(chkCopy, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkMove, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkDelete, vtui.Margins{}, vtui.AlignLeft)
