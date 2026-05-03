@@ -24,6 +24,7 @@ func (m MemoryBuffer) Read(offset, length int) ([]byte, error) {
 	}
 	return m[offset:end], nil
 }
+
 type BufferType int
 
 const (
@@ -62,6 +63,7 @@ func New(text []byte) *PieceTable {
 func (pt *PieceTable) Size() int {
 	return pt.size
 }
+
 // GetOriginalBuffer returns the underlying original buffer.
 func (pt *PieceTable) GetOriginalBuffer() Buffer {
 	return pt.orig
@@ -182,7 +184,9 @@ func (pt *PieceTable) Bytes() ([]byte, error) {
 	for _, p := range pt.pieces {
 		if p.Buf == Original {
 			data, err := pt.orig.Read(p.Start, p.Length)
-			if err != nil { return nil, err }
+			if err != nil {
+				return nil, err
+			}
 			res = append(res, data...)
 		} else {
 			res = append(res, pt.add[p.Start:p.Start+p.Length]...)
@@ -190,6 +194,7 @@ func (pt *PieceTable) Bytes() ([]byte, error) {
 	}
 	return res, nil
 }
+
 // AppendRange appends the specified range to the dest slice without new allocations.
 func (pt *PieceTable) AppendRange(dest []byte, offset, length int) ([]byte, error) {
 	if offset < 0 || length <= 0 {
@@ -212,10 +217,12 @@ func (pt *PieceTable) AppendRange(dest []byte, offset, length int) ([]byte, erro
 
 		if p.Buf == Original {
 			data, err := pt.orig.Read(p.Start+offInPiece, take)
-			if err != nil { return dest, err }
+			if err != nil {
+				return dest, err
+			}
 			dest = append(dest, data...)
 		} else {
-			dest = append(dest, pt.add[p.Start+offInPiece : p.Start+offInPiece+take]...)
+			dest = append(dest, pt.add[p.Start+offInPiece:p.Start+offInPiece+take]...)
 		}
 
 		remaining -= take
@@ -244,11 +251,17 @@ func (pt *PieceTable) ForEachRange(fn func(data []byte) error) error {
 					take = p.Length - offset
 				}
 				data, err := pt.orig.Read(p.Start+offset, take)
-				if err != nil { return err }
-				if err := fn(data); err != nil { return err }
+				if err != nil {
+					return err
+				}
+				if err := fn(data); err != nil {
+					return err
+				}
 			}
 		} else {
-			if err := fn(pt.add[p.Start : p.Start+p.Length]); err != nil { return err }
+			if err := fn(pt.add[p.Start : p.Start+p.Length]); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -273,6 +286,7 @@ func (pt *PieceTable) LoadState(s TableState) {
 	copy(pt.pieces, s.Pieces)
 	pt.size = s.Size
 }
+
 // Equals compares two table states for structural identity.
 func (s TableState) Equals(other TableState) bool {
 	if s.Size != other.Size || len(s.Pieces) != len(other.Pieces) {
@@ -310,7 +324,9 @@ func (pt *PieceTable) GetRange(offset, length int) ([]byte, error) {
 		if p.Buf == Original {
 			var err error
 			buf, err = pt.orig.Read(p.Start+offInPiece, take)
-			if err != nil { return nil, err }
+			if err != nil {
+				return nil, err
+			}
 		} else {
 			buf = pt.add[p.Start+offInPiece : p.Start+offInPiece+take]
 		}

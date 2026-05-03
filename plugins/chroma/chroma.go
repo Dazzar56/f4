@@ -15,7 +15,7 @@ func (p *Plugin) Init(api vfs.HostAPI) error {
 	return nil
 }
 
-func (p *Plugin) Close() error { return nil }
+func (p *Plugin) Close() error    { return nil }
 func (p *Plugin) GetName() string { return "Internal Syntax Highlighter (Chroma)" }
 
 // SyntaxMap links Chroma token types to f4 colors

@@ -1,8 +1,8 @@
 package main
 
 import (
-	"testing"
 	"github.com/unxed/vtui"
+	"testing"
 )
 
 func TestArkanoid_Init(t *testing.T) {

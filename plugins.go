@@ -3,11 +3,11 @@ package main
 import (
 	"sync"
 
-	"github.com/unxed/f4/vfs"
 	"github.com/unxed/f4/plugins/archive"
 	"github.com/unxed/f4/plugins/chroma"
 	"github.com/unxed/f4/plugins/dummy_internal"
 	"github.com/unxed/f4/plugins/netfox"
+	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 )
 
@@ -33,6 +33,7 @@ type PluginManager struct {
 	api     vfs.HostAPI
 	plugins []Plugin
 }
+
 var GlobalPluginManager *PluginManager
 
 func NewPluginManager() *PluginManager {
@@ -84,7 +85,6 @@ func (pm *PluginManager) loadInternal() {
 		}
 	}
 }
-
 
 func (pm *PluginManager) CloseAll() {
 	pm.mu.Lock()

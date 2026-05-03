@@ -35,53 +35,93 @@ func TranslateLegacySpecialKey(e *vtinput.InputEvent, appCursorKeys bool) string
 	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
 
 	mod := 1
-	if shift { mod += 1 }
-	if alt { mod += 2 }
-	if ctrl { mod += 4 }
+	if shift {
+		mod += 1
+	}
+	if alt {
+		mod += 2
+	}
+	if ctrl {
+		mod += 4
+	}
 
 	switch e.VirtualKeyCode {
-	case vtinput.VK_UP:     return formatCSI(mod, "A", appCursorKeys)
-	case vtinput.VK_DOWN:   return formatCSI(mod, "B", appCursorKeys)
-	case vtinput.VK_RIGHT:  return formatCSI(mod, "C", appCursorKeys)
-	case vtinput.VK_LEFT:   return formatCSI(mod, "D", appCursorKeys)
+	case vtinput.VK_UP:
+		return formatCSI(mod, "A", appCursorKeys)
+	case vtinput.VK_DOWN:
+		return formatCSI(mod, "B", appCursorKeys)
+	case vtinput.VK_RIGHT:
+		return formatCSI(mod, "C", appCursorKeys)
+	case vtinput.VK_LEFT:
+		return formatCSI(mod, "D", appCursorKeys)
 	case vtinput.VK_HOME:
-		if appCursorKeys && mod == 1 { return "\x1bOH" }
+		if appCursorKeys && mod == 1 {
+			return "\x1bOH"
+		}
 		return formatCSI(mod, "H", false)
 	case vtinput.VK_END:
-		if appCursorKeys && mod == 1 { return "\x1bOF" }
+		if appCursorKeys && mod == 1 {
+			return "\x1bOF"
+		}
 		return formatCSI(mod, "F", false)
 
-	case vtinput.VK_F1:     return formatCSIOrSS3(mod, "P")
-	case vtinput.VK_F2:     return formatCSIOrSS3(mod, "Q")
-	case vtinput.VK_F3:     return formatCSIOrSS3(mod, "R")
-	case vtinput.VK_F4:     return formatCSIOrSS3(mod, "S")
+	case vtinput.VK_F1:
+		return formatCSIOrSS3(mod, "P")
+	case vtinput.VK_F2:
+		return formatCSIOrSS3(mod, "Q")
+	case vtinput.VK_F3:
+		return formatCSIOrSS3(mod, "R")
+	case vtinput.VK_F4:
+		return formatCSIOrSS3(mod, "S")
 
-	case vtinput.VK_F5:     return formatTilde(mod, 15)
-	case vtinput.VK_F6:     return formatTilde(mod, 17)
-	case vtinput.VK_F7:     return formatTilde(mod, 18)
-	case vtinput.VK_F8:     return formatTilde(mod, 19)
-	case vtinput.VK_F9:     return formatTilde(mod, 20)
-	case vtinput.VK_F10:    return formatTilde(mod, 21)
-	case vtinput.VK_F11:    return formatTilde(mod, 23)
-	case vtinput.VK_F12:    return formatTilde(mod, 24)
+	case vtinput.VK_F5:
+		return formatTilde(mod, 15)
+	case vtinput.VK_F6:
+		return formatTilde(mod, 17)
+	case vtinput.VK_F7:
+		return formatTilde(mod, 18)
+	case vtinput.VK_F8:
+		return formatTilde(mod, 19)
+	case vtinput.VK_F9:
+		return formatTilde(mod, 20)
+	case vtinput.VK_F10:
+		return formatTilde(mod, 21)
+	case vtinput.VK_F11:
+		return formatTilde(mod, 23)
+	case vtinput.VK_F12:
+		return formatTilde(mod, 24)
 
-	case vtinput.VK_INSERT: return formatTilde(mod, 2)
-	case vtinput.VK_DELETE: return formatTilde(mod, 3)
-	case vtinput.VK_PRIOR:  return formatTilde(mod, 5)
-	case vtinput.VK_NEXT:   return formatTilde(mod, 6)
+	case vtinput.VK_INSERT:
+		return formatTilde(mod, 2)
+	case vtinput.VK_DELETE:
+		return formatTilde(mod, 3)
+	case vtinput.VK_PRIOR:
+		return formatTilde(mod, 5)
+	case vtinput.VK_NEXT:
+		return formatTilde(mod, 6)
 
 	case vtinput.VK_RETURN:
-		if alt { return "\x1b\r" }
+		if alt {
+			return "\x1b\r"
+		}
 		return "\r"
 	case vtinput.VK_BACK:
-		if alt { return "\x1b\x7f" }
+		if alt {
+			return "\x1b\x7f"
+		}
 		return "\x7f"
 	case vtinput.VK_TAB:
-		if shift { return "\x1b[Z" }
-		if alt { return "\x1b\t" }
+		if shift {
+			return "\x1b[Z"
+		}
+		if alt {
+			return "\x1b\t"
+		}
 		return "\t"
 	case vtinput.VK_ESCAPE:
-		if alt { return "\x1b\x1b" }
+		if alt {
+			return "\x1b\x1b"
+		}
 		return "\x1b"
 	}
 
@@ -92,7 +132,9 @@ func TranslateLegacySpecialKey(e *vtinput.InputEvent, appCursorKeys bool) string
 func TranslateInput(e *vtinput.InputEvent, win32Mode bool, kittyFlags int, appCursorKeys bool) string {
 	if win32Mode && e.Type == vtinput.KeyEventType {
 		kd := 0
-		if e.KeyDown { kd = 1 }
+		if e.KeyDown {
+			kd = 1
+		}
 		// Format: CSI Vk ; Sc ; Uc ; Kd ; Cs ; Rc _
 		return fmt.Sprintf("\x1b[%d;%d;%d;%d;%d;%d_",
 			e.VirtualKeyCode, e.VirtualScanCode, e.Char, kd, e.ControlKeyState, e.RepeatCount)

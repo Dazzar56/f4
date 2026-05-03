@@ -2,11 +2,11 @@ package vfs
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
-	"testing"
 	"strings"
-	"fmt"
+	"testing"
 )
 
 func TestOpStats_Add(t *testing.T) {
@@ -23,7 +23,7 @@ func TestGenericScan_FlatFiles(t *testing.T) {
 	tmpDir := t.TempDir()
 	v := NewOSVFS(tmpDir)
 
-	os.WriteFile(filepath.Join(tmpDir, "f1.txt"), []byte("abc"), 0644) // 3 bytes
+	os.WriteFile(filepath.Join(tmpDir, "f1.txt"), []byte("abc"), 0644)  // 3 bytes
 	os.WriteFile(filepath.Join(tmpDir, "f2.txt"), []byte("defg"), 0644) // 4 bytes
 
 	stats, err := GenericScan(context.Background(), v, tmpDir, []string{"f1.txt", "f2.txt"}, nil)
@@ -195,13 +195,19 @@ type mockScannerVFS struct {
 }
 
 func (m *mockScannerVFS) Stat(ctx context.Context, p string) (VFSItem, error) {
-	if m.err != nil { return VFSItem{}, m.err }
-	if m.onStat != nil { return m.onStat(p), nil }
+	if m.err != nil {
+		return VFSItem{}, m.err
+	}
+	if m.onStat != nil {
+		return m.onStat(p), nil
+	}
 	return VFSItem{Name: "item", IsDir: false}, nil
 }
 
 func (m *mockScannerVFS) ReadDir(ctx context.Context, p string, onChunk func([]VFSItem)) error {
-	if m.readDirErr != nil { return m.readDirErr }
+	if m.readDirErr != nil {
+		return m.readDirErr
+	}
 	if m.onReadDir != nil {
 		onChunk(m.onReadDir(p))
 	}

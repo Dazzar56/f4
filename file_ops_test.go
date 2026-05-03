@@ -1,16 +1,16 @@
 package main
 
 import (
-	"context"
-	"strings"
-	"os"
 	"bytes"
-	"runtime"
-	"path/filepath"
-	"testing"
-	"time"
+	"context"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"testing"
+	"time"
 )
 
 func TestRecursiveCopy(t *testing.T) {
@@ -136,10 +136,14 @@ func TestRecursiveCopy_MoveCrossVFS(t *testing.T) {
 
 	// Execute Move
 	err := recursiveCopy(tCtx.Context, srcVfs, srcFile, dstVfs, filepath.Join(tmpDst, name), &FileOpState{}, 0)
-	if err != nil { t.Fatalf("Copy part of move failed: %v", err) }
+	if err != nil {
+		t.Fatalf("Copy part of move failed: %v", err)
+	}
 
 	err = srcVfs.Remove(context.Background(), srcFile)
-	if err != nil { t.Fatalf("Delete part of move failed: %v", err) }
+	if err != nil {
+		t.Fatalf("Delete part of move failed: %v", err)
+	}
 
 	// Verify
 	if _, err := os.Stat(srcFile); !os.IsNotExist(err) {
@@ -197,7 +201,9 @@ func TestRecursiveCopy_OverwriteAllState(t *testing.T) {
 	err := recursiveCopy(tCtx.Context, srcVfs,
 		filepath.Join(tmpSrc, "f1.txt"), dstVfs, filepath.Join(tmpDst, "f1.txt"), state, 0)
 
-	if err != nil { t.Errorf("Copy failed even with OverwriteAll: %v", err) }
+	if err != nil {
+		t.Errorf("Copy failed even with OverwriteAll: %v", err)
+	}
 
 	data, _ := os.ReadFile(filepath.Join(tmpDst, "f1.txt"))
 	if string(data) != "new" {
@@ -221,7 +227,9 @@ func TestRecursiveCopy_SkipAllState(t *testing.T) {
 	err := recursiveCopy(tCtx.Context, srcVfs,
 		filepath.Join(tmpSrc, fileName), dstVfs, filepath.Join(tmpDst, fileName), state, 0)
 
-	if err != nil { t.Fatalf("Expected no error on skip, got %v", err) }
+	if err != nil {
+		t.Fatalf("Expected no error on skip, got %v", err)
+	}
 
 	data, _ := os.ReadFile(filepath.Join(tmpDst, fileName))
 	if string(data) != "target content" {
@@ -317,8 +325,10 @@ func TestFileOp_PathLogic(t *testing.T) {
 		// Drain task queue
 		for i := 0; i < 50; i++ {
 			select {
-			case task := <-vtui.FrameManager.TaskChan: task()
-			default: time.Sleep(5 * time.Millisecond)
+			case task := <-vtui.FrameManager.TaskChan:
+				task()
+			default:
+				time.Sleep(5 * time.Millisecond)
 			}
 		}
 
@@ -337,8 +347,10 @@ func TestFileOp_PathLogic(t *testing.T) {
 
 		for i := 0; i < 100; i++ {
 			select {
-			case task := <-vtui.FrameManager.TaskChan: task()
-			default: time.Sleep(5 * time.Millisecond)
+			case task := <-vtui.FrameManager.TaskChan:
+				task()
+			default:
+				time.Sleep(5 * time.Millisecond)
 			}
 		}
 
@@ -358,8 +370,10 @@ func TestFileOp_PathLogic(t *testing.T) {
 
 		for i := 0; i < 50; i++ {
 			select {
-			case task := <-vtui.FrameManager.TaskChan: task()
-			default: time.Sleep(5 * time.Millisecond)
+			case task := <-vtui.FrameManager.TaskChan:
+				task()
+			default:
+				time.Sleep(5 * time.Millisecond)
 			}
 		}
 
@@ -373,12 +387,14 @@ func TestFileOp_PathLogic(t *testing.T) {
 		os.WriteFile(filepath.Join(tmpSrc, "source2.txt"), []byte("content"), 0644)
 
 		// Target: "new_dir/" (trailing slash should force directory creation)
-	ExecuteFileOp(nil, srcVfs, dstVfs, []string{"source2.txt"}, "new_dir"+string(os.PathSeparator), false, 2, nil)
+		ExecuteFileOp(nil, srcVfs, dstVfs, []string{"source2.txt"}, "new_dir"+string(os.PathSeparator), false, 2, nil)
 
 		for i := 0; i < 50; i++ {
 			select {
-			case task := <-vtui.FrameManager.TaskChan: task()
-			default: time.Sleep(5 * time.Millisecond)
+			case task := <-vtui.FrameManager.TaskChan:
+				task()
+			default:
+				time.Sleep(5 * time.Millisecond)
 			}
 		}
 
@@ -464,12 +480,16 @@ func TestExecuteFileOp_StateTransitions(t *testing.T) {
 
 	err := recursiveCopy(tCtx.Context, srcVfs,
 		filepath.Join(tmpSrc, "a.txt"), dstVfs, filepath.Join(tmpDst, "a.txt"), state, 0)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// 2. Trigger second copy with same state
 	err = recursiveCopy(tCtx.Context, srcVfs,
 		filepath.Join(tmpSrc, "b.txt"), dstVfs, filepath.Join(tmpDst, "b.txt"), state, 0)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// 3. Verify both were overwritten
 	dataA, _ := os.ReadFile(filepath.Join(tmpDst, "a.txt"))
@@ -507,26 +527,26 @@ func TestExecuteFileOp_OptimizedRenameConflict(t *testing.T) {
 			goto done
 		}
 	}
-	done:
-		if !foundDialog {
-			t.Error("Optimized rename bypassed overwrite protection and didn't show a dialog")
-		} else {
-			// CRITICAL: Properly close the dialog to unblock the worker goroutine.
-			// This prevents "directory not empty" errors during TempDir cleanup.
-			top := vtui.FrameManager.GetTopFrame()
-			if top != nil {
-				top.SetExitCode(-1) // Simulate Cancel/Esc
-				// Pump tasks to allow the worker to receive the result and exit
-				for i := 0; i < 10; i++ {
-					select {
-					case task := <-vtui.FrameManager.TaskChan:
-						task()
-					case <-time.After(10 * time.Millisecond):
-					}
+done:
+	if !foundDialog {
+		t.Error("Optimized rename bypassed overwrite protection and didn't show a dialog")
+	} else {
+		// CRITICAL: Properly close the dialog to unblock the worker goroutine.
+		// This prevents "directory not empty" errors during TempDir cleanup.
+		top := vtui.FrameManager.GetTopFrame()
+		if top != nil {
+			top.SetExitCode(-1) // Simulate Cancel/Esc
+			// Pump tasks to allow the worker to receive the result and exit
+			for i := 0; i < 10; i++ {
+				select {
+				case task := <-vtui.FrameManager.TaskChan:
+					task()
+				case <-time.After(10 * time.Millisecond):
 				}
 			}
 		}
 	}
+}
 func TestExecuteFileOp_SkipAll_Integrity(t *testing.T) {
 	// Verifies that when a conflict occurs and user selects "Skip All",
 	// no subsequent files in the operation are modified.
@@ -712,7 +732,9 @@ func TestExecuteFileOp_DeepIntegrity(t *testing.T) {
 	os.MkdirAll(filepath.Join(srcBase, "root", "sub1", "sub2"), 0755)
 
 	largeData := make([]byte, 4*1024*1024)
-	for i := range largeData { largeData[i] = byte(i % 251) } // Prime to avoid simple patterns
+	for i := range largeData {
+		largeData[i] = byte(i % 251)
+	} // Prime to avoid simple patterns
 
 	os.WriteFile(filepath.Join(srcBase, "root", "file1.txt"), []byte("f1"), 0644)
 	os.WriteFile(filepath.Join(srcBase, "root", "sub1", "file2.txt"), []byte("f2"), 0644)
@@ -744,7 +766,8 @@ loop:
 	// Final drain to ensure all UI/stat tasks finished
 	for i := 0; i < 10; i++ {
 		select {
-		case task := <-vtui.FrameManager.TaskChan: task()
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
 		default:
 		}
 	}
@@ -766,7 +789,9 @@ loop:
 func TestExecuteFileOp_Move_PermissionDenied_Recovery(t *testing.T) {
 	// Tests that a Move operation handles partial failures (like permission denied)
 	// gracefully without deleting the source if the copy failed.
-	if runtime.GOOS == "windows" { t.Skip("Skipping Unix permission test on Windows") }
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping Unix permission test on Windows")
+	}
 
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	srcDir := t.TempDir()
@@ -858,7 +883,9 @@ func TestRecursiveCopy_SubfolderDeepRecursion(t *testing.T) {
 
 func TestRecursiveCopy_SymlinkLoop(t *testing.T) {
 	// Tests protection against loops like "ln -s .. loop"
-	if runtime.GOOS == "windows" { t.Skip("Symlinks behave differently on Windows") }
+	if runtime.GOOS == "windows" {
+		t.Skip("Symlinks behave differently on Windows")
+	}
 
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	tmp := t.TempDir()
@@ -906,12 +933,18 @@ func TestRecursiveCopy_ByteProgress(t *testing.T) {
 		}
 
 		err := recursiveCopy(ctx, srcVfs, "/1MB.bin", dstVfs, "/upload/test.bin", state, 0)
-		if err != nil { t.Fatalf("Copy failed: %v", err) }
+		if err != nil {
+			t.Fatalf("Copy failed: %v", err)
+		}
 
 		// Buffer size in recursiveCopy is 128KB (131072 bytes).
 		// 1MB = 1048576 bytes. 1048576 / 131072 = 8 exactly.
-		if callCount != 8 { t.Errorf("Expected 8 calls to OnBytes, got %d", callCount) }
-		if totalBytes != 1024*1024 { t.Errorf("Expected 1048576 bytes total, got %d", totalBytes) }
+		if callCount != 8 {
+			t.Errorf("Expected 8 calls to OnBytes, got %d", callCount)
+		}
+		if totalBytes != 1024*1024 {
+			t.Errorf("Expected 1048576 bytes total, got %d", totalBytes)
+		}
 	})
 
 	t.Run("Multiple Small Files (OSVFS)", func(t *testing.T) {
@@ -936,14 +969,21 @@ func TestRecursiveCopy_ByteProgress(t *testing.T) {
 		}
 
 		err := recursiveCopy(ctx, srcVfs, tmpSrc, dstVfs, filepath.Join(tmpDst, "copied"), state, 0)
-		if err != nil { t.Fatalf("Copy failed: %v", err) }
+		if err != nil {
+			t.Fatalf("Copy failed: %v", err)
+		}
 
 		// "Hello" (5) + "World!" (6) = 11 bytes.
 		// Expected 2 calls, one for each file.
-		if callCount != 2 { t.Errorf("Expected 2 calls to OnBytes, got %d", callCount) }
-		if totalBytes != 11 { t.Errorf("Expected 11 bytes total, got %d", totalBytes) }
+		if callCount != 2 {
+			t.Errorf("Expected 2 calls to OnBytes, got %d", callCount)
+		}
+		if totalBytes != 11 {
+			t.Errorf("Expected 11 bytes total, got %d", totalBytes)
+		}
 	})
 }
+
 // --- UI Integration Tests for Conflict Resolution ---
 
 // Helper to pump UI tasks until a dialog with the given title appears
@@ -1408,7 +1448,9 @@ func TestFileOps_CalculateStats_Integration(t *testing.T) {
 	v := vfs.NewOSVFS(tmp)
 	stats, err := vfs.CalculateStats(context.Background(), v, tmp, []string{"a"}, nil)
 
-	if err != nil { t.Fatalf("CalculateStats failed: %v", err) }
+	if err != nil {
+		t.Fatalf("CalculateStats failed: %v", err)
+	}
 	if stats.Files != 2 || stats.Dirs != 2 || stats.Bytes != 7 {
 		t.Errorf("Stats mismatch: %+v", stats)
 	}
@@ -1429,8 +1471,10 @@ func TestExecuteFileOp_PathInterpretations(t *testing.T) {
 		// Pump
 		for i := 0; i < 50; i++ {
 			select {
-			case task := <-vtui.FrameManager.TaskChan: task()
-			default: time.Sleep(2 * time.Millisecond)
+			case task := <-vtui.FrameManager.TaskChan:
+				task()
+			default:
+				time.Sleep(2 * time.Millisecond)
 			}
 		}
 		if _, err := os.Stat(filepath.Join(tmpDst, "f1.txt")); err != nil {
@@ -1445,8 +1489,10 @@ func TestExecuteFileOp_PathInterpretations(t *testing.T) {
 
 		for i := 0; i < 50; i++ {
 			select {
-			case task := <-vtui.FrameManager.TaskChan: task()
-			default: time.Sleep(2 * time.Millisecond)
+			case task := <-vtui.FrameManager.TaskChan:
+				task()
+			default:
+				time.Sleep(2 * time.Millisecond)
 			}
 		}
 		finalPath := filepath.Join(tmpDst, "newdir", "f1.txt")
@@ -1483,8 +1529,10 @@ func TestExecuteFileOp_Move_FinalizeFailure(t *testing.T) {
 	// Pump
 	for i := 0; i < 100; i++ {
 		select {
-		case task := <-vtui.FrameManager.TaskChan: task()
-		default: time.Sleep(5 * time.Millisecond)
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		default:
+			time.Sleep(5 * time.Millisecond)
 		}
 	}
 

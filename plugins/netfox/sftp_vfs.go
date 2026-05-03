@@ -8,8 +8,8 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"time"
 	"strings"
+	"time"
 
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
@@ -98,16 +98,24 @@ func NewSFTPVFS(parent vfs.VFS, host, port, user, pass string) (*SFTPVFS, error)
 
 func (v *SFTPVFS) GetTitle() string { return v.title }
 
-func (v *SFTPVFS) IsAtRoot() bool { return v.path == "/" || v.path == "" }
-func (v *SFTPVFS) GetPath() string { return v.path }
+func (v *SFTPVFS) IsAtRoot() bool      { return v.path == "/" || v.path == "" }
+func (v *SFTPVFS) GetPath() string     { return v.path }
 func (v *SFTPVFS) IsAbs(p string) bool { return path.IsAbs(p) }
 func (v *SFTPVFS) SetPath(p string) error {
 	var target string
-	if path.IsAbs(p) { target = p } else { target = v.Join(v.path, p) }
+	if path.IsAbs(p) {
+		target = p
+	} else {
+		target = v.Join(v.path, p)
+	}
 	target = path.Clean(target)
 	info, err := v.client.Stat(target)
-	if err != nil { return err }
-	if !info.IsDir() { return os.ErrInvalid }
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return os.ErrInvalid
+	}
 	v.path = target
 	return nil
 }
@@ -151,7 +159,9 @@ func (v *SFTPVFS) ReadDir(ctx context.Context, p string, onChunk func([]vfs.VFSI
 
 func (v *SFTPVFS) Stat(ctx context.Context, p string) (vfs.VFSItem, error) {
 	info, err := v.client.Stat(p)
-	if err != nil { return vfs.VFSItem{}, err }
+	if err != nil {
+		return vfs.VFSItem{}, err
+	}
 	return vfs.VFSItem{
 		Name: info.Name(), Size: info.Size(), IsDir: info.IsDir(),
 		MTime: info.ModTime(), IsExecutable: info.Mode().Perm()&0111 != 0,
@@ -166,13 +176,17 @@ func (v *SFTPVFS) Abs(p string) (string, error) {
 	}
 	return v.Join(v.path, p), nil
 }
-func (v *SFTPVFS) Base(p string) string { return path.Base(p) }
-func (v *SFTPVFS) Dir(p string) string { return path.Dir(p) }
+func (v *SFTPVFS) Base(p string) string                      { return path.Base(p) }
+func (v *SFTPVFS) Dir(p string) string                       { return path.Dir(p) }
 func (v *SFTPVFS) MkDir(ctx context.Context, p string) error { return v.client.MkdirAll(p) }
 func (v *SFTPVFS) Remove(ctx context.Context, p string) error {
 	info, err := v.client.Stat(p)
-	if err != nil { return err }
-	if info.IsDir() { return v.client.RemoveDirectory(p) }
+	if err != nil {
+		return err
+	}
+	if info.IsDir() {
+		return v.client.RemoveDirectory(p)
+	}
 	return v.client.Remove(p)
 }
 func (v *SFTPVFS) Rename(ctx context.Context, o, n string) error { return v.client.Rename(o, n) }
@@ -188,23 +202,36 @@ func (v *SFTPVFS) SetAttributes(ctx context.Context, path string, item vfs.VFSIt
 	return v.client.Chtimes(path, item.ATime, item.MTime)
 }
 
-func (v *SFTPVFS) GetCapabilities() vfs.VFSCapabilities { return vfs.VFSCapabilities{HasRandomAccess: true} }
+func (v *SFTPVFS) GetCapabilities() vfs.VFSCapabilities {
+	return vfs.VFSCapabilities{HasRandomAccess: true}
+}
 func (v *SFTPVFS) Search(ctx context.Context, p, pat string) (chan int64, error) { return nil, nil }
 
 func (v *SFTPVFS) Open(ctx context.Context, p string) (vfs.ReadAtCloser, error) {
 	vtui.DebugLog("SFTP: Opening file %q for reading...", p)
 	f, err := v.client.Open(p)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	info, err := f.Stat()
-	if err != nil { f.Close(); return nil, err }
+	if err != nil {
+		f.Close()
+		return nil, err
+	}
 	return &sftpFileWrapper{File: f, size: info.Size()}, nil
 }
 
-func (v *SFTPVFS) Create(ctx context.Context, p string) (io.WriteCloser, error) { return v.client.Create(p) }
+func (v *SFTPVFS) Create(ctx context.Context, p string) (io.WriteCloser, error) {
+	return v.client.Create(p)
+}
 func (v *SFTPVFS) ParentVFS() vfs.VFS { return v.parent }
 func (v *SFTPVFS) Close() error {
-	if v.client != nil { v.client.Close() }
-	if v.ssh != nil { return v.ssh.Close() }
+	if v.client != nil {
+		v.client.Close()
+	}
+	if v.ssh != nil {
+		return v.ssh.Close()
+	}
 	return nil
 }
 func (v *SFTPVFS) Clone() vfs.VFS {
@@ -214,21 +241,31 @@ func (v *SFTPVFS) Clone() vfs.VFS {
 
 func (v *SFTPVFS) OpenPty(cols, rows int) (any, error) {
 	pty, err := NewSSHPty(v.ssh)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	pty.SetSize(cols, rows)
 	pty.Run("")
 	return pty, nil
 }
+
 type sftpProvider struct{}
+
 func (p *sftpProvider) Name() string  { return "NetFox-SFTP" }
 func (p *sftpProvider) Priority() int { return 100 }
 func (p *sftpProvider) CanOpen(ctx context.Context, parent vfs.VFS, pth string) bool {
 	w, ok := parent.(*netFoxVFSWrapper)
-	if !ok { return false }
+	if !ok {
+		return false
+	}
 	item, err := w.Stat(ctx, pth)
-	if err != nil || item.IsDir { return false }
+	if err != nil || item.IsDir {
+		return false
+	}
 	f, err := w.Open(ctx, pth)
-	if err != nil { return false }
+	if err != nil {
+		return false
+	}
 	defer f.Close()
 	var cfg NetFoxConfig
 	json.NewDecoder(ctxReader{f, ctx}).Decode(&cfg)
@@ -241,7 +278,9 @@ func (p *sftpProvider) Open(ctx context.Context, parent vfs.VFS, pth string) (vf
 	var cfg NetFoxConfig
 	json.NewDecoder(ctxReader{f, ctx}).Decode(&cfg)
 	port := cfg.Port
-	if port == "" { port = "22" }
+	if port == "" {
+		port = "22"
+	}
 	return NewSFTPVFS(parent, cfg.Host, port, cfg.User, cfg.Pass)
 }
 
@@ -262,6 +301,7 @@ type sftpFileWrapper struct {
 	*sftp.File
 	size int64
 }
+
 func (w *sftpFileWrapper) Size() int64 { return w.size }
 func (w *sftpFileWrapper) ReadAt(ctx context.Context, p []byte, off int64) (int, error) {
 	return w.File.ReadAt(p, off)

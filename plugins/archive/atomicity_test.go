@@ -2,10 +2,10 @@ package archive
 
 import (
 	"context"
+	"github.com/unxed/f4/vfs"
 	"os"
 	"path/filepath"
 	"testing"
-	"github.com/unxed/f4/vfs"
 )
 
 func TestArchiveVFS_AtomicWrite(t *testing.T) {
@@ -18,12 +18,16 @@ func TestArchiveVFS_AtomicWrite(t *testing.T) {
 	origInfo, _ := os.Stat(arcPath)
 
 	v, err := NewArchiveVFS(&vfs.OSVFS{}, arcPath)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer v.Close()
 
 	// 2. Open for "creation" of a new file inside
 	wc, err := v.Create(context.Background(), v.Join(arcPath, "newfile.txt"))
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Write some data
 	wc.Write([]byte("some data"))

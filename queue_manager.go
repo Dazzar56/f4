@@ -52,19 +52,20 @@ func (r *DialogReporter) IsCancelled() bool {
 type DummyReporter struct{}
 
 func (r *DummyReporter) UpdateScan(currentPath string, files, dirs int64) {}
-func (r *DummyReporter) UpdateTransfer(action, filename string, currentPct int, totalText string, totalPct int, speedText string) {}
+func (r *DummyReporter) UpdateTransfer(action, filename string, currentPct int, totalText string, totalPct int, speedText string) {
+}
 func (r *DummyReporter) IsCancelled() bool { return false }
 
 type QueueTask struct {
-	ID            int
-	Type          string
-	Desc          string
-	State         string // Queued, Scanning, Running, Done, Error, Cancelled
-	Progress      int
-	TotalText     string
-	Speed         string
-	CurrentFile   string
-	ErrorMsg      error
+	ID          int
+	Type        string
+	Desc        string
+	State       string // Queued, Scanning, Running, Done, Error, Cancelled
+	Progress    int
+	TotalText   string
+	Speed       string
+	CurrentFile string
+	ErrorMsg    error
 
 	Preconditions []OpPrecondition
 	ResKeys       []string
@@ -78,7 +79,9 @@ type QueueTask struct {
 
 func (t *QueueTask) UpdateScan(currentPath string, files, dirs int64) {
 	vtui.FrameManager.PostTask(func() {
-		if t.State == "Done" || t.State == "Error" || t.State == "Cancelled" { return }
+		if t.State == "Done" || t.State == "Error" || t.State == "Cancelled" {
+			return
+		}
 		t.State = "Scanning"
 		t.CurrentFile = currentPath
 		t.TotalText = fmt.Sprintf("Files: %d, Dirs: %d", files, dirs)
@@ -88,7 +91,9 @@ func (t *QueueTask) UpdateScan(currentPath string, files, dirs int64) {
 
 func (t *QueueTask) UpdateTransfer(action string, filename string, currentPct int, totalText string, totalPct int, speedText string) {
 	vtui.FrameManager.PostTask(func() {
-		if t.State == "Done" || t.State == "Error" || t.State == "Cancelled" { return }
+		if t.State == "Done" || t.State == "Error" || t.State == "Cancelled" {
+			return
+		}
 		t.State = "Running"
 		t.CurrentFile = filename
 		t.Progress = totalPct
@@ -106,11 +111,11 @@ func (t *QueueTask) IsCancelled() bool {
 }
 
 type OpQueueManager struct {
-	mu          sync.Mutex
-	tasks       []*QueueTask
-	nextID      int
-	activeKeys  map[string]bool
-	frame       *QueueFrame
+	mu         sync.Mutex
+	tasks      []*QueueTask
+	nextID     int
+	activeKeys map[string]bool
+	frame      *QueueFrame
 }
 
 var GlobalQueueManager *OpQueueManager
@@ -123,7 +128,9 @@ func init() {
 }
 
 func getResourceKey(v vfs.VFS) string {
-	if v == nil { return "" }
+	if v == nil {
+		return ""
+	}
 	if _, ok := v.(*vfs.OSVFS); ok {
 		if runtime.GOOS == "windows" {
 			return filepath.VolumeName(v.GetPath())
@@ -161,7 +168,9 @@ func (qm *OpQueueManager) Enqueue(task *QueueTask) {
 }
 
 func (qm *OpQueueManager) EnsureQueueWorkspace() {
-	if vtui.FrameManager == nil || vtui.FrameManager.Screens == nil { return }
+	if vtui.FrameManager == nil || vtui.FrameManager.Screens == nil {
+		return
+	}
 	for _, s := range vtui.FrameManager.Screens {
 		for _, f := range s.Frames {
 			if qf, ok := f.(*QueueFrame); ok {
@@ -297,9 +306,12 @@ type queueRow struct {
 func (r queueRow) GetCellText(col int) string {
 	t := r.task
 	switch col {
-	case 0: return fmt.Sprintf("%d", t.ID)
-	case 1: return t.State
-	case 2: return t.Type
+	case 0:
+		return fmt.Sprintf("%d", t.ID)
+	case 1:
+		return t.State
+	case 2:
+		return t.Type
 	case 3:
 		if t.State == "Running" || t.State == "Scanning" {
 			return t.CurrentFile
@@ -310,19 +322,32 @@ func (r queueRow) GetCellText(col int) string {
 		bars := (pct * 10) / 100
 		s := ""
 		for i := 0; i < 10; i++ {
-			if i < bars { s += "█" } else { s += "░" }
+			if i < bars {
+				s += "█"
+			} else {
+				s += "░"
+			}
 		}
 		return fmt.Sprintf("%3d%% %s", pct, s)
-	case 5: return t.Speed
+	case 5:
+		return t.Speed
 	}
 	return ""
 }
 func (r queueRow) GetCellAttr(col int, def uint64) uint64 {
 	t := r.task
-	if t.State == "Error" { return vtui.SetRGBFore(def, 0xFF0000) } // Red
-	if t.State == "Done" { return vtui.SetRGBFore(def, 0x00FF00) } // Green
-	if t.State == "Running" || t.State == "Scanning" { return vtui.SetRGBFore(def, 0x00FFFF) } // Cyan
-	if t.State == "Cancelled" { return vtui.DimColor(def) }
+	if t.State == "Error" {
+		return vtui.SetRGBFore(def, 0xFF0000)
+	} // Red
+	if t.State == "Done" {
+		return vtui.SetRGBFore(def, 0x00FF00)
+	} // Green
+	if t.State == "Running" || t.State == "Scanning" {
+		return vtui.SetRGBFore(def, 0x00FFFF)
+	} // Cyan
+	if t.State == "Cancelled" {
+		return vtui.DimColor(def)
+	}
 	return def
 }
 
@@ -341,7 +366,9 @@ func NewQueueFrame() *QueueFrame {
 	qf.SetGrowMode(vtui.GrowHiX | vtui.GrowHiY)
 
 	descW := scrW - 4 - 4 - 10 - 8 - 18 - 12 - 5 // Dynamic width calculation
-	if descW < 10 { descW = 10 }
+	if descW < 10 {
+		descW = 10
+	}
 
 	cols := []vtui.TableColumn{
 		{Title: "ID", Width: 4},
@@ -381,7 +408,9 @@ func NewQueueFrame() *QueueFrame {
 			if t.State == "Queued" || t.State == "Running" || t.State == "Scanning" || t.State == "Starting" {
 				vtui.ShowMessageOn(qf, " Confirm ", "Cancel task ID "+fmt.Sprintf("%d", t.ID)+"?", []string{"&Yes", "&No"}).OnResult = func(c int) {
 					if c == 0 {
-						if t.cancel != nil { t.cancel() }
+						if t.cancel != nil {
+							t.cancel()
+						}
 						t.State = "Cancelled"
 						qf.UpdateTasks(qf.tasks)
 					}

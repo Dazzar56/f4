@@ -1,8 +1,8 @@
 package main
 
 import (
-	"testing"
 	"github.com/unxed/vtui"
+	"testing"
 )
 
 func TestParseFarColor(t *testing.T) {

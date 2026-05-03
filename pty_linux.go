@@ -1,4 +1,5 @@
 //go:build linux
+
 package main
 
 import (
@@ -117,8 +118,8 @@ func (p *PTY) SetSize(cols, rows int) {
 	size := struct {
 		Row, Col, Xpixel, Ypixel uint16
 	}{
-		Row: uint16(rows),
-		Col: uint16(cols),
+		Row:    uint16(rows),
+		Col:    uint16(cols),
 		Xpixel: 0,
 		Ypixel: 0,
 	}

@@ -1,9 +1,9 @@
 package main
 
 import (
+	"github.com/mattn/go-runewidth"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
-	"github.com/mattn/go-runewidth"
 )
 
 // CommandLine is a simplified Edit control used for shell input.
@@ -50,7 +50,9 @@ func (cl *CommandLine) SetFocus(f bool) {
 }
 func (cl *CommandLine) SetPrompt(prompt string) {
 	cl.RichPrompt = nil
-	if cl.Prompt == prompt { return }
+	if cl.Prompt == prompt {
+		return
+	}
 	cl.Prompt = prompt
 	// Trigger reposition of Edit control
 	cl.SetPosition(cl.X1, cl.Y1, cl.X2, cl.Y2)
@@ -68,7 +70,9 @@ func (cl *CommandLine) Show(scr *vtui.ScreenBuf) {
 }
 
 func (cl *CommandLine) DisplayObject(scr *vtui.ScreenBuf) {
-	if !cl.IsVisible() { return }
+	if !cl.IsVisible() {
+		return
+	}
 
 	// 1. Draw Prompt
 	if len(cl.RichPrompt) > 0 {
@@ -119,6 +123,7 @@ func (cl *CommandLine) ProcessKey(e *vtinput.InputEvent) bool {
 func (cl *CommandLine) ProcessMouse(e *vtinput.InputEvent) bool {
 	return cl.Edit.ProcessMouse(e)
 }
+
 // Clear empties the command line text.
 func (cl *CommandLine) Clear() {
 	cl.Edit.SetText("")
@@ -128,6 +133,7 @@ func (cl *CommandLine) Clear() {
 func (cl *CommandLine) IsEmpty() bool {
 	return cl.Edit.GetText() == ""
 }
+
 // InsertString adds text to the command line.
 func (cl *CommandLine) InsertString(text string) {
 	cl.Edit.InsertString(text)

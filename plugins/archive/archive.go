@@ -50,24 +50,34 @@ func actionArchiveCommands(app vfs.App) {
 func actionExtractArchive(app vfs.App) {
 	srcVfs := app.GetActivePanelVFS()
 	dstVfs := app.GetPassivePanelVFS()
-	if srcVfs == nil || dstVfs == nil { return }
+	if srcVfs == nil || dstVfs == nil {
+		return
+	}
 
 	name := app.GetSelectedName()
-	if name == "" || name == ".." { return }
+	if name == "" || name == ".." {
+		return
+	}
 
 	srcPath := srcVfs.Join(srcVfs.GetPath(), name)
 	destDir := dstVfs.GetPath()
 
 	app.RunProgressTask(" Extracting... ", "Identifying archive...", false, func(ctx context.Context, update func(msg string, percent int)) error {
 		f, err := os.Open(srcPath)
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 		defer f.Close()
 
 		format, _, err := archives.Identify(ctx, srcPath, f)
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 
 		ex, ok := format.(archives.Extractor)
-		if !ok { return fmt.Errorf("file is not an extractable archive") }
+		if !ok {
+			return fmt.Errorf("file is not an extractable archive")
+		}
 
 		f.Seek(0, io.SeekStart)
 
@@ -78,7 +88,9 @@ func actionExtractArchive(app vfs.App) {
 		state := &extractState{}
 
 		return ex.Extract(ctx, f, func(ctx context.Context, info archives.FileInfo) error {
-			if ctx.Err() != nil { return ctx.Err() }
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			update(fmt.Sprintf("Extracting: %s", info.NameInArchive), -1)
 			targetPath := filepath.Join(destDir, info.NameInArchive)
 
@@ -116,11 +128,15 @@ func actionExtractArchive(app vfs.App) {
 				return err
 			}
 			out, err := os.Create(targetPath)
-			if err != nil { return err }
+			if err != nil {
+				return err
+			}
 			defer out.Close()
 
 			in, err := info.Open()
-			if err != nil { return err }
+			if err != nil {
+				return err
+			}
 			defer in.Close()
 
 			_, err = io.Copy(out, &ioCtxReader{r: in, ctx: ctx})
@@ -136,33 +152,47 @@ func actionExtractArchive(app vfs.App) {
 
 func actionAddArchive(app vfs.App) {
 	activeVfs := app.GetActivePanelVFS()
-	if activeVfs == nil { return }
+	if activeVfs == nil {
+		return
+	}
 
 	names := app.GetSelectedNames()
-	if len(names) == 0 { return }
+	if len(names) == 0 {
+		return
+	}
 
 	arcName := activeVfs.Base(activeVfs.GetPath())
-	if arcName == "." || arcName == "" { arcName = "archive" }
+	if arcName == "." || arcName == "" {
+		arcName = "archive"
+	}
 	arcName += ".zip"
 
 	app.InputBox(" Add to archive ", "Archive name:", arcName, func(name string) {
-		if name == "" { return }
+		if name == "" {
+			return
+		}
 		fullArcPath := activeVfs.Join(activeVfs.GetPath(), name)
 
 		app.RunProgressTask(" Archiving... ", "Gathering files...", false, func(ctx context.Context, update func(msg string, percent int)) error {
 			var files []archives.FileInfo
 			for i, n := range names {
-				if ctx.Err() != nil { return ctx.Err() }
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
 				update(fmt.Sprintf("Scanning: %s", n), (i*100)/len(names))
 				fullPath := activeVfs.Join(activeVfs.GetPath(), n)
 				if osvfs, ok := activeVfs.(*vfs.OSVFS); ok {
 					absPath, _ := osvfs.Abs(fullPath)
 					moreFiles, err := archives.FilesFromDisk(ctx, nil, map[string]string{absPath: n})
-					if err == nil { files = append(files, moreFiles...) }
+					if err == nil {
+						files = append(files, moreFiles...)
+					}
 				}
 			}
 			out, err := os.Create(fullArcPath)
-			if err != nil { return err }
+			if err != nil {
+				return err
+			}
 			defer out.Close()
 			return archives.Zip{
 				Compression: zip.Deflate,
@@ -176,5 +206,5 @@ func actionAddArchive(app vfs.App) {
 	})
 }
 
-func (p *ArchivePlugin) Close() error { return nil }
+func (p *ArchivePlugin) Close() error    { return nil }
 func (p *ArchivePlugin) GetName() string { return "Archive Support" }

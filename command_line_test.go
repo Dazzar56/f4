@@ -1,9 +1,9 @@
 package main
 
 import (
-	"testing"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
+	"testing"
 )
 
 func TestCommandLine_Input(t *testing.T) {
@@ -104,7 +104,9 @@ func TestCommandLine_HistoryBoundaries(t *testing.T) {
 
 	// Go up once
 	cl.Edit.HistoryUp()
-	if cl.Edit.GetText() != "cmd1" { t.Fatal("Setup failed") }
+	if cl.Edit.GetText() != "cmd1" {
+		t.Fatal("Setup failed")
+	}
 
 	// Go up again - should stay at cmd1
 	cl.Edit.HistoryUp()
@@ -128,7 +130,7 @@ func TestCommandLine_HistoryBoundaries(t *testing.T) {
 func TestCommandLine_AutoCompleteDisabled(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	SetDefaultF4Palette()
-	
+
 	cl := NewCommandLine("> ")
 	cl.SetPosition(0, 0, 10, 0)
 	cl.Edit.History = []string{"ls", "long-command"}

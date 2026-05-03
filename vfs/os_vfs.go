@@ -23,7 +23,7 @@ func NewOSVFS(initialPath string) *OSVFS {
 	return &OSVFS{currentPath: abs}
 }
 
-func (v *OSVFS) GetPath() string { return v.currentPath }
+func (v *OSVFS) GetPath() string        { return v.currentPath }
 func (v *OSVFS) IsAbs(path string) bool { return filepath.IsAbs(path) }
 
 func (v *OSVFS) IsAtRoot() bool {
@@ -111,10 +111,14 @@ func (v *OSVFS) ReadDir(ctx context.Context, path string, onChunk func([]VFSItem
 	defer f.Close()
 
 	for {
-		if ctx.Err() != nil { return ctx.Err() }
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		entries, err := f.ReadDir(1000)
 		if err != nil {
-			if err == io.EOF { break }
+			if err == io.EOF {
+				break
+			}
 			return err
 		}
 
@@ -200,7 +204,7 @@ func (v *OSVFS) Abs(path string) (string, error) {
 }
 
 func (v *OSVFS) Base(path string) string { return filepath.Base(path) }
-func (v *OSVFS) Dir(path string) string          { return filepath.Dir(path) }
+func (v *OSVFS) Dir(path string) string  { return filepath.Dir(path) }
 func (v *OSVFS) MkDir(ctx context.Context, path string) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
@@ -235,7 +239,9 @@ func (v *OSVFS) Rename(ctx context.Context, old, new string) error {
 	return err
 }
 func (v *OSVFS) SetAttributes(ctx context.Context, path string, item VFSItem) error {
-	if ctx.Err() != nil { return ctx.Err() }
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 
 	// Try native first
 	errMode := os.Chmod(path, os.FileMode(item.UnixMode))
@@ -253,8 +259,12 @@ func (v *OSVFS) SetAttributes(ctx context.Context, path string, item VFSItem) er
 		return globalSudoClient.SetAttributes(path, item)
 	}
 
-	if errMode != nil { return errMode }
-	if errOwn != nil { return errOwn }
+	if errMode != nil {
+		return errMode
+	}
+	if errOwn != nil {
+		return errOwn
+	}
 	return errTime
 }
 
@@ -279,17 +289,23 @@ type osFileWrapper struct {
 
 func (f *osFileWrapper) Size() int64 { return f.size }
 func (f *osFileWrapper) Read(ctx context.Context, p []byte) (n int, err error) {
-	if ctx.Err() != nil { return 0, ctx.Err() }
+	if ctx.Err() != nil {
+		return 0, ctx.Err()
+	}
 	return f.File.Read(p)
 }
 
 func (f *osFileWrapper) ReadAt(ctx context.Context, p []byte, off int64) (n int, err error) {
-	if ctx.Err() != nil { return 0, ctx.Err() }
+	if ctx.Err() != nil {
+		return 0, ctx.Err()
+	}
 	return f.File.ReadAt(p, off)
 }
 
 func (v *OSVFS) Open(ctx context.Context, path string) (ReadAtCloser, error) {
-	if ctx.Err() != nil { return nil, ctx.Err() }
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	vtui.DebugLog("VFS: Open(%q) starting...", path)
 	f, err := os.Open(path)
 	if err != nil {
@@ -324,7 +340,6 @@ func (v *OSVFS) Create(ctx context.Context, path string) (io.WriteCloser, error)
 	}
 	return f, err
 }
-
 
 func (v *OSVFS) ParentVFS() VFS {
 	return nil // OSVFS is the root

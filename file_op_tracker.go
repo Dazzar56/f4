@@ -1,8 +1,8 @@
 package main
 
 import (
-	"sync"
 	"github.com/unxed/f4/vfs"
+	"sync"
 )
 
 // FileOpTracker aggregates statistics from a running file operation.
@@ -17,7 +17,7 @@ type FileOpTracker struct {
 	currentFileBytes int64
 	currentFileSize  int64
 
-	completedBytes   int64 // Sum of sizes of fully copied files
+	completedBytes int64 // Sum of sizes of fully copied files
 }
 
 func NewFileOpTracker(total vfs.OpStats) *FileOpTracker {
@@ -57,6 +57,7 @@ func (t *FileOpTracker) FileDone() {
 	t.currentFileBytes = 0
 	t.currentFileSize = 0
 }
+
 // FileSkipped records that a file was bypassed (e.g. user chose Skip)
 func (t *FileOpTracker) FileSkipped() {
 	t.mu.Lock()
@@ -107,7 +108,9 @@ func (t *FileOpTracker) GetProgress() (filePct, totalPct int, currentName string
 	}
 
 	// Safety clamp
-	if totalPct > 100 { totalPct = 100 }
+	if totalPct > 100 {
+		totalPct = 100
+	}
 	return
 }
 

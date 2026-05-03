@@ -9,8 +9,8 @@ import (
 
 var terminalExts = map[string]bool{
 	".exe": true, ".bat": true, ".cmd": true, ".com": true,
-	".sh":  true, ".bash": true, ".py":  true, ".pl":  true,
-	".rb":  true, ".js":   true, ".php": true, ".lua": true,
+	".sh": true, ".bash": true, ".py": true, ".pl": true,
+	".rb": true, ".js": true, ".php": true, ".lua": true,
 }
 
 // IsTerminalRunnable checks if a file can be executed in the built-in terminal.

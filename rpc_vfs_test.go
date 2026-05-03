@@ -3,8 +3,8 @@ package main
 import (
 	"context"
 	"io"
-	"testing"
 	"path/filepath"
+	"testing"
 
 	"github.com/unxed/f4/sdk/f4rpc"
 	"github.com/unxed/f4/vfs"

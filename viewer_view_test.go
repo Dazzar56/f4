@@ -1,17 +1,18 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
-	"testing"
-	"context"
-	"time"
 	"strings"
+	"testing"
+	"time"
 
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
+
 type mockCloseFile struct {
 	vfs.ReadAtCloser
 	closed bool
@@ -58,7 +59,9 @@ func TestViewerView_NavigationAndEOF(t *testing.T) {
 	// Wait for background loader to provide data
 	deadline := time.Now().Add(2 * time.Second)
 	for {
-		if time.Now().After(deadline) { t.Fatal("Timeout waiting for initial fetch") }
+		if time.Now().After(deadline) {
+			t.Fatal("Timeout waiting for initial fetch")
+		}
 		select {
 		case task := <-vtui.FrameManager.TaskChan:
 			task()
@@ -66,7 +69,9 @@ func TestViewerView_NavigationAndEOF(t *testing.T) {
 		default:
 			time.Sleep(10 * time.Millisecond)
 		}
-		if len(vv.lineOffsets) > 1 { break }
+		if len(vv.lineOffsets) > 1 {
+			break
+		}
 	}
 
 	if vv.TopOffset != 0 {
@@ -250,12 +255,20 @@ func TestViewerBar_Content(t *testing.T) {
 	foundPath := false
 	for x := 0; x <= 40; x++ {
 		cell := scr.GetCell(x, 0)
-		if cell.Char == 'H' { foundHex = true }
-		if cell.Char == 'b' { foundPath = true } // часть "bar_test.txt"
+		if cell.Char == 'H' {
+			foundHex = true
+		}
+		if cell.Char == 'b' {
+			foundPath = true
+		} // часть "bar_test.txt"
 	}
 
-	if !foundHex { t.Error("ViewerBar did not display 'Hex' mode") }
-	if !foundPath { t.Error("ViewerBar did not display file path") }
+	if !foundHex {
+		t.Error("ViewerBar did not display 'Hex' mode")
+	}
+	if !foundPath {
+		t.Error("ViewerBar did not display file path")
+	}
 }
 func TestViewerView_FileClosure(t *testing.T) {
 	mockFile := &mockCloseFile{}
@@ -340,12 +353,14 @@ func TestViewerView_HexModeToggle(t *testing.T) {
 	tmp := filepath.Join(tmpDir, "hex.txt")
 	// 32 bytes of data
 	data := make([]byte, 32)
-	for i := range data { data[i] = byte(i) }
+	for i := range data {
+		data[i] = byte(i)
+	}
 	os.WriteFile(tmp, data, 0644)
 
 	v := vfs.NewOSVFS(tmpDir)
 	vv, _ := NewViewerView(context.Background(), v, tmp)
-	
+
 	// Set an offset that is NOT aligned to 16
 	vv.TopOffset = 10
 
@@ -481,5 +496,3 @@ func TestViewerView_ScrollbarEOFAlignment(t *testing.T) {
 		t.Errorf("Hex Mode: TopOffset (%d) is not aligned to 16 bytes", vv.TopOffset)
 	}
 }
-
-

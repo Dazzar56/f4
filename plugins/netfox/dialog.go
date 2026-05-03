@@ -16,7 +16,7 @@ func padLabel(s string) string {
 	return s
 }
 
-// protoUIContainer is a proxy that routes events and rendering to the selected 
+// protoUIContainer is a proxy that routes events and rendering to the selected
 // protocol's UI block. By implementing vtui.Container but using custom Show/Focus logic,
 // it provides architectural isolation while remaining discoverable by the validator.
 type protoUIContainer struct {
@@ -155,7 +155,7 @@ func showConnectionDialog(app vfs.App, nf *NetFoxVFS, oldName string) {
 		if h, ok := handlers[p]; ok {
 			ui, save := h.BuildExtraUI(&cfg, extraX, extraY, extraW, extraH)
 			if ui != nil {
-				// ARCHITECTURAL FIX: protocol-specific UIs belong to the proxy, 
+				// ARCHITECTURAL FIX: protocol-specific UIs belong to the proxy,
 				// not to the main dialog. This ensures true protocol isolation.
 				ui.SetOwner(container)
 			}

@@ -2,10 +2,10 @@ package textlayout
 
 import (
 	"sort"
-    "unicode/utf8"
+	"unicode/utf8"
 
-	"github.com/unxed/vtui"
 	"github.com/unxed/f4/piecetable"
+	"github.com/unxed/vtui"
 
 	"github.com/mattn/go-runewidth"
 )
@@ -20,12 +20,12 @@ type LineFragment struct {
 
 // WrapEngine отвечает за вычисление визуальной разметки текста.
 type WrapEngine struct {
-	pt         *piecetable.PieceTable
-	li         *piecetable.LineIndex
-	wrapWidth  int
-	wordWrap   bool
+	pt            *piecetable.PieceTable
+	li            *piecetable.LineIndex
+	wrapWidth     int
+	wordWrap      bool
 	fragmentCache [][]LineFragment
-	tabSize    int
+	tabSize       int
 
 	// rowOffsets[i] хранит общее количество визуальных строк во всех
 	// логических строках ПЕРЕД строкой i.
@@ -48,7 +48,9 @@ func NewWrapEngine(pt *piecetable.PieceTable, li *piecetable.LineIndex) *WrapEng
 }
 
 func (we *WrapEngine) SetTabSize(size int) {
-	if size <= 0 { size = 8 }
+	if size <= 0 {
+		size = 8
+	}
 	if we.tabSize != size {
 		we.tabSize = size
 		we.InvalidateCache()
@@ -63,7 +65,9 @@ func (we *WrapEngine) SetPointers(pt *piecetable.PieceTable, li *piecetable.Line
 
 // SetWidth устанавливает ширину для свертки. При изменении сбрасывает кэш.
 func (we *WrapEngine) SetWidth(width int) {
-	if width < 1 { width = 1 } // Ширина не может быть меньше 1
+	if width < 1 {
+		width = 1
+	} // Ширина не может быть меньше 1
 	if width != we.wrapWidth {
 		we.wrapWidth = width
 		we.InvalidateCache()
@@ -177,7 +181,9 @@ func (we *WrapEngine) GetFragments(logLineIdx int) []LineFragment {
 			} else if r >= 0x7F {
 				rw = runewidth.RuneWidth(r)
 			}
-			if rw < 0 { rw = 1 }
+			if rw < 0 {
+				rw = 1
+			}
 			width += rw
 			tmpData = tmpData[size:]
 		}
@@ -214,7 +220,9 @@ func (we *WrapEngine) GetFragments(logLineIdx int) []LineFragment {
 			} else if r >= 0x7F {
 				w = runewidth.RuneWidth(r)
 			}
-			if w < 0 { w = 1 }
+			if w < 0 {
+				w = 1
+			}
 
 			if visualWidth+w > we.wrapWidth {
 				if r == ' ' {
@@ -247,9 +255,9 @@ func (we *WrapEngine) GetFragments(logLineIdx int) []LineFragment {
 			ByteOffsetEnd:   startOffset + scanPos,
 			VisualWidth:     visualWidth,
 		})
-			cumulativeVisualWidth += visualWidth
-			bytePos = scanPos
-		}
+		cumulativeVisualWidth += visualWidth
+		bytePos = scanPos
+	}
 
 	if len(fragments) == 0 {
 		fragments = append(fragments, LineFragment{LogicalLineIdx: logLineIdx, ByteOffsetStart: startOffset, ByteOffsetEnd: startOffset})
@@ -319,6 +327,7 @@ func (we *WrapEngine) GetTotalVisualRows() int {
 	we.ensureRowCountCache(we.li.LineCount() - 1)
 	return we.totalRows
 }
+
 // GetRowOffset возвращает индекс первой визуальной строки для данной логической строки.
 func (we *WrapEngine) GetRowOffset(logLineIdx int) int {
 	we.ensureRowCountCache(logLineIdx)
@@ -375,7 +384,9 @@ func (we *WrapEngine) GetLogLineAtVisualRow(visualRow int) (logLineIdx int, frag
 
 // LogicalToVisual переводит байтовый оффсет в документе в (строка, колонка) на экране.
 func (we *WrapEngine) LogicalToVisual(byteOffset int) (visualRow, visualCol int) {
-	if byteOffset < 0 { byteOffset = 0 }
+	if byteOffset < 0 {
+		byteOffset = 0
+	}
 	logLineIdx := we.li.GetLineAtOffset(byteOffset)
 	we.ensureRowCountCache(logLineIdx)
 	fragments := we.GetFragments(logLineIdx)
@@ -407,7 +418,9 @@ func (we *WrapEngine) LogicalToVisual(byteOffset int) (visualRow, visualCol int)
 					} else if r >= 0x7F {
 						rw = runewidth.RuneWidth(r)
 					}
-					if rw <= 0 { rw = 1 }
+					if rw <= 0 {
+						rw = 1
+					}
 					width += rw
 					data = data[size:]
 				}

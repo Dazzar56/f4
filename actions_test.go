@@ -1,14 +1,14 @@
 package main
 
 import (
-	"testing"
-	"os"
 	"context"
-	"time"
-	"strings"
-	"path/filepath"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
 )
 
 func TestActionExecute_RemoteRejection(t *testing.T) {
@@ -64,6 +64,7 @@ func TestActionMkDir_Flow(t *testing.T) {
 	top.SetExitCode(-1)
 	vtui.FrameManager.Pop()
 }
+
 type mockDeletionFailingVFS struct {
 	vfs.VFS
 	failedFiles  []string
@@ -91,7 +92,7 @@ func (m *mockDeletionFailingVFS) ReadDir(ctx context.Context, path string, onChu
 }
 
 func (m *mockDeletionFailingVFS) Join(e ...string) string { return filepath.Join(e...) }
-func (m *mockDeletionFailingVFS) GetPath() string        { return "/tmp" }
+func (m *mockDeletionFailingVFS) GetPath() string         { return "/tmp" }
 
 func TestActionDelete_BulkErrorAccumulation(t *testing.T) {
 	fm := vtui.FrameManager
@@ -380,8 +381,10 @@ func TestActionDelete_SuccessorLogic(t *testing.T) {
 	fsp.ReadDirectory()
 	for fsp.isLoading {
 		select {
-		case task := <-vtui.FrameManager.TaskChan: task()
-		case <-time.After(1 * time.Second): t.Fatal("Timeout")
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-time.After(1 * time.Second):
+			t.Fatal("Timeout")
 		}
 	}
 
@@ -625,13 +628,16 @@ func TestActionManagePlugins_Flow(t *testing.T) {
 			break
 		}
 	}
-	if lb == nil { t.Fatal("ListBox not found") }
+	if lb == nil {
+		t.Fatal("ListBox not found")
+	}
 
 	// 1. Test Remove
 	var btnRem *vtui.Button
 	for _, itm := range top.GetChildren() {
 		if b, ok := itm.(*vtui.Button); ok && strings.Contains(b.GetText(), "Remove") {
-			btnRem = b; break
+			btnRem = b
+			break
 		}
 	}
 	btnRem.OnClick()
@@ -646,7 +652,7 @@ func TestActionManagePlugins_Flow(t *testing.T) {
 	os.WriteFile(filepath.Join(tmpDir, testFile), []byte("#!/bin/sh"), 0755)
 
 	pluginVfs := &dialogVFSAdapter{v: vfs.NewOSVFS(tmpDir)}
-	
+
 	foundFile := false
 	err := pluginVfs.ReadDir(context.Background(), tmpDir, func(items []vtui.FSItem) {
 		for _, itm := range items {
@@ -655,8 +661,12 @@ func TestActionManagePlugins_Flow(t *testing.T) {
 			}
 		}
 	})
-	if err != nil { t.Fatalf("Adapter ReadDir failed: %v", err) }
-	if !foundFile { t.Errorf("Adapter failed to find test file %s", testFile) }
+	if err != nil {
+		t.Fatalf("Adapter ReadDir failed: %v", err)
+	}
+	if !foundFile {
+		t.Errorf("Adapter failed to find test file %s", testFile)
+	}
 
 	newPath := filepath.Join(tmpDir, testFile)
 	AppConfig.RegisteredPlugins = append(AppConfig.RegisteredPlugins, newPath)
@@ -666,4 +676,4 @@ func TestActionManagePlugins_Flow(t *testing.T) {
 	if len(AppConfig.RegisteredPlugins) != 1 || AppConfig.RegisteredPlugins[0] != newPath {
 		t.Errorf("Failed to add new plugin. Current: %v", AppConfig.RegisteredPlugins)
 	}
-}	
+}

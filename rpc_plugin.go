@@ -2,9 +2,9 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os/exec"
-	"context"
 
 	"github.com/unxed/f4/sdk/f4rpc"
 	"github.com/unxed/f4/vfs"
@@ -192,7 +192,6 @@ func (p *RPCPlugin) Init(api vfs.HostAPI) error {
 
 	// Session-local state for active progress task
 
-
 	// Session-local state for active progress task
 	var taskUpdate func(string, int)
 	var taskCtx context.Context
@@ -205,10 +204,15 @@ func (p *RPCPlugin) Init(api vfs.HostAPI) error {
 			var pf *PanelsFrame
 			if len(vtui.FrameManager.Screens) > 0 {
 				for _, f := range vtui.FrameManager.Screens[vtui.FrameManager.ActiveIdx].Frames {
-					if p, ok := f.(*PanelsFrame); ok { pf = p; break }
+					if p, ok := f.(*PanelsFrame); ok {
+						pf = p
+						break
+					}
 				}
 			}
-			if pf == nil { return }
+			if pf == nil {
+				return
+			}
 
 			pf.RunProgressTask(req.Title, req.StartMsg, req.Forked, func(ctx context.Context, update func(msg string, percent int)) error {
 				taskUpdate = update
@@ -227,7 +231,9 @@ func (p *RPCPlugin) Init(api vfs.HostAPI) error {
 	p.sess.Register("Host.UpdateProgress", func(data msgpack.RawMessage) (any, error) {
 		var req ProgressUpdateReq
 		msgpack.Unmarshal(data, &req)
-		if taskUpdate != nil { taskUpdate(req.Msg, req.Percent) }
+		if taskUpdate != nil {
+			taskUpdate(req.Msg, req.Percent)
+		}
 		return nil, nil
 	})
 
@@ -242,7 +248,9 @@ func (p *RPCPlugin) Init(api vfs.HostAPI) error {
 		var req AskOverwriteReq
 		msgpack.Unmarshal(data, &req)
 		ctx := taskCtx
-		if ctx == nil { ctx = context.Background() }
+		if ctx == nil {
+			ctx = context.Background()
+		}
 		choice, remember := AskOverwrite(ctx, req.Path, req.Src, req.Dst, taskAnchor)
 		return AskOverwriteRes{Choice: choice, Remember: remember}, nil
 	})
@@ -251,11 +259,13 @@ func (p *RPCPlugin) Init(api vfs.HostAPI) error {
 		var req AskErrorReq
 		msgpack.Unmarshal(data, &req)
 		ctx := taskCtx
-		if ctx == nil { ctx = context.Background() }
+		if ctx == nil {
+			ctx = context.Background()
+		}
 		choice := AskError(ctx, req.Op, fmt.Errorf("%s", req.Err), taskAnchor)
 		return choice, nil
 	})
-	
+
 	p.sess.Register("Host.InputBox", func(data msgpack.RawMessage) (any, error) {
 		var req InputBoxReq
 		msgpack.Unmarshal(data, &req)
@@ -277,7 +287,10 @@ func (p *RPCPlugin) Init(api vfs.HostAPI) error {
 			var pf *PanelsFrame
 			if len(vtui.FrameManager.Screens) > 0 {
 				for _, f := range vtui.FrameManager.Screens[vtui.FrameManager.ActiveIdx].Frames {
-					if p, ok := f.(*PanelsFrame); ok { pf = p; break }
+					if p, ok := f.(*PanelsFrame); ok {
+						pf = p
+						break
+					}
 				}
 			}
 			if pf != nil {
@@ -316,15 +329,19 @@ func (p *RPCPlugin) Init(api vfs.HostAPI) error {
 }
 
 type rpcHighlighterProvider struct{ p *RPCPlugin }
-func (r *rpcHighlighterProvider) Name() string { return r.p.path }
-func (r *rpcHighlighterProvider) Match(f, c string) bool { return true }
+
+func (r *rpcHighlighterProvider) Name() string                        { return r.p.path }
+func (r *rpcHighlighterProvider) Match(f, c string) bool              { return true }
 func (r *rpcHighlighterProvider) Create(f, c string) vtui.Highlighter { return &rpcHighlighter{r.p} }
 
 type rpcHighlighter struct{ p *RPCPlugin }
+
 func (h *rpcHighlighter) Highlight(line string, prev any, base uint64) ([]uint64, any) {
 	var res HighlightRes
 	err := h.p.sess.Call("VFS.Highlight", HighlightReq{Line: line, Prev: prev, Base: base}, &res)
-	if err != nil { return nil, nil }
+	if err != nil {
+		return nil, nil
+	}
 	return res.Attrs, res.Next
 }
 func (p *RPCPlugin) Close() error {

@@ -3,15 +3,15 @@ package main
 import (
 	"fmt"
 	"io"
-	"sync"
 	"path"
-	"time"
 	"strings"
+	"sync"
+	"time"
 	"unicode"
 
+	"github.com/unxed/f4/sdk/f4plugin"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
-	"github.com/unxed/f4/sdk/f4plugin"
 )
 
 type virtualItem struct {
@@ -87,13 +87,21 @@ func (p *DummyPlugin) ReadDir(drive, dpath string) ([]f4plugin.VFSItem, error) {
 
 	var items []f4plugin.VFSItem
 	prefix := dpath
-	if prefix == "." { prefix = "/" }
-	if !strings.HasSuffix(prefix, "/") { prefix += "/" }
+	if prefix == "." {
+		prefix = "/"
+	}
+	if !strings.HasSuffix(prefix, "/") {
+		prefix += "/"
+	}
 
 	for name, item := range p.fs {
-		if name == dpath { continue }
+		if name == dpath {
+			continue
+		}
 		dir := path.Dir(name)
-		if !strings.HasSuffix(dir, "/") { dir += "/" }
+		if !strings.HasSuffix(dir, "/") {
+			dir += "/"
+		}
 
 		if dir == prefix {
 			items = append(items, f4plugin.VFSItem{
@@ -116,7 +124,9 @@ func (p *DummyPlugin) Stat(drive, spath string) (f4plugin.VFSItem, error) {
 	}
 
 	item, ok := p.fs[spath]
-	if !ok { return f4plugin.VFSItem{}, fmt.Errorf("not found") }
+	if !ok {
+		return f4plugin.VFSItem{}, fmt.Errorf("not found")
+	}
 
 	return f4plugin.VFSItem{
 		Name:  path.Base(spath),
@@ -130,7 +140,9 @@ func (p *DummyPlugin) Open(drive, dpath string) (uint32, int64, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	item, ok := p.fs[dpath]
-	if !ok || item.isDir { return 0, 0, fmt.Errorf("not a file") }
+	if !ok || item.isDir {
+		return 0, 0, fmt.Errorf("not a file")
+	}
 
 	p.nextID++
 	id := p.nextID
@@ -141,13 +153,20 @@ func (p *DummyPlugin) Open(drive, dpath string) (uint32, int64, error) {
 func (p *DummyPlugin) ReadAt(fileId uint32, length int, offset int64) ([]byte, error) {
 	p.mu.Lock()
 	dpath, ok := p.open[fileId]
-	if !ok { p.mu.Unlock(); return nil, fmt.Errorf("bad handle") }
+	if !ok {
+		p.mu.Unlock()
+		return nil, fmt.Errorf("bad handle")
+	}
 	item := p.fs[dpath]
 	p.mu.Unlock()
 
-	if offset >= int64(len(item.data)) { return nil, io.EOF }
+	if offset >= int64(len(item.data)) {
+		return nil, io.EOF
+	}
 	end := offset + int64(length)
-	if end > int64(len(item.data)) { end = int64(len(item.data)) }
+	if end > int64(len(item.data)) {
+		end = int64(len(item.data))
+	}
 	return item.data[offset:end], nil
 }
 
@@ -165,7 +184,9 @@ func (p *DummyPlugin) Write(fileId uint32, data []byte) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	dpath, ok := p.open[fileId]
-	if !ok { return fmt.Errorf("bad handle") }
+	if !ok {
+		return fmt.Errorf("bad handle")
+	}
 	p.fs[dpath].data = append(p.fs[dpath].data, data...)
 	p.fs[dpath].mtime = time.Now()
 	return nil
