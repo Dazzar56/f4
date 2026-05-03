@@ -48,6 +48,7 @@ UI & input libraries are developed separately ([vtui](https://github.com/unxed/v
 
 1. **Language Agnostic**: Write plugins in Go, Python, Rust, Node.js, C++, or Lua. If it can speak MessagePack over standard I/O streams, it works.
 2. **Native Power**: Because plugins are native external processes, they have full access to the OS (sockets, CGO, external libraries) without the severe restrictions of WASI/WASM sandboxes.
+3. **Lua Ecosystem Friendly**: A dedicated [Lua SDK Guide](LUA.md) bridges the gap for developers accustomed to the Far3/far2m Lua API.
 3. **Binary Efficiency**: MessagePack minimizes serialization overhead, preventing the input lag usually associated with JSON-RPC.
 4. **Internal Plugins:** The most critical components (like `NetFox` or native VFS) are statically linked into the binary but use the exact same `HostAPI` conceptual interface.
 
