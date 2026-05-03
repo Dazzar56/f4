@@ -92,6 +92,7 @@ var Lng = map[string]string{
 	"FindFile.MaskPrompt":    "A filemask or several filemasks:",
 	"FindFile.TextPrompt":    "Containing text:",
 	"FindFile.BtnFind":       "&Find",
+	"History.FoldersTitle":   " Folders History ",
 
 	// KeyBar Normal
 	"KeyBar.F1":  "Help",
@@ -113,6 +114,7 @@ var Lng = map[string]string{
 	"KeyBar.AltF3": "Hex",
 	"KeyBar.AltF7": "Find",
 	"KeyBar.AltF8": "History",
+	"KeyBar.AltF12": "Folders",
 	"KeyBar.CtrlF3": "Name",
 	"KeyBar.CtrlF4": "Ext",
 	"KeyBar.CtrlF5": "Time",

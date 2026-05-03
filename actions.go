@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/unxed/vtinput"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 	"github.com/unxed/f4/piecetable"
@@ -23,6 +24,78 @@ var (
 	LastRightCursor  = ""
 	LastActivePanel  = 1
 )
+func actionFoldersHistory(pf *PanelsFrame) {
+	if vtui.GlobalHistoryProvider == nil { return }
+	h := vtui.GlobalHistoryProvider.LoadHistory("folders")
+	if len(h) == 0 {
+		vtui.ShowMessage(" History ", "Folders history is empty.", []string{"&Ok"})
+		return
+	}
+
+	menu := vtui.NewVMenu(Msg("History.FoldersTitle"))
+	for _, p := range h {
+		menu.AddItem(vtui.MenuItem{Text: p})
+	}
+
+	// Setup shortcuts
+	menu.OnKeyDown = func(e *vtinput.InputEvent) bool {
+		shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
+		ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
+
+		idx := menu.SelectPos
+		if idx < 0 || idx >= len(menu.Items) { return false }
+		path := menu.Items[idx].Text
+
+		if e.VirtualKeyCode == vtinput.VK_RETURN {
+			if ctrl {
+				// Insert into command line
+				pf.cmdLine.InsertString(path)
+				menu.Close()
+				return true
+			}
+			menu.Close()
+			targetPanel := pf.getActivePanel()
+			if shift {
+				targetPanel = pf.getInactivePanel()
+			}
+			if targetPanel != nil {
+				targetPanel.vfs.SetPath(path)
+				targetPanel.ReadDirectory()
+				pf.RefreshAll()
+			}
+			// Update MRU order
+			AddFolderHistory(path)
+			return true
+		}
+
+		if (e.VirtualKeyCode == vtinput.VK_DELETE || e.VirtualKeyCode == vtinput.VK_BACK) && shift {
+			// Delete item
+			h = append(h[:idx], h[idx+1:]...)
+			vtui.GlobalHistoryProvider.SaveHistory("folders", h)
+			menu.Items = append(menu.Items[:idx], menu.Items[idx+1:]...)
+			menu.ItemCount = len(menu.Items)
+			if menu.ItemCount == 0 {
+				menu.Close()
+			} else {
+				if menu.SelectPos >= menu.ItemCount { menu.SetSelectPos(menu.ItemCount - 1) }
+				vtui.FrameManager.Redraw()
+			}
+			return true
+		}
+		return false
+	}
+
+	// Sizing and positioning
+	scrW := vtui.FrameManager.GetScreenSize()
+	scrH := vtui.FrameManager.GetScreenHeight()
+	width := scrW - 10
+	if width > 100 { width = 100 }
+	height := len(h) + 2
+	if height > 15 { height = 15 }
+
+	menu.SetPosition((scrW-width)/2, (scrH-height)/2, (scrW-width)/2+width-1, (scrH-height)/2+height-1)
+	vtui.FrameManager.Push(menu)
+}
 func actionOpenEditor(pf *PanelsFrame, v vfs.VFS, path string) {
 	vtui.RunAsync(func(ctx *vtui.TaskContext) {
 		var f vfs.ReadAtCloser

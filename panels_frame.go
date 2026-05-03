@@ -690,6 +690,12 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	}
 
+	// Alt+F12: Folders History
+	if e.VirtualKeyCode == vtinput.VK_F12 && alt && !ctrl && !shift && e.KeyDown {
+		actionFoldersHistory(pf)
+		return true
+	}
+
 	// F11: Plugin Menu
 	if e.VirtualKeyCode == vtinput.VK_F11 && !alt && !ctrl && !shift && e.KeyDown {
 		pf.showPluginMenu()
@@ -1345,7 +1351,7 @@ func (pf *PanelsFrame) GetKeyLabels() *vtui.KeySet {
 		},
 		Alt: vtui.KeyBarLabels{
 			Msg("KeyBar.AltF1"), Msg("KeyBar.AltF2"), Msg("KeyBar.AltF3"), "",
-			"", "", Msg("KeyBar.AltF7"), Msg("KeyBar.AltF8"), "", "", "", "",
+			"", "", Msg("KeyBar.AltF7"), Msg("KeyBar.AltF8"), "", "", "", Msg("KeyBar.AltF12"),
 		},
 		Ctrl: vtui.KeyBarLabels{
 			"", "", Msg("KeyBar.CtrlF3"), Msg("KeyBar.CtrlF4"), Msg("KeyBar.CtrlF5"), Msg("KeyBar.CtrlF6"), Msg("KeyBar.CtrlF7"), "", "", "", "Fork", "Close",
