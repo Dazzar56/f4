@@ -313,8 +313,8 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 						// On Unix, use single quotes for paths to prevent Bash history expansion
 						sqDir := strings.ReplaceAll(dir, "'", "'\\''")
 						sqCmd := strings.ReplaceAll(cmd, "'", "'\\''")
-						// Используем одновременно OSC 2 и OSC 133 для надежной синхронизации состояния терминала.
-						cmdToWire = fmt.Sprintf("set +H; cd '%s' && { printf \"\\033]133;C\\007\\033]2;f4:busy\\007\"; ./'%s' ; printf \"\\033]2;f4:done\\007\\033]133;D\\007\"; }\r", sqDir, sqCmd)
+						// Используем OSC 133 для уведомления терминала о начале и конце выполнения.
+						cmdToWire = fmt.Sprintf("set +H; cd '%s' && { printf \"\\033]133;C\\007\"; ./'%s' ; printf \"\\033]133;D\\007\"; }\r", sqDir, sqCmd)
 					}
 					vtui.DebugLog("ACTIONS: Sending to PTY: %q", cmdToWire)
 

@@ -167,12 +167,12 @@ func NewPanelsFrame() *PanelsFrame {
 	pf.keyBar.SetOwner(pf)
 
 	pf.termView = NewTerminalView(80, 24)
-	pf.termView.OnTitleChange = func(newTitle string) {
+	pf.termView.OnBusyChange = func(busy bool) {
 		// Use PostTask to ensure state changes happen on the UI thread
 		vtui.FrameManager.PostTask(func() {
-			if newTitle == "f4:busy" {
+			if busy {
 				pf.executing = true
-			} else if newTitle == "f4:done" {
+			} else {
 				if pf.executing {
 					pf.executing = false
 					if pf.returnToPanels {
@@ -459,11 +459,8 @@ func (pf *PanelsFrame) isPtyBusy() bool {
 	if active.IsBusy() {
 		return true
 	}
-	// Managed execution signal from actionExecute
-	if pf.executing && pf.termView.Title == "f4:busy" {
-		return true
-	}
-	return false
+	// Managed execution signal from OSC 133
+	return pf.executing
 }
 func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 	isBusy := pf.isPtyBusy()
@@ -1022,9 +1019,9 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 						// Managed foreground command
 						if path != "" {
 							sqPath := strings.ReplaceAll(path, "'", "'\\''")
-							fullWireCmd = fmt.Sprintf("set +H; cd '%s' && { printf \"\\033]133;C\\007\\033]2;f4:busy\\007\"; %s ; printf \"\\033]2;f4:done\\007\\033]133;D\\007\"; }\r", sqPath, cmd)
+							fullWireCmd = fmt.Sprintf("set +H; cd '%s' && { printf \"\\033]133;C\\007\"; %s ; printf \"\\033]133;D\\007\"; }\r", sqPath, cmd)
 						} else {
-							fullWireCmd = fmt.Sprintf("{ printf \"\\033]133;C\\007\\033]2;f4:busy\\007\"; %s ; printf \"\\033]2;f4:done\\007\\033]133;D\\007\"; }\r", cmd)
+							fullWireCmd = fmt.Sprintf("{ printf \"\\033]133;C\\007\"; %s ; printf \"\\033]133;D\\007\"; }\r", cmd)
 						}
 						pf.executing = true
 						pf.returnToPanels = pf.showPanels
@@ -1756,12 +1753,11 @@ func (pf *PanelsFrame) getActivePTY() PtyBackend {
 
 func (pf *PanelsFrame) GetTitle() string {
 	if !pf.showPanels {
-		title := pf.termView.Title
-		if title == "f4:busy" || title == "f4:done" {
-			return "Terminal"
+		if pf.executing {
+			return "Terminal (executing)"
 		}
-		if title != "" {
-			return title
+		if pf.termView.Title != "" {
+			return pf.termView.Title
 		}
 		return "Terminal"
 	}

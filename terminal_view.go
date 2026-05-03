@@ -73,6 +73,7 @@ type TerminalView struct {
 	authCache     map[string]int
 
 	OnTitleChange func(string)
+	OnBusyChange  func(bool)
 }
 
 func NewTerminalView(w, h int) *TerminalView {
@@ -857,12 +858,12 @@ func (tv *TerminalView) HandleOSC133(payload string) {
 	vtui.DebugLog("TERM_OSC133: %s", payload)
 	if payload == "C" {
 		tv.SetMuted(false)
-		if tv.OnTitleChange != nil {
-			tv.OnTitleChange("f4:busy")
+		if tv.OnBusyChange != nil {
+			tv.OnBusyChange(true)
 		}
 	} else if payload == "D" {
-		if tv.OnTitleChange != nil {
-			tv.OnTitleChange("f4:done")
+		if tv.OnBusyChange != nil {
+			tv.OnBusyChange(false)
 		}
 	}
 }
