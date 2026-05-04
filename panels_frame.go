@@ -1125,6 +1125,13 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			pf.activeIdx = 1 - pf.activeIdx
 			pf.lastKey = 0
 			return true
+		} else if !pf.cmdLine.IsEmpty() {
+			// Tab triggers autocomplete menu when panels are hidden
+			ac := vtui.NewAutoCompleteMenu(pf.cmdLine.Edit)
+			if ac.HasMatches() {
+				vtui.FrameManager.Push(ac)
+				return true
+			}
 		}
 	}
 

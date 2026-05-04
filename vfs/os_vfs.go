@@ -30,7 +30,10 @@ func (v *OSVFS) IsAtRoot() bool {
 	if runtime.GOOS == "windows" {
 		vol := filepath.VolumeName(v.currentPath)
 		p := filepath.Clean(v.currentPath)
-		return p == vol+"\\" || p == vol+"/" || p == vol || p == "\\" || p == "/"
+		// Standardize to backslash for comparison on Windows
+		p = strings.ReplaceAll(p, "/", "\\")
+		vol = strings.ReplaceAll(vol, "/", "\\")
+		return p == vol+"\\" || p == vol || p == "\\"
 	}
 	return v.currentPath == "/"
 }
@@ -38,7 +41,7 @@ func (v *OSVFS) IsAtRoot() bool {
 func (v *OSVFS) SetPath(path string) error {
 	vtui.DebugLog("VFS: SetPath(%q) called", path)
 	target := path
-	if !filepath.IsAbs(path) {
+	if !filepath.IsAbs(path) && filepath.VolumeName(path) == "" {
 		target = filepath.Join(v.currentPath, path)
 	}
 	abs, err := filepath.Abs(target)
