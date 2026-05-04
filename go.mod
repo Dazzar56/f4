@@ -1,9 +1,10 @@
 module github.com/unxed/f4
 
-go 1.25.0
+go 1.25.5
 
 require (
 	github.com/alecthomas/chroma/v2 v2.15.0
+	github.com/ebitengine/purego v0.10.0
 	github.com/jlaffaye/ftp v0.2.0
 	github.com/klauspost/compress v1.18.0
 	github.com/mattn/go-runewidth v0.0.15
@@ -40,6 +41,7 @@ require (
 	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/sorairolake/lzip-go v0.3.8 // indirect
 	github.com/spf13/afero v1.15.0 // indirect
+	github.com/thegrumpylion/xkb-go v0.1.0 // indirect
 	github.com/ulikunitz/xz v0.5.15 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	go4.org v0.0.0-20230225012048-214862532bf5 // indirect
