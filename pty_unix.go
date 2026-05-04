@@ -10,6 +10,7 @@ import (
 	"unsafe"
 
 	"github.com/unxed/vtui"
+	"golang.org/x/sys/unix"
 )
 
 // PTY handles pseudo-terminal allocation and process execution.
@@ -21,7 +22,7 @@ type PTY struct {
 }
 
 func NewPTY() (*PTY, error) {
-	masterFd, err := syscall.Open("/dev/ptmx", syscall.O_RDWR|syscall.O_NOCTTY, 0)
+	masterFd, err := unix.Open("/dev/ptmx", unix.O_RDWR|unix.O_NOCTTY, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -29,17 +30,18 @@ func NewPTY() (*PTY, error) {
 	master := os.NewFile(uintptr(masterFd), "/dev/ptmx")
 
 	var res uintptr
-	if _, _, err := syscall.Syscall(syscall.SYS_IOCTL, uintptr(masterFd), syscall.TIOCGPTN, uintptr(unsafe.Pointer(&res))); err != 0 {
+	if _, _, err := syscall.Syscall(syscall.SYS_IOCTL, uintptr(masterFd), unix.TIOCGPTN, uintptr(unsafe.Pointer(&res))); err != 0 {
+		master.Close()
 		return nil, err
 	}
 
+	// TIOCSPTLCK is used on Linux to unlock the slave pty.
+	// FreeBSD doesn't need/have it for /dev/ptmx.
 	var unlock int
-	if _, _, err := syscall.Syscall(syscall.SYS_IOCTL, uintptr(masterFd), syscall.TIOCSPTLCK, uintptr(unsafe.Pointer(&unlock))); err != 0 {
-		return nil, err
-	}
+	_, _, _ = syscall.Syscall(syscall.SYS_IOCTL, uintptr(masterFd), unix.TIOCSPTLCK, uintptr(unsafe.Pointer(&unlock)))
 
 	slaveName := fmt.Sprintf("/dev/pts/%d", res)
-	slaveFd, err := syscall.Open(slaveName, syscall.O_RDWR|syscall.O_NOCTTY, 0)
+	slaveFd, err := unix.Open(slaveName, unix.O_RDWR|unix.O_NOCTTY, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -106,12 +108,12 @@ func (p *PTY) IsBusy() bool {
 	if p.Master == nil {
 		return false
 	}
-	var pgrp int
-	_, _, err := syscall.Syscall(syscall.SYS_IOCTL, p.Master.Fd(), syscall.TIOCGPGRP, uintptr(unsafe.Pointer(&pgrp)))
+	var pgrp int32
+	_, _, err := syscall.Syscall(syscall.SYS_IOCTL, p.Master.Fd(), unix.TIOCGPGRP, uintptr(unsafe.Pointer(&pgrp)))
 	if err != 0 {
 		return false
 	}
-	return pgrp != p.shellPgrp
+	return int(pgrp) != p.shellPgrp
 }
 
 func (p *PTY) SetSize(cols, rows int) {
@@ -123,7 +125,7 @@ func (p *PTY) SetSize(cols, rows int) {
 		Xpixel: 0,
 		Ypixel: 0,
 	}
-	_, _, _ = syscall.Syscall(syscall.SYS_IOCTL, p.Master.Fd(), syscall.TIOCSWINSZ, uintptr(unsafe.Pointer(&size)))
+	_, _, _ = syscall.Syscall(syscall.SYS_IOCTL, p.Master.Fd(), unix.TIOCSWINSZ, uintptr(unsafe.Pointer(&size)))
 }
 
 func GetSystemShell() string {

@@ -1,3 +1,5 @@
+//go:build windows
+
 package main
 
 import (
@@ -6,6 +8,6 @@ import (
 )
 
 func RunGui() {
-	fmt.Fprintf(os.Stderr, "GUI mode is currently only supported on Linux/X11.\n")
+	fmt.Fprintf(os.Stderr, "GUI mode is currently not supported on Windows.\n")
 	os.Exit(1)
 }

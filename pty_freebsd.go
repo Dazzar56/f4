@@ -1,4 +1,4 @@
-//go:build darwin
+//go:build freebsd
 
 package main
 
@@ -13,7 +13,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// PTY handles pseudo-terminal allocation and process execution.
 type PTY struct {
 	Master    *os.File
 	Slave     *os.File
@@ -28,18 +27,12 @@ func NewPTY() (*PTY, error) {
 	}
 	master := os.NewFile(uintptr(masterFd), "/dev/ptmx")
 
-	if _, _, e := syscall.Syscall(syscall.SYS_IOCTL, uintptr(masterFd), unix.TIOCPTYGRANT, 0); e != 0 {
-		master.Close()
-		return nil, e
-	}
-
-	if _, _, e := syscall.Syscall(syscall.SYS_IOCTL, uintptr(masterFd), unix.TIOCPTYUNLK, 0); e != 0 {
-		master.Close()
-		return nil, e
-	}
+	// FreeBSD 13+ supports TIOCPTYGNAME to get the slave name
+	// _IOR('t', 72, char[128]) -> 0x40807448
+	const tiocptygname = 0x40807448
 
 	ptyName := make([]byte, 128)
-	if _, _, e := syscall.Syscall(syscall.SYS_IOCTL, uintptr(masterFd), unix.TIOCPTYGNAME, uintptr(unsafe.Pointer(&ptyName[0]))); e != 0 {
+	if _, _, e := syscall.Syscall(syscall.SYS_IOCTL, uintptr(masterFd), tiocptygname, uintptr(unsafe.Pointer(&ptyName[0]))); e != 0 {
 		master.Close()
 		return nil, e
 	}
@@ -102,7 +95,6 @@ func (p *PTY) Run(name string, args ...string) error {
 		Setctty: true,
 	}
 
-	// Set initial size
 	p.SetSize(80, 24)
 
 	err := p.Cmd.Start()
