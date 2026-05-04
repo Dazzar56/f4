@@ -81,15 +81,19 @@ type QueueTask struct {
 func (t *QueueTask) UpdateScan(currentPath string, files, dirs int64) {
 	t.mu.Lock()
 	if t.State == "Done" || t.State == "Error" || t.State == "Cancelled" {
+		vtui.DebugLog("QUEUE_DEBUG: UpdateScan ignored for Task %d (State: %s)", t.ID, t.State)
 		t.mu.Unlock()
 		return
 	}
+	vtui.DebugLog("QUEUE_DEBUG: Task %d Scanning -> %s", t.ID, currentPath)
 	t.State = "Scanning"
 	t.CurrentFile = currentPath
 	t.TotalText = fmt.Sprintf("Files: %d, Dirs: %d", files, dirs)
 	t.mu.Unlock()
 
-	vtui.FrameManager.Redraw()
+	vtui.FrameManager.PostTask(func() {
+		GlobalQueueManager.RefreshUI()
+	})
 }
 
 func (t *QueueTask) UpdateTransfer(action string, filename string, currentPct int, totalText string, totalPct int, speedText string) {
@@ -105,7 +109,9 @@ func (t *QueueTask) UpdateTransfer(action string, filename string, currentPct in
 	t.Speed = speedText
 	t.mu.Unlock()
 
-	vtui.FrameManager.Redraw()
+	vtui.FrameManager.PostTask(func() {
+		GlobalQueueManager.RefreshUI()
+	})
 }
 
 func (t *QueueTask) IsCancelled() bool {
@@ -250,6 +256,7 @@ func (qm *OpQueueManager) workerLoop() {
 }
 
 func (qm *OpQueueManager) executeTask(t *QueueTask) {
+	vtui.DebugLog("QUEUE_DEBUG: Executing Task %d (%s)", t.ID, t.Type)
 	if t.Run == nil {
 		t.State = "Error"
 		t.ErrorMsg = fmt.Errorf("internal error: task run function is nil")
@@ -302,6 +309,8 @@ func (qm *OpQueueManager) executeTask(t *QueueTask) {
 		qm.activeKeys[rk] = false
 	}
 	qm.mu.Unlock()
+
+	vtui.DebugLog("QUEUE_DEBUG: Task %d finalized with state %s. Posting OnComplete.", t.ID, t.State)
 
 	vtui.FrameManager.PostTask(func() {
 		if t.OnComplete != nil {

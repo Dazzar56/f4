@@ -537,6 +537,9 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 				newEntries = append(newEntries, entry)
 			}
 
+			if ctx.Err() != nil {
+				return
+			}
 			vtui.FrameManager.PostTask(func() {
 				if ctx.Err() != nil {
 					return
@@ -618,6 +621,9 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 			})
 		})
 
+		if ctx.Err() != nil {
+			return
+		}
 		vtui.FrameManager.PostTask(func() {
 			if ctx.Err() != nil {
 				return
@@ -637,10 +643,10 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 			if err != nil && err != context.Canceled {
 				// Баг-фикс: если директория исчезла (например, удалена из другой панели),
 				// пытаемся подняться на уровень выше вместо показа ошибки.
-				if !fp.vfs.IsAtRoot() {
-					vtui.DebugLog("PANEL: Directory inaccessible, attempting to go up: %v", err)
+				if !fp.vfs.IsAtRoot() && !keepEntries {
+					vtui.DebugLog("PANEL[%p]: Directory inaccessible, attempting to go up. Error: %v", fp, err)
 					fp.vfs.SetPath("..")
-					fp.ReadDirectory()
+					fp.readDirectoryEx(true) // keepEntries=true предотвращает бесконечную петлю
 					return
 				}
 
