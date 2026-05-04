@@ -58,10 +58,15 @@ func TestFileEntry_HighlightDir(t *testing.T) {
 	vtui.SetDefaultPalette()
 	SetDefaultF4Palette()
 
+	// Protect global config
+	oldCfg := AppConfig
+	defer func() { AppConfig = oldCfg }()
+
 	dir := &fileEntry{VFSItem: vfs.VFSItem{Name: "work", IsDir: true}}
 
 	// 1. Without highlighting
 	AppConfig.HighlightDir = false
+	
 	if dir.GetCellText(0) != string(os.PathSeparator)+"work" {
 		t.Errorf("Expected separator prefix when HighlightDir is false, got %q", dir.GetCellText(0))
 	}
@@ -120,66 +125,47 @@ func TestFileSystemPanel_UpdateTitle_WithProvider(t *testing.T) {
 func TestFileSystemPanel_ShowHiddenFiles(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
+	// Protect global config from leakage
+	oldCfg := AppConfig
+	defer func() { AppConfig = oldCfg }()
+
 	tmp := t.TempDir()
 	os.WriteFile(filepath.Join(tmp, "normal.txt"), []byte(""), 0644)
 	os.WriteFile(filepath.Join(tmp, ".hidden.txt"), []byte(""), 0644)
 
 	v := vfs.NewOSVFS(tmp)
 
-	// 1. Show hidden files (Default)
+	// 1. Show hidden files
 	AppConfig.ShowHiddenFiles = true
 	fp1 := NewFileSystemPanel(0, 0, 80, 24, v)
-
-	// Wait for load
-	time.Sleep(50 * time.Millisecond)
-	for {
-		select {
-		case task := <-vtui.FrameManager.TaskChan:
-			task()
-		default:
-			goto done1
-		}
-	}
-done1:
+	waitForLoad(t, fp1)
 
 	foundHidden := false
 	for _, e := range fp1.entries {
 		if e.Name == ".hidden.txt" {
 			foundHidden = true
+			break
 		}
 	}
 	if !foundHidden {
-		t.Error("Hidden file should be visible")
+		t.Error("Hidden file should be visible when ShowHiddenFiles is true")
 	}
 
 	// 2. Hide hidden files
 	AppConfig.ShowHiddenFiles = false
 	fp2 := NewFileSystemPanel(0, 0, 80, 24, v)
-
-	// Wait for load
-	time.Sleep(50 * time.Millisecond)
-	for {
-		select {
-		case task := <-vtui.FrameManager.TaskChan:
-			task()
-		default:
-			goto done2
-		}
-	}
-done2:
+	waitForLoad(t, fp2)
 
 	foundHidden = false
 	for _, e := range fp2.entries {
 		if e.Name == ".hidden.txt" {
 			foundHidden = true
+			break
 		}
 	}
 	if foundHidden {
-		t.Error("Hidden file should NOT be visible")
+		t.Error("Hidden file should NOT be visible when ShowHiddenFiles is false")
 	}
-
-	// Reset global state
-	AppConfig.ShowHiddenFiles = true
 }
 
 func TestFileSystemPanel_NavigateUp_Selection(t *testing.T) {
