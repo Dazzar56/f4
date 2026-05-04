@@ -476,8 +476,6 @@ func (p *AnsiParser) handleOSC() {
 	if cmd == 0 || cmd == 2 {
 		vtui.DebugLog("ANSI_OSC_TRACE: Received window title change: %q", parts[1])
 		p.term.Title = parts[1]
-		// Любое изменение заголовка — сигнал активности. Снимаем заглушку.
-		p.term.SetMuted(false)
 		if p.term.OnTitleChange != nil {
 			p.term.OnTitleChange(p.term.Title)
 		}

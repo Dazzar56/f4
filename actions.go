@@ -328,6 +328,7 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 					pf.executing = true
 					pf.returnToPanels = true
 
+					pf.termView.SetMuted(true)
 					activePty.Write([]byte(cmdToWire))
 					pf.showPanels = false
 				}
