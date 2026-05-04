@@ -306,7 +306,6 @@ func (v *OSVFS) Open(ctx context.Context, path string) (ReadAtCloser, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
-	vtui.DebugLog("VFS: Open(%q) starting...", path)
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsPermission(err) && globalSudoClient.IsAvailable() {

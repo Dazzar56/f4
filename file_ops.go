@@ -21,6 +21,7 @@ type FileOpState struct {
 	Tracker      *FileOpTracker
 	UpdateUI     func(force bool)
 	Anchor       vtui.Frame
+	Buffer       []byte
 }
 
 // formatSize formats a byte count into a human-readable string.
@@ -220,6 +221,7 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 				updateUI(false)
 			},
 			Anchor: anchor,
+			Buffer: make([]byte, 128*1024),
 		}
 
 		updateUI(true)
@@ -714,7 +716,11 @@ func recursiveCopy(ctx context.Context, srcVfs vfs.VFS, srcPath string, dstVfs v
 		}
 	}()
 
-	buf := make([]byte, 128*1024)
+	buf := state.Buffer
+	if buf == nil {
+		buf = make([]byte, 128*1024)
+	}
+
 	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
