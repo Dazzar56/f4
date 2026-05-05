@@ -4,7 +4,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 )
 
 func RunGui() error {
