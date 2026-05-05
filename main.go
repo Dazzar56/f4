@@ -172,7 +172,10 @@ func main() {
 	}
 
 	if guiMode {
-		RunGui()
+		if err := RunGui(); err != nil {
+			fmt.Fprintf(os.Stderr, "\n[f4] FATAL GUI ERROR: %v\n", err)
+			os.Exit(1)
+		}
 		return
 	}
 
