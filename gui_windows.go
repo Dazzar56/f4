@@ -6,6 +6,6 @@ import (
 	"fmt"
 )
 
-func RunGui() error {
+func RunGui(backend string) error {
 	return fmt.Errorf("GUI mode is currently not supported on this platform")
 }
