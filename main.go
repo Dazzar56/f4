@@ -71,6 +71,7 @@ func main() {
 	var serverPath, clientPath string
 	var cpuprofile string
 	var guiMode bool
+	var guiBackend string
 	var version bool
 
 	for i := 1; i < len(os.Args); i++ {
@@ -91,6 +92,7 @@ func main() {
 			os.Setenv("VTUI_DEBUG", "1")
 		case "--gui":
 			guiMode = true
+			guiBackend = flagVal
 		case "--log":
 			if flagVal != "" {
 				os.Setenv("VTUI_DEBUG", flagVal)
@@ -173,7 +175,7 @@ func main() {
 	}
 
 	if guiMode {
-		if err := RunGui(); err != nil {
+		if err := RunGui(guiBackend); err != nil {
 			fmt.Fprintf(os.Stderr, "\n[f4] FATAL GUI ERROR: %v\n", err)
 			os.Exit(1)
 		}
