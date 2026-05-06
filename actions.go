@@ -2,11 +2,11 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"os/exec"
 	"runtime"
 	"strings"
 	"time"
+	"fmt"
 
 	"github.com/unxed/f4/piecetable"
 	"github.com/unxed/f4/vfs"
