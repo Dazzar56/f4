@@ -1,6 +1,7 @@
 package archive
 
 import (
+	"github.com/unxed/zip"
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/charmap"
 )
