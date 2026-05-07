@@ -2,13 +2,14 @@ package archive
 
 import (
 	"context"
+	"runtime"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 
-	"github.com/klauspost/compress/zip"
 	"github.com/mholt/archives"
+	"github.com/unxed/zip"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
 )
@@ -174,29 +175,38 @@ func actionAddArchive(app vfs.App) {
 		fullArcPath := activeVfs.Join(activeVfs.GetPath(), name)
 
 		app.RunProgressTask(" Archiving... ", "Gathering files...", false, func(ctx context.Context, update func(msg string, percent int)) error {
-			var files []archives.FileInfo
-			for i, n := range names {
-				if ctx.Err() != nil {
-					return ctx.Err()
-				}
-				update(fmt.Sprintf("Scanning: %s", n), (i*100)/len(names))
-				fullPath := activeVfs.Join(activeVfs.GetPath(), n)
-				if osvfs, ok := activeVfs.(*vfs.OSVFS); ok {
-					absPath, _ := osvfs.Abs(fullPath)
-					moreFiles, err := archives.FilesFromDisk(ctx, nil, map[string]string{absPath: n})
-					if err == nil {
-						files = append(files, moreFiles...)
-					}
-				}
-			}
 			out, err := os.Create(fullArcPath)
 			if err != nil {
 				return err
 			}
 			defer out.Close()
-			return archives.Zip{
-				Compression: zip.Deflate,
-			}.Archive(ctx, out, files)
+
+			archiver, err := zip.NewArchiver(out, activeVfs.GetPath(), zip.WithArchiverConcurrency(runtime.NumGoroutine()))
+			if err != nil {
+				return err
+			}
+			defer archiver.Close()
+
+			fileMap := make(map[string]os.FileInfo)
+			for i, n := range names {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				update(fmt.Sprintf("Scanning: %s", n), (i*100)/len(names))
+
+				fullPath := activeVfs.Join(activeVfs.GetPath(), n)
+				if osvfs, ok := activeVfs.(*vfs.OSVFS); ok {
+					absPath, _ := osvfs.Abs(fullPath)
+					filepath.Walk(absPath, func(p string, fi os.FileInfo, e error) error {
+						if e == nil {
+							fileMap[p] = fi
+						}
+						return nil
+					})
+				}
+			}
+
+			return archiver.Archive(ctx, fileMap)
 		}, func(err error) {
 			if err != nil && err != context.Canceled {
 				app.Message(" Error ", fmt.Sprintf("Archiving failed:\n%v", err), []string{"&Ok"})

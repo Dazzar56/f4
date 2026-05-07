@@ -11,8 +11,9 @@ require (
 	github.com/pkg/sftp v1.13.6
 	github.com/unxed/vtinput v0.0.0
 	github.com/unxed/vtui v0.0.0
+	github.com/unxed/zip v0.1.5
 	github.com/vmihailenco/msgpack/v5 v5.4.1
-	golang.org/x/crypto v0.21.0
+	golang.org/x/crypto v0.31.0
 	golang.org/x/sys v0.41.0
 	golang.org/x/term v0.40.0
 	golang.org/x/text v0.36.0
@@ -26,6 +27,7 @@ require (
 	github.com/bodgit/sevenzip v1.6.1 // indirect
 	github.com/bodgit/windows v1.0.1 // indirect
 	github.com/dlclark/regexp2 v1.11.4 // indirect
+	github.com/dovydenkovas/ppmd v0.1.1 // indirect
 	github.com/dsnet/compress v0.0.2-0.20230904184137-39efe44ab707 // indirect
 	github.com/ebitengine/purego v0.10.0 // indirect
 	github.com/emmansun/base64 v0.9.0 // indirect
@@ -55,6 +57,7 @@ require (
 	golang.org/x/exp v0.0.0-20200207192155-f17229e696bd // indirect
 	golang.org/x/image v0.39.0 // indirect
 	golang.org/x/mobile v0.0.0-20230301163155-e0f57694e12c // indirect
+	golang.org/x/sync v0.20.0 // indirect
 )
 
 replace github.com/unxed/vtinput => ./libs/vtinput
