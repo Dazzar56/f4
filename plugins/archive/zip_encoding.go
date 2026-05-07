@@ -1,7 +1,6 @@
 package archive
 
 import (
-	"github.com/klauspost/compress/zip"
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/charmap"
 )
