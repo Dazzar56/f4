@@ -547,9 +547,11 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 
 				// Sync interactive state: if the user started navigating or selecting
 				// while the cache was displayed, we must respect those changes.
-				uName := fp.getRawSelectedName()
-				if uName != "" && uName != ".." {
-					fp.pendingSelection = uName
+				if fp.pendingSelection == "" {
+					uName := fp.getRawSelectedName()
+					if uName != "" && uName != ".." {
+						fp.pendingSelection = uName
+					}
 				}
 
 				// Sync selections for currently visible items
