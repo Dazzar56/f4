@@ -54,33 +54,47 @@ func (v *TerminalLogVFS) Clone() vfs.VFS     { return v }
 func (v *TerminalLogVFS) Close() error       { return nil }
 
 func (v *TerminalLogVFS) Open(ctx context.Context, path string) (vfs.ReadAtCloser, error) {
-	return &terminalLogWrapper{data: v.tv.GetAllLogBytes()}, nil
+	return &terminalLogWrapper{tv: v.tv}, nil
 }
 
 type terminalLogWrapper struct {
-	data []byte
+	tv *TerminalView
 }
 
 func (w *terminalLogWrapper) Size() int64 {
-	return int64(len(w.data))
+	w.tv.mu.Lock()
+	defer w.tv.mu.Unlock()
+	return int64(w.tv.pt.Size() + len(w.tv.pendingLog))
 }
 
 func (w *terminalLogWrapper) ReadAt(ctx context.Context, p []byte, off int64) (int, error) {
-	if off >= int64(len(w.data)) {
+	w.tv.mu.Lock()
+	defer w.tv.mu.Unlock()
+
+	w.tv.flushLogUnsafe()
+
+	size := w.tv.pt.Size()
+	if off >= int64(size) {
 		return 0, io.EOF
 	}
 
 	readLen := len(p)
-	if off+int64(readLen) > int64(len(w.data)) {
-		readLen = int(int64(len(w.data)) - off)
+	if off+int64(readLen) > int64(size) {
+		readLen = int(int64(size) - off)
 	}
 
-	n := copy(p, w.data[off:off+int64(readLen)])
-
-	if n < len(p) {
-		return n, io.EOF
+	data, err := w.tv.pt.GetRange(int(off), readLen)
+	if len(data) > 0 {
+		copy(p, data)
 	}
-	return n, nil
+
+	if err != nil {
+		return len(data), err
+	}
+	if len(data) < len(p) {
+		return len(data), io.EOF
+	}
+	return len(data), nil
 }
 
 func (w *terminalLogWrapper) Read(ctx context.Context, p []byte) (int, error) {
