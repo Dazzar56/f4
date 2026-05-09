@@ -612,7 +612,7 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 					}
 				}
 
-				if !snapped && (fp.cursorIdx >= len(fp.entries) || fp.cursorIdx < 0) {
+				if !snapped && fp.pendingSelection == "" && (fp.cursorIdx >= len(fp.entries) || fp.cursorIdx < 0) {
 					fp.SetCursorIndex(0)
 				}
 

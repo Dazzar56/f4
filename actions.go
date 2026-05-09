@@ -603,8 +603,10 @@ func actionRename(pf *PanelsFrame) {
 			ctx.RunOnUI(func() {
 				if err != nil {
 					vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to rename:\n%v", err), []string{"&Ok"})
+					fsp.pendingSelection = name
+				} else {
+					fsp.pendingSelection = newName
 				}
-				fsp.pendingSelection = newName
 				pf.RefreshAll()
 			})
 		})
