@@ -260,7 +260,7 @@ func (p *AnsiParser) handleCSI(cmd byte) {
 		if len(args) > 0 && args[0] != 0 {
 			n = args[0]
 		}
-		p.term.ScrollUp(p.term.CursorY, p.term.ScrollBottom, n)
+		p.term.scrollUp(p.term.CursorY, p.term.ScrollBottom, n)
 	case 'P': // Delete characters
 		n := 1
 		if len(args) > 0 && args[0] != 0 {
@@ -278,7 +278,7 @@ func (p *AnsiParser) handleCSI(cmd byte) {
 		if len(args) > 0 && args[0] != 0 {
 			n = args[0]
 		}
-		p.term.ScrollUp(p.term.ScrollTop, p.term.ScrollBottom, n)
+		p.term.scrollUp(p.term.ScrollTop, p.term.ScrollBottom, n)
 	case 'T': // Scroll down (text moves down)
 		n := 1
 		if len(args) > 0 && args[0] != 0 {
