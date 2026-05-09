@@ -1069,8 +1069,8 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 
 	// Selection by mask (+, -, *) logic
-	// Intercepted only if command line is empty and fastFind is not active
-	if pf.showPanels && pf.cmdLine.IsEmpty() && !alt && !ctrl {
+	// Intercepted only if fastFind is not active
+	if pf.showPanels && !alt && !ctrl {
 		isFastFind := false
 		if fsp := pf.getActivePanel(); fsp != nil && fsp.fastFindMode {
 			isFastFind = true
@@ -1091,9 +1091,11 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				isSelectKey = true
 				selectChar = '*'
 			default:
-				if e.Char == '+' || e.Char == '-' || e.Char == '*' {
-					isSelectKey = true
-					selectChar = e.Char
+				if pf.cmdLine.IsEmpty() {
+					if e.Char == '+' || e.Char == '-' || e.Char == '*' {
+						isSelectKey = true
+						selectChar = e.Char
+					}
 				}
 			}
 

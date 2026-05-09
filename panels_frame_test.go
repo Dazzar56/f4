@@ -96,7 +96,7 @@ func TestPanelsFrame_SelectionByMask(t *testing.T) {
 	fsp := pf.panels[1].(*FileSystemPanel)
 	pf.activeIdx = 1
 
-	// 1. Command line not empty -> should not intercept
+	// 1. Command line not empty -> should not intercept for regular char
 	pf.cmdLine.Edit.SetText("a")
 	handled := pf.ProcessKey(&vtinput.InputEvent{
 		Type:    vtinput.KeyEventType,
@@ -106,6 +106,21 @@ func TestPanelsFrame_SelectionByMask(t *testing.T) {
 	if !handled {
 		t.Error("Key should be handled by cmdLine")
 	}
+
+	// 1.5 Command line not empty, but Numpad + -> SHOULD intercept
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	handled = pf.ProcessKey(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_ADD,
+	})
+	if !handled {
+		t.Error("Numpad + should be intercepted even if cmdLine is not empty")
+	}
+	if vtui.FrameManager.GetTopFrameType() != vtui.TypeDialog {
+		t.Error("Selection dialog was not shown for Numpad +")
+	}
+	vtui.FrameManager.Pop() // Clean up dialog
 
 	// 2. Command line empty, fastFindMode active -> should not intercept
 	pf.cmdLine.Clear()
