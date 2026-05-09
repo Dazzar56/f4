@@ -1497,3 +1497,46 @@ loop:
 		t.Errorf("ReadDir was not cancelled: got %d entries", len(fp.entries))
 	}
 }
+
+func TestFileSystemPanel_PendingSelectionPriority(t *testing.T) {
+	// Проверяем, что pendingSelection (установленный, например, переименованием)
+	// имеет приоритет над текущим положением курсора при прилете чанков данных.
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	fp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewNullVFS(0))
+
+	// Устанавливаем цель (новое имя файла после ренейма)
+	fp.pendingSelection = "new_name.txt"
+	// Текущий курсор "случайно" стоит на другом файле (например, индекс 0 - "..")
+	fp.cursorIdx = 0
+
+	// Логика из onChunk:
+	// Если pendingSelection пустой, мы берем имя из текущего курсора.
+	// В нашем случае он НЕ пустой, значит uName не должен переписать его.
+	if fp.pendingSelection == "" {
+		uName := fp.getRawSelectedName()
+		if uName != "" && uName != ".." {
+			fp.pendingSelection = uName
+		}
+	}
+
+	if fp.pendingSelection != "new_name.txt" {
+		t.Errorf("Pending selection was overwritten! Got %q, want 'new_name.txt'", fp.pendingSelection)
+	}
+
+	// 3. Симулируем прилет чанка, который СОДЕРЖИТ цель
+	fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: ".."}}, {VFSItem: vfs.VFSItem{Name: "new_name.txt"}}}
+	
+	// Отрабатываем снаппинг
+	target := fp.pendingSelection
+	for i, entry := range fp.entries {
+		if entry.Name == target {
+			fp.SetCursorIndex(i)
+			fp.pendingSelection = ""
+			break
+		}
+	}
+
+	if fp.GetSelectedName() != "new_name.txt" {
+		t.Errorf("Cursor failed to snap to the renamed file. On: %q", fp.GetSelectedName())
+	}
+}

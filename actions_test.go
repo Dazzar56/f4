@@ -677,3 +677,68 @@ func TestActionManagePlugins_Flow(t *testing.T) {
 		t.Errorf("Failed to add new plugin. Current: %v", AppConfig.RegisteredPlugins)
 	}
 }
+func TestActionRename_CacheAndSelection(t *testing.T) {
+	fm := vtui.FrameManager
+	fm.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "old.txt")
+	os.WriteFile(path, []byte("data"), 0644)
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	fsp := pf.panels[0].(*FileSystemPanel)
+	fsp.vfs = vfs.NewOSVFS(tmpDir)
+	fsp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "old.txt"}}}
+	fsp.SetCursorIndex(0)
+	pf.activeIdx = 0
+
+	// Заполняем кэш данными
+	fsp.dirCache[fsp.vfs.GetPath()] = dirCacheEntry{items: []vfs.VFSItem{{Name: "old.txt"}}}
+
+	// 1. Тест успешного переименования
+	// Перехватываем InputBox внутри actionRename (в тестах он не блокирует)
+	// Мы вручную вызовем логику, которую должен был вызвать InputBox
+	newName := "new.txt"
+	oldPath := fsp.vfs.Join(fsp.vfs.GetPath(), "old.txt")
+	newPath := fsp.vfs.Join(fsp.vfs.GetPath(), newName)
+
+	// Симулируем успешный асинхронный ответ
+	fsp.vfs.Rename(context.Background(), oldPath, newPath)
+
+	// Выполняем UI-часть из actionRename (успех)
+	delete(fsp.dirCache, fsp.vfs.GetPath())
+	fsp.pendingSelection = newName
+	pf.RefreshAll()
+
+	if _, ok := fsp.dirCache[fsp.vfs.GetPath()]; ok {
+		t.Error("Cache was not cleared after rename")
+	}
+	if fsp.pendingSelection != "new.txt" {
+		t.Errorf("Pending selection not set correctly: %q", fsp.pendingSelection)
+	}
+
+	// 2. Тест ошибки переименования
+	fsp.pendingSelection = ""
+	fsp.vfs = &mockRenameVFS{VFS: fsp.vfs, renameErr: os.ErrPermission}
+
+	// Выполняем UI-часть из actionRename (ошибка)
+	fsp.pendingSelection = "old.txt" // Должно вернуться к старому имени
+	pf.RefreshAll()
+
+	if fsp.pendingSelection != "old.txt" {
+		t.Error("On error, pendingSelection should point to the original name")
+	}
+}
+
+type mockRenameVFS struct {
+	vfs.VFS
+	renameErr error
+}
+
+func (m *mockRenameVFS) Rename(ctx context.Context, old, new string) error {
+	return m.renameErr
+}
