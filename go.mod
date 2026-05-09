@@ -5,7 +5,6 @@ go 1.25.5
 require (
 	github.com/alecthomas/chroma/v2 v2.15.0
 	github.com/jlaffaye/ftp v0.2.0
-	github.com/klauspost/compress v1.18.0
 	github.com/mattn/go-runewidth v0.0.15
 	github.com/mholt/archives v0.1.5
 	github.com/pkg/sftp v1.13.6
@@ -36,11 +35,12 @@ require (
 	github.com/hashicorp/errwrap v1.0.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
+	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/klauspost/pgzip v1.2.6 // indirect
 	github.com/kr/fs v0.1.0 // indirect
 	github.com/mikelolasagasti/xz v1.0.1 // indirect
 	github.com/minio/minlz v1.0.1 // indirect
-	github.com/neurlang/wayland v0.4.1 // indirect
+	github.com/neurlang/wayland v0.4.2-0.20260509194411-21f7f7831e0d // indirect
 	github.com/neurlang/winc v0.1.2 // indirect
 	github.com/nwaples/rardecode/v2 v2.2.0 // indirect
 	github.com/pierrec/lz4/v4 v4.1.22 // indirect
