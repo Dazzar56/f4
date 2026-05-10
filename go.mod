@@ -40,7 +40,7 @@ require (
 	github.com/kr/fs v0.1.0 // indirect
 	github.com/mikelolasagasti/xz v1.0.1 // indirect
 	github.com/minio/minlz v1.0.1 // indirect
-	github.com/neurlang/wayland v0.4.2-0.20260509194411-21f7f7831e0d // indirect
+	github.com/neurlang/wayland v0.4.2 // indirect
 	github.com/neurlang/winc v0.1.2 // indirect
 	github.com/nwaples/rardecode/v2 v2.2.0 // indirect
 	github.com/pierrec/lz4/v4 v4.1.22 // indirect
