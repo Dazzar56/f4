@@ -45,9 +45,27 @@ func NewAnsiParser(t *TerminalView, p PtyBackend) *AnsiParser {
 }
 
 func (p *AnsiParser) Process(data []byte) {
-	if p == nil {
+	if p == nil || len(data) == 0 {
 		return
 	}
+
+	strData := string(data)
+	// Эвристика: скрываем эхо технических команд синхронизации far2l,
+	// чтобы они не мусорили в логе и на экране. Осторожно отрезаем только текст команды,
+	// сохраняя trailing ANSI последовательности (например, отключение bracketed paste).
+	if strings.HasPrefix(strData, "set +H; cd ") {
+		idx := strings.Index(strData, "}\r\n")
+		if idx != -1 {
+			strData = strData[idx+3:]
+			data = []byte(strData)
+			vtui.DebugLog("ANSI_PARSER: Stripped technical far2l command echo")
+			if len(data) == 0 {
+				return
+			}
+		}
+	}
+
+	vtui.DebugLog("ANSI_PARSER: Processing %d bytes: [% 02X] (as string: %q)", len(data), data, strData)
 	for _, b := range data {
 		// vtui.DebugLog("PARSER: Byte 0x%02X State %v", b, p.State)
 		switch p.State {
@@ -144,6 +162,7 @@ func (p *AnsiParser) Process(data []byte) {
 	p.term.FlushLog()
 }
 func (p *AnsiParser) handleEsc(cmd byte) {
+	vtui.DebugLog("ANSI_PARSER: ESC %c", cmd)
 	switch cmd {
 	case '7':
 		p.term.SaveCursor()
@@ -163,6 +182,7 @@ func (p *AnsiParser) handleEsc(cmd byte) {
 }
 
 func (p *AnsiParser) handleCSI(cmd byte) {
+	vtui.DebugLog("ANSI_PARSER: CSI %s %c (args: %v, intermediate: %q)", p.CurParam.String(), cmd, p.Params, p.Intermediate)
 	args := make([]int, len(p.Params))
 	// If there are no arguments, args will be an empty slice.
 	// This is important for correct handling of default commands.
@@ -260,7 +280,7 @@ func (p *AnsiParser) handleCSI(cmd byte) {
 		if len(args) > 0 && args[0] != 0 {
 			n = args[0]
 		}
-		p.term.ScrollUp(p.term.CursorY, p.term.ScrollBottom, n)
+		p.term.scrollUp(p.term.CursorY, p.term.ScrollBottom, n)
 	case 'P': // Delete characters
 		n := 1
 		if len(args) > 0 && args[0] != 0 {
@@ -278,7 +298,7 @@ func (p *AnsiParser) handleCSI(cmd byte) {
 		if len(args) > 0 && args[0] != 0 {
 			n = args[0]
 		}
-		p.term.ScrollUp(p.term.ScrollTop, p.term.ScrollBottom, n)
+		p.term.scrollUp(p.term.ScrollTop, p.term.ScrollBottom, n)
 	case 'T': // Scroll down (text moves down)
 		n := 1
 		if len(args) > 0 && args[0] != 0 {
@@ -458,6 +478,7 @@ func (p *AnsiParser) handleDECRQM(args []int) {
 
 func (p *AnsiParser) handleOSC() {
 	s := p.CurParam.String()
+	vtui.DebugLog("ANSI_PARSER: OSC payload: %q", s)
 	p.CurParam.Reset()
 	if s == "" {
 		return
@@ -541,6 +562,7 @@ func (p *AnsiParser) handleOSC() {
 
 func (p *AnsiParser) handleAPC() {
 	s := p.CurParam.String()
+	vtui.DebugLog("ANSI_PARSER: APC payload: %q", s)
 	p.CurParam.Reset()
 
 	if strings.HasPrefix(s, "far2l") {

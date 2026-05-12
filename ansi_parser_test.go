@@ -552,3 +552,28 @@ func TestAnsiParser_DECRQM(t *testing.T) {
 		t.Error("Should not respond to DECRQM without parameters")
 	}
 }
+func TestAnsiParser_TechnicalCommandFilter(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	p := NewAnsiParser(tv, nil)
+
+	tv.BracketedPasteMode = true // Изменим стейт, чтобы убедиться, что trailingANSI корректно отработает
+
+	// Имитация технической команды, которую генерирует f4 для Unix (set +H...).
+	// Обратите внимание: она содержит эхо самой команды и trailing ANSI.
+	techCmd := "set +H; cd '/tmp' && { printf \"\\033]133;C\\007\"; ./script.sh ; printf \"\\033]133;D\\007\"; }\r\n"
+	trailingANSI := "\x1b[?2004l" // Отключение bracketed paste и т.д.
+
+	p.Process([]byte(techCmd + trailingANSI))
+
+	// Парсер должен был перехватить и вырезать `techCmd`,
+	// поэтому на экране терминала (Active Grid) не должно быть текста скрипта 's', 'e', 't'.
+	if tv.Lines[tv.CursorY][0].Char == 's' {
+		t.Error("Technical command was leaked to the visual screen!")
+	}
+
+	// Убеждаемся, что trailingANSI не был утерян вместе с вырезанной командой
+	// и благополучно отработал, отключив режим bracketed paste.
+	if tv.BracketedPasteMode {
+		t.Error("Trailing ANSI sequence was ignored/cut off during technical command filtering!")
+	}
+}

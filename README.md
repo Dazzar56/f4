@@ -41,6 +41,7 @@ UI & input libraries are developed separately ([vtui](https://github.com/unxed/v
 ### Integrated Terminal & OS Integration
 
 *   **Built-in Terminal:** A fully-fledged built-in terminal running underneath the panels, just like `far2l`.
+*   **VTE Mirror Architecture:** To handle the complex differences between Unix byte-streams and Windows ConPTY 2D-rendering, the terminal uses a custom hybrid grid-and-extrusion engine. Read the [Terminal Architecture Guide](TERMINAL.md) for details.
 *   **Windows Strategy:** First of all, we target recent Windows versions. There are two reasons for that. 1) They support ConPTY. A built-in terminal cannot be implemented properly without it. 2) They have Windows Terminal. So we can avoid the legacy Windows Console API entirely and rely purely on ESC sequence rendering. Windows Terminal supports all we need for proper input, clipboard operations, etc. At the same time, f4's modular architecture makes it possible to implement input/rendering/etc via Windows Console API in future (in fact, our Far-compatible internal architecture is ideally suited for this), so if you want f4 to run on your XP box you will not have to write too much code. Similarly, no one is stopping you from writing a layer for f4's built-in terminal that uses winpty instead of conpty to work on older Windows versions.
 
 ### Plugin Architecture (Out-of-Process RPC)
