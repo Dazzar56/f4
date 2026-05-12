@@ -15,6 +15,8 @@ jobs:
       matrix:
         goos: [linux, windows, darwin, freebsd]
         goarch: [amd64, arm64]
+    env:
+      CGO_ENABLED: 0
 
     steps:
     - name: Checkout code
@@ -31,17 +33,16 @@ jobs:
       if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
       run: |
         echo "Running f4 core tests..."
-        go test -v ./...
+        go test -tags nofakecgo -v ./...
         echo "Running vtui tests..."
-        (cd libs/vtui && go test -v ./...)
+        (cd libs/vtui && go test -tags nofakecgo -v ./...)
         echo "Running vtinput tests..."
-        (cd libs/vtinput && go test -v ./...)
+        (cd libs/vtinput && go test -tags nofakecgo -v ./...)
 
     - name: Build binaries
       env:
         GOOS: ${{ matrix.goos }}
         GOARCH: ${{ matrix.goarch }}
-        CGO_ENABLED: 0
       run: |
         mkdir -p build/plugins/dummy_internal
         EXT=""
