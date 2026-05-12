@@ -92,8 +92,6 @@ During the development of `f4`, the following intrinsic behaviors of the Windows
 
 ### Current Blockers / Open Issues (Windows specific)
 
-The following issues remain unresolved and require a specialized strategy for the ConPTY backend:
-
-1.  **Technical Echo Leakage (Refers to Observation 1):** The current heuristic for filtering technical command echoes (like folder synchronization strings) is too fragile on Windows. Because ConPTY echoes data in chunks, a long command string might be partially rendered before the filter can identify it.
-2.  **The Duplicate Prompt Problem (Refers to Observation 3):** Since ConPTY renders a new prompt immediately upon process exit, we end up with two prompts in our log: one captured from the PTY grid and one synthesized by our own `CommandLine` component.
-3.  **Bottom-Alignment Defeat (Refers to Observations 2 & 5):** Our "Bottom-Aligned" initialization is frequently overridden by ConPTY's insistence on Top-Left homing (`\x1b[H`) and absolute grid coordinates. This causes the UI to "jump" to the top of the terminal area instead of staying glued to the bottom like in Far Manager.
+~~1.  **Technical Echo Leakage (Refers to Observation 1):**~~ **SOLVED.** We eliminated the need for `powershell` wrappers entirely by using the `$E` variable in the `PROMPT` environment to automatically emit OSC 133 sequences.
+~~2.  **The Duplicate Prompt Problem (Refers to Observation 3):**~~ **SOLVED.** We no longer suppress the native shell prompt. We embrace it, allowing it to act as the true command history delimiter, perfectly mimicking Far Manager.
+~~3.  **Bottom-Alignment Defeat (Refers to Observations 2 & 5):**~~ **SOLVED.** Implemented "Visual Gravity" in the render pipeline (`Show()`). The active viewport is dynamically shifted downwards, guaranteeing bottom-alignment regardless of ConPTY's absolute coordinate positioning.

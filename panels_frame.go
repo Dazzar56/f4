@@ -332,6 +332,14 @@ func (pf *PanelsFrame) initPTY() {
 			return
 		}
 		pf.pty = p
+
+		if runtime.GOOS == "windows" {
+			// Настраиваем умный PROMPT для Windows, который будет автоматически
+			// посылать OSC 133;D (сигнал о завершении команды) после каждого возврата в шелл.
+			// $E = \x1b, $E\ = \x1b\ (String Terminator), $P = Path, $G = >
+			os.Setenv("PROMPT", "$E]133;D$E\\$P$G")
+		}
+
 		shell := GetSystemShell()
 		p.Run(shell)
 	}
@@ -995,15 +1003,10 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 					isBackground = strings.HasSuffix(strings.TrimSpace(cmd), "&")
 				}
 
-				psCmdC := "powershell -NoProfile -Command [Console]::Write([char]27+']133;C'+[char]7)"
-				psCmdD := "powershell -NoProfile -Command [Console]::Write([char]27+']133;D'+[char]7)"
-
 				if runtime.GOOS == "windows" {
-					if path != "" {
-						fullWireCmd = fmt.Sprintf("%s & cd /d %q & %s & %s\r", psCmdC, path, cmd, psCmdD)
-					} else {
-						fullWireCmd = fmt.Sprintf("%s & %s & %s\r", psCmdC, cmd, psCmdD)
-					}
+					// Directory is already synced silently on panel navigation.
+					// Just send the command so the shell's echo looks perfectly clean.
+					fullWireCmd = fmt.Sprintf("%s\r", cmd)
 					pf.executing = true
 					pf.returnToPanels = pf.showPanels
 				} else {
@@ -1028,9 +1031,11 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 					}
 				}
 
-				pf.termView.PrintCleanCommand(cmd)
-				if !isBackground {
-					pf.termView.SetMuted(true)
+				if runtime.GOOS != "windows" {
+					pf.termView.PrintCleanCommand(cmd)
+					if !isBackground {
+						pf.termView.SetMuted(true)
+					}
 				}
 				activePty.Write([]byte(fullWireCmd))
 			}

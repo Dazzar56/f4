@@ -800,16 +800,47 @@ func (tv *TerminalView) Show(scr *vtui.ScreenBuf) {
 		buf = tv.AltLines
 	}
 
+	offset := 0
+	if !tv.UseAltScreen {
+		lowestRow := 0
+		for y := tv.Height - 1; y >= 0; y-- {
+			if tv.rowHasText(y) {
+				lowestRow = y
+				break
+			}
+		}
+		if tv.CursorY > lowestRow {
+			lowestRow = tv.CursorY // Убеждаемся, что курсор также остается видимым
+		}
+		// Visual Gravity: сдвигаем весь активный рендер вниз, если он не достает до дна
+		if lowestRow < tv.Height-1 {
+			offset = (tv.Height - 1) - lowestRow
+		}
+	}
+
 	for y, line := range buf {
 		if y >= tv.Height {
 			break
 		}
-		scr.Write(tv.X1, tv.Y1+y, line)
+		drawY := tv.Y1 + y + offset
+		if tv.UseAltScreen {
+			drawY = tv.Y1 + y
+		}
+		// Проверка выхода за пределы экрана
+		if drawY >= tv.Y1 && drawY <= tv.Y1+tv.Height-1 {
+			scr.Write(tv.X1, drawY, line)
+		}
 	}
 
 	if tv.IsVisible() && tv.IsFocused() {
-		scr.SetCursorPos(tv.X1+tv.CursorX, tv.Y1+tv.CursorY)
-		scr.SetCursorVisible(true)
+		cursorDrawY := tv.Y1 + tv.CursorY + offset
+		if tv.UseAltScreen {
+			cursorDrawY = tv.Y1 + tv.CursorY
+		}
+		if cursorDrawY >= tv.Y1 && cursorDrawY <= tv.Y1+tv.Height-1 {
+			scr.SetCursorPos(tv.X1+tv.CursorX, cursorDrawY)
+			scr.SetCursorVisible(true)
+		}
 	}
 }
 

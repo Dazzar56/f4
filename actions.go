@@ -303,12 +303,8 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 					cmd := name
 					var cmdToWire string
 
-					// Используем максимально простую форму вызова PowerShell без вложенных кавычек
-					psCmdC := "powershell -NoProfile -Command [Console]::Write([char]27+']133;C'+[char]7)"
-					psCmdD := "powershell -NoProfile -Command [Console]::Write([char]27+']133;D'+[char]7)"
-
 					if runtime.GOOS == "windows" {
-						cmdToWire = fmt.Sprintf("%s & cd /d %q & %q & %s\r", psCmdC, dir, cmd, psCmdD)
+						cmdToWire = fmt.Sprintf("cd /d %q & %q\r", dir, cmd)
 					} else {
 						// On Unix, use single quotes for paths to prevent Bash history expansion
 						sqDir := strings.ReplaceAll(dir, "'", "'\\''")
@@ -322,13 +318,16 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 					if runtime.GOOS == "windows" {
 						cleanCmd = cmd
 					}
-					pf.termView.PrintCleanCommand(cleanCmd)
+					if runtime.GOOS != "windows" {
+						pf.termView.PrintCleanCommand(cleanCmd)
+					}
 
-					pf.termView.SetMuted(true)
 					pf.executing = true
 					pf.returnToPanels = true
 
-					pf.termView.SetMuted(true)
+					if runtime.GOOS != "windows" {
+						pf.termView.SetMuted(true)
+					}
 					activePty.Write([]byte(cmdToWire))
 					pf.showPanels = false
 				}
