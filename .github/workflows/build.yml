@@ -52,11 +52,11 @@ jobs:
         if [ "$GOOS" = "linux" ]; then LDFLAGS="$LDFLAGS -extldflags '-static'"; fi
 
         # Build core
-        go build -ldflags="$LDFLAGS" -o build/f4$EXT .
+        go build -tags nofakecgo -ldflags="$LDFLAGS" -o build/f4$EXT .
 
         # Build internal dummy plugin
         cd plugins/dummy_internal
-        go build -ldflags="$LDFLAGS" -o ../../build/plugins/dummy_internal/f4-internal-dummy-plugin$EXT .
+        go build -tags nofakecgo -ldflags="$LDFLAGS" -o ../../build/plugins/dummy_internal/f4-internal-dummy-plugin$EXT .
 
     - name: Package
       run: |
