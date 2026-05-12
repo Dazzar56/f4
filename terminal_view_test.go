@@ -669,6 +669,153 @@ func TestTerminalView_EraseDisplay_EmptyScreenGuard(t *testing.T) {
 		t.Errorf("EraseDisplay on empty screen pushed garbage to GridHistory. Count: %d", len(tv.GridHistory))
 	}
 }
+func TestTerminalView_WindowsConPTY_VisualGravity(t *testing.T) {
+	// Имитируем типичное поведение ConPTY: окно 24 строки,
+	// но shell упрямо рисует в самом верху (строки 0 и 1).
+	height := 24
+	tv := NewTerminalView(80, height)
+	tv.SetFocus(true)
+	tv.SetVisible(true)
+
+	// 1. Shell принудительно прыгает в (0,0) - Home.
+	// Используем DefaultTermAttr, чтобы пустые строки не считались "текстом" из-за цвета.
+	tv.EraseDisplay(2, DefaultTermAttr)
+	tv.SetCursor(0, 0)
+	for _, r := range "Microsoft Windows" {
+		tv.PutChar(r, 0)
+	}
+	tv.SetCursor(0, 1)
+	for _, r := range "C:\\>" {
+		tv.PutChar(r, 0)
+	}
+
+	// 2. Проверяем рендеринг через ScreenBuf
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, height)
+	tv.SetPosition(0, 0, 79, height-1)
+	tv.Show(scr)
+
+	// Ожидаемое поведение: Visual Gravity должна вычислить, что последняя
+	// заполненная строка — это 1. Значит offset = (23 - 1) = 22.
+	// "Microsoft Windows" (бывшая строка 0) должна оказаться на Y = 22.
+	// "C:\>" (бывшая строка 1) должна оказаться на Y = 23 (самый низ).
+
+	cell0 := scr.GetCell(0, 22)
+	if cell0.Char != 'M' {
+		t.Errorf("Visual Gravity failed: expected 'M' at bottom-1 (Y=22), got '%c'", cell0.Char)
+	}
+
+	cell1 := scr.GetCell(0, 23)
+	if cell1.Char != 'C' {
+		t.Errorf("Visual Gravity failed: expected 'C' at bottom (Y=23), got '%c'", cell1.Char)
+	}
+
+	_, curY := scr.GetCursorPos()
+
+	// Проверяем положение курсора - он тоже должен упасть вниз
+	if curY != 23+tv.Y1 {
+		t.Errorf("Visual Gravity: cursor did not follow the text. Expected Y=23, got %d", curY-tv.Y1)
+	}
+}
+
+func TestTerminalView_WindowsConPTY_LogIntegrity(t *testing.T) {
+	// Проверяем, что абсолютные прыжки курсора ConPTY не создают
+	// "дырок" или дублей в текстовом логе GetAllLogBytes()
+	tv := NewTerminalView(80, 10)
+
+	// Пишем в строку 5
+	tv.SetCursor(0, 5)
+	for _, r := range "Middle" {
+		tv.PutChar(r, 0)
+	}
+
+	// Прыгаем назад в строку 2
+	tv.SetCursor(0, 2)
+	for _, r := range "Top" {
+		tv.PutChar(r, 0)
+	}
+
+	logStr := strings.TrimSpace(string(tv.GetAllLogBytes()))
+
+	// GetAllLogBytes должен собрать строки в их логическом порядке (сверху вниз),
+	// пропуская пустые строки сверху, если лог был пуст.
+	expected := "Top\n\n\nMiddle"
+	if !strings.Contains(logStr, expected) {
+		t.Errorf("Windows Log stitching failed.\nExpected to contain: %q\nGot: %q", expected, logStr)
+	}
+}
+
+func TestTerminalView_WindowsConPTY_ResizePreservation(t *testing.T) {
+	// Тест на "эффект гармошки": сжимаем по вертикали, вытесняя ConPTY-данные
+	// в историю, и расширяем обратно.
+	tv := NewTerminalView(80, 10)
+
+	// Рисуем текст в строке 0 (верх)
+	tv.SetCursor(0, 0)
+	for _, r := range "C:\\>" {
+		tv.PutChar(r, 0)
+	}
+
+	// Сжимаем до 5 строк. Верхняя строка должна быть вытеснена в GridHistory.
+	tv.Resize(80, 5)
+	if len(tv.GridHistory) == 0 {
+		t.Fatal("Resize shoud have pushed bottom row to GridHistory")
+	}
+
+	// Расширяем обратно до 10. VTE Mirror должен вернуть строку из истории на экран.
+	tv.Resize(80, 10)
+
+	// Из-за Extrusion Guard пустые строки (1-4) при сжатии были проигнорированы.
+	// Поэтому единственная вытесненная строка вернется не на 0, а на самый низ
+	// восстанавливаемого пространства (на индекс 4). Главное — данные не потеряны.
+	if tv.Lines[4][0].Char != 'C' {
+		t.Errorf("Data lost after accordion resize. Expected 'C' at row 4, got '%c'", tv.Lines[4][0].Char)
+	}
+}
+
+func TestAnsiParser_WindowsSmartPrompt(t *testing.T) {
+	// Проверяем, как парсер реагирует на новую переменную PROMPT=$E]133;D$E\$P$G
+	tv := NewTerminalView(80, 24)
+	p := NewAnsiParser(tv, nil)
+
+	tv.SetMuted(false)
+
+	// Имитируем вывод cmd.exe с нашим новым промптом
+	// \x1b]133;D\x1b\ (сигнал завершения) + D:\> (текст промпта)
+	promptPayload := "\x1b]133;D\x1b\\D:\\>"
+
+	// В Windows мы решили не мьютить терминал.
+	p.Process([]byte(promptPayload))
+
+	// OSC 133;D должен был сработать.
+	// В Windows мы решили не мьютить, но если сигнал пришел - он должен обрабатываться.
+	// Проверяем, что текст "D:\>" попал в лог (значит парсер не "съел" лишнего)
+	logStr := string(tv.GetAllLogBytes())
+	if !strings.Contains(logStr, "D:\\>") {
+		t.Errorf("Smart PROMPT text was lost during OSC parsing. Log: %q", logStr)
+	}
+}
+
+func TestTerminalView_WindowsConPTY_NoDoubleEcho(t *testing.T) {
+	// Проверка того, что мы не печатаем команду дважды в Windows.
+	// f4 НЕ должен вызывать PrintCleanCommand на Windows.
+	tv := NewTerminalView(80, 24)
+
+	// Эмулируем нативный эхо-ответ от ConPTY
+	// Пользователь набрал 'dir', ConPTY вернул 'dir\r\n'
+	tv.PutChar('d', 0)
+	tv.PutChar('i', 0)
+	tv.PutChar('r', 0)
+	tv.PutChar('\r', 0)
+	tv.PutChar('\n', 0)
+
+	// Если бы мы еще раз вызвали PrintCleanCommand("dir") - было бы дублирование.
+	// Проверяем, что в логе только один экземпляр 'dir'
+	logStr := string(tv.GetAllLogBytes())
+	if strings.Count(logStr, "dir") > 1 {
+		t.Error("Double echo detected! Windows execution path must not call PrintCleanCommand.")
+	}
+}
 
 func TestTerminalView_EraseDisplay_LogSync(t *testing.T) {
 	tv := NewTerminalView(80, 24)

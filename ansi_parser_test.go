@@ -577,3 +577,21 @@ func TestAnsiParser_TechnicalCommandFilter(t *testing.T) {
 		t.Error("Trailing ANSI sequence was ignored/cut off during technical command filtering!")
 	}
 }
+func TestAnsiParser_WindowsAbsoluteJumpRobustness(t *testing.T) {
+	// Типичный "грязный" чанк от ConPTY: очистка экрана + прыжок в середину + текст
+	tv := NewTerminalView(80, 24)
+	p := NewAnsiParser(tv, nil)
+
+	// \x1b[2J (Clear) \x1b[10;5H (Jump to row 10, col 5)
+	chunk := "\x1b[2J\x1b[10;5HData"
+	p.Process([]byte(chunk))
+
+	// After writing 4 bytes "Data", X should be 4 + 4 = 8
+	if tv.CursorY != 9 || tv.CursorX != 8 {
+		t.Errorf("Absolute jump failed. Expected (8,9), got (%d,%d)", tv.CursorX, tv.CursorY)
+	}
+
+	if tv.Lines[9][4].Char != 'D' {
+		t.Errorf("Data landed in wrong place. Expected 'D' at [9][4], got '%c'", tv.Lines[9][4].Char)
+	}
+}
