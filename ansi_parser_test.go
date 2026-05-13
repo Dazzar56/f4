@@ -1,8 +1,10 @@
 package main
 
 import (
+	"io"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/unxed/vtui"
 )
@@ -15,14 +17,23 @@ func init() {
 // mockPty captures writes to the PTY for testing parser responses
 type mockPty struct {
 	written []byte
+	closed  bool
 }
 
 func (m *mockPty) Write(b []byte) (int, error) {
 	m.written = append(m.written, b...)
 	return len(b), nil
 }
-func (m *mockPty) Read(b []byte) (int, error)            { return 0, nil }
-func (m *mockPty) Close() error                          { return nil }
+func (m *mockPty) Read(b []byte) (int, error) {
+	for !m.closed {
+		time.Sleep(10 * time.Millisecond)
+	}
+	return 0, io.EOF
+}
+func (m *mockPty) Close() error {
+	m.closed = true
+	return nil
+}
 func (m *mockPty) SetSize(cols, rows int)                {}
 func (m *mockPty) Wait() error                           { return nil }
 func (m *mockPty) Run(name string, args ...string) error { return nil }

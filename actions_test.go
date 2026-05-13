@@ -5,6 +5,7 @@ import (
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 	"os"
+	"runtime"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -358,6 +359,80 @@ Loop:
 	// Проверяем, что список удаленных пуст (первый упал, второй не начинали)
 	if len(mv.deletedFiles) != 0 {
 		t.Errorf("Abort failed: some files were deleted: %v", mv.deletedFiles)
+	}
+}
+func TestActionExecute_PtyCommandFormatting(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	// setupMockPanelsFrame и mockPty определены в других тестовых файлах того же пакета
+	pf := setupMockPanelsFrame()
+	defer pf.Close()
+	pty := pf.pty.(*mockPty)
+
+	tmp := t.TempDir()
+	fileName := "app.exe"
+	if runtime.GOOS != "windows" {
+		fileName = "app.sh"
+	}
+	filePath := filepath.Join(tmp, fileName)
+	os.WriteFile(filePath, []byte("#!/bin/sh\nexit 0"), 0755)
+
+	v := vfs.NewOSVFS(tmp)
+
+	// Очищаем буфер PTY перед тестом
+	pty.written = nil
+
+	actionExecute(pf, v, tmp, fileName, filePath)
+
+	// Прокачиваем задачи FrameManager
+	timeout := time.After(2 * time.Second)
+	for pf.showPanels {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Timeout waiting for execution task")
+		}
+	}
+
+	written := string(pty.written)
+	if runtime.GOOS == "windows" {
+		// Проверяем отсутствие технической обертки 'cd /d'
+		if strings.Contains(written, "cd /d") {
+			t.Errorf("Technical 'cd /d' wrapper should be removed, but found: %q", written)
+		}
+		// Команда должна начинаться прямо с имени файла
+		if !strings.HasPrefix(written, "app.exe") {
+			t.Errorf("PTY command should start with filename, got: %q", written)
+		}
+	}
+}
+
+func TestActionExecute_HistoryQuoting(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pf := setupMockPanelsFrame()
+	defer pf.Close()
+
+	tmp := t.TempDir()
+	fileName := "name with spaces.exe"
+	filePath := filepath.Join(tmp, fileName)
+	os.WriteFile(filePath, []byte(""), 0755)
+
+	v := vfs.NewOSVFS(tmp)
+	actionExecute(pf, v, tmp, fileName, filePath)
+
+	timeout := time.After(2 * time.Second)
+	for pf.showPanels {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Timeout")
+		}
+	}
+
+	lastHistory := pf.cmdLine.Edit.History[0]
+	if !strings.Contains(lastHistory, "\"name with spaces.exe\"") {
+		t.Errorf("History entry with spaces must be quoted, got: %q", lastHistory)
 	}
 }
 func TestActionDelete_SuccessorLogic(t *testing.T) {
