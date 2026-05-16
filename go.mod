@@ -35,7 +35,7 @@ require (
 	github.com/go-webgpu/goffi v0.5.1 // indirect
 	github.com/go-webgpu/webgpu v0.4.3 // indirect
 	github.com/gogpu/gg v0.46.8 // indirect
-	github.com/gogpu/gogpu v0.35.0 // indirect
+	github.com/gogpu/gogpu v0.36.1 // indirect
 	github.com/gogpu/gpucontext v0.18.0 // indirect
 	github.com/gogpu/gputypes v0.5.0 // indirect
 	github.com/gogpu/naga v0.17.13 // indirect
@@ -58,6 +58,7 @@ require (
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/ulikunitz/xz v0.5.15 // indirect
+	github.com/unxed/xkb-go v0.1.2 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	github.com/yalue/native_endian v1.0.2 // indirect
 	github.com/zzl/go-win32api/v2 v2.1.0 // indirect

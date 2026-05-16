@@ -70,8 +70,8 @@ github.com/go-webgpu/webgpu v0.4.3 h1:dIBf7WgO/7VL2Cj7IFcq151rWqvSknsFe6k/+ZEEXE
 github.com/go-webgpu/webgpu v0.4.3/go.mod h1:HNIBiaMJNdPeQd6hmHdQsXg4t4R99xVQybnoDGOShe0=
 github.com/gogpu/gg v0.46.8 h1:Dp4WBvS5kJhTXMjyazdyYKFKOHXqUFkL50wlatpMQ/Y=
 github.com/gogpu/gg v0.46.8/go.mod h1:NsQZ0v/wR4yjc8+ykccc/xf9Kh8XoC3OJZeFcXyoHWg=
-github.com/gogpu/gogpu v0.35.0 h1:8EUZLWu+JLt8UlnQkYk2JAWudHLf30ufwqRNXREJDTA=
-github.com/gogpu/gogpu v0.35.0/go.mod h1:Y7o4T464KMcuQWqhy8A5YKqUrx1Jlmkavu44073EVvk=
+github.com/gogpu/gogpu v0.36.1 h1:wJje8s3UHQ2kChGdpDq8qdfm+7gPOBAjmro+OrBMIBI=
+github.com/gogpu/gogpu v0.36.1/go.mod h1:Y7o4T464KMcuQWqhy8A5YKqUrx1Jlmkavu44073EVvk=
 github.com/gogpu/gpucontext v0.18.0 h1:Y48ScE0cNPevoqZEhT8CxWGh9C86TeCjtLu5eFU+Grw=
 github.com/gogpu/gpucontext v0.18.0/go.mod h1:6zwdmYXH5GQltoiHbb3WXVS/UJ5bFsCux0mXCVqGlzY=
 github.com/gogpu/gputypes v0.5.0 h1:i2ED/9w6m6yLxf8XJT69/NIMSNTLO2y5F1LqvugCKIE=
@@ -180,6 +180,8 @@ github.com/stretchr/testify v1.10.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf
 github.com/ulikunitz/xz v0.5.8/go.mod h1:nbz6k7qbPmH4IRqmfOplQw/tblSgqTqBwxkY0oWt/14=
 github.com/ulikunitz/xz v0.5.15 h1:9DNdB5s+SgV3bQ2ApL10xRc35ck0DuIX/isZvIk+ubY=
 github.com/ulikunitz/xz v0.5.15/go.mod h1:nbz6k7qbPmH4IRqmfOplQw/tblSgqTqBwxkY0oWt/14=
+github.com/unxed/xkb-go v0.1.2 h1:UXNS3aDGQ3bO/sgYJgBeuNpzgYYJOINyHIhtGVqNBmo=
+github.com/unxed/xkb-go v0.1.2/go.mod h1:V3LaLLiIMPBQCGnPfTYN8gER39XW26AZBYeXkkZ/GWQ=
 github.com/unxed/zip v0.1.5 h1:VeYbsGlh21L/5sYogIJdZGkgoE2ACXG6ATopXWyAht8=
 github.com/unxed/zip v0.1.5/go.mod h1:Nt8Mr40WDehI8HtNVxKeJvKs6HggNOJjRpa/1NdgcUk=
 github.com/vmihailenco/msgpack/v5 v5.4.1 h1:cQriyiUvjTwOHg8QZaPihLWeRAAVoCpE00IUPn0Bjt8=
