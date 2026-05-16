@@ -180,8 +180,8 @@ github.com/stretchr/testify v1.10.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf
 github.com/ulikunitz/xz v0.5.8/go.mod h1:nbz6k7qbPmH4IRqmfOplQw/tblSgqTqBwxkY0oWt/14=
 github.com/ulikunitz/xz v0.5.15 h1:9DNdB5s+SgV3bQ2ApL10xRc35ck0DuIX/isZvIk+ubY=
 github.com/ulikunitz/xz v0.5.15/go.mod h1:nbz6k7qbPmH4IRqmfOplQw/tblSgqTqBwxkY0oWt/14=
-github.com/unxed/xkb-go v0.1.2 h1:UXNS3aDGQ3bO/sgYJgBeuNpzgYYJOINyHIhtGVqNBmo=
-github.com/unxed/xkb-go v0.1.2/go.mod h1:V3LaLLiIMPBQCGnPfTYN8gER39XW26AZBYeXkkZ/GWQ=
+github.com/unxed/xkb-go v0.1.3 h1:SY2/JS5xG4hxhgmW05yk7ei7KIJ5dFJSSisp/DGEgfc=
+github.com/unxed/xkb-go v0.1.3/go.mod h1:V3LaLLiIMPBQCGnPfTYN8gER39XW26AZBYeXkkZ/GWQ=
 github.com/unxed/zip v0.1.5 h1:VeYbsGlh21L/5sYogIJdZGkgoE2ACXG6ATopXWyAht8=
 github.com/unxed/zip v0.1.5/go.mod h1:Nt8Mr40WDehI8HtNVxKeJvKs6HggNOJjRpa/1NdgcUk=
 github.com/vmihailenco/msgpack/v5 v5.4.1 h1:cQriyiUvjTwOHg8QZaPihLWeRAAVoCpE00IUPn0Bjt8=
