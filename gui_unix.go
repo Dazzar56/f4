@@ -2,7 +2,11 @@
 
 package main
 
-import "github.com/unxed/vtui"
+import (
+	"os"
+	"fmt"
+	"github.com/unxed/vtui"
+)
 
 func RunGui(backend string) error {
 	// Запускаем f4 в графическом окне 100x30 символов
