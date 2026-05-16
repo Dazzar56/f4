@@ -37,6 +37,20 @@ UI & input libraries are developed separately ([vtui](https://github.com/unxed/v
 *   **Input (`vtinput`):** Built as a separate library to handle advanced protocols like the [Kitty Keyboard Protocol](https://sw.kovidgoyal.net/kitty/keyboard-protocol/) and [Win32 Input Mode](https://github.com/microsoft/terminal/blob/main/doc/specs/%234999%20-%20Improved%20keyboard%20handling%20in%20Conpty.md). This is strictly required for distinguishing combinations like `Ctrl+Enter` or `Shift+Tab`.
 *   **Framework (`vtui`):** A custom UI framework built from scratch in the style of Far, borrowing responsive layout features (like window resizing and anchors) from Turbo Vision. Ideally, it should cover all capabilities of Far's UI kit and Turbo Vision (excluding non-relevant features like custom serialization engines).
 *   **Future Renderers:** We currently render exclusively via ANSI ESC sequences (yielding TrueColor out of the box). In the future, a custom GUI renderer (for example, via SDL or OpenGL) may be added, similar to `far2l`.
+### GUI Mode & Backends
+
+`f4` can run either directly in your terminal or as a standalone graphical window. GUI mode is particularly useful on Windows to bypass console limitations or on Linux/macOS for high-performance hardware-accelerated rendering.
+
+**Command Line Options:**
+*   `--gui`: Start in GUI mode using the best available backend for your OS.
+*   `--gui=gogpu`: Use the hardware-accelerated (GPU) renderer.
+*   `--gui=x11`: Use native X11 windowing (Linux/BSD/macOS).
+*   `--gui=wayland`: Use native Wayland windowing (Linux/BSD).
+
+Example:
+```bash
+./f4 --gui=gogpu
+```
 
 ### Integrated Terminal & OS Integration
 
