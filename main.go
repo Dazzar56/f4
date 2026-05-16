@@ -92,7 +92,12 @@ func main() {
 			os.Setenv("VTUI_DEBUG", "1")
 		case "--gui":
 			guiMode = true
-			guiBackend = flagVal
+			if flagVal != "" {
+				guiBackend = flagVal
+			} else if i+1 < len(os.Args) && !strings.HasPrefix(os.Args[i+1], "-") {
+				guiBackend = os.Args[i+1]
+				i++
+			}
 		case "--log":
 			if flagVal != "" {
 				os.Setenv("VTUI_DEBUG", flagVal)

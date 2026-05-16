@@ -46,6 +46,7 @@ UI & input libraries are developed separately ([vtui](https://github.com/unxed/v
 *   `--gui=gogpu`: Use the hardware-accelerated (GPU) renderer.
 *   `--gui=x11`: Use native X11 windowing (Linux/BSD/macOS).
 *   `--gui=wayland`: Use native Wayland windowing (Linux/BSD).
+*   `--gui=purex11`: Use experimental pure Go X11 backend (no Xlib dependency).
 
 Example:
 ```bash
