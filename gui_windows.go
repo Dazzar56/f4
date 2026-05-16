@@ -4,8 +4,20 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"github.com/unxed/vtui"
 )
 
 func RunGui(backend string) error {
-	return fmt.Errorf("GUI mode is currently not supported on this platform")
+	// Запускаем f4 в графическом окне 100x30 символов
+	err := vtui.RunInGUIWindow(100, 30, backend, func() {
+		SetupUI()
+	})
+
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "GUI Startup Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	return nil
 }
