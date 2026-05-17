@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/unxed/vtui"
+	"github.com/unxed/f4/piecetable"
 )
 
 func init() {
@@ -604,5 +605,60 @@ func TestAnsiParser_WindowsAbsoluteJumpRobustness(t *testing.T) {
 
 	if tv.Lines[9][4].Char != 'D' {
 		t.Errorf("Data landed in wrong place. Expected 'D' at [9][4], got '%c'", tv.Lines[9][4].Char)
+	}
+}
+func TestAnsiParser_WindowsExcision_CrossPlatform(t *testing.T) {
+	// Этот тест проверяет логику вырезания технических команд Windows,
+	// даже если тест запущен на Linux/macOS.
+	tv := NewTerminalView(80, 24)
+	p := NewAnsiParser(tv, nil)
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "Simple CD excision",
+			input:    "cd /d \"C:\\Windows\" & dir\r\n",
+			expected: "dir",
+		},
+		{
+			name:     "Excision with prompt (screen scraping simulation)",
+			input:    "C:\\Users\\f4>cd /d \"D:\\Data\" & echo 123\r\n",
+			expected: "C:\\Users\\f4>echo 123",
+		},
+		{
+			name:     "Multiple excisions in one buffer",
+			input:    "Prompt1>cd /d \"A\" & cmd1\r\nPrompt2>cd /d \"B\" & cmd2",
+			expected: "Prompt1>cmd1\nPrompt2>cmd2",
+		},
+		{
+			name:     "Path with spaces and special chars",
+			input:    "C:\\>cd /d \"C:\\My Folder & Stuff\" & whoami\r\n",
+			expected: "C:\\>whoami",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tv.ResetBuffer(80, 24)
+			tv.pt = piecetable.New([]byte{}) // Reset history
+			tv.li.Rebuild(tv.pt)
+
+			p.Process([]byte(tt.input))
+
+			logBytes := tv.GetAllLogBytes()
+			// Очищаем от лишних пробелов в конце строк сетки
+			result := strings.TrimSpace(string(logBytes))
+
+			if !strings.Contains(result, tt.expected) {
+				t.Errorf("Excision failed for [%s].\nExpected to contain: %q\nGot log: %q", tt.name, tt.expected, result)
+			}
+
+			if strings.Contains(result, "cd /d") {
+				t.Errorf("Excision failed for [%s]: technical 'cd' command leaked into log!", tt.name)
+			}
+		})
 	}
 }

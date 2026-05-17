@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 	"os"
@@ -806,6 +807,36 @@ func TestActionRename_CacheAndSelection(t *testing.T) {
 
 	if fsp.pendingSelection != "old.txt" {
 		t.Error("On error, pendingSelection should point to the original name")
+	}
+}
+func TestActionExecute_WindowsFormatSimulation(t *testing.T) {
+	// Тестируем, что формат команды, который мы выбрали для Windows,
+	// корректно «проглатывается» парсером.
+	tv := NewTerminalView(80, 24)
+	p := NewAnsiParser(tv, nil)
+
+	dir := "C:\\Users\\f4\\Desktop"
+	cmd := "echo \"hello world\""
+
+	// Имитируем создание команды для Windows (как в panels_frame.go / actions.go)
+	// Используем %q для путей
+	wireCmd := fmt.Sprintf("cd /d %q & %s\r\n", dir, cmd)
+
+	// Проверяем, что в сформированной строке есть разделитель, на который завязан парсер
+	if !strings.Contains(wireCmd, "\" & ") {
+		t.Fatalf("Generated wire command format changed! Parser relies on '\" & ' separator. Got: %q", wireCmd)
+	}
+
+	p.Process([]byte(wireCmd))
+
+	result := string(tv.GetAllLogBytes())
+
+	if strings.Contains(result, "cd /d") {
+		t.Errorf("Technical CD leaked! Wire: %q, Result: %q", wireCmd, result)
+	}
+
+	if !strings.Contains(result, cmd) {
+		t.Errorf("Real command lost! Wire: %q, Result: %q", wireCmd, result)
 	}
 }
 
