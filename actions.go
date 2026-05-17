@@ -304,6 +304,9 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 					var cmdToWire string
 
 					if runtime.GOOS == "windows" {
+						if dir != "" {
+							activePty.Write([]byte(fmt.Sprintf("cd /d %q\r", dir)))
+						}
 						cmdToWire = fmt.Sprintf("%s\r", historyCmd)
 					} else {
 						// On Unix, use single quotes for paths to prevent Bash history expansion

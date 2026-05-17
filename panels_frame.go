@@ -1004,8 +1004,11 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				}
 
 				if runtime.GOOS == "windows" {
-					// Directory is already synced silently on panel navigation.
-					// Just send the command so the shell's echo looks perfectly clean.
+					// Sync the directory before executing. Navigation via panels
+					// does not update the PTY directory automatically to prevent log pollution.
+					if path != "" {
+						activePty.Write([]byte(fmt.Sprintf("cd /d %q\r", path)))
+					}
 					fullWireCmd = fmt.Sprintf("%s\r", cmd)
 					pf.executing = true
 					pf.returnToPanels = pf.showPanels
