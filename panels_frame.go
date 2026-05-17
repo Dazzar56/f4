@@ -1004,12 +1004,12 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				}
 
 				if runtime.GOOS == "windows" {
-					// Sync the directory before executing. Navigation via panels
-					// does not update the PTY directory automatically to prevent log pollution.
+					// Use a combined command for reliable excision in AnsiParser: cd /d "path" & command
 					if path != "" {
-						activePty.Write([]byte(fmt.Sprintf("cd /d %q\r", path)))
+						fullWireCmd = fmt.Sprintf("cd /d %q & %s\r", path, cmd)
+					} else {
+						fullWireCmd = fmt.Sprintf("%s\r", cmd)
 					}
-					fullWireCmd = fmt.Sprintf("%s\r", cmd)
 					pf.executing = true
 					pf.returnToPanels = pf.showPanels
 				} else {

@@ -304,10 +304,12 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 					var cmdToWire string
 
 					if runtime.GOOS == "windows" {
+						// Combine directory sync with the command to allow excision
 						if dir != "" {
-							activePty.Write([]byte(fmt.Sprintf("cd /d %q\r", dir)))
+							cmdToWire = fmt.Sprintf("cd /d %q & %s\r", dir, historyCmd)
+						} else {
+							cmdToWire = fmt.Sprintf("%s\r", historyCmd)
 						}
-						cmdToWire = fmt.Sprintf("%s\r", historyCmd)
 					} else {
 						// On Unix, use single quotes for paths to prevent Bash history expansion
 						sqDir := strings.ReplaceAll(dir, "'", "'\\''")

@@ -50,19 +50,37 @@ func (p *AnsiParser) Process(data []byte) {
 	}
 
 	strData := string(data)
-	// Эвристика: скрываем эхо технических команд синхронизации far2l,
-	// чтобы они не мусорили в логе и на экране. Осторожно отрезаем только текст команды,
-	// сохраняя trailing ANSI последовательности (например, отключение bracketed paste).
+	// Эвристика: скрываем эхо технических команд синхронизации (Linux far2l и Windows f4),
+	// чтобы они не мусорили в логе и на экране.
 	if strings.HasPrefix(strData, "set +H; cd ") {
+		// Unix: отрезаем префикс far2l
 		idx := strings.Index(strData, "}\r\n")
 		if idx != -1 {
 			strData = strData[idx+3:]
-			data = []byte(strData)
-			vtui.DebugLog("ANSI_PARSER: Stripped technical far2l command echo")
-			if len(data) == 0 {
-				return
-			}
 		}
+	}
+
+	// Windows f4: Вырезаем техническую команду смены папки из любого места в буфере.
+	// Это скрывает cd даже если он пришел вместе с промптом shell (screen scraping).
+	for {
+		startIdx := strings.Index(strData, "cd /d \"")
+		if startIdx == -1 {
+			break
+		}
+		// Ищем конец технической части по разделителю " & "
+		endIdx := strings.Index(strData[startIdx:], "\" & ")
+		if endIdx == -1 {
+			break
+		}
+
+		actualEnd := startIdx + endIdx + 4 // +4 чтобы захватить и " & "
+		vtui.DebugLog("ANSI_PARSER: Excising technical Windows CD sync from buffer")
+		strData = strData[:startIdx] + strData[actualEnd:]
+	}
+
+	data = []byte(strData)
+	if len(data) == 0 {
+		return
 	}
 
 	vtui.DebugLog("ANSI_PARSER: Processing %d bytes: [% 02X] (as string: %q)", len(data), data, strData)
