@@ -36,7 +36,7 @@ UI & input libraries are developed separately ([vtui](https://github.com/unxed/v
 *   **Modern Terminals Only:** Primary target is actively developed terminals (Konsole, kitty, iTerm2, Windows Terminal). Other terminals won't allow replicating Far's UI accurately.
 *   **Input (`vtinput`):** Built as a separate library to handle advanced protocols like the [Kitty Keyboard Protocol](https://sw.kovidgoyal.net/kitty/keyboard-protocol/) and [Win32 Input Mode](https://github.com/microsoft/terminal/blob/main/doc/specs/%234999%20-%20Improved%20keyboard%20handling%20in%20Conpty.md). This is strictly required for distinguishing combinations like `Ctrl+Enter` or `Shift+Tab`.
 *   **Framework (`vtui`):** A custom UI framework built from scratch in the style of Far, borrowing responsive layout features (like window resizing and anchors) from Turbo Vision. Ideally, it should cover all capabilities of Far's UI kit and Turbo Vision (excluding non-relevant features like custom serialization engines).
-*   **Future Renderers:** We currently render exclusively via ANSI ESC sequences (yielding TrueColor out of the box). In the future, a custom GUI renderer (for example, via SDL or OpenGL) may be added, similar to `far2l`.
+
 ### GUI Mode & Backends
 
 `f4` can run either directly in your terminal or as a standalone graphical window. GUI mode is particularly useful on Windows to bypass console limitations or on Linux/macOS for high-performance hardware-accelerated rendering.
@@ -57,7 +57,7 @@ Example:
 
 *   **Built-in Terminal:** A fully-fledged built-in terminal running underneath the panels, just like `far2l`.
 *   **VTE Mirror Architecture:** To handle the complex differences between Unix byte-streams and Windows ConPTY 2D-rendering, the terminal uses a custom hybrid grid-and-extrusion engine. Read the [Terminal Architecture Guide](TERMINAL.md) for details.
-*   **Windows Strategy:** First of all, we target recent Windows versions. There are two reasons for that. 1) They support ConPTY. A built-in terminal cannot be implemented properly without it. 2) They have Windows Terminal. So we can avoid the legacy Windows Console API entirely and rely purely on ESC sequence rendering. Windows Terminal supports all we need for proper input, clipboard operations, etc. At the same time, f4's modular architecture makes it possible to implement input/rendering/etc via Windows Console API in future (in fact, our Far-compatible internal architecture is ideally suited for this), so if you want f4 to run on your XP box you will not have to write too much code. Similarly, no one is stopping you from writing a layer for f4's built-in terminal that uses winpty instead of conpty to work on older Windows versions.
+*   **Windows Strategy:** Currently, we target recent Windows versions only. Reasons are they support ConPTY and console interfaces working via ESC sequences. At the same time, f4's modular architecture makes it possible to implement rendering via Windows Console API in future (in fact, our Far-compatible internal architecture is ideally suited for this), so if you want f4 to run on your XP box you will not have to write too much code. Similarly, no one is stopping you from writing a layer for f4's built-in terminal that uses winpty instead of conpty to work on older Windows versions.
 
 ### Plugin Architecture (Out-of-Process RPC)
 
@@ -89,18 +89,13 @@ Example:
 *   Built-in Terminal (`TerminalView` + ANSI Parser + Unix PTY integration).
 *   Plugin Manager foundation.
 
-**Phase 3: Parity & VFS Expansion (Current)**
-*   Complete remaining standard Far dialogs (Search, Copy/Move, File Attributes, Configuration).
-*   Implement mostly used file manager features like copy file, make folder, etc.
-*   Expand VFS (Virtual File System) to support archives and network protocols (FTP, SFTP) as internal plugins.
+**Phase 3: Parity (Current)**
+*   Add far2l features starting from requested in Issues.
 
-**Phase 4: Advanced Features (Future)**
-*   Windows ConPTY backend implementation.
-*   All far2l features.
-*   All Far3 and far2m features.
-*   Flesh out `HostAPI` to support comprehensive wrappers for other Far verisons APIs, implement whose wrappers
+**Phase 4: Future**
+*   Add Far3 and far2m starting from requested in Issues.
+*   Flesh out `HostAPI` to support comprehensive wrappers for other Far verisons APIs, implement whose wrappers.
 *   Python plugin support.
-*   Custom GUI renderer (SDL/OpenGL).
 
 ---
 
@@ -145,14 +140,7 @@ You can also specify a custom log file using `--log`:
 
 ---
 
-### Performance & Architecture Notes
-
-**Instant Bracketed Paste**
-To achieve near-instantaneous pasting text via terminal Paste feature for large clipboard buffers (comparable to `far2l`), `f4` utilizes several coordinated strategies:
-1.  **Atomic Commits:** The `EditorView` detects `PasteStart` and `PasteEnd` events. Instead of modifying the data model byte-by-byte, it accumulates incoming text in a temporary buffer and performs a single, atomic insertion into the `PieceTable`.
-2.  **Busy State Signaling:** Components can signal a `Busy` state to the `FrameManager`. While busy, the UI rendering phase and terminal `Flush()` are entirely suppressed, eliminating visual jitter.
-3.  **Event Draining (Burst Processing):** The `FrameManager` implements an "event draining" loop with a micro-timeout. It aggressively consumes all pending input events from the OS buffer before attempting a single render pass.
-4.  **Zero-Allocation Rendering:** The `vtui` core minimizes heap allocations during the `Flush()` cycle, sending only the minimum necessary ANSI sequences to the terminal.
+###  Architecture
 
 **Why vtui? (vtui vs. tcell + tview/cview)**
 While `tcell` and `tview` are industry standards for Go-based terminal applications, `f4` utilizes `vtui` to achieve a higher level of interactive performance and UX consistency tailored for heavy-duty TUIs.
@@ -164,3 +152,12 @@ While `tcell` and `tview` are industry standards for Go-based terminal applicati
 | **Keyboard** | General terminfo mapping | Full-featured (kitty/win32 protocols) |
 | **Rendering** | Full-widget declarative updates | Bitwise diffing (only changed cells are updated) |
 | **Target Use Case** | CLI dashboards | Stateful desktop-class applications |
+
+### Performance Notes
+
+**Instant Bracketed Paste**
+To achieve near-instantaneous pasting text via terminal Paste feature for large clipboard buffers (comparable to `far2l`), `f4` utilizes several coordinated strategies:
+1.  **Atomic Commits:** The `EditorView` detects `PasteStart` and `PasteEnd` events. Instead of modifying the data model byte-by-byte, it accumulates incoming text in a temporary buffer and performs a single, atomic insertion into the `PieceTable`.
+2.  **Busy State Signaling:** Components can signal a `Busy` state to the `FrameManager`. While busy, the UI rendering phase and terminal `Flush()` are entirely suppressed, eliminating visual jitter.
+3.  **Event Draining (Burst Processing):** The `FrameManager` implements an "event draining" loop with a micro-timeout. It aggressively consumes all pending input events from the OS buffer before attempting a single render pass.
+4.  **Zero-Allocation Rendering:** The `vtui` core minimizes heap allocations during the `Flush()` cycle, sending only the minimum necessary ANSI sequences to the terminal.
