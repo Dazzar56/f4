@@ -365,13 +365,13 @@ func (tv *TerminalView) PutChar(r rune, attr uint64) {
 	}
 
 	if r == '\r' {
-		vtui.DebugLog("TERM_VIEW: CR (CursorX: %d -> 0)", tv.CursorX)
+		// vtui.DebugLog("TERM_VIEW: CR (CursorX: %d -> 0)", tv.CursorX)
 		tv.CursorX = 0
 		tv.lastCharWasCR = true
 		return
 	}
 	if r == '\n' {
-		vtui.DebugLog("TERM_VIEW: LF (CursorY: %d -> %d)", tv.CursorY, tv.CursorY+1)
+		// vtui.DebugLog("TERM_VIEW: LF (CursorY: %d -> %d)", tv.CursorY, tv.CursorY+1)
 		if !tv.UseAltScreen && tv.CursorY >= 0 && tv.CursorY < tv.Height {
 			tv.WrapFlags[tv.CursorY] = false // Hard break
 		}
@@ -404,7 +404,7 @@ func (tv *TerminalView) PutChar(r rune, attr uint64) {
 		if !tv.UseAltScreen && tv.CursorY >= 0 && tv.CursorY < tv.Height {
 			tv.WrapFlags[tv.CursorY] = true // Soft wrap (reached edge)
 		}
-		vtui.DebugLog("TERM_VIEW: Soft Wrap at X=%d, Y=%d", tv.CursorX, tv.CursorY)
+		// vtui.DebugLog("TERM_VIEW: Soft Wrap at X=%d, Y=%d", tv.CursorX, tv.CursorY)
 		tv.newline()
 	}
 
@@ -664,7 +664,7 @@ func (tv *TerminalView) EraseCharacter(n int, attr uint64) {
 }
 
 func (tv *TerminalView) EraseDisplay(mode int, attr uint64) {
-	vtui.DebugLog("TERM_VIEW: EraseDisplay mode=%d", mode)
+	// vtui.DebugLog("TERM_VIEW: EraseDisplay mode=%d", mode)
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
 	if tv.Muted {
@@ -679,7 +679,7 @@ func (tv *TerminalView) EraseDisplay(mode int, attr uint64) {
 				lastRow = y
 			}
 		}
-		vtui.DebugLog("TERM_VIEW: EraseDisplay(%d) pushing viewport up to row %d to history", mode, lastRow)
+		// vtui.DebugLog("TERM_VIEW: EraseDisplay(%d) pushing viewport up to row %d to history", mode, lastRow)
 		for y := 0; y <= lastRow; y++ {
 			tv.pushRowToGridHistory(y)
 		}
@@ -725,7 +725,7 @@ func (tv *TerminalView) EraseDisplay(mode int, attr uint64) {
 }
 
 func (tv *TerminalView) EraseLine(mode int, attr uint64) {
-	vtui.DebugLog("TERM_VIEW: EraseLine mode=%d at Y=%d (X=%d)", mode, tv.CursorY, tv.CursorX)
+	// vtui.DebugLog("TERM_VIEW: EraseLine mode=%d at Y=%d (X=%d)", mode, tv.CursorY, tv.CursorX)
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
 	if tv.Muted {
@@ -991,7 +991,7 @@ func (tv *TerminalView) GetWindowNumber() int  { return 0 }
 func (tv *TerminalView) SetWindowNumber(n int) {}
 
 func (tv *TerminalView) HandleFar2lAPC(s string) {
-	vtui.DebugLog("TERM_APC: Incoming Far2l sequence: %q", s)
+	// vtui.DebugLog("TERM_APC: Incoming Far2l sequence: %q", s)
 	// Robustness: skip any garbage before the actual marker
 	idx := strings.Index(s, "far2l")
 	if idx == -1 {
@@ -1037,14 +1037,14 @@ func (tv *TerminalView) ProcessFar2lInteract(data []byte) {
 	stk := (*vtinput.Far2lStack)(&data)
 	id := stk.PopU8()
 	cmd := stk.PopU8()
-	vtui.DebugLog("TERM_APC: ProcessFar2lInteract: cmd=%c, id=%d", cmd, id)
+	// vtui.DebugLog("TERM_APC: ProcessFar2lInteract: cmd=%c, id=%d", cmd, id)
 
 	reply := vtinput.Far2lStack{}
 
 	switch cmd {
 	case 'c': // Clipboard
 		sub := stk.PopU8()
-		vtui.DebugLog("TERM_APC: Clipboard sub-command: %c", sub)
+		// vtui.DebugLog("TERM_APC: Clipboard sub-command: %c", sub)
 		switch sub {
 		case 'o':
 			clientID := stk.PopString()
