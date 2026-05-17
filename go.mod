@@ -35,8 +35,8 @@ require (
 	github.com/go-webgpu/goffi v0.5.1 // indirect
 	github.com/go-webgpu/webgpu v0.4.3 // indirect
 	github.com/gogpu/gg v0.46.8 // indirect
-	github.com/gogpu/gogpu v0.36.1 // indirect
-	github.com/gogpu/gpucontext v0.18.0 // indirect
+	github.com/gogpu/gogpu v0.37.5 // indirect
+	github.com/gogpu/gpucontext v0.19.0 // indirect
 	github.com/gogpu/gputypes v0.5.0 // indirect
 	github.com/gogpu/naga v0.17.13 // indirect
 	github.com/gogpu/wgpu v0.28.1 // indirect
