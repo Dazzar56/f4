@@ -1179,6 +1179,21 @@ func (pf *PanelsFrame) HandleBroadcast(cmd int, args any) bool {
 }
 
 func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
+	// Wheel events always scroll the active panel, regardless of mouse position.
+	// This matches classic Far Manager / far2l behavior.
+	if e.WheelDirection != 0 {
+		vk := vtinput.VK_DOWN
+		if e.WheelDirection > 0 {
+			vk = vtinput.VK_UP
+		}
+		return pf.Active().ProcessKey(&vtinput.InputEvent{
+			Type:            vtinput.KeyEventType,
+			KeyDown:         true,
+			VirtualKeyCode:  uint16(vk),
+			ControlKeyState: e.ControlKeyState,
+		})
+	}
+
 	mx, my := int(e.MouseX), int(e.MouseY)
 
 	for i, p := range pf.panels {
