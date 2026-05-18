@@ -196,7 +196,7 @@ func TestAttributesDialog_UnixSetAll(t *testing.T) {
 	if capturedItem.UnixMode != 0755 {
 		t.Errorf("Unix mode not set. Expected 0755, got %04o", capturedItem.UnixMode)
 	}
-	expectedTime, _ := time.Parse("02.01.2006 15:04:05", newTime)
+	expectedTime, _ := time.ParseInLocation("02.01.2006 15:04:05", newTime, time.Local)
 	if !capturedItem.MTime.Equal(expectedTime) {
 		t.Errorf("MTime not set. Expected %v, got %v", expectedTime, capturedItem.MTime)
 	}
