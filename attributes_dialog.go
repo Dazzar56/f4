@@ -226,7 +226,7 @@ func showAttributesUnix(pf *PanelsFrame, v vfs.VFS, path string, item vfs.VFSIte
 		var m uint64
 		fmt.Sscanf(editOctal.GetText(), "%o", &m)
 		item.UnixMode = uint32(m)
-		if t, err := time.Parse(timeFormat, editMTime.GetText()); err == nil {
+		if t, err := time.ParseInLocation(timeFormat, editMTime.GetText(), time.Local); err == nil {
 			item.MTime = t
 		}
 		vtui.RunAsync(func(ctx *vtui.TaskContext) {
@@ -305,7 +305,7 @@ func showAttributesWindows(pf *PanelsFrame, v vfs.VFS, path string, item vfs.VFS
 	gbVBox.Apply()
 
 	btnSet.OnClick = func() {
-		if nt, err := time.Parse(timeFormat, editMTime.GetText()); err == nil {
+		if nt, err := time.ParseInLocation(timeFormat, editMTime.GetText(), time.Local); err == nil {
 			item.MTime = nt
 		}
 		vtui.RunAsync(func(ctx *vtui.TaskContext) {
