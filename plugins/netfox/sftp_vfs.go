@@ -31,9 +31,11 @@ func NewSFTPVFS(parent vfs.VFS, host, port, user, pass string) (*SFTPVFS, error)
 	vtui.DebugLog("NET: Initiating SFTP connection to %s:%s (user: %s)", host, port, user)
 	auths := []ssh.AuthMethod{}
 
-	if sshAgent, err := net.Dial("unix", os.Getenv("SSH_AUTH_SOCK")); err == nil {
-		auths = append(auths, ssh.PublicKeysCallback(agent.NewClient(sshAgent).Signers))
-		sshAgent.Close()
+	if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
+		if agentConn, err := net.Dial("unix", sock); err == nil {
+			auths = append(auths, ssh.PublicKeysCallback(agent.NewClient(agentConn).Signers))
+			defer agentConn.Close()
+		}
 	}
 
 	home, _ := os.UserHomeDir()
