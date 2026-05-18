@@ -25,6 +25,8 @@ type F4Config struct {
 	EditorTabSize           int
 	EditorUseEditorConfig   bool
 	EditorCrosshair         bool
+	UseExternalEditor       bool
+	ExternalEditorCommand   string
 	RegisteredPlugins       []string
 	ConfirmCopy             bool
 	ConfirmMove             bool
@@ -48,6 +50,8 @@ var AppConfig = F4Config{
 	EditorTabSize:           4,
 	EditorUseEditorConfig:   true,
 	EditorCrosshair:         false,
+	UseExternalEditor:       false,
+	ExternalEditorCommand:   "",
 	ConfirmCopy:             true,
 	ConfirmMove:             true,
 	ConfirmDelete:           true,
@@ -106,6 +110,8 @@ func LoadConfig() {
 	AppConfig.EditorCursorBeyondEOL = ini.GetString("Editor", "CursorBeyondEOL", "0") == "1"
 	AppConfig.EditorUseEditorConfig = ini.GetString("Editor", "UseEditorConfig", "1") == "1"
 	AppConfig.EditorCrosshair = ini.GetString("Editor", "Crosshair", "0") == "1"
+	AppConfig.UseExternalEditor = ini.GetString("Editor", "UseExternalEditor", "0") == "1"
+	AppConfig.ExternalEditorCommand = ini.GetString("Editor", "ExternalEditorCommand", "")
 	plugStr := ini.GetString("Plugins", "List", "")
 	if plugStr != "" {
 		AppConfig.RegisteredPlugins = strings.Split(plugStr, "|")
@@ -144,6 +150,8 @@ func SaveConfig() {
 	sb.WriteString(fmt.Sprintf("UseEditorConfig = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.EditorUseEditorConfig]))
 	sb.WriteString(fmt.Sprintf("Crosshair = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.EditorCrosshair]))
 	sb.WriteString(fmt.Sprintf("TabSize = %d\n", AppConfig.EditorTabSize))
+	sb.WriteString(fmt.Sprintf("UseExternalEditor = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.UseExternalEditor]))
+	sb.WriteString(fmt.Sprintf("ExternalEditorCommand = %s\n", AppConfig.ExternalEditorCommand))
 	sb.WriteString("\n[Plugins]\n")
 	sb.WriteString(fmt.Sprintf("List = %s\n", strings.Join(AppConfig.RegisteredPlugins, "|")))
 
