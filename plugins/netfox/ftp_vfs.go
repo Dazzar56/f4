@@ -195,7 +195,7 @@ func (v *FTPVFS) SetAttributes(ctx context.Context, path string, item vfs.VFSIte
 	return fmt.Errorf("SetAttributes not supported for FTP")
 }
 
-func (v *FTPVFS) GetCapabilities() vfs.VFSCapabilities { return vfs.VFSCapabilities{} }
+func (v *FTPVFS) GetCapabilities() vfs.VFSCapabilities { return vfs.VFSCapabilities{HasUnixPermissions: true} }
 func (v *FTPVFS) Search(ctx context.Context, p, pat string) (chan int64, error) {
 	return nil, nil
 }

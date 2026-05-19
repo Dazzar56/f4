@@ -256,8 +256,10 @@ func (v *OSVFS) SetAttributes(ctx context.Context, path string, item VFSItem) er
 
 	errTime := os.Chtimes(path, item.ATime, item.MTime)
 
+	errPlat := applyPlatformAttributes(path, item)
+
 	// If any operation failed due to permissions, try sudo
-	if (os.IsPermission(errMode) || os.IsPermission(errOwn) || os.IsPermission(errTime)) && globalSudoClient.IsAvailable() {
+	if (os.IsPermission(errMode) || os.IsPermission(errOwn) || os.IsPermission(errTime) || os.IsPermission(errPlat)) && globalSudoClient.IsAvailable() {
 		vtui.DebugLog("VFS: SetAttributes permission denied, trying sudo for %q", path)
 		return globalSudoClient.SetAttributes(path, item)
 	}
@@ -268,15 +270,19 @@ func (v *OSVFS) SetAttributes(ctx context.Context, path string, item VFSItem) er
 	if errOwn != nil {
 		return errOwn
 	}
-	return errTime
+	if errTime != nil {
+		return errTime
+	}
+	return errPlat
 }
 
 func (v *OSVFS) GetCapabilities() VFSCapabilities {
 	return VFSCapabilities{
-		HasServerSideCopy: true,
-		HasServerSideMove: true,
-		HasRandomAccess:   true,
-		HasSearch:         false,
+		HasServerSideCopy:  true,
+		HasServerSideMove:  true,
+		HasRandomAccess:    true,
+		HasSearch:          false,
+		HasUnixPermissions: runtime.GOOS != "windows",
 	}
 }
 

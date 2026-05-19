@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"runtime"
 	"time"
 
 	"os/user"
@@ -22,7 +21,8 @@ func padLabel(s string) string {
 }
 
 func ShowAttributesDialog(pf *PanelsFrame, v vfs.VFS, path string, item vfs.VFSItem) {
-	if runtime.GOOS == "windows" {
+	caps := v.GetCapabilities()
+	if !caps.HasUnixPermissions {
 		showAttributesWindows(pf, v, path, item)
 	} else {
 		showAttributesUnix(pf, v, path, item)
@@ -213,15 +213,22 @@ func showAttributesUnix(pf *PanelsFrame, v vfs.VFS, path string, item vfs.VFSIte
 	}
 
 	btnSet.OnClick = func() {
-		if u, err := user.Lookup(editOwner.GetText()); err == nil {
+		uidStr := editOwner.GetText()
+		if u, err := user.Lookup(uidStr); err == nil {
 			item.Uid, _ = strconv.Atoi(u.Uid)
 		} else {
-			item.Uid, _ = strconv.Atoi(editOwner.GetText())
+			if parsedUid, err := strconv.Atoi(uidStr); err == nil {
+				item.Uid = parsedUid
+			}
 		}
-		if g, err := user.LookupGroup(editGroup.GetText()); err == nil {
+
+		gidStr := editGroup.GetText()
+		if g, err := user.LookupGroup(gidStr); err == nil {
 			item.Gid, _ = strconv.Atoi(g.Gid)
 		} else {
-			item.Gid, _ = strconv.Atoi(editGroup.GetText())
+			if parsedGid, err := strconv.Atoi(gidStr); err == nil {
+				item.Gid = parsedGid
+			}
 		}
 		var m uint64
 		fmt.Sscanf(editOctal.GetText(), "%o", &m)
@@ -294,6 +301,12 @@ func showAttributesWindows(pf *PanelsFrame, v vfs.VFS, path string, item vfs.VFS
 	chkHD := vtui.NewCheckbox(0, 0, "&Hidden", false)
 	chkSY := vtui.NewCheckbox(0, 0, "&System", false)
 	chkAR := vtui.NewCheckbox(0, 0, "&Archive", false)
+
+	if (item.WinAttrs & 1) != 0 { chkRO.State = 1 }
+	if (item.WinAttrs & 2) != 0 { chkHD.State = 1 }
+	if (item.WinAttrs & 4) != 0 { chkSY.State = 1 }
+	if (item.WinAttrs & 32) != 0 { chkAR.State = 1 }
+
 	gbAttr.AddItem(chkRO)
 	gbAttr.AddItem(chkHD)
 	gbAttr.AddItem(chkSY)
@@ -308,6 +321,12 @@ func showAttributesWindows(pf *PanelsFrame, v vfs.VFS, path string, item vfs.VFS
 		if nt, err := time.ParseInLocation(timeFormat, editMTime.GetText(), time.Local); err == nil {
 			item.MTime = nt
 		}
+
+		if chkRO.State == 1 { item.WinAttrs |= 1; item.UnixMode = 0444 } else { item.WinAttrs &= ^uint32(1); item.UnixMode = 0666 }
+		if chkHD.State == 1 { item.WinAttrs |= 2 } else { item.WinAttrs &= ^uint32(2) }
+		if chkSY.State == 1 { item.WinAttrs |= 4 } else { item.WinAttrs &= ^uint32(4) }
+		if chkAR.State == 1 { item.WinAttrs |= 32 } else { item.WinAttrs &= ^uint32(32) }
+
 		vtui.RunAsync(func(ctx *vtui.TaskContext) {
 			v.SetAttributes(ctx.Context, path, item)
 			ctx.RunOnUI(func() { dlg.Close(); pf.RefreshAll() })

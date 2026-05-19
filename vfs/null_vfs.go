@@ -195,10 +195,11 @@ func (v *NullVFS) SetAttributes(ctx context.Context, path string, item VFSItem) 
 
 func (v *NullVFS) GetCapabilities() VFSCapabilities {
 	return VFSCapabilities{
-		HasServerSideCopy: false,
-		HasServerSideMove: false,
-		HasRandomAccess:   true,
-		HasSearch:         false,
+		HasServerSideCopy:  false,
+		HasServerSideMove:  false,
+		HasRandomAccess:    true,
+		HasSearch:          false,
+		HasUnixPermissions: false,
 	}
 }
 

@@ -337,6 +337,66 @@ func TestAttributesDialog_Layout(t *testing.T) {
 	vtui.FrameManager.Pop()
 }
 
+func TestAttributesDialog_WindowsCheckboxes(t *testing.T) {
+	fm := vtui.FrameManager
+	fm.Init(vtui.NewSilentScreenBuf())
+
+	var capturedItem vfs.VFSItem
+	mockVFS := &mockMetadataVFS{
+		VFS:       vfs.NewOSVFS(t.TempDir()),
+		onSetAttr: func(item vfs.VFSItem) { capturedItem = item },
+	}
+
+	// WinAttrs: 1 (ReadOnly) | 32 (Archive) = 33
+	item := vfs.VFSItem{Name: "win.exe", WinAttrs: 33}
+	showAttributesWindows(nil, mockVFS, "win.exe", item)
+	dlg := fm.GetTopFrame().(vtui.Container)
+
+	var chkRO, chkHD, chkSY, chkAR *vtui.Checkbox
+	var btnSet *vtui.Button
+
+	walkUI(dlg.(vtui.UIElement), func(el vtui.UIElement) bool {
+		if c, ok := el.(*vtui.Checkbox); ok {
+			if strings.Contains(c.GetText(), "Read only") { chkRO = c }
+			if strings.Contains(c.GetText(), "Hidden") { chkHD = c }
+			if strings.Contains(c.GetText(), "System") { chkSY = c }
+			if strings.Contains(c.GetText(), "Archive") { chkAR = c }
+		}
+		if b, ok := el.(*vtui.Button); ok && strings.Contains(b.GetText(), "Set") {
+			btnSet = b
+		}
+		return true
+	})
+
+	if chkRO.State != 1 || chkHD.State != 0 || chkSY.State != 0 || chkAR.State != 1 {
+		t.Errorf("Initial checkboxes state from WinAttrs is incorrect")
+	}
+
+	// Change state
+	chkRO.State = 0
+	chkHD.State = 1
+
+	if btnSet.OnClick != nil {
+		btnSet.OnClick()
+	}
+
+	// Wait for async task
+	timeout := time.After(2 * time.Second)
+	for capturedItem.Name == "" {
+		select {
+		case task := <-fm.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Timeout waiting for SetAttributes")
+		}
+	}
+
+	// New WinAttrs should have Hidden (2) and Archive (32), but NOT ReadOnly (1). Total 34.
+	if capturedItem.WinAttrs != 34 {
+		t.Errorf("WinAttrs not updated correctly. Expected 34, got %d", capturedItem.WinAttrs)
+	}
+}
+
 func TestAttributesDialog_UnixSync(t *testing.T) {
 	vtui.SetDefaultPalette()
 	fm := vtui.FrameManager
@@ -647,6 +707,26 @@ func TestAttributesDialog_Cancel(t *testing.T) {
 done:
 	if called {
 		t.Error("SetAttributes was called despite clicking Cancel")
+	}
+}
+
+func TestShowAttributesDialog_Dispatch(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	// Create mock VFS with Unix permissions capability
+	mockUnixVFS := &mockMetadataVFS{
+		VFS: vfs.NewOSVFS(t.TempDir()),
+	}
+
+	item := vfs.VFSItem{Name: "test"}
+	ShowAttributesDialog(nil, mockUnixVFS, "test", item)
+
+	top := vtui.FrameManager.GetTopFrame()
+	if top == nil {
+		t.Error("Dialog not shown")
+	} else {
+		top.SetExitCode(-1)
+		vtui.FrameManager.Pop()
 	}
 }
 
