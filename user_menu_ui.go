@@ -33,6 +33,31 @@ const farMenuFileName = "FarMenu.ini"
 // a nested submenu, matching far2l's choice (vmenu.cpp:1980).
 const submenuMarker = "►" // ►
 
+// userMenuBottomHint is the keybinding cheat-sheet drawn on the bottom
+// border of every user-menu level. Far Manager has had a hint like this
+// since the original Roshal release (usermenu.cpp:535 sets it via
+// SetBottomTitle); listing only the chords f4 actually responds to.
+const userMenuBottomHint = " Del Ins Ctrl+F4 Ctrl+Up/Down "
+
+// userMenuFrame wraps a vtui.VMenu so the user menu can draw a hotkey
+// hint on its bottom border without extending vtui itself (the library
+// ships as a submodule and would be its own PR). All Frame interface
+// methods are promoted from the embedded VMenu; we only override Show
+// to paint the hint over the bottom border line.
+type userMenuFrame struct {
+	*vtui.VMenu
+	bottomHint string
+}
+
+func (u *userMenuFrame) Show(scr *vtui.ScreenBuf) {
+	u.VMenu.Show(scr)
+	if u.bottomHint == "" {
+		return
+	}
+	x1, _, x2, y2 := u.VMenu.GetPosition()
+	vtui.NewPainter(scr).DrawTitle(x1, y2, x2, u.bottomHint, vtui.Palette[vtui.ColMenuTitle])
+}
+
 // MainMenuFilePath returns the user-config location for the persistent
 // main menu. The filename matches far2l so the same file can be shared
 // between ~/.config/far2l/settings/user_menu.ini and the f4 directory
@@ -520,7 +545,7 @@ func (s *userMenuState) pushLevel(items []UserMenuItem, title string, initialSel
 		})
 	}
 
-	vtui.FrameManager.Push(menu)
+	vtui.FrameManager.Push(&userMenuFrame{VMenu: menu, bottomHint: userMenuBottomHint})
 }
 
 // enterSubmenu records the current cursor, descends into items[subIdx],
@@ -815,6 +840,10 @@ func menuSize(pf *PanelsFrame, itemCount int, items []UserMenuItem, hasSubmenus 
 	w := maxLabel + 4
 	if hasSubmenus {
 		w += 2 // reserve room for the trailing "► "
+	}
+	// Reserve room for the bottom hotkey hint plus two box corners.
+	if minForHint := len(userMenuBottomHint) + 2; w < minForHint {
+		w = minForHint
 	}
 	if pf.lastW > 0 && w > pf.lastW-4 {
 		w = pf.lastW - 4
