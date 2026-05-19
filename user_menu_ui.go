@@ -209,23 +209,21 @@ func resolveMenuStart(pf *PanelsFrame, initial MenuMode) (items []UserMenuItem, 
 	return nil, t, MenuModeMain, defaultSavePath(pf, MenuModeMain)
 }
 
-// menuLevel snapshots the data needed to recreate a parent menu when
-// the user returns to it from a submenu. far2l does the same: the
-// inner ProcessSingleMenu loop recreates VMenu with the saved MenuPos
-// on EC_CLOSE_LEVEL (usermenu.cpp:738-744). Showing only one menu at a
-// time keeps the screen uncluttered.
-type menuLevel struct {
-	items    []UserMenuItem
-	title    string
-	selected int
-}
-
-// userMenuState carries navigation history across pushLevel invocations.
+// userMenuState owns the full menu tree as loaded from disk plus the
+// path from the root to the level currently on screen. In-place edits
+// (Del, Ctrl+up/down) walk the same tree to find the slice to mutate,
+// save the root, and re-render at the same path. far2l shows only one
+// menu at a time: ProcessSingleMenu recreates the parent VMenu with
+// the saved MenuPos on EC_CLOSE_LEVEL (usermenu.cpp:738-744). We do
+// the same — `selStack` is one entry per ancestor.
 type userMenuState struct {
 	pf         *PanelsFrame
 	mode       MenuMode
 	sourcePath string // file Ctrl+F4 opens and edits save back to
-	history    []menuLevel
+	rootTitle  string // base title; submenu titles append " -> child"
+	rootItems  []UserMenuItem
+	path       []int // indices from root to the current level
+	selStack   []int // saved cursor position at each ancestor level
 }
 
 // ShowUserMenu is the entry point. It loads the user menu starting from
@@ -235,8 +233,75 @@ func ShowUserMenu(pf *PanelsFrame) {
 	if source == "" {
 		source = defaultSavePath(pf, mode)
 	}
-	s := &userMenuState{pf: pf, mode: mode, sourcePath: source}
-	s.pushLevel(items, title, 0)
+	s := &userMenuState{
+		pf:         pf,
+		mode:       mode,
+		sourcePath: source,
+		rootTitle:  title,
+		rootItems:  items,
+	}
+	s.openCurrent(0)
+}
+
+// currentItems returns the items slice at the level the user is viewing.
+func (s *userMenuState) currentItems() []UserMenuItem {
+	items := s.rootItems
+	for _, idx := range s.path {
+		if idx < 0 || idx >= len(items) || !items[idx].IsSubmenu() {
+			return nil
+		}
+		items = items[idx].Submenu
+	}
+	return items
+}
+
+// currentTitle builds the title with " -> " breadcrumbs for each
+// submenu the user descended through.
+func (s *userMenuState) currentTitle() string {
+	items := s.rootItems
+	t := s.rootTitle
+	for _, idx := range s.path {
+		if idx < 0 || idx >= len(items) {
+			return t
+		}
+		t = t + " -> " + stripAmpersand(items[idx].Label)
+		items = items[idx].Submenu
+	}
+	return t
+}
+
+// replaceCurrentItems swaps the slice at the current path. Needed when
+// a mutation (delete, insert) changes the slice length.
+func (s *userMenuState) replaceCurrentItems(newItems []UserMenuItem) {
+	if len(s.path) == 0 {
+		s.rootItems = newItems
+		return
+	}
+	items := s.rootItems
+	for i := 0; i < len(s.path)-1; i++ {
+		items = items[s.path[i]].Submenu
+	}
+	items[s.path[len(s.path)-1]].Submenu = newItems
+}
+
+// openCurrent pushes the menu for the current path with the given cursor.
+func (s *userMenuState) openCurrent(selected int) {
+	s.pushLevel(s.currentItems(), s.currentTitle(), selected)
+}
+
+// saveRoot persists rootItems to the source file in its native format.
+// Errors are surfaced as a modal message so the user knows.
+func (s *userMenuState) saveRoot() bool {
+	if s.sourcePath == "" {
+		return false
+	}
+	if err := saveRootForMode(s.mode, s.sourcePath, s.rootItems); err != nil {
+		vtui.ShowMessage(" User menu ",
+			fmt.Sprintf("Failed to save menu:\n%v", err),
+			[]string{"&Ok"})
+		return false
+	}
+	return true
 }
 
 func (s *userMenuState) pushLevel(items []UserMenuItem, title string, initialSelect int) {
@@ -249,7 +314,9 @@ func (s *userMenuState) pushLevel(items []UserMenuItem, title string, initialSel
 	hasSubmenus := false
 	for i, it := range items {
 		if it.IsSeparator() {
-			menu.AddSeparator()
+			// Carry UserData so Del / Ctrl+up/down can find the items
+			// index from the UI index uniformly across all entries.
+			menu.AddItem(vtui.MenuItem{Separator: true, UserData: i})
 			continue
 		}
 		if fn := parseFunctionKey(it.HotKey); fn > 0 {
@@ -290,10 +357,11 @@ func (s *userMenuState) pushLevel(items []UserMenuItem, title string, initialSel
 		ctrl := e.ControlKeyState&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed) != 0
 		alt := e.ControlKeyState&(vtinput.LeftAltPressed|vtinput.RightAltPressed) != 0
 
-		// Shift+F2 cycles the menu source mode. Clear history so the
+		// Shift+F2 cycles the menu source mode. Drop the path so the
 		// fresh root doesn't try to "return" to the previous mode's chain.
 		if e.VirtualKeyCode == vtinput.VK_F2 && shift && !ctrl && !alt {
-			s.history = nil
+			s.path = nil
+			s.selStack = nil
 			menu.Close()
 			next := MenuMode((int(s.mode) + 1) % 3)
 			vtui.FrameManager.PostTask(func() {
@@ -303,10 +371,30 @@ func (s *userMenuState) pushLevel(items []UserMenuItem, title string, initialSel
 					newSrc = defaultSavePath(s.pf, newMode)
 				}
 				s.sourcePath = newSrc
-				s.pushLevel(newItems, newTitle, 0)
+				s.rootTitle = newTitle
+				s.rootItems = newItems
+				s.openCurrent(0)
 			})
 			return true
 		}
+		openInExternalEditor := func() {
+			sourcePath := s.sourcePath
+			if sourcePath == "" {
+				sourcePath = defaultSavePath(s.pf, s.mode)
+			}
+			if sourcePath == "" {
+				return
+			}
+			pf := s.pf
+			mode := s.mode
+			s.path = nil
+			s.selStack = nil
+			menu.Close()
+			vtui.FrameManager.PostTask(func() {
+				editCurrentMenuInExternalEditor(pf, mode, sourcePath)
+			})
+		}
+
 		// Ctrl+F4 edits the menu via a temp file, matching far2l
 		// usermenu.cpp:619-678: dump the current root tree as FarMenu.ini
 		// text, open the temp file in the editor, on close parse it back
@@ -314,25 +402,36 @@ func (s *userMenuState) pushLevel(items []UserMenuItem, title string, initialSel
 		// format. If the user didn't change anything we skip the save; if
 		// parsing fails we surface an error and keep the original intact.
 		if e.VirtualKeyCode == vtinput.VK_F4 && ctrl && !shift && !alt {
-			sourcePath := s.sourcePath
-			if sourcePath == "" {
-				sourcePath = defaultSavePath(s.pf, s.mode)
-			}
-			if sourcePath == "" {
-				return true
-			}
-			pf := s.pf
-			mode := s.mode
-			s.history = nil
-			menu.Close()
-			vtui.FrameManager.PostTask(func() {
-				editCurrentMenuInExternalEditor(pf, mode, sourcePath)
-			})
+			openInExternalEditor()
+			return true
+		}
+		// Insert: in far2l this pops a "command or submenu?" dialog and
+		// then the per-item edit form. We don't have that form yet, so
+		// fall back to the bulk Ctrl+F4 editor — the user can append a
+		// new section by hand. Eventually we'll grow a proper dialog.
+		if e.VirtualKeyCode == vtinput.VK_INSERT && !ctrl && !shift && !alt {
+			openInExternalEditor()
+			return true
+		}
+		// Del: confirm and remove the item under the cursor.
+		if e.VirtualKeyCode == vtinput.VK_DELETE && !ctrl && !shift && !alt {
+			s.deleteAt(menu, items)
+			return true
+		}
+		// Ctrl+Up / Ctrl+Down: move the current item up/down within
+		// this level, no wrap (matches usermenu.cpp:603-617).
+		if e.VirtualKeyCode == vtinput.VK_UP && ctrl && !shift && !alt {
+			s.swapWithNeighbor(menu, items, -1)
+			return true
+		}
+		if e.VirtualKeyCode == vtinput.VK_DOWN && ctrl && !shift && !alt {
+			s.swapWithNeighbor(menu, items, +1)
 			return true
 		}
 		// Shift+F10 quits the entire menu chain (usermenu.cpp:685).
 		if e.VirtualKeyCode == vtinput.VK_F10 && shift && !ctrl && !alt {
-			s.history = nil
+			s.path = nil
+			s.selStack = nil
 			menu.Close()
 			return true
 		}
@@ -358,7 +457,7 @@ func (s *userMenuState) pushLevel(items []UserMenuItem, title string, initialSel
 			}
 			menu.SetSelectPos(uiIdx)
 			if target >= 0 && target < len(items) && items[target].IsSubmenu() {
-				s.enterSubmenu(menu, items, title, items[target])
+				s.enterSubmenu(menu, target)
 				return true
 			}
 			// Leaf: simulate Enter so vtui's default OnAction fires.
@@ -375,7 +474,7 @@ func (s *userMenuState) pushLevel(items []UserMenuItem, title string, initialSel
 			if pos >= 0 && pos < len(menu.Items) {
 				if idx, ok := menu.Items[pos].UserData.(int); ok && idx >= 0 && idx < len(items) {
 					if items[idx].IsSubmenu() {
-						s.enterSubmenu(menu, items, title, items[idx])
+						s.enterSubmenu(menu, idx)
 						return true
 					}
 				}
@@ -407,14 +506,15 @@ func (s *userMenuState) pushLevel(items []UserMenuItem, title string, initialSel
 		if chosen.IsSubmenu() {
 			// Submenus are handled by OnKeyDown for the keyboard paths.
 			// We only land here on mouse click; do the same thing.
-			s.enterSubmenu(menu, items, title, chosen)
+			s.enterSubmenu(menu, idx)
 			return
 		}
 		// Leaf item: vtui will pop this menu on its own after we return.
-		// Drop the history so we don't try to reopen a parent on the way
+		// Drop the path so we don't try to reopen a parent on the way
 		// out, then dispatch the commands once the frame stack has settled.
 		cmds := chosen.Commands
-		s.history = nil
+		s.path = nil
+		s.selStack = nil
 		vtui.FrameManager.PostTask(func() {
 			executeMenuCommands(s.pf, cmds)
 		})
@@ -423,34 +523,118 @@ func (s *userMenuState) pushLevel(items []UserMenuItem, title string, initialSel
 	vtui.FrameManager.Push(menu)
 }
 
-// enterSubmenu records the current level so goBack can recreate it,
-// closes the current menu, and pushes the child after the pop settles.
-func (s *userMenuState) enterSubmenu(current *vtui.VMenu, parentItems []UserMenuItem, parentTitle string, sub UserMenuItem) {
-	s.history = append(s.history, menuLevel{
-		items:    parentItems,
-		title:    parentTitle,
-		selected: current.SelectPos,
-	})
+// enterSubmenu records the current cursor, descends into items[subIdx],
+// and renders the child level.
+func (s *userMenuState) enterSubmenu(current *vtui.VMenu, subIdx int) {
+	s.selStack = append(s.selStack, current.SelectPos)
+	s.path = append(s.path, subIdx)
 	current.Close()
-	childTitle := parentTitle + " -> " + stripAmpersand(sub.Label)
-	childItems := sub.Submenu
 	vtui.FrameManager.PostTask(func() {
-		s.pushLevel(childItems, childTitle, 0)
+		s.openCurrent(0)
 	})
 }
 
-// goBack closes the current menu. If there's a saved parent level, it
-// is reopened with its prior cursor position; otherwise the user lands
-// back on the panels.
-func (s *userMenuState) goBack(current *vtui.VMenu) {
-	current.Close()
-	if len(s.history) == 0 {
+// itemIndexAtUI returns the items[] index for the menu's UI row at pos,
+// or -1 if pos is out of bounds or the UserData is missing.
+func itemIndexAtUI(menu *vtui.VMenu, pos int) int {
+	if pos < 0 || pos >= len(menu.Items) {
+		return -1
+	}
+	idx, ok := menu.Items[pos].UserData.(int)
+	if !ok {
+		return -1
+	}
+	return idx
+}
+
+// deleteAt removes the item at the cursor with a confirmation dialog
+// (none for separators — those are visual-only). On success the root
+// is saved and the menu is rerendered with the cursor clamped.
+func (s *userMenuState) deleteAt(current *vtui.VMenu, items []UserMenuItem) {
+	idx := itemIndexAtUI(current, current.SelectPos)
+	if idx < 0 || idx >= len(items) {
 		return
 	}
-	prev := s.history[len(s.history)-1]
-	s.history = s.history[:len(s.history)-1]
+	chosen := items[idx]
+
+	apply := func() {
+		newItems := make([]UserMenuItem, 0, len(items)-1)
+		newItems = append(newItems, items[:idx]...)
+		newItems = append(newItems, items[idx+1:]...)
+		s.replaceCurrentItems(newItems)
+		if !s.saveRoot() {
+			return
+		}
+		newPos := idx
+		if newPos >= len(newItems) {
+			newPos = len(newItems) - 1
+		}
+		if newPos < 0 {
+			newPos = 0
+		}
+		current.Close()
+		vtui.FrameManager.PostTask(func() {
+			s.openCurrent(newPos)
+		})
+	}
+
+	if chosen.IsSeparator() {
+		apply()
+		return
+	}
+	label := stripAmpersand(chosen.Label)
+	if label == "" {
+		label = chosen.HotKey
+	}
+	dlg := vtui.ShowMessage(" User menu ",
+		fmt.Sprintf("Delete menu item:\n\n  %s", label),
+		[]string{"&Delete", "Cancel"})
+	dlg.OnResult = func(code int) {
+		if code == 0 {
+			apply()
+		}
+	}
+}
+
+// swapWithNeighbor moves the cursor item by `delta` positions (±1)
+// within the current level, in place. Separators participate in the
+// swap so users can reorder them too.
+func (s *userMenuState) swapWithNeighbor(current *vtui.VMenu, items []UserMenuItem, delta int) {
+	a := itemIndexAtUI(current, current.SelectPos)
+	if a < 0 || a >= len(items) {
+		return
+	}
+	b := a + delta
+	if b < 0 || b >= len(items) {
+		return
+	}
+	items[a], items[b] = items[b], items[a]
+	if !s.saveRoot() {
+		items[a], items[b] = items[b], items[a]
+		return
+	}
+	current.Close()
 	vtui.FrameManager.PostTask(func() {
-		s.pushLevel(prev.items, prev.title, prev.selected)
+		s.openCurrent(b)
+	})
+}
+
+// goBack closes the current menu. If there's an ancestor level it is
+// reopened with the cursor position that was active when the user
+// descended; otherwise the user lands back on the panels.
+func (s *userMenuState) goBack(current *vtui.VMenu) {
+	current.Close()
+	if len(s.path) == 0 {
+		return
+	}
+	s.path = s.path[:len(s.path)-1]
+	sel := 0
+	if len(s.selStack) > 0 {
+		sel = s.selStack[len(s.selStack)-1]
+		s.selStack = s.selStack[:len(s.selStack)-1]
+	}
+	vtui.FrameManager.PostTask(func() {
+		s.openCurrent(sel)
 	})
 }
 
