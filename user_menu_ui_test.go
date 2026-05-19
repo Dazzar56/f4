@@ -179,7 +179,7 @@ func TestFindLocalFarMenu_PicksClosest(t *testing.T) {
 
 func TestMainMenuFilePath_HasExpectedSuffix(t *testing.T) {
 	p := MainMenuFilePath()
-	want := filepath.Join("f4", "settings", "main_menu.ini")
+	want := filepath.Join("f4", "settings", "user_menu.ini")
 	if !strings.HasSuffix(p, want) {
 		t.Errorf("MainMenuFilePath()=%q, want suffix %q", p, want)
 	}

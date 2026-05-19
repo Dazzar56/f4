@@ -27,10 +27,12 @@ const (
 const farMenuFileName = "FarMenu.ini"
 
 // MainMenuFilePath returns the user-config location for the persistent
-// main menu, parallel to far2l's ~/.config/far2l/settings/user_menu.ini.
+// main menu. The filename matches far2l so the same file can be shared
+// between ~/.config/far2l/settings/user_menu.ini and the f4 directory
+// without renaming.
 func MainMenuFilePath() string {
 	configDir, _ := os.UserConfigDir()
-	return filepath.Join(configDir, "f4", "settings", "main_menu.ini")
+	return filepath.Join(configDir, "f4", "settings", "user_menu.ini")
 }
 
 // findLocalFarMenu walks startDir upward looking for FarMenu.ini.
