@@ -132,12 +132,22 @@ func resolveMenuStart(pf *PanelsFrame, initial MenuMode) (items []UserMenuItem, 
 	return nil, t, MenuModeMain
 }
 
-// userMenuState shares ownership of the pushed VMenu chain so we can
-// close the whole stack on Shift+F2 cycle or shellable-action.
+// menuLevel snapshots the data needed to recreate a parent menu when
+// the user returns to it from a submenu. far2l does the same: the
+// inner ProcessSingleMenu loop recreates VMenu with the saved MenuPos
+// on EC_CLOSE_LEVEL (usermenu.cpp:738-744). Showing only one menu at a
+// time keeps the screen uncluttered.
+type menuLevel struct {
+	items    []UserMenuItem
+	title    string
+	selected int
+}
+
+// userMenuState carries navigation history across pushLevel invocations.
 type userMenuState struct {
-	pf    *PanelsFrame
-	mode  MenuMode
-	stack []*vtui.VMenu
+	pf      *PanelsFrame
+	mode    MenuMode
+	history []menuLevel
 }
 
 // ShowUserMenu is the entry point. It loads the user menu starting from
@@ -145,18 +155,11 @@ type userMenuState struct {
 func ShowUserMenu(pf *PanelsFrame) {
 	items, title, mode := resolveMenuStart(pf, MenuModeLocal)
 	s := &userMenuState{pf: pf, mode: mode}
-	s.pushLevel(items, title)
-	_ = title // referenced for future submenu breadcrumbs
+	s.pushLevel(items, title, 0)
 }
 
-func (s *userMenuState) pushLevel(items []UserMenuItem, title string) {
+func (s *userMenuState) pushLevel(items []UserMenuItem, title string, initialSelect int) {
 	menu := vtui.NewVMenu(" " + title + " ")
-	// Depth captured at push time stays stable even if Esc/Left dismisses
-	// some children later (we don't try to keep s.stack in sync on those
-	// paths). Using a captured value instead of len(s.stack) avoids
-	// misclassifying the root once stale entries pile up.
-	depth := len(s.stack)
-	s.stack = append(s.stack, menu)
 
 	// Map F1..F24 hotkeys to item indices for fast lookup in OnKeyDown.
 	// vtui already handles single-char (&-prefixed) hotkeys natively.
@@ -194,6 +197,9 @@ func (s *userMenuState) pushLevel(items []UserMenuItem, title string) {
 		y = 0
 	}
 	menu.SetPosition(x, y, x+w-1, y+h-1)
+	if initialSelect > 0 && initialSelect < menu.GetItemCount() {
+		menu.SetSelectPos(initialSelect)
+	}
 
 	menu.OnKeyDown = func(e *vtinput.InputEvent) bool {
 		if !e.KeyDown {
@@ -203,16 +209,29 @@ func (s *userMenuState) pushLevel(items []UserMenuItem, title string) {
 		ctrl := e.ControlKeyState&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed) != 0
 		alt := e.ControlKeyState&(vtinput.LeftAltPressed|vtinput.RightAltPressed) != 0
 
-		// Shift+F2 cycles the menu source mode.
+		// Shift+F2 cycles the menu source mode. Clear history so the
+		// fresh root doesn't try to "return" to the previous mode's chain.
 		if e.VirtualKeyCode == vtinput.VK_F2 && shift && !ctrl && !alt {
-			s.closeAll()
+			s.history = nil
+			menu.Close()
 			next := MenuMode((int(s.mode) + 1) % 3)
 			vtui.FrameManager.PostTask(func() {
-				items, title, mode := resolveMenuStart(s.pf, next)
-				s.mode = mode
-				s.stack = nil
-				s.pushLevel(items, title)
+				newItems, newTitle, newMode := resolveMenuStart(s.pf, next)
+				s.mode = newMode
+				s.pushLevel(newItems, newTitle, 0)
 			})
+			return true
+		}
+		// Shift+F10 quits the entire menu chain (usermenu.cpp:685).
+		if e.VirtualKeyCode == vtinput.VK_F10 && shift && !ctrl && !alt {
+			s.history = nil
+			menu.Close()
+			return true
+		}
+		// Esc and F10: back one level, or close at the root.
+		if !shift && !ctrl && !alt &&
+			(e.VirtualKeyCode == vtinput.VK_ESCAPE || e.VirtualKeyCode == vtinput.VK_F10) {
+			s.goBack(menu)
 			return true
 		}
 		// F1..F12: jump to the item whose HotKey is "F<n>" and activate it.
@@ -222,7 +241,7 @@ func (s *userMenuState) pushLevel(items []UserMenuItem, title string) {
 				menu.SetSelectPos(uiIdx)
 				if itemIdx, _ := menu.Items[uiIdx].UserData.(int); itemIdx >= 0 && itemIdx < len(items) {
 					if items[itemIdx].IsSubmenu() {
-						pushChild(s, items[itemIdx], title)
+						s.enterSubmenu(menu, items, title, items[itemIdx])
 						return true
 					}
 				}
@@ -234,15 +253,14 @@ func (s *userMenuState) pushLevel(items []UserMenuItem, title string) {
 				return true
 			}
 		}
-		// Enter / Right on a submenu item: push the child without closing
-		// the parent, so Left arrow can return to it.
+		// Enter / Right on a submenu item: descend into the child.
 		if !shift && !ctrl && !alt &&
 			(e.VirtualKeyCode == vtinput.VK_RETURN || e.VirtualKeyCode == vtinput.VK_RIGHT) {
 			pos := menu.SelectPos
 			if pos >= 0 && pos < len(menu.Items) {
 				if idx, ok := menu.Items[pos].UserData.(int); ok && idx >= 0 && idx < len(items) {
 					if items[idx].IsSubmenu() {
-						pushChild(s, items[idx], title)
+						s.enterSubmenu(menu, items, title, items[idx])
 						return true
 					}
 				}
@@ -254,14 +272,10 @@ func (s *userMenuState) pushLevel(items []UserMenuItem, title string) {
 			}
 			return false
 		}
-		// Left arrow → back to the parent menu, but only when we're
-		// actually inside a submenu. At the root level it's a no-op
-		// (matches usermenu.cpp:575: closes only when Title is set).
+		// Left arrow → back to the parent menu, no-op at the root.
 		if !shift && !ctrl && !alt && e.VirtualKeyCode == vtinput.VK_LEFT {
-			if depth > 0 {
-				menu.Close()
-			}
-			return true // swallow either way so it doesn't bubble to panels
+			s.goBack(menu)
+			return true
 		}
 		return false
 	}
@@ -276,17 +290,17 @@ func (s *userMenuState) pushLevel(items []UserMenuItem, title string) {
 		}
 		chosen := items[idx]
 		if chosen.IsSubmenu() {
-			// Submenus are handled in OnKeyDown to keep the parent open.
-			// We only land here on mouse click; treat it the same way.
-			pushChild(s, chosen, title)
+			// Submenus are handled by OnKeyDown for the keyboard paths.
+			// We only land here on mouse click; do the same thing.
+			s.enterSubmenu(menu, items, title, chosen)
 			return
 		}
 		// Leaf item: vtui will pop this menu on its own after we return.
-		// Close any remaining parent levels and run the commands once the
-		// frame stack has settled.
+		// Drop the history so we don't try to reopen a parent on the way
+		// out, then dispatch the commands once the frame stack has settled.
 		cmds := chosen.Commands
+		s.history = nil
 		vtui.FrameManager.PostTask(func() {
-			s.closeAll()
 			executeMenuCommands(s.pf, cmds)
 		})
 	}
@@ -294,21 +308,34 @@ func (s *userMenuState) pushLevel(items []UserMenuItem, title string) {
 	vtui.FrameManager.Push(menu)
 }
 
-func (s *userMenuState) closeAll() {
-	for _, m := range s.stack {
-		m.Close()
-	}
-	s.stack = nil
+// enterSubmenu records the current level so goBack can recreate it,
+// closes the current menu, and pushes the child after the pop settles.
+func (s *userMenuState) enterSubmenu(current *vtui.VMenu, parentItems []UserMenuItem, parentTitle string, sub UserMenuItem) {
+	s.history = append(s.history, menuLevel{
+		items:    parentItems,
+		title:    parentTitle,
+		selected: current.SelectPos,
+	})
+	current.Close()
+	childTitle := parentTitle + " -> " + stripAmpersand(sub.Label)
+	childItems := sub.Submenu
+	vtui.FrameManager.PostTask(func() {
+		s.pushLevel(childItems, childTitle, 0)
+	})
 }
 
-// pushChild opens a submenu on top of the current menu. The parent is
-// left alive on the frame stack so that Left arrow / Esc in the child
-// returns the user to it (matching every Far version since the original).
-func pushChild(s *userMenuState, parent UserMenuItem, parentTitle string) {
-	child := parent.Submenu
-	childTitle := parentTitle + " -> " + stripAmpersand(parent.Label)
+// goBack closes the current menu. If there's a saved parent level, it
+// is reopened with its prior cursor position; otherwise the user lands
+// back on the panels.
+func (s *userMenuState) goBack(current *vtui.VMenu) {
+	current.Close()
+	if len(s.history) == 0 {
+		return
+	}
+	prev := s.history[len(s.history)-1]
+	s.history = s.history[:len(s.history)-1]
 	vtui.FrameManager.PostTask(func() {
-		s.pushLevel(child, childTitle)
+		s.pushLevel(prev.items, prev.title, prev.selected)
 	})
 }
 
