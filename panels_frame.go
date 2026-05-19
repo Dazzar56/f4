@@ -696,6 +696,12 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	}
 
+	// F2: user menu (FarMenu.ini local → near binary → main_menu.ini).
+	if e.VirtualKeyCode == vtinput.VK_F2 && !alt && !ctrl && !shift && e.KeyDown {
+		ShowUserMenu(pf)
+		return true
+	}
+
 	// Ctrl+A: Attributes
 	if e.VirtualKeyCode == vtinput.VK_A && ctrl && !alt && !shift && e.KeyDown {
 		actionFileAttributes(pf)
