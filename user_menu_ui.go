@@ -235,23 +235,30 @@ func (s *userMenuState) pushLevel(items []UserMenuItem, title string, initialSel
 			return true
 		}
 		// F1..F12: jump to the item whose HotKey is "F<n>" and activate it.
+		// Any F-key not bound to a menu item is swallowed so it doesn't
+		// fall through to the panel-level handler underneath (F3=View,
+		// F5=Copy, etc. would be very surprising while the menu is open).
 		if !shift && !ctrl && !alt && e.VirtualKeyCode >= vtinput.VK_F1 && e.VirtualKeyCode <= vtinput.VK_F12 {
 			fn := uint32(e.VirtualKeyCode-vtinput.VK_F1) + 1
-			if uiIdx, ok := findMenuItemByUserData(menu, fnKeyTarget[fn]); ok {
-				menu.SetSelectPos(uiIdx)
-				if itemIdx, _ := menu.Items[uiIdx].UserData.(int); itemIdx >= 0 && itemIdx < len(items) {
-					if items[itemIdx].IsSubmenu() {
-						s.enterSubmenu(menu, items, title, items[itemIdx])
-						return true
-					}
-				}
-				// Leaf: simulate Enter so vtui's default OnAction fires.
-				menu.ProcessKey(&vtinput.InputEvent{
-					Type: vtinput.KeyEventType, KeyDown: true,
-					VirtualKeyCode: vtinput.VK_RETURN,
-				})
+			target, mapped := fnKeyTarget[fn]
+			if !mapped {
 				return true
 			}
+			uiIdx, ok := findMenuItemByUserData(menu, target)
+			if !ok {
+				return true
+			}
+			menu.SetSelectPos(uiIdx)
+			if target >= 0 && target < len(items) && items[target].IsSubmenu() {
+				s.enterSubmenu(menu, items, title, items[target])
+				return true
+			}
+			// Leaf: simulate Enter so vtui's default OnAction fires.
+			menu.ProcessKey(&vtinput.InputEvent{
+				Type: vtinput.KeyEventType, KeyDown: true,
+				VirtualKeyCode: vtinput.VK_RETURN,
+			})
+			return true
 		}
 		// Enter / Right on a submenu item: descend into the child.
 		if !shift && !ctrl && !alt &&
