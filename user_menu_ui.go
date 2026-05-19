@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -462,13 +463,18 @@ func (s *userMenuState) goBack(current *vtui.VMenu) {
 func editCurrentMenuInExternalEditor(pf *PanelsFrame, mode MenuMode, sourcePath string) {
 	items := loadRootForMode(mode, sourcePath)
 
+	var initBuf bytes.Buffer
+	if werr := WriteFarMenu(&initBuf, items); werr != nil {
+		vtui.ShowMessage(" User menu ", fmt.Sprintf("Cannot serialize menu:\n%v", werr), []string{"&Ok"})
+		return
+	}
 	tmp, err := os.CreateTemp("", "f4-usermenu-*.ini")
 	if err != nil {
 		vtui.ShowMessage(" User menu ", fmt.Sprintf("Cannot create temp file:\n%v", err), []string{"&Ok"})
 		return
 	}
 	tmpPath := tmp.Name()
-	if werr := WriteFarMenu(tmp, items); werr != nil {
+	if _, werr := tmp.Write(initBuf.Bytes()); werr != nil {
 		tmp.Close()
 		os.Remove(tmpPath)
 		vtui.ShowMessage(" User menu ", fmt.Sprintf("Cannot write temp file:\n%v", werr), []string{"&Ok"})
@@ -479,7 +485,7 @@ func editCurrentMenuInExternalEditor(pf *PanelsFrame, mode MenuMode, sourcePath 
 		vtui.ShowMessage(" User menu ", fmt.Sprintf("Cannot close temp file:\n%v", cerr), []string{"&Ok"})
 		return
 	}
-	initStat, _ := os.Stat(tmpPath)
+	initBytes := initBuf.Bytes()
 
 	onClose := func() {
 		defer os.Remove(tmpPath)
@@ -488,14 +494,18 @@ func editCurrentMenuInExternalEditor(pf *PanelsFrame, mode MenuMode, sourcePath 
 		// returns to the menu loop after FrameManager->ExecuteModalEV).
 		defer vtui.FrameManager.PostTask(func() { ShowUserMenu(pf) })
 
-		stat, statErr := os.Stat(tmpPath)
-		if statErr != nil {
+		// Compare bytes (not mtime): EditorView.SaveToFile restores the
+		// original mtime/perms after an atomic rename to preserve file
+		// ownership semantics, so size+mtime equal can't tell us whether
+		// the user actually edited anything.
+		finalBytes, readErr := os.ReadFile(tmpPath)
+		if readErr != nil {
 			return
 		}
-		if initStat != nil && stat.Size() == initStat.Size() && stat.ModTime().Equal(initStat.ModTime()) {
+		if bytes.Equal(initBytes, finalBytes) {
 			return
 		}
-		parsed, parseErr := loadFarMenuFile(tmpPath)
+		parsed, parseErr := ParseFarMenu(bytes.NewReader(finalBytes))
 		if parseErr != nil {
 			vtui.FrameManager.PostTask(func() {
 				vtui.ShowMessage(" User menu ",
