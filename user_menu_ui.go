@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/unxed/f4/piecetable"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
@@ -77,6 +78,59 @@ func loadFarMenuFile(path string) ([]UserMenuItem, error) {
 	}
 	defer f.Close()
 	return ParseFarMenu(f)
+}
+
+// saveFarMenuFile writes a FarMenu.ini text-format file atomically.
+func saveFarMenuFile(path string, items []UserMenuItem) error {
+	if dir := filepath.Dir(path); dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return err
+		}
+	}
+	tmp := path + ".tmp"
+	f, err := os.Create(tmp)
+	if err != nil {
+		return err
+	}
+	if err := WriteFarMenu(f, items); err != nil {
+		f.Close()
+		os.Remove(tmp)
+		return err
+	}
+	if err := f.Close(); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
+// loadRootForMode reads the current root menu from disk based on the
+// source mode and path. Missing files are not an error — they yield an
+// empty slice so a fresh menu can be authored.
+func loadRootForMode(mode MenuMode, path string) []UserMenuItem {
+	switch mode {
+	case MenuModeMain:
+		items, _ := LoadMainMenu(path)
+		return items
+	default:
+		items, err := loadFarMenuFile(path)
+		if err != nil {
+			return nil
+		}
+		return items
+	}
+}
+
+// saveRootForMode writes items back to the source file using whichever
+// on-disk format that source uses (flat INI for the main menu, FarMenu.ini
+// text for the per-directory and near-binary files).
+func saveRootForMode(mode MenuMode, path string, items []UserMenuItem) error {
+	switch mode {
+	case MenuModeMain:
+		return SaveMainMenu(path, items)
+	default:
+		return saveFarMenuFile(path, items)
+	}
 }
 
 // defaultSavePath returns the path Ctrl+F4 should open in the editor
@@ -252,24 +306,26 @@ func (s *userMenuState) pushLevel(items []UserMenuItem, title string, initialSel
 			})
 			return true
 		}
-		// Ctrl+F4 opens the underlying file in the editor (matches far2l
-		// usermenu.cpp:619 "редактировать все меню"). The menu is dismissed
-		// first so the editor takes the whole screen; F2 reloads the menu
-		// from disk after the user finishes editing and exits.
+		// Ctrl+F4 edits the menu via a temp file, matching far2l
+		// usermenu.cpp:619-678: dump the current root tree as FarMenu.ini
+		// text, open the temp file in the editor, on close parse it back
+		// and write it to the real source path in that source's native
+		// format. If the user didn't change anything we skip the save; if
+		// parsing fails we surface an error and keep the original intact.
 		if e.VirtualKeyCode == vtinput.VK_F4 && ctrl && !shift && !alt {
-			path := s.sourcePath
-			if path == "" {
-				path = defaultSavePath(s.pf, s.mode)
+			sourcePath := s.sourcePath
+			if sourcePath == "" {
+				sourcePath = defaultSavePath(s.pf, s.mode)
 			}
-			if path == "" {
+			if sourcePath == "" {
 				return true
 			}
+			pf := s.pf
+			mode := s.mode
 			s.history = nil
 			menu.Close()
-			editorDir := filepath.Dir(path)
-			pf := s.pf
 			vtui.FrameManager.PostTask(func() {
-				actionOpenEditor(pf, vfs.NewOSVFS(editorDir), path)
+				editCurrentMenuInExternalEditor(pf, mode, sourcePath)
 			})
 			return true
 		}
@@ -395,6 +451,82 @@ func (s *userMenuState) goBack(current *vtui.VMenu) {
 	vtui.FrameManager.PostTask(func() {
 		s.pushLevel(prev.items, prev.title, prev.selected)
 	})
+}
+
+// editCurrentMenuInExternalEditor implements the Ctrl+F4 flow modelled
+// after far2l (usermenu.cpp:619-678): write the current root tree to a
+// temp file as FarMenu.ini text, open the editor on the temp file, and
+// on close re-parse the file and persist it back to the source path
+// using that source's native format. The original source is left
+// untouched if the user made no changes or if parsing fails.
+func editCurrentMenuInExternalEditor(pf *PanelsFrame, mode MenuMode, sourcePath string) {
+	items := loadRootForMode(mode, sourcePath)
+
+	tmp, err := os.CreateTemp("", "f4-usermenu-*.ini")
+	if err != nil {
+		vtui.ShowMessage(" User menu ", fmt.Sprintf("Cannot create temp file:\n%v", err), []string{"&Ok"})
+		return
+	}
+	tmpPath := tmp.Name()
+	if werr := WriteFarMenu(tmp, items); werr != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		vtui.ShowMessage(" User menu ", fmt.Sprintf("Cannot write temp file:\n%v", werr), []string{"&Ok"})
+		return
+	}
+	if cerr := tmp.Close(); cerr != nil {
+		os.Remove(tmpPath)
+		vtui.ShowMessage(" User menu ", fmt.Sprintf("Cannot close temp file:\n%v", cerr), []string{"&Ok"})
+		return
+	}
+	initStat, _ := os.Stat(tmpPath)
+
+	onClose := func() {
+		defer os.Remove(tmpPath)
+
+		stat, statErr := os.Stat(tmpPath)
+		if statErr != nil {
+			return
+		}
+		if initStat != nil && stat.Size() == initStat.Size() && stat.ModTime().Equal(initStat.ModTime()) {
+			return
+		}
+		parsed, parseErr := loadFarMenuFile(tmpPath)
+		if parseErr != nil {
+			vtui.FrameManager.PostTask(func() {
+				vtui.ShowMessage(" User menu ",
+					fmt.Sprintf("Failed to parse edited menu:\n%v\n\nOriginal kept.", parseErr),
+					[]string{"&Ok"})
+			})
+			return
+		}
+		if saveErr := saveRootForMode(mode, sourcePath, parsed); saveErr != nil {
+			vtui.FrameManager.PostTask(func() {
+				vtui.ShowMessage(" User menu ",
+					fmt.Sprintf("Failed to save menu:\n%v", saveErr),
+					[]string{"&Ok"})
+			})
+		}
+	}
+
+	openTempInEditor(pf, tmpPath, onClose)
+}
+
+// openTempInEditor creates an EditorView on the given path with an
+// OnClose hook. It mirrors actionOpenEditor's setup but reads
+// synchronously since user-menu temp files are tiny.
+func openTempInEditor(pf *PanelsFrame, path string, onClose func()) {
+	dir := filepath.Dir(path)
+	v := vfs.NewOSVFS(dir)
+
+	data, _ := os.ReadFile(path)
+	pt := piecetable.New(data)
+
+	editor := NewEditorView(pt, v, path)
+	editor.OnClose = onClose
+	editor.ResizeConsole(pf.lastW, pf.lastH)
+	editor.StartIndexing()
+	vtui.FrameManager.AddScreen(editor)
 }
 
 // formatMenuItemText builds the displayed string for an item:
