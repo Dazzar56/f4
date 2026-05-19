@@ -20,10 +20,12 @@ import (
 // nested level is terminated by "}\r\n". Separator items use HotKey "--"
 // and an empty label.
 //
-// Encoding: far2l writes UTF-16LE with a BOM (SIGN_WIDE_LE), but its
-// reader (GetFileFormat) also accepts UTF-8 with or without BOM. We
-// always write UTF-8 without BOM (round-trips cleanly through far2l)
-// and read all of UTF-16LE/BE/UTF-8±BOM/plain UTF-8 on input.
+// Encoding: far2l writes SIGN_WIDE_LE as one wchar_t, so the on-disk
+// encoding follows the build platform's wchar_t width — UTF-16LE on
+// Windows (2-byte wchar_t) but UTF-32LE on Linux/macOS/BSD (4-byte
+// wchar_t). We detect both, plus UTF-16BE/UTF-32BE/UTF-8 with BOM, and
+// fall back to plain UTF-8 otherwise. We always write UTF-8 without a
+// BOM, which far2l's GetFileFormat accepts when no BOM is present.
 
 const (
 	farMenuColonSep      = ":  " // colon + two spaces between HotKey and Label
@@ -59,7 +61,14 @@ func WriteFarMenu(w io.Writer, items []UserMenuItem) error {
 }
 
 func decodeFarMenuBytes(b []byte) (string, error) {
+	// Order matters: a UTF-32LE BOM (FF FE 00 00) starts with the same
+	// two bytes as a UTF-16LE BOM (FF FE), so the wider check has to
+	// come first. Same for the BE pair.
 	switch {
+	case len(b) >= 4 && b[0] == 0xFF && b[1] == 0xFE && b[2] == 0x00 && b[3] == 0x00:
+		return decodeUTF32Bytes(b[4:], binary.LittleEndian), nil
+	case len(b) >= 4 && b[0] == 0x00 && b[1] == 0x00 && b[2] == 0xFE && b[3] == 0xFF:
+		return decodeUTF32Bytes(b[4:], binary.BigEndian), nil
 	case len(b) >= 3 && b[0] == 0xEF && b[1] == 0xBB && b[2] == 0xBF:
 		return string(b[3:]), nil
 	case len(b) >= 2 && b[0] == 0xFF && b[1] == 0xFE:
@@ -68,7 +77,7 @@ func decodeFarMenuBytes(b []byte) (string, error) {
 		return decodeUTF16Bytes(b[2:], binary.BigEndian), nil
 	}
 	if !utf8.Valid(b) {
-		return "", errors.New("FarMenu.ini: input is neither valid UTF-8 nor BOM-marked UTF-16")
+		return "", errors.New("FarMenu.ini: input is neither valid UTF-8 nor BOM-marked UTF-16/UTF-32")
 	}
 	return string(b), nil
 }
@@ -82,6 +91,19 @@ func decodeUTF16Bytes(b []byte, bo binary.ByteOrder) string {
 		u16[i] = bo.Uint16(b[i*2 : i*2+2])
 	}
 	return string(utf16.Decode(u16))
+}
+
+func decodeUTF32Bytes(b []byte, bo binary.ByteOrder) string {
+	b = b[:len(b)-len(b)%4]
+	runes := make([]rune, 0, len(b)/4)
+	for i := 0; i < len(b); i += 4 {
+		r := rune(bo.Uint32(b[i : i+4]))
+		if r < 0 || r > 0x10FFFF || (r >= 0xD800 && r <= 0xDFFF) {
+			r = utf8.RuneError
+		}
+		runes = append(runes, r)
+	}
+	return string(runes)
 }
 
 func splitTextLines(s string) []string {

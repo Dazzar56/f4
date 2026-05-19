@@ -197,6 +197,69 @@ func TestParseFarMenu_UTF16BEWithBOM(t *testing.T) {
 	}
 }
 
+func TestParseFarMenu_UTF32LEWithBOM(t *testing.T) {
+	// This is what far2l actually writes on Linux/macOS/BSD: SIGN_WIDE_LE
+	// emitted as a single 4-byte wchar_t. Looks like FF FE 00 00 ... .
+	body := "c:  code\r\n    code .\r\n"
+	var buf bytes.Buffer
+	buf.Write([]byte{0xFF, 0xFE, 0x00, 0x00})
+	for _, r := range body {
+		_ = binary.Write(&buf, binary.LittleEndian, uint32(r))
+	}
+	got, err := ParseFarMenu(&buf)
+	if err != nil {
+		t.Fatalf("UTF-32LE decode: %v", err)
+	}
+	if len(got) != 1 || got[0].HotKey != "c" || got[0].Label != "code" ||
+		len(got[0].Commands) != 1 || got[0].Commands[0] != "code ." {
+		t.Fatalf("UTF-32LE parsed wrong: %#v", got)
+	}
+}
+
+func TestParseFarMenu_UTF32LEWithCyrillic(t *testing.T) {
+	body := "a:  Яблоко\r\n"
+	var buf bytes.Buffer
+	buf.Write([]byte{0xFF, 0xFE, 0x00, 0x00})
+	for _, r := range body {
+		_ = binary.Write(&buf, binary.LittleEndian, uint32(r))
+	}
+	got, _ := ParseFarMenu(&buf)
+	if len(got) != 1 || got[0].Label != "Яблоко" {
+		t.Fatalf("UTF-32LE cyrillic mangled: %#v", got)
+	}
+}
+
+func TestParseFarMenu_UTF32BEWithBOM(t *testing.T) {
+	body := "a:  X\r\n"
+	var buf bytes.Buffer
+	buf.Write([]byte{0x00, 0x00, 0xFE, 0xFF})
+	for _, r := range body {
+		_ = binary.Write(&buf, binary.BigEndian, uint32(r))
+	}
+	got, _ := ParseFarMenu(&buf)
+	if len(got) != 1 || got[0].HotKey != "a" || got[0].Label != "X" {
+		t.Fatalf("UTF-32BE decoded wrong: %#v", got)
+	}
+}
+
+// Disambiguation check: UTF-32LE BOM is "FF FE 00 00" and UTF-16LE BOM
+// is "FF FE", so the wider format must be detected first or else a real
+// UTF-32 file gets misparsed as UTF-16 (every other char appears empty,
+// which is exactly the symptom seen on far2l-authored FarMenu.ini on
+// Linux).
+func TestParseFarMenu_UTF32LE_NotMistakenForUTF16LE(t *testing.T) {
+	body := "a:  Apple\r\n"
+	var buf bytes.Buffer
+	buf.Write([]byte{0xFF, 0xFE, 0x00, 0x00})
+	for _, r := range body {
+		_ = binary.Write(&buf, binary.LittleEndian, uint32(r))
+	}
+	got, _ := ParseFarMenu(&buf)
+	if len(got) != 1 || got[0].Label != "Apple" {
+		t.Fatalf("UTF-32LE misparsed (likely as UTF-16LE): %#v", got)
+	}
+}
+
 func TestParseFarMenu_LFOnlyLineEndings(t *testing.T) {
 	got := parseFarMenuString(t, "a:  Apple\n    cmd\nb:  Banana\n")
 	if len(got) != 2 || got[0].Commands[0] != "cmd" || got[1].Label != "Banana" {
