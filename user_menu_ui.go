@@ -483,6 +483,10 @@ func editCurrentMenuInExternalEditor(pf *PanelsFrame, mode MenuMode, sourcePath 
 
 	onClose := func() {
 		defer os.Remove(tmpPath)
+		// Always reopen the menu after the editor closes so the user
+		// sees their edits applied immediately (matches far2l: control
+		// returns to the menu loop after FrameManager->ExecuteModalEV).
+		defer vtui.FrameManager.PostTask(func() { ShowUserMenu(pf) })
 
 		stat, statErr := os.Stat(tmpPath)
 		if statErr != nil {
