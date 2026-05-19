@@ -26,6 +26,10 @@ const (
 
 const farMenuFileName = "FarMenu.ini"
 
+// submenuMarker is the right-aligned glyph that flags an item as opening
+// a nested submenu, matching far2l's choice (vmenu.cpp:1980).
+const submenuMarker = "►" // ►
+
 // MainMenuFilePath returns the user-config location for the persistent
 // main menu. The filename matches far2l so the same file can be shared
 // between ~/.config/far2l/settings/user_menu.ini and the f4 directory
@@ -147,12 +151,18 @@ func ShowUserMenu(pf *PanelsFrame) {
 
 func (s *userMenuState) pushLevel(items []UserMenuItem, title string) {
 	menu := vtui.NewVMenu(" " + title + " ")
+	// Depth captured at push time stays stable even if the user dismisses
+	// child menus with Esc (which doesn't tick popClosed). Using this
+	// instead of len(s.stack) avoids treating the root as a submenu after
+	// stale stack entries pile up.
+	depth := len(s.stack)
 	s.stack = append(s.stack, menu)
 
 	// Map F1..F24 hotkeys to item indices for fast lookup in OnKeyDown.
 	// vtui already handles single-char (&-prefixed) hotkeys natively.
 	fnKeyTarget := map[uint32]int{}
 
+	hasSubmenus := false
 	for i, it := range items {
 		if it.IsSeparator() {
 			menu.AddSeparator()
@@ -161,13 +171,20 @@ func (s *userMenuState) pushLevel(items []UserMenuItem, title string) {
 		if fn := parseFunctionKey(it.HotKey); fn > 0 {
 			fnKeyTarget[fn] = i
 		}
-		menu.AddItem(vtui.MenuItem{
+		mi := vtui.MenuItem{
 			Text:     formatMenuItemText(it),
 			UserData: i,
-		})
+		}
+		if it.IsSubmenu() {
+			// far2l uses U+25BA as the submenu marker (vmenu.cpp:1980);
+			// the right-aligned Shortcut slot is the closest analogue.
+			mi.Shortcut = submenuMarker
+			hasSubmenus = true
+		}
+		menu.AddItem(mi)
 	}
 
-	w, h := menuSize(s.pf, menu.GetItemCount(), items)
+	w, h := menuSize(s.pf, menu.GetItemCount(), items, hasSubmenus)
 	x := (s.pf.lastW - w) / 2
 	y := (s.pf.lastH - h) / 2
 	if x < 0 {
@@ -224,6 +241,15 @@ func (s *userMenuState) pushLevel(items []UserMenuItem, title string) {
 					}
 				}
 			}
+		}
+		// Left arrow → back to the parent menu, but only when we're
+		// actually inside a submenu. At the root level it's a no-op
+		// (matches usermenu.cpp:575: closes only when Title is set).
+		if !shift && !ctrl && !alt && e.VirtualKeyCode == vtinput.VK_LEFT {
+			if depth > 0 {
+				menu.Close()
+			}
+			return true // swallow either way so it doesn't bubble to panels
 		}
 		return false
 	}
@@ -349,7 +375,8 @@ func findMenuItemByUserData(menu *vtui.VMenu, itemIdx int) (int, bool) {
 }
 
 // menuSize returns suggested width/height for a menu given its content.
-func menuSize(pf *PanelsFrame, itemCount int, items []UserMenuItem) (int, int) {
+// hasSubmenus reserves space for the right-aligned ► marker.
+func menuSize(pf *PanelsFrame, itemCount int, items []UserMenuItem, hasSubmenus bool) (int, int) {
 	maxLabel := 20
 	for _, it := range items {
 		if it.IsSeparator() {
@@ -361,6 +388,9 @@ func menuSize(pf *PanelsFrame, itemCount int, items []UserMenuItem) (int, int) {
 		}
 	}
 	w := maxLabel + 4
+	if hasSubmenus {
+		w += 2 // reserve room for the trailing "► "
+	}
 	if pf.lastW > 0 && w > pf.lastW-4 {
 		w = pf.lastW - 4
 	}
