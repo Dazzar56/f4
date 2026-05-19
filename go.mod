@@ -15,7 +15,7 @@ require (
 	golang.org/x/crypto v0.31.0
 	golang.org/x/sys v0.44.0
 	golang.org/x/term v0.40.0
-	golang.org/x/text v0.36.0
+	golang.org/x/text v0.37.0
 )
 
 require (
@@ -33,12 +33,12 @@ require (
 	github.com/go-text/typesetting v0.3.4 // indirect
 	github.com/go-webgpu/goffi v0.5.1 // indirect
 	github.com/go-webgpu/webgpu v0.4.3 // indirect
-	github.com/gogpu/gg v0.46.8 // indirect
-	github.com/gogpu/gogpu v0.37.7 // indirect
+	github.com/gogpu/gg v0.47.3 // indirect
+	github.com/gogpu/gogpu v0.37.9 // indirect
 	github.com/gogpu/gpucontext v0.19.0 // indirect
 	github.com/gogpu/gputypes v0.5.0 // indirect
 	github.com/gogpu/naga v0.17.13 // indirect
-	github.com/gogpu/wgpu v0.28.1 // indirect
+	github.com/gogpu/wgpu v0.28.3 // indirect
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/hashicorp/errwrap v1.0.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
@@ -65,7 +65,7 @@ require (
 	go4.org v0.0.0-20230225012048-214862532bf5 // indirect
 	golang.design/x/clipboard v0.7.0 // indirect
 	golang.org/x/exp v0.0.0-20200207192155-f17229e696bd // indirect
-	golang.org/x/image v0.39.0 // indirect
+	golang.org/x/image v0.40.0 // indirect
 	golang.org/x/mobile v0.0.0-20230301163155-e0f57694e12c // indirect
 	golang.org/x/sync v0.20.0 // indirect
 )
