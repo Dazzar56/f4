@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"unicode/utf16"
@@ -280,46 +281,105 @@ func TestParseFarMenu_InvalidUTF8(t *testing.T) {
 	}
 }
 
-func TestWriteFarMenu_OneItem_CRLF_NoBOM(t *testing.T) {
-	var buf bytes.Buffer
-	err := WriteFarMenu(&buf, []UserMenuItem{
+func TestRenderFarMenuText_OneItem(t *testing.T) {
+	got := renderFarMenuText([]UserMenuItem{
 		{HotKey: "a", Label: "Apple", Commands: []string{"eat"}},
 	})
-	if err != nil {
-		t.Fatalf("write: %v", err)
-	}
-	got := buf.String()
 	want := "a:  Apple\r\n    eat\r\n"
 	if got != want {
 		t.Fatalf("output mismatch:\nGOT  %q\nWANT %q", got, want)
 	}
-	// Explicit BOM-absence check: a far2l-authored file would lead with FF FE.
-	if bytes.HasPrefix(buf.Bytes(), []byte{0xFF, 0xFE}) ||
-		bytes.HasPrefix(buf.Bytes(), []byte{0xEF, 0xBB, 0xBF}) {
-		t.Errorf("output unexpectedly includes a BOM")
-	}
 }
 
-func TestWriteFarMenu_Submenu(t *testing.T) {
-	var buf bytes.Buffer
-	_ = WriteFarMenu(&buf, []UserMenuItem{
+func TestRenderFarMenuText_Submenu(t *testing.T) {
+	got := renderFarMenuText([]UserMenuItem{
 		{HotKey: "m", Label: "Menu", Submenu: []UserMenuItem{
 			{HotKey: "a", Label: "A", Commands: []string{"x"}},
 		}},
 	})
 	want := "m:  Menu\r\n{\r\na:  A\r\n    x\r\n}\r\n"
-	if buf.String() != want {
-		t.Fatalf("submenu output:\nGOT  %q\nWANT %q", buf.String(), want)
+	if got != want {
+		t.Fatalf("submenu output:\nGOT  %q\nWANT %q", got, want)
 	}
 }
 
-func TestWriteFarMenu_Separator(t *testing.T) {
-	var buf bytes.Buffer
-	_ = WriteFarMenu(&buf, []UserMenuItem{
+func TestRenderFarMenuText_Separator(t *testing.T) {
+	got := renderFarMenuText([]UserMenuItem{
 		{HotKey: "--", Label: ""},
 	})
-	if buf.String() != "--:  \r\n" {
-		t.Fatalf("separator output: %q", buf.String())
+	if got != "--:  \r\n" {
+		t.Fatalf("separator output: %q", got)
+	}
+}
+
+func TestWriteFarMenu_PlatformEncodingHasBOM(t *testing.T) {
+	var buf bytes.Buffer
+	if err := WriteFarMenu(&buf, []UserMenuItem{
+		{HotKey: "a", Label: "Apple", Commands: []string{"eat"}},
+	}); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	b := buf.Bytes()
+	switch runtime.GOOS {
+	case "windows":
+		if !bytes.HasPrefix(b, []byte{0xFF, 0xFE}) {
+			t.Errorf("Windows build should write UTF-16LE BOM, got %x", b[:min(4, len(b))])
+		}
+		if bytes.HasPrefix(b, []byte{0xFF, 0xFE, 0x00, 0x00}) {
+			t.Errorf("Windows build wrote UTF-32 BOM instead of UTF-16")
+		}
+	default:
+		if !bytes.HasPrefix(b, []byte{0xFF, 0xFE, 0x00, 0x00}) {
+			t.Errorf("Unix build should write UTF-32LE BOM, got %x", b[:min(8, len(b))])
+		}
+	}
+	// Round-trip via the multi-encoding reader regardless of platform.
+	out, err := ParseFarMenu(bytes.NewReader(b))
+	if err != nil {
+		t.Fatalf("re-parse failed: %v", err)
+	}
+	if len(out) != 1 || out[0].Label != "Apple" {
+		t.Fatalf("round-trip mangled: %#v", out)
+	}
+}
+
+func TestEncodeUTF16LEWithBOM(t *testing.T) {
+	got := encodeUTF16LEWithBOM("c:")
+	want := []byte{0xFF, 0xFE, 'c', 0x00, ':', 0x00}
+	if !bytes.Equal(got, want) {
+		t.Errorf("got %x, want %x", got, want)
+	}
+}
+
+func TestEncodeUTF32LEWithBOM(t *testing.T) {
+	got := encodeUTF32LEWithBOM("c:")
+	want := []byte{
+		0xFF, 0xFE, 0x00, 0x00,
+		'c', 0x00, 0x00, 0x00,
+		':', 0x00, 0x00, 0x00,
+	}
+	if !bytes.Equal(got, want) {
+		t.Errorf("got %x, want %x", got, want)
+	}
+}
+
+func TestEncode_CyrillicSurvivesBothEncodings(t *testing.T) {
+	src := "Яблоко"
+	for _, c := range []struct {
+		name string
+		fn   func(string) []byte
+	}{
+		{"UTF-16LE", encodeUTF16LEWithBOM},
+		{"UTF-32LE", encodeUTF32LEWithBOM},
+	} {
+		decoded, err := decodeFarMenuBytes(c.fn(src))
+		if err != nil {
+			t.Errorf("%s decode: %v", c.name, err)
+			continue
+		}
+		if decoded != src {
+			t.Errorf("%s round-trip: got %q want %q", c.name, decoded, src)
+		}
 	}
 }
 
@@ -384,18 +444,18 @@ func TestFarMenu_CrossFormatRoundTrip(t *testing.T) {
 	}
 }
 
-func TestFarMenu_BytewiseFar2lFormat(t *testing.T) {
-	// Confirm we emit exactly what far2l's MenuRegToFile produces (modulo
-	// encoding — we use UTF-8 instead of UTF-16LE). Reference output is
-	// pieced together from usermenu.cpp:103-137 verbatim.
+func TestRenderFarMenuText_MatchesFar2lLayout(t *testing.T) {
+	// Confirm the canonical text we render mirrors what far2l's
+	// MenuRegToFile emits modulo encoding. Reference is pieced together
+	// from usermenu.cpp:103-137. WriteFarMenu wraps this in the
+	// platform's wide encoding; the layout itself must stay identical.
 	items := []UserMenuItem{
 		{HotKey: "c", Label: "VSCode", Commands: []string{"code ."}},
 		{HotKey: "t", Label: "tmux", Submenu: []UserMenuItem{
 			{HotKey: "l", Label: "list", Commands: []string{"tmux ls"}},
 		}},
 	}
-	var buf bytes.Buffer
-	_ = WriteFarMenu(&buf, items)
+	got := renderFarMenuText(items)
 	want := "c:  VSCode\r\n" +
 		"    code .\r\n" +
 		"t:  tmux\r\n" +
@@ -403,7 +463,7 @@ func TestFarMenu_BytewiseFar2lFormat(t *testing.T) {
 		"l:  list\r\n" +
 		"    tmux ls\r\n" +
 		"}\r\n"
-	if buf.String() != want {
-		t.Fatalf("byte-level format drift:\nGOT  %q\nWANT %q", buf.String(), want)
+	if got != want {
+		t.Fatalf("text-layout drift:\nGOT  %q\nWANT %q", got, want)
 	}
 }

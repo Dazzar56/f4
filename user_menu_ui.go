@@ -647,18 +647,18 @@ func (s *userMenuState) goBack(current *vtui.VMenu) {
 func editCurrentMenuInExternalEditor(pf *PanelsFrame, mode MenuMode, sourcePath string) {
 	items := loadRootForMode(mode, sourcePath)
 
-	var initBuf bytes.Buffer
-	if werr := WriteFarMenu(&initBuf, items); werr != nil {
-		vtui.ShowMessage(" User menu ", fmt.Sprintf("Cannot serialize menu:\n%v", werr), []string{"&Ok"})
-		return
-	}
+	// The temp file is what the user actually edits, so write it as
+	// plain UTF-8 even though the on-disk FarMenu.ini we ultimately
+	// save back uses the platform's wide encoding. Editors are far
+	// happier with UTF-8 and the parser accepts both on the way back.
+	initBytes := []byte(renderFarMenuText(items))
 	tmp, err := os.CreateTemp("", "f4-usermenu-*.ini")
 	if err != nil {
 		vtui.ShowMessage(" User menu ", fmt.Sprintf("Cannot create temp file:\n%v", err), []string{"&Ok"})
 		return
 	}
 	tmpPath := tmp.Name()
-	if _, werr := tmp.Write(initBuf.Bytes()); werr != nil {
+	if _, werr := tmp.Write(initBytes); werr != nil {
 		tmp.Close()
 		os.Remove(tmpPath)
 		vtui.ShowMessage(" User menu ", fmt.Sprintf("Cannot write temp file:\n%v", werr), []string{"&Ok"})
@@ -669,7 +669,6 @@ func editCurrentMenuInExternalEditor(pf *PanelsFrame, mode MenuMode, sourcePath 
 		vtui.ShowMessage(" User menu ", fmt.Sprintf("Cannot close temp file:\n%v", cerr), []string{"&Ok"})
 		return
 	}
-	initBytes := initBuf.Bytes()
 
 	onClose := func() {
 		defer os.Remove(tmpPath)

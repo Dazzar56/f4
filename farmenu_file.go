@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"runtime"
 	"strings"
 	"unicode/utf16"
 	"unicode/utf8"
@@ -20,12 +21,17 @@ import (
 // nested level is terminated by "}\r\n". Separator items use HotKey "--"
 // and an empty label.
 //
-// Encoding: far2l writes SIGN_WIDE_LE as one wchar_t, so the on-disk
-// encoding follows the build platform's wchar_t width — UTF-16LE on
-// Windows (2-byte wchar_t) but UTF-32LE on Linux/macOS/BSD (4-byte
-// wchar_t). We detect both, plus UTF-16BE/UTF-32BE/UTF-8 with BOM, and
-// fall back to plain UTF-8 otherwise. We always write UTF-8 without a
-// BOM, which far2l's GetFileFormat accepts when no BOM is present.
+// Encoding (read): we accept everything anyone might hand us — UTF-8
+// with or without BOM, UTF-16 LE/BE with BOM, UTF-32 LE/BE with BOM.
+// far2l on Linux/macOS/BSD writes UTF-32LE because its SIGN_WIDE_LE is
+// emitted as one wchar_t and wchar_t is 4 bytes there; Far Manager 2
+// on Windows writes UTF-16LE (2-byte wchar_t).
+//
+// Encoding (write): we mirror the dominant native tool on the running
+// platform so the file we produce is consumable by it without any
+// conversion. On Windows that's Far Manager 2 → UTF-16LE+BOM; on
+// Linux/macOS/BSD that's far2l → UTF-32LE+BOM. Both with CRLF line
+// endings, matching the upstream tools byte-for-byte.
 
 const (
 	farMenuColonSep      = ":  " // colon + two spaces between HotKey and Label
@@ -51,13 +57,54 @@ func ParseFarMenu(r io.Reader) ([]UserMenuItem, error) {
 	return items, nil
 }
 
-// WriteFarMenu writes items to w in far2l-compatible text format.
-// Output is UTF-8 without BOM with CRLF line endings.
+// WriteFarMenu writes items to w using the platform-native wide
+// encoding (UTF-16LE+BOM on Windows, UTF-32LE+BOM elsewhere) so the
+// resulting FarMenu.ini is consumable by the dominant tool on that
+// platform without conversion.
 func WriteFarMenu(w io.Writer, items []UserMenuItem) error {
+	text := renderFarMenuText(items)
+	_, err := w.Write(encodeFarMenuForPlatform(text))
+	return err
+}
+
+// renderFarMenuText returns the canonical FarMenu.ini representation
+// as a UTF-8 string with CRLF endings. WriteFarMenu wraps it with the
+// platform wide encoding; the editor-temp-file path in user_menu_ui.go
+// uses the raw UTF-8 bytes directly so the user gets a friendly file
+// to hand-edit.
+func renderFarMenuText(items []UserMenuItem) string {
 	var buf bytes.Buffer
 	writeFarMenuLevel(&buf, items)
-	_, err := w.Write(buf.Bytes())
-	return err
+	return buf.String()
+}
+
+// encodeFarMenuForPlatform applies the wchar_t-width-dependent encoding
+// the running platform's native tool produces.
+func encodeFarMenuForPlatform(s string) []byte {
+	if runtime.GOOS == "windows" {
+		return encodeUTF16LEWithBOM(s)
+	}
+	return encodeUTF32LEWithBOM(s)
+}
+
+func encodeUTF16LEWithBOM(s string) []byte {
+	u16 := utf16.Encode([]rune(s))
+	buf := make([]byte, 0, 2+len(u16)*2)
+	buf = append(buf, 0xFF, 0xFE)
+	for _, w := range u16 {
+		buf = binary.LittleEndian.AppendUint16(buf, w)
+	}
+	return buf
+}
+
+func encodeUTF32LEWithBOM(s string) []byte {
+	runes := []rune(s)
+	buf := make([]byte, 0, 4+len(runes)*4)
+	buf = append(buf, 0xFF, 0xFE, 0x00, 0x00)
+	for _, r := range runes {
+		buf = binary.LittleEndian.AppendUint32(buf, uint32(r))
+	}
+	return buf
 }
 
 func decodeFarMenuBytes(b []byte) (string, error) {
