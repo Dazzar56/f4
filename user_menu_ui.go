@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
@@ -78,6 +79,27 @@ func loadFarMenuFile(path string) ([]UserMenuItem, error) {
 	return ParseFarMenu(f)
 }
 
+// defaultSavePath returns the path Ctrl+F4 should open in the editor
+// for a given mode when no menu file exists yet, so the user can
+// author one from scratch and save it where the loader will find it.
+func defaultSavePath(pf *PanelsFrame, mode MenuMode) string {
+	switch mode {
+	case MenuModeLocal:
+		if fsp, ok := pf.panels[pf.activeIdx].(*FileSystemPanel); ok && fsp != nil && fsp.vfs != nil {
+			return filepath.Join(fsp.vfs.GetPath(), farMenuFileName)
+		}
+		return ""
+	case MenuModeFar:
+		if exe, err := os.Executable(); err == nil {
+			return filepath.Join(filepath.Dir(exe), farMenuFileName)
+		}
+		return ""
+	case MenuModeMain:
+		return MainMenuFilePath()
+	}
+	return ""
+}
+
 // loadMenuForMode returns (items, title, sourcePath, ok). ok=false means
 // this mode has no data — caller may want to try the next mode.
 func loadMenuForMode(pf *PanelsFrame, mode MenuMode) (items []UserMenuItem, title, source string, ok bool) {
@@ -118,18 +140,18 @@ func loadMenuForMode(pf *PanelsFrame, mode MenuMode) (items []UserMenuItem, titl
 }
 
 // resolveMenuStart finds the first non-empty mode at or after initial,
-// returning items/title and the mode actually used.
-func resolveMenuStart(pf *PanelsFrame, initial MenuMode) (items []UserMenuItem, title string, mode MenuMode) {
+// returning items/title/source and the mode actually used.
+func resolveMenuStart(pf *PanelsFrame, initial MenuMode) (items []UserMenuItem, title string, mode MenuMode, source string) {
 	for offset := 0; offset < 3; offset++ {
 		m := MenuMode((int(initial) + offset) % 3)
-		if loaded, t, _, ok := loadMenuForMode(pf, m); ok {
-			return loaded, t, m
+		if loaded, t, src, ok := loadMenuForMode(pf, m); ok {
+			return loaded, t, m, src
 		}
 	}
 	// Nothing found anywhere — fall back to main with an empty list so
 	// the user still sees the menu chrome and can press Shift+F2 / Esc.
 	_, t, _, _ := loadMenuForMode(pf, MenuModeMain)
-	return nil, t, MenuModeMain
+	return nil, t, MenuModeMain, defaultSavePath(pf, MenuModeMain)
 }
 
 // menuLevel snapshots the data needed to recreate a parent menu when
@@ -145,16 +167,20 @@ type menuLevel struct {
 
 // userMenuState carries navigation history across pushLevel invocations.
 type userMenuState struct {
-	pf      *PanelsFrame
-	mode    MenuMode
-	history []menuLevel
+	pf         *PanelsFrame
+	mode       MenuMode
+	sourcePath string // file Ctrl+F4 opens and edits save back to
+	history    []menuLevel
 }
 
 // ShowUserMenu is the entry point. It loads the user menu starting from
 // the local (cwd-relative) mode and pushes a modal VMenu.
 func ShowUserMenu(pf *PanelsFrame) {
-	items, title, mode := resolveMenuStart(pf, MenuModeLocal)
-	s := &userMenuState{pf: pf, mode: mode}
+	items, title, mode, source := resolveMenuStart(pf, MenuModeLocal)
+	if source == "" {
+		source = defaultSavePath(pf, mode)
+	}
+	s := &userMenuState{pf: pf, mode: mode, sourcePath: source}
 	s.pushLevel(items, title, 0)
 }
 
@@ -216,9 +242,34 @@ func (s *userMenuState) pushLevel(items []UserMenuItem, title string, initialSel
 			menu.Close()
 			next := MenuMode((int(s.mode) + 1) % 3)
 			vtui.FrameManager.PostTask(func() {
-				newItems, newTitle, newMode := resolveMenuStart(s.pf, next)
+				newItems, newTitle, newMode, newSrc := resolveMenuStart(s.pf, next)
 				s.mode = newMode
+				if newSrc == "" {
+					newSrc = defaultSavePath(s.pf, newMode)
+				}
+				s.sourcePath = newSrc
 				s.pushLevel(newItems, newTitle, 0)
+			})
+			return true
+		}
+		// Ctrl+F4 opens the underlying file in the editor (matches far2l
+		// usermenu.cpp:619 "редактировать все меню"). The menu is dismissed
+		// first so the editor takes the whole screen; F2 reloads the menu
+		// from disk after the user finishes editing and exits.
+		if e.VirtualKeyCode == vtinput.VK_F4 && ctrl && !shift && !alt {
+			path := s.sourcePath
+			if path == "" {
+				path = defaultSavePath(s.pf, s.mode)
+			}
+			if path == "" {
+				return true
+			}
+			s.history = nil
+			menu.Close()
+			editorDir := filepath.Dir(path)
+			pf := s.pf
+			vtui.FrameManager.PostTask(func() {
+				actionOpenEditor(pf, vfs.NewOSVFS(editorDir), path)
 			})
 			return true
 		}
