@@ -8,6 +8,7 @@ require (
 	github.com/mattn/go-runewidth v0.0.15
 	github.com/mholt/archives v0.1.5
 	github.com/pkg/sftp v1.13.6
+	github.com/unxed/tar v0.1.0
 	github.com/unxed/vtinput v0.0.0
 	github.com/unxed/vtui v0.0.0
 	github.com/unxed/zip v0.1.5
@@ -47,6 +48,7 @@ require (
 	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/klauspost/pgzip v1.2.6 // indirect
 	github.com/kr/fs v0.1.0 // indirect
+	github.com/mattn/go-sqlite3 v1.14.22 // indirect
 	github.com/mikelolasagasti/xz v1.0.1 // indirect
 	github.com/minio/minlz v1.0.1 // indirect
 	github.com/neurlang/wayland v0.4.2 // indirect

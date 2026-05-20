@@ -2,16 +2,18 @@ package archive
 
 import (
 	"context"
-	"runtime"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 
 	"github.com/mholt/archives"
-	"github.com/unxed/zip"
 	"github.com/unxed/f4/vfs"
+	"github.com/unxed/tar"
 	"github.com/unxed/vtinput"
+	"github.com/unxed/zip"
 )
 
 type ArchivePlugin struct{}
@@ -73,6 +75,26 @@ func actionExtractArchive(app vfs.App) {
 		format, _, err := archives.Identify(ctx, srcPath, f)
 		if err != nil {
 			return err
+		}
+
+		isTar := false
+		if _, ok := format.(archives.Tar); ok {
+			isTar = true
+		} else if ca, ok := format.(archives.CompressedArchive); ok {
+			if _, ok := ca.Archival.(archives.Tar); ok {
+				isTar = true
+			}
+		}
+
+		if isTar {
+			f.Close()
+			update("Extracting tar archive...", -1)
+			e, err := tar.NewExtractor(srcPath, destDir)
+			if err != nil {
+				return err
+			}
+			defer e.Close()
+			return e.Extract(ctx)
 		}
 
 		ex, ok := format.(archives.Extractor)
@@ -175,18 +197,6 @@ func actionAddArchive(app vfs.App) {
 		fullArcPath := activeVfs.Join(activeVfs.GetPath(), name)
 
 		app.RunProgressTask(" Archiving... ", "Gathering files...", false, func(ctx context.Context, update func(msg string, percent int)) error {
-			out, err := os.Create(fullArcPath)
-			if err != nil {
-				return err
-			}
-			defer out.Close()
-
-			archiver, err := zip.NewArchiver(out, activeVfs.GetPath(), zip.WithArchiverConcurrency(runtime.NumGoroutine()))
-			if err != nil {
-				return err
-			}
-			defer archiver.Close()
-
 			fileMap := make(map[string]os.FileInfo)
 			for i, n := range names {
 				if ctx.Err() != nil {
@@ -205,6 +215,41 @@ func actionAddArchive(app vfs.App) {
 					})
 				}
 			}
+
+			lowerName := strings.ToLower(name)
+			isTar := strings.HasSuffix(lowerName, ".tar") || strings.Contains(lowerName, ".tar.") || strings.HasSuffix(lowerName, ".tgz") || strings.HasSuffix(lowerName, ".txz")
+
+			if isTar {
+				method := tar.Store
+				if strings.HasSuffix(lowerName, ".gz") || strings.HasSuffix(lowerName, ".tgz") {
+					method = tar.GZIP
+				} else if strings.HasSuffix(lowerName, ".bz2") {
+					method = tar.BZIP2
+				} else if strings.HasSuffix(lowerName, ".xz") || strings.HasSuffix(lowerName, ".txz") {
+					method = tar.XZ
+				} else if strings.HasSuffix(lowerName, ".zst") {
+					method = tar.ZSTD
+				}
+
+				archiver, err := tar.NewArchiver(fullArcPath, activeVfs.GetPath(), tar.WithArchiverMethod(method))
+				if err != nil {
+					return err
+				}
+				defer archiver.Close()
+				return archiver.Archive(ctx, fileMap)
+			}
+
+			out, err := os.Create(fullArcPath)
+			if err != nil {
+				return err
+			}
+			defer out.Close()
+
+			archiver, err := zip.NewArchiver(out, activeVfs.GetPath(), zip.WithArchiverConcurrency(runtime.NumGoroutine()))
+			if err != nil {
+				return err
+			}
+			defer archiver.Close()
 
 			return archiver.Archive(ctx, fileMap)
 		}, func(err error) {

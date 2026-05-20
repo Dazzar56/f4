@@ -15,6 +15,7 @@ import (
 
 	"github.com/mholt/archives"
 	"github.com/unxed/f4/vfs"
+	"github.com/unxed/tar"
 	"github.com/unxed/zip"
 )
 
@@ -54,6 +55,8 @@ type ArchiveVFS struct {
 	closer    io.Closer
 	isZip     bool
 	zipReader *zip.ReadCloser
+	isTar     bool
+	tarFS     *tar.TarFS
 }
 
 func (v *ArchiveVFS) IsAtRoot() bool {
@@ -100,11 +103,30 @@ func NewArchiveVFS(parent vfs.VFS, path string) (*ArchiveVFS, error) {
 
 	isZip := false
 	var zr *zip.ReadCloser
+	isTar := false
+	var tfs *tar.TarFS
+
 	if _, ok := format.(archives.Zip); ok {
 		if z, err := zip.OpenReader(finalPath); err == nil {
 			isZip = true
 			zr = z
 			arcFS = z
+		}
+	} else if _, ok := format.(archives.Tar); ok {
+		isTar = true
+	} else if ca, ok := format.(archives.CompressedArchive); ok {
+		if _, ok := ca.Archival.(archives.Tar); ok {
+			isTar = true
+		}
+	}
+
+	if isTar {
+		idxPath := finalPath + ".index.sqlite"
+		if t, err := tar.NewFS(finalPath, idxPath); err == nil {
+			tfs = t
+			arcFS = t
+		} else {
+			isTar = false
 		}
 	}
 
@@ -117,6 +139,8 @@ func NewArchiveVFS(parent vfs.VFS, path string) (*ArchiveVFS, error) {
 		closer:    closer,
 		isZip:     isZip,
 		zipReader: zr,
+		isTar:     isTar,
+		tarFS:     tfs,
 	}, nil
 }
 
@@ -454,17 +478,33 @@ func (v *ArchiveVFS) Remove(ctx context.Context, path string) error {
 }
 
 func (v *ArchiveVFS) reloadFS() {
+	activePath := v.arcPath
+	if f, ok := v.closer.(*os.File); ok {
+		activePath = f.Name()
+	}
+
 	if v.isZip {
 		if v.zipReader != nil {
 			v.zipReader.Close()
 		}
-		if z, err := zip.OpenReader(v.arcPath); err == nil {
+		if z, err := zip.OpenReader(activePath); err == nil {
 			v.zipReader = z
 			v.arcFS = z
 		}
 		return
 	}
-	newFS, err := archives.FileSystem(context.Background(), v.arcPath, nil)
+	if v.isTar {
+		if v.tarFS != nil {
+			v.tarFS.Close()
+			os.Remove(v.tarFS.IndexPath)
+		}
+		if t, err := tar.NewFS(activePath, activePath+".index.sqlite"); err == nil {
+			v.tarFS = t
+			v.arcFS = t
+		}
+		return
+	}
+	newFS, err := archives.FileSystem(context.Background(), activePath, nil)
 	if err == nil {
 		v.arcFS = newFS
 	}
@@ -483,6 +523,12 @@ func (v *ArchiveVFS) Search(ctx context.Context, p, pat string) (chan int64, err
 func (v *ArchiveVFS) Close() error {
 	if v.zipReader != nil {
 		v.zipReader.Close()
+	}
+	if v.tarFS != nil {
+		v.tarFS.Close()
+		if v.closer != nil {
+			os.Remove(v.tarFS.IndexPath)
+		}
 	}
 	if v.closer != nil {
 		err := v.closer.Close()
