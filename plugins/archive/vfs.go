@@ -121,8 +121,7 @@ func NewArchiveVFS(parent vfs.VFS, path string) (*ArchiveVFS, error) {
 	}
 
 	if isTar {
-		idxPath := finalPath + ".index.sqlite"
-		if t, err := tar.NewFS(finalPath, idxPath); err == nil {
+		if t, err := tar.NewFS(finalPath, ""); err == nil {
 			tfs = t
 			arcFS = t
 		} else {
@@ -496,9 +495,11 @@ func (v *ArchiveVFS) reloadFS() {
 	if v.isTar {
 		if v.tarFS != nil {
 			v.tarFS.Close()
-			os.Remove(v.tarFS.IndexPath)
+			if v.closer != nil {
+				os.Remove(v.tarFS.IndexPath)
+			}
 		}
-		if t, err := tar.NewFS(activePath, activePath+".index.sqlite"); err == nil {
+		if t, err := tar.NewFS(activePath, ""); err == nil {
 			v.tarFS = t
 			v.arcFS = t
 		}
