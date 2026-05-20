@@ -231,7 +231,8 @@ func actionAddArchive(app vfs.App) {
 					method = tar.ZSTD
 				}
 
-				archiver, err := tar.NewArchiver(fullArcPath, activeVfs.GetPath(), tar.WithArchiverMethod(method))
+				idxPath, _ := tar.GetStandardIndexPath(fullArcPath)
+				archiver, err := tar.NewArchiver(fullArcPath, activeVfs.GetPath(), tar.WithArchiverMethod(method), tar.WithArchiverIndex(idxPath))
 				if err != nil {
 					return err
 				}
