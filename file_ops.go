@@ -7,10 +7,12 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"os"
 	"time"
 
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
+	"github.com/unxed/tar"
 )
 
 type FileOpState struct {
@@ -22,6 +24,7 @@ type FileOpState struct {
 	UpdateUI     func(force bool)
 	Anchor       vtui.Frame
 	Buffer       []byte
+	IsMove       bool
 }
 
 // formatSize formats a byte count into a human-readable string.
@@ -222,6 +225,7 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 			},
 			Anchor: anchor,
 			Buffer: make([]byte, 128*1024),
+			IsMove: isMove,
 		}
 
 		updateUI(true)
@@ -241,6 +245,7 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 				if _, err := dstVfs.Stat(ctx, targetItemPath); err != nil {
 					if err := srcVfs.Rename(ctx, srcPath, targetItemPath); err == nil {
 						vtui.DebugLog("FILEOP: Optimized server-side rename: %s -> %s", srcPath, targetItemPath)
+						handleArchiveIndexOp(srcVfs, srcPath, dstVfs, targetItemPath, true)
 
 						itemStat, _ := dstVfs.Stat(ctx, targetItemPath)
 						if itemStat.IsDir {
@@ -389,6 +394,7 @@ func ExecuteDeleteOp(pf *PanelsFrame, activeVfs vfs.VFS, names []string, mode in
 
 			tracker.StartFile(name, 0)
 			updateUI(true)
+			handleArchiveIndexDelete(ctx, activeVfs, fullPath)
 
 			for {
 				err := activeVfs.Remove(ctx, fullPath)
@@ -745,6 +751,9 @@ func recursiveCopy(ctx context.Context, srcVfs vfs.VFS, srcPath string, dstVfs v
 	copySuccess = true
 
 	if state.Tracker != nil {
+	if copySuccess {
+		handleArchiveIndexOp(srcVfs, srcPath, dstVfs, destPathForFile, state.IsMove)
+	}
 		state.Tracker.FileDone()
 		if state.UpdateUI != nil {
 			state.UpdateUI(false)
@@ -942,5 +951,73 @@ func AskError(ctx context.Context, op string, err error, anchor vtui.Frame) int 
 			}
 		})
 		return 2 // 2 matches Abort button index
+	}
+}
+func isTarArchive(path string) bool {
+	name := strings.ToLower(path)
+	return strings.HasSuffix(name, ".tar") ||
+		strings.HasSuffix(name, ".tar.gz") || strings.HasSuffix(name, ".tgz") ||
+		strings.HasSuffix(name, ".tar.bz2") || strings.HasSuffix(name, ".tbz2") ||
+		strings.HasSuffix(name, ".tar.xz") || strings.HasSuffix(name, ".txz") ||
+		strings.HasSuffix(name, ".tar.zst") || strings.HasSuffix(name, ".tar.zstd")
+}
+
+func handleArchiveIndexOp(srcVfs vfs.VFS, oldPath string, dstVfs vfs.VFS, newPath string, isMove bool) {
+	if !isTarArchive(oldPath) {
+		return
+	}
+
+	absOld, _ := srcVfs.Abs(oldPath)
+	absNew, _ := dstVfs.Abs(newPath)
+
+	oldIdx, _ := tar.GetStandardIndexPath(absOld)
+	newIdx, _ := tar.GetStandardIndexPath(absNew)
+
+	if _, err := os.Stat(oldIdx); err == nil {
+		if isMove {
+			vtui.DebugLog("FILEOP: Moving archive index: %s -> %s", oldIdx, newIdx)
+			os.Rename(oldIdx, newIdx)
+		} else {
+			vtui.DebugLog("FILEOP: Copying archive index: %s -> %s", oldIdx, newIdx)
+			s, err := os.Open(oldIdx)
+			if err != nil {
+				return
+			}
+			defer s.Close()
+
+			os.MkdirAll(filepath.Dir(newIdx), 0755)
+			d, err := os.Create(newIdx)
+			if err != nil {
+				return
+			}
+			defer d.Close()
+
+			io.Copy(d, s)
+		}
+	}
+}
+
+func handleArchiveIndexDelete(ctx context.Context, v vfs.VFS, p string) {
+	st, err := v.Stat(ctx, p)
+	if err != nil {
+		return
+	}
+
+	if st.IsDir {
+		v.ReadDir(ctx, p, func(items []vfs.VFSItem) {
+			for _, itm := range items {
+				if itm.Name == ".." {
+					continue
+				}
+				handleArchiveIndexDelete(ctx, v, v.Join(p, itm.Name))
+			}
+		})
+	} else if isTarArchive(p) {
+		abs, _ := v.Abs(p)
+		idx, _ := tar.GetStandardIndexPath(abs)
+		if _, err := os.Stat(idx); err == nil {
+			vtui.DebugLog("FILEOP: Deleting archive index: %s", idx)
+			os.Remove(idx)
+		}
 	}
 }
