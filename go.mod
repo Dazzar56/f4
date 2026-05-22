@@ -8,7 +8,7 @@ require (
 	github.com/mattn/go-runewidth v0.0.15
 	github.com/mholt/archives v0.1.5
 	github.com/pkg/sftp v1.13.6
-	github.com/unxed/tar v0.1.11
+	github.com/unxed/tar v0.1.12
 	github.com/unxed/vtinput v0.0.0
 	github.com/unxed/vtui v0.0.0
 	github.com/unxed/zip v0.1.5
@@ -47,7 +47,7 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/jezek/xgb v1.3.1 // indirect
-	github.com/klauspost/compress v1.18.0 // indirect
+	github.com/klauspost/compress v1.18.7-0.20260521203646-ecdb779d8745 // indirect
 	github.com/klauspost/pgzip v1.2.6 // indirect
 	github.com/kr/fs v0.1.0 // indirect
 	github.com/mattn/go-isatty v0.0.16 // indirect
