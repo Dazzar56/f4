@@ -11,7 +11,6 @@ import (
 
 	"github.com/mholt/archives"
 	"github.com/unxed/f4/vfs"
-	"github.com/unxed/tar"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/zip"
 )
@@ -89,12 +88,15 @@ func actionExtractArchive(app vfs.App) {
 		if isTar {
 			f.Close()
 			update("Extracting tar archive...", -1)
-			e, err := tar.NewExtractor(srcPath, destDir)
+			errExtract := tarExtract(ctx, srcPath, destDir)
+			if errExtract == nil {
+				return nil
+			}
+			// Fallback to mholt/archives on platforms where fast tar is not supported
+			f, err = os.Open(srcPath)
 			if err != nil {
 				return err
 			}
-			defer e.Close()
-			return e.Extract(ctx)
 		}
 
 		ex, ok := format.(archives.Extractor)
@@ -220,24 +222,7 @@ func actionAddArchive(app vfs.App) {
 			isTar := strings.HasSuffix(lowerName, ".tar") || strings.Contains(lowerName, ".tar.") || strings.HasSuffix(lowerName, ".tgz") || strings.HasSuffix(lowerName, ".txz")
 
 			if isTar {
-				method := tar.Store
-				if strings.HasSuffix(lowerName, ".gz") || strings.HasSuffix(lowerName, ".tgz") {
-					method = tar.GZIP
-				} else if strings.HasSuffix(lowerName, ".bz2") {
-					method = tar.BZIP2
-				} else if strings.HasSuffix(lowerName, ".xz") || strings.HasSuffix(lowerName, ".txz") {
-					method = tar.XZ
-				} else if strings.HasSuffix(lowerName, ".zst") {
-					method = tar.ZSTD
-				}
-
-				idxPath, _ := tar.GetStandardIndexPath(fullArcPath)
-				archiver, err := tar.NewArchiver(fullArcPath, activeVfs.GetPath(), tar.WithArchiverMethod(method), tar.WithArchiverIndex(idxPath))
-				if err != nil {
-					return err
-				}
-				defer archiver.Close()
-				return archiver.Archive(ctx, fileMap)
+				return tarArchive(ctx, fullArcPath, activeVfs.GetPath(), fileMap, lowerName)
 			}
 
 			out, err := os.Create(fullArcPath)

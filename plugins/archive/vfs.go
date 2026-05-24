@@ -15,7 +15,6 @@ import (
 
 	"github.com/mholt/archives"
 	"github.com/unxed/f4/vfs"
-	"github.com/unxed/tar"
 	"github.com/unxed/zip"
 )
 
@@ -56,7 +55,7 @@ type ArchiveVFS struct {
 	isZip     bool
 	zipReader *zip.ReadCloser
 	isTar     bool
-	tarFS     *tar.TarFS
+	tarFS     any
 }
 
 func (v *ArchiveVFS) IsAtRoot() bool {
@@ -104,7 +103,7 @@ func NewArchiveVFS(parent vfs.VFS, path string) (*ArchiveVFS, error) {
 	isZip := false
 	var zr *zip.ReadCloser
 	isTar := false
-	var tfs *tar.TarFS
+	var tfs any
 
 	if _, ok := format.(archives.Zip); ok {
 		if z, err := zip.OpenReader(finalPath); err == nil {
@@ -121,9 +120,9 @@ func NewArchiveVFS(parent vfs.VFS, path string) (*ArchiveVFS, error) {
 	}
 
 	if isTar {
-		if t, err := tar.NewFS(finalPath, ""); err == nil {
+		if t, err := tarOpenFS(finalPath); err == nil {
 			tfs = t
-			arcFS = t
+			arcFS = t.(fs.FS)
 		} else {
 			isTar = false
 		}
@@ -494,14 +493,14 @@ func (v *ArchiveVFS) reloadFS() {
 	}
 	if v.isTar {
 		if v.tarFS != nil {
-			v.tarFS.Close()
+			v.tarFS.(io.Closer).Close()
 			if v.closer != nil {
-				os.Remove(v.tarFS.IndexPath)
+				tarRemoveIndex(activePath)
 			}
 		}
-		if t, err := tar.NewFS(activePath, ""); err == nil {
+		if t, err := tarOpenFS(activePath); err == nil {
 			v.tarFS = t
-			v.arcFS = t
+			v.arcFS = t.(fs.FS)
 		}
 		return
 	}
@@ -525,10 +524,10 @@ func (v *ArchiveVFS) Close() error {
 	if v.zipReader != nil {
 		v.zipReader.Close()
 	}
-	if v.tarFS != nil {
-		v.tarFS.Close()
+	if v.isTar && v.tarFS != nil {
+		v.tarFS.(io.Closer).Close()
 		if v.closer != nil {
-			os.Remove(v.tarFS.IndexPath)
+			tarRemoveIndex(v.arcPath)
 		}
 	}
 	if v.closer != nil {
