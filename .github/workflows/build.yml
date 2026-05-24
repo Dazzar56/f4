@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        goos: [linux, windows, darwin, freebsd, dragonfly, openbsd]
+        goos: [linux, windows, darwin, freebsd, dragonfly, openbsd, netbsd]
         goarch: [amd64, arm64]
         exclude:
           - goos: dragonfly

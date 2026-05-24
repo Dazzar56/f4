@@ -1,4 +1,4 @@
-//go:build dragonfly
+//go:build dragonfly || netbsd
 
 package archive
 
