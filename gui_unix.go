@@ -1,4 +1,4 @@
-//go:build linux || darwin || openbsd || netbsd || dragonfly || freebsd
+//go:build linux || darwin || openbsd || netbsd || dragonfly || freebsd || illumos || solaris
 
 package main
 

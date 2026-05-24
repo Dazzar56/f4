@@ -13,10 +13,14 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        goos: [linux, windows, darwin, freebsd, dragonfly, openbsd, netbsd]
+        goos: [linux, windows, darwin, freebsd, dragonfly, openbsd, netbsd, illumos, solaris]
         goarch: [amd64, arm64]
         exclude:
           - goos: dragonfly
+            goarch: arm64
+          - goos: illumos
+            goarch: arm64
+          - goos: solaris
             goarch: arm64
     env:
       CGO_ENABLED: 0

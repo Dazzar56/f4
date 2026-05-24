@@ -1,4 +1,4 @@
-//go:build linux || openbsd || dragonfly
+//go:build linux || openbsd || dragonfly || solaris || illumos
 
 package vfs
 

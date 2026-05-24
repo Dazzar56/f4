@@ -12,6 +12,8 @@
 | **DragonflyBSD** | .tar.gz | [amd64](https://github.com/unxed/f4/releases/download/nightly/f4-dragonfly-amd64.tar.gz) |
 | **OpenBSD** | .tar.gz | [amd64](https://github.com/unxed/f4/releases/download/nightly/f4-openbsd-amd64.tar.gz) / [arm64](https://github.com/unxed/f4/releases/download/nightly/f4-openbsd-arm64.tar.gz) |
 | **NetBSD** | .tar.gz | [amd64](https://github.com/unxed/f4/releases/download/nightly/f4-netbsd-amd64.tar.gz) / [arm64](https://github.com/unxed/f4/releases/download/nightly/f4-netbsd-arm64.tar.gz) |
+| **Illumos** (experimental) | .tar.gz | [amd64](https://github.com/unxed/f4/releases/download/nightly/f4-illumos-amd64.tar.gz) |
+| **Solaris** (experimental) | .tar.gz | [amd64](https://github.com/unxed/f4/releases/download/nightly/f4-solaris-amd64.tar.gz) |
 
 *These builds are automated and represent the current state of the `main` branch.*
 

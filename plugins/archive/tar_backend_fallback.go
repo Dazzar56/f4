@@ -1,4 +1,4 @@
-//go:build dragonfly || netbsd
+//go:build dragonfly || netbsd || solaris || illumos
 
 package archive
 
