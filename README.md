@@ -119,7 +119,7 @@ cd f4
 ```bash
 cd f4
 go mod tidy
-go build -o f4
+CGO_ENABLED=0 go build -tags nofakecgo .
 ```
 
 **4. Run**
