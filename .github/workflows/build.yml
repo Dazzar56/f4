@@ -59,12 +59,17 @@ jobs:
         LDFLAGS="-s -w"
         if [ "$GOOS" = "linux" ]; then LDFLAGS="$LDFLAGS -extldflags '-static'"; fi
 
+        GCFLAGS=""
+        if [ "$GOOS" = "freebsd" ]; then
+          GCFLAGS="-gcflags=github.com/go-webgpu/goffi/internal/fakecgo=-std"
+        fi
+
         # Build core
-        go build -ldflags="$LDFLAGS" -o build/f4$EXT .
+        go build $GCFLAGS -ldflags="$LDFLAGS" -o build/f4$EXT .
 
         # Build internal dummy plugin
         cd plugins/dummy_internal
-        go build -ldflags="$LDFLAGS" -o ../../build/plugins/dummy_internal/f4-internal-dummy-plugin$EXT .
+        go build $GCFLAGS -ldflags="$LDFLAGS" -o ../../build/plugins/dummy_internal/f4-internal-dummy-plugin$EXT .
 
     - name: Package
       run: |
