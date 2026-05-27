@@ -64,10 +64,10 @@ require (
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/ulikunitz/xz v0.5.15 // indirect
-	github.com/unxed/keytrans v0.1.5 // indirect
+	github.com/unxed/keytrans v0.1.10 // indirect
 	github.com/unxed/localecp v0.1.4 // indirect
 	github.com/unxed/winkeys v0.1.0 // indirect
-	github.com/unxed/xkb-go v0.1.3 // indirect
+	github.com/unxed/xkb-go v0.1.4 // indirect
 	github.com/unxed/zipcharset v0.1.4 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	github.com/yalue/native_endian v1.0.2 // indirect
