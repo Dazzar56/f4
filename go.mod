@@ -33,7 +33,7 @@ require (
 	github.com/emmansun/base64 v0.9.0 // indirect
 	github.com/fogleman/gg v1.3.0 // indirect
 	github.com/go-text/typesetting v0.3.4 // indirect
-	github.com/go-webgpu/goffi v0.5.2 // indirect
+	github.com/go-webgpu/goffi v0.5.3 // indirect
 	github.com/go-webgpu/webgpu v0.4.3 // indirect
 	github.com/gogpu/gg v0.47.3 // indirect
 	github.com/gogpu/gogpu v0.39.1 // indirect
@@ -64,10 +64,10 @@ require (
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/ulikunitz/xz v0.5.15 // indirect
-	github.com/unxed/keytrans v0.1.16 // indirect
+	github.com/unxed/keytrans v0.1.18 // indirect
 	github.com/unxed/localecp v0.1.4 // indirect
 	github.com/unxed/winkeys v0.1.0 // indirect
-	github.com/unxed/xkb-go v0.1.4 // indirect
+	github.com/unxed/xkb-go v0.1.8 // indirect
 	github.com/unxed/zipcharset v0.1.4 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	github.com/yalue/native_endian v1.0.2 // indirect
@@ -91,4 +91,4 @@ replace github.com/unxed/vtinput => ./libs/vtinput
 
 replace github.com/unxed/vtui => ./libs/vtui
 
-replace github.com/ebitengine/purego => github.com/unxed/pureffi v0.1.1
+replace github.com/ebitengine/purego => github.com/unxed/pureffi v0.1.2
