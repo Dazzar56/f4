@@ -64,7 +64,7 @@ require (
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/ulikunitz/xz v0.5.15 // indirect
-	github.com/unxed/keytrans v0.1.22 // indirect
+	github.com/unxed/keytrans v0.1.23 // indirect
 	github.com/unxed/localecp v0.1.4 // indirect
 	github.com/unxed/winkeys v0.1.0 // indirect
 	github.com/unxed/xkb-go v0.1.8 // indirect
@@ -91,4 +91,4 @@ replace github.com/unxed/vtinput => ./libs/vtinput
 
 replace github.com/unxed/vtui => ./libs/vtui
 
-replace github.com/ebitengine/purego => github.com/unxed/pureffi v0.1.2
+replace github.com/ebitengine/purego => github.com/unxed/pureffi v0.1.4
