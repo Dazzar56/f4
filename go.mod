@@ -91,4 +91,4 @@ replace github.com/unxed/vtinput => ./libs/vtinput
 
 replace github.com/unxed/vtui => ./libs/vtui
 
-replace github.com/ebitengine/purego => github.com/unxed/pureffi v0.1.5
+replace github.com/ebitengine/purego => github.com/unxed/pureffi v0.1.6
