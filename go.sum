@@ -192,8 +192,8 @@ github.com/stretchr/testify v1.10.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf
 github.com/ulikunitz/xz v0.5.8/go.mod h1:nbz6k7qbPmH4IRqmfOplQw/tblSgqTqBwxkY0oWt/14=
 github.com/ulikunitz/xz v0.5.15 h1:9DNdB5s+SgV3bQ2ApL10xRc35ck0DuIX/isZvIk+ubY=
 github.com/ulikunitz/xz v0.5.15/go.mod h1:nbz6k7qbPmH4IRqmfOplQw/tblSgqTqBwxkY0oWt/14=
-github.com/unxed/keytrans v0.1.26 h1:4x8JdNKZq4lnN6XoSumTGe6Q1/kUQJJlyXGh6JDEsOw=
-github.com/unxed/keytrans v0.1.26/go.mod h1:BLcCR4Z2hOFnL9F2yT6bvIsA1RyWLWogY7tx9JrvryI=
+github.com/unxed/keytrans v0.1.27 h1:6xFqm3l7wtvXMNKpG285XkcOUF5cwSANdR/1wFcTj4c=
+github.com/unxed/keytrans v0.1.27/go.mod h1:BLcCR4Z2hOFnL9F2yT6bvIsA1RyWLWogY7tx9JrvryI=
 github.com/unxed/localecp v0.1.4 h1:2kJ6ABrv69tl90I0A+4W7zWlVjbVtNTQqs4R+HmrH9c=
 github.com/unxed/localecp v0.1.4/go.mod h1:gkgbX7rTm/GONyio6Ob/wxTgU9AxkIm9bQYnVH0/1pQ=
 github.com/unxed/pureffi v0.1.8 h1:gLhI2d4H1SRQ1TPXRGfEs2+Ef5zqDuVMN8jSG1B3DMM=
