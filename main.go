@@ -72,6 +72,7 @@ func main() {
 	var cpuprofile string
 	var guiMode bool
 	var guiBackend string
+	var ttyMode bool
 	var version bool
 
 	for i := 1; i < len(os.Args); i++ {
@@ -140,6 +141,8 @@ func main() {
 			pm.LoadAll()
 			pm.CloseAll()
 			return
+		case "--tty":
+			ttyMode = true
 		case "--sudo-dispatcher":
 			if flagVal != "" {
 				sudoDispatcher = flagVal
@@ -179,16 +182,72 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
+	if ttyMode {
+		ManageSessions()
+		return
+	}
+
 	if guiMode {
-		if err := RunGui(guiBackend); err != nil {
-			fmt.Fprintf(os.Stderr, "\n[f4] FATAL GUI ERROR: %v\n", err)
-			os.Exit(1)
+		if guiBackend != "" {
+			if err := RunGui(guiBackend); err != nil {
+				fmt.Fprintf(os.Stderr, "\n[f4] FATAL GUI ERROR: %v\n", err)
+				os.Exit(1)
+			}
+		} else {
+			if err := tryRunDefaultGui(); err != nil {
+				fmt.Fprintf(os.Stderr, "\n[f4] FATAL GUI ERROR: %v\n", err)
+				os.Exit(1)
+			}
 		}
 		return
 	}
 
-	// If we are here, no special mode was requested
-	ManageSessions()
+	// Default auto-detect mode (neither --gui nor --tty specified)
+	if err := tryRunDefaultGui(); err != nil {
+		vtui.DebugLog("MAIN: Falling back to console mode: %v", err)
+		ManageSessions()
+	}
+}
+
+func tryRunDefaultGui() error {
+	var errs []string
+	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
+		vtui.DebugLog("GUI_AUTO: Trying gogpu...")
+		if err := RunGui("gogpu"); err == nil {
+			return nil
+		} else {
+			errs = append(errs, fmt.Sprintf("gogpu: %v", err))
+		}
+		if os.Getenv("DISPLAY") != "" {
+			vtui.DebugLog("GUI_AUTO: Trying x11...")
+			if err := RunGui("x11"); err == nil {
+				return nil
+			} else {
+				errs = append(errs, fmt.Sprintf("x11: %v", err))
+			}
+		}
+	} else {
+		if os.Getenv("WAYLAND_DISPLAY") != "" {
+			vtui.DebugLog("GUI_AUTO: Trying wayland...")
+			if err := RunGui("wayland"); err == nil {
+				return nil
+			} else {
+				errs = append(errs, fmt.Sprintf("wayland: %v", err))
+			}
+		}
+		if os.Getenv("DISPLAY") != "" {
+			vtui.DebugLog("GUI_AUTO: Trying x11...")
+			if err := RunGui("x11"); err == nil {
+				return nil
+			} else {
+				errs = append(errs, fmt.Sprintf("x11: %v", err))
+			}
+		}
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("all GUI backends failed: %s", strings.Join(errs, "; "))
+	}
+	return fmt.Errorf("no suitable GUI environment detected")
 }
 
 func InitCore() *vtui.ScreenBuf {
