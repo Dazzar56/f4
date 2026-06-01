@@ -323,31 +323,42 @@ func (pf *PanelsFrame) initPTY() {
 	// Always initialize the parser to prevent nil dereference
 	pf.parser = NewAnsiParser(pf.termView, nil)
 
-	p := pf.pty
-	if p == nil {
-		var err error
-		p, err = NewPTY()
-		if err != nil {
-			vtui.DebugLog("PTY: Failed to allocate local PTY: %v", err)
-			return
-		}
-		pf.pty = p
-
-		if runtime.GOOS == "windows" {
-			// Настраиваем умный PROMPT для Windows, который будет автоматически
-			// посылать OSC 133;D (сигнал о завершении команды) после каждого возврата в шелл.
-			// $E = \x1b, $E\ = \x1b\ (String Terminator), $P = Path, $G = >
-			os.Setenv("PROMPT", "$E]133;D$E\\$P$G")
-		}
-
-		shell := GetSystemShell()
-		p.Run(shell)
-	}
-
-	pf.parser.pty = p
-
-	// Local PTY has its own dedicated read loop.
 	go func() {
+		pf.ptyMutex.Lock()
+		p := pf.pty
+		pf.ptyMutex.Unlock()
+
+		if p == nil {
+			var err error
+			p, err = NewPTY()
+			if err != nil {
+				vtui.DebugLog("PTY: Failed to allocate local PTY: %v", err)
+				return
+			}
+
+			if runtime.GOOS == "windows" {
+				os.Setenv("PROMPT", "$E]133;D$E\\$P$G")
+			}
+
+			shell := GetSystemShell()
+			if err := p.Run(shell); err != nil {
+				vtui.DebugLog("PTY: Failed to run shell: %v", err)
+				p.Close()
+				return
+			}
+
+			pf.ptyMutex.Lock()
+			pf.pty = p
+			pf.parser.pty = p
+			pf.termView.pty = p
+			pf.ptyMutex.Unlock()
+
+			vtui.FrameManager.PostTask(func() {
+				pf.RefreshAll()
+			})
+		}
+
+		// Local PTY has its own dedicated read loop.
 		buf := make([]byte, 32768)
 		for {
 			n, err := p.Read(buf)
