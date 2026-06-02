@@ -66,7 +66,7 @@ func TestFileEntry_HighlightDir(t *testing.T) {
 
 	// 1. Without highlighting
 	AppConfig.HighlightDir = false
-	
+
 	if dir.GetCellText(0) != string(os.PathSeparator)+"work" {
 		t.Errorf("Expected separator prefix when HighlightDir is false, got %q", dir.GetCellText(0))
 	}
@@ -1525,7 +1525,7 @@ func TestFileSystemPanel_PendingSelectionPriority(t *testing.T) {
 
 	// 3. Симулируем прилет чанка, который СОДЕРЖИТ цель
 	fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: ".."}}, {VFSItem: vfs.VFSItem{Name: "new_name.txt"}}}
-	
+
 	// Отрабатываем снаппинг
 	target := fp.pendingSelection
 	for i, entry := range fp.entries {

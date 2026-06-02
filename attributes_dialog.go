@@ -302,10 +302,18 @@ func showAttributesWindows(pf *PanelsFrame, v vfs.VFS, path string, item vfs.VFS
 	chkSY := vtui.NewCheckbox(0, 0, "&System", false)
 	chkAR := vtui.NewCheckbox(0, 0, "&Archive", false)
 
-	if (item.WinAttrs & 1) != 0 { chkRO.State = 1 }
-	if (item.WinAttrs & 2) != 0 { chkHD.State = 1 }
-	if (item.WinAttrs & 4) != 0 { chkSY.State = 1 }
-	if (item.WinAttrs & 32) != 0 { chkAR.State = 1 }
+	if (item.WinAttrs & 1) != 0 {
+		chkRO.State = 1
+	}
+	if (item.WinAttrs & 2) != 0 {
+		chkHD.State = 1
+	}
+	if (item.WinAttrs & 4) != 0 {
+		chkSY.State = 1
+	}
+	if (item.WinAttrs & 32) != 0 {
+		chkAR.State = 1
+	}
 
 	gbAttr.AddItem(chkRO)
 	gbAttr.AddItem(chkHD)
@@ -322,10 +330,28 @@ func showAttributesWindows(pf *PanelsFrame, v vfs.VFS, path string, item vfs.VFS
 			item.MTime = nt
 		}
 
-		if chkRO.State == 1 { item.WinAttrs |= 1; item.UnixMode = 0444 } else { item.WinAttrs &= ^uint32(1); item.UnixMode = 0666 }
-		if chkHD.State == 1 { item.WinAttrs |= 2 } else { item.WinAttrs &= ^uint32(2) }
-		if chkSY.State == 1 { item.WinAttrs |= 4 } else { item.WinAttrs &= ^uint32(4) }
-		if chkAR.State == 1 { item.WinAttrs |= 32 } else { item.WinAttrs &= ^uint32(32) }
+		if chkRO.State == 1 {
+			item.WinAttrs |= 1
+			item.UnixMode = 0444
+		} else {
+			item.WinAttrs &= ^uint32(1)
+			item.UnixMode = 0666
+		}
+		if chkHD.State == 1 {
+			item.WinAttrs |= 2
+		} else {
+			item.WinAttrs &= ^uint32(2)
+		}
+		if chkSY.State == 1 {
+			item.WinAttrs |= 4
+		} else {
+			item.WinAttrs &= ^uint32(4)
+		}
+		if chkAR.State == 1 {
+			item.WinAttrs |= 32
+		} else {
+			item.WinAttrs &= ^uint32(32)
+		}
 
 		vtui.RunAsync(func(ctx *vtui.TaskContext) {
 			v.SetAttributes(ctx.Context, path, item)

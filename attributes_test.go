@@ -357,10 +357,18 @@ func TestAttributesDialog_WindowsCheckboxes(t *testing.T) {
 
 	walkUI(dlg.(vtui.UIElement), func(el vtui.UIElement) bool {
 		if c, ok := el.(*vtui.Checkbox); ok {
-			if strings.Contains(c.GetText(), "Read only") { chkRO = c }
-			if strings.Contains(c.GetText(), "Hidden") { chkHD = c }
-			if strings.Contains(c.GetText(), "System") { chkSY = c }
-			if strings.Contains(c.GetText(), "Archive") { chkAR = c }
+			if strings.Contains(c.GetText(), "Read only") {
+				chkRO = c
+			}
+			if strings.Contains(c.GetText(), "Hidden") {
+				chkHD = c
+			}
+			if strings.Contains(c.GetText(), "System") {
+				chkSY = c
+			}
+			if strings.Contains(c.GetText(), "Archive") {
+				chkAR = c
+			}
 		}
 		if b, ok := el.(*vtui.Button); ok && strings.Contains(b.GetText(), "Set") {
 			btnSet = b

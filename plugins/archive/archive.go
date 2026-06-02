@@ -3,16 +3,13 @@ package archive
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
-	"runtime"
-	"strings"
+	"io"
 
-	"github.com/mholt/archives"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
-	"github.com/unxed/zip"
+	"github.com/unxed/zipper/archive"
 )
 
 type ArchivePlugin struct{}
@@ -64,109 +61,20 @@ func actionExtractArchive(app vfs.App) {
 	srcPath := srcVfs.Join(srcVfs.GetPath(), name)
 	destDir := dstVfs.GetPath()
 
-	app.RunProgressTask(" Extracting... ", "Identifying archive...", false, func(ctx context.Context, update func(msg string, percent int)) error {
-		f, err := os.Open(srcPath)
+	app.RunProgressTask(" Extracting... ", "Extracting archive...", false, func(ctx context.Context, update func(msg string, percent int)) error {
+		if osvfs, ok := srcVfs.(*vfs.OSVFS); ok {
+			srcPath, _ = osvfs.Abs(srcPath)
+		} else {
+			return fmt.Errorf("extraction supported only from local filesystem")
+		}
+
+		ex, err := archive.NewExtractor(srcPath, destDir, archive.Options{Xattrs: true, SafeWrites: true})
 		if err != nil {
 			return err
 		}
-		defer f.Close()
+		defer ex.Close()
+		return ex.Extract(ctx)
 
-		format, _, err := archives.Identify(ctx, srcPath, f)
-		if err != nil {
-			return err
-		}
-
-		isTar := false
-		if _, ok := format.(archives.Tar); ok {
-			isTar = true
-		} else if ca, ok := format.(archives.CompressedArchive); ok {
-			if _, ok := ca.Archival.(archives.Tar); ok {
-				isTar = true
-			}
-		}
-
-		if isTar {
-			f.Close()
-			update("Extracting tar archive...", -1)
-			errExtract := tarExtract(ctx, srcPath, destDir)
-			if errExtract == nil {
-				return nil
-			}
-			// Fallback to mholt/archives on platforms where fast tar is not supported
-			f, err = os.Open(srcPath)
-			if err != nil {
-				return err
-			}
-		}
-
-		ex, ok := format.(archives.Extractor)
-		if !ok {
-			return fmt.Errorf("file is not an extractable archive")
-		}
-
-		f.Seek(0, io.SeekStart)
-
-		type extractState struct {
-			OverwriteAll bool
-			SkipAll      bool
-		}
-		state := &extractState{}
-
-		return ex.Extract(ctx, f, func(ctx context.Context, info archives.FileInfo) error {
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-			update(fmt.Sprintf("Extracting: %s", info.NameInArchive), -1)
-			targetPath := filepath.Join(destDir, info.NameInArchive)
-
-			if info.IsDir() {
-				return os.MkdirAll(targetPath, 0755)
-			}
-
-			// Check for conflict before creating the file
-			if _, err := os.Stat(targetPath); err == nil {
-				if state.SkipAll {
-					return nil // Silently skip
-				}
-				if !state.OverwriteAll {
-					msg := fmt.Sprintf("File already exists:\n%s\n\nOverwrite?", info.NameInArchive)
-					buttons := []string{"&Overwrite", "Overwrite &All", "&Skip", "S&kip All", "&Cancel"}
-					choice := app.Message(" Conflict ", msg, buttons)
-
-					switch choice {
-					case 0: // Overwrite
-						// Proceed
-					case 1: // Overwrite All
-						state.OverwriteAll = true
-					case 2: // Skip
-						return nil
-					case 3: // Skip All
-						state.SkipAll = true
-						return nil
-					default: // Cancel or closed dialog
-						return context.Canceled
-					}
-				}
-			}
-
-			if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
-				return err
-			}
-			out, err := os.Create(targetPath)
-			if err != nil {
-				return err
-			}
-			defer out.Close()
-
-			in, err := info.Open()
-			if err != nil {
-				return err
-			}
-			defer in.Close()
-
-			_, err = io.Copy(out, &ioCtxReader{r: in, ctx: ctx})
-			return err
-		})
 	}, func(err error) {
 		if err != nil && err != context.Canceled {
 			app.Message(" Error ", fmt.Sprintf("Extraction failed:\n%v", err), []string{"&Ok"})
@@ -218,26 +126,12 @@ func actionAddArchive(app vfs.App) {
 				}
 			}
 
-			lowerName := strings.ToLower(name)
-			isTar := strings.HasSuffix(lowerName, ".tar") || strings.Contains(lowerName, ".tar.") || strings.HasSuffix(lowerName, ".tgz") || strings.HasSuffix(lowerName, ".txz")
-
-			if isTar {
-				return tarArchive(ctx, fullArcPath, activeVfs.GetPath(), fileMap, lowerName)
-			}
-
-			out, err := os.Create(fullArcPath)
+			a, err := archive.NewArchiver(fullArcPath, activeVfs.GetPath(), archive.Options{Xattrs: true})
 			if err != nil {
 				return err
 			}
-			defer out.Close()
-
-			archiver, err := zip.NewArchiver(out, activeVfs.GetPath(), zip.WithArchiverConcurrency(runtime.NumGoroutine()))
-			if err != nil {
-				return err
-			}
-			defer archiver.Close()
-
-			return archiver.Archive(ctx, fileMap)
+			defer a.Close()
+			return a.Archive(ctx, fileMap)
 		}, func(err error) {
 			if err != nil && err != context.Canceled {
 				app.Message(" Error ", fmt.Sprintf("Archiving failed:\n%v", err), []string{"&Ok"})

@@ -3,8 +3,8 @@
 package vfs
 
 import (
-	"testing"
 	"path/filepath"
+	"testing"
 )
 
 func TestOSVFS_WindowsPathLogic(t *testing.T) {

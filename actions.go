@@ -2,14 +2,14 @@ package main
 
 import (
 	"context"
-	"os/exec"
-	"runtime"
-	"strings"
-	"time"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strings"
+	"time"
 
 	"github.com/unxed/f4/piecetable"
 	"github.com/unxed/f4/vfs"
@@ -262,7 +262,7 @@ func runExternalEditor(pf *PanelsFrame, cmdStr, path string) {
 	if len(parts) == 0 {
 		return
 	}
-	
+
 	args := append(parts[1:], path)
 	cmd := exec.Command(parts[0], args...)
 	cmd.Stdin = os.Stdin
@@ -272,7 +272,7 @@ func runExternalEditor(pf *PanelsFrame, cmdStr, path string) {
 	vtui.Suspend()
 	err := cmd.Run()
 	vtui.Resume()
-	
+
 	if err != nil {
 		vtui.FrameManager.PostTask(func() {
 			vtui.ShowMessage(" Error ", fmt.Sprintf("Editor exited with error:\n%v", err), []string{"&Ok"})
