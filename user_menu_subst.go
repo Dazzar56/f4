@@ -54,10 +54,10 @@ type SubstContext struct {
 
 // SubstResult holds the outcome of a substitution.
 type SubstResult struct {
-	Command    string
-	TempFiles  []string // !@! files created; caller removes them after command runs
-	Cancelled  bool     // user dismissed a !?...! prompt
-	ListFiles  bool     // true if any !@!/!&-like aggregate token was used
+	Command   string
+	TempFiles []string // !@! files created; caller removes them after command runs
+	Cancelled bool     // user dismissed a !?...! prompt
+	ListFiles bool     // true if any !@!/!&-like aggregate token was used
 }
 
 func SubstFileName(cmd string, ctx *SubstContext) SubstResult {

@@ -45,13 +45,13 @@ type TerminalView struct {
 	Palette              [256]uint32
 
 	// --- Бесконечный лог (History & Reflow) ---
-	pt             *piecetable.PieceTable
-	li             *piecetable.LineIndex
-	engine         *textlayout.WrapEngine
-	GridHistory    [][]vtui.CharInfo
+	pt              *piecetable.PieceTable
+	li              *piecetable.LineIndex
+	engine          *textlayout.WrapEngine
+	GridHistory     [][]vtui.CharInfo
 	GridHistoryWrap []bool
-	styles         []StyleChange
-	lastAttr       uint64
+	styles          []StyleChange
+	lastAttr        uint64
 
 	// Скроллинг истории (визуальный ряд)
 	ScrollTopRow int
@@ -160,9 +160,9 @@ func (tv *TerminalView) ResetBuffer(w, h int) {
 	if tv.pt == nil {
 		tv.pt = piecetable.New([]byte{})
 		tv.li = piecetable.NewLineIndex()
-	tv.engine = textlayout.NewWrapEngine(tv.pt, tv.li)
-	tv.styles = []StyleChange{{0, DefaultTermAttr}}
-	tv.lastAttr = DefaultTermAttr
+		tv.engine = textlayout.NewWrapEngine(tv.pt, tv.li)
+		tv.styles = []StyleChange{{0, DefaultTermAttr}}
+		tv.lastAttr = DefaultTermAttr
 	}
 	tv.engine.SetWidth(w)
 

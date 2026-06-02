@@ -749,9 +749,9 @@ func recursiveCopy(ctx context.Context, srcVfs vfs.VFS, srcPath string, dstVfs v
 	copySuccess = true
 
 	if state.Tracker != nil {
-	if copySuccess {
-		handleArchiveIndexOp(srcVfs, srcPath, dstVfs, destPathForFile, state.IsMove)
-	}
+		if copySuccess {
+			handleArchiveIndexOp(srcVfs, srcPath, dstVfs, destPathForFile, state.IsMove)
+		}
 		state.Tracker.FileDone()
 		if state.UpdateUI != nil {
 			state.UpdateUI(false)
@@ -951,4 +951,3 @@ func AskError(ctx context.Context, op string, err error, anchor vtui.Frame) int 
 		return 2 // 2 matches Abort button index
 	}
 }
-
