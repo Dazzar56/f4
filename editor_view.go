@@ -100,6 +100,11 @@ type EditorView struct {
 	CursorBeyondEOL     bool
 	CursorVirtualSpaces int
 	UseEditorConfig     bool
+
+	// OnClose, if set, fires once after the editor has been torn down.
+	// Used by callers (e.g. the user menu's Ctrl+F4 handler) that want
+	// to react to the file content once the user is done editing.
+	OnClose func()
 }
 
 func (ev *EditorView) ApplyEditorConfig() {
@@ -195,6 +200,9 @@ func (ev *EditorView) Close() {
 		ev.file.Close()
 	}
 	ev.BaseFrame.Close()
+	if ev.OnClose != nil {
+		ev.OnClose()
+	}
 }
 
 func NewEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string) *EditorView {
