@@ -58,10 +58,15 @@ func TestFileEntry_HighlightDir(t *testing.T) {
 	vtui.SetDefaultPalette()
 	SetDefaultF4Palette()
 
+	// Protect global config
+	oldCfg := AppConfig
+	defer func() { AppConfig = oldCfg }()
+
 	dir := &fileEntry{VFSItem: vfs.VFSItem{Name: "work", IsDir: true}}
 
 	// 1. Without highlighting
 	AppConfig.HighlightDir = false
+	
 	if dir.GetCellText(0) != string(os.PathSeparator)+"work" {
 		t.Errorf("Expected separator prefix when HighlightDir is false, got %q", dir.GetCellText(0))
 	}
@@ -120,66 +125,47 @@ func TestFileSystemPanel_UpdateTitle_WithProvider(t *testing.T) {
 func TestFileSystemPanel_ShowHiddenFiles(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
+	// Protect global config from leakage
+	oldCfg := AppConfig
+	defer func() { AppConfig = oldCfg }()
+
 	tmp := t.TempDir()
 	os.WriteFile(filepath.Join(tmp, "normal.txt"), []byte(""), 0644)
 	os.WriteFile(filepath.Join(tmp, ".hidden.txt"), []byte(""), 0644)
 
 	v := vfs.NewOSVFS(tmp)
 
-	// 1. Show hidden files (Default)
+	// 1. Show hidden files
 	AppConfig.ShowHiddenFiles = true
 	fp1 := NewFileSystemPanel(0, 0, 80, 24, v)
-
-	// Wait for load
-	time.Sleep(50 * time.Millisecond)
-	for {
-		select {
-		case task := <-vtui.FrameManager.TaskChan:
-			task()
-		default:
-			goto done1
-		}
-	}
-done1:
+	waitForLoad(t, fp1)
 
 	foundHidden := false
 	for _, e := range fp1.entries {
 		if e.Name == ".hidden.txt" {
 			foundHidden = true
+			break
 		}
 	}
 	if !foundHidden {
-		t.Error("Hidden file should be visible")
+		t.Error("Hidden file should be visible when ShowHiddenFiles is true")
 	}
 
 	// 2. Hide hidden files
 	AppConfig.ShowHiddenFiles = false
 	fp2 := NewFileSystemPanel(0, 0, 80, 24, v)
-
-	// Wait for load
-	time.Sleep(50 * time.Millisecond)
-	for {
-		select {
-		case task := <-vtui.FrameManager.TaskChan:
-			task()
-		default:
-			goto done2
-		}
-	}
-done2:
+	waitForLoad(t, fp2)
 
 	foundHidden = false
 	for _, e := range fp2.entries {
 		if e.Name == ".hidden.txt" {
 			foundHidden = true
+			break
 		}
 	}
 	if foundHidden {
-		t.Error("Hidden file should NOT be visible")
+		t.Error("Hidden file should NOT be visible when ShowHiddenFiles is false")
 	}
-
-	// Reset global state
-	AppConfig.ShowHiddenFiles = true
 }
 
 func TestFileSystemPanel_NavigateUp_Selection(t *testing.T) {
@@ -1509,5 +1495,48 @@ loop:
 
 	if len(fp.entries) >= 10001 {
 		t.Errorf("ReadDir was not cancelled: got %d entries", len(fp.entries))
+	}
+}
+
+func TestFileSystemPanel_PendingSelectionPriority(t *testing.T) {
+	// Проверяем, что pendingSelection (установленный, например, переименованием)
+	// имеет приоритет над текущим положением курсора при прилете чанков данных.
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	fp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewNullVFS(0))
+
+	// Устанавливаем цель (новое имя файла после ренейма)
+	fp.pendingSelection = "new_name.txt"
+	// Текущий курсор "случайно" стоит на другом файле (например, индекс 0 - "..")
+	fp.cursorIdx = 0
+
+	// Логика из onChunk:
+	// Если pendingSelection пустой, мы берем имя из текущего курсора.
+	// В нашем случае он НЕ пустой, значит uName не должен переписать его.
+	if fp.pendingSelection == "" {
+		uName := fp.getRawSelectedName()
+		if uName != "" && uName != ".." {
+			fp.pendingSelection = uName
+		}
+	}
+
+	if fp.pendingSelection != "new_name.txt" {
+		t.Errorf("Pending selection was overwritten! Got %q, want 'new_name.txt'", fp.pendingSelection)
+	}
+
+	// 3. Симулируем прилет чанка, который СОДЕРЖИТ цель
+	fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: ".."}}, {VFSItem: vfs.VFSItem{Name: "new_name.txt"}}}
+	
+	// Отрабатываем снаппинг
+	target := fp.pendingSelection
+	for i, entry := range fp.entries {
+		if entry.Name == target {
+			fp.SetCursorIndex(i)
+			fp.pendingSelection = ""
+			break
+		}
+	}
+
+	if fp.GetSelectedName() != "new_name.txt" {
+		t.Errorf("Cursor failed to snap to the renamed file. On: %q", fp.GetSelectedName())
 	}
 }

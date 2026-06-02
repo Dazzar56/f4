@@ -55,14 +55,15 @@ func main() {
 			vtui.DebugLog("FATAL PANIC IN MAIN: %v", r)
 			crashPath := vtui.RecordCrash(r, nil)
 			vtui.Suspend()
-			vtui.CleanupStderrLog()
 			// We print to os.Stdout here because os.Stderr is redirected to the log file!
 			fmt.Fprintf(os.Stdout, "\n[f4] FATAL PANIC IN MAIN: %v\n", r)
 			if crashPath != "" {
 				fmt.Fprintf(os.Stdout, "[f4] Crash report saved to: %s\n", crashPath)
 			}
+			vtui.CleanupStderrLog()
 			os.Exit(2)
 		}
+		vtui.CleanupStderrLog()
 	}()
 	// Defer disk logging to prevent launcher processes from polluting rotation queue.
 	// Logging will be enabled in InitCore() for workers and standalone sessions.
@@ -70,6 +71,8 @@ func main() {
 	var serverPath, clientPath string
 	var cpuprofile string
 	var guiMode bool
+	var guiBackend string
+	var ttyMode bool
 	var version bool
 
 	for i := 1; i < len(os.Args); i++ {
@@ -90,6 +93,12 @@ func main() {
 			os.Setenv("VTUI_DEBUG", "1")
 		case "--gui":
 			guiMode = true
+			if flagVal != "" {
+				guiBackend = flagVal
+			} else if i+1 < len(os.Args) && !strings.HasPrefix(os.Args[i+1], "-") {
+				guiBackend = os.Args[i+1]
+				i++
+			}
 		case "--log":
 			if flagVal != "" {
 				os.Setenv("VTUI_DEBUG", flagVal)
@@ -132,6 +141,8 @@ func main() {
 			pm.LoadAll()
 			pm.CloseAll()
 			return
+		case "--tty":
+			ttyMode = true
 		case "--sudo-dispatcher":
 			if flagVal != "" {
 				sudoDispatcher = flagVal
@@ -171,13 +182,72 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
-	if guiMode {
-		RunGui()
+	if ttyMode {
+		ManageSessions()
 		return
 	}
 
-	// If we are here, no special mode was requested
-	ManageSessions()
+	if guiMode {
+		if guiBackend != "" {
+			if err := RunGui(guiBackend); err != nil {
+				fmt.Fprintf(os.Stderr, "\n[f4] FATAL GUI ERROR: %v\n", err)
+				os.Exit(1)
+			}
+		} else {
+			if err := tryRunDefaultGui(); err != nil {
+				fmt.Fprintf(os.Stderr, "\n[f4] FATAL GUI ERROR: %v\n", err)
+				os.Exit(1)
+			}
+		}
+		return
+	}
+
+	// Default auto-detect mode (neither --gui nor --tty specified)
+	if err := tryRunDefaultGui(); err != nil {
+		vtui.DebugLog("MAIN: Falling back to console mode: %v", err)
+		ManageSessions()
+	}
+}
+
+func tryRunDefaultGui() error {
+	var errs []string
+	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
+		vtui.DebugLog("GUI_AUTO: Trying gogpu...")
+		if err := RunGui("gogpu"); err == nil {
+			return nil
+		} else {
+			errs = append(errs, fmt.Sprintf("gogpu: %v", err))
+		}
+		if os.Getenv("DISPLAY") != "" {
+			vtui.DebugLog("GUI_AUTO: Trying x11...")
+			if err := RunGui("x11"); err == nil {
+				return nil
+			} else {
+				errs = append(errs, fmt.Sprintf("x11: %v", err))
+			}
+		}
+	} else {
+		if os.Getenv("WAYLAND_DISPLAY") != "" {
+			vtui.DebugLog("GUI_AUTO: Trying wayland...")
+			if err := RunGui("wayland"); err == nil {
+				return nil
+			} else {
+				errs = append(errs, fmt.Sprintf("wayland: %v", err))
+			}
+		}
+		if os.Getenv("DISPLAY") != "" {
+			vtui.DebugLog("GUI_AUTO: Trying x11...")
+			if err := RunGui("x11"); err == nil {
+				return nil
+			} else {
+				errs = append(errs, fmt.Sprintf("x11: %v", err))
+			}
+		}
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("all GUI backends failed: %s", strings.Join(errs, "; "))
+	}
+	return fmt.Errorf("no suitable GUI environment detected")
 }
 
 func InitCore() *vtui.ScreenBuf {

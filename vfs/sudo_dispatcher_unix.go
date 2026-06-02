@@ -166,6 +166,9 @@ func handleSudoClient(conn *net.UnixConn) {
 			if err == nil {
 				err = os.Chtimes(req.Path, req.Item.ATime, req.Item.MTime)
 			}
+			if err == nil {
+				err = applyPlatformAttributes(req.Path, req.Item)
+			}
 			if err != nil {
 				resp.Error = err.Error()
 			}

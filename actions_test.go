@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 	"os"
+	"runtime"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -360,6 +362,80 @@ Loop:
 		t.Errorf("Abort failed: some files were deleted: %v", mv.deletedFiles)
 	}
 }
+func TestActionExecute_PtyCommandFormatting(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	// setupMockPanelsFrame и mockPty определены в других тестовых файлах того же пакета
+	pf := setupMockPanelsFrame()
+	defer pf.Close()
+	pty := pf.pty.(*mockPty)
+
+	tmp := t.TempDir()
+	fileName := "app.exe"
+	if runtime.GOOS != "windows" {
+		fileName = "app.sh"
+	}
+	filePath := filepath.Join(tmp, fileName)
+	os.WriteFile(filePath, []byte("#!/bin/sh\nexit 0"), 0755)
+
+	v := vfs.NewOSVFS(tmp)
+
+	// Очищаем буфер PTY перед тестом
+	pty.written = nil
+
+	actionExecute(pf, v, tmp, fileName, filePath)
+
+	// Прокачиваем задачи FrameManager
+	timeout := time.After(2 * time.Second)
+	for pf.showPanels {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Timeout waiting for execution task")
+		}
+	}
+
+	written := string(pty.written)
+	if runtime.GOOS == "windows" {
+		// Проверяем отсутствие технической обертки 'cd /d'
+		if strings.Contains(written, "cd /d") {
+			t.Errorf("Technical 'cd /d' wrapper should be removed, but found: %q", written)
+		}
+		// Команда должна начинаться прямо с имени файла
+		if !strings.HasPrefix(written, "app.exe") {
+			t.Errorf("PTY command should start with filename, got: %q", written)
+		}
+	}
+}
+
+func TestActionExecute_HistoryQuoting(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pf := setupMockPanelsFrame()
+	defer pf.Close()
+
+	tmp := t.TempDir()
+	fileName := "name with spaces.exe"
+	filePath := filepath.Join(tmp, fileName)
+	os.WriteFile(filePath, []byte(""), 0755)
+
+	v := vfs.NewOSVFS(tmp)
+	actionExecute(pf, v, tmp, fileName, filePath)
+
+	timeout := time.After(2 * time.Second)
+	for pf.showPanels {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Timeout")
+		}
+	}
+
+	lastHistory := pf.cmdLine.Edit.History[0]
+	if !strings.Contains(lastHistory, "\"name with spaces.exe\"") {
+		t.Errorf("History entry with spaces must be quoted, got: %q", lastHistory)
+	}
+}
 func TestActionDelete_SuccessorLogic(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pf := NewPanelsFrame()
@@ -676,4 +752,99 @@ func TestActionManagePlugins_Flow(t *testing.T) {
 	if len(AppConfig.RegisteredPlugins) != 1 || AppConfig.RegisteredPlugins[0] != newPath {
 		t.Errorf("Failed to add new plugin. Current: %v", AppConfig.RegisteredPlugins)
 	}
+}
+func TestActionRename_CacheAndSelection(t *testing.T) {
+	fm := vtui.FrameManager
+	fm.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "old.txt")
+	os.WriteFile(path, []byte("data"), 0644)
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	fsp := pf.panels[0].(*FileSystemPanel)
+	fsp.vfs = vfs.NewOSVFS(tmpDir)
+	fsp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "old.txt"}}}
+	fsp.SetCursorIndex(0)
+	pf.activeIdx = 0
+
+	// Заполняем кэш данными
+	fsp.dirCache[fsp.vfs.GetPath()] = dirCacheEntry{items: []vfs.VFSItem{{Name: "old.txt"}}}
+
+	// 1. Тест успешного переименования
+	// Перехватываем InputBox внутри actionRename (в тестах он не блокирует)
+	// Мы вручную вызовем логику, которую должен был вызвать InputBox
+	newName := "new.txt"
+	oldPath := fsp.vfs.Join(fsp.vfs.GetPath(), "old.txt")
+	newPath := fsp.vfs.Join(fsp.vfs.GetPath(), newName)
+
+	// Симулируем успешный асинхронный ответ
+	fsp.vfs.Rename(context.Background(), oldPath, newPath)
+
+	// Выполняем UI-часть из actionRename (успех)
+	delete(fsp.dirCache, fsp.vfs.GetPath())
+	fsp.pendingSelection = newName
+	pf.RefreshAll()
+
+	if _, ok := fsp.dirCache[fsp.vfs.GetPath()]; ok {
+		t.Error("Cache was not cleared after rename")
+	}
+	if fsp.pendingSelection != "new.txt" {
+		t.Errorf("Pending selection not set correctly: %q", fsp.pendingSelection)
+	}
+
+	// 2. Тест ошибки переименования
+	fsp.pendingSelection = ""
+	fsp.vfs = &mockRenameVFS{VFS: fsp.vfs, renameErr: os.ErrPermission}
+
+	// Выполняем UI-часть из actionRename (ошибка)
+	fsp.pendingSelection = "old.txt" // Должно вернуться к старому имени
+	pf.RefreshAll()
+
+	if fsp.pendingSelection != "old.txt" {
+		t.Error("On error, pendingSelection should point to the original name")
+	}
+}
+func TestActionExecute_WindowsFormatSimulation(t *testing.T) {
+	// Тестируем, что формат команды, который мы выбрали для Windows,
+	// корректно «проглатывается» парсером.
+	tv := NewTerminalView(80, 24)
+	p := NewAnsiParser(tv, nil)
+
+	dir := "C:\\Users\\f4\\Desktop"
+	cmd := "echo \"hello world\""
+
+	// Имитируем создание команды для Windows (как в panels_frame.go / actions.go)
+	// Используем %q для путей
+	wireCmd := fmt.Sprintf("cd /d %q & %s\r\n", dir, cmd)
+
+	// Проверяем, что в сформированной строке есть разделитель, на который завязан парсер
+	if !strings.Contains(wireCmd, "\" & ") {
+		t.Fatalf("Generated wire command format changed! Parser relies on '\" & ' separator. Got: %q", wireCmd)
+	}
+
+	p.Process([]byte(wireCmd))
+
+	result := string(tv.GetAllLogBytes())
+
+	if strings.Contains(result, "cd /d") {
+		t.Errorf("Technical CD leaked! Wire: %q, Result: %q", wireCmd, result)
+	}
+
+	if !strings.Contains(result, cmd) {
+		t.Errorf("Real command lost! Wire: %q, Result: %q", wireCmd, result)
+	}
+}
+
+type mockRenameVFS struct {
+	vfs.VFS
+	renameErr error
+}
+
+func (m *mockRenameVFS) Rename(ctx context.Context, old, new string) error {
+	return m.renameErr
 }

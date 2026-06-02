@@ -1,10 +1,13 @@
 package main
 
 import (
+	"io"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/unxed/vtui"
+	"github.com/unxed/f4/piecetable"
 )
 
 func init() {
@@ -15,14 +18,23 @@ func init() {
 // mockPty captures writes to the PTY for testing parser responses
 type mockPty struct {
 	written []byte
+	closed  bool
 }
 
 func (m *mockPty) Write(b []byte) (int, error) {
 	m.written = append(m.written, b...)
 	return len(b), nil
 }
-func (m *mockPty) Read(b []byte) (int, error)            { return 0, nil }
-func (m *mockPty) Close() error                          { return nil }
+func (m *mockPty) Read(b []byte) (int, error) {
+	for !m.closed {
+		time.Sleep(10 * time.Millisecond)
+	}
+	return 0, io.EOF
+}
+func (m *mockPty) Close() error {
+	m.closed = true
+	return nil
+}
 func (m *mockPty) SetSize(cols, rows int)                {}
 func (m *mockPty) Wait() error                           { return nil }
 func (m *mockPty) Run(name string, args ...string) error { return nil }
@@ -550,5 +562,103 @@ func TestAnsiParser_DECRQM(t *testing.T) {
 	p.Process([]byte("\x1b[$p"))
 	if len(pty.written) > 0 {
 		t.Error("Should not respond to DECRQM without parameters")
+	}
+}
+func TestAnsiParser_TechnicalCommandFilter(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	p := NewAnsiParser(tv, nil)
+
+	tv.BracketedPasteMode = true // Изменим стейт, чтобы убедиться, что trailingANSI корректно отработает
+
+	// Имитация технической команды, которую генерирует f4 для Unix (set +H...).
+	// Обратите внимание: она содержит эхо самой команды и trailing ANSI.
+	techCmd := "set +H; cd '/tmp' && { printf \"\\033]133;C\\007\"; ./script.sh ; printf \"\\033]133;D\\007\"; }\r\n"
+	trailingANSI := "\x1b[?2004l" // Отключение bracketed paste и т.д.
+
+	p.Process([]byte(techCmd + trailingANSI))
+
+	// Парсер должен был перехватить и вырезать `techCmd`,
+	// поэтому на экране терминала (Active Grid) не должно быть текста скрипта 's', 'e', 't'.
+	if tv.Lines[tv.CursorY][0].Char == 's' {
+		t.Error("Technical command was leaked to the visual screen!")
+	}
+
+	// Убеждаемся, что trailingANSI не был утерян вместе с вырезанной командой
+	// и благополучно отработал, отключив режим bracketed paste.
+	if tv.BracketedPasteMode {
+		t.Error("Trailing ANSI sequence was ignored/cut off during technical command filtering!")
+	}
+}
+func TestAnsiParser_WindowsAbsoluteJumpRobustness(t *testing.T) {
+	// Типичный "грязный" чанк от ConPTY: очистка экрана + прыжок в середину + текст
+	tv := NewTerminalView(80, 24)
+	p := NewAnsiParser(tv, nil)
+
+	// \x1b[2J (Clear) \x1b[10;5H (Jump to row 10, col 5)
+	chunk := "\x1b[2J\x1b[10;5HData"
+	p.Process([]byte(chunk))
+
+	// After writing 4 bytes "Data", X should be 4 + 4 = 8
+	if tv.CursorY != 9 || tv.CursorX != 8 {
+		t.Errorf("Absolute jump failed. Expected (8,9), got (%d,%d)", tv.CursorX, tv.CursorY)
+	}
+
+	if tv.Lines[9][4].Char != 'D' {
+		t.Errorf("Data landed in wrong place. Expected 'D' at [9][4], got '%c'", tv.Lines[9][4].Char)
+	}
+}
+func TestAnsiParser_WindowsExcision_CrossPlatform(t *testing.T) {
+	// Этот тест проверяет логику вырезания технических команд Windows,
+	// даже если тест запущен на Linux/macOS.
+	tv := NewTerminalView(80, 24)
+	p := NewAnsiParser(tv, nil)
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "Simple CD excision",
+			input:    "cd /d \"C:\\Windows\" & dir\r\n",
+			expected: "dir",
+		},
+		{
+			name:     "Excision with prompt (screen scraping simulation)",
+			input:    "C:\\Users\\f4>cd /d \"D:\\Data\" & echo 123\r\n",
+			expected: "C:\\Users\\f4>echo 123",
+		},
+		{
+			name:     "Multiple excisions in one buffer",
+			input:    "Prompt1>cd /d \"A\" & cmd1\r\nPrompt2>cd /d \"B\" & cmd2",
+			expected: "Prompt1>cmd1\nPrompt2>cmd2",
+		},
+		{
+			name:     "Path with spaces and special chars",
+			input:    "C:\\>cd /d \"C:\\My Folder & Stuff\" & whoami\r\n",
+			expected: "C:\\>whoami",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tv.ResetBuffer(80, 24)
+			tv.pt = piecetable.New([]byte{}) // Reset history
+			tv.li.Rebuild(tv.pt)
+
+			p.Process([]byte(tt.input))
+
+			logBytes := tv.GetAllLogBytes()
+			// Очищаем от лишних пробелов в конце строк сетки
+			result := strings.TrimSpace(string(logBytes))
+
+			if !strings.Contains(result, tt.expected) {
+				t.Errorf("Excision failed for [%s].\nExpected to contain: %q\nGot log: %q", tt.name, tt.expected, result)
+			}
+
+			if strings.Contains(result, "cd /d") {
+				t.Errorf("Excision failed for [%s]: technical 'cd' command leaked into log!", tt.name)
+			}
+		})
 	}
 }

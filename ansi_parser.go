@@ -45,9 +45,45 @@ func NewAnsiParser(t *TerminalView, p PtyBackend) *AnsiParser {
 }
 
 func (p *AnsiParser) Process(data []byte) {
-	if p == nil {
+	if p == nil || len(data) == 0 {
 		return
 	}
+
+	strData := string(data)
+	// Эвристика: скрываем эхо технических команд синхронизации (Linux far2l и Windows f4),
+	// чтобы они не мусорили в логе и на экране.
+	if strings.HasPrefix(strData, "set +H; cd ") {
+		// Unix: отрезаем префикс far2l
+		idx := strings.Index(strData, "}\r\n")
+		if idx != -1 {
+			strData = strData[idx+3:]
+		}
+	}
+
+	// Windows f4: Вырезаем техническую команду смены папки из любого места в буфере.
+	// Это скрывает cd даже если он пришел вместе с промптом shell (screen scraping).
+	for {
+		startIdx := strings.Index(strData, "cd /d \"")
+		if startIdx == -1 {
+			break
+		}
+		// Ищем конец технической части по разделителю " & "
+		endIdx := strings.Index(strData[startIdx:], "\" & ")
+		if endIdx == -1 {
+			break
+		}
+
+		actualEnd := startIdx + endIdx + 4 // +4 чтобы захватить и " & "
+		vtui.DebugLog("ANSI_PARSER: Excising technical Windows CD sync from buffer")
+		strData = strData[:startIdx] + strData[actualEnd:]
+	}
+
+	data = []byte(strData)
+	if len(data) == 0 {
+		return
+	}
+
+	// vtui.DebugLog("ANSI_PARSER: Processing %d bytes: [% 02X] (as string: %q)", len(data), data, strData)
 	for _, b := range data {
 		// vtui.DebugLog("PARSER: Byte 0x%02X State %v", b, p.State)
 		switch p.State {
@@ -144,6 +180,7 @@ func (p *AnsiParser) Process(data []byte) {
 	p.term.FlushLog()
 }
 func (p *AnsiParser) handleEsc(cmd byte) {
+	// vtui.DebugLog("ANSI_PARSER: ESC %c", cmd)
 	switch cmd {
 	case '7':
 		p.term.SaveCursor()
@@ -163,6 +200,7 @@ func (p *AnsiParser) handleEsc(cmd byte) {
 }
 
 func (p *AnsiParser) handleCSI(cmd byte) {
+	// vtui.DebugLog("ANSI_PARSER: CSI %s %c (args: %v, intermediate: %q)", p.CurParam.String(), cmd, p.Params, p.Intermediate)
 	args := make([]int, len(p.Params))
 	// If there are no arguments, args will be an empty slice.
 	// This is important for correct handling of default commands.
@@ -260,7 +298,7 @@ func (p *AnsiParser) handleCSI(cmd byte) {
 		if len(args) > 0 && args[0] != 0 {
 			n = args[0]
 		}
-		p.term.ScrollUp(p.term.CursorY, p.term.ScrollBottom, n)
+		p.term.scrollUp(p.term.CursorY, p.term.ScrollBottom, n)
 	case 'P': // Delete characters
 		n := 1
 		if len(args) > 0 && args[0] != 0 {
@@ -278,7 +316,7 @@ func (p *AnsiParser) handleCSI(cmd byte) {
 		if len(args) > 0 && args[0] != 0 {
 			n = args[0]
 		}
-		p.term.ScrollUp(p.term.ScrollTop, p.term.ScrollBottom, n)
+		p.term.scrollUp(p.term.ScrollTop, p.term.ScrollBottom, n)
 	case 'T': // Scroll down (text moves down)
 		n := 1
 		if len(args) > 0 && args[0] != 0 {
@@ -458,6 +496,7 @@ func (p *AnsiParser) handleDECRQM(args []int) {
 
 func (p *AnsiParser) handleOSC() {
 	s := p.CurParam.String()
+	// vtui.DebugLog("ANSI_PARSER: OSC payload: %q", s)
 	p.CurParam.Reset()
 	if s == "" {
 		return
@@ -476,8 +515,6 @@ func (p *AnsiParser) handleOSC() {
 	if cmd == 0 || cmd == 2 {
 		vtui.DebugLog("ANSI_OSC_TRACE: Received window title change: %q", parts[1])
 		p.term.Title = parts[1]
-		// Любое изменение заголовка — сигнал активности. Снимаем заглушку.
-		p.term.SetMuted(false)
 		if p.term.OnTitleChange != nil {
 			p.term.OnTitleChange(p.term.Title)
 		}
@@ -543,6 +580,7 @@ func (p *AnsiParser) handleOSC() {
 
 func (p *AnsiParser) handleAPC() {
 	s := p.CurParam.String()
+	// vtui.DebugLog("ANSI_PARSER: APC payload: %q", s)
 	p.CurParam.Reset()
 
 	if strings.HasPrefix(s, "far2l") {

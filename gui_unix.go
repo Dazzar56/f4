@@ -1,10 +1,13 @@
-//go:build !windows
+//go:build linux || darwin || openbsd || netbsd || dragonfly || freebsd || illumos || solaris
 
 package main
 
-import "github.com/unxed/vtui"
+import (
+	"github.com/unxed/vtui"
+)
 
-func RunGui() {
-	// Запускаем f4 в X11 окне 100x30 символов
-	vtui.RunInX11Window(100, 30, SetupUI)
+func RunGui(backend string) error {
+	return vtui.RunInGUIWindow(100, 30, backend, func() {
+		SetupUI()
+	})
 }

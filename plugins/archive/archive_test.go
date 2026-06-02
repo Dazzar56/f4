@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/klauspost/compress/zip"
 	"github.com/mholt/archives"
 	"github.com/unxed/vtui"
+	"github.com/unxed/zip"
 )
 
 // Тест теперь находится внутри пакета archive и может тестировать неэкспортированные функции.

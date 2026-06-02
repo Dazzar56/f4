@@ -1,11 +1,13 @@
+//go:build windows
+
 package main
 
 import (
-	"fmt"
-	"os"
+	"github.com/unxed/vtui"
 )
 
-func RunGui() {
-	fmt.Fprintf(os.Stderr, "GUI mode is currently only supported on Linux/X11.\n")
-	os.Exit(1)
+func RunGui(backend string) error {
+	return vtui.RunInGUIWindow(100, 30, backend, func() {
+		SetupUI()
+	})
 }

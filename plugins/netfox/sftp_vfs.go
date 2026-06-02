@@ -31,9 +31,11 @@ func NewSFTPVFS(parent vfs.VFS, host, port, user, pass string) (*SFTPVFS, error)
 	vtui.DebugLog("NET: Initiating SFTP connection to %s:%s (user: %s)", host, port, user)
 	auths := []ssh.AuthMethod{}
 
-	if sshAgent, err := net.Dial("unix", os.Getenv("SSH_AUTH_SOCK")); err == nil {
-		auths = append(auths, ssh.PublicKeysCallback(agent.NewClient(sshAgent).Signers))
-		sshAgent.Close()
+	if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
+		if agentConn, err := net.Dial("unix", sock); err == nil {
+			auths = append(auths, ssh.PublicKeysCallback(agent.NewClient(agentConn).Signers))
+			defer agentConn.Close()
+		}
 	}
 
 	home, _ := os.UserHomeDir()
@@ -142,10 +144,24 @@ func (v *SFTPVFS) ReadDir(ctx context.Context, p string, onChunk func([]vfs.VFSI
 			}
 		}
 
+		var unixMode uint32
+		var uid, gid int
+		var aTime time.Time
+		if stat, ok := e.Sys().(*sftp.FileStat); ok {
+			unixMode = stat.Mode
+			uid = int(stat.UID)
+			gid = int(stat.GID)
+			aTime = time.Unix(int64(stat.Atime), 0)
+		} else {
+			unixMode = uint32(e.Mode().Perm())
+			aTime = e.ModTime()
+		}
+
 		items = append(items, vfs.VFSItem{
 			Name: e.Name(), Size: e.Size(), IsDir: isDir,
 			MTime: e.ModTime(), IsExecutable: e.Mode().Perm()&0111 != 0,
 			IsHidden: strings.HasPrefix(e.Name(), "."),
+			UnixMode: unixMode, Uid: uid, Gid: gid, ATime: aTime,
 		})
 
 		if len(items) >= 500 || i == len(entries)-1 {
@@ -162,10 +178,26 @@ func (v *SFTPVFS) Stat(ctx context.Context, p string) (vfs.VFSItem, error) {
 	if err != nil {
 		return vfs.VFSItem{}, err
 	}
+
+	var unixMode uint32
+	var uid, gid int
+	var aTime time.Time
+
+	if stat, ok := info.Sys().(*sftp.FileStat); ok {
+		unixMode = stat.Mode
+		uid = int(stat.UID)
+		gid = int(stat.GID)
+		aTime = time.Unix(int64(stat.Atime), 0)
+	} else {
+		unixMode = uint32(info.Mode().Perm())
+		aTime = info.ModTime()
+	}
+
 	return vfs.VFSItem{
 		Name: info.Name(), Size: info.Size(), IsDir: info.IsDir(),
 		MTime: info.ModTime(), IsExecutable: info.Mode().Perm()&0111 != 0,
 		IsHidden: strings.HasPrefix(info.Name(), "."),
+		UnixMode: unixMode, Uid: uid, Gid: gid, ATime: aTime,
 	}, nil
 }
 
@@ -234,7 +266,7 @@ func (v *SFTPVFS) SetAttributes(ctx context.Context, path string, item vfs.VFSIt
 }
 
 func (v *SFTPVFS) GetCapabilities() vfs.VFSCapabilities {
-	return vfs.VFSCapabilities{HasRandomAccess: true}
+	return vfs.VFSCapabilities{HasRandomAccess: true, HasUnixPermissions: true}
 }
 func (v *SFTPVFS) Search(ctx context.Context, p, pat string) (chan int64, error) { return nil, nil }
 

@@ -323,23 +323,42 @@ func (pf *PanelsFrame) initPTY() {
 	// Always initialize the parser to prevent nil dereference
 	pf.parser = NewAnsiParser(pf.termView, nil)
 
-	p := pf.pty
-	if p == nil {
-		var err error
-		p, err = NewPTY()
-		if err != nil {
-			vtui.DebugLog("PTY: Failed to allocate local PTY: %v", err)
-			return
-		}
-		pf.pty = p
-		shell := GetSystemShell()
-		p.Run(shell)
-	}
-
-	pf.parser.pty = p
-
-	// Local PTY has its own dedicated read loop.
 	go func() {
+		pf.ptyMutex.Lock()
+		p := pf.pty
+		pf.ptyMutex.Unlock()
+
+		if p == nil {
+			var err error
+			p, err = NewPTY()
+			if err != nil {
+				vtui.DebugLog("PTY: Failed to allocate local PTY: %v", err)
+				return
+			}
+
+			if runtime.GOOS == "windows" {
+				os.Setenv("PROMPT", "$E]133;D$E\\$P$G")
+			}
+
+			shell := GetSystemShell()
+			if err := p.Run(shell); err != nil {
+				vtui.DebugLog("PTY: Failed to run shell: %v", err)
+				p.Close()
+				return
+			}
+
+			pf.ptyMutex.Lock()
+			pf.pty = p
+			pf.parser.pty = p
+			pf.termView.pty = p
+			pf.ptyMutex.Unlock()
+
+			vtui.FrameManager.PostTask(func() {
+				pf.RefreshAll()
+			})
+		}
+
+		// Local PTY has its own dedicated read loop.
 		buf := make([]byte, 32768)
 		for {
 			n, err := p.Read(buf)
@@ -688,6 +707,12 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	}
 
+	// F2: user menu (FarMenu.ini local → near binary → main_menu.ini).
+	if e.VirtualKeyCode == vtinput.VK_F2 && !alt && !ctrl && !shift && e.KeyDown {
+		ShowUserMenu(pf)
+		return true
+	}
+
 	// Ctrl+A: Attributes
 	if e.VirtualKeyCode == vtinput.VK_A && ctrl && !alt && !shift && e.KeyDown {
 		actionFileAttributes(pf)
@@ -995,14 +1020,12 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 					isBackground = strings.HasSuffix(strings.TrimSpace(cmd), "&")
 				}
 
-				psCmdC := "powershell -NoProfile -Command [Console]::Write([char]27+']133;C'+[char]7)"
-				psCmdD := "powershell -NoProfile -Command [Console]::Write([char]27+']133;D'+[char]7)"
-
 				if runtime.GOOS == "windows" {
+					// Use a combined command for reliable excision in AnsiParser: cd /d "path" & command
 					if path != "" {
-						fullWireCmd = fmt.Sprintf("%s & cd /d %q & %s & %s\r", psCmdC, path, cmd, psCmdD)
+						fullWireCmd = fmt.Sprintf("cd /d %q & %s\r", path, cmd)
 					} else {
-						fullWireCmd = fmt.Sprintf("%s & %s & %s\r", psCmdC, cmd, psCmdD)
+						fullWireCmd = fmt.Sprintf("%s\r", cmd)
 					}
 					pf.executing = true
 					pf.returnToPanels = pf.showPanels
@@ -1028,9 +1051,11 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 					}
 				}
 
-				pf.termView.PrintCleanCommand(cmd)
-				if !isBackground {
-					pf.termView.SetMuted(true)
+				if runtime.GOOS != "windows" {
+					pf.termView.PrintCleanCommand(cmd)
+					if !isBackground {
+						pf.termView.SetMuted(true)
+					}
 				}
 				activePty.Write([]byte(fullWireCmd))
 			}
@@ -1069,8 +1094,8 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 
 	// Selection by mask (+, -, *) logic
-	// Intercepted only if command line is empty and fastFind is not active
-	if pf.showPanels && pf.cmdLine.IsEmpty() && !alt && !ctrl {
+	// Intercepted only if fastFind is not active
+	if pf.showPanels && !alt && !ctrl {
 		isFastFind := false
 		if fsp := pf.getActivePanel(); fsp != nil && fsp.fastFindMode {
 			isFastFind = true
@@ -1091,9 +1116,11 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				isSelectKey = true
 				selectChar = '*'
 			default:
-				if e.Char == '+' || e.Char == '-' || e.Char == '*' {
-					isSelectKey = true
-					selectChar = e.Char
+				if pf.cmdLine.IsEmpty() {
+					if e.Char == '+' || e.Char == '-' || e.Char == '*' {
+						isSelectKey = true
+						selectChar = e.Char
+					}
 				}
 			}
 
@@ -1169,6 +1196,21 @@ func (pf *PanelsFrame) HandleBroadcast(cmd int, args any) bool {
 }
 
 func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
+	// Wheel events always scroll the active panel, regardless of mouse position.
+	// This matches classic Far Manager / far2l behavior.
+	if e.WheelDirection != 0 {
+		vk := vtinput.VK_DOWN
+		if e.WheelDirection > 0 {
+			vk = vtinput.VK_UP
+		}
+		return pf.Active().ProcessKey(&vtinput.InputEvent{
+			Type:            vtinput.KeyEventType,
+			KeyDown:         true,
+			VirtualKeyCode:  uint16(vk),
+			ControlKeyState: e.ControlKeyState,
+		})
+	}
+
 	mx, my := int(e.MouseX), int(e.MouseY)
 
 	for i, p := range pf.panels {

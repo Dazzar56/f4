@@ -50,14 +50,16 @@ type VFSItem struct {
 	CTime    time.Time // Creation (Win) or Status Change (Unix)
 	UnixMode uint32    // Raw numeric mode for chmod
 	Uid, Gid int       // Ownership
+	WinAttrs uint32    // Windows file attributes
 }
 
 // VFSCapabilities defines what the current VFS implementation can do efficiently.
 type VFSCapabilities struct {
-	HasServerSideCopy bool
-	HasServerSideMove bool
-	HasRandomAccess   bool // Supports ReadAt
-	HasSearch         bool // Supports server-side search
+	HasServerSideCopy  bool
+	HasServerSideMove  bool
+	HasRandomAccess    bool // Supports ReadAt
+	HasSearch          bool // Supports server-side search
+	HasUnixPermissions bool // Indicates if VFS natively supports Unix-style permissions
 }
 
 // VFS is the core interface for file operations in f4.

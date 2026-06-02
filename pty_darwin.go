@@ -116,12 +116,12 @@ func (p *PTY) IsBusy() bool {
 	if p.Master == nil {
 		return false
 	}
-	var pgrp int
+	var pgrp int32
 	_, _, err := syscall.Syscall(syscall.SYS_IOCTL, p.Master.Fd(), unix.TIOCGPGRP, uintptr(unsafe.Pointer(&pgrp)))
 	if err != 0 {
 		return false
 	}
-	return pgrp != p.shellPgrp
+	return int(pgrp) != p.shellPgrp
 }
 
 func (p *PTY) SetSize(cols, rows int) {

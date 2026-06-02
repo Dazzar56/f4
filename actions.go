@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"os/exec"
 	"runtime"
 	"strings"
 	"time"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
 
 	"github.com/unxed/f4/piecetable"
 	"github.com/unxed/f4/vfs"
@@ -106,6 +109,180 @@ func actionFoldersHistory(pf *PanelsFrame) {
 	menu.SetPosition((scrW-width)/2, (scrH-height)/2, (scrW-width)/2+width-1, (scrH-height)/2+height-1)
 	vtui.FrameManager.Push(menu)
 }
+
+func actionEditFileExternal(pf *PanelsFrame, v vfs.VFS, path string, size int64) {
+	cmdStr := AppConfig.ExternalEditorCommand
+	if cmdStr == "" {
+		cmdStr = os.Getenv("EDITOR")
+		if cmdStr == "" {
+			cmdStr = "nano" // Fallback
+		}
+	}
+
+	// 1. If it's a local OSVFS file, we can just run the editor directly.
+	if osvfs, ok := v.(*vfs.OSVFS); ok {
+		absPath, _ := osvfs.Abs(path)
+		runExternalEditor(pf, cmdStr, absPath)
+		return
+	}
+
+	// 2. If it's a remote file, we need to download it to a temp file, edit, and upload back if changed.
+	ext := filepath.Ext(path)
+	if ext == "" {
+		ext = ".txt"
+	}
+	tmpFile, err := os.CreateTemp("", "f4-extedit-*"+ext)
+	if err != nil {
+		vtui.ShowMessage(" Error ", fmt.Sprintf("Cannot create temp file: %v", err), []string{"&Ok"})
+		return
+	}
+	tmpPath := tmpFile.Name()
+	tmpFile.Close() // Will be reopened by VFS/editor
+
+	pf.RunProgressTask(" Downloading... ", "Preparing to download...", false, func(ctx context.Context, update func(msg string, percent int)) error {
+		src, err := v.Open(ctx, path)
+		if err != nil {
+			// If file does not exist, it's a new file. Just create an empty temp file.
+			if os.IsNotExist(err) || strings.Contains(err.Error(), "no such file") || strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "file does not exist") {
+				return nil
+			}
+			return err
+		}
+		defer src.Close()
+
+		dst, err := os.Create(tmpPath)
+		if err != nil {
+			return err
+		}
+		defer dst.Close()
+
+		buf := make([]byte, 128*1024)
+		var downloaded int64
+		for {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			n, err := src.Read(ctx, buf)
+			if n > 0 {
+				if _, werr := dst.Write(buf[:n]); werr != nil {
+					return werr
+				}
+				downloaded += int64(n)
+				pct := 0
+				if size > 0 {
+					pct = int((downloaded * 100) / size)
+				}
+				update("Downloading...", pct)
+			}
+			if err != nil {
+				if err == io.EOF {
+					break
+				}
+				return err
+			}
+		}
+		return nil
+	}, func(err error) {
+		if err != nil && err != context.Canceled {
+			vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to download file:\n%v", err), []string{"&Ok"})
+			os.Remove(tmpPath)
+			return
+		}
+		if err == context.Canceled {
+			os.Remove(tmpPath)
+			return
+		}
+
+		stBefore, err := os.Stat(tmpPath)
+		if err != nil {
+			os.Remove(tmpPath)
+			return
+		}
+		modTimeBefore := stBefore.ModTime()
+
+		runExternalEditor(pf, cmdStr, tmpPath)
+
+		stAfter, err := os.Stat(tmpPath)
+		if err == nil && stAfter.ModTime().After(modTimeBefore) {
+			pf.RunProgressTask(" Uploading... ", "Preparing to upload...", false, func(ctx context.Context, update func(msg string, percent int)) error {
+				src, err := os.Open(tmpPath)
+				if err != nil {
+					return err
+				}
+				defer src.Close()
+
+				dst, err := v.Create(ctx, path)
+				if err != nil {
+					return err
+				}
+				defer dst.Close()
+
+				buf := make([]byte, 128*1024)
+				var uploaded int64
+				for {
+					if ctx.Err() != nil {
+						return ctx.Err()
+					}
+					n, err := src.Read(buf)
+					if n > 0 {
+						if _, werr := dst.Write(buf[:n]); werr != nil {
+							return werr
+						}
+						uploaded += int64(n)
+						pct := 0
+						if stAfter.Size() > 0 {
+							pct = int((uploaded * 100) / stAfter.Size())
+						}
+						update("Uploading...", pct)
+					}
+					if err != nil {
+						if err == io.EOF {
+							break
+						}
+						return err
+					}
+				}
+				return nil
+			}, func(err error) {
+				os.Remove(tmpPath)
+				if err != nil && err != context.Canceled {
+					vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to upload file:\n%v", err), []string{"&Ok"})
+				}
+				pf.RefreshAll()
+			})
+		} else {
+			os.Remove(tmpPath)
+			pf.RefreshAll()
+		}
+	})
+}
+
+func runExternalEditor(pf *PanelsFrame, cmdStr, path string) {
+	parts := strings.Fields(cmdStr)
+	if len(parts) == 0 {
+		return
+	}
+	
+	args := append(parts[1:], path)
+	cmd := exec.Command(parts[0], args...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	vtui.Suspend()
+	err := cmd.Run()
+	vtui.Resume()
+	
+	if err != nil {
+		vtui.FrameManager.PostTask(func() {
+			vtui.ShowMessage(" Error ", fmt.Sprintf("Editor exited with error:\n%v", err), []string{"&Ok"})
+		})
+	}
+	vtui.FrameManager.PostTask(func() {
+		pf.RefreshAll()
+	})
+}
+
 func actionOpenEditor(pf *PanelsFrame, v vfs.VFS, path string) {
 	vtui.RunAsync(func(ctx *vtui.TaskContext) {
 		var f vfs.ReadAtCloser
@@ -303,12 +480,13 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 					cmd := name
 					var cmdToWire string
 
-					// Используем максимально простую форму вызова PowerShell без вложенных кавычек
-					psCmdC := "powershell -NoProfile -Command [Console]::Write([char]27+']133;C'+[char]7)"
-					psCmdD := "powershell -NoProfile -Command [Console]::Write([char]27+']133;D'+[char]7)"
-
 					if runtime.GOOS == "windows" {
-						cmdToWire = fmt.Sprintf("%s & cd /d %q & %q & %s\r", psCmdC, dir, cmd, psCmdD)
+						// Combine directory sync with the command to allow excision
+						if dir != "" {
+							cmdToWire = fmt.Sprintf("cd /d %q & %s\r", dir, historyCmd)
+						} else {
+							cmdToWire = fmt.Sprintf("%s\r", historyCmd)
+						}
 					} else {
 						// On Unix, use single quotes for paths to prevent Bash history expansion
 						sqDir := strings.ReplaceAll(dir, "'", "'\\''")
@@ -322,12 +500,16 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 					if runtime.GOOS == "windows" {
 						cleanCmd = cmd
 					}
-					pf.termView.PrintCleanCommand(cleanCmd)
+					if runtime.GOOS != "windows" {
+						pf.termView.PrintCleanCommand(cleanCmd)
+					}
 
-					pf.termView.SetMuted(true)
 					pf.executing = true
 					pf.returnToPanels = true
 
+					if runtime.GOOS != "windows" {
+						pf.termView.SetMuted(true)
+					}
 					activePty.Write([]byte(cmdToWire))
 					pf.showPanels = false
 				}
@@ -370,7 +552,12 @@ func actionNewFile(pf *PanelsFrame) {
 			if name == "" {
 				name = "newfile.txt"
 			}
-			actionOpenEditor(pf, activeVfs, activeVfs.Join(dir, name))
+			path := activeVfs.Join(dir, name)
+			if AppConfig.UseExternalEditor {
+				actionEditFileExternal(pf, activeVfs, path, 0)
+				return
+			}
+			actionOpenEditor(pf, activeVfs, path)
 		})
 	}
 }
@@ -477,6 +664,12 @@ func actionEditFile(pf *PanelsFrame) {
 		}
 		name := fsp.GetSelectedName()
 		path := fsp.vfs.Join(fsp.vfs.GetPath(), name)
+
+		if AppConfig.UseExternalEditor {
+			actionEditFileExternal(pf, fsp.vfs, path, fsp.entries[idx].Size)
+			return
+		}
+
 		actionOpenEditor(pf, fsp.vfs, path)
 	}
 }
@@ -602,15 +795,19 @@ func actionRename(pf *PanelsFrame) {
 			ctx.RunOnUI(func() {
 				if err != nil {
 					vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to rename:\n%v", err), []string{"&Ok"})
+					fsp.pendingSelection = name
+				} else {
+					// Clear cache to ensure the new name is visible immediately
+					delete(fsp.dirCache, fsp.vfs.GetPath())
+					fsp.pendingSelection = newName
 				}
-				fsp.pendingSelection = newName
 				pf.RefreshAll()
 			})
 		})
 	})
 }
 func actionEditorSettings(pf *PanelsFrame) {
-	width, height := 78, 20
+	width, height := 78, 23
 	dlg := vtui.NewCenteredDialog(width, height, Msg("EditorSettings.Title"))
 	dlg.ShowClose = true
 
@@ -659,6 +856,14 @@ func actionEditorSettings(pf *PanelsFrame) {
 	editMask := vtui.NewEdit(0, 0, 56, AppConfig.EditorAutoCompleteMask)
 	lblMask := vtui.NewLabel(0, 0, Msg("EditorSettings.Mask"), editMask)
 
+	chkExtEdit := vtui.NewCheckbox(0, 0, "Use e&xternal editor", false)
+	if AppConfig.UseExternalEditor {
+		chkExtEdit.State = 1
+	}
+
+	editExtCmd := vtui.NewEdit(0, 0, 20, AppConfig.ExternalEditorCommand)
+	lblExtCmd := vtui.NewLabel(0, 0, "E&xternal command:", editExtCmd)
+
 	btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))
 	btnOk.IsDefault = true
 	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
@@ -675,8 +880,12 @@ func actionEditorSettings(pf *PanelsFrame) {
 	dlg.AddItem(chkCrosshair)
 	dlg.AddItem(lblMask)
 	dlg.AddItem(editMask)
+	dlg.AddItem(chkExtEdit)
+	dlg.AddItem(lblExtCmd)
+	dlg.AddItem(editExtCmd)
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnCancel)
+	dlg.AddLink(chkExtEdit, editExtCmd, vtui.LinkEnableIfChecked)
 
 	// 3. Layout Configuration
 	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, width-4, height-4)
@@ -708,6 +917,12 @@ func actionEditorSettings(pf *PanelsFrame) {
 	vbox.Add(lblMask, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(editMask, vtui.Margins{}, vtui.AlignFill)
 
+	rowExt := vtui.NewHBoxLayout(0, 0, width-4, 1)
+	rowExt.Add(chkExtEdit, vtui.Margins{Right: 1}, vtui.AlignLeft)
+	rowExt.Add(lblExtCmd, vtui.Margins{Right: 1, Left: 2}, vtui.AlignLeft)
+	rowExt.Add(editExtCmd, vtui.Margins{}, vtui.AlignFill)
+	vbox.Add(rowExt, vtui.Margins{Top: 1}, vtui.AlignFill)
+
 	hbox := vtui.NewHBoxLayout(0, 0, width-4, 1)
 	hbox.HorizontalAlign = vtui.AlignCenter
 	hbox.Spacing = 2
@@ -732,6 +947,8 @@ func actionEditorSettings(pf *PanelsFrame) {
 		AppConfig.EditorAutoComplete = chkAuto.State == 1
 		AppConfig.EditorCrosshair = chkCrosshair.State == 1
 		AppConfig.EditorAutoCompleteMask = editMask.GetText()
+		AppConfig.UseExternalEditor = chkExtEdit.State == 1
+		AppConfig.ExternalEditorCommand = editExtCmd.GetText()
 		SaveConfig()
 		dlg.Close()
 	}

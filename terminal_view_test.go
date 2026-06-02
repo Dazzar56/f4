@@ -285,11 +285,22 @@ func TestTerminalView_HistoryAndReflow(t *testing.T) {
 	for _, r := range text {
 		tv.PutChar(r, DefaultTermAttr)
 	}
-	tv.FlushLog()
 
-	// Проверяем PieceTable
-	if tv.pt.String() != text {
-		t.Errorf("History mismatch: expected %q, got %q", text, tv.pt.String())
+	// В VTE Mirror мы проверяем историю через GetAllLogBytes()
+	logBytes := tv.GetAllLogBytes()
+	result := strings.TrimSpace(string(logBytes))
+
+	if result != text {
+		t.Errorf("History mismatch: expected %q, got %q", text, result)
+	}
+
+	// Выдавливаем строки в лог, чтобы проверить Reflow в PieceTable
+	tv.scrollUp(0, 4, 5)
+
+	for len(tv.GridHistory) > 0 {
+		tv.extrudeGridHistoryRow(0)
+		tv.GridHistory = tv.GridHistory[1:]
+		tv.GridHistoryWrap = tv.GridHistoryWrap[1:]
 	}
 
 	// Проверяем фрагментацию при ширине 10
@@ -314,6 +325,7 @@ func TestTerminalView_StylesPreservation(t *testing.T) {
 	red := vtui.SetIndexFore(0, 1)
 	blue := vtui.SetIndexFore(0, 4)
 
+	tv.SetCursor(0, 0)
 	// Пишем "RED" красным и "BLUE" синим
 	for _, r := range "RED" {
 		tv.PutChar(r, red)
@@ -321,7 +333,11 @@ func TestTerminalView_StylesPreservation(t *testing.T) {
 	for _, r := range "BLUE" {
 		tv.PutChar(r, blue)
 	}
-	tv.FlushLog()
+
+	tv.pushRowToGridHistory(0)
+	tv.extrudeGridHistoryRow(0)
+	tv.GridHistory = tv.GridHistory[1:]
+	tv.GridHistoryWrap = tv.GridHistoryWrap[1:]
 
 	// Проверяем атрибуты в логе через getAttrAt
 	// "RED" — оффсеты 0, 1, 2
@@ -411,63 +427,33 @@ func TestTerminalView_AutoWrap(t *testing.T) {
 		t.Errorf("Auto-wrap failed: 'Y' should be at (0, 1), got %c", rune(tv.Lines[1][0].Char))
 	}
 }
-func TestTerminalView_PromptRewriteHeuristic(t *testing.T) {
-	// Tests the heuristic that prevents duplicate prompts in scrollback
-	// when a shell re-renders the same line.
+func TestTerminalView_VTEMirror_PromptOverwrite(t *testing.T) {
+	// Тестируем архитектурное поведение VTE Mirror:
+	// При перерисовке промпта (например, после ресайза ConPTY)
+	// данные просто перезаписываются в активной сетке, избегая дублирования в истории.
 	tv := NewTerminalView(80, 24)
 	tv.UseAltScreen = false
 
 	// 1. Shell prints a prompt "$ "
 	tv.PutChar('$', 0)
 	tv.PutChar(' ', 0)
-	tv.FlushLog()
-	if tv.pt.Size() != 2 {
-		t.Errorf("Initial history size mismatch, got %d", tv.pt.Size())
-	}
 
 	// 2. Shell moves cursor back to 0 (X=0) and prints a DIFFERENT prompt "> "
 	tv.PutChar('\r', 0)
 	tv.PutChar('>', 0)
-	tv.FlushLog()
 
-	// Heuristic should have wiped the previous '$ ' from history
-	if tv.pt.Size() != 1 || tv.pt.String() != ">" {
-		t.Errorf("Prompt rewrite heuristic failed. History: %q, Size: %d",
-			tv.pt.String(), tv.pt.Size())
-	}
-}
-func TestTerminalView_PromptRewriteDetection(t *testing.T) {
-	// Tests the logic that prevents duplicate prompts in history
-	// when a shell re-renders the same line.
-	tv := NewTerminalView(80, 24)
-	tv.UseAltScreen = false // Logic only applies to scrollback history
-
-	// 1. Simulate shell printing a prompt "$ "
-	tv.PutChar('$', 0)
-	tv.PutChar(' ', 0)
-	tv.FlushLog()
-	initialSize := tv.pt.Size()
-	if initialSize != 2 {
-		t.Errorf("Expected history size 2, got %d", initialSize)
+	// Убеждаемся, что бесконечный лог чист (данные туда не попадают до скроллинга)
+	if tv.pt.Size() != 0 {
+		t.Errorf("PieceTable should be empty in VTE Mirror before scroll. Size: %d", tv.pt.Size())
 	}
 
-	// 2. Shell moves cursor back to 0 and prints a DIFFERENT prompt "> "
-	// This happens in some advanced shells or during resize.
-	tv.PutChar('\r', 0)
-	tv.PutChar('>', 0)
-	tv.FlushLog()
-
-	// HEURISTIC: if CursorX is 0 and history for the current line exists, it should be wiped.
-	if tv.pt.Size() != 1 {
-		t.Errorf("Prompt rewrite detection failed: expected history size 1 ('>'), got %d (%q)",
-			tv.pt.Size(), tv.pt.String())
-	}
-	if tv.pt.String() != ">" {
-		t.Errorf("History corrupted: expected '>', got %q", tv.pt.String())
+	// Активная сетка должна содержать новый промпт
+	if tv.Lines[tv.CursorY][0].Char != '>' || tv.Lines[tv.CursorY][1].Char != ' ' {
+		t.Errorf("Active grid should contain the rewritten prompt")
 	}
 }
 func TestTerminalView_AutoWrap_NoHistoryLoss(t *testing.T) {
-	// Verifies that auto-wrapping does NOT trigger prompt-rewrite heuristic.
+	// Verifies that auto-wrapping operates correctly within VTE Mirror limits.
 	tv := NewTerminalView(10, 5)
 	tv.UseAltScreen = false
 
@@ -475,16 +461,359 @@ func TestTerminalView_AutoWrap_NoHistoryLoss(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		tv.PutChar('A', 0)
 	}
-	tv.FlushLog()
 
 	// Write 11th char - triggers auto-wrap. Cursor becomes (1, 1). lastCharWasCR is FALSE.
 	tv.PutChar('B', 0)
-	tv.FlushLog()
 
-	// Heuristic should NOT trigger. History should contain all 11 chars.
+	// Heuristic should NOT trigger. History representation should contain all 11 chars.
 	expected := "AAAAAAAAAAB"
-	if tv.pt.String() != expected {
-		t.Errorf("Auto-wrap caused data loss. Expected %q, got %q", expected, tv.pt.String())
+	logBytes := tv.GetAllLogBytes()
+	result := strings.TrimSpace(string(logBytes))
+
+	if result != expected {
+		t.Errorf("Auto-wrap caused data loss. Expected %q, got %q", expected, result)
+	}
+}
+func TestTerminalView_BottomAlignmentAndExtrusionGuard(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+
+	// 1. Убеждаемся, что инициализация происходит снизу (прилипание к низу)
+	if tv.CursorY != 23 {
+		t.Errorf("Terminal must initialize at bottom (Y=23), got %d", tv.CursorY)
+	}
+
+	// 2. Пишем текст, чтобы спровоцировать скролл
+	tv.PutChar('A', 0)
+	tv.PutChar('\n', 0)
+	tv.PutChar('B', 0)
+
+	// 3. Проверяем лог. Extrusion Guard должен предотвратить
+	// попадание изначальных пустых строк (эхо старта) в историю.
+	logBytes := tv.GetAllLogBytes()
+	logStr := strings.TrimRight(string(logBytes), "\n ") // убираем пустые места активной сетки
+	if logStr != "A\nB" {
+		t.Errorf("Extrusion guard failed or bottom alignment lost. Log looks like: %q", logStr)
+	}
+}
+
+func TestTerminalView_MutedStateAndOSC133(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+
+	// 1. Оболочка печатает первичный промпт (терминал не замьючен)
+	for _, r := range "prompt> " {
+		tv.PutChar(r, 0)
+	}
+
+	// 2. f4 печатает команду пользователя
+	tv.PrintCleanCommand("ls")
+
+	// 3. f4 мьютит терминал перед отправкой технической wire-команды
+	tv.SetMuted(true)
+
+	// 4. Оболочка делает эхо технической команды (оно должно быть проигнорировано)
+	for _, r := range "set +H; ugly command" {
+		tv.PutChar(r, 0)
+	}
+
+	// 5. Оболочка доходит до OSC 133;C (начало вывода)
+	tv.HandleOSC133("C")
+	if tv.Muted {
+		t.Error("OSC 133;C did not unmute the terminal")
+	}
+
+	// 6. Вывод самой команды
+	for _, r := range "output\n" {
+		tv.PutChar(r, 0)
+	}
+
+	// 7. Завершение выполнения команды (OSC 133;D).
+	// Терминал НЕ должен мьютиться, чтобы принять следующий промпт.
+	tv.HandleOSC133("D")
+	if tv.Muted {
+		t.Error("OSC 133;D erroneously muted the terminal")
+	}
+
+	// 8. Оболочка печатает следующий промпт
+	for _, r := range "prompt> " {
+		tv.PutChar(r, 0)
+	}
+
+	// 9. Проверяем лог. Должно быть: prompt> ls\noutput\nprompt>
+	logStr := strings.TrimRight(string(tv.GetAllLogBytes()), " \n\r")
+	expected := "prompt> ls\noutput\nprompt>"
+	if !strings.Contains(logStr, expected) {
+		t.Errorf("Log stitching with Mute/OSC failed.\nExpected: %q\nGot: %q", expected, logStr)
+	}
+}
+
+func TestTerminalView_Resize_VerticalPreservation(t *testing.T) {
+	tv := NewTerminalView(80, 5) // Маленький терминал
+
+	// Заполняем все 5 строк текстом
+	for i := 0; i < 5; i++ {
+		tv.SetCursor(0, i)
+		tv.PutChar(rune('0'+i), 0)
+	}
+
+	// Уменьшаем высоту до 3
+	tv.Resize(80, 3)
+
+	// Строки '0' и '1' должны быть вытеснены в GridHistory (без потерь)
+	if len(tv.GridHistory) != 2 {
+		t.Errorf("Expected 2 rows in GridHistory, got %d", len(tv.GridHistory))
+	}
+	if tv.Lines[0][0].Char != '2' {
+		t.Errorf("Top visible row should be '2', got '%c'", tv.Lines[0][0].Char)
+	}
+
+	// Увеличиваем высоту обратно до 5
+	tv.Resize(80, 5)
+
+	// Строки '0' и '1' должны вернуться из GridHistory на экран (VTE Mirror)
+	if len(tv.GridHistory) != 0 {
+		t.Errorf("Expected GridHistory to be empty after restoring size, got %d", len(tv.GridHistory))
+	}
+	if tv.Lines[0][0].Char != '0' {
+		t.Errorf("Top visible row should be restored to '0', got '%c'", tv.Lines[0][0].Char)
+	}
+}
+
+func TestTerminalView_Resize_HorizontalPreservation(t *testing.T) {
+	tv := NewTerminalView(10, 5)
+	tv.SetCursor(0, 0)
+
+	// Пишем строку, которая при ресайзе выйдет за пределы
+	text := "12345678"
+	for _, r := range text {
+		tv.PutChar(r, 0)
+	}
+
+	// Сужаем окно до 5 колонок
+	tv.Resize(5, 5)
+
+	// VTE Mirror реализует Horizontal Preservation: визуальный массив сузился логически,
+	// но физически данные в слайсе сохраняются `copyLen = max(w, len(srcLine))`
+	if len(tv.Lines[0]) < 8 {
+		t.Errorf("Horizontal preservation failed: line length shrank to %d", len(tv.Lines[0]))
+	}
+	if tv.Lines[0][7].Char != '8' {
+		t.Errorf("Hidden data lost: expected '8' at index 7, got '%c'", tv.Lines[0][7].Char)
+	}
+
+	// Расширяем обратно до 10 колонок
+	tv.Resize(10, 5)
+	if tv.Lines[0][7].Char != '8' {
+		t.Errorf("Restored data lost: expected '8' at index 7, got '%c'", tv.Lines[0][7].Char)
+	}
+}
+
+func TestTerminalView_PrintCleanCommandBehavior(t *testing.T) {
+	tv := NewTerminalView(80, 24) // Курсор изначально на Y=23
+
+	// Первая команда
+	tv.PrintCleanCommand("ls -la")
+	// После печати команды и \r\n экран прокручивается, но курсор остается прилепленным к низу
+	if tv.CursorY != 23 {
+		t.Errorf("CursorY moved unexpectedly: %d", tv.CursorY)
+	}
+
+	// "ls -la" должно оказаться на Y=22 из-за скролла
+	if tv.Lines[22][0].Char != 'l' || tv.Lines[22][1].Char != 's' {
+		t.Errorf("First clean command not printed correctly")
+	}
+
+	// Вторая (последующая) команда. Поведение должно быть абсолютно идентичным
+	// (сверху не должно появляться пустых отступов, курсор не должен прыгать).
+	tv.PrintCleanCommand("echo 1")
+	if tv.CursorY != 23 {
+		t.Errorf("CursorY moved unexpectedly on subsequent command: %d", tv.CursorY)
+	}
+	if tv.Lines[22][0].Char != 'e' || tv.Lines[22][1].Char != 'c' {
+		t.Errorf("Subsequent clean command not printed correctly")
+	}
+}
+
+func TestTerminalView_CompleteLogStitching(t *testing.T) {
+	tv := NewTerminalView(10, 5)
+
+	// Пишем более 2000 строк для срабатывания экструзии (Extrusion) из GridHistory в PieceTable
+	for i := 0; i < 2010; i++ {
+		tv.PutChar('A', 0)
+		tv.PutChar('\n', 0)
+	}
+
+	// Теперь лог состоит из 3-х слоев архитектуры:
+	// - PieceTable (вытесненные строки)
+	// - GridHistory (2000 строк - лимит)
+	// - Active Grid (5 строк окна)
+	logBytes := tv.GetAllLogBytes()
+	logStr := string(logBytes)
+
+	// Разбиваем по \n и убираем последнюю пустую строку
+	lines := strings.Split(strings.TrimRight(logStr, "\n "), "\n")
+
+	if len(lines) != 2010 {
+		t.Errorf("Log stitching failed. Expected 2010 lines, got %d", len(lines))
+	}
+}
+
+func TestTerminalView_EraseDisplay_EmptyScreenGuard(t *testing.T) {
+	tv := NewTerminalView(80, 24) // Пустой экран сразу после старта
+
+	// Симулируем bash clear (часто приходит при старте сессии)
+	tv.EraseDisplay(2, 0)
+
+	// Поскольку экран пуст, в GridHistory не должно попасть ни одной строки
+	// (защита от замусоривания лога 24-мя пустыми строками при clear).
+	if len(tv.GridHistory) != 0 {
+		t.Errorf("EraseDisplay on empty screen pushed garbage to GridHistory. Count: %d", len(tv.GridHistory))
+	}
+}
+func TestTerminalView_WindowsConPTY_VisualGravity(t *testing.T) {
+	// Имитируем типичное поведение ConPTY: окно 24 строки,
+	// но shell упрямо рисует в самом верху (строки 0 и 1).
+	height := 24
+	tv := NewTerminalView(80, height)
+	tv.SetFocus(true)
+	tv.SetVisible(true)
+
+	// 1. Shell принудительно прыгает в (0,0) - Home.
+	// Используем DefaultTermAttr, чтобы пустые строки не считались "текстом" из-за цвета.
+	tv.EraseDisplay(2, DefaultTermAttr)
+	tv.SetCursor(0, 0)
+	for _, r := range "Microsoft Windows" {
+		tv.PutChar(r, 0)
+	}
+	tv.SetCursor(0, 1)
+	for _, r := range "C:\\>" {
+		tv.PutChar(r, 0)
+	}
+
+	// 2. Проверяем рендеринг через ScreenBuf
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, height)
+	tv.SetPosition(0, 0, 79, height-1)
+	tv.Show(scr)
+
+	// Ожидаемое поведение: Visual Gravity должна вычислить, что последняя
+	// заполненная строка — это 1. Значит offset = (23 - 1) = 22.
+	// "Microsoft Windows" (бывшая строка 0) должна оказаться на Y = 22.
+	// "C:\>" (бывшая строка 1) должна оказаться на Y = 23 (самый низ).
+
+	cell0 := scr.GetCell(0, 22)
+	if cell0.Char != 'M' {
+		t.Errorf("Visual Gravity failed: expected 'M' at bottom-1 (Y=22), got '%c'", cell0.Char)
+	}
+
+	cell1 := scr.GetCell(0, 23)
+	if cell1.Char != 'C' {
+		t.Errorf("Visual Gravity failed: expected 'C' at bottom (Y=23), got '%c'", cell1.Char)
+	}
+
+	_, curY := scr.GetCursorPos()
+
+	// Проверяем положение курсора - он тоже должен упасть вниз
+	if curY != 23+tv.Y1 {
+		t.Errorf("Visual Gravity: cursor did not follow the text. Expected Y=23, got %d", curY-tv.Y1)
+	}
+}
+
+func TestTerminalView_WindowsConPTY_LogIntegrity(t *testing.T) {
+	// Проверяем, что абсолютные прыжки курсора ConPTY не создают
+	// "дырок" или дублей в текстовом логе GetAllLogBytes()
+	tv := NewTerminalView(80, 10)
+
+	// Пишем в строку 5
+	tv.SetCursor(0, 5)
+	for _, r := range "Middle" {
+		tv.PutChar(r, 0)
+	}
+
+	// Прыгаем назад в строку 2
+	tv.SetCursor(0, 2)
+	for _, r := range "Top" {
+		tv.PutChar(r, 0)
+	}
+
+	logStr := strings.TrimSpace(string(tv.GetAllLogBytes()))
+
+	// GetAllLogBytes должен собрать строки в их логическом порядке (сверху вниз),
+	// пропуская пустые строки сверху, если лог был пуст.
+	expected := "Top\n\n\nMiddle"
+	if !strings.Contains(logStr, expected) {
+		t.Errorf("Windows Log stitching failed.\nExpected to contain: %q\nGot: %q", expected, logStr)
+	}
+}
+
+func TestTerminalView_WindowsConPTY_ResizePreservation(t *testing.T) {
+	// Тест на "эффект гармошки": сжимаем по вертикали, вытесняя ConPTY-данные
+	// в историю, и расширяем обратно.
+	tv := NewTerminalView(80, 10)
+
+	// Рисуем текст в строке 0 (верх)
+	tv.SetCursor(0, 0)
+	for _, r := range "C:\\>" {
+		tv.PutChar(r, 0)
+	}
+
+	// Сжимаем до 5 строк. Верхняя строка должна быть вытеснена в GridHistory.
+	tv.Resize(80, 5)
+	if len(tv.GridHistory) == 0 {
+		t.Fatal("Resize shoud have pushed bottom row to GridHistory")
+	}
+
+	// Расширяем обратно до 10. VTE Mirror должен вернуть строку из истории на экран.
+	tv.Resize(80, 10)
+
+	// Из-за Extrusion Guard пустые строки (1-4) при сжатии были проигнорированы.
+	// Поэтому единственная вытесненная строка вернется не на 0, а на самый низ
+	// восстанавливаемого пространства (на индекс 4). Главное — данные не потеряны.
+	if tv.Lines[4][0].Char != 'C' {
+		t.Errorf("Data lost after accordion resize. Expected 'C' at row 4, got '%c'", tv.Lines[4][0].Char)
+	}
+}
+
+func TestAnsiParser_WindowsSmartPrompt(t *testing.T) {
+	// Проверяем, как парсер реагирует на новую переменную PROMPT=$E]133;D$E\$P$G
+	tv := NewTerminalView(80, 24)
+	p := NewAnsiParser(tv, nil)
+
+	tv.SetMuted(false)
+
+	// Имитируем вывод cmd.exe с нашим новым промптом
+	// \x1b]133;D\x1b\ (сигнал завершения) + D:\> (текст промпта)
+	promptPayload := "\x1b]133;D\x1b\\D:\\>"
+
+	// В Windows мы решили не мьютить терминал.
+	p.Process([]byte(promptPayload))
+
+	// OSC 133;D должен был сработать.
+	// В Windows мы решили не мьютить, но если сигнал пришел - он должен обрабатываться.
+	// Проверяем, что текст "D:\>" попал в лог (значит парсер не "съел" лишнего)
+	logStr := string(tv.GetAllLogBytes())
+	if !strings.Contains(logStr, "D:\\>") {
+		t.Errorf("Smart PROMPT text was lost during OSC parsing. Log: %q", logStr)
+	}
+}
+
+func TestTerminalView_WindowsConPTY_NoDoubleEcho(t *testing.T) {
+	// Проверка того, что мы не печатаем команду дважды в Windows.
+	// f4 НЕ должен вызывать PrintCleanCommand на Windows.
+	tv := NewTerminalView(80, 24)
+
+	// Эмулируем нативный эхо-ответ от ConPTY
+	// Пользователь набрал 'dir', ConPTY вернул 'dir\r\n'
+	tv.PutChar('d', 0)
+	tv.PutChar('i', 0)
+	tv.PutChar('r', 0)
+	tv.PutChar('\r', 0)
+	tv.PutChar('\n', 0)
+
+	// Если бы мы еще раз вызвали PrintCleanCommand("dir") - было бы дублирование.
+	// Проверяем, что в логе только один экземпляр 'dir'
+	logStr := string(tv.GetAllLogBytes())
+	if strings.Count(logStr, "dir") > 1 {
+		t.Error("Double echo detected! Windows execution path must not call PrintCleanCommand.")
 	}
 }
 
@@ -496,7 +825,6 @@ func TestTerminalView_EraseDisplay_LogSync(t *testing.T) {
 	for _, r := range "content" {
 		tv.PutChar(r, 0)
 	}
-	tv.FlushLog()
 
 	// 2. Execute 'clear' (mode 2)
 	tv.EraseDisplay(2, 0)
@@ -506,17 +834,28 @@ func TestTerminalView_EraseDisplay_LogSync(t *testing.T) {
 		t.Errorf("EraseDisplay(2) failed to home cursor: (%d,%d)", tv.CursorX, tv.CursorY)
 	}
 
-	// lastLineOffset must point to the end of the newly added vertical padding
-	if tv.lastLineOffset != tv.pt.Size() {
-		t.Errorf("lastLineOffset mismatch after clear: %d vs %d", tv.lastLineOffset, tv.pt.Size())
-	}
-
 	// 3. Write new content after clear
 	tv.PutChar('X', 0)
-	tv.FlushLog()
 
-	// Verify 'X' is preserved and didn't trigger prompt-rewrite on the empty padding
-	if !strings.HasSuffix(tv.pt.String(), "X") {
-		t.Errorf("Content after clear was lost. Log: %q", tv.pt.String())
+	// After clear, "content" must be pushed to GridHistory
+	foundInGridHistory := false
+	for _, row := range tv.GridHistory {
+		var sb strings.Builder
+		for _, ci := range row {
+			sb.WriteRune(rune(ci.Char))
+		}
+		if strings.Contains(sb.String(), "content") {
+			foundInGridHistory = true
+			break
+		}
+	}
+	if !foundInGridHistory {
+		t.Errorf("Content was not pushed to GridHistory on EraseDisplay(2)")
+	}
+
+	// Verify 'X' is present in the final combined log
+	logBytes := tv.GetAllLogBytes()
+	if !strings.HasSuffix(strings.TrimSpace(string(logBytes)), "X") {
+		t.Errorf("Content after clear was lost. Log: %q", string(logBytes))
 	}
 }

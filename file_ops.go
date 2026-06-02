@@ -22,6 +22,7 @@ type FileOpState struct {
 	UpdateUI     func(force bool)
 	Anchor       vtui.Frame
 	Buffer       []byte
+	IsMove       bool
 }
 
 // formatSize formats a byte count into a human-readable string.
@@ -222,6 +223,7 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 			},
 			Anchor: anchor,
 			Buffer: make([]byte, 128*1024),
+			IsMove: isMove,
 		}
 
 		updateUI(true)
@@ -241,6 +243,7 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 				if _, err := dstVfs.Stat(ctx, targetItemPath); err != nil {
 					if err := srcVfs.Rename(ctx, srcPath, targetItemPath); err == nil {
 						vtui.DebugLog("FILEOP: Optimized server-side rename: %s -> %s", srcPath, targetItemPath)
+						handleArchiveIndexOp(srcVfs, srcPath, dstVfs, targetItemPath, true)
 
 						itemStat, _ := dstVfs.Stat(ctx, targetItemPath)
 						if itemStat.IsDir {
@@ -389,6 +392,7 @@ func ExecuteDeleteOp(pf *PanelsFrame, activeVfs vfs.VFS, names []string, mode in
 
 			tracker.StartFile(name, 0)
 			updateUI(true)
+			handleArchiveIndexDelete(ctx, activeVfs, fullPath)
 
 			for {
 				err := activeVfs.Remove(ctx, fullPath)
@@ -745,6 +749,9 @@ func recursiveCopy(ctx context.Context, srcVfs vfs.VFS, srcPath string, dstVfs v
 	copySuccess = true
 
 	if state.Tracker != nil {
+	if copySuccess {
+		handleArchiveIndexOp(srcVfs, srcPath, dstVfs, destPathForFile, state.IsMove)
+	}
 		state.Tracker.FileDone()
 		if state.UpdateUI != nil {
 			state.UpdateUI(false)
@@ -944,3 +951,4 @@ func AskError(ctx context.Context, op string, err error, anchor vtui.Frame) int 
 		return 2 // 2 matches Abort button index
 	}
 }
+

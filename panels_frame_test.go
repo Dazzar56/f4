@@ -96,7 +96,7 @@ func TestPanelsFrame_SelectionByMask(t *testing.T) {
 	fsp := pf.panels[1].(*FileSystemPanel)
 	pf.activeIdx = 1
 
-	// 1. Command line not empty -> should not intercept
+	// 1. Command line not empty -> should not intercept for regular char
 	pf.cmdLine.Edit.SetText("a")
 	handled := pf.ProcessKey(&vtinput.InputEvent{
 		Type:    vtinput.KeyEventType,
@@ -106,6 +106,21 @@ func TestPanelsFrame_SelectionByMask(t *testing.T) {
 	if !handled {
 		t.Error("Key should be handled by cmdLine")
 	}
+
+	// 1.5 Command line not empty, but Numpad + -> SHOULD intercept
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	handled = pf.ProcessKey(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_ADD,
+	})
+	if !handled {
+		t.Error("Numpad + should be intercepted even if cmdLine is not empty")
+	}
+	if vtui.FrameManager.GetTopFrameType() != vtui.TypeDialog {
+		t.Error("Selection dialog was not shown for Numpad +")
+	}
+	vtui.FrameManager.Pop() // Clean up dialog
 
 	// 2. Command line empty, fastFindMode active -> should not intercept
 	pf.cmdLine.Clear()
@@ -407,15 +422,16 @@ func TestPanelsFrame_Clone_TerminalData(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()
 
-	// 1. Simulate complex terminal output (2 lines)
-	// We add a trailing newline so "L2" becomes history.
-	// CloneStateFrom intentionally wipes the current ACTIVE line to avoid duplicate prompt.
-	pf.termView.PutChar('L', 0)
-	pf.termView.PutChar('1', 0)
-	pf.termView.PutChar('\n', 0)
-	pf.termView.PutChar('L', 0)
-	pf.termView.PutChar('2', 0)
-	pf.termView.PutChar('\n', 0)
+	// 1. Simulate complex terminal output
+	// Inject data directly into pt to simulate extruded history
+	pf.termView.pt.Insert(0, []byte("L1\nL2\n"))
+	pf.termView.li.UpdateAfterInsert(0, []byte("L1\nL2\n"))
+
+	// Simulate active grid data
+	pf.termView.CursorY = 5
+	pf.termView.Lines[4][0].Char = 'H' // Previous row
+	pf.termView.Lines[5][0].Char = 'A' // Active row (will be wiped)
+	pf.termView.CursorX = 1
 
 	clone := pf.Clone()
 	defer clone.Close()
@@ -426,14 +442,12 @@ func TestPanelsFrame_Clone_TerminalData(t *testing.T) {
 	}
 
 	// 3. CRITICAL: Check if LineIndex is correctly pointing to the NEW pt
-	// Expected 3 lines: L1\n, L2\n, and the new active empty line.
 	if clone.termView.li.LineCount() != 3 {
 		t.Errorf("Terminal LineIndex not synced in clone. Expected 3 lines, got %d", clone.termView.li.LineCount())
 	}
 
 	// 4. Check if visual grid is copied
-	// Note: We check the PREVIOUS line because the current line was wiped by CloneStateFrom
-	if clone.termView.Lines[pf.termView.CursorY-1][0].Char != 'L' {
+	if clone.termView.Lines[4][0].Char != 'H' {
 		t.Error("Terminal visual grid (Lines) history not copied to clone")
 	}
 
@@ -441,7 +455,7 @@ func TestPanelsFrame_Clone_TerminalData(t *testing.T) {
 	if clone.termView.CursorX != 0 {
 		t.Errorf("Expected clone CursorX to be 0 after prompt wipe, got %d", clone.termView.CursorX)
 	}
-	if clone.termView.Lines[clone.termView.CursorY][0].Char != ' ' {
+	if clone.termView.Lines[5][0].Char != ' ' {
 		t.Error("Current terminal line was not cleared during clone")
 	}
 }
@@ -1111,8 +1125,8 @@ func TestPanelsFrame_Clone_Comprehensive(t *testing.T) {
 	}
 
 	// 5. Verify Terminal State
-	if !strings.HasPrefix(clone.termView.pt.String(), "foo\n") {
-		t.Errorf("Clone failed to preserve terminal history: %q", clone.termView.pt.String())
+	if !strings.HasPrefix(string(clone.termView.GetAllLogBytes()), "foo\n") {
+		t.Errorf("Clone failed to preserve terminal history: %q", string(clone.termView.GetAllLogBytes()))
 	}
 
 	// 6. Verify Active Panel index
