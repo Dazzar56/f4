@@ -36,6 +36,17 @@ jobs:
       with:
         go-version: '1.24'
         cache-dependency-path: go.sum
+    
+    - name: Check formatting
+      if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
+      run: |
+        if [ -n "$(gofmt -s -l .)" ]; then
+          echo "The following files are not properly formatted:"
+          gofmt -s -l .
+          echo "Please run 'gofmt -s -w .' locally and commit the changes."
+          exit 1
+        fi
+    
     - name: Run Tests
       if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
       run: |
