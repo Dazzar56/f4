@@ -3,9 +3,9 @@ package archive
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
-	"io"
 
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"

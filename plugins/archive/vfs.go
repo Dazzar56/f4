@@ -49,8 +49,8 @@ type ArchiveVFS struct {
 	arcPath   string
 	innerPath string
 
-	fsys      archive.FileSystem
-	closer    io.Closer
+	fsys   archive.FileSystem
+	closer io.Closer
 }
 
 func (v *ArchiveVFS) IsAtRoot() bool {
