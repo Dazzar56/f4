@@ -1012,6 +1012,7 @@ func TestEditorView_AsyncIndexing(t *testing.T) {
 	buf := NewAsyncBuffer(context.Background(), f)
 	pt := piecetable.NewWithBuffer(buf)
 	ev := NewEditorView(pt, v, tmp)
+	defer ev.Close()
 	ev.asyncBuf = buf
 	ev.file = f
 
@@ -1054,6 +1055,7 @@ func TestEditorView_Indexer_EditInterference(t *testing.T) {
 	buf := NewAsyncBuffer(context.Background(), f)
 	pt := piecetable.NewWithBuffer(buf)
 	ev := NewEditorView(pt, v, tmp)
+	defer ev.Close()
 	ev.asyncBuf = buf
 	ev.file = f
 
@@ -1099,10 +1101,12 @@ func TestEditorView_StartIndexing_RestartSafety(t *testing.T) {
 	tmp := t.TempDir() + "/restart.txt"
 	os.WriteFile(tmp, []byte("line1\nline2"), 0644)
 	f, _ := v.Open(context.Background(), tmp)
+	defer f.Close()
 
 	buf := NewAsyncBuffer(context.Background(), f)
 	pt := piecetable.NewWithBuffer(buf)
 	ev := NewEditorView(pt, v, tmp)
+	defer ev.Close()
 	ev.asyncBuf = buf
 
 	// 1. Start indexing
@@ -1127,6 +1131,7 @@ func TestEditorView_UnsavedChanges(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pt := piecetable.New([]byte("line1"))
 	ev := NewEditorView(pt, nil, "test.txt")
+	defer ev.Close()
 
 	// 1. Initially not modified
 	if ev.modified {
@@ -1175,6 +1180,7 @@ func TestEditorView_Indexer_BatchingIntegrity(t *testing.T) {
 	buf := NewAsyncBuffer(context.Background(), f)
 	pt := piecetable.NewWithBuffer(buf)
 	ev := NewEditorView(pt, v, tmpFile)
+	defer ev.Close()
 	ev.asyncBuf = buf
 	ev.file = f
 
@@ -1200,6 +1206,7 @@ func TestEditorView_Indexer_ModifierSafety(t *testing.T) {
 	// Modifier keys should NOT stop the indexer.
 	pt := piecetable.New([]byte("test content"))
 	ev := NewEditorView(pt, nil, "test.txt")
+	defer ev.Close()
 
 	// Set a mock cancel function to track if it was called
 	cancelled := false
@@ -1246,6 +1253,7 @@ func TestEditorView_Indexer_ModifierSafety(t *testing.T) {
 func TestEditorView_Navigation_DocumentBoundaries(t *testing.T) {
 	pt := piecetable.New([]byte("Line 1\nLine 2\nLine 3"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.SetPosition(0, 0, 80, 24)
 
 	// 1. Ctrl+End -> End of file
@@ -1270,6 +1278,7 @@ func TestEditorView_Navigation_DocumentBoundaries(t *testing.T) {
 func TestEditorView_SelectAll(t *testing.T) {
 	pt := piecetable.New([]byte("First\nSecond"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 
 	// Ctrl+A
 	ev.ProcessKey(&vtinput.InputEvent{
@@ -1293,6 +1302,7 @@ func TestEditorView_SelectAll(t *testing.T) {
 func TestEditorView_ShiftAliasSelection(t *testing.T) {
 	pt := piecetable.New([]byte("ABCDE"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.CursorPos = 0
 
 	// Shift + Ctrl + D (Right alias)
@@ -1311,6 +1321,7 @@ func TestEditorView_ShiftAliasSelection(t *testing.T) {
 func TestEditorView_FarNavigation_FullCoverage(t *testing.T) {
 	pt := piecetable.New([]byte("Line 1\nLine 2\nLine 3"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.SetPosition(0, 0, 80, 24)
 
 	// 1. Ctrl+End -> End of file
@@ -1348,6 +1359,7 @@ func TestEditorView_FarNavigation_FullCoverage(t *testing.T) {
 func TestEditorView_FarAliases_FullCoverage(t *testing.T) {
 	pt := piecetable.New([]byte("First word\nSecond line"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.SetPosition(0, 0, 80, 24)
 
 	// 1. Ctrl+S should move 1 char left, NOT 1 word
@@ -1378,6 +1390,7 @@ func TestEditorView_FarAliases_FullCoverage(t *testing.T) {
 func TestEditorView_FarX_SmartCut(t *testing.T) {
 	pt := piecetable.New([]byte("Select me\nNext line"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.SetPosition(0, 0, 80, 24)
 
 	// Scenario A: Selection active -> Ctrl+X is CUT
@@ -1401,6 +1414,7 @@ func TestEditorView_FarX_SmartCut(t *testing.T) {
 func TestEditorView_FarSelectAll_Behavior(t *testing.T) {
 	pt := piecetable.New([]byte("All\nText"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 
 	ev.ProcessKey(&vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
@@ -1417,6 +1431,7 @@ func TestEditorView_FarSelectAll_Behavior(t *testing.T) {
 func TestEditorView_FarNavigation_Document(t *testing.T) {
 	pt := piecetable.New([]byte("Line 1\nLine 2\nLine 3"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.SetPosition(0, 0, 80, 24)
 
 	// 1. Ctrl+End -> В самый конец файла
@@ -1441,6 +1456,7 @@ func TestEditorView_FarNavigation_Document(t *testing.T) {
 func TestEditorView_FarSelectAll(t *testing.T) {
 	pt := piecetable.New([]byte("Line 1\nLine 2"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 
 	ev.ProcessKey(&vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
@@ -1463,6 +1479,8 @@ func TestEditorView_FarSelectAll(t *testing.T) {
 func TestEditorView_FarNavigationAliases(t *testing.T) {
 	pt := piecetable.New([]byte("First line\nSecond line\nThird line"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
+
 	ev.SetPosition(0, 0, 80, 24)
 	ev.CursorLine = 1
 	ev.CursorPos = 0
@@ -1496,6 +1514,8 @@ func TestEditorView_FarNavigationAliases(t *testing.T) {
 func TestEditorView_FarX_CutVsDown(t *testing.T) {
 	pt := piecetable.New([]byte("Some selected text\nNext line"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
+
 	ev.SetPosition(0, 0, 80, 24)
 
 	// 1. С выделением Ctrl+X должен сработать как Cut
@@ -1530,6 +1550,8 @@ func TestEditorView_Search_Basic(t *testing.T) {
 	content := "The quick brown fox jumps over the lazy dog"
 	pt := piecetable.New([]byte(content))
 	ev := NewEditorView(pt, nil, "test.txt")
+	defer ev.Close()
+
 	ev.SetPosition(0, 0, 80, 24)
 
 	// Запускаем поиск слова "fox" (вперед, регистронезависимо)
@@ -1569,6 +1591,8 @@ func TestEditorView_Search_Next(t *testing.T) {
 	// Два вхождения слова "match"
 	pt := piecetable.New([]byte("match one, match two"))
 	ev := NewEditorView(pt, nil, "test.txt")
+	defer ev.Close()
+
 	ev.SetPosition(0, 0, 80, 24)
 
 	// 1. Находим первое вхождение
@@ -1613,6 +1637,8 @@ func TestEditorView_Search_CaseInsensitive(t *testing.T) {
 
 	pt := piecetable.New([]byte("ALL CAPS TEXT"))
 	ev := NewEditorView(pt, nil, "test.txt")
+	defer ev.Close()
+
 	ev.SetPosition(0, 0, 80, 24)
 
 	// Ищем "caps" маленькими буквами
@@ -1637,6 +1663,7 @@ func TestEditorView_Search_NotFound(t *testing.T) {
 
 	pt := piecetable.New([]byte("some text"))
 	ev := NewEditorView(pt, nil, "test.txt")
+	defer ev.Close()
 
 	// Ищем то, чего нет
 	ev.Search("missing", false, false, false)
@@ -1668,6 +1695,7 @@ func TestEditorView_Search_CaseSensitive(t *testing.T) {
 
 	pt := piecetable.New([]byte("Match and match"))
 	ev := NewEditorView(pt, nil, "test.txt")
+	defer ev.Close()
 	ev.SetPosition(0, 0, 80, 24)
 
 	// Ищем "match" (строчными) с учетом регистра. Должно найти второе слово.
@@ -1694,6 +1722,7 @@ func TestEditorView_Search_Backward(t *testing.T) {
 
 	pt := piecetable.New([]byte("first match, second match"))
 	ev := NewEditorView(pt, nil, "test.txt")
+	defer ev.Close()
 	ev.SetPosition(0, 0, 80, 24)
 
 	// Ставим курсор в конец
@@ -1728,6 +1757,7 @@ func TestEditorView_Search_ShiftF7_Reverse(t *testing.T) {
 	content := "one two three"
 	pt := piecetable.New([]byte(content))
 	ev := NewEditorView(pt, nil, "test.txt")
+	defer ev.Close()
 	ev.SetPosition(0, 0, 80, 24)
 
 	// 1. Initial backward search from end (next=false)
@@ -1811,6 +1841,7 @@ func TestEditorView_SaveFailure_NoDataLoss(t *testing.T) {
 
 	pt := piecetable.New([]byte("Original"))
 	ev := NewEditorView(pt, failingVfs, tmpFile)
+	defer ev.Close()
 	f, _ := failingVfs.Open(context.Background(), tmpFile)
 	ev.file = f
 
@@ -1881,6 +1912,7 @@ func TestEditorView_Save_DiskFullSimulation(t *testing.T) {
 
 	pt := piecetable.New([]byte("Stable Content"))
 	ev := NewEditorView(pt, failingVfs, tmpFile)
+	defer ev.Close()
 	f, _ := failingVfs.Open(context.Background(), tmpFile)
 	ev.file = f
 
@@ -1914,6 +1946,7 @@ func TestEditorView_LargePaste_Consistency(t *testing.T) {
 	// Tests stability and index consistency when pasting large blocks of text.
 	pt := piecetable.New([]byte("Start\nEnd"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.SetPosition(0, 0, 80, 24)
 	ev.CursorLine = 1
 	ev.CursorPos = 0 // Before "End"
@@ -1959,6 +1992,7 @@ func TestEditorView_DeleteSelection_EOFBoundaries(t *testing.T) {
 	content := "line1\nline2"
 	pt := piecetable.New([]byte(content))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.SetPosition(0, 0, 80, 24)
 
 	// Select last line and the newline before it
@@ -2027,7 +2061,10 @@ func TestEditorView_Save_IOErrorRecovery(t *testing.T) {
 
 	pt := piecetable.New([]byte("Initial Data"))
 	ev := NewEditorView(pt, failingVfs, path)
+	defer ev.Close()
+
 	f, _ := failingVfs.Open(context.Background(), path)
+	defer f.Close()
 	ev.file = f
 
 	// 1. Modify the content
@@ -2076,6 +2113,7 @@ func TestEditorView_Save_CreateFailure(t *testing.T) {
 
 	pt := piecetable.New([]byte("Original Content"))
 	ev := NewEditorView(pt, failingVfs, path)
+	defer ev.Close()
 	f, _ := failingVfs.Open(context.Background(), path)
 	ev.file = f
 
@@ -2130,6 +2168,7 @@ func TestEditorView_Save_CreateFailure_Recovery_DataPreservation(t *testing.T) {
 	buf := NewAsyncBuffer(context.Background(), f)
 	pt := piecetable.NewWithBuffer(buf)
 	ev := NewEditorView(pt, failingVfs, path)
+	defer ev.Close()
 	ev.file = f
 	ev.asyncBuf = buf
 
@@ -2256,9 +2295,13 @@ func TestEditorView_FragmentationDataIntegrity(t *testing.T) {
 
 	v := vfs.NewOSVFS(tmpDir)
 	f, _ := v.Open(context.Background(), path)
+	defer f.Close()
+
 	buf := NewAsyncBuffer(context.Background(), f)
 	pt := piecetable.NewWithBuffer(buf)
 	ev := NewEditorView(pt, v, path)
+	defer ev.Close()
+
 	ev.file = f
 	ev.asyncBuf = buf
 
@@ -2345,7 +2388,11 @@ func TestEditorView_Save_NoTrailingNewline_Integrity(t *testing.T) {
 	v := vfs.NewOSVFS(filepath.Dir(tmpFile))
 	pt := piecetable.New(content)
 	ev := NewEditorView(pt, v, tmpFile)
+	defer ev.Close()
+
 	f, _ := v.Open(context.Background(), tmpFile)
+	defer f.Close()
+
 	ev.file = f
 
 	// 1. Modify in the middle
@@ -2387,7 +2434,11 @@ func TestEditorView_Save_RetryAfterFailure(t *testing.T) {
 
 	pt := piecetable.New([]byte("Initial"))
 	ev := NewEditorView(pt, failingVfs, path)
+	defer ev.Close()
+
 	f, _ := failingVfs.Open(context.Background(), path)
+	defer f.Close()
+
 	ev.file = f
 
 	// 1. Modify
@@ -2471,7 +2522,9 @@ func TestEditorView_Save_MetadataIntegrity(t *testing.T) {
 
 	pt := piecetable.New([]byte("Original"))
 	ev := NewEditorView(pt, mock, path)
+	defer ev.Close()
 	f, _ := mock.Open(context.Background(), path)
+	defer f.Close()
 	ev.file = f
 
 	// 1. Modify and Save
@@ -2510,7 +2563,11 @@ func TestEditorView_Save_Atomic_Cleanup(t *testing.T) {
 	mock := &mockFailingWriteVFS{VFS: vfs.NewOSVFS(tmpDir)}
 	pt := piecetable.New([]byte("Untouched"))
 	ev := NewEditorView(pt, mock, path)
+	defer ev.Close()
+
 	f, _ := mock.Open(context.Background(), path)
+	defer f.Close()
+
 	ev.file = f
 
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'X'})
@@ -2554,6 +2611,7 @@ func TestEditorView_Save_AsyncRetry(t *testing.T) {
 	path := filepath.Join(tmpDir, "async_save.txt")
 
 	ev := NewEditorView(pt, vfs.NewOSVFS(tmpDir), path)
+	defer ev.Close()
 
 	// CRITICAL: Channel must be buffered to avoid deadlock when sending from a UI task
 	done := make(chan bool, 1)
