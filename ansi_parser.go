@@ -125,7 +125,7 @@ func (p *AnsiParser) Process(data []byte) {
 		}
 		break
 	}
-	
+
 	data = []byte(strData)
 	if len(data) == 0 {
 		return
