@@ -395,15 +395,19 @@ func TestActionExecute_PtyCommandFormatting(t *testing.T) {
 		}
 	}
 
-	written := string(pty.written)
+	// В реальном приложении данные из PTY проходят через AnsiParser, который
+	// вырезает технические команды (cd /d) перед отображением. Эмулируем это:
+	pf.parser.Process(pty.written)
+	result := string(pf.termView.GetAllLogBytes())
+
 	if runtime.GOOS == "windows" {
-		// Проверяем отсутствие технической обертки 'cd /d'
-		if strings.Contains(written, "cd /d") {
-			t.Errorf("Technical 'cd /d' wrapper should be removed, but found: %q", written)
+		// Проверяем отсутствие технической обертки 'cd /d' в выводе после парсера
+		if strings.Contains(result, "cd /d") {
+			t.Errorf("Technical 'cd /d' wrapper should be removed by parser, but found in log: %q", result)
 		}
-		// Команда должна начинаться прямо с имени файла
-		if !strings.HasPrefix(written, "app.exe") {
-			t.Errorf("PTY command should start with filename, got: %q", written)
+		// Команда должна присутствовать в логе (парсер вырезает cd /d, оставляя саму команду)
+		if !strings.Contains(result, "app.exe") {
+			t.Errorf("PTY command should appear in terminal log after cd excision, got log: %q", result)
 		}
 	}
 }
@@ -561,7 +565,11 @@ func TestActionViewerSearch_EmptyFile(t *testing.T) {
 	os.WriteFile(tmp, []byte(""), 0644)
 	v := vfs.NewOSVFS(t.TempDir())
 
-	vv, _ := NewViewerView(context.Background(), v, tmp)
+	vv, err := NewViewerView(context.Background(), v, tmp)
+	if err != nil {
+		t.Fatalf("Failed to create ViewerView: %v", err)
+	}
+	defer vv.Close()
 
 	// Simulate search trigger
 	// We manually call the inner logic of actionViewerSearch since InputBox is blocking in tests

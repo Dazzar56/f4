@@ -378,10 +378,15 @@ func TestPanelsFrame_Clone(t *testing.T) {
 	defer pf.Close()
 	pf.ResizeConsole(100, 30)
 
+	// Use a real temp directory that exists on all platforms
+	tmpDir := t.TempDir()
+
 	// Set some specific state
 	pf.activeIdx = 0
 	if fsp, ok := pf.panels[0].(*FileSystemPanel); ok {
-		fsp.vfs.SetPath("/tmp")
+		if err := fsp.vfs.SetPath(tmpDir); err != nil {
+			t.Fatalf("SetPath failed: %v", err)
+		}
 		fsp.table.SelectPos = 5
 	}
 
@@ -395,8 +400,8 @@ func TestPanelsFrame_Clone(t *testing.T) {
 	}
 
 	if fsp, ok := clone.panels[0].(*FileSystemPanel); ok {
-		if fsp.vfs.GetPath() != "/tmp" {
-			t.Errorf("Clone failed to copy VFS path: %s", fsp.vfs.GetPath())
+		if fsp.vfs.GetPath() != tmpDir {
+			t.Errorf("Clone failed to copy VFS path: got %s, want %s", fsp.vfs.GetPath(), tmpDir)
 		}
 		if fsp.table.SelectPos != 5 {
 			t.Errorf("Clone failed to copy Table SelectPos: %d", fsp.table.SelectPos)
