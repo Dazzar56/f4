@@ -504,6 +504,24 @@ func TestViewerView_ScrollbarEOFAlignment(t *testing.T) {
 		}
 	}
 
+	// jumpToEnd устанавливает TopOffset через ctx.RunOnUI, которая ставит задачу
+	// в FrameManager.TaskChan. Задача "Busy = false" (defer) и задача установки
+	// TopOffset могут быть в канале в любом порядке. Нужно прокачать оставшиеся
+	// задачи, чтобы TopOffset точно установился перед проверкой.
+	timeout = time.After(500 * time.Millisecond)
+	for {
+		select {
+		case task := <-fm.TaskChan:
+			task()
+		case <-timeout:
+			goto drained
+		default:
+			// Канал пуст — все задачи выполнены
+			goto drained
+		}
+	}
+drained:
+
 	// Вызываем Show, чтобы сработала логика SetParams внутри DisplayObject
 	vv.Show(scr)
 
