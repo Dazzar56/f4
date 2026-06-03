@@ -268,6 +268,11 @@ func runExternalEditor(pf *PanelsFrame, cmdStr, path string) {
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	if fsp := pf.getActivePanel(); fsp != nil {
+		if _, isLocal := fsp.vfs.(*vfs.OSVFS); isLocal {
+			cmd.Dir = fsp.vfs.GetPath()
+		}
+	}
 
 	vtui.Suspend()
 	err := cmd.Run()
@@ -483,7 +488,7 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 					if runtime.GOOS == "windows" {
 						// Combine directory sync with the command to allow excision
 						if dir != "" {
-							cmdToWire = fmt.Sprintf("cd /d %q & %s\r", dir, historyCmd)
+							cmdToWire = fmt.Sprintf("cd /d \"%s\" & %s\r", dir, historyCmd)
 						} else {
 							cmdToWire = fmt.Sprintf("%s\r", historyCmd)
 						}
@@ -531,6 +536,9 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 				cmd = exec.Command("open", path)
 			}
 			if cmd != nil {
+				if _, isLocal := v.(*vfs.OSVFS); isLocal {
+					cmd.Dir = dir
+				}
 				vtui.DebugLog("ACTIONS: Executing external command: %s", cmd.String())
 				err := cmd.Run()
 				if err != nil {

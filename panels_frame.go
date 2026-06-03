@@ -995,7 +995,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 						activePty := pf.getActivePTY()
 						if activePty != nil {
 							if runtime.GOOS == "windows" {
-								activePty.Write([]byte(fmt.Sprintf("cd /d %q\r", fsp.vfs.GetPath())))
+								activePty.Write([]byte(fmt.Sprintf("cd /d \"%s\"\r", fsp.vfs.GetPath())))
 							} else {
 								sqPath := strings.ReplaceAll(fsp.vfs.GetPath(), "'", "'\\''")
 								activePty.Write([]byte(fmt.Sprintf(" cd '%s'\r", sqPath)))
@@ -1023,7 +1023,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				if runtime.GOOS == "windows" {
 					// Use a combined command for reliable excision in AnsiParser: cd /d "path" & command
 					if path != "" {
-						fullWireCmd = fmt.Sprintf("cd /d %q & %s\r", path, cmd)
+						fullWireCmd = fmt.Sprintf("cd /d \"%s\" & %s\r", path, cmd)
 					} else {
 						fullWireCmd = fmt.Sprintf("%s\r", cmd)
 					}
