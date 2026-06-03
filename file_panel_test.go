@@ -1296,6 +1296,86 @@ func waitForLoad(t *testing.T, fp *FileSystemPanel) {
 		}
 	}
 }
+func TestFileSystemPanel_StructLiteralLazySelection(t *testing.T) {
+	// Create panel as a struct literal (nil selectedItems map)
+	fp := &FileSystemPanel{}
+	fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "test.txt"}}}
+
+	// This should not panic
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("Panel panicked on selection toggle with nil map: %v", r)
+		}
+	}()
+
+	fp.SetItemSelected(0, true)
+	if fp.selectedItems == nil || !fp.selectedItems["test.txt"] {
+		t.Error("Lazy initialization failed to record selection")
+	}
+}
+
+func TestFileSystemPanel_CacheLoadPreservesSelection(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	v := vfs.NewOSVFS(t.TempDir())
+	fp := NewFileSystemPanel(0, 0, 40, 20, v)
+
+	// Simulate items loaded and selected
+	fp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: ".."}},
+		{VFSItem: vfs.VFSItem{Name: "keep.txt"}},
+	}
+	fp.SetItemSelected(1, true)
+
+	// Populate cache
+	fp.saveToCache(v.GetPath(), []vfs.VFSItem{{Name: "keep.txt"}})
+
+	// Trigger a reload (which will hit the cache synchronously)
+	fp.readDirectoryEx(false)
+
+	// The synchronous cache load should have preserved the selection
+	found := false
+	for _, e := range fp.entries {
+		if e.Name == "keep.txt" {
+			found = true
+			if !e.Selected {
+				t.Error("Synchronous cache load wiped out the selection state")
+			}
+		}
+	}
+	if !found {
+		t.Error("keep.txt not found in panel after cache reload")
+	}
+}
+
+func TestFileSystemPanel_SelectionCleanupAfterReload(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	v := vfs.NewOSVFS(t.TempDir())
+	fp := NewFileSystemPanel(0, 0, 40, 20, v)
+
+	fp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: ".."}},
+		{VFSItem: vfs.VFSItem{Name: "ghost.txt"}},
+	}
+	fp.SetItemSelected(1, true)
+
+	// Verify it is in the map initially
+	if !fp.selectedItems["ghost.txt"] {
+		t.Fatal("Initial selection missing from map")
+	}
+
+	// Now simulate a reload where "ghost.txt" is NOT in the VFS results
+	// (we load a cache that has a different file)
+	fp.saveToCache(v.GetPath(), []vfs.VFSItem{{Name: "other.txt"}})
+	fp.readDirectoryEx(false)
+
+	// Process the tasks
+	waitForLoad(t, fp)
+
+	// Verify "ghost.txt" was removed from selectedItems map because it no longer exists on disk
+	if fp.selectedItems["ghost.txt"] {
+		t.Error("Ghost selection was not cleaned up from selectedItems map after reload")
+	}
+}
 
 func TestFileSystemPanel_Cache_FullCycle(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())

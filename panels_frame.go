@@ -1871,6 +1871,17 @@ func (pf *PanelsFrame) Clone() *PanelsFrame {
 	for i, p := range pf.panels {
 		if fsp, ok := p.(*FileSystemPanel); ok {
 			cloneFsp := clone.panels[i].(*FileSystemPanel)
+			// Stop the initial load triggered by NewPanelsFrame to prevent races
+			if cloneFsp.cancelLoad != nil {
+				cloneFsp.cancelLoad()
+			}
+			// Important: reset isLoading so the clone doesn't think it's still
+			// waiting for that cancelled initial load.
+			cloneFsp.isLoading = false
+			if cloneFsp.loadingTimer != nil {
+				cloneFsp.loadingTimer.Stop()
+			}
+
 			cloneFsp.vfs.SetPath(fsp.vfs.GetPath())
 			cloneFsp.SetViewMode(fsp.viewMode)
 			cloneFsp.cursorIdx = fsp.cursorIdx
@@ -1880,6 +1891,11 @@ func (pf *PanelsFrame) Clone() *PanelsFrame {
 			cloneFsp.dirCache = make(map[string]dirCacheEntry)
 			for k, v := range fsp.dirCache {
 				cloneFsp.dirCache[k] = v
+			}
+
+			cloneFsp.selectedItems = make(map[string]bool)
+			for k, v := range fsp.selectedItems {
+				cloneFsp.selectedItems[k] = v
 			}
 
 			// Copy entries immediately so the visual state is valid before async reload

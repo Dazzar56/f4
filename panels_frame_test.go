@@ -845,9 +845,9 @@ func TestPanelsFrame_Clone_SelectionPreservation(t *testing.T) {
 
 	// 2. Select "selected.txt" (should be at index 2, as 0:.., 1:normal, 2:selected)
 	found := false
-	for _, e := range fsp.entries {
+	for i, e := range fsp.entries {
 		if e.Name == "selected.txt" {
-			e.Selected = true
+			fsp.SetItemSelected(i, true)
 			found = true
 			break
 		}
@@ -1672,6 +1672,14 @@ func TestPanelsFrame_CopyShortcuts(t *testing.T) {
 	pf.ResizeConsole(80, 25)
 
 	fsp := pf.panels[0].(*FileSystemPanel)
+	if fsp.cancelLoad != nil {
+		fsp.cancelLoad()
+	}
+	fsp.isLoading = false
+	if fsp.loadingTimer != nil {
+		fsp.loadingTimer.Stop()
+	}
+
 	fsp.entries = []*fileEntry{
 		{VFSItem: vfs.VFSItem{Name: ".."}},
 		{VFSItem: vfs.VFSItem{Name: "target.txt"}},
@@ -1686,8 +1694,8 @@ func TestPanelsFrame_CopyShortcuts(t *testing.T) {
 		Type: vtinput.KeyEventType, KeyDown: true,
 		VirtualKeyCode: vtinput.VK_INSERT, ControlKeyState: vtinput.LeftCtrlPressed,
 	})
-	if vtui.GetClipboard() != "target.txt" {
-		t.Errorf("Ctrl+Ins failed: expected 'target.txt', got %q", vtui.GetClipboard())
+	if got := vtui.GetClipboard(); got != "target.txt" {
+		t.Errorf("Ctrl+Ins failed: expected 'target.txt', got %q", got)
 	}
 
 	// 2. Test Ctrl+F (Full Path)
@@ -1697,8 +1705,8 @@ func TestPanelsFrame_CopyShortcuts(t *testing.T) {
 		VirtualKeyCode: 'F', ControlKeyState: vtinput.LeftCtrlPressed,
 	})
 	expectedPath := fsp.vfs.Join(fsp.vfs.GetPath(), "target.txt")
-	if vtui.GetClipboard() != expectedPath {
-		t.Errorf("Ctrl+F failed: expected %q, got %q", expectedPath, vtui.GetClipboard())
+	if got := vtui.GetClipboard(); got != expectedPath {
+		t.Errorf("Ctrl+F failed: expected %q, got %q", expectedPath, got)
 	}
 }
 func TestLayout_F4ActionDialogs_Validity(t *testing.T) {

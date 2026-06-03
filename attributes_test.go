@@ -512,8 +512,10 @@ func TestAttributesDialog_SetFlow(t *testing.T) {
 	}
 
 	item := vfs.VFSItem{Name: "file.txt", UnixMode: 0644, Uid: 10, Gid: 10}
+
 	showAttributesUnix(nil, mock, path, item)
-	dlg := fm.GetTopFrame().(vtui.Container)
+	frame := fm.GetTopFrame()
+	dlg := frame.(vtui.Container)
 
 	var editOwner *vtui.Edit
 	var btnSet *vtui.Button
@@ -547,13 +549,10 @@ func TestAttributesDialog_SetFlow(t *testing.T) {
 	}
 
 	// 3. Pump tasks
-	timeout := time.After(2 * time.Second)
+	timeout := time.After(5 * time.Second)
 Loop:
 	for {
-		top := fm.GetTopFrame()
-		// CRITICAL: Exit when the dialog is marked Done.
-		// We don't wait for nil because cleanupDoneFrames only runs in the main loop.
-		if top == nil || top.IsDone() {
+		if frame.IsDone() {
 			break Loop
 		}
 		select {
@@ -561,8 +560,6 @@ Loop:
 			task()
 		case <-timeout:
 			t.Fatal("Timeout waiting for Set task")
-		default:
-			time.Sleep(10 * time.Millisecond)
 		}
 	}
 
@@ -783,5 +780,42 @@ func TestAttributesDialog_WindowsSetTime(t *testing.T) {
 	expected, _ := time.ParseInLocation("02.01.2006 15:04:05", newTimeStr, time.Local)
 	if !capturedItem.MTime.Equal(expected) {
 		t.Errorf("Windows MTime update failed. Expected %v, got %v", expected, capturedItem.MTime)
+	}
+}
+func TestDialogTaskPump_OverlayResilience(t *testing.T) {
+	fm := vtui.FrameManager
+	fm.Init(vtui.NewSilentScreenBuf())
+
+	// 1. Push target dialog
+	target := vtui.NewCenteredDialog(40, 10, "Target")
+	fm.Push(target)
+
+	// 2. Push overlay window on top (simulating autocomplete)
+	overlay := vtui.NewCenteredDialog(20, 5, "Autocomplete")
+	fm.Push(overlay)
+
+	// 3. Process task queue with a timeout.
+	// We close the target dialog in a task.
+	fm.PostTask(func() {
+		target.Close()
+	})
+
+	timeout := time.After(2 * time.Second)
+	for {
+		if target.IsDone() {
+			break
+		}
+		select {
+		case task := <-fm.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Timeout waiting for target dialog close with overlay present")
+		}
+	}
+
+	// Target is closed, but overlay is still open and on top of the stack.
+	// If the loop was based on GetTopFrame().IsDone(), it would have timed out.
+	if fm.GetTopFrame() != overlay {
+		t.Error("Overlay should still be on top of the stack")
 	}
 }

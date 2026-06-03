@@ -164,6 +164,7 @@ type FileSystemPanel struct {
 	frame               *vtui.BorderedFrame
 	vfs                 vfs.VFS
 	entries             []*fileEntry
+	selectedItems       map[string]bool
 	viewMode            ViewMode
 	cursorIdx           int
 	lastRightClickedIdx int
@@ -195,6 +196,7 @@ func NewFileSystemPanel(x, y, w, h int, vfs vfs.VFS) *FileSystemPanel {
 		viewMode:            ViewModeMedium,
 		lastRightClickedIdx: -1,
 		dirCache:            make(map[string]dirCacheEntry),
+		selectedItems:       make(map[string]bool),
 		//entries:             []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}},
 	}
 	fp.frame.ColorBoxIdx = ColPanelBox
@@ -229,6 +231,31 @@ func (fp *FileSystemPanel) saveToCache(path string, items []vfs.VFSItem) {
 			}
 		}
 		delete(fp.dirCache, oldestPath)
+	}
+}
+func (fp *FileSystemPanel) SetItemSelected(idx int, state bool) {
+	if idx >= 0 && idx < len(fp.entries) {
+		e := fp.entries[idx]
+		if e.Name != ".." {
+			e.Selected = state
+			if fp.selectedItems == nil {
+				fp.selectedItems = make(map[string]bool)
+			}
+			if state {
+				fp.selectedItems[e.Name] = true
+			} else {
+				delete(fp.selectedItems, e.Name)
+			}
+		}
+	}
+}
+
+func (fp *FileSystemPanel) ToggleSelection(idx int) {
+	if idx >= 0 && idx < len(fp.entries) {
+		e := fp.entries[idx]
+		if e.Name != ".." {
+			fp.SetItemSelected(idx, !e.Selected)
+		}
 	}
 }
 func (fp *FileSystemPanel) SetFocus(f bool) {
@@ -437,14 +464,6 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 		}
 	}
 
-	// Capture currently selected names on the UI thread before starting async work
-	selectedNames := make(map[string]bool)
-	for _, e := range fp.entries {
-		if e.Selected && e.Name != ".." {
-			selectedNames[e.Name] = true
-		}
-	}
-
 	hasCache := false
 	if !keepEntries {
 		if fp.dirCache == nil {
@@ -463,7 +482,11 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 				if !AppConfig.ShowHiddenFiles && item.Name != ".." && item.IsHidden {
 					continue
 				}
-				fp.entries = append(fp.entries, &fileEntry{VFSItem: item, IsCached: true})
+				entry := &fileEntry{VFSItem: item, IsCached: true}
+				if fp.selectedItems[item.Name] {
+					entry.Selected = true
+				}
+				fp.entries = append(fp.entries, entry)
 			}
 
 			fp.sortEntries()
@@ -540,28 +563,16 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 			if ctx.Err() != nil {
 				return
 			}
+
 			vtui.FrameManager.PostTask(func() {
 				if ctx.Err() != nil {
 					return
 				}
 
-				// Sync interactive state: if the user started navigating or selecting
-				// while the cache was displayed, we must respect those changes.
 				if fp.pendingSelection == "" {
 					uName := fp.getRawSelectedName()
 					if uName != "" && uName != ".." {
 						fp.pendingSelection = uName
-					}
-				}
-
-				// Sync selections for currently visible items
-				for _, e := range fp.entries {
-					if e.Name != ".." {
-						if e.Selected {
-							selectedNames[e.Name] = true
-						} else {
-							delete(selectedNames, e.Name)
-						}
 					}
 				}
 
@@ -583,15 +594,15 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 				}
 
 				currentSelected := fp.GetSelectedName()
-				fp.entries = append(fp.entries, newEntries...)
 
-				// Apply selections to all entries
-				for _, e := range fp.entries {
-					if e.Name != ".." && selectedNames[e.Name] {
+				// Apply persistent selection to incoming items
+				for _, e := range newEntries {
+					if fp.selectedItems[e.Name] {
 						e.Selected = true
 					}
 				}
 
+				fp.entries = append(fp.entries, newEntries...)
 				fp.sortEntries()
 
 				// Фокусировка на нужном файле
@@ -619,6 +630,7 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 				}
 
 				fp.Refresh()
+
 				vtui.FrameManager.Redraw() // Рисуем каждый чанк!
 			})
 		})
@@ -633,6 +645,17 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 
 			if err == nil {
 				fp.saveToCache(path, accumulated)
+
+				// Clean up persistent selection state (remove non-existent files)
+				validNames := make(map[string]bool)
+				for _, e := range fp.entries {
+					validNames[e.Name] = true
+				}
+				for name := range fp.selectedItems {
+					if !validNames[name] {
+						delete(fp.selectedItems, name)
+					}
+				}
 			}
 
 			// Останавливаем таймер. Если он не успел сработать — заголовок так и не моргнул.
@@ -965,18 +988,14 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 			return false
 		}
 		idx := fp.GetCursorIndex()
-		if idx < len(fp.entries) && fp.entries[idx].Name != ".." {
-			fp.entries[idx].Selected = !fp.entries[idx].Selected
-		}
+		fp.ToggleSelection(idx)
 		fp.SetCursorIndex(idx + 1)
 		return true
 
 	case vtinput.VK_UP, vtinput.VK_DOWN, vtinput.VK_LEFT, vtinput.VK_RIGHT, vtinput.VK_PRIOR, vtinput.VK_NEXT, vtinput.VK_HOME, vtinput.VK_END:
 		if shift {
 			idx := fp.GetCursorIndex()
-			if idx < len(fp.entries) && fp.entries[idx].Name != ".." {
-				fp.entries[idx].Selected = !fp.entries[idx].Selected
-			}
+			fp.ToggleSelection(idx)
 		}
 
 		idx := fp.GetCursorIndex()
@@ -1138,7 +1157,7 @@ func (fp *FileSystemPanel) ProcessMouse(e *vtinput.InputEvent) bool {
 		if idx < len(fp.entries) {
 			if e.ButtonState == vtinput.RightmostButtonPressed {
 				if fp.entries[idx].Name != ".." && fp.lastRightClickedIdx != idx {
-					fp.entries[idx].Selected = !fp.entries[idx].Selected
+					fp.ToggleSelection(idx)
 					fp.lastRightClickedIdx = idx
 				}
 				return true
@@ -1260,9 +1279,9 @@ func (fp *FileSystemPanel) doFastFind(dir int) {
 }
 
 func (fp *FileSystemPanel) InvertSelection() {
-	for _, e := range fp.entries {
+	for i, e := range fp.entries {
 		if e.Name != ".." {
-			e.Selected = !e.Selected
+			fp.SetItemSelected(i, !e.Selected)
 		}
 	}
 	vtui.FrameManager.Redraw()
@@ -1278,14 +1297,14 @@ func (fp *FileSystemPanel) ApplyMaskSelection(mask string, state bool) {
 	}
 	maskLower := strings.ToLower(mask)
 
-	for _, e := range fp.entries {
+	for i, e := range fp.entries {
 		if e.Name == ".." {
 			continue
 		}
 		nameLower := strings.ToLower(e.Name)
 		matched, _ := filepath.Match(maskLower, nameLower)
 		if matched {
-			e.Selected = state
+			fp.SetItemSelected(i, state)
 		}
 	}
 	vtui.FrameManager.Redraw()
