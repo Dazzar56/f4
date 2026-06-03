@@ -23,6 +23,7 @@ func TestAsyncBuffer_LoadingCycle(t *testing.T) {
 	wc.Close()
 
 	f, _ := v.Open(context.Background(), tmp)
+	defer f.Close()
 	// Create buffer with very small chunks (10 bytes) to trigger multi-chunk logic
 	buf := NewAsyncBuffer(context.Background(), f)
 	buf.chunkSize = 10
@@ -80,6 +81,7 @@ func TestAsyncBuffer_BoundaryRead(t *testing.T) {
 
 	v := vfs.NewOSVFS(t.TempDir())
 	f, _ := v.Open(context.Background(), tmp)
+	defer f.Close()
 
 	// Chunk size 10.
 	buf := NewAsyncBuffer(context.Background(), f)
@@ -112,6 +114,7 @@ func TestAsyncBuffer_PartialChunkAtEOF(t *testing.T) {
 
 	v := vfs.NewOSVFS(t.TempDir())
 	f, _ := v.Open(context.Background(), tmp)
+	defer f.Close()
 
 	buf := NewAsyncBuffer(context.Background(), f)
 	buf.chunkSize = 100 // Chunk is larger than file
@@ -146,6 +149,7 @@ func TestAsyncBuffer_ConcurrentAccess(t *testing.T) {
 
 	v := vfs.NewOSVFS(t.TempDir())
 	f, _ := v.Open(context.Background(), tmp)
+	defer f.Close()
 
 	buf := NewAsyncBuffer(context.Background(), f)
 	buf.chunkSize = 64 * 1024 // 64KB chunks
@@ -201,10 +205,12 @@ func TestAsyncBuffer_CancellationMidFetch(t *testing.T) {
 	tmp := filepath.Join(t.TempDir(), "cancel.txt")
 	os.WriteFile(tmp, []byte("some content"), 0644)
 	f, _ := v.Open(context.Background(), tmp)
+	defer f.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	buf := NewAsyncBuffer(ctx, f)
 	buf.chunkSize = 100
+	defer buf.Close()
 
 	// 1. Trigger fetch
 	_, err := buf.Read(0, 5)
@@ -243,6 +249,7 @@ func TestAsyncBuffer_RedundantFetchPrevention(t *testing.T) {
 	tmp := filepath.Join(t.TempDir(), "redundant.txt")
 	os.WriteFile(tmp, make([]byte, 1000), 0644)
 	f, _ := v.Open(context.Background(), tmp)
+	defer f.Close()
 
 	buf := NewAsyncBuffer(context.Background(), f)
 	buf.chunkSize = 100
@@ -274,6 +281,7 @@ func TestAsyncBuffer_ContextRace(t *testing.T) {
 	tmp := filepath.Join(t.TempDir(), "race.txt")
 	os.WriteFile(tmp, content, 0644)
 	f, _ := v.Open(context.Background(), tmp)
+	defer f.Close()
 
 	for i := 0; i < 100; i++ {
 		ctx, cancel := context.WithCancel(context.Background())
