@@ -485,19 +485,35 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 					cmd := name
 					var cmdToWire string
 
+					useDir := false
+					if _, isOS := v.(*vfs.OSVFS); isOS {
+						useDir = true
+					} else if _, isPty := v.(vfs.PtyProvider); isPty {
+						useDir = true
+					}
+
+					actualDir := ""
+					if useDir {
+						actualDir = dir
+					}
+
 					if runtime.GOOS == "windows" {
 						// Combine directory sync with the command to allow excision
-						if dir != "" {
-							cmdToWire = fmt.Sprintf("cd /d \"%s\" & %s\r", dir, historyCmd)
+						if actualDir != "" {
+							cmdToWire = fmt.Sprintf("cd /d \"%s\" & %s\r", actualDir, historyCmd)
 						} else {
 							cmdToWire = fmt.Sprintf("%s\r", historyCmd)
 						}
 					} else {
 						// On Unix, use single quotes for paths to prevent Bash history expansion
-						sqDir := strings.ReplaceAll(dir, "'", "'\\''")
 						sqCmd := strings.ReplaceAll(cmd, "'", "'\\''")
 						// Используем OSC 133 для уведомления терминала о начале и конце выполнения.
-						cmdToWire = fmt.Sprintf("set +H; cd '%s' && { printf \"\\033]133;C\\007\"; ./'%s' ; printf \"\\033]133;D\\007\"; }\r", sqDir, sqCmd)
+						if actualDir != "" {
+							sqDir := strings.ReplaceAll(actualDir, "'", "'\\''")
+							cmdToWire = fmt.Sprintf("set +H; cd '%s' && { printf \"\\033]133;C\\007\"; ./'%s' ; printf \"\\033]133;D\\007\"; }\r", sqDir, sqCmd)
+						} else {
+							cmdToWire = fmt.Sprintf("set +H; { printf \"\\033]133;C\\007\"; ./'%s' ; printf \"\\033]133;D\\007\"; }\r", sqCmd)
+						}
 					}
 					vtui.DebugLog("ACTIONS: Sending to PTY: %q", cmdToWire)
 

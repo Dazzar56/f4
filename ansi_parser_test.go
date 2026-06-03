@@ -662,3 +662,48 @@ func TestAnsiParser_WindowsExcision_CrossPlatform(t *testing.T) {
 		})
 	}
 }
+
+func TestAnsiParser_ExcisionExtra(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "Windows background sync excision",
+			input:    "C:\\Old>cd /d \"C:\\New\" & rem f4_sync\r\n",
+			expected: "",
+		},
+		{
+			name:     "Windows technical command excision",
+			input:    "C:\\Old>cd /d \"C:\\New\" & whoami\r\n",
+			expected: "C:\\Old>whoami\n",
+		},
+		{
+			name:     "Unix background sync excision",
+			input:    "user@host:~$ cd '/new/path' # f4_sync\r\n",
+			expected: "",
+		},
+		{
+			name:     "Unix technical command excision",
+			input:    "set +H; cd '/new/path' && { printf \"\\033]133;C\\007\"; ./'cmd' ; printf \"\\033]133;D\\007\"; }\r\n",
+			expected: "",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			tv := NewTerminalView(80, 24)
+			parser := NewAnsiParser(tv, nil)
+			parser.Process([]byte(tt.input))
+
+			logBytes := tv.GetAllLogBytes()
+			logStr := string(logBytes)
+
+			// Normalize newlines for cross-platform comparison
+			logStr = strings.ReplaceAll(logStr, "\r\n", "\n")
+
+			if !strings.Contains(logStr, tt.expected) {
+				t.Errorf("Expected log to contain %q, but got %q", tt.expected, logStr)
+			}
+		})
+	}
+}

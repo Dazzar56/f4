@@ -60,6 +60,35 @@ func (p *AnsiParser) Process(data []byte) {
 		}
 	}
 
+	// Unix: Вырезаем фоновые команды синхронизации директории
+	if strings.HasPrefix(strData, "set +H; { printf") {
+		idx := strings.Index(strData, "}\r\n")
+		if idx != -1 {
+			strData = strData[idx+3:]
+		}
+	}
+
+	for {
+		startIdx := strings.Index(strData, " cd '")
+		if startIdx == -1 {
+			break
+		}
+		endIdx := strings.Index(strData[startIdx:], "' # f4_sync")
+		if endIdx != -1 {
+			actualEnd := startIdx + endIdx + len("' # f4_sync")
+			if actualEnd < len(strData) && strData[actualEnd] == '\r' {
+				actualEnd++
+			}
+			if actualEnd < len(strData) && strData[actualEnd] == '\n' {
+				actualEnd++
+			}
+			vtui.DebugLog("ANSI_PARSER: Excising background Unix CD sync")
+			strData = strData[:startIdx] + "\r\x1b[2K" + strData[actualEnd:]
+			continue
+		}
+		break
+	}
+
 	// Windows f4: Вырезаем техническую команду смены папки из любого места в буфере.
 	// Это скрывает cd даже если он пришел вместе с промптом shell (screen scraping).
 	for {
@@ -67,17 +96,36 @@ func (p *AnsiParser) Process(data []byte) {
 		if startIdx == -1 {
 			break
 		}
-		// Ищем конец технической части по разделителю " & "
+
 		endIdx := strings.Index(strData[startIdx:], "\" & ")
-		if endIdx == -1 {
-			break
+		if endIdx != -1 {
+			if strings.HasPrefix(strData[startIdx+endIdx:], "\" & rem f4_sync") {
+				actualEnd := startIdx + endIdx + len("\" & rem f4_sync")
+				if actualEnd < len(strData) && strData[actualEnd] == '\r' {
+					actualEnd++
+				}
+				if actualEnd < len(strData) && strData[actualEnd] == '\n' {
+					actualEnd++
+				}
+				if actualEnd < len(strData) && strData[actualEnd] == '\r' {
+					actualEnd++
+				}
+				if actualEnd < len(strData) && strData[actualEnd] == '\n' {
+					actualEnd++
+				}
+				vtui.DebugLog("ANSI_PARSER: Excising background Windows CD sync")
+				strData = strData[:startIdx] + "\r\x1b[2K" + strData[actualEnd:]
+				continue
+			} else {
+				actualEnd := startIdx + endIdx + 4 // +4 чтобы захватить и "\" & "
+				vtui.DebugLog("ANSI_PARSER: Excising technical Windows CD sync from buffer")
+				strData = strData[:startIdx] + strData[actualEnd:]
+				continue
+			}
 		}
-
-		actualEnd := startIdx + endIdx + 4 // +4 чтобы захватить и " & "
-		vtui.DebugLog("ANSI_PARSER: Excising technical Windows CD sync from buffer")
-		strData = strData[:startIdx] + strData[actualEnd:]
+		break
 	}
-
+	
 	data = []byte(strData)
 	if len(data) == 0 {
 		return

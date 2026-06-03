@@ -96,6 +96,9 @@ type PanelsFrame struct {
 	lastAutoRefresh time.Time
 	lastKey         rune
 	lastKeyEvent    time.Time
+
+	lastPtyPath string
+	lastPtyVFS  vfs.VFS
 }
 
 func (pf *PanelsFrame) Left() Panel    { return pf.panels[0] }
@@ -355,6 +358,7 @@ func (pf *PanelsFrame) initPTY() {
 
 			vtui.FrameManager.PostTask(func() {
 				pf.RefreshAll()
+				vtui.FrameManager.Redraw()
 			})
 		}
 
@@ -489,6 +493,18 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 		pf.lastAlt = pf.termView.UseAltScreen
 		pf.lastBusy = isBusy
 		pf.ResizeConsole(pf.lastW, pf.lastH)
+	}
+
+	if !isBusy {
+		if fsp := pf.getActivePanel(); fsp != nil {
+			currentPath := fsp.vfs.GetPath()
+			if currentPath != pf.lastPtyPath || fsp.vfs != pf.lastPtyVFS {
+				if pf.syncPTYDirectory(currentPath, fsp.vfs) {
+					pf.lastPtyPath = currentPath
+					pf.lastPtyVFS = fsp.vfs
+				}
+			}
+		}
 	}
 
 	now := time.Now()
@@ -991,16 +1007,12 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 						fsp.ReadDirectory()
 						pf.cmdLine.Clear()
 
-						// Sync the background PTY silently without hiding panels
-						activePty := pf.getActivePTY()
-						if activePty != nil {
-							if runtime.GOOS == "windows" {
-								activePty.Write([]byte(fmt.Sprintf("cd /d \"%s\"\r", fsp.vfs.GetPath())))
-							} else {
-								sqPath := strings.ReplaceAll(fsp.vfs.GetPath(), "'", "'\\''")
-								activePty.Write([]byte(fmt.Sprintf(" cd '%s'\r", sqPath)))
-							}
+						// Sync the background PTY synchronously to satisfy tests and provide immediate state
+						if pf.syncPTYDirectory(fsp.vfs.GetPath(), fsp.vfs) {
+							pf.lastPtyPath = fsp.vfs.GetPath()
+							pf.lastPtyVFS = fsp.vfs
 						}
+
 						return true
 					}
 				}
@@ -1011,7 +1023,11 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			if activePty != nil {
 				var path string
 				if fsp, ok := pf.panels[pf.activeIdx].(*FileSystemPanel); ok {
-					path = fsp.vfs.GetPath()
+					if _, isOS := fsp.vfs.(*vfs.OSVFS); isOS {
+						path = fsp.vfs.GetPath()
+					} else if _, isPty := fsp.vfs.(vfs.PtyProvider); isPty {
+						path = fsp.vfs.GetPath()
+					}
 				}
 
 				var fullWireCmd string
@@ -1733,6 +1749,32 @@ func (pf *PanelsFrame) Menu(title string, items []string, callback func(int)) {
 		vtui.FrameManager.Push(menu)
 	})
 }
+
+func (pf *PanelsFrame) syncPTYDirectory(path string, v vfs.VFS) bool {
+	sync := false
+	if _, isOS := v.(*vfs.OSVFS); isOS {
+		sync = true
+	} else if _, isPty := v.(vfs.PtyProvider); isPty {
+		sync = true
+	}
+
+	if !sync {
+		return true
+	}
+
+	activePty := pf.getActivePTY()
+	if activePty != nil {
+		if runtime.GOOS == "windows" {
+			activePty.Write([]byte(fmt.Sprintf("cd /d \"%s\" & rem f4_sync\r", path)))
+		} else {
+			sqPath := strings.ReplaceAll(path, "'", "'\\''")
+			activePty.Write([]byte(fmt.Sprintf(" cd '%s' # f4_sync\r", sqPath)))
+		}
+		return true
+	}
+	return false
+}
+
 func (pf *PanelsFrame) getActivePTYUnsafe() PtyBackend {
 	if pf.remotePtys == nil {
 		pf.remotePtys = make(map[vfs.VFS]PtyBackend)
