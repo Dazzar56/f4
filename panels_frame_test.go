@@ -1385,6 +1385,7 @@ func TestExecuteFileOp_BackgroundButtonTrigger(t *testing.T) {
 	fm.Init(vtui.NewSilentScreenBuf())
 
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 	fm.Push(pf)
 
@@ -1402,6 +1403,7 @@ func TestExecuteDummyOp_HeadlessMode(t *testing.T) {
 	fm := vtui.FrameManager
 	fm.Init(vtui.NewSilentScreenBuf())
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	fm.Push(pf)
 
 	initialScreens := len(fm.Screens)
@@ -1435,6 +1437,7 @@ func TestExecuteDummyOp_HeadlessMode(t *testing.T) {
 
 func TestPanelsFrame_TerminalForwarding_Legacy(t *testing.T) {
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.showPanels = false
 	pf.termView.UseAltScreen = true
 
@@ -1468,6 +1471,7 @@ func TestPanelsFrame_TerminalForwarding_Legacy(t *testing.T) {
 
 func TestPanelsFrame_TerminalForwarding_Advanced(t *testing.T) {
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.showPanels = false
 	pf.termView.UseAltScreen = true
 	pf.termView.Win32InputMode = true // Advanced mode
@@ -1499,6 +1503,7 @@ func TestPanelsFrame_TerminalForwarding_Advanced(t *testing.T) {
 }
 func TestPanelsFrame_FilesMenuLabels(t *testing.T) {
 	pf := NewPanelsFrame()
+	defer pf.Close()
 
 	// Items[1] is the "Files" menu
 	filesMenu := pf.menuBar.Items[1]
@@ -1520,6 +1525,7 @@ func TestPanelsFrame_FilesMenuLabels(t *testing.T) {
 
 func TestPanelsFrame_ProcessMouse_RightDoubleClickNoEnter(t *testing.T) {
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
 	tmp := t.TempDir()

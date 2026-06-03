@@ -302,6 +302,7 @@ func TestDelete_NonExistent(t *testing.T) {
 
 func TestFileOps_RefreshAllNoPanic(t *testing.T) {
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	// Ensure refresh doesn't crash even if panels are not fully docked
 	pf.RefreshAll()
 }
@@ -644,20 +645,20 @@ func TestExecuteFileOp_MoveAcrossVFS_Fallback(t *testing.T) {
 	// Use ExecuteFileOp with isMove=true.
 	// Since they are different OSVFS instances (simulating different volumes/servers),
 	// the recursiveCopy logic will be used.
-	ExecuteFileOp(nil, srcVfs, dstVfs, []string{fileName}, tmpDst, true, 2, nil)
+	done := make(chan struct{})
+	ExecuteFileOp(nil, srcVfs, dstVfs, []string{fileName}, tmpDst, true, 2, func() {
+		close(done)
+	})
 
-	// Drain task queue
-	timeout := time.After(1 * time.Second)
+	// Drain task queue until operation completes
+	timeout := time.After(10 * time.Second)
 Loop:
 	for {
 		select {
+		case <-done:
+			break Loop
 		case task := <-vtui.FrameManager.TaskChan:
 			task()
-		case <-time.After(50 * time.Millisecond):
-			// Check if source is gone
-			if _, err := os.Stat(filepath.Join(tmpSrc, fileName)); os.IsNotExist(err) {
-				break Loop
-			}
 		case <-timeout:
 			t.Fatal("Move operation timed out")
 		}
@@ -1203,6 +1204,7 @@ pump3:
 func TestFileOps_ForkedWorkspace(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	vtui.FrameManager.Push(pf)
 	initialScreens := len(vtui.FrameManager.Screens)
 

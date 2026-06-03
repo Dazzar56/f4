@@ -610,7 +610,10 @@ func TestActionFindFile_Persistence(t *testing.T) {
 
 func TestSession_DiskPersistence(t *testing.T) {
 	// Создаем временную директорию для теста
-	tmpDir, _ := os.MkdirTemp("", "f4-session-test")
+	tmpDir, err := os.MkdirTemp("", "f4-session-test")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
 	defer os.RemoveAll(tmpDir)
 
 	// Перехватываем путь к ini файлу (в реальном коде он завязан на os.UserConfigDir)
