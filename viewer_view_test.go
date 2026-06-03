@@ -493,9 +493,13 @@ func TestViewerView_ScrollbarEOFAlignment(t *testing.T) {
 	// Прыгаем в конец
 	vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_END})
 
-	// Ждем завершения асинхронного расчета jumpToEnd
+	// Ждем завершения асинхронного расчета jumpToEnd.
+	// jumpToEnd устанавливает TopOffset через ctx.RunOnUI, которая ставит задачу
+	// в FrameManager.TaskChan. Задача "Busy = false" (defer) и задача установки
+	// TopOffset могут быть в канале в любом порядке. Поэтому не выходим из цикла,
+	// пока vv.Busy не станет false И TopOffset не изменится с начального 0.
 	timeout := time.After(2 * time.Second)
-	for vv.Busy {
+	for vv.Busy || vv.TopOffset == 0 {
 		select {
 		case task := <-fm.TaskChan:
 			task()
@@ -503,24 +507,6 @@ func TestViewerView_ScrollbarEOFAlignment(t *testing.T) {
 			t.Fatal("Timeout waiting for Text jumpToEnd")
 		}
 	}
-
-	// jumpToEnd устанавливает TopOffset через ctx.RunOnUI, которая ставит задачу
-	// в FrameManager.TaskChan. Задача "Busy = false" (defer) и задача установки
-	// TopOffset могут быть в канале в любом порядке. Нужно прокачать оставшиеся
-	// задачи, чтобы TopOffset точно установился перед проверкой.
-	timeout = time.After(500 * time.Millisecond)
-	for {
-		select {
-		case task := <-fm.TaskChan:
-			task()
-		case <-timeout:
-			goto drained
-		default:
-			// Канал пуст — все задачи выполнены
-			goto drained
-		}
-	}
-drained:
 
 	// Вызываем Show, чтобы сработала логика SetParams внутри DisplayObject
 	vv.Show(scr)
