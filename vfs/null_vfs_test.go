@@ -163,6 +163,7 @@ func TestNullVFS_Cancellation(t *testing.T) {
 		t.Errorf("Cancellation took too long: %v", duration)
 	}
 }
+
 func TestNullVFS_BasicMethods(t *testing.T) {
 	v := NewNullVFS(0)
 
@@ -170,7 +171,7 @@ func TestNullVFS_BasicMethods(t *testing.T) {
 		t.Error("Should be at root initially")
 	}
 
-	if v.GetPath() != "/" {
+	if v.GetPath() != filepath.FromSlash("/") {
 		t.Errorf("Expected path /, got %s", v.GetPath())
 	}
 
@@ -192,7 +193,7 @@ func TestNullVFS_BasicMethods(t *testing.T) {
 	}
 
 	clone := v.Clone()
-	if clone.GetPath() != "/" { // Clones start at root by default in NewNullVFS
+	if clone.GetPath() != filepath.FromSlash("/") { // Clones start at root by default in NewNullVFS
 		t.Errorf("Clone path mismatch: %s", clone.GetPath())
 	}
 
@@ -200,6 +201,7 @@ func TestNullVFS_BasicMethods(t *testing.T) {
 		t.Error("NullVFS should not have a parent")
 	}
 }
+
 func TestNullVFS_NativeSlashes(t *testing.T) {
 	v := NewNullVFS(0)
 	v.SetPath("/test/path")

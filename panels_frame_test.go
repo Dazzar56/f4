@@ -378,10 +378,15 @@ func TestPanelsFrame_Clone(t *testing.T) {
 	defer pf.Close()
 	pf.ResizeConsole(100, 30)
 
+	// Use a real temp directory that exists on all platforms
+	tmpDir := t.TempDir()
+
 	// Set some specific state
 	pf.activeIdx = 0
 	if fsp, ok := pf.panels[0].(*FileSystemPanel); ok {
-		fsp.vfs.SetPath("/tmp")
+		if err := fsp.vfs.SetPath(tmpDir); err != nil {
+			t.Fatalf("SetPath failed: %v", err)
+		}
 		fsp.table.SelectPos = 5
 	}
 
@@ -395,8 +400,8 @@ func TestPanelsFrame_Clone(t *testing.T) {
 	}
 
 	if fsp, ok := clone.panels[0].(*FileSystemPanel); ok {
-		if fsp.vfs.GetPath() != "/tmp" {
-			t.Errorf("Clone failed to copy VFS path: %s", fsp.vfs.GetPath())
+		if fsp.vfs.GetPath() != tmpDir {
+			t.Errorf("Clone failed to copy VFS path: got %s, want %s", fsp.vfs.GetPath(), tmpDir)
 		}
 		if fsp.table.SelectPos != 5 {
 			t.Errorf("Clone failed to copy Table SelectPos: %d", fsp.table.SelectPos)
@@ -1380,6 +1385,7 @@ func TestExecuteFileOp_BackgroundButtonTrigger(t *testing.T) {
 	fm.Init(vtui.NewSilentScreenBuf())
 
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 	fm.Push(pf)
 
@@ -1397,6 +1403,7 @@ func TestExecuteDummyOp_HeadlessMode(t *testing.T) {
 	fm := vtui.FrameManager
 	fm.Init(vtui.NewSilentScreenBuf())
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	fm.Push(pf)
 
 	initialScreens := len(fm.Screens)
@@ -1430,6 +1437,7 @@ func TestExecuteDummyOp_HeadlessMode(t *testing.T) {
 
 func TestPanelsFrame_TerminalForwarding_Legacy(t *testing.T) {
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.showPanels = false
 	pf.termView.UseAltScreen = true
 
@@ -1463,6 +1471,7 @@ func TestPanelsFrame_TerminalForwarding_Legacy(t *testing.T) {
 
 func TestPanelsFrame_TerminalForwarding_Advanced(t *testing.T) {
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.showPanels = false
 	pf.termView.UseAltScreen = true
 	pf.termView.Win32InputMode = true // Advanced mode
@@ -1494,6 +1503,7 @@ func TestPanelsFrame_TerminalForwarding_Advanced(t *testing.T) {
 }
 func TestPanelsFrame_FilesMenuLabels(t *testing.T) {
 	pf := NewPanelsFrame()
+	defer pf.Close()
 
 	// Items[1] is the "Files" menu
 	filesMenu := pf.menuBar.Items[1]
@@ -1515,6 +1525,7 @@ func TestPanelsFrame_FilesMenuLabels(t *testing.T) {
 
 func TestPanelsFrame_ProcessMouse_RightDoubleClickNoEnter(t *testing.T) {
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
 	tmp := t.TempDir()

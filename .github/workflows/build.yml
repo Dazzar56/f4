@@ -36,7 +36,7 @@ jobs:
       with:
         go-version: '1.24'
         cache-dependency-path: go.sum
-    
+
     - name: Check formatting
       if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
       run: |
@@ -46,9 +46,9 @@ jobs:
           echo "Please run 'gofmt -s -w .' locally and commit the changes."
           exit 1
         fi
-    
+
     - name: Run Tests
-      if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
+      if: matrix.goos == 'linux' && matrix.goarch == 'amd64' || (matrix.goos == 'windows' && matrix.goarch == 'amd64')
       run: |
         echo "Running f4 core tests..."
         go test -v ./...

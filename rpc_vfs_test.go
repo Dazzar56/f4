@@ -70,13 +70,15 @@ func TestRPCVFS_PathResolution(t *testing.T) {
 		t.Error("Should not be at root after SetPath")
 	}
 
-	if v.GetPath() != "/folder/sub" {
-		t.Errorf("Expected path '/folder/sub', got %q", v.GetPath())
+	expectedPath := filepath.FromSlash("/folder/sub")
+	if v.GetPath() != expectedPath {
+		t.Errorf("Expected path %q, got %q", expectedPath, v.GetPath())
 	}
 
 	abs, _ := v.Abs("file.txt")
-	if abs != "/folder/sub/file.txt" {
-		t.Errorf("Abs failed: expected '/folder/sub/file.txt', got %q", abs)
+	expectedAbs := filepath.FromSlash("/folder/sub/file.txt")
+	if abs != expectedAbs {
+		t.Errorf("Abs failed: expected %q, got %q", expectedAbs, abs)
 	}
 
 	if v.Base("/folder/sub/file.txt") != "file.txt" {

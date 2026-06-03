@@ -5,6 +5,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"sync"
 	"time"
 	"unsafe"
@@ -25,6 +26,8 @@ type PTY struct {
 
 	lastBusyCheck time.Time
 	lastBusyState bool
+
+	Cmd *exec.Cmd //for interface compatability with Pty_unix, DO NOT USE
 }
 
 func NewPTY() (*PTY, error) {

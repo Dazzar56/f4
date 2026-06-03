@@ -45,8 +45,10 @@ func TestViewerView_NavigationAndEOF(t *testing.T) {
 	v := vfs.NewOSVFS(tmpDir)
 	vv, err := NewViewerView(context.Background(), v, tmp)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("Failed to create ViewerView: %v", err)
 	}
+	defer vv.Close()
+
 	vv.SetPosition(0, 0, 10, 3) // Height 4 (Y:0..3). 1 line status, 3 lines content.
 
 	scr := vtui.NewSilentScreenBuf()
@@ -127,6 +129,7 @@ func TestViewerView_MouseScrollbar(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create ViewerView: %v", err)
 	}
+	defer vv.Close()
 
 	// Setup viewport: 11 columns (X=0..10), 5 rows (Y=0..4)
 	// Top bar at Y=0. Content area Y=1..4 (4 lines).
@@ -240,7 +243,12 @@ func TestViewerBar_Content(t *testing.T) {
 	os.WriteFile(tmp, []byte("Some content"), 0644)
 
 	v := vfs.NewOSVFS(tmpDir)
-	vv, _ := NewViewerView(context.Background(), v, tmp)
+	vv, err := NewViewerView(context.Background(), v, tmp)
+	if err != nil {
+		t.Fatalf("Failed to create ViewerView: %v", err)
+	}
+	defer vv.Close()
+
 	vv.SetPosition(0, 0, 40, 10)
 
 	scr := vtui.NewSilentScreenBuf()
@@ -311,12 +319,14 @@ func TestViewerView_GetTitle(t *testing.T) {
 	v := vfs.NewOSVFS(tmpDir)
 	vv, err := NewViewerView(context.Background(), v, tmp)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("Failed to create ViewerView: %v", err)
 	}
+	defer vv.Close()
 
 	if vv.GetTitle() != "View: doc.txt" {
 		t.Errorf("GetTitle failed: %s", vv.GetTitle())
 	}
+
 }
 func TestLayout_ViewerSearchDialog_Validity(t *testing.T) {
 	vtui.SetDefaultPalette()
@@ -359,7 +369,11 @@ func TestViewerView_HexModeToggle(t *testing.T) {
 	os.WriteFile(tmp, data, 0644)
 
 	v := vfs.NewOSVFS(tmpDir)
-	vv, _ := NewViewerView(context.Background(), v, tmp)
+	vv, err := NewViewerView(context.Background(), v, tmp)
+	if err != nil {
+		t.Fatalf("Failed to create ViewerView: %v", err)
+	}
+	defer vv.Close()
 
 	// Set an offset that is NOT aligned to 16
 	vv.TopOffset = 10
@@ -381,6 +395,7 @@ func TestViewerView_HexModeToggle(t *testing.T) {
 	if vv.HexMode {
 		t.Error("F4 failed to toggle back to TextMode")
 	}
+
 }
 func TestViewerView_EndJump_BusyState(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
@@ -389,7 +404,12 @@ func TestViewerView_EndJump_BusyState(t *testing.T) {
 	os.WriteFile(tmp, []byte(strings.Repeat("line\n", 1000)), 0644)
 
 	v := vfs.NewOSVFS(t.TempDir())
-	vv, _ := NewViewerView(context.Background(), v, tmp)
+	vv, err := NewViewerView(context.Background(), v, tmp)
+	if err != nil {
+		t.Fatalf("Failed to create ViewerView: %v", err)
+	}
+	defer vv.Close()
+
 	vv.SetPosition(0, 0, 80, 24)
 
 	// Нажимаем End
@@ -424,7 +444,12 @@ func TestViewerView_StateRestoration_Modes(t *testing.T) {
 	GlobalFileState.SaveViewerState(tmp, 0, false, true) // Wrap OFF, Hex ON
 
 	// Имитируем открытие (логика из actions.go)
-	vv, _ := NewViewerView(context.Background(), v, tmp)
+	vv, err := NewViewerView(context.Background(), v, tmp)
+	if err != nil {
+		t.Fatalf("Failed to create ViewerView: %v", err)
+	}
+	defer vv.Close()
+
 	if state := GlobalFileState.GetState(tmp); state != nil {
 		vv.WrapMode = state.ViewerWrap
 		vv.HexMode = state.ViewerHex
@@ -452,7 +477,12 @@ func TestViewerView_ScrollbarEOFAlignment(t *testing.T) {
 	os.WriteFile(tmp, []byte(content), 0644)
 
 	v := vfs.NewOSVFS(tmpDir)
-	vv, _ := NewViewerView(context.Background(), v, tmp)
+	vv, err := NewViewerView(context.Background(), v, tmp)
+	if err != nil {
+		t.Fatalf("Failed to create ViewerView: %v", err)
+	}
+	defer vv.Close()
+
 	// Viewport: 1 строка статус, 10 строк контент.
 	vv.SetPosition(0, 0, 40, 10)
 
@@ -463,9 +493,13 @@ func TestViewerView_ScrollbarEOFAlignment(t *testing.T) {
 	// Прыгаем в конец
 	vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_END})
 
-	// Ждем завершения асинхронного расчета jumpToEnd
+	// Ждем завершения асинхронного расчета jumpToEnd.
+	// jumpToEnd устанавливает TopOffset через ctx.RunOnUI, которая ставит задачу
+	// в FrameManager.TaskChan. Задача "Busy = false" (defer) и задача установки
+	// TopOffset могут быть в канале в любом порядке. Поэтому не выходим из цикла,
+	// пока vv.Busy не станет false И TopOffset не изменится с начального 0.
 	timeout := time.After(2 * time.Second)
-	for vv.Busy {
+	for vv.Busy || vv.TopOffset == 0 {
 		select {
 		case task := <-fm.TaskChan:
 			task()

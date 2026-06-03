@@ -42,6 +42,7 @@ func (m *mockPty) IsBusy() bool                          { return false }
 
 func TestAnsiParser_CPR(t *testing.T) {
 	tv := NewTerminalView(80, 24)
+	defer tv.Close()
 	pty := &mockPty{}
 	p := NewAnsiParser(tv, pty)
 
@@ -59,6 +60,7 @@ func TestAnsiParser_CPR(t *testing.T) {
 }
 func TestAnsiParser_SGR_Advanced(t *testing.T) {
 	tv := NewTerminalView(80, 24)
+	defer tv.Close()
 	p := NewAnsiParser(tv, nil)
 
 	// 1. Test TrueColor Foreground (38;2;R;G;B)
@@ -94,6 +96,7 @@ func TestAnsiParser_SGR_Advanced(t *testing.T) {
 }
 func TestAnsiParser_DynamicPalette(t *testing.T) {
 	tv := NewTerminalView(80, 24)
+	defer tv.Close()
 	p := NewAnsiParser(tv, nil)
 
 	// 1. Change Palette index 1 (ANSI Red) to Pure Purple #FF00FF
@@ -120,6 +123,7 @@ func TestAnsiParser_DynamicPalette(t *testing.T) {
 
 func TestAnsiParser_SaveRestoreCursor_ESC(t *testing.T) {
 	tv := NewTerminalView(80, 24)
+	defer tv.Close()
 	p := NewAnsiParser(tv, nil)
 
 	tv.SetCursor(15, 8)
@@ -140,6 +144,7 @@ func TestAnsiParser_SaveRestoreCursor_ESC(t *testing.T) {
 
 func TestAnsiParser_SaveRestoreCursor_CSI(t *testing.T) {
 	tv := NewTerminalView(80, 24)
+	defer tv.Close()
 	p := NewAnsiParser(tv, nil)
 
 	tv.SetCursor(22, 11)
@@ -160,6 +165,7 @@ func TestAnsiParser_SaveRestoreCursor_CSI(t *testing.T) {
 
 func TestAnsiParser_StringTerminator(t *testing.T) {
 	tv := NewTerminalView(80, 24)
+	defer tv.Close()
 	p := NewAnsiParser(tv, nil)
 
 	// Trigger APC state (Application Program Command)
@@ -179,6 +185,7 @@ func TestAnsiParser_StringTerminator(t *testing.T) {
 
 func TestAnsiParser_DSR_Status(t *testing.T) {
 	tv := NewTerminalView(80, 24)
+	defer tv.Close()
 	pty := &mockPty{}
 	p := NewAnsiParser(tv, pty)
 
@@ -194,6 +201,7 @@ func TestAnsiParser_DSR_Status(t *testing.T) {
 
 func TestAnsiParser_OSC4_Palette(t *testing.T) {
 	tv := NewTerminalView(80, 24)
+	defer tv.Close()
 	p := NewAnsiParser(tv, nil)
 
 	// ANSI Color 1 — Red. By default in f4 palette it's 0xA00000.
@@ -208,6 +216,7 @@ func TestAnsiParser_OSC4_Palette(t *testing.T) {
 }
 func TestAnsiParser_REP_ECH(t *testing.T) {
 	tv := NewTerminalView(80, 24)
+	defer tv.Close()
 	p := NewAnsiParser(tv, nil)
 
 	// 1. Test REP (Repeat last char): write 'A' and repeat 5 times
@@ -230,6 +239,7 @@ func TestAnsiParser_REP_ECH(t *testing.T) {
 }
 func TestAnsiParser_SplitUTF8(t *testing.T) {
 	tv := NewTerminalView(80, 24)
+	defer tv.Close()
 	p := NewAnsiParser(tv, nil)
 
 	// Symbol 'П' (0xD0 0x9F) sent in parts
@@ -245,6 +255,7 @@ func TestAnsiParser_SplitUTF8(t *testing.T) {
 }
 func TestAnsiParser_MovementAndErase(t *testing.T) {
 	tv := NewTerminalView(10, 5)
+	defer tv.Close()
 	p := NewAnsiParser(tv, nil)
 
 	// 1. Test CUP (H) - Cursor Position
@@ -302,6 +313,7 @@ func TestAnsiParser_MovementAndErase(t *testing.T) {
 }
 func TestAnsiParser_Win32PasteModes(t *testing.T) {
 	tv := NewTerminalView(80, 24)
+	defer tv.Close()
 	p := NewAnsiParser(tv, nil)
 
 	// Enable modes
@@ -319,6 +331,7 @@ func TestAnsiParser_Win32PasteModes(t *testing.T) {
 
 func TestAnsiParser_AdvancedCSI(t *testing.T) {
 	tv := NewTerminalView(80, 24)
+	defer tv.Close()
 	p := NewAnsiParser(tv, nil)
 
 	// Ensure we are at the top-left
@@ -344,6 +357,7 @@ func TestAnsiParser_AdvancedCSI(t *testing.T) {
 
 func TestAnsiParser_OSC_Advanced(t *testing.T) {
 	tv := NewTerminalView(80, 24)
+	defer tv.Close()
 	p := NewAnsiParser(tv, nil)
 
 	// Test window title OSC 2
@@ -354,6 +368,7 @@ func TestAnsiParser_OSC_Advanced(t *testing.T) {
 }
 func TestAnsiParser_SGR_IntensityPersistence(t *testing.T) {
 	tv := NewTerminalView(80, 24)
+	defer tv.Close()
 	p := NewAnsiParser(tv, nil)
 
 	// 1. Set Bold (Intensity)
@@ -380,6 +395,7 @@ func TestAnsiParser_SGR_IntensityPersistence(t *testing.T) {
 
 func TestAnsiParser_DefaultColorRestoration(t *testing.T) {
 	tv := NewTerminalView(80, 24)
+	defer tv.Close()
 	p := NewAnsiParser(tv, nil)
 
 	// Set some non-default colors
@@ -399,6 +415,7 @@ func TestAnsiParser_DefaultColorRestoration(t *testing.T) {
 }
 func TestAnsiParser_Robustness(t *testing.T) {
 	tv := NewTerminalView(80, 24)
+	defer tv.Close()
 	p := NewAnsiParser(tv, nil)
 
 	// 1. Truncated CSI: should stay in StateCSI
@@ -432,6 +449,7 @@ func TestAnsiParser_Robustness(t *testing.T) {
 
 func TestAnsiParser_OSC52_Malformed(t *testing.T) {
 	tv := NewTerminalView(80, 24)
+	defer tv.Close()
 	p := NewAnsiParser(tv, nil)
 
 	// 1. Malformed Base64 (should not panic or crash)
@@ -451,6 +469,7 @@ func TestAnsiParser_OSC52_Malformed(t *testing.T) {
 
 func TestAnsiParser_UnrecognizedCSI(t *testing.T) {
 	tv := NewTerminalView(80, 24)
+	defer tv.Close()
 	p := NewAnsiParser(tv, nil)
 
 	// CSI ? 999 z is unrecognized.
@@ -463,6 +482,7 @@ func TestAnsiParser_UnrecognizedCSI(t *testing.T) {
 }
 func TestAnsiParser_APC_Reset(t *testing.T) {
 	tv := NewTerminalView(80, 24)
+	defer tv.Close()
 	p := NewAnsiParser(tv, nil)
 	p.CurParam.WriteString("old_garbage")
 	p.Process([]byte("\x1b_")) // Enter StateAPC
@@ -472,6 +492,7 @@ func TestAnsiParser_APC_Reset(t *testing.T) {
 }
 func TestAnsiParser_DECRQM(t *testing.T) {
 	tv := NewTerminalView(80, 24)
+	defer tv.Close()
 	pty := &mockPty{}
 	p := NewAnsiParser(tv, pty)
 
@@ -566,6 +587,7 @@ func TestAnsiParser_DECRQM(t *testing.T) {
 }
 func TestAnsiParser_TechnicalCommandFilter(t *testing.T) {
 	tv := NewTerminalView(80, 24)
+	defer tv.Close()
 	p := NewAnsiParser(tv, nil)
 
 	tv.BracketedPasteMode = true // Изменим стейт, чтобы убедиться, что trailingANSI корректно отработает
@@ -592,6 +614,7 @@ func TestAnsiParser_TechnicalCommandFilter(t *testing.T) {
 func TestAnsiParser_WindowsAbsoluteJumpRobustness(t *testing.T) {
 	// Типичный "грязный" чанк от ConPTY: очистка экрана + прыжок в середину + текст
 	tv := NewTerminalView(80, 24)
+	defer tv.Close()
 	p := NewAnsiParser(tv, nil)
 
 	// \x1b[2J (Clear) \x1b[10;5H (Jump to row 10, col 5)
@@ -611,6 +634,7 @@ func TestAnsiParser_WindowsExcision_CrossPlatform(t *testing.T) {
 	// Этот тест проверяет логику вырезания технических команд Windows,
 	// даже если тест запущен на Linux/macOS.
 	tv := NewTerminalView(80, 24)
+	defer tv.Close()
 	p := NewAnsiParser(tv, nil)
 
 	tests := []struct {

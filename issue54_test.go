@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -66,7 +67,10 @@ Loop:
 
 	// 5. Verify results
 	history := pf.cmdLine.Edit.History
-	expected := "./" + scriptName
+	expected := scriptName
+	if runtime.GOOS != "windows" {
+		expected = "./" + expected
+	}
 	if history[0] != expected {
 		t.Errorf("History item format error. Got: %q, want: %q", history[0], expected)
 	}
