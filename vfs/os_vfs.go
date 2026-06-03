@@ -33,7 +33,7 @@ func (v *OSVFS) IsAtRoot() bool {
 		// Standardize to backslash for comparison on Windows
 		p = strings.ReplaceAll(p, "/", "\\")
 		vol = strings.ReplaceAll(vol, "/", "\\")
-		return p == vol+"\\" || p == vol || p == "\\"
+		return p == vol || p == vol+"." || p == vol+"\\" || p == "\\"
 	}
 	return v.currentPath == "/"
 }

@@ -49,7 +49,7 @@ func TestOSVFS_WindowsRootDetection(t *testing.T) {
 	for _, tt := range tests {
 		v := &OSVFS{currentPath: tt.path}
 		if got := v.IsAtRoot(); got != tt.want {
-			t.Errorf("IsAtRoot(%q) = %v, want %v", tt.path, got, tt.want)
+			t.Errorf("IsAtRoot(%q) = %v, want %v  vol: %v  path: %v", tt.path, got, tt.want, filepath.VolumeName(tt.path), filepath.Clean(tt.path))
 		}
 	}
 }
