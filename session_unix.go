@@ -326,7 +326,7 @@ func runServer(sockPath string) {
 		vtui.FrameManager.Redraw()
 
 		vtui.DebugLog("SERVER: PRE-RUN: Stdin FD: %d, Stdout FD: %d", os.Stdin.Fd(), os.Stdout.Fd())
-		reader := vtinput.NewReader(os.Stdin)
+		reader := vtinput.NewReader(os.Stdin, false)
 
 		vtui.DebugLog("SERVER: Entering fm.Run()...")
 		vtui.FrameManager.Run(reader)
@@ -452,7 +452,7 @@ func runSessionPicker(sessions []SessionInfo) *SessionInfo {
 	btnCancel.OnClick = func() { dlg.SetExitCode(-1) }
 
 	vtui.FrameManager.Push(dlg)
-	reader := vtinput.NewReader(os.Stdin)
+	reader := vtinput.NewReader(os.Stdin, false)
 	vtui.FrameManager.Run(reader)
 	reader.Close()
 
