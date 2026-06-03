@@ -18,6 +18,7 @@ func init() {
 
 func TestTerminalView_SaveRestoreCursor(t *testing.T) {
 	tv := NewTerminalView(80, 24)
+	defer tv.Close()
 
 	// Set a specific cursor position
 	tv.SetCursor(42, 12)
@@ -39,6 +40,7 @@ func TestTerminalView_SaveRestoreCursor(t *testing.T) {
 }
 func TestTerminalView_HandleFar2lAPC(t *testing.T) {
 	tv := NewTerminalView(80, 24)
+	defer tv.Close()
 	pty := &mockPty{}
 	tv.pty = pty
 
@@ -66,6 +68,7 @@ func TestTerminalView_HandleFar2lAPC(t *testing.T) {
 }
 func TestTerminalView_HandleFar2lAPC_Garbage(t *testing.T) {
 	tv := NewTerminalView(80, 24)
+	defer tv.Close()
 	pty := &mockPty{}
 	tv.pty = pty
 
@@ -78,6 +81,7 @@ func TestTerminalView_HandleFar2lAPC_Garbage(t *testing.T) {
 
 func TestTerminalView_ProcessFar2lInteract_Clipboard(t *testing.T) {
 	tv := NewTerminalView(80, 24)
+	defer tv.Close()
 	pty := &mockPty{}
 	tv.pty = pty
 
@@ -142,6 +146,7 @@ func (m *mockAuth) Authorize(id string) int {
 
 func TestTerminalView_ProcessFar2lInteract_AuthCaching(t *testing.T) {
 	tv := NewTerminalView(80, 24)
+	defer tv.Close()
 	pty := &mockPty{}
 	tv.pty = pty
 
@@ -175,6 +180,7 @@ func (m *mockLocalAuth) Authorize(id string) int { return -1 }
 
 func TestTerminalView_ProcessFar2lInteract_LocalAuth(t *testing.T) {
 	tv := NewTerminalView(80, 24)
+	defer tv.Close()
 	pty := &mockPty{}
 	tv.pty = pty
 
@@ -223,6 +229,7 @@ func TestTerminalView_ProcessFar2lInteract_LocalAuth(t *testing.T) {
 func TestTerminalView_ProcessFar2lInteract_Notification(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	tv := NewTerminalView(80, 24)
+	defer tv.Close()
 
 	stk := vtinput.Far2lStack{}
 	stk.PushString("Alert Body")
@@ -256,6 +263,7 @@ Loop:
 
 func TestTerminalView_ProcessFar2lInteract_FKeys(t *testing.T) {
 	tv := NewTerminalView(80, 24)
+	defer tv.Close()
 	pty := &mockPty{}
 	tv.pty = pty
 
@@ -279,6 +287,7 @@ func TestTerminalView_ProcessFar2lInteract_FKeys(t *testing.T) {
 func TestTerminalView_HistoryAndReflow(t *testing.T) {
 	// Создаем терминал шириной 10
 	tv := NewTerminalView(10, 5)
+	defer tv.Close()
 
 	// Пишем длинную строку без пробелов (Hard Wrap)
 	text := "1234567890ABCDE" // 15 символов
@@ -321,6 +330,7 @@ func TestTerminalView_HistoryAndReflow(t *testing.T) {
 
 func TestTerminalView_StylesPreservation(t *testing.T) {
 	tv := NewTerminalView(80, 5)
+	defer tv.Close()
 
 	red := vtui.SetIndexFore(0, 1)
 	blue := vtui.SetIndexFore(0, 4)
@@ -358,6 +368,7 @@ func TestTerminalView_StylesPreservation(t *testing.T) {
 }
 func TestTerminalView_ScrollModes(t *testing.T) {
 	tv := NewTerminalView(10, 5)
+	defer tv.Close()
 
 	// Setup: fill with 0..4
 	for i := 0; i < 5; i++ {
@@ -379,6 +390,7 @@ func TestTerminalView_ScrollModes(t *testing.T) {
 }
 func TestTerminalView_WideCharAlignment(t *testing.T) {
 	tv := NewTerminalView(10, 2)
+	defer tv.Close()
 	tv.SetCursor(0, 0)
 
 	// '世' is a wide character (2 columns)
@@ -403,6 +415,7 @@ func TestTerminalView_WideCharAlignment(t *testing.T) {
 func TestTerminalView_AutoWrap(t *testing.T) {
 	width := 10
 	tv := NewTerminalView(width, 5)
+	defer tv.Close()
 	tv.SetCursor(0, 0)
 
 	// Write 10 characters (fill line)
@@ -432,6 +445,7 @@ func TestTerminalView_VTEMirror_PromptOverwrite(t *testing.T) {
 	// При перерисовке промпта (например, после ресайза ConPTY)
 	// данные просто перезаписываются в активной сетке, избегая дублирования в истории.
 	tv := NewTerminalView(80, 24)
+	defer tv.Close()
 	tv.UseAltScreen = false
 
 	// 1. Shell prints a prompt "$ "
@@ -455,6 +469,7 @@ func TestTerminalView_VTEMirror_PromptOverwrite(t *testing.T) {
 func TestTerminalView_AutoWrap_NoHistoryLoss(t *testing.T) {
 	// Verifies that auto-wrapping operates correctly within VTE Mirror limits.
 	tv := NewTerminalView(10, 5)
+	defer tv.Close()
 	tv.UseAltScreen = false
 
 	// Write 10 chars to fill the first line
@@ -476,6 +491,7 @@ func TestTerminalView_AutoWrap_NoHistoryLoss(t *testing.T) {
 }
 func TestTerminalView_BottomAlignmentAndExtrusionGuard(t *testing.T) {
 	tv := NewTerminalView(80, 24)
+	defer tv.Close()
 
 	// 1. Убеждаемся, что инициализация происходит снизу (прилипание к низу)
 	if tv.CursorY != 23 {
@@ -498,6 +514,7 @@ func TestTerminalView_BottomAlignmentAndExtrusionGuard(t *testing.T) {
 
 func TestTerminalView_MutedStateAndOSC133(t *testing.T) {
 	tv := NewTerminalView(80, 24)
+	defer tv.Close()
 
 	// 1. Оболочка печатает первичный промпт (терминал не замьючен)
 	for _, r := range "prompt> " {
@@ -548,6 +565,7 @@ func TestTerminalView_MutedStateAndOSC133(t *testing.T) {
 
 func TestTerminalView_Resize_VerticalPreservation(t *testing.T) {
 	tv := NewTerminalView(80, 5) // Маленький терминал
+	defer tv.Close()
 
 	// Заполняем все 5 строк текстом
 	for i := 0; i < 5; i++ {
@@ -580,6 +598,7 @@ func TestTerminalView_Resize_VerticalPreservation(t *testing.T) {
 
 func TestTerminalView_Resize_HorizontalPreservation(t *testing.T) {
 	tv := NewTerminalView(10, 5)
+	defer tv.Close()
 	tv.SetCursor(0, 0)
 
 	// Пишем строку, которая при ресайзе выйдет за пределы
@@ -609,6 +628,7 @@ func TestTerminalView_Resize_HorizontalPreservation(t *testing.T) {
 
 func TestTerminalView_PrintCleanCommandBehavior(t *testing.T) {
 	tv := NewTerminalView(80, 24) // Курсор изначально на Y=23
+	defer tv.Close()
 
 	// Первая команда
 	tv.PrintCleanCommand("ls -la")
@@ -635,6 +655,7 @@ func TestTerminalView_PrintCleanCommandBehavior(t *testing.T) {
 
 func TestTerminalView_CompleteLogStitching(t *testing.T) {
 	tv := NewTerminalView(10, 5)
+	defer tv.Close()
 
 	// Пишем более 2000 строк для срабатывания экструзии (Extrusion) из GridHistory в PieceTable
 	for i := 0; i < 2010; i++ {
@@ -659,6 +680,7 @@ func TestTerminalView_CompleteLogStitching(t *testing.T) {
 
 func TestTerminalView_EraseDisplay_EmptyScreenGuard(t *testing.T) {
 	tv := NewTerminalView(80, 24) // Пустой экран сразу после старта
+	defer tv.Close()
 
 	// Симулируем bash clear (часто приходит при старте сессии)
 	tv.EraseDisplay(2, 0)
@@ -674,6 +696,7 @@ func TestTerminalView_WindowsConPTY_VisualGravity(t *testing.T) {
 	// но shell упрямо рисует в самом верху (строки 0 и 1).
 	height := 24
 	tv := NewTerminalView(80, height)
+	defer tv.Close()
 	tv.SetFocus(true)
 	tv.SetVisible(true)
 
@@ -722,6 +745,7 @@ func TestTerminalView_WindowsConPTY_LogIntegrity(t *testing.T) {
 	// Проверяем, что абсолютные прыжки курсора ConPTY не создают
 	// "дырок" или дублей в текстовом логе GetAllLogBytes()
 	tv := NewTerminalView(80, 10)
+	defer tv.Close()
 
 	// Пишем в строку 5
 	tv.SetCursor(0, 5)
@@ -749,6 +773,7 @@ func TestTerminalView_WindowsConPTY_ResizePreservation(t *testing.T) {
 	// Тест на "эффект гармошки": сжимаем по вертикали, вытесняя ConPTY-данные
 	// в историю, и расширяем обратно.
 	tv := NewTerminalView(80, 10)
+	defer tv.Close()
 
 	// Рисуем текст в строке 0 (верх)
 	tv.SetCursor(0, 0)
@@ -776,6 +801,7 @@ func TestTerminalView_WindowsConPTY_ResizePreservation(t *testing.T) {
 func TestAnsiParser_WindowsSmartPrompt(t *testing.T) {
 	// Проверяем, как парсер реагирует на новую переменную PROMPT=$E]133;D$E\$P$G
 	tv := NewTerminalView(80, 24)
+	defer tv.Close()
 	p := NewAnsiParser(tv, nil)
 
 	tv.SetMuted(false)
@@ -800,6 +826,7 @@ func TestTerminalView_WindowsConPTY_NoDoubleEcho(t *testing.T) {
 	// Проверка того, что мы не печатаем команду дважды в Windows.
 	// f4 НЕ должен вызывать PrintCleanCommand на Windows.
 	tv := NewTerminalView(80, 24)
+	defer tv.Close()
 
 	// Эмулируем нативный эхо-ответ от ConPTY
 	// Пользователь набрал 'dir', ConPTY вернул 'dir\r\n'
@@ -819,6 +846,7 @@ func TestTerminalView_WindowsConPTY_NoDoubleEcho(t *testing.T) {
 
 func TestTerminalView_EraseDisplay_LogSync(t *testing.T) {
 	tv := NewTerminalView(80, 24)
+	defer tv.Close()
 	tv.UseAltScreen = false
 
 	// 1. Write some content

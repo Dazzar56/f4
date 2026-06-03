@@ -52,6 +52,7 @@ func TestEditor_StatefulHighlighting(t *testing.T) {
 	content := "line1\nline2\nline3"
 	pt := piecetable.New([]byte(content))
 	ev := NewEditorView(pt, nil, "test.txt")
+	defer ev.Close()
 	ev.SetPosition(0, 0, 80, 10)
 
 	mh := &mockStatefulHighlighter{}
@@ -87,6 +88,7 @@ func TestEditor_HighlightingInvalidation(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pt := piecetable.New([]byte("line1\nline2\nline3"))
 	ev := NewEditorView(pt, nil, "test.txt")
+	defer ev.Close()
 	ev.SetPosition(0, 0, 80, 10)
 
 	mh := &mockStatefulHighlighter{}
@@ -149,6 +151,7 @@ func waitPtString(t *testing.T, pt *piecetable.PieceTable) string {
 func TestEditorView_TypingAndBackspace(t *testing.T) {
 	pt := piecetable.New([]byte("Hello"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.SetPosition(0, 0, 79, 24) // Устанавливаем стандартный размер 80x25
 	ev.CursorPos = 5             // End of "Hello"
 
@@ -174,6 +177,7 @@ func TestEditorView_TypingAndBackspace(t *testing.T) {
 func TestEditorView_LineNavigation(t *testing.T) {
 	pt := piecetable.New([]byte("Line1\nLine2"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.SetPosition(0, 0, 79, 24)
 	ev.CursorLine = 0
 	ev.CursorPos = 5 // End of "Line1"
@@ -194,6 +198,7 @@ func TestEditorView_LineNavigation(t *testing.T) {
 func TestEditorView_EnterAndBackspaceMerging(t *testing.T) {
 	pt := piecetable.New([]byte("ABC"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.SetPosition(0, 0, 79, 24)
 	ev.CursorPos = 1 // Between A and B
 
@@ -223,6 +228,7 @@ func TestEditorView_StickyColumn(t *testing.T) {
 	// LongLine (8)
 	pt := piecetable.New([]byte("LongLine\nShort\nLongLine"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.SetPosition(0, 0, 79, 24)
 	ev.WordWrap = false // Для этого теста отключаем перенос, чтобы имитировать классику
 
@@ -260,8 +266,12 @@ func TestEditorView_SaveFile(t *testing.T) {
 	pt := piecetable.New([]byte("Original"))
 	v := vfs.NewOSVFS(t.TempDir())
 	ev := NewEditorView(pt, v, tmpFile)
+	defer ev.Close()
 	// Add mock file object to editor so SaveToFile logic triggers cleanly
-	f, _ := v.Open(context.Background(), tmpFile)
+	f, err := v.Open(context.Background(), tmpFile)
+	if err != nil {
+		t.Fatalf("Failed to open file: %v", err)
+	}
 	ev.file = f
 
 	// 3. Simulate typing text " + Edit" at the end
@@ -300,6 +310,7 @@ func TestEditorView_SaveFile(t *testing.T) {
 func TestEditorView_Selection(t *testing.T) {
 	pt := piecetable.New([]byte("Select Me"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.SetPosition(0, 0, 79, 24)
 	ev.CursorLine = 0
 	ev.CursorPos = 0
@@ -352,6 +363,7 @@ func TestEditorView_DeleteSelectionMultiline(t *testing.T) {
 	// Three-line text
 	pt := piecetable.New([]byte("Line1\nLine2\nLine3"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.SetPosition(0, 0, 79, 24)
 
 	// 1. Select the end of the first line, all of the second, and the start of the third
@@ -395,6 +407,7 @@ func TestEditorView_WordWrapNavigation(t *testing.T) {
 	text := "0123456789ABCDEFGHIJklmno"
 	pt := piecetable.New([]byte(text))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.WordWrap = true
 	// Set width to 11 so that width minus scrollbar (11-1) is exactly 10.
 	ev.SetPosition(0, 0, 10, 6)
@@ -429,6 +442,7 @@ func TestEditorView_UTF8Editing(t *testing.T) {
 	// "Привет" - Russian letters occupy 2 bytes each
 	pt := piecetable.New([]byte("Привет"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.SetPosition(0, 0, 79, 24)
 	ev.CursorPos = 4 // After "Пр" (4 bytes)
 
@@ -453,6 +467,7 @@ func TestEditorView_WideCharWrap(t *testing.T) {
 	// Ширина 2.
 	pt := piecetable.New([]byte("A世B"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.WordWrap = true
 	ev.engine.SetWidth(2)
 
@@ -466,6 +481,7 @@ func TestEditorView_WideCharWrap(t *testing.T) {
 func TestEditorView_SelectionWrapping(t *testing.T) {
 	pt := piecetable.New([]byte("1234567890"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.WordWrap = true
 	ev.SetPosition(0, 0, 4, 3) // Width 5, Text height 3
 
@@ -486,6 +502,7 @@ func TestEditorView_WideCharNavigation(t *testing.T) {
 	// "A世B" -> 世 occupies 2 columns.
 	pt := piecetable.New([]byte("A世B"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.SetPosition(0, 0, 79, 24)
 	ev.WordWrap = false
 	ev.CursorPos = 0 // On 'A'
@@ -507,6 +524,7 @@ func TestEditorView_UTF8Selection(t *testing.T) {
 	// "Да" - 2 runes, 4 bytes
 	pt := piecetable.New([]byte("Да"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.SetPosition(0, 0, 79, 24)
 	ev.CursorPos = 0
 
@@ -529,6 +547,7 @@ func TestEditorView_UTF8Selection(t *testing.T) {
 func TestEditorView_HomeEnd(t *testing.T) {
 	pt := piecetable.New([]byte("Hello World"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.SetPosition(0, 0, 79, 24)
 
 	// 1. End test
@@ -548,6 +567,7 @@ func TestEditorView_WideCharBackspace(t *testing.T) {
 	// "A世" -> 'A' (1), '世' (3 bytes)
 	pt := piecetable.New([]byte("A世"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.SetPosition(0, 0, 79, 24)
 	ev.CursorPos = 4 // At the very end
 
@@ -565,6 +585,7 @@ func TestEditorView_WideCharBackspace(t *testing.T) {
 func TestEditorView_BracketedPaste(t *testing.T) {
 	pt := piecetable.New([]byte("Start-"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.SetPosition(0, 0, 79, 24)
 	ev.CursorLine = 0
 	ev.CursorPos = 6
@@ -604,6 +625,7 @@ func TestEditorView_BracketedPaste(t *testing.T) {
 func TestEditorView_ExtremeBounds(t *testing.T) {
 	pt := piecetable.New([]byte("A"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.SetPosition(0, 0, 79, 24)
 
 	// 1. Backspace at file start should not break anything
@@ -626,6 +648,7 @@ func TestEditorView_EmptyLinesWrap(t *testing.T) {
 	// File of three empty lines (breaks only)
 	pt := piecetable.New([]byte("\n\n"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.WordWrap = true
 	ev.SetPosition(0, 0, 10, 11)
 
@@ -654,6 +677,7 @@ func TestEditorView_WordWrapScrolling(t *testing.T) {
 	text := "0123456789ABCDEFGHIJklmnopqrstuvwxyz0123456789"
 	pt := piecetable.New([]byte(text))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.WordWrap = true
 	ev.SetPosition(0, 0, 9, 2) // Высота 3, высота текста 2
 	ev.engine.SetWidth(10)
@@ -686,6 +710,7 @@ func TestEditorView_WordWrapInfiniteLoop(t *testing.T) {
 	// Text with wide character
 	pt := piecetable.New([]byte("A世B"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.WordWrap = true
 
 	// Extremely narrow window (width 1)
@@ -705,6 +730,7 @@ func TestEditorView_WordWrapInfiniteLoop(t *testing.T) {
 func TestEditorView_F3_ToggleWordWrap(t *testing.T) {
 	pt := piecetable.New([]byte("some text"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.WordWrap = true
 
 	// Press F3 (Wait, make sure your code uses VK_F3 now)
@@ -723,6 +749,7 @@ func TestEditorView_F3_ToggleWordWrap(t *testing.T) {
 func TestEditorView_Labels(t *testing.T) {
 	pt := piecetable.New([]byte(""))
 	ev := NewEditorView(pt, nil, "test.txt")
+	defer ev.Close()
 	ks := ev.GetKeyLabels()
 
 	if ks == nil {
@@ -739,6 +766,7 @@ func TestEditorView_Labels(t *testing.T) {
 func TestEditorView_DefaultsAndToggles(t *testing.T) {
 	pt := piecetable.New([]byte("test content"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 
 	// 1. Check defaults
 	if ev.WordWrap {
@@ -765,6 +793,7 @@ func TestEditorView_WhitespaceRendering(t *testing.T) {
 	SetDefaultF4Palette()
 	pt := piecetable.New([]byte("a b\tc")) // space and tab
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.ShowWhitespaces = true
 	cells := ev.fillCells(nil, []byte("a b\tc"), 0, 0, 0, false, 0, 0, nil, 0, false, -1, 0)
 
@@ -791,6 +820,7 @@ func TestEditorView_WideCharDelete(t *testing.T) {
 	// "A世" -> 'A' (1), '世' (3 bytes)
 	pt := piecetable.New([]byte("A世"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.SetPosition(0, 0, 79, 24)
 	ev.CursorPos = 1 // Before '世'
 
@@ -813,6 +843,7 @@ func TestEditorView_PageNavigation(t *testing.T) {
 	}
 	pt := piecetable.New(buf)
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.SetPosition(0, 0, 79, 5) // Text Viewport height 5
 	ev.CursorLine = 0
 	ev.CursorPos = 0
@@ -856,6 +887,7 @@ func TestEditorView_LongLinePerformance(t *testing.T) {
 	longLine := strings.Repeat("a", 100*1024)
 	pt := piecetable.New([]byte(longLine))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.SetPosition(0, 0, 79, 24) // 80x25 viewport
 
 	// Set cursor in the middle of the line
@@ -892,6 +924,7 @@ func TestEditorView_LongLinePerformance(t *testing.T) {
 func TestEditorView_WordNavigation(t *testing.T) {
 	pt := piecetable.New([]byte("hello world  test"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.CursorPos = 0
 
 	// 1. Ctrl + Right -> should jump to start of "world" (index 6)
@@ -943,6 +976,7 @@ func TestEditorBar_Content(t *testing.T) {
 	SetDefaultF4Palette()
 	pt := piecetable.New([]byte("abc"))
 	ev := NewEditorView(pt, nil, "test.go")
+	defer ev.Close()
 	ev.SetPosition(0, 0, 40, 10)
 	ev.CursorLine = 5
 	ev.CursorPos = 12
@@ -971,6 +1005,7 @@ func TestEditorBar_Content(t *testing.T) {
 func TestEditorView_HandleClose(t *testing.T) {
 	pt := piecetable.New([]byte("test"))
 	ev := NewEditorView(pt, nil, "file.txt")
+	defer ev.Close()
 
 	if ev.IsDone() {
 		t.Fatal("Editor should not be done initially")
@@ -988,12 +1023,14 @@ func TestEditorView_GetTitle(t *testing.T) {
 
 	// With path
 	ev1 := NewEditorView(pt, nil, filepath.FromSlash("/var/log/syslog"))
+	defer ev1.Close()
 	if ev1.GetTitle() != "Edit: syslog" {
 		t.Errorf("GetTitle failed for valid path: %s", ev1.GetTitle())
 	}
 
 	// Without path
 	ev2 := NewEditorView(pt, nil, "")
+	defer ev2.Close()
 	if ev2.GetTitle() != "Editor" {
 		t.Errorf("GetTitle failed for empty path: %s", ev2.GetTitle())
 	}
@@ -1006,7 +1043,10 @@ func TestEditorView_AsyncIndexing(t *testing.T) {
 	os.WriteFile(tmp, []byte(content), 0644)
 
 	v := vfs.NewOSVFS(t.TempDir())
-	f, _ := v.Open(context.Background(), tmp)
+	f, err := v.Open(context.Background(), tmp)
+	if err != nil {
+		t.Fatalf("Failed to open file: %v", err)
+	}
 
 	// Open editor with AsyncBuffer
 	buf := NewAsyncBuffer(context.Background(), f)
@@ -1051,7 +1091,10 @@ func TestEditorView_Indexer_EditInterference(t *testing.T) {
 	os.WriteFile(tmp, []byte(sb.String()), 0644)
 
 	v := vfs.NewOSVFS(t.TempDir())
-	f, _ := v.Open(context.Background(), tmp)
+	f, err := v.Open(context.Background(), tmp)
+	if err != nil {
+		t.Fatalf("Failed to open file: %v", err)
+	}
 	buf := NewAsyncBuffer(context.Background(), f)
 	pt := piecetable.NewWithBuffer(buf)
 	ev := NewEditorView(pt, v, tmp)
@@ -1100,7 +1143,10 @@ func TestEditorView_StartIndexing_RestartSafety(t *testing.T) {
 	// Create a dummy file
 	tmp := t.TempDir() + "/restart.txt"
 	os.WriteFile(tmp, []byte("line1\nline2"), 0644)
-	f, _ := v.Open(context.Background(), tmp)
+	f, err := v.Open(context.Background(), tmp)
+	if err != nil {
+		t.Fatalf("Failed to open file: %v", err)
+	}
 	defer f.Close()
 
 	buf := NewAsyncBuffer(context.Background(), f)
@@ -1176,7 +1222,10 @@ func TestEditorView_Indexer_BatchingIntegrity(t *testing.T) {
 	os.WriteFile(tmpFile, []byte(content), 0644)
 
 	v := vfs.NewOSVFS(t.TempDir())
-	f, _ := v.Open(context.Background(), tmpFile)
+	f, err := v.Open(context.Background(), tmpFile)
+	if err != nil {
+		t.Fatalf("Failed to open file: %v", err)
+	}
 	buf := NewAsyncBuffer(context.Background(), f)
 	pt := piecetable.NewWithBuffer(buf)
 	ev := NewEditorView(pt, v, tmpFile)
@@ -1842,7 +1891,10 @@ func TestEditorView_SaveFailure_NoDataLoss(t *testing.T) {
 	pt := piecetable.New([]byte("Original"))
 	ev := NewEditorView(pt, failingVfs, tmpFile)
 	defer ev.Close()
-	f, _ := failingVfs.Open(context.Background(), tmpFile)
+	f, err := failingVfs.Open(context.Background(), tmpFile)
+	if err != nil {
+		t.Fatalf("Failed to open file: %v", err)
+	}
 	ev.file = f
 
 	// 1. Modify the file
@@ -1913,7 +1965,10 @@ func TestEditorView_Save_DiskFullSimulation(t *testing.T) {
 	pt := piecetable.New([]byte("Stable Content"))
 	ev := NewEditorView(pt, failingVfs, tmpFile)
 	defer ev.Close()
-	f, _ := failingVfs.Open(context.Background(), tmpFile)
+	f, err := failingVfs.Open(context.Background(), tmpFile)
+	if err != nil {
+		t.Fatalf("Failed to open file: %v", err)
+	}
 	ev.file = f
 
 	// 1. Modify (at the end of the text)
@@ -2063,7 +2118,10 @@ func TestEditorView_Save_IOErrorRecovery(t *testing.T) {
 	ev := NewEditorView(pt, failingVfs, path)
 	defer ev.Close()
 
-	f, _ := failingVfs.Open(context.Background(), path)
+	f, err := failingVfs.Open(context.Background(), path)
+	if err != nil {
+		t.Fatalf("Failed to open file: %v", err)
+	}
 	defer f.Close()
 	ev.file = f
 
@@ -2114,7 +2172,10 @@ func TestEditorView_Save_CreateFailure(t *testing.T) {
 	pt := piecetable.New([]byte("Original Content"))
 	ev := NewEditorView(pt, failingVfs, path)
 	defer ev.Close()
-	f, _ := failingVfs.Open(context.Background(), path)
+	f, err := failingVfs.Open(context.Background(), path)
+	if err != nil {
+		t.Fatalf("Failed to open file: %v", err)
+	}
 	ev.file = f
 
 	// 1. Modify the content
@@ -2164,7 +2225,10 @@ func TestEditorView_Save_CreateFailure_Recovery_DataPreservation(t *testing.T) {
 	baseVfs := vfs.NewOSVFS(tmpDir)
 	failingVfs := &mockFailingVFS{VFS: baseVfs, failCreate: true}
 
-	f, _ := failingVfs.Open(context.Background(), path)
+	f, err := failingVfs.Open(context.Background(), path)
+	if err != nil {
+		t.Fatalf("Failed to open file: %v", err)
+	}
 	buf := NewAsyncBuffer(context.Background(), f)
 	pt := piecetable.NewWithBuffer(buf)
 	ev := NewEditorView(pt, failingVfs, path)
@@ -2200,6 +2264,7 @@ func TestEditorView_ModificationStress(t *testing.T) {
 	content := "Line 1\nLine 2\nLine 3\nLine 4\nLine 5"
 	pt := piecetable.New([]byte(content))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.SetPosition(0, 0, 80, 24)
 	ev.WordWrap = true
 
@@ -2254,6 +2319,7 @@ func TestEditorView_CRLFPieceTable(t *testing.T) {
 	content := "Line1\r\nLine2\r\nLine3"
 	pt := piecetable.New([]byte(content))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.SetPosition(0, 0, 80, 24)
 
 	// 1. Check initial line count
@@ -2294,7 +2360,10 @@ func TestEditorView_FragmentationDataIntegrity(t *testing.T) {
 	os.WriteFile(path, initial, 0644)
 
 	v := vfs.NewOSVFS(tmpDir)
-	f, _ := v.Open(context.Background(), path)
+	f, err := v.Open(context.Background(), path)
+	if err != nil {
+		t.Fatalf("Failed to open file: %v", err)
+	}
 	defer f.Close()
 
 	buf := NewAsyncBuffer(context.Background(), f)
@@ -2390,7 +2459,10 @@ func TestEditorView_Save_NoTrailingNewline_Integrity(t *testing.T) {
 	ev := NewEditorView(pt, v, tmpFile)
 	defer ev.Close()
 
-	f, _ := v.Open(context.Background(), tmpFile)
+	f, err := v.Open(context.Background(), tmpFile)
+	if err != nil {
+		t.Fatalf("Failed to open file: %v", err)
+	}
 	defer f.Close()
 
 	ev.file = f
@@ -2436,7 +2508,10 @@ func TestEditorView_Save_RetryAfterFailure(t *testing.T) {
 	ev := NewEditorView(pt, failingVfs, path)
 	defer ev.Close()
 
-	f, _ := failingVfs.Open(context.Background(), path)
+	f, err := failingVfs.Open(context.Background(), path)
+	if err != nil {
+		t.Fatalf("Failed to open file: %v", err)
+	}
 	defer f.Close()
 
 	ev.file = f
@@ -2523,7 +2598,10 @@ func TestEditorView_Save_MetadataIntegrity(t *testing.T) {
 	pt := piecetable.New([]byte("Original"))
 	ev := NewEditorView(pt, mock, path)
 	defer ev.Close()
-	f, _ := mock.Open(context.Background(), path)
+	f, err := mock.Open(context.Background(), path)
+	if err != nil {
+		t.Fatalf("Failed to open file: %v", err)
+	}
 	defer f.Close()
 	ev.file = f
 
@@ -2565,7 +2643,10 @@ func TestEditorView_Save_Atomic_Cleanup(t *testing.T) {
 	ev := NewEditorView(pt, mock, path)
 	defer ev.Close()
 
-	f, _ := mock.Open(context.Background(), path)
+	f, err := mock.Open(context.Background(), path)
+	if err != nil {
+		t.Fatalf("Failed to open file: %v", err)
+	}
 	defer f.Close()
 
 	ev.file = f
@@ -2664,6 +2745,7 @@ func TestEditorView_BinaryRobustness(t *testing.T) {
 
 	t.Run("Empty file length", func(t *testing.T) {
 		ev := NewEditorView(piecetable.New(nil), nil, "")
+		defer ev.Close()
 		if l := ev.getLineLength(0); l != 0 {
 			t.Errorf("Empty file: expected length 0, got %d", l)
 		}
@@ -2671,6 +2753,7 @@ func TestEditorView_BinaryRobustness(t *testing.T) {
 
 	t.Run("Single byte file", func(t *testing.T) {
 		ev := NewEditorView(piecetable.New([]byte("A")), nil, "")
+		defer ev.Close()
 		if l := ev.getLineLength(0); l != 1 {
 			t.Errorf("Single byte: expected length 1, got %d", l)
 		}
@@ -2683,6 +2766,7 @@ func TestEditorView_BinaryRobustness(t *testing.T) {
 			data[i] = 0x01
 		}
 		ev := NewEditorView(piecetable.New(data), nil, "")
+		defer ev.Close()
 
 		// This used to load the whole 1MB, now it should be instant
 		start := time.Now()
@@ -2697,6 +2781,7 @@ func TestEditorView_BinaryRobustness(t *testing.T) {
 
 	t.Run("Cursor clamping", func(t *testing.T) {
 		ev := NewEditorView(piecetable.New([]byte("abc")), nil, "")
+		defer ev.Close()
 		ev.SetPosition(0, 0, 10, 10)
 
 		// Manually set invalid state
@@ -2722,6 +2807,7 @@ func TestEditorView_Search_Reverse_StartAtZero(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pt := piecetable.New([]byte("match"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.CursorPos = 0 // Start at beginning
 
 	// Reverse search from 0 should exit instantly, not hang
@@ -2740,6 +2826,7 @@ func TestEditorView_DeleteBrokenUTF8(t *testing.T) {
 	// Manually insert "half" of a Russian 'П' (0xD0 0x9F)
 	pt := piecetable.New([]byte{0xD0, ' ', 'A'})
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.CursorPos = 1 // Cursor right after the broken byte 0xD0
 
 	// Backspace should not crash and should fall back to deleting 1 byte
@@ -2762,6 +2849,7 @@ func TestEditorView_Highlighter_OOM_Protection(t *testing.T) {
 	longLine := make([]byte, 100*1024)
 	pt := piecetable.New(longLine)
 	ev := NewEditorView(pt, nil, "test.bin")
+	defer ev.Close()
 	ev.SetPosition(0, 0, 80, 10)
 	ev.highlighter = &mockCrashingHighlighter{t: t}
 
@@ -2778,6 +2866,7 @@ func TestEditorView_WordNavigation_OOM_Protection(t *testing.T) {
 	longLine := strings.Repeat("a", 100*1024)
 	pt := piecetable.New([]byte(longLine))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.CursorPos = 50 * 1024
 
 	// Without the fix, this would hang. With the fix, it's instant.
@@ -2803,6 +2892,7 @@ func TestEditorView_WordNavigation_OOM_Protection(t *testing.T) {
 func TestEditorView_DeleteSelection_Panic_Protection(t *testing.T) {
 	pt := piecetable.New([]byte("hello"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 
 	// Manually set an invalid selection range
 	ev.selActive = true
@@ -2822,6 +2912,7 @@ func TestEditorView_UndoRedo(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pt := piecetable.New([]byte("Initial"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.SetPosition(0, 0, 80, 24)
 	ev.CursorPos = 7 // End of "Initial"
 
@@ -2905,6 +2996,7 @@ func TestEditorView_StateRestoration(t *testing.T) {
 	content := "Line 1\nLine 2\nLine 3\nLine 4\nLine 5"
 	pt := piecetable.New([]byte(content))
 	ev := NewEditorView(pt, nil, "test.txt")
+	defer ev.Close()
 	ev.SetPosition(0, 0, 80, 24)
 
 	// Имитируем загрузку сохраненного состояния (как это делает actionOpenEditor)
@@ -2939,6 +3031,7 @@ func TestEditorView_StateRestoration_Interference(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pt := piecetable.New([]byte("line1\nline2\nline3"))
 	ev := NewEditorView(pt, nil, "test.txt")
+	defer ev.Close()
 
 	ev.targetLine = 2 // Хотим прыгнуть на 3-ю строку
 	ev.targetPos = 0
@@ -2963,6 +3056,7 @@ func TestEditorView_StateRestoration_BoundaryClamping(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pt := piecetable.New([]byte("short file")) // всего 1 строка
 	ev := NewEditorView(pt, nil, "test.txt")
+	defer ev.Close()
 
 	ev.targetLine = 50 // Сохраненная позиция в старом длинном файле
 	ev.targetPos = 100
@@ -2985,6 +3079,7 @@ func TestEditorView_StateRestoration_UnicodeColumn(t *testing.T) {
 	// "世" (2 колонки)
 	pt := piecetable.New([]byte("世ABC"))
 	ev := NewEditorView(pt, nil, "test.txt")
+	defer ev.Close()
 	ev.SetPosition(0, 0, 80, 24)
 
 	// Восстанавливаем позицию после "世" (индекс байта 3)
@@ -3008,6 +3103,7 @@ func TestEditorView_Undo_Advanced(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pt := piecetable.New([]byte("abcde"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.SetPosition(0, 0, 80, 24)
 	ev.CursorPos = 2 // On 'c'
 
@@ -3053,6 +3149,7 @@ func TestEditorView_Undo_CleanState(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pt := piecetable.New([]byte("Original"))
 	ev := NewEditorView(pt, nil, "test.txt")
+	defer ev.Close()
 
 	if ev.modified {
 		t.Error("Should NOT be modified initially")
@@ -3081,6 +3178,7 @@ func TestEditorView_WordJumps_FarSpec(t *testing.T) {
 	// line one (8 bytes) + \n + line two (8 bytes)
 	pt := piecetable.New([]byte("line one\nline two"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.li.Rebuild(pt) // Важно: пересобираем индексы
 	ev.SetPosition(0, 0, 80, 24)
 	ev.CursorLine = 0
@@ -3116,6 +3214,7 @@ func TestEditorView_WordJumps_VisualWrap(t *testing.T) {
 	// Текст без пробелов. Ширина 5. Перенос на 5-м символе.
 	pt := piecetable.New([]byte("0123456789"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.li.Rebuild(pt)
 	ev.WordWrap = true
 	// Контентная ширина 5
@@ -3133,6 +3232,7 @@ func TestEditorView_WordJumps_VisualWrap(t *testing.T) {
 func TestEditorView_WordJumps_EmptyLines(t *testing.T) {
 	pt := piecetable.New([]byte("top\n\n\nend"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.li.Rebuild(pt)
 	ev.CursorLine = 0
 	ev.CursorPos = 3
@@ -3158,6 +3258,7 @@ func TestEditorView_WordSelection_Multiline(t *testing.T) {
 	// "line1\nline2"
 	pt := piecetable.New([]byte("line1\nline2"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.li.Rebuild(pt)
 	ev.CursorPos = 0
 
@@ -3195,6 +3296,7 @@ func TestEditorView_WordSelection_Multiline_Left(t *testing.T) {
 	//  01234 5 67890
 	pt := piecetable.New([]byte("line1\nline2"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.li.Rebuild(pt)
 	ev.CursorLine = 1
 	ev.CursorPos = 5 // end of "line2", absolute offset 11
@@ -3248,6 +3350,7 @@ func TestEditorView_WordJumps_DifferentDividers(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pt := piecetable.New([]byte("...///"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.li.Rebuild(pt)
 	ev.CursorPos = 0
 
@@ -3264,6 +3367,7 @@ func TestEditorView_Indexer_SessionFencing(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pt := piecetable.New([]byte("line1\nline2"))
 	ev := NewEditorView(pt, nil, "fencing.txt")
+	defer ev.Close()
 
 	// 1. Запоминаем текущую сессию
 	initialSession := ev.editSession
@@ -3306,6 +3410,7 @@ func TestEditorView_CursorScrollbarBoundary(t *testing.T) {
 	text := strings.Repeat("a", 100)
 	pt := piecetable.New([]byte(text))
 	ev := NewEditorView(pt, nil, "test.txt")
+	defer ev.Close()
 
 	// Устанавливаем ширину 20 (X=0..19). Скроллбар будет на X=19.
 	ev.SetPosition(0, 0, 19, 10)
@@ -3333,6 +3438,7 @@ func TestEditorView_SearchPersistence(t *testing.T) {
 
 	// 1. Выполняем поиск
 	ev1 := NewEditorView(piecetable.New([]byte("data")), nil, "f1.txt")
+	defer ev1.Close()
 	ev1.Search("pattern", true, true, false)
 
 	// Дожидаемся завершения асинхронного поиска
@@ -3372,6 +3478,7 @@ func TestEditorView_Autocomplete_Logic(t *testing.T) {
 	content := "apple application approach\nbanana\napple"
 	pt := piecetable.New([]byte(content))
 	ev := NewEditorView(pt, nil, "test.txt")
+	defer ev.Close()
 	ev.SetPosition(0, 0, 80, 24)
 
 	if !ev.acEnabled {
@@ -3431,6 +3538,7 @@ func TestEditorView_Autocomplete_Cancellation(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pt := piecetable.New([]byte("helicopter "))
 	ev := NewEditorView(pt, nil, "test.txt")
+	defer ev.Close()
 	ev.CursorPos = 11 // Start at the end to avoid "middle of the word" check
 	ev.acEnabled = true
 
@@ -3461,6 +3569,7 @@ func TestEditorView_Autocomplete_Cancellation(t *testing.T) {
 func TestEditor_InsertToggle(t *testing.T) {
 	pt := piecetable.New([]byte("data"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 
 	if ev.overtype {
 		t.Error("Editor should start in Insert mode")
@@ -3481,6 +3590,7 @@ func TestEditor_InsertToggle(t *testing.T) {
 func TestEditor_OverwriteMode(t *testing.T) {
 	pt := piecetable.New([]byte("abc"))
 	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
 	ev.overtype = true
 	ev.CursorPos = 1 // Стоим на 'b'
 
