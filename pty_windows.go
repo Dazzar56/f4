@@ -5,10 +5,10 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"sync"
 	"time"
 	"unsafe"
-	"os/exec"
 
 	"github.com/unxed/vtui"
 	"golang.org/x/sys/windows"
