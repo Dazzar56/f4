@@ -42,7 +42,6 @@ func ManageSessions() {
 
 	reader := vtinput.NewReader(os.Stdin, false)
 	vtui.FrameManager.Run(reader)
-	reader.Close()
 }
 
 func runServer(sockPath string) {}

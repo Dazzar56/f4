@@ -332,9 +332,6 @@ func runServer(sockPath string) {
 		vtui.FrameManager.Run(reader)
 		vtui.DebugLog("SERVER: fm.Run() EXITED.")
 
-		vtui.DebugLog("SERVER: Cleaning up session...")
-		reader.Close()
-
 		if restore != nil {
 			// Ensure all pending escape sequences are sent before restoring terminal
 			os.Stdout.Sync()
@@ -454,7 +451,6 @@ func runSessionPicker(sessions []SessionInfo) *SessionInfo {
 	vtui.FrameManager.Push(dlg)
 	reader := vtinput.NewReader(os.Stdin, false)
 	vtui.FrameManager.Run(reader)
-	reader.Close()
 
 	vtui.FrameManager.Shutdown()
 
