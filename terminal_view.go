@@ -869,81 +869,220 @@ func (tv *TerminalView) Resize(w, h int) {
 	newAltLines := makeBuf()
 	newWrap := make([]bool, h)
 
-	// 1. Сохраняем основной экран (Primary Screen).
-	yOffset := 0
-	yShift := 0
+	// 1. ДИНАМИЧЕСКИЙ REFLOW основного экрана (Primary Screen)
+	var allLines [][]vtui.CharInfo
+	var allWraps []bool
 
-	if !tv.UseAltScreen {
-		if h < tv.Height {
-			lostRows := tv.Height - h
-			for y := 0; y < lostRows; y++ {
-				if tv.rowHasText(y) {
-					tv.pushRowToGridHistory(y)
-				}
-			}
-			yOffset = lostRows
-		} else if h > tv.Height {
-			yShift = h - tv.Height
-			pullCount := yShift
-			if pullCount > len(tv.GridHistory) {
-				pullCount = len(tv.GridHistory)
-			}
+	// Preallocate heavily to prevent GC pressure during resize loops
+	allLines = make([][]vtui.CharInfo, 0, len(tv.GridHistory)+tv.Height)
+	allWraps = make([]bool, 0, len(tv.GridHistoryWrap)+tv.Height)
 
-			startIdx := len(tv.GridHistory) - pullCount
-			dstStart := yShift - pullCount
+	allLines = append(allLines, tv.GridHistory...)
+	allWraps = append(allWraps, tv.GridHistoryWrap...)
 
-			// Возвращаем строки из GridHistory обратно на экран
-			for i := 0; i < pullCount; i++ {
-				dstY := dstStart + i
-				srcLine := tv.GridHistory[startIdx+i]
-				copyLen := w
-				if len(srcLine) > copyLen {
-					copyLen = len(srcLine) // Horizontal Preservation
-				}
-				newLines[dstY] = make([]vtui.CharInfo, copyLen)
-				copy(newLines[dstY], srcLine)
-				for j := len(srcLine); j < copyLen; j++ {
-					newLines[dstY][j] = vtui.CharInfo{Char: ' ', Attributes: DefaultTermAttr}
-				}
-				newWrap[dstY] = tv.GridHistoryWrap[startIdx+i]
-			}
-			tv.GridHistory = tv.GridHistory[:startIdx]
-			tv.GridHistoryWrap = tv.GridHistoryWrap[:startIdx]
-
-			// Заполняем пустоты сверху
-			for dstY := 0; dstY < dstStart; dstY++ {
-				newLines[dstY] = make([]vtui.CharInfo, w)
-				for j := 0; j < w; j++ {
-					newLines[dstY][j] = vtui.CharInfo{Char: ' ', Attributes: DefaultTermAttr}
-				}
-			}
-		}
+	// Для не-AltScreen мы используем текущий CursorY, для AltScreen используем сохраненный
+	activeY := tv.CursorY
+	activeX := tv.CursorX
+	if tv.UseAltScreen {
+		activeY = tv.savedY
+		activeX = tv.savedX
 	}
 
-	// Копируем видимые строки в новую сетку, сохраняя данные, вышедшие за пределы ширины окна
-	for dstY := yShift; dstY < h; dstY++ {
-		srcY := dstY - yShift + yOffset
-		if srcY >= 0 && srcY < tv.Height {
-			srcLine := tv.Lines[srcY]
-			copyLen := w
-			if len(srcLine) > copyLen {
-				copyLen = len(srcLine) // Horizontal Preservation
-			}
-			newLines[dstY] = make([]vtui.CharInfo, copyLen)
-			copy(newLines[dstY], srcLine)
-			for j := len(srcLine); j < copyLen; j++ {
-				newLines[dstY][j] = vtui.CharInfo{Char: ' ', Attributes: DefaultTermAttr}
-			}
-			newWrap[dstY] = tv.WrapFlags[srcY]
-		} else {
-			newLines[dstY] = make([]vtui.CharInfo, w)
-			for j := 0; j < w; j++ {
-				newLines[dstY][j] = vtui.CharInfo{Char: ' ', Attributes: DefaultTermAttr}
-			}
+	lastActive := activeY
+	for y := tv.Height - 1; y >= 0; y-- {
+		if tv.rowHasText(y) && y > lastActive {
+			lastActive = y
 		}
 	}
+	for y := 0; y <= lastActive; y++ {
+		allLines = append(allLines, tv.Lines[y])
+		allWraps = append(allWraps, tv.WrapFlags[y])
+	}
 
-	// 2. Сохраняем содержимое AltScreen (для TUI приложений типа nano/mc).
+	cursorAbsY := len(tv.GridHistory) + activeY
+
+	var logicalLines [][]vtui.CharInfo
+	var currentLogical []vtui.CharInfo
+
+	targetLogLine := -1
+	targetCharIdx := -1
+
+	logicalLines = make([][]vtui.CharInfo, 0, len(allLines))
+	currentLogical = make([]vtui.CharInfo, 0, tv.Width*2)
+
+	for i, line := range allLines {
+		take := len(line)
+		if !allWraps[i] {
+			take = len(line) - 1
+			for take >= 0 && line[take].Char == ' ' && line[take].Attributes == DefaultTermAttr {
+				take--
+			}
+			take++
+		}
+
+		if i == cursorAbsY && activeX >= take {
+			take = activeX + 1
+		}
+
+		if i == cursorAbsY {
+			targetLogLine = len(logicalLines)
+			targetCharIdx = len(currentLogical) + activeX
+		}
+
+		currentLogical = append(currentLogical, line[:take]...)
+
+		if !allWraps[i] {
+			logicalLines = append(logicalLines, currentLogical)
+			currentLogical = make([]vtui.CharInfo, 0, tv.Width*2)
+		}
+	}
+	if len(currentLogical) > 0 {
+		logicalLines = append(logicalLines, currentLogical)
+	}
+
+	var newVisualLines [][]vtui.CharInfo
+	var newVisualWraps []bool
+	newCursorY := 0
+	newCursorX := 0
+
+	newVisualLines = make([][]vtui.CharInfo, 0, len(logicalLines))
+	newVisualWraps = make([]bool, 0, len(logicalLines))
+
+	allocEmptyLine := func(width int) []vtui.CharInfo {
+		line := make([]vtui.CharInfo, width)
+		for j := range line {
+			line[j] = vtui.CharInfo{Char: ' ', Attributes: DefaultTermAttr}
+		}
+		return line
+	}
+
+	for logIdx, logLine := range logicalLines {
+		if len(logLine) == 0 {
+			if logIdx == targetLogLine {
+				newCursorY = len(newVisualLines)
+				newCursorX = 0
+			}
+			newVisualLines = append(newVisualLines, allocEmptyLine(w))
+			newVisualWraps = append(newVisualWraps, false)
+			continue
+		}
+
+		col := 0
+		var currentVis []vtui.CharInfo
+		for charIdx, c := range logLine {
+			if logIdx == targetLogLine && charIdx == targetCharIdx {
+				newCursorY = len(newVisualLines)
+				newCursorX = col
+			}
+
+			if c.Char == vtui.WideCharFiller {
+				if currentVis != nil && col < w {
+					currentVis[col] = c
+				}
+				col++
+				continue
+			}
+
+			wRune := 1
+			if c.Char >= 0x7F {
+				wRune = runewidth.RuneWidth(rune(c.Char))
+				if wRune <= 0 {
+					wRune = 1
+				}
+			}
+
+			if col+wRune > w {
+				if currentVis == nil {
+					currentVis = allocEmptyLine(w)
+				}
+				newVisualLines = append(newVisualLines, currentVis)
+				newVisualWraps = append(newVisualWraps, true)
+				currentVis = nil
+				col = 0
+
+				if logIdx == targetLogLine && charIdx == targetCharIdx {
+					newCursorY = len(newVisualLines)
+					newCursorX = col
+				}
+			}
+
+			if currentVis == nil {
+				currentVis = allocEmptyLine(w)
+			}
+			if col < w {
+				currentVis[col] = c
+			}
+			if wRune > 1 && col+1 < w {
+				currentVis[col+1] = vtui.CharInfo{Char: vtui.WideCharFiller, Attributes: c.Attributes}
+			}
+			col += wRune
+		}
+
+		if logIdx == targetLogLine && targetCharIdx == len(logLine) {
+			if col >= w {
+				if currentVis == nil {
+					currentVis = allocEmptyLine(w)
+				}
+				newVisualLines = append(newVisualLines, currentVis)
+				newVisualWraps = append(newVisualWraps, true)
+				currentVis = nil
+				col = 0
+			}
+			newCursorY = len(newVisualLines)
+			newCursorX = col
+		}
+
+		if currentVis == nil {
+			currentVis = allocEmptyLine(w)
+		}
+		newVisualLines = append(newVisualLines, currentVis)
+		newVisualWraps = append(newVisualWraps, false)
+	}
+
+	totalNew := len(newVisualLines)
+	tv.GridHistory = nil
+	tv.GridHistoryWrap = nil
+
+	if totalNew > h {
+		excess := totalNew - h
+		for i := 0; i < excess; i++ {
+			tv.GridHistory = append(tv.GridHistory, newVisualLines[i])
+			tv.GridHistoryWrap = append(tv.GridHistoryWrap, newVisualWraps[i])
+		}
+		for i := 0; i < h; i++ {
+			srcIdx := excess + i
+			copy(newLines[i], newVisualLines[srcIdx])
+			newWrap[i] = newVisualWraps[srcIdx]
+		}
+		newCursorY -= excess
+	} else {
+		startY := h - totalNew
+		for i := 0; i < totalNew; i++ {
+			copy(newLines[startY+i], newVisualLines[i])
+			newWrap[startY+i] = newVisualWraps[i]
+		}
+		newCursorY += startY
+	}
+
+	if newCursorY < 0 {
+		newCursorY = 0
+	}
+	if newCursorY >= h {
+		newCursorY = h - 1
+	}
+	if newCursorX >= w {
+		newCursorX = w - 1
+	}
+
+	if tv.UseAltScreen {
+		tv.savedX = newCursorX
+		tv.savedY = newCursorY
+	} else {
+		tv.CursorX = newCursorX
+		tv.CursorY = newCursorY
+	}
+
+	// 2. Сохраняем содержимое AltScreen (без рефлоу, так как TUI сами перерисовывают экран).
 	minH := h
 	if tv.Height < minH {
 		minH = tv.Height
@@ -956,32 +1095,23 @@ func (tv *TerminalView) Resize(w, h int) {
 		copy(newAltLines[y][:copyLen], tv.AltLines[y][:copyLen])
 	}
 
+	// Если мы в AltScreen, курсор активного экрана нужно ограничить по границам нового окна
+	if tv.UseAltScreen {
+		if tv.CursorX >= w {
+			tv.CursorX = w - 1
+		}
+		if tv.CursorY >= h {
+			tv.CursorY = h - 1
+		}
+	}
+
 	tv.Lines = newLines
 	tv.AltLines = newAltLines
 	tv.WrapFlags = newWrap
-
 	tv.Width = w
 	tv.Height = h
 	tv.ScrollTop = 0
 	tv.ScrollBottom = h - 1
-
-	if !tv.UseAltScreen {
-		tv.CursorY = tv.CursorY - yOffset + yShift
-		if tv.CursorY < 0 {
-			tv.CursorY = 0
-		}
-		if tv.CursorY >= h {
-			tv.CursorY = h - 1
-		}
-	} else {
-		if tv.CursorY >= h {
-			tv.CursorY = h - 1
-		}
-	}
-
-	if tv.CursorX >= w {
-		tv.CursorX = w - 1
-	}
 	tv.lastCharWasCR = (tv.CursorX == 0)
 }
 func (tv *TerminalView) IsModal() bool         { return false }

@@ -33,24 +33,24 @@ Before finalizing the `f4` architecture, we analyzed the source code of the most
 *   **How it works:** Parses ANSI codes from the PTY and translates them back into native Windows-like Console API calls (`WINPORT(WriteConsole)`). Scrollback is achieved by intercepting the API's scroll events via a callback.
 *   **Why it wasn't chosen:** `f4` aims to render entirely via ANSI escape sequences (`vtui`) to support modern terminals (Kitty, iTerm2). Emulating WinAPI in Go is non-idiomatic and creates unnecessary friction.
 
-## 4. The f4 Decision: VTE Mirror (Grid Extrusion)
+## 4. The f4 Decision: VTE Mirror with Dynamic Reflow
 
-*Rule of thumb: Deviating from battle-tested mainstream solutions (like Alacritty's Active Reflow) requires concrete arguments.*
+*Rule of thumb: Deviating from battle-tested mainstream solutions requires concrete arguments.*
 
-**We explicitly chose NOT to use the Active Reflow architecture (storing history as a `Grid` of `Cell` objects).** Instead, `f4` uses a custom architecture called **VTE Mirror**.
+`f4` uses a custom architecture called **VTE Mirror with Dynamic Reflow**.
 
-### How VTE Mirror Works (Updated with GridHistory):
+### How VTE Mirror Works:
 1.  **The Active Grid (Viewport):** The terminal maintains a 2D array of cells (`[][]vtui.CharInfo`).
-2.  **Horizontal Preservation:** Unlike standard terminals, `f4` allows rows in the Active Grid to temporarily exceed the viewport width. If the terminal is resized horizontally (e.g., shrunk), the off-screen characters are preserved in memory. When the window is enlarged again, the characters reappear. Commands like `EraseLine` respect this preserved length to prevent ghost artifacts.
-3.  **Soft Wrap Detection:** If text hits the right edge of the viewport, the `WrapFlags[y]` boolean is set to `true` for that row.
-4.  **GridHistory (The Staging Area):** When a line is pushed off the top of the Active Grid (due to scrolling or vertical shrink), it is not immediately serialized. Instead, it enters a `GridHistory` buffer (up to 2000 lines). This allows instant, lossless restoration of the screen when the terminal window is enlarged vertically.
-5.  **Extrusion (Linearization):** When the `GridHistory` overflows, the oldest lines are stripped of trailing spaces and permanently serialized into `f4`'s internal `PieceTable` byte stream.
-6.  **Reconstruction:** To view the log (`Ctrl+O`), `f4` simply concatenates: `PieceTable` + `GridHistory` + `ActiveGrid`.
+2.  **Soft Wrap Detection:** If text hits the right edge of the viewport, the `WrapFlags[y]` boolean is set to `true` for that row.
+3.  **Dynamic Reflow on Resize:** When the window is resized horizontally, `f4` gathers all logical lines from the active grid and `GridHistory` (using the `WrapFlags` to concatenate soft-wrapped lines). It then re-wraps these logical lines using the new width. This guarantees mathematically perfect text reflow without losing data or relying on massive arrays of structs.
+4.  **AltScreen Isolation (Preventing TUI Desync):** TUI applications (like `nano`, `htop`, or `far2l`) run in the Alternate Screen Buffer. `f4` intentionally **skips** reflowing the `AltScreen`. TUI applications handle `SIGWINCH` natively and redraw their own interfaces. Reflowing the `AltScreen` would destroy their 2D layouts.
+5.  **GridHistory (The Staging Area):** When a line is pushed off the top of the Active Grid (due to scrolling, vertical shrink, or horizontal reflow), it enters a `GridHistory` buffer (up to 2000 lines).
+6.  **Extrusion (Linearization):** When the `GridHistory` overflows, the oldest lines are stripped of trailing spaces and permanently serialized into `f4`'s internal `PieceTable` byte stream.
+7.  **Reconstruction:** To view the log (`Ctrl+O`), `f4` concatenates: `PieceTable` + `GridHistory` + `ActiveGrid`.
 
 ### Concrete Arguments for VTE Mirror:
 1.  **Domain-Specific Optimization:** `f4` is a file manager, not just a terminal emulator. It already possesses a highly optimized, zero-allocation `PieceTable` engine used for its Editor and Viewer. Extruding the terminal log directly into a `PieceTable` allows the internal Viewer (`F3`) to open a 10-gigabyte terminal log instantly without allocating memory for millions of `Cell` structs.
-2.  **No Active Reflow (Preventing Shell Desync):** Unlike Alacritty or Windows Terminal, `f4` intentionally avoids reflowing (re-wrapping) the live 2D grid upon window resize. Shells (Bash, PowerShell) track the cursor natively and redraw their prompt upon receiving a `WINCH` (Window Change) signal. If the emulator reflows the grid under the shell's feet, cursor coordinates desync, causing severe visual corruption (e.g., typing overwriting previous lines). Instead, `f4` uses **Horizontal Preservation** for the live grid (hiding off-screen characters without deleting them) and relies on the `PieceTable`'s `WrapEngine` to perform mathematically perfect reflow when the user views the scrollback history (e.g., via `Ctrl+O`).
-3.  **ConPTY Isolation:** ConPTY frequently forces full screen redraws. The VTE Mirror restricts ConPTY's chaos to a fixed-size sandbox (the viewport). The permanent log is immune to cursor-jumping artifacts because lines are only saved when they are mathematically guaranteed to be finished (pushed off the top).
+2.  **ConPTY Isolation:** ConPTY frequently forces full screen redraws. The VTE Mirror restricts ConPTY's chaos to a fixed-size sandbox (the viewport). The permanent log is immune to cursor-jumping artifacts because lines are only saved to the disk-backed `PieceTable` when they are mathematically guaranteed to be finished (pushed off the top of the 2000-line history buffer).
 3.  **Golang GC Efficiency:** Go's Garbage Collector handles large contiguous byte slices (`PieceTable` chunks) orders of magnitude better than deep hierarchies of small, pointer-heavy objects (`[]Cell` for infinite scrollback).
 
 ## 5. Critical Implementation Rules (Lessons Learned)

@@ -596,7 +596,7 @@ func TestTerminalView_Resize_VerticalPreservation(t *testing.T) {
 	}
 }
 
-func TestTerminalView_Resize_HorizontalPreservation(t *testing.T) {
+func TestTerminalView_Resize_DynamicReflow(t *testing.T) {
 	tv := NewTerminalView(10, 5)
 	defer tv.Close()
 	tv.SetCursor(0, 0)
@@ -610,19 +610,19 @@ func TestTerminalView_Resize_HorizontalPreservation(t *testing.T) {
 	// Сужаем окно до 5 колонок
 	tv.Resize(5, 5)
 
-	// VTE Mirror реализует Horizontal Preservation: визуальный массив сузился логически,
-	// но физически данные в слайсе сохраняются `copyLen = max(w, len(srcLine))`
-	if len(tv.Lines[0]) < 8 {
-		t.Errorf("Horizontal preservation failed: line length shrank to %d", len(tv.Lines[0]))
+	// Ожидаем рефлоу: строка разбилась на "12345" и "678  "
+	// Последняя заполненная строка будет на индексе 4 (так как высота 5, и строки выравниваются по низу - Visual Gravity)
+	if tv.Lines[3][0].Char != '1' {
+		t.Errorf("Reflow failed: expected '1' at row 3, got '%c'", tv.Lines[3][0].Char)
 	}
-	if tv.Lines[0][7].Char != '8' {
-		t.Errorf("Hidden data lost: expected '8' at index 7, got '%c'", tv.Lines[0][7].Char)
+	if tv.Lines[4][0].Char != '6' {
+		t.Errorf("Reflow failed: expected '6' at row 4, got '%c'", tv.Lines[4][0].Char)
 	}
 
 	// Расширяем обратно до 10 колонок
 	tv.Resize(10, 5)
-	if tv.Lines[0][7].Char != '8' {
-		t.Errorf("Restored data lost: expected '8' at index 7, got '%c'", tv.Lines[0][7].Char)
+	if tv.Lines[4][7].Char != '8' {
+		t.Errorf("Restored data lost: expected '8' at row 4 index 7, got '%c'", tv.Lines[4][7].Char)
 	}
 }
 
@@ -775,16 +775,28 @@ func TestTerminalView_WindowsConPTY_ResizePreservation(t *testing.T) {
 	tv := NewTerminalView(80, 10)
 	defer tv.Close()
 
-	// Рисуем текст в строке 0 (верх)
-	tv.SetCursor(0, 0)
-	for _, r := range "C:\\>" {
-		tv.PutChar(r, 0)
+	// Рисуем 6 строк текста, чтобы при сжатии до 5 строк верхняя гарантированно ушла в историю
+	for i := 0; i < 6; i++ {
+		tv.SetCursor(0, i)
+		text := "data"
+		if i == 0 {
+			text = "C:\\>"
+		}
+		for _, r := range text {
+			tv.PutChar(r, 0)
+		}
 	}
 
 	// Сжимаем до 5 строк. Верхняя строка должна быть вытеснена в GridHistory.
 	tv.Resize(80, 5)
 	if len(tv.GridHistory) == 0 {
 		t.Fatal("Resize shoud have pushed bottom row to GridHistory")
+	}
+
+	// Проверяем, что в истории осталась наша строка
+	// (мы берем ее из GridHistory, так как она еще не экструдирована в PieceTable)
+	if tv.GridHistory[0][0].Char != 'C' {
+		t.Errorf("Expected 'C' at history index 0, got %c", tv.GridHistory[0][0].Char)
 	}
 
 	// Расширяем обратно до 10. VTE Mirror должен вернуть строку из истории на экран.
@@ -795,6 +807,189 @@ func TestTerminalView_WindowsConPTY_ResizePreservation(t *testing.T) {
 	// восстанавливаемого пространства (на индекс 4). Главное — данные не потеряны.
 	if tv.Lines[4][0].Char != 'C' {
 		t.Errorf("Data lost after accordion resize. Expected 'C' at row 4, got '%c'", tv.Lines[4][0].Char)
+	}
+}
+
+func TestTerminalView_Reflow_AltScreen(t *testing.T) {
+	tv := NewTerminalView(80, 10)
+	defer tv.Close()
+
+	// Fill main screen
+	tv.SetCursor(0, 0)
+	for _, r := range "Main Screen Long Text" {
+		tv.PutChar(r, 0)
+	}
+
+	// Switch to AltScreen
+	tv.SetAltScreen(true)
+
+	// Fill AltScreen
+	tv.SetCursor(0, 0)
+	for _, r := range "Alt Screen Text" {
+		tv.PutChar(r, 0)
+	}
+
+	// Resize while in AltScreen
+	tv.Resize(10, 10) // Shrink width to 10
+
+	// 1. Verify AltScreen is NOT reflowed (just clipped/copied)
+	// First line of AltScreen should still be "Alt Screen" (clipped to 10 chars -> "Alt Screen")
+	gotAlt := ""
+	for i := 0; i < 10; i++ {
+		gotAlt += string(rune(tv.AltLines[0][i].Char))
+	}
+	if gotAlt != "Alt Screen" {
+		t.Errorf("AltScreen should not be reflowed, got %q", gotAlt)
+	}
+
+	// 2. Verify Main Screen WAS reflowed in the background
+	// "Main Screen Long Text" should be wrapped to width 10:
+	// "Main Scree"
+	// "n Long Tex"
+	// "t"
+	tv.SetAltScreen(false) // Swap back
+	// Since we aligned to bottom, the lines will be at the bottom of the 10-line view:
+	// index 7: "Main Scree", index 8: "n Long Tex", index 9: "t"
+	gotMain0 := ""
+	for i := 0; i < 10; i++ {
+		gotMain0 += string(rune(tv.Lines[7][i].Char))
+	}
+	gotMain0 = strings.TrimSpace(gotMain0)
+	if gotMain0 != "Main Scree" {
+		t.Errorf("Main screen in background should be reflowed, got %q", gotMain0)
+	}
+}
+
+func TestTerminalView_Reflow_CJK_And_Cursor(t *testing.T) {
+	tv := NewTerminalView(10, 5)
+	defer tv.Close()
+
+	// "A世B" -> 'A'(1), '世'(2), 'B'(1). Total width 4.
+	// Write and place cursor immediately after '世' (which is at index 3, since '世' occupies cols 1 and 2, so cursor is at col 3).
+	tv.SetCursor(0, 0)
+	tv.PutChar('A', 0)
+	tv.PutChar('世', 0)
+	// Cursor is at col 3
+	if tv.CursorX != 3 {
+		t.Fatalf("Expected cursor at 3, got %d", tv.CursorX)
+	}
+
+	// Let's add trailing spaces and place the cursor in the middle of them
+	tv.PutChar(' ', 0)
+	tv.PutChar(' ', 0)
+	tv.SetCursor(4, 0) // Cursor at index 4 (on the second space)
+
+	// Resize width to 2.
+	// Logical string: "A", "世", " ", " "
+	// "A" (width 1, wraps)
+	// "世" (width 2, wraps)
+	// "  " (two spaces can fit on a line of width 2!)
+	// Let's check where the cursor lands. Since cursor was at index 4 (the second character of the trailing spaces, i.e., index 1 of spaces),
+	// it should land on Visual line 4, column 1.
+	tv.Resize(2, 5)
+
+	// totalNew = 3. Align to bottom of 5-line view: startY = 2.
+	// Row 2: "A"
+	// Row 3: "世"
+	// Row 4: "  " (Cursor should be here, on column 1)
+	if tv.CursorY != 4 || tv.CursorX != 1 {
+		t.Errorf("Cursor misplaced after reflow. Expected (1, 4), got (%d, %d)", tv.CursorX, tv.CursorY)
+	}
+}
+
+func TestTerminalView_Reflow_EdgeCases(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	defer tv.Close()
+
+	// Fill screen with text
+	for i := 0; i < 10; i++ {
+		tv.SetCursor(0, i)
+		for _, r := range "data" {
+			tv.PutChar(r, 0)
+		}
+	}
+
+	// Resize to 1x1
+	tv.Resize(1, 1)
+
+	if tv.Width != 1 || tv.Height != 1 {
+		t.Errorf("Expected 1x1, got %dx%d", tv.Width, tv.Height)
+	}
+	if tv.CursorX != 0 || tv.CursorY != 0 {
+		t.Errorf("Cursor should be clamped to (0,0), got (%d,%d)", tv.CursorX, tv.CursorY)
+	}
+
+	// Verify no panic and that it has some content
+	if tv.Lines[0][0].Char == 0 {
+		t.Error("Character cell uninitialized after extreme shrink")
+	}
+}
+
+func TestTerminalView_Reflow_SoftWrapReconstruction(t *testing.T) {
+	tv := NewTerminalView(10, 5)
+	defer tv.Close()
+	tv.SetCursor(0, 4) // Bottom-aligned
+	for _, r := range "abcdefghijklmno" {
+		tv.PutChar(r, 0)
+	}
+
+	// На ширине 10 строка "abcdefghijklmno" разбивается на:
+	// Row 3: "abcdefghij" (вызывает автоматический мягкий перенос, WrapFlags[3] = true)
+	// Row 4: "klmno"
+	if !tv.WrapFlags[3] {
+		t.Fatal("Expected row 3 to have soft-wrap flag set")
+	}
+	if tv.WrapFlags[4] {
+		t.Fatal("Expected row 4 to not have soft-wrap flag set")
+	}
+
+	// Расширяем терминал до 20 колонок
+	tv.Resize(20, 5)
+
+	// Строка должна собраться обратно в одну: "abcdefghijklmno" на нижней строке (Row 4)
+	for y := 0; y < 4; y++ {
+		if tv.rowHasText(y) {
+			t.Errorf("Row %d should be empty after expansion reflow", y)
+		}
+	}
+
+	got := ""
+	for x := 0; x < 20; x++ {
+		if tv.Lines[4][x].Char != ' ' {
+			got += string(rune(tv.Lines[4][x].Char))
+		}
+	}
+	if got != "abcdefghijklmno" {
+		t.Errorf("Reconstruction failed: expected 'abcdefghijklmno', got %q", got)
+	}
+	if tv.WrapFlags[4] {
+		t.Error("WrapFlag should be false after reconstruction")
+	}
+}
+
+func TestTerminalView_Reflow_InfiniteLoopSafety(t *testing.T) {
+	tv := NewTerminalView(10, 5)
+	defer tv.Close()
+
+	// Write CJK char "世"
+	tv.SetCursor(0, 0)
+	tv.PutChar('世', 0)
+
+	// Extreme horizontal resize: shrink width to 1 column.
+	// Since "世" requires 2 columns, it cannot fit on any line.
+	// The algorithm must handle this gracefully without infinite loops or panics.
+	tv.Resize(1, 5)
+
+	if tv.Width != 1 {
+		t.Errorf("Expected width 1, got %d", tv.Width)
+	}
+
+	// Verify it still contains '世' on the screen.
+	// '世' (width 2) on a 1-column screen is wrapped.
+	// The trailing space under the cursor (which was at col 2) wraps onto the next line (row 4),
+	// pushing '世' up to row 3.
+	if tv.Lines[3][0].Char != '世' {
+		t.Errorf("Expected '世' to land on the active grid, got %c", tv.Lines[3][0].Char)
 	}
 }
 
