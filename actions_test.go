@@ -859,3 +859,77 @@ type mockRenameVFS struct {
 func (m *mockRenameVFS) Rename(ctx context.Context, old, new string) error {
 	return m.renameErr
 }
+
+type mockSlowVFS struct {
+	vfs.VFS
+	onOpen func()
+}
+
+func (m *mockSlowVFS) GetPath() string { return "/mock" }
+func (m *mockSlowVFS) IsAbs(p string) bool { return true }
+func (m *mockSlowVFS) Stat(ctx context.Context, p string) (vfs.VFSItem, error) {
+	return vfs.VFSItem{Name: "file.txt", IsDir: false, Size: 100}, nil
+}
+func (m *mockSlowVFS) Open(ctx context.Context, p string) (vfs.ReadAtCloser, error) {
+	if m.onOpen != nil {
+		m.onOpen()
+	}
+	tmp, _ := os.CreateTemp("", "f4mock-*")
+	return &vfs.TempFileWrapper{File: tmp, SizeVal: 0, TempPath: tmp.Name()}, nil
+}
+
+func TestActionOpenViewer_ProgressTask(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+
+	called := false
+	mv := &mockSlowVFS{
+		onOpen: func() {
+			called = true
+			t.Log("DIAG-TEST: mockSlowVFS.Open called!")
+		},
+	}
+
+	t.Log("DIAG-TEST: Calling actionOpenViewer...")
+	actionOpenViewer(pf, mv, "/mock/file.txt")
+
+	// Drain task queue to allow UI and async updates, detecting the dialog on the fly
+	timeout := time.After(1 * time.Second)
+	foundProgress := false
+	taskCount := 0
+LoopOpen:
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			taskCount++
+			//t.Logf("DIAG-TEST: Processing Task #%d...", taskCount)
+			task()
+			for _, scr := range vtui.FrameManager.Screens {
+				for _, f := range scr.Frames {
+					//t.Logf("DIAG-TEST: Active frame title during Task #%d: %q", taskCount, f.GetTitle())
+					if strings.Contains(f.GetTitle(), "Opening") {
+						foundProgress = true
+					}
+				}
+			}
+		case <-timeout:
+			t.Log("DIAG-TEST: Timeout reached.")
+			break LoopOpen
+		default:
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+
+	t.Logf("DIAG-TEST: Final results: called=%v, foundProgress=%v", called, foundProgress)
+
+	if !called {
+		t.Fatal("TEST FAILED: mockVFS.Open was not called!")
+	}
+	if !foundProgress {
+		t.Fatal("TEST FAILED: No progress dialog was shown when opening a slow/remote file!")
+	}
+
+	t.Log("SUCCESS: Progress dialog was correctly displayed during slow file load.")
+}

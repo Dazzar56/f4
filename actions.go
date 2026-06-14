@@ -366,47 +366,69 @@ func actionOpenEditor(pf *PanelsFrame, v vfs.VFS, path string) {
 	})
 }
 
-func actionOpenViewer(pf *PanelsFrame, v vfs.VFS, path string) {
-	vtui.RunAsync(func(ctx *vtui.TaskContext) {
-		if v != nil {
-			// Safety check: prevent opening directories for viewing
-			if stat, err := v.Stat(ctx.Context, path); err == nil && stat.IsDir {
-				ctx.RunOnUI(func() {
-					vtui.ShowMessage(" Error ", "Cannot view a directory.", []string{"&Ok"})
-				})
-				return
+func showViewer(pf *PanelsFrame, viewer *ViewerView, path string) {
+	if GlobalFileState != nil && path != "" {
+		if state := GlobalFileState.GetState(path); state != nil {
+			viewer.TopOffset = state.ViewerOffset
+			if viewer.TopOffset > viewer.backend.Size() {
+				viewer.TopOffset = viewer.backend.Size() - 1
 			}
+			if viewer.TopOffset < 0 {
+				viewer.TopOffset = 0
+			}
+			viewer.WrapMode = state.ViewerWrap
+			viewer.HexMode = state.ViewerHex
 		}
+	}
+	viewer.ResizeConsole(pf.lastW, pf.lastH)
+	vtui.FrameManager.AddScreen(viewer)
+}
 
-		viewer, err := NewViewerView(ctx.Context, v, path)
-		ctx.RunOnUI(func() {
-			if ctx.Err() != nil {
+func actionOpenViewer(pf *PanelsFrame, v vfs.VFS, path string) {
+	if _, isLocal := v.(*vfs.OSVFS); isLocal {
+		vtui.DebugLog("DIAG-OPEN: OSVFS detected (isLocal=true) path=%q", path)
+		vtui.RunAsync(func(ctx *vtui.TaskContext) {
+			if v != nil {
+				if stat, err := v.Stat(ctx.Context, path); err == nil && stat.IsDir {
+					ctx.RunOnUI(func() {
+						vtui.ShowMessage(" Error ", "Cannot view a directory.", []string{"&Ok"})
+					})
+					return
+				}
+			}
+
+			viewer, err := NewViewerView(ctx.Context, v, path)
+			ctx.RunOnUI(func() {
 				if err == nil {
-					viewer.Close()
+					showViewer(pf, viewer, path)
+				} else {
+					vtui.DebugLog("PANELS: Failed to open viewer for %s: %v", path, err)
+					vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to open file:\n%v", err), []string{"&Ok"})
 				}
-				return
-			}
-			if err != nil {
-				vtui.DebugLog("PANELS: Failed to open viewer for %s: %v", path, err)
-				vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to open file:\n%v", err), []string{"&Ok"})
-				return
-			}
-			if GlobalFileState != nil && path != "" {
-				if state := GlobalFileState.GetState(path); state != nil {
-					viewer.TopOffset = state.ViewerOffset
-					if viewer.TopOffset > viewer.backend.Size() {
-						viewer.TopOffset = viewer.backend.Size() - 1
-					}
-					if viewer.TopOffset < 0 {
-						viewer.TopOffset = 0
-					}
-					viewer.WrapMode = state.ViewerWrap
-					viewer.HexMode = state.ViewerHex
-				}
-			}
-			viewer.ResizeConsole(pf.lastW, pf.lastH)
-			vtui.FrameManager.AddScreen(viewer)
+			})
 		})
+		return
+	}
+
+	vtui.DebugLog("DIAG-OPEN: non-OSVFS detected (isLocal=false) path=%q, running ProgressTask", path)
+	var viewer *ViewerView
+	pf.RunProgressTask(" Opening... ", "Preparing to open file...", false, func(ctx context.Context, update func(msg string, percent int)) error {
+		vtui.DebugLog("DIAG-OPEN: ProgressTask worker starting...")
+		update("Opening file...", -1)
+		var err error
+		viewer, err = NewViewerView(ctx, v, path)
+		vtui.DebugLog("DIAG-OPEN: ProgressTask worker finished, err=%v", err)
+		return err
+	}, func(err error) {
+		vtui.DebugLog("DIAG-OPEN: ProgressTask onComplete starting, err=%v", err)
+		if err != nil {
+			if err != context.Canceled {
+				vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to open file:\n%v", err), []string{"&Ok"})
+			}
+			return
+		}
+		showViewer(pf, viewer, path)
+		vtui.DebugLog("DIAG-OPEN: ProgressTask onComplete finished")
 	})
 }
 
