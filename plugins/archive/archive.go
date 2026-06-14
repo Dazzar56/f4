@@ -77,7 +77,7 @@ func actionExtractArchive(app vfs.App) {
 
 	}, func(err error) {
 		if err != nil && err != context.Canceled {
-			app.Message(" Error ", fmt.Sprintf("Extraction failed:\n%v", err), []string{"&Ok"})
+			go app.Message(" Error ", fmt.Sprintf("Extraction failed:\n%v", err), []string{"&Ok"})
 		}
 		app.RefreshAll()
 	})
@@ -134,7 +134,7 @@ func actionAddArchive(app vfs.App) {
 			return a.Archive(ctx, fileMap)
 		}, func(err error) {
 			if err != nil && err != context.Canceled {
-				app.Message(" Error ", fmt.Sprintf("Archiving failed:\n%v", err), []string{"&Ok"})
+				go app.Message(" Error ", fmt.Sprintf("Archiving failed:\n%v", err), []string{"&Ok"})
 			}
 			app.RefreshAll()
 		})

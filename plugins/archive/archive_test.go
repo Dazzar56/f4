@@ -1,6 +1,8 @@
 package archive
 
 import (
+	"time"
+	"runtime"
 	"context"
 	"os"
 	"path/filepath"
@@ -10,6 +12,7 @@ import (
 	"github.com/mholt/archives"
 	"github.com/unxed/vtui"
 	"github.com/unxed/zip"
+	"github.com/unxed/zipper/archive"
 )
 
 // Тест теперь находится внутри пакета archive и может тестировать неэкспортированные функции.
@@ -98,5 +101,57 @@ func TestZipCompression_Deflate(t *testing.T) {
 	// zip.Deflate имеет значение 8, zip.Store (без сжатия) - 0.
 	if r.File[0].Method != zip.Deflate {
 		t.Errorf("Compression method mismatch. Got %d, want %d (Deflate)", r.File[0].Method, zip.Deflate)
+	}
+}
+
+func TestHangReproduction_RootChroot(t *testing.T) {
+	var testPath string
+	var chroot string
+	if runtime.GOOS == "windows" {
+		chroot = "C:\\"
+		testPath = "C:\\Windows"
+	} else {
+		chroot = "/"
+		testPath = "/etc"
+	}
+
+	fi, err := os.Lstat(testPath)
+	if err != nil {
+		t.Skipf("Skipping test because test path %q is not accessible: %v", testPath, err)
+	}
+
+	fileMap := map[string]os.FileInfo{
+		testPath: fi,
+	}
+
+	tempDir := t.TempDir()
+	archivePath := filepath.Join(tempDir, "repro_archive.zip")
+
+	t.Logf("Creating archiver with archivePath=%q, chroot=%q", archivePath, chroot)
+
+	done := make(chan struct{})
+	var archiverErr error
+
+	go func() {
+		defer close(done)
+		a, err := archive.NewArchiver(archivePath, chroot, archive.Options{Xattrs: true})
+		if err != nil {
+			archiverErr = err
+			return
+		}
+		defer a.Close()
+
+		archiverErr = a.Archive(context.Background(), fileMap)
+	}()
+
+	select {
+	case <-done:
+		if archiverErr != nil {
+			t.Logf("Archiving completed with error: %v", archiverErr)
+		} else {
+			t.Log("Archiving completed successfully without hanging.")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("TEST FAILED: Archiver hung! Reproduction of Issue #132 detected.")
 	}
 }
