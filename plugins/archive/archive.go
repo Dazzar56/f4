@@ -106,38 +106,47 @@ func actionAddArchive(app vfs.App) {
 		}
 		fullArcPath := activeVfs.Join(activeVfs.GetPath(), name)
 
-		app.RunProgressTask(" Archiving... ", "Gathering files...", false, func(ctx context.Context, update func(msg string, percent int)) error {
-			fileMap := make(map[string]os.FileInfo)
-			for i, n := range names {
-				if ctx.Err() != nil {
-					return ctx.Err()
-				}
-				update(fmt.Sprintf("Scanning: %s", n), (i*100)/len(names))
-
-				fullPath := activeVfs.Join(activeVfs.GetPath(), n)
-				if osvfs, ok := activeVfs.(*vfs.OSVFS); ok {
-					absPath, _ := osvfs.Abs(fullPath)
-					filepath.Walk(absPath, func(p string, fi os.FileInfo, e error) error {
-						if e == nil {
-							fileMap[p] = fi
-						}
-						return nil
-					})
+		go func() {
+			if _, err := activeVfs.Stat(context.Background(), fullArcPath); err == nil {
+				msg := "The target archive already exists.\nDo you want to overwrite it?"
+				if app.Message(" Warning ", msg, []string{"&Yes", "&No"}) != 0 {
+					return
 				}
 			}
 
-			a, err := archive.NewArchiver(fullArcPath, activeVfs.GetPath(), archive.Options{Xattrs: true})
-			if err != nil {
-				return err
-			}
-			defer a.Close()
-			return a.Archive(ctx, fileMap)
-		}, func(err error) {
-			if err != nil && err != context.Canceled {
-				go app.Message(" Error ", fmt.Sprintf("Archiving failed:\n%v", err), []string{"&Ok"})
-			}
-			app.RefreshAll()
-		})
+			app.RunProgressTask(" Archiving... ", "Gathering files...", false, func(ctx context.Context, update func(msg string, percent int)) error {
+				fileMap := make(map[string]os.FileInfo)
+				for i, n := range names {
+					if ctx.Err() != nil {
+						return ctx.Err()
+					}
+					update(fmt.Sprintf("Scanning: %s", n), (i*100)/len(names))
+
+					fullPath := activeVfs.Join(activeVfs.GetPath(), n)
+					if osvfs, ok := activeVfs.(*vfs.OSVFS); ok {
+						absPath, _ := osvfs.Abs(fullPath)
+						filepath.Walk(absPath, func(p string, fi os.FileInfo, e error) error {
+							if e == nil {
+								fileMap[p] = fi
+							}
+							return nil
+						})
+					}
+				}
+
+				a, err := archive.NewArchiver(fullArcPath, activeVfs.GetPath(), archive.Options{Xattrs: true})
+				if err != nil {
+					return err
+				}
+				defer a.Close()
+				return a.Archive(ctx, fileMap)
+			}, func(err error) {
+				if err != nil && err != context.Canceled {
+					go app.Message(" Error ", fmt.Sprintf("Archiving failed:\n%v", err), []string{"&Ok"})
+				}
+				app.RefreshAll()
+			})
+		}()
 	})
 }
 

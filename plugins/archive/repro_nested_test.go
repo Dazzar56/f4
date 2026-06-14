@@ -4,8 +4,8 @@ import (
 	"context"
 	"io"
 	"os"
-	"path/filepath"
 	"testing"
+	"path/filepath"
 
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/zip"
