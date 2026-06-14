@@ -3,9 +3,13 @@ package archive
 import (
 	"context"
 	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
+	"time"
 
 	"github.com/unxed/f4/vfs"
+	"github.com/unxed/zipper/archive"
 )
 
 type mockOverwriteApp struct {
@@ -29,7 +33,7 @@ func (m *mockOverwriteApp) RunProgressTask(title, startMsg string, forked bool, 
 func (m *mockOverwriteApp) Message(title, msg string, buttons []string) int {
 	m.messageCalled = true
 	m.t.Logf("mockApp.Message called: %q - %q", title, msg)
-	return 0 // Simulate user selecting the first option (e.g., "Yes" or "Overwrite")
+	return 0
 }
 func (m *mockOverwriteApp) InputBox(title, prompt, defaultText string, callback func(string)) {
 	m.t.Logf("mockApp.InputBox called with defaultText: %q", defaultText)
@@ -37,15 +41,65 @@ func (m *mockOverwriteApp) InputBox(title, prompt, defaultText string, callback 
 }
 func (m *mockOverwriteApp) Menu(title string, items []string, callback func(int)) {}
 
+func TestHangReproduction_RootChroot(t *testing.T) {
+	var testPath string
+	var chroot string
+	if runtime.GOOS == "windows" {
+		chroot = "C:\\"
+		testPath = "C:\\Windows"
+	} else {
+		chroot = "/"
+		testPath = "/etc"
+	}
+
+	fi, err := os.Lstat(testPath)
+	if err != nil {
+		t.Skipf("Skipping test because test path %q is not accessible: %v", testPath, err)
+	}
+
+	fileMap := map[string]os.FileInfo{
+		testPath: fi,
+	}
+
+	tempDir := t.TempDir()
+	archivePath := filepath.Join(tempDir, "repro_archive.zip")
+
+	t.Logf("Creating archiver with archivePath=%q, chroot=%q", archivePath, chroot)
+
+	done := make(chan struct{})
+	var archiverErr error
+
+	go func() {
+		defer close(done)
+		a, err := archive.NewArchiver(archivePath, chroot, archive.Options{Xattrs: true})
+		if err != nil {
+			archiverErr = err
+			return
+		}
+		defer a.Close()
+
+		archiverErr = a.Archive(context.Background(), fileMap)
+	}()
+
+	select {
+	case <-done:
+		if archiverErr != nil {
+			t.Logf("Archiving completed with error: %v", archiverErr)
+		} else {
+			t.Log("Archiving completed successfully without hanging.")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("TEST FAILED: Archiver hung! Reproduction of Issue #132 detected.")
+	}
+}
+
 func TestActionAddArchive_OverwriteWarning(t *testing.T) {
 	tmpDir := t.TempDir()
 	v := vfs.NewOSVFS(tmpDir)
 
-	// Create a dummy file to archive
 	dummyFile := v.Join(tmpDir, "file_to_archive.txt")
 	os.WriteFile(dummyFile, []byte("some content"), 0644)
 
-	// Pre-create the target archive so it already exists
 	archiveName := v.Base(tmpDir) + ".zip"
 	existingArchive := v.Join(tmpDir, archiveName)
 	os.WriteFile(existingArchive, []byte("existing zip content"), 0644)
@@ -60,7 +114,6 @@ func TestActionAddArchive_OverwriteWarning(t *testing.T) {
 	t.Log("Calling actionAddArchive...")
 	actionAddArchive(app)
 
-	// Wait for the background goroutine to reach RunProgressTask
 	<-app.done
 
 	if !app.messageCalled {

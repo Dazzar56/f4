@@ -4,8 +4,8 @@ import (
 	"context"
 	"io"
 	"os"
-	"testing"
 	"path/filepath"
+	"testing"
 
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/zip"
@@ -15,7 +15,6 @@ import (
 func TestArchiveVFS_NestedZip(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// 1. Create inner ZIP
 	innerZipPath := filepath.Join(tmpDir, "inner.zip")
 	innerF, err := os.Create(innerZipPath)
 	if err != nil {
@@ -30,7 +29,6 @@ func TestArchiveVFS_NestedZip(t *testing.T) {
 	innerZw.Close()
 	innerF.Close()
 
-	// 2. Create outer ZIP with ZSTD compression containing the inner ZIP
 	outerZipPath := filepath.Join(tmpDir, "outer.zip")
 	opts := archive.Options{
 		Method: "zstd",
@@ -51,14 +49,12 @@ func TestArchiveVFS_NestedZip(t *testing.T) {
 	}
 	a.Close()
 
-	// 3. Open outer ZIP
 	vOuter, err := NewArchiveVFS(&vfs.OSVFS{}, outerZipPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer vOuter.Close()
 
-	// 4. Open Solid.zip (nested inside outer.zip and compressed with ZSTD)
 	solidPath := vOuter.Join(outerZipPath, "Solid.zip")
 	t.Logf("Opening Solid.zip: %q", solidPath)
 	vSolid, err := NewArchiveVFS(vOuter, solidPath)
@@ -67,7 +63,6 @@ func TestArchiveVFS_NestedZip(t *testing.T) {
 	}
 	defer vSolid.Close()
 
-	// 5. Open inner.zip (nested inside Solid.zip)
 	nestedPath := vSolid.Join(solidPath, "inner.zip")
 	t.Logf("Opening nested archive VFS: %q", nestedPath)
 
