@@ -288,64 +288,81 @@ func runExternalEditor(pf *PanelsFrame, cmdStr, path string) {
 	})
 }
 
+func showEditor(pf *PanelsFrame, v vfs.VFS, path string, f vfs.ReadAtCloser) {
+	var pt *piecetable.PieceTable
+	var buf *AsyncBuffer
+
+	if f != nil {
+		buf = NewAsyncBuffer(context.Background(), f)
+		pt = piecetable.NewWithBuffer(buf)
+	} else {
+		pt = piecetable.New(nil)
+	}
+
+	editor := NewEditorView(pt, v, path)
+	if GlobalFileState != nil && path != "" {
+		if state := GlobalFileState.GetState(path); state != nil {
+			editor.WordWrap = state.EditorWrap
+			editor.targetLine = state.EditorLine
+			editor.targetPos = state.EditorPos
+			editor.targetTopRow = state.EditorTopRow
+			editor.targetLeft = state.EditorLeft
+		}
+	}
+	editor.file = f
+	editor.asyncBuf = buf
+	editor.ResizeConsole(pf.lastW, pf.lastH)
+	editor.StartIndexing()
+
+	vtui.FrameManager.AddScreen(editor)
+}
+
 func actionOpenEditor(pf *PanelsFrame, v vfs.VFS, path string) {
-	vtui.RunAsync(func(ctx *vtui.TaskContext) {
-		var f vfs.ReadAtCloser
-		var pt *piecetable.PieceTable
-		var buf *AsyncBuffer
-
-		if v != nil {
-			// Safety check: prevent opening directories for editing
-			if stat, err := v.Stat(ctx.Context, path); err == nil && stat.IsDir {
-				ctx.RunOnUI(func() {
-					vtui.ShowMessage(" Error ", "Cannot edit a directory.", []string{"&Ok"})
-				})
-				return
-			}
-
-			var err error
-			f, err = v.Open(ctx.Context, path)
-			if err != nil {
-				vtui.DebugLog("actionOpenEditor: Open failed (assuming new file): %v", err)
-				f = nil
-			}
-		}
-
-		if f != nil {
-			buf = NewAsyncBuffer(ctx.Context, f)
-			pt = piecetable.NewWithBuffer(buf)
-		} else {
-			pt = piecetable.New(nil)
-		}
-
-		ctx.RunOnUI(func() {
-			if ctx.Err() != nil {
-				if buf != nil {
-					buf.Close()
+	if _, isLocal := v.(*vfs.OSVFS); isLocal {
+		vtui.RunAsync(func(ctx *vtui.TaskContext) {
+			var f vfs.ReadAtCloser
+			if v != nil {
+				if stat, errStat := v.Stat(ctx.Context, path); errStat == nil && stat.IsDir {
+					ctx.RunOnUI(func() {
+						vtui.ShowMessage(" Error ", "Cannot edit a directory.", []string{"&Ok"})
+					})
+					return
 				}
-				if f != nil {
-					f.Close()
-				}
-				return
+				f, _ = v.Open(ctx.Context, path)
 			}
-
-			editor := NewEditorView(pt, v, path)
-			if GlobalFileState != nil && path != "" {
-				if state := GlobalFileState.GetState(path); state != nil {
-					editor.WordWrap = state.EditorWrap
-					editor.targetLine = state.EditorLine
-					editor.targetPos = state.EditorPos
-					editor.targetTopRow = state.EditorTopRow
-					editor.targetLeft = state.EditorLeft
-				}
-			}
-			editor.file = f
-			editor.asyncBuf = buf
-			editor.ResizeConsole(pf.lastW, pf.lastH)
-			editor.StartIndexing()
-
-			vtui.FrameManager.AddScreen(editor)
+			ctx.RunOnUI(func() {
+				showEditor(pf, v, path, f)
+			})
 		})
+		return
+	}
+
+	var f vfs.ReadAtCloser
+	pf.RunProgressTask(" Opening... ", "Preparing to edit file...", false, func(ctx context.Context, update func(msg string, percent int)) error {
+		update("Opening file...", -1)
+		var err error
+		if v != nil {
+			if stat, errStat := v.Stat(ctx, path); errStat == nil && stat.IsDir {
+				return fmt.Errorf("cannot edit a directory")
+			}
+			f, err = v.Open(ctx, path)
+			if err != nil {
+				if os.IsNotExist(err) || strings.Contains(err.Error(), "no such file") || strings.Contains(err.Error(), "not found") {
+					f = nil
+					return nil
+				}
+				return err
+			}
+		}
+		return nil
+	}, func(err error) {
+		if err != nil {
+			if err != context.Canceled {
+				vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to open file:\n%v", err), []string{"&Ok"})
+			}
+			return
+		}
+		showEditor(pf, v, path, f)
 	})
 }
 
