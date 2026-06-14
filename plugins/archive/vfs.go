@@ -81,8 +81,17 @@ func NewArchiveVFS(parent vfs.VFS, path string) (*ArchiveVFS, error) {
 			return nil, openErr
 		}
 
-		tmp, _ := os.CreateTemp("", "f4nested-*")
-		io.Copy(tmp, ctxReader{rc, context.Background()})
+		tmp, errTemp := os.CreateTemp("", "f4nested-*")
+		if errTemp != nil {
+			rc.Close()
+			return nil, errTemp
+		}
+		if _, errCopy := io.Copy(tmp, ctxReader{rc, context.Background()}); errCopy != nil {
+			rc.Close()
+			tmp.Close()
+			os.Remove(tmp.Name())
+			return nil, errCopy
+		}
 		rc.Close()
 		finalPath = tmp.Name()
 		closer = tmp
