@@ -159,3 +159,9 @@ func (w *TempFileWrapper) ReadAt(ctx context.Context, p []byte, off int64) (int,
 func (w *TempFileWrapper) Read(ctx context.Context, p []byte) (int, error) {
 	return w.File.Read(p)
 }
+
+func (w *TempFileWrapper) Close() error {
+	err := w.File.Close()
+	os.Remove(w.TempPath)
+	return err
+}
