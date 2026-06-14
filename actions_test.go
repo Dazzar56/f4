@@ -888,41 +888,32 @@ func TestActionOpenViewer_ProgressTask(t *testing.T) {
 	mv := &mockSlowVFS{
 		onOpen: func() {
 			called = true
-			t.Log("DIAG-TEST: mockSlowVFS.Open called!")
 		},
 	}
 
-	t.Log("DIAG-TEST: Calling actionOpenViewer...")
 	actionOpenViewer(pf, mv, "/mock/file.txt")
 
 	// Drain task queue to allow UI and async updates, detecting the dialog on the fly
 	timeout := time.After(1 * time.Second)
 	foundProgress := false
-	taskCount := 0
 LoopOpen:
 	for {
 		select {
 		case task := <-vtui.FrameManager.TaskChan:
-			taskCount++
-			//t.Logf("DIAG-TEST: Processing Task #%d...", taskCount)
 			task()
 			for _, scr := range vtui.FrameManager.Screens {
 				for _, f := range scr.Frames {
-					//t.Logf("DIAG-TEST: Active frame title during Task #%d: %q", taskCount, f.GetTitle())
 					if strings.Contains(f.GetTitle(), "Opening") {
 						foundProgress = true
 					}
 				}
 			}
 		case <-timeout:
-			t.Log("DIAG-TEST: Timeout reached.")
 			break LoopOpen
 		default:
 			time.Sleep(10 * time.Millisecond)
 		}
 	}
-
-	t.Logf("DIAG-TEST: Final results: called=%v, foundProgress=%v", called, foundProgress)
 
 	if !called {
 		t.Fatal("TEST FAILED: mockVFS.Open was not called!")
