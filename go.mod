@@ -12,7 +12,7 @@ require (
 	github.com/unxed/vtinput v0.0.0
 	github.com/unxed/vtui v0.0.0
 	github.com/unxed/zip v0.1.51
-	github.com/unxed/zipper v0.1.24
+	github.com/unxed/zipper v0.1.25
 	github.com/vmihailenco/msgpack/v5 v5.4.1
 	golang.org/x/crypto v0.31.0
 	golang.org/x/sys v0.44.0
