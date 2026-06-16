@@ -34,7 +34,7 @@ require (
 	github.com/emmansun/base64 v0.9.0 // indirect
 	github.com/fogleman/gg v1.3.0 // indirect
 	github.com/go-text/typesetting v0.3.4 // indirect
-	github.com/go-webgpu/goffi v0.5.3 // indirect
+	github.com/go-webgpu/goffi v0.5.5 // indirect
 	github.com/go-webgpu/webgpu v0.4.3 // indirect
 	github.com/gogpu/gg v0.47.3 // indirect
 	github.com/gogpu/gogpu v0.39.1 // indirect
@@ -93,4 +93,4 @@ replace github.com/unxed/vtinput => ./libs/vtinput
 
 replace github.com/unxed/vtui => ./libs/vtui
 
-replace github.com/ebitengine/purego => github.com/unxed/pureffi v0.1.8
+replace github.com/ebitengine/purego => github.com/unxed/pureffi v0.1.10
