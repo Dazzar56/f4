@@ -5,9 +5,9 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
-	"strings"
 
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/zip"

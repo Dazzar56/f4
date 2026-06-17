@@ -145,6 +145,7 @@ func TestArchiveVFS_TempFileLeak(t *testing.T) {
 
 	t.Log("SUCCESS: Temp file was properly deleted.")
 }
+
 // TestArchiveVFS_DeferredClose verifies that closing the ArchiveVFS is deferred
 // while there are active readers or writers (grace period of inactivity).
 func TestArchiveVFS_DeferredClose(t *testing.T) {
