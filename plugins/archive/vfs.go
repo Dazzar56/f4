@@ -497,24 +497,17 @@ func (v *ArchiveVFS) Open(ctx context.Context, path string) (vfs.ReadAtCloser, e
 		v.cleanupTimer = nil
 	}
 
+	// Capture fsys and increment active count EARLY to protect it while unlocked.
+	v.activeCount++
+	fsys := v.fsys
+	v.mu.Unlock()
+
 	normPath := filepath.ToSlash(path)
 	normArcPath := filepath.ToSlash(v.arcPath)
 	fsPath := "."
 	if normPath != normArcPath {
 		fsPath = strings.TrimPrefix(normPath, normArcPath)
 		fsPath = strings.TrimPrefix(fsPath, "/")
-	}
-
-	srcFile, err := v.fsys.Open(fsPath)
-	if err != nil {
-		v.mu.Unlock()
-		return nil, err
-	}
-
-	info, err := srcFile.Stat()
-	var size int64
-	if err == nil && info != nil {
-		size = info.Size()
 	}
 
 	var update vfs.ProgressCallback
@@ -531,10 +524,51 @@ func (v *ArchiveVFS) Open(ctx context.Context, path string) (vfs.ReadAtCloser, e
 		}
 	}
 
-	if update != nil || reporter != nil {
-		v.activeCount++
-		v.mu.Unlock()
+	openDone := make(chan struct{})
+	go func() {
+		if update == nil && reporter == nil {
+			return
+		}
+		ticker := time.NewTicker(250 * time.Millisecond)
+		defer ticker.Stop()
+		dots := ""
+		for {
+			select {
+			case <-openDone:
+				return
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				dots += "."
+				if len(dots) > 3 {
+					dots = ""
+				}
+				msg := fmt.Sprintf("Locating file%s", dots)
+				if update != nil {
+					update(msg, -1)
+				}
+				if reporter != nil {
+					reporter.UpdateTransfer("Opening", filepath.Base(path), -1, msg, -1, "")
+				}
+			}
+		}
+	}()
 
+	srcFile, err := fsys.Open(fsPath)
+	close(openDone)
+
+	if err != nil {
+		v.decrementActive()
+		return nil, err
+	}
+
+	info, err := srcFile.Stat()
+	var size int64
+	if err == nil && info != nil {
+		size = info.Size()
+	}
+
+	if update != nil || reporter != nil {
 		tmp, errTemp := os.CreateTemp("", "f4arc-open-*")
 		if errTemp != nil {
 			srcFile.Close()
@@ -566,9 +600,6 @@ func (v *ArchiveVFS) Open(ctx context.Context, path string) (vfs.ReadAtCloser, e
 			extracted: true,
 		}, nil
 	}
-
-	v.activeCount++
-	v.mu.Unlock()
 
 	return &archiveReadWrapper{
 		v:    v,

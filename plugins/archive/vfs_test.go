@@ -278,18 +278,23 @@ func TestArchiveReadWrapper_CloseNonBlocking(t *testing.T) {
 
 type mockSlowArchiveFS struct {
 	archive.FileSystem
+	openBlock chan struct{}
 	readBlock chan struct{}
 }
 
 func (m *mockSlowArchiveFS) Open(name string) (fs.File, error) {
+	if m.openBlock != nil {
+		<-m.openBlock
+	}
 	return &mockSlowFile{readBlock: m.readBlock}, nil
 }
 
 func TestArchiveVFS_OpenCloseNonBlocking(t *testing.T) {
+	openBlock := make(chan struct{})
 	readBlock := make(chan struct{})
 
 	v := &ArchiveVFS{
-		fsys: &mockSlowArchiveFS{readBlock: readBlock},
+		fsys: &mockSlowArchiveFS{openBlock: openBlock, readBlock: readBlock},
 	}
 
 	ctx := context.WithValue(context.Background(), vfs.ReporterKey, &mockVFSProgressReporter{})
@@ -313,9 +318,10 @@ func TestArchiveVFS_OpenCloseNonBlocking(t *testing.T) {
 	case <-closeDone:
 		// Success
 	case <-time.After(500 * time.Millisecond):
-		t.Fatal("BUG REPRODUCED: ArchiveVFS.Close() blocked because v.Open() holds the mutex during extraction!")
+		t.Fatal("BUG REPRODUCED: ArchiveVFS.Close() blocked because v.Open() holds the mutex during extraction/seeking!")
 	}
 
+	close(openBlock)
 	close(readBlock)
 	<-openDone
 	_ = openErr
@@ -336,10 +342,11 @@ func (r *mockSeekingReporter) UpdateTransfer(action, filename string, currentPct
 func (r *mockSeekingReporter) IsCancelled() bool { return false }
 
 func TestArchiveVFS_Open_SeekingProgress(t *testing.T) {
+	openBlock := make(chan struct{})
 	readBlock := make(chan struct{})
 
 	v := &ArchiveVFS{
-		fsys: &mockSlowArchiveFS{readBlock: readBlock},
+		fsys: &mockSlowArchiveFS{openBlock: openBlock, readBlock: readBlock},
 	}
 
 	reporter := &mockSeekingReporter{}
@@ -352,11 +359,17 @@ func TestArchiveVFS_Open_SeekingProgress(t *testing.T) {
 		close(openDone)
 	}()
 
-	// Wait for the async ticker to fire (runs every 250ms)
+	// 1. Verify "Locating file..." status during blocked fsys.Open
 	time.Sleep(400 * time.Millisecond)
+	if !strings.HasPrefix(reporter.lastTotalText, "Locating file") {
+		t.Errorf("Expected 'Locating file...' status while Open is blocked, got %q", reporter.lastTotalText)
+	}
+	close(openBlock)
 
+	// 2. Verify "Seeking/Decompressing..." status during blocked file.Read
+	time.Sleep(400 * time.Millisecond)
 	if !strings.HasPrefix(reporter.lastTotalText, "Seeking/Decompressing") {
-		t.Errorf("Expected 'Seeking/Decompressing...' status while blocked, got %q", reporter.lastTotalText)
+		t.Errorf("Expected 'Seeking/Decompressing...' status while Read is blocked, got %q", reporter.lastTotalText)
 	}
 
 	close(readBlock)
