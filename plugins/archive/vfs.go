@@ -233,15 +233,17 @@ func (v *ArchiveVFS) Stat(ctx context.Context, path string) (vfs.VFSItem, error)
 }
 
 type archiveReadWrapper struct {
-	v         *ArchiveVFS
-	once      sync.Once
-	mu        sync.Mutex
-	f         fs.File
-	size      int64
-	tmpFile   *os.File
-	tmpPath   string
-	extracted bool
-	err       error
+	v          *ArchiveVFS
+	once       sync.Once
+	mu         sync.Mutex
+	f          fs.File
+	size       int64
+	tmpFile    *os.File
+	tmpPath    string
+	extracted  bool
+	extracting bool
+	doneChan   chan struct{}
+	err        error
 }
 
 func (w *archiveReadWrapper) Size() int64 {
@@ -254,10 +256,12 @@ func (w *archiveReadWrapper) Close() error {
 		w.mu.Lock()
 		if w.f != nil {
 			w.f.Close()
+			w.f = nil
 		}
 		if w.tmpFile != nil {
 			w.tmpFile.Close()
 			os.Remove(w.tmpPath)
+			w.tmpFile = nil
 		}
 		w.mu.Unlock()
 		w.v.decrementActive()
@@ -272,44 +276,92 @@ func (w *archiveReadWrapper) TempPath() string {
 }
 
 func (w *archiveReadWrapper) extractToTemp(ctx context.Context) {
-	tmp, err := os.CreateTemp("", "f4arc-*")
-	if err != nil {
-		w.err = err
+	w.mu.Lock()
+	f := w.f
+	w.mu.Unlock()
+
+	if f == nil {
 		return
 	}
+
+	tmp, err := os.CreateTemp("", "f4arc-*")
+	if err != nil {
+		w.mu.Lock()
+		w.err = err
+		w.mu.Unlock()
+		return
+	}
+
+	w.mu.Lock()
 	w.tmpPath = tmp.Name()
 	w.tmpFile = tmp
+	w.mu.Unlock()
 
 	buf := make([]byte, 128*1024)
+	var loopErr error
+
 	for {
 		if ctx.Err() != nil {
-			w.err = ctx.Err()
-			return
+			loopErr = ctx.Err()
+			break
 		}
-		n, err := w.f.Read(buf)
+		n, errRead := f.Read(buf)
 		if n > 0 {
 			if _, werr := tmp.Write(buf[:n]); werr != nil {
-				w.err = werr
-				return
+				loopErr = werr
+				break
 			}
 		}
-		if err != nil {
-			if err != io.EOF {
-				w.err = err
+		if errRead != nil {
+			if errRead != io.EOF {
+				loopErr = errRead
 			}
 			break
 		}
 	}
-	w.f.Close()
-	w.f = nil
-	w.extracted = true
+
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if w.f != nil {
+		w.f.Close()
+		w.f = nil
+	}
+
+	if loopErr != nil {
+		w.err = loopErr
+	} else {
+		w.extracted = true
+	}
 }
 
 func (w *archiveReadWrapper) ReadAt(ctx context.Context, p []byte, off int64) (int, error) {
 	w.mu.Lock()
-	if !w.extracted && w.err == nil {
+	for !w.extracted && w.err == nil {
+		if w.extracting {
+			ch := w.doneChan
+			w.mu.Unlock()
+			select {
+			case <-ch:
+			case <-ctx.Done():
+				return 0, ctx.Err()
+			}
+			w.mu.Lock()
+			continue
+		}
+
+		w.extracting = true
+		w.doneChan = make(chan struct{})
+		w.mu.Unlock()
+
 		w.extractToTemp(ctx)
+
+		w.mu.Lock()
+		w.extracting = false
+		close(w.doneChan)
+		w.doneChan = nil
 	}
+
 	if w.err != nil {
 		w.mu.Unlock()
 		return 0, w.err

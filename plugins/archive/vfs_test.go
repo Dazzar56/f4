@@ -2,6 +2,8 @@ package archive
 
 import (
 	"context"
+	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -209,4 +211,53 @@ func TestArchiveVFS_DeferredClose(t *testing.T) {
 	if errRead3 == nil {
 		t.Error("VFS failed to perform cleanup after inactivity grace period")
 	}
+}
+
+type mockSlowFile struct {
+	readBlock chan struct{}
+}
+
+func (m *mockSlowFile) Read(p []byte) (int, error) {
+	<-m.readBlock
+	return 0, io.EOF
+}
+
+func (m *mockSlowFile) Stat() (fs.FileInfo, error) {
+	return nil, nil
+}
+
+func (m *mockSlowFile) Close() error {
+	return nil
+}
+
+func TestArchiveReadWrapper_CloseNonBlocking(t *testing.T) {
+	readBlock := make(chan struct{})
+	f := &mockSlowFile{readBlock: readBlock}
+	v := &ArchiveVFS{activeCount: 1}
+	w := &archiveReadWrapper{
+		v: v,
+		f: f,
+	}
+
+	go func() {
+		buf := make([]byte, 10)
+		_, _ = w.ReadAt(context.Background(), buf, 0)
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+
+	closeDone := make(chan struct{})
+	go func() {
+		w.Close()
+		close(closeDone)
+	}()
+
+	select {
+	case <-closeDone:
+		// Success
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("archiveReadWrapper.Close() blocked because of active extraction holding the mutex!")
+	}
+
+	close(readBlock)
 }

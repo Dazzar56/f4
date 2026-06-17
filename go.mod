@@ -94,3 +94,5 @@ replace github.com/unxed/vtinput => ./libs/vtinput
 replace github.com/unxed/vtui => ./libs/vtui
 
 replace github.com/ebitengine/purego => github.com/unxed/pureffi v0.1.10
+
+replace github.com/ulikunitz/xz => github.com/unxed/xz v0.1.3
