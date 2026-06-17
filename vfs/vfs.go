@@ -165,6 +165,7 @@ func (w *TempFileWrapper) Close() error {
 	os.Remove(w.TempPath)
 	return err
 }
+
 type progressKeyType struct{}
 type reporterKeyType struct{}
 

@@ -275,6 +275,7 @@ func TestArchiveReadWrapper_CloseNonBlocking(t *testing.T) {
 
 	close(readBlock)
 }
+
 type mockSlowArchiveFS struct {
 	archive.FileSystem
 	readBlock chan struct{}
@@ -319,6 +320,7 @@ func TestArchiveVFS_OpenCloseNonBlocking(t *testing.T) {
 	<-openDone
 	_ = openErr
 }
+
 type mockSeekingReporter struct {
 	lastAction    string
 	lastFilename  string
@@ -361,6 +363,7 @@ func TestArchiveVFS_Open_SeekingProgress(t *testing.T) {
 	<-openDone
 	_ = openErr
 }
+
 type mockVFSProgressReporter struct {
 	called  bool
 	lastPct int
