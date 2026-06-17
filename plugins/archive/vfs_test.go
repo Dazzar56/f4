@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -312,6 +313,48 @@ func TestArchiveVFS_OpenCloseNonBlocking(t *testing.T) {
 		// Success
 	case <-time.After(500 * time.Millisecond):
 		t.Fatal("BUG REPRODUCED: ArchiveVFS.Close() blocked because v.Open() holds the mutex during extraction!")
+	}
+
+	close(readBlock)
+	<-openDone
+	_ = openErr
+}
+type mockSeekingReporter struct {
+	lastAction    string
+	lastFilename  string
+	lastTotalText string
+}
+
+func (r *mockSeekingReporter) UpdateScan(currentPath string, files, dirs int64) {}
+func (r *mockSeekingReporter) UpdateTransfer(action, filename string, currentPct int, totalText string, totalPct int, speedText string) {
+	r.lastAction = action
+	r.lastFilename = filename
+	r.lastTotalText = totalText
+}
+func (r *mockSeekingReporter) IsCancelled() bool { return false }
+
+func TestArchiveVFS_Open_SeekingProgress(t *testing.T) {
+	readBlock := make(chan struct{})
+
+	v := &ArchiveVFS{
+		fsys: &mockSlowArchiveFS{readBlock: readBlock},
+	}
+
+	reporter := &mockSeekingReporter{}
+	ctx := context.WithValue(context.Background(), vfs.ReporterKey, vfs.TaskReporter(reporter))
+
+	openDone := make(chan struct{})
+	var openErr error
+	go func() {
+		_, openErr = v.Open(ctx, "somefile.txt")
+		close(openDone)
+	}()
+
+	// Wait for the async ticker to fire (runs every 250ms)
+	time.Sleep(400 * time.Millisecond)
+
+	if !strings.HasPrefix(reporter.lastTotalText, "Seeking/Decompressing") {
+		t.Errorf("Expected 'Seeking/Decompressing...' status while blocked, got %q", reporter.lastTotalText)
 	}
 
 	close(readBlock)

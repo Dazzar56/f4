@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/unxed/f4/vfs"
@@ -414,6 +415,37 @@ func extractWithProgress(ctx context.Context, src io.Reader, dst io.Writer, size
 	var copied int64
 	lastUpdate := time.Now()
 
+	done := make(chan struct{})
+	defer close(done)
+
+	go func() {
+		ticker := time.NewTicker(250 * time.Millisecond)
+		defer ticker.Stop()
+		dots := ""
+		for {
+			select {
+			case <-done:
+				return
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if atomic.LoadInt64(&copied) == 0 {
+					dots += "."
+					if len(dots) > 3 {
+						dots = ""
+					}
+					msg := fmt.Sprintf("Seeking/Decompressing%s", dots)
+					if update != nil {
+						update(msg, -1)
+					}
+					if reporter != nil {
+						reporter.UpdateTransfer("Extracting", name, -1, msg, -1, "")
+					}
+				}
+			}
+		}
+	}()
+
 	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -423,14 +455,15 @@ func extractWithProgress(ctx context.Context, src io.Reader, dst io.Writer, size
 			if _, werr := dst.Write(buf[:n]); werr != nil {
 				return werr
 			}
-			copied += int64(n)
+			atomic.AddInt64(&copied, int64(n))
 
 			now := time.Now()
 			if now.Sub(lastUpdate) > 50*time.Millisecond || err != nil {
 				lastUpdate = now
 				pct := 0
+				currentCopied := atomic.LoadInt64(&copied)
 				if size > 0 {
-					pct = int((copied * 100) / size)
+					pct = int((currentCopied * 100) / size)
 					if pct > 100 {
 						pct = 100
 					}
@@ -439,7 +472,7 @@ func extractWithProgress(ctx context.Context, src io.Reader, dst io.Writer, size
 					update(fmt.Sprintf("Extracting %s...", name), pct)
 				}
 				if reporter != nil {
-					reporter.UpdateTransfer("Extracting", name, pct, fmt.Sprintf("Extracting: %s / %s", formatSize(copied), formatSize(size)), pct, "")
+					reporter.UpdateTransfer("Extracting", name, pct, fmt.Sprintf("Extracting: %s / %s", formatSize(currentCopied), formatSize(size)), pct, "")
 				}
 			}
 		}
