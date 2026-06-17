@@ -1247,7 +1247,7 @@ func actionFindFile(pf *PanelsFrame) {
 	vtui.FrameManager.Push(dlg)
 }
 func actionPanelSettings(pf *PanelsFrame) {
-	dlg := vtui.NewCenteredDialog(60, 20, Msg("PanelSettings.Title"))
+	dlg := vtui.NewCenteredDialog(60, 21, Msg("PanelSettings.Title"))
 	dlg.ShowClose = true
 
 	chkHidden := vtui.NewCheckbox(0, 0, Msg("PanelSettings.ShowHidden"), false)
@@ -1285,6 +1285,12 @@ func actionPanelSettings(pf *PanelsFrame) {
 		chkVim.State = 1
 	}
 
+	chkSync := vtui.NewCheckbox(0, 0, Msg("PanelSettings.SyncPanelLoad"), false)
+	chkSync.State = 0
+	if AppConfig.SyncPanelLoad {
+		chkSync.State = 1
+	}
+
 	modes := []string{"Queue", "Background panel clone", "Foreground lock"}
 	comboMode := vtui.NewComboBox(0, 0, 30, modes)
 	comboMode.DropdownOnly = true
@@ -1302,18 +1308,21 @@ func actionPanelSettings(pf *PanelsFrame) {
 	dlg.AddItem(chkCursor)
 	dlg.AddItem(chkCmdAc)
 	dlg.AddItem(chkVim)
+	dlg.AddItem(chkSync)
 	dlg.AddItem(lblMode)
 	dlg.AddItem(comboMode)
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnCancel)
 
-	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 54-4, 20-4)
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 54-4, 21-4)
 	vbox.Add(chkHidden, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkHighlight, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(chkPaths, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(chkCursor, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(chkCmdAc, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(chkVim, vtui.Margins{Top: 1}, vtui.AlignLeft)
+
+	vbox.Add(chkSync, vtui.Margins{Top: 1}, vtui.AlignLeft)
 
 	rowMode := vtui.NewHBoxLayout(0, 0, 54-4, 1)
 	rowMode.Add(lblMode, vtui.Margins{Right: 1}, vtui.AlignLeft)
@@ -1337,6 +1346,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 		AppConfig.KeepTerminalCursor = chkCursor.State == 1
 		AppConfig.CommandLineAutoComplete = chkCmdAc.State == 1
 		AppConfig.VimHotkeys = chkVim.State == 1
+		AppConfig.SyncPanelLoad = chkSync.State == 1
 		AppConfig.DefaultFileOpMode = comboMode.Menu.SelectPos
 		vtui.ManageCursorStyle = !AppConfig.KeepTerminalCursor
 		SaveConfig()

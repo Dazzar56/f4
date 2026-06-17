@@ -1347,6 +1347,54 @@ func TestFileSystemPanel_CacheLoadPreservesSelection(t *testing.T) {
 	}
 }
 
+func TestFileSystemPanel_SyncPanelLoad(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	// Save original config and restore after test
+	oldSync := AppConfig.SyncPanelLoad
+	AppConfig.SyncPanelLoad = true
+	defer func() { AppConfig.SyncPanelLoad = oldSync }()
+
+	tmpDir := t.TempDir()
+	v := vfs.NewOSVFS(tmpDir)
+	os.WriteFile(filepath.Join(tmpDir, "file_sync.txt"), []byte("data"), 0644)
+
+	fp := NewFileSystemPanel(0, 0, 40, 20, v)
+
+	// 1. Manually populate cache with a different item to see if it gets ignored
+	items := []vfs.VFSItem{
+		{Name: "cached_file.txt", IsDir: false},
+	}
+	fp.saveToCache(v.GetPath(), items)
+
+	// 2. Call readDirectoryEx. Since SyncPanelLoad is true, it MUST NOT load "cached_file.txt" from cache.
+	fp.readDirectoryEx(false)
+
+	// Verify that cache was ignored (fp.entries should not contain "cached_file.txt" immediately)
+	for _, e := range fp.entries {
+		if e.Name == "cached_file.txt" {
+			t.Error("VFS loaded cached entry immediately, but SyncPanelLoad is enabled")
+		}
+	}
+
+	// 3. Wait for the async load to complete (should load "file_sync.txt" from disk)
+	waitForLoad(t, fp)
+
+	foundReal := false
+	for _, e := range fp.entries {
+		if e.Name == "file_sync.txt" {
+			foundReal = true
+		}
+		if e.Name == "cached_file.txt" {
+			t.Error("Cached file appeared after loading, but it should have been overwritten by real disk contents")
+		}
+	}
+
+	if !foundReal {
+		t.Error("Failed to load real file from disk under SyncPanelLoad")
+	}
+}
+
 func TestFileSystemPanel_SelectionCleanupAfterReload(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	v := vfs.NewOSVFS(t.TempDir())

@@ -469,7 +469,7 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 		if fp.dirCache == nil {
 			fp.dirCache = make(map[string]dirCacheEntry)
 		}
-		if cached, ok := fp.dirCache[path]; ok {
+		if cached, ok := fp.dirCache[path]; ok && !AppConfig.SyncPanelLoad {
 			hasCache = true
 			vtui.DebugLog("PANEL: Using cached entries for %s", path)
 			fp.entries = nil
@@ -547,6 +547,10 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 			}
 			accumulated = append(accumulated, chunk...)
 			if ctx.Err() != nil {
+				return
+			}
+
+			if AppConfig.SyncPanelLoad {
 				return
 			}
 
@@ -656,6 +660,44 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 						delete(fp.selectedItems, name)
 					}
 				}
+			}
+
+			if AppConfig.SyncPanelLoad && err == nil {
+				fp.entries = nil
+				if !fp.vfs.IsAtRoot() || fp.vfs.ParentVFS() != nil {
+					upItem := vfs.VFSItem{Name: "..", IsDir: true}
+					if hasUpItemStat {
+						upItem.MTime = upItemStat.MTime
+						upItem.ATime = upItemStat.ATime
+						upItem.CTime = upItemStat.CTime
+						upItem.UnixMode = upItemStat.UnixMode
+						upItem.Uid = upItemStat.Uid
+						upItem.Gid = upItemStat.Gid
+					}
+					fp.entries = []*fileEntry{{VFSItem: upItem}}
+				}
+
+				newEntries := make([]*fileEntry, 0, len(accumulated))
+				for _, item := range accumulated {
+					if !AppConfig.ShowHiddenFiles && item.Name != ".." && item.IsHidden {
+						continue
+					}
+					entry := &fileEntry{VFSItem: item}
+					if fp.selectedItems[item.Name] {
+						entry.Selected = true
+					}
+					newEntries = append(newEntries, entry)
+				}
+				fp.entries = append(fp.entries, newEntries...)
+				fp.sortEntries()
+
+				if fp.pendingSelection != "" {
+					fp.SelectName(fp.pendingSelection)
+					fp.pendingSelection = ""
+				} else if fp.cursorIdx >= len(fp.entries) || fp.cursorIdx < 0 {
+					fp.SetCursorIndex(0)
+				}
+				isFirstChunk = false
 			}
 
 			// Останавливаем таймер. Если он не успел сработать — заголовок так и не моргнул.

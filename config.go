@@ -17,6 +17,7 @@ type F4Config struct {
 	KeepTerminalCursor      bool
 	CommandLineAutoComplete bool
 	VimHotkeys              bool
+	SyncPanelLoad           bool
 	EditorAutoComplete      bool
 	EditorAutoCompleteMask  string
 	EditorExpandTabs        int
@@ -42,6 +43,7 @@ var AppConfig = F4Config{
 	KeepTerminalCursor:      false,
 	CommandLineAutoComplete: true,
 	VimHotkeys:              false,
+	SyncPanelLoad:           false,
 	EditorAutoComplete:      true,
 	EditorAutoCompleteMask:  "*.go;*.c;*.cpp;*.h;*.hpp;*.py;*.js;*.ts;*.rs;*.java;*.sh;*.txt;*.md;*.html;*.css;*.json",
 	EditorExpandTabs:        0,
@@ -95,6 +97,7 @@ func LoadConfig() {
 	AppConfig.KeepTerminalCursor = ini.GetString("Panel", "KeepTerminalCursor", "0") == "1"
 	AppConfig.CommandLineAutoComplete = ini.GetString("Panel", "CommandLineAutoComplete", "1") == "1"
 	AppConfig.VimHotkeys = ini.GetString("Panel", "VimHotkeys", "0") == "1"
+	AppConfig.SyncPanelLoad = ini.GetString("Panel", "SyncPanelLoad", "0") == "1"
 	fmt.Sscanf(ini.GetString("Panel", "DefaultFileOpMode", "0"), "%d", &AppConfig.DefaultFileOpMode)
 	AppConfig.ConfirmCopy = ini.GetString("System", "ConfirmCopy", "1") == "1"
 	AppConfig.ConfirmMove = ini.GetString("System", "ConfirmMove", "1") == "1"
@@ -133,6 +136,7 @@ func SaveConfig() {
 	sb.WriteString(fmt.Sprintf("KeepTerminalCursor = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.KeepTerminalCursor]))
 	sb.WriteString(fmt.Sprintf("CommandLineAutoComplete = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.CommandLineAutoComplete]))
 	sb.WriteString(fmt.Sprintf("VimHotkeys = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.VimHotkeys]))
+	sb.WriteString(fmt.Sprintf("SyncPanelLoad = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.SyncPanelLoad]))
 	sb.WriteString(fmt.Sprintf("DefaultFileOpMode = %d\n", AppConfig.DefaultFileOpMode))
 
 	sb.WriteString("\n[System]\n")
