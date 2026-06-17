@@ -480,7 +480,7 @@ func (v *ArchiveVFS) Open(ctx context.Context, path string) (vfs.ReadAtCloser, e
 
 	info, err := srcFile.Stat()
 	var size int64
-	if err == nil {
+	if err == nil && info != nil {
 		size = info.Size()
 	}
 
@@ -499,26 +499,31 @@ func (v *ArchiveVFS) Open(ctx context.Context, path string) (vfs.ReadAtCloser, e
 	}
 
 	if update != nil || reporter != nil {
+		v.activeCount++
+		v.mu.Unlock()
+
 		tmp, errTemp := os.CreateTemp("", "f4arc-open-*")
 		if errTemp != nil {
 			srcFile.Close()
-			v.mu.Unlock()
+			v.decrementActive()
 			return nil, errTemp
 		}
 
-		errExtract := extractWithProgress(ctx, srcFile, tmp, size, info.Name(), update, reporter)
+		fileName := "unknown"
+		if info != nil {
+			fileName = info.Name()
+		}
+		errExtract := extractWithProgress(ctx, srcFile, tmp, size, fileName, update, reporter)
 		srcFile.Close()
 
 		if errExtract != nil {
 			tmp.Close()
 			os.Remove(tmp.Name())
-			v.mu.Unlock()
+			v.decrementActive()
 			return nil, errExtract
 		}
 
 		tmp.Seek(0, 0)
-		v.activeCount++
-		v.mu.Unlock()
 
 		return &archiveReadWrapper{
 			v:         v,

@@ -11,6 +11,7 @@ import (
 
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/zip"
+	"github.com/unxed/zipper/archive"
 )
 
 func TestArchiveVFS_PathSlashes(t *testing.T) {
@@ -213,6 +214,18 @@ func TestArchiveVFS_DeferredClose(t *testing.T) {
 	}
 }
 
+type dummyFileInfo struct {
+	name string
+	size int64
+}
+
+func (d dummyFileInfo) Name() string       { return d.name }
+func (d dummyFileInfo) Size() int64        { return d.size }
+func (d dummyFileInfo) Mode() fs.FileMode  { return 0644 }
+func (d dummyFileInfo) ModTime() time.Time { return time.Now() }
+func (d dummyFileInfo) IsDir() bool        { return false }
+func (d dummyFileInfo) Sys() any           { return nil }
+
 type mockSlowFile struct {
 	readBlock chan struct{}
 }
@@ -223,7 +236,7 @@ func (m *mockSlowFile) Read(p []byte) (int, error) {
 }
 
 func (m *mockSlowFile) Stat() (fs.FileInfo, error) {
-	return nil, nil
+	return dummyFileInfo{name: "somefile.txt", size: 100}, nil
 }
 
 func (m *mockSlowFile) Close() error {
@@ -260,6 +273,50 @@ func TestArchiveReadWrapper_CloseNonBlocking(t *testing.T) {
 	}
 
 	close(readBlock)
+}
+type mockSlowArchiveFS struct {
+	archive.FileSystem
+	readBlock chan struct{}
+}
+
+func (m *mockSlowArchiveFS) Open(name string) (fs.File, error) {
+	return &mockSlowFile{readBlock: m.readBlock}, nil
+}
+
+func TestArchiveVFS_OpenCloseNonBlocking(t *testing.T) {
+	readBlock := make(chan struct{})
+
+	v := &ArchiveVFS{
+		fsys: &mockSlowArchiveFS{readBlock: readBlock},
+	}
+
+	ctx := context.WithValue(context.Background(), vfs.ReporterKey, &mockVFSProgressReporter{})
+
+	openDone := make(chan struct{})
+	var openErr error
+	go func() {
+		_, openErr = v.Open(ctx, "somefile.txt")
+		close(openDone)
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+
+	closeDone := make(chan struct{})
+	go func() {
+		v.Close()
+		close(closeDone)
+	}()
+
+	select {
+	case <-closeDone:
+		// Success
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("BUG REPRODUCED: ArchiveVFS.Close() blocked because v.Open() holds the mutex during extraction!")
+	}
+
+	close(readBlock)
+	<-openDone
+	_ = openErr
 }
 type mockVFSProgressReporter struct {
 	called  bool
