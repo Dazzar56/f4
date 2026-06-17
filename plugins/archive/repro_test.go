@@ -7,8 +7,10 @@ import (
 	"runtime"
 	"testing"
 	"time"
+	"strings"
 
 	"github.com/unxed/f4/vfs"
+	"github.com/unxed/zip"
 	"github.com/unxed/zipper/archive"
 )
 
@@ -120,4 +122,54 @@ func TestActionAddArchive_OverwriteWarning(t *testing.T) {
 		t.Fatal("TEST FAILED: actionAddArchive silently overwrote the archive! Overwrite warning dialog was NOT shown.")
 	}
 	t.Log("SUCCESS: Overwrite warning dialog was shown before archiving.")
+}
+
+func TestIssue137_ArchiveOpenIsLazyAndContextAware(t *testing.T) {
+	tmpDir := t.TempDir()
+	zipPath := filepath.Join(tmpDir, "large.zip")
+
+	f, err := os.Create(zipPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zw := zip.NewWriter(f)
+	w, _ := zw.Create("large.bin")
+	chunk := []byte(strings.Repeat("A", 1024*1024))
+	for i := 0; i < 5; i++ {
+		w.Write(chunk)
+	}
+	zw.Close()
+	f.Close()
+
+	vArc, err := NewArchiveVFS(&vfs.OSVFS{}, zipPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer vArc.Close()
+
+	// Test 1: Open should be fast and not block
+	start := time.Now()
+	rc, errOpen := vArc.Open(context.Background(), vArc.Join(zipPath, "large.bin"))
+	if errOpen != nil {
+		t.Fatal(errOpen)
+	}
+	if time.Since(start) > 500*time.Millisecond {
+		t.Fatalf("BUG REPRODUCED: Open took too long, likely synchronously extracting!")
+	}
+	defer rc.Close()
+
+	// Test 2: ReadAt respects cancellation
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately
+	buf := make([]byte, 100)
+	_, errRead := rc.ReadAt(ctx, buf, 0)
+	if errRead != context.Canceled {
+		t.Fatalf("Expected context.Canceled from ReadAt, got: %v", errRead)
+	}
+
+	// Test 3: Read respects cancellation
+	_, errRead2 := rc.Read(ctx, buf)
+	if errRead2 != context.Canceled {
+		t.Fatalf("Expected context.Canceled from Read, got: %v", errRead2)
+	}
 }

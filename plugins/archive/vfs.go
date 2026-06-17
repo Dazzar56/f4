@@ -233,25 +233,115 @@ func (v *ArchiveVFS) Stat(ctx context.Context, path string) (vfs.VFSItem, error)
 }
 
 type archiveReadWrapper struct {
-	vfs.ReadAtCloser
-	v    *ArchiveVFS
-	once sync.Once
+	v         *ArchiveVFS
+	once      sync.Once
+	mu        sync.Mutex
+	f         fs.File
+	size      int64
+	tmpFile   *os.File
+	tmpPath   string
+	extracted bool
+	err       error
+}
+
+func (w *archiveReadWrapper) Size() int64 {
+	return w.size
 }
 
 func (w *archiveReadWrapper) Close() error {
 	var err error
 	w.once.Do(func() {
-		err = w.ReadAtCloser.Close()
+		w.mu.Lock()
+		if w.f != nil {
+			w.f.Close()
+		}
+		if w.tmpFile != nil {
+			w.tmpFile.Close()
+			os.Remove(w.tmpPath)
+		}
+		w.mu.Unlock()
 		w.v.decrementActive()
 	})
 	return err
 }
 
 func (w *archiveReadWrapper) TempPath() string {
-	if tf, ok := w.ReadAtCloser.(*vfs.TempFileWrapper); ok {
-		return tf.TempPath
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.tmpPath
+}
+
+func (w *archiveReadWrapper) extractToTemp(ctx context.Context) {
+	tmp, err := os.CreateTemp("", "f4arc-*")
+	if err != nil {
+		w.err = err
+		return
 	}
-	return ""
+	w.tmpPath = tmp.Name()
+	w.tmpFile = tmp
+
+	buf := make([]byte, 128*1024)
+	for {
+		if ctx.Err() != nil {
+			w.err = ctx.Err()
+			return
+		}
+		n, err := w.f.Read(buf)
+		if n > 0 {
+			if _, werr := tmp.Write(buf[:n]); werr != nil {
+				w.err = werr
+				return
+			}
+		}
+		if err != nil {
+			if err != io.EOF {
+				w.err = err
+			}
+			break
+		}
+	}
+	w.f.Close()
+	w.f = nil
+	w.extracted = true
+}
+
+func (w *archiveReadWrapper) ReadAt(ctx context.Context, p []byte, off int64) (int, error) {
+	w.mu.Lock()
+	if !w.extracted && w.err == nil {
+		w.extractToTemp(ctx)
+	}
+	if w.err != nil {
+		w.mu.Unlock()
+		return 0, w.err
+	}
+	tmp := w.tmpFile
+	w.mu.Unlock()
+
+	if ctx.Err() != nil {
+		return 0, ctx.Err()
+	}
+	return tmp.ReadAt(p, off)
+}
+
+func (w *archiveReadWrapper) Read(ctx context.Context, p []byte) (int, error) {
+	if ctx.Err() != nil {
+		return 0, ctx.Err()
+	}
+	w.mu.Lock()
+	if w.err != nil {
+		w.mu.Unlock()
+		return 0, w.err
+	}
+	if w.extracted {
+		tmp := w.tmpFile
+		w.mu.Unlock()
+		return tmp.Read(p)
+	}
+
+	f := w.f
+	w.mu.Unlock()
+
+	return f.Read(p)
 }
 
 func (v *ArchiveVFS) Open(ctx context.Context, path string) (vfs.ReadAtCloser, error) {
@@ -278,23 +368,20 @@ func (v *ArchiveVFS) Open(ctx context.Context, path string) (vfs.ReadAtCloser, e
 		v.mu.Unlock()
 		return nil, err
 	}
-	defer srcFile.Close()
 
-	tmp, err := os.CreateTemp("", "f4arc-*")
-	if err != nil {
-		v.mu.Unlock()
-		return nil, err
+	info, err := srcFile.Stat()
+	var size int64
+	if err == nil {
+		size = info.Size()
 	}
-	io.Copy(tmp, srcFile)
-	tmp.Seek(0, io.SeekStart)
-	stat, _ := tmp.Stat()
 
 	v.activeCount++
 	v.mu.Unlock()
 
 	return &archiveReadWrapper{
-		ReadAtCloser: &vfs.TempFileWrapper{File: tmp, SizeVal: stat.Size(), TempPath: tmp.Name()},
-		v:            v,
+		v:    v,
+		f:    srcFile,
+		size: size,
 	}, nil
 }
 

@@ -119,6 +119,9 @@ func TestArchiveVFS_TempFileLeak(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Trigger lazy extraction which creates the temp file
+	rc.ReadAt(context.Background(), make([]byte, 1), 0)
+
 	var tempFilePath string
 	if wrapper, ok := rc.(*vfs.TempFileWrapper); ok {
 		tempFilePath = wrapper.TempPath
