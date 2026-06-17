@@ -51,6 +51,10 @@ type ArchiveVFS struct {
 
 	fsys   archive.FileSystem
 	closer io.Closer
+
+	activeCount  int
+	isClosed     bool
+	cleanupTimer *time.Timer
 }
 
 func (v *ArchiveVFS) IsAtRoot() bool {
@@ -144,6 +148,14 @@ func (v *ArchiveVFS) SetPath(path string) error {
 
 func (v *ArchiveVFS) ReadDir(ctx context.Context, path string, onChunk func([]vfs.VFSItem)) error {
 	v.mu.Lock()
+	if v.fsys == nil {
+		v.mu.Unlock()
+		return fmt.Errorf("archive VFS is closed")
+	}
+	if v.cleanupTimer != nil {
+		v.cleanupTimer.Stop()
+		v.cleanupTimer = nil
+	}
 	fsPath := v.innerPath
 	if path != "" && path != v.GetPath() {
 		if path == v.arcPath || path == v.arcPath+"/" || path == v.arcPath+"\\" {
@@ -190,6 +202,13 @@ func (v *ArchiveVFS) ReadDir(ctx context.Context, path string, onChunk func([]vf
 func (v *ArchiveVFS) Stat(ctx context.Context, path string) (vfs.VFSItem, error) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
+	if v.fsys == nil {
+		return vfs.VFSItem{}, fmt.Errorf("archive VFS is closed")
+	}
+	if v.cleanupTimer != nil {
+		v.cleanupTimer.Stop()
+		v.cleanupTimer = nil
+	}
 
 	normPath := filepath.ToSlash(path)
 	normArcPath := filepath.ToSlash(v.arcPath)
@@ -213,9 +232,38 @@ func (v *ArchiveVFS) Stat(ctx context.Context, path string) (vfs.VFSItem, error)
 	}, nil
 }
 
+type archiveReadWrapper struct {
+	vfs.ReadAtCloser
+	v    *ArchiveVFS
+	once sync.Once
+}
+
+func (w *archiveReadWrapper) Close() error {
+	var err error
+	w.once.Do(func() {
+		err = w.ReadAtCloser.Close()
+		w.v.decrementActive()
+	})
+	return err
+}
+
+func (w *archiveReadWrapper) TempPath() string {
+	if tf, ok := w.ReadAtCloser.(*vfs.TempFileWrapper); ok {
+		return tf.TempPath
+	}
+	return ""
+}
+
 func (v *ArchiveVFS) Open(ctx context.Context, path string) (vfs.ReadAtCloser, error) {
 	v.mu.Lock()
-	defer v.mu.Unlock()
+	if v.fsys == nil {
+		v.mu.Unlock()
+		return nil, fmt.Errorf("archive VFS is closed")
+	}
+	if v.cleanupTimer != nil {
+		v.cleanupTimer.Stop()
+		v.cleanupTimer = nil
+	}
 
 	normPath := filepath.ToSlash(path)
 	normArcPath := filepath.ToSlash(v.arcPath)
@@ -227,18 +275,27 @@ func (v *ArchiveVFS) Open(ctx context.Context, path string) (vfs.ReadAtCloser, e
 
 	srcFile, err := v.fsys.Open(fsPath)
 	if err != nil {
+		v.mu.Unlock()
 		return nil, err
 	}
 	defer srcFile.Close()
 
 	tmp, err := os.CreateTemp("", "f4arc-*")
 	if err != nil {
+		v.mu.Unlock()
 		return nil, err
 	}
 	io.Copy(tmp, srcFile)
 	tmp.Seek(0, io.SeekStart)
 	stat, _ := tmp.Stat()
-	return &vfs.TempFileWrapper{File: tmp, SizeVal: stat.Size(), TempPath: tmp.Name()}, nil
+
+	v.activeCount++
+	v.mu.Unlock()
+
+	return &archiveReadWrapper{
+		ReadAtCloser: &vfs.TempFileWrapper{File: tmp, SizeVal: stat.Size(), TempPath: tmp.Name()},
+		v:            v,
+	}, nil
 }
 
 func (v *ArchiveVFS) ParentVFS() vfs.VFS      { return v.parent }
@@ -259,7 +316,14 @@ func (v *ArchiveVFS) Dir(p string) string {
 
 func (v *ArchiveVFS) Create(ctx context.Context, path string) (io.WriteCloser, error) {
 	v.mu.Lock()
-	defer v.mu.Unlock()
+	if v.fsys == nil {
+		v.mu.Unlock()
+		return nil, fmt.Errorf("archive VFS is closed")
+	}
+	if v.cleanupTimer != nil {
+		v.cleanupTimer.Stop()
+		v.cleanupTimer = nil
+	}
 
 	normPath := filepath.ToSlash(path)
 	normArcPath := filepath.ToSlash(v.arcPath)
@@ -267,6 +331,9 @@ func (v *ArchiveVFS) Create(ctx context.Context, path string) (io.WriteCloser, e
 	fsPath = strings.TrimPrefix(fsPath, "/")
 
 	tmp, _ := os.CreateTemp("", "f4arc-write-*")
+	v.activeCount++
+	v.mu.Unlock()
+
 	return &archiveWriteWrapper{v: v, tmpFile: tmp, destPath: fsPath}, nil
 }
 
@@ -274,37 +341,55 @@ type archiveWriteWrapper struct {
 	v        *ArchiveVFS
 	tmpFile  *os.File
 	destPath string
+	once     sync.Once
 }
 
 func (w *archiveWriteWrapper) Write(p []byte) (n int, err error) { return w.tmpFile.Write(p) }
 func (w *archiveWriteWrapper) Close() error {
-	w.tmpFile.Close()
-	tmpName := w.tmpFile.Name()
-	defer os.Remove(tmpName)
+	var err error
+	w.once.Do(func() {
+		w.tmpFile.Close()
+		tmpName := w.tmpFile.Name()
+		defer os.Remove(tmpName)
 
-	upd, err := archive.NewUpdater(w.v.activePath(), archive.Options{})
-	if err != nil {
-		return err
-	}
-	defer upd.Close()
+		w.v.mu.Lock()
+		isClosed := w.v.isClosed
+		w.v.mu.Unlock()
 
-	w.tmpFile, err = os.Open(tmpName)
-	if err != nil {
-		return err
-	}
-	defer w.tmpFile.Close()
-
-	stat, _ := w.tmpFile.Stat()
-	err = upd.Append(w.destPath, stat.Size(), w.tmpFile)
-	if err == nil {
-		w.v.reloadFS()
-	}
+		if !isClosed {
+			upd, errUpd := archive.NewUpdater(w.v.activePath(), archive.Options{})
+			if errUpd == nil {
+				defer upd.Close()
+				w.tmpFile, err = os.Open(tmpName)
+				if err == nil {
+					defer w.tmpFile.Close()
+					stat, _ := w.tmpFile.Stat()
+					err = upd.Append(w.destPath, stat.Size(), w.tmpFile)
+					if err == nil {
+						w.v.reloadFS()
+					}
+				}
+			} else {
+				err = errUpd
+			}
+		} else {
+			err = fmt.Errorf("archive VFS was closed")
+		}
+		w.v.decrementActive()
+	})
 	return err
 }
 
 func (v *ArchiveVFS) MkDir(ctx context.Context, path string) error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
+	if v.fsys == nil {
+		return fmt.Errorf("archive VFS is closed")
+	}
+	if v.cleanupTimer != nil {
+		v.cleanupTimer.Stop()
+		v.cleanupTimer = nil
+	}
 
 	normPath := filepath.ToSlash(path)
 	normArcPath := filepath.ToSlash(v.arcPath)
@@ -331,6 +416,13 @@ func (v *ArchiveVFS) MkDir(ctx context.Context, path string) error {
 func (v *ArchiveVFS) Remove(ctx context.Context, path string) error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
+	if v.fsys == nil {
+		return fmt.Errorf("archive VFS is closed")
+	}
+	if v.cleanupTimer != nil {
+		v.cleanupTimer.Stop()
+		v.cleanupTimer = nil
+	}
 
 	normPath := filepath.ToSlash(path)
 	normArcPath := filepath.ToSlash(v.arcPath)
@@ -371,14 +463,57 @@ func (v *ArchiveVFS) GetCapabilities() vfs.VFSCapabilities {
 }
 func (v *ArchiveVFS) Search(ctx context.Context, p, pat string) (chan int64, error) { return nil, nil }
 func (v *ArchiveVFS) Close() error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+
+	v.isClosed = true
+	if v.activeCount > 0 {
+		return nil
+	}
+
+	v.startCleanupTimer()
+	return nil
+}
+
+func (v *ArchiveVFS) decrementActive() {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+
+	v.activeCount--
+	if v.activeCount == 0 && v.isClosed {
+		v.startCleanupTimer()
+	}
+}
+
+func (v *ArchiveVFS) startCleanupTimer() {
+	if v.cleanupTimer != nil {
+		v.cleanupTimer.Stop()
+	}
+	// 2-second grace period of complete inactivity
+	v.cleanupTimer = time.AfterFunc(2*time.Second, func() {
+		v.mu.Lock()
+		defer v.mu.Unlock()
+		if v.activeCount == 0 && v.isClosed {
+			v.performCleanup()
+		}
+	})
+}
+
+func (v *ArchiveVFS) performCleanup() error {
+	if v.cleanupTimer != nil {
+		v.cleanupTimer.Stop()
+		v.cleanupTimer = nil
+	}
 	if v.fsys != nil {
 		v.fsys.Close()
+		v.fsys = nil
 	}
 	if v.closer != nil {
 		err := v.closer.Close()
 		if f, ok := v.closer.(*os.File); ok {
 			os.Remove(f.Name())
 		}
+		v.closer = nil
 		return err
 	}
 	return nil
