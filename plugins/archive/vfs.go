@@ -396,6 +396,63 @@ func (w *archiveReadWrapper) Read(ctx context.Context, p []byte) (int, error) {
 	return f.Read(p)
 }
 
+func formatSize(b int64) string {
+	const unit = 1024
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
+	}
+	div, exp := int64(unit), 0
+	for n := b / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
+}
+
+func extractWithProgress(ctx context.Context, src io.Reader, dst io.Writer, size int64, name string, update vfs.ProgressCallback, reporter vfs.TaskReporter) error {
+	buf := make([]byte, 128*1024)
+	var copied int64
+	lastUpdate := time.Now()
+
+	for {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		n, err := src.Read(buf)
+		if n > 0 {
+			if _, werr := dst.Write(buf[:n]); werr != nil {
+				return werr
+			}
+			copied += int64(n)
+
+			now := time.Now()
+			if now.Sub(lastUpdate) > 50*time.Millisecond || err != nil {
+				lastUpdate = now
+				pct := 0
+				if size > 0 {
+					pct = int((copied * 100) / size)
+					if pct > 100 {
+						pct = 100
+					}
+				}
+				if update != nil {
+					update(fmt.Sprintf("Extracting %s...", name), pct)
+				}
+				if reporter != nil {
+					reporter.UpdateTransfer("Extracting", name, pct, fmt.Sprintf("Extracting: %s / %s", formatSize(copied), formatSize(size)), pct, "")
+				}
+			}
+		}
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return err
+		}
+	}
+	return nil
+}
+
 func (v *ArchiveVFS) Open(ctx context.Context, path string) (vfs.ReadAtCloser, error) {
 	v.mu.Lock()
 	if v.fsys == nil {
@@ -425,6 +482,51 @@ func (v *ArchiveVFS) Open(ctx context.Context, path string) (vfs.ReadAtCloser, e
 	var size int64
 	if err == nil {
 		size = info.Size()
+	}
+
+	var update vfs.ProgressCallback
+	if val := ctx.Value(vfs.ProgressKey); val != nil {
+		if cb, ok := val.(vfs.ProgressCallback); ok {
+			update = cb
+		}
+	}
+
+	var reporter vfs.TaskReporter
+	if val := ctx.Value(vfs.ReporterKey); val != nil {
+		if r, ok := val.(vfs.TaskReporter); ok {
+			reporter = r
+		}
+	}
+
+	if update != nil || reporter != nil {
+		tmp, errTemp := os.CreateTemp("", "f4arc-open-*")
+		if errTemp != nil {
+			srcFile.Close()
+			v.mu.Unlock()
+			return nil, errTemp
+		}
+
+		errExtract := extractWithProgress(ctx, srcFile, tmp, size, info.Name(), update, reporter)
+		srcFile.Close()
+
+		if errExtract != nil {
+			tmp.Close()
+			os.Remove(tmp.Name())
+			v.mu.Unlock()
+			return nil, errExtract
+		}
+
+		tmp.Seek(0, 0)
+		v.activeCount++
+		v.mu.Unlock()
+
+		return &archiveReadWrapper{
+			v:         v,
+			size:      size,
+			tmpFile:   tmp,
+			tmpPath:   tmp.Name(),
+			extracted: true,
+		}, nil
 	}
 
 	v.activeCount++

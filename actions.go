@@ -345,6 +345,7 @@ func actionOpenEditor(pf *PanelsFrame, v vfs.VFS, path string) {
 			if stat, errStat := v.Stat(ctx, path); errStat == nil && stat.IsDir {
 				return fmt.Errorf("cannot edit a directory")
 			}
+			ctx = context.WithValue(ctx, vfs.ProgressKey, vfs.ProgressCallback(update))
 			f, err = v.Open(ctx, path)
 			if err != nil {
 				if os.IsNotExist(err) || strings.Contains(err.Error(), "no such file") || strings.Contains(err.Error(), "not found") {
@@ -412,6 +413,7 @@ func actionOpenViewer(pf *PanelsFrame, v vfs.VFS, path string) {
 	var viewer *ViewerView
 	pf.RunProgressTask(" Opening... ", "Preparing to open file...", false, func(ctx context.Context, update func(msg string, percent int)) error {
 		update("Opening file...", -1)
+		ctx = context.WithValue(ctx, vfs.ProgressKey, vfs.ProgressCallback(update))
 		var err error
 		viewer, err = NewViewerView(ctx, v, path)
 		return err
@@ -761,13 +763,25 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 		initialDest += sep
 	}
 
+	onCompleteWithClear := func() {
+		if pf != nil {
+			if fsp := pf.getActivePanel(); fsp != nil {
+				fsp.selectedItems = make(map[string]bool)
+				for _, e := range fsp.entries {
+					e.Selected = false
+				}
+			}
+			pf.RefreshAll()
+		}
+	}
+
 	if isMove && !AppConfig.ConfirmMove {
-		go ExecuteFileOp(pf, srcVfs, dstVfs, names, initialDest, isMove, AppConfig.DefaultFileOpMode, pf.RefreshAll)
+		go ExecuteFileOp(pf, srcVfs, dstVfs, names, initialDest, isMove, AppConfig.DefaultFileOpMode, onCompleteWithClear)
 		return
 	}
 
 	if !isMove && !AppConfig.ConfirmCopy {
-		go ExecuteFileOp(pf, srcVfs, dstVfs, names, initialDest, isMove, AppConfig.DefaultFileOpMode, pf.RefreshAll)
+		go ExecuteFileOp(pf, srcVfs, dstVfs, names, initialDest, isMove, AppConfig.DefaultFileOpMode, onCompleteWithClear)
 		return
 	}
 
@@ -802,7 +816,7 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 		mode := comboMode.Menu.SelectPos
 		dlg.Close()
 		if dest != "" {
-			go ExecuteFileOp(pf, srcVfs, dstVfs, names, dest, isMove, mode, pf.RefreshAll)
+			go ExecuteFileOp(pf, srcVfs, dstVfs, names, dest, isMove, mode, onCompleteWithClear)
 		}
 	}
 	dlg.AddItem(btnOk)

@@ -165,3 +165,16 @@ func (w *TempFileWrapper) Close() error {
 	os.Remove(w.TempPath)
 	return err
 }
+type progressKeyType struct{}
+type reporterKeyType struct{}
+
+var ProgressKey = progressKeyType{}
+var ReporterKey = reporterKeyType{}
+
+type ProgressCallback func(msg string, percent int)
+
+type TaskReporter interface {
+	UpdateScan(currentPath string, files, dirs int64)
+	UpdateTransfer(action string, filename string, currentPct int, totalText string, totalPct int, speedText string)
+	IsCancelled() bool
+}

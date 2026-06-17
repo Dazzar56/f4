@@ -261,3 +261,76 @@ func TestArchiveReadWrapper_CloseNonBlocking(t *testing.T) {
 
 	close(readBlock)
 }
+type mockVFSProgressReporter struct {
+	called  bool
+	lastPct int
+}
+
+func (r *mockVFSProgressReporter) UpdateScan(currentPath string, files, dirs int64) {}
+func (r *mockVFSProgressReporter) UpdateTransfer(action, filename string, currentPct int, totalText string, totalPct int, speedText string) {
+	r.called = true
+	r.lastPct = currentPct
+}
+func (r *mockVFSProgressReporter) IsCancelled() bool { return false }
+
+func TestArchiveVFS_Open_ProgressReporting(t *testing.T) {
+	tmpDir := t.TempDir()
+	zipPath := filepath.Join(tmpDir, "progress_test.zip")
+
+	f, err := os.Create(zipPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zw := zip.NewWriter(f)
+	w, err := zw.Create("test.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Write([]byte("Progress test data"))
+	zw.Close()
+	f.Close()
+
+	vArc, err := NewArchiveVFS(&vfs.OSVFS{}, zipPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer vArc.Close()
+
+	callbackCalled := false
+	var lastCallbackPct int
+	progressCB := func(msg string, percent int) {
+		callbackCalled = true
+		lastCallbackPct = percent
+	}
+
+	reporter := &mockVFSProgressReporter{}
+
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, vfs.ProgressKey, vfs.ProgressCallback(progressCB))
+	ctx = context.WithValue(ctx, vfs.ReporterKey, vfs.TaskReporter(reporter))
+
+	rc, err := vArc.Open(ctx, vArc.Join(zipPath, "test.txt"))
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	defer rc.Close()
+
+	if !callbackCalled {
+		t.Error("ProgressCallback was not invoked during Open")
+	}
+	if !reporter.called {
+		t.Error("TaskReporter was not invoked during Open")
+	}
+	if lastCallbackPct != 100 || reporter.lastPct != 100 {
+		t.Errorf("Expected final progress to be 100%%, got Callback=%d%%, Reporter=%d%%", lastCallbackPct, reporter.lastPct)
+	}
+
+	buf := make([]byte, 18)
+	n, err := rc.ReadAt(context.Background(), buf, 0)
+	if err != nil && err != io.EOF {
+		t.Fatalf("ReadAt failed: %v", err)
+	}
+	if n != 18 || string(buf) != "Progress test data" {
+		t.Errorf("Read data mismatch: got %q, want 'Progress test data'", string(buf[:n]))
+	}
+}

@@ -97,6 +97,7 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 	desc := fmt.Sprintf("%d item(s) -> %s", len(names), vtui.TruncateMiddle(destInput, 15))
 
 	runFunc := func(ctx context.Context, reporter TaskReporter, anchor vtui.Frame) error {
+		ctx = context.WithValue(ctx, vfs.ReporterKey, reporter)
 		dirToEnsure := destPath
 		if !isTargetDir {
 			dirToEnsure = dstVfs.Dir(destPath)
@@ -347,6 +348,7 @@ func ExecuteDeleteOp(pf *PanelsFrame, activeVfs vfs.VFS, names []string, mode in
 	desc := fmt.Sprintf("Delete %d item(s)", len(names))
 
 	runFunc := func(ctx context.Context, reporter TaskReporter, anchor vtui.Frame) error {
+		ctx = context.WithValue(ctx, vfs.ReporterKey, reporter)
 		var totalStats vfs.OpStats
 		scanErr := error(nil)
 		totalStats, scanErr = vfs.CalculateStats(ctx, activeVfs, activeVfs.GetPath(), names, func(currentPath string, stats vfs.OpStats) {
