@@ -8,14 +8,14 @@ require (
 	github.com/mattn/go-runewidth v0.0.15
 	github.com/mholt/archives v0.1.5
 	github.com/pkg/sftp v1.13.6
-	github.com/unxed/tar v0.1.55
+	github.com/unxed/tar v0.1.56
 	github.com/unxed/vtinput v0.0.0
 	github.com/unxed/vtui v0.0.0
 	github.com/unxed/zip v0.1.55
-	github.com/unxed/zipper v0.1.30
+	github.com/unxed/zipper v0.1.31
 	github.com/vmihailenco/msgpack/v5 v5.4.1
 	golang.org/x/crypto v0.31.0
-	golang.org/x/sys v0.44.0
+	golang.org/x/sys v0.46.0
 	golang.org/x/term v0.40.0
 	golang.org/x/text v0.37.0
 )
@@ -35,13 +35,13 @@ require (
 	github.com/fogleman/gg v1.3.0 // indirect
 	github.com/go-text/typesetting v0.3.4 // indirect
 	github.com/go-webgpu/goffi v0.5.5 // indirect
-	github.com/go-webgpu/webgpu v0.4.3 // indirect
-	github.com/gogpu/gg v0.47.3 // indirect
-	github.com/gogpu/gogpu v0.39.1 // indirect
-	github.com/gogpu/gpucontext v0.19.0 // indirect
+	github.com/go-webgpu/webgpu v0.5.2 // indirect
+	github.com/gogpu/gg v0.48.11 // indirect
+	github.com/gogpu/gogpu v0.42.0 // indirect
+	github.com/gogpu/gpucontext v0.21.0 // indirect
 	github.com/gogpu/gputypes v0.5.0 // indirect
-	github.com/gogpu/naga v0.17.13 // indirect
-	github.com/gogpu/wgpu v0.28.7 // indirect
+	github.com/gogpu/naga v0.17.15 // indirect
+	github.com/gogpu/wgpu v0.30.1 // indirect
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/hashicorp/errwrap v1.0.0 // indirect
