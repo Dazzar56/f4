@@ -68,7 +68,7 @@ func actionExtractArchive(app vfs.App) {
 			return fmt.Errorf("extraction supported only from local filesystem")
 		}
 
-		ex, err := archive.NewExtractor(srcPath, destDir, archive.Options{Xattrs: true, SafeWrites: true})
+		ex, err := archive.NewExtractor(srcPath, destDir, archive.Options{Xattrs: false, SafeWrites: true})
 		if err != nil {
 			return err
 		}
@@ -134,7 +134,7 @@ func actionAddArchive(app vfs.App) {
 					}
 				}
 
-				a, err := archive.NewArchiver(fullArcPath, activeVfs.GetPath(), archive.Options{Xattrs: true})
+				a, err := archive.NewArchiver(fullArcPath, activeVfs.GetPath(), archive.Options{Xattrs: false})
 				if err != nil {
 					return err
 				}
