@@ -12,6 +12,7 @@ import (
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 )
+
 type globalAwareReporter struct {
 	original  TaskReporter
 	getGlobal func() (string, int, string)
@@ -231,9 +232,15 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 				if gTotalPct >= lastLoggedPct+5 || now.Sub(lastLoggedTime) >= 5*time.Second {
 					parts := strings.Fields(gTimeSpeedText)
 					elapsedStr, etaStr, speedStr := "", "", ""
-					if len(parts) >= 2 { elapsedStr = parts[1] }
-					if len(parts) >= 4 { etaStr = parts[3] }
-					if len(parts) >= 5 { speedStr = parts[4] }
+					if len(parts) >= 2 {
+						elapsedStr = parts[1]
+					}
+					if len(parts) >= 4 {
+						etaStr = parts[3]
+					}
+					if len(parts) >= 5 {
+						speedStr = parts[4]
+					}
 
 					vtui.DebugLog("FILEOP: %d%% | Items: %d/%d | Proc: %d/%d B | %s | %s | %s",
 						gTotalPct,

@@ -1,11 +1,11 @@
 package main
 
 import (
-	"io"
 	"bytes"
 	"context"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -1618,7 +1618,7 @@ func (m *mockReadAtCloser) Size() int64  { return 10 }
 type mockWriteCloser struct{}
 
 func (m *mockWriteCloser) Write(p []byte) (n int, err error) { return len(p), nil }
-func (m *mockWriteCloser) Close() error                     { return nil }
+func (m *mockWriteCloser) Close() error                      { return nil }
 
 type mockVFS struct {
 	vfs.VFS
@@ -1651,7 +1651,7 @@ func (m *mockVFS) Remove(ctx context.Context, path string) error { return nil }
 func (m *mockVFS) GetCapabilities() vfs.VFSCapabilities {
 	return vfs.VFSCapabilities{HasRandomAccess: true}
 }
-func (m *mockVFS) Close() error { return nil }
+func (m *mockVFS) Close() error   { return nil }
 func (m *mockVFS) Clone() vfs.VFS { return m }
 
 type mockReporter struct {
