@@ -413,7 +413,8 @@ func formatSize(b int64) string {
 func extractWithProgress(ctx context.Context, src io.Reader, dst io.Writer, size int64, name string, update vfs.ProgressCallback, reporter vfs.TaskReporter) error {
 	buf := make([]byte, 128*1024)
 	var copied int64
-	lastUpdate := time.Now()
+	startTime := time.Now()
+	lastUpdate := startTime
 
 	done := make(chan struct{})
 	defer close(done)
@@ -439,7 +440,9 @@ func extractWithProgress(ctx context.Context, src io.Reader, dst io.Writer, size
 						update(msg, -1)
 					}
 					if reporter != nil {
-						reporter.UpdateTransfer("Extracting", name, -1, msg, -1, "")
+						elapsed := time.Since(startTime)
+						elapsedStr := fmt.Sprintf("Time: %02d:%02d:%02d", int(elapsed.Hours()), int(elapsed.Minutes())%60, int(elapsed.Seconds())%60)
+						reporter.UpdateTransfer("Extracting", name, -1, msg, -1, elapsedStr)
 					}
 				}
 			}
@@ -472,7 +475,9 @@ func extractWithProgress(ctx context.Context, src io.Reader, dst io.Writer, size
 					update(fmt.Sprintf("Extracting %s...", name), pct)
 				}
 				if reporter != nil {
-					reporter.UpdateTransfer("Extracting", name, pct, fmt.Sprintf("Extracting: %s / %s", formatSize(currentCopied), formatSize(size)), pct, "")
+					elapsed := time.Since(startTime)
+					elapsedStr := fmt.Sprintf("Time: %02d:%02d:%02d", int(elapsed.Hours()), int(elapsed.Minutes())%60, int(elapsed.Seconds())%60)
+					reporter.UpdateTransfer("Extracting", name, pct, fmt.Sprintf("Extracting: %s / %s", formatSize(currentCopied), formatSize(size)), pct, elapsedStr)
 				}
 			}
 		}
@@ -524,6 +529,7 @@ func (v *ArchiveVFS) Open(ctx context.Context, path string) (vfs.ReadAtCloser, e
 		}
 	}
 
+	startTime := time.Now()
 	openDone := make(chan struct{})
 	go func() {
 		if update == nil && reporter == nil {
@@ -548,7 +554,9 @@ func (v *ArchiveVFS) Open(ctx context.Context, path string) (vfs.ReadAtCloser, e
 					update(msg, -1)
 				}
 				if reporter != nil {
-					reporter.UpdateTransfer("Opening", filepath.Base(path), -1, msg, -1, "")
+					elapsed := time.Since(startTime)
+					elapsedStr := fmt.Sprintf("Time: %02d:%02d:%02d", int(elapsed.Hours()), int(elapsed.Minutes())%60, int(elapsed.Seconds())%60)
+					reporter.UpdateTransfer("Opening", filepath.Base(path), -1, msg, -1, elapsedStr)
 				}
 			}
 		}

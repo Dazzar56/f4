@@ -331,6 +331,7 @@ type mockSeekingReporter struct {
 	lastAction    string
 	lastFilename  string
 	lastTotalText string
+	lastSpeedText string
 }
 
 func (r *mockSeekingReporter) UpdateScan(currentPath string, files, dirs int64) {}
@@ -338,6 +339,7 @@ func (r *mockSeekingReporter) UpdateTransfer(action, filename string, currentPct
 	r.lastAction = action
 	r.lastFilename = filename
 	r.lastTotalText = totalText
+	r.lastSpeedText = speedText
 }
 func (r *mockSeekingReporter) IsCancelled() bool { return false }
 
@@ -359,17 +361,23 @@ func TestArchiveVFS_Open_SeekingProgress(t *testing.T) {
 		close(openDone)
 	}()
 
-	// 1. Verify "Locating file..." status during blocked fsys.Open
+	// 1. Verify "Locating file..." status and elapsed time presence
 	time.Sleep(400 * time.Millisecond)
 	if !strings.HasPrefix(reporter.lastTotalText, "Locating file") {
 		t.Errorf("Expected 'Locating file...' status while Open is blocked, got %q", reporter.lastTotalText)
 	}
+	if !strings.Contains(reporter.lastSpeedText, "Time:") {
+		t.Errorf("Expected elapsed time in 'Locating' phase, got %q", reporter.lastSpeedText)
+	}
 	close(openBlock)
 
-	// 2. Verify "Seeking/Decompressing..." status during blocked file.Read
+	// 2. Verify "Seeking/Decompressing..." status and elapsed time presence
 	time.Sleep(400 * time.Millisecond)
 	if !strings.HasPrefix(reporter.lastTotalText, "Seeking/Decompressing") {
 		t.Errorf("Expected 'Seeking/Decompressing...' status while Read is blocked, got %q", reporter.lastTotalText)
+	}
+	if !strings.Contains(reporter.lastSpeedText, "Time:") {
+		t.Errorf("Expected elapsed time in 'Seeking' phase, got %q", reporter.lastSpeedText)
 	}
 
 	close(readBlock)
