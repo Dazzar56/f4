@@ -118,6 +118,89 @@ jobs:
         files: artifacts/*
         generate_release_notes: true
 
+  # Эта джоба обновляет Homebrew tap при пуше тэгов v*.*.*,
+  # чтобы под macOS можно было поставить f4 одной командой:
+  #   brew install <owner>/tap/f4
+  homebrew:
+    name: Update Homebrew Tap
+    needs: release
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+    - name: Compute version and download macOS artifacts
+      run: |
+        VERSION="${GITHUB_REF_NAME#v}"
+        echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+        BASE="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
+        for arch in amd64 arm64; do
+          file="f4-darwin-${arch}.tar.gz"
+          echo "Downloading $file ..."
+          curl -fL --retry 5 --retry-delay 10 --retry-all-errors -o "$file" "$BASE/$file"
+          sha=$(sha256sum "$file" | cut -d' ' -f1)
+          echo "SHA_${arch}=$sha" >> "$GITHUB_ENV"
+          echo "URL_${arch}=$BASE/$file" >> "$GITHUB_ENV"
+        done
+
+    - name: Generate formula
+      run: |
+        mkdir -p tap/Formula
+        cat > tap/Formula/f4.rb <<EOF
+        # This file is generated automatically by CI on each tagged release.
+        # Do not edit by hand — changes will be overwritten.
+        class F4 < Formula
+          desc "Experimental Far Manager / far2l clone in Go"
+          homepage "https://github.com/${GITHUB_REPOSITORY}"
+          version "${VERSION}"
+          license "BSD-3-Clause"
+
+          on_macos do
+            on_arm do
+              url "${URL_arm64}"
+              sha256 "${SHA_arm64}"
+            end
+            on_intel do
+              url "${URL_amd64}"
+              sha256 "${SHA_amd64}"
+            end
+          end
+
+          def install
+            bin.install "f4"
+            prefix.install "plugins" if File.directory?("plugins")
+          end
+
+          test do
+            assert_match "f4", shell_output("#{bin}/f4 --version 2>&1")
+          end
+        end
+        EOF
+        echo "----- Generated Formula -----"
+        cat tap/Formula/f4.rb
+
+    - name: Push formula to tap repository
+      env:
+        TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+      run: |
+        if [ -z "$TAP_TOKEN" ]; then
+          echo "::warning::HOMEBREW_TAP_TOKEN secret is not set; skipping tap update."
+          echo "Create a PAT with 'contents:write' on ${GITHUB_REPOSITORY_OWNER}/homebrew-tap and add it as HOMEBREW_TAP_TOKEN."
+          exit 0
+        fi
+        TAP_REPO="${GITHUB_REPOSITORY_OWNER}/homebrew-tap"
+        git clone "https://x-access-token:${TAP_TOKEN}@github.com/${TAP_REPO}.git" tap-repo
+        mkdir -p tap-repo/Formula
+        cp tap/Formula/f4.rb tap-repo/Formula/f4.rb
+        cd tap-repo
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        if git diff --quiet -- Formula/f4.rb; then
+          echo "Formula already up to date; nothing to commit."
+          exit 0
+        fi
+        git add Formula/f4.rb
+        git commit -m "f4 ${VERSION}"
+        git push
+
   # Эта джоба обновляет "плавающий" nightly релиз при каждом пуше в main
   nightly:
     name: Update Nightly Release
