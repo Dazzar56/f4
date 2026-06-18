@@ -12,6 +12,29 @@ import (
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 )
+type globalAwareReporter struct {
+	original  TaskReporter
+	getGlobal func() (string, int, string)
+}
+
+func (w *globalAwareReporter) UpdateScan(currentPath string, files, dirs int64) {
+	w.original.UpdateScan(currentPath, files, dirs)
+}
+
+func (w *globalAwareReporter) IsCancelled() bool {
+	return w.original.IsCancelled()
+}
+
+func (w *globalAwareReporter) UpdateTransfer(action, filename string, currentPct int, totalText string, totalPct int, speedText string) {
+	gTotalText, gTotalPct, gTimeSpeedText := w.getGlobal()
+	displayFileName := filename
+	if totalText != "" && !strings.HasPrefix(totalText, "Total:") && !strings.HasPrefix(totalText, "Extracting:") && !strings.HasPrefix(totalText, "Moving:") && !strings.HasPrefix(totalText, "Copying:") {
+		displayFileName = filename + " (" + totalText + ")"
+	} else if strings.HasPrefix(totalText, "Extracting:") {
+		displayFileName = filename + " (" + totalText + ")"
+	}
+	w.original.UpdateTransfer(action, displayFileName, currentPct, gTotalText, gTotalPct, gTimeSpeedText)
+}
 
 type FileOpState struct {
 	OverwriteAll bool
@@ -97,7 +120,7 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 	desc := fmt.Sprintf("%d item(s) -> %s", len(names), vtui.TruncateMiddle(destInput, 15))
 
 	runFunc := func(ctx context.Context, reporter TaskReporter, anchor vtui.Frame) error {
-		ctx = context.WithValue(ctx, vfs.ReporterKey, reporter)
+		// ctx is wrapped below with globalAwareReporter
 		dirToEnsure := destPath
 		if !isTargetDir {
 			dirToEnsure = dstVfs.Dir(destPath)
@@ -144,6 +167,51 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 		lastLoggedTime := startTime
 		lastLoggedPct := -1
 
+		getGlobalStats := func() (string, int, string) {
+			now := time.Now()
+			_, totalPct, _ := tracker.GetProgress()
+			processed, total := tracker.GetStats()
+
+			var totalText string
+			if total.Bytes > 0 {
+				totalText = fmt.Sprintf("Total: %s / %s", formatSize(processed.Bytes), formatSize(total.Bytes))
+			} else {
+				totalText = fmt.Sprintf("Total: %d / %d items", processed.Files+processed.Dirs, total.Files+total.Dirs)
+			}
+
+			elapsed := now.Sub(startTime)
+			elapsedStr := fmt.Sprintf("Time: %02d:%02d:%02d", int(elapsed.Hours()), int(elapsed.Minutes())%60, int(elapsed.Seconds())%60)
+
+			const ItemOverhead = 32 * 1024
+			vProcessed := float64(processed.Bytes + (processed.Files+processed.Dirs)*ItemOverhead)
+			vTotal := float64(total.Bytes + (total.Files+total.Dirs)*ItemOverhead)
+
+			etaStr := "Remaining: ??:??:??"
+			if vTotal > 0 && vProcessed > 0 && elapsed.Seconds() > 0.5 {
+				ratio := vProcessed / vTotal
+				etaSecs := (elapsed.Seconds() / ratio) - elapsed.Seconds()
+				if etaSecs < 0 {
+					etaSecs = 0
+				}
+				etaDur := time.Duration(etaSecs * float64(time.Second))
+				etaStr = fmt.Sprintf("Remaining: %02d:%02d:%02d", int(etaDur.Hours()), int(etaDur.Minutes())%60, int(etaDur.Seconds())%60)
+			}
+
+			speedStr := ""
+			if currentSpeed > 0 {
+				speedStr = formatSize(int64(currentSpeed)) + "/s"
+			}
+
+			timeSpeedText := fmt.Sprintf("%-16s %-21s %15s", elapsedStr, etaStr, speedStr)
+			return totalText, totalPct, timeSpeedText
+		}
+
+		wrapRep := &globalAwareReporter{
+			original:  reporter,
+			getGlobal: getGlobalStats,
+		}
+		ctx = context.WithValue(ctx, vfs.ReporterKey, wrapRep)
+
 		updateUI := func(force bool) {
 			now := time.Now()
 			if force || now.Sub(lastUpdate) >= 100*time.Millisecond {
@@ -155,53 +223,24 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 				}
 				lastUpdate = now
 
-				filePct, totalPct, currName := tracker.GetProgress()
+				filePct, _, currName := tracker.GetProgress()
 				processed, total := tracker.GetStats()
 
-				var totalText string
-				if total.Bytes > 0 {
-					totalText = fmt.Sprintf("Total: %s / %s", formatSize(processed.Bytes), formatSize(total.Bytes))
-				} else {
-					totalText = fmt.Sprintf("Total: %d / %d items", processed.Files+processed.Dirs, total.Files+total.Dirs)
-				}
+				gTotalText, gTotalPct, gTimeSpeedText := getGlobalStats()
 
-				elapsed := now.Sub(startTime)
-				elapsedStr := fmt.Sprintf("Time: %02d:%02d:%02d", int(elapsed.Hours()), int(elapsed.Minutes())%60, int(elapsed.Seconds())%60)
+				if gTotalPct >= lastLoggedPct+5 || now.Sub(lastLoggedTime) >= 5*time.Second {
+					parts := strings.Fields(gTimeSpeedText)
+					elapsedStr, etaStr, speedStr := "", "", ""
+					if len(parts) >= 2 { elapsedStr = parts[1] }
+					if len(parts) >= 4 { etaStr = parts[3] }
+					if len(parts) >= 5 { speedStr = parts[4] }
 
-				const ItemOverhead = 32 * 1024
-				vProcessed := float64(processed.Bytes + (processed.Files+processed.Dirs)*ItemOverhead)
-				vTotal := float64(total.Bytes + (total.Files+total.Dirs)*ItemOverhead)
-
-				etaStr := "Remaining: ??:??:??"
-				if vTotal > 0 && vProcessed > 0 && elapsed.Seconds() > 0.5 {
-					ratio := vProcessed / vTotal
-					etaSecs := (elapsed.Seconds() / ratio) - elapsed.Seconds()
-					if etaSecs < 0 {
-						etaSecs = 0
-					}
-					etaDur := time.Duration(etaSecs * float64(time.Second))
-					etaStr = fmt.Sprintf("Remaining: %02d:%02d:%02d", int(etaDur.Hours()), int(etaDur.Minutes())%60, int(etaDur.Seconds())%60)
-				}
-
-				speedStr := ""
-				if currentSpeed > 0 {
-					speedStr = formatSize(int64(currentSpeed)) + "/s"
-				}
-
-				timeSpeedText := fmt.Sprintf("%-16s %-21s %15s", elapsedStr, etaStr, speedStr)
-
-				vPct := 0
-				if vTotal > 0 {
-					vPct = int((vProcessed * 100) / vTotal)
-				}
-
-				if totalPct >= lastLoggedPct+5 || now.Sub(lastLoggedTime) >= 5*time.Second {
-					vtui.DebugLog("FILEOP: %d%% (V:%d%%) | Items: %d/%d | Proc: %d/%d B | %s | %s | %s",
-						totalPct, vPct,
+					vtui.DebugLog("FILEOP: %d%% | Items: %d/%d | Proc: %d/%d B | %s | %s | %s",
+						gTotalPct,
 						processed.Files+processed.Dirs, total.Files+total.Dirs,
 						processed.Bytes, total.Bytes,
-						strings.TrimSpace(elapsedStr), strings.TrimSpace(etaStr), strings.TrimSpace(speedStr))
-					lastLoggedPct = totalPct
+						elapsedStr, etaStr, speedStr)
+					lastLoggedPct = gTotalPct
 					lastLoggedTime = now
 				}
 
@@ -210,7 +249,7 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 					action = "Moving"
 				}
 
-				reporter.UpdateTransfer(action, currName, filePct, totalText, totalPct, timeSpeedText)
+				reporter.UpdateTransfer(action, currName, filePct, gTotalText, gTotalPct, gTimeSpeedText)
 			}
 		}
 

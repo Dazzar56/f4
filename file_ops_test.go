@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"bytes"
 	"context"
 	"github.com/unxed/f4/vfs"
@@ -1600,5 +1601,120 @@ Loop:
 		default:
 			time.Sleep(10 * time.Millisecond)
 		}
+	}
+}
+
+type mockReadAtCloser struct{}
+
+func (m *mockReadAtCloser) ReadAt(ctx context.Context, p []byte, off int64) (n int, err error) {
+	return 0, io.EOF
+}
+func (m *mockReadAtCloser) Read(ctx context.Context, p []byte) (n int, err error) {
+	return 0, io.EOF
+}
+func (m *mockReadAtCloser) Close() error { return nil }
+func (m *mockReadAtCloser) Size() int64  { return 10 }
+
+type mockWriteCloser struct{}
+
+func (m *mockWriteCloser) Write(p []byte) (n int, err error) { return len(p), nil }
+func (m *mockWriteCloser) Close() error                     { return nil }
+
+type mockVFS struct {
+	vfs.VFS
+	onOpen func(ctx context.Context, path string) (vfs.ReadAtCloser, error)
+}
+
+func (m *mockVFS) IsAtRoot() bool            { return true }
+func (m *mockVFS) GetPath() string           { return "/" }
+func (m *mockVFS) IsAbs(path string) bool    { return true }
+func (m *mockVFS) SetPath(path string) error { return nil }
+func (m *mockVFS) Join(elem ...string) string {
+	return strings.Join(elem, "/")
+}
+func (m *mockVFS) Abs(path string) (string, error) { return path, nil }
+func (m *mockVFS) Base(path string) string         { return "file.txt" }
+func (m *mockVFS) Dir(path string) string          { return "/" }
+func (m *mockVFS) Stat(ctx context.Context, path string) (vfs.VFSItem, error) {
+	return vfs.VFSItem{Name: "file.txt", Size: 10, IsDir: false}, nil
+}
+func (m *mockVFS) Open(ctx context.Context, path string) (vfs.ReadAtCloser, error) {
+	if m.onOpen != nil {
+		return m.onOpen(ctx, path)
+	}
+	return &mockReadAtCloser{}, nil
+}
+func (m *mockVFS) Create(ctx context.Context, path string) (io.WriteCloser, error) {
+	return &mockWriteCloser{}, nil
+}
+func (m *mockVFS) Remove(ctx context.Context, path string) error { return nil }
+func (m *mockVFS) GetCapabilities() vfs.VFSCapabilities {
+	return vfs.VFSCapabilities{HasRandomAccess: true}
+}
+func (m *mockVFS) Close() error { return nil }
+func (m *mockVFS) Clone() vfs.VFS { return m }
+
+type mockReporter struct {
+	lastAction     string
+	lastFilename   string
+	lastCurrentPct int
+	lastTotalText  string
+	lastTotalPct   int
+	lastSpeedText  string
+}
+
+func (m *mockReporter) UpdateScan(currentPath string, files, dirs int64) {}
+func (m *mockReporter) IsCancelled() bool                                { return false }
+func (m *mockReporter) UpdateTransfer(action, filename string, currentPct int, totalText string, totalPct int, speedText string) {
+	m.lastAction = action
+	m.lastFilename = filename
+	m.lastCurrentPct = currentPct
+	m.lastTotalText = totalText
+	m.lastTotalPct = totalPct
+	m.lastSpeedText = speedText
+}
+
+func TestProgressReporterHijacking(t *testing.T) {
+	mock := &mockReporter{}
+
+	// Global progress is set to 50%
+	globalTotalText := "Total: 50 MB / 100 MB"
+	globalTotalPct := 50
+	globalSpeedText := "Time: 00:01:00  Remaining: 00:01:00  1.0 MB/s"
+
+	getGlobal := func() (string, int, string) {
+		return globalTotalText, globalTotalPct, globalSpeedText
+	}
+
+	// Instantiate globalAwareReporter
+	wrap := &globalAwareReporter{
+		original:  mock,
+		getGlobal: getGlobal,
+	}
+
+	// Simulate sub-task call (e.g. from ArchiveVFS during locate/extract)
+	localAction := "Extracting"
+	localFilename := "file.txt"
+	localCurrentPct := 20
+	localTotalText := "Extracting: 2 MB / 10 MB"
+	localTotalPct := 20
+	localSpeedText := "Time: 00:00:05"
+
+	wrap.UpdateTransfer(localAction, localFilename, localCurrentPct, localTotalText, localTotalPct, localSpeedText)
+
+	// Assertions for CORRECT behavior:
+	// 1. Total progress should remain the global one (50%), not overridden by the sub-task's 20%
+	if mock.lastTotalPct != globalTotalPct {
+		t.Fatalf("[BUG #137 REPRODUCED] Total percentage was overridden by sub-task! Expected %d, got %d", globalTotalPct, mock.lastTotalPct)
+	}
+
+	// 2. Speed/Time/ETA text should retain the global context, not overwritten by local elapsed time
+	if !strings.Contains(mock.lastSpeedText, "Remaining: 00:01:00") {
+		t.Fatalf("[BUG #137 REPRODUCED] Global ETA was lost! Expected it to contain global speed text, but got %q", mock.lastSpeedText)
+	}
+
+	// 3. Current filename should display sub-task status
+	if !strings.Contains(mock.lastFilename, "file.txt (Extracting: 2 MB / 10 MB)") {
+		t.Fatalf("Filename didn't append sub-task status. Got: %q", mock.lastFilename)
 	}
 }
