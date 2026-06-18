@@ -11,8 +11,8 @@ require (
 	github.com/unxed/tar v0.1.67
 	github.com/unxed/vtinput v0.0.0
 	github.com/unxed/vtui v0.0.0
-	github.com/unxed/zip v0.1.66
-	github.com/unxed/zipper v0.1.36
+	github.com/unxed/zip v0.1.69
+	github.com/unxed/zipper v0.1.39
 	github.com/vmihailenco/msgpack/v5 v5.4.1
 	golang.org/x/crypto v0.31.0
 	golang.org/x/sys v0.46.0
