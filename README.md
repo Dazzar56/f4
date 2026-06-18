@@ -17,6 +17,18 @@
 
 *These builds are automated and represent the current state of the `main` branch.*
 
+### 🍺 Install on macOS via Homebrew
+
+Tagged releases (`vX.Y.Z`) are published to a Homebrew tap, so you can install with one command:
+
+```sh
+brew install Slach/tap/f4
+```
+
+To upgrade later: `brew upgrade f4`. Both Apple Silicon (arm64) and Intel (amd64) Macs are supported.
+
+> **Maintainer setup (one-time):** create a public repository `Slach/homebrew-tap`, then add a repository secret `HOMEBREW_TAP_TOKEN` (a fine-grained PAT with `contents:write` on that tap repo). The `homebrew` CI job regenerates `Formula/f4.rb` and pushes it on every `v*.*.*` tag.
+
 **The Core:** Creating an experimental, cross-platform TUI (Terminal User Interface) file manager that aims to fully replicate the features, UX, data structures, and rendering logic of `far2l` and Far Manager, but implemented entirely in Go.
 
 ### Philosophy & Goals
