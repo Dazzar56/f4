@@ -85,7 +85,7 @@ var Lng = map[string]string{
 	"PanelSettings.SavePaths":      "Save panel &paths on exit",
 	"PanelSettings.KeepCursor":     "Don't touch terminal &cursor style",
 	"PanelSettings.VimHotkeys":     "Enable &Vim-like hotkeys (j, k, dd, cc, mm)",
-	"PanelSettings.SyncPanelLoad":  "S&ynchronous panel loading (disable cache & chunking)",
+	"PanelSettings.SyncPanelLoad":  "S&ynchronous panel loading (disable cache/chunking)",
 	"ConfirmationsSettings.Title":  " Confirmations ",
 	"ConfirmationsSettings.Copy":   "Confirm on &copy",
 	"ConfirmationsSettings.Move":   "Confirm on &move",
