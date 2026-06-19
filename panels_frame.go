@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 	"unicode"
+	"path/filepath"
 
 	"github.com/mattn/go-runewidth"
 
@@ -1014,6 +1015,42 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 						}
 
 						return true
+					} else if targetPath == ".." && fsp.vfs.IsAtRoot() && fsp.vfs.ParentVFS() != nil {
+						parent := fsp.vfs.ParentVFS()
+						oldPath := fsp.vfs.GetPath()
+
+						fsp.vfs.Close()
+						pf.ptyMutex.Lock()
+						if pty, ok := pf.remotePtys[fsp.vfs]; ok {
+							pty.Close()
+							delete(pf.remotePtys, fsp.vfs)
+						}
+						pf.ptyMutex.Unlock()
+
+						fsp.dirCache = make(map[string]dirCacheEntry)
+						fsp.vfs = parent
+						fsp.pendingSelection = fsp.vfs.Base(oldPath)
+						fsp.ReadDirectory()
+						pf.cmdLine.Clear()
+
+						if pf.syncPTYDirectory(fsp.vfs.GetPath(), fsp.vfs) {
+							pf.lastPtyPath = fsp.vfs.GetPath()
+							pf.lastPtyVFS = fsp.vfs
+						}
+
+						return true
+					} else if filepath.IsAbs(targetPath) || filepath.VolumeName(targetPath) != "" {
+						newVfs := vfs.NewOSVFS(targetPath)
+						if err := newVfs.SetPath(targetPath); err == nil {
+							pf.switchToVFS(fsp, newVfs)
+							pf.cmdLine.Clear()
+
+							if pf.syncPTYDirectory(fsp.vfs.GetPath(), fsp.vfs) {
+								pf.lastPtyPath = fsp.vfs.GetPath()
+								pf.lastPtyVFS = fsp.vfs
+							}
+							return true
+						}
 					}
 				}
 			}

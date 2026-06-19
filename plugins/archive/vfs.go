@@ -129,21 +129,47 @@ func (v *ArchiveVFS) GetPath() string {
 }
 func (v *ArchiveVFS) IsAbs(p string) bool { return path.IsAbs(p) || strings.HasPrefix(p, v.arcPath) }
 
-func (v *ArchiveVFS) SetPath(path string) error {
+func (v *ArchiveVFS) SetPath(p string) error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	newPath := filepath.ToSlash(filepath.Clean(path))
+
+	cleanP := filepath.ToSlash(filepath.Clean(p))
 	prefix := filepath.ToSlash(filepath.Clean(v.arcPath))
 
-	if strings.HasPrefix(newPath, prefix) {
-		newPath = strings.TrimPrefix(newPath, prefix)
+	var newInner string
+
+	if strings.HasPrefix(cleanP, prefix) {
+		newInner = strings.TrimPrefix(cleanP, prefix)
+	} else if filepath.IsAbs(p) || filepath.VolumeName(p) != "" {
+		return fmt.Errorf("path escapes archive: %s", p)
+	} else {
+		if v.innerPath == "" || v.innerPath == "." {
+			newInner = cleanP
+		} else {
+			newInner = path.Join(v.innerPath, cleanP)
+		}
 	}
 
-	newPath = strings.TrimPrefix(newPath, "/")
-	if newPath == "" {
-		newPath = "."
+	newInner = strings.TrimPrefix(newInner, "/")
+	newInner = path.Clean(newInner)
+
+	if newInner == "" || newInner == "." {
+		newInner = "."
+	} else if strings.HasPrefix(newInner, "..") {
+		return fmt.Errorf("path escapes archive root")
 	}
-	v.innerPath = newPath
+
+	if v.fsys != nil && newInner != "." {
+		info, err := fs.Stat(v.fsys, newInner)
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			return fmt.Errorf("not a directory: %s", newInner)
+		}
+	}
+
+	v.innerPath = newInner
 	return nil
 }
 
