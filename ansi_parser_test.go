@@ -787,4 +787,3 @@ func TestAnsiParser_OSC52_Write_Success(t *testing.T) {
 		t.Errorf("Expected clipboard to be %q, got %q", testStr, got)
 	}
 }
-

@@ -2,11 +2,11 @@ package main
 
 import (
 	"context"
+	"github.com/unxed/f4/plugins/archive"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 	"github.com/unxed/zip"
-	"github.com/unxed/f4/plugins/archive"
 	"os"
 	"path/filepath"
 	"runtime"
