@@ -6,12 +6,12 @@ import (
 	"github.com/unxed/f4/vfs"
 	"os"
 	"os/user"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
 	"time"
 	"unicode"
-	"path/filepath"
 
 	"github.com/mattn/go-runewidth"
 

@@ -890,17 +890,16 @@ func TestTerminalView_EraseDisplay_LogSync(t *testing.T) {
 	}
 }
 
-
 type mockPtyForTerminal struct {
 	bytes.Buffer
 }
 
-func (m *mockPtyForTerminal) Read(p []byte) (n int, err error) { return 0, nil }
-func (m *mockPtyForTerminal) Close() error                     { return nil }
-func (m *mockPtyForTerminal) SetSize(cols, rows int)           {}
-func (m *mockPtyForTerminal) Wait() error                      { return nil }
+func (m *mockPtyForTerminal) Read(p []byte) (n int, err error)      { return 0, nil }
+func (m *mockPtyForTerminal) Close() error                          { return nil }
+func (m *mockPtyForTerminal) SetSize(cols, rows int)                {}
+func (m *mockPtyForTerminal) Wait() error                           { return nil }
 func (m *mockPtyForTerminal) Run(name string, args ...string) error { return nil }
-func (m *mockPtyForTerminal) IsBusy() bool                     { return false }
+func (m *mockPtyForTerminal) IsBusy() bool                          { return false }
 
 func TestTerminalView_ProcessFar2lInteract_ColonFormat(t *testing.T) {
 	tv := NewTerminalView(80, 24)
