@@ -115,14 +115,19 @@ func handleSudoClient(conn *net.UnixConn) {
 			// Just return success
 
 		case CmdOpen:
-			f, err := os.OpenFile(req.Path, req.Flags, os.FileMode(req.Mode))
-			if err != nil {
-				vtui.DebugLog("SUDO_DISPATCHER: Open(%q) FAILED: %v", req.Path, err)
-				resp.Error = err.Error()
+			fi, err := os.Stat(req.Path)
+			if err == nil && (fi.Mode()&(os.ModeNamedPipe|os.ModeSocket|os.ModeDevice|os.ModeCharDevice) != 0) {
+				resp.Error = "cannot open special file"
 			} else {
-				fd = int(f.Fd())
-				vtui.DebugLog("SUDO_DISPATCHER: Open(%q) SUCCESS, FD=%d", req.Path, fd)
-				defer f.Close() // Safe to close in dispatcher, FD is duplicated across Unix socket
+				f, err := os.OpenFile(req.Path, req.Flags, os.FileMode(req.Mode))
+				if err != nil {
+					vtui.DebugLog("SUDO_DISPATCHER: Open(%q) FAILED: %v", req.Path, err)
+					resp.Error = err.Error()
+				} else {
+					fd = int(f.Fd())
+					vtui.DebugLog("SUDO_DISPATCHER: Open(%q) SUCCESS, FD=%d", req.Path, fd)
+					defer f.Close() // Safe to close in dispatcher, FD is duplicated across Unix socket
+				}
 			}
 
 		case CmdStat:

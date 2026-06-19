@@ -315,6 +315,10 @@ func (v *OSVFS) Open(ctx context.Context, path string) (ReadAtCloser, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
+	fi, err := os.Stat(path)
+	if err == nil && (fi.Mode()&(os.ModeNamedPipe|os.ModeSocket|os.ModeDevice|os.ModeCharDevice) != 0) {
+		return nil, os.ErrInvalid
+	}
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsPermission(err) && globalSudoClient.IsAvailable() {
@@ -340,6 +344,10 @@ func (v *OSVFS) Open(ctx context.Context, path string) (ReadAtCloser, error) {
 func (v *OSVFS) Create(ctx context.Context, path string) (io.WriteCloser, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
+	}
+	fi, err := os.Stat(path)
+	if err == nil && (fi.Mode()&(os.ModeNamedPipe|os.ModeSocket|os.ModeDevice|os.ModeCharDevice) != 0) {
+		return nil, os.ErrInvalid
 	}
 	f, err := os.Create(path)
 	if err != nil && os.IsPermission(err) && globalSudoClient.IsAvailable() {
