@@ -152,7 +152,9 @@ func (p *PTY) IsBusy() bool {
 		return false
 	}
 
-	if time.Since(p.lastBusyCheck) < 50*time.Millisecond {
+	// Increase cache timeout to 1 second to prevent high CPU usage
+	// from CreateToolhelp32Snapshot during idle UI redraws.
+	if time.Since(p.lastBusyCheck) < 1000*time.Millisecond {
 		return p.lastBusyState
 	}
 
