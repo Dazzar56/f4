@@ -4,11 +4,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/unxed/vtui"
 )
 
 type F4ClipboardAuth struct {
+	mu      sync.Mutex
 	autheds map[string]bool
 	path    string
 }
@@ -32,7 +34,11 @@ func NewF4ClipboardAuth() *F4ClipboardAuth {
 
 func (a *F4ClipboardAuth) Authorize(clientID string) int {
 	vtui.DebugLog("CLIPBOARD_AUTH: Authorize request from clientID: %q", clientID)
-	if a.autheds[clientID] {
+	a.mu.Lock()
+	authed := a.autheds[clientID]
+	a.mu.Unlock()
+
+	if authed {
 		vtui.DebugLog("CLIPBOARD_AUTH: Client %q already in autheds cache", clientID)
 		return 1
 	}
@@ -55,7 +61,9 @@ func (a *F4ClipboardAuth) Authorize(clientID string) int {
 		return 1 // Allow Once
 	case 2: // Allow Always
 		vtui.DebugLog("CLIPBOARD_AUTH: Adding %q to persistent autheds", clientID)
+		a.mu.Lock()
 		a.autheds[clientID] = true
+		a.mu.Unlock()
 		f, _ := os.OpenFile(a.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 		if f != nil {
 			f.WriteString(clientID + "\n")

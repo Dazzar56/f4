@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"encoding/base64"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -198,13 +200,13 @@ func TestTerminalView_ProcessFar2lInteract_LocalAuth(t *testing.T) {
 	tv.ProcessFar2lInteract(stk)
 
 	rawResp := string(pty.written)
-	// Prefix is \x1b_far2l (7 bytes)
-	if !strings.HasPrefix(rawResp, "\x1b_far2l") || !strings.HasSuffix(rawResp, "\x07") {
+	// Prefix is \x1b_far2l: (8 bytes)
+	if !strings.HasPrefix(rawResp, "\x1b_far2l:") || !strings.HasSuffix(rawResp, "\x07") {
 		t.Fatalf("Malformed response: %q", rawResp)
 	}
 
 	// Strip prefix and suffix to get base64 payload
-	b64 := rawResp[7 : len(rawResp)-1]
+	b64 := rawResp[8 : len(rawResp)-1]
 	decoded, err := base64.StdEncoding.DecodeString(b64)
 	if err != nil {
 		t.Fatalf("Failed to decode base64: %v. Raw string: %q", err, b64)
@@ -886,4 +888,82 @@ func TestTerminalView_EraseDisplay_LogSync(t *testing.T) {
 	if !strings.HasSuffix(strings.TrimSpace(string(logBytes)), "X") {
 		t.Errorf("Content after clear was lost. Log: %q", string(logBytes))
 	}
+}
+
+
+type mockPtyForTerminal struct {
+	bytes.Buffer
+}
+
+func (m *mockPtyForTerminal) Read(p []byte) (n int, err error) { return 0, nil }
+func (m *mockPtyForTerminal) Close() error                     { return nil }
+func (m *mockPtyForTerminal) SetSize(cols, rows int)           {}
+func (m *mockPtyForTerminal) Wait() error                      { return nil }
+func (m *mockPtyForTerminal) Run(name string, args ...string) error { return nil }
+func (m *mockPtyForTerminal) IsBusy() bool                     { return false }
+
+func TestTerminalView_ProcessFar2lInteract_ColonFormat(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	pty := &mockPtyForTerminal{}
+	tv.pty = pty
+
+	// Send a simple 'w' (window size) command which generates a synchronous reply
+	stk := vtinput.Far2lStack{}
+	stk.PushU8(1)   // transaction id
+	stk.PushU8('w') // cmd
+
+	tv.ProcessFar2lInteract(stk)
+
+	out := pty.String()
+	if !strings.HasPrefix(out, "\x1b_far2l:") {
+		t.Errorf("Expected APC reply to start with '\\x1b_far2l:', got %q", out)
+	}
+}
+
+func TestTerminalView_ProcessFar2lInteract_ConcurrentRace(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	pty := &mockPtyForTerminal{}
+	tv.pty = pty
+
+	vtui.GlobalClipboardAccessManager = &mockClipAuthManager{authorized: true}
+	defer func() { vtui.GlobalClipboardAccessManager = nil }()
+
+	var wg sync.WaitGroup
+	workers := 10
+
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			for j := 0; j < 30; j++ {
+				// Simulating concurrent auth handshake ('o')
+				stk1 := vtinput.Far2lStack{}
+				stk1.PushString(fmt.Sprintf("client-%d", workerID))
+				stk1.PushU8('o')
+				stk1.PushU8('c')
+				stk1.PushU8(uint8(j))
+				tv.ProcessFar2lInteract(stk1)
+
+				// Simulating concurrent chunked clipboard writes ('S')
+				stk2 := vtinput.Far2lStack{}
+				chunk := make([]byte, 256)
+				stk2.PushBytes(chunk)
+				stk2.PushU16(1)
+				stk2.PushU8('S')
+				stk2.PushU8('c')
+				stk2.PushU8(uint8(j))
+				tv.ProcessFar2lInteract(stk2)
+
+				// Simulating concurrent clipboard read ('g')
+				stk3 := vtinput.Far2lStack{}
+				stk3.PushU32(1) // CF_TEXT
+				stk3.PushU8('g')
+				stk3.PushU8('c')
+				stk3.PushU8(uint8(j))
+				tv.ProcessFar2lInteract(stk3)
+			}
+		}(i)
+	}
+
+	wg.Wait()
 }

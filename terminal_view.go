@@ -1048,17 +1048,21 @@ func (tv *TerminalView) ProcessFar2lInteract(data []byte) {
 		switch sub {
 		case 'o':
 			clientID := stk.PopString()
+			tv.mu.Lock()
 			auth, cached := tv.authCache[clientID]
+			tv.mu.Unlock()
+
 			if !cached {
 				if vtui.GlobalClipboardAccessManager != nil {
 					auth = vtui.GlobalClipboardAccessManager.Authorize(clientID)
-					// Only cache if the user didn't explicitly "Reject" (0)
-					// to allow them to change their mind on the next attempt.
 					if auth != 0 {
+						tv.mu.Lock()
 						tv.authCache[clientID] = auth
+						tv.mu.Unlock()
 					}
 				}
 			}
+
 			respAuth := auth
 			if auth == -1 {
 				respAuth = 1 // Tell child success, we'll handle it locally
@@ -1066,31 +1070,39 @@ func (tv *TerminalView) ProcessFar2lInteract(data []byte) {
 			reply.PushU64(2) // FARTTY_FEATCLIP_CHUNKED_SET
 			reply.PushU8(uint8(respAuth))
 		case 'c':
+			tv.mu.Lock()
 			tv.clipboardChunks = nil
+			tv.mu.Unlock()
 			reply.PushU8(1)
 		case 'e':
 			if !vtui.SetOSClipboard("") {
 				vtui.SetClipboard("")
 			}
+			tv.mu.Lock()
 			tv.clipboardChunks = nil
+			tv.mu.Unlock()
 			reply.PushU8(1)
 		case 'a':
 			_ = stk.PopU32() // fmt
 			reply.PushU8(1)
 		case 'S':
 			size := stk.PopU16()
+			tv.mu.Lock()
 			if size == 0 {
 				tv.clipboardChunks = nil
 			} else {
 				chunk := stk.PopBytes(int(size) << 8)
 				tv.clipboardChunks = append(tv.clipboardChunks, chunk...)
 			}
+			tv.mu.Unlock()
 		case 's':
 			_ = stk.PopU32() // fmt
 			len := stk.PopU32()
 			textBytes := stk.PopBytes(int(len))
+			tv.mu.Lock()
 			fullData := append(tv.clipboardChunks, textBytes...)
 			tv.clipboardChunks = nil
+			tv.mu.Unlock()
 			if !vtui.SetOSClipboard(string(fullData)) {
 				vtui.SetClipboard(string(fullData))
 			}
@@ -1144,7 +1156,7 @@ func (tv *TerminalView) ProcessFar2lInteract(data []byte) {
 		reply.PushU8(id)
 		b64 := base64.StdEncoding.EncodeToString(reply)
 		if tv.pty != nil {
-			tv.pty.Write([]byte("\x1b_far2l" + b64 + "\x07"))
+			tv.pty.Write([]byte("\x1b_far2l:" + b64 + "\x07"))
 		}
 	}
 }

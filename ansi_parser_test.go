@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/base64"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -731,3 +733,58 @@ func TestAnsiParser_ExcisionExtra(t *testing.T) {
 		})
 	}
 }
+
+type mockClipAuthManager struct {
+	authorized bool
+}
+
+func (m *mockClipAuthManager) Authorize(id string) int {
+	if m.authorized {
+		return 1 // Allow Once
+	}
+	return 0 // Deny
+}
+
+func TestAnsiParser_OSC52_Read_Security(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	pty := &mockPtyForTerminal{}
+	parser := NewAnsiParser(tv, pty)
+
+	// Test 1: Denied access
+	vtui.GlobalClipboardAccessManager = &mockClipAuthManager{authorized: false}
+	parser.Process([]byte("\x1b]52;c;?\x07"))
+
+	if pty.Len() > 0 {
+		t.Errorf("Expected no output when clipboard read is denied, got %q", pty.String())
+	}
+
+	// Test 2: Allowed access
+	vtui.GlobalClipboardAccessManager = &mockClipAuthManager{authorized: true}
+	vtui.SetClipboard("secret_data")
+	parser.Process([]byte("\x1b]52;c;?\x07"))
+
+	out := pty.String()
+	if !strings.Contains(out, "\x1b]52;c;") {
+		t.Errorf("Expected OSC 52 reply containing clipboard data, got %q", out)
+	}
+
+	// Reset global state
+	vtui.GlobalClipboardAccessManager = nil
+}
+
+func TestAnsiParser_OSC52_Write_Success(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	parser := NewAnsiParser(tv, nil)
+
+	testStr := "Hello OSC 52"
+	b64 := base64.StdEncoding.EncodeToString([]byte(testStr))
+
+	// OSC 52 ; selection (c) ; data (b64) BEL
+	parser.Process([]byte(fmt.Sprintf("\x1b]52;c;%s\x07", b64)))
+
+	got := vtui.GetClipboard()
+	if got != testStr {
+		t.Errorf("Expected clipboard to be %q, got %q", testStr, got)
+	}
+}
+
