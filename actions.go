@@ -66,9 +66,7 @@ func actionFoldersHistory(pf *PanelsFrame) {
 				targetPanel = pf.getInactivePanel()
 			}
 			if targetPanel != nil {
-				targetPanel.vfs.SetPath(path)
-				targetPanel.ReadDirectory()
-				pf.RefreshAll()
+				pf.NavigateToPath(targetPanel, path)
 			}
 			// Update MRU order
 			AddFolderHistory(path)

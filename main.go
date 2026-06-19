@@ -316,16 +316,25 @@ func SetupUI() {
 	if AppConfig.SavePanelPaths {
 		lp := panels.panels[0].(*FileSystemPanel)
 		rp := panels.panels[1].(*FileSystemPanel)
-		if LastLeftPath != "" {
-			lp.vfs.SetPath(LastLeftPath)
+		if LastLeftPath != "" && panels.NavigateToPath(lp, LastLeftPath) {
+			// Navigated successfully
+		} else {
+			if LastLeftPath != "" {
+				lp.vfs.SetPath(LastLeftPath)
+			}
+			lp.ReadDirectory()
 		}
-		if LastRightPath != "" {
-			rp.vfs.SetPath(LastRightPath)
+		if LastRightPath != "" && panels.NavigateToPath(rp, LastRightPath) {
+			// Navigated successfully
+		} else {
+			if LastRightPath != "" {
+				rp.vfs.SetPath(LastRightPath)
+			}
+			rp.ReadDirectory()
 		}
 		lp.pendingSelection = LastLeftCursor
 		rp.pendingSelection = LastRightCursor
 		panels.activeIdx = LastActivePanel
-		panels.RefreshAll()
 	}
 	vtui.FrameManager.Push(panels)
 

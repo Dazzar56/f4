@@ -1003,9 +1003,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			// Apply to panel first
 			if isDirChange {
 				if fsp, ok := pf.panels[pf.activeIdx].(*FileSystemPanel); ok {
-					if err := fsp.vfs.SetPath(targetPath); err == nil {
-						fsp.pendingSelection = ".."
-						fsp.ReadDirectory()
+					if pf.NavigateToPath(fsp, targetPath) {
 						pf.cmdLine.Clear()
 
 						// Sync the background PTY synchronously to satisfy tests and provide immediate state
@@ -1015,42 +1013,6 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 						}
 
 						return true
-					} else if targetPath == ".." && fsp.vfs.IsAtRoot() && fsp.vfs.ParentVFS() != nil {
-						parent := fsp.vfs.ParentVFS()
-						oldPath := fsp.vfs.GetPath()
-
-						fsp.vfs.Close()
-						pf.ptyMutex.Lock()
-						if pty, ok := pf.remotePtys[fsp.vfs]; ok {
-							pty.Close()
-							delete(pf.remotePtys, fsp.vfs)
-						}
-						pf.ptyMutex.Unlock()
-
-						fsp.dirCache = make(map[string]dirCacheEntry)
-						fsp.vfs = parent
-						fsp.pendingSelection = fsp.vfs.Base(oldPath)
-						fsp.ReadDirectory()
-						pf.cmdLine.Clear()
-
-						if pf.syncPTYDirectory(fsp.vfs.GetPath(), fsp.vfs) {
-							pf.lastPtyPath = fsp.vfs.GetPath()
-							pf.lastPtyVFS = fsp.vfs
-						}
-
-						return true
-					} else if filepath.IsAbs(targetPath) || filepath.VolumeName(targetPath) != "" {
-						newVfs := vfs.NewOSVFS(targetPath)
-						if err := newVfs.SetPath(targetPath); err == nil {
-							pf.switchToVFS(fsp, newVfs)
-							pf.cmdLine.Clear()
-
-							if pf.syncPTYDirectory(fsp.vfs.GetPath(), fsp.vfs) {
-								pf.lastPtyPath = fsp.vfs.GetPath()
-								pf.lastPtyVFS = fsp.vfs
-							}
-							return true
-						}
 					}
 				}
 			}
@@ -2127,4 +2089,85 @@ func (pf *PanelsFrame) switchToVFS(fsp *FileSystemPanel, newVFS vfs.VFS) {
 		fsp.ReadDirectory()
 		pf.RefreshAll()
 	}
+}
+func (pf *PanelsFrame) NavigateToPath(fsp *FileSystemPanel, targetPath string) bool {
+	if targetPath == "" {
+		return false
+	}
+
+	// 1. Handle "cd .." at the root of a nested VFS (e.g. escaping an archive)
+	if targetPath == ".." && fsp.vfs.IsAtRoot() && fsp.vfs.ParentVFS() != nil {
+		parent := fsp.vfs.ParentVFS()
+		oldPath := fsp.vfs.GetPath()
+
+		fsp.vfs.Close()
+		pf.ptyMutex.Lock()
+		if pty, ok := pf.remotePtys[fsp.vfs]; ok {
+			pty.Close()
+			delete(pf.remotePtys, fsp.vfs)
+		}
+		pf.ptyMutex.Unlock()
+
+		fsp.dirCache = make(map[string]dirCacheEntry)
+		fsp.vfs = parent
+		fsp.pendingSelection = fsp.vfs.Base(oldPath)
+		fsp.ReadDirectory()
+		return true
+	}
+
+	// 2. Handle absolute paths. It could be an OS path, or a path deep inside an archive.
+	if filepath.IsAbs(targetPath) || filepath.VolumeName(targetPath) != "" {
+		// First, check if it's a regular OS directory
+		st, err := os.Stat(targetPath)
+		if err == nil && st.IsDir() {
+			newVfs := vfs.NewOSVFS(targetPath)
+			if err := newVfs.SetPath(targetPath); err == nil {
+				pf.switchToVFS(fsp, newVfs)
+				return true
+			}
+		}
+
+		// It might be a path inside an archive. Walk up the path to find the archive file.
+		current := targetPath
+		for {
+			parentDir := filepath.Dir(current)
+			if parentDir == current || parentDir == "." || parentDir == string(filepath.Separator) || parentDir == "" {
+				break
+			}
+			// Windows root check
+			if len(current) == 3 && current[1] == ':' && current[2] == '\\' {
+				break
+			}
+			current = parentDir
+
+			st, err := os.Stat(current)
+			if err == nil {
+				if !st.IsDir() {
+					// We found a file, maybe it's an archive!
+					osvfs := vfs.NewOSVFS(filepath.Dir(current))
+					if provider := vfs.FindProvider(context.Background(), osvfs, current); provider != nil {
+						arcVFS, err := provider.Open(context.Background(), osvfs, current)
+						if err == nil {
+							// Successfully opened the archive, now try to set the internal path
+							if err := arcVFS.SetPath(targetPath); err == nil {
+								pf.switchToVFS(fsp, arcVFS)
+								return true
+							}
+							arcVFS.Close()
+						}
+					}
+				}
+				break // We found something that exists, but if it wasn't a valid archive, the subpath is invalid.
+			}
+		}
+	}
+
+	// 3. Try simple SetPath on current VFS (handles relative paths and absolute paths within same VFS)
+	if err := fsp.vfs.SetPath(targetPath); err == nil {
+		fsp.pendingSelection = ".."
+		fsp.ReadDirectory()
+		return true
+	}
+
+	return false
 }
