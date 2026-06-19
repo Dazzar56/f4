@@ -72,14 +72,33 @@ func actionExtractArchive(app vfs.App) {
 		return
 	}
 
+	isBusy := false
 	if _, active := activeOps.Load(srcPath); active {
-		if app.Message(" Warning ", "An operation involving this archive is already in progress.\nRunning multiple operations simultaneously may severely degrade performance.\n\nDo you want to start it anyway?", []string{"&Yes", "&No"}) != 0 {
+		isBusy = true
+	} else if !vfs.GlobalArchiveLockManager.TryLock(srcPath) {
+		isBusy = true
+	} else {
+		// TryLock succeeded, meaning it was NOT busy. We must unlock it here
+		// so that the background worker can safely Lock() it later.
+		vfs.GlobalArchiveLockManager.Unlock(srcPath)
+	}
+
+	waitLock := true
+	if isBusy {
+		res := app.Message(" Archive Busy ", "This archive is currently being processed.\nRunning multiple operations simultaneously may severely degrade performance.", []string{"&Queue", "&Parallel", "&Cancel"})
+		if res == 2 || res < 0 {
 			return
 		}
+		waitLock = (res == 0)
 	}
-	activeOps.Store(srcPath, true)
 
-	app.RunProgressTask(" Extracting... ", "Extracting archive...", false, func(ctx context.Context, update func(msg string, percent int)) error {
+	app.RunProgressTask(" Extracting... ", "Preparing to extract...", false, func(ctx context.Context, update func(msg string, percent int)) error {
+		if waitLock {
+			update("Waiting in queue...", -1)
+			vfs.GlobalArchiveLockManager.Lock(srcPath)
+			defer vfs.GlobalArchiveLockManager.Unlock(srcPath)
+		}
+
 		ex, err := archive.NewExtractor(srcPath, destDir, archive.Options{Xattrs: false, SafeWrites: true})
 		if err != nil {
 			return err
@@ -88,7 +107,6 @@ func actionExtractArchive(app vfs.App) {
 		return ex.Extract(ctx)
 
 	}, func(err error) {
-		activeOps.Delete(srcPath)
 		if err != nil && err != context.Canceled {
 			go app.Message(" Error ", fmt.Sprintf("Extraction failed:\n%v", err), []string{"&Ok"})
 		}
@@ -127,10 +145,22 @@ func actionAddArchive(app vfs.App) {
 				absArcPath = fullArcPath
 			}
 
+			isBusy := false
 			if _, active := activeOps.Load(absArcPath); active {
-				if app.Message(" Warning ", "An operation involving this archive is already in progress.\nRunning multiple operations simultaneously may severely degrade performance.\n\nDo you want to start it anyway?", []string{"&Yes", "&No"}) != 0 {
+				isBusy = true
+			} else if !vfs.GlobalArchiveLockManager.TryLock(absArcPath) {
+				isBusy = true
+			} else {
+				vfs.GlobalArchiveLockManager.Unlock(absArcPath)
+			}
+
+			waitLock := true
+			if isBusy {
+				res := app.Message(" Archive Busy ", "This archive is currently being processed.\nRunning multiple operations simultaneously may severely degrade performance.", []string{"&Queue", "&Parallel", "&Cancel"})
+				if res == 2 || res < 0 {
 					return
 				}
+				waitLock = (res == 0)
 			}
 
 			if _, err := activeVfs.Stat(context.Background(), fullArcPath); err == nil {
@@ -140,9 +170,12 @@ func actionAddArchive(app vfs.App) {
 				}
 			}
 
-			activeOps.Store(absArcPath, true)
-
 			app.RunProgressTask(" Archiving... ", "Gathering files...", false, func(ctx context.Context, update func(msg string, percent int)) error {
+				if waitLock {
+					update("Waiting in queue...", -1)
+					vfs.GlobalArchiveLockManager.Lock(absArcPath)
+					defer vfs.GlobalArchiveLockManager.Unlock(absArcPath)
+				}
 				fileMap := make(map[string]os.FileInfo)
 				for i, n := range names {
 					if ctx.Err() != nil {
@@ -169,7 +202,6 @@ func actionAddArchive(app vfs.App) {
 				defer a.Close()
 				return a.Archive(ctx, fileMap)
 			}, func(err error) {
-				activeOps.Delete(absArcPath)
 				if err != nil && err != context.Canceled {
 					go app.Message(" Error ", fmt.Sprintf("Archiving failed:\n%v", err), []string{"&Ok"})
 				}

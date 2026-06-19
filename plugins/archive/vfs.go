@@ -21,6 +21,8 @@ import (
 
 	"github.com/unxed/zip"
 	"github.com/unxed/tar"
+
+	"github.com/unxed/vtui"
 )
 
 type dummyDirInfo struct {
@@ -900,13 +902,38 @@ func (v *ArchiveVFS) CopyBulk(ctx context.Context, srcPaths []string, dstVfs vfs
 		selectedMap[fullInner] = true
 	}
 
+	absPath := v.activePath()
+	waitLock := true
+	if !vfs.GlobalArchiveLockManager.TryLock(absPath) {
+		resChan := make(chan int, 1)
+		vtui.FrameManager.PostTask(func() {
+			dlg := vtui.ShowMessage(" Archive Busy ", "This archive is currently being processed.\nRunning multiple operations simultaneously may severely degrade performance.", []string{"&Queue", "&Parallel", "&Cancel"})
+			dlg.OnResult = func(c int) { resChan <- c }
+		})
+		res := <-resChan
+		if res == 2 || res < 0 {
+			return context.Canceled
+		}
+		waitLock = (res == 0)
+	} else {
+		vfs.GlobalArchiveLockManager.Unlock(absPath)
+	}
+
+	if waitLock {
+		if reporter != nil {
+			reporter.UpdateTransfer("Waiting", v.Base(absPath), -1, "Waiting in queue...", -1, "")
+		}
+		vfs.GlobalArchiveLockManager.Lock(absPath)
+		defer vfs.GlobalArchiveLockManager.Unlock(absPath)
+	}
+
 	archiveFile, err := v.openArchiveFile(ctx)
 	if err != nil {
 		return err
 	}
 	defer archiveFile.Close()
 
-	format := archive.DetectFormat(v.activePath())
+	format := archive.DetectFormat(absPath)
 	if format == "zip" {
 		return v.copyBulkZip(ctx, archiveFile, selectedMap, dstVfs, dstDir, reporter)
 	} else if format == "tar" {
