@@ -725,6 +725,7 @@ func loadArkScores() {
 func saveArkScores() {
 	cfgDir, _ := os.UserConfigDir()
 	p := filepath.Join(cfgDir, "f4", "ark_scores.json")
+	os.MkdirAll(filepath.Dir(p), 0755)
 	data, _ := json.MarshalIndent(ArkHighScores, "", "  ")
 	os.WriteFile(p, data, 0644)
 }

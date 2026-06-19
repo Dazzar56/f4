@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 )
 
@@ -196,5 +197,50 @@ func TestFindMenuItemByUserData(t *testing.T) {
 	}
 	if _, ok := findMenuItemByUserData(menu, 99); ok {
 		t.Errorf("expected not found for unknown UserData")
+	}
+}
+
+func TestUserMenu_ExecuteCommands(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	pf := setupMockPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	pty := pf.pty.(*mockPty)
+
+	// Очищаем буфер вывода в PTY
+	pty.written = nil
+
+	// Создаем временную папку и файл на панели
+	fsp := pf.panels[pf.activeIdx].(*FileSystemPanel)
+	tmpDir := t.TempDir()
+	fsp.vfs.SetPath(tmpDir)
+	fsp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: ".."}},
+		{VFSItem: vfs.VFSItem{Name: "file.go"}},
+	}
+	fsp.Refresh()
+	fsp.SetCursorIndex(1) // Курсор на "file.go"
+
+	// Тестовый набор команд с комментариями и заменой токена !.! (имя текущего файла)
+	commands := []string{
+		"REM This is a comment and should be ignored",
+		":: Another comment to be ignored",
+		"cat !.!",
+	}
+
+	executeMenuCommands(pf, commands)
+
+	written := string(pty.written)
+
+	// Проверяем, что в PTY ушла сформированная команда c "cat file.go"
+	if !strings.Contains(written, "cat file.go") {
+		t.Errorf("executeMenuCommands failed to translate or dispatch. Expected to contain %q, got: %q", "cat file.go", written)
+	}
+
+	// Комментарии не должны уйти в выполнение
+	if strings.Contains(written, "ignored") {
+		t.Error("Comments (REM / ::) were erroneously sent to PTY execution")
 	}
 }

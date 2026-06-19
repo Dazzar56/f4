@@ -19,8 +19,8 @@ import (
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/zipper/archive"
 
-	"github.com/unxed/zip"
 	"github.com/unxed/tar"
+	"github.com/unxed/zip"
 
 	"github.com/unxed/vtui"
 )
@@ -44,6 +44,7 @@ type ctxReader struct {
 func (cr ctxReader) Read(p []byte) (int, error) {
 	return cr.r.Read(cr.ctx, p)
 }
+
 type readerAtAdapter struct {
 	r   vfs.ReadAtCloser
 	ctx context.Context
@@ -905,16 +906,24 @@ func (v *ArchiveVFS) CopyBulk(ctx context.Context, srcPaths []string, dstVfs vfs
 	absPath := v.activePath()
 	waitLock := true
 	if !vfs.GlobalArchiveLockManager.TryLock(absPath) {
-		resChan := make(chan int, 1)
-		vtui.FrameManager.PostTask(func() {
-			dlg := vtui.ShowMessage(" Archive Busy ", "This archive is currently being processed.\nRunning multiple operations simultaneously may severely degrade performance.", []string{"&Queue", "&Parallel", "&Cancel"})
-			dlg.OnResult = func(c int) { resChan <- c }
-		})
-		res := <-resChan
-		if res == 2 || res < 0 {
-			return context.Canceled
+		// If "AutoQueue" is requested via Context (used by headless unit tests), bypass the UI prompt
+		if ctx.Value("AutoQueue") != nil {
+			waitLock = true
+		} else if vtui.FrameManager == nil {
+			// Fallback headless mode
+			waitLock = true
+		} else {
+			resChan := make(chan int, 1)
+			vtui.FrameManager.PostTask(func() {
+				dlg := vtui.ShowMessage(" Archive Busy ", "This archive is currently being processed.\nRunning multiple operations simultaneously may severely degrade performance.", []string{"&Queue", "&Parallel", "&Cancel"})
+				dlg.OnResult = func(c int) { resChan <- c }
+			})
+			res := <-resChan
+			if res == 2 || res < 0 {
+				return context.Canceled
+			}
+			waitLock = (res == 0)
 		}
-		waitLock = (res == 0)
 	} else {
 		vfs.GlobalArchiveLockManager.Unlock(absPath)
 	}

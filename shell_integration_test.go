@@ -89,11 +89,10 @@ func TestPanelsFrame_CD_QuotedParsing(t *testing.T) {
 }
 
 func TestPanelsFrame_PTY_SyncEscaping(t *testing.T) {
-	pf := NewPanelsFrame()
+	pf := setupMockPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
-	pty := &mockPty{}
-	pf.pty = pty
+	pty := pf.pty.(*mockPty)
 
 	tmp := t.TempDir()
 	dirName := "space 'n' quotes"

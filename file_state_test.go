@@ -1,6 +1,7 @@
 package main
 
 import (
+	"path/filepath"
 	"testing"
 )
 
@@ -26,5 +27,38 @@ func TestF4FileStateProvider_LRUOrder(t *testing.T) {
 	}
 	if fs.GetState("file1") == nil {
 		t.Error("file1 should be preserved as it was recently used")
+	}
+}
+
+func TestF4FileStateProvider_SaveAndRestore(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "file_states_mru.json")
+
+	fs := &F4FileStateProvider{
+		path:  dbPath,
+		Limit: 10,
+		Data:  make(map[string]*FileState),
+	}
+
+	// 1. Сохранение метаданных редактора
+	fs.SaveEditorState("main.go", 10, 5, 2, 0, true)
+
+	state := fs.GetState("main.go")
+	if state == nil {
+		t.Fatal("Expected state for main.go, got nil")
+	}
+	if state.EditorLine != 10 || state.EditorPos != 5 || state.EditorTopRow != 2 || state.EditorWrap != true {
+		t.Errorf("Incorrect saved editor state: %+v", state)
+	}
+
+	// 2. Сохранение метаданных просмотрщика
+	fs.SaveViewerState("readme.md", 500, false, true)
+
+	stateV := fs.GetState("readme.md")
+	if stateV == nil {
+		t.Fatal("Expected state for readme.md, got nil")
+	}
+	if stateV.ViewerOffset != 500 || stateV.ViewerWrap != false || stateV.ViewerHex != true {
+		t.Errorf("Incorrect saved viewer state: %+v", stateV)
 	}
 }

@@ -10,7 +10,10 @@ import (
 	"testing"
 	"time"
 
+	"sync"
+
 	"github.com/unxed/f4/vfs"
+	"github.com/unxed/tar"
 	"github.com/unxed/zip"
 	"github.com/unxed/zipper/archive"
 )
@@ -461,9 +464,10 @@ func TestArchiveVFS_Open_ProgressReporting(t *testing.T) {
 
 type dummyReporter struct{}
 
-func (d *dummyReporter) UpdateScan(currentPath string, files, dirs int64)                                     {}
-func (d *dummyReporter) UpdateTransfer(action, filename string, currentPct int, totalText string, totalPct int, speedText string) {}
-func (d *dummyReporter) IsCancelled() bool                                                                   { return false }
+func (d *dummyReporter) UpdateScan(currentPath string, files, dirs int64) {}
+func (d *dummyReporter) UpdateTransfer(action, filename string, currentPct int, totalText string, totalPct int, speedText string) {
+}
+func (d *dummyReporter) IsCancelled() bool { return false }
 
 func TestArchiveVFSCopyBulk(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "f4-test-*")
@@ -538,4 +542,165 @@ func TestArchiveVFSCopyBulk(t *testing.T) {
 		t.Errorf("expected content2, got %q", string(data2))
 	}
 }
+func TestArchiveVFSCopyBulk_Tar(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "f4-test-tar-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
 
+	tarPath := filepath.Join(tmpDir, "test.tar")
+	f, err := os.Create(tarPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tw := tar.NewWriter(f)
+	hdr1 := &tar.Header{
+		Name: "file1.txt",
+		Mode: 0644,
+		Size: 8,
+	}
+	if err := tw.WriteHeader(hdr1); err != nil {
+		t.Fatal(err)
+	}
+	tw.Write([]byte("content1"))
+
+	hdr2 := &tar.Header{
+		Name: "folder/file2.txt",
+		Mode: 0644,
+		Size: 8,
+	}
+	if err := tw.WriteHeader(hdr2); err != nil {
+		t.Fatal(err)
+	}
+	tw.Write([]byte("content2"))
+
+	tw.Close()
+	f.Close()
+
+	parentVFS := vfs.NewOSVFS(tmpDir)
+	archiveVFS, err := NewArchiveVFS(parentVFS, "test.tar")
+	if err != nil {
+		t.Fatalf("failed to create ArchiveVFS: %v", err)
+	}
+	defer archiveVFS.Close()
+
+	dstDir := filepath.Join(tmpDir, "extracted")
+	dstVFS := vfs.NewOSVFS(dstDir)
+	err = dstVFS.MkDir(context.Background(), dstDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	copier, ok := interface{}(archiveVFS).(vfs.BulkCopier)
+	if !ok {
+		t.Fatal("expected ArchiveVFS to implement BulkCopier")
+	}
+
+	err = copier.CopyBulk(context.Background(), []string{"file1.txt", "folder/file2.txt"}, dstVFS, dstDir, &dummyReporter{})
+	if err != nil {
+		t.Fatalf("Bulk copy failed: %v", err)
+	}
+
+	f1, err := dstVFS.Open(context.Background(), filepath.Join(dstDir, "file1.txt"))
+	if err != nil {
+		t.Fatal("file1.txt was not extracted")
+	}
+	defer f1.Close()
+	data1, _ := io.ReadAll(ctxReader{r: f1, ctx: context.Background()})
+	if string(data1) != "content1" {
+		t.Errorf("expected content1, got %q", string(data1))
+	}
+
+	f2, err := dstVFS.Open(context.Background(), filepath.Join(dstDir, "folder/file2.txt"))
+	if err != nil {
+		t.Fatal("folder/file2.txt was not extracted")
+	}
+	defer f2.Close()
+	data2, _ := io.ReadAll(ctxReader{r: f2, ctx: context.Background()})
+	if string(data2) != "content2" {
+		t.Errorf("expected content2, got %q", string(data2))
+	}
+}
+
+func TestArchiveVFSCopyBulk_ConcurrentQueue(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "f4-test-queue-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	zipPath := filepath.Join(tmpDir, "test.zip")
+	f, err := os.Create(zipPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zw := zip.NewWriter(f)
+	w1, _ := zw.Create("file1.txt")
+	w1.Write([]byte("content1"))
+	zw.Close()
+	f.Close()
+
+	parentVFS := vfs.NewOSVFS(tmpDir)
+	archiveVFS, err := NewArchiveVFS(parentVFS, "test.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer archiveVFS.Close()
+
+	absPath := archiveVFS.activePath()
+
+	// 1. Manually lock the archive file path from the main thread
+	if !vfs.GlobalArchiveLockManager.TryLock(absPath) {
+		t.Fatal("expected to acquire lock")
+	}
+
+	dstDir := filepath.Join(tmpDir, "extracted")
+	dstVFS := vfs.NewOSVFS(dstDir)
+	dstVFS.MkDir(context.Background(), dstDir)
+
+	copier := interface{}(archiveVFS).(vfs.BulkCopier)
+
+	// 2. Start CopyBulk in a background goroutine.
+	// It should block waiting for the lock.
+	var wg sync.WaitGroup
+	wg.Add(1)
+	copyFinished := false
+
+	go func() {
+		defer wg.Done()
+		// Inject AutoQueue into the context so the VFS doesn't block waiting for UI interaction
+		ctx := context.WithValue(context.Background(), "AutoQueue", true)
+		err := copier.CopyBulk(ctx, []string{"file1.txt"}, dstVFS, dstDir, &dummyReporter{})
+		if err != nil {
+			t.Errorf("expected no error, got %v", err)
+		}
+		copyFinished = true
+	}()
+
+	// Sleep to let the goroutine block on Lock() inside CopyBulk
+	time.Sleep(50 * time.Millisecond)
+	if copyFinished {
+		t.Fatal("expected CopyBulk to be blocked on lock")
+	}
+
+	// 3. Unlock the file from the main thread, which should wake up the CopyBulk
+	vfs.GlobalArchiveLockManager.Unlock(absPath)
+	wg.Wait()
+
+	if !copyFinished {
+		t.Fatal("expected CopyBulk to finish successfully after unlock")
+	}
+
+	// Verify file is extracted
+	f1, err := dstVFS.Open(context.Background(), filepath.Join(dstDir, "file1.txt"))
+	if err != nil {
+		t.Fatal("file1.txt was not extracted")
+	}
+	defer f1.Close()
+	data1, _ := io.ReadAll(ctxReader{r: f1, ctx: context.Background()})
+	if string(data1) != "content1" {
+		t.Errorf("expected content1, got %q", string(data1))
+	}
+}
