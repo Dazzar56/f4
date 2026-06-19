@@ -2119,11 +2119,26 @@ func (pf *PanelsFrame) NavigateToPath(fsp *FileSystemPanel, targetPath string) b
 	if filepath.IsAbs(targetPath) || filepath.VolumeName(targetPath) != "" {
 		// First, check if it's a regular OS directory
 		st, err := os.Stat(targetPath)
-		if err == nil && st.IsDir() {
-			newVfs := vfs.NewOSVFS(targetPath)
-			if err := newVfs.SetPath(targetPath); err == nil {
-				pf.switchToVFS(fsp, newVfs)
-				return true
+		if err == nil {
+			if st.IsDir() {
+				newVfs := vfs.NewOSVFS(targetPath)
+				if err := newVfs.SetPath(targetPath); err == nil {
+					pf.switchToVFS(fsp, newVfs)
+					return true
+				}
+			} else {
+				// If it is a file, it could be an archive itself!
+				osvfs := vfs.NewOSVFS(filepath.Dir(targetPath))
+				if provider := vfs.FindProvider(context.Background(), osvfs, targetPath); provider != nil {
+					arcVFS, err := provider.Open(context.Background(), osvfs, targetPath)
+					if err == nil {
+						if err := arcVFS.SetPath(targetPath); err == nil {
+							pf.switchToVFS(fsp, arcVFS)
+							return true
+						}
+						arcVFS.Close()
+					}
+				}
 			}
 		}
 
