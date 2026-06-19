@@ -6,6 +6,7 @@ import (
 	"github.com/unxed/vtui"
 	"io"
 	"os"
+	"sync"
 	"time"
 )
 
@@ -106,6 +107,49 @@ type TitleProvider interface {
 }
 type BulkCopier interface {
 	CopyBulk(ctx context.Context, srcPaths []string, dstVfs VFS, dstDir string, reporter TaskReporter) error
+}
+type ArchiveLockManager struct {
+	mu    sync.Mutex
+	conds map[string]*sync.Cond
+	busy  map[string]bool
+}
+
+var GlobalArchiveLockManager = &ArchiveLockManager{
+	conds: make(map[string]*sync.Cond),
+	busy:  make(map[string]bool),
+}
+
+func (m *ArchiveLockManager) Lock(path string) {
+	m.mu.Lock()
+	for m.busy[path] {
+		cond, ok := m.conds[path]
+		if !ok {
+			cond = sync.NewCond(&m.mu)
+			m.conds[path] = cond
+		}
+		cond.Wait()
+	}
+	m.busy[path] = true
+	m.mu.Unlock()
+}
+
+func (m *ArchiveLockManager) TryLock(path string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.busy[path] {
+		return false
+	}
+	m.busy[path] = true
+	return true
+}
+
+func (m *ArchiveLockManager) Unlock(path string) {
+	m.mu.Lock()
+	m.busy[path] = false
+	if cond, ok := m.conds[path]; ok {
+		cond.Broadcast()
+	}
+	m.mu.Unlock()
 }
 
 // PtyProvider allows a VFS to provide its own PTY implementation
