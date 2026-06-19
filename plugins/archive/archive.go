@@ -7,10 +7,14 @@ import (
 	"os"
 	"path/filepath"
 
+	"sync"
+
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/zipper/archive"
 )
+
+var activeOps sync.Map
 
 type ArchivePlugin struct{}
 
@@ -61,13 +65,21 @@ func actionExtractArchive(app vfs.App) {
 	srcPath := srcVfs.Join(srcVfs.GetPath(), name)
 	destDir := dstVfs.GetPath()
 
-	app.RunProgressTask(" Extracting... ", "Extracting archive...", false, func(ctx context.Context, update func(msg string, percent int)) error {
-		if osvfs, ok := srcVfs.(*vfs.OSVFS); ok {
-			srcPath, _ = osvfs.Abs(srcPath)
-		} else {
-			return fmt.Errorf("extraction supported only from local filesystem")
-		}
+	if osvfs, ok := srcVfs.(*vfs.OSVFS); ok {
+		srcPath, _ = osvfs.Abs(srcPath)
+	} else {
+		app.Message(" Error ", "Extraction supported only from local filesystem", []string{"&Ok"})
+		return
+	}
 
+	if _, active := activeOps.Load(srcPath); active {
+		if app.Message(" Warning ", "An operation involving this archive is already in progress.\nRunning multiple operations simultaneously may severely degrade performance.\n\nDo you want to start it anyway?", []string{"&Yes", "&No"}) != 0 {
+			return
+		}
+	}
+	activeOps.Store(srcPath, true)
+
+	app.RunProgressTask(" Extracting... ", "Extracting archive...", false, func(ctx context.Context, update func(msg string, percent int)) error {
 		ex, err := archive.NewExtractor(srcPath, destDir, archive.Options{Xattrs: false, SafeWrites: true})
 		if err != nil {
 			return err
@@ -76,6 +88,7 @@ func actionExtractArchive(app vfs.App) {
 		return ex.Extract(ctx)
 
 	}, func(err error) {
+		activeOps.Delete(srcPath)
 		if err != nil && err != context.Canceled {
 			go app.Message(" Error ", fmt.Sprintf("Extraction failed:\n%v", err), []string{"&Ok"})
 		}
@@ -107,12 +120,27 @@ func actionAddArchive(app vfs.App) {
 		fullArcPath := activeVfs.Join(activeVfs.GetPath(), name)
 
 		go func() {
+			var absArcPath string
+			if osvfs, ok := activeVfs.(*vfs.OSVFS); ok {
+				absArcPath, _ = osvfs.Abs(fullArcPath)
+			} else {
+				absArcPath = fullArcPath
+			}
+
+			if _, active := activeOps.Load(absArcPath); active {
+				if app.Message(" Warning ", "An operation involving this archive is already in progress.\nRunning multiple operations simultaneously may severely degrade performance.\n\nDo you want to start it anyway?", []string{"&Yes", "&No"}) != 0 {
+					return
+				}
+			}
+
 			if _, err := activeVfs.Stat(context.Background(), fullArcPath); err == nil {
 				msg := "The target archive already exists.\nDo you want to overwrite it?"
 				if app.Message(" Warning ", msg, []string{"&Yes", "&No"}) != 0 {
 					return
 				}
 			}
+
+			activeOps.Store(absArcPath, true)
 
 			app.RunProgressTask(" Archiving... ", "Gathering files...", false, func(ctx context.Context, update func(msg string, percent int)) error {
 				fileMap := make(map[string]os.FileInfo)
@@ -141,6 +169,7 @@ func actionAddArchive(app vfs.App) {
 				defer a.Close()
 				return a.Archive(ctx, fileMap)
 			}, func(err error) {
+				activeOps.Delete(absArcPath)
 				if err != nil && err != context.Canceled {
 					go app.Message(" Error ", fmt.Sprintf("Archiving failed:\n%v", err), []string{"&Ok"})
 				}

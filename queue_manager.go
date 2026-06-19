@@ -148,6 +148,9 @@ func getResourceKey(v vfs.VFS) string {
 		}
 		return "local_disk"
 	}
+	if parent := v.ParentVFS(); parent != nil {
+		return getResourceKey(parent)
+	}
 	return fmt.Sprintf("%p", v)
 }
 

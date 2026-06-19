@@ -381,3 +381,31 @@ func TestQueueFrame_InputLock(t *testing.T) {
 		}
 	}
 }
+
+type mockVFSWithParent struct {
+	vfs.VFS
+	parent vfs.VFS
+}
+
+func (m *mockVFSWithParent) ParentVFS() vfs.VFS {
+	return m.parent
+}
+
+func (m *mockVFSWithParent) GetPath() string {
+	return "mock_archive_inner_path"
+}
+
+func TestQueueManager_ArchiveResourceKey(t *testing.T) {
+	// Create parent OSVFS pointing to a local temp directory
+	parent := vfs.NewOSVFS(t.TempDir())
+	expectedKey := getResourceKey(parent)
+
+	// Create mock nested VFS mimicking an active ArchiveVFS
+	child := &mockVFSWithParent{parent: parent}
+
+	// Verify that the child's resource key matches the parent's (physical disk locking)
+	key := getResourceKey(child)
+	if key != expectedKey {
+		t.Errorf("Expected resource key %q, got %q (failed to inherit ParentVFS disk lock)", expectedKey, key)
+	}
+}

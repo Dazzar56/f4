@@ -173,3 +173,32 @@ func TestIssue137_ArchiveOpenIsLazyAndContextAware(t *testing.T) {
 		t.Fatalf("Expected context.Canceled from Read, got: %v", errRead2)
 	}
 }
+
+func TestArchivePlugin_ConcurrentOperationWarning(t *testing.T) {
+	tmpDir := t.TempDir()
+	v := vfs.NewOSVFS(tmpDir)
+
+	dummyFile := filepath.Join(tmpDir, "test.zip")
+	os.WriteFile(dummyFile, []byte("dummy zip content"), 0644)
+
+	// Simulate an active operation already running for this archive
+	absPath, _ := v.Abs(dummyFile)
+	activeOps.Store(absPath, true)
+	defer activeOps.Delete(absPath)
+
+	app := &mockOverwriteApp{
+		t:     t,
+		v:     v,
+		names: []string{"test.zip"},
+		done:  make(chan struct{}),
+	}
+
+	actionExtractArchive(app)
+
+	// Since mock app.Message returns 0 (Yes), it should proceed to extraction task
+	<-app.done
+
+	if !app.messageCalled {
+		t.Error("Expected concurrency warning dialog to be shown, but it was not")
+	}
+}
