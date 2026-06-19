@@ -14,8 +14,13 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/mholt/archives"
+
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/zipper/archive"
+
+	"github.com/unxed/zip"
+	"github.com/unxed/tar"
 )
 
 type dummyDirInfo struct {
@@ -36,6 +41,14 @@ type ctxReader struct {
 
 func (cr ctxReader) Read(p []byte) (int, error) {
 	return cr.r.Read(cr.ctx, p)
+}
+type readerAtAdapter struct {
+	r   vfs.ReadAtCloser
+	ctx context.Context
+}
+
+func (a readerAtAdapter) ReadAt(p []byte, off int64) (int, error) {
+	return a.r.ReadAt(a.ctx, p, off)
 }
 
 type nopWriteCloser struct {
@@ -867,4 +880,349 @@ func (v *ArchiveVFS) Clone() vfs.VFS {
 	// Archive VFS is currently stateful and linked to temp files.
 	// For now, return self as cloning requires extracting everything again.
 	return v
+}
+func (v *ArchiveVFS) CopyBulk(ctx context.Context, srcPaths []string, dstVfs vfs.VFS, dstDir string, reporter vfs.TaskReporter) error {
+	v.mu.Lock()
+	if v.fsys == nil {
+		v.mu.Unlock()
+		return fmt.Errorf("archive VFS is closed")
+	}
+	v.mu.Unlock()
+
+	// Create a map of selected paths for fast O(1) lookup
+	selectedMap := make(map[string]bool)
+	for _, p := range srcPaths {
+		fullInner := p
+		if v.innerPath != "." && v.innerPath != "" {
+			fullInner = path.Join(v.innerPath, p)
+		}
+		fullInner = strings.TrimPrefix(fullInner, "/")
+		selectedMap[fullInner] = true
+	}
+
+	archiveFile, err := v.openArchiveFile(ctx)
+	if err != nil {
+		return err
+	}
+	defer archiveFile.Close()
+
+	format := archive.DetectFormat(v.activePath())
+	if format == "zip" {
+		return v.copyBulkZip(ctx, archiveFile, selectedMap, dstVfs, dstDir, reporter)
+	} else if format == "tar" {
+		return v.copyBulkTar(ctx, archiveFile, selectedMap, dstVfs, dstDir, reporter)
+	}
+	return v.copyBulkFallback(ctx, archiveFile, selectedMap, dstVfs, dstDir, reporter)
+}
+
+func (v *ArchiveVFS) openArchiveFile(ctx context.Context) (vfs.ReadAtCloser, error) {
+	if osvfs, ok := v.parent.(*vfs.OSVFS); ok {
+		absPath, _ := osvfs.Abs(v.arcPath)
+		f, err := os.Open(absPath)
+		if err != nil {
+			return nil, err
+		}
+		stat, _ := f.Stat()
+		return &vfs.TempFileWrapper{File: f, SizeVal: stat.Size(), TempPath: ""}, nil
+	}
+	return v.parent.Open(ctx, v.arcPath)
+}
+
+func (v *ArchiveVFS) copyBulkZip(ctx context.Context, f vfs.ReadAtCloser, selected map[string]bool, dstVfs vfs.VFS, dstDir string, reporter vfs.TaskReporter) error {
+	zr, err := zip.NewReader(readerAtAdapter{r: f, ctx: ctx}, f.Size())
+	if err != nil {
+		return err
+	}
+
+	buf := make([]byte, 128*1024)
+	for _, file := range zr.File {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
+		matched := false
+		for selPath := range selected {
+			if file.Name == selPath || strings.HasPrefix(file.Name, selPath+"/") {
+				matched = true
+				break
+			}
+		}
+
+		if !matched {
+			continue
+		}
+
+		relPath := file.Name
+		if v.innerPath != "." && v.innerPath != "" {
+			relPath = strings.TrimPrefix(relPath, v.innerPath)
+			relPath = strings.TrimPrefix(relPath, "/")
+		}
+		targetPath := dstVfs.Join(dstDir, relPath)
+
+		if file.FileInfo().IsDir() {
+			dstVfs.MkDir(ctx, targetPath)
+			continue
+		}
+
+		dstVfs.MkDir(ctx, dstVfs.Dir(targetPath))
+
+		if reporter != nil {
+			reporter.UpdateTransfer("Extracting", file.Name, 0, "", 0, "")
+		}
+
+		rc, err := file.Open()
+		if err != nil {
+			return err
+		}
+
+		wc, err := dstVfs.Create(ctx, targetPath)
+		if err != nil {
+			rc.Close()
+			return err
+		}
+
+		var copied int64
+		for {
+			if ctx.Err() != nil {
+				rc.Close()
+				wc.Close()
+				return ctx.Err()
+			}
+			n, rerr := rc.Read(buf)
+			if n > 0 {
+				if _, werr := wc.Write(buf[:n]); werr != nil {
+					rc.Close()
+					wc.Close()
+					return werr
+				}
+				copied += int64(n)
+				if reporter != nil && file.UncompressedSize64 > 0 {
+					pct := int((copied * 100) / int64(file.UncompressedSize64))
+					reporter.UpdateTransfer("Extracting", file.Name, pct, "", pct, "")
+				}
+			}
+			if rerr != nil {
+				if rerr == io.EOF {
+					break
+				}
+				rc.Close()
+				wc.Close()
+				return rerr
+			}
+		}
+		rc.Close()
+		wc.Close()
+
+		item := vfs.VFSItem{
+			Name:     file.Name,
+			Size:     int64(file.UncompressedSize64),
+			IsDir:    false,
+			MTime:    file.Modified,
+			UnixMode: uint32(file.Mode().Perm()),
+		}
+		dstVfs.SetAttributes(ctx, targetPath, item)
+	}
+	return nil
+}
+
+func (v *ArchiveVFS) copyBulkTar(ctx context.Context, f vfs.ReadAtCloser, selected map[string]bool, dstVfs vfs.VFS, dstDir string, reporter vfs.TaskReporter) error {
+	tr := tar.NewReader(ctxReader{r: f, ctx: ctx})
+	buf := make([]byte, 128*1024)
+
+	for {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+
+		cleanName := strings.TrimPrefix(hdr.Name, "/")
+		matched := false
+		for selPath := range selected {
+			if cleanName == selPath || strings.HasPrefix(cleanName, selPath+"/") {
+				matched = true
+				break
+			}
+		}
+
+		if !matched {
+			continue
+		}
+
+		relPath := cleanName
+		if v.innerPath != "." && v.innerPath != "" {
+			relPath = strings.TrimPrefix(relPath, v.innerPath)
+			relPath = strings.TrimPrefix(relPath, "/")
+		}
+		targetPath := dstVfs.Join(dstDir, relPath)
+
+		if hdr.Typeflag == tar.TypeDir {
+			dstVfs.MkDir(ctx, targetPath)
+			continue
+		}
+
+		dstVfs.MkDir(ctx, dstVfs.Dir(targetPath))
+
+		if reporter != nil {
+			reporter.UpdateTransfer("Extracting", cleanName, 0, "", 0, "")
+		}
+
+		wc, err := dstVfs.Create(ctx, targetPath)
+		if err != nil {
+			return err
+		}
+
+		var copied int64
+		for {
+			if ctx.Err() != nil {
+				wc.Close()
+				return ctx.Err()
+			}
+			n, rerr := tr.Read(buf)
+			if n > 0 {
+				if _, werr := wc.Write(buf[:n]); werr != nil {
+					wc.Close()
+					return werr
+				}
+				copied += int64(n)
+				if reporter != nil && hdr.Size > 0 {
+					pct := int((copied * 100) / hdr.Size)
+					reporter.UpdateTransfer("Extracting", cleanName, pct, "", pct, "")
+				}
+			}
+			if rerr != nil {
+				if rerr == io.EOF {
+					break
+				}
+				wc.Close()
+				return rerr
+			}
+		}
+		wc.Close()
+
+		item := vfs.VFSItem{
+			Name:     hdr.Name,
+			Size:     hdr.Size,
+			IsDir:    false,
+			MTime:    hdr.ModTime,
+			UnixMode: uint32(hdr.Mode),
+		}
+		dstVfs.SetAttributes(ctx, targetPath, item)
+	}
+	return nil
+}
+
+func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, selected map[string]bool, dstVfs vfs.VFS, dstDir string, reporter vfs.TaskReporter) error {
+	var localPath string
+	if temp, ok := f.(*vfs.TempFileWrapper); ok && temp.TempPath != "" {
+		localPath = temp.TempPath
+	} else {
+		localPath = v.activePath()
+	}
+
+	localF, err := os.Open(localPath)
+	if err != nil {
+		return err
+	}
+	defer localF.Close()
+
+	format, stream, err := archives.Identify(ctx, localPath, localF)
+	if err != nil {
+		return err
+	}
+
+	ex, ok := format.(archives.Extractor)
+	if !ok {
+		return fmt.Errorf("format %T does not support extraction", format)
+	}
+
+	buf := make([]byte, 128*1024)
+
+	return ex.Extract(ctx, stream, func(ctx context.Context, info archives.FileInfo) error {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
+		cleanName := strings.TrimPrefix(info.NameInArchive, "/")
+		matched := false
+		for selPath := range selected {
+			if cleanName == selPath || strings.HasPrefix(cleanName, selPath+"/") {
+				matched = true
+				break
+			}
+		}
+
+		if !matched {
+			return nil
+		}
+
+		relPath := cleanName
+		if v.innerPath != "." && v.innerPath != "" {
+			relPath = strings.TrimPrefix(relPath, v.innerPath)
+			relPath = strings.TrimPrefix(relPath, "/")
+		}
+		targetPath := dstVfs.Join(dstDir, relPath)
+
+		if info.IsDir() {
+			dstVfs.MkDir(ctx, targetPath)
+			return nil
+		}
+
+		dstVfs.MkDir(ctx, dstVfs.Dir(targetPath))
+
+		if reporter != nil {
+			reporter.UpdateTransfer("Extracting", cleanName, 0, "", 0, "")
+		}
+
+		rc, err := info.Open()
+		if err != nil {
+			return err
+		}
+		defer rc.Close()
+
+		wc, err := dstVfs.Create(ctx, targetPath)
+		if err != nil {
+			return err
+		}
+		defer wc.Close()
+
+		var copied int64
+		for {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			n, rerr := rc.Read(buf)
+			if n > 0 {
+				if _, werr := wc.Write(buf[:n]); werr != nil {
+					return werr
+				}
+				copied += int64(n)
+				if reporter != nil && info.Size() > 0 {
+					pct := int((copied * 100) / info.Size())
+					reporter.UpdateTransfer("Extracting", cleanName, pct, "", pct, "")
+				}
+			}
+			if rerr != nil {
+				if rerr == io.EOF {
+					break
+				}
+				return rerr
+			}
+		}
+
+		item := vfs.VFSItem{
+			Name:     info.Name(),
+			Size:     info.Size(),
+			IsDir:    false,
+			MTime:    info.ModTime(),
+			UnixMode: uint32(info.Mode().Perm()),
+		}
+		dstVfs.SetAttributes(ctx, targetPath, item)
+		return nil
+	})
 }

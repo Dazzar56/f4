@@ -458,3 +458,84 @@ func TestArchiveVFS_Open_ProgressReporting(t *testing.T) {
 		t.Errorf("Read data mismatch: got %q, want 'Progress test data'", string(buf[:n]))
 	}
 }
+
+type dummyReporter struct{}
+
+func (d *dummyReporter) UpdateScan(currentPath string, files, dirs int64)                                     {}
+func (d *dummyReporter) UpdateTransfer(action, filename string, currentPct int, totalText string, totalPct int, speedText string) {}
+func (d *dummyReporter) IsCancelled() bool                                                                   { return false }
+
+func TestArchiveVFSCopyBulk(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "f4-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	zipPath := filepath.Join(tmpDir, "test.zip")
+	f, err := os.Create(zipPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	zw := zip.NewWriter(f)
+	w1, err := zw.Create("file1.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	w1.Write([]byte("content1"))
+
+	w2, err := zw.Create("folder/file2.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	w2.Write([]byte("content2"))
+
+	zw.Close()
+	f.Close()
+
+	parentVFS := vfs.NewOSVFS(tmpDir)
+	archiveVFS, err := NewArchiveVFS(parentVFS, "test.zip")
+	if err != nil {
+		t.Fatalf("failed to create ArchiveVFS: %v", err)
+	}
+	defer archiveVFS.Close()
+
+	dstDir := filepath.Join(tmpDir, "extracted")
+	dstVFS := vfs.NewOSVFS(dstDir)
+	err = dstVFS.MkDir(context.Background(), dstDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	copier, ok := interface{}(archiveVFS).(vfs.BulkCopier)
+	if !ok {
+		t.Fatal("expected ArchiveVFS to implement BulkCopier")
+	}
+
+	err = copier.CopyBulk(context.Background(), []string{"file1.txt", "folder/file2.txt"}, dstVFS, dstDir, &dummyReporter{})
+	if err != nil {
+		t.Fatalf("Bulk copy failed: %v", err)
+	}
+
+	f1, err := dstVFS.Open(context.Background(), filepath.Join(dstDir, "file1.txt"))
+	if err != nil {
+		t.Fatal("file1.txt was not extracted")
+	}
+	defer f1.Close()
+	data1, _ := io.ReadAll(ctxReader{r: f1, ctx: context.Background()})
+	if string(data1) != "content1" {
+		t.Errorf("expected content1, got %q", string(data1))
+	}
+
+	f2, err := dstVFS.Open(context.Background(), filepath.Join(dstDir, "folder/file2.txt"))
+	if err != nil {
+		t.Fatal("folder/file2.txt was not extracted")
+	}
+	defer f2.Close()
+	data2, _ := io.ReadAll(ctxReader{r: f2, ctx: context.Background()})
+	if string(data2) != "content2" {
+		t.Errorf("expected content2, got %q", string(data2))
+	}
+}
+

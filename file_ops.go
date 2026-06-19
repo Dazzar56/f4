@@ -274,6 +274,22 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 		}
 
 		updateUI(true)
+		// OPTIMIZATION: Check if the source VFS supports bulk copying (e.g. for sequential archives)
+		if !isMove && srcVfs != dstVfs {
+			if bulkCopier, ok := srcVfs.(vfs.BulkCopier); ok {
+				err := bulkCopier.CopyBulk(ctx, names, dstVfs, destPath, reporter)
+				if err == nil {
+					// Mark all files as fully completed
+					for _, name := range names {
+						tracker.StartFile(name, 0)
+						tracker.FileDone()
+					}
+					updateUI(true)
+					return nil
+				}
+				vtui.DebugLog("FILEOP: Bulk copy failed, falling back to sequential: %v", err)
+			}
+		}
 
 		for _, name := range names {
 			if ctx.Err() != nil {

@@ -104,6 +104,9 @@ type VFS interface {
 type TitleProvider interface {
 	GetTitle() string
 }
+type BulkCopier interface {
+	CopyBulk(ctx context.Context, srcPaths []string, dstVfs VFS, dstDir string, reporter TaskReporter) error
+}
 
 // PtyProvider allows a VFS to provide its own PTY implementation
 // (e.g. an SSH session for remote systems).
