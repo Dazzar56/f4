@@ -5,6 +5,8 @@ import (
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
+	"github.com/unxed/zip"
+	"github.com/unxed/f4/plugins/archive"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -2231,5 +2233,89 @@ func TestPanelsFrame_VimHotkeys_Comprehensive(t *testing.T) {
 	}
 	if fsp.fastFindStr != "j" {
 		t.Errorf("Fast find string should be 'j', got %q", fsp.fastFindStr)
+	}
+}
+
+func createTestZipForNav(t *testing.T, path string) {
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	zw := zip.NewWriter(f)
+	defer zw.Close()
+
+	_, err = zw.Create("inner_dir/")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	w, err := zw.Create("inner_dir/test.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Write([]byte("hello"))
+}
+
+func TestPanelsFrame_NavigateToPath(t *testing.T) {
+	// Register the Archive VFS provider manually for this unit test
+	vfs.RegisterProvider(&archive.ArchiveProvider{})
+
+	// Initialize a headless FrameManager to prevent nil panics during async directory reads
+	scr := vtui.NewScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+
+	tmpDir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	zipPath := filepath.Join(tmpDir, "test.zip")
+	createTestZipForNav(t, zipPath)
+
+	pf := &PanelsFrame{}
+	lp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(tmpDir))
+	rp := NewFileSystemPanel(40, 0, 40, 20, vfs.NewOSVFS(tmpDir))
+	pf.panels[0] = lp
+	pf.panels[1] = rp
+	pf.activeIdx = 0
+
+	// Test 1: Navigate to absolute path inside the archive
+	targetPath := filepath.Join(zipPath, "inner_dir")
+	ok := pf.NavigateToPath(lp, targetPath)
+	if !ok {
+		t.Fatalf("NavigateToPath failed to enter archive: %s", targetPath)
+	}
+
+	// Verify VFS switched to ArchiveVFS
+	if _, isOS := lp.vfs.(*vfs.OSVFS); isOS {
+		t.Error("Expected panel VFS to switch from OSVFS to ArchiveVFS")
+	}
+
+	expectedPath := filepath.ToSlash(filepath.Clean(targetPath))
+	if filepath.ToSlash(lp.vfs.GetPath()) != expectedPath {
+		t.Errorf("Expected VFS path %q, got %q", expectedPath, lp.vfs.GetPath())
+	}
+
+	// Test 2: Navigate to ".." at the archive root to escape it
+	ok = pf.NavigateToPath(lp, zipPath)
+	if !ok {
+		t.Fatalf("Failed to navigate to archive root: %s", zipPath)
+	}
+
+	ok = pf.NavigateToPath(lp, "..")
+	if !ok {
+		t.Fatal("Failed to navigate '..' from archive root")
+	}
+
+	// Verify we switched back to OSVFS pointing to tmpDir
+	if _, isOS := lp.vfs.(*vfs.OSVFS); !isOS {
+		t.Error("Expected panel VFS to switch back to OSVFS")
+	}
+
+	if filepath.Clean(lp.vfs.GetPath()) != filepath.Clean(tmpDir) {
+		t.Errorf("Expected OSVFS path %q, got %q", tmpDir, lp.vfs.GetPath())
 	}
 }
