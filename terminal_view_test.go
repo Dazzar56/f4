@@ -61,11 +61,20 @@ func TestTerminalView_HandleFar2lAPC(t *testing.T) {
 	stk.PushU8(0)   // id
 	b64 := base64.StdEncoding.EncodeToString(stk)
 
-	pty.written = nil // reset
+	pty.Reset()
 	tv.HandleFar2lAPC("far2l:" + b64)
 
-	if len(pty.written) == 0 || !strings.HasPrefix(string(pty.written), "\x1b_far2l") {
-		t.Errorf("Expected window size reply, got %q", string(pty.written))
+	var written string
+	for start := time.Now(); time.Since(start) < 2*time.Second; {
+		written = pty.String()
+		if len(written) > 0 && strings.HasPrefix(written, "\x1b_far2l") {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	if len(written) == 0 || !strings.HasPrefix(written, "\x1b_far2l") {
+		t.Errorf("Expected window size reply, got %q", written)
 	}
 }
 func TestTerminalView_HandleFar2lAPC_Garbage(t *testing.T) {
@@ -965,4 +974,39 @@ func TestTerminalView_ProcessFar2lInteract_ConcurrentRace(t *testing.T) {
 	}
 
 	wg.Wait()
+}
+func TestTerminalView_ProcessFar2lInteract_ClipboardProxy(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	defer tv.Close()
+	pty := &mockPty{}
+	tv.pty = pty
+
+	// Simulate clipboard data set on the true host side
+	testData := "proxy_secret_data"
+	vtui.SetClipboard(testData)
+
+	stk := vtinput.Far2lStack{}
+	stk.PushU32(1)  // format (CF_TEXT)
+	stk.PushU8('g') // subcommand: get clipboard data
+	stk.PushU8('c') // category: clipboard
+	stk.PushU8(99)  // transaction ID
+
+	// Process the request from the nested app
+	tv.ProcessFar2lInteract(stk)
+
+	// Verify that f4 retrieved the host-side clipboard and wrote it back to the client PTY
+	written := pty.String()
+	if !strings.HasPrefix(written, "\x1b_far2l:") || !strings.HasSuffix(written, "\x07") {
+		t.Fatalf("Expected valid APC format, got %q", written)
+	}
+
+	b64 := written[8 : len(written)-1]
+	decoded, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		t.Fatalf("Failed to decode base64 payload %q: %v", b64, err)
+	}
+
+	if !strings.Contains(string(decoded), testData) {
+		t.Errorf("Expected decoded reply to contain %q, got %q", testData, string(decoded))
+	}
 }

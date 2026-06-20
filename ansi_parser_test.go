@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,13 +20,28 @@ func init() {
 
 // mockPty captures writes to the PTY for testing parser responses
 type mockPty struct {
+	mu      sync.Mutex
 	written []byte
 	closed  bool
 }
 
 func (m *mockPty) Write(b []byte) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.written = append(m.written, b...)
 	return len(b), nil
+}
+
+func (m *mockPty) String() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return string(m.written)
+}
+
+func (m *mockPty) Reset() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.written = nil
 }
 func (m *mockPty) Read(b []byte) (int, error) {
 	for !m.closed {
@@ -763,7 +779,15 @@ func TestAnsiParser_OSC52_Read_Security(t *testing.T) {
 	vtui.SetClipboard("secret_data")
 	parser.Process([]byte("\x1b]52;c;?\x07"))
 
-	out := pty.String()
+	var out string
+	for start := time.Now(); time.Since(start) < 2*time.Second; {
+		out = pty.String()
+		if strings.Contains(out, "\x1b]52;c;") {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
 	if !strings.Contains(out, "\x1b]52;c;") {
 		t.Errorf("Expected OSC 52 reply containing clipboard data, got %q", out)
 	}

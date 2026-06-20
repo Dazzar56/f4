@@ -581,18 +581,20 @@ func (p *AnsiParser) handleOSC() {
 		if len(subparts) == 2 {
 			if subparts[1] == "?" {
 				if p.pty != nil {
-					allowed := false
-					if vtui.GlobalClipboardAccessManager != nil {
-						auth := vtui.GlobalClipboardAccessManager.Authorize("Terminal_OSC52_Read")
-						if auth == 1 || auth == 2 {
-							allowed = true
+					go func(subCmd string) {
+						allowed := false
+						if vtui.GlobalClipboardAccessManager != nil {
+							auth := vtui.GlobalClipboardAccessManager.Authorize("Terminal_OSC52_Read")
+							if auth == 1 || auth == 2 {
+								allowed = true
+							}
 						}
-					}
-					if allowed {
-						clip := vtui.GetClipboard()
-						b64 := base64.StdEncoding.EncodeToString([]byte(clip))
-						p.pty.Write([]byte(fmt.Sprintf("\x1b]52;%s;%s\x07", subparts[0], b64)))
-					}
+						if allowed {
+							clip := vtui.GetClipboard()
+							b64 := base64.StdEncoding.EncodeToString([]byte(clip))
+							p.pty.Write([]byte(fmt.Sprintf("\x1b]52;%s;%s\x07", subCmd, b64)))
+						}
+					}(subparts[0])
 				}
 			} else {
 				decoded, err := base64.StdEncoding.DecodeString(subparts[1])
@@ -645,9 +647,7 @@ func (p *AnsiParser) handleOSC() {
 
 func (p *AnsiParser) handleAPC() {
 	s := p.CurParam.String()
-	// vtui.DebugLog("ANSI_PARSER: APC payload: %q", s)
 	p.CurParam.Reset()
-
 	if strings.HasPrefix(s, "far2l") {
 		p.term.HandleFar2lAPC(s)
 	}

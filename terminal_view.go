@@ -1015,7 +1015,7 @@ func (tv *TerminalView) HandleFar2lAPC(s string) {
 		}
 		decoded, _ := base64.StdEncoding.DecodeString(b64)
 		if len(decoded) > 0 {
-			tv.ProcessFar2lInteract(decoded)
+			go tv.ProcessFar2lInteract(decoded)
 		}
 	}
 }
@@ -1075,9 +1075,7 @@ func (tv *TerminalView) ProcessFar2lInteract(data []byte) {
 			tv.mu.Unlock()
 			reply.PushU8(1)
 		case 'e':
-			if !vtui.SetOSClipboard("") {
-				vtui.SetClipboard("")
-			}
+			vtui.SetClipboard("")
 			tv.mu.Lock()
 			tv.clipboardChunks = nil
 			tv.mu.Unlock()
@@ -1103,13 +1101,11 @@ func (tv *TerminalView) ProcessFar2lInteract(data []byte) {
 			fullData := append(tv.clipboardChunks, textBytes...)
 			tv.clipboardChunks = nil
 			tv.mu.Unlock()
-			if !vtui.SetOSClipboard(string(fullData)) {
-				vtui.SetClipboard(string(fullData))
-			}
+			vtui.SetClipboard(string(fullData))
 			reply.PushU8(1)
 		case 'g':
 			_ = stk.PopU32() // fmt
-			clipData := vtui.GetOSClipboard()
+			clipData := vtui.GetClipboard()
 			reply.PushU32(uint32(len(clipData)))
 			reply.PushBytes([]byte(clipData))
 			reply.PushU32(uint32(len(clipData)))
