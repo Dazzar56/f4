@@ -11,8 +11,8 @@ require (
 	github.com/unxed/tar v0.1.76
 	github.com/unxed/vtinput v0.0.0
 	github.com/unxed/vtui v0.0.0
-	github.com/unxed/zip v0.1.78
-	github.com/unxed/zipper v0.1.53
+	github.com/unxed/zip v0.1.79
+	github.com/unxed/zipper v0.1.54
 	github.com/vmihailenco/msgpack/v5 v5.4.1
 	golang.org/x/crypto v0.32.0
 	golang.org/x/sys v0.46.0
@@ -69,6 +69,7 @@ require (
 	github.com/unxed/winkeys v0.1.0 // indirect
 	github.com/unxed/xkb-go v0.1.8 // indirect
 	github.com/unxed/zipcharset v0.1.4 // indirect
+	github.com/unxed/zlib4go v0.1.4 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	github.com/yalue/native_endian v1.0.2 // indirect
 	github.com/zzl/go-win32api/v2 v2.1.0 // indirect
