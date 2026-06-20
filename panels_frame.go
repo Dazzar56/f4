@@ -358,6 +358,7 @@ func (pf *PanelsFrame) initPTY() {
 			pf.ptyMutex.Unlock()
 
 			vtui.FrameManager.PostTask(func() {
+				pf.ResizeConsole(pf.lastW, pf.lastH)
 				pf.RefreshAll()
 				vtui.FrameManager.Redraw()
 			})
