@@ -1049,12 +1049,19 @@ func (v *ArchiveVFS) copyBulkZip(ctx context.Context, f vfs.ReadAtCloser, select
 		rc.Close()
 		wc.Close()
 
+		mode := uint32(file.Mode().Perm())
+		if mode == 0 {
+			mode = 0644
+		}
 		item := vfs.VFSItem{
 			Name:     file.Name,
 			Size:     int64(file.UncompressedSize64),
 			IsDir:    false,
 			MTime:    file.Modified,
-			UnixMode: uint32(file.Mode().Perm()),
+			ATime:    file.Modified,
+			UnixMode: mode,
+			Uid:      -1,
+			Gid:      -1,
 		}
 		dstVfs.SetAttributes(ctx, targetPath, item)
 	}
@@ -1141,12 +1148,19 @@ func (v *ArchiveVFS) copyBulkTar(ctx context.Context, f vfs.ReadAtCloser, select
 		}
 		wc.Close()
 
+		mode := uint32(hdr.Mode)
+		if mode == 0 {
+			mode = 0644
+		}
 		item := vfs.VFSItem{
 			Name:     hdr.Name,
 			Size:     hdr.Size,
 			IsDir:    false,
 			MTime:    hdr.ModTime,
-			UnixMode: uint32(hdr.Mode),
+			ATime:    hdr.ModTime,
+			UnixMode: mode,
+			Uid:      -1,
+			Gid:      -1,
 		}
 		dstVfs.SetAttributes(ctx, targetPath, item)
 	}
@@ -1251,12 +1265,19 @@ func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, s
 			}
 		}
 
+		mode := uint32(info.Mode().Perm())
+		if mode == 0 {
+			mode = 0644
+		}
 		item := vfs.VFSItem{
 			Name:     info.Name(),
 			Size:     info.Size(),
 			IsDir:    false,
 			MTime:    info.ModTime(),
-			UnixMode: uint32(info.Mode().Perm()),
+			ATime:    info.ModTime(),
+			UnixMode: mode,
+			Uid:      -1,
+			Gid:      -1,
 		}
 		dstVfs.SetAttributes(ctx, targetPath, item)
 		return nil

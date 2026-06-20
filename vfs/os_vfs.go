@@ -247,14 +247,30 @@ func (v *OSVFS) SetAttributes(ctx context.Context, path string, item VFSItem) er
 	}
 
 	// Try native first
-	errMode := os.Chmod(path, os.FileMode(item.UnixMode))
+	var errMode error
+	if item.UnixMode != 0 {
+		errMode = os.Chmod(path, os.FileMode(item.UnixMode))
+	}
 
 	var errOwn error
 	if runtime.GOOS != "windows" {
-		errOwn = os.Chown(path, item.Uid, item.Gid)
+		if item.Uid != -1 && item.Gid != -1 {
+			errOwn = os.Chown(path, item.Uid, item.Gid)
+		}
 	}
 
-	errTime := os.Chtimes(path, item.ATime, item.MTime)
+	var errTime error
+	if !item.ATime.IsZero() || !item.MTime.IsZero() {
+		atime := item.ATime
+		mtime := item.MTime
+		if atime.IsZero() {
+			atime = mtime
+		}
+		if mtime.IsZero() {
+			mtime = atime
+		}
+		errTime = os.Chtimes(path, atime, mtime)
+	}
 
 	errPlat := applyPlatformAttributes(path, item)
 

@@ -662,6 +662,14 @@ func recursiveCopy(ctx context.Context, srcVfs vfs.VFS, srcPath string, dstVfs v
 				return err
 			}
 		}
+		itemToSet := stat
+		itemToSet.Uid = -1
+		itemToSet.Gid = -1
+		if itemToSet.UnixMode == 0 {
+			itemToSet.UnixMode = 0755
+		}
+		_ = dstVfs.SetAttributes(ctx, destPath, itemToSet)
+
 		if state.Tracker != nil {
 			state.Tracker.DirDone()
 			if state.UpdateUI != nil {
@@ -811,6 +819,16 @@ func recursiveCopy(ctx context.Context, srcVfs vfs.VFS, srcPath string, dstVfs v
 	}
 
 	copySuccess = true
+
+	if copySuccess {
+		itemToSet := stat
+		itemToSet.Uid = -1
+		itemToSet.Gid = -1
+		if itemToSet.UnixMode == 0 {
+			itemToSet.UnixMode = 0644
+		}
+		_ = dstVfs.SetAttributes(ctx, destPathForFile, itemToSet)
+	}
 
 	if state.Tracker != nil {
 		if copySuccess {

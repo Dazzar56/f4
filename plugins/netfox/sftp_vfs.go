@@ -256,13 +256,28 @@ func (v *SFTPVFS) Rename(ctx context.Context, o, n string) error { return v.clie
 
 func (v *SFTPVFS) SetAttributes(ctx context.Context, path string, item vfs.VFSItem) error {
 	// SFTP supports chmod, chown and touch
-	if err := v.client.Chmod(path, os.FileMode(item.UnixMode)); err != nil {
-		return err
+	if item.UnixMode != 0 {
+		if err := v.client.Chmod(path, os.FileMode(item.UnixMode)); err != nil {
+			return err
+		}
 	}
-	if err := v.client.Chown(path, item.Uid, item.Gid); err != nil {
-		return err
+	if item.Uid != -1 && item.Gid != -1 {
+		if err := v.client.Chown(path, item.Uid, item.Gid); err != nil {
+			return err
+		}
 	}
-	return v.client.Chtimes(path, item.ATime, item.MTime)
+	atime := item.ATime
+	mtime := item.MTime
+	if atime.IsZero() {
+		atime = mtime
+	}
+	if mtime.IsZero() {
+		mtime = atime
+	}
+	if !atime.IsZero() && !mtime.IsZero() {
+		return v.client.Chtimes(path, atime, mtime)
+	}
+	return nil
 }
 
 func (v *SFTPVFS) GetCapabilities() vfs.VFSCapabilities {
