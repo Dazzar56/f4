@@ -315,7 +315,68 @@ func showEditor(pf *PanelsFrame, v vfs.VFS, path string, f vfs.ReadAtCloser) {
 	vtui.FrameManager.AddScreen(editor)
 }
 
+func findOpenedEditor(v vfs.VFS, path string) (*EditorView, int) {
+	var absPath string
+	isLocal := false
+	if osvfs, ok := v.(*vfs.OSVFS); ok {
+		isLocal = true
+		absPath, _ = osvfs.Abs(path)
+	}
+
+	if vtui.FrameManager == nil {
+		return nil, -1
+	}
+
+	for i, s := range vtui.FrameManager.Screens {
+		for _, f := range s.Frames {
+			if ev, ok := f.(*EditorView); ok {
+				if isLocal && ev.vfs != nil {
+					if evOSVFS, evOk := ev.vfs.(*vfs.OSVFS); evOk {
+						evAbsPath, _ := evOSVFS.Abs(ev.filePath)
+						if evAbsPath == absPath {
+							return ev, i
+						}
+					}
+				} else {
+					if ev.filePath == path {
+						return ev, i
+					}
+				}
+			}
+		}
+	}
+	return nil, -1
+}
+
 func actionOpenEditor(pf *PanelsFrame, v vfs.VFS, path string) {
+	existingEditor, screenIdx := findOpenedEditor(v, path)
+	if existingEditor != nil {
+		var buttons []string
+		if existingEditor.modified {
+			buttons = []string{"&Current", "&New instance", "Cancel"}
+		} else {
+			buttons = []string{"&Current", "&Reload", "&New instance", "Cancel"}
+		}
+
+		vtui.FrameManager.PostTask(func() {
+			dlg := vtui.ShowMessage(" Warning ", "File is already opened:\n"+vtui.TruncateMiddle(v.Base(path), 40), buttons)
+			dlg.OnResult = func(res int) {
+				if res == 0 {
+					vtui.FrameManager.SwitchScreen(screenIdx)
+				} else if res == 1 && len(buttons) == 4 { // Reload
+					existingEditor.Close()
+					openEditorInternal(pf, v, path)
+				} else if (res == 1 && len(buttons) == 3) || (res == 2 && len(buttons) == 4) { // New instance
+					openEditorInternal(pf, v, path)
+				}
+			}
+		})
+		return
+	}
+	openEditorInternal(pf, v, path)
+}
+
+func openEditorInternal(pf *PanelsFrame, v vfs.VFS, path string) {
 	if _, isLocal := v.(*vfs.OSVFS); isLocal {
 		vtui.RunAsync(func(ctx *vtui.TaskContext) {
 			var f vfs.ReadAtCloser
@@ -365,6 +426,39 @@ func actionOpenEditor(pf *PanelsFrame, v vfs.VFS, path string) {
 	})
 }
 
+func findOpenedViewer(v vfs.VFS, path string) (*ViewerView, int) {
+	var absPath string
+	isLocal := false
+	if osvfs, ok := v.(*vfs.OSVFS); ok {
+		isLocal = true
+		absPath, _ = osvfs.Abs(path)
+	}
+
+	if vtui.FrameManager == nil {
+		return nil, -1
+	}
+
+	for i, s := range vtui.FrameManager.Screens {
+		for _, f := range s.Frames {
+			if vv, ok := f.(*ViewerView); ok {
+				if isLocal && vv.vfs != nil {
+					if vvOSVFS, evOk := vv.vfs.(*vfs.OSVFS); evOk {
+						vvAbsPath, _ := vvOSVFS.Abs(vv.path)
+						if vvAbsPath == absPath {
+							return vv, i
+						}
+					}
+				} else {
+					if vv.path == path {
+						return vv, i
+					}
+				}
+			}
+		}
+	}
+	return nil, -1
+}
+
 func showViewer(pf *PanelsFrame, viewer *ViewerView, path string) {
 	if GlobalFileState != nil && path != "" {
 		if state := GlobalFileState.GetState(path); state != nil {
@@ -384,6 +478,27 @@ func showViewer(pf *PanelsFrame, viewer *ViewerView, path string) {
 }
 
 func actionOpenViewer(pf *PanelsFrame, v vfs.VFS, path string) {
+	existingViewer, screenIdx := findOpenedViewer(v, path)
+	if existingViewer != nil {
+		vtui.FrameManager.PostTask(func() {
+			dlg := vtui.ShowMessage(" Warning ", "File is already being viewed:\n"+vtui.TruncateMiddle(v.Base(path), 40), []string{"&Current", "&Reload", "&New instance", "Cancel"})
+			dlg.OnResult = func(res int) {
+				if res == 0 {
+					vtui.FrameManager.SwitchScreen(screenIdx)
+				} else if res == 1 { // Reload
+					existingViewer.Close()
+					openViewerInternal(pf, v, path)
+				} else if res == 2 { // New instance
+					openViewerInternal(pf, v, path)
+				}
+			}
+		})
+		return
+	}
+	openViewerInternal(pf, v, path)
+}
+
+func openViewerInternal(pf *PanelsFrame, v vfs.VFS, path string) {
 	if _, isLocal := v.(*vfs.OSVFS); isLocal {
 		vtui.RunAsync(func(ctx *vtui.TaskContext) {
 			if v != nil {

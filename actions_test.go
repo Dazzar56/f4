@@ -557,6 +557,125 @@ func TestActionNewFile_Flow(t *testing.T) {
 		t.Errorf("Expected New File dialog, got %v", top)
 	}
 }
+func TestActionOpenEditor_AlreadyOpened(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "test.txt")
+	os.WriteFile(path, []byte("content"), 0644)
+
+	v := vfs.NewOSVFS(tmpDir)
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	// First open
+	actionOpenEditor(pf, v, path)
+
+	// Wait for editor to open
+	timeout := time.After(2 * time.Second)
+	foundEditor := false
+	for !foundEditor {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			ev, _ := findOpenedEditor(v, path)
+			if ev != nil {
+				foundEditor = true
+			}
+		case <-timeout:
+			t.Fatal("Timeout waiting for editor to open")
+		}
+	}
+
+	// Attempt second open
+	actionOpenEditor(pf, v, path)
+
+	// Wait for warning dialog
+	foundWarning := false
+	timeout = time.After(2 * time.Second)
+Loop:
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			if vtui.FrameManager.GetTopFrameType() == vtui.TypeDialog {
+				top := vtui.FrameManager.GetTopFrame()
+				if top != nil && strings.Contains(top.GetTitle(), "Warning") {
+					foundWarning = true
+					break Loop
+				}
+			}
+		case <-timeout:
+			break Loop
+		}
+	}
+
+	if !foundWarning {
+		t.Error("Expected warning dialog when trying to open an already opened file")
+	}
+}
+
+func TestActionOpenViewer_AlreadyOpened(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "test_view.txt")
+	os.WriteFile(path, []byte("content"), 0644)
+
+	v := vfs.NewOSVFS(tmpDir)
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	// First open
+	actionOpenViewer(pf, v, path)
+
+	// Wait for viewer to open
+	timeout := time.After(2 * time.Second)
+	foundViewer := false
+	for !foundViewer {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			vv, _ := findOpenedViewer(v, path)
+			if vv != nil {
+				foundViewer = true
+			}
+		case <-timeout:
+			t.Fatal("Timeout waiting for viewer to open")
+		}
+	}
+
+	// Attempt second open
+	actionOpenViewer(pf, v, path)
+
+	// Wait for warning dialog
+	foundWarning := false
+	timeout = time.After(2 * time.Second)
+Loop:
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			if vtui.FrameManager.GetTopFrameType() == vtui.TypeDialog {
+				top := vtui.FrameManager.GetTopFrame()
+				if top != nil && strings.Contains(top.GetTitle(), "Warning") {
+					foundWarning = true
+					break Loop
+				}
+			}
+		case <-timeout:
+			break Loop
+		}
+	}
+
+	if !foundWarning {
+		t.Error("Expected warning dialog when trying to open an already viewed file")
+	}
+}
 func TestActionViewerSearch_EmptyFile(t *testing.T) {
 	// Regression test: searching in an empty file should not hang or crash
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
