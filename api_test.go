@@ -28,8 +28,10 @@ func (m *mockHighlighter) Highlight(line string, prev any, base uint64) ([]uint6
 
 type mockHighlighterProvider struct{}
 
-func (m *mockHighlighterProvider) Name() string                        { return "mock-highlighter" }
-func (m *mockHighlighterProvider) Match(filename, content string) bool { return filename == "api-test.mock" }
+func (m *mockHighlighterProvider) Name() string { return "mock-highlighter" }
+func (m *mockHighlighterProvider) Match(filename, content string) bool {
+	return filename == "api-test.mock"
+}
 func (m *mockHighlighterProvider) Create(filename, content string) vtui.Highlighter {
 	return &mockHighlighter{}
 }
