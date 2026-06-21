@@ -676,6 +676,53 @@ Loop:
 		t.Error("Expected warning dialog when trying to open an already viewed file")
 	}
 }
+type mockLockedVFS struct {
+	vfs.VFS
+}
+
+func (m *mockLockedVFS) Open(ctx context.Context, path string) (vfs.ReadAtCloser, error) {
+	return nil, os.ErrPermission // Simulate locked file or sharing violation
+}
+
+func TestActionOpenEditor_LockedFile(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "locked.txt")
+	os.WriteFile(path, []byte("data"), 0644)
+
+	v := &mockLockedVFS{VFS: vfs.NewOSVFS(tmpDir)}
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	actionOpenEditor(pf, v, path)
+
+	// Wait for error dialog
+	foundError := false
+	timeout := time.After(2 * time.Second)
+Loop:
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			if vtui.FrameManager.GetTopFrameType() == vtui.TypeDialog {
+				top := vtui.FrameManager.GetTopFrame()
+				if top != nil && strings.Contains(top.GetTitle(), "Error") {
+					foundError = true
+					break Loop
+				}
+			}
+		case <-timeout:
+			break Loop
+		}
+	}
+
+	if !foundError {
+		t.Error("Expected error dialog when trying to open a locked file for editing")
+	}
+}
 func TestActionViewerSearch_EmptyFile(t *testing.T) {
 	// Regression test: searching in an empty file should not hang or crash
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())

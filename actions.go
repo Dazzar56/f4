@@ -387,7 +387,18 @@ func openEditorInternal(pf *PanelsFrame, v vfs.VFS, path string) {
 					})
 					return
 				}
-				f, _ = v.Open(ctx.Context, path)
+				var err error
+				f, err = v.Open(ctx.Context, path)
+				if err != nil {
+					if os.IsNotExist(err) {
+						f = nil
+					} else {
+						ctx.RunOnUI(func() {
+							vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to open file:\n%v", err), []string{"&Ok"})
+						})
+						return
+					}
+				}
 			}
 			ctx.RunOnUI(func() {
 				showEditor(pf, v, path, f)
