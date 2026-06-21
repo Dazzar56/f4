@@ -226,3 +226,10 @@ type TaskReporter interface {
 	UpdateTransfer(action string, filename string, currentPct int, totalText string, totalPct int, speedText string)
 	IsCancelled() bool
 }
+
+type FileProgress interface {
+	StartFile(name string, size int64)
+	UpdateBytes(n int)
+	FileDone()
+	DirDone()
+}

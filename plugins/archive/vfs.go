@@ -997,11 +997,17 @@ func (v *ArchiveVFS) copyBulkZip(ctx context.Context, f vfs.ReadAtCloser, select
 
 		if file.FileInfo().IsDir() {
 			dstVfs.MkDir(ctx, targetPath)
+			if fp, ok := reporter.(vfs.FileProgress); ok {
+				fp.DirDone()
+			}
 			continue
 		}
 
 		dstVfs.MkDir(ctx, dstVfs.Dir(targetPath))
 
+		if fp, ok := reporter.(vfs.FileProgress); ok {
+			fp.StartFile(file.Name, int64(file.UncompressedSize64))
+		}
 		if reporter != nil {
 			reporter.UpdateTransfer("Extracting", file.Name, 0, "", 0, "")
 		}
@@ -1031,6 +1037,9 @@ func (v *ArchiveVFS) copyBulkZip(ctx context.Context, f vfs.ReadAtCloser, select
 					wc.Close()
 					return werr
 				}
+				if fp, ok := reporter.(vfs.FileProgress); ok {
+					fp.UpdateBytes(n)
+				}
 				copied += int64(n)
 				if reporter != nil && file.UncompressedSize64 > 0 {
 					pct := int((copied * 100) / int64(file.UncompressedSize64))
@@ -1048,6 +1057,10 @@ func (v *ArchiveVFS) copyBulkZip(ctx context.Context, f vfs.ReadAtCloser, select
 		}
 		rc.Close()
 		wc.Close()
+
+		if fp, ok := reporter.(vfs.FileProgress); ok {
+			fp.FileDone()
+		}
 
 		mode := uint32(file.Mode().Perm())
 		if mode == 0 {
@@ -1106,11 +1119,17 @@ func (v *ArchiveVFS) copyBulkTar(ctx context.Context, f vfs.ReadAtCloser, select
 
 		if hdr.Typeflag == tar.TypeDir {
 			dstVfs.MkDir(ctx, targetPath)
+			if fp, ok := reporter.(vfs.FileProgress); ok {
+				fp.DirDone()
+			}
 			continue
 		}
 
 		dstVfs.MkDir(ctx, dstVfs.Dir(targetPath))
 
+		if fp, ok := reporter.(vfs.FileProgress); ok {
+			fp.StartFile(cleanName, hdr.Size)
+		}
 		if reporter != nil {
 			reporter.UpdateTransfer("Extracting", cleanName, 0, "", 0, "")
 		}
@@ -1132,6 +1151,9 @@ func (v *ArchiveVFS) copyBulkTar(ctx context.Context, f vfs.ReadAtCloser, select
 					wc.Close()
 					return werr
 				}
+				if fp, ok := reporter.(vfs.FileProgress); ok {
+					fp.UpdateBytes(n)
+				}
 				copied += int64(n)
 				if reporter != nil && hdr.Size > 0 {
 					pct := int((copied * 100) / hdr.Size)
@@ -1147,6 +1169,10 @@ func (v *ArchiveVFS) copyBulkTar(ctx context.Context, f vfs.ReadAtCloser, select
 			}
 		}
 		wc.Close()
+
+		if fp, ok := reporter.(vfs.FileProgress); ok {
+			fp.FileDone()
+		}
 
 		mode := uint32(hdr.Mode)
 		if mode == 0 {
@@ -1220,11 +1246,17 @@ func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, s
 
 		if info.IsDir() {
 			dstVfs.MkDir(ctx, targetPath)
+			if fp, ok := reporter.(vfs.FileProgress); ok {
+				fp.DirDone()
+			}
 			return nil
 		}
 
 		dstVfs.MkDir(ctx, dstVfs.Dir(targetPath))
 
+		if fp, ok := reporter.(vfs.FileProgress); ok {
+			fp.StartFile(cleanName, info.Size())
+		}
 		if reporter != nil {
 			reporter.UpdateTransfer("Extracting", cleanName, 0, "", 0, "")
 		}
@@ -1251,6 +1283,9 @@ func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, s
 				if _, werr := wc.Write(buf[:n]); werr != nil {
 					return werr
 				}
+				if fp, ok := reporter.(vfs.FileProgress); ok {
+					fp.UpdateBytes(n)
+				}
 				copied += int64(n)
 				if reporter != nil && info.Size() > 0 {
 					pct := int((copied * 100) / info.Size())
@@ -1263,6 +1298,10 @@ func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, s
 				}
 				return rerr
 			}
+		}
+
+		if fp, ok := reporter.(vfs.FileProgress); ok {
+			fp.FileDone()
 		}
 
 		mode := uint32(info.Mode().Perm())

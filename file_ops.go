@@ -16,6 +16,35 @@ import (
 type globalAwareReporter struct {
 	original  TaskReporter
 	getGlobal func() (string, int, string)
+	tracker   *FileOpTracker
+	onBytes   func(int)
+}
+
+func (w *globalAwareReporter) StartFile(name string, size int64) {
+	if w.tracker != nil {
+		w.tracker.StartFile(name, size)
+	}
+}
+
+func (w *globalAwareReporter) UpdateBytes(n int) {
+	if w.tracker != nil {
+		w.tracker.UpdateBytes(n)
+	}
+	if w.onBytes != nil {
+		w.onBytes(n)
+	}
+}
+
+func (w *globalAwareReporter) FileDone() {
+	if w.tracker != nil {
+		w.tracker.FileDone()
+	}
+}
+
+func (w *globalAwareReporter) DirDone() {
+	if w.tracker != nil {
+		w.tracker.DirDone()
+	}
 }
 
 func (w *globalAwareReporter) UpdateScan(currentPath string, files, dirs int64) {
@@ -207,13 +236,21 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 			return totalText, totalPct, timeSpeedText
 		}
 
+		var updateUI func(force bool)
 		wrapRep := &globalAwareReporter{
 			original:  reporter,
 			getGlobal: getGlobalStats,
+			tracker:   tracker,
+			onBytes: func(n int) {
+				bytesSinceLastSpeedUpdate += int64(n)
+				if updateUI != nil {
+					updateUI(false)
+				}
+			},
 		}
 		ctx = context.WithValue(ctx, vfs.ReporterKey, wrapRep)
 
-		updateUI := func(force bool) {
+		updateUI = func(force bool) {
 			now := time.Now()
 			if force || now.Sub(lastUpdate) >= 100*time.Millisecond {
 				speedDur := now.Sub(lastSpeedUpdate).Seconds()
@@ -277,13 +314,8 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 		// OPTIMIZATION: Check if the source VFS supports bulk copying (e.g. for sequential archives)
 		if !isMove && srcVfs != dstVfs {
 			if bulkCopier, ok := srcVfs.(vfs.BulkCopier); ok {
-				err := bulkCopier.CopyBulk(ctx, names, dstVfs, destPath, reporter)
+				err := bulkCopier.CopyBulk(ctx, names, dstVfs, destPath, wrapRep)
 				if err == nil {
-					// Mark all files as fully completed
-					for _, name := range names {
-						tracker.StartFile(name, 0)
-						tracker.FileDone()
-					}
 					updateUI(true)
 					return nil
 				}
