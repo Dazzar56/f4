@@ -14,8 +14,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/mholt/archives"
-
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/zipper/archive"
 
@@ -1031,6 +1029,10 @@ func (v *ArchiveVFS) copyBulkZip(ctx context.Context, f vfs.ReadAtCloser, select
 			lastFile = file.Name
 			lastPct = -1
 			mu.Unlock()
+			if fp, ok := reporter.(vfs.FileProgress); ok {
+				fp.StartFile(file.Name, int64(file.UncompressedSize64))
+				fp.FileSkipped()
+			}
 			continue
 		}
 
@@ -1182,6 +1184,10 @@ func (v *ArchiveVFS) copyBulkTar(ctx context.Context, f vfs.ReadAtCloser, select
 			lastFile = cleanName
 			lastPct = -1
 			mu.Unlock()
+			if fp, ok := reporter.(vfs.FileProgress); ok {
+				fp.StartFile(cleanName, hdr.Size)
+				fp.FileSkipped()
+			}
 			continue
 		}
 
@@ -1279,29 +1285,6 @@ func (v *ArchiveVFS) copyBulkTar(ctx context.Context, f vfs.ReadAtCloser, select
 }
 
 func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, selected map[string]bool, dstVfs vfs.VFS, dstDir string, reporter vfs.TaskReporter) error {
-	var localPath string
-	if temp, ok := f.(*vfs.TempFileWrapper); ok && temp.TempPath != "" {
-		localPath = temp.TempPath
-	} else {
-		localPath = v.activePath()
-	}
-
-	localF, err := os.Open(localPath)
-	if err != nil {
-		return err
-	}
-	defer localF.Close()
-
-	format, stream, err := archives.Identify(ctx, localPath, localF)
-	if err != nil {
-		return err
-	}
-
-	ex, ok := format.(archives.Extractor)
-	if !ok {
-		return fmt.Errorf("format %T does not support extraction", format)
-	}
-
 	var mu sync.Mutex
 	lastAction := "Locating"
 	lastFile := "Archive data"
@@ -1318,12 +1301,19 @@ func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, s
 
 	buf := make([]byte, 128*1024)
 
-	return ex.Extract(ctx, stream, func(ctx context.Context, info archives.FileInfo) error {
+	return fs.WalkDir(v.fsys, ".", func(fsPath string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
 
-		cleanName := strings.TrimPrefix(info.NameInArchive, "/")
+		cleanName := strings.TrimPrefix(fsPath, "./")
+		if cleanName == "." {
+			return nil
+		}
+
 		matched := false
 		for selPath := range selected {
 			if cleanName == selPath || strings.HasPrefix(cleanName, selPath+"/") {
@@ -1332,12 +1322,22 @@ func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, s
 			}
 		}
 
+		info, _ := d.Info()
+		size := int64(0)
+		if info != nil {
+			size = info.Size()
+		}
+
 		if !matched {
 			mu.Lock()
 			lastAction = "Locating"
 			lastFile = cleanName
 			lastPct = -1
 			mu.Unlock()
+			if fp, ok := reporter.(vfs.FileProgress); ok {
+				fp.StartFile(cleanName, size)
+				fp.FileSkipped()
+			}
 			return nil
 		}
 
@@ -1348,7 +1348,7 @@ func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, s
 		}
 		targetPath := dstVfs.Join(dstDir, relPath)
 
-		if info.IsDir() {
+		if d.IsDir() {
 			dstVfs.MkDir(ctx, targetPath)
 			if fp, ok := reporter.(vfs.FileProgress); ok {
 				fp.DirDone()
@@ -1359,7 +1359,7 @@ func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, s
 		dstVfs.MkDir(ctx, dstVfs.Dir(targetPath))
 
 		if fp, ok := reporter.(vfs.FileProgress); ok {
-			fp.StartFile(cleanName, info.Size())
+			fp.StartFile(cleanName, size)
 		}
 		if reporter != nil {
 			mu.Lock()
@@ -1370,7 +1370,7 @@ func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, s
 			reporter.UpdateTransfer("Extracting", cleanName, 0, "", 0, "")
 		}
 
-		rc, err := info.Open()
+		rc, err := v.fsys.Open(fsPath)
 		if err != nil {
 			return err
 		}
@@ -1396,8 +1396,8 @@ func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, s
 					fp.UpdateBytes(n)
 				}
 				copied += int64(n)
-				if reporter != nil && info.Size() > 0 {
-					pct := int((copied * 100) / info.Size())
+				if reporter != nil && size > 0 {
+					pct := int((copied * 100) / size)
 					mu.Lock()
 					lastAction = "Extracting"
 					lastFile = cleanName
@@ -1418,21 +1418,23 @@ func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, s
 			fp.FileDone()
 		}
 
-		mode := uint32(info.Mode().Perm())
-		if mode == 0 {
-			mode = 0644
+		if info != nil {
+			mode := uint32(info.Mode().Perm())
+			if mode == 0 {
+				mode = 0644
+			}
+			item := vfs.VFSItem{
+				Name:     info.Name(),
+				Size:     info.Size(),
+				IsDir:    false,
+				MTime:    info.ModTime(),
+				ATime:    info.ModTime(),
+				UnixMode: mode,
+				Uid:      -1,
+				Gid:      -1,
+			}
+			dstVfs.SetAttributes(ctx, targetPath, item)
 		}
-		item := vfs.VFSItem{
-			Name:     info.Name(),
-			Size:     info.Size(),
-			IsDir:    false,
-			MTime:    info.ModTime(),
-			ATime:    info.ModTime(),
-			UnixMode: mode,
-			Uid:      -1,
-			Gid:      -1,
-		}
-		dstVfs.SetAttributes(ctx, targetPath, item)
 		return nil
 	})
 }

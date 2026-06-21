@@ -232,4 +232,5 @@ type FileProgress interface {
 	UpdateBytes(n int)
 	FileDone()
 	DirDone()
+	FileSkipped()
 }

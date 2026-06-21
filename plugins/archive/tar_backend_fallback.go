@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/mholt/archives"
+	"github.com/unxed/zipper/archive"
 )
 
 func tarOpenFS(path string) (any, error) {
@@ -30,22 +30,22 @@ func tarArchive(ctx context.Context, arcPath, basePath string, fileMap map[strin
 	}
 	defer out.Close()
 
-	var format archives.Archiver
-	tarFmt := archives.Tar{}
+	var format archive.Archiver
+	tarFmt := archive.Tar{}
 
 	if strings.HasSuffix(lowerName, ".gz") || strings.HasSuffix(lowerName, ".tgz") {
-		format = archives.CompressedArchive{Compression: archives.Gz{}, Archival: tarFmt}
+		format = archive.CompressedArchive{Compression: archive.Gz{}, Archival: tarFmt}
 	} else if strings.HasSuffix(lowerName, ".bz2") {
-		format = archives.CompressedArchive{Compression: archives.Bz2{}, Archival: tarFmt}
+		format = archive.CompressedArchive{Compression: archive.Bz2{}, Archival: tarFmt}
 	} else if strings.HasSuffix(lowerName, ".xz") || strings.HasSuffix(lowerName, ".txz") {
-		format = archives.CompressedArchive{Compression: archives.Xz{}, Archival: tarFmt}
+		format = archive.CompressedArchive{Compression: archive.Xz{}, Archival: tarFmt}
 	} else if strings.HasSuffix(lowerName, ".zst") {
-		format = archives.CompressedArchive{Compression: archives.Zstd{}, Archival: tarFmt}
+		format = archive.CompressedArchive{Compression: archive.Zstd{}, Archival: tarFmt}
 	} else {
 		format = tarFmt
 	}
 
-	var files []archives.FileInfo
+	var files []archive.FileInfo
 	for p, fi := range fileMap {
 		rel, err := filepath.Rel(basePath, p)
 		if err != nil {
@@ -54,7 +54,7 @@ func tarArchive(ctx context.Context, arcPath, basePath string, fileMap map[strin
 		nameInArchive := filepath.ToSlash(rel)
 
 		capturePath := p
-		files = append(files, archives.FileInfo{
+		files = append(files, archive.FileInfo{
 			FileInfo:      fi,
 			NameInArchive: nameInArchive,
 			Open: func() (fs.File, error) {

@@ -40,6 +40,11 @@ func (w *globalAwareReporter) FileDone() {
 		w.tracker.FileDone()
 	}
 }
+func (w *globalAwareReporter) FileSkipped() {
+	if w.tracker != nil {
+		w.tracker.FileSkipped()
+	}
+}
 
 func (w *globalAwareReporter) DirDone() {
 	if w.tracker != nil {
