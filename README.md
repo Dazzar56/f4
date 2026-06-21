@@ -124,9 +124,9 @@ sudo apt install golang git
 ```
 
 **2. Setup Project**
-Clone the repository with all dependencies (submodules):
+Clone the repository:
 ```bash
-git clone --recursive https://github.com/unxed/f4.git
+git clone https://github.com/unxed/f4.git
 cd f4
 ```
 
