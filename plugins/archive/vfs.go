@@ -970,6 +970,7 @@ func (v *ArchiveVFS) copyBulkZip(ctx context.Context, f vfs.ReadAtCloser, select
 		return err
 	}
 
+	var lastLocateUpdate time.Time
 	buf := make([]byte, 128*1024)
 	for _, file := range zr.File {
 		if ctx.Err() != nil {
@@ -985,6 +986,13 @@ func (v *ArchiveVFS) copyBulkZip(ctx context.Context, f vfs.ReadAtCloser, select
 		}
 
 		if !matched {
+			now := time.Now()
+			if now.Sub(lastLocateUpdate) >= 100*time.Millisecond {
+				lastLocateUpdate = now
+				if reporter != nil {
+					reporter.UpdateTransfer("Locating", file.Name, -1, "", -1, "")
+				}
+			}
 			continue
 		}
 
@@ -1083,6 +1091,7 @@ func (v *ArchiveVFS) copyBulkZip(ctx context.Context, f vfs.ReadAtCloser, select
 
 func (v *ArchiveVFS) copyBulkTar(ctx context.Context, f vfs.ReadAtCloser, selected map[string]bool, dstVfs vfs.VFS, dstDir string, reporter vfs.TaskReporter) error {
 	tr := tar.NewReader(ctxReader{r: f, ctx: ctx})
+	var lastLocateUpdate time.Time
 	buf := make([]byte, 128*1024)
 
 	for {
@@ -1107,6 +1116,13 @@ func (v *ArchiveVFS) copyBulkTar(ctx context.Context, f vfs.ReadAtCloser, select
 		}
 
 		if !matched {
+			now := time.Now()
+			if now.Sub(lastLocateUpdate) >= 100*time.Millisecond {
+				lastLocateUpdate = now
+				if reporter != nil {
+					reporter.UpdateTransfer("Locating", cleanName, -1, "", -1, "")
+				}
+			}
 			continue
 		}
 
@@ -1217,6 +1233,7 @@ func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, s
 		return fmt.Errorf("format %T does not support extraction", format)
 	}
 
+	var lastLocateUpdate time.Time
 	buf := make([]byte, 128*1024)
 
 	return ex.Extract(ctx, stream, func(ctx context.Context, info archives.FileInfo) error {
@@ -1234,6 +1251,13 @@ func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, s
 		}
 
 		if !matched {
+			now := time.Now()
+			if now.Sub(lastLocateUpdate) >= 100*time.Millisecond {
+				lastLocateUpdate = now
+				if reporter != nil {
+					reporter.UpdateTransfer("Locating", cleanName, -1, "", -1, "")
+				}
+			}
 			return nil
 		}
 
