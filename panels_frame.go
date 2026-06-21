@@ -1004,6 +1004,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			// Apply to panel first
 			if isDirChange {
 				if fsp, ok := pf.panels[pf.activeIdx].(*FileSystemPanel); ok {
+					targetPath = expandPathEnv(targetPath)
 					if pf.NavigateToPath(fsp, targetPath) {
 						pf.cmdLine.Clear()
 
@@ -2124,6 +2125,7 @@ func (pf *PanelsFrame) NavigateToPath(fsp *FileSystemPanel, targetPath string) b
 			if st.IsDir() {
 				newVfs := vfs.NewOSVFS(targetPath)
 				if err := newVfs.SetPath(targetPath); err == nil {
+					fsp.pendingSelection = ".."
 					pf.switchToVFS(fsp, newVfs)
 					return true
 				}
@@ -2186,4 +2188,30 @@ func (pf *PanelsFrame) NavigateToPath(fsp *FileSystemPanel, targetPath string) b
 	}
 
 	return false
+}
+
+func expandPathEnv(s string) string {
+	if runtime.GOOS == "windows" {
+		var buf strings.Builder
+		for i := 0; i < len(s); i++ {
+			if s[i] == '%' {
+				end := strings.IndexByte(s[i+1:], '%')
+				if end <= 0 {
+					buf.WriteByte(s[i])
+					continue
+				}
+				name := s[i+1 : i+1+end]
+				if v := os.Getenv(name); v != "" {
+					buf.WriteString(v)
+				} else {
+					buf.WriteString(s[i : i+end+2])
+				}
+				i += end + 1
+			} else {
+				buf.WriteByte(s[i])
+			}
+		}
+		return buf.String()
+	}
+	return os.ExpandEnv(s)
 }
