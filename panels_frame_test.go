@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"github.com/unxed/f4/plugins/archive"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
@@ -2378,3 +2379,131 @@ func TestPanelsFrame_NavigateToPath(t *testing.T) {
 		t.Errorf("Expected OSVFS path %q, got %q", tmpDir, lp.vfs.GetPath())
 	}
 }
+
+func TestArchiveBulkExtract_ProgressTracking(t *testing.T) {
+	// Register the Archive VFS provider manually for this unit test
+	vfs.RegisterProvider(&archive.ArchiveProvider{})
+
+	// Initialize a headless FrameManager to prevent nil panics during async directory reads
+	scr := vtui.NewScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+
+	tmpDir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	zipPath := filepath.Join(tmpDir, "progress_test.zip")
+
+	// Create a test zip with 1 folder and 2 files
+	f, err := os.Create(zipPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zw := zip.NewWriter(f)
+
+	// Directory
+	_, _ = zw.Create("dir/")
+	// File 1 (10 bytes)
+	w1, _ := zw.Create("dir/file1.txt")
+	w1.Write([]byte("0123456789"))
+	// File 2 (20 bytes)
+	w2, _ := zw.Create("dir/file2.txt")
+	w2.Write([]byte("01234567890123456789"))
+	zw.Close()
+	f.Close()
+
+	// 1. Setup VFS
+	parentVFS := vfs.NewOSVFS(tmpDir)
+	arcVFS, err := vfs.FindProvider(context.Background(), parentVFS, zipPath).Open(context.Background(), parentVFS, zipPath)
+	if err != nil {
+		t.Fatalf("Failed to open archive VFS: %v", err)
+	}
+	defer arcVFS.Close()
+
+	destDir := filepath.Join(tmpDir, "extracted")
+	os.MkdirAll(destDir, 0755)
+	dstVFS := vfs.NewOSVFS(destDir)
+
+	// 2. Pre-calculate stats (this mimics ExecuteFileOp's scan phase)
+	names := []string{"dir"}
+	totalStats, err := vfs.CalculateStats(context.Background(), arcVFS, arcVFS.GetPath(), names, nil)
+	if err != nil {
+		t.Fatalf("CalculateStats failed: %v", err)
+	}
+
+	// Verify scanned stats: 1 dir, 2 files, 30 bytes
+	if totalStats.Files != 2 || totalStats.Dirs != 1 || totalStats.Bytes != 30 {
+		t.Errorf("Unexpected scanned stats: %+v", totalStats)
+	}
+
+	tracker := NewFileOpTracker(totalStats)
+
+	var bytesReported int64
+
+	mockOriginalReporter := &mockTaskReporter{}
+
+	// We want to verify that when we call CopyBulk, the globalAwareReporter updates the tracker
+	// and invokes updateUI, which in turn updates the dialog.
+	getGlobalStats := func() (string, int, string) {
+		_, totalPct, _ := tracker.GetProgress()
+		processed, total := tracker.GetStats()
+		totalText := fmt.Sprintf("Total: %d/%d", processed.Bytes, total.Bytes)
+		timeSpeedText := fmt.Sprintf("Progress: %d%%", totalPct)
+		return totalText, totalPct, timeSpeedText
+	}
+
+	wrapRep := &globalAwareReporter{
+		original:  mockOriginalReporter,
+		getGlobal: getGlobalStats,
+		tracker:   tracker,
+		onBytes: func(n int) {
+			bytesReported += int64(n)
+		},
+	}
+
+	// We pass "AutoQueue" in context to bypass the interactive UI busy-lock prompt
+	ctx := context.WithValue(context.Background(), "AutoQueue", true)
+
+	// 3. Execute Bulk Copy
+	bulkCopier := arcVFS.(vfs.BulkCopier)
+	err = bulkCopier.CopyBulk(ctx, names, dstVFS, destDir, wrapRep)
+	if err != nil {
+		t.Fatalf("CopyBulk failed: %v", err)
+	}
+
+	// 4. Verify results
+	processed, _ := tracker.GetStats()
+
+	// All 30 bytes must be reported
+	if bytesReported != 30 {
+		t.Errorf("Expected 30 bytes reported via onBytes, got %d", bytesReported)
+	}
+	if processed.Bytes != 30 {
+		t.Errorf("Tracker processed bytes mismatch: expected 30, got %d", processed.Bytes)
+	}
+	if processed.Files != 2 {
+		t.Errorf("Tracker processed files mismatch: expected 2, got %d", processed.Files)
+	}
+	if processed.Dirs != 1 {
+		t.Errorf("Tracker processed dirs mismatch: expected 1, got %d", processed.Dirs)
+	}
+
+	// Verify files actually extracted and content matches
+	b1, err := os.ReadFile(filepath.Join(destDir, "dir/file1.txt"))
+	if err != nil || string(b1) != "0123456789" {
+		t.Errorf("file1.txt mismatch: %q (err: %v)", string(b1), err)
+	}
+	b2, err := os.ReadFile(filepath.Join(destDir, "dir/file2.txt"))
+	if err != nil || string(b2) != "01234567890123456789" {
+		t.Errorf("file2.txt mismatch: %q (err: %v)", string(b2), err)
+	}
+}
+
+type mockTaskReporter struct{}
+
+func (m *mockTaskReporter) UpdateScan(currentPath string, files, dirs int64) {}
+func (m *mockTaskReporter) UpdateTransfer(action, filename string, currentPct int, totalText string, totalPct int, speedText string) {
+}
+func (m *mockTaskReporter) IsCancelled() bool { return false }
