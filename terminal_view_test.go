@@ -209,13 +209,13 @@ func TestTerminalView_ProcessFar2lInteract_LocalAuth(t *testing.T) {
 	tv.ProcessFar2lInteract(stk)
 
 	rawResp := string(pty.written)
-	// Prefix is \x1b_far2l: (8 bytes)
-	if !strings.HasPrefix(rawResp, "\x1b_far2l:") || !strings.HasSuffix(rawResp, "\x07") {
+	// Prefix is \x1b_far2l (7 bytes), no colon for replies
+	if !strings.HasPrefix(rawResp, "\x1b_far2l") || !strings.HasSuffix(rawResp, "\x07") {
 		t.Fatalf("Malformed response: %q", rawResp)
 	}
 
 	// Strip prefix and suffix to get base64 payload
-	b64 := rawResp[8 : len(rawResp)-1]
+	b64 := rawResp[7 : len(rawResp)-1]
 	decoded, err := base64.StdEncoding.DecodeString(b64)
 	if err != nil {
 		t.Fatalf("Failed to decode base64: %v. Raw string: %q", err, b64)
@@ -923,8 +923,8 @@ func TestTerminalView_ProcessFar2lInteract_ColonFormat(t *testing.T) {
 	tv.ProcessFar2lInteract(stk)
 
 	out := pty.String()
-	if !strings.HasPrefix(out, "\x1b_far2l:") {
-		t.Errorf("Expected APC reply to start with '\\x1b_far2l:', got %q", out)
+	if !strings.HasPrefix(out, "\x1b_far2l") || strings.Contains(out, ":") {
+		t.Errorf("Expected APC reply to start with '\\x1b_far2l' without colon, got %q", out)
 	}
 }
 
@@ -996,11 +996,12 @@ func TestTerminalView_ProcessFar2lInteract_ClipboardProxy(t *testing.T) {
 
 	// Verify that f4 retrieved the host-side clipboard and wrote it back to the client PTY
 	written := pty.String()
-	if !strings.HasPrefix(written, "\x1b_far2l:") || !strings.HasSuffix(written, "\x07") {
-		t.Fatalf("Expected valid APC format, got %q", written)
+	// Reply from terminal to app MUST NOT have a colon after 'far2l'.
+	if !strings.HasPrefix(written, "\x1b_far2l") || strings.Contains(written, ":") || !strings.HasSuffix(written, "\x07") {
+		t.Fatalf("Expected valid APC format (no colon), got %q", written)
 	}
 
-	b64 := written[8 : len(written)-1]
+	b64 := written[7 : len(written)-1]
 	decoded, err := base64.StdEncoding.DecodeString(b64)
 	if err != nil {
 		t.Fatalf("Failed to decode base64 payload %q: %v", b64, err)
@@ -1008,5 +1009,260 @@ func TestTerminalView_ProcessFar2lInteract_ClipboardProxy(t *testing.T) {
 
 	if !strings.Contains(string(decoded), testData) {
 		t.Errorf("Expected decoded reply to contain %q, got %q", testData, string(decoded))
+	}
+}
+func TestIssue117_F4Host_ClipboardProtocolTypes(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	pty := &mockPtyForTerminal{}
+	tv.pty = pty
+
+	// 1. Test Clipboard SetData ('s')
+	stkSet := vtinput.Far2lStack{}
+	testData := []byte("secret")
+	stkSet.PushBytes(testData)
+	stkSet.PushU32(uint32(len(testData)))
+	stkSet.PushU32(1) // CF_TEXT
+	stkSet.PushU8('s')
+	stkSet.PushU8('c')
+	stkSet.PushU8(10) // transaction ID
+
+	tv.ProcessFar2lInteract(stkSet)
+
+	out := pty.String()
+	if !strings.HasPrefix(out, "\x1b_far2l") {
+		t.Fatalf("Expected valid APC format, got %q", out)
+	}
+	b64 := out[7 : len(out)-1]
+	decoded, _ := base64.StdEncoding.DecodeString(b64)
+
+	// Payload should be: U64(dataID) + U8(status) + U8(transID) = 10 bytes
+	if len(decoded) != 10 {
+		t.Errorf("Issue #117: SetData reply must be exactly 10 bytes, got %d", len(decoded))
+	}
+
+	pty.Reset()
+
+	// 2. Test Clipboard GetData ('g')
+	vtui.SetClipboard("hello")
+	stkGet := vtinput.Far2lStack{}
+	stkGet.PushU32(1) // CF_TEXT
+	stkGet.PushU8('g')
+	stkGet.PushU8('c')
+	stkGet.PushU8(11) // transaction ID
+
+	tv.ProcessFar2lInteract(stkGet)
+
+	out2 := pty.String()
+	b64_2 := out2[7 : len(out2)-1]
+	decoded2, _ := base64.StdEncoding.DecodeString(b64_2)
+
+	// Payload should be: U64(dataID) + Bytes(data) + U32(len) + U8(transID)
+	// 8 + len("hello") (5) + 4 + 1 = 18 bytes
+	if len(decoded2) != 18 {
+		t.Errorf("Issue #117: GetData reply size is wrong, expected 18 bytes, got %d", len(decoded2))
+	}
+}
+func TestIssue117_F4Host_MalformedAPC(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	pty := &mockPtyForTerminal{}
+	tv.pty = pty
+
+	// Setup a panic recovery to assert no crashes occur
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("Issue #117: ProcessFar2lInteract panicked on malformed input: %v", r)
+		}
+	}()
+
+	// 1. Completely empty payload
+	tv.ProcessFar2lInteract([]byte{})
+
+	// 2. Truncated header (only 1 byte)
+	tv.ProcessFar2lInteract([]byte{42})
+
+	// 3. Valid command ('c') but missing sub-command
+	stk1 := vtinput.Far2lStack{}
+	stk1.PushU8('c') // cmd
+	stk1.PushU8(12)  // ID
+	tv.ProcessFar2lInteract(stk1)
+
+	// 4. Open command ('o') but missing client ID string
+	stk2 := vtinput.Far2lStack{}
+	stk2.PushU8('o') // sub
+	stk2.PushU8('c') // category
+	stk2.PushU8(13)  // ID
+	tv.ProcessFar2lInteract(stk2)
+
+	// 5. GetData ('g') but missing format U32
+	stk3 := vtinput.Far2lStack{}
+	stk3.PushU8('g') // sub
+	stk3.PushU8('c') // category
+	stk3.PushU8(14)  // ID
+	tv.ProcessFar2lInteract(stk3)
+
+	// 6. SetData ('s') but claiming more bytes than actually provided
+	stk4 := vtinput.Far2lStack{}
+	stk4.PushBytes([]byte("short"))
+	stk4.PushU32(100) // Claims length 100, but only provided 5 bytes!
+	stk4.PushU32(1)   // CF_TEXT
+	stk4.PushU8('s')
+	stk4.PushU8('c')
+	stk4.PushU8(15) // ID
+	tv.ProcessFar2lInteract(stk4)
+}
+
+type mockDenyingAuth struct {
+	retVal int
+}
+
+func (m *mockDenyingAuth) Authorize(id string) int { return m.retVal }
+
+func TestIssue117_OSC52_Read_SecurityDenial(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+
+	// 1. Test Explicit Denial (auth = 0)
+	pty1 := &mockPtyForTerminal{}
+	parser1 := NewAnsiParser(tv, pty1)
+	vtui.GlobalClipboardAccessManager = &mockDenyingAuth{retVal: 0}
+	vtui.SetClipboard("sensitive_data")
+
+	parser1.Process([]byte("\x1b]52;c;?\x07"))
+	if pty1.Len() > 0 {
+		t.Errorf("Security leak: OSC 52 read responded to PTY even though access was Denied! Output: %q", pty1.String())
+	}
+
+	// 2. Test Local Mode (auth = -1)
+	pty2 := &mockPtyForTerminal{}
+	parser2 := NewAnsiParser(tv, pty2)
+	vtui.GlobalClipboardAccessManager = &mockDenyingAuth{retVal: -1}
+
+	parser2.Process([]byte("\x1b]52;c;?\x07"))
+	if pty2.Len() > 0 {
+		t.Errorf("Security leak: OSC 52 read responded to PTY in Local Mode! Output: %q", pty2.String())
+	}
+
+	// Reset global state
+	vtui.GlobalClipboardAccessManager = nil
+}
+func TestIssue117_F4Host_ChunkedClipboardSet(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	pty := &mockPtyForTerminal{}
+	tv.pty = pty
+
+	// 1. Send chunk 1 ('S')
+	stk1 := vtinput.Far2lStack{}
+	chunk1 := make([]byte, 256)
+	copy(chunk1, "Chunk1-")
+	stk1.PushBytes(chunk1)
+	stk1.PushU16(1) // 1 block of 256 bytes
+	stk1.PushU8('S')
+	stk1.PushU8('c')
+	stk1.PushU8(1) // ID
+
+	tv.ProcessFar2lInteract(stk1)
+
+	if len(tv.clipboardChunks) != 256 {
+		t.Fatalf("Expected 256 bytes in chunk buffer, got %d", len(tv.clipboardChunks))
+	}
+
+	// Clear pty write buffer before sending the next command so we don't read stale APC output
+	pty.Reset()
+
+	// 2. Send finalize ('s')
+	stk2 := vtinput.Far2lStack{}
+	chunk2 := []byte("Final")
+	stk2.PushBytes(chunk2)
+	stk2.PushU32(5) // len
+	stk2.PushU32(1) // CF_TEXT
+	stk2.PushU8('s')
+	stk2.PushU8('c')
+	stk2.PushU8(2) // ID
+
+	tv.ProcessFar2lInteract(stk2)
+
+	got := vtui.GetClipboard()
+	if !strings.HasPrefix(got, "Chunk1-") || !strings.Contains(got, "Final") {
+		t.Errorf("Expected clipboard to contain 'Chunk1-' and 'Final', got %q", got)
+	}
+
+	out := pty.String()
+	b64 := out[7 : len(out)-1]
+	decoded, _ := base64.StdEncoding.DecodeString(b64)
+	if len(decoded) != 10 { // U64 + U8 + U8
+		t.Errorf("Expected 10 bytes reply for finalize, got %d", len(decoded))
+	}
+}
+
+func TestIssue117_F4Host_ClipboardEmpty(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	pty := &mockPtyForTerminal{}
+	tv.pty = pty
+
+	vtui.SetClipboard("pre_existing_data")
+
+	stk := vtinput.Far2lStack{}
+	stk.PushU8('e') // Empty
+	stk.PushU8('c')
+	stk.PushU8(15) // ID
+
+	tv.ProcessFar2lInteract(stk)
+
+	if vtui.GetClipboard() != "" {
+		t.Error("Clipboard was not cleared after 'e' command")
+	}
+
+	out := pty.String()
+	b64 := out[7 : len(out)-1]
+	decoded, _ := base64.StdEncoding.DecodeString(b64)
+	if len(decoded) != 2 || decoded[0] != 1 { // status (1) + ID (15)
+		t.Errorf("Expected reply [1, 15], got %v", decoded)
+	}
+}
+
+func TestIssue117_F4Host_ClipboardOpenAuth(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	pty := &mockPtyForTerminal{}
+	tv.pty = pty
+
+	// Setup mock clipboard auth manager (allows access)
+	m := &mockAuth{val: 1}
+	oldAuth := vtui.GlobalClipboardAccessManager
+	vtui.GlobalClipboardAccessManager = m
+	defer func() { vtui.GlobalClipboardAccessManager = oldAuth }()
+
+	// First Open (not cached yet)
+	stk1 := vtinput.Far2lStack{}
+	stk1.PushString("test-client-id-32-chars-long-handshake")
+	stk1.PushU8('o') // Open
+	stk1.PushU8('c')
+	stk1.PushU8(20)
+
+	tv.ProcessFar2lInteract(stk1)
+
+	if m.calls != 1 {
+		t.Errorf("Expected 1 call to Authorize, got %d", m.calls)
+	}
+
+	pty.Reset()
+
+	// Second Open (should be cached)
+	stk2 := vtinput.Far2lStack{}
+	stk2.PushString("test-client-id-32-chars-long-handshake")
+	stk2.PushU8('o')
+	stk2.PushU8('c')
+	stk2.PushU8(21)
+
+	tv.ProcessFar2lInteract(stk2)
+
+	if m.calls != 1 {
+		t.Error("Authorize was called again, caching failed")
+	}
+
+	out := pty.String()
+	b64 := out[7 : len(out)-1]
+	decoded, _ := base64.StdEncoding.DecodeString(b64)
+	// Expected: features (U64) + status (U8) + ID (U8) = 10 bytes
+	if len(decoded) != 10 {
+		t.Errorf("Expected 10 bytes for open reply, got %d", len(decoded))
 	}
 }

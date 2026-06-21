@@ -1101,12 +1101,20 @@ func (tv *TerminalView) ProcessFar2lInteract(data []byte) {
 			fullData := append(tv.clipboardChunks, textBytes...)
 			tv.clipboardChunks = nil
 			tv.mu.Unlock()
-			vtui.SetClipboard(string(fullData))
+			if !vtui.SetOSClipboard(string(fullData)) {
+				vtui.SetClipboard(string(fullData))
+			}
+			// Guest expects: dataID (U64) + status (U8)
+			reply.PushU64(0)
 			reply.PushU8(1)
 		case 'g':
 			_ = stk.PopU32() // fmt
 			clipData := vtui.GetClipboard()
-			reply.PushU32(uint32(len(clipData)))
+			if len(clipData) > 64*1024 {
+				clipData = clipData[:64*1024]
+			}
+			// Guest expects: dataID (U64) + data (Bytes) + length (U32)
+			reply.PushU64(0)
 			reply.PushBytes([]byte(clipData))
 			reply.PushU32(uint32(len(clipData)))
 		case 'i':
@@ -1152,7 +1160,10 @@ func (tv *TerminalView) ProcessFar2lInteract(data []byte) {
 		reply.PushU8(id)
 		b64 := base64.StdEncoding.EncodeToString(reply)
 		if tv.pty != nil {
-			tv.pty.Write([]byte("\x1b_far2l:" + b64 + "\x07"))
+			// Reply from terminal to app MUST NOT have a colon after 'far2l'.
+			// The colon is used as a discriminator: 'far2l:' indicates a request,
+			// while 'far2l' (without colon) indicates a reply.
+			tv.pty.Write([]byte("\x1b_far2l" + b64 + "\x07"))
 		}
 	}
 }
