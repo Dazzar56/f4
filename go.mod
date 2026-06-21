@@ -9,8 +9,8 @@ require (
 	github.com/mholt/archives v0.1.5
 	github.com/pkg/sftp v1.13.6
 	github.com/unxed/tar v0.1.76
-	github.com/unxed/vtinput v0.0.0
-	github.com/unxed/vtui v0.0.0
+	github.com/unxed/vtinput v0.1.0
+	github.com/unxed/vtui v0.1.0
 	github.com/unxed/zip v0.1.83
 	github.com/unxed/zipper v0.1.60
 	github.com/vmihailenco/msgpack/v5 v5.4.1
@@ -80,10 +80,6 @@ require (
 	golang.org/x/mobile v0.0.0-20260410095206-2cfb76559b7b // indirect
 	golang.org/x/sync v0.20.0 // indirect
 )
-
-replace github.com/unxed/vtinput => ./libs/vtinput
-
-replace github.com/unxed/vtui => ./libs/vtui
 
 replace github.com/ebitengine/purego => github.com/unxed/pureffi v0.1.10
 
