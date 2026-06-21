@@ -1001,6 +1001,7 @@ func AskOverwrite(ctx context.Context, destPath string, srcStat, dstStat vfs.VFS
 		return 6, false
 	}
 }
+
 // askDeleteError handles delete errors with Retry/Skip/Skip All/Abort options.
 func askDeleteError(ctx context.Context, op string, err error, anchor vtui.Frame) int {
 	resultChan := make(chan int, 1)
