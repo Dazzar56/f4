@@ -622,7 +622,11 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 				if strings.Contains(historyCmd, " ") && !strings.HasPrefix(historyCmd, "\"") && !strings.HasPrefix(historyCmd, "'") {
 					historyCmd = "\"" + historyCmd + "\""
 				}
-				if runtime.GOOS != "windows" {
+				_, isOS := v.(*vfs.OSVFS)
+				_, isPty := v.(vfs.PtyProvider)
+				isWindowsShell := runtime.GOOS == "windows" && isOS
+
+				if !isWindowsShell {
 					historyCmd = "./" + historyCmd
 				}
 				pf.cmdLine.Edit.AddHistory(historyCmd)
@@ -633,19 +637,14 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 					cmd := name
 					var cmdToWire string
 
-					useDir := false
-					if _, isOS := v.(*vfs.OSVFS); isOS {
-						useDir = true
-					} else if _, isPty := v.(vfs.PtyProvider); isPty {
-						useDir = true
-					}
+					useDir := isOS || isPty
 
 					actualDir := ""
 					if useDir {
 						actualDir = dir
 					}
 
-					if runtime.GOOS == "windows" {
+					if isWindowsShell {
 						// Combine directory sync with the command to allow excision
 						if actualDir != "" {
 							cmdToWire = fmt.Sprintf("cd /d \"%s\" & %s\r", actualDir, historyCmd)
@@ -666,17 +665,17 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 					vtui.DebugLog("ACTIONS: Sending to PTY: %q", cmdToWire)
 
 					cleanCmd := "./" + cmd
-					if runtime.GOOS == "windows" {
+					if isWindowsShell {
 						cleanCmd = cmd
 					}
-					if runtime.GOOS != "windows" {
+					if !isWindowsShell {
 						pf.termView.PrintCleanCommand(cleanCmd)
 					}
 
 					pf.executing = true
 					pf.returnToPanels = true
 
-					if runtime.GOOS != "windows" {
+					if !isWindowsShell {
 						pf.termView.SetMuted(true)
 					}
 					activePty.Write([]byte(cmdToWire))

@@ -1023,21 +1023,23 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			activePty := pf.getActivePTY()
 			if activePty != nil {
 				var path string
+				isWindowsShell := runtime.GOOS == "windows"
 				if fsp, ok := pf.panels[pf.activeIdx].(*FileSystemPanel); ok {
 					if _, isOS := fsp.vfs.(*vfs.OSVFS); isOS {
 						path = fsp.vfs.GetPath()
 					} else if _, isPty := fsp.vfs.(vfs.PtyProvider); isPty {
 						path = fsp.vfs.GetPath()
+						isWindowsShell = false
 					}
 				}
 
 				var fullWireCmd string
 				isBackground := false
-				if runtime.GOOS != "windows" {
+				if !isWindowsShell {
 					isBackground = strings.HasSuffix(strings.TrimSpace(cmd), "&")
 				}
 
-				if runtime.GOOS == "windows" {
+				if isWindowsShell {
 					// Use a combined command for reliable excision in AnsiParser: cd /d "path" & command
 					if path != "" {
 						fullWireCmd = fmt.Sprintf("cd /d \"%s\" & %s\r", path, cmd)
@@ -1068,7 +1070,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 					}
 				}
 
-				if runtime.GOOS != "windows" {
+				if !isWindowsShell {
 					pf.termView.PrintCleanCommand(cmd)
 					if !isBackground {
 						pf.termView.SetMuted(true)
@@ -1752,11 +1754,13 @@ func (pf *PanelsFrame) Menu(title string, items []string, callback func(int)) {
 }
 
 func (pf *PanelsFrame) syncPTYDirectory(path string, v vfs.VFS) bool {
+	isWindowsShell := runtime.GOOS == "windows"
 	sync := false
 	if _, isOS := v.(*vfs.OSVFS); isOS {
 		sync = true
 	} else if _, isPty := v.(vfs.PtyProvider); isPty {
 		sync = true
+		isWindowsShell = false
 	}
 
 	if !sync {
@@ -1765,7 +1769,7 @@ func (pf *PanelsFrame) syncPTYDirectory(path string, v vfs.VFS) bool {
 
 	activePty := pf.getActivePTY()
 	if activePty != nil {
-		if runtime.GOOS == "windows" {
+		if isWindowsShell {
 			activePty.Write([]byte(fmt.Sprintf("cd /d \"%s\" & rem f4_sync\r", path)))
 		} else {
 			sqPath := strings.ReplaceAll(path, "'", "'\\''")
