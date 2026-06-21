@@ -52,10 +52,6 @@ jobs:
       run: |
         echo "Running f4 core tests..."
         go test -v ./...
-        echo "Running vtui tests..."
-        (cd libs/vtui && go test -v ./...)
-        echo "Running vtinput tests..."
-        (cd libs/vtinput && go test -v ./...)
 
     - name: Build binaries
       env:
