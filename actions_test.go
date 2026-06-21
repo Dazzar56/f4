@@ -362,6 +362,89 @@ Loop:
 		t.Errorf("Abort failed: some files were deleted: %v", mv.deletedFiles)
 	}
 }
+func TestActionDelete_SkipAll(t *testing.T) {
+	fm := vtui.FrameManager
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	fm.Init(scr)
+	SetDefaultF4Palette()
+
+	// Два файла, оба упадут
+	mv := &mockDeletionFailingVFS{
+		VFS:         vfs.NewOSVFS(t.TempDir()),
+		failedFiles: []string{"fail1.txt", "fail2.txt"},
+	}
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	fsp := pf.panels[0].(*FileSystemPanel)
+	fsp.vfs = mv
+	fsp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "fail1.txt"}},
+		{VFSItem: vfs.VFSItem{Name: "fail2.txt"}},
+	}
+	fsp.entries[0].Selected = true
+	fsp.entries[1].Selected = true
+	pf.activeIdx = 0
+
+	actionDelete(pf)
+
+	// 1. Подтверждаем удаление (Foreground mode)
+	dlgConfirm := fm.GetTopFrame().(vtui.Container)
+	for _, child := range dlgConfirm.GetChildren() {
+		if c, ok := child.(*vtui.ComboBox); ok {
+			c.Menu.SetSelectPos(2) // Foreground
+		}
+	}
+	clickDialogButton(t, dlgConfirm, "Delete")
+
+	// 2. Ждем первую ошибку и жмем "Skip All"
+	timeout := time.After(2 * time.Second)
+	skipAllClicked := false
+Loop:
+	for {
+		select {
+		case task := <-fm.TaskChan:
+			task()
+
+			if !skipAllClicked && fm.GetTopFrameType() == vtui.TypeDialog && strings.Contains(fm.GetTopFrame().GetTitle(), "Error") {
+				clickDialogButton(t, fm.GetTopFrame().(vtui.Container), "Skip All")
+				skipAllClicked = true
+			}
+
+			// Ждем финальный диалог со списком ошибок
+			if fm.GetTopFrameType() == vtui.TypeDialog && fm.GetTopFrame().GetTitle() == " Deletion Errors " {
+				break Loop
+			}
+
+			if fm.GetTopFrame() != nil && fm.GetTopFrame().IsDone() {
+				fm.Pop()
+			}
+		case <-timeout:
+			t.Fatal("Timeout waiting for Skip All to finish")
+		default:
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+
+	// 3. Проверяем, что в итоговом списке 2 ошибки, но диалог показывался только один раз
+	top := fm.GetTopFrame().(vtui.Container)
+	foundErrors := 0
+	for _, itm := range top.GetChildren() {
+		if lb, ok := itm.(*vtui.ListBox); ok {
+			for _, line := range lb.Items {
+				if strings.Contains(line, "Skipped") {
+					foundErrors++
+				}
+			}
+		}
+	}
+
+	if foundErrors != 2 {
+		t.Errorf("Expected 2 errors in log, found %d", foundErrors)
+	}
+}
 func TestActionExecute_PtyCommandFormatting(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	// setupMockPanelsFrame и mockPty определены в других тестовых файлах того же пакета

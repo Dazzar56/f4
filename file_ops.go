@@ -480,6 +480,7 @@ func ExecuteDeleteOp(pf *PanelsFrame, activeVfs vfs.VFS, names []string, mode in
 		updateUI(true)
 
 		var allErrors []string
+		var skipAll bool
 		for _, name := range names {
 			if ctx.Err() != nil {
 				return ctx.Err()
@@ -499,13 +500,22 @@ func ExecuteDeleteOp(pf *PanelsFrame, activeVfs vfs.VFS, names []string, mode in
 					return err
 				}
 
-				choice := AskError(ctx, fmt.Sprintf("Cannot delete '%s'", name), err, anchor)
-				if choice == 0 {
-					continue
-				} else if choice == 1 {
+				if skipAll {
 					allErrors = append(allErrors, fmt.Sprintf("Skipped '%s':\n%v", name, err))
 					break
-				} else {
+				}
+
+				choice := askDeleteError(ctx, fmt.Sprintf("Cannot delete '%s'", name), err, anchor)
+				if choice == 0 { // Retry
+					continue
+				} else if choice == 1 { // Skip
+					allErrors = append(allErrors, fmt.Sprintf("Skipped '%s':\n%v", name, err))
+					break
+				} else if choice == 2 { // Skip All
+					skipAll = true
+					allErrors = append(allErrors, fmt.Sprintf("Skipped '%s':\n%v", name, err))
+					break
+				} else { // Abort
 					return context.Canceled
 				}
 			}
@@ -989,6 +999,46 @@ func AskOverwrite(ctx context.Context, destPath string, srcStat, dstStat vfs.VFS
 			}
 		})
 		return 6, false
+	}
+}
+// askDeleteError handles delete errors with Retry/Skip/Skip All/Abort options.
+func askDeleteError(ctx context.Context, op string, err error, anchor vtui.Frame) int {
+	resultChan := make(chan int, 1)
+	var dlg *vtui.Window
+
+	vtui.FrameManager.PostTask(func() {
+		if ctx.Err() != nil {
+			return
+		}
+		msg := fmt.Sprintf("%s:\n%s\n\n%s", op, err.Error(), "What to do?")
+		if anchor != nil {
+			dlg = vtui.ShowMessageOn(anchor, " Error ", msg,
+				[]string{Msg("Btn.Retry"), "&Skip", Msg("Btn.SkipAll"), "&Abort"})
+		} else {
+			dlg = vtui.ShowMessage(" Error ", msg,
+				[]string{Msg("Btn.Retry"), "&Skip", Msg("Btn.SkipAll"), "&Abort"})
+		}
+		dlg.OnResult = func(code int) {
+			if code < 0 {
+				code = 3
+			}
+			select {
+			case resultChan <- code:
+			default:
+			}
+		}
+	})
+
+	select {
+	case res := <-resultChan:
+		return res
+	case <-ctx.Done():
+		vtui.FrameManager.PostTask(func() {
+			if dlg != nil && !dlg.IsDone() {
+				dlg.Close()
+			}
+		})
+		return 3
 	}
 }
 
