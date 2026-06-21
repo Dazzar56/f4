@@ -676,6 +676,7 @@ Loop:
 		t.Error("Expected warning dialog when trying to open an already viewed file")
 	}
 }
+
 type mockLockedVFS struct {
 	vfs.VFS
 }
