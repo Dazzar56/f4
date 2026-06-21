@@ -10,7 +10,7 @@ require (
 	github.com/pkg/sftp v1.13.6
 	github.com/unxed/tar v0.1.76
 	github.com/unxed/vtinput v0.1.0
-	github.com/unxed/vtui v0.1.0
+	github.com/unxed/vtui v0.1.1
 	github.com/unxed/zip v0.1.83
 	github.com/unxed/zipper v0.1.60
 	github.com/vmihailenco/msgpack/v5 v5.4.1
