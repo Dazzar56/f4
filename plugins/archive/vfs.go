@@ -884,6 +884,33 @@ func (v *ArchiveVFS) Clone() vfs.VFS {
 	// For now, return self as cloning requires extracting everything again.
 	return v
 }
+func runProgressTicker(ctx context.Context, done chan struct{}, reporter vfs.TaskReporter, getStatus func() (action, file string, pct int)) {
+	if reporter == nil {
+		return
+	}
+	ticker := time.NewTicker(250 * time.Millisecond)
+	defer ticker.Stop()
+	dots := ""
+	for {
+		select {
+		case <-done:
+			return
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			dots += "."
+			if len(dots) > 3 {
+				dots = ""
+			}
+			act, file, pct := getStatus()
+			if act == "Locating" {
+				reporter.UpdateTransfer(act, file+dots, pct, "", pct, "")
+			} else if act != "" {
+				reporter.UpdateTransfer(act, file, pct, "", pct, "")
+			}
+		}
+	}
+}
 func (v *ArchiveVFS) CopyBulk(ctx context.Context, srcPaths []string, dstVfs vfs.VFS, dstDir string, reporter vfs.TaskReporter) error {
 	v.mu.Lock()
 	if v.fsys == nil {
@@ -970,7 +997,20 @@ func (v *ArchiveVFS) copyBulkZip(ctx context.Context, f vfs.ReadAtCloser, select
 		return err
 	}
 
-	var lastLocateUpdate time.Time
+	var mu sync.Mutex
+	lastAction := "Locating"
+	lastFile := "Archive data"
+	lastPct := -1
+
+	done := make(chan struct{})
+	defer close(done)
+
+	go runProgressTicker(ctx, done, reporter, func() (string, string, int) {
+		mu.Lock()
+		defer mu.Unlock()
+		return lastAction, lastFile, lastPct
+	})
+
 	buf := make([]byte, 128*1024)
 	for _, file := range zr.File {
 		if ctx.Err() != nil {
@@ -986,13 +1026,11 @@ func (v *ArchiveVFS) copyBulkZip(ctx context.Context, f vfs.ReadAtCloser, select
 		}
 
 		if !matched {
-			now := time.Now()
-			if now.Sub(lastLocateUpdate) >= 100*time.Millisecond {
-				lastLocateUpdate = now
-				if reporter != nil {
-					reporter.UpdateTransfer("Locating", file.Name, -1, "", -1, "")
-				}
-			}
+			mu.Lock()
+			lastAction = "Locating"
+			lastFile = file.Name
+			lastPct = -1
+			mu.Unlock()
 			continue
 		}
 
@@ -1017,6 +1055,11 @@ func (v *ArchiveVFS) copyBulkZip(ctx context.Context, f vfs.ReadAtCloser, select
 			fp.StartFile(file.Name, int64(file.UncompressedSize64))
 		}
 		if reporter != nil {
+			mu.Lock()
+			lastAction = "Extracting"
+			lastFile = file.Name
+			lastPct = 0
+			mu.Unlock()
 			reporter.UpdateTransfer("Extracting", file.Name, 0, "", 0, "")
 		}
 
@@ -1051,6 +1094,11 @@ func (v *ArchiveVFS) copyBulkZip(ctx context.Context, f vfs.ReadAtCloser, select
 				copied += int64(n)
 				if reporter != nil && file.UncompressedSize64 > 0 {
 					pct := int((copied * 100) / int64(file.UncompressedSize64))
+					mu.Lock()
+					lastAction = "Extracting"
+					lastFile = file.Name
+					lastPct = pct
+					mu.Unlock()
 					reporter.UpdateTransfer("Extracting", file.Name, pct, "", pct, "")
 				}
 			}
@@ -1091,7 +1139,20 @@ func (v *ArchiveVFS) copyBulkZip(ctx context.Context, f vfs.ReadAtCloser, select
 
 func (v *ArchiveVFS) copyBulkTar(ctx context.Context, f vfs.ReadAtCloser, selected map[string]bool, dstVfs vfs.VFS, dstDir string, reporter vfs.TaskReporter) error {
 	tr := tar.NewReader(ctxReader{r: f, ctx: ctx})
-	var lastLocateUpdate time.Time
+	var mu sync.Mutex
+	lastAction := "Locating"
+	lastFile := "Archive data"
+	lastPct := -1
+
+	done := make(chan struct{})
+	defer close(done)
+
+	go runProgressTicker(ctx, done, reporter, func() (string, string, int) {
+		mu.Lock()
+		defer mu.Unlock()
+		return lastAction, lastFile, lastPct
+	})
+
 	buf := make([]byte, 128*1024)
 
 	for {
@@ -1116,13 +1177,11 @@ func (v *ArchiveVFS) copyBulkTar(ctx context.Context, f vfs.ReadAtCloser, select
 		}
 
 		if !matched {
-			now := time.Now()
-			if now.Sub(lastLocateUpdate) >= 100*time.Millisecond {
-				lastLocateUpdate = now
-				if reporter != nil {
-					reporter.UpdateTransfer("Locating", cleanName, -1, "", -1, "")
-				}
-			}
+			mu.Lock()
+			lastAction = "Locating"
+			lastFile = cleanName
+			lastPct = -1
+			mu.Unlock()
 			continue
 		}
 
@@ -1147,6 +1206,11 @@ func (v *ArchiveVFS) copyBulkTar(ctx context.Context, f vfs.ReadAtCloser, select
 			fp.StartFile(cleanName, hdr.Size)
 		}
 		if reporter != nil {
+			mu.Lock()
+			lastAction = "Extracting"
+			lastFile = cleanName
+			lastPct = 0
+			mu.Unlock()
 			reporter.UpdateTransfer("Extracting", cleanName, 0, "", 0, "")
 		}
 
@@ -1173,6 +1237,11 @@ func (v *ArchiveVFS) copyBulkTar(ctx context.Context, f vfs.ReadAtCloser, select
 				copied += int64(n)
 				if reporter != nil && hdr.Size > 0 {
 					pct := int((copied * 100) / hdr.Size)
+					mu.Lock()
+					lastAction = "Extracting"
+					lastFile = cleanName
+					lastPct = pct
+					mu.Unlock()
 					reporter.UpdateTransfer("Extracting", cleanName, pct, "", pct, "")
 				}
 			}
@@ -1233,7 +1302,20 @@ func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, s
 		return fmt.Errorf("format %T does not support extraction", format)
 	}
 
-	var lastLocateUpdate time.Time
+	var mu sync.Mutex
+	lastAction := "Locating"
+	lastFile := "Archive data"
+	lastPct := -1
+
+	done := make(chan struct{})
+	defer close(done)
+
+	go runProgressTicker(ctx, done, reporter, func() (string, string, int) {
+		mu.Lock()
+		defer mu.Unlock()
+		return lastAction, lastFile, lastPct
+	})
+
 	buf := make([]byte, 128*1024)
 
 	return ex.Extract(ctx, stream, func(ctx context.Context, info archives.FileInfo) error {
@@ -1251,13 +1333,11 @@ func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, s
 		}
 
 		if !matched {
-			now := time.Now()
-			if now.Sub(lastLocateUpdate) >= 100*time.Millisecond {
-				lastLocateUpdate = now
-				if reporter != nil {
-					reporter.UpdateTransfer("Locating", cleanName, -1, "", -1, "")
-				}
-			}
+			mu.Lock()
+			lastAction = "Locating"
+			lastFile = cleanName
+			lastPct = -1
+			mu.Unlock()
 			return nil
 		}
 
@@ -1282,6 +1362,11 @@ func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, s
 			fp.StartFile(cleanName, info.Size())
 		}
 		if reporter != nil {
+			mu.Lock()
+			lastAction = "Extracting"
+			lastFile = cleanName
+			lastPct = 0
+			mu.Unlock()
 			reporter.UpdateTransfer("Extracting", cleanName, 0, "", 0, "")
 		}
 
@@ -1313,6 +1398,11 @@ func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, s
 				copied += int64(n)
 				if reporter != nil && info.Size() > 0 {
 					pct := int((copied * 100) / info.Size())
+					mu.Lock()
+					lastAction = "Extracting"
+					lastFile = cleanName
+					lastPct = pct
+					mu.Unlock()
 					reporter.UpdateTransfer("Extracting", cleanName, pct, "", pct, "")
 				}
 			}

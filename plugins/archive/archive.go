@@ -98,6 +98,7 @@ func actionExtractArchive(app vfs.App) {
 			vfs.GlobalArchiveLockManager.Lock(srcPath)
 			defer vfs.GlobalArchiveLockManager.Unlock(srcPath)
 		}
+		update("Extracting files...", -1)
 
 		ex, err := archive.NewExtractor(srcPath, destDir, archive.Options{Xattrs: false, SafeWrites: true})
 		if err != nil {
@@ -176,6 +177,8 @@ func actionAddArchive(app vfs.App) {
 					vfs.GlobalArchiveLockManager.Lock(absArcPath)
 					defer vfs.GlobalArchiveLockManager.Unlock(absArcPath)
 				}
+				update("Gathering files...", -1)
+
 				fileMap := make(map[string]os.FileInfo)
 				for i, n := range names {
 					if ctx.Err() != nil {
