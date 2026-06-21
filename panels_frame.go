@@ -994,6 +994,9 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			} else if lowerCmd == "cd\\" || lowerCmd == "cd/" {
 				isDirChange = true
 				targetPath = string(os.PathSeparator)
+			} else if lowerCmd == "exit" {
+				pf.cmdLine.Clear()
+				return true
 			}
 
 			// Apply to panel first
