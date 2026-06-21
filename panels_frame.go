@@ -574,7 +574,7 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 	// in the terminal is running or using the alternate screen buffer.
 	isTop := vtui.FrameManager.GetTopFrameType() == vtui.TypeUser+1
 	if isTop { // Only the top-most user frame controls the keybar
-		if pf.showKeyBar && !pf.termView.UseAltScreen && !isBusy {
+		if pf.showKeyBar && !pf.termView.UseAltScreen && (pf.showPanels || !isBusy) {
 			vtui.FrameManager.KeyBar = pf.keyBar
 		} else {
 			vtui.FrameManager.KeyBar = nil
@@ -686,6 +686,16 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				}
 			}
 		}
+	}
+
+	// Ctrl+O toggles panels visibility (must intercept before raw input mode)
+	if e.VirtualKeyCode == vtinput.VK_O && ctrl && !alt && !shift && e.KeyDown {
+		pf.showPanels = !pf.showPanels
+		vtui.FrameManager.HardRefresh()
+		if pf.showPanels {
+			pf.RefreshAll()
+		}
+		return true
 	}
 
 	// Raw input mode for interactive terminal apps or active shell commands
@@ -935,18 +945,6 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	}
 
-	// Ctrl+O toggles panels visibility
-	if e.VirtualKeyCode == vtinput.VK_O && ctrl && !alt && !shift {
-		if !pf.showPanels && pf.isPtyBusy() {
-			return true // Prevent switching back while script is working
-		}
-		pf.showPanels = !pf.showPanels
-		vtui.FrameManager.HardRefresh()
-		if pf.showPanels {
-			pf.RefreshAll()
-		}
-		return true
-	}
 	// Ctrl+U swaps panels
 	if e.VirtualKeyCode == vtinput.VK_U && ctrl {
 		return vtui.FrameManager.EmitCommand(CmSwapPanels, nil)
@@ -955,9 +953,6 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	// Enter handling
 	if e.VirtualKeyCode == vtinput.VK_RETURN {
 		if !pf.cmdLine.IsEmpty() {
-			if pf.isPtyBusy() {
-				return true // Prevent sending command if PTY is busy to avoid "garbage"
-			}
 			cmd := pf.cmdLine.Edit.GetText()
 			pf.cmdLine.Edit.AddHistory(cmd)
 			pf.cmdLine.Edit.HistoryPos = -1

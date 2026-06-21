@@ -317,6 +317,21 @@ func TestPanelsFrame_KeyHandling(t *testing.T) {
 	if pf.cmdLine.Edit.GetText() != expectedName {
 		t.Errorf("Ctrl+Enter failed: expected '%s', got '%s'", expectedName, pf.cmdLine.Edit.GetText())
 	}
+
+	// 4. Test Ctrl+O to toggle panels even when PTY is busy (Issue #50)
+	pf.showPanels = false
+	pf.pty = &mockPty{}
+	pf.executing = true // PTY is busy
+
+	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_O, ControlKeyState: vtinput.LeftCtrlPressed})
+	if !pf.showPanels {
+		t.Error("Ctrl+O should show panels even when PTY is busy")
+	}
+
+	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_O, ControlKeyState: vtinput.LeftCtrlPressed})
+	if pf.showPanels {
+		t.Error("Ctrl+O should hide panels even when PTY is busy")
+	}
 }
 func TestPanelsFrame_MenuCommands(t *testing.T) {
 	pf := NewPanelsFrame()
@@ -609,6 +624,23 @@ func TestPanelsFrame_KeyBarSuppression(t *testing.T) {
 	pf.Show(scr)
 	if vtui.FrameManager.KeyBar != nil {
 		t.Error("KeyBar should be UNregistered from FrameManager in AltScreen mode")
+	}
+
+	// 3. Busy mode but panels visible: KeyBar should be registered (Issue #50)
+	pf.termView.UseAltScreen = false
+	pf.showPanels = true
+	pf.pty = &mockPty{} // Ensure active PTY is not nil
+	pf.executing = true
+	pf.Show(scr)
+	if vtui.FrameManager.KeyBar == nil {
+		t.Error("KeyBar should be registered in FrameManager in busy mode when panels are visible")
+	}
+
+	// 4. Busy mode and panels hidden: KeyBar should be UNregistered (Issue #50)
+	pf.showPanels = false
+	pf.Show(scr)
+	if vtui.FrameManager.KeyBar != nil {
+		t.Error("KeyBar should be UNregistered from FrameManager in busy mode when panels are hidden")
 	}
 }
 func TestPanelsFrame_RefreshAll(t *testing.T) {
@@ -1266,6 +1298,33 @@ func TestPanelsFrame_CommandLineEnter(t *testing.T) {
 	// PTY должен получить команду
 	if !strings.Contains(string(pty.written), "ls -la") {
 		t.Errorf("PTY did not receive command. Got: %q", string(pty.written))
+	}
+}
+
+func TestPanelsFrame_CommandLineEnter_WhenBusy(t *testing.T) {
+	pf := setupMockPanelsFrame()
+	pty := pf.pty.(*mockPty)
+	defer pf.Close()
+
+	pf.executing = true // PTY is busy
+
+	// Вводим команду в консоль
+	pf.cmdLine.Edit.SetText("ls -la")
+
+	// Нажимаем Enter
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_RETURN,
+	})
+
+	// Панели должны скрыться
+	if pf.showPanels {
+		t.Error("Panels should hide after command execution even when PTY is busy")
+	}
+	// PTY должен получить команду
+	if !strings.Contains(string(pty.written), "ls -la") {
+		t.Errorf("PTY did not receive command when busy. Got: %q", string(pty.written))
 	}
 }
 
