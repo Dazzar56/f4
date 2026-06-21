@@ -63,8 +63,36 @@ func (v *OSVFS) SetPath(path string) error {
 		} else {
 			abs = resolved
 		}
+		goto verify
 	}
 
+	// Windows fallbacks when EvalSymlinks fails (e.g. protected junctions)
+	if runtime.GOOS == "windows" {
+		// 1. wellKnownJunction (string comparison, no syscall)
+		if link, ok := wellKnownJunction(abs); ok {
+			vtui.DebugLog("VFS: SetPath: resolved via wellKnownJunction: %q -> %q", abs, link)
+			abs = link
+			goto verify
+		}
+		// 2. os.Readlink
+		if link, errRead := os.Readlink(abs); errRead == nil {
+			vtui.DebugLog("VFS: SetPath: resolved via Readlink: %q -> %q", abs, link)
+			if filepath.IsAbs(link) {
+				abs = link
+			} else {
+				abs = filepath.Join(filepath.Dir(abs), link)
+			}
+			goto verify
+		}
+		// 3. Direct syscall (CreateFile + DeviceIoControl)
+		if link, errJunc := resolveWindowsJunction(abs); errJunc == nil {
+			vtui.DebugLog("VFS: SetPath: resolved via resolveWindowsJunction: %q -> %q", abs, link)
+			abs = link
+			goto verify
+		}
+	}
+
+verify:
 	st, err := os.Stat(abs)
 	if err != nil {
 		if os.IsPermission(err) && globalSudoClient.IsAvailable() {
@@ -93,21 +121,31 @@ func (v *OSVFS) SetPath(path string) error {
 }
 
 func (v *OSVFS) ReadDir(ctx context.Context, path string, onChunk func([]VFSItem)) error {
-	f, err := os.Open(path)
+	// Try to open the directory
+	dirPath := path
+	f, err := os.Open(dirPath)
+	if err != nil && os.IsPermission(err) && runtime.GOOS == "windows" {
+		// Try to resolve protected junctions (e.g. "Documents and Settings")
+		if resolved, ok := wellKnownJunction(dirPath); ok {
+			vtui.DebugLog("VFS: ReadDir: resolved junction %q -> %q", dirPath, resolved)
+			dirPath = resolved
+			f, err = os.Open(dirPath)
+		}
+	}
 	if err != nil {
 		if os.IsPermission(err) && globalSudoClient.IsAvailable() {
-			vtui.DebugLog("VFS: Permission denied for ReadDir(%q), attempting sudo...", path)
-			items, sudoErr := globalSudoClient.ReadDir(path)
+			vtui.DebugLog("VFS: Permission denied for ReadDir(%q), attempting sudo...", dirPath)
+			items, sudoErr := globalSudoClient.ReadDir(dirPath)
 			if sudoErr == nil {
-				vtui.DebugLog("VFS: Sudo ReadDir(%q) SUCCESS, items: %d", path, len(items))
+				vtui.DebugLog("VFS: Sudo ReadDir(%q) SUCCESS, items: %d", dirPath, len(items))
 				if len(items) > 0 && onChunk != nil {
 					onChunk(items)
 				}
 				return nil
 			}
-			vtui.DebugLog("VFS: Sudo ReadDir(%q) FAILED: %v", path, sudoErr)
+			vtui.DebugLog("VFS: Sudo ReadDir(%q) FAILED: %v", dirPath, sudoErr)
 		} else {
-			vtui.DebugLog("VFS: ReadDir(%q) FAILED: %v (Permission: %v, SudoAvailable: %v)", path, err, os.IsPermission(err), globalSudoClient.IsAvailable())
+			vtui.DebugLog("VFS: ReadDir(%q) FAILED: %v (Permission: %v, SudoAvailable: %v)", dirPath, err, os.IsPermission(err), globalSudoClient.IsAvailable())
 		}
 		return err
 	}
@@ -140,7 +178,7 @@ func (v *OSVFS) ReadDir(ctx context.Context, path string, onChunk func([]VFSItem
 			// If it's not a direct directory, it might be a symlink or a Windows Junction.
 			// If it's not a regular file, ask the OS to resolve the final target.
 			if !isDir && !e.Type().IsRegular() {
-				if target, err := os.Stat(filepath.Join(path, e.Name())); err == nil {
+				if target, err := os.Stat(filepath.Join(dirPath, e.Name())); err == nil {
 					isDir = target.IsDir()
 				}
 			}
@@ -151,7 +189,7 @@ func (v *OSVFS) ReadDir(ctx context.Context, path string, onChunk func([]VFSItem
 				IsDir:        isDir,
 				MTime:        mtime,
 				IsExecutable: isExec,
-				IsHidden:     isHidden(filepath.Join(path, e.Name()), e.Name(), info),
+				IsHidden:     isHidden(filepath.Join(dirPath, e.Name()), e.Name(), info),
 			})
 		}
 
@@ -380,3 +418,32 @@ func (v *OSVFS) Clone() VFS {
 	return NewOSVFS(v.currentPath)
 }
 func (v *OSVFS) Close() error { return nil }
+
+// wellKnownJunction checks if the given path on Windows is a well-known junction
+// and returns its known target. This is a last-resort fallback when all other
+// reparse point resolution methods fail or are blocked by permissions.
+func wellKnownJunction(path string) (string, bool) {
+	if runtime.GOOS != "windows" {
+		return "", false
+	}
+	parent := filepath.Dir(path)
+	name := strings.ToLower(filepath.Base(path))
+	parentBase := strings.ToLower(filepath.Base(parent))
+
+	// Documents and Settings at drive root -> Users
+	if len(path) >= 3 && path[1] == ':' && path[2] == '\\' && name == "documents and settings" {
+		return filepath.Join(parent, "Users"), true
+	}
+
+	// C:\Users\All Users -> C:\ProgramData
+	if name == "all users" {
+		return filepath.Join(filepath.Dir(parent), "ProgramData"), true
+	}
+
+	// C:\Users\Default User -> C:\Users\Default
+	if name == "default user" && parentBase == "users" {
+		return filepath.Join(parent, "Default"), true
+	}
+
+	return "", false
+}

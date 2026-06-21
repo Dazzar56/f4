@@ -2123,26 +2123,37 @@ func (pf *PanelsFrame) NavigateToPath(fsp *FileSystemPanel, targetPath string) b
 	if filepath.IsAbs(targetPath) || filepath.VolumeName(targetPath) != "" {
 		// First, check if it's a regular OS directory
 		st, err := os.Stat(targetPath)
-		if err == nil {
-			if st.IsDir() {
-				newVfs := vfs.NewOSVFS(targetPath)
-				if err := newVfs.SetPath(targetPath); err == nil {
-					fsp.pendingSelection = ".."
-					pf.switchToVFS(fsp, newVfs)
-					return true
-				}
-			} else {
-				// If it is a file, it could be an archive itself!
-				osvfs := vfs.NewOSVFS(filepath.Dir(targetPath))
-				if provider := vfs.FindProvider(context.Background(), osvfs, targetPath); provider != nil {
-					arcVFS, err := provider.Open(context.Background(), osvfs, targetPath)
-					if err == nil {
-						if err := arcVFS.SetPath(targetPath); err == nil {
-							pf.switchToVFS(fsp, arcVFS)
-							return true
-						}
-						arcVFS.Close()
+		if err == nil && st.IsDir() {
+			newVfs := vfs.NewOSVFS(targetPath)
+			if err := newVfs.SetPath(targetPath); err == nil {
+				fsp.pendingSelection = ".."
+				pf.switchToVFS(fsp, newVfs)
+				return true
+			}
+		}
+
+		// If Stat failed with permission denied on a Windows junction (e.g. "Documents and Settings"),
+		// still try SetPath — it may resolve the target via Readlink.
+		if err != nil && runtime.GOOS == "windows" && os.IsPermission(err) {
+			newVfs := vfs.NewOSVFS(targetPath)
+			if err := newVfs.SetPath(targetPath); err == nil {
+				fsp.pendingSelection = ".."
+				pf.switchToVFS(fsp, newVfs)
+				return true
+			}
+		}
+
+		// If it is a file, it could be an archive itself!
+		if err == nil && !st.IsDir() {
+			osvfs := vfs.NewOSVFS(filepath.Dir(targetPath))
+			if provider := vfs.FindProvider(context.Background(), osvfs, targetPath); provider != nil {
+				arcVFS, err := provider.Open(context.Background(), osvfs, targetPath)
+				if err == nil {
+					if err := arcVFS.SetPath(targetPath); err == nil {
+						pf.switchToVFS(fsp, arcVFS)
+						return true
 					}
+					arcVFS.Close()
 				}
 			}
 		}
