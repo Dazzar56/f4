@@ -121,6 +121,7 @@ func showAttributesUnix(pf *PanelsFrame, v vfs.VFS, path string, item vfs.VFSIte
 	r2.Add(editGroup, vtui.Margins{}, vtui.AlignFill)
 	gbOwnership.AddItem(l2)
 	gbOwnership.AddItem(editGroup)
+	gbOwnership.SetFocus(false)
 	vboxOwner.Add(r2, vtui.Margins{Top: 0}, vtui.AlignFill)
 	vboxOwner.Apply()
 	r1.Apply()
@@ -164,6 +165,7 @@ func showAttributesUnix(pf *PanelsFrame, v vfs.VFS, path string, item vfs.VFSIte
 	rowOct.Add(editOctal, vtui.Margins{}, vtui.AlignLeft)
 	gbPerms.AddItem(lblOct)
 	gbPerms.AddItem(editOctal)
+	gbPerms.SetFocus(false)
 	vboxPerms.Add(rowOct, vtui.Margins{Top: 1}, vtui.AlignFill)
 	vboxPerms.Apply()
 	for _, itm := range vboxPerms.Items {
