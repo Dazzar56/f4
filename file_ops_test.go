@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 	"io"
@@ -1682,7 +1683,7 @@ func TestProgressReporterHijacking(t *testing.T) {
 	globalTotalPct := 50
 	globalSpeedText := "Time: 00:01:00  Remaining: 00:01:00  1.0 MB/s"
 
-	getGlobal := func() (string, int, string) {
+	getGlobal := func(action string) (string, int, string) {
 		return globalTotalText, globalTotalPct, globalSpeedText
 	}
 
@@ -1716,5 +1717,66 @@ func TestProgressReporterHijacking(t *testing.T) {
 	// 3. Current filename should display sub-task status
 	if !strings.Contains(mock.lastFilename, "file.txt (Extracting: 2 MB / 10 MB)") {
 		t.Fatalf("Filename didn't append sub-task status. Got: %q", mock.lastFilename)
+	}
+}
+
+func TestFileOps_ETA_DuringLocating(t *testing.T) {
+	total := vfs.OpStats{Files: 10, Bytes: 1000}
+	tracker := NewFileOpTracker(total)
+
+	// Симулируем, что прошло 5 секунд, обработан всего 1 байт (крайне медленно)
+	startTime := time.Now().Add(-5 * time.Second)
+	tracker.StartFile("f1.txt", 100)
+	tracker.UpdateBytes(1)
+
+	getGlobalStats := func(action string) (string, int, string) {
+		now := time.Now()
+		_, totalPct, _ := tracker.GetProgress()
+		processed, total := tracker.GetStats()
+
+		var totalText string
+		if total.Bytes > 0 {
+			totalText = fmt.Sprintf("Total: %s / %s", formatSize(processed.Bytes), formatSize(total.Bytes))
+		}
+
+		elapsed := now.Sub(startTime)
+		elapsedStr := fmt.Sprintf("Time: %02d:%02d:%02d", int(elapsed.Hours()), int(elapsed.Minutes())%60, int(elapsed.Seconds())%60)
+
+		const ItemOverhead = 32 * 1024
+		vProcessed := float64(processed.Bytes + (processed.Files+processed.Dirs)*ItemOverhead)
+		vTotal := float64(total.Bytes + (total.Files+total.Dirs)*ItemOverhead)
+
+		etaStr := "Remaining: ??:??:??"
+		if vTotal > 0 && vProcessed > 0 && elapsed.Seconds() > 0.5 {
+			if action == "Locating" || action == "Waiting" || action == "Scanning" || action == "Archiving" {
+				etaStr = "Remaining: ??:??:??"
+			} else {
+				ratio := vProcessed / vTotal
+				etaSecs := (elapsed.Seconds() / ratio) - elapsed.Seconds()
+				if etaSecs < 0 {
+					etaSecs = 0
+				}
+				if etaSecs > 359999 {
+					etaStr = "Remaining: >99 hours"
+				} else {
+					etaDur := time.Duration(etaSecs * float64(time.Second))
+					etaStr = fmt.Sprintf("Remaining: %02d:%02d:%02d", int(etaDur.Hours()), int(etaDur.Minutes())%60, int(etaDur.Seconds())%60)
+				}
+			}
+		}
+
+		return totalText, totalPct, fmt.Sprintf("%s %s", elapsedStr, etaStr)
+	}
+
+	// 1. При обычной копировании (Copying) ETA должно рассчитываться
+	_, _, normalText := getGlobalStats("Copying")
+	if !strings.Contains(normalText, "Remaining:") || strings.Contains(normalText, "??:??:??") {
+		t.Errorf("Expected active ETA for Copying, got: %q", normalText)
+	}
+
+	// 2. При поиске файлов (Locating) ETA должно маскироваться
+	_, _, locatingText := getGlobalStats("Locating")
+	if !strings.Contains(locatingText, "Remaining: ??:??:??") {
+		t.Errorf("Expected masked ETA for Locating, got: %q", locatingText)
 	}
 }

@@ -15,7 +15,7 @@ import (
 
 type globalAwareReporter struct {
 	original  TaskReporter
-	getGlobal func() (string, int, string)
+	getGlobal func(action string) (string, int, string)
 	tracker   *FileOpTracker
 	onBytes   func(int)
 }
@@ -56,7 +56,7 @@ func (w *globalAwareReporter) IsCancelled() bool {
 }
 
 func (w *globalAwareReporter) UpdateTransfer(action, filename string, currentPct int, totalText string, totalPct int, speedText string) {
-	gTotalText, gTotalPct, gTimeSpeedText := w.getGlobal()
+	gTotalText, gTotalPct, gTimeSpeedText := w.getGlobal(action)
 	displayFileName := filename
 	if totalText != "" && !strings.HasPrefix(totalText, "Total:") && !strings.HasPrefix(totalText, "Extracting:") && !strings.HasPrefix(totalText, "Moving:") && !strings.HasPrefix(totalText, "Copying:") {
 		displayFileName = filename + " (" + totalText + ")"
@@ -197,7 +197,7 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 		lastLoggedTime := startTime
 		lastLoggedPct := -1
 
-		getGlobalStats := func() (string, int, string) {
+		getGlobalStats := func(action string) (string, int, string) {
 			now := time.Now()
 			_, totalPct, _ := tracker.GetProgress()
 			processed, total := tracker.GetStats()
@@ -218,13 +218,21 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 
 			etaStr := "Remaining: ??:??:??"
 			if vTotal > 0 && vProcessed > 0 && elapsed.Seconds() > 0.5 {
-				ratio := vProcessed / vTotal
-				etaSecs := (elapsed.Seconds() / ratio) - elapsed.Seconds()
-				if etaSecs < 0 {
-					etaSecs = 0
+				if action == "Locating" || action == "Waiting" || action == "Scanning" || action == "Archiving" {
+					etaStr = "Remaining: ??:??:??"
+				} else {
+					ratio := vProcessed / vTotal
+					etaSecs := (elapsed.Seconds() / ratio) - elapsed.Seconds()
+					if etaSecs < 0 {
+						etaSecs = 0
+					}
+					if etaSecs > 359999 {
+						etaStr = "Remaining: >99 hours"
+					} else {
+						etaDur := time.Duration(etaSecs * float64(time.Second))
+						etaStr = fmt.Sprintf("Remaining: %02d:%02d:%02d", int(etaDur.Hours()), int(etaDur.Minutes())%60, int(etaDur.Seconds())%60)
+					}
 				}
-				etaDur := time.Duration(etaSecs * float64(time.Second))
-				etaStr = fmt.Sprintf("Remaining: %02d:%02d:%02d", int(etaDur.Hours()), int(etaDur.Minutes())%60, int(etaDur.Seconds())%60)
 			}
 
 			speedStr := ""
@@ -264,7 +272,11 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 				filePct, _, currName := tracker.GetProgress()
 				processed, total := tracker.GetStats()
 
-				gTotalText, gTotalPct, gTimeSpeedText := getGlobalStats()
+				action := "Copying"
+				if isMove {
+					action = "Moving"
+				}
+				gTotalText, gTotalPct, gTimeSpeedText := getGlobalStats(action)
 
 				if gTotalPct >= lastLoggedPct+5 || now.Sub(lastLoggedTime) >= 5*time.Second {
 					parts := strings.Fields(gTimeSpeedText)
@@ -286,11 +298,6 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 						elapsedStr, etaStr, speedStr)
 					lastLoggedPct = gTotalPct
 					lastLoggedTime = now
-				}
-
-				action := "Copying"
-				if isMove {
-					action = "Moving"
 				}
 
 				reporter.UpdateTransfer(action, currName, filePct, gTotalText, gTotalPct, gTimeSpeedText)

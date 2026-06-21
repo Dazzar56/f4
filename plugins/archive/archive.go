@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	"sync"
 
@@ -105,6 +106,26 @@ func actionExtractArchive(app vfs.App) {
 			return err
 		}
 		defer ex.Close()
+
+		done := make(chan struct{})
+		defer close(done)
+		go func() {
+			pct := 0
+			ticker := time.NewTicker(100 * time.Millisecond)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-done:
+					return
+				case <-ticker.C:
+					pct = (pct + 2) % 100
+					update("Extracting files...", pct)
+				}
+			}
+		}()
+
 		return ex.Extract(ctx)
 
 	}, func(err error) {
@@ -203,6 +224,26 @@ func actionAddArchive(app vfs.App) {
 					return err
 				}
 				defer a.Close()
+
+				done := make(chan struct{})
+				defer close(done)
+				go func() {
+					pct := 0
+					ticker := time.NewTicker(100 * time.Millisecond)
+					defer ticker.Stop()
+					for {
+						select {
+						case <-ctx.Done():
+							return
+						case <-done:
+							return
+						case <-ticker.C:
+							pct = (pct + 2) % 100
+							update("Archiving files...", pct)
+						}
+					}
+				}()
+
 				return a.Archive(ctx, fileMap)
 			}, func(err error) {
 				if err != nil && err != context.Canceled {

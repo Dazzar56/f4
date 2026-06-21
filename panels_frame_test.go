@@ -2446,7 +2446,7 @@ func TestArchiveBulkExtract_ProgressTracking(t *testing.T) {
 
 	// We want to verify that when we call CopyBulk, the globalAwareReporter updates the tracker
 	// and invokes updateUI, which in turn updates the dialog.
-	getGlobalStats := func() (string, int, string) {
+	getGlobalStats := func(action string) (string, int, string) {
 		_, totalPct, _ := tracker.GetProgress()
 		processed, total := tracker.GetStats()
 		totalText := fmt.Sprintf("Total: %d/%d", processed.Bytes, total.Bytes)
