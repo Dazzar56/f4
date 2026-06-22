@@ -84,3 +84,7 @@ require (
 )
 
 replace github.com/ebitengine/purego => github.com/unxed/pureffi v0.1.10
+
+replace github.com/mholt/archives => github.com/unxed/archives v0.0.0-20260622214837-d5c5294ec625
+
+replace github.com/bodgit/sevenzip => github.com/unxed/sevenzip v0.0.0-20260622215004-8b967f0d6c8c
