@@ -8,13 +8,13 @@ require (
 	github.com/mattn/go-runewidth v0.0.15
 	github.com/mholt/archives v0.1.5
 	github.com/pkg/sftp v1.13.6
-	github.com/unxed/tar v0.1.77
+	github.com/unxed/tar v0.1.78
 	github.com/unxed/vtinput v0.1.0
 	github.com/unxed/vtui v0.1.1
-	github.com/unxed/zip v0.1.85
-	github.com/unxed/zipper v0.1.64
+	github.com/unxed/zip v0.1.86
+	github.com/unxed/zipper v0.1.67
 	github.com/vmihailenco/msgpack/v5 v5.4.1
-	golang.org/x/crypto v0.32.0
+	golang.org/x/crypto v0.46.0
 	golang.org/x/sys v0.46.0
 	golang.org/x/term v0.40.0
 	golang.org/x/text v0.37.0
@@ -22,9 +22,9 @@ require (
 
 require (
 	github.com/STARRY-S/zip v0.2.3 // indirect
-	github.com/andybalholm/brotli v1.2.0 // indirect
+	github.com/andybalholm/brotli v1.2.1 // indirect
 	github.com/bodgit/plumbing v1.3.0 // indirect
-	github.com/bodgit/sevenzip v1.6.1 // indirect
+	github.com/bodgit/sevenzip v1.6.4 // indirect
 	github.com/bodgit/windows v1.0.1 // indirect
 	github.com/dlclark/regexp2 v1.11.4 // indirect
 	github.com/dovydenkovas/ppmd v0.1.1 // indirect
@@ -50,17 +50,18 @@ require (
 	github.com/klauspost/pgzip v1.2.6 // indirect
 	github.com/kr/fs v0.1.0 // indirect
 	github.com/mikelolasagasti/xz v1.0.1 // indirect
-	github.com/minio/minlz v1.0.1 // indirect
+	github.com/minio/minlz v1.1.1 // indirect
 	github.com/ncruces/go-sqlite3 v0.22.0 // indirect
 	github.com/ncruces/julianday v1.0.0 // indirect
 	github.com/neurlang/wayland v0.4.2 // indirect
 	github.com/neurlang/winc v0.1.2 // indirect
-	github.com/nwaples/rardecode/v2 v2.2.0 // indirect
-	github.com/pierrec/lz4/v4 v4.1.22 // indirect
+	github.com/nwaples/rardecode/v2 v2.2.3 // indirect
+	github.com/pierrec/lz4/v4 v4.1.27 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/sorairolake/lzip-go v0.3.8 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/spf13/afero v1.15.0 // indirect
+	github.com/stangelandcl/ppmd v0.1.1 // indirect
 	github.com/tetratelabs/wazero v1.8.2 // indirect
 	github.com/ulikunitz/xz v0.5.15 // indirect
 	github.com/unxed/keytrans v0.1.27 // indirect
@@ -68,12 +69,13 @@ require (
 	github.com/unxed/par2 v0.1.2 // indirect
 	github.com/unxed/winkeys v0.1.0 // indirect
 	github.com/unxed/xkb-go v0.1.8 // indirect
+	github.com/unxed/xz v0.1.8 // indirect
 	github.com/unxed/zipcharset v0.1.4 // indirect
 	github.com/unxed/zlib4go v0.1.11 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	github.com/yalue/native_endian v1.0.2 // indirect
 	github.com/zzl/go-win32api/v2 v2.1.0 // indirect
-	go4.org v0.0.0-20230225012048-214862532bf5 // indirect
+	go4.org v0.0.0-20260112195520-a5071408f32f // indirect
 	golang.design/x/clipboard v0.7.0 // indirect
 	golang.org/x/exp/shiny v0.0.0-20260508232706-74f9aab9d74a // indirect
 	golang.org/x/image v0.40.0 // indirect
@@ -82,5 +84,3 @@ require (
 )
 
 replace github.com/ebitengine/purego => github.com/unxed/pureffi v0.1.10
-
-replace github.com/ulikunitz/xz => github.com/unxed/xz v0.1.4
