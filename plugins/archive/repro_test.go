@@ -6,10 +6,12 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/unxed/f4/vfs"
+	"github.com/unxed/sevenzip"
 	"github.com/unxed/zip"
 	"github.com/unxed/zipper/archive"
 )
@@ -201,4 +203,128 @@ func TestArchivePlugin_ConcurrentOperationWarning(t *testing.T) {
 	if !app.messageCalled {
 		t.Error("Expected concurrency warning dialog to be shown, but it was not")
 	}
+}
+func TestIssue150_Concurrent7zReadDir(t *testing.T) {
+	tmpDir := t.TempDir()
+	archivePath := filepath.Join(tmpDir, "test_concurrent.7z")
+
+	// 1. Создаем тестовое дерево папок и файлов
+	srcDir := filepath.Join(tmpDir, "src")
+	os.MkdirAll(filepath.Join(srcDir, "dir1/dir2"), 0755)
+	os.WriteFile(filepath.Join(srcDir, "dir1/file1.txt"), []byte("data1"), 0644)
+	os.WriteFile(filepath.Join(srcDir, "dir1/dir2/file2.txt"), []byte("data2"), 0644)
+
+	fileMap := make(map[string]os.FileInfo)
+	filepath.Walk(srcDir, func(p string, fi os.FileInfo, err error) error {
+		if err == nil && p != srcDir {
+			fileMap[p] = fi
+		}
+		return nil
+	})
+
+	// Сжимаем с флагом Solid
+	a, err := archive.NewArchiver(archivePath, srcDir, archive.Options{Solid: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = a.Archive(context.Background(), fileMap)
+	a.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 2. Инициализируем наш VFS архива
+	v, err := NewArchiveVFS(&vfs.OSVFS{}, archivePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer v.Close()
+
+	// 3. Запускаем конкурентный обход дерева файлов
+	var wg sync.WaitGroup
+	workers := 16
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 10; j++ {
+				errRead := v.ReadDir(context.Background(), v.Join(archivePath, "dir1"), func(items []vfs.VFSItem) {
+					// Заглушка
+				})
+				if errRead != nil {
+					t.Errorf("ReadDir failed: %v", errRead)
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	t.Log("SUCCESS: Concurrent 7z ReadDir executed without hangs or concurrent map write panics.")
+}
+
+func TestIssue150_7zDirectoryStructureAndSolid(t *testing.T) {
+	tmpDir := t.TempDir()
+	archivePath := filepath.Join(tmpDir, "test_structure.7z")
+
+	srcDir := filepath.Join(tmpDir, "src")
+	os.MkdirAll(filepath.Join(srcDir, "empty_dir"), 0755)
+	os.WriteFile(filepath.Join(srcDir, "file1.txt"), []byte("solid content 1"), 0644)
+	os.WriteFile(filepath.Join(srcDir, "file2.txt"), []byte("solid content 2"), 0644)
+
+	fileMap := make(map[string]os.FileInfo)
+	filepath.Walk(srcDir, func(p string, fi os.FileInfo, err error) error {
+		if err == nil && p != srcDir {
+			fileMap[p] = fi
+		}
+		return nil
+	})
+
+	// Запаковываем в Solid-режиме
+	a, err := archive.NewArchiver(archivePath, srcDir, archive.Options{Solid: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = a.Archive(context.Background(), fileMap)
+	a.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Открываем архив низкоуровневым ридером для точечной инспекции
+	zr, err := sevenzip.OpenReader(archivePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer zr.Close()
+
+	// Проверяем, что директории помечены как IsDir() и имеют размер 0 (а не дублируются как файлы)
+	foundDir := false
+	var commonStreamID int = -1
+
+	for _, file := range zr.File {
+		isDir := file.FileInfo().IsDir()
+		if isDir {
+			foundDir = true
+			if file.UncompressedSize != 0 {
+				t.Errorf("Expected directory %q to have size 0, got %d", file.Name, file.UncompressedSize)
+			}
+		} else {
+			// Для регулярных файлов в Solid режиме проверяем, что они лежат в ОДНОМ Solid-потоке (Stream)
+			if file.UncompressedSize > 0 {
+				if commonStreamID == -1 {
+					commonStreamID = file.Stream
+				} else if file.Stream != commonStreamID {
+					t.Errorf("Expected Solid compression (single stream), but file %s is in Stream %d, whereas previous was in %d", file.Name, file.Stream, commonStreamID)
+				}
+			}
+		}
+	}
+
+	if !foundDir {
+		t.Error("Expected empty_dir directory entry in 7z archive, but none was found")
+	}
+	if commonStreamID == -1 {
+		t.Error("No regular files with data found to verify solid stream")
+	}
+
+	t.Logf("SUCCESS: Solid compression verified (Stream ID: %d). Directory structures correctly preserved.", commonStreamID)
 }
