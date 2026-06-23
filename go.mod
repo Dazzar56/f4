@@ -12,7 +12,7 @@ require (
 	github.com/unxed/vtinput v0.1.0
 	github.com/unxed/vtui v0.1.1
 	github.com/unxed/zip v0.1.86
-	github.com/unxed/zipper v0.1.67
+	github.com/unxed/zipper v0.1.68
 	github.com/vmihailenco/msgpack/v5 v5.4.1
 	golang.org/x/crypto v0.46.0
 	golang.org/x/sys v0.46.0
@@ -64,9 +64,11 @@ require (
 	github.com/stangelandcl/ppmd v0.1.1 // indirect
 	github.com/tetratelabs/wazero v1.8.2 // indirect
 	github.com/ulikunitz/xz v0.5.15 // indirect
+	github.com/unxed/archives v0.0.0-20260623134235-eabdd0f9a8a3 // indirect
 	github.com/unxed/keytrans v0.1.27 // indirect
 	github.com/unxed/localecp v0.1.4 // indirect
 	github.com/unxed/par2 v0.1.2 // indirect
+	github.com/unxed/sevenzip v0.0.0-20260623133906-0d07a51a4eef // indirect
 	github.com/unxed/winkeys v0.1.0 // indirect
 	github.com/unxed/xkb-go v0.1.8 // indirect
 	github.com/unxed/xz v0.1.8 // indirect
