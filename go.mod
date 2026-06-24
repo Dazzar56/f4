@@ -8,12 +8,12 @@ require (
 	github.com/mattn/go-runewidth v0.0.15
 	github.com/mholt/archives v0.1.5
 	github.com/pkg/sftp v1.13.6
-	github.com/unxed/sevenzip v0.0.0-20260623213523-eedfab6a41eb
-	github.com/unxed/tar v0.1.78
+	github.com/unxed/sevenzip v0.0.0-20260624145241-57e37d2bac76
+	github.com/unxed/tar v0.1.80
 	github.com/unxed/vtinput v0.1.0
 	github.com/unxed/vtui v0.1.1
-	github.com/unxed/zip v0.1.86
-	github.com/unxed/zipper v0.1.75
+	github.com/unxed/zip v0.1.90
+	github.com/unxed/zipper v0.1.76
 	github.com/vmihailenco/msgpack/v5 v5.4.1
 	golang.org/x/crypto v0.46.0
 	golang.org/x/sys v0.46.0
@@ -65,7 +65,7 @@ require (
 	github.com/stangelandcl/ppmd v0.1.1 // indirect
 	github.com/tetratelabs/wazero v1.8.2 // indirect
 	github.com/ulikunitz/xz v0.5.15 // indirect
-	github.com/unxed/archives v0.0.0-20260623213750-1ea1183752e1 // indirect
+	github.com/unxed/archives v0.0.0-20260624145449-67b1a55742a7 // indirect
 	github.com/unxed/keytrans v0.1.27 // indirect
 	github.com/unxed/localecp v0.1.4 // indirect
 	github.com/unxed/par2 v0.1.2 // indirect
