@@ -9,11 +9,11 @@ require (
 	github.com/mholt/archives v0.1.5
 	github.com/pkg/sftp v1.13.6
 	github.com/unxed/sevenzip v0.0.0-20260626142012-79fabff585f9
-	github.com/unxed/tar v0.1.95
+	github.com/unxed/tar v0.1.96
 	github.com/unxed/vtinput v0.1.0
 	github.com/unxed/vtui v0.1.1
 	github.com/unxed/zip v0.1.104
-	github.com/unxed/zipper v0.1.97
+	github.com/unxed/zipper v0.1.98
 	github.com/vmihailenco/msgpack/v5 v5.4.1
 	golang.org/x/crypto v0.46.0
 	golang.org/x/sys v0.46.0
