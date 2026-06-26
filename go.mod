@@ -13,7 +13,7 @@ require (
 	github.com/unxed/vtinput v0.1.0
 	github.com/unxed/vtui v0.1.1
 	github.com/unxed/zip v0.1.104
-	github.com/unxed/zipper v0.1.98
+	github.com/unxed/zipper v0.1.99
 	github.com/vmihailenco/msgpack/v5 v5.4.1
 	golang.org/x/crypto v0.46.0
 	golang.org/x/sys v0.46.0
