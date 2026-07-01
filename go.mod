@@ -11,7 +11,7 @@ require (
 	github.com/unxed/sevenzip v0.0.0-20260630191852-ff33261d1c4c
 	github.com/unxed/tar v0.1.116
 	github.com/unxed/vtinput v0.1.0
-	github.com/unxed/vtui v0.1.2
+	github.com/unxed/vtui v0.1.3
 	github.com/unxed/zip v0.1.119
 	github.com/unxed/zipper v0.1.122
 	github.com/vmihailenco/msgpack/v5 v5.4.1
@@ -35,12 +35,12 @@ require (
 	github.com/fogleman/gg v1.3.0 // indirect
 	github.com/go-webgpu/goffi v0.5.5 // indirect
 	github.com/go-webgpu/webgpu v0.5.2 // indirect
-	github.com/gogpu/gg v0.50.0 // indirect
+	github.com/gogpu/gg v0.50.1 // indirect
 	github.com/gogpu/gogpu v0.42.0 // indirect
 	github.com/gogpu/gpucontext v0.21.0 // indirect
 	github.com/gogpu/gputypes v0.5.1 // indirect
 	github.com/gogpu/naga v0.17.15 // indirect
-	github.com/gogpu/wgpu v0.30.7 // indirect
+	github.com/gogpu/wgpu v0.30.8 // indirect
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/hashicorp/errwrap v1.0.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
