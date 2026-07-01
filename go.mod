@@ -11,14 +11,14 @@ require (
 	github.com/unxed/sevenzip v0.0.0-20260630191852-ff33261d1c4c
 	github.com/unxed/tar v0.1.116
 	github.com/unxed/vtinput v0.1.0
-	github.com/unxed/vtui v0.1.1
+	github.com/unxed/vtui v0.1.2
 	github.com/unxed/zip v0.1.119
 	github.com/unxed/zipper v0.1.122
 	github.com/vmihailenco/msgpack/v5 v5.4.1
 	golang.org/x/crypto v0.46.0
 	golang.org/x/sys v0.46.0
 	golang.org/x/term v0.40.0
-	golang.org/x/text v0.37.0
+	golang.org/x/text v0.38.0
 )
 
 require (
@@ -33,15 +33,14 @@ require (
 	github.com/ebitengine/purego v0.10.0 // indirect
 	github.com/emmansun/base64 v0.9.0 // indirect
 	github.com/fogleman/gg v1.3.0 // indirect
-	github.com/go-text/typesetting v0.3.4 // indirect
 	github.com/go-webgpu/goffi v0.5.5 // indirect
 	github.com/go-webgpu/webgpu v0.5.2 // indirect
-	github.com/gogpu/gg v0.48.11 // indirect
+	github.com/gogpu/gg v0.50.0 // indirect
 	github.com/gogpu/gogpu v0.42.0 // indirect
 	github.com/gogpu/gpucontext v0.21.0 // indirect
-	github.com/gogpu/gputypes v0.5.0 // indirect
+	github.com/gogpu/gputypes v0.5.1 // indirect
 	github.com/gogpu/naga v0.17.15 // indirect
-	github.com/gogpu/wgpu v0.30.1 // indirect
+	github.com/gogpu/wgpu v0.30.7 // indirect
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/hashicorp/errwrap v1.0.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
@@ -80,9 +79,9 @@ require (
 	go4.org v0.0.0-20260112195520-a5071408f32f // indirect
 	golang.design/x/clipboard v0.7.0 // indirect
 	golang.org/x/exp/shiny v0.0.0-20260508232706-74f9aab9d74a // indirect
-	golang.org/x/image v0.40.0 // indirect
+	golang.org/x/image v0.43.0 // indirect
 	golang.org/x/mobile v0.0.0-20260410095206-2cfb76559b7b // indirect
-	golang.org/x/sync v0.20.0 // indirect
+	golang.org/x/sync v0.21.0 // indirect
 )
 
 replace github.com/ebitengine/purego => github.com/unxed/pureffi v0.1.10
