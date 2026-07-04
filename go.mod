@@ -8,12 +8,12 @@ require (
 	github.com/mattn/go-runewidth v0.0.15
 	github.com/mholt/archives v0.1.5
 	github.com/pkg/sftp v1.13.6
-	github.com/unxed/sevenzip v0.0.0-20260630191852-ff33261d1c4c
-	github.com/unxed/tar v0.1.116
+	github.com/unxed/sevenzip v0.0.0-20260704110200-9f4941a52a19
+	github.com/unxed/tar v0.1.117
 	github.com/unxed/vtinput v0.1.0
 	github.com/unxed/vtui v0.1.3
-	github.com/unxed/zip v0.1.119
-	github.com/unxed/zipper v0.1.122
+	github.com/unxed/zip v0.1.120
+	github.com/unxed/zipper v0.1.123
 	github.com/vmihailenco/msgpack/v5 v5.4.1
 	golang.org/x/crypto v0.46.0
 	golang.org/x/sys v0.46.0
@@ -64,13 +64,13 @@ require (
 	github.com/stangelandcl/ppmd v0.1.1 // indirect
 	github.com/tetratelabs/wazero v1.8.2 // indirect
 	github.com/ulikunitz/xz v0.5.15 // indirect
-	github.com/unxed/archives v0.0.0-20260630191919-217343e2e721 // indirect
+	github.com/unxed/archives v0.0.0-20260704110259-1b09314d7be4 // indirect
 	github.com/unxed/keytrans v0.1.27 // indirect
 	github.com/unxed/localecp v0.1.4 // indirect
 	github.com/unxed/par2 v0.1.2 // indirect
 	github.com/unxed/winkeys v0.1.0 // indirect
 	github.com/unxed/xkb-go v0.1.8 // indirect
-	github.com/unxed/xz v0.1.39 // indirect
+	github.com/unxed/xz v0.1.40 // indirect
 	github.com/unxed/zipcharset v0.1.4 // indirect
 	github.com/unxed/zlib4go v0.1.11 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
