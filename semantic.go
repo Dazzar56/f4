@@ -48,6 +48,36 @@ func (pf *PanelsFrame) SemanticNode(ctx *vtui.SemanticContext) map[string]any {
 	return shell.ToMap()
 }
 
+// HandleSemanticAction обрабатывает нативные GUI-действия для ViewerView
+func (vv *ViewerView) HandleSemanticAction(action map[string]any) bool {
+	target := semanticString(action["target"])
+	if vtui.SemanticID(vv) != target {
+		return false
+	}
+
+	switch semanticString(action["action"]) {
+	case "viewer.scroll":
+		offset := int64(semanticInt(action["offset"]))
+		if offset < 0 {
+			offset = 0
+		}
+		if offset > vv.backend.Size() {
+			offset = vv.backend.Size()
+		}
+		if vv.HexMode {
+			offset &= ^int64(0xF)
+		} else {
+			offset = vv.backend.FindLineStart(offset)
+		}
+		vv.TopOffset = offset
+		return true
+	case "control.focus":
+		vv.SetFocus(true)
+		return true
+	}
+	return false
+}
+
 // HandleSemanticAction глобально маршрутизирует семантические действия из внешнего GUI
 func HandleSemanticAction(action map[string]any) bool {
 	if action == nil {
@@ -542,6 +572,54 @@ func (ev *EditorView) SemanticNode(ctx *vtui.SemanticContext) map[string]any {
 	}
 	return surface.ToMap()
 }
+// GetText возвращает текущий текст редактора из PieceTable
+func (ev *EditorView) GetText() string {
+	if ev.pt == nil {
+		return ""
+	}
+	return ev.pt.String()
+}
+// HandleSemanticAction обрабатывает нативные GUI-действия для EditorView
+func (ev *EditorView) HandleSemanticAction(action map[string]any) bool {
+	target := semanticString(action["target"])
+	if vtui.SemanticID(ev) != target {
+		return false
+	}
+
+	switch semanticString(action["action"]) {
+	case "editor.setText":
+		text := semanticString(action["text"])
+		ev.SetText(text)
+		return true
+	case "editor.insertText":
+		text := semanticString(action["text"])
+		ev.PasteText(text)
+		return true
+	case "editor.deleteSelection":
+		ev.DeleteSelection()
+		return true
+	case "editor.undo":
+		ev.Undo()
+		return true
+	case "editor.redo":
+		ev.Redo()
+		return true
+	case "editor.save":
+		ev.SaveToFile(nil)
+		return true
+	case "editor.search":
+		pattern := semanticString(action["pattern"])
+		caseSensitive := semanticBool(action["case"])
+		reverse := semanticBool(action["reverse"])
+		next := semanticBool(action["next"])
+		ev.Search(pattern, caseSensitive, reverse, next)
+		return true
+	case "control.focus":
+		ev.SetFocus(true)
+		return true
+	}
+	return false
+}
 
 func (ev *EditorView) semanticRows() []extui.TextRowModel {
 	if ev.pt == nil || ev.li == nil || ev.engine == nil {
@@ -687,4 +765,17 @@ func semanticInt(v any) int {
 		return int(n)
 	}
 	return 0
+}
+
+func semanticBool(v any) bool {
+	if b, ok := v.(bool); ok {
+		return b
+	}
+	if n, ok := v.(int); ok {
+		return n != 0
+	}
+	if f, ok := v.(float64); ok {
+		return f != 0
+	}
+	return false
 }

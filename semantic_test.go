@@ -1,9 +1,13 @@
 package main
 
 import (
+	"context"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/unxed/f4/piecetable"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 )
@@ -102,5 +106,67 @@ func TestPanelsFrameSemanticActionAcceptsQMLNumbers(t *testing.T) {
 	}
 	if pf.activeIdx != 1 {
 		t.Fatalf("activeIdx = %d, want 1", pf.activeIdx)
+	}
+}
+
+func TestSemantic_EditorViewActions(t *testing.T) {
+	vtui.SetDefaultPalette()
+	pt := piecetable.New([]byte("hello"))
+	ev := NewEditorView(pt, nil, "test.txt")
+	ev.modified = false
+	ev.CursorPos = ev.getLineLength(0)
+
+	// 1. Test insertText
+	actionInsert := map[string]any{
+		"target": vtui.SemanticID(ev),
+		"action": "editor.insertText",
+		"text":   " world",
+	}
+	if !ev.HandleSemanticAction(actionInsert) {
+		t.Fatal("editor insert action was not handled")
+	}
+	if ev.GetText() != "hello world" {
+		t.Errorf("expected 'hello world', got %q", ev.GetText())
+	}
+	if !ev.modified {
+		t.Error("editor should be marked as modified after insertion")
+	}
+
+	// 2. Test Undo
+	actionUndo := map[string]any{
+		"target": vtui.SemanticID(ev),
+		"action": "editor.undo",
+	}
+	if !ev.HandleSemanticAction(actionUndo) {
+		t.Fatal("editor undo action was not handled")
+	}
+	if ev.GetText() != "hello" {
+		t.Errorf("expected 'hello' after undo, got %q", ev.GetText())
+	}
+}
+
+func TestSemantic_ViewerViewActions(t *testing.T) {
+	vtui.SetDefaultPalette()
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "view.txt")
+	os.WriteFile(path, []byte("line1\nline2\nline3\n"), 0644)
+
+	v := vfs.NewOSVFS(tmp)
+	viewer, err := NewViewerView(context.Background(), v, path)
+	if err != nil {
+		t.Fatalf("failed to create viewer: %v", err)
+	}
+
+	// Test scroll action
+	actionScroll := map[string]any{
+		"target": vtui.SemanticID(viewer),
+		"action": "viewer.scroll",
+		"offset": float64(6), // Starts 'line2'
+	}
+	if !viewer.HandleSemanticAction(actionScroll) {
+		t.Fatal("viewer scroll action was not handled")
+	}
+	if viewer.TopOffset != 6 {
+		t.Errorf("expected TopOffset 6, got %d", viewer.TopOffset)
 	}
 }
