@@ -358,27 +358,50 @@ func RunExternalUI(cols, rows int, execPath string, args []string) error {
 	}
 	defer conn.Close()
 
-	if err := conn.SetDeadline(time.Now().Add(10 * time.Second)); err != nil {
-		return err
-	}
-	hello, err := extUiReadMessage(conn)
-	if err != nil {
-		return fmt.Errorf("failed to read extui hello: %w", err)
-	}
-	if extUiString(hello, "type") != "hello" || extUiString(hello, "nonce") != nonce {
-		return fmt.Errorf("invalid extui hello")
-	}
-	sender := &extUiMessageSender{w: conn}
-	if err := sender.Send(map[string]any{
-		"type":     "hello",
-		"nonce":    nonce,
-		"protocol": extUiProtocolVersion,
-		"cols":     cols,
-		"rows":     rows,
-		"app":      vtui.AppName,
-	}); err != nil {
-		return fmt.Errorf("failed to send extui hello: %w", err)
-	}
+		if err := conn.SetDeadline(time.Now().Add(10 * time.Second)); err != nil {
+			return err
+		}
+		hello, err := extUiReadMessage(conn)
+		if err != nil {
+			return fmt.Errorf("failed to read extui hello: %w", err)
+		}
+		if extUiString(hello, "type") != "hello" || extUiString(hello, "nonce") != nonce {
+			return fmt.Errorf("invalid extui hello")
+		}
+
+		clientCols := extUiInt(hello, "cols")
+		clientRows := extUiInt(hello, "rows")
+
+		pixelW := extUiInt(hello, "pixelWidth")
+		pixelH := extUiInt(hello, "pixelHeight")
+		cellW := extUiInt(hello, "cellWidth")
+		cellH := extUiInt(hello, "cellHeight")
+
+		if pixelW > 0 && cellW > 0 {
+			clientCols = pixelW / cellW
+		}
+		if pixelH > 0 && cellH > 0 {
+			clientRows = pixelH / cellH
+		}
+
+		if clientCols > 0 {
+			cols = clientCols
+		}
+		if clientRows > 0 {
+			rows = clientRows
+		}
+
+		sender := &extUiMessageSender{w: conn}
+		if err := sender.Send(map[string]any{
+			"type":     "hello",
+			"nonce":    nonce,
+			"protocol": extUiProtocolVersion,
+			"cols":     cols,
+			"rows":     rows,
+			"app":      vtui.AppName,
+		}); err != nil {
+			return fmt.Errorf("failed to send extui hello: %w", err)
+		}
 	if err := conn.SetDeadline(time.Time{}); err != nil {
 		return err
 	}
