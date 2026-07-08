@@ -358,50 +358,50 @@ func RunExternalUI(cols, rows int, execPath string, args []string) error {
 	}
 	defer conn.Close()
 
-		if err := conn.SetDeadline(time.Now().Add(10 * time.Second)); err != nil {
-			return err
-		}
-		hello, err := extUiReadMessage(conn)
-		if err != nil {
-			return fmt.Errorf("failed to read extui hello: %w", err)
-		}
-		if extUiString(hello, "type") != "hello" || extUiString(hello, "nonce") != nonce {
-			return fmt.Errorf("invalid extui hello")
-		}
+	if err := conn.SetDeadline(time.Now().Add(10 * time.Second)); err != nil {
+		return err
+	}
+	hello, err := extUiReadMessage(conn)
+	if err != nil {
+		return fmt.Errorf("failed to read extui hello: %w", err)
+	}
+	if extUiString(hello, "type") != "hello" || extUiString(hello, "nonce") != nonce {
+		return fmt.Errorf("invalid extui hello")
+	}
 
-		clientCols := extUiInt(hello, "cols")
-		clientRows := extUiInt(hello, "rows")
+	clientCols := extUiInt(hello, "cols")
+	clientRows := extUiInt(hello, "rows")
 
-		pixelW := extUiInt(hello, "pixelWidth")
-		pixelH := extUiInt(hello, "pixelHeight")
-		cellW := extUiInt(hello, "cellWidth")
-		cellH := extUiInt(hello, "cellHeight")
+	pixelW := extUiInt(hello, "pixelWidth")
+	pixelH := extUiInt(hello, "pixelHeight")
+	cellW := extUiInt(hello, "cellWidth")
+	cellH := extUiInt(hello, "cellHeight")
 
-		if pixelW > 0 && cellW > 0 {
-			clientCols = pixelW / cellW
-		}
-		if pixelH > 0 && cellH > 0 {
-			clientRows = pixelH / cellH
-		}
+	if pixelW > 0 && cellW > 0 {
+		clientCols = pixelW / cellW
+	}
+	if pixelH > 0 && cellH > 0 {
+		clientRows = pixelH / cellH
+	}
 
-		if clientCols > 0 {
-			cols = clientCols
-		}
-		if clientRows > 0 {
-			rows = clientRows
-		}
+	if clientCols > 0 {
+		cols = clientCols
+	}
+	if clientRows > 0 {
+		rows = clientRows
+	}
 
-		sender := &extUiMessageSender{w: conn}
-		if err := sender.Send(map[string]any{
-			"type":     "hello",
-			"nonce":    nonce,
-			"protocol": extUiProtocolVersion,
-			"cols":     cols,
-			"rows":     rows,
-			"app":      vtui.AppName,
-		}); err != nil {
-			return fmt.Errorf("failed to send extui hello: %w", err)
-		}
+	sender := &extUiMessageSender{w: conn}
+	if err := sender.Send(map[string]any{
+		"type":     "hello",
+		"nonce":    nonce,
+		"protocol": extUiProtocolVersion,
+		"cols":     cols,
+		"rows":     rows,
+		"app":      vtui.AppName,
+	}); err != nil {
+		return fmt.Errorf("failed to send extui hello: %w", err)
+	}
 	if err := conn.SetDeadline(time.Time{}); err != nil {
 		return err
 	}
@@ -510,18 +510,18 @@ func (h *ExtUiHost) handleMessage(msg map[string]any) {
 		})
 	case "clipboard_set":
 		vtui.SetClipboard(extUiString(msg, "text"))
-		case "ui_action":
-			action := msg
-			if nested, ok := msg["action"].(map[string]any); ok {
-				action = nested
-			}
-			if vtui.FrameManager != nil {
-				vtui.FrameManager.PostTask(func() {
-					if HandleSemanticAction(action) {
-						vtui.FrameManager.Redraw()
-					}
-				})
-			}
+	case "ui_action":
+		action := msg
+		if nested, ok := msg["action"].(map[string]any); ok {
+			action = nested
+		}
+		if vtui.FrameManager != nil {
+			vtui.FrameManager.PostTask(func() {
+				if HandleSemanticAction(action) {
+					vtui.FrameManager.Redraw()
+				}
+			})
+		}
 	case "quit":
 		if vtui.FrameManager != nil {
 			vtui.FrameManager.PostTask(func() {

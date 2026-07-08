@@ -1,8 +1,8 @@
 package main
 
 import (
-	"net"
 	"bytes"
+	"net"
 	"testing"
 )
 

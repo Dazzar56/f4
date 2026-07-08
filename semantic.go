@@ -572,6 +572,7 @@ func (ev *EditorView) SemanticNode(ctx *vtui.SemanticContext) map[string]any {
 	}
 	return surface.ToMap()
 }
+
 // GetText возвращает текущий текст редактора из PieceTable
 func (ev *EditorView) GetText() string {
 	if ev.pt == nil {
@@ -579,6 +580,7 @@ func (ev *EditorView) GetText() string {
 	}
 	return ev.pt.String()
 }
+
 // HandleSemanticAction обрабатывает нативные GUI-действия для EditorView
 func (ev *EditorView) HandleSemanticAction(action map[string]any) bool {
 	target := semanticString(action["target"])
