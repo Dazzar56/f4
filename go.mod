@@ -11,14 +11,14 @@ require (
 	github.com/unxed/sevenzip v0.0.0-20260704211908-25d317f8295f
 	github.com/unxed/tar v0.1.118
 	github.com/unxed/vtinput v0.1.0
-	github.com/unxed/vtui v0.1.8
+	github.com/unxed/vtui v0.1.9
 	github.com/unxed/zip v0.1.124
 	github.com/unxed/zipper v0.1.128
 	github.com/vmihailenco/msgpack/v5 v5.4.1
 	golang.org/x/crypto v0.46.0
 	golang.org/x/sys v0.46.0
 	golang.org/x/term v0.40.0
-	golang.org/x/text v0.38.0
+	golang.org/x/text v0.40.0
 )
 
 require (
@@ -35,7 +35,7 @@ require (
 	github.com/fogleman/gg v1.3.0 // indirect
 	github.com/go-webgpu/goffi v0.5.6 // indirect
 	github.com/go-webgpu/webgpu v0.5.2 // indirect
-	github.com/gogpu/gg v0.50.2 // indirect
+	github.com/gogpu/gg v0.50.4 // indirect
 	github.com/gogpu/gogpu v0.44.0 // indirect
 	github.com/gogpu/gpucontext v0.21.0 // indirect
 	github.com/gogpu/gputypes v0.5.1 // indirect
@@ -79,9 +79,9 @@ require (
 	go4.org v0.0.0-20260112195520-a5071408f32f // indirect
 	golang.design/x/clipboard v0.7.0 // indirect
 	golang.org/x/exp/shiny v0.0.0-20260508232706-74f9aab9d74a // indirect
-	golang.org/x/image v0.43.0 // indirect
+	golang.org/x/image v0.44.0 // indirect
 	golang.org/x/mobile v0.0.0-20260410095206-2cfb76559b7b // indirect
-	golang.org/x/sync v0.21.0 // indirect
+	golang.org/x/sync v0.22.0 // indirect
 )
 
 replace github.com/ebitengine/purego => github.com/unxed/pureffi v0.1.10
