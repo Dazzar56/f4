@@ -52,7 +52,7 @@ func (p *AnsiParser) Process(data []byte) {
 	strData := string(data)
 	// Эвристика: скрываем эхо технических команд синхронизации (Linux far2l и Windows f4),
 	// чтобы они не мусорили в логе и на экране.
-	if strings.HasPrefix(strData, "set +H; cd ") {
+	if strings.HasPrefix(strData, " set +H; cd ") {
 		// Unix: отрезаем префикс far2l
 		idx := strings.Index(strData, "}\r\n")
 		if idx != -1 {
@@ -61,7 +61,14 @@ func (p *AnsiParser) Process(data []byte) {
 	}
 
 	// Unix: Вырезаем фоновые команды синхронизации директории
-	if strings.HasPrefix(strData, "set +H; { printf") {
+	if strings.HasPrefix(strData, " set +H; { printf") {
+		idx := strings.Index(strData, "}\r\n")
+		if idx != -1 {
+			strData = strData[idx+3:]
+		}
+	}
+
+	if strings.HasPrefix(strData, " { printf") {
 		idx := strings.Index(strData, "}\r\n")
 		if idx != -1 {
 			strData = strData[idx+3:]

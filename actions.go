@@ -678,9 +678,9 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 						// Используем OSC 133 для уведомления терминала о начале и конце выполнения.
 						if actualDir != "" {
 							sqDir := strings.ReplaceAll(actualDir, "'", "'\\''")
-							cmdToWire = fmt.Sprintf("set +H; cd '%s' && { printf \"\\033]133;C\\007\"; ./'%s' ; printf \"\\033]133;D\\007\"; }\r", sqDir, sqCmd)
+							cmdToWire = fmt.Sprintf(" set +H; cd '%s' && { printf \"\\033]133;C\\007\"; ./'%s' ; printf \"\\033]133;D\\007\"; }\r", sqDir, sqCmd)
 						} else {
-							cmdToWire = fmt.Sprintf("set +H; { printf \"\\033]133;C\\007\"; ./'%s' ; printf \"\\033]133;D\\007\"; }\r", sqCmd)
+							cmdToWire = fmt.Sprintf(" set +H; { printf \"\\033]133;C\\007\"; ./'%s' ; printf \"\\033]133;D\\007\"; }\r", sqCmd)
 						}
 					}
 					vtui.DebugLog("ACTIONS: Sending to PTY: %q", cmdToWire)

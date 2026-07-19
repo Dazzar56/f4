@@ -1100,17 +1100,17 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 					if isBackground {
 						if path != "" {
 							sqPath := strings.ReplaceAll(path, "'", "'\\''")
-							fullWireCmd = fmt.Sprintf("set +H; cd '%s' && %s\r", sqPath, cmd)
+							fullWireCmd = fmt.Sprintf(" set +H; cd '%s' && %s\r", sqPath, cmd)
 						} else {
-							fullWireCmd = cmd + "\r"
+							fullWireCmd = " " + cmd + "\r"
 						}
 					} else {
 						// Managed foreground command
 						if path != "" {
 							sqPath := strings.ReplaceAll(path, "'", "'\\''")
-							fullWireCmd = fmt.Sprintf("set +H; cd '%s' && { printf \"\\033]133;C\\007\"; %s ; printf \"\\033]133;D\\007\"; }\r", sqPath, cmd)
+							fullWireCmd = fmt.Sprintf(" set +H; cd '%s' && { printf \"\\033]133;C\\007\"; %s ; printf \"\\033]133;D\\007\"; }\r", sqPath, cmd)
 						} else {
-							fullWireCmd = fmt.Sprintf("{ printf \"\\033]133;C\\007\"; %s ; printf \"\\033]133;D\\007\"; }\r", cmd)
+							fullWireCmd = fmt.Sprintf(" { printf \"\\033]133;C\\007\"; %s ; printf \"\\033]133;D\\007\"; }\r", cmd)
 						}
 						pf.executing = true
 						pf.returnToPanels = pf.showPanels
