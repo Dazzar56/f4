@@ -2500,6 +2500,44 @@ func TestArchiveBulkExtract_ProgressTracking(t *testing.T) {
 		t.Errorf("file2.txt mismatch: %q (err: %v)", string(b2), err)
 	}
 }
+func TestPanelsFrame_ShiftF5_KeyInterception(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	fsp := pf.panels[0].(*FileSystemPanel)
+	fsp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: ".."}},
+		{VFSItem: vfs.VFSItem{Name: "cursor_file.txt"}},
+	}
+	fsp.Refresh()
+	fsp.SetCursorIndex(1) // Focus on cursor_file.txt
+	pf.activeIdx = 0
+
+	// Send Shift-F5 key
+	handled := pf.ProcessKey(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_F5,
+		ControlKeyState: vtinput.ShiftPressed,
+	})
+
+	if !handled {
+		t.Fatal("Shift-F5 was not handled by PanelsFrame")
+	}
+
+	top := vtui.FrameManager.GetTopFrame()
+	if top == nil || !strings.Contains(top.GetTitle(), "Copy") {
+		t.Errorf("Expected Copy dialog on top after Shift-F5, got %v", top)
+	}
+
+	// Cleanup
+	top.SetExitCode(-1)
+	vtui.FrameManager.Pop()
+}
 
 type mockTaskReporter struct{}
 
