@@ -49,6 +49,11 @@ func (pf *PanelsFrame) GetSelectedNames() []string {
 func (pf *PanelsFrame) GetSelectedName() string {
 	return pf.Active().(*FileSystemPanel).GetSelectedName()
 }
+func (pf *PanelsFrame) SetPendingSelection(name string) {
+	if fsp := pf.getActivePanel(); fsp != nil {
+		fsp.pendingSelection = name
+	}
+}
 
 type PanelController interface {
 	ProcessPanelKey(app vfs.App, e *vtinput.InputEvent) bool

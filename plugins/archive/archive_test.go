@@ -88,11 +88,12 @@ type mockAppForProgress struct {
 	mu          sync.Mutex
 }
 
-func (m *mockAppForProgress) GetActivePanelVFS() vfs.VFS  { return m.activeVfs }
-func (m *mockAppForProgress) GetPassivePanelVFS() vfs.VFS { return m.passiveVfs }
-func (m *mockAppForProgress) GetSelectedNames() []string  { return m.names }
-func (m *mockAppForProgress) GetSelectedName() string     { return m.names[0] }
-func (m *mockAppForProgress) RefreshAll()                 {}
+func (m *mockAppForProgress) GetActivePanelVFS() vfs.VFS      { return m.activeVfs }
+func (m *mockAppForProgress) GetPassivePanelVFS() vfs.VFS     { return m.passiveVfs }
+func (m *mockAppForProgress) GetSelectedNames() []string      { return m.names }
+func (m *mockAppForProgress) GetSelectedName() string         { return m.names[0] }
+func (m *mockAppForProgress) RefreshAll()                     {}
+func (m *mockAppForProgress) SetPendingSelection(name string) {}
 func (m *mockAppForProgress) RunProgressTask(title, startMsg string, forked bool, worker func(ctx context.Context, update func(msg string, percent int)) error, onComplete func(err error)) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()

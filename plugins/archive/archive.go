@@ -249,6 +249,9 @@ func actionAddArchive(app vfs.App) {
 				if err != nil && err != context.Canceled {
 					go app.Message(" Error ", fmt.Sprintf("Archiving failed:\n%v", err), []string{"&Ok"})
 				}
+				if err == nil {
+					app.SetPendingSelection(name)
+				}
 				app.RefreshAll()
 			})
 		}()

@@ -11,11 +11,12 @@ import (
 
 type mockApp struct{}
 
-func (m *mockApp) GetActivePanelVFS() vfs.VFS  { return nil }
-func (m *mockApp) GetPassivePanelVFS() vfs.VFS { return nil }
-func (m *mockApp) GetSelectedNames() []string  { return nil }
-func (m *mockApp) GetSelectedName() string     { return "" }
-func (m *mockApp) RefreshAll()                 {}
+func (m *mockApp) GetActivePanelVFS() vfs.VFS      { return nil }
+func (m *mockApp) GetPassivePanelVFS() vfs.VFS     { return nil }
+func (m *mockApp) GetSelectedNames() []string      { return nil }
+func (m *mockApp) GetSelectedName() string         { return "" }
+func (m *mockApp) RefreshAll()                     {}
+func (m *mockApp) SetPendingSelection(name string) {}
 func (m *mockApp) RunProgressTask(title, startMsg string, forked bool, worker func(ctx context.Context, update func(msg string, percent int)) error, onComplete func(err error)) {
 }
 func (m *mockApp) Message(title, msg string, buttons []string) int               { return 0 }

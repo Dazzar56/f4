@@ -17,6 +17,7 @@ type App interface {
 	GetSelectedNames() []string
 	GetSelectedName() string
 	RefreshAll()
+	SetPendingSelection(name string)
 	RunProgressTask(title, startMsg string, forked bool, worker func(ctx context.Context, update func(msg string, percent int)) error, onComplete func(err error))
 	// UI Bridge
 	Message(title, msg string, buttons []string) int
