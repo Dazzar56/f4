@@ -23,6 +23,8 @@ import (
 	"github.com/unxed/vtui"
 )
 
+var TestSkipDelay time.Duration
+
 type dummyDirInfo struct {
 	name string
 }
@@ -1029,6 +1031,9 @@ func (v *ArchiveVFS) copyBulkZip(ctx context.Context, f vfs.ReadAtCloser, select
 			lastFile = file.Name
 			lastPct = -1
 			mu.Unlock()
+			if TestSkipDelay > 0 {
+				time.Sleep(TestSkipDelay)
+			}
 			continue
 		}
 
@@ -1180,6 +1185,9 @@ func (v *ArchiveVFS) copyBulkTar(ctx context.Context, f vfs.ReadAtCloser, select
 			lastFile = cleanName
 			lastPct = -1
 			mu.Unlock()
+			if TestSkipDelay > 0 {
+				time.Sleep(TestSkipDelay)
+			}
 			continue
 		}
 
@@ -1326,6 +1334,9 @@ func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, s
 			lastFile = cleanName
 			lastPct = -1
 			mu.Unlock()
+			if TestSkipDelay > 0 {
+				time.Sleep(TestSkipDelay)
+			}
 			return nil
 		}
 

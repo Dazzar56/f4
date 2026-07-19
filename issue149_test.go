@@ -132,8 +132,8 @@ func TestIssue149_Reproduction(t *testing.T) {
 	// Extract only the LAST file. The first 9 must be skipped.
 	names := []string{"file_9.txt"}
 
-	// Tracker with pre-scanned stats for 10 files.
-	totalStats := vfs.OpStats{Files: 10, Bytes: 40}
+	// Tracker with pre-scanned stats for the selected file only.
+	totalStats := vfs.OpStats{Files: 1, Bytes: 4}
 	tracker := NewFileOpTracker(totalStats)
 
 	rep := &globalAwareReporter{
@@ -149,10 +149,10 @@ func TestIssue149_Reproduction(t *testing.T) {
 		t.Fatalf("CopyBulk failed: %v", err)
 	}
 
-	// Verify that all 10 items (9 skipped + 1 done) were processed.
+	// Verify that only the selected item was processed.
 	processed, _ := tracker.GetStats()
-	if processed.Files != 10 {
-		t.Errorf("Tracker did not record all files. Expected 10, got %d", processed.Files)
+	if processed.Files != 1 {
+		t.Errorf("Tracker did not record the file. Expected 1, got %d", processed.Files)
 	}
 
 	_, totalPct, _ := tracker.GetProgress()
@@ -190,6 +190,9 @@ func (r *actionCaptureReporter) hasAction(a string) bool {
 // TestIssue149_LocatingStatusReporting verifies that the "Locating" state
 // is correctly reported during bulk extraction when files are being skipped.
 func TestIssue149_LocatingStatusReporting(t *testing.T) {
+	archive.TestSkipDelay = 15 * time.Millisecond
+	defer func() { archive.TestSkipDelay = 0 }()
+
 	vfs.RegisterProvider(&archive.ArchiveProvider{})
 	tmpDir := t.TempDir()
 	zipPath := filepath.Join(tmpDir, "test_locating.zip")
