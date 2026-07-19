@@ -110,9 +110,9 @@ func actionExtractArchive(app vfs.App) {
 		done := make(chan struct{})
 		defer close(done)
 		go func() {
-			pct := 0
 			ticker := time.NewTicker(100 * time.Millisecond)
 			defer ticker.Stop()
+			startTime := time.Now()
 			for {
 				select {
 				case <-ctx.Done():
@@ -120,8 +120,14 @@ func actionExtractArchive(app vfs.App) {
 				case <-done:
 					return
 				case <-ticker.C:
-					pct = (pct + 2) % 100
-					update("Extracting files...", pct)
+					bytes, entries := ex.Written()
+					elapsed := time.Since(startTime).Seconds()
+					speed := float64(0)
+					if elapsed > 0 {
+						speed = float64(bytes) / elapsed
+					}
+					msg := fmt.Sprintf("Extracting: %s | %s/s | %d files", formatSize(bytes), formatSize(int64(speed)), entries)
+					update(msg, -1)
 				}
 			}
 		}()
@@ -201,6 +207,7 @@ func actionAddArchive(app vfs.App) {
 				update("Gathering files...", -1)
 
 				fileMap := make(map[string]os.FileInfo)
+				var totalBytes int64
 				for i, n := range names {
 					if ctx.Err() != nil {
 						return ctx.Err()
@@ -213,6 +220,9 @@ func actionAddArchive(app vfs.App) {
 						filepath.Walk(absPath, func(p string, fi os.FileInfo, e error) error {
 							if e == nil {
 								fileMap[p] = fi
+								if !fi.IsDir() {
+									totalBytes += fi.Size()
+								}
 							}
 							return nil
 						})
@@ -228,9 +238,9 @@ func actionAddArchive(app vfs.App) {
 				done := make(chan struct{})
 				defer close(done)
 				go func() {
-					pct := 0
 					ticker := time.NewTicker(100 * time.Millisecond)
 					defer ticker.Stop()
+					startTime := time.Now()
 					for {
 						select {
 						case <-ctx.Done():
@@ -238,8 +248,18 @@ func actionAddArchive(app vfs.App) {
 						case <-done:
 							return
 						case <-ticker.C:
-							pct = (pct + 2) % 100
-							update("Archiving files...", pct)
+							bytes, entries := a.Written()
+							elapsed := time.Since(startTime).Seconds()
+							speed := float64(0)
+							if elapsed > 0 {
+								speed = float64(bytes) / elapsed
+							}
+							pct := -1
+							if totalBytes > 0 {
+								pct = int((bytes * 100) / totalBytes)
+							}
+							msg := fmt.Sprintf("Archiving: %s | %s/s | %d files", formatSize(bytes), formatSize(int64(speed)), entries)
+							update(msg, pct)
 						}
 					}
 				}()

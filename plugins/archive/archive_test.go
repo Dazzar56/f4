@@ -152,15 +152,15 @@ func TestActionExtractArchive_ProgressUpdates(t *testing.T) {
 		t.Error("Extraction progress percentage was never updated")
 	}
 
-	hasExtractionMessage := false
+	hasSpeedInfo := false
 	for _, msg := range app.progressMsg {
-		if strings.Contains(msg, "Extracting") {
-			hasExtractionMessage = true
+		if strings.Contains(msg, "/s |") && strings.Contains(msg, "files") && strings.Contains(msg, "Extracting:") {
+			hasSpeedInfo = true
 			break
 		}
 	}
-	if !hasExtractionMessage {
-		t.Error("Expected extraction status message, but none were recorded")
+	if !hasSpeedInfo {
+		t.Errorf("Expected extraction status message to contain real progress (speed and files), got: %v", app.progressMsg)
 	}
 }
 
@@ -190,14 +190,14 @@ func TestActionAddArchive_ProgressUpdates(t *testing.T) {
 		t.Error("Archiving progress percentage was never updated")
 	}
 
-	hasArchivingMessage := false
+	hasSpeedInfo := false
 	for _, msg := range app.progressMsg {
-		if strings.Contains(msg, "Archiving") || strings.Contains(msg, "Scanning") {
-			hasArchivingMessage = true
+		if strings.Contains(msg, "/s |") && strings.Contains(msg, "files") && strings.Contains(msg, "Archiving:") {
+			hasSpeedInfo = true
 			break
 		}
 	}
-	if !hasArchivingMessage {
-		t.Error("Expected archiving status message, but none were recorded")
+	if !hasSpeedInfo {
+		t.Errorf("Expected archiving status message to contain real progress (speed and files), got: %v", app.progressMsg)
 	}
 }
