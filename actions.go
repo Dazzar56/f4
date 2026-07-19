@@ -1590,7 +1590,7 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 		defaultMenuAction(idx)
 		if idx >= 0 && idx < len(names) {
 			if err := ApplyColorStyle(names[idx]); err == nil {
-				pf.RefreshAll()
+				vtui.FrameManager.Redraw()
 			}
 		}
 	}
@@ -1616,19 +1616,20 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 	vbox.Apply()
 
 	btnCancel.OnClick = func() {
-		_ = ApplyColorStyle(originalStyle)
-		dlg.Close()
-		pf.RefreshAll()
+		dlg.SetExitCode(-1)
 	}
 	btnOk.OnClick = func() {
-		if len(names) == 0 {
-			return
+		if len(names) > 0 {
+			AppConfig.ColorStyle = names[comboStyle.Menu.SelectPos]
+			SaveConfig()
 		}
-		name := names[comboStyle.Menu.SelectPos]
-		AppConfig.ColorStyle = name
-		SaveConfig()
-		dlg.Close()
-		pf.RefreshAll()
+		dlg.SetExitCode(1)
+	}
+	dlg.OnResult = func(code int) {
+		if code < 0 {
+			_ = ApplyColorStyle(originalStyle)
+		}
+		vtui.FrameManager.Redraw()
 	}
 
 	vtui.FrameManager.Push(dlg)
