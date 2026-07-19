@@ -866,7 +866,7 @@ func actionEditFile(pf *PanelsFrame) {
 	}
 }
 
-func actionCopyMove(pf *PanelsFrame, isMove bool) {
+func actionCopyMove(pf *PanelsFrame, isMove bool, prefill ...string) {
 	fspSrc := pf.getActivePanel()
 	fspDst := pf.getInactivePanel()
 	if fspSrc == nil || fspDst == nil {
@@ -886,6 +886,9 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 	}
 
 	srcVfs, dstVfs := fspSrc.vfs, fspDst.vfs
+	if len(prefill) > 0 && prefill[0] != "" {
+		dstVfs = srcVfs
+	}
 
 	initialDest := dstVfs.GetPath()
 	if initialDest != "" && !strings.HasSuffix(initialDest, "/") && !strings.HasSuffix(initialDest, "\\") {
@@ -894,6 +897,9 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 			sep = "\\"
 		}
 		initialDest += sep
+	}
+	if len(prefill) > 0 && prefill[0] != "" {
+		initialDest += prefill[0]
 	}
 
 	onCompleteWithClear := func() {

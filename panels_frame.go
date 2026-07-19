@@ -879,6 +879,16 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		if ctrl {
 			return vtui.FrameManager.EmitCommand(CmSortTime, nil)
 		}
+		if shift {
+			fsp := pf.getActivePanel()
+			if fsp != nil {
+				name := fsp.getRawSelectedName()
+				if name != "" && name != ".." {
+					actionCopyMove(pf, false, name)
+					return true
+				}
+			}
+		}
 		return vtui.FrameManager.EmitCommand(CmCopy, nil)
 	case vtinput.VK_F6:
 		if shift {
