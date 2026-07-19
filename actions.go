@@ -1736,7 +1736,7 @@ func actionFileAttributes(pf *PanelsFrame) {
 		return
 	}
 
-	name := fsp.GetSelectedName()
+	name := fsp.getRawSelectedName()
 	if name == "" || name == ".." {
 		return
 	}
