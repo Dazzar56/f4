@@ -1029,10 +1029,6 @@ func (v *ArchiveVFS) copyBulkZip(ctx context.Context, f vfs.ReadAtCloser, select
 			lastFile = file.Name
 			lastPct = -1
 			mu.Unlock()
-			if fp, ok := reporter.(vfs.FileProgress); ok {
-				fp.StartFile(file.Name, int64(file.UncompressedSize64))
-				fp.FileSkipped()
-			}
 			continue
 		}
 
@@ -1184,10 +1180,6 @@ func (v *ArchiveVFS) copyBulkTar(ctx context.Context, f vfs.ReadAtCloser, select
 			lastFile = cleanName
 			lastPct = -1
 			mu.Unlock()
-			if fp, ok := reporter.(vfs.FileProgress); ok {
-				fp.StartFile(cleanName, hdr.Size)
-				fp.FileSkipped()
-			}
 			continue
 		}
 
@@ -1334,10 +1326,6 @@ func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, s
 			lastFile = cleanName
 			lastPct = -1
 			mu.Unlock()
-			if fp, ok := reporter.(vfs.FileProgress); ok {
-				fp.StartFile(cleanName, size)
-				fp.FileSkipped()
-			}
 			return nil
 		}
 
