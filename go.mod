@@ -11,7 +11,7 @@ require (
 	github.com/unxed/sevenzip v0.0.0-20260704211908-25d317f8295f
 	github.com/unxed/tar v0.1.118
 	github.com/unxed/vtinput v0.1.0
-	github.com/unxed/vtui v0.1.10
+	github.com/unxed/vtui v0.1.11
 	github.com/unxed/zip v0.1.124
 	github.com/unxed/zipper v0.1.128
 	github.com/vmihailenco/msgpack/v5 v5.4.1
@@ -84,4 +84,4 @@ require (
 	golang.org/x/sync v0.22.0 // indirect
 )
 
-replace github.com/ebitengine/purego => github.com/unxed/pureffi v0.1.10
+replace github.com/ebitengine/purego => github.com/unxed/pureffi v0.1.11
