@@ -624,6 +624,16 @@ func actionViewerSearch(vv *ViewerView) {
 
 func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 	vtui.RunAsync(func(ctx *vtui.TaskContext) {
+		if _, isLocal := v.(*vfs.OSVFS); isLocal {
+			if fi, err := os.Stat(path); err == nil {
+				if fi.Mode()&(os.ModeNamedPipe|os.ModeSocket|os.ModeDevice|os.ModeCharDevice) != 0 {
+					ctx.RunOnUI(func() {
+						vtui.ShowMessage(" Error ", "Cannot open special files (Named Pipes, Sockets, Devices).", []string{"&Ok"})
+					})
+					return
+				}
+			}
+		}
 		runnable := vfs.IsTerminalRunnable(ctx.Context, v, path)
 		if runnable {
 			ctx.RunOnUI(func() {
