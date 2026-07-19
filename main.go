@@ -293,12 +293,6 @@ func SetupUI() {
 		AppConfig.ColorStyle = "Modern"
 		_ = ApplyColorStyle(AppConfig.ColorStyle)
 	}
-	// Load legacy color overrides if they exist
-	legacyColorsPath := filepath.Join(configDir, "f4", "farcolors.ini")
-	if _, err := os.Stat(legacyColorsPath); err == nil {
-		legacyIni := LoadIni(legacyColorsPath)
-		InitColors(legacyIni)
-	}
 	vtui.GlobalHistoryProvider = NewF4HistoryProvider()
 	GlobalFileState = NewF4FileStateProvider()
 	vtinput.Logger = vtui.DebugLog // Pipe vtinput logs to vtui's debug logger
@@ -306,6 +300,12 @@ func SetupUI() {
 	RegisterDrive("Null VFS", func() vfs.VFS { return vfs.NewNullVFS(50 * 1024 * 1024) }) // 50 MB/s
 
 	configDir, _ := os.UserConfigDir()
+	// Load legacy color overrides if they exist
+	legacyColorsPath := filepath.Join(configDir, "f4", "farcolors.ini")
+	if _, err := os.Stat(legacyColorsPath); err == nil {
+		legacyIni := LoadIni(legacyColorsPath)
+		InitColors(legacyIni)
+	}
 
 	os.MkdirAll(filepath.Join(configDir, "f4"), 0755)
 	MacroMgr = NewMacroManager(filepath.Join(configDir, "f4", "key_macros.ini"))
