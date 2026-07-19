@@ -1561,6 +1561,79 @@ func actionConfirmationsSettings(pf *PanelsFrame) {
 	vtui.FrameManager.Push(dlg)
 }
 
+func actionAppearanceSettings(pf *PanelsFrame) {
+	const width, height = 40, 10
+	dlg := vtui.NewCenteredDialog(width, height, Msg("AppearanceSettings.Title"))
+	dlg.ShowClose = true
+	originalStyle := AppConfig.ColorStyle
+
+	styles := AvailableColorStyles()
+	names := make([]string, len(styles))
+	selected := 0
+	for i, style := range styles {
+		names[i] = style.Name
+		if strings.EqualFold(style.Name, AppConfig.ColorStyle) {
+			selected = i
+		}
+	}
+
+	comboStyle := vtui.NewComboBox(0, 0, 24, names)
+	comboStyle.DropdownOnly = true
+	if len(names) > 0 {
+		comboStyle.Menu.SetSelectPos(selected)
+		comboStyle.Edit.SetText(names[selected])
+	}
+	lblStyle := vtui.NewText(0, 0, Msg("AppearanceSettings.Style"), 0)
+	lblStyle.FocusLink = comboStyle
+	defaultMenuAction := comboStyle.Menu.OnAction
+	comboStyle.Menu.OnAction = func(idx int) {
+		defaultMenuAction(idx)
+		if idx >= 0 && idx < len(names) {
+			if err := ApplyColorStyle(names[idx]); err == nil {
+				pf.RefreshAll()
+			}
+		}
+	}
+	btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))
+	btnOk.IsDefault = true
+	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
+
+	dlg.AddItem(lblStyle)
+	dlg.AddItem(comboStyle)
+	dlg.AddItem(btnOk)
+	dlg.AddItem(btnCancel)
+
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, width-4, height-4)
+	vbox.Add(lblStyle, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(comboStyle, vtui.Margins{Top: 1}, vtui.AlignCenter)
+
+	buttons := vtui.NewHBoxLayout(0, 0, width-4, 1)
+	buttons.HorizontalAlign = vtui.AlignCenter
+	buttons.Spacing = 2
+	buttons.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
+	buttons.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
+	vbox.Add(buttons, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Apply()
+
+	btnCancel.OnClick = func() {
+		_ = ApplyColorStyle(originalStyle)
+		dlg.Close()
+		pf.RefreshAll()
+	}
+	btnOk.OnClick = func() {
+		if len(names) == 0 {
+			return
+		}
+		name := names[comboStyle.Menu.SelectPos]
+		AppConfig.ColorStyle = name
+		SaveConfig()
+		dlg.Close()
+		pf.RefreshAll()
+	}
+
+	vtui.FrameManager.Push(dlg)
+}
+
 type dialogVFSAdapter struct {
 	v vfs.VFS
 }
