@@ -109,10 +109,23 @@ func actionExtractArchive(app vfs.App) {
 
 		done := make(chan struct{})
 		defer close(done)
+		startTime := time.Now()
+
+		showProgress := func() {
+			bytes, entries := ex.Written()
+			elapsed := time.Since(startTime).Seconds()
+			speed := float64(0)
+			if elapsed > 0 {
+				speed = float64(bytes) / elapsed
+			}
+			msg := fmt.Sprintf("Extracting: %s | %s/s | %d files", formatSize(bytes), formatSize(int64(speed)), entries)
+			update(msg, -1)
+		}
+		showProgress()
+
 		go func() {
 			ticker := time.NewTicker(100 * time.Millisecond)
 			defer ticker.Stop()
-			startTime := time.Now()
 			for {
 				select {
 				case <-ctx.Done():
@@ -120,14 +133,7 @@ func actionExtractArchive(app vfs.App) {
 				case <-done:
 					return
 				case <-ticker.C:
-					bytes, entries := ex.Written()
-					elapsed := time.Since(startTime).Seconds()
-					speed := float64(0)
-					if elapsed > 0 {
-						speed = float64(bytes) / elapsed
-					}
-					msg := fmt.Sprintf("Extracting: %s | %s/s | %d files", formatSize(bytes), formatSize(int64(speed)), entries)
-					update(msg, -1)
+					showProgress()
 				}
 			}
 		}()
@@ -237,10 +243,27 @@ func actionAddArchive(app vfs.App) {
 
 				done := make(chan struct{})
 				defer close(done)
+				startTime := time.Now()
+
+				showProgress := func() {
+					bytes, entries := a.Written()
+					elapsed := time.Since(startTime).Seconds()
+					speed := float64(0)
+					if elapsed > 0 {
+						speed = float64(bytes) / elapsed
+					}
+					pct := -1
+					if totalBytes > 0 {
+						pct = int((bytes * 100) / totalBytes)
+					}
+					msg := fmt.Sprintf("Archiving: %s | %s/s | %d files", formatSize(bytes), formatSize(int64(speed)), entries)
+					update(msg, pct)
+				}
+				showProgress()
+
 				go func() {
 					ticker := time.NewTicker(100 * time.Millisecond)
 					defer ticker.Stop()
-					startTime := time.Now()
 					for {
 						select {
 						case <-ctx.Done():
@@ -248,18 +271,7 @@ func actionAddArchive(app vfs.App) {
 						case <-done:
 							return
 						case <-ticker.C:
-							bytes, entries := a.Written()
-							elapsed := time.Since(startTime).Seconds()
-							speed := float64(0)
-							if elapsed > 0 {
-								speed = float64(bytes) / elapsed
-							}
-							pct := -1
-							if totalBytes > 0 {
-								pct = int((bytes * 100) / totalBytes)
-							}
-							msg := fmt.Sprintf("Archiving: %s | %s/s | %d files", formatSize(bytes), formatSize(int64(speed)), entries)
-							update(msg, pct)
+							showProgress()
 						}
 					}
 				}()

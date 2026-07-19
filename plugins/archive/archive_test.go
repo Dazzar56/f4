@@ -2,6 +2,7 @@ package archive
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -199,5 +200,72 @@ func TestActionAddArchive_ProgressUpdates(t *testing.T) {
 	}
 	if !hasSpeedInfo {
 		t.Errorf("Expected archiving status message to contain real progress (speed and files), got: %v", app.progressMsg)
+	}
+}
+
+type mockCancelApp struct {
+	t          *testing.T
+	activeVfs  vfs.VFS
+	passiveVfs vfs.VFS
+	names      []string
+	done       chan struct{}
+	err        error
+}
+
+func (m *mockCancelApp) GetActivePanelVFS() vfs.VFS      { return m.activeVfs }
+func (m *mockCancelApp) GetPassivePanelVFS() vfs.VFS     { return m.passiveVfs }
+func (m *mockCancelApp) GetSelectedNames() []string      { return m.names }
+func (m *mockCancelApp) GetSelectedName() string         { return m.names[0] }
+func (m *mockCancelApp) RefreshAll()                     {}
+func (m *mockCancelApp) SetPendingSelection(name string) {}
+func (m *mockCancelApp) RunProgressTask(title, startMsg string, forked bool, worker func(ctx context.Context, update func(msg string, percent int)) error, onComplete func(err error)) {
+	ctx, cancel := context.WithCancel(context.Background())
+	update := func(msg string, percent int) {
+		cancel()
+	}
+	m.err = worker(ctx, update)
+	onComplete(m.err)
+	close(m.done)
+}
+func (m *mockCancelApp) Message(title, msg string, buttons []string) int { return 0 }
+func (m *mockCancelApp) InputBox(title, prompt, defaultText string, callback func(string)) {
+	callback(defaultText)
+}
+func (m *mockCancelApp) Menu(title string, items []string, callback func(int)) {}
+
+func TestActionExtractArchive_Cancellation(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	tmpDir := t.TempDir()
+	srcZip := filepath.Join(tmpDir, "test_cancel.zip")
+
+	f, _ := os.Create(srcZip)
+	zw := zip.NewWriter(f)
+	for i := 0; i < 100; i++ {
+		fw, _ := zw.Create(fmt.Sprintf("file_%d.txt", i))
+		fw.Write([]byte("some data to simulate work"))
+	}
+	zw.Close()
+	f.Close()
+
+	destDir := filepath.Join(tmpDir, "output_cancel")
+	os.Mkdir(destDir, 0755)
+
+	activeVfs := vfs.NewOSVFS(tmpDir)
+	passiveVfs := vfs.NewOSVFS(destDir)
+
+	app := &mockCancelApp{
+		t:          t,
+		activeVfs:  activeVfs,
+		passiveVfs: passiveVfs,
+		names:      []string{"test_cancel.zip"},
+		done:       make(chan struct{}),
+	}
+
+	actionExtractArchive(app)
+	<-app.done
+
+	if app.err != context.Canceled {
+		t.Errorf("Expected context.Canceled, got: %v", app.err)
 	}
 }

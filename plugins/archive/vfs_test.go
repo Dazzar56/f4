@@ -2,7 +2,6 @@ package archive
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"io/fs"
 	"os"
