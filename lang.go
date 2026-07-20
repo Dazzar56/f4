@@ -51,6 +51,7 @@ var Lng = map[string]string{
 	// Macros
 	"Macro.AssignTitle":  " Assign Macro ",
 	"Macro.AssignPrompt": "Press the desired key combination",
+	"Macro.AssignCancel": "Press Esc to cancel",
 	// Top Menu
 	"Menu.Left":     "Left",
 	"Menu.Files":    "Files",

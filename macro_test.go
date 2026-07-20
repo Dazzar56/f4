@@ -179,15 +179,15 @@ func TestMacro_AssignRobustness(t *testing.T) {
 		t.Error("Assign dialog should ignore standalone Shift")
 	}
 
-	// 2. Esc SHOULD now assign a macro (per user request to support Esc macros)
+	// 2. Esc SHOULD now cancel the dialog without assignment
 	f.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_ESCAPE})
 	if !f.Done {
 		t.Error("Assign dialog should close after pressing Esc")
 	}
 
 	escKey := KeyStr(vtinput.VK_ESCAPE, 0)
-	if _, ok := mgr.Macros[escKey]; !ok {
-		t.Error("Esc should now be a valid macro key")
+	if _, ok := mgr.Macros[escKey]; ok {
+		t.Error("Esc should cancel, not assign a macro")
 	}
 
 	// 3. Test Alt+X assignment
@@ -234,8 +234,12 @@ func TestMacro_KeyUpConsumption(t *testing.T) {
 	}
 }
 
-func TestMacro_AssignEsc(t *testing.T) {
-	mgr := NewMacroManager(filepath.Join(os.TempDir(), "esc.ini"))
+func TestMacro_CancelEsc(t *testing.T) {
+	tmpPath := filepath.Join(os.TempDir(), "esc.ini")
+	os.Remove(tmpPath)
+	defer os.Remove(tmpPath)
+
+	mgr := NewMacroManager(tmpPath)
 	mgr.Recording = true
 	mgr.Buffer = []*vtinput.InputEvent{{Char: 'h', KeyDown: true}}
 
@@ -245,16 +249,14 @@ func TestMacro_AssignEsc(t *testing.T) {
 		VirtualKeyCode: vtinput.VK_ESCAPE,
 	}
 
-	// Previously this would close the dialog without assigning.
-	// Now it should assign the macro to Esc.
 	assign.ProcessKey(escEvent)
 
 	key := KeyStr(vtinput.VK_ESCAPE, 0)
-	if _, ok := mgr.Macros[key]; !ok {
-		t.Error("Failed to assign macro to ESC key")
+	if _, ok := mgr.Macros[key]; ok {
+		t.Error("Esc should cancel, not assign a macro")
 	}
 	if !assign.Done {
-		t.Error("Assign frame should be Done after assignment")
+		t.Error("Assign frame should be Done after cancellation")
 	}
 }
 

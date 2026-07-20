@@ -160,7 +160,7 @@ type MacroAssignFrame struct {
 }
 
 func NewMacroAssignFrame(m *MacroManager) *MacroAssignFrame {
-	width, height := 42, 5
+	width, height := 42, 7
 	base := vtui.NewCenteredDialog(width, height, Msg("Macro.AssignTitle"))
 	f := &MacroAssignFrame{
 		Window: *base,
@@ -170,8 +170,12 @@ func NewMacroAssignFrame(m *MacroManager) *MacroAssignFrame {
 	prompt := vtui.NewText(0, 0, Msg("Macro.AssignPrompt"), vtui.Palette[vtui.ColDialogText])
 	f.AddItem(prompt)
 
+	cancelPrompt := vtui.NewText(0, 0, Msg("Macro.AssignCancel"), vtui.Palette[vtui.ColDialogText])
+	f.AddItem(cancelPrompt)
+
 	vbox := vtui.NewVBoxLayout(f.X1+2, f.Y1+2, width-4, height-4)
 	vbox.Add(prompt, vtui.Margins{}, vtui.AlignCenter)
+	vbox.Add(cancelPrompt, vtui.Margins{Top: 1}, vtui.AlignCenter)
 	vbox.Apply()
 
 	return f
@@ -184,6 +188,13 @@ func (f *MacroAssignFrame) ProcessKey(e *vtinput.InputEvent) bool {
 
 	if !e.KeyDown {
 		return false
+	}
+
+	if e.VirtualKeyCode == vtinput.VK_ESCAPE {
+		f.mgr.Buffer = nil
+		f.SetExitCode(-1)
+		vtui.FrameManager.Redraw()
+		return true
 	}
 
 	// Only ignore "pure" modifiers without any other key.
