@@ -1668,7 +1668,7 @@ func actionConfirmationsSettings(pf *PanelsFrame) {
 }
 
 func actionAppearanceSettings(pf *PanelsFrame) {
-	const width, height = 50, 17
+	const width, height = 60, 17
 	dlg := vtui.NewCenteredDialog(width, height, Msg("AppearanceSettings.Title"))
 	dlg.ShowClose = true
 	originalStyle := AppConfig.ColorStyle
