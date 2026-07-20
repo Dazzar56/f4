@@ -3725,3 +3725,36 @@ func TestEditor_OverwriteMode(t *testing.T) {
 		t.Errorf("Cursor did not advance: expected 2, got %d", ev.CursorPos)
 	}
 }
+
+func TestDeleteLinePreservesVisualColumn(t *testing.T) {
+	pt := piecetable.New([]byte("line 1 text\nline 2\nline 3 standard"))
+	ev := NewEditorView(pt, nil, "test.txt")
+	ev.CursorBeyondEOL = true
+
+	// Position cursor at line 1 (0-based index 0), column 20 (beyond end of "line 1 text" which is 11 chars)
+	ev.CursorLine = 0
+	ev.CursorPos = 11
+	ev.CursorVirtualSpaces = 9
+	ev.updateDesiredVisualCol()
+
+	if ev.DesiredVisualCol != 20 {
+		t.Errorf("Expected DesiredVisualCol to be 20, got %d", ev.DesiredVisualCol)
+	}
+
+	// Delete current line (line 1)
+	ev.DeleteCurrentLine()
+
+	// The new current line is "line 2" (length 6)
+	if ev.CursorLine != 0 {
+		t.Errorf("Expected CursorLine to remain 0, got %d", ev.CursorLine)
+	}
+
+	// We expect the cursor to stay at visual column 20
+	if ev.CursorVirtualSpaces != 14 { // 20 - 6 (len of "line 2")
+		t.Errorf("Expected CursorVirtualSpaces to be 14, got %d", ev.CursorVirtualSpaces)
+	}
+
+	if ev.DesiredVisualCol != 20 {
+		t.Errorf("Expected DesiredVisualCol to remain 20, got %d", ev.DesiredVisualCol)
+	}
+}

@@ -2201,11 +2201,14 @@ func (ev *EditorView) DeleteCurrentLine() {
 	lineStart := ev.li.GetLineOffset(ev.CursorLine)
 	lineEnd := ev.pt.Size()
 
+	lastLineDeleted := false
+
 	if ev.CursorLine+1 < ev.li.LineCount() {
 		lineEnd = ev.li.GetLineOffset(ev.CursorLine + 1)
 		ev.pt.Delete(lineStart, lineEnd-lineStart)
 		ev.li.UpdateAfterDelete(lineStart, lineEnd-lineStart)
 	} else {
+		lastLineDeleted = true
 		if ev.CursorLine > 0 {
 			prevLineLen := ev.getLineLength(ev.CursorLine - 1)
 			prevLineStart := ev.li.GetLineOffset(ev.CursorLine - 1)
@@ -2226,12 +2229,31 @@ func (ev *EditorView) DeleteCurrentLine() {
 	ev.invalidateStates(ev.CursorLine)
 	ev.engine.InvalidateFrom(ev.CursorLine)
 
-	lineLen := ev.getLineLength(ev.CursorLine)
-	if ev.CursorPos > lineLen {
-		ev.CursorPos = lineLen
+	if !lastLineDeleted {
+		vRow := ev.engine.GetRowOffset(ev.CursorLine)
+		newOffset := ev.engine.VisualToLogical(vRow, ev.DesiredVisualCol)
+		ev.CursorPos = newOffset - ev.li.GetLineOffset(ev.CursorLine)
+
+		lineLen := ev.getLineLength(ev.CursorLine)
+		if ev.CursorPos == lineLen && ev.CursorBeyondEOL {
+			_, endVCol := ev.engine.LogicalToVisual(ev.li.GetLineOffset(ev.CursorLine) + lineLen)
+			if ev.DesiredVisualCol > endVCol {
+				ev.CursorVirtualSpaces = ev.DesiredVisualCol - endVCol
+			} else {
+				ev.CursorVirtualSpaces = 0
+			}
+		} else {
+			ev.CursorVirtualSpaces = 0
+		}
+	} else {
+		lineLen := ev.getLineLength(ev.CursorLine)
+		if ev.CursorPos > lineLen {
+			ev.CursorPos = lineLen
+		}
+		ev.CursorVirtualSpaces = 0
+		ev.updateDesiredVisualCol()
 	}
-	ev.CursorVirtualSpaces = 0
-	ev.updateDesiredVisualCol()
+
 	ev.ensureCursorVisible()
 }
 
