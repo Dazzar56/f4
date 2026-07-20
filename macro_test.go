@@ -192,6 +192,7 @@ func TestMacro_AssignRobustness(t *testing.T) {
 
 	// 3. Test Alt+X assignment
 	f.Done = false
+	mgr.Buffer = []*vtinput.InputEvent{{Char: 'y', KeyDown: true}}
 	f.ProcessKey(&vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
 		VirtualKeyCode: vtinput.VK_X, ControlKeyState: vtinput.LeftAltPressed,
@@ -254,6 +255,39 @@ func TestMacro_AssignEsc(t *testing.T) {
 	}
 	if !assign.Done {
 		t.Error("Assign frame should be Done after assignment")
+	}
+}
+
+func TestMacro_Clear(t *testing.T) {
+	tmpFile := filepath.Join(t.TempDir(), "clear_macros.ini")
+	mgr := NewMacroManager(tmpFile)
+
+	// 1. Assign a macro first
+	key := KeyStr(vtinput.VK_F3, 0)
+	mgr.Macros[key] = []*vtinput.InputEvent{
+		{Type: vtinput.KeyEventType, KeyDown: true, Char: 'x'},
+	}
+	mgr.Save()
+
+	// 2. Simulate empty recording and assigning to F3 (to clear it)
+	mgr.Buffer = nil // Empty recording
+
+	assignFrame := NewMacroAssignFrame(mgr)
+	assignFrame.ProcessKey(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_F3,
+	})
+
+	// 3. Verify it is deleted from active map
+	if _, ok := mgr.Macros[key]; ok {
+		t.Error("Macro should be completely deleted from map when assigned an empty buffer")
+	}
+
+	// 4. Verify it is deleted from saved file
+	mgr2 := NewMacroManager(tmpFile)
+	if _, ok := mgr2.Macros[key]; ok {
+		t.Error("Cleared macro should not persist in the saved INI file")
 	}
 }
 

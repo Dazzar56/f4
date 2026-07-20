@@ -200,7 +200,11 @@ func (f *MacroAssignFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	if f.mgr.Macros == nil {
 		f.mgr.Macros = make(map[string][]*vtinput.InputEvent)
 	}
-	f.mgr.Macros[key] = f.mgr.Buffer
+	if len(f.mgr.Buffer) == 0 {
+		delete(f.mgr.Macros, key)
+	} else {
+		f.mgr.Macros[key] = f.mgr.Buffer
+	}
 	f.mgr.Buffer = nil
 	f.mgr.Save()
 	f.SetExitCode(0)
