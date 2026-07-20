@@ -211,8 +211,6 @@ func (vv *ViewerView) DisplayObject(scr *vtui.ScreenBuf) {
 					maxOffset = 0
 				}
 			}
-		} else if vv.eofVisible {
-			maxOffset = int(vv.TopOffset)
 		}
 		vv.scrollBar.SetParams(int(vv.TopOffset), 0, maxOffset)
 		vv.scrollBar.Show(scr)

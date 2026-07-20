@@ -1526,9 +1526,13 @@ func (ev *EditorView) fillCells(target []vtui.CharInfo, data []byte, defaultAttr
 		} else if r == ' ' && ev.ShowWhitespaces {
 			displayRune = '·'
 		} else if r < 0x20 || r == 0x7F {
+			w = 1
 			if !ev.ShowWhitespaces {
 				displayRune = ' '
 			}
+		}
+		if w <= 0 {
+			w = 1
 		}
 
 		attr := defaultAttr

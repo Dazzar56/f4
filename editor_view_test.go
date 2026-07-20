@@ -3073,6 +3073,123 @@ func TestEditorView_StateRestoration_BoundaryClamping(t *testing.T) {
 		t.Errorf("Clamping failed. Expected line 0, got %d", ev.CursorLine)
 	}
 }
+func TestEditorView_CharacterWidthConsistency(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pt := piecetable.New([]byte{0x01, 0x00, 'a'})
+	ev := NewEditorView(pt, nil, "test.txt")
+	defer ev.Close()
+	ev.SetPosition(0, 0, 80, 24)
+
+	_, col2 := ev.engine.LogicalToVisual(2)
+	cells := ev.fillCells(nil, []byte{0x01, 0x00, 'a'}, 0, 0, 0, false, 0, 0, nil, 0, false, -1, 0)
+
+	if col2 != 2 {
+		t.Errorf("Expected LogicalToVisual col 2, got %d", col2)
+	}
+	if len(cells) != 3 {
+		t.Errorf("Expected 3 cells rendered for control chars + 'a' to prevent disappearing, got %d", len(cells))
+	}
+	for i, cell := range cells {
+		if cell.Char == 0 {
+			t.Errorf("Cell at index %d has character code 0, which might disappear in terminal rendering", i)
+		}
+	}
+}
+
+func TestEditorView_CrosshairStateAndNoLeak(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	oldCrosshair := AppConfig.EditorCrosshair
+	AppConfig.EditorCrosshair = true
+	defer func() { AppConfig.EditorCrosshair = oldCrosshair }()
+
+	pt := piecetable.New([]byte("line1\nline2\nline3"))
+	ev := NewEditorView(pt, nil, "test.txt")
+	defer ev.Close()
+	ev.SetPosition(0, 0, 80, 10)
+
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 11)
+
+	ev.CursorLine = 1
+	ev.CursorPos = 2
+	ev.SetFocus(true)
+
+	ev.Show(scr)
+
+	crossAttr := vtui.Palette[ColEditorCrosshair]
+	crossBG := vtui.GetRGBBack(crossAttr)
+
+	activeRowCell := scr.GetCell(5, 2)
+	if vtui.GetRGBBack(activeRowCell.Attributes) != crossBG {
+		t.Errorf("Expected active row Y=2 to have crosshair background %06X, got %06X", crossBG, vtui.GetRGBBack(activeRowCell.Attributes))
+	}
+
+	nonActiveRowCell := scr.GetCell(5, 1)
+	if vtui.GetRGBBack(nonActiveRowCell.Attributes) == crossBG {
+		t.Error("Non-active row erroneously has crosshair background (sticking/leakage)")
+	}
+
+	verticalCell := scr.GetCell(2, 1)
+	if vtui.GetRGBBack(verticalCell.Attributes) != crossBG {
+		t.Errorf("Expected vertical crosshair column X=2 on non-active row Y=1 to have crosshair background, got %06X", vtui.GetRGBBack(verticalCell.Attributes))
+	}
+
+	ev.CursorLine = 0
+	ev.CursorPos = 0
+	ev.Show(scr)
+
+	activeRowCellAfter := scr.GetCell(5, 2)
+	if vtui.GetRGBBack(activeRowCellAfter.Attributes) == crossBG {
+		t.Error("Crosshair background leaked/stuck on row 2 after cursor moved away")
+	}
+}
+func TestEditorView_ZeroAndDoubleWidthConsistency(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	text := []byte("a\u0301世b")
+	pt := piecetable.New(text)
+	ev := NewEditorView(pt, nil, "test.txt")
+	defer ev.Close()
+	ev.SetPosition(0, 0, 80, 24)
+
+	_, colA := ev.engine.LogicalToVisual(1)
+	_, colCombining := ev.engine.LogicalToVisual(3)
+	_, colCJK := ev.engine.LogicalToVisual(6)
+	_, colB := ev.engine.LogicalToVisual(7)
+
+	cells := ev.fillCells(nil, text, 0, 0, 0, false, 0, 0, nil, 0, false, -1, 0)
+
+	if colA != 1 {
+		t.Errorf("Expected column after 'a' to be 1, got %d", colA)
+	}
+	if colCombining != 2 {
+		t.Errorf("Expected column after combining char to be 2, got %d", colCombining)
+	}
+	if colCJK != 4 {
+		t.Errorf("Expected column after CJK char to be 4, got %d", colCJK)
+	}
+	if colB != 5 {
+		t.Errorf("Expected column after 'b' to be 5, got %d", colB)
+	}
+
+	if len(cells) != 5 {
+		t.Errorf("Expected exactly 5 cells rendered (1 for 'a', 1 for combining, 2 for CJK, 1 for 'b'), got %d", len(cells))
+	}
+
+	if cells[0].Char != 'a' {
+		t.Errorf("Expected cells[0] to be 'a', got %c", rune(cells[0].Char))
+	}
+	if cells[2].Char != '世' {
+		t.Errorf("Expected cells[2] to be '世', got %c", rune(cells[2].Char))
+	}
+	if cells[3].Char != uint64(vtui.WideCharFiller) {
+		t.Errorf("Expected cells[3] to be WideCharFiller, got %d", cells[3].Char)
+	}
+	if cells[4].Char != 'b' {
+		t.Errorf("Expected cells[4] to be 'b', got %c", rune(cells[4].Char))
+	}
+}
 
 func TestEditorView_StateRestoration_UnicodeColumn(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())

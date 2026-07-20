@@ -566,8 +566,8 @@ func TestViewerView_ScrollbarEOFAlignment(t *testing.T) {
 	// Вызываем Show, чтобы сработала логика SetParams внутри DisplayObject
 	vv.Show(scr)
 
-	if int(vv.TopOffset) != vv.scrollBar.Max {
-		t.Errorf("Text Mode: TopOffset (%d) != ScrollBar.Max (%d) at EOF", vv.TopOffset, vv.scrollBar.Max)
+	if vv.scrollBar.Max != int(vv.backend.Size()) {
+		t.Errorf("Text Mode: ScrollBar.Max (%d) != Size (%d) at EOF", vv.scrollBar.Max, vv.backend.Size())
 	}
 
 	// --- 2. Проверка в Hex режиме ---
@@ -583,5 +583,47 @@ func TestViewerView_ScrollbarEOFAlignment(t *testing.T) {
 	// Дополнительно: проверяем, что TopOffset в Hex выровнен по 16 байт
 	if vv.TopOffset%16 != 0 {
 		t.Errorf("Hex Mode: TopOffset (%d) is not aligned to 16 bytes", vv.TopOffset)
+	}
+}
+func TestViewerView_ScrollbarStability(t *testing.T) {
+	fm := vtui.FrameManager
+	fm.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	tmpDir := t.TempDir()
+	tmp := filepath.Join(tmpDir, "stability_test.txt")
+	os.WriteFile(tmp, []byte(strings.Repeat("line\n", 200)), 0644)
+
+	v := vfs.NewOSVFS(tmpDir)
+	vv, err := NewViewerView(context.Background(), v, tmp)
+	if err != nil {
+		t.Fatalf("Failed to create ViewerView: %v", err)
+	}
+	defer vv.Close()
+
+	vv.SetPosition(0, 0, 40, 10)
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(41, 11)
+
+	vv.eofVisible = true
+	vv.TopOffset = 10
+
+	// Trigger initial show to start background fetch
+	vv.Show(scr)
+
+	// Pump tasks to wait for background fetch to complete and scrollbar to initialize
+	timeout := time.After(2 * time.Second)
+	for vv.scrollBar.Max == 0 {
+		select {
+		case task := <-fm.TaskChan:
+			task()
+			vv.Show(scr)
+		case <-timeout:
+			t.Fatal("Timeout waiting for scrollbar Max to be populated")
+		}
+	}
+
+	if vv.scrollBar.Max != int(vv.backend.Size()) {
+		t.Errorf("Expected scrollbar Max to remain stable at %d even when eofVisible is true, got %d", vv.backend.Size(), vv.scrollBar.Max)
 	}
 }
