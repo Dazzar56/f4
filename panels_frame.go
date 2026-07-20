@@ -1235,6 +1235,14 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				pf.showRightPanel = true
 			}
 			return true
+		} else {
+			if AppConfig.CommandLineAutoComplete && !pf.cmdLine.IsEmpty() {
+				acMenu := vtui.NewAutoCompleteMenu(pf.cmdLine.Edit)
+				if acMenu.HasMatches() {
+					vtui.FrameManager.Push(acMenu)
+					return true
+				}
+			}
 		}
 	}
 

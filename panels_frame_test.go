@@ -1897,6 +1897,42 @@ func TestPanelsFrame_DriveMenu_TerminalBusy(t *testing.T) {
 	}
 }
 
+func TestPanelsFrame_TerminalTabAutoComplete(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	// 1. Hide panels
+	pf.showPanels = false
+
+	// 2. Add history item starting with "cd" to guarantee a match
+	pf.cmdLine.Edit.History = []string{"cd_test_dir"}
+	pf.cmdLine.Edit.SetText("cd")
+
+	// 3. Press Tab
+	handled := pf.ProcessKey(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_TAB,
+	})
+
+	if !handled {
+		t.Error("Expected Tab to be handled as autocomplete trigger when panels are hidden")
+	}
+
+	// 4. Verify AutoCompleteMenu is pushed
+	top := vtui.FrameManager.GetTopFrame()
+	if top == nil {
+		t.Error("Expected AutoCompleteMenu to be on top of the frame stack")
+	} else {
+		// Clean up
+		vtui.FrameManager.Pop()
+	}
+}
+
 func TestDriveMenu_SmartHotkeys(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pf := NewPanelsFrame()
