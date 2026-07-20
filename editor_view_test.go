@@ -3758,3 +3758,68 @@ func TestDeleteLinePreservesVisualColumn(t *testing.T) {
 		t.Errorf("Expected DesiredVisualCol to remain 20, got %d", ev.DesiredVisualCol)
 	}
 }
+
+func TestEditorViewInsertOverwriteCursorShape(t *testing.T) {
+	vtui.SetDefaultPalette()
+	SetDefaultF4Palette()
+
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+
+	pt := piecetable.New([]byte("hello world"))
+	ev := NewEditorView(pt, nil, "test.txt")
+	ev.ResizeConsole(80, 25)
+
+	vtui.FrameManager.Push(desktopWindowWrapper{ev})
+
+	// Симулируем рендеринг, чтобы обновить состояние ScreenBuf
+	ev.Show(scr)
+	scr.Flush()
+
+	// По умолчанию overtype = false, курсор должен быть Underline
+	if ev.overtype {
+		t.Error("Expected default overtype mode to be false")
+	}
+
+	_, cy := scr.GetCursorPos()
+	// Проверяем форму курсора на активной строке
+	if cy >= 0 {
+		_, _, _, shape := scr.GetCursorStateForTesting()
+		if shape != vtui.CursorShapeUnderline {
+			t.Errorf("Expected cursor shape to be Underline, got %v", shape)
+		}
+	}
+
+	// Нажимаем Insert
+	ev.ProcessKey(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_INSERT,
+	})
+
+	// Проверяем, что режим сменился на overtype
+	if !ev.overtype {
+		t.Error("Expected overtype mode to be true after pressing Insert")
+	}
+
+	// Рендерим заново
+	ev.Show(scr)
+	scr.Flush()
+
+	// Теперь форма курсора должна быть Block
+	if cy >= 0 {
+		_, _, _, shape := scr.GetCursorStateForTesting()
+		if shape != vtui.CursorShapeBlock {
+			t.Errorf("Expected cursor shape to be Block after toggling overtype, got %v", shape)
+		}
+	}
+}
+
+type desktopWindowWrapper struct {
+	*EditorView
+}
+
+func (d desktopWindowWrapper) GetType() vtui.FrameType {
+	return vtui.TypeUser
+}

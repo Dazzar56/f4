@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -443,15 +442,6 @@ func (ev *EditorView) Show(scr *vtui.ScreenBuf) {
 	if ev.topBar != nil {
 		ev.topBar.Show(scr)
 	}
-	if ev.IsFocused() {
-		if vtui.ManageCursorStyle {
-			if ev.overtype {
-				os.Stdout.WriteString("\x1b[1 q") // Blinking Block
-			} else {
-				os.Stdout.WriteString("\x1b[3 q") // Blinking Underline
-			}
-		}
-	}
 	ev.DisplayObject(scr)
 }
 
@@ -622,6 +612,11 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 			if absVRow == curVRow {
 				scr.SetCursorPos(ev.X1+curVCol+ev.CursorVirtualSpaces-ev.ScrollLeft, currY)
 				scr.SetCursorVisible(true)
+				if ev.overtype {
+					scr.SetCursorShape(vtui.CursorShapeBlock)
+				} else {
+					scr.SetCursorShape(vtui.CursorShapeUnderline)
+				}
 			}
 
 			rowsRendered++
