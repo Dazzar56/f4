@@ -616,6 +616,32 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
 
+	// Raw input mode check at the very top. If an interactive AltScreen app is active (e.g. mc, htop),
+	// we forward ALL keys to PTY, except workspace switcher keys (Ctrl+Tab in standard mode, Ctrl+Shift+Tab in advanced).
+	if !pf.showPanels && pf.termView.UseAltScreen {
+		isAdvanced := pf.termView.Win32InputMode || pf.termView.KittyFlags != 0
+		isWorkspaceSwitch := false
+		if e.VirtualKeyCode == vtinput.VK_TAB && ctrl {
+			if isAdvanced {
+				isWorkspaceSwitch = shift
+			} else {
+				isWorkspaceSwitch = true
+			}
+		}
+
+		if !isWorkspaceSwitch {
+			if e.KeyDown || pf.termView.Win32InputMode || pf.termView.KittyFlags != 0 {
+				active := pf.getActivePTY()
+				if active != nil {
+					if seq := TranslateInput(e, pf.termView.Win32InputMode, pf.termView.KittyFlags, pf.termView.ApplicationCursorKeys); seq != "" {
+						active.Write([]byte(seq))
+					}
+				}
+			}
+			return true
+		}
+	}
+
 	// Check global hotkeys (ignoring Lock and Enhanced keys)
 	for _, hk := range GlobalHotkeys {
 		hkCtrl := (hk.Mods & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
@@ -752,21 +778,9 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	}
 
-	// Raw input mode for interactive terminal apps or active shell commands
-	if !pf.showPanels && (pf.termView.UseAltScreen || pf.isPtyBusy()) {
-		isCtrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
-		isShift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
-
-		if e.VirtualKeyCode == vtinput.VK_TAB && isCtrl {
-			if isShift {
-				return false
-			}
-			isAdvanced := pf.termView.Win32InputMode || pf.termView.KittyFlags != 0
-			if !isAdvanced {
-				return false
-			}
-		}
-
+	// Raw input mode fallback for active shell commands (non-AltScreen, e.g. ping).
+	// We forward text and navigation to PTY, but let global shortcuts (Ctrl+O) fall through.
+	if !pf.showPanels && pf.isPtyBusy() {
 		if e.KeyDown || pf.termView.Win32InputMode || pf.termView.KittyFlags != 0 {
 			active := pf.getActivePTY()
 			if active != nil {
@@ -1287,6 +1301,18 @@ func (pf *PanelsFrame) HandleBroadcast(cmd int, args any) bool {
 }
 
 func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
+	// If panels are hidden, route relevant mouse events to PTY immediately
+	if !pf.showPanels {
+		active := pf.getActivePTY()
+		if active != nil && (pf.termView.MouseTrackingMode != 0 || pf.termView.Win32InputMode) {
+			seq := TranslateMouseInput(e)
+			active.Write([]byte(seq))
+			return true
+		}
+		// If tracking is off, we still swallow clicks inside AltScreen to prevent hitting hidden panels
+		return e.ButtonState != 0 || e.WheelDirection != 0
+	}
+
 	// Wheel events always scroll the active panel, regardless of mouse position.
 	// This matches classic Far Manager / far2l behavior.
 	if e.WheelDirection != 0 {

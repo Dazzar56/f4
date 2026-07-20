@@ -2574,6 +2574,64 @@ func TestPanelsFrame_ShiftF5_KeyInterception(t *testing.T) {
 	top.SetExitCode(-1)
 	vtui.FrameManager.Pop()
 }
+func TestPanelsFrame_MouseForwarding_ToPTY(t *testing.T) {
+	pf := setupMockPanelsFrame()
+	pty := pf.pty.(*mockPty)
+	defer pf.Close()
+
+	// Setup: hidden panels and mouse tracking enabled in terminal
+	pf.showPanels = false
+	pf.termView.MouseTrackingMode = 1000
+	pf.termView.MouseSGRMode = true
+
+	// Simulate left click at (10, 10)
+	ev := &vtinput.InputEvent{
+		Type:            vtinput.MouseEventType,
+		KeyDown:         true,
+		MouseX:          10,
+		MouseY:          10,
+		ButtonState:     vtinput.FromLeft1stButtonPressed,
+		ControlKeyState: 0,
+	}
+
+	handled := pf.ProcessMouse(ev)
+	if !handled {
+		t.Fatal("Mouse event should be handled by PanelsFrame when panels are hidden")
+	}
+
+	// PTY must receive SGR 1006 sequence: \x1b[<0;11;11M (1-based coords)
+	expected := "\x1b[<0;11;11M"
+	if !strings.Contains(pty.String(), expected) {
+		t.Errorf("PTY did not receive expected mouse sequence. Got: %q, want to contain: %q", pty.String(), expected)
+	}
+}
+func TestPanelsFrame_NoCtrlOInterception_InAltScreen(t *testing.T) {
+	pf := setupMockPanelsFrame()
+	pty := pf.pty.(*mockPty)
+	defer pf.Close()
+
+	pf.showPanels = false
+	pf.termView.UseAltScreen = true
+
+	// Send Ctrl+O
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_O,
+		Char:            15, // Ctrl+O character code
+		ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+
+	// Panels must remain hidden (f4 must NOT intercept Ctrl+O when terminal app is active)
+	if pf.showPanels {
+		t.Error("f4 erroneously intercepted Ctrl+O while terminal app was active")
+	}
+
+	// PTY must receive the Ctrl+O byte (\x0f)
+	if !strings.Contains(pty.String(), "\x0f") {
+		t.Errorf("PTY did not receive Ctrl+O byte. Got: %q", pty.String())
+	}
+}
 
 type mockTaskReporter struct{}
 
