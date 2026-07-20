@@ -843,6 +843,12 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 			return true
 		}
 
+	case vtinput.VK_Y:
+		if ctrl && !alt && !shift {
+			ev.DeleteCurrentLine()
+			return true
+		}
+
 	case vtinput.VK_A:
 		if ctrl {
 			ev.selActive = true
@@ -2148,6 +2154,7 @@ func (ev *EditorView) PasteText(text string) {
 	ev.updateDesiredVisualCol()
 	ev.ensureCursorVisible()
 }
+
 func (ev *EditorView) DeleteSelection() {
 	min, max := ev.getSelectionRange()
 	// Safety clamp to prevent panic on stale selection ranges
@@ -2179,6 +2186,51 @@ func (ev *EditorView) DeleteSelection() {
 		ev.CursorPos = min - ev.li.GetLineOffset(ev.CursorLine)
 	}
 }
+
+func (ev *EditorView) DeleteCurrentLine() {
+	if ev.pt.Size() == 0 {
+		return
+	}
+	ev.saveUndo(opOther)
+	ev.modified = true
+
+	lineStart := ev.li.GetLineOffset(ev.CursorLine)
+	lineEnd := ev.pt.Size()
+
+	if ev.CursorLine+1 < ev.li.LineCount() {
+		lineEnd = ev.li.GetLineOffset(ev.CursorLine + 1)
+		ev.pt.Delete(lineStart, lineEnd-lineStart)
+		ev.li.UpdateAfterDelete(lineStart, lineEnd-lineStart)
+	} else {
+		if ev.CursorLine > 0 {
+			prevLineLen := ev.getLineLength(ev.CursorLine - 1)
+			prevLineStart := ev.li.GetLineOffset(ev.CursorLine - 1)
+			deleteStart := prevLineStart + prevLineLen
+
+			ev.pt.Delete(deleteStart, lineEnd-deleteStart)
+			ev.li.UpdateAfterDelete(deleteStart, lineEnd-deleteStart)
+
+			ev.CursorLine--
+			ev.CursorPos = prevLineLen
+		} else {
+			ev.pt.Delete(0, lineEnd)
+			ev.li.UpdateAfterDelete(0, lineEnd)
+			ev.CursorPos = 0
+		}
+	}
+
+	ev.invalidateStates(ev.CursorLine)
+	ev.engine.InvalidateFrom(ev.CursorLine)
+
+	lineLen := ev.getLineLength(ev.CursorLine)
+	if ev.CursorPos > lineLen {
+		ev.CursorPos = lineLen
+	}
+	ev.CursorVirtualSpaces = 0
+	ev.updateDesiredVisualCol()
+	ev.ensureCursorVisible()
+}
+
 func (ev *EditorView) GetType() vtui.FrameType { return vtui.TypeUser + 2 }
 func (ev *EditorView) IsBusy() bool            { return ev.pasting || ev.saving }
 func (ev *EditorView) GetTitle() string {
