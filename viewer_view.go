@@ -299,6 +299,10 @@ func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, contentHeight int) 
 		textLen := 0
 		visualWidth := 0
 		foundNewline := false
+		tabSize := 8
+		if AppConfig.EditorTabSize > 0 {
+			tabSize = AppConfig.EditorTabSize
+		}
 
 		for lineLen < len(data) {
 			r, size := utf8.DecodeRune(data[lineLen:])
@@ -312,7 +316,15 @@ func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, contentHeight int) 
 				continue
 			}
 
-			rw := runewidth.RuneWidth(r)
+			rw := 1
+			if r == '\t' {
+				rw = tabSize - (visualWidth % tabSize)
+			} else {
+				rw = runewidth.RuneWidth(r)
+				if rw <= 0 {
+					rw = 1
+				}
+			}
 			if vv.WrapMode && visualWidth+rw > width {
 				// Wrap occurred
 				break
@@ -322,7 +334,38 @@ func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, contentHeight int) 
 			textLen = lineLen
 		}
 
-		scr.Write(vv.X1, vv.Y1+1+y, vtui.StringToCharInfo(string(data[:textLen]), attr))
+		// Build []vtui.CharInfo for the line
+		var cells []vtui.CharInfo
+		lineBytes := data[:textLen]
+		visualCol := 0
+
+		for len(lineBytes) > 0 {
+			r, size := utf8.DecodeRune(lineBytes)
+			lineBytes = lineBytes[size:]
+
+			if r == '\t' {
+				w := tabSize - (visualCol % tabSize)
+				for i := 0; i < w; i++ {
+					cells = append(cells, vtui.CharInfo{Char: ' ', Attributes: attr})
+				}
+				visualCol += w
+			} else {
+				displayRune, w := vtui.SanitizeRune(r)
+				if r < 0x20 || r == 0x7F {
+					displayRune = ' '
+				}
+				if w > 0 {
+					charVal := uint64(displayRune)
+					for i := 0; i < w; i++ {
+						cells = append(cells, vtui.CharInfo{Char: charVal, Attributes: attr})
+						charVal = uint64(vtui.WideCharFiller)
+					}
+					visualCol += w
+				}
+			}
+		}
+
+		scr.Write(vv.X1, vv.Y1+1+y, cells)
 		currOffset += int64(lineLen)
 
 		if !foundNewline && !vv.WrapMode {
@@ -407,13 +450,25 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 			if err == nil && len(data) > 0 {
 				lineLen := 0
 				visualWidth := 0
+				tabSize := 8
+				if AppConfig.EditorTabSize > 0 {
+					tabSize = AppConfig.EditorTabSize
+				}
 				for lineLen < len(data) {
 					r, size := utf8.DecodeRune(data[lineLen:])
 					if r == '\n' {
 						lineLen += size
 						break
 					}
-					rw := runewidth.RuneWidth(r)
+					rw := 1
+					if r == '\t' {
+						rw = tabSize - (visualWidth % tabSize)
+					} else {
+						rw = runewidth.RuneWidth(r)
+						if rw <= 0 {
+							rw = 1
+						}
+					}
 					if vv.WrapMode && visualWidth+rw > width {
 						break
 					}
@@ -537,6 +592,10 @@ func (vv *ViewerView) jumpToEnd() {
 		var offsets []int64
 		currOff := startOff
 
+		tabSize := 8
+		if AppConfig.EditorTabSize > 0 {
+			tabSize = AppConfig.EditorTabSize
+		}
 		for currOff < vv.backend.Size() {
 			if ctx.Err() != nil {
 				return
@@ -567,7 +626,15 @@ func (vv *ViewerView) jumpToEnd() {
 						lineLen += size
 						continue
 					}
-					rw := runewidth.RuneWidth(r)
+					rw := 1
+					if r == '\t' {
+						rw = tabSize - (visualWidth % tabSize)
+					} else {
+						rw = runewidth.RuneWidth(r)
+						if rw <= 0 {
+							rw = 1
+						}
+					}
 					if vv.WrapMode && visualWidth+rw > width {
 						break
 					}

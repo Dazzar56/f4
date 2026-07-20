@@ -397,6 +397,61 @@ func TestViewerView_HexModeToggle(t *testing.T) {
 	}
 
 }
+
+func TestViewerView_TabRendering(t *testing.T) {
+	vtui.SetDefaultPalette()
+	tmpDir := t.TempDir()
+	tmp := filepath.Join(tmpDir, "tab.txt")
+	// "a\tb" -> tab should expand to spaces
+	os.WriteFile(tmp, []byte("a\tb"), 0644)
+
+	v := vfs.NewOSVFS(tmpDir)
+	vv, err := NewViewerView(context.Background(), v, tmp)
+	if err != nil {
+		t.Fatalf("Failed to create ViewerView: %v", err)
+	}
+	defer vv.Close()
+
+	vv.SetPosition(0, 0, 10, 2) // Width 11
+
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(11, 3)
+	vtui.FrameManager.Init(scr)
+
+	vv.Show(scr)
+
+	// Wait for background loader
+	deadline := time.Now().Add(2 * time.Second)
+	for len(vv.lineOffsets) < 2 {
+		if time.Now().After(deadline) {
+			t.Fatal("Timeout waiting for tab view fetch")
+		}
+		vv.Show(scr)
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		default:
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	vv.Show(scr)
+
+	// Tab size is AppConfig.EditorTabSize (default 4).
+	// "a" (col 0) -> "\t" starts at col 1, should take 3 spaces to reach col 4.
+	// "b" should be at col 4.
+	cell := scr.GetCell(4, 1) // Y=1 is content row
+	if cell.Char != 'b' {
+		t.Errorf("Tab expansion failed. Expected 'b' at column 4, got '%c' (U+%04X)", rune(cell.Char), cell.Char)
+	}
+
+	// Columns 1, 2, 3 should be empty spaces (' ')
+	for x := 1; x <= 3; x++ {
+		c := scr.GetCell(x, 1)
+		if c.Char != ' ' {
+			t.Errorf("Expected space at col %d, got '%c'", x, rune(c.Char))
+		}
+	}
+}
 func TestViewerView_EndJump_BusyState(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	tmp := filepath.Join(t.TempDir(), "large.txt")

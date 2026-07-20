@@ -524,6 +524,10 @@ func semanticHexLine(offset int64, data []byte) string {
 
 func semanticViewerLineLen(data []byte, width int, wrap bool) (lineLen int, textLen int) {
 	visualWidth := 0
+	tabSize := 8
+	if AppConfig.EditorTabSize > 0 {
+		tabSize = AppConfig.EditorTabSize
+	}
 	for lineLen < len(data) {
 		r, size := utf8.DecodeRune(data[lineLen:])
 		if r == '\n' {
@@ -534,7 +538,15 @@ func semanticViewerLineLen(data []byte, width int, wrap bool) (lineLen int, text
 			lineLen += size
 			continue
 		}
-		rw := runewidth.RuneWidth(r)
+		rw := 1
+		if r == '\t' {
+			rw = tabSize - (visualWidth % tabSize)
+		} else {
+			rw = runewidth.RuneWidth(r)
+			if rw <= 0 {
+				rw = 1
+			}
+		}
 		if wrap && visualWidth+rw > width {
 			return lineLen, textLen
 		}
