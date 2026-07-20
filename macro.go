@@ -17,6 +17,7 @@ var MacroMgr *MacroManager
 type MacroManager struct {
 	Macros    map[string][]*vtinput.InputEvent
 	Recording bool
+	Assigning bool
 	Buffer    []*vtinput.InputEvent
 	iniPath   string
 }
@@ -82,8 +83,8 @@ func (m *MacroManager) Filter(e *vtinput.InputEvent) bool {
 		return true // Trigger is ALWAYS consumed
 	}
 
-	if m.Recording {
-		if e.KeyDown {
+	if m.Recording || m.Assigning {
+		if e.KeyDown && m.Recording {
 			switch e.VirtualKeyCode {
 			case vtinput.VK_SHIFT, vtinput.VK_LSHIFT, vtinput.VK_RSHIFT,
 				vtinput.VK_CONTROL, vtinput.VK_LCONTROL, vtinput.VK_RCONTROL,
@@ -94,7 +95,7 @@ func (m *MacroManager) Filter(e *vtinput.InputEvent) bool {
 				m.Buffer = append(m.Buffer, e)
 			}
 		}
-		return false // Let it pass to the UI so user sees what they type
+		return false // Let it pass to the UI so user sees what they type / dialog catches it
 	}
 
 	if !e.KeyDown {
@@ -112,6 +113,7 @@ func (m *MacroManager) Filter(e *vtinput.InputEvent) bool {
 }
 
 func (m *MacroManager) showAssignDialog() {
+	m.Assigning = true
 	frame := NewMacroAssignFrame(m)
 	vtui.FrameManager.Push(frame)
 }
@@ -241,3 +243,8 @@ func (f *MacroAssignFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 func (f *MacroAssignFrame) GetType() vtui.FrameType { return vtui.TypeDialog }
 func (f *MacroAssignFrame) IsModal() bool           { return true }
 func (f *MacroAssignFrame) GetTitle() string        { return "Macro Assign" }
+
+func (f *MacroAssignFrame) SetExitCode(code int) {
+	f.mgr.Assigning = false
+	f.Window.SetExitCode(code)
+}

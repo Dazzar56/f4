@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
@@ -425,5 +426,88 @@ func TestMacroClearRecordingIsEmpty(t *testing.T) {
 
 	if len(mgr.Buffer) != 0 {
 		t.Errorf("Expected macro buffer to be empty for immediate stop recording, but got %d items", len(mgr.Buffer))
+	}
+}
+
+func TestMacroClearResetsExisting(t *testing.T) {
+	mgr := NewMacroManager("")
+	mgr.Macros = map[string][]*vtinput.InputEvent{
+		"C:0": {{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F3}},
+	}
+
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+
+	// 1. Начинаем запись макроса
+	startEvent := &vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_OEM_PERIOD,
+		Char:            '.',
+		ControlKeyState: vtinput.LeftCtrlPressed,
+	}
+	mgr.Filter(startEvent)
+
+	if !mgr.Recording {
+		t.Error("Expected MacroManager to be in Recording state")
+	}
+
+	// 2. Останавливаем запись (буфер пуст)
+	stopEvent := &vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_OEM_PERIOD,
+		Char:            '.',
+		ControlKeyState: vtinput.LeftCtrlPressed,
+	}
+	mgr.Filter(stopEvent)
+
+	if mgr.Recording {
+		t.Error("Expected MacroManager to stop Recording")
+	}
+
+	// Выполняем все накопившиеся асинхронные задачи, пока не включится нужный режим
+	timeout := time.After(1 * time.Second)
+WaitLoop:
+	for !mgr.Assigning {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Timeout waiting for Assigning state")
+			break WaitLoop
+		}
+	}
+
+	if !mgr.Assigning {
+		t.Error("Expected MacroManager to be in Assigning state")
+	}
+
+	// Пытаемся нажать 'Clear' (VK_CLEAR = 0x0C)
+	clearEvent := &vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_CLEAR,
+	}
+
+	// Фильтр НЕ должен поглотить событие воспроизведением старого макроса,
+	// так как активен режим назначения (Assigning == true)
+	consumed := mgr.Filter(clearEvent)
+	if consumed {
+		t.Error("Expected Filter to not consume VK_CLEAR while Assigning is active")
+	}
+
+	// Симулируем обработку нажатия диалогом
+	frame := NewMacroAssignFrame(mgr)
+	frame.ProcessKey(clearEvent)
+
+	// После обработки флаг назначения должен сброситься, а макрос удалиться
+	if mgr.Assigning {
+		t.Error("Expected Assigning state to be cleared after key processing")
+	}
+
+	if _, exists := mgr.Macros["C:0"]; exists {
+		t.Error("Expected macro on C:0 to be deleted")
 	}
 }
