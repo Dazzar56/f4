@@ -154,7 +154,7 @@ func main() {
 	}
 
 	if version {
-		fmt.Println(vtui.GetVersionInfo())
+		fmt.Println(getFormattedVersionInfo())
 		return
 	}
 
@@ -283,7 +283,7 @@ func InitCore() *vtui.ScreenBuf {
 
 func SetupUI() {
 	vtui.ConfigDiskLogging(true)
-	vtui.DebugLog("=== F4 STARTUP [%s] PID:%d ===", vtui.GetVersionInfo(), os.Getpid())
+	vtui.DebugLog("=== F4 STARTUP [%s] PID:%d ===", getFormattedVersionInfo(), os.Getpid())
 
 	SetDefaultF4Palette()
 	InitLang()
@@ -439,4 +439,46 @@ func SaveSession() {
 	}
 
 	vtui.DebugLog("SESSION: Saved state to %s", path)
+}
+
+func getFormattedVersionInfo() string {
+	return formatVersionSHA(vtui.GetVersionInfo())
+}
+
+func formatVersionSHA(v string) string {
+	runes := []rune(v)
+	var res []rune
+	i := 0
+	for i < len(runes) {
+		if i+8 <= len(runes) && isHexSequence(runes[i:i+8]) {
+			isStandalone := true
+			if i > 0 && isHexChar(runes[i-1]) {
+				isStandalone = false
+			}
+			if i+8 < len(runes) && isHexChar(runes[i+8]) {
+				isStandalone = false
+			}
+			if isStandalone {
+				res = append(res, runes[i:i+7]...)
+				i += 8
+				continue
+			}
+		}
+		res = append(res, runes[i])
+		i++
+	}
+	return string(res)
+}
+
+func isHexSequence(s []rune) bool {
+	for _, r := range s {
+		if !isHexChar(r) {
+			return false
+		}
+	}
+	return true
+}
+
+func isHexChar(r rune) bool {
+	return (r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')
 }
