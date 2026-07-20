@@ -356,7 +356,13 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 						if itemStat.IsDir {
 							tracker.DirDone()
 						} else {
-							tracker.StartFile(name, itemStat.Size)
+							displayString := name
+							if AppConfig.FileOpPathDisplay == 1 {
+								displayString = srcPath
+							} else if AppConfig.FileOpPathDisplay == 2 {
+								displayString = srcPath + " -> " + targetItemPath
+							}
+							tracker.StartFile(displayString, itemStat.Size)
 							tracker.UpdateBytes(int(itemStat.Size))
 							tracker.FileDone()
 						}
@@ -499,7 +505,11 @@ func ExecuteDeleteOp(pf *PanelsFrame, activeVfs vfs.VFS, names []string, mode in
 			}
 			fullPath := activeVfs.Join(activeVfs.GetPath(), name)
 
-			tracker.StartFile(name, 0)
+			displayString := name
+			if AppConfig.FileOpPathDisplay > 0 {
+				displayString = fullPath
+			}
+			tracker.StartFile(displayString, 0)
 			updateUI(true)
 			handleArchiveIndexDelete(ctx, activeVfs, fullPath)
 
@@ -735,7 +745,13 @@ func recursiveCopy(ctx context.Context, srcVfs vfs.VFS, srcPath string, dstVfs v
 
 	itemName := dstVfs.Base(destPath)
 	if state.Tracker != nil {
-		state.Tracker.StartFile(itemName, stat.Size)
+		displayString := itemName
+		if AppConfig.FileOpPathDisplay == 1 {
+			displayString = srcPath
+		} else if AppConfig.FileOpPathDisplay == 2 {
+			displayString = srcPath + " -> " + destPath
+		}
+		state.Tracker.StartFile(displayString, stat.Size)
 		if state.UpdateUI != nil {
 			state.UpdateUI(false)
 		}

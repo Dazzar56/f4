@@ -1442,6 +1442,63 @@ func TestFileOps_FormatSize(t *testing.T) {
 	}
 }
 
+func TestFileOps_PathDisplay(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	tmpSrc := t.TempDir()
+	tmpDst := t.TempDir()
+
+	srcVfs := vfs.NewOSVFS(tmpSrc)
+	dstVfs := vfs.NewOSVFS(tmpDst)
+
+	os.WriteFile(filepath.Join(tmpSrc, "display.txt"), []byte("data"), 0644)
+
+	orig := AppConfig.FileOpPathDisplay
+	defer func() { AppConfig.FileOpPathDisplay = orig }()
+
+	AppConfig.FileOpPathDisplay = 1
+	tracker1 := NewFileOpTracker(vfs.OpStats{Files: 1, Bytes: 4})
+	var capturedName1 string
+	state := &FileOpState{
+		Tracker: tracker1,
+		Buffer:  make([]byte, 1024),
+		UpdateUI: func(force bool) {
+			_, _, name := tracker1.GetProgress()
+			if name != "" {
+				capturedName1 = name
+			}
+		},
+	}
+	err := recursiveCopy(context.Background(), srcVfs, filepath.Join(tmpSrc, "display.txt"), dstVfs, filepath.Join(tmpDst, "display.txt"), state, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if capturedName1 != filepath.Join(tmpSrc, "display.txt") {
+		t.Errorf("Expected currentName to be full source path, got %q", capturedName1)
+	}
+
+	AppConfig.FileOpPathDisplay = 2
+	tracker2 := NewFileOpTracker(vfs.OpStats{Files: 1, Bytes: 4})
+	var capturedName2 string
+	state2 := &FileOpState{
+		Tracker: tracker2,
+		Buffer:  make([]byte, 1024),
+		UpdateUI: func(force bool) {
+			_, _, name := tracker2.GetProgress()
+			if name != "" {
+				capturedName2 = name
+			}
+		},
+	}
+	err = recursiveCopy(context.Background(), srcVfs, filepath.Join(tmpSrc, "display.txt"), dstVfs, filepath.Join(tmpDst, "display_new.txt"), state2, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := filepath.Join(tmpSrc, "display.txt") + " -> " + filepath.Join(tmpDst, "display_new.txt")
+	if capturedName2 != expected {
+		t.Errorf("Expected currentName to be source -> dest, got %q", capturedName2)
+	}
+}
+
 func TestFileOps_CalculateStats_Integration(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	tmp := t.TempDir()

@@ -35,6 +35,7 @@ type F4Config struct {
 	ConfirmDelete           bool
 	ConfirmExit             bool
 	DefaultFileOpMode       int
+	FileOpPathDisplay       int
 }
 
 var AppConfig = F4Config{
@@ -61,6 +62,7 @@ var AppConfig = F4Config{
 	ConfirmDelete:           true,
 	ConfirmExit:             true,
 	DefaultFileOpMode:       0,
+	FileOpPathDisplay:       0,
 }
 
 var getUserConfigIniPath = func() string {
@@ -106,6 +108,7 @@ func LoadConfig() {
 	AppConfig.ConfirmMove = ini.GetString("System", "ConfirmMove", "1") == "1"
 	AppConfig.ConfirmDelete = ini.GetString("System", "ConfirmDelete", "1") == "1"
 	AppConfig.ConfirmExit = ini.GetString("System", "ConfirmExit", "1") == "1"
+	fmt.Sscanf(ini.GetString("Panel", "FileOpPathDisplay", "0"), "%d", &AppConfig.FileOpPathDisplay)
 
 	AppConfig.EditorAutoComplete = ini.GetString("Editor", "AutoComplete", "1") == "1"
 	AppConfig.EditorAutoCompleteMask = ini.GetString("Editor", "AutoCompleteMask", "*.go;*.c;*.cpp;*.h;*.hpp;*.py;*.js;*.ts;*.rs;*.java;*.sh;*.txt;*.md;*.html;*.css;*.json")
@@ -143,6 +146,7 @@ func SaveConfig() {
 	sb.WriteString(fmt.Sprintf("VimHotkeys = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.VimHotkeys]))
 	sb.WriteString(fmt.Sprintf("SyncPanelLoad = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.SyncPanelLoad]))
 	sb.WriteString(fmt.Sprintf("DefaultFileOpMode = %d\n", AppConfig.DefaultFileOpMode))
+	sb.WriteString(fmt.Sprintf("FileOpPathDisplay = %d\n", AppConfig.FileOpPathDisplay))
 
 	sb.WriteString("\n[System]\n")
 	sb.WriteString(fmt.Sprintf("ConfirmCopy = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.ConfirmCopy]))

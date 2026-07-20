@@ -1475,7 +1475,7 @@ func actionFindFile(pf *PanelsFrame) {
 	vtui.FrameManager.Push(dlg)
 }
 func actionPanelSettings(pf *PanelsFrame) {
-	dlg := vtui.NewCenteredDialog(60, 21, Msg("PanelSettings.Title"))
+	dlg := vtui.NewCenteredDialog(60, 24, Msg("PanelSettings.Title"))
 	dlg.ShowClose = true
 
 	chkHidden := vtui.NewCheckbox(0, 0, Msg("PanelSettings.ShowHidden"), false)
@@ -1526,6 +1526,13 @@ func actionPanelSettings(pf *PanelsFrame) {
 	comboMode.Edit.SetText(modes[AppConfig.DefaultFileOpMode])
 	lblMode := vtui.NewLabel(0, 0, "Default operation &mode:", comboMode)
 
+	pathModes := []string{"Name only", "Full path", "Source -> Destination"}
+	comboPath := vtui.NewComboBox(0, 0, 30, pathModes)
+	comboPath.DropdownOnly = true
+	comboPath.Menu.SetSelectPos(AppConfig.FileOpPathDisplay)
+	comboPath.Edit.SetText(pathModes[AppConfig.FileOpPathDisplay])
+	lblPath := vtui.NewLabel(0, 0, "File path in progress:", comboPath)
+
 	btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))
 	btnOk.IsDefault = true
 	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
@@ -1539,10 +1546,12 @@ func actionPanelSettings(pf *PanelsFrame) {
 	dlg.AddItem(chkSync)
 	dlg.AddItem(lblMode)
 	dlg.AddItem(comboMode)
+	dlg.AddItem(lblPath)
+	dlg.AddItem(comboPath)
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnCancel)
 
-	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 54-4, 21-4)
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 54-4, 24-4)
 	vbox.Add(chkHidden, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkHighlight, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(chkPaths, vtui.Margins{Top: 1}, vtui.AlignLeft)
@@ -1556,6 +1565,11 @@ func actionPanelSettings(pf *PanelsFrame) {
 	rowMode.Add(lblMode, vtui.Margins{Right: 1}, vtui.AlignLeft)
 	rowMode.Add(comboMode, vtui.Margins{}, vtui.AlignFill)
 	vbox.Add(rowMode, vtui.Margins{Top: 1}, vtui.AlignFill)
+
+	rowPath := vtui.NewHBoxLayout(0, 0, 54-4, 1)
+	rowPath.Add(lblPath, vtui.Margins{Right: 1}, vtui.AlignLeft)
+	rowPath.Add(comboPath, vtui.Margins{}, vtui.AlignFill)
+	vbox.Add(rowPath, vtui.Margins{Top: 1}, vtui.AlignFill)
 
 	hbox := vtui.NewHBoxLayout(0, 0, 54-4, 1)
 	hbox.HorizontalAlign = vtui.AlignCenter
@@ -1576,6 +1590,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 		AppConfig.VimHotkeys = chkVim.State == 1
 		AppConfig.SyncPanelLoad = chkSync.State == 1
 		AppConfig.DefaultFileOpMode = comboMode.Menu.SelectPos
+		AppConfig.FileOpPathDisplay = comboPath.Menu.SelectPos
 		vtui.ManageCursorStyle = !AppConfig.KeepTerminalCursor
 		SaveConfig()
 		dlg.Close()
