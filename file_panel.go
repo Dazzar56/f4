@@ -710,26 +710,28 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 			fp.lastDirMTime = dirStat.MTime
 			fp.isLoading = false
 			if err != nil && err != context.Canceled {
-				// For permission errors, go back to parent and show the error.
-				if os.IsPermission(err) {
+				if os.IsNotExist(err) && !fp.vfs.IsAtRoot() && !keepEntries {
+					// If the directory disappeared (e.g., deleted from other panel),
+					// attempt to go up one level silently.
+					vtui.DebugLog("PANEL[%p]: Directory disappeared, attempting to go up. Error: %v", fp, err)
+					fp.vfs.SetPath("..")
+					fp.readDirectoryEx(true)
+					return
+				}
+
+				// For permission or network errors, go back to parent and show the error.
+				if !fp.vfs.IsAtRoot() && !keepEntries {
 					folderName := filepath.Base(path)
 					fp.vfs.SetPath("..")
 					fp.pendingSelection = folderName
 					fp.updateTitle(err)
 					vtui.ShowMessage(" Error ", fmt.Sprintf("Cannot access folder:\n%v", err), []string{"&Ok"})
 					return
-				} else if !fp.vfs.IsAtRoot() && !keepEntries {
-					// If the directory disappeared (e.g., deleted from other panel),
-					// attempt to go up one level instead of showing error.
-					vtui.DebugLog("PANEL[%p]: Directory inaccessible, attempting to go up. Error: %v", fp, err)
-					fp.vfs.SetPath("..")
-					fp.readDirectoryEx(true)
-					return
-				} else {
-					fp.updateTitle(err)
-					vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to read directory:\n%v", err), []string{"&Ok"})
-					return
 				}
+
+				fp.updateTitle(err)
+				vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to read directory:\n%v", err), []string{"&Ok"})
+				return
 			} else {
 				fp.updateTitle(nil)
 			}

@@ -1948,7 +1948,11 @@ func (pf *PanelsFrame) Clone() *PanelsFrame {
 
 	for i, p := range pf.panels {
 		if fsp, ok := p.(*FileSystemPanel); ok {
-			cloneFsp := clone.panels[i].(*FileSystemPanel)
+			cloneFsp, cloneOk := clone.panels[i].(*FileSystemPanel)
+			if !cloneOk {
+				clone.panels[i] = NewFileSystemPanel(fsp.X1, fsp.Y1, fsp.X2-fsp.X1+1, fsp.Y2-fsp.Y1+1, fsp.vfs.Clone())
+				cloneFsp = clone.panels[i].(*FileSystemPanel)
+			}
 			// Stop the initial load triggered by NewPanelsFrame to prevent races
 			if cloneFsp.cancelLoad != nil {
 				cloneFsp.cancelLoad()
