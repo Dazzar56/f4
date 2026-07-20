@@ -53,9 +53,6 @@ func NewFTPVFS(parent vfs.VFS, host, port, user, pass string, options map[string
 	if user != "" && user != "anonymous" {
 		title = user + "@" + host
 	}
-	if port != "21" && port != "" {
-		title += ":" + port
-	}
 
 	return &FTPVFS{
 		parent: parent,

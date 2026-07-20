@@ -184,6 +184,7 @@ type FileSystemPanel struct {
 	dirCache     map[string]dirCacheEntry
 
 	isCheckingRefresh bool
+	currentTitle      string
 }
 
 func NewFileSystemPanel(x, y, w, h int, vfs vfs.VFS) *FileSystemPanel {
@@ -432,7 +433,8 @@ func (fp *FileSystemPanel) updateTitle(err error) {
 	} else if fp.isLoading {
 		title += " [Loading...]"
 	}
-	fp.frame.SetTitle(title)
+	fp.currentTitle = title
+	fp.frame.SetTitle("")
 }
 
 func (fp *FileSystemPanel) ReadDirectory() {
@@ -799,7 +801,26 @@ func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
 		sortChar = strings.ToUpper(sortChar)
 	}
 
-	scr.Write(fp.X1+2, fp.Y1, vtui.StringToCharInfo(sortChar, vtui.Palette[ColPanelTitle]))
+	titleAttr := vtui.Palette[ColPanelTitle]
+	if fp.currentTitle != "" {
+		availW := (fp.X2 - fp.X1) - 8
+		if availW < 5 {
+			availW = 5
+		}
+		displayTitle := fp.currentTitle
+		if runewidth.StringWidth(displayTitle) > availW {
+			displayTitle = vtui.TruncateMiddle(displayTitle, availW)
+		}
+
+		scr.Write(fp.X1+2, fp.Y1, vtui.StringToCharInfo("[", titleAttr))
+		scr.Write(fp.X1+3, fp.Y1, vtui.StringToCharInfo(sortChar, titleAttr))
+		scr.Write(fp.X1+4, fp.Y1, vtui.StringToCharInfo("─", titleAttr))
+		scr.Write(fp.X1+5, fp.Y1, vtui.StringToCharInfo(displayTitle, titleAttr))
+		scr.Write(fp.X1+5+runewidth.StringWidth(displayTitle), fp.Y1, vtui.StringToCharInfo("]", titleAttr))
+	} else {
+		scr.Write(fp.X1+2, fp.Y1, vtui.StringToCharInfo(sortChar, titleAttr))
+	}
+
 	fp.table.SetFocus(fp.IsFocused())
 	fp.table.Show(scr)
 

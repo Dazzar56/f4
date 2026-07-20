@@ -116,7 +116,7 @@ func TestFileSystemPanel_UpdateTitle_WithProvider(t *testing.T) {
 	fp.isLoading = false
 	fp.updateTitle(nil)
 
-	got := fp.frame.GetTitle()
+	got := fp.currentTitle
 	if !strings.Contains(got, "user@host:") {
 		t.Errorf("Expected title to contain 'user@host:', got %q", got)
 	}

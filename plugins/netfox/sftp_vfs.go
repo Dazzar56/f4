@@ -85,9 +85,6 @@ func NewSFTPVFS(parent vfs.VFS, host, port, user, pass string) (*SFTPVFS, error)
 	if user != "" {
 		title = user + "@" + host
 	}
-	if port != "22" && port != "" {
-		title += ":" + port
-	}
 
 	return &SFTPVFS{
 		parent: parent,
