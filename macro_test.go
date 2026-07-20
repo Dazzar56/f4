@@ -357,3 +357,73 @@ func TestMacroKeyStrDistinguishesEnhancedKeys(t *testing.T) {
 		t.Errorf("Expected different KeyStr representations for standard Del (%q) and NumDel (%q), but they are identical", delKeyStr, numDelKeyStr)
 	}
 }
+
+func TestMacroIgnoresStandaloneModifiers(t *testing.T) {
+	mgr := NewMacroManager("")
+	mgr.Recording = true
+	mgr.Buffer = nil
+
+	// Simulate pressing Ctrl, then Shift, then a letter 'A', then releasing them
+	events := []*vtinput.InputEvent{
+		{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_CONTROL},
+		{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_SHIFT},
+		{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_A, Char: 'A'},
+		{Type: vtinput.KeyEventType, KeyDown: false, VirtualKeyCode: vtinput.VK_A, Char: 'A'},
+		{Type: vtinput.KeyEventType, KeyDown: false, VirtualKeyCode: vtinput.VK_SHIFT},
+		{Type: vtinput.KeyEventType, KeyDown: false, VirtualKeyCode: vtinput.VK_CONTROL},
+	}
+
+	for _, ev := range events {
+		mgr.Filter(ev)
+	}
+
+	if len(mgr.Buffer) != 1 {
+		t.Errorf("Expected exactly 1 event in macro buffer, but got %d", len(mgr.Buffer))
+	} else if mgr.Buffer[0].VirtualKeyCode != vtinput.VK_A {
+		t.Errorf("Expected recorded event to be VK_A, but got %v", vtinput.VKString(mgr.Buffer[0].VirtualKeyCode))
+	}
+}
+
+func TestMacroClearRecordingIsEmpty(t *testing.T) {
+	mgr := NewMacroManager("")
+
+	// Start recording
+	startEvent := &vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_OEM_PERIOD,
+		Char:            '.',
+		ControlKeyState: vtinput.LeftCtrlPressed,
+	}
+	mgr.Filter(startEvent)
+
+	if !mgr.Recording {
+		t.Error("Expected MacroManager to be in Recording state")
+	}
+
+	// Pressing Ctrl key before pressing '.' to stop recording
+	ctrlDown := &vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_CONTROL,
+	}
+	mgr.Filter(ctrlDown)
+
+	// Pressing '.' to stop recording
+	stopEvent := &vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_OEM_PERIOD,
+		Char:            '.',
+		ControlKeyState: vtinput.LeftCtrlPressed,
+	}
+	mgr.Filter(stopEvent)
+
+	if mgr.Recording {
+		t.Error("Expected MacroManager to stop Recording")
+	}
+
+	if len(mgr.Buffer) != 0 {
+		t.Errorf("Expected macro buffer to be empty for immediate stop recording, but got %d items", len(mgr.Buffer))
+	}
+}

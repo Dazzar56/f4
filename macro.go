@@ -84,7 +84,15 @@ func (m *MacroManager) Filter(e *vtinput.InputEvent) bool {
 
 	if m.Recording {
 		if e.KeyDown {
-			m.Buffer = append(m.Buffer, e)
+			switch e.VirtualKeyCode {
+			case vtinput.VK_SHIFT, vtinput.VK_LSHIFT, vtinput.VK_RSHIFT,
+				vtinput.VK_CONTROL, vtinput.VK_LCONTROL, vtinput.VK_RCONTROL,
+				vtinput.VK_MENU, vtinput.VK_LMENU, vtinput.VK_RMENU,
+				vtinput.VK_CAPITAL, vtinput.VK_NUMLOCK, vtinput.VK_SCROLL:
+				// Ignore standalone modifier keys
+			default:
+				m.Buffer = append(m.Buffer, e)
+			}
 		}
 		return false // Let it pass to the UI so user sees what they type
 	}
