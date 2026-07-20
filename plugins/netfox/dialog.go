@@ -100,8 +100,8 @@ func showConnectionDialog(app vfs.App, nf *NetFoxVFS, oldName string) {
 	}
 	activeProto := protos[currIdx]
 
-	// Height 18 provides enough room for main fields, extra options, and buttons with gaps
-	dlg := vtui.NewCenteredDialog(60, 18, " Site Connection ")
+	// Height 19 provides enough room for main fields, extra options, and buttons with gaps
+	dlg := vtui.NewCenteredDialog(60, 19, " Site Connection ")
 	dlg.ShowClose = true
 
 	editName := vtui.NewEdit(0, 0, 40, name)
@@ -120,6 +120,10 @@ func showConnectionDialog(app vfs.App, nf *NetFoxVFS, oldName string) {
 	}
 	editUser := vtui.NewEdit(0, 0, 40, cfg.User)
 	editPass := vtui.NewPasswordEdit(0, 0, 40, cfg.Pass)
+	editTimeout := vtui.NewEdit(0, 0, 10, cfg.Timeout)
+	if editTimeout.GetText() == "" {
+		editTimeout.SetText("15")
+	}
 
 	makeRow := func(label string, edit vtui.UIElement) *vtui.HBoxLayout {
 		hbox := vtui.NewHBoxLayout(0, 0, 56, 1)
@@ -131,8 +135,8 @@ func showConnectionDialog(app vfs.App, nf *NetFoxVFS, oldName string) {
 		return hbox
 	}
 
-	// 1. Main fields (Y: 2-9)
-	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 56, 7)
+	// 1. Main fields (Y: 2-10)
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 56, 8)
 
 	vbox.Add(makeRow("&Name:", editName), vtui.Margins{}, vtui.AlignFill)
 	vbox.Add(makeRow("P&rotocol:", comboProto), vtui.Margins{Top: 0}, vtui.AlignFill)
@@ -140,10 +144,11 @@ func showConnectionDialog(app vfs.App, nf *NetFoxVFS, oldName string) {
 	vbox.Add(makeRow("P&ort:", editPort), vtui.Margins{Top: 0}, vtui.AlignFill)
 	vbox.Add(makeRow("&User:", editUser), vtui.Margins{Top: 0}, vtui.AlignFill)
 	vbox.Add(makeRow("Pass&word:", editPass), vtui.Margins{Top: 0}, vtui.AlignFill)
+	vbox.Add(makeRow("Time&out:", editTimeout), vtui.Margins{Top: 0}, vtui.AlignFill)
 	vbox.Apply()
 
-	// 2. Extra Protocol Area (Y: 11) - architectural proxy
-	extraX, extraY, extraW, extraH := dlg.X1+2, dlg.Y1+11, 56, 1
+	// 2. Extra Protocol Area (Y: 12) - architectural proxy
+	extraX, extraY, extraW, extraH := dlg.X1+2, dlg.Y1+12, 56, 1
 	container := &protoUIContainer{
 		active: activeProto,
 		uis:    make(map[string]vtui.UIElement),
@@ -189,12 +194,12 @@ func showConnectionDialog(app vfs.App, nf *NetFoxVFS, oldName string) {
 		vtui.FrameManager.Redraw()
 	}
 
-	// 3. Bottom Section (Y: 13-15)
+	// 3. Bottom Section (Y: 14-16)
 	btnOk := vtui.NewButton(0, 0, "&Save")
 	btnCancel := vtui.NewButton(0, 0, "Cancel")
 	btnOk.IsDefault = true
 
-	vboxBottom := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+13, 56, 3)
+	vboxBottom := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+14, 56, 3)
 	btnHbox := vtui.NewHBoxLayout(0, 0, 56, 1)
 	btnHbox.HorizontalAlign = vtui.AlignCenter
 	btnHbox.Spacing = 2
@@ -221,6 +226,7 @@ func showConnectionDialog(app vfs.App, nf *NetFoxVFS, oldName string) {
 		cfg.Port = editPort.GetText()
 		cfg.User = editUser.GetText()
 		cfg.Pass = editPass.GetText()
+		cfg.Timeout = editTimeout.GetText()
 
 		if save, ok := extraSaves[activeProto]; ok {
 			save()

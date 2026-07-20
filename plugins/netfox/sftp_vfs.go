@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -27,7 +28,7 @@ type SFTPVFS struct {
 	title  string
 }
 
-func NewSFTPVFS(parent vfs.VFS, host, port, user, pass string) (*SFTPVFS, error) {
+func NewSFTPVFS(parent vfs.VFS, host, port, user, pass string, timeout int) (*SFTPVFS, error) {
 	vtui.DebugLog("NET: Initiating SFTP connection to %s:%s (user: %s)", host, port, user)
 	auths := []ssh.AuthMethod{}
 
@@ -56,11 +57,16 @@ func NewSFTPVFS(parent vfs.VFS, host, port, user, pass string) (*SFTPVFS, error)
 		auths = append(auths, ssh.Password(pass))
 	}
 
+	timeoutDur := time.Duration(timeout) * time.Second
+	if timeoutDur <= 0 {
+		timeoutDur = 15 * time.Second
+	}
+
 	config := &ssh.ClientConfig{
 		User:            user,
 		Auth:            auths,
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         15 * time.Second,
+		Timeout:         timeoutDur,
 	}
 
 	addr := host + ":" + port
@@ -356,7 +362,13 @@ func (p *sftpProvider) Open(ctx context.Context, parent vfs.VFS, pth string) (vf
 	if port == "" {
 		port = "22"
 	}
-	return NewSFTPVFS(parent, cfg.Host, port, cfg.User, cfg.Pass)
+	timeout := 15
+	if cfg.Timeout != "" {
+		if t, err := strconv.Atoi(cfg.Timeout); err == nil && t > 0 {
+			timeout = t
+		}
+	}
+	return NewSFTPVFS(parent, cfg.Host, port, cfg.User, cfg.Pass, timeout)
 }
 
 type sftpProtocolHandler struct{}

@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -24,10 +26,39 @@ type FTPVFS struct {
 	title  string
 }
 
-func NewFTPVFS(parent vfs.VFS, host, port, user, pass string, options map[string]string) (*FTPVFS, error) {
+type timeoutConn struct {
+	net.Conn
+	timeout time.Duration
+}
+
+func (c *timeoutConn) Read(b []byte) (int, error) {
+	c.Conn.SetReadDeadline(time.Now().Add(c.timeout))
+	return c.Conn.Read(b)
+}
+
+func (c *timeoutConn) Write(b []byte) (int, error) {
+	c.Conn.SetWriteDeadline(time.Now().Add(c.timeout))
+	return c.Conn.Write(b)
+}
+
+func NewFTPVFS(parent vfs.VFS, host, port, user, pass string, timeout int, options map[string]string) (*FTPVFS, error) {
 	addr := host + ":" + port
 
-	dialOpts := []ftp.DialOption{ftp.DialWithTimeout(15 * time.Second)}
+	timeoutDur := time.Duration(timeout) * time.Second
+	if timeoutDur <= 0 {
+		timeoutDur = 15 * time.Second
+	}
+
+	dialOpts := []ftp.DialOption{
+		ftp.DialWithTimeout(timeoutDur),
+		ftp.DialWithDialFunc(func(network, address string) (net.Conn, error) {
+			conn, err := net.DialTimeout(network, address, timeoutDur)
+			if err != nil {
+				return nil, err
+			}
+			return &timeoutConn{Conn: conn, timeout: timeoutDur}, nil
+		}),
+	}
 	if val, ok := options["Passive"]; ok && val == "false" {
 		dialOpts = append(dialOpts, ftp.DialWithDisabledEPSV(true))
 	}
@@ -260,7 +291,13 @@ func (p *ftpProvider) Open(ctx context.Context, parent vfs.VFS, pth string) (vfs
 	if port == "" {
 		port = "21"
 	}
-	return NewFTPVFS(parent, cfg.Host, port, cfg.User, cfg.Pass, cfg.Options)
+	timeout := 15
+	if cfg.Timeout != "" {
+		if t, err := strconv.Atoi(cfg.Timeout); err == nil && t > 0 {
+			timeout = t
+		}
+	}
+	return NewFTPVFS(parent, cfg.Host, port, cfg.User, cfg.Pass, timeout, cfg.Options)
 }
 
 type ftpProtocolHandler struct{}

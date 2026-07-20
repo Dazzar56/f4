@@ -20,6 +20,7 @@ type NetFoxConfig struct {
 	Port    string            `json:"Port"`
 	User    string            `json:"User"`
 	Pass    string            `json:"Pass"`
+	Timeout string            `json:"Timeout,omitempty"`
 	Options map[string]string `json:"Options,omitempty"`
 }
 
