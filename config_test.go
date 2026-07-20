@@ -118,3 +118,33 @@ Crosshair = 1
 		t.Error("Default value (HighlightDir=true) was incorrectly overwritten.")
 	}
 }
+
+func TestConfig_GuiFontPersistence(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Переопределяем путь к конфигурационному файлу для тестов
+	oldPathFunc := getUserConfigIniPath
+	getUserConfigIniPath = func() string {
+		return filepath.Join(tmpDir, "settings.ini")
+	}
+	defer func() { getUserConfigIniPath = oldPathFunc }()
+
+	// Задаем тестовые значения
+	AppConfig.GuiFont = "UbuntuMono-Regular"
+	AppConfig.GuiFontSize = 22
+	SaveConfig()
+
+	// Сбрасываем текущую конфигурацию в памяти
+	AppConfig.GuiFont = ""
+	AppConfig.GuiFontSize = 0
+
+	// Читаем заново из временного файла
+	LoadConfig()
+
+	if AppConfig.GuiFont != "UbuntuMono-Regular" {
+		t.Errorf("Expected GuiFont to be 'UbuntuMono-Regular', got %q", AppConfig.GuiFont)
+	}
+	if AppConfig.GuiFontSize != 22 {
+		t.Errorf("Expected GuiFontSize to be 22, got %d", AppConfig.GuiFontSize)
+	}
+}

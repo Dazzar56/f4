@@ -36,6 +36,8 @@ type F4Config struct {
 	ConfirmExit             bool
 	DefaultFileOpMode       int
 	FileOpPathDisplay       int
+	GuiFont                 string
+	GuiFontSize             int
 }
 
 var AppConfig = F4Config{
@@ -63,6 +65,8 @@ var AppConfig = F4Config{
 	ConfirmExit:             true,
 	DefaultFileOpMode:       0,
 	FileOpPathDisplay:       0,
+	GuiFont:                 "",
+	GuiFontSize:             16,
 }
 
 var getUserConfigIniPath = func() string {
@@ -109,6 +113,11 @@ func LoadConfig() {
 	AppConfig.ConfirmDelete = ini.GetString("System", "ConfirmDelete", "1") == "1"
 	AppConfig.ConfirmExit = ini.GetString("System", "ConfirmExit", "1") == "1"
 	fmt.Sscanf(ini.GetString("Panel", "FileOpPathDisplay", "0"), "%d", &AppConfig.FileOpPathDisplay)
+	AppConfig.GuiFont = ini.GetString("Appearance", "GuiFont", "")
+	fmt.Sscanf(ini.GetString("Appearance", "GuiFontSize", "16"), "%d", &AppConfig.GuiFontSize)
+	if AppConfig.GuiFontSize <= 0 {
+		AppConfig.GuiFontSize = 16
+	}
 
 	AppConfig.EditorAutoComplete = ini.GetString("Editor", "AutoComplete", "1") == "1"
 	AppConfig.EditorAutoCompleteMask = ini.GetString("Editor", "AutoCompleteMask", "*.go;*.c;*.cpp;*.h;*.hpp;*.py;*.js;*.ts;*.rs;*.java;*.sh;*.txt;*.md;*.html;*.css;*.json")
@@ -149,6 +158,10 @@ func SaveConfig() {
 	sb.WriteString(fmt.Sprintf("FileOpPathDisplay = %d\n", AppConfig.FileOpPathDisplay))
 
 	sb.WriteString("\n[System]\n")
+	sb.WriteString("\n[Appearance]\n")
+	sb.WriteString(fmt.Sprintf("GuiFont = %s\n", AppConfig.GuiFont))
+	sb.WriteString(fmt.Sprintf("GuiFontSize = %d\n", AppConfig.GuiFontSize))
+
 	sb.WriteString(fmt.Sprintf("ConfirmCopy = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.ConfirmCopy]))
 	sb.WriteString(fmt.Sprintf("ConfirmMove = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.ConfirmMove]))
 	sb.WriteString(fmt.Sprintf("ConfirmDelete = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.ConfirmDelete]))

@@ -193,6 +193,12 @@ func (r *ExtUiRenderer) SetCursor(x, y int, visible bool, shape vtui.CursorShape
 	r.cursorShape = shape
 	r.cursorDirty = true
 }
+func (r *ExtUiRenderer) SetWindowTitle(title string) {
+	_ = r.send.Send(map[string]any{
+		"type":  "title",
+		"title": title,
+	})
+}
 
 func (r *ExtUiRenderer) Render(buf, shadow []vtui.CharInfo, width, height int, forceRedraw bool) {
 	if width <= 0 || height <= 0 || len(buf) == 0 {

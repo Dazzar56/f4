@@ -49,6 +49,7 @@ func main() {
 
 	vtui.SetupStderrLog()
 	vtui.DebugLog("MAIN: Starting with args: %v", os.Args)
+	LoadConfig() // Load config early to apply GUI font settings
 
 	defer func() {
 		if r := recover(); r != nil {

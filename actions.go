@@ -1668,7 +1668,7 @@ func actionConfirmationsSettings(pf *PanelsFrame) {
 }
 
 func actionAppearanceSettings(pf *PanelsFrame) {
-	const width, height = 40, 10
+	const width, height = 50, 14
 	dlg := vtui.NewCenteredDialog(width, height, Msg("AppearanceSettings.Title"))
 	dlg.ShowClose = true
 	originalStyle := AppConfig.ColorStyle
@@ -1700,18 +1700,40 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 			}
 		}
 	}
+	editFont := vtui.NewEdit(0, 0, 30, AppConfig.GuiFont)
+	lblFont := vtui.NewLabel(0, 0, "GUI F&ont (Path/Name):", editFont)
+
+	editSize := vtui.NewEdit(0, 0, 6, fmt.Sprintf("%d", AppConfig.GuiFontSize))
+	editSize.Validator = &vtui.IntRangeValidator{Min: 6, Max: 72}
+	lblSize := vtui.NewLabel(0, 0, "GUI Font Si&ze:", editSize)
 	btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))
 	btnOk.IsDefault = true
 	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
 
 	dlg.AddItem(lblStyle)
 	dlg.AddItem(comboStyle)
+	dlg.AddItem(lblFont)
+	dlg.AddItem(editFont)
+	dlg.AddItem(lblSize)
+	dlg.AddItem(editSize)
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnCancel)
 
 	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, width-4, height-4)
-	vbox.Add(lblStyle, vtui.Margins{}, vtui.AlignLeft)
-	vbox.Add(comboStyle, vtui.Margins{Top: 1}, vtui.AlignCenter)
+	rowStyle := vtui.NewHBoxLayout(0, 0, width-4, 1)
+	rowStyle.Add(lblStyle, vtui.Margins{Right: 1}, vtui.AlignLeft)
+	rowStyle.Add(comboStyle, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(rowStyle, vtui.Margins{}, vtui.AlignFill)
+
+	rowFont := vtui.NewHBoxLayout(0, 0, width-4, 1)
+	rowFont.Add(lblFont, vtui.Margins{Right: 1}, vtui.AlignLeft)
+	rowFont.Add(editFont, vtui.Margins{}, vtui.AlignFill)
+	vbox.Add(rowFont, vtui.Margins{Top: 1}, vtui.AlignFill)
+
+	rowSize := vtui.NewHBoxLayout(0, 0, width-4, 1)
+	rowSize.Add(lblSize, vtui.Margins{Right: 1}, vtui.AlignLeft)
+	rowSize.Add(editSize, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(rowSize, vtui.Margins{Top: 1}, vtui.AlignFill)
 
 	buttons := vtui.NewHBoxLayout(0, 0, width-4, 1)
 	buttons.HorizontalAlign = vtui.AlignCenter
@@ -1727,10 +1749,25 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 	btnOk.OnClick = func() {
 		if len(names) > 0 {
 			AppConfig.ColorStyle = names[comboStyle.Menu.SelectPos]
-			SaveConfig()
 		}
+		fontChanged := AppConfig.GuiFont != editFont.GetText() || fmt.Sprintf("%d", AppConfig.GuiFontSize) != editSize.GetText()
+
+		AppConfig.GuiFont = editFont.GetText()
+		fmt.Sscanf(editSize.GetText(), "%d", &AppConfig.GuiFontSize)
+		if AppConfig.GuiFontSize <= 0 {
+			AppConfig.GuiFontSize = 16
+		}
+		SaveConfig()
+
 		dlg.SetExitCode(1)
+
+		if fontChanged {
+			vtui.FrameManager.PostTask(func() {
+				vtui.ShowMessage(" Appearance ", "Font changes in GUI mode will take effect\nafter application restart.", []string{"&Ok"})
+			})
+		}
 	}
+
 	dlg.OnResult = func(code int) {
 		if code < 0 {
 			_ = ApplyColorStyle(originalStyle)
