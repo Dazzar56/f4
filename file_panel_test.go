@@ -231,6 +231,52 @@ done2:
 		t.Errorf("Expected cursor to land on 'target_folder', got %q", fp.GetSelectedName())
 	}
 }
+func TestFileSystemPanel_SelectedInfo(t *testing.T) {
+	vtui.SetDefaultPalette()
+	SetDefaultF4Palette()
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+
+	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(t.TempDir()))
+	if fp.cancelLoad != nil {
+		fp.cancelLoad()
+	}
+	fp.isLoading = false
+	if fp.loadingTimer != nil {
+		fp.loadingTimer.Stop()
+	}
+
+	fp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: ".."}},
+		{VFSItem: vfs.VFSItem{Name: "file1.txt", Size: 1234567, IsDir: false}, Selected: true},
+		{VFSItem: vfs.VFSItem{Name: "folder1", IsDir: true}, Selected: true},
+		{VFSItem: vfs.VFSItem{Name: "file2.txt", Size: 50, IsDir: false}, Selected: false},
+	}
+	fp.Refresh()
+
+	fp.Show(scr)
+
+	var sb strings.Builder
+	for x := 0; x < 80; x++ {
+		cell := scr.GetCell(x, 23)
+		if cell.Char != 0 && cell.Char != ' ' {
+			sb.WriteRune(rune(cell.Char))
+		}
+	}
+
+	result := sb.String()
+	expectedBytes := "1234567"
+	if !strings.Contains(result, "Bytes:") || !strings.Contains(result, expectedBytes) {
+		t.Errorf("Expected bottom bar to contain formatted bytes %q, got: %q", expectedBytes, result)
+	}
+	if !strings.Contains(result, "files:1") {
+		t.Errorf("Expected bottom bar to contain 'files:1', got: %q", result)
+	}
+	if !strings.Contains(result, "folders:1") {
+		t.Errorf("Expected bottom bar to contain 'folders:1', got: %q", result)
+	}
+}
 
 func TestFileSystemPanel_Initialization(t *testing.T) {
 	// Verify that NewFileSystemPanel initializes with valid geometry to prevent collapsed panels

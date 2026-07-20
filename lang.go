@@ -11,6 +11,7 @@ var Lng = map[string]string{
 	"Panel.Column.Name":    "Name",
 	"Panel.Column.Size":    "Size",
 	"Panel.UpDir":          "UP-DIR",
+	"Panel.SelectedInfo":   "Bytes: %s, files: %d, folders: %d",
 	"Panels.Prompt":        "> ",
 	"Edit.NewFileTitle":    " Create New File ",
 	"Edit.NewFilePrompt":   "File &name:",

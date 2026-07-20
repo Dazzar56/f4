@@ -876,7 +876,8 @@ func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
 	}
 
 	var selSize int64
-	var selCount int
+	var selFiles int
+	var selDirs int
 	var totSize int64
 	var totCount int
 
@@ -887,8 +888,10 @@ func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
 				totSize += e.Size
 			}
 			if e.Selected {
-				selCount++
-				if !e.IsDir {
+				if e.IsDir {
+					selDirs++
+				} else {
+					selFiles++
 					selSize += e.Size
 				}
 			}
@@ -896,8 +899,8 @@ func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
 	}
 
 	totalStr := ""
-	if selCount > 0 {
-		totalStr = fmt.Sprintf(" %s (%d/%d) %s ", formatSize(selSize), selCount, totCount, formatSize(totSize))
+	if selFiles > 0 || selDirs > 0 {
+		totalStr = fmt.Sprintf(" "+Msg("Panel.SelectedInfo")+" ", formatIntWithSpaces(selSize), selFiles, selDirs)
 	} else if totCount > 0 {
 		totalStr = fmt.Sprintf(" %s (%d) ", formatSize(totSize), totCount)
 	}
