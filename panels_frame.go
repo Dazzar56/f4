@@ -814,11 +814,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 
 	// Alt+F8: Command History
 	if e.VirtualKeyCode == vtinput.VK_F8 && alt && !ctrl && !shift && e.KeyDown {
-		if len(pf.cmdLine.Edit.History) > 0 {
-			pf.cmdLine.Edit.OpenHistory()
-		} else {
-			vtui.ShowMessage(" History ", "Command history is empty.", []string{"&Ok"})
-		}
+		actionCommandHistory(pf)
 		return true
 	}
 

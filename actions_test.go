@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/unxed/f4/vfs"
+	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 	"os"
 	"path/filepath"
@@ -1241,4 +1242,73 @@ LoopOpen:
 	}
 
 	t.Log("SUCCESS: Progress dialog was correctly displayed during slow file load.")
+}
+
+func TestActionCommandHistory_Flow(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	pf.cmdLine.Edit.History = nil
+	actionCommandHistory(pf)
+
+	top := vtui.FrameManager.GetTopFrame()
+	if top == nil || !strings.Contains(top.GetTitle(), "History") {
+		t.Fatalf("Expected empty history warning dialog, got %v", top)
+	}
+	top.SetExitCode(-1)
+	vtui.FrameManager.Pop()
+
+	pf.cmdLine.Edit.History = []string{"cmd1", "cmd2"}
+	actionCommandHistory(pf)
+
+	top = vtui.FrameManager.GetTopFrame()
+	if top == nil || top.GetTitle() != Msg("History.CommandsTitle") {
+		t.Fatalf("Expected Command History dialog, got %v", top)
+	}
+
+	top.SetExitCode(-1)
+	vtui.FrameManager.Pop()
+}
+
+func TestActionCommandHistory_Deletion(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	pf.cmdLine.Edit.History = []string{"cmd1", "cmd2", "cmd3"}
+	actionCommandHistory(pf)
+
+	top := vtui.FrameManager.GetTopFrame()
+	menu, ok := top.(*vtui.VMenu)
+	if !ok {
+		t.Fatalf("Expected VMenu on top, got %T", top)
+	}
+
+	menu.SetSelectPos(1)
+
+	menu.ProcessKey(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_DELETE,
+		ControlKeyState: vtinput.ShiftPressed,
+	})
+
+	history := pf.cmdLine.Edit.History
+	if len(history) != 2 || history[0] != "cmd1" || history[1] != "cmd3" {
+		t.Errorf("Expected history [cmd1, cmd3], got %v", history)
+	}
+
+	if menu.ItemCount != 2 {
+		t.Errorf("Expected 2 menu items, got %d", menu.ItemCount)
+	}
+
+	menu.SetExitCode(-1)
+	vtui.FrameManager.Pop()
 }

@@ -99,6 +99,7 @@ var Lng = map[string]string{
 	"FindFile.TextPrompt":          "Containing text:",
 	"FindFile.BtnFind":             "&Find",
 	"History.FoldersTitle":         " Folders History ",
+	"History.CommandsTitle":        " Commands History ",
 	"UserMenu.LocalMenuTitle":      "Local menu",
 	"UserMenu.MainMenuTitle":       "Main menu",
 	"UserMenu.MainMenuFAR":         "FAR",

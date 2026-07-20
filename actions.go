@@ -95,13 +95,88 @@ func actionFoldersHistory(pf *PanelsFrame) {
 	// Sizing and positioning
 	scrW := vtui.FrameManager.GetScreenSize()
 	scrH := vtui.FrameManager.GetScreenHeight()
-	width := scrW - 10
-	if width > 100 {
-		width = 100
+	width := scrW - 6
+	if width > 120 {
+		width = 120
 	}
 	height := len(h) + 2
-	if height > 15 {
-		height = 15
+	maxH := scrH - 4
+	if maxH < 6 {
+		maxH = 6
+	}
+	if height > maxH {
+		height = maxH
+	}
+
+	menu.SetPosition((scrW-width)/2, (scrH-height)/2, (scrW-width)/2+width-1, (scrH-height)/2+height-1)
+	vtui.FrameManager.Push(menu)
+}
+
+func actionCommandHistory(pf *PanelsFrame) {
+	h := pf.cmdLine.Edit.History
+	if len(h) == 0 {
+		vtui.ShowMessage(" History ", "Command history is empty.", []string{"&Ok"})
+		return
+	}
+
+	menu := vtui.NewVMenu(Msg("History.CommandsTitle"))
+	for _, p := range h {
+		menu.AddItem(vtui.MenuItem{Text: p})
+	}
+
+	// Setup shortcuts
+	menu.OnKeyDown = func(e *vtinput.InputEvent) bool {
+		shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
+
+		idx := menu.SelectPos
+		if idx < 0 || idx >= len(menu.Items) {
+			return false
+		}
+		cmd := menu.Items[idx].Text
+
+		if e.VirtualKeyCode == vtinput.VK_RETURN {
+			menu.Close()
+			pf.cmdLine.Edit.SetText(cmd)
+			pf.cmdLine.Edit.HistoryPos = -1
+			return true
+		}
+
+		if (e.VirtualKeyCode == vtinput.VK_DELETE || e.VirtualKeyCode == vtinput.VK_BACK) && shift {
+			// Delete item
+			h = append(h[:idx], h[idx+1:]...)
+			pf.cmdLine.Edit.History = h
+			if vtui.GlobalHistoryProvider != nil {
+				vtui.GlobalHistoryProvider.SaveHistory("cmdline", h)
+			}
+			menu.Items = append(menu.Items[:idx], menu.Items[idx+1:]...)
+			menu.ItemCount = len(menu.Items)
+			if menu.ItemCount == 0 {
+				menu.Close()
+			} else {
+				if menu.SelectPos >= menu.ItemCount {
+					menu.SetSelectPos(menu.ItemCount - 1)
+				}
+				vtui.FrameManager.Redraw()
+			}
+			return true
+		}
+		return false
+	}
+
+	// Sizing and positioning
+	scrW := vtui.FrameManager.GetScreenSize()
+	scrH := vtui.FrameManager.GetScreenHeight()
+	width := scrW - 6
+	if width > 120 {
+		width = 120
+	}
+	height := len(h) + 2
+	maxH := scrH - 4
+	if maxH < 6 {
+		maxH = 6
+	}
+	if height > maxH {
+		height = maxH
 	}
 
 	menu.SetPosition((scrW-width)/2, (scrH-height)/2, (scrW-width)/2+width-1, (scrH-height)/2+height-1)
