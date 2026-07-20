@@ -1668,7 +1668,7 @@ func actionConfirmationsSettings(pf *PanelsFrame) {
 }
 
 func actionAppearanceSettings(pf *PanelsFrame) {
-	const width, height = 50, 14
+	const width, height = 50, 17
 	dlg := vtui.NewCenteredDialog(width, height, Msg("AppearanceSettings.Title"))
 	dlg.ShowClose = true
 	originalStyle := AppConfig.ColorStyle
@@ -1706,6 +1706,10 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 	editSize := vtui.NewEdit(0, 0, 6, fmt.Sprintf("%d", AppConfig.GuiFontSize))
 	editSize.Validator = &vtui.IntRangeValidator{Min: 6, Max: 72}
 	lblSize := vtui.NewLabel(0, 0, "GUI Font Si&ze:", editSize)
+
+	editTitle := vtui.NewEdit(0, 0, 30, AppConfig.ConsoleTitleTemplate)
+	lblTitle := vtui.NewLabel(0, 0, "Window &Title Template:", editTitle)
+
 	btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))
 	btnOk.IsDefault = true
 	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
@@ -1716,6 +1720,8 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 	dlg.AddItem(editFont)
 	dlg.AddItem(lblSize)
 	dlg.AddItem(editSize)
+	dlg.AddItem(lblTitle)
+	dlg.AddItem(editTitle)
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnCancel)
 
@@ -1735,6 +1741,11 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 	rowSize.Add(editSize, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(rowSize, vtui.Margins{Top: 1}, vtui.AlignFill)
 
+	rowTitle := vtui.NewHBoxLayout(0, 0, width-4, 1)
+	rowTitle.Add(lblTitle, vtui.Margins{Right: 1}, vtui.AlignLeft)
+	rowTitle.Add(editTitle, vtui.Margins{}, vtui.AlignFill)
+	vbox.Add(rowTitle, vtui.Margins{Top: 1}, vtui.AlignFill)
+
 	buttons := vtui.NewHBoxLayout(0, 0, width-4, 1)
 	buttons.HorizontalAlign = vtui.AlignCenter
 	buttons.Spacing = 2
@@ -1752,6 +1763,7 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 		}
 		fontChanged := AppConfig.GuiFont != editFont.GetText() || fmt.Sprintf("%d", AppConfig.GuiFontSize) != editSize.GetText()
 
+		AppConfig.ConsoleTitleTemplate = editTitle.GetText()
 		AppConfig.GuiFont = editFont.GetText()
 		fmt.Sscanf(editSize.GetText(), "%d", &AppConfig.GuiFontSize)
 		if AppConfig.GuiFontSize <= 0 {

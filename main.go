@@ -347,6 +347,7 @@ func SetupUI() {
 
 	vtui.FrameManager.MenuBar = panels.menuBar
 	vtui.FrameManager.KeyBar = panels.keyBar
+	vtui.FrameManager.OnRender = UpdateWindowTitle
 
 	noPlugins := false
 	for _, arg := range os.Args {
