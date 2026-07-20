@@ -43,6 +43,10 @@ func normalizeMods(mods vtinput.ControlKeyState) vtinput.ControlKeyState {
 	if mods.Contains(vtinput.ShiftPressed) {
 		n |= vtinput.ShiftPressed
 	}
+
+	if mods.Contains(vtinput.EnhancedKey) {
+		n |= vtinput.EnhancedKey
+	}
 	return n
 }
 

@@ -345,3 +345,15 @@ func TestMacro_AssignFrame_Structure(t *testing.T) {
 		t.Error("Macro failed to assign to Tab key")
 	}
 }
+
+func TestMacroKeyStrDistinguishesEnhancedKeys(t *testing.T) {
+	// Standard Delete has the EnhancedKey modifier in modern protocols
+	delKeyStr := KeyStr(vtinput.VK_DELETE, vtinput.EnhancedKey)
+
+	// Numpad Delete (NumDel) does not have the EnhancedKey modifier
+	numDelKeyStr := KeyStr(vtinput.VK_DELETE, 0)
+
+	if delKeyStr == numDelKeyStr {
+		t.Errorf("Expected different KeyStr representations for standard Del (%q) and NumDel (%q), but they are identical", delKeyStr, numDelKeyStr)
+	}
+}
