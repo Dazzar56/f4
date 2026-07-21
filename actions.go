@@ -367,6 +367,7 @@ func showEditor(pf *PanelsFrame, v vfs.VFS, path string, f vfs.ReadAtCloser) {
 
 	if f != nil {
 		buf = NewAsyncBuffer(context.Background(), f)
+		buf.prewarm()
 		pt = piecetable.NewWithBuffer(buf)
 	} else {
 		pt = piecetable.New(nil)
