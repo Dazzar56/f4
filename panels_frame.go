@@ -2204,6 +2204,7 @@ func (pf *PanelsFrame) switchToVFS(fsp *FileSystemPanel, newVFS vfs.VFS) {
 			pf.ptyMutex.Unlock()
 		}
 		fsp.dirCache = make(map[string]dirCacheEntry)
+		fsp.providerEntryName = ""
 		fsp.vfs = newVFS
 		fsp.ReadDirectory()
 		pf.RefreshAll()
@@ -2229,7 +2230,12 @@ func (pf *PanelsFrame) NavigateToPath(fsp *FileSystemPanel, targetPath string) b
 
 		fsp.dirCache = make(map[string]dirCacheEntry)
 		fsp.vfs = parent
-		fsp.pendingSelection = fsp.vfs.Base(oldPath)
+		if fsp.providerEntryName != "" {
+			fsp.pendingSelection = fsp.providerEntryName
+			fsp.providerEntryName = ""
+		} else {
+			fsp.pendingSelection = fsp.vfs.Base(oldPath)
+		}
 		fsp.ReadDirectory()
 		return true
 	}
