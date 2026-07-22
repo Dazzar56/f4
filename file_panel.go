@@ -173,8 +173,9 @@ type FileSystemPanel struct {
 	cancelLoad       context.CancelFunc
 	isLoading        bool
 	loadingTimer     *time.Timer
-	pendingSelection string
-	fastFindMode     bool
+	pendingSelection  string
+	providerEntryName string // name of entry used to enter a provider VFS (e.g. NetFox connection name)
+	fastFindMode      bool
 	fastFindStr      string
 
 	sortMode    SortMode
@@ -1131,7 +1132,12 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 					fp.vfs.Close()
 
 					fp.vfs = parent
-					fp.pendingSelection = fp.vfs.Base(oldPath)
+					if fp.providerEntryName != "" {
+						fp.pendingSelection = fp.providerEntryName
+						fp.providerEntryName = ""
+					} else {
+						fp.pendingSelection = fp.vfs.Base(oldPath)
+					}
 					fp.ReadDirectory()
 					return true
 				}
@@ -1170,16 +1176,18 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 					vtui.RunAsync(func(ctx *vtui.TaskContext) {
 						newVfs, err := provider.Open(ctx.Context, fp.vfs, fullPath)
 						ctx.RunOnUI(func() {
-							if err != nil {
-								fp.isLoading = false
-								fp.updateTitle(err)
-								fp.ReadDirectory() // Возвращаемся к списку соединений
-								vtui.ShowMessage(" Connection Error ", fmt.Sprintf("Failed to connect to %s:\n%v", selected.Name, err), []string{"&Ok"})
-								return
-							}
-							fp.vfs = newVfs
-							fp.pendingSelection = ".."
-							fp.ReadDirectory()
+						if err != nil {
+							fp.isLoading = false
+							fp.updateTitle(err)
+							fp.pendingSelection = selected.Name
+							fp.ReadDirectory() // Возвращаемся к списку соединений
+							vtui.ShowMessage(" Connection Error ", fmt.Sprintf("Failed to connect to %s:\n%v", selected.Name, err), []string{"&Ok"})
+							return
+						}
+						fp.providerEntryName = selected.Name
+						fp.vfs = newVfs
+						fp.pendingSelection = ".."
+						fp.ReadDirectory()
 						})
 					})
 					return true
