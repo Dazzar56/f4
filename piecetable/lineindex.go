@@ -45,12 +45,15 @@ func (li *LineIndex) Rebuild(pt *PieceTable) {
 func (li *LineIndex) AppendOffsets(offsets []int, maxAllowed int) {
 	li.mu.Lock()
 	defer li.mu.Unlock()
-	for _, off := range offsets {
-		if off <= maxAllowed {
-			li.offsets = append(li.offsets, off)
-		}
-	}
+        lastOffset := li.offsets[len(li.offsets)-1]
+        for _, off := range offsets {
+            if off > lastOffset && off <= maxAllowed {
+                li.offsets = append(li.offsets, off)
+                lastOffset = off
+            }
+        }
 }
+
 
 // LineCount returns total number of lines.
 func (li *LineIndex) LineCount() int {
