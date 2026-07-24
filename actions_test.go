@@ -624,7 +624,7 @@ func TestActionCopyMove_TrailingSlash(t *testing.T) {
 	top.SetExitCode(-1)
 	vtui.FrameManager.Pop()
 }
-func TestActionCopyMove_ShiftF5_Prefill(t *testing.T) {
+func TestActionCopy_ShiftF5_Prefill(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	SetDefaultF4Palette()
 
@@ -633,20 +633,14 @@ func TestActionCopyMove_ShiftF5_Prefill(t *testing.T) {
 	pf.ResizeConsole(80, 25)
 
 	fspSrc := pf.panels[0].(*FileSystemPanel)
-	fspDst := pf.panels[1].(*FileSystemPanel)
 
 	// Setup actual existing paths using t.TempDir()
 	tmpDir := t.TempDir()
 	srcPath := filepath.Join(tmpDir, "src")
-	dstPath := filepath.Join(tmpDir, "dst")
 	os.MkdirAll(srcPath, 0755)
-	os.MkdirAll(dstPath, 0755)
 
 	if err := fspSrc.vfs.SetPath(srcPath); err != nil {
 		t.Fatalf("Failed to set src VFS path: %v", err)
-	}
-	if err := fspDst.vfs.SetPath(dstPath); err != nil {
-		t.Fatalf("Failed to set dst VFS path: %v", err)
 	}
 
 	// Mock entries so we have a file under the cursor
@@ -656,10 +650,14 @@ func TestActionCopyMove_ShiftF5_Prefill(t *testing.T) {
 	fspSrc.SetCursorIndex(0)
 	pf.activeIdx = 0
 
-	// Trigger Shift-F5 simulation (Copy with prefill)
-	actionCopyMove(pf, false, "test.txt")
+	// Trigger Shift-F5 (Copy in place)
+	actionCopyInPlace(pf)
 
 	top := vtui.FrameManager.GetTopFrame()
+	if top == nil || top.GetTitle() != " Copy " {
+		t.Fatalf("Expected Copy dialog, got %v", top)
+	}
+
 	dlg, ok := top.(vtui.Container)
 	if !ok {
 		t.Fatal("Copy dialog not found on top")
@@ -678,14 +676,8 @@ func TestActionCopyMove_ShiftF5_Prefill(t *testing.T) {
 	}
 
 	txt := editDest.GetText()
-	expectedPrefix := filepath.ToSlash(srcPath) // Must be in the active (src) VFS, not dst
-	if !strings.HasSuffix(expectedPrefix, "/") {
-		expectedPrefix += "/"
-	}
-	expectedPath := filepath.FromSlash(expectedPrefix + "test.txt")
-
-	if filepath.Clean(txt) != filepath.Clean(expectedPath) {
-		t.Errorf("Shift-F5 prefilled path mismatch.\nGot:      %q\nExpected: %q", txt, expectedPath)
+	if txt != "test.txt" {
+		t.Errorf("Expected prefilled name 'test.txt', got %q", txt)
 	}
 
 	// Cleanup

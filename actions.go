@@ -958,7 +958,7 @@ func actionEditFile(pf *PanelsFrame) {
 	}
 }
 
-func actionCopyMove(pf *PanelsFrame, isMove bool, prefill ...string) {
+func actionCopyMove(pf *PanelsFrame, isMove bool) {
 	fspSrc := pf.getActivePanel()
 	fspDst := pf.getInactivePanel()
 	if fspSrc == nil || fspDst == nil {
@@ -978,9 +978,6 @@ func actionCopyMove(pf *PanelsFrame, isMove bool, prefill ...string) {
 	}
 
 	srcVfs, dstVfs := fspSrc.vfs, fspDst.vfs
-	if len(prefill) > 0 && prefill[0] != "" {
-		dstVfs = srcVfs
-	}
 
 	initialDest := dstVfs.GetPath()
 	if initialDest != "" && !strings.HasSuffix(initialDest, "/") && !strings.HasSuffix(initialDest, "\\") {
@@ -989,9 +986,6 @@ func actionCopyMove(pf *PanelsFrame, isMove bool, prefill ...string) {
 			sep = "\\"
 		}
 		initialDest += sep
-	}
-	if len(prefill) > 0 && prefill[0] != "" {
-		initialDest += prefill[0]
 	}
 
 	onCompleteWithClear := func() {
@@ -1106,6 +1100,38 @@ func actionRename(pf *PanelsFrame) {
 				pf.RefreshAll()
 			})
 		})
+	})
+}
+func actionCopyInPlace(pf *PanelsFrame) {
+	fsp := pf.getActivePanel()
+	if fsp == nil {
+		return
+	}
+
+	name := fsp.getRawSelectedName()
+	if name == "" || name == ".." {
+		return
+	}
+
+	vtui.InputBox(" Copy ", "Copy '"+name+"' to:", name, func(newName string) {
+		if newName == "" || newName == name {
+			return
+		}
+		newPath := fsp.vfs.Join(fsp.vfs.GetPath(), newName)
+
+		onCompleteWithClear := func() {
+			if pf != nil {
+				if fsp := pf.getActivePanel(); fsp != nil {
+					fsp.selectedItems = make(map[string]bool)
+					for _, e := range fsp.entries {
+						e.Selected = false
+					}
+				}
+				pf.RefreshAll()
+			}
+		}
+
+		go ExecuteFileOp(pf, fsp.vfs, fsp.vfs, []string{name}, newPath, false, AppConfig.DefaultFileOpMode, onCompleteWithClear)
 	})
 }
 func actionEditorSettings(pf *PanelsFrame) {
