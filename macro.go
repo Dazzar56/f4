@@ -54,6 +54,22 @@ func normalizeMods(mods vtinput.ControlKeyState) vtinput.ControlKeyState {
 func KeyStr(vk uint16, mods vtinput.ControlKeyState) string {
 	return fmt.Sprintf("%X:%X", vk, uint32(normalizeMods(mods)))
 }
+func formatHotkey(vk uint16, mods vtinput.ControlKeyState) string {
+	var parts []string
+	if mods.Contains(vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed) {
+		parts = append(parts, "Ctrl")
+	}
+	if mods.Contains(vtinput.LeftAltPressed | vtinput.RightAltPressed) {
+		parts = append(parts, "Alt")
+	}
+	if mods.Contains(vtinput.ShiftPressed) {
+		parts = append(parts, "Shift")
+	}
+	name := vtinput.VKString(vk)
+	name = strings.TrimPrefix(name, "VK_")
+	parts = append(parts, name)
+	return strings.Join(parts, "+")
+}
 
 // Filter is hooked into FrameManager. Returns true if the event was consumed.
 func (m *MacroManager) Filter(e *vtinput.InputEvent) bool {
@@ -225,14 +241,25 @@ func (f *MacroAssignFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	if f.mgr.Macros == nil {
 		f.mgr.Macros = make(map[string][]*vtinput.InputEvent)
 	}
+
+	keyDesc := formatHotkey(e.VirtualKeyCode, e.ControlKeyState)
+	var msg string
 	if len(f.mgr.Buffer) == 0 {
 		delete(f.mgr.Macros, key)
+		msg = fmt.Sprintf("Macro removed from key:\n%s", keyDesc)
 	} else {
 		f.mgr.Macros[key] = f.mgr.Buffer
+		msg = fmt.Sprintf("Macro assigned to key:\n%s", keyDesc)
 	}
+
 	f.mgr.Buffer = nil
 	f.mgr.Save()
 	f.SetExitCode(0)
+
+	vtui.FrameManager.PostTask(func() {
+		vtui.ShowMessage(" Macro ", msg, []string{"&Ok"})
+	})
+
 	vtui.FrameManager.Redraw()
 	return true
 }
