@@ -485,8 +485,8 @@ func (h *ExtUiHost) handleMessage(msg map[string]any) {
 	case "mouse":
 		h.sendEvent(&vtinput.InputEvent{
 			Type:            vtinput.MouseEventType,
-			MouseX:          uint16(extUiInt(msg, "x")),
-			MouseY:          uint16(extUiInt(msg, "y")),
+			MouseX:          int16(extUiInt(msg, "x")),
+			MouseY:          int16(extUiInt(msg, "y")),
 			ButtonState:     uint32(extUiInt(msg, "button")),
 			MouseEventFlags: uint32(extUiInt(msg, "flags")),
 			KeyDown:         extUiBool(msg, "down"),
@@ -496,8 +496,8 @@ func (h *ExtUiHost) handleMessage(msg map[string]any) {
 	case "wheel":
 		h.sendEvent(&vtinput.InputEvent{
 			Type:            vtinput.MouseEventType,
-			MouseX:          uint16(extUiInt(msg, "x")),
-			MouseY:          uint16(extUiInt(msg, "y")),
+			MouseX:          int16(extUiInt(msg, "x")),
+			MouseY:          int16(extUiInt(msg, "y")),
 			WheelDirection:  extUiInt(msg, "dir"),
 			ControlKeyState: vtinput.ControlKeyState(uint32(extUiInt(msg, "mods"))),
 			InputSource:     "extui",

@@ -11,8 +11,8 @@ require (
 	github.com/unxed/archives v0.0.0-20260704211952-684041740ef0
 	github.com/unxed/sevenzip v0.0.0-20260704211908-25d317f8295f
 	github.com/unxed/tar v0.1.119
-	github.com/unxed/vtinput v0.1.0
-	github.com/unxed/vtui v0.1.22
+	github.com/unxed/vtinput v0.1.1
+	github.com/unxed/vtui v0.1.23
 	github.com/unxed/zip v0.1.125
 	github.com/unxed/zipper v0.1.131
 	github.com/vmihailenco/msgpack/v5 v5.4.1
@@ -68,7 +68,7 @@ require (
 	github.com/unxed/keytrans v0.1.27 // indirect
 	github.com/unxed/localecp v0.1.4 // indirect
 	github.com/unxed/par2 v0.1.2 // indirect
-	github.com/unxed/winkeys v0.1.0 // indirect
+	github.com/unxed/winkeys v0.1.1 // indirect
 	github.com/unxed/xkb-go v0.1.8 // indirect
 	github.com/unxed/xz v0.1.41 // indirect
 	github.com/unxed/zipcharset v0.1.4 // indirect
