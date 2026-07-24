@@ -1304,6 +1304,124 @@ func TestActionCommandHistory_Deletion(t *testing.T) {
 	menu.SetExitCode(-1)
 	vtui.FrameManager.Pop()
 }
+func TestActionAppearanceSettings_SaveCursor(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	origVal := AppConfig.KeepTerminalCursor
+	defer func() { AppConfig.KeepTerminalCursor = origVal }()
+
+	AppConfig.KeepTerminalCursor = false
+
+	actionAppearanceSettings(pf)
+	top := vtui.FrameManager.GetTopFrame().(vtui.Container)
+
+	var chkCursor *vtui.Checkbox
+	for _, itm := range top.GetChildren() {
+		if c, ok := itm.(*vtui.Checkbox); ok {
+			if strings.Contains(strings.ToLower(c.GetText()), "cursor") {
+				chkCursor = c
+				break
+			}
+		}
+	}
+	if chkCursor == nil {
+		t.Fatal("KeepTerminalCursor checkbox not found in Appearance Settings")
+	}
+
+	if chkCursor.State != 0 {
+		t.Error("Expected checkbox to be unchecked initially")
+	}
+
+	chkCursor.State = 1
+	clickDialogButton(t, top, "Ok")
+
+	for i := 0; i < 10; i++ {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		default:
+		}
+	}
+
+	if !AppConfig.KeepTerminalCursor {
+		t.Error("KeepTerminalCursor was not saved to AppConfig")
+	}
+}
+
+func TestPanelsFrame_RunAdvancedProgressTask(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	done := make(chan struct{})
+	workerBlock := make(chan struct{})
+	var reporter vfs.TaskReporter
+
+	pf.RunAdvancedProgressTask("Test Action", false, func(ctx context.Context, rep vfs.TaskReporter) error {
+		reporter = rep
+		close(done)
+		<-workerBlock
+		return nil
+	}, nil)
+
+	select {
+	case <-done:
+	case <-time.After(1 * time.Second):
+		t.Fatal("Timeout waiting for progress task worker to run")
+	}
+
+	// Wait for the dialog to appear on top
+	timeout := time.After(2 * time.Second)
+	var dlg *FileOpProgressDialog
+	for dlg == nil {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			top := vtui.FrameManager.GetTopFrame()
+			if top != nil && top.GetTitle() == "Test Action" {
+				dlg = top.(*FileOpProgressDialog)
+			}
+		case <-timeout:
+			t.Fatal("Timeout waiting for dialog to appear")
+		}
+	}
+
+	reporter.UpdateTransfer("Running", "item", 75, "Total Info", 35, "10 MB/s")
+
+	// Wait for UI to update with progress
+	timeout = time.After(2 * time.Second)
+	for !dlg.pbCurrent.IsVisible() || dlg.pbCurrent.Percent != 75 {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Timeout waiting for progress update to render")
+		}
+	}
+
+	if !dlg.pbCurrent.IsVisible() || dlg.pbCurrent.Percent != 75 {
+		t.Errorf("Current progress bar not updated: visible=%v, pct=%d", dlg.pbCurrent.IsVisible(), dlg.pbCurrent.Percent)
+	}
+	if !dlg.pbTotal.IsVisible() || dlg.pbTotal.Percent != 35 {
+		t.Errorf("Total progress bar not updated: visible=%v, pct=%d", dlg.pbTotal.IsVisible(), dlg.pbTotal.Percent)
+	}
+	if dlg.lblSpeed.GetText() != "10 MB/s" {
+		t.Errorf("Speed label not updated, got %q", dlg.lblSpeed.GetText())
+	}
+
+	// Close dialog and unblock worker
+	close(workerBlock)
+	dlg.SetExitCode(-1)
+	vtui.FrameManager.Pop()
+}
 
 type mockInvalidVFS struct {
 	vfs.VFS
