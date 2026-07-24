@@ -89,14 +89,13 @@ func EventToFarString(e *vtinput.InputEvent) string {
 	}
 
 	vk := e.VirtualKeyCode
-	if vk == vtinput.VK_DELETE || vk == vtinput.VK_INSERT || vk == vtinput.VK_HOME || vk == vtinput.VK_END ||
-		vk == vtinput.VK_PRIOR || vk == vtinput.VK_NEXT || vk == vtinput.VK_UP || vk == vtinput.VK_DOWN ||
-		vk == vtinput.VK_LEFT || vk == vtinput.VK_RIGHT {
-		if name, ok := farKeyNames[vk]; ok {
-			if !mods.Contains(vtinput.EnhancedKey) {
-				sb.WriteString("Num")
-			}
-			sb.WriteString(name)
+	if !mods.Contains(vtinput.EnhancedKey) {
+		if vk == vtinput.VK_RETURN {
+			sb.WriteString("NumEnter")
+			return sb.String()
+		}
+		if vk == vtinput.VK_DELETE {
+			sb.WriteString("NumDel")
 			return sb.String()
 		}
 	}
@@ -140,25 +139,14 @@ func ParseFarKey(s string) *vtinput.InputEvent {
 		s = orig
 	}
 
-	if strings.HasPrefix(s, "Num") {
-		for vk, name := range farKeyNames {
-			if strings.EqualFold(s[3:], name) {
-				e.VirtualKeyCode = vk
-				if vk == vtinput.VK_RETURN {
-					e.Char = '\r'
-				}
-				if vk == vtinput.VK_SPACE {
-					e.Char = ' '
-				}
-				if vk == vtinput.VK_TAB {
-					e.Char = '\t'
-				}
-				if vk == vtinput.VK_BACK {
-					e.Char = '\b'
-				}
-				return e
-			}
-		}
+	if strings.EqualFold(s, "NumEnter") {
+		e.VirtualKeyCode = vtinput.VK_RETURN
+		e.Char = '\r'
+		return e
+	}
+	if strings.EqualFold(s, "NumDel") {
+		e.VirtualKeyCode = vtinput.VK_DELETE
+		return e
 	}
 
 	for vk, name := range farKeyNames {
@@ -178,7 +166,7 @@ func ParseFarKey(s string) *vtinput.InputEvent {
 			}
 			if vk == vtinput.VK_INSERT || vk == vtinput.VK_DELETE || vk == vtinput.VK_HOME || vk == vtinput.VK_END ||
 				vk == vtinput.VK_PRIOR || vk == vtinput.VK_NEXT || vk == vtinput.VK_UP || vk == vtinput.VK_DOWN ||
-				vk == vtinput.VK_LEFT || vk == vtinput.VK_RIGHT {
+				vk == vtinput.VK_LEFT || vk == vtinput.VK_RIGHT || vk == vtinput.VK_RETURN {
 				e.ControlKeyState |= vtinput.EnhancedKey
 			}
 			return e
