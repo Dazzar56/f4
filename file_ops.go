@@ -167,7 +167,7 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 	desc := fmt.Sprintf("%d item(s) -> %s", len(names), vtui.TruncateMiddle(destInput, 15))
 
 	runFunc := func(ctx context.Context, reporter TaskReporter, anchor vtui.Frame) error {
-		// ctx is wrapped below with globalAwareReporter
+		startTime := time.Now()
 		dirToEnsure := destPath
 		if !isTargetDir {
 			dirToEnsure = dstVfs.Dir(destPath)
@@ -186,7 +186,7 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 
 		var totalStats vfs.OpStats
 		scanErr := error(nil)
-		lastScanUpdate := time.Now()
+		lastScanUpdate := startTime
 		totalStats, scanErr = vfs.CalculateStats(ctx, srcVfs, srcVfs.GetPath(), names, func(currentPath string, stats vfs.OpStats) {
 			now := time.Now()
 			if now.Sub(lastScanUpdate) > 50*time.Millisecond {
@@ -204,8 +204,6 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 		}
 
 		tracker := NewFileOpTracker(totalStats)
-
-		startTime := time.Now()
 		lastUpdate := startTime
 		lastSpeedUpdate := startTime
 		bytesSinceLastSpeedUpdate := int64(0)

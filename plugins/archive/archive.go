@@ -127,7 +127,14 @@ func actionExtractArchive(app vfs.App) {
 
 			totalText := fmt.Sprintf("Total: %s", formatSize(bytes))
 
-			reporter.UpdateTransfer("Extracting", fmt.Sprintf("%d files", entries), -1, totalText, -1, timeSpeedText)
+			currFile := fmt.Sprintf("%d files", entries)
+			if fp, ok := ex.(interface{ CurrentFile() string }); ok {
+				if name := fp.CurrentFile(); name != "" {
+					currFile = name
+				}
+			}
+
+			reporter.UpdateTransfer("Extracting", currFile, -1, totalText, -1, timeSpeedText)
 		}
 		showProgress()
 

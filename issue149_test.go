@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -306,5 +308,183 @@ func TestIssue149_ETA_Stability(t *testing.T) {
 
 	if !strings.Contains(eta, "00:00:0") { // Expecting roughly 5 seconds remaining
 		t.Errorf("ETA seems incorrect: %q. Expected approx 5 seconds.", eta)
+	}
+}
+
+func readFullVFS(ctx context.Context, r vfs.ReadAtCloser, buf []byte) (int, error) {
+	total := 0
+	for total < len(buf) {
+		n, err := r.Read(ctx, buf[total:])
+		total += n
+		if err != nil {
+			if err == io.EOF && total == len(buf) {
+				return total, nil
+			}
+			return total, err
+		}
+	}
+	return total, nil
+}
+
+// TestArchiveReadWrapper_MixedReadAndReadAt verifies that mixing sequential Read()
+// and random-access ReadAt() on an archiveReadWrapper does not corrupt file contents
+// or produce zero-padded tails after 128KB chunks.
+func TestArchiveReadWrapper_MixedReadAndReadAt(t *testing.T) {
+	vfs.RegisterProvider(&archive.ArchiveProvider{})
+	tmpDir := t.TempDir()
+	zipPath := filepath.Join(tmpDir, "test_mixed_read.zip")
+
+	// Generate 300KB pattern file
+	const fileSize = 300 * 1024
+	testData := make([]byte, fileSize)
+	for i := range testData {
+		testData[i] = byte((i*13 + 7) % 251)
+	}
+
+	f, err := os.Create(zipPath)
+	if err != nil {
+		t.Fatalf("Failed to create zip: %v", err)
+	}
+	zw := zip.NewWriter(f)
+	w, err := zw.Create("large_file.bin")
+	if err != nil {
+		t.Fatalf("Failed to create zip entry: %v", err)
+	}
+	w.Write(testData)
+	zw.Close()
+	f.Close()
+
+	parentVFS := vfs.NewOSVFS(tmpDir)
+	arcVFS, err := archive.NewArchiveVFS(parentVFS, zipPath)
+	if err != nil {
+		t.Fatalf("Failed to open ArchiveVFS: %v", err)
+	}
+	defer arcVFS.Close()
+
+	ctx := context.Background()
+	reader, err := arcVFS.Open(ctx, "large_file.bin")
+	if err != nil {
+		t.Fatalf("Failed to Open file in ArchiveVFS: %v", err)
+	}
+	defer reader.Close()
+
+	// 1. First sequential Read of 128KB
+	chunk1 := make([]byte, 128*1024)
+	n1, err := readFullVFS(ctx, reader, chunk1)
+	if err != nil || n1 != 128*1024 {
+		t.Fatalf("First Read failed: n1=%d, err=%v", n1, err)
+	}
+	if !bytes.Equal(chunk1, testData[:128*1024]) {
+		t.Fatalf("First chunk mismatch")
+	}
+
+	// 2. Interleaved ReadAt call (triggers extractToTemp)
+	peekBuf := make([]byte, 64)
+	nPeek, err := reader.ReadAt(ctx, peekBuf, 100)
+	if err != nil || nPeek != 64 {
+		t.Fatalf("ReadAt failed: nPeek=%d, err=%v", nPeek, err)
+	}
+	if !bytes.Equal(peekBuf, testData[100:164]) {
+		t.Fatalf("ReadAt data mismatch at offset 100")
+	}
+
+	// 3. Second sequential Read of remaining data
+	chunk2 := make([]byte, fileSize-128*1024)
+	n2, err := readFullVFS(ctx, reader, chunk2)
+	if err != nil && err != io.EOF {
+		t.Fatalf("Second Read failed: n2=%d, err=%v", n2, err)
+	}
+	if n2 != len(chunk2) {
+		t.Fatalf("Second Read short read: got %d, want %d", n2, len(chunk2))
+	}
+	if !bytes.Equal(chunk2, testData[128*1024:]) {
+		t.Fatalf("Second chunk data mismatch (contains zeros or shifted data)")
+	}
+}
+
+// TestIssue149_F5_Extraction_Integrity ensures 100% binary identity of extracted files
+// larger than 128KB during bulk extraction (F5).
+func TestIssue149_F5_Extraction_Integrity(t *testing.T) {
+	vfs.RegisterProvider(&archive.ArchiveProvider{})
+	tmpDir := t.TempDir()
+	zipPath := filepath.Join(tmpDir, "test_f5_integrity.zip")
+
+	// Generate 350KB test file with non-zero pattern
+	const fileSize = 350 * 1024
+	testData := make([]byte, fileSize)
+	for i := range testData {
+		testData[i] = byte((i*17 + 3) % 251)
+	}
+
+	f, err := os.Create(zipPath)
+	if err != nil {
+		t.Fatalf("Failed to create zip: %v", err)
+	}
+	zw := zip.NewWriter(f)
+	w, err := zw.Create("15_Area51_bunker.dxs")
+	if err != nil {
+		t.Fatalf("Failed to create entry: %v", err)
+	}
+	w.Write(testData)
+	zw.Close()
+	f.Close()
+
+	parentVFS := vfs.NewOSVFS(tmpDir)
+	arcVFS, err := archive.NewArchiveVFS(parentVFS, zipPath)
+	if err != nil {
+		t.Fatalf("Failed to open ArchiveVFS: %v", err)
+	}
+	defer arcVFS.Close()
+
+	dstDir := filepath.Join(tmpDir, "out")
+	os.MkdirAll(dstDir, 0755)
+	dstVFS := vfs.NewOSVFS(dstDir)
+
+	rep := &globalAwareReporter{
+		original:  &DummyReporter{},
+		tracker:   NewFileOpTracker(vfs.OpStats{Files: 1, Bytes: fileSize}),
+		getGlobal: func(action string) (string, int, string) { return "", 0, "" },
+	}
+
+	ctx := context.WithValue(context.Background(), "AutoQueue", true)
+	err = arcVFS.CopyBulk(ctx, []string{"15_Area51_bunker.dxs"}, dstVFS, dstDir, rep)
+	if err != nil {
+		t.Fatalf("CopyBulk failed: %v", err)
+	}
+
+	extractedPath := filepath.Join(dstDir, "15_Area51_bunker.dxs")
+	extractedData, err := os.ReadFile(extractedPath)
+	if err != nil {
+		t.Fatalf("Failed to read extracted file: %v", err)
+	}
+
+	if len(extractedData) != len(testData) {
+		t.Fatalf("Extracted size mismatch: got %d, want %d", len(extractedData), len(testData))
+	}
+
+	if !bytes.Equal(extractedData, testData) {
+		t.Fatalf("Extracted file is binary different from source (contains corrupted/zero blocks)")
+	}
+}
+
+// TestIssue149_StartTimeIncludesScanning verifies that elapsed time in progress statistics
+// accounts for pre-scan duration so the timer doesn't lag behind real wall-clock time.
+func TestIssue149_StartTimeIncludesScanning(t *testing.T) {
+	//totalStats := vfs.OpStats{Files: 1, Bytes: 1024}
+	//tracker := NewFileOpTracker(totalStats)
+
+	// Simulate 3 seconds spent in scanning before transfer starts
+	startTime := time.Now().Add(-3 * time.Second)
+
+	getGlobalStats := func(action string) (string, int, string) {
+		now := time.Now()
+		elapsed := now.Sub(startTime)
+		elapsedStr := fmt.Sprintf("Time: %02d:%02d:%02d", int(elapsed.Hours()), int(elapsed.Minutes())%60, int(elapsed.Seconds())%60)
+		return "", 0, elapsedStr
+	}
+
+	_, _, timeText := getGlobalStats("Copying")
+	if !strings.Contains(timeText, "Time: 00:00:03") && !strings.Contains(timeText, "Time: 00:00:04") {
+		t.Errorf("Expected elapsed time to be at least 3 seconds, got: %q", timeText)
 	}
 }

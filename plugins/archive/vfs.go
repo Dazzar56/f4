@@ -281,6 +281,7 @@ type archiveReadWrapper struct {
 	once       sync.Once
 	mu         sync.Mutex
 	f          fs.File
+	fsPath     string
 	size       int64
 	tmpFile    *os.File
 	tmpPath    string
@@ -288,6 +289,7 @@ type archiveReadWrapper struct {
 	extracting bool
 	doneChan   chan struct{}
 	err        error
+	readPos    int64
 }
 
 func (w *archiveReadWrapper) Size() int64 {
@@ -321,25 +323,58 @@ func (w *archiveReadWrapper) TempPath() string {
 
 func (w *archiveReadWrapper) extractToTemp(ctx context.Context) {
 	w.mu.Lock()
-	f := w.f
+	v := w.v
+	fsPath := w.fsPath
 	w.mu.Unlock()
 
-	if f == nil {
+	var src io.Reader
+	var srcCloser io.Closer
+
+	w.mu.Lock()
+	if seeker, ok := w.f.(io.Seeker); ok {
+		_, err := seeker.Seek(0, io.SeekStart)
+		if err == nil {
+			src = w.f
+		}
+	}
+	w.mu.Unlock()
+
+	if src == nil && v != nil {
+		v.mu.Lock()
+		fsys := v.fsys
+		v.mu.Unlock()
+		if fsys != nil {
+			fNew, err := fsys.Open(fsPath)
+			if err == nil {
+				src = fNew
+				srcCloser = fNew
+			}
+		}
+	}
+
+	if src == nil {
+		w.mu.Lock()
+		src = w.f
+		w.mu.Unlock()
+	}
+
+	if src == nil {
+		w.mu.Lock()
+		w.err = fmt.Errorf("no source file available for extraction")
+		w.mu.Unlock()
 		return
 	}
 
 	tmp, err := os.CreateTemp("", "f4arc-*")
 	if err != nil {
+		if srcCloser != nil {
+			srcCloser.Close()
+		}
 		w.mu.Lock()
 		w.err = err
 		w.mu.Unlock()
 		return
 	}
-
-	w.mu.Lock()
-	w.tmpPath = tmp.Name()
-	w.tmpFile = tmp
-	w.mu.Unlock()
 
 	buf := make([]byte, 128*1024)
 	var loopErr error
@@ -349,7 +384,7 @@ func (w *archiveReadWrapper) extractToTemp(ctx context.Context) {
 			loopErr = ctx.Err()
 			break
 		}
-		n, errRead := f.Read(buf)
+		n, errRead := src.Read(buf)
 		if n > 0 {
 			if _, werr := tmp.Write(buf[:n]); werr != nil {
 				loopErr = werr
@@ -364,6 +399,18 @@ func (w *archiveReadWrapper) extractToTemp(ctx context.Context) {
 		}
 	}
 
+	if srcCloser != nil {
+		srcCloser.Close()
+	}
+
+	w.mu.Lock()
+	readPos := w.readPos
+	w.mu.Unlock()
+
+	if loopErr == nil {
+		_, loopErr = tmp.Seek(readPos, io.SeekStart)
+	}
+
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -373,8 +420,12 @@ func (w *archiveReadWrapper) extractToTemp(ctx context.Context) {
 	}
 
 	if loopErr != nil {
+		tmp.Close()
+		os.Remove(tmp.Name())
 		w.err = loopErr
 	} else {
+		w.tmpPath = tmp.Name()
+		w.tmpFile = tmp
 		w.extracted = true
 	}
 }
@@ -437,7 +488,13 @@ func (w *archiveReadWrapper) Read(ctx context.Context, p []byte) (int, error) {
 	f := w.f
 	w.mu.Unlock()
 
-	return f.Read(p)
+	n, err := f.Read(p)
+	if n > 0 {
+		w.mu.Lock()
+		w.readPos += int64(n)
+		w.mu.Unlock()
+	}
+	return n, err
 }
 
 func formatSize(b int64) string {
@@ -653,9 +710,10 @@ func (v *ArchiveVFS) Open(ctx context.Context, path string) (vfs.ReadAtCloser, e
 	}
 
 	return &archiveReadWrapper{
-		v:    v,
-		f:    srcFile,
-		size: size,
+		v:      v,
+		f:      srcFile,
+		fsPath: fsPath,
+		size:   size,
 	}, nil
 }
 
@@ -1289,6 +1347,29 @@ func (v *ArchiveVFS) copyBulkTar(ctx context.Context, f vfs.ReadAtCloser, select
 }
 
 func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, selected map[string]bool, dstVfs vfs.VFS, dstDir string, reporter vfs.TaskReporter) error {
+	var localPath string
+	if temp, ok := f.(*vfs.TempFileWrapper); ok && temp.TempPath != "" {
+		localPath = temp.TempPath
+	} else {
+		localPath = v.activePath()
+	}
+
+	localF, err := os.Open(localPath)
+	if err != nil {
+		return err
+	}
+	defer localF.Close()
+
+	format, stream, err := archives.Identify(ctx, localPath, localF)
+	if err != nil {
+		return err
+	}
+
+	ex, ok := format.(archives.Extractor)
+	if !ok {
+		return fmt.Errorf("format %T does not support extraction", format)
+	}
+
 	var mu sync.Mutex
 	lastAction := "Locating"
 	lastFile := "Archive data"
@@ -1302,22 +1383,6 @@ func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, s
 		defer mu.Unlock()
 		return lastAction, lastFile, lastPct
 	})
-
-	arcPath := v.activePath()
-	fileObj, err := os.Open(arcPath)
-	if err != nil {
-		return err
-	}
-	defer fileObj.Close()
-
-	format, stream, err := archives.Identify(ctx, arcPath, fileObj)
-	if err != nil {
-		return err
-	}
-	ex, ok := format.(archives.Extractor)
-	if !ok {
-		return fmt.Errorf("format %T does not support extraction", format)
-	}
 
 	buf := make([]byte, 128*1024)
 
@@ -1349,6 +1414,10 @@ func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, s
 			lastFile = cleanName
 			lastPct = -1
 			mu.Unlock()
+			if fp, ok := reporter.(vfs.FileProgress); ok {
+				fp.StartFile(cleanName, size)
+				fp.FileSkipped()
+			}
 			if TestSkipDelay > 0 {
 				time.Sleep(TestSkipDelay)
 			}
