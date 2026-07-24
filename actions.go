@@ -1518,7 +1518,7 @@ func actionFindFile(pf *PanelsFrame) {
 	vtui.FrameManager.Push(dlg)
 }
 func actionPanelSettings(pf *PanelsFrame) {
-	dlg := vtui.NewCenteredDialog(60, 24, Msg("PanelSettings.Title"))
+	dlg := vtui.NewCenteredDialog(60, 22, Msg("PanelSettings.Title"))
 	dlg.ShowClose = true
 
 	chkHidden := vtui.NewCheckbox(0, 0, Msg("PanelSettings.ShowHidden"), false)
@@ -1537,12 +1537,6 @@ func actionPanelSettings(pf *PanelsFrame) {
 	chkPaths.State = 0
 	if AppConfig.SavePanelPaths {
 		chkPaths.State = 1
-	}
-
-	chkCursor := vtui.NewCheckbox(0, 0, Msg("PanelSettings.KeepCursor"), false)
-	chkCursor.State = 0
-	if AppConfig.KeepTerminalCursor {
-		chkCursor.State = 1
 	}
 
 	chkCmdAc := vtui.NewCheckbox(0, 0, "Enable command line &auto-completion", false)
@@ -1583,7 +1577,6 @@ func actionPanelSettings(pf *PanelsFrame) {
 	dlg.AddItem(chkHidden)
 	dlg.AddItem(chkHighlight)
 	dlg.AddItem(chkPaths)
-	dlg.AddItem(chkCursor)
 	dlg.AddItem(chkCmdAc)
 	dlg.AddItem(chkVim)
 	dlg.AddItem(chkSync)
@@ -1594,11 +1587,10 @@ func actionPanelSettings(pf *PanelsFrame) {
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnCancel)
 
-	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 54-4, 24-4)
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 54-4, 22-4)
 	vbox.Add(chkHidden, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkHighlight, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(chkPaths, vtui.Margins{Top: 1}, vtui.AlignLeft)
-	vbox.Add(chkCursor, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(chkCmdAc, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(chkVim, vtui.Margins{Top: 1}, vtui.AlignLeft)
 
@@ -1628,13 +1620,11 @@ func actionPanelSettings(pf *PanelsFrame) {
 		AppConfig.ShowHiddenFiles = chkHidden.State == 1
 		AppConfig.HighlightDir = chkHighlight.State == 1
 		AppConfig.SavePanelPaths = chkPaths.State == 1
-		AppConfig.KeepTerminalCursor = chkCursor.State == 1
 		AppConfig.CommandLineAutoComplete = chkCmdAc.State == 1
 		AppConfig.VimHotkeys = chkVim.State == 1
 		AppConfig.SyncPanelLoad = chkSync.State == 1
 		AppConfig.DefaultFileOpMode = comboMode.Menu.SelectPos
 		AppConfig.FileOpPathDisplay = comboPath.Menu.SelectPos
-		vtui.ManageCursorStyle = !AppConfig.KeepTerminalCursor
 		SaveConfig()
 		dlg.Close()
 		pf.RefreshAll()
@@ -1711,7 +1701,7 @@ func actionConfirmationsSettings(pf *PanelsFrame) {
 }
 
 func actionAppearanceSettings(pf *PanelsFrame) {
-	const width, height = 60, 17
+	const width, height = 60, 19
 	dlg := vtui.NewCenteredDialog(width, height, Msg("AppearanceSettings.Title"))
 	dlg.ShowClose = true
 	originalStyle := AppConfig.ColorStyle
@@ -1753,6 +1743,12 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 	editTitle := vtui.NewEdit(0, 0, 30, AppConfig.ConsoleTitleTemplate)
 	lblTitle := vtui.NewLabel(0, 0, "Window &Title Template:", editTitle)
 
+	chkCursor := vtui.NewCheckbox(0, 0, Msg("PanelSettings.KeepCursor"), false)
+	chkCursor.State = 0
+	if AppConfig.KeepTerminalCursor {
+		chkCursor.State = 1
+	}
+
 	btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))
 	btnOk.IsDefault = true
 	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
@@ -1765,6 +1761,7 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 	dlg.AddItem(editSize)
 	dlg.AddItem(lblTitle)
 	dlg.AddItem(editTitle)
+	dlg.AddItem(chkCursor)
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnCancel)
 
@@ -1789,6 +1786,8 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 	rowTitle.Add(editTitle, vtui.Margins{}, vtui.AlignFill)
 	vbox.Add(rowTitle, vtui.Margins{Top: 1}, vtui.AlignFill)
 
+	vbox.Add(chkCursor, vtui.Margins{Top: 1}, vtui.AlignLeft)
+
 	buttons := vtui.NewHBoxLayout(0, 0, width-4, 1)
 	buttons.HorizontalAlign = vtui.AlignCenter
 	buttons.Spacing = 2
@@ -1812,6 +1811,8 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 		if AppConfig.GuiFontSize <= 0 {
 			AppConfig.GuiFontSize = 16
 		}
+		AppConfig.KeepTerminalCursor = chkCursor.State == 1
+		vtui.ManageCursorStyle = !AppConfig.KeepTerminalCursor
 		SaveConfig()
 
 		dlg.SetExitCode(1)
