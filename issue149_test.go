@@ -191,7 +191,11 @@ func (r *actionCaptureReporter) hasAction(a string) bool {
 // is correctly reported during bulk extraction when files are being skipped.
 func TestIssue149_LocatingStatusReporting(t *testing.T) {
 	archive.TestSkipDelay = 15 * time.Millisecond
-	defer func() { archive.TestSkipDelay = 0 }()
+	archive.ProgressTickerInterval = 5 * time.Millisecond
+	defer func() {
+		archive.TestSkipDelay = 0
+		archive.ProgressTickerInterval = 250 * time.Millisecond
+	}()
 
 	vfs.RegisterProvider(&archive.ArchiveProvider{})
 	tmpDir := t.TempDir()

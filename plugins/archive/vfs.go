@@ -885,11 +885,14 @@ func (v *ArchiveVFS) Clone() vfs.VFS {
 	// For now, return self as cloning requires extracting everything again.
 	return v
 }
+
+var ProgressTickerInterval = 250 * time.Millisecond
+
 func runProgressTicker(ctx context.Context, done chan struct{}, reporter vfs.TaskReporter, getStatus func() (action, file string, pct int)) {
 	if reporter == nil {
 		return
 	}
-	ticker := time.NewTicker(250 * time.Millisecond)
+	ticker := time.NewTicker(ProgressTickerInterval)
 	defer ticker.Stop()
 	dots := ""
 	for {
