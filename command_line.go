@@ -19,7 +19,7 @@ func NewCommandLine(prompt string) *CommandLine {
 		Prompt: prompt,
 		Edit:   vtui.NewEdit(0, 0, 10, ""),
 	}
-	cl.Edit.DeduplicateHistory = false
+	cl.Edit.DeduplicateHistory = true
 	cl.Edit.HistoryLimit = 100
 	cl.Edit.ColorTextIdx = ColCommandLineText
 	cl.Edit.ColorUnchangedIdx = ColCommandLineText
