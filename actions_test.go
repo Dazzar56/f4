@@ -1423,6 +1423,57 @@ func TestPanelsFrame_RunAdvancedProgressTask(t *testing.T) {
 	vtui.FrameManager.Pop()
 }
 
+type mockExtractionVFS struct {
+	vfs.VFS
+	parent vfs.VFS
+}
+
+func (m *mockExtractionVFS) ParentVFS() vfs.VFS { return m.parent }
+
+func TestExecuteFileOp_ContextualTitles(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	srcDir := t.TempDir()
+	os.WriteFile(filepath.Join(srcDir, "data.txt"), []byte("data"), 0644)
+
+	parent := vfs.NewOSVFS(srcDir)
+	srcVfs := &mockExtractionVFS{VFS: parent, parent: parent}
+	dstVfs := vfs.NewOSVFS(t.TempDir())
+
+	done := make(chan struct{})
+	ExecuteFileOp(nil, srcVfs, dstVfs, []string{"data.txt"}, dstVfs.GetPath(), false, 2, func() {
+		close(done)
+	})
+
+	timeout := time.After(2 * time.Second)
+	var dlg *FileOpProgressDialog
+	for dlg == nil {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			top := vtui.FrameManager.GetTopFrame()
+			if top != nil && strings.Contains(top.GetTitle(), "Extracting") {
+				dlg = top.(*FileOpProgressDialog)
+			}
+		case <-timeout:
+			t.Fatal("Timeout waiting for Extracting dialog to appear")
+		}
+	}
+
+	for vtui.FrameManager.GetTopFrame() != nil {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			if top := vtui.FrameManager.GetTopFrame(); top != nil && top.IsDone() {
+				vtui.FrameManager.Pop()
+			}
+		case <-timeout:
+			t.Fatal("Timeout waiting for copy operation to complete")
+		}
+	}
+}
+
 type mockInvalidVFS struct {
 	vfs.VFS
 }
