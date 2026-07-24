@@ -58,6 +58,57 @@ Sequence=Up Up CtrlEnter Esc F5 Down ShiftF5 Esc Esc
 		t.Errorf("Saved config lost sequence: %s", savedStr)
 	}
 }
+
+type mockAreaFrame struct {
+	vtui.BaseFrame
+	typ   vtui.FrameType
+	title string
+}
+
+func (m *mockAreaFrame) GetType() vtui.FrameType { return m.typ }
+func (m *mockAreaFrame) GetTitle() string        { return m.title }
+
+func TestMacro_GetCurrentArea(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	mgr := NewMacroManager("")
+
+	// 1. Empty FrameManager -> "Common"
+	if area := mgr.GetCurrentArea(); area != "Common" {
+		t.Errorf("Expected 'Common' for empty FrameManager, got %q", area)
+	}
+
+	// 2. Dialog -> "Dialog"
+	fDialog := &mockAreaFrame{typ: vtui.TypeDialog}
+	vtui.FrameManager.Push(fDialog)
+	if area := mgr.GetCurrentArea(); area != "Dialog" {
+		t.Errorf("Expected 'Dialog', got %q", area)
+	}
+	vtui.FrameManager.Pop()
+
+	// 3. Menu -> "Menu"
+	fMenu := &mockAreaFrame{typ: vtui.TypeMenu}
+	vtui.FrameManager.Push(fMenu)
+	if area := mgr.GetCurrentArea(); area != "Menu" {
+		t.Errorf("Expected 'Menu', got %q", area)
+	}
+	vtui.FrameManager.Pop()
+
+	// 4. EditorView -> "Editor"
+	fEditor := &mockAreaFrame{typ: vtui.TypeUser + 2}
+	vtui.FrameManager.Push(fEditor)
+	if area := mgr.GetCurrentArea(); area != "Editor" {
+		t.Errorf("Expected 'Editor', got %q", area)
+	}
+	vtui.FrameManager.Pop()
+
+	// 5. ViewerView -> "Viewer"
+	fViewer := &mockAreaFrame{typ: vtui.TypeUser + 3}
+	vtui.FrameManager.Push(fViewer)
+	if area := mgr.GetCurrentArea(); area != "Viewer" {
+		t.Errorf("Expected 'Viewer', got %q", area)
+	}
+	vtui.FrameManager.Pop()
+}
 func TestMacroRecordingAndPlayback(t *testing.T) {
 	tmpFile := "test_macros.ini"
 	defer os.Remove(tmpFile)
