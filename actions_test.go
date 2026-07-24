@@ -1312,3 +1312,74 @@ func TestActionCommandHistory_Deletion(t *testing.T) {
 	menu.SetExitCode(-1)
 	vtui.FrameManager.Pop()
 }
+
+type mockInvalidVFS struct {
+	vfs.VFS
+}
+
+func (m *mockInvalidVFS) Open(ctx context.Context, path string) (vfs.ReadAtCloser, error) {
+	return nil, os.ErrInvalid
+}
+func (m *mockInvalidVFS) Stat(ctx context.Context, p string) (vfs.VFSItem, error) {
+	return vfs.VFSItem{Name: "special", IsDir: false}, nil
+}
+
+func TestActionOpenEditor_SpecialFileRejection(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+	v := &mockInvalidVFS{VFS: vfs.NewOSVFS(t.TempDir())}
+	pf := NewPanelsFrame()
+	defer pf.Close()
+
+	actionOpenEditor(pf, v, "special")
+
+	timeout := time.After(1 * time.Second)
+	foundError := false
+Loop:
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			top := vtui.FrameManager.GetTopFrame()
+			if top != nil && strings.Contains(top.GetTitle(), "Error") {
+				foundError = true
+				break Loop
+			}
+		case <-timeout:
+			break Loop
+		}
+	}
+	if !foundError {
+		t.Error("Expected error dialog for special file in editor")
+	}
+}
+
+func TestActionOpenViewer_SpecialFileRejection(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+	v := &mockInvalidVFS{VFS: vfs.NewOSVFS(t.TempDir())}
+	pf := NewPanelsFrame()
+	defer pf.Close()
+
+	actionOpenViewer(pf, v, "special")
+
+	timeout := time.After(1 * time.Second)
+	foundError := false
+Loop:
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			top := vtui.FrameManager.GetTopFrame()
+			if top != nil && strings.Contains(top.GetTitle(), "Error") {
+				foundError = true
+				break Loop
+			}
+		case <-timeout:
+			break Loop
+		}
+	}
+	if !foundError {
+		t.Error("Expected error dialog for special file in viewer")
+	}
+}

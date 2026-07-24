@@ -470,7 +470,11 @@ func openEditorInternal(pf *PanelsFrame, v vfs.VFS, path string) {
 						f = nil
 					} else {
 						ctx.RunOnUI(func() {
-							vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to open file:\n%v", err), []string{"&Ok"})
+							if err == os.ErrInvalid {
+								vtui.ShowMessage(" Error ", "Cannot open special files (Named Pipes, Sockets, Devices).", []string{"&Ok"})
+							} else {
+								vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to open file:\n%v", err), []string{"&Ok"})
+							}
 						})
 						return
 					}
@@ -505,7 +509,11 @@ func openEditorInternal(pf *PanelsFrame, v vfs.VFS, path string) {
 	}, func(err error) {
 		if err != nil {
 			if err != context.Canceled {
-				vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to open file:\n%v", err), []string{"&Ok"})
+				if err == os.ErrInvalid {
+					vtui.ShowMessage(" Error ", "Cannot open special files (Named Pipes, Sockets, Devices).", []string{"&Ok"})
+				} else {
+					vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to open file:\n%v", err), []string{"&Ok"})
+				}
 			}
 			return
 		}
@@ -603,7 +611,11 @@ func openViewerInternal(pf *PanelsFrame, v vfs.VFS, path string) {
 					showViewer(pf, viewer, path)
 				} else {
 					vtui.DebugLog("PANELS: Failed to open viewer for %s: %v", path, err)
-					vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to open file:\n%v", err), []string{"&Ok"})
+					if err == os.ErrInvalid {
+						vtui.ShowMessage(" Error ", "Cannot open special files (Named Pipes, Sockets, Devices).", []string{"&Ok"})
+					} else {
+						vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to open file:\n%v", err), []string{"&Ok"})
+					}
 				}
 			})
 		})
@@ -620,7 +632,11 @@ func openViewerInternal(pf *PanelsFrame, v vfs.VFS, path string) {
 	}, func(err error) {
 		if err != nil {
 			if err != context.Canceled {
-				vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to open file:\n%v", err), []string{"&Ok"})
+				if err == os.ErrInvalid {
+					vtui.ShowMessage(" Error ", "Cannot open special files (Named Pipes, Sockets, Devices).", []string{"&Ok"})
+				} else {
+					vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to open file:\n%v", err), []string{"&Ok"})
+				}
 			}
 			return
 		}
