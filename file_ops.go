@@ -149,8 +149,20 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 	}
 
 	actionDesc := "Copy"
+	actionTitle := "Copying"
+	dialogTitle := " Copying... "
 	if isMove {
 		actionDesc = "Move"
+		actionTitle = "Moving"
+		dialogTitle = " Moving... "
+	} else if srcVfs.ParentVFS() != nil && dstVfs.ParentVFS() == nil {
+		actionDesc = "Extract"
+		actionTitle = "Extracting"
+		dialogTitle = " Extracting... "
+	} else if srcVfs.ParentVFS() == nil && dstVfs.ParentVFS() != nil {
+		actionDesc = "Archive"
+		actionTitle = "Archiving"
+		dialogTitle = " Archiving... "
 	}
 	desc := fmt.Sprintf("%d item(s) -> %s", len(names), vtui.TruncateMiddle(destInput, 15))
 
@@ -277,10 +289,7 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 				filePct, _, currName := tracker.GetProgress()
 				processed, total := tracker.GetStats()
 
-				action := "Copying"
-				if isMove {
-					action = "Moving"
-				}
+				action := actionTitle
 				gTotalText, gTotalPct, gTimeSpeedText := getGlobalStats(action)
 
 				if gTotalPct >= lastLoggedPct+5 || now.Sub(lastLoggedTime) >= 5*time.Second {
@@ -405,11 +414,7 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 		}
 		GlobalQueueManager.Enqueue(task)
 	} else { // Foreground or Background
-		title := " Copying... "
-		if isMove {
-			title = " Moving... "
-		}
-		dlg := NewFileOpProgressDialog(title)
+		dlg := NewFileOpProgressDialog(dialogTitle)
 		var taskCtx *vtui.TaskContext
 		dlg.btnCancel.OnClick = func() { dlg.SetExitCode(1) }
 		dlg.OnResult = func(code int) {

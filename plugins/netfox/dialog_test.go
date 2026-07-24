@@ -19,6 +19,8 @@ func (m *mockApp) RefreshAll()                     {}
 func (m *mockApp) SetPendingSelection(name string) {}
 func (m *mockApp) RunProgressTask(title, startMsg string, forked bool, worker func(ctx context.Context, update func(msg string, percent int)) error, onComplete func(err error)) {
 }
+func (m *mockApp) RunAdvancedProgressTask(title string, forked bool, worker func(ctx context.Context, reporter vfs.TaskReporter) error, onComplete func(err error)) {
+}
 func (m *mockApp) Message(title, msg string, buttons []string) int               { return 0 }
 func (m *mockApp) InputBox(title, prompt, history string, callback func(string)) {}
 func (m *mockApp) Menu(title string, items []string, callback func(int))         {}

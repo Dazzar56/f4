@@ -110,6 +110,31 @@ func (m *mockAppForProgress) RunProgressTask(title, startMsg string, forked bool
 	onComplete(err)
 	close(m.done)
 }
+
+type mockReporter struct {
+	m *mockAppForProgress
+}
+
+func (r *mockReporter) UpdateScan(currentPath string, files, dirs int64) {}
+func (r *mockReporter) IsCancelled() bool                                { return false }
+func (r *mockReporter) UpdateTransfer(action, filename string, currentPct int, totalText string, totalPct int, speedText string) {
+	r.m.mu.Lock()
+	r.m.progressPct = append(r.m.progressPct, totalPct)
+	r.m.progressMsg = append(r.m.progressMsg, fmt.Sprintf("%s: %s | %s | %s", action, filename, totalText, speedText))
+	r.m.mu.Unlock()
+}
+
+func (m *mockAppForProgress) RunAdvancedProgressTask(title string, forked bool, worker func(ctx context.Context, reporter vfs.TaskReporter) error, onComplete func(err error)) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	reporter := &mockReporter{m: m}
+
+	err := worker(ctx, reporter)
+	onComplete(err)
+	close(m.done)
+}
+
 func (m *mockAppForProgress) Message(title, msg string, buttons []string) int { return 0 }
 func (m *mockAppForProgress) InputBox(title, prompt, defaultText string, callback func(string)) {
 	callback(defaultText)
@@ -155,7 +180,7 @@ func TestActionExtractArchive_ProgressUpdates(t *testing.T) {
 
 	hasSpeedInfo := false
 	for _, msg := range app.progressMsg {
-		if strings.Contains(msg, "/s |") && strings.Contains(msg, "files") && strings.Contains(msg, "Extracting:") {
+		if strings.Contains(msg, "/s") && strings.Contains(msg, "files") && strings.Contains(msg, "Extracting") {
 			hasSpeedInfo = true
 			break
 		}
@@ -193,7 +218,7 @@ func TestActionAddArchive_ProgressUpdates(t *testing.T) {
 
 	hasSpeedInfo := false
 	for _, msg := range app.progressMsg {
-		if strings.Contains(msg, "/s |") && strings.Contains(msg, "files") && strings.Contains(msg, "Archiving:") {
+		if strings.Contains(msg, "/s") && strings.Contains(msg, "files") && strings.Contains(msg, "Archiving") {
 			hasSpeedInfo = true
 			break
 		}
@@ -227,6 +252,26 @@ func (m *mockCancelApp) RunProgressTask(title, startMsg string, forked bool, wor
 	onComplete(m.err)
 	close(m.done)
 }
+
+type mockCancelReporter struct {
+	m      *mockCancelApp
+	cancel context.CancelFunc
+}
+
+func (r *mockCancelReporter) UpdateScan(currentPath string, files, dirs int64) {}
+func (r *mockCancelReporter) IsCancelled() bool                                { return false }
+func (r *mockCancelReporter) UpdateTransfer(action, filename string, currentPct int, totalText string, totalPct int, speedText string) {
+	r.cancel()
+}
+
+func (m *mockCancelApp) RunAdvancedProgressTask(title string, forked bool, worker func(ctx context.Context, reporter vfs.TaskReporter) error, onComplete func(err error)) {
+	ctx, cancel := context.WithCancel(context.Background())
+	reporter := &mockCancelReporter{m: m, cancel: cancel}
+	m.err = worker(ctx, reporter)
+	onComplete(m.err)
+	close(m.done)
+}
+
 func (m *mockCancelApp) Message(title, msg string, buttons []string) int { return 0 }
 func (m *mockCancelApp) InputBox(title, prompt, defaultText string, callback func(string)) {
 	callback(defaultText)

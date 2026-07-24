@@ -19,6 +19,7 @@ type App interface {
 	RefreshAll()
 	SetPendingSelection(name string)
 	RunProgressTask(title, startMsg string, forked bool, worker func(ctx context.Context, update func(msg string, percent int)) error, onComplete func(err error))
+	RunAdvancedProgressTask(title string, forked bool, worker func(ctx context.Context, reporter TaskReporter) error, onComplete func(err error))
 	// UI Bridge
 	Message(title, msg string, buttons []string) int
 	InputBox(title, prompt, history string, callback func(string))

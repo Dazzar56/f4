@@ -1738,6 +1738,38 @@ func (pf *PanelsFrame) RunProgressTask(title, startMsg string, forked bool, work
 		})
 	})
 }
+func (pf *PanelsFrame) RunAdvancedProgressTask(title string, forked bool, worker func(ctx context.Context, reporter vfs.TaskReporter) error, onComplete func(err error)) {
+	dlg := NewFileOpProgressDialog(title)
+	var taskCtx *vtui.TaskContext
+	dlg.btnCancel.OnClick = func() { dlg.SetExitCode(1) }
+	dlg.OnResult = func(code int) {
+		if taskCtx != nil {
+			taskCtx.Cancel()
+		}
+	}
+
+	reporter := &DialogReporter{dlg: dlg}
+
+	vtui.FrameManager.PostTask(func() {
+		if forked && pf != nil {
+			clone := pf.Clone()
+			vtui.FrameManager.AddScreen(clone)
+			vtui.FrameManager.Push(dlg)
+		} else {
+			vtui.FrameManager.AddScreenHeadless(dlg)
+		}
+	})
+
+	taskCtx = vtui.RunAsync(func(ctx *vtui.TaskContext) {
+		err := worker(ctx.Context, reporter)
+		ctx.RunOnUI(func() {
+			dlg.Close()
+			if onComplete != nil {
+				onComplete(err)
+			}
+		})
+	})
+}
 
 type progressTaskReporter struct {
 	update func(msg string, percent int)

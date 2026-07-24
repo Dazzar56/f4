@@ -35,6 +35,10 @@ func (m *mockOverwriteApp) RunProgressTask(title, startMsg string, forked bool, 
 	m.progressCalled = true
 	close(m.done)
 }
+func (m *mockOverwriteApp) RunAdvancedProgressTask(title string, forked bool, worker func(ctx context.Context, reporter vfs.TaskReporter) error, onComplete func(err error)) {
+	m.progressCalled = true
+	close(m.done)
+}
 func (m *mockOverwriteApp) Message(title, msg string, buttons []string) int {
 	m.messageCalled = true
 	m.t.Logf("mockApp.Message called: %q - %q", title, msg)
