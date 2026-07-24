@@ -15,16 +15,17 @@ var MacroMgr *MacroManager
 
 // MacroManager handles recording, playback and storage of simple keyboard macros.
 type MacroManager struct {
-	Macros    map[string][]*vtinput.InputEvent
+	Macros    map[string]map[string][]*vtinput.InputEvent
 	Recording bool
 	Assigning bool
 	Buffer    []*vtinput.InputEvent
 	iniPath   string
+	StartArea string
 }
 
 func NewMacroManager(iniPath string) *MacroManager {
 	mgr := &MacroManager{
-		Macros:  make(map[string][]*vtinput.InputEvent),
+		Macros:  make(map[string]map[string][]*vtinput.InputEvent),
 		iniPath: iniPath,
 	}
 	mgr.Load()
@@ -72,6 +73,38 @@ func formatHotkey(vk uint16, mods vtinput.ControlKeyState) string {
 }
 
 // Filter is hooked into FrameManager. Returns true if the event was consumed.
+func (m *MacroManager) GetCurrentArea() string {
+	if vtui.FrameManager == nil {
+		return "Common"
+	}
+	top := vtui.FrameManager.GetTopFrame()
+	if top == nil {
+		return "Common"
+	}
+	switch top.GetType() {
+	case vtui.TypeDialog:
+		return "Dialog"
+	case vtui.TypeMenu:
+		if menu, ok := top.(*vtui.VMenu); ok {
+			if strings.Contains(menu.GetTitle(), "Drive") {
+				return "Disks"
+			}
+		}
+		return "Menu"
+	case vtui.TypeUser + 1:
+		if pf, ok := top.(*PanelsFrame); ok {
+			if !pf.showPanels {
+				return "Terminal"
+			}
+		}
+		return "Shell"
+	case vtui.TypeUser + 2:
+		return "Editor"
+	case vtui.TypeUser + 3:
+		return "Viewer"
+	}
+	return "Other"
+}
 func (m *MacroManager) Filter(e *vtinput.InputEvent) bool {
 	if e.Type != vtinput.KeyEventType {
 		return false
@@ -93,7 +126,8 @@ func (m *MacroManager) Filter(e *vtinput.InputEvent) bool {
 		} else {
 			m.Recording = true
 			m.Buffer = make([]*vtinput.InputEvent, 0)
-			vtui.DebugLog("MACRO: Started recording")
+			m.StartArea = m.GetCurrentArea()
+			vtui.DebugLog("MACRO: Started recording in area: %s", m.StartArea)
 		}
 		vtui.FrameManager.Redraw()
 		return true // Trigger is ALWAYS consumed
@@ -119,10 +153,23 @@ func (m *MacroManager) Filter(e *vtinput.InputEvent) bool {
 	}
 
 	// Check if this key triggers a macro
-	if seq, ok := m.Macros[KeyStr(e.VirtualKeyCode, e.ControlKeyState)]; ok {
-		vtui.DebugLog("MACRO: Playing back macro for %s", KeyStr(e.VirtualKeyCode, e.ControlKeyState))
-		vtui.FrameManager.InjectEvents(seq)
-		return true
+	keyStr := KeyStr(e.VirtualKeyCode, e.ControlKeyState)
+	currentArea := m.GetCurrentArea()
+
+	if areaMacros, ok := m.Macros[currentArea]; ok {
+		if seq, ok := areaMacros[keyStr]; ok {
+			vtui.DebugLog("MACRO: Playing back macro for %s in area %s", keyStr, currentArea)
+			vtui.FrameManager.InjectEvents(seq)
+			return true
+		}
+	}
+
+	if commonMacros, ok := m.Macros["Common"]; ok {
+		if seq, ok := commonMacros[keyStr]; ok {
+			vtui.DebugLog("MACRO: Playing back macro for %s in area Common", keyStr)
+			vtui.FrameManager.InjectEvents(seq)
+			return true
+		}
 	}
 
 	return false
@@ -136,9 +183,16 @@ func (m *MacroManager) showAssignDialog() {
 
 func (m *MacroManager) Load() {
 	vtui.DebugLog("MACRO: Loading macros from %s", m.iniPath)
-	newMacros := make(map[string][]*vtinput.InputEvent)
+	newMacros := make(map[string]map[string][]*vtinput.InputEvent)
 	ini := LoadIni(m.iniPath)
-	if sec, ok := ini.data["Macros"]; ok {
+	for areaName, sec := range ini.data {
+		targetArea := areaName
+		if areaName == "Macros" {
+			targetArea = "Common" // Migration from legacy format
+		}
+		if newMacros[targetArea] == nil {
+			newMacros[targetArea] = make(map[string][]*vtinput.InputEvent)
+		}
 		for key, val := range sec {
 			parts := strings.Split(val, ",")
 			var events []*vtinput.InputEvent
@@ -157,7 +211,7 @@ func (m *MacroManager) Load() {
 					})
 				}
 			}
-			newMacros[key] = events
+			newMacros[targetArea][key] = events
 		}
 	}
 	m.Macros = newMacros
@@ -167,13 +221,19 @@ func (m *MacroManager) Save() {
 	vtui.DebugLog("MACRO: Saving macros to %s", m.iniPath)
 
 	var sb strings.Builder
-	sb.WriteString("[Macros]\n")
-	for key, seq := range m.Macros {
-		var parts []string
-		for _, e := range seq {
-			parts = append(parts, fmt.Sprintf("%d:%d:%d", e.Char, e.VirtualKeyCode, normalizeMods(e.ControlKeyState)))
+	for area, areaMacros := range m.Macros {
+		if len(areaMacros) == 0 {
+			continue
 		}
-		sb.WriteString(fmt.Sprintf("%s=%s\n", key, strings.Join(parts, ",")))
+		sb.WriteString(fmt.Sprintf("[%s]\n", area))
+		for key, seq := range areaMacros {
+			var parts []string
+			for _, e := range seq {
+				parts = append(parts, fmt.Sprintf("%d:%d:%d", e.Char, e.VirtualKeyCode, normalizeMods(e.ControlKeyState)))
+			}
+			sb.WriteString(fmt.Sprintf("%s=%s\n", key, strings.Join(parts, ",")))
+		}
+		sb.WriteString("\n")
 	}
 
 	os.MkdirAll(filepath.Dir(m.iniPath), 0755)
@@ -239,17 +299,36 @@ func (f *MacroAssignFrame) ProcessKey(e *vtinput.InputEvent) bool {
 
 	key := KeyStr(e.VirtualKeyCode, e.ControlKeyState)
 	if f.mgr.Macros == nil {
-		f.mgr.Macros = make(map[string][]*vtinput.InputEvent)
+		f.mgr.Macros = make(map[string]map[string][]*vtinput.InputEvent)
+	}
+
+	area := f.mgr.StartArea
+	if area == "" {
+		area = "Common"
+	}
+	if f.mgr.Macros[area] == nil {
+		f.mgr.Macros[area] = make(map[string][]*vtinput.InputEvent)
 	}
 
 	keyDesc := formatHotkey(e.VirtualKeyCode, e.ControlKeyState)
 	var msg string
 	if len(f.mgr.Buffer) == 0 {
-		delete(f.mgr.Macros, key)
-		msg = fmt.Sprintf("Macro removed from key:\n%s", keyDesc)
+		if _, exists := f.mgr.Macros[area][key]; exists {
+			delete(f.mgr.Macros[area], key)
+			msg = fmt.Sprintf("Macro removed from key:\n%s\nArea: %s", keyDesc, area)
+		} else if commonArea, ok := f.mgr.Macros["Common"]; ok {
+			if _, exists := commonArea[key]; exists {
+				delete(f.mgr.Macros["Common"], key)
+				msg = fmt.Sprintf("Macro removed from key:\n%s\nArea: Common", keyDesc)
+			} else {
+				msg = fmt.Sprintf("No macro found for key:\n%s", keyDesc)
+			}
+		} else {
+			msg = fmt.Sprintf("No macro found for key:\n%s", keyDesc)
+		}
 	} else {
-		f.mgr.Macros[key] = f.mgr.Buffer
-		msg = fmt.Sprintf("Macro assigned to key:\n%s", keyDesc)
+		f.mgr.Macros[area][key] = f.mgr.Buffer
+		msg = fmt.Sprintf("Macro assigned to key:\n%s\nArea: %s", keyDesc, area)
 	}
 
 	f.mgr.Buffer = nil

@@ -62,13 +62,13 @@ func TestMacroRecordingAndPlayback(t *testing.T) {
 	assignFrame := NewMacroAssignFrame(mgr)
 	assignFrame.ProcessKey(ctrlF1)
 
-	if _, ok := mgr.Macros[KeyStr(vtinput.VK_F1, vtinput.LeftCtrlPressed)]; !ok {
-		t.Fatal("Macro should be saved with Ctrl+F1 key")
+	if _, ok := mgr.Macros["Common"][KeyStr(vtinput.VK_F1, vtinput.LeftCtrlPressed)]; !ok {
+		t.Fatal("Macro should be saved with Ctrl+F1 key in Common area")
 	}
 
 	// Test reloading from file
 	mgr2 := NewMacroManager(tmpFile)
-	if _, ok := mgr2.Macros[KeyStr(vtinput.VK_F1, vtinput.LeftCtrlPressed)]; !ok {
+	if _, ok := mgr2.Macros["Common"][KeyStr(vtinput.VK_F1, vtinput.LeftCtrlPressed)]; !ok {
 		t.Fatal("Macro was not correctly loaded from INI file")
 	}
 }
@@ -97,7 +97,8 @@ func TestMacroPlaybackLogic(t *testing.T) {
 		{Type: vtinput.KeyEventType, KeyDown: true, Char: 'h', VirtualKeyCode: vtinput.VK_H},
 		{Type: vtinput.KeyEventType, KeyDown: true, Char: 'i', VirtualKeyCode: vtinput.VK_I},
 	}
-	mgr.Macros[f2Key] = macroSeq
+	mgr.Macros["Common"] = make(map[string][]*vtinput.InputEvent)
+	mgr.Macros["Common"][f2Key] = macroSeq
 
 	// Simulate F2 press
 	pressF2 := &vtinput.InputEvent{
@@ -170,7 +171,10 @@ func TestMacro_TriggerSwallowing(t *testing.T) {
 
 func TestMacro_AssignRobustness(t *testing.T) {
 	// Clean manager for testing
-	mgr := &MacroManager{Macros: make(map[string][]*vtinput.InputEvent)}
+	mgr := &MacroManager{
+		Macros:    make(map[string]map[string][]*vtinput.InputEvent),
+		StartArea: "Common",
+	}
 	mgr.Buffer = []*vtinput.InputEvent{{Char: 'x', KeyDown: true}}
 	f := NewMacroAssignFrame(mgr)
 
@@ -187,7 +191,7 @@ func TestMacro_AssignRobustness(t *testing.T) {
 	}
 
 	escKey := KeyStr(vtinput.VK_ESCAPE, 0)
-	if _, ok := mgr.Macros[escKey]; ok {
+	if _, ok := mgr.Macros["Common"][escKey]; ok {
 		t.Error("Esc should cancel, not assign a macro")
 	}
 
@@ -195,15 +199,18 @@ func TestMacro_AssignRobustness(t *testing.T) {
 	f.Done = false
 	mgr.Buffer = []*vtinput.InputEvent{{Char: 'y', KeyDown: true}}
 	f.ProcessKey(&vtinput.InputEvent{
-		Type: vtinput.KeyEventType, KeyDown: true,
-		VirtualKeyCode: vtinput.VK_X, ControlKeyState: vtinput.LeftAltPressed,
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_X,
+		ControlKeyState: vtinput.LeftAltPressed,
 	})
 
 	altXKey := KeyStr(vtinput.VK_X, vtinput.LeftAltPressed)
-	if _, ok := mgr.Macros[altXKey]; !ok {
+	if _, ok := mgr.Macros["Common"][altXKey]; !ok {
 		t.Error("Macro failed to assign to Alt+X")
 	}
 }
+
 func TestMacro_KeyUpConsumption(t *testing.T) {
 	mgr := NewMacroManager("unused.ini")
 
@@ -253,7 +260,7 @@ func TestMacro_CancelEsc(t *testing.T) {
 	assign.ProcessKey(escEvent)
 
 	key := KeyStr(vtinput.VK_ESCAPE, 0)
-	if _, ok := mgr.Macros[key]; ok {
+	if _, ok := mgr.Macros["Common"][key]; ok {
 		t.Error("Esc should cancel, not assign a macro")
 	}
 	if !assign.Done {
@@ -265,9 +272,12 @@ func TestMacro_Clear(t *testing.T) {
 	tmpFile := filepath.Join(t.TempDir(), "clear_macros.ini")
 	mgr := NewMacroManager(tmpFile)
 
+	mgr.StartArea = "Common"
+
 	// 1. Assign a macro first
 	key := KeyStr(vtinput.VK_F3, 0)
-	mgr.Macros[key] = []*vtinput.InputEvent{
+	mgr.Macros["Common"] = make(map[string][]*vtinput.InputEvent)
+	mgr.Macros["Common"][key] = []*vtinput.InputEvent{
 		{Type: vtinput.KeyEventType, KeyDown: true, Char: 'x'},
 	}
 	mgr.Save()
@@ -283,13 +293,13 @@ func TestMacro_Clear(t *testing.T) {
 	})
 
 	// 3. Verify it is deleted from active map
-	if _, ok := mgr.Macros[key]; ok {
+	if _, ok := mgr.Macros["Common"][key]; ok {
 		t.Error("Macro should be completely deleted from map when assigned an empty buffer")
 	}
 
 	// 4. Verify it is deleted from saved file
 	mgr2 := NewMacroManager(tmpFile)
-	if _, ok := mgr2.Macros[key]; ok {
+	if _, ok := mgr2.Macros["Common"][key]; ok {
 		t.Error("Cleared macro should not persist in the saved INI file")
 	}
 }
@@ -311,7 +321,10 @@ func TestMacro_CharTrigger(t *testing.T) {
 	}
 }
 func TestMacro_AssignFrame_Structure(t *testing.T) {
-	mgr := &MacroManager{Macros: make(map[string][]*vtinput.InputEvent)}
+	mgr := &MacroManager{
+		Macros:    make(map[string]map[string][]*vtinput.InputEvent),
+		StartArea: "Common",
+	}
 	f := NewMacroAssignFrame(mgr)
 
 	// Check that it's a proper window with a child (the prompt text)
@@ -342,7 +355,7 @@ func TestMacro_AssignFrame_Structure(t *testing.T) {
 
 	// Verify that macro was assigned to Tab
 	tabKey := KeyStr(vtinput.VK_TAB, 0)
-	if _, ok := mgr.Macros[tabKey]; !ok {
+	if _, ok := mgr.Macros["Common"][tabKey]; !ok {
 		t.Error("Macro failed to assign to Tab key")
 	}
 }
@@ -431,9 +444,12 @@ func TestMacroClearRecordingIsEmpty(t *testing.T) {
 
 func TestMacroClearResetsExisting(t *testing.T) {
 	mgr := NewMacroManager("")
-	mgr.Macros = map[string][]*vtinput.InputEvent{
-		"C:0": {{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F3}},
+	mgr.Macros = map[string]map[string][]*vtinput.InputEvent{
+		"Common": {
+			"C:0": {{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F3}},
+		},
 	}
+	mgr.StartArea = "Common"
 
 	scr := vtui.NewSilentScreenBuf()
 	scr.AllocBuf(80, 25)
@@ -507,7 +523,7 @@ WaitLoop:
 		t.Error("Expected Assigning state to be cleared after key processing")
 	}
 
-	if _, exists := mgr.Macros["C:0"]; exists {
+	if _, exists := mgr.Macros["Common"]["C:0"]; exists {
 		t.Error("Expected macro on C:0 to be deleted")
 	}
 }
