@@ -1699,6 +1699,81 @@ func actionConfirmationsSettings(pf *PanelsFrame) {
 
 	vtui.FrameManager.Push(dlg)
 }
+func actionUpdateSettings(pf *PanelsFrame) {
+	width, height := 54, 11
+	dlg := vtui.NewCenteredDialog(width, height, Msg("UpdateSettings.Title"))
+	dlg.ShowClose = true
+
+	channels := []string{"Stable releases", "Nightly builds"}
+	comboChannel := vtui.NewComboBox(0, 0, 24, channels)
+	comboChannel.DropdownOnly = true
+	if AppConfig.UpdateChannel >= 0 && AppConfig.UpdateChannel < len(channels) {
+		comboChannel.Menu.SetSelectPos(AppConfig.UpdateChannel)
+		comboChannel.Edit.SetText(channels[AppConfig.UpdateChannel])
+	}
+	lblChannel := vtui.NewLabel(0, 0, Msg("UpdateSettings.Channel"), comboChannel)
+
+	intervals := []string{"Never", "Every start", "Daily", "Weekly"}
+	comboInterval := vtui.NewComboBox(0, 0, 24, intervals)
+	comboInterval.DropdownOnly = true
+	if AppConfig.UpdateInterval >= 0 && AppConfig.UpdateInterval < len(intervals) {
+		comboInterval.Menu.SetSelectPos(AppConfig.UpdateInterval)
+		comboInterval.Edit.SetText(intervals[AppConfig.UpdateInterval])
+	}
+	lblInterval := vtui.NewLabel(0, 0, Msg("UpdateSettings.Interval"), comboInterval)
+
+	btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))
+	btnOk.IsDefault = true
+	btnCheck := vtui.NewButton(0, 0, Msg("UpdateSettings.BtnCheck"))
+	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
+
+	dlg.AddItem(lblChannel)
+	dlg.AddItem(comboChannel)
+	dlg.AddItem(lblInterval)
+	dlg.AddItem(comboInterval)
+	dlg.AddItem(btnOk)
+	dlg.AddItem(btnCheck)
+	dlg.AddItem(btnCancel)
+
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, width-4, height-4)
+
+	rowChannel := vtui.NewHBoxLayout(0, 0, width-4, 1)
+	rowChannel.Add(lblChannel, vtui.Margins{Right: 1}, vtui.AlignLeft)
+	rowChannel.Add(comboChannel, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(rowChannel, vtui.Margins{}, vtui.AlignFill)
+
+	rowInterval := vtui.NewHBoxLayout(0, 0, width-4, 1)
+	rowInterval.Add(lblInterval, vtui.Margins{Right: 1}, vtui.AlignLeft)
+	rowInterval.Add(comboInterval, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(rowInterval, vtui.Margins{Top: 1}, vtui.AlignFill)
+
+	hbox := vtui.NewHBoxLayout(0, 0, width-4, 1)
+	hbox.HorizontalAlign = vtui.AlignCenter
+	hbox.Spacing = 2
+	hbox.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
+	hbox.Add(btnCheck, vtui.Margins{}, vtui.AlignTop)
+	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
+
+	vbox.Add(hbox, vtui.Margins{Top: 2}, vtui.AlignFill)
+	vbox.Apply()
+
+	btnCancel.OnClick = func() { dlg.Close() }
+	btnOk.OnClick = func() {
+		AppConfig.UpdateChannel = comboChannel.Menu.SelectPos
+		AppConfig.UpdateInterval = comboInterval.Menu.SelectPos
+		SaveConfig()
+		dlg.Close()
+	}
+	btnCheck.OnClick = func() {
+		AppConfig.UpdateChannel = comboChannel.Menu.SelectPos
+		AppConfig.UpdateInterval = comboInterval.Menu.SelectPos
+		SaveConfig()
+		dlg.Close()
+		CheckForUpdates(pf, true)
+	}
+
+	vtui.FrameManager.Push(dlg)
+}
 
 func actionAppearanceSettings(pf *PanelsFrame) {
 	const width, height = 60, 19

@@ -42,4 +42,5 @@ const (
 	CmAppearanceSettings
 	CmConfirmationsSettings
 	CmPlugins
+	CmUpdateSettings
 )

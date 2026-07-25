@@ -39,6 +39,10 @@ type F4Config struct {
 	GuiFont                 string
 	GuiFontSize             int
 	ConsoleTitleTemplate    string
+	UpdateChannel           int    // 0 = Stable, 1 = Nightly
+	UpdateInterval          int    // 0 = Never, 1 = Every start, 2 = Daily, 3 = Weekly
+	LastUpdateCheck         int64  // Unix timestamp
+	LastUpdateVersion       string // Version string or PublishedAt timestamp
 }
 
 var AppConfig = F4Config{
@@ -69,6 +73,10 @@ var AppConfig = F4Config{
 	GuiFont:                 "",
 	GuiFontSize:             16,
 	ConsoleTitleTemplate:    "f4 - %State",
+	UpdateChannel:           0,
+	UpdateInterval:          3, // Default to Weekly
+	LastUpdateCheck:         0,
+	LastUpdateVersion:       "",
 }
 
 var getUserConfigIniPath = func() string {
@@ -121,6 +129,10 @@ func LoadConfig() {
 	if AppConfig.GuiFontSize <= 0 {
 		AppConfig.GuiFontSize = 16
 	}
+	fmt.Sscanf(ini.GetString("Update", "Channel", "0"), "%d", &AppConfig.UpdateChannel)
+	fmt.Sscanf(ini.GetString("Update", "Interval", "3"), "%d", &AppConfig.UpdateInterval)
+	fmt.Sscanf(ini.GetString("Update", "LastCheck", "0"), "%d", &AppConfig.LastUpdateCheck)
+	AppConfig.LastUpdateVersion = ini.GetString("Update", "LastVersion", "")
 
 	AppConfig.EditorAutoComplete = ini.GetString("Editor", "AutoComplete", "1") == "1"
 	AppConfig.EditorAutoCompleteMask = ini.GetString("Editor", "AutoCompleteMask", "*.go;*.c;*.cpp;*.h;*.hpp;*.py;*.js;*.ts;*.rs;*.java;*.sh;*.txt;*.md;*.html;*.css;*.json")
@@ -165,6 +177,11 @@ func SaveConfig() {
 	sb.WriteString("\n[Appearance]\n")
 	sb.WriteString(fmt.Sprintf("GuiFont = %s\n", AppConfig.GuiFont))
 	sb.WriteString(fmt.Sprintf("GuiFontSize = %d\n", AppConfig.GuiFontSize))
+	sb.WriteString("\n[Update]\n")
+	sb.WriteString(fmt.Sprintf("Channel = %d\n", AppConfig.UpdateChannel))
+	sb.WriteString(fmt.Sprintf("Interval = %d\n", AppConfig.UpdateInterval))
+	sb.WriteString(fmt.Sprintf("LastCheck = %d\n", AppConfig.LastUpdateCheck))
+	sb.WriteString(fmt.Sprintf("LastVersion = %s\n", AppConfig.LastUpdateVersion))
 
 	sb.WriteString(fmt.Sprintf("ConfirmCopy = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.ConfirmCopy]))
 	sb.WriteString(fmt.Sprintf("ConfirmMove = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.ConfirmMove]))
