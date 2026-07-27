@@ -1360,7 +1360,7 @@ func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, s
 	}
 	defer localF.Close()
 
-	format, stream, err := archives.Identify(ctx, localPath, localF)
+	format, _, err := archives.Identify(ctx, localPath, localF)
 	if err != nil {
 		return err
 	}
@@ -1368,6 +1368,10 @@ func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, s
 	ex, ok := format.(archives.Extractor)
 	if !ok {
 		return fmt.Errorf("format %T does not support extraction", format)
+	}
+
+	if _, err := localF.Seek(0, io.SeekStart); err != nil {
+		return err
 	}
 
 	var mu sync.Mutex
@@ -1384,9 +1388,7 @@ func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, s
 		return lastAction, lastFile, lastPct
 	})
 
-	buf := make([]byte, 128*1024)
-
-	return ex.Extract(ctx, stream, func(ctx context.Context, info archives.FileInfo) error {
+	return ex.Extract(ctx, localF, func(ctx context.Context, info archives.FileInfo) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -1420,6 +1422,12 @@ func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, s
 			}
 			if TestSkipDelay > 0 {
 				time.Sleep(TestSkipDelay)
+			}
+			if !info.IsDir() {
+				if rc, err := info.Open(); err == nil {
+					io.Copy(io.Discard, rc)
+					rc.Close()
+				}
 			}
 			return nil
 		}
@@ -1465,6 +1473,7 @@ func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, s
 		}
 		defer wc.Close()
 
+		buf := make([]byte, 128*1024)
 		var copied int64
 		for {
 			if ctx.Err() != nil {
