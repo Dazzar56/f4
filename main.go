@@ -75,6 +75,7 @@ func main() {
 	var guiBackend string
 	var ttyMode bool
 	var version bool
+	var attachedMode bool
 
 	for i := 1; i < len(os.Args); i++ {
 		arg := os.Args[i]
@@ -144,6 +145,8 @@ func main() {
 			return
 		case "--tty":
 			ttyMode = true
+		case "--attached":
+			attachedMode = true
 		case "--sudo-dispatcher":
 			if flagVal != "" {
 				sudoDispatcher = flagVal
@@ -189,6 +192,7 @@ func main() {
 	}
 
 	if guiMode {
+		checkAndDetach(attachedMode)
 		if guiBackend != "" {
 			if err := RunGui(guiBackend); err != nil {
 				fmt.Fprintf(os.Stderr, "\n[f4] FATAL GUI ERROR: %v\n", err)
@@ -204,10 +208,24 @@ func main() {
 	}
 
 	// Default auto-detect mode (neither --gui nor --tty specified)
-	if err := tryRunDefaultGui(); err != nil {
-		vtui.DebugLog("MAIN: Falling back to console mode: %v", err)
-		ManageSessions()
+	if shouldTryGui() {
+		checkAndDetach(attachedMode)
+		if err := tryRunDefaultGui(); err != nil {
+			vtui.DebugLog("MAIN: GUI auto-detect failed after detach: %v", err)
+			os.Exit(1)
+		}
+		return
 	}
+
+	vtui.DebugLog("MAIN: Falling back to console mode")
+	ManageSessions()
+}
+
+func shouldTryGui() bool {
+	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
+		return true
+	}
+	return os.Getenv("WAYLAND_DISPLAY") != "" || os.Getenv("DISPLAY") != ""
 }
 
 func tryRunDefaultGui() error {
