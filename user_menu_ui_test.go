@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -242,5 +243,42 @@ func TestUserMenu_ExecuteCommands(t *testing.T) {
 	// Комментарии не должны уйти в выполнение
 	if strings.Contains(written, "ignored") {
 		t.Error("Comments (REM / ::) were erroneously sent to PTY execution")
+	}
+}
+func TestUserMenu_ExecuteMultipleCommands(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	pf := setupMockPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	pty := pf.pty.(*mockPty)
+
+	fsp := pf.panels[pf.activeIdx].(*FileSystemPanel)
+	tmpDir := t.TempDir()
+	fsp.vfs.SetPath(tmpDir)
+	fsp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: ".."}},
+		{VFSItem: vfs.VFSItem{Name: "file.go"}},
+	}
+	fsp.Refresh()
+	fsp.SetCursorIndex(1)
+
+	commands := []string{
+		"echo 1",
+		"echo 2",
+	}
+
+	executeMenuCommands(pf, commands)
+
+	written := string(pty.written)
+	if runtime.GOOS == "windows" {
+		if !strings.Contains(written, "echo 1 & echo 2") {
+			t.Errorf("Expected Windows commands to be joined with ' & ', got: %q", written)
+		}
+	} else {
+		if !strings.Contains(written, "echo 1; echo 2") {
+			t.Errorf("Expected Unix commands to be joined with '; ', got: %q", written)
+		}
 	}
 }

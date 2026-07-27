@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/unxed/f4/piecetable"
@@ -903,11 +904,15 @@ func executeMenuCommands(pf *PanelsFrame, commands []string) {
 		return
 	}
 
-	// Join with ';' so multiple commands run sequentially in one shell.
+	// Join so multiple commands run sequentially in one shell.
 	// We lose the panel-follows-cd nicety that far2l gets from intercepting
 	// each cd in cmdline, but the user can still use a single "cd" command
 	// per menu item to get that effect.
-	joined := strings.Join(lines, "; ")
+	separator := "; "
+	if runtime.GOOS == "windows" {
+		separator = " & "
+	}
+	joined := strings.Join(lines, separator)
 	pf.cmdLine.Edit.SetText(joined)
 	pf.ProcessKey(&vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
