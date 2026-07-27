@@ -467,6 +467,7 @@ func TestIssue149_F5_Extraction_Integrity(t *testing.T) {
 		t.Fatalf("Extracted file is binary different from source (contains corrupted/zero blocks)")
 	}
 }
+
 // TestIssue149_NoQuadraticDecompression verifies that extracting a single file
 // from a multi-file archive is fast and does not scale quadratically.
 func TestIssue149_NoQuadraticDecompression(t *testing.T) {
