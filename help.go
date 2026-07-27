@@ -54,10 +54,16 @@ func parseMarkdownToHelpTopic(name string, mdContent string) *vtui.HelpTopic {
 				topic.Lines = append([]string{headerText}, topic.Lines...)
 				continue
 			}
+			line = convertMarkdownLinks(line)
+			topic.Lines = append(topic.Lines, line)
+			continue
 		}
 
-		line = convertMarkdownLinks(line)
-		topic.Lines = append(topic.Lines, line)
+		wrapped := vtui.WrapText(line, 70)
+		for _, wLine := range wrapped {
+			wLine = convertMarkdownLinks(wLine)
+			topic.Lines = append(topic.Lines, wLine)
+		}
 	}
 	return topic
 }
