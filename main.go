@@ -307,6 +307,7 @@ func SetupUI() {
 	SetDefaultF4Palette()
 	InitLang()
 	LoadConfig()
+	InitHelpSystem()
 	if err := ApplyColorStyle(AppConfig.ColorStyle); err != nil {
 		vtui.DebugLog("COLORS: %v; falling back to Modern", err)
 		AppConfig.ColorStyle = "Modern"
