@@ -67,6 +67,11 @@ func UpdateWindowTitle(scr *vtui.ScreenBuf) {
 
 	title := r.Replace(template)
 	vtui.SetWindowTitle(title)
+
+	// Macro recording indicator — drawn after MenuBar so it's always on top
+	if MacroMgr != nil && MacroMgr.Recording {
+		scr.Write(0, 0, vtui.StringToCharInfo(" R ", vtui.SetRGBBoth(0, 0xFFFFFF, 0xFF0000)))
+	}
 }
 
 func getBackendName() string {
