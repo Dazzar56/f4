@@ -835,6 +835,7 @@ func showEditItemDialog(s *userMenuState, current *vtui.VMenu, items []UserMenuI
 	dlg.SetFocusedItem(editLabel)
 	vtui.FrameManager.Push(dlg)
 }
+
 // editCurrentMenuInExternalEditor implements the Ctrl+F4 flow modelled
 // after far2l (usermenu.cpp:619-678): write the current root tree to a
 // temp file as FarMenu.ini text, open the editor on the temp file, and
