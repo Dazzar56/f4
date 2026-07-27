@@ -1125,7 +1125,6 @@ func (v *ArchiveVFS) copyBulkZip(ctx context.Context, f vfs.ReadAtCloser, select
 			lastFile = file.Name
 			lastPct = 0
 			mu.Unlock()
-			reporter.UpdateTransfer("Extracting", file.Name, 0, "", 0, "")
 		}
 
 		rc, err := file.Open()
@@ -1164,7 +1163,6 @@ func (v *ArchiveVFS) copyBulkZip(ctx context.Context, f vfs.ReadAtCloser, select
 					lastFile = file.Name
 					lastPct = pct
 					mu.Unlock()
-					reporter.UpdateTransfer("Extracting", file.Name, pct, "", pct, "")
 				}
 			}
 			if rerr != nil {
@@ -1279,7 +1277,6 @@ func (v *ArchiveVFS) copyBulkTar(ctx context.Context, f vfs.ReadAtCloser, select
 			lastFile = cleanName
 			lastPct = 0
 			mu.Unlock()
-			reporter.UpdateTransfer("Extracting", cleanName, 0, "", 0, "")
 		}
 
 		wc, err := dstVfs.Create(ctx, targetPath)
@@ -1310,7 +1307,6 @@ func (v *ArchiveVFS) copyBulkTar(ctx context.Context, f vfs.ReadAtCloser, select
 					lastFile = cleanName
 					lastPct = pct
 					mu.Unlock()
-					reporter.UpdateTransfer("Extracting", cleanName, pct, "", pct, "")
 				}
 			}
 			if rerr != nil {
@@ -1458,7 +1454,6 @@ func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, s
 			lastFile = cleanName
 			lastPct = 0
 			mu.Unlock()
-			reporter.UpdateTransfer("Extracting", cleanName, 0, "", 0, "")
 		}
 
 		rc, err := info.Open()
@@ -1495,7 +1490,6 @@ func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, s
 					lastFile = cleanName
 					lastPct = pct
 					mu.Unlock()
-					reporter.UpdateTransfer("Extracting", cleanName, pct, "", pct, "")
 				}
 			}
 			if rerr != nil {
