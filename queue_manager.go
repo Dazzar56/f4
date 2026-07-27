@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -93,7 +94,6 @@ func (t *QueueTask) UpdateScan(currentPath string, files, dirs int64) {
 
 	GlobalQueueManager.RequestRefresh()
 }
-
 func (t *QueueTask) UpdateTransfer(action string, filename string, currentPct int, totalText string, totalPct int, speedText string) {
 	t.mu.Lock()
 	if t.State == "Done" || t.State == "Error" || t.State == "Cancelled" {
@@ -104,7 +104,14 @@ func (t *QueueTask) UpdateTransfer(action string, filename string, currentPct in
 	t.CurrentFile = filename
 	t.Progress = totalPct
 	t.TotalText = totalText
-	t.Speed = speedText
+
+	// Extract clean speed from composite timeSpeedText string if applicable
+	displaySpeed := speedText
+	if len(speedText) >= 37 {
+		displaySpeed = strings.TrimSpace(speedText[37:])
+	}
+	t.Speed = displaySpeed
+
 	t.mu.Unlock()
 
 	GlobalQueueManager.RequestRefresh()
