@@ -1419,12 +1419,6 @@ func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, s
 			if TestSkipDelay > 0 {
 				time.Sleep(TestSkipDelay)
 			}
-			if !info.IsDir() {
-				if rc, err := info.Open(); err == nil {
-					io.Copy(io.Discard, rc)
-					rc.Close()
-				}
-			}
 			return nil
 		}
 
