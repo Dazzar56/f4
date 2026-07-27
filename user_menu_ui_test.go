@@ -282,3 +282,54 @@ func TestUserMenu_ExecuteMultipleCommands(t *testing.T) {
 		}
 	}
 }
+
+func TestUserMenu_InteractiveEdit(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	pf := setupMockPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	s := &userMenuState{
+		pf:         pf,
+		mode:       MenuModeLocal,
+		sourcePath: filepath.Join(t.TempDir(), farMenuFileName),
+		rootTitle:  "Local Menu",
+		rootItems: []UserMenuItem{
+			{HotKey: "1", Label: "old label", Commands: []string{"echo 1"}},
+		},
+	}
+
+	showEditItemDialog(s, vtui.NewVMenu("dummy"), s.rootItems, 0, false, false)
+
+	top := vtui.FrameManager.GetTopFrame()
+	if top == nil || top.GetTitle() != " Edit User Menu " {
+		t.Fatalf("Expected Edit User Menu dialog, got %v", top)
+	}
+
+	dlg := top.(vtui.Container)
+	vtui.AssertLayout(t, dlg)
+
+	var editLabel *vtui.Edit
+	var btnSave *vtui.Button
+	for _, child := range dlg.GetChildren() {
+		if e, ok := child.(*vtui.Edit); ok && e.GetText() == "old label" {
+			editLabel = e
+		}
+		if b, ok := child.(*vtui.Button); ok && strings.Contains(b.GetText(), "Save") {
+			btnSave = b
+		}
+	}
+
+	if editLabel == nil || btnSave == nil {
+		t.Fatal("Required dialog controls not found")
+	}
+
+	editLabel.SetText("new label")
+	btnSave.OnClick()
+
+	if s.rootItems[0].Label != "new label" {
+		t.Errorf("Expected updated label 'new label', got %q", s.rootItems[0].Label)
+	}
+}
