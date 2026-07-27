@@ -607,10 +607,6 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 		}
 	}
 
-	// Macro Recording Indicator
-	if MacroMgr != nil && MacroMgr.Recording {
-		scr.Write(0, 0, vtui.StringToCharInfo(" R ", vtui.SetRGBBoth(0, 0xFFFFFF, 0xFF0000)))
-	}
 }
 
 func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
