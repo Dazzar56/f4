@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -465,6 +466,210 @@ func TestIssue149_F5_Extraction_Integrity(t *testing.T) {
 	if !bytes.Equal(extractedData, testData) {
 		t.Fatalf("Extracted file is binary different from source (contains corrupted/zero blocks)")
 	}
+}
+
+type testBlackBoxReporter struct{}
+
+func (r *testBlackBoxReporter) UpdateScan(currentPath string, files, dirs int64) {}
+func (r *testBlackBoxReporter) UpdateTransfer(action, filename string, currentPct int, totalText string, totalPct int, speedText string) {
+}
+func (r *testBlackBoxReporter) IsCancelled() bool { return false }
+
+// TestIssue149_7z_MultiBlock_Solid_Integrity recreates the exact conditions of large
+// multi-block solid 7z archives with nested directories and >1MB binary files.
+func TestIssue149_7z_MultiBlock_Solid_Integrity(t *testing.T) {
+	sevenZipCmd := ""
+	for _, cmd := range []string{"7z", "7za", "7zr"} {
+		if _, err := exec.LookPath(cmd); err == nil {
+			sevenZipCmd = cmd
+			break
+		}
+	}
+	if sevenZipCmd == "" {
+		t.Skip("Skipping 7z integration test: 7z/7za/7zr executable not found in PATH")
+	}
+
+	vfs.RegisterProvider(&archive.ArchiveProvider{})
+	tmpDir := t.TempDir()
+
+	// Recreate user structure with nested folders and large pseudo-random files (>1MB)
+	fileSpecs := []struct {
+		relPath string
+		size    int
+		seed    int64
+	}{
+		{"Deus Ex/Save/Save0048/04_NYC_Street.dxs", 3 * 1024 * 1024, 1001},
+		{"Deus Ex/Save/Save0050/04_NYC_UNATCOIsland.dxs", 2500 * 1024, 1002},
+		{"Deus Ex/Save/Save0059/05_NYC_UNATCOMJ12lab.dxs", 4 * 1024 * 1024, 1003},
+		{"Deus Ex/System/Shot0001.bmp", 5 * 1024 * 1024, 1004},
+		{"Deus Ex/System/Shot0003.bmp", 5 * 1024 * 1024, 1005},
+	}
+
+	srcDir := filepath.Join(tmpDir, "src")
+	originalData := make(map[string][]byte)
+
+	for _, spec := range fileSpecs {
+		fullPath := filepath.Join(srcDir, filepath.FromSlash(spec.relPath))
+		if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
+			t.Fatalf("Failed to create dir for %s: %v", spec.relPath, err)
+		}
+
+		// Generate uncompressible pseudo-random data to force multi-block solid LZMA2 stream
+		data := make([]byte, spec.size)
+		for i := range data {
+			data[i] = byte((int64(i)*13 + spec.seed*37) % 251)
+			if data[i] == 0 {
+				data[i] = 1
+			}
+		}
+		originalData[spec.relPath] = data
+
+		if err := os.WriteFile(fullPath, data, 0644); err != nil {
+			t.Fatalf("Failed to write test file %s: %v", spec.relPath, err)
+		}
+	}
+
+	// Compress using console 7z with small solid block size (-ms=2m) to force multiple solid blocks
+	archivePath := filepath.Join(tmpDir, "DeusEx_test.7z")
+	cmd := exec.Command(sevenZipCmd, "a", "-ms=2m", "-m0=lzma2", archivePath, "Deus Ex")
+	cmd.Dir = srcDir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("7z command failed: %v\nOutput: %s", err, string(out))
+	}
+
+	verifyFile := func(t *testing.T, extractedPath string, relPath string) {
+		data, err := os.ReadFile(extractedPath)
+		if err != nil {
+			t.Errorf("Failed to read extracted file %s: %v", relPath, err)
+			return
+		}
+		orig := originalData[relPath]
+		if len(data) != len(orig) {
+			t.Errorf("[%s] Size mismatch: got %d, want %d", relPath, len(data), len(orig))
+			return
+		}
+		for i := 0; i < len(orig); i++ {
+			if data[i] != orig[i] {
+				t.Errorf("[%s] CORRUPTION at byte offset 0x%X (%d): got 0x%02X, want 0x%02X",
+					relPath, i, i, data[i], orig[i])
+				return
+			}
+		}
+	}
+
+	// --- SCENARIO 1: F5 Bulk Copy of specific nested files ---
+	t.Run("Bulk_Copy_Nested_Files_F5", func(t *testing.T) {
+		parentVFS := vfs.NewOSVFS(tmpDir)
+		arcVFS, err := archive.NewArchiveVFS(parentVFS, archivePath)
+		if err != nil {
+			t.Fatalf("NewArchiveVFS failed: %v", err)
+		}
+		defer arcVFS.Close()
+
+		dstDir := filepath.Join(tmpDir, "out_f5_nested")
+		if err := os.MkdirAll(dstDir, 0755); err != nil {
+			t.Fatalf("Failed to create out_f5_nested: %v", err)
+		}
+		dstVFS := vfs.NewOSVFS(dstDir)
+
+		selected := []string{
+			"Deus Ex/Save/Save0048/04_NYC_Street.dxs",
+			"Deus Ex/System/Shot0001.bmp",
+		}
+
+		rep := &testBlackBoxReporter{}
+		ctx := context.WithValue(context.Background(), "AutoQueue", true)
+		if err := arcVFS.CopyBulk(ctx, selected, dstVFS, dstDir, rep); err != nil {
+			t.Fatalf("CopyBulk failed: %v", err)
+		}
+		for _, rel := range selected {
+			verifyFile(t, filepath.Join(dstDir, filepath.FromSlash(rel)), rel)
+		}
+	})
+
+	// --- SCENARIO 2: F5 Bulk Copy of the entire top folder ---
+	t.Run("Bulk_Copy_Root_Folder_F5", func(t *testing.T) {
+		parentVFS := vfs.NewOSVFS(tmpDir)
+		arcVFS, err := archive.NewArchiveVFS(parentVFS, archivePath)
+		if err != nil {
+			t.Fatalf("NewArchiveVFS failed: %v", err)
+		}
+		defer arcVFS.Close()
+
+		dstDir := filepath.Join(tmpDir, "out_f5_root")
+		if err := os.MkdirAll(dstDir, 0755); err != nil {
+			t.Fatalf("Failed to create out_f5_root: %v", err)
+		}
+		dstVFS := vfs.NewOSVFS(dstDir)
+
+		selected := []string{"Deus Ex"}
+
+		rep := &testBlackBoxReporter{}
+		ctx := context.WithValue(context.Background(), "AutoQueue", true)
+		if err := arcVFS.CopyBulk(ctx, selected, dstVFS, dstDir, rep); err != nil {
+			t.Fatalf("CopyBulk failed: %v", err)
+		}
+
+		for _, spec := range fileSpecs {
+			verifyFile(t, filepath.Join(dstDir, filepath.FromSlash(spec.relPath)), spec.relPath)
+		}
+	})
+
+	// --- SCENARIO 3: Sequential VFS.Open with TaskReporter (forcing archiveReadWrapper) ---
+	t.Run("Sequential_Open_With_Reporter", func(t *testing.T) {
+		parentVFS := vfs.NewOSVFS(tmpDir)
+		arcVFS, err := archive.NewArchiveVFS(parentVFS, archivePath)
+		if err != nil {
+			t.Fatalf("NewArchiveVFS failed: %v", err)
+		}
+		defer arcVFS.Close()
+
+		dstDir := filepath.Join(tmpDir, "out_seq_open")
+		if err := os.MkdirAll(dstDir, 0755); err != nil {
+			t.Fatalf("Failed to create out_seq_open: %v", err)
+		}
+
+		rep := &testBlackBoxReporter{}
+		ctx := context.WithValue(context.Background(), vfs.ReporterKey, rep)
+
+		for _, spec := range fileSpecs {
+			reader, err := arcVFS.Open(ctx, spec.relPath)
+			if err != nil {
+				t.Fatalf("Open(%s) failed: %v", spec.relPath, err)
+			}
+
+			outPath := filepath.Join(dstDir, filepath.FromSlash(spec.relPath))
+			if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {
+				reader.Close()
+				t.Fatalf("Failed to create out dir: %v", err)
+			}
+			outFile, err := os.Create(outPath)
+			if err != nil {
+				reader.Close()
+				t.Fatalf("Create out file failed: %v", err)
+			}
+
+			buf := make([]byte, 128*1024)
+			for {
+				n, errRead := reader.Read(ctx, buf)
+				if n > 0 {
+					outFile.Write(buf[:n])
+				}
+				if errRead != nil {
+					if errRead == io.EOF {
+						break
+					}
+					outFile.Close()
+					reader.Close()
+					t.Fatalf("Read failed on %s: %v", spec.relPath, errRead)
+				}
+			}
+			outFile.Close()
+			reader.Close()
+
+			verifyFile(t, outPath, spec.relPath)
+		}
+	})
 }
 
 // TestIssue149_StartTimeIncludesScanning verifies that elapsed time in progress statistics
