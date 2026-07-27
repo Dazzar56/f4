@@ -467,6 +467,43 @@ func TestIssue149_F5_Extraction_Integrity(t *testing.T) {
 		t.Fatalf("Extracted file is binary different from source (contains corrupted/zero blocks)")
 	}
 }
+// TestIssue149_NoQuadraticDecompression verifies that extracting a single file
+// from a multi-file archive is fast and does not scale quadratically.
+func TestIssue149_NoQuadraticDecompression(t *testing.T) {
+	vfs.RegisterProvider(&archive.ArchiveProvider{})
+	tmpDir := t.TempDir()
+	zipPath := filepath.Join(tmpDir, "test_speed.zip")
+
+	// Create 100 small files
+	f, _ := os.Create(zipPath)
+	zw := zip.NewWriter(f)
+	for i := 0; i < 100; i++ {
+		w, _ := zw.Create(fmt.Sprintf("file_%d.txt", i))
+		w.Write([]byte("some data"))
+	}
+	zw.Close()
+	f.Close()
+
+	parentVFS := vfs.NewOSVFS(tmpDir)
+	arcVfs, _ := archive.NewArchiveVFS(parentVFS, zipPath)
+	defer arcVfs.Close()
+
+	dstVFS := vfs.NewOSVFS(tmpDir)
+
+	// Measure time to extract only the last file
+	start := time.Now()
+	err := arcVfs.CopyBulk(context.Background(), []string{"file_99.txt"}, dstVFS, tmpDir, &DummyReporter{})
+	if err != nil {
+		t.Fatalf("CopyBulk failed: %v", err)
+	}
+	elapsed := time.Since(start)
+
+	// Linear skip on 100 tiny files should take less than 10ms on modern CPUs.
+	// We set a conservative threshold of 100ms.
+	if elapsed > 100*time.Millisecond {
+		t.Errorf("Extraction took too long (%v), potential quadratic complexity or redundant read loops detected", elapsed)
+	}
+}
 
 type testBlackBoxReporter struct{}
 
