@@ -887,8 +887,13 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	// Ctrl+PgUp - Go to parent directory or open Drive Menu at root (Far compatible)
 	if e.VirtualKeyCode == vtinput.VK_PRIOR && ctrl && !alt && !shift && e.KeyDown {
 		if fsp := pf.getActivePanel(); fsp != nil {
-			if fsp.vfs.IsAtRoot() && fsp.vfs.ParentVFS() == nil {
-				pf.showDriveMenu(pf.activeIdx)
+			if fsp.vfs.IsAtRoot() {
+				if fsp.vfs.ParentVFS() == nil {
+					pf.showDriveMenu(pf.activeIdx)
+				} else {
+					// Выходим из архива или сетевого соединения NetFox в родительскую систему VFS
+					pf.NavigateToPath(fsp, "..")
+				}
 			} else {
 				oldPath := fsp.vfs.GetPath()
 				if err := fsp.vfs.SetPath(".."); err == nil {

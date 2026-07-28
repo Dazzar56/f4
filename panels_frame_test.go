@@ -2950,3 +2950,50 @@ func TestPanelsFrame_CaptureCommands(t *testing.T) {
 		t.Error("Output was not copied to clipboard")
 	}
 }
+
+type mockNestedVFS struct {
+	mockUpdateVFS
+	parent vfs.VFS
+}
+
+func (m *mockNestedVFS) ParentVFS() vfs.VFS { return m.parent }
+func (m *mockNestedVFS) Close() error       { return nil }
+
+func TestPanelsFrame_CtrlPgUp_EscapesNestedVFS(t *testing.T) {
+	vtui.SetDefaultPalette()
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+	vtui.FrameManager.Push(pf)
+
+	fsp := pf.panels[pf.activeIdx].(*FileSystemPanel)
+	tmp := t.TempDir()
+
+	parentVfs := vfs.NewOSVFS(tmp)
+	nested := &mockNestedVFS{parent: parentVfs}
+	fsp.vfs = nested
+	fsp.providerEntryName = "test.zip"
+
+	// Отправляем Ctrl+PgUp на корне вложенной VFS
+	ev := &vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_PRIOR,
+		ControlKeyState: vtinput.LeftCtrlPressed,
+	}
+
+	if !pf.ProcessKey(ev) {
+		t.Error("Expected PanelsFrame to handle Ctrl+PgUp on nested VFS")
+	}
+
+	// Должны выйти в родительскую VFS и сфокусироваться на "test.zip"
+	if fsp.vfs != parentVfs {
+		t.Error("Ctrl+PgUp failed to escape nested VFS to parent")
+	}
+	if fsp.pendingSelection != "test.zip" {
+		t.Errorf("Expected pendingSelection 'test.zip', got %q", fsp.pendingSelection)
+	}
+}
