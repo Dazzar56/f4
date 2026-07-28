@@ -842,6 +842,14 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	}
 
+	// Shift+F9 - Save Settings (Far compatible)
+	if e.VirtualKeyCode == vtinput.VK_F9 && shift && !ctrl && !alt && e.KeyDown {
+		SaveConfig()
+		SaveSession()
+		vtui.ShowToast("Settings saved", 2*time.Second)
+		return true
+	}
+
 	if !e.KeyDown {
 		return false
 	}
@@ -1608,7 +1616,7 @@ func (pf *PanelsFrame) GetKeyLabels() *vtui.KeySet {
 			Msg("KeyBar.F9"), Msg("KeyBar.F10"), Msg("KeyBar.F11"), Msg("KeyBar.F12"),
 		},
 		Shift: vtui.KeyBarLabels{
-			"", "", "", "", "", "Rename", "", "", "", "", "", "",
+			"", "", "", "", "", "Rename", "", "", "Save", "", "", "",
 		},
 		Alt: vtui.KeyBarLabels{
 			Msg("KeyBar.AltF1"), Msg("KeyBar.AltF2"), Msg("KeyBar.AltF3"), "",
