@@ -2640,6 +2640,96 @@ func TestPanelsFrame_NoCtrlOInterception_InAltScreen(t *testing.T) {
 	}
 }
 
+func TestPanelsFrame_ShiftF9_SaveSettings(t *testing.T) {
+	vtui.SetDefaultPalette()
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+
+	// Создаем временный файл конфигурации
+	tmp, err := os.CreateTemp("", "settings-*.ini")
+	if err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmp.Name())
+	tmp.Close()
+
+	oldGetPath := getUserConfigIniPath
+	getUserConfigIniPath = func() string { return tmp.Name() }
+	getConfigIniPaths = func() []string { return []string{tmp.Name()} }
+	defer func() {
+		getUserConfigIniPath = oldGetPath
+	}()
+
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+	vtui.FrameManager.Push(pf)
+
+	// Отправляем хоткей Shift+F9
+	ev := &vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_F9,
+		ControlKeyState: vtinput.ShiftPressed,
+	}
+
+	if !pf.ProcessKey(ev) {
+		t.Error("Expected PanelsFrame to handle Shift+F9 keypress")
+	}
+
+	// Проверяем, что файл настроек действительно был записан на диск
+	info, err := os.Stat(tmp.Name())
+	if err != nil || info.Size() == 0 {
+		t.Error("Expected Shift+F9 to write settings to ini file")
+	}
+}
+
+type mockUpdateVFS struct {
+	vfs.NullVFS
+}
+
+func (m *mockUpdateVFS) GetPath() string { return "/" }
+func (m *mockUpdateVFS) IsAtRoot() bool  { return true }
+func (m *mockUpdateVFS) ReadDir(ctx context.Context, p string, onChunk func([]vfs.VFSItem)) error {
+	onChunk([]vfs.VFSItem{
+		{Name: "test_file.txt", Size: 100, IsDir: false},
+	})
+	return nil
+}
+
+func TestPanelsFrame_MiddleClick_LaunchesFile(t *testing.T) {
+	vtui.SetDefaultPalette()
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+	vtui.FrameManager.Push(pf)
+
+	// Подставляем стабильный mockUpdateVFS для панели
+	fsp := pf.panels[pf.activeIdx].(*FileSystemPanel)
+	fsp.vfs = &mockUpdateVFS{}
+	fsp.ReadDirectory()
+
+	// Даем немного времени асинхронной горутине на наполнение
+	time.Sleep(50 * time.Millisecond)
+	fsp.SetCursorIndex(0)
+
+	// Симулируем клик колесом мыши по первой строке
+	ev := &vtinput.InputEvent{
+		Type:        vtinput.MouseEventType,
+		MouseX:      int16(fsp.X1 + 5),
+		MouseY:      int16(fsp.Y1 + 1), // Клик по первой строке
+		ButtonState: vtinput.FromLeft2ndButtonPressed,
+		KeyDown:     true,
+	}
+
+	if !pf.ProcessMouse(ev) {
+		t.Error("Expected PanelsFrame to handle middle click mouse event")
+	}
+}
+
 type mockTaskReporter struct{}
 
 func (m *mockTaskReporter) UpdateScan(currentPath string, files, dirs int64) {}

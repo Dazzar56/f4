@@ -148,3 +148,43 @@ func TestConfig_GuiFontPersistence(t *testing.T) {
 		t.Errorf("Expected GuiFontSize to be 22, got %d", AppConfig.GuiFontSize)
 	}
 }
+
+func TestConfig_GuiDimensionsPersistence(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	oldPathFunc := getUserConfigIniPath
+	getUserConfigIniPath = func() string {
+		return filepath.Join(tmpDir, "settings.ini")
+	}
+	oldCfg := AppConfig
+	defer func() {
+		getUserConfigIniPath = oldPathFunc
+		AppConfig = oldCfg
+	}()
+
+	// 1. Задаем тестовые значения
+	AppConfig.GuiCols = 120
+	AppConfig.GuiRows = 45
+	AppConfig.ConfirmExit = false
+
+	SaveConfig()
+
+	// 2. Сбрасываем текущую конфигурацию в памяти
+	AppConfig.GuiCols = 0
+	AppConfig.GuiRows = 0
+	AppConfig.ConfirmExit = true
+
+	// 3. Читаем заново из временного файла
+	LoadConfig()
+
+	// 4. Проверяем корректность восстановления
+	if AppConfig.GuiCols != 120 {
+		t.Errorf("Expected GuiCols to be 120, got %d", AppConfig.GuiCols)
+	}
+	if AppConfig.GuiRows != 45 {
+		t.Errorf("Expected GuiRows to be 45, got %d", AppConfig.GuiRows)
+	}
+	if AppConfig.ConfirmExit {
+		t.Error("Expected ConfirmExit to be loaded as false, got true")
+	}
+}
