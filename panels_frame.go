@@ -1422,7 +1422,7 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 			handled := p.ProcessMouse(e)
 			if handled && e.KeyDown {
 				isLeftDoubleClick := (e.MouseEventFlags&vtinput.DoubleClick) != 0 && (e.ButtonState&vtinput.FromLeft1stButtonPressed) != 0
-				isMiddleClick := (e.ButtonState&vtinput.FromLeft2ndButtonPressed) != 0
+				isMiddleClick := (e.ButtonState & vtinput.FromLeft2ndButtonPressed) != 0
 
 				if isLeftDoubleClick || isMiddleClick {
 					pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN})
