@@ -114,15 +114,38 @@ func CheckForUpdates(pf *PanelsFrame, manual bool) {
 		return
 	}
 
+	assetSuffix := fmt.Sprintf("-%s-%s.tar.gz", currentOS, currentArch)
+	if currentOS == "windows" {
+		assetSuffix = fmt.Sprintf("-%s-%s.zip", currentOS, currentArch)
+	}
+
+	var downloadURL string
+	var assetUpdated string
+	for _, asset := range release.Assets {
+		if strings.HasSuffix(asset.Name, assetSuffix) {
+			downloadURL = asset.BrowserDownloadURL
+			assetUpdated = asset.UpdatedAt
+			break
+		}
+	}
+
+	if downloadURL == "" {
+		reportUpdateError(manual, "No suitable build found for your OS/Arch.")
+		return
+	}
+
 	needsUpdate := false
 	displayVersion := release.TagName
+	updateKey := release.TagName
+
 	if AppConfig.UpdateChannel == 1 {
-		pubTime := release.PublishedAt
-		if len(pubTime) >= 10 {
-			pubTime = pubTime[:10]
+		updateKey = assetUpdated
+		displayTime := assetUpdated
+		if len(displayTime) >= 16 {
+			displayTime = strings.Replace(displayTime[:16], "T", " ", 1)
 		}
-		displayVersion = "Nightly (" + pubTime + ")"
-		if AppConfig.LastUpdateVersion != release.PublishedAt {
+		displayVersion = "Nightly (" + displayTime + ")"
+		if AppConfig.LastUpdateVersion != updateKey {
 			needsUpdate = true
 		}
 	} else {
@@ -141,36 +164,14 @@ func CheckForUpdates(pf *PanelsFrame, manual bool) {
 		return
 	}
 
-	assetSuffix := fmt.Sprintf("-%s-%s.tar.gz", currentOS, currentArch)
-	if currentOS == "windows" {
-		assetSuffix = fmt.Sprintf("-%s-%s.zip", currentOS, currentArch)
-	}
-
-	var downloadURL string
-	for _, asset := range release.Assets {
-		if strings.HasSuffix(asset.Name, assetSuffix) {
-			downloadURL = asset.BrowserDownloadURL
-			break
-		}
-	}
-
-	if downloadURL == "" {
-		reportUpdateError(manual, "No suitable build found for your OS/Arch.")
-		return
-	}
-
 	vtui.FrameManager.PostTask(func() {
 		msg := fmt.Sprintf("An update is available: %s\n\nDo you want to download and install it now?", displayVersion)
 		dlg := vtui.ShowMessage(" Auto Update ", msg, []string{"&Yes", "&No"})
 		dlg.OnResult = func(code int) {
 			if code == 0 {
-				performUpdate(pf, downloadURL, currentOS != "windows", release.TagName, release.PublishedAt)
+				performUpdate(pf, downloadURL, currentOS != "windows", release.TagName, updateKey)
 			} else {
-				if AppConfig.UpdateChannel == 1 {
-					AppConfig.LastUpdateVersion = release.PublishedAt
-				} else {
-					AppConfig.LastUpdateVersion = release.TagName
-				}
+				AppConfig.LastUpdateVersion = updateKey
 				SaveConfig()
 			}
 		}
@@ -275,7 +276,7 @@ func performUpdate(pf *PanelsFrame, url string, isTarGz bool, newTag, publishedA
 		dlg := vtui.ShowMessage(" Update Successful ", "f4 has been updated successfully.\nPlease restart the application to apply changes.", []string{"E&xit now", "&Later"})
 		dlg.OnResult = func(code int) {
 			if code == 0 {
-				vtui.FrameManager.EmitCommand(vtui.CmQuit, nil)
+				vtui.FrameManager.Shutdown()
 			}
 		}
 	})
