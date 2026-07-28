@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 )
 
@@ -284,19 +285,48 @@ func performUpdate(pf *PanelsFrame, url string, isTarGz bool, newTag, publishedA
 
 func writeFileSafe(targetPath string, r io.Reader, mode os.FileMode) error {
 	oldPath := targetPath + ".old"
-	os.Remove(oldPath)
-	if _, err := os.Stat(targetPath); err == nil {
-		os.Rename(targetPath, oldPath)
+
+	err := os.Remove(oldPath)
+	if err != nil && os.IsPermission(err) && vfs.GetSudoClient().IsAvailable() {
+		_ = vfs.GetSudoClient().Remove(oldPath)
 	}
-	os.MkdirAll(filepath.Dir(targetPath), 0755)
-	f, err := os.OpenFile(targetPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)
+
+	if _, err := os.Stat(targetPath); err == nil {
+		errRename := os.Rename(targetPath, oldPath)
+		if errRename != nil && os.IsPermission(errRename) && vfs.GetSudoClient().IsAvailable() {
+			_ = vfs.GetSudoClient().Rename(targetPath, oldPath)
+		}
+	}
+
+	dir := filepath.Dir(targetPath)
+	errMkdir := os.MkdirAll(dir, 0755)
+	if errMkdir != nil && os.IsPermission(errMkdir) && vfs.GetSudoClient().IsAvailable() {
+		_ = vfs.GetSudoClient().MkDir(dir, 0755)
+	}
+
+	var f *os.File
+	f, err = os.OpenFile(targetPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)
+	if err != nil && os.IsPermission(err) && vfs.GetSudoClient().IsAvailable() {
+		vtui.DebugLog("UPDATER: Permission denied for %q, attempting elevated write via sudo...", targetPath)
+		f, err = vfs.GetSudoClient().Open(targetPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, uint32(mode))
+	}
+
 	if err != nil {
 		return err
 	}
+	defer f.Close()
+
 	_, err = io.Copy(f, r)
-	f.Close()
-	os.Remove(oldPath) // ignore error, on Windows running files can't be deleted immediately
-	return err
+	if err != nil {
+		return err
+	}
+
+	errRemove := os.Remove(oldPath)
+	if errRemove != nil && os.IsPermission(errRemove) && vfs.GetSudoClient().IsAvailable() {
+		_ = vfs.GetSudoClient().Remove(oldPath)
+	}
+
+	return nil
 }
 
 func sanitizeExtractPath(name, destDir string) (string, error) {
@@ -331,7 +361,10 @@ func extractTarGzToDir(data []byte, destDir string) error {
 		}
 
 		if hdr.Typeflag == tar.TypeDir {
-			os.MkdirAll(targetPath, 0755)
+			errMkdir := os.MkdirAll(targetPath, 0755)
+			if errMkdir != nil && os.IsPermission(errMkdir) && vfs.GetSudoClient().IsAvailable() {
+				_ = vfs.GetSudoClient().MkDir(targetPath, 0755)
+			}
 			continue
 		}
 
@@ -360,7 +393,10 @@ func extractZipToDir(data []byte, destDir string) error {
 		}
 
 		if f.FileInfo().IsDir() {
-			os.MkdirAll(targetPath, 0755)
+			errMkdir := os.MkdirAll(targetPath, 0755)
+			if errMkdir != nil && os.IsPermission(errMkdir) && vfs.GetSudoClient().IsAvailable() {
+				_ = vfs.GetSudoClient().MkDir(targetPath, 0755)
+			}
 			continue
 		}
 
