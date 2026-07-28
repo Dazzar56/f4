@@ -8,13 +8,13 @@ require (
 	github.com/mattn/go-runewidth v0.0.15
 	github.com/mholt/archives v0.1.5
 	github.com/pkg/sftp v1.13.6
-	github.com/unxed/archives v0.0.0-20260704211952-684041740ef0
+	github.com/unxed/archives v0.0.0-20260728171610-555945c76813
 	github.com/unxed/sevenzip v0.0.0-20260704211908-25d317f8295f
-	github.com/unxed/tar v0.1.119
+	github.com/unxed/tar v0.1.120
 	github.com/unxed/vtinput v0.1.1
 	github.com/unxed/vtui v0.1.46
-	github.com/unxed/zip v0.1.125
-	github.com/unxed/zipper v0.1.134
+	github.com/unxed/zip v0.1.126
+	github.com/unxed/zipper v0.1.135
 	github.com/vmihailenco/msgpack/v5 v5.4.1
 	golang.org/x/crypto v0.46.0
 	golang.org/x/sys v0.47.0
