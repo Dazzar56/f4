@@ -850,6 +850,53 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	}
 
+	// Ctrl+\ - Go to VFS root (Far compatible)
+	if (e.VirtualKeyCode == vtinput.VK_OEM_5 || e.Char == '\\') && ctrl && !alt && !shift && e.KeyDown {
+		if fsp := pf.getActivePanel(); fsp != nil {
+			rootPath := "/"
+			if runtime.GOOS == "windows" {
+				rootPath = string(os.PathSeparator)
+				if _, isOS := fsp.vfs.(*vfs.OSVFS); isOS {
+					rootPath = filepath.VolumeName(fsp.vfs.GetPath()) + string(os.PathSeparator)
+				}
+			}
+			pf.NavigateToPath(fsp, rootPath)
+			return true
+		}
+	}
+
+	// Ctrl+PgUp - Go to parent directory or open Drive Menu at root (Far compatible)
+	if e.VirtualKeyCode == vtinput.VK_PRIOR && ctrl && !alt && !shift && e.KeyDown {
+		if fsp := pf.getActivePanel(); fsp != nil {
+			if fsp.vfs.IsAtRoot() && fsp.vfs.ParentVFS() == nil {
+				pf.showDriveMenu(pf.activeIdx)
+			} else {
+				pf.NavigateToPath(fsp, "..")
+			}
+			return true
+		}
+	}
+
+	// Ctrl+PgDn / Ctrl+Shift+PgDn - Enter directory or archive (Far compatible)
+	if e.VirtualKeyCode == vtinput.VK_NEXT && ctrl && !alt && e.KeyDown {
+		if fsp := pf.getActivePanel(); fsp != nil {
+			idx := fsp.GetCursorIndex()
+			if idx >= 0 && idx < len(fsp.entries) {
+				selected := fsp.entries[idx]
+				isDir := selected.IsDir
+				isArchive := false
+				if !isDir {
+					fullPath := fsp.vfs.Join(fsp.vfs.GetPath(), selected.Name)
+					isArchive = vfs.FindProvider(context.Background(), fsp.vfs, fullPath) != nil
+				}
+				if isDir || isArchive {
+					pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN})
+					return true
+				}
+			}
+		}
+	}
+
 	if !e.KeyDown {
 		return false
 	}

@@ -2730,6 +2730,134 @@ func TestPanelsFrame_MiddleClick_LaunchesFile(t *testing.T) {
 	}
 }
 
+func TestPanelsFrame_CtrlBackslash_GoesToRoot(t *testing.T) {
+	vtui.SetDefaultPalette()
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+	vtui.FrameManager.Push(pf)
+
+	fsp := pf.panels[pf.activeIdx].(*FileSystemPanel)
+	tmp := t.TempDir()
+	sub := filepath.Join(tmp, "a", "b", "c")
+	os.MkdirAll(sub, 0755)
+	fsp.vfs.SetPath(sub)
+
+	// Отправляем Ctrl+\
+	ev := &vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_OEM_5,
+		ControlKeyState: vtinput.LeftCtrlPressed,
+	}
+
+	if !pf.ProcessKey(ev) {
+		t.Error("Expected PanelsFrame to handle Ctrl+\\")
+	}
+
+	expectedRoot := "/"
+	if runtime.GOOS == "windows" {
+		expectedRoot = filepath.VolumeName(tmp) + string(os.PathSeparator)
+	}
+	if filepath.Clean(fsp.vfs.GetPath()) != filepath.Clean(expectedRoot) {
+		t.Errorf("Ctrl+\\ failed to go to root: expected %q, got %q", expectedRoot, fsp.vfs.GetPath())
+	}
+}
+
+func TestPanelsFrame_CtrlPgUp_GoesToParentOrDriveMenu(t *testing.T) {
+	vtui.SetDefaultPalette()
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+	vtui.FrameManager.Push(pf)
+
+	fsp := pf.panels[pf.activeIdx].(*FileSystemPanel)
+	tmp := t.TempDir()
+	sub := filepath.Join(tmp, "sub")
+	os.MkdirAll(sub, 0755)
+	fsp.vfs.SetPath(sub)
+
+	// Отправляем Ctrl+PgUp
+	ev := &vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_PRIOR,
+		ControlKeyState: vtinput.LeftCtrlPressed,
+	}
+
+	if !pf.ProcessKey(ev) {
+		t.Error("Expected PanelsFrame to handle Ctrl+PgUp")
+	}
+
+	// 1. Должны подняться на один уровень до tmp
+	if filepath.Clean(fsp.vfs.GetPath()) != filepath.Clean(tmp) {
+		t.Errorf("Ctrl+PgUp failed to go up: expected %q, got %q", tmp, fsp.vfs.GetPath())
+	}
+
+	// 2. Поднимаемся все дальше до физического корня системы
+	for !fsp.vfs.IsAtRoot() {
+		if err := fsp.vfs.SetPath(".."); err != nil {
+			break
+		}
+	}
+
+	// Отправляем Ctrl+PgUp на корне диска -> должно открыться Drive Menu
+	if !pf.ProcessKey(ev) {
+		t.Error("Expected PanelsFrame to handle Ctrl+PgUp at root")
+	}
+	top := vtui.FrameManager.GetTopFrame()
+	if top == nil || top.GetType() != vtui.TypeMenu || !strings.Contains(top.GetTitle(), "Drive") {
+		t.Errorf("Expected Drive menu on top when pressing Ctrl+PgUp at root, got %v", top)
+	}
+}
+
+func TestPanelsFrame_CtrlPgDn_EntersDir(t *testing.T) {
+	vtui.SetDefaultPalette()
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+	vtui.FrameManager.Push(pf)
+
+	fsp := pf.panels[pf.activeIdx].(*FileSystemPanel)
+	tmp := t.TempDir()
+	sub := filepath.Join(tmp, "sub")
+	os.MkdirAll(sub, 0755)
+	fsp.vfs.SetPath(tmp)
+
+	fsp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
+		{VFSItem: vfs.VFSItem{Name: "sub", IsDir: true}},
+	}
+	fsp.Refresh()
+	fsp.SelectName("sub")
+
+	// Отправляем Ctrl+PgDn
+	ev := &vtinput.InputEvent{
+		Type:            vtinput.MouseEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_NEXT,
+		ControlKeyState: vtinput.LeftCtrlPressed,
+	}
+
+	if !pf.ProcessKey(ev) {
+		t.Error("Expected PanelsFrame to handle Ctrl+PgDn")
+	}
+
+	// Так как на панели симулируется Enter, путь должен измениться на sub
+	if filepath.Clean(fsp.vfs.GetPath()) != filepath.Clean(sub) {
+		t.Errorf("Ctrl+PgDn failed to enter directory: expected %q, got %q", sub, fsp.vfs.GetPath())
+	}
+}
+
 type mockTaskReporter struct{}
 
 func (m *mockTaskReporter) UpdateScan(currentPath string, files, dirs int64) {}
