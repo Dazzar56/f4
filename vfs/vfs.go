@@ -10,6 +10,8 @@ import (
 	"time"
 )
 
+var CustomConfigDir string
+
 // App defines the interface for plugin-to-core UI interactions.
 type App interface {
 	GetActivePanelVFS() VFS

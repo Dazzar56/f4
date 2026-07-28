@@ -1,14 +1,65 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/unxed/vtui"
 )
+
+var (
+	cachedF4ConfigDir string
+	configDirOnce     sync.Once
+)
+
+func GetF4ConfigDir() string {
+	configDirOnce.Do(func() {
+		exe, err := osExecutable()
+		if err != nil {
+			exe = os.Args[0]
+		}
+		exeDir := filepath.Dir(exe)
+
+		// Ищем Far.exe.ini (имя_бинарника.ini) или f4.ini в папке программы
+		iniPath := exe + ".ini"
+		if _, err := os.Stat(iniPath); os.IsNotExist(err) {
+			iniPath = filepath.Join(exeDir, "f4.ini")
+		}
+
+		useSystemProfiles := true
+		if _, err := os.Stat(iniPath); err == nil {
+			ini := ParseIni(bytesReader(iniPath))
+			if ini.GetString("General", "UseSystemProfiles", "1") == "0" {
+				useSystemProfiles = false
+			}
+		}
+
+		if !useSystemProfiles {
+			cachedF4ConfigDir = filepath.Join(exeDir, "Profile")
+			_ = os.MkdirAll(cachedF4ConfigDir, 0755)
+		} else {
+			sysDir, _ := os.UserConfigDir()
+			cachedF4ConfigDir = filepath.Join(sysDir, "f4")
+		}
+	})
+	return cachedF4ConfigDir
+}
+
+func bytesReader(p string) io.Reader {
+	b, _ := os.ReadFile(p)
+	return bytes.NewReader(b)
+}
+
+func resetConfigDirForTest() {
+	configDirOnce = sync.Once{}
+	cachedF4ConfigDir = ""
+}
 
 type F4Config struct {
 	ColorStyle              string
@@ -84,8 +135,7 @@ var AppConfig = F4Config{
 }
 
 var getUserConfigIniPath = func() string {
-	configDir, _ := os.UserConfigDir()
-	return filepath.Join(configDir, "f4", "settings.ini")
+	return filepath.Join(GetF4ConfigDir(), "settings.ini")
 }
 
 var getConfigIniPaths = func() []string {

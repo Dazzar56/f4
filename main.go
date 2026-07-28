@@ -325,16 +325,21 @@ func SetupUI() {
 	vtui.GlobalClipboardAccessManager = NewF4ClipboardAuth()
 	RegisterDrive("Null VFS", func() vfs.VFS { return vfs.NewNullVFS(50 * 1024 * 1024) }) // 50 MB/s
 
-	configDir, _ := os.UserConfigDir()
+	configDir := GetF4ConfigDir()
+
+	// Прокидываем путь портативного конфига в изолированные пакеты vtui и vfs
+	vtui.CrashDirBase = configDir
+	vfs.CustomConfigDir = configDir
+
 	// Load legacy color overrides if they exist
-	legacyColorsPath := filepath.Join(configDir, "f4", "farcolors.ini")
+	legacyColorsPath := filepath.Join(configDir, "farcolors.ini")
 	if _, err := os.Stat(legacyColorsPath); err == nil {
 		legacyIni := LoadIni(legacyColorsPath)
 		InitColors(legacyIni)
 	}
 
-	os.MkdirAll(filepath.Join(configDir, "f4"), 0755)
-	MacroMgr = NewMacroManager(filepath.Join(configDir, "f4", "key_macros.ini"))
+	os.MkdirAll(configDir, 0755)
+	MacroMgr = NewMacroManager(filepath.Join(configDir, "key_macros.ini"))
 	vtui.FrameManager.EventFilter = MacroMgr.Filter
 	LoadSession()
 	vtui.ManageCursorStyle = !AppConfig.KeepTerminalCursor
@@ -395,8 +400,7 @@ func SetupUI() {
 }
 
 var getSessionIniPath = func() string {
-	configDir, _ := os.UserConfigDir()
-	return filepath.Join(configDir, "f4", "session.ini")
+	return filepath.Join(GetF4ConfigDir(), "session.ini")
 }
 
 func LoadSession() {
