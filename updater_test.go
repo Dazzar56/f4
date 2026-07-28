@@ -10,10 +10,12 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 )
 
@@ -420,5 +422,47 @@ Loop:
 
 	if string(content) != "new_binary" {
 		t.Errorf("Executable replacement failed. Got %q, want 'new_binary'", string(content))
+	}
+}
+
+func TestUpdater_WriteFileSafe_SudoElevationFallback(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping Unix-specific sudo elevation test on Windows")
+	}
+
+	tmpDir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatalf("failed to resolve temp dir: %v", err)
+	}
+
+	// Создаем директорию с ограниченными правами доступа (только чтение и выполнение)
+	protectedDir := filepath.Join(tmpDir, "protected_dir")
+	if err := os.Mkdir(protectedDir, 0555); err != nil {
+		t.Fatalf("failed to create read-only dir: %v", err)
+	}
+	defer os.Chmod(protectedDir, 0755) // Гарантируем очистку
+
+	targetPath := filepath.Join(protectedDir, "binary.exe")
+
+	// Проверяем, что система действительно запрещает запись под обычным пользователем
+	_, errDirect := os.Create(targetPath)
+	if errDirect == nil {
+		t.Skip("System is running as root; skipping elevation test")
+	}
+
+	// Инициализируем глобальный SudoClient
+	vfs.InitSudoClient("/nonexistent/f4", "")
+
+	// Пытаемся записать файл. Операция должна пойти по пути эскалации и упасть
+	// на попытке соединения с сокетом диспетчера (так как парольный диалог мы гасим),
+	// что доказывает успешный переход управления в SudoClient!
+	err = writeFileSafe(targetPath, strings.NewReader("v2"), 0755)
+	if err == nil {
+		t.Error("expected writeFileSafe to fail under restricted directory")
+	}
+
+	errStr := err.Error()
+	if !strings.Contains(errStr, "elevated dispatcher") && !strings.Contains(errStr, "sudo process") {
+		t.Errorf("expected error to originate from sudo elevation fallback, got: %q", errStr)
 	}
 }
