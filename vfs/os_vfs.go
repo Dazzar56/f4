@@ -49,7 +49,15 @@ func (v *OSVFS) SetPath(path string) error {
 		return err
 	}
 
-	// Resolve symlinks/junctions to avoid ACL issues on the link itself (e.g. "Documents and Settings")
+	// Сначала пробуем проверить оригинальный путь напрямую.
+	// Если он существует, доступен и является директорией (симлинком на нее),
+	// мы сохраняем оригинальный визуальный путь в панели без принудительного разыменования!
+	if st, errStat := os.Stat(prepareOSPath(abs)); errStat == nil && st.IsDir() {
+		goto verify
+	}
+
+	// Если мы получили ошибку (например, Permission Denied на системном джанкшене Windows
+	// "Documents and Settings"), то только тогда пытаемся принудительно разыменовать симлинк.
 	if resolved, errEval := filepath.EvalSymlinks(prepareOSPath(abs)); errEval == nil {
 		resolved = stripExtendedPrefix(resolved)
 		if runtime.GOOS == "windows" {
