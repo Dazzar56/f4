@@ -116,6 +116,9 @@ func LoadConfig() {
 	AppConfig.ShowHiddenFiles = ini.GetString("Panel", "ShowHiddenFiles", "1") == "1"
 	AppConfig.ColorStyle = ini.GetString("Interface", "ColorStyle", "Modern")
 	AppConfig.ConsoleTitleTemplate = ini.GetString("Interface", "ConsoleTitleTemplate", "f4 %Ver %Platform %Admin - %State")
+	if AppConfig.ConsoleTitleTemplate == "f4 - %State" {
+		AppConfig.ConsoleTitleTemplate = "f4 %Ver %Platform %Admin - %State"
+	}
 	AppConfig.HighlightDir = ini.GetString("Panel", "HighlightDir", "1") == "1"
 	AppConfig.SavePanelPaths = ini.GetString("Panel", "SavePanelPaths", "1") == "1"
 	AppConfig.KeepTerminalCursor = ini.GetString("Panel", "KeepTerminalCursor", "0") == "1"

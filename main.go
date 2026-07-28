@@ -52,6 +52,7 @@ func main() {
 	LoadConfig() // Load config early to apply GUI font settings
 
 	defer func() {
+		SaveSession() // Гарантирует сохранение размеров и путей при любом выходе
 		if r := recover(); r != nil {
 			vtui.DebugLog("FATAL PANIC IN MAIN: %v", r)
 			crashPath := vtui.RecordCrash(r, nil)
