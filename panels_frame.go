@@ -1175,8 +1175,9 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				actualCmd := strings.TrimSpace(trimmedCmd[idx+3:])
 
 				pf.cmdLine.Clear()
+				wasShowPanels := pf.showPanels
 				pf.showPanels = true // Удерживаем панели открытыми во время выполнения
-				executeCapturedCommand(pf, action, actualCmd)
+				executeCapturedCommand(pf, action, actualCmd, wasShowPanels)
 				return true
 			}
 
@@ -2121,7 +2122,7 @@ func (pf *PanelsFrame) GetTitle() string {
 	return "Panels"
 }
 
-func executeCapturedCommand(pf *PanelsFrame, action string, cmdStr string) {
+func executeCapturedCommand(pf *PanelsFrame, action string, cmdStr string, wasShowPanels bool) {
 	var dir string
 	if fsp, ok := pf.panels[pf.activeIdx].(*FileSystemPanel); ok {
 		if _, isOS := fsp.vfs.(*vfs.OSVFS); isOS {
@@ -2160,19 +2161,18 @@ func executeCapturedCommand(pf *PanelsFrame, action string, cmdStr string) {
 				tmpFile.Close()
 
 				v := vfs.NewOSVFS(filepath.Dir(tmpPath))
-				base := filepath.Base(tmpPath)
 
 				if action == "view" {
-					vv, err := NewViewerView(context.Background(), v, base)
+					vv, err := NewViewerView(context.Background(), v, tmpPath)
 					if err == nil {
 						vv.OnClose = func() { os.Remove(tmpPath) }
-						showViewer(pf, vv, base)
+						showViewer(pf, vv, tmpPath)
 					}
 				} else {
-					f, err := v.Open(context.Background(), base)
+					f, err := v.Open(context.Background(), tmpPath)
 					if err == nil {
-						showEditor(pf, v, base, f)
-						if ev, _ := findOpenedEditor(v, base); ev != nil {
+						showEditor(pf, v, tmpPath, f)
+						if ev, _ := findOpenedEditor(v, tmpPath); ev != nil {
 							ev.OnClose = func() { os.Remove(tmpPath) }
 						}
 					}
@@ -2184,6 +2184,7 @@ func executeCapturedCommand(pf *PanelsFrame, action string, cmdStr string) {
 		if err != nil && err != context.Canceled {
 			vtui.ShowMessage(" Error ", fmt.Sprintf("Execution failed:\n%v", err), []string{"&Ok"})
 		}
+		pf.showPanels = wasShowPanels
 		pf.RefreshAll()
 	})
 }
