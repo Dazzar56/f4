@@ -10,7 +10,7 @@ func isAdmin() bool {
 
 func getAdminString() string {
 	if isAdmin() {
-		return "Root"
+		return "[Root]"
 	}
 	return ""
 }

@@ -76,7 +76,7 @@ var AppConfig = F4Config{
 	GuiFontSize:             16,
 	GuiCols:                 100,
 	GuiRows:                 30,
-	ConsoleTitleTemplate:    "f4 - %State",
+	ConsoleTitleTemplate:    "f4 %Ver %Platform %Admin - %State",
 	UpdateChannel:           0,
 	UpdateInterval:          3, // Default to Weekly
 	LastUpdateCheck:         0,
@@ -115,7 +115,7 @@ func LoadConfig() {
 
 	AppConfig.ShowHiddenFiles = ini.GetString("Panel", "ShowHiddenFiles", "1") == "1"
 	AppConfig.ColorStyle = ini.GetString("Interface", "ColorStyle", "Modern")
-	AppConfig.ConsoleTitleTemplate = ini.GetString("Interface", "ConsoleTitleTemplate", "f4 - %State")
+	AppConfig.ConsoleTitleTemplate = ini.GetString("Interface", "ConsoleTitleTemplate", "f4 %Ver %Platform %Admin - %State")
 	AppConfig.HighlightDir = ini.GetString("Panel", "HighlightDir", "1") == "1"
 	AppConfig.SavePanelPaths = ini.GetString("Panel", "SavePanelPaths", "1") == "1"
 	AppConfig.KeepTerminalCursor = ini.GetString("Panel", "KeepTerminalCursor", "0") == "1"

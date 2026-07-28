@@ -66,6 +66,7 @@ func UpdateWindowTitle(scr *vtui.ScreenBuf) {
 	)
 
 	title := r.Replace(template)
+	title = strings.ReplaceAll(title, "  ", " ") // Убираем двойные пробелы, если %Admin пустой
 	vtui.SetWindowTitle(title)
 
 	// Macro recording indicator — drawn after MenuBar so it's always on top

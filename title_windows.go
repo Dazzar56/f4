@@ -16,7 +16,7 @@ func isAdmin() bool {
 
 func getAdminString() string {
 	if isAdmin() {
-		return "Administrator"
+		return "[Administrator]"
 	}
 	return ""
 }

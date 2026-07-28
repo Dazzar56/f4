@@ -69,9 +69,10 @@ func parseMarkdownToHelpTopic(name string, mdContent string) *vtui.HelpTopic {
 }
 
 func InitHelpSystem() {
+	versionedHelp := strings.ReplaceAll(helpData, "%Ver", getFormattedVersionInfo())
 	v := &memoryHelpVFS{
 		files: map[string]string{
-			"help.hlf": helpData,
+			"help.hlf": versionedHelp,
 		},
 	}
 	vtui.GlobalHelpEngine = vtui.NewHelpEngine(v)
