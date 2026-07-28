@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"os/user"
@@ -255,7 +256,7 @@ func showAttributesUnix(pf *PanelsFrame, v vfs.VFS, path string, item vfs.VFSIte
 }
 
 func showAttributesWindows(pf *PanelsFrame, v vfs.VFS, path string, item vfs.VFSItem) {
-	width, height := 60, 17
+	width, height := 60, 20
 	dlg := vtui.NewCenteredDialog(width, height, " Attributes ")
 	dlg.ShowClose = true
 	x, y := dlg.X1, dlg.Y1
@@ -270,6 +271,10 @@ func showAttributesWindows(pf *PanelsFrame, v vfs.VFS, path string, item vfs.VFS
 	gbAttr := vtui.NewGroupBox(0, 0, 54, 6, " Flags ")
 	dlg.AddItem(gbAttr)
 	mainVBox.Add(gbAttr, vtui.Margins{Top: 1}, vtui.AlignFill)
+
+	gbAdv := vtui.NewGroupBox(0, 0, 54, 3, " Advanced NTFS Flags ")
+	dlg.AddItem(gbAdv)
+	mainVBox.Add(gbAdv, vtui.Margins{Top: 1}, vtui.AlignFill)
 
 	editMTime := vtui.NewEdit(0, 0, 20, item.MTime.Format(timeFormat))
 	lblTime := vtui.NewLabel(0, 0, padLabel("Last write:"), editMTime)
@@ -326,6 +331,40 @@ func showAttributesWindows(pf *PanelsFrame, v vfs.VFS, path string, item vfs.VFS
 	gbVBox.Add(chkSY, vtui.Margins{}, vtui.AlignLeft)
 	gbVBox.Add(chkAR, vtui.Margins{}, vtui.AlignLeft)
 	gbVBox.Apply()
+
+	var advFlags []string
+	if (item.WinAttrs & 0x00000800) != 0 {
+		advFlags = append(advFlags, "Compressed")
+	}
+	if (item.WinAttrs & 0x00004000) != 0 {
+		advFlags = append(advFlags, "Encrypted")
+	}
+	if (item.WinAttrs & 0x00000400) != 0 {
+		advFlags = append(advFlags, "Reparse Point")
+	}
+	if (item.WinAttrs & 0x00000200) != 0 {
+		advFlags = append(advFlags, "Sparse")
+	}
+	if (item.WinAttrs & 0x00001000) != 0 {
+		advFlags = append(advFlags, "Offline")
+	}
+	if (item.WinAttrs & 0x00002000) != 0 {
+		advFlags = append(advFlags, "Not Content Indexed")
+	}
+	if (item.WinAttrs & 0x00000010) != 0 {
+		advFlags = append(advFlags, "Directory")
+	}
+
+	advStr := "None"
+	if len(advFlags) > 0 {
+		advStr = strings.Join(advFlags, ", ")
+	}
+
+	lblAdv := vtui.NewText(0, 0, vtui.TruncateMiddle(advStr, 50), vtui.Palette[vtui.ColDialogText])
+	gbAdv.AddItem(lblAdv)
+	gbAdvVBox := vtui.NewVBoxLayout(gbAdv.X1+2, gbAdv.Y1+1, gbAdv.X2-gbAdv.X1-4, 1)
+	gbAdvVBox.Add(lblAdv, vtui.Margins{}, vtui.AlignLeft)
+	gbAdvVBox.Apply()
 
 	btnSet.OnClick = func() {
 		if nt, err := time.ParseInLocation(timeFormat, editMTime.GetText(), time.Local); err == nil {
