@@ -897,6 +897,24 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		}
 	}
 
+	// Ctrl+1 - Set active panel to Medium (Brief in Far)
+	if e.VirtualKeyCode == '1' && ctrl && !alt && !shift && e.KeyDown {
+		if fsp := pf.getActivePanel(); fsp != nil {
+			fsp.SetViewMode(ViewModeMedium)
+			pf.updateMenuCheckmarks()
+			return true
+		}
+	}
+
+	// Ctrl+2 - Set active panel to Detailed (Medium in Far)
+	if e.VirtualKeyCode == '2' && ctrl && !alt && !shift && e.KeyDown {
+		if fsp := pf.getActivePanel(); fsp != nil {
+			fsp.SetViewMode(ViewModeDetailed)
+			pf.updateMenuCheckmarks()
+			return true
+		}
+	}
+
 	if !e.KeyDown {
 		return false
 	}

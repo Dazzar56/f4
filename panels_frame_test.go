@@ -2858,6 +2858,46 @@ func TestPanelsFrame_CtrlPgDn_EntersDir(t *testing.T) {
 	}
 }
 
+func TestPanelsFrame_Ctrl1AndCtrl2_ViewModes(t *testing.T) {
+	vtui.SetDefaultPalette()
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+
+	pf := NewPanelsFrame()
+	pf.ResizeConsole(80, 25)
+	vtui.FrameManager.Push(pf)
+
+	fsp := pf.panels[pf.activeIdx].(*FileSystemPanel)
+
+	// 1. Изначально устанавливаем режим Medium
+	fsp.SetViewMode(ViewModeMedium)
+
+	// 2. Отправляем Ctrl+2 -> должен переключить на Detailed
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  '2',
+		ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+
+	if fsp.viewMode != ViewModeDetailed {
+		t.Errorf("Expected viewMode to be Detailed, got %v", fsp.viewMode)
+	}
+
+	// 3. Отправляем Ctrl+1 -> должен переключить обратно на Medium
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  '1',
+		ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+
+	if fsp.viewMode != ViewModeMedium {
+		t.Errorf("Expected viewMode to be Medium, got %v", fsp.viewMode)
+	}
+}
+
 type mockTaskReporter struct{}
 
 func (m *mockTaskReporter) UpdateScan(currentPath string, files, dirs int64) {}
