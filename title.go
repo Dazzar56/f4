@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/user"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"sync"
 
@@ -34,8 +35,68 @@ func initTitleCache() {
 	}
 
 	cachedAdmin = getAdminString()
-	cachedVersion = getFormattedVersionInfo()
+	cachedVersion = getShortVersionInfo()
 	cachedPlat = runtime.GOARCH
+}
+
+func getShortVersionInfo() string {
+	if info, ok := debug.ReadBuildInfo(); ok {
+		var vcsRev string
+		for _, s := range info.Settings {
+			if s.Key == "vcs.revision" {
+				vcsRev = s.Value
+				if len(vcsRev) > 7 {
+					vcsRev = vcsRev[:7]
+				}
+			}
+		}
+		if vcsRev != "" {
+			return vcsRev
+		}
+		if info.Main.Version != "" && info.Main.Version != "(devel)" {
+			return info.Main.Version
+		}
+	}
+	return "v0.1.1-alpha"
+}
+
+func getLongVersionInfo() string {
+	if info, ok := debug.ReadBuildInfo(); ok {
+		var vcsRev, vcsDirty, vcsTime string
+		for _, s := range info.Settings {
+			switch s.Key {
+			case "vcs.revision":
+				vcsRev = s.Value
+				if len(vcsRev) > 7 {
+					vcsRev = vcsRev[:7]
+				}
+			case "vcs.modified":
+				if s.Value == "true" {
+					vcsDirty = " (dirty)"
+				}
+			case "vcs.time":
+				vcsTime = s.Value
+				if len(vcsTime) >= 16 {
+					vcsTime = strings.Replace(vcsTime[:16], "T", " ", 1)
+				}
+			}
+		}
+		var sb strings.Builder
+		if info.Main.Version != "" && info.Main.Version != "(devel)" {
+			sb.WriteString(info.Main.Version)
+		} else {
+			sb.WriteString("v0.1.1-alpha")
+		}
+		if vcsRev != "" {
+			sb.WriteString("-" + vcsRev + vcsDirty)
+		}
+		if vcsTime != "" {
+			sb.WriteString(" [" + vcsTime + "]")
+		}
+		sb.WriteString(" (go: " + info.GoVersion + ")")
+		return sb.String()
+	}
+	return "v0.1.1-alpha"
 }
 
 func UpdateWindowTitle(scr *vtui.ScreenBuf) {
