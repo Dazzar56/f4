@@ -2907,3 +2907,46 @@ func (m *mockTaskReporter) UpdateScan(currentPath string, files, dirs int64) {}
 func (m *mockTaskReporter) UpdateTransfer(action, filename string, currentPct int, totalText string, totalPct int, speedText string) {
 }
 func (m *mockTaskReporter) IsCancelled() bool { return false }
+
+func TestPanelsFrame_CaptureCommands(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	vtui.SetDefaultPalette()
+	pf := setupMockPanelsFrame()
+	defer pf.Close()
+
+	vtui.SetClipboard("")
+
+	cmdStr := "clip:<< echo f4_capture_test"
+	if runtime.GOOS == "windows" {
+		cmdStr = "clip:<< cmd.exe /c echo f4_capture_test"
+	}
+
+	pf.cmdLine.Edit.SetText(cmdStr)
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_RETURN,
+	})
+
+	// Wait for async execution via TaskChan
+	timeout := time.After(2 * time.Second)
+	found := false
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Timeout waiting for clip:<< task to complete")
+		default:
+		}
+		if strings.Contains(vtui.GetClipboard(), "f4_capture_test") {
+			found = true
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	if !found {
+		t.Error("Output was not copied to clipboard")
+	}
+}

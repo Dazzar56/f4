@@ -33,6 +33,8 @@ type ViewerView struct {
 	lastKnownSize int64
 
 	scrollBar *vtui.ScrollBar
+
+	OnClose func()
 }
 
 func NewViewerView(ctx context.Context, v vfs.VFS, path string) (*ViewerView, error) {
@@ -685,6 +687,9 @@ func (vv *ViewerView) Close() {
 		vv.backend.Close()
 	}
 	vv.BaseFrame.Close()
+	if vv.OnClose != nil {
+		vv.OnClose()
+	}
 }
 
 func (vv *ViewerView) GetKeyLabels() *vtui.KeySet {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/unxed/f4/vfs"
 	"os"
+	"os/exec"
 	"os/user"
 	"path/filepath"
 	"runtime"
@@ -1144,6 +1145,18 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				return true
 			}
 
+			// Intercept Far Manager output capturing commands
+			if strings.HasPrefix(lowerCmd, "clip:<<") || strings.HasPrefix(lowerCmd, "view:<<") || strings.HasPrefix(lowerCmd, "edit:<<") {
+				idx := strings.Index(lowerCmd, ":<<")
+				action := lowerCmd[:idx]
+				actualCmd := strings.TrimSpace(trimmedCmd[idx+3:])
+
+				pf.cmdLine.Clear()
+				pf.showPanels = true // Удерживаем панели открытыми во время выполнения
+				executeCapturedCommand(pf, action, actualCmd)
+				return true
+			}
+
 			// Apply to panel first
 			if isDirChange {
 				if fsp, ok := pf.panels[pf.activeIdx].(*FileSystemPanel); ok {
@@ -2083,6 +2096,73 @@ func (pf *PanelsFrame) GetTitle() string {
 		return "Panels: " + path
 	}
 	return "Panels"
+}
+
+func executeCapturedCommand(pf *PanelsFrame, action string, cmdStr string) {
+	var dir string
+	if fsp, ok := pf.panels[pf.activeIdx].(*FileSystemPanel); ok {
+		if _, isOS := fsp.vfs.(*vfs.OSVFS); isOS {
+			dir = fsp.vfs.GetPath()
+		}
+	}
+
+	pf.RunProgressTask(" Executing ", "Running: "+vtui.TruncateMiddle(cmdStr, 30), false, func(ctx context.Context, update func(msg string, percent int)) error {
+		var cmd *exec.Cmd
+		if runtime.GOOS == "windows" {
+			cmd = exec.CommandContext(ctx, "cmd.exe", "/c", cmdStr)
+		} else {
+			cmd = exec.CommandContext(ctx, "sh", "-c", cmdStr)
+		}
+		if dir != "" {
+			cmd.Dir = dir
+		}
+
+		out, err := cmd.CombinedOutput()
+		if err != nil && len(out) == 0 {
+			return err
+		}
+
+		vtui.FrameManager.PostTask(func() {
+			if action == "clip" {
+				vtui.SetClipboard(string(out))
+				vtui.ShowToast("Command output copied to clipboard", 3*time.Second)
+			} else if action == "view" || action == "edit" {
+				tmpFile, err := os.CreateTemp("", "f4-capture-*.txt")
+				if err != nil {
+					vtui.ShowMessage(" Error ", err.Error(), []string{"&Ok"})
+					return
+				}
+				tmpFile.Write(out)
+				tmpPath := tmpFile.Name()
+				tmpFile.Close()
+
+				v := vfs.NewOSVFS(filepath.Dir(tmpPath))
+				base := filepath.Base(tmpPath)
+
+				if action == "view" {
+					vv, err := NewViewerView(context.Background(), v, base)
+					if err == nil {
+						vv.OnClose = func() { os.Remove(tmpPath) }
+						showViewer(pf, vv, base)
+					}
+				} else {
+					f, err := v.Open(context.Background(), base)
+					if err == nil {
+						showEditor(pf, v, base, f)
+						if ev, _ := findOpenedEditor(v, base); ev != nil {
+							ev.OnClose = func() { os.Remove(tmpPath) }
+						}
+					}
+				}
+			}
+		})
+		return nil
+	}, func(err error) {
+		if err != nil && err != context.Canceled {
+			vtui.ShowMessage(" Error ", fmt.Sprintf("Execution failed:\n%v", err), []string{"&Ok"})
+		}
+		pf.RefreshAll()
+	})
 }
 
 func (pf *PanelsFrame) Clone() *PanelsFrame {
