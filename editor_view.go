@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -1977,13 +1978,27 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 		// Capture original metadata to restore it after atomic rename
 		originalStat, statErr := ev.vfs.Stat(ctx.Context, ev.filePath)
 
-		tempPath := ev.filePath + ".f4tmp"
-		f, err := ev.vfs.Create(ctx.Context, tempPath)
+		useTemp := !isAlternateDataStream(ev.filePath)
+		var f io.WriteCloser
+		var err error
+
+		if useTemp {
+			tempPath := ev.filePath + ".f4tmp"
+			f, err = ev.vfs.Create(ctx.Context, tempPath)
+		} else {
+			f, err = ev.vfs.Create(ctx.Context, ev.filePath)
+		}
+
 		if err != nil {
 			ctx.RunOnUI(func() {
 				ev.saving = false
-				vtui.DebugLog("EDITOR: Failed to create temp file for saving: %v", err)
-				vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to create temporary file:\n%v", err), []string{"&Ok"})
+				if useTemp {
+					vtui.DebugLog("EDITOR: Failed to create temp file for saving: %v", err)
+					vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to create temporary file:\n%v", err), []string{"&Ok"})
+				} else {
+					vtui.DebugLog("EDITOR: Failed to open file for direct saving: %v", err)
+					vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to open file for writing:\n%v", err), []string{"&Ok"})
+				}
 			})
 			return
 		}
@@ -2020,7 +2035,9 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 		f.Close()
 
 		if saveErr != nil {
-			ev.vfs.Remove(ctx.Context, tempPath)
+			if useTemp {
+				ev.vfs.Remove(ctx.Context, ev.filePath+".f4tmp")
+			}
 			ctx.RunOnUI(func() {
 				ev.saving = false
 				vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to save data:\n%v", saveErr), []string{"&Ok"})
@@ -2037,12 +2054,15 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 			oldFile.Close()
 		}
 
-		if err := ev.vfs.Rename(ctx.Context, tempPath, ev.filePath); err != nil {
-			ctx.RunOnUI(func() {
-				ev.saving = false
-				vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to finalize save (rename failed):\n%v", err), []string{"&Ok"})
-			})
-			return
+		if useTemp {
+			tempPath := ev.filePath + ".f4tmp"
+			if err := ev.vfs.Rename(ctx.Context, tempPath, ev.filePath); err != nil {
+				ctx.RunOnUI(func() {
+					ev.saving = false
+					vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to finalize save (rename failed):\n%v", err), []string{"&Ok"})
+				})
+				return
+			}
 		}
 
 		// Restore original metadata (owner, group, perms, times)
@@ -2580,4 +2600,16 @@ func (ev *EditorView) updateAutocomplete() {
 		ev.acMatches = append(currentLineMatches, otherLineMatches...)
 		ev.acCurrentIdx = 0
 	}
+}
+
+func isAlternateDataStream(path string) bool {
+	if runtime.GOOS != "windows" {
+		return false
+	}
+	vol := filepath.VolumeName(path)
+	rest := path
+	if vol != "" {
+		rest = strings.TrimPrefix(path, vol)
+	}
+	return strings.Contains(rest, ":")
 }
