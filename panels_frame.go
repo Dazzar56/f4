@@ -1175,9 +1175,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				actualCmd := strings.TrimSpace(trimmedCmd[idx+3:])
 
 				pf.cmdLine.Clear()
-				wasShowPanels := pf.showPanels
-				pf.showPanels = true // Удерживаем панели открытыми во время выполнения
-				executeCapturedCommand(pf, action, actualCmd, wasShowPanels)
+				executeCapturedCommand(pf, action, actualCmd)
 				return true
 			}
 
@@ -2122,12 +2120,38 @@ func (pf *PanelsFrame) GetTitle() string {
 	return "Panels"
 }
 
-func executeCapturedCommand(pf *PanelsFrame, action string, cmdStr string, wasShowPanels bool) {
+func executeCapturedCommand(pf *PanelsFrame, action string, cmdStr string) {
 	var dir string
 	if fsp, ok := pf.panels[pf.activeIdx].(*FileSystemPanel); ok {
 		if _, isOS := fsp.vfs.(*vfs.OSVFS); isOS {
 			dir = fsp.vfs.GetPath()
 		}
+	}
+
+	if action == "clip" {
+		vtui.RunAsync(func(ctx *vtui.TaskContext) {
+			var cmd *exec.Cmd
+			if runtime.GOOS == "windows" {
+				cmd = exec.CommandContext(ctx.Context, "cmd.exe", "/c", cmdStr)
+			} else {
+				cmd = exec.CommandContext(ctx.Context, "sh", "-c", cmdStr)
+			}
+			if dir != "" {
+				cmd.Dir = dir
+			}
+
+			out, err := cmd.CombinedOutput()
+			ctx.RunOnUI(func() {
+				if err != nil && len(out) == 0 {
+					vtui.ShowMessage(" Error ", fmt.Sprintf("Execution failed:\n%v", err), []string{"&Ok"})
+					return
+				}
+				vtui.SetClipboard(string(out))
+				vtui.ShowToast("Command output copied to clipboard", 3*time.Second)
+				pf.RefreshAll()
+			})
+		})
+		return
 	}
 
 	pf.RunProgressTask(" Executing ", "Running: "+vtui.TruncateMiddle(cmdStr, 30), false, func(ctx context.Context, update func(msg string, percent int)) error {
@@ -2147,34 +2171,29 @@ func executeCapturedCommand(pf *PanelsFrame, action string, cmdStr string, wasSh
 		}
 
 		vtui.FrameManager.PostTask(func() {
-			if action == "clip" {
-				vtui.SetClipboard(string(out))
-				vtui.ShowToast("Command output copied to clipboard", 3*time.Second)
-			} else if action == "view" || action == "edit" {
-				tmpFile, err := os.CreateTemp("", "f4-capture-*.txt")
-				if err != nil {
-					vtui.ShowMessage(" Error ", err.Error(), []string{"&Ok"})
-					return
+			tmpFile, err := os.CreateTemp("", "f4-capture-*.txt")
+			if err != nil {
+				vtui.ShowMessage(" Error ", err.Error(), []string{"&Ok"})
+				return
+			}
+			tmpFile.Write(out)
+			tmpPath := tmpFile.Name()
+			tmpFile.Close()
+
+			v := vfs.NewOSVFS(filepath.Dir(tmpPath))
+
+			if action == "view" {
+				vv, err := NewViewerView(context.Background(), v, tmpPath)
+				if err == nil {
+					vv.OnClose = func() { os.Remove(tmpPath) }
+					showViewer(pf, vv, tmpPath)
 				}
-				tmpFile.Write(out)
-				tmpPath := tmpFile.Name()
-				tmpFile.Close()
-
-				v := vfs.NewOSVFS(filepath.Dir(tmpPath))
-
-				if action == "view" {
-					vv, err := NewViewerView(context.Background(), v, tmpPath)
-					if err == nil {
-						vv.OnClose = func() { os.Remove(tmpPath) }
-						showViewer(pf, vv, tmpPath)
-					}
-				} else {
-					f, err := v.Open(context.Background(), tmpPath)
-					if err == nil {
-						showEditor(pf, v, tmpPath, f)
-						if ev, _ := findOpenedEditor(v, tmpPath); ev != nil {
-							ev.OnClose = func() { os.Remove(tmpPath) }
-						}
+			} else {
+				f, err := v.Open(context.Background(), tmpPath)
+				if err == nil {
+					showEditor(pf, v, tmpPath, f)
+					if ev, _ := findOpenedEditor(v, tmpPath); ev != nil {
+						ev.OnClose = func() { os.Remove(tmpPath) }
 					}
 				}
 			}
@@ -2184,7 +2203,6 @@ func executeCapturedCommand(pf *PanelsFrame, action string, cmdStr string, wasSh
 		if err != nil && err != context.Canceled {
 			vtui.ShowMessage(" Error ", fmt.Sprintf("Execution failed:\n%v", err), []string{"&Ok"})
 		}
-		pf.showPanels = wasShowPanels
 		pf.RefreshAll()
 	})
 }
