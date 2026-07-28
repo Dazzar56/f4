@@ -77,6 +77,11 @@ func main() {
 	var version bool
 	var attachedMode bool
 
+	exeName := filepath.Base(absExecPath)
+	if strings.Contains(strings.ToLower(exeName), "gui") {
+		guiMode = true
+	}
+
 	for i := 1; i < len(os.Args); i++ {
 		arg := os.Args[i]
 
