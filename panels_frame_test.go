@@ -2799,6 +2799,9 @@ func TestPanelsFrame_CtrlPgUp_GoesToParentOrDriveMenu(t *testing.T) {
 	if filepath.Clean(fsp.vfs.GetPath()) != filepath.Clean(tmp) {
 		t.Errorf("Ctrl+PgUp failed to go up: expected %q, got %q", tmp, fsp.vfs.GetPath())
 	}
+	if fsp.pendingSelection != "sub" {
+		t.Errorf("Ctrl+PgUp should position cursor on 'sub', got %q", fsp.pendingSelection)
+	}
 
 	// 2. Поднимаемся все дальше до физического корня системы
 	for !fsp.vfs.IsAtRoot() {

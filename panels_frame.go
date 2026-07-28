@@ -871,7 +871,13 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			if fsp.vfs.IsAtRoot() && fsp.vfs.ParentVFS() == nil {
 				pf.showDriveMenu(pf.activeIdx)
 			} else {
-				pf.NavigateToPath(fsp, "..")
+				oldPath := fsp.vfs.GetPath()
+				if err := fsp.vfs.SetPath(".."); err == nil {
+					fsp.pendingSelection = fsp.vfs.Base(oldPath)
+					fsp.ReadDirectory()
+				} else {
+					pf.NavigateToPath(fsp, "..")
+				}
 			}
 			return true
 		}
@@ -1415,8 +1421,8 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 
 			handled := p.ProcessMouse(e)
 			if handled && e.KeyDown {
-				isLeftDoubleClick := (e.MouseEventFlags&vtinput.DoubleClick) != 0 && e.ButtonState == vtinput.FromLeft1stButtonPressed
-				isMiddleClick := e.ButtonState == vtinput.FromLeft2ndButtonPressed
+				isLeftDoubleClick := (e.MouseEventFlags&vtinput.DoubleClick) != 0 && (e.ButtonState&vtinput.FromLeft1stButtonPressed) != 0
+				isMiddleClick := (e.ButtonState&vtinput.FromLeft2ndButtonPressed) != 0
 
 				if isLeftDoubleClick || isMiddleClick {
 					pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN})
