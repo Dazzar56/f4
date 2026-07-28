@@ -851,6 +851,24 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	}
 
+	// Alt+F9 - Toggle window size (Far compatible)
+	if e.VirtualKeyCode == vtinput.VK_F9 && alt && !ctrl && !shift && e.KeyDown {
+		targetCols, targetRows := AppConfig.GuiCols, AppConfig.GuiRows
+		if pf.lastW == AppConfig.GuiCols && pf.lastH == AppConfig.GuiRows {
+			targetCols, targetRows = AppConfig.GuiCols+40, AppConfig.GuiRows+15
+		}
+
+		// 1. Посылаем xterm-последовательность изменения размера для консольного режима
+		os.Stdout.WriteString(fmt.Sprintf("\x1b[8;%d;%dt", targetRows, targetCols))
+		os.Stdout.Sync()
+
+		// 2. Для графического режима вызываем принудительный ресайз окна ОС
+		if vtui.FrameManager != nil {
+			vtui.FrameManager.ResizeWindow(targetCols, targetRows)
+		}
+		return true
+	}
+
 	// Ctrl+\ - Go to VFS root (Far compatible)
 	if (e.VirtualKeyCode == vtinput.VK_OEM_5 || e.Char == '\\') && ctrl && !alt && !shift && e.KeyDown {
 		if fsp := pf.getActivePanel(); fsp != nil {
