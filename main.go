@@ -426,6 +426,18 @@ func SaveSession() {
 	path := getSessionIniPath()
 	os.MkdirAll(filepath.Dir(path), 0755)
 
+	if vtui.FrameManager != nil {
+		w := vtui.FrameManager.GetScreenSize()
+		h := vtui.FrameManager.GetScreenHeight()
+		if w > 0 && h > 0 {
+			if AppConfig.GuiCols != w || AppConfig.GuiRows != h {
+				AppConfig.GuiCols = w
+				AppConfig.GuiRows = h
+				SaveConfig()
+			}
+		}
+	}
+
 	if AppConfig.SavePanelPaths && vtui.FrameManager != nil {
 		for _, s := range vtui.FrameManager.Screens {
 			for _, f := range s.Frames {

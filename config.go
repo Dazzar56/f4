@@ -38,6 +38,8 @@ type F4Config struct {
 	FileOpPathDisplay       int
 	GuiFont                 string
 	GuiFontSize             int
+	GuiCols                 int
+	GuiRows                 int
 	ConsoleTitleTemplate    string
 	UpdateChannel           int    // 0 = Stable, 1 = Nightly
 	UpdateInterval          int    // 0 = Never, 1 = Every start, 2 = Daily, 3 = Weekly
@@ -72,6 +74,8 @@ var AppConfig = F4Config{
 	FileOpPathDisplay:       0,
 	GuiFont:                 "",
 	GuiFontSize:             16,
+	GuiCols:                 100,
+	GuiRows:                 30,
 	ConsoleTitleTemplate:    "f4 - %State",
 	UpdateChannel:           0,
 	UpdateInterval:          3, // Default to Weekly
@@ -129,6 +133,14 @@ func LoadConfig() {
 	if AppConfig.GuiFontSize <= 0 {
 		AppConfig.GuiFontSize = 16
 	}
+	fmt.Sscanf(ini.GetString("Appearance", "GuiCols", "100"), "%d", &AppConfig.GuiCols)
+	if AppConfig.GuiCols <= 0 {
+		AppConfig.GuiCols = 100
+	}
+	fmt.Sscanf(ini.GetString("Appearance", "GuiRows", "30"), "%d", &AppConfig.GuiRows)
+	if AppConfig.GuiRows <= 0 {
+		AppConfig.GuiRows = 30
+	}
 	fmt.Sscanf(ini.GetString("Update", "Channel", "0"), "%d", &AppConfig.UpdateChannel)
 	fmt.Sscanf(ini.GetString("Update", "Interval", "3"), "%d", &AppConfig.UpdateInterval)
 	fmt.Sscanf(ini.GetString("Update", "LastCheck", "0"), "%d", &AppConfig.LastUpdateCheck)
@@ -182,6 +194,8 @@ func SaveConfig() {
 	sb.WriteString("\n[Appearance]\n")
 	sb.WriteString(fmt.Sprintf("GuiFont = %s\n", AppConfig.GuiFont))
 	sb.WriteString(fmt.Sprintf("GuiFontSize = %d\n", AppConfig.GuiFontSize))
+	sb.WriteString(fmt.Sprintf("GuiCols = %d\n", AppConfig.GuiCols))
+	sb.WriteString(fmt.Sprintf("GuiRows = %d\n", AppConfig.GuiRows))
 
 	sb.WriteString("\n[Update]\n")
 	sb.WriteString(fmt.Sprintf("Channel = %d\n", AppConfig.UpdateChannel))
