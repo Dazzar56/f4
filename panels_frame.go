@@ -325,7 +325,7 @@ func (pf *PanelsFrame) buildPrompt() []vtui.CharInfo {
 		displayPath = vtui.TruncateMiddle(displayPath, maxPathLen)
 	}
 
-	baseAttr := vtui.Palette[ColCommandLineUserScreen]
+	baseAttr := vtui.Palette[ColCommandLinePrompt]
 	// Use colors as close as possible to classic bash, while keeping the base background
 	greenAttr := vtui.SetRGBFore(baseAttr, 0x8AE234) // Bright green
 	blueAttr := vtui.SetRGBFore(baseAttr, 0x729FCF)  // Bright blue

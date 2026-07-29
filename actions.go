@@ -1826,6 +1826,7 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 
 	btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))
 	btnOk.IsDefault = true
+	btnExport := vtui.NewButton(0, 0, "E&xport Scheme")
 	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
 
 	dlg.AddItem(lblStyle)
@@ -1838,6 +1839,7 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 	dlg.AddItem(editTitle)
 	dlg.AddItem(chkCursor)
 	dlg.AddItem(btnOk)
+	dlg.AddItem(btnExport)
 	dlg.AddItem(btnCancel)
 
 	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, width-4, height-4)
@@ -1867,12 +1869,22 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 	buttons.HorizontalAlign = vtui.AlignCenter
 	buttons.Spacing = 2
 	buttons.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
+	buttons.Add(btnExport, vtui.Margins{}, vtui.AlignTop)
 	buttons.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
 	vbox.Add(buttons, vtui.Margins{Top: 1}, vtui.AlignFill)
 	vbox.Apply()
 
 	btnCancel.OnClick = func() {
 		dlg.SetExitCode(-1)
+	}
+	btnExport.OnClick = func() {
+		colorsPath := filepath.Join(GetF4ConfigDir(), "farcolors.ini")
+		err := ExportColors(colorsPath)
+		if err != nil {
+			vtui.ShowMessageOn(dlg, " Error ", fmt.Sprintf("Failed to export colors:\n%v", err), []string{"&Ok"})
+		} else {
+			vtui.ShowMessageOn(dlg, " Info ", "Current colors successfully exported to:\n"+colorsPath+"\n\nYou can edit this file to customize your palette.", []string{"&Ok"})
+		}
 	}
 	btnOk.OnClick = func() {
 		if len(names) > 0 {

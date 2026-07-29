@@ -1,6 +1,13 @@
 package main
 
-import "github.com/unxed/vtui"
+import (
+	"fmt"
+	"os"
+	"sort"
+	"strings"
+
+	"github.com/unxed/vtui"
+)
 
 const (
 	ColPanelText = vtui.LastPaletteColor + iota
@@ -158,4 +165,41 @@ func InitColors(ini *IniFile) {
 	// Terminal history uses indexed background color 0 for default and blank cells.
 	// Keep it in sync with the configurable user-screen background.
 	vtui.ThemePalette[0] = vtui.GetRGBBack(vtui.Palette[ColCommandLineUserScreen])
+}
+// FormatFarColor serializes a vtui palette color attribute to a farcolors.ini string.
+func FormatFarColor(attr uint64) string {
+	var fg, bg uint32
+	if attr&vtui.IsFgRGB != 0 {
+		fg = vtui.GetRGBFore(attr)
+	} else {
+		fg = vtui.ThemePalette[vtui.GetIndexFore(attr)]
+	}
+
+	if attr&vtui.IsBgRGB != 0 {
+		bg = vtui.GetRGBBack(attr)
+	} else {
+		bg = vtui.ThemePalette[vtui.GetIndexBack(attr)]
+	}
+
+	return fmt.Sprintf("foreground:#%06x | background:#%06x", fg, bg)
+}
+
+// ExportColors writes the current palette to a farcolors.ini file.
+func ExportColors(path string) error {
+	var sb strings.Builder
+	sb.WriteString("[farcolors]\n")
+
+	var keys []string
+	for k := range colorMap {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		idx := colorMap[k]
+		attr := vtui.Palette[idx]
+		sb.WriteString(fmt.Sprintf("%s = %s\n", k, FormatFarColor(attr)))
+	}
+
+	return os.WriteFile(path, []byte(sb.String()), 0644)
 }
