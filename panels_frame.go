@@ -807,6 +807,55 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	}
 
+	// Folder bookmarks, far2l's hotkey scheme: [RightCtrl | Ctrl+Alt] + N
+	// jumps to slot N, Ctrl+Shift+N stores the current directory there, and
+	// [RightCtrl | Ctrl+Alt] + ~ goes home. The ctrl local above merges both
+	// Ctrl keys, but here the side matters, so the flags are read directly.
+	// Terminals that cannot tell the two Ctrls apart report LeftCtrlPressed
+	// for either one — that is what the Ctrl+Alt alias (far2l offers the
+	// same pair) is for.
+	if e.KeyDown {
+		rctrl := (e.ControlKeyState & vtinput.RightCtrlPressed) != 0
+		lctrl := (e.ControlKeyState & vtinput.LeftCtrlPressed) != 0
+		isBookmarkGoto := (rctrl && !shift && !alt) || ((lctrl || rctrl) && alt && !shift)
+		isBookmarkSave := (lctrl || rctrl) && shift && !alt
+
+		if e.VirtualKeyCode >= vtinput.VK_0 && e.VirtualKeyCode <= vtinput.VK_9 && (isBookmarkGoto || isBookmarkSave) {
+			slot := int(e.VirtualKeyCode - vtinput.VK_0)
+			file := BookmarksFilePath()
+			// Always read fresh: another f4 or far2l instance may have
+			// rewritten the file since we last looked at it.
+			set, err := LoadBookmarks(file)
+			if err != nil {
+				vtui.DebugLog("BOOKMARKS: load %q failed: %v", file, err)
+				return true
+			}
+			if isBookmarkSave {
+				if fsp := pf.getActivePanel(); fsp != nil {
+					set[slot] = Bookmark{Path: fsp.vfs.GetPath()}
+					if err := SaveBookmarks(file, set); err != nil {
+						vtui.DebugLog("BOOKMARKS: save %q failed: %v", file, err)
+					}
+				}
+			} else if !set[slot].IsEmpty() {
+				// An unset slot is a silent no-op, as in far2l.
+				if fsp := pf.getActivePanel(); fsp != nil {
+					pf.NavigateToPath(fsp, set[slot].Path)
+				}
+			}
+			return true
+		}
+
+		if e.VirtualKeyCode == vtinput.VK_OEM_3 && isBookmarkGoto {
+			if home, _ := os.UserHomeDir(); home != "" {
+				if fsp := pf.getActivePanel(); fsp != nil {
+					pf.NavigateToPath(fsp, home)
+				}
+			}
+			return true
+		}
+	}
+
 	// Ctrl+A: Attributes
 	if e.VirtualKeyCode == vtinput.VK_A && ctrl && !alt && !shift && e.KeyDown {
 		actionFileAttributes(pf)
