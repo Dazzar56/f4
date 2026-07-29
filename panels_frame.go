@@ -1418,6 +1418,17 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 		// If tracking is off, we still swallow clicks inside AltScreen to prevent hitting hidden panels
 		return e.ButtonState != 0 || e.WheelDirection != 0
 	}
+	// Global middle-click (wheel click) intercept for PanelsFrame.
+	// When panels are shown, clicking the middle mouse button anywhere on screen
+	// triggers the Enter handler, launching the selected file in the active panel.
+	if e.ButtonState == vtinput.FromLeft2ndButtonPressed && e.KeyDown {
+		pf.ProcessKey(&vtinput.InputEvent{
+			Type:           vtinput.KeyEventType,
+			KeyDown:        true,
+			VirtualKeyCode: vtinput.VK_RETURN,
+		})
+		return true
+	}
 
 	// Wheel events always scroll the active panel, regardless of mouse position.
 	// This matches classic Far Manager / far2l behavior.
