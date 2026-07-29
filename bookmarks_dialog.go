@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/mattn/go-runewidth"
 	"github.com/unxed/vtinput"
@@ -92,6 +93,38 @@ func (d *bookmarksDialog) open() {
 		shift := e.ControlKeyState&vtinput.ShiftPressed != 0
 		ctrl := e.ControlKeyState&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed) != 0
 		alt := e.ControlKeyState&(vtinput.LeftAltPressed|vtinput.RightAltPressed) != 0
+
+		slot := d.slotAt(d.menu.SelectPos)
+
+		// Ins stores the panel's directory, Del clears the slot, F4 edits
+		// the path by hand. All three overwrite without asking, as far2l
+		// does, and each one hits the disk immediately.
+		if !ctrl && !shift && !alt {
+			switch e.VirtualKeyCode {
+			case vtinput.VK_INSERT:
+				d.saveCurrentDir(slot)
+				return true
+			case vtinput.VK_DELETE:
+				d.clearSlot(slot)
+				return true
+			case vtinput.VK_F4:
+				d.editPath(slot)
+				return true
+			}
+		}
+
+		// Shift+Up / Shift+Down swap the slot with its neighbour and take
+		// the cursor along, so it stays on the same bookmark.
+		if shift && !ctrl && !alt {
+			switch e.VirtualKeyCode {
+			case vtinput.VK_UP:
+				d.moveSlot(slot, -1)
+				return true
+			case vtinput.VK_DOWN:
+				d.moveSlot(slot, +1)
+				return true
+			}
+		}
 
 		// Keys the top frame declines fall through to vtui's own global
 		// handlers — F1 opens help, F9 activates the menu bar (which a
@@ -184,6 +217,100 @@ func (d *bookmarksDialog) size() (int, int) {
 		h = maxH
 	}
 	return w, h
+}
+
+// saveCurrentDir records the active panel's directory in the slot.
+func (d *bookmarksDialog) saveCurrentDir(slot int) {
+	fsp := d.pf.getActivePanel()
+	if fsp == nil || slot < 0 {
+		return
+	}
+	d.set.setCurrentDir(slot, fsp.vfs.GetPath())
+	d.persist()
+}
+
+// clearSlot empties the slot. No confirmation, matching far2l.
+func (d *bookmarksDialog) clearSlot(slot int) {
+	if slot < 0 {
+		return
+	}
+	d.set.deleteAtSlot(slot)
+	d.persist()
+}
+
+// editPath asks for a path and stores it in the slot. Empty input counts
+// as a cancel rather than "clear the slot" — that is what Del is for.
+func (d *bookmarksDialog) editPath(slot int) {
+	if slot < 0 || slot >= len(d.set) {
+		return
+	}
+	current := d.set[slot].Path
+	vtui.InputBox(Msg("Bookmarks.EditTitle"), Msg("Bookmarks.EditPrompt"), current, func(text string) {
+		text = strings.TrimSpace(text)
+		if text == "" {
+			return
+		}
+		d.set.setCurrentDir(slot, text)
+		d.persist()
+	})
+}
+
+// moveSlot swaps the slot with the neighbour delta rows away and moves
+// the cursor with it. A move off either end is a no-op.
+func (d *bookmarksDialog) moveSlot(slot, delta int) {
+	target := slot + delta
+	if slot < 0 || target < 0 || target >= len(d.set) {
+		return
+	}
+	d.set.swapSlots(slot, target)
+	if d.persist() {
+		d.menu.SetSelectPos(target)
+	}
+}
+
+// persist writes the table back and re-renders. On a write failure the
+// on-disk state wins: the in-memory copy is reloaded so the dialog never
+// shows changes that were not saved.
+func (d *bookmarksDialog) persist() bool {
+	err := SaveBookmarks(d.file, d.set)
+	if err != nil {
+		vtui.ShowMessage(Msg("Bookmarks.Title"),
+			fmt.Sprintf(Msg("Bookmarks.SaveError"), err),
+			[]string{"&Ok"})
+		if reloaded, lerr := LoadBookmarks(d.file); lerr == nil {
+			d.set = reloaded
+		}
+	}
+	d.render()
+	vtui.FrameManager.Redraw()
+	return err == nil
+}
+
+// deleteAtSlot clears the slot, leaving the rest of the table alone.
+func (s *BookmarkSet) deleteAtSlot(i int) {
+	if i < 0 || i >= len(s) {
+		return
+	}
+	s[i] = Bookmark{}
+}
+
+// swapSlots exchanges two slots. Out-of-range indices are ignored so
+// callers can pass "cursor ± 1" without bounds-checking first.
+func (s *BookmarkSet) swapSlots(a, b int) {
+	if a < 0 || a >= len(s) || b < 0 || b >= len(s) {
+		return
+	}
+	s[a], s[b] = s[b], s[a]
+}
+
+// setCurrentDir stores path in the slot and clears the plugin fields:
+// whoever edits a slot from the dialog is recording a filesystem
+// directory, not a plugin location.
+func (s *BookmarkSet) setCurrentDir(i int, path string) {
+	if i < 0 || i >= len(s) {
+		return
+	}
+	s[i] = Bookmark{Path: path}
 }
 
 // slotAt maps a menu row to its slot index, or -1 when the row is out of

@@ -119,6 +119,9 @@ var Lng = map[string]string{
 	"Bookmarks.EmptySlot":  "<empty>",
 	"Bookmarks.BottomHint": " Del Ins F4 Shift+Up Shift+Down ",
 	"Bookmarks.LoadError":  "Failed to load bookmarks:\n%v",
+	"Bookmarks.SaveError":  "Failed to save bookmarks:\n%v",
+	"Bookmarks.EditTitle":  " Edit bookmark path ",
+	"Bookmarks.EditPrompt": "&Path:",
 
 	// KeyBar Normal
 	"KeyBar.F1":  "Help",
