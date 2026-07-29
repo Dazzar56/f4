@@ -228,7 +228,12 @@ func main() {
 }
 
 func shouldTryGui() bool {
-	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
+	if runtime.GOOS == "windows" {
+		// On Windows, we compile separate binaries for console (f4.exe) and GUI (f4-gui.exe).
+		// We do not auto-detect GUI mode; it must be requested via filename or --gui flag.
+		return false
+	}
+	if runtime.GOOS == "darwin" {
 		return true
 	}
 	return os.Getenv("WAYLAND_DISPLAY") != "" || os.Getenv("DISPLAY") != ""
