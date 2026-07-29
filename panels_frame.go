@@ -149,6 +149,7 @@ func NewPanelsFrame() *PanelsFrame {
 		}},
 		{Label: "&" + Msg("Menu.Commands"), SubItems: []vtui.MenuItem{
 			{Text: "&" + Msg("Menu.Commands.FindFile"), Shortcut: "Alt+F7", Command: CmFindFile},
+			{Text: "&" + Msg("Menu.Commands.Bookmarks"), Command: CmBookmarks},
 		}},
 		// Uncomment to test crash logging
 		//{Label: "&" + Msg("Menu.Options"), SubItems: []vtui.MenuItem{{Text: "Placeholder"}}},
@@ -1491,6 +1492,9 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 		return true
 	case CmFindFile:
 		actionFindFile(pf)
+		return true
+	case CmBookmarks:
+		ShowBookmarksDialog(pf)
 		return true
 	case CmPanelSettings:
 		actionPanelSettings(pf)

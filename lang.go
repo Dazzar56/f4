@@ -69,6 +69,7 @@ var Lng = map[string]string{
 	"Menu.Left.Medium":             "Medium",
 	"Menu.Left.Detailed":           "Detailed",
 	"Menu.Commands.FindFile":       "Find file",
+	"Menu.Commands.Bookmarks":      "Bookmarks",
 	"Menu.SortName":                "Name",
 	"Menu.SortExt":                 "Extension",
 	"Menu.SortTime":                "Time",
@@ -110,6 +111,14 @@ var Lng = map[string]string{
 	"UserMenu.LocalMenuTitle":      "Local menu",
 	"UserMenu.MainMenuTitle":       "Main menu",
 	"UserMenu.MainMenuFAR":         "FAR",
+	// "RCtrl" and "Ctrl+Alt" are English keyboard convention; a
+	// translation may want to spell them out differently, so the whole
+	// row prefix is localizable rather than built in code.
+	"Bookmarks.Title":      " Bookmarks ",
+	"Bookmarks.RowPrefix":  "[RCtrl | Ctrl+Alt] +",
+	"Bookmarks.EmptySlot":  "<empty>",
+	"Bookmarks.BottomHint": " Del Ins F4 Shift+Up Shift+Down ",
+	"Bookmarks.LoadError":  "Failed to load bookmarks:\n%v",
 
 	// KeyBar Normal
 	"KeyBar.F1":  "Help",
