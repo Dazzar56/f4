@@ -12,7 +12,7 @@ require (
 	github.com/unxed/sevenzip v0.0.0-20260704211908-25d317f8295f
 	github.com/unxed/tar v0.1.121
 	github.com/unxed/vtinput v0.1.1
-	github.com/unxed/vtui v0.1.55
+	github.com/unxed/vtui v0.1.56
 	github.com/unxed/zip v0.1.126
 	github.com/unxed/zipper v0.1.136
 	github.com/vmihailenco/msgpack/v5 v5.4.1
@@ -34,14 +34,14 @@ require (
 	github.com/ebitengine/purego v0.10.0 // indirect
 	github.com/emmansun/base64 v0.9.0 // indirect
 	github.com/fogleman/gg v1.3.0 // indirect
-	github.com/go-webgpu/goffi v0.6.0 // indirect
-	github.com/go-webgpu/webgpu v0.5.3 // indirect
+	github.com/go-webgpu/goffi v0.6.2 // indirect
+	github.com/go-webgpu/webgpu v0.5.4 // indirect
 	github.com/gogpu/gg v0.50.7 // indirect
-	github.com/gogpu/gogpu v0.44.9 // indirect
+	github.com/gogpu/gogpu v0.45.2-0.20260729134706-b1d8fae26ea4 // indirect
 	github.com/gogpu/gpucontext v0.21.1 // indirect
 	github.com/gogpu/gputypes v0.5.1 // indirect
-	github.com/gogpu/naga v0.17.15 // indirect
-	github.com/gogpu/wgpu v0.30.22 // indirect
+	github.com/gogpu/naga v0.17.16 // indirect
+	github.com/gogpu/wgpu v0.30.23 // indirect
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/hashicorp/errwrap v1.0.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
