@@ -2141,6 +2141,13 @@ func (pf *PanelsFrame) showPluginMenu() {
 }
 
 func (pf *PanelsFrame) showDriveMenu(panelIdx int) {
+	pf.showDriveMenuAt(panelIdx, 0)
+}
+
+// showDriveMenuAt opens the drive menu with the cursor on selectPos. The
+// bookmark keys reopen the menu at the row they acted on, the way far2l
+// loops ChangeDiskMenu around its own Pos (panels/panel.cpp:168).
+func (pf *PanelsFrame) showDriveMenuAt(panelIdx, selectPos int) {
 	menu := vtui.NewVMenu(" Drive ")
 
 	usedHotkeys := make(map[rune]bool)
@@ -2185,6 +2192,7 @@ func (pf *PanelsFrame) showDriveMenu(panelIdx int) {
 	// the same menu (panels/panel.cpp, AddBookmarkItems) with the slot
 	// digit as the hotkey, so Alt+F1 followed by 6 lands on slot 6.
 	// Unassigned slots are left out.
+	bookmarkRows := map[int]int{} // menu row -> slot, for the keys below
 	if set, err := LoadBookmarks(BookmarksFilePath()); err == nil {
 		firstBookmark := true
 		for i := range set {
@@ -2197,6 +2205,7 @@ func (pf *PanelsFrame) showDriveMenu(panelIdx int) {
 			}
 			path := set[i].Path
 			usedHotkeys[rune('0'+i)] = true
+			bookmarkRows[menu.GetItemCount()] = i
 			menu.AddItem(vtui.MenuItem{
 				Text: fmt.Sprintf("&%d  %s", i, escapeAmpersand(truncPathLeft(path, 64))),
 				UserData: func(fsp *FileSystemPanel) {
@@ -2242,6 +2251,39 @@ func (pf *PanelsFrame) showDriveMenu(panelIdx int) {
 
 	// Обработка физических клавиш / и ~ (layout-independent)
 	menu.OnKeyDown = func(e *vtinput.InputEvent) bool {
+		// far2l binds three keys on the bookmark rows of this menu
+		// (panels/panel.cpp:544-600): Ins opens the bookmarks dialog, F4
+		// opens it on the slot under the cursor, Del clears that slot.
+		// The menu comes back afterwards, as it does there. On other rows
+		// F4 and Del are left alone — far2l uses them for mount hotkeys
+		// and unmounting, neither of which f4 has.
+		if e.KeyDown && e.ControlKeyState&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed|
+			vtinput.LeftAltPressed|vtinput.RightAltPressed|vtinput.ShiftPressed) == 0 {
+			pos := menu.SelectPos
+			slot, onBookmark := bookmarkRows[pos]
+			reopen := func() { pf.showDriveMenuAt(panelIdx, pos) }
+
+			switch e.VirtualKeyCode {
+			case vtinput.VK_INSERT:
+				// far2l opens the dialog from any row here, not just a
+				// bookmark one, and always at the first slot.
+				menu.Close()
+				vtui.FrameManager.PostTask(func() { ShowBookmarksDialogAt(pf, 0, reopen) })
+				return true
+			case vtinput.VK_F4:
+				if onBookmark {
+					menu.Close()
+					vtui.FrameManager.PostTask(func() { ShowBookmarksDialogAt(pf, slot, reopen) })
+					return true
+				}
+			case vtinput.VK_DELETE:
+				if onBookmark {
+					pf.clearBookmarkSlot(slot, menu, reopen)
+					return true
+				}
+			}
+		}
+
 		var targetIndex = -1
 		if e.VirtualKeyCode == vtinput.VK_OEM_2 { // Клавиша /?
 			for i, item := range menu.Items {
@@ -2268,7 +2310,7 @@ func (pf *PanelsFrame) showDriveMenu(panelIdx int) {
 		return false
 	}
 
-	menu.SetSelectPos(0)
+	menu.SetSelectPos(selectPos)
 
 	// Bookmark rows carry paths, so the box no longer fits a fixed width.
 	w, h := 26, menu.GetItemCount()+2
@@ -2313,6 +2355,26 @@ func (pf *PanelsFrame) showDriveMenu(panelIdx int) {
 		}
 	}
 	vtui.FrameManager.Push(menu)
+}
+
+// clearBookmarkSlot empties one slot straight from the drive menu, which
+// is what Del does there in far2l (panels/panel.cpp:594), then reopens
+// the menu so the row is gone. The table is re-read first: another
+// instance may have rewritten the file since the menu was built.
+func (pf *PanelsFrame) clearBookmarkSlot(slot int, menu *vtui.VMenu, reopen func()) {
+	file := BookmarksFilePath()
+	set, err := LoadBookmarks(file)
+	if err != nil {
+		vtui.DebugLog("BOOKMARKS: load %q failed: %v", file, err)
+		return
+	}
+	set.deleteAtSlot(slot)
+	if err := SaveBookmarks(file, set); err != nil {
+		vtui.DebugLog("BOOKMARKS: save %q failed: %v", file, err)
+		return
+	}
+	menu.Close()
+	vtui.FrameManager.PostTask(reopen)
 }
 
 func (pf *PanelsFrame) switchToVFS(fsp *FileSystemPanel, newVFS vfs.VFS) {

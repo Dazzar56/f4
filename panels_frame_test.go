@@ -210,6 +210,150 @@ func TestPanelsFrame_DriveMenuListsAssignedBookmarks(t *testing.T) {
 	}
 }
 
+// settleFrames does what the render loop does between keystrokes: run the
+// tasks frames posted, then drop the ones that closed themselves.
+func settleFrames(t *testing.T) {
+	t.Helper()
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			continue
+		case <-time.After(200 * time.Millisecond):
+		}
+		break
+	}
+	for _, f := range append([]vtui.Frame(nil), openFrames()...) {
+		if f.IsDone() {
+			vtui.FrameManager.RemoveFrame(f)
+		}
+	}
+}
+
+func openFrames() []vtui.Frame {
+	return vtui.FrameManager.Screens[vtui.FrameManager.ActiveIdx].Frames
+}
+
+// findDriveMenu returns the top-most drive menu on the stack. Unrelated
+// tasks (the update check, for one) can push frames above it.
+func findDriveMenu(t *testing.T) *vtui.VMenu {
+	t.Helper()
+	frames := openFrames()
+	for i := len(frames) - 1; i >= 0; i-- {
+		if m, ok := frames[i].(*vtui.VMenu); ok && m.GetTitle() == " Drive " {
+			return m
+		}
+	}
+	t.Fatalf("drive menu not on the frame stack: %#v", frames)
+	return nil
+}
+
+func findBookmarksDialog(t *testing.T) *bookmarksFrame {
+	t.Helper()
+	frames := openFrames()
+	for i := len(frames) - 1; i >= 0; i-- {
+		if d, ok := frames[i].(*bookmarksFrame); ok {
+			return d
+		}
+	}
+	t.Fatalf("bookmarks dialog not on the frame stack: %#v", frames)
+	return nil
+}
+
+func bookmarkRow(t *testing.T, menu *vtui.VMenu) int {
+	t.Helper()
+	for i, it := range menu.Items {
+		if strings.HasPrefix(it.Text, "&6  ") {
+			return i
+		}
+	}
+	t.Fatalf("bookmark row missing: %#v", menu.Items)
+	return -1
+}
+
+func TestPanelsFrame_DriveMenuBookmarkKeys(t *testing.T) {
+	cfg := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", cfg)
+	if err := os.MkdirAll(filepath.Join(cfg, "f4", "settings"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ini := filepath.Join(cfg, "f4", "settings", "bookmarks.ini")
+	target := t.TempDir()
+	write := func() {
+		if err := os.WriteFile(ini,
+			[]byte("[6]\nPath="+target+"\nPlugin=\nPluginData=\nPluginFile=\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write()
+
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	vtui.FrameManager.Push(pf)
+
+	press := func(menu *vtui.VMenu, vk uint16) {
+		menu.ProcessKey(&vtinput.InputEvent{
+			Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vk,
+		})
+	}
+
+	// F4 on the bookmark row opens the dialog on that slot, and closing
+	// the dialog brings the drive menu back.
+	pf.showDriveMenu(1)
+	menu := findDriveMenu(t)
+	menu.SetSelectPos(bookmarkRow(t, menu))
+	press(menu, vtinput.VK_F4)
+	settleFrames(t)
+	dlg := findBookmarksDialog(t)
+	if dlg.SelectPos != 6 {
+		t.Errorf("dialog opened on slot %d, want 6", dlg.SelectPos)
+	}
+	press(dlg.VMenu, vtinput.VK_ESCAPE)
+	settleFrames(t)
+	if !dlg.IsDone() {
+		t.Fatal("Esc did not close the dialog")
+	}
+	settleFrames(t)
+	menu = findDriveMenu(t) // reopened by the dialog's close hook
+	if menu.IsDone() {
+		t.Fatal("drive menu did not come back after the dialog closed")
+	}
+
+	// Ins opens the dialog from any row, always at the first slot.
+	menu.SetSelectPos(0)
+	press(menu, vtinput.VK_INSERT)
+	settleFrames(t)
+	dlg = findBookmarksDialog(t)
+	if dlg.SelectPos != 0 {
+		t.Errorf("Ins opened the dialog on slot %d, want 0", dlg.SelectPos)
+	}
+	press(dlg.VMenu, vtinput.VK_ESCAPE)
+	settleFrames(t)
+	dlg.IsDone()
+	settleFrames(t)
+
+	// Del clears the slot, and the menu that comes back no longer lists it.
+	menu = findDriveMenu(t)
+	menu.SetSelectPos(bookmarkRow(t, menu))
+	press(menu, vtinput.VK_DELETE)
+	settleFrames(t)
+	data, err := os.ReadFile(ini)
+	if err != nil {
+		t.Fatalf("read ini: %v", err)
+	}
+	if strings.Contains(string(data), "[6]") {
+		t.Errorf("Del did not clear the slot on disk:\n%s", data)
+	}
+	menu = findDriveMenu(t)
+	for _, it := range menu.Items {
+		if strings.HasPrefix(it.Text, "&6  ") {
+			t.Errorf("cleared bookmark still listed: %q", it.Text)
+		}
+	}
+}
+
 func TestPanelsFrame_GetActivePTY(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()

@@ -20,6 +20,22 @@ import (
 type bookmarksFrame struct {
 	*vtui.VMenu
 	bottomHint string
+	onClose    func()
+}
+
+// IsDone doubles as the close hook. vtui has no OnClose on VMenu and Esc
+// closes through the embedded menu's own SetExitCode, which a wrapper
+// cannot intercept — but the frame manager drops a frame the moment
+// IsDone reports true, so that is the point where "after the dialog goes
+// away" work can be queued. Fires once.
+func (b *bookmarksFrame) IsDone() bool {
+	done := b.VMenu.IsDone()
+	if done && b.onClose != nil {
+		cb := b.onClose
+		b.onClose = nil
+		vtui.FrameManager.PostTask(cb)
+	}
+	return done
 }
 
 func (b *bookmarksFrame) Show(scr *vtui.ScreenBuf) {
@@ -43,14 +59,25 @@ type bookmarksDialog struct {
 
 // ShowBookmarksDialog is the entry point wired to CmBookmarks.
 func ShowBookmarksDialog(pf *PanelsFrame) {
+	ShowBookmarksDialogAt(pf, 0, nil)
+}
+
+// ShowBookmarksDialogAt opens the dialog with the cursor on a given slot
+// and runs onClose (may be nil) once the dialog is gone. The drive menu
+// uses both: far2l's F4 there opens this dialog on the slot under the
+// cursor and returns to the menu afterwards.
+func ShowBookmarksDialogAt(pf *PanelsFrame, slot int, onClose func()) {
 	d, err := newBookmarksDialog(pf, BookmarksFilePath())
 	if err != nil {
 		vtui.ShowMessage(Msg("Bookmarks.Title"),
 			fmt.Sprintf(Msg("Bookmarks.LoadError"), err),
 			[]string{"&Ok"})
+		if onClose != nil {
+			onClose()
+		}
 		return
 	}
-	d.open()
+	d.open(slot, onClose)
 }
 
 // newBookmarksDialog reads the table from path. The error is returned
@@ -64,8 +91,8 @@ func newBookmarksDialog(pf *PanelsFrame, path string) (*bookmarksDialog, error) 
 	return &bookmarksDialog{pf: pf, file: path, set: set}, nil
 }
 
-// open builds the menu and pushes it as a modal frame.
-func (d *bookmarksDialog) open() {
+// open builds the menu and pushes it as a modal frame, cursor on slot.
+func (d *bookmarksDialog) open(slot int, onClose func()) {
 	// Empty rows carry CmBookmarkEmptySlot, which is permanently disabled:
 	// vtui then draws them dimmed and swallows Enter on them, which is
 	// exactly the "empty slot is a no-op" behavior far2l has. No other
@@ -74,6 +101,7 @@ func (d *bookmarksDialog) open() {
 
 	d.menu = vtui.NewVMenu(Msg("Bookmarks.Title"))
 	d.render()
+	d.menu.SetSelectPos(slot)
 
 	w, h := d.size()
 	x := (d.pf.lastW - w) / 2
@@ -158,7 +186,11 @@ func (d *bookmarksDialog) open() {
 		})
 	}
 
-	vtui.FrameManager.Push(&bookmarksFrame{VMenu: d.menu, bottomHint: Msg("Bookmarks.BottomHint")})
+	vtui.FrameManager.Push(&bookmarksFrame{
+		VMenu:      d.menu,
+		bottomHint: Msg("Bookmarks.BottomHint"),
+		onClose:    onClose,
+	})
 }
 
 // render rebuilds all ten rows in place, keeping the cursor where it was.
