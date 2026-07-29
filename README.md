@@ -88,6 +88,7 @@ Example:
 
 1. **Asynchronous VFS:** Built from the ground up to be non-blocking, supporting live streaming of directory contents and lazy-loading of file data. See [VFS Architecture](VFS.md).
 2. **FISH+ Protocol (Coming Soon):** A revolutionary remote file management protocol that offloads indexing, searching, and patching to the server. See [FISH+ Concept](FISH+.md).
+3. **Custom File Highlighting:** Highly flexible file highlighting system supporting glob masks, cross-platform attributes, file sizes, absolute/relative dates, cascade blending, and visual marker glyphs. See [File Highlighting Guide](HIGHLIGHTING.md).
 
 ---
 

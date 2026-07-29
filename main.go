@@ -332,6 +332,16 @@ func SetupUI() {
 
 	configDir := GetF4ConfigDir()
 
+	// Initialize File Highlighting
+	highlightPath := filepath.Join(configDir, "highlight.ini")
+	if _, err := os.Stat(highlightPath); os.IsNotExist(err) {
+		createDefaultHighlightIni(highlightPath)
+	}
+	if _, err := os.Stat(highlightPath); err == nil {
+		highlightIni := LoadIni(highlightPath)
+		GlobalFileHighlighter.LoadFromIni(highlightIni)
+	}
+
 	// Прокидываем путь портативного конфига в изолированные пакеты vtui и vfs
 	vtui.CrashDirBase = configDir
 	vfs.CustomConfigDir = configDir
@@ -533,4 +543,39 @@ func isHexSequence(s []rune) bool {
 
 func isHexChar(r rune) bool {
 	return (r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')
+}
+func createDefaultHighlightIni(path string) {
+	content := `[Highlight_0]
+Name = Executables
+Mask = *.exe, *.bat, *.cmd, *.sh, *.bash
+IncludeAttributes = Executable
+Mark = *
+NormalColor = foreground:#8AE234
+SelectedColor = foreground:#8AE234 | background:#0000A0
+CursorColor = foreground:#8AE234 | background:#00AAAA
+
+[Highlight_1]
+Name = Archives
+Mask = *.zip, *.rar, *.tar, *.gz, *.7z, *.tgz, *.bz2, *.xz, *.zst
+NormalColor = foreground:#AD7FA8
+SelectedColor = foreground:#AD7FA8 | background:#0000A0
+CursorColor = foreground:#AD7FA8 | background:#00AAAA
+
+[Highlight_2]
+Name = Hidden Files
+IncludeAttributes = Hidden
+Mark = •
+NormalColor = foreground:#729FCF
+SelectedColor = foreground:#729FCF | background:#0000A0
+CursorColor = foreground:#729FCF | background:#00AAAA
+
+[Highlight_3]
+Name = Directories
+IncludeAttributes = Directory
+Mark = /
+NormalColor = foreground:#FFFFFF
+SelectedColor = foreground:#FFFFFF | background:#0000A0
+CursorColor = foreground:#FFFFFF | background:#00AAAA
+`
+	_ = os.WriteFile(path, []byte(content), 0644)
 }

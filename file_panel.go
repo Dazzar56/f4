@@ -43,16 +43,22 @@ func (m *mediumRow) GetCellText(col int) string {
 		return ""
 	}
 	e := m.fp.entries[idx]
-	if e.IsDir {
-		if e.Name == ".." {
-			return ".."
-		}
-		if AppConfig.HighlightDir {
-			return e.Name
-		}
-		return string(os.PathSeparator) + e.Name
+	if e.Name == ".." {
+		return ".."
 	}
-	return e.Name
+	name := e.Name
+	marker := GlobalFileHighlighter.GetMarker(&e.VFSItem)
+	if marker != "" {
+		name = marker + " " + name
+	}
+
+	if e.IsDir {
+		if AppConfig.HighlightDir {
+			return name
+		}
+		return string(os.PathSeparator) + name
+	}
+	return name
 }
 
 func (m *mediumRow) IsColSelected(col int) bool {
@@ -83,9 +89,14 @@ func (m *mediumRow) GetCellAttr(col int, defaultAttr uint64) uint64 {
 	}
 	e := m.fp.entries[idx]
 	attr := defaultAttr
-	if AppConfig.HighlightDir && e.IsDir && e.Name != ".." {
+	isCursor := (defaultAttr == vtui.Palette[ColPanelCursor] || defaultAttr == vtui.Palette[ColPanelSelectedCursor])
+
+	attr = GlobalFileHighlighter.GetColor(&e.VFSItem, attr, e.Selected, isCursor)
+
+	if attr == defaultAttr && AppConfig.HighlightDir && e.IsDir && e.Name != ".." {
 		attr = vtui.Palette[ColPanelDir]
 	}
+
 	if e.IsCached {
 		attr = vtui.DimColor(attr)
 	}
@@ -116,16 +127,21 @@ func (f *fileEntry) IsSelected() bool {
 func (f *fileEntry) GetCellText(col int) string {
 	switch col {
 	case 0:
-		if f.IsDir {
-			if f.Name == ".." {
-				return ".."
-			}
-			if AppConfig.HighlightDir {
-				return f.Name
-			}
-			return string(os.PathSeparator) + f.Name
+		if f.Name == ".." {
+			return ".."
 		}
-		return f.Name
+		name := f.Name
+		marker := GlobalFileHighlighter.GetMarker(&f.VFSItem)
+		if marker != "" {
+			name = marker + " " + name
+		}
+		if f.IsDir {
+			if AppConfig.HighlightDir {
+				return name
+			}
+			return string(os.PathSeparator) + name
+		}
+		return name
 	case 1:
 		if f.IsDir {
 			if f.SizeCalculated {
@@ -142,9 +158,14 @@ func (f *fileEntry) GetCellText(col int) string {
 }
 func (f *fileEntry) GetCellAttr(col int, defaultAttr uint64) uint64 {
 	attr := defaultAttr
-	if AppConfig.HighlightDir && f.IsDir && f.Name != ".." {
+	isCursor := (defaultAttr == vtui.Palette[ColPanelCursor] || defaultAttr == vtui.Palette[ColPanelSelectedCursor])
+
+	attr = GlobalFileHighlighter.GetColor(&f.VFSItem, attr, f.Selected, isCursor)
+
+	if attr == defaultAttr && AppConfig.HighlightDir && f.IsDir && f.Name != ".." {
 		attr = vtui.Palette[ColPanelDir]
 	}
+
 	if f.IsCached {
 		attr = vtui.DimColor(attr)
 	}
