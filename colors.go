@@ -166,6 +166,7 @@ func InitColors(ini *IniFile) {
 	// Keep it in sync with the configurable user-screen background.
 	vtui.ThemePalette[0] = vtui.GetRGBBack(vtui.Palette[ColCommandLineUserScreen])
 }
+
 // FormatFarColor serializes a vtui palette color attribute to a farcolors.ini string.
 func FormatFarColor(attr uint64) string {
 	var fg, bg uint32
