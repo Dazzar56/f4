@@ -85,6 +85,7 @@ type F4Config struct {
 	ConfirmMove             bool
 	ConfirmDelete           bool
 	ConfirmExit             bool
+	DeleteCancelFocused     bool
 	DefaultFileOpMode       int
 	FileOpPathDisplay       int
 	GuiFont                 string
@@ -121,6 +122,7 @@ var AppConfig = F4Config{
 	ConfirmMove:             true,
 	ConfirmDelete:           true,
 	ConfirmExit:             true,
+	DeleteCancelFocused:     true,
 	DefaultFileOpMode:       0,
 	FileOpPathDisplay:       0,
 	GuiFont:                 "",
@@ -180,6 +182,7 @@ func LoadConfig() {
 	AppConfig.ConfirmMove = ini.GetString("System", "ConfirmMove", "1") == "1"
 	AppConfig.ConfirmDelete = ini.GetString("System", "ConfirmDelete", "1") == "1"
 	AppConfig.ConfirmExit = ini.GetString("System", "ConfirmExit", "1") == "1"
+	AppConfig.DeleteCancelFocused = ini.GetString("System", "DeleteCancelFocused", "1") == "1"
 	fmt.Sscanf(ini.GetString("Panel", "FileOpPathDisplay", "0"), "%d", &AppConfig.FileOpPathDisplay)
 	AppConfig.GuiFont = ini.GetString("Appearance", "GuiFont", "")
 	fmt.Sscanf(ini.GetString("Appearance", "GuiFontSize", "16"), "%d", &AppConfig.GuiFontSize)
@@ -243,6 +246,7 @@ func SaveConfig() {
 	sb.WriteString(fmt.Sprintf("ConfirmMove = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.ConfirmMove]))
 	sb.WriteString(fmt.Sprintf("ConfirmDelete = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.ConfirmDelete]))
 	sb.WriteString(fmt.Sprintf("ConfirmExit = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.ConfirmExit]))
+	sb.WriteString(fmt.Sprintf("DeleteCancelFocused = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.DeleteCancelFocused]))
 
 	sb.WriteString("\n[Appearance]\n")
 	sb.WriteString(fmt.Sprintf("GuiFont = %s\n", AppConfig.GuiFont))

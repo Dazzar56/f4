@@ -549,7 +549,6 @@ func createDefaultHighlightIni(path string) {
 Name = Executables
 Mask = *.exe, *.bat, *.cmd, *.sh, *.bash
 IncludeAttributes = Executable
-Mark = *
 NormalColor = foreground:#8AE234
 SelectedColor = foreground:#8AE234 | background:#0000A0
 CursorColor = foreground:#8AE234 | background:#00AAAA
@@ -564,7 +563,6 @@ CursorColor = foreground:#AD7FA8 | background:#00AAAA
 [Highlight_2]
 Name = Hidden Files
 IncludeAttributes = Hidden
-Mark = •
 NormalColor = foreground:#729FCF
 SelectedColor = foreground:#729FCF | background:#0000A0
 CursorColor = foreground:#729FCF | background:#00AAAA
@@ -572,7 +570,6 @@ CursorColor = foreground:#729FCF | background:#00AAAA
 [Highlight_3]
 Name = Directories
 IncludeAttributes = Directory
-Mark = /
 NormalColor = foreground:#FFFFFF
 SelectedColor = foreground:#FFFFFF | background:#0000A0
 CursorColor = foreground:#FFFFFF | background:#00AAAA

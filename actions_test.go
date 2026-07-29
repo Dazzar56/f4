@@ -701,6 +701,58 @@ func TestActionNewFile_Flow(t *testing.T) {
 		t.Errorf("Expected New File dialog, got %v", top)
 	}
 }
+func TestDelete_FocusCustomization(t *testing.T) {
+	fm := vtui.FrameManager
+	fm.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	fsp := pf.panels[0].(*FileSystemPanel)
+	fsp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "test.txt"}}}
+	pf.activeIdx = 0
+
+	// 1. Тест режима по умолчанию (фокус на Cancel)
+	AppConfig.DeleteCancelFocused = true
+	actionDelete(pf)
+
+	dlg1 := fm.GetTopFrame().(vtui.Container)
+	var btnCancel *vtui.Button
+	for _, child := range dlg1.GetChildren() {
+		if b, ok := child.(*vtui.Button); ok && strings.Contains(b.GetText(), "Cancel") {
+			btnCancel = b
+			break
+		}
+	}
+	if btnCancel == nil {
+		t.Fatal("Cancel button not found")
+	}
+	if !btnCancel.IsFocused() {
+		t.Error("Expected 'Cancel' button to be focused by default")
+	}
+	fm.Pop()
+
+	// 2. Тест кастомного режима (фокус на Delete/OK)
+	AppConfig.DeleteCancelFocused = false
+	actionDelete(pf)
+
+	dlg2 := fm.GetTopFrame().(vtui.Container)
+	var btnDel *vtui.Button
+	for _, child := range dlg2.GetChildren() {
+		if b, ok := child.(*vtui.Button); ok && strings.Contains(b.GetText(), "Delete") {
+			btnDel = b
+			break
+		}
+	}
+	if btnDel == nil {
+		t.Fatal("Delete button not found")
+	}
+	if !btnDel.IsFocused() {
+		t.Error("Expected 'Delete' button to be focused after customization")
+	}
+	fm.Pop()
+}
 func TestActionOpenEditor_AlreadyOpened(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	SetDefaultF4Palette()

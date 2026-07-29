@@ -1333,7 +1333,13 @@ func actionDelete(pf *PanelsFrame) {
 
 	btnDel := vtui.NewButton(0, 0, Msg("Delete.Btn"))
 	btnCancel := vtui.NewButton(0, 0, "Cancel")
-	btnCancel.IsDefault = true
+
+	if AppConfig.DeleteCancelFocused {
+		btnCancel.IsDefault = true
+	} else {
+		btnDel.IsDefault = true
+	}
+
 	dlg.AddItem(btnDel)
 	dlg.AddItem(btnCancel)
 
@@ -1353,7 +1359,11 @@ func actionDelete(pf *PanelsFrame) {
 		go ExecuteDeleteOp(pf, activeVfs, names, mode, pf.RefreshAll)
 	}
 
-	dlg.SetFocusedItem(btnCancel)
+	if AppConfig.DeleteCancelFocused {
+		dlg.SetFocusedItem(btnCancel)
+	} else {
+		dlg.SetFocusedItem(btnDel)
+	}
 
 	vtui.FrameManager.Push(dlg)
 }
@@ -1633,7 +1643,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 	vtui.FrameManager.Push(dlg)
 }
 func actionConfirmationsSettings(pf *PanelsFrame) {
-	dlg := vtui.NewCenteredDialog(44, 11, Msg("ConfirmationsSettings.Title"))
+	dlg := vtui.NewCenteredDialog(44, 13, Msg("ConfirmationsSettings.Title"))
 	dlg.ShowClose = true
 
 	chkCopy := vtui.NewCheckbox(0, 0, Msg("ConfirmationsSettings.Copy"), false)
@@ -1660,6 +1670,12 @@ func actionConfirmationsSettings(pf *PanelsFrame) {
 		chkExit.State = 1
 	}
 
+	chkDelFocus := vtui.NewCheckbox(0, 0, "Focus 'Cancel' on delete", false)
+	chkDelFocus.State = 0
+	if AppConfig.DeleteCancelFocused {
+		chkDelFocus.State = 1
+	}
+
 	btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))
 	btnOk.IsDefault = true
 	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
@@ -1668,14 +1684,16 @@ func actionConfirmationsSettings(pf *PanelsFrame) {
 	dlg.AddItem(chkMove)
 	dlg.AddItem(chkDelete)
 	dlg.AddItem(chkExit)
+	dlg.AddItem(chkDelFocus)
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnCancel)
 
-	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 44-4, 11-4)
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 44-4, 13-4)
 	vbox.Add(chkCopy, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkMove, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkDelete, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkExit, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(chkDelFocus, vtui.Margins{}, vtui.AlignLeft)
 
 	hbox := vtui.NewHBoxLayout(0, 0, 44-4, 1)
 	hbox.HorizontalAlign = vtui.AlignCenter
@@ -1692,6 +1710,7 @@ func actionConfirmationsSettings(pf *PanelsFrame) {
 		AppConfig.ConfirmMove = chkMove.State == 1
 		AppConfig.ConfirmDelete = chkDelete.State == 1
 		AppConfig.ConfirmExit = chkExit.State == 1
+		AppConfig.DeleteCancelFocused = chkDelFocus.State == 1
 		SaveConfig()
 		dlg.Close()
 		pf.RefreshAll()
