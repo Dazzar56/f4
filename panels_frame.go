@@ -2181,7 +2181,32 @@ func (pf *PanelsFrame) showDriveMenu(panelIdx int) {
 		}})
 	}
 
-	// 3. Plugins & custom drives
+	// 3. Folder bookmarks. far2l lists the assigned slots right here in
+	// the same menu (panels/panel.cpp, AddBookmarkItems) with the slot
+	// digit as the hotkey, so Alt+F1 followed by 6 lands on slot 6.
+	// Unassigned slots are left out.
+	if set, err := LoadBookmarks(BookmarksFilePath()); err == nil {
+		firstBookmark := true
+		for i := range set {
+			if set[i].IsEmpty() {
+				continue
+			}
+			if firstBookmark {
+				menu.AddSeparator()
+				firstBookmark = false
+			}
+			path := set[i].Path
+			usedHotkeys[rune('0'+i)] = true
+			menu.AddItem(vtui.MenuItem{
+				Text: fmt.Sprintf("&%d  %s", i, escapeAmpersand(truncPathLeft(path, 64))),
+				UserData: func(fsp *FileSystemPanel) {
+					pf.NavigateToPath(fsp, path)
+				},
+			})
+		}
+	}
+
+	// 4. Plugins & custom drives
 	if len(DriveRegistry) > 0 {
 		menu.AddSeparator()
 		for _, drv := range DriveRegistry {
@@ -2245,16 +2270,34 @@ func (pf *PanelsFrame) showDriveMenu(panelIdx int) {
 
 	menu.SetSelectPos(0)
 
+	// Bookmark rows carry paths, so the box no longer fits a fixed width.
 	w, h := 26, menu.GetItemCount()+2
-	x := (pf.lastW - w) / 2
+	for _, it := range menu.Items {
+		clean, _, _ := vtui.ParseAmpersandString(it.Text)
+		if iw := runewidth.StringWidth(clean) + 6; iw > w {
+			w = iw
+		}
+	}
+	if pf.lastW > 0 && w > pf.lastW-4 {
+		w = pf.lastW - 4
+	}
+	if pf.lastH > 0 && h > pf.lastH-2 {
+		h = pf.lastH - 2
+	}
+
 	y := (pf.lastH - h) / 2
-	if panelIdx == 0 {
-		x = pf.lastW/4 - w/2
-	} else {
+	x := pf.lastW/4 - w/2
+	if panelIdx != 0 {
 		x = pf.lastW*3/4 - w/2
+	}
+	if x+w > pf.lastW {
+		x = pf.lastW - w
 	}
 	if x < 0 {
 		x = 0
+	}
+	if y < 0 {
+		y = 0
 	}
 	menu.SetPosition(x, y, x+w-1, y+h-1)
 

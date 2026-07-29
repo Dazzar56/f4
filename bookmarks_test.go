@@ -232,6 +232,34 @@ func TestBookmark_IsEmpty(t *testing.T) {
 	}
 }
 
+func TestTruncPathLeft(t *testing.T) {
+	const long = "/mnt/d/!!wrkstk/reps/ssh/ski-analyzer"
+	cases := []struct {
+		path  string
+		width int
+		want  string
+	}{
+		{"/home/user", 40, "/home/user"}, // fits, untouched
+		{"/home/user", 10, "/home/user"}, // exactly fits
+		{long, 12, "…ki-analyzer"},       // ellipsis plus 11 cells of tail
+		{"/a/b/c", 1, "…"},
+		{"/a/b/c", 0, ""},
+	}
+	for _, c := range cases {
+		if got := truncPathLeft(c.path, c.width); got != c.want {
+			t.Errorf("truncPathLeft(%q, %d) = %q, want %q", c.path, c.width, got, c.want)
+		}
+	}
+	// The tail is what identifies a path, so it must survive the cut.
+	got := truncPathLeft(long, 20)
+	if !strings.HasPrefix(got, "…") || !strings.HasSuffix(got, "ski-analyzer") {
+		t.Errorf("truncPathLeft(%q, 20) = %q, want an ellipsis plus the tail", long, got)
+	}
+	if w := len([]rune(got)); w > 20 {
+		t.Errorf("truncPathLeft returned %d cells, want at most 20: %q", w, got)
+	}
+}
+
 func TestBookmarksFilePath_HasExpectedSuffix(t *testing.T) {
 	p := BookmarksFilePath()
 	want := filepath.Join("f4", "settings", "bookmarks.ini")

@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/mattn/go-runewidth"
 )
 
 // Folder bookmarks: ten numbered slots, each remembering one directory,
@@ -143,6 +145,28 @@ func SaveBookmarks(path string, s BookmarkSet) error {
 		return err
 	}
 	return os.Rename(tmp, path)
+}
+
+// truncPathLeft shortens path to at most width display cells by dropping
+// characters from the front and marking the cut with an ellipsis. far2l
+// truncates the paths it lists in menus the same way round
+// (mix/StrCells.cpp, StrCellsTruncateLeft): the tail of a path is the
+// part that identifies it.
+func truncPathLeft(path string, width int) string {
+	const ellipsis = "…"
+	if width <= 0 {
+		return ""
+	}
+	if runewidth.StringWidth(path) <= width {
+		return path
+	}
+	runes := []rune(path)
+	for i := 1; i < len(runes); i++ {
+		if runewidth.StringWidth(string(runes[i:]))+1 <= width {
+			return ellipsis + string(runes[i:])
+		}
+	}
+	return ellipsis
 }
 
 // bookmarkSlot maps a section name to its slot index, or -1 when the

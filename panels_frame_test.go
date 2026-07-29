@@ -152,6 +152,64 @@ func TestPanelsFrame_SelectionByMask(t *testing.T) {
 		t.Error("Selection dialog was not shown")
 	}
 }
+func TestPanelsFrame_DriveMenuListsAssignedBookmarks(t *testing.T) {
+	cfg := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", cfg)
+	if err := os.MkdirAll(filepath.Join(cfg, "f4", "settings"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	target := t.TempDir()
+	if err := os.WriteFile(filepath.Join(cfg, "f4", "settings", "bookmarks.ini"),
+		[]byte("[6]\nPath="+target+"\nPlugin=\nPluginData=\nPluginFile=\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	vtui.FrameManager.Push(pf)
+
+	pf.showDriveMenu(1)
+	menu, ok := vtui.FrameManager.GetTopFrame().(*vtui.VMenu)
+	if !ok {
+		t.Fatalf("drive menu not shown, top frame is %T", vtui.FrameManager.GetTopFrame())
+	}
+
+	row := -1
+	for i, it := range menu.Items {
+		if strings.HasPrefix(it.Text, "&6  ") {
+			row = i
+		}
+		for _, empty := range []string{"&0  ", "&1  ", "&9  "} {
+			if strings.HasPrefix(it.Text, empty) {
+				t.Errorf("unassigned slot listed: %q", it.Text)
+			}
+		}
+	}
+	if row == -1 {
+		t.Fatalf("assigned bookmark missing from the drive menu: %#v", menu.Items)
+	}
+	// Long paths are cut from the front, so only the tail is guaranteed.
+	if !strings.HasSuffix(menu.Items[row].Text, filepath.Base(target)) {
+		t.Errorf("row %q should show the bookmarked path", menu.Items[row].Text)
+	}
+	if !menu.Items[row-1].Separator {
+		t.Errorf("bookmarks should start after a separator, got %#v", menu.Items[row-1])
+	}
+
+	// Pressing the slot digit moves the panel the menu was opened for —
+	// the whole point of the entry: Alt+F2 then 6.
+	fsp := pf.panels[1].(*FileSystemPanel)
+	menu.SetSelectPos(0)
+	menu.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_6, Char: '6',
+	})
+	if got := fsp.vfs.GetPath(); got != target {
+		t.Errorf("panel at %q, want %q", got, target)
+	}
+}
+
 func TestPanelsFrame_GetActivePTY(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()
