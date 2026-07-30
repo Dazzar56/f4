@@ -152,6 +152,208 @@ func TestPanelsFrame_SelectionByMask(t *testing.T) {
 		t.Error("Selection dialog was not shown")
 	}
 }
+func TestPanelsFrame_DriveMenuListsAssignedBookmarks(t *testing.T) {
+	cfg := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", cfg)
+	if err := os.MkdirAll(filepath.Join(cfg, "f4", "settings"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	target := t.TempDir()
+	if err := os.WriteFile(filepath.Join(cfg, "f4", "settings", "bookmarks.ini"),
+		[]byte("[6]\nPath="+target+"\nPlugin=\nPluginData=\nPluginFile=\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	vtui.FrameManager.Push(pf)
+
+	pf.showDriveMenu(1)
+	menu, ok := vtui.FrameManager.GetTopFrame().(*vtui.VMenu)
+	if !ok {
+		t.Fatalf("drive menu not shown, top frame is %T", vtui.FrameManager.GetTopFrame())
+	}
+
+	row := -1
+	for i, it := range menu.Items {
+		if strings.HasPrefix(it.Text, "&6  ") {
+			row = i
+		}
+		for _, empty := range []string{"&0  ", "&1  ", "&9  "} {
+			if strings.HasPrefix(it.Text, empty) {
+				t.Errorf("unassigned slot listed: %q", it.Text)
+			}
+		}
+	}
+	if row == -1 {
+		t.Fatalf("assigned bookmark missing from the drive menu: %#v", menu.Items)
+	}
+	// Long paths are cut from the front, so only the tail is guaranteed.
+	if !strings.HasSuffix(menu.Items[row].Text, filepath.Base(target)) {
+		t.Errorf("row %q should show the bookmarked path", menu.Items[row].Text)
+	}
+	if !menu.Items[row-1].Separator {
+		t.Errorf("bookmarks should start after a separator, got %#v", menu.Items[row-1])
+	}
+
+	// Pressing the slot digit moves the panel the menu was opened for —
+	// the whole point of the entry: Alt+F2 then 6.
+	fsp := pf.panels[1].(*FileSystemPanel)
+	menu.SetSelectPos(0)
+	menu.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_6, Char: '6',
+	})
+	if got := fsp.vfs.GetPath(); got != target {
+		t.Errorf("panel at %q, want %q", got, target)
+	}
+}
+
+// settleFrames does what the render loop does between keystrokes: run the
+// tasks frames posted, then drop the ones that closed themselves.
+func settleFrames(t *testing.T) {
+	t.Helper()
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			continue
+		case <-time.After(200 * time.Millisecond):
+		}
+		break
+	}
+	for _, f := range append([]vtui.Frame(nil), openFrames()...) {
+		if f.IsDone() {
+			vtui.FrameManager.RemoveFrame(f)
+		}
+	}
+}
+
+func openFrames() []vtui.Frame {
+	return vtui.FrameManager.Screens[vtui.FrameManager.ActiveIdx].Frames
+}
+
+// findDriveMenu returns the top-most drive menu on the stack. Unrelated
+// tasks (the update check, for one) can push frames above it.
+func findDriveMenu(t *testing.T) *vtui.VMenu {
+	t.Helper()
+	frames := openFrames()
+	for i := len(frames) - 1; i >= 0; i-- {
+		if m, ok := frames[i].(*vtui.VMenu); ok && m.GetTitle() == " Drive " {
+			return m
+		}
+	}
+	t.Fatalf("drive menu not on the frame stack: %#v", frames)
+	return nil
+}
+
+func findBookmarksDialog(t *testing.T) *bookmarksFrame {
+	t.Helper()
+	frames := openFrames()
+	for i := len(frames) - 1; i >= 0; i-- {
+		if d, ok := frames[i].(*bookmarksFrame); ok {
+			return d
+		}
+	}
+	t.Fatalf("bookmarks dialog not on the frame stack: %#v", frames)
+	return nil
+}
+
+func bookmarkRow(t *testing.T, menu *vtui.VMenu) int {
+	t.Helper()
+	for i, it := range menu.Items {
+		if strings.HasPrefix(it.Text, "&6  ") {
+			return i
+		}
+	}
+	t.Fatalf("bookmark row missing: %#v", menu.Items)
+	return -1
+}
+
+func TestPanelsFrame_DriveMenuBookmarkKeys(t *testing.T) {
+	cfg := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", cfg)
+	if err := os.MkdirAll(filepath.Join(cfg, "f4", "settings"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ini := filepath.Join(cfg, "f4", "settings", "bookmarks.ini")
+	target := t.TempDir()
+	write := func() {
+		if err := os.WriteFile(ini,
+			[]byte("[6]\nPath="+target+"\nPlugin=\nPluginData=\nPluginFile=\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write()
+
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	vtui.FrameManager.Push(pf)
+
+	press := func(menu *vtui.VMenu, vk uint16) {
+		menu.ProcessKey(&vtinput.InputEvent{
+			Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vk,
+		})
+	}
+
+	// F4 on the bookmark row opens the dialog on that slot, and closing
+	// the dialog brings the drive menu back.
+	pf.showDriveMenu(1)
+	menu := findDriveMenu(t)
+	menu.SetSelectPos(bookmarkRow(t, menu))
+	press(menu, vtinput.VK_F4)
+	settleFrames(t)
+	dlg := findBookmarksDialog(t)
+	if dlg.SelectPos != 6 {
+		t.Errorf("dialog opened on slot %d, want 6", dlg.SelectPos)
+	}
+	press(dlg.VMenu, vtinput.VK_ESCAPE)
+	settleFrames(t)
+	if !dlg.IsDone() {
+		t.Fatal("Esc did not close the dialog")
+	}
+	settleFrames(t)
+	menu = findDriveMenu(t) // reopened by the dialog's close hook
+	if menu.IsDone() {
+		t.Fatal("drive menu did not come back after the dialog closed")
+	}
+
+	// Ins opens the dialog from any row, always at the first slot.
+	menu.SetSelectPos(0)
+	press(menu, vtinput.VK_INSERT)
+	settleFrames(t)
+	dlg = findBookmarksDialog(t)
+	if dlg.SelectPos != 0 {
+		t.Errorf("Ins opened the dialog on slot %d, want 0", dlg.SelectPos)
+	}
+	press(dlg.VMenu, vtinput.VK_ESCAPE)
+	settleFrames(t)
+	dlg.IsDone()
+	settleFrames(t)
+
+	// Del clears the slot, and the menu that comes back no longer lists it.
+	menu = findDriveMenu(t)
+	menu.SetSelectPos(bookmarkRow(t, menu))
+	press(menu, vtinput.VK_DELETE)
+	settleFrames(t)
+	data, err := os.ReadFile(ini)
+	if err != nil {
+		t.Fatalf("read ini: %v", err)
+	}
+	if strings.Contains(string(data), "[6]") {
+		t.Errorf("Del did not clear the slot on disk:\n%s", data)
+	}
+	menu = findDriveMenu(t)
+	for _, it := range menu.Items {
+		if strings.HasPrefix(it.Text, "&6  ") {
+			t.Errorf("cleared bookmark still listed: %q", it.Text)
+		}
+	}
+}
+
 func TestPanelsFrame_GetActivePTY(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()

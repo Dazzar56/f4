@@ -171,6 +171,7 @@ func NewPanelsFrame() *PanelsFrame {
 		}},
 		{Label: "&" + Msg("Menu.Commands"), SubItems: []vtui.MenuItem{
 			{Text: "&" + Msg("Menu.Commands.FindFile"), Shortcut: "Alt+F7", Command: CmFindFile},
+			{Text: "&" + Msg("Menu.Commands.Bookmarks"), Command: CmBookmarks},
 		}},
 		// Uncomment to test crash logging
 		//{Label: "&" + Msg("Menu.Options"), SubItems: []vtui.MenuItem{{Text: "Placeholder"}}},
@@ -844,6 +845,55 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	if e.VirtualKeyCode == vtinput.VK_F2 && !alt && !ctrl && !shift && e.KeyDown {
 		ShowUserMenu(pf)
 		return true
+	}
+
+	// Folder bookmarks, far2l's hotkey scheme: [RightCtrl | Ctrl+Alt] + N
+	// jumps to slot N, Ctrl+Shift+N stores the current directory there, and
+	// [RightCtrl | Ctrl+Alt] + ~ goes home. The ctrl local above merges both
+	// Ctrl keys, but here the side matters, so the flags are read directly.
+	// Terminals that cannot tell the two Ctrls apart report LeftCtrlPressed
+	// for either one — that is what the Ctrl+Alt alias (far2l offers the
+	// same pair) is for.
+	if e.KeyDown {
+		rctrl := (e.ControlKeyState & vtinput.RightCtrlPressed) != 0
+		lctrl := (e.ControlKeyState & vtinput.LeftCtrlPressed) != 0
+		isBookmarkGoto := (rctrl && !shift && !alt) || ((lctrl || rctrl) && alt && !shift)
+		isBookmarkSave := (lctrl || rctrl) && shift && !alt
+
+		if e.VirtualKeyCode >= vtinput.VK_0 && e.VirtualKeyCode <= vtinput.VK_9 && (isBookmarkGoto || isBookmarkSave) {
+			slot := int(e.VirtualKeyCode - vtinput.VK_0)
+			file := BookmarksFilePath()
+			// Always read fresh: another f4 or far2l instance may have
+			// rewritten the file since we last looked at it.
+			set, err := LoadBookmarks(file)
+			if err != nil {
+				vtui.DebugLog("BOOKMARKS: load %q failed: %v", file, err)
+				return true
+			}
+			if isBookmarkSave {
+				if fsp := pf.getActivePanel(); fsp != nil {
+					set[slot] = Bookmark{Path: fsp.vfs.GetPath()}
+					if err := SaveBookmarks(file, set); err != nil {
+						vtui.DebugLog("BOOKMARKS: save %q failed: %v", file, err)
+					}
+				}
+			} else if !set[slot].IsEmpty() {
+				// An unset slot is a silent no-op, as in far2l.
+				if fsp := pf.getActivePanel(); fsp != nil {
+					pf.NavigateToPath(fsp, set[slot].Path)
+				}
+			}
+			return true
+		}
+
+		if e.VirtualKeyCode == vtinput.VK_OEM_3 && isBookmarkGoto {
+			if home, _ := os.UserHomeDir(); home != "" {
+				if fsp := pf.getActivePanel(); fsp != nil {
+					pf.NavigateToPath(fsp, home)
+				}
+			}
+			return true
+		}
 	}
 
 	// Ctrl+A: Attributes
@@ -1635,6 +1685,9 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 	case CmFindFile:
 		actionFindFile(pf)
 		return true
+	case CmBookmarks:
+		ShowBookmarksDialog(pf)
+		return true
 	case CmPanelSettings:
 		actionPanelSettings(pf)
 		return true
@@ -2367,6 +2420,13 @@ func (pf *PanelsFrame) showPluginMenu() {
 }
 
 func (pf *PanelsFrame) showDriveMenu(panelIdx int) {
+	pf.showDriveMenuAt(panelIdx, 0)
+}
+
+// showDriveMenuAt opens the drive menu with the cursor on selectPos. The
+// bookmark keys reopen the menu at the row they acted on, the way far2l
+// loops ChangeDiskMenu around its own Pos (panels/panel.cpp:168).
+func (pf *PanelsFrame) showDriveMenuAt(panelIdx, selectPos int) {
 	menu := vtui.NewVMenu(" Drive ")
 
 	usedHotkeys := make(map[rune]bool)
@@ -2407,7 +2467,34 @@ func (pf *PanelsFrame) showDriveMenu(panelIdx int) {
 		}})
 	}
 
-	// 3. Plugins & custom drives
+	// 3. Folder bookmarks. far2l lists the assigned slots right here in
+	// the same menu (panels/panel.cpp, AddBookmarkItems) with the slot
+	// digit as the hotkey, so Alt+F1 followed by 6 lands on slot 6.
+	// Unassigned slots are left out.
+	bookmarkRows := map[int]int{} // menu row -> slot, for the keys below
+	if set, err := LoadBookmarks(BookmarksFilePath()); err == nil {
+		firstBookmark := true
+		for i := range set {
+			if set[i].IsEmpty() {
+				continue
+			}
+			if firstBookmark {
+				menu.AddSeparator()
+				firstBookmark = false
+			}
+			path := set[i].Path
+			usedHotkeys[rune('0'+i)] = true
+			bookmarkRows[menu.GetItemCount()] = i
+			menu.AddItem(vtui.MenuItem{
+				Text: fmt.Sprintf("&%d  %s", i, escapeAmpersand(truncPathLeft(path, 64))),
+				UserData: func(fsp *FileSystemPanel) {
+					pf.NavigateToPath(fsp, path)
+				},
+			})
+		}
+	}
+
+	// 4. Plugins & custom drives
 	if len(DriveRegistry) > 0 {
 		menu.AddSeparator()
 		for _, drv := range DriveRegistry {
@@ -2443,6 +2530,39 @@ func (pf *PanelsFrame) showDriveMenu(panelIdx int) {
 
 	// Обработка физических клавиш / и ~ (layout-independent)
 	menu.OnKeyDown = func(e *vtinput.InputEvent) bool {
+		// far2l binds three keys on the bookmark rows of this menu
+		// (panels/panel.cpp:544-600): Ins opens the bookmarks dialog, F4
+		// opens it on the slot under the cursor, Del clears that slot.
+		// The menu comes back afterwards, as it does there. On other rows
+		// F4 and Del are left alone — far2l uses them for mount hotkeys
+		// and unmounting, neither of which f4 has.
+		if e.KeyDown && e.ControlKeyState&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed|
+			vtinput.LeftAltPressed|vtinput.RightAltPressed|vtinput.ShiftPressed) == 0 {
+			pos := menu.SelectPos
+			slot, onBookmark := bookmarkRows[pos]
+			reopen := func() { pf.showDriveMenuAt(panelIdx, pos) }
+
+			switch e.VirtualKeyCode {
+			case vtinput.VK_INSERT:
+				// far2l opens the dialog from any row here, not just a
+				// bookmark one, and always at the first slot.
+				menu.Close()
+				vtui.FrameManager.PostTask(func() { ShowBookmarksDialogAt(pf, 0, reopen) })
+				return true
+			case vtinput.VK_F4:
+				if onBookmark {
+					menu.Close()
+					vtui.FrameManager.PostTask(func() { ShowBookmarksDialogAt(pf, slot, reopen) })
+					return true
+				}
+			case vtinput.VK_DELETE:
+				if onBookmark {
+					pf.clearBookmarkSlot(slot, menu, reopen)
+					return true
+				}
+			}
+		}
+
 		var targetIndex = -1
 		if e.VirtualKeyCode == vtinput.VK_OEM_2 { // Клавиша /?
 			for i, item := range menu.Items {
@@ -2469,18 +2589,36 @@ func (pf *PanelsFrame) showDriveMenu(panelIdx int) {
 		return false
 	}
 
-	menu.SetSelectPos(0)
+	menu.SetSelectPos(selectPos)
 
+	// Bookmark rows carry paths, so the box no longer fits a fixed width.
 	w, h := 26, menu.GetItemCount()+2
-	x := (pf.lastW - w) / 2
+	for _, it := range menu.Items {
+		clean, _, _ := vtui.ParseAmpersandString(it.Text)
+		if iw := runewidth.StringWidth(clean) + 6; iw > w {
+			w = iw
+		}
+	}
+	if pf.lastW > 0 && w > pf.lastW-4 {
+		w = pf.lastW - 4
+	}
+	if pf.lastH > 0 && h > pf.lastH-2 {
+		h = pf.lastH - 2
+	}
+
 	y := (pf.lastH - h) / 2
-	if panelIdx == 0 {
-		x = pf.lastW/4 - w/2
-	} else {
+	x := pf.lastW/4 - w/2
+	if panelIdx != 0 {
 		x = pf.lastW*3/4 - w/2
+	}
+	if x+w > pf.lastW {
+		x = pf.lastW - w
 	}
 	if x < 0 {
 		x = 0
+	}
+	if y < 0 {
+		y = 0
 	}
 	menu.SetPosition(x, y, x+w-1, y+h-1)
 
@@ -2496,6 +2634,26 @@ func (pf *PanelsFrame) showDriveMenu(panelIdx int) {
 		}
 	}
 	vtui.FrameManager.Push(menu)
+}
+
+// clearBookmarkSlot empties one slot straight from the drive menu, which
+// is what Del does there in far2l (panels/panel.cpp:594), then reopens
+// the menu so the row is gone. The table is re-read first: another
+// instance may have rewritten the file since the menu was built.
+func (pf *PanelsFrame) clearBookmarkSlot(slot int, menu *vtui.VMenu, reopen func()) {
+	file := BookmarksFilePath()
+	set, err := LoadBookmarks(file)
+	if err != nil {
+		vtui.DebugLog("BOOKMARKS: load %q failed: %v", file, err)
+		return
+	}
+	set.deleteAtSlot(slot)
+	if err := SaveBookmarks(file, set); err != nil {
+		vtui.DebugLog("BOOKMARKS: save %q failed: %v", file, err)
+		return
+	}
+	menu.Close()
+	vtui.FrameManager.PostTask(reopen)
 }
 
 func (pf *PanelsFrame) switchToVFS(fsp *FileSystemPanel, newVFS vfs.VFS) {
