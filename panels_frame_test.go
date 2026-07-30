@@ -3363,3 +3363,75 @@ func TestPanelsFrame_CtrlPgUp_EscapesNestedVFS(t *testing.T) {
 		t.Errorf("Expected pendingSelection 'test.zip', got %q", fsp.pendingSelection)
 	}
 }
+
+// TestPanelsFrame_CtrlP_TogglesPassivePanel exercises issue #197:
+// Ctrl+P should hide/show the panel opposite the currently active one,
+// leaving the active panel untouched.
+func TestPanelsFrame_CtrlP_TogglesPassivePanel(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	send := func(pf *PanelsFrame) {
+		pf.ProcessKey(&vtinput.InputEvent{
+			Type: vtinput.KeyEventType, KeyDown: true,
+			VirtualKeyCode:  vtinput.VK_P,
+			ControlKeyState: vtinput.LeftCtrlPressed,
+		})
+	}
+
+	// Active = right (setupMockPanelsFrame's default), Ctrl+P hides left.
+	pf := setupMockPanelsFrame()
+	defer pf.Close()
+	if pf.activeIdx != 1 || !pf.showLeftPanel || !pf.showRightPanel || !pf.showPanels {
+		t.Fatalf("mock frame precondition: activeIdx=%d L=%v R=%v show=%v",
+			pf.activeIdx, pf.showLeftPanel, pf.showRightPanel, pf.showPanels)
+	}
+	send(pf)
+	if pf.showLeftPanel || !pf.showRightPanel {
+		t.Errorf("active=right: Ctrl+P should hide left only, got L=%v R=%v",
+			pf.showLeftPanel, pf.showRightPanel)
+	}
+	if pf.activeIdx != 1 {
+		t.Errorf("Ctrl+P must not move the active panel, got activeIdx=%d", pf.activeIdx)
+	}
+	if !pf.showPanels {
+		t.Errorf("one panel still visible, showPanels should stay true")
+	}
+
+	// Second press restores the hidden side.
+	send(pf)
+	if !pf.showLeftPanel || !pf.showRightPanel {
+		t.Errorf("Ctrl+P again should restore left, got L=%v R=%v",
+			pf.showLeftPanel, pf.showRightPanel)
+	}
+
+	// Symmetric case: active = left, Ctrl+P hides right.
+	pf.activeIdx = 0
+	send(pf)
+	if !pf.showLeftPanel || pf.showRightPanel {
+		t.Errorf("active=left: Ctrl+P should hide right only, got L=%v R=%v",
+			pf.showLeftPanel, pf.showRightPanel)
+	}
+	if pf.activeIdx != 0 {
+		t.Errorf("Ctrl+P must not move the active panel, got activeIdx=%d", pf.activeIdx)
+	}
+
+	// Toggle the last visible panel off — no panels left, showPanels drops.
+	pf.activeIdx = 1
+	pf.showLeftPanel = false
+	pf.showRightPanel = true
+	pf.showPanels = true
+	send(pf) // active=right, so this touches left; left was false → becomes true
+	if !pf.showLeftPanel {
+		t.Fatalf("setup for last-visible test: expected left to come back, got L=%v", pf.showLeftPanel)
+	}
+	// Now hide right via Ctrl+F2 to isolate: only left visible, active=right (invalid state
+	// that Ctrl+F2's auto-switch would fix; here we just want to test Ctrl+P's showPanels math).
+	pf.showLeftPanel = true
+	pf.showRightPanel = false
+	pf.showPanels = true
+	pf.activeIdx = 0 // active on the visible panel
+	send(pf)         // active=left, toggles right; right was false → becomes true
+	if !pf.showRightPanel {
+		t.Errorf("Ctrl+P should have shown the right panel again, got R=%v", pf.showRightPanel)
+	}
+}

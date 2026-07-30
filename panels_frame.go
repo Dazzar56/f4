@@ -808,6 +808,23 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	}
 
+	// Ctrl+P toggles the passive panel — the one not currently active.
+	// Complements Ctrl+F1/F2 (toggle a specific panel by side) and
+	// Ctrl+O (toggle both), matching far/far2l (issue #197).
+	if e.VirtualKeyCode == vtinput.VK_P && ctrl && !alt && !shift && e.KeyDown {
+		if pf.activeIdx == 0 {
+			pf.showRightPanel = !pf.showRightPanel
+		} else {
+			pf.showLeftPanel = !pf.showLeftPanel
+		}
+		pf.showPanels = pf.showLeftPanel || pf.showRightPanel
+		vtui.FrameManager.HardRefresh()
+		if pf.showPanels {
+			pf.RefreshAll()
+		}
+		return true
+	}
+
 	// Ctrl+Left / Ctrl+Right - Navigate words in command line even if panels are active (Far compatible)
 	if (e.VirtualKeyCode == vtinput.VK_LEFT || e.VirtualKeyCode == vtinput.VK_RIGHT) && ctrl && !alt && !shift && e.KeyDown {
 		if pf.cmdLine.IsVisible() {
