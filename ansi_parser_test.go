@@ -777,6 +777,13 @@ func TestAnsiParser_OSC52_Read_Security(t *testing.T) {
 	// Test 2: Allowed access
 	vtui.GlobalClipboardAccessManager = &mockClipAuthManager{authorized: true}
 	vtui.SetClipboard("secret_data")
+	for i := 0; i < 50; i++ {
+		if vtui.GetClipboard() == "secret_data" {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
 	parser.Process([]byte("\x1b]52;c;?\x07"))
 
 	var out string

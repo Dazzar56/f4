@@ -252,12 +252,12 @@ func TestIssue149_LocatingStatusReporting(t *testing.T) {
 		default:
 			if rep.hasAction("Locating") {
 				found = true
-				cancel()
-				<-done
 			}
 			time.Sleep(50 * time.Millisecond)
 		}
 	}
+	cancel()
+	<-done
 }
 
 // TestIssue149_ETA_Stability verifies the fix for "Crazy ETA" by checking
