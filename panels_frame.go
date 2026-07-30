@@ -1473,10 +1473,8 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 		return e.ButtonState != 0 || e.WheelDirection != 0
 	}
 
-	mx, my := int(e.MouseX), int(e.MouseY)
-
 	// Активация меню кликом мыши на нулевую строку (AlwaysShowMenuBar)
-	if AppConfig.AlwaysShowMenuBar && pf.showPanels && my == 0 && e.ButtonState != 0 {
+	if AppConfig.AlwaysShowMenuBar && pf.showPanels && int(e.MouseY) == 0 && e.ButtonState != 0 {
 		pf.menuBar.Active = true
 		pf.menuBar.ProcessMouse(e)
 		return true

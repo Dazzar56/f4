@@ -498,7 +498,13 @@ func TestPanelsFrame_CtrlArrows_CommandLineNavigation(t *testing.T) {
 
 	pf.showPanels = true
 	pf.cmdLine.Edit.SetText("word1 word2 word3")
-	pf.cmdLine.Edit.CursorPos = 17 // Конец строки
+
+	// Перемещаем курсор в конец строки
+	pf.cmdLine.ProcessKey(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_END,
+	})
 
 	// 1. Тест Ctrl+Left (Прыжок к началу "word3", оффсет 12)
 	pf.ProcessKey(&vtinput.InputEvent{
@@ -508,11 +514,20 @@ func TestPanelsFrame_CtrlArrows_CommandLineNavigation(t *testing.T) {
 		ControlKeyState: vtinput.LeftCtrlPressed,
 	})
 
-	if pf.cmdLine.Edit.CursorPos != 12 {
-		t.Errorf("Ctrl+Left word navigation failed with panels enabled: expected CursorPos 12, got %d", pf.cmdLine.Edit.CursorPos)
+	// Вставляем символ 'X' в текущую позицию курсора
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type:    vtinput.KeyEventType,
+		KeyDown: true,
+		Char:    'X',
+	})
+
+	gotText := pf.cmdLine.Edit.GetText()
+	expectedLeft := "word1 word2 Xword3"
+	if gotText != expectedLeft {
+		t.Errorf("Ctrl+Left word navigation failed with panels enabled: expected %q, got %q", expectedLeft, gotText)
 	}
 
-	// 2. Тест Ctrl+Right (Прыжок обратно в конец строки, оффсет 17)
+	// 2. Тест Ctrl+Right (Прыжок в конец "Xword3")
 	pf.ProcessKey(&vtinput.InputEvent{
 		Type:            vtinput.KeyEventType,
 		KeyDown:         true,
@@ -520,8 +535,17 @@ func TestPanelsFrame_CtrlArrows_CommandLineNavigation(t *testing.T) {
 		ControlKeyState: vtinput.LeftCtrlPressed,
 	})
 
-	if pf.cmdLine.Edit.CursorPos != 17 {
-		t.Errorf("Ctrl+Right word navigation failed with panels enabled: expected CursorPos 17, got %d", pf.cmdLine.Edit.CursorPos)
+	// Вставляем символ 'Y'
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type:    vtinput.KeyEventType,
+		KeyDown: true,
+		Char:    'Y',
+	})
+
+	gotText = pf.cmdLine.Edit.GetText()
+	expectedRight := "word1 word2 Xword3Y"
+	if gotText != expectedRight {
+		t.Errorf("Ctrl+Right word navigation failed with panels enabled: expected %q, got %q", expectedRight, gotText)
 	}
 }
 func TestPanelsFrame_AlwaysShowMenuBar(t *testing.T) {
