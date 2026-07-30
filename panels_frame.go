@@ -120,9 +120,9 @@ type PanelsFrame struct {
 	termView   *TerminalView
 	parser     *AnsiParser
 
-	lastAlt          bool
-	lastBusy         bool
-	lastShowPanels   bool
+	lastAlt        bool
+	lastBusy       bool
+	lastShowPanels bool
 
 	lastAutoRefresh time.Time
 	lastKey         rune
