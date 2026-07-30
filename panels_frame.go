@@ -120,8 +120,9 @@ type PanelsFrame struct {
 	termView   *TerminalView
 	parser     *AnsiParser
 
-	lastAlt  bool
-	lastBusy bool
+	lastAlt          bool
+	lastBusy         bool
+	lastShowPanels   bool
 
 	lastAutoRefresh time.Time
 	lastKey         rune
@@ -142,6 +143,7 @@ func NewPanelsFrame() *PanelsFrame {
 	pf.SetHelp("Panels")
 	pf.showKeyBar = true
 	pf.showPanels = true
+	pf.lastShowPanels = true
 	pf.showLeftPanel = true
 	pf.showRightPanel = true
 
@@ -556,9 +558,10 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 	isBusy := pf.isPtyBusy()
 
 	// 1. Dynamic Layout Adjustment
-	if pf.termView.UseAltScreen != pf.lastAlt || isBusy != pf.lastBusy {
+	if pf.termView.UseAltScreen != pf.lastAlt || isBusy != pf.lastBusy || pf.showPanels != pf.lastShowPanels {
 		pf.lastAlt = pf.termView.UseAltScreen
 		pf.lastBusy = isBusy
+		pf.lastShowPanels = pf.showPanels
 		pf.ResizeConsole(pf.lastW, pf.lastH)
 	}
 

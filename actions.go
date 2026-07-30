@@ -1657,6 +1657,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 		AppConfig.FileOpPathDisplay = comboPath.Menu.SelectPos
 		SaveConfig()
 		dlg.Close()
+		pf.ResizeConsole(pf.lastW, pf.lastH)
 		pf.RefreshAll()
 	}
 
