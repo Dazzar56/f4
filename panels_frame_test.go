@@ -489,6 +489,41 @@ func TestPanelsFrame_CtrlBrackets_Insertion(t *testing.T) {
 		t.Errorf("Ctrl+] failed: expected %q, got %q", expectedRight, gotRight)
 	}
 }
+func TestPanelsFrame_CtrlArrows_CommandLineNavigation(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	pf.showPanels = true
+	pf.cmdLine.Edit.SetText("word1 word2 word3")
+	pf.cmdLine.Edit.CursorPos = 17 // Конец строки
+
+	// 1. Тест Ctrl+Left (Прыжок к началу "word3", оффсет 12)
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_LEFT,
+		ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+
+	if pf.cmdLine.Edit.CursorPos != 12 {
+		t.Errorf("Ctrl+Left word navigation failed with panels enabled: expected CursorPos 12, got %d", pf.cmdLine.Edit.CursorPos)
+	}
+
+	// 2. Тест Ctrl+Right (Прыжок обратно в конец строки, оффсет 17)
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_RIGHT,
+		ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+
+	if pf.cmdLine.Edit.CursorPos != 17 {
+		t.Errorf("Ctrl+Right word navigation failed with panels enabled: expected CursorPos 17, got %d", pf.cmdLine.Edit.CursorPos)
+	}
+}
 func TestPanelsFrame_Clone_TerminalData(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()

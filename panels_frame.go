@@ -772,7 +772,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	}
 
-	// Ctrl+F1 toggles left panel, Ctrl+F2 toggles right panel
+	// Ctrl+F1 toggles left panel
 	if e.VirtualKeyCode == vtinput.VK_F1 && ctrl && !alt && !shift && e.KeyDown {
 		pf.showLeftPanel = !pf.showLeftPanel
 		pf.showPanels = pf.showLeftPanel || pf.showRightPanel
@@ -785,6 +785,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		}
 		return true
 	}
+	// Ctrl+F2 toggles right panel
 	if e.VirtualKeyCode == vtinput.VK_F2 && ctrl && !alt && !shift && e.KeyDown {
 		pf.showRightPanel = !pf.showRightPanel
 		pf.showPanels = pf.showLeftPanel || pf.showRightPanel
@@ -796,6 +797,14 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			pf.RefreshAll()
 		}
 		return true
+	}
+
+	// Ctrl+Left / Ctrl+Right - Navigate words in command line even if panels are active (Far compatible)
+	if (e.VirtualKeyCode == vtinput.VK_LEFT || e.VirtualKeyCode == vtinput.VK_RIGHT) && ctrl && !alt && !shift && e.KeyDown {
+		if pf.cmdLine.IsVisible() {
+			pf.cmdLine.ProcessKey(e)
+			return true
+		}
 	}
 
 	// Raw input mode fallback for active shell commands (non-AltScreen, e.g. ping).
