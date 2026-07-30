@@ -3543,24 +3543,25 @@ func TestPanelsFrame_CtrlArrows_ResizePanels(t *testing.T) {
 	}
 	pf.cmdLine.Edit.SetText("")
 
-	// Height: Ctrl+Down shrinks panel area (heightDecrement +1),
-	// Ctrl+Up grows it back. Ctrl+Up at 0 must clamp, not go negative.
+	// Height: Ctrl+Up shrinks panel area (heightDecrement +1, boundary
+	// moves up), Ctrl+Down grows it back. Ctrl+Down at 0 must clamp,
+	// not go negative.
 	pf.heightDecrement = 0
 	pf.ResizeConsole(80, 25)
 	basePanelH := panelHeight(pf.panels[0])
 
-	send(pf, vtinput.VK_DOWN)
+	send(pf, vtinput.VK_UP)
 	if pf.heightDecrement != 1 {
-		t.Errorf("Ctrl+Down: heightDecrement=%d, want 1", pf.heightDecrement)
+		t.Errorf("Ctrl+Up: heightDecrement=%d, want 1", pf.heightDecrement)
 	}
 	if got := panelHeight(pf.panels[0]); got != basePanelH-1 {
-		t.Errorf("Ctrl+Down: panel height=%d, want %d", got, basePanelH-1)
+		t.Errorf("Ctrl+Up: panel height=%d, want %d", got, basePanelH-1)
 	}
 
-	send(pf, vtinput.VK_UP)
-	send(pf, vtinput.VK_UP) // Second Up at 0 should be a no-op (clamp).
+	send(pf, vtinput.VK_DOWN)
+	send(pf, vtinput.VK_DOWN) // Second Down at 0 should be a no-op (clamp).
 	if pf.heightDecrement != 0 {
-		t.Errorf("Ctrl+Up past 0: heightDecrement=%d, want 0 (clamp)", pf.heightDecrement)
+		t.Errorf("Ctrl+Down past 0: heightDecrement=%d, want 0 (clamp)", pf.heightDecrement)
 	}
 
 	// Width clamp: on an 80-col terminal, maxWD = 40 - 10 = 30. Push past it.

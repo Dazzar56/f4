@@ -638,8 +638,10 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 	}
 
 	if pf.showPanels {
-		// Если одна из панелей скрыта — показываем терминал под видимой панелью
-		if !pf.showLeftPanel || !pf.showRightPanel {
+		// Показываем терминал под панелями если: одна из панелей скрыта
+		// (терминал занимает освободившуюся половину), либо панели уменьшены
+		// по высоте (Ctrl+Up) и терминал должен просвечивать снизу.
+		if !pf.showLeftPanel || !pf.showRightPanel || pf.heightDecrement > 0 {
 			pf.termView.SetVisible(true)
 			pf.termView.Show(scr)
 		} else {
@@ -912,9 +914,11 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	// deliberate follow-up.
 	if (e.VirtualKeyCode == vtinput.VK_UP || e.VirtualKeyCode == vtinput.VK_DOWN) && ctrl && !alt && !shift && e.KeyDown {
 		if pf.showPanels && pf.cmdLine.Edit.GetText() == "" {
-			delta := 1 // Down shrinks panels (grows terminal above)
+			// Ctrl+Up moves the panels' bottom edge up (shrinks them,
+			// exposes more terminal). Ctrl+Down does the reverse.
+			delta := -1
 			if e.VirtualKeyCode == vtinput.VK_UP {
-				delta = -1
+				delta = 1
 			}
 			next := pf.heightDecrement + delta
 			maxHD := pf.lastH - 7
