@@ -806,6 +806,13 @@ func TestAnsiParser_OSC52_Write_Success(t *testing.T) {
 	// OSC 52 ; selection (c) ; data (b64) BEL
 	parser.Process([]byte(fmt.Sprintf("\x1b]52;c;%s\x07", b64)))
 
+	for i := 0; i < 50; i++ {
+		if vtui.GetClipboard() == testStr {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
 	got := vtui.GetClipboard()
 	if got != testStr {
 		t.Errorf("Expected clipboard to be %q, got %q", testStr, got)

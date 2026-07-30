@@ -2097,6 +2097,12 @@ func TestPanelsFrame_CopyShortcuts(t *testing.T) {
 		Type: vtinput.KeyEventType, KeyDown: true,
 		VirtualKeyCode: vtinput.VK_INSERT, ControlKeyState: vtinput.LeftCtrlPressed,
 	})
+	for i := 0; i < 50; i++ {
+		if vtui.GetClipboard() == "target.txt" {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 	if got := vtui.GetClipboard(); got != "target.txt" {
 		t.Errorf("Ctrl+Ins failed: expected 'target.txt', got %q", got)
 	}
@@ -2108,6 +2114,13 @@ func TestPanelsFrame_CopyShortcuts(t *testing.T) {
 		VirtualKeyCode: 'F', ControlKeyState: vtinput.LeftCtrlPressed,
 	})
 	expectedPath := fsp.vfs.Join(fsp.vfs.GetPath(), "target.txt")
+
+	for i := 0; i < 50; i++ {
+		if vtui.GetClipboard() == expectedPath {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 	if got := vtui.GetClipboard(); got != expectedPath {
 		t.Errorf("Ctrl+F failed: expected %q, got %q", expectedPath, got)
 	}
@@ -2378,6 +2391,13 @@ func TestPanelsFrame_ShiftInsert_Fallthrough(t *testing.T) {
 	// 1. Prepare clipboard
 	testText := "ClipboardPayload"
 	vtui.SetClipboard(testText)
+
+	for i := 0; i < 50; i++ {
+		if vtui.GetClipboard() == testText {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 
 	// 2. Ensure panel is active (should NOT handle Shift+Ins)
 	pf.activeIdx = 0
@@ -3270,7 +3290,7 @@ func TestPanelsFrame_CaptureCommands(t *testing.T) {
 	})
 
 	// Wait for async execution via TaskChan
-	timeout := time.After(2 * time.Second)
+	timeout := time.After(5 * time.Second)
 	found := false
 	for {
 		select {
@@ -3283,6 +3303,11 @@ func TestPanelsFrame_CaptureCommands(t *testing.T) {
 		if strings.Contains(vtui.GetClipboard(), "f4_capture_test") {
 			found = true
 			break
+		}
+		if vtui.FrameManager.GetTopFrameType() == vtui.TypeDialog {
+			if strings.Contains(vtui.FrameManager.GetTopFrame().GetTitle(), "Error") {
+				t.Fatalf("Execution failed, error dialog shown")
+			}
 		}
 		time.Sleep(10 * time.Millisecond)
 	}

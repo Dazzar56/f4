@@ -225,7 +225,8 @@ func TestIssue149_LocatingStatusReporting(t *testing.T) {
 	rep := &actionCaptureReporter{actions: make(map[string]bool)}
 
 	// We need to use a context that triggers progress updates
-	ctx := context.WithValue(context.Background(), "AutoQueue", true)
+	ctx, cancel := context.WithCancel(context.WithValue(context.Background(), "AutoQueue", true))
+	defer cancel()
 
 	// Run extraction in background to allow ticker to fire
 	done := make(chan error, 1)
@@ -241,7 +242,7 @@ func TestIssue149_LocatingStatusReporting(t *testing.T) {
 		case <-timeout:
 			t.Fatal("Timeout waiting for 'Locating' status to be reported")
 		case err := <-done:
-			if err != nil {
+			if err != nil && err != context.Canceled {
 				t.Fatalf("CopyBulk failed: %v", err)
 			}
 			found = rep.hasAction("Locating")
@@ -251,6 +252,8 @@ func TestIssue149_LocatingStatusReporting(t *testing.T) {
 		default:
 			if rep.hasAction("Locating") {
 				found = true
+				cancel()
+				<-done
 			}
 			time.Sleep(50 * time.Millisecond)
 		}

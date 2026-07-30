@@ -1136,6 +1136,13 @@ func TestIssue117_OSC52_Read_SecurityDenial(t *testing.T) {
 	vtui.GlobalClipboardAccessManager = &mockDenyingAuth{retVal: 0}
 	vtui.SetClipboard("sensitive_data")
 
+	for i := 0; i < 50; i++ {
+		if vtui.GetClipboard() == "secret_data" {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
 	parser1.Process([]byte("\x1b]52;c;?\x07"))
 	if pty1.Len() > 0 {
 		t.Errorf("Security leak: OSC 52 read responded to PTY even though access was Denied! Output: %q", pty1.String())

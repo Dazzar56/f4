@@ -173,7 +173,7 @@ Loop:
 			task()
 
 			// Если выскочил диалог ошибки удаления (AskError), нажимаем Skip
-			if fm.GetTopFrameType() == vtui.TypeDialog && strings.Contains(fm.GetTopFrame().GetTitle(), "Error") {
+			if fm.GetTopFrameType() == vtui.TypeDialog && fm.GetTopFrame().GetTitle() == " Error " {
 				if dlg, ok := fm.GetTopFrame().(vtui.Container); ok {
 					for _, itm := range dlg.GetChildren() {
 						if b, ok := itm.(*vtui.Button); ok && strings.Contains(b.GetText(), "Skip") {
@@ -284,7 +284,7 @@ Loop:
 		select {
 		case task := <-fm.TaskChan:
 			task()
-			if !retryClicked && fm.GetTopFrameType() == vtui.TypeDialog && strings.Contains(fm.GetTopFrame().GetTitle(), "Error") {
+			if !retryClicked && fm.GetTopFrameType() == vtui.TypeDialog && fm.GetTopFrame().GetTitle() == " Error " {
 				clickDialogButton(t, fm.GetTopFrame().(vtui.Container), "Retry")
 				retryClicked = true
 			}
@@ -344,7 +344,7 @@ Loop:
 		select {
 		case task := <-fm.TaskChan:
 			task()
-			if fm.GetTopFrameType() == vtui.TypeDialog && strings.Contains(fm.GetTopFrame().GetTitle(), "Error") {
+			if fm.GetTopFrameType() == vtui.TypeDialog && fm.GetTopFrame().GetTitle() == " Error " {
 				clickDialogButton(t, fm.GetTopFrame().(vtui.Container), "Abort")
 				break Loop
 			}
@@ -409,7 +409,7 @@ Loop:
 		case task := <-fm.TaskChan:
 			task()
 
-			if !skipAllClicked && fm.GetTopFrameType() == vtui.TypeDialog && strings.Contains(fm.GetTopFrame().GetTitle(), "Error") {
+			if !skipAllClicked && fm.GetTopFrameType() == vtui.TypeDialog && fm.GetTopFrame().GetTitle() == " Error " {
 				clickDialogButton(t, fm.GetTopFrame().(vtui.Container), "Skip All")
 				skipAllClicked = true
 			}
