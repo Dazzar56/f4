@@ -1987,6 +1987,7 @@ func TestPanelsFrame_ProcessMouse_RightDoubleClickNoEnter(t *testing.T) {
 
 func TestPanelsFrame_CommandRouting_FKeys(t *testing.T) {
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	// Mock exit behavior to check F10
 	fm := vtui.FrameManager
 	fm.Init(vtui.NewSilentScreenBuf())
@@ -2017,6 +2018,7 @@ func TestPanelsFrame_CommandRouting_FKeys(t *testing.T) {
 
 func TestPanelsFrame_QuitConfirmation_Cancel(t *testing.T) {
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	fm := vtui.FrameManager
 	fm.Init(vtui.NewSilentScreenBuf())
 	fm.Push(pf)
@@ -2040,6 +2042,7 @@ func TestPanelsFrame_QuitConfirmation_Cancel(t *testing.T) {
 }
 func TestPanelsFrame_F9Context(t *testing.T) {
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
 	// 1. Test Left Panel context
@@ -2774,6 +2777,10 @@ func TestPanelsFrame_NavigateToPath(t *testing.T) {
 	pf.panels[0] = lp
 	pf.panels[1] = rp
 	pf.activeIdx = 0
+	defer pf.Close()
+
+	waitForLoad(t, lp)
+	waitForLoad(t, rp)
 
 	// Test 1: Navigate to absolute path inside the archive
 	targetPath := filepath.Join(zipPath, "inner_dir")
@@ -2781,6 +2788,7 @@ func TestPanelsFrame_NavigateToPath(t *testing.T) {
 	if !ok {
 		t.Fatalf("NavigateToPath failed to enter archive: %s", targetPath)
 	}
+	waitForLoad(t, lp)
 
 	// Verify VFS switched to ArchiveVFS
 	if _, isOS := lp.vfs.(*vfs.OSVFS); isOS {
@@ -2797,11 +2805,13 @@ func TestPanelsFrame_NavigateToPath(t *testing.T) {
 	if !ok {
 		t.Fatalf("Failed to navigate to archive root: %s", zipPath)
 	}
+	waitForLoad(t, lp)
 
 	ok = pf.NavigateToPath(lp, "..")
 	if !ok {
 		t.Fatal("Failed to navigate '..' from archive root")
 	}
+	waitForLoad(t, lp)
 
 	// Verify we switched back to OSVFS pointing to tmpDir
 	if _, isOS := lp.vfs.(*vfs.OSVFS); !isOS {
@@ -3052,6 +3062,7 @@ func TestPanelsFrame_ShiftF9_SaveSettings(t *testing.T) {
 	}()
 
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 	vtui.FrameManager.Push(pf)
 

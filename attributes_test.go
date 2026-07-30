@@ -51,6 +51,7 @@ func TestAttributesDialog_StatFailure(t *testing.T) {
 		statErr: os.ErrPermission,
 	}
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 	fsp := pf.getActivePanel()
 	fsp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "locked.txt"}}}
