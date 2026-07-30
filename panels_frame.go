@@ -113,6 +113,14 @@ type PanelsFrame struct {
 	lastW          int
 	lastH          int
 
+	// Panel geometry offsets, adjusted by Ctrl+Left/Right (width) and
+	// Ctrl+Up/Down (height). Names and semantics match far2l's [Layout]:
+	// widthDecrement > 0 grows the right panel, < 0 grows the left;
+	// heightDecrement >= 0 shrinks BOTH panels from the bottom, growing
+	// the terminal area above them.
+	widthDecrement  int
+	heightDecrement int
+
 	// Integrated Terminal
 	pty        PtyBackend
 	remotePtys map[vfs.VFS]PtyBackend
@@ -497,17 +505,40 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 		pf.termView.Resize(w, termH)
 	}
 
-	// 2. Panel Area: Leaves one additional line for the f4 CommandLine
-	panelY2 := h - 2
+	// 2. Panel Area: Leaves one additional line for the f4 CommandLine.
+	// heightDecrement shrinks the panel area from the bottom; the freed
+	// rows go to the terminal area above (matches far2l's LeftHeightDecrement/
+	// RightHeightDecrement, applied symmetrically here).
+	hd := pf.heightDecrement
+	if maxHD := h - 7; maxHD > 0 && hd > maxHD {
+		hd = maxHD
+	}
+	if hd < 0 {
+		hd = 0
+	}
+	panelY2 := h - 2 - hd
 	if pf.showKeyBar {
-		panelY2 = h - 3
+		panelY2 = h - 3 - hd
 	}
 	panelH := panelY2 - contentY1 + 1
 	if panelH < 0 {
 		panelH = 0
 	}
 
-	leftW := w / 2
+	// widthDecrement shifts the split between the two panels: positive
+	// grows the right panel (as in far2l).
+	wd := pf.widthDecrement
+	if maxWD := (w / 2) - 10; maxWD > 0 {
+		if wd > maxWD {
+			wd = maxWD
+		}
+		if wd < -maxWD {
+			wd = -maxWD
+		}
+	} else {
+		wd = 0
+	}
+	leftW := w/2 - wd
 	rightW := w - leftW
 
 	if pf.panels[0] == nil {
@@ -851,10 +882,47 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	}
 
-	// Ctrl+Left / Ctrl+Right - Navigate words in command line even if panels are active (Far compatible)
+	// Ctrl+Left / Ctrl+Right — panel width resize when panels are visible
+	// and the command line is empty (far2l's FilePanels::ProcessKey gate).
+	// With a non-empty cmdline, fall through to word navigation instead.
 	if (e.VirtualKeyCode == vtinput.VK_LEFT || e.VirtualKeyCode == vtinput.VK_RIGHT) && ctrl && !alt && !shift && e.KeyDown {
+		if pf.showPanels && pf.cmdLine.Edit.GetText() == "" {
+			delta := 1
+			if e.VirtualKeyCode == vtinput.VK_LEFT {
+				delta = -1
+			}
+			next := pf.widthDecrement + delta
+			if maxWD := (pf.lastW / 2) - 10; maxWD > 0 && next <= maxWD && next >= -maxWD {
+				pf.widthDecrement = next
+				pf.ResizeConsole(pf.lastW, pf.lastH)
+				vtui.FrameManager.HardRefresh()
+			}
+			return true
+		}
 		if pf.cmdLine.IsVisible() {
 			pf.cmdLine.ProcessKey(e)
+			return true
+		}
+	}
+
+	// Ctrl+Up / Ctrl+Down — grow/shrink the panel-area vs terminal-area
+	// split. In far2l this drives both LeftHeightDecrement and
+	// RightHeightDecrement symmetrically; we keep them merged into a
+	// single heightDecrement field. Asymmetric Ctrl+Shift+Up/Down is a
+	// deliberate follow-up.
+	if (e.VirtualKeyCode == vtinput.VK_UP || e.VirtualKeyCode == vtinput.VK_DOWN) && ctrl && !alt && !shift && e.KeyDown {
+		if pf.showPanels && pf.cmdLine.Edit.GetText() == "" {
+			delta := 1 // Down shrinks panels (grows terminal above)
+			if e.VirtualKeyCode == vtinput.VK_UP {
+				delta = -1
+			}
+			next := pf.heightDecrement + delta
+			maxHD := pf.lastH - 7
+			if next >= 0 && (maxHD <= 0 || next <= maxHD) {
+				pf.heightDecrement = next
+				pf.ResizeConsole(pf.lastW, pf.lastH)
+				vtui.FrameManager.HardRefresh()
+			}
 			return true
 		}
 	}

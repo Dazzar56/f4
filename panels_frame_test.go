@@ -3490,3 +3490,86 @@ func TestPanelsFrame_CtrlP_TogglesPassivePanel(t *testing.T) {
 		t.Errorf("Ctrl+P should have shown the right panel again, got R=%v", pf.showRightPanel)
 	}
 }
+
+func panelWidth(p Panel) int  { x1, _, x2, _ := p.GetPosition(); return x2 - x1 + 1 }
+func panelHeight(p Panel) int { _, y1, _, y2 := p.GetPosition(); return y2 - y1 + 1 }
+
+// TestPanelsFrame_CtrlArrows_ResizePanels exercises the far2l-style
+// panel resize keys: Ctrl+Left/Right shift the width split, Ctrl+Up/Down
+// shrink/grow the panel-vs-terminal split. Requires empty cmdline;
+// non-empty cmdline must fall through to word-navigation.
+func TestPanelsFrame_CtrlArrows_ResizePanels(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	send := func(pf *PanelsFrame, vk uint16) {
+		pf.ProcessKey(&vtinput.InputEvent{
+			Type: vtinput.KeyEventType, KeyDown: true,
+			VirtualKeyCode:  vk,
+			ControlKeyState: vtinput.LeftCtrlPressed,
+		})
+	}
+
+	// Width: Ctrl+Right grows right panel (widthDecrement +1);
+	// Ctrl+Left shrinks it back and then grows left.
+	pf := setupMockPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	baseLeft := panelWidth(pf.panels[0])
+
+	send(pf, vtinput.VK_RIGHT)
+	if pf.widthDecrement != 1 {
+		t.Errorf("Ctrl+Right: widthDecrement=%d, want 1", pf.widthDecrement)
+	}
+	if got := panelWidth(pf.panels[0]); got != baseLeft-1 {
+		t.Errorf("Ctrl+Right: left panel width=%d, want %d", got, baseLeft-1)
+	}
+
+	send(pf, vtinput.VK_LEFT)
+	send(pf, vtinput.VK_LEFT)
+	if pf.widthDecrement != -1 {
+		t.Errorf("Ctrl+Left twice: widthDecrement=%d, want -1", pf.widthDecrement)
+	}
+	if got := panelWidth(pf.panels[0]); got != baseLeft+1 {
+		t.Errorf("Ctrl+Left twice: left panel width=%d, want %d", got, baseLeft+1)
+	}
+
+	// Non-empty cmdline: Ctrl+Left/Right must NOT resize.
+	pf.widthDecrement = 0
+	pf.ResizeConsole(80, 25)
+	pf.cmdLine.Edit.SetText("hello")
+	send(pf, vtinput.VK_RIGHT)
+	if pf.widthDecrement != 0 {
+		t.Errorf("non-empty cmdline: widthDecrement changed to %d, want 0", pf.widthDecrement)
+	}
+	pf.cmdLine.Edit.SetText("")
+
+	// Height: Ctrl+Down shrinks panel area (heightDecrement +1),
+	// Ctrl+Up grows it back. Ctrl+Up at 0 must clamp, not go negative.
+	pf.heightDecrement = 0
+	pf.ResizeConsole(80, 25)
+	basePanelH := panelHeight(pf.panels[0])
+
+	send(pf, vtinput.VK_DOWN)
+	if pf.heightDecrement != 1 {
+		t.Errorf("Ctrl+Down: heightDecrement=%d, want 1", pf.heightDecrement)
+	}
+	if got := panelHeight(pf.panels[0]); got != basePanelH-1 {
+		t.Errorf("Ctrl+Down: panel height=%d, want %d", got, basePanelH-1)
+	}
+
+	send(pf, vtinput.VK_UP)
+	send(pf, vtinput.VK_UP) // Second Up at 0 should be a no-op (clamp).
+	if pf.heightDecrement != 0 {
+		t.Errorf("Ctrl+Up past 0: heightDecrement=%d, want 0 (clamp)", pf.heightDecrement)
+	}
+
+	// Width clamp: on an 80-col terminal, maxWD = 40 - 10 = 30. Push past it.
+	pf.widthDecrement = 0
+	pf.ResizeConsole(80, 25)
+	for i := 0; i < 40; i++ {
+		send(pf, vtinput.VK_RIGHT)
+	}
+	if pf.widthDecrement != 30 {
+		t.Errorf("width clamp: widthDecrement=%d, want 30", pf.widthDecrement)
+	}
+}
