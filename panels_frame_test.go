@@ -524,6 +524,38 @@ func TestPanelsFrame_CtrlArrows_CommandLineNavigation(t *testing.T) {
 		t.Errorf("Ctrl+Right word navigation failed with panels enabled: expected CursorPos 17, got %d", pf.cmdLine.Edit.CursorPos)
 	}
 }
+func TestPanelsFrame_AlwaysShowMenuBar(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+	pf := NewPanelsFrame()
+	defer pf.Close()
+
+	// 1. Test when AlwaysShowMenuBar is false (default)
+	AppConfig.AlwaysShowMenuBar = false
+	pf.showPanels = true
+	pf.ResizeConsole(80, 25)
+
+	fspL := pf.panels[0].(*FileSystemPanel)
+	if fspL.Y1 != 0 {
+		t.Errorf("Expected panels to start at row 0 by default, got %d", fspL.Y1)
+	}
+
+	// 2. Test when AlwaysShowMenuBar is true (panels shifted down)
+	AppConfig.AlwaysShowMenuBar = true
+	pf.ResizeConsole(80, 25)
+
+	if fspL.Y1 != 1 {
+		t.Errorf("Expected panels to start at row 1 when AlwaysShowMenuBar is true, got %d", fspL.Y1)
+	}
+
+	// 3. Test that hiding panels collapses the menu bar space for terminal
+	pf.showPanels = false
+	pf.ResizeConsole(80, 25)
+
+	if pf.termView.Y1 != 0 {
+		t.Errorf("Expected terminal to start at row 0 when panels are hidden, got %d", pf.termView.Y1)
+	}
+}
 func TestPanelsFrame_Clone_TerminalData(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()

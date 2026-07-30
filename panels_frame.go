@@ -444,6 +444,9 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 	pf.menuBar.SetPosition(0, 0, w-1, 0)
 
 	contentY1 := 0
+	if AppConfig.AlwaysShowMenuBar && pf.showPanels {
+		contentY1 = 1
+	}
 
 	// 1. Terminal Area: Fills everything except KeyBar
 	termY2 := h - 1
@@ -595,6 +598,11 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 	} else {
 		pf.termView.SetVisible(true)
 		pf.termView.Show(scr)
+	}
+
+	if AppConfig.AlwaysShowMenuBar && pf.showPanels {
+		pf.menuBar.SetVisible(true)
+		pf.menuBar.Show(scr)
 	}
 
 	// Command line logic depends on terminal state and editor visibility
@@ -1456,7 +1464,7 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 	// If panels are hidden, route relevant mouse events to PTY immediately
 	if !pf.showPanels {
 		active := pf.getActivePTY()
-		if active != nil && (pf.termView.MouseTrackingMode != 0 || pf.termView.Win32InputMode) {
+		if active != nil && (pf.termView.MouseTrackingMode != 0 || pf.termView.MouseSGRMode) {
 			seq := TranslateMouseInput(e)
 			active.Write([]byte(seq))
 			return true
@@ -1464,6 +1472,16 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 		// If tracking is off, we still swallow clicks inside AltScreen to prevent hitting hidden panels
 		return e.ButtonState != 0 || e.WheelDirection != 0
 	}
+
+	mx, my := int(e.MouseX), int(e.MouseY)
+
+	// Активация меню кликом мыши на нулевую строку (AlwaysShowMenuBar)
+	if AppConfig.AlwaysShowMenuBar && pf.showPanels && my == 0 && e.ButtonState != 0 {
+		pf.menuBar.Active = true
+		pf.menuBar.ProcessMouse(e)
+		return true
+	}
+
 	// Global middle-click (wheel click) intercept for PanelsFrame.
 	// When panels are shown, clicking the middle mouse button anywhere on screen
 	// triggers the Enter handler, launching the selected file in the active panel.

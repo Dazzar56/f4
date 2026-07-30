@@ -1539,7 +1539,7 @@ func actionFindFile(pf *PanelsFrame) {
 	vtui.FrameManager.Push(dlg)
 }
 func actionPanelSettings(pf *PanelsFrame) {
-	dlg := vtui.NewCenteredDialog(60, 22, Msg("PanelSettings.Title"))
+	dlg := vtui.NewCenteredDialog(60, 24, Msg("PanelSettings.Title"))
 	dlg.ShowClose = true
 
 	chkHidden := vtui.NewCheckbox(0, 0, Msg("PanelSettings.ShowHidden"), false)
@@ -1577,6 +1577,12 @@ func actionPanelSettings(pf *PanelsFrame) {
 		chkSync.State = 1
 	}
 
+	chkAlwaysMenu := vtui.NewCheckbox(0, 0, "Always show &menu bar", false)
+	chkAlwaysMenu.State = 0
+	if AppConfig.AlwaysShowMenuBar {
+		chkAlwaysMenu.State = 1
+	}
+
 	modes := []string{"Queue", "Background panel clone", "Foreground lock"}
 	comboMode := vtui.NewComboBox(0, 0, 30, modes)
 	comboMode.DropdownOnly = true
@@ -1601,6 +1607,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 	dlg.AddItem(chkCmdAc)
 	dlg.AddItem(chkVim)
 	dlg.AddItem(chkSync)
+	dlg.AddItem(chkAlwaysMenu)
 	dlg.AddItem(lblMode)
 	dlg.AddItem(comboMode)
 	dlg.AddItem(lblPath)
@@ -1608,7 +1615,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnCancel)
 
-	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 54-4, 22-4)
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 54-4, 24-4)
 	vbox.Add(chkHidden, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkHighlight, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(chkPaths, vtui.Margins{Top: 1}, vtui.AlignLeft)
@@ -1616,6 +1623,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 	vbox.Add(chkVim, vtui.Margins{Top: 1}, vtui.AlignLeft)
 
 	vbox.Add(chkSync, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	vbox.Add(chkAlwaysMenu, vtui.Margins{Top: 1}, vtui.AlignLeft)
 
 	rowMode := vtui.NewHBoxLayout(0, 0, 54-4, 1)
 	rowMode.Add(lblMode, vtui.Margins{Right: 1}, vtui.AlignLeft)
@@ -1644,6 +1652,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 		AppConfig.CommandLineAutoComplete = chkCmdAc.State == 1
 		AppConfig.VimHotkeys = chkVim.State == 1
 		AppConfig.SyncPanelLoad = chkSync.State == 1
+		AppConfig.AlwaysShowMenuBar = chkAlwaysMenu.State == 1
 		AppConfig.DefaultFileOpMode = comboMode.Menu.SelectPos
 		AppConfig.FileOpPathDisplay = comboPath.Menu.SelectPos
 		SaveConfig()

@@ -63,6 +63,7 @@ func resetConfigDirForTest() {
 
 type F4Config struct {
 	ColorStyle              string
+	AlwaysShowMenuBar       bool
 	ShowHiddenFiles         bool
 	HighlightDir            bool
 	SavePanelPaths          bool
@@ -101,6 +102,7 @@ type F4Config struct {
 
 var AppConfig = F4Config{
 	ColorStyle:              "Modern",
+	AlwaysShowMenuBar:       false,
 	ShowHiddenFiles:         true,
 	HighlightDir:            true,
 	SavePanelPaths:          true,
@@ -168,6 +170,7 @@ func LoadConfig() {
 	AppConfig.ShowHiddenFiles = ini.GetString("Panel", "ShowHiddenFiles", "1") == "1"
 	AppConfig.ColorStyle = ini.GetString("Interface", "ColorStyle", "Modern")
 	AppConfig.ConsoleTitleTemplate = ini.GetString("Interface", "ConsoleTitleTemplate", "f4 %Ver %Platform %Admin - %State")
+	AppConfig.AlwaysShowMenuBar = ini.GetString("Interface", "AlwaysShowMenuBar", "0") == "1"
 	if AppConfig.ConsoleTitleTemplate == "f4 - %State" {
 		AppConfig.ConsoleTitleTemplate = "f4 %Ver %Platform %Admin - %State"
 	}
@@ -229,7 +232,8 @@ func SaveConfig() {
 	var sb strings.Builder
 	sb.WriteString("[Interface]\n")
 	sb.WriteString(fmt.Sprintf("ColorStyle = %s\n", AppConfig.ColorStyle))
-	sb.WriteString(fmt.Sprintf("ConsoleTitleTemplate = %s\n\n", AppConfig.ConsoleTitleTemplate))
+	sb.WriteString(fmt.Sprintf("ConsoleTitleTemplate = %s\n", AppConfig.ConsoleTitleTemplate))
+	sb.WriteString(fmt.Sprintf("AlwaysShowMenuBar = %d\n\n", map[bool]int{true: 1, false: 0}[AppConfig.AlwaysShowMenuBar]))
 	sb.WriteString("[Panel]\n")
 	sb.WriteString(fmt.Sprintf("ShowHiddenFiles = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.ShowHiddenFiles]))
 	sb.WriteString(fmt.Sprintf("HighlightDir = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.HighlightDir]))
