@@ -343,7 +343,7 @@ func SetupUI() {
 	}
 
 	// Прокидываем путь портативного конфига в изолированные пакеты vtui и vfs
-	vtui.CrashDirBase = configDir
+	vtui.CrashDirBase = filepath.Dir(configDir)
 	vfs.CustomConfigDir = configDir
 
 	// Load legacy color overrides if they exist
