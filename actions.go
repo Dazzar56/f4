@@ -25,6 +25,17 @@ var (
 	LastLeftCursor   = ""
 	LastRightCursor  = ""
 	LastActivePanel  = 1
+
+	LastLeftViewMode  = 0
+	LastRightViewMode = 0
+	LastLeftSortMode  = 0
+	LastRightSortMode = 0
+	LastLeftSortRev   = false
+	LastRightSortRev  = false
+
+	LastShowPanels = true
+	LastShowLeft   = true
+	LastShowRight  = true
 )
 
 func actionFoldersHistory(pf *PanelsFrame) {

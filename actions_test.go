@@ -993,22 +993,58 @@ func TestSession_DiskPersistence(t *testing.T) {
 	LastRightCursor = "file.b"
 	LastActivePanel = 0
 
+	LastLeftViewMode = 1
+	LastRightViewMode = 0
+	LastLeftSortMode = 3
+	LastRightSortMode = 2
+	LastLeftSortRev = true
+	LastRightSortRev = false
+
+	LastShowPanels = false
+	LastShowLeft = true
+	LastShowRight = false
+
 	SaveSession()
 
 	// Сбрасываем и загружаем
-	LastEditorSearch = ""
 	LastLeftPath = ""
 	LastRightPath = ""
 	LastLeftCursor = ""
 	LastRightCursor = ""
 	LastActivePanel = 1
+
+	LastLeftViewMode = 0
+	LastRightViewMode = 1
+	LastLeftSortMode = 0
+	LastRightSortMode = 0
+	LastLeftSortRev = false
+	LastRightSortRev = true
+
+	LastShowPanels = true
+	LastShowLeft = false
+	LastShowRight = true
+
 	LoadSession()
 
 	if LastEditorSearch != "disk-test" || LastLeftPath != "/path/a" || LastLeftCursor != "file.a" || LastActivePanel != 0 {
 		t.Errorf("Disk persistence failed. Search:%q, LeftPath:%q, LeftCursor:%q, Active:%d",
 			LastEditorSearch, LastLeftPath, LastLeftCursor, LastActivePanel)
 	}
+
+	if LastLeftViewMode != 1 || LastRightViewMode != 0 || LastLeftSortMode != 3 || LastRightSortMode != 2 {
+		t.Errorf("View/Sort modes persistence failed. LeftVM:%d, RightVM:%d, LeftSM:%d, RightSM:%d",
+			LastLeftViewMode, LastRightViewMode, LastLeftSortMode, LastRightSortMode)
+	}
+
+	if !LastLeftSortRev || LastRightSortRev {
+		t.Errorf("Sort directions persistence failed. LeftRev:%v, RightRev:%v", LastLeftSortRev, LastRightSortRev)
+	}
+
+	if LastShowPanels || !LastShowLeft || LastShowRight {
+		t.Errorf("Panel visibility persistence failed. Show:%v, Left:%v, Right:%v", LastShowPanels, LastShowLeft, LastShowRight)
+	}
 }
+
 func TestActionPanelSettings_Flow(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	SetDefaultF4Palette()

@@ -368,6 +368,16 @@ func SetupUI() {
 	if AppConfig.SavePanelPaths {
 		lp := panels.panels[0].(*FileSystemPanel)
 		rp := panels.panels[1].(*FileSystemPanel)
+
+		// Восстанавливаем режимы отображения и типы сортировки панелей
+		lp.viewMode = ViewMode(LastLeftViewMode)
+		lp.sortMode = SortMode(LastLeftSortMode)
+		lp.sortReverse = LastLeftSortRev
+
+		rp.viewMode = ViewMode(LastRightViewMode)
+		rp.sortMode = SortMode(LastRightSortMode)
+		rp.sortReverse = LastRightSortRev
+
 		if LastLeftPath != "" && panels.NavigateToPath(lp, LastLeftPath) {
 			// Navigated successfully
 		} else {
@@ -387,6 +397,10 @@ func SetupUI() {
 		lp.pendingSelection = LastLeftCursor
 		rp.pendingSelection = LastRightCursor
 		panels.activeIdx = LastActivePanel
+
+		panels.showPanels = LastShowPanels
+		panels.showLeftPanel = LastShowLeft
+		panels.showRightPanel = LastShowRight
 	}
 	vtui.FrameManager.Push(panels)
 
@@ -432,12 +446,26 @@ func LoadSession() {
 	LastFindFileMask = ini.GetString("FindFile", "Mask", "*")
 	LastFindFileText = ini.GetString("FindFile", "Text", "")
 
-	LastLeftPath = ini.GetString("Session", "LeftPath", "")
-	LastRightPath = ini.GetString("Session", "RightPath", "")
-	LastLeftCursor = ini.GetString("Session", "LeftCursor", "")
-	LastRightCursor = ini.GetString("Session", "RightCursor", "")
+	// Восстанавливаем состояние левой панели
+	LastLeftPath = ini.GetString("Panel/Left", "Folder", "")
+	LastLeftCursor = ini.GetString("Panel/Left", "CurFile", "")
+	fmt.Sscanf(ini.GetString("Panel/Left", "ViewMode", "0"), "%d", &LastLeftViewMode)
+	fmt.Sscanf(ini.GetString("Panel/Left", "SortMode", "0"), "%d", &LastLeftSortMode)
+	LastLeftSortRev = ini.GetString("Panel/Left", "SortReverse", "0") == "1"
+
+	// Восстанавливаем состояние правой панели
+	LastRightPath = ini.GetString("Panel/Right", "Folder", "")
+	LastRightCursor = ini.GetString("Panel/Right", "CurFile", "")
+	fmt.Sscanf(ini.GetString("Panel/Right", "ViewMode", "0"), "%d", &LastRightViewMode)
+	fmt.Sscanf(ini.GetString("Panel/Right", "SortMode", "0"), "%d", &LastRightSortMode)
+	LastRightSortRev = ini.GetString("Panel/Right", "SortReverse", "0") == "1"
+
+	// Восстанавливаем глобальное состояние сессии
 	activeStr := ini.GetString("Session", "ActivePanel", "1")
 	fmt.Sscanf(activeStr, "%d", &LastActivePanel)
+	LastShowPanels = ini.GetString("Session", "ShowPanels", "1") == "1"
+	LastShowLeft = ini.GetString("Session", "ShowLeft", "1") == "1"
+	LastShowRight = ini.GetString("Session", "ShowRight", "1") == "1"
 
 	vtui.DebugLog("SESSION: Loaded state from %s", path)
 }
@@ -464,11 +492,20 @@ func SaveSession() {
 				if pf, ok := f.(*PanelsFrame); ok {
 					LastLeftPath, LastRightPath = pf.GetPaths()
 					LastActivePanel = pf.activeIdx
+					LastShowPanels = pf.showPanels
+					LastShowLeft = pf.showLeftPanel
+					LastShowRight = pf.showRightPanel
 					if fsp, ok := pf.panels[0].(*FileSystemPanel); ok {
 						LastLeftCursor = fsp.GetSelectedName()
+						LastLeftViewMode = int(fsp.viewMode)
+						LastLeftSortMode = int(fsp.sortMode)
+						LastLeftSortRev = fsp.sortReverse
 					}
 					if fsp, ok := pf.panels[1].(*FileSystemPanel); ok {
 						LastRightCursor = fsp.GetSelectedName()
+						LastRightViewMode = int(fsp.viewMode)
+						LastRightSortMode = int(fsp.sortMode)
+						LastRightSortRev = fsp.sortReverse
 					}
 					goto found
 				}
@@ -488,11 +525,24 @@ func SaveSession() {
 	sb.WriteString(fmt.Sprintf("Text = %s\n", LastFindFileText))
 
 	sb.WriteString("\n[Session]\n")
-	sb.WriteString(fmt.Sprintf("LeftPath = %s\n", LastLeftPath))
-	sb.WriteString(fmt.Sprintf("RightPath = %s\n", LastRightPath))
-	sb.WriteString(fmt.Sprintf("LeftCursor = %s\n", LastLeftCursor))
-	sb.WriteString(fmt.Sprintf("RightCursor = %s\n", LastRightCursor))
 	sb.WriteString(fmt.Sprintf("ActivePanel = %d\n", LastActivePanel))
+	sb.WriteString(fmt.Sprintf("ShowPanels = %d\n", map[bool]int{true: 1, false: 0}[LastShowPanels]))
+	sb.WriteString(fmt.Sprintf("ShowLeft = %d\n", map[bool]int{true: 1, false: 0}[LastShowLeft]))
+	sb.WriteString(fmt.Sprintf("ShowRight = %d\n", map[bool]int{true: 1, false: 0}[LastShowRight]))
+
+	sb.WriteString("\n[Panel/Left]\n")
+	sb.WriteString(fmt.Sprintf("Folder = %s\n", LastLeftPath))
+	sb.WriteString(fmt.Sprintf("CurFile = %s\n", LastLeftCursor))
+	sb.WriteString(fmt.Sprintf("ViewMode = %d\n", LastLeftViewMode))
+	sb.WriteString(fmt.Sprintf("SortMode = %d\n", LastLeftSortMode))
+	sb.WriteString(fmt.Sprintf("SortReverse = %d\n", map[bool]int{true: 1, false: 0}[LastLeftSortRev]))
+
+	sb.WriteString("\n[Panel/Right]\n")
+	sb.WriteString(fmt.Sprintf("Folder = %s\n", LastRightPath))
+	sb.WriteString(fmt.Sprintf("CurFile = %s\n", LastRightCursor))
+	sb.WriteString(fmt.Sprintf("ViewMode = %d\n", LastRightViewMode))
+	sb.WriteString(fmt.Sprintf("SortMode = %d\n", LastRightSortMode))
+	sb.WriteString(fmt.Sprintf("SortReverse = %d\n", map[bool]int{true: 1, false: 0}[LastRightSortRev]))
 
 	err := os.WriteFile(path, []byte(sb.String()), 0644)
 	if err != nil {
