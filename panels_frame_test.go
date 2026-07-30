@@ -441,6 +441,54 @@ func TestPanelsFrame_Clone(t *testing.T) {
 		t.Error("Clone should be independent from its parent")
 	}
 }
+
+func TestPanelsFrame_CtrlBrackets_Insertion(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	lp := pf.panels[0].(*FileSystemPanel)
+	rp := pf.panels[1].(*FileSystemPanel)
+
+	tmp := t.TempDir()
+	leftPath := filepath.Join(tmp, "left")
+	rightPath := filepath.Join(tmp, "right")
+	os.MkdirAll(leftPath, 0755)
+	os.MkdirAll(rightPath, 0755)
+
+	lp.vfs.SetPath(leftPath)
+	rp.vfs.SetPath(rightPath)
+
+	// 1. Тест Ctrl+[ (Путь левой панели)
+	pf.cmdLine.Clear()
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_OEM_4,
+		ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+	gotLeft := pf.cmdLine.Edit.GetText()
+	expectedLeft := leftPath
+	if gotLeft != expectedLeft {
+		t.Errorf("Ctrl+[ failed: expected %q, got %q", expectedLeft, gotLeft)
+	}
+
+	// 2. Тест Ctrl+] (Путь правой панели)
+	pf.cmdLine.Clear()
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_OEM_6,
+		ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+	gotRight := pf.cmdLine.Edit.GetText()
+	expectedRight := rightPath
+	if gotRight != expectedRight {
+		t.Errorf("Ctrl+] failed: expected %q, got %q", expectedRight, gotRight)
+	}
+}
 func TestPanelsFrame_Clone_TerminalData(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()

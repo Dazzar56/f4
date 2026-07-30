@@ -56,6 +56,27 @@ func (pf *PanelsFrame) SetPendingSelection(name string) {
 	}
 }
 
+func (pf *PanelsFrame) insertPathToCmdLine(path string) {
+	if path != "" {
+		if strings.ContainsAny(path, " &|;<>()$`\\\"'") {
+			if runtime.GOOS == "windows" {
+				if !strings.HasPrefix(path, "\"") {
+					path = "\"" + path + "\""
+				}
+			} else {
+				if !strings.HasPrefix(path, "'") {
+					path = "'" + strings.ReplaceAll(path, "'", "'\\''") + "'"
+				}
+			}
+		}
+		txt := pf.cmdLine.Edit.GetText()
+		if len(txt) > 0 && txt[len(txt)-1] != ' ' {
+			pf.cmdLine.InsertString(" ")
+		}
+		pf.cmdLine.InsertString(path)
+	}
+}
+
 type PanelController interface {
 	ProcessPanelKey(app vfs.App, e *vtinput.InputEvent) bool
 }
@@ -880,6 +901,22 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				}
 			}
 			pf.NavigateToPath(fsp, rootPath)
+			return true
+		}
+	}
+
+	// Ctrl+[ - Insert left panel path into command line (Far compatible)
+	if (e.VirtualKeyCode == vtinput.VK_OEM_4 || e.Char == '[') && ctrl && !alt && !shift && e.KeyDown {
+		if fsp, ok := pf.panels[0].(*FileSystemPanel); ok && fsp != nil {
+			pf.insertPathToCmdLine(fsp.vfs.GetPath())
+			return true
+		}
+	}
+
+	// Ctrl+] - Insert right panel path into command line (Far compatible)
+	if (e.VirtualKeyCode == vtinput.VK_OEM_6 || e.Char == ']') && ctrl && !alt && !shift && e.KeyDown {
+		if fsp, ok := pf.panels[1].(*FileSystemPanel); ok && fsp != nil {
+			pf.insertPathToCmdLine(fsp.vfs.GetPath())
 			return true
 		}
 	}
