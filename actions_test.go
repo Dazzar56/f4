@@ -1281,6 +1281,7 @@ func TestActionOpenViewer_ProgressTask(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	pf := NewPanelsFrame()
+	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
 	called := false
