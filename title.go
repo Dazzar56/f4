@@ -2,11 +2,13 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"os/user"
 	"runtime"
 	"runtime/debug"
 	"strings"
 	"sync"
+	"unicode"
 
 	"github.com/unxed/vtui"
 )
@@ -39,64 +41,124 @@ func initTitleCache() {
 	cachedPlat = runtime.GOARCH
 }
 
-func getShortVersionInfo() string {
-	if info, ok := debug.ReadBuildInfo(); ok {
-		var vcsRev string
-		for _, s := range info.Settings {
-			if s.Key == "vcs.revision" {
-				vcsRev = s.Value
-				if len(vcsRev) > 7 {
-					vcsRev = vcsRev[:7]
-				}
-			}
-		}
-		if vcsRev != "" {
-			return vcsRev
-		}
-		if info.Main.Version != "" && info.Main.Version != "(devel)" {
-			return info.Main.Version
+func isReleaseVersion(v string) bool {
+	if !strings.HasPrefix(v, "v") {
+		return false
+	}
+	s := v[1:]
+	for _, r := range s {
+		if !unicode.IsDigit(r) && r != '.' {
+			return false
 		}
 	}
-	return "v0.1.1-alpha"
+	return true
 }
 
-func getLongVersionInfo() string {
+func getGitTag() string {
+	out, err := exec.Command("git", "describe", "--tags", "--abbrev=0").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+func getGitFallback() (rev string, dirty string, timeStr string) {
+	out, err := exec.Command("git", "rev-parse", "--short", "HEAD").Output()
+	if err != nil {
+		return "", "", ""
+	}
+	rev = strings.TrimSpace(string(out))
+	if rev == "" {
+		return "", "", ""
+	}
+	statusOut, err := exec.Command("git", "status", "--porcelain").Output()
+	if err == nil && len(strings.TrimSpace(string(statusOut))) > 0 {
+		dirty = "-dirty"
+	}
+	timeOut, err := exec.Command("git", "log", "-1", "--format=%cI").Output()
+	if err == nil {
+		tStr := strings.TrimSpace(string(timeOut))
+		if len(tStr) >= 16 {
+			timeStr = strings.Replace(tStr[:16], "T", " ", 1)
+		}
+	}
+	return rev, dirty, timeStr
+}
+
+func getVCSInfo() (rev string, dirty string, timeStr string) {
 	if info, ok := debug.ReadBuildInfo(); ok {
-		var vcsRev, vcsDirty, vcsTime string
 		for _, s := range info.Settings {
 			switch s.Key {
 			case "vcs.revision":
-				vcsRev = s.Value
-				if len(vcsRev) > 7 {
-					vcsRev = vcsRev[:7]
+				rev = s.Value
+				if len(rev) > 7 {
+					rev = rev[:7]
 				}
 			case "vcs.modified":
 				if s.Value == "true" {
-					vcsDirty = " (dirty)"
+					dirty = "-dirty"
 				}
 			case "vcs.time":
-				vcsTime = s.Value
-				if len(vcsTime) >= 16 {
-					vcsTime = strings.Replace(vcsTime[:16], "T", " ", 1)
+				timeStr = s.Value
+				if len(timeStr) >= 16 {
+					timeStr = strings.Replace(timeStr[:16], "T", " ", 1)
 				}
 			}
 		}
-		var sb strings.Builder
-		if info.Main.Version != "" && info.Main.Version != "(devel)" {
-			sb.WriteString(info.Main.Version)
-		} else {
-			sb.WriteString("v0.1.1-alpha")
-		}
-		if vcsRev != "" {
-			sb.WriteString("-" + vcsRev + vcsDirty)
-		}
-		if vcsTime != "" {
-			sb.WriteString(" [" + vcsTime + "]")
-		}
-		sb.WriteString(" (go: " + info.GoVersion + ")")
-		return sb.String()
 	}
-	return "v0.1.1-alpha"
+	if rev == "" {
+		rev, dirty, timeStr = getGitFallback()
+	}
+	return rev, dirty, timeStr
+}
+
+func getShortVersionInfo() string {
+	baseVer := ""
+	if info, ok := debug.ReadBuildInfo(); ok {
+		baseVer = info.Main.Version
+	}
+	if baseVer == "" || baseVer == "(devel)" {
+		baseVer = getGitTag()
+	}
+	if baseVer == "" {
+		baseVer = "(devel)"
+	}
+
+	rev, dirty, _ := getVCSInfo()
+	if isReleaseVersion(baseVer) {
+		return baseVer + dirty
+	}
+	if rev != "" {
+		return rev + dirty
+	}
+	return baseVer
+}
+
+func getLongVersionInfo() string {
+	baseVer := ""
+	if info, ok := debug.ReadBuildInfo(); ok {
+		baseVer = info.Main.Version
+	}
+	if baseVer == "" || baseVer == "(devel)" {
+		baseVer = getGitTag()
+	}
+	if baseVer == "" {
+		baseVer = "(devel)"
+	}
+
+	rev, dirty, timeStr := getVCSInfo()
+	var sb strings.Builder
+	if isReleaseVersion(baseVer) {
+		sb.WriteString(baseVer + dirty)
+	} else if rev != "" {
+		sb.WriteString(rev + dirty)
+	} else {
+		sb.WriteString(baseVer)
+	}
+	if timeStr != "" {
+		sb.WriteString(" [" + timeStr + "]")
+	}
+	return sb.String()
 }
 
 func UpdateWindowTitle(scr *vtui.ScreenBuf) {

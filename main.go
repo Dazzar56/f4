@@ -554,7 +554,7 @@ func SaveSession() {
 }
 
 func getFormattedVersionInfo() string {
-	return formatVersionSHA(vtui.GetVersionInfo())
+	return getLongVersionInfo()
 }
 
 func formatVersionSHA(v string) string {
