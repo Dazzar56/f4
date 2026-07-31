@@ -927,8 +927,9 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 
 	// Ctrl+Up / Ctrl+Down — grow/shrink the panel-area vs terminal-area
 	// split. In far2l this drives both LeftHeightDecrement and
-	// RightHeightDecrement symmetrically (asymmetric Ctrl+Shift+Up/Down
-	// is a deliberate follow-up). We bump both fields in lockstep here.
+	// RightHeightDecrement symmetrically. We bump both fields in
+	// lockstep here; the asymmetric Ctrl+Shift+Up/Down handler right
+	// below adjusts only the active panel.
 	if (e.VirtualKeyCode == vtinput.VK_UP || e.VirtualKeyCode == vtinput.VK_DOWN) && ctrl && !alt && !shift && e.KeyDown {
 		if pf.showPanels && pf.cmdLine.Edit.GetText() == "" {
 			// Ctrl+Up moves the panels' bottom edge up (shrinks them,
@@ -945,6 +946,34 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				pf.rightHeightDecrement = nextR
 				AppConfig.LeftHeightDecrement = nextL
 				AppConfig.RightHeightDecrement = nextR
+				RequestSaveConfig()
+				pf.ResizeConsole(pf.lastW, pf.lastH)
+				vtui.FrameManager.HardRefresh()
+			}
+			return true
+		}
+	}
+
+	// Ctrl+Shift+Up / Ctrl+Shift+Down — adjust only the *active* panel's
+	// height, giving an asymmetric split. Matches far2l's behavior on the
+	// same keys.
+	if (e.VirtualKeyCode == vtinput.VK_UP || e.VirtualKeyCode == vtinput.VK_DOWN) && ctrl && !alt && shift && e.KeyDown {
+		if pf.showPanels && pf.cmdLine.Edit.GetText() == "" {
+			delta := -1
+			if e.VirtualKeyCode == vtinput.VK_UP {
+				delta = 1
+			}
+			cur := &pf.rightHeightDecrement
+			cfg := &AppConfig.RightHeightDecrement
+			if pf.activeIdx == 0 {
+				cur = &pf.leftHeightDecrement
+				cfg = &AppConfig.LeftHeightDecrement
+			}
+			next := *cur + delta
+			maxHD := pf.lastH - 7
+			if next >= 0 && (maxHD <= 0 || next <= maxHD) {
+				*cur = next
+				*cfg = next
 				RequestSaveConfig()
 				pf.ResizeConsole(pf.lastW, pf.lastH)
 				vtui.FrameManager.HardRefresh()
