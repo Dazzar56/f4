@@ -7,8 +7,10 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/unxed/vtui"
 )
@@ -98,6 +100,21 @@ type F4Config struct {
 	UpdateInterval          int    // 0 = Never, 1 = Every start, 2 = Daily, 3 = Weekly
 	LastUpdateCheck         int64  // Unix timestamp
 	LastUpdateVersion       string // Version string or PublishedAt timestamp
+
+	// [Layout] mirrors far2l's config.ini section of the same name so
+	// a config shared with far2l keeps working in both. Adjusted by
+	// Ctrl+Left/Right (width split) and Ctrl+Up/Down (panel/terminal
+	// vertical split, applied symmetrically to both height fields).
+	// Ctrl+Clear resets all three to 0.
+	WidthDecrement       int
+	LeftHeightDecrement  int
+	RightHeightDecrement int
+
+	// LayoutExtras is any [Layout] key we don't recognise (e.g. far2l's
+	// FullscreenHelp, PanelsDisposition). Read at LoadConfig and written
+	// back verbatim on SaveConfig so f4 doesn't strip far2l-only options
+	// from a shared config file.
+	LayoutExtras map[string]string
 }
 
 var AppConfig = F4Config{
@@ -223,6 +240,23 @@ func LoadConfig() {
 	AppConfig.EditorTabSize = 4
 	fmt.Sscanf(ini.GetString("Editor", "TabSize", "4"), "%d", &AppConfig.EditorTabSize)
 
+	// [Layout] — three known keys plus round-trip storage for anything else.
+	fmt.Sscanf(ini.GetString("Layout", "WidthDecrement", "0"), "%d", &AppConfig.WidthDecrement)
+	fmt.Sscanf(ini.GetString("Layout", "LeftHeightDecrement", "0"), "%d", &AppConfig.LeftHeightDecrement)
+	fmt.Sscanf(ini.GetString("Layout", "RightHeightDecrement", "0"), "%d", &AppConfig.RightHeightDecrement)
+	AppConfig.LayoutExtras = nil
+	if layout, ok := ini.data["Layout"]; ok {
+		for k, v := range layout {
+			switch k {
+			case "WidthDecrement", "LeftHeightDecrement", "RightHeightDecrement":
+				continue
+			}
+			if AppConfig.LayoutExtras == nil {
+				AppConfig.LayoutExtras = make(map[string]string)
+			}
+			AppConfig.LayoutExtras[k] = v
+		}
+	}
 }
 
 func SaveConfig() {
@@ -278,6 +312,30 @@ func SaveConfig() {
 	sb.WriteString("\n[Plugins]\n")
 	sb.WriteString(fmt.Sprintf("List = %s\n", strings.Join(AppConfig.RegisteredPlugins, "|")))
 
+	// [Layout]: emit our three keys plus any unrecognised keys we loaded
+	// (round-trip). Keys are written alphabetically to match far2l's
+	// on-disk order, so a diff against far2l's config.ini stays minimal.
+	layoutKeys := map[string]string{
+		"WidthDecrement":       fmt.Sprintf("%d", AppConfig.WidthDecrement),
+		"LeftHeightDecrement":  fmt.Sprintf("%d", AppConfig.LeftHeightDecrement),
+		"RightHeightDecrement": fmt.Sprintf("%d", AppConfig.RightHeightDecrement),
+	}
+	for k, v := range AppConfig.LayoutExtras {
+		if _, taken := layoutKeys[k]; taken {
+			continue
+		}
+		layoutKeys[k] = v
+	}
+	names := make([]string, 0, len(layoutKeys))
+	for k := range layoutKeys {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	sb.WriteString("\n[Layout]\n")
+	for _, k := range names {
+		sb.WriteString(fmt.Sprintf("%s=%s\n", k, layoutKeys[k]))
+	}
+
 	err := os.WriteFile(path, []byte(sb.String()), 0644)
 	if err != nil {
 		vtui.DebugLog("CONFIG: Failed to save application settings: %v", err)
@@ -286,3 +344,24 @@ func SaveConfig() {
 
 	vtui.DebugLog("CONFIG: Saved application settings to %s", path)
 }
+
+// RequestSaveConfig schedules a debounced SaveConfig call. Multiple calls
+// within the debounce window collapse into a single write. Used by the
+// panel-resize hotkeys, where holding Ctrl+Arrow can fire many times per
+// second and we don't want to fsync on every keystroke. The final value
+// still lands on disk because the shutdown path calls SaveConfig directly.
+func RequestSaveConfig() {
+	saveConfigTimerMu.Lock()
+	defer saveConfigTimerMu.Unlock()
+	if saveConfigTimer != nil {
+		saveConfigTimer.Stop()
+	}
+	saveConfigTimer = time.AfterFunc(saveConfigDebounce, SaveConfig)
+}
+
+var (
+	saveConfigTimerMu sync.Mutex
+	saveConfigTimer   *time.Timer
+)
+
+const saveConfigDebounce = 500 * time.Millisecond
