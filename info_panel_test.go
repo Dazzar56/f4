@@ -109,6 +109,68 @@ func TestInfoPanel_ShowRenders(t *testing.T) {
 	}
 }
 
+// TestPanelsFrame_B_TogglesInfoPanelUnits verifies that `B` (plain,
+// no modifiers) flips AppConfig.InfoPanelBytes while an info panel is
+// visible, and falls through to fast-find otherwise.
+func TestPanelsFrame_B_TogglesInfoPanelUnits(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pf := setupMockPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	oldBytes := AppConfig.InfoPanelBytes
+	defer func() { AppConfig.InfoPanelBytes = oldBytes }()
+	AppConfig.InfoPanelBytes = false
+
+	send := func(vk uint16) bool {
+		return pf.ProcessKey(&vtinput.InputEvent{
+			Type: vtinput.KeyEventType, KeyDown: true,
+			VirtualKeyCode: vk,
+		})
+	}
+
+	// No info panel yet: `B` must NOT touch the config (fast-find
+	// path is expected to consume it).
+	send(vtinput.VK_B)
+	if AppConfig.InfoPanelBytes {
+		t.Errorf("without info panel: B must not flip units, got InfoPanelBytes=true")
+	}
+
+	// Install info panel on passive side, then `B` should flip units.
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode:  vtinput.VK_L,
+		ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+	if pf.altPanels[0] == nil {
+		t.Fatal("Ctrl+L should install info panel")
+	}
+	send(vtinput.VK_B)
+	if !AppConfig.InfoPanelBytes {
+		t.Errorf("with info panel: B should flip units to bytes")
+	}
+	send(vtinput.VK_B)
+	if AppConfig.InfoPanelBytes {
+		t.Errorf("second B should flip back to human")
+	}
+}
+
+// TestFormatBytes_TogglesWithConfig verifies formatBytes routes to
+// commas or human based on AppConfig.InfoPanelBytes.
+func TestFormatBytes_TogglesWithConfig(t *testing.T) {
+	old := AppConfig.InfoPanelBytes
+	defer func() { AppConfig.InfoPanelBytes = old }()
+
+	AppConfig.InfoPanelBytes = true
+	if got := formatBytes(1024); got != formatBytesCommas(1024) {
+		t.Errorf("bytes-mode: got %q, want commas form", got)
+	}
+	AppConfig.InfoPanelBytes = false
+	if got := formatBytes(1024); got != formatBytesHuman(1024) {
+		t.Errorf("human-mode: got %q, want human form", got)
+	}
+}
+
 // TestFormatBytesCommas covers the raw-bytes-with-thousand-separator
 // formatter used in the info panel. Matches far2l's InsertCommas.
 func TestFormatBytesCommas(t *testing.T) {

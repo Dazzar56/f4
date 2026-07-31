@@ -134,6 +134,7 @@ var Lng = map[string]string{
 	"InfoPanel.MemBuffered":     "Buffer memory",
 	"InfoPanel.SwapTotal":       "Total paging file",
 	"InfoPanel.SwapFree":        "Free paging file",
+	"InfoPanel.UnitsHint":       " B: bytes ↔ human ",
 
 	"Bookmarks.Title":      " Bookmarks ",
 	"Bookmarks.RowPrefix":  "[RCtrl | Ctrl+Alt] +",

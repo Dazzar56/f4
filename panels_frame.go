@@ -922,6 +922,27 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	}
 
+	// `B` (plain, no modifiers) flips the info panel's number format
+	// between human-readable (GiB/MiB/…) and far2l's raw-bytes-with-
+	// separators presentation. Only fires while an info panel is
+	// actually visible — otherwise `B` still goes to fast-find as
+	// usual. Persists to settings.ini via the debounced save.
+	if e.VirtualKeyCode == vtinput.VK_B && !ctrl && !alt && !shift && e.KeyDown {
+		hasInfo := false
+		for _, a := range pf.altPanels {
+			if a != nil && a.Kind() == "info" {
+				hasInfo = true
+				break
+			}
+		}
+		if hasInfo {
+			AppConfig.InfoPanelBytes = !AppConfig.InfoPanelBytes
+			RequestSaveConfig()
+			vtui.FrameManager.HardRefresh()
+			return true
+		}
+	}
+
 	// Ctrl+P toggles the passive panel — the one not currently active.
 	// Complements Ctrl+F1/F2 (toggle a specific panel by side) and
 	// Ctrl+O (toggle both), matching far/far2l (issue #197).

@@ -87,6 +87,16 @@ func (ip *InfoPanel) Show(scr *vtui.ScreenBuf) {
 	if ip.frame != nil {
 		ip.frame.Show(scr)
 	}
+	// Bottom-border hint reminding the user of the units toggle,
+	// same pattern the bookmarks dialog uses. Drawn on the ┴ line;
+	// keeps the panel self-documenting so we don't need a menu entry.
+	if ip.frame != nil && ip.Y2 > ip.Y1+1 {
+		hint := Msg("InfoPanel.UnitsHint")
+		if runewidth.StringWidth(hint) < ip.X2-ip.X1-1 {
+			attrBox := vtui.Palette[ColPanelBox]
+			scr.Write(ip.X1+2, ip.Y2, vtui.StringToCharInfo(hint, attrBox))
+		}
+	}
 	innerW := ip.X2 - ip.X1 - 1 // room between the two vertical borders
 	if innerW < 1 {
 		return
@@ -175,8 +185,8 @@ func (ip *InfoPanel) Show(scr *vtui.ScreenBuf) {
 			fsTitle = fmt.Sprintf("%s (%s)", fsTitle, fs.Type)
 		}
 		sectionHeader(fsTitle)
-		row(Msg("InfoPanel.Total"), formatBytesCommas(fs.Total))
-		row(Msg("InfoPanel.Free"), formatBytesCommas(fs.Free))
+		row(Msg("InfoPanel.Total"), formatBytes(fs.Total))
+		row(Msg("InfoPanel.Free"), formatBytes(fs.Free))
 		if fs.Label != "" {
 			row(Msg("InfoPanel.Label"), fs.Label)
 		}
@@ -204,17 +214,17 @@ func (ip *InfoPanel) Show(scr *vtui.ScreenBuf) {
 		blank()
 		sectionHeader(Msg("InfoPanel.MemoryTitle"))
 		row(Msg("InfoPanel.MemLoad"), fmt.Sprintf("%d%%", mem.LoadPercent))
-		row(Msg("InfoPanel.MemTotal"), formatBytesCommas(mem.Total))
-		row(Msg("InfoPanel.MemFree"), formatBytesCommas(mem.Free))
+		row(Msg("InfoPanel.MemTotal"), formatBytes(mem.Total))
+		row(Msg("InfoPanel.MemFree"), formatBytes(mem.Free))
 		if mem.Shared > 0 {
-			row(Msg("InfoPanel.MemShared"), formatBytesCommas(mem.Shared))
+			row(Msg("InfoPanel.MemShared"), formatBytes(mem.Shared))
 		}
 		if mem.Buffered > 0 {
-			row(Msg("InfoPanel.MemBuffered"), formatBytesCommas(mem.Buffered))
+			row(Msg("InfoPanel.MemBuffered"), formatBytes(mem.Buffered))
 		}
 		if mem.SwapTotal > 0 {
-			row(Msg("InfoPanel.SwapTotal"), formatBytesCommas(mem.SwapTotal))
-			row(Msg("InfoPanel.SwapFree"), formatBytesCommas(mem.SwapFree))
+			row(Msg("InfoPanel.SwapTotal"), formatBytes(mem.SwapTotal))
+			row(Msg("InfoPanel.SwapFree"), formatBytes(mem.SwapFree))
 		}
 	}
 }
@@ -248,6 +258,30 @@ func formatBytesCommas(b uint64) string {
 		out = append(out, c)
 	}
 	return string(out)
+}
+
+// formatBytesHuman renders a byte count in binary units (KiB/MiB/…).
+func formatBytesHuman(b uint64) string {
+	const unit = 1024
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
+	}
+	div, exp := uint64(unit), 0
+	for n := b / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %ciB", float64(b)/float64(div), "KMGTPE"[exp])
+}
+
+// formatBytes picks between the raw far2l-style form and the human
+// form based on AppConfig. Toggled at runtime by pressing `B` while
+// the info panel is visible.
+func formatBytes(b uint64) string {
+	if AppConfig.InfoPanelBytes {
+		return formatBytesCommas(b)
+	}
+	return formatBytesHuman(b)
 }
 
 // Compile-time interface check.
