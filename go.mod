@@ -11,8 +11,8 @@ require (
 	github.com/unxed/archives v0.0.0-20260728171610-555945c76813
 	github.com/unxed/sevenzip v0.0.0-20260704211908-25d317f8295f
 	github.com/unxed/tar v0.1.124
-	github.com/unxed/vtinput v0.1.1
-	github.com/unxed/vtui v0.1.68
+	github.com/unxed/vtinput v0.1.2
+	github.com/unxed/vtui v0.1.69
 	github.com/unxed/zip v0.1.126
 	github.com/unxed/zipper v0.1.140
 	github.com/vmihailenco/msgpack/v5 v5.4.1
