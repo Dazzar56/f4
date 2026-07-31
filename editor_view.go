@@ -37,6 +37,7 @@ var (
 	LastEditorSearchCase    bool
 	LastEditorSearchReverse bool
 )
+var GlobalLastClipboardWasRectangular bool
 
 // EditorView is a text editor component.
 type EditorView struct {
@@ -2527,6 +2528,7 @@ func (ev *EditorView) getSelectionRange() (int, int) {
 
 func (ev *EditorView) CopySelection() {
 	if ev.rectSelActive {
+		GlobalLastClipboardWasRectangular = true
 		minY, maxY := ev.rectSelStartLine, ev.CursorLine
 		if minY > maxY {
 			minY, maxY = maxY, minY
@@ -2590,12 +2592,83 @@ func (ev *EditorView) CopySelection() {
 
 	min, max := ev.getSelectionRange()
 	if max > min {
+		GlobalLastClipboardWasRectangular = false
 		data, _ := ev.pt.GetRange(min, max-min)
 		if data != nil {
 			vtui.SetClipboard(string(data))
 			vtui.DebugLog("EDITOR: Copied %d bytes to clipboard", max-min)
 		}
 	}
+}
+
+func (ev *EditorView) PasteRectangular(text string, targetCol int) {
+	lines := strings.Split(text, "\n")
+	if len(lines) == 0 {
+		return
+	}
+
+	ev.saveUndo(opOther)
+	ev.modified = true
+
+	neededLines := ev.CursorLine + len(lines)
+	for ev.li.LineCount() < neededLines {
+		offset := ev.pt.Size()
+		ev.pt.Insert(offset, []byte("\n"))
+		ev.li.UpdateAfterInsert(offset, []byte("\n"))
+	}
+	ev.engine.InvalidateFrom(ev.CursorLine)
+
+	for i := len(lines) - 1; i >= 0; i-- {
+		y := ev.CursorLine + i
+		lineStart := ev.li.GetLineOffset(y)
+		lineLen := ev.getLineLength(y)
+		lineData, _ := ev.pt.GetRange(lineStart, lineLen)
+
+		visualCol := 0
+		runes := []rune(string(lineData))
+		tabSize := ev.TabSize
+		if tabSize <= 0 {
+			tabSize = 8
+		}
+
+		insertByteOff := -1
+		byteAcc := 0
+
+		for _, r := range runes {
+			rw := 1
+			if r == '\t' {
+				rw = tabSize - (visualCol % tabSize)
+			} else {
+				rw = runewidth.RuneWidth(r)
+				if rw <= 0 {
+					rw = 1
+				}
+			}
+
+			if visualCol >= targetCol && insertByteOff == -1 {
+				insertByteOff = byteAcc
+				break
+			}
+
+			visualCol += rw
+			byteAcc += utf8.RuneLen(r)
+		}
+
+		if insertByteOff == -1 {
+			padding := strings.Repeat(" ", targetCol-visualCol)
+			insertOff := lineStart + byteAcc
+			ev.pt.Insert(insertOff, []byte(padding+lines[i]))
+			ev.li.UpdateAfterInsert(insertOff, []byte(padding+lines[i]))
+		} else {
+			insertOff := lineStart + insertByteOff
+			ev.pt.Insert(insertOff, []byte(lines[i]))
+			ev.li.UpdateAfterInsert(insertOff, []byte(lines[i]))
+		}
+	}
+
+	ev.invalidateStates(ev.CursorLine)
+	ev.engine.InvalidateFrom(ev.CursorLine)
+	ev.ensureCursorVisible()
 }
 
 func (ev *EditorView) PasteText(text string) {
@@ -2606,6 +2679,12 @@ func (ev *EditorView) PasteText(text string) {
 		}
 	}
 	ev.editSession++
+
+	if GlobalLastClipboardWasRectangular {
+		targetCol := ev.getVisualColOf(ev.CursorLine, ev.CursorPos)
+		ev.PasteRectangular(text, targetCol)
+		return
+	}
 
 	ev.saveUndo(opOther)
 	ev.inGroup = true

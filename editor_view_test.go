@@ -3915,6 +3915,26 @@ func TestEditorView_RectangularSelection_Delete(t *testing.T) {
 		t.Errorf("Rectangular Delete failed: expected %q, got %q", expected, ev.pt.String())
 	}
 }
+func TestEditorView_RectangularSelection_Paste(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pt := piecetable.New([]byte("123\n456"))
+	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
+	ev.SetPosition(0, 0, 80, 24)
+
+	GlobalLastClipboardWasRectangular = true
+	ev.CursorLine = 0
+	ev.CursorPos = 1 // после '1'
+
+	ev.PasteText("AB\nCD")
+
+	expected := "1AB23\n4CD56"
+	if ev.pt.String() != expected {
+		t.Errorf("Rectangular Paste failed: expected %q, got %q", expected, ev.pt.String())
+	}
+
+	GlobalLastClipboardWasRectangular = false
+}
 func TestEditorView_Codepages_LoadSave(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
