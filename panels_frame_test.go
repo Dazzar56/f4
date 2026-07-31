@@ -3509,35 +3509,36 @@ func TestPanelsFrame_CtrlArrows_ResizePanels(t *testing.T) {
 		})
 	}
 
-	// Width: Ctrl+Right grows right panel (widthDecrement +1);
-	// Ctrl+Left shrinks it back and then grows left.
+	// Width: Ctrl+Left moves the split to the left (widthDecrement +1,
+	// left panel shrinks, right grows) — arrow follows the boundary,
+	// matching far2l / Far3 / far2m. Ctrl+Right does the reverse.
 	pf := setupMockPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 	baseLeft := panelWidth(pf.panels[0])
 
-	send(pf, vtinput.VK_RIGHT)
+	send(pf, vtinput.VK_LEFT)
 	if pf.widthDecrement != 1 {
-		t.Errorf("Ctrl+Right: widthDecrement=%d, want 1", pf.widthDecrement)
+		t.Errorf("Ctrl+Left: widthDecrement=%d, want 1", pf.widthDecrement)
 	}
 	if got := panelWidth(pf.panels[0]); got != baseLeft-1 {
-		t.Errorf("Ctrl+Right: left panel width=%d, want %d", got, baseLeft-1)
+		t.Errorf("Ctrl+Left: left panel width=%d, want %d", got, baseLeft-1)
 	}
 
-	send(pf, vtinput.VK_LEFT)
-	send(pf, vtinput.VK_LEFT)
+	send(pf, vtinput.VK_RIGHT)
+	send(pf, vtinput.VK_RIGHT)
 	if pf.widthDecrement != -1 {
-		t.Errorf("Ctrl+Left twice: widthDecrement=%d, want -1", pf.widthDecrement)
+		t.Errorf("Ctrl+Right twice: widthDecrement=%d, want -1", pf.widthDecrement)
 	}
 	if got := panelWidth(pf.panels[0]); got != baseLeft+1 {
-		t.Errorf("Ctrl+Left twice: left panel width=%d, want %d", got, baseLeft+1)
+		t.Errorf("Ctrl+Right twice: left panel width=%d, want %d", got, baseLeft+1)
 	}
 
 	// Non-empty cmdline: Ctrl+Left/Right must NOT resize.
 	pf.widthDecrement = 0
 	pf.ResizeConsole(80, 25)
 	pf.cmdLine.Edit.SetText("hello")
-	send(pf, vtinput.VK_RIGHT)
+	send(pf, vtinput.VK_LEFT)
 	if pf.widthDecrement != 0 {
 		t.Errorf("non-empty cmdline: widthDecrement changed to %d, want 0", pf.widthDecrement)
 	}
@@ -3571,11 +3572,12 @@ func TestPanelsFrame_CtrlArrows_ResizePanels(t *testing.T) {
 			pf.leftHeightDecrement, pf.rightHeightDecrement)
 	}
 
-	// Width clamp: on an 80-col terminal, maxWD = 40 - 10 = 30. Push past it.
+	// Width clamp: on an 80-col terminal, maxWD = 40 - 10 = 30. Push
+	// past it with Ctrl+Left (the direction that bumps widthDecrement +1).
 	pf.widthDecrement = 0
 	pf.ResizeConsole(80, 25)
 	for i := 0; i < 40; i++ {
-		send(pf, vtinput.VK_RIGHT)
+		send(pf, vtinput.VK_LEFT)
 	}
 	if pf.widthDecrement != 30 {
 		t.Errorf("width clamp: widthDecrement=%d, want 30", pf.widthDecrement)
