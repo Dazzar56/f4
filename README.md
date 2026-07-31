@@ -34,15 +34,12 @@ To upgrade later: `brew upgrade f4`. Both Apple Silicon (arm64) and Intel (amd64
 This project is built around several core philosophical and technical principles:
 
 1. **The Go Experiment:** Testing the viability of building a heavy-duty TUI in Go. Go provides cross-platform compilation out of the box, fast development, and zero dependency hell (e.g., an x64 Linux binary runs on any x64 Linux without external library issues).
-2. **AI-Driven:** Active use of modern, powerful LLMs like Gemini 3.1 Pro for test-driven development and code generation. LLMs write Go exceptionally well.
-3. **Test-Driven Development (TDD):** Ensuring core stability and behavioral correctness from the start.
-4. **Memory Management:** Go has a Garbage Collector (GC), but we use local optimizations (like a zero-allocation rendering loop) to bypass GC lag where it matters, keeping UI freezes unnoticeable.
-5. **Far Heritage:** Copying all successful concepts from Far (screen buffer, frame manager, etc.). Keeping internal structures and their names as close to the original C++ versions as possible to lower the entry barrier for developers familiar with Far APIs.
-6. **Iterative Scope:** First, replicate 1:1 everything in `far2l` that is personally needed by the author (on Linux). Next, cover everything else in `far2l`. Finally, port useful additions that appeared in Far3.
-7. **Consistent UX:** Adherence to a strict set of [Navigation and Interaction Guidelines](UX_GUIDELINES.md) that blend the best of classic TUI paradigms.
-8. **Bazaar Policy:** Openness to community contributions and patches.
+2. **AI-only. Canaries included:** Every line of code in this project is AI-generated. Instead of manually reviewing every change, we rely on an extensive test suite that serves as canaries in a coal mine: if the AI breaks something, the tests fail first. If you'd like to contribute, please include tests with your changes whenever possible.
+3. **Far Heritage:** Copying all successful concepts from Far (screen buffer, frame manager, etc.). Keeping internal structures and their names as close to the original C++ versions as possible to lower the entry barrier for developers familiar with Far APIs.
+4. **Consistent UX:** Adherence to a strict set of [Navigation and Interaction Guidelines](UX_GUIDELINES.md) that blend the best of classic TUI paradigms.
+5. **Bazaar Policy:** Openness to community contributions and patches.
 
-*Trade-offs:* The compiled binary is currently ~20MB, which might not fit in highly constrained environments like home routers.
+*Trade-offs:* The compiled binary is currently ~50MB, which might not fit in highly constrained environments like home routers.
 
 ### UI & Input
 
