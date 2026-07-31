@@ -3915,3 +3915,111 @@ func TestEditorView_RectangularSelection_Delete(t *testing.T) {
 		t.Errorf("Rectangular Delete failed: expected %q, got %q", expected, ev.pt.String())
 	}
 }
+func TestEditorView_Codepages_LoadSave(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "cyrillic.txt")
+
+	raw := []byte{0xcf, 0xf0, 0xe8, 0xe2, 0xe5, 0xf2}
+	os.WriteFile(path, raw, 0644)
+
+	v := vfs.NewOSVFS(tmpDir)
+	f, err := v.Open(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	size := f.Size()
+	fullData := make([]byte, size)
+	_, _ = f.ReadAt(context.Background(), fullData, 0)
+	f.Close()
+
+	decoded, err := vfs.DecodeBytes(fullData, 1251)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pt := piecetable.New(decoded)
+	ev := NewEditorView(pt, v, path)
+	ev.Codepage = 1251
+	defer ev.Close()
+
+	if ev.pt.String() != "Привет" {
+		t.Errorf("Load failed: expected 'Привет', got %q", ev.pt.String())
+	}
+
+	ev.CursorPos = 12
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: '!'})
+
+	ev.SaveToFile(nil)
+
+	timeout := time.After(2 * time.Second)
+	for ev.saving {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Save timed out")
+		}
+	}
+
+	savedRaw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expected := []byte{0xcf, 0xf0, 0xe8, 0xe2, 0xe5, 0xf2, 0x21}
+	if !bytes.Equal(savedRaw, expected) {
+		t.Errorf("Save failed: expected raw bytes %v, got %v", expected, savedRaw)
+	}
+}
+
+func TestEditorView_DoubleClick_SelectWord(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pt := piecetable.New([]byte("hello world"))
+	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
+	ev.SetPosition(0, 0, 80, 24)
+
+	ev.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: true,
+		MouseX: 8, MouseY: 1, ButtonState: vtinput.FromLeft1stButtonPressed,
+		MouseEventFlags: vtinput.DoubleClick,
+	})
+
+	if !ev.selActive {
+		t.Fatal("Selection should be active")
+	}
+
+	min, max := ev.getSelectionRange()
+	if min != 6 || max != 11 {
+		t.Errorf("Word selection failed: expected [6:11], got [%d:%d]", min, max)
+	}
+}
+
+func TestEditorView_MouseSelection_Release(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pt := piecetable.New([]byte("data"))
+	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
+	ev.SetPosition(0, 0, 80, 24)
+
+	ev.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: true,
+		MouseX: 2, MouseY: 1, ButtonState: vtinput.FromLeft1stButtonPressed,
+	})
+
+	if !ev.selActive {
+		t.Fatal("Selection should start active on mouse down")
+	}
+
+	ev.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: false,
+		MouseX: 2, MouseY: 1, ButtonState: 0,
+	})
+
+	if ev.selActive {
+		t.Error("Simple click without dragging should turn off selection on mouse release")
+	}
+}

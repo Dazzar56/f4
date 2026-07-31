@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/unxed/f4/piecetable"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
@@ -625,5 +626,57 @@ func TestViewerView_ScrollbarStability(t *testing.T) {
 
 	if vv.scrollBar.Max != int(vv.backend.Size()) {
 		t.Errorf("Expected scrollbar Max to remain stable at %d even when eofVisible is true, got %d", vv.backend.Size(), vv.scrollBar.Max)
+	}
+}
+func TestViewerView_Codepages_Load(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "oem.txt")
+
+	raw := []byte{0x8f, 0xe0, 0xa8, 0xa2, 0xa5, 0xe2}
+	os.WriteFile(path, raw, 0644)
+
+	oldDefault := AppConfig.ViewerDefaultCodePage
+	AppConfig.ViewerDefaultCodePage = 866
+	defer func() { AppConfig.ViewerDefaultCodePage = oldDefault }()
+
+	v := vfs.NewOSVFS(tmpDir)
+	vv, err := NewViewerView(context.Background(), v, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer vv.Close()
+
+	if vv.Codepage != 866 {
+		t.Errorf("Expected detected codepage 866, got %d", vv.Codepage)
+	}
+
+	_, err = vv.backend.ReadAt(0, 12)
+	if err != piecetable.ErrLoading {
+		t.Fatalf("Expected ErrLoading on first read, got %v", err)
+	}
+
+	var data []byte
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if time.Now().After(deadline) {
+			t.Fatal("Timeout waiting for codepage viewer fetch")
+		}
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		default:
+			time.Sleep(10 * time.Millisecond)
+		}
+
+		data, err = vv.backend.ReadAt(0, 12)
+		if err == nil {
+			break
+		}
+	}
+
+	if string(data) != "Привет" {
+		t.Errorf("Viewer failed to decode CP866: expected 'Привет', got %q", string(data))
 	}
 }

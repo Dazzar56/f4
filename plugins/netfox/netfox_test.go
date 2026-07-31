@@ -1,6 +1,7 @@
 package netfox
 
 import (
+	"bytes"
 	"github.com/unxed/f4/vfs"
 	"net"
 	"os"
@@ -97,5 +98,19 @@ func TestNetFox_TimeoutAndDial(t *testing.T) {
 	// The connection should fail and return within approx 1 second (plus small buffer), not hang
 	if duration > 1500*time.Millisecond {
 		t.Errorf("Timeout took too long: %v (expected ~1s)", duration)
+	}
+}
+func TestNetFox_CodepageSupport(t *testing.T) {
+	v := &FTPVFS{
+		cwd: "/home",
+	}
+	dec, enc := vfs.GetCodepageDecoderEncoder("1251")
+	v.decoder = dec
+	v.encoder = enc
+
+	encoded := v.encodePath("Привет")
+	expected := []byte{0xcf, 0xf0, 0xe8, 0xe2, 0xe5, 0xf2}
+	if !bytes.Equal([]byte(encoded), expected) {
+		t.Errorf("encodePath failed: expected bytes %v, got %q", expected, []byte(encoded))
 	}
 }
