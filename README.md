@@ -115,6 +115,19 @@ Example:
 
 ---
 
+## Development & Contribution Guidelines
+
+To maintain the performance and quality of `f4`, all contributors (including AI assistants) must adhere to these development guidelines:
+
+1. **Licensing and IP Cleanliness:** `f4` is licensed under the **BSD 3-Clause License**. Since `far2l` is GPL-licensed, you **must not** copy, translate, or adapt GPL-licensed code from `far2l` or Far Manager directly. All implementations of Far/far2l concepts must be clean-room, independent rewrites.
+2. **Rigorous Testing:** Every new feature, VFS provider, or bug fix must be accompanied by automated tests. Verify your changes by running `go test ./...` before submitting a pull request.
+3. **Code Formatting:** Code must be formatted strictly according to Go standards. Always run `gofmt -s -w .` on your changes before committing.
+4. **Memory Optimization:** Avoid heap allocations in hot paths or loops to prevent Garbage Collection (GC) latency. Optimize hot spots creatively, utilizing local pooling or zero-allocation paradigms.
+5. **FFI and Native Interoperability:** Avoid CGO to preserve easy cross-compilation. If native interoperability is necessary, utilize the `unxed/pureffi` library for fast, non-CGO FFI.
+6. **Language:** All code, comments, documentation, and commit messages must be in English to facilitate international collaboration.
+7. **Plan-First & Fail-Fast:** For complex tasks, start with a clear plan, break the work into incremental, logical chunks, and focus on failing fast to catch architectural flaws early.
+
+---
 ### Getting Started (Ubuntu)
 
 **1. Install Prerequisites**
