@@ -3639,3 +3639,84 @@ func TestPanelsFrame_LayoutDecrements_InitFromAppConfig(t *testing.T) {
 			pf.widthDecrement, pf.leftHeightDecrement, pf.rightHeightDecrement)
 	}
 }
+
+// TestPanelsFrame_CtrlShiftArrows_AsymmetricHeight exercises far2l's
+// Ctrl+Shift+Up / Ctrl+Shift+Down: bumps only the ACTIVE panel's height
+// decrement, leaving the other panel untouched. Same gate as plain
+// Ctrl+Up/Down (panels visible + cmdline empty).
+func TestPanelsFrame_CtrlShiftArrows_AsymmetricHeight(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	send := func(pf *PanelsFrame, vk uint16) {
+		pf.ProcessKey(&vtinput.InputEvent{
+			Type: vtinput.KeyEventType, KeyDown: true,
+			VirtualKeyCode:  vk,
+			ControlKeyState: vtinput.LeftCtrlPressed | vtinput.ShiftPressed,
+		})
+	}
+
+	pf := setupMockPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	// Baseline: both decrements 0.
+	if pf.leftHeightDecrement != 0 || pf.rightHeightDecrement != 0 {
+		t.Fatalf("precondition: expected 0/0, got %d/%d",
+			pf.leftHeightDecrement, pf.rightHeightDecrement)
+	}
+	baseLeftH := panelHeight(pf.panels[0])
+	baseRightH := panelHeight(pf.panels[1])
+
+	// Active = right (mock default). Ctrl+Shift+Up bumps only right.
+	send(pf, vtinput.VK_UP)
+	if pf.leftHeightDecrement != 0 || pf.rightHeightDecrement != 1 {
+		t.Errorf("active=right Ctrl+Shift+Up: got %d/%d, want 0/1",
+			pf.leftHeightDecrement, pf.rightHeightDecrement)
+	}
+	if panelHeight(pf.panels[0]) != baseLeftH {
+		t.Errorf("left panel changed unexpectedly")
+	}
+	if panelHeight(pf.panels[1]) != baseRightH-1 {
+		t.Errorf("right panel height=%d, want %d",
+			panelHeight(pf.panels[1]), baseRightH-1)
+	}
+	if AppConfig.RightHeightDecrement != 1 {
+		t.Errorf("AppConfig.RightHeightDecrement=%d, want 1",
+			AppConfig.RightHeightDecrement)
+	}
+	AppConfig.RightHeightDecrement = 0 // cleanup for later tests
+
+	// Ctrl+Shift+Down on active=right undoes it.
+	send(pf, vtinput.VK_DOWN)
+	if pf.rightHeightDecrement != 0 {
+		t.Errorf("Ctrl+Shift+Down: rightHeightDecrement=%d, want 0",
+			pf.rightHeightDecrement)
+	}
+
+	// Switch to left, Ctrl+Shift+Up bumps left only.
+	pf.activeIdx = 0
+	send(pf, vtinput.VK_UP)
+	if pf.leftHeightDecrement != 1 || pf.rightHeightDecrement != 0 {
+		t.Errorf("active=left Ctrl+Shift+Up: got %d/%d, want 1/0",
+			pf.leftHeightDecrement, pf.rightHeightDecrement)
+	}
+	AppConfig.LeftHeightDecrement = 0 // cleanup
+
+	// Clamp: Ctrl+Shift+Down on a zero-decrement panel must not go negative.
+	pf.leftHeightDecrement = 0
+	send(pf, vtinput.VK_DOWN)
+	if pf.leftHeightDecrement != 0 {
+		t.Errorf("Ctrl+Shift+Down past 0: leftHeightDecrement=%d, want 0 (clamp)",
+			pf.leftHeightDecrement)
+	}
+
+	// Non-empty cmdline: Ctrl+Shift+Up/Down must NOT resize.
+	pf.leftHeightDecrement = 0
+	pf.cmdLine.Edit.SetText("hello")
+	send(pf, vtinput.VK_UP)
+	if pf.leftHeightDecrement != 0 {
+		t.Errorf("non-empty cmdline: leftHeightDecrement changed to %d, want 0",
+			pf.leftHeightDecrement)
+	}
+	pf.cmdLine.Edit.SetText("")
+}
