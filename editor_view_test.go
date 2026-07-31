@@ -795,7 +795,7 @@ func TestEditorView_WhitespaceRendering(t *testing.T) {
 	ev := NewEditorView(pt, nil, "")
 	defer ev.Close()
 	ev.ShowWhitespaces = true
-	cells := ev.fillCells(nil, []byte("a b\tc"), 0, 0, 0, false, 0, 0, nil, 0, false, -1, 0)
+	cells := ev.fillCells(nil, []byte("a b\tc"), 0, 0, 0, false, 0, 0, nil, 0, false, -1, 0, 0)
 
 	// '·' is U+00B7 (183)
 	if cells[1].Char != 183 {
@@ -807,7 +807,7 @@ func TestEditorView_WhitespaceRendering(t *testing.T) {
 	}
 
 	ev.ShowWhitespaces = false
-	cells = ev.fillCells(nil, []byte("a b\tc"), 0, 0, 0, false, 0, 0, nil, 0, false, -1, 0)
+	cells = ev.fillCells(nil, []byte("a b\tc"), 0, 0, 0, false, 0, 0, nil, 0, false, -1, 0, 0)
 	if cells[1].Char != ' ' {
 		t.Errorf("Expected space for space when ShowWhitespaces is OFF, got %d", cells[1].Char)
 	}
@@ -3081,7 +3081,7 @@ func TestEditorView_CharacterWidthConsistency(t *testing.T) {
 	ev.SetPosition(0, 0, 80, 24)
 
 	_, col2 := ev.engine.LogicalToVisual(2)
-	cells := ev.fillCells(nil, []byte{0x01, 0x00, 'a'}, 0, 0, 0, false, 0, 0, nil, 0, false, -1, 0)
+	cells := ev.fillCells(nil, []byte{0x01, 0x00, 'a'}, 0, 0, 0, false, 0, 0, nil, 0, false, -1, 0, 0)
 
 	if col2 != 2 {
 		t.Errorf("Expected LogicalToVisual col 2, got %d", col2)
@@ -3158,7 +3158,7 @@ func TestEditorView_ZeroAndDoubleWidthConsistency(t *testing.T) {
 	_, colCJK := ev.engine.LogicalToVisual(6)
 	_, colB := ev.engine.LogicalToVisual(7)
 
-	cells := ev.fillCells(nil, text, 0, 0, 0, false, 0, 0, nil, 0, false, -1, 0)
+	cells := ev.fillCells(nil, text, 0, 0, 0, false, 0, 0, nil, 0, false, -1, 0, 0)
 
 	if colA != 1 {
 		t.Errorf("Expected column after 'a' to be 1, got %d", colA)
@@ -3822,4 +3822,96 @@ type desktopWindowWrapper struct {
 
 func (d desktopWindowWrapper) GetType() vtui.FrameType {
 	return vtui.TypeUser
+}
+
+func TestEditorView_Replace(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pt := piecetable.New([]byte("abc 123 abc"))
+	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
+	ev.SetPosition(0, 0, 80, 24)
+
+	ev.Replace("abc", "def", true, true)
+
+	timeout := time.After(1 * time.Second)
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("timeout")
+		}
+		if ev.pt.String() == "def 123 def" {
+			break
+		}
+	}
+}
+
+func TestEditorView_MouseSelection(t *testing.T) {
+	pt := piecetable.New([]byte("hello world"))
+	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
+	ev.SetPosition(0, 0, 80, 24)
+
+	ev.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: true,
+		MouseX: 0, MouseY: 1, ButtonState: vtinput.FromLeft1stButtonPressed,
+	})
+
+	if !ev.selActive {
+		t.Fatal("Selection should be active")
+	}
+
+	ev.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: true,
+		MouseX: 5, MouseY: 1, ButtonState: vtinput.FromLeft1stButtonPressed,
+		MouseEventFlags: vtinput.MouseMoved,
+	})
+
+	min, max := ev.getSelectionRange()
+	if min != 0 || max != 5 {
+		t.Errorf("Expected range 0:5, got %d:%d", min, max)
+	}
+}
+func TestEditorView_RectangularSelection_Copy(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pt := piecetable.New([]byte("line1\nline2\nline3"))
+	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
+	ev.SetPosition(0, 0, 80, 24)
+
+	ev.rectSelActive = true
+	ev.rectSelStartLine = 0
+	ev.rectSelStartCol = 1
+	ev.CursorLine = 2
+	ev.CursorPos = 5
+
+	vtui.SetClipboard("")
+	ev.CopySelection()
+
+	expected := "ine1\nine2\nine3"
+	if vtui.GetClipboard() != expected {
+		t.Errorf("Rectangular Copy failed: expected %q, got %q", expected, vtui.GetClipboard())
+	}
+}
+
+func TestEditorView_RectangularSelection_Delete(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pt := piecetable.New([]byte("line1\nline2\nline3"))
+	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
+	ev.SetPosition(0, 0, 80, 24)
+
+	ev.rectSelActive = true
+	ev.rectSelStartLine = 0
+	ev.rectSelStartCol = 1
+	ev.CursorLine = 2
+	ev.CursorPos = 4
+
+	ev.DeleteSelection()
+
+	expected := "l1\nl2\nl3"
+	if ev.pt.String() != expected {
+		t.Errorf("Rectangular Delete failed: expected %q, got %q", expected, ev.pt.String())
+	}
 }

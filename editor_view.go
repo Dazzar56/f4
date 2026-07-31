@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/mattn/go-runewidth"
 	"io"
 	"path/filepath"
 	"runtime"
@@ -56,10 +57,13 @@ type EditorView struct {
 	CursorPos        int // Позиция в байтах (для плагинов)
 	DesiredVisualCol int // Колонка, в которую мы хотим попасть при навигации Up/Down
 
-	ShowWhitespaces bool
-	selActive       bool
-	selAnchorOffset int // Абсолютное смещение начала выделения
-	editSession     int // Unique ID to fence background tasks
+	ShowWhitespaces  bool
+	selActive        bool
+	selAnchorOffset  int // Абсолютное смещение начала выделения
+	rectSelActive    bool
+	rectSelStartLine int
+	rectSelStartCol  int
+	editSession      int // Unique ID to fence background tasks
 
 	pasting     bool
 	saving      bool
@@ -607,7 +611,7 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 
 			_, startVCol := ev.engine.LogicalToVisual(frag.ByteOffsetStart)
 			isCrossRow := (absVRow == crossVRow)
-			ev.renderCells = ev.fillCells(ev.renderCells, ev.renderBytes, bgAttr, selAttr, frag.ByteOffsetStart, ev.selActive, selMin, selMax, fragSyntax, startVCol, isCrossRow, crossVCol, crossAttr)
+			ev.renderCells = ev.fillCells(ev.renderCells, ev.renderBytes, bgAttr, selAttr, frag.ByteOffsetStart, ev.selActive, selMin, selMax, fragSyntax, startVCol, isCrossRow, crossVCol, crossAttr, absVRow)
 
 			scr.Write(ev.X1-ev.ScrollLeft, currY, ev.renderCells)
 
@@ -802,13 +806,22 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 
 	handleNav := func() {
-		if shift {
+		if alt {
+			ev.selActive = false
+			if !ev.rectSelActive {
+				ev.rectSelActive = true
+				ev.rectSelStartLine = ev.CursorLine
+				ev.rectSelStartCol = ev.getVisualColOf(ev.CursorLine, ev.CursorPos)
+			}
+		} else if shift {
+			ev.rectSelActive = false
 			if !ev.selActive {
 				ev.selActive = true
 				ev.selAnchorOffset = ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 			}
 		} else {
 			ev.selActive = false
+			ev.rectSelActive = false
 		}
 	}
 
@@ -848,6 +861,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 
 	case vtinput.VK_A:
 		if ctrl {
+			ev.rectSelActive = false
 			ev.selActive = true
 			ev.selAnchorOffset = 0
 			lastLine := ev.li.LineCount() - 1
@@ -873,19 +887,25 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 
 	case vtinput.VK_F7:
-		if shift && LastEditorSearch != "" {
+		if ctrl {
+			vtui.FrameManager.EmitCommand(CmReplace, nil)
+		} else if shift && LastEditorSearch != "" {
 			ev.Search(LastEditorSearch, LastEditorSearchCase, LastEditorSearchReverse, true)
 		} else {
 			vtui.FrameManager.EmitCommand(CmSearch, nil)
 		}
 		return true
 
-	case vtinput.VK_ESCAPE, vtinput.VK_F10:
+	case vtinput.VK_ESCAPE, vtinput.VK_F10, vtinput.VK_F4:
 		ev.tryClose()
 		return true
 
+	case vtinput.VK_F6:
+		vtui.FrameManager.EmitCommand(CmSwitchToViewer, ev)
+		return true
+
 	case vtinput.VK_C, vtinput.VK_INSERT:
-		if ctrl && ev.selActive {
+		if ctrl && (ev.selActive || ev.rectSelActive) {
 			ev.CopySelection()
 			return true
 		}
@@ -943,7 +963,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 			if !ctrl {
 				break
 			}
-			if ev.selActive {
+			if ev.selActive || ev.rectSelActive {
 				ev.CopySelection()
 				ev.DeleteSelection()
 				return true
@@ -1351,7 +1371,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 
 	case vtinput.VK_RETURN:
 		ev.saveUndo(opOther)
-		if ev.selActive {
+		if ev.selActive || ev.rectSelActive {
 			ev.inGroup = true
 			ev.DeleteSelection()
 			ev.inGroup = false
@@ -1399,7 +1419,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 	case vtinput.VK_TAB:
 		if !shift && !ctrl && !alt {
 			ev.saveUndo(opTyping)
-			if ev.selActive {
+			if ev.selActive || ev.rectSelActive {
 				ev.inGroup = true
 				ev.DeleteSelection()
 				ev.inGroup = false
@@ -1444,7 +1464,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 
 	if e.Char != 0 && ctrl == false {
 		ev.saveUndo(opTyping)
-		if ev.selActive {
+		if ev.selActive || ev.rectSelActive {
 			ev.inGroup = true
 			ev.DeleteSelection()
 			ev.inGroup = false
@@ -1499,7 +1519,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 	return false
 }
 
-func (ev *EditorView) fillCells(target []vtui.CharInfo, data []byte, defaultAttr, selAttr uint64, offset int, selActive bool, selMin, selMax int, syntax []uint64, startVisualCol int, isCrossRow bool, crossVCol int, crossAttr uint64) []vtui.CharInfo {
+func (ev *EditorView) fillCells(target []vtui.CharInfo, data []byte, defaultAttr, selAttr uint64, offset int, selActive bool, selMin, selMax int, syntax []uint64, startVisualCol int, isCrossRow bool, crossVCol int, crossAttr uint64, visualRow int) []vtui.CharInfo {
 	target = target[:0]
 	currByte := 0
 	charIdx := 0
@@ -1546,7 +1566,19 @@ func (ev *EditorView) fillCells(target []vtui.CharInfo, data []byte, defaultAttr
 			}
 		}
 
-		if selActive {
+		if ev.rectSelActive {
+			minY, maxY := ev.rectSelStartLine, ev.CursorLine
+			if minY > maxY {
+				minY, maxY = maxY, minY
+			}
+			minX, maxX := ev.rectSelStartCol, ev.getVisualColOf(ev.CursorLine, ev.CursorPos)
+			if minX > maxX {
+				minX, maxX = maxX, minX
+			}
+			if visualRow >= minY && visualRow <= maxY && visualCol >= minX && visualCol < maxX {
+				attr = selAttr
+			}
+		} else if selActive {
 			absPos := offset + currByte
 			if absPos >= selMin && absPos < selMax {
 				attr = selAttr
@@ -1657,6 +1689,79 @@ func (ev *EditorView) ProcessMouse(e *vtinput.InputEvent) bool {
 		}
 		return true
 	}
+
+	if e.ButtonState == vtinput.FromLeft1stButtonPressed {
+		mx, my := int(e.MouseX), int(e.MouseY)
+		if mx >= ev.X1 && mx <= ev.X2 && my >= ev.Y1+1 && my <= ev.Y2 {
+			visualCol := mx - ev.X1 + ev.ScrollLeft
+			visualRow := my - (ev.Y1 + 1) + ev.ScrollTopRow
+			offset := ev.engine.VisualToLogical(visualRow, visualCol)
+
+			if e.MouseEventFlags&vtinput.DoubleClick != 0 {
+				ev.CursorLine = ev.li.GetLineAtOffset(offset)
+				ev.CursorPos = offset - ev.li.GetLineOffset(ev.CursorLine)
+				ev.selectWordUnderCursor()
+			} else {
+				if !ev.selActive || e.MouseEventFlags&vtinput.MouseMoved == 0 {
+					ev.selActive = false
+					ev.rectSelActive = false
+					ev.CursorLine = ev.li.GetLineAtOffset(offset)
+					ev.CursorPos = offset - ev.li.GetLineOffset(ev.CursorLine)
+					ev.updateDesiredVisualCol()
+
+					if e.MouseEventFlags&vtinput.MouseMoved == 0 {
+						ev.selActive = true
+						ev.selAnchorOffset = offset
+					}
+				} else if ev.selActive && e.MouseEventFlags&vtinput.MouseMoved != 0 {
+					ev.CursorLine = ev.li.GetLineAtOffset(offset)
+					ev.CursorPos = offset - ev.li.GetLineOffset(ev.CursorLine)
+					ev.updateDesiredVisualCol()
+				}
+			}
+			ev.ensureCursorVisible()
+			vtui.FrameManager.Redraw()
+			return true
+		}
+	} else if e.ButtonState == vtinput.RightmostButtonPressed {
+		mx, my := int(e.MouseX), int(e.MouseY)
+		if mx >= ev.X1 && mx <= ev.X2 && my >= ev.Y1+1 && my <= ev.Y2 {
+			visualCol := mx - ev.X1 + ev.ScrollLeft
+			visualRow := my - (ev.Y1 + 1) + ev.ScrollTopRow
+			offset := ev.engine.VisualToLogical(visualRow, visualCol)
+
+			if !ev.rectSelActive || e.MouseEventFlags&vtinput.MouseMoved == 0 {
+				ev.selActive = false
+				ev.rectSelActive = false
+				ev.CursorLine = ev.li.GetLineAtOffset(offset)
+				ev.CursorPos = offset - ev.li.GetLineOffset(ev.CursorLine)
+				ev.updateDesiredVisualCol()
+
+				if e.MouseEventFlags&vtinput.MouseMoved == 0 {
+					ev.rectSelActive = true
+					ev.rectSelStartLine = ev.CursorLine
+					ev.rectSelStartCol = visualCol
+				}
+			} else if ev.rectSelActive && e.MouseEventFlags&vtinput.MouseMoved != 0 {
+				ev.CursorLine = ev.li.GetLineAtOffset(offset)
+				ev.CursorPos = offset - ev.li.GetLineOffset(ev.CursorLine)
+				ev.updateDesiredVisualCol()
+			}
+			ev.ensureCursorVisible()
+			vtui.FrameManager.Redraw()
+			return true
+		}
+	} else if e.ButtonState == 0 {
+		if ev.selActive && ev.selAnchorOffset == ev.li.GetLineOffset(ev.CursorLine)+ev.CursorPos {
+			ev.selActive = false
+			vtui.FrameManager.Redraw()
+		}
+		if ev.rectSelActive && ev.rectSelStartLine == ev.CursorLine && ev.rectSelStartCol == ev.getVisualColOf(ev.CursorLine, ev.CursorPos) {
+			ev.rectSelActive = false
+			vtui.FrameManager.Redraw()
+		}
+	}
+
 	return false
 }
 
@@ -1810,6 +1915,10 @@ func (ev *EditorView) HandleCommand(cmd int, args any) bool {
 		ev.showSearchDialog()
 		return true
 	}
+	if cmd == CmReplace {
+		ev.showReplaceDialog()
+		return true
+	}
 	return ev.BaseFrame.HandleCommand(cmd, args)
 }
 
@@ -1900,6 +2009,211 @@ func (ev *EditorView) showSearchDialog() {
 	btnCancel.OnClick = func() { dlg.Close() }
 
 	vtui.FrameManager.Push(dlg)
+}
+func replaceAllFold(s, old, new string) string {
+	if old == "" {
+		return s
+	}
+	lowerS := strings.ToLower(s)
+	lowerOld := strings.ToLower(old)
+	var b strings.Builder
+	b.Grow(len(s))
+
+	start := 0
+	for {
+		idx := strings.Index(lowerS[start:], lowerOld)
+		if idx == -1 {
+			b.WriteString(s[start:])
+			break
+		}
+		b.WriteString(s[start : start+idx])
+		b.WriteString(new)
+		start += idx + len(old)
+	}
+	return b.String()
+}
+
+func (ev *EditorView) Replace(pattern, replacement string, caseSensitive, all bool) {
+	if pattern == "" {
+		return
+	}
+
+	if all {
+		vtui.RunAsync(func(ctx *vtui.TaskContext) {
+			bytes, _ := ev.pt.Bytes()
+			text := string(bytes)
+			var newText string
+			if caseSensitive {
+				newText = strings.ReplaceAll(text, pattern, replacement)
+			} else {
+				newText = replaceAllFold(text, pattern, replacement)
+			}
+			if newText != text {
+				ctx.RunOnUI(func() {
+					ev.saveUndo(opOther)
+					ev.SetText(newText)
+					ev.modified = true
+					ev.ensureCursorVisible()
+					vtui.FrameManager.Redraw()
+				})
+			} else {
+				ctx.RunOnUI(func() {
+					vtui.ShowMessage(" Replace ", "Pattern not found.", []string{"&Ok"})
+				})
+			}
+		})
+		return
+	}
+
+	if ev.selActive {
+		min, max := ev.getSelectionRange()
+		data, _ := ev.pt.GetRange(min, max-min)
+		match := false
+		if caseSensitive {
+			match = string(data) == pattern
+		} else {
+			match = strings.EqualFold(string(data), pattern)
+		}
+		if match {
+			ev.saveUndo(opOther)
+			ev.modified = true
+			ev.pt.Delete(min, max-min)
+			ev.li.UpdateAfterDelete(min, max-min)
+
+			repBytes := []byte(replacement)
+			ev.pt.Insert(min, repBytes)
+			ev.li.UpdateAfterInsert(min, repBytes)
+
+			ev.invalidateStates(ev.CursorLine)
+			ev.engine.InvalidateFrom(ev.CursorLine)
+
+			newCursorOff := min + len(repBytes)
+			ev.CursorLine = ev.li.GetLineAtOffset(newCursorOff)
+			ev.CursorPos = newCursorOff - ev.li.GetLineOffset(ev.CursorLine)
+
+			ev.selActive = false
+			ev.updateDesiredVisualCol()
+			ev.ensureCursorVisible()
+			vtui.FrameManager.Redraw()
+
+			ev.Search(pattern, caseSensitive, false, true)
+			return
+		}
+	}
+
+	ev.Search(pattern, caseSensitive, false, false)
+}
+
+func (ev *EditorView) showReplaceDialog() {
+	dlgW, dlgH := 50, 13
+	dlg := vtui.NewCenteredDialog(dlgW, dlgH, " Replace ")
+	dlg.ShowClose = true
+
+	lblPrompt := vtui.NewLabel(0, 0, "Search for:", nil)
+	editPattern := vtui.NewEdit(0, 0, 30, LastEditorSearch)
+	editPattern.SelectAll()
+	lblPrompt.FocusLink = editPattern
+	dlg.SetFocusedItem(editPattern)
+
+	lblReplace := vtui.NewLabel(0, 0, "Replace with:", nil)
+	editReplace := vtui.NewEdit(0, 0, 30, "")
+
+	chkCase := vtui.NewCheckbox(0, 0, Msg("Search.CaseSensitive"), false)
+	chkCase.State = 0
+	if LastEditorSearchCase {
+		chkCase.State = 1
+	}
+
+	btnReplace := vtui.NewButton(0, 0, "&Replace")
+	btnReplaceAll := vtui.NewButton(0, 0, "Replace &All")
+	btnCancel := vtui.NewButton(0, 0, "Cancel")
+	btnReplace.IsDefault = true
+
+	dlg.AddItem(lblPrompt)
+	dlg.AddItem(editPattern)
+	dlg.AddItem(lblReplace)
+	dlg.AddItem(editReplace)
+	dlg.AddItem(chkCase)
+	dlg.AddItem(btnReplace)
+	dlg.AddItem(btnReplaceAll)
+	dlg.AddItem(btnCancel)
+
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, dlgW-4, dlgH-4)
+	vbox.Add(lblPrompt, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(editPattern, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Add(lblReplace, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	vbox.Add(editReplace, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Add(chkCase, vtui.Margins{Top: 1}, vtui.AlignLeft)
+
+	hbox := vtui.NewHBoxLayout(0, 0, dlgW-4, 1)
+	hbox.HorizontalAlign = vtui.AlignCenter
+	hbox.Spacing = 2
+	hbox.Add(btnReplace, vtui.Margins{}, vtui.AlignTop)
+	hbox.Add(btnReplaceAll, vtui.Margins{}, vtui.AlignTop)
+	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
+	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Apply()
+
+	btnReplace.OnClick = func() {
+		LastEditorSearch = editPattern.GetText()
+		LastEditorSearchCase = chkCase.State == 1
+		SaveSession()
+		dlg.Close()
+		ev.Replace(LastEditorSearch, editReplace.GetText(), LastEditorSearchCase, false)
+	}
+	btnReplaceAll.OnClick = func() {
+		LastEditorSearch = editPattern.GetText()
+		LastEditorSearchCase = chkCase.State == 1
+		SaveSession()
+		dlg.Close()
+		ev.Replace(LastEditorSearch, editReplace.GetText(), LastEditorSearchCase, true)
+	}
+	btnCancel.OnClick = func() { dlg.Close() }
+
+	vtui.FrameManager.Push(dlg)
+}
+
+func (ev *EditorView) selectWordUnderCursor() {
+	lineStart := ev.li.GetLineOffset(ev.CursorLine)
+	lineRunes := ev.getLogicalLineRunes(ev.CursorLine)
+	byteAcc := 0
+	runeIdx := -1
+	for i, r := range lineRunes {
+		if byteAcc > ev.CursorPos {
+			break
+		}
+		runeIdx = i
+		byteAcc += utf8.RuneLen(r)
+	}
+	if runeIdx == -1 {
+		runeIdx = len(lineRunes) - 1
+	}
+
+	if runeIdx >= 0 && runeIdx < len(lineRunes) {
+		startIdx := runeIdx
+		for startIdx > 0 && getCharCategory(lineRunes[startIdx-1]) == catWord {
+			startIdx--
+		}
+		endIdx := runeIdx
+		for endIdx < len(lineRunes) && getCharCategory(lineRunes[endIdx]) == catWord {
+			endIdx++
+		}
+
+		startOff := 0
+		for i := 0; i < startIdx; i++ {
+			startOff += utf8.RuneLen(lineRunes[i])
+		}
+		endOff := startOff
+		for i := startIdx; i < endIdx; i++ {
+			endOff += utf8.RuneLen(lineRunes[i])
+		}
+
+		ev.selActive = true
+		ev.selAnchorOffset = lineStart + startOff
+		ev.CursorPos = endOff
+		ev.updateDesiredVisualCol()
+		ev.ensureCursorVisible()
+	}
 }
 func (ev *EditorView) getLogicalLineRunes(line int) []rune {
 	lineStart := ev.li.GetLineOffset(line)
@@ -2134,6 +2448,68 @@ func (ev *EditorView) getSelectionRange() (int, int) {
 }
 
 func (ev *EditorView) CopySelection() {
+	if ev.rectSelActive {
+		minY, maxY := ev.rectSelStartLine, ev.CursorLine
+		if minY > maxY {
+			minY, maxY = maxY, minY
+		}
+		minX, maxX := ev.rectSelStartCol, ev.getVisualColOf(ev.CursorLine, ev.CursorPos)
+		if minX > maxX {
+			minX, maxX = maxX, minX
+		}
+
+		var lines []string
+		for y := minY; y <= maxY; y++ {
+			lineStart := ev.li.GetLineOffset(y)
+			lineLen := ev.getLineLength(y)
+			lineData, _ := ev.pt.GetRange(lineStart, lineLen)
+
+			var piece []rune
+			visualCol := 0
+			runes := []rune(string(lineData))
+			tabSize := ev.TabSize
+			if tabSize <= 0 {
+				tabSize = 8
+			}
+
+			for _, r := range runes {
+				rw := 1
+				if r == '\t' {
+					rw = tabSize - (visualCol % tabSize)
+				} else {
+					rw = runewidth.RuneWidth(r)
+					if rw <= 0 {
+						rw = 1
+					}
+				}
+
+				if visualCol >= minX && visualCol < maxX {
+					piece = append(piece, r)
+				} else if visualCol < minX && visualCol+rw > minX {
+					piece = append(piece, ' ')
+				}
+
+				visualCol += rw
+				if visualCol >= maxX {
+					break
+				}
+			}
+
+			if visualCol < maxX {
+				needed := maxX - visualCol
+				if visualCol < minX {
+					needed = maxX - minX
+				}
+				piece = append(piece, []rune(strings.Repeat(" ", needed))...)
+			}
+
+			lines = append(lines, string(piece))
+		}
+
+		vtui.SetClipboard(strings.Join(lines, "\n"))
+		return
+	}
+
 	min, max := ev.getSelectionRange()
 	if max > min {
 		data, _ := ev.pt.GetRange(min, max-min)
@@ -2176,8 +2552,78 @@ func (ev *EditorView) PasteText(text string) {
 }
 
 func (ev *EditorView) DeleteSelection() {
+	if ev.rectSelActive {
+		minY, maxY := ev.rectSelStartLine, ev.CursorLine
+		if minY > maxY {
+			minY, maxY = maxY, minY
+		}
+		minX, maxX := ev.rectSelStartCol, ev.getVisualColOf(ev.CursorLine, ev.CursorPos)
+		if minX > maxX {
+			minX, maxX = maxX, minX
+		}
+
+		ev.saveUndo(opOther)
+		ev.modified = true
+
+		for y := maxY; y >= minY; y-- {
+			lineStart := ev.li.GetLineOffset(y)
+			lineLen := ev.getLineLength(y)
+			lineData, _ := ev.pt.GetRange(lineStart, lineLen)
+
+			visualCol := 0
+			runes := []rune(string(lineData))
+			tabSize := ev.TabSize
+			if tabSize <= 0 {
+				tabSize = 8
+			}
+
+			startByte := -1
+			endByte := -1
+			byteAcc := 0
+
+			for _, r := range runes {
+				rw := 1
+				if r == '\t' {
+					rw = tabSize - (visualCol % tabSize)
+				} else {
+					rw = runewidth.RuneWidth(r)
+					if rw <= 0 {
+						rw = 1
+					}
+				}
+
+				if visualCol >= minX && startByte == -1 {
+					startByte = byteAcc
+				}
+				if visualCol >= maxX && endByte == -1 {
+					endByte = byteAcc
+				}
+
+				visualCol += rw
+				byteAcc += utf8.RuneLen(r)
+			}
+
+			if startByte != -1 {
+				if endByte == -1 {
+					endByte = byteAcc
+				}
+				if endByte > startByte {
+					delOff := lineStart + startByte
+					delLen := endByte - startByte
+					ev.pt.Delete(delOff, delLen)
+					ev.li.UpdateAfterDelete(delOff, delLen)
+				}
+			}
+		}
+
+		ev.invalidateStates(minY)
+		ev.engine.InvalidateFrom(minY)
+		ev.rectSelActive = false
+		ev.ensureCursorVisible()
+		return
+	}
+
 	min, max := ev.getSelectionRange()
-	// Safety clamp to prevent panic on stale selection ranges
 	if min < 0 {
 		min = 0
 	}
@@ -2197,11 +2643,9 @@ func (ev *EditorView) DeleteSelection() {
 
 		ev.modified = true
 		ev.pt.Delete(min, max-min)
-		// Incremental update
 		ev.li.UpdateAfterDelete(min, max-min)
 		ev.clearCaches()
 		ev.selActive = false
-		// Update cursor position to the start of the former selection
 		ev.CursorLine = ev.li.GetLineAtOffset(min)
 		ev.CursorPos = min - ev.li.GetLineOffset(ev.CursorLine)
 	}
@@ -2613,4 +3057,10 @@ func isAlternateDataStream(path string) bool {
 		rest = strings.TrimPrefix(path, vol)
 	}
 	return strings.Contains(rest, ":")
+}
+
+func (ev *EditorView) getVisualColOf(line, pos int) int {
+	offset := ev.li.GetLineOffset(line) + pos
+	_, vCol := ev.engine.LogicalToVisual(offset)
+	return vCol
 }

@@ -428,6 +428,9 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 			vv.TopOffset &= ^0xF
 		}
 		return true
+	case vtinput.VK_F6:
+		vtui.FrameManager.EmitCommand(CmSwitchToEditor, vv)
+		return true
 
 	case vtinput.VK_DOWN:
 		if vv.eofVisible {

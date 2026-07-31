@@ -1868,6 +1868,40 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 	case CmFindFile:
 		actionFindFile(pf)
 		return true
+	case CmSwitchToViewer:
+		if ev, ok := args.(*EditorView); ok {
+			doSwitch := func() {
+				path := ev.filePath
+				v := ev.vfs
+				ev.Close()
+				actionOpenViewer(pf, v, path)
+			}
+			if ev.modified {
+				msg := "The file has been modified.\nDo you want to save it before switching?"
+				dlg := vtui.ShowMessage(" Confirm ", msg, []string{"&Save", "&Don't Save", "Cancel"})
+				dlg.OnResult = func(code int) {
+					switch code {
+					case 0:
+						ev.SaveToFile(doSwitch)
+					case 1:
+						doSwitch()
+					}
+				}
+			} else {
+				doSwitch()
+			}
+			return true
+		}
+		return false
+	case CmSwitchToEditor:
+		if vv, ok := args.(*ViewerView); ok {
+			path := vv.path
+			v := vv.vfs
+			vv.Close()
+			actionOpenEditor(pf, v, path)
+			return true
+		}
+		return false
 	case CmBookmarks:
 		ShowBookmarksDialog(pf)
 		return true

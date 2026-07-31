@@ -416,7 +416,7 @@ func findOpenedEditor(v vfs.VFS, path string) (*EditorView, int) {
 
 	for i, s := range vtui.FrameManager.Screens {
 		for _, f := range s.Frames {
-			if ev, ok := f.(*EditorView); ok {
+			if ev, ok := f.(*EditorView); ok && !ev.IsDone() {
 				if isLocal && ev.vfs != nil {
 					if evOSVFS, evOk := ev.vfs.(*vfs.OSVFS); evOk {
 						evAbsPath, _ := evOSVFS.Abs(ev.filePath)
@@ -546,7 +546,7 @@ func findOpenedViewer(v vfs.VFS, path string) (*ViewerView, int) {
 
 	for i, s := range vtui.FrameManager.Screens {
 		for _, f := range s.Frames {
-			if vv, ok := f.(*ViewerView); ok {
+			if vv, ok := f.(*ViewerView); ok && !vv.IsDone() {
 				if isLocal && vv.vfs != nil {
 					if vvOSVFS, evOk := vv.vfs.(*vfs.OSVFS); evOk {
 						vvAbsPath, _ := vvOSVFS.Abs(vv.path)
