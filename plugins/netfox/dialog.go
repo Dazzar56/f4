@@ -2,6 +2,7 @@ package netfox
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/mattn/go-runewidth"
 	"github.com/unxed/f4/vfs"
@@ -100,8 +101,7 @@ func showConnectionDialog(app vfs.App, nf *NetFoxVFS, oldName string) {
 	}
 	activeProto := protos[currIdx]
 
-	// Height 19 provides enough room for main fields, extra options, and buttons with gaps
-	dlg := vtui.NewCenteredDialog(60, 19, " Site Connection ")
+	dlg := vtui.NewCenteredDialog(60, 21, " Site Connection ")
 	dlg.ShowClose = true
 
 	editName := vtui.NewEdit(0, 0, 40, name)
@@ -125,6 +125,22 @@ func showConnectionDialog(app vfs.App, nf *NetFoxVFS, oldName string) {
 		editTimeout.SetText("15")
 	}
 
+	cpItems := []string{}
+	for _, cp := range vfs.AvailableCodepages {
+		cpItems = append(cpItems, fmt.Sprintf("%d  %s", cp.ID, cp.Name))
+	}
+	comboCp := vtui.NewComboBox(0, 0, 30, cpItems)
+	comboCp.DropdownOnly = true
+	currCpIdx := 0
+	for i, cp := range vfs.AvailableCodepages {
+		if fmt.Sprintf("%d", cp.ID) == cfg.Codepage {
+			currCpIdx = i
+			break
+		}
+	}
+	comboCp.Menu.SetSelectPos(currCpIdx)
+	comboCp.Edit.SetText(cpItems[currCpIdx])
+
 	makeRow := func(label string, edit vtui.UIElement) *vtui.HBoxLayout {
 		hbox := vtui.NewHBoxLayout(0, 0, 56, 1)
 		l := vtui.NewLabel(0, 0, padLabel(label), edit)
@@ -135,8 +151,7 @@ func showConnectionDialog(app vfs.App, nf *NetFoxVFS, oldName string) {
 		return hbox
 	}
 
-	// 1. Main fields (Y: 2-10)
-	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 56, 8)
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 56, 9)
 
 	vbox.Add(makeRow("&Name:", editName), vtui.Margins{}, vtui.AlignFill)
 	vbox.Add(makeRow("P&rotocol:", comboProto), vtui.Margins{Top: 0}, vtui.AlignFill)
@@ -145,10 +160,11 @@ func showConnectionDialog(app vfs.App, nf *NetFoxVFS, oldName string) {
 	vbox.Add(makeRow("&User:", editUser), vtui.Margins{Top: 0}, vtui.AlignFill)
 	vbox.Add(makeRow("Pass&word:", editPass), vtui.Margins{Top: 0}, vtui.AlignFill)
 	vbox.Add(makeRow("Time&out:", editTimeout), vtui.Margins{Top: 0}, vtui.AlignFill)
+	vbox.Add(makeRow("Cod&epage:", comboCp), vtui.Margins{Top: 0}, vtui.AlignFill)
 	vbox.Apply()
 
-	// 2. Extra Protocol Area (Y: 12) - architectural proxy
-	extraX, extraY, extraW, extraH := dlg.X1+2, dlg.Y1+12, 56, 1
+	// 2. Extra Protocol Area (Y: 14) - architectural proxy
+	extraX, extraY, extraW, extraH := dlg.X1+2, dlg.Y1+14, 56, 1
 	container := &protoUIContainer{
 		active: activeProto,
 		uis:    make(map[string]vtui.UIElement),
@@ -194,12 +210,12 @@ func showConnectionDialog(app vfs.App, nf *NetFoxVFS, oldName string) {
 		vtui.FrameManager.Redraw()
 	}
 
-	// 3. Bottom Section (Y: 14-16)
+	// 3. Bottom Section (Y: 16-18)
 	btnOk := vtui.NewButton(0, 0, "&Save")
 	btnCancel := vtui.NewButton(0, 0, "Cancel")
 	btnOk.IsDefault = true
 
-	vboxBottom := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+14, 56, 3)
+	vboxBottom := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+16, 56, 3)
 	btnHbox := vtui.NewHBoxLayout(0, 0, 56, 1)
 	btnHbox.HorizontalAlign = vtui.AlignCenter
 	btnHbox.Spacing = 2
@@ -227,6 +243,11 @@ func showConnectionDialog(app vfs.App, nf *NetFoxVFS, oldName string) {
 		cfg.User = editUser.GetText()
 		cfg.Pass = editPass.GetText()
 		cfg.Timeout = editTimeout.GetText()
+		cfg.Codepage = ""
+		cpSel := comboCp.Menu.SelectPos
+		if cpSel >= 0 && cpSel < len(vfs.AvailableCodepages) {
+			cfg.Codepage = fmt.Sprintf("%d", vfs.AvailableCodepages[cpSel].ID)
+		}
 
 		if save, ok := extraSaves[activeProto]; ok {
 			save()

@@ -375,16 +375,39 @@ func runExternalEditor(pf *PanelsFrame, cmdStr, path string) {
 func showEditor(pf *PanelsFrame, v vfs.VFS, path string, f vfs.ReadAtCloser) {
 	var pt *piecetable.PieceTable
 	var buf *AsyncBuffer
+	cpID := AppConfig.EditorDefaultCodePage
 
 	if f != nil {
-		buf = NewAsyncBuffer(context.Background(), f)
-		buf.prewarm()
-		pt = piecetable.NewWithBuffer(buf)
+		size := f.Size()
+		detectLen := 16 * 1024
+		if int64(detectLen) > size {
+			detectLen = int(size)
+		}
+		header := make([]byte, detectLen)
+		_, _ = f.ReadAt(context.Background(), header, 0)
+
+		cpID = vfs.DetectEncoding(header, AppConfig.EditorAutodetectCodePage, AppConfig.EditorDefaultCodePage)
+
+		if cpID == 65001 {
+			buf = NewAsyncBuffer(context.Background(), f)
+			buf.prewarm()
+			pt = piecetable.NewWithBuffer(buf)
+		} else {
+			fullData := make([]byte, size)
+			_, _ = f.ReadAt(context.Background(), fullData, 0)
+			decoded, err := vfs.DecodeBytes(fullData, cpID)
+			if err != nil {
+				decoded = fullData
+				cpID = 65001
+			}
+			pt = piecetable.New(decoded)
+		}
 	} else {
 		pt = piecetable.New(nil)
 	}
 
 	editor := NewEditorView(pt, v, path)
+	editor.Codepage = cpID
 	if GlobalFileState != nil && path != "" {
 		if state := GlobalFileState.GetState(path); state != nil {
 			editor.WordWrap = state.EditorWrap

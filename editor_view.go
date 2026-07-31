@@ -98,6 +98,7 @@ type EditorView struct {
 	targetPos    int
 	targetTopRow int
 	targetLeft   int
+	Codepage     int
 
 	TabSize             int
 	ExpandTabs          int
@@ -231,6 +232,7 @@ func NewEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string) *EditorVie
 		AutoIndent:      AppConfig.EditorAutoIndent,
 		CursorBeyondEOL: AppConfig.EditorCursorBeyondEOL,
 		UseEditorConfig: AppConfig.EditorUseEditorConfig,
+		Codepage:        65001,
 	}
 	if ev.TabSize <= 0 {
 		ev.TabSize = 8
@@ -902,6 +904,15 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 
 	case vtinput.VK_F6:
 		vtui.FrameManager.EmitCommand(CmSwitchToViewer, ev)
+		return true
+	case vtinput.VK_F8:
+		if shift {
+			ev.showCodepageDialog()
+		} else {
+			next := vfs.GetNextFastSwitchCodepage(ev.Codepage)
+			ev.ReloadWithCodepage(next)
+			vtui.ShowToast(fmt.Sprintf("Codepage: %d", next), time.Second)
+		}
 		return true
 
 	case vtinput.VK_C, vtinput.VK_INSERT:
@@ -2173,6 +2184,61 @@ func (ev *EditorView) showReplaceDialog() {
 	vtui.FrameManager.Push(dlg)
 }
 
+func (ev *EditorView) ReloadWithCodepage(cpID int) {
+	if ev.file == nil {
+		ev.Codepage = cpID
+		return
+	}
+
+	size := ev.file.Size()
+	fullData := make([]byte, size)
+	_, err := ev.file.ReadAt(context.Background(), fullData, 0)
+	if err != nil {
+		return
+	}
+
+	decoded, err := vfs.DecodeBytes(fullData, cpID)
+	if err != nil {
+		return
+	}
+
+	ev.saveUndo(opOther)
+	ev.SetText(string(decoded))
+	ev.Codepage = cpID
+	ev.modified = false
+	ev.ensureCursorVisible()
+	vtui.FrameManager.Redraw()
+}
+
+func (ev *EditorView) showCodepageDialog() {
+	menu := vtui.NewVMenu(" Code pages ")
+	for _, cp := range vfs.AvailableCodepages {
+		menu.AddItem(vtui.MenuItem{Text: fmt.Sprintf("%5d  %s", cp.ID, cp.Name)})
+	}
+
+	w, h := 45, len(vfs.AvailableCodepages)+2
+	if h > 15 {
+		h = 15
+	}
+	x := (ev.X2 - ev.X1 - w) / 2
+	y := (ev.Y2 - ev.Y1 - h) / 2
+	if x < 0 {
+		x = 0
+	}
+	if y < 0 {
+		y = 0
+	}
+	menu.SetPosition(x, y, x+w-1, y+h-1)
+
+	menu.OnAction = func(idx int) {
+		menu.Close()
+		if idx >= 0 && idx < len(vfs.AvailableCodepages) {
+			ev.ReloadWithCodepage(vfs.AvailableCodepages[idx].ID)
+		}
+	}
+	vtui.FrameManager.Push(menu)
+}
+
 func (ev *EditorView) selectWordUnderCursor() {
 	lineStart := ev.li.GetLineOffset(ev.CursorLine)
 	lineRunes := ev.getLogicalLineRunes(ev.CursorLine)
@@ -2318,34 +2384,46 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 			return
 		}
 
-		// Streaming write loop with retry logic for async loading.
-		// We use GetRange instead of ForEachRange to safely handle ErrLoading without closure mess.
 		var saveErr error
-		curr := 0
-		total := ev.pt.Size()
-		for curr < total {
-			if ctx.Err() != nil {
-				saveErr = ctx.Err()
-				break
+		if ev.Codepage == 65001 {
+			curr := 0
+			total := ev.pt.Size()
+			for curr < total {
+				if ctx.Err() != nil {
+					saveErr = ctx.Err()
+					break
+				}
+				take := 256 * 1024
+				if curr+take > total {
+					take = total - curr
+				}
+				data, errRange := ev.pt.GetRange(curr, take)
+				if errRange == piecetable.ErrLoading {
+					time.Sleep(20 * time.Millisecond)
+					continue
+				}
+				if errRange != nil {
+					saveErr = errRange
+					break
+				}
+				if _, errWrite := f.Write(data); errWrite != nil {
+					saveErr = errWrite
+					break
+				}
+				curr += len(data)
 			}
-			take := 256 * 1024 // 256KB chunks
-			if curr+take > total {
-				take = total - curr
+		} else {
+			bytes, errBytes := ev.pt.Bytes()
+			if errBytes != nil {
+				saveErr = errBytes
+			} else {
+				encoded, errEnc := vfs.EncodeBytes(bytes, ev.Codepage)
+				if errEnc != nil {
+					saveErr = errEnc
+				} else {
+					_, saveErr = f.Write(encoded)
+				}
 			}
-			data, errRange := ev.pt.GetRange(curr, take)
-			if errRange == piecetable.ErrLoading {
-				time.Sleep(20 * time.Millisecond)
-				continue
-			}
-			if errRange != nil {
-				saveErr = errRange
-				break
-			}
-			if _, errWrite := f.Write(data); errWrite != nil {
-				saveErr = errWrite
-				break
-			}
-			curr += len(data)
 		}
 		f.Close()
 

@@ -34,19 +34,60 @@ type ViewerView struct {
 
 	scrollBar *vtui.ScrollBar
 
-	OnClose func()
+	OnClose  func()
+	Codepage int
 }
 
 func NewViewerView(ctx context.Context, v vfs.VFS, path string) (*ViewerView, error) {
-	backend, err := NewViewerBackend(ctx, v, path)
+	f, err := v.Open(ctx, path)
 	if err != nil {
 		return nil, err
 	}
+
+	size := f.Size()
+	detectLen := 16 * 1024
+	if int64(detectLen) > size {
+		detectLen = int(size)
+	}
+	header := make([]byte, detectLen)
+	_, _ = f.ReadAt(ctx, header, 0)
+
+	cpID := vfs.DetectEncoding(header, AppConfig.ViewerAutodetectCodePage, AppConfig.ViewerDefaultCodePage)
+
+	var backend *ViewerBackend
+	bCtx, bCancel := context.WithCancel(context.Background())
+	if cpID == 65001 {
+		backend = &ViewerBackend{
+			file:      f,
+			size:      size,
+			ctx:       bCtx,
+			cancelCtx: bCancel,
+		}
+	} else {
+		fullData := make([]byte, size)
+		_, _ = f.ReadAt(ctx, fullData, 0)
+		f.Close()
+
+		decoded, err := vfs.DecodeBytes(fullData, cpID)
+		if err != nil {
+			decoded = fullData
+			cpID = 65001
+		}
+		memFile := &vfs.MemoryReadAtCloser{Data: decoded}
+		backend = &ViewerBackend{
+			file:      memFile,
+			size:      int64(len(decoded)),
+			ctx:       bCtx,
+			cancelCtx: bCancel,
+		}
+	}
+
 	vv := &ViewerView{
 		backend:  backend,
 		vfs:      v,
 		path:     path,
 		WrapMode: true,
+		Codepage: cpID,
 	}
 	vv.scrollBar = vtui.NewScrollBar(0, 0, 0)
 	vv.scrollBar.SetOwner(vv)
@@ -401,6 +442,7 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 
 	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
+	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
 	if e.VirtualKeyCode == vtinput.VK_TAB && ctrl {
 		return false
 	}
@@ -430,6 +472,16 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	case vtinput.VK_F6:
 		vtui.FrameManager.EmitCommand(CmSwitchToEditor, vv)
+		return true
+
+	case vtinput.VK_F8:
+		if shift {
+			vv.showCodepageDialog()
+		} else {
+			next := vfs.GetNextFastSwitchCodepage(vv.Codepage)
+			vv.ReloadWithCodepage(next)
+			vtui.ShowToast(fmt.Sprintf("Codepage: %d", next), time.Second)
+		}
 		return true
 
 	case vtinput.VK_DOWN:
@@ -661,6 +713,72 @@ func (vv *ViewerView) jumpToEnd() {
 			vtui.FrameManager.Redraw()
 		})
 	})
+}
+func (vv *ViewerView) ReloadWithCodepage(cpID int) {
+	f, err := vv.vfs.Open(context.Background(), vv.path)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
+	size := f.Size()
+	var backend *ViewerBackend
+	if cpID == 65001 {
+		backend = &ViewerBackend{
+			file: f,
+			size: size,
+			ctx:  context.Background(),
+		}
+	} else {
+		fullData := make([]byte, size)
+		_, _ = f.ReadAt(context.Background(), fullData, 0)
+		decoded, err := vfs.DecodeBytes(fullData, cpID)
+		if err != nil {
+			decoded = fullData
+			cpID = 65001
+		}
+		memFile := &vfs.MemoryReadAtCloser{Data: decoded}
+		backend = &ViewerBackend{
+			file: memFile,
+			size: int64(len(decoded)),
+			ctx:  context.Background(),
+		}
+	}
+
+	vv.backend.Close()
+	vv.backend = backend
+	vv.Codepage = cpID
+	vv.TopOffset = 0
+	vtui.FrameManager.Redraw()
+}
+
+func (vv *ViewerView) showCodepageDialog() {
+	menu := vtui.NewVMenu(" Code pages ")
+	for _, cp := range vfs.AvailableCodepages {
+		menu.AddItem(vtui.MenuItem{Text: fmt.Sprintf("%5d  %s", cp.ID, cp.Name)})
+	}
+
+	w, h := 45, len(vfs.AvailableCodepages)+2
+	if h > 15 {
+		h = 15
+	}
+	x := (vv.X2 - vv.X1 - w) / 2
+	y := (vv.Y2 - vv.Y1 - h) / 2
+	if x < 0 {
+		x = 0
+	}
+	if y < 0 {
+		y = 0
+	}
+	menu.SetPosition(x, y, x+w-1, y+h-1)
+
+	menu.OnAction = func(idx int) {
+		menu.Close()
+		if idx >= 0 && idx < len(vfs.AvailableCodepages) {
+			vv.ReloadWithCodepage(vfs.AvailableCodepages[idx].ID)
+		}
+	}
+	vtui.FrameManager.Push(menu)
 }
 
 func (vv *ViewerView) ProcessMouse(e *vtinput.InputEvent) bool {

@@ -20,15 +20,30 @@ import (
 	"github.com/unxed/vtui"
 )
 
+import "golang.org/x/text/encoding"
+
 type SFTPVFS struct {
-	parent vfs.VFS
-	client *sftp.Client
-	ssh    *ssh.Client
-	path   string
-	title  string
+	parent  vfs.VFS
+	client  *sftp.Client
+	ssh     *ssh.Client
+	path    string
+	title   string
+	decoder *encoding.Decoder
+	encoder *encoding.Encoder
 }
 
-func NewSFTPVFS(parent vfs.VFS, host, port, user, pass string, timeout int) (*SFTPVFS, error) {
+func (v *SFTPVFS) encodePath(p string) string {
+	if v.encoder == nil {
+		return p
+	}
+	encoded, err := v.encoder.Bytes([]byte(p))
+	if err == nil {
+		return string(encoded)
+	}
+	return p
+}
+
+func NewSFTPVFS(parent vfs.VFS, host, port, user, pass string, timeout int, cp string) (*SFTPVFS, error) {
 	vtui.DebugLog("NET: Initiating SFTP connection to %s:%s (user: %s)", host, port, user)
 	auths := []ssh.AuthMethod{}
 
@@ -92,12 +107,15 @@ func NewSFTPVFS(parent vfs.VFS, host, port, user, pass string, timeout int) (*SF
 		title = user + "@" + host
 	}
 
+	dec, enc := vfs.GetCodepageDecoderEncoder(cp)
 	return &SFTPVFS{
-		parent: parent,
-		client: sftpClient,
-		ssh:    sshClient,
-		path:   pwd,
-		title:  title,
+		parent:  parent,
+		client:  sftpClient,
+		ssh:     sshClient,
+		path:    pwd,
+		title:   title,
+		decoder: dec,
+		encoder: enc,
 	}, nil
 }
 
@@ -114,7 +132,7 @@ func (v *SFTPVFS) SetPath(p string) error {
 		target = v.Join(v.path, p)
 	}
 	target = path.Clean(target)
-	info, err := v.client.Stat(target)
+	info, err := v.client.Stat(v.encodePath(target))
 	if err != nil {
 		return err
 	}
@@ -127,7 +145,7 @@ func (v *SFTPVFS) SetPath(p string) error {
 
 func (v *SFTPVFS) ReadDir(ctx context.Context, p string, onChunk func([]vfs.VFSItem)) error {
 	vtui.DebugLog("SFTP: ReadDir(%q) starting...", p)
-	entries, err := v.client.ReadDir(p)
+	entries, err := v.client.ReadDir(v.encodePath(p))
 	if err != nil {
 		vtui.DebugLog("SFTP: ReadDir(%q) failed: %v", p, err)
 		return err
@@ -140,9 +158,8 @@ func (v *SFTPVFS) ReadDir(ctx context.Context, p string, onChunk func([]vfs.VFSI
 		}
 
 		isDir := e.IsDir()
-		// For SFTP: if it's a symlink, we must resolve it to see if it points to a directory.
 		if !isDir && (e.Mode()&os.ModeSymlink != 0) {
-			if target, err := v.client.Stat(v.Join(p, e.Name())); err == nil {
+			if target, err := v.client.Stat(v.encodePath(v.Join(p, e.Name()))); err == nil {
 				isDir = target.IsDir()
 			}
 		}
@@ -160,10 +177,17 @@ func (v *SFTPVFS) ReadDir(ctx context.Context, p string, onChunk func([]vfs.VFSI
 			aTime = e.ModTime()
 		}
 
+		name := e.Name()
+		if v.decoder != nil {
+			if decoded, err := v.decoder.Bytes([]byte(name)); err == nil {
+				name = string(decoded)
+			}
+		}
+
 		items = append(items, vfs.VFSItem{
-			Name: e.Name(), Size: e.Size(), IsDir: isDir,
+			Name: name, Size: e.Size(), IsDir: isDir,
 			MTime: e.ModTime(), IsExecutable: e.Mode().Perm()&0111 != 0,
-			IsHidden: strings.HasPrefix(e.Name(), "."),
+			IsHidden: strings.HasPrefix(name, "."),
 			UnixMode: unixMode, Uid: uid, Gid: gid, ATime: aTime,
 		})
 
@@ -177,7 +201,7 @@ func (v *SFTPVFS) ReadDir(ctx context.Context, p string, onChunk func([]vfs.VFSI
 }
 
 func (v *SFTPVFS) Stat(ctx context.Context, p string) (vfs.VFSItem, error) {
-	info, err := v.client.Stat(p)
+	info, err := v.client.Stat(v.encodePath(p))
 	if err != nil {
 		return vfs.VFSItem{}, err
 	}
@@ -211,20 +235,21 @@ func (v *SFTPVFS) Abs(p string) (string, error) {
 	}
 	return v.Join(v.path, p), nil
 }
-func (v *SFTPVFS) Base(p string) string                      { return path.Base(p) }
-func (v *SFTPVFS) Dir(p string) string                       { return path.Dir(p) }
-func (v *SFTPVFS) MkDir(ctx context.Context, p string) error { return v.client.MkdirAll(p) }
+func (v *SFTPVFS) Base(p string) string { return path.Base(p) }
+func (v *SFTPVFS) Dir(p string) string  { return path.Dir(p) }
+func (v *SFTPVFS) MkDir(ctx context.Context, p string) error {
+	return v.client.MkdirAll(v.encodePath(p))
+}
 func (v *SFTPVFS) Remove(ctx context.Context, p string) error {
-	info, err := v.client.Lstat(p)
+	info, err := v.client.Lstat(v.encodePath(p))
 	if err != nil {
 		return err
 	}
 	if !info.IsDir() {
-		return v.client.Remove(p)
+		return v.client.Remove(v.encodePath(p))
 	}
 
-	// Рекурсивное удаление для SFTP
-	walker := v.client.Walk(p)
+	walker := v.client.Walk(v.encodePath(p))
 	var items []string
 	for walker.Step() {
 		if err := walker.Err(); err != nil {
@@ -233,7 +258,6 @@ func (v *SFTPVFS) Remove(ctx context.Context, p string) error {
 		items = append(items, walker.Path())
 	}
 
-	// Удаляем в обратном порядке (снизу вверх)
 	for i := len(items) - 1; i >= 0; i-- {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -255,17 +279,19 @@ func (v *SFTPVFS) Remove(ctx context.Context, p string) error {
 	}
 	return nil
 }
-func (v *SFTPVFS) Rename(ctx context.Context, o, n string) error { return v.client.Rename(o, n) }
+func (v *SFTPVFS) Rename(ctx context.Context, o, n string) error {
+	return v.client.Rename(v.encodePath(o), v.encodePath(n))
+}
 
 func (v *SFTPVFS) SetAttributes(ctx context.Context, path string, item vfs.VFSItem) error {
-	// SFTP supports chmod, chown and touch
+	encPath := v.encodePath(path)
 	if item.UnixMode != 0 {
-		if err := v.client.Chmod(path, os.FileMode(item.UnixMode)); err != nil {
+		if err := v.client.Chmod(encPath, os.FileMode(item.UnixMode)); err != nil {
 			return err
 		}
 	}
 	if item.Uid != -1 && item.Gid != -1 {
-		if err := v.client.Chown(path, item.Uid, item.Gid); err != nil {
+		if err := v.client.Chown(encPath, item.Uid, item.Gid); err != nil {
 			return err
 		}
 	}
@@ -278,7 +304,7 @@ func (v *SFTPVFS) SetAttributes(ctx context.Context, path string, item vfs.VFSIt
 		mtime = atime
 	}
 	if !atime.IsZero() && !mtime.IsZero() {
-		return v.client.Chtimes(path, atime, mtime)
+		return v.client.Chtimes(encPath, atime, mtime)
 	}
 	return nil
 }
@@ -290,7 +316,7 @@ func (v *SFTPVFS) Search(ctx context.Context, p, pat string) (chan int64, error)
 
 func (v *SFTPVFS) Open(ctx context.Context, p string) (vfs.ReadAtCloser, error) {
 	vtui.DebugLog("SFTP: Opening file %q for reading...", p)
-	f, err := v.client.Open(p)
+	f, err := v.client.Open(v.encodePath(p))
 	if err != nil {
 		return nil, err
 	}
@@ -303,7 +329,7 @@ func (v *SFTPVFS) Open(ctx context.Context, p string) (vfs.ReadAtCloser, error) 
 }
 
 func (v *SFTPVFS) Create(ctx context.Context, p string) (io.WriteCloser, error) {
-	return v.client.Create(p)
+	return v.client.Create(v.encodePath(p))
 }
 func (v *SFTPVFS) ParentVFS() vfs.VFS { return v.parent }
 func (v *SFTPVFS) Close() error {
@@ -368,7 +394,7 @@ func (p *sftpProvider) Open(ctx context.Context, parent vfs.VFS, pth string) (vf
 			timeout = t
 		}
 	}
-	return NewSFTPVFS(parent, cfg.Host, port, cfg.User, cfg.Pass, timeout)
+	return NewSFTPVFS(parent, cfg.Host, port, cfg.User, cfg.Pass, timeout, cfg.Codepage)
 }
 
 type sftpProtocolHandler struct{}

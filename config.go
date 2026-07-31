@@ -64,42 +64,46 @@ func resetConfigDirForTest() {
 }
 
 type F4Config struct {
-	ColorStyle              string
-	AlwaysShowMenuBar       bool
-	ShowHiddenFiles         bool
-	HighlightDir            bool
-	SavePanelPaths          bool
-	KeepTerminalCursor      bool
-	CommandLineAutoComplete bool
-	VimHotkeys              bool
-	SyncPanelLoad           bool
-	EditorAutoComplete      bool
-	EditorAutoCompleteMask  string
-	EditorExpandTabs        int
-	EditorAutoIndent        bool
-	EditorCursorBeyondEOL   bool
-	EditorTabSize           int
-	EditorUseEditorConfig   bool
-	EditorCrosshair         bool
-	UseExternalEditor       bool
-	ExternalEditorCommand   string
-	RegisteredPlugins       []string
-	ConfirmCopy             bool
-	ConfirmMove             bool
-	ConfirmDelete           bool
-	ConfirmExit             bool
-	DeleteCancelFocused     bool
-	DefaultFileOpMode       int
-	FileOpPathDisplay       int
-	GuiFont                 string
-	GuiFontSize             int
-	GuiCols                 int
-	GuiRows                 int
-	ConsoleTitleTemplate    string
-	UpdateChannel           int    // 0 = Stable, 1 = Nightly
-	UpdateInterval          int    // 0 = Never, 1 = Every start, 2 = Daily, 3 = Weekly
-	LastUpdateCheck         int64  // Unix timestamp
-	LastUpdateVersion       string // Version string or PublishedAt timestamp
+	ColorStyle               string
+	AlwaysShowMenuBar        bool
+	ShowHiddenFiles          bool
+	HighlightDir             bool
+	SavePanelPaths           bool
+	KeepTerminalCursor       bool
+	CommandLineAutoComplete  bool
+	VimHotkeys               bool
+	SyncPanelLoad            bool
+	EditorAutoComplete       bool
+	EditorAutoCompleteMask   string
+	EditorExpandTabs         int
+	EditorAutoIndent         bool
+	EditorCursorBeyondEOL    bool
+	EditorTabSize            int
+	EditorUseEditorConfig    bool
+	EditorCrosshair          bool
+	UseExternalEditor        bool
+	ExternalEditorCommand    string
+	EditorAutodetectCodePage bool
+	EditorDefaultCodePage    int
+	ViewerAutodetectCodePage bool
+	ViewerDefaultCodePage    int
+	RegisteredPlugins        []string
+	ConfirmCopy              bool
+	ConfirmMove              bool
+	ConfirmDelete            bool
+	ConfirmExit              bool
+	DeleteCancelFocused      bool
+	DefaultFileOpMode        int
+	FileOpPathDisplay        int
+	GuiFont                  string
+	GuiFontSize              int
+	GuiCols                  int
+	GuiRows                  int
+	ConsoleTitleTemplate     string
+	UpdateChannel            int    // 0 = Stable, 1 = Nightly
+	UpdateInterval           int    // 0 = Never, 1 = Every start, 2 = Daily, 3 = Weekly
+	LastUpdateCheck          int64  // Unix timestamp
+	LastUpdateVersion        string // Version string or PublishedAt timestamp
 
 	// [Layout] mirrors far2l's config.ini section of the same name so
 	// a config shared with far2l keeps working in both. Adjusted by
@@ -118,41 +122,45 @@ type F4Config struct {
 }
 
 var AppConfig = F4Config{
-	ColorStyle:              "Modern",
-	AlwaysShowMenuBar:       false,
-	ShowHiddenFiles:         true,
-	HighlightDir:            true,
-	SavePanelPaths:          true,
-	KeepTerminalCursor:      false,
-	CommandLineAutoComplete: true,
-	VimHotkeys:              false,
-	SyncPanelLoad:           false,
-	EditorAutoComplete:      true,
-	EditorAutoCompleteMask:  "*.go;*.c;*.cpp;*.h;*.hpp;*.py;*.js;*.ts;*.rs;*.java;*.sh;*.txt;*.md;*.html;*.css;*.json",
-	EditorExpandTabs:        0,
-	EditorAutoIndent:        true,
-	EditorCursorBeyondEOL:   false,
-	EditorTabSize:           4,
-	EditorUseEditorConfig:   true,
-	EditorCrosshair:         false,
-	UseExternalEditor:       false,
-	ExternalEditorCommand:   "",
-	ConfirmCopy:             true,
-	ConfirmMove:             true,
-	ConfirmDelete:           true,
-	ConfirmExit:             true,
-	DeleteCancelFocused:     true,
-	DefaultFileOpMode:       0,
-	FileOpPathDisplay:       0,
-	GuiFont:                 "",
-	GuiFontSize:             16,
-	GuiCols:                 100,
-	GuiRows:                 30,
-	ConsoleTitleTemplate:    "f4 %Ver %Platform %Admin - %State",
-	UpdateChannel:           0,
-	UpdateInterval:          3, // Default to Weekly
-	LastUpdateCheck:         0,
-	LastUpdateVersion:       "",
+	ColorStyle:               "Modern",
+	AlwaysShowMenuBar:        false,
+	ShowHiddenFiles:          true,
+	HighlightDir:             true,
+	SavePanelPaths:           true,
+	KeepTerminalCursor:       false,
+	CommandLineAutoComplete:  true,
+	VimHotkeys:               false,
+	SyncPanelLoad:            false,
+	EditorAutoComplete:       true,
+	EditorAutoCompleteMask:   "*.go;*.c;*.cpp;*.h;*.hpp;*.py;*.js;*.ts;*.rs;*.java;*.sh;*.txt;*.md;*.html;*.css;*.json",
+	EditorExpandTabs:         0,
+	EditorAutoIndent:         true,
+	EditorCursorBeyondEOL:    false,
+	EditorTabSize:            4,
+	EditorUseEditorConfig:    true,
+	EditorCrosshair:          false,
+	UseExternalEditor:        false,
+	ExternalEditorCommand:    "",
+	EditorAutodetectCodePage: true,
+	EditorDefaultCodePage:    65001,
+	ViewerAutodetectCodePage: true,
+	ViewerDefaultCodePage:    65001,
+	ConfirmCopy:              true,
+	ConfirmMove:              true,
+	ConfirmDelete:            true,
+	ConfirmExit:              true,
+	DeleteCancelFocused:      true,
+	DefaultFileOpMode:        0,
+	FileOpPathDisplay:        0,
+	GuiFont:                  "",
+	GuiFontSize:              16,
+	GuiCols:                  100,
+	GuiRows:                  30,
+	ConsoleTitleTemplate:     "f4 %Ver %Platform %Admin - %State",
+	UpdateChannel:            0,
+	UpdateInterval:           3, // Default to Weekly
+	LastUpdateCheck:          0,
+	LastUpdateVersion:        "",
 }
 
 var getUserConfigIniPath = func() string {
@@ -231,6 +239,10 @@ func LoadConfig() {
 	AppConfig.EditorCursorBeyondEOL = ini.GetString("Editor", "CursorBeyondEOL", "0") == "1"
 	AppConfig.EditorUseEditorConfig = ini.GetString("Editor", "UseEditorConfig", "1") == "1"
 	AppConfig.EditorCrosshair = ini.GetString("Editor", "Crosshair", "0") == "1"
+	AppConfig.EditorAutodetectCodePage = ini.GetString("Editor", "AutodetectCodePage", "1") == "1"
+	fmt.Sscanf(ini.GetString("Editor", "DefaultCodePage", "65001"), "%d", &AppConfig.EditorDefaultCodePage)
+	AppConfig.ViewerAutodetectCodePage = ini.GetString("Viewer", "AutodetectCodePage", "1") == "1"
+	fmt.Sscanf(ini.GetString("Viewer", "DefaultCodePage", "65001"), "%d", &AppConfig.ViewerDefaultCodePage)
 	AppConfig.UseExternalEditor = ini.GetString("Editor", "UseExternalEditor", "0") == "1"
 	AppConfig.ExternalEditorCommand = ini.GetString("Editor", "ExternalEditorCommand", "")
 	plugStr := ini.GetString("Plugins", "List", "")
@@ -309,6 +321,12 @@ func SaveConfig() {
 	sb.WriteString(fmt.Sprintf("TabSize = %d\n", AppConfig.EditorTabSize))
 	sb.WriteString(fmt.Sprintf("UseExternalEditor = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.UseExternalEditor]))
 	sb.WriteString(fmt.Sprintf("ExternalEditorCommand = %s\n", AppConfig.ExternalEditorCommand))
+	sb.WriteString(fmt.Sprintf("AutodetectCodePage = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.EditorAutodetectCodePage]))
+	sb.WriteString(fmt.Sprintf("DefaultCodePage = %d\n", AppConfig.EditorDefaultCodePage))
+
+	sb.WriteString("\n[Viewer]\n")
+	sb.WriteString(fmt.Sprintf("AutodetectCodePage = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.ViewerAutodetectCodePage]))
+	sb.WriteString(fmt.Sprintf("DefaultCodePage = %d\n", AppConfig.ViewerDefaultCodePage))
 	sb.WriteString("\n[Plugins]\n")
 	sb.WriteString(fmt.Sprintf("List = %s\n", strings.Join(AppConfig.RegisteredPlugins, "|")))
 
