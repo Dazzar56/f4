@@ -905,9 +905,13 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	// With a non-empty cmdline, fall through to word navigation instead.
 	if (e.VirtualKeyCode == vtinput.VK_LEFT || e.VirtualKeyCode == vtinput.VK_RIGHT) && ctrl && !alt && !shift && e.KeyDown {
 		if pf.showPanels && pf.cmdLine.Edit.GetText() == "" {
-			delta := 1
+			// Match far2l: Ctrl+Left bumps WidthDecrement, moving the
+			// split to the left (left panel shrinks, right grows).
+			// Ctrl+Right does the reverse. This is the arrow-follows-
+			// boundary intuition and lines up with Far3/far2m.
+			delta := -1
 			if e.VirtualKeyCode == vtinput.VK_LEFT {
-				delta = -1
+				delta = 1
 			}
 			next := pf.widthDecrement + delta
 			if maxWD := (pf.lastW / 2) - 10; maxWD > 0 && next <= maxWD && next >= -maxWD {
