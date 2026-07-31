@@ -755,6 +755,9 @@ type mockClipAuthManager struct {
 }
 
 func (m *mockClipAuthManager) Authorize(id string) int {
+	if m == nil {
+		return 0
+	}
 	if m.authorized {
 		return 1 // Allow Once
 	}

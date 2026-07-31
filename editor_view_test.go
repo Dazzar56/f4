@@ -1604,7 +1604,7 @@ func TestEditorView_Search_Basic(t *testing.T) {
 	ev.SetPosition(0, 0, 80, 24)
 
 	// Запускаем поиск слова "fox" (вперед, регистронезависимо)
-	ev.Search("fox", false, false, false)
+	ev.Search("fox", false, false, false, false, false)
 
 	// Прокачиваем задачи из очереди (PostTask), так как поиск асинхронный
 	timeout := time.After(1 * time.Second)
@@ -1645,7 +1645,7 @@ func TestEditorView_Search_Next(t *testing.T) {
 	ev.SetPosition(0, 0, 80, 24)
 
 	// 1. Находим первое вхождение
-	ev.Search("match", false, false, false)
+	ev.Search("match", false, false, false, false, false)
 
 	timeout := time.After(1 * time.Second)
 	for !ev.selActive {
@@ -1663,7 +1663,7 @@ func TestEditorView_Search_Next(t *testing.T) {
 
 	// 2. Ищем следующее (Find Next)
 	ev.selActive = false // Сбрасываем для проверки нового результата
-	ev.Search("match", false, false, true)
+	ev.Search("match", false, false, false, false, true)
 
 	timeout = time.After(1 * time.Second)
 	for !ev.selActive {
@@ -1691,7 +1691,7 @@ func TestEditorView_Search_CaseInsensitive(t *testing.T) {
 	ev.SetPosition(0, 0, 80, 24)
 
 	// Ищем "caps" маленькими буквами
-	ev.Search("caps", false, false, false)
+	ev.Search("caps", false, false, false, false, false)
 
 	timeout := time.After(1 * time.Second)
 	for !ev.selActive {
@@ -1715,7 +1715,7 @@ func TestEditorView_Search_NotFound(t *testing.T) {
 	defer ev.Close()
 
 	// Ищем то, чего нет
-	ev.Search("missing", false, false, false)
+	ev.Search("missing", false, false, false, false, false)
 
 	// Ждем появления сообщения об ошибке (оно создается через ShowMessage)
 	timeout := time.After(1 * time.Second)
@@ -1748,7 +1748,7 @@ func TestEditorView_Search_CaseSensitive(t *testing.T) {
 	ev.SetPosition(0, 0, 80, 24)
 
 	// Ищем "match" (строчными) с учетом регистра. Должно найти второе слово.
-	ev.Search("match", true, false, false)
+	ev.Search("match", true, false, false, false, false)
 
 	timeout := time.After(1 * time.Second)
 	for !ev.selActive {
@@ -1779,7 +1779,7 @@ func TestEditorView_Search_Backward(t *testing.T) {
 	ev.CursorPos = 25
 
 	// Ищем "match" назад
-	ev.Search("match", false, true, false)
+	ev.Search("match", false, true, false, false, false)
 
 	timeout := time.After(1 * time.Second)
 	for !ev.selActive {
@@ -1813,7 +1813,7 @@ func TestEditorView_Search_ShiftF7_Reverse(t *testing.T) {
 	// Should find the 'e' at index 12.
 	ev.selActive = false
 	ev.CursorPos = 13
-	ev.Search("e", false, true, false)
+	ev.Search("e", false, true, false, false, false)
 
 	timeout := time.After(1 * time.Second)
 	for !ev.selActive {
@@ -2811,7 +2811,7 @@ func TestEditorView_Search_Reverse_StartAtZero(t *testing.T) {
 	ev.CursorPos = 0 // Start at beginning
 
 	// Reverse search from 0 should exit instantly, not hang
-	ev.Search("match", false, true, false)
+	ev.Search("match", false, true, false, false, false)
 
 	timeout := time.After(2 * time.Second)
 	select {
@@ -3556,7 +3556,7 @@ func TestEditorView_SearchPersistence(t *testing.T) {
 	// 1. Выполняем поиск
 	ev1 := NewEditorView(piecetable.New([]byte("data")), nil, "f1.txt")
 	defer ev1.Close()
-	ev1.Search("pattern", true, true, false)
+	ev1.Search("pattern", true, true, false, false, false)
 
 	// Дожидаемся завершения асинхронного поиска
 	timeout := time.After(1 * time.Second)
@@ -3831,7 +3831,7 @@ func TestEditorView_Replace(t *testing.T) {
 	defer ev.Close()
 	ev.SetPosition(0, 0, 80, 24)
 
-	ev.Replace("abc", "def", true, true)
+	ev.Replace("abc", "def", true, false, false, false, true)
 
 	timeout := time.After(1 * time.Second)
 	for {
@@ -3934,6 +3934,93 @@ func TestEditorView_RectangularSelection_Paste(t *testing.T) {
 	}
 
 	GlobalLastClipboardWasRectangular = false
+}
+func TestEditorView_RegexpSearchReplace(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pt := piecetable.New([]byte("abc 123 abc"))
+	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
+	ev.SetPosition(0, 0, 80, 24)
+
+	ev.Replace(`abc (\d+) abc`, "found $1", true, false, true, false, true)
+
+	timeout := time.After(1 * time.Second)
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("timeout")
+		}
+		if ev.pt.String() == "found 123" {
+			break
+		}
+	}
+}
+
+func TestEditorView_RegexpSearch_CaseAndReverse(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pt := piecetable.New([]byte("Match match Match"))
+	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
+	ev.SetPosition(0, 0, 80, 24)
+
+	// 1. Регистрозависимый поиск вперед: ищем "match" -> должен найти второй "match" (индекс 6)
+	ev.Search("match", true, false, true, false, false)
+
+	timeout := time.After(1 * time.Second)
+	for !ev.selActive {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Forward regex search failed")
+		}
+	}
+	if ev.selAnchorOffset != 6 {
+		t.Errorf("Expected first match at index 6, got %d", ev.selAnchorOffset)
+	}
+
+	// 2. Регистронезависимый поиск назад с конца: ищем "match" -> должен найти третий "Match" (индекс 12)
+	ev.selActive = false
+	ev.CursorPos = 17
+	ev.Search("match", false, true, true, false, false)
+
+	timeout = time.After(1 * time.Second)
+	for !ev.selActive {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Reverse regex search failed")
+		}
+	}
+	if ev.selAnchorOffset != 12 {
+		t.Errorf("Expected reverse match at index 12, got %d", ev.selAnchorOffset)
+	}
+}
+
+func TestEditorView_WholeWordSearchReplace(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pt := piecetable.New([]byte("apple pineapple apple"))
+	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
+	ev.SetPosition(0, 0, 80, 24)
+
+	ev.Replace("apple", "orange", true, false, false, true, true)
+
+	timeout := time.After(1 * time.Second)
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("timeout")
+		}
+		if ev.pt.String() == "orange pineapple orange" {
+			break
+		}
+	}
 }
 func TestEditorView_Codepages_LoadSave(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())

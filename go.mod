@@ -4,6 +4,7 @@ go 1.25.5
 
 require (
 	github.com/alecthomas/chroma/v2 v2.15.0
+	github.com/coregx/coregex v0.12.19
 	github.com/jlaffaye/ftp v0.2.0
 	github.com/mattn/go-runewidth v0.0.15
 	github.com/mholt/archives v0.1.5
@@ -29,6 +30,7 @@ require (
 	github.com/bodgit/plumbing v1.3.0 // indirect
 	github.com/bodgit/sevenzip v1.6.4 // indirect
 	github.com/bodgit/windows v1.0.1 // indirect
+	github.com/coregx/ahocorasick v0.2.1 // indirect
 	github.com/dlclark/regexp2 v1.11.4 // indirect
 	github.com/dovydenkovas/ppmd v0.1.1 // indirect
 	github.com/dsnet/compress v0.0.2-0.20230904184137-39efe44ab707 // indirect

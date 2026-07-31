@@ -442,6 +442,8 @@ func LoadSession() {
 	LastEditorSearch = ini.GetString("EditorSearch", "Pattern", "")
 	LastEditorSearchCase = ini.GetString("EditorSearch", "CaseSensitive", "0") == "1"
 	LastEditorSearchReverse = ini.GetString("EditorSearch", "Reverse", "0") == "1"
+	LastEditorSearchRegexp = ini.GetString("EditorSearch", "Regexp", "0") == "1"
+	LastEditorSearchWholeWord = ini.GetString("EditorSearch", "WholeWord", "0") == "1"
 
 	LastFindFileMask = ini.GetString("FindFile", "Mask", "*")
 	LastFindFileText = ini.GetString("FindFile", "Text", "")
@@ -519,6 +521,8 @@ func SaveSession() {
 	sb.WriteString(fmt.Sprintf("Pattern = %s\n", LastEditorSearch))
 	sb.WriteString(fmt.Sprintf("CaseSensitive = %d\n", map[bool]int{true: 1, false: 0}[LastEditorSearchCase]))
 	sb.WriteString(fmt.Sprintf("Reverse = %d\n", map[bool]int{true: 1, false: 0}[LastEditorSearchReverse]))
+	sb.WriteString(fmt.Sprintf("Regexp = %d\n", map[bool]int{true: 1, false: 0}[LastEditorSearchRegexp]))
+	sb.WriteString(fmt.Sprintf("WholeWord = %d\n", map[bool]int{true: 1, false: 0}[LastEditorSearchWholeWord]))
 
 	sb.WriteString("\n[FindFile]\n")
 	sb.WriteString(fmt.Sprintf("Mask = %s\n", LastFindFileMask))

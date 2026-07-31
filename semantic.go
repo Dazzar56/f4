@@ -626,7 +626,7 @@ func (ev *EditorView) HandleSemanticAction(action map[string]any) bool {
 		caseSensitive := semanticBool(action["case"])
 		reverse := semanticBool(action["reverse"])
 		next := semanticBool(action["next"])
-		ev.Search(pattern, caseSensitive, reverse, next)
+		ev.Search(pattern, caseSensitive, reverse, false, false, next)
 		return true
 	case "control.focus":
 		ev.SetFocus(true)

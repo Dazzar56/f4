@@ -16,6 +16,10 @@ github.com/bodgit/sevenzip v1.6.4 h1:iHiVJfxbrB6RF4X+snI2MpVgNBKmVfGaTqZGNlMQIU0
 github.com/bodgit/sevenzip v1.6.4/go.mod h1:ZtNi5KNgHXeXg1G7WiF0IWSuFE2eG6lt/cTGlvuirO0=
 github.com/bodgit/windows v1.0.1 h1:tF7K6KOluPYygXa3Z2594zxlkbKPAOvqr97etrGNIz4=
 github.com/bodgit/windows v1.0.1/go.mod h1:a6JLwrB4KrTR5hBpp8FI9/9W9jJfeQ2h4XDXU74ZCdM=
+github.com/coregx/ahocorasick v0.2.1 h1:JsZ5Rb32/SzGiGBl3vIwA8DAnY0+E6BLBhj+4HZsAbo=
+github.com/coregx/ahocorasick v0.2.1/go.mod h1:SDcS9KTiwLP8FHNpYSO3Q3mRqrK8SYJAYpygrhcIils=
+github.com/coregx/coregex v0.12.19 h1:u9DN5qlNbOjL+fP8pVO58ZZgK2rSDfODaIY55jthWcw=
+github.com/coregx/coregex v0.12.19/go.mod h1:dsQgGpWvPcDeywbz/BK/YYyRcGhlMoXoCdlOWNqCR6Q=
 github.com/danielmorsing/gonzbee v0.0.0-20170928120813-4deb2f96db05 h1:tmM1ENb3ZH4KXfDzcdXl/dmjZN6gY9zJH3tp40e+z9I=
 github.com/danielmorsing/gonzbee v0.0.0-20170928120813-4deb2f96db05/go.mod h1:/By0gd1aCX/bU4xZTGTqg4vWxhY/RqtMlgvH66IpW6w=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
