@@ -1399,6 +1399,46 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	}
 
+	if e.VirtualKeyCode == vtinput.VK_RETURN && shift && !ctrl && !alt {
+		if fsp := pf.getActivePanel(); fsp != nil {
+			idx := fsp.GetCursorIndex()
+			if idx >= 0 && idx < len(fsp.entries) {
+				name := fsp.entries[idx].Name
+				var fullPath string
+				if name == ".." {
+					fullPath = fsp.vfs.GetPath()
+				} else {
+					fullPath = fsp.vfs.Join(fsp.vfs.GetPath(), name)
+				}
+
+				if _, isLocal := fsp.vfs.(*vfs.OSVFS); isLocal {
+					go func() {
+						var cmd *exec.Cmd
+						switch runtime.GOOS {
+						case "linux":
+							cmd = exec.Command("xdg-open", fullPath)
+						case "windows":
+							if fsp.entries[idx].IsDir || name == ".." {
+								cmd = exec.Command("explorer.exe", fullPath)
+							} else {
+								cmd = exec.Command("explorer.exe", "/select,", fullPath)
+							}
+						case "darwin":
+							cmd = exec.Command("open", fullPath)
+						}
+						if cmd != nil {
+							_ = cmd.Run()
+						}
+					}()
+					return true
+				} else {
+					vtui.ShowMessage(" Error ", "Cannot open remote paths in system explorer.", []string{"&Ok"})
+					return true
+				}
+			}
+		}
+	}
+
 	// Ctrl+R forces panels refresh
 	if e.VirtualKeyCode == vtinput.VK_R && ctrl && !alt && !shift {
 		pf.RefreshAll()
