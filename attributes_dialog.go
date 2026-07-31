@@ -287,13 +287,32 @@ func showAttributesWindows(pf *PanelsFrame, v vfs.VFS, path string, item vfs.VFS
 
 	btnSet := vtui.NewButton(0, 0, "Set")
 	btnSet.IsDefault = true
+	btnSec := vtui.NewButton(0, 0, "&Security")
 	btnCancel := vtui.NewButton(0, 0, "Cancel")
+
+	var osPath string
+	if osvfs, ok := v.(*vfs.OSVFS); ok {
+		osPath, _ = osvfs.Abs(path)
+	}
+	if osPath == "" {
+		btnSec.SetDisabled(true)
+	}
+
+	btnSec.OnClick = func() {
+		if osPath != "" {
+			showNativePropertiesOS(osPath)
+		}
+	}
+
 	rowBtns := vtui.NewHBoxLayout(0, 0, 54, 1)
 	rowBtns.HorizontalAlign = vtui.AlignCenter
 	rowBtns.Spacing = 2
 	rowBtns.Add(btnSet, vtui.Margins{}, vtui.AlignTop)
+	rowBtns.Add(btnSec, vtui.Margins{}, vtui.AlignTop)
 	rowBtns.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
+
 	dlg.AddItem(btnSet)
+	dlg.AddItem(btnSec)
 	dlg.AddItem(btnCancel)
 	mainVBox.Add(rowBtns, vtui.Margins{Top: 1}, vtui.AlignFill)
 
