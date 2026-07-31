@@ -58,7 +58,7 @@ var Lng = map[string]string{
 	"Menu.Commands": "Commands",
 	"Menu.Options":  "Options",
 	"Menu.Right":    "Right",
-	"Menu.Exit":     "Exit",
+	"Menu.Exit":     "E&xit",
 	// Files Menu specific strings
 	"Menu.Files.View":              "View",
 	"Menu.Files.Edit":              "Edit",
@@ -79,7 +79,7 @@ var Lng = map[string]string{
 	"Menu.EditorSettings":          "Editor settings",
 	"Menu.AppearanceSettings":      "Appearance settings",
 	"Menu.ConfirmationsSettings":   "Confirmations",
-	"Menu.AutoUpdateSettings":      "A&uto update",
+	"Menu.AutoUpdateSettings":      "Auto &update",
 	"Menu.Options.Plugins":         "Manage plugins",
 	"EditorSettings.Title":         " Editor settings ",
 	"EditorSettings.AutoComplete":  "Enable &Autocomplete",
