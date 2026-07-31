@@ -199,7 +199,7 @@ func NewPanelsFrame() *PanelsFrame {
 			{Text: "&" + Msg("Menu.AppearanceSettings"), Command: CmAppearanceSettings},
 			{Text: "&" + Msg("Menu.ConfirmationsSettings"), Command: CmConfirmationsSettings},
 			{Separator: true},
-			{Text: "&" + Msg("Menu.AutoUpdateSettings"), Command: CmUpdateSettings},
+			{Text: Msg("Menu.AutoUpdateSettings"), Command: CmUpdateSettings},
 			{Separator: true},
 			{Text: "&" + Msg("Menu.Options.Plugins"), Command: CmPlugins},
 		}},

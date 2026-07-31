@@ -79,7 +79,7 @@ var Lng = map[string]string{
 	"Menu.EditorSettings":          "Editor settings",
 	"Menu.AppearanceSettings":      "Appearance settings",
 	"Menu.ConfirmationsSettings":   "Confirmations",
-	"Menu.AutoUpdateSettings":      "Auto update",
+	"Menu.AutoUpdateSettings":      "A&uto update",
 	"Menu.Options.Plugins":         "Manage plugins",
 	"EditorSettings.Title":         " Editor settings ",
 	"EditorSettings.AutoComplete":  "Enable &Autocomplete",
