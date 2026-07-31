@@ -3543,25 +3543,32 @@ func TestPanelsFrame_CtrlArrows_ResizePanels(t *testing.T) {
 	}
 	pf.cmdLine.Edit.SetText("")
 
-	// Height: Ctrl+Up shrinks panel area (heightDecrement +1, boundary
-	// moves up), Ctrl+Down grows it back. Ctrl+Down at 0 must clamp,
-	// not go negative.
-	pf.heightDecrement = 0
+	// Height: Ctrl+Up shrinks the panel area from the bottom (both
+	// leftHeightDecrement and rightHeightDecrement +1, moving both
+	// panels' bottom edge up in lockstep). Ctrl+Down reverses it.
+	// Ctrl+Down at 0 must clamp, not go negative.
+	pf.leftHeightDecrement = 0
+	pf.rightHeightDecrement = 0
 	pf.ResizeConsole(80, 25)
 	basePanelH := panelHeight(pf.panels[0])
 
 	send(pf, vtinput.VK_UP)
-	if pf.heightDecrement != 1 {
-		t.Errorf("Ctrl+Up: heightDecrement=%d, want 1", pf.heightDecrement)
+	if pf.leftHeightDecrement != 1 || pf.rightHeightDecrement != 1 {
+		t.Errorf("Ctrl+Up: heightDecrements=%d/%d, want 1/1",
+			pf.leftHeightDecrement, pf.rightHeightDecrement)
 	}
 	if got := panelHeight(pf.panels[0]); got != basePanelH-1 {
 		t.Errorf("Ctrl+Up: panel height=%d, want %d", got, basePanelH-1)
 	}
+	if got := panelHeight(pf.panels[1]); got != basePanelH-1 {
+		t.Errorf("Ctrl+Up: right panel height=%d, want %d", got, basePanelH-1)
+	}
 
 	send(pf, vtinput.VK_DOWN)
 	send(pf, vtinput.VK_DOWN) // Second Down at 0 should be a no-op (clamp).
-	if pf.heightDecrement != 0 {
-		t.Errorf("Ctrl+Down past 0: heightDecrement=%d, want 0 (clamp)", pf.heightDecrement)
+	if pf.leftHeightDecrement != 0 || pf.rightHeightDecrement != 0 {
+		t.Errorf("Ctrl+Down past 0: heightDecrements=%d/%d, want 0/0 (clamp)",
+			pf.leftHeightDecrement, pf.rightHeightDecrement)
 	}
 
 	// Width clamp: on an 80-col terminal, maxWD = 40 - 10 = 30. Push past it.
@@ -3572,5 +3579,63 @@ func TestPanelsFrame_CtrlArrows_ResizePanels(t *testing.T) {
 	}
 	if pf.widthDecrement != 30 {
 		t.Errorf("width clamp: widthDecrement=%d, want 30", pf.widthDecrement)
+	}
+}
+
+// TestPanelsFrame_CtrlClear_ResetsLayoutDecrements verifies that Ctrl+Clear
+// (NumPad 5 with NumLock off) zeroes widthDecrement / leftHeightDecrement /
+// rightHeightDecrement in one shot, matching far2l's Ctrl+Clear.
+func TestPanelsFrame_CtrlClear_ResetsLayoutDecrements(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pf := setupMockPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	pf.widthDecrement = 5
+	pf.leftHeightDecrement = 3
+	pf.rightHeightDecrement = 4
+	AppConfig.WidthDecrement = 5
+	AppConfig.LeftHeightDecrement = 3
+	AppConfig.RightHeightDecrement = 4
+	defer func() {
+		AppConfig.WidthDecrement = 0
+		AppConfig.LeftHeightDecrement = 0
+		AppConfig.RightHeightDecrement = 0
+	}()
+
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode:  vtinput.VK_CLEAR,
+		ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+
+	if pf.widthDecrement != 0 || pf.leftHeightDecrement != 0 || pf.rightHeightDecrement != 0 {
+		t.Errorf("Ctrl+Clear: fields = %d/%d/%d, want 0/0/0",
+			pf.widthDecrement, pf.leftHeightDecrement, pf.rightHeightDecrement)
+	}
+	if AppConfig.WidthDecrement != 0 || AppConfig.LeftHeightDecrement != 0 || AppConfig.RightHeightDecrement != 0 {
+		t.Errorf("Ctrl+Clear: AppConfig = %d/%d/%d, want 0/0/0",
+			AppConfig.WidthDecrement, AppConfig.LeftHeightDecrement, AppConfig.RightHeightDecrement)
+	}
+}
+
+// TestPanelsFrame_LayoutDecrements_InitFromAppConfig verifies that a
+// fresh PanelsFrame picks up saved layout offsets from AppConfig so a
+// restart restores the last on-disk state.
+func TestPanelsFrame_LayoutDecrements_InitFromAppConfig(t *testing.T) {
+	oldW, oldL, oldR := AppConfig.WidthDecrement, AppConfig.LeftHeightDecrement, AppConfig.RightHeightDecrement
+	AppConfig.WidthDecrement = -3
+	AppConfig.LeftHeightDecrement = 4
+	AppConfig.RightHeightDecrement = 5
+	defer func() {
+		AppConfig.WidthDecrement, AppConfig.LeftHeightDecrement, AppConfig.RightHeightDecrement = oldW, oldL, oldR
+	}()
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+
+	if pf.widthDecrement != -3 || pf.leftHeightDecrement != 4 || pf.rightHeightDecrement != 5 {
+		t.Errorf("init from AppConfig: got %d/%d/%d, want -3/4/5",
+			pf.widthDecrement, pf.leftHeightDecrement, pf.rightHeightDecrement)
 	}
 }

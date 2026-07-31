@@ -116,10 +116,14 @@ type PanelsFrame struct {
 	// Panel geometry offsets, adjusted by Ctrl+Left/Right (width) and
 	// Ctrl+Up/Down (height). Names and semantics match far2l's [Layout]:
 	// widthDecrement > 0 grows the right panel, < 0 grows the left;
-	// heightDecrement >= 0 shrinks BOTH panels from the bottom, growing
-	// the terminal area above them.
-	widthDecrement  int
-	heightDecrement int
+	// leftHeightDecrement / rightHeightDecrement >= 0 shrink the
+	// corresponding panel from the bottom, growing the terminal area
+	// above it. Ctrl+Up/Down bumps both symmetrically for now — the
+	// asymmetric Ctrl+Shift+Up/Down handler will come as a follow-up
+	// PR, which is why the fields are split already.
+	widthDecrement       int
+	leftHeightDecrement  int
+	rightHeightDecrement int
 
 	// Integrated Terminal
 	pty        PtyBackend
@@ -154,6 +158,9 @@ func NewPanelsFrame() *PanelsFrame {
 	pf.lastShowPanels = true
 	pf.showLeftPanel = true
 	pf.showRightPanel = true
+	pf.widthDecrement = AppConfig.WidthDecrement
+	pf.leftHeightDecrement = AppConfig.LeftHeightDecrement
+	pf.rightHeightDecrement = AppConfig.RightHeightDecrement
 
 	pf.menuBar = vtui.NewMenuBar(nil)
 	pf.menuBar.SetOwner(pf)
@@ -506,21 +513,28 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 	}
 
 	// 2. Panel Area: Leaves one additional line for the f4 CommandLine.
-	// heightDecrement shrinks the panel area from the bottom; the freed
-	// rows go to the terminal area above (matches far2l's LeftHeightDecrement/
-	// RightHeightDecrement, applied symmetrically here).
-	hd := pf.heightDecrement
-	if maxHD := h - 7; maxHD > 0 && hd > maxHD {
-		hd = maxHD
-	}
-	if hd < 0 {
-		hd = 0
-	}
-	panelY2 := h - 2 - hd
+	// leftHeightDecrement / rightHeightDecrement shrink the corresponding
+	// panel from the bottom; the freed rows go to the terminal area above
+	// (matches far2l's [Layout] section of the same name).
+	basePanelY2 := h - 2
 	if pf.showKeyBar {
-		panelY2 = h - 3 - hd
+		basePanelY2 = h - 3
 	}
-	panelH := panelY2 - contentY1 + 1
+	maxHD := h - 7
+	clampHD := func(hd int) int {
+		if hd < 0 {
+			return 0
+		}
+		if maxHD > 0 && hd > maxHD {
+			return maxHD
+		}
+		return hd
+	}
+	leftPanelY2 := basePanelY2 - clampHD(pf.leftHeightDecrement)
+	rightPanelY2 := basePanelY2 - clampHD(pf.rightHeightDecrement)
+	// panelH is only used to seed the two panels on first construction;
+	// after that each panel takes its own height from SetPosition below.
+	panelH := basePanelY2 - contentY1 + 1
 	if panelH < 0 {
 		panelH = 0
 	}
@@ -545,16 +559,18 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 		pf.panels[0] = NewFileSystemPanel(0, contentY1, leftW, panelH, vfs.NewOSVFS("."))
 		pf.panels[1] = NewFileSystemPanel(leftW, contentY1, rightW, panelH, vfs.NewOSVFS("."))
 	} else {
-		pf.panels[0].SetPosition(0, contentY1, leftW-1, panelY2)
-		pf.panels[1].SetPosition(leftW, contentY1, w-1, panelY2)
+		pf.panels[0].SetPosition(0, contentY1, leftW-1, leftPanelY2)
+		pf.panels[1].SetPosition(leftW, contentY1, w-1, rightPanelY2)
 
 		for i, p := range pf.panels {
 			width := leftW
+			panelY2Cur := leftPanelY2
 			if i == 1 {
 				width = rightW
+				panelY2Cur = rightPanelY2
 			}
 			if fsp, ok := p.(*FileSystemPanel); ok {
-				fsp.Resize(width, panelH)
+				fsp.Resize(width, panelY2Cur-contentY1+1)
 			}
 		}
 	}
@@ -641,7 +657,7 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 		// Показываем терминал под панелями если: одна из панелей скрыта
 		// (терминал занимает освободившуюся половину), либо панели уменьшены
 		// по высоте (Ctrl+Up) и терминал должен просвечивать снизу.
-		if !pf.showLeftPanel || !pf.showRightPanel || pf.heightDecrement > 0 {
+		if !pf.showLeftPanel || !pf.showRightPanel || pf.leftHeightDecrement > 0 || pf.rightHeightDecrement > 0 {
 			pf.termView.SetVisible(true)
 			pf.termView.Show(scr)
 		} else {
@@ -896,6 +912,8 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			next := pf.widthDecrement + delta
 			if maxWD := (pf.lastW / 2) - 10; maxWD > 0 && next <= maxWD && next >= -maxWD {
 				pf.widthDecrement = next
+				AppConfig.WidthDecrement = next
+				RequestSaveConfig()
 				pf.ResizeConsole(pf.lastW, pf.lastH)
 				vtui.FrameManager.HardRefresh()
 			}
@@ -909,9 +927,8 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 
 	// Ctrl+Up / Ctrl+Down — grow/shrink the panel-area vs terminal-area
 	// split. In far2l this drives both LeftHeightDecrement and
-	// RightHeightDecrement symmetrically; we keep them merged into a
-	// single heightDecrement field. Asymmetric Ctrl+Shift+Up/Down is a
-	// deliberate follow-up.
+	// RightHeightDecrement symmetrically (asymmetric Ctrl+Shift+Up/Down
+	// is a deliberate follow-up). We bump both fields in lockstep here.
 	if (e.VirtualKeyCode == vtinput.VK_UP || e.VirtualKeyCode == vtinput.VK_DOWN) && ctrl && !alt && !shift && e.KeyDown {
 		if pf.showPanels && pf.cmdLine.Edit.GetText() == "" {
 			// Ctrl+Up moves the panels' bottom edge up (shrinks them,
@@ -920,15 +937,37 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			if e.VirtualKeyCode == vtinput.VK_UP {
 				delta = 1
 			}
-			next := pf.heightDecrement + delta
+			nextL := pf.leftHeightDecrement + delta
+			nextR := pf.rightHeightDecrement + delta
 			maxHD := pf.lastH - 7
-			if next >= 0 && (maxHD <= 0 || next <= maxHD) {
-				pf.heightDecrement = next
+			if nextL >= 0 && nextR >= 0 && (maxHD <= 0 || (nextL <= maxHD && nextR <= maxHD)) {
+				pf.leftHeightDecrement = nextL
+				pf.rightHeightDecrement = nextR
+				AppConfig.LeftHeightDecrement = nextL
+				AppConfig.RightHeightDecrement = nextR
+				RequestSaveConfig()
 				pf.ResizeConsole(pf.lastW, pf.lastH)
 				vtui.FrameManager.HardRefresh()
 			}
 			return true
 		}
+	}
+
+	// Ctrl+Clear (NumPad 5 with NumLock off) resets all three layout
+	// decrements to 0, matching far2l's Ctrl+Clear.
+	if e.VirtualKeyCode == vtinput.VK_CLEAR && ctrl && !alt && !shift && e.KeyDown {
+		if pf.showPanels && (pf.widthDecrement != 0 || pf.leftHeightDecrement != 0 || pf.rightHeightDecrement != 0) {
+			pf.widthDecrement = 0
+			pf.leftHeightDecrement = 0
+			pf.rightHeightDecrement = 0
+			AppConfig.WidthDecrement = 0
+			AppConfig.LeftHeightDecrement = 0
+			AppConfig.RightHeightDecrement = 0
+			RequestSaveConfig()
+			pf.ResizeConsole(pf.lastW, pf.lastH)
+			vtui.FrameManager.HardRefresh()
+		}
+		return true
 	}
 
 	// Raw input mode fallback for active shell commands (non-AltScreen, e.g. ping).

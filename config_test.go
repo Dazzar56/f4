@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -186,5 +187,65 @@ func TestConfig_GuiDimensionsPersistence(t *testing.T) {
 	}
 	if AppConfig.ConfirmExit {
 		t.Error("Expected ConfirmExit to be loaded as false, got true")
+	}
+}
+
+// TestConfig_LayoutRoundTrip verifies that the [Layout] section persists
+// our three known keys and round-trips any unknown keys (e.g. far2l's
+// FullscreenHelp / PanelsDisposition) untouched on save.
+func TestConfig_LayoutRoundTrip(t *testing.T) {
+	tmpDir := t.TempDir()
+	iniPath := filepath.Join(tmpDir, "settings.ini")
+
+	origUserPathFunc := getUserConfigIniPath
+	origPathsFunc := getConfigIniPaths
+	getUserConfigIniPath = func() string { return iniPath }
+	getConfigIniPaths = func() []string { return []string{iniPath} }
+	oldCfg := AppConfig
+	defer func() {
+		getUserConfigIniPath = origUserPathFunc
+		getConfigIniPaths = origPathsFunc
+		AppConfig = oldCfg
+	}()
+
+	// Seed a config file with our three keys AND two far2l-only keys.
+	seed := "[Layout]\n" +
+		"WidthDecrement=3\n" +
+		"LeftHeightDecrement=5\n" +
+		"RightHeightDecrement=7\n" +
+		"FullscreenHelp=1\n" +
+		"PanelsDisposition=2\n"
+	if err := os.WriteFile(iniPath, []byte(seed), 0644); err != nil {
+		t.Fatalf("write seed: %v", err)
+	}
+
+	LoadConfig()
+	if AppConfig.WidthDecrement != 3 || AppConfig.LeftHeightDecrement != 5 || AppConfig.RightHeightDecrement != 7 {
+		t.Errorf("LoadConfig [Layout] values: W=%d L=%d R=%d, want 3/5/7",
+			AppConfig.WidthDecrement, AppConfig.LeftHeightDecrement, AppConfig.RightHeightDecrement)
+	}
+	if AppConfig.LayoutExtras["FullscreenHelp"] != "1" || AppConfig.LayoutExtras["PanelsDisposition"] != "2" {
+		t.Errorf("LoadConfig extras: %v", AppConfig.LayoutExtras)
+	}
+
+	// Save and re-read the file — extras must survive verbatim.
+	AppConfig.WidthDecrement = -2
+	SaveConfig()
+	out, err := os.ReadFile(iniPath)
+	if err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	body := string(out)
+	for _, want := range []string{
+		"[Layout]",
+		"FullscreenHelp=1",
+		"LeftHeightDecrement=5",
+		"PanelsDisposition=2",
+		"RightHeightDecrement=7",
+		"WidthDecrement=-2",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("SaveConfig missing %q in output:\n%s", want, body)
+		}
 	}
 }
