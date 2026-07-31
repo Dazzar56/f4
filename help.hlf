@@ -7,7 +7,7 @@ f4 is an experimental Far Manager / far2l clone in Go.
 ~View README.md~README@
 
 @Panels
-$f4 Help Index
+$f4 Help Index (Version: %Ver)
 f4 is an experimental Far Manager / far2l clone in Go.
 
 ~Viewer / Editor keys~ViewerEditor@
