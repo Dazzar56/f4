@@ -1,0 +1,132 @@
+package main
+
+import (
+	"testing"
+
+	"github.com/unxed/f4/vfs"
+	"github.com/unxed/vtinput"
+	"github.com/unxed/vtui"
+)
+
+// TestPanelsFrame_CtrlL_TogglesInfoPanel exercises far2l's Ctrl+L:
+//   - first press installs an InfoPanel on the passive side, keeping
+//     the file panel underneath alive and focus on the active side;
+//   - second press removes it (toggle);
+//   - Tab moving focus onto the alt slot closes the alt.
+func TestPanelsFrame_CtrlL_TogglesInfoPanel(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pf := setupMockPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	send := func(vk uint16, mods vtinput.ControlKeyState) {
+		pf.ProcessKey(&vtinput.InputEvent{
+			Type: vtinput.KeyEventType, KeyDown: true,
+			VirtualKeyCode:  vk,
+			ControlKeyState: mods,
+		})
+	}
+
+	// setupMockPanelsFrame sets activeIdx = 1 (right). Passive is left.
+	if pf.altPanels[0] != nil || pf.altPanels[1] != nil {
+		t.Fatal("precondition: no alt panels expected initially")
+	}
+
+	send(vtinput.VK_L, vtinput.LeftCtrlPressed)
+	if pf.altPanels[0] == nil {
+		t.Fatal("Ctrl+L should install alt panel on passive (left) side")
+	}
+	if pf.altPanels[1] != nil {
+		t.Error("active (right) side must not get an alt panel")
+	}
+	if _, ok := pf.altPanels[0].(*InfoPanel); !ok {
+		t.Errorf("expected *InfoPanel, got %T", pf.altPanels[0])
+	}
+	if _, ok := pf.panels[0].(*FileSystemPanel); !ok {
+		t.Error("file panel underneath must stay alive")
+	}
+	if pf.activeIdx != 1 {
+		t.Errorf("Ctrl+L must not move active panel; got activeIdx=%d", pf.activeIdx)
+	}
+
+	// Source of the alt panel is the current active file panel.
+	if src := pf.altPanels[0].Source(); src != pf.panels[1].(*FileSystemPanel) {
+		t.Error("alt panel source should be the active file panel")
+	}
+
+	// Second press toggles it off.
+	send(vtinput.VK_L, vtinput.LeftCtrlPressed)
+	if pf.altPanels[0] != nil {
+		t.Error("second Ctrl+L should remove alt panel")
+	}
+
+	// Install again, then Tab to the alt side — Tab must close it.
+	send(vtinput.VK_L, vtinput.LeftCtrlPressed)
+	if pf.altPanels[0] == nil {
+		t.Fatal("re-install: alt panel should be present again")
+	}
+	send(vtinput.VK_TAB, 0)
+	if pf.activeIdx != 0 {
+		t.Fatalf("Tab should switch active to left; got activeIdx=%d", pf.activeIdx)
+	}
+	if pf.altPanels[0] != nil {
+		t.Error("Tab landing on alt slot should close the alt")
+	}
+}
+
+// TestInfoPanel_ShowRenders verifies the panel renders without panic
+// for a source panel with a couple of entries and clips to its width.
+func TestInfoPanel_ShowRenders(t *testing.T) {
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+	vtui.SetDefaultPalette()
+
+	tmp := t.TempDir()
+	fsp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(tmp))
+	fsp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
+	}
+	fsp.Refresh()
+
+	ip := NewInfoPanel(fsp)
+	ip.SetPosition(0, 0, 39, 19)
+	// Should render without panic even on paths that fsSpace can't
+	// resolve; fsSpace on tmp dirs works on unix, no crash otherwise.
+	ip.Show(scr)
+
+	if ip.Kind() != "info" {
+		t.Errorf("Kind() = %q, want %q", ip.Kind(), "info")
+	}
+	if ip.Source() != fsp {
+		t.Error("Source() should return the file panel we passed")
+	}
+
+	// Focus is always false; SetFocus is a no-op.
+	ip.SetFocus(true)
+	if ip.IsFocused() {
+		t.Error("info panel must never be focused")
+	}
+}
+
+// TestFormatBytesCommas covers the raw-bytes-with-thousand-separator
+// formatter used in the info panel. Matches far2l's InsertCommas.
+func TestFormatBytesCommas(t *testing.T) {
+	const nbsp = " "
+	cases := []struct {
+		in   uint64
+		want string
+	}{
+		{0, "0"},
+		{7, "7"},
+		{999, "999"},
+		{1000, "1" + nbsp + "000"},
+		{1234567, "1" + nbsp + "234" + nbsp + "567"},
+		{8191705088, "8" + nbsp + "191" + nbsp + "705" + nbsp + "088"},
+	}
+	for _, c := range cases {
+		if got := formatBytesCommas(c.in); got != c.want {
+			t.Errorf("formatBytesCommas(%d)=%q, want %q", c.in, got, c.want)
+		}
+	}
+}

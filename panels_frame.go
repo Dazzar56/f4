@@ -97,7 +97,13 @@ type Panel interface {
 // PanelsFrame is the main frame of the f4 manager, containing left and right panels.
 type PanelsFrame struct {
 	vtui.BaseFrame
-	panels         [2]Panel
+	panels [2]Panel
+	// altPanels[i] holds an alternate view (Info / Quick view / Tree)
+	// covering slot i's file panel. When non-nil it's rendered in
+	// place of panels[i]; panels[i] stays alive underneath and is
+	// still the "logical" panel for command dispatch. Alt panels
+	// never take focus (see AltPanel in info_panel.go).
+	altPanels      [2]AltPanel
 	activeIdx      int // 0 for left, 1 for right
 	executing      bool
 	returnToPanels bool
@@ -574,6 +580,13 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 			}
 		}
 	}
+	// Keep any active alt panels aligned with their host slot.
+	if pf.altPanels[0] != nil {
+		pf.altPanels[0].SetPosition(0, contentY1, leftW-1, leftPanelY2)
+	}
+	if pf.altPanels[1] != nil {
+		pf.altPanels[1].SetPosition(leftW, contentY1, w-1, rightPanelY2)
+	}
 
 	cmdLineY := h - 1
 	if pf.showKeyBar {
@@ -665,11 +678,19 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 		}
 		if pf.showLeftPanel {
 			pf.panels[0].SetFocus(pf.activeIdx == 0)
-			pf.panels[0].Show(scr)
+			if pf.altPanels[0] != nil {
+				pf.altPanels[0].Show(scr)
+			} else {
+				pf.panels[0].Show(scr)
+			}
 		}
 		if pf.showRightPanel {
 			pf.panels[1].SetFocus(pf.activeIdx == 1)
-			pf.panels[1].Show(scr)
+			if pf.altPanels[1] != nil {
+				pf.altPanels[1].Show(scr)
+			} else {
+				pf.panels[1].Show(scr)
+			}
 		}
 	} else {
 		pf.termView.SetVisible(true)
@@ -879,6 +900,24 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		vtui.FrameManager.HardRefresh()
 		if pf.showPanels {
 			pf.RefreshAll()
+		}
+		return true
+	}
+
+	// Ctrl+L toggles the info panel on the passive side, mirroring the
+	// active file panel's selection (far2l's Ctrl+L). AltPanel is the
+	// interface Info / Quick view / Tree will all share; Ctrl+Q and
+	// Ctrl+T can plug in the same way. Closes #196.
+	if e.VirtualKeyCode == vtinput.VK_L && ctrl && !alt && !shift && e.KeyDown {
+		if pf.showPanels {
+			opp := 1 - pf.activeIdx
+			if a := pf.altPanels[opp]; a != nil && a.Kind() == "info" {
+				pf.altPanels[opp] = nil
+			} else if fsp, ok := pf.panels[pf.activeIdx].(*FileSystemPanel); ok {
+				pf.altPanels[opp] = NewInfoPanel(fsp)
+			}
+			pf.ResizeConsole(pf.lastW, pf.lastH)
+			vtui.FrameManager.HardRefresh()
 		}
 		return true
 	}
@@ -1684,6 +1723,15 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			}
 			if pf.activeIdx == 1 && !pf.showRightPanel {
 				pf.showRightPanel = true
+			}
+			// Alt panels are display-only companions to the passive
+			// side. If Tab landed on a slot that was showing one,
+			// close it — the panel there is now the active file
+			// panel again.
+			if pf.altPanels[pf.activeIdx] != nil {
+				pf.altPanels[pf.activeIdx] = nil
+				pf.ResizeConsole(pf.lastW, pf.lastH)
+				vtui.FrameManager.HardRefresh()
 			}
 			return true
 		} else {
