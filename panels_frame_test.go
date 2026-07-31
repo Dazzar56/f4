@@ -3370,6 +3370,88 @@ func TestPanelsFrame_CaptureCommands(t *testing.T) {
 		t.Error("Output was not copied to clipboard")
 	}
 }
+func TestPanelsFrame_ShiftEnter_ExplorerLaunch(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	lp := pf.panels[0].(*FileSystemPanel)
+	tmp := t.TempDir()
+	lp.vfs.SetPath(tmp)
+
+	// Create dummy file and folder
+	os.WriteFile(filepath.Join(tmp, "doc.txt"), []byte("data"), 0644)
+	os.Mkdir(filepath.Join(tmp, "sub"), 0755)
+
+	lp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: ".."}},
+		{VFSItem: vfs.VFSItem{Name: "sub", IsDir: true}},
+		{VFSItem: vfs.VFSItem{Name: "doc.txt", IsDir: false}},
+	}
+	lp.Refresh()
+	pf.activeIdx = 0
+
+	// 1. Test Shift+Enter on file "doc.txt"
+	lp.SetCursorIndex(2)
+	handled := pf.ProcessKey(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_RETURN,
+		ControlKeyState: vtinput.ShiftPressed,
+	})
+	if !handled {
+		t.Error("Expected Shift+Enter on file to be handled by PanelsFrame")
+	}
+
+	// 2. Test Shift+Enter on folder "sub"
+	lp.SetCursorIndex(1)
+	handled = pf.ProcessKey(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_RETURN,
+		ControlKeyState: vtinput.ShiftPressed,
+	})
+	if !handled {
+		t.Error("Expected Shift+Enter on folder to be handled by PanelsFrame")
+	}
+
+	// 3. Test Shift+Enter on parent folder ".."
+	lp.SetCursorIndex(0)
+	handled = pf.ProcessKey(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_RETURN,
+		ControlKeyState: vtinput.ShiftPressed,
+	})
+	if !handled {
+		t.Error("Expected Shift+Enter on '..' to be handled by PanelsFrame")
+	}
+
+	// 4. Test on non-local VFS (e.g. NullVFS) -> should show warning but remain handled
+	lp.vfs = vfs.NewNullVFS(0)
+	lp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "file.txt"}}}
+	lp.Refresh()
+	lp.SetCursorIndex(0)
+
+	handled = pf.ProcessKey(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_RETURN,
+		ControlKeyState: vtinput.ShiftPressed,
+	})
+	if !handled {
+		t.Error("Expected Shift+Enter on non-local VFS to be handled (with warning dialog)")
+	}
+
+	// Clean up any warning dialog pushed on top
+	if vtui.FrameManager.GetTopFrameType() == vtui.TypeDialog {
+		vtui.FrameManager.GetTopFrame().SetExitCode(-1)
+		vtui.FrameManager.Pop()
+	}
+}
 
 type mockNestedVFS struct {
 	mockUpdateVFS

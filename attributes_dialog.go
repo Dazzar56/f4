@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"reflect"
+	"runtime"
 	"strings"
 	"time"
 
@@ -19,6 +21,32 @@ func padLabel(s string) string {
 		s += " "
 	}
 	return s
+}
+func isLocalOSVFS(v any) bool {
+	if v == nil {
+		return false
+	}
+	val := reflect.ValueOf(v)
+	if val.Kind() == reflect.Interface {
+		val = val.Elem()
+	}
+	if val.Kind() == reflect.Ptr {
+		if _, ok := val.Interface().(*vfs.OSVFS); ok {
+			return true
+		}
+		val = val.Elem()
+	}
+	if val.Kind() == reflect.Struct {
+		for i := 0; i < val.NumField(); i++ {
+			field := val.Field(i)
+			if field.CanInterface() {
+				if isLocalOSVFS(field.Interface()) {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 func ShowAttributesDialog(pf *PanelsFrame, v vfs.VFS, path string, item vfs.VFSItem) {
@@ -291,8 +319,18 @@ func showAttributesWindows(pf *PanelsFrame, v vfs.VFS, path string, item vfs.VFS
 	btnCancel := vtui.NewButton(0, 0, "Cancel")
 
 	var osPath string
-	if osvfs, ok := v.(*vfs.OSVFS); ok {
-		osPath, _ = osvfs.Abs(path)
+	if isLocalOSVFS(v) {
+		if abs, err := v.Abs(path); err == nil {
+			if runtime.GOOS == "windows" {
+				if (len(abs) >= 2 && abs[1] == ':') || strings.HasPrefix(abs, "\\\\") {
+					osPath = abs
+				}
+			} else {
+				if strings.HasPrefix(abs, "/") {
+					osPath = abs
+				}
+			}
+		}
 	}
 	if osPath == "" {
 		btnSec.SetDisabled(true)
