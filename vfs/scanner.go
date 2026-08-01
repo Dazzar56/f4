@@ -41,6 +41,21 @@ type PhysicalSizer interface {
 	SupportsPhysicalSize() bool
 }
 
+// ScanOptions tunes the behaviour of CalculateStatsWithOptions.
+// The zero value is the historical, size-inflating behaviour that
+// copy/move pre-scans rely on (a symlink-to-dir is walked as if it
+// were a real directory); consumers that want find/far2l-style
+// leaf semantics should flip the flag explicitly.
+type ScanOptions struct {
+	// FollowSymlinkDirs decides how symlinks that resolve to a
+	// directory are treated. true (default via plain CalculateStats):
+	// recurse into the target — same tree walked twice if the link
+	// points inside the scan root. false (used by QuickView): treat
+	// the symlink as a leaf, counting it once with its own tiny
+	// size, matching what `find` and far2l report.
+	FollowSymlinkDirs bool
+}
+
 // FastScanner is an optional interface for VFS implementations.
 // If a VFS implements this, it means it can offload the tree traversal
 // to the remote server (e.g., FISH+), drastically reducing network roundtrips.
@@ -54,15 +69,37 @@ type FastScanner interface {
 // PhysicalSize (see VFSItem.PhysicalSize) — OSVFS does this on Unix
 // via stat.Blocks and on Windows via GetCompressedFileSize; remote
 // VFSes leave it zero and the consumer hides the metric.
+//
+// This entry point preserves historical behaviour (symlink-to-dir is
+// walked as if it were a real directory) so file_ops / actions
+// pre-scan ETAs continue to match what the actual copy path does.
+// Callers that want find / far2l semantics — count symlinks as
+// leaves — should use CalculateStatsWithOptions instead.
 func CalculateStats(ctx context.Context, v VFS, basePath string, names []string, cb ScanCallback) (OpStats, error) {
-	if fs, ok := v.(FastScanner); ok {
-		return fs.Scan(ctx, basePath, names, cb)
+	return CalculateStatsWithOptions(ctx, v, basePath, names, ScanOptions{FollowSymlinkDirs: true}, cb)
+}
+
+// CalculateStatsWithOptions is CalculateStats with a knob. See
+// ScanOptions for the available toggles. FastScanner VFSes fall back
+// to the generic walk since the remote-side Scan protocol has no
+// place to carry an option struct.
+func CalculateStatsWithOptions(ctx context.Context, v VFS, basePath string, names []string, opts ScanOptions, cb ScanCallback) (OpStats, error) {
+	if opts.FollowSymlinkDirs {
+		// Historical path — try the FastScanner shortcut for VFSes
+		// that implement it (they can offload the walk to the server).
+		if fs, ok := v.(FastScanner); ok {
+			return fs.Scan(ctx, basePath, names, cb)
+		}
 	}
-	return GenericScan(ctx, v, basePath, names, cb)
+	return genericScan(ctx, v, basePath, names, opts, cb)
 }
 
 // GenericScan performs a recursive, client-side tree traversal to gather stats.
 func GenericScan(ctx context.Context, v VFS, basePath string, names []string, cb ScanCallback) (OpStats, error) {
+	return genericScan(ctx, v, basePath, names, ScanOptions{FollowSymlinkDirs: true}, cb)
+}
+
+func genericScan(ctx context.Context, v VFS, basePath string, names []string, opts ScanOptions, cb ScanCallback) (OpStats, error) {
 	var totalStats OpStats
 
 	for _, name := range names {
@@ -78,7 +115,7 @@ func GenericScan(ctx context.Context, v VFS, basePath string, names []string, cb
 			return totalStats, err
 		}
 
-		err = scanRecursive(ctx, v, fullPath, itemStat, &totalStats, cb, 0)
+		err = scanRecursive(ctx, v, fullPath, itemStat, &totalStats, cb, 0, opts)
 		if err != nil {
 			return totalStats, err
 		}
@@ -87,7 +124,7 @@ func GenericScan(ctx context.Context, v VFS, basePath string, names []string, cb
 	return totalStats, nil
 }
 
-func scanRecursive(ctx context.Context, v VFS, currentPath string, item VFSItem, stats *OpStats, cb ScanCallback, depth int) error {
+func scanRecursive(ctx context.Context, v VFS, currentPath string, item VFSItem, stats *OpStats, cb ScanCallback, depth int, opts ScanOptions) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -118,6 +155,18 @@ func scanRecursive(ctx context.Context, v VFS, currentPath string, item VFSItem,
 		}
 	}
 
+	// find / far2l-style leaf semantics: a symlink is counted once,
+	// no matter what it points at, and we do NOT walk into its
+	// target. Only fires when the caller opted out of the historical
+	// follow-through — copy/move pre-scans still recurse because the
+	// actual copy path recurses.
+	if item.IsSymlink && !opts.FollowSymlinkDirs {
+		stats.Files++
+		stats.Bytes += item.Size
+		stats.PhysicalBytes += item.PhysicalSize
+		return nil
+	}
+
 	if !item.IsDir {
 		stats.Files++
 		stats.Bytes += item.Size
@@ -144,7 +193,7 @@ func scanRecursive(ctx context.Context, v VFS, currentPath string, item VFSItem,
 			continue
 		}
 		childPath := v.Join(currentPath, child.Name)
-		err := scanRecursive(ctx, v, childPath, child, stats, cb, depth+1)
+		err := scanRecursive(ctx, v, childPath, child, stats, cb, depth+1, opts)
 		if err != nil {
 			return err
 		}

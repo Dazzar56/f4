@@ -50,6 +50,13 @@ type VFSItem struct {
 	Mode         string
 	IsExecutable bool
 	IsHidden     bool
+	// IsSymlink is true when the entry is a filesystem symlink (or a
+	// Windows reparse point that Go reports as a symlink). IsDir may
+	// still be true for symlink-to-directory — the two flags are
+	// orthogonal, and callers that want find/far2l-style "leaf" scan
+	// semantics should treat any IsSymlink as a leaf regardless of
+	// IsDir. Populated by OSVFS.ReadDir; other VFSes leave it false.
+	IsSymlink bool
 	// PhysicalSize is the real on-disk footprint of the item (compressed
 	// size on NTFS / actual allocated blocks on Unix). Zero means the
 	// platform didn't populate it (network VFSes, non-Unix/-Windows).

@@ -227,3 +227,65 @@ func (m *mockFastVFS) Scan(ctx context.Context, basePath string, names []string,
 	m.scanCalled = true
 	return OpStats{Bytes: 999, Files: 1, Dirs: 1}, nil
 }
+
+// TestGenericScan_SymlinkDirLeafVsFollow verifies both walk modes on
+// a tree with a symlink-to-directory. Layout:
+//
+//	root/
+//	  real/
+//	    a.bin (100)
+//	    b.bin (50)
+//	  link -> real
+//
+// FollowSymlinkDirs=true (default; copy/move pre-scan) walks
+// root/link/* a second time, so files/bytes are doubled. false
+// (QuickView) counts the link once as a leaf — same numbers `find`
+// and far2l would report.
+func TestGenericScan_SymlinkDirLeafVsFollow(t *testing.T) {
+	tmp := t.TempDir()
+	real := filepath.Join(tmp, "real")
+	if err := os.Mkdir(real, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(real, "a.bin"), make([]byte, 100), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(real, "b.bin"), make([]byte, 50), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(real, filepath.Join(tmp, "link")); err != nil {
+		t.Skipf("cannot create symlink (fs may not support it): %v", err)
+	}
+
+	v := NewOSVFS(tmp)
+
+	// Follow-through mode: two file entries under real/ plus two more
+	// under link/ (walked as if it were a directory) — 4 files, 300 B.
+	follow, err := CalculateStatsWithOptions(context.Background(), v, tmp, []string{"."}, ScanOptions{FollowSymlinkDirs: true}, nil)
+	if err != nil {
+		t.Fatalf("follow scan: %v", err)
+	}
+	if follow.Files != 4 || follow.Bytes != 300 {
+		t.Errorf("follow: Files=%d Bytes=%d, want 4/300", follow.Files, follow.Bytes)
+	}
+
+	// Leaf mode: link counted once as a plain entry — 2 file entries
+	// (a.bin + b.bin) + 1 for the link, and only real's bytes.
+	leaf, err := CalculateStatsWithOptions(context.Background(), v, tmp, []string{"."}, ScanOptions{FollowSymlinkDirs: false}, nil)
+	if err != nil {
+		t.Fatalf("leaf scan: %v", err)
+	}
+	if leaf.Files != 3 {
+		t.Errorf("leaf: Files=%d, want 3 (2 real files + 1 symlink counted as leaf)", leaf.Files)
+	}
+	// Symlink's Size is the length of the target path — some bytes but
+	// certainly less than the sum of the two files it points at (150).
+	// The important assertion is that we did NOT double-count real/'s
+	// contents through the link.
+	if leaf.Bytes >= follow.Bytes {
+		t.Errorf("leaf.Bytes (%d) should be well below follow.Bytes (%d)", leaf.Bytes, follow.Bytes)
+	}
+	if leaf.Bytes < 150 {
+		t.Errorf("leaf.Bytes (%d) should include the two real files (150) + symlink target length", leaf.Bytes)
+	}
+}

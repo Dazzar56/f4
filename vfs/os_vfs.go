@@ -184,6 +184,7 @@ func (v *OSVFS) ReadDir(ctx context.Context, path string, onChunk func([]VFSItem
 				isExec = info.Mode().Perm()&0111 != 0
 			}
 			isDir := e.IsDir()
+			isSymlink := e.Type()&os.ModeSymlink != 0
 			// If it's not a direct directory, it might be a symlink or a Windows Junction.
 			// If it's not a regular file, ask the OS to resolve the final target.
 			if !isDir && !e.Type().IsRegular() {
@@ -197,6 +198,7 @@ func (v *OSVFS) ReadDir(ctx context.Context, path string, onChunk func([]VFSItem
 				Name:         e.Name(),
 				Size:         size,
 				IsDir:        isDir,
+				IsSymlink:    isSymlink,
 				MTime:        mtime,
 				IsExecutable: isExec,
 				IsHidden:     isHidden(entryPath, e.Name(), info),
