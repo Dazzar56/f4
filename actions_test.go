@@ -1096,6 +1096,43 @@ func TestActionPanelSettings_Flow(t *testing.T) {
 	top.SetExitCode(-1)
 	vtui.FrameManager.Pop()
 }
+func TestActionLanguage_Flow(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	// 1. Вызываем диалог выбора языка
+	actionLanguage(pf)
+
+	top := vtui.FrameManager.GetTopFrame()
+	if top == nil {
+		t.Fatalf("Expected menu, got nil")
+	}
+
+	menu, ok := top.(*vtui.VMenu)
+	if !ok {
+		t.Fatalf("Expected VMenu for Language selection, got %T", top)
+	}
+
+	// 2. Проверяем, что в списке есть как минимум дефолтный English
+	foundEnglish := false
+	for _, itm := range menu.Items {
+		if itm.Text == "English" {
+			foundEnglish = true
+			break
+		}
+	}
+	if !foundEnglish {
+		t.Errorf("English language option not found in menu")
+	}
+
+	// 3. Закрываем
+	menu.Close()
+	vtui.FrameManager.Pop()
+}
 func TestActionManagePlugins_Flow(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	SetDefaultF4Palette()

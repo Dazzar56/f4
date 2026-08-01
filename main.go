@@ -312,12 +312,12 @@ func InitCore() *vtui.ScreenBuf {
 }
 
 func SetupUI() {
-	vtui.ConfigDiskLogging(true)
+	vtui.ConfigDiskLogging(os.Getenv("VTUI_DEBUG") != "")
 	vtui.DebugLog("=== F4 STARTUP [%s] PID:%d ===", getFormattedVersionInfo(), os.Getpid())
 
 	SetDefaultF4Palette()
-	InitLang()
 	LoadConfig()
+	InitLang()
 	InitHelpSystem()
 	if err := ApplyColorStyle(AppConfig.ColorStyle); err != nil {
 		vtui.DebugLog("COLORS: %v; falling back to Modern", err)

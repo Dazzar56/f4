@@ -200,6 +200,8 @@ func NewPanelsFrame() *PanelsFrame {
 		// Uncomment to test crash logging
 		//{Label: "&" + Msg("Menu.Options"), SubItems: []vtui.MenuItem{{Text: "Placeholder"}}},
 		{Label: "&" + Msg("Menu.Options"), SubItems: []vtui.MenuItem{
+			{Text: "&" + Msg("Menu.Language"), Command: CmLanguage},
+			{Separator: true},
 			{Text: "&" + Msg("Menu.PanelSettings"), Command: CmPanelSettings},
 			{Text: "&" + Msg("Menu.EditorSettings"), Command: CmEditorSettings},
 			{Text: "&" + Msg("Menu.AppearanceSettings"), Command: CmAppearanceSettings},
@@ -2090,6 +2092,9 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 		return true
 	case CmConfirmationsSettings:
 		actionConfirmationsSettings(pf)
+		return true
+	case CmLanguage:
+		actionLanguage(pf)
 		return true
 	case CmUpdateSettings:
 		actionUpdateSettings(pf)

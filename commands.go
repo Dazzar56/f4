@@ -41,6 +41,7 @@ const (
 	CmEditorSettings
 	CmAppearanceSettings
 	CmConfirmationsSettings
+	CmLanguage
 	CmPlugins
 	CmUpdateSettings
 	CmBookmarks

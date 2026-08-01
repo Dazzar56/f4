@@ -5,14 +5,15 @@ import (
 	_ "embed"
 	"io"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 
 	"github.com/unxed/vtui"
 )
 
-//go:embed help.hlf
-var helpData string
+//go:embed help/en.hlf
+var defaultHelpData string
 
 //go:embed README.md
 var readmeData string
@@ -69,14 +70,53 @@ func parseMarkdownToHelpTopic(name string, mdContent string) *vtui.HelpTopic {
 }
 
 func InitHelpSystem() {
-	versionedHelp := strings.ReplaceAll(helpData, "%Ver", getLongVersionInfo())
+	files := map[string]string{}
+
+	versionedEnglishHelp := strings.ReplaceAll(defaultHelpData, "%Ver", getLongVersionInfo())
+	files["help.hlf"] = versionedEnglishHelp
+
+	lang := AppConfig.Language
+	if lang == "" {
+		lang = "en"
+	}
+
+	hasLocalHelp := false
+	if lang != "en" && lang != "eng" {
+		exeDir := filepath.Dir(os.Args[0])
+		userDir := filepath.Join(GetF4ConfigDir(), "help")
+
+		candidates := []string{
+			filepath.Join(userDir, lang+".hlf"),
+			filepath.Join(exeDir, "help", lang+".hlf"),
+			filepath.Join("help", lang+".hlf"), // Fallback for "go run ." development
+		}
+
+		var helpContent string
+		for _, cand := range candidates {
+			if data, err := os.ReadFile(cand); err == nil {
+				helpContent = string(data)
+				vtui.DebugLog("HELP: Loaded language help file from disk: %s", cand)
+				break
+			}
+		}
+
+		if helpContent != "" {
+			versionedHelp := strings.ReplaceAll(helpContent, "%Ver", getLongVersionInfo())
+			files["help_local.hlf"] = versionedHelp
+			hasLocalHelp = true
+		}
+	}
+
 	v := &memoryHelpVFS{
-		files: map[string]string{
-			"help.hlf": versionedHelp,
-		},
+		files: files,
 	}
 	vtui.GlobalHelpEngine = vtui.NewHelpEngine(v)
+
 	_ = vtui.GlobalHelpEngine.LoadFile("help.hlf")
+
+	if hasLocalHelp {
+		_ = vtui.GlobalHelpEngine.LoadFile("help_local.hlf")
+	}
 
 	readmeTopic := parseMarkdownToHelpTopic("README", readmeData)
 	vtui.GlobalHelpEngine.AddTopic(readmeTopic)

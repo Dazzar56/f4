@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestMsg(t *testing.T) {
 	// 1. Test existing key
@@ -33,5 +36,26 @@ func TestFormatVersionSHA(t *testing.T) {
 		if got := formatVersionSHA(tt.in); got != tt.want {
 			t.Errorf("formatVersionSHA(%q) = %q, want %q", tt.in, got, tt.want)
 		}
+	}
+}
+func TestLoadLangMapFromINI(t *testing.T) {
+	iniContent := `
+[Language]
+Name=TestLang
+
+[Strings]
+Key1=Value1
+Key2=Line1\nLine2
+`
+	ini := ParseIni(strings.NewReader(iniContent))
+	m := loadLangMapFromINI(ini)
+
+	if m["Key1"] != "Value1" {
+		t.Errorf("Expected 'Value1', got %q", m["Key1"])
+	}
+
+	// Проверяем, что \n корректно превращается в реальный перенос строки
+	if m["Key2"] != "Line1\nLine2" {
+		t.Errorf("Expected unescaped newline, got %q", m["Key2"])
 	}
 }
