@@ -142,12 +142,14 @@ func scanRecursive(ctx context.Context, v VFS, currentPath string, item VFSItem,
 	// PhysicalSize is populated cheaply on Unix during ReadDir; on
 	// Windows the ReadDir path skips it to keep listings fast. Fall
 	// back to a Stat only when (a) the VFS declares it can actually
-	// produce the number (PhysicalSizer) and (b) the item plausibly
-	// has non-zero physical size. Without the capability check,
-	// archive / network VFSes would pay one lazy Stat per file
-	// across a copy/move pre-scan for a field they never fill —
-	// N+1 wasted round trips.
-	if item.PhysicalSize == 0 && item.Size > 0 {
+	// produce the number (PhysicalSizer), (b) the item plausibly has
+	// non-zero physical size, and (c) it's NOT a symlink — v.Stat
+	// resolves symlinks and would return the target inode's blocks,
+	// which is already counted through the direct path in the same
+	// walk. Without the symlink guard, a tree with N file-symlinks
+	// double-counts their targets' blocks (measured: a uv wheel
+	// cache of 59 link/target pairs added ~3.5 GB of ghost physical).
+	if item.PhysicalSize == 0 && item.Size > 0 && !item.IsSymlink {
 		if ps, ok := v.(PhysicalSizer); ok && ps.SupportsPhysicalSize() {
 			if st, err := v.Stat(ctx, currentPath); err == nil {
 				item.PhysicalSize = st.PhysicalSize

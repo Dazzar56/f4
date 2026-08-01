@@ -289,3 +289,52 @@ func TestGenericScan_SymlinkDirLeafVsFollow(t *testing.T) {
 		t.Errorf("leaf.Bytes (%d) should include the two real files (150) + symlink target length", leaf.Bytes)
 	}
 }
+
+// TestGenericScan_FileSymlinkDoesNotDoublePhysical guards against the
+// bug that shipped briefly on this branch: the scanner's lazy-Stat
+// fallback would resolve a symlink and add the target's blocks to
+// PhysicalBytes — but the same target was already counted through its
+// direct path, so every file-symlink inflated physical by its target's
+// footprint.
+//
+// Uses a RELATIVE short symlink target so ext4's "fast symlink" path
+// stores the link inside the inode (Blocks=0). That's the pathological
+// case for the bug — Lstat leaves PhysicalSize at 0, the gate opens,
+// and v.Stat then resolves the link and returns the target's blocks.
+// A long (>60 char) symlink target would allocate a block for the
+// link text (Blocks>0) and legitimately skip the gate.
+func TestGenericScan_FileSymlinkDoesNotDoublePhysical(t *testing.T) {
+	tmp := t.TempDir()
+	target := filepath.Join(tmp, "t.bin")
+	// 64 KiB — big enough that a duplicate contribution is unmistakable
+	// against the noise of a symlink's own inode blocks.
+	const targetSize = 64 * 1024
+	if err := os.WriteFile(target, make([]byte, targetSize), 0644); err != nil {
+		t.Fatal(err)
+	}
+	v := NewOSVFS(tmp)
+	before, err := CalculateStatsWithOptions(context.Background(), v, tmp, []string{"."}, ScanOptions{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before.PhysicalBytes <= 0 {
+		t.Skip("filesystem doesn't report per-file blocks (no PhysicalSize path)")
+	}
+
+	// Relative short target => fast symlink (Blocks=0 on ext4).
+	if err := os.Symlink("t.bin", filepath.Join(tmp, "l")); err != nil {
+		t.Skipf("cannot create symlink: %v", err)
+	}
+
+	for _, follow := range []bool{true, false} {
+		got, err := CalculateStatsWithOptions(context.Background(), v, tmp, []string{"."}, ScanOptions{FollowSymlinkDirs: follow}, nil)
+		if err != nil {
+			t.Fatalf("follow=%v: %v", follow, err)
+		}
+		delta := got.PhysicalBytes - before.PhysicalBytes
+		if delta >= int64(targetSize) {
+			t.Errorf("follow=%v: adding a link to a %d-byte target grew PhysicalBytes by %d — target was double-counted through the link",
+				follow, targetSize, delta)
+		}
+	}
+}
