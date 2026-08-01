@@ -281,7 +281,10 @@ func actionInstallPlugRingItem(pf *PanelsFrame, parent *vtui.Window, item PlugRi
 				vtui.ShowMessageOn(parent, " Error ", fmt.Sprintf("Installation failed:\n%v", err), []string{"&Ok"})
 			}
 		} else {
-			vtui.ShowMessageOn(parent, " Success ", "Plugin installed successfully.\nRestart f4 to load the plugin.", []string{"&Ok"})
+			if GlobalPluginManager != nil {
+				GlobalPluginManager.loadSinglePlugRingItem(item)
+			}
+			vtui.ShowMessageOn(parent, " Success ", "Plugin installed and loaded successfully!", []string{"&Ok"})
 			refresh()
 		}
 	})

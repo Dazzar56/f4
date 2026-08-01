@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -219,5 +220,115 @@ func TestCheckForPluginUpdates(t *testing.T) {
 		case <-timeout:
 			t.Fatal("Timeout waiting for update toast")
 		}
+	}
+}
+func TestPlugRing_InstallAndRemove_EndToEnd(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	tmpConfig := t.TempDir()
+	os.Setenv("XDG_CONFIG_HOME", tmpConfig)
+	os.Setenv("APPDATA", tmpConfig)
+	resetConfigDirForTest()
+
+	// 1. Setup mock single-file plugin
+	pluginContent := `#!/bin/sh
+echo "running"
+`
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(pluginContent))
+	}))
+	defer ts.Close()
+
+	item := PlugRingItem{
+		ID:          "e2e-plugin",
+		Name:        "E2E Plugin",
+		Version:     "1.0.0",
+		Author:      "Tester",
+		Description: "End to end test plugin",
+		URL:         ts.URL + "/plugin.sh",
+		Entrypoint:  "sh plugin.sh",
+		SetupCmd:    "echo 'setup complete' > setup.log",
+	}
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+
+	// 2. Perform installation
+	done := make(chan struct{})
+	var installErr error
+
+	actionInstallPlugRingItem(pf, nil, item, func() {
+		close(done)
+	})
+
+	// Drain task queue to process async download and installation
+	timeout := time.After(3 * time.Second)
+Loop:
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-done:
+			break Loop
+		case <-timeout:
+			t.Fatal("Timeout waiting for plugin installation")
+		}
+	}
+
+	if installErr != nil {
+		t.Fatalf("Plugin installation failed: %v", installErr)
+	}
+
+	// 3. Verify files on disk
+	pluginDir := filepath.Join(GetF4ConfigDir(), "plugring", "e2e-plugin")
+	if _, err := os.Stat(filepath.Join(pluginDir, "plugin.sh")); os.IsNotExist(err) {
+		t.Error("Plugin binary file was not saved to disk")
+	}
+	if _, err := os.Stat(filepath.Join(pluginDir, "manifest.json")); os.IsNotExist(err) {
+		t.Error("Plugin manifest.json was not created")
+	}
+
+	// Verify setup_cmd execution
+	setupLog, err := os.ReadFile(filepath.Join(pluginDir, "setup.log"))
+	if err != nil || !strings.Contains(string(setupLog), "setup complete") {
+		t.Errorf("setup_cmd execution failed or log missing. Log: %q, err: %v", string(setupLog), err)
+	}
+
+	// 4. Verify GetInstalledPlugRingItems detects it
+	installed := GetInstalledPlugRingItems()
+	if _, ok := installed["e2e-plugin"]; !ok {
+		t.Error("GetInstalledPlugRingItems failed to detect newly installed plugin")
+	}
+
+	// 5. Perform Removal
+	removeDone := make(chan struct{})
+	actionRemovePlugRingItem(pf, nil, item, func() {
+		close(removeDone)
+	})
+
+	// Process confirmation dialog and removal
+	timeout = time.After(2 * time.Second)
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			// Auto-confirm removal dialog
+			if top := vtui.FrameManager.GetTopFrame(); top != nil && strings.Contains(top.GetTitle(), "Remove Plugin") {
+				if dlg, ok := top.(*vtui.Window); ok && dlg.OnResult != nil {
+					dlg.OnResult(0) // Click Remove
+					top.SetExitCode(-1)
+					vtui.FrameManager.Pop()
+				}
+			}
+		case <-removeDone:
+			goto VerifiedRemoval
+		case <-timeout:
+			t.Fatal("Timeout waiting for plugin removal")
+		}
+	}
+
+VerifiedRemoval:
+	if _, err := os.Stat(pluginDir); !os.IsNotExist(err) {
+		t.Error("Plugin directory was not deleted after removal")
 	}
 }

@@ -89,6 +89,23 @@ func (pm *PluginManager) loadPlugRing() {
 		}
 	}
 }
+func (pm *PluginManager) loadSinglePlugRingItem(item PlugRingItem) {
+	if item.Entrypoint == "" {
+		return
+	}
+	plugringDir := filepath.Join(GetF4ConfigDir(), "plugring")
+	pluginDir := filepath.Join(plugringDir, item.ID)
+
+	p := NewRPCPlugRing(pluginDir, item.Entrypoint)
+	if err := p.Init(pm.api); err == nil {
+		pm.mu.Lock()
+		pm.plugins = append(pm.plugins, p)
+		pm.mu.Unlock()
+		vtui.DebugLog("Hot-loaded PlugRing RPC plugin: %s", p.GetName())
+	} else {
+		vtui.DebugLog("Failed to hot-load PlugRing RPC plugin %s: %v", item.ID, err)
+	}
+}
 
 func (pm *PluginManager) loadInternal() {
 	plugins := []Plugin{

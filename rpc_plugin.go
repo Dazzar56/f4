@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/unxed/f4/sdk/f4rpc"
@@ -142,8 +144,17 @@ func (p *RPCPlugin) Init(api vfs.HostAPI) error {
 	if len(parts) == 0 {
 		return fmt.Errorf("empty entrypoint")
 	}
-	p.cmd = exec.Command(parts[0], parts[1:]...)
 
+	bin := parts[0]
+	// Fix Go exec.Command trap: if binary path is relative, resolve it against p.dir
+	if p.dir != "" && !filepath.IsAbs(bin) {
+		localBin := filepath.Join(p.dir, bin)
+		if _, err := os.Stat(localBin); err == nil {
+			bin = localBin
+		}
+	}
+
+	p.cmd = exec.Command(bin, parts[1:]...)
 	if p.dir != "" {
 		p.cmd.Dir = p.dir
 	}
