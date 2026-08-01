@@ -324,12 +324,12 @@ func (q *QuickViewPanel) renderDir(item *fileEntry, writeLine func(string)) {
 	writeLine("")
 	writeLine(fmt.Sprintf(" %-14s %d", Msg("QuickView.FolderCount"), dirs))
 	writeLine(fmt.Sprintf(" %-14s %d", Msg("QuickView.FileCount"), stats.Files))
-	// "Files size" is the sum of file sizes only — matches Windows
-	// far2 semantics (where dir inodes are size 0) and keeps the
-	// number identical across platforms; on Linux dir inodes tend to
-	// be 4096, which would inflate the total versus the same tree
-	// seen from Windows.
-	writeLine(fmt.Sprintf(" %-14s %s", Msg("QuickView.FilesSize"), formatBytes(uint64(stats.Bytes))))
+	// "Files size" adds dir-inode Sizes to file bytes — that's what
+	// far2l puts in "Размер файлов" (see far2l/src/dirinfo.cpp:
+	// FileSize += FindData.nFileSize for directories). On Windows
+	// directory Size is 0 so the sum is unaffected there.
+	logical := stats.Bytes + stats.DirBytes
+	writeLine(fmt.Sprintf(" %-14s %s", Msg("QuickView.FilesSize"), formatBytes(uint64(logical))))
 	// Physical size + Ratio need per-item on-disk footprint. Stub /
 	// remote VFSes leave PhysicalBytes at 0 during the whole scan —
 	// hide the rows in that case. Ratio is also hidden when it would
@@ -337,11 +337,11 @@ func (q *QuickViewPanel) renderDir(item *fileEntry, writeLine func(string)) {
 	// a constant carries no information for the reader.
 	if stats.PhysicalBytes > 0 {
 		writeLine(fmt.Sprintf(" %-14s %s", Msg("QuickView.PhysicalSize"), formatBytes(uint64(stats.PhysicalBytes))))
-		if stats.PhysicalBytes < stats.Bytes {
+		if stats.PhysicalBytes < logical {
 			// Ratio interpretation matches far/far2l — >100% means "on
 			// disk it takes less than the logical size", i.e. real
 			// NTFS compression / sparse regions.
-			ratio := int((stats.Bytes * 100) / stats.PhysicalBytes)
+			ratio := int((logical * 100) / stats.PhysicalBytes)
 			writeLine(fmt.Sprintf(" %-14s %d%%", Msg("QuickView.Ratio"), ratio))
 		}
 	}

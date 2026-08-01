@@ -7,9 +7,16 @@ import (
 
 // OpStats holds detailed statistics about a file system subtree.
 // Separating Files/Dirs from Bytes allows for highly accurate,
-// non-linear ETA calculations during I/O operations.
+// non-linear ETA calculations during I/O operations. DirBytes is the
+// sum of directory-inode Sizes (as reported by Stat) and is tracked
+// separately so ETA calculations for copy/move — which only move
+// file payload — stay unaffected; UI consumers that display the
+// far2l-style "Files size" should sum Bytes + DirBytes (far2l does
+// this too: FileSize += FindData.nFileSize for directory entries,
+// see far2l/src/dirinfo.cpp).
 type OpStats struct {
 	Bytes         int64
+	DirBytes      int64
 	PhysicalBytes int64 // sum of VFSItem.PhysicalSize (Unix stat.Blocks*512 / Windows GetCompressedFileSize); 0 on VFSes that don't report it
 	Files         int64
 	Dirs          int64
@@ -18,6 +25,7 @@ type OpStats struct {
 // Add merges another OpStats into the current one.
 func (s *OpStats) Add(other OpStats) {
 	s.Bytes += other.Bytes
+	s.DirBytes += other.DirBytes
 	s.PhysicalBytes += other.PhysicalBytes
 	s.Files += other.Files
 	s.Dirs += other.Dirs
@@ -214,6 +222,7 @@ func scanRecursive(ctx context.Context, v VFS, currentPath string, item VFSItem,
 
 	// It's a directory
 	stats.Dirs++
+	stats.DirBytes += item.Size
 	stats.PhysicalBytes += item.PhysicalSize
 
 	var childItems []VFSItem
