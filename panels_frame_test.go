@@ -3930,3 +3930,144 @@ func TestPanelsFrame_ProcessMouse_HoverWheel_AltPanel(t *testing.T) {
 		t.Fatal("Mouse wheel over AltPanel not handled")
 	}
 }
+func TestPanelsFrame_ProcessMouse_HoverWheel_Medium_Boundaries(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	lp := pf.panels[0].(*FileSystemPanel)
+	rp := pf.panels[1].(*FileSystemPanel)
+
+	// Set left panel as active, medium view mode
+	pf.activeIdx = 0
+	pf.showPanels = true
+	pf.showLeftPanel = true
+	pf.showRightPanel = true
+
+	// Clear async loading
+	if lp.cancelLoad != nil {
+		lp.cancelLoad()
+	}
+	lp.isLoading = false
+	if rp.cancelLoad != nil {
+		rp.cancelLoad()
+	}
+	rp.isLoading = false
+
+	// Create 45 items to fill multiple columns
+	var entries []*fileEntry
+	for i := 0; i < 45; i++ {
+		entries = append(entries, &fileEntry{VFSItem: vfs.VFSItem{Name: fmt.Sprintf("F%d", i)}})
+	}
+	lp.entries = entries
+	lp.Refresh()
+
+	H := lp.table.ViewHeight
+	if H <= 0 {
+		H = 1
+	}
+
+	// Set cursor to the first row of the second column (idx = H)
+	lp.SetCursorIndex(H)
+
+	// TopPos should be 0
+	lp.table.TopPos = 0
+	lp.Refresh()
+
+	if lp.GetCursorIndex() != H {
+		t.Fatalf("Setup failed: expected cursor index %d, got %d", H, lp.GetCursorIndex())
+	}
+
+	// 1. Simulate mouse wheel UP over the left panel
+	lx1, ly1, _, _ := lp.GetPosition()
+	ev := &vtinput.InputEvent{
+		Type:           vtinput.MouseEventType,
+		MouseX:         int16(lx1 + 2),
+		MouseY:         int16(ly1 + 2),
+		WheelDirection: 1, // Up scroll
+	}
+
+	handled := pf.ProcessMouse(ev)
+	if !handled {
+		t.Fatal("Mouse wheel up event not handled")
+	}
+
+	// Cursor should have jumped to the last row of the first column (index H - 1)
+	expectedIdx := H - 1
+	if lp.GetCursorIndex() != expectedIdx {
+		t.Errorf("Expected cursor to jump to first column index %d, got %d", expectedIdx, lp.GetCursorIndex())
+	}
+}
+
+func TestPanelsFrame_ProcessMouse_HoverWheel_Detailed_Boundaries(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	lp := pf.panels[0].(*FileSystemPanel)
+	rp := pf.panels[1].(*FileSystemPanel)
+
+	// Set left panel as active, detailed view mode
+	pf.activeIdx = 0
+	pf.showPanels = true
+	pf.showLeftPanel = true
+	pf.showRightPanel = true
+
+	// Clear async loading
+	if lp.cancelLoad != nil {
+		lp.cancelLoad()
+	}
+	lp.isLoading = false
+	if rp.cancelLoad != nil {
+		rp.cancelLoad()
+	}
+	rp.isLoading = false
+
+	lp.SetViewMode(ViewModeDetailed)
+
+	H := lp.table.ViewHeight
+	if H <= 0 {
+		H = 1
+	}
+
+	// Create items to fill more than screen height
+	var entries []*fileEntry
+	for i := 0; i < H+10; i++ {
+		entries = append(entries, &fileEntry{VFSItem: vfs.VFSItem{Name: fmt.Sprintf("F%d", i)}})
+	}
+	lp.entries = entries
+	lp.Refresh()
+
+	totalItems := len(lp.entries)
+
+	// Set cursor to the last item
+	lp.SetCursorIndex(totalItems - 1)
+	lp.Refresh()
+
+	lastIdx := lp.GetCursorIndex()
+
+	// 1. Simulate mouse wheel DOWN over the left panel
+	lx1, ly1, _, _ := lp.GetPosition()
+	ev := &vtinput.InputEvent{
+		Type:           vtinput.MouseEventType,
+		MouseX:         int16(lx1 + 2),
+		MouseY:         int16(ly1 + 2),
+		WheelDirection: -1, // Down scroll
+	}
+
+	handled := pf.ProcessMouse(ev)
+	if !handled {
+		t.Fatal("Mouse wheel down event not handled")
+	}
+
+	// Cursor should remain at the last item
+	if lp.GetCursorIndex() != lastIdx {
+		t.Errorf("Expected cursor to remain at the last item %d, got %d", lastIdx, lp.GetCursorIndex())
+	}
+}

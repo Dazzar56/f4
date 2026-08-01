@@ -1234,6 +1234,77 @@ func (fp *FileSystemPanel) ProcessMouse(e *vtinput.InputEvent) bool {
 		vtui.FrameManager.Redraw()
 	}
 
+	if e.WheelDirection != 0 {
+		// Determine direction: up is -1, down is 1
+		direction := 1
+		if e.WheelDirection > 0 {
+			direction = -1
+		}
+
+		H := fp.table.ViewHeight
+		if H <= 0 {
+			H = 1
+		}
+
+		if fp.viewMode == ViewModeDetailed {
+			// Detailed view (1-column)
+			idx := fp.GetCursorIndex()
+			newIdx := idx + direction
+			if newIdx < 0 {
+				newIdx = 0
+			}
+			if newIdx >= len(fp.entries) {
+				newIdx = len(fp.entries) - 1
+			}
+
+			// Scroll the list if possible, keeping the cursor visually stable
+			newTop := fp.table.TopPos + direction
+			maxTop := len(fp.entries) - H
+			if maxTop < 0 {
+				maxTop = 0
+			}
+			if newTop < 0 {
+				newTop = 0
+			}
+			if newTop > maxTop {
+				newTop = maxTop
+			}
+
+			fp.table.TopPos = newTop
+			fp.SetCursorIndex(newIdx)
+			fp.Refresh()
+			return true
+		} else {
+			// Medium/Brief view (2-column)
+			idx := fp.GetCursorIndex()
+			newIdx := idx + direction
+			if newIdx < 0 {
+				newIdx = 0
+			}
+			if newIdx >= len(fp.entries) {
+				newIdx = len(fp.entries) - 1
+			}
+
+			// Scroll the list if possible, keeping the cursor visually stable
+			newTop := fp.table.TopPos + direction
+			maxTop := len(fp.entries) - 2*H
+			if maxTop < 0 {
+				maxTop = 0
+			}
+			if newTop < 0 {
+				newTop = 0
+			}
+			if newTop > maxTop {
+				newTop = maxTop
+			}
+
+			fp.table.TopPos = newTop
+			fp.SetCursorIndex(newIdx)
+			fp.Refresh()
+			return true
+		}
+	}
+
 	handled := fp.table.ProcessMouse(e)
 	if handled {
 		// Sync absolute index from table's visual selection
