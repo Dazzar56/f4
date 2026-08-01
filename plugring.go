@@ -12,31 +12,32 @@ import (
 	"time"
 
 	"github.com/unxed/vtui"
+	"gopkg.in/yaml.v3"
 )
 
-// PlugRingCatalogURL is the URL where f4 fetches the compiled JSON catalog.
-// During development, it can point to a raw file. In production, it might point to gh-pages.
-var PlugRingCatalogURL = "https://raw.githubusercontent.com/unxed/f4/main/plugring/index.json"
+// PlugRingCatalogURL is the URL where f4 fetches the compiled YAML catalog.
+var PlugRingCatalogURL = "https://raw.githubusercontent.com/unxed/f4/main/plugring/index.yaml"
 
 // PlugRingItem represents a single plugin available in the store.
 type PlugRingItem struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Version     string `json:"version"`
-	Author      string `json:"author"`
-	Description string `json:"description"`
-	URL         string `json:"url"`
-	Entrypoint  string `json:"entrypoint"`
-	SetupCmd    string `json:"setup_cmd"`
+	ID           string   `json:"id" yaml:"id"`
+	Name         string   `json:"name" yaml:"name"`
+	Version      string   `json:"version" yaml:"version"`
+	Author       string   `json:"author" yaml:"author"`
+	Description  string   `json:"description" yaml:"description"`
+	URL          string   `json:"url" yaml:"url"`
+	Entrypoint   string   `json:"entrypoint" yaml:"entrypoint"`
+	SetupCmd     string   `json:"setup_cmd" yaml:"setup_cmd"`
+	Dependencies []string `json:"dependencies" yaml:"dependencies"`
 }
 
 // FetchCatalog downloads and parses the plugin catalog.
 func FetchCatalog(ctx context.Context) ([]PlugRingItem, error) {
 	// Developer convenience: load local index if available, but only if we are using the default URL
-	if PlugRingCatalogURL == "https://raw.githubusercontent.com/unxed/f4/main/plugring/index.json" {
-		if data, err := os.ReadFile(filepath.Join("plugring", "index.json")); err == nil {
+	if PlugRingCatalogURL == "https://raw.githubusercontent.com/unxed/f4/main/plugring/index.yaml" {
+		if data, err := os.ReadFile(filepath.Join("plugring", "index.yaml")); err == nil {
 			var items []PlugRingItem
-			if json.Unmarshal(data, &items) == nil {
+			if yaml.Unmarshal(data, &items) == nil {
 				vtui.DebugLog("PLUGRING: Loaded catalog from local file")
 				return items, nil
 			}
@@ -67,8 +68,8 @@ func FetchCatalog(ctx context.Context) ([]PlugRingItem, error) {
 	}
 
 	var items []PlugRingItem
-	if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
-		return nil, fmt.Errorf("failed to parse catalog JSON: %w", err)
+	if err := yaml.NewDecoder(resp.Body).Decode(&items); err != nil {
+		return nil, fmt.Errorf("failed to parse catalog YAML: %w", err)
 	}
 
 	return items, nil
@@ -102,4 +103,36 @@ func GetInstalledPlugRingItems() map[string]PlugRingItem {
 		}
 	}
 	return res
+}
+
+// CheckForPluginUpdates checks for available updates of installed plugins in background.
+func CheckForPluginUpdates() {
+	go func() {
+		// Let the application UI initialize completely before checking
+		time.Sleep(5 * time.Second)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		items, err := FetchCatalog(ctx)
+		if err != nil {
+			return
+		}
+
+		installed := GetInstalledPlugRingItems()
+		updateCount := 0
+		for _, itm := range items {
+			if inst, ok := installed[itm.ID]; ok {
+				if inst.Version != itm.Version {
+					updateCount++
+				}
+			}
+		}
+
+		if updateCount > 0 {
+			vtui.FrameManager.PostTask(func() {
+				vtui.ShowToast(fmt.Sprintf("PlugRing: %d plugin update(s) available!", updateCount), 5*time.Second)
+			})
+		}
+	}()
 }

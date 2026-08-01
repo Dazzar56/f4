@@ -144,6 +144,30 @@ func actionPlugRing(pf *PanelsFrame) {
 }
 
 func actionInstallPlugRingItem(pf *PanelsFrame, parent *vtui.Window, item PlugRingItem, refresh func()) {
+	// 1. Implicit dependency check from Entrypoint interpreter
+	parts := strings.Fields(item.Entrypoint)
+	if len(parts) > 0 {
+		interpreter := parts[0]
+		if !strings.ContainsAny(interpreter, "/\\") && !strings.HasPrefix(interpreter, ".") {
+			if _, err := exec.LookPath(interpreter); err != nil {
+				msg := fmt.Sprintf("Warning: This plugin requires '%s' to run, but it was not found in your system's PATH.\n\nPlease install '%s' first, or the plugin might fail to load.", interpreter, interpreter)
+				if pf.Message(" Missing Dependency ", msg, []string{"&Install Anyway", "Cancel"}) != 0 {
+					return
+				}
+			}
+		}
+	}
+
+	// 2. Explicit dependencies check
+	for _, dep := range item.Dependencies {
+		if _, err := exec.LookPath(dep); err != nil {
+			msg := fmt.Sprintf("Warning: This plugin requires '%s', but it was not found in your system's PATH.\n\nPlease install it, or the plugin might fail to load.", dep)
+			if pf.Message(" Missing Dependency ", msg, []string{"&Install Anyway", "Cancel"}) != 0 {
+				return
+			}
+		}
+	}
+
 	url := ResolveAssetURL(item.URL)
 	isTarGz := strings.HasSuffix(url, ".tar.gz") || strings.HasSuffix(url, ".tgz")
 	isArchive := isTarGz || strings.HasSuffix(url, ".zip")

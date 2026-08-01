@@ -422,9 +422,11 @@ func SetupUI() {
 	} else {
 		vtui.DebugLog("CORE: Plugins disabled by --no-plugins flag")
 	}
+
 	// Background update check
 	if AppConfig.UpdateInterval > 0 {
 		go CheckForUpdates(panels, false)
+		go CheckForPluginUpdates()
 	}
 }
 
