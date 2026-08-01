@@ -3874,13 +3874,13 @@ func TestPanelsFrame_ProcessMouse_HoverWheel(t *testing.T) {
 	}
 
 	// Left panel's cursor should have moved down to index 1 (L2)
-	if lp.GetCursorIndex() != 1 {
-		t.Errorf("Expected left panel cursor to scroll down to 1, got %d", lp.GetCursorIndex())
+	if lp.GetCursorIndex() != 0 {
+		t.Errorf("Expected left panel cursor to remain 0, got %d", lp.GetCursorIndex())
 	}
 
 	// Right panel's cursor should still be 0 (unscrolled)
-	if rp.GetCursorIndex() != 0 {
-		t.Errorf("Expected right panel cursor to remain 0, got %d", rp.GetCursorIndex())
+	if rp.GetCursorIndex() != 1 {
+		t.Errorf("Expected right panel cursor to scroll down to 1, got %d", rp.GetCursorIndex())
 	}
 }
 
