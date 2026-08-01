@@ -10,8 +10,8 @@ f4rpc.register("Plugin.Init", function()
     f4rpc.call("Host.Log", "Hello PlugRing plugin initialized!")
 
     -- Register global hotkey: Ctrl+Shift+H
-    -- VK_H = 0x48 (72). Mods: Shift(1) | Ctrl(4) = 5
-    f4rpc.call("Host.RegisterGlobalHotkey", { VK = 72, Mods = 5 })
+    -- VK_H = 0x48 (72). Mods: Ctrl(8) + Shift(16) = 24
+    f4rpc.call("Host.RegisterGlobalHotkey", { VK = 72, Mods = f4rpc.CTRL + f4rpc.SHIFT })
 
     return { Drives = {} }
 end)
