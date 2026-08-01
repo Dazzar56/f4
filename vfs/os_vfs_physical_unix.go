@@ -34,3 +34,11 @@ func fillPhysicalSizeCheap(item *VFSItem, info os.FileInfo) {
 func fillPhysicalSize(item *VFSItem, info os.FileInfo, _ string) {
 	fillPhysicalSizeCheap(item, info)
 }
+
+// SupportsPhysicalSize is the PhysicalSizer capability answer for
+// this platform. Declared here (rather than a single unconditional
+// method in os_vfs.go) so the answer is co-located with the actual
+// implementation of fillPhysicalSize — no risk of OSVFS claiming a
+// capability on a platform where the stub version leaves the field
+// at zero.
+func (v *OSVFS) SupportsPhysicalSize() bool { return true }

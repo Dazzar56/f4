@@ -54,3 +54,7 @@ func fillPhysicalSize(item *VFSItem, info os.FileInfo, path string) {
 	}
 	item.PhysicalSize = int64((uint64(high) << 32) | uint64(low))
 }
+
+// SupportsPhysicalSize is true on Windows — see the Unix version
+// for the rationale of keeping the answer per-platform.
+func (v *OSVFS) SupportsPhysicalSize() bool { return true }
