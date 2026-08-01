@@ -12,11 +12,11 @@ require (
 	github.com/unxed/archives v0.0.0-20260728171610-555945c76813
 	github.com/unxed/localecp v0.1.4
 	github.com/unxed/sevenzip v0.0.0-20260704211908-25d317f8295f
-	github.com/unxed/tar v0.1.124
+	github.com/unxed/tar v0.1.125
 	github.com/unxed/vtinput v0.1.2
 	github.com/unxed/vtui v0.1.84
 	github.com/unxed/zip v0.1.126
-	github.com/unxed/zipper v0.1.140
+	github.com/unxed/zipper v0.1.142
 	github.com/vmihailenco/msgpack/v5 v5.4.1
 	golang.org/x/crypto v0.53.0
 	golang.org/x/sys v0.47.0
@@ -50,7 +50,7 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/jezek/xgb v1.3.1 // indirect
-	github.com/klauspost/compress v1.18.7-0.20260521203646-ecdb779d8745 // indirect
+	github.com/klauspost/compress v1.19.1 // indirect
 	github.com/klauspost/pgzip v1.2.6 // indirect
 	github.com/kr/fs v0.1.0 // indirect
 	github.com/mikelolasagasti/xz v1.0.1 // indirect
