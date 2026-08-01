@@ -1824,8 +1824,10 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 		return e.ButtonState != 0 || e.WheelDirection != 0
 	}
 
+	mx, my := int(e.MouseX), int(e.MouseY)
+
 	// Активация меню кликом мыши на нулевую строку (AlwaysShowMenuBar)
-	if AppConfig.AlwaysShowMenuBar && pf.showPanels && int(e.MouseY) == 0 && e.ButtonState != 0 {
+	if AppConfig.AlwaysShowMenuBar && pf.showPanels && my == 0 && e.ButtonState != 0 {
 		pf.menuBar.Active = true
 		pf.menuBar.ProcessMouse(e)
 		return true
@@ -1843,17 +1845,42 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 		return true
 	}
 
-	// Wheel events always scroll the active panel, regardless of mouse
-	// position — matches classic Far / far2l. When the active slot is
-	// covered by an alt panel (Ctrl+Q quick-view, later Ctrl+T tree),
-	// it's the visually-active thing, so we hand the wheel to it
-	// instead of the file panel underneath.
+	// Wheel events scroll the hovered panel if panels are visible.
+	// When a panel slot is covered by an alt panel (e.g. Ctrl+Q quick-view),
+	// we hand the wheel to it. This matches modern GUI and far2l behavior.
 	if e.WheelDirection != 0 {
-		if pf.showPanels && pf.altPanels[pf.activeIdx] != nil {
-			if pf.altPanels[pf.activeIdx].ProcessMouse(e) {
+		hoveredIdx := pf.activeIdx
+		if pf.showPanels {
+			for i, p := range pf.panels {
+				if p == nil {
+					continue
+				}
+				if i == 0 && !pf.showLeftPanel {
+					continue
+				}
+				if i == 1 && !pf.showRightPanel {
+					continue
+				}
+				x1, y1, x2, y2 := p.GetPosition()
+				if mx >= x1 && mx <= x2 && my >= y1 && my <= y2 {
+					hoveredIdx = i
+					break
+				}
+			}
+		}
+
+		if pf.showPanels && pf.altPanels[hoveredIdx] != nil {
+			if pf.altPanels[hoveredIdx].ProcessMouse(e) {
 				return true
 			}
 		}
+
+		if pf.showPanels && pf.panels[hoveredIdx] != nil {
+			if pf.panels[hoveredIdx].ProcessMouse(e) {
+				return true
+			}
+		}
+
 		vk := vtinput.VK_DOWN
 		if e.WheelDirection > 0 {
 			vk = vtinput.VK_UP
@@ -1865,8 +1892,6 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 			ControlKeyState: e.ControlKeyState,
 		})
 	}
-
-	mx, my := int(e.MouseX), int(e.MouseY)
 
 	for i, p := range pf.panels {
 		if p == nil {
