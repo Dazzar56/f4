@@ -308,16 +308,20 @@ Loop:
 
 	// Process confirmation dialog and removal
 	timeout = time.After(2 * time.Second)
+	removedSimulated := false
 	for {
 		select {
 		case task := <-vtui.FrameManager.TaskChan:
 			task()
 			// Auto-confirm removal dialog
-			if top := vtui.FrameManager.GetTopFrame(); top != nil && strings.Contains(top.GetTitle(), "Remove Plugin") {
-				if dlg, ok := top.(*vtui.Window); ok && dlg.OnResult != nil {
-					dlg.OnResult(0) // Click Remove
-					top.SetExitCode(-1)
-					vtui.FrameManager.Pop()
+			if !removedSimulated {
+				if top := vtui.FrameManager.GetTopFrame(); top != nil && strings.Contains(top.GetTitle(), "Remove Plugin") {
+					if dlg, ok := top.(*vtui.Window); ok && dlg.OnResult != nil {
+						removedSimulated = true
+						dlg.OnResult(0) // Click Remove
+						top.SetExitCode(-1)
+						vtui.FrameManager.Pop()
+					}
 				}
 			}
 		case <-removeDone:
