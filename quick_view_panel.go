@@ -212,7 +212,14 @@ func (q *QuickViewPanel) Show(scr *vtui.ScreenBuf) {
 		if pad > 0 {
 			s += strings.Repeat(" ", pad)
 		}
-		scr.Write(q.X1+1, y, vtui.StringToCharInfo(s, attr))
+		ci := vtui.StringToCharInfo(s, attr)
+		// Hard cap on cell count — defends the right border against
+		// any pathological width mismatch between StringWidth and
+		// StringToCharInfo (double-width edge cases, etc.).
+		if len(ci) > innerW {
+			ci = ci[:innerW]
+		}
+		scr.Write(q.X1+1, y, ci)
 		y++
 	}
 
@@ -240,6 +247,15 @@ func (q *QuickViewPanel) Show(scr *vtui.ScreenBuf) {
 		return
 	}
 	q.renderFile(item, innerW, writeLine, attr, scr)
+
+	// Vertical scrollbar over the right border. Repaints column X2
+	// with scrollbar glyphs, so if a wide content line ever bled
+	// into the border position it gets restored. Skipped when the
+	// content fits entirely (DrawScrollBar returns false).
+	if q.Y2 > q.Y1+1 && len(q.displayLines) > 0 {
+		vtui.DrawScrollBar(scr, q.X2, q.Y1+1, q.Y2-q.Y1-1,
+			q.scrollY, len(q.displayLines), vtui.Palette[ColPanelScrollbar])
+	}
 }
 
 func (q *QuickViewPanel) renderDir(item *fileEntry, writeLine func(string)) {
