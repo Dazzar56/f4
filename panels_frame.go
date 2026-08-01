@@ -210,6 +210,8 @@ func NewPanelsFrame() *PanelsFrame {
 			{Text: Msg("Menu.AutoUpdateSettings"), Command: CmUpdateSettings},
 			{Separator: true},
 			{Text: "&" + Msg("Menu.Options.Plugins"), Command: CmPlugins},
+			{Separator: true},
+			{Text: "f4 Plug&Ring", Command: CmPlugRing},
 		}},
 		{Label: "&" + Msg("Menu.Right"), SubItems: []vtui.MenuItem{
 			{Text: "&" + Msg("Menu.Left.Medium"), Command: CmRightMedium},
@@ -2103,6 +2105,9 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 		actionManagePlugins(pf)
 		return true
 
+	case CmPlugRing:
+		actionPlugRing(pf)
+		return true
 	case CmBackground:
 		if !SupportsBackgrounding() {
 			vtui.ShowMessage(" Background ", "Backgrounding is not supported on this OS.", []string{"&Ok"})
