@@ -325,11 +325,10 @@ func (q *QuickViewPanel) renderDir(item *fileEntry, writeLine func(string)) {
 	writeLine(fmt.Sprintf(" %-14s %d", Msg("QuickView.FolderCount"), dirs))
 	writeLine(fmt.Sprintf(" %-14s %d", Msg("QuickView.FileCount"), stats.Files))
 	// "Files size" is the sum of file sizes only — matches Windows
-	// far2 semantics (where dir inodes are size 0) and, more
-	// importantly, keeps the number identical across platforms; on
-	// Linux dir inodes tend to be 4096, which would inflate the total
-	// versus the same tree seen from Windows. DirBytes stays tracked
-	// separately in OpStats for anyone who wants it.
+	// far2 semantics (where dir inodes are size 0) and keeps the
+	// number identical across platforms; on Linux dir inodes tend to
+	// be 4096, which would inflate the total versus the same tree
+	// seen from Windows.
 	writeLine(fmt.Sprintf(" %-14s %s", Msg("QuickView.FilesSize"), formatBytes(uint64(stats.Bytes))))
 	// Physical size + Ratio need per-item on-disk footprint. Stub /
 	// remote VFSes leave PhysicalBytes at 0 during the whole scan —

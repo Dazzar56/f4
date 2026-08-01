@@ -7,14 +7,9 @@ import (
 
 // OpStats holds detailed statistics about a file system subtree.
 // Separating Files/Dirs from Bytes allows for highly accurate,
-// non-linear ETA calculations during I/O operations. DirBytes is the
-// sum of directory-inode sizes (as reported by Stat) and is tracked
-// separately so ETA calculations for copy/move — which only move the
-// file payload — stay unaffected; consumers that want the far2l-style
-// "Files size" for display (Ctrl+Q quick view) can add Bytes+DirBytes.
+// non-linear ETA calculations during I/O operations.
 type OpStats struct {
 	Bytes         int64
-	DirBytes      int64
 	PhysicalBytes int64 // sum of VFSItem.PhysicalSize (Unix stat.Blocks*512 / Windows GetCompressedFileSize); 0 on VFSes that don't report it
 	Files         int64
 	Dirs          int64
@@ -23,7 +18,6 @@ type OpStats struct {
 // Add merges another OpStats into the current one.
 func (s *OpStats) Add(other OpStats) {
 	s.Bytes += other.Bytes
-	s.DirBytes += other.DirBytes
 	s.PhysicalBytes += other.PhysicalBytes
 	s.Files += other.Files
 	s.Dirs += other.Dirs
@@ -32,6 +26,20 @@ func (s *OpStats) Add(other OpStats) {
 // ScanCallback is used to report progress during a long scanning operation.
 // It returns the path currently being inspected and the accumulated stats so far.
 type ScanCallback func(currentPath string, stats OpStats)
+
+// PhysicalSizer is an optional VFS capability declaring that the
+// implementation can produce VFSItem.PhysicalSize for individual
+// items — either cheaply during ReadDir or through a Stat fallback.
+// The scanner uses this to decide whether to bother with a lazy
+// Stat when an item comes back with PhysicalSize == 0; VFSes that
+// don't implement this (archive, network) skip the fallback entirely,
+// which matters because CalculateStats is also on the copy/move
+// pre-scan path — one lazy Stat per file across an archive tree
+// would be an N+1 mutex-serialised round trip for a field the VFS
+// can't fill anyway.
+type PhysicalSizer interface {
+	SupportsPhysicalSize() bool
+}
 
 // FastScanner is an optional interface for VFS implementations.
 // If a VFS implements this, it means it can offload the tree traversal
@@ -95,14 +103,18 @@ func scanRecursive(ctx context.Context, v VFS, currentPath string, item VFSItem,
 	}
 
 	// PhysicalSize is populated cheaply on Unix during ReadDir; on
-	// Windows the ReadDir path skips it to keep listings fast, so we
-	// fill it lazily here (an extra Stat per file — expensive per
-	// item, but we only pay it during an actual scan, not on every
-	// panel refresh). item.Size > 0 is the trigger; empty files and
-	// truly-sparse files stay at 0.
+	// Windows the ReadDir path skips it to keep listings fast. Fall
+	// back to a Stat only when (a) the VFS declares it can actually
+	// produce the number (PhysicalSizer) and (b) the item plausibly
+	// has non-zero physical size. Without the capability check,
+	// archive / network VFSes would pay one lazy Stat per file
+	// across a copy/move pre-scan for a field they never fill —
+	// N+1 wasted round trips.
 	if item.PhysicalSize == 0 && item.Size > 0 {
-		if st, err := v.Stat(ctx, currentPath); err == nil {
-			item.PhysicalSize = st.PhysicalSize
+		if ps, ok := v.(PhysicalSizer); ok && ps.SupportsPhysicalSize() {
+			if st, err := v.Stat(ctx, currentPath); err == nil {
+				item.PhysicalSize = st.PhysicalSize
+			}
 		}
 	}
 
@@ -115,7 +127,6 @@ func scanRecursive(ctx context.Context, v VFS, currentPath string, item VFSItem,
 
 	// It's a directory
 	stats.Dirs++
-	stats.DirBytes += item.Size
 	stats.PhysicalBytes += item.PhysicalSize
 
 	var childItems []VFSItem

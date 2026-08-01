@@ -413,12 +413,6 @@ func TestQuickView_DirScan_PopulatesRecursive(t *testing.T) {
 	if stats.Bytes != 150 {
 		t.Errorf("Bytes = %d, want 150", stats.Bytes)
 	}
-	// DirBytes accumulates per-directory inode sizes so the far2/far2l
-	// "Files size" display can add Bytes+DirBytes and match. It must
-	// not leak into Bytes — that's what copy/move ETA reads.
-	if stats.DirBytes <= 0 {
-		t.Errorf("DirBytes = %d, want > 0 (dir inodes should be tracked)", stats.DirBytes)
-	}
 	// PhysicalBytes is populated per-item by the VFS (stat.Blocks on
 	// Unix / GetCompressedFileSize on Windows) and accumulated by the
 	// scanner. On Unix tempdirs the block count is always > 0 for a

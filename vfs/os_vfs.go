@@ -252,6 +252,13 @@ func (v *OSVFS) Stat(ctx context.Context, path string) (VFSItem, error) {
 	return item, nil
 }
 
+// SupportsPhysicalSize tells the scanner that OSVFS can produce
+// VFSItem.PhysicalSize for every entry — cheaply on Unix (stat.Blocks
+// alongside FileInfo) and via GetCompressedFileSize on Windows. The
+// scanner uses this to enable the lazy-Stat fallback only where it
+// pays off. See vfs/scanner.go's PhysicalSizer.
+func (v *OSVFS) SupportsPhysicalSize() bool { return true }
+
 func (v *OSVFS) Join(elem ...string) string { return filepath.Join(elem...) }
 
 func (v *OSVFS) Abs(path string) (string, error) {
