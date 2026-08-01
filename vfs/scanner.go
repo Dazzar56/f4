@@ -44,8 +44,9 @@ type PhysicalSizer interface {
 // ScanOptions tunes the behaviour of CalculateStatsWithOptions.
 // The zero value is the historical, size-inflating behaviour that
 // copy/move pre-scans rely on (a symlink-to-dir is walked as if it
-// were a real directory); consumers that want find/far2l-style
-// leaf semantics should flip the flag explicitly.
+// were a real directory, hard-linked inodes are counted once per
+// path); consumers that want find/far2l-style semantics should flip
+// the flags explicitly.
 type ScanOptions struct {
 	// FollowSymlinkDirs decides how symlinks that resolve to a
 	// directory are treated. true (default via plain CalculateStats):
@@ -54,6 +55,14 @@ type ScanOptions struct {
 	// the symlink as a leaf, counting it once with its own tiny
 	// size, matching what `find` and far2l report.
 	FollowSymlinkDirs bool
+	// DedupInodes tells the scanner to skip any entry whose
+	// (Device, Inode) pair has already been seen in this walk — the
+	// far2l behaviour (see far2l/src/dirinfo.cpp:120 ScannedINodes).
+	// Hard-linked files are then counted once, matching `du`. false
+	// (default) preserves the copy/move ETA path where two hard
+	// links to one inode really do count as two work items. QuickView
+	// opts in to keep its numbers aligned with far2l.
+	DedupInodes bool
 }
 
 // FastScanner is an optional interface for VFS implementations.
@@ -99,8 +108,20 @@ func GenericScan(ctx context.Context, v VFS, basePath string, names []string, cb
 	return genericScan(ctx, v, basePath, names, ScanOptions{FollowSymlinkDirs: true}, cb)
 }
 
+// inodeKey identifies a filesystem object across a walk for
+// hard-link deduplication. Device is included so a scan crossing
+// bind mounts / overlays doesn't collide inode numbers from
+// different filesystems.
+type inodeKey struct {
+	Dev, Ino uint64
+}
+
 func genericScan(ctx context.Context, v VFS, basePath string, names []string, opts ScanOptions, cb ScanCallback) (OpStats, error) {
 	var totalStats OpStats
+	var seen map[inodeKey]struct{}
+	if opts.DedupInodes {
+		seen = make(map[inodeKey]struct{})
+	}
 
 	for _, name := range names {
 		if ctx.Err() != nil {
@@ -115,7 +136,7 @@ func genericScan(ctx context.Context, v VFS, basePath string, names []string, op
 			return totalStats, err
 		}
 
-		err = scanRecursive(ctx, v, fullPath, itemStat, &totalStats, cb, 0, opts)
+		err = scanRecursive(ctx, v, fullPath, itemStat, &totalStats, cb, 0, opts, seen)
 		if err != nil {
 			return totalStats, err
 		}
@@ -124,7 +145,7 @@ func genericScan(ctx context.Context, v VFS, basePath string, names []string, op
 	return totalStats, nil
 }
 
-func scanRecursive(ctx context.Context, v VFS, currentPath string, item VFSItem, stats *OpStats, cb ScanCallback, depth int, opts ScanOptions) error {
+func scanRecursive(ctx context.Context, v VFS, currentPath string, item VFSItem, stats *OpStats, cb ScanCallback, depth int, opts ScanOptions, seen map[inodeKey]struct{}) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -137,6 +158,21 @@ func scanRecursive(ctx context.Context, v VFS, currentPath string, item VFSItem,
 	if cb != nil {
 		// Report progress. To avoid spamming the UI thread, the caller should throttle this.
 		cb(currentPath, *stats)
+	}
+
+	// Hard-link dedup — matches far2l/src/dirinfo.cpp:120 ScannedINodes.
+	// A hard-linked file reached through multiple paths in the same
+	// walk should count once (its blocks are on disk once). Symlinks
+	// each have their own inode so this never dedups them. VFSes that
+	// don't populate Device/Inode (Windows, remote) leave both at
+	// zero — we skip the dedup then rather than merging every entry
+	// under (0,0).
+	if seen != nil && (item.Device != 0 || item.Inode != 0) {
+		key := inodeKey{item.Device, item.Inode}
+		if _, dup := seen[key]; dup {
+			return nil
+		}
+		seen[key] = struct{}{}
 	}
 
 	// PhysicalSize is populated cheaply on Unix during ReadDir; on
@@ -195,7 +231,7 @@ func scanRecursive(ctx context.Context, v VFS, currentPath string, item VFSItem,
 			continue
 		}
 		childPath := v.Join(currentPath, child.Name)
-		err := scanRecursive(ctx, v, childPath, child, stats, cb, depth+1, opts)
+		err := scanRecursive(ctx, v, childPath, child, stats, cb, depth+1, opts, seen)
 		if err != nil {
 			return err
 		}

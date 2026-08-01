@@ -407,11 +407,12 @@ func (q *QuickViewPanel) startDirScan(fullPath string) {
 			}
 			q.scanMu.Unlock()
 		}
-		// QuickView explicitly does NOT follow symlink-to-dir — matches
-		// far2/far2l's number and what `find` reports without -L. The
-		// copy/move code path keeps the historical follow-through so
-		// pre-scan ETAs there still line up with the actual walk.
-		scanOpts := vfs.ScanOptions{FollowSymlinkDirs: false}
+		// QuickView explicitly does NOT follow symlink-to-dir and
+		// DEDUPS hard links (same-inode counted once) — matches
+		// far2/far2l and `find`. The copy/move code path keeps the
+		// historical follow-through and no-dedup so pre-scan ETAs
+		// there still line up with the actual walk.
+		scanOpts := vfs.ScanOptions{FollowSymlinkDirs: false, DedupInodes: true}
 		stats, err := vfs.CalculateStatsWithOptions(ctx, source, basePath, []string{name}, scanOpts, func(_ string, s vfs.OpStats) {
 			q.scanMu.Lock()
 			if q.scanGen != gen {

@@ -57,6 +57,14 @@ type VFSItem struct {
 	// semantics should treat any IsSymlink as a leaf regardless of
 	// IsDir. Populated by OSVFS.ReadDir; other VFSes leave it false.
 	IsSymlink bool
+	// Device / Inode identify the underlying filesystem object so a
+	// scanner can dedup hard links (same inode reached through
+	// multiple paths in one walk). Both zero means "not populated" —
+	// the scanner then simply doesn't dedup, matching prior behaviour.
+	// Populated by OSVFS on Unix (stat.Dev/Ino). Windows and remote
+	// VFSes leave them zero.
+	Device uint64
+	Inode  uint64
 	// PhysicalSize is the real on-disk footprint of the item (compressed
 	// size on NTFS / actual allocated blocks on Unix). Zero means the
 	// platform didn't populate it (network VFSes, non-Unix/-Windows).

@@ -25,6 +25,12 @@ func fillPhysicalSizeCheap(item *VFSItem, info os.FileInfo) {
 		// than Size) and transparent-compression fs (btrfs/zfs — Blocks
 		// reflects the compressed footprint).
 		item.PhysicalSize = int64(stat.Blocks) * 512
+		// Device / Inode let the scanner dedup hard links (same inode
+		// reached through multiple paths). Also free — Stat_t is
+		// already loaded. Windows and stubs leave these zero, so the
+		// scanner just doesn't dedup there.
+		item.Device = uint64(stat.Dev)
+		item.Inode = uint64(stat.Ino)
 	}
 }
 

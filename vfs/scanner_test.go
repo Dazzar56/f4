@@ -338,3 +338,54 @@ func TestGenericScan_FileSymlinkDoesNotDoublePhysical(t *testing.T) {
 		}
 	}
 }
+
+// TestGenericScan_HardLinkDedup checks that DedupInodes matches
+// far2l's ScannedINodes behaviour: a file reachable via N hard
+// links counts once, not N times, in every OpStats field.
+//
+// Layout:
+//
+//	root/
+//	  original (8192)
+//	  link1   (hard link -> original)
+//	  link2   (hard link -> original)
+func TestGenericScan_HardLinkDedup(t *testing.T) {
+	tmp := t.TempDir()
+	orig := filepath.Join(tmp, "original")
+	if err := os.WriteFile(orig, make([]byte, 8192), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Link(orig, filepath.Join(tmp, "link1")); err != nil {
+		t.Skipf("cannot create hard link: %v", err)
+	}
+	if err := os.Link(orig, filepath.Join(tmp, "link2")); err != nil {
+		t.Skipf("cannot create hard link: %v", err)
+	}
+
+	v := NewOSVFS(tmp)
+
+	// Without dedup: 3 files, 3× the bytes. Preserves historical
+	// copy/move pre-scan behaviour.
+	nodedup, err := CalculateStatsWithOptions(context.Background(), v, tmp, []string{"."}, ScanOptions{FollowSymlinkDirs: true}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if nodedup.Files != 3 {
+		t.Errorf("no-dedup: Files=%d, want 3 (each hard link counted)", nodedup.Files)
+	}
+	if nodedup.Bytes != 3*8192 {
+		t.Errorf("no-dedup: Bytes=%d, want %d (3×)", nodedup.Bytes, 3*8192)
+	}
+
+	// With dedup: 1 file, one contribution. Matches far2l's Ctrl+Q.
+	dedup, err := CalculateStatsWithOptions(context.Background(), v, tmp, []string{"."}, ScanOptions{DedupInodes: true, FollowSymlinkDirs: true}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dedup.Files != 1 {
+		t.Errorf("dedup: Files=%d, want 1 (three hard links to same inode counted once)", dedup.Files)
+	}
+	if dedup.Bytes != 8192 {
+		t.Errorf("dedup: Bytes=%d, want 8192 (only original's bytes)", dedup.Bytes)
+	}
+}
