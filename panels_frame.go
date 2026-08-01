@@ -769,6 +769,17 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		}
 	}
 
+	// If the active slot is showing a focused alt panel (Ctrl+L info,
+	// Ctrl+Q quick-view, later Ctrl+T tree), let it consume its own
+	// navigation keys first — plain arrows, PgUp/Dn, Home/End, F2
+	// wrap-toggle. Anything the alt doesn't recognise falls through
+	// to the normal chain, so Ctrl+L / Ctrl+Q / Tab still work.
+	if pf.showPanels && pf.altPanels[pf.activeIdx] != nil && pf.altPanels[pf.activeIdx].IsFocused() {
+		if pf.altPanels[pf.activeIdx].ProcessKey(e) {
+			return true
+		}
+	}
+
 	// Check global hotkeys (ignoring Lock and Enhanced keys)
 	for _, hk := range GlobalHotkeys {
 		hkCtrl := (hk.Mods & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
@@ -906,30 +917,18 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	}
 
-	// Ctrl+L toggles the info panel, mirroring far2l's Ctrl+L. If the
-	// currently active slot already shows an info panel, close THAT
-	// one first (matches far2l: `if active is already target type,
-	// AnotherPanel = ActivePanel` in filepanels.cpp). Otherwise, if
-	// the passive slot has one, close it; otherwise open a new one
-	// on the passive side. AltPanel is the shared interface Ctrl+Q
-	// (Quick view) and Ctrl+T (Tree) will plug into the same way.
-	// Closes #196.
+	// Ctrl+L toggles the info panel; Ctrl+Q the quick-view panel.
+	// Both go through toggleAltPanel with the same three-step logic
+	// borrowed from far2l's ChangePanel: close the ACTIVE-side alt
+	// if it's already this kind, else close the PASSIVE-side one if
+	// it is, else open a new one on the passive side. Ctrl+T (Tree)
+	// will plug in the same way. Closes #196 (Ctrl+L).
 	if e.VirtualKeyCode == vtinput.VK_L && ctrl && !alt && !shift && e.KeyDown {
-		if pf.showPanels {
-			opp := 1 - pf.activeIdx
-			switch {
-			case pf.altPanels[pf.activeIdx] != nil && pf.altPanels[pf.activeIdx].Kind() == "info":
-				pf.altPanels[pf.activeIdx] = nil
-			case pf.altPanels[opp] != nil && pf.altPanels[opp].Kind() == "info":
-				pf.altPanels[opp] = nil
-			default:
-				if fsp, ok := pf.panels[pf.activeIdx].(*FileSystemPanel); ok {
-					pf.altPanels[opp] = NewInfoPanel(fsp)
-				}
-			}
-			pf.ResizeConsole(pf.lastW, pf.lastH)
-			vtui.FrameManager.HardRefresh()
-		}
+		pf.toggleAltPanel("info", func(src *FileSystemPanel) AltPanel { return NewInfoPanel(src) })
+		return true
+	}
+	if e.VirtualKeyCode == vtinput.VK_Q && ctrl && !alt && !shift && e.KeyDown {
+		pf.toggleAltPanel("quick_view", func(src *FileSystemPanel) AltPanel { return NewQuickViewPanel(src) })
 		return true
 	}
 
@@ -1844,6 +1843,15 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 		return true
 	}
 
+	// If a focused alt panel wants the wheel (e.g. quick-view is
+	// scrolling its content), give it first crack before the "wheel
+	// always scrolls active file panel" rule below.
+	if pf.showPanels && pf.altPanels[pf.activeIdx] != nil && pf.altPanels[pf.activeIdx].IsFocused() {
+		if pf.altPanels[pf.activeIdx].ProcessMouse(e) {
+			return true
+		}
+	}
+
 	// Wheel events always scroll the active panel, regardless of mouse position.
 	// This matches classic Far Manager / far2l behavior.
 	if e.WheelDirection != 0 {
@@ -2182,9 +2190,24 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 }
 
 func (pf *PanelsFrame) GetKeyLabels() *vtui.KeySet {
+	// F2 label switches to Wrap/Unwrap while the quick-view panel is
+	// focused, matching far/far2l. The alt panel handles the actual
+	// key in its ProcessKey; we just relabel the hint here.
+	f2 := Msg("KeyBar.F2")
+	if pf.showPanels && pf.activeIdx >= 0 && pf.activeIdx < len(pf.altPanels) {
+		if a := pf.altPanels[pf.activeIdx]; a != nil && a.IsFocused() && a.Kind() == "quick_view" {
+			if q, ok := a.(*QuickViewPanel); ok {
+				if q.wrap {
+					f2 = Msg("KeyBar.F2Unwrap")
+				} else {
+					f2 = Msg("KeyBar.F2Wrap")
+				}
+			}
+		}
+	}
 	return &vtui.KeySet{
 		Normal: vtui.KeyBarLabels{
-			Msg("KeyBar.F1"), Msg("KeyBar.F2"), Msg("KeyBar.F3"), Msg("KeyBar.F4"),
+			Msg("KeyBar.F1"), f2, Msg("KeyBar.F3"), Msg("KeyBar.F4"),
 			Msg("KeyBar.F5"), Msg("KeyBar.F6"), Msg("KeyBar.F7"), Msg("KeyBar.F8"),
 			Msg("KeyBar.F9"), Msg("KeyBar.F10"), Msg("KeyBar.F11"), Msg("KeyBar.F12"),
 		},
@@ -2401,6 +2424,31 @@ func (pf *PanelsFrame) ExecuteDummyOp(mode int) {
 		})
 	}
 }
+
+// toggleAltPanel drives the Ctrl+L / Ctrl+Q / (future) Ctrl+T
+// keystrokes. Given a Kind and a factory, it closes the active-side
+// alt if it already matches Kind, else closes the passive-side one
+// if it matches, else creates a new alt on the passive side via the
+// factory (fed the current active FileSystemPanel as source).
+func (pf *PanelsFrame) toggleAltPanel(kind string, factory func(src *FileSystemPanel) AltPanel) {
+	if !pf.showPanels {
+		return
+	}
+	opp := 1 - pf.activeIdx
+	switch {
+	case pf.altPanels[pf.activeIdx] != nil && pf.altPanels[pf.activeIdx].Kind() == kind:
+		pf.altPanels[pf.activeIdx] = nil
+	case pf.altPanels[opp] != nil && pf.altPanels[opp].Kind() == kind:
+		pf.altPanels[opp] = nil
+	default:
+		if fsp, ok := pf.panels[pf.activeIdx].(*FileSystemPanel); ok {
+			pf.altPanels[opp] = factory(fsp)
+		}
+	}
+	pf.ResizeConsole(pf.lastW, pf.lastH)
+	vtui.FrameManager.HardRefresh()
+}
+
 func (pf *PanelsFrame) RefreshAll() {
 	if pf == nil {
 		return

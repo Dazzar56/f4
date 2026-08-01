@@ -1,0 +1,475 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"strings"
+	"time"
+	"unicode/utf8"
+
+	"github.com/mattn/go-runewidth"
+	"github.com/unxed/f4/vfs"
+	"github.com/unxed/vtinput"
+	"github.com/unxed/vtui"
+)
+
+// QuickViewPanel is far2l's Ctrl+Q quick-view panel. It mirrors the
+// source file panel's current cursor: for a directory it shows a
+// small "info" block (name + immediate file/folder counts), for a
+// regular file it shows a text preview or a hex dump depending on a
+// simple binary heuristic. Recursive directory sizing and full-file
+// viewer features are deliberately deferred.
+type QuickViewPanel struct {
+	vtui.ScreenObject
+	src     *FileSystemPanel
+	frame   *vtui.BorderedFrame
+	focused bool
+
+	// Cache the last-computed preview so we don't re-read the file /
+	// re-scan the directory on every redraw.
+	cacheKey        string // full path we last previewed
+	cacheDir        bool   // whether cache is for a directory or file
+	cacheDirFiles   int
+	cacheDirFolders int
+	cacheDirErr     error
+	cacheBinary     bool
+	cacheLines      []string // raw preview lines (source lines or hex rows)
+	cacheReadErr    error
+
+	// Display state driven by the keyboard while the panel is focused.
+	wrap    bool
+	scrollY int
+	scrollX int
+
+	// Wrapped view: cacheLines re-flowed to fit innerW. Rebuilt when
+	// content / wrap flag / innerW changes.
+	displayLines []string
+	displayWrap  bool
+	displayWidth int
+}
+
+// NewQuickViewPanel creates a quick-view panel over src's slot.
+func NewQuickViewPanel(src *FileSystemPanel) *QuickViewPanel {
+	x1, y1, x2, y2 := src.GetPosition()
+	q := &QuickViewPanel{src: src, wrap: true}
+	q.SetVisible(true)
+	q.frame = vtui.NewBorderedFrame(x1, y1, x2, y2, vtui.SingleBox, Msg("QuickView.Title"))
+	q.frame.ColorBoxIdx = ColPanelBox
+	q.frame.ColorTitleIdx = ColPanelTitle
+	q.frame.ColorBackgroundIdx = ColPanelInfoText
+	q.SetPosition(x1, y1, x2, y2)
+	return q
+}
+
+func (q *QuickViewPanel) SetPosition(x1, y1, x2, y2 int) {
+	q.ScreenObject.SetPosition(x1, y1, x2, y2)
+	if q.frame != nil {
+		q.frame.SetPosition(x1, y1, x2, y2)
+	}
+}
+
+func (q *QuickViewPanel) Source() *FileSystemPanel { return q.src }
+func (q *QuickViewPanel) Kind() string             { return "quick_view" }
+
+// SetFocus tracks the focused marker (title recolour). When focused
+// the panel starts consuming navigation keys — see ProcessKey.
+func (q *QuickViewPanel) SetFocus(f bool) {
+	q.focused = f
+	if q.frame != nil {
+		if f {
+			q.frame.ColorTitleIdx = ColPanelSelectedTitle
+		} else {
+			q.frame.ColorTitleIdx = ColPanelTitle
+		}
+	}
+}
+func (q *QuickViewPanel) IsFocused() bool { return q.focused }
+
+// ProcessKey handles scroll / wrap-toggle keys while focused. Any
+// key we don't recognise falls through (return false), letting the
+// global handler chain deal with Ctrl+Q close, Tab, etc.
+func (q *QuickViewPanel) ProcessKey(e *vtinput.InputEvent) bool {
+	if !e.KeyDown || !q.focused {
+		return false
+	}
+	// Ignore anything with modifiers — Ctrl+Q / Ctrl+L etc. need
+	// to reach the global handler chain unchanged.
+	if e.ControlKeyState&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed|vtinput.LeftAltPressed|vtinput.RightAltPressed) != 0 {
+		return false
+	}
+	switch e.VirtualKeyCode {
+	case vtinput.VK_UP:
+		q.scrollY--
+	case vtinput.VK_DOWN:
+		q.scrollY++
+	case vtinput.VK_PRIOR: // PgUp
+		q.scrollY -= q.pageHeight()
+	case vtinput.VK_NEXT: // PgDn
+		q.scrollY += q.pageHeight()
+	case vtinput.VK_HOME:
+		q.scrollY = 0
+		q.scrollX = 0
+	case vtinput.VK_END:
+		q.scrollY = 1 << 30 // clamped by Show
+	case vtinput.VK_LEFT:
+		if !q.wrap {
+			q.scrollX--
+		}
+	case vtinput.VK_RIGHT:
+		if !q.wrap {
+			q.scrollX++
+		}
+	case vtinput.VK_F2:
+		q.wrap = !q.wrap
+		q.scrollX = 0
+		q.displayLines = nil // force re-flow next Show
+	default:
+		return false
+	}
+	if q.scrollX < 0 {
+		q.scrollX = 0
+	}
+	if q.scrollY < 0 {
+		q.scrollY = 0
+	}
+	vtui.FrameManager.HardRefresh()
+	return true
+}
+
+// ProcessMouse handles the wheel while focused.
+func (q *QuickViewPanel) ProcessMouse(e *vtinput.InputEvent) bool {
+	if !q.focused || (e.MouseEventFlags&vtinput.MouseWheeled) == 0 {
+		return false
+	}
+	step := 3
+	if e.WheelDirection > 0 {
+		q.scrollY -= step
+	} else {
+		q.scrollY += step
+	}
+	if q.scrollY < 0 {
+		q.scrollY = 0
+	}
+	vtui.FrameManager.HardRefresh()
+	return true
+}
+
+func (q *QuickViewPanel) GetSelectedName() string {
+	if q.src == nil {
+		return ""
+	}
+	return q.src.GetSelectedName()
+}
+
+func (q *QuickViewPanel) pageHeight() int {
+	h := q.Y2 - q.Y1 - 1 // room between borders
+	if h < 1 {
+		return 1
+	}
+	return h
+}
+
+func (q *QuickViewPanel) Show(scr *vtui.ScreenBuf) {
+	if q.frame != nil {
+		q.frame.Show(scr)
+	}
+	innerW := q.X2 - q.X1 - 1
+	if innerW < 1 || q.src == nil {
+		return
+	}
+	attr := vtui.Palette[ColPanelInfoText]
+	y := q.Y1 + 1
+	maxY := q.Y2 - 1
+
+	writeLine := func(s string) {
+		if y > maxY {
+			return
+		}
+		if runewidth.StringWidth(s) > innerW {
+			s = runewidth.Truncate(s, innerW, "…")
+		}
+		pad := innerW - runewidth.StringWidth(s)
+		if pad > 0 {
+			s += strings.Repeat(" ", pad)
+		}
+		scr.Write(q.X1+1, y, vtui.StringToCharInfo(s, attr))
+		y++
+	}
+
+	idx := q.src.GetCursorIndex()
+	if idx < 0 || idx >= len(q.src.entries) {
+		writeLine(" " + Msg("QuickView.NoSelection"))
+		return
+	}
+	item := q.src.entries[idx]
+	if item.Name == ".." {
+		writeLine(" " + Msg("QuickView.ParentDir"))
+		return
+	}
+
+	path := q.src.vfs.Join(q.src.vfs.GetPath(), item.Name)
+	if path != q.cacheKey {
+		q.refreshCache(path, *item)
+		q.scrollY = 0
+		q.scrollX = 0
+		q.displayLines = nil
+	}
+
+	if q.cacheDir {
+		q.renderDir(item, writeLine)
+		return
+	}
+	q.renderFile(item, innerW, writeLine, attr, scr)
+}
+
+func (q *QuickViewPanel) renderDir(item *fileEntry, writeLine func(string)) {
+	writeLine(" " + Msg("QuickView.Folder") + " \"" + item.Name + "\"")
+	writeLine("")
+	if q.cacheDirErr != nil {
+		writeLine(" " + Msg("QuickView.ReadError") + ": " + q.cacheDirErr.Error())
+		return
+	}
+	writeLine(fmt.Sprintf(" %s: %d", Msg("QuickView.FileCount"), q.cacheDirFiles))
+	writeLine(fmt.Sprintf(" %s: %d", Msg("QuickView.FolderCount"), q.cacheDirFolders))
+}
+
+func (q *QuickViewPanel) renderFile(item *fileEntry, innerW int, writeLine func(string), attr uint64, scr *vtui.ScreenBuf) {
+	// Header block (name + size + optional binary note). Two rows.
+	writeLine(" " + item.Name)
+	writeLine(fmt.Sprintf(" %s: %s", Msg("QuickView.Size"), formatBytes(uint64(item.Size))))
+	if q.cacheReadErr != nil {
+		writeLine("")
+		writeLine(" " + Msg("QuickView.ReadError") + ": " + q.cacheReadErr.Error())
+		return
+	}
+	if q.cacheBinary {
+		writeLine(" " + Msg("QuickView.Binary"))
+	} else {
+		writeLine("")
+	}
+	writeLine(" " + strings.Repeat("─", innerW-2))
+
+	// Re-flow if wrap flag / innerW changed.
+	if q.displayLines == nil || q.displayWrap != q.wrap || q.displayWidth != innerW {
+		q.displayLines = q.buildDisplayLines(innerW)
+		q.displayWrap = q.wrap
+		q.displayWidth = innerW
+	}
+
+	// Clamp scroll offsets against fresh display.
+	viewH := (q.Y2 - 1) - (q.Y1 + 1 + 4) + 1 // rows left after the 4-line header
+	if viewH < 0 {
+		viewH = 0
+	}
+	maxScroll := len(q.displayLines) - viewH
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	if q.scrollY > maxScroll {
+		q.scrollY = maxScroll
+	}
+
+	// Emit visible slice with optional horizontal shift.
+	end := q.scrollY + viewH
+	if end > len(q.displayLines) {
+		end = len(q.displayLines)
+	}
+	for i := q.scrollY; i < end; i++ {
+		line := q.displayLines[i]
+		if !q.wrap && q.scrollX > 0 {
+			line = trimLeftCells(line, q.scrollX)
+		}
+		writeLine(line)
+	}
+}
+
+// buildDisplayLines converts cacheLines into what should actually be
+// on screen: with wrap on, long lines are re-flowed to fit innerW;
+// with wrap off, we pass them through and rely on scrollX/right-clip
+// at render time.
+func (q *QuickViewPanel) buildDisplayLines(innerW int) []string {
+	if innerW <= 0 {
+		return nil
+	}
+	if !q.wrap {
+		out := make([]string, len(q.cacheLines))
+		copy(out, q.cacheLines)
+		return out
+	}
+	var out []string
+	for _, raw := range q.cacheLines {
+		if raw == "" {
+			out = append(out, "")
+			continue
+		}
+		for len(raw) > 0 {
+			cut := cellCut(raw, innerW)
+			if cut == 0 { // guard against zero-width impossibility
+				cut = len(raw)
+			}
+			out = append(out, raw[:cut])
+			raw = raw[cut:]
+		}
+	}
+	return out
+}
+
+// cellCut finds the byte offset that keeps runewidth.StringWidth
+// under width. Handles multibyte runes and double-width cells.
+func cellCut(s string, width int) int {
+	if width <= 0 || s == "" {
+		return len(s)
+	}
+	used := 0
+	for i := 0; i < len(s); {
+		r, sz := utf8.DecodeRuneInString(s[i:])
+		w := runewidth.RuneWidth(r)
+		if used+w > width {
+			return i
+		}
+		used += w
+		i += sz
+	}
+	return len(s)
+}
+
+// trimLeftCells drops `cells` display columns from the front. Used
+// for horizontal scroll (wrap = off).
+func trimLeftCells(s string, cells int) string {
+	dropped := 0
+	for i := 0; i < len(s); {
+		r, sz := utf8.DecodeRuneInString(s[i:])
+		w := runewidth.RuneWidth(r)
+		if dropped+w > cells {
+			return s[i:]
+		}
+		dropped += w
+		i += sz
+	}
+	return ""
+}
+
+// refreshCache reads a fresh preview for path. Best-effort: errors
+// are captured into cache*Err so the render path can surface them
+// without blowing up.
+func (q *QuickViewPanel) refreshCache(path string, item fileEntry) {
+	q.cacheKey = path
+	q.cacheDir = item.IsDir
+	q.cacheBinary = false
+	q.cacheLines = nil
+	q.cacheReadErr = nil
+	q.cacheDirErr = nil
+	q.cacheDirFiles = 0
+	q.cacheDirFolders = 0
+
+	if item.IsDir {
+		ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+		defer cancel()
+		err := q.src.vfs.ReadDir(ctx, path, func(chunk []vfs.VFSItem) {
+			for i := range chunk {
+				if chunk[i].Name == ".." {
+					continue
+				}
+				if chunk[i].IsDir {
+					q.cacheDirFolders++
+				} else {
+					q.cacheDirFiles++
+				}
+			}
+		})
+		if err != nil {
+			q.cacheDirErr = err
+		}
+		return
+	}
+
+	// Regular file: read up to previewMax bytes, split into lines or
+	// classify as binary. Small budget (16 KiB) keeps this cheap even
+	// on network VFSes.
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	rc, err := q.src.vfs.Open(ctx, path)
+	if err != nil {
+		q.cacheReadErr = err
+		return
+	}
+	defer rc.Close()
+	buf := make([]byte, previewMax)
+	n, rerr := rc.ReadAt(ctx, buf, 0)
+	if rerr != nil && rerr != io.EOF {
+		q.cacheReadErr = rerr
+		return
+	}
+	buf = buf[:n]
+	if looksBinary(buf) {
+		q.cacheBinary = true
+		q.cacheLines = hexDumpLines(buf)
+	} else {
+		lines := splitTextLines(string(buf))
+		if n := len(lines); n > 0 && lines[n-1] == "" {
+			lines = lines[:n-1]
+		}
+		q.cacheLines = lines
+	}
+}
+
+const previewMax = 16 * 1024
+
+// looksBinary returns true if the buffer contains a NUL byte or an
+// unusually high proportion of non-printable / non-UTF-8 sequences.
+// Simple heuristic — same shape as Far/far2l's viewer classification.
+func looksBinary(b []byte) bool {
+	if len(b) == 0 {
+		return false
+	}
+	if !utf8.Valid(b) {
+		return true
+	}
+	for _, c := range b {
+		if c == 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func hexDumpLines(b []byte) []string {
+	const perLine = 16
+	var out []string
+	for off := 0; off < len(b); off += perLine {
+		end := off + perLine
+		if end > len(b) {
+			end = len(b)
+		}
+		row := b[off:end]
+		hex := make([]byte, 0, perLine*3)
+		ascii := make([]byte, 0, perLine)
+		for i := 0; i < perLine; i++ {
+			if i < len(row) {
+				hex = append(hex, hexNibble(row[i]>>4), hexNibble(row[i]&0xF))
+			} else {
+				hex = append(hex, ' ', ' ')
+			}
+			hex = append(hex, ' ')
+			if i < len(row) {
+				c := row[i]
+				if c < 32 || c == 127 {
+					c = '.'
+				}
+				ascii = append(ascii, c)
+			}
+		}
+		out = append(out, fmt.Sprintf(" %08X  %s  %s", off, hex, ascii))
+	}
+	return out
+}
+
+func hexNibble(n byte) byte {
+	if n < 10 {
+		return '0' + n
+	}
+	return 'A' + (n - 10)
+}
+
+var _ AltPanel = (*QuickViewPanel)(nil)
