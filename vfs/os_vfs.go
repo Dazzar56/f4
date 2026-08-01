@@ -192,15 +192,21 @@ func (v *OSVFS) ReadDir(ctx context.Context, path string, onChunk func([]VFSItem
 				}
 			}
 
+			entryPath := filepath.Join(dirPath, e.Name())
 			item := VFSItem{
 				Name:         e.Name(),
 				Size:         size,
 				IsDir:        isDir,
 				MTime:        mtime,
 				IsExecutable: isExec,
-				IsHidden:     isHidden(filepath.Join(dirPath, e.Name()), e.Name(), info),
+				IsHidden:     isHidden(entryPath, e.Name(), info),
 			}
-			fillPhysicalSize(&item, info, filepath.Join(dirPath, e.Name()))
+			// Cheap variant: on Unix stat.Blocks is already loaded
+			// alongside FileInfo, so filling PhysicalSize here is free.
+			// On Windows this is a no-op — the scan path pays for
+			// GetCompressedFileSize lazily via Stat() when it actually
+			// needs the number (see vfs/scanner.go).
+			fillPhysicalSizeCheap(&item, info)
 			items = append(items, item)
 		}
 

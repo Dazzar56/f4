@@ -20,11 +20,19 @@ var (
 	procGetCompressedFileSizeW = physKernel32.NewProc("GetCompressedFileSizeW")
 )
 
+// fillPhysicalSizeCheap is a no-op on Windows — there's no way to get
+// on-disk allocation size from FileInfo alone; GetCompressedFileSize
+// is a separate syscall we don't want to pay in the ReadDir path (an
+// extra kernel round-trip per file, and on SMB an extra network
+// round-trip too). Consumers that actually need PhysicalSize (the
+// QuickView scan) go through fillPhysicalSize / Stat instead.
+func fillPhysicalSizeCheap(_ *VFSItem, _ os.FileInfo) {}
+
 // fillPhysicalSize asks NTFS for the on-disk footprint of path, which
 // matches far/far2 semantics: NTFS-compressed files return their
 // compressed size, sparse regions are excluded, and plain files return
 // their cluster-aligned allocation. Non-NTFS or unsupported paths
-// (network shares, some FUSE mounts) fall back to info.Size().
+// (some network shares, some FUSE mounts) fall back to info.Size().
 func fillPhysicalSize(item *VFSItem, info os.FileInfo, path string) {
 	if path == "" || info == nil {
 		return

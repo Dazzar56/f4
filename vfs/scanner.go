@@ -15,7 +15,7 @@ import (
 type OpStats struct {
 	Bytes         int64
 	DirBytes      int64
-	PhysicalBytes int64 // sum of per-file ceil-round to a cluster boundary; 0 unless a Detailed scan filled it
+	PhysicalBytes int64 // sum of VFSItem.PhysicalSize (Unix stat.Blocks*512 / Windows GetCompressedFileSize); 0 on VFSes that don't report it
 	Files         int64
 	Dirs          int64
 }
@@ -92,6 +92,18 @@ func scanRecursive(ctx context.Context, v VFS, currentPath string, item VFSItem,
 	if cb != nil {
 		// Report progress. To avoid spamming the UI thread, the caller should throttle this.
 		cb(currentPath, *stats)
+	}
+
+	// PhysicalSize is populated cheaply on Unix during ReadDir; on
+	// Windows the ReadDir path skips it to keep listings fast, so we
+	// fill it lazily here (an extra Stat per file — expensive per
+	// item, but we only pay it during an actual scan, not on every
+	// panel refresh). item.Size > 0 is the trigger; empty files and
+	// truly-sparse files stay at 0.
+	if item.PhysicalSize == 0 && item.Size > 0 {
+		if st, err := v.Stat(ctx, currentPath); err == nil {
+			item.PhysicalSize = st.PhysicalSize
+		}
 	}
 
 	if !item.IsDir {

@@ -37,12 +37,13 @@ type QuickViewPanel struct {
 
 	// Async recursive scan state for the directory case. Guarded by
 	// scanMu so the goroutine and the UI thread can share it. scanGen
-	// bumps on each new scan; callbacks whose gen mismatches are
-	// ignored (the goroutine may still be draining after a cursor
-	// change cancelled its ctx). scanDoneCh is closed on completion
-	// and recreated per scan so tests can wait for finalisation.
-	// scanClusterSize is the FSInfo.ClusterSize that was used to seed
-	// the scan (0 = unknown); rendering hides Physical/Ratio when 0.
+	// bumps on every new scan AND on every cancel; callbacks whose
+	// gen mismatches are ignored (the goroutine may still be draining
+	// after a cursor change or Close cancelled its ctx), so no stale
+	// numbers can leak into a fresh state. scanDoneCh is closed on
+	// completion and recreated per scan so tests can wait for
+	// finalisation. scanClusterSize gates only the "Cluster size" row
+	// in render; Physical/Ratio are gated by scanStats.PhysicalBytes.
 	scanMu          sync.Mutex
 	scanCancel      context.CancelFunc
 	scanGen         uint64
@@ -214,11 +215,12 @@ func (q *QuickViewPanel) Show(scr *vtui.ScreenBuf) {
 		q.frame.Show(scr)
 	}
 	// Bottom-border hint reminding the user of the units toggle, same
-	// pattern InfoPanel uses. Since B affects both the "Files size"
-	// number for directories and the header "Size" for files, we
-	// always draw it while the panel is up.
+	// pattern InfoPanel uses (same string too — the toggle behaves
+	// identically). Drawn always while the panel is up because B
+	// affects both the "Files size" number for directories and the
+	// header "Size" for files.
 	if q.frame != nil && q.Y2 > q.Y1+1 {
-		hint := Msg("QuickView.UnitsHint")
+		hint := Msg("InfoPanel.UnitsHint")
 		if runewidth.StringWidth(hint) < q.X2-q.X1-1 {
 			attrBox := vtui.Palette[ColPanelBox]
 			scr.Write(q.X1+2, q.Y2, vtui.StringToCharInfo(hint, attrBox))
@@ -312,48 +314,49 @@ func (q *QuickViewPanel) renderDir(item *fileEntry, writeLine func(string)) {
 
 	// vfs.CalculateStats counts the passed-in directory itself as one
 	// of Dirs, but far2/far2l show "Folders" as the child-folder count.
-	// Subtract 1 (clamped) so the two match. Files/Bytes are children
-	// only already since directories don't contribute to Bytes.
+	// Subtract 1 (clamped) so the two match.
 	dirs := stats.Dirs - 1
 	if dirs < 0 {
 		dirs = 0
 	}
 
-	hint := ""
-	if !done && serr == nil {
-		hint = "  " + Msg("QuickView.Scanning")
-	}
 	writeLine(" " + Msg("QuickView.Contains") + ":")
 	writeLine("")
-	writeLine(fmt.Sprintf(" %-14s %d%s", Msg("QuickView.FolderCount"), dirs, hint))
-	writeLine(fmt.Sprintf(" %-14s %d%s", Msg("QuickView.FileCount"), stats.Files, hint))
-	// Include directory-inode sizes in the shown "Files size" so it
-	// matches far2/far2l (their number sums every entry's Size,
-	// including dir inodes). ETA/copy paths read stats.Bytes only, so
-	// they're unaffected.
-	logical := stats.Bytes + stats.DirBytes
-	writeLine(fmt.Sprintf(" %-14s %s%s", Msg("QuickView.FilesSize"), formatBytes(uint64(logical)), hint))
-	// Physical size + Ratio need per-item on-disk footprint from the
-	// VFS. On stub VFSes (some plugins) PhysicalBytes stays 0 during
-	// the whole scan — hide the rows entirely rather than misleading.
+	writeLine(fmt.Sprintf(" %-14s %d", Msg("QuickView.FolderCount"), dirs))
+	writeLine(fmt.Sprintf(" %-14s %d", Msg("QuickView.FileCount"), stats.Files))
+	// "Files size" is the sum of file sizes only — matches Windows
+	// far2 semantics (where dir inodes are size 0) and, more
+	// importantly, keeps the number identical across platforms; on
+	// Linux dir inodes tend to be 4096, which would inflate the total
+	// versus the same tree seen from Windows. DirBytes stays tracked
+	// separately in OpStats for anyone who wants it.
+	writeLine(fmt.Sprintf(" %-14s %s", Msg("QuickView.FilesSize"), formatBytes(uint64(stats.Bytes))))
+	// Physical size + Ratio need per-item on-disk footprint. Stub /
+	// remote VFSes leave PhysicalBytes at 0 during the whole scan —
+	// hide the rows in that case. Ratio is also hidden when it would
+	// just read "100%" — on Unix that's every uncompressed tree, and
+	// a constant carries no information for the reader.
 	if stats.PhysicalBytes > 0 {
-		writeLine(fmt.Sprintf(" %-14s %s%s", Msg("QuickView.PhysicalSize"), formatBytes(uint64(stats.PhysicalBytes)), hint))
-		// Ratio interpretation matches far/far2l:
-		//   uncompressed dense files: physical >= logical → 100%
-		//   NTFS-compressed / sparse: physical <  logical → logical/physical
-		// so >100% means "on disk it takes less than the logical size" —
-		// what "compression ratio" conventionally denotes.
-		ratio := 100
-		if stats.PhysicalBytes < logical {
-			ratio = int((logical * 100) / stats.PhysicalBytes)
+		writeLine(fmt.Sprintf(" %-14s %s", Msg("QuickView.PhysicalSize"), formatBytes(uint64(stats.PhysicalBytes))))
+		if stats.PhysicalBytes < stats.Bytes {
+			// Ratio interpretation matches far/far2l — >100% means "on
+			// disk it takes less than the logical size", i.e. real
+			// NTFS compression / sparse regions.
+			ratio := int((stats.Bytes * 100) / stats.PhysicalBytes)
+			writeLine(fmt.Sprintf(" %-14s %d%%", Msg("QuickView.Ratio"), ratio))
 		}
-		writeLine(fmt.Sprintf(" %-14s %d%%%s", Msg("QuickView.Ratio"), ratio, hint))
 	}
-	// Cluster size comes from statfs / GetDiskFreeSpace and stands on
-	// its own — shown even without physical (older/stub VFSes).
+	// Cluster size stands on its own — shown even when PhysicalBytes
+	// couldn't be filled (VFS without per-item support).
 	if cluster > 0 {
 		writeLine("")
 		writeLine(fmt.Sprintf(" %-14s %s", Msg("QuickView.ClusterSize"), formatBytes(cluster)))
+	}
+	// Single "scanning" hint per far2l — one trailing line at the
+	// bottom, not repeated on every row.
+	if !done && serr == nil {
+		writeLine("")
+		writeLine(" " + Msg("QuickView.Scanning"))
 	}
 	if serr != nil {
 		writeLine("")
@@ -366,17 +369,10 @@ func (q *QuickViewPanel) renderDir(item *fileEntry, writeLine func(string)) {
 // scanStats under scanMu; the UI is nudged via HardRefresh no more
 // than every 200ms while the scan runs. On completion the final stats
 // (plus scanErr if any) are latched and scanDone becomes true.
+// fsInfo (statfs / GetDiskFreeSpace) is done inside the goroutine —
+// it can block for seconds on a hung NFS/SMB mount and must not sit
+// on the UI thread.
 func (q *QuickViewPanel) startDirScan(fullPath string) {
-	// Cluster size comes from the platform's statfs / GetDiskFreeSpace
-	// and is used purely for display (the "Cluster size" row). Physical
-	// footprint is provided per-item by the VFS (stat.Blocks on Unix,
-	// GetCompressedFileSize on Windows) and accumulated into
-	// stats.PhysicalBytes by the scanner — no cluster-size math here.
-	var clusterSize uint64
-	if fs, ok := fsInfo(fullPath); ok {
-		clusterSize = fs.ClusterSize
-	}
-
 	q.scanMu.Lock()
 	if q.scanCancel != nil {
 		q.scanCancel()
@@ -386,7 +382,7 @@ func (q *QuickViewPanel) startDirScan(fullPath string) {
 	ctx, cancel := context.WithCancel(context.Background())
 	q.scanCancel = cancel
 	q.scanStats = vfs.OpStats{}
-	q.scanClusterSize = clusterSize
+	q.scanClusterSize = 0
 	q.scanDone = false
 	q.scanErr = nil
 	q.scanLastRedraw = time.Time{}
@@ -402,6 +398,16 @@ func (q *QuickViewPanel) startDirScan(fullPath string) {
 
 	go func() {
 		defer close(done)
+		// fsInfo() is a syscall that may block on stuck network
+		// mounts; do it here, off the UI thread. Cluster size is a
+		// display-only field.
+		if fs, ok := fsInfo(fullPath); ok {
+			q.scanMu.Lock()
+			if q.scanGen == gen {
+				q.scanClusterSize = fs.ClusterSize
+			}
+			q.scanMu.Unlock()
+		}
 		stats, err := vfs.CalculateStats(ctx, source, basePath, []string{name}, func(_ string, s vfs.OpStats) {
 			q.scanMu.Lock()
 			if q.scanGen != gen {
@@ -433,13 +439,17 @@ func (q *QuickViewPanel) startDirScan(fullPath string) {
 
 // cancelScan tears down any in-flight scan and clears scan state.
 // Called both when switching from a dir to a file entry and on Close.
+// Bumps scanGen so any still-draining callback of the old goroutine is
+// rejected and can't stamp stale numbers onto the freshly-cleared state.
 func (q *QuickViewPanel) cancelScan() {
 	q.scanMu.Lock()
 	if q.scanCancel != nil {
 		q.scanCancel()
 		q.scanCancel = nil
 	}
+	q.scanGen++
 	q.scanStats = vfs.OpStats{}
+	q.scanClusterSize = 0
 	q.scanDone = false
 	q.scanErr = nil
 	q.scanMu.Unlock()
