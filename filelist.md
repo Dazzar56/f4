@@ -1,5 +1,5 @@
 # Project Structure
-Last updated: 2026-07-31 22:09:24
+Last updated: 2026-08-01 17:38:36
 
 ```text
 .
@@ -60,6 +60,10 @@ Last updated: 2026-07-31 22:09:24
 ├── find_file.go
 ├── find_file_test.go
 ├── FISH+.md
+├── fs_info.go
+├── fs_info_linux.go
+├── fs_info_other.go
+├── fs_info_windows.go
 ├── .github
 │   └── workflows
 │       └── build.yml
@@ -76,6 +80,8 @@ Last updated: 2026-07-31 22:09:24
 ├── HIGHLIGHTING.md
 ├── history_provider.go
 ├── history_provider_test.go
+├── info_panel.go
+├── info_panel_test.go
 ├── ini.go
 ├── ini_test.go
 ├── input_translation.go
@@ -89,6 +95,10 @@ Last updated: 2026-07-31 22:09:24
 ├── macro.go
 ├── macro_test.go
 ├── main.go
+├── mem_info.go
+├── mem_info_linux.go
+├── mem_info_other.go
+├── mem_info_windows.go
 ├── panels_frame.go
 ├── panels_frame_test.go
 ├── piecetable
@@ -144,6 +154,8 @@ Last updated: 2026-07-31 22:09:24
 ├── pty_windows.go
 ├── queue_manager.go
 ├── queue_manager_test.go
+├── quick_view_panel.go
+├── quick_view_panel_test.go
 ├── README.md
 ├── rpc_lua_test.go
 ├── rpc_plugin.go
@@ -253,5 +265,5 @@ Last updated: 2026-07-31 22:09:24
 ├── viewer_view.go
 └── viewer_view_test.go
 
-19 directories, 231 files
+19 directories, 243 files
 ```
