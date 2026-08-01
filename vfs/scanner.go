@@ -226,13 +226,19 @@ func scanRecursive(ctx context.Context, v VFS, currentPath string, item VFSItem,
 	stats.PhysicalBytes += item.PhysicalSize
 
 	var childItems []VFSItem
-	err := v.ReadDir(ctx, currentPath, func(chunk []VFSItem) {
+	if err := v.ReadDir(ctx, currentPath, func(chunk []VFSItem) {
 		childItems = append(childItems, chunk...)
-	})
-	if err != nil {
-		// Permission denied on a subfolder shouldn't necessarily fail the whole scan,
-		// but returning the error lets the caller decide. For now, we propagate it.
-		return err
+	}); err != nil {
+		// Permission denied / transient I/O on this specific directory
+		// must NOT kill the whole walk — matches far2l's ScanTree,
+		// which silently steps over inaccessible directories and
+		// returns partial totals. Root-level failure is still surfaced
+		// upstream (via v.Stat in genericScan). Cancellation is
+		// preserved by returning ctx.Err() when set.
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return nil
 	}
 
 	for _, child := range childItems {
@@ -240,8 +246,12 @@ func scanRecursive(ctx context.Context, v VFS, currentPath string, item VFSItem,
 			continue
 		}
 		childPath := v.Join(currentPath, child.Name)
-		err := scanRecursive(ctx, v, childPath, child, stats, cb, depth+1, opts, seen)
-		if err != nil {
+		// Propagate errors from the recursive call — the depth-limit
+		// guard and ctx cancellation live in scanRecursive itself and
+		// must be able to abort the whole walk. Per-directory ReadDir
+		// failures inside the recursion are already swallowed above,
+		// so this only forwards genuine "abort" conditions.
+		if err := scanRecursive(ctx, v, childPath, child, stats, cb, depth+1, opts, seen); err != nil {
 			return err
 		}
 	}

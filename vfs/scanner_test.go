@@ -177,9 +177,17 @@ func TestGenericScan_Errors(t *testing.T) {
 			return VFSItem{Name: "dir", IsDir: true}
 		}
 
-		_, err := GenericScan(context.Background(), mv, "/", []string{"dir"}, nil)
-		if err == nil || err.Error() != "readdir failed" {
-			t.Errorf("Expected readdir error, got %v", err)
+		// ReadDir errors are swallowed by the scanner — matches
+		// far2l's ScanTree, which silently steps over permission-
+		// denied subtrees so the walk returns partial totals rather
+		// than aborting on the first sudo-only directory. The scan
+		// should return no error and just count the parent dir.
+		stats, err := GenericScan(context.Background(), mv, "/", []string{"dir"}, nil)
+		if err != nil {
+			t.Errorf("ReadDir failure should be swallowed, got %v", err)
+		}
+		if stats.Dirs != 1 {
+			t.Errorf("Dirs = %d, want 1 (root dir counted even when ReadDir fails)", stats.Dirs)
 		}
 	})
 }
