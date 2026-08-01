@@ -50,6 +50,12 @@ type VFSItem struct {
 	Mode         string
 	IsExecutable bool
 	IsHidden     bool
+	// PhysicalSize is the real on-disk footprint of the item (compressed
+	// size on NTFS / actual allocated blocks on Unix). Zero means the
+	// platform didn't populate it (network VFSes, non-Unix/-Windows).
+	// Consumers that display "physical size" should hide the metric
+	// entirely when the accumulated total is 0.
+	PhysicalSize int64
 	// Metadata for Attributes dialog
 	ATime    time.Time // Last Access
 	CTime    time.Time // Creation (Win) or Status Change (Unix)

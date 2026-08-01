@@ -333,17 +333,25 @@ func (q *QuickViewPanel) renderDir(item *fileEntry, writeLine func(string)) {
 	// they're unaffected.
 	logical := stats.Bytes + stats.DirBytes
 	writeLine(fmt.Sprintf(" %-14s %s%s", Msg("QuickView.FilesSize"), formatBytes(uint64(logical)), hint))
-	// Physical size + Ratio are only meaningful when we know the
-	// cluster (allocation-unit) size — fs_info_other.go stubs return
-	// 0, and Windows may fail GetDiskFreeSpace on network shares. In
-	// that case we hide these rows rather than showing bogus numbers.
-	if cluster > 0 {
+	// Physical size + Ratio need per-item on-disk footprint from the
+	// VFS. On stub VFSes (some plugins) PhysicalBytes stays 0 during
+	// the whole scan — hide the rows entirely rather than misleading.
+	if stats.PhysicalBytes > 0 {
 		writeLine(fmt.Sprintf(" %-14s %s%s", Msg("QuickView.PhysicalSize"), formatBytes(uint64(stats.PhysicalBytes)), hint))
+		// Ratio interpretation matches far/far2l:
+		//   uncompressed dense files: physical >= logical → 100%
+		//   NTFS-compressed / sparse: physical <  logical → logical/physical
+		// so >100% means "on disk it takes less than the logical size" —
+		// what "compression ratio" conventionally denotes.
 		ratio := 100
-		if stats.PhysicalBytes > 0 {
+		if stats.PhysicalBytes < logical {
 			ratio = int((logical * 100) / stats.PhysicalBytes)
 		}
 		writeLine(fmt.Sprintf(" %-14s %d%%%s", Msg("QuickView.Ratio"), ratio, hint))
+	}
+	// Cluster size comes from statfs / GetDiskFreeSpace and stands on
+	// its own — shown even without physical (older/stub VFSes).
+	if cluster > 0 {
 		writeLine("")
 		writeLine(fmt.Sprintf(" %-14s %s", Msg("QuickView.ClusterSize"), formatBytes(cluster)))
 	}
@@ -359,11 +367,11 @@ func (q *QuickViewPanel) renderDir(item *fileEntry, writeLine func(string)) {
 // than every 200ms while the scan runs. On completion the final stats
 // (plus scanErr if any) are latched and scanDone becomes true.
 func (q *QuickViewPanel) startDirScan(fullPath string) {
-	// Ask the platform for the cluster size on the scan target's
-	// filesystem so we can approximate physical (on-disk) size as the
-	// per-file ceil-round to that boundary. Zero on platforms that
-	// don't tell us (see fs_info_other.go); render then hides
-	// Physical/Ratio.
+	// Cluster size comes from the platform's statfs / GetDiskFreeSpace
+	// and is used purely for display (the "Cluster size" row). Physical
+	// footprint is provided per-item by the VFS (stat.Blocks on Unix,
+	// GetCompressedFileSize on Windows) and accumulated into
+	// stats.PhysicalBytes by the scanner — no cluster-size math here.
 	var clusterSize uint64
 	if fs, ok := fsInfo(fullPath); ok {
 		clusterSize = fs.ClusterSize
@@ -385,16 +393,16 @@ func (q *QuickViewPanel) startDirScan(fullPath string) {
 	done := make(chan struct{})
 	q.scanDoneCh = done
 	source := q.src.vfs
-	// CalculateStatsDetailed derives its target via Join(basePath,
-	// name), so split fullPath on its parent+basename. Works for both
-	// children of GetPath() and for GetPath() itself (the ".." case).
+	// CalculateStats derives its target via Join(basePath, name), so
+	// split fullPath on its parent+basename. Works for both children
+	// of GetPath() and for GetPath() itself (the ".." case).
 	basePath := source.Dir(fullPath)
 	name := source.Base(fullPath)
 	q.scanMu.Unlock()
 
 	go func() {
 		defer close(done)
-		stats, err := vfs.CalculateStatsDetailed(ctx, source, basePath, []string{name}, int64(clusterSize), func(_ string, s vfs.OpStats) {
+		stats, err := vfs.CalculateStats(ctx, source, basePath, []string{name}, func(_ string, s vfs.OpStats) {
 			q.scanMu.Lock()
 			if q.scanGen != gen {
 				q.scanMu.Unlock()

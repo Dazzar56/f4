@@ -42,6 +42,10 @@ type FastScanner interface {
 
 // CalculateStats is the main entry point for gathering operation statistics.
 // It uses FastScanner if available, otherwise falls back to GenericScan.
+// stats.PhysicalBytes is populated when the VFS reports per-item
+// PhysicalSize (see VFSItem.PhysicalSize) — OSVFS does this on Unix
+// via stat.Blocks and on Windows via GetCompressedFileSize; remote
+// VFSes leave it zero and the consumer hides the metric.
 func CalculateStats(ctx context.Context, v VFS, basePath string, names []string, cb ScanCallback) (OpStats, error) {
 	if fs, ok := v.(FastScanner); ok {
 		return fs.Scan(ctx, basePath, names, cb)
@@ -49,26 +53,8 @@ func CalculateStats(ctx context.Context, v VFS, basePath string, names []string,
 	return GenericScan(ctx, v, basePath, names, cb)
 }
 
-// CalculateStatsDetailed is CalculateStats with an extra clusterSize
-// hint; when clusterSize > 0 the scan accumulates PhysicalBytes as the
-// per-file ceil-round to that boundary (an approximation of the
-// on-disk allocation size — accurate for uncompressed dense files, an
-// upper bound for sparse ones). clusterSize <= 0 leaves PhysicalBytes
-// at zero. FastScanner VFSes fall back to the generic path since the
-// remote-side Scan protocol has no room for the hint.
-func CalculateStatsDetailed(ctx context.Context, v VFS, basePath string, names []string, clusterSize int64, cb ScanCallback) (OpStats, error) {
-	if clusterSize <= 0 {
-		return CalculateStats(ctx, v, basePath, names, cb)
-	}
-	return genericScan(ctx, v, basePath, names, clusterSize, cb)
-}
-
 // GenericScan performs a recursive, client-side tree traversal to gather stats.
 func GenericScan(ctx context.Context, v VFS, basePath string, names []string, cb ScanCallback) (OpStats, error) {
-	return genericScan(ctx, v, basePath, names, 0, cb)
-}
-
-func genericScan(ctx context.Context, v VFS, basePath string, names []string, clusterSize int64, cb ScanCallback) (OpStats, error) {
 	var totalStats OpStats
 
 	for _, name := range names {
@@ -84,7 +70,7 @@ func genericScan(ctx context.Context, v VFS, basePath string, names []string, cl
 			return totalStats, err
 		}
 
-		err = scanRecursive(ctx, v, fullPath, itemStat, &totalStats, cb, 0, clusterSize)
+		err = scanRecursive(ctx, v, fullPath, itemStat, &totalStats, cb, 0)
 		if err != nil {
 			return totalStats, err
 		}
@@ -93,7 +79,7 @@ func genericScan(ctx context.Context, v VFS, basePath string, names []string, cl
 	return totalStats, nil
 }
 
-func scanRecursive(ctx context.Context, v VFS, currentPath string, item VFSItem, stats *OpStats, cb ScanCallback, depth int, clusterSize int64) error {
+func scanRecursive(ctx context.Context, v VFS, currentPath string, item VFSItem, stats *OpStats, cb ScanCallback, depth int) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -111,18 +97,14 @@ func scanRecursive(ctx context.Context, v VFS, currentPath string, item VFSItem,
 	if !item.IsDir {
 		stats.Files++
 		stats.Bytes += item.Size
-		if clusterSize > 0 {
-			stats.PhysicalBytes += ceilRound(item.Size, clusterSize)
-		}
+		stats.PhysicalBytes += item.PhysicalSize
 		return nil
 	}
 
 	// It's a directory
 	stats.Dirs++
 	stats.DirBytes += item.Size
-	if clusterSize > 0 {
-		stats.PhysicalBytes += ceilRound(item.Size, clusterSize)
-	}
+	stats.PhysicalBytes += item.PhysicalSize
 
 	var childItems []VFSItem
 	err := v.ReadDir(ctx, currentPath, func(chunk []VFSItem) {
@@ -139,24 +121,11 @@ func scanRecursive(ctx context.Context, v VFS, currentPath string, item VFSItem,
 			continue
 		}
 		childPath := v.Join(currentPath, child.Name)
-		err := scanRecursive(ctx, v, childPath, child, stats, cb, depth+1, clusterSize)
+		err := scanRecursive(ctx, v, childPath, child, stats, cb, depth+1)
 		if err != nil {
 			return err
 		}
 	}
 
 	return nil
-}
-
-// ceilRound rounds size up to the nearest multiple of unit. A zero
-// size still occupies one cluster on typical filesystems (an
-// approximation the caller may want to relax for sparse files).
-func ceilRound(size, unit int64) int64 {
-	if unit <= 0 {
-		return size
-	}
-	if size <= 0 {
-		return unit
-	}
-	return ((size + unit - 1) / unit) * unit
 }

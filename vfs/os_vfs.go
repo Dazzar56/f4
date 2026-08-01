@@ -192,14 +192,16 @@ func (v *OSVFS) ReadDir(ctx context.Context, path string, onChunk func([]VFSItem
 				}
 			}
 
-			items = append(items, VFSItem{
+			item := VFSItem{
 				Name:         e.Name(),
 				Size:         size,
 				IsDir:        isDir,
 				MTime:        mtime,
 				IsExecutable: isExec,
 				IsHidden:     isHidden(filepath.Join(dirPath, e.Name()), e.Name(), info),
-			})
+			}
+			fillPhysicalSize(&item, info, filepath.Join(dirPath, e.Name()))
+			items = append(items, item)
 		}
 
 		if len(items) > 0 && onChunk != nil {
@@ -239,6 +241,7 @@ func (v *OSVFS) Stat(ctx context.Context, path string) (VFSItem, error) {
 
 	// Platform specific time extraction
 	fillPlatformTimes(&item, info)
+	fillPhysicalSize(&item, info, prepareOSPath(path))
 
 	return item, nil
 }
