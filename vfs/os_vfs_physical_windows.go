@@ -3,9 +3,12 @@
 package vfs
 
 import (
+	"context"
 	"os"
 	"syscall"
 	"unsafe"
+
+	"golang.org/x/sys/windows"
 )
 
 // GetCompressedFileSizeW isn't exposed by x/sys/windows in a way we
@@ -58,6 +61,54 @@ func fillPhysicalSize(item *VFSItem, info os.FileInfo, path string) {
 // SupportsPhysicalSize is true on Windows — see the Unix version
 // for the rationale of keeping the answer per-platform.
 func (v *OSVFS) SupportsPhysicalSize() bool { return true }
+
+// FileIdentity resolves a path's NTFS file identity via
+// GetFileInformationByHandle: the volume serial number plus the 64-bit
+// file index uniquely identify a file record, so every hard link to
+// one file reports the same (device, inode). This is what lets the
+// scanner's DedupInodes pass count hard-linked files once on Windows,
+// matching the Unix Stat_t path — Go's ReadDir (FindNextFile) can't
+// supply a file index, so we open the entry here. FILE_FLAG_BACKUP_
+// SEMANTICS lets us open directories too; FILE_FLAG_OPEN_REPARSE_POINT
+// makes us identify a reparse point itself rather than its target. Any
+// failure (vanished path, access denied, or a volume like FAT/some SMB
+// shares that returns a zero index) yields ok=false and the scanner
+// simply skips dedup for that entry.
+func (v *OSVFS) FileIdentity(ctx context.Context, path string) (device, inode uint64, ok bool) {
+	if ctx.Err() != nil {
+		return 0, 0, false
+	}
+	ptr, err := windows.UTF16PtrFromString(prepareOSPath(path))
+	if err != nil {
+		return 0, 0, false
+	}
+	h, err := windows.CreateFile(
+		ptr,
+		0, // querying metadata needs no access rights
+		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
+		nil,
+		windows.OPEN_EXISTING,
+		windows.FILE_FLAG_BACKUP_SEMANTICS|windows.FILE_FLAG_OPEN_REPARSE_POINT,
+		0,
+	)
+	if err != nil {
+		return 0, 0, false
+	}
+	defer windows.CloseHandle(h)
+
+	var bhfi windows.ByHandleFileInformation
+	if err := windows.GetFileInformationByHandle(h, &bhfi); err != nil {
+		return 0, 0, false
+	}
+	inode = (uint64(bhfi.FileIndexHigh) << 32) | uint64(bhfi.FileIndexLow)
+	// A zero index means the volume doesn't expose persistent file IDs
+	// (FAT, some network shares). Treat it as "no identity" so we never
+	// merge unrelated entries under (serial, 0).
+	if inode == 0 {
+		return 0, 0, false
+	}
+	return uint64(bhfi.VolumeSerialNumber), inode, true
+}
 
 // isReparsePoint reports whether the entry described by info is any
 // kind of NTFS reparse point — symlinks, junctions (mount points),

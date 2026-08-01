@@ -49,6 +49,20 @@ type PhysicalSizer interface {
 	SupportsPhysicalSize() bool
 }
 
+// FileIdentifier is an optional VFS capability that resolves a stable
+// (device, inode) identity for a single path, so the scanner can
+// dedup hard links even on backends whose ReadDir can't supply that
+// identity cheaply. Unix OSVFS already stamps VFSItem.Device/Inode
+// from Stat_t during ReadDir (fillPhysicalSizeCheap), so this is only
+// really exercised on Windows — FindNextFile carries no file index,
+// so identity needs a per-file GetFileInformationByHandle (see
+// os_vfs_physical_windows.go). The scanner calls this only when
+// DedupInodes is set (seen != nil), so ordinary listings and non-dedup
+// pre-scans never pay the extra syscall.
+type FileIdentifier interface {
+	FileIdentity(ctx context.Context, path string) (device, inode uint64, ok bool)
+}
+
 // ScanOptions tunes the behaviour of CalculateStatsWithOptions.
 // The zero value is the historical, size-inflating behaviour that
 // copy/move pre-scans rely on (a symlink-to-dir is walked as if it
@@ -171,16 +185,30 @@ func scanRecursive(ctx context.Context, v VFS, currentPath string, item VFSItem,
 	// Hard-link dedup — matches far2l/src/dirinfo.cpp:120 ScannedINodes.
 	// A hard-linked file reached through multiple paths in the same
 	// walk should count once (its blocks are on disk once). Symlinks
-	// each have their own inode so this never dedups them. VFSes that
-	// don't populate Device/Inode (Windows, remote) leave both at
-	// zero — we skip the dedup then rather than merging every entry
-	// under (0,0).
-	if seen != nil && (item.Device != 0 || item.Inode != 0) {
-		key := inodeKey{item.Device, item.Inode}
-		if _, dup := seen[key]; dup {
-			return nil
+	// each have their own inode so this never dedups them.
+	if seen != nil {
+		// Unix stamps (Device, Inode) during ReadDir for free; Windows'
+		// FindNextFile can't, so resolve identity lazily via the optional
+		// FileIdentifier capability — one GetFileInformationByHandle per
+		// entry, paid only because DedupInodes was requested. Symlinks are
+		// skipped: they're leaf-counted once regardless, and resolving one
+		// would mean an extra handle open for no dedup win. Backends that
+		// still leave both at zero (remote, or an NTFS-less volume) fall
+		// through with no dedup rather than merging everything under (0,0).
+		if item.Device == 0 && item.Inode == 0 && !item.IsSymlink {
+			if idf, ok := v.(FileIdentifier); ok {
+				if dev, ino, ok := idf.FileIdentity(ctx, currentPath); ok {
+					item.Device, item.Inode = dev, ino
+				}
+			}
 		}
-		seen[key] = struct{}{}
+		if item.Device != 0 || item.Inode != 0 {
+			key := inodeKey{item.Device, item.Inode}
+			if _, dup := seen[key]; dup {
+				return nil
+			}
+			seen[key] = struct{}{}
+		}
 	}
 
 	// PhysicalSize is populated cheaply on Unix during ReadDir; on

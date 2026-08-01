@@ -3,6 +3,7 @@
 package vfs
 
 import (
+	"context"
 	"os"
 	"syscall"
 )
@@ -48,6 +49,26 @@ func fillPhysicalSize(item *VFSItem, info os.FileInfo, _ string) {
 // capability on a platform where the stub version leaves the field
 // at zero.
 func (v *OSVFS) SupportsPhysicalSize() bool { return true }
+
+// FileIdentity resolves (device, inode) for path via Lstat so the
+// scanner can dedup hard links through the FileIdentifier capability.
+// OSVFS already stamps VFSItem.Device/Inode cheaply in the ReadDir
+// path here (fillPhysicalSizeCheap reads the same Stat_t), so the
+// scanner rarely needs to call this on Unix; it exists to keep the
+// capability honest and to cover any item that reaches the dedup check
+// without identity. Lstat (not Stat) so a symlink reports its own
+// identity, never the target's.
+func (v *OSVFS) FileIdentity(_ context.Context, path string) (device, inode uint64, ok bool) {
+	info, err := os.Lstat(prepareOSPath(path))
+	if err != nil {
+		return 0, 0, false
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return 0, 0, false
+	}
+	return uint64(stat.Dev), uint64(stat.Ino), true
+}
 
 // isReparsePoint reports whether info describes a reparse-point-like
 // entry. There's no direct Unix equivalent — plain symlinks are
