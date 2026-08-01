@@ -114,6 +114,28 @@ var Lng = map[string]string{
 	// "RCtrl" and "Ctrl+Alt" are English keyboard convention; a
 	// translation may want to spell them out differently, so the whole
 	// row prefix is localizable rather than built in code.
+	"InfoPanel.Title":           " Information ",
+	"InfoPanel.Computer":        "Computer name",
+	"InfoPanel.User":            "User name",
+	"InfoPanel.FilesystemTitle": "Filesystem",
+	"InfoPanel.CurrentDir":      "Current directory",
+	"InfoPanel.Total":           "Total bytes",
+	"InfoPanel.Free":            "Free bytes",
+	"InfoPanel.Label":           "Volume label",
+	"InfoPanel.Serial":          "Serial number",
+	"InfoPanel.Mount":           "Mount point",
+	"InfoPanel.MaxFilename":     "Max filename length",
+	"InfoPanel.Flags":           "Flags",
+	"InfoPanel.MemoryTitle":     "Memory",
+	"InfoPanel.MemLoad":         "Memory load",
+	"InfoPanel.MemTotal":        "Total memory",
+	"InfoPanel.MemFree":         "Free memory",
+	"InfoPanel.MemShared":       "Shared memory",
+	"InfoPanel.MemBuffered":     "Buffer memory",
+	"InfoPanel.SwapTotal":       "Total paging file",
+	"InfoPanel.SwapFree":        "Free paging file",
+	"InfoPanel.UnitsHint":       " B: bytes ↔ human ",
+
 	"Bookmarks.Title":      " Bookmarks ",
 	"Bookmarks.RowPrefix":  "[RCtrl | Ctrl+Alt] +",
 	"Bookmarks.EmptySlot":  "<empty>",

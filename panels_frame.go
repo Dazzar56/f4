@@ -97,7 +97,13 @@ type Panel interface {
 // PanelsFrame is the main frame of the f4 manager, containing left and right panels.
 type PanelsFrame struct {
 	vtui.BaseFrame
-	panels         [2]Panel
+	panels [2]Panel
+	// altPanels[i] holds an alternate view (Info / Quick view / Tree)
+	// covering slot i's file panel. When non-nil it's rendered in
+	// place of panels[i]; panels[i] stays alive underneath and is
+	// still the "logical" panel for command dispatch. Alt panels
+	// never take focus (see AltPanel in info_panel.go).
+	altPanels      [2]AltPanel
 	activeIdx      int // 0 for left, 1 for right
 	executing      bool
 	returnToPanels bool
@@ -574,6 +580,13 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 			}
 		}
 	}
+	// Keep any active alt panels aligned with their host slot.
+	if pf.altPanels[0] != nil {
+		pf.altPanels[0].SetPosition(0, contentY1, leftW-1, leftPanelY2)
+	}
+	if pf.altPanels[1] != nil {
+		pf.altPanels[1].SetPosition(leftW, contentY1, w-1, rightPanelY2)
+	}
 
 	cmdLineY := h - 1
 	if pf.showKeyBar {
@@ -665,11 +678,21 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 		}
 		if pf.showLeftPanel {
 			pf.panels[0].SetFocus(pf.activeIdx == 0)
-			pf.panels[0].Show(scr)
+			if pf.altPanels[0] != nil {
+				pf.altPanels[0].SetFocus(pf.activeIdx == 0)
+				pf.altPanels[0].Show(scr)
+			} else {
+				pf.panels[0].Show(scr)
+			}
 		}
 		if pf.showRightPanel {
 			pf.panels[1].SetFocus(pf.activeIdx == 1)
-			pf.panels[1].Show(scr)
+			if pf.altPanels[1] != nil {
+				pf.altPanels[1].SetFocus(pf.activeIdx == 1)
+				pf.altPanels[1].Show(scr)
+			} else {
+				pf.panels[1].Show(scr)
+			}
 		}
 	} else {
 		pf.termView.SetVisible(true)
@@ -881,6 +904,54 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			pf.RefreshAll()
 		}
 		return true
+	}
+
+	// Ctrl+L toggles the info panel, mirroring far2l's Ctrl+L. If the
+	// currently active slot already shows an info panel, close THAT
+	// one first (matches far2l: `if active is already target type,
+	// AnotherPanel = ActivePanel` in filepanels.cpp). Otherwise, if
+	// the passive slot has one, close it; otherwise open a new one
+	// on the passive side. AltPanel is the shared interface Ctrl+Q
+	// (Quick view) and Ctrl+T (Tree) will plug into the same way.
+	// Closes #196.
+	if e.VirtualKeyCode == vtinput.VK_L && ctrl && !alt && !shift && e.KeyDown {
+		if pf.showPanels {
+			opp := 1 - pf.activeIdx
+			switch {
+			case pf.altPanels[pf.activeIdx] != nil && pf.altPanels[pf.activeIdx].Kind() == "info":
+				pf.altPanels[pf.activeIdx] = nil
+			case pf.altPanels[opp] != nil && pf.altPanels[opp].Kind() == "info":
+				pf.altPanels[opp] = nil
+			default:
+				if fsp, ok := pf.panels[pf.activeIdx].(*FileSystemPanel); ok {
+					pf.altPanels[opp] = NewInfoPanel(fsp)
+				}
+			}
+			pf.ResizeConsole(pf.lastW, pf.lastH)
+			vtui.FrameManager.HardRefresh()
+		}
+		return true
+	}
+
+	// `B` (plain, no modifiers) flips the info panel's number format
+	// between human-readable (GiB/MiB/…) and far2l's raw-bytes-with-
+	// separators presentation. Only fires while an info panel is
+	// actually visible — otherwise `B` still goes to fast-find as
+	// usual. Persists to settings.ini via the debounced save.
+	if e.VirtualKeyCode == vtinput.VK_B && !ctrl && !alt && !shift && e.KeyDown {
+		hasInfo := false
+		for _, a := range pf.altPanels {
+			if a != nil && a.Kind() == "info" {
+				hasInfo = true
+				break
+			}
+		}
+		if hasInfo {
+			AppConfig.InfoPanelBytes = !AppConfig.InfoPanelBytes
+			RequestSaveConfig()
+			vtui.FrameManager.HardRefresh()
+			return true
+		}
 	}
 
 	// Ctrl+P toggles the passive panel — the one not currently active.
@@ -1685,6 +1756,10 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			if pf.activeIdx == 1 && !pf.showRightPanel {
 				pf.showRightPanel = true
 			}
+			// Alt panels survive Tab — matches far2l where the
+			// info / quick view / tree panel becomes visually
+			// focused but stays put; commands still target the
+			// source file panel underneath.
 			return true
 		} else {
 			if AppConfig.CommandLineAutoComplete && !pf.cmdLine.IsEmpty() {
