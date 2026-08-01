@@ -1959,7 +1959,7 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 		AppConfig.GuiFont = editFont.GetText()
 		fmt.Sscanf(editSize.GetText(), "%d", &AppConfig.GuiFontSize)
 		if AppConfig.GuiFontSize <= 0 {
-			AppConfig.GuiFontSize = 16
+			AppConfig.GuiFontSize = 18
 		}
 		AppConfig.KeepTerminalCursor = chkCursor.State == 1
 		vtui.ManageCursorStyle = !AppConfig.KeepTerminalCursor

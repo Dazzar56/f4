@@ -153,7 +153,7 @@ var AppConfig = F4Config{
 	DefaultFileOpMode:        0,
 	FileOpPathDisplay:        0,
 	GuiFont:                  "",
-	GuiFontSize:              16,
+	GuiFontSize:              18,
 	GuiCols:                  100,
 	GuiRows:                  30,
 	ConsoleTitleTemplate:     "f4 %Ver %Platform %Admin - %State",
@@ -213,9 +213,9 @@ func LoadConfig() {
 	AppConfig.DeleteCancelFocused = ini.GetString("System", "DeleteCancelFocused", "1") == "1"
 	fmt.Sscanf(ini.GetString("Panel", "FileOpPathDisplay", "0"), "%d", &AppConfig.FileOpPathDisplay)
 	AppConfig.GuiFont = ini.GetString("Appearance", "GuiFont", "")
-	fmt.Sscanf(ini.GetString("Appearance", "GuiFontSize", "16"), "%d", &AppConfig.GuiFontSize)
+	fmt.Sscanf(ini.GetString("Appearance", "GuiFontSize", "18"), "%d", &AppConfig.GuiFontSize)
 	if AppConfig.GuiFontSize <= 0 {
-		AppConfig.GuiFontSize = 16
+		AppConfig.GuiFontSize = 18
 	}
 	fmt.Sscanf(ini.GetString("Appearance", "GuiCols", "100"), "%d", &AppConfig.GuiCols)
 	if AppConfig.GuiCols <= 0 {

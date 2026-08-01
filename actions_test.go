@@ -713,6 +713,9 @@ func TestDelete_FocusCustomization(t *testing.T) {
 	fsp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "test.txt"}}}
 	pf.activeIdx = 0
 
+	origDelFocus := AppConfig.DeleteCancelFocused
+	defer func() { AppConfig.DeleteCancelFocused = origDelFocus }()
+
 	// 1. Тест режима по умолчанию (фокус на Cancel)
 	AppConfig.DeleteCancelFocused = true
 	actionDelete(pf)

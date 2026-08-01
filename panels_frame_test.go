@@ -767,8 +767,12 @@ func TestPanelsFrame_AlwaysShowMenuBar(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()
 
+	origAlways := AppConfig.AlwaysShowMenuBar
+	defer func() { AppConfig.AlwaysShowMenuBar = origAlways }()
+
 	// 1. Test when AlwaysShowMenuBar is false (default)
 	AppConfig.AlwaysShowMenuBar = false
+
 	pf.showPanels = true
 	pf.ResizeConsole(80, 25)
 
