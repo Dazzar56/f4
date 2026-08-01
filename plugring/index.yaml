@@ -1,6 +1,6 @@
 - id: "hello-plugring"
   name: "Hello PlugRing"
-  version: "1.0.1"
+  version: "1.0.2"
   author: "f4 Team"
   description: "A test plugin to verify single-file mechanics and hotkeys."
   url: "file://plugring/hello_plugring.lua"

@@ -6,12 +6,15 @@ package.path = "./?.lua;" .. package.path
 
 local f4rpc = require('f4rpc')
 
+local CTRL = (f4rpc and f4rpc.CTRL) or 8
+local SHIFT = (f4rpc and f4rpc.SHIFT) or 16
+
 f4rpc.register("Plugin.Init", function()
     f4rpc.call("Host.Log", "Hello PlugRing plugin initialized!")
 
     -- Register global hotkey: Ctrl+Shift+H
     -- VK_H = 0x48 (72). Mods: Ctrl(8) + Shift(16) = 24
-    f4rpc.call("Host.RegisterGlobalHotkey", { VK = 72, Mods = f4rpc.CTRL + f4rpc.SHIFT })
+    f4rpc.call("Host.RegisterGlobalHotkey", { VK = 72, Mods = CTRL + SHIFT })
 
     return { Drives = {} }
 end)
