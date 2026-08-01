@@ -1034,7 +1034,6 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	}
 
-
 	// Ctrl+A: Attributes
 	if e.VirtualKeyCode == vtinput.VK_A && ctrl && !alt && !shift && e.KeyDown {
 		actionFileAttributes(pf)
