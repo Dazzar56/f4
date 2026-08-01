@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
@@ -333,4 +334,188 @@ func TestQuickView_BinaryDetection(t *testing.T) {
 	if looksBinary(nil) {
 		t.Error("empty buffer is not binary")
 	}
+}
+
+// TestQuickView_DirScan_PopulatesRecursive builds a small tree and
+// checks that the async scan settles on the right recursive counts.
+// The scan runs in a goroutine, so we wait on scanDoneCh with a
+// generous test timeout instead of polling.
+func TestQuickView_DirScan_PopulatesRecursive(t *testing.T) {
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+	vtui.SetDefaultPalette()
+
+	tmp := t.TempDir()
+	// Layout:
+	//   dir/
+	//     a.txt    (100 bytes)
+	//     sub/
+	//       b.txt  (50 bytes)
+	// Expected recursive: Folders=1 (sub), Files=2, Bytes=150.
+	dir := filepath.Join(tmp, "dir")
+	sub := filepath.Join(dir, "sub")
+	if err := os.MkdirAll(sub, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), make([]byte, 100), 0644); err != nil {
+		t.Fatalf("write a: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sub, "b.txt"), make([]byte, 50), 0644); err != nil {
+		t.Fatalf("write b: %v", err)
+	}
+
+	fsp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(tmp))
+	fsp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
+		{VFSItem: vfs.VFSItem{Name: "dir", IsDir: true}},
+	}
+	fsp.cursorIdx = 1
+	fsp.Refresh()
+
+	q := NewQuickViewPanel(fsp)
+	q.SetPosition(0, 0, 39, 19)
+	q.Show(scr) // triggers refreshCache → startDirScan
+
+	// Wait for the scan goroutine to close its done channel.
+	q.scanMu.Lock()
+	done := q.scanDoneCh
+	q.scanMu.Unlock()
+	if done == nil {
+		t.Fatal("startDirScan didn't create scanDoneCh")
+	}
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("scan did not finish within 5s")
+	}
+
+	q.scanMu.Lock()
+	stats := q.scanStats
+	scanDone := q.scanDone
+	scanErr := q.scanErr
+	q.scanMu.Unlock()
+
+	if !scanDone {
+		t.Fatal("scanDone should be true after channel close")
+	}
+	if scanErr != nil {
+		t.Fatalf("unexpected scan error: %v", scanErr)
+	}
+	// CalculateStats counts the base dir itself, so Dirs is 2 (dir+sub).
+	// renderDir subtracts 1 for display, but here we assert raw stats.
+	if stats.Dirs != 2 {
+		t.Errorf("Dirs = %d, want 2", stats.Dirs)
+	}
+	if stats.Files != 2 {
+		t.Errorf("Files = %d, want 2", stats.Files)
+	}
+	if stats.Bytes != 150 {
+		t.Errorf("Bytes = %d, want 150", stats.Bytes)
+	}
+}
+
+// TestQuickView_DirScan_CancelsOnSelectionChange checks that starting
+// a second scan cancels the first one — the old goroutine drops its
+// callbacks (scanGen mismatch) and doesn't clobber the new scanStats.
+func TestQuickView_DirScan_CancelsOnSelectionChange(t *testing.T) {
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+	vtui.SetDefaultPalette()
+
+	tmp := t.TempDir()
+	dirA := filepath.Join(tmp, "A")
+	dirB := filepath.Join(tmp, "B")
+	if err := os.MkdirAll(dirA, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(dirB, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dirA, "onlyA.bin"), make([]byte, 42), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	fsp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(tmp))
+	fsp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "A", IsDir: true}},
+		{VFSItem: vfs.VFSItem{Name: "B", IsDir: true}},
+	}
+	fsp.cursorIdx = 0
+	fsp.Refresh()
+
+	q := NewQuickViewPanel(fsp)
+	q.SetPosition(0, 0, 39, 19)
+	q.Show(scr) // starts scan on A
+
+	q.scanMu.Lock()
+	firstGen := q.scanGen
+	q.scanMu.Unlock()
+
+	// Move to B and re-render — this cancels the A scan and starts a
+	// B scan (empty).
+	fsp.cursorIdx = 1
+	q.Show(scr)
+
+	q.scanMu.Lock()
+	newGen := q.scanGen
+	q.scanMu.Unlock()
+	if newGen == firstGen {
+		t.Fatalf("scanGen should bump on new dir; still %d", newGen)
+	}
+
+	q.scanMu.Lock()
+	done := q.scanDoneCh
+	q.scanMu.Unlock()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("B scan did not finish within 5s")
+	}
+
+	q.scanMu.Lock()
+	stats := q.scanStats
+	q.scanMu.Unlock()
+
+	// The final state must reflect B, not A. B is empty apart from
+	// itself (Dirs=1, Files=0, Bytes=0). If the stale A callback ever
+	// wrote through we'd see Bytes=42 or Files=1.
+	if stats.Bytes != 0 || stats.Files != 0 {
+		t.Errorf("stale A scan clobbered B state: %+v", stats)
+	}
+	if stats.Dirs != 1 {
+		t.Errorf("B scan Dirs = %d, want 1 (self only)", stats.Dirs)
+	}
+}
+
+// TestPanelsFrame_BToggle_WithQuickView ensures pressing plain `B`
+// while a quick-view alt is up flips AppConfig.InfoPanelBytes. Before
+// this PR the B toggle only fired for `info` alts.
+func TestPanelsFrame_BToggle_WithQuickView(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pf := setupMockPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	// Install a QuickView (Ctrl+Q). Active panel is right (activeIdx=1),
+	// so alt lands on left (index 0).
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_Q, ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+	if _, ok := pf.altPanels[0].(*QuickViewPanel); !ok {
+		t.Fatalf("expected QuickView on left, got %T", pf.altPanels[0])
+	}
+
+	before := AppConfig.InfoPanelBytes
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_B,
+	})
+	if AppConfig.InfoPanelBytes == before {
+		t.Error("B with QuickView visible should flip InfoPanelBytes")
+	}
+	// Flip back so the test is idempotent across a full suite.
+	AppConfig.InfoPanelBytes = before
 }

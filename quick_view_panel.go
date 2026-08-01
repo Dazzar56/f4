@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -15,11 +16,11 @@ import (
 )
 
 // QuickViewPanel is far2l's Ctrl+Q quick-view panel. It mirrors the
-// source file panel's current cursor: for a directory it shows a
-// small "info" block (name + immediate file/folder counts), for a
-// regular file it shows a text preview or a hex dump depending on a
-// simple binary heuristic. Recursive directory sizing and full-file
-// viewer features are deliberately deferred.
+// source file panel's current cursor: for a directory it kicks off an
+// async recursive scan and shows the running Folders / Files / Files-
+// size totals; for a regular file it shows a text preview or a hex
+// dump depending on a simple binary heuristic. Full-file viewer
+// features (search, syntax highlighting, …) are deliberately deferred.
 type QuickViewPanel struct {
 	vtui.ScreenObject
 	src     *FileSystemPanel
@@ -28,14 +29,26 @@ type QuickViewPanel struct {
 
 	// Cache the last-computed preview so we don't re-read the file /
 	// re-scan the directory on every redraw.
-	cacheKey        string // full path we last previewed
-	cacheDir        bool   // whether cache is for a directory or file
-	cacheDirFiles   int
-	cacheDirFolders int
-	cacheDirErr     error
-	cacheBinary     bool
-	cacheLines      []string // raw preview lines (source lines or hex rows)
-	cacheReadErr    error
+	cacheKey     string // full path we last previewed
+	cacheDir     bool   // whether cache is for a directory or file
+	cacheBinary  bool
+	cacheLines   []string // raw preview lines (source lines or hex rows)
+	cacheReadErr error
+
+	// Async recursive scan state for the directory case. Guarded by
+	// scanMu so the goroutine and the UI thread can share it. scanGen
+	// bumps on each new scan; callbacks whose gen mismatches are
+	// ignored (the goroutine may still be draining after a cursor
+	// change cancelled its ctx). scanDoneCh is closed on completion
+	// and recreated per scan so tests can wait for finalisation.
+	scanMu         sync.Mutex
+	scanCancel     context.CancelFunc
+	scanGen        uint64
+	scanStats      vfs.OpStats
+	scanDone       bool
+	scanErr        error
+	scanLastRedraw time.Time
+	scanDoneCh     chan struct{}
 
 	// Display state driven by the keyboard while the panel is focused.
 	wrap    bool
@@ -229,11 +242,15 @@ func (q *QuickViewPanel) Show(scr *vtui.ScreenBuf) {
 
 	idx := q.src.GetCursorIndex()
 	if idx < 0 || idx >= len(q.src.entries) {
+		q.cancelScan()
+		q.cacheKey = ""
 		writeLine(" " + Msg("QuickView.NoSelection"))
 		return
 	}
 	item := q.src.entries[idx]
 	if item.Name == ".." {
+		q.cancelScan()
+		q.cacheKey = ""
 		writeLine(" " + Msg("QuickView.ParentDir"))
 		return
 	}
@@ -265,13 +282,110 @@ func (q *QuickViewPanel) Show(scr *vtui.ScreenBuf) {
 func (q *QuickViewPanel) renderDir(item *fileEntry, writeLine func(string)) {
 	writeLine(" " + Msg("QuickView.Folder") + " \"" + item.Name + "\"")
 	writeLine("")
-	if q.cacheDirErr != nil {
-		writeLine(" " + Msg("QuickView.ReadError") + ": " + q.cacheDirErr.Error())
-		return
+	q.scanMu.Lock()
+	stats := q.scanStats
+	done := q.scanDone
+	serr := q.scanErr
+	q.scanMu.Unlock()
+
+	// vfs.CalculateStats counts the passed-in directory itself as one
+	// of Dirs, but far2/far2l show "Folders" as the child-folder count.
+	// Subtract 1 (clamped) so the two match. Files/Bytes are children
+	// only already since directories don't contribute to Bytes.
+	dirs := stats.Dirs - 1
+	if dirs < 0 {
+		dirs = 0
 	}
-	writeLine(fmt.Sprintf(" %s: %d", Msg("QuickView.FileCount"), q.cacheDirFiles))
-	writeLine(fmt.Sprintf(" %s: %d", Msg("QuickView.FolderCount"), q.cacheDirFolders))
+
+	hint := ""
+	if !done && serr == nil {
+		hint = "  " + Msg("QuickView.Scanning")
+	}
+	writeLine(" " + Msg("QuickView.Contains") + ":")
+	writeLine("")
+	writeLine(fmt.Sprintf(" %-13s %d%s", Msg("QuickView.FolderCount"), dirs, hint))
+	writeLine(fmt.Sprintf(" %-13s %d%s", Msg("QuickView.FileCount"), stats.Files, hint))
+	writeLine(fmt.Sprintf(" %-13s %s%s", Msg("QuickView.FilesSize"), formatBytes(uint64(stats.Bytes)), hint))
+	if serr != nil {
+		writeLine("")
+		writeLine(" " + Msg("QuickView.ReadError") + ": " + serr.Error())
+	}
 }
+
+// startDirScan cancels any running scan and kicks off a fresh async
+// vfs.CalculateStats for the given directory. Progress lands in
+// scanStats under scanMu; the UI is nudged via HardRefresh no more
+// than every 200ms while the scan runs. On completion the final stats
+// (plus scanErr if any) are latched and scanDone becomes true.
+func (q *QuickViewPanel) startDirScan(name string) {
+	q.scanMu.Lock()
+	if q.scanCancel != nil {
+		q.scanCancel()
+	}
+	q.scanGen++
+	gen := q.scanGen
+	ctx, cancel := context.WithCancel(context.Background())
+	q.scanCancel = cancel
+	q.scanStats = vfs.OpStats{}
+	q.scanDone = false
+	q.scanErr = nil
+	q.scanLastRedraw = time.Time{}
+	done := make(chan struct{})
+	q.scanDoneCh = done
+	source := q.src.vfs
+	basePath := source.GetPath()
+	q.scanMu.Unlock()
+
+	go func() {
+		defer close(done)
+		stats, err := vfs.CalculateStats(ctx, source, basePath, []string{name}, func(_ string, s vfs.OpStats) {
+			q.scanMu.Lock()
+			if q.scanGen != gen {
+				q.scanMu.Unlock()
+				return
+			}
+			q.scanStats = s
+			redraw := time.Since(q.scanLastRedraw) > 200*time.Millisecond
+			if redraw {
+				q.scanLastRedraw = time.Now()
+			}
+			q.scanMu.Unlock()
+			if redraw {
+				vtui.FrameManager.HardRefresh()
+			}
+		})
+		q.scanMu.Lock()
+		if q.scanGen == gen {
+			q.scanStats = stats
+			if err != nil && ctx.Err() == nil {
+				q.scanErr = err
+			}
+			q.scanDone = true
+		}
+		q.scanMu.Unlock()
+		vtui.FrameManager.HardRefresh()
+	}()
+}
+
+// cancelScan tears down any in-flight scan and clears scan state.
+// Called both when switching from a dir to a file entry and on Close.
+func (q *QuickViewPanel) cancelScan() {
+	q.scanMu.Lock()
+	if q.scanCancel != nil {
+		q.scanCancel()
+		q.scanCancel = nil
+	}
+	q.scanStats = vfs.OpStats{}
+	q.scanDone = false
+	q.scanErr = nil
+	q.scanMu.Unlock()
+}
+
+// Close cancels any running scan. Called by PanelsFrame.toggleAltPanel
+// when the QuickView panel is being removed (Ctrl+Q toggle-off,
+// Ctrl+L replacing it, etc.), so the scan goroutine doesn't outlive
+// the panel it's populating.
+func (q *QuickViewPanel) Close() { q.cancelScan() }
 
 func (q *QuickViewPanel) renderFile(item *fileEntry, innerW int, writeLine func(string), attr uint64, scr *vtui.ScreenBuf) {
 	// Header block (name + size + optional binary note). Two rows.
@@ -422,30 +536,12 @@ func (q *QuickViewPanel) refreshCache(path string, item fileEntry) {
 	q.cacheBinary = false
 	q.cacheLines = nil
 	q.cacheReadErr = nil
-	q.cacheDirErr = nil
-	q.cacheDirFiles = 0
-	q.cacheDirFolders = 0
 
 	if item.IsDir {
-		ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
-		defer cancel()
-		err := q.src.vfs.ReadDir(ctx, path, func(chunk []vfs.VFSItem) {
-			for i := range chunk {
-				if chunk[i].Name == ".." {
-					continue
-				}
-				if chunk[i].IsDir {
-					q.cacheDirFolders++
-				} else {
-					q.cacheDirFiles++
-				}
-			}
-		})
-		if err != nil {
-			q.cacheDirErr = err
-		}
+		q.startDirScan(item.Name)
 		return
 	}
+	q.cancelScan()
 
 	// Regular file: read up to previewMax bytes, split into lines or
 	// classify as binary. Small budget (16 KiB) keeps this cheap even
