@@ -156,9 +156,13 @@ func (q *QuickViewPanel) ProcessKey(e *vtinput.InputEvent) bool {
 	return true
 }
 
-// ProcessMouse handles the wheel while focused.
+// ProcessMouse handles the wheel over the panel. Uses WheelDirection
+// as the wheel signal (universal across platforms — Linux SGR mouse
+// only sets WheelDirection, Windows ConPTY sets both MouseWheeled
+// flag and WheelDirection; the flag-based check misses Linux).
+// PanelsFrame's dispatch routes wheel-on-active-alt here.
 func (q *QuickViewPanel) ProcessMouse(e *vtinput.InputEvent) bool {
-	if !q.focused || (e.MouseEventFlags&vtinput.MouseWheeled) == 0 {
+	if e.WheelDirection == 0 {
 		return false
 	}
 	step := 3

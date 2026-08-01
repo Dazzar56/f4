@@ -1843,18 +1843,17 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 		return true
 	}
 
-	// If a focused alt panel wants the wheel (e.g. quick-view is
-	// scrolling its content), give it first crack before the "wheel
-	// always scrolls active file panel" rule below.
-	if pf.showPanels && pf.altPanels[pf.activeIdx] != nil && pf.altPanels[pf.activeIdx].IsFocused() {
-		if pf.altPanels[pf.activeIdx].ProcessMouse(e) {
-			return true
-		}
-	}
-
-	// Wheel events always scroll the active panel, regardless of mouse position.
-	// This matches classic Far Manager / far2l behavior.
+	// Wheel events always scroll the active panel, regardless of mouse
+	// position — matches classic Far / far2l. When the active slot is
+	// covered by an alt panel (Ctrl+Q quick-view, later Ctrl+T tree),
+	// it's the visually-active thing, so we hand the wheel to it
+	// instead of the file panel underneath.
 	if e.WheelDirection != 0 {
+		if pf.showPanels && pf.altPanels[pf.activeIdx] != nil {
+			if pf.altPanels[pf.activeIdx].ProcessMouse(e) {
+				return true
+			}
+		}
 		vk := vtinput.VK_DOWN
 		if e.WheelDirection > 0 {
 			vk = vtinput.VK_UP

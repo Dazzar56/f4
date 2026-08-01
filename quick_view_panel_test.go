@@ -221,6 +221,62 @@ func TestQuickView_ScrollAndWrap(t *testing.T) {
 	}
 }
 
+// TestPanelsFrame_QuickViewWheel_ActivePanelScrolls locks in
+// far/far2l behaviour: whichever panel is active gets scrolled by the
+// wheel, regardless of where the mouse points. If the active slot is
+// covered by a quick-view alt panel, the alt scrolls — not the file
+// panel underneath.
+func TestPanelsFrame_QuickViewWheel_ActivePanelScrolls(t *testing.T) {
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+	vtui.SetDefaultPalette()
+
+	pf := setupMockPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	tmp := t.TempDir()
+	var b strings.Builder
+	for i := 0; i < 200; i++ {
+		b.WriteString("line\n")
+	}
+	os.WriteFile(filepath.Join(tmp, "big.txt"), []byte(b.String()), 0644)
+	fsp := pf.panels[1].(*FileSystemPanel)
+	fsp.vfs = vfs.NewOSVFS(tmp)
+	fsp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "big.txt", Size: int64(b.Len())}}}
+	fsp.cursorIdx = 0
+	fsp.Refresh()
+
+	// Ctrl+Q — alt lands on left (opposite of active=right).
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_Q, ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+	q := pf.altPanels[0].(*QuickViewPanel)
+	pf.Show(scr)
+
+	// Tab — active moves to left (alt slot). From now on wheel should
+	// hit the alt, regardless of mouse pointer.
+	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_TAB})
+	pf.Show(scr)
+
+	before := q.scrollY
+	// Point the mouse at the RIGHT half (over the file panel, not
+	// over the alt) — active-side rule should still send wheel to alt.
+	pf.ProcessMouse(&vtinput.InputEvent{
+		Type:            vtinput.MouseEventType,
+		KeyDown:         true,
+		MouseEventFlags: vtinput.MouseWheeled,
+		WheelDirection:  -1,
+		MouseX:          60,
+		MouseY:          10,
+	})
+	if q.scrollY == before {
+		t.Errorf("wheel over passive side should still scroll active alt; scrollY=%d", q.scrollY)
+	}
+}
+
 // TestQuickView_MouseWheelScrolls confirms the wheel drives scrollY.
 func TestQuickView_MouseWheelScrolls(t *testing.T) {
 	tmp := t.TempDir()
@@ -246,19 +302,20 @@ func TestQuickView_MouseWheelScrolls(t *testing.T) {
 	q.Show(scr)
 
 	q.SetFocus(true)
+	// Simulate the Linux SGR event shape (WheelDirection set, but
+	// MouseWheeled flag not set) — this is what tripped the earlier
+	// missed-scroll on Linux while Windows worked fine.
 	q.ProcessMouse(&vtinput.InputEvent{
-		Type:            vtinput.MouseEventType,
-		MouseEventFlags: vtinput.MouseWheeled,
-		WheelDirection:  -1, // scroll down
+		Type:           vtinput.MouseEventType,
+		WheelDirection: -1, // scroll down
 	})
 	if q.scrollY <= 0 {
 		t.Errorf("wheel down should advance scrollY; got %d", q.scrollY)
 	}
 	before := q.scrollY
 	q.ProcessMouse(&vtinput.InputEvent{
-		Type:            vtinput.MouseEventType,
-		MouseEventFlags: vtinput.MouseWheeled,
-		WheelDirection:  +1, // scroll up
+		Type:           vtinput.MouseEventType,
+		WheelDirection: +1, // scroll up
 	})
 	if q.scrollY >= before {
 		t.Errorf("wheel up should retreat scrollY; got %d, was %d", q.scrollY, before)
