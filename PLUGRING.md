@@ -1,6 +1,6 @@
 # f4 PlugRing: The App Store Philosophy
 
-PlugRing is the decentralized, community-driven catalog for f4 plugins, macros, and color schemes. Inspired by the legendary Far Manager PlugRing, it aims to be a single ring to rule them all, but built for the modern era.
+PlugRing is community-driven catalog for f4 plugins, macros, and color schemes. Inspired by the legendary Far Manager PlugRing, it aims to be a single ring to rule them all, but built for the modern era.
 
 ## 1. Hosting & Submission (The "No Backend" Approach)
 
