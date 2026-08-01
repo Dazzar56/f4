@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -326,9 +327,16 @@ func (q *QuickViewPanel) renderDir(item *fileEntry, writeLine func(string)) {
 	writeLine(fmt.Sprintf(" %-14s %d", Msg("QuickView.FileCount"), stats.Files))
 	// "Files size" adds dir-inode Sizes to file bytes — that's what
 	// far2l puts in "Размер файлов" (see far2l/src/dirinfo.cpp:
-	// FileSize += FindData.nFileSize for directories). On Windows
-	// directory Size is 0 so the sum is unaffected there.
+	// FileSize += FindData.nFileSize for directories). On Windows,
+	// though, Far/Explorer count only file bytes: child dirs report
+	// Size 0 via ReadDir, and the sole non-zero contributor is the
+	// scanned root itself — os.Stat of a directory returns a 4096
+	// index size via GetFileInformationByHandle. Drop DirBytes there
+	// so the total matches the platform's native tools.
 	logical := stats.Bytes + stats.DirBytes
+	if runtime.GOOS == "windows" {
+		logical = stats.Bytes
+	}
 	writeLine(fmt.Sprintf(" %-14s %s", Msg("QuickView.FilesSize"), formatBytes(uint64(logical))))
 	// Physical size + Ratio need per-item on-disk footprint. Stub /
 	// remote VFSes leave PhysicalBytes at 0 during the whole scan —

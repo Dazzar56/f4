@@ -11,17 +11,20 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// GetCompressedFileSizeW isn't exposed by x/sys/windows in a way we
-// can use ergonomically here, so we bind it via NewLazyDLL. Returns
-// the low-order DWORD of the size and writes the high-order DWORD to
-// *lpFileSizeHigh. INVALID_FILE_SIZE (0xFFFFFFFF) signals failure —
-// GetLastError() is needed to disambiguate from an actual file that
-// happens to be 4 GiB−1 bytes, but we treat any 0xFFFFFFFF low DWORD
-// as a soft failure (the fallback below is harmless).
-var (
-	physKernel32               = syscall.NewLazyDLL("kernel32.dll")
-	procGetCompressedFileSizeW = physKernel32.NewProc("GetCompressedFileSizeW")
-)
+// fileStandardInfo mirrors the Win32 FILE_STANDARD_INFO struct.
+// x/sys/windows exposes the GetFileInformationByHandleEx class constant
+// (FileStandardInfo) but not the struct, so we declare the layout we
+// need. AllocationSize is the on-disk footprint — cluster-granular and
+// compression/sparse aware — the Windows analogue of the Unix
+// stat.Blocks*512 the other platforms report.
+type fileStandardInfo struct {
+	AllocationSize int64
+	EndOfFile      int64
+	NumberOfLinks  uint32
+	DeletePending  uint8
+	Directory      uint8
+	_              [2]byte // pad to the struct's natural 8-byte alignment
+}
 
 // fillPhysicalSizeCheap is a no-op on Windows — there's no way to get
 // on-disk allocation size from FileInfo alone; GetCompressedFileSize
@@ -31,31 +34,56 @@ var (
 // QuickView scan) go through fillPhysicalSize / Stat instead.
 func fillPhysicalSizeCheap(_ *VFSItem, _ os.FileInfo) {}
 
-// fillPhysicalSize asks NTFS for the on-disk footprint of path, which
-// matches far/far2 semantics: NTFS-compressed files return their
-// compressed size, sparse regions are excluded, and plain files return
-// their cluster-aligned allocation. Non-NTFS or unsupported paths
-// (some network shares, some FUSE mounts) fall back to info.Size().
+// fillPhysicalSize asks NTFS for the on-disk allocation of path via
+// GetFileInformationByHandleEx(FileStandardInfo).AllocationSize. This
+// matches far2l/Far and the Unix stat.Blocks*512 path: NTFS-compressed
+// files report their compressed allocation, sparse regions are
+// excluded, MFT-resident tiny files report 0, and plain files report
+// their cluster-aligned size. (GetCompressedFileSize, used before,
+// returns the packed data size WITHOUT cluster rounding, so it
+// under-reported the real footprint by the per-file cluster slack —
+// ~24 MB on a 116 GB tree.) Non-NTFS or unopenable paths fall back to
+// info.Size().
 func fillPhysicalSize(item *VFSItem, info os.FileInfo, path string) {
 	if path == "" || info == nil {
 		return
 	}
-	ptr, err := syscall.UTF16PtrFromString(path)
+	// Directories occupy $INDEX clusters we don't attribute to the
+	// tree's on-disk size — Far's "Реальный размер" counts file
+	// allocation only (dirs = 0), and this keeps Physical symmetric
+	// with the logical total, which also drops directory sizes on
+	// Windows. Leaving PhysicalSize at 0 for dirs avoids charging the
+	// scanned root's own index cluster to the result.
+	if info.IsDir() {
+		return
+	}
+	ptr, err := windows.UTF16PtrFromString(path)
 	if err != nil {
 		item.PhysicalSize = info.Size()
 		return
 	}
-	var high uint32
-	r, _, _ := procGetCompressedFileSizeW.Call(
-		uintptr(unsafe.Pointer(ptr)),
-		uintptr(unsafe.Pointer(&high)),
+	h, err := windows.CreateFile(
+		ptr,
+		0, // querying metadata needs no access rights
+		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
+		nil,
+		windows.OPEN_EXISTING,
+		windows.FILE_FLAG_BACKUP_SEMANTICS|windows.FILE_FLAG_OPEN_REPARSE_POINT,
+		0,
 	)
-	low := uint32(r)
-	if low == 0xFFFFFFFF {
+	if err != nil {
 		item.PhysicalSize = info.Size()
 		return
 	}
-	item.PhysicalSize = int64((uint64(high) << 32) | uint64(low))
+	defer windows.CloseHandle(h)
+
+	var fsi fileStandardInfo
+	if err := windows.GetFileInformationByHandleEx(h, windows.FileStandardInfo,
+		(*byte)(unsafe.Pointer(&fsi)), uint32(unsafe.Sizeof(fsi))); err != nil {
+		item.PhysicalSize = info.Size()
+		return
+	}
+	item.PhysicalSize = fsi.AllocationSize
 }
 
 // SupportsPhysicalSize is true on Windows — see the Unix version
