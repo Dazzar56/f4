@@ -210,6 +210,17 @@ func (q *QuickViewPanel) Show(scr *vtui.ScreenBuf) {
 	if q.frame != nil {
 		q.frame.Show(scr)
 	}
+	// Bottom-border hint reminding the user of the units toggle, same
+	// pattern InfoPanel uses. Since B affects both the "Files size"
+	// number for directories and the header "Size" for files, we
+	// always draw it while the panel is up.
+	if q.frame != nil && q.Y2 > q.Y1+1 {
+		hint := Msg("QuickView.UnitsHint")
+		if runewidth.StringWidth(hint) < q.X2-q.X1-1 {
+			attrBox := vtui.Palette[ColPanelBox]
+			scr.Write(q.X1+2, q.Y2, vtui.StringToCharInfo(hint, attrBox))
+		}
+	}
 	innerW := q.X2 - q.X1 - 1
 	if innerW < 1 || q.src == nil {
 		return
@@ -248,14 +259,23 @@ func (q *QuickViewPanel) Show(scr *vtui.ScreenBuf) {
 		return
 	}
 	item := q.src.entries[idx]
-	if item.Name == ".." {
-		q.cancelScan()
-		q.cacheKey = ""
-		writeLine(" " + Msg("QuickView.ParentDir"))
-		return
-	}
 
-	path := q.src.vfs.Join(q.src.vfs.GetPath(), item.Name)
+	// On "..", far2/far2l scan the CURRENT directory (parent of the
+	// listing) rather than showing a static "Parent directory" note.
+	// We synthesize a fileEntry that points at the current dir and
+	// funnel it through the same refreshCache path as regular items.
+	var path string
+	if item.Name == ".." {
+		path = q.src.vfs.GetPath()
+		displayName := q.src.vfs.Base(path)
+		if displayName == "" || displayName == "/" || displayName == "." {
+			displayName = path
+		}
+		synth := fileEntry{VFSItem: vfs.VFSItem{Name: displayName, IsDir: true}}
+		item = &synth
+	} else {
+		path = q.src.vfs.Join(q.src.vfs.GetPath(), item.Name)
+	}
 	if path != q.cacheKey {
 		q.refreshCache(path, *item)
 		q.scrollY = 0
@@ -305,7 +325,11 @@ func (q *QuickViewPanel) renderDir(item *fileEntry, writeLine func(string)) {
 	writeLine("")
 	writeLine(fmt.Sprintf(" %-13s %d%s", Msg("QuickView.FolderCount"), dirs, hint))
 	writeLine(fmt.Sprintf(" %-13s %d%s", Msg("QuickView.FileCount"), stats.Files, hint))
-	writeLine(fmt.Sprintf(" %-13s %s%s", Msg("QuickView.FilesSize"), formatBytes(uint64(stats.Bytes)), hint))
+	// Include directory-inode sizes in the shown total so we match
+	// far2/far2l's "Files size" (their number sums every entry's Size,
+	// including dir inodes). ETA/copy paths read stats.Bytes only, so
+	// they're unaffected.
+	writeLine(fmt.Sprintf(" %-13s %s%s", Msg("QuickView.FilesSize"), formatBytes(uint64(stats.Bytes+stats.DirBytes)), hint))
 	if serr != nil {
 		writeLine("")
 		writeLine(" " + Msg("QuickView.ReadError") + ": " + serr.Error())
@@ -317,7 +341,7 @@ func (q *QuickViewPanel) renderDir(item *fileEntry, writeLine func(string)) {
 // scanStats under scanMu; the UI is nudged via HardRefresh no more
 // than every 200ms while the scan runs. On completion the final stats
 // (plus scanErr if any) are latched and scanDone becomes true.
-func (q *QuickViewPanel) startDirScan(name string) {
+func (q *QuickViewPanel) startDirScan(fullPath string) {
 	q.scanMu.Lock()
 	if q.scanCancel != nil {
 		q.scanCancel()
@@ -333,7 +357,11 @@ func (q *QuickViewPanel) startDirScan(name string) {
 	done := make(chan struct{})
 	q.scanDoneCh = done
 	source := q.src.vfs
-	basePath := source.GetPath()
+	// CalculateStats derives its target via Join(basePath, name), so
+	// split fullPath on its parent+basename. Works for both children
+	// of GetPath() and for GetPath() itself (the ".." case).
+	basePath := source.Dir(fullPath)
+	name := source.Base(fullPath)
 	q.scanMu.Unlock()
 
 	go func() {
@@ -538,7 +566,7 @@ func (q *QuickViewPanel) refreshCache(path string, item fileEntry) {
 	q.cacheReadErr = nil
 
 	if item.IsDir {
-		q.startDirScan(item.Name)
+		q.startDirScan(path)
 		return
 	}
 	q.cancelScan()

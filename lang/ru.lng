@@ -191,6 +191,7 @@ QuickView.Scanning=(сканирование…)
 QuickView.Size=Размер
 QuickView.Binary=<бинарные данные — шестнадцатеричный просмотр>
 QuickView.ReadError=Ошибка чтения
+QuickView.UnitsHint= B: байты ↔ человекочитаемый
 
 Bookmarks.Title= Bookmarks
 Bookmarks.RowPrefix=[RCtrl | Ctrl+Alt] +

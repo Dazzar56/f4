@@ -413,6 +413,60 @@ func TestQuickView_DirScan_PopulatesRecursive(t *testing.T) {
 	if stats.Bytes != 150 {
 		t.Errorf("Bytes = %d, want 150", stats.Bytes)
 	}
+	// DirBytes accumulates per-directory inode sizes so the far2/far2l
+	// "Files size" display can add Bytes+DirBytes and match. It must
+	// not leak into Bytes — that's what copy/move ETA reads.
+	if stats.DirBytes <= 0 {
+		t.Errorf("DirBytes = %d, want > 0 (dir inodes should be tracked)", stats.DirBytes)
+	}
+}
+
+// TestQuickView_DotDot_ScansCurrentDir locks in far2/far2l behaviour:
+// with the cursor on "..", the panel shows the running scan of the
+// CURRENT dir (basename in the title), not a static "Parent directory"
+// note.
+func TestQuickView_DotDot_ScansCurrentDir(t *testing.T) {
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+	vtui.SetDefaultPalette()
+
+	tmp := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmp, "one.bin"), make([]byte, 200), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	fsp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(tmp))
+	fsp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
+		{VFSItem: vfs.VFSItem{Name: "one.bin", Size: 200}},
+	}
+	fsp.cursorIdx = 0 // sit on ".."
+	fsp.Refresh()
+
+	q := NewQuickViewPanel(fsp)
+	q.SetPosition(0, 0, 39, 19)
+	q.Show(scr) // triggers scan of tmp itself
+
+	q.scanMu.Lock()
+	done := q.scanDoneCh
+	q.scanMu.Unlock()
+	if done == nil {
+		t.Fatal("dot-dot should have triggered a scan (no scanDoneCh)")
+	}
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("scan did not finish within 5s")
+	}
+
+	q.scanMu.Lock()
+	stats := q.scanStats
+	q.scanMu.Unlock()
+
+	if stats.Files != 1 || stats.Bytes != 200 {
+		t.Errorf("Files=%d Bytes=%d, want Files=1 Bytes=200", stats.Files, stats.Bytes)
+	}
 }
 
 // TestQuickView_DirScan_CancelsOnSelectionChange checks that starting

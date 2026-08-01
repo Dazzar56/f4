@@ -191,6 +191,7 @@ QuickView.Scanning=(scanning…)
 QuickView.Size=Size
 QuickView.Binary=<binary content — hex preview>
 QuickView.ReadError=Read failed
+QuickView.UnitsHint= B: bytes ↔ human
 
 Bookmarks.Title= Bookmarks
 Bookmarks.RowPrefix=[RCtrl | Ctrl+Alt] +
