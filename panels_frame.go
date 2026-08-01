@@ -1851,6 +1851,17 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 	if e.WheelDirection != 0 {
 		hoveredIdx := pf.activeIdx
 		if pf.showPanels {
+			w := pf.lastW
+			if w <= 0 {
+				w = 80
+			}
+			// Use simple half-screen split fallback if panel coordinates are uninitialized
+			if mx < w/2 {
+				hoveredIdx = 0
+			} else {
+				hoveredIdx = 1
+			}
+
 			for i, p := range pf.panels {
 				if p == nil {
 					continue
@@ -1862,19 +1873,31 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 					continue
 				}
 				x1, y1, x2, y2 := p.GetPosition()
-				if mx >= x1 && mx <= x2 && my >= y1 && my <= y2 {
-					hoveredIdx = i
-					break
+				if x2 >= x1 && y2 >= y1 {
+					if mx >= x1 && mx <= x2 && my >= y1 && my <= y2 {
+						hoveredIdx = i
+						break
+					}
 				}
 			}
 		}
 
+		// 1. If the hovered slot has an active alt panel, scroll it
 		if pf.showPanels && pf.altPanels[hoveredIdx] != nil {
 			if pf.altPanels[hoveredIdx].ProcessMouse(e) {
 				return true
 			}
 		}
 
+		// 2. Otherwise, if the active slot is covered by an alt panel,
+		// it is the visually active thing for the window, so scroll it.
+		if pf.showPanels && pf.altPanels[pf.activeIdx] != nil {
+			if pf.altPanels[pf.activeIdx].ProcessMouse(e) {
+				return true
+			}
+		}
+
+		// 3. Otherwise, scroll the hovered regular panel
 		if pf.showPanels && pf.panels[hoveredIdx] != nil {
 			if pf.panels[hoveredIdx].ProcessMouse(e) {
 				return true

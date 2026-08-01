@@ -3808,3 +3808,125 @@ func TestPanelsFrame_CtrlShiftArrows_AsymmetricHeight(t *testing.T) {
 	}
 	pf.cmdLine.Edit.SetText("")
 }
+
+func TestPanelsFrame_ProcessMouse_HoverWheel(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	lp := pf.panels[0].(*FileSystemPanel)
+	rp := pf.panels[1].(*FileSystemPanel)
+
+	// Make both panels visible and set right as active
+	pf.activeIdx = 1
+	pf.showPanels = true
+	pf.showLeftPanel = true
+	pf.showRightPanel = true
+
+	// Clear async loading
+	if lp.cancelLoad != nil {
+		lp.cancelLoad()
+	}
+	lp.isLoading = false
+	if rp.cancelLoad != nil {
+		rp.cancelLoad()
+	}
+	rp.isLoading = false
+
+	// Create test entries
+	lp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "L1"}},
+		{VFSItem: vfs.VFSItem{Name: "L2"}},
+		{VFSItem: vfs.VFSItem{Name: "L3"}},
+	}
+	lp.Refresh()
+	lp.SetCursorIndex(0)
+
+	rp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "R1"}},
+		{VFSItem: vfs.VFSItem{Name: "R2"}},
+		{VFSItem: vfs.VFSItem{Name: "R3"}},
+	}
+	rp.Refresh()
+	rp.SetCursorIndex(0)
+
+	// 1. Simulate mouse wheel over the LEFT panel (hover scroll)
+	lx1, ly1, _, _ := lp.GetPosition()
+
+	ev := &vtinput.InputEvent{
+		Type:           vtinput.MouseEventType,
+		MouseX:         int16(lx1 + 2),
+		MouseY:         int16(ly1 + 2),
+		WheelDirection: -1, // Down scroll -> should move cursor down
+	}
+
+	handled := pf.ProcessMouse(ev)
+	if !handled {
+		t.Fatal("Mouse wheel event was not handled")
+	}
+
+	// Active panel should remain right (1)
+	if pf.activeIdx != 1 {
+		t.Errorf("Expected active panel to remain 1, got %d", pf.activeIdx)
+	}
+
+	// Left panel's cursor should have moved down to index 1 (L2)
+	if lp.GetCursorIndex() != 1 {
+		t.Errorf("Expected left panel cursor to scroll down to 1, got %d", lp.GetCursorIndex())
+	}
+
+	// Right panel's cursor should still be 0 (unscrolled)
+	if rp.GetCursorIndex() != 0 {
+		t.Errorf("Expected right panel cursor to remain 0, got %d", rp.GetCursorIndex())
+	}
+}
+
+func TestPanelsFrame_ProcessMouse_HoverWheel_AltPanel(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	lp := pf.panels[0].(*FileSystemPanel)
+	rp := pf.panels[1].(*FileSystemPanel)
+
+	// Make both panels visible and set right as active
+	pf.activeIdx = 1
+	pf.showPanels = true
+	pf.showLeftPanel = true
+	pf.showRightPanel = true
+
+	// Clear async loading
+	if lp.cancelLoad != nil {
+		lp.cancelLoad()
+	}
+	lp.isLoading = false
+	if rp.cancelLoad != nil {
+		rp.cancelLoad()
+	}
+	rp.isLoading = false
+
+	// Add an AltPanel (QuickViewPanel) on the Left (0) slot
+	qv := NewQuickViewPanel(lp)
+	pf.altPanels[0] = qv
+
+	lx1, ly1, _, _ := lp.GetPosition()
+
+	// Simulate wheel over the left slot (where QuickView is)
+	ev := &vtinput.InputEvent{
+		Type:           vtinput.MouseEventType,
+		MouseX:         int16(lx1 + 2),
+		MouseY:         int16(ly1 + 2),
+		WheelDirection: -1, // Down scroll
+	}
+
+	handled := pf.ProcessMouse(ev)
+	if !handled {
+		t.Fatal("Mouse wheel over AltPanel not handled")
+	}
+}
