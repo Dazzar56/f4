@@ -82,6 +82,16 @@ func TestPanelsFrame_CtrlL_TogglesInfoPanel(t *testing.T) {
 	if !pf.altPanels[0].IsFocused() {
 		t.Error("after Tab + render, alt panel should report focused=true")
 	}
+
+	// Ctrl+L while focus is ON the alt panel must close IT (matches
+	// far2l), not open another one on the opposite side.
+	send(vtinput.VK_L, vtinput.LeftCtrlPressed)
+	if pf.altPanels[0] != nil {
+		t.Error("Ctrl+L on focused alt panel should close it")
+	}
+	if pf.altPanels[1] != nil {
+		t.Error("Ctrl+L on focused alt must not spawn a second alt on the opposite side")
+	}
 }
 
 // TestInfoPanel_ShowRenders verifies the panel renders without panic

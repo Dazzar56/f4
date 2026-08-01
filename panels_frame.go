@@ -906,17 +906,26 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	}
 
-	// Ctrl+L toggles the info panel on the passive side, mirroring the
-	// active file panel's selection (far2l's Ctrl+L). AltPanel is the
-	// interface Info / Quick view / Tree will all share; Ctrl+Q and
-	// Ctrl+T can plug in the same way. Closes #196.
+	// Ctrl+L toggles the info panel, mirroring far2l's Ctrl+L. If the
+	// currently active slot already shows an info panel, close THAT
+	// one first (matches far2l: `if active is already target type,
+	// AnotherPanel = ActivePanel` in filepanels.cpp). Otherwise, if
+	// the passive slot has one, close it; otherwise open a new one
+	// on the passive side. AltPanel is the shared interface Ctrl+Q
+	// (Quick view) and Ctrl+T (Tree) will plug into the same way.
+	// Closes #196.
 	if e.VirtualKeyCode == vtinput.VK_L && ctrl && !alt && !shift && e.KeyDown {
 		if pf.showPanels {
 			opp := 1 - pf.activeIdx
-			if a := pf.altPanels[opp]; a != nil && a.Kind() == "info" {
+			switch {
+			case pf.altPanels[pf.activeIdx] != nil && pf.altPanels[pf.activeIdx].Kind() == "info":
+				pf.altPanels[pf.activeIdx] = nil
+			case pf.altPanels[opp] != nil && pf.altPanels[opp].Kind() == "info":
 				pf.altPanels[opp] = nil
-			} else if fsp, ok := pf.panels[pf.activeIdx].(*FileSystemPanel); ok {
-				pf.altPanels[opp] = NewInfoPanel(fsp)
+			default:
+				if fsp, ok := pf.panels[pf.activeIdx].(*FileSystemPanel); ok {
+					pf.altPanels[opp] = NewInfoPanel(fsp)
+				}
 			}
 			pf.ResizeConsole(pf.lastW, pf.lastH)
 			vtui.FrameManager.HardRefresh()
