@@ -185,6 +185,16 @@ func (v *OSVFS) ReadDir(ctx context.Context, path string, onChunk func([]VFSItem
 			}
 			isDir := e.IsDir()
 			isSymlink := e.Type()&os.ModeSymlink != 0
+			// Windows NTFS junctions are reparse points but Go doesn't
+			// always report them via ModeSymlink — the classification
+			// has drifted across releases (ModeSymlink / ModeIrregular).
+			// Treat the FILE_ATTRIBUTE_REPARSE_POINT bit as authoritative
+			// so the scanner's leaf mode actually stops at things like
+			// C:\Users\<user>\AppData\Local\Application Data instead of
+			// walking into the self-loop.
+			if !isSymlink && info != nil && isReparsePoint(info) {
+				isSymlink = true
+			}
 			// If it's not a direct directory, it might be a symlink or a Windows Junction.
 			// If it's not a regular file, ask the OS to resolve the final target.
 			if !isDir && !e.Type().IsRegular() {

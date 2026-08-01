@@ -48,3 +48,10 @@ func fillPhysicalSize(item *VFSItem, info os.FileInfo, _ string) {
 // capability on a platform where the stub version leaves the field
 // at zero.
 func (v *OSVFS) SupportsPhysicalSize() bool { return true }
+
+// isReparsePoint reports whether info describes a reparse-point-like
+// entry. There's no direct Unix equivalent — plain symlinks are
+// already covered by Mode()&ModeSymlink at the caller — so this is a
+// no-op stub. The Windows implementation (os_vfs_physical_windows.go)
+// covers junctions which Go doesn't always mark as ModeSymlink.
+func isReparsePoint(_ os.FileInfo) bool { return false }

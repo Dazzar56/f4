@@ -58,3 +58,23 @@ func fillPhysicalSize(item *VFSItem, info os.FileInfo, path string) {
 // SupportsPhysicalSize is true on Windows — see the Unix version
 // for the rationale of keeping the answer per-platform.
 func (v *OSVFS) SupportsPhysicalSize() bool { return true }
+
+// isReparsePoint reports whether the entry described by info is any
+// kind of NTFS reparse point — symlinks, junctions (mount points),
+// OneDrive/Dropbox placeholders, etc. Go's Mode()&ModeSymlink covers
+// the plain symlink case, but its handling of junctions has flipped
+// between releases (ModeSymlink vs ModeIrregular); relying on it
+// alone was letting the scanner walk INTO junctions like
+// C:\Users\<user>\AppData\Local\Application Data which points back
+// at its own parent — cue millions of ghost files and hundreds of
+// gigabytes of "physical" size that the disk doesn't have.
+// FILE_ATTRIBUTE_REPARSE_POINT is the authoritative NTFS bit.
+func isReparsePoint(info os.FileInfo) bool {
+	if info == nil {
+		return false
+	}
+	if a, ok := info.Sys().(*syscall.Win32FileAttributeData); ok {
+		return a.FileAttributes&syscall.FILE_ATTRIBUTE_REPARSE_POINT != 0
+	}
+	return false
+}

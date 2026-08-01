@@ -15,3 +15,7 @@ func fillPhysicalSize(_ *VFSItem, _ os.FileInfo, _ string) {}
 // scanner not to bother with the lazy Stat fallback (it would just
 // return zero and add an N+1 syscall on the copy/move pre-scan).
 func (v *OSVFS) SupportsPhysicalSize() bool { return false }
+
+// isReparsePoint stub — no meaningful notion of reparse points on
+// platforms that hit this build path.
+func isReparsePoint(_ os.FileInfo) bool { return false }
