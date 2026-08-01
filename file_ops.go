@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -685,21 +686,31 @@ func recursiveCopy(ctx context.Context, srcVfs vfs.VFS, srcPath string, dstVfs v
 		}
 	}
 
-	if realSrc == realDst {
-		return fmt.Errorf("cannot copy folder into itself (source equals destination)")
+	cleanSrc := filepath.ToSlash(filepath.Clean(realSrc))
+	cleanDst := filepath.ToSlash(filepath.Clean(realDst))
+
+	if runtime.GOOS == "windows" {
+		cleanSrc = strings.ToLower(cleanSrc)
+		cleanDst = strings.ToLower(cleanDst)
 	}
 
-	// Используем "/" как универсальный разделитель для внутренних проверок путей,
-	// чтобы избежать проблем при копировании между Windows и Linux серверами.
-	if !strings.HasSuffix(realSrc, "/") && !strings.HasSuffix(realSrc, "\\") {
-		realSrc += "/"
+	if cleanSrc == cleanDst {
+		if stat.IsDir {
+			return fmt.Errorf("cannot copy folder into itself (source equals destination)")
+		}
+		return fmt.Errorf("cannot copy file onto itself (source equals destination)")
 	}
-	// Нормализуем оба пути к одному виду слэшей для корректного сравнения префиксов
-	compareSrc := filepath.ToSlash(realSrc)
-	compareDst := filepath.ToSlash(realDst)
 
-	if strings.HasPrefix(compareDst, compareSrc) {
-		return fmt.Errorf("cannot copy folder into itself (destination is a subfolder)")
+	prefixSrc := cleanSrc
+	if !strings.HasSuffix(prefixSrc, "/") {
+		prefixSrc += "/"
+	}
+
+	if strings.HasPrefix(cleanDst, prefixSrc) {
+		if stat.IsDir {
+			return fmt.Errorf("cannot copy folder into itself (destination is a subfolder)")
+		}
+		return fmt.Errorf("cannot copy file into its own subfolder")
 	}
 
 	dstStat, err := dstVfs.Stat(ctx, destPath)

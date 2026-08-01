@@ -871,6 +871,43 @@ func TestExecuteFileOp_MoveIntoSelf_Circular(t *testing.T) {
 		t.Errorf("Expected circular copy protection error, got: %v", err)
 	}
 }
+func TestRecursiveCopy_SelfAndSubfolderProtection(t *testing.T) {
+	tmpDir := t.TempDir()
+	v := vfs.NewOSVFS(tmpDir)
+	tCtx := &vtui.TaskContext{Context: context.Background()}
+
+	// 1. Folder self-copy
+	folderPath := filepath.Join(tmpDir, "myfolder")
+	os.MkdirAll(folderPath, 0755)
+
+	err := recursiveCopy(tCtx.Context, v, folderPath, v, folderPath, &FileOpState{}, 0)
+	if err == nil || !strings.Contains(err.Error(), "folder into itself") {
+		t.Errorf("Expected folder self-copy error, got: %v", err)
+	}
+
+	// 2. Folder into subfolder
+	subPath := filepath.Join(folderPath, "sub")
+	err = recursiveCopy(tCtx.Context, v, folderPath, v, subPath, &FileOpState{}, 0)
+	if err == nil || !strings.Contains(err.Error(), "subfolder") {
+		t.Errorf("Expected folder into subfolder error, got: %v", err)
+	}
+
+	// 3. File self-copy
+	filePath := filepath.Join(tmpDir, "myfile.txt")
+	os.WriteFile(filePath, []byte("data"), 0644)
+
+	err = recursiveCopy(tCtx.Context, v, filePath, v, filePath, &FileOpState{}, 0)
+	if err == nil || !strings.Contains(err.Error(), "file onto itself") {
+		t.Errorf("Expected file self-copy error, got: %v", err)
+	}
+
+	// 4. File into own subfolder
+	fileSubPath := filepath.Join(filePath, "sub")
+	err = recursiveCopy(tCtx.Context, v, filePath, v, fileSubPath, &FileOpState{}, 0)
+	if err == nil || !strings.Contains(err.Error(), "subfolder") {
+		t.Errorf("Expected file into subfolder error, got: %v", err)
+	}
+}
 func TestRecursiveCopy_SubfolderDeepRecursion(t *testing.T) {
 	// Regression test for Note 7: vtinput/vtinput/vtinput...
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
