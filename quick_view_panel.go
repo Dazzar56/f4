@@ -42,11 +42,21 @@ type QuickViewPanel struct {
 	scrollY int
 	scrollX int
 
+	// F2 (wrap toggle) sets these to re-anchor scrollY on the source
+	// line the user was reading, so the new re-flow doesn't move the
+	// text out from under them.
+	pinSourceOnNextShow int
+	hasPin              bool
+
 	// Wrapped view: cacheLines re-flowed to fit innerW. Rebuilt when
-	// content / wrap flag / innerW changes.
-	displayLines []string
-	displayWrap  bool
-	displayWidth int
+	// content / wrap flag / innerW changes. displayToSource[i] holds
+	// the index of the SOURCE line (cacheLines) the display line i
+	// belongs to, so F2 can pin the currently-visible source line
+	// while the display re-flows around it.
+	displayLines    []string
+	displayToSource []int
+	displayWrap     bool
+	displayWidth    int
 }
 
 // NewQuickViewPanel creates a quick-view panel over src's slot.
@@ -121,9 +131,18 @@ func (q *QuickViewPanel) ProcessKey(e *vtinput.InputEvent) bool {
 			q.scrollX++
 		}
 	case vtinput.VK_F2:
+		// Pin the currently-visible source line before re-flowing so
+		// the user's reading position doesn't scroll away. Falls back
+		// to 0 if we haven't computed a mapping yet.
+		pinnedSrc := 0
+		if q.scrollY >= 0 && q.scrollY < len(q.displayToSource) {
+			pinnedSrc = q.displayToSource[q.scrollY]
+		}
 		q.wrap = !q.wrap
 		q.scrollX = 0
-		q.displayLines = nil // force re-flow next Show
+		q.displayLines = nil // force re-flow on next Show
+		q.pinSourceOnNextShow = pinnedSrc
+		q.hasPin = true
 	default:
 		return false
 	}
@@ -252,9 +271,13 @@ func (q *QuickViewPanel) renderFile(item *fileEntry, innerW int, writeLine func(
 
 	// Re-flow if wrap flag / innerW changed.
 	if q.displayLines == nil || q.displayWrap != q.wrap || q.displayWidth != innerW {
-		q.displayLines = q.buildDisplayLines(innerW)
+		q.displayLines, q.displayToSource = q.buildDisplayLines(innerW)
 		q.displayWrap = q.wrap
 		q.displayWidth = innerW
+		if q.hasPin {
+			q.scrollY = firstDisplayForSource(q.displayToSource, q.pinSourceOnNextShow)
+			q.hasPin = false
+		}
 	}
 
 	// Clamp scroll offsets against fresh display.
@@ -287,20 +310,28 @@ func (q *QuickViewPanel) renderFile(item *fileEntry, innerW int, writeLine func(
 // buildDisplayLines converts cacheLines into what should actually be
 // on screen: with wrap on, long lines are re-flowed to fit innerW;
 // with wrap off, we pass them through and rely on scrollX/right-clip
-// at render time.
-func (q *QuickViewPanel) buildDisplayLines(innerW int) []string {
+// at render time. Returns the display lines plus a parallel slice
+// mapping each display line back to its source index so wrap toggle
+// can pin the reading position.
+func (q *QuickViewPanel) buildDisplayLines(innerW int) ([]string, []int) {
 	if innerW <= 0 {
-		return nil
+		return nil, nil
 	}
 	if !q.wrap {
 		out := make([]string, len(q.cacheLines))
 		copy(out, q.cacheLines)
-		return out
+		src := make([]int, len(q.cacheLines))
+		for i := range src {
+			src[i] = i
+		}
+		return out, src
 	}
 	var out []string
-	for _, raw := range q.cacheLines {
+	var src []int
+	for srcIdx, raw := range q.cacheLines {
 		if raw == "" {
 			out = append(out, "")
+			src = append(src, srcIdx)
 			continue
 		}
 		for len(raw) > 0 {
@@ -309,10 +340,22 @@ func (q *QuickViewPanel) buildDisplayLines(innerW int) []string {
 				cut = len(raw)
 			}
 			out = append(out, raw[:cut])
+			src = append(src, srcIdx)
 			raw = raw[cut:]
 		}
 	}
-	return out
+	return out, src
+}
+
+// firstDisplayForSource returns the smallest i for which m[i]==src.
+// If no line maps to src (out of range), returns 0.
+func firstDisplayForSource(m []int, src int) int {
+	for i, s := range m {
+		if s == src {
+			return i
+		}
+	}
+	return 0
 }
 
 // cellCut finds the byte offset that keeps runewidth.StringWidth
