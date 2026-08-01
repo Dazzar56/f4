@@ -1,4 +1,4 @@
-//go:build !windows
+//go:build linux
 
 package main
 
@@ -8,18 +8,6 @@ import (
 	"strings"
 	"syscall"
 )
-
-// FSInfo describes the filesystem holding a given path.
-// Fields default to their zero value if the platform can't supply them.
-type FSInfo struct {
-	Total, Free uint64
-	Type        string // e.g. "ext4", "" on macOS/BSD (no /proc)
-	Label       string // rarely populated on Unix
-	Serial      string // rarely populated on Unix
-	Mount       string // mount point, from /proc/mounts on Linux
-	MaxFilename int    // Statfs.Namelen
-	Flags       string // e.g. "rw,relatime" (Linux only)
-}
 
 // fsInfo populates as many fields as the current OS can supply for
 // the filesystem holding path. ok=false if the value can't be

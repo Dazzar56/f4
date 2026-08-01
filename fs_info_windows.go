@@ -10,18 +10,6 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// FSInfo describes the filesystem holding a given path.
-// Fields default to their zero value if the OS can't supply them.
-type FSInfo struct {
-	Total, Free uint64
-	Type        string // e.g. "NTFS", "FAT32"
-	Label       string
-	Serial      string // hex, e.g. "04A7-A6C3"
-	Mount       string // drive root, e.g. `C:\`
-	MaxFilename int
-	Flags       string // decoded from GetVolumeInformation flags
-}
-
 // fsInfo returns filesystem info for the drive containing path.
 // ok=false if the value can't be determined.
 func fsInfo(path string) (FSInfo, bool) {

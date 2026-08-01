@@ -7,18 +7,6 @@ import (
 	"unsafe"
 )
 
-// MemInfo describes overall system memory. Field semantics match the
-// unix side; on Windows Shared/Buffered stay zero (no direct
-// equivalent in MEMORYSTATUSEX) and Swap* are the pagefile totals.
-type MemInfo struct {
-	Total, Free uint64
-	Shared      uint64
-	Buffered    uint64
-	SwapTotal   uint64
-	SwapFree    uint64
-	LoadPercent int
-}
-
 // memoryStatusEx matches Windows' MEMORYSTATUSEX layout.
 type memoryStatusEx struct {
 	Length               uint32

@@ -1,20 +1,8 @@
-//go:build !windows
+//go:build linux
 
 package main
 
 import "syscall"
-
-// MemInfo describes overall system memory. Fields are 0 if the OS
-// couldn't supply them. Load% matches far2l's formula:
-// 100 * (used_ram + used_swap) / (total_ram + total_swap).
-type MemInfo struct {
-	Total, Free uint64 // bytes
-	Shared      uint64
-	Buffered    uint64
-	SwapTotal   uint64
-	SwapFree    uint64
-	LoadPercent int
-}
 
 // memInfo uses sysinfo(2) — same source far2l reads on Linux, so
 // numbers line up between the two apps.
