@@ -171,6 +171,24 @@ func TestFormatBytes_TogglesWithConfig(t *testing.T) {
 	}
 }
 
+// TestShortUsername verifies the Windows machine/domain prefix is
+// stripped so the info panel shows just the login name.
+func TestShortUsername(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"sogonov", "sogonov"},                 // unix
+		{"INBOOK_X2_PLUS\\sogonov", "sogonov"}, // windows local
+		{"MYDOMAIN\\alice.smith", "alice.smith"},
+		{"forward/slash", "slash"}, // defensive: any known separator
+		{"", ""},
+		{"\\", ""},
+	}
+	for _, c := range cases {
+		if got := shortUsername(c.in); got != c.want {
+			t.Errorf("shortUsername(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
 // TestFormatBytesCommas covers the raw-bytes-with-thousand-separator
 // formatter used in the info panel. Matches far2l's InsertCommas.
 func TestFormatBytesCommas(t *testing.T) {

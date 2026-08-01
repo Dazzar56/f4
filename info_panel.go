@@ -249,7 +249,7 @@ func (ip *InfoPanel) Show(scr *vtui.ScreenBuf) {
 	hostname, _ := os.Hostname()
 	username := ""
 	if u, err := user.Current(); err == nil {
-		username = u.Username
+		username = shortUsername(u.Username)
 	}
 	row(Msg("InfoPanel.Computer"), hostname)
 	row(Msg("InfoPanel.User"), username)
@@ -339,6 +339,17 @@ func formatBytesCommas(b uint64) string {
 		out = append(out, c)
 	}
 	return string(out)
+}
+
+// shortUsername strips the machine/domain prefix from Windows-style
+// user names (`INBOOK\sogonov` → `sogonov`), matching how the
+// original Far2 InfoList renders it. On Unix `user.Current().Username`
+// is already the bare login, so this is a no-op there.
+func shortUsername(u string) string {
+	if i := strings.LastIndexAny(u, `\/`); i >= 0 {
+		return u[i+1:]
+	}
+	return u
 }
 
 // formatBytesHuman renders a byte count in binary units (KiB/MiB/…).
