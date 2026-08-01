@@ -12,7 +12,9 @@ import (
 //   - first press installs an InfoPanel on the passive side, keeping
 //     the file panel underneath alive and focus on the active side;
 //   - second press removes it (toggle);
-//   - Tab moving focus onto the alt slot closes the alt.
+//   - Tab that lands on the alt slot keeps it open — the panel
+//     visually becomes focused (as in far2l), but commands still
+//     target the source file panel underneath.
 func TestPanelsFrame_CtrlL_TogglesInfoPanel(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pf := setupMockPanelsFrame()
@@ -60,7 +62,9 @@ func TestPanelsFrame_CtrlL_TogglesInfoPanel(t *testing.T) {
 		t.Error("second Ctrl+L should remove alt panel")
 	}
 
-	// Install again, then Tab to the alt side — Tab must close it.
+	// Install again, then Tab to the alt side — Tab must keep the
+	// alt panel visible AND flip its focused state so the frame
+	// title recolors (matches far2l).
 	send(vtinput.VK_L, vtinput.LeftCtrlPressed)
 	if pf.altPanels[0] == nil {
 		t.Fatal("re-install: alt panel should be present again")
@@ -69,8 +73,14 @@ func TestPanelsFrame_CtrlL_TogglesInfoPanel(t *testing.T) {
 	if pf.activeIdx != 0 {
 		t.Fatalf("Tab should switch active to left; got activeIdx=%d", pf.activeIdx)
 	}
-	if pf.altPanels[0] != nil {
-		t.Error("Tab landing on alt slot should close the alt")
+	if pf.altPanels[0] == nil {
+		t.Error("Tab must NOT close the alt panel — it should stay visible")
+	}
+	// A render is required to propagate SetFocus into the alt panel;
+	// call Show and then check the focus state was flipped.
+	pf.Show(vtui.NewSilentScreenBuf())
+	if !pf.altPanels[0].IsFocused() {
+		t.Error("after Tab + render, alt panel should report focused=true")
 	}
 }
 
@@ -102,10 +112,15 @@ func TestInfoPanel_ShowRenders(t *testing.T) {
 		t.Error("Source() should return the file panel we passed")
 	}
 
-	// Focus is always false; SetFocus is a no-op.
+	// SetFocus now tracks a visible focus marker (title recolour) —
+	// used when Tab lands on the alt-panel slot.
 	ip.SetFocus(true)
+	if !ip.IsFocused() {
+		t.Error("SetFocus(true) should be reflected by IsFocused")
+	}
+	ip.SetFocus(false)
 	if ip.IsFocused() {
-		t.Error("info panel must never be focused")
+		t.Error("SetFocus(false) should clear the focus marker")
 	}
 }
 

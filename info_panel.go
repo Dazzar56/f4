@@ -32,8 +32,9 @@ type AltPanel interface {
 // (README/Descript.ion) rendering are also deliberately deferred.
 type InfoPanel struct {
 	vtui.ScreenObject
-	src   *FileSystemPanel
-	frame *vtui.BorderedFrame
+	src     *FileSystemPanel
+	frame   *vtui.BorderedFrame
+	focused bool
 }
 
 // NewInfoPanel creates an info panel positioned over src's slot.
@@ -64,13 +65,26 @@ func (ip *InfoPanel) SetPosition(x1, y1, x2, y2 int) {
 func (ip *InfoPanel) Source() *FileSystemPanel { return ip.src }
 func (ip *InfoPanel) Kind() string             { return "info" }
 
-// SetFocus is a no-op — alt panels never receive keyboard focus.
-func (ip *InfoPanel) SetFocus(bool) {}
+// SetFocus flips the visible focus marker (title recolours). The alt
+// panel doesn't consume keyboard input — commands still target the
+// source file panel — but showing the frame as focused matches how
+// far2l's Info/Quick view highlight themselves on Tab.
+func (ip *InfoPanel) SetFocus(f bool) {
+	ip.focused = f
+	if ip.frame != nil {
+		if f {
+			ip.frame.ColorTitleIdx = ColPanelSelectedTitle
+		} else {
+			ip.frame.ColorTitleIdx = ColPanelTitle
+		}
+	}
+}
 
-// IsFocused returns false — alt panels never receive keyboard focus.
-func (ip *InfoPanel) IsFocused() bool { return false }
+func (ip *InfoPanel) IsFocused() bool { return ip.focused }
 
 // ProcessKey / ProcessMouse do nothing — alt panels are display-only.
+// Anything typed on the alt-panel slot falls through to the global
+// handler, which will dispatch to the source file panel underneath.
 func (ip *InfoPanel) ProcessKey(*vtinput.InputEvent) bool   { return false }
 func (ip *InfoPanel) ProcessMouse(*vtinput.InputEvent) bool { return false }
 

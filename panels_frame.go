@@ -679,6 +679,7 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 		if pf.showLeftPanel {
 			pf.panels[0].SetFocus(pf.activeIdx == 0)
 			if pf.altPanels[0] != nil {
+				pf.altPanels[0].SetFocus(pf.activeIdx == 0)
 				pf.altPanels[0].Show(scr)
 			} else {
 				pf.panels[0].Show(scr)
@@ -687,6 +688,7 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 		if pf.showRightPanel {
 			pf.panels[1].SetFocus(pf.activeIdx == 1)
 			if pf.altPanels[1] != nil {
+				pf.altPanels[1].SetFocus(pf.activeIdx == 1)
 				pf.altPanels[1].Show(scr)
 			} else {
 				pf.panels[1].Show(scr)
@@ -1745,15 +1747,10 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			if pf.activeIdx == 1 && !pf.showRightPanel {
 				pf.showRightPanel = true
 			}
-			// Alt panels are display-only companions to the passive
-			// side. If Tab landed on a slot that was showing one,
-			// close it — the panel there is now the active file
-			// panel again.
-			if pf.altPanels[pf.activeIdx] != nil {
-				pf.altPanels[pf.activeIdx] = nil
-				pf.ResizeConsole(pf.lastW, pf.lastH)
-				vtui.FrameManager.HardRefresh()
-			}
+			// Alt panels survive Tab — matches far2l where the
+			// info / quick view / tree panel becomes visually
+			// focused but stays put; commands still target the
+			// source file panel underneath.
 			return true
 		} else {
 			if AppConfig.CommandLineAutoComplete && !pf.cmdLine.IsEmpty() {
