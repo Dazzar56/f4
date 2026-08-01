@@ -419,6 +419,18 @@ func TestQuickView_DirScan_PopulatesRecursive(t *testing.T) {
 	if stats.DirBytes <= 0 {
 		t.Errorf("DirBytes = %d, want > 0 (dir inodes should be tracked)", stats.DirBytes)
 	}
+	// PhysicalBytes is only populated when fsInfo() gave us a cluster
+	// size (Linux tempdirs always do). If cluster size is known here,
+	// physical must be >= logical (rounding is up).
+	q.scanMu.Lock()
+	cluster := q.scanClusterSize
+	q.scanMu.Unlock()
+	if cluster > 0 {
+		if stats.PhysicalBytes < stats.Bytes {
+			t.Errorf("PhysicalBytes (%d) < Bytes (%d) — should ceil-round, not shrink",
+				stats.PhysicalBytes, stats.Bytes)
+		}
+	}
 }
 
 // TestQuickView_DotDot_ScansCurrentDir locks in far2/far2l behaviour:

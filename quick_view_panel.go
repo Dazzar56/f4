@@ -41,14 +41,17 @@ type QuickViewPanel struct {
 	// ignored (the goroutine may still be draining after a cursor
 	// change cancelled its ctx). scanDoneCh is closed on completion
 	// and recreated per scan so tests can wait for finalisation.
-	scanMu         sync.Mutex
-	scanCancel     context.CancelFunc
-	scanGen        uint64
-	scanStats      vfs.OpStats
-	scanDone       bool
-	scanErr        error
-	scanLastRedraw time.Time
-	scanDoneCh     chan struct{}
+	// scanClusterSize is the FSInfo.ClusterSize that was used to seed
+	// the scan (0 = unknown); rendering hides Physical/Ratio when 0.
+	scanMu          sync.Mutex
+	scanCancel      context.CancelFunc
+	scanGen         uint64
+	scanStats       vfs.OpStats
+	scanClusterSize uint64
+	scanDone        bool
+	scanErr         error
+	scanLastRedraw  time.Time
+	scanDoneCh      chan struct{}
 
 	// Display state driven by the keyboard while the panel is focused.
 	wrap    bool
@@ -264,14 +267,12 @@ func (q *QuickViewPanel) Show(scr *vtui.ScreenBuf) {
 	// listing) rather than showing a static "Parent directory" note.
 	// We synthesize a fileEntry that points at the current dir and
 	// funnel it through the same refreshCache path as regular items.
+	// The header shows the full path so it's unambiguous even when
+	// several panels sit in similarly-named leaf folders.
 	var path string
 	if item.Name == ".." {
 		path = q.src.vfs.GetPath()
-		displayName := q.src.vfs.Base(path)
-		if displayName == "" || displayName == "/" || displayName == "." {
-			displayName = path
-		}
-		synth := fileEntry{VFSItem: vfs.VFSItem{Name: displayName, IsDir: true}}
+		synth := fileEntry{VFSItem: vfs.VFSItem{Name: path, IsDir: true}}
 		item = &synth
 	} else {
 		path = q.src.vfs.Join(q.src.vfs.GetPath(), item.Name)
@@ -304,6 +305,7 @@ func (q *QuickViewPanel) renderDir(item *fileEntry, writeLine func(string)) {
 	writeLine("")
 	q.scanMu.Lock()
 	stats := q.scanStats
+	cluster := q.scanClusterSize
 	done := q.scanDone
 	serr := q.scanErr
 	q.scanMu.Unlock()
@@ -323,13 +325,28 @@ func (q *QuickViewPanel) renderDir(item *fileEntry, writeLine func(string)) {
 	}
 	writeLine(" " + Msg("QuickView.Contains") + ":")
 	writeLine("")
-	writeLine(fmt.Sprintf(" %-13s %d%s", Msg("QuickView.FolderCount"), dirs, hint))
-	writeLine(fmt.Sprintf(" %-13s %d%s", Msg("QuickView.FileCount"), stats.Files, hint))
-	// Include directory-inode sizes in the shown total so we match
-	// far2/far2l's "Files size" (their number sums every entry's Size,
+	writeLine(fmt.Sprintf(" %-14s %d%s", Msg("QuickView.FolderCount"), dirs, hint))
+	writeLine(fmt.Sprintf(" %-14s %d%s", Msg("QuickView.FileCount"), stats.Files, hint))
+	// Include directory-inode sizes in the shown "Files size" so it
+	// matches far2/far2l (their number sums every entry's Size,
 	// including dir inodes). ETA/copy paths read stats.Bytes only, so
 	// they're unaffected.
-	writeLine(fmt.Sprintf(" %-13s %s%s", Msg("QuickView.FilesSize"), formatBytes(uint64(stats.Bytes+stats.DirBytes)), hint))
+	logical := stats.Bytes + stats.DirBytes
+	writeLine(fmt.Sprintf(" %-14s %s%s", Msg("QuickView.FilesSize"), formatBytes(uint64(logical)), hint))
+	// Physical size + Ratio are only meaningful when we know the
+	// cluster (allocation-unit) size — fs_info_other.go stubs return
+	// 0, and Windows may fail GetDiskFreeSpace on network shares. In
+	// that case we hide these rows rather than showing bogus numbers.
+	if cluster > 0 {
+		writeLine(fmt.Sprintf(" %-14s %s%s", Msg("QuickView.PhysicalSize"), formatBytes(uint64(stats.PhysicalBytes)), hint))
+		ratio := 100
+		if stats.PhysicalBytes > 0 {
+			ratio = int((logical * 100) / stats.PhysicalBytes)
+		}
+		writeLine(fmt.Sprintf(" %-14s %d%%%s", Msg("QuickView.Ratio"), ratio, hint))
+		writeLine("")
+		writeLine(fmt.Sprintf(" %-14s %s", Msg("QuickView.ClusterSize"), formatBytes(cluster)))
+	}
 	if serr != nil {
 		writeLine("")
 		writeLine(" " + Msg("QuickView.ReadError") + ": " + serr.Error())
@@ -342,6 +359,16 @@ func (q *QuickViewPanel) renderDir(item *fileEntry, writeLine func(string)) {
 // than every 200ms while the scan runs. On completion the final stats
 // (plus scanErr if any) are latched and scanDone becomes true.
 func (q *QuickViewPanel) startDirScan(fullPath string) {
+	// Ask the platform for the cluster size on the scan target's
+	// filesystem so we can approximate physical (on-disk) size as the
+	// per-file ceil-round to that boundary. Zero on platforms that
+	// don't tell us (see fs_info_other.go); render then hides
+	// Physical/Ratio.
+	var clusterSize uint64
+	if fs, ok := fsInfo(fullPath); ok {
+		clusterSize = fs.ClusterSize
+	}
+
 	q.scanMu.Lock()
 	if q.scanCancel != nil {
 		q.scanCancel()
@@ -351,22 +378,23 @@ func (q *QuickViewPanel) startDirScan(fullPath string) {
 	ctx, cancel := context.WithCancel(context.Background())
 	q.scanCancel = cancel
 	q.scanStats = vfs.OpStats{}
+	q.scanClusterSize = clusterSize
 	q.scanDone = false
 	q.scanErr = nil
 	q.scanLastRedraw = time.Time{}
 	done := make(chan struct{})
 	q.scanDoneCh = done
 	source := q.src.vfs
-	// CalculateStats derives its target via Join(basePath, name), so
-	// split fullPath on its parent+basename. Works for both children
-	// of GetPath() and for GetPath() itself (the ".." case).
+	// CalculateStatsDetailed derives its target via Join(basePath,
+	// name), so split fullPath on its parent+basename. Works for both
+	// children of GetPath() and for GetPath() itself (the ".." case).
 	basePath := source.Dir(fullPath)
 	name := source.Base(fullPath)
 	q.scanMu.Unlock()
 
 	go func() {
 		defer close(done)
-		stats, err := vfs.CalculateStats(ctx, source, basePath, []string{name}, func(_ string, s vfs.OpStats) {
+		stats, err := vfs.CalculateStatsDetailed(ctx, source, basePath, []string{name}, int64(clusterSize), func(_ string, s vfs.OpStats) {
 			q.scanMu.Lock()
 			if q.scanGen != gen {
 				q.scanMu.Unlock()
