@@ -145,6 +145,87 @@ func (ip *InfoPanel) Show(scr *vtui.ScreenBuf) {
 		y++
 	}
 
+	// wrapRow is like row but, for values too long to share a line
+	// with their label, breaks the value on `sep` and continues it
+	// on hanging continuation lines. Used for Flags where the value
+	// is a naturally-splittable comma-list — Windows NTFS attributes
+	// alone go past 60 cols. Falls back to plain row for short values.
+	wrapRow := func(label, value, sep string) {
+		labelPad := " " + label
+		labelW := runewidth.StringWidth(labelPad)
+		fitsInline := labelW+1+runewidth.StringWidth(value) <= innerW
+		if fitsInline || value == "" {
+			row(label, value)
+			return
+		}
+		// Continuation lines hang two cells past the label start so
+		// the wrapped value visually attaches to its label.
+		hangStart := 3
+		if hangStart >= innerW {
+			hangStart = 1
+		}
+		hangIndent := strings.Repeat(" ", hangStart)
+		hangRoom := innerW - hangStart
+		if hangRoom < 1 {
+			row(label, value)
+			return
+		}
+		parts := strings.Split(value, sep)
+		// First line: label followed by as many parts as fit right of it.
+		gap := 1
+		firstRoom := innerW - labelW - gap
+		var first []string
+		i := 0
+		for i < len(parts) {
+			piece := parts[i]
+			if len(first) > 0 {
+				piece = sep + piece
+			}
+			if runewidth.StringWidth(strings.Join(first, "")+piece) > firstRoom {
+				break
+			}
+			if len(first) == 0 {
+				first = append(first, parts[i])
+			} else {
+				first = append(first, sep+parts[i])
+			}
+			i++
+		}
+		firstValue := strings.Join(first, "")
+		if firstValue == "" {
+			// Value's first token alone doesn't fit next to the label;
+			// put the label on its own line and wrap the value below.
+			ip.writeLine(scr, labelPad, attr, innerW, y)
+			y++
+		} else {
+			text := labelPad + strings.Repeat(" ", innerW-labelW-runewidth.StringWidth(firstValue)) + firstValue
+			ip.writeLine(scr, text, attr, innerW, y)
+			y++
+		}
+		// Continuation lines: greedy-pack the remaining parts.
+		cur := ""
+		flush := func() {
+			if cur == "" || y > maxY {
+				return
+			}
+			ip.writeLine(scr, hangIndent+cur, attr, innerW, y)
+			y++
+			cur = ""
+		}
+		for ; i < len(parts); i++ {
+			piece := parts[i]
+			if cur != "" {
+				piece = sep + piece
+			}
+			if runewidth.StringWidth(cur+piece) > hangRoom {
+				flush()
+				piece = parts[i]
+			}
+			cur += piece
+		}
+		flush()
+	}
+
 	sectionHeader := func(text string) {
 		if y > maxY {
 			return
@@ -201,7 +282,7 @@ func (ip *InfoPanel) Show(scr *vtui.ScreenBuf) {
 			row(Msg("InfoPanel.MaxFilename"), fmt.Sprintf("%d", fs.MaxFilename))
 		}
 		if fs.Flags != "" {
-			row(Msg("InfoPanel.Flags"), fs.Flags)
+			wrapRow(Msg("InfoPanel.Flags"), fs.Flags, ",")
 		}
 	} else {
 		sectionHeader(fsTitle)
