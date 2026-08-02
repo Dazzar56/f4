@@ -936,20 +936,20 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	}
 
-	// `B` (plain, no modifiers) flips the info panel's number format
-	// between human-readable (GiB/MiB/…) and far2l's raw-bytes-with-
-	// separators presentation. Only fires while an info panel is
-	// actually visible — otherwise `B` still goes to fast-find as
+	// `B` (plain, no modifiers) flips number formatting between the
+	// human-readable form (GiB/MiB/…) and far2l's raw-bytes-with-
+	// separators presentation. Fires while an info panel OR a quick
+	// view panel is visible; otherwise `B` still goes to fast-find as
 	// usual. Persists to settings.ini via the debounced save.
 	if e.VirtualKeyCode == vtinput.VK_B && !ctrl && !alt && !shift && e.KeyDown {
-		hasInfo := false
+		hasAlt := false
 		for _, a := range pf.altPanels {
-			if a != nil && a.Kind() == "info" {
-				hasInfo = true
+			if a != nil && (a.Kind() == "info" || a.Kind() == "quick_view") {
+				hasAlt = true
 				break
 			}
 		}
-		if hasInfo {
+		if hasAlt {
 			AppConfig.InfoPanelBytes = !AppConfig.InfoPanelBytes
 			RequestSaveConfig()
 			vtui.FrameManager.HardRefresh()
@@ -2452,14 +2452,24 @@ func (pf *PanelsFrame) toggleAltPanel(kind string, factory func(src *FileSystemP
 	if !pf.showPanels {
 		return
 	}
+	tryClose := func(a AltPanel) {
+		if c, ok := a.(interface{ Close() }); ok {
+			c.Close()
+		}
+	}
 	opp := 1 - pf.activeIdx
 	switch {
 	case pf.altPanels[pf.activeIdx] != nil && pf.altPanels[pf.activeIdx].Kind() == kind:
+		tryClose(pf.altPanels[pf.activeIdx])
 		pf.altPanels[pf.activeIdx] = nil
 	case pf.altPanels[opp] != nil && pf.altPanels[opp].Kind() == kind:
+		tryClose(pf.altPanels[opp])
 		pf.altPanels[opp] = nil
 	default:
 		if fsp, ok := pf.panels[pf.activeIdx].(*FileSystemPanel); ok {
+			if pf.altPanels[opp] != nil {
+				tryClose(pf.altPanels[opp])
+			}
 			pf.altPanels[opp] = factory(fsp)
 		}
 	}
