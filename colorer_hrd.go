@@ -28,11 +28,12 @@ type colorerRegionStyle struct {
 }
 
 var (
-	schemeMu     sync.Mutex
-	schemeName   string
-	schemeStyles map[string]colorerRegionStyle
-	schemeKeys   []string
-	schemeMemo   map[string]colorerRegionStyle
+	schemeMu         sync.Mutex
+	schemeName       string
+	schemeStyles     map[string]colorerRegionStyle
+	schemeKeys       []string
+	schemeMemo       map[string]colorerRegionStyle
+	schemeGeneration uint64
 )
 
 // ColorerConfigsDir returns the directory the Colorer schemas are unpacked to.
@@ -59,6 +60,23 @@ var catalogEntityRe = regexp.MustCompile(`(?is)<!ENTITY\s+(?:%\s+)?[^\s>]+\s+(?:
 // PUBLIC form the system id is the last one.
 var catalogQuotedRe = regexp.MustCompile(`"[^"]*"|'[^']*'`)
 
+// entityDeclRe matches both internal and external entity declarations inside the DOCTYPE,
+// capturing the entity name and its string literal value (which may be double or single-quoted).
+var entityDeclRe = regexp.MustCompile(`(?is)<!ENTITY\s+(?:%\s+)?([^\s>]+)\s+(?:SYSTEM\s+|PUBLIC\s+(?:"[^"]*"|'[^']*')\s+)?(?:"([^"]*)"|'([^']*)')`)
+
+// parseDirectiveEntities parses any entity declarations from the given XML directive string
+// and adds them to the provided map.
+func parseDirectiveEntities(directive string, entitiesMap map[string]string) {
+	for _, match := range entityDeclRe.FindAllStringSubmatch(directive, -1) {
+		name := match[1]
+		val := match[2]
+		if val == "" && match[3] != "" {
+			val = match[3]
+		}
+		entitiesMap[name] = val
+	}
+}
+
 // catalogEnvRe matches the environment references colorer expands in entity
 // paths: $NAME and ${NAME}, plus the Windows %NAME% form.
 var catalogEnvRe = regexp.MustCompile(`\$\{([A-Za-z]\w*)\}|\$([A-Za-z]\w*)|%([A-Za-z]\w*)%`)
@@ -71,6 +89,8 @@ func parseColorerCatalog(catalogPath string) []ColorerScheme {
 	var schemes []ColorerScheme
 	seenFiles := make(map[string]bool)
 	seenNames := make(map[string]bool)
+
+	entitiesMap := make(map[string]string)
 
 	queue := []string{catalogPath}
 	for len(queue) > 0 && len(seenFiles) < maxColorerCatalogFiles {
@@ -86,7 +106,7 @@ func parseColorerCatalog(catalogPath string) []ColorerScheme {
 		}
 		seenFiles[key] = true
 
-		found, entities := scanColorerCatalogFile(path, catalogPath)
+		found, entities := scanColorerCatalogFile(path, catalogPath, entitiesMap)
 		for _, scheme := range found {
 			lower := strings.ToLower(scheme.Name)
 			if seenNames[lower] {
@@ -96,7 +116,7 @@ func parseColorerCatalog(catalogPath string) []ColorerScheme {
 			schemes = append(schemes, scheme)
 		}
 		for _, entity := range entities {
-			if resolved := resolveColorerCatalogEntity(entity, path); resolved != "" {
+			if resolved := resolveColorerCatalogEntity(entity, path, catalogPath); resolved != "" {
 				queue = append(queue, resolved)
 			}
 		}
@@ -112,7 +132,7 @@ func parseColorerCatalog(catalogPath string) []ColorerScheme {
 // styles it declares together with the system ids of the external entities it
 // references. Style locations are resolved against the main catalog, the way
 // the colorer engine itself does it.
-func scanColorerCatalogFile(path, catalogPath string) ([]ColorerScheme, []string) {
+func scanColorerCatalogFile(path, catalogPath string, entitiesMap map[string]string) ([]ColorerScheme, []string) {
 	f, err := os.Open(path)
 	if err != nil {
 		vtui.DebugLog("COLORER: Cannot open catalog file %q: %v", path, err)
@@ -126,6 +146,7 @@ func scanColorerCatalogFile(path, catalogPath string) ([]ColorerScheme, []string
 
 	dec := xml.NewDecoder(f)
 	dec.Strict = false
+	dec.Entity = entitiesMap
 	for {
 		tok, tErr := dec.Token()
 		if tErr != nil {
@@ -133,6 +154,7 @@ func scanColorerCatalogFile(path, catalogPath string) ([]ColorerScheme, []string
 		}
 		switch el := tok.(type) {
 		case xml.Directive:
+			parseDirectiveEntities(string(el), entitiesMap)
 			entities = append(entities, colorerCatalogEntities(string(el))...)
 		case xml.StartElement:
 			switch strings.ToLower(el.Name.Local) {
@@ -149,7 +171,11 @@ func scanColorerCatalogFile(path, catalogPath string) ([]ColorerScheme, []string
 				if current != nil && current.Path == "" {
 					link := xmlAttr(el, "link")
 					if link != "" {
-						current.Path = filepath.Join(filepath.Dir(catalogPath), filepath.FromSlash(link))
+						resolved, found := resolveColorerLocation(link, path, catalogPath)
+						if !found {
+							vtui.DebugLog("COLORER: Style %q location %q not found, assuming %q", current.Name, link, resolved)
+						}
+						current.Path = resolved
 					}
 				}
 			}
@@ -185,25 +211,49 @@ func colorerCatalogEntities(directive string) []string {
 // FarColorer writes them as "env:$FAR_HOME/hrd/catalog-console.xml": the
 // variable is expanded when the environment defines it, and what is left is
 // looked up next to the file that declared the entity otherwise.
-func resolveColorerCatalogEntity(systemID, fromFile string) string {
-	text := strings.TrimSpace(systemID)
+// resolveColorerLocation turns a catalog path into a readable file path.
+// Entity system ids and style locations share the same syntax: an optional
+// "env:" prefix, environment references, and a path that may be absolute,
+// relative to the main catalog, or relative to the file that declared it.
+// When nothing exists the catalog-relative form is returned with false, since
+// that is the one the colorer engine itself would have used.
+func resolveColorerLocation(location, fromFile, catalogPath string) (string, bool) {
+	text := strings.TrimSpace(location)
 	text = strings.TrimPrefix(text, "env:")
 	text = strings.TrimPrefix(text, "file://")
 	if text == "" {
-		return ""
+		return "", false
 	}
 	text = filepath.FromSlash(expandColorerCatalogEnv(text))
-
-	if isColorerCatalogFile(text) {
-		return text
-	}
 	relative := strings.TrimLeft(text, `/\`)
-	if candidate := filepath.Join(filepath.Dir(fromFile), relative); isColorerCatalogFile(candidate) {
-		return candidate
+
+	candidates := []string{text}
+	fallback := text
+	if catalogPath != "" {
+		fallback = filepath.Join(filepath.Dir(catalogPath), relative)
+		candidates = append(candidates, fallback)
+	}
+	if fromFile != "" {
+		candidates = append(candidates, filepath.Join(filepath.Dir(fromFile), relative))
 	}
 
-	vtui.DebugLog("COLORER: Catalog entity %q could not be resolved", systemID)
-	return ""
+	for _, candidate := range candidates {
+		if isColorerCatalogFile(candidate) {
+			return candidate, true
+		}
+	}
+	return fallback, false
+}
+
+// resolveColorerCatalogEntity resolves the system id of an external entity,
+// or returns an empty string when no such file can be found.
+func resolveColorerCatalogEntity(systemID, fromFile, catalogPath string) string {
+	resolved, found := resolveColorerLocation(systemID, fromFile, catalogPath)
+	if !found {
+		vtui.DebugLog("COLORER: Catalog entity %q could not be resolved, tried %q", systemID, resolved)
+		return ""
+	}
+	return resolved
 }
 
 // expandColorerCatalogEnv replaces the environment references of an entity
@@ -234,29 +284,34 @@ func loadColorerScheme(path string) map[string]colorerRegionStyle {
 	}
 	defer f.Close()
 
+	entitiesMap := make(map[string]string)
 	styles := make(map[string]colorerRegionStyle)
 	dec := xml.NewDecoder(f)
 	dec.Strict = false
+	dec.Entity = entitiesMap
 	for {
 		tok, tErr := dec.Token()
 		if tErr != nil {
 			break
 		}
-		el, ok := tok.(xml.StartElement)
-		if !ok {
-			continue
-		}
-		name := xmlAttr(el, "name")
-		if name == "" {
-			continue
-		}
-		var style colorerRegionStyle
-		style.fore, style.hasFore = parseColorerColor(xmlAttr(el, "fore"))
-		style.back, style.hasBack = parseColorerColor(xmlAttr(el, "back"))
-		if style.hasFore || style.hasBack {
-			styles[strings.ToLower(name)] = style
+		switch el := tok.(type) {
+		case xml.Directive:
+			parseDirectiveEntities(string(el), entitiesMap)
+		case xml.StartElement:
+			name := xmlAttr(el, "name")
+			if name == "" {
+				continue
+			}
+			var style colorerRegionStyle
+			style.fore, style.hasFore = parseColorerColor(xmlAttr(el, "fore"))
+			style.back, style.hasBack = parseColorerColor(xmlAttr(el, "back"))
+			if style.hasFore || style.hasBack {
+				styles[strings.ToLower(name)] = style
+			}
 		}
 	}
+
+	vtui.DebugLog("COLORER: Color style %q defines %d regions", path, len(styles))
 	return styles
 }
 
@@ -293,12 +348,17 @@ func SetColorerScheme(name string) {
 	}
 
 	var styles map[string]colorerRegionStyle
+	stylePath := ""
 	if name != "" {
 		for _, scheme := range ListColorerSchemes() {
 			if strings.EqualFold(scheme.Name, name) {
+				stylePath = scheme.Path
 				styles = loadColorerScheme(scheme.Path)
 				break
 			}
+		}
+		if stylePath == "" {
+			vtui.DebugLog("COLORER: Color style %q is not listed in the catalog", name)
 		}
 	}
 
@@ -313,9 +373,19 @@ func SetColorerScheme(name string) {
 	schemeStyles = styles
 	schemeKeys = keys
 	schemeMemo = make(map[string]colorerRegionStyle)
+	schemeGeneration++
 	schemeMu.Unlock()
 
-	vtui.DebugLog("COLORER: Color style %q activated, %d regions defined", name, len(styles))
+	vtui.DebugLog("COLORER: Color style %q activated from %q, %d regions defined", name, stylePath, len(styles))
+}
+
+// ColorerSchemeGeneration changes every time a color style is applied.
+// Highlighters cache the attributes they computed per line, so they watch it
+// to notice that the colors underneath them have been replaced.
+func ColorerSchemeGeneration() uint64 {
+	schemeMu.Lock()
+	defer schemeMu.Unlock()
+	return schemeGeneration
 }
 
 // colorerBackgroundRegion is the region FarColorer copies into the editor

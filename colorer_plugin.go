@@ -274,6 +274,7 @@ type ColorerHighlighter struct {
 	attrCache  map[int][]uint64
 	baseAttr   uint64
 	baseKnown  bool
+	schemeGen  uint64
 	parsedIdx  int
 	filename   string
 	configsDir string
@@ -300,11 +301,13 @@ func (ch *ColorerHighlighter) Highlight(line string, prevState any, baseAttr uin
 		logIdx = len(ch.lines)
 	}
 
-	// The base attribute carries the current palette, so cached colors are
-	// only valid while it stays the same.
-	if !ch.baseKnown || ch.baseAttr != baseAttr {
+	// Cached colors are only valid while both the palette they were computed
+	// from and the active color style stay the same.
+	gen := ColorerSchemeGeneration()
+	if !ch.baseKnown || ch.baseAttr != baseAttr || ch.schemeGen != gen {
 		ch.baseAttr = baseAttr
 		ch.baseKnown = true
+		ch.schemeGen = gen
 		ch.attrCache = nil
 	}
 

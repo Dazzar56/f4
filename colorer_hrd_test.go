@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/unxed/vtui"
@@ -384,5 +385,107 @@ func TestColorer_ParseCatalogHandlesCycleAndDuplicates(t *testing.T) {
 	wantPath := filepath.Join(base, "hrd", "rgb", "amber.hrd")
 	if schemes[0].Path != wantPath {
 		t.Errorf("Expected the first declaration to win with %q, got %q", wantPath, schemes[0].Path)
+	}
+}
+func TestColorer_ParseCatalogResolvesEnvLocation(t *testing.T) {
+	base := filepath.Join(t.TempDir(), "base")
+	if err := os.MkdirAll(filepath.Join(base, "hrd", "rgb"), 0755); err != nil {
+		t.Fatalf("Cannot create the fixture directory: %v", err)
+	}
+	t.Setenv("F4_COLORER_TEST_HOME", base)
+
+	catalog := `<?xml version="1.0" encoding="UTF-8"?>
+<catalog>
+  <hrd-sets>
+    <hrd class="rgb" name="grayscale" description="Grayscale style">
+      <location link="env:$F4_COLORER_TEST_HOME/hrd/rgb/grayscale.hrd"/>
+    </hrd>
+  </hrd-sets>
+</catalog>`
+	style := `<?xml version="1.0" encoding="UTF-8"?>
+<hrd>
+  <assign name="def:Text" fore="#101010" back="#E0E0E0"/>
+</hrd>`
+
+	catalogPath := filepath.Join(base, "catalog.xml")
+	stylePath := filepath.Join(base, "hrd", "rgb", "grayscale.hrd")
+	if err := os.WriteFile(catalogPath, []byte(catalog), 0644); err != nil {
+		t.Fatalf("Cannot write the catalog: %v", err)
+	}
+	if err := os.WriteFile(stylePath, []byte(style), 0644); err != nil {
+		t.Fatalf("Cannot write the color style: %v", err)
+	}
+
+	schemes := parseColorerCatalog(catalogPath)
+	if len(schemes) != 1 {
+		t.Fatalf("Expected one rgb style, got %v", schemes)
+	}
+	if schemes[0].Path != stylePath {
+		t.Fatalf("Expected the env: location resolved to %q, got %q", stylePath, schemes[0].Path)
+	}
+
+	styles := loadColorerScheme(schemes[0].Path)
+	if len(styles) != 1 || !styles["def:text"].hasBack || styles["def:text"].back != 0xE0E0E0 {
+		t.Errorf("Expected def:Text to be read from the style, got %+v", styles)
+	}
+}
+func TestColorer_ParseCatalogWithInternalEntities(t *testing.T) {
+	base := filepath.Join(t.TempDir(), "base")
+	if err := os.MkdirAll(filepath.Join(base, "hrd", "rgb"), 0755); err != nil {
+		t.Fatalf("Cannot create the fixture directory: %v", err)
+	}
+
+	catalog := `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE catalog [
+  <!ENTITY hrd "hrd">
+]>
+<catalog>
+  <hrd-sets>
+    <hrd class="rgb" name="grayscale" description="Grayscale style">
+      <location link="&hrd;/rgb/grayscale.hrd"/>
+    </hrd>
+  </hrd-sets>
+</catalog>`
+	style := `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE hrd [
+  <!ENTITY white "#FFFFFF">
+]>
+<hrd>
+  <assign name="def:Text" fore="&white;" back="#000000"/>
+</hrd>`
+
+	catalogPath := filepath.Join(base, "catalog.xml")
+	stylePath := filepath.Join(base, "hrd", "rgb", "grayscale.hrd")
+	if err := os.WriteFile(catalogPath, []byte(catalog), 0644); err != nil {
+		t.Fatalf("Cannot write the catalog: %v", err)
+	}
+	if err := os.WriteFile(stylePath, []byte(style), 0644); err != nil {
+		t.Fatalf("Cannot write the color style: %v", err)
+	}
+
+	schemes := parseColorerCatalog(catalogPath)
+	if len(schemes) != 1 {
+		t.Fatalf("Expected one rgb style, got %v", schemes)
+	}
+	if !strings.HasSuffix(filepath.ToSlash(schemes[0].Path), "hrd/rgb/grayscale.hrd") {
+		t.Fatalf("Expected path resolved via internal entity, got %q", schemes[0].Path)
+	}
+
+	styles := loadColorerScheme(schemes[0].Path)
+	if len(styles) != 1 || !styles["def:text"].hasFore || styles["def:text"].fore != 0xFFFFFF {
+		t.Errorf("Expected def:Text to be read with expanded entity, got %+v", styles)
+	}
+}
+
+func TestColorer_SchemeGenerationChangesOnSwitch(t *testing.T) {
+	installColorerTestScheme(t, map[string]colorerRegionStyle{
+		"def:text": {fore: 0x00FF00, hasFore: true},
+	})
+
+	before := ColorerSchemeGeneration()
+	// Switching back to the built-in colors must be visible to the caches.
+	SetColorerScheme("")
+	if after := ColorerSchemeGeneration(); after == before {
+		t.Errorf("Expected the generation to change, it stayed at %d", after)
 	}
 }
