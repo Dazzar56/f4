@@ -327,6 +327,112 @@ func TestInfoPanel_ProcessKey_UnfocusedIgnoresC(t *testing.T) {
 	}
 }
 
+// TestInfoPanel_ShiftUpDownSelectsAndCCopiesLabelValue checks the
+// multi-row selection UX: Shift+Down toggles the current row's
+// selection and moves the cursor down; a subsequent C copies every
+// selected row as "label: value" per line (in on-screen order),
+// with a two-line minimum so the copy joiner is actually exercised.
+func TestInfoPanel_ShiftUpDownSelectsAndCCopiesLabelValue(t *testing.T) {
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+	vtui.SetDefaultPalette()
+
+	tmp := t.TempDir()
+	fsp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(tmp))
+	fsp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
+	fsp.Refresh()
+
+	ip := NewInfoPanel(fsp)
+	ip.SetPosition(0, 0, 39, 24)
+	ip.SetFocus(true)
+	ip.Show(scr)
+	ip.setCursorToFirstCopyable()
+
+	// First row: Shift+Down should toggle current selection then move.
+	firstLabel := ip.rows[ip.cursor].label
+	firstValue := ip.rows[ip.cursor].value
+	ip.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode:  vtinput.VK_DOWN,
+		ControlKeyState: vtinput.ShiftPressed,
+	})
+	// Second row (post-move): Shift+Down again, adds it too.
+	secondLabel := ip.rows[ip.cursor].label
+	secondValue := ip.rows[ip.cursor].value
+	ip.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode:  vtinput.VK_DOWN,
+		ControlKeyState: vtinput.ShiftPressed,
+	})
+	firstSection := ip.rows[0].section
+	// After the second Shift+Down the cursor sits on the second
+	// selectable row; recover its section from the row list.
+	secondSection := ""
+	for _, r := range ip.rows {
+		if r.label == secondLabel && r.copyable {
+			secondSection = r.section
+			break
+		}
+	}
+	if !ip.selection[rowKey(firstSection, firstLabel)] ||
+		!ip.selection[rowKey(secondSection, secondLabel)] {
+		t.Fatalf("expected both %q and %q to be selected; got selection=%v",
+			firstLabel, secondLabel, ip.selection)
+	}
+
+	// C copies both rows as label: value per line, in on-screen order.
+	ip.copyCurrent()
+	want := firstLabel + ": " + firstValue + "\n" + secondLabel + ": " + secondValue
+	if got := vtui.GetClipboard(); got != want {
+		t.Errorf("clipboard = %q, want %q", got, want)
+	}
+
+	// Selection persists across a rebuild — the highlight must
+	// survive the next Show, which walks the row list from scratch.
+	ip.Show(scr)
+	for _, r := range ip.rows {
+		if r.label == firstLabel || r.label == secondLabel {
+			if !r.selected {
+				t.Errorf("row %q lost its selected flag after rebuild", r.label)
+			}
+		}
+	}
+}
+
+// TestInfoPanel_InsTogglesSelectionAndMoves verifies Ins behaves
+// like the file-panel Ins: toggle current, advance one row.
+func TestInfoPanel_InsTogglesSelectionAndMoves(t *testing.T) {
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+	vtui.SetDefaultPalette()
+
+	tmp := t.TempDir()
+	fsp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(tmp))
+	fsp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
+	fsp.Refresh()
+
+	ip := NewInfoPanel(fsp)
+	ip.SetPosition(0, 0, 39, 24)
+	ip.SetFocus(true)
+	ip.Show(scr)
+	ip.setCursorToFirstCopyable()
+
+	startRow := ip.rows[ip.cursor]
+	startCursor := ip.cursor
+	ip.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_INSERT,
+	})
+	if !ip.selection[rowKey(startRow.section, startRow.label)] {
+		t.Errorf("Ins should have selected %q", startRow.label)
+	}
+	if ip.cursor == startCursor {
+		t.Error("Ins should have advanced the cursor by one copyable row")
+	}
+}
+
 // TestInfoPanel_CPUSectionRespectsOption checks that the CPU/GPU
 // section is opt-in — hidden when AppConfig.InfoPanelCPUGPU is off,
 // present when it's on. Guards the maintainer's off-by-default ask.

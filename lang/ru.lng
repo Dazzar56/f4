@@ -203,7 +203,8 @@ InfoPanel.GPUTitle=Видеокарта
 InfoPanel.GPUModel=Модель
 InfoPanel.GPUDriver=Драйвер
 InfoPanel.Copied=Скопировано
-InfoPanel.UnitsHint= B: байты ↔ человекочитаемый   C: копировать
+InfoPanel.CopiedRows=Скопировано строк
+InfoPanel.UnitsHint= B: единицы   Ins/Shift+↑↓: пометить   C: копир
 
 QuickView.Title= Быстрый просмотр
 QuickView.NoSelection=<нет выделения>

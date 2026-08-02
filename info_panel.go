@@ -43,6 +43,14 @@ type InfoPanel struct {
 	// cursor indexes into rows; only rows with copyable == true are
 	// stopping points. Clamped by moveCursor on each navigation call.
 	cursor int
+	// selection persists across rebuilds. Keyed by "section|label"
+	// because labels alone collide (CPU and GPU both use i18n key
+	// InfoPanel.*Model = "Model"). Values fluctuate (Load %, free
+	// bytes) — losing a selection when a value changes is worse
+	// than keying by section+label and accepting that the copied
+	// value reflects the current sample, which is what the user
+	// sees.
+	selection map[string]bool
 }
 
 // infoRow captures one rendered line so the highlight (when focused)
@@ -50,6 +58,7 @@ type InfoPanel struct {
 // Section headers and blank spacers set copyable=false; navigation
 // skips them.
 type infoRow struct {
+	section  string
 	label    string
 	value    string
 	copyable bool
@@ -59,6 +68,16 @@ type infoRow struct {
 	// recompute alignment.
 	text string
 	y    int
+	// selected is filled from ip.selection on each Show — it's not
+	// authoritative, only a rendering hint.
+	selected bool
+}
+
+// rowKey composes the selection-map key for a row. Empty section
+// (Computer/User header before any sectionHeader() call) keeps the
+// key well-formed and still unique across sections.
+func rowKey(section, label string) string {
+	return section + "|" + label
 }
 
 // NewInfoPanel creates an info panel positioned over src's slot.
@@ -66,7 +85,7 @@ type infoRow struct {
 // current layout (PanelsFrame.ResizeConsole does this).
 func NewInfoPanel(src *FileSystemPanel) *InfoPanel {
 	x1, y1, x2, y2 := src.GetPosition()
-	ip := &InfoPanel{src: src, cursor: -1}
+	ip := &InfoPanel{src: src, cursor: -1, selection: map[string]bool{}}
 	ip.SetVisible(true)
 	ip.frame = vtui.NewBorderedFrame(x1, y1, x2, y2, vtui.SingleBox, Msg("InfoPanel.Title"))
 	ip.frame.ColorBoxIdx = ColPanelBox
@@ -105,9 +124,11 @@ func (ip *InfoPanel) SetFocus(f bool) {
 
 func (ip *InfoPanel) IsFocused() bool { return ip.focused }
 
-// ProcessKey consumes Up / Down / Home / End / C while focused. All
-// other keys (including B and Ctrl+L) fall through to the global
+// ProcessKey consumes navigation, selection and C while focused. All
+// other keys (B and Ctrl+L in particular) fall through to the global
 // handler chain so the units toggle and close behaviour still work.
+// Shift+Up/Down mirror the file panel's convention: toggle the
+// current row's selection, then move. Ins toggles without moving.
 func (ip *InfoPanel) ProcessKey(e *vtinput.InputEvent) bool {
 	if !e.KeyDown || !ip.focused {
 		return false
@@ -115,22 +136,66 @@ func (ip *InfoPanel) ProcessKey(e *vtinput.InputEvent) bool {
 	if e.ControlKeyState&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed|vtinput.LeftAltPressed|vtinput.RightAltPressed) != 0 {
 		return false
 	}
+	shift := e.ControlKeyState&vtinput.ShiftPressed != 0
+
 	switch e.VirtualKeyCode {
 	case vtinput.VK_UP:
+		if shift {
+			ip.toggleSelectionAtCursor()
+		}
 		ip.moveCursor(-1)
 	case vtinput.VK_DOWN:
+		if shift {
+			ip.toggleSelectionAtCursor()
+		}
 		ip.moveCursor(+1)
 	case vtinput.VK_HOME:
+		if shift {
+			ip.toggleSelectionAtCursor()
+		}
 		ip.setCursorToFirstCopyable()
 	case vtinput.VK_END:
+		if shift {
+			ip.toggleSelectionAtCursor()
+		}
 		ip.setCursorToLastCopyable()
+	case vtinput.VK_INSERT:
+		if shift {
+			return false
+		}
+		ip.toggleSelectionAtCursor()
+		ip.moveCursor(+1)
 	case vtinput.VK_C:
+		if shift {
+			return false
+		}
 		ip.copyCurrent()
 	default:
 		return false
 	}
 	vtui.FrameManager.HardRefresh()
 	return true
+}
+
+// toggleSelectionAtCursor flips the persistent selection bit for the
+// row under the cursor. No-op on non-copyable rows (headers, blanks)
+// so the user doesn't have to worry about invisible state.
+func (ip *InfoPanel) toggleSelectionAtCursor() {
+	if ip.cursor < 0 || ip.cursor >= len(ip.rows) {
+		return
+	}
+	r := &ip.rows[ip.cursor]
+	if !r.copyable {
+		return
+	}
+	key := rowKey(r.section, r.label)
+	if ip.selection[key] {
+		delete(ip.selection, key)
+		r.selected = false
+	} else {
+		ip.selection[key] = true
+		r.selected = true
+	}
 }
 
 // ProcessMouse: alt panels don't handle clicks — fall through.
@@ -188,22 +253,43 @@ func (ip *InfoPanel) setCursorToLastCopyable() {
 	}
 }
 
-// copyCurrent puts the current row's value into vtui's clipboard and
-// flashes a toast so the user knows something happened. Uses the raw
-// value (label stripped) — that's what people paste elsewhere.
+// copyCurrent copies the row(s) under the C hotkey to the clipboard.
+//
+//   - With at least one row selected via Shift+Up/Down or Ins:
+//     joins every selected row as "label: value" per line, in the
+//     order they appear on screen. Toast shows "Copied N rows".
+//   - Otherwise: copies the current row's raw value (no label),
+//     which is what single-row-copy has always done.
+//
+// vtui.SetClipboard already tries far2l IPC → OS clipboard →
+// OSC 52 in order, so a single call covers every terminal case f4
+// supports.
 func (ip *InfoPanel) copyCurrent() {
-	if ip.cursor < 0 || ip.cursor >= len(ip.rows) {
+	var selRows []infoRow
+	for _, r := range ip.rows {
+		if r.selected && r.copyable && r.value != "" {
+			selRows = append(selRows, r)
+		}
+	}
+	if len(selRows) == 0 {
+		if ip.cursor < 0 || ip.cursor >= len(ip.rows) {
+			return
+		}
+		r := ip.rows[ip.cursor]
+		if !r.copyable || r.value == "" {
+			return
+		}
+		vtui.SetClipboard(r.value)
+		vtui.ShowToast(fmt.Sprintf("%s: %s", Msg("InfoPanel.Copied"), r.value), 2*time.Second)
 		return
 	}
-	r := ip.rows[ip.cursor]
-	if !r.copyable || r.value == "" {
-		return
+	var lines []string
+	for _, r := range selRows {
+		lines = append(lines, r.label+": "+r.value)
 	}
-	// SetClipboard already tries far2l IPC → OS clipboard → OSC 52
-	// in order, so a single call covers every terminal case f4
-	// supports.
-	vtui.SetClipboard(r.value)
-	vtui.ShowToast(fmt.Sprintf("%s: %s", Msg("InfoPanel.Copied"), r.value), 2*time.Second)
+	joined := strings.Join(lines, "\n")
+	vtui.SetClipboard(joined)
+	vtui.ShowToast(fmt.Sprintf("%s: %d", Msg("InfoPanel.CopiedRows"), len(selRows)), 2*time.Second)
 }
 
 func (ip *InfoPanel) Show(scr *vtui.ScreenBuf) {
@@ -229,6 +315,12 @@ func (ip *InfoPanel) Show(scr *vtui.ScreenBuf) {
 
 	y := ip.Y1 + 1
 	maxY := ip.Y2 - 1
+
+	// currentSection is updated by sectionHeader; row/wrapRow tag
+	// every infoRow they emit with it so the selection map can key
+	// by section+label rather than label alone (avoids CPU Model /
+	// GPU Model colliding on the same "Model" i18n string).
+	currentSection := ""
 
 	// Two-column row: label on the left, value right-aligned. Both
 	// use the same attr as the frame background so the row reads as
@@ -257,7 +349,8 @@ func (ip *InfoPanel) Show(scr *vtui.ScreenBuf) {
 			}
 		}
 		ip.rows = append(ip.rows, infoRow{
-			label: label, value: value, copyable: copyable && value != "",
+			section: currentSection,
+			label:   label, value: value, copyable: copyable && value != "",
 			text: text, y: y,
 		})
 		y++
@@ -317,13 +410,15 @@ func (ip *InfoPanel) Show(scr *vtui.ScreenBuf) {
 		// copyable flag so the full value can be yanked with C.
 		if firstValue == "" {
 			ip.rows = append(ip.rows, infoRow{
-				label: label, value: value, copyable: true, text: labelPad, y: y,
+				section: currentSection,
+				label:   label, value: value, copyable: true, text: labelPad, y: y,
 			})
 			y++
 		} else {
 			text := labelPad + strings.Repeat(" ", innerW-labelW-runewidth.StringWidth(firstValue)) + firstValue
 			ip.rows = append(ip.rows, infoRow{
-				label: label, value: value, copyable: true, text: text, y: y,
+				section: currentSection,
+				label:   label, value: value, copyable: true, text: text, y: y,
 			})
 			y++
 		}
@@ -350,11 +445,12 @@ func (ip *InfoPanel) Show(scr *vtui.ScreenBuf) {
 		flush()
 	}
 
-	sectionHeader := func(text string) {
+	sectionHeader := func(title string) {
 		if y > maxY {
 			return
 		}
-		text = " " + text + " "
+		currentSection = title
+		text := " " + title + " "
 		w := runewidth.StringWidth(text)
 		pad := 0
 		if w < innerW {
@@ -486,19 +582,36 @@ func (ip *InfoPanel) Show(scr *vtui.ScreenBuf) {
 		}
 	}
 
+	// Restore the persisted selection so the highlight survives a
+	// rebuild (which happens on every Show). Keyed by section+label
+	// — see InfoPanel.selection docs for the rationale.
+	for i := range ip.rows {
+		if ip.rows[i].copyable && ip.selection[rowKey(ip.rows[i].section, ip.rows[i].label)] {
+			ip.rows[i].selected = true
+		}
+	}
+
 	// If the cursor is stale (out of range after a resize) or was
 	// never placed, seed it on the first copyable row.
 	if ip.cursor < 0 || ip.cursor >= len(ip.rows) || !ip.rows[ip.cursor].copyable {
 		ip.setCursorToFirstCopyable()
 	}
 
-	// Render pass — pushes each row to the screen at its recorded y,
-	// swapping in the cursor colour for the highlighted row when the
-	// panel is focused.
+	// Render pass — pushes each row to the screen at its recorded y.
+	// Colour picks in order of increasing "attention":
+	//   plain → selected → cursor → cursor-on-selected
+	// so a selected row you're standing on gets the highest-contrast
+	// treatment (matches ColPanelSelectedCursor in the file panel).
 	for i, r := range ip.rows {
 		lineAttr := attr
-		if ip.focused && i == ip.cursor && r.copyable {
+		isCursor := ip.focused && i == ip.cursor && r.copyable
+		switch {
+		case isCursor && r.selected:
+			lineAttr = vtui.Palette[ColPanelSelectedCursor]
+		case isCursor:
 			lineAttr = vtui.Palette[ColPanelCursor]
+		case r.selected:
+			lineAttr = vtui.Palette[ColPanelSelectedText]
 		}
 		ip.writeLine(scr, r.text, lineAttr, innerW, r.y)
 	}

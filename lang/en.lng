@@ -203,7 +203,8 @@ InfoPanel.GPUTitle=GPU
 InfoPanel.GPUModel=Model
 InfoPanel.GPUDriver=Driver
 InfoPanel.Copied=Copied
-InfoPanel.UnitsHint= B: bytes ↔ human   C: copy row
+InfoPanel.CopiedRows=Copied rows
+InfoPanel.UnitsHint= B: units   Ins/Shift+↑↓: select   C: copy
 
 QuickView.Title= Quick view
 QuickView.NoSelection=<no selection>
