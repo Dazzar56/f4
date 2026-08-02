@@ -487,6 +487,28 @@ func actionOpenEditor(pf *PanelsFrame, v vfs.VFS, path string) {
 }
 
 func openEditorInternal(pf *PanelsFrame, v vfs.VFS, path string) {
+	if AppConfig.EditorHighlighter == "Colorer" && !SchemasExist() {
+		go func() {
+			msg := "Colorer syntax highlighting schemas are missing.\nWould you like to download them from elfmz/far2l GitHub?"
+			if pf.Message(" Download Colorer Schemas ", msg, []string{"&Yes", "&No"}) == 0 {
+				DownloadColorerSchemas(pf, func(success bool) {
+					vtui.FrameManager.PostTask(func() {
+						if !success {
+							AppConfig.EditorHighlighter = "Chroma"
+							SaveConfig()
+						}
+						openEditorInternal(pf, v, path)
+					})
+				})
+			} else {
+				vtui.FrameManager.PostTask(func() {
+					AppConfig.EditorHighlighter = "Chroma"
+					openEditorInternal(pf, v, path)
+				})
+			}
+		}()
+		return
+	}
 	if _, isLocal := v.(*vfs.OSVFS); isLocal {
 		vtui.RunAsync(func(ctx *vtui.TaskContext) {
 			var f vfs.ReadAtCloser
@@ -1169,7 +1191,7 @@ func actionCopyInPlace(pf *PanelsFrame) {
 	})
 }
 func actionEditorSettings(pf *PanelsFrame) {
-	width, height := 78, 23
+	width, height := 78, 25
 	dlg := vtui.NewCenteredDialog(width, height, Msg("EditorSettings.Title"))
 	dlg.ShowClose = true
 
@@ -1185,6 +1207,19 @@ func actionEditorSettings(pf *PanelsFrame) {
 		comboExpand.Edit.SetText(comboExpand.Menu.Items[AppConfig.EditorExpandTabs].Text)
 	}
 	lblExpand := vtui.NewLabel(0, 0, "Expand t&abs:", comboExpand)
+	engines := []string{"Chroma", "Colorer", "None"}
+	selectedEngine := 0
+	for i, eng := range engines {
+		if strings.EqualFold(eng, AppConfig.EditorHighlighter) {
+			selectedEngine = i
+			break
+		}
+	}
+	comboHighlighter := vtui.NewComboBox(0, 0, 40, engines)
+	comboHighlighter.DropdownOnly = true
+	comboHighlighter.Menu.SetSelectPos(selectedEngine)
+	comboHighlighter.Edit.SetText(engines[selectedEngine])
+	lblHighlighter := vtui.NewLabel(0, 0, "Hi&ghlighter:", comboHighlighter)
 
 	editTabSize := vtui.NewEdit(0, 0, 4, fmt.Sprintf("%d", AppConfig.EditorTabSize))
 	editTabSize.ClearSelection()
@@ -1233,6 +1268,8 @@ func actionEditorSettings(pf *PanelsFrame) {
 	// 2. Add to Dialog in desired focus order
 	dlg.AddItem(lblExpand)
 	dlg.AddItem(comboExpand)
+	dlg.AddItem(lblHighlighter)
+	dlg.AddItem(comboHighlighter)
 	dlg.AddItem(lblTabSize)
 	dlg.AddItem(editTabSize)
 	dlg.AddItem(chkAutoIndent)
@@ -1256,6 +1293,10 @@ func actionEditorSettings(pf *PanelsFrame) {
 	rowTabs.Add(lblExpand, vtui.Margins{Right: 1}, vtui.AlignLeft)
 	rowTabs.Add(comboExpand, vtui.Margins{}, vtui.AlignFill)
 	vbox.Add(rowTabs, vtui.Margins{}, vtui.AlignFill)
+	rowHighlighter := vtui.NewHBoxLayout(0, 0, width-4, 1)
+	rowHighlighter.Add(lblHighlighter, vtui.Margins{Right: 1}, vtui.AlignLeft)
+	rowHighlighter.Add(comboHighlighter, vtui.Margins{}, vtui.AlignFill)
+	vbox.Add(rowHighlighter, vtui.Margins{Top: 1}, vtui.AlignFill)
 
 	rowTabSize := vtui.NewHBoxLayout(0, 0, width-4, 1)
 	rowTabSize.Add(lblTabSize, vtui.Margins{Right: 1}, vtui.AlignLeft)
@@ -1297,6 +1338,7 @@ func actionEditorSettings(pf *PanelsFrame) {
 	// 4. Logic
 	btnCancel.OnClick = func() { dlg.Close() }
 	btnOk.OnClick = func() {
+		AppConfig.EditorHighlighter = comboHighlighter.Menu.Items[comboHighlighter.Menu.SelectPos].Text
 		AppConfig.EditorExpandTabs = comboExpand.Menu.SelectPos
 		fmt.Sscanf(editTabSize.GetText(), "%d", &AppConfig.EditorTabSize)
 		if AppConfig.EditorTabSize <= 0 {

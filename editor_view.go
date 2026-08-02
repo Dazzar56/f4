@@ -209,6 +209,9 @@ func (ev *EditorView) Close() {
 	if ev.file != nil {
 		ev.file.Close()
 	}
+	if closer, ok := ev.highlighter.(io.Closer); ok {
+		closer.Close()
+	}
 	ev.BaseFrame.Close()
 	if ev.OnClose != nil {
 		ev.OnClose()
@@ -260,7 +263,25 @@ func NewEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string) *EditorVie
 			}
 		}
 	}
-	ev.highlighter = vtui.GetHighlighter(path, "")
+	switch {
+	case strings.EqualFold(AppConfig.EditorHighlighter, "None"):
+		ev.highlighter = nil
+	case strings.EqualFold(AppConfig.EditorHighlighter, "Colorer") && SchemasExist():
+		firstLine := ""
+		if probeLen := pt.Size(); probeLen > 0 {
+			if probeLen > 1024 {
+				probeLen = 1024
+			}
+			b, _ := pt.GetRange(0, probeLen)
+			firstLine = string(b)
+			if idx := strings.IndexAny(firstLine, "\r\n"); idx >= 0 {
+				firstLine = firstLine[:idx]
+			}
+		}
+		ev.highlighter = newColorerHighlighter(ev, filepath.Base(path), firstLine, vtui.GetHighlighter(path, ""))
+	default:
+		ev.highlighter = vtui.GetHighlighter(path, "")
+	}
 	ev.scrollBar = vtui.NewScrollBar(0, 0, 0)
 	ev.scrollBar.SetOwner(ev)
 	ev.scrollBar.OnScroll = func(v int) {
