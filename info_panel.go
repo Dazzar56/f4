@@ -427,7 +427,17 @@ func (ip *InfoPanel) Show(scr *vtui.ScreenBuf) {
 			if cur == "" || y > maxY {
 				return
 			}
-			ip.rows = append(ip.rows, infoRow{text: hangIndent + cur, y: y})
+			// Tag continuation lines with the same (section, label)
+			// as the parent row so selecting the row highlights the
+			// wrap too — the line break is a display artifact, not
+			// a semantic boundary. copyable stays false so navigation
+			// still skips these and copy doesn't duplicate the value.
+			ip.rows = append(ip.rows, infoRow{
+				section: currentSection,
+				label:   label,
+				text:    hangIndent + cur,
+				y:       y,
+			})
 			y++
 			cur = ""
 		}
@@ -584,9 +594,12 @@ func (ip *InfoPanel) Show(scr *vtui.ScreenBuf) {
 
 	// Restore the persisted selection so the highlight survives a
 	// rebuild (which happens on every Show). Keyed by section+label
-	// — see InfoPanel.selection docs for the rationale.
+	// — see InfoPanel.selection docs for the rationale. Applied to
+	// every row (not just copyable) so a wrapRow's continuation
+	// lines light up alongside their parent when the label is
+	// selected.
 	for i := range ip.rows {
-		if ip.rows[i].copyable && ip.selection[rowKey(ip.rows[i].section, ip.rows[i].label)] {
+		if ip.rows[i].label != "" && ip.selection[rowKey(ip.rows[i].section, ip.rows[i].label)] {
 			ip.rows[i].selected = true
 		}
 	}

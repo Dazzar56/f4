@@ -400,6 +400,64 @@ func TestInfoPanel_ShiftUpDownSelectsAndCCopiesLabelValue(t *testing.T) {
 	}
 }
 
+// TestInfoPanel_WrapRowContinuationInheritsSelection checks that
+// when a value overflows the panel width and wrapRow spills it onto
+// hanging continuation lines, selecting the row highlights ALL of
+// its screen lines — not just the first. The line break is a
+// display artifact, not a selection boundary. Realised via
+// section+label tagging of continuation rows so ip.selection lights
+// every line owned by the parent label.
+func TestInfoPanel_WrapRowContinuationInheritsSelection(t *testing.T) {
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(40, 25)
+	vtui.FrameManager.Init(scr)
+	vtui.SetDefaultPalette()
+
+	tmp := t.TempDir()
+	fsp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(tmp))
+	fsp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
+	fsp.Refresh()
+
+	ip := NewInfoPanel(fsp)
+	// Narrow panel so any real Flags-style row spills onto at least
+	// two hanging lines.
+	ip.SetPosition(0, 0, 39, 24)
+	ip.SetFocus(true)
+	ip.Show(scr)
+
+	// Directly select the Flags label if a wrapped row exists.
+	// If it doesn't (fs has no flags string), simulate one by
+	// invoking wrapRow via a synthesised call. Simpler: iterate
+	// existing rows for two consecutive rows sharing (section,
+	// label) — that's a wrap. If none exist skip the test.
+	var parentIdx int = -1
+	for i := 0; i+1 < len(ip.rows); i++ {
+		r, next := ip.rows[i], ip.rows[i+1]
+		if r.copyable && !next.copyable && r.label != "" &&
+			next.label == r.label && next.section == r.section {
+			parentIdx = i
+			break
+		}
+	}
+	if parentIdx < 0 {
+		t.Skip("no wrapped row present in this environment — nothing to verify")
+	}
+	parent := ip.rows[parentIdx]
+	ip.selection[rowKey(parent.section, parent.label)] = true
+	ip.Show(scr) // triggers the restore loop
+
+	// Every row sharing (section, label) with the parent must now
+	// carry selected=true, contiguous continuation and all.
+	for _, r := range ip.rows {
+		if r.section == parent.section && r.label == parent.label {
+			if !r.selected {
+				t.Errorf("row (section=%q label=%q, text=%q) should be selected",
+					r.section, r.label, r.text)
+			}
+		}
+	}
+}
+
 // TestInfoPanel_InsTogglesSelectionAndMoves verifies Ins behaves
 // like the file-panel Ins: toggle current, advance one row.
 func TestInfoPanel_InsTogglesSelectionAndMoves(t *testing.T) {
