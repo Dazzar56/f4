@@ -108,6 +108,7 @@ PanelSettings.VimHotkeys=Включить &Vim-раскладку (j, k, dd, cc,
 PanelSettings.SyncPanelLoad=&Синхронная загрузка панелей (без кэша)
 PanelSettings.DefaultMode=Режим операций по &умолчанию:
 PanelSettings.PathDisplay=Отображение пути в прогрессе:
+PanelSettings.InfoPanelCPUGPU=Показывать CPU/GPU на &инфо-панели
 
 AppearanceSettings.Title= Внешний вид
 AppearanceSettings.Style=Стиль &оформления:
@@ -192,7 +193,17 @@ InfoPanel.MemShared=Общая память
 InfoPanel.MemBuffered=Буферная память
 InfoPanel.SwapTotal=Файл подкачки всего
 InfoPanel.SwapFree=Файл подкачки свободно
-InfoPanel.UnitsHint= B: байты ↔ человекочитаемый
+InfoPanel.CPUTitle=Процессор
+InfoPanel.CPUModel=Модель
+InfoPanel.CPUCores=Ядер / потоков
+InfoPanel.CPUFreq=Частота
+InfoPanel.CPULoad=Загрузка
+InfoPanel.CPULoadAvg=Средняя нагрузка
+InfoPanel.GPUTitle=Видеокарта
+InfoPanel.GPUModel=Модель
+InfoPanel.GPUDriver=Драйвер
+InfoPanel.Copied=Скопировано
+InfoPanel.UnitsHint= B: байты ↔ человекочитаемый   C: копировать
 
 QuickView.Title= Быстрый просмотр
 QuickView.NoSelection=<нет выделения>

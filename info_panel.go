@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/user"
 	"strings"
+	"time"
 
 	"github.com/mattn/go-runewidth"
 	"github.com/unxed/vtinput"
@@ -27,14 +28,37 @@ type AltPanel interface {
 
 // InfoPanel is far2l's Ctrl+L information panel. It shows the
 // active file panel's location and system context — computer/user,
-// current directory and disk space. Per-file details ("Quick view")
-// belong to Ctrl+Q (a follow-up PR); git status and description-file
-// (README/Descript.ion) rendering are also deliberately deferred.
+// current directory, disk space, memory and (when enabled) CPU/GPU.
+// Per-file details ("Quick view") belong to Ctrl+Q; git status and
+// description-file (README/Descript.ion) rendering are deferred.
 type InfoPanel struct {
 	vtui.ScreenObject
 	src     *FileSystemPanel
 	frame   *vtui.BorderedFrame
 	focused bool
+
+	// rows is rebuilt on every Show and remembered for hit-testing by
+	// ProcessKey (Up/Down/C need to know what's on screen).
+	rows []infoRow
+	// cursor indexes into rows; only rows with copyable == true are
+	// stopping points. Clamped by moveCursor on each navigation call.
+	cursor int
+}
+
+// infoRow captures one rendered line so the highlight (when focused)
+// and the C-copies-value command can share what the Show pass built.
+// Section headers and blank spacers set copyable=false; navigation
+// skips them.
+type infoRow struct {
+	label    string
+	value    string
+	copyable bool
+	// text is the pre-composed label + gap + value line (or the
+	// wrapped label-only line for wrapRow's first segment). It's
+	// stashed so a redraw of the cursor row doesn't have to
+	// recompute alignment.
+	text string
+	y    int
 }
 
 // NewInfoPanel creates an info panel positioned over src's slot.
@@ -42,7 +66,7 @@ type InfoPanel struct {
 // current layout (PanelsFrame.ResizeConsole does this).
 func NewInfoPanel(src *FileSystemPanel) *InfoPanel {
 	x1, y1, x2, y2 := src.GetPosition()
-	ip := &InfoPanel{src: src}
+	ip := &InfoPanel{src: src, cursor: -1}
 	ip.SetVisible(true)
 	ip.frame = vtui.NewBorderedFrame(x1, y1, x2, y2, vtui.SingleBox, Msg("InfoPanel.Title"))
 	ip.frame.ColorBoxIdx = ColPanelBox
@@ -65,10 +89,9 @@ func (ip *InfoPanel) SetPosition(x1, y1, x2, y2 int) {
 func (ip *InfoPanel) Source() *FileSystemPanel { return ip.src }
 func (ip *InfoPanel) Kind() string             { return "info" }
 
-// SetFocus flips the visible focus marker (title recolours). The alt
-// panel doesn't consume keyboard input — commands still target the
-// source file panel — but showing the frame as focused matches how
-// far2l's Info/Quick view highlight themselves on Tab.
+// SetFocus flips the visible focus marker (title recolours). When the
+// panel is focused it also starts consuming Up / Down / C keys — see
+// ProcessKey.
 func (ip *InfoPanel) SetFocus(f bool) {
 	ip.focused = f
 	if ip.frame != nil {
@@ -82,10 +105,35 @@ func (ip *InfoPanel) SetFocus(f bool) {
 
 func (ip *InfoPanel) IsFocused() bool { return ip.focused }
 
-// ProcessKey / ProcessMouse do nothing — alt panels are display-only.
-// Anything typed on the alt-panel slot falls through to the global
-// handler, which will dispatch to the source file panel underneath.
-func (ip *InfoPanel) ProcessKey(*vtinput.InputEvent) bool   { return false }
+// ProcessKey consumes Up / Down / Home / End / C while focused. All
+// other keys (including B and Ctrl+L) fall through to the global
+// handler chain so the units toggle and close behaviour still work.
+func (ip *InfoPanel) ProcessKey(e *vtinput.InputEvent) bool {
+	if !e.KeyDown || !ip.focused {
+		return false
+	}
+	if e.ControlKeyState&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed|vtinput.LeftAltPressed|vtinput.RightAltPressed) != 0 {
+		return false
+	}
+	switch e.VirtualKeyCode {
+	case vtinput.VK_UP:
+		ip.moveCursor(-1)
+	case vtinput.VK_DOWN:
+		ip.moveCursor(+1)
+	case vtinput.VK_HOME:
+		ip.setCursorToFirstCopyable()
+	case vtinput.VK_END:
+		ip.setCursorToLastCopyable()
+	case vtinput.VK_C:
+		ip.copyCurrent()
+	default:
+		return false
+	}
+	vtui.FrameManager.HardRefresh()
+	return true
+}
+
+// ProcessMouse: alt panels don't handle clicks — fall through.
 func (ip *InfoPanel) ProcessMouse(*vtinput.InputEvent) bool { return false }
 
 // GetSelectedName proxies to the source so callers that inspect
@@ -97,13 +145,74 @@ func (ip *InfoPanel) GetSelectedName() string {
 	return ip.src.GetSelectedName()
 }
 
+// moveCursor advances to the next copyable row in the given
+// direction (+1 or -1), skipping section headers and blank lines.
+// Clamps at the ends — no wrap-around, matches how the file panel
+// treats Up/Down at the extremes.
+func (ip *InfoPanel) moveCursor(delta int) {
+	if len(ip.rows) == 0 {
+		return
+	}
+	if ip.cursor < 0 {
+		ip.setCursorToFirstCopyable()
+		return
+	}
+	i := ip.cursor
+	for {
+		i += delta
+		if i < 0 || i >= len(ip.rows) {
+			return
+		}
+		if ip.rows[i].copyable {
+			ip.cursor = i
+			return
+		}
+	}
+}
+
+func (ip *InfoPanel) setCursorToFirstCopyable() {
+	for i, r := range ip.rows {
+		if r.copyable {
+			ip.cursor = i
+			return
+		}
+	}
+}
+
+func (ip *InfoPanel) setCursorToLastCopyable() {
+	for i := len(ip.rows) - 1; i >= 0; i-- {
+		if ip.rows[i].copyable {
+			ip.cursor = i
+			return
+		}
+	}
+}
+
+// copyCurrent puts the current row's value into vtui's clipboard and
+// flashes a toast so the user knows something happened. Uses the raw
+// value (label stripped) — that's what people paste elsewhere.
+func (ip *InfoPanel) copyCurrent() {
+	if ip.cursor < 0 || ip.cursor >= len(ip.rows) {
+		return
+	}
+	r := ip.rows[ip.cursor]
+	if !r.copyable || r.value == "" {
+		return
+	}
+	// SetClipboard already tries far2l IPC → OS clipboard → OSC 52
+	// in order, so a single call covers every terminal case f4
+	// supports.
+	vtui.SetClipboard(r.value)
+	vtui.ShowToast(fmt.Sprintf("%s: %s", Msg("InfoPanel.Copied"), r.value), 2*time.Second)
+}
+
 func (ip *InfoPanel) Show(scr *vtui.ScreenBuf) {
 	if ip.frame != nil {
 		ip.frame.Show(scr)
 	}
-	// Bottom-border hint reminding the user of the units toggle,
-	// same pattern the bookmarks dialog uses. Drawn on the ┴ line;
-	// keeps the panel self-documenting so we don't need a menu entry.
+	// Bottom-border hint reminding the user of the units toggle and
+	// the copy shortcut. Drawn on the ┴ line so the panel is
+	// self-documenting without a menu entry.
 	if ip.frame != nil && ip.Y2 > ip.Y1+1 {
 		hint := Msg("InfoPanel.UnitsHint")
 		if runewidth.StringWidth(hint) < ip.X2-ip.X1-1 {
@@ -116,64 +225,62 @@ func (ip *InfoPanel) Show(scr *vtui.ScreenBuf) {
 		return
 	}
 	attr := vtui.Palette[ColPanelInfoText]
+	ip.rows = ip.rows[:0]
+
 	y := ip.Y1 + 1
 	maxY := ip.Y2 - 1
 
-	// Two-column row: label on the left, value right-aligned. Both use
-	// the same attr as the frame background so the row reads as a
-	// single flat block, matching far2l's InfoList layout.
-	row := func(label, value string) {
+	// Two-column row: label on the left, value right-aligned. Both
+	// use the same attr as the frame background so the row reads as
+	// a single flat block, matching far2l's InfoList layout. Returns
+	// the composed text so buildRows can stash it.
+	row := func(label, value string, copyable bool) {
 		if y > maxY {
 			return
 		}
 		labelPad := " " + label
-		if value == "" {
-			ip.writeLine(scr, labelPad, attr, innerW, y)
-			y++
-			return
-		}
-		labelW := runewidth.StringWidth(labelPad)
-		valueW := runewidth.StringWidth(value)
-		// Available room for spaces between label and value.
-		space := innerW - labelW - valueW
-		if space < 1 {
-			// Truncate value to fit.
-			roomForValue := innerW - labelW - 1
-			if roomForValue < 1 {
-				ip.writeLine(scr, labelPad, attr, innerW, y)
-				y++
-				return
+		text := labelPad
+		if value != "" {
+			labelW := runewidth.StringWidth(labelPad)
+			valueW := runewidth.StringWidth(value)
+			space := innerW - labelW - valueW
+			if space < 1 {
+				roomForValue := innerW - labelW - 1
+				if roomForValue < 1 {
+					text = labelPad
+				} else {
+					value = runewidth.Truncate(value, roomForValue, "…")
+					text = labelPad + " " + value
+				}
+			} else {
+				text = labelPad + strings.Repeat(" ", space) + value
 			}
-			value = runewidth.Truncate(value, roomForValue, "…")
-			space = 1
 		}
-		text := labelPad + strings.Repeat(" ", space) + value
-		ip.writeLine(scr, text, attr, innerW, y)
+		ip.rows = append(ip.rows, infoRow{
+			label: label, value: value, copyable: copyable && value != "",
+			text: text, y: y,
+		})
 		y++
 	}
 	blank := func() {
 		if y > maxY {
 			return
 		}
-		ip.writeLine(scr, "", attr, innerW, y)
+		ip.rows = append(ip.rows, infoRow{y: y})
 		y++
 	}
 
-	// wrapRow is like row but, for values too long to share a line
-	// with their label, breaks the value on `sep` and continues it
-	// on hanging continuation lines. Used for Flags where the value
-	// is a naturally-splittable comma-list — Windows NTFS attributes
-	// alone go past 60 cols. Falls back to plain row for short values.
+	// wrapRow is row for a value too long to share a line with its
+	// label — breaks on `sep`, continues on hanging lines. Used for
+	// Flags (Windows NTFS attributes exceed 60 cols).
 	wrapRow := func(label, value, sep string) {
 		labelPad := " " + label
 		labelW := runewidth.StringWidth(labelPad)
 		fitsInline := labelW+1+runewidth.StringWidth(value) <= innerW
 		if fitsInline || value == "" {
-			row(label, value)
+			row(label, value, true)
 			return
 		}
-		// Continuation lines hang two cells past the label start so
-		// the wrapped value visually attaches to its label.
 		hangStart := 3
 		if hangStart >= innerW {
 			hangStart = 1
@@ -181,11 +288,10 @@ func (ip *InfoPanel) Show(scr *vtui.ScreenBuf) {
 		hangIndent := strings.Repeat(" ", hangStart)
 		hangRoom := innerW - hangStart
 		if hangRoom < 1 {
-			row(label, value)
+			row(label, value, true)
 			return
 		}
 		parts := strings.Split(value, sep)
-		// First line: label followed by as many parts as fit right of it.
 		gap := 1
 		firstRoom := innerW - labelW - gap
 		var first []string
@@ -206,23 +312,27 @@ func (ip *InfoPanel) Show(scr *vtui.ScreenBuf) {
 			i++
 		}
 		firstValue := strings.Join(first, "")
+		// First screen line: label + first-chunk (or the label alone
+		// if not even the first token fits). This one carries the
+		// copyable flag so the full value can be yanked with C.
 		if firstValue == "" {
-			// Value's first token alone doesn't fit next to the label;
-			// put the label on its own line and wrap the value below.
-			ip.writeLine(scr, labelPad, attr, innerW, y)
+			ip.rows = append(ip.rows, infoRow{
+				label: label, value: value, copyable: true, text: labelPad, y: y,
+			})
 			y++
 		} else {
 			text := labelPad + strings.Repeat(" ", innerW-labelW-runewidth.StringWidth(firstValue)) + firstValue
-			ip.writeLine(scr, text, attr, innerW, y)
+			ip.rows = append(ip.rows, infoRow{
+				label: label, value: value, copyable: true, text: text, y: y,
+			})
 			y++
 		}
-		// Continuation lines: greedy-pack the remaining parts.
 		cur := ""
 		flush := func() {
 			if cur == "" || y > maxY {
 				return
 			}
-			ip.writeLine(scr, hangIndent+cur, attr, innerW, y)
+			ip.rows = append(ip.rows, infoRow{text: hangIndent + cur, y: y})
 			y++
 			cur = ""
 		}
@@ -244,7 +354,6 @@ func (ip *InfoPanel) Show(scr *vtui.ScreenBuf) {
 		if y > maxY {
 			return
 		}
-		// Centered heading like far2l's DrawTitle inside InfoList.
 		text = " " + text + " "
 		w := runewidth.StringWidth(text)
 		pad := 0
@@ -255,7 +364,7 @@ func (ip *InfoPanel) Show(scr *vtui.ScreenBuf) {
 		if w > innerW {
 			line = runewidth.Truncate(text, innerW, "…")
 		}
-		ip.writeLine(scr, line, attr, innerW, y)
+		ip.rows = append(ip.rows, infoRow{text: line, y: y})
 		y++
 	}
 
@@ -265,8 +374,8 @@ func (ip *InfoPanel) Show(scr *vtui.ScreenBuf) {
 	if u, err := user.Current(); err == nil {
 		username = shortUsername(u.Username)
 	}
-	row(Msg("InfoPanel.Computer"), hostname)
-	row(Msg("InfoPanel.User"), username)
+	row(Msg("InfoPanel.Computer"), hostname, true)
+	row(Msg("InfoPanel.User"), username, true)
 	blank()
 
 	// Filesystem.
@@ -280,27 +389,27 @@ func (ip *InfoPanel) Show(scr *vtui.ScreenBuf) {
 			fsTitle = fmt.Sprintf("%s (%s)", fsTitle, fs.Type)
 		}
 		sectionHeader(fsTitle)
-		row(Msg("InfoPanel.Total"), formatBytes(fs.Total))
-		row(Msg("InfoPanel.Free"), formatBytes(fs.Free))
+		row(Msg("InfoPanel.Total"), formatBytes(fs.Total), true)
+		row(Msg("InfoPanel.Free"), formatBytes(fs.Free), true)
 		if fs.Label != "" {
-			row(Msg("InfoPanel.Label"), fs.Label)
+			row(Msg("InfoPanel.Label"), fs.Label, true)
 		}
 		if fs.Serial != "" {
-			row(Msg("InfoPanel.Serial"), fs.Serial)
+			row(Msg("InfoPanel.Serial"), fs.Serial, true)
 		}
-		row(Msg("InfoPanel.CurrentDir"), path)
+		row(Msg("InfoPanel.CurrentDir"), path, true)
 		if fs.Mount != "" && fs.Mount != path {
-			row(Msg("InfoPanel.Mount"), fs.Mount)
+			row(Msg("InfoPanel.Mount"), fs.Mount, true)
 		}
 		if fs.MaxFilename > 0 {
-			row(Msg("InfoPanel.MaxFilename"), fmt.Sprintf("%d", fs.MaxFilename))
+			row(Msg("InfoPanel.MaxFilename"), fmt.Sprintf("%d", fs.MaxFilename), true)
 		}
 		if fs.Flags != "" {
 			wrapRow(Msg("InfoPanel.Flags"), fs.Flags, ",")
 		}
 	} else {
 		sectionHeader(fsTitle)
-		row(Msg("InfoPanel.CurrentDir"), path)
+		row(Msg("InfoPanel.CurrentDir"), path, true)
 	}
 
 	// Memory. Same numbers as far2l's InfoList reads via sysinfo(2)
@@ -308,19 +417,90 @@ func (ip *InfoPanel) Show(scr *vtui.ScreenBuf) {
 	if mem, ok := memInfo(); ok {
 		blank()
 		sectionHeader(Msg("InfoPanel.MemoryTitle"))
-		row(Msg("InfoPanel.MemLoad"), fmt.Sprintf("%d%%", mem.LoadPercent))
-		row(Msg("InfoPanel.MemTotal"), formatBytes(mem.Total))
-		row(Msg("InfoPanel.MemFree"), formatBytes(mem.Free))
+		row(Msg("InfoPanel.MemLoad"), fmt.Sprintf("%d%%", mem.LoadPercent), true)
+		row(Msg("InfoPanel.MemTotal"), formatBytes(mem.Total), true)
+		row(Msg("InfoPanel.MemFree"), formatBytes(mem.Free), true)
 		if mem.Shared > 0 {
-			row(Msg("InfoPanel.MemShared"), formatBytes(mem.Shared))
+			row(Msg("InfoPanel.MemShared"), formatBytes(mem.Shared), true)
 		}
 		if mem.Buffered > 0 {
-			row(Msg("InfoPanel.MemBuffered"), formatBytes(mem.Buffered))
+			row(Msg("InfoPanel.MemBuffered"), formatBytes(mem.Buffered), true)
 		}
 		if mem.SwapTotal > 0 {
-			row(Msg("InfoPanel.SwapTotal"), formatBytes(mem.SwapTotal))
-			row(Msg("InfoPanel.SwapFree"), formatBytes(mem.SwapFree))
+			row(Msg("InfoPanel.SwapTotal"), formatBytes(mem.SwapTotal), true)
+			row(Msg("InfoPanel.SwapFree"), formatBytes(mem.SwapFree), true)
 		}
+	}
+
+	// CPU + GPU — opt-in, off by default (maintainer's ask). Kept
+	// after Memory so a user who enables the section doesn't have
+	// what they see above shifted downward.
+	if AppConfig.InfoPanelCPUGPU {
+		if cpu, ok := cpuInfo(); ok {
+			blank()
+			sectionHeader(Msg("InfoPanel.CPUTitle"))
+			if cpu.Model != "" {
+				row(Msg("InfoPanel.CPUModel"), cpu.Model, true)
+			}
+			if cpu.PhysicalCores > 0 && cpu.LogicalCores > 0 && cpu.PhysicalCores != cpu.LogicalCores {
+				row(Msg("InfoPanel.CPUCores"),
+					fmt.Sprintf("%d / %d", cpu.PhysicalCores, cpu.LogicalCores), true)
+			} else if cpu.LogicalCores > 0 {
+				row(Msg("InfoPanel.CPUCores"), fmt.Sprintf("%d", cpu.LogicalCores), true)
+			}
+			if cpu.FreqMHz > 0 {
+				row(Msg("InfoPanel.CPUFreq"), formatMHz(cpu.FreqMHz), true)
+			}
+			for i, sz := range cpu.CacheBytes {
+				if sz == 0 {
+					continue
+				}
+				row(fmt.Sprintf("L%d", i+1), formatBytes(sz), true)
+			}
+			switch {
+			case cpu.HasLoadPct:
+				row(Msg("InfoPanel.CPULoad"), fmt.Sprintf("%d%%", cpu.Load), true)
+			case cpu.HasLoad:
+				row(Msg("InfoPanel.CPULoadAvg"),
+					fmt.Sprintf("%.2f %.2f %.2f", cpu.LoadAvg[0], cpu.LoadAvg[1], cpu.LoadAvg[2]),
+					true)
+			}
+		}
+		if gpus, ok := gpuInfo(); ok {
+			blank()
+			sectionHeader(Msg("InfoPanel.GPUTitle"))
+			for i, g := range gpus {
+				label := Msg("InfoPanel.GPUModel")
+				if len(gpus) > 1 {
+					label = fmt.Sprintf("%s %d", label, i+1)
+				}
+				row(label, g.Model, true)
+				if g.Driver != "" {
+					dLabel := Msg("InfoPanel.GPUDriver")
+					if len(gpus) > 1 {
+						dLabel = fmt.Sprintf("%s %d", dLabel, i+1)
+					}
+					row(dLabel, g.Driver, true)
+				}
+			}
+		}
+	}
+
+	// If the cursor is stale (out of range after a resize) or was
+	// never placed, seed it on the first copyable row.
+	if ip.cursor < 0 || ip.cursor >= len(ip.rows) || !ip.rows[ip.cursor].copyable {
+		ip.setCursorToFirstCopyable()
+	}
+
+	// Render pass — pushes each row to the screen at its recorded y,
+	// swapping in the cursor colour for the highlighted row when the
+	// panel is focused.
+	for i, r := range ip.rows {
+		lineAttr := attr
+		if ip.focused && i == ip.cursor && r.copyable {
+			lineAttr = vtui.Palette[ColPanelCursor]
+		}
+		ip.writeLine(scr, r.text, lineAttr, innerW, r.y)
 	}
 }
 
@@ -343,8 +523,7 @@ func formatBytesCommas(b uint64) string {
 	if len(s) <= 3 {
 		return s
 	}
-	// Insert a separator every three digits from the right.
-	sep := " " // non-breaking space
+	sep := " " // non-breaking space (thin thousands separator)
 	var out []byte
 	for i, c := range []byte(s) {
 		if i > 0 && (len(s)-i)%3 == 0 {
@@ -364,6 +543,16 @@ func shortUsername(u string) string {
 		return u[i+1:]
 	}
 	return u
+}
+
+// formatMHz renders a clock speed as MHz or GHz — GHz for anything
+// at or above 1 GHz to match the "3.2 GHz" convention every Task
+// Manager / lscpu / About This Mac uses.
+func formatMHz(mhz int) string {
+	if mhz >= 1000 {
+		return fmt.Sprintf("%.2f GHz", float64(mhz)/1000)
+	}
+	return fmt.Sprintf("%d MHz", mhz)
 }
 
 // formatBytesHuman renders a byte count in binary units (KiB/MiB/…).
