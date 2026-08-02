@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 
@@ -97,12 +96,7 @@ func colorerColorKeys() []string {
 		for key := range ColorerColorMap {
 			keys = append(keys, key)
 		}
-		sort.Slice(keys, func(i, j int) bool {
-			if len(keys[i]) != len(keys[j]) {
-				return len(keys[i]) > len(keys[j])
-			}
-			return keys[i] < keys[j]
-		})
+		sortColorerKeys(keys)
 		colorerKeys = keys
 		colorerKeysSize = len(ColorerColorMap)
 		colorerNames = make(map[string]int64)
@@ -157,6 +151,16 @@ func lookupColorerColor(name string) (uint32, bool) {
 }
 
 func getColorerAttr(name string, baseAttr uint64) uint64 {
+	if style, ok := colorerSchemeStyle(name); ok {
+		attr := baseAttr
+		if style.hasFore {
+			attr = vtui.SetRGBFore(attr, style.fore)
+		}
+		if style.hasBack {
+			attr = vtui.SetRGBBack(attr, style.back)
+		}
+		return attr
+	}
 	if color, ok := lookupColorerColor(name); ok {
 		return vtui.SetRGBFore(baseAttr, color)
 	}
@@ -227,6 +231,8 @@ func releaseColorerSession(session *colorer.Session, configsDir string) {
 // engine right away and upgrades itself to Colorer as soon as the session is
 // ready, so that opening a file is never blocked by the WASM start-up.
 func newColorerHighlighter(ev *EditorView, filename, firstLine string, fallback vtui.Highlighter) *ColorerHighlighter {
+	SetColorerScheme(AppConfig.EditorColorerScheme)
+
 	ch := &ColorerHighlighter{
 		fallback:   fallback,
 		filename:   filename,

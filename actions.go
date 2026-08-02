@@ -1191,7 +1191,7 @@ func actionCopyInPlace(pf *PanelsFrame) {
 	})
 }
 func actionEditorSettings(pf *PanelsFrame) {
-	width, height := 78, 25
+	width, height := 78, 27
 	dlg := vtui.NewCenteredDialog(width, height, Msg("EditorSettings.Title"))
 	dlg.ShowClose = true
 
@@ -1220,6 +1220,22 @@ func actionEditorSettings(pf *PanelsFrame) {
 	comboHighlighter.Menu.SetSelectPos(selectedEngine)
 	comboHighlighter.Edit.SetText(engines[selectedEngine])
 	lblHighlighter := vtui.NewLabel(0, 0, "Hi&ghlighter:", comboHighlighter)
+	schemeItems := []string{"(built-in)"}
+	for _, scheme := range ListColorerSchemes() {
+		schemeItems = append(schemeItems, scheme.Name)
+	}
+	selectedScheme := 0
+	for i, item := range schemeItems {
+		if i > 0 && strings.EqualFold(item, AppConfig.EditorColorerScheme) {
+			selectedScheme = i
+			break
+		}
+	}
+	comboScheme := vtui.NewComboBox(0, 0, 40, schemeItems)
+	comboScheme.DropdownOnly = true
+	comboScheme.Menu.SetSelectPos(selectedScheme)
+	comboScheme.Edit.SetText(schemeItems[selectedScheme])
+	lblScheme := vtui.NewLabel(0, 0, "Colorer st&yle:", comboScheme)
 
 	editTabSize := vtui.NewEdit(0, 0, 4, fmt.Sprintf("%d", AppConfig.EditorTabSize))
 	editTabSize.ClearSelection()
@@ -1270,6 +1286,8 @@ func actionEditorSettings(pf *PanelsFrame) {
 	dlg.AddItem(comboExpand)
 	dlg.AddItem(lblHighlighter)
 	dlg.AddItem(comboHighlighter)
+	dlg.AddItem(lblScheme)
+	dlg.AddItem(comboScheme)
 	dlg.AddItem(lblTabSize)
 	dlg.AddItem(editTabSize)
 	dlg.AddItem(chkAutoIndent)
@@ -1297,6 +1315,10 @@ func actionEditorSettings(pf *PanelsFrame) {
 	rowHighlighter.Add(lblHighlighter, vtui.Margins{Right: 1}, vtui.AlignLeft)
 	rowHighlighter.Add(comboHighlighter, vtui.Margins{}, vtui.AlignFill)
 	vbox.Add(rowHighlighter, vtui.Margins{Top: 1}, vtui.AlignFill)
+	rowScheme := vtui.NewHBoxLayout(0, 0, width-4, 1)
+	rowScheme.Add(lblScheme, vtui.Margins{Right: 1}, vtui.AlignLeft)
+	rowScheme.Add(comboScheme, vtui.Margins{}, vtui.AlignFill)
+	vbox.Add(rowScheme, vtui.Margins{Top: 1}, vtui.AlignFill)
 
 	rowTabSize := vtui.NewHBoxLayout(0, 0, width-4, 1)
 	rowTabSize.Add(lblTabSize, vtui.Margins{Right: 1}, vtui.AlignLeft)
@@ -1339,6 +1361,11 @@ func actionEditorSettings(pf *PanelsFrame) {
 	btnCancel.OnClick = func() { dlg.Close() }
 	btnOk.OnClick = func() {
 		AppConfig.EditorHighlighter = comboHighlighter.Menu.Items[comboHighlighter.Menu.SelectPos].Text
+		AppConfig.EditorColorerScheme = ""
+		if comboScheme.Menu.SelectPos > 0 {
+			AppConfig.EditorColorerScheme = comboScheme.Menu.Items[comboScheme.Menu.SelectPos].Text
+		}
+		SetColorerScheme(AppConfig.EditorColorerScheme)
 		AppConfig.EditorExpandTabs = comboExpand.Menu.SelectPos
 		fmt.Sscanf(editTabSize.GetText(), "%d", &AppConfig.EditorTabSize)
 		if AppConfig.EditorTabSize <= 0 {

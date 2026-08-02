@@ -87,6 +87,7 @@ type F4Config struct {
 	ExternalEditorCommand    string
 	EditorAutodetectCodePage bool
 	EditorHighlighter        string
+	EditorColorerScheme      string
 	EditorDefaultCodePage    int
 	ViewerAutodetectCodePage bool
 	ViewerDefaultCodePage    int
@@ -148,6 +149,7 @@ var AppConfig = F4Config{
 	ExternalEditorCommand:    "",
 	EditorAutodetectCodePage: true,
 	EditorHighlighter:        "Chroma",
+	EditorColorerScheme:      "",
 	EditorDefaultCodePage:    65001,
 	ViewerAutodetectCodePage: true,
 	ViewerDefaultCodePage:    65001,
@@ -260,6 +262,7 @@ func LoadConfig() {
 	AppConfig.EditorCrosshair = ini.GetString("Editor", "Crosshair", "0") == "1"
 	AppConfig.EditorAutodetectCodePage = ini.GetString("Editor", "AutodetectCodePage", "1") == "1"
 	AppConfig.EditorHighlighter = normalizeHighlighter(ini.GetString("Editor", "Highlighter", "Chroma"))
+	AppConfig.EditorColorerScheme = ini.GetString("Editor", "ColorerScheme", "")
 	fmt.Sscanf(ini.GetString("Editor", "DefaultCodePage", "65001"), "%d", &AppConfig.EditorDefaultCodePage)
 	AppConfig.ViewerAutodetectCodePage = ini.GetString("Viewer", "AutodetectCodePage", "1") == "1"
 	fmt.Sscanf(ini.GetString("Viewer", "DefaultCodePage", "65001"), "%d", &AppConfig.ViewerDefaultCodePage)
@@ -345,6 +348,7 @@ func SaveConfig() {
 	sb.WriteString(fmt.Sprintf("ExternalEditorCommand = %s\n", AppConfig.ExternalEditorCommand))
 	sb.WriteString(fmt.Sprintf("AutodetectCodePage = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.EditorAutodetectCodePage]))
 	sb.WriteString(fmt.Sprintf("Highlighter = %s\n", AppConfig.EditorHighlighter))
+	sb.WriteString(fmt.Sprintf("ColorerScheme = %s\n", AppConfig.EditorColorerScheme))
 	sb.WriteString(fmt.Sprintf("DefaultCodePage = %d\n", AppConfig.EditorDefaultCodePage))
 
 	sb.WriteString("\n[Viewer]\n")
