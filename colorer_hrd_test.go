@@ -189,27 +189,200 @@ func TestColorer_ParseColorerColor(t *testing.T) {
 	}
 }
 
-func TestColorer_SchemeOverridesBuiltinColors(t *testing.T) {
+// installColorerTestScheme activates a color style for the duration of a test
+// and restores the previous one afterwards.
+func installColorerTestScheme(t *testing.T, styles map[string]colorerRegionStyle) {
+	t.Helper()
+
+	keys := make([]string, 0, len(styles))
+	for key := range styles {
+		keys = append(keys, key)
+	}
+	sortColorerKeys(keys)
+
 	schemeMu.Lock()
 	oldName, oldStyles, oldKeys, oldMemo := schemeName, schemeStyles, schemeKeys, schemeMemo
 	schemeName = "test"
-	schemeStyles = map[string]colorerRegionStyle{
-		"def:comment": {fore: 0x123456, hasFore: true},
-	}
-	schemeKeys = []string{"def:comment"}
+	schemeStyles = styles
+	schemeKeys = keys
 	schemeMemo = make(map[string]colorerRegionStyle)
 	schemeMu.Unlock()
 
-	defer func() {
+	t.Cleanup(func() {
 		schemeMu.Lock()
 		schemeName, schemeStyles, schemeKeys, schemeMemo = oldName, oldStyles, oldKeys, oldMemo
 		schemeMu.Unlock()
-	}()
+	})
+}
+
+// useColorerHighlighter switches the editor over to Colorer and back.
+func useColorerHighlighter(t *testing.T, background bool) {
+	t.Helper()
+
+	oldHighlighter, oldBackground := AppConfig.EditorHighlighter, AppConfig.EditorColorerBackground
+	AppConfig.EditorHighlighter = "Colorer"
+	AppConfig.EditorColorerBackground = background
+
+	t.Cleanup(func() {
+		AppConfig.EditorHighlighter = oldHighlighter
+		AppConfig.EditorColorerBackground = oldBackground
+	})
+}
+
+func TestColorer_EditorBaseAttrFollowsDefText(t *testing.T) {
+	installColorerTestScheme(t, map[string]colorerRegionStyle{
+		"def:text": {fore: 0x00FF00, back: 0x101010, hasFore: true, hasBack: true},
+	})
+	useColorerHighlighter(t, true)
+
+	base := vtui.SetRGBBoth(0, 0xD3D7CF, 0x000000)
+	got := ColorerEditorBaseAttr(base)
+	if vtui.GetRGBFore(got) != 0x00FF00 || vtui.GetRGBBack(got) != 0x101010 {
+		t.Errorf("Expected def:Text to paint the editor, got %06X on %06X",
+			vtui.GetRGBFore(got), vtui.GetRGBBack(got))
+	}
+
+	AppConfig.EditorColorerBackground = false
+	if kept := ColorerEditorBaseAttr(base); kept != base {
+		t.Error("The palette must be kept when the option is off")
+	}
+
+	AppConfig.EditorColorerBackground = true
+	AppConfig.EditorHighlighter = "Chroma"
+	if kept := ColorerEditorBaseAttr(base); kept != base {
+		t.Error("The palette must be kept when Colorer is not the active highlighter")
+	}
+}
+
+func TestColorer_EditorBaseAttrIgnoresMissingDefText(t *testing.T) {
+	// def:Comment must not leak into the canvas through the substring rule.
+	installColorerTestScheme(t, map[string]colorerRegionStyle{
+		"def:comment": {fore: 0x123456, hasFore: true},
+	})
+	useColorerHighlighter(t, true)
+
+	base := vtui.SetRGBBoth(0, 0xD3D7CF, 0x000000)
+	if kept := ColorerEditorBaseAttr(base); kept != base {
+		t.Error("A style without def:Text must not repaint the editor")
+	}
+}
+
+func TestColorer_SchemeOverridesBuiltinColors(t *testing.T) {
+	installColorerTestScheme(t, map[string]colorerRegionStyle{
+		"def:comment": {fore: 0x123456, hasFore: true},
+	})
 
 	if got := vtui.GetRGBFore(getColorerAttr("def:CommentContent", 0)); got != 0x123456 {
 		t.Errorf("Expected the color style to win, got %06X", got)
 	}
 	if got := getColorerAttr("unknown_region", 0); got != 0 {
 		t.Errorf("Expected the base attribute for an unknown region, got %d", got)
+	}
+}
+func TestColorer_CatalogEntityDeclarations(t *testing.T) {
+	directive := `DOCTYPE catalog [
+  <!ENTITY hrd-sets SYSTEM "env:$FAR_HOME/hrd/catalog-console.xml">
+  <!ENTITY extra PUBLIC "-//Colorer//catalog//EN" 'hrd/catalog-rgb.xml'>
+  <!ENTITY % params SYSTEM "params.xml">
+  <!ENTITY inline "no path here">
+]`
+
+	want := []string{
+		"env:$FAR_HOME/hrd/catalog-console.xml",
+		"hrd/catalog-rgb.xml",
+		"params.xml",
+	}
+	got := colorerCatalogEntities(directive)
+	if len(got) != len(want) {
+		t.Fatalf("Expected %d entity paths, got %v", len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("Entity %d read as %q, expected %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestColorer_ExpandCatalogEnv(t *testing.T) {
+	t.Setenv("F4_COLORER_TEST_HOME", "/opt/far2l")
+
+	cases := []struct {
+		value string
+		want  string
+	}{
+		{"$F4_COLORER_TEST_HOME/hrd", "/opt/far2l/hrd"},
+		{"${F4_COLORER_TEST_HOME}/hrd", "/opt/far2l/hrd"},
+		{"%F4_COLORER_TEST_HOME%/hrd", "/opt/far2l/hrd"},
+		{"$F4_COLORER_TEST_MISSING/hrd", "/hrd"},
+		{"hrd/catalog.xml", "hrd/catalog.xml"},
+	}
+	for _, c := range cases {
+		if got := expandColorerCatalogEnv(c.value); got != c.want {
+			t.Errorf("Expanded %q to %q, expected %q", c.value, got, c.want)
+		}
+	}
+}
+
+func TestColorer_ParseCatalogHandlesCycleAndDuplicates(t *testing.T) {
+	base := filepath.Join(t.TempDir(), "base")
+	if err := os.MkdirAll(filepath.Join(base, "hrd"), 0755); err != nil {
+		t.Fatalf("Cannot create the fixture directory: %v", err)
+	}
+
+	// The catalog refers back to itself, and the first entity file pulls in a
+	// second one which redeclares a style the first file already provides.
+	catalog := `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE catalog [
+  <!ENTITY first SYSTEM "hrd/first.xml">
+  <!ENTITY loop SYSTEM "catalog.xml">
+]>
+<catalog>
+  <hrc-sets>
+    <location link="hrc/proto/base.xml"/>
+  </hrc-sets>
+  &first;
+  &loop;
+</catalog>`
+	first := `<!DOCTYPE hrd-sets [
+  <!ENTITY second SYSTEM "second.xml">
+]>
+<hrd-sets>
+  <hrd class="rgb" name="amber" description="Amber style">
+    <location link="hrd/rgb/amber.hrd"/>
+  </hrd>
+  &second;
+</hrd-sets>`
+	second := `<hrd-sets>
+  <hrd class="rgb" name="Amber" description="Duplicate style">
+    <location link="hrd/rgb/other.hrd"/>
+  </hrd>
+  <hrd class="rgb" name="zebra" description="Zebra style">
+    <location link="hrd/rgb/zebra.hrd"/>
+  </hrd>
+</hrd-sets>`
+
+	write := func(path, content string) {
+		t.Helper()
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatalf("Cannot write %q: %v", path, err)
+		}
+	}
+
+	catalogPath := filepath.Join(base, "catalog.xml")
+	write(catalogPath, catalog)
+	write(filepath.Join(base, "hrd", "first.xml"), first)
+	write(filepath.Join(base, "hrd", "second.xml"), second)
+
+	schemes := parseColorerCatalog(catalogPath)
+	if len(schemes) != 2 {
+		t.Fatalf("Expected the duplicate to be dropped and the cycle to stop, got %v", schemes)
+	}
+	if schemes[0].Name != "amber" || schemes[1].Name != "zebra" {
+		t.Fatalf("Expected amber and zebra, got %v", schemes)
+	}
+
+	wantPath := filepath.Join(base, "hrd", "rgb", "amber.hrd")
+	if schemes[0].Path != wantPath {
+		t.Errorf("Expected the first declaration to win with %q, got %q", wantPath, schemes[0].Path)
 	}
 }

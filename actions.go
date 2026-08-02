@@ -1265,6 +1265,10 @@ func actionEditorSettings(pf *PanelsFrame) {
 	if AppConfig.EditorCrosshair {
 		chkCrosshair.State = 1
 	}
+	chkColorerBg := vtui.NewCheckbox(0, 0, "Colorer &background", false)
+	if AppConfig.EditorColorerBackground {
+		chkColorerBg.State = 1
+	}
 
 	editMask := vtui.NewEdit(0, 0, 56, AppConfig.EditorAutoCompleteMask)
 	lblMask := vtui.NewLabel(0, 0, Msg("EditorSettings.Mask"), editMask)
@@ -1295,6 +1299,7 @@ func actionEditorSettings(pf *PanelsFrame) {
 	dlg.AddItem(chkEditorConfig)
 	dlg.AddItem(chkAuto)
 	dlg.AddItem(chkCrosshair)
+	dlg.AddItem(chkColorerBg)
 	dlg.AddItem(lblMask)
 	dlg.AddItem(editMask)
 	dlg.AddItem(chkExtEdit)
@@ -1328,6 +1333,7 @@ func actionEditorSettings(pf *PanelsFrame) {
 	col1 := vtui.NewVBoxLayout(0, 0, (width-4)/2, 5)
 	col1.Add(chkAutoIndent, vtui.Margins{}, vtui.AlignLeft)
 	col1.Add(chkEditorConfig, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	col1.Add(chkColorerBg, vtui.Margins{Top: 1}, vtui.AlignLeft)
 
 	col2 := vtui.NewVBoxLayout(0, 0, (width-4)/2, 5)
 	col2.Add(chkCursorEOL, vtui.Margins{}, vtui.AlignLeft)
@@ -1377,6 +1383,7 @@ func actionEditorSettings(pf *PanelsFrame) {
 		AppConfig.EditorUseEditorConfig = chkEditorConfig.State == 1
 		AppConfig.EditorAutoComplete = chkAuto.State == 1
 		AppConfig.EditorCrosshair = chkCrosshair.State == 1
+		AppConfig.EditorColorerBackground = chkColorerBg.State == 1
 		AppConfig.EditorAutoCompleteMask = editMask.GetText()
 		AppConfig.UseExternalEditor = chkExtEdit.State == 1
 		AppConfig.ExternalEditorCommand = editExtCmd.GetText()

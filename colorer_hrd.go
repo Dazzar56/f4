@@ -318,8 +318,51 @@ func SetColorerScheme(name string) {
 	vtui.DebugLog("COLORER: Color style %q activated, %d regions defined", name, len(styles))
 }
 
+// colorerBackgroundRegion is the region FarColorer copies into the editor
+// color when its "Change editor background" option is on.
+const colorerBackgroundRegion = "def:Text"
+
+// colorerSchemeExactStyle looks a region up in the active color style without
+// the prefix and substring fallbacks. The canvas color must not be guessed
+// from an unrelated region, so a style without def:Text finds nothing here.
+func colorerSchemeExactStyle(name string) (colorerRegionStyle, bool) {
+	schemeMu.Lock()
+	defer schemeMu.Unlock()
+	if schemeStyles == nil {
+		return colorerRegionStyle{}, false
+	}
+	style, found := schemeStyles[strings.ToLower(name)]
+	return style, found && (style.hasFore || style.hasBack)
+}
+
+// ColorerEditorBaseAttr paints the editor with the def:Text region of the
+// active color style, the way FarColorer's "Change editor background" option
+// does. Without Colorer, without an active style, or with the option off the
+// f4 palette is returned untouched.
+func ColorerEditorBaseAttr(base uint64) uint64 {
+	if !AppConfig.EditorColorerBackground {
+		return base
+	}
+	if !strings.EqualFold(AppConfig.EditorHighlighter, "Colorer") {
+		return base
+	}
+	style, ok := colorerSchemeExactStyle(colorerBackgroundRegion)
+	if !ok {
+		return base
+	}
+
+	attr := base
+	if style.hasFore {
+		attr = vtui.SetRGBFore(attr, style.fore)
+	}
+	if style.hasBack {
+		attr = vtui.SetRGBBack(attr, style.back)
+	}
+	return attr
+}
+
 // colorerSchemeStyle resolves a region name through the active color style,
-// using the same exact/prefix/substring rules as the built-in color map.
+// using the exact, prefix and substring rules of the built-in color map.
 func colorerSchemeStyle(name string) (colorerRegionStyle, bool) {
 	nameLower := strings.ToLower(name)
 

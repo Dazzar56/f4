@@ -31,6 +31,7 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	AppConfig.HighlightDir = true
 	AppConfig.SavePanelPaths = false
 	AppConfig.EditorCrosshair = true
+	AppConfig.EditorColorerBackground = false
 	AppConfig.CommandLineAutoComplete = false
 
 	// 2. Save
@@ -41,6 +42,7 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	AppConfig.ColorStyle = "Modern"
 	AppConfig.HighlightDir = false
 	AppConfig.EditorCrosshair = false
+	AppConfig.EditorColorerBackground = true
 
 	// 4. Load
 	LoadConfig()
@@ -60,6 +62,9 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	}
 	if !AppConfig.EditorCrosshair {
 		t.Error("LoadConfig failed to restore EditorCrosshair")
+	}
+	if AppConfig.EditorColorerBackground {
+		t.Error("LoadConfig failed to restore EditorColorerBackground")
 	}
 	if AppConfig.CommandLineAutoComplete {
 		t.Error("LoadConfig failed to restore CommandLineAutoComplete")

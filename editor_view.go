@@ -490,7 +490,7 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 		width--
 	}
 
-	bgAttr := vtui.Palette[ColEditorText]
+	bgAttr := ColorerEditorBaseAttr(vtui.Palette[ColEditorText])
 	selAttr := vtui.Palette[vtui.ColDialogEditSelected]
 
 	if ev.saving {
