@@ -77,8 +77,7 @@ func TestRPCPlugin_VFS_Proxy(t *testing.T) {
 func TestRPCPlugin_Highlighter_Proxy(t *testing.T) {
 	coreSess, pluginSess := setupTestSessions()
 
-	p := &RPCPlugin{sess: coreSess}
-	h := &rpcHighlighter{p: p}
+	h := &rpcHighlighter{transport: coreSess}
 
 	pluginSess.Register("VFS.Highlight", func(data msgpack.RawMessage) (any, error) {
 		return HighlightRes{Attrs: []uint64{42, 42}, Next: "state2"}, nil
