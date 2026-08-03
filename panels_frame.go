@@ -204,6 +204,7 @@ func NewPanelsFrame() *PanelsFrame {
 			{Separator: true},
 			{Text: "&" + Msg("Menu.PanelSettings"), Command: CmPanelSettings},
 			{Text: "&" + Msg("Menu.EditorSettings"), Command: CmEditorSettings},
+			{Text: "&" + Msg("Menu.ColorerSettings"), Command: CmColorerSettings},
 			{Text: "&" + Msg("Menu.AppearanceSettings"), Command: CmAppearanceSettings},
 			{Text: "&" + Msg("Menu.ConfirmationsSettings"), Command: CmConfirmationsSettings},
 			{Separator: true},
@@ -2049,6 +2050,9 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 		return true
 	case CmEditorSettings:
 		actionEditorSettings(pf)
+		return true
+	case CmColorerSettings:
+		actionColorerSettings(pf)
 		return true
 	case CmAppearanceSettings:
 		actionAppearanceSettings(pf)

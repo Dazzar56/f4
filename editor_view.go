@@ -504,26 +504,34 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 	curVRow, curVCol := ev.engine.LogicalToVisual(curOffset)
 
 	crossVRow, crossVCol := -1, -1
-	var crossAttr uint64
-	if AppConfig.EditorCrosshair && ev.IsFocused() {
-		crossVRow = curVRow
-		crossVCol = curVCol + ev.CursorVirtualSpaces
-		crossAttr = vtui.Palette[ColEditorCrosshair]
+	var horzCrossAttr, vertCrossAttr uint64
+	if showHorz, showVert, hAttr, vAttr := EditorCrossAttrs(); ev.IsFocused() {
+		if showHorz {
+			crossVRow = curVRow
+			horzCrossAttr = hAttr
+		}
+		if showVert {
+			crossVCol = curVCol + ev.CursorVirtualSpaces
+			vertCrossAttr = vAttr
+		}
 	}
 
 	// Clear the entire editor text area
 	scr.FillRect(ev.X1, ev.Y1+1, ev.X2, ev.Y2, ' ', bgAttr)
 
+	// Horizontal line
 	if crossVRow != -1 {
-		// Horizontal line
 		cy := ev.Y1 + 1 + crossVRow - ev.ScrollTopRow
 		if cy >= ev.Y1+1 && cy <= ev.Y2 {
-			scr.FillRect(ev.X1, cy, ev.X1+width-1, cy, ' ', crossAttr)
+			scr.FillRect(ev.X1, cy, ev.X1+width-1, cy, ' ', horzCrossAttr)
 		}
-		// Vertical line
+	}
+
+	// Vertical line
+	if crossVCol != -1 {
 		cx := ev.X1 + crossVCol - ev.ScrollLeft
 		if cx >= ev.X1 && cx < ev.X1+width {
-			scr.FillRect(cx, ev.Y1+1, cx, ev.Y2, ' ', crossAttr)
+			scr.FillRect(cx, ev.Y1+1, cx, ev.Y2, ' ', vertCrossAttr)
 		}
 	}
 
@@ -638,7 +646,7 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 
 			_, startVCol := ev.engine.LogicalToVisual(frag.ByteOffsetStart)
 			isCrossRow := (absVRow == crossVRow)
-			ev.renderCells = ev.fillCells(ev.renderCells, ev.renderBytes, bgAttr, selAttr, frag.ByteOffsetStart, ev.selActive, selMin, selMax, fragSyntax, startVCol, isCrossRow, crossVCol, crossAttr, absVRow)
+			ev.renderCells = ev.fillCells(ev.renderCells, ev.renderBytes, bgAttr, selAttr, frag.ByteOffsetStart, ev.selActive, selMin, selMax, fragSyntax, startVCol, isCrossRow, crossVCol, horzCrossAttr, vertCrossAttr, absVRow)
 
 			scr.Write(ev.X1-ev.ScrollLeft, currY, ev.renderCells)
 
@@ -1555,7 +1563,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 	return false
 }
 
-func (ev *EditorView) fillCells(target []vtui.CharInfo, data []byte, defaultAttr, selAttr uint64, offset int, selActive bool, selMin, selMax int, syntax []uint64, startVisualCol int, isCrossRow bool, crossVCol int, crossAttr uint64, visualRow int) []vtui.CharInfo {
+func (ev *EditorView) fillCells(target []vtui.CharInfo, data []byte, defaultAttr, selAttr uint64, offset int, selActive bool, selMin, selMax int, syntax []uint64, startVisualCol int, isCrossRow bool, crossVCol int, horzCrossAttr, vertCrossAttr uint64, visualRow int) []vtui.CharInfo {
 	target = target[:0]
 	currByte := 0
 	charIdx := 0
@@ -1594,11 +1602,11 @@ func (ev *EditorView) fillCells(target []vtui.CharInfo, data []byte, defaultAttr
 		}
 
 		// Horizontal crosshair line applies to the entire character in the active row
-		if isCrossRow && crossAttr != 0 {
-			if crossAttr&vtui.IsBgRGB != 0 {
-				attr = vtui.SetRGBBack(attr, vtui.GetRGBBack(crossAttr))
+		if isCrossRow && horzCrossAttr != 0 {
+			if horzCrossAttr&vtui.IsBgRGB != 0 {
+				attr = vtui.SetRGBBack(attr, vtui.GetRGBBack(horzCrossAttr))
 			} else {
-				attr = vtui.SetIndexBack(attr, vtui.GetIndexBack(crossAttr))
+				attr = vtui.SetIndexBack(attr, vtui.GetIndexBack(horzCrossAttr))
 			}
 		}
 
@@ -1628,11 +1636,11 @@ func (ev *EditorView) fillCells(target []vtui.CharInfo, data []byte, defaultAttr
 			for j := 0; j < w; j++ {
 				cellAttr := attr
 				// Vertical crosshair line: apply ONLY to the specific cell index
-				if !isCrossRow && (visualCol+j == crossVCol) && crossAttr != 0 {
-					if crossAttr&vtui.IsBgRGB != 0 {
-						cellAttr = vtui.SetRGBBack(cellAttr, vtui.GetRGBBack(crossAttr))
+				if !isCrossRow && (visualCol+j == crossVCol) && vertCrossAttr != 0 {
+					if vertCrossAttr&vtui.IsBgRGB != 0 {
+						cellAttr = vtui.SetRGBBack(cellAttr, vtui.GetRGBBack(vertCrossAttr))
 					} else {
-						cellAttr = vtui.SetIndexBack(cellAttr, vtui.GetIndexBack(crossAttr))
+						cellAttr = vtui.SetIndexBack(cellAttr, vtui.GetIndexBack(vertCrossAttr))
 					}
 				}
 				target = append(target, vtui.CharInfo{Char: charVal, Attributes: cellAttr})

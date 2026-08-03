@@ -795,7 +795,7 @@ func TestEditorView_WhitespaceRendering(t *testing.T) {
 	ev := NewEditorView(pt, nil, "")
 	defer ev.Close()
 	ev.ShowWhitespaces = true
-	cells := ev.fillCells(nil, []byte("a b\tc"), 0, 0, 0, false, 0, 0, nil, 0, false, -1, 0, 0)
+	cells := ev.fillCells(nil, []byte("a b\tc"), 0, 0, 0, false, 0, 0, nil, 0, false, -1, 0, 0, 0)
 
 	// '·' is U+00B7 (183)
 	if cells[1].Char != 183 {
@@ -807,7 +807,7 @@ func TestEditorView_WhitespaceRendering(t *testing.T) {
 	}
 
 	ev.ShowWhitespaces = false
-	cells = ev.fillCells(nil, []byte("a b\tc"), 0, 0, 0, false, 0, 0, nil, 0, false, -1, 0, 0)
+	cells = ev.fillCells(nil, []byte("a b\tc"), 0, 0, 0, false, 0, 0, nil, 0, false, -1, 0, 0, 0)
 	if cells[1].Char != ' ' {
 		t.Errorf("Expected space for space when ShowWhitespaces is OFF, got %d", cells[1].Char)
 	}
@@ -3081,7 +3081,7 @@ func TestEditorView_CharacterWidthConsistency(t *testing.T) {
 	ev.SetPosition(0, 0, 80, 24)
 
 	_, col2 := ev.engine.LogicalToVisual(2)
-	cells := ev.fillCells(nil, []byte{0x01, 0x00, 'a'}, 0, 0, 0, false, 0, 0, nil, 0, false, -1, 0, 0)
+	cells := ev.fillCells(nil, []byte{0x01, 0x00, 'a'}, 0, 0, 0, false, 0, 0, nil, 0, false, -1, 0, 0, 0)
 
 	if col2 != 2 {
 		t.Errorf("Expected LogicalToVisual col 2, got %d", col2)
@@ -3158,7 +3158,7 @@ func TestEditorView_ZeroAndDoubleWidthConsistency(t *testing.T) {
 	_, colCJK := ev.engine.LogicalToVisual(6)
 	_, colB := ev.engine.LogicalToVisual(7)
 
-	cells := ev.fillCells(nil, text, 0, 0, 0, false, 0, 0, nil, 0, false, -1, 0, 0)
+	cells := ev.fillCells(nil, text, 0, 0, 0, false, 0, 0, nil, 0, false, -1, 0, 0, 0)
 
 	if colA != 1 {
 		t.Errorf("Expected column after 'a' to be 1, got %d", colA)

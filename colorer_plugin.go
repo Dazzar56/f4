@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"io"
-	"path/filepath"
 	"strings"
 	"sync"
 
@@ -151,6 +150,9 @@ func lookupColorerColor(name string) (uint32, bool) {
 }
 
 func getColorerAttr(name string, baseAttr uint64) uint64 {
+	if !AppConfig.EditorColorerSyntax {
+		return baseAttr
+	}
 	if style, ok := colorerSchemeStyle(name); ok {
 		attr := baseAttr
 		if style.hasFore {
@@ -227,6 +229,20 @@ func releaseColorerSession(session *colorer.Session, configsDir string) {
 	session.Close()
 }
 
+// ResetColorerSessions drops the pooled session, so that the next opened file
+// starts a fresh one. The schemas are read when a session is created, which is
+// what makes a re-downloaded or relocated catalog take effect.
+func ResetColorerSessions() {
+	colorerPoolMu.Lock()
+	session := colorerIdle
+	colorerIdle = nil
+	colorerIdleDir = ""
+	colorerPoolMu.Unlock()
+	if session != nil {
+		session.Close()
+	}
+}
+
 // newColorerHighlighter returns a highlighter which works through the fallback
 // engine right away and upgrades itself to Colorer as soon as the session is
 // ready, so that opening a file is never blocked by the WASM start-up.
@@ -236,7 +252,7 @@ func newColorerHighlighter(ev *EditorView, filename, firstLine string, fallback 
 	ch := &ColorerHighlighter{
 		fallback:   fallback,
 		filename:   filename,
-		configsDir: filepath.Join(GetF4ConfigDir(), "colorer", "configs"),
+		configsDir: ColorerConfigsDir(),
 	}
 
 	go func() {

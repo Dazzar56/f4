@@ -39,6 +39,7 @@ const (
 	CmExtractArchive
 	CmPanelSettings
 	CmEditorSettings
+	CmColorerSettings
 	CmAppearanceSettings
 	CmConfirmationsSettings
 	CmLanguage

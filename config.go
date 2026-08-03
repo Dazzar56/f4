@@ -89,6 +89,9 @@ type F4Config struct {
 	EditorHighlighter        string
 	EditorColorerScheme      string
 	EditorColorerBackground  bool
+	EditorColorerSyntax      bool
+	EditorColorerCatalog     string
+	EditorCrossMode          int
 	EditorDefaultCodePage    int
 	ViewerAutodetectCodePage bool
 	ViewerDefaultCodePage    int
@@ -152,6 +155,9 @@ var AppConfig = F4Config{
 	EditorHighlighter:        "Chroma",
 	EditorColorerScheme:      "",
 	EditorColorerBackground:  true,
+	EditorColorerSyntax:      true,
+	EditorColorerCatalog:     "",
+	EditorCrossMode:          ColorerCrossBoth,
 	EditorDefaultCodePage:    65001,
 	ViewerAutodetectCodePage: true,
 	ViewerDefaultCodePage:    65001,
@@ -266,6 +272,13 @@ func LoadConfig() {
 	AppConfig.EditorHighlighter = normalizeHighlighter(ini.GetString("Editor", "Highlighter", "Chroma"))
 	AppConfig.EditorColorerScheme = ini.GetString("Editor", "ColorerScheme", "")
 	AppConfig.EditorColorerBackground = ini.GetString("Editor", "ColorerBackground", "1") == "1"
+	AppConfig.EditorColorerSyntax = ini.GetString("Editor", "ColorerSyntax", "1") == "1"
+	AppConfig.EditorColorerCatalog = ini.GetString("Editor", "ColorerCatalog", "")
+	AppConfig.EditorCrossMode = ColorerCrossBoth
+	fmt.Sscanf(ini.GetString("Editor", "CrossMode", "3"), "%d", &AppConfig.EditorCrossMode)
+	if AppConfig.EditorCrossMode < ColorerCrossOff || AppConfig.EditorCrossMode > ColorerCrossBoth {
+		AppConfig.EditorCrossMode = ColorerCrossBoth
+	}
 	fmt.Sscanf(ini.GetString("Editor", "DefaultCodePage", "65001"), "%d", &AppConfig.EditorDefaultCodePage)
 	AppConfig.ViewerAutodetectCodePage = ini.GetString("Viewer", "AutodetectCodePage", "1") == "1"
 	fmt.Sscanf(ini.GetString("Viewer", "DefaultCodePage", "65001"), "%d", &AppConfig.ViewerDefaultCodePage)
@@ -353,6 +366,9 @@ func SaveConfig() {
 	sb.WriteString(fmt.Sprintf("Highlighter = %s\n", AppConfig.EditorHighlighter))
 	sb.WriteString(fmt.Sprintf("ColorerScheme = %s\n", AppConfig.EditorColorerScheme))
 	sb.WriteString(fmt.Sprintf("ColorerBackground = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.EditorColorerBackground]))
+	sb.WriteString(fmt.Sprintf("ColorerSyntax = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.EditorColorerSyntax]))
+	sb.WriteString(fmt.Sprintf("ColorerCatalog = %s\n", AppConfig.EditorColorerCatalog))
+	sb.WriteString(fmt.Sprintf("CrossMode = %d\n", AppConfig.EditorCrossMode))
 	sb.WriteString(fmt.Sprintf("DefaultCodePage = %d\n", AppConfig.EditorDefaultCodePage))
 
 	sb.WriteString("\n[Viewer]\n")

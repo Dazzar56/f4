@@ -36,8 +36,13 @@ var (
 	schemeGeneration uint64
 )
 
-// ColorerConfigsDir returns the directory the Colorer schemas are unpacked to.
+// ColorerConfigsDir returns the directory the Colorer schemas are read from.
+// A folder configured by the user wins over the downloaded copy, so that the
+// schemas of an existing far2l installation can be used instead.
 func ColorerConfigsDir() string {
+	if custom := strings.TrimSpace(AppConfig.EditorColorerCatalog); custom != "" {
+		return custom
+	}
 	return filepath.Join(GetF4ConfigDir(), "colorer", "configs")
 }
 
@@ -377,6 +382,20 @@ func SetColorerScheme(name string) {
 	schemeMu.Unlock()
 
 	vtui.DebugLog("COLORER: Color style %q activated from %q, %d regions defined", name, stylePath, len(styles))
+}
+
+// ResetColorerScheme drops the styles of the active color style so that the
+// next SetColorerScheme reads them from disk again. Replacing the schemas or
+// pointing the catalog somewhere else leaves the style name untouched, and
+// SetColorerScheme skips a switch to the name that is already active.
+func ResetColorerScheme() {
+	schemeMu.Lock()
+	schemeName = ""
+	schemeStyles = nil
+	schemeKeys = nil
+	schemeMemo = make(map[string]colorerRegionStyle)
+	schemeGeneration++
+	schemeMu.Unlock()
 }
 
 // ColorerSchemeGeneration changes every time a color style is applied.

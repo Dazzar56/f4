@@ -15,7 +15,7 @@ import (
 )
 
 func SchemasExist() bool {
-	path := filepath.Join(GetF4ConfigDir(), "colorer", "configs", "base", "catalog.xml")
+	path := filepath.Join(ColorerConfigsDir(), "base", "catalog.xml")
 	_, err := os.Stat(path)
 	return err == nil
 }
@@ -24,7 +24,7 @@ var colorerDownloadURL = "https://github.com/elfmz/far2l/archive/refs/tags/v_2.8
 
 func DownloadColorerSchemas(pf *PanelsFrame, onComplete func(success bool)) {
 	url := colorerDownloadURL
-	destDir := filepath.Join(GetF4ConfigDir(), "colorer", "configs")
+	destDir := ColorerConfigsDir()
 
 	pf.RunProgressTask(" Downloading Colorer Schemas ", "Connecting to GitHub...", false, func(ctx context.Context, update func(msg string, percent int)) error {
 		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
