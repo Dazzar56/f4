@@ -336,6 +336,7 @@ func newColorerHighlighter(ev *EditorView, filename, firstLine string, fallback 
 
 	return ch
 }
+
 // useFallback hands the file over to the fallback engine once Colorer has said
 // it cannot take it. Nothing is colored until that point, so the states of the
 // plain phase have to go.
