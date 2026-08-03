@@ -90,6 +90,20 @@ func enumerateLinuxGPUs() []GPUInfo {
 		}
 		out = append(out, GPUInfo{Model: fmt.Sprintf("%s:%s", vendor, device), Driver: driver})
 	}
+	// WSL2 fallback. Microsoft's GPU passthrough uses dxgkrnl via
+	// /dev/dxg instead of exposing anything under /sys/class/drm.
+	// If we found nothing above and /dev/dxg is present, at least
+	// tell the user *something* is there rather than hide the
+	// section — the host adapter name would need dxgkio ioctl
+	// plumbing which is out of scope for a display panel.
+	if len(out) == 0 {
+		if _, err := os.Stat("/dev/dxg"); err == nil {
+			out = append(out, GPUInfo{
+				Model:  Msg("InfoPanel.GPUWSLVirt"),
+				Driver: "dxgkrnl",
+			})
+		}
+	}
 	return out
 }
 

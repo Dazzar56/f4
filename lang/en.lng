@@ -202,6 +202,7 @@ InfoPanel.CPULoadAvg=Load average
 InfoPanel.GPUTitle=GPU
 InfoPanel.GPUModel=Model
 InfoPanel.GPUDriver=Driver
+InfoPanel.GPUWSLVirt=WSL virtualised GPU (host name not exposed)
 InfoPanel.Copied=Copied
 InfoPanel.CopiedRows=Copied rows
 InfoPanel.UnitsHint= B: units   Ins/Shift+↑↓: select   C: copy

@@ -202,6 +202,7 @@ InfoPanel.CPULoadAvg=Средняя нагрузка
 InfoPanel.GPUTitle=Видеокарта
 InfoPanel.GPUModel=Модель
 InfoPanel.GPUDriver=Драйвер
+InfoPanel.GPUWSLVirt=Виртуальная GPU WSL (имя хостовой не проброшено)
 InfoPanel.Copied=Скопировано
 InfoPanel.CopiedRows=Скопировано строк
 InfoPanel.UnitsHint= B: единицы   Ins/Shift+↑↓: пометить   C: копир
