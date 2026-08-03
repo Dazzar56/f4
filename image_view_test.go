@@ -39,12 +39,13 @@ func TestImageViewFitsAndCentres(t *testing.T) {
 	if !ok {
 		t.Fatal("layout failed")
 	}
-	// The window is 80x24 cells of 8x16, so 640x384 pixels. A square image
-	// fits to 384x384, which is 48x24 cells, centred horizontally.
-	if p.Cols != 48 || p.Rows != 24 {
+	// The window has 23 available rows (h=25, minus topbar and bottom border).
+	// Available cells: 80x23, cell size 8x16 -> 640x368 pixels.
+	// A square image fits to 368x368, which is 46x23 cells, centred horizontally.
+	if p.Cols != 46 || p.Rows != 23 {
 		t.Errorf("wrong size %dx%d cells", p.Cols, p.Rows)
 	}
-	if p.Col != 16 || p.Row != 1 {
+	if p.Col != 17 || p.Row != 1 {
 		t.Errorf("wrong origin %d,%d", p.Col, p.Row)
 	}
 	if p.SrcW != 0 || p.SrcH != 0 {
