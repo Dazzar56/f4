@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -98,6 +100,41 @@ func TestRecordedMacroSkipsUnusableEvents(t *testing.T) {
 	}
 }
 
+func TestSaveRecordedMacroTakesEffectImmediately(t *testing.T) {
+	dir := t.TempDir()
+	host := newFakeMacroHost()
+	engine := newTestMacroEngine(t, host, "")
+
+	manager := NewMacroManager("")
+	manager.Lua = engine
+
+	events := []*vtinput.InputEvent{ParseFarKey("F7"), ParseFarKey("Esc")}
+	if err := manager.SaveRecordedMacro(dir, "Shell", "CtrlA", "make and cancel", events); err != nil {
+		t.Fatalf("SaveRecordedMacro: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, "shell_ctrla.lua")); err != nil {
+		t.Fatalf("the macro file was not written: %v", err)
+	}
+
+	// No restart: the macro has to work in the session that recorded it.
+	fireMacro(t, engine, "CtrlA")
+	if got := strings.Join(host.injectedKeys(), " "); got != "F7 Esc" {
+		t.Fatalf("replayed %q, want \"F7 Esc\"", got)
+	}
+}
+
+func TestSaveRecordedMacroWithoutARunningEngine(t *testing.T) {
+	dir := t.TempDir()
+	manager := NewMacroManager("")
+
+	if err := manager.SaveRecordedMacro(dir, "Shell", "CtrlB", "", nil); err != nil {
+		t.Fatalf("SaveRecordedMacro: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "shell_ctrlb.lua")); err != nil {
+		t.Error("a user with no macros yet could not record their first one")
+	}
+}
 func TestRecordedMacroFileName(t *testing.T) {
 	if got := RecordedMacroFileName("Shell", "CtrlA"); got != "shell_ctrla.lua" {
 		t.Errorf("RecordedMacroFileName = %q, want shell_ctrla.lua", got)

@@ -142,10 +142,10 @@ Next, in order:
   itself is done: `macro_export.go` turns a recorded sequence into a `Macro{}`
   declaration built from `EventToFarString`, names the file `<area>_<key>.lua`
   the way Far does, and is covered by a round trip test that loads the result
-  back into the engine and checks it replays the same keys. What remains is
-  writing the file into `Macros/scripts` and handing it to the running engine
-  with `LoadString`, so a freshly recorded macro works without a restart. The
-  cost is
+  back into the engine and checks it replays the same keys. Writing the file
+  into `Macros/scripts` and handing it to the running engine with `LoadString`
+  is done too, in `MacroManager.SaveRecordedMacro`, so a macro takes effect in
+  the session that recorded it. The remaining cost is
   elsewhere: a configuration option and its place in the settings dialog, and
   deciding what editing or reassigning a recorded macro means once a macro can
   be either kind. Worth doing; not worth rushing.

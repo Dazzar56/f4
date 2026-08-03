@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/unxed/vtinput"
@@ -104,6 +106,28 @@ func RecordedMacroFileName(area, key string) string {
 		area = "Common"
 	}
 	return fmt.Sprintf("%s_%s.lua", sanitizeMacroFilePart(area), sanitizeMacroFilePart(key))
+}
+
+// SaveRecordedMacro writes a recorded macro into the scripts directory and
+// hands it to the running engine, so it takes effect immediately rather than
+// at the next start. That immediacy is the whole appeal of recording one.
+func (m *MacroManager) SaveRecordedMacro(dir, area, key, description string, events []*vtinput.InputEvent) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+
+	source := RecordedMacroToLua(area, key, description, events)
+	path := filepath.Join(dir, RecordedMacroFileName(area, key))
+	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+		return err
+	}
+
+	if m.Lua == nil {
+		// No engine is running because the user had no macros until now. The
+		// file is on disk and will be read at the next start.
+		return nil
+	}
+	return m.Lua.LoadString(path, source)
 }
 
 func sanitizeMacroFilePart(part string) string {
