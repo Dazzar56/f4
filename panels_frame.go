@@ -28,6 +28,12 @@ type DriveEntry struct {
 var DriveRegistry []DriveEntry
 
 func RegisterDrive(name string, factory func() vfs.VFS) {
+	for i, d := range DriveRegistry {
+		if d.Name == name {
+			DriveRegistry[i].Factory = factory
+			return
+		}
+	}
 	DriveRegistry = append(DriveRegistry, DriveEntry{Name: name, Factory: factory})
 }
 

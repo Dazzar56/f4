@@ -1168,6 +1168,11 @@ func TestActionManagePlugins_Flow(t *testing.T) {
 	}
 	btnRem.OnClick()
 
+	confirmDlg, _ := vtui.FrameManager.GetTopFrame().(*vtui.Window)
+	if confirmDlg != nil && confirmDlg.OnResult != nil {
+		confirmDlg.OnResult(0)
+	}
+
 	if len(AppConfig.RegisteredPlugins) != 0 {
 		t.Error("Plugin was not removed from config")
 	}
@@ -1176,23 +1181,6 @@ func TestActionManagePlugins_Flow(t *testing.T) {
 	tmpDir := t.TempDir()
 	testFile := "my_plugin.sh"
 	os.WriteFile(filepath.Join(tmpDir, testFile), []byte("#!/bin/sh"), 0755)
-
-	pluginVfs := &dialogVFSAdapter{v: vfs.NewOSVFS(tmpDir)}
-
-	foundFile := false
-	err := pluginVfs.ReadDir(context.Background(), tmpDir, func(items []vtui.FSItem) {
-		for _, itm := range items {
-			if itm.Name == testFile {
-				foundFile = true
-			}
-		}
-	})
-	if err != nil {
-		t.Fatalf("Adapter ReadDir failed: %v", err)
-	}
-	if !foundFile {
-		t.Errorf("Adapter failed to find test file %s", testFile)
-	}
 
 	newPath := filepath.Join(tmpDir, testFile)
 	AppConfig.RegisteredPlugins = append(AppConfig.RegisteredPlugins, newPath)

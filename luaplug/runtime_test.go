@@ -256,6 +256,13 @@ func TestRuntimeTimeout(t *testing.T) {
 	}
 }
 
+func TestLoadStringSkipsShebang(t *testing.T) {
+	r := newTestRuntime(t, nil)
+	err := r.LoadString("plugin", "#!/usr/bin/env lua\nrequire('f4rpc')")
+	if err != nil {
+		t.Fatalf("LoadString with shebang failed: %v", err)
+	}
+}
 func TestLoadFileAddsPackagePath(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "helper.lua"), []byte("return { answer = 42 }"), 0o644); err != nil {

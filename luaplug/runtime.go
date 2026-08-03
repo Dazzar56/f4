@@ -188,6 +188,9 @@ func (r *Runtime) Do(fn func(*lua.LState) error) error {
 // LoadString compiles and runs a chunk. Running the plugin body is what
 // populates its handler table, so this is how a plugin is started.
 func (r *Runtime) LoadString(name, source string) error {
+	if strings.HasPrefix(source, "#!") {
+		source = "--" + source[2:]
+	}
 	return r.Do(func(L *lua.LState) error {
 		fn, err := L.Load(strings.NewReader(source), name)
 		if err != nil {
