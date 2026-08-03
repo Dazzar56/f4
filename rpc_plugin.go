@@ -183,35 +183,11 @@ func (p *RPCPlugin) Init(api vfs.HostAPI) error {
 
 	p.sess = f4rpc.NewSession(stdout, stdin)
 
-	// The host method set is shared with every other transport.
-	for name, handler := range newHostMethods(api, p.sess, p.path) {
-		p.sess.Register(name, handler)
-	}
-
-	go func() {
-		err := p.sess.Serve()
+	return startPluginSession(p.sess, api, p.path, nil, func(err error) {
 		if !p.closing {
 			vtui.DebugLog("RPC Plugin %q terminated unexpectedly: %v", p.path, err)
 		}
-	}()
-
-	// Query plugin for its capabilities (drives)
-	type PluginInitRes struct {
-		Drives []string
-	}
-	var res PluginInitRes
-	if err := p.sess.Call("Plugin.Init", nil, &res); err != nil {
-		return fmt.Errorf("Plugin.Init failed: %v", err)
-	}
-
-	for _, drive := range res.Drives {
-		driveName := drive // closure capture
-		api.RegisterDrive(driveName, func() vfs.VFS {
-			return NewRPCVFS(p.sess, driveName)
-		})
-	}
-
-	return nil
+	})
 }
 
 func (p *RPCPlugin) Close() error {

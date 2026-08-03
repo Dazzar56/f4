@@ -33,7 +33,13 @@ Lua and embedded wasm, all three transports carry that same protocol:
 | --- | --- | --- |
 | subprocess | its own process | any language, full OS access |
 | embedded Lua | in f4, on gopher-lua | zero install, ships as one file |
-| embedded wasm | in f4, on wazero | zero install, sandboxed, any source language |
+| embedded wasm | in f4, on wazero | zero install, real sandbox, any source language |
+
+The wasm guest is a WASI command, not a module of exported functions: it reads
+F4-RPC from stdin and writes it to stdout, exactly as a subprocess plugin does.
+So the same plugin source builds either to a native binary or to a `.wasm`
+with no changes, and the transport costs a pair of pipes rather than a third
+plugin ABI.
 
 The consequences are the point: one SDK surface, one set of documentation, one
 set of host methods, and a plugin that moves between transports without being
@@ -105,6 +111,27 @@ Done:
 - **Step 2b: transports.** `PluginTransport` and shared `newHostMethods`;
   `LuaPlugin` mounts a Lua script as an in-process plugin. `plugins/dummy_lua`
   now runs without a system Lua.
+- **Step 3: Far-compatible Lua macros.** `Macro{}`, `Keys()`, `akey()`,
+  `Area`, `APanel`/`PPanel`, `CmdLine`, `Far`, `mf.*` and `bit.*`, reading
+  `Macros/scripts` under the config directory. The dialect is far2m's. Macros
+  run off the UI goroutine so that they can ask the UI for panel state without
+  deadlocking it; `MacroHost` is the seam that enforces this in one place, and
+  is what lets the engine be tested without a terminal. Recorded macros keep
+  working and take precedence, as in Far.
+- **Step 4: embedded wasm on wazero.** The guest is a WASI command over stdio,
+  so `startPluginSession` in `plughost.go` now holds everything a transport
+  does once it has two byte streams, and the wasm transport is just the
+  streams. The guest gets no filesystem, making this the first transport that
+  is actually a sandbox. `Plugin.Init` gained a timeout along the way: a valid
+  but silent module would otherwise hang startup forever, and so would a
+  broken subprocess.
+- **Step 4b: FFI over the protocol, as `Host.FFI.*`.** The earlier worry about
+  guest offsets not being host addresses turned out to be the wrong frame: the
+  broker deals only in integers and strings, so it projects onto the existing
+  protocol directly. A wasm guest gets real native calls and real C callbacks
+  without ever holding a host pointer. Subprocess plugins are not given these
+  methods, having no need of them. Zero-copy over guest linear memory remains
+  available as a later optimisation for heavy data rather than a precondition.
 
 Next, in order:
 
@@ -114,13 +141,6 @@ Next, in order:
   `GetCurrentArea()` are already close to Far's, and `EventToFarString` and
   `ParseFarKey` already speak Far's key names. Keyboard-recorded macros keep
   working; the Lua engine is a second backend, not a replacement.
-- **Step 4: embedded wasm on wazero.** wazero is already an indirect dependency
-  through go-sqlite3 and needs promoting to a direct one. The hard part is
-  pointers: a guest offset is not a host address. Guest linear memory is a Go
-  slice with a real host address, so passing a pointer into it is possible
-  without copying; the copy is only needed when the memory can grow or when
-  native code retains the pointer past the call. Shared memory for heavy data
-  is wanted, but not first.
 - **Step 5: onboarding.** A scaffolder for new plugins, a five minute hello
   world, a PlugRing submission walkthrough, and a rewrite of `PLUGINS.md` and
   `LUA.md` to match reality.

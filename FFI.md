@@ -50,4 +50,22 @@ explanation shown to the user. Until that is wired up, an unset hook allows
 everything, which is fine for local development and not for anything else.
 
 Builds made with the `noffi` tag, and platforms `pureffi` does not cover, keep
-the whole plugin system working and only report the bridge as unsupported.
+the whole plugin system working and only report the bridge as unsupported.## Reaching the bridge from a sandbox
+
+An embedded Lua plugin gets the broker as the `f4ffi` module. A wasm guest
+cannot load a library itself, so it gets the same broker over the plugin
+protocol instead, as `Host.FFI.*` methods: `Open`, `OpenLibC`, `Sym`, `Call`,
+`CallSym`, `Alloc`, `Free`, `CString`, `GoString`, `Read`, `Write`, `Peek`,
+`Poke` and `Callback`.
+
+This works only because the broker deals exclusively in integers and strings.
+Handles, addresses and signatures survive MessagePack unchanged, so nothing has
+to reconcile a guest's own memory offsets with host addresses.
+
+`Host.FFI.Callback` registers a trampoline and returns its address. When native
+code invokes it, the host calls `Plugin.OnFFICallback` with the id the plugin
+chose. So a guest can hand a real C function pointer to a library it has never
+been able to link against, and still never hold a host pointer.
+
+A subprocess plugin is not given these methods. It is a native process and can
+load libraries perfectly well on its own.

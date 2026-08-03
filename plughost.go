@@ -3,13 +3,64 @@ package main
 import (
 	"context"
 	"fmt"
+	"time"
 
+	"github.com/unxed/f4/ffibridge"
 	"github.com/unxed/f4/sdk/f4rpc"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 	"github.com/vmihailenco/msgpack/v5"
 )
+
+// pluginInitTimeout bounds the Plugin.Init handshake. A plugin that never
+// answers must not hang f4's startup: a subprocess can be launched but broken,
+// and a wasm module can be perfectly valid and simply never speak. It is a
+// variable so tests need not wait it out.
+var pluginInitTimeout = 15 * time.Second
+
+// startPluginSession brings a transport's session up: it installs the shared
+// host methods, starts serving, asks the plugin what it provides and registers
+// its drives.
+//
+// Everything a transport does once it has a pair of byte streams lives here,
+// so adding a transport is a matter of producing those streams and nothing
+// else.
+func startPluginSession(sess *f4rpc.Session, api vfs.HostAPI, name string, bridge *ffibridge.Bridge, onServeExit func(error)) error {
+	for method, handler := range newHostMethods(api, sess, name, bridge) {
+		sess.Register(method, handler)
+	}
+
+	go func() {
+		err := sess.Serve()
+		if onServeExit != nil {
+			onServeExit(err)
+		}
+	}()
+
+	var res struct{ Drives []string }
+	done := make(chan error, 1)
+	go func() {
+		done <- sess.Call("Plugin.Init", nil, &res)
+	}()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			return fmt.Errorf("Plugin.Init failed: %w", err)
+		}
+	case <-time.After(pluginInitTimeout):
+		return fmt.Errorf("Plugin.Init timed out after %s", pluginInitTimeout)
+	}
+
+	for _, drive := range res.Drives {
+		driveName := drive // closure capture
+		api.RegisterDrive(driveName, func() vfs.VFS {
+			return NewRPCVFS(sess, driveName)
+		})
+	}
+	return nil
+}
 
 // PluginTransport is the one call shape every plugin transport implements.
 // Out of process it is a MessagePack request over a pipe; embedded it is a
@@ -26,8 +77,16 @@ type PluginTransport interface {
 // something the plugin asked for (a hotkey it registered, a progress task it
 // started). Keeping it an interface is what makes this set of methods shared
 // between transports instead of copied per transport.
-func newHostMethods(api vfs.HostAPI, back PluginTransport, name string) map[string]f4rpc.Handler {
+func newHostMethods(api vfs.HostAPI, back PluginTransport, name string, bridge *ffibridge.Bridge) map[string]f4rpc.Handler {
 	methods := make(map[string]f4rpc.Handler)
+	// A transport that cannot reach native code on its own gets the host's
+	// FFI over the same protocol. A subprocess passes nil: it can dlopen
+	// perfectly well by itself and has no need of a proxy.
+	if bridge != nil {
+		for method, handler := range newFFIHostMethods(bridge, back) {
+			methods[method] = handler
+		}
+	}
 
 	methods["Host.Log"] = func(data msgpack.RawMessage) (any, error) {
 		var msg string

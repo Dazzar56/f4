@@ -32,26 +32,40 @@ func NewLuaPlugin(path string) *LuaPlugin {
 }
 
 // IsLuaEntrypoint reports whether an entrypoint is a bare Lua script that the
-// embedded interpreter can run. An entrypoint with arguments, such as
-// "lua plugin.lua" or ".venv/bin/python main.py", asks for a process and gets
-// one.
+// embedded interpreter can run.
 func IsLuaEntrypoint(entrypoint string) bool {
+	return isBareEntrypointWithExt(entrypoint, ".lua")
+}
+
+// isBareEntrypointWithExt reports whether an entrypoint is a single file with
+// the given extension. An entrypoint with arguments, such as "lua plugin.lua"
+// or ".venv/bin/python main.py", asks for a process and gets one.
+func isBareEntrypointWithExt(entrypoint, ext string) bool {
 	fields := strings.Fields(entrypoint)
 	if len(fields) != 1 {
 		return false
 	}
-	return strings.EqualFold(filepath.Ext(fields[0]), ".lua")
+	return strings.EqualFold(filepath.Ext(fields[0]), ext)
+}
+
+// resolvePluginPath turns an entrypoint into a path, relative to the plugin's
+// own directory when it has one.
+func resolvePluginPath(dir, entrypoint string) string {
+	path := strings.TrimSpace(entrypoint)
+	if dir != "" && !filepath.IsAbs(path) {
+		path = filepath.Join(dir, path)
+	}
+	return path
 }
 
 // newPluginForEntrypoint picks the transport an entrypoint asks for. dir is the
 // plugin's own directory, empty for a plain registered path.
 func newPluginForEntrypoint(dir, entrypoint string) Plugin {
 	if IsLuaEntrypoint(entrypoint) {
-		path := strings.TrimSpace(entrypoint)
-		if dir != "" && !filepath.IsAbs(path) {
-			path = filepath.Join(dir, path)
-		}
-		return NewLuaPlugin(path)
+		return NewLuaPlugin(resolvePluginPath(dir, entrypoint))
+	}
+	if IsWasmEntrypoint(entrypoint) {
+		return NewWasmPlugin(resolvePluginPath(dir, entrypoint))
 	}
 	if dir == "" {
 		return NewRPCPlugin(entrypoint)
@@ -79,7 +93,7 @@ func (p *LuaPlugin) Init(api vfs.HostAPI) error {
 
 	// The host methods must exist before the script body runs: a plugin is
 	// free to log or ask for its version while it is still loading.
-	p.host = newHostMethods(api, p, p.path)
+	p.host = newHostMethods(api, p, p.path, p.bridge)
 
 	if err := runtime.LoadFile(p.path); err != nil {
 		p.Close()
