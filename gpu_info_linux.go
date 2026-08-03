@@ -4,11 +4,14 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 )
 
 var (
@@ -92,19 +95,88 @@ func enumerateLinuxGPUs() []GPUInfo {
 	}
 	// WSL2 fallback. Microsoft's GPU passthrough uses dxgkrnl via
 	// /dev/dxg instead of exposing anything under /sys/class/drm.
-	// If we found nothing above and /dev/dxg is present, at least
-	// tell the user *something* is there rather than hide the
-	// section — the host adapter name would need dxgkio ioctl
-	// plumbing which is out of scope for a display panel.
+	// Ask Windows for the host adapter name(s) through WSL interop:
+	// wmic.exe is on $PATH by default in WSL, sub-second, and gives
+	// the same string dxdiag / Device Manager show.
 	if len(out) == 0 {
 		if _, err := os.Stat("/dev/dxg"); err == nil {
-			out = append(out, GPUInfo{
-				Model:  Msg("InfoPanel.GPUWSLVirt"),
-				Driver: "dxgkrnl",
-			})
+			names := queryHostGPUsFromWSL()
+			if len(names) > 0 {
+				for _, n := range names {
+					out = append(out, GPUInfo{Model: n, Driver: "dxgkrnl"})
+				}
+			} else {
+				// Interop unavailable (Windows LTSC without wmic,
+				// PowerShell blocked, /mnt/c not mounted) — at
+				// least confirm the passthrough is there.
+				out = append(out, GPUInfo{
+					Model:  Msg("InfoPanel.GPUWSLVirt"),
+					Driver: "dxgkrnl",
+				})
+			}
 		}
 	}
 	return out
+}
+
+// queryHostGPUsFromWSL runs a Windows-side query for the host GPU
+// adapter list via WSL interop. Prefers wmic (~250 ms in practice)
+// and falls back to PowerShell (~1.5 s) if wmic is missing —
+// Microsoft has been sunsetting wmic since Server 2012 R2 and
+// removed it from newer LTSC images. Both binaries live on the
+// interop PATH inside WSL by default, so exec.LookPath finds them
+// without any /mnt/c/... hard-coding.
+func queryHostGPUsFromWSL() []string {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	// wmic path win32_videocontroller get name /format:list emits
+	//   Name=<adapter1>\r\n\r\n
+	//   Name=<adapter2>\r\n\r\n
+	// which parses trivially. /format:list is chosen over the
+	// default table format because the latter pads with trailing
+	// spaces and localised column headers.
+	if p, err := exec.LookPath("wmic.exe"); err == nil {
+		out, err := exec.CommandContext(ctx,
+			p, "path", "win32_videocontroller", "get", "name", "/format:list").Output()
+		if err == nil {
+			if names := parseWmicNames(string(out)); len(names) > 0 {
+				return names
+			}
+		}
+	}
+	// PowerShell path prints one adapter name per line.
+	if p, err := exec.LookPath("powershell.exe"); err == nil {
+		out, err := exec.CommandContext(ctx,
+			p, "-NoProfile", "-Command",
+			"(Get-CimInstance Win32_VideoController).Name").Output()
+		if err == nil {
+			var names []string
+			for _, line := range strings.Split(string(out), "\n") {
+				line = strings.TrimSpace(line)
+				if line != "" {
+					names = append(names, line)
+				}
+			}
+			return names
+		}
+	}
+	return nil
+}
+
+func parseWmicNames(out string) []string {
+	var names []string
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "Name=") {
+			continue
+		}
+		v := strings.TrimSpace(strings.TrimPrefix(line, "Name="))
+		if v != "" {
+			names = append(names, v)
+		}
+	}
+	return names
 }
 
 // readDriverFromUevent picks the DRIVER=... line out of a device's
