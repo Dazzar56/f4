@@ -118,6 +118,7 @@ Done:
   deadlocking it; `MacroHost` is the seam that enforces this in one place, and
   is what lets the engine be tested without a terminal. Recorded macros keep
   working and take precedence, as in Far.
+  Documented for users in `MACROS.md`.
 - **Step 4: embedded wasm on wazero.** The guest is a WASI command over stdio,
   so `startPluginSession` in `plughost.go` now holds everything a transport
   does once it has two byte streams, and the wasm transport is just the
@@ -134,6 +135,18 @@ Done:
   available as a later optimisation for heavy data rather than a precondition.
 
 Next, in order:
+- **Step 4c: choosing where `Ctrl+.` records to.** Both macro backends already
+  coexist, recorded ones in `key_macros.ini` and scripted ones in
+  `Macros/scripts`, with recorded winning a shared key as in Far. What is
+  missing is a choice about where a newly recorded macro is stored. Exporting
+  a recording as Lua is the cheap part: a recorded macro is a key sequence, so
+  its body is `action = function() Keys("F5 Enter") end`, built from the
+  events with the existing `EventToFarString`, written as
+  `<area>_<key>.lua` the way Far names its own files, and handed to the
+  running engine with `LoadString` so it works without a restart. The cost is
+  elsewhere: a configuration option and its place in the settings dialog, and
+  deciding what editing or reassigning a recorded macro means once a macro can
+  be either kind. Worth doing; not worth rushing.
 
 - **Step 5: onboarding.** A scaffolder for new plugins, a five minute hello
   world, a PlugRing submission walkthrough, and a rewrite of `PLUGINS.md` and
