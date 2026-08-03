@@ -552,14 +552,46 @@ func ColorerEditorBaseAttr(base uint64) uint64 {
 	return attr
 }
 
+// minColorerLocalMatch keeps the local name comparison from latching onto a
+// two letter fragment of an unrelated region.
+const minColorerLocalMatch = 3
+
+// maxUnresolvedColorerLogs bounds the report of the regions no rule could
+// resolve, so that a file full of them cannot flood the log.
+const maxUnresolvedColorerLogs = 64
+
+var (
+	unresolvedMu    sync.Mutex
+	unresolvedSeen  = make(map[string]bool)
+	unresolvedCount int
+)
+
+// logUnresolvedColorerRegion reports a region that reached no color at all.
+// That is what tells a hole in the recovered hierarchy from a style that
+// genuinely leaves a region alone, and there is no other way to see it from
+// the outside.
+func logUnresolvedColorerRegion(name string) {
+	unresolvedMu.Lock()
+	defer unresolvedMu.Unlock()
+	if unresolvedCount >= maxUnresolvedColorerLogs || unresolvedSeen[name] {
+		return
+	}
+	unresolvedSeen[name] = true
+	unresolvedCount++
+	vtui.DebugLog("COLORER: No color for region %q in the active style", name)
+}
+
 // colorerSchemeStyle resolves a region name through the active color style.
 // Colorer looks the full name up and then walks the region parents declared in
-// the hrc schemas, so that is what happens here as well. Until those have been
-// scanned the old prefix and substring rules stand in for the hierarchy, so
-// that the colors are approximately right from the very first frame.
+// the hrc schemas. The recovered graph is only as complete as the files that
+// could be read, and colorer pulls a good part of its region declarations in
+// through external entities that Go's decoder never expands, so the name based
+// rules stay in place behind the graph rather than instead of it. Everything
+// they reach is another region of the very same style, so a monochrome style
+// stays monochrome; only the built-in color map is out of bounds here.
 func colorerSchemeStyle(name string) (colorerRegionStyle, bool) {
 	nameLower := strings.ToLower(name)
-	parents := ColorerRegionParents()
+	chain := ColorerRegionChain(nameLower)
 
 	schemeMu.Lock()
 	defer schemeMu.Unlock()
@@ -574,29 +606,36 @@ func colorerSchemeStyle(name string) (colorerRegionStyle, bool) {
 	}
 
 	style, found := schemeStyles[nameLower]
-	if !found && parents != nil {
-		current := nameLower
-		for step := 0; step < maxColorerRegionDepth; step++ {
-			parent, known := parents[current]
-			if !known {
-				break
-			}
+	if !found {
+		for _, parent := range chain {
 			if style, found = schemeStyles[parent]; found {
 				break
 			}
-			current = parent
 		}
 	}
-	if !found && parents == nil {
+	if !found {
 		for _, key := range schemeKeys {
 			if strings.HasPrefix(nameLower, key) {
 				style, found = schemeStyles[key], true
 				break
 			}
 		}
-		if !found {
+	}
+	if !found {
+		for _, key := range schemeKeys {
+			if strings.Contains(nameLower, key) {
+				style, found = schemeStyles[key], true
+				break
+			}
+		}
+	}
+	if !found {
+		// A region of a foreign type shares no prefix with the def: keys of a
+		// style, so the local names are compared on their own.
+		if local := colorerRegionLocalName(nameLower); len(local) >= minColorerLocalMatch {
 			for _, key := range schemeKeys {
-				if strings.Contains(nameLower, key) {
+				keyLocal := colorerRegionLocalName(key)
+				if len(keyLocal) >= minColorerLocalMatch && strings.Contains(local, keyLocal) {
 					style, found = schemeStyles[key], true
 					break
 				}
@@ -605,6 +644,7 @@ func colorerSchemeStyle(name string) (colorerRegionStyle, bool) {
 	}
 	if !found {
 		style = colorerRegionStyle{}
+		logUnresolvedColorerRegion(nameLower)
 	}
 
 	schemeMemo[nameLower] = style

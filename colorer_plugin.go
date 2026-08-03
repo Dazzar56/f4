@@ -280,6 +280,7 @@ func newColorerHighlighter(ev *EditorView, filename, firstLine string, fallback 
 		fallback:   fallback,
 		filename:   filename,
 		firstLine:  firstLine,
+		starting:   true,
 		configsDir: ColorerConfigsDir(),
 	}
 	// Colors are resolved through the region parents declared in the schemas,
@@ -290,6 +291,7 @@ func newColorerHighlighter(ev *EditorView, filename, firstLine string, fallback 
 		session, err := acquireColorerSession(ch.configsDir)
 		if err != nil {
 			vtui.DebugLog("COLORER: Failed to init session: %v", err)
+			ch.useFallback(ev)
 			return
 		}
 		selected, sErr := session.SelectType(filename, firstLine)
@@ -299,6 +301,7 @@ func newColorerHighlighter(ev *EditorView, filename, firstLine string, fallback 
 			// all, which is worse than what the fallback engine already shows.
 			// The session goes back to the pool and the switch never happens.
 			releaseColorerSession(session, ch.configsDir)
+			ch.useFallback(ev)
 			return
 		}
 
@@ -318,6 +321,7 @@ func newColorerHighlighter(ev *EditorView, filename, firstLine string, fallback 
 			}
 			ch.fallback = nil
 			ch.session = session
+			ch.starting = false
 			// Nothing the fallback engine produced carries over: its states
 			// mean nothing to Colorer, and no line has been parsed yet.
 			ch.lines = nil
@@ -331,6 +335,21 @@ func newColorerHighlighter(ev *EditorView, filename, firstLine string, fallback 
 	}()
 
 	return ch
+}
+// useFallback hands the file over to the fallback engine once Colorer has said
+// it cannot take it. Nothing is colored until that point, so the states of the
+// plain phase have to go.
+func (ch *ColorerHighlighter) useFallback(ev *EditorView) {
+	vtui.FrameManager.PostTask(func() {
+		if !ch.starting {
+			return
+		}
+		ch.starting = false
+		if ev != nil {
+			ev.invalidateStates(0)
+		}
+		vtui.FrameManager.Redraw()
+	})
 }
 
 type ColorerHighlighter struct {
@@ -346,10 +365,18 @@ type ColorerHighlighter struct {
 	firstLine  string
 	configsDir string
 	closed     bool
+	starting   bool
 }
 
 func (ch *ColorerHighlighter) Highlight(line string, prevState any, baseAttr uint64) ([]uint64, any) {
 	if ch.session == nil {
+		if ch.starting {
+			// The session is still coming up. Painting the whole file with one
+			// engine and repainting it with another a moment later is more
+			// distracting than waiting, so nothing is colored until Colorer
+			// has answered.
+			return nil, nil
+		}
 		if ch.fallback != nil {
 			return ch.fallback.Highlight(line, prevState, baseAttr)
 		}

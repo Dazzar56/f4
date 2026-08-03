@@ -14,13 +14,13 @@ func installColorerTestRegions(t *testing.T, parents map[string]string) {
 	t.Helper()
 
 	hrcMu.Lock()
-	oldParents, oldDir := hrcParents, hrcDir
-	hrcParents, hrcDir = parents, "test"
+	oldParents, oldOrphans, oldDir := hrcParents, hrcOrphans, hrcDir
+	hrcParents, hrcOrphans, hrcDir = parents, nil, "test"
 	hrcMu.Unlock()
 
 	t.Cleanup(func() {
 		hrcMu.Lock()
-		hrcParents, hrcDir = oldParents, oldDir
+		hrcParents, hrcOrphans, hrcDir = oldParents, oldOrphans, oldDir
 		hrcMu.Unlock()
 	})
 }
@@ -65,7 +65,7 @@ func writeColorerHrcFixture(t *testing.T) string {
 }
 
 func TestColorerRegions_ParentsComeFromTheSchemas(t *testing.T) {
-	parents := scanColorerRegions(writeColorerHrcFixture(t))
+	parents, _ := scanColorerRegions(writeColorerHrcFixture(t))
 
 	want := map[string]string{
 		"def:comment":        "def:syntax",
@@ -98,7 +98,7 @@ func TestColorerRegions_UnresolvableParentIsDropped(t *testing.T) {
 		t.Fatalf("Cannot write the schema: %v", err)
 	}
 
-	if parents := scanColorerRegions(base); len(parents) != 0 {
+	if parents, _ := scanColorerRegions(base); len(parents) != 0 {
 		t.Errorf("Expected a parent that belongs to no type to be dropped, got %v", parents)
 	}
 }
@@ -184,5 +184,55 @@ func TestColorerScheme_LabelPrefersTheDescription(t *testing.T) {
 	}
 	if got := colorerSchemeLabel(ColorerScheme{Name: "grayscale"}); got != "grayscale" {
 		t.Errorf("Expected the name as a fallback, got %q", got)
+	}
+}
+func TestColorerRegions_FragmentRegionsAreKeptByLocalName(t *testing.T) {
+	base := filepath.Join(t.TempDir(), "base")
+	if err := os.MkdirAll(filepath.Join(base, "hrc", "gen"), 0755); err != nil {
+		t.Fatalf("Cannot create the fixture directory: %v", err)
+	}
+	// A fragment has no <type> of its own: it is pulled into one through an
+	// external entity, which the decoder never expands.
+	fragment := `<region xmlns="http://colorer.sf.net/2003/hrc" name="php.function" parent="def:FunctionKeyword"/>
+<region xmlns="http://colorer.sf.net/2003/hrc" name="php.const" parent="def:Constant"/>`
+	if err := os.WriteFile(filepath.Join(base, "hrc", "gen", "php-gen.ent.hrc"), []byte(fragment), 0644); err != nil {
+		t.Fatalf("Cannot write the fragment: %v", err)
+	}
+
+	parents, orphans := scanColorerRegions(base)
+	if len(parents) != 0 {
+		t.Errorf("Expected no qualified names from a fragment, got %v", parents)
+	}
+	if got := orphans["php.function"]; got != "def:functionkeyword" {
+		t.Errorf("Expected php.function to be kept, got %q", got)
+	}
+	if got := orphans["php.const"]; got != "def:constant" {
+		t.Errorf("Expected every region of the fragment to be kept, got %q", got)
+	}
+}
+
+func TestColorerScheme_NameRulesRunBehindTheGraph(t *testing.T) {
+	installColorerTestRegions(t, map[string]string{
+		"def:comment": "def:syntax",
+	})
+	installColorerTestScheme(t, map[string]colorerRegionStyle{
+		"def:comment": {fore: 0x123456, hasFore: true},
+	})
+
+	// The graph knows nothing about this one, so the prefix rule has to carry
+	// it. An incomplete graph must not switch the name rules off.
+	if got := vtui.GetRGBFore(getColorerAttr("def:CommentContent", 0)); got != 0x123456 {
+		t.Errorf("Expected the prefix rule to still reach def:Comment, got %06X", got)
+	}
+}
+
+func TestColorerScheme_ForeignTypeMatchesByLocalName(t *testing.T) {
+	installColorerTestRegions(t, map[string]string{})
+	installColorerTestScheme(t, map[string]colorerRegionStyle{
+		"def:tag": {fore: 0x729FCF, hasFore: true},
+	})
+
+	if got := vtui.GetRGBFore(getColorerAttr("html:htmlOpenTag", 0)); got != 0x729FCF {
+		t.Errorf("Expected a foreign tag region to reach def:Tag, got %06X", got)
 	}
 }

@@ -28,20 +28,49 @@ var (
 	hrcMu      sync.Mutex
 	hrcDir     string
 	hrcParents map[string]string
+	hrcOrphans map[string]string
 	hrcLoading bool
 )
 
-// ColorerRegionParents maps a fully qualified region name to its parent, both
-// lower cased. It returns nil while the schemas have not been scanned, and
-// also when the scan found nothing, so that the callers fall back to their
-// approximations instead of painting everything with the base color.
-func ColorerRegionParents() map[string]string {
+// colorerRegionLocalName returns the part of a region name after the type
+// qualifier, which is what identifies a region inside its own schema.
+func colorerRegionLocalName(name string) string {
+	if idx := strings.Index(name, ":"); idx >= 0 {
+		return name[idx+1:]
+	}
+	return name
+}
+
+// ColorerRegionParent returns the parent of a fully qualified, lower cased
+// region name. Colorer keeps a good part of its region declarations in
+// .ent.hrc fragments that are pulled into a <type> through an external entity,
+// and Go's decoder never expands those, so a fragment is read on its own and
+// its regions can only be matched by their local name.
+func ColorerRegionParent(name string) (string, bool) {
 	hrcMu.Lock()
 	defer hrcMu.Unlock()
-	if len(hrcParents) == 0 {
-		return nil
+	if parent, ok := hrcParents[name]; ok {
+		return parent, true
 	}
-	return hrcParents
+	if parent, ok := hrcOrphans[colorerRegionLocalName(name)]; ok && parent != name {
+		return parent, true
+	}
+	return "", false
+}
+
+// ColorerRegionChain lists the parents of a region, the nearest one first.
+func ColorerRegionChain(name string) []string {
+	var chain []string
+	current := name
+	for step := 0; step < maxColorerRegionDepth; step++ {
+		parent, ok := ColorerRegionParent(current)
+		if !ok {
+			break
+		}
+		chain = append(chain, parent)
+		current = parent
+	}
+	return chain
 }
 
 // StartColorerRegionScan builds the region graph of dir in the background. The
@@ -57,15 +86,16 @@ func StartColorerRegionScan(dir string) {
 	hrcMu.Unlock()
 
 	go func() {
-		parents := scanColorerRegions(dir)
+		parents, orphans := scanColorerRegions(dir)
 
 		hrcMu.Lock()
 		hrcParents = parents
+		hrcOrphans = orphans
 		hrcDir = dir
 		hrcLoading = false
 		hrcMu.Unlock()
 
-		vtui.DebugLog("COLORER: Region graph of %q holds %d parents", dir, len(parents))
+		vtui.DebugLog("COLORER: Region graph of %q holds %d parents and %d named regions", dir, len(parents), len(orphans))
 		InvalidateColorerRegionCache()
 		vtui.FrameManager.PostTask(func() {
 			vtui.FrameManager.Redraw()
@@ -78,13 +108,14 @@ func StartColorerRegionScan(dir string) {
 func ResetColorerRegions() {
 	hrcMu.Lock()
 	hrcParents = nil
+	hrcOrphans = nil
 	hrcDir = ""
 	hrcMu.Unlock()
 }
 
 // scanColorerRegions walks the schema tree and returns the region parents it
 // declares.
-func scanColorerRegions(dir string) map[string]string {
+func scanColorerRegions(dir string) (map[string]string, map[string]string) {
 	var types []*colorerHrcType
 	scanned := 0
 
@@ -109,22 +140,43 @@ func scanColorerRegions(dir string) map[string]string {
 	// so the own names are collected first.
 	owned := make(map[string]bool)
 	for _, ht := range types {
+		if ht.name == "" {
+			continue
+		}
 		for name := range ht.regions {
 			owned[qualifyColorerRegion(ht.name, name)] = true
 		}
 	}
 
 	parents := make(map[string]string)
+	orphans := make(map[string]string)
 	for _, ht := range types {
 		for name, parent := range ht.regions {
-			qualified := qualifyColorerRegion(ht.name, name)
+			local := colorerRegionLocalName(strings.ToLower(strings.TrimSpace(name)))
 			resolved := resolveColorerRegionParent(ht, parent, owned)
+
+			if ht.name == "" {
+				// A fragment gives no type to qualify the name with, so only
+				// the parent it declares is of any use.
+				if _, taken := orphans[local]; !taken && resolved != "" {
+					orphans[local] = resolved
+				}
+				continue
+			}
+
+			qualified := qualifyColorerRegion(ht.name, name)
 			if resolved != "" && resolved != qualified {
 				parents[qualified] = resolved
 			}
+			// A region of a type that could not be scanned falls back on the
+			// one of the same local name, so that "go:Comment" still reaches
+			// "def:Comment". The base type always wins that slot.
+			if _, taken := orphans[local]; !taken || strings.EqualFold(ht.name, "def") {
+				orphans[local] = qualified
+			}
 		}
 	}
-	return parents
+	return parents, orphans
 }
 
 // qualifyColorerRegion prefixes a region name with the type that declares it,
@@ -173,6 +225,7 @@ func scanColorerHrcFile(path string) []*colorerHrcType {
 
 	var types []*colorerHrcType
 	var current *colorerHrcType
+	var fragment *colorerHrcType
 	entitiesMap := make(map[string]string)
 
 	dec := xml.NewDecoder(f)
@@ -205,17 +258,26 @@ func scanColorerHrcFile(path string) []*colorerHrcType {
 					current.imports = append(current.imports, imported)
 				}
 			case "region":
-				if current == nil {
-					continue
-				}
 				name := xmlAttr(el, "name")
 				if name == "" {
 					continue
 				}
+				target := current
+				if target == nil {
+					// Region declarations also live in .ent.hrc fragments that
+					// are pulled into a <type> through an external entity. The
+					// decoder never expands those, so the fragment is read on
+					// its own and its regions are kept without a type.
+					if fragment == nil {
+						fragment = &colorerHrcType{regions: make(map[string]string)}
+						types = append(types, fragment)
+					}
+					target = fragment
+				}
 				// The first declaration wins, the way colorer treats a
 				// duplicate region.
-				if _, seen := current.regions[name]; !seen {
-					current.regions[name] = xmlAttr(el, "parent")
+				if _, seen := target.regions[name]; !seen {
+					target.regions[name] = xmlAttr(el, "parent")
 				}
 			}
 		case xml.EndElement:

@@ -165,6 +165,23 @@ func TestColorer_FallbackUntilSessionIsReady(t *testing.T) {
 	}
 }
 
+func TestColorer_PlainWhileTheSessionStartsUp(t *testing.T) {
+	stub := &stubHighlighter{}
+	ch := &ColorerHighlighter{fallback: stub, starting: true}
+
+	attrs, state := ch.Highlight("package main", nil, 0)
+	if attrs != nil || state != nil {
+		t.Errorf("Expected nothing to be colored while the session starts, got %v, %v", attrs, state)
+	}
+	if stub.calls != 0 {
+		t.Errorf("Expected the fallback engine to stay unused, got %d calls", stub.calls)
+	}
+
+	ch.starting = false
+	if _, state := ch.Highlight("package main", nil, 0); state != "stub" {
+		t.Error("Expected the fallback engine to take over once Colorer gave up")
+	}
+}
 func TestColorer_HighlighterNilSession(t *testing.T) {
 	ch := &ColorerHighlighter{
 		session:  nil,
