@@ -71,6 +71,7 @@ type F4Config struct {
 	HighlightDir             bool
 	SavePanelPaths           bool
 	InfoPanelBytes           bool // Ctrl+L info panel: true = raw bytes, false = human (GiB/MiB…)
+	InfoPanelCPUGPU          bool // Ctrl+L info panel: show CPU and GPU sections (off by default)
 	KeepTerminalCursor       bool
 	CommandLineAutoComplete  bool
 	VimHotkeys               bool
@@ -137,6 +138,7 @@ var AppConfig = F4Config{
 	HighlightDir:             true,
 	SavePanelPaths:           true,
 	InfoPanelBytes:           false,
+	InfoPanelCPUGPU:          false,
 	KeepTerminalCursor:       false,
 	CommandLineAutoComplete:  true,
 	VimHotkeys:               false,
@@ -230,6 +232,7 @@ func LoadConfig() {
 	AppConfig.HighlightDir = ini.GetString("Panel", "HighlightDir", "1") == "1"
 	AppConfig.SavePanelPaths = ini.GetString("Panel", "SavePanelPaths", "1") == "1"
 	AppConfig.InfoPanelBytes = ini.GetString("Panel", "InfoPanelBytes", "0") == "1"
+	AppConfig.InfoPanelCPUGPU = ini.GetString("Panel", "InfoPanelCPUGPU", "0") == "1"
 	AppConfig.KeepTerminalCursor = ini.GetString("Panel", "KeepTerminalCursor", "0") == "1"
 	AppConfig.CommandLineAutoComplete = ini.GetString("Panel", "CommandLineAutoComplete", "1") == "1"
 	AppConfig.VimHotkeys = ini.GetString("Panel", "VimHotkeys", "0") == "1"
@@ -325,6 +328,7 @@ func SaveConfig() {
 	sb.WriteString(fmt.Sprintf("HighlightDir = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.HighlightDir]))
 	sb.WriteString(fmt.Sprintf("SavePanelPaths = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.SavePanelPaths]))
 	sb.WriteString(fmt.Sprintf("InfoPanelBytes = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.InfoPanelBytes]))
+	sb.WriteString(fmt.Sprintf("InfoPanelCPUGPU = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.InfoPanelCPUGPU]))
 	sb.WriteString(fmt.Sprintf("KeepTerminalCursor = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.KeepTerminalCursor]))
 	sb.WriteString(fmt.Sprintf("CommandLineAutoComplete = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.CommandLineAutoComplete]))
 	sb.WriteString(fmt.Sprintf("VimHotkeys = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.VimHotkeys]))
