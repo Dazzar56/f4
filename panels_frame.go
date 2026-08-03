@@ -1816,6 +1816,29 @@ func (pf *PanelsFrame) HandleBroadcast(cmd int, args any) bool {
 	return pf.BaseFrame.HandleBroadcast(cmd, args)
 }
 
+// hitAltPanel returns the index (0 or 1) of the alt panel whose
+// on-screen area contains (mx, my), or -1 if none. Respects the
+// per-side hidden flags so a click over a hidden slot doesn't
+// accidentally target its ghost alt panel.
+func (pf *PanelsFrame) hitAltPanel(mx, my int) int {
+	for i, a := range pf.altPanels {
+		if a == nil {
+			continue
+		}
+		if i == 0 && !pf.showLeftPanel {
+			continue
+		}
+		if i == 1 && !pf.showRightPanel {
+			continue
+		}
+		x1, y1, x2, y2 := a.GetPosition()
+		if mx >= x1 && mx <= x2 && my >= y1 && my <= y2 {
+			return i
+		}
+	}
+	return -1
+}
+
 func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 	// If panels are hidden, route relevant mouse events to PTY immediately
 	if !pf.showPanels {
@@ -1847,22 +1870,9 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 	// Wheel events fall through to the wheel branch and its
 	// normal alt-panel-first routing.
 	if pf.showPanels && e.ButtonState != 0 {
-		for i, a := range pf.altPanels {
-			if a == nil {
-				continue
-			}
-			if i == 0 && !pf.showLeftPanel {
-				continue
-			}
-			if i == 1 && !pf.showRightPanel {
-				continue
-			}
-			x1, y1, x2, y2 := a.GetPosition()
-			if mx < x1 || mx > x2 || my < y1 || my > y2 {
-				continue
-			}
-			// Click on an alt panel activates its side, same as a
-			// click on a file panel does.
+		if i := pf.hitAltPanel(mx, my); i >= 0 {
+			// Click on an alt panel activates its side, same as
+			// a click on a file panel does.
 			if pf.activeIdx != i {
 				pf.activeIdx = i
 				pf.lastKey = 0
@@ -1871,7 +1881,7 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 			// Give the alt panel a chance to handle it (future
 			// row-picking, etc.); return true either way — the
 			// event does not fall through.
-			a.ProcessMouse(e)
+			pf.altPanels[i].ProcessMouse(e)
 			return true
 		}
 	}
