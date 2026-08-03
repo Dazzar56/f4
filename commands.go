@@ -13,10 +13,14 @@ const (
 	CmBackground
 	CmMkDir
 	CmNew
+	CmLeftBrief
 	CmLeftMedium
 	CmLeftDetailed
+	CmLeftWide
+	CmRightBrief
 	CmRightMedium
 	CmRightDetailed
+	CmRightWide
 	CmFileChanged
 	CmFindFile
 	CmSortName

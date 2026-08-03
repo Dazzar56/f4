@@ -370,11 +370,19 @@ func SetupUI() {
 		rp := panels.panels[1].(*FileSystemPanel)
 
 		// Восстанавливаем режимы отображения и типы сортировки панелей
-		lp.viewMode = ViewMode(LastLeftViewMode)
+		leftMode := ViewMode(LastLeftViewMode)
+		if leftMode != ViewModeMedium && leftMode != ViewModeDetailed && leftMode != ViewModeBrief {
+			leftMode = ViewModeMedium
+		}
+		lp.SetViewMode(leftMode)
 		lp.sortMode = SortMode(LastLeftSortMode)
 		lp.sortReverse = LastLeftSortRev
 
-		rp.viewMode = ViewMode(LastRightViewMode)
+		rightMode := ViewMode(LastRightViewMode)
+		if rightMode != ViewModeMedium && rightMode != ViewModeDetailed && rightMode != ViewModeBrief {
+			rightMode = ViewModeMedium
+		}
+		rp.SetViewMode(rightMode)
 		rp.sortMode = SortMode(LastRightSortMode)
 		rp.sortReverse = LastRightSortRev
 
@@ -401,6 +409,12 @@ func SetupUI() {
 		panels.showPanels = LastShowPanels
 		panels.showLeftPanel = LastShowLeft
 		panels.showRightPanel = LastShowRight
+		if LastWidePanel == 0 || LastWidePanel == 1 {
+			panels.widePanel = LastWidePanel
+			panels.activeIdx = LastWidePanel
+			panels.showPanels = true
+		}
+		panels.ResizeConsole(width, height)
 	}
 	vtui.FrameManager.Push(panels)
 
@@ -467,6 +481,11 @@ func LoadSession() {
 	// Восстанавливаем глобальное состояние сессии
 	activeStr := ini.GetString("Session", "ActivePanel", "1")
 	fmt.Sscanf(activeStr, "%d", &LastActivePanel)
+	LastWidePanel = -1
+	fmt.Sscanf(ini.GetString("Session", "WidePanel", "-1"), "%d", &LastWidePanel)
+	if LastWidePanel < -1 || LastWidePanel > 1 {
+		LastWidePanel = -1
+	}
 	LastShowPanels = ini.GetString("Session", "ShowPanels", "1") == "1"
 	LastShowLeft = ini.GetString("Session", "ShowLeft", "1") == "1"
 	LastShowRight = ini.GetString("Session", "ShowRight", "1") == "1"
@@ -496,6 +515,7 @@ func SaveSession() {
 				if pf, ok := f.(*PanelsFrame); ok {
 					LastLeftPath, LastRightPath = pf.GetPaths()
 					LastActivePanel = pf.activeIdx
+					LastWidePanel = pf.widePanel
 					LastShowPanels = pf.showPanels
 					LastShowLeft = pf.showLeftPanel
 					LastShowRight = pf.showRightPanel
@@ -532,6 +552,7 @@ func SaveSession() {
 
 	sb.WriteString("\n[Session]\n")
 	sb.WriteString(fmt.Sprintf("ActivePanel = %d\n", LastActivePanel))
+	sb.WriteString(fmt.Sprintf("WidePanel = %d\n", LastWidePanel))
 	sb.WriteString(fmt.Sprintf("ShowPanels = %d\n", map[bool]int{true: 1, false: 0}[LastShowPanels]))
 	sb.WriteString(fmt.Sprintf("ShowLeft = %d\n", map[bool]int{true: 1, false: 0}[LastShowLeft]))
 	sb.WriteString(fmt.Sprintf("ShowRight = %d\n", map[bool]int{true: 1, false: 0}[LastShowRight]))

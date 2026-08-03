@@ -25,6 +25,7 @@ var (
 	LastLeftCursor   = ""
 	LastRightCursor  = ""
 	LastActivePanel  = 1
+	LastWidePanel    = -1
 
 	LastLeftViewMode  = 0
 	LastRightViewMode = 0
@@ -1670,7 +1671,7 @@ func actionFindFile(pf *PanelsFrame) {
 	vtui.FrameManager.Push(dlg)
 }
 func actionPanelSettings(pf *PanelsFrame) {
-	dlg := vtui.NewCenteredDialog(60, 25, Msg("PanelSettings.Title"))
+	dlg := vtui.NewCenteredDialog(60, 27, Msg("PanelSettings.Title"))
 	dlg.ShowClose = true
 
 	chkHidden := vtui.NewCheckbox(0, 0, Msg("PanelSettings.ShowHidden"), false)
@@ -1683,6 +1684,11 @@ func actionPanelSettings(pf *PanelsFrame) {
 	chkHighlight.State = 0
 	if AppConfig.HighlightDir {
 		chkHighlight.State = 1
+	}
+
+	chkSeparateExtensions := vtui.NewCheckbox(0, 0, Msg("PanelSettings.SeparateExtensions"), false)
+	if AppConfig.SeparateFileExtensions {
+		chkSeparateExtensions.State = 1
 	}
 
 	chkPaths := vtui.NewCheckbox(0, 0, Msg("PanelSettings.SavePaths"), false)
@@ -1740,6 +1746,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 
 	dlg.AddItem(chkHidden)
 	dlg.AddItem(chkHighlight)
+	dlg.AddItem(chkSeparateExtensions)
 	dlg.AddItem(chkPaths)
 	dlg.AddItem(chkCmdAc)
 	dlg.AddItem(chkVim)
@@ -1753,9 +1760,10 @@ func actionPanelSettings(pf *PanelsFrame) {
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnCancel)
 
-	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 54-4, 25-4)
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 54-4, 27-4)
 	vbox.Add(chkHidden, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkHighlight, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	vbox.Add(chkSeparateExtensions, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(chkPaths, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(chkCmdAc, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(chkVim, vtui.Margins{Top: 1}, vtui.AlignLeft)
@@ -1787,6 +1795,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 	btnOk.OnClick = func() {
 		AppConfig.ShowHiddenFiles = chkHidden.State == 1
 		AppConfig.HighlightDir = chkHighlight.State == 1
+		AppConfig.SeparateFileExtensions = chkSeparateExtensions.State == 1
 		AppConfig.SavePanelPaths = chkPaths.State == 1
 		AppConfig.CommandLineAutoComplete = chkCmdAc.State == 1
 		AppConfig.VimHotkeys = chkVim.State == 1

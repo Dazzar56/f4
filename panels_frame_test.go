@@ -691,6 +691,15 @@ func TestPanelsFrame_MenuCommands(t *testing.T) {
 		t.Error("Right panel mode not changed to Detailed")
 	}
 
+	for _, menuIndex := range []int{0, 4} {
+		items := pf.menuBar.Items[menuIndex].SubItems
+		for i, shortcut := range []string{"Ctrl+1", "Ctrl+2", "Ctrl+3", "Ctrl+4"} {
+			if items[i].Shortcut != shortcut {
+				t.Errorf("view shortcut %d in menu %d = %q, want %s", i, menuIndex, items[i].Shortcut, shortcut)
+			}
+		}
+	}
+
 	// Sort mode commands
 	pf.HandleCommand(CmLeftSortTime, nil)
 	if pf.panels[0].(*FileSystemPanel).sortMode != SortTime {
@@ -703,11 +712,11 @@ func TestPanelsFrame_MenuCommands(t *testing.T) {
 	}
 
 	// Menu checkmarks
-	menuText := pf.menuBar.Items[0].SubItems[1].Text
+	menuText := pf.menuBar.Items[0].SubItems[2].Text
 	if !strings.HasPrefix(menuText, "√") {
 		t.Errorf("Menu checkmark not updated, got %q", menuText)
 	}
-	sortText := pf.menuBar.Items[0].SubItems[5].Text
+	sortText := pf.menuBar.Items[0].SubItems[7].Text
 	if !strings.HasPrefix(sortText, "√") {
 		t.Errorf("Sort menu checkmark not updated, got %q", sortText)
 	}
@@ -1324,6 +1333,29 @@ func TestPanelsFrame_SwapPanels(t *testing.T) {
 	// 4. Verify state preservation
 	if fspR.viewMode != ViewModeMedium {
 		t.Error("Swapped panel did not preserve its ViewMode")
+	}
+}
+
+func TestPanelsFrame_WideFollowsSwapAndClone(t *testing.T) {
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	left := pf.panels[0]
+	pf.setWidePanel(0)
+
+	pf.HandleCommand(CmSwapPanels, nil)
+	if pf.widePanel != 1 || pf.activeIdx != 1 || pf.panels[1] != left {
+		t.Fatalf("Wide did not follow swapped content: wide=%d active=%d", pf.widePanel, pf.activeIdx)
+	}
+
+	clone := pf.Clone()
+	defer clone.Close()
+	if clone.widePanel != 1 || clone.activeIdx != 1 {
+		t.Fatalf("clone lost Wide state: wide=%d active=%d", clone.widePanel, clone.activeIdx)
+	}
+	x1, _, x2, _ := clone.panels[1].GetPosition()
+	if x1 != 0 || x2 != 79 {
+		t.Fatalf("cloned Wide geometry = %d..%d, want 0..79", x1, x2)
 	}
 }
 func TestPanelsFrame_Clone_SelectionPreservation(t *testing.T) {
@@ -3396,7 +3428,7 @@ func TestPanelsFrame_CtrlPgDn_EntersDir(t *testing.T) {
 	}
 }
 
-func TestPanelsFrame_Ctrl1AndCtrl2_ViewModes(t *testing.T) {
+func TestPanelsFrame_CtrlViewModes(t *testing.T) {
 	vtui.SetDefaultPalette()
 	scr := vtui.NewSilentScreenBuf()
 	scr.AllocBuf(80, 25)
@@ -3412,28 +3444,40 @@ func TestPanelsFrame_Ctrl1AndCtrl2_ViewModes(t *testing.T) {
 	// 1. Изначально устанавливаем режим Medium
 	fsp.SetViewMode(ViewModeMedium)
 
-	// 2. Отправляем Ctrl+2 -> должен переключить на Detailed
-	pf.ProcessKey(&vtinput.InputEvent{
-		Type:            vtinput.KeyEventType,
-		KeyDown:         true,
-		VirtualKeyCode:  '2',
-		ControlKeyState: vtinput.LeftCtrlPressed,
-	})
-
-	if fsp.viewMode != ViewModeDetailed {
-		t.Errorf("Expected viewMode to be Detailed, got %v", fsp.viewMode)
+	for _, tc := range []struct {
+		key  uint16
+		mode ViewMode
+	}{{'1', ViewModeBrief}, {'2', ViewModeMedium}, {'3', ViewModeDetailed}} {
+		pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: tc.key, ControlKeyState: vtinput.LeftCtrlPressed})
+		if fsp.viewMode != tc.mode || pf.widePanel != -1 {
+			t.Errorf("Ctrl+%c: mode=%v wide=%d, want mode=%v wide=-1", tc.key, fsp.viewMode, pf.widePanel, tc.mode)
+		}
 	}
 
-	// 3. Отправляем Ctrl+1 -> должен переключить обратно на Medium
-	pf.ProcessKey(&vtinput.InputEvent{
-		Type:            vtinput.KeyEventType,
-		KeyDown:         true,
-		VirtualKeyCode:  '1',
-		ControlKeyState: vtinput.LeftCtrlPressed,
-	})
-
-	if fsp.viewMode != ViewModeMedium {
-		t.Errorf("Expected viewMode to be Medium, got %v", fsp.viewMode)
+	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: '4', ControlKeyState: vtinput.LeftCtrlPressed})
+	if pf.widePanel != pf.activeIdx || !fsp.wide || len(fsp.table.Columns) != 3 {
+		t.Fatalf("Ctrl+4 did not enter Wide: wide=%d active=%d columns=%d", pf.widePanel, pf.activeIdx, len(fsp.table.Columns))
+	}
+	x1, _, x2, _ := fsp.GetPosition()
+	if x1 != 0 || x2 != 79 {
+		t.Fatalf("Wide geometry = %d..%d, want 0..79", x1, x2)
+	}
+	originalMode := fsp.viewMode
+	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_TAB})
+	if pf.widePanel != pf.activeIdx || pf.activeIdx != 0 {
+		t.Fatalf("Tab did not transfer Wide to left panel: wide=%d active=%d", pf.widePanel, pf.activeIdx)
+	}
+	if fsp.viewMode != originalMode {
+		t.Error("Wide changed the right panel's normal view mode")
+	}
+	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: '2', ControlKeyState: vtinput.LeftCtrlPressed})
+	if pf.widePanel != -1 || pf.panels[0].(*FileSystemPanel).viewMode != ViewModeMedium {
+		t.Error("Ctrl+2 did not leave Wide and set Medium on the active panel")
+	}
+	_, _, leftX2, _ := pf.panels[0].GetPosition()
+	rightX1, _, _, _ := pf.panels[1].GetPosition()
+	if leftX2+1 != rightX1 {
+		t.Errorf("split geometry was not restored: left x2=%d right x1=%d", leftX2, rightX1)
 	}
 }
 

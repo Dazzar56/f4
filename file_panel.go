@@ -30,29 +30,53 @@ type mediumRow struct {
 	r  int
 }
 
+type panelEntryRow struct {
+	fp    *FileSystemPanel
+	entry *fileEntry
+}
+
+func (r *panelEntryRow) GetCellText(col int) string {
+	if col == 0 && len(r.fp.table.Columns) > 0 {
+		return formatPanelFileName(r.entry, r.fp.table.Columns[0].Width)
+	}
+	return r.entry.GetCellText(col)
+}
+
+func (r *panelEntryRow) IsSelected() bool {
+	return r.entry.IsSelected()
+}
+
+func (r *panelEntryRow) GetCellAttr(col int, defaultAttr uint64) uint64 {
+	return r.entry.GetCellAttr(col, defaultAttr)
+}
+
 func (m *mediumRow) GetCellText(col int) string {
 	H := m.fp.table.ViewHeight
 	if H <= 0 {
 		H = 1
 	}
-	idx := m.r
-	if col == 1 {
-		idx += H
-	}
+	idx := m.r + col*H
 	if idx >= len(m.fp.entries) {
 		return ""
 	}
 	e := m.fp.entries[idx]
-	if e.Name == ".." {
+	width := 0
+	if col >= 0 && col < len(m.fp.table.Columns) {
+		width = m.fp.table.Columns[col].Width
+	}
+	return formatPanelFileName(e, width)
+}
+
+func (f *fileEntry) displayName(name string) string {
+	if f.Name == ".." {
 		return ".."
 	}
-	name := e.Name
-	marker := GlobalFileHighlighter.GetMarker(&e.VFSItem)
+	marker := GlobalFileHighlighter.GetMarker(&f.VFSItem)
 	if marker != "" {
 		name = marker + " " + name
 	}
 
-	if e.IsDir {
+	if f.IsDir {
 		if AppConfig.HighlightDir {
 			return name
 		}
@@ -61,15 +85,43 @@ func (m *mediumRow) GetCellText(col int) string {
 	return name
 }
 
+func splitFileExtension(name string) (string, string) {
+	lastDot := strings.LastIndex(name, ".")
+	if lastDot <= 0 || lastDot == len(name)-1 {
+		return name, ""
+	}
+	return name[:lastDot], name[lastDot+1:]
+}
+
+func formatPanelFileName(entry *fileEntry, width int) string {
+	if !AppConfig.SeparateFileExtensions || entry.IsDir || entry.Name == ".." || width <= 0 {
+		return entry.displayName(entry.Name)
+	}
+	base, extension := splitFileExtension(entry.Name)
+	if extension == "" {
+		return entry.displayName(entry.Name)
+	}
+
+	extensionWidth := runewidth.StringWidth(extension)
+	extensionFieldWidth := extensionWidth
+	if extensionFieldWidth < 3 {
+		extensionFieldWidth = 3
+	}
+	extensionText := extension + strings.Repeat(" ", extensionFieldWidth-extensionWidth)
+	if extensionFieldWidth >= width {
+		return runewidth.Truncate(extensionText, width, "")
+	}
+	left := runewidth.Truncate(entry.displayName(base), width-extensionFieldWidth-1, "")
+	padding := width - runewidth.StringWidth(left) - extensionFieldWidth
+	return left + strings.Repeat(" ", padding) + extensionText
+}
+
 func (m *mediumRow) IsColSelected(col int) bool {
 	H := m.fp.table.ViewHeight
 	if H <= 0 {
 		H = 1
 	}
-	idx := m.r
-	if col == 1 {
-		idx += H
-	}
+	idx := m.r + col*H
 	if idx >= len(m.fp.entries) {
 		return false
 	}
@@ -80,10 +132,7 @@ func (m *mediumRow) GetCellAttr(col int, defaultAttr uint64) uint64 {
 	if H <= 0 {
 		H = 1
 	}
-	idx := m.r
-	if col == 1 {
-		idx += H
-	}
+	idx := m.r + col*H
 	if idx >= len(m.fp.entries) {
 		return defaultAttr
 	}
@@ -108,6 +157,8 @@ type ViewMode int
 const (
 	ViewModeMedium ViewMode = iota
 	ViewModeDetailed
+	ViewModeBrief
+	ViewModeWide
 )
 
 type SortMode int
@@ -127,21 +178,7 @@ func (f *fileEntry) IsSelected() bool {
 func (f *fileEntry) GetCellText(col int) string {
 	switch col {
 	case 0:
-		if f.Name == ".." {
-			return ".."
-		}
-		name := f.Name
-		marker := GlobalFileHighlighter.GetMarker(&f.VFSItem)
-		if marker != "" {
-			name = marker + " " + name
-		}
-		if f.IsDir {
-			if AppConfig.HighlightDir {
-				return name
-			}
-			return string(os.PathSeparator) + name
-		}
-		return name
+		return f.displayName(f.Name)
 	case 1:
 		if f.IsDir {
 			if f.SizeCalculated {
@@ -153,6 +190,11 @@ func (f *fileEntry) GetCellText(col int) string {
 			return ""
 		}
 		return formatIntWithSpaces(f.Size)
+	case 2:
+		if f.MTime.IsZero() {
+			return ""
+		}
+		return f.MTime.Format("02.01.06 15:04")
 	}
 	return ""
 }
@@ -187,6 +229,7 @@ type FileSystemPanel struct {
 	entries             []*fileEntry
 	selectedItems       map[string]bool
 	viewMode            ViewMode
+	wide                bool
 	cursorIdx           int
 	lastRightClickedIdx int
 
@@ -352,14 +395,47 @@ func (fp *FileSystemPanel) sortEntries() {
 }
 
 func (fp *FileSystemPanel) SetViewMode(mode ViewMode) {
+	if mode == ViewModeWide {
+		fp.SetWide(true)
+		return
+	}
 	fp.viewMode = mode
-	if mode == ViewModeMedium {
+	fp.wide = false
+	fp.configureCellSelection()
+	fp.Resize(fp.X2-fp.X1+1, fp.Y2-fp.Y1+1)
+}
+
+func (fp *FileSystemPanel) SetWide(wide bool) {
+	fp.wide = wide
+	fp.configureCellSelection()
+	fp.Resize(fp.X2-fp.X1+1, fp.Y2-fp.Y1+1)
+}
+
+func (fp *FileSystemPanel) effectiveViewMode() ViewMode {
+	if fp.wide {
+		return ViewModeWide
+	}
+	return fp.viewMode
+}
+
+func (fp *FileSystemPanel) gridColumnCount() int {
+	switch fp.effectiveViewMode() {
+	case ViewModeBrief:
+		return 3
+	case ViewModeMedium:
+		return 2
+	default:
+		return 1
+	}
+}
+
+func (fp *FileSystemPanel) configureCellSelection() {
+	if fp.gridColumnCount() > 1 {
 		fp.table.CellSelection = true
 	} else {
 		fp.table.CellSelection = false
 		fp.table.SelectCol = 0
 	}
-	fp.Resize(fp.X2-fp.X1+1, fp.Y2-fp.Y1+1)
 }
 
 func (fp *FileSystemPanel) GetCursorIndex() int {
@@ -386,7 +462,7 @@ func (fp *FileSystemPanel) SetCursorIndex(idx int) {
 	fp.cursorIdx = idx
 
 	// Sync table visual state
-	if fp.viewMode == ViewModeDetailed {
+	if fp.gridColumnCount() == 1 {
 		fp.table.SetSelectPos(fp.cursorIdx)
 		fp.table.SelectCol = 0
 		if fp.fastFindMode {
@@ -407,15 +483,15 @@ func (fp *FileSystemPanel) SetCursorIndex(idx int) {
 		// 1. Ensure TopPos is sane for the current cursor
 		if fp.cursorIdx < fp.table.TopPos {
 			fp.table.TopPos = fp.cursorIdx
-		} else if fp.cursorIdx >= fp.table.TopPos+2*H {
-			fp.table.TopPos = fp.cursorIdx - 2*H + 1
+		} else if fp.cursorIdx >= fp.table.TopPos+fp.gridColumnCount()*H {
+			fp.table.TopPos = fp.cursorIdx - fp.gridColumnCount()*H + 1
 		}
 
 		// Far-style 2-column scrolling: ensure cursorIdx is in [TopPos, TopPos + 2*H)
 		if fp.cursorIdx < fp.table.TopPos {
 			fp.table.TopPos = fp.cursorIdx
-		} else if fp.cursorIdx >= fp.table.TopPos+2*H {
-			fp.table.TopPos = fp.cursorIdx - 2*H + 1
+		} else if fp.cursorIdx >= fp.table.TopPos+fp.gridColumnCount()*H {
+			fp.table.TopPos = fp.cursorIdx - fp.gridColumnCount()*H + 1
 		}
 
 		if fp.fastFindMode && H > 2 {
@@ -791,10 +867,10 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 
 func (fp *FileSystemPanel) Refresh() {
 	idx := fp.GetCursorIndex()
-	if fp.viewMode == ViewModeDetailed {
+	if fp.gridColumnCount() == 1 {
 		rows := make([]vtui.TableRow, len(fp.entries))
 		for i, e := range fp.entries {
-			rows[i] = e
+			rows[i] = &panelEntryRow{fp: fp, entry: e}
 		}
 		fp.table.SetRows(rows)
 	} else {
@@ -992,7 +1068,18 @@ func (fp *FileSystemPanel) SetPosition(x1, y1, x2, y2 int) {
 func (fp *FileSystemPanel) Resize(w, h int) {
 	fp.SetPosition(fp.X1, fp.Y1, fp.X1+w-1, fp.Y1+h-1)
 
-	if fp.viewMode == ViewModeDetailed {
+	switch fp.effectiveViewMode() {
+	case ViewModeWide:
+		nameW := w - 2 - 2 - 12 - 14
+		if nameW < 1 {
+			nameW = 1
+		}
+		fp.table.Columns = []vtui.TableColumn{
+			{Title: Msg("Panel.Column.Name"), Width: nameW},
+			{Title: Msg("Panel.Column.Size"), Width: 12, Alignment: vtui.AlignRight},
+			{Title: Msg("Panel.Column.Modified"), Width: 14},
+		}
+	case ViewModeDetailed:
 		nameW := w - 15 - 2
 		if nameW < 5 {
 			nameW = 5
@@ -1001,15 +1088,23 @@ func (fp *FileSystemPanel) Resize(w, h int) {
 			{Title: Msg("Panel.Column.Name"), Width: nameW},
 			{Title: Msg("Panel.Column.Size"), Width: 12, Alignment: vtui.AlignRight},
 		}
-	} else {
-		colW := (w - 2 - 1) / 2 // 2 borders, 1 separator
-		if colW < 5 {
-			colW = 5
+	default:
+		columnCount := fp.gridColumnCount()
+		available := w - 2 - (columnCount - 1)
+		if available < columnCount {
+			available = columnCount
 		}
-		fp.table.Columns = []vtui.TableColumn{
-			{Title: Msg("Panel.Column.Name"), Width: colW},
-			{Title: Msg("Panel.Column.Name"), Width: w - 2 - colW - 1},
+		columns := make([]vtui.TableColumn, columnCount)
+		remaining := available
+		for i := range columns {
+			width := remaining / (columnCount - i)
+			if width < 1 {
+				width = 1
+			}
+			columns[i] = vtui.TableColumn{Title: Msg("Panel.Column.Name"), Width: width}
+			remaining -= width
 		}
+		fp.table.Columns = columns
 	}
 	fp.Refresh()
 }
@@ -1103,7 +1198,7 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 			H = 1
 		}
 
-		if fp.viewMode == ViewModeMedium {
+		if columns := fp.gridColumnCount(); columns > 1 {
 			switch e.VirtualKeyCode {
 			case vtinput.VK_UP:
 				idx--
@@ -1114,9 +1209,9 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 			case vtinput.VK_RIGHT:
 				idx += H
 			case vtinput.VK_PRIOR:
-				idx -= H * 2
+				idx -= H * columns
 			case vtinput.VK_NEXT:
-				idx += H * 2
+				idx += H * columns
 			case vtinput.VK_HOME:
 				idx = 0
 			case vtinput.VK_END:
@@ -1246,7 +1341,7 @@ func (fp *FileSystemPanel) ProcessMouse(e *vtinput.InputEvent) bool {
 			H = 1
 		}
 
-		if fp.viewMode == ViewModeDetailed {
+		if fp.gridColumnCount() == 1 {
 			// Detailed view (1-column)
 			idx := fp.GetCursorIndex()
 			newIdx := idx + direction
@@ -1275,7 +1370,7 @@ func (fp *FileSystemPanel) ProcessMouse(e *vtinput.InputEvent) bool {
 			fp.Refresh()
 			return true
 		} else {
-			// Medium/Brief view (2-column)
+			// Medium/Brief grid view.
 			idx := fp.GetCursorIndex()
 			newIdx := idx + direction
 			if newIdx < 0 {
@@ -1287,7 +1382,7 @@ func (fp *FileSystemPanel) ProcessMouse(e *vtinput.InputEvent) bool {
 
 			// Scroll the list if possible, keeping the cursor visually stable
 			newTop := fp.table.TopPos + direction
-			maxTop := len(fp.entries) - 2*H
+			maxTop := len(fp.entries) - fp.gridColumnCount()*H
 			if maxTop < 0 {
 				maxTop = 0
 			}
@@ -1308,7 +1403,7 @@ func (fp *FileSystemPanel) ProcessMouse(e *vtinput.InputEvent) bool {
 	handled := fp.table.ProcessMouse(e)
 	if handled {
 		// Sync absolute index from table's visual selection
-		if fp.viewMode == ViewModeDetailed {
+		if fp.gridColumnCount() == 1 {
 			fp.cursorIdx = fp.table.SelectPos
 		} else {
 			H := fp.table.ViewHeight

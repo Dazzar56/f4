@@ -33,6 +33,7 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	AppConfig.EditorCrosshair = true
 	AppConfig.EditorColorerBackground = false
 	AppConfig.CommandLineAutoComplete = false
+	AppConfig.SeparateFileExtensions = true
 
 	// 2. Save
 	SaveConfig()
@@ -43,6 +44,7 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	AppConfig.HighlightDir = false
 	AppConfig.EditorCrosshair = false
 	AppConfig.EditorColorerBackground = true
+	AppConfig.SeparateFileExtensions = false
 
 	// 4. Load
 	LoadConfig()
@@ -68,6 +70,9 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	}
 	if AppConfig.CommandLineAutoComplete {
 		t.Error("LoadConfig failed to restore CommandLineAutoComplete")
+	}
+	if !AppConfig.SeparateFileExtensions {
+		t.Error("LoadConfig failed to restore SeparateFileExtensions")
 	}
 }
 

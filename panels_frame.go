@@ -116,6 +116,7 @@ type PanelsFrame struct {
 	showPanels     bool
 	showLeftPanel  bool
 	showRightPanel bool
+	widePanel      int // -1 for normal split, 0/1 for the slot occupying the full width
 	lastW          int
 	lastH          int
 
@@ -157,7 +158,7 @@ func (pf *PanelsFrame) Active() Panel  { return pf.panels[pf.activeIdx] }
 func (pf *PanelsFrame) Passive() Panel { return pf.panels[1-pf.activeIdx] }
 
 func NewPanelsFrame() *PanelsFrame {
-	pf := &PanelsFrame{activeIdx: 1}
+	pf := &PanelsFrame{activeIdx: 1, widePanel: -1}
 	pf.SetHelp("Panels")
 	pf.showKeyBar = true
 	pf.showPanels = true
@@ -173,8 +174,10 @@ func NewPanelsFrame() *PanelsFrame {
 	pf.menuBar.Items = []vtui.MenuBarItem{
 		// Using Command routing (TV style) instead of hardcoded indices
 		{Label: "&" + Msg("Menu.Left"), SubItems: []vtui.MenuItem{
-			{Text: "&" + Msg("Menu.Left.Medium"), Command: CmLeftMedium},
-			{Text: "&" + Msg("Menu.Left.Detailed"), Command: CmLeftDetailed},
+			{Text: "&" + Msg("Menu.Left.Brief"), Shortcut: "Ctrl+1", Command: CmLeftBrief},
+			{Text: "&" + Msg("Menu.Left.Medium"), Shortcut: "Ctrl+2", Command: CmLeftMedium},
+			{Text: "&" + Msg("Menu.Left.Detailed"), Shortcut: "Ctrl+3", Command: CmLeftDetailed},
+			{Text: "&" + Msg("Menu.Left.Wide"), Shortcut: "Ctrl+4", Command: CmLeftWide},
 			{Separator: true},
 			{Text: "&" + Msg("Menu.SortName"), Shortcut: "Ctrl+F3", Command: CmLeftSortName},
 			{Text: "&" + Msg("Menu.SortExt"), Shortcut: "Ctrl+F4", Command: CmLeftSortExt},
@@ -215,8 +218,10 @@ func NewPanelsFrame() *PanelsFrame {
 			{Text: "f4 Plug&Ring", Command: CmPlugRing},
 		}},
 		{Label: "&" + Msg("Menu.Right"), SubItems: []vtui.MenuItem{
-			{Text: "&" + Msg("Menu.Left.Medium"), Command: CmRightMedium},
-			{Text: "&" + Msg("Menu.Left.Detailed"), Command: CmRightDetailed},
+			{Text: "&" + Msg("Menu.Left.Brief"), Shortcut: "Ctrl+1", Command: CmRightBrief},
+			{Text: "&" + Msg("Menu.Left.Medium"), Shortcut: "Ctrl+2", Command: CmRightMedium},
+			{Text: "&" + Msg("Menu.Left.Detailed"), Shortcut: "Ctrl+3", Command: CmRightDetailed},
+			{Text: "&" + Msg("Menu.Left.Wide"), Shortcut: "Ctrl+4", Command: CmRightWide},
 			{Separator: true},
 			{Text: "&" + Msg("Menu.SortName"), Shortcut: "Ctrl+F3", Command: CmRightSortName},
 			{Text: "&" + Msg("Menu.SortExt"), Shortcut: "Ctrl+F4", Command: CmRightSortExt},
@@ -282,6 +287,9 @@ func (pf *PanelsFrame) updateMenuCheckmarks() {
 	if pf.panels[0] == nil || pf.panels[1] == nil || pf.menuBar == nil || len(pf.menuBar.Items) < 5 {
 		return
 	}
+	if len(pf.menuBar.Items[0].SubItems) < 10 || len(pf.menuBar.Items[4].SubItems) < 10 {
+		return
+	}
 
 	lMode, rMode := ViewModeMedium, ViewModeMedium
 	lSort, rSort := SortName, SortName
@@ -294,21 +302,27 @@ func (pf *PanelsFrame) updateMenuCheckmarks() {
 		rSort = fsp.sortMode
 	}
 
-	pf.menuBar.Items[0].SubItems[0].Text = getMenuText(lMode, ViewModeMedium, "&"+Msg("Menu.Left.Medium"))
-	pf.menuBar.Items[0].SubItems[1].Text = getMenuText(lMode, ViewModeDetailed, "&"+Msg("Menu.Left.Detailed"))
-	pf.menuBar.Items[0].SubItems[3].Text = getSortMenuText(lSort, SortName, "&"+Msg("Menu.SortName"))
-	pf.menuBar.Items[0].SubItems[4].Text = getSortMenuText(lSort, SortExt, "&"+Msg("Menu.SortExt"))
-	pf.menuBar.Items[0].SubItems[5].Text = getSortMenuText(lSort, SortTime, "&"+Msg("Menu.SortTime"))
-	pf.menuBar.Items[0].SubItems[6].Text = getSortMenuText(lSort, SortSize, "&"+Msg("Menu.SortSize"))
-	pf.menuBar.Items[0].SubItems[7].Text = getSortMenuText(lSort, SortUnsorted, "&"+Msg("Menu.SortUnsorted"))
-
-	pf.menuBar.Items[4].SubItems[0].Text = getMenuText(rMode, ViewModeMedium, "&"+Msg("Menu.Left.Medium"))
-	pf.menuBar.Items[4].SubItems[1].Text = getMenuText(rMode, ViewModeDetailed, "&"+Msg("Menu.Left.Detailed"))
-	pf.menuBar.Items[4].SubItems[3].Text = getSortMenuText(rSort, SortName, "&"+Msg("Menu.SortName"))
-	pf.menuBar.Items[4].SubItems[4].Text = getSortMenuText(rSort, SortExt, "&"+Msg("Menu.SortExt"))
-	pf.menuBar.Items[4].SubItems[5].Text = getSortMenuText(rSort, SortTime, "&"+Msg("Menu.SortTime"))
-	pf.menuBar.Items[4].SubItems[6].Text = getSortMenuText(rSort, SortSize, "&"+Msg("Menu.SortSize"))
-	pf.menuBar.Items[4].SubItems[7].Text = getSortMenuText(rSort, SortUnsorted, "&"+Msg("Menu.SortUnsorted"))
+	if pf.widePanel == 0 {
+		lMode = ViewModeWide
+	}
+	if pf.widePanel == 1 {
+		rMode = ViewModeWide
+	}
+	modeItems := []struct {
+		mode ViewMode
+		key  string
+	}{{ViewModeBrief, "Brief"}, {ViewModeMedium, "Medium"}, {ViewModeDetailed, "Detailed"}, {ViewModeWide, "Wide"}}
+	for i, item := range modeItems {
+		pf.menuBar.Items[0].SubItems[i].Text = getMenuText(lMode, item.mode, "&"+Msg("Menu.Left."+item.key))
+		pf.menuBar.Items[4].SubItems[i].Text = getMenuText(rMode, item.mode, "&"+Msg("Menu.Left."+item.key))
+	}
+	for i, item := range []struct {
+		mode SortMode
+		key  string
+	}{{SortName, "SortName"}, {SortExt, "SortExt"}, {SortTime, "SortTime"}, {SortSize, "SortSize"}, {SortUnsorted, "SortUnsorted"}} {
+		pf.menuBar.Items[0].SubItems[i+5].Text = getSortMenuText(lSort, item.mode, "&"+Msg("Menu."+item.key))
+		pf.menuBar.Items[4].SubItems[i+5].Text = getSortMenuText(rSort, item.mode, "&"+Msg("Menu."+item.key))
+	}
 }
 
 func (pf *PanelsFrame) buildPrompt() []vtui.CharInfo {
@@ -490,6 +504,37 @@ func (pf *PanelsFrame) Close() {
 	pf.BaseFrame.Close()
 }
 
+func (pf *PanelsFrame) setWidePanel(idx int) {
+	if idx < 0 || idx > 1 {
+		idx = -1
+	}
+	pf.widePanel = idx
+	if idx >= 0 {
+		pf.activeIdx = idx
+		pf.showPanels = true
+	}
+	if pf.lastW > 0 && pf.lastH > 0 {
+		pf.ResizeConsole(pf.lastW, pf.lastH)
+	}
+}
+
+func (pf *PanelsFrame) exitWide() {
+	if pf.widePanel >= 0 {
+		pf.setWidePanel(-1)
+	}
+}
+
+func (pf *PanelsFrame) setPanelViewMode(idx int, mode ViewMode) {
+	if idx < 0 || idx > 1 {
+		return
+	}
+	pf.exitWide()
+	if fsp, ok := pf.panels[idx].(*FileSystemPanel); ok {
+		fsp.SetViewMode(mode)
+	}
+	pf.updateMenuCheckmarks()
+}
+
 func (pf *PanelsFrame) ResizeConsole(w, h int) {
 	pf.lastW, pf.lastH = w, h
 	pf.SetPosition(0, 0, w-1, h-1) // Update hit-box for FrameManager hit-testing
@@ -569,6 +614,25 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 	if pf.panels[0] == nil {
 		pf.panels[0] = NewFileSystemPanel(0, contentY1, leftW, panelH, vfs.NewOSVFS("."))
 		pf.panels[1] = NewFileSystemPanel(leftW, contentY1, rightW, panelH, vfs.NewOSVFS("."))
+	}
+
+	for i, p := range pf.panels {
+		if fsp, ok := p.(*FileSystemPanel); ok {
+			fsp.wide = pf.widePanel == i
+			fsp.configureCellSelection()
+		}
+	}
+
+	if pf.widePanel >= 0 {
+		idx := pf.widePanel
+		panelY2 := leftPanelY2
+		if idx == 1 {
+			panelY2 = rightPanelY2
+		}
+		pf.panels[idx].SetPosition(0, contentY1, w-1, panelY2)
+		if fsp, ok := pf.panels[idx].(*FileSystemPanel); ok {
+			fsp.Resize(w, panelY2-contentY1+1)
+		}
 	} else {
 		pf.panels[0].SetPosition(0, contentY1, leftW-1, leftPanelY2)
 		pf.panels[1].SetPosition(leftW, contentY1, w-1, rightPanelY2)
@@ -586,11 +650,22 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 		}
 	}
 	// Keep any active alt panels aligned with their host slot.
-	if pf.altPanels[0] != nil {
-		pf.altPanels[0].SetPosition(0, contentY1, leftW-1, leftPanelY2)
-	}
-	if pf.altPanels[1] != nil {
-		pf.altPanels[1].SetPosition(leftW, contentY1, w-1, rightPanelY2)
+	if pf.widePanel >= 0 {
+		idx := pf.widePanel
+		panelY2 := leftPanelY2
+		if idx == 1 {
+			panelY2 = rightPanelY2
+		}
+		if pf.altPanels[idx] != nil {
+			pf.altPanels[idx].SetPosition(0, contentY1, w-1, panelY2)
+		}
+	} else {
+		if pf.altPanels[0] != nil {
+			pf.altPanels[0].SetPosition(0, contentY1, leftW-1, leftPanelY2)
+		}
+		if pf.altPanels[1] != nil {
+			pf.altPanels[1].SetPosition(leftW, contentY1, w-1, rightPanelY2)
+		}
 	}
 
 	cmdLineY := h - 1
@@ -671,7 +746,24 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 		}
 	}
 
-	if pf.showPanels {
+	if pf.showPanels && pf.widePanel >= 0 {
+		hasTerminalArea := pf.leftHeightDecrement > 0
+		if pf.widePanel == 1 {
+			hasTerminalArea = pf.rightHeightDecrement > 0
+		}
+		pf.termView.SetVisible(hasTerminalArea)
+		if hasTerminalArea {
+			pf.termView.Show(scr)
+		}
+		idx := pf.widePanel
+		pf.panels[idx].SetFocus(true)
+		if pf.altPanels[idx] != nil {
+			pf.altPanels[idx].SetFocus(true)
+			pf.altPanels[idx].Show(scr)
+		} else {
+			pf.panels[idx].Show(scr)
+		}
+	} else if pf.showPanels {
 		// Показываем терминал под панелями если: одна из панелей скрыта
 		// (терминал занимает освободившуюся половину), либо панели уменьшены
 		// по высоте (Ctrl+Up) и терминал должен просвечивать снизу.
@@ -883,6 +975,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 
 	// Ctrl+O toggles panels visibility (must intercept before raw input mode)
 	if e.VirtualKeyCode == vtinput.VK_O && ctrl && !alt && !shift && e.KeyDown {
+		pf.exitWide()
 		pf.showPanels = !pf.showPanels
 		if pf.showPanels && !pf.showLeftPanel && !pf.showRightPanel {
 			pf.showLeftPanel = true
@@ -897,6 +990,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 
 	// Ctrl+F1 toggles left panel
 	if e.VirtualKeyCode == vtinput.VK_F1 && ctrl && !alt && !shift && e.KeyDown {
+		pf.exitWide()
 		pf.showLeftPanel = !pf.showLeftPanel
 		pf.showPanels = pf.showLeftPanel || pf.showRightPanel
 		if !pf.showLeftPanel && pf.showPanels {
@@ -910,6 +1004,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 	// Ctrl+F2 toggles right panel
 	if e.VirtualKeyCode == vtinput.VK_F2 && ctrl && !alt && !shift && e.KeyDown {
+		pf.exitWide()
 		pf.showRightPanel = !pf.showRightPanel
 		pf.showPanels = pf.showLeftPanel || pf.showRightPanel
 		if !pf.showRightPanel && pf.showPanels {
@@ -962,6 +1057,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	// Complements Ctrl+F1/F2 (toggle a specific panel by side) and
 	// Ctrl+O (toggle both), matching far/far2l (issue #197).
 	if e.VirtualKeyCode == vtinput.VK_P && ctrl && !alt && !shift && e.KeyDown {
+		pf.exitWide()
 		if pf.activeIdx == 0 {
 			pf.showRightPanel = !pf.showRightPanel
 		} else {
@@ -1293,20 +1389,19 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		}
 	}
 
-	// Ctrl+1 - Set active panel to Medium (Brief in Far)
-	if e.VirtualKeyCode == '1' && ctrl && !alt && !shift && e.KeyDown {
-		if fsp := pf.getActivePanel(); fsp != nil {
-			fsp.SetViewMode(ViewModeMedium)
-			pf.updateMenuCheckmarks()
+	if ctrl && !alt && !shift && e.KeyDown {
+		switch e.VirtualKeyCode {
+		case '1':
+			pf.setPanelViewMode(pf.activeIdx, ViewModeBrief)
 			return true
-		}
-	}
-
-	// Ctrl+2 - Set active panel to Detailed (Medium in Far)
-	if e.VirtualKeyCode == '2' && ctrl && !alt && !shift && e.KeyDown {
-		if fsp := pf.getActivePanel(); fsp != nil {
-			fsp.SetViewMode(ViewModeDetailed)
-			pf.updateMenuCheckmarks()
+		case '2':
+			pf.setPanelViewMode(pf.activeIdx, ViewModeMedium)
+			return true
+		case '3':
+			pf.setPanelViewMode(pf.activeIdx, ViewModeDetailed)
+			return true
+		case '4':
+			pf.setWidePanel(pf.activeIdx)
 			return true
 		}
 	}
@@ -1753,6 +1848,12 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	if e.VirtualKeyCode == vtinput.VK_TAB && !ctrl {
 		if pf.showPanels {
 			pf.activeIdx = 1 - pf.activeIdx
+			if pf.widePanel >= 0 {
+				pf.widePanel = pf.activeIdx
+				pf.ResizeConsole(pf.lastW, pf.lastH)
+				pf.lastKey = 0
+				return true
+			}
 			pf.lastKey = 0
 			if pf.activeIdx == 0 && !pf.showLeftPanel {
 				pf.showLeftPanel = true
@@ -1825,10 +1926,13 @@ func (pf *PanelsFrame) hitAltPanel(mx, my int) int {
 		if a == nil {
 			continue
 		}
-		if i == 0 && !pf.showLeftPanel {
+		if pf.widePanel >= 0 && i != pf.widePanel {
 			continue
 		}
-		if i == 1 && !pf.showRightPanel {
+		if pf.widePanel < 0 && i == 0 && !pf.showLeftPanel {
+			continue
+		}
+		if pf.widePanel < 0 && i == 1 && !pf.showRightPanel {
 			continue
 		}
 		x1, y1, x2, y2 := a.GetPosition()
@@ -1934,10 +2038,13 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 		if p == nil {
 			continue
 		}
-		if i == 0 && !pf.showLeftPanel {
+		if pf.widePanel >= 0 && i != pf.widePanel {
 			continue
 		}
-		if i == 1 && !pf.showRightPanel {
+		if pf.widePanel < 0 && i == 0 && !pf.showLeftPanel {
+			continue
+		}
+		if pf.widePanel < 0 && i == 1 && !pf.showRightPanel {
 			continue
 		}
 		x1, y1, x2, y2 := p.GetPosition()
@@ -2135,29 +2242,29 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 			return true
 		}
 
+	case CmLeftBrief:
+		pf.setPanelViewMode(0, ViewModeBrief)
+		return true
 	case CmLeftMedium:
-		if fsp, ok := pf.panels[0].(*FileSystemPanel); ok {
-			fsp.SetViewMode(ViewModeMedium)
-		}
-		pf.updateMenuCheckmarks()
+		pf.setPanelViewMode(0, ViewModeMedium)
 		return true
 	case CmLeftDetailed:
-		if fsp, ok := pf.panels[0].(*FileSystemPanel); ok {
-			fsp.SetViewMode(ViewModeDetailed)
-		}
-		pf.updateMenuCheckmarks()
+		pf.setPanelViewMode(0, ViewModeDetailed)
+		return true
+	case CmLeftWide:
+		pf.setWidePanel(0)
+		return true
+	case CmRightBrief:
+		pf.setPanelViewMode(1, ViewModeBrief)
 		return true
 	case CmRightMedium:
-		if fsp, ok := pf.panels[1].(*FileSystemPanel); ok {
-			fsp.SetViewMode(ViewModeMedium)
-		}
-		pf.updateMenuCheckmarks()
+		pf.setPanelViewMode(1, ViewModeMedium)
 		return true
 	case CmRightDetailed:
-		if fsp, ok := pf.panels[1].(*FileSystemPanel); ok {
-			fsp.SetViewMode(ViewModeDetailed)
-		}
-		pf.updateMenuCheckmarks()
+		pf.setPanelViewMode(1, ViewModeDetailed)
+		return true
+	case CmRightWide:
+		pf.setWidePanel(1)
 		return true
 
 	case CmLeftSortName:
@@ -2223,6 +2330,9 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 	case CmSwapPanels:
 		pf.panels[0], pf.panels[1] = pf.panels[1], pf.panels[0]
 		pf.activeIdx = 1 - pf.activeIdx
+		if pf.widePanel >= 0 {
+			pf.widePanel = 1 - pf.widePanel
+		}
 		pf.ResizeConsole(pf.lastW, pf.lastH)
 		return true
 	case CmSortName:
@@ -2859,11 +2969,26 @@ func (pf *PanelsFrame) Clone() *PanelsFrame {
 	clone.showPanels = pf.showPanels
 	clone.showLeftPanel = pf.showLeftPanel
 	clone.showRightPanel = pf.showRightPanel
+	clone.widePanel = pf.widePanel
 
 	if pf.termView != nil && clone.termView != nil {
 		clone.termView.CloneStateFrom(pf.termView)
 	}
-	clone.updateMenuCheckmarks()
+	if clone.lastW > 0 && clone.lastH > 0 {
+		clone.ResizeConsole(clone.lastW, clone.lastH)
+	} else {
+		clone.updateMenuCheckmarks()
+	}
+	for i, p := range pf.panels {
+		if source, ok := p.(*FileSystemPanel); ok {
+			if target, ok := clone.panels[i].(*FileSystemPanel); ok {
+				target.table.SelectPos = source.table.SelectPos
+				target.table.SelectCol = source.table.SelectCol
+				target.table.TopPos = source.table.TopPos
+				target.cursorIdx = source.cursorIdx
+			}
+		}
+	}
 	return clone
 }
 
