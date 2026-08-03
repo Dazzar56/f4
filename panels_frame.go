@@ -1838,6 +1838,44 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 		return true
 	}
 
+	// Alt panels (Ctrl+L info / Ctrl+Q quick view / …) share the
+	// same screen slot as the file panel underneath — the file
+	// panel is not drawn, but it still exists logically at the
+	// same coordinates. Swallow any button event landing on an
+	// alt panel so a double-click or the global middle-click →
+	// Enter branch below can't launch a file the user can't see.
+	// Wheel events fall through to the wheel branch and its
+	// normal alt-panel-first routing.
+	if pf.showPanels && e.ButtonState != 0 {
+		for i, a := range pf.altPanels {
+			if a == nil {
+				continue
+			}
+			if i == 0 && !pf.showLeftPanel {
+				continue
+			}
+			if i == 1 && !pf.showRightPanel {
+				continue
+			}
+			x1, y1, x2, y2 := a.GetPosition()
+			if mx < x1 || mx > x2 || my < y1 || my > y2 {
+				continue
+			}
+			// Click on an alt panel activates its side, same as a
+			// click on a file panel does.
+			if pf.activeIdx != i {
+				pf.activeIdx = i
+				pf.lastKey = 0
+				vtui.FrameManager.Redraw()
+			}
+			// Give the alt panel a chance to handle it (future
+			// row-picking, etc.); return true either way — the
+			// event does not fall through.
+			a.ProcessMouse(e)
+			return true
+		}
+	}
+
 	// Global middle-click (wheel click) intercept for PanelsFrame.
 	// When panels are shown, clicking the middle mouse button anywhere on screen
 	// triggers the Enter handler, launching the selected file in the active panel.

@@ -483,6 +483,132 @@ func TestPanelsFrame_ProcessMouse_DoubleClickFile(t *testing.T) {
 	}
 }
 
+// TestPanelsFrame_ProcessMouse_AltPanelSwallowsClicks makes sure a
+// click on an alt panel (Ctrl+L / Ctrl+Q) does NOT fall through to
+// the file panel underneath — otherwise a double-click can launch
+// a file the user can't even see. Also verifies that a click on
+// the passive-side alt panel activates that side.
+func TestPanelsFrame_ProcessMouse_AltPanelSwallowsClicks(t *testing.T) {
+	pf := setupMockPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	tmp := t.TempDir()
+	runnablePath := filepath.Join(tmp, "run.sh")
+	os.WriteFile(runnablePath, []byte("echo"), 0755)
+
+	// Left panel holds the runnable; right is active by default.
+	fsp := pf.panels[0].(*FileSystemPanel)
+	fsp.SetViewMode(ViewModeDetailed)
+	fsp.vfs.SetPath(tmp)
+	fsp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
+		{VFSItem: vfs.VFSItem{Name: "run.sh", IsDir: false}},
+	}
+	fsp.Refresh()
+
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	// Ctrl+L installs an info panel on the passive (left) slot.
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode:  vtinput.VK_L,
+		ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+	if pf.altPanels[0] == nil {
+		t.Fatal("Ctrl+L should install alt panel on the left slot")
+	}
+	priorActive := pf.activeIdx // right (1) from setupMockPanelsFrame
+
+	// Double-click at (5,3) — coordinates that would hit run.sh
+	// if the file panel underneath received the event.
+	handled := pf.ProcessMouse(&vtinput.InputEvent{
+		Type:            vtinput.MouseEventType,
+		KeyDown:         true,
+		MouseX:          5,
+		MouseY:          3,
+		ButtonState:     vtinput.FromLeft1stButtonPressed,
+		MouseEventFlags: vtinput.DoubleClick,
+	})
+	if !handled {
+		t.Error("click on alt panel must return handled=true")
+	}
+	// Drain any incidental tasks (ReadDirectory etc); if the file
+	// panel handled the double-click, panels would be hidden.
+	timeout := time.After(200 * time.Millisecond)
+drain:
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			break drain
+		}
+	}
+	if !pf.showPanels {
+		t.Error("double-click on alt panel must NOT launch the file underneath")
+	}
+	if pf.activeIdx == priorActive {
+		t.Errorf("click on passive-side alt panel should activate that side; activeIdx stayed %d", pf.activeIdx)
+	}
+}
+
+// TestPanelsFrame_ProcessMouse_MiddleClickOverAltPanel confirms the
+// global middle-click → Enter branch is also swallowed when the
+// click lands on an alt panel; otherwise the file under the alt
+// still gets launched despite the fix.
+func TestPanelsFrame_ProcessMouse_MiddleClickOverAltPanel(t *testing.T) {
+	pf := setupMockPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	tmp := t.TempDir()
+	os.WriteFile(filepath.Join(tmp, "run.sh"), []byte("echo"), 0755)
+	fsp := pf.panels[0].(*FileSystemPanel)
+	fsp.SetViewMode(ViewModeDetailed)
+	fsp.vfs.SetPath(tmp)
+	fsp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
+		{VFSItem: vfs.VFSItem{Name: "run.sh", IsDir: false}},
+	}
+	fsp.Refresh()
+
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode:  vtinput.VK_L,
+		ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+	if pf.altPanels[0] == nil {
+		t.Fatal("Ctrl+L should install alt panel")
+	}
+
+	handled := pf.ProcessMouse(&vtinput.InputEvent{
+		Type:        vtinput.MouseEventType,
+		KeyDown:     true,
+		MouseX:      5,
+		MouseY:      3,
+		ButtonState: vtinput.FromLeft2ndButtonPressed,
+	})
+	if !handled {
+		t.Error("middle-click on alt panel must be handled=true")
+	}
+	timeout := time.After(200 * time.Millisecond)
+drain:
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			break drain
+		}
+	}
+	if !pf.showPanels {
+		t.Error("middle-click on alt panel must NOT trigger Enter → launch on the file underneath")
+	}
+}
+
 func TestPanelsFrame_KeyHandling(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()
