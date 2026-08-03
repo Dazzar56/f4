@@ -238,12 +238,14 @@ func TestKittyPutAndDelete(t *testing.T) {
 	e := newKittyEnv(t)
 	e.send("a=t,i=21,f=32,s=1,v=1", kittyB64([]byte{1, 2, 3, 4}))
 
-	// There is no placement layer yet, so a put is answered but cannot show
-	// anything.
+	// The placement layer turns a put into a picture on the grid.
 	e.pty.Reset()
 	e.send("a=p,i=21,p=5", "")
-	if got, want := e.pty.String(), "\x1b_Gi=21,p=5;ENOTSUP:this terminal cannot display images\x1b\\"; got != want {
+	if got, want := e.pty.String(), "\x1b_Gi=21,p=5;OK\x1b\\"; got != want {
 		t.Errorf("put answer: expected %q, got %q", want, got)
+	}
+	if len(e.tv.images) != 1 || e.tv.images[0].Placement != 5 {
+		t.Errorf("a put must create a placement: %+v", e.tv.images)
 	}
 
 	e.pty.Reset()
