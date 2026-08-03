@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,9 +10,7 @@ import (
 
 	"github.com/unxed/f4/sdk/f4rpc"
 	"github.com/unxed/f4/vfs"
-	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
-	"github.com/vmihailenco/msgpack/v5"
 )
 
 type HighlightReq struct {
@@ -186,147 +183,10 @@ func (p *RPCPlugin) Init(api vfs.HostAPI) error {
 
 	p.sess = f4rpc.NewSession(stdout, stdin)
 
-	// Register Host API methods for the plugin to call
-	p.sess.Register("Host.Log", func(data msgpack.RawMessage) (any, error) {
-		var msg string
-		msgpack.Unmarshal(data, &msg)
-		api.Log(msg)
-		return nil, nil
-	})
-	p.sess.Register("Host.Message", func(data msgpack.RawMessage) (any, error) {
-		var msg string
-		msgpack.Unmarshal(data, &msg)
-		api.Message(msg)
-		return nil, nil
-	})
-	p.sess.Register("Host.GetVersion", func(data msgpack.RawMessage) (any, error) {
-		return api.GetVersion(), nil
-	})
-	p.sess.Register("Host.RegisterHighlighter", func(data msgpack.RawMessage) (any, error) {
-		api.RegisterHighlighter(&rpcHighlighterProvider{p})
-		return nil, nil
-	})
-
-	p.sess.Register("Host.RegisterGlobalHotkey", func(data msgpack.RawMessage) (any, error) {
-		var req HotkeyReq
-		msgpack.Unmarshal(data, &req)
-		api.RegisterGlobalHotkey(req.VK, vtinput.ControlKeyState(req.Mods), func(app vfs.App) {
-			_ = p.sess.Call("Plugin.OnHotkey", req, nil)
-		})
-		return nil, nil
-	})
-
-	// Session-local state for active progress task
-
-	// Session-local state for active progress task
-	var taskUpdate func(string, int)
-	var taskCtx context.Context
-	var taskAnchor vtui.Frame
-
-	p.sess.Register("Host.RunProgressTask", func(data msgpack.RawMessage) (any, error) {
-		var req ProgressTaskReq
-		msgpack.Unmarshal(data, &req)
-		vtui.FrameManager.PostTask(func() {
-			var pf *PanelsFrame
-			if len(vtui.FrameManager.Screens) > 0 {
-				for _, f := range vtui.FrameManager.Screens[vtui.FrameManager.ActiveIdx].Frames {
-					if p, ok := f.(*PanelsFrame); ok {
-						pf = p
-						break
-					}
-				}
-			}
-			if pf == nil {
-				return
-			}
-
-			pf.RunProgressTask(req.Title, req.StartMsg, req.Forked, func(ctx context.Context, update func(msg string, percent int)) error {
-				taskUpdate = update
-				taskCtx = ctx
-				taskAnchor = vtui.FrameManager.GetTopFrame()
-				return p.sess.Call("Plugin.OnProgressTask", nil, nil)
-			}, func(err error) {
-				taskUpdate = nil
-				taskCtx = nil
-				taskAnchor = nil
-			})
-		})
-		return nil, nil
-	})
-
-	p.sess.Register("Host.UpdateProgress", func(data msgpack.RawMessage) (any, error) {
-		var req ProgressUpdateReq
-		msgpack.Unmarshal(data, &req)
-		if taskUpdate != nil {
-			taskUpdate(req.Msg, req.Percent)
-		}
-		return nil, nil
-	})
-
-	p.sess.Register("Host.IsProgressCancelled", func(data msgpack.RawMessage) (any, error) {
-		if taskCtx != nil {
-			return taskCtx.Err() != nil, nil
-		}
-		return false, nil
-	})
-
-	p.sess.Register("Host.AskOverwrite", func(data msgpack.RawMessage) (any, error) {
-		var req AskOverwriteReq
-		msgpack.Unmarshal(data, &req)
-		ctx := taskCtx
-		if ctx == nil {
-			ctx = context.Background()
-		}
-		choice, remember := AskOverwrite(ctx, req.Path, req.Src, req.Dst, taskAnchor)
-		return AskOverwriteRes{Choice: choice, Remember: remember}, nil
-	})
-
-	p.sess.Register("Host.AskError", func(data msgpack.RawMessage) (any, error) {
-		var req AskErrorReq
-		msgpack.Unmarshal(data, &req)
-		ctx := taskCtx
-		if ctx == nil {
-			ctx = context.Background()
-		}
-		choice := AskError(ctx, req.Op, fmt.Errorf("%s", req.Err), taskAnchor)
-		return choice, nil
-	})
-
-	p.sess.Register("Host.InputBox", func(data msgpack.RawMessage) (any, error) {
-		var req InputBoxReq
-		msgpack.Unmarshal(data, &req)
-		resChan := make(chan string, 1)
-		vtui.FrameManager.PostTask(func() {
-			vtui.InputBox(req.Title, req.Prompt, req.Default, func(s string) {
-				resChan <- s
-			})
-		})
-		return <-resChan, nil
-	})
-
-	p.sess.Register("Host.Menu", func(data msgpack.RawMessage) (any, error) {
-		var req MenuReq
-		msgpack.Unmarshal(data, &req)
-		resChan := make(chan int, 1)
-		vtui.FrameManager.PostTask(func() {
-			// Find PanelsFrame for context-aware menu
-			var pf *PanelsFrame
-			if len(vtui.FrameManager.Screens) > 0 {
-				for _, f := range vtui.FrameManager.Screens[vtui.FrameManager.ActiveIdx].Frames {
-					if p, ok := f.(*PanelsFrame); ok {
-						pf = p
-						break
-					}
-				}
-			}
-			if pf != nil {
-				pf.Menu(req.Title, req.Items, func(idx int) { resChan <- idx })
-			} else {
-				resChan <- -1
-			}
-		})
-		return <-resChan, nil
-	})
+	// The host method set is shared with every other transport.
+	for name, handler := range newHostMethods(api, p.sess, p.path) {
+		p.sess.Register(name, handler)
+	}
 
 	go func() {
 		err := p.sess.Serve()
@@ -354,24 +214,7 @@ func (p *RPCPlugin) Init(api vfs.HostAPI) error {
 	return nil
 }
 
-type rpcHighlighterProvider struct{ p *RPCPlugin }
-
-func (r *rpcHighlighterProvider) Name() string                        { return r.p.path }
-func (r *rpcHighlighterProvider) Match(f, c string) bool              { return true }
-func (r *rpcHighlighterProvider) Create(f, c string) vtui.Highlighter { return &rpcHighlighter{r.p} }
-
-type rpcHighlighter struct{ p *RPCPlugin }
-
-func (h *rpcHighlighter) Highlight(line string, prev any, base uint64) ([]uint64, any) {
-	var res HighlightRes
-	err := h.p.sess.Call("VFS.Highlight", HighlightReq{Line: line, Prev: prev, Base: base}, &res)
-	if err != nil {
-		return nil, nil
-	}
-	return res.Attrs, res.Next
-}
 func (p *RPCPlugin) Close() error {
-	p.closing = true
 	if p.cmd != nil && p.cmd.Process != nil {
 		p.cmd.Process.Kill()
 		p.cmd.Wait()
