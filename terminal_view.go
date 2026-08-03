@@ -812,9 +812,11 @@ func (tv *TerminalView) Show(scr *vtui.ScreenBuf) {
 
 	// Очищаем всю область терминала черным цветом
 	// The placement layer needs the real size of a cell to turn the pixel
-	// geometry of an image into a rectangle of cells.
-	if cw, ch := scr.Graphics().CellSize(); cw > 0 && ch > 0 {
+	// geometry of an image into a rectangle of cells, and so does the
+	// program running in the terminal, which learns it from the pty.
+	if cw, ch := scr.Graphics().CellSize(); cw > 0 && ch > 0 && (cw != tv.cellW || ch != tv.cellH) {
 		tv.cellW, tv.cellH = cw, ch
+		tv.syncPtyPixelSize()
 	}
 
 	scr.FillRect(tv.X1, tv.Y1, tv.X1+tv.Width-1, tv.Y1+tv.Height-1, ' ', DefaultTermAttr)
@@ -1054,6 +1056,40 @@ func (tv *TerminalView) HandleFar2lAPC(s string) {
 			go tv.ProcessFar2lInteract(decoded)
 		}
 	}
+}
+
+// CellSize reports the pixel size of one character cell as the host renderer
+// last told us, falling back to the size the terminal advertises when nobody
+// knows better.
+func (tv *TerminalView) CellSize() (int, int) {
+	tv.mu.Lock()
+	defer tv.mu.Unlock()
+	return tv.cellSizeUnsafe()
+}
+
+func (tv *TerminalView) cellSizeUnsafe() (int, int) {
+	cw, ch := tv.cellW, tv.cellH
+	if cw <= 0 {
+		cw = kittyFallbackCellW
+	}
+	if ch <= 0 {
+		ch = kittyFallbackCellH
+	}
+	return cw, ch
+}
+
+// syncPtyPixelSize tells the child how large its terminal is in pixels. The
+// caller holds the lock.
+func (tv *TerminalView) syncPtyPixelSize() {
+	if tv.pty == nil {
+		return
+	}
+	sizer, ok := tv.pty.(PtyPixelSizer)
+	if !ok {
+		return
+	}
+	cw, ch := tv.cellSizeUnsafe()
+	sizer.SetSizePixels(tv.Width, tv.Height, tv.Width*cw, tv.Height*ch)
 }
 
 // kittyGraphics lazily creates the receiver of the kitty graphics protocol:

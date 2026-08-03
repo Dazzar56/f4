@@ -119,13 +119,7 @@ func (tv *TerminalView) kittyPut(img *kittyImage, cmd kittyCommand) string {
 // kittyCellSpan turns the c and r keys into a rectangle of cells. A missing
 // one is computed from the aspect ratio so that the picture is not distorted.
 func (tv *TerminalView) kittyCellSpan(cmd kittyCommand, srcW, srcH int) (int, int) {
-	cw, ch := tv.cellW, tv.cellH
-	if cw <= 0 {
-		cw = kittyFallbackCellW
-	}
-	if ch <= 0 {
-		ch = kittyFallbackCellH
-	}
+	cw, ch := tv.cellSizeUnsafe()
 
 	cols, rows := cmd.Int('c', 0), cmd.Int('r', 0)
 	switch {

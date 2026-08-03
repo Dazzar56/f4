@@ -519,9 +519,10 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 
 	if pf.pty != nil {
 		pf.ptyMutex.Lock()
-		pf.pty.SetSize(w, termH)
+		cw, ch := pf.termView.CellSize()
+		setPtySize(pf.pty, w, termH, cw, ch)
 		for _, remotePty := range pf.remotePtys {
-			remotePty.SetSize(w, termH)
+			setPtySize(remotePty, w, termH, cw, ch)
 		}
 		pf.ptyMutex.Unlock()
 
