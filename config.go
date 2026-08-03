@@ -74,7 +74,8 @@ type F4Config struct {
 	InfoPanelCPUGPU          bool // Ctrl+L info panel: show CPU and GPU sections (off by default)
 	KeepTerminalCursor       bool
 	CommandLineAutoComplete  bool
-	VimHotkeys               bool
+	NavigationMode           PanelNavigationMode
+	SearchCommandStayFocused bool
 	SyncPanelLoad            bool
 	EditorAutoComplete       bool
 	EditorAutoCompleteMask   string
@@ -141,7 +142,8 @@ var AppConfig = F4Config{
 	InfoPanelCPUGPU:          false,
 	KeepTerminalCursor:       false,
 	CommandLineAutoComplete:  true,
-	VimHotkeys:               false,
+	NavigationMode:           NavigationClassic,
+	SearchCommandStayFocused: false,
 	SyncPanelLoad:            false,
 	EditorAutoComplete:       true,
 	EditorAutoCompleteMask:   "*.go;*.c;*.cpp;*.h;*.hpp;*.py;*.js;*.ts;*.rs;*.java;*.sh;*.txt;*.md;*.html;*.css;*.json",
@@ -235,7 +237,15 @@ func LoadConfig() {
 	AppConfig.InfoPanelCPUGPU = ini.GetString("Panel", "InfoPanelCPUGPU", "0") == "1"
 	AppConfig.KeepTerminalCursor = ini.GetString("Panel", "KeepTerminalCursor", "0") == "1"
 	AppConfig.CommandLineAutoComplete = ini.GetString("Panel", "CommandLineAutoComplete", "1") == "1"
-	AppConfig.VimHotkeys = ini.GetString("Panel", "VimHotkeys", "0") == "1"
+	if mode := ini.GetString("Panel", "NavigationMode", ""); mode != "" {
+		AppConfig.NavigationMode = ParsePanelNavigationMode(mode)
+	} else if ini.GetString("Panel", "VimHotkeys", "0") == "1" {
+		// Migration from settings written before NavigationMode was introduced.
+		AppConfig.NavigationMode = NavigationVim
+	} else {
+		AppConfig.NavigationMode = NavigationClassic
+	}
+	AppConfig.SearchCommandStayFocused = ini.GetString("Panel", "SearchCommandStayFocused", "0") == "1"
 	AppConfig.SyncPanelLoad = ini.GetString("Panel", "SyncPanelLoad", "0") == "1"
 	fmt.Sscanf(ini.GetString("Panel", "DefaultFileOpMode", "0"), "%d", &AppConfig.DefaultFileOpMode)
 	AppConfig.ConfirmCopy = ini.GetString("System", "ConfirmCopy", "1") == "1"
@@ -331,7 +341,10 @@ func SaveConfig() {
 	sb.WriteString(fmt.Sprintf("InfoPanelCPUGPU = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.InfoPanelCPUGPU]))
 	sb.WriteString(fmt.Sprintf("KeepTerminalCursor = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.KeepTerminalCursor]))
 	sb.WriteString(fmt.Sprintf("CommandLineAutoComplete = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.CommandLineAutoComplete]))
-	sb.WriteString(fmt.Sprintf("VimHotkeys = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.VimHotkeys]))
+	sb.WriteString(fmt.Sprintf("NavigationMode = %s\n", AppConfig.NavigationMode.String()))
+	sb.WriteString(fmt.Sprintf("SearchCommandStayFocused = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.SearchCommandStayFocused]))
+	// Keep the legacy key synchronized for older f4 versions and shared configs.
+	sb.WriteString(fmt.Sprintf("VimHotkeys = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.NavigationMode == NavigationVim]))
 	sb.WriteString(fmt.Sprintf("SyncPanelLoad = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.SyncPanelLoad]))
 	sb.WriteString(fmt.Sprintf("DefaultFileOpMode = %d\n", AppConfig.DefaultFileOpMode))
 	sb.WriteString(fmt.Sprintf("FileOpPathDisplay = %d\n", AppConfig.FileOpPathDisplay))
