@@ -187,6 +187,33 @@ func colorerUTF16ToRuneIndex(line string) []int {
 	return append(index, runeIdx)
 }
 
+// colorerLineIndex turns the state the editor hands back into the index of the
+// line that is about to be parsed. The state is the index of the previous
+// line, so a missing one means the very first line of the file. Falling back
+// to the number of lines seen so far instead made every redraw append another
+// copy of line zero to the end of the array: the parser then had to be rewound
+// for the next line, and the array grew without bound.
+func colorerLineIndex(prevState any, known int) int {
+	idx := 0
+	if prevIdx, ok := prevState.(int); ok {
+		idx = prevIdx + 1
+	}
+	if idx < 0 {
+		idx = 0
+	}
+	if idx > known {
+		idx = known
+	}
+	return idx
+}
+
+// colorerNeedsRewind reports whether the engine has to be restarted from the
+// first line in order to reach upTo. Colorer only ever parses forward, so a
+// line that is still ahead of the parser can simply be fed to it.
+func colorerNeedsRewind(parsedIdx, upTo int) bool {
+	return parsedIdx < 0 || parsedIdx > upTo
+}
+
 // Starting a session means compiling the WASM module and parsing the whole
 // HRC catalog, which takes seconds. An idle session is therefore kept around
 // and handed over to the next opened file instead of being destroyed.
@@ -252,6 +279,7 @@ func newColorerHighlighter(ev *EditorView, filename, firstLine string, fallback 
 	ch := &ColorerHighlighter{
 		fallback:   fallback,
 		filename:   filename,
+		firstLine:  firstLine,
 		configsDir: ColorerConfigsDir(),
 	}
 	// Colors are resolved through the region parents declared in the schemas,
@@ -266,9 +294,22 @@ func newColorerHighlighter(ev *EditorView, filename, firstLine string, fallback 
 		}
 		selected, sErr := session.SelectType(filename, firstLine)
 		vtui.DebugLog("COLORER: SelectType(%q, len=%d) -> selected=%v, err=%v", filename, len(firstLine), selected, sErr)
+		if sErr != nil || !selected {
+			// Colorer knows no schema for this file and would paint nothing at
+			// all, which is worse than what the fallback engine already shows.
+			// The session goes back to the pool and the switch never happens.
+			releaseColorerSession(session, ch.configsDir)
+			return
+		}
 
 		vtui.FrameManager.PostTask(func() {
 			if ch.closed {
+				releaseColorerSession(session, ch.configsDir)
+				return
+			}
+			if ev != nil && ev.highlighter != vtui.Highlighter(ch) {
+				// The editor moved on to another engine while the session was
+				// starting up.
 				releaseColorerSession(session, ch.configsDir)
 				return
 			}
@@ -277,8 +318,14 @@ func newColorerHighlighter(ev *EditorView, filename, firstLine string, fallback 
 			}
 			ch.fallback = nil
 			ch.session = session
-			// States computed by the fallback engine mean nothing to Colorer.
-			ev.invalidateStates(0)
+			// Nothing the fallback engine produced carries over: its states
+			// mean nothing to Colorer, and no line has been parsed yet.
+			ch.lines = nil
+			ch.attrCache = nil
+			ch.parsedIdx = 0
+			if ev != nil {
+				ev.invalidateStates(0)
+			}
 			vtui.FrameManager.Redraw()
 		})
 	}()
@@ -296,6 +343,7 @@ type ColorerHighlighter struct {
 	schemeGen  uint64
 	parsedIdx  int
 	filename   string
+	firstLine  string
 	configsDir string
 	closed     bool
 }
@@ -309,16 +357,7 @@ func (ch *ColorerHighlighter) Highlight(line string, prevState any, baseAttr uin
 		return nil, nil
 	}
 
-	logIdx := len(ch.lines)
-	if prevIdx, ok := prevState.(int); ok {
-		logIdx = prevIdx + 1
-	}
-	if logIdx < 0 {
-		logIdx = 0
-	}
-	if logIdx > len(ch.lines) {
-		logIdx = len(ch.lines)
-	}
+	logIdx := colorerLineIndex(prevState, len(ch.lines))
 
 	// Cached colors are only valid while both the palette they were computed
 	// from and the active color style stay the same.
@@ -387,8 +426,10 @@ func (ch *ColorerHighlighter) Highlight(line string, prevState any, baseAttr uin
 	return attrs, logIdx
 }
 
-// resync rewinds the engine and feeds it every line up to upTo, so that its
-// internal state matches the line which is about to be parsed.
+// resync brings the engine to the state of the line that is about to be
+// parsed. Colorer only ever moves forward, so a line still ahead of the parser
+// is simply fed to it; only a line behind it costs a rewind and a replay from
+// the very beginning.
 func (ch *ColorerHighlighter) resync(upTo int) {
 	if upTo > len(ch.lines) {
 		upTo = len(ch.lines)
@@ -396,14 +437,21 @@ func (ch *ColorerHighlighter) resync(upTo int) {
 	if upTo < 0 {
 		upTo = 0
 	}
-	vtui.DebugLog("COLORER: Restoring parser state up to line %d", upTo)
-	ch.session.Reset()
-	firstLine := ""
-	if len(ch.lines) > 0 {
-		firstLine = ch.lines[0]
+
+	from := ch.parsedIdx
+	if colorerNeedsRewind(from, upTo) {
+		vtui.DebugLog("COLORER: Rewinding the parser from line %d to line %d", ch.parsedIdx, upTo)
+		ch.session.Reset()
+		// The type is chosen from the first line as well, so the one the
+		// session started with is kept for the case of an empty array.
+		firstLine := ch.firstLine
+		if len(ch.lines) > 0 {
+			firstLine = ch.lines[0]
+		}
+		_, _ = ch.session.SelectType(ch.filename, firstLine)
+		from = 0
 	}
-	_, _ = ch.session.SelectType(ch.filename, firstLine)
-	for i := 0; i < upTo; i++ {
+	for i := from; i < upTo; i++ {
 		_, _ = ch.session.ParseLine(ch.lines[i])
 	}
 	ch.parsedIdx = upTo
