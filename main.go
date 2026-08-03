@@ -47,6 +47,10 @@ func main() {
 		return
 	}
 
+	// Setup crash/stderr location before any logging starts; in portable mode
+	// this keeps crash reports inside <configDir>\crashes (Profile\crashes).
+	vtui.CrashDirFull = filepath.Join(GetF4ConfigDir(), "crashes")
+
 	vtui.SetupStderrLog()
 	vtui.DebugLog("MAIN: Starting with args: %v", os.Args)
 	LoadConfig() // Load config early to apply GUI font settings
@@ -342,8 +346,8 @@ func SetupUI() {
 		GlobalFileHighlighter.LoadFromIni(highlightIni)
 	}
 
-	// Прокидываем путь портативного конфига в изолированные пакеты vtui и vfs
-	vtui.CrashDirBase = filepath.Dir(configDir)
+	// CrashDirFull задаётся рано (см. main()); здесь только повторная
+	// синхронизация для vfs, чтобы конфиг портативного режима был единым.
 	vfs.CustomConfigDir = configDir
 
 	// Load legacy color overrides if they exist
