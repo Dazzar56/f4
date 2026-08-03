@@ -97,11 +97,11 @@ func assertEntityCatalogSchemes(t *testing.T, catalogPath string) {
 	if len(schemes) != 2 {
 		t.Fatalf("Expected two rgb styles behind the entity, got %v", schemes)
 	}
-	if schemes[0].Name != "amber" || schemes[1].Name != "zebra" {
-		t.Fatalf("Expected the styles sorted by name, got %v", schemes)
+	if schemes[0].Name != "zebra" || schemes[1].Name != "amber" {
+		t.Fatalf("Expected the styles in the catalog order, got %v", schemes)
 	}
 
-	wantPath := filepath.Join(filepath.Dir(catalogPath), "hrd", "rgb", "amber.hrd")
+	wantPath := filepath.Join(filepath.Dir(catalogPath), "hrd", "rgb", "zebra.hrd")
 	if schemes[0].Path != wantPath {
 		t.Errorf("Expected the location resolved against the catalog as %q, got %q", wantPath, schemes[0].Path)
 	}

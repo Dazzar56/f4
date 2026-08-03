@@ -1220,13 +1220,15 @@ func actionEditorSettings(pf *PanelsFrame) {
 	comboHighlighter.Menu.SetSelectPos(selectedEngine)
 	comboHighlighter.Edit.SetText(engines[selectedEngine])
 	lblHighlighter := vtui.NewLabel(0, 0, "Hi&ghlighter:", comboHighlighter)
+	schemeNames := []string{""}
 	schemeItems := []string{"(built-in)"}
 	for _, scheme := range ListColorerSchemes() {
-		schemeItems = append(schemeItems, scheme.Name)
+		schemeNames = append(schemeNames, scheme.Name)
+		schemeItems = append(schemeItems, colorerSchemeLabel(scheme))
 	}
 	selectedScheme := 0
-	for i, item := range schemeItems {
-		if i > 0 && strings.EqualFold(item, AppConfig.EditorColorerScheme) {
+	for i := 1; i < len(schemeNames); i++ {
+		if strings.EqualFold(schemeNames[i], AppConfig.EditorColorerScheme) {
 			selectedScheme = i
 			break
 		}
@@ -1368,8 +1370,8 @@ func actionEditorSettings(pf *PanelsFrame) {
 	btnOk.OnClick = func() {
 		AppConfig.EditorHighlighter = comboHighlighter.Menu.Items[comboHighlighter.Menu.SelectPos].Text
 		AppConfig.EditorColorerScheme = ""
-		if comboScheme.Menu.SelectPos > 0 {
-			AppConfig.EditorColorerScheme = comboScheme.Menu.Items[comboScheme.Menu.SelectPos].Text
+		if pos := comboScheme.Menu.SelectPos; pos > 0 && pos < len(schemeNames) {
+			AppConfig.EditorColorerScheme = schemeNames[pos]
 		}
 		SetColorerScheme(AppConfig.EditorColorerScheme)
 		AppConfig.EditorExpandTabs = comboExpand.Menu.SelectPos

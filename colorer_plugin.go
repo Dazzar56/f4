@@ -154,14 +154,14 @@ func getColorerAttr(name string, baseAttr uint64) uint64 {
 		return baseAttr
 	}
 	if style, ok := colorerSchemeStyle(name); ok {
-		attr := baseAttr
-		if style.hasFore {
-			attr = vtui.SetRGBFore(attr, style.fore)
-		}
-		if style.hasBack {
-			attr = vtui.SetRGBBack(attr, style.back)
-		}
-		return attr
+		return applyColorerStyle(baseAttr, style)
+	}
+	if colorerSchemeActive() {
+		// A color style from the catalog is in charge, and colorer leaves a
+		// region the style does not define transparent. Falling back to the
+		// built-in colors here is what used to drop foreign colors into a
+		// monochrome style.
+		return baseAttr
 	}
 	if color, ok := lookupColorerColor(name); ok {
 		return vtui.SetRGBFore(baseAttr, color)
@@ -254,6 +254,9 @@ func newColorerHighlighter(ev *EditorView, filename, firstLine string, fallback 
 		filename:   filename,
 		configsDir: ColorerConfigsDir(),
 	}
+	// Colors are resolved through the region parents declared in the schemas,
+	// and reading those takes long enough to keep it off the render path.
+	StartColorerRegionScan(ch.configsDir)
 
 	go func() {
 		session, err := acquireColorerSession(ch.configsDir)

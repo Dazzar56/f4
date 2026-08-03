@@ -107,7 +107,7 @@ func actionColorerSettings(pf *PanelsFrame) {
 	schemeItems := []string{Msg("ColorerSettings.BuiltIn")}
 	for _, scheme := range ListColorerSchemes() {
 		schemeNames = append(schemeNames, scheme.Name)
-		schemeItems = append(schemeItems, scheme.Name)
+		schemeItems = append(schemeItems, colorerSchemeLabel(scheme))
 	}
 	selectedScheme := 0
 	for i := 1; i < len(schemeNames); i++ {
@@ -239,6 +239,7 @@ func actionColorerSettings(pf *PanelsFrame) {
 	btnReload.OnClick = func() {
 		apply()
 		ResetColorerSessions()
+		ResetColorerRegions()
 		vtui.FrameManager.Redraw()
 	}
 
@@ -250,6 +251,7 @@ func actionColorerSettings(pf *PanelsFrame) {
 				return
 			}
 			ResetColorerSessions()
+			ResetColorerRegions()
 			ResetColorerScheme()
 			SetColorerScheme(AppConfig.EditorColorerScheme)
 		})

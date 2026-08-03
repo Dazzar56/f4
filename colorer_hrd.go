@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/xml"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -21,10 +22,33 @@ type ColorerScheme struct {
 }
 
 type colorerRegionStyle struct {
-	fore    uint32
-	back    uint32
-	hasFore bool
-	hasBack bool
+	fore     uint32
+	back     uint32
+	style    uint32
+	hasFore  bool
+	hasBack  bool
+	hasStyle bool
+}
+
+// The style bits an hrd assign carries, as StyledRegion defines them. Colorer
+// reads the attribute as a hex number and treats it as a mask.
+const (
+	colorerStyleBold      = 1
+	colorerStyleItalic    = 2
+	colorerStyleUnderline = 4
+	colorerStyleStrikeout = 8
+)
+
+// maxColorerRegionDepth bounds the walk up the region parents, so that a
+// schema declaring a cycle cannot spin the resolver forever.
+const maxColorerRegionDepth = 32
+
+// colorerCharsetReader keeps the decoder going for the schema files that
+// declare a legacy encoding: a fair number of them are windows-1251, and Go
+// refuses to decode those without a reader, which used to leave the style
+// empty without a word. Everything read out of them is ASCII.
+func colorerCharsetReader(_ string, input io.Reader) (io.Reader, error) {
+	return input, nil
 }
 
 var (
@@ -127,9 +151,9 @@ func parseColorerCatalog(catalogPath string) []ColorerScheme {
 		}
 	}
 
-	sort.Slice(schemes, func(i, j int) bool {
-		return strings.ToLower(schemes[i].Name) < strings.ToLower(schemes[j].Name)
-	})
+	// The declaration order of the catalog is kept, the way FarColorer lists
+	// the styles: the catalog groups them deliberately, and sorting by the
+	// machine name scattered that grouping.
 	return schemes
 }
 
@@ -152,6 +176,7 @@ func scanColorerCatalogFile(path, catalogPath string, entitiesMap map[string]str
 	dec := xml.NewDecoder(f)
 	dec.Strict = false
 	dec.Entity = entitiesMap
+	dec.CharsetReader = colorerCharsetReader
 	for {
 		tok, tErr := dec.Token()
 		if tErr != nil {
@@ -294,6 +319,7 @@ func loadColorerScheme(path string) map[string]colorerRegionStyle {
 	dec := xml.NewDecoder(f)
 	dec.Strict = false
 	dec.Entity = entitiesMap
+	dec.CharsetReader = colorerCharsetReader
 	for {
 		tok, tErr := dec.Token()
 		if tErr != nil {
@@ -303,6 +329,13 @@ func loadColorerScheme(path string) map[string]colorerRegionStyle {
 		case xml.Directive:
 			parseDirectiveEntities(string(el), entitiesMap)
 		case xml.StartElement:
+			// Only the region assignments carry colors. The mapper writes them
+			// back as <define>, so both spellings are accepted.
+			switch strings.ToLower(el.Name.Local) {
+			case "assign", "define":
+			default:
+				continue
+			}
 			name := xmlAttr(el, "name")
 			if name == "" {
 				continue
@@ -310,7 +343,8 @@ func loadColorerScheme(path string) map[string]colorerRegionStyle {
 			var style colorerRegionStyle
 			style.fore, style.hasFore = parseColorerColor(xmlAttr(el, "fore"))
 			style.back, style.hasBack = parseColorerColor(xmlAttr(el, "back"))
-			if style.hasFore || style.hasBack {
+			style.style, style.hasStyle = parseColorerStyleBits(xmlAttr(el, "style"))
+			if style.hasFore || style.hasBack || style.hasStyle {
 				styles[strings.ToLower(name)] = style
 			}
 		}
@@ -340,6 +374,56 @@ func parseColorerColor(value string) (uint32, bool) {
 		return 0, false
 	}
 	return uint32(parsed), true
+}
+
+// parseColorerStyleBits reads the "style" attribute of an assign. Colorer
+// parses it as a hex number, so "10" means sixteen and not ten.
+func parseColorerStyleBits(value string) (uint32, bool) {
+	text := strings.TrimSpace(value)
+	text = strings.TrimPrefix(text, "#")
+	if text == "" {
+		return 0, false
+	}
+	parsed, err := strconv.ParseUint(text, 16, 32)
+	if err != nil {
+		return 0, false
+	}
+	return uint32(parsed), true
+}
+
+// applyColorerStyle paints an attribute with a resolved region style. vtui has
+// no italic flag, so that bit is dropped.
+func applyColorerStyle(base uint64, style colorerRegionStyle) uint64 {
+	attr := base
+	if style.hasFore {
+		attr = vtui.SetRGBFore(attr, style.fore)
+	}
+	if style.hasBack {
+		attr = vtui.SetRGBBack(attr, style.back)
+	}
+	if !style.hasStyle {
+		return attr
+	}
+	if style.style&colorerStyleBold != 0 {
+		attr |= vtui.ForegroundIntensity
+	}
+	if style.style&colorerStyleUnderline != 0 {
+		attr |= vtui.CommonLvbUnderscore
+	}
+	if style.style&colorerStyleStrikeout != 0 {
+		attr |= vtui.CommonLvbStrikeout
+	}
+	return attr
+}
+
+// colorerSchemeLabel is what the user sees in the style lists. FarColorer
+// shows the human description of an hrd and keeps the machine name for its
+// own configuration, so f4 does the same.
+func colorerSchemeLabel(scheme ColorerScheme) string {
+	if label := strings.TrimSpace(scheme.Description); label != "" {
+		return label
+	}
+	return scheme.Name
 }
 
 // SetColorerScheme activates a color style by name. An empty or unknown name
@@ -407,6 +491,24 @@ func ColorerSchemeGeneration() uint64 {
 	return schemeGeneration
 }
 
+// colorerSchemeActive reports whether a color style from the catalog is in
+// charge of the colors.
+func colorerSchemeActive() bool {
+	schemeMu.Lock()
+	defer schemeMu.Unlock()
+	return schemeStyles != nil
+}
+
+// InvalidateColorerRegionCache drops the memoized region colors and makes the
+// highlighters recompute their lines. It is called once the region graph has
+// been scanned, since everything resolved before that was an approximation.
+func InvalidateColorerRegionCache() {
+	schemeMu.Lock()
+	schemeMemo = make(map[string]colorerRegionStyle)
+	schemeGeneration++
+	schemeMu.Unlock()
+}
+
 // colorerBackgroundRegion is the region FarColorer copies into the editor
 // color when its "Change editor background" option is on.
 const colorerBackgroundRegion = "def:Text"
@@ -421,7 +523,7 @@ func colorerSchemeExactStyle(name string) (colorerRegionStyle, bool) {
 		return colorerRegionStyle{}, false
 	}
 	style, found := schemeStyles[strings.ToLower(name)]
-	return style, found && (style.hasFore || style.hasBack)
+	return style, found && (style.hasFore || style.hasBack || style.hasStyle)
 }
 
 // ColorerEditorBaseAttr paints the editor with the def:Text region of the
@@ -450,34 +552,54 @@ func ColorerEditorBaseAttr(base uint64) uint64 {
 	return attr
 }
 
-// colorerSchemeStyle resolves a region name through the active color style,
-// using the exact, prefix and substring rules of the built-in color map.
+// colorerSchemeStyle resolves a region name through the active color style.
+// Colorer looks the full name up and then walks the region parents declared in
+// the hrc schemas, so that is what happens here as well. Until those have been
+// scanned the old prefix and substring rules stand in for the hierarchy, so
+// that the colors are approximately right from the very first frame.
 func colorerSchemeStyle(name string) (colorerRegionStyle, bool) {
 	nameLower := strings.ToLower(name)
+	parents := ColorerRegionParents()
 
 	schemeMu.Lock()
 	defer schemeMu.Unlock()
 	if schemeStyles == nil {
 		return colorerRegionStyle{}, false
 	}
+	if schemeMemo == nil {
+		schemeMemo = make(map[string]colorerRegionStyle)
+	}
 	if cached, hit := schemeMemo[nameLower]; hit {
-		return cached, cached.hasFore || cached.hasBack
+		return cached, cached.hasFore || cached.hasBack || cached.hasStyle
 	}
 
 	style, found := schemeStyles[nameLower]
-	if !found {
+	if !found && parents != nil {
+		current := nameLower
+		for step := 0; step < maxColorerRegionDepth; step++ {
+			parent, known := parents[current]
+			if !known {
+				break
+			}
+			if style, found = schemeStyles[parent]; found {
+				break
+			}
+			current = parent
+		}
+	}
+	if !found && parents == nil {
 		for _, key := range schemeKeys {
 			if strings.HasPrefix(nameLower, key) {
 				style, found = schemeStyles[key], true
 				break
 			}
 		}
-	}
-	if !found {
-		for _, key := range schemeKeys {
-			if strings.Contains(nameLower, key) {
-				style, found = schemeStyles[key], true
-				break
+		if !found {
+			for _, key := range schemeKeys {
+				if strings.Contains(nameLower, key) {
+					style, found = schemeStyles[key], true
+					break
+				}
 			}
 		}
 	}
