@@ -2286,9 +2286,9 @@ func showPluginFileDialog(parent *vtui.Window, startPath string, onSelect func(s
 	}
 	btnCancel.OnClick = func() { dlg.Close() }
 
-			vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, w-4, h-3)
-			vbox.Add(lbl, vtui.Margins{}, vtui.AlignLeft)
-			vbox.Add(edit, vtui.Margins{Top: 1, Bottom: 1}, vtui.AlignLeft)
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, w-4, h-3)
+	vbox.Add(lbl, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(edit, vtui.Margins{Top: 1, Bottom: 1}, vtui.AlignLeft)
 	vbox.Add(lb, vtui.Margins{}, vtui.AlignFill)
 
 	hbox := vtui.NewHBoxLayout(0, 0, w-4, 1)
