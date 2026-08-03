@@ -684,6 +684,12 @@ func (p *AnsiParser) handleOSC() {
 func (p *AnsiParser) handleAPC() {
 	s := p.CurParam.String()
 	p.CurParam.Reset()
+	// The kitty graphics protocol shares the APC channel with the far2l
+	// extensions; the leading G is what tells them apart.
+	if strings.HasPrefix(s, "G") {
+		p.term.HandleKittyAPC(s[1:])
+		return
+	}
 	if strings.HasPrefix(s, "far2l") {
 		p.term.HandleFar2lAPC(s)
 	}

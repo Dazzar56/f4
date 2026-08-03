@@ -69,6 +69,7 @@ type TerminalView struct {
 
 	clipboardChunks []byte
 	pty             PtyBackend
+	kitty           *KittyGraphics
 
 	Muted         bool
 	lastCharWasCR bool
@@ -1026,6 +1027,26 @@ func (tv *TerminalView) HandleFar2lAPC(s string) {
 			go tv.ProcessFar2lInteract(decoded)
 		}
 	}
+}
+
+// kittyGraphics lazily creates the receiver of the kitty graphics protocol:
+// a session that never sends an image never pays for one.
+func (tv *TerminalView) kittyGraphics() *KittyGraphics {
+	tv.mu.Lock()
+	defer tv.mu.Unlock()
+	if tv.kitty == nil {
+		tv.kitty = NewKittyGraphics(func(b []byte) {
+			if tv.pty != nil {
+				tv.pty.Write(b)
+			}
+		})
+	}
+	return tv.kitty
+}
+
+// HandleKittyAPC consumes one graphics escape code, without the leading G.
+func (tv *TerminalView) HandleKittyAPC(s string) {
+	tv.kittyGraphics().Handle(s)
 }
 
 func (tv *TerminalView) HandleOSC133(payload string) {
