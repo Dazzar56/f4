@@ -50,7 +50,9 @@ explanation shown to the user. Until that is wired up, an unset hook allows
 everything, which is fine for local development and not for anything else.
 
 Builds made with the `noffi` tag, and platforms `pureffi` does not cover, keep
-the whole plugin system working and only report the bridge as unsupported.## Reaching the bridge from a sandbox
+the whole plugin system working and only report the bridge as unsupported.
+
+## Reaching the bridge from a sandbox
 
 An embedded Lua plugin gets the broker as the `f4ffi` module. A wasm guest
 cannot load a library itself, so it gets the same broker over the plugin
