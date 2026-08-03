@@ -20,6 +20,7 @@ require (
 	github.com/unxed/zip v0.1.126
 	github.com/unxed/zipper v0.1.142
 	github.com/vmihailenco/msgpack/v5 v5.4.1
+	github.com/yuin/gopher-lua v1.1.1
 	golang.org/x/crypto v0.53.0
 	golang.org/x/sys v0.47.0
 	golang.org/x/term v0.44.0
