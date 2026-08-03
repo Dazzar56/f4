@@ -108,19 +108,19 @@ Done:
 
 Next, in order:
 
-- **Step 3: embedded wasm on wazero.** wazero is already an indirect dependency
+- **Step 3: Far-compatible Lua macros.** `Macro{area=, key=, description=,
+  action=}`, `mf.*`, `Far.*`, `APanel`/`PPanel`, `Keys()`, scanning a macro
+  directory. This lands on the existing `MacroManager`: the areas in
+  `GetCurrentArea()` are already close to Far's, and `EventToFarString` and
+  `ParseFarKey` already speak Far's key names. Keyboard-recorded macros keep
+  working; the Lua engine is a second backend, not a replacement.
+- **Step 4: embedded wasm on wazero.** wazero is already an indirect dependency
   through go-sqlite3 and needs promoting to a direct one. The hard part is
   pointers: a guest offset is not a host address. Guest linear memory is a Go
   slice with a real host address, so passing a pointer into it is possible
   without copying; the copy is only needed when the memory can grow or when
   native code retains the pointer past the call. Shared memory for heavy data
   is wanted, but not first.
-- **Step 4: Far-compatible Lua macros.** `Macro{area=, key=, description=,
-  action=}`, `mf.*`, `Far.*`, `APanel`/`PPanel`, `Keys()`, scanning a macro
-  directory. This lands on the existing `MacroManager`: the areas in
-  `GetCurrentArea()` are already close to Far's, and `EventToFarString` and
-  `ParseFarKey` already speak Far's key names. Keyboard-recorded macros keep
-  working; the Lua engine is a second backend, not a replacement.
 - **Step 5: onboarding.** A scaffolder for new plugins, a five minute hello
   world, a PlugRing submission walkthrough, and a rewrite of `PLUGINS.md` and
   `LUA.md` to match reality.
