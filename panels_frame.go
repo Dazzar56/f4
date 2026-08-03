@@ -116,6 +116,7 @@ type PanelsFrame struct {
 	showPanels     bool
 	showLeftPanel  bool
 	showRightPanel bool
+	wide           bool
 	widePanel      int // -1 for normal split, 0/1 for the slot occupying the full width
 	lastW          int
 	lastH          int
@@ -302,10 +303,10 @@ func (pf *PanelsFrame) updateMenuCheckmarks() {
 		rSort = fsp.sortMode
 	}
 
-	if pf.widePanel == 0 {
+	if pf.wide && pf.widePanel == 0 {
 		lMode = ViewModeWide
 	}
-	if pf.widePanel == 1 {
+	if pf.wide && pf.widePanel == 1 {
 		rMode = ViewModeWide
 	}
 	modeItems := []struct {
@@ -509,6 +510,7 @@ func (pf *PanelsFrame) setWidePanel(idx int) {
 		idx = -1
 	}
 	pf.widePanel = idx
+	pf.wide = idx >= 0
 	if idx >= 0 {
 		pf.activeIdx = idx
 		pf.showPanels = true
@@ -519,7 +521,7 @@ func (pf *PanelsFrame) setWidePanel(idx int) {
 }
 
 func (pf *PanelsFrame) exitWide() {
-	if pf.widePanel >= 0 {
+	if pf.wide {
 		pf.setWidePanel(-1)
 	}
 }
@@ -618,12 +620,12 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 
 	for i, p := range pf.panels {
 		if fsp, ok := p.(*FileSystemPanel); ok {
-			fsp.wide = pf.widePanel == i
+			fsp.wide = pf.wide && pf.widePanel == i
 			fsp.configureCellSelection()
 		}
 	}
 
-	if pf.widePanel >= 0 {
+	if pf.wide {
 		idx := pf.widePanel
 		panelY2 := leftPanelY2
 		if idx == 1 {
@@ -650,7 +652,7 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 		}
 	}
 	// Keep any active alt panels aligned with their host slot.
-	if pf.widePanel >= 0 {
+	if pf.wide {
 		idx := pf.widePanel
 		panelY2 := leftPanelY2
 		if idx == 1 {
@@ -746,7 +748,7 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 		}
 	}
 
-	if pf.showPanels && pf.widePanel >= 0 {
+	if pf.showPanels && pf.wide {
 		hasTerminalArea := pf.leftHeightDecrement > 0
 		if pf.widePanel == 1 {
 			hasTerminalArea = pf.rightHeightDecrement > 0
@@ -1848,7 +1850,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	if e.VirtualKeyCode == vtinput.VK_TAB && !ctrl {
 		if pf.showPanels {
 			pf.activeIdx = 1 - pf.activeIdx
-			if pf.widePanel >= 0 {
+			if pf.wide {
 				pf.widePanel = pf.activeIdx
 				pf.ResizeConsole(pf.lastW, pf.lastH)
 				pf.lastKey = 0
@@ -1926,13 +1928,13 @@ func (pf *PanelsFrame) hitAltPanel(mx, my int) int {
 		if a == nil {
 			continue
 		}
-		if pf.widePanel >= 0 && i != pf.widePanel {
+		if pf.wide && i != pf.widePanel {
 			continue
 		}
-		if pf.widePanel < 0 && i == 0 && !pf.showLeftPanel {
+		if !pf.wide && i == 0 && !pf.showLeftPanel {
 			continue
 		}
-		if pf.widePanel < 0 && i == 1 && !pf.showRightPanel {
+		if !pf.wide && i == 1 && !pf.showRightPanel {
 			continue
 		}
 		x1, y1, x2, y2 := a.GetPosition()
@@ -2038,13 +2040,13 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 		if p == nil {
 			continue
 		}
-		if pf.widePanel >= 0 && i != pf.widePanel {
+		if pf.wide && i != pf.widePanel {
 			continue
 		}
-		if pf.widePanel < 0 && i == 0 && !pf.showLeftPanel {
+		if !pf.wide && i == 0 && !pf.showLeftPanel {
 			continue
 		}
-		if pf.widePanel < 0 && i == 1 && !pf.showRightPanel {
+		if !pf.wide && i == 1 && !pf.showRightPanel {
 			continue
 		}
 		x1, y1, x2, y2 := p.GetPosition()
@@ -2330,7 +2332,7 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 	case CmSwapPanels:
 		pf.panels[0], pf.panels[1] = pf.panels[1], pf.panels[0]
 		pf.activeIdx = 1 - pf.activeIdx
-		if pf.widePanel >= 0 {
+		if pf.wide {
 			pf.widePanel = 1 - pf.widePanel
 		}
 		pf.ResizeConsole(pf.lastW, pf.lastH)
@@ -2970,6 +2972,7 @@ func (pf *PanelsFrame) Clone() *PanelsFrame {
 	clone.showLeftPanel = pf.showLeftPanel
 	clone.showRightPanel = pf.showRightPanel
 	clone.widePanel = pf.widePanel
+	clone.wide = pf.wide
 
 	if pf.termView != nil && clone.termView != nil {
 		clone.termView.CloneStateFrom(pf.termView)

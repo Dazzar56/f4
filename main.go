@@ -410,6 +410,7 @@ func SetupUI() {
 		panels.showLeftPanel = LastShowLeft
 		panels.showRightPanel = LastShowRight
 		if LastWidePanel == 0 || LastWidePanel == 1 {
+			panels.wide = true
 			panels.widePanel = LastWidePanel
 			panels.activeIdx = LastWidePanel
 			panels.showPanels = true
@@ -515,7 +516,10 @@ func SaveSession() {
 				if pf, ok := f.(*PanelsFrame); ok {
 					LastLeftPath, LastRightPath = pf.GetPaths()
 					LastActivePanel = pf.activeIdx
-					LastWidePanel = pf.widePanel
+					LastWidePanel = -1
+					if pf.wide {
+						LastWidePanel = pf.widePanel
+					}
 					LastShowPanels = pf.showPanels
 					LastShowLeft = pf.showLeftPanel
 					LastShowRight = pf.showRightPanel
