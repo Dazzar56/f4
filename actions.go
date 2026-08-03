@@ -649,7 +649,37 @@ func actionOpenViewer(pf *PanelsFrame, v vfs.VFS, path string) {
 	openViewerInternal(pf, v, path)
 }
 
+// tryOpenImageViewer opens the picture viewer when the file looks like an
+// image and the backend can actually show one. It returns false to let the
+// ordinary viewer handle the file.
+func tryOpenImageViewer(pf *PanelsFrame, v vfs.VFS, path string) bool {
+	if pf == nil || !IsImageFile(path) {
+		return false
+	}
+	scr := vtui.FrameManager.Screen()
+	if scr == nil || !scr.SupportsGraphics() {
+		return false
+	}
+
+	vtui.RunAsync(func(ctx *vtui.TaskContext) {
+		iv, err := NewImageView(ctx.Context, v, path)
+		ctx.RunOnUI(func() {
+			if err != nil {
+				vtui.DebugLog("IMAGE: failed to open %s: %v", path, err)
+				vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to open image:\n%v", err), []string{"&Ok"})
+				return
+			}
+			iv.ResizeConsole(pf.lastW, pf.lastH)
+			vtui.FrameManager.AddScreen(iv)
+		})
+	})
+	return true
+}
+
 func openViewerInternal(pf *PanelsFrame, v vfs.VFS, path string) {
+	if tryOpenImageViewer(pf, v, path) {
+		return
+	}
 	if _, isLocal := v.(*vfs.OSVFS); isLocal {
 		vtui.RunAsync(func(ctx *vtui.TaskContext) {
 			if v != nil {
