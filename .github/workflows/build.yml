@@ -14,7 +14,7 @@ jobs:
     strategy:
       matrix:
         goos: [linux, windows, darwin, freebsd, dragonfly, openbsd, netbsd, illumos, solaris]
-        goarch: [amd64, arm64]
+        goarch: [amd64, arm64, arm]
         exclude:
           - goos: dragonfly
             goarch: arm64
@@ -22,6 +22,22 @@ jobs:
             goarch: arm64
           - goos: solaris
             goarch: arm64
+          - goos: windows
+            goarch: arm
+          - goos: darwin
+            goarch: arm
+          - goos: freebsd
+            goarch: arm
+          - goos: dragonfly
+            goarch: arm
+          - goos: openbsd
+            goarch: arm
+          - goos: netbsd
+            goarch: arm
+          - goos: illumos
+            goarch: arm
+          - goos: solaris
+            goarch: arm
     env:
       CGO_ENABLED: 0
 
