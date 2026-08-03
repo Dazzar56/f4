@@ -5,6 +5,7 @@ go 1.25.5
 require (
 	github.com/alecthomas/chroma/v2 v2.15.0
 	github.com/coregx/coregex v0.12.19
+	github.com/ebitengine/purego v0.10.0
 	github.com/jlaffaye/ftp v0.2.0
 	github.com/mattn/go-runewidth v0.0.15
 	github.com/mholt/archives v0.1.5
@@ -15,7 +16,7 @@ require (
 	github.com/unxed/sevenzip v0.0.0-20260704211908-25d317f8295f
 	github.com/unxed/tar v0.1.125
 	github.com/unxed/vtinput v0.1.2
-	github.com/unxed/vtui v0.1.91
+	github.com/unxed/vtui v0.1.94
 	github.com/unxed/zip v0.1.126
 	github.com/unxed/zipper v0.1.142
 	github.com/vmihailenco/msgpack/v5 v5.4.1
@@ -36,7 +37,6 @@ require (
 	github.com/dlclark/regexp2 v1.11.4 // indirect
 	github.com/dovydenkovas/ppmd v0.1.1 // indirect
 	github.com/dsnet/compress v0.0.2-0.20230904184137-39efe44ab707 // indirect
-	github.com/ebitengine/purego v0.10.0 // indirect
 	github.com/emmansun/base64 v0.9.0 // indirect
 	github.com/fogleman/gg v1.3.0 // indirect
 	github.com/go-webgpu/goffi v0.6.3 // indirect
@@ -90,3 +90,5 @@ require (
 )
 
 replace github.com/ebitengine/purego => github.com/unxed/pureffi v0.1.12
+
+// replace github.com/unxed/vtui => ../../../dev/vtui
