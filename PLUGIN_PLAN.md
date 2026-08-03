@@ -135,12 +135,6 @@ Done:
 
 Next, in order:
 
-- **Step 3: Far-compatible Lua macros.** `Macro{area=, key=, description=,
-  action=}`, `mf.*`, `Far.*`, `APanel`/`PPanel`, `Keys()`, scanning a macro
-  directory. This lands on the existing `MacroManager`: the areas in
-  `GetCurrentArea()` are already close to Far's, and `EventToFarString` and
-  `ParseFarKey` already speak Far's key names. Keyboard-recorded macros keep
-  working; the Lua engine is a second backend, not a replacement.
 - **Step 5: onboarding.** A scaffolder for new plugins, a five minute hello
   world, a PlugRing submission walkthrough, and a rewrite of `PLUGINS.md` and
   `LUA.md` to match reality.
@@ -161,3 +155,14 @@ Next, in order:
   one identically.
 - A runtime that has hit its call deadline was interrupted at an arbitrary
   instruction and should be discarded rather than reused.
+- `Keys()` is not synchronous the way Far's is. Keys queued by a macro are
+  injected as one batch once the macro returns, so a macro that inspects panel
+  state between two `Keys()` calls sees the state from before either of them.
+  Making it synchronous means re-entering the input loop from inside the
+  interpreter.
+- A macro's `condition` is evaluated after the key has already been consumed,
+  because evaluating it on the UI goroutine could deadlock. When a condition
+  declines, the original key is replayed, which costs one extra trip through
+  the input queue.
+- `Event{}`, `MenuItem{}` and `CommandLine{}` declarations are accepted and
+  ignored, so that scripts using them still contribute their `Macro{}` entries.

@@ -21,6 +21,10 @@ type MacroManager struct {
 	Buffer    []*vtinput.InputEvent
 	iniPath   string
 	StartArea string
+	// Lua is the Far-compatible macro engine, present only when the user has
+	// macros. Recorded macros keep working either way: this is a second
+	// backend, not a replacement.
+	Lua *LuaMacroEngine
 }
 
 func NewMacroManager(iniPath string) *MacroManager {
@@ -322,6 +326,12 @@ func (m *MacroManager) Filter(e *vtinput.InputEvent) bool {
 			vtui.FrameManager.InjectEvents(seq)
 			return true
 		}
+	}
+
+	// Recorded macros win over scripted ones, as they do in Far.
+	if m.Lua != nil && m.Lua.Trigger(currentArea, e) {
+		vtui.DebugLog("MACRO: Running Lua macro for %s in area %s", keyStr, currentArea)
+		return true
 	}
 
 	return false

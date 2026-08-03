@@ -81,7 +81,7 @@ func TestWasmPluginRejectsGarbage(t *testing.T) {
 	}
 }
 
-func TestWasmPluginSilentModuleTimesOut(t *testing.T) {
+func TestWasmPluginSilentModuleDoesNotHang(t *testing.T) {
 	path := writeWasmModule(t, "silent.wasm", emptyWasmModule)
 
 	restore := pluginInitTimeout
@@ -97,11 +97,11 @@ func TestWasmPluginSilentModuleTimesOut(t *testing.T) {
 		plugin.Close()
 		t.Fatal("a module that never answers was accepted")
 	}
-	if !strings.Contains(err.Error(), "timed out") {
-		t.Errorf("error = %v, want a timeout", err)
-	}
+	// A module that exits without ever speaking either trips the handshake
+	// timeout or breaks its pipe first, depending on which wins the race.
+	// Either is fine; what matters is that startup is never left waiting.
 	if elapsed > 5*time.Second {
-		t.Errorf("Init took %v, the timeout did not apply", elapsed)
+		t.Errorf("Init took %v, nothing bounded the handshake", elapsed)
 	}
 }
 

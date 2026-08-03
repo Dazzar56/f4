@@ -191,6 +191,7 @@ func (p *RPCPlugin) Init(api vfs.HostAPI) error {
 }
 
 func (p *RPCPlugin) Close() error {
+	p.closing = true
 	if p.cmd != nil && p.cmd.Process != nil {
 		p.cmd.Process.Kill()
 		p.cmd.Wait()

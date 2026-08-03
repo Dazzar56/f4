@@ -69,6 +69,40 @@ func callFFI(t *testing.T, methods map[string]f4rpc.Handler, method string, req 
 	return res, nil
 }
 
+// ffiNumber reads a number out of a wire value. MessagePack encodes small
+// integers compactly, so a result the bridge produced as int64 comes back as
+// int8; asserting on the Go type would test the encoder rather than the
+// bridge.
+func ffiNumber(t *testing.T, value any) int64 {
+	t.Helper()
+	switch n := value.(type) {
+	case int8:
+		return int64(n)
+	case int16:
+		return int64(n)
+	case int32:
+		return int64(n)
+	case int64:
+		return n
+	case int:
+		return int64(n)
+	case uint8:
+		return int64(n)
+	case uint16:
+		return int64(n)
+	case uint32:
+		return int64(n)
+	case uint64:
+		return int64(n)
+	case uint:
+		return int64(n)
+	case float64:
+		return int64(n)
+	}
+	t.Fatalf("expected a number, got %T", value)
+	return 0
+}
+
 func TestFFIMethodsAbsentWithoutABridge(t *testing.T) {
 	methods := newHostMethods(newLuaTestHostAPI(), &ffiTestTransport{}, "test", nil)
 	for method := range methods {
@@ -116,8 +150,8 @@ func TestFFICallOverTheProtocol(t *testing.T) {
 	if err != nil {
 		t.Fatalf("strlen: %v", err)
 	}
-	if got, ok := res.Value.(int64); !ok || got != 5 {
-		t.Fatalf("strlen returned %#v, want int64(5)", res.Value)
+	if got := ffiNumber(t, res.Value); got != 5 {
+		t.Fatalf("strlen returned %#v, want 5", res.Value)
 	}
 }
 
@@ -148,7 +182,7 @@ func TestFFIPointerResultSurvivesTheWire(t *testing.T) {
 		t.Fatalf("memcpy: %v", err)
 	}
 	// A uintptr has no MessagePack representation; it must arrive as a number.
-	if got, ok := copied.Value.(uint64); !ok || got != dst.Addr {
+	if got := ffiNumber(t, copied.Value); got != int64(dst.Addr) {
 		t.Fatalf("memcpy returned %#v, want the destination address", copied.Value)
 	}
 
@@ -207,9 +241,7 @@ func TestFFICallbackReachesThePlugin(t *testing.T) {
 
 			var sum int64
 			for _, arg := range req.Args {
-				if n, ok := arg.(int64); ok {
-					sum += n
-				}
+				sum += ffiNumber(t, arg)
 			}
 			if res, ok := result.(*FFIRes); ok {
 				res.Value = sum
@@ -236,8 +268,8 @@ func TestFFICallbackReachesThePlugin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("calling the trampoline: %v", err)
 	}
-	if got, ok := res.Value.(int64); !ok || got != 42 {
-		t.Fatalf("the callback returned %#v, want int64(42)", res.Value)
+	if got := ffiNumber(t, res.Value); got != 42 {
+		t.Fatalf("the callback returned %#v, want 42", res.Value)
 	}
 	if seen.ID != 7 {
 		t.Errorf("the plugin was told id %d, want 7", seen.ID)
