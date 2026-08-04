@@ -2,11 +2,13 @@ package netfox
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -209,5 +211,99 @@ func TestFishVFSMutationsRefuseForNow(t *testing.T) {
 	}
 	if _, err := os.Stat(dir); err != nil {
 		t.Errorf("a refused mutation still touched the disk: %v", err)
+	}
+}
+func TestFishVFSCloneHasItsOwnDirectory(t *testing.T) {
+	v := newLocalFishVFS(t)
+	dirA := t.TempDir()
+	dirB := t.TempDir()
+	if err := v.SetPath(dirA); err != nil {
+		t.Fatalf("SetPath: %v", err)
+	}
+
+	clone, ok := v.Clone().(*FishVFS)
+	if !ok {
+		t.Fatal("Clone did not return a FishVFS")
+	}
+	if clone == v {
+		t.Fatal("Clone returned the same instance, so two panels would share one current directory")
+	}
+	if clone.GetPath() != v.GetPath() {
+		t.Errorf("clone starts at %q, want %q", clone.GetPath(), v.GetPath())
+	}
+	if err := clone.SetPath(dirB); err != nil {
+		t.Fatalf("SetPath on the clone: %v", err)
+	}
+	if v.GetPath() != filepath.Clean(dirA) {
+		t.Errorf("moving the clone moved the original to %q", v.GetPath())
+	}
+	if clone.GetPath() != filepath.Clean(dirB) {
+		t.Errorf("the clone did not move: %q", clone.GetPath())
+	}
+}
+
+func TestFishVFSSessionOutlivesItsClones(t *testing.T) {
+	v := newLocalFishVFS(t)
+	ctx := context.Background()
+	dir := t.TempDir()
+	clone := v.Clone().(*FishVFS)
+
+	if err := clone.Close(); err != nil {
+		t.Fatalf("closing the clone: %v", err)
+	}
+	if _, err := v.Stat(ctx, dir); err != nil {
+		t.Fatalf("closing a clone tore the shared session down: %v", err)
+	}
+	// A double close must not drop the reference count twice.
+	if err := clone.Close(); err != nil {
+		t.Errorf("closing the clone again: %v", err)
+	}
+	if _, err := v.Stat(ctx, dir); err != nil {
+		t.Fatalf("a second close of the clone tore the session down: %v", err)
+	}
+
+	if err := v.Close(); err != nil {
+		t.Fatalf("closing the last view: %v", err)
+	}
+	if _, err := v.Stat(ctx, dir); err == nil {
+		t.Error("the session survived its last user")
+	}
+}
+
+func TestFishVFSClonesShareOneSessionSafely(t *testing.T) {
+	v := newLocalFishVFS(t)
+	dir := t.TempDir()
+	for _, name := range []string{"one", "two", "three"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(name), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	clone := v.Clone().(*FishVFS)
+
+	var wg sync.WaitGroup
+	errs := make(chan error, 64)
+	for i := 0; i < 16; i++ {
+		for _, target := range []*FishVFS{v, clone} {
+			wg.Add(1)
+			go func(x *FishVFS) {
+				defer wg.Done()
+				count := 0
+				err := x.ReadDir(context.Background(), dir, func(chunk []vfs.VFSItem) {
+					count += len(chunk)
+				})
+				if err != nil {
+					errs <- err
+					return
+				}
+				if count != 3 {
+					errs <- fmt.Errorf("listing returned %d entries, want 3", count)
+				}
+			}(target)
+		}
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatalf("concurrent use of one session: %v", err)
 	}
 }

@@ -120,6 +120,7 @@ The offset is clamped against the size the helper just read, so the frame length
 *   The helper does its size arithmetic in the shell, so a host whose shell has 32 bit arithmetic cannot address past 2 GB. `tools/fishplus_probe.sh` reports this per host.
 *   A listing carries file names on a line each, so a name containing a newline shows up truncated in a directory listing, exactly as in classic fish. Operating on such a file still works, because paths going the other way are escaped.
 *   Cancelling a request while its response is being read desynchronizes the stream, so the session is marked broken and has to be reconnected. Proper mid-request cancellation is a separate step of the plan.
+*   Two panels sharing one session — which is what `Clone` gives them — take turns rather than working in parallel, because the remote shell answers one command at a time. That also means a cancellation in one panel breaks the session for the other until step 10 makes cancellation recoverable.
 *   In the `stat` and `statbsd` backends a directory is listed through a shell glob, so a directory with very many entries can exceed the argument limit, and a symlink is reported without the type of its target until the user enters it.
 *   Hosts with neither GNU find, nor GNU stat, nor BSD stat cannot be listed at all yet.
 

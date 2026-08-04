@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync"
 
 	"github.com/unxed/f4/plugins/netfox/fishplus"
 	"github.com/unxed/f4/vfs"
@@ -28,8 +29,47 @@ const fishReadDirChunk = 500
 type FishVFS struct {
 	parent vfs.VFS
 	client *fishplus.Client
+	conn   *fishConn
 	path   string
 	title  string
+	once   sync.Once
+}
+
+// fishConn keeps one FISH+ session alive for as long as any of the VFS
+// instances built on it is still in use. f4 clones a panel's file system in
+// several places — the "other panel" menu item and the frame snapshot taken
+// for a background task — and every panel closes its own file system when it
+// leaves it. Handing back the same instance, the way the SFTP backend does,
+// would therefore let one panel tear the session down under another, and
+// would make both panels share a single current directory.
+//
+// Requests from the clones interleave freely: the session serializes them
+// with its own mutex, so each request stays atomic. They do not run in
+// parallel, which for a shell that answers one command at a time is what a
+// second connection could not fix anyway.
+type fishConn struct {
+	client *fishplus.Client
+
+	mu     sync.Mutex
+	refs   int
+	closed bool
+}
+
+func (c *fishConn) retain() {
+	c.mu.Lock()
+	c.refs++
+	c.mu.Unlock()
+}
+
+func (c *fishConn) release() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.refs--
+	if c.refs > 0 || c.closed {
+		return nil
+	}
+	c.closed = true
+	return c.client.Session().Close()
 }
 
 // NewFishVFSOnStream completes the handshake on an already established pair
@@ -47,7 +87,13 @@ func NewFishVFSOnStream(ctx context.Context, parent vfs.VFS, stdin io.Writer, st
 	if err != nil || !path.IsAbs(cwd) {
 		cwd = "/"
 	}
-	return &FishVFS{parent: parent, client: client, path: cwd, title: title}, nil
+	return &FishVFS{
+		parent: parent,
+		client: client,
+		conn:   &fishConn{client: client, refs: 1},
+		path:   cwd,
+		title:  title,
+	}, nil
 }
 
 // Client exposes the underlying protocol client, mostly so a caller can ask
@@ -176,13 +222,32 @@ func (v *FishVFS) SetAttributes(ctx context.Context, p string, item vfs.VFSItem)
 
 func (v *FishVFS) ParentVFS() vfs.VFS { return v.parent }
 
-// Clone hands back the same instance: a second session would mean a second
-// login, which is what the SFTP backend avoids as well.
-func (v *FishVFS) Clone() vfs.VFS { return v }
-
-func (v *FishVFS) Close() error {
-	if v.client == nil {
-		return nil
+// Clone returns a second view of the same session, with its own current
+// directory. A second login would cost another authentication and another
+// password prompt, and would buy nothing: the remote shell answers one
+// command at a time either way.
+func (v *FishVFS) Clone() vfs.VFS {
+	if v.conn != nil {
+		v.conn.retain()
 	}
-	return v.client.Session().Close()
+	return &FishVFS{
+		parent: v.parent,
+		client: v.client,
+		conn:   v.conn,
+		path:   v.path,
+		title:  v.title,
+	}
+}
+
+// Close releases this view. The session itself goes away with its last
+// user, and closing the same view twice is harmless: a panel may well be
+// closed by both its own teardown and the frame that owned it.
+func (v *FishVFS) Close() error {
+	var err error
+	v.once.Do(func() {
+		if v.conn != nil {
+			err = v.conn.release()
+		}
+	})
+	return err
 }
