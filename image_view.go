@@ -74,6 +74,7 @@ type ImageView struct {
 	sizeKnown bool
 	gal       *imageGallery
 	selected  map[string]bool
+	slideStop chan struct{}
 
 	OnClose  func()
 	OnSelect func(path string, selected bool)
@@ -120,6 +121,9 @@ func NewImageView(ctx context.Context, v vfs.VFS, path string) (*ImageView, erro
 			state += ", loading"
 		case iv.preview:
 			state += ", preview"
+		}
+		if iv.slideStop != nil {
+			state += ", slideshow"
 		}
 
 		position := ""
@@ -705,6 +709,9 @@ func (iv *ImageView) ProcessKey(e *vtinput.InputEvent) bool {
 		case vtinput.VK_I:
 			iv.ToggleOverlay()
 			return true
+		case vtinput.VK_S:
+			iv.ToggleSlideShow()
+			return true
 		}
 		return false
 	}
@@ -811,6 +818,7 @@ func (iv *ImageView) Close() {
 	// The whole screen mode is a state of the manager, not of the frame, so
 	// leaving the viewer has to hand the bars back.
 	iv.full = false
+	iv.stopSlideShow()
 	vtui.FrameManager.HideBars = false
 	iv.BaseFrame.Close()
 	if iv.OnClose != nil {

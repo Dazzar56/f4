@@ -102,6 +102,9 @@ func (g *imageGallery) scrollTo(idx, total int) {
 // the picture that was on screen, and leaving it by anything but Enter leaves
 // that same picture on screen.
 func (iv *ImageView) ToggleGallery() {
+	// A grid and a slide show both want to own which picture is current,
+	// and there is nothing to divide that ownership with.
+	iv.stopSlideShow()
 	if iv.gal != nil {
 		iv.gal = nil
 		return
