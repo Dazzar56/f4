@@ -88,6 +88,53 @@ func (hm *HotkeyManager) GetActiveBindings() map[string]map[string]string {
 	return res
 }
 
+// GetKeyForAction searches for a key combination bound to the given action in an area.
+func (hm *HotkeyManager) GetKeyForAction(area, actionName string) string {
+	if binds, ok := hm.Bindings[area]; ok {
+		for key, binding := range binds {
+			parts := strings.SplitN(binding, ":", 2)
+			if strings.EqualFold(parts[0], actionName) {
+				return key
+			}
+		}
+	}
+	if area != "Common" {
+		if binds, ok := hm.Bindings["Common"]; ok {
+			for key, binding := range binds {
+				parts := strings.SplitN(binding, ":", 2)
+				if strings.EqualFold(parts[0], actionName) {
+					return key
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// FormatKeyForUI converts a raw key string (like CtrlShiftF5) into a pretty UI string (Ctrl+Shift+F5).
+func FormatKeyForUI(key string) string {
+	if key == "" {
+		return ""
+	}
+	var parts []string
+	if strings.HasPrefix(key, "Ctrl") {
+		parts = append(parts, "Ctrl")
+		key = key[4:]
+	}
+	if strings.HasPrefix(key, "Alt") {
+		parts = append(parts, "Alt")
+		key = key[3:]
+	}
+	if strings.HasPrefix(key, "Shift") {
+		parts = append(parts, "Shift")
+		key = key[5:]
+	}
+	if key != "" {
+		parts = append(parts, key)
+	}
+	return strings.Join(parts, "+")
+}
+
 func (hm *HotkeyManager) initDefaults() {
 	hm.Defaults = map[string]map[string]string{
 		"Shell": {
@@ -106,6 +153,10 @@ func (hm *HotkeyManager) initDefaults() {
 			"AltF12":  "Panel.FoldersHistory",
 			"AltF8":   "Panel.CommandHistory",
 			"Esc":     "Panel.Toggle:EscToggle",
+			"Ctrl1":   "Panel.ViewBrief",
+			"Ctrl2":   "Panel.ViewMedium",
+			"Ctrl3":   "Panel.ViewDetailed",
+			"Ctrl4":   "Panel.ViewWide",
 		},
 		"Editor": {
 			"F2":         "Editor.Save",

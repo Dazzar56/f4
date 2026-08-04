@@ -179,6 +179,48 @@ func init() {
 		Handler:     withPF(func(pf *PanelsFrame) { actionFoldersHistory(pf) }),
 	})
 	RegisterAction(Action{
+		Name:        "Panel.ViewBrief",
+		Label:       "Brief Mode",
+		Description: "Set active panel to brief mode",
+		Handler:     withPF(func(pf *PanelsFrame) { pf.setPanelViewMode(pf.activeIdx, ViewModeBrief) }),
+	})
+	RegisterAction(Action{
+		Name:        "Panel.ViewMedium",
+		Label:       "Medium Mode",
+		Description: "Set active panel to medium mode",
+		Handler:     withPF(func(pf *PanelsFrame) { pf.setPanelViewMode(pf.activeIdx, ViewModeMedium) }),
+	})
+	RegisterAction(Action{
+		Name:        "Panel.ViewDetailed",
+		Label:       "Detailed Mode",
+		Description: "Set active panel to detailed mode",
+		Handler:     withPF(func(pf *PanelsFrame) { pf.setPanelViewMode(pf.activeIdx, ViewModeDetailed) }),
+	})
+	RegisterAction(Action{
+		Name:        "Panel.ViewWide",
+		Label:       "Wide Mode",
+		Description: "Set active panel to wide mode",
+		Handler:     withPF(func(pf *PanelsFrame) { pf.setWidePanel(pf.activeIdx) }),
+	})
+	RegisterAction(Action{
+		Name:        "Panel.Bookmarks",
+		Label:       "Bookmarks",
+		Description: "Show folder bookmarks dialog",
+		Handler:     withPF(func(pf *PanelsFrame) { ShowBookmarksDialog(pf) }),
+	})
+	RegisterAction(Action{
+		Name:        "Settings.Language",
+		Label:       "Language",
+		Description: "Open language selection dialog",
+		Handler:     withPF(func(pf *PanelsFrame) { actionLanguage(pf) }),
+	})
+	RegisterAction(Action{
+		Name:        "Settings.Plugins",
+		Label:       "Plugins Menu",
+		Description: "Manage plugins dialog",
+		Handler:     withPF(func(pf *PanelsFrame) { actionManagePlugins(pf) }),
+	})
+	RegisterAction(Action{
 		Name:        "Panel.CommandHistory",
 		Label:       "Command History",
 		Description: "Show command line history",

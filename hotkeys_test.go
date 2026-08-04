@@ -77,6 +77,38 @@ func TestHotkeyManager_GetActiveBindings(t *testing.T) {
 		t.Errorf("Expected Editor CtrlS to be File.Save")
 	}
 }
+func TestFormatKeyForUI(t *testing.T) {
+	tests := []struct {
+		in  string
+		out string
+	}{
+		{"F3", "F3"},
+		{"CtrlO", "Ctrl+O"},
+		{"ShiftF4", "Shift+F4"},
+		{"CtrlShiftF5", "Ctrl+Shift+F5"},
+		{"AltF12", "Alt+F12"},
+		{"", ""},
+	}
+	for _, tc := range tests {
+		if got := FormatKeyForUI(tc.in); got != tc.out {
+			t.Errorf("FormatKeyForUI(%q) = %q, expected %q", tc.in, got, tc.out)
+		}
+	}
+}
+
+func TestHotkeyManager_GetKeyForAction(t *testing.T) {
+	hm := NewHotkeyManager("")
+	hm.initDefaults()
+	hm.Bind("Shell", "CtrlT", "Panel.Test")
+
+	if key := hm.GetKeyForAction("Shell", "Panel.Test"); key != "CtrlT" {
+		t.Errorf("Expected CtrlT, got %q", key)
+	}
+
+	if key := hm.GetKeyForAction("Shell", "File.View"); key != "F3" {
+		t.Errorf("Expected F3, got %q", key)
+	}
+}
 func TestHotkeyManager_Conditions(t *testing.T) {
 	hm := NewHotkeyManager("")
 	hm.initDefaults()

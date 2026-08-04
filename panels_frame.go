@@ -333,6 +333,32 @@ func getSortMenuText(current, target SortMode, label string) string {
 	return " " + label
 }
 
+var commandToActionName = map[int]string{
+	CmLeftBrief:             "Panel.ViewBrief",
+	CmLeftMedium:            "Panel.ViewMedium",
+	CmLeftDetailed:          "Panel.ViewDetailed",
+	CmLeftWide:              "Panel.ViewWide",
+	CmRightBrief:            "Panel.ViewBrief",
+	CmRightMedium:           "Panel.ViewMedium",
+	CmRightDetailed:         "Panel.ViewDetailed",
+	CmRightWide:             "Panel.ViewWide",
+	CmView:                  "File.View",
+	CmEdit:                  "File.Edit",
+	CmCopy:                  "File.Copy",
+	CmMove:                  "File.Move",
+	CmMkDir:                 "File.MakeDir",
+	CmDelete:                "File.Delete",
+	CmFindFile:              "File.Find",
+	CmBookmarks:             "Panel.Bookmarks",
+	CmPanelSettings:         "Settings.Panel",
+	CmEditorSettings:        "Settings.Editor",
+	CmColorerSettings:       "Settings.Colorer",
+	CmAppearanceSettings:    "Settings.Appearance",
+	CmConfirmationsSettings: "Settings.Confirmations",
+	CmLanguage:              "Settings.Language",
+	CmPlugins:               "Settings.Plugins",
+}
+
 func (pf *PanelsFrame) updateMenuCheckmarks() {
 	if pf.panels[0] == nil || pf.panels[1] == nil || pf.menuBar == nil || len(pf.menuBar.Items) < 5 {
 		return
@@ -372,6 +398,23 @@ func (pf *PanelsFrame) updateMenuCheckmarks() {
 	}{{SortName, "SortName"}, {SortExt, "SortExt"}, {SortTime, "SortTime"}, {SortSize, "SortSize"}, {SortUnsorted, "SortUnsorted"}} {
 		pf.menuBar.Items[0].SubItems[i+5].Text = getSortMenuText(lSort, item.mode, "&"+Msg("Menu."+item.key))
 		pf.menuBar.Items[4].SubItems[i+5].Text = getSortMenuText(rSort, item.mode, "&"+Msg("Menu."+item.key))
+	}
+
+	// Update shortcuts dynamically from HotkeyManager
+	if hm := GlobalHotkeysMgr; hm != nil {
+		area := "Shell"
+		for i := range pf.menuBar.Items {
+			for j := range pf.menuBar.Items[i].SubItems {
+				sub := &pf.menuBar.Items[i].SubItems[j]
+				if actName, ok := commandToActionName[sub.Command]; ok {
+					if key := hm.GetKeyForAction(area, actName); key != "" {
+						sub.Shortcut = FormatKeyForUI(key)
+					} else {
+						sub.Shortcut = ""
+					}
+				}
+			}
+		}
 	}
 }
 
@@ -2455,9 +2498,23 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 }
 
 func (pf *PanelsFrame) GetKeyLabels() *vtui.KeySet {
-	// F2 label switches to Wrap/Unwrap while the quick-view panel is
-	// focused, matching far/far2l. The alt panel handles the actual
-	// key in its ProcessKey; we just relabel the hint here.
+	area := MacroMgr.GetCurrentArea()
+
+	resolveLabel := func(keyPrefix, keyNum string, fallback string) string {
+		keyStr := keyPrefix + keyNum
+		if hm := GlobalHotkeysMgr; hm != nil {
+			if actName := hm.GetAction(area, keyStr); actName != "" {
+				if strings.EqualFold(actName, "none") {
+					return ""
+				}
+				if act, ok := GetAction(actName); ok {
+					return act.Label
+				}
+			}
+		}
+		return fallback
+	}
+
 	f2 := Msg("KeyBar.F2")
 	if pf.showPanels && pf.activeIdx >= 0 && pf.activeIdx < len(pf.altPanels) {
 		if a := pf.altPanels[pf.activeIdx]; a != nil && a.IsFocused() && a.Kind() == "quick_view" {
@@ -2470,22 +2527,49 @@ func (pf *PanelsFrame) GetKeyLabels() *vtui.KeySet {
 			}
 		}
 	}
+
+	normal := vtui.KeyBarLabels{}
+	defaultsNormal := []string{
+		Msg("KeyBar.F1"), f2, Msg("KeyBar.F3"), Msg("KeyBar.F4"),
+		Msg("KeyBar.F5"), Msg("KeyBar.F6"), Msg("KeyBar.F7"), Msg("KeyBar.F8"),
+		Msg("KeyBar.F9"), Msg("KeyBar.F10"), Msg("KeyBar.F11"), Msg("KeyBar.F12"),
+	}
+	for i := 0; i < 12; i++ {
+		keyNum := fmt.Sprintf("F%d", i+1)
+		normal[i] = resolveLabel("", keyNum, defaultsNormal[i])
+	}
+
+	shift := vtui.KeyBarLabels{}
+	defaultsShift := []string{"", "", "", "", "", "Rename", "", "", "Save", "", "", ""}
+	for i := 0; i < 12; i++ {
+		keyNum := fmt.Sprintf("F%d", i+1)
+		shift[i] = resolveLabel("Shift", keyNum, defaultsShift[i])
+	}
+
+	alt := vtui.KeyBarLabels{}
+	defaultsAlt := []string{
+		Msg("KeyBar.AltF1"), Msg("KeyBar.AltF2"), Msg("KeyBar.AltF3"), "",
+		"", "", Msg("KeyBar.AltF7"), Msg("KeyBar.AltF8"), "", "", "", Msg("KeyBar.AltF12"),
+	}
+	for i := 0; i < 12; i++ {
+		keyNum := fmt.Sprintf("F%d", i+1)
+		alt[i] = resolveLabel("Alt", keyNum, defaultsAlt[i])
+	}
+
+	ctrl := vtui.KeyBarLabels{}
+	defaultsCtrl := []string{
+		Msg("KeyBar.CtrlF1"), Msg("KeyBar.CtrlF2"), Msg("KeyBar.CtrlF3"), Msg("KeyBar.CtrlF4"), Msg("KeyBar.CtrlF5"), Msg("KeyBar.CtrlF6"), Msg("KeyBar.CtrlF7"), "", "", "", "Fork", "Close",
+	}
+	for i := 0; i < 12; i++ {
+		keyNum := fmt.Sprintf("F%d", i+1)
+		ctrl[i] = resolveLabel("Ctrl", keyNum, defaultsCtrl[i])
+	}
+
 	return &vtui.KeySet{
-		Normal: vtui.KeyBarLabels{
-			Msg("KeyBar.F1"), f2, Msg("KeyBar.F3"), Msg("KeyBar.F4"),
-			Msg("KeyBar.F5"), Msg("KeyBar.F6"), Msg("KeyBar.F7"), Msg("KeyBar.F8"),
-			Msg("KeyBar.F9"), Msg("KeyBar.F10"), Msg("KeyBar.F11"), Msg("KeyBar.F12"),
-		},
-		Shift: vtui.KeyBarLabels{
-			"", "", "", "", "", "Rename", "", "", "Save", "", "", "",
-		},
-		Alt: vtui.KeyBarLabels{
-			Msg("KeyBar.AltF1"), Msg("KeyBar.AltF2"), Msg("KeyBar.AltF3"), "",
-			"", "", Msg("KeyBar.AltF7"), Msg("KeyBar.AltF8"), "", "", "", Msg("KeyBar.AltF12"),
-		},
-		Ctrl: vtui.KeyBarLabels{
-			Msg("KeyBar.CtrlF1"), Msg("KeyBar.CtrlF2"), Msg("KeyBar.CtrlF3"), Msg("KeyBar.CtrlF4"), Msg("KeyBar.CtrlF5"), Msg("KeyBar.CtrlF6"), Msg("KeyBar.CtrlF7"), "", "", "", "Fork", "Close",
-		},
+		Normal: normal,
+		Shift:  shift,
+		Alt:    alt,
+		Ctrl:   ctrl,
 	}
 }
 
