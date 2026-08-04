@@ -100,6 +100,8 @@ type F4Config struct {
 	ViewerAutodetectCodePage bool
 	ViewerDefaultCodePage    int
 	SlideShowDelay           int
+	ImageExternalTimeout     int
+	ImageDecoderPriority     string
 	RegisteredPlugins        []string
 	ConfirmCopy              bool
 	ConfirmMove              bool
@@ -172,6 +174,8 @@ var AppConfig = F4Config{
 	ViewerAutodetectCodePage: true,
 	ViewerDefaultCodePage:    65001,
 	SlideShowDelay:           defaultSlideShowDelay,
+	ImageExternalTimeout:     defaultImageExternalTimeout,
+	ImageDecoderPriority:     "",
 	ConfirmCopy:              true,
 	ConfirmMove:              true,
 	ConfirmDelete:            true,
@@ -303,6 +307,13 @@ func LoadConfig() {
 	if AppConfig.SlideShowDelay <= 0 {
 		AppConfig.SlideShowDelay = defaultSlideShowDelay
 	}
+	AppConfig.ImageExternalTimeout = defaultImageExternalTimeout
+	fmt.Sscanf(ini.GetString("Images", "ExternalTimeout", "20"), "%d", &AppConfig.ImageExternalTimeout)
+	if AppConfig.ImageExternalTimeout <= 0 {
+		AppConfig.ImageExternalTimeout = defaultImageExternalTimeout
+	}
+	AppConfig.ImageDecoderPriority = ini.GetString("Images", "DecoderPriority", "")
+	SetImageDecoderPriorities(ParseImageDecoderPriorities(AppConfig.ImageDecoderPriority))
 	AppConfig.UseExternalEditor = ini.GetString("Editor", "UseExternalEditor", "0") == "1"
 	AppConfig.ExternalEditorCommand = ini.GetString("Editor", "ExternalEditorCommand", "")
 	plugStr := ini.GetString("Plugins", "List", "")
@@ -402,6 +413,8 @@ func SaveConfig() {
 	sb.WriteString(fmt.Sprintf("DefaultCodePage = %d\n", AppConfig.ViewerDefaultCodePage))
 	sb.WriteString("\n[Images]\n")
 	sb.WriteString(fmt.Sprintf("SlideShowDelay = %d\n", AppConfig.SlideShowDelay))
+	sb.WriteString(fmt.Sprintf("ExternalTimeout = %d\n", AppConfig.ImageExternalTimeout))
+	sb.WriteString(fmt.Sprintf("DecoderPriority = %s\n", AppConfig.ImageDecoderPriority))
 	sb.WriteString("\n[Plugins]\n")
 	sb.WriteString(fmt.Sprintf("List = %s\n", strings.Join(AppConfig.RegisteredPlugins, "|")))
 

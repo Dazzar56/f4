@@ -61,6 +61,8 @@ In `f4` (package `main`):
 - `image_pipeline.go` — the cache, the job queue, the workers, prefetch
 - `image_decode.go`, `image_qoi.go`, `image_bmp.go`, `image_preview.go` —
   decoders and the Exif thumbnail path
+- `image_external.go` — the converter of last resort: `magick`, `convert` or
+  `ffmpeg`, whichever is on the `PATH`
 - `image_transform.go` — rotation and mirroring over the RGBA bytes
 - `image_view.go` — the viewer frame: layout, zoom, panning, orientation,
   the info overlay, keys
@@ -91,7 +93,7 @@ a terminfo check and the `AnnounceKittyTerm` option); the decoding pipeline;
 preview from the Exif thumbnail; QOI and BMP decoders; walking the neighbours
 with prefetch; the 100% mode; `Ctrl+R`; errors shown in the title.
 
-Done in the current sequence, as steps 1 to 3 of the twelve below:
+Done in the current sequence, as steps 1 to 5 of the twelve below:
 
 **1. Rotation and mirroring.** `image_transform.go` rotates and mirrors a
 surface in plain Go. `ImageView` keeps `rotation`, `flipH`, `flipV` and a
@@ -116,13 +118,15 @@ the pipeline instead of the hex dump when one is under the cursor. The
 placement is computed the way `ImageView.placementFor` does it, but inside the
 bounds of the panel.
 
-## 5. What is left, in order
+**5. External decoder.** `image_external.go` registers a decoder at priority
+−10 that hands the file to `magick`, `convert` or `ffmpeg` — whichever is on
+the `PATH` — and reads PNG back from its standard output. It is registered
+only when one of them is there, and it claims only the formats that one can
+read, so `IsImageFile` never promises a picture the machine cannot open. The
+`[Images]` section gained `ExternalTimeout` and `DecoderPriority`, and
+`ImageDecoder` gained an optional context-aware `Decode`.
 
-**5. External decoder.** A fallback decoder at priority −10 that runs
-`convert`, `magick` or `ffmpeg` — whichever is on `PATH` — and reads PNG from
-its standard output, for `webp avif tiff heic jxl` and anything else. Register
-it only when the binary exists. Extend the `[Images]` section with decoder
-priorities by name and a timeout for the external call.
+## 5. What is left, in order
 
 **6. Kitty polish in the built-in terminal.** Honour a negative `z` (picture
 under the text) when drawing; save and restore placements across an alt-screen
@@ -198,6 +202,24 @@ the other way round.
 - **`Stat` for the overlay happens once, lazily, and only when the overlay is
   actually up.** It can be a network round trip on a remote file system.
 
+- **The external converter is fed a file, not a pipe.** `heic`, `avif` and
+  `jxl` are containers that are read by seeking around them, and both
+  ImageMagick's delegates and `ffmpeg` refuse a stream they cannot rewind.
+  The bytes are in memory already, so a temporary file costs one write. Its
+  name carries an extension guessed from the magic bytes, because ImageMagick
+  picks a delegate by the name before it looks inside.
+- **The list of formats depends on the converter that was found.** Claiming an
+  extension is what makes the panel call a file a picture and the viewer open
+  it, so a decoder that claimed `psd` on a machine with only `ffmpeg` would
+  turn a hex dump into an error message.
+- **`convert` is skipped on Windows.** There, `convert.exe` is the file system
+  conversion utility that ships with the system. ImageMagick 7 answers to
+  `magick` everywhere, so nothing is lost.
+- **Decoder priorities live beside the registry, not in it.** A decoder
+  registers with the priority its author chose and the overrides are applied
+  when the registry is read, so emptying `DecoderPriority` restores the
+  built-in order without a second copy of the built-in numbers.
+
 ## 7. Traps
 
 **`Ctrl+I` is Tab.** On a terminal without an extended keyboard protocol,
@@ -229,3 +251,11 @@ asking, and the user may want a different one.
   move the check one level down.
 - `image_gallery_test.go` passes a nil context to `ImagePipe.LoadSync`, which
   the function handles but which no other test does.
+- `ImagePipeline.run` still calls the loader with `context.Background()`, so
+  the context now threaded down to the external decoder is never cancelled in
+  practice. The timeout works; the cancellation is waiting for the pipeline to
+  learn how to drop a job.
+- Only the still picture is taken from a converter that could give more: an
+  animated `webp` arrives as its first frame. Animation belongs with step 12.
+- `ExternalTimeout` and `DecoderPriority` are read and written but do not
+  appear in the settings dialog, same as `SlideShowDelay`.
