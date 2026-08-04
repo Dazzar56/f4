@@ -1187,17 +1187,41 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 
 	case vtinput.VK_UP, vtinput.VK_DOWN, vtinput.VK_LEFT, vtinput.VK_RIGHT, vtinput.VK_PRIOR, vtinput.VK_NEXT, vtinput.VK_HOME, vtinput.VK_END:
-		if shift {
-			idx := fp.GetCursorIndex()
-			fp.ToggleSelection(idx)
+		// Shift+nav: two flavours share this block.
+		//
+		//   * Single-step (Up/Down): FAR's per-tap toggle-current
+		//     semantic. Each tap toggles the row under the cursor,
+		//     then moves — holding Shift and tapping Down N times
+		//     naturally toggles N sequential rows.
+		//
+		//   * Multi-step (Left/Right in grid, PgUp/PgDn, Home/End):
+		//     the cursor covers many rows in one keystroke, so a
+		//     per-tap toggle would leave a dashed selection. Simpler
+		//     and closer to what users expect: mark every row the
+		//     cursor sweeps over as selected. Additive — repeated
+		//     swipes grow the selection instead of flipping it.
+		//     Starting on a non-selectable row (".." parent-dir) is
+		//     handled naturally because SetItemSelected skips it.
+		//
+		// Deselect stays with Ins (single row) and the panel-wide
+		// mask/invert commands; Shift-swipe intentionally only adds.
+		startIdx := fp.GetCursorIndex()
+		isMultiStep := false
+		switch e.VirtualKeyCode {
+		case vtinput.VK_LEFT, vtinput.VK_RIGHT, vtinput.VK_PRIOR, vtinput.VK_NEXT, vtinput.VK_HOME, vtinput.VK_END:
+			isMultiStep = true
+		}
+		if shift && !isMultiStep {
+			fp.ToggleSelection(startIdx)
 		}
 
-		idx := fp.GetCursorIndex()
+		idx := startIdx
 		H := fp.table.ViewHeight
 		if H <= 0 {
 			H = 1
 		}
 
+		handled := false
 		if columns := fp.gridColumnCount(); columns > 1 {
 			switch e.VirtualKeyCode {
 			case vtinput.VK_UP:
@@ -1220,15 +1244,26 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 				return false
 			}
 			fp.SetCursorIndex(idx)
-			return true
+			handled = true
 		} else {
 			// In Detailed mode, we let the table handle navigation but sync our index back
-			handled := fp.table.ProcessKey(e)
-			if handled {
+			if fp.table.ProcessKey(e) {
 				fp.cursorIdx = fp.table.SelectPos
+				handled = true
 			}
-			return handled
 		}
+
+		if shift && handled && isMultiStep {
+			newIdx := fp.GetCursorIndex()
+			lo, hi := startIdx, newIdx
+			if lo > hi {
+				lo, hi = hi, lo
+			}
+			for i := lo; i <= hi; i++ {
+				fp.SetItemSelected(i, true)
+			}
+		}
+		return handled
 
 	case vtinput.VK_RETURN:
 		idx := fp.GetCursorIndex()

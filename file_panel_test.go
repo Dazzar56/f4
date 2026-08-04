@@ -542,7 +542,12 @@ func TestFileSystemPanel_MultiSelect(t *testing.T) {
 		t.Errorf("Cursor should move to 2, got %d", fp.GetCursorIndex())
 	}
 
-	// 3. Select file2.txt via Shift+Down
+	// 3. Shift+Down at cursor=2 (file2.txt).
+	//    Single-step Up/Down keep FAR's per-tap semantics: only the
+	//    starting row is toggled; the cursor moves to the next row
+	//    but that row is left alone (the next tap decides what to
+	//    do with it). Range-paint is reserved for multi-step jumps
+	//    (Home/End/PgUp/PgDn/Left/Right in grid mode).
 	fp.ProcessKey(&vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN, ControlKeyState: vtinput.ShiftPressed,
 	})
@@ -550,11 +555,100 @@ func TestFileSystemPanel_MultiSelect(t *testing.T) {
 	if !fp.entries[2].Selected {
 		t.Error("file2.txt (index 2) should be selected after Shift+Down")
 	}
+	if fp.entries[3].Selected {
+		t.Error("file3.txt (index 3) must NOT be selected — Shift+Down is single-step, next row is left alone")
+	}
+	if fp.GetCursorIndex() != 3 {
+		t.Errorf("Cursor should move to 3, got %d", fp.GetCursorIndex())
+	}
 
-	// 4. Verify results
+	// 4. Verify results — file1 (from Ins) + file2 (from Shift+Down).
 	names := fp.GetSelectedNames()
 	if len(names) != 2 || names[0] != "file1.txt" || names[1] != "file2.txt" {
 		t.Errorf("GetSelectedNames returned wrong result: %v", names)
+	}
+}
+
+// TestFileSystemPanel_ShiftMultiStepSwipe covers the long-jump
+// shift keys: they select every row the cursor sweeps over. It's
+// additive — starting on ".." works (nothing to toggle, we just
+// paint from there onward), and a second swipe over already-
+// selected rows grows the selection instead of flipping it off.
+func TestFileSystemPanel_ShiftMultiStepSwipe(t *testing.T) {
+	tmp := t.TempDir()
+	for _, n := range []string{"a", "b", "c", "d", "e"} {
+		os.WriteFile(filepath.Join(tmp, n), []byte(n), 0644)
+	}
+	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(tmp))
+	fp.viewMode = ViewModeDetailed
+	fp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
+		{VFSItem: vfs.VFSItem{Name: "a"}},
+		{VFSItem: vfs.VFSItem{Name: "b"}},
+		{VFSItem: vfs.VFSItem{Name: "c"}},
+		{VFSItem: vfs.VFSItem{Name: "d"}},
+		{VFSItem: vfs.VFSItem{Name: "e"}},
+	}
+	fp.Refresh()
+
+	// Cursor on ".." (idx 0). Shift+End should still paint a..e —
+	// starting on an unselectable row is not a reason to skip the
+	// sweep. This exact scenario used to return zero selections.
+	fp.SetCursorIndex(0)
+	fp.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode:  vtinput.VK_END,
+		ControlKeyState: vtinput.ShiftPressed,
+	})
+	for _, want := range []string{"a", "b", "c", "d", "e"} {
+		for _, e := range fp.entries {
+			if e.Name == want && !e.Selected {
+				t.Errorf(`Shift+End starting on "..": expected %q selected`, want)
+			}
+		}
+	}
+
+	// Repeating the sweep from "e" back with Shift+Home must NOT
+	// deselect anything — swipes are additive. Everything from ".."
+	// (skipped) through "a" is already selected, and the return
+	// trip leaves the selection intact.
+	fp.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode:  vtinput.VK_HOME,
+		ControlKeyState: vtinput.ShiftPressed,
+	})
+	for _, want := range []string{"a", "b", "c", "d", "e"} {
+		for _, e := range fp.entries {
+			if e.Name == want && !e.Selected {
+				t.Errorf("Shift+Home return sweep must not deselect %q", want)
+			}
+		}
+	}
+}
+
+// TestFileSystemPanel_ShiftRangeSkipsParentDir makes sure the ".."
+// row is never selected by a shift-sweep, matching the same rule
+// SetItemSelected / ToggleSelection already enforce for Ins.
+func TestFileSystemPanel_ShiftRangeSkipsParentDir(t *testing.T) {
+	tmp := t.TempDir()
+	os.WriteFile(filepath.Join(tmp, "a"), []byte("a"), 0644)
+	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(tmp))
+	fp.viewMode = ViewModeDetailed
+	fp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
+		{VFSItem: vfs.VFSItem{Name: "a"}},
+	}
+	fp.Refresh()
+
+	// Cursor on "a"; Shift+Home should not select ".."
+	fp.SetCursorIndex(1)
+	fp.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode:  vtinput.VK_HOME,
+		ControlKeyState: vtinput.ShiftPressed,
+	})
+	if fp.entries[0].Selected {
+		t.Error(`Shift-sweep must not select the ".." parent-dir row`)
 	}
 }
 
