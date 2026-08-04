@@ -34,6 +34,7 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	AppConfig.EditorColorerBackground = false
 	AppConfig.CommandLineAutoComplete = false
 	AppConfig.SeparateFileExtensions = true
+	AppConfig.ShowPanelScrollbars = true
 	AppConfig.MacroRecordFormat = 1
 
 	// 2. Save
@@ -46,6 +47,7 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	AppConfig.EditorCrosshair = false
 	AppConfig.EditorColorerBackground = true
 	AppConfig.SeparateFileExtensions = false
+	AppConfig.ShowPanelScrollbars = false
 	AppConfig.MacroRecordFormat = 0
 
 	// 4. Load
@@ -76,8 +78,36 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	if !AppConfig.SeparateFileExtensions {
 		t.Error("LoadConfig failed to restore SeparateFileExtensions")
 	}
+	if !AppConfig.ShowPanelScrollbars {
+		t.Error("LoadConfig failed to restore ShowPanelScrollbars")
+	}
 	if AppConfig.MacroRecordFormat != 1 {
 		t.Error("LoadConfig failed to restore MacroRecordFormat")
+	}
+}
+
+func TestConfig_PanelScrollbarsDisabledByDefault(t *testing.T) {
+	tmpDir := t.TempDir()
+	userIniPath := filepath.Join(tmpDir, "settings.ini")
+	if err := os.WriteFile(userIniPath, []byte("[Panel]\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	origUserPathFunc := getUserConfigIniPath
+	origPathsFunc := getConfigIniPaths
+	oldCfg := AppConfig
+	defer func() {
+		getUserConfigIniPath = origUserPathFunc
+		getConfigIniPaths = origPathsFunc
+		AppConfig = oldCfg
+	}()
+	getUserConfigIniPath = func() string { return userIniPath }
+	getConfigIniPaths = func() []string { return []string{userIniPath} }
+
+	AppConfig.ShowPanelScrollbars = true
+	LoadConfig()
+	if AppConfig.ShowPanelScrollbars {
+		t.Fatal("panel scrollbars must be disabled when the setting is absent")
 	}
 }
 
