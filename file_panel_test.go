@@ -626,6 +626,122 @@ func TestFileSystemPanel_ShiftMultiStepSwipe(t *testing.T) {
 	}
 }
 
+// TestFileSystemPanel_ShiftSessionModeDecidedOnFirstKey covers
+// FAR-style session semantic: the first Shift+nav decides "select"
+// or "deselect" based on the starting row, every subsequent Shift+
+// nav in the same session applies that same mode, and any non-
+// Shift-nav event closes the session so the next Shift+nav re-
+// decides.
+func TestFileSystemPanel_ShiftSessionModeDecidedOnFirstKey(t *testing.T) {
+	tmp := t.TempDir()
+	for _, n := range []string{"a", "b", "c", "d", "e"} {
+		os.WriteFile(filepath.Join(tmp, n), []byte(n), 0644)
+	}
+	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(tmp))
+	fp.viewMode = ViewModeDetailed
+	fp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
+		{VFSItem: vfs.VFSItem{Name: "a"}},
+		{VFSItem: vfs.VFSItem{Name: "b"}},
+		{VFSItem: vfs.VFSItem{Name: "c"}},
+		{VFSItem: vfs.VFSItem{Name: "d"}},
+		{VFSItem: vfs.VFSItem{Name: "e"}},
+	}
+	fp.Refresh()
+
+	shiftDown := &vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode:  vtinput.VK_DOWN,
+		ControlKeyState: vtinput.ShiftPressed,
+	}
+	plainDown := &vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_DOWN,
+	}
+
+	// Session 1: start on unselected "a" (idx 1) → session picks
+	// "select" mode. Two Shift+Down keystrokes should select "a"
+	// and "b" one after another.
+	fp.SetCursorIndex(1)
+	fp.ProcessKey(shiftDown)
+	fp.ProcessKey(shiftDown)
+	if !fp.entries[1].Selected || !fp.entries[2].Selected {
+		t.Errorf("session-1 select: a=%v b=%v, want both true",
+			fp.entries[1].Selected, fp.entries[2].Selected)
+	}
+	if fp.entries[3].Selected {
+		t.Error("session-1 select: 'c' must not be selected yet — cursor stopped at 'c'")
+	}
+
+	// Plain Down closes the session. Cursor moves from c to d
+	// without selecting anything.
+	fp.ProcessKey(plainDown)
+	if fp.shiftSessionActive {
+		t.Error("plain Down must close the shift-selection session")
+	}
+
+	// Session 2: cursor now on "d". Move it back to "b" (still
+	// selected from session 1) to prove the mode re-decides.
+	fp.SetCursorIndex(2)
+	fp.ProcessKey(shiftDown)
+	// b was selected → session mode = deselect. b should be
+	// unselected now, cursor moved to c.
+	if fp.entries[2].Selected {
+		t.Error("session-2 first Shift+Down on selected 'b' should deselect it")
+	}
+	// Another Shift+Down: c was selected? no, c wasn't selected
+	// after session 1. deselect on an already-unselected row is
+	// a no-op — still unselected.
+	fp.ProcessKey(shiftDown)
+	if fp.entries[3].Selected {
+		t.Error("session-2 mode is deselect; 'c' must stay unselected")
+	}
+}
+
+// TestFileSystemPanel_ShiftSessionDeselectFromParentDir covers the
+// asymmetric case: cursor on ".." (unselectable) and everything
+// below already selected. Session mode has to look past ".." at
+// the first real row in the direction of movement; otherwise
+// Shift+End would always start in "select" mode and there'd be
+// no way to clear the panel selection from that position.
+func TestFileSystemPanel_ShiftSessionDeselectFromParentDir(t *testing.T) {
+	tmp := t.TempDir()
+	for _, n := range []string{"a", "b", "c"} {
+		os.WriteFile(filepath.Join(tmp, n), []byte(n), 0644)
+	}
+	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(tmp))
+	fp.viewMode = ViewModeDetailed
+	fp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
+		{VFSItem: vfs.VFSItem{Name: "a"}},
+		{VFSItem: vfs.VFSItem{Name: "b"}},
+		{VFSItem: vfs.VFSItem{Name: "c"}},
+	}
+	// Pre-select everything by hand — this is the state the user
+	// would land in after a first Shift+End sweep.
+	fp.entries[1].Selected = true
+	fp.entries[2].Selected = true
+	fp.entries[3].Selected = true
+	fp.selectedItems = map[string]bool{"a": true, "b": true, "c": true}
+	fp.Refresh()
+
+	// Cursor on ".." (idx 0). Shift+End should look past ".." to
+	// "a" (selected) and pick "deselect" mode, then clear a..c.
+	fp.SetCursorIndex(0)
+	fp.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode:  vtinput.VK_END,
+		ControlKeyState: vtinput.ShiftPressed,
+	})
+	for _, want := range []string{"a", "b", "c"} {
+		for _, e := range fp.entries {
+			if e.Name == want && e.Selected {
+				t.Errorf("Shift+End from '..': expected %q deselected", want)
+			}
+		}
+	}
+}
+
 // TestFileSystemPanel_ShiftRangeSkipsParentDir makes sure the ".."
 // row is never selected by a shift-sweep, matching the same rule
 // SetItemSelected / ToggleSelection already enforce for Ins.
