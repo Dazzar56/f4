@@ -591,7 +591,7 @@ func logUnresolvedColorerRegion(name string) {
 // stays monochrome; only the built-in color map is out of bounds here.
 func colorerSchemeStyle(name string) (colorerRegionStyle, bool) {
 	nameLower := strings.ToLower(name)
-	chain := ColorerRegionChain(nameLower)
+	chain := append([]string{nameLower}, ColorerRegionChain(nameLower)...)
 
 	schemeMu.Lock()
 	defer schemeMu.Unlock()
@@ -605,50 +605,70 @@ func colorerSchemeStyle(name string) (colorerRegionStyle, bool) {
 		return cached, cached.hasFore || cached.hasBack || cached.hasStyle
 	}
 
-	style, found := schemeStyles[nameLower]
-	if !found {
-		for _, parent := range chain {
-			if style, found = schemeStyles[parent]; found {
-				break
+	var finalStyle colorerRegionStyle
+	var anyFound bool
+
+	vtui.DebugLog("    Trace chain for %q: %v", name, chain)
+	for _, parent := range chain {
+		if style, found := schemeStyles[parent]; found {
+			vtui.DebugLog("      Matched parent %q in HRD -> fore=#%06X (has=%v) back=#%06X (has=%v) style=%d", parent, style.fore, style.hasFore, style.back, style.hasBack, style.style)
+			if !finalStyle.hasFore && style.hasFore {
+				finalStyle.fore = style.fore
+				finalStyle.hasFore = true
 			}
+			if !finalStyle.hasBack && style.hasBack {
+				finalStyle.back = style.back
+				finalStyle.hasBack = true
+			}
+			if style.hasStyle {
+				finalStyle.style |= style.style
+				finalStyle.hasStyle = true
+			}
+			anyFound = true
 		}
 	}
-	if !found {
+
+	if !anyFound {
+		var fallbackStyle colorerRegionStyle
+		var fallbackFound bool
 		for _, key := range schemeKeys {
 			if strings.HasPrefix(nameLower, key) {
-				style, found = schemeStyles[key], true
+				fallbackStyle, fallbackFound = schemeStyles[key], true
 				break
 			}
 		}
-	}
-	if !found {
-		for _, key := range schemeKeys {
-			if strings.Contains(nameLower, key) {
-				style, found = schemeStyles[key], true
-				break
-			}
-		}
-	}
-	if !found {
-		// A region of a foreign type shares no prefix with the def: keys of a
-		// style, so the local names are compared on their own.
-		if local := colorerRegionLocalName(nameLower); len(local) >= minColorerLocalMatch {
+		if !fallbackFound {
 			for _, key := range schemeKeys {
-				keyLocal := colorerRegionLocalName(key)
-				if len(keyLocal) >= minColorerLocalMatch && strings.Contains(local, keyLocal) {
-					style, found = schemeStyles[key], true
+				if strings.Contains(nameLower, key) {
+					fallbackStyle, fallbackFound = schemeStyles[key], true
 					break
 				}
 			}
 		}
+		if !fallbackFound {
+			if local := colorerRegionLocalName(nameLower); len(local) >= minColorerLocalMatch {
+				for _, key := range schemeKeys {
+					keyLocal := colorerRegionLocalName(key)
+					if len(keyLocal) >= minColorerLocalMatch && strings.Contains(local, keyLocal) {
+						fallbackStyle, fallbackFound = schemeStyles[key], true
+						break
+					}
+				}
+			}
+		}
+		if fallbackFound {
+			finalStyle = fallbackStyle
+			anyFound = true
+		}
 	}
-	if !found {
-		style = colorerRegionStyle{}
+
+	if !anyFound {
+		finalStyle = colorerRegionStyle{}
 		logUnresolvedColorerRegion(nameLower)
 	}
 
-	schemeMemo[nameLower] = style
-	return style, found
+	schemeMemo[nameLower] = finalStyle
+	return finalStyle, anyFound
 }
 
 // sortColorerKeys orders keys from the longest to the shortest one, so that

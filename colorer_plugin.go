@@ -424,6 +424,8 @@ func (ch *ColorerHighlighter) Highlight(line string, prevState any, baseAttr uin
 		return nil, logIdx
 	}
 
+	vtui.DebugLog("--- COLORER HIGHLIGHT LINE %d: %q ---", logIdx, line)
+
 	unitToRune := colorerUTF16ToRuneIndex(line)
 	lineUnits := len(unitToRune) - 1
 	attrs := make([]uint64, unitToRune[lineUnits])
@@ -444,9 +446,31 @@ func (ch *ColorerHighlighter) Highlight(line string, prevState any, baseAttr uin
 		}
 		startRune := unitToRune[start]
 		endRune := unitToRune[end]
-		attr := getColorerAttr(reg.Name, baseAttr)
+
+		var style colorerRegionStyle
+		var useScheme bool
+		var fallbackColor uint32
+		var useFallback bool
+
+		if AppConfig.EditorColorerSyntax {
+			if colorerSchemeActive() {
+				style, _ = colorerSchemeStyle(reg.Name)
+				useScheme = true
+				vtui.DebugLog("  [SCHEME] Reg: %q -> %q (Rune: %d..%d), Style: fore=#%06X (has=%v) back=#%06X (has=%v) mode=%d", reg.Name, line[start:end], startRune, endRune, style.fore, style.hasFore, style.back, style.hasBack, style.style)
+			} else {
+				fallbackColor, useFallback = lookupColorerColor(reg.Name)
+				if useFallback {
+					vtui.DebugLog("  [FALLBACK] Reg: %q -> %q (Rune: %d..%d), Color: #%06X", reg.Name, line[start:end], startRune, endRune, fallbackColor)
+				}
+			}
+		}
+
 		for i := startRune; i < endRune && i < len(attrs); i++ {
-			attrs[i] = attr
+			if useScheme {
+				attrs[i] = applyColorerStyle(attrs[i], style)
+			} else if useFallback {
+				attrs[i] = vtui.SetRGBFore(attrs[i], fallbackColor)
+			}
 		}
 	}
 

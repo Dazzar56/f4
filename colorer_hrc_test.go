@@ -117,6 +117,26 @@ func TestColorerScheme_ResolvesThroughTheParentChain(t *testing.T) {
 		t.Errorf("Expected the color of the nearest declared parent, got %06X", got)
 	}
 }
+func TestColorerScheme_AccumulatesStylesThroughParentChain(t *testing.T) {
+	installColorerTestRegions(t, map[string]string{
+		"c:linecomment":      "def:commentcontent",
+		"def:commentcontent": "def:comment",
+		"def:comment":        "def:syntax",
+	})
+	installColorerTestScheme(t, map[string]colorerRegionStyle{
+		"def:comment":        {fore: 0x123456, hasFore: true},
+		"def:commentcontent": {back: 0x654321, hasBack: true, style: colorerStyleBold, hasStyle: true},
+		"c:linecomment":      {fore: 0x999999, hasFore: true},
+	})
+
+	style, found := colorerSchemeStyle("c:LineComment")
+	if !found {
+		t.Fatal("Expected to find style")
+	}
+	if style.fore != 0x999999 || style.back != 0x654321 || style.style != colorerStyleBold {
+		t.Errorf("Expected accumulated style, got %+v", style)
+	}
+}
 
 func TestColorerScheme_UnknownRegionStaysTransparent(t *testing.T) {
 	installColorerTestRegions(t, map[string]string{
