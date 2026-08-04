@@ -1491,6 +1491,65 @@ func TestActionAppearanceSettings_SaveCursor(t *testing.T) {
 	}
 }
 
+// TestActionAppearanceSettings_CancelPreservesPalette locks in the
+// fix: farcolors.ini overrides applied at startup were wiped when
+// the user opened Appearance settings and pressed Cancel, because
+// the dialog restored via ApplyColorStyle(originalStyle) — a clean
+// re-apply of the named base style with no room for runtime
+// overrides. Snapshot-and-copy the whole palette instead, so
+// Cancel returns exactly what was on screen before the dialog
+// opened, regardless of where the tweak came from.
+func TestActionAppearanceSettings_CancelPreservesPalette(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	// Simulate a farcolors.ini override: bump one palette slot to
+	// a sentinel value the base style would never produce. If Cancel
+	// restores by name it clobbers this back to the style default;
+	// if it restores by palette snapshot the sentinel survives.
+	const sentinel uint64 = 0xDEADBEEFCAFE0001
+	origAtIdx := vtui.Palette[ColPanelText]
+	vtui.Palette[ColPanelText] = sentinel
+	defer func() { vtui.Palette[ColPanelText] = origAtIdx }()
+
+	actionAppearanceSettings(pf)
+	top := vtui.FrameManager.GetTopFrame().(vtui.Container)
+
+	// Trigger live preview: pick a style different from the current
+	// one so ApplyColorStyle actually runs and overwrites the
+	// sentinel. Any built-in style other than the current one works.
+	var combo *vtui.ComboBox
+	for _, itm := range top.GetChildren() {
+		if c, ok := itm.(*vtui.ComboBox); ok {
+			combo = c
+			break
+		}
+	}
+	if combo == nil {
+		t.Fatal("style combobox not found in Appearance dialog")
+	}
+	// Pick the *other* end of the list — different from whatever
+	// index the config currently points to.
+	target := 0
+	if combo.Menu.SelectPos == 0 && len(combo.Menu.Items) > 1 {
+		target = len(combo.Menu.Items) - 1
+	}
+	combo.Menu.OnAction(target)
+	if vtui.Palette[ColPanelText] == sentinel {
+		t.Fatal("test setup: live preview didn't overwrite the sentinel — need a different palette slot or style pair")
+	}
+
+	clickDialogButton(t, top, "Cancel")
+
+	if got := vtui.Palette[ColPanelText]; got != sentinel {
+		t.Errorf("Cancel dropped the override: palette[ColPanelText]=%016x, want sentinel %016x", got, sentinel)
+	}
+}
+
 func TestPanelsFrame_RunAdvancedProgressTask(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	SetDefaultF4Palette()
