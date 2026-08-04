@@ -111,12 +111,12 @@ file size, the decoder, the scale and the orientation.
 both directions. `Ctrl+S` runs a slide show with the interval from
 `[Images] SlideShowDelay`, five seconds by default.
 
-## 5. What is left, in order
-
-**4. Quick view on `Ctrl+Q`.** In `quick_view_panel.go`, show a picture through
+**4. Quick view on `Ctrl+Q`.** In `quick_view_panel.go`, shows a picture through
 the pipeline instead of the hex dump when one is under the cursor. The
 placement is computed the way `ImageView.placementFor` does it, but inside the
 bounds of the panel.
+
+## 5. What is left, in order
 
 **5. External decoder.** A fallback decoder at priority −10 that runs
 `convert`, `magick` or `ffmpeg` — whichever is on `PATH` — and reads PNG from

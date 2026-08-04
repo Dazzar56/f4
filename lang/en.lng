@@ -226,6 +226,7 @@ QuickView.Ratio=Ratio
 QuickView.ClusterSize=Cluster size
 QuickView.Scanning=(scanning…)
 QuickView.Size=Size
+QuickView.Image=<image>
 QuickView.Binary=<binary content — hex preview>
 QuickView.ReadError=Read failed
 

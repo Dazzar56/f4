@@ -226,6 +226,7 @@ QuickView.Ratio=Степень сжатия
 QuickView.ClusterSize=Размер кластера
 QuickView.Scanning=(сканирование…)
 QuickView.Size=Размер
+QuickView.Image=<изображение>
 QuickView.Binary=<бинарные данные — шестнадцатеричный просмотр>
 QuickView.ReadError=Ошибка чтения
 
