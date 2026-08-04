@@ -1217,20 +1217,6 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	// by the hotkey dispatcher; F3/F4 for the terminal log are bound in
 	// the Terminal area with the TerminalQuiet condition.
 
-	// Alt+Left / Alt+Right move backward / forward through folder history.
-	// These are positional history moves: visiting an entry must not promote it
-	// to the newest MRU slot.
-	if (e.VirtualKeyCode == vtinput.VK_LEFT || e.VirtualKeyCode == vtinput.VK_RIGHT) && alt && !ctrl && !shift && e.KeyDown && pf.showPanels {
-		if fsp := pf.getActivePanel(); fsp != nil {
-			direction := -1
-			if e.VirtualKeyCode == vtinput.VK_RIGHT {
-				direction = 1
-			}
-			pf.moveFolderHistory(fsp, direction)
-		}
-		return true
-	}
-
 	// Raw input mode fallback for active shell commands (non-AltScreen, e.g. ping).
 	// We forward text and navigation to PTY, but let global shortcuts (Ctrl+O) fall through.
 	if !pf.showPanels && pf.isPtyBusy() {

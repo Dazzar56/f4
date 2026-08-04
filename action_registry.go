@@ -544,6 +544,36 @@ func init() {
 		}),
 	})
 	RegisterAction(Action{
+		Name:        "Panel.HistoryBack",
+		Area:        "Shell",
+		Label:       "History Back",
+		LabelKey:    "Action.Panel.HistoryBack",
+		Description: "Move backward through folders history",
+		DescKey:     "Action.Panel.HistoryBack.Desc",
+		DefaultKeys: []string{"AltLeft"},
+		MenuPath:    "Commands",
+		Handler: withPF(func(pf *PanelsFrame) {
+			if fsp := pf.getActivePanel(); fsp != nil {
+				pf.moveFolderHistory(fsp, -1)
+			}
+		}),
+	})
+	RegisterAction(Action{
+		Name:        "Panel.HistoryForward",
+		Area:        "Shell",
+		Label:       "History Forward",
+		LabelKey:    "Action.Panel.HistoryForward",
+		Description: "Move forward through folders history",
+		DescKey:     "Action.Panel.HistoryForward.Desc",
+		DefaultKeys: []string{"AltRight"},
+		MenuPath:    "Commands",
+		Handler: withPF(func(pf *PanelsFrame) {
+			if fsp := pf.getActivePanel(); fsp != nil {
+				pf.moveFolderHistory(fsp, 1)
+			}
+		}),
+	})
+	RegisterAction(Action{
 		Name:        "Panel.CopyPath",
 		Area:        "Shell",
 		Label:       "Copy Path",

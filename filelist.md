@@ -105,6 +105,7 @@ Last updated: 2026-08-05 12:00:00
 ├── find_file.go
 ├── find_file_test.go
 ├── FISH+.md
+├── folder_history_actions_test.go
 ├── folder_history_navigation_test.go
 ├── fs_info_darwin.go
 ├── fs_info.go
@@ -460,5 +461,5 @@ Last updated: 2026-08-05 12:00:00
 ├── WORDNAV.md
 └── word_nav_test.go
 
-34 directories, 425 files
+34 directories, 426 files
 ```
