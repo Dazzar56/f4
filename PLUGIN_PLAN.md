@@ -97,6 +97,42 @@ transport never went away.
     Every dangerous operation already funnels through one hook, so adding it
     later is not invasive.
 
+## Distribution
+
+The catalog carries source and wasm, not binaries.
+
+The three transports differ in what has to reach the user. A Lua plugin is
+text: portable, readable, nothing to build, identical on every platform. A
+wasm plugin is one artifact for all of them, sandboxed and unbound to any
+libc. A native plugin is a platform binary, and that is the only one that is a
+problem: a distribution maintainer will not mirror third party binaries, a
+reviewer cannot audit them, and they need a build per operating system and
+architecture. So PlugRing distributes `.lua` and `.wasm`; a native plugin stays
+a local affair, registered by the user or installed by the system package
+manager.
+
+Almost nothing gives up speed for this. The case that needs speed is served by
+wasm, whose overhead is a factor rather than an order of magnitude. The case
+that needs native APIs is served by the FFI bridge, which lets a plugin remain
+portable text and call the target system's own libraries instead of carrying
+its own build of them. What is left over is small enough to be worth the
+trade.
+
+`plugring_meta.go` holds the vocabulary: categories following
+plugring.farmanager.com so that somebody arriving from there recognises the
+shelves, and a `runtimes` field so a plugin can say which interpreter it needs.
+That last one exists because a plugin using LuaJIT's `cdef` genuinely has
+nowhere else to go, and declaring the dependency is better than failing at
+load: f4 can then say so before the install rather than after.
+
+Two things in the existing manifest work against this policy and have to go
+when the permission model lands: `setup_cmd`, which runs an arbitrary shell
+command with the user's privileges at install time, and the `{os}`/`{arch}`
+placeholders in the download URL, which exist for no purpose other than
+shipping per platform binaries. Entries breaking the policy are currently
+reported in the log rather than hidden, since the catalog in the wild predates
+the rule.
+
 ## Status
 
 Done:

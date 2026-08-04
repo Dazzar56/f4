@@ -164,6 +164,8 @@ func scaffoldManifest(name string) (string, error) {
 		Version:      "0.1.0",
 		Description:  "An f4 plugin.",
 		Entrypoint:   "plugin.lua",
+		Category:     PlugRingCategoryFilesystem,
+		Runtimes:     []string{PlugRingRuntimeEmbedded},
 		Dependencies: []string{},
 	}
 	encoded, err := json.MarshalIndent(item, "", "  ")
