@@ -7,6 +7,7 @@ import (
 	"image"
 	"sort"
 	"strings"
+	"sync"
 
 	_ "image/gif"
 	_ "image/jpeg"
@@ -27,7 +28,19 @@ type ImageDecoder struct {
 	Decode     func(data []byte) (*vtui.ImageSurface, error)
 }
 
-var imageDecoders []ImageDecoder
+// The registry is read from the decoding workers, so it is guarded: a plugin
+// registering a decoder while a picture is being decoded is otherwise a race.
+var (
+	imageDecodersMu sync.RWMutex
+	imageDecoders   []ImageDecoder
+)
+
+// allImageDecoders returns a snapshot of the registry.
+func allImageDecoders() []ImageDecoder {
+	imageDecodersMu.RLock()
+	defer imageDecodersMu.RUnlock()
+	return append([]ImageDecoder(nil), imageDecoders...)
+}
 
 // RegisterImageDecoder adds a decoder, replacing an earlier one of the same
 // name so that a plugin can override a built-in.
@@ -35,6 +48,8 @@ func RegisterImageDecoder(d ImageDecoder) {
 	if d.Name == "" || d.Decode == nil {
 		return
 	}
+	imageDecodersMu.Lock()
+	defer imageDecodersMu.Unlock()
 	for i := range imageDecoders {
 		if imageDecoders[i].Name == d.Name {
 			imageDecoders[i] = d
@@ -63,7 +78,7 @@ func ImageDecodersFor(path string) []ImageDecoder {
 		return nil
 	}
 	var out []ImageDecoder
-	for _, d := range imageDecoders {
+	for _, d := range allImageDecoders() {
 		for _, e := range d.Extensions {
 			if strings.ToLower(e) == ext {
 				out = append(out, d)
@@ -83,12 +98,30 @@ func IsImageFile(path string) bool {
 }
 
 // DecodeImage walks the decoders in priority order and returns the first
-// result, together with the name of the decoder that produced it.
+// result, together with the name of the decoder that produced it. The ones
+// claiming the extension go first; when they all fail the remaining ones are
+// offered the file too, because a photograph saved under the wrong name is
+// still a photograph.
 func DecodeImage(path string, data []byte) (*vtui.ImageSurface, string, error) {
 	decoders := ImageDecodersFor(path)
+	claimed := make(map[string]bool, len(decoders))
+	for _, d := range decoders {
+		claimed[d.Name] = true
+	}
+	rest := make([]ImageDecoder, 0, len(claimed))
+	for _, d := range allImageDecoders() {
+		if !claimed[d.Name] {
+			rest = append(rest, d)
+		}
+	}
+	sort.SliceStable(rest, func(i, j int) bool {
+		return rest[i].Priority > rest[j].Priority
+	})
+	decoders = append(decoders, rest...)
 	if len(decoders) == 0 {
 		return nil, "", fmt.Errorf("no image decoder for %q", path)
 	}
+
 	var lastErr error
 	for _, d := range decoders {
 		surf, err := d.Decode(data)
@@ -100,12 +133,19 @@ func DecodeImage(path string, data []byte) (*vtui.ImageSurface, string, error) {
 		}
 		lastErr = err
 	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("no image decoder for %q", path)
+	}
 	return nil, "", lastErr
 }
 
 // maxImageFileSize guards against loading a multi gigabyte file into memory.
 // Tiled decoding of huge images is a separate job.
 const maxImageFileSize = 128 << 20
+
+// imageMaxPixels bounds the geometry a decoder will honour, whatever the
+// file claims about itself.
+const imageMaxPixels = 64 << 20
 
 // LoadImage reads a file through the VFS and decodes it.
 func LoadImage(ctx context.Context, v vfs.VFS, path string) (*vtui.ImageSurface, string, error) {
