@@ -1,8 +1,12 @@
 # Project Structure
-Last updated: 2026-08-04 07:43:17
+Last updated: 2026-08-04 17:41:16
 
 ```text
 .
+├── action_menu.go
+├── action_menu_test.go
+├── action_registry.go
+├── action_registry_test.go
 ├── actions.go
 ├── actions_test.go
 ├── ansi_parser.go
@@ -79,6 +83,7 @@ Last updated: 2026-08-04 07:43:17
 ├── drives_unix.go
 ├── drives_windows.go
 ├── editor_features_test.go
+├── editor_veto_test.go
 ├── editor_view_ads_test.go
 ├── editor_view.go
 ├── editor_view_test.go
@@ -134,22 +139,32 @@ Last updated: 2026-08-04 07:43:17
 ├── gpu_info_linux.go
 ├── gpu_info_other.go
 ├── gpu_info_windows.go
+├── grabber.go
+├── grabber_test.go
 ├── gui_unix.go
 ├── gui_windows.go
 ├── help
 │   ├── en.hlf
 │   └── ru.hlf
 ├── help.go
+├── help_keys_test.go
+├── help_lang_test.go
 ├── help_test.go
 ├── highlight_files.go
 ├── highlight_files_test.go
 ├── HIGHLIGHTING.md
 ├── history_provider.go
 ├── history_provider_test.go
+├── hotkeys.go
+├── hotkeys_test.go
+├── hotkeys_ui.go
+├── hotkeys_ui_test.go
 ├── I18N.md
 ├── image_bmp.go
 ├── image_decode.go
 ├── image_decode_test.go
+├── image_external.go
+├── image_external_test.go
 ├── image_formats_test.go
 ├── image_gallery.go
 ├── image_gallery_test.go
@@ -213,6 +228,8 @@ Last updated: 2026-08-04 07:43:17
 ├── mem_info_linux.go
 ├── mem_info_other.go
 ├── mem_info_windows.go
+├── navigation_mode.go
+├── navigation_mode_test.go
 ├── packaging
 │   ├── linux
 │   │   └── f4.desktop
@@ -338,11 +355,13 @@ Last updated: 2026-08-04 07:43:17
 ├── terminal_log_vfs.go
 ├── terminal_log_vfs_test.go
 ├── TERMINAL.md
+├── terminal_selection_test.go
 ├── terminal_view.go
 ├── terminal_view_test.go
 ├── test_main_test.go
 ├── test_plugins.sh
 ├── test_resurrect.sh
+├── themed_table.go
 ├── textlayout
 │   ├── wrap.go
 │   └── wrap_test.go
@@ -436,7 +455,9 @@ Last updated: 2026-08-04 07:43:17
 ├── wasm_plugin.go
 ├── wasm_plugin_test.go
 ├── window_icon_windows.go
-└── window_icon_windows_test.go
+├── window_icon_windows_test.go
+├── word_nav.go
+└── word_nav_test.go
 
-34 directories, 401 files
+34 directories, 422 files
 ```

@@ -6,6 +6,16 @@ This document outlines the core principles of user experience (UX) and navigatio
 
 The goal is to create an environment that is instantly familiar to veterans of TUI applications while remaining discoverable and consistent for new users. We achieve this by ensuring that every navigation key has a clear, context-dependent purpose, maximizing user efficiency and respecting "muscle memory".
 
+### 0. The Golden Rule: One Action, Three Faces
+
+Every interactive capability of `f4` (everything above `vtui` widget internals like `Checkbox.ProcessKey`) MUST exist in three equivalent forms, all driven by a single entry in the action registry (`action_registry.go`):
+
+1. **A clickable menu or KeyBar item.** Menus (`F9`, available in the panels, the editor and the viewer) and KeyBar labels are generated from the registry, never hardcoded.
+2. **A macro command.** The action's `Name` (e.g. `Editor.Save`) is callable from macros via `Actions.Run(...)`.
+3. **A hotkey.** Default bindings ship with the action (`DefaultKeys`) and users can rebind them in the Hotkey Configurator.
+
+The built-in help pages for key bindings are generated from the same registry, so documentation, menus, KeyBar and actual behavior can never drift apart.
+
 ### 1. The Four Tiers of Navigation
 
 Every interactive screen in `vtui` adheres to a hierarchical navigation model. This ensures there is always a way to move focus, from global workspace management to specific character input.

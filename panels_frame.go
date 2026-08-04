@@ -1840,13 +1840,16 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				}
 
 				if _, isLocal := fsp.vfs.(*vfs.OSVFS); isLocal {
+					// Capture entry state before spawning: the entries
+					// slice may be replaced by a refresh at any time.
+					isDir := fsp.entries[idx].IsDir || name == ".."
 					go func() {
 						var cmd *exec.Cmd
 						switch runtime.GOOS {
 						case "linux":
 							cmd = exec.Command("xdg-open", fullPath)
 						case "windows":
-							if fsp.entries[idx].IsDir || name == ".." {
+							if isDir {
 								cmd = exec.Command("explorer.exe", fullPath)
 							} else {
 								cmd = exec.Command("explorer.exe", "/select,", fullPath)
@@ -2869,7 +2872,7 @@ func (pf *PanelsFrame) GetKeyLabels() *vtui.KeySet {
 					return ""
 				}
 				if act, ok := GetAction(actName); ok {
-					return act.Label
+					return plainLabel(act.DisplayLabel())
 				}
 			}
 		}

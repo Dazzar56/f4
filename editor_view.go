@@ -289,12 +289,6 @@ func NewEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string) *EditorVie
 		vtui.FrameManager.Redraw()
 	}
 	ev.menuBar = vtui.NewMenuBar(nil)
-	ev.menuBar.Items = []vtui.MenuBarItem{
-		{Label: "&File", SubItems: []vtui.MenuItem{{Text: "&Save", Command: vtui.CmDefault}, {Text: "E&xit", Command: vtui.CmClose}}},
-		{Label: "&Edit", SubItems: []vtui.MenuItem{{Text: "&Copy", Command: CmCopy}, {Text: "&Paste"}}},
-		{Label: "&Search", SubItems: []vtui.MenuItem{{Text: "&Find", Command: CmSearch}}},
-		{Label: "&Options", SubItems: []vtui.MenuItem{{Text: "&WordWrap"}}},
-	}
 
 	ev.topBar = NewTopBar(func() string {
 		base := ""
@@ -733,6 +727,26 @@ DoneRendering:
 	}
 }
 
+// VetoActionKey reports modal input states in which the editor must see
+// the key before the global hotkey dispatcher. While autocomplete is
+// active, the keys it consumes (Tab/Esc) or uses to dismiss itself
+// (navigation, Enter) belong to the editor's own ProcessKey.
+func (ev *EditorView) VetoActionKey(e *vtinput.InputEvent) bool {
+	if e.Type != vtinput.KeyEventType || !e.KeyDown {
+		return false
+	}
+	if !ev.acEnabled || len(ev.acMatches) == 0 {
+		return false
+	}
+	switch e.VirtualKeyCode {
+	case vtinput.VK_TAB, vtinput.VK_ESCAPE, vtinput.VK_RETURN,
+		vtinput.VK_UP, vtinput.VK_DOWN, vtinput.VK_LEFT, vtinput.VK_RIGHT,
+		vtinput.VK_HOME, vtinput.VK_END, vtinput.VK_PRIOR, vtinput.VK_NEXT:
+		return true
+	}
+	return false
+}
+
 func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 	if e.Type == vtinput.KeyEventType && e.KeyDown {
 		if ev.targetLine != -1 {
@@ -747,16 +761,6 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 
-	// Alt+Ins — global screen grabber (far/far2l parity). Handled here
-	// so it works even when the editor is the top frame.
-	if e.Type == vtinput.KeyEventType && e.KeyDown && e.VirtualKeyCode == vtinput.VK_INSERT && alt {
-		ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
-		shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
-		if !ctrl && !shift {
-			OpenGrabber()
-			return true
-		}
-	}
 	// 1. Processing Bracketed Paste (events arrive outside KeyDown)
 	if e.Type == vtinput.PasteEventType {
 		if e.PasteStart {
@@ -823,32 +827,6 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
 	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
 	//alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
-
-	// Panel-side shortcuts (issue #289): while the editor is on top,
-	// forward the current panel context into the buffer. Same key
-	// assignments as PanelsFrame binds on the command line.
-	if ctrl && !alt && !shift {
-		switch {
-		case e.VirtualKeyCode == vtinput.VK_OEM_4 || e.Char == '[':
-			if s := leftPanelPathForEditor(); s != "" {
-				ev.insertTextAtCursor([]byte(s))
-			}
-			return true
-		case e.VirtualKeyCode == vtinput.VK_OEM_6 || e.Char == ']':
-			if s := rightPanelPathForEditor(); s != "" {
-				ev.insertTextAtCursor([]byte(s))
-			}
-			return true
-		case e.VirtualKeyCode == vtinput.VK_RETURN:
-			if s := activePanelNameForEditor(); s != "" {
-				ev.insertTextAtCursor([]byte(s))
-			}
-			return true
-		case e.VirtualKeyCode == vtinput.VK_DELETE:
-			ev.deleteSpacersForward()
-			return true
-		}
-	}
 
 	// --- Autocomplete Interception ---
 	if ev.acEnabled && len(ev.acMatches) > 0 {
@@ -937,101 +915,6 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 
 	switch e.VirtualKeyCode {
-	case vtinput.VK_Z:
-		if ctrl {
-			if shift {
-				ev.Redo()
-			} else {
-				ev.Undo()
-			}
-			return true
-		}
-
-	case vtinput.VK_Y:
-		if ctrl && !alt && !shift {
-			ev.DeleteCurrentLine()
-			return true
-		}
-
-	case vtinput.VK_A:
-		if ctrl {
-			ev.rectSelActive = false
-			ev.selActive = true
-			ev.selAnchorOffset = 0
-			lastLine := ev.li.LineCount() - 1
-			ev.CursorLine = lastLine
-			ev.CursorPos = ev.getLineLength(lastLine)
-			ev.ensureCursorVisible()
-			return true
-		}
-
-	case vtinput.VK_F2:
-		ev.SaveToFile(nil)
-		return true
-
-	case vtinput.VK_F3:
-		ev.WordWrap = !ev.WordWrap
-		ev.ScrollLeft = 0
-		ev.clearCaches()
-		ev.ensureCursorVisible()
-		return true
-
-	case vtinput.VK_F5:
-		ev.ShowWhitespaces = !ev.ShowWhitespaces
-		return true
-
-	case vtinput.VK_F7:
-		if ctrl {
-			vtui.FrameManager.EmitCommand(CmReplace, nil)
-		} else if shift && LastEditorSearch != "" {
-			ev.Search(LastEditorSearch, LastEditorSearchCase, LastEditorSearchReverse, LastEditorSearchRegexp, LastEditorSearchWholeWord, true)
-		} else {
-			vtui.FrameManager.EmitCommand(CmSearch, nil)
-		}
-		return true
-
-	case vtinput.VK_ESCAPE, vtinput.VK_F10, vtinput.VK_F4:
-		ev.tryClose()
-		return true
-
-	case vtinput.VK_F6:
-		vtui.FrameManager.EmitCommand(CmSwitchToViewer, ev)
-		return true
-	case vtinput.VK_F8:
-		if shift {
-			ev.showCodepageDialog()
-		} else {
-			next := vfs.GetNextFastSwitchCodepage(ev.Codepage)
-			ev.ReloadWithCodepage(next)
-			vtui.ShowToast(fmt.Sprintf("Codepage: %d", next), time.Second)
-		}
-		return true
-
-	case vtinput.VK_C, vtinput.VK_INSERT:
-		if ctrl && (ev.selActive || ev.rectSelActive) {
-			ev.CopySelection()
-			return true
-		}
-		if shift && !ctrl && e.VirtualKeyCode == vtinput.VK_INSERT {
-			if text := vtui.GetClipboard(); text != "" {
-				ev.PasteText(text)
-			}
-			return true
-		}
-		if !shift && !ctrl && !alt && e.VirtualKeyCode == vtinput.VK_INSERT {
-			ev.overtype = !ev.overtype
-			ev.ensureCursorVisible()
-			return true
-		}
-
-	case vtinput.VK_V:
-		if ctrl && !shift {
-			if text := vtui.GetClipboard(); text != "" {
-				ev.PasteText(text)
-			}
-			return true
-		}
-
 	case vtinput.VK_UP, vtinput.VK_E:
 		if e.VirtualKeyCode == vtinput.VK_E && !ctrl {
 			break
@@ -1066,9 +949,11 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 			if !ctrl {
 				break
 			}
+			// Ctrl+X is delegated to the Cut action when text is
+			// selected; without a selection it falls through and acts
+			// as the classic Ctrl+E/Ctrl+X down-movement alias.
 			if ev.selActive || ev.rectSelActive {
-				ev.CopySelection()
-				ev.DeleteSelection()
+				RunAction("Editor.Cut")
 				return true
 			}
 		}
@@ -1415,9 +1300,6 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 
 	case vtinput.VK_DELETE:
 		if ev.selActive {
-			if shift {
-				ev.CopySelection()
-			}
 			ev.DeleteSelection()
 		} else {
 			ev.saveUndo(opOther)
@@ -1864,7 +1746,13 @@ func (ev *EditorView) ResizeConsole(w, h int) {
 	ev.SetPosition(0, 0, w-1, h-2)
 }
 
-func (ev *EditorView) GetMenuBar() *vtui.MenuBar { return ev.menuBar }
+// GetMenuBar returns the editor's menu bar. Items are regenerated from
+// the action registry on every call, so shortcuts and toggle states are
+// always current.
+func (ev *EditorView) GetMenuBar() *vtui.MenuBar {
+	ev.menuBar.Items = BuildMenuBarItems("Editor")
+	return ev.menuBar
+}
 
 func (ev *EditorView) StartIndexing() {
 	if ev.asyncBuf == nil {
@@ -2021,12 +1909,13 @@ func (ev *EditorView) tryClose() {
 }
 
 func (ev *EditorView) GetKeyLabels() *vtui.KeySet {
-	return &vtui.KeySet{
+	fallbacks := &vtui.KeySet{
 		Normal: vtui.KeyBarLabels{
 			Msg("KeyBar.EditorF1"), Msg("KeyBar.EditorF2"), Msg("KeyBar.EditorF3"),
 			"", Msg("KeyBar.EditorF5"), "", Msg("KeyBar.EditorF7"), "", "", Msg("KeyBar.EditorF10"),
 		},
 	}
+	return KeyBarLabelsForArea("Editor", fallbacks)
 }
 func (ev *EditorView) showSearchDialog() {
 	dlgW, dlgH := 60, 15

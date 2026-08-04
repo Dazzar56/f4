@@ -282,7 +282,7 @@ func TestEditorView_SaveFile(t *testing.T) {
 
 	// 4. Simulate pressing F2 (Save)
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf()) // Needed for PostTask to work
-	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F2})
+	pressKey(ev, &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F2})
 
 	// 5. Wait for async save to finish by processing tasks
 	timeout := time.After(1 * time.Second)
@@ -734,13 +734,13 @@ func TestEditorView_F3_ToggleWordWrap(t *testing.T) {
 	ev.WordWrap = true
 
 	// Press F3 (Wait, make sure your code uses VK_F3 now)
-	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F3})
+	pressKey(ev, &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F3})
 	if ev.WordWrap {
 		t.Error("F3 failed to disable WordWrap")
 	}
 
 	// Press F3 again
-	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F3})
+	pressKey(ev, &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F3})
 	if !ev.WordWrap {
 		t.Error("F3 failed to re-enable WordWrap")
 	}
@@ -759,8 +759,8 @@ func TestEditorView_Labels(t *testing.T) {
 	if ks.Normal[1] != "Save" { // F2
 		t.Errorf("Expected F2 to be 'Save', got %q", ks.Normal[1])
 	}
-	if ks.Normal[9] != "Quit" { // F10
-		t.Errorf("Expected F10 to be 'Quit', got %q", ks.Normal[9])
+	if ks.Normal[9] != "Exit" { // F10
+		t.Errorf("Expected F10 to be 'Exit', got %q", ks.Normal[9])
 	}
 }
 func TestEditorView_DefaultsAndToggles(t *testing.T) {
@@ -777,13 +777,13 @@ func TestEditorView_DefaultsAndToggles(t *testing.T) {
 	}
 
 	// 2. Toggle F3 (Wrap)
-	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F3})
+	pressKey(ev, &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F3})
 	if !ev.WordWrap {
 		t.Error("F3 failed to toggle WordWrap to ON")
 	}
 
 	// 3. Toggle F5 (Whitespaces)
-	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F5})
+	pressKey(ev, &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F5})
 	if !ev.ShowWhitespaces {
 		t.Error("F5 failed to toggle ShowWhitespaces to ON")
 	}
@@ -1330,7 +1330,7 @@ func TestEditorView_SelectAll(t *testing.T) {
 	defer ev.Close()
 
 	// Ctrl+A
-	ev.ProcessKey(&vtinput.InputEvent{
+	pressKey(ev, &vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
 		VirtualKeyCode: vtinput.VK_A, ControlKeyState: vtinput.LeftCtrlPressed,
 	})
@@ -1446,7 +1446,7 @@ func TestEditorView_FarX_SmartCut(t *testing.T) {
 	ev.selActive = true
 	ev.selAnchorOffset = 0
 	ev.CursorPos = 6 // "Select"
-	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_X, ControlKeyState: vtinput.LeftCtrlPressed})
+	pressKey(ev, &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_X, ControlKeyState: vtinput.LeftCtrlPressed})
 	if pt.String() != " me\nNext line" {
 		t.Errorf("Ctrl+X Cut failed: %q", pt.String())
 	}
@@ -1465,7 +1465,7 @@ func TestEditorView_FarSelectAll_Behavior(t *testing.T) {
 	ev := NewEditorView(pt, nil, "")
 	defer ev.Close()
 
-	ev.ProcessKey(&vtinput.InputEvent{
+	pressKey(ev, &vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
 		VirtualKeyCode: vtinput.VK_A, ControlKeyState: vtinput.LeftCtrlPressed,
 	})
@@ -1507,7 +1507,7 @@ func TestEditorView_FarSelectAll(t *testing.T) {
 	ev := NewEditorView(pt, nil, "")
 	defer ev.Close()
 
-	ev.ProcessKey(&vtinput.InputEvent{
+	pressKey(ev, &vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
 		VirtualKeyCode: vtinput.VK_A, ControlKeyState: vtinput.LeftCtrlPressed,
 	})
@@ -1572,7 +1572,7 @@ func TestEditorView_FarX_CutVsDown(t *testing.T) {
 	ev.selAnchorOffset = 0
 	ev.CursorPos = 4 // Выделено "Some"
 
-	ev.ProcessKey(&vtinput.InputEvent{
+	pressKey(ev, &vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
 		VirtualKeyCode: vtinput.VK_X, ControlKeyState: vtinput.LeftCtrlPressed,
 	})
@@ -1846,7 +1846,7 @@ func TestEditorView_Search_ShiftF7_Reverse(t *testing.T) {
 	ev.selActive = false
 	LastEditorSearchReverse = true
 	vtui.DebugLog("TEST_SEARCH: Triggering Search 2. Current CursorPos: %d", ev.CursorPos)
-	ev.ProcessKey(&vtinput.InputEvent{
+	pressKey(ev, &vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
 		VirtualKeyCode: vtinput.VK_F7, ControlKeyState: vtinput.ShiftPressed,
 	})
@@ -1904,7 +1904,7 @@ func TestEditorView_SaveFailure_NoDataLoss(t *testing.T) {
 	}
 
 	// 2. Attempt to save (F2)
-	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F2})
+	pressKey(ev, &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F2})
 
 	// Process async tasks
 	timeout := time.After(2 * time.Second)
@@ -2293,7 +2293,7 @@ func TestEditorView_ModificationStress(t *testing.T) {
 		if op.ctrl {
 			ctrlFlag = vtinput.LeftCtrlPressed
 		}
-		ev.ProcessKey(&vtinput.InputEvent{
+		pressKey(ev, &vtinput.InputEvent{
 			Type:            vtinput.KeyEventType,
 			KeyDown:         true,
 			Char:            rune(op.char),
@@ -3725,7 +3725,7 @@ func TestEditor_InsertToggle(t *testing.T) {
 	}
 
 	// Нажимаем Insert
-	ev.ProcessKey(&vtinput.InputEvent{
+	pressKey(ev, &vtinput.InputEvent{
 		Type:           vtinput.KeyEventType,
 		KeyDown:        true,
 		VirtualKeyCode: vtinput.VK_INSERT,
@@ -3824,7 +3824,7 @@ func TestEditorViewInsertOverwriteCursorShape(t *testing.T) {
 	}
 
 	// Нажимаем Insert
-	ev.ProcessKey(&vtinput.InputEvent{
+	pressKey(ev, &vtinput.InputEvent{
 		Type:           vtinput.KeyEventType,
 		KeyDown:        true,
 		VirtualKeyCode: vtinput.VK_INSERT,

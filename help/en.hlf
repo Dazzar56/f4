@@ -16,25 +16,21 @@ f4 is an experimental Far Manager / far2l clone in Go.
 
 @ViewerEditor
 $Viewer & Editor Keys
+This topic is generated dynamically from the action registry.
+
+@ViewerNav
+$Navigation Keys
 Editor:
-  F2            - Save
-  F3            - Toggle word wrap
-  F5            - Toggle show whitespaces
-  F7            - Search
   Ctrl+Left     - Previous word boundary
   Ctrl+Right    - Next word boundary
   Ctrl+Shift+Left/Right - Select by words
-  Ctrl+Y        - Delete line
-  Ctrl+Z        - Undo
-  Ctrl+Shift+Z  - Redo
-  Ctrl+A        - Select all
-  Esc / F10     - Exit
+  Home/End      - Line start / end
+  PgUp/PgDn     - Page up / down
 
 Viewer:
-  F2            - Toggle wrap
-  F4            - Toggle hex mode
-  F7            - Search
-  Esc / F10     - Exit
+  Up/Down       - Scroll one line
+  PgUp/PgDn     - Scroll one page
+  Home/End      - File start / end
 
 @PanelNav
 $Panel Navigation

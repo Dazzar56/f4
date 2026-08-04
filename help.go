@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	_ "embed"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/unxed/vtui"
@@ -120,4 +122,66 @@ func InitHelpSystem() {
 
 	readmeTopic := parseMarkdownToHelpTopic("README", readmeData)
 	vtui.GlobalHelpEngine.AddTopic(readmeTopic)
+
+	// Key binding topics are generated from the action registry (the
+	// single source of truth), overriding the static stubs in .hlf
+	// files and reflecting the user's hotkeys.ini overrides.
+	vtui.GlobalHelpEngine.AddTopic(generateKeysHelpTopic("ViewerEditor",
+		Msg("Help.ViewerEditor"), []string{"Editor", "Viewer", "Common"}, "ViewerNav"))
+}
+
+// generateKeysHelpTopic builds a help topic listing the active key
+// bindings of the given areas, straight from the action registry.
+// navTarget, when non-empty, appends a link to the static topic holding
+// widget-level navigation keys (arrows and the like are not actions).
+func generateKeysHelpTopic(name, title string, areas []string, navTarget string) *vtui.HelpTopic {
+	topic := &vtui.HelpTopic{Name: name, StickyRows: 1, Lines: []string{title}}
+
+	hm := GlobalHotkeysMgr
+	if hm == nil {
+		hm = NewHotkeyManager("")
+	}
+	active := hm.GetActiveBindings()
+
+	keysFor := func(area, actionName string) string {
+		var keys []string
+		for key, binding := range active[area] {
+			parts := strings.SplitN(binding, ":", 2)
+			if strings.EqualFold(parts[0], actionName) {
+				keys = append(keys, FormatKeyForUI(key))
+			}
+		}
+		sort.Strings(keys)
+		return strings.Join(keys, " / ")
+	}
+
+	for _, area := range areas {
+		topic.Lines = append(topic.Lines, area+":")
+		for _, a := range GetOrderedActions() {
+			if a.Area != area {
+				continue
+			}
+			keys := keysFor(area, a.Name)
+			if keys == "" {
+				continue
+			}
+			topic.Lines = append(topic.Lines, fmt.Sprintf("  %-14s - %s", keys, a.DisplayDescription()))
+		}
+		topic.Lines = append(topic.Lines, "")
+	}
+
+	if navTarget != "" {
+		text := Msg("Help.NavigationKeys")
+		line := "~" + text + "~" + navTarget + "@"
+		topic.Lines = append(topic.Lines, line)
+		// AddTopic bypasses LoadFile, so register the link manually.
+		topic.Links = append(topic.Links, vtui.HelpLink{
+			Text:   text,
+			Target: navTarget,
+			Line:   len(topic.Lines) - 1,
+			X1:     0,
+			X2:     len(line) - 1,
+		})
+	}
+	return topic
 }

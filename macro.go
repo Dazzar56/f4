@@ -360,6 +360,20 @@ func (m *MacroManager) Filter(e *vtinput.InputEvent) bool {
 		return true
 	}
 
+	// A frame in a modal input state (e.g. editor autocomplete, panel
+	// fast-find) may veto system hotkey dispatch: the key then falls
+	// through to the frame's own ProcessKey, which handles such states
+	// before anything else.
+	if vtui.FrameManager != nil {
+		if top := vtui.FrameManager.GetTopFrame(); top != nil {
+			if v, ok := top.(interface {
+				VetoActionKey(*vtinput.InputEvent) bool
+			}); ok && v.VetoActionKey(e) {
+				return false
+			}
+		}
+	}
+
 	// Hotkey Manager evaluation (System actions)
 	if hm := GlobalHotkeysMgr; hm != nil {
 		if actionName := hm.GetAction(currentArea, keyStr); actionName != "" {

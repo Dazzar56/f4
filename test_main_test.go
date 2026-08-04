@@ -2,10 +2,34 @@ package main
 
 import (
 	"github.com/unxed/f4/vfs"
-	//"github.com/unxed/vtui"
+	"github.com/unxed/vtinput"
+	"github.com/unxed/vtui"
 	"os"
 	"testing"
 )
+
+// pressKey dispatches a key through the production input path: the
+// macro/hotkey filter first (action hotkeys are dispatched there), then
+// the frame's own ProcessKey for widget-level keys. It ensures the
+// global managers exist and the frame is the top frame.
+func pressKey(f vtui.Frame, e *vtinput.InputEvent) {
+	if vtui.FrameManager == nil {
+		vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	}
+	if GlobalHotkeysMgr == nil {
+		GlobalHotkeysMgr = NewHotkeyManager("")
+	}
+	if MacroMgr == nil {
+		MacroMgr = NewMacroManager("")
+	}
+	if vtui.FrameManager.GetTopFrame() != f {
+		vtui.FrameManager.Push(f)
+	}
+	if MacroMgr.Filter(e) {
+		return
+	}
+	f.ProcessKey(e)
+}
 
 func TestMain(m *testing.M) {
 	vfs.InitSudoClient("/usr/bin/f4", "")

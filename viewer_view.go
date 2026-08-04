@@ -121,11 +121,6 @@ func NewViewerView(ctx context.Context, v vfs.VFS, path string) (*ViewerView, er
 		vtui.FrameManager.Redraw()
 	}
 	vv.menuBar = vtui.NewMenuBar(nil)
-	vv.menuBar.Items = []vtui.MenuBarItem{
-		{Label: "&File", SubItems: []vtui.MenuItem{{Text: "E&xit", Command: vtui.CmClose}}},
-		{Label: "&View", SubItems: []vtui.MenuItem{{Text: "&Hex", Command: vtui.CmDefault}, {Text: "&Wrap"}}},
-		{Label: "&Options", SubItems: []vtui.MenuItem{{Text: "&Settings"}}},
-	}
 	vv.topBar = NewTopBar(func() string {
 		percent := 0
 		size := vv.backend.Size()
@@ -180,7 +175,11 @@ func (vv *ViewerView) SetPosition(x1, y1, x2, y2 int) {
 	}
 }
 
+// GetMenuBar returns the viewer's menu bar. Items are regenerated from
+// the action registry on every call, so shortcuts and toggle states are
+// always current.
 func (vv *ViewerView) GetMenuBar() *vtui.MenuBar {
+	vv.menuBar.Items = BuildMenuBarItems("Viewer")
 	return vv.menuBar
 }
 
@@ -442,16 +441,8 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 
 	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
-	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
-	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 	if e.VirtualKeyCode == vtinput.VK_TAB && ctrl {
 		return false
-	}
-
-	// Alt+Ins — global screen grabber (far/far2l parity).
-	if e.VirtualKeyCode == vtinput.VK_INSERT && alt && !ctrl && !shift {
-		OpenGrabber()
-		return true
 	}
 
 	//height := int64(vv.Y2 - vv.Y1 + 1)
@@ -463,34 +454,6 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 	contentHeight := int64(vv.Y2 - vv.Y1) // height - 1 (status line)
 
 	switch e.VirtualKeyCode {
-	case vtinput.VK_ESCAPE, vtinput.VK_F10, vtinput.VK_F3:
-		vv.Close()
-		return true
-
-	case vtinput.VK_F2:
-		vv.WrapMode = !vv.WrapMode
-		return true
-
-	case vtinput.VK_F4:
-		vv.HexMode = !vv.HexMode
-		if vv.HexMode {
-			vv.TopOffset &= ^int64(0xF)
-		}
-		return true
-	case vtinput.VK_F6:
-		vtui.FrameManager.EmitCommand(CmSwitchToEditor, vv)
-		return true
-
-	case vtinput.VK_F8:
-		if shift {
-			vv.showCodepageDialog()
-		} else {
-			next := vfs.GetNextFastSwitchCodepage(vv.Codepage)
-			vv.ReloadWithCodepage(next)
-			vtui.ShowToast(fmt.Sprintf("Codepage: %d", next), time.Second)
-		}
-		return true
-
 	case vtinput.VK_DOWN:
 		if vv.eofVisible {
 			return true // Prevent scrolling past End of File
@@ -828,12 +791,13 @@ func (vv *ViewerView) Close() {
 }
 
 func (vv *ViewerView) GetKeyLabels() *vtui.KeySet {
-	return &vtui.KeySet{
+	fallbacks := &vtui.KeySet{
 		Normal: vtui.KeyBarLabels{
 			Msg("KeyBar.ViewerF1"), Msg("KeyBar.ViewerF2"), Msg("KeyBar.ViewerF3"), Msg("KeyBar.ViewerF4"),
 			"", "", Msg("KeyBar.ViewerF7"), "", "", Msg("KeyBar.ViewerF10"),
 		},
 	}
+	return KeyBarLabelsForArea("Viewer", fallbacks)
 }
 
 func (vv *ViewerView) GetType() vtui.FrameType { return vtui.TypeUser + 3 }
