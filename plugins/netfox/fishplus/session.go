@@ -20,6 +20,11 @@ import (
 // lengths; anything bigger means the stream went out of sync.
 const MaxLineLen = 1 << 20
 
+// MaxFrameLen caps a single binary frame. The client never asks for more
+// than this, so a bigger frame means either a confused helper or a hostile
+// host trying to make the panel allocate a disk worth of memory.
+const MaxFrameLen = 64 << 20
+
 // ErrBroken is returned once a session lost synchronization with the remote
 // helper. Such a session cannot be repaired, the caller has to reconnect.
 var ErrBroken = errors.New("fishplus: session is out of sync")
@@ -291,6 +296,16 @@ func (s *Session) readResponse(ctx context.Context, id uint64, binary bool) (*Re
 			s.broken = true
 			return nil, err
 		}
+		// The handshake is the one place where the terminator may not start
+		// its line: a motd, a shell warning or the echo of the uploaded
+		// script on a pseudo terminal can end without a newline and glue
+		// itself to the banner. Later responses are strict, the helper
+		// controls every byte by then.
+		if id == 0 {
+			if at := strings.Index(line, prefix); at > 0 {
+				line = line[at:]
+			}
+		}
 		if strings.HasPrefix(line, prefix) {
 			status, msg, _ := strings.Cut(strings.TrimSpace(line[len(prefix):]), " ")
 			if status != "ok" && status != "err" {
@@ -307,7 +322,7 @@ func (s *Session) readResponse(ctx context.Context, id uint64, binary bool) (*Re
 		}
 		if binary && strings.HasPrefix(line, "#") {
 			n, convErr := strconv.Atoi(line[1:])
-			if convErr != nil || n < 0 {
+			if convErr != nil || n < 0 || n > MaxFrameLen {
 				s.broken = true
 				return nil, fmt.Errorf("fishplus: bad data frame header %q", line)
 			}

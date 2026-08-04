@@ -16,6 +16,10 @@
 #
 # The token is substituted by the client, so a terminator can never be
 # confused with payload produced by ls/stat/dd and friends.
+#
+# Binary payload travels in frames: a line "#<n>" followed by exactly n
+# raw bytes, which is why the line discipline has to be tamed first when
+# the shell happens to sit on a pseudo terminal.
 
 F4TOKEN=__F4_TOKEN__
 F4PROTO=1
@@ -41,16 +45,39 @@ f4_have() {
  command -v "$1" >/dev/null 2>&1 || which "$1" >/dev/null 2>&1
 }
 
+f4_num() {
+ case $1 in
+  '' | *[!0-9]* ) return 1 ;;
+ esac
+ return 0
+}
+
+# A shell started on a pseudo terminal echoes back everything it is fed and
+# turns every \n of the payload into \r\n, which destroys binary frames and
+# truncates long request lines at the canonical buffer limit. Where there is
+# a terminal, put it into a transparent mode; on a plain pipe (the normal
+# case) nothing happens. Only POSIX stty operands are used here.
+F4TTY=
+if [ -t 0 ] && f4_have stty; then
+ if stty -echo -icanon -inlcr -icrnl -onlcr -ixon -ixoff min 1 time 0 2>/dev/null; then
+  F4TTY=1
+ fi
+fi
+
+# The trailing newline matters: "openssl base64 -d" silently produces
+# nothing for input that does not end with one, which is what made it a
+# useless fallback on hosts whose base64 speaks neither -d nor -D. -A lets
+# it accept a single long line.
 F4DEC=
-for f4c in 'base64 -d' 'base64 -D' 'base64 --decode' 'openssl base64 -d'; do
- if [ "`printf aGk= | $f4c 2>/dev/null`" = hi ]; then
+for f4c in 'base64 -d' 'base64 -D' 'base64 --decode' 'openssl base64 -A -d'; do
+ if [ "`printf 'aGk=\n' | $f4c 2>/dev/null`" = hi ]; then
   F4DEC=$f4c
   break
  fi
 done
 
 f4_dec() {
- printf '%s' "$1" | $F4DEC 2>/dev/null
+ printf '%s\n' "$1" | $F4DEC 2>/dev/null
 }
 
 f4_path() {
@@ -81,20 +108,110 @@ for f4c in find stat statbsd; do
  fi
 done
 
+# How "head -c" behaves decides more than it looks: on macOS it swallows the
+# whole pipe instead of stopping after n bytes, so it can never be used on a
+# stream someone else still has to read from. One probe answers both
+# questions, whether -c is supported at all and whether it stops in time.
+F4HEADC=
+F4HEADSAFE=
+if f4_have head; then
+ case "`printf 12345 | { head -c 2 2>/dev/null; printf '|'; cat; }`" in
+  '12|345' ) F4HEADC=1; F4HEADSAFE=1 ;;
+  '12|' ) F4HEADC=1 ;;
+ esac
+fi
+
+F4TAILC=
+if f4_have tail && [ "`printf 12345 | tail -c +3 2>/dev/null`" = 345 ]; then
+ F4TAILC=1
+fi
+
+f4_try_rmode() {
+ case $1 in
+  ddbytes ) f4_have dd && dd if=/dev/null of=/dev/null bs=1 count=0 iflag=skip_bytes,count_bytes 2>/dev/null ;;
+  dd ) f4_have dd && dd if=/dev/null of=/dev/null count=0 2>/dev/null ;;
+  tailc ) [ -n "$F4TAILC" ] && [ -n "$F4HEADC" ] ;;
+  cat ) f4_have cat ;;
+  * ) false ;;
+ esac
+}
+
+F4RD=
+for f4c in ddbytes dd tailc cat; do
+ if f4_try_rmode $f4c; then
+  F4RD=$f4c
+  break
+ fi
+done
+
 F4FEATS=
-for f4c in dd base64 readlink du grep sed awk wc sha256sum; do
+for f4c in dd base64 readlink du grep sed awk wc head tail stty sha256sum; do
  f4_have $f4c && F4FEATS="$F4FEATS $f4c"
 done
 for f4c in find stat statbsd; do
  f4_try_mode $f4c && F4FEATS="$F4FEATS $f4c"
 done
+[ -n "$F4HEADC" ] && F4FEATS="$F4FEATS headc"
+[ -n "$F4HEADSAFE" ] && F4FEATS="$F4FEATS headsafe"
+[ -n "$F4TAILC" ] && F4FEATS="$F4FEATS tailc"
+f4_try_rmode ddbytes && F4FEATS="$F4FEATS ddbytes"
+[ -n "$F4TTY" ] && F4FEATS="$F4FEATS tty"
 [ -n "$F4MODE" ] && F4FEATS="$F4FEATS mode:$F4MODE"
+[ -n "$F4RD" ] && F4FEATS="$F4FEATS read:$F4RD"
 
 f4_list() {
  case $F4MODE in
   find ) find -H "$F4PATH" -mindepth 1 -maxdepth 1 -printf "$F4FMT_FIND" 2>/dev/null ;;
   stat ) stat -c "$F4FMT_STAT" -- "$F4PATH"/* "$F4PATH"/.* 2>/dev/null ;;
   statbsd ) stat -f "$F4FMT_BSD" -- "$F4PATH"/* "$F4PATH"/.* 2>/dev/null ;;
+ esac
+}
+
+# f4_size follows symlinks, like the read command it serves, and falls back
+# to counting bytes when there is no metadata backend at all.
+f4_size() {
+ F4SZ=
+ case $F4MODE in
+  find ) F4SZ=`find -H "$1" -mindepth 0 -maxdepth 0 -printf '%s\n' 2>/dev/null` ;;
+  stat ) F4SZ=`stat -c '%s' -- "$1" 2>/dev/null` ;;
+  statbsd ) F4SZ=`stat -f '%z' -- "$1" 2>/dev/null` ;;
+ esac
+ f4_num "$F4SZ" || F4SZ=
+ if [ -z "$F4SZ" ] && f4_have wc; then
+  F4SZ=`wc -c < "$1" 2>/dev/null | tr -d ' '`
+  f4_num "$F4SZ" || F4SZ=
+ fi
+}
+
+# The largest power of two up to 64k that divides both the offset and the
+# length. It lets plain dd position itself with one lseek and read whole
+# blocks, without the GNU only iflag=skip_bytes; a client that asks for
+# aligned chunks therefore gets full speed on every host.
+f4_bs() {
+ F4BS=65536
+ while [ "$F4BS" -gt 1 ]; do
+  if [ $(( $1 % F4BS )) -eq 0 ] && [ $(( $2 % F4BS )) -eq 0 ]; then
+   break
+  fi
+  F4BS=$(( F4BS / 2 ))
+ done
+}
+
+f4_read_range() {
+ case $F4RD in
+  ddbytes )
+   dd if="$1" bs=1048576 iflag=skip_bytes,count_bytes skip="$2" count="$3" 2>/dev/null
+   ;;
+  dd )
+   f4_bs "$2" "$3"
+   dd if="$1" bs=$F4BS skip=$(( $2 / F4BS )) count=$(( $3 / F4BS )) 2>/dev/null
+   ;;
+  tailc )
+   tail -c +$(( $2 + 1 )) < "$1" 2>/dev/null | head -c "$3" 2>/dev/null
+   ;;
+  cat )
+   cat < "$1" 2>/dev/null
+   ;;
  esac
 }
 
@@ -157,6 +274,55 @@ f4_cmd_rdlink() {
  fi
 }
 
+# read <offset> <length>, length 0 meaning "to the end of the file".
+# The reply carries the size the helper saw as a text line, then one binary
+# frame with the bytes that were actually available in that range.
+f4_cmd_read() {
+ f4_path
+ if ! f4_num "$1" || ! f4_num "$2"; then
+  f4_end err "bad range"
+  return
+ fi
+ if [ -z "$F4RD" ]; then
+  f4_end err "no way to read files on remote host"
+  return
+ fi
+ if [ ! -e "$F4PATH" ]; then
+  f4_end err "no such file"
+  return
+ fi
+ if [ -d "$F4PATH" ]; then
+  f4_end err "is a directory"
+  return
+ fi
+ if [ ! -r "$F4PATH" ]; then
+  f4_end err "permission denied"
+  return
+ fi
+ f4_size "$F4PATH"
+ if [ -z "$F4SZ" ]; then
+  f4_end err "cannot determine file size"
+  return
+ fi
+ F4N=0
+ if [ "$1" -lt "$F4SZ" ]; then
+  F4N=$(( F4SZ - $1 ))
+  if [ "$2" -gt 0 ] && [ "$2" -lt "$F4N" ]; then
+   F4N=$2
+  fi
+ fi
+ if [ "$F4RD" = cat ] && [ "$F4N" -gt 0 ] && { [ "$1" -ne 0 ] || [ "$F4N" -ne "$F4SZ" ]; }; then
+  f4_end err "no way to read a byte range on remote host"
+  return
+ fi
+ echo "S $F4SZ"
+ echo "#$F4N"
+ if [ "$F4N" -gt 0 ]; then
+  f4_read_range "$F4PATH" "$1" "$F4N"
+ fi
+ f4_end ok
+}
+
 f4_cmd_mode() {
  if f4_try_mode "$1"; then
   F4MODE=$1
@@ -166,7 +332,19 @@ f4_cmd_mode() {
  fi
 }
 
+f4_cmd_rmode() {
+ if f4_try_rmode "$1"; then
+  F4RD=$1
+  f4_end ok
+ else
+  f4_end err "read mode not available"
+ fi
+}
+
 F4ID=0
+# A login banner or the echo of this very script may end without a newline,
+# and the terminator has to start a line of its own to be recognizable.
+printf '\n'
 if [ -n "$F4DEC" ]; then
  f4_end ok "FISHPLUS $F4PROTO$F4FEATS"
 else
@@ -197,8 +375,14 @@ while :; do
   rdlink )
    f4_cmd_rdlink
    ;;
+  read )
+   f4_cmd_read "$F4A1" "$F4A2"
+   ;;
   mode )
    f4_cmd_mode "$F4A1"
+   ;;
+  rmode )
+   f4_cmd_rmode "$F4A1"
    ;;
   feats )
    echo "$F4PROTO$F4FEATS"

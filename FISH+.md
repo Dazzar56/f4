@@ -40,6 +40,8 @@ The helper script and the wire format are written from scratch for f4 (BSD-3-Cla
 
 The client starts a plain POSIX shell on the remote host, writes the compacted helper script into its stdin and then keeps talking over that very same pair of streams. When the client closes its side, the helper's `read` hits EOF and the remote shell exits on its own — no farewell command is needed, so a hung remote can never block the UI thread.
 
+A shell that ended up on a pseudo terminal needs one more step. A terminal echoes back everything it is fed, turns every `\n` on the way out into `\r\n` — which destroys binary frames — and in canonical mode truncates an input line at a few kilobytes, which would cut off a long path. So the helper checks whether its stdin is a terminal and, if it is, puts it into a transparent mode with POSIX `stty` operands only, announcing `tty` among its features. A client whose transport is a terminal and which does not see `tty` in the banner must treat binary payload as unsafe.
+
 ### Request
 
 One line per request, optionally followed by one line per path the command works on:
@@ -71,7 +73,7 @@ The helper answers with a terminator carrying the reserved id `0`:
 
     .<token> 0 ok FISHPLUS 1 dd base64 readlink du grep sed awk wc sha256sum stat find
 
-Everything printed before that line (motd, shell warnings, login banners) is discarded by the client. The word list after the version is the set of features the helper detected on the remote host; later steps pick their strategy from it (`stat` vs `statbsd` vs `find` vs plain `ls`, `dd` availability and so on). A failing host answers `err` with a reason instead.
+Everything printed before that line (motd, shell warnings, login banners) is discarded by the client. Such noise does not always end with a newline, and neither does the echo of the uploaded script on a pseudo terminal, so during the handshake — and only there — the client looks for the terminator anywhere in the line rather than at its start, while the helper prints a newline of its own before the banner. The word list after the version is the set of features the helper detected on the remote host; later steps pick their strategy from it (`stat` vs `statbsd` vs `find` vs plain `ls`, `dd` availability and so on). A failing host answers `err` with a reason instead.
 
 ### Commands implemented so far
 
@@ -97,9 +99,24 @@ A pure `ls -l` fallback for hosts that have neither is a separate step; it needs
 
 The first payload line of a listing names the backend that produced the rest, so the client always knows which parser to use — including when the backend was switched at runtime.
 
+### Reading
+
+`read` answers with a text line `S <size>` carrying the size the remote host saw, then one binary frame with the bytes that were actually available in that range. The size travels along because a client following a growing log file needs it anyway, and because it is what the helper used to decide how much to send.
+
+Which tool does the reading is detected as well, and reported as `read:<n>`:
+
+1.  **ddbytes** — `dd bs=1M iflag=skip_bytes,count_bytes skip=OFF count=LEN`. Any offset, any length, one process. GNU and recent BusyBox only.
+2.  **dd** — plain `dd bs=BS skip=OFF/BS count=LEN/BS`, where `BS` is the largest power of two up to 64k that divides both the offset and the length. A client that asks for chunk aligned ranges — which `File` does — therefore gets whole block reads and a single `lseek` on BSD, macOS and Solaris too, without the GNU only `iflag`.
+3.  **tailc** — `tail -c +OFF | head -c LEN`, for hosts with no usable `dd`.
+4.  **cat** — whole files only; a byte range is refused rather than answered with the wrong bytes.
+
+The offset is clamped against the size the helper just read, so the frame length is exact and the stream stays in sync.
+
 ### Known limitations of v1
 
 *   The remote host must provide a base64 decoder (`base64` or `openssl`), even though almost no request needs one: the handshake refuses hosts without it because a path with a newline would otherwise be unreachable. Dropping that requirement for hosts that never see such a path is possible later.
+*   A file truncated between the moment the helper reads its size and the moment `dd` runs makes the frame shorter than its header promises, which desynchronizes the session. Growth is harmless; truncation under the reader is not, and detecting it costs a second pass over the data.
+*   The helper does its size arithmetic in the shell, so a host whose shell has 32 bit arithmetic cannot address past 2 GB. `tools/fishplus_probe.sh` reports this per host.
 *   A listing carries file names on a line each, so a name containing a newline shows up truncated in a directory listing, exactly as in classic fish. Operating on such a file still works, because paths going the other way are escaped.
 *   Cancelling a request while its response is being read desynchronizes the stream, so the session is marked broken and has to be reconnected. Proper mid-request cancellation is a separate step of the plan.
 *   In the `stat` and `statbsd` backends a directory is listed through a shell glob, so a directory with very many entries can exceed the argument limit, and a symlink is reported without the type of its target until the user enters it.
@@ -111,14 +128,14 @@ The first payload line of a listing names the backend that produced the rest, so
 
 *   **Step 1 — transport and protocol core.** Helper script, handshake, feature detection, request/response framing, base64 arguments, binary frames, error reporting, session teardown. Tested both against an in-memory peer and against a real local shell.
 *   **Step 2 — listing and metadata.** `enum`, `info`, `linfo`, `rdlink` and the runtime `mode` switch, with the find, GNU stat and BSD stat backends and their parsers. Paths now travel raw instead of base64. The integration test drives every backend the test machine provides, over names with spaces, tabs, backslashes, trailing blanks and non-ASCII characters.
+*   **Step 3 — reading.** `read` with an offset and a length, raw binary frames with no base64 in the way, four read backends with runtime switching through `rmode`, and a `File` handle with a chunk cache that satisfies `vfs.ReadAtCloser`. The terminal safeguards and the first round of compatibility fixes from issue #316 landed here as well.
 
 ### To do
 
 The order below is chosen so that something usable arrives as early as possible: after step 4 a user can already browse, view and download.
 
-*   **Step 3 — reading.** `read` with an offset and a length on top of `dd`, raw binary frames with no base64 in the way, `cat` as the fallback for offset zero, plus a `vfs.ReadAtCloser` with a chunk cache.
 *   **Step 4 — NetFox integration, read only.** `fish_vfs.go` mapping `Entry` onto `vfs.VFSItem`, the SSH transport, the VFS provider, the `fish` entry in the connection dialog. First version fit for actual use.
-*   **Step 5 — writing and mutations.** `write` (raw through `dd` or `head -c`, base64 only as the last resort), `mkdir`, `rm`, `rmdir`, `mv`, `chmod`, `symlink`, `touch`. Parity with classic fish.
+*   **Step 5 — writing and mutations.** `write` (raw through `dd`, never through `head -c`: on macOS it swallows the rest of the stream and would eat the next request; base64 only as the last resort), `mkdir`, `rm`, `rmdir`, `mv`, `chmod`, `symlink`, `touch`. Parity with classic fish.
 *   **Step 6 — odd hosts.** The `ls -l` fallback backend and whatever else the compatibility issue turns up; `tools/fishplus_probe.sh` collects the raw material.
 *   **Step 7 — FISH+ proper, part 1.** Server-side `grep` feeding `VFS.Search` with byte offsets; server-side line index for the viewer and the editor.
 *   **Step 8 — FISH+ proper, part 2.** Delta based saving: PieceTable edits applied remotely instead of re-uploading the file.
@@ -130,4 +147,14 @@ The order below is chosen so that something usable arrives as early as possible:
 
     go test ./plugins/netfox/fishplus/
 
-`TestHelperAgainstLocalShell` runs the real helper in a local `/bin/sh`, which is the only test that proves the shell side and the Go side agree on the wire format. It skips itself on Windows and on hosts without a shell or without base64.
+`TestListingAgainstLocalShell`, `TestReadAgainstLocalShell` and `TestFileReadAtAndCache` run the real helper in a local `/bin/sh`, which is the only kind of test that proves the shell side and the Go side agree on the wire format. They walk every backend the test machine provides, one subtest each, and skip themselves on Windows and on hosts without a shell or without base64.
+
+### What the compatibility issue changed
+
+Issue #316 collects probe output from hosts we do not own. The first three reports (macOS 26 on arm64, Git for Windows/MSYS2, Ubuntu under WSL2) already paid for themselves:
+
+*   `openssl base64 -d` decodes *nothing* when its input does not end with a newline, which made the openssl fallback dead weight: a host whose `base64` speaks neither `-d` nor `-D` was refused at the handshake. The decoder probe and `f4_dec` now both terminate their input, and openssl is called with `-A` so a long line survives.
+*   macOS `head -c` reads its input to the end even after it stopped writing, so it can never be used on a stream someone else still has to read from. The helper probes for this and reports `headc` and `headsafe` separately; the write step will need it.
+*   macOS `find` has no `-printf` and its `stat` no `-c`, so `statbsd` is the backend there, and its `dd` has no `iflag`. Both paths are exercised here against a simulated host built from that report.
+
+Hosts with neither GNU find nor either `stat` are still unlisted; the `ls -l` fallback waits for probe output from the systems that need it. Probe version 2 asks for what that parser will need — `ls -lT`, `--time-style`, `--full-time`, numeric ids, symlink rendering — plus the `dd`, `tail -c`, `stty` and shell arithmetic details the read and write steps depend on.
