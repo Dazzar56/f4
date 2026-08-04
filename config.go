@@ -178,7 +178,7 @@ var AppConfig = F4Config{
 	ShowHiddenFiles:          true,
 	HighlightDir:             true,
 	SeparateFileExtensions:   false,
-	PanelScrollbarMode:       PanelScrollbarOff,
+	PanelScrollbarMode:       PanelScrollbarMinimal,
 	SavePanelPaths:           true,
 	InfoPanelBytes:           false,
 	InfoPanelCPUGPU:          false,
@@ -283,11 +283,17 @@ func LoadConfig() {
 	AppConfig.SeparateFileExtensions = ini.GetString("Panel", "SeparateFileExtensions", "0") == "1"
 	if mode := ini.GetString("Panel", "PanelScrollbarMode", ""); mode != "" {
 		AppConfig.PanelScrollbarMode = ParsePanelScrollbarMode(mode)
-	} else if ini.GetString("Panel", "ShowPanelScrollbars", "0") == "1" {
-		// Migration from the short-lived boolean setting.
-		AppConfig.PanelScrollbarMode = PanelScrollbarFull
 	} else {
-		AppConfig.PanelScrollbarMode = PanelScrollbarOff
+		// Migration from the short-lived boolean setting. When neither setting
+		// exists, use the new default: the minimal scrollbar.
+		switch ini.GetString("Panel", "ShowPanelScrollbars", "") {
+		case "1":
+			AppConfig.PanelScrollbarMode = PanelScrollbarFull
+		case "0":
+			AppConfig.PanelScrollbarMode = PanelScrollbarOff
+		default:
+			AppConfig.PanelScrollbarMode = PanelScrollbarMinimal
+		}
 	}
 	AppConfig.SavePanelPaths = ini.GetString("Panel", "SavePanelPaths", "1") == "1"
 	AppConfig.InfoPanelBytes = ini.GetString("Panel", "InfoPanelBytes", "0") == "1"
