@@ -145,11 +145,22 @@ Next, in order:
   back into the engine and checks it replays the same keys. Writing the file
   into `Macros/scripts` and handing it to the running engine with `LoadString`
   is done too, in `MacroManager.SaveRecordedMacro`, so a macro takes effect in
-  the session that recorded it. The remaining cost is
-  elsewhere: a configuration option and its place in the settings dialog, and
+  the session that recorded it. What remains is the choice itself: a
+  configuration option and its place in the settings dialog, and
   deciding what editing or reassigning a recorded macro means once a macro can
   be either kind. Worth doing; not worth rushing.
 
+- **Step 4d: an action registry.** f4's actions are Go functions bound to keys
+  and to the keybar, and nothing can call one by name. A macro reaches an
+  action by sending its keystroke, which breaks the moment the user rebinds
+  that key and tells a reader nothing about what the macro does; a plugin
+  reaches one only by registering a hotkey or a menu item and being handed
+  control. The fix is a registry mapping stable names to the existing
+  functions, exposed as `Actions.Run("Panel.Rescan")` to macros and
+  `Host.RunAction` to plugins, leaving `Keys()` for what it is actually for,
+  simulating input. The work is spread across `actions.go` rather than deep,
+  and naming the actions is the part that deserves thought: the names become
+  API the moment anyone writes a macro against them.
 - **Step 5: onboarding.** A scaffolder for new plugins, a five minute hello
   world, a PlugRing submission walkthrough, and a rewrite of `PLUGINS.md` and
   `LUA.md` to match reality.

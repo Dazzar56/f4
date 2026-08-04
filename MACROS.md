@@ -169,4 +169,7 @@ that runs longer than ten seconds is stopped.
 ## A note on trust
 
 A macro is a program, running with your privileges and f4's. Read one before
-you install it, the same as you would a shell script.
+you install it, the same as you would a shell script.## See also
+
+`PLUGINS.md` for plugins, which are a different thing: a macro automates the
+keyboard, a plugin adds a filesystem, a highlighter or a command of its own.

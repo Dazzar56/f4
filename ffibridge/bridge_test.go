@@ -204,6 +204,39 @@ func TestCallErrors(t *testing.T) {
 	}
 }
 
+func TestCloseLibDropsCachedCallables(t *testing.T) {
+	b, lib := testLibC(t)
+	requireSym(t, b, lib, "strlen")
+
+	if _, err := b.CallSym(lib, "strlen", "i64(str)", "hello"); err != nil {
+		t.Fatalf("strlen: %v", err)
+	}
+
+	b.mu.Lock()
+	cached := len(b.callables)
+	b.mu.Unlock()
+	if cached == 0 {
+		t.Fatal("nothing was cached, so this test would prove nothing")
+	}
+
+	if err := b.CloseLib(lib); err != nil {
+		t.Fatalf("CloseLib: %v", err)
+	}
+
+	// A cached callable is bound to a raw address inside the library. Keeping
+	// one past the unload would leave a call jumping into an unmapped page.
+	b.mu.Lock()
+	left := len(b.callables)
+	b.mu.Unlock()
+	if left != 0 {
+		t.Fatalf("%d callable(s) still point into the unloaded library", left)
+	}
+
+	if err := b.CloseLib(lib); err == nil {
+		t.Error("closing an unknown library handle was accepted")
+	}
+}
+
 func TestPermissionHookBlocksOpen(t *testing.T) {
 	denied := errors.New("denied by policy")
 	b := New(Options{Allow: func(op Op, detail string) error {

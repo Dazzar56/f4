@@ -165,9 +165,11 @@ func (b *Bridge) CloseLib(lib uintptr) error {
 	_, known := b.libs[lib]
 	if known {
 		delete(b.libs, lib)
-		for key := range b.callables {
-			_ = key
-		}
+		// Every cached callable holds a raw address, and unloading a library
+		// invalidates the ones that came from it. Which callable came from
+		// which library is not recorded, so the whole cache goes: rebuilding
+		// an entry is cheap, calling into an unmapped page is not.
+		b.callables = make(map[callKey]reflect.Value)
 	}
 	b.mu.Unlock()
 	if !known {

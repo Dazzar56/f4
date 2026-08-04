@@ -16,7 +16,12 @@ system Lua and no rocks to install. The plugin is a single file. `require('f4rpc
 resolves to a preloaded module, so a script written for the subprocess
 transport runs here unmodified.
 
-**Embedded wasm.** Planned; see `PLUGIN_PLAN.md`.
+**Embedded wasm.** `f4` runs a `.wasm` plugin on a built-in WebAssembly
+runtime. The guest is a WASI command reading F4-RPC from stdin and writing it
+to stdout, exactly as a subprocess plugin does, so the same source builds
+either way. It is the only transport that is genuinely a sandbox: the guest
+gets no filesystem, only stdio, a clock and a random source. Native calls
+reach it through `Host.FFI.*`; see `FFI.md`.
 
 An earlier revision of this document argued that embedded interpreters had been
 abandoned for good, on three grounds. Each has an answer now:
