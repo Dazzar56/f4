@@ -650,6 +650,27 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 
 			scr.Write(ev.X1-ev.ScrollLeft, currY, ev.renderCells)
 
+			lineBg := bgAttr
+			if ch, ok := ev.highlighter.(*ColorerHighlighter); ok {
+				lineBg = ch.GetLineBackground(logIdx, bgAttr)
+			}
+			fillBg := lineBg
+			if isCrossRow && horzCrossAttr != 0 {
+				if horzCrossAttr&vtui.IsBgRGB != 0 {
+					fillBg = vtui.SetRGBBack(fillBg, vtui.GetRGBBack(horzCrossAttr))
+				} else {
+					fillBg = vtui.SetIndexBack(fillBg, vtui.GetIndexBack(horzCrossAttr))
+				}
+			}
+			startX := ev.X1 - ev.ScrollLeft + len(ev.renderCells)
+			if startX < ev.X1 {
+				startX = ev.X1
+			}
+			maxX := ev.X1 + width - 1
+			if startX <= maxX {
+				scr.FillRect(startX, currY, maxX, currY, ' ', fillBg)
+			}
+
 			if absVRow == curVRow {
 				scr.SetCursorPos(ev.X1+curVCol+ev.CursorVirtualSpaces-ev.ScrollLeft, currY)
 				scr.SetCursorVisible(true)

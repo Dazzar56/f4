@@ -44,7 +44,7 @@ func TestColorer_UTF16ToRuneIndex(t *testing.T) {
 func TestColorer_AttrCacheIsBounded(t *testing.T) {
 	ch := &ColorerHighlighter{}
 	for i := 0; i < maxCachedAttrLines+64; i++ {
-		ch.storeAttrs(i, []uint64{uint64(i)})
+		ch.storeAttrs(i, []uint64{uint64(i)}, 0)
 	}
 	if len(ch.attrCache) > maxCachedAttrLines {
 		t.Errorf("Attribute cache grew to %d entries", len(ch.attrCache))

@@ -333,6 +333,7 @@ type ColorerHighlighter struct {
 	fallback   vtui.Highlighter
 	lines      []string
 	attrCache  map[int][]uint64
+	bgCache    map[int]uint64
 	baseAttr   uint64
 	baseKnown  bool
 	schemeGen  uint64
@@ -363,6 +364,7 @@ func (ch *ColorerHighlighter) Highlight(line string, prevState any, baseAttr uin
 		ch.baseKnown = true
 		ch.schemeGen = gen
 		ch.attrCache = nil
+		ch.bgCache = nil
 
 		schemeMu.Lock()
 		activeScheme := schemeName
@@ -404,12 +406,25 @@ func (ch *ColorerHighlighter) Highlight(line string, prevState any, baseAttr uin
 		attrs[i] = baseAttr
 	}
 
+	eolBg := baseAttr
 	for _, reg := range regions {
 		start, end := reg.Start, reg.End
 		if start < 0 {
 			start = 0
 		}
-		if end < 0 || end > lineUnits {
+		if end < 0 {
+			if AppConfig.EditorColorerSyntax {
+				rd := colorer.RegionDefine{
+					Fore:      reg.Fore,
+					Back:      reg.Back,
+					Style:     reg.Style,
+					IsForeSet: reg.IsForeSet,
+					IsBackSet: reg.IsBackSet,
+				}
+				eolBg = applyColorerStyle(eolBg, &rd)
+			}
+			end = lineUnits
+		} else if end > lineUnits {
 			end = lineUnits
 		}
 		if start >= end {
@@ -432,7 +447,7 @@ func (ch *ColorerHighlighter) Highlight(line string, prevState any, baseAttr uin
 		}
 	}
 
-	ch.storeAttrs(logIdx, attrs)
+	ch.storeAttrs(logIdx, attrs, eolBg)
 	return attrs, logIdx
 }
 
@@ -460,27 +475,48 @@ func (ch *ColorerHighlighter) resync(upTo int) {
 	ch.parsedIdx = upTo
 }
 
-func (ch *ColorerHighlighter) storeAttrs(idx int, attrs []uint64) {
+func (ch *ColorerHighlighter) GetLineBackground(idx int, defaultAttr uint64) uint64 {
+	if ch.bgCache == nil {
+		return defaultAttr
+	}
+	if bg, ok := ch.bgCache[idx]; ok {
+		return bg
+	}
+	return defaultAttr
+}
+
+func (ch *ColorerHighlighter) storeAttrs(idx int, attrs []uint64, bg uint64) {
 	if ch.attrCache == nil {
 		ch.attrCache = make(map[int][]uint64)
+	}
+	if ch.bgCache == nil {
+		ch.bgCache = make(map[int]uint64)
 	}
 	if len(ch.attrCache) >= maxCachedAttrLines {
 		for key := range ch.attrCache {
 			if key < idx-attrCacheKeepWindow || key > idx+attrCacheKeepWindow {
 				delete(ch.attrCache, key)
+				delete(ch.bgCache, key)
 			}
 		}
 		if len(ch.attrCache) >= maxCachedAttrLines {
 			ch.attrCache = make(map[int][]uint64)
+			ch.bgCache = make(map[int]uint64)
 		}
 	}
 	ch.attrCache[idx] = attrs
+	ch.bgCache[idx] = bg
 }
 
 func (ch *ColorerHighlighter) dropCacheFrom(idx int) {
 	for key := range ch.attrCache {
 		if key >= idx {
 			delete(ch.attrCache, key)
+		}
+	}
+	for key := range ch.bgCache {
+		if key >= idx {
+			delete(ch.bgCache, key)
 		}
 	}
 }
