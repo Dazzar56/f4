@@ -591,7 +591,7 @@ func logUnresolvedColorerRegion(name string) {
 // stays monochrome; only the built-in color map is out of bounds here.
 func colorerSchemeStyle(name string) (colorerRegionStyle, bool) {
 	nameLower := strings.ToLower(name)
-	chain := append([]string{nameLower}, ColorerRegionChain(nameLower)...)
+	chain := strings.Split(nameLower, "|")
 
 	schemeMu.Lock()
 	defer schemeMu.Unlock()
@@ -628,29 +628,33 @@ func colorerSchemeStyle(name string) (colorerRegionStyle, bool) {
 		}
 	}
 
-	if !anyFound {
+	if !anyFound && len(chain) > 0 {
+		leaf := chain[0]
 		var fallbackStyle colorerRegionStyle
 		var fallbackFound bool
 		for _, key := range schemeKeys {
-			if strings.HasPrefix(nameLower, key) {
+			if isRegionPrefix(leaf, key) {
 				fallbackStyle, fallbackFound = schemeStyles[key], true
+				vtui.DebugLog("      Matched prefix %q for leaf %q -> style=%+v", key, leaf, fallbackStyle)
 				break
 			}
 		}
 		if !fallbackFound {
 			for _, key := range schemeKeys {
-				if strings.Contains(nameLower, key) {
+				if isRegionContains(leaf, key) {
 					fallbackStyle, fallbackFound = schemeStyles[key], true
+					vtui.DebugLog("      Matched contains %q for leaf %q -> style=%+v", key, leaf, fallbackStyle)
 					break
 				}
 			}
 		}
 		if !fallbackFound {
-			if local := colorerRegionLocalName(nameLower); len(local) >= minColorerLocalMatch {
+			if local := colorerRegionLocalName(leaf); len(local) >= minColorerLocalMatch {
 				for _, key := range schemeKeys {
 					keyLocal := colorerRegionLocalName(key)
-					if len(keyLocal) >= minColorerLocalMatch && strings.Contains(local, keyLocal) {
+					if len(keyLocal) >= minColorerLocalMatch && isRegionContains(local, keyLocal) {
 						fallbackStyle, fallbackFound = schemeStyles[key], true
+						vtui.DebugLog("      Matched local %q (keyLocal: %q) for leaf %q -> style=%+v", key, keyLocal, leaf, fallbackStyle)
 						break
 					}
 				}
@@ -674,6 +678,37 @@ func colorerSchemeStyle(name string) (colorerRegionStyle, bool) {
 // sortColorerKeys orders keys from the longest to the shortest one, so that
 // the most specific key always wins and the result never depends on Go's
 // random map iteration order.
+func isRegionPrefix(name, prefix string) bool {
+	if !strings.HasPrefix(name, prefix) {
+		return false
+	}
+	if len(name) == len(prefix) {
+		return true
+	}
+	nextChar := name[len(prefix)]
+	return nextChar == '.' || nextChar == ':' || nextChar == '_' || nextChar == '|' || nextChar == '-'
+}
+
+func isRegionContains(name, sub string) bool {
+	idx := strings.Index(name, sub)
+	if idx == -1 {
+		return false
+	}
+	if idx > 0 {
+		prevChar := name[idx-1]
+		if prevChar != '.' && prevChar != ':' && prevChar != '_' && prevChar != '|' && prevChar != '-' {
+			return false
+		}
+	}
+	if idx+len(sub) < len(name) {
+		nextChar := name[idx+len(sub)]
+		if nextChar != '.' && nextChar != ':' && nextChar != '_' && nextChar != '|' && nextChar != '-' {
+			return false
+		}
+	}
+	return true
+}
+
 func sortColorerKeys(keys []string) {
 	sort.Slice(keys, func(i, j int) bool {
 		if len(keys[i]) != len(keys[j]) {

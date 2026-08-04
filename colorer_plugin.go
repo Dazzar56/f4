@@ -118,24 +118,46 @@ func lookupColorerColor(name string) (uint32, bool) {
 	}
 
 	color, found := uint32(0), false
-	if exact, ok := ColorerColorMap[nameLower]; ok {
-		color, found = exact, true
+	var matchType string
+	var matchedKey string
+
+	chain := strings.Split(nameLower, "|")
+
+	for _, part := range chain {
+		if exact, ok := ColorerColorMap[part]; ok {
+			color, found = exact, true
+			matchType = "exact"
+			matchedKey = part
+			break
+		}
 	}
-	if !found {
+
+	if !found && len(chain) > 0 {
+		leaf := chain[0]
 		for _, key := range keys {
-			if strings.HasPrefix(nameLower, key) {
+			if isRegionPrefix(leaf, key) {
 				color, found = ColorerColorMap[key], true
+				matchType = "prefix"
+				matchedKey = key
 				break
 			}
 		}
-	}
-	if !found {
-		for _, key := range keys {
-			if strings.Contains(nameLower, key) {
-				color, found = ColorerColorMap[key], true
-				break
+		if !found {
+			for _, key := range keys {
+				if isRegionContains(leaf, key) {
+					color, found = ColorerColorMap[key], true
+					matchType = "contains"
+					matchedKey = key
+					break
+				}
 			}
 		}
+	}
+
+	if found {
+		vtui.DebugLog("    lookupColorerColor: Matched %q (type: %s, key: %q) -> color: #%06X", nameLower, matchType, matchedKey, color)
+	} else {
+		vtui.DebugLog("    lookupColorerColor: No match found for %q", nameLower)
 	}
 
 	stored := int64(-1)
@@ -458,11 +480,13 @@ func (ch *ColorerHighlighter) Highlight(line string, prevState any, baseAttr uin
 			if colorerSchemeActive() {
 				style, _ = colorerSchemeStyle(reg.Name)
 				useScheme = true
-				vtui.DebugLog("  [SCHEME] Reg: %q -> %q (Rune: %d..%d), Style: fore=#%06X (has=%v) back=#%06X (has=%v) mode=%d", reg.Name, line[start:end], startRune, endRune, style.fore, style.hasFore, style.back, style.hasBack, style.style)
+				vtui.DebugLog("  [SCHEME] Reg: %q -> %q (Rune: %d..%d), Style: fore=#%06X (has=%v) back=#%06X (has=%v) style=%d", reg.Name, line[start:end], startRune, endRune, style.fore, style.hasFore, style.back, style.hasBack, style.style)
 			} else {
 				fallbackColor, useFallback = lookupColorerColor(reg.Name)
 				if useFallback {
 					vtui.DebugLog("  [FALLBACK] Reg: %q -> %q (Rune: %d..%d), Color: #%06X", reg.Name, line[start:end], startRune, endRune, fallbackColor)
+				} else {
+					vtui.DebugLog("  [FALLBACK-NONE] Reg: %q -> %q (Rune: %d..%d) - No color resolved", reg.Name, line[start:end], startRune, endRune)
 				}
 			}
 		}
