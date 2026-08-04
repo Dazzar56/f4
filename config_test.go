@@ -34,7 +34,7 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	AppConfig.EditorColorerBackground = false
 	AppConfig.CommandLineAutoComplete = false
 	AppConfig.SeparateFileExtensions = true
-	AppConfig.ShowPanelScrollbars = true
+	AppConfig.PanelScrollbarMode = PanelScrollbarMinimal
 	AppConfig.MacroRecordFormat = 1
 
 	// 2. Save
@@ -47,7 +47,7 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	AppConfig.EditorCrosshair = false
 	AppConfig.EditorColorerBackground = true
 	AppConfig.SeparateFileExtensions = false
-	AppConfig.ShowPanelScrollbars = false
+	AppConfig.PanelScrollbarMode = PanelScrollbarOff
 	AppConfig.MacroRecordFormat = 0
 
 	// 4. Load
@@ -78,8 +78,8 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	if !AppConfig.SeparateFileExtensions {
 		t.Error("LoadConfig failed to restore SeparateFileExtensions")
 	}
-	if !AppConfig.ShowPanelScrollbars {
-		t.Error("LoadConfig failed to restore ShowPanelScrollbars")
+	if AppConfig.PanelScrollbarMode != PanelScrollbarMinimal {
+		t.Errorf("LoadConfig restored PanelScrollbarMode %v, want minimal", AppConfig.PanelScrollbarMode)
 	}
 	if AppConfig.MacroRecordFormat != 1 {
 		t.Error("LoadConfig failed to restore MacroRecordFormat")
@@ -104,10 +104,34 @@ func TestConfig_PanelScrollbarsDisabledByDefault(t *testing.T) {
 	getUserConfigIniPath = func() string { return userIniPath }
 	getConfigIniPaths = func() []string { return []string{userIniPath} }
 
-	AppConfig.ShowPanelScrollbars = true
+	AppConfig.PanelScrollbarMode = PanelScrollbarFull
 	LoadConfig()
-	if AppConfig.ShowPanelScrollbars {
+	if AppConfig.PanelScrollbarMode != PanelScrollbarOff {
 		t.Fatal("panel scrollbars must be disabled when the setting is absent")
+	}
+}
+
+func TestConfig_PanelScrollbarBooleanMigration(t *testing.T) {
+	tmpDir := t.TempDir()
+	userIniPath := filepath.Join(tmpDir, "settings.ini")
+	if err := os.WriteFile(userIniPath, []byte("[Panel]\nShowPanelScrollbars = 1\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	origUserPathFunc := getUserConfigIniPath
+	origPathsFunc := getConfigIniPaths
+	oldCfg := AppConfig
+	defer func() {
+		getUserConfigIniPath = origUserPathFunc
+		getConfigIniPaths = origPathsFunc
+		AppConfig = oldCfg
+	}()
+	getUserConfigIniPath = func() string { return userIniPath }
+	getConfigIniPaths = func() []string { return []string{userIniPath} }
+
+	LoadConfig()
+	if AppConfig.PanelScrollbarMode != PanelScrollbarFull {
+		t.Fatalf("boolean scrollbar setting migrated to %v, want full", AppConfig.PanelScrollbarMode)
 	}
 }
 
