@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/mattn/go-runewidth"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
@@ -279,6 +280,9 @@ func TestFileSystemPanel_SelectedInfo(t *testing.T) {
 }
 
 func TestFileSystemPanel_Initialization(t *testing.T) {
+	if ViewModeMedium != 0 || ViewModeDetailed != 1 {
+		t.Fatalf("legacy view mode values changed: Medium=%d Detailed=%d", ViewModeMedium, ViewModeDetailed)
+	}
 	// Verify that NewFileSystemPanel initializes with valid geometry to prevent collapsed panels
 	x, y, w, h := 10, 5, 40, 20
 	fp := NewFileSystemPanel(x, y, w, h, vfs.NewOSVFS("."))
@@ -335,6 +339,97 @@ func TestMediumRow_GetCellText(t *testing.T) {
 	}
 	if mRow.GetCellText(1) != "Right" {
 		t.Errorf("Expected 'Right', got %q", mRow.GetCellText(1))
+	}
+}
+
+func TestBriefRowAndColumns(t *testing.T) {
+	fp := NewFileSystemPanel(0, 0, 90, 12, vfs.NewOSVFS("."))
+	fp.entries = make([]*fileEntry, 20)
+	for i := range fp.entries {
+		fp.entries[i] = &fileEntry{VFSItem: vfs.VFSItem{Name: fmt.Sprintf("file-%d", i)}}
+	}
+	fp.SetViewMode(ViewModeBrief)
+	if len(fp.table.Columns) != 3 || !fp.table.CellSelection {
+		t.Fatalf("Brief layout has %d columns, CellSelection=%v", len(fp.table.Columns), fp.table.CellSelection)
+	}
+	row := &mediumRow{fp: fp, r: 0}
+	h := fp.table.ViewHeight
+	for col := 0; col < 3; col++ {
+		want := fmt.Sprintf("file-%d", col*h)
+		if got := row.GetCellText(col); got != want {
+			t.Errorf("column %d = %q, want %q", col, got, want)
+		}
+	}
+	fp.SetCursorIndex(2*h + 1)
+	if fp.table.SelectCol != 2 || fp.table.SelectPos != 1 {
+		t.Errorf("Brief cursor mapping: pos=%d col=%d, want pos=1 col=2", fp.table.SelectPos, fp.table.SelectCol)
+	}
+}
+
+func TestFileEntryModifiedCell(t *testing.T) {
+	entry := &fileEntry{VFSItem: vfs.VFSItem{MTime: time.Date(2026, 8, 4, 12, 34, 0, 0, time.Local)}}
+	if got := entry.GetCellText(2); got != "04.08.26 12:34" {
+		t.Fatalf("modified cell = %q", got)
+	}
+	entry.MTime = time.Time{}
+	if got := entry.GetCellText(2); got != "" {
+		t.Fatalf("zero modified cell = %q, want empty", got)
+	}
+}
+
+func TestFormatPanelFileNameSeparateExtension(t *testing.T) {
+	oldConfig := AppConfig
+	defer func() { AppConfig = oldConfig }()
+	AppConfig.SeparateFileExtensions = true
+	AppConfig.HighlightDir = true
+
+	entry := &fileEntry{VFSItem: vfs.VFSItem{Name: "report.txt"}}
+	if got, want := formatPanelFileName(entry, 20), "report           txt"; got != want {
+		t.Fatalf("separate extension = %q, want %q", got, want)
+	}
+	entry.Name = "source.go"
+	if got, want := formatPanelFileName(entry, 20), "source           go "; got != want {
+		t.Fatalf("short extension = %q, want %q", got, want)
+	}
+	entry.Name = "archive.longext"
+	if got, want := formatPanelFileName(entry, 20), "archive      longext"; got != want {
+		t.Fatalf("long extension = %q, want %q", got, want)
+	}
+	if got := runewidth.StringWidth(formatPanelFileName(entry, 20)); got != 20 {
+		t.Fatalf("formatted width = %d, want 20", got)
+	}
+
+	for _, name := range []string{"README", ".gitignore", "trailing."} {
+		entry.Name = name
+		if got := formatPanelFileName(entry, 20); got != name {
+			t.Errorf("name %q unexpectedly split: %q", name, got)
+		}
+	}
+
+	entry.Name = "folder.ext"
+	entry.IsDir = true
+	if got := formatPanelFileName(entry, 20); got != "folder.ext" {
+		t.Fatalf("directory extension was separated: %q", got)
+	}
+}
+
+func TestSeparateExtensionAppliesToEveryViewMode(t *testing.T) {
+	oldConfig := AppConfig
+	defer func() { AppConfig = oldConfig }()
+	AppConfig.SeparateFileExtensions = true
+
+	fp := NewFileSystemPanel(0, 0, 90, 12, vfs.NewOSVFS("."))
+	fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "sample.go"}}}
+	for _, mode := range []ViewMode{ViewModeBrief, ViewModeMedium, ViewModeDetailed, ViewModeWide} {
+		fp.SetViewMode(mode)
+		fp.Refresh()
+		text := fp.table.Rows[0].GetCellText(0)
+		if !strings.HasPrefix(text, "sample") || !strings.HasSuffix(text, "go ") {
+			t.Errorf("mode %v did not separate extension: %q", mode, text)
+		}
+		if got, want := runewidth.StringWidth(text), fp.table.Columns[0].Width; got != want {
+			t.Errorf("mode %v formatted width=%d, want %d", mode, got, want)
+		}
 	}
 }
 

@@ -995,6 +995,7 @@ func TestSession_DiskPersistence(t *testing.T) {
 	LastLeftCursor = "file.a"
 	LastRightCursor = "file.b"
 	LastActivePanel = 0
+	LastWidePanel = 1
 
 	LastLeftViewMode = 1
 	LastRightViewMode = 0
@@ -1015,6 +1016,7 @@ func TestSession_DiskPersistence(t *testing.T) {
 	LastLeftCursor = ""
 	LastRightCursor = ""
 	LastActivePanel = 1
+	LastWidePanel = -1
 
 	LastLeftViewMode = 0
 	LastRightViewMode = 1
@@ -1033,6 +1035,9 @@ func TestSession_DiskPersistence(t *testing.T) {
 		t.Errorf("Disk persistence failed. Search:%q, LeftPath:%q, LeftCursor:%q, Active:%d",
 			LastEditorSearch, LastLeftPath, LastLeftCursor, LastActivePanel)
 	}
+	if LastWidePanel != 1 {
+		t.Errorf("Wide panel persistence failed: got %d, want 1", LastWidePanel)
+	}
 
 	if LastLeftViewMode != 1 || LastRightViewMode != 0 || LastLeftSortMode != 3 || LastRightSortMode != 2 {
 		t.Errorf("View/Sort modes persistence failed. LeftVM:%d, RightVM:%d, LeftSM:%d, RightSM:%d",
@@ -1045,6 +1050,22 @@ func TestSession_DiskPersistence(t *testing.T) {
 
 	if LastShowPanels || !LastShowLeft || LastShowRight {
 		t.Errorf("Panel visibility persistence failed. Show:%v, Left:%v, Right:%v", LastShowPanels, LastShowLeft, LastShowRight)
+	}
+}
+
+func TestSession_OldFileDefaultsWideOff(t *testing.T) {
+	tmpDir := t.TempDir()
+	origPathFunc := getSessionIniPath
+	getSessionIniPath = func() string { return filepath.Join(tmpDir, "session.ini") }
+	defer func() { getSessionIniPath = origPathFunc }()
+
+	if err := os.WriteFile(getSessionIniPath(), []byte("[Session]\nActivePanel = 0\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	LastWidePanel = 1
+	LoadSession()
+	if LastWidePanel != -1 {
+		t.Fatalf("old session enabled Wide: got %d, want -1", LastWidePanel)
 	}
 }
 
