@@ -28,7 +28,11 @@ Operations like calculating directory sizes, finding duplicate files, or complex
     *   `helper.sh` — the shell helper that is uploaded to the remote host on every connect.
     *   `script.go` — embedding, token substitution and compaction of the helper.
     *   `session.go` — handshake, request/response framing, feature detection.
-*   `plugins/netfox/fish_vfs.go` — *(planned)* the `vfs.VFS` implementation, registered as the `fish` protocol of the NetFox connection manager.
+    *   `fs.go` — listing and metadata parsers for every backend.
+    *   `read.go` — ranged reads and the cached file handle.
+    *   `mutate.go` — directory and metadata mutations.
+*   `plugins/netfox/fish_vfs.go` — the `vfs.VFS` implementation, registered as the `fish+` protocol of the NetFox connection manager. A plain `fish` type is accepted as a synonym.
+*   `plugins/netfox/ssh_dial.go` — the SSH dialer shared with the SFTP backend.
 
 ### Licensing
 
@@ -85,7 +89,13 @@ Everything printed before that line (motd, shell warnings, login banners) is dis
 *   `info` + path — metadata, following symlinks.
 *   `linfo` + path — metadata of the link itself.
 *   `rdlink` + path — the target of a symlink.
+*   `read <offset> <length>` + path — a byte range, `length` zero meaning "to the end of the file".
+*   `mkdir` + path — creates a directory and its missing parents.
+*   `rm`, `rmdir`, `rmtree` + path — a file, an empty directory, a whole tree. All three refuse the root directory.
+*   `mv` + two paths — the first command that reads more than one path line.
+*   `chmod <octal>` + path — the mode is checked for being octal before it reaches the remote `chmod`.
 *   `mode <name>` — forces a metadata backend instead of the auto-detected one; for tests and for troubleshooting.
+*   `rmode <name>` — the same for the read backend.
 *   `exit` — makes the helper leave its loop.
 
 ### Metadata backends
@@ -104,7 +114,7 @@ The first payload line of a listing names the backend that produced the rest, so
 
 `read` answers with a text line `S <size>` carrying the size the remote host saw, then one binary frame with the bytes that were actually available in that range. The size travels along because a client following a growing log file needs it anyway, and because it is what the helper used to decide how much to send.
 
-Which tool does the reading is detected as well, and reported as `read:<n>`:
+Which tool does the reading is detected as well, and reported as `read:<name>`:
 
 1.  **ddbytes** — `dd bs=1M iflag=skip_bytes,count_bytes skip=OFF count=LEN`. Any offset, any length, one process. GNU and recent BusyBox only.
 2.  **dd** — plain `dd bs=BS skip=OFF/BS count=LEN/BS`, where `BS` is the largest power of two up to 64k that divides both the offset and the length. A client that asks for chunk aligned ranges — which `File` does — therefore gets whole block reads and a single `lseek` on BSD, macOS and Solaris too, without the GNU only `iflag`.
@@ -121,6 +131,7 @@ The offset is clamped against the size the helper just read, so the frame length
 *   A listing carries file names on a line each, so a name containing a newline shows up truncated in a directory listing, exactly as in classic fish. Operating on such a file still works, because paths going the other way are escaped.
 *   Cancelling a request while its response is being read desynchronizes the stream, so the session is marked broken and has to be reconnected. Proper mid-request cancellation is a separate step of the plan.
 *   Two panels sharing one session — which is what `Clone` gives them — take turns rather than working in parallel, because the remote shell answers one command at a time. That also means a cancellation in one panel breaks the session for the other until step 10 makes cancellation recoverable.
+*   `SetAttributes` applies the permission bits only. Ownership and timestamps arrive with step 5b, which is also where the portable `touch` invocation gets worked out.
 *   In the `stat` and `statbsd` backends a directory is listed through a shell glob, so a directory with very many entries can exceed the argument limit, and a symlink is reported without the type of its target until the user enters it.
 *   Hosts with neither GNU find, nor GNU stat, nor BSD stat cannot be listed at all yet.
 
@@ -136,12 +147,13 @@ The offset is clamped against the size the helper just read, so the frame length
 
 *   **Step 4b — transport and registration.** `DialSSH` now carries the agent, key and password logic for both SSH backends, and a FISH+ site opens a shell with no pseudo terminal attached, running `exec /bin/sh` so that a csh or fish login shell cannot get in the way. The protocol is registered as `fish+`, with the plain `fish` type accepted as a synonym.
 
+*   **Step 5a — mutations.** `mkdir`, `rm`, `rmdir`, `rmtree`, `mv` and `chmod`, and the `FishVFS` methods on top of them. A recursive delete is one round trip rather than one per entry, because the remote host does the walking. `Create` is now the only method that still refuses.
+
 ### To do
 
 The order below is chosen so that something usable arrives as early as possible: after step 4 a user can already browse, view and download.
 
-*   **Step 5 — writing and mutations.** The first thing a user will miss now that browsing works.
-*   **Step 5 — writing and mutations.** `write` (raw through `dd`, never through `head -c`: on macOS it swallows the rest of the stream and would eat the next request; base64 only as the last resort), `mkdir`, `rm`, `rmdir`, `mv`, `chmod`, `symlink`, `touch`. Parity with classic fish.
+*   **Step 5b — writing file content.** `write` with an offset, raw through `dd` and never through `head -c`, which on macOS swallows the rest of the stream and would eat the following request; base64 only as the last resort. Then `FishVFS.Create`, plus `chown` and a portable `touch` to finish `SetAttributes`.
 *   **Step 6 — odd hosts.** The `ls -l` fallback backend and whatever else the compatibility issue turns up; `tools/fishplus_probe.sh` collects the raw material.
 *   **Step 7 — FISH+ proper, part 1.** Server-side `grep` feeding `VFS.Search` with byte offsets; server-side line index for the viewer and the editor.
 *   **Step 8 — FISH+ proper, part 2.** Delta based saving: PieceTable edits applied remotely instead of re-uploading the file.
@@ -151,9 +163,9 @@ The order below is chosen so that something usable arrives as early as possible:
 
 ## Testing
 
-    go test ./plugins/netfox/fishplus/
+    go test ./plugins/netfox/fishplus/ ./plugins/netfox/
 
-`TestListingAgainstLocalShell`, `TestReadAgainstLocalShell` and `TestFileReadAtAndCache` run the real helper in a local `/bin/sh`, which is the only kind of test that proves the shell side and the Go side agree on the wire format. They walk every backend the test machine provides, one subtest each, and skip themselves on Windows and on hosts without a shell or without base64.
+The tests whose names end in `AgainstLocalShell`, together with `TestFileReadAtAndCache` and the `FishVFS` tests in the `netfox` package, run the real helper in a local `/bin/sh`. That is the only kind of test that proves the shell side and the Go side agree on the wire format, and it walks every backend the test machine provides, one subtest each. They skip themselves on Windows and on hosts without a shell or without base64.
 
 ### What the compatibility issue changed
 

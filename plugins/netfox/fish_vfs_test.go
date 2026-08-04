@@ -189,28 +189,59 @@ func TestFishVFSStatAndOpen(t *testing.T) {
 	}
 }
 
-func TestFishVFSMutationsRefuseForNow(t *testing.T) {
+func TestFishVFSMutations(t *testing.T) {
 	v := newLocalFishVFS(t)
 	ctx := context.Background()
-	dir := t.TempDir()
+	root := t.TempDir()
 
-	if err := v.MkDir(ctx, filepath.Join(dir, "new")); err != ErrFishReadOnly {
-		t.Errorf("MkDir = %v, want ErrFishReadOnly", err)
+	dir := filepath.Join(root, "new dir")
+	if err := v.MkDir(ctx, dir); err != nil {
+		t.Fatalf("MkDir: %v", err)
 	}
-	if err := v.Remove(ctx, dir); err != ErrFishReadOnly {
-		t.Errorf("Remove = %v, want ErrFishReadOnly", err)
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+		t.Fatalf("MkDir did not create %q: %v", dir, err)
 	}
-	if err := v.Rename(ctx, dir, dir+".x"); err != ErrFishReadOnly {
-		t.Errorf("Rename = %v, want ErrFishReadOnly", err)
+
+	file := filepath.Join(dir, "payload.txt")
+	if err := os.WriteFile(file, []byte("hello"), 0644); err != nil {
+		t.Fatal(err)
 	}
-	if _, err := v.Create(ctx, filepath.Join(dir, "new")); err != ErrFishReadOnly {
-		t.Errorf("Create = %v, want ErrFishReadOnly", err)
+	moved := filepath.Join(dir, "renamed.txt")
+	if err := v.Rename(ctx, file, moved); err != nil {
+		t.Fatalf("Rename: %v", err)
 	}
-	if err := v.SetAttributes(ctx, dir, vfs.VFSItem{}); err != ErrFishReadOnly {
-		t.Errorf("SetAttributes = %v, want ErrFishReadOnly", err)
+	if _, err := os.Stat(moved); err != nil {
+		t.Fatalf("Rename did not produce %q: %v", moved, err)
 	}
-	if _, err := os.Stat(dir); err != nil {
-		t.Errorf("a refused mutation still touched the disk: %v", err)
+
+	if err := v.SetAttributes(ctx, moved, vfs.VFSItem{UnixMode: 0100600}); err != nil {
+		t.Fatalf("SetAttributes: %v", err)
+	}
+	info, err := os.Stat(moved)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0600 {
+		t.Errorf("mode = %o, want 600", info.Mode().Perm())
+	}
+	// An item carrying no mode must leave the file alone.
+	if err := v.SetAttributes(ctx, moved, vfs.VFSItem{}); err != nil {
+		t.Errorf("SetAttributes with nothing to set: %v", err)
+	}
+
+	if _, err := v.Create(ctx, filepath.Join(dir, "brand new")); err != ErrFishReadOnly {
+		t.Errorf("Create = %v, want ErrFishReadOnly until step 5b", err)
+	}
+
+	// Remove takes the whole tree, the file inside it included.
+	if err := v.Remove(ctx, dir); err != nil {
+		t.Fatalf("Remove: %v", err)
+	}
+	if _, err := os.Stat(dir); err == nil {
+		t.Error("Remove left the directory behind")
+	}
+	if err := v.Remove(ctx, dir); err == nil {
+		t.Error("Remove of a missing directory succeeded")
 	}
 }
 func TestFishVFSCloneHasItsOwnDirectory(t *testing.T) {

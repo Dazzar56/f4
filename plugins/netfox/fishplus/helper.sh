@@ -86,6 +86,37 @@ f4_path() {
   '~'* ) F4PATH=`f4_dec "${F4PATH#\~}"` ;;
  esac
 }
+f4_paths2() {
+ f4_path
+ F4SRC=$F4PATH
+ f4_path
+ F4DST=$F4PATH
+}
+
+f4_do() {
+ F4OUT=$("$@" 2>&1)
+ F4RV=$?
+ if [ $F4RV -eq 0 ]; then
+  f4_end ok
+ else
+  f4_end err "$(f4_flat "$F4OUT")"
+ fi
+}
+
+f4_safe_target() {
+ case $1 in
+  '' | '/' ) return 1 ;;
+ esac
+ return 0
+}
+
+f4_rm() {
+ if f4_safe_target "$F4PATH"; then
+  f4_do "$@" -- "$F4PATH"
+ else
+  f4_end err "refusing to remove the root directory"
+ fi
+}
 
 F4FMT_FIND='%y %Y %s %T@ %A@ %C@ %m %U %G %f\n'
 F4FMT_STAT='%f %s %Y %X %Z %u %g %n'
@@ -378,6 +409,33 @@ while :; do
    ;;
   rdlink )
    f4_cmd_rdlink
+   ;;
+  mkdir )
+   f4_path
+   f4_do mkdir -p -- "$F4PATH"
+   ;;
+  rm )
+   f4_path
+   f4_rm rm -f
+   ;;
+  rmdir )
+   f4_path
+   f4_rm rmdir
+   ;;
+  rmtree )
+   f4_path
+   f4_rm rm -rf
+   ;;
+  mv )
+   f4_paths2
+   f4_do mv -f -- "$F4SRC" "$F4DST"
+   ;;
+  chmod )
+   f4_path
+   case $F4A1 in
+    '' | *[!0-7]* ) f4_end err "bad mode" ;;
+    * ) f4_do chmod -- "$F4A1" "$F4PATH" ;;
+   esac
    ;;
   read )
    f4_cmd_read "$F4A1" "$F4A2"

@@ -280,16 +280,42 @@ func (v *FishVFS) Search(ctx context.Context, p, pattern string) (chan int64, er
 	return nil, nil
 }
 
-func (v *FishVFS) MkDir(ctx context.Context, p string) error  { return ErrFishReadOnly }
-func (v *FishVFS) Remove(ctx context.Context, p string) error { return ErrFishReadOnly }
-func (v *FishVFS) Rename(ctx context.Context, o, n string) error {
-	return ErrFishReadOnly
+func (v *FishVFS) MkDir(ctx context.Context, p string) error {
+	return v.client.MkDir(ctx, v.abs(p))
 }
+
+// Remove deletes whatever is at the path. A directory is removed with
+// everything below it by the remote host itself, in one round trip instead
+// of one per entry, which is the main reason a shell based file system is
+// worth having at all.
+func (v *FishVFS) Remove(ctx context.Context, p string) error {
+	target := v.abs(p)
+	e, err := v.client.Lstat(ctx, target)
+	if err != nil {
+		return err
+	}
+	if e.IsDir() {
+		return v.client.RemoveAll(ctx, target)
+	}
+	return v.client.Remove(ctx, target)
+}
+
+func (v *FishVFS) Rename(ctx context.Context, o, n string) error {
+	return v.client.Rename(ctx, v.abs(o), v.abs(n))
+}
+
+// Create still refuses: sending file content is step 5b.
 func (v *FishVFS) Create(ctx context.Context, p string) (io.WriteCloser, error) {
 	return nil, ErrFishReadOnly
 }
+
+// SetAttributes applies the permission bits. Ownership needs a remote chown
+// and the timestamps need a portable touch, both of which wait for step 5b.
 func (v *FishVFS) SetAttributes(ctx context.Context, p string, item vfs.VFSItem) error {
-	return ErrFishReadOnly
+	if item.UnixMode == 0 {
+		return nil
+	}
+	return v.client.Chmod(ctx, v.abs(p), item.UnixMode)
 }
 
 func (v *FishVFS) ParentVFS() vfs.VFS { return v.parent }
