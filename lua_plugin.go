@@ -24,14 +24,25 @@ type LuaPlugin struct {
 	runtime *luaplug.Runtime
 	bridge  *ffibridge.Bridge
 	host    map[string]f4rpc.Handler
-	// declared is what the plugin's manifest says it needs and why.
-	declared map[string]string
+	// identity is who this plugin is to the permission model, taken from
+	// the manifest when it came from the catalog.
+	identity PluginIdentity
 }
 
-// SetDeclaredPermissions passes on what the manifest asked for, so that the
-// permission dialog can quote the author instead of guessing.
-func (p *LuaPlugin) SetDeclaredPermissions(declared map[string]string) {
-	p.declared = declared
+// SetPermissionIdentity passes on who the manifest says this plugin is, so
+// that a grant is remembered under the id PlugRing installed it under, and
+// the dialog can quote the author instead of guessing.
+func (p *LuaPlugin) SetPermissionIdentity(identity PluginIdentity) {
+	p.identity = identity
+}
+
+// permissionIdentity falls back to the path for a plugin registered by hand,
+// which has no manifest and therefore no id.
+func (p *LuaPlugin) permissionIdentity() PluginIdentity {
+	if p.identity.Key == "" {
+		return PermissionIdentityForPath(p.path)
+	}
+	return p.identity
 }
 
 // NewLuaPlugin prepares a plugin from a Lua script.
@@ -75,24 +86,27 @@ func newPluginForEntrypoint(dir, entrypoint string) Plugin {
 	if IsWasmEntrypoint(entrypoint) {
 		return NewWasmPlugin(resolvePluginPath(dir, entrypoint))
 	}
-	_ = dir
 	if dir == "" {
 		return NewRPCPlugin(entrypoint)
 	}
 	return NewRPCPlugRing(dir, entrypoint)
 }
 
-// declaresPermissions is implemented by the transports that can be gated.
-type declaresPermissions interface {
-	SetDeclaredPermissions(map[string]string)
+// carriesPermissionIdentity is implemented by the transports that can be
+// gated.
+type carriesPermissionIdentity interface {
+	SetPermissionIdentity(PluginIdentity)
 }
 
 // newPluginForPlugRingItem is newPluginForEntrypoint with the manifest in
 // hand, which is the only place the declared permissions come from.
 func newPluginForPlugRingItem(dir string, item PlugRingItem) Plugin {
 	plugin := newPluginForEntrypoint(dir, item.Entrypoint)
-	if aware, ok := plugin.(declaresPermissions); ok && len(item.Permissions) > 0 {
-		aware.SetDeclaredPermissions(item.Permissions)
+	// Unconditionally: an identity is needed even when the manifest declares
+	// no permissions, because the gate also asks about permissions a plugin
+	// never declared.
+	if aware, ok := plugin.(carriesPermissionIdentity); ok {
+		aware.SetPermissionIdentity(PermissionIdentityForPlugRingItem(item))
 	}
 	return plugin
 }
@@ -102,7 +116,7 @@ func (p *LuaPlugin) GetName() string {
 }
 
 func (p *LuaPlugin) Init(api vfs.HostAPI) error {
-	p.bridge = newPluginFFIBridge(p.GetName(), p.declared)
+	p.bridge = newPluginFFIBridge(p.permissionIdentity())
 
 	runtime, err := luaplug.New(luaplug.Options{
 		Name: filepath.Base(p.path),

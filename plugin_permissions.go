@@ -149,9 +149,54 @@ func (s *PermissionStore) Forget(plugin string) error {
 	return os.WriteFile(path, append(data, '\n'), 0o600)
 }
 
+// PluginIdentity is who a plugin is to the permission model.
+//
+// Two fields, because the answer to "which plugin is this" depends on who is
+// asking. A grant has to be remembered under something stable that survives an
+// update and that removal can forget again, which is the catalog id. The user
+// has to be shown something they recognise, which is the name from the
+// manifest. The plugin's file path satisfied neither: it is not what PlugRing
+// removes a plugin by, so a grant outlived the plugin that earned it; it
+// carries the user's home directory into the stored grants; and it changes
+// when the configuration directory moves.
+type PluginIdentity struct {
+	// Key is what grants are stored under.
+	Key string
+	// Title is what the dialog calls the plugin. Empty falls back to Key.
+	Title string
+	// Declared maps a permission onto the author's own reason for wanting
+	// it, straight from the manifest.
+	Declared map[string]string
+}
+
+// Name is what to put in front of the user.
+func (id PluginIdentity) Name() string {
+	if id.Title != "" {
+		return id.Title
+	}
+	return id.Key
+}
+
+// PermissionIdentityForPlugRingItem is the identity of a plugin installed from
+// the catalog: the id it was installed under, and the name it advertises.
+func PermissionIdentityForPlugRingItem(item PlugRingItem) PluginIdentity {
+	return PluginIdentity{Key: item.ID, Title: item.Name, Declared: item.Permissions}
+}
+
+// PermissionIdentityForPath is the fallback for a plugin registered by hand.
+// It never went through a manifest, so it has no id, and nothing about it is
+// more stable than where it lives.
+func PermissionIdentityForPath(path string) PluginIdentity {
+	return PluginIdentity{Key: path, Title: filepath.Base(path)}
+}
+
 // PermissionGate decides whether one plugin may do one thing.
 type PermissionGate struct {
+	// plugin is the key grants are stored under and title is what the user
+	// is shown. They are separate because one has to be stable and the
+	// other has to be readable.
 	plugin  string
+	title   string
 	reasons map[string]string
 	store   *PermissionStore
 	prompt  PermissionPrompt
@@ -160,12 +205,12 @@ type PermissionGate struct {
 	refused map[string]bool
 }
 
-// NewPermissionGate builds a gate for a plugin. reasons is what the plugin
-// declared in its manifest, keyed by permission.
-func NewPermissionGate(plugin string, reasons map[string]string, store *PermissionStore, prompt PermissionPrompt) *PermissionGate {
+// NewPermissionGate builds a gate for one plugin.
+func NewPermissionGate(identity PluginIdentity, store *PermissionStore, prompt PermissionPrompt) *PermissionGate {
 	return &PermissionGate{
-		plugin:  plugin,
-		reasons: reasons,
+		plugin:  identity.Key,
+		title:   identity.Name(),
+		reasons: identity.Declared,
 		store:   store,
 		prompt:  prompt,
 		refused: make(map[string]bool),
@@ -204,7 +249,7 @@ func (g *PermissionGate) Allow(permission, detail string) error {
 	}
 
 	granted := g.prompt.Ask(PermissionRequest{
-		Plugin:     g.plugin,
+		Plugin:     g.title,
 		Permission: permission,
 		Reason:     g.reasons[permission],
 		Detail:     detail,
@@ -308,7 +353,7 @@ func PluginPermissions() *PermissionStore {
 // newPluginFFIBridge builds a plugin's FFI bridge with its permission gate
 // already attached, so that no transport can accidentally hand out an
 // ungated one.
-func newPluginFFIBridge(plugin string, reasons map[string]string) *ffibridge.Bridge {
-	gate := NewPermissionGate(plugin, reasons, PluginPermissions(), uiPermissionPrompt{})
+func newPluginFFIBridge(identity PluginIdentity) *ffibridge.Bridge {
+	gate := NewPermissionGate(identity, PluginPermissions(), uiPermissionPrompt{})
 	return ffibridge.New(ffibridge.Options{Allow: gate.FFIHook()})
 }

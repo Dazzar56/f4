@@ -97,6 +97,13 @@ transport never went away.
     Every dangerous operation already funnels through one hook, so adding it
     later is not invasive.
 
+11. **A grant is remembered under the plugin's catalog id, not its path.** The
+    id is what PlugRing installs and removes under, so it is the only key for
+    which forgetting a removed plugin's answers actually works. A path is also
+    the user's home directory written into the stored grants, and it changes
+    when the configuration directory moves. A plugin registered by hand has no
+    id and falls back to its path, which is the only stable thing it has.
+
 ## Distribution
 
 The catalog carries source and wasm, not binaries.

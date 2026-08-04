@@ -28,7 +28,7 @@ func newTestStore(t *testing.T) *PermissionStore {
 func TestPermissionGateAsksOnceAndRemembersYes(t *testing.T) {
 	prompt := &fakePrompt{answer: true}
 	store := newTestStore(t)
-	gate := NewPermissionGate("notes", map[string]string{PermissionFFI: "to read the clipboard"}, store, prompt)
+	gate := NewPermissionGate(PluginIdentity{Key: "notes", Title: "Notes", Declared: map[string]string{PermissionFFI: "to read the clipboard"}}, store, prompt)
 
 	for i := 0; i < 3; i++ {
 		if err := gate.Allow(PermissionFFI, "open libc.so.6"); err != nil {
@@ -44,7 +44,7 @@ func TestPermissionGateAsksOnceAndRemembersYes(t *testing.T) {
 
 	// A fresh gate over the same store must not ask again.
 	second := &fakePrompt{answer: false}
-	again := NewPermissionGate("notes", nil, store, second)
+	again := NewPermissionGate(PluginIdentity{Key: "notes"}, store, second)
 	if err := again.Allow(PermissionFFI, "open libc.so.6"); err != nil {
 		t.Fatalf("a remembered grant was not honoured: %v", err)
 	}
@@ -56,7 +56,7 @@ func TestPermissionGateAsksOnceAndRemembersYes(t *testing.T) {
 func TestPermissionGateRefusalLastsOnlyForThisRun(t *testing.T) {
 	prompt := &fakePrompt{answer: false}
 	store := newTestStore(t)
-	gate := NewPermissionGate("notes", nil, store, prompt)
+	gate := NewPermissionGate(PluginIdentity{Key: "notes"}, store, prompt)
 
 	if err := gate.Allow(PermissionFFI, "open libc.so.6"); err == nil {
 		t.Fatal("a refusal was not enforced")
@@ -76,7 +76,7 @@ func TestPermissionGateRefusalLastsOnlyForThisRun(t *testing.T) {
 }
 
 func TestPermissionGateWithoutAPrompt(t *testing.T) {
-	gate := NewPermissionGate("notes", nil, newTestStore(t), nil)
+	gate := NewPermissionGate(PluginIdentity{Key: "notes"}, newTestStore(t), nil)
 	if err := gate.Allow(PermissionFFI, "open libc.so.6"); err == nil {
 		t.Fatal("a permission was granted with nobody to ask")
 	}
@@ -86,10 +86,10 @@ func TestPermissionGatePerPlugin(t *testing.T) {
 	prompt := &fakePrompt{answer: true}
 	store := newTestStore(t)
 
-	if err := NewPermissionGate("notes", nil, store, prompt).Allow(PermissionFFI, ""); err != nil {
+	if err := NewPermissionGate(PluginIdentity{Key: "notes"}, store, prompt).Allow(PermissionFFI, ""); err != nil {
 		t.Fatalf("notes: %v", err)
 	}
-	if err := NewPermissionGate("other", nil, store, prompt).Allow(PermissionFFI, ""); err != nil {
+	if err := NewPermissionGate(PluginIdentity{Key: "other"}, store, prompt).Allow(PermissionFFI, ""); err != nil {
 		t.Fatalf("other: %v", err)
 	}
 	if len(prompt.asked) != 2 {
@@ -159,7 +159,7 @@ func TestGatedBridgeRefusesWhenDenied(t *testing.T) {
 		t.Skip("ffibridge: FFI is disabled in this build")
 	}
 
-	gate := NewPermissionGate("notes", nil, newTestStore(t), &fakePrompt{answer: false})
+	gate := NewPermissionGate(PluginIdentity{Key: "notes"}, newTestStore(t), &fakePrompt{answer: false})
 	bridge := ffibridge.New(ffibridge.Options{Allow: gate.FFIHook()})
 	defer bridge.Close()
 
@@ -173,7 +173,7 @@ func TestGatedBridgeWorksWhenAllowed(t *testing.T) {
 		t.Skip("ffibridge: FFI is disabled in this build")
 	}
 
-	gate := NewPermissionGate("notes", nil, newTestStore(t), &fakePrompt{answer: true})
+	gate := NewPermissionGate(PluginIdentity{Key: "notes"}, newTestStore(t), &fakePrompt{answer: true})
 	bridge := ffibridge.New(ffibridge.Options{Allow: gate.FFIHook()})
 	defer bridge.Close()
 

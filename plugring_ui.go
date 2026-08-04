@@ -204,6 +204,23 @@ func actionPlugRing(pf *PanelsFrame) {
 	refresh()
 }
 
+// entrypointNeedsInterpreterOnPath reports whether the first word of an
+// entrypoint is a command that must already exist on the user's PATH. A bare
+// .lua or .wasm entrypoint names a file f4 runs itself, so there is nothing to
+// look up, and warning that "notes.lua" is missing would send the user looking
+// for a package that does not exist.
+func entrypointNeedsInterpreterOnPath(entrypoint string) bool {
+	if IsLuaEntrypoint(entrypoint) || IsWasmEntrypoint(entrypoint) {
+		return false
+	}
+	fields := strings.Fields(entrypoint)
+	if len(fields) == 0 {
+		return false
+	}
+	interpreter := fields[0]
+	return !strings.ContainsAny(interpreter, "/\\") && !strings.HasPrefix(interpreter, ".")
+}
+
 func actionInstallPlugRingItem(pf *PanelsFrame, parent *vtui.Window, item PlugRingItem, refresh func()) {
 	// 0. The distribution policy, enforced rather than merely documented.
 	// An entry that breaks it is not installed silently; the user is told
@@ -222,15 +239,12 @@ func actionInstallPlugRingItem(pf *PanelsFrame, parent *vtui.Window, item PlugRi
 		}
 	}
 	// 1. Implicit dependency check from Entrypoint interpreter
-	parts := strings.Fields(item.Entrypoint)
-	if len(parts) > 0 {
-		interpreter := parts[0]
-		if !strings.ContainsAny(interpreter, "/\\") && !strings.HasPrefix(interpreter, ".") {
-			if _, err := exec.LookPath(interpreter); err != nil {
-				msg := fmt.Sprintf("Warning: This plugin requires '%s' to run, but it was not found in your system's PATH.\n\nPlease install '%s' first, or the plugin might fail to load.", interpreter, interpreter)
-				if pf.Message(" Missing Dependency ", msg, []string{"&Install Anyway", "Cancel"}) != 0 {
-					return
-				}
+	if entrypointNeedsInterpreterOnPath(item.Entrypoint) {
+		interpreter := strings.Fields(item.Entrypoint)[0]
+		if _, err := exec.LookPath(interpreter); err != nil {
+			msg := fmt.Sprintf("Warning: This plugin requires '%s' to run, but it was not found in your system's PATH.\n\nPlease install '%s' first, or the plugin might fail to load.", interpreter, interpreter)
+			if pf.Message(" Missing Dependency ", msg, []string{"&Install Anyway", "Cancel"}) != 0 {
+				return
 			}
 		}
 	}

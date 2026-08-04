@@ -43,13 +43,23 @@ type WasmPlugin struct {
 	done    chan struct{}
 	closing bool
 	bridge  *ffibridge.Bridge
-	// declared is what the plugin's manifest says it needs and why.
-	declared map[string]string
+	// identity is who this plugin is to the permission model, taken from
+	// the manifest when it came from the catalog.
+	identity PluginIdentity
 }
 
-// SetDeclaredPermissions passes on what the manifest asked for.
-func (p *WasmPlugin) SetDeclaredPermissions(declared map[string]string) {
-	p.declared = declared
+// SetPermissionIdentity passes on who the manifest says this plugin is.
+func (p *WasmPlugin) SetPermissionIdentity(identity PluginIdentity) {
+	p.identity = identity
+}
+
+// permissionIdentity falls back to the path for a plugin registered by hand,
+// which has no manifest and therefore no id.
+func (p *WasmPlugin) permissionIdentity() PluginIdentity {
+	if p.identity.Key == "" {
+		return PermissionIdentityForPath(p.path)
+	}
+	return p.identity
 }
 
 // NewWasmPlugin prepares a plugin from a .wasm module.
@@ -126,7 +136,7 @@ func (p *WasmPlugin) Init(api vfs.HostAPI) error {
 	p.sess = f4rpc.NewSession(hostFromGuest, hostToGuest)
 	// A wasm guest cannot load a library itself, which is the point of it.
 	// The FFI it gets is the host's, projected over the same protocol.
-	p.bridge = newPluginFFIBridge(p.GetName(), p.declared)
+	p.bridge = newPluginFFIBridge(p.permissionIdentity())
 
 	if err := startPluginSession(p.sess, api, p.path, p.bridge, func(err error) {
 		if !p.closing {
