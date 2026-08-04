@@ -58,6 +58,17 @@ func (f Features) Names() []string {
 	return out
 }
 
+// ListingMode returns the metadata backend the helper picked for itself,
+// announced as "mode:<name>" among the features.
+func (f Features) ListingMode() string {
+	for name := range f.names {
+		if strings.HasPrefix(name, "mode:") {
+			return strings.TrimPrefix(name, "mode:")
+		}
+	}
+	return ""
+}
+
 // Response is the outcome of a single request.
 type Response struct {
 	// Lines holds the textual payload, newlines stripped.
@@ -192,21 +203,49 @@ func parseBanner(msg string) (Features, error) {
 	return feats, nil
 }
 
-// Exec runs a command whose payload is text. Arguments are base64 encoded,
-// so paths may contain spaces and any other byte except NUL.
+// Exec runs a command that takes only short tokens as arguments. A token
+// must be non-empty and free of whitespace; anything path shaped belongs in
+// ExecPath instead.
 func (s *Session) Exec(ctx context.Context, cmd string, args ...string) (*Response, error) {
-	return s.exec(ctx, false, cmd, args...)
+	return s.exec(ctx, false, cmd, args, nil)
 }
 
-// ExecData runs a command whose payload may contain binary frames. A frame
-// is a line "#<n>" followed by exactly n raw bytes.
+// ExecPath runs a command that operates on a path. The path travels on a
+// line of its own, verbatim whenever the channel can carry it: only a path
+// containing a newline (or starting with the escape marker) is base64
+// encoded. Staying out of base64 keeps a fork per request off the remote
+// host and keeps the traffic readable in a protocol log.
+func (s *Session) ExecPath(ctx context.Context, cmd, path string, args ...string) (*Response, error) {
+	return s.exec(ctx, false, cmd, args, []string{path})
+}
+
+// ExecData and ExecPathData behave like Exec and ExecPath but also accept
+// binary frames: a line "#<n>" followed by exactly n raw bytes.
 func (s *Session) ExecData(ctx context.Context, cmd string, args ...string) (*Response, error) {
-	return s.exec(ctx, true, cmd, args...)
+	return s.exec(ctx, true, cmd, args, nil)
 }
 
-func (s *Session) exec(ctx context.Context, binary bool, cmd string, args ...string) (*Response, error) {
-	if strings.ContainsAny(cmd, " \t\r\n") || cmd == "" {
+func (s *Session) ExecPathData(ctx context.Context, cmd, path string, args ...string) (*Response, error) {
+	return s.exec(ctx, true, cmd, args, []string{path})
+}
+
+// EncodePathLine renders a path as one protocol line, escaping it only when
+// a raw line would not survive the round trip.
+func EncodePathLine(p string) string {
+	if p == "" || strings.HasPrefix(p, "~") || strings.ContainsAny(p, "\r\n") {
+		return "~" + base64.StdEncoding.EncodeToString([]byte(p))
+	}
+	return p
+}
+
+func (s *Session) exec(ctx context.Context, binary bool, cmd string, args, paths []string) (*Response, error) {
+	if cmd == "" || strings.ContainsAny(cmd, " \t\r\n") {
 		return nil, fmt.Errorf("fishplus: invalid command %q", cmd)
+	}
+	for _, arg := range args {
+		if arg == "" || strings.ContainsAny(arg, " \t\r\n") {
+			return nil, fmt.Errorf("fishplus: invalid argument %q for command %q", arg, cmd)
+		}
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -224,9 +263,13 @@ func (s *Session) exec(ctx context.Context, binary bool, cmd string, args ...str
 	req.WriteString(cmd)
 	for _, arg := range args {
 		req.WriteByte(' ')
-		req.WriteString(base64.StdEncoding.EncodeToString([]byte(arg)))
+		req.WriteString(arg)
 	}
 	req.WriteByte('\n')
+	for _, p := range paths {
+		req.WriteString(EncodePathLine(p))
+		req.WriteByte('\n')
+	}
 	if _, err := io.WriteString(s.w, req.String()); err != nil {
 		s.broken = true
 		return nil, err
@@ -302,7 +345,7 @@ func (s *Session) readLine() (string, error) {
 // Ping asks the remote helper to echo the payload back. It doubles as a
 // keepalive and as a synchronization check.
 func (s *Session) Ping(ctx context.Context, payload string) (string, error) {
-	resp, err := s.Exec(ctx, "ping", payload)
+	resp, err := s.ExecPath(ctx, "ping", payload)
 	if err != nil {
 		return "", err
 	}

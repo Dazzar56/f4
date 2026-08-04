@@ -18,19 +18,25 @@ import (
 )
 
 type mockRequest struct {
-	ID   string
-	Cmd  string
-	Args []string
+	ID    string
+	Cmd   string
+	Args  []string
+	Paths []string
 }
 
-// decodeArgs returns the base64 decoded arguments of a mock request.
-func (r mockRequest) decodeArgs(t *testing.T) []string {
+// decodePaths returns the path lines of a mock request, undoing the tilde
+// escape where the client had to fall back to base64.
+func (r mockRequest) decodePaths(t *testing.T) []string {
 	t.Helper()
-	out := make([]string, 0, len(r.Args))
-	for _, arg := range r.Args {
-		raw, err := base64.StdEncoding.DecodeString(arg)
+	out := make([]string, 0, len(r.Paths))
+	for _, line := range r.Paths {
+		if !strings.HasPrefix(line, "~") {
+			out = append(out, line)
+			continue
+		}
+		raw, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(line, "~"))
 		if err != nil {
-			t.Fatalf("argument %q is not valid base64: %v", arg, err)
+			t.Fatalf("path line %q is not valid base64: %v", line, err)
 		}
 		out = append(out, string(raw))
 	}
@@ -41,8 +47,12 @@ func (r mockRequest) decodeArgs(t *testing.T) []string {
 // the client with banner (unless empty) and then answers every request via
 // handle. Reading and writing happen in separate goroutines, so the client
 // may keep writing while the peer is answering.
-func newMockPeer(t *testing.T, banner string, handle func(w io.Writer, token string, req mockRequest)) *Session {
+func newMockPeer(t *testing.T, banner string, handle func(w io.Writer, token string, req mockRequest), pathLines ...int) *Session {
 	t.Helper()
+	extra := 0
+	if len(pathLines) > 0 {
+		extra = pathLines[0]
+	}
 	peerR, cliW := io.Pipe()
 	cliR, peerW := io.Pipe()
 	sess := NewSession(cliW, cliR, nil)
@@ -60,7 +70,11 @@ func newMockPeer(t *testing.T, banner string, handle func(w io.Writer, token str
 			if _, err := strconv.Atoi(fields[0]); err != nil {
 				continue // a line of the helper script, not a request
 			}
-			reqs <- mockRequest{ID: fields[0], Cmd: fields[1], Args: fields[2:]}
+			req := mockRequest{ID: fields[0], Cmd: fields[1], Args: fields[2:]}
+			for i := 0; i < extra && sc.Scan(); i++ {
+				req.Paths = append(req.Paths, sc.Text())
+			}
+			reqs <- req
 		}
 	}()
 	go func() {
@@ -154,33 +168,61 @@ func TestExecCollectsTextLines(t *testing.T) {
 	}
 }
 
-func TestExecEncodesArguments(t *testing.T) {
+func TestExecPathEscapesOnlyWhenNecessary(t *testing.T) {
 	var mu sync.Mutex
-	var seen mockRequest
-	done := make(chan struct{})
+	var seen []mockRequest
+	done := make(chan struct{}, 4)
 	sess := newMockPeer(t, "ok FISHPLUS 1", func(w io.Writer, token string, req mockRequest) {
 		mu.Lock()
-		seen = req
+		seen = append(seen, req)
 		mu.Unlock()
 		fmt.Fprintf(w, ".%s %s ok\n", token, req.ID)
-		close(done)
-	})
+		done <- struct{}{}
+	}, 1)
 	if err := sess.Handshake(context.Background()); err != nil {
 		t.Fatalf("handshake: %v", err)
 	}
-	const weird = "/tmp/two words/пример\tтаб"
-	if _, err := sess.Exec(context.Background(), "stat", weird); err != nil {
-		t.Fatalf("exec: %v", err)
+	// Everything but a newline has to travel raw: base64 costs a fork on
+	// the remote host, so it stays a last resort.
+	const raw = "/tmp/two words/пример\tтаб\\с чертой "
+	const escaped = "/tmp/two\nlines"
+	if _, err := sess.ExecPath(context.Background(), "info", raw, "-L"); err != nil {
+		t.Fatalf("exec raw: %v", err)
 	}
+	if _, err := sess.ExecPath(context.Background(), "info", escaped); err != nil {
+		t.Fatalf("exec escaped: %v", err)
+	}
+	<-done
 	<-done
 	mu.Lock()
 	defer mu.Unlock()
-	if seen.Cmd != "stat" {
-		t.Errorf("Cmd = %q, want %q", seen.Cmd, "stat")
+	if len(seen) != 2 {
+		t.Fatalf("peer saw %d requests, want 2", len(seen))
 	}
-	args := seen.decodeArgs(t)
-	if len(args) != 1 || args[0] != weird {
-		t.Errorf("args = %q, want [%q]", args, weird)
+	if seen[0].Cmd != "info" || len(seen[0].Args) != 1 || seen[0].Args[0] != "-L" {
+		t.Errorf("request = %q %q", seen[0].Cmd, seen[0].Args)
+	}
+	if len(seen[0].Paths) != 1 || seen[0].Paths[0] != raw {
+		t.Errorf("path line = %q, want it raw: %q", seen[0].Paths, raw)
+	}
+	if len(seen[1].Paths) != 1 || !strings.HasPrefix(seen[1].Paths[0], "~") {
+		t.Fatalf("path with a newline was not escaped: %q", seen[1].Paths)
+	}
+	if got := seen[1].decodePaths(t); got[0] != escaped {
+		t.Errorf("escaped path decoded to %q, want %q", got[0], escaped)
+	}
+}
+
+func TestExecRejectsWhitespaceArguments(t *testing.T) {
+	sess := newMockPeer(t, "ok FISHPLUS 1", nil)
+	if err := sess.Handshake(context.Background()); err != nil {
+		t.Fatalf("handshake: %v", err)
+	}
+	if _, err := sess.Exec(context.Background(), "mode", "two words"); err == nil {
+		t.Error("an argument with a space must not be sent as a bare token")
+	}
+	if _, err := sess.Exec(context.Background(), "mode", ""); err == nil {
+		t.Error("an empty argument must be rejected")
 	}
 }
 

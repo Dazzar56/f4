@@ -42,11 +42,14 @@ The client starts a plain POSIX shell on the remote host, writes the compacted h
 
 ### Request
 
-One line per request:
+One line per request, optionally followed by one line per path the command works on:
 
-    <id> <cmd> [<base64 arg> ...]
+    <id> <cmd> [<short arg> ...]
+    <path>
 
-`id` is a decimal counter that starts at 1 and never repeats within a session. Every argument is base64 encoded, so paths may contain spaces, quotes, dollar signs and any byte except NUL.
+`id` is a decimal counter that starts at 1 and never repeats within a session. Short arguments are bare tokens: they must not be empty and must not contain whitespace, which is why every path travels on a line of its own, read by the helper with `IFS= read -r`. A path therefore reaches the remote host byte for byte — spaces, leading and trailing ones included, tabs, backslashes, quotes, dollar signs, any encoding.
+
+Only a path that a line based channel cannot carry — one containing a newline, or one starting with the escape marker itself — is base64 encoded and prefixed with `~`. That keeps the classic fish trade-off the right way round: raw whenever possible, base64 only where nothing else works, so the remote host does not fork a decoder per request.
 
 ### Response
 
@@ -73,34 +76,55 @@ Everything printed before that line (motd, shell warnings, login banners) is dis
 ### Commands implemented so far
 
 *   `noop` — cheapest possible round trip.
-*   `ping <payload>` — echoes the payload back; keepalive and synchronization check.
+*   `ping` + payload line — echoes the payload back; keepalive and synchronization check.
 *   `feats` — repeats the version and feature list.
+*   `enum` + path — lists a directory.
+*   `info` + path — metadata, following symlinks.
+*   `linfo` + path — metadata of the link itself.
+*   `rdlink` + path — the target of a symlink.
+*   `mode <name>` — forces a metadata backend instead of the auto-detected one; for tests and for troubleshooting.
 *   `exit` — makes the helper leave its loop.
+
+### Metadata backends
+
+Listing is where remote hosts differ the most, so the helper probes what is there and reports the winner as `mode:<name>` among its features. In order of preference:
+
+1.  **find** — `find -H DIR -mindepth 1 -maxdepth 1 -printf '%y %Y %s %T@ %A@ %C@ %m %U %G %f\n'`. One process for the whole directory, no shell glob, hidden entries included, sub-second timestamps, and `%Y` tells for free whether a symlink resolves to a directory. GNU only.
+2.  **stat** — `stat -c '%f %s %Y %X %Z %u %g %n' -- DIR/* DIR/.*`. Needs a shell glob, so a huge directory can hit the argument limit, and the type of a symlink target stays unknown until someone asks for it.
+3.  **statbsd** — the same shape with `stat -f '%p %z %m %a %c %u %g %N'` for BSD and macOS.
+
+A pure `ls -l` fallback for hosts that have neither is a separate step; it needs real output from such hosts, which is what the compatibility issue and `tools/fishplus_probe.sh` collect.
+
+The first payload line of a listing names the backend that produced the rest, so the client always knows which parser to use — including when the backend was switched at runtime.
 
 ### Known limitations of v1
 
-*   The remote host must provide a base64 decoder (`base64` or `openssl`). A fallback for hosts without one is possible but deliberately postponed.
-*   File names containing a newline character cannot be represented in the line-oriented payload. Classic `fish` has the same limitation; a NUL-separated mode may be added later.
+*   The remote host must provide a base64 decoder (`base64` or `openssl`), even though almost no request needs one: the handshake refuses hosts without it because a path with a newline would otherwise be unreachable. Dropping that requirement for hosts that never see such a path is possible later.
+*   A listing carries file names on a line each, so a name containing a newline shows up truncated in a directory listing, exactly as in classic fish. Operating on such a file still works, because paths going the other way are escaped.
 *   Cancelling a request while its response is being read desynchronizes the stream, so the session is marked broken and has to be reconnected. Proper mid-request cancellation is a separate step of the plan.
-*   Arguments are decoded by forking a `base64` process per request. Acceptable for now, since heavy commands carry whole directories or chunks; a fork-free decoder is an optimization for later.
+*   In the `stat` and `statbsd` backends a directory is listed through a shell glob, so a directory with very many entries can exceed the argument limit, and a symlink is reported without the type of its target until the user enters it.
+*   Hosts with neither GNU find, nor GNU stat, nor BSD stat cannot be listed at all yet.
 
 ## Roadmap
 
 ### Done
 
 *   **Step 1 — transport and protocol core.** Helper script, handshake, feature detection, request/response framing, base64 arguments, binary frames, error reporting, session teardown. Tested both against an in-memory peer and against a real local shell.
+*   **Step 2 — listing and metadata.** `enum`, `info`, `linfo`, `rdlink` and the runtime `mode` switch, with the find, GNU stat and BSD stat backends and their parsers. Paths now travel raw instead of base64. The integration test drives every backend the test machine provides, over names with spaces, tabs, backslashes, trailing blanks and non-ASCII characters.
 
 ### To do
 
-*   **Step 2 — listing and metadata.** `enum`, `stat`, `lstat`, `readlink`; parsers for the `stat`, `find` and `ls` output flavours; mapping onto `vfs.VFSItem`.
-*   **Step 3 — reading.** `read <path> <offset> <size>` on top of `dd`, a `vfs.ReadAtCloser` with a chunk cache, streaming into the viewer.
-*   **Step 4 — writing and mutations.** `write`, `mkdir`, `rm`, `rmdir`, `mv`, `chmod`, `symlink`, `touch`.
-*   **Step 5 — NetFox integration.** `fish_vfs.go`, the SSH transport, the VFS provider, the connection dialog entry, protocol registration.
-*   **Step 6 — FISH+ proper, part 1.** Server-side `grep` feeding `VFS.Search` with byte offsets; server-side line index for the viewer and the editor.
-*   **Step 7 — FISH+ proper, part 2.** Delta based saving: PieceTable edits applied remotely instead of re-uploading the file.
-*   **Step 8 — FISH+ proper, part 3.** Background jobs (directory sizes, duplicate search, hashing) reporting progress through the f4 progress dialog.
-*   **Step 9 — resilience.** Mid-request cancellation and resynchronization without dropping the session, keepalive, automatic reconnect.
-*   **Step 10 — remote execution.** `exec` and a remote terminal, plus user documentation and help pages.
+The order below is chosen so that something usable arrives as early as possible: after step 4 a user can already browse, view and download.
+
+*   **Step 3 — reading.** `read` with an offset and a length on top of `dd`, raw binary frames with no base64 in the way, `cat` as the fallback for offset zero, plus a `vfs.ReadAtCloser` with a chunk cache.
+*   **Step 4 — NetFox integration, read only.** `fish_vfs.go` mapping `Entry` onto `vfs.VFSItem`, the SSH transport, the VFS provider, the `fish` entry in the connection dialog. First version fit for actual use.
+*   **Step 5 — writing and mutations.** `write` (raw through `dd` or `head -c`, base64 only as the last resort), `mkdir`, `rm`, `rmdir`, `mv`, `chmod`, `symlink`, `touch`. Parity with classic fish.
+*   **Step 6 — odd hosts.** The `ls -l` fallback backend and whatever else the compatibility issue turns up; `tools/fishplus_probe.sh` collects the raw material.
+*   **Step 7 — FISH+ proper, part 1.** Server-side `grep` feeding `VFS.Search` with byte offsets; server-side line index for the viewer and the editor.
+*   **Step 8 — FISH+ proper, part 2.** Delta based saving: PieceTable edits applied remotely instead of re-uploading the file.
+*   **Step 9 — FISH+ proper, part 3.** Background jobs (directory sizes, duplicate search, hashing) reporting progress through the f4 progress dialog.
+*   **Step 10 — resilience.** Mid-request cancellation and resynchronization without dropping the session, keepalive, automatic reconnect.
+*   **Step 11 — remote execution.** `exec` and a remote terminal, plus user documentation and help pages.
 
 ## Testing
 
