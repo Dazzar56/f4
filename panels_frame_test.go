@@ -610,6 +610,83 @@ drain:
 	}
 }
 
+// TestPanelsFrame_EscTogglesPanels exercises the FAR-style ESC
+// toggle: hides visible panels when the command line is empty,
+// shows hidden panels back if no interactive terminal app is
+// running. Non-empty command line keeps the existing ESC-clears-
+// cmdLine behaviour.
+func TestPanelsFrame_EscTogglesPanels(t *testing.T) {
+	pf := setupMockPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	old := AppConfig.EscTogglePanels
+	defer func() { AppConfig.EscTogglePanels = old }()
+	AppConfig.EscTogglePanels = true
+
+	sendEsc := func() bool {
+		return pf.ProcessKey(&vtinput.InputEvent{
+			Type: vtinput.KeyEventType, KeyDown: true,
+			VirtualKeyCode: vtinput.VK_ESCAPE,
+		})
+	}
+
+	// Panels visible, cmdLine empty → ESC hides.
+	if !pf.showPanels {
+		t.Fatal("precondition: panels should start visible")
+	}
+	if !sendEsc() {
+		t.Error("ESC on visible panels + empty cmdLine should be handled")
+	}
+	if pf.showPanels {
+		t.Error("ESC should hide panels when cmdLine is empty")
+	}
+
+	// Panels hidden, quiet PTY → ESC brings them back.
+	if !sendEsc() {
+		t.Error("ESC on hidden panels + quiet PTY should be handled")
+	}
+	if !pf.showPanels {
+		t.Error("ESC should show panels back on the second press")
+	}
+
+	// Panels visible with a typed command → ESC falls through to
+	// the clear-cmdLine handler and panels stay put.
+	pf.cmdLine.InsertString("something")
+	if !sendEsc() {
+		t.Error("ESC with a non-empty cmdLine should still be handled (clears it)")
+	}
+	if !pf.showPanels {
+		t.Error("ESC with a typed command must NOT hide the panels — only clear the line")
+	}
+	if !pf.cmdLine.IsEmpty() {
+		t.Error("ESC with a typed command should have cleared the command line")
+	}
+}
+
+// TestPanelsFrame_EscTogglePanels_RespectsOption confirms the
+// shortcut can be turned off — with EscTogglePanels=false, ESC
+// on visible panels + empty cmdLine is a no-op instead of hiding.
+func TestPanelsFrame_EscTogglePanels_RespectsOption(t *testing.T) {
+	pf := setupMockPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	old := AppConfig.EscTogglePanels
+	defer func() { AppConfig.EscTogglePanels = old }()
+	AppConfig.EscTogglePanels = false
+
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_ESCAPE,
+	})
+	if !pf.showPanels {
+		t.Error("with EscTogglePanels=false, ESC must not hide the panels")
+	}
+}
+
 func TestPanelsFrame_KeyHandling(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()

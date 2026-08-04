@@ -997,6 +997,36 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	}
 
+	// ESC toggles panels visibility — mirrors the "hide panels"
+	// macro shipped with FAR. Only fires when there's nothing more
+	// contextual for ESC to do. Both branches require an empty
+	// command line so ESC still clears typed input / resets the
+	// history-navigation position (the ESC-clears-cmdline handler
+	// further down keeps working on a non-empty line):
+	//   * panels visible + empty cmdLine → hide panels;
+	//   * panels hidden + empty cmdLine + quiet terminal (no
+	//     AltScreen, no busy PTY) → show panels back. Busy/AltScreen
+	//     leaves ESC to the running app (vim, less, htop, …).
+	if AppConfig.EscTogglePanels && e.VirtualKeyCode == vtinput.VK_ESCAPE && !alt && !ctrl && !shift && e.KeyDown && pf.cmdLine.IsEmpty() {
+		if pf.showPanels {
+			pf.exitWide()
+			pf.showPanels = false
+			vtui.FrameManager.HardRefresh()
+			return true
+		}
+		if !pf.termView.UseAltScreen && !pf.isPtyBusy() {
+			pf.exitWide()
+			pf.showPanels = true
+			if !pf.showLeftPanel && !pf.showRightPanel {
+				pf.showLeftPanel = true
+				pf.showRightPanel = true
+			}
+			vtui.FrameManager.HardRefresh()
+			pf.RefreshAll()
+			return true
+		}
+	}
+
 	// Ctrl+F1 toggles left panel
 	if e.VirtualKeyCode == vtinput.VK_F1 && ctrl && !alt && !shift && e.KeyDown {
 		pf.exitWide()
@@ -2955,6 +2985,14 @@ func (pf *PanelsFrame) Clone() *PanelsFrame {
 			for k, v := range fsp.selectedItems {
 				cloneFsp.selectedItems[k] = v
 			}
+			// Copying selectedItems without copying the path they
+			// belong to would trip readDirectoryEx's "path changed
+			// → drop selection" guard: the clone's fsp was
+			// constructed against CWD, so its lastLoadedPath is
+			// CWD, and the SetPath above moves it elsewhere. Bring
+			// the tag over so the clone's next load recognises
+			// the map as belonging to the current directory.
+			cloneFsp.lastLoadedPath = fsp.lastLoadedPath
 
 			// Copy entries immediately so the visual state is valid before async reload
 			cloneFsp.entries = make([]*fileEntry, len(fsp.entries))

@@ -250,6 +250,21 @@ type FileSystemPanel struct {
 
 	isCheckingRefresh bool
 	currentTitle      string
+
+	// lastLoadedPath is the path readDirectoryEx last saw; used to
+	// detect a directory switch so selectedItems can be dropped
+	// (selection is per-directory, matches far/far2l).
+	lastLoadedPath string
+
+	// shiftSessionActive / shiftSessionMode implement FAR-style
+	// Shift+nav selection. The mode (select vs deselect) is
+	// decided on the first Shift+nav from the state of the row
+	// under the cursor and held until Shift is released, so all
+	// following Shift+nav keys in the same "session" apply that
+	// same mode. Any event other than a Shift+nav key closes
+	// the session — the next Shift+nav starts a new one.
+	shiftSessionActive bool
+	shiftSessionMode   bool // true = select, false = deselect
 }
 
 func NewFileSystemPanel(x, y, w, h int, vfs vfs.VFS) *FileSystemPanel {
@@ -556,6 +571,19 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 
 	// 1. Устанавливаем флаг, но НЕ обновляем UI немедленно, чтобы избежать мерцания
 	path := fp.vfs.GetPath()
+
+	// Drop persistent selection when we've navigated to a different
+	// directory. Without this the map (keyed by bare filename)
+	// silently re-applies to any incoming entry with a matching
+	// name — e.g. .claude selected in ~/f4 would come back
+	// pre-selected in ~/scc or ~. Same rule far/far2l use:
+	// selection is per-directory.
+	if fp.lastLoadedPath != "" && fp.lastLoadedPath != path {
+		for k := range fp.selectedItems {
+			delete(fp.selectedItems, k)
+		}
+	}
+	fp.lastLoadedPath = path
 
 	if fp.pendingSelection == "" {
 		oldName := fp.getRawSelectedName()
@@ -1109,6 +1137,32 @@ func (fp *FileSystemPanel) Resize(w, h int) {
 	fp.Refresh()
 }
 
+// isShiftSelectNavKey reports whether a virtual key is a navigation
+// key that participates in the Shift+nav selection session. The set
+// mirrors the nav switch below so any change stays in sync.
+func isShiftSelectNavKey(vk uint16) bool {
+	switch vk {
+	case vtinput.VK_UP, vtinput.VK_DOWN, vtinput.VK_LEFT, vtinput.VK_RIGHT,
+		vtinput.VK_PRIOR, vtinput.VK_NEXT, vtinput.VK_HOME, vtinput.VK_END:
+		return true
+	}
+	return false
+}
+
+// shiftSelectDirection returns +1 for keys that move the cursor
+// forward (Down/Right/PgDn/End) and -1 for backward (Up/Left/
+// PgUp/Home). Used to look past a ".." starting row so
+// session-mode detection can still see a real, selectable row.
+func shiftSelectDirection(vk uint16) int {
+	switch vk {
+	case vtinput.VK_DOWN, vtinput.VK_RIGHT, vtinput.VK_NEXT, vtinput.VK_END:
+		return 1
+	case vtinput.VK_UP, vtinput.VK_LEFT, vtinput.VK_PRIOR, vtinput.VK_HOME:
+		return -1
+	}
+	return 0
+}
+
 func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 	if !e.KeyDown {
 		return false
@@ -1118,6 +1172,13 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 
 	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
+
+	// Close the shift-selection session on anything other than a
+	// Shift+nav key so the next Shift+nav re-decides its mode
+	// from the row under the cursor.
+	if !(shift && isShiftSelectNavKey(e.VirtualKeyCode)) {
+		fp.shiftSessionActive = false
+	}
 
 	if fp.fastFindMode {
 		switch e.VirtualKeyCode {
@@ -1187,17 +1248,69 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 
 	case vtinput.VK_UP, vtinput.VK_DOWN, vtinput.VK_LEFT, vtinput.VK_RIGHT, vtinput.VK_PRIOR, vtinput.VK_NEXT, vtinput.VK_HOME, vtinput.VK_END:
+		// FAR-style Shift+nav selection.
+		//
+		// The session concept unifies "select" and "deselect"
+		// across every navigation key: the first Shift+nav decides
+		// the mode from the state of the row under the cursor
+		// (unselected → we're selecting; selected → we're
+		// deselecting), and every subsequent Shift+nav in the same
+		// session applies that same mode. Releasing Shift (or any
+		// non-nav key) closes the session; the next Shift+nav
+		// starts a new one, potentially with the opposite mode.
+		//
+		// Range width is per-key: Up/Down affect just the starting
+		// row (session grows by one row per tap); Left/Right in
+		// grid, PgUp/PgDn, Home/End paint the whole [start..new]
+		// sweep. ".." is skipped inside SetItemSelected.
+		startIdx := fp.GetCursorIndex()
+
 		if shift {
-			idx := fp.GetCursorIndex()
-			fp.ToggleSelection(idx)
+			if !fp.shiftSessionActive {
+				fp.shiftSessionActive = true
+				// Decide session mode from the state of the row
+				// under the cursor. If it's ".." (never selectable),
+				// look past it in the direction of movement to
+				// find the first real row — otherwise the ".."
+				// start would always resolve to "select" and users
+				// couldn't clear a selection with Shift+End/etc
+				// from the top of the list.
+				modeIdx := startIdx
+				if startIdx >= 0 && startIdx < len(fp.entries) &&
+					fp.entries[startIdx].Name == ".." {
+					if dir := shiftSelectDirection(e.VirtualKeyCode); dir != 0 {
+						for i := startIdx + dir; i >= 0 && i < len(fp.entries); i += dir {
+							if fp.entries[i].Name != ".." {
+								modeIdx = i
+								break
+							}
+						}
+					}
+				}
+				if modeIdx >= 0 && modeIdx < len(fp.entries) &&
+					fp.entries[modeIdx].Name != ".." &&
+					fp.entries[modeIdx].Selected {
+					fp.shiftSessionMode = false
+				} else {
+					fp.shiftSessionMode = true
+				}
+			}
+			fp.SetItemSelected(startIdx, fp.shiftSessionMode)
 		}
 
-		idx := fp.GetCursorIndex()
+		isMultiStep := false
+		switch e.VirtualKeyCode {
+		case vtinput.VK_LEFT, vtinput.VK_RIGHT, vtinput.VK_PRIOR, vtinput.VK_NEXT, vtinput.VK_HOME, vtinput.VK_END:
+			isMultiStep = true
+		}
+
+		idx := startIdx
 		H := fp.table.ViewHeight
 		if H <= 0 {
 			H = 1
 		}
 
+		handled := false
 		if columns := fp.gridColumnCount(); columns > 1 {
 			switch e.VirtualKeyCode {
 			case vtinput.VK_UP:
@@ -1220,15 +1333,26 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 				return false
 			}
 			fp.SetCursorIndex(idx)
-			return true
+			handled = true
 		} else {
 			// In Detailed mode, we let the table handle navigation but sync our index back
-			handled := fp.table.ProcessKey(e)
-			if handled {
+			if fp.table.ProcessKey(e) {
 				fp.cursorIdx = fp.table.SelectPos
+				handled = true
 			}
-			return handled
 		}
+
+		if shift && handled && isMultiStep {
+			newIdx := fp.GetCursorIndex()
+			lo, hi := startIdx, newIdx
+			if lo > hi {
+				lo, hi = hi, lo
+			}
+			for i := lo; i <= hi; i++ {
+				fp.SetItemSelected(i, fp.shiftSessionMode)
+			}
+		}
+		return handled
 
 	case vtinput.VK_RETURN:
 		idx := fp.GetCursorIndex()
