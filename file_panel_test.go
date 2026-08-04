@@ -1093,6 +1093,10 @@ func TestFileSystemPanel_DragAutoScrollStopsOnRelease(t *testing.T) {
 }
 
 func TestFileSystemPanel_ScrollBarMetricsAllViewModes(t *testing.T) {
+	oldCfg := AppConfig
+	defer func() { AppConfig = oldCfg }()
+	AppConfig.ShowPanelScrollbars = true
+
 	for _, tc := range []struct {
 		name    string
 		mode    ViewMode
@@ -1140,6 +1144,9 @@ func TestFileSystemPanel_ScrollBarMetricsAllViewModes(t *testing.T) {
 func TestFileSystemPanel_ScrollBarDrawAndMouse(t *testing.T) {
 	vtui.SetDefaultPalette()
 	SetDefaultF4Palette()
+	oldCfg := AppConfig
+	defer func() { AppConfig = oldCfg }()
+	AppConfig.ShowPanelScrollbars = true
 
 	fp := newPanelScrollTestFixture(ViewModeMedium, 0)
 	capacity := fp.table.ViewHeight * fp.gridColumnCount()
@@ -1210,6 +1217,10 @@ func TestFileSystemPanel_ScrollBarDrawAndMouse(t *testing.T) {
 }
 
 func TestFileSystemPanel_ScrollBarHiddenWhenGridFits(t *testing.T) {
+	oldCfg := AppConfig
+	defer func() { AppConfig = oldCfg }()
+	AppConfig.ShowPanelScrollbars = true
+
 	fp := newPanelScrollTestFixture(ViewModeBrief, 0)
 	fp.entries = make([]*fileEntry, fp.table.ViewHeight*fp.gridColumnCount())
 	fp.table.TopPos = 4
@@ -1225,6 +1236,31 @@ func TestFileSystemPanel_ScrollBarHiddenWhenGridFits(t *testing.T) {
 	dataY := fp.table.Y1 + fp.table.MarginTop
 	if got := scr.GetCell(fp.X2, dataY).Char; got != 0 {
 		t.Fatalf("scrollbar drawn for fitting Brief grid: %q", rune(got))
+	}
+}
+
+func TestFileSystemPanel_ScrollBarDisabledByDefault(t *testing.T) {
+	oldCfg := AppConfig
+	defer func() { AppConfig = oldCfg }()
+	AppConfig.ShowPanelScrollbars = false
+
+	fp := newPanelScrollTestFixture(ViewModeDetailed, 50)
+	if fp.syncScrollBar() {
+		t.Fatal("disabled panel scrollbar reported itself visible")
+	}
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(40, 12)
+	fp.drawScrollBar(scr)
+	y := fp.table.Y1 + fp.table.MarginTop
+	if got := scr.GetCell(fp.X2, y).Char; got != 0 {
+		t.Fatalf("disabled panel scrollbar drew %q", rune(got))
+	}
+	if fp.processScrollBarMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: true,
+		MouseX: int16(fp.X2), MouseY: int16(y),
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+	}) {
+		t.Fatal("disabled panel scrollbar handled mouse input")
 	}
 }
 

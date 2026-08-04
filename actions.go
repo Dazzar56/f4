@@ -1758,7 +1758,7 @@ func actionFindFile(pf *PanelsFrame) {
 	vtui.FrameManager.Push(dlg)
 }
 func actionPanelSettings(pf *PanelsFrame) {
-	const dialogHeight = 33
+	const dialogHeight = 34
 	dlg := vtui.NewCenteredDialog(60, dialogHeight, Msg("PanelSettings.Title"))
 	dlg.ShowClose = true
 
@@ -1777,6 +1777,11 @@ func actionPanelSettings(pf *PanelsFrame) {
 	chkSeparateExtensions := vtui.NewCheckbox(0, 0, Msg("PanelSettings.SeparateExtensions"), false)
 	if AppConfig.SeparateFileExtensions {
 		chkSeparateExtensions.State = 1
+	}
+
+	chkShowScrollbars := vtui.NewCheckbox(0, 0, Msg("PanelSettings.ShowScrollbars"), false)
+	if AppConfig.ShowPanelScrollbars {
+		chkShowScrollbars.State = 1
 	}
 
 	chkPaths := vtui.NewCheckbox(0, 0, Msg("PanelSettings.SavePaths"), false)
@@ -1864,6 +1869,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 	dlg.AddItem(chkHidden)
 	dlg.AddItem(chkHighlight)
 	dlg.AddItem(chkSeparateExtensions)
+	dlg.AddItem(chkShowScrollbars)
 	dlg.AddItem(chkPaths)
 	dlg.AddItem(chkCmdAc)
 	dlg.AddItem(lblNavigation)
@@ -1886,6 +1892,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 	vbox.Add(chkHidden, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkHighlight, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(chkSeparateExtensions, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	vbox.Add(chkShowScrollbars, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkPaths, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(chkCmdAc, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(lblNavigation, vtui.Margins{Top: 1}, vtui.AlignLeft)
@@ -1925,6 +1932,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 		AppConfig.ShowHiddenFiles = chkHidden.State == 1
 		AppConfig.HighlightDir = chkHighlight.State == 1
 		AppConfig.SeparateFileExtensions = chkSeparateExtensions.State == 1
+		AppConfig.ShowPanelScrollbars = chkShowScrollbars.State == 1
 		AppConfig.SavePanelPaths = chkPaths.State == 1
 		AppConfig.CommandLineAutoComplete = chkCmdAc.State == 1
 		AppConfig.NavigationMode = PanelNavigationMode(navigation.Selected)
@@ -2536,6 +2544,9 @@ func actionLanguage(pf *PanelsFrame) {
 		AppConfig.Language = langs[idx].code
 		SaveConfig()
 		InitLang()
+		// Key binding help topics are generated from the action
+		// registry and must be rebuilt in the new language.
+		InitHelpSystem()
 		vtui.FrameManager.PostTask(func() {
 			vtui.ShowMessage(Msg("Info.Title"), Msg("Language.Changed"), []string{Msg("vtui.Ok")})
 			vtui.FrameManager.Redraw()

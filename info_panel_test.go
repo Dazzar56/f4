@@ -23,7 +23,7 @@ func TestPanelsFrame_CtrlL_TogglesInfoPanel(t *testing.T) {
 	pf.ResizeConsole(80, 25)
 
 	send := func(vk uint16, mods vtinput.ControlKeyState) {
-		pf.ProcessKey(&vtinput.InputEvent{
+		pressKey(pf, &vtinput.InputEvent{
 			Type: vtinput.KeyEventType, KeyDown: true,
 			VirtualKeyCode:  vk,
 			ControlKeyState: mods,
@@ -149,7 +149,7 @@ func TestPanelsFrame_B_TogglesInfoPanelUnits(t *testing.T) {
 	AppConfig.InfoPanelBytes = false
 
 	send := func(vk uint16) bool {
-		return pf.ProcessKey(&vtinput.InputEvent{
+		return pressKey(pf, &vtinput.InputEvent{
 			Type: vtinput.KeyEventType, KeyDown: true,
 			VirtualKeyCode: vk,
 		})
@@ -163,7 +163,7 @@ func TestPanelsFrame_B_TogglesInfoPanelUnits(t *testing.T) {
 	}
 
 	// Install info panel on passive side, then `B` should flip units.
-	pf.ProcessKey(&vtinput.InputEvent{
+	pressKey(pf, &vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
 		VirtualKeyCode:  vtinput.VK_L,
 		ControlKeyState: vtinput.LeftCtrlPressed,
