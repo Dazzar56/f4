@@ -58,6 +58,15 @@ type ImageView struct {
 	zoom       float64
 	panX, panY float64
 
+	// How far the picture can still be moved along each axis, as of the last
+	// frame: only drawing knows how large the window is. Zero means the
+	// picture fits and there is nothing to pan.
+	panMaxX, panMaxY float64
+
+	// The last line of geometry that was written to the log, so that a
+	// picture nobody is touching does not fill it.
+	lastGeom string
+
 	// Orientation chosen by the reader. The decoded picture stays in
 	// surface; shown carries the turned and mirrored copy and is nil while
 	// the picture is seen exactly as it was decoded.
@@ -131,6 +140,8 @@ func NewImageView(ctx context.Context, v vfs.VFS, path string) (*ImageView, erro
 			position = fmt.Sprintf(" │ %d/%d", iv.index+1, len(iv.siblings))
 		}
 
+		position += iv.pickMark()
+
 		// The scale of the last frame is the honest one: it already knows
 		// how large the window is.
 		scale := iv.lastScale
@@ -141,6 +152,7 @@ func NewImageView(ctx context.Context, v vfs.VFS, path string) (*ImageView, erro
 			base, iv.display().Width, iv.display().Height,
 			int(scale*100+0.5), position, state)
 	})
+	iv.topBar.GetAttr = iv.titleAttr
 	iv.topBar.SetVisible(true)
 	iv.SetCanFocus(true)
 	iv.SetFocus(true)
@@ -476,6 +488,7 @@ func (iv *ImageView) placementFor(scr *vtui.ScreenBuf) (vtui.ImagePlacement, boo
 
 	if dispW <= boxW && dispH <= boxH {
 		iv.panX, iv.panY = 0, 0
+		iv.panMaxX, iv.panMaxY = 0, 0
 		p.Cols, p.Rows = cellsFor(dispW, cw, cols), cellsFor(dispH, ch, rows)
 		p.Col = x1 + (cols-p.Cols)/2
 		p.Row = top + (rows-p.Rows)/2
@@ -496,6 +509,14 @@ func (iv *ImageView) placementFor(scr *vtui.ScreenBuf) (vtui.ImagePlacement, boo
 	if visH < 1 {
 		visH = 1
 	}
+	iv.panMaxX = float64(img.Width - visW)
+	iv.panMaxY = float64(img.Height - visH)
+	if iv.panMaxX < 0 {
+		iv.panMaxX = 0
+	}
+	if iv.panMaxY < 0 {
+		iv.panMaxY = 0
+	}
 	iv.clampPan(visW, visH)
 
 	shownW := int(float64(visW)*scale + 0.5)
@@ -513,6 +534,74 @@ func (iv *ImageView) placementFor(scr *vtui.ScreenBuf) (vtui.ImagePlacement, boo
 	p.SrcX, p.SrcY = int(iv.panX), int(iv.panY)
 	p.SrcW, p.SrcH = visW, visH
 	return p, true
+}
+
+// arrow is what the four arrow keys do. An axis the picture cannot be moved
+// along at all has no panning to offer, so the key walks the directory
+// instead; an axis that can be panned is panned, and the walking is left to
+// space, PgUp and PgDn. Panning to the edge and then jumping to the next
+// picture was the other candidate and was refused: it reads as a slip of the
+// finger. The letters w, a, s and d pan whatever happens, so a reader moving
+// a zoomed picture never has to think about which of the two an arrow means.
+func (iv *ImageView) arrow(dx, dy int) {
+	if dx != 0 && iv.panMaxX > 0 {
+		iv.Pan(dx, 0)
+		return
+	}
+	if dy != 0 && iv.panMaxY > 0 {
+		iv.Pan(0, dy)
+		return
+	}
+	if dx < 0 || dy < 0 {
+		iv.Step(-1)
+		return
+	}
+	iv.Step(1)
+}
+
+// pickMark is what the title bar says about the picture being selected. The
+// colour says it as well, but a mark survives a terminal nobody has set the
+// colours of.
+func (iv *ImageView) pickMark() string {
+	if iv.selected[iv.path] {
+		return " *"
+	}
+	return ""
+}
+
+// titleAttr colours the title bar. A picked picture gets the colour the grid
+// gives a picked tile, so that the two views say the same thing the same way.
+// Zero leaves the palette in charge.
+func (iv *ImageView) titleAttr() uint64 {
+	if iv.selected[iv.path] {
+		return imageTilePickedAttr
+	}
+	return 0
+}
+
+// logGeometry records what the layout worked out to, once per change. It is
+// here because a strip of background nobody asked for is a question about
+// numbers — how many rows the frame has, how many the picture takes, how
+// large a cell is — and about how many pictures the graphics layer holds at
+// that moment, which is a different fault with the same symptom.
+func (iv *ImageView) logGeometry(scr *vtui.ScreenBuf, p vtui.ImagePlacement) {
+	img := iv.display()
+	if scr == nil || !img.Valid() {
+		return
+	}
+	x1, y1, x2, y2 := iv.GetPosition()
+	cw, ch := scr.Graphics().CellSize()
+	line := fmt.Sprintf(
+		"console=%dx%d frame=%d,%d..%d,%d bar=%d cell=%dx%d img=%dx%d scale=%.4f place=%d,%d %dx%d src=%d,%d %dx%d z=%d layer=%d",
+		iv.conW, iv.conH, x1, y1, x2, y2, iv.barHeight(), cw, ch,
+		img.Width, img.Height, iv.lastScale,
+		p.Col, p.Row, p.Cols, p.Rows, p.SrcX, p.SrcY, p.SrcW, p.SrcH, p.ZIndex,
+		scr.Graphics().Len())
+	if line == iv.lastGeom {
+		return
+	}
+	iv.lastGeom = line
+	vtui.DebugLog("IMAGE_GEOM: %s", line)
 }
 
 func cellsFor(pixels, cellSize, limit int) int {
@@ -684,6 +773,7 @@ func (iv *ImageView) Show(scr *vtui.ScreenBuf) {
 		return
 	}
 	scr.Graphics().DrawImage(iv.gfxKey, p)
+	iv.logGeometry(scr, p)
 	if iv.overlay {
 		iv.drawOverlay(scr)
 	}
@@ -790,17 +880,25 @@ func (iv *ImageView) ProcessKey(e *vtinput.InputEvent) bool {
 	case vtinput.VK_F12:
 		iv.ToggleGallery()
 		return true
+	case vtinput.VK_INSERT:
+		iv.SetSelected(iv.path, !iv.selected[iv.path])
+		iv.Step(1)
+		return true
+	case vtinput.VK_DELETE:
+		iv.SetSelected(iv.path, false)
+		iv.Step(1)
+		return true
 	case vtinput.VK_LEFT:
-		iv.Pan(-1, 0)
+		iv.arrow(-1, 0)
 		return true
 	case vtinput.VK_RIGHT:
-		iv.Pan(1, 0)
+		iv.arrow(1, 0)
 		return true
 	case vtinput.VK_UP:
-		iv.Pan(0, -1)
+		iv.arrow(0, -1)
 		return true
 	case vtinput.VK_DOWN:
-		iv.Pan(0, 1)
+		iv.arrow(0, 1)
 		return true
 	}
 	return false

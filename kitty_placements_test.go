@@ -245,13 +245,25 @@ func TestKittyKeepsTheSpanTheClientAskedFor(t *testing.T) {
 	scr := kittyGraphicsScreen(80, 24)
 	e.tv.Show(scr)
 
-	// The width is given, the height is left to us.
+	// The width is given and the height is left to us. A square picture four
+	// columns wide is four cell widths tall, which on a ten by twenty cell
+	// comes to two rows.
 	kittySendImage(e, "a=T,i=1,f=32,s=40,v=40,c=4,C=1", 40, 40)
 	if p := e.tv.images[0]; p.Cols != 4 || p.Rows != 2 {
 		t.Fatalf("span: %dx%d", p.Cols, p.Rows)
 	}
 
+	// Halving both sides of the cell changes nothing at all: with the width
+	// given in columns, the height in rows follows the shape of the cell and
+	// not its size.
 	scr.Graphics().SetCellSize(5, 10)
+	e.tv.Show(scr)
+	if p := e.tv.images[0]; p.Cols != 4 || p.Rows != 2 {
+		t.Fatalf("a cell of the same shape must leave the span alone: %dx%d", p.Cols, p.Rows)
+	}
+
+	// A cell that becomes square makes those same four columns twice as tall.
+	scr.Graphics().SetCellSize(10, 10)
 	e.tv.Show(scr)
 	if p := e.tv.images[0]; p.Cols != 4 || p.Rows != 4 {
 		t.Fatalf("the given width must stand and only the height move: %dx%d", p.Cols, p.Rows)

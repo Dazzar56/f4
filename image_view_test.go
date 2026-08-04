@@ -139,8 +139,8 @@ func TestImageViewKeys(t *testing.T) {
 	if !press('*', 0) || iv.zoom != 1 {
 		t.Errorf("star must reset the zoom, got %v", iv.zoom)
 	}
-	if !press(0, vtinput.VK_RIGHT) || iv.panX <= 0 {
-		t.Error("the right arrow must pan")
+	if !press('d', 0) || iv.panX <= 0 {
+		t.Error("d must pan")
 	}
 	if press('~', 0) {
 		t.Error("unrelated keys must be left to the rest of the UI")
@@ -227,6 +227,133 @@ func TestImageViewWalksItsSiblings(t *testing.T) {
 	lone.Step(1)
 	if lone.path != "test.png" {
 		t.Errorf("a lone picture must stay put, got %q", lone.path)
+	}
+}
+
+func TestImageViewArrowsWalkWhenThereIsNothingToPan(t *testing.T) {
+	withStubPipeline(t, 20, 10)
+
+	iv := newTestImageView(t, 100, 100)
+	iv.path = "b.png"
+	iv.SetSiblings([]string{"a.png", "b.png", "c.png"}, 1)
+	for _, name := range []string{"a.png", "c.png"} {
+		if res := ImagePipe.LoadSync(context.Background(), nil, name); res.Err != nil {
+			t.Fatalf("%s: %v", name, res.Err)
+		}
+	}
+
+	press := func(vk uint16) bool {
+		return iv.ProcessKey(&vtinput.InputEvent{KeyDown: true, VirtualKeyCode: vk})
+	}
+
+	// Nothing has been drawn yet and the picture fits anyway, so the pan
+	// range is zero and the arrows walk the directory.
+	if !press(vtinput.VK_RIGHT) || iv.index != 2 {
+		t.Fatalf("the right arrow should have stepped forward, index is %d", iv.index)
+	}
+	if !press(vtinput.VK_LEFT) || iv.index != 1 {
+		t.Fatalf("the left arrow should have stepped back, index is %d", iv.index)
+	}
+	if !press(vtinput.VK_DOWN) || iv.index != 2 {
+		t.Fatalf("the down arrow should have stepped forward, index is %d", iv.index)
+	}
+	if iv.panX != 0 || iv.panY != 0 {
+		t.Errorf("nothing should have been panned: %v %v", iv.panX, iv.panY)
+	}
+}
+
+func TestImageViewArrowsPanAZoomedPicture(t *testing.T) {
+	withStubPipeline(t, 400, 400)
+	scr := newImageTestScreen(t)
+
+	iv := newTestImageView(t, 400, 400)
+	iv.SetSiblings([]string{"test.png", "two.png"}, 0)
+	if res := ImagePipe.LoadSync(context.Background(), nil, "two.png"); res.Err != nil {
+		t.Fatalf("two.png: %v", res.Err)
+	}
+
+	iv.SetZoom(8)
+	if _, ok := iv.placementFor(scr); !ok {
+		t.Fatal("layout failed")
+	}
+	if iv.panMaxX <= 0 {
+		t.Fatalf("a zoomed picture must have room to pan, got %v", iv.panMaxX)
+	}
+
+	if !iv.ProcessKey(&vtinput.InputEvent{KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT}) {
+		t.Fatal("the right arrow must be handled")
+	}
+	if iv.panX <= 0 {
+		t.Error("a zoomed picture must be panned, not walked past")
+	}
+	if iv.path != "test.png" || iv.index != 0 {
+		t.Errorf("the list must not have moved: %q %d", iv.path, iv.index)
+	}
+}
+
+func TestImageViewInsertPicksAndMovesOn(t *testing.T) {
+	withStubPipeline(t, 20, 10)
+
+	iv := newTestImageView(t, 100, 100)
+	iv.path = "a.png"
+	iv.SetSiblings([]string{"a.png", "b.png"}, 0)
+	for _, name := range []string{"a.png", "b.png"} {
+		if res := ImagePipe.LoadSync(context.Background(), nil, name); res.Err != nil {
+			t.Fatalf("%s: %v", name, res.Err)
+		}
+	}
+
+	var told []string
+	var states []bool
+	iv.OnSelect = func(path string, on bool) {
+		told = append(told, path)
+		states = append(states, on)
+	}
+
+	press := func(vk uint16) bool {
+		return iv.ProcessKey(&vtinput.InputEvent{KeyDown: true, VirtualKeyCode: vk})
+	}
+
+	if !press(vtinput.VK_INSERT) {
+		t.Fatal("Insert must be handled")
+	}
+	if !iv.selected["a.png"] {
+		t.Error("Insert must pick the picture on screen")
+	}
+	if iv.path != "b.png" {
+		t.Errorf("Insert must then move on, got %q", iv.path)
+	}
+
+	iv.GoTo(0)
+	if !press(vtinput.VK_DELETE) {
+		t.Fatal("Delete must be handled")
+	}
+	if iv.selected["a.png"] {
+		t.Error("Delete must unpick the picture on screen")
+	}
+
+	if len(told) != 2 || told[0] != "a.png" || told[1] != "a.png" || !states[0] || states[1] {
+		t.Errorf("the panel was told %v %v", told, states)
+	}
+}
+
+func TestImageViewTitleMarksAPickedPicture(t *testing.T) {
+	iv := newTestImageView(t, 10, 10)
+	if iv.pickMark() != "" || iv.titleAttr() != 0 {
+		t.Fatal("an unpicked picture must not be marked")
+	}
+
+	iv.SetSelected(iv.path, true)
+	if iv.pickMark() == "" {
+		t.Error("a picked picture must be marked in the title")
+	}
+	if iv.titleAttr() != imageTilePickedAttr {
+		t.Error("a picked picture must colour the title bar")
+	}
+
+	iv.SetSelected(iv.path, false)
+	if iv.pickMark() != "" || iv.titleAttr() != 0 {
+		t.Error("unpicking must take the mark away again")
 	}
 }
 

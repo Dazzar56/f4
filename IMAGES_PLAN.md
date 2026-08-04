@@ -93,7 +93,10 @@ a terminfo check and the `AnnounceKittyTerm` option); the decoding pipeline;
 preview from the Exif thumbnail; QOI and BMP decoders; walking the neighbours
 with prefetch; the 100% mode; `Ctrl+R`; errors shown in the title.
 
-Done in the current sequence, as steps 1 to 5 of the twelve below:
+Done in the current sequence, listed in the order the work happened rather
+than in the order of the numbering below, which the work has already outgrown.
+An entry numbered `R` comes from the issue tracker and one numbered `B` is a
+defect; the twelve steps below foresaw neither.
 
 **1. Rotation and mirroring.** `image_transform.go` rotates and mirrors a
 surface in plain Go. `ImageView` keeps `rotation`, `flipH`, `flipV` and a
@@ -134,12 +137,30 @@ text and drops what left the buffer for good; `kittyRecomputeSpans` works out
 again the side of a span the client left to us, both after a resize and after
 a cell changes size. Leaving the alternate screen now drops its pictures.
 
+**R1. Picking and walking in the single picture view.** Asked for on the
+issue: `Ins` and `Del` pick and unpick the picture on screen and move on to
+the next, exactly as they do in the grid, and the title bar turns the colour a
+picked tile has and gains an asterisk. The arrow keys walk the directory when
+their axis has nothing to pan and pan when it has; `w`, `a`, `s` and `d` pan
+whatever happens.
+
 ## 5. What is left, in order
 
-**6b. Kitty polish, what is left.** Honour a negative `z`, which is not a
-matter of passing the key on — it already is passed on — but of the cells
-under such a placement keeping a default background; and unicode placeholders
-(`U=1` and the character `U+10EEEE`).
+Before the numbered work, one defect that is on screen right now:
+
+**B1. A strip of background below the picture, with something flickering in
+it.** Reported with a screenshot: the picture stops short of the key bar by a
+row or two, and now and then a picture appears in that strip for a frame.
+Two mechanisms produce that symptom and they need different fixes, so the
+geometry is measured rather than guessed at — `ImageView.logGeometry` writes
+one `IMAGE_GEOM` line per change of layout under `VTUI_DEBUG=1`. Either the
+centring leaves the odd row at the bottom, because `(rows-p.Rows)/2` truncates
+towards zero, or something besides the viewer is drawing into the graphics
+layer, which the `layer=` count in that line reports directly.
+
+**6b. Kitty polish, what is left.** Unicode placeholders (`U=1` and the
+character `U+10EEEE`), and a negative `z`, which needs a change in vtui first:
+see the entry in section 8.
 
 **7. iTerm2 and sixel output in vtui.** Add `GraphicsITerm2` (OSC 1337, base64
 PNG) and `GraphicsSixel` (DCS, up to 256 palette colours, dithering) to
@@ -241,7 +262,25 @@ the other way round.
   reading any file on the machine. It is refused before it reaches the file
   system rather than after.
 
+- **An arrow steps only when its axis cannot be panned at all.** Panning to
+  the edge of a zoomed picture and then jumping to the next one reads as a
+  slip of the finger. A picture that fits has no edge to reach, and that is
+  the case the request was about; `w`, `a`, `s` and `d` pan unconditionally,
+  so nothing is lost.
+- **The title bar carries both a colour and a mark for a picked picture.** The
+  colour is the one the grid gives a picked tile, so the two views agree; the
+  asterisk survives a terminal whose colours nobody has set up.
+
 ## 7. Traps
+
+**A span with one side given follows the shape of the cell, not its size.**
+When a client gives `c` and leaves `r` to the terminal, the rows come out of
+`srcH * cols * cellW / (srcW * cellH)`, and halving both sides of the cell
+leaves that untouched. Only a change of the cell's aspect ratio moves it. A
+test that took a cell from ten by twenty to five by ten and expected the
+height to change was wrong about the arithmetic, not about the code — the
+mistake was carrying an expectation over from the case where both sides are
+computed, which does depend on the absolute size.
 
 **`Ctrl+I` is Tab.** On a terminal without an extended keyboard protocol,
 `Ctrl+I` arrives as `VK_TAB`, which the viewer uses for the 1:1 fit. Nothing in
@@ -272,6 +311,18 @@ asking, and the user may want a different one.
   move the check one level down.
 - `image_gallery_test.go` passes a nil context to `ImagePipe.LoadSync`, which
   the function handles but which no other test does.
+- **A negative `z` cannot be honoured without changing vtui.** The attribute
+  word in `vtui/colors.go` carries either an eight bit index or twenty four
+  bits of RGB, and has no way of saying "whatever the terminal calls default".
+  `Show` fills the viewer with an explicit dark background, so a picture the
+  terminal is asked to keep under the glyphs ends up under an opaque fill and
+  is never seen. Either the attribute needs a "default colour" state, or the
+  graphics layer needs to tell the backend not to paint the cells a negative
+  `z` placement covers.
+- `ImageView.panMaxX` and `panMaxY` come from the last frame, so the arrow
+  keys walk rather than pan until the picture has been drawn once. That is the
+  right answer for a picture that fits, which is every picture before somebody
+  zooms it, so the case never shows.
 - `t=s` works wherever shared memory objects appear in the file system, which
   is Linux and the BSDs. On macOS and Windows `kittyShmPath` reports that the
   system has none, and the client gets `EBADF`. Doing better would need cgo
