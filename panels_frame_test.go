@@ -1414,6 +1414,47 @@ func TestPanelsFrame_SwapPanels(t *testing.T) {
 	}
 }
 
+// TestPanelsFrame_VisualLeftRightFollowSwap makes sure resolving
+// panels by on-screen X-position keeps Ctrl+[/Ctrl+] pointing at
+// the visually-left and visually-right sides after CmSwapPanels
+// re-slots the underlying panels array.
+func TestPanelsFrame_VisualLeftRightFollowSwap(t *testing.T) {
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	pathL := filepath.Join(t.TempDir(), "left")
+	pathR := filepath.Join(t.TempDir(), "right")
+	os.MkdirAll(pathL, 0755)
+	os.MkdirAll(pathR, 0755)
+
+	fspL := pf.panels[0].(*FileSystemPanel)
+	fspR := pf.panels[1].(*FileSystemPanel)
+	fspL.vfs.SetPath(pathL)
+	fspR.vfs.SetPath(pathR)
+
+	// Baseline: unswapped — visual-left is the panel we set to
+	// pathL, visual-right the one at pathR.
+	if got := pf.visualLeftFSP(); got != fspL {
+		t.Errorf("visualLeftFSP baseline: got %p, want left (%p)", got, fspL)
+	}
+	if got := pf.visualRightFSP(); got != fspR {
+		t.Errorf("visualRightFSP baseline: got %p, want right (%p)", got, fspR)
+	}
+
+	// Swap. panels[0] now points at fspR, but that panel gets
+	// moved to X=0 by ResizeConsole (see TestPanelsFrame_SwapPanels
+	// step 3), so it's the visually-left one now.
+	pf.HandleCommand(CmSwapPanels, nil)
+
+	if got := pf.visualLeftFSP(); got != fspR {
+		t.Errorf("visualLeftFSP after swap: got %p, want fspR (%p)", got, fspR)
+	}
+	if got := pf.visualRightFSP(); got != fspL {
+		t.Errorf("visualRightFSP after swap: got %p, want fspL (%p)", got, fspL)
+	}
+}
+
 func TestPanelsFrame_WideFollowsSwapAndClone(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()

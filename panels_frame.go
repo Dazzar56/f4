@@ -159,8 +159,49 @@ type PanelsFrame struct {
 	closed      bool
 }
 
-func (pf *PanelsFrame) Left() Panel    { return pf.panels[0] }
-func (pf *PanelsFrame) Right() Panel   { return pf.panels[1] }
+func (pf *PanelsFrame) Left() Panel  { return pf.panels[0] }
+func (pf *PanelsFrame) Right() Panel { return pf.panels[1] }
+
+// visualLeftFSP / visualRightFSP return the file panels resolved by
+// their on-screen X-position rather than slot index. The Ctrl+U
+// panel swap re-assigns pf.panels[0]/[1] but keeps the two frames
+// where the user sees them, so index-based routing sends Ctrl+[/]
+// to the wrong side after a swap. Sizing keeps both panels
+// horizontal-adjacent (see ResizeConsole), so a simple min-X pick
+// is enough — no need to check a bounding box.
+func (pf *PanelsFrame) visualLeftFSP() *FileSystemPanel {
+	a, _ := pf.panels[0].(*FileSystemPanel)
+	b, _ := pf.panels[1].(*FileSystemPanel)
+	if a == nil {
+		return b
+	}
+	if b == nil {
+		return a
+	}
+	xA, _, _, _ := a.GetPosition()
+	xB, _, _, _ := b.GetPosition()
+	if xA <= xB {
+		return a
+	}
+	return b
+}
+
+func (pf *PanelsFrame) visualRightFSP() *FileSystemPanel {
+	a, _ := pf.panels[0].(*FileSystemPanel)
+	b, _ := pf.panels[1].(*FileSystemPanel)
+	if a == nil {
+		return b
+	}
+	if b == nil {
+		return a
+	}
+	xA, _, _, _ := a.GetPosition()
+	xB, _, _, _ := b.GetPosition()
+	if xA > xB {
+		return a
+	}
+	return b
+}
 func (pf *PanelsFrame) Active() Panel  { return pf.panels[pf.activeIdx] }
 func (pf *PanelsFrame) Passive() Panel { return pf.panels[1-pf.activeIdx] }
 
@@ -1322,7 +1363,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 
 	// Ctrl+[ - Insert left panel path into command line (Far compatible)
 	if (e.VirtualKeyCode == vtinput.VK_OEM_4 || e.Char == '[') && ctrl && !alt && !shift && e.KeyDown {
-		if fsp, ok := pf.panels[0].(*FileSystemPanel); ok && fsp != nil {
+		if fsp := pf.visualLeftFSP(); fsp != nil {
 			pf.insertPathToCmdLine(fsp.vfs.GetPath())
 			return true
 		}
@@ -1330,7 +1371,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 
 	// Ctrl+] - Insert right panel path into command line (Far compatible)
 	if (e.VirtualKeyCode == vtinput.VK_OEM_6 || e.Char == ']') && ctrl && !alt && !shift && e.KeyDown {
-		if fsp, ok := pf.panels[1].(*FileSystemPanel); ok && fsp != nil {
+		if fsp := pf.visualRightFSP(); fsp != nil {
 			pf.insertPathToCmdLine(fsp.vfs.GetPath())
 			return true
 		}
