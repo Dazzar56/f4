@@ -997,6 +997,34 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	}
 
+	// ESC toggles panels visibility — mirrors the "hide panels"
+	// macro shipped with FAR. Only fires when there's nothing more
+	// contextual for ESC to do:
+	//   * panels visible → command line must be empty (otherwise
+	//     the ESC-clears-cmdline handler below still wins);
+	//   * panels hidden → the terminal must be in a non-interactive
+	//     state (no AltScreen, no busy PTY), so we don't steal ESC
+	//     from a running app (vim, less, htop, …).
+	if e.VirtualKeyCode == vtinput.VK_ESCAPE && !alt && !ctrl && !shift && e.KeyDown {
+		if pf.showPanels && pf.cmdLine.IsEmpty() {
+			pf.exitWide()
+			pf.showPanels = false
+			vtui.FrameManager.HardRefresh()
+			return true
+		}
+		if !pf.showPanels && !pf.termView.UseAltScreen && !pf.isPtyBusy() {
+			pf.exitWide()
+			pf.showPanels = true
+			if !pf.showLeftPanel && !pf.showRightPanel {
+				pf.showLeftPanel = true
+				pf.showRightPanel = true
+			}
+			vtui.FrameManager.HardRefresh()
+			pf.RefreshAll()
+			return true
+		}
+	}
+
 	// Ctrl+F1 toggles left panel
 	if e.VirtualKeyCode == vtinput.VK_F1 && ctrl && !alt && !shift && e.KeyDown {
 		pf.exitWide()
