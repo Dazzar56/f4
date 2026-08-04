@@ -935,6 +935,147 @@ func TestFileSystemPanel_RightClick_ResetOnRelease(t *testing.T) {
 		t.Error("Item should have been unselected after button release and re-click")
 	}
 }
+
+func TestFileSystemPanel_RightDragAppliesToSkippedRows(t *testing.T) {
+	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS("."))
+	fp.SetViewMode(ViewModeDetailed)
+	fp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
+		{VFSItem: vfs.VFSItem{Name: "f1"}},
+		{VFSItem: vfs.VFSItem{Name: "f2"}},
+		{VFSItem: vfs.VFSItem{Name: "f3"}},
+		{VFSItem: vfs.VFSItem{Name: "f4"}},
+	}
+	fp.Refresh()
+
+	dataY := fp.table.Y1 + fp.table.MarginTop
+	rightDown := func(idx int) {
+		fp.ProcessMouse(&vtinput.InputEvent{
+			Type: vtinput.MouseEventType, KeyDown: true,
+			MouseX: int16(fp.table.X1), MouseY: int16(dataY + idx),
+			ButtonState: vtinput.RightmostButtonPressed,
+		})
+	}
+	release := func(idx int) {
+		fp.ProcessMouse(&vtinput.InputEvent{
+			Type:   vtinput.MouseEventType,
+			MouseX: int16(fp.table.X1), MouseY: int16(dataY + idx),
+		})
+	}
+
+	// Only the endpoints emit events; f2 and f3 must still be selected.
+	rightDown(1)
+	rightDown(4)
+	for idx := 1; idx <= 4; idx++ {
+		if !fp.entries[idx].Selected {
+			t.Errorf("entry %d was skipped while selecting", idx)
+		}
+	}
+
+	release(4)
+
+	// Starting a new drag on a selected item fixes the operation to deselect,
+	// including skipped rows while moving in the opposite direction.
+	rightDown(4)
+	rightDown(1)
+	for idx := 1; idx <= 4; idx++ {
+		if fp.entries[idx].Selected {
+			t.Errorf("entry %d was skipped while deselecting", idx)
+		}
+	}
+}
+
+func TestFileSystemPanel_RightDragTracksGridColumn(t *testing.T) {
+	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS("."))
+	fp.SetViewMode(ViewModeMedium)
+
+	height := fp.table.ViewHeight
+	fp.entries = make([]*fileEntry, height*2)
+	for idx := range fp.entries {
+		fp.entries[idx] = &fileEntry{VFSItem: vfs.VFSItem{Name: fmt.Sprintf("f%d", idx)}}
+	}
+	fp.Refresh()
+
+	startIdx := height - 2
+	endIdx := height + 1
+	dataY := fp.table.Y1 + fp.table.MarginTop
+	leftX := fp.table.X1
+	rightX := fp.table.X1 + fp.table.Columns[0].Width + 1
+
+	fp.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: true,
+		MouseX: int16(leftX), MouseY: int16(dataY + height - 2),
+		ButtonState: vtinput.RightmostButtonPressed,
+	})
+	fp.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: true,
+		MouseX: int16(rightX), MouseY: int16(dataY + 1),
+		ButtonState: vtinput.RightmostButtonPressed,
+	})
+
+	if fp.GetCursorIndex() != endIdx {
+		t.Fatalf("cursor index = %d, want %d", fp.GetCursorIndex(), endIdx)
+	}
+	for idx := startIdx; idx <= endIdx; idx++ {
+		if !fp.entries[idx].Selected {
+			t.Errorf("grid entry %d was skipped", idx)
+		}
+	}
+}
+
+func TestFileSystemPanel_RightDoubleClickAppliesToWholePanel(t *testing.T) {
+	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS("."))
+	fp.SetViewMode(ViewModeDetailed)
+	fp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
+		{VFSItem: vfs.VFSItem{Name: "f1"}},
+		{VFSItem: vfs.VFSItem{Name: "f2"}},
+		{VFSItem: vfs.VFSItem{Name: "f3"}},
+	}
+	fp.Refresh()
+
+	dataY := fp.table.Y1 + fp.table.MarginTop
+	rightClick := func(idx int, flags uint32) {
+		fp.ProcessMouse(&vtinput.InputEvent{
+			Type: vtinput.MouseEventType, KeyDown: true,
+			MouseX: int16(fp.table.X1), MouseY: int16(dataY + idx),
+			ButtonState: vtinput.RightmostButtonPressed, MouseEventFlags: flags,
+		})
+	}
+	release := func(idx int) {
+		fp.ProcessMouse(&vtinput.InputEvent{
+			Type:   vtinput.MouseEventType,
+			MouseX: int16(fp.table.X1), MouseY: int16(dataY + idx),
+		})
+	}
+
+	// The first press selects f1; the second press spreads that state to all.
+	rightClick(1, 0)
+	release(1)
+	rightClick(1, vtinput.DoubleClick)
+	for idx := 1; idx < len(fp.entries); idx++ {
+		if !fp.entries[idx].Selected {
+			t.Errorf("entry %d was not selected by right double-click", idx)
+		}
+	}
+	if fp.entries[0].Selected {
+		t.Error("parent directory entry must not be selected")
+	}
+
+	release(1)
+
+	// Starting on selected f2 makes the first press deselect it; the second
+	// press spreads deselection to the whole panel.
+	rightClick(2, 0)
+	release(2)
+	rightClick(2, vtinput.DoubleClick)
+	for idx := 1; idx < len(fp.entries); idx++ {
+		if fp.entries[idx].Selected {
+			t.Errorf("entry %d was not deselected by right double-click", idx)
+		}
+	}
+}
+
 func TestFileSystemPanel_IncrementalInteraction(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(t.TempDir()))

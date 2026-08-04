@@ -232,6 +232,8 @@ type FileSystemPanel struct {
 	wide                bool
 	cursorIdx           int
 	lastRightClickedIdx int
+	rightDragActive     bool
+	rightDragSelect     bool
 
 	loadCtx            context.Context
 	cancelLoad         context.CancelFunc
@@ -419,6 +421,71 @@ func (fp *FileSystemPanel) SetViewMode(mode ViewMode) {
 	fp.wide = false
 	fp.configureCellSelection()
 	fp.Resize(fp.X2-fp.X1+1, fp.Y2-fp.Y1+1)
+}
+
+// mouseEntryIndex returns the entry under the mouse. Multi-column panel modes
+// are filled from top to bottom and then from left to right, so the visual
+// column contributes a full table height to the entry index.
+func (fp *FileSystemPanel) mouseEntryIndex(mouseX, mouseY int) int {
+	if mouseX < fp.table.X1 || mouseX > fp.table.X2 {
+		return -1
+	}
+
+	row := mouseY - (fp.table.Y1 + fp.table.MarginTop)
+	if row < 0 || row >= fp.table.ViewHeight {
+		return -1
+	}
+
+	column := 0
+	if fp.gridColumnCount() > 1 {
+		column = -1
+		columnX := fp.table.X1
+		for i, tableColumn := range fp.table.Columns {
+			if mouseX >= columnX && mouseX < columnX+tableColumn.Width {
+				column = i
+				break
+			}
+			columnX += tableColumn.Width + 1 // one-character separator
+		}
+		if column < 0 {
+			return -1
+		}
+	}
+
+	idx := fp.table.TopPos + row + column*fp.table.ViewHeight
+	if idx < 0 || idx >= len(fp.entries) {
+		return -1
+	}
+	return idx
+}
+
+func (fp *FileSystemPanel) processRightDrag(idx int) {
+	if !fp.rightDragActive {
+		fp.rightDragActive = true
+		fp.rightDragSelect = !fp.entries[idx].Selected
+		fp.lastRightClickedIdx = idx
+		fp.SetItemSelected(idx, fp.rightDragSelect)
+		return
+	}
+
+	from := fp.lastRightClickedIdx
+	step := 1
+	if idx < from {
+		step = -1
+	}
+	for current := from; ; current += step {
+		fp.SetItemSelected(current, fp.rightDragSelect)
+		if current == idx {
+			break
+		}
+	}
+	fp.lastRightClickedIdx = idx
+}
+
+func (fp *FileSystemPanel) setAllItemsSelected(state bool) {
+	for idx := range fp.entries {
+		fp.SetItemSelected(idx, state)
+	}
 }
 
 func (fp *FileSystemPanel) SetWide(wide bool) {
@@ -1472,6 +1539,7 @@ func (fp *FileSystemPanel) ProcessMouse(e *vtinput.InputEvent) bool {
 
 	if e.ButtonState == 0 {
 		fp.lastRightClickedIdx = -1
+		fp.rightDragActive = false
 	}
 
 	if fp.fastFindMode && e.ButtonState != 0 {
@@ -1550,6 +1618,33 @@ func (fp *FileSystemPanel) ProcessMouse(e *vtinput.InputEvent) bool {
 		}
 	}
 
+	if e.ButtonState == vtinput.RightmostButtonPressed && e.KeyDown {
+		idx := fp.mouseEntryIndex(int(e.MouseX), int(e.MouseY))
+		if idx >= 0 {
+			fp.SetCursorIndex(idx)
+			if fp.entries[idx].Name == ".." {
+				return true
+			}
+			if e.MouseEventFlags&vtinput.DoubleClick != 0 {
+				// Windows reports the second press as a double-click. The first
+				// press has already established whether this is a select or
+				// deselect operation, so propagate its result to the whole panel.
+				state := fp.entries[idx].Selected
+				fp.setAllItemsSelected(state)
+				fp.rightDragActive = true
+				fp.rightDragSelect = state
+				fp.lastRightClickedIdx = idx
+				fp.Refresh()
+				return true
+			}
+			fp.processRightDrag(idx)
+			fp.Refresh()
+			return true
+		}
+		// Keep the drag captured while the pointer temporarily leaves a file row.
+		return fp.rightDragActive
+	}
+
 	handled := fp.table.ProcessMouse(e)
 	if handled {
 		// Sync absolute index from table's visual selection
@@ -1570,19 +1665,6 @@ func (fp *FileSystemPanel) ProcessMouse(e *vtinput.InputEvent) bool {
 				fp.SetCursorIndex(len(fp.entries) - 1)
 			} else {
 				fp.cursorIdx = newIdx
-			}
-		}
-	}
-
-	if e.ButtonState != 0 && e.KeyDown {
-		idx := fp.GetCursorIndex()
-		if idx < len(fp.entries) {
-			if e.ButtonState == vtinput.RightmostButtonPressed {
-				if fp.entries[idx].Name != ".." && fp.lastRightClickedIdx != idx {
-					fp.ToggleSelection(idx)
-					fp.lastRightClickedIdx = idx
-				}
-				return true
 			}
 		}
 	}
