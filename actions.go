@@ -2043,7 +2043,12 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 	const width, height = 60, 19
 	dlg := vtui.NewCenteredDialog(width, height, Msg("AppearanceSettings.Title"))
 	dlg.ShowClose = true
-	originalStyle := AppConfig.ColorStyle
+	// Snapshot the whole palette (not just the style name) so a
+	// Cancel restores every runtime tweak — farcolors.ini overrides
+	// loaded at startup, Colorer editor-background pushes, anything
+	// else that touched vtui.Palette. Re-applying originalStyle
+	// alone would wipe those.
+	originalPalette := append([]uint64(nil), vtui.Palette...)
 
 	styles := AvailableColorStyles()
 	names := make([]string, len(styles))
@@ -2176,8 +2181,8 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 	}
 
 	dlg.OnResult = func(code int) {
-		if code < 0 {
-			_ = ApplyColorStyle(originalStyle)
+		if code < 0 && len(originalPalette) == len(vtui.Palette) {
+			copy(vtui.Palette, originalPalette)
 		}
 		vtui.FrameManager.Redraw()
 	}
