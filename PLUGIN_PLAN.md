@@ -187,10 +187,23 @@ Done:
   five minute hello world. `PLUGINS.md`, `LUA.md` and `PLUGRING.md` are
   rewritten for three transports, a submission walkthrough and the
   distribution policy; `LUA.md` settles the FFI naming, with `f4ffi` the Lua
-  face of the bridge and `Host.FFI.*` the protocol underneath it for guests
+face of the bridge and `Host.FFI.*` the protocol underneath it for guests
   that cannot have a module.
+- **Step 6: the permission model (V1).** Manifest permissions with the author's
+  own justification text, asked for on first real use (for FFI) or at load time
+  (for `unsafe-stdlib`), and remembered persistently in `plugin_permissions.json`
+  under the plugin's catalog ID (not its file path, so it survives updates and
+  moves). `PermissionStore.Forget` is called when a plugin is uninstalled via
+  PlugRing. A global permission management dialog is implemented
+  (`actionPluginPermissions` / `btnPerms`) to review and revoke granted permissions.
 
 Next, in order:
+
+- **Step 6.1: Enforce the `native` permission.**
+  - The permission `native` (running an external process as an RPC plugin) is declared in the vocabulary but not yet enforced.
+  - Decide on the UX for a subprocess plugin when its `native` permission is refused at launch (e.g. skip loading, or show an error, or wait for user consent).
+  - Implement the gate for `RPCPlugin` in `rpc_plugin.go`. When an external plugin starts, check the `native` permission using the `gate.Allow` mechanism. If denied, do not launch or load the plugin.
+
 - **Step 4c: choosing where `Ctrl+.` records to.** Both macro backends already
   coexist, recorded ones in `key_macros.ini` and scripted ones in
   `Macros/scripts`, with recorded winning a shared key as in Far. What is
@@ -201,26 +214,20 @@ Next, in order:
   back into the engine and checks it replays the same keys. Writing the file
   into `Macros/scripts` and handing it to the running engine with `LoadString`
   is done too, in `MacroManager.SaveRecordedMacro`, so a macro takes effect in
-  the session that recorded it. What remains is the choice itself: a
-  configuration option and its place in the settings dialog, and
-  deciding what editing or reassigning a recorded macro means once a macro can
-  be either kind. Worth doing; not worth rushing.
+  the session that recorded it.
+  - Implement a configuration option in `F4Config` / `settings.ini` to choose the active storage mode (legacy `ini` vs. new `Lua` macro file).
+  - Expose this setting in the editor/panel settings dialog.
+  - Decide what "edit" or "reassign" a recorded macro means once a macro can be either kind.
 
 - **Step 4d: an action registry.** f4's actions are Go functions bound to keys
   and to the keybar, and nothing can call one by name. A macro reaches an
   action by sending its keystroke, which breaks the moment the user rebinds
   that key and tells a reader nothing about what the macro does; a plugin
   reaches one only by registering a hotkey or a menu item and being handed
-  control. The fix is a registry mapping stable names to the existing
-  functions, exposed as `Actions.Run("Panel.Rescan")` to macros and
-  `Host.RunAction` to plugins, leaving `Keys()` for what it is actually for,
-  simulating input. The work is spread across `actions.go` rather than deep,
-  and naming the actions is the part that deserves thought: the names become
-  API the moment anyone writes a macro against them.
-- **Step 6: the permission model.** Manifest permissions with the author's own
-  justification text, asked for on first real use, remembered in the config.
-  Covers FFI, unsafe stdlib and running a native binary. Wires into
-  `ffibridge.Options.Allow` and `luaplug.Options.AllowUnsafeStdlib`.
+  control.
+  - Implement a registry mapping stable semantic names to the existing Go functions, exposed as `Actions.Run("Panel.Rescan")` to macros and `Host.RunAction` to plugins, leaving `Keys()` strictly for simulating raw input.
+  - Map and register existing panel/file functions in `actions.go` (e.g., rescan, copy, delete, etc.) under stable, well-designed API names.
+
 - **Later: a Far3/far2l API compatibility layer.** Explicitly deferred, but the
   namespacing choices above are made so it can arrive without a rewrite.
 
