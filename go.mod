@@ -12,7 +12,7 @@ require (
 	github.com/pkg/sftp v1.13.6
 	github.com/tetratelabs/wazero v1.12.0
 	github.com/unxed/archives v0.0.0-20260728171610-555945c76813
-	github.com/unxed/colorer4go v0.1.3
+	github.com/unxed/colorer4go v0.1.4
 	github.com/unxed/ffibridge v0.1.0
 	github.com/unxed/localecp v0.1.4
 	github.com/unxed/sevenzip v0.0.0-20260704211908-25d317f8295f
@@ -85,12 +85,13 @@ require (
 	github.com/zzl/go-win32api/v2 v2.1.0 // indirect
 	go4.org v0.0.0-20260112195520-a5071408f32f // indirect
 	golang.design/x/clipboard v0.7.0 // indirect
-	golang.org/x/exp/shiny v0.0.0-20260508232706-74f9aab9d74a // indirect
+	golang.org/x/exp v0.0.0-20190731235908-ec7cb31e5a56 // indirect
 	golang.org/x/image v0.44.0 // indirect
-	golang.org/x/mobile v0.0.0-20260410095206-2cfb76559b7b // indirect
+	golang.org/x/mobile v0.0.0-20230301163155-e0f57694e12c // indirect
 	golang.org/x/sync v0.22.0 // indirect
 )
 
 replace github.com/ebitengine/purego => github.com/unxed/pureffi v0.1.13
 
-// replace github.com/unxed/vtui => ../../../dev/vtui
+//replace github.com/unxed/vtui => ../../../dev/vtui
+//replace github.com/unxed/colorer4go => ../../../dev/colorer4go
