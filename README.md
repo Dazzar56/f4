@@ -152,6 +152,14 @@ go mod tidy
 CGO_ENABLED=0 go build .
 ```
 
+The generated platform icons are committed to the repository, so a normal
+build does not need an image converter. If `assets/icon/f4.svg` is changed,
+regenerate PNG, ICO, ICNS, and Windows resources on any supported OS with:
+
+```bash
+go generate
+```
+
 **4. Run**
 ```bash
 ./f4

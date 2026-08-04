@@ -1,3 +1,5 @@
+//go:generate go -C tools/icons run .
+
 package main
 
 import (
