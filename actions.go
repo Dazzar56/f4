@@ -1722,7 +1722,7 @@ func actionFindFile(pf *PanelsFrame) {
 	vtui.FrameManager.Push(dlg)
 }
 func actionPanelSettings(pf *PanelsFrame) {
-	dlg := vtui.NewCenteredDialog(60, 28, Msg("PanelSettings.Title"))
+	dlg := vtui.NewCenteredDialog(60, 30, Msg("PanelSettings.Title"))
 	dlg.ShowClose = true
 
 	chkHidden := vtui.NewCheckbox(0, 0, Msg("PanelSettings.ShowHidden"), false)
@@ -1797,6 +1797,13 @@ func actionPanelSettings(pf *PanelsFrame) {
 	comboPath.Edit.SetText(pathModes[AppConfig.FileOpPathDisplay])
 	lblPath := vtui.NewLabel(0, 0, Msg("PanelSettings.PathDisplay"), comboPath)
 
+	macroModes := []string{"key_macros.ini (Legacy)", "Macros/scripts/*.lua"}
+	comboMacro := vtui.NewComboBox(0, 0, 30, macroModes)
+	comboMacro.DropdownOnly = true
+	comboMacro.Menu.SetSelectPos(AppConfig.MacroRecordFormat)
+	comboMacro.Edit.SetText(macroModes[AppConfig.MacroRecordFormat])
+	lblMacro := vtui.NewLabel(0, 0, "Record macros to:", comboMacro)
+
 	btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))
 	btnOk.IsDefault = true
 	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
@@ -1815,10 +1822,12 @@ func actionPanelSettings(pf *PanelsFrame) {
 	dlg.AddItem(comboMode)
 	dlg.AddItem(lblPath)
 	dlg.AddItem(comboPath)
+	dlg.AddItem(lblMacro)
+	dlg.AddItem(comboMacro)
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnCancel)
 
-	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 54-4, 28-4)
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 54-4, 30-4)
 	vbox.Add(chkHidden, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkHighlight, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(chkSeparateExtensions, vtui.Margins{Top: 1}, vtui.AlignLeft)
@@ -1840,6 +1849,11 @@ func actionPanelSettings(pf *PanelsFrame) {
 	rowPath.Add(lblPath, vtui.Margins{Right: 1}, vtui.AlignLeft)
 	rowPath.Add(comboPath, vtui.Margins{}, vtui.AlignFill)
 	vbox.Add(rowPath, vtui.Margins{Top: 1}, vtui.AlignFill)
+
+	rowMacro := vtui.NewHBoxLayout(0, 0, 54-4, 1)
+	rowMacro.Add(lblMacro, vtui.Margins{Right: 1}, vtui.AlignLeft)
+	rowMacro.Add(comboMacro, vtui.Margins{}, vtui.AlignFill)
+	vbox.Add(rowMacro, vtui.Margins{Top: 1}, vtui.AlignFill)
 
 	hbox := vtui.NewHBoxLayout(0, 0, 54-4, 1)
 	hbox.HorizontalAlign = vtui.AlignCenter
@@ -1864,6 +1878,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 		AppConfig.EscTogglePanels = chkEscToggle.State == 1
 		AppConfig.DefaultFileOpMode = comboMode.Menu.SelectPos
 		AppConfig.FileOpPathDisplay = comboPath.Menu.SelectPos
+		AppConfig.MacroRecordFormat = comboMacro.Menu.SelectPos
 		SaveConfig()
 		dlg.Close()
 		pf.ResizeConsole(pf.lastW, pf.lastH)

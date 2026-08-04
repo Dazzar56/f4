@@ -210,6 +210,37 @@ func (e *LuaMacroEngine) Find(area, key string) *LuaMacro {
 	return nil
 }
 
+// Remove drops a macro from the engine.
+func (e *LuaMacroEngine) Remove(area, key string) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	area = strings.ToLower(area)
+	if alias, ok := macroAreaAliases[area]; ok {
+		area = alias
+	}
+	key = strings.ToLower(key)
+
+	if e.byArea[area] == nil {
+		return false
+	}
+	list := e.byArea[area][key]
+	if len(list) == 0 {
+		return false
+	}
+
+	macroToRemove := list[len(list)-1]
+	e.byArea[area][key] = list[:len(list)-1]
+
+	for i, m := range e.all {
+		if m == macroToRemove {
+			e.all = append(e.all[:i], e.all[i+1:]...)
+			break
+		}
+	}
+	return true
+}
+
 // Trigger consumes a key if a macro claims it and starts that macro.
 //
 // The macro runs on its own goroutine, never on the caller's. The caller is
