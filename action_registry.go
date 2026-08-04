@@ -1,9 +1,12 @@
 package main
 
 import (
+	"fmt"
 	"sort"
 	"strings"
+	"time"
 
+	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 )
 
@@ -12,7 +15,7 @@ type Action struct {
 	Name        string
 	Label       string
 	Description string
-	Handler     func()
+	Handler     func() bool
 }
 
 var actionRegistry = make(map[string]Action)
@@ -25,8 +28,7 @@ func RegisterAction(action Action) {
 // RunAction executes an action by name if it exists.
 func RunAction(name string) bool {
 	if a, ok := actionRegistry[strings.ToLower(name)]; ok && a.Handler != nil {
-		a.Handler()
-		return true
+		return a.Handler()
 	}
 	return false
 }
@@ -50,11 +52,39 @@ func GetAction(name string) (Action, bool) {
 }
 
 func init() {
-	withPF := func(fn func(pf *PanelsFrame)) func() {
-		return func() {
+	withPF := func(fn func(pf *PanelsFrame)) func() bool {
+		return func() bool {
 			if pf := findPanelsFrameAnyScreen(); pf != nil {
 				fn(pf)
+				return true
 			}
+			return false
+		}
+	}
+
+	withEditor := func(fn func(ev *EditorView)) func() bool {
+		return func() bool {
+			if vtui.FrameManager == nil {
+				return false
+			}
+			if ev, ok := vtui.FrameManager.GetTopFrame().(*EditorView); ok {
+				fn(ev)
+				return true
+			}
+			return false
+		}
+	}
+
+	withViewer := func(fn func(vv *ViewerView)) func() bool {
+		return func() bool {
+			if vtui.FrameManager == nil {
+				return false
+			}
+			if vv, ok := vtui.FrameManager.GetTopFrame().(*ViewerView); ok {
+				fn(vv)
+				return true
+			}
+			return false
 		}
 	}
 
@@ -185,6 +215,12 @@ func init() {
 		Description: "Open confirmations settings dialog",
 		Handler:     withPF(func(pf *PanelsFrame) { actionConfirmationsSettings(pf) }),
 	})
+	RegisterAction(Action{
+		Name:        "Settings.Hotkeys",
+		Label:       "Hotkey Configuration",
+		Description: "Open Hotkey Configurator",
+		Handler:     withPF(func(pf *PanelsFrame) { actionHotkeyConfig(pf) }),
+	})
 
 	RegisterAction(Action{
 		Name:        "Terminal.ViewLog",
@@ -198,4 +234,59 @@ func init() {
 		Description: "Open terminal log in editor",
 		Handler:     withPF(func(pf *PanelsFrame) { actionEditTerminalLog(pf) }),
 	})
+
+	// Editor Actions
+	RegisterAction(Action{Name: "Editor.Save", Label: "Save", Description: "Save file", Handler: withEditor(func(ev *EditorView) { ev.SaveToFile(nil) })})
+	RegisterAction(Action{Name: "Editor.WordWrap", Label: "Word Wrap", Description: "Toggle word wrap", Handler: withEditor(func(ev *EditorView) {
+		ev.WordWrap = !ev.WordWrap
+		ev.ScrollLeft = 0
+		ev.clearCaches()
+		ev.ensureCursorVisible()
+	})})
+	RegisterAction(Action{Name: "Editor.ShowWhitespaces", Label: "Show Whitespaces", Description: "Toggle visible whitespaces", Handler: withEditor(func(ev *EditorView) { ev.ShowWhitespaces = !ev.ShowWhitespaces })})
+	RegisterAction(Action{Name: "Editor.Search", Label: "Search", Description: "Find text", Handler: withEditor(func(ev *EditorView) { vtui.FrameManager.EmitCommand(CmSearch, nil) })})
+	RegisterAction(Action{Name: "Editor.Replace", Label: "Replace", Description: "Replace text", Handler: withEditor(func(ev *EditorView) { vtui.FrameManager.EmitCommand(CmReplace, nil) })})
+	RegisterAction(Action{Name: "Editor.SearchNext", Label: "Search Next", Description: "Continue search", Handler: withEditor(func(ev *EditorView) {
+		if LastEditorSearch != "" {
+			ev.Search(LastEditorSearch, LastEditorSearchCase, LastEditorSearchReverse, LastEditorSearchRegexp, LastEditorSearchWholeWord, true)
+		}
+	})})
+	RegisterAction(Action{Name: "Editor.Quit", Label: "Quit", Description: "Close editor", Handler: withEditor(func(ev *EditorView) { ev.tryClose() })})
+	RegisterAction(Action{Name: "Editor.SwitchToViewer", Label: "Switch to Viewer", Description: "Switch to viewer mode", Handler: withEditor(func(ev *EditorView) { vtui.FrameManager.EmitCommand(CmSwitchToViewer, ev) })})
+	RegisterAction(Action{Name: "Editor.CodepageNext", Label: "Next Codepage", Description: "Cycle to next codepage", Handler: withEditor(func(ev *EditorView) {
+		next := vfs.GetNextFastSwitchCodepage(ev.Codepage)
+		ev.ReloadWithCodepage(next)
+		vtui.ShowToast(fmt.Sprintf("Codepage: %d", next), time.Second)
+	})})
+	RegisterAction(Action{Name: "Editor.CodepageMenu", Label: "Codepage Menu", Description: "Select codepage", Handler: withEditor(func(ev *EditorView) { ev.showCodepageDialog() })})
+	RegisterAction(Action{Name: "Editor.SelectAll", Label: "Select All", Description: "Select all text", Handler: withEditor(func(ev *EditorView) {
+		ev.rectSelActive = false
+		ev.selActive = true
+		ev.selAnchorOffset = 0
+		lastLine := ev.li.LineCount() - 1
+		ev.CursorLine = lastLine
+		ev.CursorPos = ev.getLineLength(lastLine)
+		ev.ensureCursorVisible()
+	})})
+	RegisterAction(Action{Name: "Editor.DeleteLine", Label: "Delete Line", Description: "Delete current line", Handler: withEditor(func(ev *EditorView) { ev.DeleteCurrentLine() })})
+	RegisterAction(Action{Name: "Editor.Undo", Label: "Undo", Description: "Undo last change", Handler: withEditor(func(ev *EditorView) { ev.Undo() })})
+	RegisterAction(Action{Name: "Editor.Redo", Label: "Redo", Description: "Redo last undone change", Handler: withEditor(func(ev *EditorView) { ev.Redo() })})
+
+	// Viewer Actions
+	RegisterAction(Action{Name: "Viewer.Quit", Label: "Quit", Description: "Close viewer", Handler: withViewer(func(vv *ViewerView) { vv.Close() })})
+	RegisterAction(Action{Name: "Viewer.WrapMode", Label: "Wrap Mode", Description: "Toggle word wrap", Handler: withViewer(func(vv *ViewerView) { vv.WrapMode = !vv.WrapMode })})
+	RegisterAction(Action{Name: "Viewer.HexMode", Label: "Hex Mode", Description: "Toggle hex view", Handler: withViewer(func(vv *ViewerView) {
+		vv.HexMode = !vv.HexMode
+		if vv.HexMode {
+			vv.TopOffset &= ^int64(0xF)
+		}
+	})})
+	RegisterAction(Action{Name: "Viewer.Search", Label: "Search", Description: "Find text", Handler: withViewer(func(vv *ViewerView) { vtui.FrameManager.EmitCommand(CmSearch, nil) })})
+	RegisterAction(Action{Name: "Viewer.SwitchToEditor", Label: "Switch to Editor", Description: "Switch to editor mode", Handler: withViewer(func(vv *ViewerView) { vtui.FrameManager.EmitCommand(CmSwitchToEditor, vv) })})
+	RegisterAction(Action{Name: "Viewer.CodepageNext", Label: "Next Codepage", Description: "Cycle to next codepage", Handler: withViewer(func(vv *ViewerView) {
+		next := vfs.GetNextFastSwitchCodepage(vv.Codepage)
+		vv.ReloadWithCodepage(next)
+		vtui.ShowToast(fmt.Sprintf("Codepage: %d", next), time.Second)
+	})})
+	RegisterAction(Action{Name: "Viewer.CodepageMenu", Label: "Codepage Menu", Description: "Select codepage", Handler: withViewer(func(vv *ViewerView) { vv.showCodepageDialog() })})
 }

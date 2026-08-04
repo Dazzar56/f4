@@ -36,8 +36,8 @@ CtrlU=None
 	}
 
 	// Test removal
-	if action := hm.GetAction("Shell", "CtrlU"); action != "" {
-		t.Errorf("Expected CtrlU to be removed, got %q", action)
+	if action := hm.GetAction("Shell", "CtrlU"); action != "None" {
+		t.Errorf("Expected CtrlU to be None, got %q", action)
 	}
 
 	// Modify and save
@@ -49,7 +49,31 @@ CtrlU=None
 	if action := hm2.GetAction("Terminal", "AltF1"); action != "Terminal.ShowMenu" {
 		t.Errorf("Expected saved action Terminal.ShowMenu, got %q", action)
 	}
-	if action := hm2.GetAction("Shell", "CtrlU"); action != "" {
-		t.Errorf("Expected CtrlU to still be removed after reload, got %q", action)
+	if action := hm2.GetAction("Shell", "CtrlU"); action != "None" {
+		t.Errorf("Expected CtrlU to still be None after reload, got %q", action)
+	}
+}
+func TestHotkeyManager_GetActiveBindings(t *testing.T) {
+	hm := NewHotkeyManager("")
+	hm.initDefaults()
+	hm.Bindings = map[string]map[string]string{
+		"Shell": {
+			"F5":    "My.Copy",
+			"CtrlO": "None", // Unbind default
+		},
+		"Editor": {
+			"CtrlS": "File.Save",
+		},
+	}
+
+	active := hm.GetActiveBindings()
+	if active["Shell"]["F5"] != "My.Copy" {
+		t.Errorf("Expected F5 to be My.Copy, got %v", active["Shell"]["F5"])
+	}
+	if _, ok := active["Shell"]["CtrlO"]; ok {
+		t.Errorf("Expected CtrlO to be unbound in Shell")
+	}
+	if active["Editor"]["CtrlS"] != "File.Save" {
+		t.Errorf("Expected Editor CtrlS to be File.Save")
 	}
 }

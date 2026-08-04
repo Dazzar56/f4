@@ -337,6 +337,9 @@ func (m *MacroManager) Filter(e *vtinput.InputEvent) bool {
 	// Hotkey Manager evaluation (System actions)
 	if hm := GlobalHotkeysMgr; hm != nil {
 		if actionName := hm.GetAction(currentArea, keyStr); actionName != "" {
+			if strings.EqualFold(actionName, "none") {
+				return true // Intercept and silence (explicitly unbound)
+			}
 			vtui.DebugLog("HOTKEY: Executing action %s for %s in area %s", actionName, keyStr, currentArea)
 			if RunAction(actionName) {
 				return true

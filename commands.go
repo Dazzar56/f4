@@ -48,6 +48,7 @@ const (
 	CmConfirmationsSettings
 	CmLanguage
 	CmPlugins
+	CmHotkeyConfig
 	CmUpdateSettings
 	CmBookmarks
 	CmSwitchToViewer

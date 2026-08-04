@@ -259,6 +259,8 @@ func NewPanelsFrame() *PanelsFrame {
 			{Text: "&" + Msg("Menu.AppearanceSettings"), Command: CmAppearanceSettings},
 			{Text: "&" + Msg("Menu.ConfirmationsSettings"), Command: CmConfirmationsSettings},
 			{Separator: true},
+			{Text: "Hot&keys Configuration", Command: CmHotkeyConfig},
+			{Separator: true},
 			{Text: Msg("Menu.AutoUpdateSettings"), Command: CmUpdateSettings},
 			{Separator: true},
 			{Text: "&" + Msg("Menu.Options.Plugins"), Command: CmPlugins},
@@ -2294,6 +2296,9 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 		return true
 	case CmConfirmationsSettings:
 		actionConfirmationsSettings(pf)
+		return true
+	case CmHotkeyConfig:
+		actionHotkeyConfig(pf)
 		return true
 	case CmLanguage:
 		actionLanguage(pf)

@@ -467,7 +467,7 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 	case vtinput.VK_F4:
 		vv.HexMode = !vv.HexMode
 		if vv.HexMode {
-			vv.TopOffset &= ^0xF
+			vv.TopOffset &= ^int64(0xF)
 		}
 		return true
 	case vtinput.VK_F6:

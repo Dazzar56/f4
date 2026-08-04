@@ -8,8 +8,9 @@ func TestActionRegistry(t *testing.T) {
 		Name:        "Test.Action",
 		Label:       "Test Label",
 		Description: "Test Description",
-		Handler: func() {
+		Handler: func() bool {
 			called = true
+			return true
 		},
 	}
 

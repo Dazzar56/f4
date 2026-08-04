@@ -27,6 +27,30 @@ func NewHotkeyManager(iniPath string) *HotkeyManager {
 	return hm
 }
 
+// GetActiveBindings returns a map of Area -> Key -> ActionName containing all active bindings.
+func (hm *HotkeyManager) GetActiveBindings() map[string]map[string]string {
+	res := make(map[string]map[string]string)
+	for area, binds := range hm.Defaults {
+		res[area] = make(map[string]string)
+		for k, v := range binds {
+			res[area][k] = v
+		}
+	}
+	for area, binds := range hm.Bindings {
+		if res[area] == nil {
+			res[area] = make(map[string]string)
+		}
+		for k, v := range binds {
+			if v == "None" || v == "" {
+				delete(res[area], k)
+			} else {
+				res[area][k] = v
+			}
+		}
+	}
+	return res
+}
+
 func (hm *HotkeyManager) initDefaults() {
 	hm.Defaults = map[string]map[string]string{
 		"Shell": {
@@ -44,6 +68,35 @@ func (hm *HotkeyManager) initDefaults() {
 			"CtrlR":   "Panel.Rescan",
 			"AltF12":  "Panel.FoldersHistory",
 			"AltF8":   "Panel.CommandHistory",
+		},
+		"Editor": {
+			"F2":         "Editor.Save",
+			"F3":         "Editor.WordWrap",
+			"F5":         "Editor.ShowWhitespaces",
+			"F6":         "Editor.SwitchToViewer",
+			"F7":         "Editor.Search",
+			"ShiftF7":    "Editor.SearchNext",
+			"CtrlF7":     "Editor.Replace",
+			"F8":         "Editor.CodepageNext",
+			"ShiftF8":    "Editor.CodepageMenu",
+			"F10":        "Editor.Quit",
+			"Esc":        "Editor.Quit",
+			"F4":         "Editor.Quit",
+			"CtrlA":      "Editor.SelectAll",
+			"CtrlY":      "Editor.DeleteLine",
+			"CtrlZ":      "Editor.Undo",
+			"CtrlShiftZ": "Editor.Redo",
+		},
+		"Viewer": {
+			"Esc":     "Viewer.Quit",
+			"F10":     "Viewer.Quit",
+			"F3":      "Viewer.Quit",
+			"F2":      "Viewer.WrapMode",
+			"F4":      "Viewer.HexMode",
+			"F6":      "Viewer.SwitchToEditor",
+			"F8":      "Viewer.CodepageNext",
+			"ShiftF8": "Viewer.CodepageMenu",
+			"F7":      "Viewer.Search",
 		},
 		"Terminal": {
 			"CtrlO": "Panel.Toggle",
@@ -74,8 +127,10 @@ func (hm *HotkeyManager) Load() {
 			hm.Bindings[area] = make(map[string]string)
 		}
 		for key, action := range binds {
-			if action == "" || strings.ToLower(action) == "none" {
+			if action == "" {
 				delete(hm.Bindings[area], key)
+			} else if strings.EqualFold(action, "none") {
+				hm.Bindings[area][key] = "None"
 			} else {
 				hm.Bindings[area][key] = action
 			}
