@@ -443,8 +443,15 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 
 	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
 	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
+	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 	if e.VirtualKeyCode == vtinput.VK_TAB && ctrl {
 		return false
+	}
+
+	// Alt+Ins — global screen grabber (far/far2l parity).
+	if e.VirtualKeyCode == vtinput.VK_INSERT && alt && !ctrl && !shift {
+		OpenGrabber()
+		return true
 	}
 
 	//height := int64(vv.Y2 - vv.Y1 + 1)

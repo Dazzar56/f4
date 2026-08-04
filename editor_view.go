@@ -725,6 +725,17 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	}
 	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
+
+	// Alt+Ins — global screen grabber (far/far2l parity). Handled here
+	// so it works even when the editor is the top frame.
+	if e.Type == vtinput.KeyEventType && e.KeyDown && e.VirtualKeyCode == vtinput.VK_INSERT && alt {
+		ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
+		shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
+		if !ctrl && !shift {
+			OpenGrabber()
+			return true
+		}
+	}
 	// 1. Processing Bracketed Paste (events arrive outside KeyDown)
 	if e.Type == vtinput.PasteEventType {
 		if e.PasteStart {

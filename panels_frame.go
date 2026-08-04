@@ -1011,6 +1011,14 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
 
+	// Alt+Ins opens the screen grabber — matches far/far2l's
+	// non-remappable global hotkey. Intercepted before the AltScreen
+	// raw-forwarding branch so the grabber still opens over mc/htop.
+	if e.KeyDown && e.VirtualKeyCode == vtinput.VK_INSERT && alt && !ctrl && !shift {
+		OpenGrabber()
+		return true
+	}
+
 	// Raw input mode check at the very top. If an interactive AltScreen app is active (e.g. mc, htop),
 	// we forward ALL keys to PTY, except workspace switcher keys (Ctrl+Tab in standard mode, Ctrl+Shift+Tab in advanced).
 	if !pf.showPanels && pf.termView.UseAltScreen {
