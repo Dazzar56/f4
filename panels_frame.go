@@ -2955,6 +2955,14 @@ func (pf *PanelsFrame) Clone() *PanelsFrame {
 			for k, v := range fsp.selectedItems {
 				cloneFsp.selectedItems[k] = v
 			}
+			// Copying selectedItems without copying the path they
+			// belong to would trip readDirectoryEx's "path changed
+			// → drop selection" guard: the clone's fsp was
+			// constructed against CWD, so its lastLoadedPath is
+			// CWD, and the SetPath above moves it elsewhere. Bring
+			// the tag over so the clone's next load recognises
+			// the map as belonging to the current directory.
+			cloneFsp.lastLoadedPath = fsp.lastLoadedPath
 
 			// Copy entries immediately so the visual state is valid before async reload
 			cloneFsp.entries = make([]*fileEntry, len(fsp.entries))

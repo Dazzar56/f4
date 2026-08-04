@@ -250,6 +250,11 @@ type FileSystemPanel struct {
 
 	isCheckingRefresh bool
 	currentTitle      string
+
+	// lastLoadedPath is the path readDirectoryEx last saw; used to
+	// detect a directory switch so selectedItems can be dropped
+	// (selection is per-directory, matches far/far2l).
+	lastLoadedPath string
 }
 
 func NewFileSystemPanel(x, y, w, h int, vfs vfs.VFS) *FileSystemPanel {
@@ -556,6 +561,19 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 
 	// 1. Устанавливаем флаг, но НЕ обновляем UI немедленно, чтобы избежать мерцания
 	path := fp.vfs.GetPath()
+
+	// Drop persistent selection when we've navigated to a different
+	// directory. Without this the map (keyed by bare filename)
+	// silently re-applies to any incoming entry with a matching
+	// name — e.g. .claude selected in ~/f4 would come back
+	// pre-selected in ~/scc or ~. Same rule far/far2l use:
+	// selection is per-directory.
+	if fp.lastLoadedPath != "" && fp.lastLoadedPath != path {
+		for k := range fp.selectedItems {
+			delete(fp.selectedItems, k)
+		}
+	}
+	fp.lastLoadedPath = path
 
 	if fp.pendingSelection == "" {
 		oldName := fp.getRawSelectedName()

@@ -652,6 +652,62 @@ func TestFileSystemPanel_ShiftRangeSkipsParentDir(t *testing.T) {
 	}
 }
 
+// TestFileSystemPanel_SelectionClearedOnDirChange guards against
+// the map[filename]→selected persisting between directories: a
+// row with the same name in a sibling dir used to inherit the
+// old selection. readDirectoryEx now drops the map when the path
+// changes.
+func TestFileSystemPanel_SelectionClearedOnDirChange(t *testing.T) {
+	// Two sibling directories, each with a file named "same".
+	parent := t.TempDir()
+	a := filepath.Join(parent, "a")
+	b := filepath.Join(parent, "b")
+	os.MkdirAll(a, 0755)
+	os.MkdirAll(b, 0755)
+	os.WriteFile(filepath.Join(a, "same"), []byte("a"), 0644)
+	os.WriteFile(filepath.Join(b, "same"), []byte("b"), 0644)
+
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(a))
+	fp.viewMode = ViewModeDetailed
+	// Simulate a completed load of directory `a` with "same" selected.
+	fp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
+		{VFSItem: vfs.VFSItem{Name: "same"}},
+	}
+	fp.selectedItems = map[string]bool{"same": true}
+	fp.entries[1].Selected = true
+	fp.lastLoadedPath = a
+
+	// Now navigate to sibling `b`. readDirectoryEx should notice
+	// the path changed and drop the persistent selection so the
+	// "same" file in `b` starts unselected.
+	fp.vfs.SetPath(b)
+	fp.ReadDirectory()
+
+	// Drain any async loader tasks the ReadDirectory scheduled.
+	timeout := time.After(500 * time.Millisecond)
+drain:
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			break drain
+		}
+	}
+
+	for _, e := range fp.entries {
+		if e.Name == "same" && e.Selected {
+			t.Error(`"same" in sibling directory should NOT inherit selection from previous dir`)
+		}
+	}
+	if fp.selectedItems["same"] {
+		t.Error("selectedItems should have been cleared on directory change")
+	}
+}
+
 func TestFileSystemPanel_ProcessMouse(t *testing.T) {
 	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS("."))
 	fp.SetViewMode(ViewModeDetailed)
