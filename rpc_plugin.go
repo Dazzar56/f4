@@ -114,12 +114,26 @@ type MenuReq struct {
 
 // RPCPlugin manages the lifecycle of an external process plugin.
 type RPCPlugin struct {
-	path    string
-	dir     string
-	cmd     *exec.Cmd
-	sess    *f4rpc.Session
-	api     vfs.HostAPI
-	closing bool
+	path     string
+	dir      string
+	cmd      *exec.Cmd
+	sess     *f4rpc.Session
+	api      vfs.HostAPI
+	closing  bool
+	identity PluginIdentity
+}
+
+// SetPermissionIdentity passes on who the manifest says this plugin is.
+func (p *RPCPlugin) SetPermissionIdentity(identity PluginIdentity) {
+	p.identity = identity
+}
+
+// permissionIdentity falls back to the path for a plugin registered by hand.
+func (p *RPCPlugin) permissionIdentity() PluginIdentity {
+	if p.identity.Key == "" {
+		return PermissionIdentityForPath(p.path)
+	}
+	return p.identity
 }
 
 func NewRPCPlugin(path string) *RPCPlugin {
@@ -137,6 +151,12 @@ func (p *RPCPlugin) GetName() string {
 
 func (p *RPCPlugin) Init(api vfs.HostAPI) error {
 	p.api = api
+
+	gate := newPluginGate(p.permissionIdentity())
+	if err := gate.Allow(PermissionNative, "run as an external process"); err != nil {
+		return err
+	}
+
 	parts := strings.Fields(p.path)
 	if len(parts) == 0 {
 		return fmt.Errorf("empty entrypoint")
