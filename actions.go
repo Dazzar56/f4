@@ -50,22 +50,36 @@ func actionFoldersHistory(pf *PanelsFrame) {
 	}
 
 	menu := vtui.NewVMenu(Msg("History.FoldersTitle"))
-	for _, p := range h {
-		menu.AddItem(vtui.MenuItem{Text: p})
+	search := newHistorySearch(menu, h, Msg("History.SearchModeHint"))
+	if activePanel := pf.getActivePanel(); activePanel != nil {
+		currentPath := activePanel.vfs.GetPath()
+		for historyPos, path := range h {
+			if sameFolderHistoryPath(path, currentPath) {
+				search.selectOriginalIndex(historyPos)
+				break
+			}
+		}
 	}
 
 	// Setup shortcuts
 	menu.OnKeyDown = func(e *vtinput.InputEvent) bool {
 		shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
 		ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
-
-		idx := menu.SelectPos
-		if idx < 0 || idx >= len(menu.Items) {
+		if search.processKey(e) {
+			return true
+		}
+		if e.VirtualKeyCode == vtinput.VK_ESCAPE || e.VirtualKeyCode == vtinput.VK_F10 {
+			search.cleanup()
 			return false
 		}
-		path := menu.Items[idx].Text
+
+		historyPos, path, ok := search.selected()
+		if !ok {
+			return false
+		}
 
 		if e.VirtualKeyCode == vtinput.VK_RETURN {
+			search.cleanup()
 			if ctrl {
 				// Insert into command line
 				pf.cmdLine.InsertString(path)
@@ -78,49 +92,27 @@ func actionFoldersHistory(pf *PanelsFrame) {
 				targetPanel = pf.getInactivePanel()
 			}
 			if targetPanel != nil {
-				pf.NavigateToPath(targetPanel, path)
+				// The menu is displayed oldest -> newest. If the selected path
+				// disappeared, continue downwards to the next (newer) entry.
+				pf.navigateAvailableFolderHistory(targetPanel, h, historyPos, -1)
 			}
-			// Update MRU order
-			AddFolderHistory(path)
 			return true
 		}
 
 		if (e.VirtualKeyCode == vtinput.VK_DELETE || e.VirtualKeyCode == vtinput.VK_BACK) && shift {
 			// Delete item
-			h = append(h[:idx], h[idx+1:]...)
+			search.deleteSelected()
+			h = append([]string(nil), search.all...)
 			vtui.GlobalHistoryProvider.SaveHistory("folders", h)
-			menu.Items = append(menu.Items[:idx], menu.Items[idx+1:]...)
-			menu.ItemCount = len(menu.Items)
-			if menu.ItemCount == 0 {
+			if len(search.all) == 0 {
+				search.cleanup()
 				menu.Close()
-			} else {
-				if menu.SelectPos >= menu.ItemCount {
-					menu.SetSelectPos(menu.ItemCount - 1)
-				}
-				vtui.FrameManager.Redraw()
 			}
 			return true
 		}
 		return false
 	}
 
-	// Sizing and positioning
-	scrW := vtui.FrameManager.GetScreenSize()
-	scrH := vtui.FrameManager.GetScreenHeight()
-	width := scrW - 6
-	if width > 120 {
-		width = 120
-	}
-	height := len(h) + 2
-	maxH := scrH - 4
-	if maxH < 6 {
-		maxH = 6
-	}
-	if height > maxH {
-		height = maxH
-	}
-
-	menu.SetPosition((scrW-width)/2, (scrH-height)/2, (scrW-width)/2+width-1, (scrH-height)/2+height-1)
 	vtui.FrameManager.Push(menu)
 }
 
@@ -132,21 +124,26 @@ func actionCommandHistory(pf *PanelsFrame) {
 	}
 
 	menu := vtui.NewVMenu(Msg("History.CommandsTitle"))
-	for _, p := range h {
-		menu.AddItem(vtui.MenuItem{Text: p})
-	}
+	search := newHistorySearch(menu, h, Msg("History.SearchModeHint"))
 
 	// Setup shortcuts
 	menu.OnKeyDown = func(e *vtinput.InputEvent) bool {
 		shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
-
-		idx := menu.SelectPos
-		if idx < 0 || idx >= len(menu.Items) {
+		if search.processKey(e) {
+			return true
+		}
+		if e.VirtualKeyCode == vtinput.VK_ESCAPE || e.VirtualKeyCode == vtinput.VK_F10 {
+			search.cleanup()
 			return false
 		}
-		cmd := menu.Items[idx].Text
+
+		_, cmd, ok := search.selected()
+		if !ok {
+			return false
+		}
 
 		if e.VirtualKeyCode == vtinput.VK_RETURN {
+			search.cleanup()
 			menu.Close()
 			pf.cmdLine.Edit.SetText(cmd)
 			pf.cmdLine.Edit.HistoryPos = -1
@@ -155,43 +152,21 @@ func actionCommandHistory(pf *PanelsFrame) {
 
 		if (e.VirtualKeyCode == vtinput.VK_DELETE || e.VirtualKeyCode == vtinput.VK_BACK) && shift {
 			// Delete item
-			h = append(h[:idx], h[idx+1:]...)
+			search.deleteSelected()
+			h = append([]string(nil), search.all...)
 			pf.cmdLine.Edit.History = h
 			if vtui.GlobalHistoryProvider != nil {
 				vtui.GlobalHistoryProvider.SaveHistory("cmdline", h)
 			}
-			menu.Items = append(menu.Items[:idx], menu.Items[idx+1:]...)
-			menu.ItemCount = len(menu.Items)
-			if menu.ItemCount == 0 {
+			if len(search.all) == 0 {
+				search.cleanup()
 				menu.Close()
-			} else {
-				if menu.SelectPos >= menu.ItemCount {
-					menu.SetSelectPos(menu.ItemCount - 1)
-				}
-				vtui.FrameManager.Redraw()
 			}
 			return true
 		}
 		return false
 	}
 
-	// Sizing and positioning
-	scrW := vtui.FrameManager.GetScreenSize()
-	scrH := vtui.FrameManager.GetScreenHeight()
-	width := scrW - 6
-	if width > 120 {
-		width = 120
-	}
-	height := len(h) + 2
-	maxH := scrH - 4
-	if maxH < 6 {
-		maxH = 6
-	}
-	if height > maxH {
-		height = maxH
-	}
-
-	menu.SetPosition((scrW-width)/2, (scrH-height)/2, (scrW-width)/2+width-1, (scrH-height)/2+height-1)
 	vtui.FrameManager.Push(menu)
 }
 
@@ -1783,7 +1758,7 @@ func actionFindFile(pf *PanelsFrame) {
 	vtui.FrameManager.Push(dlg)
 }
 func actionPanelSettings(pf *PanelsFrame) {
-	const dialogHeight = 33
+	const dialogHeight = 34
 	dlg := vtui.NewCenteredDialog(60, dialogHeight, Msg("PanelSettings.Title"))
 	dlg.ShowClose = true
 
@@ -1835,6 +1810,11 @@ func actionPanelSettings(pf *PanelsFrame) {
 	chkStayFocused.SetDisabled(AppConfig.NavigationMode != NavigationSearchFirst)
 	navigation.OnChange = func(selected int) {
 		chkStayFocused.SetDisabled(PanelNavigationMode(selected) != NavigationSearchFirst)
+	}
+
+	chkFastFindArrowsCancel := vtui.NewCheckbox(0, 0, Msg("PanelSettings.FastFindArrowsCancel"), false)
+	if AppConfig.FastFindArrowsCancel {
+		chkFastFindArrowsCancel.State = 1
 	}
 
 	chkSync := vtui.NewCheckbox(0, 0, Msg("PanelSettings.SyncPanelLoad"), false)
@@ -1894,6 +1874,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 	dlg.AddItem(lblNavigation)
 	dlg.AddItem(navigation)
 	dlg.AddItem(chkStayFocused)
+	dlg.AddItem(chkFastFindArrowsCancel)
 	dlg.AddItem(chkSync)
 	dlg.AddItem(chkAlwaysMenu)
 	dlg.AddItem(chkCPUGPU)
@@ -1916,6 +1897,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 	vbox.Add(lblNavigation, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(navigation, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkStayFocused, vtui.Margins{Left: 2}, vtui.AlignLeft)
+	vbox.Add(chkFastFindArrowsCancel, vtui.Margins{}, vtui.AlignLeft)
 
 	vbox.Add(chkSync, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(chkAlwaysMenu, vtui.Margins{Top: 1}, vtui.AlignLeft)
@@ -1955,6 +1937,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 		AppConfig.CommandLineAutoComplete = chkCmdAc.State == 1
 		AppConfig.NavigationMode = PanelNavigationMode(navigation.Selected)
 		AppConfig.SearchCommandStayFocused = chkStayFocused.State == 1
+		AppConfig.FastFindArrowsCancel = chkFastFindArrowsCancel.State == 1
 		AppConfig.SyncPanelLoad = chkSync.State == 1
 		AppConfig.AlwaysShowMenuBar = chkAlwaysMenu.State == 1
 		AppConfig.InfoPanelCPUGPU = chkCPUGPU.State == 1

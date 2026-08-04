@@ -80,6 +80,7 @@ type F4Config struct {
 	CommandLineAutoComplete  bool
 	NavigationMode           PanelNavigationMode
 	SearchCommandStayFocused bool
+	FastFindArrowsCancel     bool
 	SyncPanelLoad            bool
 	EditorAutoComplete       bool
 	EditorAutoCompleteMask   string
@@ -156,6 +157,7 @@ var AppConfig = F4Config{
 	CommandLineAutoComplete:  true,
 	NavigationMode:           NavigationClassic,
 	SearchCommandStayFocused: false,
+	FastFindArrowsCancel:     false,
 	SyncPanelLoad:            false,
 	EditorAutoComplete:       true,
 	EditorAutoCompleteMask:   "*.go;*.c;*.cpp;*.h;*.hpp;*.py;*.js;*.ts;*.rs;*.java;*.sh;*.txt;*.md;*.html;*.css;*.json",
@@ -264,6 +266,7 @@ func LoadConfig() {
 		AppConfig.NavigationMode = NavigationClassic
 	}
 	AppConfig.SearchCommandStayFocused = ini.GetString("Panel", "SearchCommandStayFocused", "0") == "1"
+	AppConfig.FastFindArrowsCancel = ini.GetString("Panel", "FastFindArrowsCancel", "0") == "1"
 	AppConfig.SyncPanelLoad = ini.GetString("Panel", "SyncPanelLoad", "0") == "1"
 	fmt.Sscanf(ini.GetString("Panel", "DefaultFileOpMode", "0"), "%d", &AppConfig.DefaultFileOpMode)
 	AppConfig.ConfirmCopy = ini.GetString("System", "ConfirmCopy", "1") == "1"
@@ -378,6 +381,7 @@ func SaveConfig() {
 	sb.WriteString(fmt.Sprintf("CommandLineAutoComplete = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.CommandLineAutoComplete]))
 	sb.WriteString(fmt.Sprintf("NavigationMode = %s\n", AppConfig.NavigationMode.String()))
 	sb.WriteString(fmt.Sprintf("SearchCommandStayFocused = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.SearchCommandStayFocused]))
+	sb.WriteString(fmt.Sprintf("FastFindArrowsCancel = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.FastFindArrowsCancel]))
 	// Keep the legacy key synchronized for older f4 versions and shared configs.
 	sb.WriteString(fmt.Sprintf("VimHotkeys = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.NavigationMode == NavigationVim]))
 	sb.WriteString(fmt.Sprintf("SyncPanelLoad = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.SyncPanelLoad]))
