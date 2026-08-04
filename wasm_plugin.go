@@ -136,7 +136,7 @@ func (p *WasmPlugin) Init(api vfs.HostAPI) error {
 	p.sess = f4rpc.NewSession(hostFromGuest, hostToGuest)
 	// A wasm guest cannot load a library itself, which is the point of it.
 	// The FFI it gets is the host's, projected over the same protocol.
-	p.bridge = newPluginFFIBridge(p.permissionIdentity())
+	p.bridge = newGatedFFIBridge(newPluginGate(p.permissionIdentity()))
 
 	if err := startPluginSession(p.sess, api, p.path, p.bridge, func(err error) {
 		if !p.closing {

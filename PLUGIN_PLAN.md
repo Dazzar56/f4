@@ -230,10 +230,13 @@ Next, in order:
   which is otherwise about plugins registered by hand. The list it opens is
   global, so it is the right list in a slightly wrong place until PlugRing
   grows an entry point of its own.
-- `unsafe-stdlib` and `native` are named in the permission vocabulary but not
-  yet enforced: opening Lua's `os` and `io` still needs plumbing through
-  `luaplug.Options`, and gating a subprocess needs a decision about what
-  happens to a plugin refused at launch.
+- `native` is named in the permission vocabulary but not yet enforced: gating
+  a subprocess needs a decision about what happens to a plugin refused at
+  launch.
+- `unsafe-stdlib` is asked for at load rather than at first use, because
+  gopher-lua builds a state's globals when the state is created and there is
+  no later moment at which `os` and `io` could appear. A plugin that did not
+  declare the permission is not asked and simply does without it.
 - `Host.InputBox` and `Host.Menu` block until the UI answers. A plugin that
   calls them from inside a VFS request served on the UI goroutine will
   deadlock. This predates the embedded transports and affects the subprocess

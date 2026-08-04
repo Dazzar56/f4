@@ -9,6 +9,7 @@ import (
 	"github.com/unxed/f4/luaplug"
 	"github.com/unxed/f4/sdk/f4rpc"
 	"github.com/unxed/f4/vfs"
+	"github.com/unxed/vtui"
 	"github.com/vmihailenco/msgpack/v5"
 )
 
@@ -116,12 +117,14 @@ func (p *LuaPlugin) GetName() string {
 }
 
 func (p *LuaPlugin) Init(api vfs.HostAPI) error {
-	p.bridge = newPluginFFIBridge(p.permissionIdentity())
+	gate := newPluginGate(p.permissionIdentity())
+	p.bridge = newGatedFFIBridge(gate)
 
 	runtime, err := luaplug.New(luaplug.Options{
-		Name: filepath.Base(p.path),
-		Host: luaplug.HostFunc(p.callHost),
-		FFI:  p.bridge,
+		Name:              filepath.Base(p.path),
+		Host:              luaplug.HostFunc(p.callHost),
+		FFI:               p.bridge,
+		AllowUnsafeStdlib: p.allowsUnsafeStdlib(gate),
 	})
 	if err != nil {
 		p.bridge.Close()
@@ -151,6 +154,33 @@ func (p *LuaPlugin) Init(api vfs.HostAPI) error {
 		})
 	}
 	return nil
+}
+
+// allowsUnsafeStdlib decides whether this plugin gets Lua's os and io.
+//
+// It is the one permission that cannot be asked for at the moment of use the
+// way FFI is: gopher-lua builds a state's globals when the state is created,
+// so there is no later point at which os and io could appear. Asking at load
+// is the honest version of that constraint. The plugin has not started yet,
+// so a refusal costs it nothing it had already begun.
+//
+// A plugin that never declared the permission is not asked at all. The dialog
+// would be a question about something the author never claimed to need, at a
+// moment when nothing has happened, and the only answer it could give to
+// "why does it want this" is that no reason was given. Such a plugin gets the
+// sandbox, which is what it asked for by saying nothing.
+//
+// A refusal is not fatal. Plugins reach for io on paths they rarely take, and
+// failing the load would turn "not now" into "uninstall".
+func (p *LuaPlugin) allowsUnsafeStdlib(gate *PermissionGate) bool {
+	if _, declared := p.permissionIdentity().Declared[PermissionUnsafeStdlib]; !declared {
+		return false
+	}
+	if err := gate.Allow(PermissionUnsafeStdlib, "load with the os and io libraries available"); err != nil {
+		vtui.DebugLog("PERMISSIONS: %s runs without os and io: %v", p.path, err)
+		return false
+	}
+	return true
 }
 
 // Call implements PluginTransport: a request from f4 into the plugin.

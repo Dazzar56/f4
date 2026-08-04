@@ -425,10 +425,15 @@ func PluginPermissions() *PermissionStore {
 	return pluginPermissionStore
 }
 
-// newPluginFFIBridge builds a plugin's FFI bridge with its permission gate
-// already attached, so that no transport can accidentally hand out an
-// ungated one.
-func newPluginFFIBridge(identity PluginIdentity) *ffibridge.Bridge {
-	gate := NewPermissionGate(identity, PluginPermissions(), uiPermissionPrompt{})
+// newPluginGate builds the one gate a plugin is judged by. One gate per
+// plugin rather than one per permission, so that a refusal in this run is
+// remembered across everything the plugin goes on to try.
+func newPluginGate(identity PluginIdentity) *PermissionGate {
+	return NewPermissionGate(identity, PluginPermissions(), uiPermissionPrompt{})
+}
+
+// newGatedFFIBridge builds a plugin's FFI bridge with its gate already
+// attached, so that no transport can accidentally hand out an ungated one.
+func newGatedFFIBridge(gate *PermissionGate) *ffibridge.Bridge {
 	return ffibridge.New(ffibridge.Options{Allow: gate.FFIHook()})
 }
