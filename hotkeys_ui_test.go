@@ -2,7 +2,23 @@ package main
 
 import (
 	"testing"
+
+	"github.com/unxed/vtui"
 )
+
+func TestDialogTableUsesThemePalette(t *testing.T) {
+	table := vtui.NewTable(0, 0, 20, 5, []vtui.TableColumn{{Title: "Value", Width: 20}})
+	useDialogTableColors(table)
+
+	if table.ColorTextIdx != vtui.ColDialogText ||
+		table.ColorSelectedTextIdx != vtui.ColDialogSelectedButton ||
+		table.ColorItemSelectTextIdx != vtui.ColDialogHighlightText ||
+		table.ColorItemSelectCursorIdx != vtui.ColDialogHighlightSelectedButton ||
+		table.ColorTitleIdx != vtui.ColDialogHighlightText ||
+		table.ColorBoxIdx != vtui.ColDialogBox {
+		t.Fatal("dialog table does not use the dialog theme palette")
+	}
+}
 
 func TestHotkeyRow(t *testing.T) {
 	row := hotkeyRow{

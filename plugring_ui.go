@@ -56,13 +56,13 @@ func (r plugRingRow) GetCellText(col int) string {
 func (r plugRingRow) GetCellAttr(col int, def uint64) uint64 {
 	switch {
 	case r.header != "":
-		return vtui.SetRGBFore(def, 0x729FCF) // Blue
+		return themedForeground(def, vtui.ColDialogHighlightText)
 	case r.note != "":
-		return vtui.SetRGBFore(def, 0x888A85) // Grey
+		return vtui.DimColor(def)
 	case r.status == "Update":
-		return vtui.SetRGBFore(def, 0xFCE94F) // Yellow
+		return themedForeground(def, vtui.ColDialogHighlightText)
 	case r.status == "Installed":
-		return vtui.SetRGBFore(def, 0x8AE234) // Green
+		return themedForeground(def, vtui.ColDialogText)
 	}
 	return def
 }
@@ -121,6 +121,7 @@ func actionPlugRing(pf *PanelsFrame) {
 		{Title: "Author", Width: 10},
 		{Title: "Description", Width: w - 4 - 16 - 8 - 13 - 10 - 5}, // 5 is for borders and scrollbar
 	})
+	useDialogTableColors(table)
 	table.ShowScrollBar = true
 
 	btnInstall := vtui.NewButton(0, 0, "&Install/Update")
