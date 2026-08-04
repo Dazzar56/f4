@@ -77,3 +77,24 @@ func TestHotkeyManager_GetActiveBindings(t *testing.T) {
 		t.Errorf("Expected Editor CtrlS to be File.Save")
 	}
 }
+func TestHotkeyManager_Conditions(t *testing.T) {
+	hm := NewHotkeyManager("")
+	hm.initDefaults()
+
+	// Register a mock condition
+	condValue := true
+	conditionRegistry["testcond"] = func() bool { return condValue }
+
+	hm.Bind("Shell", "F12", "Test.Action:TestCond")
+
+	// Condition is true -> should return action
+	if act := hm.GetAction("Shell", "F12"); act != "Test.Action" {
+		t.Errorf("Expected Test.Action, got %q", act)
+	}
+
+	// Flip condition to false -> should return empty
+	condValue = false
+	if act := hm.GetAction("Shell", "F12"); act != "" {
+		t.Errorf("Expected empty string when condition failed, got %q", act)
+	}
+}

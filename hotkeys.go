@@ -14,6 +14,26 @@ type HotkeyManager struct {
 	iniPath  string
 }
 
+var conditionRegistry = map[string]func() bool{
+	"EmptyCommandLine": func() bool {
+		if pf := findPanelsFrameAnyScreen(); pf != nil {
+			return pf.cmdLine.IsEmpty()
+		}
+		return false
+	},
+	"CommandLineNotEmpty": func() bool {
+		if pf := findPanelsFrameAnyScreen(); pf != nil {
+			return !pf.cmdLine.IsEmpty()
+		}
+		return false
+	},
+}
+
+// RegisterCondition adds a dynamic boolean check accessible by hotkey bindings.
+func RegisterCondition(name string, fn func() bool) {
+	conditionRegistry[strings.ToLower(name)] = fn
+}
+
 var GlobalHotkeysMgr *HotkeyManager
 
 func NewHotkeyManager(iniPath string) *HotkeyManager {
@@ -179,15 +199,36 @@ func (hm *HotkeyManager) Save() {
 
 // GetAction returns the action name mapped to the key in the given area.
 func (hm *HotkeyManager) GetAction(area, key string) string {
+	evalBinding := func(binding string) string {
+		if binding == "" {
+			return ""
+		}
+		parts := strings.SplitN(binding, ":", 2)
+		action := parts[0]
+		if len(parts) == 2 {
+			condName := strings.ToLower(strings.TrimSpace(parts[1]))
+			if condFn, ok := conditionRegistry[condName]; ok {
+				if !condFn() {
+					return "" // Condition failed, act as if unbound
+				}
+			}
+		}
+		return action
+	}
+
 	if binds, ok := hm.Bindings[area]; ok {
-		if action, ok := binds[key]; ok {
-			return action
+		if binding, ok := binds[key]; ok {
+			if action := evalBinding(binding); action != "" {
+				return action
+			}
 		}
 	}
 	if area != "Common" {
 		if binds, ok := hm.Bindings["Common"]; ok {
-			if action, ok := binds[key]; ok {
-				return action
+			if binding, ok := binds[key]; ok {
+				if action := evalBinding(binding); action != "" {
+					return action
+				}
 			}
 		}
 	}
