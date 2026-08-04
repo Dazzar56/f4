@@ -226,6 +226,10 @@ Next, in order:
 
 ## Known issues
 
+- The permission dialog is reachable only from the plugin management dialog,
+  which is otherwise about plugins registered by hand. The list it opens is
+  global, so it is the right list in a slightly wrong place until PlugRing
+  grows an entry point of its own.
 - `unsafe-stdlib` and `native` are named in the permission vocabulary but not
   yet enforced: opening Lua's `os` and `io` still needs plumbing through
   `luaplug.Options`, and gating a subprocess needs a decision about what

@@ -175,6 +175,7 @@ Op.PathSrcDst=Источник -> Назначение
 Plugins.Title= Управление плагинами (RPC)
 Plugins.BtnAdd=&Добавить
 Plugins.BtnRemove=&Удалить
+Plugins.BtnPermissions=&Разрешения
 Plugins.BtnClose=&Закрыть
 
 InfoPanel.Title= Информация

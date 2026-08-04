@@ -175,6 +175,7 @@ Op.PathSrcDst=Source -> Destination
 Plugins.Title= Manage Plugins (RPC)
 Plugins.BtnAdd=&Add
 Plugins.BtnRemove=&Remove
+Plugins.BtnPermissions=&Permissions
 Plugins.BtnClose=&Close
 
 InfoPanel.Title= Information

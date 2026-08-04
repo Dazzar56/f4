@@ -2148,11 +2148,14 @@ func actionManagePlugins(pf *PanelsFrame) {
 
 	btnAdd := vtui.NewButton(0, 0, Msg("Plugins.BtnAdd"))
 	btnDel := vtui.NewButton(0, 0, Msg("Plugins.BtnRemove"))
+	btnPerms := vtui.NewButton(0, 0, Msg("Plugins.BtnPermissions"))
+	btnPerms.OnClick = func() { actionPluginPermissions(PluginPermissions()) }
 	btnClose := vtui.NewButton(0, 0, Msg("Plugins.BtnClose"))
 
 	dlg.AddItem(lb)
 	dlg.AddItem(btnAdd)
 	dlg.AddItem(btnDel)
+	dlg.AddItem(btnPerms)
 	dlg.AddItem(btnClose)
 
 	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, width-4, height-4)
@@ -2163,6 +2166,7 @@ func actionManagePlugins(pf *PanelsFrame) {
 	hbox.Spacing = 2
 	hbox.Add(btnAdd, vtui.Margins{}, vtui.AlignTop)
 	hbox.Add(btnDel, vtui.Margins{}, vtui.AlignTop)
+	hbox.Add(btnPerms, vtui.Margins{}, vtui.AlignTop)
 	hbox.Add(btnClose, vtui.Margins{}, vtui.AlignTop)
 
 	vbox.Add(hbox, vtui.Margins{}, vtui.AlignFill)

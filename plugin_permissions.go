@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 
@@ -190,6 +191,59 @@ func PermissionIdentityForPath(path string) PluginIdentity {
 	return PluginIdentity{Key: path, Title: filepath.Base(path)}
 }
 
+// PermissionGrant is one remembered answer.
+type PermissionGrant struct {
+	Plugin     string
+	Permission string
+	Decision   string
+}
+
+// Grants lists everything the store remembers, ordered by plugin and then by
+// permission. The order matters because Go randomises map iteration, and a
+// list that reshuffles itself between openings is one nobody can revoke from
+// with any confidence.
+func (s *PermissionStore) Grants() []PermissionGrant {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	out := make([]PermissionGrant, 0, len(s.granted))
+	for plugin, permissions := range s.granted {
+		for permission, decision := range permissions {
+			out = append(out, PermissionGrant{Plugin: plugin, Permission: permission, Decision: decision})
+		}
+	}
+	sort.Slice(out, func(a, b int) bool {
+		if out[a].Plugin != out[b].Plugin {
+			return out[a].Plugin < out[b].Plugin
+		}
+		return out[a].Permission < out[b].Permission
+	})
+	return out
+}
+
+// Revoke drops one answer and leaves the plugin's others alone. Forget takes
+// everything and belongs to removing a plugin; this belongs to somebody
+// changing their mind about one thing.
+//
+// It records no refusal. The plugin is asked again the next time it wants
+// this, which is the asymmetry the gate already has: a no that stuck forever
+// would leave a dead plugin and no obvious way to revive it.
+func (s *PermissionStore) Revoke(plugin, permission string) error {
+	s.mu.Lock()
+	delete(s.granted[plugin], permission)
+	if len(s.granted[plugin]) == 0 {
+		delete(s.granted, plugin)
+	}
+	data, err := json.MarshalIndent(s.granted, "", "  ")
+	path := s.path
+	s.mu.Unlock()
+
+	if err != nil || path == "" {
+		return err
+	}
+	return os.WriteFile(path, append(data, '\n'), 0o600)
+}
+
 // PermissionGate decides whether one plugin may do one thing.
 type PermissionGate struct {
 	// plugin is the key grants are stored under and title is what the user
@@ -303,6 +357,27 @@ func PermissionRequestText(req PermissionRequest) string {
 	}
 	text += "Allowing this lets it do anything f4 can do."
 	return text
+}
+
+// PermissionGrantLine is how one grant reads in the list. It spells the
+// permission the way the user was asked about it rather than the way it is
+// stored, because the question they open the dialog with is what they allowed
+// and to whom, not which key holds it.
+func PermissionGrantLine(grant PermissionGrant) string {
+	verdict := "allowed to"
+	if grant.Decision != PermissionAllow {
+		verdict = "not allowed to"
+	}
+	return fmt.Sprintf("%s: %s %s", grant.Plugin, verdict, permissionTitle(grant.Permission))
+}
+
+// PermissionGrantLines is the whole list, in the order Grants returned it.
+func PermissionGrantLines(grants []PermissionGrant) []string {
+	lines := make([]string, 0, len(grants))
+	for _, grant := range grants {
+		lines = append(lines, PermissionGrantLine(grant))
+	}
+	return lines
 }
 
 // uiPermissionPrompt asks through f4's own dialogs.
