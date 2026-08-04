@@ -3568,6 +3568,18 @@ func TestPanelsFrame_CtrlViewModes(t *testing.T) {
 
 	// 1. Изначально устанавливаем режим Medium
 	fsp.SetViewMode(ViewModeMedium)
+	oldHotkeys := GlobalHotkeysMgr
+	GlobalHotkeysMgr = NewHotkeyManager("")
+	defer func() { GlobalHotkeysMgr = oldHotkeys }()
+	macroFilter := &MacroManager{Macros: make(map[string]map[string][]*vtinput.InputEvent)}
+	rightCtrl3 := &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: '3', ControlKeyState: vtinput.RightCtrlPressed}
+	if macroFilter.Filter(rightCtrl3) {
+		t.Fatal("RightCtrl+3 was consumed by the configurable hotkey filter")
+	}
+	pf.ProcessKey(rightCtrl3)
+	if fsp.viewMode != ViewModeMedium {
+		t.Fatalf("RightCtrl+3 changed panel mode to %v", fsp.viewMode)
+	}
 
 	for _, tc := range []struct {
 		key  uint16
