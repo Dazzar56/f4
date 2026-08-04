@@ -198,7 +198,7 @@ type editorState struct {
 
 func (ev *EditorView) Close() {
 	if GlobalFileState != nil && ev.filePath != "" {
-		GlobalFileState.SaveEditorState(ev.filePath, ev.CursorLine, ev.CursorPos, ev.ScrollTopRow, ev.ScrollLeft, ev.WordWrap)
+		GlobalFileState.SaveEditorStateAsync(ev.filePath, ev.CursorLine, ev.CursorPos, ev.ScrollTopRow, ev.ScrollLeft, ev.WordWrap)
 	}
 	if ev.indexCancel != nil {
 		ev.indexCancel()
