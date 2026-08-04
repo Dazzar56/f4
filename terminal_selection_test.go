@@ -372,7 +372,7 @@ func TestPanelsFrame_TerminalMouseSelect_DragHostShapes(t *testing.T) {
 
 func TestPanelsFrame_TerminalMouseSelect_RightClickPastes(t *testing.T) {
 	pf, pty := panelsFrameWithMouseSelect(t)
-	pf.clipboardReader = func() string { return "pasted" }
+	pf.termView.clipboardReader = func() string { return "pasted" }
 
 	pf.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: true,
@@ -387,7 +387,7 @@ func TestPanelsFrame_TerminalMouseSelect_RightClickPastes(t *testing.T) {
 func TestPanelsFrame_TerminalMouseSelect_RightClickPasteBracketed(t *testing.T) {
 	pf, pty := panelsFrameWithMouseSelect(t)
 	pf.termView.BracketedPasteMode = true
-	pf.clipboardReader = func() string { return "pasted" }
+	pf.termView.clipboardReader = func() string { return "pasted" }
 
 	pf.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: true,
