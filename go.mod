@@ -20,7 +20,7 @@ require (
 	github.com/unxed/vtinput v0.1.2
 	github.com/unxed/vtui v0.1.102
 	github.com/unxed/zip v0.1.127
-	github.com/unxed/zipper v0.1.143
+	github.com/unxed/zipper v0.1.144
 	github.com/vmihailenco/msgpack/v5 v5.4.1
 	github.com/yuin/gopher-lua v1.1.1
 	golang.org/x/crypto v0.53.0
