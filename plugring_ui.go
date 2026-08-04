@@ -20,9 +20,21 @@ import (
 type plugRingRow struct {
 	item   PlugRingItem
 	status string
+	// header is set on a category heading, which is a row with no plugin
+	// behind it.
+	header string
+	// note says why this entry cannot be used here, and takes the place of
+	// the description when it does.
+	note string
 }
 
 func (r plugRingRow) GetCellText(col int) string {
+	if r.header != "" {
+		if col == 0 {
+			return r.header
+		}
+		return ""
+	}
 	switch col {
 	case 0:
 		return r.item.Name
@@ -33,18 +45,69 @@ func (r plugRingRow) GetCellText(col int) string {
 	case 3:
 		return r.item.Author
 	case 4:
-		return runewidth.Truncate(r.item.Description, 40, "...")
+		text := r.item.Description
+		if r.note != "" {
+			text = r.note
+		}
+		return runewidth.Truncate(text, 40, "...")
 	}
 	return ""
 }
 
 func (r plugRingRow) GetCellAttr(col int, def uint64) uint64 {
-	if r.status == "Update" {
+	switch {
+	case r.header != "":
+		return vtui.SetRGBFore(def, 0x729FCF) // Blue
+	case r.note != "":
+		return vtui.SetRGBFore(def, 0x888A85) // Grey
+	case r.status == "Update":
 		return vtui.SetRGBFore(def, 0xFCE94F) // Yellow
-	} else if r.status == "Installed" {
+	case r.status == "Installed":
 		return vtui.SetRGBFore(def, 0x8AE234) // Green
 	}
 	return def
+}
+
+// BuildPlugRingRows lays a catalog out as a table: a heading per category,
+// then its plugins.
+//
+// It returns a parallel slice saying which plugin each row belongs to, with a
+// nil where a heading is. The table is indexed by position, so without that
+// slice pressing Enter on the "Archives" heading would install whichever
+// plugin happened to sit at the same index.
+func BuildPlugRingRows(items []PlugRingItem, installed map[string]PlugRingItem) ([]vtui.TableRow, []*PlugRingItem) {
+	order, grouped := GroupPlugRingByCategory(items)
+
+	rows := make([]vtui.TableRow, 0, len(items)+len(order))
+	selectable := make([]*PlugRingItem, 0, len(items)+len(order))
+
+	for _, category := range order {
+		rows = append(rows, plugRingRow{header: PlugRingCategoryTitle(category)})
+		selectable = append(selectable, nil)
+
+		for _, item := range grouped[category] {
+			entry := item
+
+			status := "Not installed"
+			if inst, ok := installed[entry.ID]; ok {
+				if inst.Version != entry.Version {
+					status = "Update"
+				} else {
+					status = "Installed"
+				}
+			}
+
+			note := ""
+			if ok, reason := PlugRingItemRunsHere(entry); !ok {
+				status = "Unavailable"
+				note = reason
+			}
+
+			rows = append(rows, plugRingRow{item: entry, status: status, note: note})
+			selectable = append(selectable, &entry)
+		}
+	}
+	return rows, selectable
 }
 
 func actionPlugRing(pf *PanelsFrame) {
@@ -88,6 +151,9 @@ func actionPlugRing(pf *PanelsFrame) {
 	btnClose.OnClick = func() { dlg.Close() }
 
 	var items []PlugRingItem
+	// shown[i] is the plugin on row i, or nil when row i is a category
+	// heading.
+	var shown []*PlugRingItem
 
 	refresh := func() {
 		table.SetRows(nil)
@@ -101,19 +167,8 @@ func actionPlugRing(pf *PanelsFrame) {
 					return
 				}
 				items = fetched
-				installed := GetInstalledPlugRingItems()
-				rows := make([]vtui.TableRow, len(items))
-				for i, itm := range items {
-					status := "Not installed"
-					if inst, ok := installed[itm.ID]; ok {
-						if inst.Version != itm.Version {
-							status = "Update"
-						} else {
-							status = "Installed"
-						}
-					}
-					rows[i] = plugRingRow{item: itm, status: status}
-				}
+				var rows []vtui.TableRow
+				rows, shown = BuildPlugRingRows(items, GetInstalledPlugRingItems())
 				table.SetRows(rows)
 				vtui.FrameManager.Redraw()
 			})
@@ -122,16 +177,23 @@ func actionPlugRing(pf *PanelsFrame) {
 
 	btnRefresh.OnClick = refresh
 
-	btnInstall.OnClick = func() {
+	// selected is nil on a category heading, which is not a plugin.
+	selected := func() *PlugRingItem {
 		idx := table.SelectPos
-		if idx >= 0 && idx < len(items) {
-			actionInstallPlugRingItem(pf, dlg, items[idx], refresh)
+		if idx >= 0 && idx < len(shown) {
+			return shown[idx]
+		}
+		return nil
+	}
+
+	btnInstall.OnClick = func() {
+		if item := selected(); item != nil {
+			actionInstallPlugRingItem(pf, dlg, *item, refresh)
 		}
 	}
 	btnRemove.OnClick = func() {
-		idx := table.SelectPos
-		if idx >= 0 && idx < len(items) {
-			actionRemovePlugRingItem(pf, dlg, items[idx], refresh)
+		if item := selected(); item != nil {
+			actionRemovePlugRingItem(pf, dlg, *item, refresh)
 		}
 	}
 

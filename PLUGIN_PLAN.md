@@ -118,7 +118,9 @@ portable text and call the target system's own libraries instead of carrying
 its own build of them. What is left over is small enough to be worth the
 trade.
 
-`plugring_meta.go` holds the vocabulary: categories following
+The catalog dialog groups by category and greys out what this build cannot
+run, so the constraint is visible before the install rather than discovered
+after it. `plugring_meta.go` holds the vocabulary: categories following
 plugring.farmanager.com so that somebody arriving from there recognises the
 shelves, and a `runtimes` field so a plugin can say which interpreter it needs.
 That last one exists because a plugin using LuaJIT's `cdef` genuinely has

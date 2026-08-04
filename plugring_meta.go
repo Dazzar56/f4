@@ -242,6 +242,28 @@ func NormalizePlugRingCatalog(items []PlugRingItem) []PlugRingItem {
 	return out
 }
 
+// plugRingCategoryTitles are the headings a user sees. The stored value stays
+// lowercase and machine friendly; this is only for the screen.
+var plugRingCategoryTitles = map[string]string{
+	PlugRingCategoryArchive:    "Archives",
+	PlugRingCategoryEditor:     "Editor",
+	PlugRingCategoryFilesystem: "File systems",
+	PlugRingCategoryNetwork:    "Network",
+	PlugRingCategoryPanel:      "Panels",
+	PlugRingCategoryService:    "Services",
+	PlugRingCategoryTools:      "Tools",
+	PlugRingCategoryViewer:     "Viewer",
+	PlugRingCategoryOther:      "Other",
+}
+
+// PlugRingCategoryTitle is the heading for a category.
+func PlugRingCategoryTitle(category string) string {
+	if title, ok := plugRingCategoryTitles[NormalizePlugRingCategory(category)]; ok {
+		return title
+	}
+	return plugRingCategoryTitles[PlugRingCategoryOther]
+}
+
 // GroupPlugRingByCategory arranges a catalog for display, keeping the category
 // order and sorting the entries inside each one by name.
 func GroupPlugRingByCategory(items []PlugRingItem) ([]string, map[string][]PlugRingItem) {
