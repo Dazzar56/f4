@@ -1239,7 +1239,7 @@ func TestFileSystemPanel_ScrollBarHiddenWhenGridFits(t *testing.T) {
 	}
 }
 
-func TestFileSystemPanel_ScrollBarDisabledByDefault(t *testing.T) {
+func TestFileSystemPanel_ScrollBarDisabled(t *testing.T) {
 	oldCfg := AppConfig
 	defer func() { AppConfig = oldCfg }()
 	AppConfig.PanelScrollbarMode = PanelScrollbarOff

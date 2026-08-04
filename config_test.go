@@ -86,7 +86,7 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	}
 }
 
-func TestConfig_PanelScrollbarsDisabledByDefault(t *testing.T) {
+func TestConfig_MinimalPanelScrollbarsByDefault(t *testing.T) {
 	tmpDir := t.TempDir()
 	userIniPath := filepath.Join(tmpDir, "settings.ini")
 	if err := os.WriteFile(userIniPath, []byte("[Panel]\n"), 0644); err != nil {
@@ -106,8 +106,8 @@ func TestConfig_PanelScrollbarsDisabledByDefault(t *testing.T) {
 
 	AppConfig.PanelScrollbarMode = PanelScrollbarFull
 	LoadConfig()
-	if AppConfig.PanelScrollbarMode != PanelScrollbarOff {
-		t.Fatal("panel scrollbars must be disabled when the setting is absent")
+	if AppConfig.PanelScrollbarMode != PanelScrollbarMinimal {
+		t.Fatal("panel scrollbars must use minimal mode when the setting is absent")
 	}
 }
 
@@ -132,6 +132,30 @@ func TestConfig_PanelScrollbarBooleanMigration(t *testing.T) {
 	LoadConfig()
 	if AppConfig.PanelScrollbarMode != PanelScrollbarFull {
 		t.Fatalf("boolean scrollbar setting migrated to %v, want full", AppConfig.PanelScrollbarMode)
+	}
+}
+
+func TestConfig_DisabledPanelScrollbarBooleanMigration(t *testing.T) {
+	tmpDir := t.TempDir()
+	userIniPath := filepath.Join(tmpDir, "settings.ini")
+	if err := os.WriteFile(userIniPath, []byte("[Panel]\nShowPanelScrollbars = 0\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	origUserPathFunc := getUserConfigIniPath
+	origPathsFunc := getConfigIniPaths
+	oldCfg := AppConfig
+	defer func() {
+		getUserConfigIniPath = origUserPathFunc
+		getConfigIniPaths = origPathsFunc
+		AppConfig = oldCfg
+	}()
+	getUserConfigIniPath = func() string { return userIniPath }
+	getConfigIniPaths = func() []string { return []string{userIniPath} }
+
+	LoadConfig()
+	if AppConfig.PanelScrollbarMode != PanelScrollbarOff {
+		t.Fatalf("disabled boolean scrollbar setting migrated to %v, want off", AppConfig.PanelScrollbarMode)
 	}
 }
 
