@@ -410,8 +410,15 @@ Loop:
 			task()
 
 			if !skipAllClicked && fm.GetTopFrameType() == vtui.TypeDialog && fm.GetTopFrame().GetTitle() == " Error " {
-				clickDialogButton(t, fm.GetTopFrame().(vtui.Container), "Skip All")
-				skipAllClicked = true
+				if dlg, ok := fm.GetTopFrame().(vtui.Container); ok {
+					for _, itm := range dlg.GetChildren() {
+						if b, ok := itm.(*vtui.Button); ok && (strings.Contains(b.GetText(), "Skip All") || strings.Contains(b.GetText(), "S&kip All") || strings.Contains(b.GetText(), "ропустить")) {
+							b.OnClick()
+							skipAllClicked = true
+							break
+						}
+					}
+				}
 			}
 
 			// Ждем финальный диалог со списком ошибок
