@@ -72,8 +72,11 @@ type ImageView struct {
 	overlay   bool
 	fileSize  int64
 	sizeKnown bool
+	gal       *imageGallery
+	selected  map[string]bool
 
-	OnClose func()
+	OnClose  func()
+	OnSelect func(path string, selected bool)
 }
 
 // NewImageView loads and decodes the file. Decoding happens here rather than
@@ -658,6 +661,10 @@ func (iv *ImageView) Show(scr *vtui.ScreenBuf) {
 	x1, y1, x2, y2 := iv.GetPosition()
 	top := y1 + iv.barHeight()
 	scr.FillRect(x1, top, x2, y2, ' ', imageViewBackAttr)
+	if iv.gal != nil {
+		iv.showGallery(scr)
+		return
+	}
 
 	p, ok := iv.placementFor(scr)
 	if !ok {
@@ -681,6 +688,9 @@ func (iv *ImageView) Show(scr *vtui.ScreenBuf) {
 func (iv *ImageView) ProcessKey(e *vtinput.InputEvent) bool {
 	if e == nil || !e.KeyDown {
 		return false
+	}
+	if iv.gal != nil && iv.galleryKey(e) {
+		return true
 	}
 
 	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
@@ -769,6 +779,9 @@ func (iv *ImageView) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	case vtinput.VK_TAB:
 		iv.ToggleActualSize()
+		return true
+	case vtinput.VK_F12:
+		iv.ToggleGallery()
 		return true
 	case vtinput.VK_LEFT:
 		iv.Pan(-1, 0)

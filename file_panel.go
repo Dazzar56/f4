@@ -1460,6 +1460,25 @@ func (fp *FileSystemPanel) getRawSelectedName() string {
 	return fp.entries[idx].Name
 }
 
+// SetSelectedByName picks or unpicks an entry by name and reports whether the
+// panel shows such an entry at all. It is how the picture gallery keeps the
+// panel underneath in step with what the reader has picked; a panel that has
+// walked away to another directory simply answers no.
+func (fp *FileSystemPanel) SetSelectedByName(name string, state bool) bool {
+	for i, e := range fp.entries {
+		if e.Name == name {
+			fp.SetItemSelected(i, state)
+			return true
+		}
+	}
+	return false
+}
+
+// IsNameSelected reports whether an entry has been picked explicitly.
+func (fp *FileSystemPanel) IsNameSelected(name string) bool {
+	return fp.selectedItems[name]
+}
+
 // ImageSiblings lists the pictures of this panel in the order it shows them,
 // together with the position of the one under the cursor, or minus one when
 // the cursor is not on a picture.

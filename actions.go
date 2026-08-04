@@ -666,6 +666,20 @@ func tryOpenImageViewer(pf *PanelsFrame, v vfs.VFS, path string) bool {
 	// the one the reader was looking at.
 	siblings, index := imageSiblingPaths(pf, v, path)
 
+	// The gallery and the panel share one selection, so that the file
+	// operations afterwards act on what the reader picked among the
+	// thumbnails. What the panel had picked already is taken here, on the UI
+	// thread, for the same reason the sibling list is.
+	fsp := pf.getActivePanel()
+	picked := make(map[string]bool)
+	if fsp != nil && v != nil {
+		for _, sibling := range siblings {
+			if fsp.IsNameSelected(v.Base(sibling)) {
+				picked[sibling] = true
+			}
+		}
+	}
+
 	vtui.RunAsync(func(ctx *vtui.TaskContext) {
 		iv, err := NewImageView(ctx.Context, v, path)
 		ctx.RunOnUI(func() {
@@ -675,6 +689,14 @@ func tryOpenImageViewer(pf *PanelsFrame, v vfs.VFS, path string) bool {
 				return
 			}
 			iv.SetSiblings(siblings, index)
+			iv.SetSelection(picked)
+			if fsp != nil && v != nil {
+				iv.OnSelect = func(sibling string, on bool) {
+					if fsp.SetSelectedByName(v.Base(sibling), on) {
+						fsp.Refresh()
+					}
+				}
+			}
 			iv.ResizeConsole(pf.lastW, pf.lastH)
 			vtui.FrameManager.AddScreen(iv)
 		})
