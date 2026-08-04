@@ -93,14 +93,17 @@ f4_paths2() {
  F4DST=$F4PATH
 }
 
-f4_do() {
- F4OUT=$("$@" 2>&1)
- F4RV=$?
- if [ $F4RV -eq 0 ]; then
+f4_end_rv() {
+ if [ "$1" -eq 0 ]; then
   f4_end ok
  else
-  f4_end err "$(f4_flat "$F4OUT")"
+  f4_end err "$(f4_flat "$2")"
  fi
+}
+
+f4_do() {
+ F4OUT=$("$@" 2>&1)
+ f4_end_rv $? "$F4OUT"
 }
 
 f4_safe_target() {
@@ -182,9 +185,32 @@ for f4c in ddbytes dd tailc cat; do
   break
  fi
 done
+# Writing needs the opposite of reading: a consumer that stops after exactly
+# n bytes, because whatever it leaves in the stream is read as the next
+# request. Only GNU dd stops on a byte boundary while still reading full
+# blocks (iflag=fullblock,count_bytes); a plain dd is exact only with bs=1,
+# which costs a syscall per byte, so elsewhere base64 -- consumed by the
+# shell itself with read, and therefore exact by construction -- is the
+# faster of the two even with a third more traffic on the wire.
+f4_try_wmode() {
+ case $1 in
+  ddbytes ) f4_have dd && dd if=/dev/null of=/dev/null bs=1 count=0 iflag=fullblock,count_bytes oflag=seek_bytes 2>/dev/null ;;
+  b64 ) f4_have dd && [ -n "$F4DEC" ] ;;
+  ddbs1 ) f4_have dd ;;
+  * ) false ;;
+ esac
+}
+
+F4WR=
+for f4c in ddbytes b64; do
+ if f4_try_wmode $f4c; then
+  F4WR=$f4c
+  break
+ fi
+done
 
 F4FEATS=
-for f4c in dd base64 readlink du grep sed awk wc head tail stty sha256sum; do
+for f4c in dd base64 readlink du grep sed awk wc head tail stty truncate sha256sum; do
  f4_have $f4c && F4FEATS="$F4FEATS $f4c"
 done
 for f4c in find stat statbsd; do
@@ -197,6 +223,7 @@ f4_try_rmode ddbytes && F4FEATS="$F4FEATS ddbytes"
 [ -n "$F4TTY" ] && F4FEATS="$F4FEATS tty"
 [ -n "$F4MODE" ] && F4FEATS="$F4FEATS mode:$F4MODE"
 [ -n "$F4RD" ] && F4FEATS="$F4FEATS read:$F4RD"
+[ -n "$F4WR" ] && F4FEATS="$F4FEATS write:$F4WR"
 
 f4_list() {
  case $F4MODE in
@@ -362,6 +389,125 @@ f4_cmd_read() {
  f4_end ok
 }
 
+f4_write_raw() {
+ case $F4WR in
+  ddbytes ) dd bs=1048576 iflag=fullblock,count_bytes count="$3" of="$1" oflag=seek_bytes seek="$2" conv=notrunc ;;
+  * ) dd bs=1 count="$3" of="$1" seek="$2" conv=notrunc ;;
+ esac
+}
+
+f4_write_b64() {
+ f4_bs "$2" "$3"
+ printf '%s\n' "$F4B64" | $F4DEC | dd of="$1" bs=$F4BS seek=$(( $2 / F4BS )) conv=notrunc
+}
+
+# Everything the payload was supposed to become, when the request cannot be
+# carried out after all. Reading it anyway is what keeps the next request
+# from being parsed out of the middle of a file.
+f4_drain() {
+ [ "$1" -gt 0 ] || return 0
+ case $F4WR in
+  ddbytes ) dd bs=1048576 iflag=fullblock,count_bytes count="$1" of=/dev/null 2>/dev/null ;;
+  * ) dd bs=1 count="$1" of=/dev/null 2>/dev/null ;;
+ esac
+}
+
+# A "D" line means the payload is off the wire for certain, so the session is
+# still usable even though the request failed. Its absence is what tells the
+# client that a write died halfway and the stream can no longer be trusted.
+f4_write_end() {
+ [ "$1" -eq 0 ] && echo D
+ f4_end_rv "$1" "$2"
+}
+
+f4_write_run() {
+ F4OUT=$("$@" 2>&1)
+ f4_write_end $? "$F4OUT"
+}
+
+# write <offset> <length> raw|b64, the payload following the path line: raw
+# is exactly <length> bytes, b64 is one line of base64 that decodes to them.
+f4_cmd_write() {
+ f4_path
+ F4WERR=
+ F4WDIR=${F4PATH%/*}
+ [ -n "$F4WDIR" ] || F4WDIR=/
+ if ! f4_num "$1" || ! f4_num "$2"; then
+  F4WERR="bad range"
+ elif [ -z "$F4WR" ]; then
+  F4WERR="no way to write files on remote host"
+ elif ! f4_safe_target "$F4PATH"; then
+  F4WERR="unsafe path: must be absolute and free of .. components"
+ elif [ -d "$F4PATH" ]; then
+  F4WERR="is a directory"
+ elif [ -e "$F4PATH" ] && [ ! -w "$F4PATH" ]; then
+  F4WERR="permission denied"
+ elif [ ! -e "$F4PATH" ] && [ ! -w "$F4WDIR" ]; then
+  F4WERR="permission denied"
+ fi
+ case $3 in
+  b64 )
+   IFS= read -r F4B64 || exit
+   if [ -n "$F4WERR" ]; then
+    echo D
+    f4_end err "$F4WERR"
+   else
+    f4_write_run f4_write_b64 "$F4PATH" "$1" "$2"
+   fi
+   ;;
+  raw )
+   if [ -n "$F4WERR" ]; then
+    if [ -z "$F4WR" ]; then
+     f4_end err "$F4WERR"
+    else
+     f4_drain "$2"
+     echo D
+     f4_end err "$F4WERR"
+    fi
+   else
+    f4_write_run f4_write_raw "$F4PATH" "$1" "$2"
+   fi
+   ;;
+  * )
+   f4_end err "bad payload encoding"
+   ;;
+ esac
+}
+
+# trunc <size>: size zero is a plain shell redirection and therefore works
+# everywhere, including on a file that is not there yet; any other size needs
+# the truncate utility, which is what the "truncate" feature stands for.
+f4_cmd_trunc() {
+ f4_path
+ f4_guard "$F4PATH" || return
+ if ! f4_num "$1"; then
+  f4_end err "bad size"
+  return
+ fi
+ if [ -d "$F4PATH" ]; then
+  f4_end err "is a directory"
+  return
+ fi
+ if [ "$1" -eq 0 ]; then
+  F4OUT=$({ : > "$F4PATH"; } 2>&1)
+  f4_end_rv $? "$F4OUT"
+  return
+ fi
+ if f4_have truncate; then
+  f4_do truncate -s "$1" "$F4PATH"
+ else
+  f4_end err "no truncate utility on remote host"
+ fi
+}
+
+f4_cmd_wmode() {
+ if f4_try_wmode "$1"; then
+  F4WR=$1
+  f4_end ok
+ else
+  f4_end err "write mode not available"
+ fi
+}
 f4_cmd_mode() {
  if f4_try_mode "$1"; then
   F4MODE=$1
@@ -447,6 +593,15 @@ while :; do
    ;;
   read )
    f4_cmd_read "$F4A1" "$F4A2"
+   ;;
+  write )
+   f4_cmd_write "$F4A1" "$F4A2" "$F4A3"
+   ;;
+  trunc )
+   f4_cmd_trunc "$F4A1"
+   ;;
+  wmode )
+   f4_cmd_wmode "$F4A1"
    ;;
   mode )
    f4_cmd_mode "$F4A1"

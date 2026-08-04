@@ -249,7 +249,29 @@ func EncodePathLine(p string) string {
 	return p
 }
 
+// ExecPayload runs a command that carries a payload of its own after the
+// path lines. A raw payload is exactly the announced number of bytes with
+// nothing around it; an encoded one is a single base64 line, which the
+// remote helper can consume with the shell alone and which therefore stays
+// exact on hosts whose dd cannot stop on a byte boundary.
+func (s *Session) ExecPayload(ctx context.Context, cmd string, paths, args []string, payload []byte, encoded bool) (*Response, error) {
+	return s.execFull(ctx, false, cmd, args, paths, payload, encoded)
+}
+
+// MarkBroken poisons the session after the caller found out, by means the
+// session itself cannot see, that the two sides disagree about how much of
+// the stream has been consumed.
+func (s *Session) MarkBroken() {
+	s.mu.Lock()
+	s.broken = true
+	s.mu.Unlock()
+}
+
 func (s *Session) exec(ctx context.Context, binary bool, cmd string, args, paths []string) (*Response, error) {
+	return s.execFull(ctx, binary, cmd, args, paths, nil, false)
+}
+
+func (s *Session) execFull(ctx context.Context, binary bool, cmd string, args, paths []string, payload []byte, encoded bool) (*Response, error) {
 	if cmd == "" || strings.ContainsAny(cmd, " \t\r\n") {
 		return nil, fmt.Errorf("fishplus: invalid command %q", cmd)
 	}
@@ -281,9 +303,26 @@ func (s *Session) exec(ctx context.Context, binary bool, cmd string, args, paths
 		req.WriteString(EncodePathLine(p))
 		req.WriteByte('\n')
 	}
+	if encoded {
+		// The line is written even for an empty payload: the helper reads
+		// one line per encoded request and would otherwise wait for a line
+		// that never comes.
+		req.WriteString(base64.StdEncoding.EncodeToString(payload))
+		req.WriteByte('\n')
+	}
 	if _, err := io.WriteString(s.w, req.String()); err != nil {
 		s.broken = true
 		return nil, err
+	}
+	if !encoded && len(payload) > 0 {
+		// The raw payload carries no terminator of its own: the remote
+		// helper reads exactly as many bytes as the request announced, so
+		// a stray newline here would end up at the head of the next
+		// request.
+		if _, err := s.w.Write(payload); err != nil {
+			s.broken = true
+			return nil, err
+		}
 	}
 	return s.readResponse(ctx, id, binary)
 }

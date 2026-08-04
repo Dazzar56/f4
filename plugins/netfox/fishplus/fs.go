@@ -6,6 +6,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -246,10 +247,18 @@ func ParseListing(lines []string) (string, []Entry, error) {
 // Client is the file system view of a FISH+ session.
 type Client struct {
 	sess *Session
+
+	mu        sync.Mutex
+	writeMode string
 }
 
-// NewClient wraps a session that has already completed its handshake.
-func NewClient(sess *Session) *Client { return &Client{sess: sess} }
+// NewClient wraps a session that has already completed its handshake. The
+// write backend is remembered here rather than looked up per request,
+// because wmode can change it at runtime and the client has to encode its
+// payload the way the current backend expects it.
+func NewClient(sess *Session) *Client {
+	return &Client{sess: sess, writeMode: sess.Features().WriteMode()}
+}
 
 // Session exposes the underlying protocol session.
 func (c *Client) Session() *Session { return c.sess }
