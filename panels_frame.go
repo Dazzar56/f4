@@ -158,6 +158,15 @@ type PanelsFrame struct {
 	lastPtyPath string
 	lastPtyVFS  vfs.VFS
 	closed      bool
+
+	// Terminal mouse-selection state. Kept in PanelsFrame because
+	// mouse routing lives here; the highlight and text extraction
+	// live on the TerminalView itself.
+	termSelDragging bool      // LMB is down after a drag-initiating click
+	termSelClickN   int       // 1 / 2 / 3 for triple-click detection
+	termSelClickAt  time.Time // time of the last click
+	termSelClickX   int
+	termSelClickY   int
 }
 
 func (pf *PanelsFrame) Left() Panel  { return pf.panels[0] }
@@ -2200,6 +2209,125 @@ func (pf *PanelsFrame) hitAltPanel(mx, my int) int {
 	return -1
 }
 
+// handleTerminalMouseSelection implements xterm-style text selection
+// over the terminal viewport when panels are hidden and no TUI has
+// grabbed the mouse via a tracking-mode escape. LMB starts / extends
+// a selection, dbl/triple-click selects word / line, Alt+LMB drag
+// switches to a rectangular block, releasing LMB auto-copies to the
+// clipboard, RMB pastes clipboard content into the PTY. Returns true
+// when it consumed the event.
+func (pf *PanelsFrame) handleTerminalMouseSelection(e *vtinput.InputEvent) bool {
+	if e.Type != vtinput.MouseEventType {
+		return false
+	}
+	tv := pf.termView
+	if tv == nil {
+		return false
+	}
+	mx, my := int(e.MouseX), int(e.MouseY)
+
+	// Right button: paste clipboard into the active PTY. Fires on
+	// button-down so the release doesn't paste a second time.
+	if e.ButtonState == vtinput.RightmostButtonPressed && e.KeyDown {
+		if !tv.InTerminalArea(mx, my) {
+			return false
+		}
+		if pty := pf.getActivePTY(); pty != nil {
+			text := vtui.GetClipboard()
+			if text != "" {
+				if tv.BracketedPasteMode {
+					pty.Write([]byte("\x1b[200~" + text + "\x1b[201~"))
+				} else {
+					pty.Write([]byte(text))
+				}
+			}
+		}
+		return true
+	}
+
+	// LMB fresh press — start / promote a selection. Guarded by
+	// KeyDown=true and no-MouseMoved so this fires only on the
+	// initial button-down (all hosts agree on that shape).
+	if e.ButtonState == vtinput.FromLeft1stButtonPressed &&
+		e.KeyDown && (e.MouseEventFlags&vtinput.MouseMoved) == 0 {
+		if !tv.InTerminalArea(mx, my) {
+			return false
+		}
+		alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
+
+		now := time.Now()
+		if pf.termSelClickN > 0 &&
+			now.Sub(pf.termSelClickAt) < 400*time.Millisecond &&
+			pf.termSelClickX == mx && pf.termSelClickY == my {
+			pf.termSelClickN++
+		} else {
+			pf.termSelClickN = 1
+		}
+		pf.termSelClickAt = now
+		pf.termSelClickX, pf.termSelClickY = mx, my
+
+		// A fresh click always drops the previous highlight, so the
+		// world resets before we start whatever this click resolves
+		// into (single/double/triple).
+		tv.ClearSelection()
+		switch pf.termSelClickN {
+		case 1:
+			tv.StartSelection(mx, my, alt)
+			pf.termSelDragging = true
+		case 2:
+			tv.SelectWordAt(mx, my)
+			pf.termSelDragging = false
+		default: // 3 or more
+			tv.SelectLineAt(my)
+			pf.termSelDragging = false
+			pf.termSelClickN = 0
+		}
+		vtui.FrameManager.Redraw()
+		return true
+	}
+
+	// From here on we act only while a drag is in progress; separate
+	// motion-vs-release paths so we work across every backend:
+	//   * Windows console: every mouse event has KeyDown=true; release
+	//     is inferred from ButtonState transitioning to 0.
+	//   * Wayland: motion has KeyDown=false, ButtonState=held; release
+	//     KeyDown=false, ButtonState=0.
+	//   * X11/purex11: motion has KeyDown=false, ButtonState=0; release
+	//     KeyDown=false, ButtonState=held (X11 leaves the button code).
+	//   * tty SGR: motion KeyDown=true (button+motion bit); release
+	//     KeyDown=false, ButtonState=held.
+	if !pf.termSelDragging {
+		return false
+	}
+
+	// Drag — extend selection while the mouse moves with LMB held.
+	if (e.MouseEventFlags & vtinput.MouseMoved) != 0 {
+		tv.ExtendSelection(mx, my)
+		vtui.FrameManager.Redraw()
+		return true
+	}
+
+	// Release — the button is no longer down under any of the four
+	// shapes above.
+	releasedWayland := e.ButtonState == 0
+	releasedElsewhere := !e.KeyDown
+	if releasedWayland || releasedElsewhere {
+		pf.termSelDragging = false
+		if !tv.SelectionIsEmpty() {
+			text := tv.ExtractSelection()
+			if text != "" {
+				// SetClipboard can hang for seconds behind far2l IPC
+				// or xclip/wl-copy — same treatment as the grabber.
+				go vtui.SetClipboard(text)
+			}
+		}
+		vtui.FrameManager.Redraw()
+		return true
+	}
+
+	return false
+}
+
 func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 	// If panels are hidden, route relevant mouse events to PTY immediately
 	if !pf.showPanels {
@@ -2207,6 +2335,12 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 		if active != nil && (pf.termView.MouseTrackingMode != 0 || pf.termView.MouseSGRMode) {
 			seq := TranslateMouseInput(e)
 			active.Write([]byte(seq))
+			return true
+		}
+		// No TUI is grabbing the mouse — treat clicks/drags in the
+		// terminal viewport as text selection with auto-copy on
+		// release (xterm-style, and matches far2l's AdhocQuickEdit).
+		if pf.handleTerminalMouseSelection(e) {
 			return true
 		}
 		// If tracking is off, we still swallow clicks inside AltScreen to prevent hitting hidden panels
