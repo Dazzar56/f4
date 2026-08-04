@@ -1077,12 +1077,16 @@ func (pf *PanelsFrame) VetoActionKey(e *vtinput.InputEvent) bool {
 	if e.Char != 0 {
 		return true
 	}
-	// Fast Find owns plain Esc and Ctrl+Enter; the filter must not turn
-	// them into Panel.Toggle / Panel.InsertFileName.
+	// Fast Find owns plain Esc, plain F2 (search mode toggle) and
+	// Ctrl+Enter; the filter must not turn them into Panel.Toggle,
+	// Panel.UserMenu or Panel.InsertFileName.
 	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
 	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
 	if e.VirtualKeyCode == vtinput.VK_ESCAPE && !ctrl && !alt && !shift {
+		return true
+	}
+	if e.VirtualKeyCode == vtinput.VK_F2 && !ctrl && !alt && !shift {
 		return true
 	}
 	if e.VirtualKeyCode == vtinput.VK_RETURN && ctrl && !alt {
@@ -1159,6 +1163,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		if fsp := pf.getActivePanel(); fsp != nil && fsp.fastFindMode {
 			isFindEnter := e.VirtualKeyCode == vtinput.VK_RETURN && ctrl && !alt
 			isFindModeToggle := e.VirtualKeyCode == vtinput.VK_F2 && !ctrl && !alt && !shift
+			plainEscape := e.VirtualKeyCode == vtinput.VK_ESCAPE && !ctrl && !alt && !shift
 			if plainEscape || isFindEnter || isFindModeToggle {
 				return fsp.ProcessKey(e)
 			}
