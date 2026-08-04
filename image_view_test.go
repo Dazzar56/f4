@@ -286,17 +286,21 @@ func TestImageViewActualSize(t *testing.T) {
 	}
 }
 
-func TestImageViewFullscreenTakesTheTopRow(t *testing.T) {
+func TestImageViewFullscreenTakesTheBarRows(t *testing.T) {
+	restoreBars(t)
 	scr := newImageTestScreen(t)
 	iv := newTestImageView(t, 100, 100)
 
 	iv.ProcessKey(&vtinput.InputEvent{KeyDown: true, Char: 'f'})
+	if !vtui.FrameManager.HideBars {
+		t.Fatal("the key bar is drawn by the manager and has to be told to go away")
+	}
 	p, ok := iv.placementFor(scr)
 	if !ok {
 		t.Fatal("layout failed")
 	}
-	if p.Row != 0 || p.Rows != 24 {
-		t.Errorf("without the title bar the picture starts at row 0: %d, %d rows", p.Row, p.Rows)
+	if p.Row != 0 || p.Rows != 25 {
+		t.Errorf("without the bars the picture starts at row 0 and fills 25: %d, %d rows", p.Row, p.Rows)
 	}
 }
 

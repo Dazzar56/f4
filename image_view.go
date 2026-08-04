@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
 
+	"github.com/mattn/go-runewidth"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
@@ -26,6 +28,11 @@ const (
 )
 
 var imageViewBackAttr = vtui.SetRGBBoth(0, 0xC0C0C0, 0x101010)
+
+// imageOverlayAttr is what the info panel is written with. The background
+// only matters on backends that paint it over the picture; where the terminal
+// honours a negative z index, the picture shows through it.
+var imageOverlayAttr = vtui.SetRGBBoth(0, 0xFFFFFF, 0x202020)
 
 // ImageView shows a single picture full screen.
 type ImageView struct {
@@ -57,6 +64,14 @@ type ImageView struct {
 	rotation     int
 	flipH, flipV bool
 	shown        *vtui.ImageSurface
+
+	// The last console size, kept so that entering or leaving the whole
+	// screen mode can lay the frame out again without waiting for a resize.
+	conW, conH int
+
+	overlay   bool
+	fileSize  int64
+	sizeKnown bool
 
 	OnClose func()
 }
@@ -198,11 +213,15 @@ func (iv *ImageView) open(path string) {
 	iv.zoom = 1
 	iv.panX, iv.panY = 0, 0
 	iv.rotation, iv.flipH, iv.flipV = 0, false, false
+	iv.fileSize, iv.sizeKnown = 0, false
 	iv.shown = nil
 	iv.err = nil
 	iv.loadGen++
 	gen := iv.loadGen
 	iv.prefetch()
+	if iv.overlay {
+		iv.requestFileSize()
+	}
 
 	if res, ok := ImagePipe.Cached(iv.vfs, path); ok {
 		iv.accept(gen, res)
@@ -330,7 +349,16 @@ func (iv *ImageView) SetPosition(x1, y1, x2, y2 int) {
 	}
 }
 
-func (iv *ImageView) ResizeConsole(w, h int) { iv.SetPosition(0, 0, w-1, h-2) }
+// ResizeConsole lays the viewer out over the console. In the whole screen
+// mode the row that normally belongs to the key bar is taken by the picture.
+func (iv *ImageView) ResizeConsole(w, h int) {
+	iv.conW, iv.conH = w, h
+	bottom := h - 2
+	if iv.full {
+		bottom = h - 1
+	}
+	iv.SetPosition(0, 0, w-1, bottom)
+}
 
 // SetZoom applies a new zoom factor, 1 meaning "fit into the window".
 func (iv *ImageView) SetZoom(z float64) {
@@ -432,6 +460,12 @@ func (iv *ImageView) placementFor(scr *vtui.ScreenBuf) (vtui.ImagePlacement, boo
 	}
 
 	p := vtui.ImagePlacement{Surface: img}
+	if iv.overlay {
+		// A negative z index asks the terminal to keep the picture under the
+		// glyphs but still over the cell background, which is what makes the
+		// info panel readable without hiding the picture behind a box.
+		p.ZIndex = -1
+	}
 
 	if dispW <= boxW && dispH <= boxH {
 		iv.panX, iv.panY = 0, 0
@@ -485,6 +519,133 @@ func cellsFor(pixels, cellSize, limit int) int {
 	return n
 }
 
+// SetFullScreen gives the rows of the title and key bars to the picture. The
+// key bar is drawn by the frame manager rather than by the frame, and
+// ScreenObject.Show makes an object visible whether it wants to be or not, so
+// hiding it cannot be done locally and has to be asked for centrally.
+func (iv *ImageView) SetFullScreen(on bool) {
+	if iv.full == on {
+		return
+	}
+	iv.full = on
+	vtui.FrameManager.HideBars = on
+	if iv.conW > 0 && iv.conH > 0 {
+		iv.ResizeConsole(iv.conW, iv.conH)
+	}
+}
+
+// ToggleOverlay shows or hides the panel that describes the picture.
+func (iv *ImageView) ToggleOverlay() {
+	iv.overlay = !iv.overlay
+	if iv.overlay {
+		iv.requestFileSize()
+	}
+}
+
+// requestFileSize asks the file system how big the file is. Stat can be a
+// network round trip on a remote file system, so it happens off the drawing
+// path, once, and only for a reader who has actually opened the overlay.
+func (iv *ImageView) requestFileSize() {
+	if iv.sizeKnown || iv.vfs == nil {
+		return
+	}
+	v, path, gen := iv.vfs, iv.path, iv.loadGen
+	vtui.RunAsync(func(ctx *vtui.TaskContext) {
+		item, err := v.Stat(ctx.Context, path)
+		if err != nil {
+			return
+		}
+		ctx.RunOnUI(func() {
+			if gen == iv.loadGen {
+				iv.fileSize, iv.sizeKnown = item.Size, true
+			}
+		})
+	})
+}
+
+// imageOrientationLabel names a turn and a mirroring, and says nothing at all
+// about a picture that is seen exactly as it was decoded.
+func imageOrientationLabel(rotation int, flipH, flipV bool) string {
+	var parts []string
+	if rotation != 0 {
+		parts = append(parts, fmt.Sprintf("%d°", rotation))
+	}
+	if flipH {
+		parts = append(parts, "mirror H")
+	}
+	if flipV {
+		parts = append(parts, "mirror V")
+	}
+	return strings.Join(parts, ", ")
+}
+
+// overlayLines is what the info panel has to say about the picture.
+func (iv *ImageView) overlayLines() []string {
+	name := filepath.Base(iv.path)
+	if iv.vfs != nil {
+		name = iv.vfs.Base(iv.path)
+	}
+
+	img := iv.display()
+	scale := iv.lastScale
+	if scale <= 0 {
+		scale = iv.zoom
+	}
+
+	size := "unknown size"
+	if iv.sizeKnown {
+		size = formatSize(iv.fileSize)
+	}
+
+	lines := []string{
+		name,
+		fmt.Sprintf("%dx%d", img.Width, img.Height),
+		size,
+		iv.decoder,
+		fmt.Sprintf("%d%%", int(scale*100+0.5)),
+	}
+	if label := imageOrientationLabel(iv.rotation, iv.flipH, iv.flipV); label != "" {
+		lines = append(lines, label)
+	}
+	return lines
+}
+
+// drawOverlay writes the info panel over the left edge of the picture.
+func (iv *ImageView) drawOverlay(scr *vtui.ScreenBuf) {
+	lines := iv.overlayLines()
+	if scr == nil || len(lines) == 0 {
+		return
+	}
+	x1, y1, x2, y2 := iv.GetPosition()
+	top := y1 + iv.barHeight()
+
+	width := 0
+	for _, s := range lines {
+		if w := runewidth.StringWidth(s); w > width {
+			width = w
+		}
+	}
+	width += 2
+	if limit := x2 - x1 + 1; width > limit {
+		width = limit
+	}
+	if width <= 0 {
+		return
+	}
+
+	for i, line := range lines {
+		row := top + i
+		if row > y2 {
+			break
+		}
+		text := runewidth.Truncate(" "+line, width, "…")
+		if w := runewidth.StringWidth(text); w < width {
+			text += strings.Repeat(" ", width-w)
+		}
+		scr.Write(x1, row, vtui.StringToCharInfo(text, imageOverlayAttr))
+	}
+}
+
 func (iv *ImageView) Show(scr *vtui.ScreenBuf) {
 	iv.ScreenObject.Show(scr)
 	if iv.topBar != nil {
@@ -512,6 +673,9 @@ func (iv *ImageView) Show(scr *vtui.ScreenBuf) {
 		return
 	}
 	scr.Graphics().DrawImage(iv.gfxKey, p)
+	if iv.overlay {
+		iv.drawOverlay(scr)
+	}
 }
 
 func (iv *ImageView) ProcessKey(e *vtinput.InputEvent) bool {
@@ -521,8 +685,15 @@ func (iv *ImageView) ProcessKey(e *vtinput.InputEvent) bool {
 
 	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
 	if ctrl {
-		if e.VirtualKeyCode == vtinput.VK_R {
+		switch e.VirtualKeyCode {
+		case vtinput.VK_R:
 			iv.Reload()
+			return true
+		case vtinput.VK_F:
+			iv.SetFullScreen(!iv.full)
+			return true
+		case vtinput.VK_I:
+			iv.ToggleOverlay()
 			return true
 		}
 		return false
@@ -561,7 +732,10 @@ func (iv *ImageView) ProcessKey(e *vtinput.InputEvent) bool {
 		iv.Step(1)
 		return true
 	case 'f', 'F':
-		iv.full = !iv.full
+		iv.SetFullScreen(!iv.full)
+		return true
+	case 'i', 'I':
+		iv.ToggleOverlay()
 		return true
 	case 'a', 'A':
 		iv.Pan(-1, 0)
@@ -621,6 +795,10 @@ func (iv *ImageView) HandleCommand(cmd int, args any) bool {
 }
 
 func (iv *ImageView) Close() {
+	// The whole screen mode is a state of the manager, not of the frame, so
+	// leaving the viewer has to hand the bars back.
+	iv.full = false
+	vtui.FrameManager.HideBars = false
 	iv.BaseFrame.Close()
 	if iv.OnClose != nil {
 		iv.OnClose()
