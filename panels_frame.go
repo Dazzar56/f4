@@ -999,20 +999,22 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 
 	// ESC toggles panels visibility — mirrors the "hide panels"
 	// macro shipped with FAR. Only fires when there's nothing more
-	// contextual for ESC to do:
-	//   * panels visible → command line must be empty (otherwise
-	//     the ESC-clears-cmdline handler below still wins);
-	//   * panels hidden → the terminal must be in a non-interactive
-	//     state (no AltScreen, no busy PTY), so we don't steal ESC
-	//     from a running app (vim, less, htop, …).
-	if AppConfig.EscTogglePanels && e.VirtualKeyCode == vtinput.VK_ESCAPE && !alt && !ctrl && !shift && e.KeyDown {
-		if pf.showPanels && pf.cmdLine.IsEmpty() {
+	// contextual for ESC to do. Both branches require an empty
+	// command line so ESC still clears typed input / resets the
+	// history-navigation position (the ESC-clears-cmdline handler
+	// further down keeps working on a non-empty line):
+	//   * panels visible + empty cmdLine → hide panels;
+	//   * panels hidden + empty cmdLine + quiet terminal (no
+	//     AltScreen, no busy PTY) → show panels back. Busy/AltScreen
+	//     leaves ESC to the running app (vim, less, htop, …).
+	if AppConfig.EscTogglePanels && e.VirtualKeyCode == vtinput.VK_ESCAPE && !alt && !ctrl && !shift && e.KeyDown && pf.cmdLine.IsEmpty() {
+		if pf.showPanels {
 			pf.exitWide()
 			pf.showPanels = false
 			vtui.FrameManager.HardRefresh()
 			return true
 		}
-		if !pf.showPanels && !pf.termView.UseAltScreen && !pf.isPtyBusy() {
+		if !pf.termView.UseAltScreen && !pf.isPtyBusy() {
 			pf.exitWide()
 			pf.showPanels = true
 			if !pf.showLeftPanel && !pf.showRightPanel {
