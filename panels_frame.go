@@ -1627,7 +1627,9 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		}
 	}
 
-	if ctrl && !alt && !shift && e.KeyDown {
+	lctrl := (e.ControlKeyState & vtinput.LeftCtrlPressed) != 0
+	rctrl := (e.ControlKeyState & vtinput.RightCtrlPressed) != 0
+	if lctrl && !rctrl && !alt && !shift && e.KeyDown {
 		switch e.VirtualKeyCode {
 		case '1':
 			pf.setPanelViewMode(pf.activeIdx, ViewModeBrief)
