@@ -248,15 +248,16 @@ type FileSystemPanel struct {
 	dragScrollTimer      *time.Timer
 	dragScrollGeneration uint64
 
-	loadCtx            context.Context
-	cancelLoad         context.CancelFunc
-	isLoading          bool
-	loadingTimer       *time.Timer
-	pendingSelection   string
-	providerEntryName  string // name of entry used to enter a provider VFS (e.g. NetFox connection name)
-	fastFindMode       bool
-	fastFindStr        string
-	showInactiveCursor bool
+	loadCtx                   context.Context
+	cancelLoad                context.CancelFunc
+	isLoading                 bool
+	loadingTimer              *time.Timer
+	pendingSelection          string
+	providerEntryName         string // name of entry used to enter a provider VFS (e.g. NetFox connection name)
+	suppressFolderHistoryPath string // one-shot: history/menu navigation must not reorder MRU
+	fastFindMode              bool
+	fastFindStr               string
+	showInactiveCursor        bool
 
 	sortMode    SortMode
 	sortReverse bool
@@ -1303,6 +1304,8 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 			if fp.loadingTimer != nil {
 				fp.loadingTimer.Stop()
 			}
+			suppressFolderHistory := sameFolderHistoryPath(path, fp.suppressFolderHistoryPath)
+			fp.suppressFolderHistoryPath = ""
 
 			fp.lastDirMTime = dirStat.MTime
 			fp.isLoading = false
@@ -1353,7 +1356,7 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 			if fp.pendingSelection != "" {
 				fp.SelectName(fp.pendingSelection)
 				fp.pendingSelection = ""
-			} else if err == nil && !isFirstChunk {
+			} else if err == nil && !isFirstChunk && !suppressFolderHistory {
 				// Path changed successfully, record in history
 				AddFolderHistory(path)
 			}
@@ -1667,6 +1670,14 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 
 	if fp.fastFindMode {
+		if AppConfig.FastFindArrowsCancel && (e.VirtualKeyCode == vtinput.VK_UP || e.VirtualKeyCode == vtinput.VK_DOWN) {
+			fp.fastFindMode = false
+			fp.fastFindStr = ""
+			vtui.FrameManager.Redraw()
+			// Reprocess the key as ordinary panel navigation now that Fast Find
+			// no longer owns it.
+			return fp.ProcessKey(e)
+		}
 		switch e.VirtualKeyCode {
 		case vtinput.VK_LEFT, vtinput.VK_RIGHT, vtinput.VK_PRIOR, vtinput.VK_NEXT, vtinput.VK_HOME, vtinput.VK_END:
 			fp.fastFindMode = false
@@ -1699,6 +1710,15 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 		}
 		if e.VirtualKeyCode == vtinput.VK_DOWN {
 			fp.doFastFind(1)
+			vtui.FrameManager.Redraw()
+			return true
+		}
+		if e.VirtualKeyCode == vtinput.VK_RETURN && ctrl && !alt {
+			dir := 1
+			if shift {
+				dir = -1
+			}
+			fp.doFastFind(dir)
 			vtui.FrameManager.Redraw()
 			return true
 		}
