@@ -43,10 +43,13 @@ type ImageView struct {
 // NewImageView loads and decodes the file. Decoding happens here rather than
 // lazily so that a failure can still be reported as a normal open error.
 func NewImageView(ctx context.Context, v vfs.VFS, path string) (*ImageView, error) {
-	surf, decoder, err := LoadImage(ctx, v, path)
-	if err != nil {
-		return nil, err
+	// Decoding goes through the pipeline, so that reopening a picture is
+	// instant and its neighbours can be prepared in advance.
+	res := ImagePipe.LoadSync(ctx, v, path)
+	if res.Err != nil {
+		return nil, res.Err
 	}
+	surf, decoder := res.Surface, res.Decoder
 
 	iv := &ImageView{
 		vfs:     v,
