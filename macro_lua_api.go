@@ -22,6 +22,8 @@ func (e *LuaMacroEngine) installAPI(L *lua.LState) {
 	L.SetGlobal("exit", L.NewFunction(luaMacroExit))
 	L.SetGlobal("msgbox", L.NewFunction(e.luaMsgBox))
 
+	L.SetGlobal("Actions", e.newActionsTable(L))
+
 	// Declarations f4 does not implement yet. They are accepted and ignored so
 	// that a script mixing them with Macro{} still contributes its macros
 	// instead of failing to load entirely.
@@ -204,6 +206,18 @@ func (e *LuaMacroEngine) newCmdLineTable(L *lua.LState) *lua.LTable {
 		}
 		return lua.LNil
 	})
+}
+func (e *LuaMacroEngine) newActionsTable(L *lua.LState) *lua.LTable {
+	table := L.NewTable()
+	L.SetFuncs(table, map[string]lua.LGFunction{
+		"Run": func(L *lua.LState) int {
+			name := L.CheckString(1)
+			ok := e.host.RunAction(name)
+			L.Push(lua.LBool(ok))
+			return 1
+		},
+	})
+	return table
 }
 
 func (e *LuaMacroEngine) newFarTable(L *lua.LState) *lua.LTable {

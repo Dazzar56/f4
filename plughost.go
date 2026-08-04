@@ -105,6 +105,11 @@ func newHostMethods(api vfs.HostAPI, back PluginTransport, name string, bridge *
 	methods["Host.GetVersion"] = func(data msgpack.RawMessage) (any, error) {
 		return api.GetVersion(), nil
 	}
+	methods["Host.RunAction"] = func(data msgpack.RawMessage) (any, error) {
+		var req string
+		msgpack.Unmarshal(data, &req)
+		return api.RunAction(req), nil
+	}
 
 	methods["Host.RegisterHighlighter"] = func(data msgpack.RawMessage) (any, error) {
 		api.RegisterHighlighter(&rpcHighlighterProvider{transport: back, name: name})

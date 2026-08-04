@@ -153,6 +153,11 @@ func (f4MacroHost) InjectKeys(keys []*vtinput.InputEvent) {
 func (f4MacroHost) Log(format string, args ...any) {
 	vtui.DebugLog(format, args...)
 }
+func (f4MacroHost) RunAction(name string) bool {
+	return onUI(func() bool {
+		return RunAction(name)
+	})
+}
 
 // LoadLuaMacros starts the Far-compatible macro engine and reads dir, which is
 // the equivalent of Far's Macros/scripts. A missing directory is not an error:

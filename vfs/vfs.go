@@ -39,6 +39,7 @@ type HostAPI interface {
 	RegisterDrive(name string, factory func() VFS)
 	RegisterGlobalHotkey(vk uint16, mods vtinput.ControlKeyState, handler func(app App))
 	RegisterPluginMenuItem(label string, handler func(app App))
+	RunAction(name string) bool
 }
 
 // VFSItem represents a generic file or directory entry.

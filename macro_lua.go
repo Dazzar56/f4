@@ -55,6 +55,7 @@ type MacroHost interface {
 	Message(title, text string)
 	InjectKeys(keys []*vtinput.InputEvent)
 	Log(format string, args ...any)
+	RunAction(name string) bool
 }
 
 // LuaMacro is one Macro{} declaration.
