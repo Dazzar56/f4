@@ -193,6 +193,76 @@ func TestKittyFileMedium(t *testing.T) {
 	}
 }
 
+// kittyFakeShm points the shared memory lookup at a directory the test owns,
+// so that nothing here depends on the machine having /dev/shm.
+func kittyFakeShm(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	saved := kittyShmDir
+	kittyShmDir = dir
+	t.Cleanup(func() { kittyShmDir = saved })
+	return dir
+}
+
+func TestKittyShmPath(t *testing.T) {
+	dir := kittyFakeShm(t)
+
+	got, err := kittyShmPath("/picture")
+	if err != nil || got != filepath.Join(dir, "picture") {
+		t.Fatalf("got %q %v", got, err)
+	}
+	if got, err := kittyShmPath("picture"); err != nil || got != filepath.Join(dir, "picture") {
+		t.Fatalf("a name without the leading slash: got %q %v", got, err)
+	}
+	for _, bad := range []string{"", "   ", "/", ".", "..", "a/b", "..\\windows", "/../etc/passwd"} {
+		if _, err := kittyShmPath(bad); err == nil {
+			t.Errorf("%q must be refused", bad)
+		}
+	}
+
+	kittyShmDir = filepath.Join(dir, "no-such-place")
+	if _, err := kittyShmPath("picture"); err == nil {
+		t.Error("a system without shared memory objects must say so")
+	}
+}
+
+func TestKittySharedMemoryMedium(t *testing.T) {
+	dir := kittyFakeShm(t)
+	path := filepath.Join(dir, "f4-shm-picture")
+	if err := os.WriteFile(path, []byte{4, 5, 6}, 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	e := newKittyEnv(t)
+	e.send("a=t,i=21,f=24,s=1,v=1,t=s", kittyB64([]byte("/f4-shm-picture")))
+
+	img := e.tv.kitty.Image(21)
+	if img == nil {
+		t.Fatalf("the image was not read from shared memory, answer was %q", e.pty.String())
+	}
+	if r, g, b, _ := img.Surface.PixelAt(0, 0); r != 4 || g != 5 || b != 6 {
+		t.Errorf("pixel: got %d %d %d", r, g, b)
+	}
+	// The protocol makes the terminal responsible for the shm_unlink.
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Error("a t=s object must be unlinked once it has been read")
+	}
+}
+
+func TestKittySharedMemoryRefusesAPath(t *testing.T) {
+	kittyFakeShm(t)
+
+	e := newKittyEnv(t)
+	e.send("a=t,i=22,f=24,s=1,v=1,t=s", kittyB64([]byte("../../etc/passwd")))
+
+	if !strings.HasPrefix(e.pty.String(), "\x1b_Gi=22;EBADF:") {
+		t.Errorf("expected an EBADF answer, got %q", e.pty.String())
+	}
+	if e.tv.kitty.Len() != 0 {
+		t.Error("nothing must be stored")
+	}
+}
+
 func TestKittyRejectsSpecialFiles(t *testing.T) {
 	e := newKittyEnv(t)
 	e.send("a=t,i=14,f=24,s=1,v=1,t=f", kittyB64([]byte("/proc/self/mem")))
@@ -238,12 +308,14 @@ func TestKittyPutAndDelete(t *testing.T) {
 	e := newKittyEnv(t)
 	e.send("a=t,i=21,f=32,s=1,v=1", kittyB64([]byte{1, 2, 3, 4}))
 
-	// There is no placement layer yet, so a put is answered but cannot show
-	// anything.
+	// The placement layer turns a put into a picture on the grid.
 	e.pty.Reset()
 	e.send("a=p,i=21,p=5", "")
-	if got, want := e.pty.String(), "\x1b_Gi=21,p=5;ENOTSUP:this terminal cannot display images\x1b\\"; got != want {
+	if got, want := e.pty.String(), "\x1b_Gi=21,p=5;OK\x1b\\"; got != want {
 		t.Errorf("put answer: expected %q, got %q", want, got)
+	}
+	if len(e.tv.images) != 1 || e.tv.images[0].Placement != 5 {
+		t.Errorf("a put must create a placement: %+v", e.tv.images)
 	}
 
 	e.pty.Reset()

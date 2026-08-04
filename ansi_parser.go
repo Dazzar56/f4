@@ -320,14 +320,15 @@ func (p *AnsiParser) handleCSI(cmd byte) {
 		}
 	case 't':
 		if len(args) > 0 && p.pty != nil {
+			cw, ch := p.term.CellSize()
 			if args[0] == 18 {
 				resp := fmt.Sprintf("\x1b[8;%d;%dt", p.term.Height, p.term.Width)
 				p.pty.Write([]byte(resp))
 			} else if args[0] == 14 {
-				resp := fmt.Sprintf("\x1b[4;%d;%dt", p.term.Height*16, p.term.Width*8)
+				resp := fmt.Sprintf("\x1b[4;%d;%dt", p.term.Height*ch, p.term.Width*cw)
 				p.pty.Write([]byte(resp))
 			} else if args[0] == 16 {
-				resp := fmt.Sprintf("\x1b[6;16;8t")
+				resp := fmt.Sprintf("\x1b[6;%d;%dt", ch, cw)
 				p.pty.Write([]byte(resp))
 			}
 		}

@@ -33,6 +33,10 @@ type QuickViewPanel struct {
 	cacheKey     string // full path we last previewed
 	cacheDir     bool   // whether cache is for a directory or file
 	cacheBinary  bool
+	cacheImage   bool // whether cache is an image
+	imageSurf    *vtui.ImageSurface
+	imageLoadGen uint64
+	gfxKey       string
 	cacheLines   []string // raw preview lines (source lines or hex rows)
 	cacheReadErr error
 
@@ -86,6 +90,7 @@ func NewQuickViewPanel(src *FileSystemPanel) *QuickViewPanel {
 	q.frame.ColorBoxIdx = ColPanelBox
 	q.frame.ColorTitleIdx = ColPanelTitle
 	q.frame.ColorBackgroundIdx = ColPanelInfoText
+	q.gfxKey = fmt.Sprintf("f4.quickview:%p", q)
 	q.SetPosition(x1, y1, x2, y2)
 	return q
 }
@@ -483,12 +488,19 @@ func (q *QuickViewPanel) renderFile(item *fileEntry, innerW int, writeLine func(
 		writeLine(" " + Msg("QuickView.ReadError") + ": " + q.cacheReadErr.Error())
 		return
 	}
-	if q.cacheBinary {
+	if q.cacheImage {
+		writeLine(" " + Msg("QuickView.Image"))
+	} else if q.cacheBinary {
 		writeLine(" " + Msg("QuickView.Binary"))
 	} else {
 		writeLine("")
 	}
 	writeLine(" " + strings.Repeat("─", innerW-2))
+
+	if q.cacheImage {
+		q.renderImage(innerW, writeLine, attr, scr)
+		return
+	}
 
 	// Re-flow if wrap flag / innerW changed.
 	if q.displayLines == nil || q.displayWrap != q.wrap || q.displayWidth != innerW {
@@ -526,6 +538,48 @@ func (q *QuickViewPanel) renderFile(item *fileEntry, innerW int, writeLine func(
 		}
 		writeLine(line)
 	}
+}
+func (q *QuickViewPanel) renderImage(innerW int, writeLine func(string), attr uint64, scr *vtui.ScreenBuf) {
+	if q.imageSurf == nil || !q.imageSurf.Valid() {
+		writeLine(" [ Loading image... ]")
+		return
+	}
+	if !scr.SupportsGraphics() {
+		writeLine(" [ Image graphics not supported ]")
+		return
+	}
+
+	x1, y1, x2, y2 := q.GetPosition()
+	top := y1 + 1 + 4 // Below the 4-line header
+	cols := x2 - x1 - 1
+	rows := y2 - top
+
+	if cols <= 0 || rows <= 0 {
+		return
+	}
+
+	cw, ch := scr.Graphics().CellSize()
+	if cw <= 0 || ch <= 0 {
+		cw, ch = imageViewFallbackCellW, imageViewFallbackCellH
+	}
+
+	boxW := cols * cw
+	boxH := rows * ch
+
+	fitW, fitH := vtui.FitInside(q.imageSurf.Width, q.imageSurf.Height, boxW, boxH)
+	if fitW <= 0 || fitH <= 0 {
+		return
+	}
+
+	p := vtui.ImagePlacement{Surface: q.imageSurf}
+	p.Cols, p.Rows = cellsFor(fitW, cw, cols), cellsFor(fitH, ch, rows)
+	p.Col = x1 + 1 + (cols-p.Cols)/2
+	p.Row = top + (rows-p.Rows)/2
+	p.SrcX, p.SrcY = 0, 0
+	p.SrcW, p.SrcH = q.imageSurf.Width, q.imageSurf.Height
+	p.ZIndex = -1 // Keep picture below panel borders if they overlap
+
+	scr.Graphics().DrawImage(q.gfxKey, p)
 }
 
 // buildDisplayLines converts cacheLines into what should actually be
@@ -621,6 +675,8 @@ func (q *QuickViewPanel) refreshCache(path string, item fileEntry) {
 	q.cacheKey = path
 	q.cacheDir = item.IsDir
 	q.cacheBinary = false
+	q.cacheImage = false
+	q.imageSurf = nil
 	q.cacheLines = nil
 	q.cacheReadErr = nil
 
@@ -629,6 +685,32 @@ func (q *QuickViewPanel) refreshCache(path string, item fileEntry) {
 		return
 	}
 	q.cancelScan()
+
+	if IsImageFile(path) {
+		q.cacheImage = true
+		q.imageLoadGen++
+		gen := q.imageLoadGen
+
+		if res, ok := ImagePipe.PreviewSync(context.Background(), q.src.vfs, path); ok {
+			if res.Surface != nil && res.Surface.Valid() {
+				q.imageSurf = res.Surface
+			}
+		}
+
+		ImagePipe.Load(q.src.vfs, path, func(res ImageResult) {
+			vtui.FrameManager.PostTask(func() {
+				if q.imageLoadGen == gen {
+					if res.Err != nil {
+						q.cacheReadErr = res.Err
+					} else if res.Surface != nil && res.Surface.Valid() {
+						q.imageSurf = res.Surface
+					}
+					vtui.FrameManager.Redraw()
+				}
+			})
+		})
+		return
+	}
 
 	// Regular file: read up to previewMax bytes, split into lines or
 	// classify as binary. Small budget (16 KiB) keeps this cheap even

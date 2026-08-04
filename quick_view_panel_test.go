@@ -575,3 +575,114 @@ func TestPanelsFrame_BToggle_WithQuickView(t *testing.T) {
 	// Flip back so the test is idempotent across a full suite.
 	AppConfig.InfoPanelBytes = before
 }
+
+// TestQuickView_ImageFilePreview generates a valid 1x1 QOI image file,
+// loads it in QuickView, and verifies that the image pipeline successfully
+// decodes and registers the image surface.
+func TestQuickView_ImageFilePreview(t *testing.T) {
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+	vtui.SetDefaultPalette()
+
+	tmp := t.TempDir()
+	filePath := filepath.Join(tmp, "image.qoi")
+
+	// Valid 1x1 QOI file bytes:
+	// "qoif" + width(1) + height(1) + channels(4) + colorspace(0) + tagRGBA(0xff) + R(255), G(0), B(0), A(255)
+	qoiBytes := []byte{
+		'q', 'o', 'i', 'f',
+		0, 0, 0, 1,
+		0, 0, 0, 1,
+		4, 0,
+		0xff, 0xff, 0x00, 0x00, 0xff,
+	}
+
+	if err := os.WriteFile(filePath, qoiBytes, 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	fsp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(tmp))
+	fsp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "image.qoi", Size: int64(len(qoiBytes))}},
+	}
+	fsp.cursorIdx = 0
+	fsp.Refresh()
+
+	q := NewQuickViewPanel(fsp)
+	q.SetPosition(0, 0, 39, 24)
+	q.Show(scr) // Triggers refreshCache and ImagePipe.Load
+
+	if !q.cacheImage {
+		t.Error("Expected qoi file to be flagged as image")
+	}
+
+	// Drain tasks to process async image load on UI thread
+	timeout := time.After(2 * time.Second)
+	for q.imageSurf == nil && q.cacheReadErr == nil {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Timeout waiting for image to decode")
+		}
+	}
+
+	if q.cacheReadErr != nil {
+		t.Fatalf("Image decode failed: %v", q.cacheReadErr)
+	}
+
+	if q.imageSurf == nil {
+		t.Fatal("Expected imageSurf to be populated")
+	}
+
+	if q.imageSurf.Width != 1 || q.imageSurf.Height != 1 {
+		t.Errorf("Unexpected image dimensions: %dx%d", q.imageSurf.Width, q.imageSurf.Height)
+	}
+}
+
+// TestQuickView_ImageGraphicsNotSupported verifies that a fallback message
+// is rendered when the output terminal or screen buffer does not support
+// image graphics.
+func TestQuickView_ImageGraphicsNotSupported(t *testing.T) {
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+
+	fsp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(t.TempDir()))
+	fsp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "dummy.png", Size: 100}},
+	}
+	fsp.cursorIdx = 0
+	fsp.Refresh()
+
+	q := NewQuickViewPanel(fsp)
+	q.SetPosition(0, 0, 39, 24)
+
+	// Pre-seed cacheKey to skip async file loading during Test
+	path := fsp.vfs.Join(fsp.vfs.GetPath(), "dummy.png")
+	q.cacheKey = path
+	q.cacheImage = true
+	q.imageSurf = vtui.NewImageSurface(1, 1)
+
+	q.Show(scr)
+
+	foundNotSupported := false
+	for y := q.Y1; y <= q.Y2; y++ {
+		var line []rune
+		for x := q.X1; x <= q.X2; x++ {
+			ci := scr.GetCell(x, y)
+			if ci.Char != 0 {
+				line = append(line, rune(ci.Char))
+			}
+		}
+		if strings.Contains(string(line), "not supported") {
+			foundNotSupported = true
+			break
+		}
+	}
+
+	if !foundNotSupported {
+		t.Error("Expected 'Image graphics not supported' or similar message in the output")
+	}
+}

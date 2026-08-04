@@ -70,6 +70,10 @@ type TerminalView struct {
 	clipboardChunks []byte
 	pty             PtyBackend
 	kitty           *KittyGraphics
+	images          []terminalImage
+	kittyKeySeq     uint64
+	cellW           int
+	cellH           int
 
 	Muted         bool
 	lastCharWasCR bool
@@ -146,6 +150,7 @@ func (tv *TerminalView) CloneStateFrom(other *TerminalView) {
 	tv.KittyFlags = other.KittyFlags
 	tv.KittyFlagsStack = append([]int(nil), other.KittyFlagsStack...)
 	tv.pty = other.pty
+	tv.images = append([]terminalImage(nil), other.images...)
 
 	vtui.DebugLog("TERM_VIEW: CloneStateFrom completed. Cleaning active row for new shell.")
 
@@ -187,6 +192,7 @@ func (tv *TerminalView) ResetBuffer(w, h int) {
 	tv.Lines = makeBuf()
 	tv.AltLines = makeBuf()
 	tv.WrapFlags = make([]bool, h)
+	tv.images = nil
 
 	// Сброс параметров прокрутки и курсора
 	tv.Width, tv.Height = w, h
@@ -511,6 +517,7 @@ func (tv *TerminalView) scrollUp(top, bottom, n int) {
 			tv.WrapFlags[bottom] = false
 		}
 	}
+	tv.kittyScrollPlacements(top, bottom, n)
 }
 func (tv *TerminalView) ScrollDown(top, bottom, n int) {
 	tv.mu.Lock()
@@ -549,6 +556,7 @@ func (tv *TerminalView) scrollDown(top, bottom, n int) {
 			tv.WrapFlags[top] = false
 		}
 	}
+	tv.kittyScrollPlacements(top, bottom, -n)
 }
 
 func (tv *TerminalView) DeleteCharacters(n int, attr uint64) {
@@ -702,6 +710,7 @@ func (tv *TerminalView) EraseDisplay(mode int, attr uint64) {
 		tv.CursorX = 0
 		tv.CursorY = 0
 		tv.lastCharWasCR = true
+		tv.kittyClearPlacements(tv.UseAltScreen)
 		for i := range buf {
 			for j := range buf[i] {
 				buf[i][j] = vtui.CharInfo{Char: ' ', Attributes: attr}
@@ -774,6 +783,11 @@ func (tv *TerminalView) SetAltScreen(enable bool) {
 		tv.CursorX, tv.CursorY = 0, 0
 	} else {
 		tv.CursorX, tv.CursorY = tv.savedX, tv.savedY
+		// The alternate screen is discarded rather than remembered: the
+		// next program to raise it is given an empty one, and the erase on
+		// the way in proves it. Its pictures go with it, or they would keep
+		// their pixels alive for as long as the session lasts.
+		tv.kittyClearPlacements(true)
 	}
 	tv.UseAltScreen = enable
 }
@@ -802,6 +816,17 @@ func (tv *TerminalView) Show(scr *vtui.ScreenBuf) {
 	defer tv.mu.Unlock()
 
 	// Очищаем всю область терминала черным цветом
+	// The placement layer needs the real size of a cell to turn the pixel
+	// geometry of an image into a rectangle of cells, and so does the
+	// program running in the terminal, which learns it from the pty.
+	if cw, ch := scr.Graphics().CellSize(); cw > 0 && ch > 0 && (cw != tv.cellW || ch != tv.cellH) {
+		tv.cellW, tv.cellH = cw, ch
+		tv.syncPtyPixelSize()
+		// A span we chose ourselves was worked out from the old cell, and
+		// on the new one it would stretch the picture.
+		tv.kittyRecomputeSpans()
+	}
+
 	scr.FillRect(tv.X1, tv.Y1, tv.X1+tv.Width-1, tv.Y1+tv.Height-1, ' ', DefaultTermAttr)
 
 	buf := tv.Lines
@@ -820,6 +845,16 @@ func (tv *TerminalView) Show(scr *vtui.ScreenBuf) {
 		}
 		if tv.CursorY > lowestRow {
 			lowestRow = tv.CursorY // Убеждаемся, что курсор также остается видимым
+		}
+		// A picture occupies rows that hold no text of their own, and
+		// gravity must not push it out of the visible area.
+		for i := range tv.images {
+			if tv.images[i].Alt {
+				continue
+			}
+			if bottom := tv.images[i].Row + tv.images[i].Rows - 1; bottom > lowestRow {
+				lowestRow = bottom
+			}
 		}
 		// Visual Gravity: сдвигаем весь активный рендер вниз, если он не достает до дна
 		if lowestRow < tv.Height-1 {
@@ -840,6 +875,8 @@ func (tv *TerminalView) Show(scr *vtui.ScreenBuf) {
 			scr.Write(tv.X1, drawY, line)
 		}
 	}
+
+	tv.kittyDrawPlacements(scr, offset)
 
 	if tv.IsVisible() && tv.IsFocused() {
 		cursorDrawY := tv.Y1 + tv.CursorY + offset
@@ -974,6 +1011,11 @@ func (tv *TerminalView) Resize(w, h int) {
 	tv.ScrollTop = 0
 	tv.ScrollBottom = h - 1
 
+	// The pictures follow the text through the reflow, and then take
+	// whatever room the new size gives them.
+	tv.kittyResizePlacements(yShift-yOffset, h)
+	tv.kittyRecomputeSpans()
+
 	if !tv.UseAltScreen {
 		tv.CursorY = tv.CursorY - yOffset + yShift
 		if tv.CursorY < 0 {
@@ -1029,19 +1071,66 @@ func (tv *TerminalView) HandleFar2lAPC(s string) {
 	}
 }
 
+// CellSize reports the pixel size of one character cell as the host renderer
+// last told us, falling back to the size the terminal advertises when nobody
+// knows better.
+func (tv *TerminalView) CellSize() (int, int) {
+	tv.mu.Lock()
+	defer tv.mu.Unlock()
+	return tv.cellSizeUnsafe()
+}
+
+func (tv *TerminalView) cellSizeUnsafe() (int, int) {
+	cw, ch := tv.cellW, tv.cellH
+	if cw <= 0 {
+		cw = kittyFallbackCellW
+	}
+	if ch <= 0 {
+		ch = kittyFallbackCellH
+	}
+	return cw, ch
+}
+
+// syncPtyPixelSize tells the child how large its terminal is in pixels. The
+// caller holds the lock.
+func (tv *TerminalView) syncPtyPixelSize() {
+	if tv.pty == nil {
+		return
+	}
+	sizer, ok := tv.pty.(PtyPixelSizer)
+	if !ok {
+		return
+	}
+	cw, ch := tv.cellSizeUnsafe()
+	sizer.SetSizePixels(tv.Width, tv.Height, tv.Width*cw, tv.Height*ch)
+}
+
 // kittyGraphics lazily creates the receiver of the kitty graphics protocol:
 // a session that never sends an image never pays for one.
 func (tv *TerminalView) kittyGraphics() *KittyGraphics {
 	tv.mu.Lock()
-	defer tv.mu.Unlock()
-	if tv.kitty == nil {
-		tv.kitty = NewKittyGraphics(func(b []byte) {
-			if tv.pty != nil {
-				tv.pty.Write(b)
-			}
-		})
+	kg := tv.kitty
+	tv.mu.Unlock()
+	if kg != nil {
+		return kg
 	}
-	return tv.kitty
+
+	kg = NewKittyGraphics(func(b []byte) {
+		if tv.pty != nil {
+			tv.pty.Write(b)
+		}
+	})
+	// The placement layer is attached before the receiver becomes reachable,
+	// so the two locks are never taken at the same time.
+	kg.SetDisplay(kittyDisplay{tv})
+
+	tv.mu.Lock()
+	if tv.kitty == nil {
+		tv.kitty = kg
+	}
+	kg = tv.kitty
+	tv.mu.Unlock()
+	return kg
 }
 
 // HandleKittyAPC consumes one graphics escape code, without the leading G.

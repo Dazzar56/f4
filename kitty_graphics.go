@@ -248,10 +248,7 @@ func (kg *KittyGraphics) beginTransfer(cmd kittyCommand) {
 		return
 	}
 	switch cmd.Char('t', 'd') {
-	case 'd', 'f', 't':
-	case 's':
-		kg.reply(cmd, "EBADF:shared memory transfer is not supported")
-		return
+	case 'd', 'f', 't', 's':
 	default:
 		kg.reply(cmd, "EINVAL:unsupported transmission medium")
 		return
@@ -294,8 +291,17 @@ func (kg *KittyGraphics) finishTransfer(x *kittyTransfer) {
 	data := x.data
 
 	if medium := cmd.Char('t', 'd'); medium != 'd' {
+		name := string(data)
+		if medium == 's' {
+			shm, err := kittyShmPath(name)
+			if err != nil {
+				kg.reply(cmd, "EBADF:"+err.Error())
+				return
+			}
+			name = shm
+		}
 		var err error
-		data, err = kittyReadFile(string(data), medium, cmd.Int('O', 0), cmd.Int('S', 0))
+		data, err = kittyReadFile(name, medium, cmd.Int('O', 0), cmd.Int('S', 0))
 		if err != nil {
 			kg.reply(cmd, "EBADF:"+err.Error())
 			return
@@ -572,6 +578,32 @@ func kittyInflate(data []byte) ([]byte, error) {
 	return out, nil
 }
 
+// kittyShmDir is where POSIX shared memory objects appear in the file system
+// on the systems that have them. It is a variable so that the tests need no
+// /dev/shm of their own.
+var kittyShmDir = "/dev/shm"
+
+// kittyShmPath turns the name of a POSIX shared memory object into the path
+// it has on disk. A name is a single component by definition — shm_open(3)
+// allows nothing else — and letting a separator through here would turn t=s
+// into a way of reading any file on the machine, which the checks meant for
+// t=f would then have to catch on their own.
+func kittyShmPath(name string) (string, error) {
+	name = strings.TrimSpace(name)
+	name = strings.TrimPrefix(name, "/")
+	if name == "" || name == "." || name == ".." {
+		return "", fmt.Errorf("the shared memory name is not valid")
+	}
+	if strings.ContainsAny(name, "/\\") {
+		return "", fmt.Errorf("the shared memory name is not valid")
+	}
+	st, err := os.Stat(kittyShmDir)
+	if err != nil || !st.IsDir() {
+		return "", fmt.Errorf("this system has no shared memory objects")
+	}
+	return filepath.Join(kittyShmDir, name), nil
+}
+
 // kittyReadFile loads pixel data that a client left in the file system. Only
 // plain files are read: a client must not be able to make the terminal open a
 // device or a socket. Files sent as t=t are removed afterwards, but only from
@@ -619,7 +651,10 @@ func kittyReadFile(path string, medium byte, offset, size int) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("the file could not be read")
 	}
-	if medium == 't' && kittyIsTempPath(clean) {
+	// A shared memory object belongs to the terminal once it has been read:
+	// the protocol makes us responsible for the shm_unlink. A t=t file is
+	// the client saying we may have that one too.
+	if medium == 's' || (medium == 't' && kittyIsTempPath(clean)) {
 		os.Remove(clean)
 	}
 	return data, nil

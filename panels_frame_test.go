@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -609,6 +610,83 @@ drain:
 	}
 }
 
+// TestPanelsFrame_EscTogglesPanels exercises the FAR-style ESC
+// toggle: hides visible panels when the command line is empty,
+// shows hidden panels back if no interactive terminal app is
+// running. Non-empty command line keeps the existing ESC-clears-
+// cmdLine behaviour.
+func TestPanelsFrame_EscTogglesPanels(t *testing.T) {
+	pf := setupMockPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	old := AppConfig.EscTogglePanels
+	defer func() { AppConfig.EscTogglePanels = old }()
+	AppConfig.EscTogglePanels = true
+
+	sendEsc := func() bool {
+		return pf.ProcessKey(&vtinput.InputEvent{
+			Type: vtinput.KeyEventType, KeyDown: true,
+			VirtualKeyCode: vtinput.VK_ESCAPE,
+		})
+	}
+
+	// Panels visible, cmdLine empty → ESC hides.
+	if !pf.showPanels {
+		t.Fatal("precondition: panels should start visible")
+	}
+	if !sendEsc() {
+		t.Error("ESC on visible panels + empty cmdLine should be handled")
+	}
+	if pf.showPanels {
+		t.Error("ESC should hide panels when cmdLine is empty")
+	}
+
+	// Panels hidden, quiet PTY → ESC brings them back.
+	if !sendEsc() {
+		t.Error("ESC on hidden panels + quiet PTY should be handled")
+	}
+	if !pf.showPanels {
+		t.Error("ESC should show panels back on the second press")
+	}
+
+	// Panels visible with a typed command → ESC falls through to
+	// the clear-cmdLine handler and panels stay put.
+	pf.cmdLine.InsertString("something")
+	if !sendEsc() {
+		t.Error("ESC with a non-empty cmdLine should still be handled (clears it)")
+	}
+	if !pf.showPanels {
+		t.Error("ESC with a typed command must NOT hide the panels — only clear the line")
+	}
+	if !pf.cmdLine.IsEmpty() {
+		t.Error("ESC with a typed command should have cleared the command line")
+	}
+}
+
+// TestPanelsFrame_EscTogglePanels_RespectsOption confirms the
+// shortcut can be turned off — with EscTogglePanels=false, ESC
+// on visible panels + empty cmdLine is a no-op instead of hiding.
+func TestPanelsFrame_EscTogglePanels_RespectsOption(t *testing.T) {
+	pf := setupMockPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	old := AppConfig.EscTogglePanels
+	defer func() { AppConfig.EscTogglePanels = old }()
+	AppConfig.EscTogglePanels = false
+
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_ESCAPE,
+	})
+	if !pf.showPanels {
+		t.Error("with EscTogglePanels=false, ESC must not hide the panels")
+	}
+}
+
 func TestPanelsFrame_KeyHandling(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()
@@ -691,6 +769,15 @@ func TestPanelsFrame_MenuCommands(t *testing.T) {
 		t.Error("Right panel mode not changed to Detailed")
 	}
 
+	for _, menuIndex := range []int{0, 4} {
+		items := pf.menuBar.Items[menuIndex].SubItems
+		for i, shortcut := range []string{"Ctrl+1", "Ctrl+2", "Ctrl+3", "Ctrl+4"} {
+			if items[i].Shortcut != shortcut {
+				t.Errorf("view shortcut %d in menu %d = %q, want %s", i, menuIndex, items[i].Shortcut, shortcut)
+			}
+		}
+	}
+
 	// Sort mode commands
 	pf.HandleCommand(CmLeftSortTime, nil)
 	if pf.panels[0].(*FileSystemPanel).sortMode != SortTime {
@@ -703,11 +790,11 @@ func TestPanelsFrame_MenuCommands(t *testing.T) {
 	}
 
 	// Menu checkmarks
-	menuText := pf.menuBar.Items[0].SubItems[1].Text
+	menuText := pf.menuBar.Items[0].SubItems[2].Text
 	if !strings.HasPrefix(menuText, "√") {
 		t.Errorf("Menu checkmark not updated, got %q", menuText)
 	}
-	sortText := pf.menuBar.Items[0].SubItems[5].Text
+	sortText := pf.menuBar.Items[0].SubItems[7].Text
 	if !strings.HasPrefix(sortText, "√") {
 		t.Errorf("Sort menu checkmark not updated, got %q", sortText)
 	}
@@ -1324,6 +1411,70 @@ func TestPanelsFrame_SwapPanels(t *testing.T) {
 	// 4. Verify state preservation
 	if fspR.viewMode != ViewModeMedium {
 		t.Error("Swapped panel did not preserve its ViewMode")
+	}
+}
+
+// TestPanelsFrame_VisualLeftRightFollowSwap makes sure resolving
+// panels by on-screen X-position keeps Ctrl+[/Ctrl+] pointing at
+// the visually-left and visually-right sides after CmSwapPanels
+// re-slots the underlying panels array.
+func TestPanelsFrame_VisualLeftRightFollowSwap(t *testing.T) {
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	pathL := filepath.Join(t.TempDir(), "left")
+	pathR := filepath.Join(t.TempDir(), "right")
+	os.MkdirAll(pathL, 0755)
+	os.MkdirAll(pathR, 0755)
+
+	fspL := pf.panels[0].(*FileSystemPanel)
+	fspR := pf.panels[1].(*FileSystemPanel)
+	fspL.vfs.SetPath(pathL)
+	fspR.vfs.SetPath(pathR)
+
+	// Baseline: unswapped — visual-left is the panel we set to
+	// pathL, visual-right the one at pathR.
+	if got := pf.visualLeftFSP(); got != fspL {
+		t.Errorf("visualLeftFSP baseline: got %p, want left (%p)", got, fspL)
+	}
+	if got := pf.visualRightFSP(); got != fspR {
+		t.Errorf("visualRightFSP baseline: got %p, want right (%p)", got, fspR)
+	}
+
+	// Swap. panels[0] now points at fspR, but that panel gets
+	// moved to X=0 by ResizeConsole (see TestPanelsFrame_SwapPanels
+	// step 3), so it's the visually-left one now.
+	pf.HandleCommand(CmSwapPanels, nil)
+
+	if got := pf.visualLeftFSP(); got != fspR {
+		t.Errorf("visualLeftFSP after swap: got %p, want fspR (%p)", got, fspR)
+	}
+	if got := pf.visualRightFSP(); got != fspL {
+		t.Errorf("visualRightFSP after swap: got %p, want fspL (%p)", got, fspL)
+	}
+}
+
+func TestPanelsFrame_WideFollowsSwapAndClone(t *testing.T) {
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	left := pf.panels[0]
+	pf.setWidePanel(0)
+
+	pf.HandleCommand(CmSwapPanels, nil)
+	if pf.widePanel != 1 || pf.activeIdx != 1 || pf.panels[1] != left {
+		t.Fatalf("Wide did not follow swapped content: wide=%d active=%d", pf.widePanel, pf.activeIdx)
+	}
+
+	clone := pf.Clone()
+	defer clone.Close()
+	if clone.widePanel != 1 || clone.activeIdx != 1 {
+		t.Fatalf("clone lost Wide state: wide=%d active=%d", clone.widePanel, clone.activeIdx)
+	}
+	x1, _, x2, _ := clone.panels[1].GetPosition()
+	if x1 != 0 || x2 != 79 {
+		t.Fatalf("cloned Wide geometry = %d..%d, want 0..79", x1, x2)
 	}
 }
 func TestPanelsFrame_Clone_SelectionPreservation(t *testing.T) {
@@ -2672,12 +2823,14 @@ func TestPanelsFrame_PromptTruncation(t *testing.T) {
 
 type mockSlowStatVFS struct {
 	vfs.OSVFS
-	statCalls int
+	// Stat is called from background goroutines and read from the test, so
+	// the counter has to be one both may touch.
+	statCalls atomic.Int64
 	statBlock chan struct{}
 }
 
 func (m *mockSlowStatVFS) Stat(ctx context.Context, p string) (vfs.VFSItem, error) {
-	m.statCalls++
+	m.statCalls.Add(1)
 	if m.statBlock != nil {
 		<-m.statBlock
 	}
@@ -2723,16 +2876,20 @@ func TestPanelsFrame_AutoRefresh_Locking(t *testing.T) {
 	if !fsp.isCheckingRefresh {
 		t.Error("Expected isCheckingRefresh to be true while Stat is pending")
 	}
-	if mv.statCalls != 1 {
-		t.Errorf("Expected 1 Stat call, got %d", mv.statCalls)
+	if mv.statCalls.Load() < 1 {
+		t.Error("Expected the auto refresh to have called Stat")
 	}
 
-	// 2. Повторный вызов Show() НЕ должен инициировать второй Stat, пока первый висит
+	// 2. Повторный вызов Show() НЕ должен инициировать второй Stat, пока первый висит.
+	// Считаем от текущего значения: подмена VFS могла оставить позади и
+	// фоновое чтение каталога, которое обращается к тому же Stat, и оно к
+	// защите от повторного запроса отношения не имеет.
+	before := mv.statCalls.Load()
 	pf.lastAutoRefresh = time.Now().Add(-5 * time.Second)
 	pf.Show(vtui.NewSilentScreenBuf())
 
-	if mv.statCalls > 1 {
-		t.Errorf("Anti-spam failed: Stat called %d times simultaneously", mv.statCalls)
+	if after := mv.statCalls.Load(); after != before {
+		t.Errorf("Anti-spam failed: Stat called %d more times while one was pending", after-before)
 	}
 
 	// 3. Разблокируем Stat и проверяем сброс флага
@@ -3396,7 +3553,7 @@ func TestPanelsFrame_CtrlPgDn_EntersDir(t *testing.T) {
 	}
 }
 
-func TestPanelsFrame_Ctrl1AndCtrl2_ViewModes(t *testing.T) {
+func TestPanelsFrame_CtrlViewModes(t *testing.T) {
 	vtui.SetDefaultPalette()
 	scr := vtui.NewSilentScreenBuf()
 	scr.AllocBuf(80, 25)
@@ -3412,28 +3569,40 @@ func TestPanelsFrame_Ctrl1AndCtrl2_ViewModes(t *testing.T) {
 	// 1. Изначально устанавливаем режим Medium
 	fsp.SetViewMode(ViewModeMedium)
 
-	// 2. Отправляем Ctrl+2 -> должен переключить на Detailed
-	pf.ProcessKey(&vtinput.InputEvent{
-		Type:            vtinput.KeyEventType,
-		KeyDown:         true,
-		VirtualKeyCode:  '2',
-		ControlKeyState: vtinput.LeftCtrlPressed,
-	})
-
-	if fsp.viewMode != ViewModeDetailed {
-		t.Errorf("Expected viewMode to be Detailed, got %v", fsp.viewMode)
+	for _, tc := range []struct {
+		key  uint16
+		mode ViewMode
+	}{{'1', ViewModeBrief}, {'2', ViewModeMedium}, {'3', ViewModeDetailed}} {
+		pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: tc.key, ControlKeyState: vtinput.LeftCtrlPressed})
+		if fsp.viewMode != tc.mode || pf.widePanel != -1 {
+			t.Errorf("Ctrl+%c: mode=%v wide=%d, want mode=%v wide=-1", tc.key, fsp.viewMode, pf.widePanel, tc.mode)
+		}
 	}
 
-	// 3. Отправляем Ctrl+1 -> должен переключить обратно на Medium
-	pf.ProcessKey(&vtinput.InputEvent{
-		Type:            vtinput.KeyEventType,
-		KeyDown:         true,
-		VirtualKeyCode:  '1',
-		ControlKeyState: vtinput.LeftCtrlPressed,
-	})
-
-	if fsp.viewMode != ViewModeMedium {
-		t.Errorf("Expected viewMode to be Medium, got %v", fsp.viewMode)
+	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: '4', ControlKeyState: vtinput.LeftCtrlPressed})
+	if pf.widePanel != pf.activeIdx || !fsp.wide || len(fsp.table.Columns) != 3 {
+		t.Fatalf("Ctrl+4 did not enter Wide: wide=%d active=%d columns=%d", pf.widePanel, pf.activeIdx, len(fsp.table.Columns))
+	}
+	x1, _, x2, _ := fsp.GetPosition()
+	if x1 != 0 || x2 != 79 {
+		t.Fatalf("Wide geometry = %d..%d, want 0..79", x1, x2)
+	}
+	originalMode := fsp.viewMode
+	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_TAB})
+	if pf.widePanel != pf.activeIdx || pf.activeIdx != 0 {
+		t.Fatalf("Tab did not transfer Wide to left panel: wide=%d active=%d", pf.widePanel, pf.activeIdx)
+	}
+	if fsp.viewMode != originalMode {
+		t.Error("Wide changed the right panel's normal view mode")
+	}
+	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: '2', ControlKeyState: vtinput.LeftCtrlPressed})
+	if pf.widePanel != -1 || pf.panels[0].(*FileSystemPanel).viewMode != ViewModeMedium {
+		t.Error("Ctrl+2 did not leave Wide and set Medium on the active panel")
+	}
+	_, _, leftX2, _ := pf.panels[0].GetPosition()
+	rightX1, _, _, _ := pf.panels[1].GetPosition()
+	if leftX2+1 != rightX1 {
+		t.Errorf("split geometry was not restored: left x2=%d right x1=%d", leftX2, rightX1)
 	}
 }
 

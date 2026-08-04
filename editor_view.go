@@ -791,6 +791,33 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
 	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
 	//alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
+
+	// Panel-side shortcuts (issue #289): while the editor is on top,
+	// forward the current panel context into the buffer. Same key
+	// assignments as PanelsFrame binds on the command line.
+	if ctrl && !alt && !shift {
+		switch {
+		case e.VirtualKeyCode == vtinput.VK_OEM_4 || e.Char == '[':
+			if s := leftPanelPathForEditor(); s != "" {
+				ev.insertTextAtCursor([]byte(s))
+			}
+			return true
+		case e.VirtualKeyCode == vtinput.VK_OEM_6 || e.Char == ']':
+			if s := rightPanelPathForEditor(); s != "" {
+				ev.insertTextAtCursor([]byte(s))
+			}
+			return true
+		case e.VirtualKeyCode == vtinput.VK_RETURN:
+			if s := activePanelNameForEditor(); s != "" {
+				ev.insertTextAtCursor([]byte(s))
+			}
+			return true
+		case e.VirtualKeyCode == vtinput.VK_DELETE:
+			ev.deleteSpacersForward()
+			return true
+		}
+	}
+
 	// --- Autocomplete Interception ---
 	if ev.acEnabled && len(ev.acMatches) > 0 {
 		if e.VirtualKeyCode == vtinput.VK_TAB {
@@ -2648,6 +2675,141 @@ func (ev *EditorView) getSelectionRange() (int, int) {
 		min, max = max, min
 	}
 	return min, max
+}
+
+// findPanelsFrameAnyScreen locates a PanelsFrame on any of the
+// frame manager's screens. The plain findPanelsFrame() only walks
+// the active screen — that works for macros invoked from panel
+// mode, but fails from a full-screen editor (added via AddScreen,
+// so the editor is the active screen and the panels frame lives
+// on the previous one). Kept editor-local so we don't broaden
+// findPanelsFrame's contract and change the behaviour for macros.
+func findPanelsFrameAnyScreen() *PanelsFrame {
+	if vtui.FrameManager == nil {
+		return nil
+	}
+	for _, s := range vtui.FrameManager.Screens {
+		for _, f := range s.Frames {
+			if pf, ok := f.(*PanelsFrame); ok {
+				return pf
+			}
+		}
+	}
+	return nil
+}
+
+// leftPanelPathForEditor / rightPanelPathForEditor return the
+// on-screen visually-left / visually-right file panel's path, or
+// "" if the panels frame isn't available. Deliberately uses the
+// same visualLeftFSP / visualRightFSP resolvers PanelsFrame uses
+// for its own Ctrl+[/Ctrl+] command-line binds, so after Ctrl+U
+// the editor stays in lock-step with the panel behaviour instead
+// of routing by stale slot index.
+func leftPanelPathForEditor() string {
+	pf := findPanelsFrameAnyScreen()
+	if pf == nil {
+		return ""
+	}
+	if fsp := pf.visualLeftFSP(); fsp != nil {
+		return fsp.vfs.GetPath()
+	}
+	return ""
+}
+
+func rightPanelPathForEditor() string {
+	pf := findPanelsFrameAnyScreen()
+	if pf == nil {
+		return ""
+	}
+	if fsp := pf.visualRightFSP(); fsp != nil {
+		return fsp.vfs.GetPath()
+	}
+	return ""
+}
+
+// activePanelNameForEditor returns the currently-selected file name
+// on the active file panel, or "" if there isn't one. Not
+// distinguishing "no selection" from "no panel" — both yield ""
+// which the caller treats as a no-op.
+func activePanelNameForEditor() string {
+	pf := findPanelsFrameAnyScreen()
+	if pf == nil {
+		return ""
+	}
+	fsp := pf.getActivePanel()
+	if fsp == nil {
+		return ""
+	}
+	return fsp.GetSelectedName()
+}
+
+// insertTextAtCursor writes bytes at the cursor position, taking
+// care of an active selection (deleted first), any accumulated
+// virtual-space column past EOL (materialised as real spaces before
+// the insert), and the bookkeeping the rest of the editor expects
+// after an edit — undo checkpoint, line-index update, cache
+// invalidation, cursor advance, autocomplete refresh.
+func (ev *EditorView) insertTextAtCursor(data []byte) {
+	if len(data) == 0 {
+		return
+	}
+	ev.saveUndo(opOther)
+	if ev.selActive || ev.rectSelActive {
+		ev.inGroup = true
+		ev.DeleteSelection()
+		ev.inGroup = false
+	}
+	ev.modified = true
+	offset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
+	if ev.CursorVirtualSpaces > 0 {
+		virtSpaces := []byte(strings.Repeat(" ", ev.CursorVirtualSpaces))
+		ev.pt.Insert(offset, virtSpaces)
+		ev.li.UpdateAfterInsert(offset, virtSpaces)
+		offset += ev.CursorVirtualSpaces
+		ev.CursorPos += ev.CursorVirtualSpaces
+		ev.CursorVirtualSpaces = 0
+	}
+	ev.pt.Insert(offset, data)
+	ev.li.UpdateAfterInsert(offset, data)
+	ev.invalidateStates(ev.CursorLine)
+	ev.engine.InvalidateFrom(ev.CursorLine)
+	ev.CursorPos += len(data)
+	ev.updateDesiredVisualCol()
+	ev.ensureCursorVisible()
+	if ev.acEnabled {
+		ev.updateAutocomplete()
+	}
+}
+
+// deleteSpacersForward removes every run of spaces and tabs starting
+// at the cursor, stopping at the first non-spacer byte (or EOF). No-
+// op when the cursor is already on a non-spacer. Matches FAR's
+// Ctrl+Del behaviour word-for-word — "spacer" is the same tokeniser
+// term the issue uses.
+func (ev *EditorView) deleteSpacersForward() {
+	offset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
+	total := ev.pt.Size()
+	if offset >= total {
+		return
+	}
+	count := 0
+	for offset+count < total {
+		b, _ := ev.pt.GetRange(offset+count, 1)
+		if len(b) == 0 || (b[0] != ' ' && b[0] != '\t') {
+			break
+		}
+		count++
+	}
+	if count == 0 {
+		return
+	}
+	ev.saveUndo(opOther)
+	ev.modified = true
+	ev.pt.Delete(offset, count)
+	ev.li.UpdateAfterDelete(offset, count)
+	ev.invalidateStates(ev.CursorLine)
+	ev.engine.InvalidateFrom(ev.CursorLine)
+	ev.ensureCursorVisible()
 }
 
 func (ev *EditorView) CopySelection() {

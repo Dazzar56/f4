@@ -7,7 +7,7 @@
 | :--- | :--- | :--- |
 | **Windows** | .zip | [amd64](https://github.com/unxed/f4/releases/download/nightly/f4-windows-amd64.zip) / [arm64](https://github.com/unxed/f4/releases/download/nightly/f4-windows-arm64.zip) |
 | **macOS** | .tar.gz | [amd64](https://github.com/unxed/f4/releases/download/nightly/f4-darwin-amd64.tar.gz) / [arm64](https://github.com/unxed/f4/releases/download/nightly/f4-darwin-arm64.tar.gz) |
-| **Linux** | .tar.gz | [amd64](https://github.com/unxed/f4/releases/download/nightly/f4-linux-amd64.tar.gz) / [arm64](https://github.com/unxed/f4/releases/download/nightly/f4-linux-arm64.tar.gz) |
+| **Linux** | .tar.gz | [amd64](https://github.com/unxed/f4/releases/download/nightly/f4-linux-amd64.tar.gz) / [arm64](https://github.com/unxed/f4/releases/download/nightly/f4-linux-arm64.tar.gz) / [armv7l](https://github.com/unxed/f4/releases/download/nightly/f4-linux-arm.tar.gz) |
 | **FreeBSD** | .tar.gz | [amd64](https://github.com/unxed/f4/releases/download/nightly/f4-freebsd-amd64.tar.gz) / [arm64](https://github.com/unxed/f4/releases/download/nightly/f4-freebsd-arm64.tar.gz) |
 | **DragonflyBSD** | .tar.gz | [amd64](https://github.com/unxed/f4/releases/download/nightly/f4-dragonfly-amd64.tar.gz) |
 | **OpenBSD** | .tar.gz | [amd64](https://github.com/unxed/f4/releases/download/nightly/f4-openbsd-amd64.tar.gz) / [arm64](https://github.com/unxed/f4/releases/download/nightly/f4-openbsd-arm64.tar.gz) |
@@ -150,6 +150,14 @@ cd f4
 cd f4
 go mod tidy
 CGO_ENABLED=0 go build .
+```
+
+The generated platform icons are committed to the repository, so a normal
+build does not need an image converter. If `assets/icon/f4.svg` is changed,
+regenerate PNG, ICO, ICNS, and Windows resources on any supported OS with:
+
+```bash
+go generate
 ```
 
 **4. Run**

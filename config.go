@@ -69,10 +69,13 @@ type F4Config struct {
 	AlwaysShowMenuBar        bool
 	ShowHiddenFiles          bool
 	HighlightDir             bool
+	SeparateFileExtensions   bool
 	SavePanelPaths           bool
 	InfoPanelBytes           bool // Ctrl+L info panel: true = raw bytes, false = human (GiB/MiB…)
 	InfoPanelCPUGPU          bool // Ctrl+L info panel: show CPU and GPU sections (off by default)
+	EscTogglePanels          bool // ESC toggles panels visibility (Far ships this as a macro; on by default)
 	KeepTerminalCursor       bool
+	AnnounceKittyTerm        bool // introduce the built-in terminal as kitty, so that image tools use the graphics protocol
 	CommandLineAutoComplete  bool
 	NavigationMode           PanelNavigationMode
 	SearchCommandStayFocused bool
@@ -97,6 +100,9 @@ type F4Config struct {
 	EditorDefaultCodePage    int
 	ViewerAutodetectCodePage bool
 	ViewerDefaultCodePage    int
+	SlideShowDelay           int
+	ImageExternalTimeout     int
+	ImageDecoderPriority     string
 	RegisteredPlugins        []string
 	ConfirmCopy              bool
 	ConfirmMove              bool
@@ -105,6 +111,7 @@ type F4Config struct {
 	DeleteCancelFocused      bool
 	DefaultFileOpMode        int
 	FileOpPathDisplay        int
+	MacroRecordFormat        int
 	GuiFont                  string
 	GuiFontSize              int
 	GuiCols                  int
@@ -137,10 +144,13 @@ var AppConfig = F4Config{
 	AlwaysShowMenuBar:        false,
 	ShowHiddenFiles:          true,
 	HighlightDir:             true,
+	SeparateFileExtensions:   false,
 	SavePanelPaths:           true,
 	InfoPanelBytes:           false,
 	InfoPanelCPUGPU:          false,
+	EscTogglePanels:          true,
 	KeepTerminalCursor:       false,
+	AnnounceKittyTerm:        true,
 	CommandLineAutoComplete:  true,
 	NavigationMode:           NavigationClassic,
 	SearchCommandStayFocused: false,
@@ -165,6 +175,9 @@ var AppConfig = F4Config{
 	EditorDefaultCodePage:    65001,
 	ViewerAutodetectCodePage: true,
 	ViewerDefaultCodePage:    65001,
+	SlideShowDelay:           defaultSlideShowDelay,
+	ImageExternalTimeout:     defaultImageExternalTimeout,
+	ImageDecoderPriority:     "",
 	ConfirmCopy:              true,
 	ConfirmMove:              true,
 	ConfirmDelete:            true,
@@ -232,9 +245,11 @@ func LoadConfig() {
 		AppConfig.ConsoleTitleTemplate = "f4 %Ver %Platform %Admin - %State"
 	}
 	AppConfig.HighlightDir = ini.GetString("Panel", "HighlightDir", "1") == "1"
+	AppConfig.SeparateFileExtensions = ini.GetString("Panel", "SeparateFileExtensions", "0") == "1"
 	AppConfig.SavePanelPaths = ini.GetString("Panel", "SavePanelPaths", "1") == "1"
 	AppConfig.InfoPanelBytes = ini.GetString("Panel", "InfoPanelBytes", "0") == "1"
 	AppConfig.InfoPanelCPUGPU = ini.GetString("Panel", "InfoPanelCPUGPU", "0") == "1"
+	AppConfig.EscTogglePanels = ini.GetString("Panel", "EscTogglePanels", "1") == "1"
 	AppConfig.KeepTerminalCursor = ini.GetString("Panel", "KeepTerminalCursor", "0") == "1"
 	AppConfig.CommandLineAutoComplete = ini.GetString("Panel", "CommandLineAutoComplete", "1") == "1"
 	if mode := ini.GetString("Panel", "NavigationMode", ""); mode != "" {
@@ -253,6 +268,8 @@ func LoadConfig() {
 	AppConfig.ConfirmDelete = ini.GetString("System", "ConfirmDelete", "1") == "1"
 	AppConfig.ConfirmExit = ini.GetString("System", "ConfirmExit", "1") == "1"
 	AppConfig.DeleteCancelFocused = ini.GetString("System", "DeleteCancelFocused", "1") == "1"
+	AppConfig.AnnounceKittyTerm = ini.GetString("System", "AnnounceKittyTerm", "1") == "1"
+	fmt.Sscanf(ini.GetString("System", "MacroRecordFormat", "0"), "%d", &AppConfig.MacroRecordFormat)
 	fmt.Sscanf(ini.GetString("Panel", "FileOpPathDisplay", "0"), "%d", &AppConfig.FileOpPathDisplay)
 	AppConfig.GuiFont = ini.GetString("Appearance", "GuiFont", "")
 	fmt.Sscanf(ini.GetString("Appearance", "GuiFontSize", "18"), "%d", &AppConfig.GuiFontSize)
@@ -295,6 +312,18 @@ func LoadConfig() {
 	fmt.Sscanf(ini.GetString("Editor", "DefaultCodePage", "65001"), "%d", &AppConfig.EditorDefaultCodePage)
 	AppConfig.ViewerAutodetectCodePage = ini.GetString("Viewer", "AutodetectCodePage", "1") == "1"
 	fmt.Sscanf(ini.GetString("Viewer", "DefaultCodePage", "65001"), "%d", &AppConfig.ViewerDefaultCodePage)
+	AppConfig.SlideShowDelay = defaultSlideShowDelay
+	fmt.Sscanf(ini.GetString("Images", "SlideShowDelay", "5"), "%d", &AppConfig.SlideShowDelay)
+	if AppConfig.SlideShowDelay <= 0 {
+		AppConfig.SlideShowDelay = defaultSlideShowDelay
+	}
+	AppConfig.ImageExternalTimeout = defaultImageExternalTimeout
+	fmt.Sscanf(ini.GetString("Images", "ExternalTimeout", "20"), "%d", &AppConfig.ImageExternalTimeout)
+	if AppConfig.ImageExternalTimeout <= 0 {
+		AppConfig.ImageExternalTimeout = defaultImageExternalTimeout
+	}
+	AppConfig.ImageDecoderPriority = ini.GetString("Images", "DecoderPriority", "")
+	SetImageDecoderPriorities(ParseImageDecoderPriorities(AppConfig.ImageDecoderPriority))
 	AppConfig.UseExternalEditor = ini.GetString("Editor", "UseExternalEditor", "0") == "1"
 	AppConfig.ExternalEditorCommand = ini.GetString("Editor", "ExternalEditorCommand", "")
 	plugStr := ini.GetString("Plugins", "List", "")
@@ -336,9 +365,11 @@ func SaveConfig() {
 	sb.WriteString("[Panel]\n")
 	sb.WriteString(fmt.Sprintf("ShowHiddenFiles = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.ShowHiddenFiles]))
 	sb.WriteString(fmt.Sprintf("HighlightDir = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.HighlightDir]))
+	sb.WriteString(fmt.Sprintf("SeparateFileExtensions = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.SeparateFileExtensions]))
 	sb.WriteString(fmt.Sprintf("SavePanelPaths = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.SavePanelPaths]))
 	sb.WriteString(fmt.Sprintf("InfoPanelBytes = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.InfoPanelBytes]))
 	sb.WriteString(fmt.Sprintf("InfoPanelCPUGPU = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.InfoPanelCPUGPU]))
+	sb.WriteString(fmt.Sprintf("EscTogglePanels = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.EscTogglePanels]))
 	sb.WriteString(fmt.Sprintf("KeepTerminalCursor = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.KeepTerminalCursor]))
 	sb.WriteString(fmt.Sprintf("CommandLineAutoComplete = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.CommandLineAutoComplete]))
 	sb.WriteString(fmt.Sprintf("NavigationMode = %s\n", AppConfig.NavigationMode.String()))
@@ -355,6 +386,8 @@ func SaveConfig() {
 	sb.WriteString(fmt.Sprintf("ConfirmDelete = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.ConfirmDelete]))
 	sb.WriteString(fmt.Sprintf("ConfirmExit = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.ConfirmExit]))
 	sb.WriteString(fmt.Sprintf("DeleteCancelFocused = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.DeleteCancelFocused]))
+	sb.WriteString(fmt.Sprintf("AnnounceKittyTerm = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.AnnounceKittyTerm]))
+	sb.WriteString(fmt.Sprintf("MacroRecordFormat = %d\n", AppConfig.MacroRecordFormat))
 
 	sb.WriteString("\n[Appearance]\n")
 	sb.WriteString(fmt.Sprintf("GuiFont = %s\n", AppConfig.GuiFont))
@@ -391,6 +424,10 @@ func SaveConfig() {
 	sb.WriteString("\n[Viewer]\n")
 	sb.WriteString(fmt.Sprintf("AutodetectCodePage = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.ViewerAutodetectCodePage]))
 	sb.WriteString(fmt.Sprintf("DefaultCodePage = %d\n", AppConfig.ViewerDefaultCodePage))
+	sb.WriteString("\n[Images]\n")
+	sb.WriteString(fmt.Sprintf("SlideShowDelay = %d\n", AppConfig.SlideShowDelay))
+	sb.WriteString(fmt.Sprintf("ExternalTimeout = %d\n", AppConfig.ImageExternalTimeout))
+	sb.WriteString(fmt.Sprintf("DecoderPriority = %s\n", AppConfig.ImageDecoderPriority))
 	sb.WriteString("\n[Plugins]\n")
 	sb.WriteString(fmt.Sprintf("List = %s\n", strings.Join(AppConfig.RegisteredPlugins, "|")))
 

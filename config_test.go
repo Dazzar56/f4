@@ -33,6 +33,8 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	AppConfig.EditorCrosshair = true
 	AppConfig.EditorColorerBackground = false
 	AppConfig.CommandLineAutoComplete = false
+	AppConfig.SeparateFileExtensions = true
+	AppConfig.MacroRecordFormat = 1
 
 	// 2. Save
 	SaveConfig()
@@ -43,6 +45,8 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	AppConfig.HighlightDir = false
 	AppConfig.EditorCrosshair = false
 	AppConfig.EditorColorerBackground = true
+	AppConfig.SeparateFileExtensions = false
+	AppConfig.MacroRecordFormat = 0
 
 	// 4. Load
 	LoadConfig()
@@ -68,6 +72,56 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	}
 	if AppConfig.CommandLineAutoComplete {
 		t.Error("LoadConfig failed to restore CommandLineAutoComplete")
+	}
+	if !AppConfig.SeparateFileExtensions {
+		t.Error("LoadConfig failed to restore SeparateFileExtensions")
+	}
+	if AppConfig.MacroRecordFormat != 1 {
+		t.Error("LoadConfig failed to restore MacroRecordFormat")
+	}
+}
+
+func TestConfig_ImagesSectionRoundTrip(t *testing.T) {
+	tmpDir := t.TempDir()
+	userIniPath := filepath.Join(tmpDir, "settings.ini")
+
+	origUserPathFunc := getUserConfigIniPath
+	origPathsFunc := getConfigIniPaths
+	getUserConfigIniPath = func() string { return userIniPath }
+	getConfigIniPaths = func() []string { return []string{userIniPath} }
+
+	oldCfg := AppConfig
+	defer func() {
+		getUserConfigIniPath = origUserPathFunc
+		getConfigIniPaths = origPathsFunc
+		AppConfig = oldCfg
+		SetImageDecoderPriorities(nil)
+	}()
+
+	AppConfig.SlideShowDelay = 9
+	AppConfig.ImageExternalTimeout = 42
+	AppConfig.ImageDecoderPriority = "external:-5|go-std:3"
+	SaveConfig()
+
+	AppConfig.SlideShowDelay = 5
+	AppConfig.ImageExternalTimeout = 0
+	AppConfig.ImageDecoderPriority = ""
+	LoadConfig()
+
+	if AppConfig.SlideShowDelay != 9 {
+		t.Errorf("SlideShowDelay is %d, want 9", AppConfig.SlideShowDelay)
+	}
+	if AppConfig.ImageExternalTimeout != 42 {
+		t.Errorf("ExternalTimeout is %d, want 42", AppConfig.ImageExternalTimeout)
+	}
+	if AppConfig.ImageDecoderPriority != "external:-5|go-std:3" {
+		t.Errorf("DecoderPriority is %q", AppConfig.ImageDecoderPriority)
+	}
+	if got := imageDecoderPriorityOf("external", -10); got != -5 {
+		t.Errorf("loading must apply the priorities, external is %d", got)
+	}
+	if got := imageDecoderPriorityOf("go-bmp", 10); got != 10 {
+		t.Errorf("a decoder nobody overrode must keep its own priority, got %d", got)
 	}
 }
 
