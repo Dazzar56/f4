@@ -4130,3 +4130,64 @@ func TestEditorView_MouseSelection_Release(t *testing.T) {
 		t.Error("Simple click without dragging should turn off selection on mouse release")
 	}
 }
+
+// TestEditorView_InsertTextAtCursor covers the shared insert path
+// the new Ctrl+[/Ctrl+]/Ctrl+Enter shortcuts use — appends bytes
+// at cursor, updates line index, advances cursor by len(data).
+// Cursor mid-word split is the interesting case.
+func TestEditorView_InsertTextAtCursor(t *testing.T) {
+	pt := piecetable.New([]byte("abcxyz"))
+	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
+	ev.SetPosition(0, 0, 79, 24)
+	ev.CursorPos = 3
+
+	ev.insertTextAtCursor([]byte("/tmp/f4"))
+	if got := pt.String(); got != "abc/tmp/f4xyz" {
+		t.Errorf("insert = %q, want abc/tmp/f4xyz", got)
+	}
+	if ev.CursorPos != 3+len("/tmp/f4") {
+		t.Errorf("cursor = %d, want %d", ev.CursorPos, 3+len("/tmp/f4"))
+	}
+	if !ev.modified {
+		t.Error("modified flag should be set after insert")
+	}
+}
+
+// TestEditorView_DeleteSpacersForward exercises Ctrl+Del from
+// issue #289: eat every space and tab between the cursor and the
+// first non-spacer byte, leave everything else alone.
+func TestEditorView_DeleteSpacersForward(t *testing.T) {
+	cases := []struct {
+		name     string
+		src      string
+		cursor   int
+		want     string
+		wantCurs int
+	}{
+		{"leading-spaces", "abc    def", 3, "abcdef", 3},
+		{"tabs-mixed", "abc \t \tdef", 3, "abcdef", 3},
+		{"no-spacers", "abcdef", 3, "abcdef", 3},
+		{"at-eof", "abc   ", 3, "abc", 3},
+		{"cursor-on-non-spacer", "aaa bbb", 0, "aaa bbb", 0},
+		{"only-spacers-mid-file", "x   \n  y", 1, "x\n  y", 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			pt := piecetable.New([]byte(tc.src))
+			ev := NewEditorView(pt, nil, "")
+			defer ev.Close()
+			ev.SetPosition(0, 0, 79, 24)
+			ev.CursorLine = 0
+			ev.CursorPos = tc.cursor
+
+			ev.deleteSpacersForward()
+			if got := pt.String(); got != tc.want {
+				t.Errorf("pt = %q, want %q", got, tc.want)
+			}
+			if ev.CursorPos != tc.wantCurs {
+				t.Errorf("cursor = %d, want %d", ev.CursorPos, tc.wantCurs)
+			}
+		})
+	}
+}
