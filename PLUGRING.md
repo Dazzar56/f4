@@ -29,13 +29,18 @@ one the way it packages anything else.
 
 ### What gets turned away
 
-- **`setup_cmd`.** It runs an arbitrary shell command with the user's
-  privileges at install time. That is worse than shipping a binary, because
-  nobody reads it.
+- **`setup_cmd`.** It ran an arbitrary shell command with the user's
+  privileges at install time, which is worse than shipping a binary because
+  nobody reads it. f4 no longer runs it at all: the field is ignored and the
+  fact is logged. A plugin that needs a build step does not belong here.
 - **`{os}` and `{arch}` in the download URL.** They exist for one purpose:
   serving a different binary per platform.
 - **An entrypoint that is not a bare `.lua` or `.wasm` file**, including one
   that names an interpreter, such as `luajit main.lua`.
+An entry breaking any of these can still be installed, after a dialog saying
+what is wrong: the catalog predates the rule and hiding half of it would be a
+worse first impression. The one exception is `setup_cmd`, which is never run,
+with or without confirmation.
 
 ## Hosting and submission
 

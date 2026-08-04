@@ -206,6 +206,22 @@ func actionPlugRing(pf *PanelsFrame) {
 }
 
 func actionInstallPlugRingItem(pf *PanelsFrame, parent *vtui.Window, item PlugRingItem, refresh func()) {
+	// 0. The distribution policy, enforced rather than merely documented.
+	// An entry that breaks it is not installed silently; the user is told
+	// exactly what is wrong and may insist, because the catalog in the wild
+	// predates the rule.
+	if problem := PlugRingItemProblem(item); problem != "" {
+		msg := fmt.Sprintf("This catalog entry does not meet f4's distribution policy:\n\n%s\n\nSee PLUGRING.md. Installing anyway is your decision.", problem)
+		if pf.Message(" Policy Warning ", msg, []string{"&Install Anyway", "Cancel"}) != 0 {
+			return
+		}
+	}
+	if ok, reason := PlugRingItemRunsHere(item); !ok {
+		msg := fmt.Sprintf("This plugin %s.\n\nIt will install, but f4 will not be able to run it.", reason)
+		if pf.Message(" Cannot Run Here ", msg, []string{"&Install Anyway", "Cancel"}) != 0 {
+			return
+		}
+	}
 	// 1. Implicit dependency check from Entrypoint interpreter
 	parts := strings.Fields(item.Entrypoint)
 	if len(parts) > 0 {
@@ -317,20 +333,13 @@ func actionInstallPlugRingItem(pf *PanelsFrame, parent *vtui.Window, item PlugRi
 			}
 		}
 
+		// setup_cmd used to be run here: an arbitrary shell command, with the
+		// user's privileges, at install time, from a catalog entry nobody
+		// reads. That is worse than shipping a binary, and no confirmation
+		// dialog makes it acceptable, so it is not run at all. A plugin that
+		// needs a build step does not belong in this catalog.
 		if item.SetupCmd != "" {
-			update("Running setup commands...", -1)
-			var cmd *exec.Cmd
-			if runtime.GOOS == "windows" {
-				cmd = exec.CommandContext(ctx, "cmd.exe", "/c", item.SetupCmd)
-			} else {
-				cmd = exec.CommandContext(ctx, "sh", "-c", item.SetupCmd)
-			}
-			cmd.Dir = pluginDir
-			out, cmdErr := cmd.CombinedOutput()
-			if cmdErr != nil {
-				os.RemoveAll(pluginDir)
-				return fmt.Errorf("setup command failed: %v\nOutput: %s", cmdErr, string(out))
-			}
+			vtui.DebugLog("PLUGRING: ignoring setup_cmd of %q: %s", item.ID, item.SetupCmd)
 		}
 
 		manifestData, _ := json.MarshalIndent(item, "", "  ")
@@ -364,6 +373,11 @@ func actionRemovePlugRingItem(pf *PanelsFrame, parent *vtui.Window, item PlugRin
 	dlg := vtui.ShowMessageOn(parent, " Remove Plugin ", fmt.Sprintf("Do you want to completely remove %s?", item.Name), []string{"&Remove", "Cancel"})
 	dlg.OnResult = func(code int) {
 		if code == 0 {
+			// Grants belong to the plugin, not to its id. Leaving them
+			// behind would hand them to whatever is installed here next.
+			if err := PluginPermissions().Forget(item.ID); err != nil {
+				vtui.DebugLog("PLUGRING: cannot drop the permissions of %q: %v", item.ID, err)
+			}
 			err := os.RemoveAll(pluginDir)
 			if err != nil {
 				vtui.ShowMessageOn(parent, " Error ", fmt.Sprintf("Removal failed:\n%v", err), []string{"&Ok"})

@@ -127,13 +127,13 @@ That last one exists because a plugin using LuaJIT's `cdef` genuinely has
 nowhere else to go, and declaring the dependency is better than failing at
 load: f4 can then say so before the install rather than after.
 
-Two things in the existing manifest work against this policy and have to go
-when the permission model lands: `setup_cmd`, which runs an arbitrary shell
-command with the user's privileges at install time, and the `{os}`/`{arch}`
-placeholders in the download URL, which exist for no purpose other than
-shipping per platform binaries. Entries breaking the policy are currently
-reported in the log rather than hidden, since the catalog in the wild predates
-the rule.
+Two things in the existing manifest worked against this policy. `setup_cmd`
+ran an arbitrary shell command with the user's privileges at install time and
+is now ignored outright, with no confirmation offered, because no dialog makes
+that acceptable. The `{os}`/`{arch}` placeholders in the download URL exist
+only to ship per platform binaries; an entry using them is flagged before the
+install and can still be installed on the user's say-so, since the catalog in
+the wild predates the rule.
 
 ## Status
 
