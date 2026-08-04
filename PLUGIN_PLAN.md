@@ -171,6 +171,17 @@ Done:
   without ever holding a host pointer. Subprocess plugins are not given these
   methods, having no need of them. Zero-copy over guest linear memory remains
   available as a later optimisation for heavy data rather than a precondition.
+- **Step 5: onboarding.** `f4 --new-plugin <name>` writes a working Lua
+  plugin, its manifest and a README, and a test loads the generated file
+  through `LuaPlugin` and reads a file off the drive it mounts, so the
+  template cannot rot unnoticed in front of the audience least able to debug
+  it. Lua only, deliberately: a Go template needs a toolchain and a go.mod
+  pointing at the SDK, a wasm one needs a target as well, and neither is a
+  five minute hello world. `PLUGINS.md`, `LUA.md` and `PLUGRING.md` are
+  rewritten for three transports, a submission walkthrough and the
+  distribution policy; `LUA.md` settles the FFI naming, with `f4ffi` the Lua
+  face of the bridge and `Host.FFI.*` the protocol underneath it for guests
+  that cannot have a module.
 
 Next, in order:
 - **Step 4c: choosing where `Ctrl+.` records to.** Both macro backends already
@@ -199,17 +210,6 @@ Next, in order:
   simulating input. The work is spread across `actions.go` rather than deep,
   and naming the actions is the part that deserves thought: the names become
   API the moment anyone writes a macro against them.
-- **Step 5: onboarding.** The scaffolder is done: `f4 --new-plugin <name>`
-  writes a working Lua plugin, its manifest and a README, and a test loads the
-  generated file through `LuaPlugin` and reads a file off the drive it mounts,
-  so the template cannot rot unnoticed in front of the audience least able to
-  debug it. Lua only, deliberately: a Go template needs a toolchain and a
-  go.mod pointing at the SDK, a wasm one needs a target as well, and neither
-  is a five minute hello world. What remains is the prose: a rewrite of
-  `PLUGINS.md` and `LUA.md` to match three transports rather than one, and a
-  PlugRing submission walkthrough. `LUA.md` also has to settle which name is
-  canonical for the FFI in a Lua plugin, since one reaches the same bridge as
-  both `f4ffi` and `Host.FFI.*`.
 - **Step 6: the permission model.** Manifest permissions with the author's own
   justification text, asked for on first real use, remembered in the config.
   Covers FFI, unsafe stdlib and running a native binary. Wires into
