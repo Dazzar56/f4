@@ -4,29 +4,49 @@ import "testing"
 
 func TestActionRegistry(t *testing.T) {
 	called := false
-	RegisterAction("Test.Action", func() {
-		called = true
-	})
+	testAction := Action{
+		Name:        "Test.Action",
+		Label:       "Test Label",
+		Description: "Test Description",
+		Handler: func() {
+			called = true
+		},
+	}
 
-	if !RunAction("Test.Action") {
-		t.Error("Expected RunAction to return true for registered action")
+	RegisterAction(testAction)
+
+	// Test GetAction
+	a, ok := GetAction("test.action")
+	if !ok {
+		t.Fatal("Expected to find Test.Action")
+	}
+	if a.Label != "Test Label" || a.Description != "Test Description" {
+		t.Errorf("Action fields mismatch. Got %+v", a)
+	}
+
+	// Test GetActions
+	actions := GetActions()
+	found := false
+	for _, act := range actions {
+		if act.Name == "Test.Action" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("Action not found in GetActions() result")
+	}
+
+	// Test RunAction
+	if !RunAction("Test.action") {
+		t.Error("RunAction failed")
 	}
 	if !called {
-		t.Error("Expected registered handler to be executed")
+		t.Error("Action handler was not executed")
 	}
 
-	called2 := false
-	RegisterAction("Another.Test", func() {
-		called2 = true
-	})
-	if !RunAction("another.test") {
-		t.Error("Expected RunAction to be case insensitive")
-	}
-	if !called2 {
-		t.Error("Expected lowercase lookup to trigger action")
-	}
-
-	if RunAction("Nonexistent.Action") {
-		t.Error("Expected RunAction to return false for unknown action")
+	// Test missing action
+	if RunAction("Missing.Action") {
+		t.Error("RunAction should return false for missing action")
 	}
 }
