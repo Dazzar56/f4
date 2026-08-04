@@ -211,6 +211,68 @@ func TestClassicFastFindEscapeDoesNotHidePanels(t *testing.T) {
 	}
 }
 
+func TestClassicFastFindF2TogglesAnywhereMatching(t *testing.T) {
+	oldCfg := AppConfig
+	defer func() { AppConfig = oldCfg }()
+	AppConfig.NavigationMode = NavigationClassic
+
+	pf, left, _ := newSearchFirstTestFrame(t)
+	left.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "inside-target.txt"}},
+		{VFSItem: vfs.VFSItem{Name: "target-prefix.txt"}},
+	}
+	left.Refresh()
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		Char:            't',
+		VirtualKeyCode:  'T',
+		ControlKeyState: vtinput.LeftAltPressed,
+	})
+	if got := left.GetSelectedName(); got != "target-prefix.txt" {
+		t.Fatalf("prefix Fast Find selected %q, want target-prefix.txt", got)
+	}
+
+	f2 := &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F2}
+	if !pf.ProcessKey(f2) || left.fastFindStr != "*t" {
+		t.Fatal("F2 did not enable anywhere matching in Fast Find")
+	}
+	if got := left.GetSelectedName(); got != "target-prefix.txt" {
+		t.Fatalf("anywhere Fast Find moved away from current match to %q", got)
+	}
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_RETURN,
+		ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+	if got := left.GetSelectedName(); got != "inside-target.txt" {
+		t.Fatalf("next anywhere match selected %q, want inside-target.txt", got)
+	}
+	if !pf.ProcessKey(f2) || left.fastFindStr != "t" {
+		t.Fatal("second F2 did not restore prefix matching")
+	}
+	if got := left.GetSelectedName(); got != "target-prefix.txt" {
+		t.Fatalf("restored prefix Fast Find selected %q, want target-prefix.txt", got)
+	}
+
+	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_ESCAPE})
+	left.SetCursorIndex(0)
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		Char:            '*',
+		ControlKeyState: vtinput.LeftAltPressed,
+	})
+	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 't', VirtualKeyCode: 'T'})
+	if left.fastFindStr != "*t" {
+		t.Fatalf("manually entered anywhere query = %q, want *t", left.fastFindStr)
+	}
+	if got := left.GetSelectedName(); got != "inside-target.txt" {
+		t.Fatalf("manual leading star selected %q, want inside-target.txt", got)
+	}
+}
+
 func TestSearchFirstFocusToggleAcceptsGUITextOnlyGraveEvents(t *testing.T) {
 	oldCfg := AppConfig
 	defer func() { AppConfig = oldCfg }()

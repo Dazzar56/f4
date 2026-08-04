@@ -115,7 +115,6 @@ PanelSettings.NavigationClassic=&Classic
 PanelSettings.NavigationVim=&Vim (j, k, dd, cc, mm)
 PanelSettings.NavigationSearch=&Search by default
 PanelSettings.SearchStayFocused=Stay in the command &line after Enter
-PanelSettings.FastFindArrowsCancel=&Arrow keys cancel fast find
 PanelSettings.SyncPanelLoad=S&ynchronous panel loading (disable cache/chunking)
 PanelSettings.DefaultMode=Default operation &mode:
 PanelSettings.PathDisplay=File path in progress:

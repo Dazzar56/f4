@@ -28,6 +28,7 @@ const (
 	ColPanelBox
 	ColPanelScrollbar
 	ColPanelDir
+	ColPanelFastFindNoMatch
 
 	ColCommandLinePrompt
 	ColCommandLineInactivePrompt
@@ -83,6 +84,7 @@ func SetDefaultF4Palette() {
 	vtui.Palette[ColPanelSelectedTitle] = vtui.Palette[ColPanelTitle]
 	vtui.Palette[ColPanelTotalInfo] = vtui.Palette[ColPanelText]
 	vtui.Palette[ColPanelDir] = vtui.SetRGBBoth(0, 0xFFFFFF, blue)
+	vtui.Palette[ColPanelFastFindNoMatch] = vtui.SetRGBBoth(0, 0xD75F5F, blue)
 	vtui.Palette[ColPanelSelectedInfo] = vtui.Palette[ColPanelSelectedText]
 	vtui.Palette[ColPanelScrollbar] = vtui.Palette[ColPanelBox]
 
@@ -139,6 +141,7 @@ var colorMap = map[string]int{
 	"Panel.Box":                        ColPanelBox,
 	"Panel.Scrollbar":                  ColPanelScrollbar,
 	"Panel.Dir":                        ColPanelDir,
+	"Panel.FastFindNoMatch":            ColPanelFastFindNoMatch,
 	"Dialog.Text":                      vtui.ColDialogText,
 	"Dialog.Highlight":                 vtui.ColDialogHighlightText,
 	"Dialog.Box":                       vtui.ColDialogBox,
@@ -234,7 +237,7 @@ func ExportColors(path string) error {
 			name: "Panel",
 			keys: []string{
 				"Panel.Box", "Panel.Cursor", "Panel.Cursor.Selected", "Panel.Cursor.Inactive",
-				"Panel.Cursor.Inactive.Selected", "Panel.Dir",
+				"Panel.Cursor.Inactive.Selected", "Panel.Dir", "Panel.FastFindNoMatch",
 				"Panel.Scrollbar", "Panel.Text", "Panel.Text.Highlight", "Panel.Text.Info",
 				"Panel.Text.Selected", "Panel.Title", "Panel.Title.Column", "Panel.Title.Selected",
 				"Table.Box", "Scrollbar",
