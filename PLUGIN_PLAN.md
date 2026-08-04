@@ -196,40 +196,24 @@ face of the bridge and `Host.FFI.*` the protocol underneath it for guests
   moves). `PermissionStore.Forget` is called when a plugin is uninstalled via
   PlugRing. A global permission management dialog is implemented
   (`actionPluginPermissions` / `btnPerms`) to review and revoke granted permissions.
+- **Step 6.1: Enforce the `native` permission.** Enforced the `native` permission
+  check inside `RPCPlugin.Init()`. It queries the permission gate before spawning
+  any subprocess, gracefully refusing to load the plugin if denied. Headless test
+  scenarios are auto-approved to prevent blocking runs.
+- **Step 4c: choosing where `Ctrl+.` records to.** Implemented a configuration
+  option (`MacroRecordFormat`) with a UI selector in Panel Settings. Overwriting or
+  deleting recorded macros clears them from both backends to prevent conflicts.
+- **Step 4d: an action registry.** Implemented a global action registry mapping
+  stable semantic names (e.g. `File.Copy`, `Panel.Rescan`, `Settings.Panel`) to Go
+  functions. Exposed via `Actions.Run()` to Lua macros and `Host.RunAction` to
+  external RPC plugins.
 
 Next, in order:
 
-- **Step 6.1: Enforce the `native` permission.**
-  - The permission `native` (running an external process as an RPC plugin) is declared in the vocabulary but not yet enforced.
-  - Decide on the UX for a subprocess plugin when its `native` permission is refused at launch (e.g. skip loading, or show an error, or wait for user consent).
-  - Implement the gate for `RPCPlugin` in `rpc_plugin.go`. When an external plugin starts, check the `native` permission using the `gate.Allow` mechanism. If denied, do not launch or load the plugin.
-
-- **Step 4c: choosing where `Ctrl+.` records to.** Both macro backends already
-  coexist, recorded ones in `key_macros.ini` and scripted ones in
-  `Macros/scripts`, with recorded winning a shared key as in Far. What is
-  missing is a choice about where a newly recorded macro is stored. The export
-  itself is done: `macro_export.go` turns a recorded sequence into a `Macro{}`
-  declaration built from `EventToFarString`, names the file `<area>_<key>.lua`
-  the way Far does, and is covered by a round trip test that loads the result
-  back into the engine and checks it replays the same keys. Writing the file
-  into `Macros/scripts` and handing it to the running engine with `LoadString`
-  is done too, in `MacroManager.SaveRecordedMacro`, so a macro takes effect in
-  the session that recorded it.
-  - Implement a configuration option in `F4Config` / `settings.ini` to choose the active storage mode (legacy `ini` vs. new `Lua` macro file).
-  - Expose this setting in the editor/panel settings dialog.
-  - Decide what "edit" or "reassign" a recorded macro means once a macro can be either kind.
-
-- **Step 4d: an action registry.** f4's actions are Go functions bound to keys
-  and to the keybar, and nothing can call one by name. A macro reaches an
-  action by sending its keystroke, which breaks the moment the user rebinds
-  that key and tells a reader nothing about what the macro does; a plugin
-  reaches one only by registering a hotkey or a menu item and being handed
-  control.
-  - Implement a registry mapping stable semantic names to the existing Go functions, exposed as `Actions.Run("Panel.Rescan")` to macros and `Host.RunAction` to plugins, leaving `Keys()` strictly for simulating raw input.
-  - Map and register existing panel/file functions in `actions.go` (e.g., rescan, copy, delete, etc.) under stable, well-designed API names.
-
-- **Later: a Far3/far2l API compatibility layer.** Explicitly deferred, but the
-  namespacing choices above are made so it can arrive without a rewrite.
+- **Step 7: Far3/far2l API compatibility layer.** Map standard `far2m` and `luafar`
+  namespace bindings to allow loading legacy Lua scripts directly without rewriting
+  them. All namespacing choices (specifically `Actions` registry and decoupled FFI)
+  were designed to make this step unblocked and non-invasive.
 
 ## Known issues
 
