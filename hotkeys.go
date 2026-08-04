@@ -15,18 +15,35 @@ type HotkeyManager struct {
 }
 
 var conditionRegistry = map[string]func() bool{
-	"EmptyCommandLine": func() bool {
+	"emptycommandline": func() bool {
 		if pf := findPanelsFrameAnyScreen(); pf != nil {
 			return pf.cmdLine.IsEmpty()
 		}
 		return false
 	},
-	"CommandLineNotEmpty": func() bool {
+	"commandlinenotempty": func() bool {
 		if pf := findPanelsFrameAnyScreen(); pf != nil {
 			return !pf.cmdLine.IsEmpty()
 		}
 		return false
 	},
+	"esctoggle": func() bool {
+		if pf := findPanelsFrameAnyScreen(); pf != nil {
+			if !pf.cmdLine.IsEmpty() {
+				return false
+			}
+			if pf.showPanels {
+				return true
+			}
+			return !pf.termView.UseAltScreen && !pf.isPtyBusy()
+		}
+		return false
+	},
+}
+
+// GetConditions returns the user-friendly names of all registered conditions.
+func GetConditions() []string {
+	return []string{"None", "EmptyCommandLine", "CommandLineNotEmpty", "EscToggle"}
 }
 
 // RegisterCondition adds a dynamic boolean check accessible by hotkey bindings.
@@ -88,6 +105,7 @@ func (hm *HotkeyManager) initDefaults() {
 			"CtrlR":   "Panel.Rescan",
 			"AltF12":  "Panel.FoldersHistory",
 			"AltF8":   "Panel.CommandHistory",
+			"Esc":     "Panel.Toggle:EscToggle",
 		},
 		"Editor": {
 			"F2":         "Editor.Save",
@@ -120,6 +138,7 @@ func (hm *HotkeyManager) initDefaults() {
 		},
 		"Terminal": {
 			"CtrlO": "Panel.Toggle",
+			"Esc":   "Panel.Toggle:EscToggle",
 		},
 		"Common": {},
 	}

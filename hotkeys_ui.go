@@ -9,11 +9,12 @@ import (
 )
 
 type hotkeyRow struct {
-	Action string
-	Label  string
-	Area   string
-	Key    string
-	Desc   string
+	Action    string
+	Label     string
+	Area      string
+	Key       string
+	Condition string
+	Desc      string
 }
 
 func (r hotkeyRow) GetCellText(col int) string {
@@ -25,6 +26,8 @@ func (r hotkeyRow) GetCellText(col int) string {
 	case 2:
 		return r.Area
 	case 3:
+		return r.Condition
+	case 4:
 		return r.Desc
 	}
 	return ""
@@ -44,9 +47,10 @@ func actionHotkeyConfig(pf *PanelsFrame) {
 
 	table := vtui.NewTable(0, 0, w-4, h-5, []vtui.TableColumn{
 		{Title: "Command", Width: 20},
-		{Title: "Key", Width: 15},
+		{Title: "Key", Width: 12},
 		{Title: "Area", Width: 10},
-		{Title: "Description", Width: 25},
+		{Title: "When", Width: 12},
+		{Title: "Description", Width: 16},
 	})
 	table.ShowScrollBar = true
 
@@ -84,17 +88,24 @@ func actionHotkeyConfig(pf *PanelsFrame) {
 		assignedActions := make(map[string]bool)
 
 		for area, binds := range activeBinds {
-			for key, actName := range binds {
+			for key, binding := range binds {
+				parts := strings.SplitN(binding, ":", 2)
+				actName := parts[0]
+				cond := ""
+				if len(parts) == 2 {
+					cond = parts[1]
+				}
 				act, ok := GetAction(actName)
 				if !ok {
 					act = Action{Name: actName, Label: actName, Description: "Unknown action"}
 				}
 				hkRows = append(hkRows, hotkeyRow{
-					Action: act.Name,
-					Label:  act.Label,
-					Area:   area,
-					Key:    key,
-					Desc:   act.Description,
+					Action:    act.Name,
+					Label:     act.Label,
+					Area:      area,
+					Key:       key,
+					Condition: cond,
+					Desc:      act.Description,
 				})
 				assignedActions[strings.ToLower(act.Name)] = true
 			}
@@ -103,11 +114,12 @@ func actionHotkeyConfig(pf *PanelsFrame) {
 		for _, act := range actions {
 			if !assignedActions[strings.ToLower(act.Name)] {
 				hkRows = append(hkRows, hotkeyRow{
-					Action: act.Name,
-					Label:  act.Label,
-					Area:   "",
-					Key:    "",
-					Desc:   act.Description,
+					Action:    act.Name,
+					Label:     act.Label,
+					Area:      "",
+					Key:       "",
+					Condition: "",
+					Desc:      act.Description,
 				})
 			}
 		}
@@ -137,7 +149,7 @@ func actionHotkeyConfig(pf *PanelsFrame) {
 		idx := table.SelectPos
 		if idx >= 0 && idx < len(hkRows) {
 			row := hkRows[idx]
-			showAreaSelectDialog(row.Action, row.Area, refresh)
+			showAreaSelectDialog(row.Action, row.Area, row.Condition, refresh)
 		}
 	}
 
@@ -163,8 +175,8 @@ func actionHotkeyConfig(pf *PanelsFrame) {
 	refresh()
 }
 
-func showAreaSelectDialog(actionName, defaultArea string, onComplete func()) {
-	dlg := vtui.NewCenteredDialog(40, 8, " Select Area ")
+func showAreaSelectDialog(actionName, defaultArea, defaultCond string, onComplete func()) {
+	dlg := vtui.NewCenteredDialog(40, 11, " Select Area & Condition ")
 	dlg.ShowClose = true
 
 	if defaultArea == "" {
@@ -184,21 +196,42 @@ func showAreaSelectDialog(actionName, defaultArea string, onComplete func()) {
 	combo.Menu.SetSelectPos(idx)
 	combo.Edit.SetText(areas[idx])
 
+	conds := GetConditions()
+	comboCond := vtui.NewComboBox(0, 0, 20, conds)
+	comboCond.DropdownOnly = true
+	cIdx := 0
+	for i, c := range conds {
+		if strings.EqualFold(c, defaultCond) || (c == "None" && defaultCond == "") {
+			cIdx = i
+		}
+	}
+	comboCond.Menu.SetSelectPos(cIdx)
+	comboCond.Edit.SetText(conds[cIdx])
+
 	btnOk := vtui.NewButton(0, 0, "Next >")
 	btnOk.IsDefault = true
 	btnCancel := vtui.NewButton(0, 0, "Cancel")
 
 	lbl := vtui.NewLabel(0, 0, "Area: ", combo)
+	lblCond := vtui.NewLabel(0, 0, "When: ", comboCond)
+
 	dlg.AddItem(lbl)
 	dlg.AddItem(combo)
+	dlg.AddItem(lblCond)
+	dlg.AddItem(comboCond)
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnCancel)
 
-	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 36, 4)
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 36, 7)
 	row := vtui.NewHBoxLayout(0, 0, 36, 1)
 	row.Add(lbl, vtui.Margins{Right: 1}, vtui.AlignLeft)
 	row.Add(combo, vtui.Margins{}, vtui.AlignFill)
 	vbox.Add(row, vtui.Margins{}, vtui.AlignFill)
+
+	rowCond := vtui.NewHBoxLayout(0, 0, 36, 1)
+	rowCond.Add(lblCond, vtui.Margins{Right: 1}, vtui.AlignLeft)
+	rowCond.Add(comboCond, vtui.Margins{}, vtui.AlignFill)
+	vbox.Add(rowCond, vtui.Margins{Top: 1}, vtui.AlignFill)
 
 	btns := vtui.NewHBoxLayout(0, 0, 36, 1)
 	btns.HorizontalAlign = vtui.AlignCenter
@@ -212,9 +245,19 @@ func showAreaSelectDialog(actionName, defaultArea string, onComplete func()) {
 	btnCancel.OnClick = func() { dlg.Close() }
 	btnOk.OnClick = func() {
 		area := combo.Menu.Items[combo.Menu.SelectPos].Text
+		cond := comboCond.Menu.Items[comboCond.Menu.SelectPos].Text
+		if cond == "None" {
+			cond = ""
+		}
+
+		fullName := actionName
+		if cond != "" {
+			fullName = actionName + ":" + cond
+		}
+
 		dlg.Close()
 		vtui.FrameManager.PostTask(func() {
-			vtui.FrameManager.Push(NewHotkeyAssignFrame(actionName, area, onComplete))
+			vtui.FrameManager.Push(NewHotkeyAssignFrame(fullName, area, onComplete))
 		})
 	}
 	vtui.FrameManager.Push(dlg)

@@ -6,11 +6,12 @@ import (
 
 func TestHotkeyRow(t *testing.T) {
 	row := hotkeyRow{
-		Action: "Test.Action",
-		Label:  "Test Label",
-		Area:   "Common",
-		Key:    "F12",
-		Desc:   "Description",
+		Action:    "Test.Action",
+		Label:     "Test Label",
+		Area:      "Common",
+		Key:       "F12",
+		Condition: "EmptyCommandLine",
+		Desc:      "Description",
 	}
 
 	if row.GetCellText(0) != "Test Label" {
@@ -22,7 +23,10 @@ func TestHotkeyRow(t *testing.T) {
 	if row.GetCellText(2) != "Common" {
 		t.Errorf("Expected Common")
 	}
-	if row.GetCellText(3) != "Description" {
+	if row.GetCellText(3) != "EmptyCommandLine" {
+		t.Errorf("Expected EmptyCommandLine")
+	}
+	if row.GetCellText(4) != "Description" {
 		t.Errorf("Expected Description")
 	}
 }
