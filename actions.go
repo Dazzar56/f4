@@ -661,6 +661,10 @@ func tryOpenImageViewer(pf *PanelsFrame, v vfs.VFS, path string) bool {
 		return false
 	}
 
+	// The list is taken here, on the UI thread, while the panel is still
+	// the one the reader was looking at.
+	siblings, index := imageSiblingPaths(pf, v, path)
+
 	vtui.RunAsync(func(ctx *vtui.TaskContext) {
 		iv, err := NewImageView(ctx.Context, v, path)
 		ctx.RunOnUI(func() {
@@ -669,11 +673,36 @@ func tryOpenImageViewer(pf *PanelsFrame, v vfs.VFS, path string) bool {
 				vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to open image:\n%v", err), []string{"&Ok"})
 				return
 			}
+			iv.SetSiblings(siblings, index)
 			iv.ResizeConsole(pf.lastW, pf.lastH)
 			vtui.FrameManager.AddScreen(iv)
 		})
 	})
 	return true
+}
+
+// imageSiblingPaths lists the pictures next to this one, in the order the
+// active panel shows them. A panel looking somewhere else has nothing to say
+// about this file, and then the viewer simply shows one picture.
+func imageSiblingPaths(pf *PanelsFrame, v vfs.VFS, path string) ([]string, int) {
+	if pf == nil || v == nil {
+		return nil, -1
+	}
+	fsp := pf.getActivePanel()
+	if fsp == nil || fsp.vfs == nil {
+		return nil, -1
+	}
+	dir := v.Dir(path)
+	if fsp.vfs.GetPath() != dir {
+		return nil, -1
+	}
+
+	names, index := fsp.ImageSiblings()
+	paths := make([]string, 0, len(names))
+	for _, name := range names {
+		paths = append(paths, v.Join(dir, name))
+	}
+	return paths, index
 }
 
 func openViewerInternal(pf *PanelsFrame, v vfs.VFS, path string) {

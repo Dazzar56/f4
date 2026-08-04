@@ -1,9 +1,13 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"io"
 	"testing"
+	"time"
 
+	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
@@ -138,7 +142,7 @@ func TestImageViewKeys(t *testing.T) {
 	if !press(0, vtinput.VK_RIGHT) || iv.panX <= 0 {
 		t.Error("the right arrow must pan")
 	}
-	if press('q', 0) {
+	if press('~', 0) {
 		t.Error("unrelated keys must be left to the rest of the UI")
 	}
 	if !press(0, vtinput.VK_ESCAPE) || !iv.IsDone() {
@@ -163,5 +167,179 @@ func TestImageViewShowDeclaresThePlacement(t *testing.T) {
 	scr.Graphics().EndFrame()
 	if scr.Graphics().Len() != 0 {
 		t.Error("the placement outlived the frame that owned it")
+	}
+}
+
+// withStubPipeline replaces the application pipeline with one that decodes
+// pictures out of thin air, and reports which files it was asked for.
+func withStubPipeline(t *testing.T, w, h int) chan string {
+	t.Helper()
+	asked := make(chan string, 16)
+
+	old := ImagePipe
+	t.Cleanup(func() { ImagePipe = old })
+
+	ImagePipe = newTestPipeline(func(ctx context.Context, v vfs.VFS, path string) (*vtui.ImageSurface, string, error) {
+		asked <- path
+		return imageTestSurface(w, h), "stub", nil
+	})
+	ImagePipe.preview = func(ctx context.Context, v vfs.VFS, path string) (*vtui.ImageSurface, string, error) {
+		return nil, "", errors.New("no thumbnail")
+	}
+	return asked
+}
+
+func TestImageViewWalksItsSiblings(t *testing.T) {
+	withStubPipeline(t, 20, 10)
+
+	iv := newTestImageView(t, 100, 100)
+	iv.path = "b.png"
+	iv.SetSiblings([]string{"a.png", "b.png", "c.png"}, 1)
+
+	// Decode them all first, so that stepping is answered from the cache.
+	for _, name := range []string{"a.png", "c.png"} {
+		if res := ImagePipe.LoadSync(context.Background(), nil, name); res.Err != nil {
+			t.Fatalf("%s: %v", name, res.Err)
+		}
+	}
+
+	iv.Step(1)
+	if iv.index != 2 || iv.path != "c.png" {
+		t.Fatalf("a step forward went to %d, %q", iv.index, iv.path)
+	}
+	if iv.surface.Width != 20 || iv.surface.Height != 10 {
+		t.Errorf("the new picture is not the one on screen: %dx%d", iv.surface.Width, iv.surface.Height)
+	}
+
+	// Walking past the end stays on the last picture.
+	iv.Step(5)
+	if iv.index != 2 {
+		t.Errorf("walking past the end left the list at %d", iv.index)
+	}
+
+	iv.GoTo(0)
+	if iv.index != 0 || iv.path != "a.png" {
+		t.Errorf("Home went to %d, %q", iv.index, iv.path)
+	}
+
+	// A viewer without siblings has nowhere to step.
+	lone := newTestImageView(t, 10, 10)
+	lone.Step(1)
+	if lone.path != "test.png" {
+		t.Errorf("a lone picture must stay put, got %q", lone.path)
+	}
+}
+
+func TestImageViewPrefetchesItsNeighbours(t *testing.T) {
+	asked := withStubPipeline(t, 8, 8)
+
+	iv := newTestImageView(t, 100, 100)
+	iv.path = "2.png"
+	iv.SetSiblings([]string{"0.png", "1.png", "2.png", "3.png", "4.png"}, 2)
+
+	seen := map[string]bool{}
+	for i := 0; i < 4; i++ {
+		select {
+		case path := <-asked:
+			seen[path] = true
+		case <-time.After(time.Second):
+			t.Fatalf("only %d neighbours were prepared: %v", len(seen), seen)
+		}
+	}
+	for _, want := range []string{"1.png", "3.png", "0.png", "4.png"} {
+		if !seen[want] {
+			t.Errorf("%s was not prepared", want)
+		}
+	}
+	if seen["2.png"] {
+		t.Error("the picture on screen is not its own neighbour")
+	}
+}
+
+func TestImageViewActualSize(t *testing.T) {
+	scr := newImageTestScreen(t)
+	iv := newTestImageView(t, 100, 100)
+
+	// Fitted, a square picture fills the 23 rows of the window.
+	p, _ := iv.placementFor(scr)
+	if p.Rows != 23 {
+		t.Fatalf("fitted size: %dx%d cells", p.Cols, p.Rows)
+	}
+
+	iv.ToggleActualSize()
+	p, ok := iv.placementFor(scr)
+	if !ok {
+		t.Fatal("layout failed")
+	}
+	// A hundred pixels are thirteen cells of eight and seven cells of
+	// sixteen.
+	if p.Cols != 13 || p.Rows != 7 {
+		t.Errorf("actual size: %dx%d cells", p.Cols, p.Rows)
+	}
+	if iv.lastScale != 1 {
+		t.Errorf("the actual size is a scale of one, got %v", iv.lastScale)
+	}
+
+	iv.ToggleActualSize()
+	if p, _ = iv.placementFor(scr); p.Rows != 23 {
+		t.Errorf("switching back must fit the window again: %dx%d", p.Cols, p.Rows)
+	}
+}
+
+func TestImageViewFullscreenTakesTheTopRow(t *testing.T) {
+	scr := newImageTestScreen(t)
+	iv := newTestImageView(t, 100, 100)
+
+	iv.ProcessKey(&vtinput.InputEvent{KeyDown: true, Char: 'f'})
+	p, ok := iv.placementFor(scr)
+	if !ok {
+		t.Fatal("layout failed")
+	}
+	if p.Row != 0 || p.Rows != 24 {
+		t.Errorf("without the title bar the picture starts at row 0: %d, %d rows", p.Row, p.Rows)
+	}
+}
+
+func TestImageViewIgnoresStaleResults(t *testing.T) {
+	iv := newTestImageView(t, 100, 100)
+	gen := iv.loadGen
+
+	// The reader moved on while the decoder was busy.
+	iv.loadGen++
+	iv.accept(gen, ImageResult{Path: "old.png", Surface: vtui.NewImageSurface(7, 7)})
+	if iv.surface.Width != 100 {
+		t.Error("a result for a picture nobody is looking at any more must be dropped")
+	}
+
+	iv.accept(iv.loadGen, ImageResult{Path: "new.png", Surface: vtui.NewImageSurface(7, 7), Decoder: "stub"})
+	if iv.surface.Width != 7 {
+		t.Error("the awaited result must be taken")
+	}
+}
+
+func TestPanelImageSiblings(t *testing.T) {
+	fp := &FileSystemPanel{
+		entries: []*fileEntry{
+			{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
+			{VFSItem: vfs.VFSItem{Name: "sub", IsDir: true}},
+			{VFSItem: vfs.VFSItem{Name: "a.png"}},
+			{VFSItem: vfs.VFSItem{Name: "notes.txt"}},
+			{VFSItem: vfs.VFSItem{Name: "b.jpg"}},
+		},
+		cursorIdx: 4,
+	}
+
+	names, index := fp.ImageSiblings()
+	if len(names) != 2 || names[0] != "a.png" || names[1] != "b.jpg" {
+		t.Fatalf("the pictures of the panel: %v", names)
+	}
+	if index != 1 {
+		t.Errorf("the cursor is on the second picture, got %d", index)
+	}
+
+	// A cursor on something that is not a picture has no position.
+	fp.cursorIdx = 3
+	if _, index := fp.ImageSiblings(); index != -1 {
+		t.Errorf("expected no position, got %d", index)
 	}
 }

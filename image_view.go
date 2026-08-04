@@ -19,6 +19,10 @@ const (
 	// good enough until the size can be queried.
 	imageViewFallbackCellW = 8
 	imageViewFallbackCellH = 16
+
+	// imageViewPrefetchRadius is how many pictures on each side are decoded
+	// before anybody asks to see them.
+	imageViewPrefetchRadius = 2
 )
 
 var imageViewBackAttr = vtui.SetRGBBoth(0, 0xC0C0C0, 0x101010)
@@ -34,7 +38,16 @@ type ImageView struct {
 	decoder string
 	gfxKey  string
 
+	siblings []string
+	index    int
+
 	preview    bool
+	loading    bool
+	err        error
+	loadGen    uint64
+	actual     bool
+	full       bool
+	lastScale  float64
 	zoom       float64
 	panX, panY float64
 
@@ -65,34 +78,173 @@ func NewImageView(ctx context.Context, v vfs.VFS, path string) (*ImageView, erro
 	}
 	iv.gfxKey = fmt.Sprintf("f4.imageview:%p", iv)
 
+	iv.index = -1
 	iv.topBar = NewTopBar(func() string {
-		base := path
+		base := iv.path
 		if v != nil {
-			base = v.Base(path)
+			base = v.Base(iv.path)
 		} else {
-			base = filepath.Base(path)
+			base = filepath.Base(iv.path)
 		}
-		decoder := iv.decoder
-		if iv.preview {
-			decoder += ", preview"
+
+		state := iv.decoder
+		switch {
+		case iv.err != nil:
+			state = "error: " + iv.err.Error()
+		case iv.loading:
+			state += ", loading"
+		case iv.preview:
+			state += ", preview"
 		}
-		return fmt.Sprintf(" %s │ %dx%d │ %d%% │ %s ",
+
+		position := ""
+		if iv.index >= 0 && len(iv.siblings) > 1 {
+			position = fmt.Sprintf(" │ %d/%d", iv.index+1, len(iv.siblings))
+		}
+
+		// The scale of the last frame is the honest one: it already knows
+		// how large the window is.
+		scale := iv.lastScale
+		if scale <= 0 {
+			scale = iv.zoom
+		}
+		return fmt.Sprintf(" %s │ %dx%d │ %d%%%s │ %s ",
 			base, iv.surface.Width, iv.surface.Height,
-			int(iv.zoom*100+0.5), decoder)
+			int(scale*100+0.5), position, state)
 	})
 	iv.topBar.SetVisible(true)
 	iv.SetCanFocus(true)
 	iv.SetFocus(true)
 
 	// What is on screen is a stand-in; ask for the real thing.
+	iv.loading = res.Preview
 	if res.Preview {
+		gen := iv.loadGen
 		ImagePipe.Load(v, path, func(full ImageResult) {
-			if full.Err == nil && !full.Preview {
-				iv.SetImage(full)
-			}
+			iv.accept(gen, full)
 		})
 	}
 	return iv, nil
+}
+
+// barHeight is how many rows the title bar takes from the picture.
+func (iv *ImageView) barHeight() int {
+	if iv.full {
+		return 0
+	}
+	return 1
+}
+
+// SetSiblings tells the viewer which pictures stand next to this one, in the
+// order the panel shows them.
+func (iv *ImageView) SetSiblings(paths []string, index int) {
+	iv.siblings = paths
+	iv.index = index
+	iv.prefetch()
+}
+
+// prefetch has the neighbours decoded while nobody is looking at them yet.
+func (iv *ImageView) prefetch() {
+	if iv.index < 0 || iv.index >= len(iv.siblings) {
+		return
+	}
+	ImagePipe.Prefetch(iv.vfs, ImageNeighbourhood(iv.siblings, iv.index, imageViewPrefetchRadius))
+}
+
+// Step walks the siblings. It stops at the ends rather than wrapping around,
+// so that it stays obvious where the directory begins and where it ends.
+func (iv *ImageView) Step(delta int) {
+	if len(iv.siblings) == 0 || iv.index < 0 {
+		return
+	}
+	idx := iv.index + delta
+	if idx < 0 {
+		idx = 0
+	}
+	if idx >= len(iv.siblings) {
+		idx = len(iv.siblings) - 1
+	}
+	iv.GoTo(idx)
+}
+
+// GoTo shows the sibling at the given position.
+func (iv *ImageView) GoTo(idx int) {
+	if idx < 0 || idx >= len(iv.siblings) || iv.siblings[idx] == iv.path {
+		return
+	}
+	iv.index = idx
+	iv.open(iv.siblings[idx])
+}
+
+// Reload decodes the file again, for a picture that has changed since it was
+// put on screen.
+func (iv *ImageView) Reload() {
+	ImagePipe.Invalidate(iv.vfs, iv.path)
+	iv.open(iv.path)
+}
+
+// open puts another picture on screen. One that is decoded already appears
+// at once; otherwise the previous picture stays until the new one arrives,
+// which is quieter than a flash of empty window.
+func (iv *ImageView) open(path string) {
+	iv.path = path
+	iv.zoom = 1
+	iv.panX, iv.panY = 0, 0
+	iv.err = nil
+	iv.loadGen++
+	gen := iv.loadGen
+	iv.prefetch()
+
+	if res, ok := ImagePipe.Cached(iv.vfs, path); ok {
+		iv.accept(gen, res)
+		return
+	}
+
+	iv.loading = true
+	v := iv.vfs
+	vtui.RunAsync(func(ctx *vtui.TaskContext) {
+		if res, ok := ImagePipe.PreviewSync(ctx.Context, v, path); ok {
+			ctx.RunOnUI(func() { iv.accept(gen, res) })
+		}
+		res := ImagePipe.LoadSync(ctx.Context, v, path)
+		ctx.RunOnUI(func() { iv.accept(gen, res) })
+	})
+}
+
+// accept takes a result unless the reader has moved on since asking for it.
+func (iv *ImageView) accept(gen uint64, res ImageResult) {
+	if gen != iv.loadGen {
+		return
+	}
+	if res.Err != nil {
+		iv.loading = false
+		iv.err = res.Err
+		vtui.DebugLog("IMAGE: %s: %v", res.Path, res.Err)
+		return
+	}
+	iv.SetImage(res)
+	iv.loading = res.Preview
+}
+
+// baseScale is what a zoom of one means: the picture fitted into the window,
+// or its own pixels when the actual size is asked for.
+func (iv *ImageView) baseScale(boxW, boxH int) float64 {
+	if !iv.surface.Valid() || iv.surface.Width <= 0 || iv.actual {
+		return 1
+	}
+	fitW, _ := vtui.FitInside(iv.surface.Width, iv.surface.Height, boxW, boxH)
+	if fitW <= 0 {
+		return 1
+	}
+	return float64(fitW) / float64(iv.surface.Width)
+}
+
+// ToggleActualSize switches between the window and the picture itself
+// deciding how large it is shown.
+func (iv *ImageView) ToggleActualSize() {
+	iv.actual = !iv.actual
+	iv.zoom = 1
+	iv.panX, iv.panY = 0, 0
 }
 
 // SetImage replaces the picture on screen, keeping the viewer looking at the
@@ -188,7 +340,7 @@ func (iv *ImageView) placementFor(scr *vtui.ScreenBuf) (vtui.ImagePlacement, boo
 	}
 
 	x1, y1, x2, y2 := iv.GetPosition()
-	top := y1 + 1
+	top := y1 + iv.barHeight()
 	cols := x2 - x1 + 1
 	rows := y2 - top + 1
 	if cols <= 0 || rows <= 0 {
@@ -202,13 +354,14 @@ func (iv *ImageView) placementFor(scr *vtui.ScreenBuf) (vtui.ImagePlacement, boo
 
 	boxW := cols * cw
 	boxH := rows * ch
-	fitW, fitH := vtui.FitInside(iv.surface.Width, iv.surface.Height, boxW, boxH)
-	if fitW <= 0 || fitH <= 0 {
+	scale := iv.baseScale(boxW, boxH) * iv.zoom
+	if scale <= 0 {
 		return vtui.ImagePlacement{}, false
 	}
+	iv.lastScale = scale
 
-	dispW := int(float64(fitW)*iv.zoom + 0.5)
-	dispH := int(float64(fitH)*iv.zoom + 0.5)
+	dispW := int(float64(iv.surface.Width)*scale + 0.5)
+	dispH := int(float64(iv.surface.Height)*scale + 0.5)
 	if dispW < 1 {
 		dispW = 1
 	}
@@ -224,11 +377,6 @@ func (iv *ImageView) placementFor(scr *vtui.ScreenBuf) (vtui.ImagePlacement, boo
 		p.Col = x1 + (cols-p.Cols)/2
 		p.Row = top + (rows-p.Rows)/2
 		return p, true
-	}
-
-	scale := float64(dispW) / float64(iv.surface.Width)
-	if scale <= 0 {
-		return vtui.ImagePlacement{}, false
 	}
 
 	visW := int(float64(boxW) / scale)
@@ -278,11 +426,14 @@ func cellsFor(pixels, cellSize, limit int) int {
 func (iv *ImageView) Show(scr *vtui.ScreenBuf) {
 	iv.ScreenObject.Show(scr)
 	if iv.topBar != nil {
-		iv.topBar.Show(scr)
+		iv.topBar.SetVisible(!iv.full)
+		if !iv.full {
+			iv.topBar.Show(scr)
+		}
 	}
 
 	x1, y1, x2, y2 := iv.GetPosition()
-	top := y1 + 1
+	top := y1 + iv.barHeight()
 	scr.FillRect(x1, top, x2, y2, ' ', imageViewBackAttr)
 
 	p, ok := iv.placementFor(scr)
@@ -306,22 +457,63 @@ func (iv *ImageView) ProcessKey(e *vtinput.InputEvent) bool {
 		return false
 	}
 
+	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
+	if ctrl {
+		if e.VirtualKeyCode == vtinput.VK_R {
+			iv.Reload()
+			return true
+		}
+		return false
+	}
+
 	switch e.Char {
-	case '+', '=':
+	case '+', '=', 'e', 'E':
 		iv.SetZoom(iv.zoom * 1.25)
 		return true
-	case '-', '_':
+	case '-', '_', 'q', 'Q':
 		iv.SetZoom(iv.zoom / 1.25)
 		return true
-	case '*':
-		iv.SetZoom(1)
-		iv.panX, iv.panY = 0, 0
+	case '*', '0':
+		iv.ToggleActualSize()
+		return true
+	case ' ':
+		iv.Step(1)
+		return true
+	case 'f', 'F':
+		iv.full = !iv.full
+		return true
+	case 'a', 'A':
+		iv.Pan(-1, 0)
+		return true
+	case 'd', 'D':
+		iv.Pan(1, 0)
+		return true
+	case 'w', 'W':
+		iv.Pan(0, -1)
+		return true
+	case 's', 'S':
+		iv.Pan(0, 1)
 		return true
 	}
 
 	switch e.VirtualKeyCode {
 	case vtinput.VK_ESCAPE, vtinput.VK_F10:
 		iv.Close()
+		return true
+	case vtinput.VK_NEXT:
+		iv.Step(1)
+		return true
+	case vtinput.VK_PRIOR, vtinput.VK_BACK:
+		iv.Step(-1)
+		return true
+	case vtinput.VK_HOME:
+		iv.GoTo(0)
+		return true
+	case vtinput.VK_END:
+		iv.GoTo(len(iv.siblings) - 1)
+		return true
+	case vtinput.VK_TAB:
+		iv.ToggleActualSize()
 		return true
 	case vtinput.VK_LEFT:
 		iv.Pan(-1, 0)

@@ -1365,6 +1365,25 @@ func (fp *FileSystemPanel) getRawSelectedName() string {
 	return fp.entries[idx].Name
 }
 
+// ImageSiblings lists the pictures of this panel in the order it shows them,
+// together with the position of the one under the cursor, or minus one when
+// the cursor is not on a picture.
+func (fp *FileSystemPanel) ImageSiblings() ([]string, int) {
+	current := fp.getRawSelectedName()
+	names := make([]string, 0, len(fp.entries))
+	index := -1
+	for _, e := range fp.entries {
+		if e.IsDir || e.Name == ".." || !IsImageFile(e.Name) {
+			continue
+		}
+		if e.Name == current {
+			index = len(names)
+		}
+		names = append(names, e.Name)
+	}
+	return names, index
+}
+
 // SelectName searches for an entry by name and moves the cursor to it.
 func (fp *FileSystemPanel) SelectName(name string) {
 	for i, entry := range fp.entries {
