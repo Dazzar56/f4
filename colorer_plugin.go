@@ -244,7 +244,6 @@ func releaseColorerSession(session *colorer.Session, configsDir string) {
 	if session == nil {
 		return
 	}
-	session.Reset()
 	colorerPoolMu.Lock()
 	if colorerIdle == nil {
 		colorerIdle = session
@@ -253,7 +252,10 @@ func releaseColorerSession(session *colorer.Session, configsDir string) {
 		return
 	}
 	colorerPoolMu.Unlock()
-	session.Close()
+	// Destroying a WASM runtime can be noticeably slower than closing the
+	// editor frame. This session is no longer reachable, so release it away
+	// from the UI thread.
+	go session.Close()
 }
 
 // ResetColorerSessions drops the pooled session, so that the next opened file
