@@ -100,10 +100,16 @@ func IsImageFile(path string) bool {
 // DecodeImage walks the decoders in priority order and returns the first
 // result, together with the name of the decoder that produced it. The ones
 // claiming the extension go first; when they all fail the remaining ones are
-// offered the file too, because a photograph saved under the wrong name is
-// still a photograph.
+// offered the file too, because a picture saved under the wrong picture name
+// is still a picture. A name no decoder claims at all is refused outright:
+// the extension is what says the file is meant to be an image, and sniffing
+// every file that is opened would promise something quite different.
 func DecodeImage(path string, data []byte) (*vtui.ImageSurface, string, error) {
 	decoders := ImageDecodersFor(path)
+	if len(decoders) == 0 {
+		return nil, "", fmt.Errorf("no image decoder for %q", path)
+	}
+
 	claimed := make(map[string]bool, len(decoders))
 	for _, d := range decoders {
 		claimed[d.Name] = true
@@ -118,9 +124,6 @@ func DecodeImage(path string, data []byte) (*vtui.ImageSurface, string, error) {
 		return rest[i].Priority > rest[j].Priority
 	})
 	decoders = append(decoders, rest...)
-	if len(decoders) == 0 {
-		return nil, "", fmt.Errorf("no image decoder for %q", path)
-	}
 
 	var lastErr error
 	for _, d := range decoders {

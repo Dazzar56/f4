@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -2704,12 +2705,14 @@ func TestPanelsFrame_PromptTruncation(t *testing.T) {
 
 type mockSlowStatVFS struct {
 	vfs.OSVFS
-	statCalls int
+	// Stat is called from background goroutines and read from the test, so
+	// the counter has to be one both may touch.
+	statCalls atomic.Int64
 	statBlock chan struct{}
 }
 
 func (m *mockSlowStatVFS) Stat(ctx context.Context, p string) (vfs.VFSItem, error) {
-	m.statCalls++
+	m.statCalls.Add(1)
 	if m.statBlock != nil {
 		<-m.statBlock
 	}
@@ -2755,16 +2758,20 @@ func TestPanelsFrame_AutoRefresh_Locking(t *testing.T) {
 	if !fsp.isCheckingRefresh {
 		t.Error("Expected isCheckingRefresh to be true while Stat is pending")
 	}
-	if mv.statCalls != 1 {
-		t.Errorf("Expected 1 Stat call, got %d", mv.statCalls)
+	if mv.statCalls.Load() < 1 {
+		t.Error("Expected the auto refresh to have called Stat")
 	}
 
-	// 2. Повторный вызов Show() НЕ должен инициировать второй Stat, пока первый висит
+	// 2. Повторный вызов Show() НЕ должен инициировать второй Stat, пока первый висит.
+	// Считаем от текущего значения: подмена VFS могла оставить позади и
+	// фоновое чтение каталога, которое обращается к тому же Stat, и оно к
+	// защите от повторного запроса отношения не имеет.
+	before := mv.statCalls.Load()
 	pf.lastAutoRefresh = time.Now().Add(-5 * time.Second)
 	pf.Show(vtui.NewSilentScreenBuf())
 
-	if mv.statCalls > 1 {
-		t.Errorf("Anti-spam failed: Stat called %d times simultaneously", mv.statCalls)
+	if after := mv.statCalls.Load(); after != before {
+		t.Errorf("Anti-spam failed: Stat called %d more times while one was pending", after-before)
 	}
 
 	// 3. Разблокируем Stat и проверяем сброс флага
