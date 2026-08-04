@@ -1177,11 +1177,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 					if vRow == startVRow {
 						for currRuneIdx > 0 {
 							prev, curr := runes[currRuneIdx-1], runes[currRuneIdx]
-							pCat, cCat := getCharCategory(prev), getCharCategory(curr)
-							if (shift && pCat != catSpace && cCat == catSpace) ||
-								(pCat == catSpace && cCat == catWord) ||
-								(pCat == catSpace && cCat == catDivider) ||
-								(pCat == catDivider && cCat == catWord) {
+							if stopBeforeRuneLeft(prev, curr, shift) {
 								break
 							}
 							currRuneIdx--
@@ -1261,28 +1257,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 					if vRow == startVRow {
 						for currRuneIdx < len(runes) {
 							prev, curr := runes[currRuneIdx-1], runes[currRuneIdx]
-							pCat, cCat := getCharCategory(prev), getCharCategory(curr)
-							stop := false
-							if shift && pCat != catSpace && cCat == catSpace {
-								stop = true
-							}
-							if pCat == catWord && cCat == catDivider {
-								stop = true
-							}
-							if pCat == catSpace && cCat == catWord {
-								stop = true
-							}
-							if pCat == catSpace && cCat == catDivider {
-								stop = true
-							}
-							if pCat == catDivider && cCat == catWord {
-								stop = true
-							}
-							if pCat == catDivider && cCat == catDivider && prev != curr {
-								stop = true
-							}
-
-							if stop {
+							if stopBeforeRuneRight(prev, curr, shift) {
 								break
 							}
 
@@ -3335,22 +3310,6 @@ func (ev *EditorView) Search(pattern string, caseSensitive, reverse, regexp, who
 			})
 		})
 	})
-}
-
-const (
-	catSpace = iota
-	catDivider
-	catWord
-)
-
-func getCharCategory(r rune) int {
-	if r == ' ' || r == '\t' {
-		return catSpace
-	}
-	if strings.ContainsRune("~!%^&*()+|{}:\"<>?`-=\\[];',./", r) {
-		return catDivider
-	}
-	return catWord
 }
 
 // updateAutocomplete scans nearby lines for words matching the current prefix.

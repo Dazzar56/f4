@@ -3471,11 +3471,43 @@ func TestEditorView_WordJumps_DifferentDividers(t *testing.T) {
 	ev.li.Rebuild(pt)
 	ev.CursorPos = 0
 
-	// Ctrl+Right должен остановиться на первом слэше (смена типа разделителя)
+	// A change of divider kind is not a word boundary in far2l, so the whole
+	// run is crossed in a single jump (issue #280).
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT, ControlKeyState: vtinput.LeftCtrlPressed})
 
+	if ev.CursorPos != 6 {
+		t.Errorf("EditorView expected stop on index 6, got %d", ev.CursorPos)
+	}
+}
+
+func TestEditorView_WordJumps_DividerBetweenWords(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pt := piecetable.New([]byte("foo.bar"))
+	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
+	ev.li.Rebuild(pt)
+	ev.CursorPos = 0
+
+	// far2l stops at the end of the word, then jumps straight to the end of
+	// the line: the divider itself is not a landing spot.
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT, ControlKeyState: vtinput.LeftCtrlPressed})
 	if ev.CursorPos != 3 {
-		t.Errorf("EditorView expected stop on index 3, got %d", ev.CursorPos)
+		t.Errorf("first Ctrl+Right: expected 3, got %d", ev.CursorPos)
+	}
+
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT, ControlKeyState: vtinput.LeftCtrlPressed})
+	if ev.CursorPos != 7 {
+		t.Errorf("second Ctrl+Right: expected 7, got %d", ev.CursorPos)
+	}
+
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_LEFT, ControlKeyState: vtinput.LeftCtrlPressed})
+	if ev.CursorPos != 4 {
+		t.Errorf("first Ctrl+Left: expected 4, got %d", ev.CursorPos)
+	}
+
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_LEFT, ControlKeyState: vtinput.LeftCtrlPressed})
+	if ev.CursorPos != 0 {
+		t.Errorf("second Ctrl+Left: expected 0, got %d", ev.CursorPos)
 	}
 }
 
