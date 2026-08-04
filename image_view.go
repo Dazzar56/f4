@@ -51,6 +51,13 @@ type ImageView struct {
 	zoom       float64
 	panX, panY float64
 
+	// Orientation chosen by the reader. The decoded picture stays in
+	// surface; shown carries the turned and mirrored copy and is nil while
+	// the picture is seen exactly as it was decoded.
+	rotation     int
+	flipH, flipV bool
+	shown        *vtui.ImageSurface
+
 	OnClose func()
 }
 
@@ -109,7 +116,7 @@ func NewImageView(ctx context.Context, v vfs.VFS, path string) (*ImageView, erro
 			scale = iv.zoom
 		}
 		return fmt.Sprintf(" %s │ %dx%d │ %d%%%s │ %s ",
-			base, iv.surface.Width, iv.surface.Height,
+			base, iv.display().Width, iv.display().Height,
 			int(scale*100+0.5), position, state)
 	})
 	iv.topBar.SetVisible(true)
@@ -190,6 +197,8 @@ func (iv *ImageView) open(path string) {
 	iv.path = path
 	iv.zoom = 1
 	iv.panX, iv.panY = 0, 0
+	iv.rotation, iv.flipH, iv.flipV = 0, false, false
+	iv.shown = nil
 	iv.err = nil
 	iv.loadGen++
 	gen := iv.loadGen
@@ -229,14 +238,15 @@ func (iv *ImageView) accept(gen uint64, res ImageResult) {
 // baseScale is what a zoom of one means: the picture fitted into the window,
 // or its own pixels when the actual size is asked for.
 func (iv *ImageView) baseScale(boxW, boxH int) float64 {
-	if !iv.surface.Valid() || iv.surface.Width <= 0 || iv.actual {
+	img := iv.display()
+	if !img.Valid() || img.Width <= 0 || iv.actual {
 		return 1
 	}
-	fitW, _ := vtui.FitInside(iv.surface.Width, iv.surface.Height, boxW, boxH)
+	fitW, _ := vtui.FitInside(img.Width, img.Height, boxW, boxH)
 	if fitW <= 0 {
 		return 1
 	}
-	return float64(fitW) / float64(iv.surface.Width)
+	return float64(fitW) / float64(img.Width)
 }
 
 // ToggleActualSize switches between the window and the picture itself
@@ -247,6 +257,53 @@ func (iv *ImageView) ToggleActualSize() {
 	iv.panX, iv.panY = 0, 0
 }
 
+// display is the picture the viewer works with: the turned and mirrored copy
+// when the reader has changed the orientation, the decoded surface when they
+// have not.
+func (iv *ImageView) display() *vtui.ImageSurface {
+	if iv.shown.Valid() {
+		return iv.shown
+	}
+	return iv.surface
+}
+
+// rebuild bakes the current orientation into pixels. A backend can only ship
+// a rectangle of pixels and place it on a grid of cells, so a turn cannot be
+// expressed in the placement and has to be applied to the surface itself.
+func (iv *ImageView) rebuild() {
+	if iv.rotation == 0 && !iv.flipH && !iv.flipV {
+		iv.shown = nil
+		return
+	}
+	iv.shown = TransformSurface(iv.surface, iv.rotation, iv.flipH, iv.flipV)
+}
+
+// Rotate turns the picture clockwise by a multiple of ninety degrees.
+func (iv *ImageView) Rotate(delta int) {
+	// Mirroring is applied after the turn, and a mirror reverses the
+	// direction of a turn, so with exactly one axis mirrored the stored
+	// angle has to move the other way for the key to keep turning the
+	// picture the reader actually sees.
+	if iv.flipH != iv.flipV {
+		delta = -delta
+	}
+	iv.rotation = ((iv.rotation+delta)%360 + 360) % 360
+	iv.panX, iv.panY = 0, 0
+	iv.rebuild()
+}
+
+// Flip mirrors the picture as it is seen, so it is applied after the turn.
+func (iv *ImageView) Flip(horizontal, vertical bool) {
+	if horizontal {
+		iv.flipH = !iv.flipH
+	}
+	if vertical {
+		iv.flipV = !iv.flipV
+	}
+	iv.panX, iv.panY = 0, 0
+	iv.rebuild()
+}
+
 // SetImage replaces the picture on screen, keeping the viewer looking at the
 // same part of it. Sizes differ between a thumbnail and the picture itself,
 // so the panning is measured in the new picture's pixels.
@@ -254,14 +311,16 @@ func (iv *ImageView) SetImage(res ImageResult) {
 	if res.Surface == nil || !res.Surface.Valid() {
 		return
 	}
-	if iv.surface.Valid() && iv.surface.Width > 0 {
-		scale := float64(res.Surface.Width) / float64(iv.surface.Width)
-		iv.panX *= scale
-		iv.panY *= scale
-	}
+	prev := iv.display()
 	iv.surface = res.Surface
 	iv.decoder = res.Decoder
 	iv.preview = res.Preview
+	iv.rebuild()
+	if prev.Valid() && prev.Width > 0 {
+		scale := float64(iv.display().Width) / float64(prev.Width)
+		iv.panX *= scale
+		iv.panY *= scale
+	}
 }
 
 func (iv *ImageView) SetPosition(x1, y1, x2, y2 int) {
@@ -286,11 +345,12 @@ func (iv *ImageView) SetZoom(z float64) {
 
 // Pan moves the visible region by a step of one twentieth of the image.
 func (iv *ImageView) Pan(dx, dy int) {
-	if !iv.surface.Valid() {
+	img := iv.display()
+	if !img.Valid() {
 		return
 	}
-	stepX := float64(iv.surface.Width) / 20
-	stepY := float64(iv.surface.Height) / 20
+	stepX := float64(img.Width) / 20
+	stepY := float64(img.Height) / 20
 	if stepX < 1 {
 		stepX = 1
 	}
@@ -308,8 +368,9 @@ func (iv *ImageView) Pan(dx, dy int) {
 }
 
 func (iv *ImageView) clampPan(visW, visH int) {
-	maxX := float64(iv.surface.Width - visW)
-	maxY := float64(iv.surface.Height - visH)
+	img := iv.display()
+	maxX := float64(img.Width - visW)
+	maxY := float64(img.Height - visH)
 	if maxX < 0 {
 		maxX = 0
 	}
@@ -335,7 +396,8 @@ func (iv *ImageView) clampPan(visW, visH int) {
 // zoomed past the window, the placement fills the window and the source
 // rectangle is cropped and panned instead.
 func (iv *ImageView) placementFor(scr *vtui.ScreenBuf) (vtui.ImagePlacement, bool) {
-	if scr == nil || !iv.surface.Valid() {
+	img := iv.display()
+	if scr == nil || !img.Valid() {
 		return vtui.ImagePlacement{}, false
 	}
 
@@ -360,8 +422,8 @@ func (iv *ImageView) placementFor(scr *vtui.ScreenBuf) (vtui.ImagePlacement, boo
 	}
 	iv.lastScale = scale
 
-	dispW := int(float64(iv.surface.Width)*scale + 0.5)
-	dispH := int(float64(iv.surface.Height)*scale + 0.5)
+	dispW := int(float64(img.Width)*scale + 0.5)
+	dispH := int(float64(img.Height)*scale + 0.5)
 	if dispW < 1 {
 		dispW = 1
 	}
@@ -369,7 +431,7 @@ func (iv *ImageView) placementFor(scr *vtui.ScreenBuf) (vtui.ImagePlacement, boo
 		dispH = 1
 	}
 
-	p := vtui.ImagePlacement{Surface: iv.surface}
+	p := vtui.ImagePlacement{Surface: img}
 
 	if dispW <= boxW && dispH <= boxH {
 		iv.panX, iv.panY = 0, 0
@@ -381,11 +443,11 @@ func (iv *ImageView) placementFor(scr *vtui.ScreenBuf) (vtui.ImagePlacement, boo
 
 	visW := int(float64(boxW) / scale)
 	visH := int(float64(boxH) / scale)
-	if visW > iv.surface.Width {
-		visW = iv.surface.Width
+	if visW > img.Width {
+		visW = img.Width
 	}
-	if visH > iv.surface.Height {
-		visH = iv.surface.Height
+	if visH > img.Height {
+		visH = img.Height
 	}
 	if visW < 1 {
 		visW = 1
@@ -466,6 +528,19 @@ func (iv *ImageView) ProcessKey(e *vtinput.InputEvent) bool {
 		return false
 	}
 
+	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
+	if alt {
+		switch e.Char {
+		case '>', '.':
+			iv.Flip(true, false)
+			return true
+		case '<', ',':
+			iv.Flip(false, true)
+			return true
+		}
+		return false
+	}
+
 	switch e.Char {
 	case '+', '=', 'e', 'E':
 		iv.SetZoom(iv.zoom * 1.25)
@@ -475,6 +550,12 @@ func (iv *ImageView) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	case '*', '0':
 		iv.ToggleActualSize()
+		return true
+	case '>', '.':
+		iv.Rotate(90)
+		return true
+	case '<', ',':
+		iv.Rotate(-90)
 		return true
 	case ' ':
 		iv.Step(1)
