@@ -172,6 +172,7 @@ type PanelsFrame struct {
 	termSelClickAt  time.Time // time of the last click
 	termSelClickX   int
 	termSelClickY   int
+	clipboardReader func() string
 }
 
 func (pf *PanelsFrame) Left() Panel  { return pf.panels[0] }
@@ -2245,7 +2246,12 @@ func (pf *PanelsFrame) handleTerminalMouseSelection(e *vtinput.InputEvent) bool 
 			return false
 		}
 		if pty := pf.getActivePTY(); pty != nil {
-			text := vtui.GetClipboard()
+			text := ""
+			if pf.clipboardReader != nil {
+				text = pf.clipboardReader()
+			} else {
+				text = vtui.GetClipboard()
+			}
 			if text != "" {
 				if tv.BracketedPasteMode {
 					pty.Write([]byte("\x1b[200~" + text + "\x1b[201~"))
