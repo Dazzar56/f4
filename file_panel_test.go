@@ -1628,12 +1628,16 @@ func TestFileSystemPanel_NavigateDown_CursorReset(t *testing.T) {
 }
 func TestFileSystemPanel_FastFind(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	oldFastFindArrowsCancel := AppConfig.FastFindArrowsCancel
+	defer func() { AppConfig.FastFindArrowsCancel = oldFastFindArrowsCancel }()
+	AppConfig.FastFindArrowsCancel = false
 	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(t.TempDir()))
 	fp.entries = []*fileEntry{
 		{VFSItem: vfs.VFSItem{Name: ".."}},
 		{VFSItem: vfs.VFSItem{Name: "apple"}},
 		{VFSItem: vfs.VFSItem{Name: "banana"}},
 		{VFSItem: vfs.VFSItem{Name: "cherry"}},
+		{VFSItem: vfs.VFSItem{Name: "dog"}},
 		{VFSItem: vfs.VFSItem{Name: "cat"}},
 	}
 	fp.Refresh()
@@ -1703,7 +1707,50 @@ func TestFileSystemPanel_FastFind(t *testing.T) {
 		t.Errorf("Up arrow should jump back to 'cherry', got %q", fp.GetSelectedName())
 	}
 
-	// 6. Escape to cancel
+	// 6. Ctrl+Enter finds the next match and keeps Fast Find active.
+	fp.ProcessKey(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_RETURN,
+		ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+	if fp.GetSelectedName() != "cat" {
+		t.Errorf("Ctrl+Enter should jump to 'cat', got %q", fp.GetSelectedName())
+	}
+	if !fp.fastFindMode || fp.fastFindStr != "c" {
+		t.Fatal("Ctrl+Enter should keep Fast Find active")
+	}
+
+	// 7. Ctrl+Shift+Enter finds the previous match.
+	fp.ProcessKey(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_RETURN,
+		ControlKeyState: vtinput.LeftCtrlPressed | vtinput.ShiftPressed,
+	})
+	if fp.GetSelectedName() != "cherry" {
+		t.Errorf("Ctrl+Shift+Enter should jump back to 'cherry', got %q", fp.GetSelectedName())
+	}
+
+	// 8. With the option enabled, Down cancels Fast Find and performs
+	// ordinary one-row navigation instead of jumping to the next match.
+	AppConfig.FastFindArrowsCancel = true
+	fp.ProcessKey(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_DOWN,
+	})
+	if got := fp.GetSelectedName(); got != "dog" {
+		t.Errorf("Down with FastFindArrowsCancel selected %q, want dog", got)
+	}
+	if fp.fastFindMode || fp.fastFindStr != "" {
+		t.Fatal("Down with FastFindArrowsCancel should close Fast Find")
+	}
+	AppConfig.FastFindArrowsCancel = false
+
+	// 9. Escape to cancel
+	fp.fastFindMode = true
+	fp.fastFindStr = "c"
 	fp.ProcessKey(&vtinput.InputEvent{
 		Type:           vtinput.KeyEventType,
 		KeyDown:        true,
@@ -1713,7 +1760,7 @@ func TestFileSystemPanel_FastFind(t *testing.T) {
 		t.Error("Escape should exit FastFind mode")
 	}
 
-	// 7. Navigation keys should deactivate FastFind
+	// 10. Navigation keys should deactivate FastFind
 	fp.fastFindMode = true
 	fp.fastFindStr = "c"
 	fp.ProcessKey(&vtinput.InputEvent{

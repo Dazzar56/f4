@@ -142,7 +142,9 @@ func CheckForUpdates(pf *PanelsFrame, manual bool) {
 	if AppConfig.UpdateChannel == 1 {
 		updateKey = assetUpdated
 		displayTime := assetUpdated
-		if len(displayTime) >= 16 {
+		if t, err := time.Parse(time.RFC3339, assetUpdated); err == nil {
+			displayTime = t.Local().Format("2006-01-02 15:04")
+		} else if len(displayTime) >= 16 {
 			displayTime = strings.Replace(displayTime[:16], "T", " ", 1)
 		}
 		displayVersion = "Nightly (" + displayTime + ")"

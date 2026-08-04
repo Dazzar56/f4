@@ -8,6 +8,7 @@ import (
 type TopBar struct {
 	vtui.Bar
 	GetValue func() string
+	ColorIdx int
 
 	// GetAttr, when set, chooses the colour of the bar. A zero answer means
 	// the palette decides, so a frame only has to say something when it has
@@ -17,7 +18,7 @@ type TopBar struct {
 }
 
 func NewTopBar(cb func() string) *TopBar {
-	return &TopBar{GetValue: cb}
+	return &TopBar{GetValue: cb, ColorIdx: ColViewerStatus}
 }
 
 func (tb *TopBar) Show(scr *vtui.ScreenBuf) {
@@ -25,7 +26,7 @@ func (tb *TopBar) Show(scr *vtui.ScreenBuf) {
 	if !tb.IsVisible() || tb.GetValue == nil {
 		return
 	}
-	attr := vtui.Palette[ColViewerStatus]
+	attr := vtui.Palette[tb.ColorIdx]
 	if tb.GetAttr != nil {
 		if a := tb.GetAttr(); a != 0 {
 			attr = a

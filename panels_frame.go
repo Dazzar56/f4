@@ -109,10 +109,11 @@ type PanelsFrame struct {
 	// place of panels[i]; panels[i] stays alive underneath and is
 	// still the "logical" panel for command dispatch. Alt panels
 	// never take focus (see AltPanel in info_panel.go).
-	altPanels      [2]AltPanel
-	activeIdx      int // 0 for left, 1 for right
-	executing      bool
-	returnToPanels bool
+	altPanels        [2]AltPanel
+	activeIdx        int    // 0 for left, 1 for right
+	folderHistoryPos [2]int // position in provider's newest-first folder history
+	executing        bool
+	returnToPanels   bool
 
 	menuBar *vtui.MenuBar
 	cmdLine *CommandLine
@@ -221,7 +222,7 @@ func (pf *PanelsFrame) Active() Panel  { return pf.panels[pf.activeIdx] }
 func (pf *PanelsFrame) Passive() Panel { return pf.panels[1-pf.activeIdx] }
 
 func NewPanelsFrame() *PanelsFrame {
-	pf := &PanelsFrame{activeIdx: 1, widePanel: -1}
+	pf := &PanelsFrame{activeIdx: 1, widePanel: -1, folderHistoryPos: [2]int{-1, -1}}
 	pf.SetHelp("Panels")
 	pf.showKeyBar = true
 	pf.showPanels = true
@@ -1076,6 +1077,17 @@ func (pf *PanelsFrame) VetoActionKey(e *vtinput.InputEvent) bool {
 	if e.Char != 0 {
 		return true
 	}
+	// Fast Find owns plain Esc and Ctrl+Enter; the filter must not turn
+	// them into Panel.Toggle / Panel.InsertFileName.
+	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
+	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
+	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
+	if e.VirtualKeyCode == vtinput.VK_ESCAPE && !ctrl && !alt && !shift {
+		return true
+	}
+	if e.VirtualKeyCode == vtinput.VK_RETURN && ctrl && !alt {
+		return true
+	}
 	switch e.VirtualKeyCode {
 	case vtinput.VK_ADD, vtinput.VK_SUBTRACT, vtinput.VK_MULTIPLY:
 		return true
@@ -1141,6 +1153,19 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		}
 	}
 
+	// Fast Find owns Esc and Ctrl+Enter before in-frame hotkeys and command-line
+	// handling. Delegate both to the panel's normal Fast Find handler.
+	// (VetoActionKey keeps the hotkey filter from grabbing them first.)
+	if pf.showPanels && e.KeyDown {
+		if fsp := pf.getActivePanel(); fsp != nil && fsp.fastFindMode {
+			isFindEnter := e.VirtualKeyCode == vtinput.VK_RETURN && ctrl && !alt
+			plainEscape := e.VirtualKeyCode == vtinput.VK_ESCAPE && !ctrl && !alt && !shift
+			if plainEscape || isFindEnter {
+				return fsp.ProcessKey(e)
+			}
+		}
+	}
+
 	// Arkanoid easter egg: Ctrl+Alt+A
 	if e.VirtualKeyCode == 'A' && alt && ctrl && e.KeyDown {
 		for i, s := range vtui.FrameManager.Screens {
@@ -1191,6 +1216,20 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	// Ctrl+O (Panel.Toggle) and Esc (Panel.Toggle:EscToggle) are handled
 	// by the hotkey dispatcher; F3/F4 for the terminal log are bound in
 	// the Terminal area with the TerminalQuiet condition.
+
+	// Alt+Left / Alt+Right move backward / forward through folder history.
+	// These are positional history moves: visiting an entry must not promote it
+	// to the newest MRU slot.
+	if (e.VirtualKeyCode == vtinput.VK_LEFT || e.VirtualKeyCode == vtinput.VK_RIGHT) && alt && !ctrl && !shift && e.KeyDown && pf.showPanels {
+		if fsp := pf.getActivePanel(); fsp != nil {
+			direction := -1
+			if e.VirtualKeyCode == vtinput.VK_RIGHT {
+				direction = 1
+			}
+			pf.moveFolderHistory(fsp, direction)
+		}
+		return true
+	}
 
 	// Raw input mode fallback for active shell commands (non-AltScreen, e.g. ping).
 	// We forward text and navigation to PTY, but let global shortcuts (Ctrl+O) fall through.
@@ -3331,6 +3370,111 @@ func (pf *PanelsFrame) NavigateToPath(fsp *FileSystemPanel, targetPath string) b
 	}
 
 	return false
+}
+
+func sameFolderHistoryPath(a, b string) bool {
+	if a == "" || b == "" {
+		return false
+	}
+	a = filepath.Clean(a)
+	b = filepath.Clean(b)
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(a, b)
+	}
+	return a == b
+}
+
+// folderHistoryStep resolves a move in newest-first provider storage.
+// direction < 0 means Back (towards older entries), direction > 0 means
+// Forward (towards newer entries).
+func folderHistoryStep(history []string, current string, pos, direction int) (int, string, bool) {
+	if len(history) == 0 || direction == 0 {
+		return pos, "", false
+	}
+	if pos < 0 || pos >= len(history) || !sameFolderHistoryPath(history[pos], current) {
+		pos = -1
+		for i, path := range history {
+			if sameFolderHistoryPath(path, current) {
+				pos = i
+				break
+			}
+		}
+	}
+
+	target := pos - 1
+	if direction < 0 {
+		target = pos + 1
+		if pos == -1 {
+			target = 0
+		}
+	} else if pos == -1 {
+		return pos, "", false
+	}
+	if target < 0 || target >= len(history) {
+		return pos, "", false
+	}
+	return target, history[target], true
+}
+
+func (pf *PanelsFrame) folderHistoryPanelIndex(fsp *FileSystemPanel) int {
+	for i, panel := range pf.panels {
+		if panelFSP, ok := panel.(*FileSystemPanel); ok && panelFSP == fsp {
+			return i
+		}
+	}
+	return pf.activeIdx
+}
+
+func (pf *PanelsFrame) navigateFolderHistory(fsp *FileSystemPanel, path string, pos int) bool {
+	if fsp == nil || path == "" {
+		return false
+	}
+	fsp.suppressFolderHistoryPath = path
+	if !pf.NavigateToPath(fsp, path) {
+		fsp.suppressFolderHistoryPath = ""
+		return false
+	}
+	idx := pf.folderHistoryPanelIndex(fsp)
+	if idx >= 0 && idx < len(pf.folderHistoryPos) {
+		pf.folderHistoryPos[idx] = pos
+	}
+	return true
+}
+
+// navigateAvailableFolderHistory tries history entries in storage-index order
+// until one can actually be opened. A positive step walks towards older MRU
+// entries; a negative step walks towards newer entries.
+func (pf *PanelsFrame) navigateAvailableFolderHistory(fsp *FileSystemPanel, history []string, startPos, step int) bool {
+	if step == 0 {
+		return false
+	}
+	for pos := startPos; pos >= 0 && pos < len(history); pos += step {
+		if pf.navigateFolderHistory(fsp, history[pos], pos) {
+			return true
+		}
+	}
+	return false
+}
+
+func (pf *PanelsFrame) moveFolderHistory(fsp *FileSystemPanel, direction int) bool {
+	if fsp == nil || vtui.GlobalHistoryProvider == nil {
+		return false
+	}
+	history := vtui.GlobalHistoryProvider.LoadHistory("folders")
+	idx := pf.folderHistoryPanelIndex(fsp)
+	pos := -1
+	if idx >= 0 && idx < len(pf.folderHistoryPos) {
+		pos = pf.folderHistoryPos[idx]
+	}
+	targetPos, _, ok := folderHistoryStep(history, fsp.vfs.GetPath(), pos, direction)
+	if !ok {
+		return false
+	}
+	step := -1
+	if direction < 0 {
+		step = 1
+	}
+	return pf.navigateAvailableFolderHistory(fsp, history, targetPos, step)
 }
 
 func expandPathEnv(s string) string {

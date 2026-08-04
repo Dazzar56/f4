@@ -299,6 +299,7 @@ func NewEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string) *EditorVie
 		}
 		return fmt.Sprintf(" %s │ %d,%d ", base, ev.CursorLine+1, ev.CursorPos)
 	})
+	ev.topBar.ColorIdx = ColEditorStatus
 	ev.topBar.SetVisible(true)
 	ev.SetCanFocus(true)
 	ev.SetFocus(true)

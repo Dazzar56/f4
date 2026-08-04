@@ -34,6 +34,7 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	AppConfig.EditorColorerBackground = false
 	AppConfig.CommandLineAutoComplete = false
 	AppConfig.SeparateFileExtensions = true
+	AppConfig.FastFindArrowsCancel = true
 	AppConfig.MacroRecordFormat = 1
 
 	// 2. Save
@@ -46,6 +47,7 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	AppConfig.EditorCrosshair = false
 	AppConfig.EditorColorerBackground = true
 	AppConfig.SeparateFileExtensions = false
+	AppConfig.FastFindArrowsCancel = false
 	AppConfig.MacroRecordFormat = 0
 
 	// 4. Load
@@ -75,6 +77,9 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	}
 	if !AppConfig.SeparateFileExtensions {
 		t.Error("LoadConfig failed to restore SeparateFileExtensions")
+	}
+	if !AppConfig.FastFindArrowsCancel {
+		t.Error("LoadConfig failed to restore FastFindArrowsCancel")
 	}
 	if AppConfig.MacroRecordFormat != 1 {
 		t.Error("LoadConfig failed to restore MacroRecordFormat")

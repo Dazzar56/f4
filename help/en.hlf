@@ -43,3 +43,4 @@ $Panel Navigation Keys
   Ctrl+Tab      - Cycle workspaces
   Ctrl+W        - Close workspace
   Ctrl+N        - Fork active panel to new workspace
+  Alt+Left/Right - Back/forward through folders history

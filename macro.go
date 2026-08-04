@@ -283,6 +283,26 @@ func isPanelBookmarkHotkey(e *vtinput.InputEvent) bool {
 	return e.VirtualKeyCode == vtinput.VK_OEM_3 && isGoto
 }
 
+// isPanelFastFindEscape identifies the contextual Escape owned by Fast Find.
+// It must reach PanelsFrame before macros and configurable hotkeys, otherwise
+// a Shell binding such as Esc -> Panel.Toggle hides the panels first.
+func isPanelFastFindEscape(e *vtinput.InputEvent) bool {
+	if e.Type != vtinput.KeyEventType || !e.KeyDown || e.VirtualKeyCode != vtinput.VK_ESCAPE {
+		return false
+	}
+	mods := e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed |
+		vtinput.LeftAltPressed | vtinput.RightAltPressed | vtinput.ShiftPressed)
+	if mods != 0 || vtui.FrameManager == nil {
+		return false
+	}
+	pf, ok := vtui.FrameManager.GetTopFrame().(*PanelsFrame)
+	if !ok || !pf.showPanels {
+		return false
+	}
+	fsp := pf.getActivePanel()
+	return fsp != nil && fsp.fastFindMode
+}
+
 func (m *MacroManager) Filter(e *vtinput.InputEvent) bool {
 	if e.Type != vtinput.KeyEventType {
 		return false
@@ -331,7 +351,7 @@ func (m *MacroManager) Filter(e *vtinput.InputEvent) bool {
 	}
 
 	currentArea := m.GetCurrentArea()
-	if currentArea == "Shell" && isPanelBookmarkHotkey(e) {
+	if currentArea == "Shell" && (isPanelBookmarkHotkey(e) || isPanelFastFindEscape(e)) {
 		return false
 	}
 

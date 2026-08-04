@@ -124,6 +124,93 @@ func TestSearchFirstKeyboardRoutingAndFocusToggle(t *testing.T) {
 	}
 }
 
+func TestSearchFirstFastFindCtrlEnterNavigation(t *testing.T) {
+	oldCfg := AppConfig
+	defer func() { AppConfig = oldCfg }()
+	AppConfig.NavigationMode = NavigationSearchFirst
+	AppConfig.CommandLineAutoComplete = false
+
+	pf, left, _ := newSearchFirstTestFrame(t)
+	left.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "alpha.txt"}},
+		{VFSItem: vfs.VFSItem{Name: "beta.txt"}},
+		{VFSItem: vfs.VFSItem{Name: "bravo.txt"}},
+	}
+	left.Refresh()
+
+	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'b', VirtualKeyCode: 'B'})
+	if got := left.GetSelectedName(); got != "beta.txt" {
+		t.Fatalf("initial Fast Find selected %q, want beta.txt", got)
+	}
+
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_RETURN,
+		ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+	if got := left.GetSelectedName(); got != "bravo.txt" {
+		t.Fatalf("Ctrl+Enter selected %q, want bravo.txt", got)
+	}
+	if !left.fastFindMode || left.fastFindStr != "b" || !pf.cmdLine.IsEmpty() {
+		t.Fatal("Ctrl+Enter must keep Fast Find active without changing the command line")
+	}
+
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_RETURN,
+		ControlKeyState: vtinput.LeftCtrlPressed | vtinput.ShiftPressed,
+	})
+	if got := left.GetSelectedName(); got != "beta.txt" {
+		t.Fatalf("Ctrl+Shift+Enter selected %q, want beta.txt", got)
+	}
+
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_ESCAPE,
+	})
+	if left.fastFindMode || left.fastFindStr != "" {
+		t.Fatal("Esc must close Fast Find")
+	}
+	if !pf.showPanels {
+		t.Fatal("Esc used to close Fast Find must not hide the panels")
+	}
+}
+
+func TestClassicFastFindEscapeDoesNotHidePanels(t *testing.T) {
+	oldCfg := AppConfig
+	defer func() { AppConfig = oldCfg }()
+	AppConfig.NavigationMode = NavigationClassic
+	AppConfig.EscTogglePanels = true
+
+	pf, left, _ := newSearchFirstTestFrame(t)
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		Char:            'b',
+		VirtualKeyCode:  'B',
+		ControlKeyState: vtinput.LeftAltPressed,
+	})
+	if !left.fastFindMode {
+		t.Fatal("Alt+B did not start Fast Find in classic navigation")
+	}
+
+	escapeDown := &vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_ESCAPE,
+	}
+	pf.ProcessKey(escapeDown)
+	if left.fastFindMode || left.fastFindStr != "" {
+		t.Fatal("Esc did not close classic Fast Find")
+	}
+	if !pf.showPanels {
+		t.Fatal("Esc used to close classic Fast Find hid the panels")
+	}
+}
+
 func TestSearchFirstFocusToggleAcceptsGUITextOnlyGraveEvents(t *testing.T) {
 	oldCfg := AppConfig
 	defer func() { AppConfig = oldCfg }()

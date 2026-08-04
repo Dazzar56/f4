@@ -1,5 +1,5 @@
 # Project Structure
-Last updated: 2026-08-04 17:41:16
+Last updated: 2026-08-05 12:00:00
 
 ```text
 .
@@ -58,10 +58,6 @@ Last updated: 2026-08-04 17:41:16
 ├── child_env.go
 ├── child_env_test.go
 ├── colorer_downloader.go
-├── colorer_hrc.go
-├── colorer_hrc_test.go
-├── colorer_hrd.go
-├── colorer_hrd_test.go
 ├── colorer_plugin.go
 ├── colorer_plugin_test.go
 ├── colorer_settings.go
@@ -94,20 +90,6 @@ Last updated: 2026-08-04 17:41:16
 ├── farcolor_test.go
 ├── farmenu_file.go
 ├── farmenu_file_test.go
-├── ffibridge
-│   ├── bridge.go
-│   ├── bridge_test.go
-│   ├── callback.go
-│   ├── convert.go
-│   ├── convert_test.go
-│   ├── kind.go
-│   ├── libc.go
-│   ├── memory.go
-│   ├── memory_test.go
-│   ├── signature.go
-│   ├── signature_test.go
-│   ├── sys_ffi.go
-│   └── sys_stub.go
 ├── FFI.md
 ├── filelist_update.sh
 ├── file_op_dialog.go
@@ -123,6 +105,7 @@ Last updated: 2026-08-04 17:41:16
 ├── find_file.go
 ├── find_file_test.go
 ├── FISH+.md
+├── folder_history_navigation_test.go
 ├── fs_info_darwin.go
 ├── fs_info.go
 ├── fs_info_linux.go
@@ -145,6 +128,7 @@ Last updated: 2026-08-04 17:41:16
 ├── gui_windows.go
 ├── help
 │   ├── en.hlf
+│   ├── README.md
 │   └── ru.hlf
 ├── help.go
 ├── help_keys_ru_test.go
@@ -154,6 +138,8 @@ Last updated: 2026-08-04 17:41:16
 ├── highlight_files.go
 ├── highlight_files_test.go
 ├── HIGHLIGHTING.md
+├── history_dialog.go
+├── history_dialog_test.go
 ├── history_provider.go
 ├── history_provider_test.go
 ├── hotkeys.go
@@ -176,6 +162,7 @@ Last updated: 2026-08-04 17:41:16
 ├── image_qoi.go
 ├── image_slideshow.go
 ├── image_slideshow_test.go
+├── IMAGES_PLAN.md
 ├── image_transform.go
 ├── image_transform_test.go
 ├── image_view.go
@@ -279,6 +266,14 @@ Last updated: 2026-08-04 17:41:16
 │       ├── crypto_test.go
 │       ├── dialog.go
 │       ├── dialog_test.go
+│       ├── fishplus
+│       │   ├── fs.go
+│       │   ├── fs_test.go
+│       │   ├── helper.sh
+│       │   ├── script.go
+│       │   ├── script_test.go
+│       │   ├── session.go
+│       │   └── session_test.go
 │       ├── ftp_vfs.go
 │       ├── netfox.go
 │       ├── netfox_test.go
@@ -348,9 +343,11 @@ Last updated: 2026-08-04 17:41:16
 ├── solaris_streams.go
 ├── solaris_streams_mock_test.go
 ├── solaris_streams_test.go
+├── style_far2l_test.go
 ├── style.go
 ├── styles
 │   ├── classic.ini
+│   ├── far2l_dark.ini
 │   └── modern.ini
 ├── style_test.go
 ├── terminal_log_vfs.go
@@ -366,11 +363,13 @@ Last updated: 2026-08-04 17:41:16
 ├── textlayout
 │   ├── wrap.go
 │   └── wrap_test.go
+├── themed_table.go
 ├── title.go
 ├── title_test.go
 ├── title_unix.go
 ├── title_windows.go
 ├── tools
+│   ├── fishplus_probe.sh
 │   └── icons
 │       ├── go.mod
 │       ├── go.sum
@@ -458,7 +457,8 @@ Last updated: 2026-08-04 17:41:16
 ├── window_icon_windows.go
 ├── window_icon_windows_test.go
 ├── word_nav.go
+├── WORDNAV.md
 └── word_nav_test.go
 
-34 directories, 422 files
+34 directories, 425 files
 ```

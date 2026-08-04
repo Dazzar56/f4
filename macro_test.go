@@ -218,6 +218,61 @@ func TestPanelBookmarkHotkeysKeepRightCtrlDistinct(t *testing.T) {
 	}
 }
 
+func TestMacroFastFindEscapeBypassesPanelToggle(t *testing.T) {
+	oldCfg := AppConfig
+	oldHotkeys := GlobalHotkeysMgr
+	oldMacroMgr := MacroMgr
+	defer func() {
+		AppConfig = oldCfg
+		GlobalHotkeysMgr = oldHotkeys
+		MacroMgr = oldMacroMgr
+	}()
+
+	AppConfig.NavigationMode = NavigationClassic
+	MacroMgr = nil
+	pf, left, _ := newSearchFirstTestFrame(t)
+	vtui.FrameManager.Push(pf)
+	vtui.FrameManager.SyncCurrentScreen()
+	defer func() {
+		pf.Close()
+		vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	}()
+
+	GlobalHotkeysMgr = NewHotkeyManager("")
+	GlobalHotkeysMgr.Bind("Shell", "Esc", "Panel.Toggle")
+	mgr := NewMacroManager("")
+	escape := &vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_ESCAPE,
+	}
+
+	left.fastFindMode = true
+	left.fastFindStr = "a"
+	if mgr.Filter(escape) {
+		t.Fatal("macro filter consumed Esc while Fast Find was active")
+	}
+	if !pf.showPanels {
+		t.Fatal("Panel.Toggle hid panels before Fast Find handled Esc")
+	}
+	if !pf.ProcessKey(escape) {
+		t.Fatal("PanelsFrame did not handle Fast Find Esc")
+	}
+	if left.fastFindMode || left.fastFindStr != "" || !pf.showPanels {
+		t.Fatalf("Esc result: mode=%v text=%q panels=%v", left.fastFindMode, left.fastFindStr, pf.showPanels)
+	}
+
+	// The bypass is contextual: without Fast Find, the configured Esc action
+	// must still run normally.
+	pf.showPanels = true
+	if !mgr.Filter(escape) {
+		t.Fatal("Esc without Fast Find did not invoke Panel.Toggle")
+	}
+	if pf.showPanels {
+		t.Fatal("Panel.Toggle did not hide panels without Fast Find")
+	}
+}
+
 func TestMacroPlaybackLogic(t *testing.T) {
 	mgr := NewMacroManager("unused.ini")
 
