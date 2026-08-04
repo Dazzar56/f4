@@ -39,6 +39,11 @@ func (h *luaTestHostAPI) RegisterGlobalHotkey(vk uint16, mods vtinput.ControlKey
 
 func (h *luaTestHostAPI) RegisterPluginMenuItem(label string, handler func(app vfs.App)) {}
 
+func (h *luaTestHostAPI) RunAction(name string) bool {
+	h.logs = append(h.logs, "action:"+name)
+	return true
+}
+
 func writeLuaPlugin(t *testing.T, source string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "plugin.lua")

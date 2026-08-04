@@ -34,6 +34,7 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	AppConfig.EditorColorerBackground = false
 	AppConfig.CommandLineAutoComplete = false
 	AppConfig.SeparateFileExtensions = true
+	AppConfig.MacroRecordFormat = 1
 
 	// 2. Save
 	SaveConfig()
@@ -45,6 +46,7 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	AppConfig.EditorCrosshair = false
 	AppConfig.EditorColorerBackground = true
 	AppConfig.SeparateFileExtensions = false
+	AppConfig.MacroRecordFormat = 0
 
 	// 4. Load
 	LoadConfig()
@@ -73,6 +75,9 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	}
 	if !AppConfig.SeparateFileExtensions {
 		t.Error("LoadConfig failed to restore SeparateFileExtensions")
+	}
+	if AppConfig.MacroRecordFormat != 1 {
+		t.Error("LoadConfig failed to restore MacroRecordFormat")
 	}
 }
 

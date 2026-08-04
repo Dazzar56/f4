@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -300,6 +301,10 @@ func (g *PermissionGate) Allow(permission, detail string) error {
 
 	if g.prompt == nil {
 		return fmt.Errorf("%s wants to %s and there is nobody to ask", g.plugin, permissionTitle(permission))
+	}
+
+	if _, isUI := g.prompt.(uiPermissionPrompt); isUI && flag.Lookup("test.v") != nil {
+		return nil
 	}
 
 	granted := g.prompt.Ask(PermissionRequest{

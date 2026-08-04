@@ -74,6 +74,13 @@ func (h *fakeMacroHost) Log(format string, args ...any) {
 	h.logs = append(h.logs, format)
 }
 
+func (h *fakeMacroHost) RunAction(name string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.logs = append(h.logs, "action:"+name)
+	return true
+}
+
 func (h *fakeMacroHost) injectedKeys() []string {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -515,5 +522,32 @@ func TestMacroLoadDirIgnoresMissingDirectory(t *testing.T) {
 	engine := newTestMacroEngine(t, newFakeMacroHost(), "")
 	if err := engine.LoadDir(filepath.Join(t.TempDir(), "absent")); err != nil {
 		t.Fatalf("LoadDir on a missing directory returned %v", err)
+	}
+}
+
+func TestMacro_Remove(t *testing.T) {
+	engine := newTestMacroEngine(t, newFakeMacroHost(), `
+		Macro { area = "Shell"; key = "CtrlZ"; action = function() Keys("F5") end }
+	`)
+
+	if engine.Count() != 1 {
+		t.Fatalf("Count = %d, want 1", engine.Count())
+	}
+	if engine.Find("Shell", "CtrlZ") == nil {
+		t.Fatal("Expected to find CtrlZ macro")
+	}
+
+	if !engine.Remove("Shell", "CtrlZ") {
+		t.Fatal("Expected Remove to return true")
+	}
+	if engine.Count() != 0 {
+		t.Errorf("Count = %d, want 0 after Remove", engine.Count())
+	}
+	if engine.Find("Shell", "CtrlZ") != nil {
+		t.Error("Expected Find to return nil after Remove")
+	}
+
+	if engine.Remove("Shell", "CtrlZ") {
+		t.Error("Expected second Remove to return false")
 	}
 }
