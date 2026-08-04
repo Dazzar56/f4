@@ -24,6 +24,14 @@ type LuaPlugin struct {
 	runtime *luaplug.Runtime
 	bridge  *ffibridge.Bridge
 	host    map[string]f4rpc.Handler
+	// declared is what the plugin's manifest says it needs and why.
+	declared map[string]string
+}
+
+// SetDeclaredPermissions passes on what the manifest asked for, so that the
+// permission dialog can quote the author instead of guessing.
+func (p *LuaPlugin) SetDeclaredPermissions(declared map[string]string) {
+	p.declared = declared
 }
 
 // NewLuaPlugin prepares a plugin from a Lua script.
@@ -67,10 +75,26 @@ func newPluginForEntrypoint(dir, entrypoint string) Plugin {
 	if IsWasmEntrypoint(entrypoint) {
 		return NewWasmPlugin(resolvePluginPath(dir, entrypoint))
 	}
+	_ = dir
 	if dir == "" {
 		return NewRPCPlugin(entrypoint)
 	}
 	return NewRPCPlugRing(dir, entrypoint)
+}
+
+// declaresPermissions is implemented by the transports that can be gated.
+type declaresPermissions interface {
+	SetDeclaredPermissions(map[string]string)
+}
+
+// newPluginForPlugRingItem is newPluginForEntrypoint with the manifest in
+// hand, which is the only place the declared permissions come from.
+func newPluginForPlugRingItem(dir string, item PlugRingItem) Plugin {
+	plugin := newPluginForEntrypoint(dir, item.Entrypoint)
+	if aware, ok := plugin.(declaresPermissions); ok && len(item.Permissions) > 0 {
+		aware.SetDeclaredPermissions(item.Permissions)
+	}
+	return plugin
 }
 
 func (p *LuaPlugin) GetName() string {
@@ -78,7 +102,7 @@ func (p *LuaPlugin) GetName() string {
 }
 
 func (p *LuaPlugin) Init(api vfs.HostAPI) error {
-	p.bridge = ffibridge.New(ffibridge.Options{})
+	p.bridge = newPluginFFIBridge(p.GetName(), p.declared)
 
 	runtime, err := luaplug.New(luaplug.Options{
 		Name: filepath.Base(p.path),

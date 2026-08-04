@@ -32,6 +32,9 @@ type PlugRingItem struct {
 	// Category groups the plugin in the catalog, the way plugring.farmanager.com
 	// does. Empty means PlugRingCategoryOther.
 	Category string `json:"category" yaml:"category"`
+	// Permissions maps a permission the plugin needs onto the author's own
+	// explanation of why, which is what the user is shown when asked.
+	Permissions map[string]string `json:"permissions" yaml:"permissions"`
 	// Runtimes names the interpreters or runtimes the plugin works with, so
 	// that f4 can tell whether it can run the thing before installing it
 	// rather than after. Empty is inferred from the entrypoint.

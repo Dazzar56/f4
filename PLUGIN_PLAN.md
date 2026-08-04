@@ -219,8 +219,10 @@ Next, in order:
 
 ## Known issues
 
-- A Lua plugin currently gets an FFI bridge with an open permission hook, so it
-  can do anything f4 can. This is the alpha tradeoff recorded in decision 10.
+- `unsafe-stdlib` and `native` are named in the permission vocabulary but not
+  yet enforced: opening Lua's `os` and `io` still needs plumbing through
+  `luaplug.Options`, and gating a subprocess needs a decision about what
+  happens to a plugin refused at launch.
 - `Host.InputBox` and `Host.Menu` block until the UI answers. A plugin that
   calls them from inside a VFS request served on the UI goroutine will
   deadlock. This predates the embedded transports and affects the subprocess

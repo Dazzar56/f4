@@ -43,6 +43,13 @@ type WasmPlugin struct {
 	done    chan struct{}
 	closing bool
 	bridge  *ffibridge.Bridge
+	// declared is what the plugin's manifest says it needs and why.
+	declared map[string]string
+}
+
+// SetDeclaredPermissions passes on what the manifest asked for.
+func (p *WasmPlugin) SetDeclaredPermissions(declared map[string]string) {
+	p.declared = declared
 }
 
 // NewWasmPlugin prepares a plugin from a .wasm module.
@@ -119,7 +126,7 @@ func (p *WasmPlugin) Init(api vfs.HostAPI) error {
 	p.sess = f4rpc.NewSession(hostFromGuest, hostToGuest)
 	// A wasm guest cannot load a library itself, which is the point of it.
 	// The FFI it gets is the host's, projected over the same protocol.
-	p.bridge = ffibridge.New(ffibridge.Options{})
+	p.bridge = newPluginFFIBridge(p.GetName(), p.declared)
 
 	if err := startPluginSession(p.sess, api, p.path, p.bridge, func(err error) {
 		if !p.closing {
