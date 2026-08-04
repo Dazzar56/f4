@@ -1984,7 +1984,7 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 			if isInitialPress && e.ButtonState&vtinput.RightmostButtonPressed != 0 {
 				if fsp, ok := p.(*FileSystemPanel); ok {
 					if _, header := fsp.headerSortModeAt(mx, my); header {
-						actionSortMenu(pf)
+						RunAction("Panel.SortMenu")
 						return true
 					}
 				}

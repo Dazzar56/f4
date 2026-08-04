@@ -1019,6 +1019,9 @@ func TestPanelsFrame_RightClickHeaderOpensPanelCenteredSortMenu(t *testing.T) {
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 	pf.activeIdx = 1
+	// RunAction("Panel.SortMenu") resolves the panels frame through
+	// FrameManager screens, as in production.
+	vtui.FrameManager.Push(pf)
 	left := pf.panels[0].(*FileSystemPanel)
 
 	if !pf.ProcessMouse(&vtinput.InputEvent{

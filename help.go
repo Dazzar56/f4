@@ -71,6 +71,44 @@ func parseMarkdownToHelpTopic(name string, mdContent string) *vtui.HelpTopic {
 	return topic
 }
 
+// helpActionStrings holds the .lng strings of the configured help
+// language. Generated key topics use it so their language matches the
+// static .hlf content even when it differs from the UI language.
+var helpActionStrings map[string]string
+
+// helpMsg resolves an i18n key preferring the help language strings,
+// falling back to the UI language.
+func helpMsg(key string) string {
+	if helpActionStrings != nil {
+		if s, ok := helpActionStrings[key]; ok {
+			return s
+		}
+	}
+	return Msg(key)
+}
+
+// loadHelpLangStrings loads the .lng map for a help language code.
+// Returns nil for English (embedded strings already cover it via Msg)
+// or when no language file is found.
+func loadHelpLangStrings(code string) map[string]string {
+	if code == "" || code == "en" || code == "eng" {
+		return nil
+	}
+	exeDir := filepath.Dir(os.Args[0])
+	userDir := filepath.Join(GetF4ConfigDir(), "lang")
+	candidates := []string{
+		filepath.Join(userDir, code+".lng"),
+		filepath.Join(exeDir, "lang", code+".lng"),
+		filepath.Join("lang", code+".lng"),
+	}
+	for _, cand := range candidates {
+		if _, err := os.Stat(cand); err == nil {
+			return loadLangMapFromINI(LoadIni(cand))
+		}
+	}
+	return nil
+}
+
 func InitHelpSystem() {
 	files := map[string]string{}
 
@@ -126,10 +164,11 @@ func InitHelpSystem() {
 	// Key binding topics are generated from the action registry (the
 	// single source of truth), overriding the static stubs in .hlf
 	// files and reflecting the user's hotkeys.ini overrides.
+	helpActionStrings = loadHelpLangStrings(lang)
 	vtui.GlobalHelpEngine.AddTopic(generateKeysHelpTopic("ViewerEditor",
-		Msg("Help.ViewerEditor"), []string{"Editor", "Viewer", "Common"}, "ViewerNav"))
+		helpMsg("Help.ViewerEditor"), []string{"Editor", "Viewer", "Common"}, "ViewerNav"))
 	vtui.GlobalHelpEngine.AddTopic(generateKeysHelpTopic("PanelNav",
-		Msg("Help.PanelNav"), []string{"Shell", "Terminal", "Common"}, "ShellNav"))
+		helpMsg("Help.PanelNav"), []string{"Shell", "Terminal", "Common"}, "ShellNav"))
 }
 
 // generateKeysHelpTopic builds a help topic listing the active key
@@ -158,7 +197,11 @@ func generateKeysHelpTopic(name, title string, areas []string, navTarget string)
 	}
 
 	for _, area := range areas {
-		topic.Lines = append(topic.Lines, area+":")
+		header := helpMsg("Help.Area." + area)
+		if strings.HasPrefix(header, "{") {
+			header = area
+		}
+		topic.Lines = append(topic.Lines, header+":")
 		for _, a := range GetOrderedActions() {
 			if a.Area != area {
 				continue
@@ -167,13 +210,19 @@ func generateKeysHelpTopic(name, title string, areas []string, navTarget string)
 			if keys == "" {
 				continue
 			}
-			topic.Lines = append(topic.Lines, fmt.Sprintf("  %-14s - %s", keys, a.DisplayDescription()))
+			desc := a.Description
+			if a.DescKey != "" {
+				if s := helpMsg(a.DescKey); !strings.HasPrefix(s, "{") {
+					desc = s
+				}
+			}
+			topic.Lines = append(topic.Lines, fmt.Sprintf("  %-14s - %s", keys, desc))
 		}
 		topic.Lines = append(topic.Lines, "")
 	}
 
 	if navTarget != "" {
-		text := Msg("Help.NavigationKeys")
+		text := helpMsg("Help.NavigationKeys")
 		line := "~" + text + "~" + navTarget + "@"
 		topic.Lines = append(topic.Lines, line)
 		// AddTopic bypasses LoadFile, so register the link manually.
