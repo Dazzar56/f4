@@ -233,14 +233,15 @@ type FileSystemPanel struct {
 	cursorIdx           int
 	lastRightClickedIdx int
 
-	loadCtx           context.Context
-	cancelLoad        context.CancelFunc
-	isLoading         bool
-	loadingTimer      *time.Timer
-	pendingSelection  string
-	providerEntryName string // name of entry used to enter a provider VFS (e.g. NetFox connection name)
-	fastFindMode      bool
-	fastFindStr       string
+	loadCtx            context.Context
+	cancelLoad         context.CancelFunc
+	isLoading          bool
+	loadingTimer       *time.Timer
+	pendingSelection   string
+	providerEntryName  string // name of entry used to enter a provider VFS (e.g. NetFox connection name)
+	fastFindMode       bool
+	fastFindStr        string
+	showInactiveCursor bool
 
 	sortMode    SortMode
 	sortReverse bool
@@ -949,7 +950,17 @@ func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
 		scr.Write(fp.X1+2, fp.Y1, vtui.StringToCharInfo(sortChar, titleAttr))
 	}
 
-	fp.table.SetFocus(fp.IsFocused())
+	// Search-first keeps the active panel cursor visible while keyboard focus
+	// is in the command line, but renders it with dedicated inactive colors.
+	if fp.showInactiveCursor {
+		fp.table.ColorSelectedTextIdx = ColPanelInactiveCursor
+		fp.table.ColorItemSelectCursorIdx = ColPanelInactiveSelectedCursor
+		fp.table.SetFocus(true)
+	} else {
+		fp.table.ColorSelectedTextIdx = ColPanelCursor
+		fp.table.ColorItemSelectCursorIdx = ColPanelSelectedCursor
+		fp.table.SetFocus(fp.IsFocused())
+	}
 	fp.table.Show(scr)
 
 	if fp.Y2-fp.Y1+1 > 6 {
@@ -1173,6 +1184,20 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
 
+	// Detailed view has no horizontal cell navigation. Outside Vim mode,
+	// reuse plain Left/Right as Page Up/Page Down while preserving the rest
+	// of the event (notably Shift selection).
+	if fp.viewMode == ViewModeDetailed && AppConfig.NavigationMode != NavigationVim && !ctrl && !alt &&
+		(e.VirtualKeyCode == vtinput.VK_LEFT || e.VirtualKeyCode == vtinput.VK_RIGHT) {
+		mapped := *e
+		if e.VirtualKeyCode == vtinput.VK_LEFT {
+			mapped.VirtualKeyCode = vtinput.VK_PRIOR
+		} else {
+			mapped.VirtualKeyCode = vtinput.VK_NEXT
+		}
+		e = &mapped
+	}
+
 	// Close the shift-selection session on anything other than a
 	// Shift+nav key so the next Shift+nav re-decides its mode
 	// from the row under the cursor.
@@ -1228,7 +1253,8 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 			return true
 		}
 	} else {
-		if e.Char != 0 && alt && !ctrl && unicode.IsPrint(e.Char) {
+		searchFirstInput := AppConfig.NavigationMode == NavigationSearchFirst && fp.IsFocused() && !alt
+		if e.Char != 0 && (alt || searchFirstInput) && !ctrl && unicode.IsPrint(e.Char) {
 			fp.fastFindMode = true
 			fp.fastFindStr = string(unicode.ToLower(e.Char))
 			fp.doFastFind(0)

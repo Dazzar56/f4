@@ -150,9 +150,10 @@ type PanelsFrame struct {
 	lastBusy       bool
 	lastShowPanels bool
 
-	lastAutoRefresh time.Time
-	lastKey         rune
-	lastKeyEvent    time.Time
+	lastAutoRefresh    time.Time
+	lastKey            rune
+	lastKeyEvent       time.Time
+	commandLineFocused bool
 
 	lastPtyPath string
 	lastPtyVFS  vfs.VFS
@@ -282,6 +283,9 @@ func NewPanelsFrame() *PanelsFrame {
 	}
 	// We no longer need pf.menuBar.OnCommand for routing!
 	pf.cmdLine = NewCommandLine(Msg("Panels.Prompt"))
+	if AppConfig.NavigationMode == NavigationSearchFirst {
+		pf.cmdLine.SetFocus(false)
+	}
 	pf.cmdLine.Edit.HistoryID = "cmdline"
 	if vtui.GlobalHistoryProvider != nil {
 		pf.cmdLine.Edit.History = vtui.GlobalHistoryProvider.LoadHistory("cmdline")
@@ -317,6 +321,63 @@ func NewPanelsFrame() *PanelsFrame {
 	pf.termView.pty = pf.pty
 
 	return pf
+}
+
+func (pf *PanelsFrame) searchFirstMode() bool {
+	return AppConfig.NavigationMode == NavigationSearchFirst
+}
+
+func isCommandFocusToggleKey(e *vtinput.InputEvent) bool {
+	if e.VirtualKeyCode == vtinput.VK_OEM_3 {
+		return true
+	}
+	// The gogpu backend currently has no KeyGrave -> VK mapping and emits
+	// this physical key as a text-only event. Cover its English and Russian
+	// layout output without treating arbitrary known virtual keys as toggles.
+	return e.VirtualKeyCode == 0 && (e.Char == '`' || e.Char == 'ё')
+}
+
+// setCommandLineFocus changes the explicit input target used by search-first
+// navigation. Classic and Vim modes intentionally retain their legacy focus
+// model, where the active panel and command edit can both appear focused.
+func (pf *PanelsFrame) setCommandLineFocus(focused bool) {
+	if !pf.searchFirstMode() {
+		return
+	}
+	pf.commandLineFocused = focused
+	pf.cmdLine.SetFocus(focused)
+	for i, panel := range pf.panels {
+		if panel == nil {
+			continue
+		}
+		panel.SetFocus(i == pf.activeIdx && !focused)
+		if fsp, ok := panel.(*FileSystemPanel); ok {
+			fsp.showInactiveCursor = i == pf.activeIdx && focused
+		}
+		if pf.altPanels[i] != nil {
+			pf.altPanels[i].SetFocus(i == pf.activeIdx && !focused)
+		}
+	}
+	vtui.FrameManager.Redraw()
+}
+
+// applyNavigationMode resets transient focus when the setting is changed.
+func (pf *PanelsFrame) applyNavigationMode() {
+	pf.commandLineFocused = false
+	if pf.searchFirstMode() {
+		pf.cmdLine.SetFocus(false)
+		pf.setCommandLineFocus(false)
+		return
+	}
+	pf.cmdLine.SetFocus(true)
+	for i, panel := range pf.panels {
+		if panel != nil {
+			panel.SetFocus(i == pf.activeIdx)
+		}
+		if fsp, ok := panel.(*FileSystemPanel); ok {
+			fsp.showInactiveCursor = false
+		}
+	}
 }
 
 func getMenuText(current, target ViewMode, label string) string {
@@ -481,6 +542,11 @@ func (pf *PanelsFrame) buildPrompt() []vtui.CharInfo {
 
 	if runewidth.StringWidth(displayPath) > maxPathLen {
 		displayPath = vtui.TruncateMiddle(displayPath, maxPathLen)
+	}
+
+	if pf.searchFirstMode() && pf.showPanels && !pf.commandLineFocused {
+		plainPrompt := userHostStr + sepStr + displayPath + suffixStr
+		return vtui.StringToCharInfo(plainPrompt, vtui.Palette[ColCommandLineInactivePrompt])
 	}
 
 	baseAttr := vtui.Palette[ColCommandLinePrompt]
@@ -869,18 +935,26 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 			pf.termView.SetVisible(false)
 		}
 		if pf.showLeftPanel {
-			pf.panels[0].SetFocus(pf.activeIdx == 0)
+			panelFocused := !pf.searchFirstMode() || !pf.commandLineFocused
+			pf.panels[0].SetFocus(pf.activeIdx == 0 && panelFocused)
+			if fsp, ok := pf.panels[0].(*FileSystemPanel); ok {
+				fsp.showInactiveCursor = pf.searchFirstMode() && pf.commandLineFocused && pf.activeIdx == 0
+			}
 			if pf.altPanels[0] != nil {
-				pf.altPanels[0].SetFocus(pf.activeIdx == 0)
+				pf.altPanels[0].SetFocus(pf.activeIdx == 0 && panelFocused)
 				pf.altPanels[0].Show(scr)
 			} else {
 				pf.panels[0].Show(scr)
 			}
 		}
 		if pf.showRightPanel {
-			pf.panels[1].SetFocus(pf.activeIdx == 1)
+			panelFocused := !pf.searchFirstMode() || !pf.commandLineFocused
+			pf.panels[1].SetFocus(pf.activeIdx == 1 && panelFocused)
+			if fsp, ok := pf.panels[1].(*FileSystemPanel); ok {
+				fsp.showInactiveCursor = pf.searchFirstMode() && pf.commandLineFocused && pf.activeIdx == 1
+			}
 			if pf.altPanels[1] != nil {
-				pf.altPanels[1].SetFocus(pf.activeIdx == 1)
+				pf.altPanels[1].SetFocus(pf.activeIdx == 1 && panelFocused)
 				pf.altPanels[1].Show(scr)
 			} else {
 				pf.panels[1].Show(scr)
@@ -907,7 +981,7 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 		pf.cmdLine.SetVisible(false)
 	} else {
 		pf.cmdLine.SetVisible(true)
-		pf.cmdLine.Edit.HideCursor = isFastFind
+		pf.cmdLine.Edit.HideCursor = isFastFind || (pf.searchFirstMode() && pf.showPanels && !pf.commandLineFocused)
 		cmdLineY := pf.lastH - 1
 		if pf.showKeyBar {
 			cmdLineY = pf.lastH - 2
@@ -959,6 +1033,22 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			}
 			return true
 		}
+	}
+
+	// In search-first command focus, Alt+the grave key inserts a literal
+	// backtick instead of toggling focus. Always insert the shell character,
+	// including when the current keyboard layout reports 'ё'.
+	if pf.searchFirstMode() && pf.showPanels && pf.commandLineFocused && e.KeyDown &&
+		isCommandFocusToggleKey(e) && !ctrl && alt && !shift {
+		pf.cmdLine.InsertString("`")
+		return true
+	}
+
+	// Quake-style physical key: ` / ~ / ё toggles the explicit input
+	// target in search-first mode and is never inserted as text.
+	if pf.searchFirstMode() && pf.showPanels && e.KeyDown && isCommandFocusToggleKey(e) && !ctrl && !alt && !shift {
+		pf.setCommandLineFocus(!pf.commandLineFocused)
+		return true
 	}
 
 	// If the active slot is showing a focused alt panel (Ctrl+L info,
@@ -1020,8 +1110,12 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		if e.SetFocus && MacroMgr != nil {
 			MacroMgr.Load()
 		}
-		// Propagate focus to command line so its cursor state stays in sync
-		pf.cmdLine.SetFocus(e.SetFocus)
+		// Propagate application focus without losing the explicit search-first target.
+		if pf.searchFirstMode() {
+			pf.cmdLine.SetFocus(e.SetFocus && pf.commandLineFocused)
+		} else {
+			pf.cmdLine.SetFocus(e.SetFocus)
+		}
 		pf.termView.SetFocus(e.SetFocus)
 		return true
 	}
@@ -1607,13 +1701,21 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		pf.menuBar.ActivateSubMenu(pos)
 		return true
 	}
-	if e.VirtualKeyCode == vtinput.VK_ESCAPE && !pf.cmdLine.IsEmpty() {
+	if e.VirtualKeyCode == vtinput.VK_ESCAPE && !pf.cmdLine.IsEmpty() && (!pf.searchFirstMode() || pf.commandLineFocused) {
 		pf.cmdLine.Clear()
 		pf.cmdLine.Edit.HistoryPos = -1
 		return true
 	}
+	// In classic navigation, a non-empty command line owns plain horizontal
+	// arrows. With an empty line they remain panel navigation keys (including
+	// Detailed view's Left/Right page mapping). Search-first uses explicit
+	// focus below, while Vim retains its existing routing.
+	if AppConfig.NavigationMode == NavigationClassic && pf.showPanels && !pf.cmdLine.IsEmpty() &&
+		(e.VirtualKeyCode == vtinput.VK_LEFT || e.VirtualKeyCode == vtinput.VK_RIGHT) && !ctrl && !alt {
+		return pf.cmdLine.ProcessKey(e)
+	}
 	// Vim-like hotkeys
-	if AppConfig.VimHotkeys && pf.showPanels && !alt && !ctrl && !shift && e.Char != 0 && pf.cmdLine.Edit.HistoryPos == -1 {
+	if AppConfig.NavigationMode == NavigationVim && pf.showPanels && !alt && !ctrl && !shift && e.Char != 0 && pf.cmdLine.Edit.HistoryPos == -1 {
 		isFastFind := false
 		if fsp := pf.getActivePanel(); fsp != nil {
 			isFastFind = fsp.fastFindMode
@@ -1747,7 +1849,8 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 
 	// Enter handling
 	if e.VirtualKeyCode == vtinput.VK_RETURN {
-		if !pf.cmdLine.IsEmpty() {
+		commandInputActive := !pf.searchFirstMode() || pf.commandLineFocused || !pf.showPanels
+		if commandInputActive && !pf.cmdLine.IsEmpty() {
 			cmd := pf.cmdLine.Edit.GetText()
 			pf.cmdLine.Edit.AddHistory(cmd)
 			pf.cmdLine.Edit.HistoryPos = -1
@@ -1791,6 +1894,9 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				targetPath = string(os.PathSeparator)
 			} else if lowerCmd == "exit" {
 				pf.cmdLine.Clear()
+				if pf.searchFirstMode() && !AppConfig.SearchCommandStayFocused {
+					pf.setCommandLineFocus(false)
+				}
 				return true
 			}
 
@@ -1801,6 +1907,9 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				actualCmd := strings.TrimSpace(trimmedCmd[idx+3:])
 
 				pf.cmdLine.Clear()
+				if pf.searchFirstMode() && !AppConfig.SearchCommandStayFocused {
+					pf.setCommandLineFocus(false)
+				}
 				executeCapturedCommand(pf, action, actualCmd)
 				return true
 			}
@@ -1811,6 +1920,9 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 					targetPath = expandPathEnv(targetPath)
 					if pf.NavigateToPath(fsp, targetPath) {
 						pf.cmdLine.Clear()
+						if pf.searchFirstMode() && !AppConfig.SearchCommandStayFocused {
+							pf.setCommandLineFocus(false)
+						}
 
 						// Sync the background PTY synchronously to satisfy tests and provide immediate state
 						if pf.syncPTYDirectory(fsp.vfs.GetPath(), fsp.vfs) {
@@ -1884,7 +1996,13 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			}
 
 			pf.cmdLine.Clear()
+			if pf.searchFirstMode() && !AppConfig.SearchCommandStayFocused {
+				pf.setCommandLineFocus(false)
+			}
 			pf.showPanels = false
+			return true
+		} else if pf.searchFirstMode() && pf.commandLineFocused && pf.showPanels {
+			// An empty command line must not activate the selected panel item.
 			return true
 		} else if !pf.showPanels {
 			activePty := pf.getActivePTY()
@@ -1918,7 +2036,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 
 	// Selection by mask (+, -, *) logic
 	// Intercepted only if fastFind is not active
-	if pf.showPanels && !alt && !ctrl {
+	if pf.showPanels && AppConfig.NavigationMode != NavigationSearchFirst && !alt && !ctrl {
 		isFastFind := false
 		if fsp := pf.getActivePanel(); fsp != nil && fsp.fastFindMode {
 			isFastFind = true
@@ -1971,7 +2089,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 
 	// Tab switches panels
 	if e.VirtualKeyCode == vtinput.VK_TAB && !ctrl {
-		if pf.showPanels {
+		if pf.showPanels && (!pf.searchFirstMode() || !pf.commandLineFocused) {
 			pf.activeIdx = 1 - pf.activeIdx
 			if pf.wide {
 				pf.widePanel = pf.activeIdx
@@ -1985,6 +2103,9 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			}
 			if pf.activeIdx == 1 && !pf.showRightPanel {
 				pf.showRightPanel = true
+			}
+			if pf.searchFirstMode() {
+				pf.setCommandLineFocus(false)
 			}
 			// Alt panels survive Tab — matches far2l where the
 			// info / quick view / tree panel becomes visually
@@ -2010,12 +2131,13 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 
 	// 3. Try Active Panel
-	if pf.showPanels {
+	if pf.showPanels && (!pf.searchFirstMode() || !pf.commandLineFocused) {
 		if pf.Active().ProcessKey(e) {
 			return true
 		}
 	} else {
-		// Navigation keys when panels are hidden (Terminal is visible)
+		// Navigation keys in the command line use command history, whether
+		// panels are hidden or search-first focus is explicitly below.
 		if e.VirtualKeyCode == vtinput.VK_UP || (e.VirtualKeyCode == vtinput.VK_E && ctrl) {
 			pf.cmdLine.Edit.HistoryUp()
 			return true
@@ -2027,7 +2149,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 
 	// 4. Fallback: pass to CommandLine (handles text, Backspace, Delete, etc.)
-	if pf.cmdLine.ProcessKey(e) {
+	if (!pf.searchFirstMode() || pf.commandLineFocused || !pf.showPanels) && pf.cmdLine.ProcessKey(e) {
 		pf.cmdLine.SetFocus(true)
 		return true
 	}
@@ -2083,6 +2205,15 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 
 	mx, my := int(e.MouseX), int(e.MouseY)
 
+	if pf.searchFirstMode() && e.ButtonState != 0 && e.KeyDown && pf.cmdLine.IsVisible() {
+		x1, y1, x2, y2 := pf.cmdLine.GetPosition()
+		if mx >= x1 && mx <= x2 && my >= y1 && my <= y2 {
+			pf.setCommandLineFocus(true)
+			pf.cmdLine.ProcessMouse(e)
+			return true
+		}
+	}
+
 	// Активация меню кликом мыши на нулевую строку (AlwaysShowMenuBar)
 	if AppConfig.AlwaysShowMenuBar && pf.showPanels && my == 0 && e.ButtonState != 0 {
 		pf.menuBar.Active = true
@@ -2106,6 +2237,9 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 				pf.activeIdx = i
 				pf.lastKey = 0
 				vtui.FrameManager.Redraw()
+			}
+			if pf.searchFirstMode() {
+				pf.setCommandLineFocus(false)
 			}
 			// Give the alt panel a chance to handle it (future
 			// row-picking, etc.); return true either way — the
@@ -2178,6 +2312,9 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 				pf.activeIdx = i
 				pf.lastKey = 0
 				vtui.FrameManager.Redraw()
+			}
+			if pf.searchFirstMode() && e.ButtonState != 0 {
+				pf.setCommandLineFocus(false)
 			}
 
 			handled := p.ProcessMouse(e)

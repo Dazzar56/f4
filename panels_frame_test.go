@@ -2936,7 +2936,7 @@ func TestPanelsFrame_VimHotkeys_Comprehensive(t *testing.T) {
 	}
 
 	oldCfg := AppConfig
-	AppConfig.VimHotkeys = true
+	AppConfig.NavigationMode = NavigationVim
 	defer func() { AppConfig = oldCfg }()
 
 	pf := NewPanelsFrame()

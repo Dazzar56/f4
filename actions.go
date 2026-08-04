@@ -1722,7 +1722,8 @@ func actionFindFile(pf *PanelsFrame) {
 	vtui.FrameManager.Push(dlg)
 }
 func actionPanelSettings(pf *PanelsFrame) {
-	dlg := vtui.NewCenteredDialog(60, 30, Msg("PanelSettings.Title"))
+	const dialogHeight = 33
+	dlg := vtui.NewCenteredDialog(60, dialogHeight, Msg("PanelSettings.Title"))
 	dlg.ShowClose = true
 
 	chkHidden := vtui.NewCheckbox(0, 0, Msg("PanelSettings.ShowHidden"), false)
@@ -1753,10 +1754,26 @@ func actionPanelSettings(pf *PanelsFrame) {
 	if AppConfig.CommandLineAutoComplete {
 		chkCmdAc.State = 1
 	}
-	chkVim := vtui.NewCheckbox(0, 0, Msg("PanelSettings.VimHotkeys"), false)
-	chkVim.State = 0
-	if AppConfig.VimHotkeys {
-		chkVim.State = 1
+
+	lblNavigation := vtui.NewText(0, 0, Msg("PanelSettings.Navigation"), 0)
+	navigation := vtui.NewRadioGroup(0, 0, 1, []string{
+		Msg("PanelSettings.NavigationClassic"),
+		Msg("PanelSettings.NavigationVim"),
+		Msg("PanelSettings.NavigationSearch"),
+	})
+	navigation.Selected = int(AppConfig.NavigationMode)
+	// RadioGroup does not expose its keyboard focus index, so advance it to
+	// the selected row to make Space operate on the visibly selected mode.
+	for i := 0; i < navigation.Selected; i++ {
+		navigation.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
+	}
+	chkStayFocused := vtui.NewCheckbox(0, 0, Msg("PanelSettings.SearchStayFocused"), false)
+	if AppConfig.SearchCommandStayFocused {
+		chkStayFocused.State = 1
+	}
+	chkStayFocused.SetDisabled(AppConfig.NavigationMode != NavigationSearchFirst)
+	navigation.OnChange = func(selected int) {
+		chkStayFocused.SetDisabled(PanelNavigationMode(selected) != NavigationSearchFirst)
 	}
 
 	chkSync := vtui.NewCheckbox(0, 0, Msg("PanelSettings.SyncPanelLoad"), false)
@@ -1813,7 +1830,9 @@ func actionPanelSettings(pf *PanelsFrame) {
 	dlg.AddItem(chkSeparateExtensions)
 	dlg.AddItem(chkPaths)
 	dlg.AddItem(chkCmdAc)
-	dlg.AddItem(chkVim)
+	dlg.AddItem(lblNavigation)
+	dlg.AddItem(navigation)
+	dlg.AddItem(chkStayFocused)
 	dlg.AddItem(chkSync)
 	dlg.AddItem(chkAlwaysMenu)
 	dlg.AddItem(chkCPUGPU)
@@ -1827,13 +1846,15 @@ func actionPanelSettings(pf *PanelsFrame) {
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnCancel)
 
-	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 54-4, 30-4)
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 54-4, dialogHeight-4)
 	vbox.Add(chkHidden, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkHighlight, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(chkSeparateExtensions, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(chkPaths, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(chkCmdAc, vtui.Margins{Top: 1}, vtui.AlignLeft)
-	vbox.Add(chkVim, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	vbox.Add(lblNavigation, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	vbox.Add(navigation, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(chkStayFocused, vtui.Margins{Left: 2}, vtui.AlignLeft)
 
 	vbox.Add(chkSync, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(chkAlwaysMenu, vtui.Margins{Top: 1}, vtui.AlignLeft)
@@ -1871,7 +1892,8 @@ func actionPanelSettings(pf *PanelsFrame) {
 		AppConfig.SeparateFileExtensions = chkSeparateExtensions.State == 1
 		AppConfig.SavePanelPaths = chkPaths.State == 1
 		AppConfig.CommandLineAutoComplete = chkCmdAc.State == 1
-		AppConfig.VimHotkeys = chkVim.State == 1
+		AppConfig.NavigationMode = PanelNavigationMode(navigation.Selected)
+		AppConfig.SearchCommandStayFocused = chkStayFocused.State == 1
 		AppConfig.SyncPanelLoad = chkSync.State == 1
 		AppConfig.AlwaysShowMenuBar = chkAlwaysMenu.State == 1
 		AppConfig.InfoPanelCPUGPU = chkCPUGPU.State == 1
@@ -1879,6 +1901,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 		AppConfig.DefaultFileOpMode = comboMode.Menu.SelectPos
 		AppConfig.FileOpPathDisplay = comboPath.Menu.SelectPos
 		AppConfig.MacroRecordFormat = comboMacro.Menu.SelectPos
+		pf.applyNavigationMode()
 		SaveConfig()
 		dlg.Close()
 		pf.ResizeConsole(pf.lastW, pf.lastH)
