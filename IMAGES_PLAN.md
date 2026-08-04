@@ -149,14 +149,28 @@ whatever happens.
 Before the numbered work, one defect that is on screen right now:
 
 **B1. A strip of background below the picture, with something flickering in
-it.** Reported with a screenshot: the picture stops short of the key bar by a
-row or two, and now and then a picture appears in that strip for a frame.
-Two mechanisms produce that symptom and they need different fixes, so the
-geometry is measured rather than guessed at — `ImageView.logGeometry` writes
-one `IMAGE_GEOM` line per change of layout under `VTUI_DEBUG=1`. Either the
-centring leaves the odd row at the bottom, because `(rows-p.Rows)/2` truncates
-towards zero, or something besides the viewer is drawing into the graphics
-layer, which the `layer=` count in that line reports directly.
+it.** Under investigation. `ImageView.logGeometry` writes one `IMAGE_GEOM`
+line per change of layout under `VTUI_DEBUG=1`, and it has already ruled out
+both of the causes that were suspected first. On a console of `153x38` with a
+`20x41` cell the frame runs `0,0..152,36` with one row of title bar, and the
+placement comes out as `place=45,1 62x36`: the picture covers rows one to
+thirty six, which is the whole of its area, so the centring leaves nothing
+over. Every line reports `layer=1`, so nothing besides the viewer is drawing
+into the graphics layer.
+
+The fault is therefore below the cell grid, in a native renderer, which agrees
+with what was observed: it appears on X11 and not in kitty and not on gogpu.
+One defect there is proved from the source and fixed in vtui — the X11 frame
+buffer covered only the whole cells of the window, leaving `height mod cellH`
+pixels, up to forty of them on a cell forty one high, that nothing ever wrote
+to and that therefore kept whatever the X server last put in them. That
+accounts for a strip *below* the key bar.
+
+Still open: whether the strip that was reported is that one, or lies *between*
+the picture and the key bar, which would instead mean that
+`vtui.drawNativePlacements` paints a picture smaller than the rectangle the
+placement gives it. The new `X11_GFX` line prints the rectangle drawn beside
+the rectangle asked for and settles it.
 
 **6b. Kitty polish, what is left.** Unicode placeholders (`U=1` and the
 character `U+10EEEE`), and a negative `z`, which needs a change in vtui first:
@@ -230,7 +244,11 @@ the other way round.
   there would only be a slow way of pressing space.
 - **`Stat` for the overlay happens once, lazily, and only when the overlay is
   actually up.** It can be a network round trip on a remote file system.
-
+- **The cell grid is not the window.** A native backend gets a window sized in
+  pixels by somebody else, and the whole cells inside it do not reach its
+  edges. Everything f4 computes is in cells and stops being the whole story at
+  that boundary, which is why an `IMAGE_GEOM` line that looks perfect can sit
+  above a defect on screen.
 - **The external converter is fed a file, not a pipe.** `heic`, `avif` and
   `jxl` are containers that are read by seeking around them, and both
   ImageMagick's delegates and `ffmpeg` refuse a stream they cannot rewind.
