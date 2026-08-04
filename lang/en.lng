@@ -53,6 +53,7 @@ Macro.AssignPrompt=Press the desired key combination
 Macro.AssignCancel=Press Esc to cancel
 
 Menu.Language=Language
+Menu.HelpLanguage=Help Language
 Menu.Left=Left
 Menu.Files=Files
 Menu.Commands=Commands
@@ -147,6 +148,8 @@ UserMenu.MainMenuFAR=FAR
 
 Language.Title= Languages
 Language.Changed=Language changed.\nSome UI elements require application restart\nto fully apply the new language.
+HelpLanguage.Title=Help Languages
+HelpLanguage.Changed=Help language changed.
 
 History.Title= History
 History.EmptyFolders=Folders history is empty.

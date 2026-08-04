@@ -66,6 +66,7 @@ func resetConfigDirForTest() {
 type F4Config struct {
 	ColorStyle               string
 	Language                 string
+	HelpLanguage             string
 	AlwaysShowMenuBar        bool
 	ShowHiddenFiles          bool
 	HighlightDir             bool
@@ -141,6 +142,7 @@ type F4Config struct {
 var AppConfig = F4Config{
 	ColorStyle:               "Modern",
 	Language:                 "en",
+	HelpLanguage:             "en",
 	AlwaysShowMenuBar:        false,
 	ShowHiddenFiles:          true,
 	HighlightDir:             true,
@@ -239,6 +241,7 @@ func LoadConfig() {
 	AppConfig.ShowHiddenFiles = ini.GetString("Panel", "ShowHiddenFiles", "1") == "1"
 	AppConfig.ColorStyle = ini.GetString("Interface", "ColorStyle", "Modern")
 	AppConfig.Language = ini.GetString("Interface", "Language", "en")
+	AppConfig.HelpLanguage = ini.GetString("Interface", "HelpLanguage", "en")
 	AppConfig.ConsoleTitleTemplate = ini.GetString("Interface", "ConsoleTitleTemplate", "f4 %Ver %Platform %Admin - %State")
 	AppConfig.AlwaysShowMenuBar = ini.GetString("Interface", "AlwaysShowMenuBar", "0") == "1"
 	if AppConfig.ConsoleTitleTemplate == "f4 - %State" {
@@ -360,6 +363,7 @@ func SaveConfig() {
 	sb.WriteString("[Interface]\n")
 	sb.WriteString(fmt.Sprintf("ColorStyle = %s\n", AppConfig.ColorStyle))
 	sb.WriteString(fmt.Sprintf("Language = %s\n", AppConfig.Language))
+	sb.WriteString(fmt.Sprintf("HelpLanguage = %s\n", AppConfig.HelpLanguage))
 	sb.WriteString(fmt.Sprintf("ConsoleTitleTemplate = %s\n", AppConfig.ConsoleTitleTemplate))
 	sb.WriteString(fmt.Sprintf("AlwaysShowMenuBar = %d\n\n", map[bool]int{true: 1, false: 0}[AppConfig.AlwaysShowMenuBar]))
 	sb.WriteString("[Panel]\n")

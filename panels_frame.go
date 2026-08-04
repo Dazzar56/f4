@@ -253,6 +253,7 @@ func NewPanelsFrame() *PanelsFrame {
 		//{Label: "&" + Msg("Menu.Options"), SubItems: []vtui.MenuItem{{Text: "Placeholder"}}},
 		{Label: "&" + Msg("Menu.Options"), SubItems: []vtui.MenuItem{
 			{Text: "&" + Msg("Menu.Language"), Command: CmLanguage},
+			{Text: "&" + Msg("Menu.HelpLanguage"), Command: CmHelpLanguage},
 			{Separator: true},
 			{Text: "&" + Msg("Menu.PanelSettings"), Command: CmPanelSettings},
 			{Text: "&" + Msg("Menu.EditorSettings"), Command: CmEditorSettings},
@@ -417,6 +418,7 @@ var commandToActionName = map[int]string{
 	CmAppearanceSettings:    "Settings.Appearance",
 	CmConfirmationsSettings: "Settings.Confirmations",
 	CmLanguage:              "Settings.Language",
+	CmHelpLanguage:          "Settings.HelpLanguage",
 	CmPlugins:               "Settings.Plugins",
 }
 
@@ -2482,6 +2484,9 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 		return true
 	case CmLanguage:
 		actionLanguage(pf)
+		return true
+	case CmHelpLanguage:
+		actionHelpLanguage(pf)
 		return true
 	case CmUpdateSettings:
 		actionUpdateSettings(pf)

@@ -47,6 +47,7 @@ const (
 	CmAppearanceSettings
 	CmConfirmationsSettings
 	CmLanguage
+	CmHelpLanguage
 	CmPlugins
 	CmHotkeyConfig
 	CmUpdateSettings

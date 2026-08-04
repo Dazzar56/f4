@@ -53,6 +53,7 @@ Macro.AssignPrompt=Нажмите желаемую комбинацию клав
 Macro.AssignCancel=Нажмите Esc для отмены
 
 Menu.Language=Язык (Language)
+Menu.HelpLanguage=Язык справки (Help Language)
 Menu.Left=Левая
 Menu.Files=Файлы
 Menu.Commands=Команды
@@ -146,6 +147,8 @@ UserMenu.MainMenuTitle=Главное меню
 UserMenu.MainMenuFAR=FAR
 
 Language.Title= Язык (Languages)
+HelpLanguage.Title=Язык справки
+HelpLanguage.Changed=Язык справки изменен.
 Language.Changed=Язык изменен.\nНекоторым элементам интерфейса может потребоваться\nперезапуск приложения для полного обновления.
 
 History.Title= История

@@ -215,6 +215,12 @@ func init() {
 		Handler:     withPF(func(pf *PanelsFrame) { actionLanguage(pf) }),
 	})
 	RegisterAction(Action{
+		Name:        "Settings.HelpLanguage",
+		Label:       "Help Language",
+		Description: "Open help language selection dialog",
+		Handler:     withPF(func(pf *PanelsFrame) { actionHelpLanguage(pf) }),
+	})
+	RegisterAction(Action{
 		Name:        "Settings.Plugins",
 		Label:       "Plugins Menu",
 		Description: "Manage plugins dialog",

@@ -2509,3 +2509,68 @@ func actionLanguage(pf *PanelsFrame) {
 
 	vtui.FrameManager.Push(menu)
 }
+func actionHelpLanguage(pf *PanelsFrame) {
+	type langInfo struct {
+		code string
+		name string
+	}
+	langs := []langInfo{{"en", "English"}}
+
+	exeDir := filepath.Dir(os.Args[0])
+	userDir := filepath.Join(GetF4ConfigDir(), "help")
+
+	dirs := []string{filepath.Join(exeDir, "help"), userDir, "help"}
+	seen := map[string]bool{"en": true}
+
+	for _, d := range dirs {
+		entries, err := os.ReadDir(d)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if !e.IsDir() && strings.HasSuffix(e.Name(), ".hlf") {
+				code := strings.TrimSuffix(e.Name(), ".hlf")
+				if !seen[code] {
+					name := strings.ToUpper(code)
+					if code == "ru" {
+						name = "Русский"
+					}
+					langs = append(langs, langInfo{code, name})
+					seen[code] = true
+				}
+			}
+		}
+	}
+
+	menu := vtui.NewVMenu(Msg("HelpLanguage.Title"))
+	currIdx := 0
+	for i, l := range langs {
+		menu.AddItem(vtui.MenuItem{Text: l.name})
+		if l.code == AppConfig.HelpLanguage {
+			currIdx = i
+		}
+	}
+
+	scrW := vtui.FrameManager.GetScreenSize()
+	scrH := vtui.FrameManager.GetScreenHeight()
+	w, h := 30, len(langs)+2
+	if h > 15 {
+		h = 15
+	}
+	x := (scrW - w) / 2
+	y := (scrH - h) / 2
+	menu.SetPosition(x, y, x+w-1, y+h-1)
+	menu.SetSelectPos(currIdx)
+
+	menu.OnAction = func(idx int) {
+		AppConfig.HelpLanguage = langs[idx].code
+		SaveConfig()
+		InitHelpSystem()
+		vtui.FrameManager.PostTask(func() {
+			vtui.ShowMessage(Msg("Info.Title"), Msg("HelpLanguage.Changed"), []string{Msg("vtui.Ok")})
+			vtui.FrameManager.Redraw()
+		})
+	}
+
+	vtui.FrameManager.Push(menu)
+}
