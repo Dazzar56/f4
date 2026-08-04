@@ -128,6 +128,8 @@ func InitHelpSystem() {
 	// files and reflecting the user's hotkeys.ini overrides.
 	vtui.GlobalHelpEngine.AddTopic(generateKeysHelpTopic("ViewerEditor",
 		Msg("Help.ViewerEditor"), []string{"Editor", "Viewer", "Common"}, "ViewerNav"))
+	vtui.GlobalHelpEngine.AddTopic(generateKeysHelpTopic("PanelNav",
+		Msg("Help.PanelNav"), []string{"Shell", "Terminal", "Common"}, "ShellNav"))
 }
 
 // generateKeysHelpTopic builds a help topic listing the active key

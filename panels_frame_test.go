@@ -218,7 +218,7 @@ func TestPanelsFrame_ArkanoidHotkey(t *testing.T) {
 	initialScreens := len(vtui.FrameManager.Screens)
 
 	// 1. Запуск игры
-	pf.ProcessKey(&vtinput.InputEvent{
+	pressKey(pf, &vtinput.InputEvent{
 		Type:            vtinput.KeyEventType,
 		KeyDown:         true,
 		VirtualKeyCode:  'A',
@@ -238,7 +238,7 @@ func TestPanelsFrame_ArkanoidHotkey(t *testing.T) {
 	}
 
 	// 2. Пытаемся запустить еще раз (не должно создавать новый экран, а только переключить)
-	pf.ProcessKey(&vtinput.InputEvent{
+	pressKey(pf, &vtinput.InputEvent{
 		Type:            vtinput.KeyEventType,
 		KeyDown:         true,
 		VirtualKeyCode:  'A',
@@ -270,7 +270,7 @@ func TestPanelsFrame_SelectionByMask(t *testing.T) {
 
 	// 1. Command line not empty -> should not intercept for regular char
 	pf.cmdLine.Edit.SetText("a")
-	handled := pf.ProcessKey(&vtinput.InputEvent{
+	handled := pressKey(pf, &vtinput.InputEvent{
 		Type:    vtinput.KeyEventType,
 		KeyDown: true,
 		Char:    '+',
@@ -281,7 +281,7 @@ func TestPanelsFrame_SelectionByMask(t *testing.T) {
 
 	// 1.5 Command line not empty, but Numpad + -> SHOULD intercept
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	handled = pf.ProcessKey(&vtinput.InputEvent{
+	handled = pressKey(pf, &vtinput.InputEvent{
 		Type:           vtinput.KeyEventType,
 		KeyDown:        true,
 		VirtualKeyCode: vtinput.VK_ADD,
@@ -297,7 +297,7 @@ func TestPanelsFrame_SelectionByMask(t *testing.T) {
 	// 2. Command line empty, fastFindMode active -> should not intercept
 	pf.cmdLine.Clear()
 	fsp.fastFindMode = true
-	handled = pf.ProcessKey(&vtinput.InputEvent{
+	handled = pressKey(pf, &vtinput.InputEvent{
 		Type:    vtinput.KeyEventType,
 		KeyDown: true,
 		Char:    '+',
@@ -309,7 +309,7 @@ func TestPanelsFrame_SelectionByMask(t *testing.T) {
 	// 3. Command line empty, fastFindMode NOT active -> SHOULD intercept and show dialog
 	fsp.fastFindMode = false
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	handled = pf.ProcessKey(&vtinput.InputEvent{
+	handled = pressKey(pf, &vtinput.InputEvent{
 		Type:    vtinput.KeyEventType,
 		KeyDown: true,
 		Char:    '+',
@@ -668,7 +668,7 @@ func TestPanelsFrame_ProcessMouse_AltPanelSwallowsClicks(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	// Ctrl+L installs an info panel on the passive (left) slot.
-	pf.ProcessKey(&vtinput.InputEvent{
+	pressKey(pf, &vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
 		VirtualKeyCode:  vtinput.VK_L,
 		ControlKeyState: vtinput.LeftCtrlPressed,
@@ -733,7 +733,7 @@ func TestPanelsFrame_ProcessMouse_MiddleClickOverAltPanel(t *testing.T) {
 
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
-	pf.ProcessKey(&vtinput.InputEvent{
+	pressKey(pf, &vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
 		VirtualKeyCode:  vtinput.VK_L,
 		ControlKeyState: vtinput.LeftCtrlPressed,
@@ -783,7 +783,7 @@ func TestPanelsFrame_EscTogglesPanels(t *testing.T) {
 	AppConfig.EscTogglePanels = true
 
 	sendEsc := func() bool {
-		return pf.ProcessKey(&vtinput.InputEvent{
+		return pressKey(pf, &vtinput.InputEvent{
 			Type: vtinput.KeyEventType, KeyDown: true,
 			VirtualKeyCode: vtinput.VK_ESCAPE,
 		})
@@ -835,7 +835,7 @@ func TestPanelsFrame_EscTogglePanels_RespectsOption(t *testing.T) {
 	defer func() { AppConfig.EscTogglePanels = old }()
 	AppConfig.EscTogglePanels = false
 
-	pf.ProcessKey(&vtinput.InputEvent{
+	pressKey(pf, &vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
 		VirtualKeyCode: vtinput.VK_ESCAPE,
 	})
@@ -853,11 +853,11 @@ func TestPanelsFrame_KeyHandling(t *testing.T) {
 	if pf.activeIdx != 1 {
 		t.Fatalf("Initial active panel should be right (1), got %d", pf.activeIdx)
 	}
-	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_TAB})
+	pressKey(pf, &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_TAB})
 	if pf.activeIdx != 0 {
 		t.Error("Tab did not switch active panel to left (0)")
 	}
-	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_TAB})
+	pressKey(pf, &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_TAB})
 	if pf.activeIdx != 1 {
 		t.Error("Tab did not switch active panel back to right (1)")
 	}
@@ -866,11 +866,11 @@ func TestPanelsFrame_KeyHandling(t *testing.T) {
 	if !pf.showPanels {
 		t.Fatal("Panels should be visible initially")
 	}
-	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_O, ControlKeyState: vtinput.LeftCtrlPressed})
+	pressKey(pf, &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_O, ControlKeyState: vtinput.LeftCtrlPressed})
 	if pf.showPanels {
 		t.Error("Ctrl+O did not hide panels")
 	}
-	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_O, ControlKeyState: vtinput.LeftCtrlPressed})
+	pressKey(pf, &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_O, ControlKeyState: vtinput.LeftCtrlPressed})
 	if !pf.showPanels {
 		t.Error("Ctrl+O did not show panels again")
 	}
@@ -886,7 +886,7 @@ func TestPanelsFrame_KeyHandling(t *testing.T) {
 		fsp.Refresh()
 		fsp.SetCursorIndex(1)
 	}
-	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN, ControlKeyState: vtinput.LeftCtrlPressed})
+	pressKey(pf, &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN, ControlKeyState: vtinput.LeftCtrlPressed | vtinput.EnhancedKey})
 
 	expectedName := pf.panels[0].GetSelectedName()
 	if pf.cmdLine.Edit.GetText() != expectedName {
@@ -898,12 +898,12 @@ func TestPanelsFrame_KeyHandling(t *testing.T) {
 	pf.pty = &mockPty{}
 	pf.executing = true // PTY is busy
 
-	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_O, ControlKeyState: vtinput.LeftCtrlPressed})
+	pressKey(pf, &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_O, ControlKeyState: vtinput.LeftCtrlPressed})
 	if !pf.showPanels {
 		t.Error("Ctrl+O should show panels even when PTY is busy")
 	}
 
-	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_O, ControlKeyState: vtinput.LeftCtrlPressed})
+	pressKey(pf, &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_O, ControlKeyState: vtinput.LeftCtrlPressed})
 	if pf.showPanels {
 		t.Error("Ctrl+O should hide panels even when PTY is busy")
 	}
@@ -970,7 +970,7 @@ func TestPanelsFrame_CtrlF12SortMenu(t *testing.T) {
 	fsp.sortMode = SortTime
 	fsp.sortReverse = false
 
-	if !pf.ProcessKey(&vtinput.InputEvent{
+	if !pressKey(pf, &vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
 		VirtualKeyCode:  vtinput.VK_F12,
 		ControlKeyState: vtinput.LeftCtrlPressed,
@@ -1058,7 +1058,7 @@ func TestPanelsFrame_RefreshOnFocus(t *testing.T) {
 	// we check if the internal state handles the focus event without crashing
 	// and returns true.
 
-	handled := pf.ProcessKey(&vtinput.InputEvent{
+	handled := pressKey(pf, &vtinput.InputEvent{
 		Type:     vtinput.FocusEventType,
 		SetFocus: true,
 	})
@@ -1139,7 +1139,7 @@ func TestPanelsFrame_CtrlBrackets_Insertion(t *testing.T) {
 
 	// 1. Тест Ctrl+[ (Путь левой панели)
 	pf.cmdLine.Clear()
-	pf.ProcessKey(&vtinput.InputEvent{
+	pressKey(pf, &vtinput.InputEvent{
 		Type:            vtinput.KeyEventType,
 		KeyDown:         true,
 		VirtualKeyCode:  vtinput.VK_OEM_4,
@@ -1153,7 +1153,7 @@ func TestPanelsFrame_CtrlBrackets_Insertion(t *testing.T) {
 
 	// 2. Тест Ctrl+] (Путь правой панели)
 	pf.cmdLine.Clear()
-	pf.ProcessKey(&vtinput.InputEvent{
+	pressKey(pf, &vtinput.InputEvent{
 		Type:            vtinput.KeyEventType,
 		KeyDown:         true,
 		VirtualKeyCode:  vtinput.VK_OEM_6,
@@ -1183,7 +1183,7 @@ func TestPanelsFrame_CtrlArrows_CommandLineNavigation(t *testing.T) {
 	})
 
 	// 1. Тест Ctrl+Left (Прыжок к началу "word3", оффсет 12)
-	pf.ProcessKey(&vtinput.InputEvent{
+	pressKey(pf, &vtinput.InputEvent{
 		Type:            vtinput.KeyEventType,
 		KeyDown:         true,
 		VirtualKeyCode:  vtinput.VK_LEFT,
@@ -1191,7 +1191,7 @@ func TestPanelsFrame_CtrlArrows_CommandLineNavigation(t *testing.T) {
 	})
 
 	// Вставляем символ 'X' в текущую позицию курсора
-	pf.ProcessKey(&vtinput.InputEvent{
+	pressKey(pf, &vtinput.InputEvent{
 		Type:    vtinput.KeyEventType,
 		KeyDown: true,
 		Char:    'X',
@@ -1204,7 +1204,7 @@ func TestPanelsFrame_CtrlArrows_CommandLineNavigation(t *testing.T) {
 	}
 
 	// 2. Тест Ctrl+Right (Прыжок в конец "Xword3")
-	pf.ProcessKey(&vtinput.InputEvent{
+	pressKey(pf, &vtinput.InputEvent{
 		Type:            vtinput.KeyEventType,
 		KeyDown:         true,
 		VirtualKeyCode:  vtinput.VK_RIGHT,
@@ -1212,7 +1212,7 @@ func TestPanelsFrame_CtrlArrows_CommandLineNavigation(t *testing.T) {
 	})
 
 	// Вставляем символ 'Y'
-	pf.ProcessKey(&vtinput.InputEvent{
+	pressKey(pf, &vtinput.InputEvent{
 		Type:    vtinput.KeyEventType,
 		KeyDown: true,
 		Char:    'Y',
@@ -1323,7 +1323,7 @@ func TestPanelsFrame_HistoryNavigation(t *testing.T) {
 	pf.cmdLine.Edit.AddHistory("git status")
 
 	// Press Up Arrow
-	pf.ProcessKey(&vtinput.InputEvent{
+	pressKey(pf, &vtinput.InputEvent{
 		Type:           vtinput.KeyEventType,
 		KeyDown:        true,
 		VirtualKeyCode: vtinput.VK_UP,
@@ -1338,7 +1338,7 @@ func TestPanelsFrame_HistoryNavigation(t *testing.T) {
 	pf.cmdLine.Edit.HistoryPos = -1
 	pf.showPanels = true
 
-	pf.ProcessKey(&vtinput.InputEvent{
+	pressKey(pf, &vtinput.InputEvent{
 		Type:           vtinput.KeyEventType,
 		KeyDown:        true,
 		VirtualKeyCode: vtinput.VK_UP,
@@ -1355,7 +1355,7 @@ func TestPanelsFrame_HistoryNavigation_HiddenPanels(t *testing.T) {
 	pf.cmdLine.Edit.AddHistory("last command")
 
 	// Press Up Arrow - should trigger HistoryUp on the command line
-	pf.ProcessKey(&vtinput.InputEvent{
+	pressKey(pf, &vtinput.InputEvent{
 		Type:           vtinput.KeyEventType,
 		KeyDown:        true,
 		VirtualKeyCode: vtinput.VK_UP,
@@ -1366,7 +1366,7 @@ func TestPanelsFrame_HistoryNavigation_HiddenPanels(t *testing.T) {
 	}
 
 	// Press Esc - should clear line and reset history position
-	pf.ProcessKey(&vtinput.InputEvent{
+	pressKey(pf, &vtinput.InputEvent{
 		Type:           vtinput.KeyEventType,
 		KeyDown:        true,
 		VirtualKeyCode: vtinput.VK_ESCAPE,
@@ -1382,7 +1382,7 @@ func TestPanelsFrame_EnterAddsToHistory(t *testing.T) {
 	pf.cmdLine.Edit.SetText("ls -la")
 
 	// Simulate Enter
-	pf.ProcessKey(&vtinput.InputEvent{
+	pressKey(pf, &vtinput.InputEvent{
 		Type:           vtinput.KeyEventType,
 		KeyDown:        true,
 		VirtualKeyCode: vtinput.VK_RETURN,
@@ -1482,7 +1482,7 @@ func TestPanelsFrame_ManualRefresh(t *testing.T) {
 	fsp.vfs.SetPath(tmp)
 
 	// Press Ctrl+R
-	handled := pf.ProcessKey(&vtinput.InputEvent{
+	handled := pressKey(pf, &vtinput.InputEvent{
 		Type:            vtinput.KeyEventType,
 		KeyDown:         true,
 		VirtualKeyCode:  vtinput.VK_R,
@@ -1937,7 +1937,7 @@ func TestPanelsFrame_CtrlO_HardRedraw(t *testing.T) {
 	scr.Flush()
 
 	// Simulate Ctrl+O
-	pf.ProcessKey(&vtinput.InputEvent{
+	pressKey(pf, &vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
 		VirtualKeyCode: vtinput.VK_O, ControlKeyState: vtinput.LeftCtrlPressed,
 	})
@@ -2128,7 +2128,7 @@ func TestPanelsFrame_ReturnExecution(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf()) // For TaskChan
 
 	// Имитируем нажатие Enter
-	pf.ProcessKey(&vtinput.InputEvent{
+	pressKey(pf, &vtinput.InputEvent{
 		Type:           vtinput.KeyEventType,
 		KeyDown:        true,
 		VirtualKeyCode: vtinput.VK_RETURN,
@@ -2169,7 +2169,7 @@ func TestPanelsFrame_CommandLineEnter(t *testing.T) {
 	pf.cmdLine.Edit.SetText("ls -la")
 
 	// Нажимаем Enter
-	pf.ProcessKey(&vtinput.InputEvent{
+	pressKey(pf, &vtinput.InputEvent{
 		Type:           vtinput.KeyEventType,
 		KeyDown:        true,
 		VirtualKeyCode: vtinput.VK_RETURN,
@@ -2196,7 +2196,7 @@ func TestPanelsFrame_CommandLineEnter_WhenBusy(t *testing.T) {
 	pf.cmdLine.Edit.SetText("ls -la")
 
 	// Нажимаем Enter
-	pf.ProcessKey(&vtinput.InputEvent{
+	pressKey(pf, &vtinput.InputEvent{
 		Type:           vtinput.KeyEventType,
 		KeyDown:        true,
 		VirtualKeyCode: vtinput.VK_RETURN,
@@ -2231,7 +2231,7 @@ func TestPanelsFrame_DirectoryEnter(t *testing.T) {
 	fsp.SelectName("work_dir")
 
 	// Нажимаем Enter на директории
-	pf.ProcessKey(&vtinput.InputEvent{
+	pressKey(pf, &vtinput.InputEvent{
 		Type:           vtinput.KeyEventType,
 		KeyDown:        true,
 		VirtualKeyCode: vtinput.VK_RETURN,
@@ -2266,7 +2266,7 @@ func TestPanelsFrame_NonRunnableOpen(t *testing.T) {
 	fsp.SelectName("readme.txt")
 
 	// Нажимаем Enter на текстовом файле
-	pf.ProcessKey(&vtinput.InputEvent{
+	pressKey(pf, &vtinput.InputEvent{
 		Type:           vtinput.KeyEventType,
 		KeyDown:        true,
 		VirtualKeyCode: vtinput.VK_RETURN,
@@ -2406,7 +2406,7 @@ func TestPanelsFrame_TerminalForwarding_Legacy(t *testing.T) {
 
 	// 1. Ctrl+W should be FORWARDED (Legacy mode has no Kitty/Win32 flags)
 	// For letters, TranslateInput expects the Char field to be populated.
-	pf.ProcessKey(&vtinput.InputEvent{
+	pressKey(pf, &vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
 		VirtualKeyCode: vtinput.VK_W, Char: 'w', ControlKeyState: vtinput.LeftCtrlPressed,
 	})
@@ -2416,7 +2416,7 @@ func TestPanelsFrame_TerminalForwarding_Legacy(t *testing.T) {
 	pty.written = nil
 
 	// 2. Ctrl+Tab should NOT be forwarded (returns false, handled by FrameManager)
-	handled := pf.ProcessKey(&vtinput.InputEvent{
+	handled := pressKey(pf, &vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
 		VirtualKeyCode: vtinput.VK_TAB, ControlKeyState: vtinput.LeftCtrlPressed,
 	})
@@ -2439,7 +2439,7 @@ func TestPanelsFrame_TerminalForwarding_Advanced(t *testing.T) {
 	pf.pty = pty
 
 	// 1. Ctrl+Tab should be FORWARDED in Advanced mode
-	handled := pf.ProcessKey(&vtinput.InputEvent{
+	handled := pressKey(pf, &vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
 		VirtualKeyCode: vtinput.VK_TAB, ControlKeyState: vtinput.LeftCtrlPressed,
 	})
@@ -2452,7 +2452,7 @@ func TestPanelsFrame_TerminalForwarding_Advanced(t *testing.T) {
 	pty.written = nil
 
 	// 2. Shift+Ctrl+Tab should NOT be forwarded in any mode
-	handled = pf.ProcessKey(&vtinput.InputEvent{
+	handled = pressKey(pf, &vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
 		VirtualKeyCode: vtinput.VK_TAB, ControlKeyState: vtinput.LeftCtrlPressed | vtinput.ShiftPressed,
 	})
@@ -2461,17 +2461,21 @@ func TestPanelsFrame_TerminalForwarding_Advanced(t *testing.T) {
 	}
 }
 func TestPanelsFrame_FilesMenuLabels(t *testing.T) {
+	old := GlobalHotkeysMgr
+	GlobalHotkeysMgr = NewHotkeyManager("")
+	defer func() { GlobalHotkeysMgr = old }()
+
 	pf := NewPanelsFrame()
 	defer pf.Close()
 
-	// Items[1] is the "Files" menu
+	// Items[1] is the "Files" menu (Left, Files, Commands, Options, Right)
 	filesMenu := pf.menuBar.Items[1]
 	if filesMenu.Label != "&Files" {
 		t.Errorf("Expected Files menu label '&Files', got %q", filesMenu.Label)
 	}
 
-	// SubItems[3] should be "Rename or move"
-	renMove := filesMenu.SubItems[3]
+	// SubItems[5] should be "Rename or move" (View, Edit, New, Copy, CopyInPlace, RenMov)
+	renMove := filesMenu.SubItems[5]
 	expected := "&" + Msg("Menu.Files.RenMov")
 	if renMove.Text != expected {
 		t.Errorf("Expected Files item %q, got %q", expected, renMove.Text)
@@ -2525,7 +2529,7 @@ func TestPanelsFrame_CommandRouting_FKeys(t *testing.T) {
 	fm.Push(pf)
 
 	// Simulate F10
-	pf.ProcessKey(&vtinput.InputEvent{
+	pressKey(pf, &vtinput.InputEvent{
 		Type:           vtinput.KeyEventType,
 		KeyDown:        true,
 		VirtualKeyCode: vtinput.VK_F10,
@@ -2578,7 +2582,7 @@ func TestPanelsFrame_F9Context(t *testing.T) {
 
 	// 1. Test Left Panel context
 	pf.activeIdx = 0
-	pf.ProcessKey(&vtinput.InputEvent{
+	pressKey(pf, &vtinput.InputEvent{
 		Type:           vtinput.KeyEventType,
 		KeyDown:        true,
 		VirtualKeyCode: vtinput.VK_F9,
@@ -2594,7 +2598,7 @@ func TestPanelsFrame_F9Context(t *testing.T) {
 	// 2. Test Right Panel context
 	pf.menuBar.Active = false // Reset
 	pf.activeIdx = 1
-	pf.ProcessKey(&vtinput.InputEvent{
+	pressKey(pf, &vtinput.InputEvent{
 		Type:           vtinput.KeyEventType,
 		KeyDown:        true,
 		VirtualKeyCode: vtinput.VK_F9,
@@ -2652,7 +2656,7 @@ func TestPanelsFrame_CopyShortcuts(t *testing.T) {
 
 	// 1. Test Ctrl+Ins (Filename)
 	vtui.SetClipboard("")
-	pf.ProcessKey(&vtinput.InputEvent{
+	pressKey(pf, &vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
 		VirtualKeyCode: vtinput.VK_INSERT, ControlKeyState: vtinput.LeftCtrlPressed,
 	})
@@ -2668,7 +2672,7 @@ func TestPanelsFrame_CopyShortcuts(t *testing.T) {
 
 	// 2. Test Ctrl+F (Full Path)
 	vtui.SetClipboard("")
-	pf.ProcessKey(&vtinput.InputEvent{
+	pressKey(pf, &vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
 		VirtualKeyCode: 'F', ControlKeyState: vtinput.LeftCtrlPressed,
 	})
@@ -2806,7 +2810,7 @@ func TestPanelsFrame_DriveMenu_TerminalBusy(t *testing.T) {
 	pf.termView.UseAltScreen = true
 
 	// Press Alt+F1
-	pf.ProcessKey(&vtinput.InputEvent{
+	pressKey(pf, &vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
 		VirtualKeyCode: vtinput.VK_F1, ControlKeyState: vtinput.LeftAltPressed,
 	})
@@ -2833,7 +2837,7 @@ func TestPanelsFrame_TerminalTabAutoComplete(t *testing.T) {
 	pf.cmdLine.Edit.SetText("cd")
 
 	// 3. Press Tab
-	handled := pf.ProcessKey(&vtinput.InputEvent{
+	handled := pressKey(pf, &vtinput.InputEvent{
 		Type:           vtinput.KeyEventType,
 		KeyDown:        true,
 		VirtualKeyCode: vtinput.VK_TAB,
@@ -2970,7 +2974,7 @@ func TestPanelsFrame_ShiftInsert_Fallthrough(t *testing.T) {
 	fsp.SetFocus(true)
 
 	// 3. Send Shift+Ins
-	pf.ProcessKey(&vtinput.InputEvent{
+	pressKey(pf, &vtinput.InputEvent{
 		Type:            vtinput.KeyEventType,
 		KeyDown:         true,
 		VirtualKeyCode:  vtinput.VK_INSERT,
@@ -3208,11 +3212,11 @@ func TestPanelsFrame_VimHotkeys_Comprehensive(t *testing.T) {
 	fm.Push(handler)
 
 	// 1. Basic j/k navigation
-	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'j'})
+	pressKey(pf, &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'j'})
 	if fsp.GetCursorIndex() != 2 {
 		t.Errorf("Vim 'j' failed, expected index 2, got %d", fsp.GetCursorIndex())
 	}
-	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'k'})
+	pressKey(pf, &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'k'})
 	if fsp.GetCursorIndex() != 1 {
 		t.Errorf("Vim 'k' failed, expected index 1, got %d", fsp.GetCursorIndex())
 	}
@@ -3220,8 +3224,8 @@ func TestPanelsFrame_VimHotkeys_Comprehensive(t *testing.T) {
 	// 2. Action dd (Delete)
 	cmdCaught = 0
 	pf.cmdLine.Clear()
-	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'd'})
-	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'd'})
+	pressKey(pf, &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'd'})
+	pressKey(pf, &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'd'})
 	if cmdCaught != CmDelete {
 		t.Errorf("'dd' failed to emit CmDelete, got %d", cmdCaught)
 	}
@@ -3232,9 +3236,9 @@ func TestPanelsFrame_VimHotkeys_Comprehensive(t *testing.T) {
 	// 3. Reset on Tab (Switch panel)
 	cmdCaught = 0
 	pf.cmdLine.Clear()
-	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'd'})
-	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_TAB})
-	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'd'})
+	pressKey(pf, &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'd'})
+	pressKey(pf, &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_TAB})
+	pressKey(pf, &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'd'})
 	if cmdCaught == CmDelete {
 		t.Error("Vim prefix should reset after switching panels via Tab")
 	}
@@ -3242,12 +3246,12 @@ func TestPanelsFrame_VimHotkeys_Comprehensive(t *testing.T) {
 	// 4. Reset on Mouse click
 	cmdCaught = 0
 	pf.cmdLine.Clear()
-	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'c'})
+	pressKey(pf, &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'c'})
 	pf.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: true, ButtonState: vtinput.FromLeft1stButtonPressed,
 		MouseX: 5, MouseY: 5,
 	})
-	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'c'})
+	pressKey(pf, &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'c'})
 	if cmdCaught == CmCopy {
 		t.Error("Vim prefix should reset after mouse interaction")
 	}
@@ -3260,7 +3264,7 @@ func TestPanelsFrame_VimHotkeys_Comprehensive(t *testing.T) {
 	// In fast find mode, 'j' should be passed to find logic, not navigation.
 	// `pf.ProcessKey` will return `false` because Vim logic is skipped,
 	// then it will fall through to `fsp.ProcessKey` which will handle fast-find and return `true`.
-	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'j'})
+	pressKey(pf, &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'j'})
 	if fsp.GetCursorIndex() != 1 {
 		t.Error("'j' was handled as Vim navigation despite Fast Find being active")
 	}
@@ -3498,7 +3502,7 @@ func TestPanelsFrame_ShiftF5_KeyInterception(t *testing.T) {
 	pf.activeIdx = 0
 
 	// Send Shift-F5 key
-	handled := pf.ProcessKey(&vtinput.InputEvent{
+	handled := pressKey(pf, &vtinput.InputEvent{
 		Type:            vtinput.KeyEventType,
 		KeyDown:         true,
 		VirtualKeyCode:  vtinput.VK_F5,
@@ -3558,7 +3562,7 @@ func TestPanelsFrame_NoCtrlOInterception_InAltScreen(t *testing.T) {
 	pf.termView.UseAltScreen = true
 
 	// Send Ctrl+O
-	pf.ProcessKey(&vtinput.InputEvent{
+	pressKey(pf, &vtinput.InputEvent{
 		Type:            vtinput.KeyEventType,
 		KeyDown:         true,
 		VirtualKeyCode:  vtinput.VK_O,
@@ -3611,7 +3615,7 @@ func TestPanelsFrame_ShiftF9_SaveSettings(t *testing.T) {
 		ControlKeyState: vtinput.ShiftPressed,
 	}
 
-	if !pf.ProcessKey(ev) {
+	if !pressKey(pf, ev) {
 		t.Error("Expected PanelsFrame to handle Shift+F9 keypress")
 	}
 
@@ -3694,7 +3698,7 @@ func TestPanelsFrame_CtrlBackslash_GoesToRoot(t *testing.T) {
 		ControlKeyState: vtinput.LeftCtrlPressed,
 	}
 
-	if !pf.ProcessKey(ev) {
+	if !pressKey(pf, ev) {
 		t.Error("Expected PanelsFrame to handle Ctrl+\\")
 	}
 
@@ -3732,7 +3736,7 @@ func TestPanelsFrame_CtrlPgUp_GoesToParentOrDriveMenu(t *testing.T) {
 		ControlKeyState: vtinput.LeftCtrlPressed,
 	}
 
-	if !pf.ProcessKey(ev) {
+	if !pressKey(pf, ev) {
 		t.Error("Expected PanelsFrame to handle Ctrl+PgUp")
 	}
 
@@ -3752,7 +3756,7 @@ func TestPanelsFrame_CtrlPgUp_GoesToParentOrDriveMenu(t *testing.T) {
 	}
 
 	// Отправляем Ctrl+PgUp на корне диска -> должно открыться Drive Menu
-	if !pf.ProcessKey(ev) {
+	if !pressKey(pf, ev) {
 		t.Error("Expected PanelsFrame to handle Ctrl+PgUp at root")
 	}
 	top := vtui.FrameManager.GetTopFrame()
@@ -3787,13 +3791,13 @@ func TestPanelsFrame_CtrlPgDn_EntersDir(t *testing.T) {
 
 	// Отправляем Ctrl+PgDn
 	ev := &vtinput.InputEvent{
-		Type:            vtinput.MouseEventType,
+		Type:            vtinput.KeyEventType,
 		KeyDown:         true,
 		VirtualKeyCode:  vtinput.VK_NEXT,
 		ControlKeyState: vtinput.LeftCtrlPressed,
 	}
 
-	if !pf.ProcessKey(ev) {
+	if !pressKey(pf, ev) {
 		t.Error("Expected PanelsFrame to handle Ctrl+PgDn")
 	}
 
@@ -3826,7 +3830,7 @@ func TestPanelsFrame_CtrlViewModes(t *testing.T) {
 	if macroFilter.Filter(rightCtrl3) {
 		t.Fatal("RightCtrl+3 was consumed by the configurable hotkey filter")
 	}
-	pf.ProcessKey(rightCtrl3)
+	pressKey(pf, rightCtrl3)
 	if fsp.viewMode != ViewModeMedium {
 		t.Fatalf("RightCtrl+3 changed panel mode to %v", fsp.viewMode)
 	}
@@ -3835,13 +3839,13 @@ func TestPanelsFrame_CtrlViewModes(t *testing.T) {
 		key  uint16
 		mode ViewMode
 	}{{'1', ViewModeBrief}, {'2', ViewModeMedium}, {'3', ViewModeDetailed}} {
-		pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: tc.key, ControlKeyState: vtinput.LeftCtrlPressed})
+		pressKey(pf, &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: tc.key, ControlKeyState: vtinput.LeftCtrlPressed})
 		if fsp.viewMode != tc.mode || pf.widePanel != -1 {
 			t.Errorf("Ctrl+%c: mode=%v wide=%d, want mode=%v wide=-1", tc.key, fsp.viewMode, pf.widePanel, tc.mode)
 		}
 	}
 
-	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: '4', ControlKeyState: vtinput.LeftCtrlPressed})
+	pressKey(pf, &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: '4', ControlKeyState: vtinput.LeftCtrlPressed})
 	if pf.widePanel != pf.activeIdx || !fsp.wide || len(fsp.table.Columns) != 3 {
 		t.Fatalf("Ctrl+4 did not enter Wide: wide=%d active=%d columns=%d", pf.widePanel, pf.activeIdx, len(fsp.table.Columns))
 	}
@@ -3850,14 +3854,14 @@ func TestPanelsFrame_CtrlViewModes(t *testing.T) {
 		t.Fatalf("Wide geometry = %d..%d, want 0..79", x1, x2)
 	}
 	originalMode := fsp.viewMode
-	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_TAB})
+	pressKey(pf, &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_TAB})
 	if pf.widePanel != pf.activeIdx || pf.activeIdx != 0 {
 		t.Fatalf("Tab did not transfer Wide to left panel: wide=%d active=%d", pf.widePanel, pf.activeIdx)
 	}
 	if fsp.viewMode != originalMode {
 		t.Error("Wide changed the right panel's normal view mode")
 	}
-	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: '2', ControlKeyState: vtinput.LeftCtrlPressed})
+	pressKey(pf, &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: '2', ControlKeyState: vtinput.LeftCtrlPressed})
 	if pf.widePanel != -1 || pf.panels[0].(*FileSystemPanel).viewMode != ViewModeMedium {
 		t.Error("Ctrl+2 did not leave Wide and set Medium on the active panel")
 	}
@@ -3889,7 +3893,7 @@ func TestPanelsFrame_CaptureCommands(t *testing.T) {
 	}
 
 	pf.cmdLine.Edit.SetText(cmdStr)
-	pf.ProcessKey(&vtinput.InputEvent{
+	pressKey(pf, &vtinput.InputEvent{
 		Type:           vtinput.KeyEventType,
 		KeyDown:        true,
 		VirtualKeyCode: vtinput.VK_RETURN,
@@ -3957,7 +3961,7 @@ func TestPanelsFrame_ShiftEnter_ExplorerLaunch(t *testing.T) {
 
 	// 1. Test Shift+Enter on file "doc.txt"
 	lp.SetCursorIndex(2)
-	handled := pf.ProcessKey(&vtinput.InputEvent{
+	handled := pressKey(pf, &vtinput.InputEvent{
 		Type:            vtinput.KeyEventType,
 		KeyDown:         true,
 		VirtualKeyCode:  vtinput.VK_RETURN,
@@ -3969,7 +3973,7 @@ func TestPanelsFrame_ShiftEnter_ExplorerLaunch(t *testing.T) {
 
 	// 2. Test Shift+Enter on folder "sub"
 	lp.SetCursorIndex(1)
-	handled = pf.ProcessKey(&vtinput.InputEvent{
+	handled = pressKey(pf, &vtinput.InputEvent{
 		Type:            vtinput.KeyEventType,
 		KeyDown:         true,
 		VirtualKeyCode:  vtinput.VK_RETURN,
@@ -3981,7 +3985,7 @@ func TestPanelsFrame_ShiftEnter_ExplorerLaunch(t *testing.T) {
 
 	// 3. Test Shift+Enter on parent folder ".."
 	lp.SetCursorIndex(0)
-	handled = pf.ProcessKey(&vtinput.InputEvent{
+	handled = pressKey(pf, &vtinput.InputEvent{
 		Type:            vtinput.KeyEventType,
 		KeyDown:         true,
 		VirtualKeyCode:  vtinput.VK_RETURN,
@@ -3997,7 +4001,7 @@ func TestPanelsFrame_ShiftEnter_ExplorerLaunch(t *testing.T) {
 	lp.Refresh()
 	lp.SetCursorIndex(0)
 
-	handled = pf.ProcessKey(&vtinput.InputEvent{
+	handled = pressKey(pf, &vtinput.InputEvent{
 		Type:            vtinput.KeyEventType,
 		KeyDown:         true,
 		VirtualKeyCode:  vtinput.VK_RETURN,
@@ -4049,7 +4053,7 @@ func TestPanelsFrame_CtrlPgUp_EscapesNestedVFS(t *testing.T) {
 		ControlKeyState: vtinput.LeftCtrlPressed,
 	}
 
-	if !pf.ProcessKey(ev) {
+	if !pressKey(pf, ev) {
 		t.Error("Expected PanelsFrame to handle Ctrl+PgUp on nested VFS")
 	}
 
@@ -4069,7 +4073,7 @@ func TestPanelsFrame_CtrlP_TogglesPassivePanel(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	send := func(pf *PanelsFrame) {
-		pf.ProcessKey(&vtinput.InputEvent{
+		pressKey(pf, &vtinput.InputEvent{
 			Type: vtinput.KeyEventType, KeyDown: true,
 			VirtualKeyCode:  vtinput.VK_P,
 			ControlKeyState: vtinput.LeftCtrlPressed,
@@ -4145,7 +4149,7 @@ func TestPanelsFrame_CtrlArrows_ResizePanels(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	send := func(pf *PanelsFrame, vk uint16) {
-		pf.ProcessKey(&vtinput.InputEvent{
+		pressKey(pf, &vtinput.InputEvent{
 			Type: vtinput.KeyEventType, KeyDown: true,
 			VirtualKeyCode:  vk,
 			ControlKeyState: vtinput.LeftCtrlPressed,
@@ -4248,7 +4252,7 @@ func TestPanelsFrame_CtrlClear_ResetsLayoutDecrements(t *testing.T) {
 		AppConfig.RightHeightDecrement = 0
 	}()
 
-	pf.ProcessKey(&vtinput.InputEvent{
+	pressKey(pf, &vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
 		VirtualKeyCode:  vtinput.VK_CLEAR,
 		ControlKeyState: vtinput.LeftCtrlPressed,
@@ -4293,7 +4297,7 @@ func TestPanelsFrame_CtrlShiftArrows_AsymmetricHeight(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	send := func(pf *PanelsFrame, vk uint16) {
-		pf.ProcessKey(&vtinput.InputEvent{
+		pressKey(pf, &vtinput.InputEvent{
 			Type: vtinput.KeyEventType, KeyDown: true,
 			VirtualKeyCode:  vk,
 			ControlKeyState: vtinput.LeftCtrlPressed | vtinput.ShiftPressed,

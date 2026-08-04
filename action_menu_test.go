@@ -69,6 +69,63 @@ func TestBuildMenuBarItems_Viewer(t *testing.T) {
 	}
 }
 
+func TestBuildMenuBarItems_Shell(t *testing.T) {
+	old := GlobalHotkeysMgr
+	GlobalHotkeysMgr = NewHotkeyManager("")
+	defer func() { GlobalHotkeysMgr = old }()
+
+	items := BuildMenuBarItems("Shell")
+
+	wantTitles := []string{"&Files", "&Commands", "&Options"}
+	if len(items) != len(wantTitles) {
+		t.Fatalf("Expected %d top-level menus, got %d: %+v", len(wantTitles), len(items), items)
+	}
+	for i, want := range wantTitles {
+		if items[i].Label != want {
+			t.Errorf("Menu %d: expected title %q, got %q", i, want, items[i].Label)
+		}
+	}
+
+	// Files menu: View first, with the default F3 shortcut shown.
+	files := items[0].SubItems
+	if len(files) == 0 {
+		t.Fatal("Files menu is empty")
+	}
+	if files[0].Text != "&View" {
+		t.Errorf("Expected first Files item to be '&View', got %q", files[0].Text)
+	}
+	if files[0].Shortcut != "F3" {
+		t.Errorf("Expected View shortcut 'F3', got %q", files[0].Shortcut)
+	}
+
+	// Options menu honors MenuSeparatorBefore.
+	var sawSeparator bool
+	for _, it := range items[2].SubItems {
+		if it.Separator {
+			sawSeparator = true
+			break
+		}
+	}
+	if !sawSeparator {
+		t.Error("Expected at least one separator in the Options menu")
+	}
+}
+
+func TestBuildMenuBarItems_Terminal(t *testing.T) {
+	old := GlobalHotkeysMgr
+	GlobalHotkeysMgr = NewHotkeyManager("")
+	defer func() { GlobalHotkeysMgr = old }()
+
+	items := BuildMenuBarItems("Terminal")
+	if len(items) != 1 || items[0].Label != "&File" {
+		t.Fatalf("Expected a single '&File' menu, got %+v", items)
+	}
+	file := items[0].SubItems
+	if len(file) == 0 || file[0].Text != "&View terminal log" {
+		t.Errorf("Expected first File item to be '&View terminal log', got %+v", file)
+	}
+}
+
 func TestBuildMenuBarItems_OnClickRunsAction(t *testing.T) {
 	old := GlobalHotkeysMgr
 	GlobalHotkeysMgr = NewHotkeyManager("")

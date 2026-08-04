@@ -2586,7 +2586,7 @@ func findPanelsFrameAnyScreen() *PanelsFrame {
 	}
 	for _, s := range vtui.FrameManager.Screens {
 		for _, f := range s.Frames {
-			if pf, ok := f.(*PanelsFrame); ok {
+			if pf, ok := f.(*PanelsFrame); ok && !pf.closed {
 				return pf
 			}
 		}

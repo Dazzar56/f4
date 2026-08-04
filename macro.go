@@ -360,6 +360,19 @@ func (m *MacroManager) Filter(e *vtinput.InputEvent) bool {
 		return true
 	}
 
+	// Plugin key interception: global plugin hotkeys and the active
+	// panel's PanelController may override built-in hotkeys, so they
+	// are consulted before the hotkey manager.
+	if vtui.FrameManager != nil {
+		if top := vtui.FrameManager.GetTopFrame(); top != nil {
+			if pi, ok := top.(interface {
+				InterceptPluginKey(*vtinput.InputEvent) bool
+			}); ok && pi.InterceptPluginKey(e) {
+				return true
+			}
+		}
+	}
+
 	// A frame in a modal input state (e.g. editor autocomplete, panel
 	// fast-find) may veto system hotkey dispatch: the key then falls
 	// through to the frame's own ProcessKey, which handles such states

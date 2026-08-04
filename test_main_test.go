@@ -12,8 +12,8 @@ import (
 // macro/hotkey filter first (action hotkeys are dispatched there), then
 // the frame's own ProcessKey for widget-level keys. It ensures the
 // global managers exist and the frame is the top frame.
-func pressKey(f vtui.Frame, e *vtinput.InputEvent) {
-	if vtui.FrameManager == nil {
+func pressKey(f vtui.Frame, e *vtinput.InputEvent) bool {
+	if vtui.FrameManager == nil || len(vtui.FrameManager.Screens) == 0 {
 		vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	}
 	if GlobalHotkeysMgr == nil {
@@ -22,13 +22,22 @@ func pressKey(f vtui.Frame, e *vtinput.InputEvent) {
 	if MacroMgr == nil {
 		MacroMgr = NewMacroManager("")
 	}
-	if vtui.FrameManager.GetTopFrame() != f {
+	inStack := false
+	for _, s := range vtui.FrameManager.Screens {
+		for _, fr := range s.Frames {
+			if fr == f {
+				inStack = true
+				break
+			}
+		}
+	}
+	if !inStack {
 		vtui.FrameManager.Push(f)
 	}
 	if MacroMgr.Filter(e) {
-		return
+		return true
 	}
-	f.ProcessKey(e)
+	return f.ProcessKey(e)
 }
 
 func TestMain(m *testing.M) {

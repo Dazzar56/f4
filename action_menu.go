@@ -31,7 +31,13 @@ func BuildMenuBarItems(area string) []vtui.MenuBarItem {
 			menus[a.MenuPath] = m
 			order = append(order, a.MenuPath)
 		}
+		if a.MenuSeparatorBefore {
+			m.items = append(m.items, vtui.MenuItem{Separator: true})
+		}
 		text := a.DisplayLabel()
+		if !strings.Contains(text, "&") {
+			text = "&" + text // first letter becomes the menu hotkey
+		}
 		if a.Checked != nil && a.Checked() {
 			text = "√ " + text
 		}
@@ -45,14 +51,16 @@ func BuildMenuBarItems(area string) []vtui.MenuBarItem {
 		m.items = append(m.items, item)
 	}
 
-	// The area's own actions first, then Common ones (stable registry order).
+	// The area's own actions first (stable registry order).
 	for _, a := range GetOrderedActions() {
 		if a.MenuPath != "" && a.Area == area {
 			appendAction(a)
 		}
 	}
+	// Common actions join only menu groups that already exist in the
+	// area, so they cannot create stray top-level menus.
 	for _, a := range GetOrderedActions() {
-		if a.MenuPath != "" && a.Area == "Common" {
+		if a.MenuPath != "" && a.Area == "Common" && menus[a.MenuPath] != nil {
 			appendAction(a)
 		}
 	}

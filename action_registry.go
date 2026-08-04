@@ -1,12 +1,18 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/unxed/f4/vfs"
+	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
 
@@ -32,6 +38,8 @@ type Action struct {
 	// MenuPath is the top-level menu the action appears in ("File",
 	// "Edit", ...). Empty means the action is not listed in menus.
 	MenuPath string
+	// MenuSeparatorBefore inserts a separator above this action's menu item.
+	MenuSeparatorBefore bool
 	// Checked, when set, reports the toggle state shown in menus ("√ ").
 	Checked func() bool
 	Handler func() bool
@@ -202,84 +210,566 @@ func init() {
 	})
 
 	// --- Shell (panels) actions ---
+	// Registration order defines the menu order inside each top-level menu.
+	RegisterAction(Action{
+		Name:        "File.View",
+		Area:        "Shell",
+		Label:       "View",
+		LabelKey:    "Menu.Files.View",
+		Description: "Open file in viewer",
+		DescKey:     "Action.File.View.Desc",
+		DefaultKeys: []string{"F3"},
+		MenuPath:    "Files",
+		Handler:     withPF(func(pf *PanelsFrame) { actionViewFile(pf) }),
+	})
+	RegisterAction(Action{
+		Name:        "File.Edit",
+		Area:        "Shell",
+		Label:       "Edit",
+		LabelKey:    "Menu.Files.Edit",
+		Description: "Open file in editor",
+		DescKey:     "Action.File.Edit.Desc",
+		DefaultKeys: []string{"F4"},
+		MenuPath:    "Files",
+		Handler:     withPF(func(pf *PanelsFrame) { actionEditFile(pf) }),
+	})
+	RegisterAction(Action{
+		Name:        "File.New",
+		Area:        "Shell",
+		Label:       "New File",
+		LabelKey:    "Action.File.New",
+		Description: "Create and open a new file in editor",
+		DescKey:     "Action.File.New.Desc",
+		DefaultKeys: []string{"ShiftF4"},
+		MenuPath:    "Files",
+		Handler:     withPF(func(pf *PanelsFrame) { actionNewFile(pf) }),
+	})
 	RegisterAction(Action{
 		Name:        "File.Copy",
 		Area:        "Shell",
 		Label:       "Copy",
+		LabelKey:    "Menu.Files.Copy",
 		Description: "Copy selected files or current file",
+		DescKey:     "Action.File.Copy.Desc",
 		DefaultKeys: []string{"F5"},
+		MenuPath:    "Files",
 		Handler:     withPF(func(pf *PanelsFrame) { actionCopyMove(pf, false) }),
+	})
+	RegisterAction(Action{
+		Name:        "File.CopyInPlace",
+		Area:        "Shell",
+		Label:       "Copy In Place",
+		LabelKey:    "Action.File.CopyInPlace",
+		Description: "Copy file under a new name in the same directory",
+		DescKey:     "Action.File.CopyInPlace.Desc",
+		DefaultKeys: []string{"ShiftF5"},
+		MenuPath:    "Files",
+		Handler:     withPF(func(pf *PanelsFrame) { actionCopyInPlace(pf) }),
 	})
 	RegisterAction(Action{
 		Name:        "File.Move",
 		Area:        "Shell",
 		Label:       "Move",
+		LabelKey:    "Menu.Files.RenMov",
 		Description: "Rename or move selected files",
+		DescKey:     "Action.File.Move.Desc",
 		DefaultKeys: []string{"F6"},
+		MenuPath:    "Files",
 		Handler:     withPF(func(pf *PanelsFrame) { actionCopyMove(pf, true) }),
 	})
 	RegisterAction(Action{
 		Name:        "File.Rename",
 		Area:        "Shell",
 		Label:       "Rename",
+		LabelKey:    "Action.File.Rename",
 		Description: "Rename current file",
+		DescKey:     "Action.File.Rename.Desc",
 		DefaultKeys: []string{"ShiftF6"},
+		MenuPath:    "Files",
 		Handler:     withPF(func(pf *PanelsFrame) { actionRename(pf) }),
-	})
-	RegisterAction(Action{
-		Name:        "File.Delete",
-		Area:        "Shell",
-		Label:       "Delete",
-		Description: "Delete selected files",
-		DefaultKeys: []string{"F8"},
-		Handler:     withPF(func(pf *PanelsFrame) { actionDelete(pf) }),
 	})
 	RegisterAction(Action{
 		Name:        "File.MakeDir",
 		Area:        "Shell",
 		Label:       "Make Folder",
+		LabelKey:    "Menu.Files.MkDir",
 		Description: "Create a new directory",
+		DescKey:     "Action.File.MakeDir.Desc",
 		DefaultKeys: []string{"F7"},
+		MenuPath:    "Files",
 		Handler:     withPF(func(pf *PanelsFrame) { actionMkDir(pf) }),
 	})
 	RegisterAction(Action{
-		Name:        "File.Edit",
+		Name:        "File.Delete",
 		Area:        "Shell",
-		Label:       "Edit",
-		Description: "Open file in editor",
-		DefaultKeys: []string{"F4"},
-		Handler:     withPF(func(pf *PanelsFrame) { actionEditFile(pf) }),
+		Label:       "Delete",
+		LabelKey:    "Menu.Files.Delete",
+		Description: "Delete selected files",
+		DescKey:     "Action.File.Delete.Desc",
+		DefaultKeys: []string{"F8"},
+		MenuPath:    "Files",
+		Handler:     withPF(func(pf *PanelsFrame) { actionDelete(pf) }),
 	})
 	RegisterAction(Action{
-		Name:        "File.View",
+		Name:        "File.Attributes",
 		Area:        "Shell",
-		Label:       "View",
-		Description: "Open file in viewer",
-		DefaultKeys: []string{"F3"},
-		Handler:     withPF(func(pf *PanelsFrame) { actionViewFile(pf) }),
+		Label:       "File Attributes",
+		LabelKey:    "Action.File.Attributes",
+		Description: "View and change file attributes",
+		DescKey:     "Action.File.Attributes.Desc",
+		DefaultKeys: []string{"CtrlA"},
+		MenuPath:    "Files",
+		Handler:     withPF(func(pf *PanelsFrame) { actionFileAttributes(pf) }),
 	})
 	RegisterAction(Action{
-		Name:        "File.New",
+		Name:        "Panel.SystemExplorer",
 		Area:        "Shell",
-		Label:       "New File",
-		Description: "Create and open a new file in editor",
-		DefaultKeys: []string{"ShiftF4"},
-		Handler:     withPF(func(pf *PanelsFrame) { actionNewFile(pf) }),
+		Label:       "Open in Explorer",
+		LabelKey:    "Action.Panel.SystemExplorer",
+		Description: "Open current file in the system file manager",
+		DescKey:     "Action.Panel.SystemExplorer.Desc",
+		DefaultKeys: []string{"ShiftEnter"},
+		MenuPath:    "Files",
+		Handler: withPF(func(pf *PanelsFrame) {
+			fsp := pf.getActivePanel()
+			if fsp == nil {
+				return
+			}
+			idx := fsp.GetCursorIndex()
+			if idx < 0 || idx >= len(fsp.entries) {
+				return
+			}
+			name := fsp.entries[idx].Name
+			var fullPath string
+			if name == ".." {
+				fullPath = fsp.vfs.GetPath()
+			} else {
+				fullPath = fsp.vfs.Join(fsp.vfs.GetPath(), name)
+			}
+			if _, isLocal := fsp.vfs.(*vfs.OSVFS); isLocal {
+				// Capture entry state before spawning: the entries
+				// slice may be replaced by a refresh at any time.
+				isDir := fsp.entries[idx].IsDir || name == ".."
+				go func() {
+					var cmd *exec.Cmd
+					switch runtime.GOOS {
+					case "linux":
+						cmd = exec.Command("xdg-open", fullPath)
+					case "windows":
+						if isDir {
+							cmd = exec.Command("explorer.exe", fullPath)
+						} else {
+							cmd = exec.Command("explorer.exe", "/select,", fullPath)
+						}
+					case "darwin":
+						cmd = exec.Command("open", fullPath)
+					}
+					if cmd != nil {
+						_ = cmd.Run()
+					}
+				}()
+			} else {
+				vtui.ShowMessage(" Error ", "Cannot open remote paths in system explorer.", []string{"&Ok"})
+			}
+		}),
+	})
+
+	RegisterAction(Action{
+		Name:        "Panel.SelectGroup",
+		Area:        "Shell",
+		Label:       "Select Group",
+		LabelKey:    "Action.Panel.SelectGroup",
+		Description: "Select files by mask",
+		DescKey:     "Action.Panel.SelectGroup.Desc",
+		DefaultKeys: []string{"Add"},
+		MenuPath:    "Files",
+		Handler: withPF(func(pf *PanelsFrame) {
+			if fsp := pf.getActivePanel(); fsp != nil {
+				vtui.InputBox(Msg("Select.Title"), Msg("Select.Mask"), "*", func(mask string) {
+					fsp.ApplyMaskSelection(mask, true)
+				})
+			}
+		}),
+	})
+	RegisterAction(Action{
+		Name:        "Panel.DeselectGroup",
+		Area:        "Shell",
+		Label:       "Deselect Group",
+		LabelKey:    "Action.Panel.DeselectGroup",
+		Description: "Deselect files by mask",
+		DescKey:     "Action.Panel.DeselectGroup.Desc",
+		DefaultKeys: []string{"Subtract"},
+		MenuPath:    "Files",
+		Handler: withPF(func(pf *PanelsFrame) {
+			if fsp := pf.getActivePanel(); fsp != nil {
+				vtui.InputBox(Msg("Deselect.Title"), Msg("Select.Mask"), "*", func(mask string) {
+					fsp.ApplyMaskSelection(mask, false)
+				})
+			}
+		}),
+	})
+	RegisterAction(Action{
+		Name:        "Panel.InvertSelection",
+		Area:        "Shell",
+		Label:       "Invert Selection",
+		LabelKey:    "Action.Panel.InvertSelection",
+		Description: "Invert file selection",
+		DescKey:     "Action.Panel.InvertSelection.Desc",
+		DefaultKeys: []string{"Multiply"},
+		MenuPath:    "Files",
+		Handler: withPF(func(pf *PanelsFrame) {
+			if fsp := pf.getActivePanel(); fsp != nil {
+				fsp.InvertSelection()
+			}
+		}),
+	})
+
+	RegisterAction(Action{
+		Name:        "Panel.UserMenu",
+		Area:        "Shell",
+		Label:       "User Menu",
+		LabelKey:    "Action.Panel.UserMenu",
+		Description: "Show the user menu",
+		DescKey:     "Action.Panel.UserMenu.Desc",
+		DefaultKeys: []string{"F2"},
+		MenuPath:    "Commands",
+		Handler:     withPF(func(pf *PanelsFrame) { ShowUserMenu(pf) }),
 	})
 	RegisterAction(Action{
 		Name:        "File.Find",
 		Area:        "Shell",
 		Label:       "Find File",
+		LabelKey:    "Menu.Commands.FindFile",
 		Description: "Search for files",
+		DescKey:     "Action.File.Find.Desc",
 		DefaultKeys: []string{"AltF7"},
+		MenuPath:    "Commands",
 		Handler:     withPF(func(pf *PanelsFrame) { actionFindFile(pf) }),
 	})
+	RegisterAction(Action{
+		Name:        "Panel.Bookmarks",
+		Area:        "Shell",
+		Label:       "Bookmarks",
+		LabelKey:    "Menu.Commands.Bookmarks",
+		Description: "Show folder bookmarks dialog",
+		DescKey:     "Action.Panel.Bookmarks.Desc",
+		MenuPath:    "Commands",
+		Handler:     withPF(func(pf *PanelsFrame) { ShowBookmarksDialog(pf) }),
+	})
+	RegisterAction(Action{
+		Name:        "Panel.PluginMenu",
+		Area:        "Shell",
+		Label:       "Plugin Commands",
+		LabelKey:    "Action.Panel.PluginMenu",
+		Description: "Show plugin commands menu",
+		DescKey:     "Action.Panel.PluginMenu.Desc",
+		DefaultKeys: []string{"F11"},
+		MenuPath:    "Commands",
+		Handler:     withPF(func(pf *PanelsFrame) { pf.showPluginMenu() }),
+	})
+	RegisterAction(Action{
+		Name:        "Panel.CommandHistory",
+		Area:        "Shell",
+		Label:       "Command History",
+		LabelKey:    "Action.Panel.CommandHistory",
+		Description: "Show command line history",
+		DescKey:     "Action.Panel.CommandHistory.Desc",
+		DefaultKeys: []string{"AltF8"},
+		MenuPath:    "Commands",
+		Handler:     withPF(func(pf *PanelsFrame) { actionCommandHistory(pf) }),
+	})
+	RegisterAction(Action{
+		Name:        "Panel.FoldersHistory",
+		Area:        "Shell",
+		Label:       "Folders History",
+		LabelKey:    "Action.Panel.FoldersHistory",
+		Description: "Show folders history",
+		DescKey:     "Action.Panel.FoldersHistory.Desc",
+		DefaultKeys: []string{"AltF12"},
+		MenuPath:    "Commands",
+		Handler:     withPF(func(pf *PanelsFrame) { actionFoldersHistory(pf) }),
+	})
+	RegisterAction(Action{
+		Name:        "Panel.GoParent",
+		Area:        "Shell",
+		Label:       "Parent Folder",
+		LabelKey:    "Action.Panel.GoParent",
+		Description: "Go to parent directory",
+		DescKey:     "Action.Panel.GoParent.Desc",
+		DefaultKeys: []string{"CtrlPgUp"},
+		MenuPath:    "Commands",
+		Handler: withPF(func(pf *PanelsFrame) {
+			fsp := pf.getActivePanel()
+			if fsp == nil {
+				return
+			}
+			if fsp.vfs.IsAtRoot() {
+				if fsp.vfs.ParentVFS() == nil {
+					pf.showDriveMenu(pf.activeIdx)
+				} else {
+					// Exit an archive or a NetFox connection to the parent VFS
+					pf.NavigateToPath(fsp, "..")
+				}
+			} else {
+				oldPath := fsp.vfs.GetPath()
+				if err := fsp.vfs.SetPath(".."); err == nil {
+					fsp.pendingSelection = fsp.vfs.Base(oldPath)
+					fsp.ReadDirectory()
+				} else {
+					pf.NavigateToPath(fsp, "..")
+				}
+			}
+		}),
+	})
+	RegisterAction(Action{
+		Name:        "Panel.GoRoot",
+		Area:        "Shell",
+		Label:       "Root Folder",
+		LabelKey:    "Action.Panel.GoRoot",
+		Description: "Go to the filesystem root",
+		DescKey:     "Action.Panel.GoRoot.Desc",
+		DefaultKeys: []string{"CtrlVK_DC"},
+		MenuPath:    "Commands",
+		Handler: withPF(func(pf *PanelsFrame) {
+			if fsp := pf.getActivePanel(); fsp != nil {
+				rootPath := "/"
+				if runtime.GOOS == "windows" {
+					rootPath = string(os.PathSeparator)
+					if _, isOS := fsp.vfs.(*vfs.OSVFS); isOS {
+						rootPath = filepath.VolumeName(fsp.vfs.GetPath()) + string(os.PathSeparator)
+					}
+				}
+				pf.NavigateToPath(fsp, rootPath)
+			}
+		}),
+	})
+	RegisterAction(Action{
+		Name:        "Panel.CopyPath",
+		Area:        "Shell",
+		Label:       "Copy Path",
+		LabelKey:    "Action.Panel.CopyPath",
+		Description: "Copy the full path of the current file to clipboard",
+		DescKey:     "Action.Panel.CopyPath.Desc",
+		DefaultKeys: []string{"CtrlF:EmptyCommandLine"},
+		MenuPath:    "Commands",
+		Handler: withPF(func(pf *PanelsFrame) {
+			if fsp := pf.getActivePanel(); fsp != nil {
+				idx := fsp.GetCursorIndex()
+				if idx >= 0 && idx < len(fsp.entries) {
+					if entry := fsp.entries[idx]; entry.Name != ".." {
+						vtui.SetClipboard(fsp.vfs.Join(fsp.vfs.GetPath(), entry.Name))
+					}
+				}
+			}
+		}),
+	})
+	RegisterAction(Action{
+		Name:        "Panel.CopyName",
+		Area:        "Shell",
+		Label:       "Copy Name",
+		LabelKey:    "Action.Panel.CopyName",
+		Description: "Copy the current file name to clipboard",
+		DescKey:     "Action.Panel.CopyName.Desc",
+		DefaultKeys: []string{"CtrlIns:EmptyCommandLine"},
+		MenuPath:    "Commands",
+		Handler: withPF(func(pf *PanelsFrame) {
+			if fsp := pf.getActivePanel(); fsp != nil {
+				idx := fsp.GetCursorIndex()
+				if idx >= 0 && idx < len(fsp.entries) {
+					if entry := fsp.entries[idx]; entry.Name != ".." {
+						vtui.SetClipboard(entry.Name)
+					}
+				}
+			}
+		}),
+	})
+	RegisterAction(Action{
+		Name:        "Panel.SortMenu",
+		Area:        "Shell",
+		Label:       "Sort Modes",
+		LabelKey:    "Action.Panel.SortMenu",
+		Description: "Show sort modes menu",
+		DescKey:     "Action.Panel.SortMenu.Desc",
+		DefaultKeys: []string{"CtrlF12"},
+		MenuPath:    "Commands",
+		Handler:     withPF(func(pf *PanelsFrame) { actionSortMenu(pf) }),
+	})
 
+	RegisterAction(Action{
+		Name:        "Settings.Language",
+		Area:        "Shell",
+		Label:       "Language",
+		LabelKey:    "Menu.Language",
+		Description: "Open language selection dialog",
+		DescKey:     "Action.Settings.Language.Desc",
+		MenuPath:    "Options",
+		Handler:     withPF(func(pf *PanelsFrame) { actionLanguage(pf) }),
+	})
+	RegisterAction(Action{
+		Name:        "Settings.HelpLanguage",
+		Area:        "Shell",
+		Label:       "Help Language",
+		LabelKey:    "Menu.HelpLanguage",
+		Description: "Open help language selection dialog",
+		DescKey:     "Action.Settings.HelpLanguage.Desc",
+		MenuPath:    "Options",
+		Handler:     withPF(func(pf *PanelsFrame) { actionHelpLanguage(pf) }),
+	})
+	RegisterAction(Action{
+		Name:                "Settings.Panel",
+		Area:                "Shell",
+		Label:               "Panel Settings",
+		LabelKey:            "Menu.PanelSettings",
+		Description:         "Open panel settings dialog",
+		DescKey:             "Action.Settings.Panel.Desc",
+		MenuPath:            "Options",
+		MenuSeparatorBefore: true,
+		Handler:             withPF(func(pf *PanelsFrame) { actionPanelSettings(pf) }),
+	})
+	RegisterAction(Action{
+		Name:        "Settings.Editor",
+		Area:        "Shell",
+		Label:       "Editor Settings",
+		LabelKey:    "Menu.EditorSettings",
+		Description: "Open editor settings dialog",
+		DescKey:     "Action.Settings.Editor.Desc",
+		MenuPath:    "Options",
+		Handler:     withPF(func(pf *PanelsFrame) { actionEditorSettings(pf) }),
+	})
+	RegisterAction(Action{
+		Name:        "Settings.Colorer",
+		Area:        "Shell",
+		Label:       "Colorer Settings",
+		LabelKey:    "Menu.ColorerSettings",
+		Description: "Open Colorer settings dialog",
+		DescKey:     "Action.Settings.Colorer.Desc",
+		MenuPath:    "Options",
+		Handler:     withPF(func(pf *PanelsFrame) { actionColorerSettings(pf) }),
+	})
+	RegisterAction(Action{
+		Name:        "Settings.Appearance",
+		Area:        "Shell",
+		Label:       "Appearance Settings",
+		LabelKey:    "Menu.AppearanceSettings",
+		Description: "Open appearance settings dialog",
+		DescKey:     "Action.Settings.Appearance.Desc",
+		MenuPath:    "Options",
+		Handler:     withPF(func(pf *PanelsFrame) { actionAppearanceSettings(pf) }),
+	})
+	RegisterAction(Action{
+		Name:        "Settings.Confirmations",
+		Area:        "Shell",
+		Label:       "Confirmations Settings",
+		LabelKey:    "Menu.ConfirmationsSettings",
+		Description: "Open confirmations settings dialog",
+		DescKey:     "Action.Settings.Confirmations.Desc",
+		MenuPath:    "Options",
+		Handler:     withPF(func(pf *PanelsFrame) { actionConfirmationsSettings(pf) }),
+	})
+	RegisterAction(Action{
+		Name:                "Settings.Hotkeys",
+		Area:                "Shell",
+		Label:               "Hotkey Configuration",
+		LabelKey:            "Action.Settings.Hotkeys",
+		Description:         "Open Hotkey Configurator",
+		DescKey:             "Action.Settings.Hotkeys.Desc",
+		MenuPath:            "Options",
+		MenuSeparatorBefore: true,
+		Handler:             withPF(func(pf *PanelsFrame) { actionHotkeyConfig(pf) }),
+	})
+	RegisterAction(Action{
+		Name:                "Settings.AutoUpdate",
+		Area:                "Shell",
+		Label:               "Auto Update Settings",
+		LabelKey:            "Menu.AutoUpdateSettings",
+		Description:         "Open auto update settings dialog",
+		DescKey:             "Action.Settings.AutoUpdate.Desc",
+		MenuPath:            "Options",
+		MenuSeparatorBefore: true,
+		Handler:             withPF(func(pf *PanelsFrame) { vtui.FrameManager.EmitCommand(CmUpdateSettings, nil) }),
+	})
+	RegisterAction(Action{
+		Name:                "Settings.Plugins",
+		Area:                "Shell",
+		Label:               "Plugins Menu",
+		LabelKey:            "Menu.Options.Plugins",
+		Description:         "Manage plugins dialog",
+		DescKey:             "Action.Settings.Plugins.Desc",
+		MenuPath:            "Options",
+		MenuSeparatorBefore: true,
+		Handler:             withPF(func(pf *PanelsFrame) { actionManagePlugins(pf) }),
+	})
+	RegisterAction(Action{
+		Name:                "App.PlugRing",
+		Area:                "Shell",
+		Label:               "f4 PlugRing",
+		LabelKey:            "Action.App.PlugRing",
+		Description:         "Open the PlugRing plugin catalog",
+		DescKey:             "Action.App.PlugRing.Desc",
+		MenuPath:            "Options",
+		MenuSeparatorBefore: true,
+		Handler:             withPF(func(pf *PanelsFrame) { vtui.FrameManager.EmitCommand(CmPlugRing, nil) }),
+	})
+	RegisterAction(Action{
+		Name:        "App.SaveSettings",
+		Area:        "Shell",
+		Label:       "Save Settings",
+		LabelKey:    "Action.App.SaveSettings",
+		Description: "Save settings and session",
+		DescKey:     "Action.App.SaveSettings.Desc",
+		DefaultKeys: []string{"ShiftF9"},
+		MenuPath:    "Options",
+		Handler: withPF(func(pf *PanelsFrame) {
+			SaveConfig()
+			SaveSession()
+			vtui.ShowToast("Settings saved", 2*time.Second)
+		}),
+	})
+	RegisterAction(Action{
+		Name:        "App.ToggleWindowSize",
+		Area:        "Shell",
+		Label:       "Toggle Window Size",
+		LabelKey:    "Action.App.ToggleWindowSize",
+		Description: "Toggle between two window sizes",
+		DescKey:     "Action.App.ToggleWindowSize.Desc",
+		DefaultKeys: []string{"AltF9"},
+		MenuPath:    "Options",
+		Handler: withPF(func(pf *PanelsFrame) {
+			targetCols, targetRows := AppConfig.GuiCols, AppConfig.GuiRows
+			if pf.lastW == AppConfig.GuiCols && pf.lastH == AppConfig.GuiRows {
+				targetCols, targetRows = AppConfig.GuiCols+40, AppConfig.GuiRows+15
+			}
+			// xterm resize sequence for console mode
+			os.Stdout.WriteString(fmt.Sprintf("\x1b[8;%d;%dt", targetRows, targetCols))
+			os.Stdout.Sync()
+			// Forced OS window resize for GUI mode
+			if vtui.FrameManager != nil {
+				vtui.FrameManager.ResizeWindow(targetCols, targetRows)
+			}
+		}),
+	})
+	RegisterAction(Action{
+		Name:        "Panel.ToggleKeyBar",
+		Area:        "Shell",
+		Label:       "Toggle KeyBar",
+		LabelKey:    "Action.Panel.ToggleKeyBar",
+		Description: "Show or hide the KeyBar",
+		DescKey:     "Action.Panel.ToggleKeyBar.Desc",
+		DefaultKeys: []string{"CtrlB"},
+		MenuPath:    "Options",
+		Handler: withPF(func(pf *PanelsFrame) {
+			pf.showKeyBar = !pf.showKeyBar
+			pf.ResizeConsole(pf.lastW, pf.lastH)
+		}),
+	})
+
+	// --- Shell key-only actions (no menu entries) ---
 	RegisterAction(Action{
 		Name:        "Panel.Rescan",
 		Area:        "Shell",
 		Label:       "Rescan",
 		Description: "Refresh panel contents",
+		DescKey:     "Action.Panel.Rescan.Desc",
 		DefaultKeys: []string{"CtrlR"},
 		Handler:     withPF(func(pf *PanelsFrame) { pf.RefreshAll() }),
 	})
@@ -288,6 +778,7 @@ func init() {
 		Area:        "Shell",
 		Label:       "Swap Panels",
 		Description: "Swap left and right panels",
+		DescKey:     "Action.Panel.Swap.Desc",
 		DefaultKeys: []string{"CtrlU"},
 		Handler:     withPF(func(pf *PanelsFrame) { vtui.FrameManager.EmitCommand(CmSwapPanels, nil) }),
 	})
@@ -296,7 +787,8 @@ func init() {
 		Area:         "Shell",
 		Label:        "Toggle Panels",
 		Description:  "Show or hide panels",
-		DefaultKeys:  []string{"CtrlO", "Esc:EscToggle"},
+		DescKey:      "Action.Panel.Toggle.Desc",
+		DefaultKeys:  []string{"CtrlO:NoAltScreenApp", "Esc:EscToggle"},
 		DefaultAreas: []string{"Terminal"},
 		Handler: withPF(func(pf *PanelsFrame) {
 			pf.exitWide()
@@ -312,18 +804,258 @@ func init() {
 		}),
 	})
 	RegisterAction(Action{
-		Name:        "Panel.FoldersHistory",
+		Name:        "Panel.ToggleLeftPanel",
 		Area:        "Shell",
-		Label:       "Folders History",
-		Description: "Show folders history",
-		DefaultKeys: []string{"AltF12"},
-		Handler:     withPF(func(pf *PanelsFrame) { actionFoldersHistory(pf) }),
+		Label:       "Toggle Left Panel",
+		Description: "Show or hide the left panel",
+		DescKey:     "Action.Panel.ToggleLeftPanel.Desc",
+		DefaultKeys: []string{"CtrlF1"},
+		Handler: withPF(func(pf *PanelsFrame) {
+			pf.exitWide()
+			pf.showLeftPanel = !pf.showLeftPanel
+			pf.showPanels = pf.showLeftPanel || pf.showRightPanel
+			if !pf.showLeftPanel && pf.showPanels {
+				pf.activeIdx = 1
+			}
+			vtui.FrameManager.HardRefresh()
+			if pf.showPanels {
+				pf.RefreshAll()
+			}
+		}),
+	})
+	RegisterAction(Action{
+		Name:        "Panel.ToggleRightPanel",
+		Area:        "Shell",
+		Label:       "Toggle Right Panel",
+		Description: "Show or hide the right panel",
+		DescKey:     "Action.Panel.ToggleRightPanel.Desc",
+		DefaultKeys: []string{"CtrlF2"},
+		Handler: withPF(func(pf *PanelsFrame) {
+			pf.exitWide()
+			pf.showRightPanel = !pf.showRightPanel
+			pf.showPanels = pf.showLeftPanel || pf.showRightPanel
+			if !pf.showRightPanel && pf.showPanels {
+				pf.activeIdx = 0
+			}
+			vtui.FrameManager.HardRefresh()
+			if pf.showPanels {
+				pf.RefreshAll()
+			}
+		}),
+	})
+	RegisterAction(Action{
+		Name:        "Panel.TogglePassivePanel",
+		Area:        "Shell",
+		Label:       "Toggle Passive Panel",
+		Description: "Show or hide the passive panel",
+		DescKey:     "Action.Panel.TogglePassivePanel.Desc",
+		DefaultKeys: []string{"CtrlP"},
+		Handler: withPF(func(pf *PanelsFrame) {
+			pf.exitWide()
+			if pf.activeIdx == 0 {
+				pf.showRightPanel = !pf.showRightPanel
+			} else {
+				pf.showLeftPanel = !pf.showLeftPanel
+			}
+			pf.showPanels = pf.showLeftPanel || pf.showRightPanel
+			vtui.FrameManager.HardRefresh()
+			if pf.showPanels {
+				pf.RefreshAll()
+			}
+		}),
+	})
+	RegisterAction(Action{
+		Name:        "Panel.InfoPanel",
+		Area:        "Shell",
+		Label:       "Info Panel",
+		Description: "Toggle the info panel",
+		DescKey:     "Action.Panel.InfoPanel.Desc",
+		DefaultKeys: []string{"CtrlL"},
+		Handler: withPF(func(pf *PanelsFrame) {
+			pf.toggleAltPanel("info", func(src *FileSystemPanel) AltPanel { return NewInfoPanel(src) })
+		}),
+	})
+	RegisterAction(Action{
+		Name:        "Panel.QuickView",
+		Area:        "Shell",
+		Label:       "Quick View",
+		Description: "Toggle the quick view panel",
+		DescKey:     "Action.Panel.QuickView.Desc",
+		DefaultKeys: []string{"CtrlQ"},
+		Handler: withPF(func(pf *PanelsFrame) {
+			pf.toggleAltPanel("quick_view", func(src *FileSystemPanel) AltPanel { return NewQuickViewPanel(src) })
+		}),
+	})
+	RegisterAction(Action{
+		Name:        "Panel.SplitLeft",
+		Area:        "Shell",
+		Label:       "Move Split Left",
+		Description: "Move the vertical split to the left",
+		DescKey:     "Action.Panel.SplitLeft.Desc",
+		DefaultKeys: []string{"CtrlLeft:EmptyCommandLine"},
+		Handler: withPF(func(pf *PanelsFrame) {
+			next := pf.widthDecrement + 1
+			if maxWD := (pf.lastW / 2) - 10; maxWD > 0 && next <= maxWD && next >= -maxWD {
+				pf.widthDecrement = next
+				AppConfig.WidthDecrement = next
+				RequestSaveConfig()
+				pf.ResizeConsole(pf.lastW, pf.lastH)
+				vtui.FrameManager.HardRefresh()
+			}
+		}),
+	})
+	RegisterAction(Action{
+		Name:        "Panel.SplitRight",
+		Area:        "Shell",
+		Label:       "Move Split Right",
+		Description: "Move the vertical split to the right",
+		DescKey:     "Action.Panel.SplitRight.Desc",
+		DefaultKeys: []string{"CtrlRight:EmptyCommandLine"},
+		Handler: withPF(func(pf *PanelsFrame) {
+			next := pf.widthDecrement - 1
+			if maxWD := (pf.lastW / 2) - 10; maxWD > 0 && next <= maxWD && next >= -maxWD {
+				pf.widthDecrement = next
+				AppConfig.WidthDecrement = next
+				RequestSaveConfig()
+				pf.ResizeConsole(pf.lastW, pf.lastH)
+				vtui.FrameManager.HardRefresh()
+			}
+		}),
+	})
+	RegisterAction(Action{
+		Name:        "Panel.SplitUp",
+		Area:        "Shell",
+		Label:       "Move Split Up",
+		Description: "Shrink both panels vertically",
+		DescKey:     "Action.Panel.SplitUp.Desc",
+		DefaultKeys: []string{"CtrlUp:EmptyCommandLine"},
+		Handler: withPF(func(pf *PanelsFrame) {
+			nextL := pf.leftHeightDecrement + 1
+			nextR := pf.rightHeightDecrement + 1
+			maxHD := pf.lastH - 7
+			if nextL >= 0 && nextR >= 0 && (maxHD <= 0 || (nextL <= maxHD && nextR <= maxHD)) {
+				pf.leftHeightDecrement = nextL
+				pf.rightHeightDecrement = nextR
+				AppConfig.LeftHeightDecrement = nextL
+				AppConfig.RightHeightDecrement = nextR
+				RequestSaveConfig()
+				pf.ResizeConsole(pf.lastW, pf.lastH)
+				vtui.FrameManager.HardRefresh()
+			}
+		}),
+	})
+	RegisterAction(Action{
+		Name:        "Panel.SplitDown",
+		Area:        "Shell",
+		Label:       "Move Split Down",
+		Description: "Grow both panels vertically",
+		DescKey:     "Action.Panel.SplitDown.Desc",
+		DefaultKeys: []string{"CtrlDown:EmptyCommandLine"},
+		Handler: withPF(func(pf *PanelsFrame) {
+			nextL := pf.leftHeightDecrement - 1
+			nextR := pf.rightHeightDecrement - 1
+			maxHD := pf.lastH - 7
+			if nextL >= 0 && nextR >= 0 && (maxHD <= 0 || (nextL <= maxHD && nextR <= maxHD)) {
+				pf.leftHeightDecrement = nextL
+				pf.rightHeightDecrement = nextR
+				AppConfig.LeftHeightDecrement = nextL
+				AppConfig.RightHeightDecrement = nextR
+				RequestSaveConfig()
+				pf.ResizeConsole(pf.lastW, pf.lastH)
+				vtui.FrameManager.HardRefresh()
+			}
+		}),
+	})
+	RegisterAction(Action{
+		Name:        "Panel.SplitActiveUp",
+		Area:        "Shell",
+		Label:       "Shrink Active Panel",
+		Description: "Shrink the active panel vertically",
+		DescKey:     "Action.Panel.SplitActiveUp.Desc",
+		DefaultKeys: []string{"CtrlShiftUp:EmptyCommandLine"},
+		Handler: withPF(func(pf *PanelsFrame) {
+			cur := &pf.rightHeightDecrement
+			cfg := &AppConfig.RightHeightDecrement
+			if pf.activeIdx == 0 {
+				cur = &pf.leftHeightDecrement
+				cfg = &AppConfig.LeftHeightDecrement
+			}
+			next := *cur + 1
+			maxHD := pf.lastH - 7
+			if next >= 0 && (maxHD <= 0 || next <= maxHD) {
+				*cur = next
+				*cfg = next
+				RequestSaveConfig()
+				pf.ResizeConsole(pf.lastW, pf.lastH)
+				vtui.FrameManager.HardRefresh()
+			}
+		}),
+	})
+	RegisterAction(Action{
+		Name:        "Panel.SplitActiveDown",
+		Area:        "Shell",
+		Label:       "Grow Active Panel",
+		Description: "Grow the active panel vertically",
+		DescKey:     "Action.Panel.SplitActiveDown.Desc",
+		DefaultKeys: []string{"CtrlShiftDown:EmptyCommandLine"},
+		Handler: withPF(func(pf *PanelsFrame) {
+			cur := &pf.rightHeightDecrement
+			cfg := &AppConfig.RightHeightDecrement
+			if pf.activeIdx == 0 {
+				cur = &pf.leftHeightDecrement
+				cfg = &AppConfig.LeftHeightDecrement
+			}
+			next := *cur - 1
+			maxHD := pf.lastH - 7
+			if next >= 0 && (maxHD <= 0 || next <= maxHD) {
+				*cur = next
+				*cfg = next
+				RequestSaveConfig()
+				pf.ResizeConsole(pf.lastW, pf.lastH)
+				vtui.FrameManager.HardRefresh()
+			}
+		}),
+	})
+	RegisterAction(Action{
+		Name:        "Panel.SplitReset",
+		Area:        "Shell",
+		Label:       "Reset Split",
+		Description: "Reset the panel split to defaults",
+		DescKey:     "Action.Panel.SplitReset.Desc",
+		DefaultKeys: []string{"CtrlVK_C"},
+		Handler: withPF(func(pf *PanelsFrame) {
+			if pf.widthDecrement != 0 || pf.leftHeightDecrement != 0 || pf.rightHeightDecrement != 0 {
+				pf.widthDecrement = 0
+				pf.leftHeightDecrement = 0
+				pf.rightHeightDecrement = 0
+				AppConfig.WidthDecrement = 0
+				AppConfig.LeftHeightDecrement = 0
+				AppConfig.RightHeightDecrement = 0
+				RequestSaveConfig()
+				pf.ResizeConsole(pf.lastW, pf.lastH)
+				vtui.FrameManager.HardRefresh()
+			}
+		}),
+	})
+	RegisterAction(Action{
+		Name:        "Panel.ToggleInfoBytes",
+		Area:        "Shell",
+		Label:       "Toggle Bytes Format",
+		Description: "Flip number formatting in info and quick view panels",
+		DescKey:     "Action.Panel.ToggleInfoBytes.Desc",
+		DefaultKeys: []string{"B:AltPanelVisible"},
+		Handler: withPF(func(pf *PanelsFrame) {
+			AppConfig.InfoPanelBytes = !AppConfig.InfoPanelBytes
+			RequestSaveConfig()
+			vtui.FrameManager.HardRefresh()
+		}),
 	})
 	RegisterAction(Action{
 		Name:        "Panel.ViewBrief",
 		Area:        "Shell",
 		Label:       "Brief Mode",
 		Description: "Set active panel to brief mode",
+		DescKey:     "Action.Panel.ViewBrief.Desc",
 		DefaultKeys: []string{"Ctrl1"},
 		Handler:     withPF(func(pf *PanelsFrame) { pf.setPanelViewMode(pf.activeIdx, ViewModeBrief) }),
 	})
@@ -332,6 +1064,7 @@ func init() {
 		Area:        "Shell",
 		Label:       "Medium Mode",
 		Description: "Set active panel to medium mode",
+		DescKey:     "Action.Panel.ViewMedium.Desc",
 		DefaultKeys: []string{"Ctrl2"},
 		Handler:     withPF(func(pf *PanelsFrame) { pf.setPanelViewMode(pf.activeIdx, ViewModeMedium) }),
 	})
@@ -340,6 +1073,7 @@ func init() {
 		Area:        "Shell",
 		Label:       "Detailed Mode",
 		Description: "Set active panel to detailed mode",
+		DescKey:     "Action.Panel.ViewDetailed.Desc",
 		DefaultKeys: []string{"Ctrl3"},
 		Handler:     withPF(func(pf *PanelsFrame) { pf.setPanelViewMode(pf.activeIdx, ViewModeDetailed) }),
 	})
@@ -348,87 +1082,176 @@ func init() {
 		Area:        "Shell",
 		Label:       "Wide Mode",
 		Description: "Set active panel to wide mode",
+		DescKey:     "Action.Panel.ViewWide.Desc",
 		DefaultKeys: []string{"Ctrl4"},
 		Handler:     withPF(func(pf *PanelsFrame) { pf.setWidePanel(pf.activeIdx) }),
 	})
 	RegisterAction(Action{
-		Name:        "Panel.Bookmarks",
+		Name:        "Panel.SortByName",
 		Area:        "Shell",
-		Label:       "Bookmarks",
-		Description: "Show folder bookmarks dialog",
-		Handler:     withPF(func(pf *PanelsFrame) { ShowBookmarksDialog(pf) }),
+		Label:       "Sort by Name",
+		Description: "Sort panel by name",
+		DescKey:     "Action.Panel.SortByName.Desc",
+		DefaultKeys: []string{"CtrlF3"},
+		Handler:     withPF(func(pf *PanelsFrame) { vtui.FrameManager.EmitCommand(CmSortName, nil) }),
 	})
 	RegisterAction(Action{
-		Name:        "Panel.CommandHistory",
+		Name:        "Panel.SortByExt",
 		Area:        "Shell",
-		Label:       "Command History",
-		Description: "Show command line history",
-		DefaultKeys: []string{"AltF8"},
-		Handler:     withPF(func(pf *PanelsFrame) { actionCommandHistory(pf) }),
-	})
-
-	RegisterAction(Action{
-		Name:        "Settings.Language",
-		Area:        "Shell",
-		Label:       "Language",
-		Description: "Open language selection dialog",
-		Handler:     withPF(func(pf *PanelsFrame) { actionLanguage(pf) }),
+		Label:       "Sort by Extension",
+		Description: "Sort panel by extension",
+		DescKey:     "Action.Panel.SortByExt.Desc",
+		DefaultKeys: []string{"CtrlF4"},
+		Handler:     withPF(func(pf *PanelsFrame) { vtui.FrameManager.EmitCommand(CmSortExt, nil) }),
 	})
 	RegisterAction(Action{
-		Name:        "Settings.HelpLanguage",
+		Name:        "Panel.SortByTime",
 		Area:        "Shell",
-		Label:       "Help Language",
-		Description: "Open help language selection dialog",
-		Handler:     withPF(func(pf *PanelsFrame) { actionHelpLanguage(pf) }),
+		Label:       "Sort by Time",
+		Description: "Sort panel by modification time",
+		DescKey:     "Action.Panel.SortByTime.Desc",
+		DefaultKeys: []string{"CtrlF5"},
+		Handler:     withPF(func(pf *PanelsFrame) { vtui.FrameManager.EmitCommand(CmSortTime, nil) }),
 	})
 	RegisterAction(Action{
-		Name:        "Settings.Plugins",
+		Name:        "Panel.SortBySize",
 		Area:        "Shell",
-		Label:       "Plugins Menu",
-		Description: "Manage plugins dialog",
-		Handler:     withPF(func(pf *PanelsFrame) { actionManagePlugins(pf) }),
+		Label:       "Sort by Size",
+		Description: "Sort panel by size",
+		DescKey:     "Action.Panel.SortBySize.Desc",
+		DefaultKeys: []string{"CtrlF6"},
+		Handler:     withPF(func(pf *PanelsFrame) { vtui.FrameManager.EmitCommand(CmSortSize, nil) }),
 	})
 	RegisterAction(Action{
-		Name:        "Settings.Panel",
+		Name:        "Panel.SortUnsorted",
 		Area:        "Shell",
-		Label:       "Panel Settings",
-		Description: "Open panel settings dialog",
-		Handler:     withPF(func(pf *PanelsFrame) { actionPanelSettings(pf) }),
+		Label:       "Unsorted",
+		Description: "Disable panel sorting",
+		DescKey:     "Action.Panel.SortUnsorted.Desc",
+		DefaultKeys: []string{"CtrlF7"},
+		Handler:     withPF(func(pf *PanelsFrame) { vtui.FrameManager.EmitCommand(CmSortUnsorted, nil) }),
 	})
 	RegisterAction(Action{
-		Name:        "Settings.Editor",
+		Name:        "Panel.LeftDriveMenu",
 		Area:        "Shell",
-		Label:       "Editor Settings",
-		Description: "Open editor settings dialog",
-		Handler:     withPF(func(pf *PanelsFrame) { actionEditorSettings(pf) }),
+		Label:       "Left Drive Menu",
+		Description: "Show the drive menu for the left panel",
+		DescKey:     "Action.Panel.LeftDriveMenu.Desc",
+		DefaultKeys: []string{"AltF1"},
+		Handler:     withPF(func(pf *PanelsFrame) { pf.showDriveMenu(0) }),
 	})
 	RegisterAction(Action{
-		Name:        "Settings.Colorer",
+		Name:        "Panel.RightDriveMenu",
 		Area:        "Shell",
-		Label:       "Colorer Settings",
-		Description: "Open Colorer settings dialog",
-		Handler:     withPF(func(pf *PanelsFrame) { actionColorerSettings(pf) }),
+		Label:       "Right Drive Menu",
+		Description: "Show the drive menu for the right panel",
+		DescKey:     "Action.Panel.RightDriveMenu.Desc",
+		DefaultKeys: []string{"AltF2"},
+		Handler:     withPF(func(pf *PanelsFrame) { pf.showDriveMenu(1) }),
 	})
 	RegisterAction(Action{
-		Name:        "Settings.Appearance",
+		Name:        "Panel.EnterDirectory",
 		Area:        "Shell",
-		Label:       "Appearance Settings",
-		Description: "Open appearance settings dialog",
-		Handler:     withPF(func(pf *PanelsFrame) { actionAppearanceSettings(pf) }),
+		Label:       "Enter Directory",
+		Description: "Enter the directory or archive under the cursor",
+		DescKey:     "Action.Panel.EnterDirectory.Desc",
+		DefaultKeys: []string{"CtrlPgDn", "CtrlShiftPgDn"},
+		Handler: withPF(func(pf *PanelsFrame) {
+			fsp := pf.getActivePanel()
+			if fsp == nil {
+				return
+			}
+			idx := fsp.GetCursorIndex()
+			if idx < 0 || idx >= len(fsp.entries) {
+				return
+			}
+			selected := fsp.entries[idx]
+			isDir := selected.IsDir
+			isArchive := false
+			if !isDir {
+				fullPath := fsp.vfs.Join(fsp.vfs.GetPath(), selected.Name)
+				isArchive = vfs.FindProvider(context.Background(), fsp.vfs, fullPath) != nil
+			}
+			if isDir || isArchive {
+				pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN})
+			}
+		}),
 	})
 	RegisterAction(Action{
-		Name:        "Settings.Confirmations",
+		Name:        "Panel.InsertFileName",
 		Area:        "Shell",
-		Label:       "Confirmations Settings",
-		Description: "Open confirmations settings dialog",
-		Handler:     withPF(func(pf *PanelsFrame) { actionConfirmationsSettings(pf) }),
+		Label:       "Insert File Name",
+		Description: "Insert the current file name into the command line",
+		DescKey:     "Action.Panel.InsertFileName.Desc",
+		DefaultKeys: []string{"CtrlEnter"},
+		Handler: withPF(func(pf *PanelsFrame) {
+			name := pf.Active().GetSelectedName()
+			if name == "" {
+				return
+			}
+			// Escape spaces and special characters for shell commands
+			if strings.ContainsAny(name, " &|;<>()$`\\\"'") {
+				if runtime.GOOS == "windows" {
+					if !strings.HasPrefix(name, "\"") {
+						name = "\"" + name + "\""
+					}
+				} else {
+					if !strings.HasPrefix(name, "'") {
+						name = "'" + strings.ReplaceAll(name, "'", "'\\''") + "'"
+					}
+				}
+			}
+			txt := pf.cmdLine.Edit.GetText()
+			// Add space if the line is not empty and doesn't end with a space.
+			if len(txt) > 0 && txt[len(txt)-1] != ' ' {
+				pf.cmdLine.InsertString(" ")
+			}
+			pf.cmdLine.InsertString(name)
+		}),
 	})
 	RegisterAction(Action{
-		Name:        "Settings.Hotkeys",
+		Name:        "Panel.InsertLeftPath",
 		Area:        "Shell",
-		Label:       "Hotkey Configuration",
-		Description: "Open Hotkey Configurator",
-		Handler:     withPF(func(pf *PanelsFrame) { actionHotkeyConfig(pf) }),
+		Label:       "Insert Left Path",
+		Description: "Insert the left panel path into the command line",
+		DescKey:     "Action.Panel.InsertLeftPath.Desc",
+		DefaultKeys: []string{"CtrlVK_DB"},
+		Handler: withPF(func(pf *PanelsFrame) {
+			if fsp := pf.visualLeftFSP(); fsp != nil {
+				pf.insertPathToCmdLine(fsp.vfs.GetPath())
+			}
+		}),
+	})
+	RegisterAction(Action{
+		Name:        "Panel.InsertRightPath",
+		Area:        "Shell",
+		Label:       "Insert Right Path",
+		Description: "Insert the right panel path into the command line",
+		DescKey:     "Action.Panel.InsertRightPath.Desc",
+		DefaultKeys: []string{"CtrlVK_DD"},
+		Handler: withPF(func(pf *PanelsFrame) {
+			if fsp := pf.visualRightFSP(); fsp != nil {
+				pf.insertPathToCmdLine(fsp.vfs.GetPath())
+			}
+		}),
+	})
+	RegisterAction(Action{
+		Name:        "App.Quit",
+		Area:        "Shell",
+		Label:       "Quit",
+		Description: "Quit f4",
+		DescKey:     "Action.App.Quit.Desc",
+		DefaultKeys: []string{"F10"},
+		Handler:     func() bool { return vtui.FrameManager.EmitCommand(vtui.CmQuit, nil) },
+	})
+	RegisterAction(Action{
+		Name:        "Debug.DummyOperation",
+		Area:        "Shell",
+		Label:       "Dummy Long Operation",
+		Description: "Show a dummy long operation dialog (debug)",
+		DescKey:     "Action.Debug.DummyOperation.Desc",
+		DefaultKeys: []string{"AltF5"},
+		Handler:     withPF(func(pf *PanelsFrame) { pf.showDummyOpDialog() }),
 	})
 
 	// --- Terminal actions ---
@@ -436,14 +1259,22 @@ func init() {
 		Name:        "Terminal.ViewLog",
 		Area:        "Terminal",
 		Label:       "View Terminal Log",
+		LabelKey:    "Action.Terminal.ViewLog",
 		Description: "Open terminal log in viewer",
+		DescKey:     "Action.Terminal.ViewLog.Desc",
+		DefaultKeys: []string{"F3:TerminalQuiet", "CtrlShiftF3"},
+		MenuPath:    "File",
 		Handler:     withPF(func(pf *PanelsFrame) { actionViewTerminalLog(pf) }),
 	})
 	RegisterAction(Action{
 		Name:        "Terminal.EditLog",
 		Area:        "Terminal",
 		Label:       "Edit Terminal Log",
+		LabelKey:    "Action.Terminal.EditLog",
 		Description: "Open terminal log in editor",
+		DescKey:     "Action.Terminal.EditLog.Desc",
+		DefaultKeys: []string{"F4:TerminalQuiet", "CtrlShiftF4"},
+		MenuPath:    "File",
 		Handler:     withPF(func(pf *PanelsFrame) { actionEditTerminalLog(pf) }),
 	})
 

@@ -30,6 +30,9 @@ var conditionRegistry = map[string]func() bool{
 		return false
 	},
 	"esctoggle": func() bool {
+		if !AppConfig.EscTogglePanels {
+			return false
+		}
 		if pf := findPanelsFrameAnyScreen(); pf != nil {
 			if !pf.cmdLine.IsEmpty() {
 				return false
@@ -41,11 +44,40 @@ var conditionRegistry = map[string]func() bool{
 		}
 		return false
 	},
+	// noaltscreenapp gates keys that must reach an interactive AltScreen
+	// application (mc, htop) instead of triggering f4's own actions.
+	"noaltscreenapp": func() bool {
+		if pf := findPanelsFrameAnyScreen(); pf != nil {
+			return pf.showPanels || !pf.termView.UseAltScreen
+		}
+		return false
+	},
+	// terminalquiet reports a hidden-panels terminal with no AltScreen app
+	// and no busy PTY, so F3/F4 may open the terminal log instead of
+	// being forwarded to the running application.
+	"terminalquiet": func() bool {
+		if pf := findPanelsFrameAnyScreen(); pf != nil {
+			return !pf.termView.UseAltScreen && !pf.isPtyBusy()
+		}
+		return false
+	},
+	// altpanelvisible reports that an info or quick-view panel is shown,
+	// gating the plain-letter toggles that belong to those panels.
+	"altpanelvisible": func() bool {
+		if pf := findPanelsFrameAnyScreen(); pf != nil {
+			for _, a := range pf.altPanels {
+				if a != nil && (a.Kind() == "info" || a.Kind() == "quick_view") {
+					return true
+				}
+			}
+		}
+		return false
+	},
 }
 
 // GetConditions returns the user-friendly names of all registered conditions.
 func GetConditions() []string {
-	return []string{"None", "EmptyCommandLine", "CommandLineNotEmpty", "EscToggle"}
+	return []string{"None", "EmptyCommandLine", "CommandLineNotEmpty", "EscToggle", "TerminalQuiet", "AltPanelVisible", "NoAltScreenApp"}
 }
 
 // RegisterCondition adds a dynamic boolean check accessible by hotkey bindings.

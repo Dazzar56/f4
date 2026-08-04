@@ -40,6 +40,28 @@ func TestGenerateKeysHelpTopic(t *testing.T) {
 	}
 }
 
+func TestGenerateKeysHelpTopic_PanelNav(t *testing.T) {
+	old := GlobalHotkeysMgr
+	GlobalHotkeysMgr = NewHotkeyManager("")
+	defer func() { GlobalHotkeysMgr = old }()
+
+	topic := generateKeysHelpTopic("PanelNav", "Panel Keys", []string{"Shell", "Terminal", "Common"}, "ShellNav")
+	joined := strings.Join(topic.Lines, "\n")
+
+	for _, want := range []string{
+		"F3             - Open file in viewer",
+		"Ctrl+O / Esc   - Show or hide panels",
+		"Alt+F1         - Show the drive menu for the left panel",
+		"Ctrl+PgUp      - Go to parent directory",
+		"Shift+Enter    - Open current file in the system file manager",
+		"Ctrl+Shift+F3 / F3 - Open terminal log in viewer",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("Generated PanelNav topic missing line %q\n---\n%s", want, joined)
+		}
+	}
+}
+
 func TestGenerateKeysHelpTopic_ReflectsOverrides(t *testing.T) {
 	old := GlobalHotkeysMgr
 	GlobalHotkeysMgr = NewHotkeyManager("")
