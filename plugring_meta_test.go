@@ -37,10 +37,10 @@ func TestNormalizePlugRingRuntimes(t *testing.T) {
 
 func TestInferPlugRingRuntimes(t *testing.T) {
 	cases := map[string]string{
-		"plugin.lua":     PlugRingRuntimeEmbedded,
-		"plugin.wasm":    PlugRingRuntimeWasm,
+		"plugin.lua":      PlugRingRuntimeEmbedded,
+		"plugin.wasm":     PlugRingRuntimeWasm,
 		"luajit main.lua": PlugRingRuntimeLua51,
-		"helper":         PlugRingRuntimeNative,
+		"helper":          PlugRingRuntimeNative,
 	}
 	for entrypoint, want := range cases {
 		got := InferPlugRingRuntimes(entrypoint)
