@@ -22,6 +22,19 @@ to stdout, exactly as a subprocess plugin does, so the same source builds
 either way. It is the only transport that is genuinely a sandbox: the guest
 gets no filesystem, only stdio, a clock and a random source. Native calls
 reach it through `Host.FFI.*`; see `FFI.md`.
+## Getting started
+
+```
+f4 --new-plugin mydrive
+```
+
+That writes a working plugin: a virtual drive with a couple of files in it,
+its manifest, and a README saying what to do next. It is a Lua plugin, so
+there is nothing to build and nothing to install; edit `plugin.lua` and
+restart f4.
+
+Start reading the generated file at `Plugin.Init`. Everything else in it is
+one `f4rpc.register` per method of the protocol described below.
 
 An earlier revision of this document argued that embedded interpreters had been
 abandoned for good, on three grounds. Each has an answer now:
