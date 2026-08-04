@@ -621,6 +621,10 @@ func TestPanelsFrame_EscTogglesPanels(t *testing.T) {
 	pf.ResizeConsole(80, 25)
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
+	old := AppConfig.EscTogglePanels
+	defer func() { AppConfig.EscTogglePanels = old }()
+	AppConfig.EscTogglePanels = true
+
 	sendEsc := func() bool {
 		return pf.ProcessKey(&vtinput.InputEvent{
 			Type: vtinput.KeyEventType, KeyDown: true,
@@ -658,6 +662,28 @@ func TestPanelsFrame_EscTogglesPanels(t *testing.T) {
 	}
 	if !pf.cmdLine.IsEmpty() {
 		t.Error("ESC with a typed command should have cleared the command line")
+	}
+}
+
+// TestPanelsFrame_EscTogglePanels_RespectsOption confirms the
+// shortcut can be turned off — with EscTogglePanels=false, ESC
+// on visible panels + empty cmdLine is a no-op instead of hiding.
+func TestPanelsFrame_EscTogglePanels_RespectsOption(t *testing.T) {
+	pf := setupMockPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	old := AppConfig.EscTogglePanels
+	defer func() { AppConfig.EscTogglePanels = old }()
+	AppConfig.EscTogglePanels = false
+
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_ESCAPE,
+	})
+	if !pf.showPanels {
+		t.Error("with EscTogglePanels=false, ESC must not hide the panels")
 	}
 }
 

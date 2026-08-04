@@ -1005,7 +1005,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	//   * panels hidden → the terminal must be in a non-interactive
 	//     state (no AltScreen, no busy PTY), so we don't steal ESC
 	//     from a running app (vim, less, htop, …).
-	if e.VirtualKeyCode == vtinput.VK_ESCAPE && !alt && !ctrl && !shift && e.KeyDown {
+	if AppConfig.EscTogglePanels && e.VirtualKeyCode == vtinput.VK_ESCAPE && !alt && !ctrl && !shift && e.KeyDown {
 		if pf.showPanels && pf.cmdLine.IsEmpty() {
 			pf.exitWide()
 			pf.showPanels = false

@@ -113,6 +113,7 @@ PanelSettings.SyncPanelLoad=S&ynchronous panel loading (disable cache/chunking)
 PanelSettings.DefaultMode=Default operation &mode:
 PanelSettings.PathDisplay=File path in progress:
 PanelSettings.InfoPanelCPUGPU=Show CPU/GPU section on i&nfo panel
+PanelSettings.EscTogglePanels=&Esc toggles panels visibility
 
 AppearanceSettings.Title= Appearance settings
 AppearanceSettings.Style=Application &style:

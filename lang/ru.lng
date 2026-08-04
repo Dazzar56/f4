@@ -113,6 +113,7 @@ PanelSettings.SyncPanelLoad=&Синхронная загрузка панеле�
 PanelSettings.DefaultMode=Режим операций по &умолчанию:
 PanelSettings.PathDisplay=Отображение пути в прогрессе:
 PanelSettings.InfoPanelCPUGPU=Показывать CPU/GPU на &инфо-панели
+PanelSettings.EscTogglePanels=&Esc переключает видимость панелей
 
 AppearanceSettings.Title= Внешний вид
 AppearanceSettings.Style=Стиль &оформления:
