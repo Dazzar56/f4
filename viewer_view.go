@@ -719,17 +719,19 @@ func (vv *ViewerView) ReloadWithCodepage(cpID int) {
 	if err != nil {
 		return
 	}
-	defer f.Close()
 
 	size := f.Size()
 	var backend *ViewerBackend
 	if cpID == 65001 {
+		bCtx, bCancel := context.WithCancel(context.Background())
 		backend = &ViewerBackend{
-			file: f,
-			size: size,
-			ctx:  context.Background(),
+			file:      f,
+			size:      size,
+			ctx:       bCtx,
+			cancelCtx: bCancel,
 		}
 	} else {
+		defer f.Close()
 		fullData := make([]byte, size)
 		_, _ = f.ReadAt(context.Background(), fullData, 0)
 		decoded, err := vfs.DecodeBytes(fullData, cpID)
@@ -738,17 +740,22 @@ func (vv *ViewerView) ReloadWithCodepage(cpID int) {
 			cpID = 65001
 		}
 		memFile := &vfs.MemoryReadAtCloser{Data: decoded}
+		bCtx, bCancel := context.WithCancel(context.Background())
 		backend = &ViewerBackend{
-			file: memFile,
-			size: int64(len(decoded)),
-			ctx:  context.Background(),
+			file:      memFile,
+			size:      int64(len(decoded)),
+			ctx:       bCtx,
+			cancelCtx: bCancel,
 		}
 	}
 
-	vv.backend.Close()
+	oldBackend := vv.backend
 	vv.backend = backend
 	vv.Codepage = cpID
 	vv.TopOffset = 0
+	if oldBackend != nil {
+		oldBackend.Close()
+	}
 	vtui.FrameManager.Redraw()
 }
 
