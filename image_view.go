@@ -34,6 +34,7 @@ type ImageView struct {
 	decoder string
 	gfxKey  string
 
+	preview    bool
 	zoom       float64
 	panX, panY float64
 
@@ -43,11 +44,14 @@ type ImageView struct {
 // NewImageView loads and decodes the file. Decoding happens here rather than
 // lazily so that a failure can still be reported as a normal open error.
 func NewImageView(ctx context.Context, v vfs.VFS, path string) (*ImageView, error) {
-	// Decoding goes through the pipeline, so that reopening a picture is
-	// instant and its neighbours can be prepared in advance.
-	res := ImagePipe.LoadSync(ctx, v, path)
-	if res.Err != nil {
-		return nil, res.Err
+	// A file that carries a thumbnail opens at once and sharpens when the
+	// megapixels arrive; one that does not is waited for.
+	res, ok := ImagePipe.PreviewSync(ctx, v, path)
+	if !ok {
+		res = ImagePipe.LoadSync(ctx, v, path)
+		if res.Err != nil {
+			return nil, res.Err
+		}
 	}
 	surf, decoder := res.Surface, res.Decoder
 
@@ -56,6 +60,7 @@ func NewImageView(ctx context.Context, v vfs.VFS, path string) (*ImageView, erro
 		path:    path,
 		surface: surf,
 		decoder: decoder,
+		preview: res.Preview,
 		zoom:    1,
 	}
 	iv.gfxKey = fmt.Sprintf("f4.imageview:%p", iv)
@@ -67,14 +72,44 @@ func NewImageView(ctx context.Context, v vfs.VFS, path string) (*ImageView, erro
 		} else {
 			base = filepath.Base(path)
 		}
+		decoder := iv.decoder
+		if iv.preview {
+			decoder += ", preview"
+		}
 		return fmt.Sprintf(" %s │ %dx%d │ %d%% │ %s ",
 			base, iv.surface.Width, iv.surface.Height,
-			int(iv.zoom*100+0.5), iv.decoder)
+			int(iv.zoom*100+0.5), decoder)
 	})
 	iv.topBar.SetVisible(true)
 	iv.SetCanFocus(true)
 	iv.SetFocus(true)
+
+	// What is on screen is a stand-in; ask for the real thing.
+	if res.Preview {
+		ImagePipe.Load(v, path, func(full ImageResult) {
+			if full.Err == nil && !full.Preview {
+				iv.SetImage(full)
+			}
+		})
+	}
 	return iv, nil
+}
+
+// SetImage replaces the picture on screen, keeping the viewer looking at the
+// same part of it. Sizes differ between a thumbnail and the picture itself,
+// so the panning is measured in the new picture's pixels.
+func (iv *ImageView) SetImage(res ImageResult) {
+	if res.Surface == nil || !res.Surface.Valid() {
+		return
+	}
+	if iv.surface.Valid() && iv.surface.Width > 0 {
+		scale := float64(res.Surface.Width) / float64(iv.surface.Width)
+		iv.panX *= scale
+		iv.panY *= scale
+	}
+	iv.surface = res.Surface
+	iv.decoder = res.Decoder
+	iv.preview = res.Preview
 }
 
 func (iv *ImageView) SetPosition(x1, y1, x2, y2 int) {

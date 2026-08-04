@@ -24,11 +24,14 @@ const (
 	imageWorkers = 2
 )
 
-// ImageResult is what a request for a picture eventually produces.
+// ImageResult is what a request for a picture eventually produces. A preview
+// is a provisional answer: the small copy the file carries inside itself,
+// handed over while the picture proper is still being decoded.
 type ImageResult struct {
 	Path    string
 	Surface *vtui.ImageSurface
 	Decoder string
+	Preview bool
 	Err     error
 }
 
@@ -77,7 +80,11 @@ type ImagePipeline struct {
 	busy    int
 	workers int
 
+	previews     map[imageCacheKey]ImageResult
+	previewOrder []imageCacheKey
+
 	load     imageLoader
+	preview  imageLoader
 	dispatch func(func())
 }
 
@@ -90,7 +97,9 @@ func NewImagePipeline() *ImagePipeline {
 		jobs:     make(map[imageCacheKey]*imageJob),
 		limit:    imageCacheLimit,
 		workers:  imageWorkers,
+		previews: make(map[imageCacheKey]ImageResult),
 		load:     LoadImage,
+		preview:  imageQuickPreview,
 		dispatch: func(fn func()) { vtui.FrameManager.PostTask(fn) },
 	}
 }
@@ -120,6 +129,60 @@ func (p *ImagePipeline) Cached(v vfs.VFS, path string) (ImageResult, bool) {
 	}
 	p.touch(key)
 	return entry.res, true
+}
+
+// PreviewSync returns the best picture that can be had without decoding the
+// whole file: one that is already decoded, a thumbnail seen earlier, or the
+// thumbnail the file carries inside itself. The second value says whether
+// there is anything at all to show.
+func (p *ImagePipeline) PreviewSync(ctx context.Context, v vfs.VFS, path string) (ImageResult, bool) {
+	if res, ok := p.Cached(v, path); ok {
+		return res, true
+	}
+	key := imageCacheKey{Source: imageSource(v), Path: path}
+
+	p.mu.Lock()
+	res, ok := p.previews[key]
+	p.mu.Unlock()
+	if ok {
+		return res, true
+	}
+
+	surf, decoder, err := p.preview(ctx, v, path)
+	if err != nil || !surf.Valid() {
+		return ImageResult{}, false
+	}
+	res = ImageResult{Path: path, Surface: surf, Decoder: decoder, Preview: true}
+
+	p.mu.Lock()
+	p.storePreview(key, res)
+	p.mu.Unlock()
+	return res, true
+}
+
+// storePreview keeps a thumbnail around. The caller holds the lock.
+func (p *ImagePipeline) storePreview(key imageCacheKey, res ImageResult) {
+	if _, ok := p.previews[key]; !ok {
+		p.previewOrder = append(p.previewOrder, key)
+	}
+	p.previews[key] = res
+	for len(p.previewOrder) > imagePreviewCacheLimit {
+		delete(p.previews, p.previewOrder[0])
+		p.previewOrder = p.previewOrder[1:]
+	}
+}
+
+func (p *ImagePipeline) dropPreview(key imageCacheKey) {
+	if _, ok := p.previews[key]; !ok {
+		return
+	}
+	delete(p.previews, key)
+	for i, k := range p.previewOrder {
+		if k == key {
+			p.previewOrder = append(p.previewOrder[:i], p.previewOrder[i+1:]...)
+			break
+		}
+	}
 }
 
 // Load asks for a picture. A picture that is already decoded is handed over
@@ -195,7 +258,9 @@ func (p *ImagePipeline) Prefetch(v vfs.VFS, paths []string) {
 func (p *ImagePipeline) Invalidate(v vfs.VFS, path string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.drop(imageCacheKey{Source: imageSource(v), Path: path})
+	key := imageCacheKey{Source: imageSource(v), Path: path}
+	p.drop(key)
+	p.dropPreview(key)
 }
 
 // Clear forgets every picture.
@@ -205,6 +270,8 @@ func (p *ImagePipeline) Clear() {
 	p.cache = make(map[imageCacheKey]*imageEntry)
 	p.lru = nil
 	p.bytes = 0
+	p.previews = make(map[imageCacheKey]ImageResult)
+	p.previewOrder = nil
 }
 
 // CacheStats reports how much the pipeline is holding on to.
