@@ -267,6 +267,10 @@ echo "running"
 		if !ok || top == nil || top.OnResult == nil || answered[top] {
 			return
 		}
+		title := top.GetTitle()
+		if strings.Contains(title, "Installing Plugin") {
+			return // Don't cancel the progress dialog
+		}
 		answered[top] = true
 		top.OnResult(0) // "Install Anyway"
 		top.SetExitCode(-1)
@@ -311,10 +315,9 @@ Loop:
 		t.Error("Plugin manifest.json was not created")
 	}
 
-	// Verify setup_cmd execution
-	setupLog, err := os.ReadFile(filepath.Join(pluginDir, "setup.log"))
-	if err != nil || !strings.Contains(string(setupLog), "setup complete") {
-		t.Errorf("setup_cmd execution failed or log missing. Log: %q, err: %v", string(setupLog), err)
+	// Verify setup_cmd is ignored
+	if _, err := os.Stat(filepath.Join(pluginDir, "setup.log")); !os.IsNotExist(err) {
+		t.Error("setup_cmd was executed, but it should have been ignored per policy")
 	}
 
 	// 4. Verify GetInstalledPlugRingItems detects it
