@@ -309,3 +309,16 @@ func TestListingSurvivesWeirdNames(t *testing.T) {
 		}
 	}
 }
+func TestPwdAgainstLocalShell(t *testing.T) {
+	c := newLocalShellClient(t)
+	cwd, err := c.Pwd(context.Background())
+	if err != nil {
+		t.Fatalf("pwd: %v", err)
+	}
+	if !strings.HasPrefix(cwd, "/") {
+		t.Errorf("Pwd = %q, want an absolute path", cwd)
+	}
+	if _, err := c.Enum(context.Background(), cwd); err != nil {
+		t.Errorf("the directory Pwd reported cannot be listed: %v", err)
+	}
+}

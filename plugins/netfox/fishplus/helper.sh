@@ -358,6 +358,10 @@ while :; do
   noop )
    f4_end ok
    ;;
+  pwd )
+   pwd
+   f4_end ok
+   ;;
   ping )
    f4_path
    printf '%s\n' "$F4PATH"

@@ -314,6 +314,20 @@ func (c *Client) ReadLink(ctx context.Context, p string) (string, error) {
 	return strings.Join(resp.Lines, "\n"), nil
 }
 
+// Pwd returns the directory the remote shell started in. That is where a
+// panel opens first, the same way an interactive login lands in a home
+// directory rather than at the root.
+func (c *Client) Pwd(ctx context.Context) (string, error) {
+	resp, err := c.sess.Exec(ctx, "pwd")
+	if err != nil {
+		return "", err
+	}
+	if err := resp.Err("pwd"); err != nil {
+		return "", err
+	}
+	return strings.Join(resp.Lines, "\n"), nil
+}
+
 // SetListingMode forces a metadata backend instead of the one picked during
 // the handshake. Meant for tests and for troubleshooting an odd host.
 func (c *Client) SetListingMode(ctx context.Context, mode string) error {
