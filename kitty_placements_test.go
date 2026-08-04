@@ -181,6 +181,108 @@ func TestKittyDrawsIntoTheGraphicsLayer(t *testing.T) {
 	}
 }
 
+func TestKittyResizeMovesPlacementsWithTheText(t *testing.T) {
+	e := newKittyEnv(t)
+	e.tv.SetCursor(2, 5)
+	kittySendImage(e, "a=T,i=1,f=32,s=4,v=4,c=6,r=3,C=1", 4, 4)
+
+	if len(e.tv.images) != 1 || e.tv.images[0].Row != 5 {
+		t.Fatalf("the placement did not land on row five: %v", e.tv.images)
+	}
+
+	// Four rows fall off the top, and what was on row five is now on row one.
+	e.tv.Resize(80, 20)
+	if len(e.tv.images) != 1 || e.tv.images[0].Row != 1 {
+		t.Fatalf("after shrinking: %v", e.tv.images)
+	}
+
+	// Growing pushes everything back down by as much as it gained.
+	e.tv.Resize(80, 26)
+	if len(e.tv.images) != 1 || e.tv.images[0].Row != 7 {
+		t.Fatalf("after growing: %v", e.tv.images)
+	}
+	if p := e.tv.images[0]; p.Cols != 6 || p.Rows != 3 {
+		t.Errorf("a span the client asked for must not change: %dx%d", p.Cols, p.Rows)
+	}
+}
+
+func TestKittyResizeForgetsWhatScrolledOff(t *testing.T) {
+	e := newKittyEnv(t)
+	e.tv.SetCursor(0, 2)
+	kittySendImage(e, "a=T,i=1,f=32,s=4,v=4,c=4,r=2,C=1", 4, 4)
+
+	// Five rows go away, and the picture on rows two and three with them.
+	e.tv.Resize(80, 19)
+	if len(e.tv.images) != 0 {
+		t.Fatalf("the placement should be gone: %v", e.tv.images)
+	}
+}
+
+func TestKittyRecomputesSpanWhenACellChangesSize(t *testing.T) {
+	e := newKittyEnv(t)
+	e.tv.SetPosition(0, 0, 79, 23)
+
+	// A cell is ten by twenty pixels to begin with, so a forty by forty
+	// picture takes four columns and two rows.
+	scr := kittyGraphicsScreen(80, 24)
+	e.tv.Show(scr)
+	kittySendImage(e, "a=T,i=1,f=32,s=40,v=40,C=1", 40, 40)
+	if p := e.tv.images[0]; p.Cols != 4 || p.Rows != 2 {
+		t.Fatalf("span on a ten by twenty cell: %dx%d", p.Cols, p.Rows)
+	}
+
+	// The font gets smaller and the same picture needs more cells.
+	scr.Graphics().SetCellSize(5, 10)
+	e.tv.Show(scr)
+	if p := e.tv.images[0]; p.Cols != 8 || p.Rows != 4 {
+		t.Fatalf("span on a five by ten cell: %dx%d", p.Cols, p.Rows)
+	}
+}
+
+func TestKittyKeepsTheSpanTheClientAskedFor(t *testing.T) {
+	e := newKittyEnv(t)
+	e.tv.SetPosition(0, 0, 79, 23)
+	scr := kittyGraphicsScreen(80, 24)
+	e.tv.Show(scr)
+
+	// The width is given, the height is left to us.
+	kittySendImage(e, "a=T,i=1,f=32,s=40,v=40,c=4,C=1", 40, 40)
+	if p := e.tv.images[0]; p.Cols != 4 || p.Rows != 2 {
+		t.Fatalf("span: %dx%d", p.Cols, p.Rows)
+	}
+
+	scr.Graphics().SetCellSize(5, 10)
+	e.tv.Show(scr)
+	if p := e.tv.images[0]; p.Cols != 4 || p.Rows != 4 {
+		t.Fatalf("the given width must stand and only the height move: %dx%d", p.Cols, p.Rows)
+	}
+}
+
+func TestKittyAltScreenKeepsAndDropsTheRightPictures(t *testing.T) {
+	e := newKittyEnv(t)
+	e.tv.SetCursor(0, 3)
+	kittySendImage(e, "a=T,i=1,f=32,s=4,v=4,c=4,r=2,C=1", 4, 4)
+
+	e.p.Process([]byte("\x1b[?1049h"))
+	if len(e.tv.images) != 1 || e.tv.images[0].Alt {
+		t.Fatalf("the picture of the main screen must survive the switch: %v", e.tv.images)
+	}
+
+	e.tv.SetCursor(0, 1)
+	kittySendImage(e, "a=T,i=2,f=32,s=4,v=4,c=4,r=2,C=1", 4, 4)
+	if len(e.tv.images) != 2 {
+		t.Fatalf("both screens should hold a picture: %v", e.tv.images)
+	}
+
+	e.p.Process([]byte("\x1b[?1049l"))
+	if len(e.tv.images) != 1 {
+		t.Fatalf("the alternate screen must take its pictures with it: %v", e.tv.images)
+	}
+	if p := e.tv.images[0]; p.ImageID != 1 || p.Alt {
+		t.Errorf("the wrong picture survived: %+v", p)
+	}
+}
+
 func TestKittyClipPlacement(t *testing.T) {
 	// Half of the picture hangs below the bottom of the terminal.
 	p := vtui.ImagePlacement{Col: 0, Row: 20, Cols: 4, Rows: 4, SrcW: 80, SrcH: 80}

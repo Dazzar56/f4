@@ -783,6 +783,11 @@ func (tv *TerminalView) SetAltScreen(enable bool) {
 		tv.CursorX, tv.CursorY = 0, 0
 	} else {
 		tv.CursorX, tv.CursorY = tv.savedX, tv.savedY
+		// The alternate screen is discarded rather than remembered: the
+		// next program to raise it is given an empty one, and the erase on
+		// the way in proves it. Its pictures go with it, or they would keep
+		// their pixels alive for as long as the session lasts.
+		tv.kittyClearPlacements(true)
 	}
 	tv.UseAltScreen = enable
 }
@@ -817,6 +822,9 @@ func (tv *TerminalView) Show(scr *vtui.ScreenBuf) {
 	if cw, ch := scr.Graphics().CellSize(); cw > 0 && ch > 0 && (cw != tv.cellW || ch != tv.cellH) {
 		tv.cellW, tv.cellH = cw, ch
 		tv.syncPtyPixelSize()
+		// A span we chose ourselves was worked out from the old cell, and
+		// on the new one it would stretch the picture.
+		tv.kittyRecomputeSpans()
 	}
 
 	scr.FillRect(tv.X1, tv.Y1, tv.X1+tv.Width-1, tv.Y1+tv.Height-1, ' ', DefaultTermAttr)
@@ -1002,6 +1010,11 @@ func (tv *TerminalView) Resize(w, h int) {
 	tv.Height = h
 	tv.ScrollTop = 0
 	tv.ScrollBottom = h - 1
+
+	// The pictures follow the text through the reflow, and then take
+	// whatever room the new size gives them.
+	tv.kittyResizePlacements(yShift-yOffset, h)
+	tv.kittyRecomputeSpans()
 
 	if !tv.UseAltScreen {
 		tv.CursorY = tv.CursorY - yOffset + yShift

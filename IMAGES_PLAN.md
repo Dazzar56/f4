@@ -126,12 +126,20 @@ read, so `IsImageFile` never promises a picture the machine cannot open. The
 `[Images]` section gained `ExternalTimeout` and `DecoderPriority`, and
 `ImageDecoder` gained an optional context-aware `Decode`.
 
+**6a. Kitty in the built-in terminal: shared memory, resize, alt screen.**
+`t=s` resolves the name of a POSIX shared memory object inside `/dev/shm`,
+reads it and unlinks it, as the protocol requires. `kittyResizePlacements`
+moves the pictures of the main screen by the same shift the reflow gives the
+text and drops what left the buffer for good; `kittyRecomputeSpans` works out
+again the side of a span the client left to us, both after a resize and after
+a cell changes size. Leaving the alternate screen now drops its pictures.
+
 ## 5. What is left, in order
 
-**6. Kitty polish in the built-in terminal.** Honour a negative `z` (picture
-under the text) when drawing; save and restore placements across an alt-screen
-switch; recompute on `Resize`; `t=s` (shared memory through `/dev/shm`);
-unicode placeholders (`U=1` and the character `U+10EEEE`).
+**6b. Kitty polish, what is left.** Honour a negative `z`, which is not a
+matter of passing the key on — it already is passed on — but of the cells
+under such a placement keeping a default background; and unicode placeholders
+(`U=1` and the character `U+10EEEE`).
 
 **7. iTerm2 and sixel output in vtui.** Add `GraphicsITerm2` (OSC 1337, base64
 PNG) and `GraphicsSixel` (DCS, up to 256 palette colours, dithering) to
@@ -220,6 +228,19 @@ the other way round.
   when the registry is read, so emptying `DecoderPriority` restores the
   built-in order without a second copy of the built-in numbers.
 
+- **A resize moves pictures but never rescales them.** A placement is a
+  rectangle of cells and kitty keeps it that way; `kittyClipPlacement` already
+  trims what does not fit at drawing time, so widening the window brings the
+  whole picture back. Shrinking `Cols` instead would lose it for good.
+- **`WantCols` and `WantRows` are kept beside the computed span.** A side the
+  client gave in `c` or `r` is a promise about the layout of the screen and
+  stands through everything; only the side we chose for it, and the clamp to
+  the size of the screen, are worked out again.
+- **A shared memory name is one path component.** `shm_open(3)` allows nothing
+  else, and a name with a separator in it would turn `t=s` into a way of
+  reading any file on the machine. It is refused before it reaches the file
+  system rather than after.
+
 ## 7. Traps
 
 **`Ctrl+I` is Tab.** On a terminal without an extended keyboard protocol,
@@ -251,6 +272,13 @@ asking, and the user may want a different one.
   move the check one level down.
 - `image_gallery_test.go` passes a nil context to `ImagePipe.LoadSync`, which
   the function handles but which no other test does.
+- `t=s` works wherever shared memory objects appear in the file system, which
+  is Linux and the BSDs. On macOS and Windows `kittyShmPath` reports that the
+  system has none, and the client gets `EBADF`. Doing better would need cgo
+  and `shm_open`, for a medium almost nothing uses.
+- Leaving the alternate screen drops its pictures but does not tell the store
+  that they are gone, so the images themselves wait for the `kittyMaxImages`
+  eviction. The same was already true of the erase path.
 - `ImagePipeline.run` still calls the loader with `context.Background()`, so
   the context now threaded down to the external decoder is never cancelled in
   practice. The timeout works; the cancellation is waiting for the pipeline to

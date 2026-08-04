@@ -40,6 +40,13 @@ type terminalImage struct {
 	SrcW int
 	SrcH int
 
+	// WantCols and WantRows are the span the client asked for in c and r,
+	// zero for a side it left to us to work out. They are kept so that our
+	// side can be worked out again when a cell changes size or the terminal
+	// is resized.
+	WantCols int
+	WantRows int
+
 	Z   int
 	Alt bool
 }
@@ -100,7 +107,8 @@ func (tv *TerminalView) kittyPut(img *kittyImage, cmd kittyCommand) string {
 		p.SrcH = img.Surface.Height - p.SrcY
 	}
 
-	p.Cols, p.Rows = tv.kittyCellSpan(cmd, p.SrcW, p.SrcH)
+	p.WantCols, p.WantRows = cmd.Int('c', 0), cmd.Int('r', 0)
+	p.Cols, p.Rows = tv.kittyCellSpan(p.WantCols, p.WantRows, p.SrcW, p.SrcH)
 	if p.Cols <= 0 || p.Rows <= 0 {
 		return "EINVAL:the placement is empty"
 	}
@@ -116,23 +124,11 @@ func (tv *TerminalView) kittyPut(img *kittyImage, cmd kittyCommand) string {
 	return ""
 }
 
-// kittyCellSpan turns the c and r keys into a rectangle of cells. A missing
-// one is computed from the aspect ratio so that the picture is not distorted.
-func (tv *TerminalView) kittyCellSpan(cmd kittyCommand, srcW, srcH int) (int, int) {
+// kittyCellSpan turns the wanted span into a rectangle of cells, clamped to
+// the size of the terminal. The caller holds the lock.
+func (tv *TerminalView) kittyCellSpan(wantCols, wantRows, srcW, srcH int) (int, int) {
 	cw, ch := tv.cellSizeUnsafe()
-
-	cols, rows := cmd.Int('c', 0), cmd.Int('r', 0)
-	switch {
-	case cols > 0 && rows > 0:
-	case cols > 0:
-		rows = kittyCeilDiv(int64(srcH)*int64(cols)*int64(cw), int64(srcW)*int64(ch))
-	case rows > 0:
-		cols = kittyCeilDiv(int64(srcW)*int64(rows)*int64(ch), int64(srcH)*int64(cw))
-	default:
-		cols = kittyCeilDiv(int64(srcW), int64(cw))
-		rows = kittyCeilDiv(int64(srcH), int64(ch))
-	}
-
+	cols, rows := kittySpanFor(wantCols, wantRows, srcW, srcH, cw, ch)
 	if cols > tv.Width {
 		cols = tv.Width
 	}
@@ -140,6 +136,39 @@ func (tv *TerminalView) kittyCellSpan(cmd kittyCommand, srcW, srcH int) (int, in
 		rows = tv.Height
 	}
 	return cols, rows
+}
+
+// kittySpanFor is the arithmetic on its own, with no terminal attached, so
+// that placing a picture and working its span out again after the cell has
+// changed size follow exactly the same rules. A side the client did not ask
+// for is computed from the aspect ratio, so that the picture is not
+// distorted.
+func kittySpanFor(wantCols, wantRows, srcW, srcH, cellW, cellH int) (int, int) {
+	cols, rows := wantCols, wantRows
+	switch {
+	case cols > 0 && rows > 0:
+	case cols > 0:
+		rows = kittyCeilDiv(int64(srcH)*int64(cols)*int64(cellW), int64(srcW)*int64(cellH))
+	case rows > 0:
+		cols = kittyCeilDiv(int64(srcW)*int64(rows)*int64(cellH), int64(srcH)*int64(cellW))
+	default:
+		cols = kittyCeilDiv(int64(srcW), int64(cellW))
+		rows = kittyCeilDiv(int64(srcH), int64(cellH))
+	}
+	return cols, rows
+}
+
+// kittyRecomputeSpans works every span out again after a cell has changed
+// size or the terminal has been resized. A side the client gave in c or r
+// stands: it is a promise about the layout of the screen, and keeping it
+// matters more than the aspect ratio. What moves is the side we chose and the
+// clamp to the screen, so a picture squeezed by a narrow window comes back
+// whole when the window widens. The caller holds the lock.
+func (tv *TerminalView) kittyRecomputeSpans() {
+	for i := range tv.images {
+		p := &tv.images[i]
+		p.Cols, p.Rows = tv.kittyCellSpan(p.WantCols, p.WantRows, p.SrcW, p.SrcH)
+	}
 }
 
 func kittyCeilDiv(a, b int64) int {
@@ -315,6 +344,33 @@ func (tv *TerminalView) kittyScrollPlacements(top, bottom, n int) {
 				// Gone off the top of the screen for good.
 				continue
 			}
+		}
+		kept = append(kept, p)
+	}
+	tv.images = kept
+}
+
+// kittyResizePlacements follows the pictures through a change of the terminal
+// size. The rows of the main screen move by the same shift the reflow gives
+// the text, so that a picture never drifts away from the line it was printed
+// next to; the alternate screen is not reflowed, so its pictures stay where
+// they are. Nothing is rescaled here: a placement is a rectangle of cells and
+// kitty keeps it that way, and what no longer fits is clipped when it is
+// drawn, so widening the window brings the whole picture back. The caller
+// holds the lock.
+func (tv *TerminalView) kittyResizePlacements(shift, height int) {
+	if len(tv.images) == 0 {
+		return
+	}
+	kept := make([]terminalImage, 0, len(tv.images))
+	for _, p := range tv.images {
+		if !p.Alt {
+			p.Row += shift
+		}
+		// Off the top for good, or past the bottom of a screen that shrank:
+		// the text of those rows is gone as well and neither comes back.
+		if p.Row+p.Rows <= 0 || p.Row >= height {
+			continue
 		}
 		kept = append(kept, p)
 	}
