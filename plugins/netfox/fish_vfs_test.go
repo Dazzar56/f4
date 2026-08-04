@@ -307,3 +307,61 @@ func TestFishVFSClonesShareOneSessionSafely(t *testing.T) {
 		t.Fatalf("concurrent use of one session: %v", err)
 	}
 }
+func TestFishProtocolIsRegistered(t *testing.T) {
+	found := false
+	for _, p := range GetProtocols() {
+		if p == "fish+" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("fish+ missing from the protocol list: %v", GetProtocols())
+	}
+	ph := &fishProtocolHandler{}
+	if ph.Prefix() != "fish+" {
+		t.Errorf("Prefix = %q", ph.Prefix())
+	}
+	if ph.DefaultPort() != "22" {
+		t.Errorf("DefaultPort = %q, want 22", ph.DefaultPort())
+	}
+	ui, apply := ph.BuildExtraUI(&NetFoxConfig{}, 0, 0, 10, 10)
+	if ui != nil {
+		t.Error("the fish+ handler needs no extra UI yet")
+	}
+	apply()
+}
+
+func TestFishTypeMatches(t *testing.T) {
+	for _, good := range []string{"fish+", "fish"} {
+		if !fishTypeMatches(good) {
+			t.Errorf("type %q not recognized as FISH+", good)
+		}
+	}
+	// An empty type belongs to SFTP, which claims it as its default; taking
+	// it here would hijack every site saved before FISH+ existed.
+	for _, bad := range []string{"", "sftp", "ftp", "fishy"} {
+		if fishTypeMatches(bad) {
+			t.Errorf("type %q wrongly claimed by FISH+", bad)
+		}
+	}
+}
+
+func TestSSHTimeoutDefaults(t *testing.T) {
+	if got := sshTimeout(0); got != 15*time.Second {
+		t.Errorf("sshTimeout(0) = %v, want 15s", got)
+	}
+	if got := sshTimeout(-3); got != 15*time.Second {
+		t.Errorf("sshTimeout(-3) = %v, want 15s", got)
+	}
+	if got := sshTimeout(7); got != 7*time.Second {
+		t.Errorf("sshTimeout(7) = %v, want 7s", got)
+	}
+}
+
+func TestDialSSHFailsOnAClosedPort(t *testing.T) {
+	client, err := DialSSH("127.0.0.1", "1", "nobody", "", 2)
+	if err == nil {
+		client.Close()
+		t.Fatal("dialing a closed port succeeded")
+	}
+}

@@ -134,11 +134,13 @@ The offset is clamped against the size the helper just read, so the frame length
 
 *   **Step 4a — the VFS.** `plugins/netfox/fish_vfs.go` maps `Entry` onto `vfs.VFSItem` and a `fishplus.File` onto `vfs.ReadAtCloser`, so a FISH+ session is already a browsable and readable file system. The helper learned `pwd`, so a panel opens where an interactive login would land. Mutations answer with a plain error until step 5, and the test drives the whole mapping over a local shell.
 
+*   **Step 4b — transport and registration.** `DialSSH` now carries the agent, key and password logic for both SSH backends, and a FISH+ site opens a shell with no pseudo terminal attached, running `exec /bin/sh` so that a csh or fish login shell cannot get in the way. The protocol is registered as `fish+`, with the plain `fish` type accepted as a synonym.
+
 ### To do
 
 The order below is chosen so that something usable arrives as early as possible: after step 4 a user can already browse, view and download.
 
-*   **Step 4b — transport and registration.** An SSH session without a pseudo terminal — the existing `SSHPty` asks for one with echo, which the helper would have to tame with `stty` on every connect — plus the VFS provider, the `fish` protocol handler and the entry in the connection dialog. First version fit for actual use.
+*   **Step 5 — writing and mutations.** The first thing a user will miss now that browsing works.
 *   **Step 5 — writing and mutations.** `write` (raw through `dd`, never through `head -c`: on macOS it swallows the rest of the stream and would eat the next request; base64 only as the last resort), `mkdir`, `rm`, `rmdir`, `mv`, `chmod`, `symlink`, `touch`. Parity with classic fish.
 *   **Step 6 — odd hosts.** The `ls -l` fallback backend and whatever else the compatibility issue turns up; `tools/fishplus_probe.sh` collects the raw material.
 *   **Step 7 — FISH+ proper, part 1.** Server-side `grep` feeding `VFS.Search` with byte offsets; server-side line index for the viewer and the editor.

@@ -2,15 +2,20 @@ package netfox
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
 	"path"
+	"strconv"
 	"strings"
 	"sync"
 
+	"golang.org/x/crypto/ssh"
+
 	"github.com/unxed/f4/plugins/netfox/fishplus"
 	"github.com/unxed/f4/vfs"
+	"github.com/unxed/vtui"
 )
 
 // ErrFishReadOnly is what every mutation answers until step 5 of the FISH+
@@ -94,6 +99,73 @@ func NewFishVFSOnStream(ctx context.Context, parent vfs.VFS, stdin io.Writer, st
 		path:   cwd,
 		title:  title,
 	}, nil
+}
+
+// sshShell ties the lifetime of the remote shell and of the connection that
+// carries it to the session that speaks through them.
+type sshShell struct {
+	sess   *ssh.Session
+	client *ssh.Client
+}
+
+func (s *sshShell) Close() error {
+	s.sess.Close()
+	return s.client.Close()
+}
+
+// NewFishVFS opens a site over SSH. The shell deliberately runs without a
+// pseudo terminal: a terminal would echo every request back, turn each \n of
+// a binary frame into \r\n and cut long request lines at the canonical
+// buffer limit. The helper can tame a terminal with stty when it has to, but
+// not asking for one in the first place is cheaper and cannot fail.
+//
+// The command is "exec /bin/sh" rather than a plain shell request, because
+// the account's login shell may well be csh, fish or something else that
+// does not speak the POSIX syntax the helper is written in.
+func NewFishVFS(parent vfs.VFS, host, port, user, pass string, timeout int) (*FishVFS, error) {
+	vtui.DebugLog("NET: Initiating FISH+ connection to %s:%s (user: %s)", host, port, user)
+	client, err := DialSSH(host, port, user, pass, timeout)
+	if err != nil {
+		return nil, err
+	}
+	sess, err := client.NewSession()
+	if err != nil {
+		client.Close()
+		return nil, err
+	}
+	stdin, err := sess.StdinPipe()
+	if err != nil {
+		sess.Close()
+		client.Close()
+		return nil, err
+	}
+	stdout, err := sess.StdoutPipe()
+	if err != nil {
+		sess.Close()
+		client.Close()
+		return nil, err
+	}
+	sess.Stderr = io.Discard
+	if err := sess.Start("exec /bin/sh"); err != nil {
+		sess.Close()
+		client.Close()
+		return nil, err
+	}
+
+	title := host
+	if user != "" {
+		title = user + "@" + host
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), sshTimeout(timeout))
+	defer cancel()
+	v, err := NewFishVFSOnStream(ctx, parent, stdin, stdout, &sshShell{sess: sess, client: client}, title)
+	if err != nil {
+		sess.Close()
+		client.Close()
+		return nil, err
+	}
+	vtui.DebugLog("NET: FISH+ session established, features: %s", v.client.Session().Features().Raw)
+	return v, nil
 }
 
 // Client exposes the underlying protocol client, mostly so a caller can ask
@@ -250,4 +322,74 @@ func (v *FishVFS) Close() error {
 		}
 	})
 	return err
+}
+
+// fishTypeMatches reports whether a site configuration asks for FISH+. The
+// plus is part of the name because the protocol is more than the classic
+// fish, but a configuration that spells it without one is accepted too.
+func fishTypeMatches(t string) bool {
+	return t == "fish+" || t == "fish"
+}
+
+// netFoxConfigAt reads the site configuration a connection entry stands for.
+func netFoxConfigAt(ctx context.Context, parent vfs.VFS, pth string) (NetFoxConfig, bool) {
+	w, ok := parent.(*netFoxVFSWrapper)
+	if !ok {
+		return NetFoxConfig{}, false
+	}
+	item, err := w.Stat(ctx, pth)
+	if err != nil || item.IsDir {
+		return NetFoxConfig{}, false
+	}
+	f, err := w.Open(ctx, pth)
+	if err != nil {
+		return NetFoxConfig{}, false
+	}
+	defer f.Close()
+	var cfg NetFoxConfig
+	if err := json.NewDecoder(ctxReader{f, ctx}).Decode(&cfg); err != nil {
+		return NetFoxConfig{}, false
+	}
+	return cfg, true
+}
+
+type fishProvider struct{}
+
+func (p *fishProvider) Name() string  { return "NetFox-FISH+" }
+func (p *fishProvider) Priority() int { return 100 }
+
+func (p *fishProvider) CanOpen(ctx context.Context, parent vfs.VFS, pth string) bool {
+	cfg, ok := netFoxConfigAt(ctx, parent, pth)
+	return ok && fishTypeMatches(cfg.Type)
+}
+
+func (p *fishProvider) Open(ctx context.Context, parent vfs.VFS, pth string) (vfs.VFS, error) {
+	cfg, ok := netFoxConfigAt(ctx, parent, pth)
+	if !ok {
+		return nil, os.ErrInvalid
+	}
+	port := cfg.Port
+	if port == "" {
+		port = "22"
+	}
+	timeout := 15
+	if cfg.Timeout != "" {
+		if t, err := strconv.Atoi(cfg.Timeout); err == nil && t > 0 {
+			timeout = t
+		}
+	}
+	return NewFishVFS(parent, cfg.Host, port, cfg.User, cfg.Pass, timeout)
+}
+
+type fishProtocolHandler struct{}
+
+func (ph *fishProtocolHandler) Prefix() string      { return "fish+" }
+func (ph *fishProtocolHandler) DefaultPort() string { return "22" }
+func (ph *fishProtocolHandler) BuildExtraUI(cfg *NetFoxConfig, x, y, w, h int) (vtui.UIElement, func()) {
+	return nil, func() {}
+}
+
+func init() {
+	vfs.RegisterProvider(&fishProvider{})
+	RegisterProtocol(&fishProtocolHandler{})
 }
