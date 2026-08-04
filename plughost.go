@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/unxed/f4/ffibridge"
 	"github.com/unxed/f4/sdk/f4rpc"
 	"github.com/unxed/f4/vfs"
+	"github.com/unxed/ffibridge"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 	"github.com/vmihailenco/msgpack/v5"

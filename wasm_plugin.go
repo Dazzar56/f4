@@ -13,9 +13,9 @@ import (
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 	"github.com/tetratelabs/wazero/sys"
-	"github.com/unxed/f4/ffibridge"
 	"github.com/unxed/f4/sdk/f4rpc"
 	"github.com/unxed/f4/vfs"
+	"github.com/unxed/ffibridge"
 	"github.com/unxed/vtui"
 )
 

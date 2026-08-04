@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/unxed/f4/ffibridge"
 	"github.com/unxed/f4/sdk/f4rpc"
+	"github.com/unxed/ffibridge"
 	"github.com/vmihailenco/msgpack/v5"
 )
 

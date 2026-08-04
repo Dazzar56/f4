@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/unxed/f4/ffibridge"
+	"github.com/unxed/ffibridge"
 )
 
 // fakePrompt answers without a terminal, and records what it was asked.

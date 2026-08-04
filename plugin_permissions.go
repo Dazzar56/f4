@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/unxed/f4/ffibridge"
+	"github.com/unxed/ffibridge"
 	"github.com/unxed/vtui"
 )
 

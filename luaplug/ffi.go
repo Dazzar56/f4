@@ -1,7 +1,7 @@
 package luaplug
 
 import (
-	"github.com/unxed/f4/ffibridge"
+	"github.com/unxed/ffibridge"
 	lua "github.com/yuin/gopher-lua"
 )
 

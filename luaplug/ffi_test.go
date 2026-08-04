@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/unxed/f4/ffibridge"
+	"github.com/unxed/ffibridge"
 )
 
 func newFFIRuntime(t *testing.T) *Runtime {
