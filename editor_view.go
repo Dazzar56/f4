@@ -798,12 +798,12 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 	if ctrl && !alt && !shift {
 		switch {
 		case e.VirtualKeyCode == vtinput.VK_OEM_4 || e.Char == '[':
-			if s := panelPathForEditor(0); s != "" {
+			if s := leftPanelPathForEditor(); s != "" {
 				ev.insertTextAtCursor([]byte(s))
 			}
 			return true
 		case e.VirtualKeyCode == vtinput.VK_OEM_6 || e.Char == ']':
-			if s := panelPathForEditor(1); s != "" {
+			if s := rightPanelPathForEditor(); s != "" {
 				ev.insertTextAtCursor([]byte(s))
 			}
 			return true
@@ -2698,19 +2698,30 @@ func findPanelsFrameAnyScreen() *PanelsFrame {
 	return nil
 }
 
-// panelPathForEditor returns the on-disk path of file panel [idx]
-// (0=left, 1=right), or "" if the panels frame or the panel isn't
-// available (headless test, panels hidden). Same source PanelsFrame
-// uses for its own Ctrl+[/Ctrl+] command-line binds.
-func panelPathForEditor(idx int) string {
+// leftPanelPathForEditor / rightPanelPathForEditor return the
+// on-screen visually-left / visually-right file panel's path, or
+// "" if the panels frame isn't available. Deliberately uses the
+// same visualLeftFSP / visualRightFSP resolvers PanelsFrame uses
+// for its own Ctrl+[/Ctrl+] command-line binds, so after Ctrl+U
+// the editor stays in lock-step with the panel behaviour instead
+// of routing by stale slot index.
+func leftPanelPathForEditor() string {
 	pf := findPanelsFrameAnyScreen()
 	if pf == nil {
 		return ""
 	}
-	if idx < 0 || idx >= len(pf.panels) {
+	if fsp := pf.visualLeftFSP(); fsp != nil {
+		return fsp.vfs.GetPath()
+	}
+	return ""
+}
+
+func rightPanelPathForEditor() string {
+	pf := findPanelsFrameAnyScreen()
+	if pf == nil {
 		return ""
 	}
-	if fsp, ok := pf.panels[idx].(*FileSystemPanel); ok && fsp != nil {
+	if fsp := pf.visualRightFSP(); fsp != nil {
 		return fsp.vfs.GetPath()
 	}
 	return ""
