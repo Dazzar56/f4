@@ -52,6 +52,7 @@ func actionHotkeyConfig(pf *PanelsFrame) {
 		{Title: "When", Width: 12},
 		{Title: "Description", Width: 16},
 	})
+	useDialogTableColors(table)
 	table.ShowScrollBar = true
 
 	btnAssign := vtui.NewButton(0, 0, "&Assign")
