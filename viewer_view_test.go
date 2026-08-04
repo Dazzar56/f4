@@ -380,7 +380,7 @@ func TestViewerView_HexModeToggle(t *testing.T) {
 	vv.TopOffset = 10
 
 	// Toggle Hex Mode
-	vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F4})
+	pressKey(vv, &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F4})
 
 	if !vv.HexMode {
 		t.Error("F4 failed to toggle HexMode")
@@ -392,7 +392,7 @@ func TestViewerView_HexModeToggle(t *testing.T) {
 	}
 
 	// Toggle back to Text
-	vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F4})
+	pressKey(vv, &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F4})
 	if vv.HexMode {
 		t.Error("F4 failed to toggle back to TextMode")
 	}
@@ -572,7 +572,7 @@ func TestViewerView_ScrollbarEOFAlignment(t *testing.T) {
 	}
 
 	// --- 2. Проверка в Hex режиме ---
-	vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F4})
+	pressKey(vv, &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F4})
 	// В Hex режиме jumpToEnd отрабатывает мгновенно, если данные в кэше
 	vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_END})
 	vv.Show(scr)

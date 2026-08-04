@@ -2536,6 +2536,9 @@ func actionLanguage(pf *PanelsFrame) {
 		AppConfig.Language = langs[idx].code
 		SaveConfig()
 		InitLang()
+		// Key binding help topics are generated from the action
+		// registry and must be rebuilt in the new language.
+		InitHelpSystem()
 		vtui.FrameManager.PostTask(func() {
 			vtui.ShowMessage(Msg("Info.Title"), Msg("Language.Changed"), []string{Msg("vtui.Ok")})
 			vtui.FrameManager.Redraw()

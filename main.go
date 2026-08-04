@@ -334,7 +334,6 @@ func SetupUI() {
 	SetDefaultF4Palette()
 	LoadConfig()
 	InitLang()
-	InitHelpSystem()
 	if err := ApplyColorStyle(AppConfig.ColorStyle); err != nil {
 		vtui.DebugLog("COLORS: %v; falling back to Modern", err)
 		AppConfig.ColorStyle = "Modern"
@@ -373,6 +372,10 @@ func SetupUI() {
 	GlobalHotkeysMgr = NewHotkeyManager(filepath.Join(configDir, "hotkeys.ini"))
 	MacroMgr = NewMacroManager(filepath.Join(configDir, "key_macros.ini"))
 	MacroMgr.LoadLuaMacros(filepath.Join(configDir, "Macros", "scripts"))
+	// Help is initialized after the hotkey manager: key binding topics
+	// are generated from the action registry and must reflect the
+	// user's overrides from hotkeys.ini.
+	InitHelpSystem()
 	vtui.FrameManager.EventFilter = MacroMgr.Filter
 	LoadSession()
 	vtui.ManageCursorStyle = !AppConfig.KeepTerminalCursor

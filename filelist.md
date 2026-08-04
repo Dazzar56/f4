@@ -1,8 +1,10 @@
 # Project Structure
-Last updated: 2026-08-04 21:35:41
+Last updated: 2026-08-05 12:00:00
 
 ```text
 .
+├── action_menu.go
+├── action_menu_test.go
 ├── action_registry.go
 ├── action_registry_test.go
 ├── actions.go
@@ -77,6 +79,7 @@ Last updated: 2026-08-04 21:35:41
 ├── drives_unix.go
 ├── drives_windows.go
 ├── editor_features_test.go
+├── editor_veto_test.go
 ├── editor_view_ads_test.go
 ├── editor_view.go
 ├── editor_view_test.go
@@ -102,6 +105,8 @@ Last updated: 2026-08-04 21:35:41
 ├── find_file.go
 ├── find_file_test.go
 ├── FISH+.md
+├── folder_history_actions_test.go
+├── folder_history_navigation_test.go
 ├── fs_info_darwin.go
 ├── fs_info.go
 ├── fs_info_linux.go
@@ -127,11 +132,15 @@ Last updated: 2026-08-04 21:35:41
 │   ├── README.md
 │   └── ru.hlf
 ├── help.go
+├── help_keys_ru_test.go
+├── help_keys_test.go
 ├── help_lang_test.go
 ├── help_test.go
 ├── highlight_files.go
 ├── highlight_files_test.go
 ├── HIGHLIGHTING.md
+├── history_dialog.go
+├── history_dialog_test.go
 ├── history_provider.go
 ├── history_provider_test.go
 ├── hotkeys.go
@@ -351,6 +360,7 @@ Last updated: 2026-08-04 21:35:41
 ├── test_main_test.go
 ├── test_plugins.sh
 ├── test_resurrect.sh
+├── themed_table.go
 ├── textlayout
 │   ├── wrap.go
 │   └── wrap_test.go
@@ -451,5 +461,5 @@ Last updated: 2026-08-04 21:35:41
 ├── WORDNAV.md
 └── word_nav_test.go
 
-34 directories, 414 files
+34 directories, 426 files
 ```
