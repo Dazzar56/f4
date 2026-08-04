@@ -1758,7 +1758,7 @@ func actionFindFile(pf *PanelsFrame) {
 	vtui.FrameManager.Push(dlg)
 }
 func actionPanelSettings(pf *PanelsFrame) {
-	const dialogHeight = 34
+	const dialogHeight = 33
 	dlg := vtui.NewCenteredDialog(60, dialogHeight, Msg("PanelSettings.Title"))
 	dlg.ShowClose = true
 
@@ -1810,11 +1810,6 @@ func actionPanelSettings(pf *PanelsFrame) {
 	chkStayFocused.SetDisabled(AppConfig.NavigationMode != NavigationSearchFirst)
 	navigation.OnChange = func(selected int) {
 		chkStayFocused.SetDisabled(PanelNavigationMode(selected) != NavigationSearchFirst)
-	}
-
-	chkFastFindArrowsCancel := vtui.NewCheckbox(0, 0, Msg("PanelSettings.FastFindArrowsCancel"), false)
-	if AppConfig.FastFindArrowsCancel {
-		chkFastFindArrowsCancel.State = 1
 	}
 
 	chkSync := vtui.NewCheckbox(0, 0, Msg("PanelSettings.SyncPanelLoad"), false)
@@ -1874,7 +1869,6 @@ func actionPanelSettings(pf *PanelsFrame) {
 	dlg.AddItem(lblNavigation)
 	dlg.AddItem(navigation)
 	dlg.AddItem(chkStayFocused)
-	dlg.AddItem(chkFastFindArrowsCancel)
 	dlg.AddItem(chkSync)
 	dlg.AddItem(chkAlwaysMenu)
 	dlg.AddItem(chkCPUGPU)
@@ -1897,8 +1891,6 @@ func actionPanelSettings(pf *PanelsFrame) {
 	vbox.Add(lblNavigation, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(navigation, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkStayFocused, vtui.Margins{Left: 2}, vtui.AlignLeft)
-	vbox.Add(chkFastFindArrowsCancel, vtui.Margins{}, vtui.AlignLeft)
-
 	vbox.Add(chkSync, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(chkAlwaysMenu, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(chkCPUGPU, vtui.Margins{Top: 1}, vtui.AlignLeft)
@@ -1937,7 +1929,6 @@ func actionPanelSettings(pf *PanelsFrame) {
 		AppConfig.CommandLineAutoComplete = chkCmdAc.State == 1
 		AppConfig.NavigationMode = PanelNavigationMode(navigation.Selected)
 		AppConfig.SearchCommandStayFocused = chkStayFocused.State == 1
-		AppConfig.FastFindArrowsCancel = chkFastFindArrowsCancel.State == 1
 		AppConfig.SyncPanelLoad = chkSync.State == 1
 		AppConfig.AlwaysShowMenuBar = chkAlwaysMenu.State == 1
 		AppConfig.InfoPanelCPUGPU = chkCPUGPU.State == 1

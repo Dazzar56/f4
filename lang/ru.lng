@@ -299,7 +299,6 @@ PanelSettings.NavigationClassic=&Классическая
 PanelSettings.NavigationVim=&Vim (j, k, dd, cc, mm)
 PanelSettings.NavigationSearch=&Поиск по умолчанию
 PanelSettings.SearchStayFocused=Оставаться в командной &строке после Enter
-PanelSettings.FastFindArrowsCancel=&Стрелки отменяют быстрый поиск
 PanelSettings.SyncPanelLoad=&Синхронная загрузка панелей (без кэша)
 PanelSettings.DefaultMode=Режим операций по &умолчанию:
 PanelSettings.PathDisplay=Отображение пути в прогрессе:

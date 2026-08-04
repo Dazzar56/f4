@@ -1153,14 +1153,13 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		}
 	}
 
-	// Fast Find owns Esc and Ctrl+Enter before in-frame hotkeys and command-line
-	// handling. Delegate both to the panel's normal Fast Find handler.
-	// (VetoActionKey keeps the hotkey filter from grabbing them first.)
+	// Fast Find owns Esc, F2 and Ctrl+Enter before in-frame hotkeys and
+	// command-line handling. Delegate them to the panel's normal handler.
 	if pf.showPanels && e.KeyDown {
 		if fsp := pf.getActivePanel(); fsp != nil && fsp.fastFindMode {
 			isFindEnter := e.VirtualKeyCode == vtinput.VK_RETURN && ctrl && !alt
-			plainEscape := e.VirtualKeyCode == vtinput.VK_ESCAPE && !ctrl && !alt && !shift
-			if plainEscape || isFindEnter {
+			isFindModeToggle := e.VirtualKeyCode == vtinput.VK_F2 && !ctrl && !alt && !shift
+			if plainEscape || isFindEnter || isFindModeToggle {
 				return fsp.ProcessKey(e)
 			}
 		}
