@@ -905,7 +905,7 @@ func (fp *FileSystemPanel) initScrollBar() {
 }
 
 func (fp *FileSystemPanel) syncScrollBar() bool {
-	if fp.scrollBar == nil {
+	if fp.scrollBar == nil || !AppConfig.ShowPanelScrollbars {
 		return false
 	}
 	height, _, maxTop, virtualMax, virtualValue := fp.panelScrollMetrics()
@@ -994,7 +994,7 @@ func (fp *FileSystemPanel) drawCursorSeparators(scr *vtui.ScreenBuf) {
 }
 
 func (fp *FileSystemPanel) processScrollBarMouse(e *vtinput.InputEvent) bool {
-	if fp.scrollBar == nil {
+	if fp.scrollBar == nil || !AppConfig.ShowPanelScrollbars {
 		return false
 	}
 	// Releases must reach ScrollBar so it can stop dragging and auto-repeat.

@@ -292,6 +292,7 @@ PanelSettings.Title= Panel settings
 PanelSettings.ShowHidden=Show &hidden and system files
 PanelSettings.HighlightDir=H&ighlight folders
 PanelSettings.SeparateExtensions=Align file &extensions to the right
+PanelSettings.ShowScrollbars=Show panel scroll&bars
 PanelSettings.SavePaths=Save panel &paths on exit
 PanelSettings.KeepCursor=Don't touch terminal &cursor style
 PanelSettings.Navigation=&Navigation:
