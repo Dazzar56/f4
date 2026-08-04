@@ -223,6 +223,7 @@ func (s *Session) Exec(ctx context.Context, cmd string, args ...string) (*Respon
 func (s *Session) ExecPath(ctx context.Context, cmd, path string, args ...string) (*Response, error) {
 	return s.exec(ctx, false, cmd, args, []string{path})
 }
+
 // ExecPaths runs a command that operates on more than one path, each on a
 // line of its own and in the order given. Rename is the first such command.
 func (s *Session) ExecPaths(ctx context.Context, cmd string, paths []string, args ...string) (*Response, error) {

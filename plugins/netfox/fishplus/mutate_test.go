@@ -53,7 +53,9 @@ func TestMutationsAgainstLocalShell(t *testing.T) {
 		t.Fatalf("chmod back: %v", err)
 	}
 
-	if err := c.RemoveDir(ctx, nested); err == nil {
+	// The rename above moved the file out of "three" and into its parent,
+	// so the parent is the one that is not empty now.
+	if err := c.RemoveDir(ctx, filepath.Dir(moved)); err == nil {
 		t.Error("rmdir removed a directory that is not empty")
 	}
 	if err := c.Remove(ctx, moved); err != nil {
@@ -85,13 +87,22 @@ func TestMutationsAgainstLocalShell(t *testing.T) {
 	}
 }
 
-func TestMutationsRefuseTheRootAndBadModes(t *testing.T) {
+func TestMutationsRequireSafePaths(t *testing.T) {
 	c := newLocalShellClient(t)
 	ctx := context.Background()
+	dir := t.TempDir()
 
-	for _, p := range []string{"/", ""} {
-		if err := c.RemoveAll(ctx, p); err == nil {
-			t.Errorf("rmtree accepted %q", p)
+	victim := filepath.Join(dir, "victim.txt")
+	if err := os.WriteFile(victim, []byte("keep me"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// filepath.Join would clean the ".." away, which is exactly the kind of
+	// path the helper must not have to trust, so these are built by hand.
+	unsafe := []string{"", "/", "relative/path", dir + "/../escape", "/..", dir + "/.."}
+	for _, p := range unsafe {
+		if err := c.MkDir(ctx, p); err == nil {
+			t.Errorf("mkdir accepted %q", p)
 		}
 		if err := c.Remove(ctx, p); err == nil {
 			t.Errorf("rm accepted %q", p)
@@ -99,9 +110,36 @@ func TestMutationsRefuseTheRootAndBadModes(t *testing.T) {
 		if err := c.RemoveDir(ctx, p); err == nil {
 			t.Errorf("rmdir accepted %q", p)
 		}
+		if err := c.RemoveAll(ctx, p); err == nil {
+			t.Errorf("rmtree accepted %q", p)
+		}
+		if err := c.Chmod(ctx, p, 0644); err == nil {
+			t.Errorf("chmod accepted %q", p)
+		}
+		if err := c.Rename(ctx, victim, p); err == nil {
+			t.Errorf("mv accepted %q as a destination", p)
+		}
+		if err := c.Rename(ctx, p, filepath.Join(dir, "landing")); err == nil {
+			t.Errorf("mv accepted %q as a source", p)
+		}
+	}
+	if _, err := os.Stat(victim); err != nil {
+		t.Fatalf("a refused mutation moved the file anyway: %v", err)
 	}
 
-	dir := t.TempDir()
+	// A name that merely starts with dots is not a ".." component and must
+	// stay usable, or the guard has grown too wide.
+	dotty := filepath.Join(dir, "..hidden")
+	if err := os.WriteFile(dotty, []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Chmod(ctx, dotty, 0600); err != nil {
+		t.Errorf("a name starting with dots was refused: %v", err)
+	}
+	if err := c.Remove(ctx, dotty); err != nil {
+		t.Errorf("removing a name starting with dots: %v", err)
+	}
+
 	resp, err := c.Session().ExecPath(ctx, "chmod", dir, "99z")
 	if err != nil {
 		t.Fatalf("chmod: %v", err)

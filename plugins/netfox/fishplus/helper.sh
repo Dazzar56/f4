@@ -105,17 +105,25 @@ f4_do() {
 
 f4_safe_target() {
  case $1 in
-  '' | '/' ) return 1 ;;
+  /* ) ;;
+  * ) return 1 ;;
+ esac
+ case $1 in
+  '/' | */.. | */../* ) return 1 ;;
  esac
  return 0
 }
 
-f4_rm() {
- if f4_safe_target "$F4PATH"; then
-  f4_do "$@" -- "$F4PATH"
- else
-  f4_end err "refusing to remove the root directory"
+f4_guard() {
+ if f4_safe_target "$1"; then
+  return 0
  fi
+ f4_end err "unsafe path: must be absolute and free of .. components"
+ return 1
+}
+
+f4_rm() {
+ f4_guard "$F4PATH" && f4_do "$@" -- "$F4PATH"
 }
 
 F4FMT_FIND='%y %Y %s %T@ %A@ %C@ %m %U %G %f\n'
@@ -412,7 +420,7 @@ while :; do
    ;;
   mkdir )
    f4_path
-   f4_do mkdir -p -- "$F4PATH"
+   f4_guard "$F4PATH" && f4_do mkdir -p -- "$F4PATH"
    ;;
   rm )
    f4_path
@@ -428,13 +436,13 @@ while :; do
    ;;
   mv )
    f4_paths2
-   f4_do mv -f -- "$F4SRC" "$F4DST"
+   f4_guard "$F4SRC" && f4_guard "$F4DST" && f4_do mv -f -- "$F4SRC" "$F4DST"
    ;;
   chmod )
    f4_path
    case $F4A1 in
     '' | *[!0-7]* ) f4_end err "bad mode" ;;
-    * ) f4_do chmod -- "$F4A1" "$F4PATH" ;;
+    * ) f4_guard "$F4PATH" && f4_do chmod -- "$F4A1" "$F4PATH" ;;
    esac
    ;;
   read )

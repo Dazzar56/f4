@@ -91,9 +91,10 @@ Everything printed before that line (motd, shell warnings, login banners) is dis
 *   `rdlink` + path — the target of a symlink.
 *   `read <offset> <length>` + path — a byte range, `length` zero meaning "to the end of the file".
 *   `mkdir` + path — creates a directory and its missing parents.
-*   `rm`, `rmdir`, `rmtree` + path — a file, an empty directory, a whole tree. All three refuse the root directory.
+*   `rm`, `rmdir`, `rmtree` + path — a file, an empty directory, a whole tree.
 *   `mv` + two paths — the first command that reads more than one path line.
 *   `chmod <octal>` + path — the mode is checked for being octal before it reaches the remote `chmod`.
+Every mutation refuses a path that is not absolute or that carries a `..` component, and the root directory itself. The client always sends absolute paths, so the rule costs nothing in normal use; it is there because `rmtree` turns one mistake in path assembly into a lot of lost data, and because a check the remote host performs holds even when the client is the thing that went wrong. A name that merely begins with dots is not a `..` component and stays usable.
 *   `mode <name>` — forces a metadata backend instead of the auto-detected one; for tests and for troubleshooting.
 *   `rmode <name>` — the same for the read backend.
 *   `exit` — makes the helper leave its loop.
