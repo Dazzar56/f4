@@ -367,6 +367,7 @@ func SetupUI() {
 	}
 
 	os.MkdirAll(configDir, 0755)
+	GlobalHotkeysMgr = NewHotkeyManager(filepath.Join(configDir, "hotkeys.ini"))
 	MacroMgr = NewMacroManager(filepath.Join(configDir, "key_macros.ini"))
 	MacroMgr.LoadLuaMacros(filepath.Join(configDir, "Macros", "scripts"))
 	vtui.FrameManager.EventFilter = MacroMgr.Filter
