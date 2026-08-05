@@ -21,6 +21,11 @@ func BuildMenuBarItems(area string) []vtui.MenuBarItem {
 	menus := make(map[string]*menu)
 
 	appendAction := func(a Action) {
+		// Asked before the menu is created, so a group whose every action
+		// is hidden does not appear as an empty one.
+		if a.Visible != nil && !a.Visible() {
+			return
+		}
 		m := menus[a.MenuPath]
 		if m == nil {
 			title := Msg("Menu." + area + "." + a.MenuPath)

@@ -1825,6 +1825,22 @@ func actionMkDir(pf *PanelsFrame) {
 	vtui.FrameManager.Push(dlg)
 }
 
+// panelCanFindDuplicates reports whether the active panel's file system can
+// answer a duplicate search. It is what keeps the menu entry out of sight
+// on the ones that cannot, rather than offering it and refusing.
+func panelCanFindDuplicates() bool {
+	pf := findPanelsFrameAnyScreen()
+	if pf == nil {
+		return false
+	}
+	fsp := pf.getActivePanel()
+	if fsp == nil {
+		return false
+	}
+	_, ok := fsp.vfs.(vfs.DuplicateFinder)
+	return ok
+}
+
 // actionFindDuplicates asks the file system for files with identical
 // content. Only a file system that can do the work on its own side offers
 // it: doing it from here would mean reading every candidate over the
@@ -1836,6 +1852,8 @@ func actionFindDuplicates(pf *PanelsFrame) {
 	}
 	finder, ok := fsp.vfs.(vfs.DuplicateFinder)
 	if !ok {
+		// Reachable through a key binding or a macro, which the menu's
+		// visibility rule does not cover.
 		vtui.ShowMessage(" Find Duplicates ",
 			"This file system cannot search for duplicates.\nOnly a remote one that can hash its own files offers it.",
 			[]string{"&Ok"})
@@ -1857,6 +1875,11 @@ func actionFindDuplicates(pf *PanelsFrame) {
 	})
 
 	taskCtx = vtui.RunAsync(func(ctx *vtui.TaskContext) {
+		// The work runs on the remote host whether or not this dialog is
+		// still open, so it is listed while it lasts.
+		job := GlobalBackgroundJobs.Start("Duplicates in "+root, ctx.Cancel)
+		defer job.Finish()
+
 		lastUpdate := time.Now()
 		groups, err := finder.FindDuplicates(ctx.Context, root, func(p vfs.DuplicateProgress) {
 			now := time.Now()
@@ -1864,6 +1887,7 @@ func actionFindDuplicates(pf *PanelsFrame) {
 				return
 			}
 			lastUpdate = now
+			job.SetStatus(fmt.Sprintf("%d of %d files", p.Done, p.Total))
 			ctx.RunOnUI(func() {
 				opDlg.UpdateCounting("Hashing", p.Path, int64(p.Done), int64(p.Total))
 				vtui.FrameManager.Redraw()

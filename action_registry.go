@@ -42,6 +42,12 @@ type Action struct {
 	MenuSeparatorBefore bool
 	// Checked, when set, reports the toggle state shown in menus ("√ ").
 	Checked func() bool
+	// Visible, when set, decides whether the action appears in a menu at
+	// all. It is asked every time the menu is built, so it can depend on
+	// what the panel is showing right now: an action the current file
+	// system cannot perform is better left out than offered and refused.
+	// It does not affect key bindings, which reach the handler regardless.
+	Visible func() bool
 	Handler func() bool
 }
 
@@ -480,6 +486,7 @@ func init() {
 		Description: "Find files with identical content",
 		DescKey:     "Action.File.FindDuplicates.Desc",
 		MenuPath:    "Commands",
+		Visible:     panelCanFindDuplicates,
 		Handler:     withPF(func(pf *PanelsFrame) { actionFindDuplicates(pf) }),
 	})
 	RegisterAction(Action{
