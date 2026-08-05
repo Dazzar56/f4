@@ -534,10 +534,10 @@ func TestFishVFSScan(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, size := range map[string]int{
-		"tree/one.txt":                 100,
-		"tree/two.txt":                 250,
-		"tree/a deep dir/three.txt":    1000,
-		"loose.txt":                    7,
+		"tree/one.txt":              100,
+		"tree/two.txt":              250,
+		"tree/a deep dir/three.txt": 1000,
+		"loose.txt":                 7,
 	} {
 		if err := os.WriteFile(filepath.Join(root, name), make([]byte, size), 0644); err != nil {
 			t.Fatal(err)

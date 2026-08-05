@@ -404,6 +404,7 @@ func (v *FishVFS) Scan(ctx context.Context, basePath string, names []string, cb 
 	}
 	return total, nil
 }
+
 // PatchFile implements vfs.DeltaWriter. The copying happens on the remote
 // host at local disk speed; only the new bytes cross the network.
 func (v *FishVFS) PatchFile(ctx context.Context, src, dst string, pieces []vfs.PatchPiece) error {
