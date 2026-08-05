@@ -50,6 +50,7 @@ func actionFoldersHistory(pf *PanelsFrame) {
 	}
 
 	menu := vtui.NewVMenu(Msg("History.FoldersTitle"))
+	menu.SetHelp("HistoryFolders")
 	search := newHistorySearch(menu, h, Msg("History.FoldersHint"))
 	if activePanel := pf.getActivePanel(); activePanel != nil {
 		currentPath := activePanel.vfs.GetPath()
@@ -162,6 +163,7 @@ func actionCommandHistory(pf *PanelsFrame) {
 	}
 
 	menu := vtui.NewVMenu(Msg("History.CommandsTitle"))
+	menu.SetHelp("History")
 	search := newHistorySearch(menu, h, Msg("History.CommandsHint"))
 
 	// Shared "paste selected command" path used by Enter and mouse click.

@@ -224,6 +224,56 @@ func initHistoryTestScreen(_ *testing.T) {
 	SetDefaultF4Palette()
 }
 
+// TestActionCommandHistory_HelpTopic pins the F1 help topic name so
+// FrameManager routes to the History page instead of the generic
+// Panels topic (issue #290 follow-up).
+func TestActionCommandHistory_HelpTopic(t *testing.T) {
+	initHistoryTestScreen(t)
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(120, 40)
+
+	pf.cmdLine.Edit.History = []string{"a", "b"}
+	actionCommandHistory(pf)
+	menu := vtui.FrameManager.GetTopFrame().(*vtui.VMenu)
+	if got := menu.GetHelp(); got != "History" {
+		t.Errorf("commands help topic = %q, want %q", got, "History")
+	}
+	menu.SetExitCode(-1)
+	vtui.FrameManager.Pop()
+}
+
+func TestActionFoldersHistory_HelpTopic(t *testing.T) {
+	initHistoryTestScreen(t)
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(120, 40)
+
+	prev := vtui.GlobalHistoryProvider
+	vtui.GlobalHistoryProvider = &stubHistoryProvider{"folders": {"/tmp"}}
+	t.Cleanup(func() { vtui.GlobalHistoryProvider = prev })
+
+	actionFoldersHistory(pf)
+	menu := vtui.FrameManager.GetTopFrame().(*vtui.VMenu)
+	if got := menu.GetHelp(); got != "HistoryFolders" {
+		t.Errorf("folders help topic = %q, want %q", got, "HistoryFolders")
+	}
+	menu.SetExitCode(-1)
+	vtui.FrameManager.Pop()
+}
+
+// TestHistoryHelpTopics_LoadedInHelpEngine catches typos in the .hlf
+// entries — if either topic is missing, F1 in the dialog would render
+// an empty "topic not found" page.
+func TestHistoryHelpTopics_LoadedInHelpEngine(t *testing.T) {
+	InitHelpSystem()
+	for _, name := range []string{"History", "HistoryFolders"} {
+		if topic := vtui.GlobalHelpEngine.GetTopic(name); topic == nil {
+			t.Errorf("help topic %q not registered in engine", name)
+		}
+	}
+}
+
 // TestActionCommandHistory_MouseClickPastesEntry — clicking a menu row
 // must accept it just like Enter (VMenu.ProcessMouse fires OnAction on
 // left click, and the dialog needs to wire OnAction to the paste path).
