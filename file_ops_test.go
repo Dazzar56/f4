@@ -1846,6 +1846,7 @@ func TestRecursiveCopyClosesTheDestinationBeforeSucceeding(t *testing.T) {
 		t.Errorf("Close called %d times, want 1", dstVfs.closes)
 	}
 }
+
 type mockReadAtCloser struct{}
 
 func (m *mockReadAtCloser) ReadAt(ctx context.Context, p []byte, off int64) (n int, err error) {
