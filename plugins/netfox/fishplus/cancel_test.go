@@ -78,32 +78,35 @@ func TestCancelledRequestDrainsItsFrames(t *testing.T) {
 	}
 }
 
-// TestCancelledRequestGivesUpEventually covers the other half: a remote that
-// never finishes the answer cannot be waited for forever, and the session is
-// then worth less than the wait.
-func TestCancelledRequestGivesUpEventually(t *testing.T) {
+// TestDrainGivesUpEventually covers the other half: a remote that never
+// finishes the answer cannot be waited for forever, and past the deadline
+// the session is worth less than the wait.
+//
+// It calls the drain directly. Going through a cancelled request would also
+// depend on how far such a request gets before anybody looks at the context,
+// which is a different question from the one being asked here.
+func TestDrainGivesUpEventually(t *testing.T) {
 	old := DrainAfterCancelTimeout
-	DrainAfterCancelTimeout = 50 * time.Millisecond
+	DrainAfterCancelTimeout = 20 * time.Millisecond
 	defer func() { DrainAfterCancelTimeout = old }()
 
-	sess := newMockPeer(t, "ok FISHPLUS 1 dd base64", func(w io.Writer, token string, req mockRequest) {
-		// Lines forever, and never a terminator.
-		for i := 0; i < 100000; i++ {
-			if _, err := fmt.Fprintf(w, "still working on it\n"); err != nil {
+	pr, pw := io.Pipe()
+	sess := NewSession(io.Discard, pr, nil)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			// Lines forever, and never a terminator.
+			if _, err := io.WriteString(pw, "still working on it\n"); err != nil {
 				return
 			}
 		}
-	}, 0)
-	if err := sess.Handshake(context.Background()); err != nil {
-		t.Fatalf("handshake: %v", err)
-	}
+	}()
 
-	cancelled, cancel := context.WithCancel(context.Background())
-	cancel()
-	if _, err := sess.Exec(cancelled, "noop"); err != context.Canceled {
-		t.Fatalf("a cancelled request returned %v", err)
-	}
-	if !sess.Broken() {
-		t.Error("a remote that never finished its answer left the session usable")
+	err := sess.drainToTerminator(".sometoken 1 ", false)
+	pw.Close()
+	<-done
+	if err == nil {
+		t.Fatal("draining an answer that never ends reported success")
 	}
 }

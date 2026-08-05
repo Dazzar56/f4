@@ -223,6 +223,7 @@ type CommandRunner interface {
 	// status is not an error: the command ran and said something.
 	RunCommand(ctx context.Context, dir, command string, cb func(line string)) (int, error)
 }
+
 // DuplicateProgress reports how far a duplicate search has got. Total is how
 // many files turned out to be worth reading at all, which is known only once
 // the tree has been walked, so it is not the number of files in it.

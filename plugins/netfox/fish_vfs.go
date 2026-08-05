@@ -414,6 +414,7 @@ func (v *FishVFS) RunCommand(ctx context.Context, dir, command string, cb func(l
 	}
 	return v.client.Run(ctx, v.abs(dir), command, cb)
 }
+
 // FindDuplicates implements vfs.DuplicateFinder. Only the paths of the files
 // that turned out to be identical cross the network; the reading and the
 // hashing happen where the disk is.

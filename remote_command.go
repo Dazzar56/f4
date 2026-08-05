@@ -1,9 +1,9 @@
 package main
 
 import (
-	"context"
 	"fmt"
 
+	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 )
 
