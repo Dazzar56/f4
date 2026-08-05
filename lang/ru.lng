@@ -362,6 +362,7 @@ History.CommandsHint=Up/Down Enter Esc Shift+Del Del Ctrl+C Ctrl+Ins F2
 History.FoldersHint=Up/Down Enter Shift+Enter Ctrl+Enter Esc Shift+Del Del Ctrl+C Ctrl+Ins Ctrl+R F2
 History.ConfirmClearAll=Очистить всю историю?
 History.ConfirmPruneMissing=Удалить записи с несуществующими путями?
+Help.SearchHint=Поиск: ввод  Далее: F3/Ctrl+Enter  Назад: Shift+F3/Ctrl+Shift+Enter
 UserMenu.LocalMenuTitle=Локальное меню
 UserMenu.MainMenuTitle=Главное меню
 UserMenu.MainMenuFAR=FAR
