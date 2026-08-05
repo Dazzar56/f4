@@ -405,6 +405,15 @@ func (v *FishVFS) Scan(ctx context.Context, basePath string, names []string, cb 
 	return total, nil
 }
 
+// RunCommand implements vfs.CommandRunner. The command runs as a job, so it
+// can read stdin, print for an hour or never end without any of that
+// reaching the request stream the panel is using.
+func (v *FishVFS) RunCommand(ctx context.Context, dir, command string, cb func(line string)) (int, error) {
+	if !v.client.CanRun() {
+		return 0, fishplus.ErrNoJobs
+	}
+	return v.client.Run(ctx, v.abs(dir), command, cb)
+}
 // FindDuplicates implements vfs.DuplicateFinder. Only the paths of the files
 // that turned out to be identical cross the network; the reading and the
 // hashing happen where the disk is.

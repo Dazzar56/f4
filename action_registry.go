@@ -490,6 +490,17 @@ func init() {
 		Handler:     withPF(func(pf *PanelsFrame) { actionFindDuplicates(pf) }),
 	})
 	RegisterAction(Action{
+		Name:        "File.RunRemoteCommand",
+		Area:        "Shell",
+		Label:       "Run Command Remotely",
+		LabelKey:    "Menu.Commands.RunRemote",
+		Description: "Run a command on the host the panel is showing",
+		DescKey:     "Action.File.RunRemoteCommand.Desc",
+		MenuPath:    "Commands",
+		Visible:     panelCanRunCommand,
+		Handler:     withPF(func(pf *PanelsFrame) { actionRunRemoteCommand(pf) }),
+	})
+	RegisterAction(Action{
 		Name:        "Panel.BackgroundJobs",
 		Area:        "Shell",
 		Label:       "Background Jobs",

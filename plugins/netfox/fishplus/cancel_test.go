@@ -16,7 +16,7 @@ func TestCancelledRequestKeepsTheSession(t *testing.T) {
 	sess := newMockPeer(t, "ok FISHPLUS 1 dd base64", func(w io.Writer, token string, req mockRequest) {
 		fmt.Fprintf(w, "one line of an answer nobody is waiting for any more\n")
 		fmt.Fprintf(w, ".%s %s ok\n", token, req.ID)
-	}, 4)
+	}, 0)
 	if err := sess.Handshake(context.Background()); err != nil {
 		t.Fatalf("handshake: %v", err)
 	}
@@ -56,7 +56,7 @@ func TestCancelledRequestDrainsItsFrames(t *testing.T) {
 		fmt.Fprintf(w, "S 300\n#%d\n", len(payload))
 		w.Write(payload)
 		fmt.Fprintf(w, ".%s %s ok\n", token, req.ID)
-	}, 4)
+	}, 1)
 	if err := sess.Handshake(context.Background()); err != nil {
 		t.Fatalf("handshake: %v", err)
 	}
@@ -93,7 +93,7 @@ func TestCancelledRequestGivesUpEventually(t *testing.T) {
 				return
 			}
 		}
-	}, 4)
+	}, 0)
 	if err := sess.Handshake(context.Background()); err != nil {
 		t.Fatalf("handshake: %v", err)
 	}

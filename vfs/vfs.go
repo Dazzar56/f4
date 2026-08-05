@@ -213,6 +213,16 @@ func FindProvider(ctx context.Context, parent VFS, path string) VFSProvider {
 }
 
 // ReadAtCloser combines reader interfaces with context support.
+// CommandRunner is implemented by a file system that can run a command where
+// its files are. For a remote one that is the difference between downloading
+// a tree to grep it and asking the host a question; for a local one there is
+// nothing to implement, since a shell is already there.
+type CommandRunner interface {
+	// RunCommand runs the command line in dir and hands each line of its
+	// output to cb as it arrives, returning the exit status. A non-zero
+	// status is not an error: the command ran and said something.
+	RunCommand(ctx context.Context, dir, command string, cb func(line string)) (int, error)
+}
 // DuplicateProgress reports how far a duplicate search has got. Total is how
 // many files turned out to be worth reading at all, which is known only once
 // the tree has been walked, so it is not the number of files in it.
