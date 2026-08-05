@@ -49,6 +49,20 @@ func TestParseLsEntry(t *testing.T) {
 			want:    Entry{Name: "LICENSE.txt", Size: 18765, Mode: 0100644, Uid: 501, Gid: 20},
 		},
 		{
+			// BusyBox, which is the reason this dialect exists: it takes
+			// --full-time and nothing else that carries a year.
+			name:    "full iso without a fraction",
+			variant: "iso",
+			line:    "drwxr-xr-x 20 0 0 4096 2026-06-05 15:09:23 +0300 a dir",
+			want:    Entry{Name: "a dir", Size: 4096, Mode: 0040755},
+		},
+		{
+			name:    "full iso with a fraction",
+			variant: "iso",
+			line:    "-rw-r--r-- 1 1000 1000 12 2026-08-03 19:40:32.480954998 +0300 x.txt",
+			want:    Entry{Name: "x.txt", Size: 12, Mode: 0100644, Uid: 1000, Gid: 1000},
+		},
+		{
 			name:    "a name of nothing but spaces keeps them",
 			variant: "epoch",
 			line:    "-rw-r--r-- 1 0 0 0 1785950384    three",
@@ -87,6 +101,16 @@ func TestParseLsEntry(t *testing.T) {
 	}
 	if !e.MTime.Equal(time.Unix(1785950384, 0)) {
 		t.Errorf("MTime = %v", e.MTime)
+	}
+
+	// The iso dialect carries its zone, so it is exact too, and worth
+	// checking rather than only checking that it parsed.
+	e, err = parseLsEntry("-rw-r--r-- 1 0 0 0 2026-06-05 15:09:23 +0300 x", "iso", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := e.MTime.UTC().Format("2006-01-02T15:04:05Z"); got != "2026-06-05T12:09:23Z" {
+		t.Errorf("iso MTime = %v", got)
 	}
 
 	// The lines that are not entries have to be refused rather than turned

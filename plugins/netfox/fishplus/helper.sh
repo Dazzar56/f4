@@ -138,11 +138,33 @@ F4FMT_BSD='%p %z %m %a %c %u %g %N'
 # year on anything older than six months, and a user name can contain a
 # space. With -n the columns before the name are a fixed count, which is what
 # makes the rest of the line a name rather than a guess.
+# The dialect is decided by what came back, not by whether the command
+# succeeded. BusyBox accepts -T and prints the short format anyway, so an
+# exit status would have said "BSD timestamps" about a listing with no year
+# in it, and every date would have been wrong by up to a year.
 F4LSTIME=
-if ls -lan --time-style=+%s -d . >/dev/null 2>&1; then
- F4LSTIME=epoch
-elif ls -lanT -d . >/dev/null 2>&1; then
- F4LSTIME=bsd
+set -- `ls -lan --time-style=+%s -d . 2>/dev/null`
+if [ $# -ge 7 ]; then
+ case $6 in
+  '' | *[!0-9]* ) ;;
+  * ) F4LSTIME=epoch ;;
+ esac
+fi
+if [ -z "$F4LSTIME" ]; then
+ set -- `ls -lan --full-time -d . 2>/dev/null`
+ if [ $# -ge 9 ]; then
+  case $6 in
+   [0-9][0-9][0-9][0-9]-[0-9][0-9]-* ) F4LSTIME=iso ;;
+  esac
+ fi
+fi
+if [ -z "$F4LSTIME" ]; then
+ set -- `ls -lanT -d . 2>/dev/null`
+ if [ $# -ge 10 ]; then
+  case $9 in
+   [0-9][0-9][0-9][0-9] ) case $8 in *:*:* ) F4LSTIME=bsd ;; esac ;;
+  esac
+ fi
 fi
 
 f4_try_mode() {
@@ -158,6 +180,7 @@ f4_try_mode() {
 f4_ls() {
  case $F4LSTIME in
   epoch ) ls -lan --time-style=+%s "$@" 2>/dev/null ;;
+  iso ) ls -lan --full-time "$@" 2>/dev/null ;;
   bsd ) ls -lanT "$@" 2>/dev/null ;;
  esac
 }
@@ -318,8 +341,8 @@ f4_cmd_ffind() {
  f4_gm=$3
  f4_path
  f4_dir=$F4PATH
- if [ -z "$F4MODE" ]; then
-  f4_end err "no supported listing tool on remote host"
+ if [ -z "$F4MODE" ] || [ "$F4MODE" = ls ]; then
+  f4_end err "the remote host has no metadata backend a tree search can use"
   return
  fi
  if ! f4_num "$f4_lim" || ! f4_num "$f4_nm" || [ "$f4_nm" -lt 1 ]; then
