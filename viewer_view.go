@@ -170,7 +170,7 @@ func NewViewerView(ctx context.Context, v vfs.VFS, path string) (*ViewerView, er
 				mode = Msg("Viewer.ModeHex")
 			}
 			cpName := vfs.DisplayCodepageName(vv.Codepage)
-			return fmt.Sprintf(" %s │ %s │ %d%% ", cpName, mode, percent)
+			return fmt.Sprintf(" %s │ %s │ %d%%     ", cpName, mode, percent)
 		},
 	)
 	vv.topBar.SetVisible(true)

@@ -2361,6 +2361,7 @@ func (pf *PanelsFrame) GetKeyLabels() *vtui.KeySet {
 	area := MacroMgr.GetCurrentArea()
 
 	f2 := Msg("KeyBar.F2")
+	overrideF2 := false
 	if pf.showPanels && pf.activeIdx >= 0 && pf.activeIdx < len(pf.altPanels) {
 		if a := pf.altPanels[pf.activeIdx]; a != nil && a.IsFocused() && a.Kind() == "quick_view" {
 			if q, ok := a.(*QuickViewPanel); ok {
@@ -2369,6 +2370,7 @@ func (pf *PanelsFrame) GetKeyLabels() *vtui.KeySet {
 				} else {
 					f2 = Msg("KeyBar.F2Wrap")
 				}
+				overrideF2 = true
 			}
 		}
 	}
@@ -2388,7 +2390,11 @@ func (pf *PanelsFrame) GetKeyLabels() *vtui.KeySet {
 			Msg("KeyBar.CtrlF1"), Msg("KeyBar.CtrlF2"), Msg("KeyBar.CtrlF3"), Msg("KeyBar.CtrlF4"), Msg("KeyBar.CtrlF5"), Msg("KeyBar.CtrlF6"), Msg("KeyBar.CtrlF7"), "", "", "", "Fork", "Close",
 		},
 	}
-	return KeyBarLabelsForArea(area, fallbacks)
+	res := KeyBarLabelsForArea(area, fallbacks)
+	if overrideF2 {
+		res.Normal[1] = f2
+	}
+	return res
 }
 
 func (pf *PanelsFrame) GetType() vtui.FrameType { return vtui.TypeUser + 1 }

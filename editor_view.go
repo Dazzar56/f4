@@ -302,7 +302,7 @@ func NewEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string) *EditorVie
 		},
 		func() string {
 			cpName := vfs.DisplayCodepageName(ev.Codepage)
-			return fmt.Sprintf(" %s │ %d,%d ", cpName, ev.CursorLine+1, ev.CursorPos)
+			return fmt.Sprintf(" %s │ %d,%d     ", cpName, ev.CursorLine+1, ev.CursorPos)
 		},
 	)
 	ev.topBar.ColorIdx = ColEditorStatus
@@ -2718,23 +2718,36 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 		var newBuf *AsyncBuffer
 
 		if err == nil {
-			newBuf = NewAsyncBuffer(ctx.Context, newFile)
-			newPt = piecetable.NewWithBuffer(newBuf)
+			if ev.Codepage == 65001 {
+				newBuf = NewAsyncBuffer(ctx.Context, newFile)
+				newPt = piecetable.NewWithBuffer(newBuf)
+			} else {
+				size := newFile.Size()
+				fullData := make([]byte, size)
+				_, _ = newFile.ReadAt(ctx.Context, fullData, 0)
+				decoded, errDec := vfs.DecodeBytes(fullData, ev.Codepage)
+				if errDec != nil {
+					decoded = fullData
+				}
+				newPt = piecetable.New(decoded)
+			}
 			// Reuse the existing LineIndex since the logical content is identical
 			newEngine = textlayout.NewWrapEngine(newPt, ev.li)
 		}
 
 		// PRELOAD CACHE TO PREVENT SCREEN FLICKER
 		// This MUST be outside RunOnUI to prevent blocking the main thread for 500ms.
-		for i := 0; i < 50; i++ { // max 500ms
-			if ctx.Err() != nil {
-				break
+		if newBuf != nil {
+			for i := 0; i < 50; i++ { // max 500ms
+				if ctx.Err() != nil {
+					break
+				}
+				_, e := newBuf.Read(visStart, 4096)
+				if e != piecetable.ErrLoading {
+					break
+				}
+				time.Sleep(10 * time.Millisecond)
 			}
-			_, e := newBuf.Read(visStart, 4096)
-			if e != piecetable.ErrLoading {
-				break
-			}
-			time.Sleep(10 * time.Millisecond)
 		}
 
 		ctx.RunOnUI(func() {
