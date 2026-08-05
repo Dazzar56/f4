@@ -525,3 +525,56 @@ func TestFishVFSLineIndex(t *testing.T) {
 		t.Error("FishVFS does not satisfy vfs.LineIndexer")
 	}
 }
+func TestFishVFSFindFiles(t *testing.T) {
+	v := newLocalFishVFS(t)
+	ctx := context.Background()
+
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "nested dir"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "top.txt"), []byte("needle here\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "nested dir", "deep.txt"), []byte("nothing\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	hits, err := v.FindFiles(ctx, root, vfs.FindQuery{Masks: []string{"*.txt"}})
+	if err != nil {
+		t.Fatalf("FindFiles: %v", err)
+	}
+	if len(hits) != 2 {
+		t.Fatalf("found %d files, want 2: %+v", len(hits), hits)
+	}
+	byName := map[string]vfs.FoundEntry{}
+	for _, hit := range hits {
+		byName[hit.Item.Name] = hit
+	}
+	deep, ok := byName["deep.txt"]
+	if !ok {
+		t.Fatal("the nested file was not found")
+	}
+	if !strings.HasPrefix(deep.Path, root) || !strings.HasSuffix(deep.Path, "deep.txt") {
+		t.Errorf("Path = %q, want a full path below %q", deep.Path, root)
+	}
+	if !deep.Item.IsExecutable || deep.Item.IsDir {
+		t.Errorf("nested file mapped wrong: %+v", deep.Item)
+	}
+
+	if !v.Client().CanGrep() {
+		t.Skip("no remote grep on this host")
+	}
+	hits, err = v.FindFiles(ctx, root, vfs.FindQuery{Masks: []string{"*"}, Text: "NEEDLE", IgnoreCase: true})
+	if err != nil {
+		t.Fatalf("FindFiles with a pattern: %v", err)
+	}
+	if len(hits) != 1 || hits[0].Item.Name != "top.txt" {
+		t.Errorf("content search returned %+v, want top.txt alone", hits)
+	}
+
+	// The VFS is a vfs.FileFinder, which is what the search asserts for.
+	if _, ok := interface{}(v).(vfs.FileFinder); !ok {
+		t.Error("FishVFS does not satisfy vfs.FileFinder")
+	}
+}

@@ -302,6 +302,46 @@ func (v *FishVFS) Search(ctx context.Context, p, pattern string) (chan int64, er
 	return out, nil
 }
 
+// FindFiles implements vfs.FileFinder. The remote host walks the tree and,
+// when a content pattern is given, greps the candidates in the same pass, so
+// what crosses the network is one request and one line per hit.
+//
+// A symlink is reported as found without resolving it: the alternative is a
+// round trip per hit, which would give back what the whole command saves.
+func (v *FishVFS) FindFiles(ctx context.Context, dir string, q vfs.FindQuery) ([]vfs.FoundEntry, error) {
+	entries, err := v.client.Find(ctx, v.abs(dir), fishplus.FindOptions{
+		Masks:      q.Masks,
+		Text:       q.Text,
+		Fixed:      true,
+		IgnoreCase: q.IgnoreCase,
+		Limit:      q.Limit,
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]vfs.FoundEntry, 0, len(entries))
+	for _, e := range entries {
+		name := path.Base(e.Name)
+		out = append(out, vfs.FoundEntry{
+			Path: e.Name,
+			Item: vfs.VFSItem{
+				Name:         name,
+				Size:         e.Size,
+				IsDir:        e.IsDir(),
+				MTime:        e.MTime,
+				ATime:        e.ATime,
+				IsExecutable: e.IsExecutable(),
+				IsHidden:     strings.HasPrefix(name, "."),
+				IsSymlink:    e.IsSymlink(),
+				UnixMode:     e.Mode,
+				Uid:          e.Uid,
+				Gid:          e.Gid,
+			},
+		})
+	}
+	return out, nil
+}
+
 // LineIndex implements vfs.LineIndexer. A count of zero asks for nothing but
 // the total, which is one remote pass and three numbers on the wire.
 func (v *FishVFS) LineIndex(ctx context.Context, p string, first, count int64) (vfs.LineIndexResult, error) {

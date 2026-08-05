@@ -213,6 +213,34 @@ func FindProvider(ctx context.Context, parent VFS, path string) VFSProvider {
 }
 
 // ReadAtCloser combines reader interfaces with context support.
+// FoundEntry is one hit of a tree search.
+type FoundEntry struct {
+	// Path is the full path of the file, in the file system's own notation.
+	Path string
+	// Item describes it the way a listing would.
+	Item VFSItem
+}
+
+// FindQuery describes a tree search.
+type FindQuery struct {
+	// Masks are shell globs matched against the file name; at least one.
+	Masks []string
+	// Text, when set, keeps only files containing it as a plain string.
+	Text string
+	// IgnoreCase folds case for Text.
+	IgnoreCase bool
+	// Limit caps the number of hits; zero leaves it to the file system.
+	Limit int
+}
+
+// FileFinder is implemented by a file system that can walk a tree on its own
+// side. Like LineIndexer it is an optional interface: a local file system is
+// no faster for it, so only the ones that gain from it carry it, and a
+// caller that does not find it walks the tree itself as before.
+type FileFinder interface {
+	FindFiles(ctx context.Context, dir string, q FindQuery) ([]FoundEntry, error)
+}
+
 // LineIndexResult is what a LineIndexer answers with.
 type LineIndexResult struct {
 	// First is the one-based number of the line Offsets[0] belongs to.

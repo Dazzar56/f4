@@ -213,3 +213,122 @@ func TestLinesAgainstLocalShell(t *testing.T) {
 		t.Fatalf("session out of sync after lidx: %q %v", got, err)
 	}
 }
+
+func findNames(t *testing.T, entries []Entry, root string) []string {
+	t.Helper()
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		rel, err := filepath.Rel(root, e.Name)
+		if err != nil {
+			t.Fatalf("hit %q is not below %q", e.Name, root)
+		}
+		names = append(names, rel)
+	}
+	sort.Strings(names)
+	return names
+}
+
+func TestFindAgainstLocalShell(t *testing.T) {
+	c := newLocalShellClient(t)
+	ctx := context.Background()
+	root := t.TempDir()
+
+	if err := os.MkdirAll(filepath.Join(root, "sub dir", "deeper"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"a.txt":                "hello world\n",
+		"b.txt":                "nothing here\n",
+		"c.log":                "HELLO again\n",
+		"sub dir/deeper/d.txt": "hello nested\n",
+		"sub dir/skip me.bin":  "hello binary\n",
+	}
+	for name, body := range files {
+		if err := os.WriteFile(filepath.Join(root, name), []byte(body), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for _, mode := range ListingModes {
+		if err := c.SetListingMode(ctx, mode); err != nil {
+			t.Logf("listing backend %q unavailable here: %v", mode, err)
+			continue
+		}
+		t.Run(mode, func(t *testing.T) {
+			hits, err := c.Find(ctx, root, FindOptions{Masks: []string{"*.txt"}})
+			if err != nil {
+				t.Fatalf("find by mask: %v", err)
+			}
+			got := findNames(t, hits, root)
+			want := []string{"a.txt", "b.txt", filepath.Join("sub dir", "deeper", "d.txt")}
+			if !reflect.DeepEqual(got, want) {
+				t.Errorf("mask search found %v, want %v", got, want)
+			}
+			for _, e := range hits {
+				if e.Size <= 0 || e.MTime.IsZero() {
+					t.Errorf("hit %q came back without metadata: %+v", e.Name, e)
+				}
+			}
+
+			hits, err = c.Find(ctx, root, FindOptions{Masks: []string{"*.log", "*.bin"}})
+			if err != nil {
+				t.Fatalf("find by two masks: %v", err)
+			}
+			got = findNames(t, hits, root)
+			want = []string{"c.log", filepath.Join("sub dir", "skip me.bin")}
+			if !reflect.DeepEqual(got, want) {
+				t.Errorf("two mask search found %v, want %v", got, want)
+			}
+
+			if !c.CanGrep() {
+				t.Skip("no remote grep on this host")
+			}
+
+			hits, err = c.Find(ctx, root, FindOptions{
+				Masks: []string{"*"}, Text: "hello", Fixed: true, IgnoreCase: true,
+			})
+			if err != nil {
+				t.Fatalf("content search: %v", err)
+			}
+			got = findNames(t, hits, root)
+			want = []string{
+				"a.txt", "c.log",
+				filepath.Join("sub dir", "deeper", "d.txt"),
+				filepath.Join("sub dir", "skip me.bin"),
+			}
+			if !reflect.DeepEqual(got, want) {
+				t.Errorf("content search found %v, want %v", got, want)
+			}
+
+			hits, err = c.Find(ctx, root, FindOptions{
+				Masks: []string{"*"}, Text: "HELLO", Fixed: true,
+			})
+			if err != nil {
+				t.Fatalf("case sensitive search: %v", err)
+			}
+			if got = findNames(t, hits, root); !reflect.DeepEqual(got, []string{"c.log"}) {
+				t.Errorf("case sensitive search found %v, want [c.log]", got)
+			}
+
+			hits, err = c.Find(ctx, root, FindOptions{Masks: []string{"*"}, Limit: 2})
+			if err != nil {
+				t.Fatalf("limited search: %v", err)
+			}
+			if len(hits) != 2 {
+				t.Errorf("a limit of 2 returned %d hits", len(hits))
+			}
+		})
+	}
+
+	if _, err := c.Find(ctx, root, FindOptions{}); err == nil {
+		t.Error("a search without a mask was accepted")
+	}
+	if _, err := c.Find(ctx, filepath.Join(root, "a.txt"), FindOptions{Masks: []string{"*"}}); err == nil {
+		t.Error("a regular file was accepted as a search root")
+	}
+	// A desynchronized stream is what a variable number of path lines is
+	// most likely to cause, so make sure the session still answers.
+	if err := c.Session().Noop(ctx); err != nil {
+		t.Fatalf("session out of sync after the searches: %v", err)
+	}
+}

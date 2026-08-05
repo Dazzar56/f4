@@ -88,6 +88,82 @@ func (c *Client) Grep(ctx context.Context, p, pattern string, opts GrepOptions) 
 	return offsets, nil
 }
 
+// MaxFindResults caps how many hits one tree search brings back. Nobody
+// scrolls through more, and the remote host stops walking once it has them.
+const MaxFindResults = 10000
+
+// ErrNoFind is returned when the remote host has no listing backend at all,
+// so it cannot describe what it found even if it found it.
+var ErrNoFind = errors.New("fishplus: the remote host cannot search a tree")
+
+// FindOptions describes a tree search: which names to match, and optionally
+// what the file has to contain.
+type FindOptions struct {
+	// Masks are shell globs matched against the file name, as find's -name
+	// does it. At least one is required.
+	Masks []string
+	// Text, when set, keeps only files containing it.
+	Text string
+	// Fixed treats Text as a plain string rather than a regular expression.
+	Fixed bool
+	// IgnoreCase folds case for Text.
+	IgnoreCase bool
+	// Limit caps the number of hits; zero means MaxFindResults.
+	Limit int
+}
+
+// CanFind reports whether the remote host can walk a tree for us. Anything
+// that can list a directory can, since the walking is find's job.
+func (c *Client) CanFind() bool { return c.sess.Features().ListingMode() != "" }
+
+// Find walks a whole tree on the remote host and returns one entry per hit,
+// with the full path in Entry.Name. A content search runs as a remote grep
+// inside the same find, so a candidate is never downloaded just to be
+// rejected — which is the difference between searching a remote source tree
+// and waiting for it to arrive.
+func (c *Client) Find(ctx context.Context, dir string, opts FindOptions) ([]Entry, error) {
+	masks := make([]string, 0, len(opts.Masks))
+	for _, m := range opts.Masks {
+		if m != "" {
+			masks = append(masks, m)
+		}
+	}
+	if len(masks) == 0 {
+		return nil, errors.New("fishplus: find needs at least one mask")
+	}
+	if !c.CanFind() {
+		return nil, ErrNoFind
+	}
+	if opts.Text != "" && !c.CanGrep() {
+		return nil, ErrNoGrep
+	}
+	limit := opts.Limit
+	if limit <= 0 || limit > MaxFindResults {
+		limit = MaxFindResults
+	}
+
+	gmode := "-"
+	paths := append([]string{dir}, masks...)
+	if opts.Text != "" {
+		gmode = GrepOptions{Fixed: opts.Fixed, IgnoreCase: opts.IgnoreCase}.mode()
+		paths = append(paths, opts.Text)
+	}
+
+	resp, err := c.sess.ExecPaths(ctx, "ffind", paths,
+		strconv.Itoa(limit), strconv.Itoa(len(masks)), gmode)
+	if err != nil {
+		return nil, err
+	}
+	if err := resp.Err("ffind " + dir); err != nil {
+		return nil, err
+	}
+	_, entries, err := ParseListing(resp.Lines)
+	if err != nil {
+		return nil, err
+	}
+	return entries, nil
+}
+
 // LineIndex is what the remote host knows about the line structure of a file
 // after one pass over it: where the requested lines start, and how many
 // there are in total.

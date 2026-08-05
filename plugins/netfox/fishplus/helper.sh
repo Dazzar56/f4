@@ -232,6 +232,79 @@ f4_list() {
   statbsd ) stat -f "$F4FMT_BSD" -- "$F4PATH"/* "$F4PATH"/.* 2>/dev/null ;;
  esac
 }
+# ffind <limit> <nmasks> <grep mode>: walk a whole tree on this side and
+# report every file whose name matches one of the masks, in the same format
+# a listing uses, with the full path in place of the name. With a grep mode
+# other than "-" a pattern line follows the masks and only files containing
+# it are reported, so one request replaces a directory round trip per level
+# plus a download per candidate.
+F4FMT_FINDP='%y %Y %s %T@ %A@ %C@ %m %U %G %p\n'
+
+f4_cmd_ffind() {
+ f4_lim=$1
+ f4_nm=$2
+ f4_gm=$3
+ f4_path
+ f4_dir=$F4PATH
+ if [ -z "$F4MODE" ]; then
+  f4_end err "no supported listing tool on remote host"
+  return
+ fi
+ if ! f4_num "$f4_lim" || ! f4_num "$f4_nm" || [ "$f4_nm" -lt 1 ]; then
+  f4_end err "bad search request"
+  return
+ fi
+ set --
+ f4_i=0
+ while [ "$f4_i" -lt "$f4_nm" ]; do
+  f4_path
+  if [ "$f4_i" -eq 0 ]; then
+   set -- -name "$F4PATH"
+  else
+   set -- "$@" -o -name "$F4PATH"
+  fi
+  f4_i=$(( f4_i + 1 ))
+ done
+ f4_pat=
+ f4_go=
+ case $f4_gm in
+  - ) ;;
+  *[!fie]* ) f4_end err "bad grep mode"; return ;;
+  * )
+   f4_path
+   f4_pat=$F4PATH
+   if [ -z "$f4_pat" ]; then
+    f4_end err "empty search pattern"
+    return
+   fi
+   if ! f4_have grep; then
+    f4_end err "no grep on remote host"
+    return
+   fi
+   case $f4_gm in *f* ) f4_go="$f4_go -F" ;; esac
+   case $f4_gm in *i* ) f4_go="$f4_go -i" ;; esac
+   ;;
+ esac
+ if [ ! -d "$f4_dir" ]; then
+  f4_end err "not a directory"
+  return
+ fi
+ echo "M $F4MODE"
+ if [ -n "$f4_pat" ]; then
+  case $F4MODE in
+   find ) find -H "$f4_dir" ! -type d \( "$@" \) -exec grep $f4_go -q -e "$f4_pat" {} \; -printf "$F4FMT_FINDP" 2>/dev/null ;;
+   stat ) find -H "$f4_dir" ! -type d \( "$@" \) -exec grep $f4_go -q -e "$f4_pat" {} \; -exec stat -c "$F4FMT_STAT" -- {} + 2>/dev/null ;;
+   statbsd ) find -H "$f4_dir" ! -type d \( "$@" \) -exec grep $f4_go -q -e "$f4_pat" {} \; -exec stat -f "$F4FMT_BSD" -- {} + 2>/dev/null ;;
+  esac
+ else
+  case $F4MODE in
+   find ) find -H "$f4_dir" ! -type d \( "$@" \) -printf "$F4FMT_FINDP" 2>/dev/null ;;
+   stat ) find -H "$f4_dir" ! -type d \( "$@" \) -exec stat -c "$F4FMT_STAT" -- {} + 2>/dev/null ;;
+   statbsd ) find -H "$f4_dir" ! -type d \( "$@" \) -exec stat -f "$F4FMT_BSD" -- {} + 2>/dev/null ;;
+  esac
+ fi | head -n "$f4_lim"
+ f4_end ok
+}
 
 # f4_size follows symlinks, like the read command it serves, and falls back
 # to counting bytes when there is no metadata backend at all.
@@ -767,6 +840,9 @@ while :; do
    ;;
   lidx )
    f4_cmd_lidx "$F4A1" "$F4A2"
+   ;;
+  ffind )
+   f4_cmd_ffind "$F4A1" "$F4A2" "$F4A3"
    ;;
   chown )
    f4_cmd_chown "$F4A1" "$F4A2"
