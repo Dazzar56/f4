@@ -58,11 +58,18 @@ func newMockPeer(t *testing.T, banner string, handle func(w io.Writer, token str
 	sess := NewSession(cliW, cliR, nil)
 
 	reqs := make(chan mockRequest, 32)
+	uploaded := make(chan struct{})
+	var uploadedOnce sync.Once
 	go func() {
 		defer close(reqs)
 		sc := bufio.NewScanner(peerR)
 		sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 		for sc.Scan() {
+			if sc.Text() == HelperEndMarker {
+				// The helper is in; a real shell would start it now.
+				uploadedOnce.Do(func() { close(uploaded) })
+				continue
+			}
 			fields := strings.Fields(sc.Text())
 			if len(fields) < 2 {
 				continue
@@ -80,6 +87,10 @@ func newMockPeer(t *testing.T, banner string, handle func(w io.Writer, token str
 	go func() {
 		if banner != "" {
 			fmt.Fprintf(peerW, "Last login: never, this host is a fake\n")
+			// The bootstrap announces itself, takes the script, and only
+			// then does the helper get to speak.
+			fmt.Fprintf(peerW, "%s\n", ReadyMarker(sess.Token()))
+			<-uploaded
 			fmt.Fprintf(peerW, ".%s 0 %s\n", sess.Token(), banner)
 		}
 		for req := range reqs {

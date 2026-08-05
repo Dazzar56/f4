@@ -43,7 +43,11 @@ The helper script and the wire format are written from scratch for f4 (BSD-3-Cla
 
 ### Session bootstrap
 
-The client starts a plain POSIX shell on the remote host, writes the compacted helper script into its stdin and then keeps talking over that very same pair of streams. When the client closes its side, the helper's `read` hits EOF and the remote shell exits on its own — no farewell command is needed, so a hung remote can never block the UI thread.
+The client starts a plain POSIX shell on the remote host and then keeps talking over that very same pair of streams. When the client closes its side, the helper's `read` hits EOF and the remote shell exits on its own — no farewell command is needed, so a hung remote can never block the UI thread.
+
+Getting the helper there takes two steps, and the reason is worth writing down. A shell parses its script from the same stream the requests arrive on, and it does not read that stream a byte at a time: `dash` fills a buffer, and whatever lands in the buffer past the end of the script is parsed as part of it. Send the script and a request together and the request is executed as a shell command — `1: not found` — while the client waits forever for an answer. `bash` reads byte by byte and never showed this, so with `/bin/sh` linked to `bash` everything looked fine; with `dash`, which is `/bin/sh` on Debian and Ubuntu, it was a race that the network usually won and a fast link would not.
+
+So the script is not parsed off the stream at all. What the shell parses is one line, the bootstrap, which prints a marker and then reads the script in through the shell's own `read` builtin, ending at `F4EOF`, and `eval`s it. `read` takes its bytes from the file descriptor and cannot run ahead of itself. The client sends that line, waits for the marker, and only then sends the script, so nothing is ever in flight while the parser is working. The marker carries the session token and is printed in two pieces, `F4R"DY"`, so that a terminal echoing the line back cannot be mistaken for the shell answering.
 
 A shell that ended up on a pseudo terminal needs one more step. A terminal echoes back everything it is fed, turns every `\n` on the way out into `\r\n` — which destroys binary frames — and in canonical mode truncates an input line at a few kilobytes, which would cut off a long path. So the helper checks whether its stdin is a terminal and, if it is, puts it into a transparent mode with POSIX `stty` operands only, announcing `tty` among its features. A client whose transport is a terminal and which does not see `tty` in the banner must treat binary payload as unsafe.
 
@@ -93,6 +97,7 @@ Everything printed before that line (motd, shell warnings, login banners) is dis
 *   `read <offset> <length>` + path — a byte range, `length` zero meaning "to the end of the file".
 *   `write <offset> <length> raw|b64` + path + payload — the same range in the other direction; the payload follows the path line and is described below.
 *   `trunc <size>` + path — sets the size of a file, creating an empty one where there was none.
+*   `patch <nsegs> raw|b64` + two paths + one line per segment — builds the second path out of ranges of the first and of new bytes, the literals following their descriptors.
 *   `mkdir` + path — creates a directory and its missing parents.
 *   `rm`, `rmdir`, `rmtree` + path — a file, an empty directory, a whole tree.
 *   `mv` + two paths — the first command that reads more than one path line.
@@ -223,7 +228,11 @@ The pass is a full one — awk cannot know where line N starts without counting 
 
 *   **Step 7e — go to line.** Alt+F8 in the viewer asks for a line number and `ViewerBackend.LineStart` finds it: through `vfs.LineIndexer` where the file system has one, by scanning otherwise. In hex mode the same key asks for a byte offset instead, which needs no counting. The scan reads through the file handle rather than the cache, so walking a file does not evict the window the viewer is drawing from.
 
+*   **Step 8a — the patch command.** `patch` assembles a file from `S <off> <len>` ranges of an existing one, copied at local disk speed on the remote host, and `D <len>` literals that follow their descriptor on the wire. A one byte change in a hundred megabyte file therefore costs one byte of traffic. `Client.Patch` splits oversized literals into chunks and, like a write, tells a refusal that drained its payload from a failure that could not. The result is written forward into a second path, which is why source and destination may not be the same file.
+
 ### To do
+
+*   **Step 8b — the editor on top of it.** Turning `PieceTable.GetState().Pieces` into patch segments and using them in `SaveToFile`, which already writes to `.f4tmp` and renames. Only for a file loaded as UTF-8: with any other codepage the buffer is decoded text and its pieces no longer describe ranges of the file on disk.
 
 The order below is chosen so that something usable arrives as early as possible: after step 4 a user can already browse, view and download.
 

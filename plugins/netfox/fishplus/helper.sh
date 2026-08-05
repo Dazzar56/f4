@@ -547,6 +547,92 @@ f4_cmd_write() {
  esac
 }
 
+# patch <nsegs> raw|b64: build <dst> out of pieces of <src> and of new bytes.
+# Each segment is a line of its own: "S <off> <len>" copies from the original
+# on this side, where it costs no network at all, and "D <len>" is followed by
+# that many new bytes -- one base64 line in b64 encoding. Saving a one byte
+# change in a hundred megabyte file therefore puts one byte on the wire.
+f4_pcopy() {
+ case $F4WR in
+  ddbytes ) dd bs=1048576 iflag=fullblock,count_bytes count="$1" 2>/dev/null >> "$f4_pdst" ;;
+  * ) dd bs=1 count="$1" 2>/dev/null >> "$f4_pdst" ;;
+ esac
+}
+
+f4_cmd_patch() {
+ f4_path
+ f4_psrc=$F4PATH
+ f4_path
+ f4_pdst=$F4PATH
+ case $2 in
+  raw | b64 ) ;;
+  * ) f4_end err "bad payload encoding"; return ;;
+ esac
+ if ! f4_num "$1"; then
+  f4_end err "bad segment count"
+  return
+ fi
+ f4_perr=
+ f4_pmade=
+ if [ -z "$F4WR" ]; then
+  f4_perr="no way to write files on remote host"
+ elif ! f4_safe_target "$f4_pdst"; then
+  f4_perr="unsafe path: must be absolute and free of .. components"
+ elif [ -d "$f4_pdst" ]; then
+  f4_perr="is a directory"
+ elif [ ! -f "$f4_psrc" ] || [ ! -r "$f4_psrc" ]; then
+  f4_perr="cannot read the original file"
+ elif F4OUT=$({ : > "$f4_pdst"; } 2>&1); then
+  f4_pmade=1
+ else
+  f4_perr=$(f4_flat "$F4OUT")
+ fi
+ f4_i=0
+ while [ "$f4_i" -lt "$1" ]; do
+  IFS=' ' read -r f4_k f4_a f4_b || exit
+  f4_i=$(( f4_i + 1 ))
+  case $f4_k in
+   S )
+    if ! f4_num "$f4_a" || ! f4_num "$f4_b"; then
+     f4_perr=${f4_perr:-bad segment}
+     continue
+    fi
+    [ -n "$f4_perr" ] && continue
+    f4_bs "$f4_a" "$f4_b"
+    dd if="$f4_psrc" bs=$F4BS skip=$(( f4_a / F4BS )) count=$(( f4_b / F4BS )) 2>/dev/null >> "$f4_pdst" || f4_perr="copying from the original failed"
+    ;;
+   D )
+    if ! f4_num "$f4_a"; then
+     [ -n "$f4_pmade" ] && rm -f "$f4_pdst" 2>/dev/null
+     f4_end err "bad segment length"
+     return
+    fi
+    if [ "$2" = b64 ]; then
+     IFS= read -r F4B64 || exit
+     if [ -z "$f4_perr" ]; then
+      printf '%s\n' "$F4B64" | $F4DEC >> "$f4_pdst" || f4_perr="writing failed"
+     fi
+    elif [ -n "$f4_perr" ]; then
+     f4_drain "$f4_a"
+    else
+     f4_pcopy "$f4_a" || f4_perr="writing failed"
+    fi
+    ;;
+   * )
+    [ -n "$f4_pmade" ] && rm -f "$f4_pdst" 2>/dev/null
+    f4_end err "bad segment"
+    return
+    ;;
+  esac
+ done
+ echo D
+ if [ -n "$f4_perr" ]; then
+  [ -n "$f4_pmade" ] && rm -f "$f4_pdst" 2>/dev/null
+  f4_end err "$f4_perr"
+ else
+  f4_end ok
+ fi
+}
 # trunc <size>: size zero is a plain shell redirection and therefore works
 # everywhere, including on a file that is not there yet; any other size needs
 # the truncate utility, which is what the "truncate" feature stands for.
@@ -831,6 +917,9 @@ while :; do
    ;;
   trunc )
    f4_cmd_trunc "$F4A1"
+   ;;
+  patch )
+   f4_cmd_patch "$F4A1" "$F4A2"
    ;;
   utime )
    f4_cmd_utime "$F4A1" "$F4A2"

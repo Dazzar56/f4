@@ -116,14 +116,20 @@ func TestParseFoundListingKeepsFullPaths(t *testing.T) {
 			t.Errorf("%s: Size = %d, want 12", tc.mode, entries[0].Size)
 		}
 
-		// The listing parser must keep reducing it, or every panel would
-		// start showing full paths in its name column.
+		// The stat backends print the path they were handed, so the listing
+		// parser has to reduce it or every panel would show full paths in
+		// its name column. The find backend is exempt: a listing there is
+		// printed with %f, which is the bare name to begin with, and only a
+		// search asks for %p.
+		if tc.mode == "find" {
+			continue
+		}
 		_, entries, err = ParseListing([]string{"M " + tc.mode, tc.line})
 		if err != nil {
 			t.Fatalf("%s: %v", tc.mode, err)
 		}
 		if len(entries) != 1 || entries[0].Name != "b.txt" {
-			t.Errorf("%s: listing Name = %+v, want b.txt", entries, tc.mode)
+			t.Errorf("%s: listing Name = %+v, want b.txt", tc.mode, entries)
 		}
 	}
 }

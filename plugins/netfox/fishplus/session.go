@@ -163,7 +163,14 @@ func (s *Session) Handshake(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if _, err := io.WriteString(s.w, HelperScript(s.token)); err != nil {
+	if _, err := io.WriteString(s.w, BootstrapLine(s.token)); err != nil {
+		s.broken = true
+		return err
+	}
+	if err := s.waitForReady(ctx); err != nil {
+		return err
+	}
+	if _, err := io.WriteString(s.w, HelperScript(s.token)+HelperEndMarker+"\n"); err != nil {
 		s.broken = true
 		return err
 	}
@@ -206,6 +213,33 @@ func parseBanner(msg string) (Features, error) {
 		feats.names[name] = true
 	}
 	return feats, nil
+}
+
+// maxBootstrapLines bounds how much login noise is skipped while waiting
+// for the shell to report itself ready. A motd is long; it is not endless.
+const maxBootstrapLines = 1000
+
+// waitForReady consumes whatever the login printed until the bootstrap says
+// it is running. Sending the helper before that is what the whole two step
+// upload exists to avoid.
+func (s *Session) waitForReady(ctx context.Context) error {
+	marker := ReadyMarker(s.token)
+	for i := 0; i < maxBootstrapLines; i++ {
+		if err := ctx.Err(); err != nil {
+			s.broken = true
+			return err
+		}
+		line, err := s.readLine()
+		if err != nil {
+			s.broken = true
+			return err
+		}
+		if strings.Contains(line, marker) {
+			return nil
+		}
+	}
+	s.broken = true
+	return fmt.Errorf("fishplus: the remote shell never reported being ready")
 }
 
 // Exec runs a command that takes only short tokens as arguments. A token
@@ -255,7 +289,15 @@ func EncodePathLine(p string) string {
 // remote helper can consume with the shell alone and which therefore stays
 // exact on hosts whose dd cannot stop on a byte boundary.
 func (s *Session) ExecPayload(ctx context.Context, cmd string, paths, args []string, payload []byte, encoded bool) (*Response, error) {
-	return s.execFull(ctx, false, cmd, args, paths, payload, encoded)
+	return s.execFull(ctx, false, cmd, args, paths, payload, encoded, nil)
+}
+
+// ExecStream runs a command whose request body the caller writes itself,
+// after the path lines and before the answer is read. A command whose
+// payload is interleaved with descriptions of it cannot be handed over as
+// one slice, which is what patch needs.
+func (s *Session) ExecStream(ctx context.Context, cmd string, paths, args []string, body func(w io.Writer) error) (*Response, error) {
+	return s.execFull(ctx, false, cmd, args, paths, nil, false, body)
 }
 
 // MarkBroken poisons the session after the caller found out, by means the
@@ -268,10 +310,10 @@ func (s *Session) MarkBroken() {
 }
 
 func (s *Session) exec(ctx context.Context, binary bool, cmd string, args, paths []string) (*Response, error) {
-	return s.execFull(ctx, binary, cmd, args, paths, nil, false)
+	return s.execFull(ctx, binary, cmd, args, paths, nil, false, nil)
 }
 
-func (s *Session) execFull(ctx context.Context, binary bool, cmd string, args, paths []string, payload []byte, encoded bool) (*Response, error) {
+func (s *Session) execFull(ctx context.Context, binary bool, cmd string, args, paths []string, payload []byte, encoded bool, body func(w io.Writer) error) (*Response, error) {
 	if cmd == "" || strings.ContainsAny(cmd, " \t\r\n") {
 		return nil, fmt.Errorf("fishplus: invalid command %q", cmd)
 	}
@@ -320,6 +362,14 @@ func (s *Session) execFull(ctx context.Context, binary bool, cmd string, args, p
 		// a stray newline here would end up at the head of the next
 		// request.
 		if _, err := s.w.Write(payload); err != nil {
+			s.broken = true
+			return nil, err
+		}
+	}
+	if body != nil {
+		// A body that stops halfway leaves the remote host waiting for
+		// bytes that will never come, so there is no recovering the stream.
+		if err := body(s.w); err != nil {
 			s.broken = true
 			return nil, err
 		}
