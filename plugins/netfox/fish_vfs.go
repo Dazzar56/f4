@@ -293,6 +293,7 @@ func NewFishVFS(parent vfs.VFS, host, port, user, pass string, timeout int) (*Fi
 // Client exposes the underlying protocol client, mostly so a caller can ask
 // what the remote host turned out to be capable of.
 func (v *FishVFS) Client() *fishplus.Client { return v.client }
+
 // CanReconnect reports whether this file system can rebuild its session. A
 // site opened from a configuration can; one handed a pair of streams cannot,
 // because there is no second pair. A caller offering the user a choice has to
