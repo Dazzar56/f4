@@ -123,6 +123,13 @@ func (s *historySearch) deleteSelected() bool {
 	return true
 }
 
+// setItems replaces the full item list (used by the "clear all" and
+// "remove missing paths" hotkeys) and re-applies the active filter.
+func (s *historySearch) setItems(items []string) {
+	s.all = append([]string(nil), items...)
+	s.applyFilter()
+}
+
 func (s *historySearch) processKey(e *vtinput.InputEvent) bool {
 	if !e.KeyDown {
 		return false
