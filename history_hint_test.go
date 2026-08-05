@@ -213,6 +213,147 @@ func TestActionCommandHistory_Del_CancelKeepsHistory(t *testing.T) {
 	}
 }
 
+// initHistoryTestScreen sets up a fully-sized SilentScreenBuf for a test —
+// historySearch.resize() bails out early when the FrameManager screen has
+// zero width, which leaves the underlying VMenu without geometry and
+// makes mouse-click coordinates land nowhere.
+func initHistoryTestScreen(_ *testing.T) {
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(120, 40)
+	vtui.FrameManager.Init(scr)
+	SetDefaultF4Palette()
+}
+
+// TestActionCommandHistory_MouseClickPastesEntry — clicking a menu row
+// must accept it just like Enter (VMenu.ProcessMouse fires OnAction on
+// left click, and the dialog needs to wire OnAction to the paste path).
+func TestActionCommandHistory_MouseClickPastesEntry(t *testing.T) {
+	initHistoryTestScreen(t)
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(120, 40)
+
+	// History convention: [0] is newest. historySearch shows oldest at the
+	// top and newest at the bottom, so bottom-row = "echo newest".
+	pf.cmdLine.Edit.History = []string{"echo newest", "echo oldest"}
+	actionCommandHistory(pf)
+	menu := vtui.FrameManager.GetTopFrame().(*vtui.VMenu)
+	x1, y1, _, _ := menu.GetPosition()
+	if menu.SelectPos != 1 {
+		t.Fatalf("test invariant: SelectPos=%d, expected 1 (newest at bottom row)", menu.SelectPos)
+	}
+	rowY := y1 + 1 + (menu.SelectPos - menu.TopPos) // menu content starts 1 row below the top border
+
+	menu.ProcessMouse(&vtinput.InputEvent{
+		Type:        vtinput.MouseEventType,
+		KeyDown:     true,
+		MouseX:      int16(x1 + 2),
+		MouseY:      int16(rowY),
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+	})
+
+	if got := pf.cmdLine.Edit.GetText(); got != "echo newest" {
+		t.Errorf("cmdline after click = %q, want %q", got, "echo newest")
+	}
+	if !menu.IsDone() {
+		t.Error("menu should be closed after click accept")
+	}
+}
+
+// TestActionFoldersHistory_MouseClickNavigates guards the folder-history
+// counterpart: click on a row must cd to that path on the active panel.
+func TestActionFoldersHistory_MouseClickNavigates(t *testing.T) {
+	initHistoryTestScreen(t)
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(120, 40)
+
+	// Provider convention: [0] is newest. The bottom row of the dialog
+	// shows the newest entry, so clicking it should cd to `newest`.
+	newest := t.TempDir()
+	oldest := t.TempDir()
+	prev := vtui.GlobalHistoryProvider
+	vtui.GlobalHistoryProvider = &stubHistoryProvider{"folders": {newest, oldest}}
+	t.Cleanup(func() { vtui.GlobalHistoryProvider = prev })
+
+	actionFoldersHistory(pf)
+	menu := vtui.FrameManager.GetTopFrame().(*vtui.VMenu)
+	x1, y1, _, _ := menu.GetPosition()
+	if menu.SelectPos != 1 {
+		t.Fatalf("test invariant: SelectPos=%d, expected 1", menu.SelectPos)
+	}
+	rowY := y1 + 1 + (menu.SelectPos - menu.TopPos)
+
+	menu.ProcessMouse(&vtinput.InputEvent{
+		Type:        vtinput.MouseEventType,
+		KeyDown:     true,
+		MouseX:      int16(x1 + 2),
+		MouseY:      int16(rowY),
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+	})
+
+	if got := pf.getActivePanel().vfs.GetPath(); got != newest {
+		t.Errorf("active panel path after click = %q, want %q", got, newest)
+	}
+	if !menu.IsDone() {
+		t.Error("folder-history menu should be closed after click accept")
+	}
+}
+
+// TestHistorySearch_KeepsPainterAcrossModalOverlay guards issue #290
+// regression: pushing another frame on top of the history menu (e.g.
+// F1 help) must not tear down the bottom-border painter, otherwise the
+// hint stays gone even after the overlay closes. installRenderer had
+// been eagerly cleaning up on !IsTop; the fix is to cleanup only when
+// the menu itself IsDone.
+func TestHistorySearch_KeepsPainterAcrossModalOverlay(t *testing.T) {
+	initHistoryTestScreen(t)
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(120, 40)
+
+	pf.cmdLine.Edit.History = []string{"cmd1", "cmd2"}
+	activeHistorySearch = nil
+	t.Cleanup(func() {
+		if activeHistorySearch != nil {
+			activeHistorySearch.cleanup()
+		}
+	})
+	actionCommandHistory(pf)
+	if activeHistorySearch == nil {
+		t.Fatal("actionCommandHistory did not install a historySearch")
+	}
+	installed := activeHistorySearch
+
+	// Push a dummy overlay dialog on top of the menu — mimics F1 help.
+	overlay := vtui.ShowMessage(" Help ", "help text", []string{"&Ok"})
+	// A render pass with the overlay on top used to eagerly cleanup.
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	if vtui.FrameManager.OnRender != nil {
+		vtui.FrameManager.OnRender(scr)
+	}
+	if activeHistorySearch != installed {
+		t.Fatal("history painter was torn down while overlay was on top")
+	}
+
+	// Close the overlay; the menu is on top again → hint must reappear.
+	overlay.SetExitCode(-1)
+	vtui.FrameManager.Pop()
+	if activeHistorySearch != installed {
+		t.Fatal("history painter did not survive the overlay closing")
+	}
+
+	// Now close the menu itself; cleanup must fire.
+	installed.menu.Close()
+	if vtui.FrameManager.OnRender != nil {
+		vtui.FrameManager.OnRender(scr)
+	}
+	if activeHistorySearch != nil {
+		t.Error("history painter survived the menu being closed")
+	}
+}
+
 // TestActionFoldersHistory_CtrlR_DropsMissingPaths exercises the far2l
 // Ctrl+R shortcut on the folder-history dialog: prompt, then keep only
 // paths that still exist on disk.

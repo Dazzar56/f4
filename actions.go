@@ -61,6 +61,23 @@ func actionFoldersHistory(pf *PanelsFrame) {
 		}
 	}
 
+	// Shared "cd on active panel" path used by bare Enter and by mouse click.
+	gotoActive := func() {
+		historyPos, _, ok := search.selected()
+		if !ok {
+			return
+		}
+		search.cleanup()
+		if targetPanel := pf.getActivePanel(); targetPanel != nil {
+			// The menu is oldest → newest. If the selected path disappeared,
+			// navigateAvailableFolderHistory walks toward newer entries.
+			pf.navigateAvailableFolderHistory(targetPanel, h, historyPos, -1)
+		}
+	}
+	// VMenu.ProcessMouse calls SetExitCode after OnAction, so click closes
+	// the menu automatically — gotoActive only does the side effect.
+	menu.OnAction = func(int) { gotoActive() }
+
 	// Setup shortcuts
 	menu.OnKeyDown = func(e *vtinput.InputEvent) bool {
 		shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
@@ -86,23 +103,23 @@ func actionFoldersHistory(pf *PanelsFrame) {
 		}
 
 		if e.VirtualKeyCode == vtinput.VK_RETURN {
-			search.cleanup()
 			if ctrl {
 				// Insert into command line
+				search.cleanup()
 				pf.cmdLine.InsertString(path)
 				menu.Close()
 				return true
 			}
-			menu.Close()
-			targetPanel := pf.getActivePanel()
 			if shift {
-				targetPanel = pf.getInactivePanel()
+				search.cleanup()
+				menu.Close()
+				if targetPanel := pf.getInactivePanel(); targetPanel != nil {
+					pf.navigateAvailableFolderHistory(targetPanel, h, historyPos, -1)
+				}
+				return true
 			}
-			if targetPanel != nil {
-				// The menu is displayed oldest -> newest. If the selected path
-				// disappeared, continue downwards to the next (newer) entry.
-				pf.navigateAvailableFolderHistory(targetPanel, h, historyPos, -1)
-			}
+			menu.Close()
+			gotoActive()
 			return true
 		}
 
@@ -147,6 +164,20 @@ func actionCommandHistory(pf *PanelsFrame) {
 	menu := vtui.NewVMenu(Msg("History.CommandsTitle"))
 	search := newHistorySearch(menu, h, Msg("History.CommandsHint"))
 
+	// Shared "paste selected command" path used by Enter and mouse click.
+	pasteCurrent := func() {
+		_, cmd, ok := search.selected()
+		if !ok {
+			return
+		}
+		search.cleanup()
+		pf.cmdLine.Edit.SetText(cmd)
+		pf.cmdLine.Edit.HistoryPos = -1
+	}
+	// VMenu.ProcessMouse calls SetExitCode after OnAction, so click closes
+	// the menu automatically — pasteCurrent only does the side effect.
+	menu.OnAction = func(int) { pasteCurrent() }
+
 	// Setup shortcuts
 	menu.OnKeyDown = func(e *vtinput.InputEvent) bool {
 		shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
@@ -166,10 +197,8 @@ func actionCommandHistory(pf *PanelsFrame) {
 		}
 
 		if e.VirtualKeyCode == vtinput.VK_RETURN {
-			search.cleanup()
 			menu.Close()
-			pf.cmdLine.Edit.SetText(cmd)
-			pf.cmdLine.Edit.HistoryPos = -1
+			pasteCurrent()
 			return true
 		}
 
