@@ -17,7 +17,7 @@ Calculating line breaks for a large file is expensive over a network. With FISH+
 ### 3. Delta-Based Editing (Sparse Saving)
 The `PieceTable` model used in `f4` is essentially a list of edit instructions (insert X at Y, delete range A-B).
 *   **Classic SFTP:** To save a 1-byte change in a 100MB file, you must re-upload the entire 100MB.
-*   **FISH+:** `f4` sends only the `PieceTable` deltas. A small server-side script applies these changes to the remote file in-place.
+*   **FISH+:** `f4` sends only the `PieceTable` deltas — the ranges of the file that are unchanged and the bytes that are new. The remote host assembles the result from its own copy and the few new bytes, and the editor renames it over the original, the way it already saves a local file. Patching in place would spare the second copy but only works while the length does not change, and leaves a half written file behind when a connection drops; making that a setting is for later.
 
 ### 4. Background Offloading
 Operations like calculating directory sizes, finding duplicate files, or complex pattern matching are executed as remote background tasks. The FISH+ VFS reports progress back to the `f4` Progress Dialog without saturating the network with raw file data.
@@ -201,7 +201,13 @@ The pass is a full one — awk cannot know where line N starts without counting 
 *   A search is capped at 10000 matches and the client cannot tell a file with exactly that many hits from a truncated answer. A count line would fix it and costs a second pass over the file, so it waits for a case that needs it.
 *   Case folding and regular expression dialect are the remote `grep`'s, not Go's, so a search over a FISH+ panel can match slightly differently than the same search over a local one. That is the price of not moving the file.
 *   `grep` cannot match across a line break, so a pattern containing a newline finds nothing. The viewer's search will have to split such a pattern itself.
-*   `lidx` reads the whole file to answer, so on a slow remote disk the first jump to the end of a very large file takes a while, even though nothing is transferred. Caching the total per file and reusing it belongs with the viewer wiring.
+*   `lidx` reads the whole file to answer, so on a slow remote disk the first jump to the end of a very large file takes a while, even though nothing is transferred. The viewer keeps the line total against the file size it was counted at, so paging around a file that is not growing pays for one pass rather than one per keystroke.
+*   Going to a line on a file system without a line index falls back to scanning, which for a remote host means reading the file. It is bounded by the user cancelling the task, not by anything cheaper: the alternative would be refusing the command outright on a host without `awk`.
+*   A `patch` needs somewhere to build the result, so a file cannot be edited in place and the remote host briefly holds two copies of it. Renaming the result over the original also replaces it rather than writing through it, so hard links to the file are left pointing at the old content, exactly as with a local save through a temporary file.
+*   The delta save applies only to a file loaded as raw UTF-8. With any other codepage the buffer holds decoded text whose offsets say nothing about the bytes on disk, and the file is written out in full.
+*   A tree search matches names the way the remote `find -name` does, which is `fnmatch` rather than Go's `filepath.Match`. The two agree on `*`, `?` and simple classes and can differ on the corners, which is the same trade the remote `grep` makes for content.
+*   A tree search reports a symlink without resolving it, because resolving would cost a round trip per hit and give back what the single request saves.
+*   A raw payload assumes a binary safe transport. The ssh backend asks for no pseudo terminal and the helper tames one with `stty` where it finds it, announcing `tty`; a caller whose stream is terminal backed and which does not see `tty` in the banner has to select `wmode b64` by hand.
 *   A line index counts `\n` only. A file with classic Mac line endings is one line to `lidx`, exactly as it is to `awk`, `grep` and `wc` on the remote host.
 
 ## Roadmap
