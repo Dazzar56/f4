@@ -180,6 +180,44 @@ Browsing a huge remote file in pieces already works: the viewer renders from a b
 `lidx` moves that walk to the far side. One `awk` pass prints the byte offset of each requested line and, at the end, `T <total>`. What crosses the network is a handful of numbers no matter how large the file is. The offsets are byte offsets because that is the only currency the rest of the protocol speaks: feed one straight back into `read`, and the viewer is drawing that line.
 
 The pass is a full one — awk cannot know where line N starts without counting the newlines before it — so the cost is one sequential read on a machine that has the file locally, instead of one transfer across the network. That trade is the whole idea of FISH+.
+### Traps, and how they were found
+
+Three defects here were invisible on the machine they were written on and
+would have surfaced on a user's. They are worth knowing before touching the
+helper again, because each of them is a property of POSIX shells rather than
+a mistake in the logic.
+
+**A shell reads ahead of itself.** The first version sent the script and the
+first request down one stream, which works right up until it does not: `dash`
+fills a parse buffer, and a request that has already arrived when the parser
+refills is parsed as part of the script and executed as a command. `bash`
+reads byte by byte and never showed it, so a machine whose `/bin/sh` is
+`bash` sees nothing wrong, while Debian and Ubuntu, where it is `dash`, race
+on every connect and lose the race whenever the link is fast enough. Hence
+the two step bootstrap: what the parser sees is one line, and the script
+comes in through `read`, which cannot run ahead.
+
+**A failed redirection on a special builtin kills the shell.** `: > "$file"`
+looks like the cheapest way to create or truncate something, and when the
+redirection fails POSIX says a non-interactive shell shall exit — `:` being a
+special builtin. The session dies with no answer rather than reporting an
+error. Wrap such a redirection in a command substitution, as `trunc` and
+`patch` both do: the fatal exit then belongs to the subshell. The same holds
+for `.`, `eval`, `exec`, `set`, `shift` and the rest of that list.
+
+**Tools disagree about when to stop reading.** macOS `head -c` writes the
+bytes it was asked for and then drains the rest of its input, so it can never
+be used on a stream something else still has to read from; that is why the
+write path uses `dd` and why the helper reports `headc` and `headsafe`
+separately. `openssl base64 -d` decodes nothing at all unless its input ends
+with a newline, which made it useless as a fallback until the decoder started
+terminating what it feeds in.
+
+The first two were found by a test harness that speaks the wire protocol to a
+real shell with no network in between. Latency hides both: over ssh the shell
+almost always wins the race and the failure looks like a rare hang. A test
+that runs everything locally and immediately loses the race nearly every
+time, which is exactly what makes it useful.
 ### Known limitations of v1
 
 *   The remote host must provide a base64 decoder (`base64` or `openssl`), even though almost no request needs one: the handshake refuses hosts without it because a path with a newline would otherwise be unreachable. Dropping that requirement for hosts that never see such a path is possible later.
@@ -255,7 +293,9 @@ The numbering follows the order the steps were planned in, not the order they we
 
 The tests whose names end in `AgainstLocalShell`, together with `TestFileReadAtAndCache` and the `FishVFS` tests in the `netfox` package, run the real helper in a local `/bin/sh`. That is the only kind of test that proves the shell side and the Go side agree on the wire format, and it walks every backend the test machine provides, one subtest each. They skip themselves on Windows and on hosts without a shell or without base64.
 
-Every write test ends with a `ping` on purpose. Only what the session answers *after* a refused write can show that the payload really left the wire; a test that just checks the error would pass on a helper that desynchronizes the stream.
+Every write test ends with a `ping` on purpose. Only what the session answers *after* a refused write can show that the payload really left the wire; a test that just checks the error would pass on a helper that desynchronizes the stream. The same goes for a refused `patch`, and for the tree search, whose request carries a variable number of lines and is therefore the easiest one to get out of step.
+
+These tests take `sh` from `PATH`, so what they actually exercise depends on the machine. Run them at least once with `/bin/sh` pointing at `dash`, and preferably also at `busybox sh`: `bash` is forgiving in ways the shells on the hosts people connect to are not, and a helper that only ever meets `bash` is a helper whose worst bugs are still ahead of it.
 The timestamp tests run twice: once against the tools the machine has, and once with stubs in front of `touch` and `date` that refuse `-d` and answer `-r`, the way macOS does. Without the second run the BSD branch would never be executed on a GNU build machine, and a mistake in it would only surface on a user's Mac.
 ### What the compatibility issue changed
 
