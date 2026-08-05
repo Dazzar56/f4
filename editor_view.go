@@ -103,6 +103,9 @@ type EditorView struct {
 	targetTopRow int
 	targetLeft   int
 	Codepage     int
+	// DisplayTitle overrides the temporary filename in frame and top-bar
+	// titles. It is used by internal editor round-trip workflows.
+	DisplayTitle string
 
 	TabSize             int
 	ExpandTabs          int
@@ -298,7 +301,9 @@ func NewEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string) *EditorVie
 
 	ev.topBar = NewTopBar(func() string {
 		base := ""
-		if ev.vfs != nil {
+		if ev.DisplayTitle != "" {
+			base = ev.DisplayTitle
+		} else if ev.vfs != nil {
 			base = ev.vfs.Base(ev.filePath)
 		} else {
 			base = filepath.Base(ev.filePath)
@@ -3171,6 +3176,9 @@ func (ev *EditorView) DeleteCurrentLine() {
 func (ev *EditorView) GetType() vtui.FrameType { return vtui.TypeUser + 2 }
 func (ev *EditorView) IsBusy() bool            { return ev.pasting || ev.saving }
 func (ev *EditorView) GetTitle() string {
+	if ev.DisplayTitle != "" {
+		return ev.DisplayTitle
+	}
 	if ev.filePath != "" {
 		return "Edit: " + filepath.Base(ev.filePath)
 	}

@@ -53,6 +53,17 @@ func (pf *PanelsFrame) GetPassivePanelVFS() vfs.VFS { return pf.Passive().(*File
 func (pf *PanelsFrame) GetSelectedNames() []string {
 	return pf.Active().(*FileSystemPanel).GetSelectedNames()
 }
+func (pf *PanelsFrame) GetMarkedNames() []string {
+	if panel := pf.getActivePanel(); panel != nil {
+		return panel.GetMarkedNames()
+	}
+	return nil
+}
+func (pf *PanelsFrame) ReplaceMarkedNames(names []string) {
+	if panel := pf.getActivePanel(); panel != nil {
+		panel.ReplaceMarkedNames(names)
+	}
+}
 func (pf *PanelsFrame) GetSelectedName() string {
 	return pf.Active().(*FileSystemPanel).GetSelectedName()
 }

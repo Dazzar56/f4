@@ -117,7 +117,40 @@ func InitHelpSystem() {
 	if hasLocalHelp {
 		_ = vtui.GlobalHelpEngine.LoadFile("help_local.hlf")
 	}
+	flattenVisRenHelp(vtui.GlobalHelpEngine)
 
 	readmeTopic := parseMarkdownToHelpTopic("README", readmeData)
 	vtui.GlobalHelpEngine.AddTopic(readmeTopic)
+}
+
+var visRenHelpSections = []string{
+	"VisRenQuickStart", "VisRenMasks", "VisRenTransforms", "VisRenMetadata",
+	"VisRenSearch", "VisRenPreview", "VisRenEditor", "VisRenRename",
+	"VisRenSafety", "VisRenExamples",
+}
+
+// flattenVisRenHelp keeps the linked detail topics for quick navigation while
+// also appending their complete contents to the main topic. This lets readers
+// browse all of VisRen's help continuously with PgDn.
+func flattenVisRenHelp(engine *vtui.HelpEngine) {
+	if engine == nil {
+		return
+	}
+	index := engine.GetTopic("VisRen")
+	if index == nil {
+		return
+	}
+	for _, name := range visRenHelpSections {
+		section := engine.GetTopic(name)
+		if section == nil || len(section.Lines) == 0 {
+			continue
+		}
+		title := strings.TrimSpace(section.Lines[0])
+		index.Lines = append(index.Lines, "", "#"+title+"#")
+		start := section.StickyRows
+		if start < 0 || start > len(section.Lines) {
+			start = 0
+		}
+		index.Lines = append(index.Lines, section.Lines[start:]...)
+	}
 }

@@ -1034,6 +1034,14 @@ func TestEditorView_GetTitle(t *testing.T) {
 	if ev2.GetTitle() != "Editor" {
 		t.Errorf("GetTitle failed for empty path: %s", ev2.GetTitle())
 	}
+
+	// Internal editor workflows can hide a temporary filename.
+	ev3 := NewEditorView(pt, nil, "f4-visren-temporary.txt")
+	defer ev3.Close()
+	ev3.DisplayTitle = "Rename list of files"
+	if ev3.GetTitle() != "Rename list of files" {
+		t.Errorf("GetTitle ignored DisplayTitle: %s", ev3.GetTitle())
+	}
 }
 func TestEditorView_AsyncIndexing(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
