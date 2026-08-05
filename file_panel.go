@@ -22,6 +22,7 @@ import (
 type fileEntry struct {
 	vfs.VFSItem
 	Selected       bool
+	PrevSelected   bool // snapshot of Selected taken by SaveSelection; swapped in by RestoreSelection (Ctrl+M)
 	SizeCalculated bool
 	IsCached       bool
 }
@@ -2551,7 +2552,34 @@ func (fp *FileSystemPanel) doFastFind(dir int) {
 	}
 }
 
+// SaveSelection snapshots the current selection into fileEntry.PrevSelected.
+// Called by every mass-selection operation (mask select/deselect, invert,
+// select-all/deselect-all) so that RestoreSelection has a well-defined
+// state to bring back. Mirrors far2l's FileList::SaveSelection().
+func (fp *FileSystemPanel) SaveSelection() {
+	for _, e := range fp.entries {
+		e.PrevSelected = e.Selected
+	}
+}
+
+// RestoreSelection swaps the current selection with the last snapshot taken
+// by SaveSelection. Because the swap goes both ways, pressing Ctrl+M twice
+// returns to the state you started from. Mirrors far2l's
+// FileList::RestoreSelection().
+func (fp *FileSystemPanel) RestoreSelection() {
+	for i, e := range fp.entries {
+		if e.Name == ".." {
+			continue
+		}
+		saved := e.PrevSelected
+		e.PrevSelected = e.Selected
+		fp.SetItemSelected(i, saved)
+	}
+	vtui.FrameManager.Redraw()
+}
+
 func (fp *FileSystemPanel) InvertSelection() {
+	fp.SaveSelection()
 	for i, e := range fp.entries {
 		if e.Name != ".." {
 			fp.SetItemSelected(i, !e.Selected)
@@ -2570,6 +2598,7 @@ func (fp *FileSystemPanel) ApplyMaskSelection(mask string, state bool) {
 	}
 	maskLower := strings.ToLower(mask)
 
+	fp.SaveSelection()
 	for i, e := range fp.entries {
 		if e.Name == ".." {
 			continue

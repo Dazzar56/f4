@@ -423,6 +423,21 @@ func init() {
 			}
 		}),
 	})
+	RegisterAction(Action{
+		Name:        "Panel.RestoreSelection",
+		Area:        "Shell",
+		Label:       "Restore Selection",
+		LabelKey:    "Action.Panel.RestoreSelection",
+		Description: "Restore the previous selection state",
+		DescKey:     "Action.Panel.RestoreSelection.Desc",
+		DefaultKeys: []string{"CtrlM"},
+		MenuPath:    "Files",
+		Handler: withPF(func(pf *PanelsFrame) {
+			if fsp := pf.getActivePanel(); fsp != nil {
+				fsp.RestoreSelection()
+			}
+		}),
+	})
 
 	RegisterAction(Action{
 		Name:        "Panel.UserMenu",
