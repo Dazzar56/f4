@@ -109,11 +109,12 @@ func EventToFarString(e *vtinput.InputEvent) string {
 	} else if vk >= vtinput.VK_F1 && vk <= vtinput.VK_F24 {
 		sb.WriteString(fmt.Sprintf("F%d", vk-vtinput.VK_F1+1))
 	} else if vk >= 'A' && vk <= 'Z' {
-		if !mods.Contains(vtinput.ShiftPressed) && e.Char >= 'a' && e.Char <= 'z' {
-			sb.WriteRune(e.Char)
-		} else {
-			sb.WriteRune(rune(vk))
-		}
+		// Hotkey key strings are always uppercase for A-Z ("CtrlV",
+		// "ShiftA"). Wayland/X11 gui backends deliver Ctrl+letter events
+		// with Char set to the lowercase typed letter — writing e.Char
+		// here would produce "Ctrlv" and miss every default binding
+		// (Ctrl+V paste, Ctrl+A select-all, Ctrl+O toggle-panels, …).
+		sb.WriteRune(rune(vk))
 	} else if vk >= '0' && vk <= '9' {
 		sb.WriteRune(rune(vk))
 	} else if e.Char > 32 && e.Char < 127 {
