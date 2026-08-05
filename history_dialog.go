@@ -123,6 +123,13 @@ func (s *historySearch) deleteSelected() bool {
 	return true
 }
 
+// setItems replaces the full item list (used by the "clear all" and
+// "remove missing paths" hotkeys) and re-applies the active filter.
+func (s *historySearch) setItems(items []string) {
+	s.all = append([]string(nil), items...)
+	s.applyFilter()
+}
+
 func (s *historySearch) processKey(e *vtinput.InputEvent) bool {
 	if !e.KeyDown {
 		return false
@@ -164,18 +171,29 @@ func (s *historySearch) installRenderer() {
 	if activeHistorySearch != nil {
 		activeHistorySearch.cleanup()
 	}
-	historySearchPreviousDraw = vtui.FrameManager.OnRender
+	// Capture the previous painter into a local so nested installs (test
+	// runs, back-to-back Alt+F8 → Alt+F12) don't recurse into themselves
+	// by re-reading the package-level historySearchPreviousDraw.
+	prev := vtui.FrameManager.OnRender
+	historySearchPreviousDraw = prev
 	activeHistorySearch = s
 	vtui.FrameManager.OnRender = func(scr *vtui.ScreenBuf) {
-		if historySearchPreviousDraw != nil {
-			historySearchPreviousDraw(scr)
+		if prev != nil {
+			prev(scr)
 		}
 		active := activeHistorySearch
 		if active == nil {
 			return
 		}
-		if vtui.FrameManager.GetTopFrame() != active.menu {
+		// The menu is gone for good only after IsDone. When another
+		// frame is pushed on top (e.g. F1 help), the menu is still
+		// alive in the stack — skip the paint but keep our renderer
+		// installed so the hint returns after the modal closes.
+		if active.menu.IsDone() {
 			active.cleanup()
+			return
+		}
+		if vtui.FrameManager.GetTopFrame() != active.menu {
 			return
 		}
 		active.draw(scr)

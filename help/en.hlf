@@ -43,3 +43,42 @@ $Panel Navigation Keys
   Ctrl+Tab      - Cycle workspaces
   Ctrl+W        - Close workspace
   Ctrl+N        - Fork active panel to new workspace
+
+@History
+$Commands History (Alt+F8)
+    The commands history shows the list of previously executed commands.
+Besides the cursor keys, the following keyboard shortcuts are available:
+
+  Paste selected command into command line          Enter
+  (Left-click acts the same)
+  Cancel the dialog                                 Esc, F10
+
+  Toggle substring / prefix incremental search      F2
+  Type any character to filter the visible entries
+  Backspace to remove the last filter character
+
+  Delete the current history item                   Shift+Del
+  Clear the entire commands history (confirmed)     Del
+
+  Copy the selected command to the clipboard        Ctrl+C, Ctrl+Ins
+
+@HistoryFolders
+$Folders History (Alt+F12)
+    The folders history shows the list of previously visited directories.
+Besides the cursor keys, the following keyboard shortcuts are available:
+
+  Go to selected folder on the active panel         Enter
+  (Left-click acts the same)
+  Go to selected folder on the passive panel        Shift+Enter
+  Insert selected path into the command line        Ctrl+Enter
+  Cancel the dialog                                 Esc, F10
+
+  Toggle substring / prefix incremental search      F2
+  Type any character to filter the visible entries
+  Backspace to remove the last filter character
+
+  Delete the current history item                   Shift+Del
+  Clear the entire folders history (confirmed)      Del
+  Remove entries with non-existing paths (confirmed) Ctrl+R
+
+  Copy the selected path to the clipboard           Ctrl+C, Ctrl+Ins
