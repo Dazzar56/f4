@@ -156,7 +156,8 @@ func NewViewerView(ctx context.Context, v vfs.VFS, path string) (*ViewerView, er
 		} else {
 			base = filepath.Base(vv.path)
 		}
-		return fmt.Sprintf(" %s │ %s │ %d%% ", base, mode, percent)
+		cpName := vfs.DisplayCodepageName(vv.Codepage)
+		return fmt.Sprintf(" %s │ %s │ CP: %s │ %d%% ", base, mode, cpName, percent)
 	})
 	vv.topBar.SetVisible(true)
 	vv.SetCanFocus(true)
@@ -754,6 +755,10 @@ func (vv *ViewerView) jumpToEnd() {
 	})
 }
 func (vv *ViewerView) ReloadWithCodepage(cpID int) {
+	if vv.Codepage == cpID {
+		return
+	}
+
 	f, err := vv.vfs.Open(context.Background(), vv.path)
 	if err != nil {
 		return
@@ -773,6 +778,7 @@ func (vv *ViewerView) ReloadWithCodepage(cpID int) {
 		defer f.Close()
 		fullData := make([]byte, size)
 		_, _ = f.ReadAt(context.Background(), fullData, 0)
+
 		decoded, err := vfs.DecodeBytes(fullData, cpID)
 		if err != nil {
 			decoded = fullData
@@ -791,20 +797,41 @@ func (vv *ViewerView) ReloadWithCodepage(cpID int) {
 	oldBackend := vv.backend
 	vv.backend = backend
 	vv.Codepage = cpID
-	vv.TopOffset = 0
+	vv.TopOffset = vv.backend.FindLineStart(vv.TopOffset)
+
 	if oldBackend != nil {
 		oldBackend.Close()
 	}
 	vtui.FrameManager.Redraw()
 }
 
+func (vv *ViewerView) ReloadWithAutoDetect() {
+	f, err := vv.vfs.Open(context.Background(), vv.path)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
+	size := f.Size()
+	detectLen := 16 * 1024
+	if int64(detectLen) > size {
+		detectLen = int(size)
+	}
+	header := make([]byte, detectLen)
+	_, _ = f.ReadAt(context.Background(), header, 0)
+
+	cpID := vfs.DetectEncoding(header, AppConfig.ViewerAutodetectCodePage, AppConfig.ViewerDefaultCodePage)
+	vv.ReloadWithCodepage(cpID)
+}
+
 func (vv *ViewerView) showCodepageDialog() {
+	items, currIdx := vfs.BuildCodepageMenuItems(vv.Codepage, AppConfig.ViewerAutodetectCodePage)
 	menu := vtui.NewVMenu(" Code pages ")
-	for _, cp := range vfs.AvailableCodepages {
-		menu.AddItem(vtui.MenuItem{Text: fmt.Sprintf("%5d  %s", cp.ID, cp.Name)})
+	for _, item := range items {
+		menu.AddItem(item)
 	}
 
-	w, h := 45, len(vfs.AvailableCodepages)+2
+	w, h := 45, len(items)+2
 	if h > 15 {
 		h = 15
 	}
@@ -820,10 +847,22 @@ func (vv *ViewerView) showCodepageDialog() {
 
 	menu.OnAction = func(idx int) {
 		menu.Close()
-		if idx >= 0 && idx < len(vfs.AvailableCodepages) {
-			vv.ReloadWithCodepage(vfs.AvailableCodepages[idx].ID)
+		if idx >= 0 && idx < len(menu.Items) {
+			if cpID, ok := menu.Items[idx].UserData.(int); ok {
+				if cpID == -1 {
+					AppConfig.ViewerAutodetectCodePage = !AppConfig.ViewerAutodetectCodePage
+					SaveConfig()
+					vv.ReloadWithAutoDetect()
+				} else {
+					AppConfig.ViewerAutodetectCodePage = false
+					AppConfig.ViewerDefaultCodePage = cpID
+					SaveConfig()
+					vv.ReloadWithCodepage(cpID)
+				}
+			}
 		}
 	}
+	menu.SetSelectPos(currIdx)
 	vtui.FrameManager.Push(menu)
 }
 
@@ -860,16 +899,25 @@ func (vv *ViewerView) Close() {
 }
 
 func (vv *ViewerView) GetKeyLabels() *vtui.KeySet {
+	nextCp := vfs.GetNextFastSwitchCodepage(vv.Codepage)
+	nextCpName := vfs.DisplayCodepageName(nextCp)
+
 	fallbacks := &vtui.KeySet{
 		Normal: vtui.KeyBarLabels{
 			Msg("KeyBar.ViewerF1"), Msg("KeyBar.ViewerF2"), Msg("KeyBar.ViewerF3"), Msg("KeyBar.ViewerF4"),
-			"", "", Msg("KeyBar.ViewerF7"), "", "", Msg("KeyBar.ViewerF10"),
+			"", "", Msg("KeyBar.ViewerF7"), nextCpName, "", Msg("KeyBar.ViewerF10"),
 		},
 		Alt: vtui.KeyBarLabels{
 			"", "", "", "", "", "", "", Msg("KeyBar.ViewerAltF8"), "", "",
 		},
 	}
-	return KeyBarLabelsForArea("Viewer", fallbacks)
+	res := KeyBarLabelsForArea("Viewer", fallbacks)
+	if hm := GlobalHotkeysMgr; hm != nil {
+		if hm.GetAction("Viewer", "F8") == "Viewer.CodepageNext" {
+			res.Normal[7] = nextCpName
+		}
+	}
+	return res
 }
 
 func (vv *ViewerView) GetType() vtui.FrameType { return vtui.TypeUser + 3 }

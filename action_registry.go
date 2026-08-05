@@ -1679,8 +1679,11 @@ func init() {
 		MenuPath:    "Options",
 		Handler: withEditor(func(ev *EditorView) {
 			next := vfs.GetNextFastSwitchCodepage(ev.Codepage)
+			AppConfig.EditorAutodetectCodePage = false
+			AppConfig.EditorDefaultCodePage = next
+			SaveConfig()
 			ev.ReloadWithCodepage(next)
-			vtui.ShowToast(fmt.Sprintf("Codepage: %d", next), time.Second)
+			vtui.ShowToast(fmt.Sprintf("Codepage: %s", vfs.DisplayCodepageName(next)), time.Second)
 		}),
 	})
 	RegisterAction(Action{
@@ -1829,8 +1832,11 @@ func init() {
 		MenuPath:    "Options",
 		Handler: withViewer(func(vv *ViewerView) {
 			next := vfs.GetNextFastSwitchCodepage(vv.Codepage)
+			AppConfig.ViewerAutodetectCodePage = false
+			AppConfig.ViewerDefaultCodePage = next
+			SaveConfig()
 			vv.ReloadWithCodepage(next)
-			vtui.ShowToast(fmt.Sprintf("Codepage: %d", next), time.Second)
+			vtui.ShowToast(fmt.Sprintf("Codepage: %s", vfs.DisplayCodepageName(next)), time.Second)
 		}),
 	})
 	RegisterAction(Action{

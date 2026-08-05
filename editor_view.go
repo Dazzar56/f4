@@ -42,6 +42,11 @@ var (
 )
 var GlobalLastClipboardWasRectangular bool
 
+var (
+	internalClipboardText string
+	internalClipboardCP   int
+)
+
 // EditorView is a text editor component.
 type EditorView struct {
 	vtui.BaseFrame
@@ -297,7 +302,8 @@ func NewEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string) *EditorVie
 		} else {
 			base = filepath.Base(ev.filePath)
 		}
-		return fmt.Sprintf(" %s │ %d,%d ", base, ev.CursorLine+1, ev.CursorPos)
+		cpName := vfs.DisplayCodepageName(ev.Codepage)
+		return fmt.Sprintf(" %s │ %d,%d │ CP: %s ", base, ev.CursorLine+1, ev.CursorPos, cpName)
 	})
 	ev.topBar.ColorIdx = ColEditorStatus
 	ev.topBar.SetVisible(true)
@@ -1910,13 +1916,22 @@ func (ev *EditorView) tryClose() {
 }
 
 func (ev *EditorView) GetKeyLabels() *vtui.KeySet {
+	nextCp := vfs.GetNextFastSwitchCodepage(ev.Codepage)
+	nextCpName := vfs.DisplayCodepageName(nextCp)
+
 	fallbacks := &vtui.KeySet{
 		Normal: vtui.KeyBarLabels{
 			Msg("KeyBar.EditorF1"), Msg("KeyBar.EditorF2"), Msg("KeyBar.EditorF3"),
-			"", Msg("KeyBar.EditorF5"), "", Msg("KeyBar.EditorF7"), "", "", Msg("KeyBar.EditorF10"),
+			"", Msg("KeyBar.EditorF5"), "", Msg("KeyBar.EditorF7"), nextCpName, "", Msg("KeyBar.EditorF10"),
 		},
 	}
-	return KeyBarLabelsForArea("Editor", fallbacks)
+	res := KeyBarLabelsForArea("Editor", fallbacks)
+	if hm := GlobalHotkeysMgr; hm != nil {
+		if hm.GetAction("Editor", "F8") == "Editor.CodepageNext" {
+			res.Normal[7] = nextCpName
+		}
+	}
+	return res
 }
 func (ev *EditorView) showSearchDialog() {
 	dlgW, dlgH := 60, 15
@@ -2234,38 +2249,77 @@ func (ev *EditorView) showReplaceDialog() {
 }
 
 func (ev *EditorView) ReloadWithCodepage(cpID int) {
-	if ev.file == nil {
-		ev.Codepage = cpID
+	if ev.Codepage == cpID {
 		return
 	}
 
-	size := ev.file.Size()
-	fullData := make([]byte, size)
-	_, err := ev.file.ReadAt(context.Background(), fullData, 0)
+	bytes, err := ev.pt.Bytes()
 	if err != nil {
 		return
 	}
 
-	decoded, err := vfs.DecodeBytes(fullData, cpID)
+	rawData, err := vfs.EncodeBytes(bytes, ev.Codepage)
+	if err != nil {
+		rawData = bytes // Fallback
+	}
+
+	decoded, err := vfs.DecodeBytes(rawData, cpID)
 	if err != nil {
 		return
 	}
 
+	wasModified := ev.modified
 	ev.saveUndo(opOther)
+
+	oldLine := ev.CursorLine
+	oldPos := ev.CursorPos
+
 	ev.SetText(string(decoded))
+
+	ev.CursorLine = oldLine
+	if ev.CursorLine >= ev.li.LineCount() {
+		ev.CursorLine = ev.li.LineCount() - 1
+	}
+	if ev.CursorLine < 0 {
+		ev.CursorLine = 0
+	}
+	ev.CursorPos = oldPos
+	if ev.CursorPos > ev.getLineLength(ev.CursorLine) {
+		ev.CursorPos = ev.getLineLength(ev.CursorLine)
+	}
+
 	ev.Codepage = cpID
-	ev.modified = false
+	ev.modified = wasModified
+
+	ev.updateDesiredVisualCol()
 	ev.ensureCursorVisible()
 	vtui.FrameManager.Redraw()
 }
 
+func (ev *EditorView) ReloadWithAutoDetect() {
+	if ev.file == nil {
+		return
+	}
+	size := ev.file.Size()
+	detectLen := 16 * 1024
+	if int64(detectLen) > size {
+		detectLen = int(size)
+	}
+	header := make([]byte, detectLen)
+	_, _ = ev.file.ReadAt(context.Background(), header, 0)
+
+	cpID := vfs.DetectEncoding(header, AppConfig.EditorAutodetectCodePage, AppConfig.EditorDefaultCodePage)
+	ev.ReloadWithCodepage(cpID)
+}
+
 func (ev *EditorView) showCodepageDialog() {
+	items, currIdx := vfs.BuildCodepageMenuItems(ev.Codepage, AppConfig.EditorAutodetectCodePage)
 	menu := vtui.NewVMenu(" Code pages ")
-	for _, cp := range vfs.AvailableCodepages {
-		menu.AddItem(vtui.MenuItem{Text: fmt.Sprintf("%5d  %s", cp.ID, cp.Name)})
+	for _, item := range items {
+		menu.AddItem(item)
 	}
 
-	w, h := 45, len(vfs.AvailableCodepages)+2
+	w, h := 45, len(items)+2
 	if h > 15 {
 		h = 15
 	}
@@ -2281,10 +2335,22 @@ func (ev *EditorView) showCodepageDialog() {
 
 	menu.OnAction = func(idx int) {
 		menu.Close()
-		if idx >= 0 && idx < len(vfs.AvailableCodepages) {
-			ev.ReloadWithCodepage(vfs.AvailableCodepages[idx].ID)
+		if idx >= 0 && idx < len(menu.Items) {
+			if cpID, ok := menu.Items[idx].UserData.(int); ok {
+				if cpID == -1 {
+					AppConfig.EditorAutodetectCodePage = !AppConfig.EditorAutodetectCodePage
+					SaveConfig()
+					ev.ReloadWithAutoDetect()
+				} else {
+					AppConfig.EditorAutodetectCodePage = false
+					AppConfig.EditorDefaultCodePage = cpID
+					SaveConfig()
+					ev.ReloadWithCodepage(cpID)
+				}
+			}
 		}
 	}
+	menu.SetSelectPos(currIdx)
 	vtui.FrameManager.Push(menu)
 }
 
@@ -2833,6 +2899,8 @@ func (ev *EditorView) CopySelection() {
 		}
 
 		vtui.SetClipboard(strings.Join(lines, "\n"))
+		internalClipboardText = strings.Join(lines, "\n")
+		internalClipboardCP = ev.Codepage
 		return
 	}
 
@@ -2842,6 +2910,8 @@ func (ev *EditorView) CopySelection() {
 		data, _ := ev.pt.GetRange(min, max-min)
 		if data != nil {
 			vtui.SetClipboard(string(data))
+			internalClipboardText = string(data)
+			internalClipboardCP = ev.Codepage
 			vtui.DebugLog("EDITOR: Copied %d bytes to clipboard", max-min)
 		}
 	}
@@ -2925,6 +2995,16 @@ func (ev *EditorView) PasteText(text string) {
 		}
 	}
 	ev.editSession++
+
+	if text == internalClipboardText && internalClipboardCP != 0 && internalClipboardCP != ev.Codepage {
+		rawData, err := vfs.EncodeBytes([]byte(text), internalClipboardCP)
+		if err == nil {
+			decoded, err := vfs.DecodeBytes(rawData, ev.Codepage)
+			if err == nil {
+				text = string(decoded)
+			}
+		}
+	}
 
 	if GlobalLastClipboardWasRectangular {
 		targetCol := ev.getVisualColOf(ev.CursorLine, ev.CursorPos)
