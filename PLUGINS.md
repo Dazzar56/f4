@@ -14,20 +14,37 @@ One protocol, several transports. The same plugin can run in its own process, co
 
 ## 2. The F4-RPC Object Model & API
 
-Unlike classic terminal file managers, the `f4` plugin API is strictly **Data-Centric**, built entirely around the concept of a **Virtual File System (VFS)**.
+Unlike classic terminal file managers, the `f4` plugin API is strictly **Data-Centric**, split into VFS/Drive operations, Editor Syntax Highlighting, and UI/Global actions.
 
-A plugin does not "draw" panels or manage keyboard event loops directly. Instead, it exposes endpoints that supply data, and `f4` takes care of all UI rendering, column formatting, background loading, caching, and scrollbar management.
+### A. Virtual Filesystems: Drives vs. Providers
 
-### Core Plugin Endpoints (Host -> Plugin)
-To expose a filesystem, a plugin registers handlers for these requests:
-*   `Plugin.Init`: Returns the plugin's capabilities and a list of virtual drive names to mount in the `Alt+F1/F2` menus.
+`f4` supports two distinct ways of mounting virtual file systems:
+1.  **Drives (External & Internal):** Standalone file systems mounted under a specific label. They are registered during `Plugin.Init` (e.g., returning `{ Drives = { "My Lua Drive" } }`) and appear in the `Alt+F1/F2` drive selection menus.
+2.  **VFS Providers (Internal):** High-priority hooks that can intercept path navigation. For example, when you press `Enter` on a `.zip` or `.tar.gz` file, the **Archive Plugin** (an internal Go provider) intercepts the open request and transparently mounts a virtual file system *over* the archive. Similarly, the **NetFox (Network) Plugin** intercepts connection files in `net://` and mounts FTP/SFTP sessions.
+
+To expose a VFS, an external plugin registers handlers for these requests:
 *   `VFS.ReadDir`: Returns a list of `VFSItem` objects (Name, Size, IsDir, MTime).
 *   `VFS.Stat`: Returns metadata for a single item.
 *   `VFS.Open` / `VFS.ReadAt`: Returns a file handle ID and provides random-access byte reading. This enables f4's instant, zero-allocation Viewer and Editor to work over network or archive connections without downloading the whole file.
 *   `VFS.Create` / `VFS.Write` / `VFS.MkDir` / `VFS.Remove` / `VFS.Rename`: Standard filesystem mutations.
 *   `VFS.ProcessKey`: Allows the plugin to intercept specific keystrokes while the user is browsing its virtual drive.
 
-### Host Callbacks (Plugin -> Host)
+### B. Editor Syntax Highlighting (Highlighter API)
+
+Plugins can colorize files in the text editor dynamically.
+1.  During initialization, the plugin calls `Host.RegisterHighlighter`.
+2.  When `f4` opens a file, it starts sending lines to the plugin's `VFS.Highlight` endpoint.
+
+**The `VFS.Highlight` Protocol:**
+*   **Request Payload (`HighlightReq`):**
+    *   `Line` (string): The raw text of the line to highlight.
+    *   `Prev` (any): The state returned by the plugin after highlighting the *previous* line. This allows stateful, line-by-line parsing (e.g. tracking whether we are inside a multi-line comment block) without re-parsing the entire file.
+    *   `Base` (uint64): The default terminal text attribute (colors).
+*   **Response Payload (`HighlightRes`):**
+    *   `Attrs` ([]uint64): A parallel array of terminal attribute words (colors/styles), one per rune of the line.
+    *   `Next` (any): Any state object the plugin wants to pass to the next line's `Prev` parameter.
+
+### C. Host Callbacks (Plugin -> Host)
 Because F4-RPC is a full-duplex protocol, plugins can call back into `f4` at any time:
 *   `Host.Log` / `Host.Message` / `Host.InputBox` / `Host.Menu`: Standard UI and debugging interactions.
 *   `Host.RunAction`: Triggers any internal f4 semantic action (e.g., `Editor.Save`, `Panel.Swap`).
