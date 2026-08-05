@@ -1100,14 +1100,6 @@ func (pf *PanelsFrame) VetoActionKey(e *vtinput.InputEvent) bool {
 }
 
 func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
-	// If it is an F-key event, let the macro manager filter it first.
-	// This is necessary because mouse clicks on the KeyBar generate synthetic
-	// key events that bypass the global FrameManager.EventFilter.
-	if e.VirtualKeyCode >= vtinput.VK_F1 && e.VirtualKeyCode <= vtinput.VK_F12 {
-		if MacroMgr != nil && MacroMgr.Filter(e) {
-			return true
-		}
-	}
 	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
 	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
@@ -1918,10 +1910,6 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 		pf.menuBar.Active = true
 		pf.menuBar.ProcessMouse(e)
 		return true
-	}
-	// Клик мыши по нижней строке (KeyBar)
-	if pf.showKeyBar && my == pf.lastH-1 && e.WheelDirection == 0 && e.ButtonState != 0 {
-		return pf.keyBar.ProcessMouse(e)
 	}
 
 	// Alt panels (Ctrl+L info / Ctrl+Q quick view / …) share the

@@ -756,11 +756,6 @@ func (ev *EditorView) VetoActionKey(e *vtinput.InputEvent) bool {
 }
 
 func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
-	if e.VirtualKeyCode >= vtinput.VK_F1 && e.VirtualKeyCode <= vtinput.VK_F12 {
-		if MacroMgr != nil && MacroMgr.Filter(e) {
-			return true
-		}
-	}
 	if e.Type == vtinput.KeyEventType && e.KeyDown {
 		if ev.targetLine != -1 {
 			ev.targetLine = -1 // User took control, abort target jump
