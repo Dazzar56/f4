@@ -564,6 +564,14 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 		}
 	}
 
+	// Injected-event fallback: KeyBar mouse clicks reach ProcessKey via
+	// InjectEvents, which skips FrameManager.EventFilter and therefore the
+	// hotkey manager. Route them through the same lookup so clicking F2/F5/
+	// F7/… on the bottom bar triggers the configured Viewer action.
+	if MacroMgr.LookupHotkey(e) {
+		return true
+	}
+
 	return false
 }
 

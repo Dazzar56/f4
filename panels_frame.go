@@ -1667,7 +1667,18 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		}
 	}
 
-	// 4. Fallback: pass to CommandLine (handles text, Backspace, Delete, etc.)
+	// 4. Injected-event fallback: synthesized key events (a KeyBar mouse
+	// click, InjectEvents from a widget) bypass FrameManager.EventFilter
+	// and therefore skip the hotkey manager the F-key actions moved into
+	// after the KeyBind refactor. Route them through the same lookup so
+	// clicking F3/F4/F5/… on the bottom bar still triggers View/Edit/Copy.
+	// Real key events reach ProcessKey only when Filter already declined
+	// them, so re-checking here is a no-op for those.
+	if MacroMgr.LookupHotkey(e) {
+		return true
+	}
+
+	// 5. Fallback: pass to CommandLine (handles text, Backspace, Delete, etc.)
 	if (!pf.searchFirstMode() || pf.commandLineFocused || !pf.showPanels) && pf.cmdLine.ProcessKey(e) {
 		pf.cmdLine.SetFocus(true)
 		return true
