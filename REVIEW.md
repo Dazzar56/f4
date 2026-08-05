@@ -5,12 +5,21 @@ they can be reviewed in one sitting instead of being rediscovered one at a
 time. Nothing here blocks anything; anything that grows a plan of its own
 moves out of this file.
 
-## Positions are keyed by the bare path
+## Two archives share one state namespace
 
-`file_state.go` stores the last editor and viewer position under the path
-string alone. A path is unique only within one file system, so a remote path
-and a local one collide, and so do two remote hosts with the same layout.
-Step 13b in `FISH+.md`.
+`vfsStateNamespace` names a remote site by the title the panel already shows and
+everything else by its Go type. That tells a local file from an archive member
+and one host from another, but two different archives are one namespace: the
+same path inside two zips shares a saved position. Naming an archive by the file
+it lives in needs the path of that file, which a mounted VFS does not expose
+today.
+
+## A site renamed is a site forgotten
+
+The key holds `user@host` as it was typed. Connecting to the same machine by IP
+one day and by name the next gives two namespaces, and every saved position
+starts again. A host key would be the honest identifier; it is also one the user
+never sees, so the panel would show one thing and the state file another.
 
 ## AsyncBuffer can hand out a short read without saying so
 

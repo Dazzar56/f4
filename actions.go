@@ -573,7 +573,7 @@ func showEditor(pf *PanelsFrame, v vfs.VFS, path string, f vfs.ReadAtCloser) {
 	editor := NewEditorView(pt, v, path)
 	editor.Codepage = cpID
 	if GlobalFileState != nil && path != "" {
-		if state := GlobalFileState.GetState(path); state != nil {
+		if state := GlobalFileState.GetState(FileStateKey(v, path)); state != nil {
 			editor.WordWrap = state.EditorWrap
 			editor.targetLine = state.EditorLine
 			editor.targetPos = state.EditorPos
@@ -776,7 +776,7 @@ func findOpenedViewer(v vfs.VFS, path string) (*ViewerView, int) {
 
 func showViewer(pf *PanelsFrame, viewer *ViewerView, path string) {
 	if GlobalFileState != nil && path != "" {
-		if state := GlobalFileState.GetState(path); state != nil {
+		if state := GlobalFileState.GetState(FileStateKey(viewer.vfs, path)); state != nil {
 			viewer.TopOffset = state.ViewerOffset
 			if viewer.TopOffset > viewer.backend.Size() {
 				viewer.TopOffset = viewer.backend.Size() - 1
