@@ -64,10 +64,14 @@ func newMockPeer(t *testing.T, banner string, handle func(w io.Writer, token str
 		defer close(reqs)
 		sc := bufio.NewScanner(peerR)
 		sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+		scriptDone := false
 		for sc.Scan() {
-			if sc.Text() == HelperEndMarker {
-				// The helper is in; a real shell would start it now.
-				uploadedOnce.Do(func() { close(uploaded) })
+			if !scriptDone {
+				if sc.Text() == HelperEndMarker {
+					// The helper is in; a real shell would start it now.
+					scriptDone = true
+					uploadedOnce.Do(func() { close(uploaded) })
+				}
 				continue
 			}
 			fields := strings.Fields(sc.Text())
