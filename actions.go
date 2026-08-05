@@ -1119,7 +1119,7 @@ func actionEditFile(pf *PanelsFrame) {
 			return
 		}
 		if fsp.entries[idx].IsDir {
-			vtui.ShowMessage(" Error ", "Cannot edit a directory.", []string{"&Ok"})
+			actionFileAttributes(pf)
 			return
 		}
 		name := fsp.GetSelectedName()
