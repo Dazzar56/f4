@@ -48,6 +48,7 @@ type FishVFS struct {
 // second connection could not fix anyway.
 type fishConn struct {
 	client *fishplus.Client
+	ka     *fishplus.Keepalive
 
 	mu     sync.Mutex
 	refs   int
@@ -68,6 +69,10 @@ func (c *fishConn) release() error {
 		return nil
 	}
 	c.closed = true
+	// Stopped before the session goes away, so the loop does not send a noop
+	// into a stream that is being torn down. It does not wait, so closing a
+	// panel never blocks on the far side.
+	c.ka.Stop()
 	return c.client.Session().Close()
 }
 
@@ -89,9 +94,13 @@ func NewFishVFSOnStream(ctx context.Context, parent vfs.VFS, stdin io.Writer, st
 	return &FishVFS{
 		parent: parent,
 		client: client,
-		conn:   &fishConn{client: client, refs: 1},
-		path:   cwd,
-		title:  title,
+		conn: &fishConn{
+			client: client,
+			refs:   1,
+			ka:     fishplus.StartKeepalive(client, fishplus.DefaultKeepaliveInterval),
+		},
+		path:  cwd,
+		title: title,
 	}, nil
 }
 
