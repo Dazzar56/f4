@@ -99,6 +99,7 @@ Everything printed before that line (motd, shell warnings, login banners) is dis
 *   `chmod <octal>` + path — the mode is checked for being octal before it reaches the remote `chmod`.
 *   `chown <uid> <gid>` + path — either half may be `-`, meaning "leave it alone".
 *   `utime <mtime> <atime>` + path — epoch seconds, either of them `-` for "leave it alone".
+*   `grep <mode> <limit>` + pattern + path — byte offsets of the matches, at most `limit` of them.
 Every mutation refuses a path that is not absolute or that carries a `..` component, and the root directory itself. The client always sends absolute paths, so the rule costs nothing in normal use; it is there because `rmtree` turns one mistake in path assembly into a lot of lost data, and because a check the remote host performs holds even when the client is the thing that went wrong. A name that merely begins with dots is not a `..` component and stays usable.
 *   `mode <name>` — forces a metadata backend instead of the auto-detected one; for tests and for troubleshooting.
 *   `rmode <name>` — the same for the read backend.
@@ -156,6 +157,13 @@ A write that dies in the middle — the disk fills up, the medium fails — leav
 Timestamps are not. GNU `touch` takes an epoch as `-d @1400000000`; BSD and macOS have never accepted that and want `-t YYYYMMDDhhmm.SS` — in the *local* time of the host, which is exactly the one thing the client cannot compute for it. So the conversion happens on the remote side: the helper tries GNU form first, and if it is refused it asks the host's own `date` to render the epoch, `date -r` for BSD and `date -d @` for GNU, and feeds the result to `touch -t`. The `date -r` attempt is skipped when a file with that name exists in the current directory, because GNU `date` reads `-r` as "reference file" and would then quietly report that file's time instead.
 
 Setting both times is one `touch`; setting them to different values is two, `-m` and then `-a`, because that is all POSIX `touch` offers. A caller that wants neither pays no round trip at all.
+### Remote search
+
+This is the first command that is FISH+ rather than fish: the remote host does the work and only the answer travels. `grep -a -b -o` prints one match per line as `offset:text`, and an `awk` behind it throws the text away and stops after the limit, so a pattern matching a million times costs the same handful of bytes on the wire as one matching three times — and grep dies on the broken pipe instead of reading the rest of the file.
+
+The mode argument is `f` for a fixed string or `e` for an extended regular expression, with an `i` appended to fold case. Pattern and path both travel on lines of their own, escaped the same way as any path, so a pattern with spaces, tabs or a leading `~` arrives byte for byte.
+
+`FishVFS.Search` uses it with a fixed pattern and announces `HasSearch` accordingly. A host without `grep` or without `awk` answers `nil`, which is f4's way of saying "search it yourself by reading" — the same fallback SFTP gets.
 ### Known limitations of v1
 
 *   The remote host must provide a base64 decoder (`base64` or `openssl`), even though almost no request needs one: the handshake refuses hosts without it because a path with a newline would otherwise be unreachable. Dropping that requirement for hosts that never see such a path is possible later.
@@ -174,6 +182,9 @@ Setting both times is one `touch`; setting them to different values is two, `-m`
 *   A host with a `touch` that takes neither `-d @epoch` nor `-t`, or with no `date` able to render an epoch, cannot have its timestamps set. The helper says so instead of writing the wrong time.
 *   Times are set with a resolution of one second, because that is what `touch -t` carries. The sub-second part a listing reports is therefore lost on a copy.
 *   `chown` follows symlinks, so setting the ownership of a symlink changes its target instead. Doing it the other way round needs `chown -h`, which not every host has.
+*   A search is capped at 10000 matches and the client cannot tell a file with exactly that many hits from a truncated answer. A count line would fix it and costs a second pass over the file, so it waits for a case that needs it.
+*   Case folding and regular expression dialect are the remote `grep`'s, not Go's, so a search over a FISH+ panel can match slightly differently than the same search over a local one. That is the price of not moving the file.
+*   `grep` cannot match across a line break, so a pattern containing a newline finds nothing. The viewer's search will have to split such a pattern itself.
 
 ## Roadmap
 
@@ -190,6 +201,7 @@ Setting both times is one `touch`; setting them to different values is two, `-m`
 *   **Step 5a — mutations.** `mkdir`, `rm`, `rmdir`, `rmtree`, `mv` and `chmod`, and the `FishVFS` methods on top of them. A recursive delete is one round trip rather than one per entry, because the remote host does the walking. `Create` is now the only method that still refuses.
 *   **Step 5b — writing file content.** The `write` command with an offset and a length, three write backends with runtime switching through `wmode`, `trunc`, and a buffering `Writer` on the client side. A refused request still drains its payload and says so with a `D` line; a write that fails halfway does not, and marks the session broken rather than letting it desynchronize.
 *   **Step 5c — the writing VFS.** `FishVFS.Create` on top of `Writer`, plus `chown` and a `touch` that works on GNU and on BSD alike by letting the remote host convert the epoch into its own local time. `SetAttributes` now carries mode, ownership and timestamps, so a file copied onto a FISH+ panel arrives with the attributes it had. Nothing in the VFS refuses any more, and `ErrFishReadOnly` is gone.
+*   **Step 7a — remote search.** The `grep` command, `Client.Grep` and `FishVFS.Search`, with `HasSearch` finally true for one of f4's file systems. Only byte offsets cross the network, and the limit is enforced on the remote side rather than by disconnecting a flood.
 
 ### To do
 
@@ -197,7 +209,7 @@ The order below is chosen so that something usable arrives as early as possible:
 
 *   **Step 5d — the copier's silent `Close`.** `copyFileWithVFS` closes the destination in a `defer` and drops the error, so the last partial chunk of any buffered writer can fail unnoticed — this is not specific to FISH+, it affects every VFS that buffers. Fixing it touches `file_ops.go` and has to be judged against the other backends, so it is a step of its own rather than a footnote of this one.
 *   **Step 6 — odd hosts.** The `ls -l` fallback backend and whatever else the compatibility issue turns up; `tools/fishplus_probe.sh` collects the raw material.
-*   **Step 7 — FISH+ proper, part 1.** Server-side `grep` feeding `VFS.Search` with byte offsets; server-side line index for the viewer and the editor.
+*   **Step 7b — the remote line index.** A `lines <offset> <count>` command answering with the offsets of the next `count` line starts, so the viewer can jump to the end of a multi-gigabyte remote file without reading what lies between. This is the half users asked for by name — browsing a huge remote file in pieces — and it needs a look at how the viewer asks for its lines today, which is why it is its own step rather than a tail of this one.
 *   **Step 8 — FISH+ proper, part 2.** Delta based saving: PieceTable edits applied remotely instead of re-uploading the file.
 *   **Step 9 — FISH+ proper, part 3.** Background jobs (directory sizes, duplicate search, hashing) reporting progress through the f4 progress dialog.
 *   **Step 10 — resilience.** Mid-request cancellation and resynchronization without dropping the session, keepalive, automatic reconnect.

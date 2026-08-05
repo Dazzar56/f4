@@ -291,6 +291,42 @@ func TestFishVFSMutations(t *testing.T) {
 		t.Error("Remove of a missing directory succeeded")
 	}
 }
+func TestFishVFSSearch(t *testing.T) {
+	v := newLocalFishVFS(t)
+	ctx := context.Background()
+	file := filepath.Join(t.TempDir(), "log.txt")
+	content := "alpha\nbeta\ngamma beta\n"
+	if err := os.WriteFile(file, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	ch, err := v.Search(ctx, file, "beta")
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if ch == nil {
+		if v.GetCapabilities().HasSearch {
+			t.Fatal("Search answered nothing although the host announced it")
+		}
+		t.Skip("no server-side search on this host")
+	}
+	var got []int64
+	for off := range ch {
+		got = append(got, off)
+	}
+	want := []int64{int64(strings.Index(content, "beta")), int64(strings.LastIndex(content, "beta"))}
+	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
+		t.Errorf("offsets = %v, want %v", got, want)
+	}
+	if !v.GetCapabilities().HasSearch {
+		t.Error("HasSearch is false although the search worked")
+	}
+	// An empty pattern is the caller saying it has nothing to search for,
+	// and must not cost a round trip.
+	if ch, err = v.Search(ctx, file, ""); ch != nil || err != nil {
+		t.Errorf("Search with an empty pattern = %v, %v", ch, err)
+	}
+}
 func TestFishVFSCloneHasItsOwnDirectory(t *testing.T) {
 	v := newLocalFishVFS(t)
 	dirA := t.TempDir()

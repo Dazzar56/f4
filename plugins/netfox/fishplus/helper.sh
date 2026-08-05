@@ -594,6 +594,44 @@ f4_cmd_chown() {
  fi
  f4_do chown "$F4SPEC" -- "$F4PATH"
 }
+# grep <mode><i?> <limit>, then a pattern line and a path line. The reply is
+# one byte offset per match: the point of doing this remotely is that a
+# gigabyte of log never has to cross the network to find three lines in it.
+# awk does the trimming and the limiting, so neither the matched text nor a
+# runaway match count ever reaches the wire, and it leaves grep on a broken
+# pipe once the limit is reached instead of letting it read on.
+f4_cmd_grep() {
+ f4_path
+ F4PAT=$F4PATH
+ f4_path
+ if ! f4_have grep || ! f4_have awk; then
+  f4_end err "no grep and awk on remote host"
+  return
+ fi
+ if ! f4_num "$2"; then
+  f4_end err "bad limit"
+  return
+ fi
+ F4GO=
+ case $1 in
+  f* ) F4GO=-F ;;
+  e* ) F4GO=-E ;;
+  * ) f4_end err "bad grep mode"; return ;;
+ esac
+ case $1 in
+  *i ) F4GO="$F4GO -i" ;;
+ esac
+ if [ ! -f "$F4PATH" ]; then
+  f4_end err "not a regular file"
+  return
+ fi
+ if [ ! -r "$F4PATH" ]; then
+  f4_end err "permission denied"
+  return
+ fi
+ grep -a -b -o $F4GO -e "$F4PAT" -- "$F4PATH" 2>/dev/null | awk -F: -v n="$2" '{ print $1 } n > 0 && NR >= n { exit }'
+ f4_end ok
+}
 f4_cmd_wmode() {
  if f4_try_wmode "$1"; then
   F4WR=$1
@@ -696,6 +734,9 @@ while :; do
    ;;
   utime )
    f4_cmd_utime "$F4A1" "$F4A2"
+   ;;
+  grep )
+   f4_cmd_grep "$F4A1" "$F4A2"
    ;;
   chown )
    f4_cmd_chown "$F4A1" "$F4A2"

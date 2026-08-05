@@ -265,13 +265,41 @@ func (v *FishVFS) Open(ctx context.Context, p string) (vfs.ReadAtCloser, error) 
 }
 
 func (v *FishVFS) GetCapabilities() vfs.VFSCapabilities {
-	return vfs.VFSCapabilities{HasRandomAccess: true, HasUnixPermissions: true}
+	return vfs.VFSCapabilities{
+		HasRandomAccess:    true,
+		HasUnixPermissions: true,
+		HasSearch:          v.client.CanGrep(),
+	}
 }
 
-// Search will be answered by the remote host itself in step 7; until then
-// the caller falls back to reading the file, exactly as with SFTP.
+// fishSearchMax caps how many matches one search brings back. It is there so
+// that a pattern matching half a log cannot fill the panel's memory with
+// offsets nobody will ever scroll to.
+const fishSearchMax = 10000
+
+// Search hands the pattern to the remote host's own grep and returns the byte
+// offset of every match. Only the offsets cross the network, which is what
+// lets a panel search a log it would take an hour to download. A host without
+// the tools answers nil, and the caller falls back to reading the file,
+// exactly as it does with SFTP.
 func (v *FishVFS) Search(ctx context.Context, p, pattern string) (chan int64, error) {
-	return nil, nil
+	if pattern == "" || !v.client.CanGrep() {
+		return nil, nil
+	}
+	offsets, err := v.client.Grep(ctx, v.abs(p), pattern, fishplus.GrepOptions{Fixed: true, Limit: fishSearchMax})
+	if err != nil {
+		return nil, err
+	}
+	// The channel is filled before it is handed over. The session answers one
+	// request at a time anyway, so a producing goroutine would buy no overlap
+	// and would only add a way for a caller that stops reading to leave it
+	// hanging on a send.
+	out := make(chan int64, len(offsets))
+	for _, off := range offsets {
+		out <- off
+	}
+	close(out)
+	return out, nil
 }
 
 func (v *FishVFS) MkDir(ctx context.Context, p string) error {
