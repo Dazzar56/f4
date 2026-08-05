@@ -600,10 +600,16 @@ func init() {
 		Handler: withPF(func(pf *PanelsFrame) {
 			if fsp := pf.getActivePanel(); fsp != nil {
 				idx := fsp.GetCursorIndex()
-				if idx >= 0 && idx < len(fsp.entries) {
-					if entry := fsp.entries[idx]; entry.Name != ".." {
-						vtui.SetClipboard(fsp.vfs.Join(fsp.vfs.GetPath(), entry.Name))
-					}
+				if idx < 0 || idx >= len(fsp.entries) {
+					return
+				}
+				base := fsp.vfs.GetPath()
+				if entry := fsp.entries[idx]; entry.Name == ".." {
+					// far2l: cursor on ".." acts as the current folder itself
+					// (matches CreateFullPathName(".", …) in far2l's KEY_CTRLF branch).
+					vtui.SetClipboard(base)
+				} else {
+					vtui.SetClipboard(fsp.vfs.Join(base, entry.Name))
 				}
 			}
 		}),
@@ -620,11 +626,18 @@ func init() {
 		Handler: withPF(func(pf *PanelsFrame) {
 			if fsp := pf.getActivePanel(); fsp != nil {
 				idx := fsp.GetCursorIndex()
-				if idx >= 0 && idx < len(fsp.entries) {
-					if entry := fsp.entries[idx]; entry.Name != ".." {
-						vtui.SetClipboard(entry.Name)
-					}
+				if idx < 0 || idx >= len(fsp.entries) {
+					return
 				}
+				name := fsp.entries[idx].Name
+				if name == ".." {
+					// far2l docs: with the cursor on ".." this hotkey
+					// treats it as the name of the current folder.
+					// Mirrors far2l's PointToName(GetCurDir()) branch
+					// in FileList::CopyNames() (FullPathName=false).
+					name = fsp.vfs.Base(fsp.vfs.GetPath())
+				}
+				vtui.SetClipboard(name)
 			}
 		}),
 	})
