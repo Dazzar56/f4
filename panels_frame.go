@@ -1500,6 +1500,10 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				}
 
 				if isWindowsShell {
+					cmd = resolveWindowsCommand(cmd)
+				}
+
+				if isWindowsShell {
 					// Use a combined command for reliable excision in AnsiParser: cd /d "path" & command
 					if path != "" {
 						fullWireCmd = fmt.Sprintf("cd /d \"%s\" & %s\r", path, cmd)
