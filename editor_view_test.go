@@ -4148,15 +4148,15 @@ func TestEditorView_Codepages_ClipboardConversion(t *testing.T) {
 	ev := NewEditorView(pt, nil, "")
 	defer ev.Close()
 
-	ev.Codepage = 11111 // ANSI (CP1251)
+	ev.Codepage = 1251 // Windows-1251 (Cyrillic)
 	ev.selActive = true
 	ev.selAnchorOffset = 0
 	ev.CursorPos = 12 // "Привет" in UTF-8
 
 	ev.CopySelection()
 
-	// Switch editor to OEM (866)
-	ev.Codepage = 22222
+	// Switch editor to CP866
+	ev.Codepage = 866
 	ev.DeleteSelection()
 
 	// Paste text - should perform conversion
@@ -4199,17 +4199,17 @@ func TestEditorView_Codepages_ClipboardConversion_Fallback(t *testing.T) {
 	ev := NewEditorView(pt, nil, "")
 	defer ev.Close()
 
-	ev.Codepage = 11111 // ANSI (CP1251) - pretend the editor has this text in CP1251 (even though it contains unconvertible emoji)
+	ev.Codepage = 1251 // Windows-1251 - pretend the editor has this text in CP1251 (even though it contains unconvertible emoji)
 	ev.selActive = true
 	ev.selAnchorOffset = 0
 	ev.CursorPos = int(pt.Size())
 
-	ev.CopySelection() // Copied with CP = 11111
+	ev.CopySelection() // Copied with CP = 1251
 
 	ev.Codepage = 65001 // Switch to UTF-8 (65001)
 	ev.DeleteSelection()
 
-	// Paste - encoding to 11111 will fail because of '🚀', so it should fallback to original text
+	// Paste - encoding to 1251 will fail because of '🚀', so it should fallback to original text
 	ev.PasteText(internalClipboardText)
 
 	expected := "🚀 Emojis are unconvertible to CP1251"
