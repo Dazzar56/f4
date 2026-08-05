@@ -1477,6 +1477,14 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	}
 
+	// Injected-event fallback: KeyBar mouse clicks reach ProcessKey via
+	// InjectEvents, which skips FrameManager.EventFilter and therefore the
+	// hotkey manager. Route them through the same lookup so clicking F2/F7/
+	// F10/… on the bottom bar triggers the configured Editor action.
+	if MacroMgr.LookupHotkey(e) {
+		return true
+	}
+
 	return false
 }
 

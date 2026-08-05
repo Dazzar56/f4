@@ -424,6 +424,36 @@ func (m *MacroManager) Filter(e *vtinput.InputEvent) bool {
 	return false
 }
 
+// LookupHotkey runs the configured action for e in the current area without
+// touching macro-recording or macro-playback state. Frames use it as a
+// fallback for synthesized key events that bypass FrameManager.EventFilter —
+// notably mouse clicks on the F-key bar, which InjectEvents into the queue
+// with is_injected=true and therefore never reach Filter above. Returns true
+// when the key is bound (including to "None", which is a deliberate silence).
+func (m *MacroManager) LookupHotkey(e *vtinput.InputEvent) bool {
+	if m == nil || e == nil || e.Type != vtinput.KeyEventType || !e.KeyDown {
+		return false
+	}
+	hm := GlobalHotkeysMgr
+	if hm == nil {
+		return false
+	}
+	keyStr := EventToFarString(e)
+	if keyStr == "" {
+		return false
+	}
+	area := m.GetCurrentArea()
+	actionName := hm.GetAction(area, keyStr)
+	if actionName == "" {
+		return false
+	}
+	if strings.EqualFold(actionName, "none") {
+		return true
+	}
+	vtui.DebugLog("HOTKEY: Injected %s → action %s in area %s", keyStr, actionName, area)
+	return RunAction(actionName)
+}
+
 func (m *MacroManager) showAssignDialog() {
 	m.Assigning = true
 	frame := NewMacroAssignFrame(m)
