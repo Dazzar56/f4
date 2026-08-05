@@ -1,5 +1,5 @@
 # Project Structure
-Last updated: 2026-08-05 19:31:35
+Last updated: 2026-08-06 00:48:27
 
 ```text
 .
@@ -353,13 +353,13 @@ Last updated: 2026-08-05 19:31:35
 ├── quick_view_panel_test.go
 ├── README.md
 ├── remote_command.go
+├── resolve_command_other.go
+├── resolve_command_windows.go
 ├── rpc_lua_test.go
 ├── rpc_plugin.go
 ├── rpc_plugin_test.go
 ├── rpc_vfs.go
 ├── rpc_vfs_test.go
-├── rsrc_windows_amd64.syso
-├── rsrc_windows_arm64.syso
 ├── screenshot.png
 ├── sdk
 │   ├── extui
