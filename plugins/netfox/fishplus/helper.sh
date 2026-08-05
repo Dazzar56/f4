@@ -166,6 +166,17 @@ if [ -z "$F4LSTIME" ]; then
   esac
  fi
 fi
+# The dialect decides two more things, because find cannot -exec a shell
+# function: the options ls has to be given, and how many columns stand
+# before the name in what it prints. The tree search and the scan job both
+# run ls from inside find and then read what came back.
+F4LSOPT=
+F4LSN=0
+case $F4LSTIME in
+ epoch ) F4LSOPT='-lan --time-style=+%s'; F4LSN=6 ;;
+ iso ) F4LSOPT='-lan --full-time'; F4LSN=8 ;;
+ bsd ) F4LSOPT='-lanT'; F4LSN=9 ;;
+esac
 
 f4_try_mode() {
  case $1 in
@@ -178,11 +189,8 @@ f4_try_mode() {
 }
 
 f4_ls() {
- case $F4LSTIME in
-  epoch ) ls -lan --time-style=+%s "$@" 2>/dev/null ;;
-  iso ) ls -lan --full-time "$@" 2>/dev/null ;;
-  bsd ) ls -lanT "$@" 2>/dev/null ;;
- esac
+ [ -n "$F4LSOPT" ] || return 1
+ ls $F4LSOPT "$@" 2>/dev/null
 }
 
 F4MODE=
@@ -341,7 +349,7 @@ f4_cmd_ffind() {
  f4_gm=$3
  f4_path
  f4_dir=$F4PATH
- if [ -z "$F4MODE" ] || [ "$F4MODE" = ls ]; then
+ if [ -z "$F4MODE" ] || ! f4_have find; then
   f4_end err "the remote host has no metadata backend a tree search can use"
   return
  fi
@@ -384,18 +392,20 @@ f4_cmd_ffind() {
   f4_end err "not a directory"
   return
  fi
- echo "M $F4MODE"
+ f4_mode_line
  if [ -n "$f4_pat" ]; then
   case $F4MODE in
    find ) find -H "$f4_dir" ! -type d \( "$@" \) -exec grep $f4_go -q -e "$f4_pat" {} \; -printf "$F4FMT_FINDP" 2>/dev/null ;;
    stat ) find -H "$f4_dir" ! -type d \( "$@" \) -exec grep $f4_go -q -e "$f4_pat" {} \; -exec stat -c "$F4FMT_STAT" -- {} + 2>/dev/null ;;
    statbsd ) find -H "$f4_dir" ! -type d \( "$@" \) -exec grep $f4_go -q -e "$f4_pat" {} \; -exec stat -f "$F4FMT_BSD" -- {} + 2>/dev/null ;;
+   ls ) find -H "$f4_dir" ! -type d \( "$@" \) -exec grep $f4_go -q -e "$f4_pat" {} \; -exec ls -d $F4LSOPT -- {} + 2>/dev/null ;;
   esac
  else
   case $F4MODE in
    find ) find -H "$f4_dir" ! -type d \( "$@" \) -printf "$F4FMT_FINDP" 2>/dev/null ;;
    stat ) find -H "$f4_dir" ! -type d \( "$@" \) -exec stat -c "$F4FMT_STAT" -- {} + 2>/dev/null ;;
    statbsd ) find -H "$f4_dir" ! -type d \( "$@" \) -exec stat -f "$F4FMT_BSD" -- {} + 2>/dev/null ;;
+   ls ) find -H "$f4_dir" ! -type d \( "$@" \) -exec ls -d $F4LSOPT -- {} + 2>/dev/null ;;
   esac
  fi | head -n "$f4_lim"
  f4_end ok
@@ -999,11 +1009,21 @@ f4_job_scan() {
  fi
  f4_jfl=n=n
  [ -n "$F4AWKFL" ] && f4_jfl='fflush()'
+ # ls puts the size in the fifth column rather than the second, and its
+ # name starts further along the line, so the counting awk is told both
+ # rather than being written twice.
+ f4_sf=2
+ f4_pf=2
+ if [ "$F4MODE" = ls ]; then
+  f4_sf=5
+  f4_pf=$F4LSN
+ fi
  case $F4MODE in
   find ) find -H "$1" -printf '%y %s %p\n' 2>/dev/null ;;
   stat ) find -H "$1" -exec stat -c '%f %s %n' -- {} + 2>/dev/null ;;
   statbsd ) find -H "$1" -exec stat -f '%p %z %N' -- {} + 2>/dev/null ;;
- esac | awk -v e=2000 '{ if (substr($1, 1, 1) == "4" || $1 == "d") { dn++; db += $2 } else { fn++; fb += $2 } k++; if (k % e == 0) { p = $0; sub(/^[^ ]+ [^ ]+ /, "", p); printf "P %d %d %d %d %s\n", fb, db, fn, dn, p; '"$f4_jfl"' } } END { printf "T %d %d %d %d\n", fb, db, fn, dn }'
+  ls ) find -H "$1" -exec ls -d $F4LSOPT -- {} + 2>/dev/null ;;
+ esac | awk -v e=2000 -v sf="$f4_sf" -v pf="$f4_pf" '{ if (substr($1, 1, 1) == "4" || substr($1, 1, 1) == "d") { dn++; db += $sf } else { fn++; fb += $sf } k++; if (k % e == 0) { p = $0; for (i = 0; i < pf; i++) sub(/^[^ ]+ +/, "", p); printf "P %d %d %d %d %s\n", fb, db, fn, dn, p; '"$f4_jfl"' } } END { printf "T %d %d %d %d\n", fb, db, fn, dn }'
 }
 
 # The hash job is what a duplicate search is built on. Hashing a whole tree

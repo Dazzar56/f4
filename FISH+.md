@@ -398,7 +398,7 @@ time, which is exactly what makes it useful.
 
 *   **Step 12a — the viewer's search.** `ViewerBackend.SearchFrom` asks the file system when it can search its own copy, and the viewer's read-and-scan loop stays as the fallback for everything that cannot. Over FISH+ a search in a gigabyte log is now one round trip instead of a gigabyte of traffic. The remote search folds case, because the viewer's own search always has, and a pattern that matched in one panel and not in another would be worse than a slow search.
 
-*   **Step 13a — the ls backend.** A host with neither GNU find nor either stat can now be browsed: `ls -lan` with a full timestamp, in both dialects that offer one. Listing, stat, lstat and file size all go through it; the tree search and the hash job refuse on it, since both need a `find` that such a host does not have, and the client walks the tree itself instead.
+*   **Step 13a — the ls backend.** A host with neither GNU find nor either stat can now be browsed: `ls -lan` with a full timestamp, in both dialects that offer one. Listing, stat, lstat and file size all go through it. The tree search and the scan job go through it too, by running `ls -d` from inside `find`, so a host that has a `find` without `-printf` keeps both; where there is no `find` at all the search refuses and the client walks the tree itself. The hash job still refuses on this backend — see `IDEAS.md`.
 
 ### To do
 

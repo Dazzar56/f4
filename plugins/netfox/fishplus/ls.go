@@ -106,7 +106,14 @@ func lsNameOf(line string, fields []string, n int) string {
 		}
 		at += idx + len(fields[i])
 	}
-	return strings.TrimLeft(line[at:], " \t")
+	// Exactly one space separates the last fixed column from the name: ls
+	// pads inside a column, never between them. Trimming everything here
+	// would eat the leading spaces of a name that begins with them.
+	rest := line[at:]
+	if len(rest) > 0 && (rest[0] == ' ' || rest[0] == '\t') {
+		rest = rest[1:]
+	}
+	return rest
 }
 
 // parseLsTime reads the timestamp of whichever dialect produced it. The BSD
