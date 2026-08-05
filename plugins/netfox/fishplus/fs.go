@@ -53,7 +53,7 @@ func (e Entry) IsExecutable() bool { return e.Mode&0111 != 0 }
 // preference: GNU find carries everything in a single call and even tells
 // where a symlink points, while the stat flavours need a shell glob and
 // report the link itself only.
-var ListingModes = []string{"find", "stat", "statbsd"}
+var ListingModes = []string{"find", "stat", "statbsd", "ls"}
 
 func typeCharMode(c byte) uint32 {
 	switch c {
@@ -229,6 +229,9 @@ func parseListing(lines []string, keepPath bool) (string, []Entry, error) {
 	if !strings.HasPrefix(lines[0], "M ") || mode == "" {
 		return "", nil, fmt.Errorf("fishplus: listing without a mode marker: %q", lines[0])
 	}
+	// The ls backend carries its time dialect in the marker, because the two
+	// print timestamps differently and nothing else in the line says which.
+	mode, variant, _ := strings.Cut(mode, " ")
 	var parse func(string) (Entry, error)
 	switch mode {
 	case "find":
@@ -237,6 +240,8 @@ func parseListing(lines []string, keepPath bool) (string, []Entry, error) {
 		parse = func(l string) (Entry, error) { return parseStatLike(l, 16, "stat listing", keepPath) }
 	case "statbsd":
 		parse = func(l string) (Entry, error) { return parseStatLike(l, 8, "bsd stat listing", keepPath) }
+	case "ls":
+		parse = func(l string) (Entry, error) { return parseLsEntry(l, variant, keepPath) }
 	default:
 		return mode, nil, fmt.Errorf("fishplus: unknown listing mode %q", mode)
 	}

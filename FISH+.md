@@ -131,7 +131,7 @@ Listing is where remote hosts differ the most, so the helper probes what is ther
 2.  **stat** — `stat -c '%f %s %Y %X %Z %u %g %n' -- DIR/* DIR/.*`. Needs a shell glob, so a huge directory can hit the argument limit, and the type of a symlink target stays unknown until someone asks for it.
 3.  **statbsd** — the same shape with `stat -f '%p %z %m %a %c %u %g %N'` for BSD and macOS.
 
-A pure `ls -l` fallback for hosts that have neither is a separate step; it needs real output from such hosts, which is what the compatibility issue and `tools/fishplus_probe.sh` collect.
+4.  **ls** — the last resort, `ls -lan` with a full timestamp: `--time-style=+%s` where GNU has it, `-T` where BSD does. The ids are asked for numerically and the timestamp in full for the same reason: with them the number of fields before the name is fixed, so everything after them is the name, spaces and all. Without them a user name with a space in it and a date without a year make the line a guess. The dialect travels in the mode marker, `M ls epoch` or `M ls bsd`, since nothing in the line itself says which.
 
 The first payload line of a listing names the backend that produced the rest, so the client always knows which parser to use — including when the backend was switched at runtime.
 
@@ -327,7 +327,9 @@ time, which is exactly what makes it useful.
 *   Two panels sharing one session — which is what `Clone` gives them — take turns rather than working in parallel, because the remote shell answers one command at a time. A cancellation in one of them no longer breaks the session for the other, but it does make the other wait for the answer being drained.
 *   `SetAttributes` follows the SFTP backend: a `Uid` or `Gid` of -1 means "leave the ownership alone", and a zero-valued `VFSItem` therefore asks for `chown 0:0` rather than for nothing. Callers with nothing to change have to say so with -1, which is what the copier does.
 *   In the `stat` and `statbsd` backends a directory is listed through a shell glob, so a directory with very many entries can exceed the argument limit, and a symlink is reported without the type of its target until the user enters it.
-*   Hosts with neither GNU find, nor GNU stat, nor BSD stat cannot be listed at all yet.
+*   The `ls` backend needs a full timestamp, which means either GNU's `--time-style` or BSD's `-T`. A host with neither — Solaris `ls` is the one we know of — still cannot be listed, because the short form drops the year and no amount of parsing gets it back.
+*   In the `ls` backend a tree search and the hash job refuse rather than answer: both walk with `find`, and a host that has no usable `find` has none to walk with. The client falls back to walking the tree itself for the search.
+*   The BSD `ls` timestamp carries no time zone, so it is read in the client's zone. A host in another zone shows times off by the difference, in that backend only.
 *   A host without `dd` cannot be written to at all, and the client refuses to send a payload it knows the remote side cannot take off the wire.
 *   The `b64` backend puts a third more bytes on the wire and makes the remote shell read them one syscall per byte, which is why the client sends it smaller chunks than a raw backend.
 *   Shrinking a file to a non-zero size needs the `truncate` utility; without it only truncation to zero is possible.
@@ -393,12 +395,14 @@ time, which is exactly what makes it useful.
 
 *   **Step 12a — the viewer's search.** `ViewerBackend.SearchFrom` asks the file system when it can search its own copy, and the viewer's read-and-scan loop stays as the fallback for everything that cannot. Over FISH+ a search in a gigabyte log is now one round trip instead of a gigabyte of traffic. The remote search folds case, because the viewer's own search always has, and a pattern that matched in one panel and not in another would be worse than a slow search.
 
+*   **Step 13a — the ls backend.** A host with neither GNU find nor either stat can now be browsed: `ls -lan` with a full timestamp, in both dialects that offer one. Listing, stat, lstat and file size all go through it; the tree search and the hash job refuse on it, since both need a `find` that such a host does not have, and the client walks the tree itself instead.
+
 ### To do
 
 The numbering follows the order the steps were planned in, not the order they were done: the plan was arranged so that something usable arrived early, and a browsable, readable panel existed from step 4 onwards.
 
 *   **Step 12b — the editor.** Whether a remote line index helps the editor at all is the open question, and the answer looks like no: the editor loads a file into a piece table whose original buffer is the file itself, so by the time anything could be counted the bytes are already here. What would help is not counting but loading — an editor that opens a large remote file without fetching all of it first — and that is a different piece of work from step 7b. Worth measuring before building.
-*   **Step 13 — odd hosts.** The `ls -l` fallback backend and whatever else the compatibility issue turns up; `tools/fishplus_probe.sh` collects the raw material.
+*   **Step 13b — the rest of the odd hosts.** Whatever the compatibility issue turns up beyond the `ls` backend; `tools/fishplus_probe.sh` collects the raw material. Solaris is the known gap: its `ls` prints neither a full timestamp nor numeric ids in a form this can use.
 *   **Step 14 — surviving a broken connection.** Keepalive, and a session that reconnects and picks up where it was rather than making the user open the site again. Everything that needs a session to outlive its process waits here: a job whose answer nobody looked at before f4 was closed, a transfer that should resume rather than restart, a panel that reopens where it was. Deliberately last — each of these is easy to want and hard to make honest, since a reconnected session is a new shell that knows nothing of what the old one was doing.
 *   **Step 15 — the interactive terminal.** A shell on a pseudo terminal of its own on the far side, which needs a second channel rather than the request stream: the requests are strictly sequential and an interactive session cannot share them. far2l's built-in terminal is the reference for what this half has to get right. LLM MUST consider using techniques from far2l internal virtual terminal as it is time-tested solution. LLM MUST ask user for recent far2l vt code if it was not included in prompt.
 *   **Step 16 — copying without a client in the middle.** A copy between two panels on the same host is `cp` there, and a move within one file system is `mv` and costs nothing; today both pull every byte here and push it back. Between two different hosts, one that can reach the other opens its own FISH+ session to it and the bytes travel directly, at whatever the link between two data centres is worth, while the client watches from a bad connection. See `IDEAS.md` for what has to be worked out first.

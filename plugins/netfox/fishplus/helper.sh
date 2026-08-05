@@ -133,17 +133,37 @@ F4FMT_FIND='%y %Y %s %T@ %A@ %C@ %m %U %G %f\n'
 F4FMT_STAT='%f %s %Y %X %Z %u %g %n'
 F4FMT_BSD='%p %z %m %a %c %u %g %N'
 
+# The last resort. ls is everywhere, but its output is only parseable when
+# the timestamp is complete and the ids are numeric: the short form drops the
+# year on anything older than six months, and a user name can contain a
+# space. With -n the columns before the name are a fixed count, which is what
+# makes the rest of the line a name rather than a guess.
+F4LSTIME=
+if ls -lan --time-style=+%s -d . >/dev/null 2>&1; then
+ F4LSTIME=epoch
+elif ls -lanT -d . >/dev/null 2>&1; then
+ F4LSTIME=bsd
+fi
+
 f4_try_mode() {
  case $1 in
   find ) find -H . -mindepth 0 -maxdepth 0 -printf "$F4FMT_FIND" >/dev/null 2>&1 ;;
   stat ) stat -c "$F4FMT_STAT" . >/dev/null 2>&1 ;;
   statbsd ) stat -f "$F4FMT_BSD" . >/dev/null 2>&1 ;;
+  ls ) [ -n "$F4LSTIME" ] ;;
   * ) false ;;
  esac
 }
 
+f4_ls() {
+ case $F4LSTIME in
+  epoch ) ls -lan --time-style=+%s "$@" 2>/dev/null ;;
+  bsd ) ls -lanT "$@" 2>/dev/null ;;
+ esac
+}
+
 F4MODE=
-for f4c in find stat statbsd; do
+for f4c in find stat statbsd ls; do
  if f4_try_mode $f4c; then
   F4MODE=$f4c
   break
@@ -248,7 +268,7 @@ F4FEATS=
 for f4c in dd base64 readlink du grep sed awk wc head tail stty truncate chown touch date sha256sum; do
  f4_have $f4c && F4FEATS="$F4FEATS $f4c"
 done
-for f4c in find stat statbsd; do
+for f4c in find stat statbsd ls; do
  f4_try_mode $f4c && F4FEATS="$F4FEATS $f4c"
 done
 [ -n "$F4HEADC" ] && F4FEATS="$F4FEATS headc"
@@ -266,11 +286,22 @@ fi
 [ -n "$F4RD" ] && F4FEATS="$F4FEATS read:$F4RD"
 [ -n "$F4WR" ] && F4FEATS="$F4FEATS write:$F4WR"
 
+# The mode marker carries the ls dialect with it, since the two print their
+# timestamps differently and the client has to know which it is reading.
+f4_mode_line() {
+ if [ "$F4MODE" = ls ]; then
+  echo "M ls $F4LSTIME"
+ else
+  echo "M $F4MODE"
+ fi
+}
+
 f4_list() {
  case $F4MODE in
   find ) find -H "$F4PATH" -mindepth 1 -maxdepth 1 -printf "$F4FMT_FIND" 2>/dev/null ;;
   stat ) stat -c "$F4FMT_STAT" -- "$F4PATH"/* "$F4PATH"/.* 2>/dev/null ;;
   statbsd ) stat -f "$F4FMT_BSD" -- "$F4PATH"/* "$F4PATH"/.* 2>/dev/null ;;
+  ls ) f4_ls -A -- "$F4PATH" ;;
  esac
 }
 # ffind <limit> <nmasks> <grep mode>: walk a whole tree on this side and
@@ -355,6 +386,7 @@ f4_size() {
   find ) F4SZ=`find -H "$1" -mindepth 0 -maxdepth 0 -printf '%s\n' 2>/dev/null` ;;
   stat ) F4SZ=`stat -c '%s' -- "$1" 2>/dev/null` ;;
   statbsd ) F4SZ=`stat -f '%z' -- "$1" 2>/dev/null` ;;
+  ls ) set -- `f4_ls -dL -- "$1" 2>/dev/null`; F4SZ=$5 ;;
  esac
  f4_num "$F4SZ" || F4SZ=
  if [ -z "$F4SZ" ] && f4_have wc; then
@@ -409,7 +441,7 @@ f4_cmd_enum() {
   f4_end err "permission denied"
   return
  fi
- echo "M $F4MODE"
+ f4_mode_line
  f4_list
  f4_end ok
 }
@@ -424,9 +456,10 @@ f4_cmd_info() {
   find ) F4OUT=`find $1 "$F4PATH" -mindepth 0 -maxdepth 0 -printf "$F4FMT_FIND" 2>&1`; F4RV=$? ;;
   stat ) F4OUT=`stat $2 -c "$F4FMT_STAT" -- "$F4PATH" 2>&1`; F4RV=$? ;;
   statbsd ) F4OUT=`stat $2 -f "$F4FMT_BSD" -- "$F4PATH" 2>&1`; F4RV=$? ;;
+  ls ) F4OUT=`f4_ls -d $2 -- "$F4PATH" 2>&1`; F4RV=$? ;;
  esac
  if [ $F4RV -eq 0 ] && [ -n "$F4OUT" ]; then
-  echo "M $F4MODE"
+  f4_mode_line
   echo "$F4OUT"
   f4_end ok
  else
@@ -964,7 +997,7 @@ f4_job_hash() {
   echo "no hashing tool on remote host" >&2
   return 1
  fi
- if [ -z "$F4MODE" ] || ! f4_have find || ! f4_have awk; then
+ if [ -z "$F4MODE" ] || [ "$F4MODE" = ls ] || ! f4_have find || ! f4_have awk; then
   echo "no find and awk on remote host" >&2
   return 1
  fi
