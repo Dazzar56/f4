@@ -439,6 +439,11 @@ func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, contentHeight int) 
 }
 
 func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
+	if e.VirtualKeyCode >= vtinput.VK_F1 && e.VirtualKeyCode <= vtinput.VK_F12 {
+		if MacroMgr != nil && MacroMgr.Filter(e) {
+			return true
+		}
+	}
 	if !e.KeyDown {
 		return false
 	}
