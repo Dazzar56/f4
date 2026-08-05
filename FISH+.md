@@ -413,6 +413,7 @@ The numbering follows the order the steps were planned in, not the order they we
 // А вот всякие рефакторинги наоборот должны быть в конце списка - по той же причине.
 // Пункт 16 можно сделать до 15, если это делается сравнительно быстро.
 
+The design for the reconnect half of step 14 is in `STEP14.md`, written before the code so the next session starts from a decision rather than from an analysis; it goes away when the step lands.
 ## Testing
 
     go test ./plugins/netfox/fishplus/ ./plugins/netfox/
