@@ -293,6 +293,46 @@ func NewFishVFS(parent vfs.VFS, host, port, user, pass string, timeout int) (*Fi
 // Client exposes the underlying protocol client, mostly so a caller can ask
 // what the remote host turned out to be capable of.
 func (v *FishVFS) Client() *fishplus.Client { return v.client }
+// CanReconnect reports whether this file system can rebuild its session. A
+// site opened from a configuration can; one handed a pair of streams cannot,
+// because there is no second pair. A caller offering the user a choice has to
+// know which it is before it offers one.
+func (v *FishVFS) CanReconnect() bool {
+	if v.conn == nil {
+		return false
+	}
+	v.conn.mu.Lock()
+	defer v.conn.mu.Unlock()
+	return v.conn.dial != nil && !v.conn.closed
+}
+
+// Reconnect rebuilds the session behind this file system and points this view
+// at the result. The new shell knows nothing of what the old one was doing:
+// background jobs are gone, and a write or a patch that was in flight cannot be
+// resumed, only reported. What survives is what lives on this side — the path
+// this panel stands in, a read handle, and the credentials the dialer holds.
+//
+// It is deliberately not called from inside a request. A request that
+// reconnected on its own would turn one failure into a delay of unknown length
+// in the middle of a copy, with no way for the user to say no; the choice
+// belongs to whoever meets ErrBroken and can ask.
+//
+// Only this view is repointed. Another panel sharing the connection keeps its
+// own pointer until it reconnects too, at which point it is handed the session
+// that already exists rather than a second one. Reaching the session through
+// the connection everywhere instead is a mechanical change of its own and is
+// listed in STEP14.md.
+func (v *FishVFS) Reconnect(ctx context.Context) error {
+	if v.conn == nil {
+		return ErrNoDialer
+	}
+	client, err := v.conn.reconnect(ctx, v.client)
+	if err != nil {
+		return err
+	}
+	v.client = client
+	return nil
+}
 
 func (v *FishVFS) GetTitle() string { return v.title }
 
