@@ -405,6 +405,22 @@ func (v *FishVFS) Scan(ctx context.Context, basePath string, names []string, cb 
 	return total, nil
 }
 
+// FindDuplicates implements vfs.DuplicateFinder. Only the paths of the files
+// that turned out to be identical cross the network; the reading and the
+// hashing happen where the disk is.
+func (v *FishVFS) FindDuplicates(ctx context.Context, dir string, cb func(vfs.DuplicateProgress)) ([][]string, error) {
+	if !v.client.CanHash() {
+		return nil, fishplus.ErrNoJobs
+	}
+	var forward func(fishplus.HashProgress)
+	if cb != nil {
+		forward = func(p fishplus.HashProgress) {
+			cb(vfs.DuplicateProgress{Done: p.Done, Total: p.Total, Path: p.Path})
+		}
+	}
+	return v.client.Duplicates(ctx, v.abs(dir), forward)
+}
+
 // PatchFile implements vfs.DeltaWriter. The copying happens on the remote
 // host at local disk speed; only the new bytes cross the network.
 func (v *FishVFS) PatchFile(ctx context.Context, src, dst string, pieces []vfs.PatchPiece) error {

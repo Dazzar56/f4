@@ -1825,6 +1825,85 @@ func actionMkDir(pf *PanelsFrame) {
 	vtui.FrameManager.Push(dlg)
 }
 
+// actionFindDuplicates asks the file system for files with identical
+// content. Only a file system that can do the work on its own side offers
+// it: doing it from here would mean reading every candidate over the
+// network, which costs more than the answer is worth.
+func actionFindDuplicates(pf *PanelsFrame) {
+	fsp := pf.getActivePanel()
+	if fsp == nil {
+		return
+	}
+	finder, ok := fsp.vfs.(vfs.DuplicateFinder)
+	if !ok {
+		vtui.ShowMessage(" Find Duplicates ",
+			"This file system cannot search for duplicates.\nOnly a remote one that can hash its own files offers it.",
+			[]string{"&Ok"})
+		return
+	}
+
+	v := fsp.vfs
+	root := v.GetPath()
+	opDlg := NewFileOpProgressDialog(" Searching for duplicates... ")
+	var taskCtx *vtui.TaskContext
+	opDlg.btnCancel.OnClick = func() {
+		if taskCtx != nil {
+			taskCtx.Cancel()
+		}
+		opDlg.Close()
+	}
+	vtui.FrameManager.PostTask(func() {
+		vtui.FrameManager.AddScreenHeadless(opDlg)
+	})
+
+	taskCtx = vtui.RunAsync(func(ctx *vtui.TaskContext) {
+		lastUpdate := time.Now()
+		groups, err := finder.FindDuplicates(ctx.Context, root, func(p vfs.DuplicateProgress) {
+			now := time.Now()
+			if now.Sub(lastUpdate) < 50*time.Millisecond {
+				return
+			}
+			lastUpdate = now
+			ctx.RunOnUI(func() {
+				opDlg.UpdateCounting("Hashing", p.Path, int64(p.Done), int64(p.Total))
+				vtui.FrameManager.Redraw()
+			})
+		})
+
+		// The panel wants an item per row, and a group is only recognizable
+		// by its neighbours, so the groups are flattened in order and the
+		// rows of one group stay adjacent.
+		var found []FoundFile
+		if err == nil {
+			for _, group := range groups {
+				for _, p := range group {
+					item, statErr := v.Stat(ctx.Context, p)
+					if statErr != nil {
+						item = vfs.VFSItem{Name: v.Base(p)}
+					}
+					found = append(found, FoundFile{Path: p, Item: item})
+				}
+			}
+		}
+
+		ctx.RunOnUI(func() {
+			opDlg.Close()
+			if err != nil && err != context.Canceled {
+				vtui.ShowMessage(" Error ", fmt.Sprintf("Duplicate search failed:\n%v", err), []string{"&Ok"})
+				return
+			}
+			if ctx.Err() != nil {
+				return
+			}
+			if len(found) == 0 {
+				vtui.ShowMessage(" Find Duplicates ", "No files with identical content were found.", []string{"&Ok"})
+				return
+			}
+			ShowSearchResults(pf, v, found)
+		})
+	})
+}
+
 func actionFindFile(pf *PanelsFrame) {
 	activePanel := pf.getActivePanel()
 	if activePanel == nil {

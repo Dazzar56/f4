@@ -78,6 +78,24 @@ func (d *FileOpProgressDialog) UpdateScan(currentPath string, files, dirs int64)
 	d.lblSpeed.SetVisible(false)
 }
 
+// UpdateCounting sets the dialog to counting mode: one thing at a time out
+// of a known total. Scanning cannot use it because a walk does not know how
+// much is left; hashing does, because the tree was already walked to decide
+// which files are worth reading.
+func (d *FileOpProgressDialog) UpdateCounting(action, currentPath string, done, total int64) {
+	d.lblCurrent.SetText(runewidth.Truncate(action+": "+currentPath, 54, "..."))
+	d.lblTotal.SetText(fmt.Sprintf("%d of %d files", done, total))
+
+	d.pbCurrent.SetVisible(false)
+	if total > 0 {
+		d.pbTotal.SetVisible(true)
+		d.pbTotal.SetPercent(int(done * 100 / total))
+	} else {
+		d.pbTotal.SetVisible(false)
+	}
+	d.lblSpeed.SetVisible(false)
+}
+
 // UpdateTransfer sets the dialog to Transfer mode (shows progress bars and speed).
 func (d *FileOpProgressDialog) UpdateTransfer(action string, filename string, currentPct int, totalText string, totalPct int, speedText string) {
 	safeName := runewidth.Truncate(action+": "+filename, 54, "...")

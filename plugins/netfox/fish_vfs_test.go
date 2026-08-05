@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -574,6 +575,50 @@ func TestFishVFSScan(t *testing.T) {
 
 	if _, ok := interface{}(v).(vfs.FastScanner); !ok {
 		t.Error("FishVFS does not satisfy vfs.FastScanner")
+	}
+}
+
+func TestFishVFSFindDuplicates(t *testing.T) {
+	v := newLocalFishVFS(t)
+	ctx := context.Background()
+	if !v.Client().CanHash() {
+		t.Skip("this host cannot hash a tree remotely")
+	}
+
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "sub dir"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	for name, body := range map[string]string{
+		"twin one.txt":     "the same content\n",
+		"sub dir/twin two": "the same content\n",
+		"different.txt":    "the same lengthX\n",
+		"alone.txt":        "on its own\n",
+	} {
+		if err := os.WriteFile(filepath.Join(root, name), []byte(body), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var progress int
+	groups, err := v.FindDuplicates(ctx, root, func(p vfs.DuplicateProgress) { progress++ })
+	if err != nil {
+		t.Fatalf("FindDuplicates: %v", err)
+	}
+	if len(groups) != 1 || len(groups[0]) != 2 {
+		t.Fatalf("got %v, want one group of two", groups)
+	}
+	names := []string{filepath.Base(groups[0][0]), filepath.Base(groups[0][1])}
+	sort.Strings(names)
+	if names[0] != "twin one.txt" || names[1] != "twin two" {
+		t.Errorf("the group is %v", names)
+	}
+	if progress == 0 {
+		t.Error("no progress was reported")
+	}
+
+	if _, ok := interface{}(v).(vfs.DuplicateFinder); !ok {
+		t.Error("FishVFS does not satisfy vfs.DuplicateFinder")
 	}
 }
 func TestFishVFSPatchFile(t *testing.T) {

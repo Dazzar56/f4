@@ -972,10 +972,10 @@ f4_job_hash() {
   find ) find -H "$1" -type f -printf '%s %p\n' 2>/dev/null ;;
   stat ) find -H "$1" -type f -exec stat -c '%s %n' -- {} + 2>/dev/null ;;
   statbsd ) find -H "$1" -type f -exec stat -f '%z %N' -- {} + 2>/dev/null ;;
- esac > sizes
- awk 'NR == FNR { c[$1]++; next } c[$1] > 1 { p = $0; sub(/^[^ ]+ /, "", p); print p }' sizes sizes > cand
+ esac > "$F4JD/sizes"
+ awk 'NR == FNR { c[$1]++; next } c[$1] > 1 { p = $0; sub(/^[^ ]+ /, "", p); print p }' "$F4JD/sizes" "$F4JD/sizes" > "$F4JD/cand"
  f4_hn=0
- f4_ht=$(wc -l < cand)
+ f4_ht=$(wc -l < "$F4JD/cand")
  while IFS= read -r f4_hf; do
   f4_hn=$(( f4_hn + 1 ))
   f4_hv=$($F4HASH -- "$f4_hf" 2>/dev/null)
@@ -986,7 +986,7 @@ f4_job_hash() {
   [ -n "$f4_hv" ] || continue
   printf 'H %s %s\n' "$f4_hv" "$f4_hf"
   printf 'P %d %d %s\n' "$f4_hn" "$f4_ht" "$f4_hf"
- done < cand
+ done < "$F4JD/cand"
  printf 'T %d\n' "$f4_hn"
 }
 f4_job_body() {

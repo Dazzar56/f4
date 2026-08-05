@@ -378,13 +378,16 @@ time, which is exactly what makes it useful.
 
 *   **Step 9c — hashing and duplicates.** A `hash` job kind, `Client.Hash` and `Client.Duplicates`. Hashing a whole tree would read every byte of it, so the job walks the tree for sizes first and hashes only the files whose size is shared with another: a file with a size of its own cannot have a twin. Both passes over the list are metadata only, and the reading that remains never crosses the network. Which utility does the hashing is detected and announced as `hash:<name>`, so the values are only ever compared with others from the same host.
 
+*   **Step 9d — the duplicate search in the panel.** `vfs.DuplicateFinder` is the optional interface, `FishVFS` implements it over `Client.Duplicates`, and a Commands menu entry runs it against the current directory with a progress dialog and a cancel button that stops the remote job too. The groups are flattened into the existing search results window with the rows of a group adjacent. A file system that cannot do the work on its own side does not offer the command at all, rather than reading a whole remote tree to answer it.
+
 ### To do
 
 The numbering follows the order the steps were planned in, not the order they were done: the plan was arranged so that something usable arrived early, and a browsable, readable panel existed from step 4 onwards.
 
-*   **Step 9d — jobs in the interface.** A list of what is running, so a job can outlive the dialog it was started from. "Cancel" and "send to the background" become separate keys, and which one Escape means becomes a setting. The duplicate search gets its consumer here too: `Client.Duplicates` exists, nothing calls it yet.
+*   **Step 9e — jobs in the interface.** A list of what is running, so a job can outlive the dialog it was started from. "Cancel" and "send to the background" become separate keys, and which one Escape means becomes a setting.
 *   **Step 10 — resilience.** Mid-request cancellation and resynchronization without dropping the session, keepalive, automatic reconnect.
 *   **Step 11 — remote execution.** `exec` and a remote terminal, plus user documentation and help pages.
+*   **Step 13 — copying without a client in the middle.** A copy between two panels on the same host is `cp` there, and a move within one file system is `mv` and costs nothing; today both pull every byte here and push it back. Between two different hosts, one that can reach the other opens its own FISH+ session to it and the bytes travel directly, at whatever the link between two data centres is worth, while the client watches from a bad connection. See `IDEAS.md` for what has to be worked out first.
 *   **Step 12 — odd hosts.** The `ls -l` fallback backend and whatever else the compatibility issue turns up; `tools/fishplus_probe.sh` collects the raw material.
 
 ## Testing

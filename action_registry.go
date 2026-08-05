@@ -473,6 +473,16 @@ func init() {
 		Handler:     withPF(func(pf *PanelsFrame) { actionFindFile(pf) }),
 	})
 	RegisterAction(Action{
+		Name:        "File.FindDuplicates",
+		Area:        "Shell",
+		Label:       "Find Duplicates",
+		LabelKey:    "Menu.Commands.FindDuplicates",
+		Description: "Find files with identical content",
+		DescKey:     "Action.File.FindDuplicates.Desc",
+		MenuPath:    "Commands",
+		Handler:     withPF(func(pf *PanelsFrame) { actionFindDuplicates(pf) }),
+	})
+	RegisterAction(Action{
 		Name:        "Panel.Bookmarks",
 		Area:        "Shell",
 		Label:       "Bookmarks",

@@ -213,6 +213,24 @@ func FindProvider(ctx context.Context, parent VFS, path string) VFSProvider {
 }
 
 // ReadAtCloser combines reader interfaces with context support.
+// DuplicateProgress reports how far a duplicate search has got. Total is how
+// many files turned out to be worth reading at all, which is known only once
+// the tree has been walked, so it is not the number of files in it.
+type DuplicateProgress struct {
+	Done  int
+	Total int
+	Path  string
+}
+
+// DuplicateFinder is implemented by a file system that can find files with
+// identical content on its own side. Doing it from here means reading every
+// candidate across the network, which for a remote tree costs more than the
+// answer is worth; a file system that cannot do it simply does not offer the
+// command. Each group holds two or more paths with the same content.
+type DuplicateFinder interface {
+	FindDuplicates(ctx context.Context, dir string, cb func(DuplicateProgress)) ([][]string, error)
+}
+
 // PatchPiece is one piece of a file being assembled. Data set means literal
 // new bytes; Data nil means Length bytes taken from the existing file at
 // Offset, which then never have to travel.
