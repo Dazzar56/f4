@@ -8,6 +8,7 @@ import (
 	"github.com/unxed/f4/plugins/chroma"
 	"github.com/unxed/f4/plugins/dummy_internal"
 	"github.com/unxed/f4/plugins/netfox"
+	"github.com/unxed/f4/plugins/visren"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 )
@@ -113,6 +114,7 @@ func (pm *PluginManager) loadInternal() {
 		&dummy_internal.InternalDummyPlugin{},
 		&archive.ArchivePlugin{},
 		&netfox.NetFoxPlugin{},
+		&visren.Plugin{},
 	}
 
 	for _, p := range plugins {
