@@ -358,41 +358,31 @@ time, which is exactly what makes it useful.
 *   **Step 1 — transport and protocol core.** Helper script, handshake, feature detection, request/response framing, base64 arguments, binary frames, error reporting, session teardown. Tested both against an in-memory peer and against a real local shell.
 *   **Step 2 — listing and metadata.** `enum`, `info`, `linfo`, `rdlink` and the runtime `mode` switch, with the find, GNU stat and BSD stat backends and their parsers. Paths now travel raw instead of base64. The integration test drives every backend the test machine provides, over names with spaces, tabs, backslashes, trailing blanks and non-ASCII characters.
 *   **Step 3 — reading.** `read` with an offset and a length, raw binary frames with no base64 in the way, four read backends with runtime switching through `rmode`, and a `File` handle with a chunk cache that satisfies `vfs.ReadAtCloser`. The terminal safeguards and the first round of compatibility fixes from issue #316 landed here as well.
-
 *   **Step 4a — the VFS.** `plugins/netfox/fish_vfs.go` maps `Entry` onto `vfs.VFSItem` and a `fishplus.File` onto `vfs.ReadAtCloser`, so a FISH+ session is already a browsable and readable file system. The helper learned `pwd`, so a panel opens where an interactive login would land. Mutations answer with a plain error until step 5, and the test drives the whole mapping over a local shell.
-
 *   **Step 4b — transport and registration.** `DialSSH` now carries the agent, key and password logic for both SSH backends, and a FISH+ site opens a shell with no pseudo terminal attached, running `exec /bin/sh` so that a csh or fish login shell cannot get in the way. The protocol is registered as `fish+`, with the plain `fish` type accepted as a synonym.
-
 *   **Step 5a — mutations.** `mkdir`, `rm`, `rmdir`, `rmtree`, `mv` and `chmod`, and the `FishVFS` methods on top of them. A recursive delete is one round trip rather than one per entry, because the remote host does the walking. `Create` is now the only method that still refuses.
 *   **Step 5b — writing file content.** The `write` command with an offset and a length, three write backends with runtime switching through `wmode`, `trunc`, and a buffering `Writer` on the client side. A refused request still drains its payload and says so with a `D` line; a write that fails halfway does not, and marks the session broken rather than letting it desynchronize.
 *   **Step 5c — the writing VFS.** `FishVFS.Create` on top of `Writer`, plus `chown` and a `touch` that works on GNU and on BSD alike by letting the remote host convert the epoch into its own local time. `SetAttributes` now carries mode, ownership and timestamps, so a file copied onto a FISH+ panel arrives with the attributes it had. Nothing in the VFS refuses any more, and `ErrFishReadOnly` is gone.
 *   **Step 5d — a `Close` whose error is not dropped.** `closeOnce` lets the places that write through a VFS close explicitly where the error matters and still keep a `defer` as a safety net. `recursiveCopy` now closes the destination before declaring success, so a failed last chunk removes the incomplete file instead of reporting a copy that did not happen; the download to a temporary file, the upload back after an external editor and the editor's own save report it too. None of this is specific to FISH+, it affects every file system that buffers.
 *   **Step 7a — remote search.** The `grep` command, `Client.Grep` and `FishVFS.Search`, with `HasSearch` finally true for one of f4's file systems. Only byte offsets cross the network, and the limit is enforced on the remote side rather than by disconnecting a flood.
 *   **Step 7b — the remote line index.** The `lidx` command and `Client.Lines`: the offsets of a range of lines and the total line count, from one remote `awk` pass and a few numbers on the wire.
-
-
 *   **Step 7c — the viewer on top of it.** `vfs.LineIndexer` is an optional interface, so a local file system and an archive are not made to carry a method they cannot answer; `FishVFS` implements it over `Client.Lines`, and `ViewerBackend` asserts for it. What it buys is the jump to the end of a file: instead of reading back up to a megabyte and scanning all of it, the viewer asks where the last screenful of lines begins and reads exactly that. The line total is cached against the file size, so paging around a log that is not growing costs one round trip. Everything else the viewer does is byte based and needed no index at all.
-
 *   **Step 7d — the file search.** The `ffind` command, `Client.Find` and `vfs.FileFinder`, another optional interface. One request walks the whole tree on the remote host and, when the user asked for a text, greps the candidates in the same `find` pass, so a file is never downloaded only to be rejected. `ExecuteFindFile` uses it when the file system offers it and walks the tree itself otherwise, which is what a host without `find` or without `grep` falls back to.
-
 *   **Step 7e — go to line.** Alt+F8 in the viewer asks for a line number and `ViewerBackend.LineStart` finds it: through `vfs.LineIndexer` where the file system has one, by scanning otherwise. In hex mode the same key asks for a byte offset instead, which needs no counting. The scan reads through the file handle rather than the cache, so walking a file does not evict the window the viewer is drawing from.
-
 *   **Step 8a — the patch command.** `patch` assembles a file from `S <off> <len>` ranges of an existing one, copied at local disk speed on the remote host, and `D <len>` literals that follow their descriptor on the wire. A one byte change in a hundred megabyte file therefore costs one byte of traffic. `Client.Patch` splits oversized literals into chunks and, like a write, tells a refusal that drained its payload from a failure that could not. The result is written forward into a second path, which is why source and destination may not be the same file.
-
 *   **Step 8b — the editor on top of it.** `vfs.DeltaWriter` is the optional interface, `FishVFS` implements it over `Client.Patch`, and `SaveToFile` uses it when the save goes through `.f4tmp` anyway. A piece table already is the description the command wants: a piece pointing at the original buffer is a range of the file on disk, one pointing at the add buffer is what the user typed. It applies only to a raw UTF-8 load, because with any other codepage the buffer holds decoded text whose offsets say nothing about the bytes on disk, and it falls back to writing the file out in full whenever the remote host cannot do it.
-
 *   **Step 9a — background jobs.** `jstart`, `jpoll`, `jkill`, `jdrop` and `jlist`: a detached subshell whose streams point away from the wire, and a client that polls it with a backoff. The first kind is `scan`, which counts a whole tree on the remote host and reports progress while it does. `Client.Scan` cancels the remote job when its caller goes away; `StartScan` and `FollowScan` underneath it cancel nothing, which is what step 9d will build on.
 
 ### To do
 
 The numbering follows the order the steps were planned in, not the order they were done: the plan was arranged so that something usable arrived early, and a browsable, readable panel existed from step 4 onwards.
 
-*   **Step 6 — odd hosts.** The `ls -l` fallback backend and whatever else the compatibility issue turns up; `tools/fishplus_probe.sh` collects the raw material.
 *   **Step 9b — the scanning VFS.** `FishVFS` implements `vfs.FastScanner` over `Client.Scan`, so calculating a directory size and the pre-scan of a copy both happen on the remote host, with progress in the f4 progress dialog and a cancel button that cancels the remote work too.
 *   **Step 9c — hashing and duplicates.** A `hash` job kind and the duplicate search built on it, jobs for the same reason the scan is one.
 *   **Step 9d — jobs in the interface.** A list of what is running, so a job can outlive the dialog it was started from. "Cancel" and "send to the background" become separate keys, and which one Escape means becomes a setting.
 *   **Step 10 — resilience.** Mid-request cancellation and resynchronization without dropping the session, keepalive, automatic reconnect.
 *   **Step 11 — remote execution.** `exec` and a remote terminal, plus user documentation and help pages.
+*   **Step 12 — odd hosts.** The `ls -l` fallback backend and whatever else the compatibility issue turns up; `tools/fishplus_probe.sh` collects the raw material.
 
 ## Testing
 
