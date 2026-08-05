@@ -292,24 +292,24 @@ func NewEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string) *EditorVie
 		vtui.FrameManager.Redraw()
 	}
 	ev.menuBar = vtui.NewMenuBar(nil)
-	ev.menuBar.Items = []vtui.MenuBarItem{
-		{Label: "&File", SubItems: []vtui.MenuItem{{Text: "&Save", Command: vtui.CmDefault}, {Text: "E&xit", Command: vtui.CmClose}}},
-		{Label: "&Edit", SubItems: []vtui.MenuItem{{Text: "&Copy", Command: CmCopy}, {Text: "&Paste"}}},
-		{Label: "&Search", SubItems: []vtui.MenuItem{{Text: "&Find", Command: CmSearch}}},
-		{Label: "&Options", SubItems: []vtui.MenuItem{{Text: "&WordWrap"}}},
-	}
 
-	ev.topBar = NewTopBar(func() string {
-		base := ""
-		if ev.DisplayTitle != "" {
-			base = ev.DisplayTitle
-		} else if ev.vfs != nil {
-			base = ev.vfs.Base(ev.filePath)
-		} else {
-			base = filepath.Base(ev.filePath)
-		}
-		return fmt.Sprintf(" %s │ %d,%d ", base, ev.CursorLine+1, ev.CursorPos)
-	})
+	ev.topBar = NewTopBar(
+		func() string {
+			base := ""
+			if ev.DisplayTitle != "" {
+				base = ev.DisplayTitle
+			} else if ev.vfs != nil {
+				base = ev.vfs.Base(ev.filePath)
+			} else {
+				base = filepath.Base(ev.filePath)
+			}
+			return " " + base
+		},
+		func() string {
+			cpName := vfs.DisplayCodepageName(ev.Codepage)
+			return fmt.Sprintf(" %s │ %d,%d     ", cpName, ev.CursorLine+1, ev.CursorPos)
+		},
+	)
 	ev.topBar.ColorIdx = ColEditorStatus
 	ev.topBar.SetVisible(true)
 	ev.SetCanFocus(true)
@@ -739,6 +739,26 @@ DoneRendering:
 	}
 }
 
+// VetoActionKey reports modal input states in which the editor must see
+// the key before the global hotkey dispatcher. While autocomplete is
+// active, the keys it consumes (Tab/Esc) or uses to dismiss itself
+// (navigation, Enter) belong to the editor's own ProcessKey.
+func (ev *EditorView) VetoActionKey(e *vtinput.InputEvent) bool {
+	if e.Type != vtinput.KeyEventType || !e.KeyDown {
+		return false
+	}
+	if !ev.acEnabled || len(ev.acMatches) == 0 {
+		return false
+	}
+	switch e.VirtualKeyCode {
+	case vtinput.VK_TAB, vtinput.VK_ESCAPE, vtinput.VK_RETURN,
+		vtinput.VK_UP, vtinput.VK_DOWN, vtinput.VK_LEFT, vtinput.VK_RIGHT,
+		vtinput.VK_HOME, vtinput.VK_END, vtinput.VK_PRIOR, vtinput.VK_NEXT:
+		return true
+	}
+	return false
+}
+
 func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 	if e.Type == vtinput.KeyEventType && e.KeyDown {
 		if ev.targetLine != -1 {
@@ -753,16 +773,6 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 
-	// Alt+Ins — global screen grabber (far/far2l parity). Handled here
-	// so it works even when the editor is the top frame.
-	if e.Type == vtinput.KeyEventType && e.KeyDown && e.VirtualKeyCode == vtinput.VK_INSERT && alt {
-		ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
-		shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
-		if !ctrl && !shift {
-			OpenGrabber()
-			return true
-		}
-	}
 	// 1. Processing Bracketed Paste (events arrive outside KeyDown)
 	if e.Type == vtinput.PasteEventType {
 		if e.PasteStart {
@@ -829,32 +839,6 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
 	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
 	//alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
-
-	// Panel-side shortcuts (issue #289): while the editor is on top,
-	// forward the current panel context into the buffer. Same key
-	// assignments as PanelsFrame binds on the command line.
-	if ctrl && !alt && !shift {
-		switch {
-		case e.VirtualKeyCode == vtinput.VK_OEM_4 || e.Char == '[':
-			if s := leftPanelPathForEditor(); s != "" {
-				ev.insertTextAtCursor([]byte(s))
-			}
-			return true
-		case e.VirtualKeyCode == vtinput.VK_OEM_6 || e.Char == ']':
-			if s := rightPanelPathForEditor(); s != "" {
-				ev.insertTextAtCursor([]byte(s))
-			}
-			return true
-		case e.VirtualKeyCode == vtinput.VK_RETURN:
-			if s := activePanelNameForEditor(); s != "" {
-				ev.insertTextAtCursor([]byte(s))
-			}
-			return true
-		case e.VirtualKeyCode == vtinput.VK_DELETE:
-			ev.deleteSpacersForward()
-			return true
-		}
-	}
 
 	// --- Autocomplete Interception ---
 	if ev.acEnabled && len(ev.acMatches) > 0 {
@@ -943,101 +927,6 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 
 	switch e.VirtualKeyCode {
-	case vtinput.VK_Z:
-		if ctrl {
-			if shift {
-				ev.Redo()
-			} else {
-				ev.Undo()
-			}
-			return true
-		}
-
-	case vtinput.VK_Y:
-		if ctrl && !alt && !shift {
-			ev.DeleteCurrentLine()
-			return true
-		}
-
-	case vtinput.VK_A:
-		if ctrl {
-			ev.rectSelActive = false
-			ev.selActive = true
-			ev.selAnchorOffset = 0
-			lastLine := ev.li.LineCount() - 1
-			ev.CursorLine = lastLine
-			ev.CursorPos = ev.getLineLength(lastLine)
-			ev.ensureCursorVisible()
-			return true
-		}
-
-	case vtinput.VK_F2:
-		ev.SaveToFile(nil)
-		return true
-
-	case vtinput.VK_F3:
-		ev.WordWrap = !ev.WordWrap
-		ev.ScrollLeft = 0
-		ev.clearCaches()
-		ev.ensureCursorVisible()
-		return true
-
-	case vtinput.VK_F5:
-		ev.ShowWhitespaces = !ev.ShowWhitespaces
-		return true
-
-	case vtinput.VK_F7:
-		if ctrl {
-			vtui.FrameManager.EmitCommand(CmReplace, nil)
-		} else if shift && LastEditorSearch != "" {
-			ev.Search(LastEditorSearch, LastEditorSearchCase, LastEditorSearchReverse, LastEditorSearchRegexp, LastEditorSearchWholeWord, true)
-		} else {
-			vtui.FrameManager.EmitCommand(CmSearch, nil)
-		}
-		return true
-
-	case vtinput.VK_ESCAPE, vtinput.VK_F10, vtinput.VK_F4:
-		ev.tryClose()
-		return true
-
-	case vtinput.VK_F6:
-		vtui.FrameManager.EmitCommand(CmSwitchToViewer, ev)
-		return true
-	case vtinput.VK_F8:
-		if shift {
-			ev.showCodepageDialog()
-		} else {
-			next := vfs.GetNextFastSwitchCodepage(ev.Codepage)
-			ev.ReloadWithCodepage(next)
-			vtui.ShowToast(fmt.Sprintf("Codepage: %d", next), time.Second)
-		}
-		return true
-
-	case vtinput.VK_C, vtinput.VK_INSERT:
-		if ctrl && (ev.selActive || ev.rectSelActive) {
-			ev.CopySelection()
-			return true
-		}
-		if shift && !ctrl && e.VirtualKeyCode == vtinput.VK_INSERT {
-			if text := vtui.GetClipboard(); text != "" {
-				ev.PasteText(text)
-			}
-			return true
-		}
-		if !shift && !ctrl && !alt && e.VirtualKeyCode == vtinput.VK_INSERT {
-			ev.overtype = !ev.overtype
-			ev.ensureCursorVisible()
-			return true
-		}
-
-	case vtinput.VK_V:
-		if ctrl && !shift {
-			if text := vtui.GetClipboard(); text != "" {
-				ev.PasteText(text)
-			}
-			return true
-		}
-
 	case vtinput.VK_UP, vtinput.VK_E:
 		if e.VirtualKeyCode == vtinput.VK_E && !ctrl {
 			break
@@ -1072,9 +961,11 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 			if !ctrl {
 				break
 			}
+			// Ctrl+X is delegated to the Cut action when text is
+			// selected; without a selection it falls through and acts
+			// as the classic Ctrl+E/Ctrl+X down-movement alias.
 			if ev.selActive || ev.rectSelActive {
-				ev.CopySelection()
-				ev.DeleteSelection()
+				RunAction("Editor.Cut")
 				return true
 			}
 		}
@@ -1421,9 +1312,6 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 
 	case vtinput.VK_DELETE:
 		if ev.selActive {
-			if shift {
-				ev.CopySelection()
-			}
 			ev.DeleteSelection()
 		} else {
 			ev.saveUndo(opOther)
@@ -1597,6 +1485,14 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		if ev.acEnabled {
 			ev.updateAutocomplete()
 		}
+		return true
+	}
+
+	// Injected-event fallback: KeyBar mouse clicks reach ProcessKey via
+	// InjectEvents, which skips FrameManager.EventFilter and therefore the
+	// hotkey manager. Route them through the same lookup so clicking F2/F7/
+	// F10/… on the bottom bar triggers the configured Editor action.
+	if MacroMgr.LookupHotkey(e) {
 		return true
 	}
 
@@ -1870,7 +1766,13 @@ func (ev *EditorView) ResizeConsole(w, h int) {
 	ev.SetPosition(0, 0, w-1, h-2)
 }
 
-func (ev *EditorView) GetMenuBar() *vtui.MenuBar { return ev.menuBar }
+// GetMenuBar returns the editor's menu bar. Items are regenerated from
+// the action registry on every call, so shortcuts and toggle states are
+// always current.
+func (ev *EditorView) GetMenuBar() *vtui.MenuBar {
+	ev.menuBar.Items = BuildMenuBarItems("Editor")
+	return ev.menuBar
+}
 
 func (ev *EditorView) StartIndexing() {
 	if ev.asyncBuf == nil {
@@ -2027,12 +1929,22 @@ func (ev *EditorView) tryClose() {
 }
 
 func (ev *EditorView) GetKeyLabels() *vtui.KeySet {
-	return &vtui.KeySet{
+	nextCp := vfs.GetNextFastSwitchCodepage(ev.Codepage)
+	nextCpName := vfs.DisplayCodepageName(nextCp)
+
+	fallbacks := &vtui.KeySet{
 		Normal: vtui.KeyBarLabels{
 			Msg("KeyBar.EditorF1"), Msg("KeyBar.EditorF2"), Msg("KeyBar.EditorF3"),
-			"", Msg("KeyBar.EditorF5"), "", Msg("KeyBar.EditorF7"), "", "", Msg("KeyBar.EditorF10"),
+			"", Msg("KeyBar.EditorF5"), "", Msg("KeyBar.EditorF7"), nextCpName, "", Msg("KeyBar.EditorF10"),
 		},
 	}
+	res := KeyBarLabelsForArea("Editor", fallbacks)
+	if hm := GlobalHotkeysMgr; hm != nil {
+		if hm.GetAction("Editor", "F8") == "Editor.CodepageNext" {
+			res.Normal[7] = nextCpName
+		}
+	}
+	return res
 }
 func (ev *EditorView) showSearchDialog() {
 	dlgW, dlgH := 60, 15
@@ -2350,43 +2262,88 @@ func (ev *EditorView) showReplaceDialog() {
 }
 
 func (ev *EditorView) ReloadWithCodepage(cpID int) {
-	if ev.file == nil {
-		ev.Codepage = cpID
+	if ev.Codepage == cpID {
 		return
 	}
 
-	size := ev.file.Size()
-	fullData := make([]byte, size)
-	_, err := ev.file.ReadAt(context.Background(), fullData, 0)
+	bytes, err := ev.pt.Bytes()
 	if err != nil {
 		return
 	}
 
-	decoded, err := vfs.DecodeBytes(fullData, cpID)
+	rawData, err := vfs.EncodeBytes(bytes, ev.Codepage)
+	if err != nil {
+		rawData = bytes // Fallback
+	}
+
+	decoded, err := vfs.DecodeBytes(rawData, cpID)
 	if err != nil {
 		return
 	}
 
+	wasModified := ev.modified
 	ev.saveUndo(opOther)
+
+	oldLine := ev.CursorLine
+	oldPos := ev.CursorPos
+
 	ev.SetText(string(decoded))
+
+	ev.CursorLine = oldLine
+	if ev.CursorLine >= ev.li.LineCount() {
+		ev.CursorLine = ev.li.LineCount() - 1
+	}
+	if ev.CursorLine < 0 {
+		ev.CursorLine = 0
+	}
+	ev.CursorPos = oldPos
+	if ev.CursorPos > ev.getLineLength(ev.CursorLine) {
+		ev.CursorPos = ev.getLineLength(ev.CursorLine)
+	}
+
 	ev.Codepage = cpID
-	ev.modified = false
+	ev.modified = wasModified
+
+	ev.updateDesiredVisualCol()
 	ev.ensureCursorVisible()
 	vtui.FrameManager.Redraw()
 }
 
+func (ev *EditorView) ReloadWithAutoDetect() {
+	if ev.file == nil {
+		return
+	}
+	size := ev.file.Size()
+	detectLen := 16 * 1024
+	if int64(detectLen) > size {
+		detectLen = int(size)
+	}
+	header := make([]byte, detectLen)
+	_, _ = ev.file.ReadAt(context.Background(), header, 0)
+
+	cpID := vfs.DetectEncoding(header, AppConfig.EditorAutodetectCodePage, AppConfig.EditorDefaultCodePage)
+	ev.ReloadWithCodepage(cpID)
+}
+
 func (ev *EditorView) showCodepageDialog() {
+	items, currIdx := vfs.BuildCodepageMenuItems(ev.Codepage, AppConfig.EditorAutodetectCodePage)
 	menu := vtui.NewVMenu(" Code pages ")
-	for _, cp := range vfs.AvailableCodepages {
-		menu.AddItem(vtui.MenuItem{Text: fmt.Sprintf("%5d  %s", cp.ID, cp.Name)})
+	for _, item := range items {
+		menu.AddItem(item)
 	}
 
-	w, h := 45, len(vfs.AvailableCodepages)+2
-	if h > 15 {
-		h = 15
+	w, h := 45, len(items)+2
+	scrW := vtui.FrameManager.GetScreenSize()
+	scrH := vtui.FrameManager.GetScreenHeight()
+	maxH := scrH - 2
+	if maxH < 5 {
+		maxH = 5
 	}
-	x := (ev.X2 - ev.X1 - w) / 2
-	y := (ev.Y2 - ev.Y1 - h) / 2
+	if h > maxH {
+		h = maxH
+	}
+	x := (scrW - w) / 2
+	y := (scrH - h) / 2
 	if x < 0 {
 		x = 0
 	}
@@ -2397,10 +2354,79 @@ func (ev *EditorView) showCodepageDialog() {
 
 	menu.OnAction = func(idx int) {
 		menu.Close()
-		if idx >= 0 && idx < len(vfs.AvailableCodepages) {
-			ev.ReloadWithCodepage(vfs.AvailableCodepages[idx].ID)
+		if idx >= 0 && idx < len(menu.Items) {
+			if cpID, ok := menu.Items[idx].UserData.(int); ok {
+				if cpID == -1 {
+					AppConfig.EditorAutodetectCodePage = !AppConfig.EditorAutodetectCodePage
+					SaveConfig()
+					ev.ReloadWithAutoDetect()
+				} else {
+					AppConfig.EditorAutodetectCodePage = false
+					AppConfig.EditorDefaultCodePage = cpID
+					SaveConfig()
+					ev.ReloadWithCodepage(cpID)
+				}
+			}
 		}
 	}
+	menu.SetSelectPos(currIdx)
+	vtui.FrameManager.Push(menu)
+}
+func (ev *EditorView) showConvertCodepageDialog() {
+	items, _ := vfs.BuildCodepageMenuItems(ev.Codepage, false)
+	menu := vtui.NewVMenu(" Convert Codepage ")
+	realItems := 0
+	for _, item := range items {
+		if item.UserData == -1 {
+			continue // Skip auto-detect
+		}
+		menu.AddItem(item)
+		realItems++
+	}
+
+	w, h := 45, realItems+2
+	scrW := vtui.FrameManager.GetScreenSize()
+	scrH := vtui.FrameManager.GetScreenHeight()
+	maxH := scrH - 2
+	if maxH < 5 {
+		maxH = 5
+	}
+	if h > maxH {
+		h = maxH
+	}
+
+	x := (scrW - w) / 2
+	y := (scrH - h) / 2
+	if x < 0 {
+		x = 0
+	}
+	if y < 0 {
+		y = 0
+	}
+	menu.SetPosition(x, y, x+w-1, y+h-1)
+
+	menu.OnAction = func(idx int) {
+		menu.Close()
+		if idx >= 0 && idx < len(menu.Items) {
+			if cpID, ok := menu.Items[idx].UserData.(int); ok {
+				ev.Codepage = cpID
+				ev.modified = true
+				vtui.ShowToast(fmt.Sprintf("Will be saved as: %s", vfs.DisplayCodepageName(cpID)), 2*time.Second)
+				ev.updateDesiredVisualCol()
+				ev.ensureCursorVisible()
+				vtui.FrameManager.Redraw()
+			}
+		}
+	}
+
+	selIdx := 0
+	for i, item := range menu.Items {
+		if item.UserData == ev.Codepage {
+			selIdx = i
+			break
+		}
+	}
+	menu.SetSelectPos(selIdx)
 	vtui.FrameManager.Push(menu)
 }
 
@@ -2496,6 +2522,42 @@ func (ev *EditorView) getLineLength(line int) int {
 	return totalLen
 }
 
+// nopWriteCloser stands in for the destination handle when the file has
+// already been assembled by the file system itself.
+type nopWriteCloser struct{}
+
+func (nopWriteCloser) Write(p []byte) (int, error) { return len(p), nil }
+func (nopWriteCloser) Close() error                { return nil }
+
+// patchPiecesFromTable describes the edited text as pieces of the file on
+// disk plus the bytes that are new, which is exactly what a piece table is:
+// a piece pointing at the original buffer is a range of the file, and one
+// pointing at the add buffer is text the user typed.
+//
+// It is only meaningful while the original buffer still is the file. That
+// holds for a raw UTF-8 load; with any other codepage the buffer holds
+// decoded text whose offsets have nothing to do with the bytes on disk.
+func patchPiecesFromTable(pt *piecetable.PieceTable) ([]vfs.PatchPiece, bool) {
+	state := pt.GetState()
+	pieces := make([]vfs.PatchPiece, 0, len(state.Pieces))
+	logical := 0
+	for _, p := range state.Pieces {
+		if p.Buf == piecetable.Original {
+			pieces = append(pieces, vfs.PatchPiece{Offset: int64(p.Start), Length: int64(p.Length)})
+		} else {
+			data, err := pt.GetRange(logical, p.Length)
+			if err != nil {
+				return nil, false
+			}
+			pieces = append(pieces, vfs.PatchPiece{
+				Length: int64(len(data)),
+				Data:   append([]byte(nil), data...),
+			})
+		}
+		logical += p.Length
+	}
+	return pieces, true
+}
 func (ev *EditorView) SaveToFile(afterSave func()) {
 	if ev.filePath == "" || ev.vfs == nil || ev.saving {
 		return
@@ -2528,7 +2590,26 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 		var f io.WriteCloser
 		var err error
 
-		if useTemp {
+		// A file system that can assemble a file out of pieces of another
+		// one saves the unchanged parts from ever crossing the network. It
+		// needs a second path to build into, which the temp file already
+		// provides, and a buffer whose offsets still describe the file on
+		// disk, which is only true for a raw UTF-8 load.
+		saved := false
+		if delta, isDelta := ev.vfs.(vfs.DeltaWriter); isDelta && useTemp && ev.Codepage == 65001 {
+			if pieces, ok := patchPiecesFromTable(ev.pt); ok {
+				perr := delta.PatchFile(ctx.Context, ev.filePath, ev.filePath+".f4tmp", pieces)
+				if perr == nil {
+					saved = true
+				} else {
+					vtui.DebugLog("EDITOR: delta save unavailable, writing in full: %v", perr)
+				}
+			}
+		}
+
+		if saved {
+			f = nopWriteCloser{}
+		} else if useTemp {
 			tempPath := ev.filePath + ".f4tmp"
 			f, err = ev.vfs.Create(ctx.Context, tempPath)
 		} else {
@@ -2550,7 +2631,9 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 		}
 
 		var saveErr error
-		if ev.Codepage == 65001 {
+		if saved {
+			// The file system already wrote it.
+		} else if ev.Codepage == 65001 {
 			curr := 0
 			total := ev.pt.Size()
 			for curr < total {
@@ -2590,7 +2673,13 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 				}
 			}
 		}
-		f.Close()
+		// The last chunk of a buffering writer is only sent by Close, so a
+		// save is not finished until Close has succeeded. Over a network file
+		// system, dropping this error means reporting a save that lost its
+		// tail.
+		if cerr := f.Close(); cerr != nil && saveErr == nil {
+			saveErr = cerr
+		}
 
 		if saveErr != nil {
 			if useTemp {
@@ -2634,23 +2723,36 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 		var newBuf *AsyncBuffer
 
 		if err == nil {
-			newBuf = NewAsyncBuffer(ctx.Context, newFile)
-			newPt = piecetable.NewWithBuffer(newBuf)
+			if ev.Codepage == 65001 {
+				newBuf = NewAsyncBuffer(ctx.Context, newFile)
+				newPt = piecetable.NewWithBuffer(newBuf)
+			} else {
+				size := newFile.Size()
+				fullData := make([]byte, size)
+				_, _ = newFile.ReadAt(ctx.Context, fullData, 0)
+				decoded, errDec := vfs.DecodeBytes(fullData, ev.Codepage)
+				if errDec != nil {
+					decoded = fullData
+				}
+				newPt = piecetable.New(decoded)
+			}
 			// Reuse the existing LineIndex since the logical content is identical
 			newEngine = textlayout.NewWrapEngine(newPt, ev.li)
 		}
 
 		// PRELOAD CACHE TO PREVENT SCREEN FLICKER
 		// This MUST be outside RunOnUI to prevent blocking the main thread for 500ms.
-		for i := 0; i < 50; i++ { // max 500ms
-			if ctx.Err() != nil {
-				break
+		if newBuf != nil {
+			for i := 0; i < 50; i++ { // max 500ms
+				if ctx.Err() != nil {
+					break
+				}
+				_, e := newBuf.Read(visStart, 4096)
+				if e != piecetable.ErrLoading {
+					break
+				}
+				time.Sleep(10 * time.Millisecond)
 			}
-			_, e := newBuf.Read(visStart, 4096)
-			if e != piecetable.ErrLoading {
-				break
-			}
-			time.Sleep(10 * time.Millisecond)
 		}
 
 		ctx.RunOnUI(func() {
@@ -2703,7 +2805,7 @@ func findPanelsFrameAnyScreen() *PanelsFrame {
 	}
 	for _, s := range vtui.FrameManager.Screens {
 		for _, f := range s.Frames {
-			if pf, ok := f.(*PanelsFrame); ok {
+			if pf, ok := f.(*PanelsFrame); ok && !pf.closed {
 				return pf
 			}
 		}

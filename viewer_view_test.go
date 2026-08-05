@@ -380,7 +380,7 @@ func TestViewerView_HexModeToggle(t *testing.T) {
 	vv.TopOffset = 10
 
 	// Toggle Hex Mode
-	vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F4})
+	pressKey(vv, &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F4})
 
 	if !vv.HexMode {
 		t.Error("F4 failed to toggle HexMode")
@@ -392,7 +392,7 @@ func TestViewerView_HexModeToggle(t *testing.T) {
 	}
 
 	// Toggle back to Text
-	vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F4})
+	pressKey(vv, &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F4})
 	if vv.HexMode {
 		t.Error("F4 failed to toggle back to TextMode")
 	}
@@ -572,7 +572,7 @@ func TestViewerView_ScrollbarEOFAlignment(t *testing.T) {
 	}
 
 	// --- 2. Проверка в Hex режиме ---
-	vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F4})
+	pressKey(vv, &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F4})
 	// В Hex режиме jumpToEnd отрабатывает мгновенно, если данные в кэше
 	vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_END})
 	vv.Show(scr)
@@ -678,5 +678,76 @@ func TestViewerView_Codepages_Load(t *testing.T) {
 
 	if string(data) != "Привет" {
 		t.Errorf("Viewer failed to decode CP866: expected 'Привет', got %q", string(data))
+	}
+}
+func TestViewerView_Codepages_AutoDetect(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "auto_view.txt")
+	os.WriteFile(path, []byte("plain ascii is valid utf8"), 0644)
+
+	v := vfs.NewOSVFS(tmpDir)
+	vv, err := NewViewerView(context.Background(), v, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer vv.Close()
+
+	AppConfig.ViewerAutodetectCodePage = true
+	AppConfig.ViewerDefaultCodePage = 11111 // ANSI
+	vv.ReloadWithAutoDetect()
+
+	if vv.Codepage != 65001 {
+		t.Errorf("Expected autodetect to recognize valid UTF-8/ASCII as 65001, got %d", vv.Codepage)
+	}
+}
+
+func TestViewerView_Codepages_KeyBarLabel(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "dummy_view.txt")
+	os.WriteFile(path, []byte("content"), 0644)
+
+	v := vfs.NewOSVFS(tmpDir)
+	vv, err := NewViewerView(context.Background(), v, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer vv.Close()
+
+	vv.Codepage = 65001 // UTF-8
+	labels := vv.GetKeyLabels()
+	if labels.Normal[7] != "ANSI" {
+		t.Errorf("Expected F8 KeyBar label to be 'ANSI' for UTF-8 viewer, got %q", labels.Normal[7])
+	}
+
+	vv.Codepage = 22222 // OEM
+	labels = vv.GetKeyLabels()
+	if labels.Normal[7] != "UTF-8" {
+		t.Errorf("Expected F8 KeyBar label to be 'UTF-8' for OEM viewer, got %q", labels.Normal[7])
+	}
+}
+func TestViewerView_Codepages_MultipleSwitchNoCrash(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "switch_test.txt")
+	os.WriteFile(path, []byte("Test content for codepage switch"), 0644)
+
+	v := vfs.NewOSVFS(tmpDir)
+	vv, err := NewViewerView(context.Background(), v, path)
+	if err != nil {
+		t.Fatalf("Failed to create ViewerView: %v", err)
+	}
+
+	// Switch codepages twice (F8, F8)
+	vv.ReloadWithCodepage(11111)
+	vv.ReloadWithCodepage(22222)
+	vv.ReloadWithCodepage(65001)
+
+	// Close viewer (F3 exit)
+	vv.Close()
+
+	if !vv.IsDone() {
+		t.Error("ViewerView failed to close cleanly after codepage switches")
 	}
 }

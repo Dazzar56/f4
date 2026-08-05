@@ -109,11 +109,12 @@ func EventToFarString(e *vtinput.InputEvent) string {
 	} else if vk >= vtinput.VK_F1 && vk <= vtinput.VK_F24 {
 		sb.WriteString(fmt.Sprintf("F%d", vk-vtinput.VK_F1+1))
 	} else if vk >= 'A' && vk <= 'Z' {
-		if !mods.Contains(vtinput.ShiftPressed) && e.Char >= 'a' && e.Char <= 'z' {
-			sb.WriteRune(e.Char)
-		} else {
-			sb.WriteRune(rune(vk))
-		}
+		// Hotkey key strings are always uppercase for A-Z ("CtrlV",
+		// "ShiftA"). Wayland/X11 gui backends deliver Ctrl+letter events
+		// with Char set to the lowercase typed letter — writing e.Char
+		// here would produce "Ctrlv" and miss every default binding
+		// (Ctrl+V paste, Ctrl+A select-all, Ctrl+O toggle-panels, …).
+		sb.WriteRune(rune(vk))
 	} else if vk >= '0' && vk <= '9' {
 		sb.WriteRune(rune(vk))
 	} else if e.Char > 32 && e.Char < 127 {
@@ -380,6 +381,33 @@ func (m *MacroManager) Filter(e *vtinput.InputEvent) bool {
 		return true
 	}
 
+	// Plugin key interception: global plugin hotkeys and the active
+	// panel's PanelController may override built-in hotkeys, so they
+	// are consulted before the hotkey manager.
+	if vtui.FrameManager != nil {
+		if top := vtui.FrameManager.GetTopFrame(); top != nil {
+			if pi, ok := top.(interface {
+				InterceptPluginKey(*vtinput.InputEvent) bool
+			}); ok && pi.InterceptPluginKey(e) {
+				return true
+			}
+		}
+	}
+
+	// A frame in a modal input state (e.g. editor autocomplete, panel
+	// fast-find) may veto system hotkey dispatch: the key then falls
+	// through to the frame's own ProcessKey, which handles such states
+	// before anything else.
+	if vtui.FrameManager != nil {
+		if top := vtui.FrameManager.GetTopFrame(); top != nil {
+			if v, ok := top.(interface {
+				VetoActionKey(*vtinput.InputEvent) bool
+			}); ok && v.VetoActionKey(e) {
+				return false
+			}
+		}
+	}
+
 	// Hotkey Manager evaluation (System actions)
 	if hm := GlobalHotkeysMgr; hm != nil {
 		if actionName := hm.GetAction(currentArea, keyStr); actionName != "" {
@@ -394,6 +422,36 @@ func (m *MacroManager) Filter(e *vtinput.InputEvent) bool {
 	}
 
 	return false
+}
+
+// LookupHotkey runs the configured action for e in the current area without
+// touching macro-recording or macro-playback state. Frames use it as a
+// fallback for synthesized key events that bypass FrameManager.EventFilter —
+// notably mouse clicks on the F-key bar, which InjectEvents into the queue
+// with is_injected=true and therefore never reach Filter above. Returns true
+// when the key is bound (including to "None", which is a deliberate silence).
+func (m *MacroManager) LookupHotkey(e *vtinput.InputEvent) bool {
+	if m == nil || e == nil || e.Type != vtinput.KeyEventType || !e.KeyDown {
+		return false
+	}
+	hm := GlobalHotkeysMgr
+	if hm == nil {
+		return false
+	}
+	keyStr := EventToFarString(e)
+	if keyStr == "" {
+		return false
+	}
+	area := m.GetCurrentArea()
+	actionName := hm.GetAction(area, keyStr)
+	if actionName == "" {
+		return false
+	}
+	if strings.EqualFold(actionName, "none") {
+		return true
+	}
+	vtui.DebugLog("HOTKEY: Injected %s → action %s in area %s", keyStr, actionName, area)
+	return RunAction(actionName)
 }
 
 func (m *MacroManager) showAssignDialog() {

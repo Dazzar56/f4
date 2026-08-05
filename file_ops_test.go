@@ -1736,6 +1736,117 @@ Loop:
 	}
 }
 
+// closeErrVFS hands out writers whose Close fails, which is how a buffering
+// remote file system reports that its last chunk never arrived.
+type closeErrVFS struct {
+	vfs.VFS
+	closeErr error
+	closes   int
+}
+
+func (v *closeErrVFS) Create(ctx context.Context, path string) (io.WriteCloser, error) {
+	w, err := v.VFS.Create(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	return &closeErrWriter{w: w, owner: v}, nil
+}
+
+type closeErrWriter struct {
+	w     io.WriteCloser
+	owner *closeErrVFS
+}
+
+func (w *closeErrWriter) Write(p []byte) (int, error) { return w.w.Write(p) }
+
+func (w *closeErrWriter) Close() error {
+	w.owner.closes++
+	w.w.Close()
+	return w.owner.closeErr
+}
+
+type countingCloser struct {
+	closes int
+	err    error
+}
+
+func (c *countingCloser) Close() error {
+	c.closes++
+	return c.err
+}
+
+func TestCloseOnceClosesOnceAndReportsTheError(t *testing.T) {
+	c := &countingCloser{err: fmt.Errorf("flush failed")}
+	closeIt := closeOnce(c)
+	if err := closeIt(); err == nil || !strings.Contains(err.Error(), "flush failed") {
+		t.Fatalf("first close returned %v, want the underlying error", err)
+	}
+	// The defer that follows an explicit close must be a no-op, not a
+	// second Close on a writer that already tore its buffer down.
+	if err := closeIt(); err != nil {
+		t.Errorf("second close returned %v, want nil", err)
+	}
+	if c.closes != 1 {
+		t.Errorf("Close called %d times, want 1", c.closes)
+	}
+}
+
+func TestRecursiveCopyFailsWhenTheDestinationCloseFails(t *testing.T) {
+	tmpSrc := t.TempDir()
+	tmpDst := t.TempDir()
+	srcFile := filepath.Join(tmpSrc, "file.txt")
+	if err := os.WriteFile(srcFile, []byte("some content"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	dstFile := filepath.Join(tmpDst, "file.txt")
+
+	dstVfs := &closeErrVFS{VFS: vfs.NewOSVFS(tmpDst), closeErr: fmt.Errorf("flush failed")}
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	tCtx := vtui.RunAsync(func(c *vtui.TaskContext) {})
+	defer tCtx.Cancel()
+
+	err := recursiveCopy(tCtx.Context, vfs.NewOSVFS(tmpSrc), srcFile, dstVfs, dstFile, &FileOpState{}, 0)
+	if err == nil || !strings.Contains(err.Error(), "flush failed") {
+		t.Fatalf("recursiveCopy returned %v, want the close error", err)
+	}
+	if _, statErr := os.Stat(dstFile); statErr == nil {
+		t.Error("an incomplete destination was left behind")
+	}
+	if dstVfs.closes != 1 {
+		t.Errorf("Close called %d times, want 1", dstVfs.closes)
+	}
+}
+
+func TestRecursiveCopyClosesTheDestinationBeforeSucceeding(t *testing.T) {
+	tmpSrc := t.TempDir()
+	tmpDst := t.TempDir()
+	srcFile := filepath.Join(tmpSrc, "file.txt")
+	content := []byte("some content")
+	if err := os.WriteFile(srcFile, content, 0644); err != nil {
+		t.Fatal(err)
+	}
+	dstFile := filepath.Join(tmpDst, "file.txt")
+
+	dstVfs := &closeErrVFS{VFS: vfs.NewOSVFS(tmpDst)}
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	tCtx := vtui.RunAsync(func(c *vtui.TaskContext) {})
+	defer tCtx.Cancel()
+
+	if err := recursiveCopy(tCtx.Context, vfs.NewOSVFS(tmpSrc), srcFile, dstVfs, dstFile, &FileOpState{}, 0); err != nil {
+		t.Fatalf("recursiveCopy: %v", err)
+	}
+	got, err := os.ReadFile(dstFile)
+	if err != nil {
+		t.Fatalf("reading the copy: %v", err)
+	}
+	if !bytes.Equal(got, content) {
+		t.Errorf("copied %q, want %q", got, content)
+	}
+	if dstVfs.closes != 1 {
+		t.Errorf("Close called %d times, want 1", dstVfs.closes)
+	}
+}
+
 type mockReadAtCloser struct{}
 
 func (m *mockReadAtCloser) ReadAt(ctx context.Context, p []byte, off int64) (n int, err error) {

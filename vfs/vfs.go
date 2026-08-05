@@ -213,6 +213,101 @@ func FindProvider(ctx context.Context, parent VFS, path string) VFSProvider {
 }
 
 // ReadAtCloser combines reader interfaces with context support.
+// CommandRunner is implemented by a file system that can run a command where
+// its files are. For a remote one that is the difference between downloading
+// a tree to grep it and asking the host a question; for a local one there is
+// nothing to implement, since a shell is already there.
+type CommandRunner interface {
+	// RunCommand runs the command line in dir and hands each line of its
+	// output to cb as it arrives, returning the exit status. A non-zero
+	// status is not an error: the command ran and said something.
+	RunCommand(ctx context.Context, dir, command string, cb func(line string)) (int, error)
+}
+
+// DuplicateProgress reports how far a duplicate search has got. Total is how
+// many files turned out to be worth reading at all, which is known only once
+// the tree has been walked, so it is not the number of files in it.
+type DuplicateProgress struct {
+	Done  int
+	Total int
+	Path  string
+}
+
+// DuplicateFinder is implemented by a file system that can find files with
+// identical content on its own side. Doing it from here means reading every
+// candidate across the network, which for a remote tree costs more than the
+// answer is worth; a file system that cannot do it simply does not offer the
+// command. Each group holds two or more paths with the same content.
+type DuplicateFinder interface {
+	FindDuplicates(ctx context.Context, dir string, cb func(DuplicateProgress)) ([][]string, error)
+}
+
+// PatchPiece is one piece of a file being assembled. Data set means literal
+// new bytes; Data nil means Length bytes taken from the existing file at
+// Offset, which then never have to travel.
+type PatchPiece struct {
+	Offset int64
+	Length int64
+	Data   []byte
+}
+
+// DeltaWriter is implemented by a file system that can build a file out of
+// pieces of another one on its own side. An editor saving a one byte change
+// in a large remote file then sends one byte rather than the file. Like the
+// other optional interfaces here, a caller that does not find it writes the
+// file out in full as before.
+type DeltaWriter interface {
+	PatchFile(ctx context.Context, src, dst string, pieces []PatchPiece) error
+}
+
+// FoundEntry is one hit of a tree search.
+type FoundEntry struct {
+	// Path is the full path of the file, in the file system's own notation.
+	Path string
+	// Item describes it the way a listing would.
+	Item VFSItem
+}
+
+// FindQuery describes a tree search.
+type FindQuery struct {
+	// Masks are shell globs matched against the file name; at least one.
+	Masks []string
+	// Text, when set, keeps only files containing it as a plain string.
+	Text string
+	// IgnoreCase folds case for Text.
+	IgnoreCase bool
+	// Limit caps the number of hits; zero leaves it to the file system.
+	Limit int
+}
+
+// FileFinder is implemented by a file system that can walk a tree on its own
+// side. Like LineIndexer it is an optional interface: a local file system is
+// no faster for it, so only the ones that gain from it carry it, and a
+// caller that does not find it walks the tree itself as before.
+type FileFinder interface {
+	FindFiles(ctx context.Context, dir string, q FindQuery) ([]FoundEntry, error)
+}
+
+// LineIndexResult is what a LineIndexer answers with.
+type LineIndexResult struct {
+	// First is the one-based number of the line Offsets[0] belongs to.
+	First int64
+	// Offsets holds the byte offset of each line start, in file order. It is
+	// shorter than requested when the file ends first.
+	Offsets []int64
+	// Total is the number of lines in the file.
+	Total int64
+}
+
+// LineIndexer is implemented by a file system that can have the far side
+// work out where lines begin, so that a viewer does not have to read a file
+// in order to count it. It is deliberately an optional interface rather than
+// a method on VFS: a local file system gains nothing from it, and an archive
+// cannot answer it at all, so neither should be made to carry it. A caller
+// type asserts for it and keeps its own behaviour when the assertion fails.
+type LineIndexer interface {
+	LineIndex(ctx context.Context, path string, first, count int64) (LineIndexResult, error)
+}
 type ReadAtCloser interface {
 	ReadAt(ctx context.Context, p []byte, off int64) (n int, err error)
 	Read(ctx context.Context, p []byte) (n int, err error)

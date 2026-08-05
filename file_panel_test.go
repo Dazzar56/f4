@@ -904,6 +904,124 @@ func newPanelScrollTestFixture(mode ViewMode, entryCount int) *FileSystemPanel {
 	return fp
 }
 
+func TestPanelFileNameMatchSpans_AlignedExtension(t *testing.T) {
+	oldCfg := AppConfig
+	defer func() { AppConfig = oldCfg }()
+	AppConfig.SeparateFileExtensions = true
+
+	entry := &fileEntry{VFSItem: vfs.VFSItem{Name: "report.json"}}
+	spans := panelFileNameMatchSpans(entry, 16, 0, len([]rune("report.jso")))
+	if len(spans) != 2 {
+		t.Fatalf("match spans = %#v, want base and extension spans", spans)
+	}
+	if spans[0] != (panelMatchSpan{start: 0, width: 6}) {
+		t.Fatalf("base span = %#v, want start 0 width 6", spans[0])
+	}
+	if spans[1] != (panelMatchSpan{start: 12, width: 3}) {
+		t.Fatalf("extension span = %#v, want start 12 width 3", spans[1])
+	}
+}
+
+func TestPanelFileNameMatchSpans_Anywhere(t *testing.T) {
+	oldCfg := AppConfig
+	defer func() { AppConfig = oldCfg }()
+	AppConfig.SeparateFileExtensions = true
+
+	entry := &fileEntry{VFSItem: vfs.VFSItem{Name: "report.json"}}
+	if got := panelFileNameMatchSpans(entry, 16, 2, 4); len(got) != 1 || got[0] != (panelMatchSpan{start: 2, width: 4}) {
+		t.Fatalf("middle-of-name spans = %#v, want start 2 width 4", got)
+	}
+	if got := panelFileNameMatchSpans(entry, 16, 8, 3); len(got) != 1 || got[0] != (panelMatchSpan{start: 13, width: 3}) {
+		t.Fatalf("middle-of-extension spans = %#v, want start 13 width 3", got)
+	}
+}
+
+func TestFileSystemPanel_DrawFastFindMatches(t *testing.T) {
+	vtui.SetDefaultPalette()
+	SetDefaultF4Palette()
+	oldCfg := AppConfig
+	defer func() { AppConfig = oldCfg }()
+	AppConfig.SeparateFileExtensions = false
+
+	fp := NewFileSystemPanel(0, 0, 40, 12, vfs.NewOSVFS(t.TempDir()))
+	fp.viewMode = ViewModeDetailed
+	fp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "alpha.txt"}},
+		{VFSItem: vfs.VFSItem{Name: "beta.txt"}},
+		{VFSItem: vfs.VFSItem{Name: "alpine.txt"}},
+	}
+	fp.Resize(40, 12)
+	fp.Refresh()
+	fp.table.SetFocus(true)
+	fp.fastFindMode = true
+	fp.fastFindStr = "alp"
+
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(40, 12)
+	fp.table.Show(scr)
+	y := fp.table.Y1 + fp.table.MarginTop
+	beforeCursor := scr.GetCell(fp.table.X1, y).Attributes
+	beforeNonMatch := scr.GetCell(fp.table.X1, y+1).Attributes
+
+	fp.drawFastFindMatches(scr)
+	matchColor := vtui.GetRGBFore(vtui.Palette[vtui.ColMenuHighlight])
+	for _, row := range []int{0, 2} {
+		for x := 0; x < 3; x++ {
+			cell := scr.GetCell(fp.table.X1+x, y+row)
+			if got := vtui.GetRGBFore(cell.Attributes); got != matchColor {
+				t.Fatalf("row %d match cell %d foreground = %#06x, want %#06x", row, x, got, matchColor)
+			}
+		}
+	}
+	afterCursor := scr.GetCell(fp.table.X1, y).Attributes
+	if vtui.GetRGBBack(afterCursor) != vtui.GetRGBBack(beforeCursor) {
+		t.Fatalf("match highlight changed cursor background: before %#x after %#x", beforeCursor, afterCursor)
+	}
+	if got := scr.GetCell(fp.table.X1, y+1).Attributes; got != beforeNonMatch {
+		t.Fatalf("non-matching row color changed: before %#x after %#x", beforeNonMatch, got)
+	}
+}
+
+func TestFileSystemPanel_DrawFastFindMatchesInEveryGridColumn(t *testing.T) {
+	vtui.SetDefaultPalette()
+	SetDefaultF4Palette()
+	oldCfg := AppConfig
+	defer func() { AppConfig = oldCfg }()
+	AppConfig.SeparateFileExtensions = false
+
+	for _, mode := range []ViewMode{ViewModeBrief, ViewModeMedium} {
+		fp := NewFileSystemPanel(0, 0, 60, 12, vfs.NewOSVFS(t.TempDir()))
+		fp.viewMode = mode
+		fp.Resize(60, 12)
+		height := fp.table.ViewHeight
+		count := height * fp.gridColumnCount()
+		fp.entries = make([]*fileEntry, count)
+		for idx := range fp.entries {
+			fp.entries[idx] = &fileEntry{VFSItem: vfs.VFSItem{Name: fmt.Sprintf("other-%d", idx)}}
+		}
+		for column := 0; column < fp.gridColumnCount(); column++ {
+			fp.entries[column*height].Name = fmt.Sprintf("match-%d", column)
+		}
+		fp.Refresh()
+		fp.fastFindMode = true
+		fp.fastFindStr = "match"
+
+		scr := vtui.NewSilentScreenBuf()
+		scr.AllocBuf(60, 12)
+		fp.table.Show(scr)
+		fp.drawFastFindMatches(scr)
+		wantForeground := vtui.GetRGBFore(vtui.Palette[vtui.ColMenuHighlight])
+		x := fp.table.X1
+		y := fp.table.Y1 + fp.table.MarginTop
+		for column, tableColumn := range fp.table.Columns {
+			if got := vtui.GetRGBFore(scr.GetCell(x, y).Attributes); got != wantForeground {
+				t.Fatalf("mode %v column %d foreground = %#06x, want %#06x", mode, column, got, wantForeground)
+			}
+			x += tableColumn.Width + 1
+		}
+	}
+}
+
 func TestFileSystemPanel_DragAutoScrollContinuesAndStops(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	for _, mode := range []ViewMode{ViewModeBrief, ViewModeMedium, ViewModeDetailed, ViewModeWide} {
@@ -975,6 +1093,10 @@ func TestFileSystemPanel_DragAutoScrollStopsOnRelease(t *testing.T) {
 }
 
 func TestFileSystemPanel_ScrollBarMetricsAllViewModes(t *testing.T) {
+	oldCfg := AppConfig
+	defer func() { AppConfig = oldCfg }()
+	AppConfig.PanelScrollbarMode = PanelScrollbarFull
+
 	for _, tc := range []struct {
 		name    string
 		mode    ViewMode
@@ -1022,6 +1144,9 @@ func TestFileSystemPanel_ScrollBarMetricsAllViewModes(t *testing.T) {
 func TestFileSystemPanel_ScrollBarDrawAndMouse(t *testing.T) {
 	vtui.SetDefaultPalette()
 	SetDefaultF4Palette()
+	oldCfg := AppConfig
+	defer func() { AppConfig = oldCfg }()
+	AppConfig.PanelScrollbarMode = PanelScrollbarFull
 
 	fp := newPanelScrollTestFixture(ViewModeMedium, 0)
 	capacity := fp.table.ViewHeight * fp.gridColumnCount()
@@ -1092,6 +1217,10 @@ func TestFileSystemPanel_ScrollBarDrawAndMouse(t *testing.T) {
 }
 
 func TestFileSystemPanel_ScrollBarHiddenWhenGridFits(t *testing.T) {
+	oldCfg := AppConfig
+	defer func() { AppConfig = oldCfg }()
+	AppConfig.PanelScrollbarMode = PanelScrollbarFull
+
 	fp := newPanelScrollTestFixture(ViewModeBrief, 0)
 	fp.entries = make([]*fileEntry, fp.table.ViewHeight*fp.gridColumnCount())
 	fp.table.TopPos = 4
@@ -1107,6 +1236,103 @@ func TestFileSystemPanel_ScrollBarHiddenWhenGridFits(t *testing.T) {
 	dataY := fp.table.Y1 + fp.table.MarginTop
 	if got := scr.GetCell(fp.X2, dataY).Char; got != 0 {
 		t.Fatalf("scrollbar drawn for fitting Brief grid: %q", rune(got))
+	}
+}
+
+func TestFileSystemPanel_ScrollBarDisabled(t *testing.T) {
+	oldCfg := AppConfig
+	defer func() { AppConfig = oldCfg }()
+	AppConfig.PanelScrollbarMode = PanelScrollbarOff
+
+	fp := newPanelScrollTestFixture(ViewModeDetailed, 50)
+	if fp.syncScrollBar() {
+		t.Fatal("disabled panel scrollbar reported itself visible")
+	}
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(40, 12)
+	fp.drawScrollBar(scr)
+	y := fp.table.Y1 + fp.table.MarginTop
+	if got := scr.GetCell(fp.X2, y).Char; got != 0 {
+		t.Fatalf("disabled panel scrollbar drew %q", rune(got))
+	}
+	if fp.processScrollBarMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: true,
+		MouseX: int16(fp.X2), MouseY: int16(y),
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+	}) {
+		t.Fatal("disabled panel scrollbar handled mouse input")
+	}
+}
+
+func TestMinimalPanelScrollThumbUsesWholeHeight(t *testing.T) {
+	position, length := minimalPanelScrollThumb(10, 0, 20)
+	if position != 0 || length != 3 {
+		t.Fatalf("top thumb = position %d length %d, want 0,3", position, length)
+	}
+	position, bottomLength := minimalPanelScrollThumb(10, 20, 20)
+	if bottomLength != length || position+bottomLength != 10 {
+		t.Fatalf("bottom thumb = position %d length %d, want it to touch row 10", position, bottomLength)
+	}
+}
+
+func TestFileSystemPanel_MinimalScrollBarDrawAndMouse(t *testing.T) {
+	vtui.SetDefaultPalette()
+	SetDefaultF4Palette()
+	oldCfg := AppConfig
+	defer func() { AppConfig = oldCfg }()
+	AppConfig.PanelScrollbarMode = PanelScrollbarMinimal
+
+	fp := newPanelScrollTestFixture(ViewModeDetailed, 50)
+	fp.Refresh()
+	if !fp.syncScrollBar() {
+		t.Fatal("minimal scrollbar was hidden for overflowing content")
+	}
+	height := fp.scrollBar.Y2 - fp.scrollBar.Y1 + 1
+	caretPos, caretLength := minimalPanelScrollThumb(height, fp.scrollBar.Value, fp.scrollBar.Max)
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(40, 12)
+	fp.drawScrollBar(scr)
+	for offset := 0; offset < height; offset++ {
+		cell := scr.GetCell(fp.scrollBar.X1, fp.scrollBar.Y1+offset)
+		inHandle := offset >= caretPos && offset < caretPos+caretLength
+		if inHandle {
+			if cell.Char != '│' || cell.Attributes != vtui.Palette[ColPanelMinimalScrollbar] {
+				t.Fatalf("minimal handle cell %d = %q/%#x, want bright border", offset, rune(cell.Char), cell.Attributes)
+			}
+		} else if cell.Char != 0 {
+			t.Fatalf("minimal scrollbar drew track or arrow at offset %d: %q", offset, rune(cell.Char))
+		}
+	}
+
+	outsideHandleY := fp.scrollBar.Y1 + caretPos + caretLength
+	if outsideHandleY <= fp.scrollBar.Y2 && fp.processScrollBarMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: true,
+		MouseX: int16(fp.scrollBar.X1), MouseY: int16(outsideHandleY),
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+	}) {
+		t.Fatal("minimal scrollbar handled a click on the invisible track")
+	}
+	if !fp.processScrollBarMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: true,
+		MouseX: int16(fp.scrollBar.X1), MouseY: int16(fp.scrollBar.Y1 + caretPos),
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+	}) {
+		t.Fatal("minimal scrollbar did not capture its handle")
+	}
+	if !fp.processScrollBarMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: true,
+		MouseX: 0, MouseY: int16(fp.scrollBar.Y2),
+		ButtonState: vtinput.FromLeft1stButtonPressed, MouseEventFlags: vtinput.MouseMoved,
+	}) {
+		t.Fatal("minimal scrollbar did not drag its captured handle")
+	}
+	_, _, maxTop, _, _ := fp.panelScrollMetrics()
+	if fp.table.TopPos != maxTop {
+		t.Fatalf("minimal handle drag ended at top %d, want %d", fp.table.TopPos, maxTop)
+	}
+	fp.processScrollBarMouse(&vtinput.InputEvent{Type: vtinput.MouseEventType})
+	if fp.scrollMouseActive {
+		t.Fatal("minimal scrollbar kept mouse capture after release")
 	}
 }
 
@@ -1628,9 +1854,6 @@ func TestFileSystemPanel_NavigateDown_CursorReset(t *testing.T) {
 }
 func TestFileSystemPanel_FastFind(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	oldFastFindArrowsCancel := AppConfig.FastFindArrowsCancel
-	defer func() { AppConfig.FastFindArrowsCancel = oldFastFindArrowsCancel }()
-	AppConfig.FastFindArrowsCancel = false
 	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(t.TempDir()))
 	fp.entries = []*fileEntry{
 		{VFSItem: vfs.VFSItem{Name: ".."}},
@@ -1683,72 +1906,66 @@ func TestFileSystemPanel_FastFind(t *testing.T) {
 	if fp.fastFindStr != "c" {
 		t.Errorf("Expected search string 'c' after backspace, got %q", fp.fastFindStr)
 	}
-	if fp.GetSelectedName() != "cherry" {
-		t.Errorf("Cursor should jump back to 'cherry', got %q", fp.GetSelectedName())
-	}
-
-	// 4. Down arrow (next match)
-	fp.ProcessKey(&vtinput.InputEvent{
-		Type:           vtinput.KeyEventType,
-		KeyDown:        true,
-		VirtualKeyCode: vtinput.VK_DOWN,
-	})
 	if fp.GetSelectedName() != "cat" {
-		t.Errorf("Down arrow should jump to 'cat', got %q", fp.GetSelectedName())
+		t.Errorf("Cursor should stay on the current matching 'cat', got %q", fp.GetSelectedName())
 	}
 
-	// 5. Up arrow (prev match)
-	fp.ProcessKey(&vtinput.InputEvent{
-		Type:           vtinput.KeyEventType,
-		KeyDown:        true,
-		VirtualKeyCode: vtinput.VK_UP,
-	})
-	if fp.GetSelectedName() != "cherry" {
-		t.Errorf("Up arrow should jump back to 'cherry', got %q", fp.GetSelectedName())
-	}
-
-	// 6. Ctrl+Enter finds the next match and keeps Fast Find active.
+	// 4. Ctrl+Enter finds the next match and keeps Fast Find active.
 	fp.ProcessKey(&vtinput.InputEvent{
 		Type:            vtinput.KeyEventType,
 		KeyDown:         true,
 		VirtualKeyCode:  vtinput.VK_RETURN,
 		ControlKeyState: vtinput.LeftCtrlPressed,
 	})
-	if fp.GetSelectedName() != "cat" {
-		t.Errorf("Ctrl+Enter should jump to 'cat', got %q", fp.GetSelectedName())
+	if fp.GetSelectedName() != "cherry" {
+		t.Errorf("Ctrl+Enter should wrap to 'cherry', got %q", fp.GetSelectedName())
 	}
 	if !fp.fastFindMode || fp.fastFindStr != "c" {
 		t.Fatal("Ctrl+Enter should keep Fast Find active")
 	}
 
-	// 7. Ctrl+Shift+Enter finds the previous match.
+	// 5. Ctrl+Shift+Enter finds the previous match.
 	fp.ProcessKey(&vtinput.InputEvent{
 		Type:            vtinput.KeyEventType,
 		KeyDown:         true,
 		VirtualKeyCode:  vtinput.VK_RETURN,
 		ControlKeyState: vtinput.LeftCtrlPressed | vtinput.ShiftPressed,
 	})
-	if fp.GetSelectedName() != "cherry" {
-		t.Errorf("Ctrl+Shift+Enter should jump back to 'cherry', got %q", fp.GetSelectedName())
+	if fp.GetSelectedName() != "cat" {
+		t.Errorf("Ctrl+Shift+Enter should wrap back to 'cat', got %q", fp.GetSelectedName())
 	}
 
-	// 8. With the option enabled, Down cancels Fast Find and performs
-	// ordinary one-row navigation instead of jumping to the next match.
-	AppConfig.FastFindArrowsCancel = true
+	// 6. Down closes Fast Find and performs ordinary one-row navigation.
+	fp.SetCursorIndex(3) // cherry
 	fp.ProcessKey(&vtinput.InputEvent{
 		Type:           vtinput.KeyEventType,
 		KeyDown:        true,
 		VirtualKeyCode: vtinput.VK_DOWN,
 	})
 	if got := fp.GetSelectedName(); got != "dog" {
-		t.Errorf("Down with FastFindArrowsCancel selected %q, want dog", got)
+		t.Errorf("Down after closing Fast Find selected %q, want dog", got)
 	}
 	if fp.fastFindMode || fp.fastFindStr != "" {
-		t.Fatal("Down with FastFindArrowsCancel should close Fast Find")
+		t.Fatal("Down should close Fast Find")
 	}
-	AppConfig.FastFindArrowsCancel = false
 
-	// 9. Escape to cancel
+	// 7. Up follows the same rule and moves to the previous ordinary item.
+	fp.SetCursorIndex(5) // cat
+	fp.fastFindMode = true
+	fp.fastFindStr = "c"
+	fp.ProcessKey(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_UP,
+	})
+	if got := fp.GetSelectedName(); got != "dog" {
+		t.Errorf("Up after closing Fast Find selected %q, want dog", got)
+	}
+	if fp.fastFindMode || fp.fastFindStr != "" {
+		t.Fatal("Up should close Fast Find")
+	}
+
+	// 8. Escape to cancel.
 	fp.fastFindMode = true
 	fp.fastFindStr = "c"
 	fp.ProcessKey(&vtinput.InputEvent{
@@ -1774,11 +1991,14 @@ func TestFileSystemPanel_FastFind(t *testing.T) {
 }
 func TestFileSystemPanel_FastFind_Rendering(t *testing.T) {
 	vtui.SetDefaultPalette()
+	SetDefaultF4Palette()
 	scr := vtui.NewSilentScreenBuf()
 	scr.AllocBuf(80, 25)
 	vtui.FrameManager.Init(scr)
 
 	fp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(t.TempDir()))
+	fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "test-file.txt"}}}
+	fp.Refresh()
 	fp.fastFindMode = true
 	fp.fastFindStr = "test"
 
@@ -1809,6 +2029,34 @@ func TestFileSystemPanel_FastFind_Rendering(t *testing.T) {
 	}
 	if !foundText {
 		t.Error("FastFind search string 'test' not found in ScreenBuf")
+	}
+
+	inputX, inputY := fp.X1+11, fp.Y2-1
+	matchingAttr := scr.GetCell(inputX, inputY).Attributes
+	if got, want := vtui.GetRGBFore(matchingAttr), vtui.GetRGBFore(vtui.Palette[vtui.ColMenuHighlight]); got != want {
+		t.Fatalf("matching query foreground = %#06x, want %#06x", got, want)
+	}
+	if got, want := vtui.GetRGBBack(matchingAttr), vtui.GetRGBBack(vtui.Palette[vtui.ColDialogText]); got != want {
+		t.Fatalf("matching query background = %#06x, want dialog background %#06x", got, want)
+	}
+
+	fp.fastFindStr = "*test"
+	fp.Show(scr)
+	if got := scr.GetCell(inputX, inputY).Char; got != '*' {
+		t.Fatalf("anywhere-mode marker = %q, want '*'", rune(got))
+	}
+	if got := scr.GetCell(inputX+1, inputY).Char; got != 't' {
+		t.Fatalf("query after anywhere-mode marker starts with %q, want 't'", rune(got))
+	}
+
+	fp.fastFindStr = "missing"
+	fp.Show(scr)
+	missingAttr := scr.GetCell(inputX, inputY).Attributes
+	if got, want := vtui.GetRGBFore(missingAttr), vtui.GetRGBFore(vtui.Palette[ColPanelFastFindNoMatch]); got != want {
+		t.Fatalf("missing query foreground = %#06x, want %#06x", got, want)
+	}
+	if got, want := vtui.GetRGBBack(missingAttr), vtui.GetRGBBack(vtui.Palette[vtui.ColDialogText]); got != want {
+		t.Fatalf("missing query background = %#06x, want dialog background %#06x", got, want)
 	}
 }
 
@@ -1882,6 +2130,35 @@ func TestFileSystemPanel_FastFind_XLat(t *testing.T) {
 
 	if fp.GetSelectedName() != "заметка.txt" {
 		t.Errorf("XLat FastFind (reverse) failed: expected 'заметка.txt', got %q", fp.GetSelectedName())
+	}
+}
+
+func TestFileSystemPanel_FastFindStartsAtCurrentItem(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(t.TempDir()))
+	fp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "match-before.txt"}},
+		{VFSItem: vfs.VFSItem{Name: "other.txt"}},
+		{VFSItem: vfs.VFSItem{Name: "match-after.txt"}},
+		{VFSItem: vfs.VFSItem{Name: "tail.txt"}},
+	}
+	fp.Refresh()
+	fp.fastFindMode = true
+	fp.fastFindStr = "match"
+
+	fp.SetCursorIndex(1)
+	fp.doFastFind(0)
+	if got := fp.GetSelectedName(); got != "match-after.txt" {
+		t.Fatalf("search from middle selected %q, want match-after.txt", got)
+	}
+	fp.doFastFind(0)
+	if got := fp.GetSelectedName(); got != "match-after.txt" {
+		t.Fatalf("search moved away from matching current item to %q", got)
+	}
+	fp.SetCursorIndex(3)
+	fp.doFastFind(0)
+	if got := fp.GetSelectedName(); got != "match-before.txt" {
+		t.Fatalf("wrapped search selected %q, want match-before.txt", got)
 	}
 }
 

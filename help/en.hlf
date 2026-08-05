@@ -546,38 +546,69 @@ f4 is an experimental Far Manager / far2l clone in Go.
 
 @ViewerEditor
 $Viewer & Editor Keys
+This topic is generated dynamically from the action registry.
+
+@ViewerNav
+$Navigation Keys
 Editor:
-  F2            - Save
-  F3            - Toggle word wrap
-  F5            - Toggle show whitespaces
-  F7            - Search
   Ctrl+Left     - Previous word boundary
   Ctrl+Right    - Next word boundary
   Ctrl+Shift+Left/Right - Select by words
-  Ctrl+Y        - Delete line
-  Ctrl+Z        - Undo
-  Ctrl+Shift+Z  - Redo
-  Ctrl+A        - Select all
-  Esc / F10     - Exit
+  Home/End      - Line start / end
+  PgUp/PgDn     - Page up / down
 
 Viewer:
-  F2            - Toggle wrap
-  F4            - Toggle hex mode
-  F7            - Search
-  Esc / F10     - Exit
+  Up/Down       - Scroll one line
+  PgUp/PgDn     - Scroll one page
+  Home/End      - File start / end
 
 @PanelNav
 $Panel Navigation
+This topic is generated dynamically from the action registry.
+
+@ShellNav
+$Panel Navigation Keys
   Tab           - Switch active panel
-  Alt+F1/F2     - Left/Right drive menu
-  Ctrl+O        - Toggle panels / terminal view
+  Insert        - Select file/folder
   Ctrl+Tab      - Cycle workspaces
   Ctrl+W        - Close workspace
   Ctrl+N        - Fork active panel to new workspace
-  Insert        - Select file/folder
-  Ctrl+A        - View file attributes
-  Alt+F7        - Find file
-  Alt+F8        - Command history
-  Alt+F12       - Folders history
-  Alt+Left/Right - Back/forward through folders history
-  F11           - Plugin menu
+
+@History
+$Commands History (Alt+F8)
+    The commands history shows the list of previously executed commands.
+Besides the cursor keys, the following keyboard shortcuts are available:
+
+  Paste selected command into command line          Enter
+  (Left-click acts the same)
+  Cancel the dialog                                 Esc, F10
+
+  Toggle substring / prefix incremental search      F2
+  Type any character to filter the visible entries
+  Backspace to remove the last filter character
+
+  Delete the current history item                   Shift+Del
+  Clear the entire commands history (confirmed)     Del
+
+  Copy the selected command to the clipboard        Ctrl+C, Ctrl+Ins
+
+@HistoryFolders
+$Folders History (Alt+F12)
+    The folders history shows the list of previously visited directories.
+Besides the cursor keys, the following keyboard shortcuts are available:
+
+  Go to selected folder on the active panel         Enter
+  (Left-click acts the same)
+  Go to selected folder on the passive panel        Shift+Enter
+  Insert selected path into the command line        Ctrl+Enter
+  Cancel the dialog                                 Esc, F10
+
+  Toggle substring / prefix incremental search      F2
+  Type any character to filter the visible entries
+  Backspace to remove the last filter character
+
+  Delete the current history item                   Shift+Del
+  Clear the entire folders history (confirmed)      Del
+  Remove entries with non-existing paths (confirmed) Ctrl+R
+
+  Copy the selected path to the clipboard           Ctrl+C, Ctrl+Ins

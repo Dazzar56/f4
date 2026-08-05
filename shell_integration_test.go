@@ -31,11 +31,11 @@ func TestPanelsFrame_CtrlEnter_Escaping(t *testing.T) {
 	fsp.SetCursorIndex(1)
 
 	// Нажимаем Ctrl+Enter
-	pf.ProcessKey(&vtinput.InputEvent{
+	pressKey(pf, &vtinput.InputEvent{
 		Type:            vtinput.KeyEventType,
 		KeyDown:         true,
 		VirtualKeyCode:  vtinput.VK_RETURN,
-		ControlKeyState: vtinput.LeftCtrlPressed,
+		ControlKeyState: vtinput.LeftCtrlPressed | vtinput.EnhancedKey,
 	})
 
 	got := pf.cmdLine.Edit.GetText()
@@ -72,7 +72,7 @@ func TestPanelsFrame_CD_QuotedParsing(t *testing.T) {
 	// Для Windows этот тест тоже должен работать, так как мы добавили поддержку '' и там.
 	pf.cmdLine.Edit.SetText("cd 'dir with space'\\''s'")
 
-	pf.ProcessKey(&vtinput.InputEvent{
+	pressKey(pf, &vtinput.InputEvent{
 		Type:           vtinput.KeyEventType,
 		KeyDown:        true,
 		VirtualKeyCode: vtinput.VK_RETURN,
@@ -104,7 +104,7 @@ func TestPanelsFrame_PTY_SyncEscaping(t *testing.T) {
 
 	// Вводим команду перехода
 	pf.cmdLine.Edit.SetText("cd \"" + dirName + "\"")
-	pf.ProcessKey(&vtinput.InputEvent{
+	pressKey(pf, &vtinput.InputEvent{
 		Type:           vtinput.KeyEventType,
 		KeyDown:        true,
 		VirtualKeyCode: vtinput.VK_RETURN,

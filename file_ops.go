@@ -656,6 +656,22 @@ func ExecuteDeleteOp(pf *PanelsFrame, activeVfs vfs.VFS, names []string, mode in
 	}
 }
 
+// closeOnce wraps a Close so that it can be called explicitly where its
+// error matters and still be left in a defer as a safety net. A writer that
+// buffers — every network file system does, FISH+ among them — only sends
+// its last chunk from Close, so a copy is not finished until Close has
+// succeeded, and a dropped error there leaves a truncated file behind while
+// the panel reports success.
+func closeOnce(c io.Closer) func() error {
+	closed := false
+	return func() error {
+		if closed {
+			return nil
+		}
+		closed = true
+		return c.Close()
+	}
+}
 func recursiveCopy(ctx context.Context, srcVfs vfs.VFS, srcPath string, dstVfs vfs.VFS, destPath string, state *FileOpState, depth int) error {
 	if depth > 1000 {
 		return fmt.Errorf("maximum recursion depth exceeded (circular structure?)")
@@ -868,9 +884,10 @@ func recursiveCopy(ctx context.Context, srcVfs vfs.VFS, srcPath string, dstVfs v
 		}
 	}
 
+	closeDst := closeOnce(dstFile)
 	copySuccess := false
 	defer func() {
-		dstFile.Close()
+		closeDst()
 		if !copySuccess {
 			dstVfs.Remove(context.Background(), destPathForFile)
 		}
@@ -902,6 +919,9 @@ func recursiveCopy(ctx context.Context, srcVfs vfs.VFS, srcPath string, dstVfs v
 		}
 	}
 
+	if cerr := closeDst(); cerr != nil {
+		return cerr
+	}
 	copySuccess = true
 
 	if copySuccess {

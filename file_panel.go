@@ -22,6 +22,7 @@ import (
 type fileEntry struct {
 	vfs.VFSItem
 	Selected       bool
+	PrevSelected   bool // snapshot of Selected taken by SaveSelection; swapped in by RestoreSelection (Ctrl+M)
 	SizeCalculated bool
 	IsCached       bool
 }
@@ -33,6 +34,11 @@ type mediumRow struct {
 type panelEntryRow struct {
 	fp    *FileSystemPanel
 	entry *fileEntry
+}
+
+type panelMatchSpan struct {
+	start int
+	width int
 }
 
 func (r *panelEntryRow) GetCellText(col int) string {
@@ -114,6 +120,110 @@ func formatPanelFileName(entry *fileEntry, width int) string {
 	left := runewidth.Truncate(entry.displayName(base), width-extensionFieldWidth-1, "")
 	padding := width - runewidth.StringWidth(left) - extensionFieldWidth
 	return left + strings.Repeat(" ", padding) + extensionText
+}
+
+func clippedPanelMatchSpan(start, width, cellWidth int) (panelMatchSpan, bool) {
+	if start < 0 {
+		width += start
+		start = 0
+	}
+	if start >= cellWidth || width <= 0 {
+		return panelMatchSpan{}, false
+	}
+	if start+width > cellWidth {
+		width = cellWidth - start
+	}
+	return panelMatchSpan{start: start, width: width}, width > 0
+}
+
+func panelFileNameMatchSpans(entry *fileEntry, width, matchStartRunes, matchedRunes int) []panelMatchSpan {
+	if matchStartRunes < 0 || matchedRunes <= 0 || width <= 0 {
+		return nil
+	}
+	nameRunes := []rune(entry.Name)
+	if matchStartRunes >= len(nameRunes) {
+		return nil
+	}
+	matchEndRunes := matchStartRunes + matchedRunes
+	if matchEndRunes > len(nameRunes) {
+		matchEndRunes = len(nameRunes)
+	}
+	prefixWidth := 0
+	if entry.Name != ".." {
+		prefixWidth = runewidth.StringWidth(entry.displayName(""))
+	}
+
+	if !AppConfig.SeparateFileExtensions || entry.IsDir || entry.Name == ".." {
+		if span, ok := clippedPanelMatchSpan(
+			prefixWidth+runewidth.StringWidth(string(nameRunes[:matchStartRunes])),
+			runewidth.StringWidth(string(nameRunes[matchStartRunes:matchEndRunes])), width,
+		); ok {
+			return []panelMatchSpan{span}
+		}
+		return nil
+	}
+
+	base, extension := splitFileExtension(entry.Name)
+	if extension == "" {
+		if span, ok := clippedPanelMatchSpan(
+			prefixWidth+runewidth.StringWidth(string(nameRunes[:matchStartRunes])),
+			runewidth.StringWidth(string(nameRunes[matchStartRunes:matchEndRunes])), width,
+		); ok {
+			return []panelMatchSpan{span}
+		}
+		return nil
+	}
+
+	baseRunes := []rune(base)
+	extensionRunes := []rune(extension)
+	extensionFieldWidth := runewidth.StringWidth(extension)
+	if extensionFieldWidth < 3 {
+		extensionFieldWidth = 3
+	}
+
+	spans := make([]panelMatchSpan, 0, 2)
+	baseMatchStart := matchStartRunes
+	if baseMatchStart < 0 {
+		baseMatchStart = 0
+	}
+	baseMatchEnd := matchEndRunes
+	if baseMatchEnd > len(baseRunes) {
+		baseMatchEnd = len(baseRunes)
+	}
+	if baseMatchStart < baseMatchEnd && extensionFieldWidth < width {
+		leftWidth := width - extensionFieldWidth - 1
+		if span, ok := clippedPanelMatchSpan(
+			prefixWidth+runewidth.StringWidth(string(baseRunes[:baseMatchStart])),
+			runewidth.StringWidth(string(baseRunes[baseMatchStart:baseMatchEnd])), leftWidth,
+		); ok {
+			spans = append(spans, span)
+		}
+	}
+
+	// The separating dot is intentionally hidden when extensions are aligned.
+	// Continue highlighting at the right-aligned extension after that dot.
+	extensionNameStart := len(baseRunes) + 1
+	extensionMatchStart := matchStartRunes - extensionNameStart
+	if extensionMatchStart < 0 {
+		extensionMatchStart = 0
+	}
+	extensionMatchEnd := matchEndRunes - extensionNameStart
+	if extensionMatchEnd > len(extensionRunes) {
+		extensionMatchEnd = len(extensionRunes)
+	}
+	if extensionMatchStart < extensionMatchEnd {
+		extensionStart := width - extensionFieldWidth
+		if extensionStart < 0 {
+			extensionStart = 0
+		}
+		if span, ok := clippedPanelMatchSpan(
+			extensionStart+runewidth.StringWidth(string(extensionRunes[:extensionMatchStart])),
+			runewidth.StringWidth(string(extensionRunes[extensionMatchStart:extensionMatchEnd])), width,
+		); ok {
+			spans = append(spans, span)
+		}
+	}
+	return spans
 }
 
 func (m *mediumRow) IsColSelected(col int) bool {
@@ -232,6 +342,7 @@ type FileSystemPanel struct {
 	table                *vtui.Table
 	scrollBar            *vtui.ScrollBar
 	scrollMouseActive    bool
+	minimalScrollDragGap int
 	headerMouseActive    bool
 	frame                *vtui.BorderedFrame
 	vfs                  vfs.VFS
@@ -796,7 +907,7 @@ func (fp *FileSystemPanel) initScrollBar() {
 }
 
 func (fp *FileSystemPanel) syncScrollBar() bool {
-	if fp.scrollBar == nil {
+	if fp.scrollBar == nil || AppConfig.PanelScrollbarMode == PanelScrollbarOff {
 		return false
 	}
 	height, _, maxTop, virtualMax, virtualValue := fp.panelScrollMetrics()
@@ -848,8 +959,40 @@ func (fp *FileSystemPanel) drawScrollBar(scr *vtui.ScreenBuf) {
 		return
 	}
 	height := fp.scrollBar.Y2 - fp.scrollBar.Y1 + 1
+	if AppConfig.PanelScrollbarMode == PanelScrollbarMinimal {
+		caretPos, caretLength := minimalPanelScrollThumb(height, fp.scrollBar.Value, fp.scrollBar.Max)
+		attr := vtui.Palette[ColPanelMinimalScrollbar]
+		for offset := 0; offset < caretLength; offset++ {
+			scr.Write(fp.scrollBar.X1, fp.scrollBar.Y1+caretPos+offset,
+				vtui.StringToCharInfo("│", attr))
+		}
+		return
+	}
 	vtui.DrawScrollBar(scr, fp.scrollBar.X1, fp.scrollBar.Y1, height,
 		fp.scrollBar.Value, fp.scrollBar.Max+height, vtui.Palette[ColPanelScrollbar])
+}
+
+func minimalPanelScrollThumb(height, value, maximum int) (position, length int) {
+	if height <= 0 || maximum <= 0 {
+		return 0, 0
+	}
+	itemsCount := maximum + height
+	length = (height*height + itemsCount/2) / itemsCount
+	if length < 1 {
+		length = 1
+	}
+	if length >= height {
+		length = height - 1
+	}
+	maxPosition := height - length
+	if value < 0 {
+		value = 0
+	}
+	if value > maximum {
+		value = maximum
+	}
+	position = (value*maxPosition + maximum/2) / maximum
+	return position, length
 }
 
 // drawCursorSeparators restores the cursor background on column separators.
@@ -885,18 +1028,56 @@ func (fp *FileSystemPanel) drawCursorSeparators(scr *vtui.ScreenBuf) {
 }
 
 func (fp *FileSystemPanel) processScrollBarMouse(e *vtinput.InputEvent) bool {
-	if fp.scrollBar == nil {
+	if fp.scrollBar == nil || AppConfig.PanelScrollbarMode == PanelScrollbarOff {
 		return false
 	}
 	// Releases must reach ScrollBar so it can stop dragging and auto-repeat.
 	if e.ButtonState == 0 {
-		fp.scrollBar.ProcessMouse(e)
+		if AppConfig.PanelScrollbarMode == PanelScrollbarFull {
+			fp.scrollBar.ProcessMouse(e)
+		}
 		fp.scrollMouseActive = false
+		fp.minimalScrollDragGap = 0
 		fp.syncScrollBar()
 		return false
 	}
 	if e.ButtonState&vtinput.FromLeft1stButtonPressed == 0 {
 		return false
+	}
+	if AppConfig.PanelScrollbarMode == PanelScrollbarMinimal {
+		if fp.scrollMouseActive {
+			height := fp.scrollBar.Y2 - fp.scrollBar.Y1 + 1
+			_, caretLength := minimalPanelScrollThumb(height, fp.scrollBar.Value, fp.scrollBar.Max)
+			maxPosition := height - caretLength
+			position := int(e.MouseY) - fp.scrollBar.Y1 - fp.minimalScrollDragGap
+			if position < 0 {
+				position = 0
+			}
+			if position > maxPosition {
+				position = maxPosition
+			}
+			value := 0
+			if maxPosition > 0 {
+				value = (position*fp.scrollBar.Max + maxPosition/2) / maxPosition
+			}
+			_, _, maxTop, virtualMax, _ := fp.panelScrollMetrics()
+			if virtualMax > 0 {
+				fp.setPanelScrollTop((value*maxTop + virtualMax/2) / virtualMax)
+			}
+			return true
+		}
+		if !e.KeyDown || e.MouseEventFlags&vtinput.MouseMoved != 0 || !fp.syncScrollBar() || int(e.MouseX) != fp.scrollBar.X1 {
+			return false
+		}
+		height := fp.scrollBar.Y2 - fp.scrollBar.Y1 + 1
+		caretPos, caretLength := minimalPanelScrollThumb(height, fp.scrollBar.Value, fp.scrollBar.Max)
+		y := int(e.MouseY) - fp.scrollBar.Y1
+		if y < caretPos || y >= caretPos+caretLength {
+			return false
+		}
+		fp.scrollMouseActive = true
+		fp.minimalScrollDragGap = y - caretPos
+		return true
 	}
 	if fp.scrollMouseActive {
 		// Once a scrollbar owns the press, moving over file rows must not
@@ -1421,6 +1602,7 @@ func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
 		fp.table.SetFocus(fp.IsFocused())
 	}
 	fp.table.Show(scr)
+	fp.drawFastFindMatches(scr)
 	fp.drawCursorSeparators(scr)
 	fp.drawScrollBar(scr)
 
@@ -1547,10 +1729,96 @@ func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
 			searchStr = string(runes[1:])
 		}
 
-		p.DrawString(fx1+2, fy1+1, searchStr, vtui.Palette[vtui.ColDialogText])
+		searchColor := vtui.Palette[ColPanelFastFindNoMatch]
+		if fp.fastFindHasMatches() {
+			searchColor = vtui.Palette[vtui.ColMenuHighlight]
+		}
+		searchAttr := fastFindMatchAttr(vtui.Palette[vtui.ColDialogText], searchColor)
+		p.DrawString(fx1+2, fy1+1, searchStr, searchAttr)
 
 		scr.SetCursorPos(fx1+2+runewidth.StringWidth(searchStr), fy1+1)
 		scr.SetCursorVisible(true)
+	}
+}
+
+func (fp *FileSystemPanel) fastFindMatch(name string) (startRunes, matchedRunes int, ok bool) {
+	if !fp.fastFindMode || fp.fastFindStr == "" {
+		return 0, 0, false
+	}
+	queryText := fp.fastFindStr
+	anywhere := strings.HasPrefix(queryText, "*")
+	if anywhere {
+		queryText = strings.TrimPrefix(queryText, "*")
+	}
+	if queryText == "" {
+		return 0, 0, anywhere
+	}
+	nameLower := strings.ToLower(name)
+	for _, query := range []string{
+		strings.ToLower(queryText),
+		strings.ToLower(vtui.GlobalXlator.TranscodeString(queryText)),
+	} {
+		if query == "" {
+			continue
+		}
+		byteOffset := strings.Index(nameLower, query)
+		if byteOffset >= 0 && (anywhere || byteOffset == 0) {
+			return len([]rune(nameLower[:byteOffset])), len([]rune(query)), true
+		}
+	}
+	return 0, 0, false
+}
+
+func (fp *FileSystemPanel) fastFindHasMatches() bool {
+	for _, entry := range fp.entries {
+		if _, _, ok := fp.fastFindMatch(entry.Name); ok {
+			return true
+		}
+	}
+	return false
+}
+
+func fastFindMatchAttr(baseAttr, matchAttr uint64) uint64 {
+	if matchAttr&vtui.IsFgRGB != 0 {
+		return vtui.SetRGBFore(baseAttr, vtui.GetRGBFore(matchAttr))
+	}
+	return vtui.SetIndexFore(baseAttr, vtui.GetIndexFore(matchAttr))
+}
+
+func (fp *FileSystemPanel) drawFastFindMatches(scr *vtui.ScreenBuf) {
+	if !fp.fastFindMode || fp.fastFindStr == "" || !fp.table.IsVisible() {
+		return
+	}
+	height := fp.table.ViewHeight
+	if height <= 0 {
+		return
+	}
+	columns := fp.gridColumnCount()
+	matchAttr := vtui.Palette[vtui.ColMenuHighlight]
+
+	for rowOffset := 0; rowOffset < height; rowOffset++ {
+		row := fp.table.TopPos + rowOffset
+		y := fp.table.Y1 + fp.table.MarginTop + rowOffset
+		x := fp.table.X1
+		for column := 0; column < columns && column < len(fp.table.Columns); column++ {
+			entryIndex := row
+			if columns > 1 {
+				entryIndex += column * height
+			}
+			cellWidth := fp.table.Columns[column].Width
+			if entryIndex >= 0 && entryIndex < len(fp.entries) {
+				entry := fp.entries[entryIndex]
+				matchStart, matchedRunes, _ := fp.fastFindMatch(entry.Name)
+				for _, span := range panelFileNameMatchSpans(entry, cellWidth, matchStart, matchedRunes) {
+					for cellOffset := 0; cellOffset < span.width; cellOffset++ {
+						cell := scr.GetCell(x+span.start+cellOffset, y)
+						cell.Attributes = fastFindMatchAttr(cell.Attributes, matchAttr)
+						scr.Write(x+span.start+cellOffset, y, []vtui.CharInfo{cell})
+					}
+				}
+			}
+			x += cellWidth + 1
+		}
 	}
 }
 
@@ -1670,7 +1938,7 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 
 	if fp.fastFindMode {
-		if AppConfig.FastFindArrowsCancel && (e.VirtualKeyCode == vtinput.VK_UP || e.VirtualKeyCode == vtinput.VK_DOWN) {
+		if e.VirtualKeyCode == vtinput.VK_UP || e.VirtualKeyCode == vtinput.VK_DOWN {
 			fp.fastFindMode = false
 			fp.fastFindStr = ""
 			vtui.FrameManager.Redraw()
@@ -1687,6 +1955,20 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 		case vtinput.VK_ESCAPE:
 			fp.fastFindMode = false
 			fp.fastFindStr = ""
+			vtui.FrameManager.Redraw()
+			return true
+		}
+		if e.VirtualKeyCode == vtinput.VK_F2 && !shift && !ctrl && !alt {
+			if strings.HasPrefix(fp.fastFindStr, "*") {
+				fp.fastFindStr = strings.TrimPrefix(fp.fastFindStr, "*")
+			} else {
+				fp.fastFindStr = "*" + fp.fastFindStr
+			}
+			if fp.fastFindStr == "" {
+				fp.fastFindMode = false
+			} else {
+				fp.doFastFind(0)
+			}
 			vtui.FrameManager.Redraw()
 			return true
 		}
@@ -1982,6 +2264,7 @@ func (fp *FileSystemPanel) ProcessMouse(e *vtinput.InputEvent) bool {
 
 	if fp.fastFindMode && e.ButtonState != 0 {
 		fp.fastFindMode = false
+		fp.fastFindStr = ""
 		vtui.FrameManager.Redraw()
 	}
 
@@ -2238,17 +2521,22 @@ func (fp *FileSystemPanel) doFastFind(dir int) {
 	if fp.fastFindStr == "" {
 		return
 	}
-	searchLower := strings.ToLower(fp.fastFindStr)
-	searchXlat := strings.ToLower(vtui.GlobalXlator.TranscodeString(fp.fastFindStr))
 	startIdx := fp.GetCursorIndex()
 
 	checkMatch := func(i int) bool {
-		nameLower := strings.ToLower(fp.entries[i].Name)
-		return strings.HasPrefix(nameLower, searchLower) || strings.HasPrefix(nameLower, searchXlat)
+		_, _, ok := fp.fastFindMatch(fp.entries[i].Name)
+		return ok
 	}
 
 	if dir == 0 {
-		for i := 0; i < len(fp.entries); i++ {
+		for i := startIdx; i < len(fp.entries); i++ {
+			if checkMatch(i) {
+				fp.SetCursorIndex(i)
+				fp.Refresh()
+				return
+			}
+		}
+		for i := 0; i < startIdx; i++ {
 			if checkMatch(i) {
 				fp.SetCursorIndex(i)
 				fp.Refresh()
@@ -2288,7 +2576,34 @@ func (fp *FileSystemPanel) doFastFind(dir int) {
 	}
 }
 
+// SaveSelection snapshots the current selection into fileEntry.PrevSelected.
+// Called by every mass-selection operation (mask select/deselect, invert,
+// select-all/deselect-all) so that RestoreSelection has a well-defined
+// state to bring back. Mirrors far2l's FileList::SaveSelection().
+func (fp *FileSystemPanel) SaveSelection() {
+	for _, e := range fp.entries {
+		e.PrevSelected = e.Selected
+	}
+}
+
+// RestoreSelection swaps the current selection with the last snapshot taken
+// by SaveSelection. Because the swap goes both ways, pressing Ctrl+M twice
+// returns to the state you started from. Mirrors far2l's
+// FileList::RestoreSelection().
+func (fp *FileSystemPanel) RestoreSelection() {
+	for i, e := range fp.entries {
+		if e.Name == ".." {
+			continue
+		}
+		saved := e.PrevSelected
+		e.PrevSelected = e.Selected
+		fp.SetItemSelected(i, saved)
+	}
+	vtui.FrameManager.Redraw()
+}
+
 func (fp *FileSystemPanel) InvertSelection() {
+	fp.SaveSelection()
 	for i, e := range fp.entries {
 		if e.Name != ".." {
 			fp.SetItemSelected(i, !e.Selected)
@@ -2307,6 +2622,7 @@ func (fp *FileSystemPanel) ApplyMaskSelection(mask string, state bool) {
 	}
 	maskLower := strings.ToLower(mask)
 
+	fp.SaveSelection()
 	for i, e := range fp.entries {
 		if e.Name == ".." {
 			continue

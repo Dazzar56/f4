@@ -6,6 +6,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -52,7 +53,7 @@ func (e Entry) IsExecutable() bool { return e.Mode&0111 != 0 }
 // preference: GNU find carries everything in a single call and even tells
 // where a symlink points, while the stat flavours need a shell glob and
 // report the link itself only.
-var ListingModes = []string{"find", "stat", "statbsd"}
+var ListingModes = []string{"find", "stat", "statbsd", "ls"}
 
 func typeCharMode(c byte) uint32 {
 	switch c {
@@ -152,16 +153,20 @@ func parseFindEntry(line string) (Entry, error) {
 // parseStatEntry reads a line produced with GNU
 // stat -c '%f %s %Y %X %Z %u %g %n', where the mode comes in hex.
 func parseStatEntry(line string) (Entry, error) {
-	return parseStatLike(line, 16, "stat listing")
+	return parseStatLike(line, 16, "stat listing", false)
 }
 
 // parseBSDStatEntry reads a line produced with BSD
 // stat -f '%p %z %m %a %c %u %g %N', where the mode comes in octal.
 func parseBSDStatEntry(line string) (Entry, error) {
-	return parseStatLike(line, 8, "bsd stat listing")
+	return parseStatLike(line, 8, "bsd stat listing", false)
 }
 
-func parseStatLike(line string, modeBase int, what string) (Entry, error) {
+// keepPath decides what the last field means. A directory listing wants the
+// bare name, because that is what a panel shows; a tree search answers with
+// paths, and reducing one to its base name loses the only thing that says
+// where the hit is.
+func parseStatLike(line string, modeBase int, what string, keepPath bool) (Entry, error) {
 	f := strings.SplitN(line, " ", 8)
 	if len(f) < 8 {
 		return Entry{}, fmt.Errorf("%s: expected 8 fields in %q", what, line)
@@ -197,7 +202,7 @@ func parseStatLike(line string, modeBase int, what string) (Entry, error) {
 	name := strings.TrimRight(f[7], "/")
 	if name == "" {
 		name = "/"
-	} else {
+	} else if !keepPath {
 		name = path.Base(name)
 	}
 	e.Name = name
@@ -207,6 +212,16 @@ func parseStatLike(line string, modeBase int, what string) (Entry, error) {
 // ParseListing turns the payload of the enum, info and linfo commands into
 // entries. The first line names the backend that produced the rest.
 func ParseListing(lines []string) (string, []Entry, error) {
+	return parseListing(lines, false)
+}
+
+// ParseFoundListing does the same for the answer of a tree search, where
+// Entry.Name carries the full path of the hit rather than its name.
+func ParseFoundListing(lines []string) (string, []Entry, error) {
+	return parseListing(lines, true)
+}
+
+func parseListing(lines []string, keepPath bool) (string, []Entry, error) {
 	if len(lines) == 0 {
 		return "", nil, fmt.Errorf("fishplus: empty listing")
 	}
@@ -214,14 +229,19 @@ func ParseListing(lines []string) (string, []Entry, error) {
 	if !strings.HasPrefix(lines[0], "M ") || mode == "" {
 		return "", nil, fmt.Errorf("fishplus: listing without a mode marker: %q", lines[0])
 	}
+	// The ls backend carries its time dialect in the marker, because the two
+	// print timestamps differently and nothing else in the line says which.
+	mode, variant, _ := strings.Cut(mode, " ")
 	var parse func(string) (Entry, error)
 	switch mode {
 	case "find":
 		parse = parseFindEntry
 	case "stat":
-		parse = parseStatEntry
+		parse = func(l string) (Entry, error) { return parseStatLike(l, 16, "stat listing", keepPath) }
 	case "statbsd":
-		parse = parseBSDStatEntry
+		parse = func(l string) (Entry, error) { return parseStatLike(l, 8, "bsd stat listing", keepPath) }
+	case "ls":
+		parse = func(l string) (Entry, error) { return parseLsEntry(l, variant, keepPath) }
 	default:
 		return mode, nil, fmt.Errorf("fishplus: unknown listing mode %q", mode)
 	}
@@ -246,10 +266,18 @@ func ParseListing(lines []string) (string, []Entry, error) {
 // Client is the file system view of a FISH+ session.
 type Client struct {
 	sess *Session
+
+	mu        sync.Mutex
+	writeMode string
 }
 
-// NewClient wraps a session that has already completed its handshake.
-func NewClient(sess *Session) *Client { return &Client{sess: sess} }
+// NewClient wraps a session that has already completed its handshake. The
+// write backend is remembered here rather than looked up per request,
+// because wmode can change it at runtime and the client has to encode its
+// payload the way the current backend expects it.
+func NewClient(sess *Session) *Client {
+	return &Client{sess: sess, writeMode: sess.Features().WriteMode()}
+}
 
 // Session exposes the underlying protocol session.
 func (c *Client) Session() *Session { return c.sess }
@@ -309,6 +337,20 @@ func (c *Client) ReadLink(ctx context.Context, p string) (string, error) {
 		return "", err
 	}
 	if err := resp.Err("rdlink " + p); err != nil {
+		return "", err
+	}
+	return strings.Join(resp.Lines, "\n"), nil
+}
+
+// Pwd returns the directory the remote shell started in. That is where a
+// panel opens first, the same way an interactive login lands in a home
+// directory rather than at the root.
+func (c *Client) Pwd(ctx context.Context) (string, error) {
+	resp, err := c.sess.Exec(ctx, "pwd")
+	if err != nil {
+		return "", err
+	}
+	if err := resp.Err("pwd"); err != nil {
 		return "", err
 	}
 	return strings.Join(resp.Lines, "\n"), nil

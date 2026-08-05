@@ -50,7 +50,8 @@ func actionFoldersHistory(pf *PanelsFrame) {
 	}
 
 	menu := vtui.NewVMenu(Msg("History.FoldersTitle"))
-	search := newHistorySearch(menu, h, Msg("History.SearchModeHint"))
+	menu.SetHelp("HistoryFolders")
+	search := newHistorySearch(menu, h, Msg("History.FoldersHint"))
 	if activePanel := pf.getActivePanel(); activePanel != nil {
 		currentPath := activePanel.vfs.GetPath()
 		for historyPos, path := range h {
@@ -61,10 +62,28 @@ func actionFoldersHistory(pf *PanelsFrame) {
 		}
 	}
 
+	// Shared "cd on active panel" path used by bare Enter and by mouse click.
+	gotoActive := func() {
+		historyPos, _, ok := search.selected()
+		if !ok {
+			return
+		}
+		search.cleanup()
+		if targetPanel := pf.getActivePanel(); targetPanel != nil {
+			// The menu is oldest → newest. If the selected path disappeared,
+			// navigateAvailableFolderHistory walks toward newer entries.
+			pf.navigateAvailableFolderHistory(targetPanel, h, historyPos, -1)
+		}
+	}
+	// VMenu.ProcessMouse calls SetExitCode after OnAction, so click closes
+	// the menu automatically — gotoActive only does the side effect.
+	menu.OnAction = func(int) { gotoActive() }
+
 	// Setup shortcuts
 	menu.OnKeyDown = func(e *vtinput.InputEvent) bool {
 		shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
 		ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
+		alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 		if search.processKey(e) {
 			return true
 		}
@@ -73,29 +92,35 @@ func actionFoldersHistory(pf *PanelsFrame) {
 			return false
 		}
 
+		// Ctrl+R: drop entries whose path no longer exists on disk (far2l).
+		if e.VirtualKeyCode == vtinput.VK_R && ctrl && !alt && !shift {
+			confirmAndPruneMissingFolderHistory(&h, search, menu)
+			return true
+		}
+
 		historyPos, path, ok := search.selected()
 		if !ok {
 			return false
 		}
 
 		if e.VirtualKeyCode == vtinput.VK_RETURN {
-			search.cleanup()
 			if ctrl {
 				// Insert into command line
+				search.cleanup()
 				pf.cmdLine.InsertString(path)
 				menu.Close()
 				return true
 			}
-			menu.Close()
-			targetPanel := pf.getActivePanel()
 			if shift {
-				targetPanel = pf.getInactivePanel()
+				search.cleanup()
+				menu.Close()
+				if targetPanel := pf.getInactivePanel(); targetPanel != nil {
+					pf.navigateAvailableFolderHistory(targetPanel, h, historyPos, -1)
+				}
+				return true
 			}
-			if targetPanel != nil {
-				// The menu is displayed oldest -> newest. If the selected path
-				// disappeared, continue downwards to the next (newer) entry.
-				pf.navigateAvailableFolderHistory(targetPanel, h, historyPos, -1)
-			}
+			menu.Close()
+			gotoActive()
 			return true
 		}
 
@@ -108,6 +133,20 @@ func actionFoldersHistory(pf *PanelsFrame) {
 				search.cleanup()
 				menu.Close()
 			}
+			return true
+		}
+
+		// Del (no modifiers): clear the whole history with a confirmation.
+		if e.VirtualKeyCode == vtinput.VK_DELETE && !ctrl && !alt && !shift {
+			confirmAndClearHistory(Msg("History.FoldersTitle"), "folders", &h, func() {
+				pf.cmdLine.Edit.HistoryPos = -1
+			}, search, menu)
+			return true
+		}
+
+		// Ctrl+C / Ctrl+Ins: copy the selected entry to the clipboard.
+		if (e.VirtualKeyCode == vtinput.VK_C || e.VirtualKeyCode == vtinput.VK_INSERT) && ctrl && !alt && !shift {
+			go vtui.SetClipboard(path)
 			return true
 		}
 		return false
@@ -124,11 +163,28 @@ func actionCommandHistory(pf *PanelsFrame) {
 	}
 
 	menu := vtui.NewVMenu(Msg("History.CommandsTitle"))
-	search := newHistorySearch(menu, h, Msg("History.SearchModeHint"))
+	menu.SetHelp("History")
+	search := newHistorySearch(menu, h, Msg("History.CommandsHint"))
+
+	// Shared "paste selected command" path used by Enter and mouse click.
+	pasteCurrent := func() {
+		_, cmd, ok := search.selected()
+		if !ok {
+			return
+		}
+		search.cleanup()
+		pf.cmdLine.Edit.SetText(cmd)
+		pf.cmdLine.Edit.HistoryPos = -1
+	}
+	// VMenu.ProcessMouse calls SetExitCode after OnAction, so click closes
+	// the menu automatically — pasteCurrent only does the side effect.
+	menu.OnAction = func(int) { pasteCurrent() }
 
 	// Setup shortcuts
 	menu.OnKeyDown = func(e *vtinput.InputEvent) bool {
 		shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
+		ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
+		alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 		if search.processKey(e) {
 			return true
 		}
@@ -143,10 +199,8 @@ func actionCommandHistory(pf *PanelsFrame) {
 		}
 
 		if e.VirtualKeyCode == vtinput.VK_RETURN {
-			search.cleanup()
 			menu.Close()
-			pf.cmdLine.Edit.SetText(cmd)
-			pf.cmdLine.Edit.HistoryPos = -1
+			pasteCurrent()
 			return true
 		}
 
@@ -164,10 +218,81 @@ func actionCommandHistory(pf *PanelsFrame) {
 			}
 			return true
 		}
+
+		// Del (no modifiers): clear the whole history with a confirmation.
+		if e.VirtualKeyCode == vtinput.VK_DELETE && !ctrl && !alt && !shift {
+			confirmAndClearHistory(Msg("History.CommandsTitle"), "cmdline", &h, func() {
+				pf.cmdLine.Edit.History = nil
+				pf.cmdLine.Edit.HistoryPos = -1
+			}, search, menu)
+			return true
+		}
+
+		// Ctrl+C / Ctrl+Ins: copy the selected entry to the clipboard.
+		if (e.VirtualKeyCode == vtinput.VK_C || e.VirtualKeyCode == vtinput.VK_INSERT) && ctrl && !alt && !shift {
+			go vtui.SetClipboard(cmd)
+			return true
+		}
 		return false
 	}
 
 	vtui.FrameManager.Push(menu)
+}
+
+// confirmAndClearHistory shows a Yes/No dialog, and on Yes wipes the
+// history file identified by providerName, invokes localReset (used for
+// state kept outside the provider, e.g. cmdLine.Edit.History), and
+// closes the history menu. Mirrors far2l's Del handler in history.cpp
+// with the "confirm history clear" option always on.
+func confirmAndClearHistory(title, providerName string, h *[]string, localReset func(), search *historySearch, menu *vtui.VMenu) {
+	buttons := []string{Msg("vtui.Ok"), Msg("vtui.Cancel")}
+	dlg := vtui.ShowMessage(title, Msg("History.ConfirmClearAll"), buttons)
+	dlg.OnResult = func(code int) {
+		if code != 0 {
+			return
+		}
+		*h = nil
+		if localReset != nil {
+			localReset()
+		}
+		if vtui.GlobalHistoryProvider != nil {
+			vtui.GlobalHistoryProvider.SaveHistory(providerName, nil)
+		}
+		search.cleanup()
+		menu.Close()
+	}
+}
+
+// confirmAndPruneMissingFolderHistory implements the far2l Ctrl+R
+// handler in folder history: prompt, then keep only paths that still
+// exist on disk. Locked-entry semantics don't apply here — f4 has no
+// per-entry lock flag yet.
+func confirmAndPruneMissingFolderHistory(h *[]string, search *historySearch, menu *vtui.VMenu) {
+	buttons := []string{Msg("vtui.Ok"), Msg("vtui.Cancel")}
+	dlg := vtui.ShowMessage(Msg("History.FoldersTitle"), Msg("History.ConfirmPruneMissing"), buttons)
+	dlg.OnResult = func(code int) {
+		if code != 0 {
+			return
+		}
+		kept := make([]string, 0, len(*h))
+		for _, p := range *h {
+			if _, err := os.Stat(p); err == nil {
+				kept = append(kept, p)
+			}
+		}
+		if len(kept) == len(*h) {
+			return
+		}
+		*h = kept
+		if vtui.GlobalHistoryProvider != nil {
+			vtui.GlobalHistoryProvider.SaveHistory("folders", kept)
+		}
+		search.setItems(kept)
+		if len(kept) == 0 {
+			search.cleanup()
+			menu.Close()
+		}
+	}
 }
 
 func actionSortMenu(pf *PanelsFrame) {
@@ -275,7 +400,8 @@ func actionEditFileExternal(pf *PanelsFrame, v vfs.VFS, path string, size int64)
 		if err != nil {
 			return err
 		}
-		defer dst.Close()
+		closeDst := closeOnce(dst)
+		defer closeDst()
 
 		buf := make([]byte, 128*1024)
 		var downloaded int64
@@ -302,7 +428,7 @@ func actionEditFileExternal(pf *PanelsFrame, v vfs.VFS, path string, size int64)
 				return err
 			}
 		}
-		return nil
+		return closeDst()
 	}, func(err error) {
 		if err != nil && err != context.Canceled {
 			vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to download file:\n%v", err), []string{"&Ok"})
@@ -336,7 +462,8 @@ func actionEditFileExternal(pf *PanelsFrame, v vfs.VFS, path string, size int64)
 				if err != nil {
 					return err
 				}
-				defer dst.Close()
+				closeDst := closeOnce(dst)
+				defer closeDst()
 
 				buf := make([]byte, 128*1024)
 				var uploaded int64
@@ -363,7 +490,7 @@ func actionEditFileExternal(pf *PanelsFrame, v vfs.VFS, path string, size int64)
 						return err
 					}
 				}
-				return nil
+				return closeDst()
 			}, func(err error) {
 				os.Remove(tmpPath)
 				if err != nil && err != context.Canceled {
@@ -847,6 +974,14 @@ func actionViewerSearch(vv *ViewerView) {
 				fileSize := vv.backend.Size()
 				patternLower := strings.ToLower(pattern)
 
+				// A file system that can search its own copy answers in one round
+				// trip. Scanning here would mean reading the whole file, which
+				// for a remote one means downloading it.
+				if at, searched := vv.backend.SearchFrom(ctx.Context, pattern, currOff); searched {
+					foundOffset = at
+					currOff = fileSize
+				}
+
 				for currOff < fileSize {
 					if ctx.Err() != nil {
 						return
@@ -1117,7 +1252,7 @@ func actionEditFile(pf *PanelsFrame) {
 			return
 		}
 		if fsp.entries[idx].IsDir {
-			vtui.ShowMessage(" Error ", "Cannot edit a directory.", []string{"&Ok"})
+			actionFileAttributes(pf)
 			return
 		}
 		name := fsp.GetSelectedName()
@@ -1698,6 +1833,138 @@ func actionMkDir(pf *PanelsFrame) {
 	vtui.FrameManager.Push(dlg)
 }
 
+// panelCanFindDuplicates reports whether the active panel's file system can
+// answer a duplicate search. It is what keeps the menu entry out of sight
+// on the ones that cannot, rather than offering it and refusing.
+func panelCanFindDuplicates() bool {
+	pf := findPanelsFrameAnyScreen()
+	if pf == nil {
+		return false
+	}
+	fsp := pf.getActivePanel()
+	if fsp == nil {
+		return false
+	}
+	_, ok := fsp.vfs.(vfs.DuplicateFinder)
+	return ok
+}
+
+// actionFindDuplicates asks the file system for files with identical
+// content. Only a file system that can do the work on its own side offers
+// it: doing it from here would mean reading every candidate over the
+// network, which costs more than the answer is worth.
+func actionFindDuplicates(pf *PanelsFrame) {
+	fsp := pf.getActivePanel()
+	if fsp == nil {
+		return
+	}
+	finder, ok := fsp.vfs.(vfs.DuplicateFinder)
+	if !ok {
+		// Reachable through a key binding or a macro, which the menu's
+		// visibility rule does not cover.
+		vtui.ShowMessage(" Find Duplicates ",
+			"This file system cannot search for duplicates.\nOnly a remote one that can hash its own files offers it.",
+			[]string{"&Ok"})
+		return
+	}
+
+	v := fsp.vfs
+	root := v.GetPath()
+	opDlg := NewFileOpProgressDialog(" Searching for duplicates... ")
+	var taskCtx *vtui.TaskContext
+	// detached is read and written on the UI thread only, which is where
+	// both the buttons and the progress updates run.
+	detached := false
+	opDlg.btnCancel.OnClick = func() {
+		if taskCtx != nil {
+			taskCtx.Cancel()
+		}
+		opDlg.Close()
+	}
+	// The hashing runs on the remote host, so the window is only a way of
+	// watching it. Closing it that way leaves the work in the job registry.
+	opDlg.EnableBackground(func() {
+		detached = true
+		opDlg.Close()
+	})
+	vtui.FrameManager.PostTask(func() {
+		vtui.FrameManager.AddScreenHeadless(opDlg)
+	})
+
+	taskCtx = vtui.RunAsync(func(ctx *vtui.TaskContext) {
+		// The work runs on the remote host whether or not this dialog is
+		// still open, so it is listed while it lasts.
+		job := GlobalBackgroundJobs.Start("Duplicates in "+root, ctx.Cancel)
+		finished := false
+		defer func() {
+			if !finished {
+				job.Finish()
+			}
+		}()
+
+		lastUpdate := time.Now()
+		groups, err := finder.FindDuplicates(ctx.Context, root, func(p vfs.DuplicateProgress) {
+			now := time.Now()
+			if now.Sub(lastUpdate) < 50*time.Millisecond {
+				return
+			}
+			lastUpdate = now
+			job.SetStatus(fmt.Sprintf("%d of %d files", p.Done, p.Total))
+			ctx.RunOnUI(func() {
+				if detached {
+					return
+				}
+				opDlg.UpdateCounting("Hashing", p.Path, int64(p.Done), int64(p.Total))
+				vtui.FrameManager.Redraw()
+			})
+		})
+
+		// The panel wants an item per row, and a group is only recognizable
+		// by its neighbours, so the groups are flattened in order and the
+		// rows of one group stay adjacent.
+		var found []FoundFile
+		if err == nil {
+			for _, group := range groups {
+				for _, p := range group {
+					item, statErr := v.Stat(ctx.Context, p)
+					if statErr != nil {
+						item = vfs.VFSItem{Name: v.Base(p)}
+					}
+					found = append(found, FoundFile{Path: p, Item: item})
+				}
+			}
+		}
+
+		ctx.RunOnUI(func() {
+			if !detached {
+				opDlg.Close()
+			}
+			if err != nil && err != context.Canceled {
+				vtui.ShowMessage(" Error ", fmt.Sprintf("Duplicate search failed:\n%v", err), []string{"&Ok"})
+				return
+			}
+			if ctx.Err() != nil {
+				return
+			}
+			if len(found) == 0 {
+				if !detached {
+					vtui.ShowMessage(" Find Duplicates ", "No files with identical content were found.", []string{"&Ok"})
+				}
+				return
+			}
+			if detached {
+				// Nobody is watching, so the answer waits in the job list
+				// rather than opening a window over whatever came next.
+				finished = true
+				job.FinishWith(fmt.Sprintf("%d duplicate files in %d groups", len(found), len(groups)),
+					func() { ShowSearchResults(pf, v, found) })
+				return
+			}
+			ShowSearchResults(pf, v, found)
+		})
+	})
+}
+
 func actionFindFile(pf *PanelsFrame) {
 	activePanel := pf.getActivePanel()
 	if activePanel == nil {
@@ -1779,6 +2046,17 @@ func actionPanelSettings(pf *PanelsFrame) {
 		chkSeparateExtensions.State = 1
 	}
 
+	scrollbarModes := []string{
+		Msg("PanelSettings.ScrollbarsOff"),
+		Msg("PanelSettings.ScrollbarsMinimal"),
+		Msg("PanelSettings.ScrollbarsFull"),
+	}
+	comboScrollbars := vtui.NewComboBox(0, 0, 30, scrollbarModes)
+	comboScrollbars.DropdownOnly = true
+	comboScrollbars.Menu.SetSelectPos(int(AppConfig.PanelScrollbarMode))
+	comboScrollbars.Edit.SetText(scrollbarModes[AppConfig.PanelScrollbarMode])
+	lblScrollbars := vtui.NewLabel(0, 0, Msg("PanelSettings.Scrollbars"), comboScrollbars)
+
 	chkPaths := vtui.NewCheckbox(0, 0, Msg("PanelSettings.SavePaths"), false)
 	chkPaths.State = 0
 	if AppConfig.SavePanelPaths {
@@ -1810,11 +2088,6 @@ func actionPanelSettings(pf *PanelsFrame) {
 	chkStayFocused.SetDisabled(AppConfig.NavigationMode != NavigationSearchFirst)
 	navigation.OnChange = func(selected int) {
 		chkStayFocused.SetDisabled(PanelNavigationMode(selected) != NavigationSearchFirst)
-	}
-
-	chkFastFindArrowsCancel := vtui.NewCheckbox(0, 0, Msg("PanelSettings.FastFindArrowsCancel"), false)
-	if AppConfig.FastFindArrowsCancel {
-		chkFastFindArrowsCancel.State = 1
 	}
 
 	chkSync := vtui.NewCheckbox(0, 0, Msg("PanelSettings.SyncPanelLoad"), false)
@@ -1869,12 +2142,13 @@ func actionPanelSettings(pf *PanelsFrame) {
 	dlg.AddItem(chkHidden)
 	dlg.AddItem(chkHighlight)
 	dlg.AddItem(chkSeparateExtensions)
+	dlg.AddItem(lblScrollbars)
+	dlg.AddItem(comboScrollbars)
 	dlg.AddItem(chkPaths)
 	dlg.AddItem(chkCmdAc)
 	dlg.AddItem(lblNavigation)
 	dlg.AddItem(navigation)
 	dlg.AddItem(chkStayFocused)
-	dlg.AddItem(chkFastFindArrowsCancel)
 	dlg.AddItem(chkSync)
 	dlg.AddItem(chkAlwaysMenu)
 	dlg.AddItem(chkCPUGPU)
@@ -1892,13 +2166,15 @@ func actionPanelSettings(pf *PanelsFrame) {
 	vbox.Add(chkHidden, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkHighlight, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(chkSeparateExtensions, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	rowScrollbars := vtui.NewHBoxLayout(0, 0, 54-4, 1)
+	rowScrollbars.Add(lblScrollbars, vtui.Margins{Right: 1}, vtui.AlignLeft)
+	rowScrollbars.Add(comboScrollbars, vtui.Margins{}, vtui.AlignFill)
+	vbox.Add(rowScrollbars, vtui.Margins{}, vtui.AlignFill)
 	vbox.Add(chkPaths, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(chkCmdAc, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(lblNavigation, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(navigation, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkStayFocused, vtui.Margins{Left: 2}, vtui.AlignLeft)
-	vbox.Add(chkFastFindArrowsCancel, vtui.Margins{}, vtui.AlignLeft)
-
 	vbox.Add(chkSync, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(chkAlwaysMenu, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(chkCPUGPU, vtui.Margins{Top: 1}, vtui.AlignLeft)
@@ -1933,11 +2209,11 @@ func actionPanelSettings(pf *PanelsFrame) {
 		AppConfig.ShowHiddenFiles = chkHidden.State == 1
 		AppConfig.HighlightDir = chkHighlight.State == 1
 		AppConfig.SeparateFileExtensions = chkSeparateExtensions.State == 1
+		AppConfig.PanelScrollbarMode = PanelScrollbarMode(comboScrollbars.Menu.SelectPos)
 		AppConfig.SavePanelPaths = chkPaths.State == 1
 		AppConfig.CommandLineAutoComplete = chkCmdAc.State == 1
 		AppConfig.NavigationMode = PanelNavigationMode(navigation.Selected)
 		AppConfig.SearchCommandStayFocused = chkStayFocused.State == 1
-		AppConfig.FastFindArrowsCancel = chkFastFindArrowsCancel.State == 1
 		AppConfig.SyncPanelLoad = chkSync.State == 1
 		AppConfig.AlwaysShowMenuBar = chkAlwaysMenu.State == 1
 		AppConfig.InfoPanelCPUGPU = chkCPUGPU.State == 1
@@ -2545,6 +2821,9 @@ func actionLanguage(pf *PanelsFrame) {
 		AppConfig.Language = langs[idx].code
 		SaveConfig()
 		InitLang()
+		// Key binding help topics are generated from the action
+		// registry and must be rebuilt in the new language.
+		InitHelpSystem()
 		vtui.FrameManager.PostTask(func() {
 			vtui.ShowMessage(Msg("Info.Title"), Msg("Language.Changed"), []string{Msg("vtui.Ok")})
 			vtui.FrameManager.Redraw()

@@ -1,10 +1,16 @@
 # Project Structure
-Last updated: 2026-08-04 21:35:41
+Last updated: 2026-08-05 19:31:35
 
 ```text
 .
+├── action_copyname_parent_test.go
+├── action_marked_clipboard_test.go
+├── action_menu.go
+├── action_menu_test.go
+├── action_menu_visibility_test.go
 ├── action_registry.go
 ├── action_registry_test.go
+├── action_restore_selection_test.go
 ├── actions.go
 ├── actions_test.go
 ├── ansi_parser.go
@@ -49,6 +55,9 @@ Last updated: 2026-08-04 21:35:41
 ├── attributes_dialog_unix.go
 ├── attributes_dialog_windows.go
 ├── attributes_test.go
+├── background_jobs.go
+├── background_jobs_test.go
+├── background_jobs_window.go
 ├── bookmarks_dialog.go
 ├── bookmarks_dialog_test.go
 ├── bookmarks.go
@@ -76,7 +85,9 @@ Last updated: 2026-08-04 21:35:41
 ├── detach_windows.go
 ├── drives_unix.go
 ├── drives_windows.go
+├── editor_delta_test.go
 ├── editor_features_test.go
+├── editor_veto_test.go
 ├── editor_view_ads_test.go
 ├── editor_view.go
 ├── editor_view_test.go
@@ -102,6 +113,8 @@ Last updated: 2026-08-04 21:35:41
 ├── find_file.go
 ├── find_file_test.go
 ├── FISH+.md
+├── folder_history_actions_test.go
+├── folder_history_navigation_test.go
 ├── fs_info_darwin.go
 ├── fs_info.go
 ├── fs_info_linux.go
@@ -127,11 +140,16 @@ Last updated: 2026-08-04 21:35:41
 │   ├── README.md
 │   └── ru.hlf
 ├── help.go
+├── help_keys_ru_test.go
+├── help_keys_test.go
 ├── help_lang_test.go
 ├── help_test.go
 ├── highlight_files.go
 ├── highlight_files_test.go
 ├── HIGHLIGHTING.md
+├── history_dialog.go
+├── history_dialog_test.go
+├── history_hint_test.go
 ├── history_provider.go
 ├── history_provider_test.go
 ├── hotkeys.go
@@ -139,6 +157,7 @@ Last updated: 2026-08-04 21:35:41
 ├── hotkeys_ui.go
 ├── hotkeys_ui_test.go
 ├── I18N.md
+├── IDEAS.md
 ├── image_bmp.go
 ├── image_decode.go
 ├── image_decode_test.go
@@ -169,6 +188,7 @@ Last updated: 2026-08-04 21:35:41
 ├── input_translation_test.go
 ├── issue149_test.go
 ├── issue54_test.go
+├── keybar_injected_test.go
 ├── kitty_graphics.go
 ├── kitty_graphics_test.go
 ├── kitty_metrics_test.go
@@ -194,6 +214,7 @@ Last updated: 2026-08-04 21:35:41
 │   └── sandbox.go
 ├── lua_plugin.go
 ├── lua_plugin_test.go
+├── macro_ctrlletter_test.go
 ├── macro_export.go
 ├── macro_export_test.go
 ├── macro.go
@@ -256,21 +277,48 @@ Last updated: 2026-08-04 21:35:41
 │   └── netfox
 │       ├── crypto.go
 │       ├── crypto_test.go
+│       ├── dev
+│       │   ├── README.md
+│       │   └── unxed_f4_issue_316.json
 │       ├── dialog.go
 │       ├── dialog_test.go
 │       ├── fishplus
+│       │   ├── cancel_test.go
+│       │   ├── cand
+│       │   ├── exec.go
+│       │   ├── exec_test.go
 │       │   ├── fs.go
 │       │   ├── fs_test.go
+│       │   ├── hash.go
+│       │   ├── hash_test.go
 │       │   ├── helper.sh
+│       │   ├── job.go
+│       │   ├── job_test.go
+│       │   ├── ls.go
+│       │   ├── ls_test.go
+│       │   ├── mutate.go
+│       │   ├── mutate_test.go
+│       │   ├── patch.go
+│       │   ├── patch_test.go
+│       │   ├── read.go
+│       │   ├── read_test.go
 │       │   ├── script.go
 │       │   ├── script_test.go
+│       │   ├── search.go
+│       │   ├── search_test.go
 │       │   ├── session.go
-│       │   └── session_test.go
+│       │   ├── session_test.go
+│       │   ├── sizes
+│       │   ├── write.go
+│       │   └── write_test.go
+│       ├── fish_vfs.go
+│       ├── fish_vfs_test.go
 │       ├── ftp_vfs.go
 │       ├── netfox.go
 │       ├── netfox_test.go
 │       ├── registry.go
 │       ├── sftp_vfs.go
+│       ├── ssh_dial.go
 │       ├── ssh_pty.go
 │       ├── vfs_abs_test.go
 │       └── vfs.go
@@ -304,6 +352,7 @@ Last updated: 2026-08-04 21:35:41
 ├── quick_view_panel.go
 ├── quick_view_panel_test.go
 ├── README.md
+├── remote_command.go
 ├── rpc_lua_test.go
 ├── rpc_plugin.go
 ├── rpc_plugin_test.go
@@ -361,6 +410,10 @@ Last updated: 2026-08-04 21:35:41
 ├── title_windows.go
 ├── tools
 │   ├── fishplus_probe.sh
+│   ├── fishplus_testlab
+│   │   ├── fishclient.py
+│   │   ├── TESTLAB.md
+│   │   └── test_patch.py
 │   └── icons
 │       ├── go.mod
 │       ├── go.sum
@@ -386,6 +439,7 @@ Last updated: 2026-08-04 21:35:41
 ├── translate_kitty.go
 ├── translate_kitty_test.go
 ├── updater.go
+├── updater_repro_test.go
 ├── updater_test.go
 ├── user_menu.go
 ├── user_menu_ini.go
@@ -451,5 +505,5 @@ Last updated: 2026-08-04 21:35:41
 ├── WORDNAV.md
 └── word_nav_test.go
 
-34 directories, 414 files
+36 directories, 466 files
 ```

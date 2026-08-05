@@ -13,12 +13,18 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 // MaxLineLen caps a single protocol line. Payload lines are produced by
 // remote tools (ls, stat, grep), so they are bounded by path and match
 // lengths; anything bigger means the stream went out of sync.
 const MaxLineLen = 1 << 20
+
+// MaxFrameLen caps a single binary frame. The client never asks for more
+// than this, so a bigger frame means either a confused helper or a hostile
+// host trying to make the panel allocate a disk worth of memory.
+const MaxFrameLen = 64 << 20
 
 // ErrBroken is returned once a session lost synchronization with the remote
 // helper. Such a session cannot be repaired, the caller has to reconnect.
@@ -158,7 +164,14 @@ func (s *Session) Handshake(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if _, err := io.WriteString(s.w, HelperScript(s.token)); err != nil {
+	if _, err := io.WriteString(s.w, BootstrapLine(s.token)); err != nil {
+		s.broken = true
+		return err
+	}
+	if err := s.waitForReady(ctx); err != nil {
+		return err
+	}
+	if _, err := io.WriteString(s.w, HelperScript(s.token)+HelperEndMarker+"\n"); err != nil {
 		s.broken = true
 		return err
 	}
@@ -203,6 +216,33 @@ func parseBanner(msg string) (Features, error) {
 	return feats, nil
 }
 
+// maxBootstrapLines bounds how much login noise is skipped while waiting
+// for the shell to report itself ready. A motd is long; it is not endless.
+const maxBootstrapLines = 1000
+
+// waitForReady consumes whatever the login printed until the bootstrap says
+// it is running. Sending the helper before that is what the whole two step
+// upload exists to avoid.
+func (s *Session) waitForReady(ctx context.Context) error {
+	marker := ReadyMarker(s.token)
+	for i := 0; i < maxBootstrapLines; i++ {
+		if err := ctx.Err(); err != nil {
+			s.broken = true
+			return err
+		}
+		line, err := s.readLine()
+		if err != nil {
+			s.broken = true
+			return err
+		}
+		if strings.Contains(line, marker) {
+			return nil
+		}
+	}
+	s.broken = true
+	return fmt.Errorf("fishplus: the remote shell never reported being ready")
+}
+
 // Exec runs a command that takes only short tokens as arguments. A token
 // must be non-empty and free of whitespace; anything path shaped belongs in
 // ExecPath instead.
@@ -217,6 +257,12 @@ func (s *Session) Exec(ctx context.Context, cmd string, args ...string) (*Respon
 // host and keeps the traffic readable in a protocol log.
 func (s *Session) ExecPath(ctx context.Context, cmd, path string, args ...string) (*Response, error) {
 	return s.exec(ctx, false, cmd, args, []string{path})
+}
+
+// ExecPaths runs a command that operates on more than one path, each on a
+// line of its own and in the order given. Rename is the first such command.
+func (s *Session) ExecPaths(ctx context.Context, cmd string, paths []string, args ...string) (*Response, error) {
+	return s.exec(ctx, false, cmd, args, paths)
 }
 
 // ExecData and ExecPathData behave like Exec and ExecPath but also accept
@@ -238,7 +284,37 @@ func EncodePathLine(p string) string {
 	return p
 }
 
+// ExecPayload runs a command that carries a payload of its own after the
+// path lines. A raw payload is exactly the announced number of bytes with
+// nothing around it; an encoded one is a single base64 line, which the
+// remote helper can consume with the shell alone and which therefore stays
+// exact on hosts whose dd cannot stop on a byte boundary.
+func (s *Session) ExecPayload(ctx context.Context, cmd string, paths, args []string, payload []byte, encoded bool) (*Response, error) {
+	return s.execFull(ctx, false, cmd, args, paths, payload, encoded, nil)
+}
+
+// ExecStream runs a command whose request body the caller writes itself,
+// after the path lines and before the answer is read. A command whose
+// payload is interleaved with descriptions of it cannot be handed over as
+// one slice, which is what patch needs.
+func (s *Session) ExecStream(ctx context.Context, cmd string, paths, args []string, body func(w io.Writer) error) (*Response, error) {
+	return s.execFull(ctx, false, cmd, args, paths, nil, false, body)
+}
+
+// MarkBroken poisons the session after the caller found out, by means the
+// session itself cannot see, that the two sides disagree about how much of
+// the stream has been consumed.
+func (s *Session) MarkBroken() {
+	s.mu.Lock()
+	s.broken = true
+	s.mu.Unlock()
+}
+
 func (s *Session) exec(ctx context.Context, binary bool, cmd string, args, paths []string) (*Response, error) {
+	return s.execFull(ctx, binary, cmd, args, paths, nil, false, nil)
+}
+
+func (s *Session) execFull(ctx context.Context, binary bool, cmd string, args, paths []string, payload []byte, encoded bool, body func(w io.Writer) error) (*Response, error) {
 	if cmd == "" || strings.ContainsAny(cmd, " \t\r\n") {
 		return nil, fmt.Errorf("fishplus: invalid command %q", cmd)
 	}
@@ -270,9 +346,34 @@ func (s *Session) exec(ctx context.Context, binary bool, cmd string, args, paths
 		req.WriteString(EncodePathLine(p))
 		req.WriteByte('\n')
 	}
+	if encoded {
+		// The line is written even for an empty payload: the helper reads
+		// one line per encoded request and would otherwise wait for a line
+		// that never comes.
+		req.WriteString(base64.StdEncoding.EncodeToString(payload))
+		req.WriteByte('\n')
+	}
 	if _, err := io.WriteString(s.w, req.String()); err != nil {
 		s.broken = true
 		return nil, err
+	}
+	if !encoded && len(payload) > 0 {
+		// The raw payload carries no terminator of its own: the remote
+		// helper reads exactly as many bytes as the request announced, so
+		// a stray newline here would end up at the head of the next
+		// request.
+		if _, err := s.w.Write(payload); err != nil {
+			s.broken = true
+			return nil, err
+		}
+	}
+	if body != nil {
+		// A body that stops halfway leaves the remote host waiting for
+		// bytes that will never come, so there is no recovering the stream.
+		if err := body(s.w); err != nil {
+			s.broken = true
+			return nil, err
+		}
 	}
 	return s.readResponse(ctx, id, binary)
 }
@@ -282,14 +383,29 @@ func (s *Session) readResponse(ctx context.Context, id uint64, binary bool) (*Re
 	resp := &Response{}
 	for {
 		if err := ctx.Err(); err != nil {
-			// The response is only half-read, so the stream is unusable.
-			s.broken = true
+			// The response is only half-read. Reading forward to the
+			// terminator puts the stream back where the next request
+			// expects it, which costs the rest of one answer and saves a
+			// whole reconnect.
+			if drainErr := s.drainToTerminator(prefix, binary); drainErr != nil {
+				s.broken = true
+			}
 			return nil, err
 		}
 		line, err := s.readLine()
 		if err != nil {
 			s.broken = true
 			return nil, err
+		}
+		// The handshake is the one place where the terminator may not start
+		// its line: a motd, a shell warning or the echo of the uploaded
+		// script on a pseudo terminal can end without a newline and glue
+		// itself to the banner. Later responses are strict, the helper
+		// controls every byte by then.
+		if id == 0 {
+			if at := strings.Index(line, prefix); at > 0 {
+				line = line[at:]
+			}
 		}
 		if strings.HasPrefix(line, prefix) {
 			status, msg, _ := strings.Cut(strings.TrimSpace(line[len(prefix):]), " ")
@@ -307,7 +423,7 @@ func (s *Session) readResponse(ctx context.Context, id uint64, binary bool) (*Re
 		}
 		if binary && strings.HasPrefix(line, "#") {
 			n, convErr := strconv.Atoi(line[1:])
-			if convErr != nil || n < 0 {
+			if convErr != nil || n < 0 || n > MaxFrameLen {
 				s.broken = true
 				return nil, fmt.Errorf("fishplus: bad data frame header %q", line)
 			}
@@ -323,6 +439,47 @@ func (s *Session) readResponse(ctx context.Context, id uint64, binary bool) (*Re
 	}
 }
 
+// DrainAfterCancelTimeout bounds how long the client will keep reading an
+// answer nobody wants any more. Past it the session is worth less than the
+// wait, and a reconnect is the cheaper answer.
+var DrainAfterCancelTimeout = 10 * time.Second
+
+// drainToTerminator reads and discards the rest of a response. It is what
+// makes cancelling a request survivable: the terminator is unforgeable, so
+// finding it means the stream is back at a request boundary no matter what
+// the remote tools printed on the way.
+//
+// It cannot interrupt a read that is already blocked — nothing here can, and
+// the ordinary path has the same property — so the deadline is checked
+// between lines rather than during one.
+func (s *Session) drainToTerminator(prefix string, binary bool) error {
+	deadline := time.Now().Add(DrainAfterCancelTimeout)
+	for {
+		if time.Now().After(deadline) {
+			return fmt.Errorf("fishplus: the remote host did not finish a cancelled answer within %s", DrainAfterCancelTimeout)
+		}
+		line, err := s.readLine()
+		if err != nil {
+			return err
+		}
+		if strings.HasPrefix(line, prefix) {
+			return nil
+		}
+		if !binary || !strings.HasPrefix(line, "#") {
+			continue
+		}
+		// A frame header has to be honoured even while discarding, or its
+		// payload would be read as lines and a byte that happens to be a
+		// newline would look like a boundary.
+		n, convErr := strconv.Atoi(line[1:])
+		if convErr != nil || n < 0 || n > MaxFrameLen {
+			return fmt.Errorf("fishplus: bad data frame header %q while draining", line)
+		}
+		if _, err := io.CopyN(io.Discard, s.r, int64(n)); err != nil {
+			return err
+		}
+	}
+}
 func (s *Session) readLine() (string, error) {
 	var buf []byte
 	for {

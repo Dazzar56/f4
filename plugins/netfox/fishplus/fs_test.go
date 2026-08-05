@@ -84,6 +84,56 @@ func TestParseBSDStatEntry(t *testing.T) {
 	}
 }
 
+// TestParseFoundListingKeepsFullPaths guards the difference between the two
+// parsers. A listing wants the bare name; a search answers with paths, and
+// the stat backends print the path they were handed, so reducing it to a
+// base name silently loses the directory the hit was in. This needs no shell
+// and therefore catches it on any machine, including one whose stat is GNU.
+func TestParseFoundListingKeepsFullPaths(t *testing.T) {
+	cases := []struct {
+		mode string
+		line string
+	}{
+		{"find", "f f 12 1785869231.0 1785869231.0 1785869231.0 644 1000 1000 /tmp/x/sub dir/b.txt"},
+		{"stat", "81a4 12 1785869231 1785869231 1785869231 1000 1000 /tmp/x/sub dir/b.txt"},
+		{"statbsd", "100644 12 1785869231 1785869231 1785869231 1000 1000 /tmp/x/sub dir/b.txt"},
+	}
+	for _, tc := range cases {
+		mode, entries, err := ParseFoundListing([]string{"M " + tc.mode, tc.line})
+		if err != nil {
+			t.Fatalf("%s: %v", tc.mode, err)
+		}
+		if mode != tc.mode {
+			t.Errorf("mode = %q, want %q", mode, tc.mode)
+		}
+		if len(entries) != 1 {
+			t.Fatalf("%s: got %d entries", tc.mode, len(entries))
+		}
+		if entries[0].Name != "/tmp/x/sub dir/b.txt" {
+			t.Errorf("%s: Name = %q, want the full path", tc.mode, entries[0].Name)
+		}
+		if entries[0].Size != 12 {
+			t.Errorf("%s: Size = %d, want 12", tc.mode, entries[0].Size)
+		}
+
+		// The stat backends print the path they were handed, so the listing
+		// parser has to reduce it or every panel would show full paths in
+		// its name column. The find backend is exempt: a listing there is
+		// printed with %f, which is the bare name to begin with, and only a
+		// search asks for %p.
+		if tc.mode == "find" {
+			continue
+		}
+		_, entries, err = ParseListing([]string{"M " + tc.mode, tc.line})
+		if err != nil {
+			t.Fatalf("%s: %v", tc.mode, err)
+		}
+		if len(entries) != 1 || entries[0].Name != "b.txt" {
+			t.Errorf("%s: listing Name = %+v, want b.txt", tc.mode, entries)
+		}
+	}
+}
+
 func TestParseListingSkipsDotsAndGarbage(t *testing.T) {
 	lines := []string{
 		"M stat",
@@ -116,6 +166,14 @@ func TestParseListingRejectsMissingMarker(t *testing.T) {
 // newLocalShellClient starts the real helper in a local POSIX shell.
 func newLocalShellClient(t *testing.T) *Client {
 	t.Helper()
+	return newLocalShellClientEnv(t)
+}
+
+// newLocalShellClientEnv is the same with extra environment entries. That is
+// how a host with different tools is simulated: a PATH pointing at stubs
+// makes the helper take the branch a macOS or BSD box would take.
+func newLocalShellClientEnv(t *testing.T, extraEnv ...string) *Client {
+	t.Helper()
 	if runtime.GOOS == "windows" {
 		t.Skip("no POSIX shell on Windows")
 	}
@@ -124,6 +182,9 @@ func newLocalShellClient(t *testing.T) *Client {
 		t.Skip("no POSIX shell available")
 	}
 	cmd := exec.Command(shell)
+	if len(extraEnv) > 0 {
+		cmd.Env = append(os.Environ(), extraEnv...)
+	}
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		t.Fatalf("stdin: %v", err)
@@ -307,5 +368,18 @@ func TestListingSurvivesWeirdNames(t *testing.T) {
 		if _, err := c.Stat(ctx, filepath.Join(dir, name)); err != nil {
 			t.Errorf("stat %q: %v", name, err)
 		}
+	}
+}
+func TestPwdAgainstLocalShell(t *testing.T) {
+	c := newLocalShellClient(t)
+	cwd, err := c.Pwd(context.Background())
+	if err != nil {
+		t.Fatalf("pwd: %v", err)
+	}
+	if !strings.HasPrefix(cwd, "/") {
+		t.Errorf("Pwd = %q, want an absolute path", cwd)
+	}
+	if _, err := c.Enum(context.Background(), cwd); err != nil {
+		t.Errorf("the directory Pwd reported cannot be listed: %v", err)
 	}
 }
