@@ -383,7 +383,6 @@ time, which is exactly what makes it useful.
 The numbering follows the order the steps were planned in, not the order they were done: the plan was arranged so that something usable arrived early, and a browsable, readable panel existed from step 4 onwards.
 
 *   **Step 9d — jobs in the interface.** A list of what is running, so a job can outlive the dialog it was started from. "Cancel" and "send to the background" become separate keys, and which one Escape means becomes a setting. The duplicate search gets its consumer here too: `Client.Duplicates` exists, nothing calls it yet.
-*   **Step 9d — jobs in the interface.** A list of what is running, so a job can outlive the dialog it was started from. "Cancel" and "send to the background" become separate keys, and which one Escape means becomes a setting.
 *   **Step 10 — resilience.** Mid-request cancellation and resynchronization without dropping the session, keepalive, automatic reconnect.
 *   **Step 11 — remote execution.** `exec` and a remote terminal, plus user documentation and help pages.
 *   **Step 12 — odd hosts.** The `ls -l` fallback backend and whatever else the compatibility issue turns up; `tools/fishplus_probe.sh` collects the raw material.
