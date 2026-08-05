@@ -2491,6 +2491,30 @@ func (fp *FileSystemPanel) GetSelectedNames() []string {
 	return names
 }
 
+// GetMarkedNames returns only explicitly marked panel items, in panel order.
+// Unlike GetSelectedNames it deliberately does not fall back to the cursor.
+func (fp *FileSystemPanel) GetMarkedNames() []string {
+	names := make([]string, 0)
+	for _, entry := range fp.entries {
+		if entry.Selected && entry.Name != ".." {
+			names = append(names, entry.Name)
+		}
+	}
+	return names
+}
+
+// ReplaceMarkedNames atomically replaces the explicit panel selection.
+func (fp *FileSystemPanel) ReplaceMarkedNames(names []string) {
+	selected := make(map[string]struct{}, len(names))
+	for _, name := range names {
+		selected[name] = struct{}{}
+	}
+	for _, entry := range fp.entries {
+		_, entry.Selected = selected[entry.Name]
+	}
+	fp.Refresh()
+}
+
 // GetSuccessorName determines which file should receive focus after the current
 // selection (or focused item) is deleted or moved.
 func (fp *FileSystemPanel) doFastFind(dir int) {
