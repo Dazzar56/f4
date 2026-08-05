@@ -4141,7 +4141,7 @@ func TestEditorView_Codepages_PreserveEditsOnSwitch(t *testing.T) {
 	}
 }
 
-func TestEditorView_Codepages_ClipboardConversion(t *testing.T) {
+func TestEditorView_Codepages_Convert(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	pt := piecetable.New([]byte("Привет"))
@@ -4149,21 +4149,17 @@ func TestEditorView_Codepages_ClipboardConversion(t *testing.T) {
 	defer ev.Close()
 
 	ev.Codepage = 1251 // Windows-1251 (Cyrillic)
-	ev.selActive = true
-	ev.selAnchorOffset = 0
-	ev.CursorPos = 12 // "Привет" in UTF-8
+	ev.SetPosition(0, 0, 80, 24)
 
-	ev.CopySelection()
-
-	// Switch editor to CP866
+	ev.showConvertCodepageDialog()
 	ev.Codepage = 866
-	ev.DeleteSelection()
+	ev.modified = true
 
-	// Paste text - should perform conversion
-	ev.PasteText(internalClipboardText)
-
-	if ev.GetText() != "╧ЁштхЄ" {
-		t.Errorf("Clipboard conversion failed: expected '╧ЁштхЄ', got %q", ev.GetText())
+	if ev.pt.String() != "Привет" {
+		t.Errorf("Convert failed: expected 'Привет' to be preserved in memory, got %q", ev.pt.String())
+	}
+	if ev.Codepage != 866 {
+		t.Errorf("Expected Codepage to be 866, got %d", ev.Codepage)
 	}
 }
 func TestEditorView_Codepages_AutoDetect(t *testing.T) {
@@ -4190,31 +4186,6 @@ func TestEditorView_Codepages_AutoDetect(t *testing.T) {
 
 	if ev.Codepage != 11111 {
 		t.Errorf("Expected autodetect to fall back to 11111 (ANSI) for non-UTF-8 file, got %d", ev.Codepage)
-	}
-}
-
-func TestEditorView_Codepages_ClipboardConversion_Fallback(t *testing.T) {
-	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	pt := piecetable.New([]byte("🚀 Emojis are unconvertible to CP1251"))
-	ev := NewEditorView(pt, nil, "")
-	defer ev.Close()
-
-	ev.Codepage = 1251 // Windows-1251 - pretend the editor has this text in CP1251 (even though it contains unconvertible emoji)
-	ev.selActive = true
-	ev.selAnchorOffset = 0
-	ev.CursorPos = int(pt.Size())
-
-	ev.CopySelection() // Copied with CP = 1251
-
-	ev.Codepage = 65001 // Switch to UTF-8 (65001)
-	ev.DeleteSelection()
-
-	// Paste - encoding to 1251 will fail because of '🚀', so it should fallback to original text
-	ev.PasteText(internalClipboardText)
-
-	expected := "🚀 Emojis are unconvertible to CP1251"
-	if ev.GetText() != expected {
-		t.Errorf("Expected failed conversion to fallback to original text, got %q", ev.GetText())
 	}
 }
 

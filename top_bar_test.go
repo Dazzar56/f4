@@ -15,7 +15,7 @@ func TestTopBar_Show(t *testing.T) {
 	// 1. Valid TopBar with value
 	tb := NewTopBar(func() string {
 		return "My Test Status"
-	})
+	}, nil)
 	tb.SetPosition(0, 0, 39, 0)
 	tb.SetVisible(true)
 
@@ -47,7 +47,7 @@ func TestTopBar_AttributeCallback(t *testing.T) {
 	scr := vtui.NewSilentScreenBuf()
 	scr.AllocBuf(40, 5)
 
-	tb := NewTopBar(func() string { return "picked" })
+	tb := NewTopBar(func() string { return "picked" }, nil)
 	tb.SetPosition(0, 0, 39, 0)
 	tb.SetVisible(true)
 
@@ -73,7 +73,7 @@ func TestTopBar_NilCallbackAndInvisible(t *testing.T) {
 	scr.AllocBuf(40, 5)
 
 	// 1. Nil callback - should not panic and should not write anything
-	tbNil := NewTopBar(nil)
+	tbNil := NewTopBar(nil, nil)
 	tbNil.SetPosition(0, 0, 39, 0)
 	tbNil.SetVisible(true)
 
@@ -82,7 +82,7 @@ func TestTopBar_NilCallbackAndInvisible(t *testing.T) {
 	// 2. Invisible TopBar - should not write anything
 	tbInvisible := NewTopBar(func() string {
 		return "Should Not Be Seen"
-	})
+	}, nil)
 	tbInvisible.SetPosition(0, 0, 39, 0)
 	tbInvisible.SetVisible(false)
 
