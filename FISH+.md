@@ -395,12 +395,19 @@ time, which is exactly what makes it useful.
 
 The numbering follows the order the steps were planned in, not the order they were done: the plan was arranged so that something usable arrived early, and a browsable, readable panel existed from step 4 onwards.
 
-*   **Step 11c — the interactive terminal.** A shell on a pseudo terminal of its own on the far side, which needs a second channel rather than the request stream: the requests are strictly sequential and an interactive session cannot share them. far2l's built-in terminal is the reference for what this half has to get right. LLM MUST consider using techniques from far2l internal virtual terminal as it is time-tested solution. LLM MUST ask user for recent far2l vt code if it was not included in prompt.
-*   **Step 11d — one command engine for every backend.** SFTP wants `vfs.CommandRunner` too, and SCP will when NetFox grows it; all three sit on an SSH connection that can already run a command. Sharing the contract and the plumbing, and leaving each backend only the starting and the reading, keeps the three from answering the same questions differently. See `IDEAS.md`.
-*   **Step 11e — speed up search in viewer using remote search function (if not ready). Remote line indexing in editor (if applicable and not ready).
-*   **Step 12 — odd hosts.** The `ls -l` fallback backend and whatever else the compatibility issue turns up; `tools/fishplus_probe.sh` collects the raw material.
-*   **Step 13 — copying without a client in the middle.** A copy between two panels on the same host is `cp` there, and a move within one file system is `mv` and costs nothing; today both pull every byte here and push it back. Between two different hosts, one that can reach the other opens its own FISH+ session to it and the bytes travel directly, at whatever the link between two data centres is worth, while the client watches from a bad connection. See `IDEAS.md` for what has to be worked out first.
+*   **Step 12 — speed up search in viewer using remote search function (if not ready). Remote line indexing in editor (if applicable and not ready).
+*   **Step 13 — odd hosts.** The `ls -l` fallback backend and whatever else the compatibility issue turns up; `tools/fishplus_probe.sh` collects the raw material.
 *   **Step 14 — surviving a broken connection.** Keepalive, and a session that reconnects and picks up where it was rather than making the user open the site again. Everything that needs a session to outlive its process waits here: a job whose answer nobody looked at before f4 was closed, a transfer that should resume rather than restart, a panel that reopens where it was. Deliberately last — each of these is easy to want and hard to make honest, since a reconnected session is a new shell that knows nothing of what the old one was doing.
+*   **Step 15 — the interactive terminal.** A shell on a pseudo terminal of its own on the far side, which needs a second channel rather than the request stream: the requests are strictly sequential and an interactive session cannot share them. far2l's built-in terminal is the reference for what this half has to get right. LLM MUST consider using techniques from far2l internal virtual terminal as it is time-tested solution. LLM MUST ask user for recent far2l vt code if it was not included in prompt.
+*   **Step 16 — copying without a client in the middle.** A copy between two panels on the same host is `cp` there, and a move within one file system is `mv` and costs nothing; today both pull every byte here and push it back. Between two different hosts, one that can reach the other opens its own FISH+ session to it and the bytes travel directly, at whatever the link between two data centres is worth, while the client watches from a bad connection. See `IDEAS.md` for what has to be worked out first.
+*   **Step 17 — one command engine for every backend.** SFTP wants `vfs.CommandRunner` too, and SCP will when NetFox grows it; all three sit on an SSH connection that can already run a command. Sharing the contract and the plumbing, and leaving each backend only the starting and the reading, keeps the three from answering the same questions differently. See `IDEAS.md`.
+
+// И если у тебя нет полного кода встроенного терминала far2l, попроси его у пользователя, прежде чем браться за пункт 15.
+// Я обновил номера пунктов в To do в соответствии с собственными пожеланиями по приоритетам. Если технически такой порядок невозможен,
+// скорректируй его с по возможности минимальными изменениями. Держи в голове, что интерактивный терминал сложная задача,
+// поэтому начать стоит с более простых, чтобы как можно раньше дать пользователям новые возможности для тестирования.
+// А вот всякие рефакторинги наоборот должны быть в конце списка - по той же причине.
+// Пункт 16 можно сделать до 15, если это делается сравнительно быстро.
 
 ## Testing
 
