@@ -50,7 +50,8 @@ func actionFoldersHistory(pf *PanelsFrame) {
 	}
 
 	menu := vtui.NewVMenu(Msg("History.FoldersTitle"))
-	search := newHistorySearch(menu, h, Msg("History.SearchModeHint"))
+	menu.SetHelp("HistoryFolders")
+	search := newHistorySearch(menu, h, Msg("History.FoldersHint"))
 	if activePanel := pf.getActivePanel(); activePanel != nil {
 		currentPath := activePanel.vfs.GetPath()
 		for historyPos, path := range h {
@@ -61,10 +62,28 @@ func actionFoldersHistory(pf *PanelsFrame) {
 		}
 	}
 
+	// Shared "cd on active panel" path used by bare Enter and by mouse click.
+	gotoActive := func() {
+		historyPos, _, ok := search.selected()
+		if !ok {
+			return
+		}
+		search.cleanup()
+		if targetPanel := pf.getActivePanel(); targetPanel != nil {
+			// The menu is oldest → newest. If the selected path disappeared,
+			// navigateAvailableFolderHistory walks toward newer entries.
+			pf.navigateAvailableFolderHistory(targetPanel, h, historyPos, -1)
+		}
+	}
+	// VMenu.ProcessMouse calls SetExitCode after OnAction, so click closes
+	// the menu automatically — gotoActive only does the side effect.
+	menu.OnAction = func(int) { gotoActive() }
+
 	// Setup shortcuts
 	menu.OnKeyDown = func(e *vtinput.InputEvent) bool {
 		shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
 		ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
+		alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 		if search.processKey(e) {
 			return true
 		}
@@ -73,29 +92,35 @@ func actionFoldersHistory(pf *PanelsFrame) {
 			return false
 		}
 
+		// Ctrl+R: drop entries whose path no longer exists on disk (far2l).
+		if e.VirtualKeyCode == vtinput.VK_R && ctrl && !alt && !shift {
+			confirmAndPruneMissingFolderHistory(&h, search, menu)
+			return true
+		}
+
 		historyPos, path, ok := search.selected()
 		if !ok {
 			return false
 		}
 
 		if e.VirtualKeyCode == vtinput.VK_RETURN {
-			search.cleanup()
 			if ctrl {
 				// Insert into command line
+				search.cleanup()
 				pf.cmdLine.InsertString(path)
 				menu.Close()
 				return true
 			}
-			menu.Close()
-			targetPanel := pf.getActivePanel()
 			if shift {
-				targetPanel = pf.getInactivePanel()
+				search.cleanup()
+				menu.Close()
+				if targetPanel := pf.getInactivePanel(); targetPanel != nil {
+					pf.navigateAvailableFolderHistory(targetPanel, h, historyPos, -1)
+				}
+				return true
 			}
-			if targetPanel != nil {
-				// The menu is displayed oldest -> newest. If the selected path
-				// disappeared, continue downwards to the next (newer) entry.
-				pf.navigateAvailableFolderHistory(targetPanel, h, historyPos, -1)
-			}
+			menu.Close()
+			gotoActive()
 			return true
 		}
 
@@ -108,6 +133,20 @@ func actionFoldersHistory(pf *PanelsFrame) {
 				search.cleanup()
 				menu.Close()
 			}
+			return true
+		}
+
+		// Del (no modifiers): clear the whole history with a confirmation.
+		if e.VirtualKeyCode == vtinput.VK_DELETE && !ctrl && !alt && !shift {
+			confirmAndClearHistory(Msg("History.FoldersTitle"), "folders", &h, func() {
+				pf.cmdLine.Edit.HistoryPos = -1
+			}, search, menu)
+			return true
+		}
+
+		// Ctrl+C / Ctrl+Ins: copy the selected entry to the clipboard.
+		if (e.VirtualKeyCode == vtinput.VK_C || e.VirtualKeyCode == vtinput.VK_INSERT) && ctrl && !alt && !shift {
+			go vtui.SetClipboard(path)
 			return true
 		}
 		return false
@@ -124,11 +163,28 @@ func actionCommandHistory(pf *PanelsFrame) {
 	}
 
 	menu := vtui.NewVMenu(Msg("History.CommandsTitle"))
-	search := newHistorySearch(menu, h, Msg("History.SearchModeHint"))
+	menu.SetHelp("History")
+	search := newHistorySearch(menu, h, Msg("History.CommandsHint"))
+
+	// Shared "paste selected command" path used by Enter and mouse click.
+	pasteCurrent := func() {
+		_, cmd, ok := search.selected()
+		if !ok {
+			return
+		}
+		search.cleanup()
+		pf.cmdLine.Edit.SetText(cmd)
+		pf.cmdLine.Edit.HistoryPos = -1
+	}
+	// VMenu.ProcessMouse calls SetExitCode after OnAction, so click closes
+	// the menu automatically — pasteCurrent only does the side effect.
+	menu.OnAction = func(int) { pasteCurrent() }
 
 	// Setup shortcuts
 	menu.OnKeyDown = func(e *vtinput.InputEvent) bool {
 		shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
+		ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
+		alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 		if search.processKey(e) {
 			return true
 		}
@@ -143,10 +199,8 @@ func actionCommandHistory(pf *PanelsFrame) {
 		}
 
 		if e.VirtualKeyCode == vtinput.VK_RETURN {
-			search.cleanup()
 			menu.Close()
-			pf.cmdLine.Edit.SetText(cmd)
-			pf.cmdLine.Edit.HistoryPos = -1
+			pasteCurrent()
 			return true
 		}
 
@@ -164,10 +218,81 @@ func actionCommandHistory(pf *PanelsFrame) {
 			}
 			return true
 		}
+
+		// Del (no modifiers): clear the whole history with a confirmation.
+		if e.VirtualKeyCode == vtinput.VK_DELETE && !ctrl && !alt && !shift {
+			confirmAndClearHistory(Msg("History.CommandsTitle"), "cmdline", &h, func() {
+				pf.cmdLine.Edit.History = nil
+				pf.cmdLine.Edit.HistoryPos = -1
+			}, search, menu)
+			return true
+		}
+
+		// Ctrl+C / Ctrl+Ins: copy the selected entry to the clipboard.
+		if (e.VirtualKeyCode == vtinput.VK_C || e.VirtualKeyCode == vtinput.VK_INSERT) && ctrl && !alt && !shift {
+			go vtui.SetClipboard(cmd)
+			return true
+		}
 		return false
 	}
 
 	vtui.FrameManager.Push(menu)
+}
+
+// confirmAndClearHistory shows a Yes/No dialog, and on Yes wipes the
+// history file identified by providerName, invokes localReset (used for
+// state kept outside the provider, e.g. cmdLine.Edit.History), and
+// closes the history menu. Mirrors far2l's Del handler in history.cpp
+// with the "confirm history clear" option always on.
+func confirmAndClearHistory(title, providerName string, h *[]string, localReset func(), search *historySearch, menu *vtui.VMenu) {
+	buttons := []string{Msg("vtui.Ok"), Msg("vtui.Cancel")}
+	dlg := vtui.ShowMessage(title, Msg("History.ConfirmClearAll"), buttons)
+	dlg.OnResult = func(code int) {
+		if code != 0 {
+			return
+		}
+		*h = nil
+		if localReset != nil {
+			localReset()
+		}
+		if vtui.GlobalHistoryProvider != nil {
+			vtui.GlobalHistoryProvider.SaveHistory(providerName, nil)
+		}
+		search.cleanup()
+		menu.Close()
+	}
+}
+
+// confirmAndPruneMissingFolderHistory implements the far2l Ctrl+R
+// handler in folder history: prompt, then keep only paths that still
+// exist on disk. Locked-entry semantics don't apply here — f4 has no
+// per-entry lock flag yet.
+func confirmAndPruneMissingFolderHistory(h *[]string, search *historySearch, menu *vtui.VMenu) {
+	buttons := []string{Msg("vtui.Ok"), Msg("vtui.Cancel")}
+	dlg := vtui.ShowMessage(Msg("History.FoldersTitle"), Msg("History.ConfirmPruneMissing"), buttons)
+	dlg.OnResult = func(code int) {
+		if code != 0 {
+			return
+		}
+		kept := make([]string, 0, len(*h))
+		for _, p := range *h {
+			if _, err := os.Stat(p); err == nil {
+				kept = append(kept, p)
+			}
+		}
+		if len(kept) == len(*h) {
+			return
+		}
+		*h = kept
+		if vtui.GlobalHistoryProvider != nil {
+			vtui.GlobalHistoryProvider.SaveHistory("folders", kept)
+		}
+		search.setItems(kept)
+		if len(kept) == 0 {
+			search.cleanup()
+			menu.Close()
+		}
+	}
 }
 
 func actionSortMenu(pf *PanelsFrame) {
