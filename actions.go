@@ -1887,7 +1887,12 @@ func actionFindDuplicates(pf *PanelsFrame) {
 		// The work runs on the remote host whether or not this dialog is
 		// still open, so it is listed while it lasts.
 		job := GlobalBackgroundJobs.Start("Duplicates in "+root, ctx.Cancel)
-		defer job.Finish()
+		finished := false
+		defer func() {
+			if !finished {
+				job.Finish()
+			}
+		}()
 
 		lastUpdate := time.Now()
 		groups, err := finder.FindDuplicates(ctx.Context, root, func(p vfs.DuplicateProgress) {
@@ -1934,7 +1939,17 @@ func actionFindDuplicates(pf *PanelsFrame) {
 				return
 			}
 			if len(found) == 0 {
-				vtui.ShowMessage(" Find Duplicates ", "No files with identical content were found.", []string{"&Ok"})
+				if !detached {
+					vtui.ShowMessage(" Find Duplicates ", "No files with identical content were found.", []string{"&Ok"})
+				}
+				return
+			}
+			if detached {
+				// Nobody is watching, so the answer waits in the job list
+				// rather than opening a window over whatever came next.
+				finished = true
+				job.FinishWith(fmt.Sprintf("%d duplicate files in %d groups", len(found), len(groups)),
+					func() { ShowSearchResults(pf, v, found) })
 				return
 			}
 			ShowSearchResults(pf, v, found)

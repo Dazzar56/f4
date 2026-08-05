@@ -42,12 +42,6 @@ var (
 )
 var GlobalLastClipboardWasRectangular bool
 
-var (
-	internalClipboardText   string
-	internalClipboardCP     int
-	internalClipboardEditor *EditorView
-)
-
 // EditorView is a text editor component.
 type EditorView struct {
 	vtui.BaseFrame
@@ -296,16 +290,21 @@ func NewEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string) *EditorVie
 	}
 	ev.menuBar = vtui.NewMenuBar(nil)
 
-	ev.topBar = NewTopBar(func() string {
-		base := ""
-		if ev.vfs != nil {
-			base = ev.vfs.Base(ev.filePath)
-		} else {
-			base = filepath.Base(ev.filePath)
-		}
-		cpName := vfs.DisplayCodepageName(ev.Codepage)
-		return fmt.Sprintf(" %s │ %d,%d │ CP: %s ", base, ev.CursorLine+1, ev.CursorPos, cpName)
-	})
+	ev.topBar = NewTopBar(
+		func() string {
+			base := ""
+			if ev.vfs != nil {
+				base = ev.vfs.Base(ev.filePath)
+			} else {
+				base = filepath.Base(ev.filePath)
+			}
+			return " " + base
+		},
+		func() string {
+			cpName := vfs.DisplayCodepageName(ev.Codepage)
+			return fmt.Sprintf(" %s │ %d,%d ", cpName, ev.CursorLine+1, ev.CursorPos)
+		},
+	)
 	ev.topBar.ColorIdx = ColEditorStatus
 	ev.topBar.SetVisible(true)
 	ev.SetCanFocus(true)
@@ -2329,11 +2328,17 @@ func (ev *EditorView) showCodepageDialog() {
 	}
 
 	w, h := 45, len(items)+2
-	if h > 15 {
-		h = 15
+	scrW := vtui.FrameManager.GetScreenSize()
+	scrH := vtui.FrameManager.GetScreenHeight()
+	maxH := scrH - 2
+	if maxH < 5 {
+		maxH = 5
 	}
-	x := (ev.X2 - ev.X1 - w) / 2
-	y := (ev.Y2 - ev.Y1 - h) / 2
+	if h > maxH {
+		h = maxH
+	}
+	x := (scrW - w) / 2
+	y := (scrH - h) / 2
 	if x < 0 {
 		x = 0
 	}
@@ -2360,6 +2365,63 @@ func (ev *EditorView) showCodepageDialog() {
 		}
 	}
 	menu.SetSelectPos(currIdx)
+	vtui.FrameManager.Push(menu)
+}
+func (ev *EditorView) showConvertCodepageDialog() {
+	items, _ := vfs.BuildCodepageMenuItems(ev.Codepage, false)
+	menu := vtui.NewVMenu(" Convert Codepage ")
+	realItems := 0
+	for _, item := range items {
+		if item.UserData == -1 {
+			continue // Skip auto-detect
+		}
+		menu.AddItem(item)
+		realItems++
+	}
+
+	w, h := 45, realItems+2
+	scrW := vtui.FrameManager.GetScreenSize()
+	scrH := vtui.FrameManager.GetScreenHeight()
+	maxH := scrH - 2
+	if maxH < 5 {
+		maxH = 5
+	}
+	if h > maxH {
+		h = maxH
+	}
+
+	x := (scrW - w) / 2
+	y := (scrH - h) / 2
+	if x < 0 {
+		x = 0
+	}
+	if y < 0 {
+		y = 0
+	}
+	menu.SetPosition(x, y, x+w-1, y+h-1)
+
+	menu.OnAction = func(idx int) {
+		menu.Close()
+		if idx >= 0 && idx < len(menu.Items) {
+			if cpID, ok := menu.Items[idx].UserData.(int); ok {
+				ev.Codepage = cpID
+				ev.modified = true
+				vtui.ShowToast(fmt.Sprintf("Will be saved as: %s", vfs.DisplayCodepageName(cpID)), 2*time.Second)
+				ev.updateDesiredVisualCol()
+				ev.ensureCursorVisible()
+				vtui.FrameManager.Redraw()
+			}
+		}
+	}
+
+	selIdx := 0
+	for i, item := range menu.Items {
+		if item.UserData == ev.Codepage {
+			selIdx = i
+			break
+		}
+	}
+	menu.SetSelectPos(selIdx)
 	vtui.FrameManager.Push(menu)
 }
 
@@ -2908,9 +2970,6 @@ func (ev *EditorView) CopySelection() {
 		}
 
 		vtui.SetClipboard(strings.Join(lines, "\n"))
-		internalClipboardText = strings.Join(lines, "\n")
-		internalClipboardCP = ev.Codepage
-		internalClipboardEditor = ev
 		return
 	}
 
@@ -2920,9 +2979,6 @@ func (ev *EditorView) CopySelection() {
 		data, _ := ev.pt.GetRange(min, max-min)
 		if data != nil {
 			vtui.SetClipboard(string(data))
-			internalClipboardText = string(data)
-			internalClipboardCP = ev.Codepage
-			internalClipboardEditor = ev
 			vtui.DebugLog("EDITOR: Copied %d bytes to clipboard", max-min)
 		}
 	}
@@ -3006,16 +3062,6 @@ func (ev *EditorView) PasteText(text string) {
 		}
 	}
 	ev.editSession++
-
-	if text == internalClipboardText && internalClipboardCP != 0 && internalClipboardCP != ev.Codepage && internalClipboardEditor == ev {
-		rawData, err := vfs.EncodeBytes([]byte(text), internalClipboardCP)
-		if err == nil {
-			decoded, err := vfs.DecodeBytes(rawData, ev.Codepage)
-			if err == nil {
-				text = string(decoded)
-			}
-		}
-	}
 
 	if GlobalLastClipboardWasRectangular {
 		targetCol := ev.getVisualColOf(ev.CursorLine, ev.CursorPos)

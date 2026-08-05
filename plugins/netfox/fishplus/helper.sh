@@ -989,10 +989,31 @@ f4_job_hash() {
  done < "$F4JD/cand"
  printf 'T %d\n' "$f4_hn"
 }
+# The exec job runs a command line where the files are. It is a job like any
+# other, which is what keeps it away from the request stream: the body
+# already has its stdin on /dev/null and its output going to the job's own
+# file, so a command that reads from stdin, prints for an hour or never ends
+# cannot get between the panel and its next request.
+#
+# The command runs in a subshell of its own, because a command line ending in
+# "exit" would otherwise take the job's own bookkeeping with it and leave the
+# job running forever with nobody to write its exit status.
+f4_job_exec() {
+ if [ -n "$1" ] && ! cd "$1" 2>/dev/null; then
+  echo "no such directory" >&2
+  return 1
+ fi
+ if [ -z "$2" ]; then
+  echo "empty command" >&2
+  return 1
+ fi
+ ( eval "$2" ) 2>&1
+}
 f4_job_body() {
  case $1 in
   scan ) f4_job_scan "$2" ;;
   hash ) f4_job_hash "$2" ;;
+  exec ) f4_job_exec "$2" "$3" ;;
   * ) echo "unknown job kind" >&2; return 127 ;;
  esac
 }
@@ -1027,6 +1048,12 @@ f4_cmd_jstart() {
   scan | hash )
    if [ "$2" -ne 1 ]; then
     f4_end err "this job takes one path"
+    return
+   fi
+   ;;
+  exec )
+   if [ "$2" -ne 2 ]; then
+    f4_end err "the exec job takes a directory and a command"
     return
    fi
    ;;

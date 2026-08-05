@@ -18,11 +18,15 @@ import (
 
 // BackgroundJobState is what the list shows about a job.
 type BackgroundJobState struct {
-	ID       int
-	Title    string
-	Status   string
-	Started  time.Time
-	Finished bool
+	ID      int
+	Title   string
+	Status  string
+	Started time.Time
+	// Done is set once the work has ended and left something to look at.
+	// A job that ended with nothing to show simply leaves the list.
+	Done bool
+	// Result is the line describing what came out of it.
+	Result string
 }
 
 // BackgroundJob is the handle the task that started the work keeps.
@@ -44,6 +48,7 @@ type BackgroundJobRegistry struct {
 type backgroundJobEntry struct {
 	state  BackgroundJobState
 	cancel func()
+	open   func()
 }
 
 // GlobalBackgroundJobs is the registry the interface shows.
@@ -104,6 +109,59 @@ func (j *BackgroundJob) ID() int {
 	return j.id
 }
 
+// FinishWith ends a job and leaves its answer in the list instead of
+// showing it. A window that has been sent to the background must not come
+// back on its own: the user asked to stop watching, and an answer that
+// arrives half an hour later on top of whatever they are doing now is not
+// what stopping watching means. The job waits in the list with a line
+// saying what it found, and open is what shows it.
+func (j *BackgroundJob) FinishWith(result string, open func()) {
+	if j == nil {
+		return
+	}
+	r := j.registry
+	r.mu.Lock()
+	if e := r.jobs[j.id]; e != nil {
+		e.state.Done = true
+		e.state.Status = result
+		e.state.Result = result
+		e.cancel = nil
+		e.open = open
+	}
+	r.mu.Unlock()
+	r.changed()
+}
+
+// Open shows the result of a finished job and takes it out of the list.
+// It reports whether there was anything to show.
+func (r *BackgroundJobRegistry) Open(id int) bool {
+	r.mu.Lock()
+	e := r.jobs[id]
+	var open func()
+	if e != nil && e.state.Done {
+		open = e.open
+		delete(r.jobs, id)
+	}
+	r.mu.Unlock()
+	if e == nil || !e.state.Done {
+		return false
+	}
+	r.changed()
+	if open != nil {
+		open()
+	}
+	return true
+}
+
+// Forget drops a job from the list without showing anything, for a result
+// the user does not want after all.
+func (r *BackgroundJobRegistry) Forget(id int) {
+	r.mu.Lock()
+	delete(r.jobs, id)
+	r.mu.Unlock()
+	r.changed()
+}
+
 // List returns what is running, oldest first, which is the order somebody
 // watching a list expects things to have started in.
 func (r *BackgroundJobRegistry) List() []BackgroundJobState {
@@ -124,12 +182,12 @@ func (r *BackgroundJobRegistry) Cancel(id int) bool {
 	r.mu.Lock()
 	e := r.jobs[id]
 	var cancel func()
-	if e != nil {
+	if e != nil && !e.state.Done {
 		cancel = e.cancel
 		e.state.Status = "cancelling"
 	}
 	r.mu.Unlock()
-	if e == nil {
+	if e == nil || e.state.Done {
 		return false
 	}
 	r.changed()

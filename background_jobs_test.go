@@ -73,6 +73,51 @@ func TestBackgroundJobRegistry(t *testing.T) {
 	nilJob.Finish()
 }
 
+func TestBackgroundJobResultWaits(t *testing.T) {
+	r := NewBackgroundJobRegistry()
+	job := r.Start("duplicates in /srv", func() {})
+
+	shown := 0
+	job.FinishWith("3 groups found", func() { shown++ })
+
+	// The answer waits in the list rather than appearing over whatever the
+	// user is doing now, which is what sending it to the background meant.
+	list := r.List()
+	if len(list) != 1 {
+		t.Fatalf("%d jobs listed, want the finished one", len(list))
+	}
+	if !list[0].Done || list[0].Result != "3 groups found" {
+		t.Errorf("the finished job reads %+v", list[0])
+	}
+	if shown != 0 {
+		t.Error("the result showed itself without being asked")
+	}
+	if r.Cancel(job.ID()) {
+		t.Error("a finished job accepted a cancel")
+	}
+
+	if !r.Open(job.ID()) {
+		t.Error("opening the result found nothing")
+	}
+	if shown != 1 {
+		t.Errorf("the result was shown %d times", shown)
+	}
+	if len(r.List()) != 0 {
+		t.Error("an opened result stayed in the list")
+	}
+	if r.Open(job.ID()) {
+		t.Error("the result could be opened twice")
+	}
+
+	// A result nobody wants can be dropped, and a job still running can be
+	// dropped from the list too without pretending it produced anything.
+	other := r.Start("scanning", nil)
+	other.FinishWith("nothing found", nil)
+	r.Forget(other.ID())
+	if len(r.List()) != 0 {
+		t.Error("a forgotten job stayed in the list")
+	}
+}
 func TestBackgroundJobRegistryIsConcurrent(t *testing.T) {
 	r := NewBackgroundJobRegistry()
 	var wg sync.WaitGroup

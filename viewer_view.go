@@ -123,42 +123,47 @@ func NewViewerView(ctx context.Context, v vfs.VFS, path string) (*ViewerView, er
 		vtui.FrameManager.Redraw()
 	}
 	vv.menuBar = vtui.NewMenuBar(nil)
-	vv.topBar = NewTopBar(func() string {
-		percent := 0
-		size := vv.backend.Size()
-		if size > 0 {
-			viewHeightBytes := int64(vv.Y2 - vv.Y1)
+	vv.topBar = NewTopBar(
+		func() string {
+			base := ""
+			if vv.vfs != nil {
+				base = vv.vfs.Base(vv.path)
+			} else {
+				base = filepath.Base(vv.path)
+			}
+			return " " + base
+		},
+		func() string {
+			percent := 0
+			size := vv.backend.Size()
+			if size > 0 {
+				viewHeightBytes := int64(vv.Y2 - vv.Y1)
+				if vv.HexMode {
+					viewHeightBytes *= 16
+				} else {
+					viewHeightBytes *= 80
+				}
+				if size <= viewHeightBytes {
+					percent = 100
+				} else {
+					denominator := size - viewHeightBytes
+					percent = int((vv.TopOffset * 100) / denominator)
+				}
+				if percent < 0 {
+					percent = 0
+				}
+				if percent > 100 {
+					percent = 100
+				}
+			}
+			mode := Msg("Viewer.ModeText")
 			if vv.HexMode {
-				viewHeightBytes *= 16
-			} else {
-				viewHeightBytes *= 80
+				mode = Msg("Viewer.ModeHex")
 			}
-			if size <= viewHeightBytes {
-				percent = 100
-			} else {
-				denominator := size - viewHeightBytes
-				percent = int((vv.TopOffset * 100) / denominator)
-			}
-			if percent < 0 {
-				percent = 0
-			}
-			if percent > 100 {
-				percent = 100
-			}
-		}
-		mode := Msg("Viewer.ModeText")
-		if vv.HexMode {
-			mode = Msg("Viewer.ModeHex")
-		}
-		base := ""
-		if vv.vfs != nil {
-			base = vv.vfs.Base(vv.path)
-		} else {
-			base = filepath.Base(vv.path)
-		}
-		cpName := vfs.DisplayCodepageName(vv.Codepage)
-		return fmt.Sprintf(" %s │ %s │ CP: %s │ %d%% ", base, mode, cpName, percent)
-	})
+			cpName := vfs.DisplayCodepageName(vv.Codepage)
+			return fmt.Sprintf(" %s │ %s │ %d%% ", cpName, mode, percent)
+		},
+	)
 	vv.topBar.SetVisible(true)
 	vv.SetCanFocus(true)
 	vv.SetFocus(true)
@@ -840,11 +845,17 @@ func (vv *ViewerView) showCodepageDialog() {
 	}
 
 	w, h := 45, len(items)+2
-	if h > 15 {
-		h = 15
+	scrW := vtui.FrameManager.GetScreenSize()
+	scrH := vtui.FrameManager.GetScreenHeight()
+	maxH := scrH - 2
+	if maxH < 5 {
+		maxH = 5
 	}
-	x := (vv.X2 - vv.X1 - w) / 2
-	y := (vv.Y2 - vv.Y1 - h) / 2
+	if h > maxH {
+		h = maxH
+	}
+	x := (scrW - w) / 2
+	y := (scrH - h) / 2
 	if x < 0 {
 		x = 0
 	}

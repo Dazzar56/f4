@@ -490,6 +490,16 @@ func init() {
 		Handler:     withPF(func(pf *PanelsFrame) { actionFindDuplicates(pf) }),
 	})
 	RegisterAction(Action{
+		Name:        "Panel.BackgroundJobs",
+		Area:        "Shell",
+		Label:       "Background Jobs",
+		LabelKey:    "Menu.Commands.BackgroundJobs",
+		Description: "Show work still running and results waiting to be seen",
+		DescKey:     "Action.Panel.BackgroundJobs.Desc",
+		MenuPath:    "Commands",
+		Handler:     withPF(func(pf *PanelsFrame) { ShowBackgroundJobs(pf) }),
+	})
+	RegisterAction(Action{
 		Name:        "Panel.Bookmarks",
 		Area:        "Shell",
 		Label:       "Bookmarks",
@@ -1713,6 +1723,16 @@ func init() {
 		DefaultKeys: []string{"ShiftF8"},
 		MenuPath:    "Options",
 		Handler:     withEditor(func(ev *EditorView) { ev.showCodepageDialog() }),
+	})
+	RegisterAction(Action{
+		Name:        "Editor.ConvertCodepage",
+		Area:        "Editor",
+		Label:       "Convert codepage...",
+		LabelKey:    "Action.Editor.ConvertCodepage",
+		Description: "Change the file codepage without modifying text",
+		DescKey:     "Action.Editor.ConvertCodepage.Desc",
+		MenuPath:    "Options",
+		Handler:     withEditor(func(ev *EditorView) { ev.showConvertCodepageDialog() }),
 	})
 
 	RegisterAction(Action{
