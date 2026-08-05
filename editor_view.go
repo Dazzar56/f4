@@ -2474,7 +2474,13 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 				}
 			}
 		}
-		f.Close()
+		// The last chunk of a buffering writer is only sent by Close, so a
+		// save is not finished until Close has succeeded. Over a network file
+		// system, dropping this error means reporting a save that lost its
+		// tail.
+		if cerr := f.Close(); cerr != nil && saveErr == nil {
+			saveErr = cerr
+		}
 
 		if saveErr != nil {
 			if useTemp {

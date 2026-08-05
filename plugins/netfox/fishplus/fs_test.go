@@ -84,6 +84,50 @@ func TestParseBSDStatEntry(t *testing.T) {
 	}
 }
 
+// TestParseFoundListingKeepsFullPaths guards the difference between the two
+// parsers. A listing wants the bare name; a search answers with paths, and
+// the stat backends print the path they were handed, so reducing it to a
+// base name silently loses the directory the hit was in. This needs no shell
+// and therefore catches it on any machine, including one whose stat is GNU.
+func TestParseFoundListingKeepsFullPaths(t *testing.T) {
+	cases := []struct {
+		mode string
+		line string
+	}{
+		{"find", "f f 12 1785869231.0 1785869231.0 1785869231.0 644 1000 1000 /tmp/x/sub dir/b.txt"},
+		{"stat", "81a4 12 1785869231 1785869231 1785869231 1000 1000 /tmp/x/sub dir/b.txt"},
+		{"statbsd", "100644 12 1785869231 1785869231 1785869231 1000 1000 /tmp/x/sub dir/b.txt"},
+	}
+	for _, tc := range cases {
+		mode, entries, err := ParseFoundListing([]string{"M " + tc.mode, tc.line})
+		if err != nil {
+			t.Fatalf("%s: %v", tc.mode, err)
+		}
+		if mode != tc.mode {
+			t.Errorf("mode = %q, want %q", mode, tc.mode)
+		}
+		if len(entries) != 1 {
+			t.Fatalf("%s: got %d entries", tc.mode, len(entries))
+		}
+		if entries[0].Name != "/tmp/x/sub dir/b.txt" {
+			t.Errorf("%s: Name = %q, want the full path", tc.mode, entries[0].Name)
+		}
+		if entries[0].Size != 12 {
+			t.Errorf("%s: Size = %d, want 12", tc.mode, entries[0].Size)
+		}
+
+		// The listing parser must keep reducing it, or every panel would
+		// start showing full paths in its name column.
+		_, entries, err = ParseListing([]string{"M " + tc.mode, tc.line})
+		if err != nil {
+			t.Fatalf("%s: %v", tc.mode, err)
+		}
+		if len(entries) != 1 || entries[0].Name != "b.txt" {
+			t.Errorf("%s: listing Name = %+v, want b.txt", entries, tc.mode)
+		}
+	}
+}
+
 func TestParseListingSkipsDotsAndGarbage(t *testing.T) {
 	lines := []string{
 		"M stat",

@@ -157,7 +157,7 @@ func (c *Client) Find(ctx context.Context, dir string, opts FindOptions) ([]Entr
 	if err := resp.Err("ffind " + dir); err != nil {
 		return nil, err
 	}
-	_, entries, err := ParseListing(resp.Lines)
+	_, entries, err := ParseFoundListing(resp.Lines)
 	if err != nil {
 		return nil, err
 	}
