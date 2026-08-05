@@ -1748,3 +1748,51 @@ Loop:
 		t.Error("Expected error dialog for special file in viewer")
 	}
 }
+func TestActionEditFile_DirectoryRedirectsToAttributes(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	tmpDir := t.TempDir()
+	subDirName := "sub_folder"
+	subDirPath := filepath.Join(tmpDir, subDirName)
+	if err := os.Mkdir(subDirPath, 0755); err != nil {
+		t.Fatalf("Failed to create sub directory: %v", err)
+	}
+
+	v := vfs.NewOSVFS(tmpDir)
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	fsp := pf.panels[0].(*FileSystemPanel)
+	fsp.vfs = v
+	fsp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
+		{VFSItem: vfs.VFSItem{Name: subDirName, IsDir: true}},
+	}
+	fsp.SetCursorIndex(1) // Focus on "sub_folder"
+	pf.activeIdx = 0
+
+	// Trigger Edit (F4)
+	actionEditFile(pf)
+
+	// Wait for the async task that reads Stat and shows the Attributes dialog
+	timeout := time.After(2 * time.Second)
+	foundAttributes := false
+	for !foundAttributes {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			top := vtui.FrameManager.GetTopFrame()
+			if top != nil && strings.Contains(top.GetTitle(), "Attributes") {
+				foundAttributes = true
+			}
+		case <-timeout:
+			t.Fatal("Timeout waiting for Attributes dialog to open on F4")
+		}
+	}
+
+	if !foundAttributes {
+		t.Error("Expected Attributes dialog to open when pressing F4 on a directory")
+	}
+}
