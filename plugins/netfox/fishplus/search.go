@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 )
 
 // DefaultGrepLimit caps how many matches one request brings back. A search
@@ -85,4 +86,68 @@ func (c *Client) Grep(ctx context.Context, p, pattern string, opts GrepOptions) 
 		return nil, fmt.Errorf("fishplus: grep %q returned %d offsets for a limit of %d", p, len(offsets), limit)
 	}
 	return offsets, nil
+}
+
+// LineIndex is what the remote host knows about the line structure of a file
+// after one pass over it: where the requested lines start, and how many
+// there are in total.
+type LineIndex struct {
+	// First is the one-based number of the line Offsets[0] belongs to.
+	First int64
+	// Offsets holds the byte offset of each line start, in file order. It is
+	// shorter than requested when the file ends first.
+	Offsets []int64
+	// Total is the number of lines in the file.
+	Total int64
+}
+
+// MaxLineIndexCount caps one index request. The offsets come back as text,
+// so asking for millions of them would cost more than reading the file.
+const MaxLineIndexCount = 100000
+
+// CanIndexLines reports whether the remote host can do the counting.
+func (c *Client) CanIndexLines() bool { return c.sess.Features().Has("awk") }
+
+// Lines returns where the given range of lines starts, counting from line 1,
+// together with the number of lines in the file. The remote host walks the
+// file; what crosses the network is a few numbers, which is what lets a
+// viewer jump to the end of a multi-gigabyte log over ssh.
+func (c *Client) Lines(ctx context.Context, p string, first, count int64) (LineIndex, error) {
+	if first < 1 {
+		return LineIndex{}, fmt.Errorf("fishplus: lines %q: first line %d is below 1", p, first)
+	}
+	if count < 0 || count > MaxLineIndexCount {
+		return LineIndex{}, fmt.Errorf("fishplus: lines %q: count %d outside 0..%d", p, count, MaxLineIndexCount)
+	}
+	if !c.CanIndexLines() {
+		return LineIndex{}, ErrNoGrep
+	}
+	resp, err := c.sess.ExecPath(ctx, "lidx", p,
+		strconv.FormatInt(first, 10), strconv.FormatInt(count, 10))
+	if err != nil {
+		return LineIndex{}, err
+	}
+	if err := resp.Err("lidx " + p); err != nil {
+		return LineIndex{}, err
+	}
+	idx := LineIndex{First: first, Total: -1}
+	for _, line := range resp.Lines {
+		if strings.HasPrefix(line, "T ") {
+			total, convErr := strconv.ParseInt(strings.TrimSpace(line[2:]), 10, 64)
+			if convErr != nil {
+				return LineIndex{}, fmt.Errorf("fishplus: bad line total %q", line)
+			}
+			idx.Total = total
+			continue
+		}
+		off, convErr := strconv.ParseInt(line, 10, 64)
+		if convErr != nil {
+			continue
+		}
+		idx.Offsets = append(idx.Offsets, off)
+	}
+	if idx.Total < 0 {
+		return LineIndex{}, errors.New("fishplus: line index without a total")
+	}
+	return idx, nil
 }

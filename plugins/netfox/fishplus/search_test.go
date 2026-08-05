@@ -117,3 +117,99 @@ func TestGrepAgainstLocalShell(t *testing.T) {
 		t.Fatalf("session out of sync after grep: %q %v", got, err)
 	}
 }
+
+// TestLinesAgainstLocalShell checks the offsets against the ones the same
+// content has in memory, including the last line and the end of the file,
+// which is where an off-by-one in the awk arithmetic would show up.
+func TestLinesAgainstLocalShell(t *testing.T) {
+	c := newLocalShellClient(t)
+	ctx := context.Background()
+	if !c.CanIndexLines() {
+		t.Skip("no awk on this host")
+	}
+
+	var body strings.Builder
+	var want []int64
+	for i := 0; i < 300; i++ {
+		want = append(want, int64(body.Len()))
+		body.WriteString(strings.Repeat("x", i%37) + " line\n")
+	}
+	content := body.String()
+	dir := t.TempDir()
+	file := filepath.Join(dir, "a log.txt")
+	if err := os.WriteFile(file, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	idx, err := c.Lines(ctx, file, 1, 5)
+	if err != nil {
+		t.Fatalf("lines: %v", err)
+	}
+	if idx.Total != 300 {
+		t.Errorf("total = %d, want 300", idx.Total)
+	}
+	if len(idx.Offsets) != 5 {
+		t.Fatalf("offsets = %v, want 5 of them", idx.Offsets)
+	}
+	for i, off := range idx.Offsets {
+		if off != want[i] {
+			t.Fatalf("offset of line %d = %d, want %d", i+1, off, want[i])
+		}
+	}
+
+	// A window in the middle, which is what scrolling asks for.
+	idx, err = c.Lines(ctx, file, 100, 3)
+	if err != nil {
+		t.Fatalf("lines in the middle: %v", err)
+	}
+	if len(idx.Offsets) != 3 || idx.Offsets[0] != want[99] || idx.Offsets[2] != want[101] {
+		t.Fatalf("offsets = %v, want %v", idx.Offsets, want[99:102])
+	}
+	if content[idx.Offsets[0]:idx.Offsets[0]+1] != "x" && want[99] != idx.Offsets[0] {
+		t.Errorf("the offset does not point at a line start")
+	}
+
+	// The tail of the file: fewer lines than asked for, and the last one
+	// still has to point at the right byte.
+	idx, err = c.Lines(ctx, file, 298, 10)
+	if err != nil {
+		t.Fatalf("lines at the end: %v", err)
+	}
+	if len(idx.Offsets) != 3 || idx.Offsets[2] != want[299] {
+		t.Fatalf("offsets at the end = %v, want the last three of %v", idx.Offsets, want[297:])
+	}
+
+	// Past the end is an empty answer, not an error: the viewer asks for a
+	// screenful without knowing where the file stops.
+	idx, err = c.Lines(ctx, file, 5000, 10)
+	if err != nil {
+		t.Fatalf("lines past the end: %v", err)
+	}
+	if len(idx.Offsets) != 0 || idx.Total != 300 {
+		t.Errorf("past the end = %v (total %d)", idx.Offsets, idx.Total)
+	}
+
+	empty := filepath.Join(dir, "empty")
+	if err := os.WriteFile(empty, nil, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if idx, err = c.Lines(ctx, empty, 1, 10); err != nil {
+		t.Fatalf("lines of an empty file: %v", err)
+	}
+	if idx.Total != 0 || len(idx.Offsets) != 0 {
+		t.Errorf("empty file = %v (total %d)", idx.Offsets, idx.Total)
+	}
+
+	if _, err := c.Lines(ctx, file, 0, 10); err == nil {
+		t.Error("line 0 was accepted")
+	}
+	if _, err := c.Lines(ctx, file, 1, MaxLineIndexCount+1); err == nil {
+		t.Error("an oversized count was accepted")
+	}
+	if _, err := c.Lines(ctx, dir, 1, 10); err == nil {
+		t.Error("a directory was indexed")
+	}
+	if got, err := c.Session().Ping(ctx, "alive"); err != nil || got != "alive" {
+		t.Fatalf("session out of sync after lidx: %q %v", got, err)
+	}
+}

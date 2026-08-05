@@ -100,6 +100,7 @@ Everything printed before that line (motd, shell warnings, login banners) is dis
 *   `chown <uid> <gid>` + path — either half may be `-`, meaning "leave it alone".
 *   `utime <mtime> <atime>` + path — epoch seconds, either of them `-` for "leave it alone".
 *   `grep <mode> <limit>` + pattern + path — byte offsets of the matches, at most `limit` of them.
+*   `lidx <first> <count>` + path — where the given lines start, and how many lines the file has.
 Every mutation refuses a path that is not absolute or that carries a `..` component, and the root directory itself. The client always sends absolute paths, so the rule costs nothing in normal use; it is there because `rmtree` turns one mistake in path assembly into a lot of lost data, and because a check the remote host performs holds even when the client is the thing that went wrong. A name that merely begins with dots is not a `..` component and stays usable.
 *   `mode <name>` — forces a metadata backend instead of the auto-detected one; for tests and for troubleshooting.
 *   `rmode <name>` — the same for the read backend.
@@ -164,6 +165,13 @@ This is the first command that is FISH+ rather than fish: the remote host does t
 The mode argument is `f` for a fixed string or `e` for an extended regular expression, with an `i` appended to fold case. Pattern and path both travel on lines of their own, escaped the same way as any path, so a pattern with spaces, tabs or a leading `~` arrives byte for byte.
 
 `FishVFS.Search` uses it with a fixed pattern and announces `HasSearch` accordingly. A host without `grep` or without `awk` answers `nil`, which is f4's way of saying "search it yourself by reading" — the same fallback SFTP gets.
+### The remote line index
+
+Browsing a huge remote file in pieces already works: the viewer renders from a byte offset and asks the VFS for what it needs through `ReadAt`, so a panel opens the head of a gigabyte log instantly. What does not work that way is anything that has to know where the *lines* are — jumping to the end, jumping to line number N, showing how many lines there are — because finding that out means walking the file, and walking it over the network means downloading it.
+
+`lidx` moves that walk to the far side. One `awk` pass prints the byte offset of each requested line and, at the end, `T <total>`. What crosses the network is a handful of numbers no matter how large the file is. The offsets are byte offsets because that is the only currency the rest of the protocol speaks: feed one straight back into `read`, and the viewer is drawing that line.
+
+The pass is a full one — awk cannot know where line N starts without counting the newlines before it — so the cost is one sequential read on a machine that has the file locally, instead of one transfer across the network. That trade is the whole idea of FISH+.
 ### Known limitations of v1
 
 *   The remote host must provide a base64 decoder (`base64` or `openssl`), even though almost no request needs one: the handshake refuses hosts without it because a path with a newline would otherwise be unreachable. Dropping that requirement for hosts that never see such a path is possible later.
@@ -185,6 +193,8 @@ The mode argument is `f` for a fixed string or `e` for an extended regular expre
 *   A search is capped at 10000 matches and the client cannot tell a file with exactly that many hits from a truncated answer. A count line would fix it and costs a second pass over the file, so it waits for a case that needs it.
 *   Case folding and regular expression dialect are the remote `grep`'s, not Go's, so a search over a FISH+ panel can match slightly differently than the same search over a local one. That is the price of not moving the file.
 *   `grep` cannot match across a line break, so a pattern containing a newline finds nothing. The viewer's search will have to split such a pattern itself.
+*   `lidx` reads the whole file to answer, so on a slow remote disk the first jump to the end of a very large file takes a while, even though nothing is transferred. Caching the total per file and reusing it belongs with the viewer wiring.
+*   A line index counts `\n` only. A file with classic Mac line endings is one line to `lidx`, exactly as it is to `awk`, `grep` and `wc` on the remote host.
 
 ## Roadmap
 
@@ -202,6 +212,7 @@ The mode argument is `f` for a fixed string or `e` for an extended regular expre
 *   **Step 5b — writing file content.** The `write` command with an offset and a length, three write backends with runtime switching through `wmode`, `trunc`, and a buffering `Writer` on the client side. A refused request still drains its payload and says so with a `D` line; a write that fails halfway does not, and marks the session broken rather than letting it desynchronize.
 *   **Step 5c — the writing VFS.** `FishVFS.Create` on top of `Writer`, plus `chown` and a `touch` that works on GNU and on BSD alike by letting the remote host convert the epoch into its own local time. `SetAttributes` now carries mode, ownership and timestamps, so a file copied onto a FISH+ panel arrives with the attributes it had. Nothing in the VFS refuses any more, and `ErrFishReadOnly` is gone.
 *   **Step 7a — remote search.** The `grep` command, `Client.Grep` and `FishVFS.Search`, with `HasSearch` finally true for one of f4's file systems. Only byte offsets cross the network, and the limit is enforced on the remote side rather than by disconnecting a flood.
+*   **Step 7b — the remote line index.** The `lidx` command and `Client.Lines`: the offsets of a range of lines and the total line count, from one remote `awk` pass and a few numbers on the wire.
 
 ### To do
 
@@ -209,7 +220,7 @@ The order below is chosen so that something usable arrives as early as possible:
 
 *   **Step 5d — the copier's silent `Close`.** `copyFileWithVFS` closes the destination in a `defer` and drops the error, so the last partial chunk of any buffered writer can fail unnoticed — this is not specific to FISH+, it affects every VFS that buffers. Fixing it touches `file_ops.go` and has to be judged against the other backends, so it is a step of its own rather than a footnote of this one.
 *   **Step 6 — odd hosts.** The `ls -l` fallback backend and whatever else the compatibility issue turns up; `tools/fishplus_probe.sh` collects the raw material.
-*   **Step 7b — the remote line index.** A `lines <offset> <count>` command answering with the offsets of the next `count` line starts, so the viewer can jump to the end of a multi-gigabyte remote file without reading what lies between. This is the half users asked for by name — browsing a huge remote file in pieces — and it needs a look at how the viewer asks for its lines today, which is why it is its own step rather than a tail of this one.
+*   **Step 7c — the viewer on top of it.** `ViewerView` already renders from a byte offset through `ReadAt`, so a remote file is browsed in pieces today; what it still does by reading is jumping to the end and counting lines. Wiring those to `Client.Lines` needs a VFS-level hook, since `vfs.VFS` has no line index method yet, plus a per-file cache of the total so that one keystroke does not start a new remote pass. That interface question is what makes it a step of its own.
 *   **Step 8 — FISH+ proper, part 2.** Delta based saving: PieceTable edits applied remotely instead of re-uploading the file.
 *   **Step 9 — FISH+ proper, part 3.** Background jobs (directory sizes, duplicate search, hashing) reporting progress through the f4 progress dialog.
 *   **Step 10 — resilience.** Mid-request cancellation and resynchronization without dropping the session, keepalive, automatic reconnect.

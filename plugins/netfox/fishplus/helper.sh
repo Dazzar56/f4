@@ -632,6 +632,33 @@ f4_cmd_grep() {
  grep -a -b -o $F4GO -e "$F4PAT" -- "$F4PATH" 2>/dev/null | awk -F: -v n="$2" '{ print $1 } n > 0 && NR >= n { exit }'
  f4_end ok
 }
+# lidx <first> <count>: the byte offsets of lines first..first+count-1, one
+# per line, followed by "T <total>". One awk pass over the remote file, and
+# not a byte of it on the wire -- which is the difference between jumping to
+# the end of a gigabyte log over ssh and waiting for a gigabyte to arrive.
+# LC_ALL=C is exported at the top of this script, so length() counts bytes
+# rather than characters, which is what an offset has to be.
+f4_cmd_lidx() {
+ f4_path
+ if ! f4_have awk; then
+  f4_end err "no awk on remote host"
+  return
+ fi
+ if ! f4_num "$1" || ! f4_num "$2" || [ "$1" -lt 1 ]; then
+  f4_end err "bad line range"
+  return
+ fi
+ if [ ! -f "$F4PATH" ]; then
+  f4_end err "not a regular file"
+  return
+ fi
+ if [ ! -r "$F4PATH" ]; then
+  f4_end err "permission denied"
+  return
+ fi
+ awk -v f="$1" -v n="$2" '{ if (NR >= f && NR < f + n) printf "%d\n", off; off += length($0) + 1 } END { printf "T %d\n", NR }' "$F4PATH" 2>/dev/null
+ f4_end ok
+}
 f4_cmd_wmode() {
  if f4_try_wmode "$1"; then
   F4WR=$1
@@ -737,6 +764,9 @@ while :; do
    ;;
   grep )
    f4_cmd_grep "$F4A1" "$F4A2"
+   ;;
+  lidx )
+   f4_cmd_lidx "$F4A1" "$F4A2"
    ;;
   chown )
    f4_cmd_chown "$F4A1" "$F4A2"
