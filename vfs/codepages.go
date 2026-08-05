@@ -30,6 +30,8 @@ func init() {
 		{22222, "866 OEM (Russian)", nil},
 		{1200, "UTF-16 (Little endian)", unicode.UTF16(unicode.LittleEndian, unicode.UseBOM)},
 		{1201, "UTF-16 (Big endian)", unicode.UTF16(unicode.BigEndian, unicode.UseBOM)},
+		{1251, "Windows-1251 (Cyrillic)", charmap.Windows1251},
+		{866, "CP866 (Cyrillic OEM)", charmap.CodePage866},
 		{20866, "KOI8-R (Cyrillic)", charmap.KOI8R},
 		{1252, "Windows-1252 (Western)", charmap.Windows1252},
 		{437, "CP437 (US OEM)", charmap.CodePage437},
@@ -271,6 +273,9 @@ func BuildCodepageMenuItems(currentCpID int, autoDetect bool) ([]vtui.MenuItem, 
 	}
 
 	addCP := func(cp Codepage) {
+		if cp.ID == 1251 || cp.ID == 866 {
+			return // Exclude duplicate 1251 and 866 from the UI menu
+		}
 		text := fmt.Sprintf("%5d  %s", cp.ID, cp.Name)
 		if cp.ID == currentCpID && !autoDetect {
 			text = "√ " + text

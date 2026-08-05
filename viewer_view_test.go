@@ -680,3 +680,28 @@ func TestViewerView_Codepages_Load(t *testing.T) {
 		t.Errorf("Viewer failed to decode CP866: expected 'Привет', got %q", string(data))
 	}
 }
+func TestViewerView_Codepages_MultipleSwitchNoCrash(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "switch_test.txt")
+	os.WriteFile(path, []byte("Test content for codepage switch"), 0644)
+
+	v := vfs.NewOSVFS(tmpDir)
+	vv, err := NewViewerView(context.Background(), v, path)
+	if err != nil {
+		t.Fatalf("Failed to create ViewerView: %v", err)
+	}
+
+	// Switch codepages twice (F8, F8)
+	vv.ReloadWithCodepage(11111)
+	vv.ReloadWithCodepage(22222)
+	vv.ReloadWithCodepage(65001)
+
+	// Close viewer (F3 exit)
+	vv.Close()
+
+	if !vv.IsDone() {
+		t.Error("ViewerView failed to close cleanly after codepage switches")
+	}
+}

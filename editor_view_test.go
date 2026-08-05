@@ -4113,6 +4113,59 @@ func TestEditorView_Codepages_LoadSave(t *testing.T) {
 		t.Errorf("Save failed: expected raw bytes %v, got %v", expected, savedRaw)
 	}
 }
+func TestEditorView_Codepages_PreserveEditsOnSwitch(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "edit_cp.txt")
+	os.WriteFile(path, []byte("Initial text"), 0644)
+
+	v := vfs.NewOSVFS(tmpDir)
+	pt := piecetable.New([]byte("Initial text"))
+	ev := NewEditorView(pt, v, path)
+	defer ev.Close()
+	ev.Codepage = 65001
+
+	// Modify text
+	ev.SetText("Modified text")
+
+	// Switch codepage to 11111 (ANSI)
+	ev.ReloadWithCodepage(11111)
+
+	// User modifications must NOT be reverted to "Initial text"
+	if strings.Contains(ev.GetText(), "Initial text") {
+		t.Error("ReloadWithCodepage reverted unsaved user edits to disk content")
+	}
+	if ev.Codepage != 11111 {
+		t.Errorf("Expected Codepage 11111, got %d", ev.Codepage)
+	}
+}
+
+func TestEditorView_Codepages_ClipboardConversion(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	pt := piecetable.New([]byte("Привет"))
+	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
+
+	ev.Codepage = 11111 // ANSI (CP1251)
+	ev.selActive = true
+	ev.selAnchorOffset = 0
+	ev.CursorPos = 12 // "Привет" in UTF-8
+
+	ev.CopySelection()
+
+	// Switch editor to OEM (866)
+	ev.Codepage = 22222
+	ev.DeleteSelection()
+
+	// Paste text - should perform conversion
+	ev.PasteText(internalClipboardText)
+
+	if ev.GetText() != "╧ЁштхЄ" {
+		t.Errorf("Clipboard conversion failed: expected '╧ЁштхЄ', got %q", ev.GetText())
+	}
+}
 
 func TestEditorView_DoubleClick_SelectWord(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())

@@ -43,8 +43,9 @@ var (
 var GlobalLastClipboardWasRectangular bool
 
 var (
-	internalClipboardText string
-	internalClipboardCP   int
+	internalClipboardText   string
+	internalClipboardCP     int
+	internalClipboardEditor *EditorView
 )
 
 // EditorView is a text editor component.
@@ -2901,6 +2902,7 @@ func (ev *EditorView) CopySelection() {
 		vtui.SetClipboard(strings.Join(lines, "\n"))
 		internalClipboardText = strings.Join(lines, "\n")
 		internalClipboardCP = ev.Codepage
+		internalClipboardEditor = ev
 		return
 	}
 
@@ -2912,6 +2914,7 @@ func (ev *EditorView) CopySelection() {
 			vtui.SetClipboard(string(data))
 			internalClipboardText = string(data)
 			internalClipboardCP = ev.Codepage
+			internalClipboardEditor = ev
 			vtui.DebugLog("EDITOR: Copied %d bytes to clipboard", max-min)
 		}
 	}
@@ -2996,7 +2999,7 @@ func (ev *EditorView) PasteText(text string) {
 	}
 	ev.editSession++
 
-	if text == internalClipboardText && internalClipboardCP != 0 && internalClipboardCP != ev.Codepage {
+	if text == internalClipboardText && internalClipboardCP != 0 && internalClipboardCP != ev.Codepage && internalClipboardEditor == ev {
 		rawData, err := vfs.EncodeBytes([]byte(text), internalClipboardCP)
 		if err == nil {
 			decoded, err := vfs.DecodeBytes(rawData, ev.Codepage)
