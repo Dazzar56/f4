@@ -34,6 +34,7 @@ Operations like calculating directory sizes, finding duplicate files, or complex
     *   `mutate.go` — directory and metadata mutations.
     *   `search.go` — the remote search and the remote line index.
     *   `patch.go` — assembling a file out of pieces of another one.
+    *   `job.go` — background jobs, and the tree scan that is the first of them.
 *   `plugins/netfox/fish_vfs.go` — the `vfs.VFS` implementation, registered as the `fish+` protocol of the NetFox connection manager. A plain `fish` type is accepted as a synonym.
 *   `plugins/netfox/ssh_dial.go` — the SSH dialer shared with the SFTP backend.
 
@@ -110,6 +111,11 @@ Everything printed before that line (motd, shell warnings, login banners) is dis
 *   `lidx <first> <count>` + path — where the given lines start, and how many lines the file has.
 *   `ffind <limit> <nmasks> <grep mode>` + a directory, one line per mask and, unless the mode is `-`, a pattern — every file in the tree whose name matches a mask, in the listing format with the full path in place of the name.
 Every mutation refuses a path that is not absolute or that carries a `..` component, and the root directory itself. The client always sends absolute paths, so the rule costs nothing in normal use; it is there because `rmtree` turns one mistake in path assembly into a lot of lost data, and because a check the remote host performs holds even when the client is the thing that went wrong. A name that merely begins with dots is not a `..` component and stays usable.
+*   `jstart <kind> <npaths>` + that many paths — starts a detached job and answers with `J <id>`; the only kind so far is `scan`, which takes one directory.
+*   `jpoll <id> <limit>` — the state of a job as `S <state> <exit> [message]`, followed by at most `limit` of the lines it produced since the previous poll.
+*   `jkill <id>` — stops a job, keeping what it produced.
+*   `jdrop <id>` — stops a job and removes every trace of it; dropping one that is not there succeeds.
+*   `jlist` — one line per job of this session: `<id> <state> <kind>`.
 *   `mode <name>` — forces a metadata backend instead of the auto-detected one; for tests and for troubleshooting.
 *   `rmode <name>` — the same for the read backend.
 *   `wmode <name>` — the same for the write backend.
@@ -180,6 +186,86 @@ Browsing a huge remote file in pieces already works: the viewer renders from a b
 `lidx` moves that walk to the far side. One `awk` pass prints the byte offset of each requested line and, at the end, `T <total>`. What crosses the network is a handful of numbers no matter how large the file is. The offsets are byte offsets because that is the only currency the rest of the protocol speaks: feed one straight back into `read`, and the viewer is drawing that line.
 
 The pass is a full one — awk cannot know where line N starts without counting the newlines before it — so the cost is one sequential read on a machine that has the file locally, instead of one transfer across the network. That trade is the whole idea of FISH+.
+### Background jobs
+
+Everything above answers within one round trip, or at least within one a user
+is willing to sit through. Summing a directory tree is not like that: it takes
+as long as the remote disk takes, which on a large export is minutes. As a
+command it would freeze the panel for its whole duration, and the only way out
+would be to drop the session, because a request cannot be abandoned halfway
+without desynchronizing the stream.
+
+So the work is detached instead. `jstart` forks a subshell with all three of
+its standard streams pointed away from the wire, writes its output into a file
+and answers with a job id; `jpoll` brings back whatever accumulated since the
+previous poll; `jkill` stops it and `jdrop` forgets it. The session is idle
+between polls, and that is what makes a job cancellable at all: cancelling
+means the client stops asking, so it never has to interrupt a request in
+flight.
+
+Three details are what hold it together.
+
+*   The request carries its own path count, `jstart <kind> <npaths>`. A helper
+    that rejected an unknown kind before reading its path lines would leave
+    them in the stream, and the next request would be parsed out of somebody's
+    directory name. The refusal reads them first and complains afterwards,
+    which is the rule a refused `write` already follows with its payload.
+*   A poll reports the state *before* it reads the output. The other order
+    loses data: a job that finishes between the two reads is then reported as
+    done in the very poll whose output was collected a moment earlier, and the
+    lines written in between are never delivered.
+*   Only whole lines are handed out, which is exactly what `wc -l` counts, so
+    a progress line that is still being written waits for its newline instead
+    of arriving in two halves.
+
+The job directory lives under `$TMPDIR`, `/tmp` or `$HOME`, whichever is
+writable first, and is created when the first job starts rather than at
+connect, so a session that never runs one leaves nothing behind. The session
+token is part of its name because a pid alone repeats often enough for a new
+session to adopt the leftovers of an old one. When the request loop ends —
+which is what the client closing its side does — everything still running is
+killed and the directory removed, and a trap covers a connection that was cut
+rather than closed.
+
+### The remote tree scan
+
+The first job kind is `scan`: the bytes, the files and the directories of a
+whole tree, counted by the side that has the disk. One `find` feeds one `awk`,
+and what crosses the network is a progress line every two thousand entries
+plus a total, no matter how many millions of files there are.
+
+The three listing backends differ only in how the type of an entry arrives — a
+type letter from GNU `find -printf`, a hexadecimal mode from GNU `stat`, an
+octal one from BSD `stat` — and both spellings of a mode begin with a 4 for a
+directory and for nothing else, so one awk rule serves all three. A symlink is
+counted as the leaf it is and never followed, which also means a link pointing
+at its own parent cannot make the walk grow forever.
+
+Progress needs the remote awk to flush on demand: output to a file is block
+buffered, and the first report would otherwise arrive four kilobytes late. An
+awk that does not know `fflush` fails to parse a program containing it rather
+than skipping the call, so the helper probes for it during the handshake and
+builds the program without it where it is missing. Such a host reports its
+total and nothing before it.
+
+`Client.Scan` starts the job, follows it, and cancels it on the way out.
+Cancelling is a policy rather than a mechanism: `StartScan` and `FollowScan`
+underneath kill nothing, so a job meant to outlive the dialog it was started
+from is built out of those two. The choice is deliberate. Nobody has done this
+before us, so there is no convention to inherit, and the predictable rule is
+the one where what the user sees matches what is happening: a dialog that is
+gone must not leave a `find` running on somebody else's server with nothing to
+notice it by. That makes "cancel" and "send to the background" two different
+actions rather than one whose meaning has to be guessed — which is what step
+9d will give two different keys, and what a setting can then choose between.
+
+The polls themselves run on a context of their own. A request cancelled while
+its answer is on the wire desynchronizes the session, which is the standing
+limitation of v1, so `FollowScan` lets the poll it already sent come back and
+notices the cancellation between two polls. It costs one round trip and buys a
+session that is still usable afterwards, which is the whole reason for making
+the scan a job.
+
 ### Traps, and how they were found
 
 Three defects here were invisible on the machine they were written on and
@@ -212,6 +298,17 @@ write path uses `dd` and why the helper reports `headc` and `headsafe`
 separately. `openssl base64 -d` decodes nothing at all unless its input ends
 with a newline, which made it useless as a fallback until the decoder started
 terminating what it feeds in.
+
+**A background job outlives the shell that started it.** Killing a job means
+killing the subshell wrapping it, and the tool doing the actual work is that
+subshell's child. A POSIX shell without job control leaves background commands
+in its own process group, so there is no group to aim at that would not take
+the session down as well. What is left is `pkill -P`, and the order matters:
+kill the wrapper first and its children belong to init, with nothing left to
+select them by. Children first, then the wrapper. On a host without `pkill`
+the tool runs on until it finishes, writing into a file that has already been
+deleted — which is why a dropped job has its directory removed rather than
+emptied.
 
 The first two were found by a test harness that speaks the wire protocol to a
 real shell with no network in between. Latency hides both: over ssh the shell
@@ -247,6 +344,12 @@ time, which is exactly what makes it useful.
 *   A tree search reports a symlink without resolving it, because resolving would cost a round trip per hit and give back what the single request saves.
 *   A raw payload assumes a binary safe transport. The ssh backend asks for no pseudo terminal and the helper tames one with `stty` where it finds it, announcing `tty`; a caller whose stream is terminal backed and which does not see `tty` in the banner has to select `wmode b64` by hand.
 *   A line index counts `\n` only. A file with classic Mac line endings is one line to `lidx`, exactly as it is to `awk`, `grep` and `wc` on the remote host.
+*   A job's output is re-read from its beginning on every poll, so polling gets slower the more a job has printed. A scan prints a handful of lines, so nothing meets that limit yet; a job kind that streams results will need a byte offset instead of a line count.
+*   Killing a job on a host without `pkill` stops the wrapper but not the tool it started, which runs to its end. Its output goes into a file that has already been removed, so nothing is corrupted and nothing is reported.
+*   A job left behind by a connection that was cut is killed by the helper's trap, but a host that killed the shell outright keeps both the job and its directory until somebody cleans up `/tmp`.
+*   The scan reports its position as the last entry `find` reached, so a name containing a newline shows up truncated there, exactly as it does in a listing.
+*   A scan counts a symlink as a leaf, while f4's own scanner walks a symlink that resolves to a directory. The two therefore disagree on a tree full of directory symlinks, and the remote numbers are the ones `find` and far2l would report.
+*   A running scan polls the session, so a second panel sharing it waits for the current poll before its own request goes out. The polls back off to three quarters of a second when a job has nothing new to say, which is what keeps that wait from being noticeable.
 
 ## Roadmap
 
@@ -278,12 +381,16 @@ time, which is exactly what makes it useful.
 
 *   **Step 8b — the editor on top of it.** `vfs.DeltaWriter` is the optional interface, `FishVFS` implements it over `Client.Patch`, and `SaveToFile` uses it when the save goes through `.f4tmp` anyway. A piece table already is the description the command wants: a piece pointing at the original buffer is a range of the file on disk, one pointing at the add buffer is what the user typed. It applies only to a raw UTF-8 load, because with any other codepage the buffer holds decoded text whose offsets say nothing about the bytes on disk, and it falls back to writing the file out in full whenever the remote host cannot do it.
 
+*   **Step 9a — background jobs.** `jstart`, `jpoll`, `jkill`, `jdrop` and `jlist`: a detached subshell whose streams point away from the wire, and a client that polls it with a backoff. The first kind is `scan`, which counts a whole tree on the remote host and reports progress while it does. `Client.Scan` cancels the remote job when its caller goes away; `StartScan` and `FollowScan` underneath it cancel nothing, which is what step 9d will build on.
+
 ### To do
 
 The numbering follows the order the steps were planned in, not the order they were done: the plan was arranged so that something usable arrived early, and a browsable, readable panel existed from step 4 onwards.
 
 *   **Step 6 — odd hosts.** The `ls -l` fallback backend and whatever else the compatibility issue turns up; `tools/fishplus_probe.sh` collects the raw material.
-*   **Step 9 — FISH+ proper, part 3.** Background jobs (directory sizes, duplicate search, hashing) reporting progress through the f4 progress dialog.
+*   **Step 9b — the scanning VFS.** `FishVFS` implements `vfs.FastScanner` over `Client.Scan`, so calculating a directory size and the pre-scan of a copy both happen on the remote host, with progress in the f4 progress dialog and a cancel button that cancels the remote work too.
+*   **Step 9c — hashing and duplicates.** A `hash` job kind and the duplicate search built on it, jobs for the same reason the scan is one.
+*   **Step 9d — jobs in the interface.** A list of what is running, so a job can outlive the dialog it was started from. "Cancel" and "send to the background" become separate keys, and which one Escape means becomes a setting.
 *   **Step 10 — resilience.** Mid-request cancellation and resynchronization without dropping the session, keepalive, automatic reconnect.
 *   **Step 11 — remote execution.** `exec` and a remote terminal, plus user documentation and help pages.
 
@@ -294,6 +401,8 @@ The numbering follows the order the steps were planned in, not the order they we
 The tests whose names end in `AgainstLocalShell`, together with `TestFileReadAtAndCache` and the `FishVFS` tests in the `netfox` package, run the real helper in a local `/bin/sh`. That is the only kind of test that proves the shell side and the Go side agree on the wire format, and it walks every backend the test machine provides, one subtest each. They skip themselves on Windows and on hosts without a shell or without base64.
 
 Every write test ends with a `ping` on purpose. Only what the session answers *after* a refused write can show that the payload really left the wire; a test that just checks the error would pass on a helper that desynchronizes the stream. The same goes for a refused `patch`, and for the tree search, whose request carries a variable number of lines and is therefore the easiest one to get out of step.
+
+The job tests check the scan against a walk done here, over every listing backend the machine provides, because the interesting question is not whether the helper can count but whether both sides agree on what a directory is and what a symlink weighs. Two of them build a tree of a few thousand entries on purpose: the remote awk reports every two thousand, so anything smaller would pass on a helper whose progress never leaves its buffer. Cancellation is triggered from inside a progress report, which is the one moment when nothing of ours is on the wire, so the test is deterministic rather than a race — and it ends with a ping, because the property being checked is that a cancelled job leaves the session usable.
 
 These tests take `sh` from `PATH`, so what they actually exercise depends on the machine. Run them at least once with `/bin/sh` pointing at `dash`, and preferably also at `busybox sh`: `bash` is forgiving in ways the shells on the hosts people connect to are not, and a helper that only ever meets `bash` is a helper whose worst bugs are still ahead of it.
 The timestamp tests run twice: once against the tools the machine has, and once with stubs in front of `touch` and `date` that refuse `-d` and answer `-r`, the way macOS does. Without the second run the BSD branch would never be executed on a GNU build machine, and a mistake in it would only surface on a user's Mac.

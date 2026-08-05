@@ -209,6 +209,33 @@ for f4c in ddbytes b64; do
  fi
 done
 
+# Anything that walks a whole tree takes minutes, and a session answers one
+# request at a time: doing it in a command would freeze the panel, and the
+# only way to cancel it would be to drop the connection. Such work therefore
+# runs detached with its output in a file, and the client collects that file
+# in small polls it may stop at any moment. The jobs live in the first
+# writable directory among the usual candidates; a host with none of them
+# simply does not announce the feature.
+F4JBASE=
+for f4c in "$TMPDIR" /tmp "$HOME" .; do
+ [ -n "$f4c" ] || continue
+ if [ -d "$f4c" ] && [ -w "$f4c" ]; then
+  F4JBASE=$f4c
+  break
+ fi
+done
+F4JDIR=
+F4JN=0
+
+# A job reports progress while it runs, which only works if its awk can be
+# made to flush: output to a file is block buffered, so without fflush the
+# first progress line would arrive four kilobytes late. An awk that does not
+# know the function fails to parse the program at all rather than skipping
+# the call, hence a probe instead of a guard inside the program.
+F4AWKFL=
+if f4_have awk && awk 'BEGIN { fflush() }' </dev/null >/dev/null 2>&1; then
+ F4AWKFL=1
+fi
 F4FEATS=
 for f4c in dd base64 readlink du grep sed awk wc head tail stty truncate chown touch date sha256sum; do
  f4_have $f4c && F4FEATS="$F4FEATS $f4c"
@@ -221,6 +248,11 @@ done
 [ -n "$F4TAILC" ] && F4FEATS="$F4FEATS tailc"
 f4_try_rmode ddbytes && F4FEATS="$F4FEATS ddbytes"
 [ -n "$F4TTY" ] && F4FEATS="$F4FEATS tty"
+[ -n "$F4AWKFL" ] && F4FEATS="$F4FEATS awkflush"
+f4_have find && F4FEATS="$F4FEATS findbin"
+if [ -n "$F4JBASE" ] && f4_have tail && f4_have head && f4_have wc; then
+ F4FEATS="$F4FEATS jobs"
+fi
 [ -n "$F4MODE" ] && F4FEATS="$F4FEATS mode:$F4MODE"
 [ -n "$F4RD" ] && F4FEATS="$F4FEATS read:$F4RD"
 [ -n "$F4WR" ] && F4FEATS="$F4FEATS write:$F4WR"
@@ -818,6 +850,241 @@ f4_cmd_lidx() {
  awk -v f="$1" -v n="$2" '{ if (NR >= f && NR < f + n) printf "%d\n", off; off += length($0) + 1 } END { printf "T %d\n", NR }' "$F4PATH" 2>/dev/null
  f4_end ok
 }
+# The job directory is created on demand: a session that never starts a job
+# leaves nothing behind on the remote host. The session token is part of the
+# name because a pid on its own repeats often enough for a new session to
+# adopt the leftovers of an old one.
+f4_jdir() {
+ if [ -n "$F4JDIR" ]; then
+  return 0
+ fi
+ if [ -z "$F4JBASE" ]; then
+  return 1
+ fi
+ F4JDIR=$F4JBASE/.f4jobs.$$.$F4TOKEN
+ if mkdir "$F4JDIR" 2>/dev/null; then
+  return 0
+ fi
+ F4JDIR=
+ return 1
+}
+
+# f4_jfind resolves a job id to its directory and refuses anything that is
+# not a plain number: the id ends up in a path, and a job directory is
+# removed whole.
+f4_jfind() {
+ F4JD=
+ if [ -z "$F4JDIR" ] || ! f4_num "$1" || [ ! -d "$F4JDIR/$1" ]; then
+  return 1
+ fi
+ F4JD=$F4JDIR/$1
+ return 0
+}
+
+# Killing a job means killing the subshell wrapping it; the tool doing the
+# actual work is its child, and a POSIX shell without job control leaves
+# both in the shell's own process group, so killing the group would take the
+# session down with them. pkill closes that gap where it exists; where it
+# does not, the tool keeps running until it finishes writing into a file
+# nobody will ever read. The children go first: once the wrapper is gone its
+# children belong to init, and there is nothing left to select them by.
+f4_jkillpid() {
+ F4JP=`cat "$1/pid" 2>/dev/null`
+ if f4_num "$F4JP"; then
+  if f4_have pkill; then
+   pkill -P "$F4JP" 2>/dev/null
+  fi
+  kill "$F4JP" 2>/dev/null
+ fi
+ return 0
+}
+
+# Whatever is still running when the client goes away is killed and removed.
+# The loop below ends when stdin reaches EOF, which is how a session
+# normally closes, and the trap covers a connection that was cut instead.
+f4_jclean() {
+ [ -n "$F4JDIR" ] || return 0
+ for f4_je in "$F4JDIR"/*; do
+  [ -d "$f4_je" ] && f4_jkillpid "$f4_je"
+ done
+ rm -rf "$F4JDIR" 2>/dev/null
+ F4JDIR=
+ return 0
+}
+
+# scan: the bytes, files and directories of a whole tree, counted by the
+# side that has the disk. The three listing backends differ only in how the
+# type arrives -- a type letter from find, a hex mode from GNU stat, an
+# octal one from BSD stat -- and both modes begin with 4 for a directory and
+# for nothing else, so one awk rule serves all three. Symlinks are counted
+# as the leaves they are and never followed, so a link pointing at its own
+# parent cannot make the walk grow forever.
+f4_job_scan() {
+ if [ ! -d "$1" ]; then
+  echo "not a directory" >&2
+  return 1
+ fi
+ if [ -z "$F4MODE" ]; then
+  echo "no supported listing tool on remote host" >&2
+  return 1
+ fi
+ if ! f4_have find || ! f4_have awk; then
+  echo "no find and awk on remote host" >&2
+  return 1
+ fi
+ f4_jfl=n=n
+ [ -n "$F4AWKFL" ] && f4_jfl='fflush()'
+ case $F4MODE in
+  find ) find -H "$1" -printf '%y %s %p\n' 2>/dev/null ;;
+  stat ) find -H "$1" -exec stat -c '%f %s %n' -- {} + 2>/dev/null ;;
+  statbsd ) find -H "$1" -exec stat -f '%p %z %N' -- {} + 2>/dev/null ;;
+ esac | awk -v e=2000 '{ if (substr($1, 1, 1) == "4" || $1 == "d") { dn++; db += $2 } else { fn++; fb += $2 } k++; if (k % e == 0) { p = $0; sub(/^[^ ]+ [^ ]+ /, "", p); printf "P %d %d %d %d %s\n", fb, db, fn, dn, p; '"$f4_jfl"' } } END { printf "T %d %d %d %d\n", fb, db, fn, dn }'
+}
+
+f4_job_body() {
+ case $1 in
+  scan ) f4_job_scan "$2" ;;
+  * ) echo "unknown job kind" >&2; return 127 ;;
+ esac
+}
+
+# jstart <kind> <npaths> followed by exactly that many path lines. The count
+# travels with the request so that a refusal can still consume the lines
+# belonging to it: a helper that rejected an unknown kind before reading its
+# paths would leave them in the stream to be parsed as the next request.
+# The reply names the job and nothing is waited for. All three standard
+# streams of the subshell are pointed away from the wire, stdin included: a
+# background process holding the request stream open would eat requests
+# meant for the helper, and one holding the answer stream open would keep
+# the ssh channel from closing long after the client is gone.
+f4_cmd_jstart() {
+ f4_jkind=$1
+ f4_ja1=
+ f4_ja2=
+ if ! f4_num "$2" || [ "$2" -gt 4 ]; then
+  f4_end err "bad path count"
+  return
+ fi
+ f4_ji=0
+ while [ "$f4_ji" -lt "$2" ]; do
+  f4_path
+  case $f4_ji in
+   0 ) f4_ja1=$F4PATH ;;
+   1 ) f4_ja2=$F4PATH ;;
+  esac
+  f4_ji=$(( f4_ji + 1 ))
+ done
+ case $f4_jkind in
+  scan )
+   if [ "$2" -ne 1 ]; then
+    f4_end err "the scan job takes one path"
+    return
+   fi
+   ;;
+  * )
+   f4_end err "unknown job kind"
+   return
+   ;;
+ esac
+ if ! f4_jdir; then
+  f4_end err "no writable directory for jobs on remote host"
+  return
+ fi
+ F4JN=$(( F4JN + 1 ))
+ F4JD=$F4JDIR/$F4JN
+ if ! mkdir "$F4JD" 2>/dev/null; then
+  f4_end err "cannot create a job directory"
+  return
+ fi
+ printf '%s\n' "$f4_jkind" > "$F4JD/kind"
+ printf '' > "$F4JD/out"
+ echo 0 > "$F4JD/n"
+ ( f4_job_body "$f4_jkind" "$f4_ja1" "$f4_ja2"; echo $? > "$F4JD/rc" ) </dev/null > "$F4JD/out" 2> "$F4JD/err" &
+ echo $! > "$F4JD/pid"
+ echo "J $F4JN"
+ f4_end ok
+}
+
+# jpoll <id> <limit>: the state first, then at most limit lines the job has
+# produced since the last poll. The state is read before the output on
+# purpose -- the other order can report a job as finished after reading
+# output it wrote just before finishing, and those last lines would never be
+# delivered. Only whole lines are handed out, which is exactly what wc
+# counts, so a progress line still being written waits for its newline
+# instead of arriving in two halves.
+f4_cmd_jpoll() {
+ if ! f4_jfind "$1"; then
+  f4_end err "no such job"
+  return
+ fi
+ if ! f4_num "$2" || [ "$2" -lt 1 ]; then
+  f4_end err "bad limit"
+  return
+ fi
+ f4_jst=run
+ f4_jrc=-
+ f4_jmsg=
+ if [ -f "$F4JD/kill" ]; then
+  f4_jst=kill
+ elif [ -f "$F4JD/rc" ]; then
+  f4_jst=done
+  f4_jrc=`cat "$F4JD/rc" 2>/dev/null`
+  f4_num "$f4_jrc" || f4_jrc=-
+  if [ "$f4_jrc" != 0 ]; then
+   f4_jmsg=`head -n 1 "$F4JD/err" 2>/dev/null`
+  fi
+ fi
+ f4_jline="S $f4_jst $f4_jrc"
+ [ -n "$f4_jmsg" ] && f4_jline="$f4_jline $(f4_flat "$f4_jmsg")"
+ echo "$f4_jline"
+ f4_jtot=`wc -l < "$F4JD/out" 2>/dev/null | tr -d ' '`
+ f4_num "$f4_jtot" || f4_jtot=0
+ f4_jn=`cat "$F4JD/n" 2>/dev/null`
+ f4_num "$f4_jn" || f4_jn=0
+ f4_jav=$(( f4_jtot - f4_jn ))
+ if [ "$f4_jav" -gt 0 ]; then
+  [ "$f4_jav" -gt "$2" ] && f4_jav=$2
+  tail -n +$(( f4_jn + 1 )) "$F4JD/out" 2>/dev/null | head -n "$f4_jav"
+  echo $(( f4_jn + f4_jav )) > "$F4JD/n"
+ fi
+ f4_end ok
+}
+
+f4_cmd_jkill() {
+ if ! f4_jfind "$1"; then
+  f4_end err "no such job"
+  return
+ fi
+ f4_jkillpid "$F4JD"
+ echo 1 > "$F4JD/kill"
+ f4_end ok
+}
+
+# A job the client no longer knows about is one it has already forgotten, so
+# dropping a job that is not there is not an error: cancelling ends in a
+# drop, and a client must not have to care whether the drop raced anything.
+f4_cmd_jdrop() {
+ if ! f4_jfind "$1"; then
+  f4_end ok
+  return
+ fi
+ f4_jkillpid "$F4JD"
+ rm -rf "$F4JD" 2>/dev/null
+ f4_end ok
+}
+
+f4_cmd_jlist() {
+ if [ -n "$F4JDIR" ]; then
+  for f4_je in "$F4JDIR"/*; do
+   [ -d "$f4_je" ] || continue
+   f4_jst=run
+   [ -f "$f4_je/rc" ] && f4_jst=done
+   [ -f "$f4_je/kill" ] && f4_jst=kill
+   echo "${f4_je##*/} $f4_jst $(cat "$f4_je/kind" 2>/dev/null)"
+  done
+ fi
+ f4_end ok
+}
 f4_cmd_wmode() {
  if f4_try_wmode "$1"; then
   F4WR=$1
@@ -845,6 +1112,8 @@ f4_cmd_rmode() {
 }
 
 F4ID=0
+trap 'f4_jclean; exit' HUP INT TERM
+trap 'f4_jclean' EXIT
 # A login banner or the echo of this very script may end without a newline,
 # and the terminator has to start a line of its own to be recognizable.
 printf '\n'
@@ -933,6 +1202,21 @@ while :; do
   ffind )
    f4_cmd_ffind "$F4A1" "$F4A2" "$F4A3"
    ;;
+  jstart )
+   f4_cmd_jstart "$F4A1" "$F4A2"
+   ;;
+  jpoll )
+   f4_cmd_jpoll "$F4A1" "$F4A2"
+   ;;
+  jkill )
+   f4_cmd_jkill "$F4A1"
+   ;;
+  jdrop )
+   f4_cmd_jdrop "$F4A1"
+   ;;
+  jlist )
+   f4_cmd_jlist
+   ;;
   chown )
    f4_cmd_chown "$F4A1" "$F4A2"
    ;;
@@ -950,6 +1234,7 @@ while :; do
    f4_end ok
    ;;
   exit )
+   f4_jclean
    f4_end ok
    break
    ;;
@@ -958,3 +1243,5 @@ while :; do
    ;;
  esac
 done
+
+f4_jclean
