@@ -70,8 +70,8 @@ hour late, attached to whatever the user happened to do next.
 
 ## Order of work
 
-1.  `fishConn.reconnect`: dial, handshake, swap the client, one round trip to
-    confirm. Tested against a local shell that is killed and restarted.
+1.  ~~`fishConn.reconnect`: dial, handshake, swap the client, one round trip to
+    confirm.~~ Done. `FishDialer` is
 2.  The dialer plumbed in from the FISH+ site, with `NewFishVFSOnStream`
     keeping the no-dialer path.
 3.  The dialog, and the retry of the operation that raised it. Read-only

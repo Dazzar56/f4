@@ -3,6 +3,7 @@ package netfox
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path"
@@ -46,13 +47,111 @@ type FishVFS struct {
 // with its own mutex, so each request stays atomic. They do not run in
 // parallel, which for a shell that answers one command at a time is what a
 // second connection could not fix anyway.
+// FishDialer opens a new transport for a session that has to be rebuilt. It
+// returns the two halves of the stream and the closer that ties the remote
+// shell and its connection to the session speaking through them — the same
+// three things NewFishVFSOnStream is handed. Whoever built the connection
+// supplies it, which is what keeps SSH out of this file and lets the tests
+// reconnect to a local shell instead.
+//
+// A nil dialer means the connection cannot be rebuilt, which is the honest
+// answer for a caller that handed over a pair of streams it has no second copy
+// of.
+type FishDialer func(ctx context.Context) (io.Writer, io.Reader, io.Closer, error)
+
 type fishConn struct {
 	client *fishplus.Client
 	ka     *fishplus.Keepalive
+	dial   FishDialer
 
 	mu     sync.Mutex
 	refs   int
 	closed bool
+}
+
+// ErrNoDialer is what a reconnect answers when nobody told the connection how
+// to rebuild itself.
+var ErrNoDialer = errors.New("fishplus: this session cannot be reconnected")
+
+// current hands out the client under the lock, so a caller that took one before
+// a reconnect and used it after does not talk to the session that died.
+func (c *fishConn) current() *fishplus.Client {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.client
+}
+
+// reconnect replaces a dead session with a new one and reports the client that
+// took its place. The new shell knows nothing of what the old one was doing:
+// its jobs are gone, and a write or a patch that was in flight cannot be
+// resumed, only reported. What survives is what lives on this side — the path a
+// panel stands in, a read handle, and the credentials the dialer holds.
+//
+// A caller that lost a race and finds the session already replaced gets the
+// replacement rather than a second reconnect, which is why the check happens
+// under the lock and the client it saw is the thing compared.
+func (c *fishConn) reconnect(ctx context.Context, dead *fishplus.Client) (*fishplus.Client, error) {
+	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		return nil, fishplus.ErrBroken
+	}
+	if dead != nil && c.client != dead {
+		fresh := c.client
+		c.mu.Unlock()
+		return fresh, nil
+	}
+	dial := c.dial
+	c.mu.Unlock()
+
+	if dial == nil {
+		return nil, ErrNoDialer
+	}
+
+	// Dialling and the handshake happen outside the lock: both take as long as
+	// the network takes, and holding the lock would stall every other view of
+	// this connection for that whole time.
+	stdin, stdout, closer, err := dial(ctx)
+	if err != nil {
+		return nil, err
+	}
+	sess := fishplus.NewSession(stdin, stdout, closer)
+	if err := sess.Handshake(ctx); err != nil {
+		sess.Close()
+		return nil, err
+	}
+	client := fishplus.NewClient(sess)
+	// One round trip before anything is promised: a handshake that answered
+	// says the helper is there, and a noop says the request loop is running.
+	if err := sess.Noop(ctx); err != nil {
+		sess.Close()
+		return nil, err
+	}
+
+	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		sess.Close()
+		return nil, fishplus.ErrBroken
+	}
+	if dead != nil && c.client != dead {
+		// Somebody else reconnected while this one was dialling. Theirs is as
+		// good as this one and is already in use, so this one is dropped.
+		fresh := c.client
+		c.mu.Unlock()
+		sess.Close()
+		return fresh, nil
+	}
+	old, oldKA := c.client, c.ka
+	c.client = client
+	c.ka = fishplus.StartKeepalive(client, fishplus.DefaultKeepaliveInterval)
+	c.mu.Unlock()
+
+	oldKA.Stop()
+	if old != nil {
+		old.Session().Close()
+	}
+	return client, nil
 }
 
 func (c *fishConn) retain() {
@@ -81,6 +180,25 @@ func (c *fishConn) release() error {
 // started in. closer may be nil; when set it is closed together with the
 // session, which is also what makes the remote helper exit.
 func NewFishVFSOnStream(ctx context.Context, parent vfs.VFS, stdin io.Writer, stdout io.Reader, closer io.Closer, title string) (*FishVFS, error) {
+	return newFishVFSOnStream(ctx, parent, stdin, stdout, closer, title, nil)
+}
+
+// NewFishVFSOnDialer builds a session the same way and remembers how to build
+// it again, which is what a reconnect needs. The dialer is called once here so
+// that a site that cannot be reached fails at open time rather than at the
+// first request.
+func NewFishVFSOnDialer(ctx context.Context, parent vfs.VFS, dial FishDialer, title string) (*FishVFS, error) {
+	if dial == nil {
+		return nil, ErrNoDialer
+	}
+	stdin, stdout, closer, err := dial(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return newFishVFSOnStream(ctx, parent, stdin, stdout, closer, title, dial)
+}
+
+func newFishVFSOnStream(ctx context.Context, parent vfs.VFS, stdin io.Writer, stdout io.Reader, closer io.Closer, title string, dial FishDialer) (*FishVFS, error) {
 	sess := fishplus.NewSession(stdin, stdout, closer)
 	if err := sess.Handshake(ctx); err != nil {
 		sess.Close()
@@ -98,6 +216,7 @@ func NewFishVFSOnStream(ctx context.Context, parent vfs.VFS, stdin io.Writer, st
 			client: client,
 			refs:   1,
 			ka:     fishplus.StartKeepalive(client, fishplus.DefaultKeepaliveInterval),
+			dial:   dial,
 		},
 		path:  cwd,
 		title: title,
