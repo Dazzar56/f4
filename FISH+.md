@@ -30,6 +30,7 @@ Operations like calculating directory sizes, finding duplicate files, or complex
     *   `session.go` — handshake, request/response framing, feature detection.
     *   `fs.go` — listing and metadata parsers for every backend.
     *   `read.go` — ranged reads and the cached file handle.
+    *   `write.go` — ranged writes, truncation and the buffering write handle.
     *   `mutate.go` — directory and metadata mutations.
 *   `plugins/netfox/fish_vfs.go` — the `vfs.VFS` implementation, registered as the `fish+` protocol of the NetFox connection manager. A plain `fish` type is accepted as a synonym.
 *   `plugins/netfox/ssh_dial.go` — the SSH dialer shared with the SFTP backend.
@@ -90,13 +91,18 @@ Everything printed before that line (motd, shell warnings, login banners) is dis
 *   `linfo` + path — metadata of the link itself.
 *   `rdlink` + path — the target of a symlink.
 *   `read <offset> <length>` + path — a byte range, `length` zero meaning "to the end of the file".
+*   `write <offset> <length> raw|b64` + path + payload — the same range in the other direction; the payload follows the path line and is described below.
+*   `trunc <size>` + path — sets the size of a file, creating an empty one where there was none.
 *   `mkdir` + path — creates a directory and its missing parents.
 *   `rm`, `rmdir`, `rmtree` + path — a file, an empty directory, a whole tree.
 *   `mv` + two paths — the first command that reads more than one path line.
 *   `chmod <octal>` + path — the mode is checked for being octal before it reaches the remote `chmod`.
+*   `chown <uid> <gid>` + path — either half may be `-`, meaning "leave it alone".
+*   `utime <mtime> <atime>` + path — epoch seconds, either of them `-` for "leave it alone".
 Every mutation refuses a path that is not absolute or that carries a `..` component, and the root directory itself. The client always sends absolute paths, so the rule costs nothing in normal use; it is there because `rmtree` turns one mistake in path assembly into a lot of lost data, and because a check the remote host performs holds even when the client is the thing that went wrong. A name that merely begins with dots is not a `..` component and stays usable.
 *   `mode <name>` — forces a metadata backend instead of the auto-detected one; for tests and for troubleshooting.
 *   `rmode <name>` — the same for the read backend.
+*   `wmode <name>` — the same for the write backend.
 *   `exit` — makes the helper leave its loop.
 
 ### Metadata backends
@@ -124,6 +130,32 @@ Which tool does the reading is detected as well, and reported as `read:<name>`:
 
 The offset is clamped against the size the helper just read, so the frame length is exact and the stream stays in sync.
 
+### Writing
+
+The payload of a `write` follows the path line and carries no terminator of its own: the helper reads exactly as many bytes as the request announced. One byte too few or too many and the remote shell parses the rest of a file as commands, so the entire design of this step is about who counts those bytes and what happens when the count cannot be kept.
+
+Which tool does the counting is detected during the handshake and reported as `write:<n>`:
+
+1.  **ddbytes** — `dd bs=1M iflag=fullblock,count_bytes count=LEN oflag=seek_bytes seek=OFF conv=notrunc`. One process, any offset, any length; `fullblock` is what makes it stop on the exact byte while still reading whole blocks, because a short read from a socket must not end the copy. GNU and recent BusyBox only.
+2.  **b64** — the client sends a single line of base64 and the helper reads it with the shell's own `read`, which cannot overshoot: a line ends where its newline is. Positioning is then a plain `dd` on the largest power of two dividing both the offset and the length, the same arithmetic the read path uses. It costs a third more traffic and is still the better choice on a host without GNU dd.
+3.  **ddbs1** — `dd bs=1 count=LEN seek=OFF conv=notrunc`, exact because a one byte read cannot come back short, but a syscall per byte. It is never picked automatically; `wmode` selects it for a host where the other two misbehave.
+
+A range starting past the end of the file leaves a hole, and nothing after the written range is touched — which is what the delta based saving of step 8 will need.
+
+`trunc` sets a size. Zero is a shell redirection and therefore works everywhere, including on a file that does not exist yet; any other size needs the `truncate` utility, announced as the `truncate` feature. `Create` truncates to zero and then writes forward, so the common case never depends on it.
+
+#### When a write fails
+
+A refusal the helper can see coming — a directory, a path it may not write, a bad range — is answered only *after* the payload has been read into `/dev/null`, because a failed request must still leave the stream where the next request expects it. Such a reply carries a `D` line and the client treats the session as healthy.
+
+A write that dies in the middle — the disk fills up, the medium fails — leaves an unknown number of bytes on the wire, and no amount of guessing on the client side can recover them. There is no `D` line then, and the client marks the session broken so that it gets reconnected instead of quietly writing the rest of the payload into the next file. Step 10 is where a broken session learns to resynchronize instead.
+### Ownership and timestamps
+
+`chown` is the easy half: a numeric `uid:gid` pair, either side of it droppable, and one utility that behaves the same everywhere.
+
+Timestamps are not. GNU `touch` takes an epoch as `-d @1400000000`; BSD and macOS have never accepted that and want `-t YYYYMMDDhhmm.SS` — in the *local* time of the host, which is exactly the one thing the client cannot compute for it. So the conversion happens on the remote side: the helper tries GNU form first, and if it is refused it asks the host's own `date` to render the epoch, `date -r` for BSD and `date -d @` for GNU, and feeds the result to `touch -t`. The `date -r` attempt is skipped when a file with that name exists in the current directory, because GNU `date` reads `-r` as "reference file" and would then quietly report that file's time instead.
+
+Setting both times is one `touch`; setting them to different values is two, `-m` and then `-a`, because that is all POSIX `touch` offers. A caller that wants neither pays no round trip at all.
 ### Known limitations of v1
 
 *   The remote host must provide a base64 decoder (`base64` or `openssl`), even though almost no request needs one: the handshake refuses hosts without it because a path with a newline would otherwise be unreachable. Dropping that requirement for hosts that never see such a path is possible later.
@@ -132,9 +164,16 @@ The offset is clamped against the size the helper just read, so the frame length
 *   A listing carries file names on a line each, so a name containing a newline shows up truncated in a directory listing, exactly as in classic fish. Operating on such a file still works, because paths going the other way are escaped.
 *   Cancelling a request while its response is being read desynchronizes the stream, so the session is marked broken and has to be reconnected. Proper mid-request cancellation is a separate step of the plan.
 *   Two panels sharing one session — which is what `Clone` gives them — take turns rather than working in parallel, because the remote shell answers one command at a time. That also means a cancellation in one panel breaks the session for the other until step 10 makes cancellation recoverable.
-*   `SetAttributes` applies the permission bits only. Ownership and timestamps arrive with step 5b, which is also where the portable `touch` invocation gets worked out.
+*   `SetAttributes` follows the SFTP backend: a `Uid` or `Gid` of -1 means "leave the ownership alone", and a zero-valued `VFSItem` therefore asks for `chown 0:0` rather than for nothing. Callers with nothing to change have to say so with -1, which is what the copier does.
 *   In the `stat` and `statbsd` backends a directory is listed through a shell glob, so a directory with very many entries can exceed the argument limit, and a symlink is reported without the type of its target until the user enters it.
 *   Hosts with neither GNU find, nor GNU stat, nor BSD stat cannot be listed at all yet.
+*   A host without `dd` cannot be written to at all, and the client refuses to send a payload it knows the remote side cannot take off the wire.
+*   The `b64` backend puts a third more bytes on the wire and makes the remote shell read them one syscall per byte, which is why the client sends it smaller chunks than a raw backend.
+*   Shrinking a file to a non-zero size needs the `truncate` utility; without it only truncation to zero is possible.
+*   A raw payload assumes a binary safe transport. The ssh backend asks for no pseudo terminal, so this holds there; a caller supplying its own terminal backed stream has to select `wmode b64` by hand for now.
+*   A host with a `touch` that takes neither `-d @epoch` nor `-t`, or with no `date` able to render an epoch, cannot have its timestamps set. The helper says so instead of writing the wrong time.
+*   Times are set with a resolution of one second, because that is what `touch -t` carries. The sub-second part a listing reports is therefore lost on a copy.
+*   `chown` follows symlinks, so setting the ownership of a symlink changes its target instead. Doing it the other way round needs `chown -h`, which not every host has.
 
 ## Roadmap
 
@@ -149,12 +188,14 @@ The offset is clamped against the size the helper just read, so the frame length
 *   **Step 4b — transport and registration.** `DialSSH` now carries the agent, key and password logic for both SSH backends, and a FISH+ site opens a shell with no pseudo terminal attached, running `exec /bin/sh` so that a csh or fish login shell cannot get in the way. The protocol is registered as `fish+`, with the plain `fish` type accepted as a synonym.
 
 *   **Step 5a — mutations.** `mkdir`, `rm`, `rmdir`, `rmtree`, `mv` and `chmod`, and the `FishVFS` methods on top of them. A recursive delete is one round trip rather than one per entry, because the remote host does the walking. `Create` is now the only method that still refuses.
+*   **Step 5b — writing file content.** The `write` command with an offset and a length, three write backends with runtime switching through `wmode`, `trunc`, and a buffering `Writer` on the client side. A refused request still drains its payload and says so with a `D` line; a write that fails halfway does not, and marks the session broken rather than letting it desynchronize.
+*   **Step 5c — the writing VFS.** `FishVFS.Create` on top of `Writer`, plus `chown` and a `touch` that works on GNU and on BSD alike by letting the remote host convert the epoch into its own local time. `SetAttributes` now carries mode, ownership and timestamps, so a file copied onto a FISH+ panel arrives with the attributes it had. Nothing in the VFS refuses any more, and `ErrFishReadOnly` is gone.
 
 ### To do
 
 The order below is chosen so that something usable arrives as early as possible: after step 4 a user can already browse, view and download.
 
-*   **Step 5b — writing file content.** `write` with an offset, raw through `dd` and never through `head -c`, which on macOS swallows the rest of the stream and would eat the following request; base64 only as the last resort. Then `FishVFS.Create`, plus `chown` and a portable `touch` to finish `SetAttributes`.
+*   **Step 5d — the copier's silent `Close`.** `copyFileWithVFS` closes the destination in a `defer` and drops the error, so the last partial chunk of any buffered writer can fail unnoticed — this is not specific to FISH+, it affects every VFS that buffers. Fixing it touches `file_ops.go` and has to be judged against the other backends, so it is a step of its own rather than a footnote of this one.
 *   **Step 6 — odd hosts.** The `ls -l` fallback backend and whatever else the compatibility issue turns up; `tools/fishplus_probe.sh` collects the raw material.
 *   **Step 7 — FISH+ proper, part 1.** Server-side `grep` feeding `VFS.Search` with byte offsets; server-side line index for the viewer and the editor.
 *   **Step 8 — FISH+ proper, part 2.** Delta based saving: PieceTable edits applied remotely instead of re-uploading the file.
@@ -168,6 +209,8 @@ The order below is chosen so that something usable arrives as early as possible:
 
 The tests whose names end in `AgainstLocalShell`, together with `TestFileReadAtAndCache` and the `FishVFS` tests in the `netfox` package, run the real helper in a local `/bin/sh`. That is the only kind of test that proves the shell side and the Go side agree on the wire format, and it walks every backend the test machine provides, one subtest each. They skip themselves on Windows and on hosts without a shell or without base64.
 
+Every write test ends with a `ping` on purpose. Only what the session answers *after* a refused write can show that the payload really left the wire; a test that just checks the error would pass on a helper that desynchronizes the stream.
+The timestamp tests run twice: once against the tools the machine has, and once with stubs in front of `touch` and `date` that refuse `-d` and answer `-r`, the way macOS does. Without the second run the BSD branch would never be executed on a GNU build machine, and a mistake in it would only surface on a user's Mac.
 ### What the compatibility issue changed
 
 Issue #316 collects probe output from hosts we do not own. The first three reports (macOS 26 on arm64, Git for Windows/MSYS2, Ubuntu under WSL2) already paid for themselves:

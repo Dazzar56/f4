@@ -214,7 +214,12 @@ func TestFishVFSMutations(t *testing.T) {
 		t.Fatalf("Rename did not produce %q: %v", moved, err)
 	}
 
-	if err := v.SetAttributes(ctx, moved, vfs.VFSItem{UnixMode: 0100600}); err != nil {
+	// Mode, ownership and timestamps in one call, which is what the copier
+	// does once a file has arrived. A negative uid and gid mean the copier's
+	// "keep whatever the remote host decided".
+	stamp := time.Unix(1400000000, 0)
+	attrs := vfs.VFSItem{UnixMode: 0100600, Uid: -1, Gid: -1, MTime: stamp}
+	if err := v.SetAttributes(ctx, moved, attrs); err != nil {
 		t.Fatalf("SetAttributes: %v", err)
 	}
 	info, err := os.Stat(moved)
@@ -224,13 +229,55 @@ func TestFishVFSMutations(t *testing.T) {
 	if info.Mode().Perm() != 0600 {
 		t.Errorf("mode = %o, want 600", info.Mode().Perm())
 	}
-	// An item carrying no mode must leave the file alone.
-	if err := v.SetAttributes(ctx, moved, vfs.VFSItem{}); err != nil {
+	if info.ModTime().Unix() != stamp.Unix() {
+		t.Errorf("mtime = %v, want %v", info.ModTime(), stamp)
+	}
+	if item, err := v.Stat(ctx, moved); err != nil {
+		t.Errorf("Stat after SetAttributes: %v", err)
+	} else if item.MTime.Unix() != stamp.Unix() {
+		t.Errorf("mtime seen through the panel = %v, want %v", item.MTime, stamp)
+	}
+	// An item carrying nothing to set must leave the file alone.
+	if err := v.SetAttributes(ctx, moved, vfs.VFSItem{Uid: -1, Gid: -1}); err != nil {
 		t.Errorf("SetAttributes with nothing to set: %v", err)
 	}
+	if info, err = os.Stat(moved); err != nil || info.Mode().Perm() != 0600 {
+		t.Errorf("mode after an empty SetAttributes = %v (%v)", info.Mode().Perm(), err)
+	}
 
-	if _, err := v.Create(ctx, filepath.Join(dir, "brand new")); err != ErrFishReadOnly {
-		t.Errorf("Create = %v, want ErrFishReadOnly until step 5b", err)
+	created := filepath.Join(dir, "brand new.txt")
+	w, err := v.Create(ctx, created)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if _, err := w.Write([]byte("first line\n")); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if _, err := w.Write([]byte("second line\n")); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if got, err := os.ReadFile(created); err != nil || string(got) != "first line\nsecond line\n" {
+		t.Fatalf("created file = %q (%v)", got, err)
+	}
+	// Creating an existing file truncates it, so a shorter second round must
+	// not leave the tail of the first one behind.
+	if w, err = v.Create(ctx, created); err != nil {
+		t.Fatalf("Create again: %v", err)
+	}
+	if _, err := w.Write([]byte("short")); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if got, err := os.ReadFile(created); err != nil || string(got) != "short" {
+		t.Fatalf("recreated file = %q (%v)", got, err)
+	}
+	if item, err := v.Stat(ctx, created); err != nil || item.Size != 5 {
+		t.Errorf("Stat after Create = %+v (%v)", item, err)
 	}
 
 	// Remove takes the whole tree, the file inside it included.

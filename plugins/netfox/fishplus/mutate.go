@@ -3,6 +3,7 @@ package fishplus
 import (
 	"context"
 	"strconv"
+	"time"
 )
 
 // MkDir creates a directory and any missing parent of it, so a caller does
@@ -64,4 +65,46 @@ func (c *Client) Chmod(ctx context.Context, p string, mode uint32) error {
 		return err
 	}
 	return resp.Err("chmod " + p)
+}
+
+// Chown changes ownership. A negative uid or gid leaves that half alone, and
+// a request that would change neither costs no round trip at all.
+func (c *Client) Chown(ctx context.Context, p string, uid, gid int) error {
+	if uid < 0 && gid < 0 {
+		return nil
+	}
+	resp, err := c.sess.ExecPath(ctx, "chown", p, ownerArg(uid), ownerArg(gid))
+	if err != nil {
+		return err
+	}
+	return resp.Err("chown " + p)
+}
+
+func ownerArg(id int) string {
+	if id < 0 {
+		return "-"
+	}
+	return strconv.Itoa(id)
+}
+
+// Chtimes sets the modification and access times. A zero time leaves that
+// timestamp alone; so does a time before the epoch, which no remote touch
+// can be relied upon to express.
+func (c *Client) Chtimes(ctx context.Context, p string, mtime, atime time.Time) error {
+	m, a := epochArg(mtime), epochArg(atime)
+	if m == "-" && a == "-" {
+		return nil
+	}
+	resp, err := c.sess.ExecPath(ctx, "utime", p, m, a)
+	if err != nil {
+		return err
+	}
+	return resp.Err("utime " + p)
+}
+
+func epochArg(t time.Time) string {
+	if t.IsZero() || t.Unix() < 0 {
+		return "-"
+	}
+	return strconv.FormatInt(t.Unix(), 10)
 }

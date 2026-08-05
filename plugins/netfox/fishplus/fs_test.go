@@ -116,6 +116,14 @@ func TestParseListingRejectsMissingMarker(t *testing.T) {
 // newLocalShellClient starts the real helper in a local POSIX shell.
 func newLocalShellClient(t *testing.T) *Client {
 	t.Helper()
+	return newLocalShellClientEnv(t)
+}
+
+// newLocalShellClientEnv is the same with extra environment entries. That is
+// how a host with different tools is simulated: a PATH pointing at stubs
+// makes the helper take the branch a macOS or BSD box would take.
+func newLocalShellClientEnv(t *testing.T, extraEnv ...string) *Client {
+	t.Helper()
 	if runtime.GOOS == "windows" {
 		t.Skip("no POSIX shell on Windows")
 	}
@@ -124,6 +132,9 @@ func newLocalShellClient(t *testing.T) *Client {
 		t.Skip("no POSIX shell available")
 	}
 	cmd := exec.Command(shell)
+	if len(extraEnv) > 0 {
+		cmd.Env = append(os.Environ(), extraEnv...)
+	}
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		t.Fatalf("stdin: %v", err)

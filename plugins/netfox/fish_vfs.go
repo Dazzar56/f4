@@ -3,7 +3,6 @@ package netfox
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"os"
 	"path"
@@ -17,11 +16,6 @@ import (
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 )
-
-// ErrFishReadOnly is what every mutation answers until step 5 of the FISH+
-// plan lands. It is deliberately not os.ErrPermission: the remote host is
-// not refusing anything, this build simply cannot write yet.
-var ErrFishReadOnly = errors.New("fish: this build of FISH+ is read only")
 
 // fishReadDirChunk is how many entries are handed to the panel at once,
 // matching what the SFTP backend does.
@@ -304,18 +298,40 @@ func (v *FishVFS) Rename(ctx context.Context, o, n string) error {
 	return v.client.Rename(ctx, v.abs(o), v.abs(n))
 }
 
-// Create still refuses: sending file content is step 5b.
+// Create truncates the file, or creates it, and hands back a handle that
+// streams from the beginning. The handle buffers up to one transfer chunk,
+// so the copier's small writes do not each become a round trip.
 func (v *FishVFS) Create(ctx context.Context, p string) (io.WriteCloser, error) {
-	return nil, ErrFishReadOnly
+	w, err := v.client.Create(ctx, v.abs(p))
+	if err != nil {
+		return nil, err
+	}
+	return w, nil
 }
 
-// SetAttributes applies the permission bits. Ownership needs a remote chown
-// and the timestamps need a portable touch, both of which wait for step 5b.
+// SetAttributes applies the permission bits, then the ownership, then the
+// timestamps. A Uid or Gid below zero means "leave that half alone", which
+// is what the copier passes; a zero timestamp is filled in from the other
+// one, the same way the SFTP backend does it, so a file copied onto a FISH+
+// panel keeps the times it had.
 func (v *FishVFS) SetAttributes(ctx context.Context, p string, item vfs.VFSItem) error {
-	if item.UnixMode == 0 {
-		return nil
+	target := v.abs(p)
+	if item.UnixMode != 0 {
+		if err := v.client.Chmod(ctx, target, item.UnixMode); err != nil {
+			return err
+		}
 	}
-	return v.client.Chmod(ctx, v.abs(p), item.UnixMode)
+	if err := v.client.Chown(ctx, target, item.Uid, item.Gid); err != nil {
+		return err
+	}
+	mtime, atime := item.MTime, item.ATime
+	if mtime.IsZero() {
+		mtime = atime
+	}
+	if atime.IsZero() {
+		atime = mtime
+	}
+	return v.client.Chtimes(ctx, target, mtime, atime)
 }
 
 func (v *FishVFS) ParentVFS() vfs.VFS { return v.parent }

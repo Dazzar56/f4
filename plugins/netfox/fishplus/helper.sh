@@ -210,7 +210,7 @@ for f4c in ddbytes b64; do
 done
 
 F4FEATS=
-for f4c in dd base64 readlink du grep sed awk wc head tail stty truncate sha256sum; do
+for f4c in dd base64 readlink du grep sed awk wc head tail stty truncate chown touch date sha256sum; do
  f4_have $f4c && F4FEATS="$F4FEATS $f4c"
 done
 for f4c in find stat statbsd; do
@@ -500,6 +500,100 @@ f4_cmd_trunc() {
  fi
 }
 
+# A timestamp is where remote hosts disagree most quietly. GNU touch takes an
+# epoch directly; BSD and macOS want a local time string, so the epoch has to
+# be converted on the remote host itself -- only it knows its own time zone,
+# and touch -t reads local time. The guard on date -r is there because GNU
+# date reads -r as "reference file": without it, a file whose name happens to
+# be the epoch number would silently supply the wrong timestamp.
+f4_epoch_fmt() {
+ F4TS=
+ if [ ! -e "$1" ]; then
+  F4TS=`date -r "$1" +%Y%m%d%H%M.%S 2>/dev/null`
+  case $F4TS in
+   '' | *[!0-9.]* ) F4TS= ;;
+  esac
+ fi
+ if [ -z "$F4TS" ]; then
+  F4TS=`date -d "@$1" +%Y%m%d%H%M.%S 2>/dev/null`
+  case $F4TS in
+   '' | *[!0-9.]* ) F4TS= ;;
+  esac
+ fi
+}
+
+f4_touch() {
+ touch $1 -d "@$2" -- "$3" 2>/dev/null && return 0
+ f4_epoch_fmt "$2"
+ if [ -z "$F4TS" ]; then
+  echo "cannot express timestamp $2 on this host" >&2
+  return 1
+ fi
+ touch $1 -t "$F4TS" -- "$3"
+}
+
+f4_utime_ok() {
+ [ "$1" = - ] && return 0
+ f4_num "$1"
+}
+
+f4_cmd_utime() {
+ f4_path
+ f4_guard "$F4PATH" || return
+ if ! f4_have touch; then
+  f4_end err "no touch utility on remote host"
+  return
+ fi
+ if ! f4_utime_ok "$1" || ! f4_utime_ok "$2"; then
+  f4_end err "bad timestamp"
+  return
+ fi
+ if [ "$1" = - ] && [ "$2" = - ]; then
+  f4_end err "nothing to change"
+  return
+ fi
+ F4RV=0
+ F4OUT=
+ if [ "$1" = "$2" ]; then
+  F4OUT=$(f4_touch '' "$1" "$F4PATH" 2>&1)
+  F4RV=$?
+ else
+  if [ "$1" != - ]; then
+   F4OUT=$(f4_touch -m "$1" "$F4PATH" 2>&1)
+   F4RV=$?
+  fi
+  if [ $F4RV -eq 0 ] && [ "$2" != - ]; then
+   F4OUT=$(f4_touch -a "$2" "$F4PATH" 2>&1)
+   F4RV=$?
+  fi
+ fi
+ f4_end_rv $F4RV "$F4OUT"
+}
+
+f4_cmd_chown() {
+ f4_path
+ f4_guard "$F4PATH" || return
+ if ! f4_have chown; then
+  f4_end err "no chown utility on remote host"
+  return
+ fi
+ F4SPEC=
+ case $1 in
+  - ) ;;
+  '' | *[!0-9]* ) f4_end err "bad uid"; return ;;
+  * ) F4SPEC=$1 ;;
+ esac
+ case $2 in
+  - ) ;;
+  '' | *[!0-9]* ) f4_end err "bad gid"; return ;;
+  * ) F4SPEC=$F4SPEC:$2 ;;
+ esac
+ if [ -z "$F4SPEC" ]; then
+  f4_end err "nothing to change"
+  return
+ fi
+ f4_do chown "$F4SPEC" -- "$F4PATH"
+}
 f4_cmd_wmode() {
  if f4_try_wmode "$1"; then
   F4WR=$1
@@ -599,6 +693,12 @@ while :; do
    ;;
   trunc )
    f4_cmd_trunc "$F4A1"
+   ;;
+  utime )
+   f4_cmd_utime "$F4A1" "$F4A2"
+   ;;
+  chown )
+   f4_cmd_chown "$F4A1" "$F4A2"
    ;;
   wmode )
    f4_cmd_wmode "$F4A1"
