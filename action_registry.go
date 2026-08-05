@@ -114,6 +114,17 @@ func GetAction(name string) (Action, bool) {
 	return a, ok
 }
 
+// cursorOnParent reports whether the panel's cursor sits on the ".."
+// (parent-directory) entry — used by the far2l Ins clipboard shortcuts
+// that treat this position as the current folder itself.
+func cursorOnParent(fsp *FileSystemPanel) bool {
+	if fsp == nil {
+		return false
+	}
+	idx := fsp.GetCursorIndex()
+	return idx >= 0 && idx < len(fsp.entries) && fsp.entries[idx].Name == ".."
+}
+
 // plainLabel strips hotkey markers ('&') from a menu label for contexts
 // that cannot render them (keybar, plain lists). '&&' unescapes to '&'.
 func plainLabel(s string) string {
@@ -306,7 +317,7 @@ func init() {
 		LabelKey:    "Menu.Files.Delete",
 		Description: "Delete selected files",
 		DescKey:     "Action.File.Delete.Desc",
-		DefaultKeys: []string{"F8"},
+		DefaultKeys: []string{"F8", "ShiftDel", "ShiftNumDel"},
 		MenuPath:    "Files",
 		Handler:     withPF(func(pf *PanelsFrame) { actionDelete(pf) }),
 	})
@@ -420,6 +431,21 @@ func init() {
 		Handler: withPF(func(pf *PanelsFrame) {
 			if fsp := pf.getActivePanel(); fsp != nil {
 				fsp.InvertSelection()
+			}
+		}),
+	})
+	RegisterAction(Action{
+		Name:        "Panel.RestoreSelection",
+		Area:        "Shell",
+		Label:       "Restore Selection",
+		LabelKey:    "Action.Panel.RestoreSelection",
+		Description: "Restore the previous selection state",
+		DescKey:     "Action.Panel.RestoreSelection.Desc",
+		DefaultKeys: []string{"CtrlM"},
+		MenuPath:    "Files",
+		Handler: withPF(func(pf *PanelsFrame) {
+			if fsp := pf.getActivePanel(); fsp != nil {
+				fsp.RestoreSelection()
 			}
 		}),
 	})
@@ -585,10 +611,16 @@ func init() {
 		Handler: withPF(func(pf *PanelsFrame) {
 			if fsp := pf.getActivePanel(); fsp != nil {
 				idx := fsp.GetCursorIndex()
-				if idx >= 0 && idx < len(fsp.entries) {
-					if entry := fsp.entries[idx]; entry.Name != ".." {
-						vtui.SetClipboard(fsp.vfs.Join(fsp.vfs.GetPath(), entry.Name))
-					}
+				if idx < 0 || idx >= len(fsp.entries) {
+					return
+				}
+				base := fsp.vfs.GetPath()
+				if entry := fsp.entries[idx]; entry.Name == ".." {
+					// far2l: cursor on ".." acts as the current folder itself
+					// (matches CreateFullPathName(".", …) in far2l's KEY_CTRLF branch).
+					vtui.SetClipboard(base)
+				} else {
+					vtui.SetClipboard(fsp.vfs.Join(base, entry.Name))
 				}
 			}
 		}),
@@ -605,11 +637,105 @@ func init() {
 		Handler: withPF(func(pf *PanelsFrame) {
 			if fsp := pf.getActivePanel(); fsp != nil {
 				idx := fsp.GetCursorIndex()
-				if idx >= 0 && idx < len(fsp.entries) {
-					if entry := fsp.entries[idx]; entry.Name != ".." {
-						vtui.SetClipboard(entry.Name)
-					}
+				if idx < 0 || idx >= len(fsp.entries) {
+					return
 				}
+				name := fsp.entries[idx].Name
+				if name == ".." {
+					// far2l docs: with the cursor on ".." this hotkey
+					// treats it as the name of the current folder.
+					// Mirrors far2l's PointToName(GetCurDir()) branch
+					// in FileList::CopyNames() (FullPathName=false).
+					name = fsp.vfs.Base(fsp.vfs.GetPath())
+				}
+				vtui.SetClipboard(name)
+			}
+		}),
+	})
+	RegisterAction(Action{
+		Name:        "Panel.CopySelectedNames",
+		Area:        "Shell",
+		Label:       "Copy Selected Names",
+		LabelKey:    "Action.Panel.CopySelectedNames",
+		Description: "Copy names of selected files to clipboard",
+		DescKey:     "Action.Panel.CopySelectedNames.Desc",
+		DefaultKeys: []string{"CtrlShiftIns"},
+		MenuPath:    "Commands",
+		Handler: withPF(func(pf *PanelsFrame) {
+			if fsp := pf.getActivePanel(); fsp != nil {
+				if names := fsp.GetSelectedNames(); len(names) > 0 {
+					// SetClipboard can block up to ~4s on far2l IPC or
+					// while shelling out to xclip/wl-copy — do it off the
+					// UI goroutine (matches Grabber's copyAndExit).
+					go vtui.SetClipboard(strings.Join(names, "\n"))
+				}
+			}
+		}),
+	})
+	RegisterAction(Action{
+		Name:        "Panel.CopySelectedPaths",
+		Area:        "Shell",
+		Label:       "Copy Selected Paths",
+		LabelKey:    "Action.Panel.CopySelectedPaths",
+		Description: "Copy full paths of selected files to clipboard",
+		DescKey:     "Action.Panel.CopySelectedPaths.Desc",
+		DefaultKeys: []string{"AltShiftIns"},
+		MenuPath:    "Commands",
+		Handler: withPF(func(pf *PanelsFrame) {
+			if fsp := pf.getActivePanel(); fsp != nil {
+				base := fsp.vfs.GetPath()
+				names := fsp.GetSelectedNames()
+				if len(names) == 0 {
+					// far2l note: with the cursor on ".." this action
+					// treats it as the name of the current folder.
+					if cursorOnParent(fsp) {
+						go vtui.SetClipboard(base)
+					}
+					return
+				}
+				paths := make([]string, 0, len(names))
+				for _, n := range names {
+					paths = append(paths, fsp.vfs.Join(base, n))
+				}
+				go vtui.SetClipboard(strings.Join(paths, "\n"))
+			}
+		}),
+	})
+	RegisterAction(Action{
+		Name:        "Panel.CopySelectedRealPaths",
+		Area:        "Shell",
+		Label:       "Copy Selected Real Paths",
+		LabelKey:    "Action.Panel.CopySelectedRealPaths",
+		Description: "Copy full paths of selected files with symlink resolution",
+		DescKey:     "Action.Panel.CopySelectedRealPaths.Desc",
+		DefaultKeys: []string{"CtrlAltIns"},
+		MenuPath:    "Commands",
+		Handler: withPF(func(pf *PanelsFrame) {
+			if fsp := pf.getActivePanel(); fsp != nil {
+				base := fsp.vfs.GetPath()
+				_, isOS := fsp.vfs.(*vfs.OSVFS)
+				resolve := func(p string) string {
+					if isOS {
+						if r, err := filepath.EvalSymlinks(p); err == nil {
+							return r
+						}
+					}
+					return p
+				}
+				names := fsp.GetSelectedNames()
+				if len(names) == 0 {
+					// far2l note: with the cursor on ".." this action
+					// treats it as the name of the current folder.
+					if cursorOnParent(fsp) {
+						go vtui.SetClipboard(resolve(base))
+					}
+					return
+				}
+				paths := make([]string, 0, len(names))
+				for _, n := range names {
+					paths = append(paths, resolve(fsp.vfs.Join(base, n)))
+				}
+				go vtui.SetClipboard(strings.Join(paths, "\n"))
 			}
 		}),
 	})
@@ -1078,6 +1204,20 @@ func init() {
 			AppConfig.InfoPanelBytes = !AppConfig.InfoPanelBytes
 			RequestSaveConfig()
 			vtui.FrameManager.HardRefresh()
+		}),
+	})
+	RegisterAction(Action{
+		Name:        "Panel.ToggleHidden",
+		Area:        "Shell",
+		Label:       "Toggle Hidden",
+		LabelKey:    "Action.Panel.ToggleHidden",
+		Description: "Show or hide hidden and system files on both panels",
+		DescKey:     "Action.Panel.ToggleHidden.Desc",
+		DefaultKeys: []string{"CtrlH"},
+		Checked:     func() bool { return AppConfig.ShowHiddenFiles },
+		Handler: withPF(func(pf *PanelsFrame) {
+			AppConfig.ShowHiddenFiles = !AppConfig.ShowHiddenFiles
+			pf.RefreshAll()
 		}),
 	})
 	RegisterAction(Action{

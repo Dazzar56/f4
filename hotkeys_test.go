@@ -109,6 +109,25 @@ func TestHotkeyManager_GetKeyForAction(t *testing.T) {
 		t.Errorf("Expected F3, got %q", key)
 	}
 }
+func TestHotkeyManager_ShellDefaults_Issue289(t *testing.T) {
+	hm := NewHotkeyManager("")
+	hm.initDefaults()
+
+	cases := []struct {
+		key      string
+		expected string
+	}{
+		{"CtrlH", "Panel.ToggleHidden"},
+		{"ShiftDel", "File.Delete"},
+		{"ShiftNumDel", "File.Delete"},
+	}
+	for _, tc := range cases {
+		if got := hm.GetAction("Shell", tc.key); got != tc.expected {
+			t.Errorf("Shell/%s: expected %q, got %q", tc.key, tc.expected, got)
+		}
+	}
+}
+
 func TestHotkeyManager_Conditions(t *testing.T) {
 	hm := NewHotkeyManager("")
 	hm.initDefaults()
