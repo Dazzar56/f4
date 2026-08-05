@@ -486,4 +486,5 @@ KeyBar.ViewerF2=Wrap
 KeyBar.ViewerF3=Exit
 KeyBar.ViewerF4=Hex
 KeyBar.ViewerF7=Search
+KeyBar.ViewerAltF8=Goto
 KeyBar.ViewerF10=Quit

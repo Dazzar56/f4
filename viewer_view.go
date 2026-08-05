@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -441,6 +443,7 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 
 	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
+	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 	if e.VirtualKeyCode == vtinput.VK_TAB && ctrl {
 		return false
 	}
@@ -552,11 +555,69 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 	case vtinput.VK_END:
 		vv.jumpToEnd()
 		return true
+
+	case vtinput.VK_F8:
+		if alt {
+			vv.askGoto()
+			return true
+		}
 	}
 
 	return false
 }
 
+// askGoto prompts for a position. In text mode that is a line number, which
+// only means something once someone has counted the newlines; in hex mode it
+// is a byte offset, which needs no counting at all.
+func (vv *ViewerView) askGoto() {
+	title, prompt := " Go to line ", "Line number:"
+	if vv.HexMode {
+		title, prompt = " Go to offset ", "Byte offset:"
+	}
+	vtui.InputBoxOn(vv, title, prompt, "", func(s string) {
+		n, err := strconv.ParseInt(strings.TrimSpace(s), 10, 64)
+		if err != nil || n < 0 {
+			return
+		}
+		vv.gotoPosition(n)
+	})
+}
+
+func (vv *ViewerView) gotoPosition(n int64) {
+	if vv.HexMode {
+		size := vv.backend.Size()
+		if n >= size {
+			n = size - 1
+		}
+		if n < 0 {
+			n = 0
+		}
+		vv.TopOffset = n &^ 0xF
+		vtui.FrameManager.Redraw()
+		return
+	}
+
+	// Finding a line can mean a remote round trip or, on a file system that
+	// cannot index, a walk over the file, so it does not happen on the UI
+	// thread and the user can cancel it.
+	vv.Busy = true
+	vtui.RunAsync(func(ctx *vtui.TaskContext) {
+		off, ok := vv.backend.LineStart(ctx.Context, n)
+		ctx.RunOnUI(func() {
+			vv.Busy = false
+			if !ok {
+				if ctx.Err() == nil {
+					vtui.ShowMessageOn(vv, " Go to line ",
+						fmt.Sprintf("Line %d is past the end of the file.", n), []string{"&Ok"})
+				}
+				return
+			}
+			vv.TopOffset = off
+			vv.eofVisible = false
+			vtui.FrameManager.Redraw()
+		})
+	})
+}
 func (vv *ViewerView) jumpToEnd() {
 	contentHeight := int64(vv.Y2 - vv.Y1)
 	if vv.HexMode {
@@ -803,6 +864,9 @@ func (vv *ViewerView) GetKeyLabels() *vtui.KeySet {
 		Normal: vtui.KeyBarLabels{
 			Msg("KeyBar.ViewerF1"), Msg("KeyBar.ViewerF2"), Msg("KeyBar.ViewerF3"), Msg("KeyBar.ViewerF4"),
 			"", "", Msg("KeyBar.ViewerF7"), "", "", Msg("KeyBar.ViewerF10"),
+		},
+		Alt: vtui.KeyBarLabels{
+			"", "", "", "", "", "", "", Msg("KeyBar.ViewerAltF8"), "", "",
 		},
 	}
 	return KeyBarLabelsForArea("Viewer", fallbacks)

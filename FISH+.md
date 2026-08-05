@@ -101,6 +101,7 @@ Everything printed before that line (motd, shell warnings, login banners) is dis
 *   `utime <mtime> <atime>` + path — epoch seconds, either of them `-` for "leave it alone".
 *   `grep <mode> <limit>` + pattern + path — byte offsets of the matches, at most `limit` of them.
 *   `lidx <first> <count>` + path — where the given lines start, and how many lines the file has.
+*   `ffind <limit> <nmasks> <grep mode>` + a directory, one line per mask and, unless the mode is `-`, a pattern — every file in the tree whose name matches a mask, in the listing format with the full path in place of the name.
 Every mutation refuses a path that is not absolute or that carries a `..` component, and the root directory itself. The client always sends absolute paths, so the rule costs nothing in normal use; it is there because `rmtree` turns one mistake in path assembly into a lot of lost data, and because a check the remote host performs holds even when the client is the thing that went wrong. A name that merely begins with dots is not a `..` component and stays usable.
 *   `mode <name>` — forces a metadata backend instead of the auto-detected one; for tests and for troubleshooting.
 *   `rmode <name>` — the same for the read backend.
@@ -218,13 +219,15 @@ The pass is a full one — awk cannot know where line N starts without counting 
 
 *   **Step 7c — the viewer on top of it.** `vfs.LineIndexer` is an optional interface, so a local file system and an archive are not made to carry a method they cannot answer; `FishVFS` implements it over `Client.Lines`, and `ViewerBackend` asserts for it. What it buys is the jump to the end of a file: instead of reading back up to a megabyte and scanning all of it, the viewer asks where the last screenful of lines begins and reads exactly that. The line total is cached against the file size, so paging around a log that is not growing costs one round trip. Everything else the viewer does is byte based and needed no index at all.
 
+*   **Step 7d — the file search.** The `ffind` command, `Client.Find` and `vfs.FileFinder`, another optional interface. One request walks the whole tree on the remote host and, when the user asked for a text, greps the candidates in the same `find` pass, so a file is never downloaded only to be rejected. `ExecuteFindFile` uses it when the file system offers it and walks the tree itself otherwise, which is what a host without `find` or without `grep` falls back to.
+
+*   **Step 7e — go to line.** Alt+F8 in the viewer asks for a line number and `ViewerBackend.LineStart` finds it: through `vfs.LineIndexer` where the file system has one, by scanning otherwise. In hex mode the same key asks for a byte offset instead, which needs no counting. The scan reads through the file handle rather than the cache, so walking a file does not evict the window the viewer is drawing from.
+
 ### To do
 
 The order below is chosen so that something usable arrives as early as possible: after step 4 a user can already browse, view and download.
 
 *   **Step 6 — odd hosts.** The `ls -l` fallback backend and whatever else the compatibility issue turns up; `tools/fishplus_probe.sh` collects the raw material.
-*   **Step 7e — a goto line command.** The viewer has no way to jump to a line number, and the remote index now makes one cheap over ssh. It is a user visible feature with its own dialog and key binding rather than a wiring job, which is why it is listed separately.
-*   **Step 7d — file search function also should be offloaded to server.
 *   **Step 8 — FISH+ proper, part 2.** Delta based saving: PieceTable edits applied remotely instead of re-uploading the file.
 *   **Step 9 — FISH+ proper, part 3.** Background jobs (directory sizes, duplicate search, hashing) reporting progress through the f4 progress dialog.
 *   **Step 10 — resilience.** Mid-request cancellation and resynchronization without dropping the session, keepalive, automatic reconnect.

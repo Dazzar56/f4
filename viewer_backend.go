@@ -124,6 +124,62 @@ func (b *ViewerBackend) ReadAt(offset int64, length int) ([]byte, error) {
 	return nil, piecetable.ErrLoading
 }
 
+// LineStart reports the byte offset where the given one-based line begins.
+// A file system that can index lines answers it without moving the file; one
+// that cannot is scanned here, which for a remote file means downloading it,
+// so the caller runs this in a background task and lets the user cancel.
+//
+// The scan reads through the file handle rather than through ReadAt on
+// purpose: the cache is a window meant for what is on screen, and pushing a
+// whole file through it would evict exactly what the viewer is drawing.
+func (b *ViewerBackend) LineStart(ctx context.Context, line int64) (int64, bool) {
+	if line <= 1 {
+		return 0, true
+	}
+	if b.indexer != nil {
+		idx, err := b.indexer.LineIndex(ctx, b.path, line, 1)
+		if err == nil {
+			if len(idx.Offsets) > 0 {
+				return idx.Offsets[0], true
+			}
+			// The far side counted the file and the line is not in it.
+			if idx.Total >= 0 && line > idx.Total {
+				return 0, false
+			}
+		}
+	}
+
+	size := b.Size()
+	buf := make([]byte, 64*1024)
+	remaining := line - 1
+	var off int64
+	for off < size {
+		if ctx.Err() != nil {
+			return 0, false
+		}
+		n, err := b.file.ReadAt(ctx, buf, off)
+		for i := 0; i < n; i++ {
+			if buf[i] != '\n' {
+				continue
+			}
+			remaining--
+			if remaining == 0 {
+				start := off + int64(i) + 1
+				if start >= size {
+					// The newline that ends the file starts no line.
+					return 0, false
+				}
+				return start, true
+			}
+		}
+		off += int64(n)
+		if err != nil {
+			break
+		}
+	}
+	return 0, false
+}
+
 // LineStartFromEnd reports where the last n lines of the file begin, asking
 // the file system to do the counting. It answers false whenever that is not
 // possible — a local file, a file system without the feature, a remote host

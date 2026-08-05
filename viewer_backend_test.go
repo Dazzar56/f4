@@ -155,3 +155,61 @@ func TestViewerBackendLineStartFromEndFallsBack(t *testing.T) {
 		t.Error("a failing index was treated as an answer")
 	}
 }
+func TestViewerBackendLineStart(t *testing.T) {
+	dir := t.TempDir()
+	tmp := filepath.Join(dir, "test.txt")
+	content := "line1\nline2\nline3\n"
+	if err := os.WriteFile(tmp, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		line int64
+		want int64
+		ok   bool
+	}{
+		{0, 0, true}, {1, 0, true}, {2, 6, true}, {3, 12, true}, {4, 0, false}, {99, 0, false},
+	}
+
+	// Once through the index the file system provides, once through the scan
+	// that a file system without one falls back to. Both have to agree, or
+	// the same keystroke would land somewhere else depending on the backend.
+	indexed := &indexingVFS{VFS: vfs.NewOSVFS(dir), offsets: []int64{0, 6, 12}, total: 3}
+	for name, v := range map[string]vfs.VFS{"indexed": indexed, "scanned": vfs.NewOSVFS(dir)} {
+		vb, err := NewViewerBackend(context.Background(), v, tmp)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, tc := range cases {
+			got, ok := vb.LineStart(context.Background(), tc.line)
+			if ok != tc.ok || (ok && got != tc.want) {
+				t.Errorf("%s: LineStart(%d) = %d, %v; want %d, %v",
+					name, tc.line, got, ok, tc.want, tc.ok)
+			}
+		}
+		vb.Close()
+	}
+	if indexed.calls == 0 {
+		t.Error("the index was never asked")
+	}
+}
+
+func TestViewerBackendLineStartWithoutTrailingNewline(t *testing.T) {
+	dir := t.TempDir()
+	tmp := filepath.Join(dir, "test.txt")
+	if err := os.WriteFile(tmp, []byte("alpha\nomega"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	vb, err := NewViewerBackend(context.Background(), vfs.NewOSVFS(dir), tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer vb.Close()
+
+	if got, ok := vb.LineStart(context.Background(), 2); !ok || got != 6 {
+		t.Errorf("LineStart(2) = %d, %v; want 6, true", got, ok)
+	}
+	if _, ok := vb.LineStart(context.Background(), 3); ok {
+		t.Error("a line past the last one was found")
+	}
+}
