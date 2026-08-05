@@ -275,7 +275,8 @@ func actionEditFileExternal(pf *PanelsFrame, v vfs.VFS, path string, size int64)
 		if err != nil {
 			return err
 		}
-		defer dst.Close()
+		closeDst := closeOnce(dst)
+		defer closeDst()
 
 		buf := make([]byte, 128*1024)
 		var downloaded int64
@@ -302,7 +303,7 @@ func actionEditFileExternal(pf *PanelsFrame, v vfs.VFS, path string, size int64)
 				return err
 			}
 		}
-		return nil
+		return closeDst()
 	}, func(err error) {
 		if err != nil && err != context.Canceled {
 			vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to download file:\n%v", err), []string{"&Ok"})
@@ -336,7 +337,8 @@ func actionEditFileExternal(pf *PanelsFrame, v vfs.VFS, path string, size int64)
 				if err != nil {
 					return err
 				}
-				defer dst.Close()
+				closeDst := closeOnce(dst)
+				defer closeDst()
 
 				buf := make([]byte, 128*1024)
 				var uploaded int64
@@ -363,7 +365,7 @@ func actionEditFileExternal(pf *PanelsFrame, v vfs.VFS, path string, size int64)
 						return err
 					}
 				}
-				return nil
+				return closeDst()
 			}, func(err error) {
 				os.Remove(tmpPath)
 				if err != nil && err != context.Canceled {

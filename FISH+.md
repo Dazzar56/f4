@@ -214,11 +214,12 @@ The pass is a full one — awk cannot know where line N starts without counting 
 *   **Step 7a — remote search.** The `grep` command, `Client.Grep` and `FishVFS.Search`, with `HasSearch` finally true for one of f4's file systems. Only byte offsets cross the network, and the limit is enforced on the remote side rather than by disconnecting a flood.
 *   **Step 7b — the remote line index.** The `lidx` command and `Client.Lines`: the offsets of a range of lines and the total line count, from one remote `awk` pass and a few numbers on the wire.
 
+*   **Step 5d — a `Close` whose error is not dropped.** `closeOnce` lets the three places that write through a VFS close explicitly where the error matters and still keep a `defer` as a safety net. `recursiveCopy` now closes the destination before declaring success, so a failed last chunk removes the incomplete file instead of reporting a copy that did not happen; the download to the temporary file and the upload back after an external editor report it too. None of this is specific to FISH+, it affects every file system that buffers.
+
 ### To do
 
 The order below is chosen so that something usable arrives as early as possible: after step 4 a user can already browse, view and download.
 
-*   **Step 5d — the copier's silent `Close`.** `copyFileWithVFS` closes the destination in a `defer` and drops the error, so the last partial chunk of any buffered writer can fail unnoticed — this is not specific to FISH+, it affects every VFS that buffers. Fixing it touches `file_ops.go` and has to be judged against the other backends, so it is a step of its own rather than a footnote of this one.
 *   **Step 6 — odd hosts.** The `ls -l` fallback backend and whatever else the compatibility issue turns up; `tools/fishplus_probe.sh` collects the raw material.
 *   **Step 7c — the viewer on top of it.** `ViewerView` already renders from a byte offset through `ReadAt`, so a remote file is browsed in pieces today; what it still does by reading is jumping to the end and counting lines. Wiring those to `Client.Lines` needs a VFS-level hook, since `vfs.VFS` has no line index method yet, plus a per-file cache of the total so that one keystroke does not start a new remote pass. That interface question is what makes it a step of its own.
 *   **Step 7d — file search function also should be offloaded to server.
