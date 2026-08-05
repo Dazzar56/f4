@@ -2380,6 +2380,42 @@ func (ev *EditorView) getLineLength(line int) int {
 	return totalLen
 }
 
+// nopWriteCloser stands in for the destination handle when the file has
+// already been assembled by the file system itself.
+type nopWriteCloser struct{}
+
+func (nopWriteCloser) Write(p []byte) (int, error) { return len(p), nil }
+func (nopWriteCloser) Close() error                { return nil }
+
+// patchPiecesFromTable describes the edited text as pieces of the file on
+// disk plus the bytes that are new, which is exactly what a piece table is:
+// a piece pointing at the original buffer is a range of the file, and one
+// pointing at the add buffer is text the user typed.
+//
+// It is only meaningful while the original buffer still is the file. That
+// holds for a raw UTF-8 load; with any other codepage the buffer holds
+// decoded text whose offsets have nothing to do with the bytes on disk.
+func patchPiecesFromTable(pt *piecetable.PieceTable) ([]vfs.PatchPiece, bool) {
+	state := pt.GetState()
+	pieces := make([]vfs.PatchPiece, 0, len(state.Pieces))
+	logical := 0
+	for _, p := range state.Pieces {
+		if p.Buf == piecetable.Original {
+			pieces = append(pieces, vfs.PatchPiece{Offset: int64(p.Start), Length: int64(p.Length)})
+		} else {
+			data, err := pt.GetRange(logical, p.Length)
+			if err != nil {
+				return nil, false
+			}
+			pieces = append(pieces, vfs.PatchPiece{
+				Length: int64(len(data)),
+				Data:   append([]byte(nil), data...),
+			})
+		}
+		logical += p.Length
+	}
+	return pieces, true
+}
 func (ev *EditorView) SaveToFile(afterSave func()) {
 	if ev.filePath == "" || ev.vfs == nil || ev.saving {
 		return
@@ -2412,7 +2448,26 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 		var f io.WriteCloser
 		var err error
 
-		if useTemp {
+		// A file system that can assemble a file out of pieces of another
+		// one saves the unchanged parts from ever crossing the network. It
+		// needs a second path to build into, which the temp file already
+		// provides, and a buffer whose offsets still describe the file on
+		// disk, which is only true for a raw UTF-8 load.
+		saved := false
+		if delta, isDelta := ev.vfs.(vfs.DeltaWriter); isDelta && useTemp && ev.Codepage == 65001 {
+			if pieces, ok := patchPiecesFromTable(ev.pt); ok {
+				perr := delta.PatchFile(ctx.Context, ev.filePath, ev.filePath+".f4tmp", pieces)
+				if perr == nil {
+					saved = true
+				} else {
+					vtui.DebugLog("EDITOR: delta save unavailable, writing in full: %v", perr)
+				}
+			}
+		}
+
+		if saved {
+			f = nopWriteCloser{}
+		} else if useTemp {
 			tempPath := ev.filePath + ".f4tmp"
 			f, err = ev.vfs.Create(ctx.Context, tempPath)
 		} else {
@@ -2434,7 +2489,9 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 		}
 
 		var saveErr error
-		if ev.Codepage == 65001 {
+		if saved {
+			// The file system already wrote it.
+		} else if ev.Codepage == 65001 {
 			curr := 0
 			total := ev.pt.Size()
 			for curr < total {

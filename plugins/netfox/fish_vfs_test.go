@@ -525,6 +525,42 @@ func TestFishVFSLineIndex(t *testing.T) {
 		t.Error("FishVFS does not satisfy vfs.LineIndexer")
 	}
 }
+func TestFishVFSPatchFile(t *testing.T) {
+	v := newLocalFishVFS(t)
+	ctx := context.Background()
+	if !v.Client().CanPatch() {
+		t.Skip("this host cannot assemble a file remotely")
+	}
+
+	dir := t.TempDir()
+	src := filepath.Join(dir, "original.txt")
+	dst := filepath.Join(dir, "rebuilt.txt")
+	body := []byte("the quick brown fox jumps over the lazy dog")
+	if err := os.WriteFile(src, body, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// One word replaced: two ranges of the original and one literal.
+	err := v.PatchFile(ctx, src, dst, []vfs.PatchPiece{
+		{Offset: 0, Length: 4},
+		{Length: 5, Data: []byte("slow ")},
+		{Offset: 10, Length: 33},
+	})
+	if err != nil {
+		t.Fatalf("PatchFile: %v", err)
+	}
+	got, err := os.ReadFile(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "the slow brown fox jumps over the lazy dog" {
+		t.Errorf("rebuilt file is %q", got)
+	}
+
+	if _, ok := interface{}(v).(vfs.DeltaWriter); !ok {
+		t.Error("FishVFS does not satisfy vfs.DeltaWriter")
+	}
+}
 func TestFishVFSFindFiles(t *testing.T) {
 	v := newLocalFishVFS(t)
 	ctx := context.Background()

@@ -342,6 +342,23 @@ func (v *FishVFS) FindFiles(ctx context.Context, dir string, q vfs.FindQuery) ([
 	return out, nil
 }
 
+// PatchFile implements vfs.DeltaWriter. The copying happens on the remote
+// host at local disk speed; only the new bytes cross the network.
+func (v *FishVFS) PatchFile(ctx context.Context, src, dst string, pieces []vfs.PatchPiece) error {
+	if !v.client.CanPatch() {
+		return fishplus.ErrNoWrite
+	}
+	segs := make([]fishplus.PatchSegment, 0, len(pieces))
+	for _, p := range pieces {
+		if p.Data == nil {
+			segs = append(segs, fishplus.Copy(p.Offset, p.Length))
+			continue
+		}
+		segs = append(segs, fishplus.Literal(p.Data))
+	}
+	return v.client.Patch(ctx, v.abs(src), v.abs(dst), segs)
+}
+
 // LineIndex implements vfs.LineIndexer. A count of zero asks for nothing but
 // the total, which is one remote pass and three numbers on the wire.
 func (v *FishVFS) LineIndex(ctx context.Context, p string, first, count int64) (vfs.LineIndexResult, error) {

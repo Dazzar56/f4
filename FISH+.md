@@ -230,9 +230,11 @@ The pass is a full one — awk cannot know where line N starts without counting 
 
 *   **Step 8a — the patch command.** `patch` assembles a file from `S <off> <len>` ranges of an existing one, copied at local disk speed on the remote host, and `D <len>` literals that follow their descriptor on the wire. A one byte change in a hundred megabyte file therefore costs one byte of traffic. `Client.Patch` splits oversized literals into chunks and, like a write, tells a refusal that drained its payload from a failure that could not. The result is written forward into a second path, which is why source and destination may not be the same file.
 
+*   **Step 8b — the editor on top of it.** `vfs.DeltaWriter` is the optional interface, `FishVFS` implements it over `Client.Patch`, and `SaveToFile` uses it when the save goes through `.f4tmp` anyway. A piece table already is the description the command wants: a piece pointing at the original buffer is a range of the file on disk, one pointing at the add buffer is what the user typed. It applies only to a raw UTF-8 load, because with any other codepage the buffer holds decoded text whose offsets say nothing about the bytes on disk, and it falls back to writing the file out in full whenever the remote host cannot do it.
+
 ### To do
 
-*   **Step 8b — the editor on top of it.** Turning `PieceTable.GetState().Pieces` into patch segments and using them in `SaveToFile`, which already writes to `.f4tmp` and renames. Only for a file loaded as UTF-8: with any other codepage the buffer is decoded text and its pieces no longer describe ranges of the file on disk.
+*   **Step 9 — FISH+ proper, part 3.** Background jobs (directory sizes, duplicate search, hashing) reporting progress through the f4 progress dialog.
 
 The order below is chosen so that something usable arrives as early as possible: after step 4 a user can already browse, view and download.
 

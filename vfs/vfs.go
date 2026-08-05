@@ -213,6 +213,24 @@ func FindProvider(ctx context.Context, parent VFS, path string) VFSProvider {
 }
 
 // ReadAtCloser combines reader interfaces with context support.
+// PatchPiece is one piece of a file being assembled. Data set means literal
+// new bytes; Data nil means Length bytes taken from the existing file at
+// Offset, which then never have to travel.
+type PatchPiece struct {
+	Offset int64
+	Length int64
+	Data   []byte
+}
+
+// DeltaWriter is implemented by a file system that can build a file out of
+// pieces of another one on its own side. An editor saving a one byte change
+// in a large remote file then sends one byte rather than the file. Like the
+// other optional interfaces here, a caller that does not find it writes the
+// file out in full as before.
+type DeltaWriter interface {
+	PatchFile(ctx context.Context, src, dst string, pieces []PatchPiece) error
+}
+
 // FoundEntry is one hit of a tree search.
 type FoundEntry struct {
 	// Path is the full path of the file, in the file system's own notation.
