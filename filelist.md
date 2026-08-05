@@ -1,5 +1,5 @@
 # Project Structure
-Last updated: 2026-08-05 18:50:16
+Last updated: 2026-08-05 19:31:35
 
 ```text
 .
@@ -294,6 +294,8 @@ Last updated: 2026-08-05 18:50:16
 │       │   ├── helper.sh
 │       │   ├── job.go
 │       │   ├── job_test.go
+│       │   ├── ls.go
+│       │   ├── ls_test.go
 │       │   ├── mutate.go
 │       │   ├── mutate_test.go
 │       │   ├── patch.go
@@ -503,5 +505,5 @@ Last updated: 2026-08-05 18:50:16
 ├── WORDNAV.md
 └── word_nav_test.go
 
-36 directories, 464 files
+36 directories, 466 files
 ```
