@@ -60,10 +60,16 @@ func NewViewerView(ctx context.Context, v vfs.VFS, path string) (*ViewerView, er
 	bCtx, bCancel := context.WithCancel(context.Background())
 	if cpID == 65001 {
 		backend = &ViewerBackend{
-			file:      f,
-			size:      size,
-			ctx:       bCtx,
-			cancelCtx: bCancel,
+			file:         f,
+			size:         size,
+			path:         path,
+			totalLines:   -1,
+			totalForSize: -1,
+			ctx:          bCtx,
+			cancelCtx:    bCancel,
+		}
+		if indexer, ok := v.(vfs.LineIndexer); ok {
+			backend.indexer = indexer
 		}
 	} else {
 		fullData := make([]byte, size)
@@ -77,10 +83,13 @@ func NewViewerView(ctx context.Context, v vfs.VFS, path string) (*ViewerView, er
 		}
 		memFile := &vfs.MemoryReadAtCloser{Data: decoded}
 		backend = &ViewerBackend{
-			file:      memFile,
-			size:      int64(len(decoded)),
-			ctx:       bCtx,
-			cancelCtx: bCancel,
+			file:         memFile,
+			size:         int64(len(decoded)),
+			path:         path,
+			totalLines:   -1,
+			totalForSize: -1,
+			ctx:          bCtx,
+			cancelCtx:    bCancel,
 		}
 	}
 
@@ -782,10 +791,16 @@ func (vv *ViewerView) ReloadWithCodepage(cpID int) {
 	if cpID == 65001 {
 		bCtx, bCancel := context.WithCancel(context.Background())
 		backend = &ViewerBackend{
-			file:      f,
-			size:      size,
-			ctx:       bCtx,
-			cancelCtx: bCancel,
+			file:         f,
+			size:         size,
+			path:         vv.path,
+			totalLines:   -1,
+			totalForSize: -1,
+			ctx:          bCtx,
+			cancelCtx:    bCancel,
+		}
+		if indexer, ok := vv.vfs.(vfs.LineIndexer); ok {
+			backend.indexer = indexer
 		}
 	} else {
 		defer f.Close()
@@ -800,10 +815,13 @@ func (vv *ViewerView) ReloadWithCodepage(cpID int) {
 		memFile := &vfs.MemoryReadAtCloser{Data: decoded}
 		bCtx, bCancel := context.WithCancel(context.Background())
 		backend = &ViewerBackend{
-			file:      memFile,
-			size:      int64(len(decoded)),
-			ctx:       bCtx,
-			cancelCtx: bCancel,
+			file:         memFile,
+			size:         int64(len(decoded)),
+			path:         vv.path,
+			totalLines:   -1,
+			totalForSize: -1,
+			ctx:          bCtx,
+			cancelCtx:    bCancel,
 		}
 	}
 

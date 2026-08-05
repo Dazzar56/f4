@@ -1035,6 +1035,67 @@ func TestEditorView_GetTitle(t *testing.T) {
 		t.Errorf("GetTitle failed for empty path: %s", ev2.GetTitle())
 	}
 }
+func TestViewerView_CodepageSwitch_Crash(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	tmpFile := filepath.Join(t.TempDir(), "test_viewer_cp.txt")
+	err := os.WriteFile(tmpFile, []byte("Hello World\nLine 2\nLine 3"), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	v := vfs.NewOSVFS(filepath.Dir(tmpFile))
+	vv, err := NewViewerView(context.Background(), v, tmpFile)
+	if err != nil {
+		t.Fatalf("Failed to create ViewerView: %v", err)
+	}
+	defer vv.Close()
+	vv.SetPosition(0, 0, 80, 24)
+
+	// Simulate double codepage switch (F8, F8)
+	vv.ReloadWithCodepage(11111) // ANSI
+	vv.ReloadWithCodepage(22222) // OEM
+
+	// Trigger render to make sure it doesn't crash during drawing
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	vv.Show(scr)
+
+	// Exit the viewer (F3 / Close)
+	vv.Close()
+}
+
+func TestEditorView_CodepageDialog_DynamicHeight(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	scrH := 10 // Very small screen height
+	vtui.FrameManager.Screen().AllocBuf(80, scrH)
+
+	pt := piecetable.New(nil)
+	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
+	ev.SetPosition(0, 0, 80, scrH-1)
+
+	ev.showCodepageDialog()
+
+	// The dialog should be the top frame
+	top := vtui.FrameManager.GetTopFrame()
+	menu, ok := top.(*vtui.VMenu)
+	if !ok {
+		t.Fatal("Expected top frame to be VMenu")
+	}
+
+	_, _, _, y2 := menu.GetPosition()
+	menuHeight := y2 - menu.Y1 + 1
+
+	expectedMaxH := scrH - 2
+	if menuHeight > expectedMaxH {
+		t.Errorf("Codepage dialog height %d exceeds maximum allowed %d for screen height %d", menuHeight, expectedMaxH, scrH)
+	}
+
+	if menu.SelectPos < 0 || menu.SelectPos >= len(menu.Items) {
+		t.Errorf("Selected position %d out of bounds", menu.SelectPos)
+	}
+}
 func TestEditorView_AsyncIndexing(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 

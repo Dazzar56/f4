@@ -88,3 +88,75 @@ func TestTopBar_NilCallbackAndInvisible(t *testing.T) {
 
 	tbInvisible.Show(scr) // should be a no-op entirely
 }
+func TestTopBar_LeftRightAlignment(t *testing.T) {
+	vtui.SetDefaultPalette()
+	SetDefaultF4Palette()
+
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(40, 5)
+
+	tb := NewTopBar(
+		func() string { return "LeftPart" },
+		func() string { return "RightPart" },
+	)
+	tb.SetPosition(0, 0, 39, 0)
+	tb.SetVisible(true)
+
+	tb.Show(scr)
+
+	// Verify LeftPart is on the left
+	leftText := "LeftPart"
+	for i, r := range leftText {
+		cell := scr.GetCell(i, 0)
+		if cell.Char != uint64(r) {
+			t.Errorf("Expected char %q at x=%d, got %q", r, i, rune(cell.Char))
+		}
+	}
+
+	// Verify RightPart is on the right
+	rightText := "RightPart"
+	rightStart := 40 - len(rightText)
+	for i, r := range rightText {
+		cell := scr.GetCell(rightStart+i, 0)
+		if cell.Char != uint64(r) {
+			t.Errorf("Expected char %q at x=%d, got %q", r, rightStart+i, rune(cell.Char))
+		}
+	}
+}
+
+func TestTopBar_Truncation(t *testing.T) {
+	vtui.SetDefaultPalette()
+	SetDefaultF4Palette()
+
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(20, 5) // Narrow screen
+
+	tb := NewTopBar(
+		func() string { return "VeryLongLeftPartName" },
+		func() string { return "Right" },
+	)
+	tb.SetPosition(0, 0, 19, 0)
+	tb.SetVisible(true)
+
+	tb.Show(scr)
+
+	// Combined length (20 + 5 = 25) exceeds width (20).
+	// Right part ("Right" - 5 chars) should be preserved, and Left part should be truncated with "…".
+	// Left part should become: runewidth.Truncate("VeryLongLeftPartName", 20 - 5 - 1 = 14, "…") -> "VeryLongLeftP…"
+	expectedLeft := "VeryLongLeftP…"
+	for i, r := range expectedLeft {
+		cell := scr.GetCell(i, 0)
+		if cell.Char != uint64(r) {
+			t.Errorf("Expected truncated char %q at x=%d, got %q", r, i, rune(cell.Char))
+		}
+	}
+
+	expectedRight := "Right"
+	rightStart := 20 - len(expectedRight)
+	for i, r := range expectedRight {
+		cell := scr.GetCell(rightStart+i, 0)
+		if cell.Char != uint64(r) {
+			t.Errorf("Expected right char %q at x=%d, got %q", r, rightStart+i, rune(cell.Char))
+		}
+	}
+}
