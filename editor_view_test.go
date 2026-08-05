@@ -4166,6 +4166,75 @@ func TestEditorView_Codepages_ClipboardConversion(t *testing.T) {
 		t.Errorf("Clipboard conversion failed: expected '╧ЁштхЄ', got %q", ev.GetText())
 	}
 }
+func TestEditorView_Codepages_AutoDetect(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "auto_cp.txt")
+	os.WriteFile(path, []byte{0xcf, 0xf0, 0xe8, 0xe2, 0xe5, 0xf2}, 0644) // "Привет" in CP1251
+
+	v := vfs.NewOSVFS(tmpDir)
+	f, err := v.Open(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	pt := piecetable.New([]byte("Initial"))
+	ev := NewEditorView(pt, v, path)
+	defer ev.Close()
+	ev.file = f
+
+	AppConfig.EditorAutodetectCodePage = true
+	AppConfig.EditorDefaultCodePage = 11111 // ANSI
+	ev.ReloadWithAutoDetect()
+
+	if ev.Codepage != 11111 {
+		t.Errorf("Expected autodetect to fall back to 11111 (ANSI) for non-UTF-8 file, got %d", ev.Codepage)
+	}
+}
+
+func TestEditorView_Codepages_ClipboardConversion_Fallback(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pt := piecetable.New([]byte("🚀 Emojis are unconvertible to CP1251"))
+	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
+
+	ev.Codepage = 11111 // ANSI (CP1251) - pretend the editor has this text in CP1251 (even though it contains unconvertible emoji)
+	ev.selActive = true
+	ev.selAnchorOffset = 0
+	ev.CursorPos = int(pt.Size())
+
+	ev.CopySelection() // Copied with CP = 11111
+
+	ev.Codepage = 65001 // Switch to UTF-8 (65001)
+	ev.DeleteSelection()
+
+	// Paste - encoding to 11111 will fail because of '🚀', so it should fallback to original text
+	ev.PasteText(internalClipboardText)
+
+	expected := "🚀 Emojis are unconvertible to CP1251"
+	if ev.GetText() != expected {
+		t.Errorf("Expected failed conversion to fallback to original text, got %q", ev.GetText())
+	}
+}
+
+func TestEditorView_Codepages_KeyBarLabel(t *testing.T) {
+	pt := piecetable.New(nil)
+	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
+
+	ev.Codepage = 65001 // UTF-8
+	labels := ev.GetKeyLabels()
+	if labels.Normal[7] != "ANSI" {
+		t.Errorf("Expected F8 KeyBar label to be 'ANSI', got %q", labels.Normal[7])
+	}
+
+	ev.Codepage = 11111 // ANSI
+	labels = ev.GetKeyLabels()
+	if labels.Normal[7] != "OEM" {
+		t.Errorf("Expected F8 KeyBar label to be 'OEM', got %q", labels.Normal[7])
+	}
+}
 
 func TestEditorView_DoubleClick_SelectWord(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())

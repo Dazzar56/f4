@@ -276,7 +276,13 @@ func BuildCodepageMenuItems(currentCpID int, autoDetect bool) ([]vtui.MenuItem, 
 		if cp.ID == 1251 || cp.ID == 866 {
 			return // Exclude duplicate 1251 and 866 from the UI menu
 		}
-		text := fmt.Sprintf("%5d  %s", cp.ID, cp.Name)
+		var text string
+		if cp.ID == 11111 || cp.ID == 22222 {
+			text = cp.Name // Don't show technical "11111" / "22222" IDs
+		} else {
+			text = fmt.Sprintf("%5d  %s", cp.ID, cp.Name)
+		}
+
 		if cp.ID == currentCpID && !autoDetect {
 			text = "√ " + text
 			currIdx = len(items)

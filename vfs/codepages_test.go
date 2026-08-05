@@ -202,3 +202,27 @@ func TestCodepages_BuildCodepageMenuItems(t *testing.T) {
 		t.Errorf("Invalid selected index %d", currIdx)
 	}
 }
+func TestCodepages_BuildCodepageMenuItems_AutoDetect(t *testing.T) {
+	items, currIdx := BuildCodepageMenuItems(11111, true)
+	if len(items) == 0 {
+		t.Fatal("Empty menu items")
+	}
+	if currIdx != 0 {
+		t.Errorf("Expected active index to be 0 (Auto-detect), got %d", currIdx)
+	}
+	if !strings.Contains(items[0].Text, "√") {
+		t.Errorf("Expected Auto-detect to have a checkmark, got %q", items[0].Text)
+	}
+}
+
+func TestCodepages_SafeDecodeEncodeErrors(t *testing.T) {
+	_, err := DecodeBytes([]byte("test"), 99999)
+	if err == nil {
+		t.Error("Expected error for unsupported decode CP ID, got nil")
+	}
+
+	_, err = EncodeBytes([]byte("test"), 99999)
+	if err == nil {
+		t.Error("Expected error for unsupported encode CP ID, got nil")
+	}
+}
