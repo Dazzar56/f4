@@ -32,6 +32,8 @@ Operations like calculating directory sizes, finding duplicate files, or complex
     *   `read.go` — ranged reads and the cached file handle.
     *   `write.go` — ranged writes, truncation and the buffering write handle.
     *   `mutate.go` — directory and metadata mutations.
+    *   `search.go` — the remote search and the remote line index.
+    *   `patch.go` — assembling a file out of pieces of another one.
 *   `plugins/netfox/fish_vfs.go` — the `vfs.VFS` implementation, registered as the `fish+` protocol of the NetFox connection manager. A plain `fish` type is accepted as a synonym.
 *   `plugins/netfox/ssh_dial.go` — the SSH dialer shared with the SFTP backend.
 
@@ -148,7 +150,7 @@ Which tool does the counting is detected during the handshake and reported as `w
 2.  **b64** — the client sends a single line of base64 and the helper reads it with the shell's own `read`, which cannot overshoot: a line ends where its newline is. Positioning is then a plain `dd` on the largest power of two dividing both the offset and the length, the same arithmetic the read path uses. It costs a third more traffic and is still the better choice on a host without GNU dd.
 3.  **ddbs1** — `dd bs=1 count=LEN seek=OFF conv=notrunc`, exact because a one byte read cannot come back short, but a syscall per byte. It is never picked automatically; `wmode` selects it for a host where the other two misbehave.
 
-A range starting past the end of the file leaves a hole, and nothing after the written range is touched — which is what the delta based saving of step 8 will need.
+A range starting past the end of the file leaves a hole, and nothing after the written range is touched — which is what the delta based saving of step 8 needs.
 
 `trunc` sets a size. Zero is a shell redirection and therefore works everywhere, including on a file that does not exist yet; any other size needs the `truncate` utility, announced as the `truncate` feature. `Create` truncates to zero and then writes forward, so the common case never depends on it.
 
@@ -217,10 +219,10 @@ The pass is a full one — awk cannot know where line N starts without counting 
 *   **Step 5a — mutations.** `mkdir`, `rm`, `rmdir`, `rmtree`, `mv` and `chmod`, and the `FishVFS` methods on top of them. A recursive delete is one round trip rather than one per entry, because the remote host does the walking. `Create` is now the only method that still refuses.
 *   **Step 5b — writing file content.** The `write` command with an offset and a length, three write backends with runtime switching through `wmode`, `trunc`, and a buffering `Writer` on the client side. A refused request still drains its payload and says so with a `D` line; a write that fails halfway does not, and marks the session broken rather than letting it desynchronize.
 *   **Step 5c — the writing VFS.** `FishVFS.Create` on top of `Writer`, plus `chown` and a `touch` that works on GNU and on BSD alike by letting the remote host convert the epoch into its own local time. `SetAttributes` now carries mode, ownership and timestamps, so a file copied onto a FISH+ panel arrives with the attributes it had. Nothing in the VFS refuses any more, and `ErrFishReadOnly` is gone.
+*   **Step 5d — a `Close` whose error is not dropped.** `closeOnce` lets the places that write through a VFS close explicitly where the error matters and still keep a `defer` as a safety net. `recursiveCopy` now closes the destination before declaring success, so a failed last chunk removes the incomplete file instead of reporting a copy that did not happen; the download to a temporary file, the upload back after an external editor and the editor's own save report it too. None of this is specific to FISH+, it affects every file system that buffers.
 *   **Step 7a — remote search.** The `grep` command, `Client.Grep` and `FishVFS.Search`, with `HasSearch` finally true for one of f4's file systems. Only byte offsets cross the network, and the limit is enforced on the remote side rather than by disconnecting a flood.
 *   **Step 7b — the remote line index.** The `lidx` command and `Client.Lines`: the offsets of a range of lines and the total line count, from one remote `awk` pass and a few numbers on the wire.
 
-*   **Step 5d — a `Close` whose error is not dropped.** `closeOnce` lets the three places that write through a VFS close explicitly where the error matters and still keep a `defer` as a safety net. `recursiveCopy` now closes the destination before declaring success, so a failed last chunk removes the incomplete file instead of reporting a copy that did not happen; the download to the temporary file and the upload back after an external editor report it too. None of this is specific to FISH+, it affects every file system that buffers.
 
 *   **Step 7c — the viewer on top of it.** `vfs.LineIndexer` is an optional interface, so a local file system and an archive are not made to carry a method they cannot answer; `FishVFS` implements it over `Client.Lines`, and `ViewerBackend` asserts for it. What it buys is the jump to the end of a file: instead of reading back up to a megabyte and scanning all of it, the viewer asks where the last screenful of lines begins and reads exactly that. The line total is cached against the file size, so paging around a log that is not growing costs one round trip. Everything else the viewer does is byte based and needed no index at all.
 
@@ -234,12 +236,9 @@ The pass is a full one — awk cannot know where line N starts without counting 
 
 ### To do
 
-*   **Step 9 — FISH+ proper, part 3.** Background jobs (directory sizes, duplicate search, hashing) reporting progress through the f4 progress dialog.
-
-The order below is chosen so that something usable arrives as early as possible: after step 4 a user can already browse, view and download.
+The numbering follows the order the steps were planned in, not the order they were done: the plan was arranged so that something usable arrived early, and a browsable, readable panel existed from step 4 onwards.
 
 *   **Step 6 — odd hosts.** The `ls -l` fallback backend and whatever else the compatibility issue turns up; `tools/fishplus_probe.sh` collects the raw material.
-*   **Step 8 — FISH+ proper, part 2.** Delta based saving: PieceTable edits applied remotely instead of re-uploading the file.
 *   **Step 9 — FISH+ proper, part 3.** Background jobs (directory sizes, duplicate search, hashing) reporting progress through the f4 progress dialog.
 *   **Step 10 — resilience.** Mid-request cancellation and resynchronization without dropping the session, keepalive, automatic reconnect.
 *   **Step 11 — remote execution.** `exec` and a remote terminal, plus user documentation and help pages.
