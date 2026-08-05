@@ -155,6 +155,88 @@ func TestViewerBackendLineStartFromEndFallsBack(t *testing.T) {
 		t.Error("a failing index was treated as an answer")
 	}
 }
+
+// searchingVFS answers a search the way a remote host does: with the offsets
+// of every match, in file order, worked out on its own side.
+type searchingVFS struct {
+	vfs.VFS
+	offsets []int64
+	can     bool
+	err     error
+	calls   int
+}
+
+func (v *searchingVFS) GetCapabilities() vfs.VFSCapabilities {
+	caps := v.VFS.GetCapabilities()
+	caps.HasSearch = v.can
+	return caps
+}
+
+func (v *searchingVFS) Search(ctx context.Context, path, pattern string) (chan int64, error) {
+	v.calls++
+	if v.err != nil {
+		return nil, v.err
+	}
+	out := make(chan int64, len(v.offsets))
+	for _, off := range v.offsets {
+		out <- off
+	}
+	close(out)
+	return out, nil
+}
+
+func TestViewerBackendSearchFrom(t *testing.T) {
+	dir := t.TempDir()
+	tmp := filepath.Join(dir, "test.txt")
+	if err := os.WriteFile(tmp, []byte("needle here and needle there\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	remote := &searchingVFS{VFS: vfs.NewOSVFS(dir), offsets: []int64{0, 16}, can: true}
+	vb, err := NewViewerBackend(context.Background(), remote, tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer vb.Close()
+
+	if at, searched := vb.SearchFrom(context.Background(), "needle", 0); !searched || at != 0 {
+		t.Errorf("SearchFrom(0) = %d, %v; want 0, true", at, searched)
+	}
+	// Searching on from where the last hit was is what pressing the key
+	// again means, and it must not find the same one over and over.
+	if at, searched := vb.SearchFrom(context.Background(), "needle", 1); !searched || at != 16 {
+		t.Errorf("SearchFrom(1) = %d, %v; want 16, true", at, searched)
+	}
+	// Searched and not there is a different answer from cannot search: the
+	// caller must not fall back to scanning a file that has been searched.
+	if at, searched := vb.SearchFrom(context.Background(), "needle", 100); !searched || at != -1 {
+		t.Errorf("SearchFrom past the last hit = %d, %v; want -1, true", at, searched)
+	}
+	if remote.calls != 3 {
+		t.Errorf("the file system was asked %d times, want 3", remote.calls)
+	}
+
+	// A file system that cannot search says so, and the viewer scans.
+	local, err := NewViewerBackend(context.Background(), vfs.NewOSVFS(dir), tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer local.Close()
+	if _, searched := local.SearchFrom(context.Background(), "needle", 0); searched {
+		t.Error("a file system without HasSearch claimed to have searched")
+	}
+
+	// One that says it can and then fails is not to be trusted either.
+	broken := &searchingVFS{VFS: vfs.NewOSVFS(dir), can: true, err: fmt.Errorf("no grep on remote host")}
+	vb2, err := NewViewerBackend(context.Background(), broken, tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer vb2.Close()
+	if _, searched := vb2.SearchFrom(context.Background(), "needle", 0); searched {
+		t.Error("a failed search was taken for an answer")
+	}
+}
 func TestViewerBackendLineStart(t *testing.T) {
 	dir := t.TempDir()
 	tmp := filepath.Join(dir, "test.txt")

@@ -286,7 +286,11 @@ func (v *FishVFS) Search(ctx context.Context, p, pattern string) (chan int64, er
 	if pattern == "" || !v.client.CanGrep() {
 		return nil, nil
 	}
-	offsets, err := v.client.Grep(ctx, v.abs(p), pattern, fishplus.GrepOptions{Fixed: true, Limit: fishSearchMax})
+	// Case is folded because the one caller, the viewer's search, has always
+	// folded it, and a search that starts matching differently depending on
+	// which panel the file is open in would be worse than a slow one.
+	offsets, err := v.client.Grep(ctx, v.abs(p), pattern,
+		fishplus.GrepOptions{Fixed: true, IgnoreCase: true, Limit: fishSearchMax})
 	if err != nil {
 		return nil, err
 	}

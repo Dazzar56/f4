@@ -16,6 +16,7 @@ type ViewerBackend struct {
 	size int64
 
 	path    string
+	owner   vfs.VFS
 	indexer vfs.LineIndexer
 
 	// totalLines is what the far side last reported, and totalForSize is the
@@ -45,6 +46,7 @@ func NewViewerBackend(ctx context.Context, v vfs.VFS, path string) (*ViewerBacke
 		file:         f,
 		size:         f.Size(),
 		path:         path,
+		owner:        v,
 		totalLines:   -1,
 		totalForSize: -1,
 		ctx:          bCtx,
@@ -122,6 +124,30 @@ func (b *ViewerBackend) ReadAt(offset int64, length int) ([]byte, error) {
 		}()
 	}
 	return nil, piecetable.ErrLoading
+}
+
+// SearchFrom asks the file system for the first occurrence of pattern at or
+// after off. searched is false when the file system cannot answer, and the
+// caller then scans the file itself; when it is true, an offset of -1 means
+// the file was searched and the pattern is not in it.
+//
+// The difference matters most where it costs most: searching a remote file
+// by reading it means downloading it, and a host that can grep its own copy
+// answers in one round trip no matter how large the file is.
+func (b *ViewerBackend) SearchFrom(ctx context.Context, pattern string, off int64) (int64, bool) {
+	if b.owner == nil || pattern == "" || !b.owner.GetCapabilities().HasSearch {
+		return 0, false
+	}
+	matches, err := b.owner.Search(ctx, b.path, pattern)
+	if err != nil || matches == nil {
+		return 0, false
+	}
+	for at := range matches {
+		if at >= off {
+			return at, true
+		}
+	}
+	return -1, true
 }
 
 // LineStart reports the byte offset where the given one-based line begins.

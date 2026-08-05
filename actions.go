@@ -974,6 +974,14 @@ func actionViewerSearch(vv *ViewerView) {
 				fileSize := vv.backend.Size()
 				patternLower := strings.ToLower(pattern)
 
+				// A file system that can search its own copy answers in one round
+				// trip. Scanning here would mean reading the whole file, which
+				// for a remote one means downloading it.
+				if at, searched := vv.backend.SearchFrom(ctx.Context, pattern, currOff); searched {
+					foundOffset = at
+					currOff = fileSize
+				}
+
 				for currOff < fileSize {
 					if ctx.Err() != nil {
 						return
