@@ -1,0 +1,109 @@
+package fishplus
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"testing"
+	"time"
+)
+
+// TestCancelledRequestKeepsTheSession is the whole point of the step: an
+// impatient Escape used to cost a reconnect, because the client stopped
+// reading in the middle of an answer and had no way of knowing where the
+// next one began. The terminator is that way.
+func TestCancelledRequestKeepsTheSession(t *testing.T) {
+	sess := newMockPeer(t, "ok FISHPLUS 1 dd base64", func(w io.Writer, token string, req mockRequest) {
+		fmt.Fprintf(w, "one line of an answer nobody is waiting for any more\n")
+		fmt.Fprintf(w, ".%s %s ok\n", token, req.ID)
+	}, 4)
+	if err := sess.Handshake(context.Background()); err != nil {
+		t.Fatalf("handshake: %v", err)
+	}
+
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := sess.Exec(cancelled, "noop"); err != context.Canceled {
+		t.Fatalf("a cancelled request returned %v, want context.Canceled", err)
+	}
+	if sess.Broken() {
+		t.Fatal("a cancelled request broke the session")
+	}
+
+	// The next request has to get its own answer, not the tail of the one
+	// that was abandoned.
+	resp, err := sess.Exec(context.Background(), "noop")
+	if err != nil {
+		t.Fatalf("the request after a cancellation failed: %v", err)
+	}
+	if !resp.OK() {
+		t.Errorf("the request after a cancellation answered %+v", resp)
+	}
+	if len(resp.Lines) != 1 {
+		t.Errorf("the answer carried %d lines, want the one line of its own", len(resp.Lines))
+	}
+}
+
+// TestCancelledRequestDrainsItsFrames checks the same thing for an answer
+// carrying binary payload, where a discarded byte that happens to be a
+// newline would otherwise look like a line boundary.
+func TestCancelledRequestDrainsItsFrames(t *testing.T) {
+	payload := make([]byte, 300)
+	for i := range payload {
+		payload[i] = '\n' // the worst possible payload for a line reader
+	}
+	sess := newMockPeer(t, "ok FISHPLUS 1 dd base64", func(w io.Writer, token string, req mockRequest) {
+		fmt.Fprintf(w, "S 300\n#%d\n", len(payload))
+		w.Write(payload)
+		fmt.Fprintf(w, ".%s %s ok\n", token, req.ID)
+	}, 4)
+	if err := sess.Handshake(context.Background()); err != nil {
+		t.Fatalf("handshake: %v", err)
+	}
+
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := sess.ExecPathData(cancelled, "read", "/x", "0", "0"); err != context.Canceled {
+		t.Fatal("a cancelled data request did not report being cancelled")
+	}
+	if sess.Broken() {
+		t.Fatal("a cancelled data request broke the session")
+	}
+	resp, err := sess.ExecPathData(context.Background(), "read", "/x", "0", "0")
+	if err != nil {
+		t.Fatalf("the request after a cancellation failed: %v", err)
+	}
+	if len(resp.Data) != len(payload) {
+		t.Errorf("got %d bytes, want %d: the drain left part of a frame behind", len(resp.Data), len(payload))
+	}
+}
+
+// TestCancelledRequestGivesUpEventually covers the other half: a remote that
+// never finishes the answer cannot be waited for forever, and the session is
+// then worth less than the wait.
+func TestCancelledRequestGivesUpEventually(t *testing.T) {
+	old := DrainAfterCancelTimeout
+	DrainAfterCancelTimeout = 50 * time.Millisecond
+	defer func() { DrainAfterCancelTimeout = old }()
+
+	sess := newMockPeer(t, "ok FISHPLUS 1 dd base64", func(w io.Writer, token string, req mockRequest) {
+		// Lines forever, and never a terminator.
+		for i := 0; i < 100000; i++ {
+			if _, err := fmt.Fprintf(w, "still working on it\n"); err != nil {
+				return
+			}
+		}
+	}, 4)
+	if err := sess.Handshake(context.Background()); err != nil {
+		t.Fatalf("handshake: %v", err)
+	}
+
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := sess.Exec(cancelled, "noop"); err != context.Canceled {
+		t.Fatalf("a cancelled request returned %v", err)
+	}
+	if !sess.Broken() {
+		t.Error("a remote that never finished its answer left the session usable")
+	}
+}

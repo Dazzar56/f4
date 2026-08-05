@@ -382,8 +382,13 @@ func (s *Session) readResponse(ctx context.Context, id uint64, binary bool) (*Re
 	resp := &Response{}
 	for {
 		if err := ctx.Err(); err != nil {
-			// The response is only half-read, so the stream is unusable.
-			s.broken = true
+			// The response is only half-read. Reading forward to the
+			// terminator puts the stream back where the next request
+			// expects it, which costs the rest of one answer and saves a
+			// whole reconnect.
+			if drainErr := s.drainToTerminator(prefix, binary); drainErr != nil {
+				s.broken = true
+			}
 			return nil, err
 		}
 		line, err := s.readLine()
@@ -433,6 +438,47 @@ func (s *Session) readResponse(ctx context.Context, id uint64, binary bool) (*Re
 	}
 }
 
+// DrainAfterCancelTimeout bounds how long the client will keep reading an
+// answer nobody wants any more. Past it the session is worth less than the
+// wait, and a reconnect is the cheaper answer.
+var DrainAfterCancelTimeout = 10 * time.Second
+
+// drainToTerminator reads and discards the rest of a response. It is what
+// makes cancelling a request survivable: the terminator is unforgeable, so
+// finding it means the stream is back at a request boundary no matter what
+// the remote tools printed on the way.
+//
+// It cannot interrupt a read that is already blocked — nothing here can, and
+// the ordinary path has the same property — so the deadline is checked
+// between lines rather than during one.
+func (s *Session) drainToTerminator(prefix string, binary bool) error {
+	deadline := time.Now().Add(DrainAfterCancelTimeout)
+	for {
+		if time.Now().After(deadline) {
+			return fmt.Errorf("fishplus: the remote host did not finish a cancelled answer within %s", DrainAfterCancelTimeout)
+		}
+		line, err := s.readLine()
+		if err != nil {
+			return err
+		}
+		if strings.HasPrefix(line, prefix) {
+			return nil
+		}
+		if !binary || !strings.HasPrefix(line, "#") {
+			continue
+		}
+		// A frame header has to be honoured even while discarding, or its
+		// payload would be read as lines and a byte that happens to be a
+		// newline would look like a boundary.
+		n, convErr := strconv.Atoi(line[1:])
+		if convErr != nil || n < 0 || n > MaxFrameLen {
+			return fmt.Errorf("fishplus: bad data frame header %q while draining", line)
+		}
+		if _, err := io.CopyN(io.Discard, s.r, int64(n)); err != nil {
+			return err
+		}
+	}
+}
 func (s *Session) readLine() (string, error) {
 	var buf []byte
 	for {
