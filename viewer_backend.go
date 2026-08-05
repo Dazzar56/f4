@@ -15,6 +15,16 @@ type ViewerBackend struct {
 	file vfs.ReadAtCloser
 	size int64
 
+	path    string
+	indexer vfs.LineIndexer
+
+	// totalLines is what the far side last reported, and totalForSize is the
+	// file size it reported it for. A log file grows while it is being read,
+	// so the total is only reused while the size it was counted at still
+	// holds; anything else would put the viewer at the wrong offset.
+	totalLines   int64
+	totalForSize int64
+
 	mu         sync.Mutex
 	cacheOff   int64
 	cacheData  []byte
@@ -31,12 +41,19 @@ func NewViewerBackend(ctx context.Context, v vfs.VFS, path string) (*ViewerBacke
 	}
 
 	bCtx, bCancel := context.WithCancel(context.Background())
-	return &ViewerBackend{
-		file:      f,
-		size:      f.Size(),
-		ctx:       bCtx,
-		cancelCtx: bCancel,
-	}, nil
+	b := &ViewerBackend{
+		file:         f,
+		size:         f.Size(),
+		path:         path,
+		totalLines:   -1,
+		totalForSize: -1,
+		ctx:          bCtx,
+		cancelCtx:    bCancel,
+	}
+	if indexer, ok := v.(vfs.LineIndexer); ok {
+		b.indexer = indexer
+	}
+	return b, nil
 }
 
 func (b *ViewerBackend) Close() error {
@@ -107,6 +124,50 @@ func (b *ViewerBackend) ReadAt(offset int64, length int) ([]byte, error) {
 	return nil, piecetable.ErrLoading
 }
 
+// LineStartFromEnd reports where the last n lines of the file begin, asking
+// the file system to do the counting. It answers false whenever that is not
+// possible — a local file, a file system without the feature, a remote host
+// without the tool for it, or any error at all — and the caller then falls
+// back to reading, which is what it did before this existed.
+//
+// Two round trips at worst: one for the total, one for the offset. The total
+// is kept, so paging around a file that is not growing costs one.
+func (b *ViewerBackend) LineStartFromEnd(ctx context.Context, n int64) (int64, bool) {
+	if b.indexer == nil || n <= 0 {
+		return 0, false
+	}
+	size := b.Size()
+
+	b.mu.Lock()
+	total := b.totalLines
+	known := total >= 0 && b.totalForSize == size
+	b.mu.Unlock()
+
+	if !known {
+		idx, err := b.indexer.LineIndex(ctx, b.path, 1, 0)
+		if err != nil || idx.Total < 0 {
+			return 0, false
+		}
+		total = idx.Total
+		b.mu.Lock()
+		b.totalLines = total
+		b.totalForSize = size
+		b.mu.Unlock()
+	}
+	if total <= 0 {
+		return 0, false
+	}
+
+	first := total - n + 1
+	if first < 1 {
+		first = 1
+	}
+	idx, err := b.indexer.LineIndex(ctx, b.path, first, 1)
+	if err != nil || len(idx.Offsets) == 0 {
+		return 0, false
+	}
+	return idx.Offsets[0], true
+}
 func (b *ViewerBackend) FindLineStart(offset int64) int64 {
 	if offset <= 0 {
 		return 0

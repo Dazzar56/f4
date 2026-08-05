@@ -302,6 +302,15 @@ func (v *FishVFS) Search(ctx context.Context, p, pattern string) (chan int64, er
 	return out, nil
 }
 
+// LineIndex implements vfs.LineIndexer. A count of zero asks for nothing but
+// the total, which is one remote pass and three numbers on the wire.
+func (v *FishVFS) LineIndex(ctx context.Context, p string, first, count int64) (vfs.LineIndexResult, error) {
+	idx, err := v.client.Lines(ctx, v.abs(p), first, count)
+	if err != nil {
+		return vfs.LineIndexResult{}, err
+	}
+	return vfs.LineIndexResult{First: idx.First, Offsets: idx.Offsets, Total: idx.Total}, nil
+}
 func (v *FishVFS) MkDir(ctx context.Context, p string) error {
 	return v.client.MkDir(ctx, v.abs(p))
 }

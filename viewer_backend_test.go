@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -59,5 +60,98 @@ func TestViewerBackend_ReadAndFindLineStart(t *testing.T) {
 	startZero := vb.FindLineStart(3)
 	if startZero != 0 {
 		t.Errorf("FindLineStart at file beginning should return 0, got %d", startZero)
+	}
+}
+
+// indexingVFS answers line index questions the way a remote file system
+// does, and counts the questions so the caching can be checked.
+type indexingVFS struct {
+	vfs.VFS
+	offsets []int64
+	total   int64
+	calls   int
+	err     error
+}
+
+func (v *indexingVFS) LineIndex(ctx context.Context, path string, first, count int64) (vfs.LineIndexResult, error) {
+	v.calls++
+	if v.err != nil {
+		return vfs.LineIndexResult{}, v.err
+	}
+	res := vfs.LineIndexResult{First: first, Total: v.total}
+	for i := first; i < first+count && i >= 1 && i <= int64(len(v.offsets)); i++ {
+		res.Offsets = append(res.Offsets, v.offsets[i-1])
+	}
+	return res, nil
+}
+
+func TestViewerBackendLineStartFromEnd(t *testing.T) {
+	dir := t.TempDir()
+	tmp := filepath.Join(dir, "test.txt")
+	content := "line1\nline2\nline3\n"
+	if err := os.WriteFile(tmp, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	v := &indexingVFS{VFS: vfs.NewOSVFS(dir), offsets: []int64{0, 6, 12}, total: 3}
+	vb, err := NewViewerBackend(context.Background(), v, tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer vb.Close()
+
+	off, ok := vb.LineStartFromEnd(context.Background(), 2)
+	if !ok {
+		t.Fatal("the indexer was not used")
+	}
+	if off != 6 {
+		t.Errorf("last two lines start at %d, want 6", off)
+	}
+	if v.calls != 2 {
+		t.Errorf("%d index calls, want 2 (total, then offset)", v.calls)
+	}
+
+	// The total is already known for this size, so only the offset is asked
+	// for the second time round.
+	v.calls = 0
+	if off, ok = vb.LineStartFromEnd(context.Background(), 1); !ok || off != 12 {
+		t.Errorf("second call returned %d, %v", off, ok)
+	}
+	if v.calls != 1 {
+		t.Errorf("%d index calls after caching the total, want 1", v.calls)
+	}
+
+	// Asking for more lines than the file has starts at its beginning.
+	if off, ok = vb.LineStartFromEnd(context.Background(), 100); !ok || off != 0 {
+		t.Errorf("whole file request returned %d, %v", off, ok)
+	}
+}
+
+func TestViewerBackendLineStartFromEndFallsBack(t *testing.T) {
+	dir := t.TempDir()
+	tmp := filepath.Join(dir, "test.txt")
+	if err := os.WriteFile(tmp, []byte("a\nb\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// A plain local file system does not implement the interface at all.
+	plain, err := NewViewerBackend(context.Background(), vfs.NewOSVFS(dir), tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer plain.Close()
+	if _, ok := plain.LineStartFromEnd(context.Background(), 1); ok {
+		t.Error("a file system without the interface claimed to have an index")
+	}
+
+	// One that does, but fails, must not be trusted either.
+	failing := &indexingVFS{VFS: vfs.NewOSVFS(dir), err: fmt.Errorf("no awk on remote host")}
+	vb, err := NewViewerBackend(context.Background(), failing, tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer vb.Close()
+	if _, ok := vb.LineStartFromEnd(context.Background(), 1); ok {
+		t.Error("a failing index was treated as an answer")
 	}
 }

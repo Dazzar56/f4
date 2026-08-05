@@ -590,16 +590,24 @@ func (vv *ViewerView) jumpToEnd() {
 			chunkSize = 16 * 1024
 		}
 
-		startOff := vv.backend.Size() - chunkSize
-		if startOff < 0 {
-			startOff = 0
-		}
+		// A file system that can index lines remotely knows exactly where the
+		// last screenful starts, so nothing before it has to cross the wire.
+		// Wrapping turns one line into several, hence the generous multiple
+		// of the height: the scan below still places the top precisely, it
+		// just no longer has to start a megabyte early.
+		startOff, indexed := vv.backend.LineStartFromEnd(ctx.Context, contentHeight*4+16)
+		if !indexed {
+			startOff = vv.backend.Size() - chunkSize
+			if startOff < 0 {
+				startOff = 0
+			}
 
-		if startOff < vv.backend.Size()-1024*1024 {
-			startOff = vv.backend.Size() - 1024*1024
-		}
-		if startOff < 0 {
-			startOff = 0
+			if startOff < vv.backend.Size()-1024*1024 {
+				startOff = vv.backend.Size() - 1024*1024
+			}
+			if startOff < 0 {
+				startOff = 0
+			}
 		}
 
 		for {

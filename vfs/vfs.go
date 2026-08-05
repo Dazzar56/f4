@@ -213,6 +213,26 @@ func FindProvider(ctx context.Context, parent VFS, path string) VFSProvider {
 }
 
 // ReadAtCloser combines reader interfaces with context support.
+// LineIndexResult is what a LineIndexer answers with.
+type LineIndexResult struct {
+	// First is the one-based number of the line Offsets[0] belongs to.
+	First int64
+	// Offsets holds the byte offset of each line start, in file order. It is
+	// shorter than requested when the file ends first.
+	Offsets []int64
+	// Total is the number of lines in the file.
+	Total int64
+}
+
+// LineIndexer is implemented by a file system that can have the far side
+// work out where lines begin, so that a viewer does not have to read a file
+// in order to count it. It is deliberately an optional interface rather than
+// a method on VFS: a local file system gains nothing from it, and an archive
+// cannot answer it at all, so neither should be made to carry it. A caller
+// type asserts for it and keeps its own behaviour when the assertion fails.
+type LineIndexer interface {
+	LineIndex(ctx context.Context, path string, first, count int64) (LineIndexResult, error)
+}
 type ReadAtCloser interface {
 	ReadAt(ctx context.Context, p []byte, off int64) (n int, err error)
 	Read(ctx context.Context, p []byte) (n int, err error)

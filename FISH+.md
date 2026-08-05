@@ -216,12 +216,14 @@ The pass is a full one — awk cannot know where line N starts without counting 
 
 *   **Step 5d — a `Close` whose error is not dropped.** `closeOnce` lets the three places that write through a VFS close explicitly where the error matters and still keep a `defer` as a safety net. `recursiveCopy` now closes the destination before declaring success, so a failed last chunk removes the incomplete file instead of reporting a copy that did not happen; the download to the temporary file and the upload back after an external editor report it too. None of this is specific to FISH+, it affects every file system that buffers.
 
+*   **Step 7c — the viewer on top of it.** `vfs.LineIndexer` is an optional interface, so a local file system and an archive are not made to carry a method they cannot answer; `FishVFS` implements it over `Client.Lines`, and `ViewerBackend` asserts for it. What it buys is the jump to the end of a file: instead of reading back up to a megabyte and scanning all of it, the viewer asks where the last screenful of lines begins and reads exactly that. The line total is cached against the file size, so paging around a log that is not growing costs one round trip. Everything else the viewer does is byte based and needed no index at all.
+
 ### To do
 
 The order below is chosen so that something usable arrives as early as possible: after step 4 a user can already browse, view and download.
 
 *   **Step 6 — odd hosts.** The `ls -l` fallback backend and whatever else the compatibility issue turns up; `tools/fishplus_probe.sh` collects the raw material.
-*   **Step 7c — the viewer on top of it.** `ViewerView` already renders from a byte offset through `ReadAt`, so a remote file is browsed in pieces today; what it still does by reading is jumping to the end and counting lines. Wiring those to `Client.Lines` needs a VFS-level hook, since `vfs.VFS` has no line index method yet, plus a per-file cache of the total so that one keystroke does not start a new remote pass. That interface question is what makes it a step of its own.
+*   **Step 7e — a goto line command.** The viewer has no way to jump to a line number, and the remote index now makes one cheap over ssh. It is a user visible feature with its own dialog and key binding rather than a wiring job, which is why it is listed separately.
 *   **Step 7d — file search function also should be offloaded to server.
 *   **Step 8 — FISH+ proper, part 2.** Delta based saving: PieceTable edits applied remotely instead of re-uploading the file.
 *   **Step 9 — FISH+ proper, part 3.** Background jobs (directory sizes, duplicate search, hashing) reporting progress through the f4 progress dialog.

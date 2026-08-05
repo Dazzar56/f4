@@ -479,3 +479,49 @@ func TestDialSSHFailsOnAClosedPort(t *testing.T) {
 		t.Fatal("dialing a closed port succeeded")
 	}
 }
+func TestFishVFSLineIndex(t *testing.T) {
+	v := newLocalFishVFS(t)
+	ctx := context.Background()
+	if !v.Client().CanIndexLines() {
+		t.Skip("no awk on this host")
+	}
+
+	dir := t.TempDir()
+	p := filepath.Join(dir, "log with spaces.txt")
+	if err := os.WriteFile(p, []byte("alpha\nbeta\ngamma\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	idx, err := v.LineIndex(ctx, p, 1, 0)
+	if err != nil {
+		t.Fatalf("LineIndex: %v", err)
+	}
+	if idx.Total != 3 {
+		t.Errorf("Total = %d, want 3", idx.Total)
+	}
+	if len(idx.Offsets) != 0 {
+		t.Errorf("a count of zero returned %d offsets", len(idx.Offsets))
+	}
+
+	idx, err = v.LineIndex(ctx, p, 2, 2)
+	if err != nil {
+		t.Fatalf("LineIndex: %v", err)
+	}
+	want := []int64{6, 11}
+	if len(idx.Offsets) != len(want) {
+		t.Fatalf("got %d offsets, want %d", len(idx.Offsets), len(want))
+	}
+	for i, off := range idx.Offsets {
+		if off != want[i] {
+			t.Errorf("offset %d = %d, want %d", i, off, want[i])
+		}
+	}
+	if idx.First != 2 {
+		t.Errorf("First = %d, want 2", idx.First)
+	}
+
+	// The VFS is a vfs.LineIndexer, which is what the viewer asserts for.
+	if _, ok := interface{}(v).(vfs.LineIndexer); !ok {
+		t.Error("FishVFS does not satisfy vfs.LineIndexer")
+	}
+}
