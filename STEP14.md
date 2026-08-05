@@ -82,8 +82,9 @@ hour late, attached to whatever the user happened to do next.
 
     A related mechanical change belongs with it: every `FishVFS` method reaches
     the session through its own `v.client` field, so only the view that
-    reconnected is repointed. Twenty-nine call sites become `v.conn.current()`,
-    after which a clone that never reconnects still talks to the live session.
+    reconnected is repointed. `Clone` already asks the connection instead, so a
+    view born after a reconnect is on the live session; the request methods are
+    what is left, and each of them becomes `v.conn.current()`.
 3.  The dialog, and the retry of the operation that raised it. Read-only
     operations retry; the rest report.
 4.  Jobs: `jlist` on a fresh session comes back empty, so the registry is told

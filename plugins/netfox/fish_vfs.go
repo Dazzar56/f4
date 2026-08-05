@@ -697,12 +697,18 @@ func (v *FishVFS) ParentVFS() vfs.VFS { return v.parent }
 // password prompt, and would buy nothing: the remote shell answers one
 // command at a time either way.
 func (v *FishVFS) Clone() vfs.VFS {
+	client := v.client
 	if v.conn != nil {
 		v.conn.retain()
+		// A clone starts on whatever session the connection is on now, not on
+		// the one this view happened to be holding. A panel cloned after
+		// another had reconnected would otherwise be born pointing at a session
+		// that is already gone.
+		client = v.conn.current()
 	}
 	return &FishVFS{
 		parent: v.parent,
-		client: v.client,
+		client: client,
 		conn:   v.conn,
 		path:   v.path,
 		title:  v.title,
