@@ -306,7 +306,7 @@ func init() {
 		LabelKey:    "Menu.Files.Delete",
 		Description: "Delete selected files",
 		DescKey:     "Action.File.Delete.Desc",
-		DefaultKeys: []string{"F8"},
+		DefaultKeys: []string{"F8", "ShiftDel", "ShiftNumDel"},
 		MenuPath:    "Files",
 		Handler:     withPF(func(pf *PanelsFrame) { actionDelete(pf) }),
 	})
@@ -1078,6 +1078,20 @@ func init() {
 			AppConfig.InfoPanelBytes = !AppConfig.InfoPanelBytes
 			RequestSaveConfig()
 			vtui.FrameManager.HardRefresh()
+		}),
+	})
+	RegisterAction(Action{
+		Name:        "Panel.ToggleHidden",
+		Area:        "Shell",
+		Label:       "Toggle Hidden",
+		LabelKey:    "Action.Panel.ToggleHidden",
+		Description: "Show or hide hidden and system files on both panels",
+		DescKey:     "Action.Panel.ToggleHidden.Desc",
+		DefaultKeys: []string{"CtrlH"},
+		Checked:     func() bool { return AppConfig.ShowHiddenFiles },
+		Handler: withPF(func(pf *PanelsFrame) {
+			AppConfig.ShowHiddenFiles = !AppConfig.ShowHiddenFiles
+			pf.RefreshAll()
 		}),
 	})
 	RegisterAction(Action{
