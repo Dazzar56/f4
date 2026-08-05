@@ -380,12 +380,14 @@ time, which is exactly what makes it useful.
 
 *   **Step 9d — the duplicate search in the panel.** `vfs.DuplicateFinder` is the optional interface, `FishVFS` implements it over `Client.Duplicates`, and a Commands menu entry runs it against the current directory with a progress dialog of its own and a cancel button that stops the remote job too. The groups are flattened into the existing search results window with the rows of a group adjacent. A file system that cannot do the work on its own side does not offer the command at all, rather than reading a whole remote tree to answer it: `Action.Visible` decides whether a menu entry appears, asked each time the menu is built, so the entry is simply absent on a local panel.
 
+*   **Step 9e2 — leaving a job running.** `FileOpProgressDialog.EnableBackground` adds a second button that closes the window without stopping the work, so "cancel" and "stop watching" are different answers to a dialog that used to have one. It is offered only by an operation that genuinely survives its window: a copy through this client does not, work on a remote host does. The duplicate search uses it and stays in the job registry after the window is gone.
+
 ### To do
 
 The numbering follows the order the steps were planned in, not the order they were done: the plan was arranged so that something usable arrived early, and a browsable, readable panel existed from step 4 onwards.
 
 *   **Step 9e — the job registry.** `BackgroundJobRegistry` keeps what is running, with a title, a status line and a way to ask it to stop, and notifies whoever is showing the list. It holds no session and no context: it knows how to ask a job to stop and what to call it, and everything else stays with the task that started it. The duplicate search registers itself. Nothing shows the list yet, which is step 9f.
-*   **Step 9f — jobs in the interface.** A window over the registry, so a job can outlive the dialog it was started from. "Cancel" and "send to the background" become separate keys, and which one Escape means becomes a setting.
+*   **Step 9f — a window over the registry.** Something that lists what is running, so a detached job can be got back to and cancelled. Which of the two the Escape key means becomes a setting once there are two of them on screen.
 *   **Step 10 — resilience.** Mid-request cancellation and resynchronization without dropping the session, keepalive, automatic reconnect.
 *   **Step 11 — remote execution.** `exec` and a remote terminal, plus user documentation and help pages.
 *   **Step 13 — copying without a client in the middle.** A copy between two panels on the same host is `cp` there, and a move within one file system is `mv` and costs nothing; today both pull every byte here and push it back. Between two different hosts, one that can reach the other opens its own FISH+ session to it and the bytes travel directly, at whatever the link between two data centres is worth, while the client watches from a bad connection. See `IDEAS.md` for what has to be worked out first.

@@ -1864,12 +1864,21 @@ func actionFindDuplicates(pf *PanelsFrame) {
 	root := v.GetPath()
 	opDlg := NewFileOpProgressDialog(" Searching for duplicates... ")
 	var taskCtx *vtui.TaskContext
+	// detached is read and written on the UI thread only, which is where
+	// both the buttons and the progress updates run.
+	detached := false
 	opDlg.btnCancel.OnClick = func() {
 		if taskCtx != nil {
 			taskCtx.Cancel()
 		}
 		opDlg.Close()
 	}
+	// The hashing runs on the remote host, so the window is only a way of
+	// watching it. Closing it that way leaves the work in the job registry.
+	opDlg.EnableBackground(func() {
+		detached = true
+		opDlg.Close()
+	})
 	vtui.FrameManager.PostTask(func() {
 		vtui.FrameManager.AddScreenHeadless(opDlg)
 	})
@@ -1889,6 +1898,9 @@ func actionFindDuplicates(pf *PanelsFrame) {
 			lastUpdate = now
 			job.SetStatus(fmt.Sprintf("%d of %d files", p.Done, p.Total))
 			ctx.RunOnUI(func() {
+				if detached {
+					return
+				}
 				opDlg.UpdateCounting("Hashing", p.Path, int64(p.Done), int64(p.Total))
 				vtui.FrameManager.Redraw()
 			})
@@ -1911,7 +1923,9 @@ func actionFindDuplicates(pf *PanelsFrame) {
 		}
 
 		ctx.RunOnUI(func() {
-			opDlg.Close()
+			if !detached {
+				opDlg.Close()
+			}
 			if err != nil && err != context.Canceled {
 				vtui.ShowMessage(" Error ", fmt.Sprintf("Duplicate search failed:\n%v", err), []string{"&Ok"})
 				return
