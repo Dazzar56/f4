@@ -3097,8 +3097,10 @@ func TestEditorView_StateRestoration_Interference(t *testing.T) {
 	ev.targetLine = 2 // Хотим прыгнуть на 3-ю строку
 	ev.targetPos = 0
 
-	// Имитируем, что пользователь нажал клавишу (например, влево) до завершения индексации
-	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_LEFT})
+	// Имитируем, что пользователь нажал клавишу (например, вправо) до завершения
+	// индексации. Клавиша должна реально сдвинуть курсор: нажатие, которое ничего
+	// не изменило, вмешательством пользователя больше не считается.
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT})
 
 	if ev.targetLine != -1 {
 		t.Error("User intervention must cancel pending state restoration")

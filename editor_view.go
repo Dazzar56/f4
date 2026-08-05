@@ -754,13 +754,27 @@ func (ev *EditorView) VetoActionKey(e *vtinput.InputEvent) bool {
 	return false
 }
 
+// ProcessKey wraps the editor's own key handling so that a restore still
+// waiting for the background index is abandoned only when the key actually did
+// something. Over FISH+ the index needs seconds to reach a position saved deep
+// in a file, and a key pressed inside that window used to throw the position
+// away even when it moved nothing: Up at the top of a file left the user at the
+// top of the file, which is precisely where they did not want to be.
 func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
-	if e.Type == vtinput.KeyEventType && e.KeyDown {
-		if ev.targetLine != -1 {
-			ev.targetLine = -1 // User took control, abort target jump
-			ev.ensureCursorVisible()
-		}
+	if ev.targetLine == -1 {
+		return ev.processKeyInner(e)
 	}
+
+	line, pos, edited := ev.CursorLine, ev.CursorPos, ev.edited
+	handled := ev.processKeyInner(e)
+	if ev.targetLine != -1 && (ev.CursorLine != line || ev.CursorPos != pos || ev.edited != edited) {
+		ev.targetLine = -1 // User took control, abort target jump
+		ev.ensureCursorVisible()
+	}
+	return handled
+}
+
+func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 
 	ev.ensureEngineWidth()
 	if ev.saving {
@@ -1824,6 +1838,14 @@ func (ev *EditorView) StartIndexing() {
 			// Update UI if we have enough lines or reached EOF
 			if len(pendingOffsets) >= 500 || absPos >= maxSize {
 				currentBatch := pendingOffsets
+				// The closure below runs on the UI thread, and by then the
+				// scanning goroutine has moved absPos on: over FISH+ a burst
+				// of chunks arrives at once and the whole scan can finish
+				// while several batches are still waiting in the queue.
+				// Snapshot how far this batch reached, so "the file is fully
+				// scanned" is a question about the batch and not about the
+				// future.
+				batchEnd := absPos
 				pendingOffsets = make([]int, 0, 1000)
 
 				vtui.FrameManager.PostTask(func() {
@@ -1835,7 +1857,7 @@ func (ev *EditorView) StartIndexing() {
 					lastLineBefore := li.LineCount() - 1
 					li.AppendOffsets(currentBatch, maxSize)
 
-					if ev.targetLine != -1 && (li.LineCount() > ev.targetLine || absPos >= maxSize) {
+					if ev.targetLine != -1 && (li.LineCount() > ev.targetLine || batchEnd >= maxSize) {
 						ev.CursorLine = ev.targetLine
 						if ev.CursorLine >= li.LineCount() {
 							ev.CursorLine = li.LineCount() - 1
