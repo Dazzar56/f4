@@ -342,6 +342,68 @@ func (v *FishVFS) FindFiles(ctx context.Context, dir string, q vfs.FindQuery) ([
 	return out, nil
 }
 
+// opStatsFromScan converts what the remote walk counted. PhysicalBytes stays
+// zero: the remote host reports apparent sizes, and a consumer that sees a
+// zero there hides the metric rather than showing a wrong one.
+func opStatsFromScan(s fishplus.ScanStats) vfs.OpStats {
+	return vfs.OpStats{Bytes: s.Bytes, DirBytes: s.DirBytes, Files: s.Files, Dirs: s.Dirs}
+}
+
+// Scan implements vfs.FastScanner. Counting a tree is one remote job instead
+// of a listing round trip per directory, which is the difference between a
+// directory size dialog that answers and one the user gives up on.
+//
+// Anything the remote host cannot do falls back to the generic walk, because
+// the caller takes this answer as final: vfs.CalculateStats does not retry a
+// FastScanner that failed.
+func (v *FishVFS) Scan(ctx context.Context, basePath string, names []string, cb vfs.ScanCallback) (vfs.OpStats, error) {
+	if !v.client.CanScan() {
+		return vfs.GenericScan(ctx, v, basePath, names, cb)
+	}
+	var total vfs.OpStats
+	for _, name := range names {
+		if err := ctx.Err(); err != nil {
+			return total, err
+		}
+		full := v.abs(path.Join(basePath, name))
+		item, err := v.Stat(ctx, full)
+		if err != nil {
+			return total, err
+		}
+		if !item.IsDir {
+			total.Files++
+			total.Bytes += item.Size
+			if cb != nil {
+				cb(full, total)
+			}
+			continue
+		}
+		// The remote walk counts one tree at a time and starts from zero, so
+		// what the caller sees has to be added to what the earlier names
+		// already contributed.
+		base := total
+		stats, err := v.client.Scan(ctx, full, func(p fishplus.ScanProgress) {
+			if cb == nil {
+				return
+			}
+			running := base
+			running.Add(opStatsFromScan(p.ScanStats))
+			cb(p.Path, running)
+		})
+		if err != nil {
+			if ctx.Err() != nil {
+				return total, err
+			}
+			vtui.DebugLog("NET: remote scan unavailable, walking instead: %v", err)
+			return vfs.GenericScan(ctx, v, basePath, names, cb)
+		}
+		total.Add(opStatsFromScan(stats))
+		if cb != nil {
+			cb(full, total)
+		}
+	}
+	return total, nil
+}
 // PatchFile implements vfs.DeltaWriter. The copying happens on the remote
 // host at local disk speed; only the new bytes cross the network.
 func (v *FishVFS) PatchFile(ctx context.Context, src, dst string, pieces []vfs.PatchPiece) error {

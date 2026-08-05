@@ -525,6 +525,57 @@ func TestFishVFSLineIndex(t *testing.T) {
 		t.Error("FishVFS does not satisfy vfs.LineIndexer")
 	}
 }
+func TestFishVFSScan(t *testing.T) {
+	v := newLocalFishVFS(t)
+	ctx := context.Background()
+
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "tree", "a deep dir"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	for name, size := range map[string]int{
+		"tree/one.txt":                 100,
+		"tree/two.txt":                 250,
+		"tree/a deep dir/three.txt":    1000,
+		"loose.txt":                    7,
+	} {
+		if err := os.WriteFile(filepath.Join(root, name), make([]byte, size), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	names := []string{"tree", "loose.txt"}
+	var seen int
+	got, err := v.Scan(ctx, root, names, func(string, vfs.OpStats) { seen++ })
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+
+	// The generic walk is the definition of the right answer: whichever way
+	// the numbers were obtained, a panel must show the same ones.
+	want, err := vfs.GenericScan(ctx, v, root, names, nil)
+	if err != nil {
+		t.Fatalf("GenericScan: %v", err)
+	}
+	if got.Files != want.Files || got.Dirs != want.Dirs || got.Bytes != want.Bytes {
+		t.Errorf("remote scan = %+v, generic walk = %+v", got, want)
+	}
+	if got.Bytes != 1357 {
+		t.Errorf("Bytes = %d, want 1357", got.Bytes)
+	}
+	if seen == 0 {
+		t.Error("the scan reported no progress at all")
+	}
+
+	// A host that cannot run a remote scan still has to produce numbers.
+	if !v.Client().CanScan() {
+		t.Log("this host has no remote scan; the generic path was the one tested")
+	}
+
+	if _, ok := interface{}(v).(vfs.FastScanner); !ok {
+		t.Error("FishVFS does not satisfy vfs.FastScanner")
+	}
+}
 func TestFishVFSPatchFile(t *testing.T) {
 	v := newLocalFishVFS(t)
 	ctx := context.Background()

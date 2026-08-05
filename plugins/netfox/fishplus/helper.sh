@@ -236,6 +236,14 @@ F4AWKFL=
 if f4_have awk && awk 'BEGIN { fflush() }' </dev/null >/dev/null 2>&1; then
  F4AWKFL=1
 fi
+F4HASH=
+for f4c in sha256sum sha1sum md5sum cksum; do
+ if f4_have $f4c; then
+  F4HASH=$f4c
+  break
+ fi
+done
+
 F4FEATS=
 for f4c in dd base64 readlink du grep sed awk wc head tail stty truncate chown touch date sha256sum; do
  f4_have $f4c && F4FEATS="$F4FEATS $f4c"
@@ -254,6 +262,7 @@ if [ -n "$F4JBASE" ] && f4_have tail && f4_have head && f4_have wc; then
  F4FEATS="$F4FEATS jobs"
 fi
 [ -n "$F4MODE" ] && F4FEATS="$F4FEATS mode:$F4MODE"
+[ -n "$F4HASH" ] && F4FEATS="$F4FEATS hash:$F4HASH"
 [ -n "$F4RD" ] && F4FEATS="$F4FEATS read:$F4RD"
 [ -n "$F4WR" ] && F4FEATS="$F4FEATS write:$F4WR"
 
@@ -941,9 +950,49 @@ f4_job_scan() {
  esac | awk -v e=2000 '{ if (substr($1, 1, 1) == "4" || $1 == "d") { dn++; db += $2 } else { fn++; fb += $2 } k++; if (k % e == 0) { p = $0; sub(/^[^ ]+ [^ ]+ /, "", p); printf "P %d %d %d %d %s\n", fb, db, fn, dn, p; '"$f4_jfl"' } } END { printf "T %d %d %d %d\n", fb, db, fn, dn }'
 }
 
+# The hash job is what a duplicate search is built on. Hashing a whole tree
+# would read every byte of it, so only files whose size is shared with another
+# file are hashed at all: anything with a size of its own cannot have a twin.
+# Both passes over the list are metadata only, and the reading that remains
+# happens on the host that owns the disk.
+f4_job_hash() {
+ if [ ! -d "$1" ]; then
+  echo "not a directory" >&2
+  return 1
+ fi
+ if [ -z "$F4HASH" ]; then
+  echo "no hashing tool on remote host" >&2
+  return 1
+ fi
+ if [ -z "$F4MODE" ] || ! f4_have find || ! f4_have awk; then
+  echo "no find and awk on remote host" >&2
+  return 1
+ fi
+ case $F4MODE in
+  find ) find -H "$1" -type f -printf '%s %p\n' 2>/dev/null ;;
+  stat ) find -H "$1" -type f -exec stat -c '%s %n' -- {} + 2>/dev/null ;;
+  statbsd ) find -H "$1" -type f -exec stat -f '%z %N' -- {} + 2>/dev/null ;;
+ esac > sizes
+ awk 'NR == FNR { c[$1]++; next } c[$1] > 1 { p = $0; sub(/^[^ ]+ /, "", p); print p }' sizes sizes > cand
+ f4_hn=0
+ f4_ht=$(wc -l < cand)
+ while IFS= read -r f4_hf; do
+  f4_hn=$(( f4_hn + 1 ))
+  f4_hv=$($F4HASH -- "$f4_hf" 2>/dev/null)
+  case $F4HASH in
+   cksum ) f4_hv=$(printf '%s' "$f4_hv" | awk '{ print $1 "_" $2 }') ;;
+   * ) f4_hv=${f4_hv%% *} ;;
+  esac
+  [ -n "$f4_hv" ] || continue
+  printf 'H %s %s\n' "$f4_hv" "$f4_hf"
+  printf 'P %d %d %s\n' "$f4_hn" "$f4_ht" "$f4_hf"
+ done < cand
+ printf 'T %d\n' "$f4_hn"
+}
 f4_job_body() {
  case $1 in
   scan ) f4_job_scan "$2" ;;
+  hash ) f4_job_hash "$2" ;;
   * ) echo "unknown job kind" >&2; return 127 ;;
  esac
 }
@@ -975,9 +1024,9 @@ f4_cmd_jstart() {
   f4_ji=$(( f4_ji + 1 ))
  done
  case $f4_jkind in
-  scan )
+  scan | hash )
    if [ "$2" -ne 1 ]; then
-    f4_end err "the scan job takes one path"
+    f4_end err "this job takes one path"
     return
    fi
    ;;
