@@ -47,11 +47,7 @@ gogpu v0.50.0 or later.
 3. done: drag out under X11, from local panels, as copy.
 4. done: gogpu, both directions, which covers Windows, macOS, X11 and
    Wayland at once through gogpu's own backends.
-5. Dragging out of an archive or a network panel. The files have to be
-   materialised into a temporary directory first, which is a copy the user
-   did not ask for: it needs a progress dialog, a cleanup on exit, and
-   probably XDND's direct save (`XdndDirectSave0`) so nothing is copied
-   until the receiver actually wants it.
+5. Dragging to and out of an archive or a network panel.
 6. Offering move as well as copy. Everything is in place except the trust:
    the source deletes the originals on the receiver's word, so this wants
    testing against real desktops before it is switched on.
