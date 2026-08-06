@@ -354,7 +354,7 @@ func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, dest
 				targetItemPath = dstVfs.Join(destPath, name)
 			}
 
-			if isMove && srcVfs == dstVfs {
+			if isMove && vfs.SameSession(srcVfs, dstVfs) {
 				if _, err := dstVfs.Stat(ctx, targetItemPath); err != nil {
 					if err := srcVfs.Rename(ctx, srcPath, targetItemPath); err == nil {
 						vtui.DebugLog("FILEOP: Optimized server-side rename: %s -> %s", srcPath, targetItemPath)
@@ -849,6 +849,23 @@ func recursiveCopy(ctx context.Context, srcVfs vfs.VFS, srcPath string, dstVfs v
 		} else { // Cancel
 			return context.Canceled
 		}
+	}
+
+	// Optimize using server-side copy if both VFS share the same session/connection
+	if ssc, ok := dstVfs.(vfs.ServerSideCopier); ok && vfs.SameSession(srcVfs, dstVfs) {
+		err := ssc.Copy(ctx, srcPath, destPathForFile)
+		if err == nil {
+			if state.Tracker != nil {
+				state.Tracker.UpdateBytes(int(stat.Size))
+				handleArchiveIndexOp(srcVfs, srcPath, dstVfs, destPathForFile, state.IsMove)
+				state.Tracker.FileDone()
+				if state.UpdateUI != nil {
+					state.UpdateUI(false)
+				}
+			}
+			return nil
+		}
+		vtui.DebugLog("FILEOP: Server-side copy failed, falling back to streaming: %v", err)
 	}
 
 	var srcFile vfs.ReadAtCloser
