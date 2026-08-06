@@ -444,12 +444,18 @@ func SetupUI() {
 		if previousEventFilter != nil && previousEventFilter(e) {
 			return true
 		}
-		return handlePanelPathEditHotkey(e)
+		if handlePanelPathEditHotkey(e) {
+			return true
+		}
+		return handleHelpSearchHotkey(e)
 	}
 
 	vtui.FrameManager.MenuBar = panels.menuBar
 	vtui.FrameManager.KeyBar = panels.keyBar
-	vtui.FrameManager.OnRender = UpdateWindowTitle
+	vtui.FrameManager.OnRender = func(scr *vtui.ScreenBuf) {
+		UpdateWindowTitle(scr)
+		renderHelpSearch(scr)
+	}
 
 	noPlugins := false
 	for _, arg := range os.Args {

@@ -1082,9 +1082,9 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 						// Используем OSC 133 для уведомления терминала о начале и конце выполнения.
 						if actualDir != "" {
 							sqDir := strings.ReplaceAll(actualDir, "'", "'\\''")
-							cmdToWire = fmt.Sprintf(" set +H; cd '%s' && { printf \"\\033]133;C\\007\"; ./'%s' ; printf \"\\033]133;D\\007\"; }\r", sqDir, sqCmd)
+							cmdToWire = fmt.Sprintf(" set +H; cd '%s' && { trap \"printf ''\" INT; printf \"\\033]133;C\\007\"; ./'%s' ; FARVTRESULT=$?; printf \"\\033]133;D\\007\"; trap - INT; (exit $FARVTRESULT); }\r", sqDir, sqCmd)
 						} else {
-							cmdToWire = fmt.Sprintf(" set +H; { printf \"\\033]133;C\\007\"; ./'%s' ; printf \"\\033]133;D\\007\"; }\r", sqCmd)
+							cmdToWire = fmt.Sprintf(" set +H; { trap \"printf ''\" INT; printf \"\\033]133;C\\007\"; ./'%s' ; FARVTRESULT=$?; printf \"\\033]133;D\\007\"; trap - INT; (exit $FARVTRESULT); }\r", sqCmd)
 						}
 					}
 					vtui.DebugLog("ACTIONS: Sending to PTY: %q", cmdToWire)
@@ -1897,7 +1897,10 @@ func actionFindDuplicates(pf *PanelsFrame) {
 	taskCtx = vtui.RunAsync(func(ctx *vtui.TaskContext) {
 		// The work runs on the remote host whether or not this dialog is
 		// still open, so it is listed while it lasts.
-		job := GlobalBackgroundJobs.Start("Duplicates in "+root, ctx.Cancel)
+		// Started against the connection it runs on, so that a session
+		// rebuilt from another panel takes this job off the list instead of
+		// leaving it there waiting for an answer that cannot come.
+		job := GlobalBackgroundJobs.StartOn(sessionKeyOf(v), "Duplicates in "+root, ctx.Cancel)
 		finished := false
 		defer func() {
 			if !finished {

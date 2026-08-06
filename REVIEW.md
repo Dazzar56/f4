@@ -5,6 +5,19 @@ they can be reviewed in one sitting instead of being rediscovered one at a
 time. Nothing here blocks anything; anything that grows a plan of its own
 moves out of this file.
 
+## The keepalive interval is not the one the host was configured with
+
+A minute is a guess that fits the common defaults. A host with a shorter
+`ClientAliveInterval`, or a NAT with a thirty second table, drops the session
+anyway, and there is nothing in the protocol that would let the client ask. A
+setting is the obvious answer and should wait until a host that needs it turns
+up.
+
+## Finding a session dead is still all that happens
+
+The keepalive marks a session broken and stops. That moves the discovery
+earlier, which is worth having on its own, but the user still has to open the
+site again. Picking up where it was is the rest of step 14.
 ## Two archives share one state namespace
 
 `vfsStateNamespace` names a remote site by the title the panel already shows and

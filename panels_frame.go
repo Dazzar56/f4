@@ -53,6 +53,17 @@ func (pf *PanelsFrame) GetPassivePanelVFS() vfs.VFS { return pf.Passive().(*File
 func (pf *PanelsFrame) GetSelectedNames() []string {
 	return pf.Active().(*FileSystemPanel).GetSelectedNames()
 }
+func (pf *PanelsFrame) GetMarkedNames() []string {
+	if panel := pf.getActivePanel(); panel != nil {
+		return panel.GetMarkedNames()
+	}
+	return nil
+}
+func (pf *PanelsFrame) ReplaceMarkedNames(names []string) {
+	if panel := pf.getActivePanel(); panel != nil {
+		panel.ReplaceMarkedNames(names)
+	}
+}
 func (pf *PanelsFrame) GetSelectedName() string {
 	return pf.Active().(*FileSystemPanel).GetSelectedName()
 }
@@ -1577,9 +1588,9 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 						// Managed foreground command
 						if path != "" {
 							sqPath := strings.ReplaceAll(path, "'", "'\\''")
-							fullWireCmd = fmt.Sprintf(" set +H; cd '%s' && { printf \"\\033]133;C\\007\"; %s ; printf \"\\033]133;D\\007\"; }\r", sqPath, cmd)
+							fullWireCmd = fmt.Sprintf(" set +H; cd '%s' && { trap \"printf ''\" INT; printf \"\\033]133;C\\007\"; %s ; FARVTRESULT=$?; printf \"\\033]133;D\\007\"; trap - INT; (exit $FARVTRESULT); }\r", sqPath, cmd)
 						} else {
-							fullWireCmd = fmt.Sprintf(" { printf \"\\033]133;C\\007\"; %s ; printf \"\\033]133;D\\007\"; }\r", cmd)
+							fullWireCmd = fmt.Sprintf(" { trap \"printf ''\" INT; printf \"\\033]133;C\\007\"; %s ; FARVTRESULT=$?; printf \"\\033]133;D\\007\"; trap - INT; (exit $FARVTRESULT); }\r", cmd)
 						}
 						pf.executing = true
 						pf.returnToPanels = pf.showPanels

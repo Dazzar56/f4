@@ -3,6 +3,7 @@ package netfox
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path"
@@ -27,7 +28,6 @@ const fishReadDirChunk = 500
 // shell instead of on ssh.
 type FishVFS struct {
 	parent vfs.VFS
-	client *fishplus.Client
 	conn   *fishConn
 	path   string
 	title  string
@@ -46,12 +46,113 @@ type FishVFS struct {
 // with its own mutex, so each request stays atomic. They do not run in
 // parallel, which for a shell that answers one command at a time is what a
 // second connection could not fix anyway.
+// FishDialer opens a new transport for a session that has to be rebuilt. It
+// returns the two halves of the stream and the closer that ties the remote
+// shell and its connection to the session speaking through them — the same
+// three things NewFishVFSOnStream is handed. Whoever built the connection
+// supplies it, which is what keeps SSH out of this file and lets the tests
+// reconnect to a local shell instead.
+//
+// A nil dialer means the connection cannot be rebuilt, which is the honest
+// answer for a caller that handed over a pair of streams it has no second copy
+// of.
+type FishDialer func(ctx context.Context) (io.Writer, io.Reader, io.Closer, error)
+
 type fishConn struct {
 	client *fishplus.Client
+	ka     *fishplus.Keepalive
+	dial   FishDialer
+	closer io.Closer
 
 	mu     sync.Mutex
 	refs   int
 	closed bool
+}
+
+// ErrNoDialer is what a reconnect answers when nobody told the connection how
+// to rebuild itself.
+var ErrNoDialer = errors.New("fishplus: this session cannot be reconnected")
+
+// current hands out the client under the lock, so a caller that took one before
+// a reconnect and used it after does not talk to the session that died.
+func (c *fishConn) current() *fishplus.Client {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.client
+}
+
+// reconnect replaces a dead session with a new one and reports the client that
+// took its place. The new shell knows nothing of what the old one was doing:
+// its jobs are gone, and a write or a patch that was in flight cannot be
+// resumed, only reported. What survives is what lives on this side — the path a
+// panel stands in, a read handle, and the credentials the dialer holds.
+//
+// A caller that lost a race and finds the session already replaced gets the
+// replacement rather than a second reconnect, which is why the check happens
+// under the lock and the client it saw is the thing compared.
+func (c *fishConn) reconnect(ctx context.Context, dead *fishplus.Client) (*fishplus.Client, error) {
+	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		return nil, fishplus.ErrBroken
+	}
+	if dead != nil && c.client != dead {
+		fresh := c.client
+		c.mu.Unlock()
+		return fresh, nil
+	}
+	dial := c.dial
+	c.mu.Unlock()
+
+	if dial == nil {
+		return nil, ErrNoDialer
+	}
+
+	// Dialling and the handshake happen outside the lock: both take as long as
+	// the network takes, and holding the lock would stall every other view of
+	// this connection for that whole time.
+	stdin, stdout, closer, err := dial(ctx)
+	if err != nil {
+		return nil, err
+	}
+	sess := fishplus.NewSession(stdin, stdout, closer)
+	if err := sess.Handshake(ctx); err != nil {
+		sess.Close()
+		return nil, err
+	}
+	client := fishplus.NewClient(sess)
+	// One round trip before anything is promised: a handshake that answered
+	// says the helper is there, and a noop says the request loop is running.
+	if err := sess.Noop(ctx); err != nil {
+		sess.Close()
+		return nil, err
+	}
+
+	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		sess.Close()
+		return nil, fishplus.ErrBroken
+	}
+	if dead != nil && c.client != dead {
+		// Somebody else reconnected while this one was dialling. Theirs is as
+		// good as this one and is already in use, so this one is dropped.
+		fresh := c.client
+		c.mu.Unlock()
+		sess.Close()
+		return fresh, nil
+	}
+	old, oldKA := c.client, c.ka
+	c.client = client
+	c.ka = fishplus.StartKeepalive(client, fishplus.DefaultKeepaliveInterval)
+	c.closer = closer
+	c.mu.Unlock()
+
+	oldKA.Stop()
+	if old != nil {
+		old.Session().Close() // This also closes its session's closer automatically
+	}
+	return client, nil
 }
 
 func (c *fishConn) retain() {
@@ -68,6 +169,10 @@ func (c *fishConn) release() error {
 		return nil
 	}
 	c.closed = true
+	// Stopped before the session goes away, so the loop does not send a noop
+	// into a stream that is being torn down. It does not wait, so closing a
+	// panel never blocks on the far side.
+	c.ka.Stop()
 	return c.client.Session().Close()
 }
 
@@ -76,6 +181,25 @@ func (c *fishConn) release() error {
 // started in. closer may be nil; when set it is closed together with the
 // session, which is also what makes the remote helper exit.
 func NewFishVFSOnStream(ctx context.Context, parent vfs.VFS, stdin io.Writer, stdout io.Reader, closer io.Closer, title string) (*FishVFS, error) {
+	return newFishVFSOnStream(ctx, parent, stdin, stdout, closer, title, nil)
+}
+
+// NewFishVFSOnDialer builds a session the same way and remembers how to build
+// it again, which is what a reconnect needs. The dialer is called once here so
+// that a site that cannot be reached fails at open time rather than at the
+// first request.
+func NewFishVFSOnDialer(ctx context.Context, parent vfs.VFS, dial FishDialer, title string) (*FishVFS, error) {
+	if dial == nil {
+		return nil, ErrNoDialer
+	}
+	stdin, stdout, closer, err := dial(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return newFishVFSOnStream(ctx, parent, stdin, stdout, closer, title, dial)
+}
+
+func newFishVFSOnStream(ctx context.Context, parent vfs.VFS, stdin io.Writer, stdout io.Reader, closer io.Closer, title string, dial FishDialer) (*FishVFS, error) {
 	sess := fishplus.NewSession(stdin, stdout, closer)
 	if err := sess.Handshake(ctx); err != nil {
 		sess.Close()
@@ -88,10 +212,15 @@ func NewFishVFSOnStream(ctx context.Context, parent vfs.VFS, stdin io.Writer, st
 	}
 	return &FishVFS{
 		parent: parent,
-		client: client,
-		conn:   &fishConn{client: client, refs: 1},
-		path:   cwd,
-		title:  title,
+		conn: &fishConn{
+			client: client,
+			refs:   1,
+			ka:     fishplus.StartKeepalive(client, fishplus.DefaultKeepaliveInterval),
+			dial:   dial,
+			closer: closer,
+		},
+		path:  cwd,
+		title: title,
 	}, nil
 }
 
@@ -107,64 +236,164 @@ func (s *sshShell) Close() error {
 	return s.client.Close()
 }
 
-// NewFishVFS opens a site over SSH. The shell deliberately runs without a
-// pseudo terminal: a terminal would echo every request back, turn each \n of
-// a binary frame into \r\n and cut long request lines at the canonical
-// buffer limit. The helper can tame a terminal with stty when it has to, but
-// not asking for one in the first place is cheaper and cannot fail.
+func (s *sshShell) OpenPty(cols, rows int) (any, error) {
+	pty, err := NewSSHPty(s.client)
+	if err != nil {
+		return nil, err
+	}
+	pty.SetSize(cols, rows)
+	pty.Run("")
+	return pty, nil
+}
+
+// sshFishDialer builds the transport a FISH+ site speaks over, and — the whole
+// point of it being a dialer — can build it again. Everything it needs is in
+// the site configuration, which is what makes a reconnect possible at all: the
+// credentials are here, not on the far side.
 //
-// The command is "exec /bin/sh" rather than a plain shell request, because
-// the account's login shell may well be csh, fish or something else that
-// does not speak the POSIX syntax the helper is written in.
+// The shell deliberately runs without a pseudo terminal: a terminal would echo
+// every request back, turn each \n of a binary frame into \r\n and cut long
+// request lines at the canonical buffer limit. The helper can tame a terminal
+// with stty when it has to, but not asking for one in the first place is
+// cheaper and cannot fail.
+//
+// The command is "exec /bin/sh" rather than a plain shell request, because the
+// account's login shell may well be csh, fish or something else that does not
+// speak the POSIX syntax the helper is written in.
+func sshFishDialer(host, port, user, pass string, timeout int) FishDialer {
+	return func(ctx context.Context) (io.Writer, io.Reader, io.Closer, error) {
+		// DialSSH carries a timeout of its own and cannot be interrupted, so
+		// the context is honoured where it can be: before the dial, and again
+		// after it, so a reconnect the user gave up on does not leave a shell
+		// running on the far side.
+		if err := ctx.Err(); err != nil {
+			return nil, nil, nil, err
+		}
+		client, err := DialSSH(host, port, user, pass, timeout)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		sess, err := client.NewSession()
+		if err != nil {
+			client.Close()
+			return nil, nil, nil, err
+		}
+		shell := &sshShell{sess: sess, client: client}
+		stdin, err := sess.StdinPipe()
+		if err != nil {
+			shell.Close()
+			return nil, nil, nil, err
+		}
+		stdout, err := sess.StdoutPipe()
+		if err != nil {
+			shell.Close()
+			return nil, nil, nil, err
+		}
+		sess.Stderr = io.Discard
+		if err := sess.Start("exec /bin/sh"); err != nil {
+			shell.Close()
+			return nil, nil, nil, err
+		}
+		if err := ctx.Err(); err != nil {
+			shell.Close()
+			return nil, nil, nil, err
+		}
+		return stdin, stdout, shell, nil
+	}
+}
+
+// NewFishVFS opens a site over SSH. It goes through a dialer rather than
+// through a pair of streams, so the session it hands back is one that can be
+// rebuilt after the connection drops; a site opened any other way would have
+// to be reopened by hand.
 func NewFishVFS(parent vfs.VFS, host, port, user, pass string, timeout int) (*FishVFS, error) {
 	vtui.DebugLog("NET: Initiating FISH+ connection to %s:%s (user: %s)", host, port, user)
-	client, err := DialSSH(host, port, user, pass, timeout)
-	if err != nil {
-		return nil, err
-	}
-	sess, err := client.NewSession()
-	if err != nil {
-		client.Close()
-		return nil, err
-	}
-	stdin, err := sess.StdinPipe()
-	if err != nil {
-		sess.Close()
-		client.Close()
-		return nil, err
-	}
-	stdout, err := sess.StdoutPipe()
-	if err != nil {
-		sess.Close()
-		client.Close()
-		return nil, err
-	}
-	sess.Stderr = io.Discard
-	if err := sess.Start("exec /bin/sh"); err != nil {
-		sess.Close()
-		client.Close()
-		return nil, err
-	}
-
 	title := host
 	if user != "" {
 		title = user + "@" + host
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), sshTimeout(timeout))
 	defer cancel()
-	v, err := NewFishVFSOnStream(ctx, parent, stdin, stdout, &sshShell{sess: sess, client: client}, title)
+	v, err := NewFishVFSOnDialer(ctx, parent, sshFishDialer(host, port, user, pass, timeout), title)
 	if err != nil {
-		sess.Close()
-		client.Close()
 		return nil, err
 	}
-	vtui.DebugLog("NET: FISH+ session established, features: %s", v.client.Session().Features().Raw)
+	vtui.DebugLog("NET: FISH+ session established, features: %s", v.client().Session().Features().Raw)
 	return v, nil
+}
+
+// client is how every request reaches the session. It asks the connection
+// instead of remembering, so a view whose neighbour reconnected is on the live
+// session at its next request rather than at its next Clone: the connection is
+// the only thing that sees a session, a FishVFS only ever sees a view of one.
+func (v *FishVFS) client() *fishplus.Client {
+	if v.conn == nil {
+		return nil
+	}
+	return v.conn.current()
 }
 
 // Client exposes the underlying protocol client, mostly so a caller can ask
 // what the remote host turned out to be capable of.
-func (v *FishVFS) Client() *fishplus.Client { return v.client }
+func (v *FishVFS) Client() *fishplus.Client { return v.client() }
+func (v *FishVFS) OpenPty(cols, rows int) (any, error) {
+	v.conn.mu.Lock()
+	closer := v.conn.closer
+	v.conn.mu.Unlock()
+	if pp, ok := closer.(vfs.PtyProvider); ok {
+		return pp.OpenPty(cols, rows)
+	}
+	return nil, errors.New("pty not supported on this FISH+ connection")
+}
+
+// CanReconnect reports whether this file system can rebuild its session. A
+// site opened from a configuration can; one handed a pair of streams cannot,
+// because there is no second pair. A caller offering the user a choice has to
+// know which it is before it offers one.
+func (v *FishVFS) CanReconnect() bool {
+	if v.conn == nil {
+		return false
+	}
+	v.conn.mu.Lock()
+	defer v.conn.mu.Unlock()
+	return v.conn.dial != nil && !v.conn.closed
+}
+
+// SessionLost implements vfs.SessionReconnector. Only a session that stopped
+// speaking counts: a file that is not there, a permission that was refused or
+// a cancelled request are failures of the request, and offering to reconnect
+// over any of them would be noise in front of the real message.
+func (v *FishVFS) SessionLost(err error) bool {
+	return err != nil && errors.Is(err, fishplus.ErrBroken)
+}
+
+// SessionKey implements vfs.SessionIdentity. The connection is the identity:
+// a clone shares it, which is exactly the property a caller looking for
+// everything that died with one session needs.
+func (v *FishVFS) SessionKey() any { return v.conn }
+
+// Reconnect rebuilds the session behind this file system and points this view
+// at the result. The new shell knows nothing of what the old one was doing:
+// background jobs are gone, and a write or a patch that was in flight cannot be
+// resumed, only reported. What survives is what lives on this side — the path
+// this panel stands in, a read handle, and the credentials the dialer holds.
+//
+// It is deliberately not called from inside a request. A request that
+// reconnected on its own would turn one failure into a delay of unknown length
+// in the middle of a copy, with no way for the user to say no; the choice
+// belongs to whoever meets ErrBroken and can ask.
+//
+// Every view of the connection is repointed, not just this one: they all reach
+// the session through the connection, so the panel that asked and the panel
+// next to it are on the same shell afterwards. What each of them keeps is its
+// own current directory, which never depended on the shell that died.
+func (v *FishVFS) Reconnect(ctx context.Context) error {
+	if v.conn == nil {
+		return ErrNoDialer
+	}
+	_, err := v.conn.reconnect(ctx, v.client())
+	return err
+}
 
 func (v *FishVFS) GetTitle() string { return v.title }
 
@@ -210,7 +439,7 @@ func (v *FishVFS) entryToItem(ctx context.Context, dir string, e fishplus.Entry)
 	if e.IsSymlink() {
 		if e.TargetIsDir {
 			isDir = true
-		} else if target, err := v.client.Stat(ctx, path.Join(dir, e.Name)); err == nil {
+		} else if target, err := v.client().Stat(ctx, path.Join(dir, e.Name)); err == nil {
 			isDir = target.IsDir()
 		}
 	}
@@ -231,7 +460,7 @@ func (v *FishVFS) entryToItem(ctx context.Context, dir string, e fishplus.Entry)
 
 func (v *FishVFS) ReadDir(ctx context.Context, p string, onChunk func([]vfs.VFSItem)) error {
 	dir := v.abs(p)
-	entries, err := v.client.Enum(ctx, dir)
+	entries, err := v.client().Enum(ctx, dir)
 	if err != nil {
 		return err
 	}
@@ -253,7 +482,7 @@ func (v *FishVFS) ReadDir(ctx context.Context, p string, onChunk func([]vfs.VFSI
 // a symlink as one, and only resolves it to answer the IsDir question.
 func (v *FishVFS) Stat(ctx context.Context, p string) (vfs.VFSItem, error) {
 	target := v.abs(p)
-	e, err := v.client.Lstat(ctx, target)
+	e, err := v.client().Lstat(ctx, target)
 	if err != nil {
 		return vfs.VFSItem{}, err
 	}
@@ -261,14 +490,14 @@ func (v *FishVFS) Stat(ctx context.Context, p string) (vfs.VFSItem, error) {
 }
 
 func (v *FishVFS) Open(ctx context.Context, p string) (vfs.ReadAtCloser, error) {
-	return v.client.Open(ctx, v.abs(p))
+	return v.client().Open(ctx, v.abs(p))
 }
 
 func (v *FishVFS) GetCapabilities() vfs.VFSCapabilities {
 	return vfs.VFSCapabilities{
 		HasRandomAccess:    true,
 		HasUnixPermissions: true,
-		HasSearch:          v.client.CanGrep(),
+		HasSearch:          v.client().CanGrep(),
 	}
 }
 
@@ -283,13 +512,13 @@ const fishSearchMax = 10000
 // the tools answers nil, and the caller falls back to reading the file,
 // exactly as it does with SFTP.
 func (v *FishVFS) Search(ctx context.Context, p, pattern string) (chan int64, error) {
-	if pattern == "" || !v.client.CanGrep() {
+	if pattern == "" || !v.client().CanGrep() {
 		return nil, nil
 	}
 	// Case is folded because the one caller, the viewer's search, has always
 	// folded it, and a search that starts matching differently depending on
 	// which panel the file is open in would be worse than a slow one.
-	offsets, err := v.client.Grep(ctx, v.abs(p), pattern,
+	offsets, err := v.client().Grep(ctx, v.abs(p), pattern,
 		fishplus.GrepOptions{Fixed: true, IgnoreCase: true, Limit: fishSearchMax})
 	if err != nil {
 		return nil, err
@@ -313,7 +542,7 @@ func (v *FishVFS) Search(ctx context.Context, p, pattern string) (chan int64, er
 // A symlink is reported as found without resolving it: the alternative is a
 // round trip per hit, which would give back what the whole command saves.
 func (v *FishVFS) FindFiles(ctx context.Context, dir string, q vfs.FindQuery) ([]vfs.FoundEntry, error) {
-	entries, err := v.client.Find(ctx, v.abs(dir), fishplus.FindOptions{
+	entries, err := v.client().Find(ctx, v.abs(dir), fishplus.FindOptions{
 		Masks:      q.Masks,
 		Text:       q.Text,
 		Fixed:      true,
@@ -361,7 +590,7 @@ func opStatsFromScan(s fishplus.ScanStats) vfs.OpStats {
 // the caller takes this answer as final: vfs.CalculateStats does not retry a
 // FastScanner that failed.
 func (v *FishVFS) Scan(ctx context.Context, basePath string, names []string, cb vfs.ScanCallback) (vfs.OpStats, error) {
-	if !v.client.CanScan() {
+	if !v.client().CanScan() {
 		return vfs.GenericScan(ctx, v, basePath, names, cb)
 	}
 	var total vfs.OpStats
@@ -386,7 +615,7 @@ func (v *FishVFS) Scan(ctx context.Context, basePath string, names []string, cb 
 		// what the caller sees has to be added to what the earlier names
 		// already contributed.
 		base := total
-		stats, err := v.client.Scan(ctx, full, func(p fishplus.ScanProgress) {
+		stats, err := v.client().Scan(ctx, full, func(p fishplus.ScanProgress) {
 			if cb == nil {
 				return
 			}
@@ -413,17 +642,17 @@ func (v *FishVFS) Scan(ctx context.Context, basePath string, names []string, cb 
 // can read stdin, print for an hour or never end without any of that
 // reaching the request stream the panel is using.
 func (v *FishVFS) RunCommand(ctx context.Context, dir, command string, cb func(line string)) (int, error) {
-	if !v.client.CanRun() {
+	if !v.client().CanRun() {
 		return 0, fishplus.ErrNoJobs
 	}
-	return v.client.Run(ctx, v.abs(dir), command, cb)
+	return v.client().Run(ctx, v.abs(dir), command, cb)
 }
 
 // FindDuplicates implements vfs.DuplicateFinder. Only the paths of the files
 // that turned out to be identical cross the network; the reading and the
 // hashing happen where the disk is.
 func (v *FishVFS) FindDuplicates(ctx context.Context, dir string, cb func(vfs.DuplicateProgress)) ([][]string, error) {
-	if !v.client.CanHash() {
+	if !v.client().CanHash() {
 		return nil, fishplus.ErrNoJobs
 	}
 	var forward func(fishplus.HashProgress)
@@ -432,13 +661,13 @@ func (v *FishVFS) FindDuplicates(ctx context.Context, dir string, cb func(vfs.Du
 			cb(vfs.DuplicateProgress{Done: p.Done, Total: p.Total, Path: p.Path})
 		}
 	}
-	return v.client.Duplicates(ctx, v.abs(dir), forward)
+	return v.client().Duplicates(ctx, v.abs(dir), forward)
 }
 
 // PatchFile implements vfs.DeltaWriter. The copying happens on the remote
 // host at local disk speed; only the new bytes cross the network.
 func (v *FishVFS) PatchFile(ctx context.Context, src, dst string, pieces []vfs.PatchPiece) error {
-	if !v.client.CanPatch() {
+	if !v.client().CanPatch() {
 		return fishplus.ErrNoWrite
 	}
 	segs := make([]fishplus.PatchSegment, 0, len(pieces))
@@ -449,20 +678,20 @@ func (v *FishVFS) PatchFile(ctx context.Context, src, dst string, pieces []vfs.P
 		}
 		segs = append(segs, fishplus.Literal(p.Data))
 	}
-	return v.client.Patch(ctx, v.abs(src), v.abs(dst), segs)
+	return v.client().Patch(ctx, v.abs(src), v.abs(dst), segs)
 }
 
 // LineIndex implements vfs.LineIndexer. A count of zero asks for nothing but
 // the total, which is one remote pass and three numbers on the wire.
 func (v *FishVFS) LineIndex(ctx context.Context, p string, first, count int64) (vfs.LineIndexResult, error) {
-	idx, err := v.client.Lines(ctx, v.abs(p), first, count)
+	idx, err := v.client().Lines(ctx, v.abs(p), first, count)
 	if err != nil {
 		return vfs.LineIndexResult{}, err
 	}
 	return vfs.LineIndexResult{First: idx.First, Offsets: idx.Offsets, Total: idx.Total}, nil
 }
 func (v *FishVFS) MkDir(ctx context.Context, p string) error {
-	return v.client.MkDir(ctx, v.abs(p))
+	return v.client().MkDir(ctx, v.abs(p))
 }
 
 // Remove deletes whatever is at the path. A directory is removed with
@@ -471,25 +700,25 @@ func (v *FishVFS) MkDir(ctx context.Context, p string) error {
 // worth having at all.
 func (v *FishVFS) Remove(ctx context.Context, p string) error {
 	target := v.abs(p)
-	e, err := v.client.Lstat(ctx, target)
+	e, err := v.client().Lstat(ctx, target)
 	if err != nil {
 		return err
 	}
 	if e.IsDir() {
-		return v.client.RemoveAll(ctx, target)
+		return v.client().RemoveAll(ctx, target)
 	}
-	return v.client.Remove(ctx, target)
+	return v.client().Remove(ctx, target)
 }
 
 func (v *FishVFS) Rename(ctx context.Context, o, n string) error {
-	return v.client.Rename(ctx, v.abs(o), v.abs(n))
+	return v.client().Rename(ctx, v.abs(o), v.abs(n))
 }
 
 // Create truncates the file, or creates it, and hands back a handle that
 // streams from the beginning. The handle buffers up to one transfer chunk,
 // so the copier's small writes do not each become a round trip.
 func (v *FishVFS) Create(ctx context.Context, p string) (io.WriteCloser, error) {
-	w, err := v.client.Create(ctx, v.abs(p))
+	w, err := v.client().Create(ctx, v.abs(p))
 	if err != nil {
 		return nil, err
 	}
@@ -504,11 +733,11 @@ func (v *FishVFS) Create(ctx context.Context, p string) (io.WriteCloser, error) 
 func (v *FishVFS) SetAttributes(ctx context.Context, p string, item vfs.VFSItem) error {
 	target := v.abs(p)
 	if item.UnixMode != 0 {
-		if err := v.client.Chmod(ctx, target, item.UnixMode); err != nil {
+		if err := v.client().Chmod(ctx, target, item.UnixMode); err != nil {
 			return err
 		}
 	}
-	if err := v.client.Chown(ctx, target, item.Uid, item.Gid); err != nil {
+	if err := v.client().Chown(ctx, target, item.Uid, item.Gid); err != nil {
 		return err
 	}
 	mtime, atime := item.MTime, item.ATime
@@ -518,7 +747,7 @@ func (v *FishVFS) SetAttributes(ctx context.Context, p string, item vfs.VFSItem)
 	if atime.IsZero() {
 		atime = mtime
 	}
-	return v.client.Chtimes(ctx, target, mtime, atime)
+	return v.client().Chtimes(ctx, target, mtime, atime)
 }
 
 func (v *FishVFS) ParentVFS() vfs.VFS { return v.parent }
@@ -533,7 +762,6 @@ func (v *FishVFS) Clone() vfs.VFS {
 	}
 	return &FishVFS{
 		parent: v.parent,
-		client: v.client,
 		conn:   v.conn,
 		path:   v.path,
 		title:  v.title,

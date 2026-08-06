@@ -102,15 +102,16 @@ func (r *Response) Err(cmd string) error {
 // stdin/stdout pair of a remote shell started through ssh. All requests are
 // serialized: the protocol is strictly request/response over one stream.
 type Session struct {
-	mu     sync.Mutex
-	w      io.Writer
-	r      *bufio.Reader
-	closer io.Closer
-	token  string
-	seq    uint64
-	feats  Features
-	broken bool
-	closed bool
+	mu      sync.Mutex
+	w       io.Writer
+	r       *bufio.Reader
+	closer  io.Closer
+	token   string
+	seq     uint64
+	feats   Features
+	broken  bool
+	closed  bool
+	lastUse time.Time
 }
 
 // NewSession wires a session to the remote shell's stdin and stdout. closer
@@ -118,10 +119,11 @@ type Session struct {
 // helper exit because its stdin hits EOF.
 func NewSession(stdin io.Writer, stdout io.Reader, closer io.Closer) *Session {
 	return &Session{
-		w:      stdin,
-		r:      bufio.NewReaderSize(stdout, 64*1024),
-		closer: closer,
-		token:  newToken(),
+		w:       stdin,
+		r:       bufio.NewReaderSize(stdout, 64*1024),
+		closer:  closer,
+		token:   newToken(),
+		lastUse: time.Now(),
 	}
 }
 
@@ -150,6 +152,15 @@ func (s *Session) Broken() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.broken
+}
+
+// IdleFor is how long it has been since the session last carried a request.
+// It is what tells a session nobody is using from one that is merely between
+// two chunks of a copy, which is the only distinction a keepalive needs.
+func (s *Session) IdleFor() time.Duration {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return time.Since(s.lastUse)
 }
 
 // Handshake uploads the helper script and waits for its banner. Everything
@@ -328,6 +339,10 @@ func (s *Session) execFull(ctx context.Context, binary bool, cmd string, args, p
 	if s.broken {
 		return nil, ErrBroken
 	}
+	// The idle clock is refreshed when the request is done rather than when it
+	// started, under the lock the request already holds: a read that took ten
+	// minutes was ten minutes of activity, not ten minutes of silence.
+	defer func() { s.lastUse = time.Now() }()
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}

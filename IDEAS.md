@@ -83,3 +83,19 @@ This approach has massive benefits across all supported platforms:
 *   It bypasses shell-specific limitations (like 32-bit arithmetic, lack of proper `dd`/`truncate` tools, or complex escaping).
 *   It provides a high-performance, native Go-based server that speaks the FISH+ protocol out of the box over a simple SSH tunnel or TCP socket.
 *   It simplifies remote host support, especially on non-POSIX platforms like Windows (see below).
+
+## The credentials a reconnect needs
+
+A FISH+ site opens through a dialer that holds the host, the user and the
+password for as long as the panel is open, because a session that has to be
+rebuilt has to be able to authenticate again. Before the reconnect work the
+password was used once and forgotten — though it was read from a site
+configuration on disk, so it was never a secret f4 alone was keeping.
+
+Two things could make this better and neither is needed yet: asking the user
+again instead of remembering, which turns a reconnect into a prompt and is
+wrong for a panel that reconnects while nobody is looking, and holding the
+authenticated `ssh.Client` rather than the password, which works for a
+connection that is merely idle and not for one that is gone. Whichever way it
+goes, it is a decision about credentials rather than about reconnecting, which
+is why it is here and not in `STEP14.md`.

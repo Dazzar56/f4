@@ -1507,6 +1507,12 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 			fp.lastDirMTime = dirStat.MTime
 			fp.isLoading = false
 			if err != nil && err != context.Canceled {
+				// A session that died is a question rather than a message: the
+				// panel can often be had back, and going up a level or showing
+				// an error would throw away the answer before it was asked.
+				if fp.offerPanelReconnect(err, keepEntries) {
+					return
+				}
 				if os.IsNotExist(err) && !fp.vfs.IsAtRoot() && !keepEntries {
 					// If the directory disappeared (e.g., deleted from other panel),
 					// attempt to go up one level silently.
@@ -2505,6 +2511,30 @@ func (fp *FileSystemPanel) GetSelectedNames() []string {
 		}
 	}
 	return names
+}
+
+// GetMarkedNames returns only explicitly marked panel items, in panel order.
+// Unlike GetSelectedNames it deliberately does not fall back to the cursor.
+func (fp *FileSystemPanel) GetMarkedNames() []string {
+	names := make([]string, 0)
+	for _, entry := range fp.entries {
+		if entry.Selected && entry.Name != ".." {
+			names = append(names, entry.Name)
+		}
+	}
+	return names
+}
+
+// ReplaceMarkedNames atomically replaces the explicit panel selection.
+func (fp *FileSystemPanel) ReplaceMarkedNames(names []string) {
+	selected := make(map[string]struct{}, len(names))
+	for _, name := range names {
+		selected[name] = struct{}{}
+	}
+	for _, entry := range fp.entries {
+		_, entry.Selected = selected[entry.Name]
+	}
+	fp.Refresh()
 }
 
 // GetSuccessorName determines which file should receive focus after the current
