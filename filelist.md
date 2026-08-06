@@ -548,8 +548,7 @@
 ├── window_icon_windows.go
 ├── window_icon_windows_test.go
 ├── word_nav.go
-├── WORDNAV.md
 └── word_nav_test.go
 
-37 directories, 512 files
+37 directories, 511 files
 ```
