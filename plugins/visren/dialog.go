@@ -536,35 +536,35 @@ func (d *Dialog) layout() {
 		d.separators[4].FocusLink = d.nameCombo
 		d.separators[5].FocusLink = d.extCombo
 	}
-	d.separators[0].SetPosition(x+2, y+1, x+10, y+1)
-	d.separators[1].SetPosition(rightX, y+1, rightX+12, y+1)
-	d.nameEdit.SetPosition(x+2, y+2, rightX-3, y+2)
-	d.extEdit.SetPosition(rightX, y+2, x+w-3, y+2)
-	d.separators[4].SetPosition(x+2, y+3, rightX-3, y+3)
-	d.separators[5].SetPosition(rightX, y+3, x+w-3, y+3)
-	d.nameCombo.SetPosition(x+2, y+4, rightX-10, y+4)
-	d.namePlus.SetPosition(rightX-7, y+4, rightX-5, y+4)
-	d.extCombo.SetPosition(rightX, y+4, x+w-8, y+4)
-	d.extPlus.SetPosition(x+w-5, y+4, x+w-3, y+4)
+	d.separators[0].SetPosition(x+2, y+2, x+10, y+2)
+	d.separators[1].SetPosition(rightX, y+2, rightX+12, y+2)
+	d.nameEdit.SetPosition(x+2, y+3, rightX-3, y+3)
+	d.extEdit.SetPosition(rightX, y+3, x+w-3, y+3)
+	d.separators[4].SetPosition(x+2, y+4, rightX-3, y+4)
+	d.separators[5].SetPosition(rightX, y+4, x+w-3, y+4)
+	d.nameCombo.SetPosition(x+2, y+5, rightX-10, y+5)
+	d.namePlus.SetPosition(rightX-7, y+5, rightX-5, y+5)
+	d.extCombo.SetPosition(rightX, y+5, x+w-8, y+5)
+	d.extPlus.SetPosition(x+w-5, y+5, x+w-3, y+5)
 	d.separators[6].SetText(strings.Repeat("─", inner))
-	d.separators[6].SetPosition(x+2, y+5, x+w-3, y+5)
-	d.separators[2].SetPosition(x+2, y+6, x+13, y+6)
-	d.searchEdit.SetPosition(x+15, y+6, rightX-3, y+6)
-	d.caseCheck.SetPosition(rightX, y+6, rightX+23, y+6)
-	d.separators[3].SetPosition(x+2, y+7, x+13, y+7)
-	d.replaceEdit.SetPosition(x+15, y+7, rightX-3, y+7)
-	d.regexCheck.SetPosition(rightX, y+7, rightX+25, y+7)
+	d.separators[6].SetPosition(x+2, y+6, x+w-3, y+6)
+	d.separators[2].SetPosition(x+2, y+7, x+13, y+7)
+	d.searchEdit.SetPosition(x+15, y+7, rightX-3, y+7)
+	d.caseCheck.SetPosition(rightX, y+7, rightX+23, y+7)
+	d.separators[3].SetPosition(x+2, y+8, x+13, y+8)
+	d.replaceEdit.SetPosition(x+15, y+8, rightX-3, y+8)
+	d.regexCheck.SetPosition(rightX, y+8, rightX+25, y+8)
 	d.separators[7].SetText(centeredRule(tr("VisRen.BeforeAfter", "name before - name after"), inner))
-	d.separators[7].SetPosition(x+2, y+8, x+w-3, y+8)
-	d.preview.SetPosition(x+2, y+9, x+w-3, y+h-4)
+	d.separators[7].SetPosition(x+2, y+9, x+w-3, y+9)
+	d.preview.SetPosition(x+2, y+10, x+w-3, y+h-5)
 	d.preview.divider = d.preview.contentWidth() / 2
-	d.logLine.SetPosition(x+2, y+h-3, x+w-3, y+h-3)
+	d.logLine.SetPosition(x+2, y+h-4, x+w-3, y+h-4)
 	d.updateLogLine()
 	buttonWidths := []int{d.renameButton.X2 - d.renameButton.X1 + 1, d.undoButton.X2 - d.undoButton.X1 + 1, d.editorButton.X2 - d.editorButton.X1 + 1, d.cancelButton.X2 - d.cancelButton.X1 + 1}
 	total := buttonWidths[0] + buttonWidths[1] + buttonWidths[2] + buttonWidths[3] + 6
 	bx := x + (w-total)/2
 	for idx, button := range []*vtui.Button{d.renameButton, d.undoButton, d.editorButton, d.cancelButton} {
-		button.SetPosition(bx, y+h-2, bx+buttonWidths[idx]-1, y+h-2)
+		button.SetPosition(bx, y+h-3, bx+buttonWidths[idx]-1, y+h-3)
 		bx += buttonWidths[idx] + 2
 	}
 }

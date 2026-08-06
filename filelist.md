@@ -1,5 +1,5 @@
 # Project Structure
-Last updated: 2026-08-06 04:31:44
+Last updated: 2026-08-06 06:57:21
 
 ```text
 .
@@ -117,6 +117,7 @@ Last updated: 2026-08-06 04:31:44
 ├── find_file.go
 ├── find_file_test.go
 ├── FISH+.md
+├── FISH_PLUS_S2S.md
 ├── folder_history_actions_test.go
 ├── folder_history_navigation_test.go
 ├── fs_info_darwin.go
@@ -204,6 +205,8 @@ Last updated: 2026-08-06 04:31:44
 │   ├── en.lng
 │   └── ru.lng
 ├── lang.go
+├── lang_packs.go
+├── lang_packs_test.go
 ├── lang_test.go
 ├── LICENSE
 ├── LUA.md
@@ -546,5 +549,5 @@ Last updated: 2026-08-06 04:31:44
 ├── WORDNAV.md
 └── word_nav_test.go
 
-37 directories, 506 files
+37 directories, 509 files
 ```
