@@ -1027,6 +1027,12 @@ func actionViewerSearch(vv *ViewerView) {
 }
 
 func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
+	// User-defined file associations for Enter (mirrors far2l F9 →
+	// Commands → File associations). A matching association intercepts
+	// before the runnable / xdg-open fallback; no match → default flow.
+	if tryFileAssociation(pf, AssocExecute) {
+		return
+	}
 	vtui.RunAsync(func(ctx *vtui.TaskContext) {
 		if _, isLocal := v.(*vfs.OSVFS); isLocal {
 			if fi, err := os.Stat(path); err == nil {
@@ -1178,6 +1184,11 @@ func actionViewFile(pf *PanelsFrame) {
 			actionCalcDirSize(pf, fsp, idx)
 			return
 		}
+		// A matching View association intercepts before the built-in
+		// viewer, so users can wire F3 to feh, less, or anything else.
+		if tryFileAssociation(pf, AssocView) {
+			return
+		}
 		name := fsp.GetSelectedName()
 		path := fsp.vfs.Join(fsp.vfs.GetPath(), name)
 		actionOpenViewer(pf, fsp.vfs, path)
@@ -1256,6 +1267,11 @@ func actionEditFile(pf *PanelsFrame) {
 		}
 		if fsp.entries[idx].IsDir {
 			actionFileAttributes(pf)
+			return
+		}
+		// A matching Edit association intercepts before the built-in
+		// editor (or the external one if UseExternalEditor is on).
+		if tryFileAssociation(pf, AssocEdit) {
 			return
 		}
 		name := fsp.GetSelectedName()

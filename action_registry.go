@@ -468,6 +468,16 @@ func init() {
 		Handler:     withPF(func(pf *PanelsFrame) { ShowUserMenu(pf) }),
 	})
 	RegisterAction(Action{
+		Name:        "Panel.FileAssociations",
+		Area:        "Shell",
+		Label:       "File Associations…",
+		LabelKey:    "Action.Panel.FileAssociations",
+		Description: "Configure per-mask commands for Enter, F3 and F4",
+		DescKey:     "Action.Panel.FileAssociations.Desc",
+		MenuPath:    "Commands",
+		Handler:     withPF(func(pf *PanelsFrame) { ShowFileAssociations(pf) }),
+	})
+	RegisterAction(Action{
 		Name:        "File.Find",
 		Area:        "Shell",
 		Label:       "Find File",
