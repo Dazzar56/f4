@@ -72,23 +72,38 @@ hour late, attached to whatever the user happened to do next.
 
 1.  ~~`fishConn.reconnect`: dial, handshake, swap the client, one round trip to
     confirm.~~ Done. `FishDialer` is
-2.  ~~The dialer plumbed in from the FISH+ site~~ — half done. `FishVFS.
-    Reconnect` and `CanReconnect` are the entry point a caller uses, and
-    `NewFishVFSOnDialer` is what a site has to be opened through. What is left
-    is the site itself: whatever builds a FISH+ panel from a NetFox
-    configuration still calls `NewFishVFSOnStream`, so it opens a session that
-    cannot be rebuilt. That change is in `ssh_dial.go` and the FISH+ site
-    constructor, and it is the next thing to do.
+2.  ~~The dialer plumbed in from the FISH+ site.~~ Done. `NewFishVFSOnDialer`
+    is what a site is opened through, `sshFishDialer` is the transport it is
+    handed, and `NewFishVFS` is now nothing but the two of them plus a title.
+    The credentials live in that closure for as long as the panel does, which
+    is what a reconnect needs and what is written down in `IDEAS.md`.
 
-    A related mechanical change belongs with it: every `FishVFS` method reaches
-    the session through its own `v.client` field, so only the view that
-    reconnected is repointed. `Clone` already asks the connection instead, so a
-    view born after a reconnect is on the live session; the request methods are
-    what is left, and each of them becomes `v.conn.current()`.
-3.  The dialog, and the retry of the operation that raised it. Read-only
-    operations retry; the rest report.
+    The mechanical half landed with it: `FishVFS` no longer holds a client at
+    all. Every request goes through `v.client()`, which asks the connection, so
+    a reconnect repoints every view of the session rather than only the one
+    that asked. `Clone` therefore has nothing left to copy but the path.
+
+3.  ~~The dialog, and the retry of the operation that raised it.~~ Done.
+    `vfs.SessionReconnector` is the optional interface — was the session lost,
+    can it be rebuilt, rebuild it — and `FishVFS` answers all three.
+    `offerReconnect` in `reconnect.go` is the question, with three buttons and
+    a fourth answer, Escape, which means the same as working offline. A caller
+    says whether repeating its operation is honest: a directory listing is, a
+    half written file is not, and one that is not still gets the session back
+    but is told to start over by hand. The panel's directory load is the first
+    caller; the viewer, the editor and the copier are not wired up yet and
+    report as they always did.
 4.  Jobs: `jlist` on a fresh session comes back empty, so the registry is told
     its remote entries are gone. That is a UI change and belongs last.
+
+## Where to pick it up
+
+Step 4 is what is left of this file. Beyond it, the call sites: the viewer,
+the editor and the file operations all meet `ErrBroken` in their own error
+paths and none of them asks yet. Each is a few lines — `offerReconnect` with
+`retryable` set to what that operation can honestly promise — and each needs
+its own answer to what "retry" means there, which is why they are separate
+work rather than one sweep.
 
 ## What stays out of scope
 

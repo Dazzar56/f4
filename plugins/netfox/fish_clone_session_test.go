@@ -20,8 +20,8 @@ func TestFishCloneStartsOnTheLiveSession(t *testing.T) {
 	}
 	defer v.Close()
 
-	// One view reconnects; the one it was cloned from keeps its own pointer,
-	// which is the situation the next clone has to survive.
+	// One view reconnects; every other view of the connection follows, which
+	// is what the clone then has to be born on too.
 	reconnecting, ok := v.Clone().(*FishVFS)
 	if !ok {
 		t.Fatal("Clone did not hand back a FishVFS")
@@ -33,8 +33,8 @@ func TestFishCloneStartsOnTheLiveSession(t *testing.T) {
 	if err := reconnecting.Reconnect(context.Background()); err != nil {
 		t.Fatalf("reconnect: %v", err)
 	}
-	if v.Client() != dead {
-		t.Fatal("the untouched view was repointed, so the test proves nothing")
+	if v.Client() == dead {
+		t.Fatal("the view that did not ask for the reconnect kept the dead session")
 	}
 
 	fresh, ok := v.Clone().(*FishVFS)

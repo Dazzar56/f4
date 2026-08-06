@@ -1491,6 +1491,12 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 			fp.lastDirMTime = dirStat.MTime
 			fp.isLoading = false
 			if err != nil && err != context.Canceled {
+				// A session that died is a question rather than a message: the
+				// panel can often be had back, and going up a level or showing
+				// an error would throw away the answer before it was asked.
+				if fp.offerPanelReconnect(err, keepEntries) {
+					return
+				}
 				if os.IsNotExist(err) && !fp.vfs.IsAtRoot() && !keepEntries {
 					// If the directory disappeared (e.g., deleted from other panel),
 					// attempt to go up one level silently.

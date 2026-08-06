@@ -41,7 +41,7 @@ func TestFishReconnectRepointsTheView(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if _, err := v.client.Pwd(ctx); err != nil {
+	if _, err := v.client().Pwd(ctx); err != nil {
 		t.Fatalf("the reconnected view cannot make a request: %v", err)
 	}
 }

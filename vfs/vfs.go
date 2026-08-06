@@ -308,6 +308,32 @@ type LineIndexResult struct {
 type LineIndexer interface {
 	LineIndex(ctx context.Context, path string, first, count int64) (LineIndexResult, error)
 }
+
+// SessionReconnector is implemented by a file system that lives on a
+// connection and can rebuild it. It is optional for the same reason
+// LineIndexer is: a local file system has no session to lose, and one that
+// was handed a stream it cannot open a second time has nothing to rebuild
+// with, so neither should be made to carry it.
+//
+// Reconnecting is deliberately not done inside a failing request. A request
+// that reconnected on its own would turn one failure into a delay of unknown
+// length in the middle of an operation, with no way for the user to say no.
+// What the interface offers instead is the three questions a caller that met
+// the failure needs answered: was the session lost, can it be rebuilt, and
+// rebuild it.
+type SessionReconnector interface {
+	// SessionLost reports whether an error means the connection died rather
+	// than the operation itself failing. A missing file is not a lost session
+	// and must not be answered as one.
+	SessionLost(err error) bool
+	// CanReconnect reports whether a new connection can be built. A caller
+	// asks before offering the user a choice it cannot honour.
+	CanReconnect() bool
+	// Reconnect builds it. What survives is what lives on this side; anything
+	// the far side was doing is gone, which is why the caller decides what to
+	// retry rather than this method retrying anything itself.
+	Reconnect(ctx context.Context) error
+}
 type ReadAtCloser interface {
 	ReadAt(ctx context.Context, p []byte, off int64) (n int, err error)
 	Read(ctx context.Context, p []byte) (n int, err error)

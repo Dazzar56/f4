@@ -1,0 +1,484 @@
+# Summary: Step 14b, part 3 — the question a user is asked when a session dies,
+# and the panel asking it.
+#
+# Plan:
+#   1. vfs.SessionReconnector: the optional interface a file system living on a
+#      connection answers, and FishVFS.SessionLost answering the first of it.
+#   2. reconnect.go: offerReconnect, the three buttons, and the retry that only
+#      an operation safe to repeat is offered.
+#   3. The panel's directory load asks before it reports.
+#   4. Tests for the offer, and STEP14.md updated.
+
+3c9d0f47 AP 3.1
+
+3c9d0f47 FILE
+vfs/vfs.go
+
+3c9d0f47 REPLACE
+3c9d0f47 snippet
+type LineIndexer interface {
+	LineIndex(ctx context.Context, path string, first, count int64) (LineIndexResult, error)
+}
+3c9d0f47 content
+type LineIndexer interface {
+	LineIndex(ctx context.Context, path string, first, count int64) (LineIndexResult, error)
+}
+
+// SessionReconnector is implemented by a file system that lives on a
+// connection and can rebuild it. It is optional for the same reason
+// LineIndexer is: a local file system has no session to lose, and one that
+// was handed a stream it cannot open a second time has nothing to rebuild
+// with, so neither should be made to carry it.
+//
+// Reconnecting is deliberately not done inside a failing request. A request
+// that reconnected on its own would turn one failure into a delay of unknown
+// length in the middle of an operation, with no way for the user to say no.
+// What the interface offers instead is the three questions a caller that met
+// the failure needs answered: was the session lost, can it be rebuilt, and
+// rebuild it.
+type SessionReconnector interface {
+	// SessionLost reports whether an error means the connection died rather
+	// than the operation itself failing. A missing file is not a lost session
+	// and must not be answered as one.
+	SessionLost(err error) bool
+	// CanReconnect reports whether a new connection can be built. A caller
+	// asks before offering the user a choice it cannot honour.
+	CanReconnect() bool
+	// Reconnect builds it. What survives is what lives on this side; anything
+	// the far side was doing is gone, which is why the caller decides what to
+	// retry rather than this method retrying anything itself.
+	Reconnect(ctx context.Context) error
+}
+
+3c9d0f47 FILE
+plugins/netfox/fish_vfs.go
+
+3c9d0f47 REPLACE
+3c9d0f47 snippet
+// Reconnect rebuilds the session behind this file system and points this view
+3c9d0f47 content
+// SessionLost implements vfs.SessionReconnector. Only a session that stopped
+// speaking counts: a file that is not there, a permission that was refused or
+// a cancelled request are failures of the request, and offering to reconnect
+// over any of them would be noise in front of the real message.
+func (v *FishVFS) SessionLost(err error) bool {
+	return err != nil && errors.Is(err, fishplus.ErrBroken)
+}
+
+// Reconnect rebuilds the session behind this file system and points this view
+
+3c9d0f47 FILE
+file_panel.go
+
+3c9d0f47 REPLACE
+3c9d0f47 snippet
+			if err != nil && err != context.Canceled {
+				if os.IsNotExist(err) && !fp.vfs.IsAtRoot() && !keepEntries {
+3c9d0f47 content
+			if err != nil && err != context.Canceled {
+				// A session that died is a question rather than a message: the
+				// panel can often be had back, and going up a level or showing
+				// an error would throw away the answer before it was asked.
+				if fp.offerPanelReconnect(err, keepEntries) {
+					return
+				}
+				if os.IsNotExist(err) && !fp.vfs.IsAtRoot() && !keepEntries {
+
+3c9d0f47 FILE
+reconnect.go
+
+3c9d0f47 CREATE
+3c9d0f47 content
+package main
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/unxed/f4/vfs"
+	"github.com/unxed/vtui"
+)
+
+// reconnectTimeout bounds one attempt at rebuilding a connection. It is
+// deliberately longer than a request timeout: the user has just been asked
+// whether to wait and answered yes, so giving up quickly would only make them
+// answer again.
+const reconnectTimeout = 30 * time.Second
+
+// reconnectChoice is what the user answered.
+type reconnectChoice int
+
+const (
+	// reconnectRetry — the connection was rebuilt and the operation may be
+	// attempted again. It is only ever handed to a caller that said its
+	// operation is safe to repeat.
+	reconnectRetry reconnectChoice = iota
+	// reconnectOffline — leave the panel where it is with what it already
+	// shows. The session stays broken and the next operation asks again.
+	reconnectOffline
+	// reconnectLeave — the user is done with this file system.
+	reconnectLeave
+)
+
+// reconnectAsk shows the question. It is a variable so that a test can answer
+// it without a screen; nothing else replaces it.
+var reconnectAsk = func(title, message string, buttons []string, onChoice func(int)) {
+	dlg := vtui.ShowMessage(title, message, buttons)
+	dlg.OnResult = onChoice
+}
+
+// reconnectPostUI hands work back to the UI thread. Also a variable, and for
+// the same reason: a test has no frame manager to post to.
+var reconnectPostUI = func(f func()) { vtui.FrameManager.PostTask(f) }
+
+// reconnectRunner performs the attempt itself, off the UI thread.
+var reconnectRunner = func(r vfs.SessionReconnector, done func(error)) {
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), reconnectTimeout)
+		defer cancel()
+		err := r.Reconnect(ctx)
+		reconnectPostUI(func() { done(err) })
+	}()
+}
+
+// reconnectorFor reports the file system to offer a reconnect on, or nil when
+// there is nothing to offer: an error that is not a lost session, a file
+// system that does not live on a connection, or one that cannot open a second
+// one. Answering nil is the normal case and means the caller reports the error
+// the way it always did.
+func reconnectorFor(fs vfs.VFS, err error) vfs.SessionReconnector {
+	if fs == nil || err == nil {
+		return nil
+	}
+	r, ok := fs.(vfs.SessionReconnector)
+	if !ok {
+		return nil
+	}
+	if !r.SessionLost(err) || !r.CanReconnect() {
+		return nil
+	}
+	return r
+}
+
+// offerReconnect asks what to do about a connection that died under an
+// operation, and reports whether it took responsibility for the error. When it
+// returns false nothing was shown and the caller reports the error itself.
+//
+// what names the operation in the message, in a form that fits after "while":
+// "reading the directory", "saving the file". retryable says whether repeating
+// it is honest — a read is, a half finished write is not, because nobody knows
+// how much of it arrived before the session died. A caller that says false
+// still gets the reconnect offered, since the panel is worth having back; what
+// it does not get is reconnectRetry, and the dialog says so rather than
+// silently doing less than it looks like it does.
+//
+// done runs on the UI thread, once, with the choice the user made. For
+// reconnectRetry the error is nil; a reconnect that failed is reported as
+// reconnectOffline with the error that stopped it, because a panel that could
+// not be rebuilt is exactly a panel left as it was.
+func offerReconnect(fs vfs.VFS, err error, what string, retryable bool, done func(reconnectChoice, error)) bool {
+	r := reconnectorFor(fs, err)
+	if r == nil {
+		return false
+	}
+	msg := fmt.Sprintf("The connection was lost while %s:\n%v", what, err)
+	if retryable {
+		msg += "\n\nReconnecting starts a new session and repeats the operation."
+	} else {
+		msg += "\n\nReconnecting starts a new session, but this operation cannot" +
+			"\nbe resumed and has to be started again by hand."
+	}
+	buttons := []string{"&Reconnect", "Work &offline", "&Close panel"}
+	reconnectAsk(" Connection lost ", msg, buttons, func(code int) {
+		switch code {
+		case 0:
+			reconnectRunner(r, func(rerr error) {
+				if rerr != nil {
+					done(reconnectOffline, rerr)
+					return
+				}
+				if !retryable {
+					done(reconnectOffline, nil)
+					return
+				}
+				done(reconnectRetry, nil)
+			})
+		case 2:
+			done(reconnectLeave, nil)
+		default:
+			// Anything else, Escape included, leaves things as they are. That
+			// is the answer that changes nothing, which is what a dialog the
+			// user dismissed should mean.
+			done(reconnectOffline, nil)
+		}
+	})
+	return true
+}
+
+// offerPanelReconnect is the panel's use of it: a directory listing is a read,
+// so repeating it is honest, and repeating it is also all it takes to get the
+// panel back.
+func (fp *FileSystemPanel) offerPanelReconnect(err error, keepEntries bool) bool {
+	return offerReconnect(fp.vfs, err, "reading the directory", true, func(c reconnectChoice, rerr error) {
+		switch c {
+		case reconnectRetry:
+			fp.readDirectoryEx(keepEntries)
+		case reconnectLeave:
+			fp.leaveVFS()
+		default:
+			shown := err
+			if rerr != nil {
+				shown = rerr
+			}
+			fp.updateTitle(shown)
+			vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to read directory:\n%v", shown), []string{"&Ok"})
+		}
+	})
+}
+
+// leaveVFS drops the file system the panel is standing in and shows the one
+// underneath, which is what entering ".." at the root of a virtual file system
+// does. A panel whose file system has no parent stays where it is: there is
+// nothing to fall back to, and closing it would leave the frame with a hole.
+func (fp *FileSystemPanel) leaveVFS() {
+	parent := fp.vfs.ParentVFS()
+	if parent == nil {
+		return
+	}
+	oldPath := fp.vfs.GetPath()
+	fp.vfs.Close()
+	fp.vfs = parent
+	if fp.providerEntryName != "" {
+		fp.pendingSelection = fp.providerEntryName
+		fp.providerEntryName = ""
+	} else {
+		fp.pendingSelection = fp.vfs.Base(oldPath)
+	}
+	fp.ReadDirectory()
+}
+
+3c9d0f47 FILE
+reconnect_test.go
+
+3c9d0f47 CREATE
+3c9d0f47 content
+package main
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/unxed/f4/vfs"
+)
+
+// fakeReconnectVFS is a file system that lives on a connection, built on
+// NullVFS so that only the three questions this feature asks have to be
+// answered here.
+type fakeReconnectVFS struct {
+	*vfs.NullVFS
+	lost     bool
+	can      bool
+	attempts int
+	failWith error
+}
+
+func newFakeReconnectVFS() *fakeReconnectVFS {
+	return &fakeReconnectVFS{NullVFS: vfs.NewNullVFS(0), lost: true, can: true}
+}
+
+func (f *fakeReconnectVFS) SessionLost(err error) bool {
+	return err != nil && f.lost
+}
+func (f *fakeReconnectVFS) CanReconnect() bool { return f.can }
+func (f *fakeReconnectVFS) Reconnect(ctx context.Context) error {
+	f.attempts++
+	return f.failWith
+}
+
+// withReconnectStubs replaces the two hooks that need a screen and a frame
+// manager, and hands back the last message the dialog was asked to show.
+func withReconnectStubs(t *testing.T, answer int) *string {
+	t.Helper()
+	oldAsk, oldPost := reconnectAsk, reconnectPostUI
+	t.Cleanup(func() { reconnectAsk, reconnectPostUI = oldAsk, oldPost })
+	var shown string
+	reconnectAsk = func(title, message string, buttons []string, onChoice func(int)) {
+		shown = message
+		onChoice(answer)
+	}
+	reconnectPostUI = func(f func()) { f() }
+	return &shown
+}
+
+// waitChoice runs an offer and waits for the answer, since a reconnect happens
+// off the calling goroutine even when the posting back is immediate.
+func waitChoice(t *testing.T, ch chan reconnectChoice) reconnectChoice {
+	t.Helper()
+	select {
+	case c := <-ch:
+		return c
+	case <-time.After(5 * time.Second):
+		t.Fatal("the offer never answered")
+		return reconnectOffline
+	}
+}
+
+func TestReconnectorForOffersOnlyWhereItCan(t *testing.T) {
+	boom := errors.New("session died")
+
+	if r := reconnectorFor(vfs.NewNullVFS(0), boom); r != nil {
+		t.Error("a file system with no session was offered a reconnect")
+	}
+
+	fs := newFakeReconnectVFS()
+	if r := reconnectorFor(fs, nil); r != nil {
+		t.Error("a reconnect was offered without an error")
+	}
+	if r := reconnectorFor(fs, boom); r == nil {
+		t.Error("a lost session that can be rebuilt was not offered")
+	}
+
+	fs.lost = false
+	if r := reconnectorFor(fs, boom); r != nil {
+		t.Error("an error that is not a lost session was offered a reconnect")
+	}
+
+	fs.lost, fs.can = true, false
+	if r := reconnectorFor(fs, boom); r != nil {
+		t.Error("a session that cannot be rebuilt was offered a reconnect")
+	}
+}
+
+func TestOfferReconnectSaysNothingWhenItCannotHelp(t *testing.T) {
+	shown := withReconnectStubs(t, 0)
+	if offerReconnect(vfs.NewNullVFS(0), errors.New("no such file"), "reading the directory", true, func(reconnectChoice, error) {
+		t.Error("the caller was answered for an error it owns")
+	}) {
+		t.Error("the offer claimed an error it cannot help with")
+	}
+	if *shown != "" {
+		t.Error("a dialog was shown for a file system with no session")
+	}
+}
+
+func TestOfferReconnectRetriesAReadableOperation(t *testing.T) {
+	withReconnectStubs(t, 0)
+	fs := newFakeReconnectVFS()
+	ch := make(chan reconnectChoice, 1)
+
+	if !offerReconnect(fs, errors.New("session died"), "reading the directory", true, func(c reconnectChoice, err error) {
+		if err != nil {
+			t.Errorf("a reconnect that worked reported %v", err)
+		}
+		ch <- c
+	}) {
+		t.Fatal("the offer was not taken")
+	}
+	if got := waitChoice(t, ch); got != reconnectRetry {
+		t.Fatalf("choice %v, want reconnectRetry", got)
+	}
+	if fs.attempts != 1 {
+		t.Fatalf("%d reconnect attempts, want 1", fs.attempts)
+	}
+}
+
+func TestOfferReconnectDoesNotRepeatAWrite(t *testing.T) {
+	shown := withReconnectStubs(t, 0)
+	fs := newFakeReconnectVFS()
+	ch := make(chan reconnectChoice, 1)
+
+	offerReconnect(fs, errors.New("session died"), "saving the file", false, func(c reconnectChoice, err error) {
+		ch <- c
+	})
+	if got := waitChoice(t, ch); got != reconnectOffline {
+		t.Fatalf("choice %v, want reconnectOffline: a half written file must not be repeated", got)
+	}
+	if fs.attempts != 1 {
+		t.Fatalf("%d reconnect attempts, want 1: the panel is still worth having back", fs.attempts)
+	}
+	if !strings.Contains(*shown, "cannot") {
+		t.Errorf("the dialog did not say the operation cannot be resumed: %q", *shown)
+	}
+}
+
+func TestOfferReconnectReportsAFailedAttempt(t *testing.T) {
+	withReconnectStubs(t, 0)
+	fs := newFakeReconnectVFS()
+	fs.failWith = errors.New("host still unreachable")
+	ch := make(chan reconnectChoice, 1)
+
+	offerReconnect(fs, errors.New("session died"), "reading the directory", true, func(c reconnectChoice, err error) {
+		if err == nil || !strings.Contains(err.Error(), "unreachable") {
+			t.Errorf("the failure was reported as %v", err)
+		}
+		ch <- c
+	})
+	if got := waitChoice(t, ch); got != reconnectOffline {
+		t.Fatalf("choice %v, want reconnectOffline", got)
+	}
+}
+
+func TestOfferReconnectHonoursTheOtherAnswers(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		answer int
+		want   reconnectChoice
+	}{
+		{"work offline", 1, reconnectOffline},
+		{"close the panel", 2, reconnectLeave},
+		{"dismissed", -1, reconnectOffline},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			withReconnectStubs(t, tc.answer)
+			fs := newFakeReconnectVFS()
+			ch := make(chan reconnectChoice, 1)
+			offerReconnect(fs, errors.New("session died"), "reading the directory", true, func(c reconnectChoice, err error) {
+				ch <- c
+			})
+			if got := waitChoice(t, ch); got != tc.want {
+				t.Fatalf("choice %v, want %v", got, tc.want)
+			}
+			if fs.attempts != 0 {
+				t.Fatalf("%d reconnect attempts, want none", fs.attempts)
+			}
+		})
+	}
+}
+
+3c9d0f47 FILE
+STEP14.md
+
+3c9d0f47 REPLACE
+3c9d0f47 snippet
+3.  The dialog, and the retry of the operation that raised it. Read-only
+    operations retry; the rest report.
+3c9d0f47 content
+3.  ~~The dialog, and the retry of the operation that raised it.~~ Done.
+    `vfs.SessionReconnector` is the optional interface — was the session lost,
+    can it be rebuilt, rebuild it — and `FishVFS` answers all three.
+    `offerReconnect` in `reconnect.go` is the question, with three buttons and
+    a fourth answer, Escape, which means the same as working offline. A caller
+    says whether repeating its operation is honest: a directory listing is, a
+    half written file is not, and one that is not still gets the session back
+    but is told to start over by hand. The panel's directory load is the first
+    caller; the viewer, the editor and the copier are not wired up yet and
+    report as they always did.
+
+3c9d0f47 REPLACE
+3c9d0f47 snippet
+Steps 3 and 4 are what is left, and 3 is the one a user would notice: nothing
+3c9d0f47 snippet_tail
+request that met a dead session answers.
+3c9d0f47 content
+Step 4 is what is left of this file. Beyond it, the call sites: the viewer,
+the editor and the file operations all meet `ErrBroken` in their own error
+paths and none of them asks yet. Each is a few lines — `offerReconnect` with
+`retryable` set to what that operation can honestly promise — and each needs
+its own answer to what "retry" means there, which is why they are separate
+work rather than one sweep.
+
+3c9d0f47 END
