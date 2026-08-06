@@ -112,16 +112,21 @@ func formatIntWithSpaces(n int64) string {
 	return res.String()
 }
 
-func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, destInput string, isMove bool, mode int, onComplete func()) {
-	destPath := destInput
-	if !dstVfs.IsAbs(destPath) {
-		if !strings.ContainsAny(destInput, "/\\") && destInput != "." && destInput != ".." {
-			destPath = srcVfs.Join(srcVfs.GetPath(), destInput)
-			dstVfs = srcVfs
-		} else {
-			destPath = dstVfs.Join(dstVfs.GetPath(), destPath)
-		}
+func resolveFileOpDestination(srcVfs, dstVfs vfs.VFS, destInput string) (vfs.VFS, string) {
+	// The passive panel supplies the initial absolute destination shown in the
+	// dialog. Once the user enters a relative path, however, it is relative to
+	// the active (source) panel, just like other panel path operations.
+	if dstVfs.IsAbs(destInput) {
+		return dstVfs, destInput
 	}
+	if srcVfs.IsAbs(destInput) {
+		return srcVfs, destInput
+	}
+	return srcVfs, srcVfs.Join(srcVfs.GetPath(), destInput)
+}
+
+func ExecuteFileOp(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, names []string, destInput string, isMove bool, mode int, onComplete func()) {
+	dstVfs, destPath := resolveFileOpDestination(srcVfs, dstVfs, destInput)
 
 	isTargetDir := len(names) > 1
 	if !isTargetDir {

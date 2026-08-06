@@ -439,6 +439,13 @@ func SetupUI() {
 		panels.ResizeConsole(width, height)
 	}
 	vtui.FrameManager.Push(panels)
+	previousEventFilter := vtui.FrameManager.EventFilter
+	vtui.FrameManager.EventFilter = func(e *vtinput.InputEvent) bool {
+		if previousEventFilter != nil && previousEventFilter(e) {
+			return true
+		}
+		return handlePanelPathEditHotkey(e)
+	}
 
 	vtui.FrameManager.MenuBar = panels.menuBar
 	vtui.FrameManager.KeyBar = panels.keyBar

@@ -1345,7 +1345,7 @@ func init() {
 		Label:       "Left Drive Menu",
 		Description: "Show the drive menu for the left panel",
 		DescKey:     "Action.Panel.LeftDriveMenu.Desc",
-		DefaultKeys: []string{"AltF1"},
+		DefaultKeys: []string{"AltF1", "CtrlShiftLeft"},
 		Handler:     withPF(func(pf *PanelsFrame) { pf.showDriveMenu(0) }),
 	})
 	RegisterAction(Action{
@@ -1354,7 +1354,7 @@ func init() {
 		Label:       "Right Drive Menu",
 		Description: "Show the drive menu for the right panel",
 		DescKey:     "Action.Panel.RightDriveMenu.Desc",
-		DefaultKeys: []string{"AltF2"},
+		DefaultKeys: []string{"AltF2", "CtrlShiftRight"},
 		Handler:     withPF(func(pf *PanelsFrame) { pf.showDriveMenu(1) }),
 	})
 	RegisterAction(Action{

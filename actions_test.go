@@ -723,33 +723,14 @@ func TestDelete_FocusCustomization(t *testing.T) {
 	origDelFocus := AppConfig.DeleteCancelFocused
 	defer func() { AppConfig.DeleteCancelFocused = origDelFocus }()
 
-	// 1. Тест режима по умолчанию (фокус на Cancel)
-	AppConfig.DeleteCancelFocused = true
-	actionDelete(pf)
-
-	dlg1 := fm.GetTopFrame().(vtui.Container)
-	var btnCancel *vtui.Button
-	for _, child := range dlg1.GetChildren() {
-		if b, ok := child.(*vtui.Button); ok && strings.Contains(b.GetText(), "Cancel") {
-			btnCancel = b
-			break
-		}
-	}
-	if btnCancel == nil {
-		t.Fatal("Cancel button not found")
-	}
-	if !btnCancel.IsFocused() {
-		t.Error("Expected 'Cancel' button to be focused by default")
-	}
-	fm.Pop()
-
-	// 2. Тест кастомного режима (фокус на Delete/OK)
+	// 1. By default the destructive action is focused, matching the other
+	// confirmation dialogs and allowing Enter to confirm it.
 	AppConfig.DeleteCancelFocused = false
 	actionDelete(pf)
 
-	dlg2 := fm.GetTopFrame().(vtui.Container)
+	dlg1 := fm.GetTopFrame().(vtui.Container)
 	var btnDel *vtui.Button
-	for _, child := range dlg2.GetChildren() {
+	for _, child := range dlg1.GetChildren() {
 		if b, ok := child.(*vtui.Button); ok && strings.Contains(b.GetText(), "Delete") {
 			btnDel = b
 			break
@@ -759,7 +740,27 @@ func TestDelete_FocusCustomization(t *testing.T) {
 		t.Fatal("Delete button not found")
 	}
 	if !btnDel.IsFocused() {
-		t.Error("Expected 'Delete' button to be focused after customization")
+		t.Error("Expected 'Delete' button to be focused by default")
+	}
+	fm.Pop()
+
+	// 2. The safety option can still explicitly focus Cancel.
+	AppConfig.DeleteCancelFocused = true
+	actionDelete(pf)
+
+	dlg2 := fm.GetTopFrame().(vtui.Container)
+	var btnCancel *vtui.Button
+	for _, child := range dlg2.GetChildren() {
+		if b, ok := child.(*vtui.Button); ok && strings.Contains(b.GetText(), "Cancel") {
+			btnCancel = b
+			break
+		}
+	}
+	if btnCancel == nil {
+		t.Fatal("Cancel button not found")
+	}
+	if !btnCancel.IsFocused() {
+		t.Error("Expected 'Cancel' button to be focused when configured")
 	}
 	fm.Pop()
 }

@@ -380,7 +380,7 @@ func TestFileOp_PathLogic(t *testing.T) {
 			}
 		}
 
-		finalPath := filepath.Join(tmpDst, "deep", "path", "target.txt")
+		finalPath := filepath.Join(tmpSrc, "deep", "path", "target.txt")
 		if _, err := os.Stat(finalPath); os.IsNotExist(err) {
 			t.Error("Failed to create parent directories during rename-copy")
 		}
@@ -401,7 +401,7 @@ func TestFileOp_PathLogic(t *testing.T) {
 			}
 		}
 
-		finalPath := filepath.Join(tmpDst, "new_dir", "source2.txt")
+		finalPath := filepath.Join(tmpSrc, "new_dir", "source2.txt")
 		if _, err := os.Stat(finalPath); os.IsNotExist(err) {
 			t.Error("Trailing slash did not trigger directory creation for single file")
 		}
@@ -1575,50 +1575,32 @@ func TestFileOps_CalculateStats_Integration(t *testing.T) {
 	}
 }
 func TestExecuteFileOp_PathInterpretations(t *testing.T) {
-	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	tmpSrc := t.TempDir()
 	tmpDst := t.TempDir()
 	srcVfs := vfs.NewOSVFS(tmpSrc)
 	dstVfs := vfs.NewOSVFS(tmpDst)
 
-	os.WriteFile(filepath.Join(tmpSrc, "f1.txt"), []byte("content"), 0644)
-
-	t.Run("Copy to dot", func(t *testing.T) {
-		// Копирование f1.txt в "." (текущая директория пассивной панели)
-		ExecuteFileOp(nil, srcVfs, dstVfs, []string{"f1.txt"}, ".", false, 2, nil)
-
-		// Pump
-		for i := 0; i < 50; i++ {
-			select {
-			case task := <-vtui.FrameManager.TaskChan:
-				task()
-			default:
-				time.Sleep(2 * time.Millisecond)
+	tests := []struct {
+		name     string
+		input    string
+		wantVFS  vfs.VFS
+		wantPath string
+	}{
+		{name: "simple name", input: "renamed.txt", wantVFS: srcVfs, wantPath: filepath.Join(tmpSrc, "renamed.txt")},
+		{name: "nested relative path", input: filepath.Join("test", "nested"), wantVFS: srcVfs, wantPath: filepath.Join(tmpSrc, "test", "nested")},
+		{name: "current directory", input: ".", wantVFS: srcVfs, wantPath: filepath.Clean(tmpSrc)},
+		{name: "parent directory", input: "..", wantVFS: srcVfs, wantPath: filepath.Dir(tmpSrc)},
+		{name: "passive absolute path", input: tmpDst, wantVFS: dstVfs, wantPath: tmpDst},
+		{name: "active absolute path", input: tmpSrc, wantVFS: dstVfs, wantPath: tmpSrc},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotVFS, gotPath := resolveFileOpDestination(srcVfs, dstVfs, tt.input)
+			if gotVFS != tt.wantVFS || gotPath != tt.wantPath {
+				t.Fatalf("resolve(%q) = (%T, %q), want (%T, %q)", tt.input, gotVFS, gotPath, tt.wantVFS, tt.wantPath)
 			}
-		}
-		if _, err := os.Stat(filepath.Join(tmpDst, "f1.txt")); err != nil {
-			t.Error("Copy to '.' failed to preserve filename in target")
-		}
-	})
-
-	t.Run("Copy with trailing slash (force dir)", func(t *testing.T) {
-		// Копирование f1.txt в "newdir/" -> f1.txt должен оказаться внутри newdir
-		target := "newdir" + string(os.PathSeparator)
-		ExecuteFileOp(nil, srcVfs, dstVfs, []string{"f1.txt"}, target, false, 2, nil)
-
-		for i := 0; i < 50; i++ {
-			select {
-			case task := <-vtui.FrameManager.TaskChan:
-				task()
-			default:
-				time.Sleep(2 * time.Millisecond)
-			}
-		}
-		finalPath := filepath.Join(tmpDst, "newdir", "f1.txt")
-		if _, err := os.Stat(finalPath); err != nil {
-			t.Error("Trailing slash did not force directory creation")
-		}
-	})
+		})
+	}
 }
 
 type mockFailingRemoveVFS struct {

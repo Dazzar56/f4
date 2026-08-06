@@ -1203,6 +1203,22 @@ func (fp *FileSystemPanel) updateTitle(err error) {
 	fp.frame.SetTitle("")
 }
 
+func (fp *FileSystemPanel) pathTitleHitTest(x, y int) bool {
+	if y != fp.Y1 || fp.currentTitle == "" {
+		return false
+	}
+	availW := (fp.X2 - fp.X1) - 6
+	if availW < 5 {
+		availW = 5
+	}
+	displayTitle := fp.currentTitle
+	if runewidth.StringWidth(displayTitle) > availW {
+		displayTitle = vtui.TruncateMiddle(displayTitle, availW)
+	}
+	// Include the one-cell padding drawn on both sides of the path.
+	return x >= fp.X1+2 && x <= fp.X1+3+runewidth.StringWidth(displayTitle)
+}
+
 func (fp *FileSystemPanel) ReadDirectory() {
 	fp.readDirectoryEx(false)
 }

@@ -1031,8 +1031,8 @@ func TestPanelsFrame_RightClickHeaderOpensPanelCenteredSortMenu(t *testing.T) {
 	}) {
 		t.Fatal("right click on column header was not handled")
 	}
-	if pf.activeIdx != 0 {
-		t.Fatalf("right-clicked left panel was not activated: active=%d", pf.activeIdx)
+	if pf.activeIdx != 1 {
+		t.Fatalf("right-clicking the passive panel header changed active panel to %d", pf.activeIdx)
 	}
 	if pf.panelMouseCapture != nil {
 		t.Fatal("header context click incorrectly captured a file-panel drag")
@@ -1050,6 +1050,90 @@ func TestPanelsFrame_RightClickHeaderOpensPanelCenteredSortMenu(t *testing.T) {
 	}
 	menu.Close()
 	vtui.FrameManager.Pop()
+}
+
+func TestPanelsFrame_RightClickPanelPathOpensDriveMenuForThatPanel(t *testing.T) {
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+	SetDefaultF4Palette()
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	pf.activeIdx = 0
+	left := pf.panels[0].(*FileSystemPanel)
+	right := pf.panels[1].(*FileSystemPanel)
+	leftPath := t.TempDir()
+	rightPath := t.TempDir()
+	if err := left.vfs.SetPath(leftPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := right.vfs.SetPath(rightPath); err != nil {
+		t.Fatal(err)
+	}
+	right.currentTitle = rightPath
+
+	if !pf.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: true,
+		MouseX: int16(right.X1 + 3), MouseY: int16(right.Y1),
+		ButtonState: vtinput.RightmostButtonPressed,
+	}) {
+		t.Fatal("right click on the panel path was not handled")
+	}
+	if pf.activeIdx != 0 {
+		t.Fatalf("right-clicking the passive panel path changed active panel to %d", pf.activeIdx)
+	}
+	if pf.panelMouseCapture != nil {
+		t.Fatal("path context click incorrectly captured a panel drag")
+	}
+	menu := findDriveMenu(t)
+	menu.OnAction(0) // "Other panel" must apply to the right panel.
+	if got := right.vfs.GetPath(); got != leftPath {
+		t.Fatalf("drive menu changed path %q, want right panel to receive %q", got, leftPath)
+	}
+}
+
+func TestPanelsFrame_CtrlShiftArrowsOpenDriveMenuForPanelSide(t *testing.T) {
+	tests := []struct {
+		name     string
+		key      uint16
+		panelIdx int
+	}{
+		{name: "left", key: vtinput.VK_LEFT, panelIdx: 0},
+		{name: "right", key: vtinput.VK_RIGHT, panelIdx: 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scr := vtui.NewSilentScreenBuf()
+			scr.AllocBuf(80, 25)
+			vtui.FrameManager.Init(scr)
+			SetDefaultF4Palette()
+
+			pf := NewPanelsFrame()
+			defer pf.Close()
+			pf.ResizeConsole(80, 25)
+			paths := []string{t.TempDir(), t.TempDir()}
+			for i, panel := range pf.panels {
+				if err := panel.(*FileSystemPanel).vfs.SetPath(paths[i]); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			if !pf.ProcessKey(&vtinput.InputEvent{
+				Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: tt.key,
+				ControlKeyState: vtinput.LeftCtrlPressed | vtinput.ShiftPressed,
+			}) {
+				t.Fatal("Ctrl+Shift+Arrow was not handled")
+			}
+			menu := findDriveMenu(t)
+			menu.OnAction(0)
+			want := paths[1-tt.panelIdx]
+			if got := pf.panels[tt.panelIdx].(*FileSystemPanel).vfs.GetPath(); got != want {
+				t.Fatalf("drive menu changed path %q, want panel %d to receive %q", got, tt.panelIdx, want)
+			}
+		})
+	}
 }
 
 func TestPanelsFrame_RefreshOnFocus(t *testing.T) {
@@ -1168,6 +1252,84 @@ func TestPanelsFrame_CtrlBrackets_Insertion(t *testing.T) {
 		t.Errorf("Ctrl+] failed: expected %q, got %q", expectedRight, gotRight)
 	}
 }
+
+func TestCtrlBracketsInsertPanelPathsIntoFocusedEdit(t *testing.T) {
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+	SetDefaultF4Palette()
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	leftPath := filepath.Join(t.TempDir(), "left path")
+	rightPath := filepath.Join(t.TempDir(), "right path")
+	if err := os.MkdirAll(leftPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(rightPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := pf.panels[0].(*FileSystemPanel).vfs.SetPath(leftPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := pf.panels[1].(*FileSystemPanel).vfs.SetPath(rightPath); err != nil {
+		t.Fatal(err)
+	}
+	vtui.FrameManager.Push(pf)
+
+	dlg := vtui.NewCenteredDialog(50, 9, " Path ")
+	edit := vtui.NewEdit(0, 0, 30, "prefix:")
+	dlg.AddItem(edit)
+	dlg.SetFocusedItem(edit)
+	vtui.FrameManager.Push(dlg)
+
+	if !handlePanelPathEditHotkey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_OEM_4,
+		ControlKeyState: vtinput.LeftCtrlPressed,
+	}) {
+		t.Fatal("Ctrl+[ was not handled for focused edit")
+	}
+	if got, want := edit.GetText(), leftPath; got != want {
+		t.Fatalf("Ctrl+[ inserted %q, want %q", got, want)
+	}
+
+	edit.SelectAll()
+	if !handlePanelPathEditHotkey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_OEM_6,
+		ControlKeyState: vtinput.RightCtrlPressed,
+	}) {
+		t.Fatal("Ctrl+] was not handled for focused edit")
+	}
+	if got := edit.GetText(); got != rightPath {
+		t.Fatalf("Ctrl+] inserted %q, want raw path %q", got, rightPath)
+	}
+}
+
+func TestCtrlBracketsIgnoreDialogsWithoutFocusedEdit(t *testing.T) {
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+	SetDefaultF4Palette()
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	vtui.FrameManager.Push(pf)
+	dlg := vtui.NewCenteredDialog(40, 7, " Confirm ")
+	button := vtui.NewButton(0, 0, "OK")
+	dlg.AddItem(button)
+	dlg.SetFocusedItem(button)
+	vtui.FrameManager.Push(dlg)
+
+	if handlePanelPathEditHotkey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_OEM_4,
+		ControlKeyState: vtinput.LeftCtrlPressed,
+	}) {
+		t.Fatal("Ctrl+[ was consumed without a focused edit")
+	}
+}
+
 func TestPanelsFrame_CtrlArrows_CommandLineNavigation(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	SetDefaultF4Palette()

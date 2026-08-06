@@ -296,7 +296,10 @@ func confirmAndPruneMissingFolderHistory(h *[]string, search *historySearch, men
 }
 
 func actionSortMenu(pf *PanelsFrame) {
-	fsp := pf.getActivePanel()
+	actionSortMenuForPanel(pf, pf.getActivePanel())
+}
+
+func actionSortMenuForPanel(pf *PanelsFrame, fsp *FileSystemPanel) {
 	if fsp == nil {
 		return
 	}
