@@ -4,11 +4,21 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
+
+// dragOutState remembers a left button press that landed on a marked file.
+// That is the only press allowed to become a drag out of f4: a press on an
+// unmarked file still just moves the cursor, as it always has.
+type dragOutState struct {
+	panel *FileSystemPanel
+	x, y  int
+	armed bool
+}
 
 // readOnlyVFS is implemented by a file system that already knows it cannot
 // be written to. Nothing implements it yet: a VFS that does not is assumed
@@ -225,6 +235,88 @@ func (pf *PanelsFrame) dropExternalFiles(info dropTargetInfo, paths []string, is
 	run(0)
 }
 
+// processDragOutGesture watches the left button for the start of a drag out
+// of f4. It returns true only once a drag has actually begun, so the press
+// itself and every ordinary drag fall through to the panel untouched.
+func (pf *PanelsFrame) processDragOutGesture(e *vtinput.InputEvent, mx, my int) bool {
+	if pf == nil || e == nil || e.Type != vtinput.MouseEventType || e.WheelDirection != 0 {
+		return false
+	}
+	if e.ButtonState&vtinput.FromLeft1stButtonPressed == 0 {
+		pf.dragOut = dragOutState{}
+		return false
+	}
+
+	if e.MouseEventFlags&vtinput.MouseMoved == 0 {
+		pf.dragOut = dragOutState{}
+		if !e.KeyDown {
+			return false
+		}
+		info, ok := pf.resolveDropTarget(mx, my)
+		if !ok || info.panel == nil || pf.altPanels[info.panelIdx] != nil {
+			return false
+		}
+		idx := info.panel.mouseEntryIndex(mx, my)
+		if idx < 0 || idx >= len(info.panel.entries) || !info.panel.entries[idx].Selected {
+			return false
+		}
+		pf.dragOut = dragOutState{panel: info.panel, x: mx, y: my, armed: true}
+		return false
+	}
+
+	if !pf.dragOut.armed || (mx == pf.dragOut.x && my == pf.dragOut.y) {
+		return false
+	}
+	panel := pf.dragOut.panel
+	pf.dragOut = dragOutState{}
+	return pf.startDragOut(panel)
+}
+
+// startDragOut offers the marked files to the rest of the desktop. Only copy
+// is offered: a move would have f4 delete the originals because the receiver
+// said it took them, which is more trust than files deserve.
+func (pf *PanelsFrame) startDragOut(fsp *FileSystemPanel) bool {
+	if fsp == nil || !vtui.DragOutSupported() {
+		return false
+	}
+	names := fsp.GetMarkedNames()
+	if len(names) == 0 {
+		return false
+	}
+	paths, ok := localDragPaths(fsp, names)
+	if !ok {
+		vtui.ShowToast("Dragging files out of an archive or a network panel is not supported yet", 3*time.Second)
+		return true
+	}
+
+	payload := vtui.DragPayload{Kinds: []string{"text/uri-list"}, Paths: paths}
+	go func() {
+		action, err := vtui.StartDrag(payload, vtui.DropCopy)
+		if err != nil {
+			vtui.DebugLog("DND: drag out failed: %v", err)
+			return
+		}
+		vtui.DebugLog("DND: drag out finished as %s", action)
+	}()
+	return true
+}
+
+// localDragPaths turns marked names into paths another application can open.
+// It reports false for anything but a local file system: a file inside an
+// archive or on a remote host has no such path until it is materialised into
+// a temporary directory, which is a copy nobody asked for and needs its own
+// progress and cleanup - see DRAGDROP.md.
+func localDragPaths(fsp *FileSystemPanel, names []string) ([]string, bool) {
+	local, ok := fsp.vfs.(*vfs.OSVFS)
+	if !ok {
+		return nil, false
+	}
+	paths := make([]string, 0, len(names))
+	for _, n := range names {
+		paths = append(paths, local.Join(local.GetPath(), n))
+	}
+	return paths, true
+}
 // installPanelDropTarget makes the panels the drop target of whatever
 // graphical backend is running. In a terminal no backend registers a drag
 // and drop protocol, so the target is simply never asked anything.

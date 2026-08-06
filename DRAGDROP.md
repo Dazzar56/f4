@@ -24,6 +24,12 @@ after another.
 A file system that knows it is read-only can implement `IsReadOnly() bool`
 and the pointer will say "no" before the drop instead of failing after it.
 
+The other direction works too, under X11. Press the left button on a marked
+file and move: the marked files are offered to the desktop as a file list.
+A press on an unmarked file still only moves the cursor, so nothing about
+the old mouse behaviour changed. Only copy is offered, and only from a local
+panel - an archive or a network panel says so in a toast instead.
+
 ## Roadmap
 
 1. done: backend-agnostic core in vtui, drop target in f4.
@@ -32,12 +38,16 @@ and the pointer will say "no" before the drop instead of failing after it.
    transfer is refused rather than half read, and move is only offered when
    the source publishes `XdndActionList`, since only the source can honour a
    move by deleting the original.
-3. Drag out: the XDND source side in vtui, plus in f4 the gesture that
-   starts a drag from a panel and the payload builder. For a local panel the
-   payload is the selected paths. For an archive or a network panel the files
-   do not exist as paths, so they have to be materialised into a temporary
-   directory first - which is a copy the user did not ask for, so it should
-   be visible (progress dialog, cleanup on exit).
+3. done: drag out under X11, from local panels, as copy.
+4. Dragging out of an archive or a network panel. The files have to be
+   materialised into a temporary directory first, which is a copy the user
+   did not ask for: it needs a progress dialog, a cleanup on exit, and
+   probably XDND's direct save (`XdndDirectSave0`) so nothing is copied
+   until the receiver actually wants it.
+5. Offering move as well as copy. Everything is in place except the trust:
+   the source deletes the originals on the receiver's word, so this wants
+   testing against real desktops before it is switched on.
+</parameter>
 4. Highlighting the drop target while the pointer is over it. Deliberately
    not done yet: it needs the panel to paint hover state, and until step 2
    lands there is nothing to hover with.

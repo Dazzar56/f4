@@ -115,6 +115,7 @@ type Panel interface {
 type PanelsFrame struct {
 	vtui.BaseFrame
 	panels [2]Panel
+	dragOut dragOutState
 	// altPanels[i] holds an alternate view (Info / Quick view / Tree)
 	// covering slot i's file panel. When non-nil it's rendered in
 	// place of panels[i]; panels[i] stays alive underneath and is
@@ -1900,6 +1901,9 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 	}
 
 	mx, my := int(e.MouseX), int(e.MouseY)
+	if pf.processDragOutGesture(e, mx, my) {
+		return true
+	}
 
 	// A middle-button gesture that already emitted Enter owns its remaining
 	// motion/release events and must not fall through to panels or scrollbars.

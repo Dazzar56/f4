@@ -102,3 +102,51 @@ func TestHandleDragWithoutTargetPanel(t *testing.T) {
 		t.Fatalf("action = %s, want none on leave", got)
 	}
 }
+func TestLocalDragPaths(t *testing.T) {
+	dir := t.TempDir()
+	fsp := &FileSystemPanel{vfs: vfs.NewOSVFS(dir)}
+	paths, ok := localDragPaths(fsp, []string{"a.txt", "b.txt"})
+	if !ok {
+		t.Fatal("a local panel can be dragged out of")
+	}
+	want := []string{filepath.Join(dir, "a.txt"), filepath.Join(dir, "b.txt")}
+	if !reflect.DeepEqual(paths, want) {
+		t.Fatalf("paths = %v, want %v", paths, want)
+	}
+
+	remote := &FileSystemPanel{vfs: vfs.NewNullVFS(0)}
+	if _, ok := localDragPaths(remote, []string{"a.txt"}); ok {
+		t.Fatal("a panel without real paths must refuse the drag")
+	}
+}
+
+func TestDragOutGestureIgnoresPlainPress(t *testing.T) {
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	defer vtui.SetDropTarget(nil)
+
+	press := &vtinput.InputEvent{
+		Type:        vtinput.MouseEventType,
+		KeyDown:     true,
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+		MouseX:      5,
+		MouseY:      5,
+	}
+	if pf.processDragOutGesture(press, 5, 5) {
+		t.Fatal("a press must never be swallowed")
+	}
+	if pf.dragOut.armed {
+		t.Fatal("a press outside a marked file must not arm the gesture")
+	}
+
+	move := &vtinput.InputEvent{
+		Type:            vtinput.MouseEventType,
+		ButtonState:     vtinput.FromLeft1stButtonPressed,
+		MouseEventFlags: vtinput.MouseMoved,
+		MouseX:          7,
+		MouseY:          9,
+	}
+	if pf.processDragOutGesture(move, 7, 9) {
+		t.Fatal("an unarmed drag belongs to the panel")
+	}
+}
