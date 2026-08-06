@@ -54,26 +54,26 @@ func DialSSH(host, port, user, pass string, timeout int) (*ssh.Client, error) {
 		auths = append(auths, ssh.Password(pass))
 	}
 
-		config := &ssh.ClientConfig{
-			User:            user,
-			Auth:            auths,
-			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-			Timeout:         sshTimeout(timeout),
-		}
-		client, err := ssh.Dial("tcp", host+":"+port, config)
-		if err != nil {
-			if agentConn != nil {
-				agentConn.Close()
-			}
-			return nil, err
-		}
-		if agentClient != nil {
-			if err := agent.ForwardToAgent(client, agentClient); err != nil {
-				vtui.DebugLog("SSH: Failed to forward agent: %v", err)
-				agentConn.Close()
-			} else {
-				vtui.DebugLog("SSH: Agent forwarding enabled")
-			}
-		}
-		return client, nil
+	config := &ssh.ClientConfig{
+		User:            user,
+		Auth:            auths,
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:         sshTimeout(timeout),
 	}
+	client, err := ssh.Dial("tcp", host+":"+port, config)
+	if err != nil {
+		if agentConn != nil {
+			agentConn.Close()
+		}
+		return nil, err
+	}
+	if agentClient != nil {
+		if err := agent.ForwardToAgent(client, agentClient); err != nil {
+			vtui.DebugLog("SSH: Failed to forward agent: %v", err)
+			agentConn.Close()
+		} else {
+			vtui.DebugLog("SSH: Agent forwarding enabled")
+		}
+	}
+	return client, nil
+}
