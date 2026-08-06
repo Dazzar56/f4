@@ -150,3 +150,30 @@ func TestDragOutGestureIgnoresPlainPress(t *testing.T) {
 		t.Fatal("an unarmed drag belongs to the panel")
 	}
 }
+// dragBackendStub is a backend that supports both directions and does
+// nothing, which is all dragOutRefusal asks of one.
+type dragBackendStub struct{}
+
+func (dragBackendStub) AcceptsDrops() bool { return true }
+
+func (dragBackendStub) StartDrag(vtui.DragPayload, vtui.DropAction) (vtui.DropAction, error) {
+	return vtui.DropCopy, nil
+}
+
+func TestDragOutRefusal(t *testing.T) {
+	vtui.SetDragBackend(nil)
+	if got := dragOutRefusal(nil); got != "no panel under the pointer" {
+		t.Fatalf("reason = %q, want the missing panel", got)
+	}
+
+	fsp := &FileSystemPanel{vfs: vfs.NewOSVFS(t.TempDir())}
+	if got := dragOutRefusal(fsp); got != "the backend offers no drag source" {
+		t.Fatalf("reason = %q, want the missing backend", got)
+	}
+
+	vtui.SetDragBackend(dragBackendStub{})
+	defer vtui.SetDragBackend(nil)
+	if got := dragOutRefusal(fsp); got != "nothing is marked" {
+		t.Fatalf("reason = %q, want the empty selection", got)
+	}
+}

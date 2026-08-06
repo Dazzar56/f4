@@ -36,6 +36,12 @@ neither what the source allows nor which modifiers are held, and nothing
 happens before the drop, because gogpu reports nothing before it. It needs
 gogpu v0.50.0 or later.
 
+## When nothing happens
+
+Run with `VTUI_DEBUG=1` and read debug.log. f4 logs why a drag out was not
+started and what a drop at a cell would do; vtui logs the protocol side, and
+the diagnosing section of its DRAGDROP.md lists every line and what a
+missing one means.
 ## Roadmap
 
 1. done: backend-agnostic core in vtui, drop target in f4.

@@ -192,9 +192,16 @@ func (pf *PanelsFrame) HandleDrag(ev *vtui.DragEvent) vtui.DropAction {
 	}
 	info, ok := pf.resolveDropTarget(ev.X, ev.Y)
 	if !ok || !vfsAcceptsDrop(info.fs) {
+		if ev.Phase != vtui.DragOver {
+			vtui.DebugLog("DND: nothing at cell %d,%d accepts a drop", ev.X, ev.Y)
+		}
 		return vtui.DropNone
 	}
 	action := chooseDropAction(ev.Allowed, ev.Suggested, ev.Modifiers)
+	if ev.Phase != vtui.DragOver {
+		vtui.DebugLog("DND: a drop at %d,%d would go to %q as %s",
+			ev.X, ev.Y, info.dir, action)
+	}
 	if action == vtui.DropNone || ev.Phase != vtui.DragDrop {
 		return action
 	}
@@ -261,6 +268,7 @@ func (pf *PanelsFrame) processDragOutGesture(e *vtinput.InputEvent, mx, my int) 
 			return false
 		}
 		pf.dragOut = dragOutState{panel: info.panel, x: mx, y: my, armed: true}
+		vtui.DebugLog("DND: drag out armed on a marked file at %d,%d", mx, my)
 		return false
 	}
 
@@ -269,20 +277,35 @@ func (pf *PanelsFrame) processDragOutGesture(e *vtinput.InputEvent, mx, my int) 
 	}
 	panel := pf.dragOut.panel
 	pf.dragOut = dragOutState{}
+	vtui.DebugLog("DND: drag out gesture triggered at %d,%d", mx, my)
 	return pf.startDragOut(panel)
+}
+
+// dragOutRefusal names the reason a drag out cannot start, or "" when it
+// can. One place rather than three, so the guard and the log line it writes
+// can never drift apart.
+func dragOutRefusal(fsp *FileSystemPanel) string {
+	if fsp == nil {
+		return "no panel under the pointer"
+	}
+	if !vtui.DragOutSupported() {
+		return "the backend offers no drag source"
+	}
+	if len(fsp.GetMarkedNames()) == 0 {
+		return "nothing is marked"
+	}
+	return ""
 }
 
 // startDragOut offers the marked files to the rest of the desktop. Only copy
 // is offered: a move would have f4 delete the originals because the receiver
 // said it took them, which is more trust than files deserve.
 func (pf *PanelsFrame) startDragOut(fsp *FileSystemPanel) bool {
-	if fsp == nil || !vtui.DragOutSupported() {
+	if reason := dragOutRefusal(fsp); reason != "" {
+		vtui.DebugLog("DND: drag out not started: %s", reason)
 		return false
 	}
 	names := fsp.GetMarkedNames()
-	if len(names) == 0 {
-		return false
-	}
 	paths, ok := localDragPaths(fsp, names)
 	if !ok {
 		vtui.ShowToast("Dragging files out of an archive or a network panel is not supported yet", 3*time.Second)
