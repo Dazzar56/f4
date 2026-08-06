@@ -24,11 +24,17 @@ after another.
 A file system that knows it is read-only can implement `IsReadOnly() bool`
 and the pointer will say "no" before the drop instead of failing after it.
 
-The other direction works too, under X11. Press the left button on a marked
-file and move: the marked files are offered to the desktop as a file list.
-A press on an unmarked file still only moves the cursor, so nothing about
-the old mouse behaviour changed. Only copy is offered, and only from a local
-panel - an archive or a network panel says so in a toast instead.
+The other direction works too. Press the left button on a marked file and
+move: the marked files are offered to the desktop as a file list. A press on
+an unmarked file still only moves the cursor, so nothing about the old mouse
+behaviour changed. Only copy is offered, and only from a local panel - an
+archive or a network panel says so in a toast instead.
+
+Under the gogpu backend both directions work as well, with two differences
+gogpu's own API imposes: a drop always copies, because gogpu tells us
+neither what the source allows nor which modifiers are held, and nothing
+happens before the drop, because gogpu reports nothing before it. It needs
+gogpu v0.50.0 or later.
 
 ## Roadmap
 
@@ -39,35 +45,37 @@ panel - an archive or a network panel says so in a toast instead.
    the source publishes `XdndActionList`, since only the source can honour a
    move by deleting the original.
 3. done: drag out under X11, from local panels, as copy.
-4. Dragging out of an archive or a network panel. The files have to be
+4. done: gogpu, both directions, which covers Windows, macOS, X11 and
+   Wayland at once through gogpu's own backends.
+5. Dragging out of an archive or a network panel. The files have to be
    materialised into a temporary directory first, which is a copy the user
    did not ask for: it needs a progress dialog, a cleanup on exit, and
    probably XDND's direct save (`XdndDirectSave0`) so nothing is copied
    until the receiver actually wants it.
-5. Offering move as well as copy. Everything is in place except the trust:
+6. Offering move as well as copy. Everything is in place except the trust:
    the source deletes the originals on the receiver's word, so this wants
    testing against real desktops before it is switched on.
-</parameter>
-4. Highlighting the drop target while the pointer is over it. Deliberately
-   not done yet: it needs the panel to paint hover state, and until step 2
-   lands there is nothing to hover with.
-5. Wayland (`wl_data_device`), then gogpu, Windows (OLE) and macOS.
-6. A protocol for terminals. None exists; if we invent one, far2l's
+7. Highlighting the drop target while the pointer is over it. It needs the
+   panel to paint a hover state, and under gogpu there would be nothing to
+   hover with: no event arrives before the drop itself.
+8. Wayland under vtui's own backend (`wl_data_device`), for people running
+   the native backend rather than gogpu.
+9. A protocol for terminals. None exists; if we invent one, far2l's
    extension channel is the natural place for it.
 
-## Open questions, to review before step 3
+## Open questions, to review
 
 - Dropping on ".." currently means the panel's directory, not its parent.
   Far itself has no drop target to copy here, and "the panel you see" is the
   less surprising of the two. Revisit if it annoys anyone.
 - The destination is passed to `ExecuteFileOp` as a path in the target VFS.
   For archive VFSes whose paths are not absolute in the `IsAbs` sense this
-  could take the wrong branch there; needs a test with a real archive panel
-  once drops can actually arrive.
+  could take the wrong branch there; needs a test with a real archive panel.
 - A drop on a panel covered by info / quick view goes to that panel's
   directory. Alternatives are refusing it or dropping into the *other*
   panel; both looked worse than the obvious one.
 - Move from another application deletes the source, and the source is
-  outside f4. Step 2 should confirm that XDND's `XdndActionMove` really does
-  mean "we deleted it" for the common senders before we offer move at all;
-  if not, we should only ever announce copy.
+  outside f4. Whether `XdndActionMove` really means "we have deleted it" for
+  the common senders is still unconfirmed, which is why move is not offered
+  outwards. Under gogpu the question does not arise: only copy is ever
+  announced, in both directions.
