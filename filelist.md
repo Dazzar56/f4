@@ -12,7 +12,6 @@
 ├── action_restore_selection_test.go
 ├── actions.go
 ├── actions_test.go
-├── afix.ap
 ├── ansi_parser.go
 ├── ansi_parser_test.go
 ├── api.go
@@ -552,5 +551,5 @@
 ├── WORDNAV.md
 └── word_nav_test.go
 
-37 directories, 513 files
+37 directories, 512 files
 ```
