@@ -51,22 +51,6 @@ next read retries. That is the right behaviour for a hiccup and the wrong one
 for a host that is gone: nothing counts the retries and nothing tells the
 user.
 
-## Nothing on screen says the editor is still catching up
-
-A file opened at a saved position over a slow link sits at line 0 until the
-background index reaches that line, and there is no sign anywhere that it is
-going to move. The user cannot tell that a keystroke now costs them the jump,
-and cannot tell the wait from an editor that has simply forgotten where they
-were. A hint in the top bar while a restore is pending would cost very little.
-
-## The restore still reads the file up to the saved line
-
-The jump waits for the local index to walk every byte before the saved
-position, which over FISH+ is round trips proportional to how deep in the file
-the user was. `vfs.LineIndexer` already answers exactly this question in one
-request — `lidx` on the remote host — and the viewer already uses it. The
-editor could too, and then there would be no window to interrupt at all.
-
 ## A mouse click still cancels a pending restore unconditionally
 
 `ProcessMouse` drops the restore whenever a button is down. A click does place

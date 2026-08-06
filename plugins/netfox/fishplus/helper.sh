@@ -296,7 +296,7 @@ for f4c in sha256sum sha1sum md5sum cksum; do
 done
 
 F4FEATS=
-for f4c in dd base64 readlink du grep sed awk wc head tail stty truncate chown touch date sha256sum; do
+for f4c in cp dd base64 readlink du grep sed awk wc head tail stty truncate chown touch date sha256sum; do
  f4_have $f4c && F4FEATS="$F4FEATS $f4c"
 done
 for f4c in find stat statbsd ls; do
@@ -1322,6 +1322,10 @@ while :; do
   mv )
    f4_paths2
    f4_guard "$F4SRC" && f4_guard "$F4DST" && f4_do mv -f -- "$F4SRC" "$F4DST"
+   ;;
+  cp )
+   f4_paths2
+   f4_guard "$F4SRC" && f4_guard "$F4DST" && f4_do cp -R -f -- "$F4SRC" "$F4DST"
    ;;
   chmod )
    f4_path

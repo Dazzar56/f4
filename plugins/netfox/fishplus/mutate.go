@@ -56,6 +56,15 @@ func (c *Client) Rename(ctx context.Context, from, to string) error {
 	return resp.Err("mv " + from)
 }
 
+// Copy copies a path, overwriting the destination the way cp does.
+func (c *Client) Copy(ctx context.Context, from, to string) error {
+	resp, err := c.sess.ExecPaths(ctx, "cp", []string{from, to})
+	if err != nil {
+		return err
+	}
+	return resp.Err("cp " + from)
+}
+
 // Chmod sets the permission, setuid, setgid and sticky bits; the file type
 // bits of a raw st_mode are ignored, so an Entry.Mode can be passed as is.
 func (c *Client) Chmod(ctx context.Context, p string, mode uint32) error {

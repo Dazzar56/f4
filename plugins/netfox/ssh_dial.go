@@ -1,13 +1,13 @@
 package netfox
 
 import (
+	"github.com/unxed/vtui"
+	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/agent"
 	"net"
 	"os"
 	"path/filepath"
 	"time"
-
-	"golang.org/x/crypto/ssh"
-	"golang.org/x/crypto/ssh/agent"
 )
 
 // sshTimeout turns the timeout a site configuration carries into a duration,
@@ -25,11 +25,14 @@ func sshTimeout(seconds int) time.Duration {
 // site behaves identically whichever of them opens it.
 func DialSSH(host, port, user, pass string, timeout int) (*ssh.Client, error) {
 	auths := []ssh.AuthMethod{}
+	var agentClient agent.Agent
+	var agentConn net.Conn
 
 	if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
-		if agentConn, err := net.Dial("unix", sock); err == nil {
-			auths = append(auths, ssh.PublicKeysCallback(agent.NewClient(agentConn).Signers))
-			defer agentConn.Close()
+		if conn, err := net.Dial("unix", sock); err == nil {
+			agentConn = conn
+			agentClient = agent.NewClient(conn)
+			auths = append(auths, ssh.PublicKeysCallback(agentClient.Signers))
 		}
 	}
 
@@ -57,5 +60,20 @@ func DialSSH(host, port, user, pass string, timeout int) (*ssh.Client, error) {
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		Timeout:         sshTimeout(timeout),
 	}
-	return ssh.Dial("tcp", host+":"+port, config)
+	client, err := ssh.Dial("tcp", host+":"+port, config)
+	if err != nil {
+		if agentConn != nil {
+			agentConn.Close()
+		}
+		return nil, err
+	}
+	if agentClient != nil {
+		if err := agent.ForwardToAgent(client, agentClient); err != nil {
+			vtui.DebugLog("SSH: Failed to forward agent: %v", err)
+			agentConn.Close()
+		} else {
+			vtui.DebugLog("SSH: Agent forwarding enabled")
+		}
+	}
+	return client, nil
 }

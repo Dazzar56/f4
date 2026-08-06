@@ -1,5 +1,4 @@
 # Project Structure
-Last updated: 2026-08-06 03:19:15
 
 ```text
 .
@@ -84,6 +83,9 @@ Last updated: 2026-08-06 03:19:15
 ├── cpu_info_windows.go
 ├── detach_unix.go
 ├── detach_windows.go
+├── dragdrop.go
+├── DRAGDROP.md
+├── dragdrop_test.go
 ├── drives_unix.go
 ├── drives_windows.go
 ├── editor_delta_test.go
@@ -117,6 +119,7 @@ Last updated: 2026-08-06 03:19:15
 ├── find_file.go
 ├── find_file_test.go
 ├── FISH+.md
+├── FISH_PLUS_S2S.md
 ├── folder_history_actions_test.go
 ├── folder_history_navigation_test.go
 ├── fs_info_darwin.go
@@ -204,6 +207,8 @@ Last updated: 2026-08-06 03:19:15
 │   ├── en.lng
 │   └── ru.lng
 ├── lang.go
+├── lang_packs.go
+├── lang_packs_test.go
 ├── lang_test.go
 ├── LICENSE
 ├── LUA.md
@@ -543,8 +548,7 @@ Last updated: 2026-08-06 03:19:15
 ├── window_icon_windows.go
 ├── window_icon_windows_test.go
 ├── word_nav.go
-├── WORDNAV.md
 └── word_nav_test.go
 
-37 directories, 506 files
+37 directories, 511 files
 ```

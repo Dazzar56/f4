@@ -276,6 +276,106 @@ func TestRecursiveCopy_AskError_Stub(t *testing.T) {
 		t.Error("Failed to create PanelsFrame")
 	}
 }
+
+type mockS2SVFS struct {
+	vfs.VFS
+	runCommand func(ctx context.Context, dir, command string, cb func(line string)) (int, error)
+	connInfo   func() (host, port, user string, ok bool)
+}
+
+func (m *mockS2SVFS) RunCommand(ctx context.Context, dir, command string, cb func(line string)) (int, error) {
+	if m.runCommand != nil {
+		return m.runCommand(ctx, dir, command, cb)
+	}
+	return 0, fmt.Errorf("unsupported")
+}
+
+func (m *mockS2SVFS) ConnectionInfo() (host, port, user string, ok bool) {
+	if m.connInfo != nil {
+		return m.connInfo()
+	}
+	return "localhost", "22", "user", true
+}
+
+func (m *mockS2SVFS) GetCapabilities() vfs.VFSCapabilities {
+	return vfs.VFSCapabilities{HasRandomAccess: true}
+}
+
+func TestRecursiveCopy_S2SProbing(t *testing.T) {
+	tmpSrc := t.TempDir()
+	tmpDst := t.TempDir()
+
+	srcFile := filepath.Join(tmpSrc, "s2s.bin")
+	os.WriteFile(srcFile, []byte("s2s_data"), 0644)
+	dstFile := filepath.Join(tmpDst, "s2s.bin")
+
+	var pushedCmd string
+	var pulledCmd string
+
+	srcMock := &mockS2SVFS{
+		VFS: vfs.NewOSVFS(tmpSrc),
+		runCommand: func(ctx context.Context, dir, command string, cb func(line string)) (int, error) {
+			pushedCmd = command
+			// Force push to fail with exit code 1, but no protocol error
+			return 1, nil
+		},
+		connInfo: func() (host, port, user string, ok bool) {
+			return "hostA", "22", "userA", true
+		},
+	}
+
+	dstMock := &mockS2SVFS{
+		VFS: vfs.NewOSVFS(tmpDst),
+		runCommand: func(ctx context.Context, dir, command string, cb func(line string)) (int, error) {
+			pulledCmd = command
+			return 0, nil // Pull succeeds
+		},
+		connInfo: func() (host, port, user string, ok bool) {
+			return "hostB", "22", "userB", true
+		},
+	}
+
+	state := &FileOpState{}
+	ctx := context.Background()
+
+	err := recursiveCopy(ctx, srcMock, srcFile, dstMock, dstFile, state, 0)
+	if err != nil {
+		t.Fatalf("recursiveCopy failed during S2S: %v", err)
+	}
+
+	if pushedCmd == "" {
+		t.Error("Expected push attempt on source VFS")
+	}
+	if !strings.Contains(pushedCmd, "scp") || !strings.Contains(pushedCmd, "userB@hostB") {
+		t.Errorf("Unexpected push command: %q", pushedCmd)
+	}
+
+	if pulledCmd == "" {
+		t.Error("Expected pull fallback attempt on dest VFS")
+	}
+	if !strings.Contains(pulledCmd, "scp") || !strings.Contains(pulledCmd, "userA@hostA") {
+		t.Errorf("Unexpected pull command: %q", pulledCmd)
+	}
+
+	if state.S2SDir != 2 {
+		t.Errorf("Expected S2SDir state to be 2 (pull), got %d", state.S2SDir)
+	}
+
+	// Now run again with S2SDir set to 2; it should directly pull and skip push
+	pushedCmd = ""
+	pulledCmd = ""
+	err = recursiveCopy(ctx, srcMock, srcFile, dstMock, dstFile, state, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pushedCmd != "" {
+		t.Error("Expected push to be skipped when S2SDir is 2")
+	}
+	if pulledCmd == "" {
+		t.Error("Expected pull to be executed directly when S2SDir is 2")
+	}
+}
+
 func TestMkDir_ErrorHandling(t *testing.T) {
 	tmp := t.TempDir()
 	v := vfs.NewOSVFS(tmp)
