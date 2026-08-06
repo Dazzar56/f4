@@ -416,8 +416,6 @@ UPD: This part is already implemented by another model. We are skipping it for n
 *   **Step 18 — copying without a client in the middle.** A copy between two panels on the same host is `cp` there, and a move within one file system is `mv` and costs nothing; today both pull every byte here and push it back. Between two different hosts, one that can reach the other opens its own FISH+ session to it and the bytes travel directly, at whatever the link between two data centres is worth, while the client watches from a bad connection. See `IDEAS.md` for what has to be worked out first.
 *   **Step 19 — one command engine for every backend.** SFTP wants `vfs.CommandRunner` too, and SCP will when NetFox grows it; all three sit on an SSH connection that can already run a command. Sharing the contract and the plumbing, and leaving each backend only the starting and the reading, keeps the three from answering the same questions differently. See `IDEAS.md`.
 
-See also: IDEAS.md
-
 // И если у тебя нет полного кода встроенного терминала far2l, попроси его у пользователя, прежде чем браться за пункт 15.
 // Я обновил номера пунктов в To do в соответствии с собственными пожеланиями по приоритетам. Если технически такой порядок невозможен,
 // скорректируй его с по возможности минимальными изменениями. Держи в голове, что интерактивный терминал сложная задача,

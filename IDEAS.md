@@ -4,36 +4,6 @@ Things worth building that nobody is working on. Written down so they are not
 rediscovered from scratch; nothing here is a commitment, and anything that
 grows a plan of its own moves out of this file.
 
-## One engine for running commands, not one per protocol
-
-`vfs.CommandRunner` is the interface a panel asks; FISH+ answers it today
-through its job machinery. SFTP will want the same thing, and SCP will when
-NetFox grows it. All three sit on an SSH connection that can already run a
-command — the differences are in bookkeeping, not in the running.
-
-The temptation is to implement it three times. The cost of that is not the
-duplicated code, which is small, but three different answers to the same
-questions: when is a command finished, where does its standard error go, what
-happens to it when the window is closed, what a non-zero exit means, how
-output is delivered while it is still being produced. A user who moves
-between two panels of different protocols would meet a different program in
-each.
-
-What the shared layer owns: the contract of `RunCommand` — output and errors
-interleaved in the order they were produced, exit status reported rather than
-turned into an error, cancellation stopping the command — and the plumbing
-above it, which is the window, the job registry entry and the key binding.
-What a backend owns: how the command is started and how its output comes
-back. For FISH+ that is a job over the request stream, because the stream is
-sequential and a command that prints for an hour would block a panel. For
-SFTP and SCP it is an `ssh.Session` on the connection that is already open,
-which needs none of that. `DialSSH` is already shared, so the SSH backends
-would differ from each other in almost nothing.
-
-Worth doing before the second implementation exists rather than after: two
-implementations that already disagree are much harder to merge than one that
-has not been written.
-
 ## Drag and drop, including to and from a remote host
 
 f4 should support drag and drop, and it should work with a remote panel, not
