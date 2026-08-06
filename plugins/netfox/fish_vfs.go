@@ -282,7 +282,7 @@ func sshFishDialer(host, port, user, pass string, timeout int) FishDialer {
 			client.Close()
 			return nil, nil, nil, err
 		}
-		if sock := os.Setenv("SSH_AUTH_SOCK", os.Getenv("SSH_AUTH_SOCK")); os.Getenv("SSH_AUTH_SOCK") != "" {
+		if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
 			if err := agent.RequestAgentForwarding(sess); err != nil {
 				vtui.DebugLog("SSH: Failed to request agent forwarding: %v", err)
 			} else {

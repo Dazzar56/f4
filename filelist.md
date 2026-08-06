@@ -1,5 +1,5 @@
 # Project Structure
-Last updated: 2026-08-06 04:17:11
+Last updated: 2026-08-06 04:25:55
 
 ```text
 .
@@ -13,6 +13,9 @@ Last updated: 2026-08-06 04:17:11
 ├── action_restore_selection_test.go
 ├── actions.go
 ├── actions_test.go
+├── afailed.ap
+├── afailed.md
+├── afix.ap
 ├── ansi_parser.go
 ├── ansi_parser_test.go
 ├── api.go
@@ -546,5 +549,5 @@ Last updated: 2026-08-06 04:17:11
 ├── WORDNAV.md
 └── word_nav_test.go
 
-37 directories, 506 files
+37 directories, 509 files
 ```

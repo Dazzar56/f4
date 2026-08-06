@@ -1,13 +1,13 @@
 package netfox
 
 import (
+	"github.com/unxed/vtui"
+	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/agent"
 	"net"
 	"os"
 	"path/filepath"
 	"time"
-
-	"golang.org/x/crypto/ssh"
-	"golang.org/x/crypto/ssh/agent"
 )
 
 // sshTimeout turns the timeout a site configuration carries into a duration,
