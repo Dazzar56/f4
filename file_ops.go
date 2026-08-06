@@ -82,6 +82,7 @@ type FileOpState struct {
 	Anchor       vtui.Frame
 	Buffer       []byte
 	IsMove       bool
+	S2SDir       int // 0: unknown, 1: push, 2: pull, 3: disabled
 }
 
 // formatSize formats a byte count into a human-readable string.
@@ -869,27 +870,79 @@ func recursiveCopy(ctx context.Context, srcVfs vfs.VFS, srcPath string, dstVfs v
 	}
 
 	// Optimize using server-to-server direct copy if they are on different hosts,
-	// but we can run commands on the source and have connection info for the destination.
-	if rner, ok1 := srcVfs.(vfs.CommandRunner); ok1 {
-		if cip, ok2 := dstVfs.(vfs.ConnectionInfoProvider); ok2 {
-			if host, port, user, ok := cip.ConnectionInfo(); ok {
-				scpCmd := fmt.Sprintf("scp -P %s -o StrictHostKeyChecking=no -p %q %s@%s:%q",
-					port, srcPath, user, host, destPathForFile)
-				vtui.DebugLog("FILEOP: Attempting server-to-server copy: %s", scpCmd)
-				_, err := rner.RunCommand(ctx, srcVfs.Dir(srcPath), scpCmd, nil)
-				if err == nil {
-					if state.Tracker != nil {
-						state.Tracker.UpdateBytes(int(stat.Size))
-						handleArchiveIndexOp(srcVfs, srcPath, dstVfs, destPathForFile, state.IsMove)
-						state.Tracker.FileDone()
-						if state.UpdateUI != nil {
-							state.UpdateUI(false)
+	// but we can run commands on one of them and have connection info for the other.
+	if state.S2SDir != 3 { // Not disabled
+		pushed, pulled := false, false
+
+		tryPush := state.S2SDir == 0 || state.S2SDir == 1
+		tryPull := state.S2SDir == 0 || state.S2SDir == 2
+
+		if tryPush {
+			if rner, ok1 := srcVfs.(vfs.CommandRunner); ok1 {
+				if cip, ok2 := dstVfs.(vfs.ConnectionInfoProvider); ok2 {
+					if host, port, user, ok := cip.ConnectionInfo(); ok {
+						var scpDst string
+						if user != "" {
+							scpDst = fmt.Sprintf("%s@%s:%q", user, host, destPathForFile)
+						} else {
+							scpDst = fmt.Sprintf("%s:%q", host, destPathForFile)
+						}
+
+						scpCmd := fmt.Sprintf("scp -o ConnectTimeout=10 -P %s -o StrictHostKeyChecking=no -p %q %s",
+							port, srcPath, scpDst)
+						vtui.DebugLog("FILEOP: Attempting server-to-server push: %s", scpCmd)
+						codePush, errPush := rner.RunCommand(ctx, srcVfs.Dir(srcPath), scpCmd, nil)
+						if errPush == nil && codePush == 0 {
+							pushed = true
+							state.S2SDir = 1
+						} else {
+							vtui.DebugLog("FILEOP: Server-to-server push failed (code: %d): %v", codePush, errPush)
 						}
 					}
-					return nil
 				}
-				vtui.DebugLog("FILEOP: Server-to-server copy failed, falling back to streaming: %v", err)
 			}
+		}
+
+		if !pushed && tryPull {
+			if rner, ok1 := dstVfs.(vfs.CommandRunner); ok1 {
+				if cip, ok2 := srcVfs.(vfs.ConnectionInfoProvider); ok2 {
+					if host, port, user, ok := cip.ConnectionInfo(); ok {
+						var scpSrc string
+						if user != "" {
+							scpSrc = fmt.Sprintf("%s@%s:%q", user, host, srcPath)
+						} else {
+							scpSrc = fmt.Sprintf("%s:%q", host, srcPath)
+						}
+
+						scpCmd := fmt.Sprintf("scp -o ConnectTimeout=10 -P %s -o StrictHostKeyChecking=no -p %s %q",
+							port, scpSrc, destPathForFile)
+						vtui.DebugLog("FILEOP: Attempting server-to-server pull: %s", scpCmd)
+						codePull, errPull := rner.RunCommand(ctx, dstVfs.Dir(destPathForFile), scpCmd, nil)
+						if errPull == nil && codePull == 0 {
+							pulled = true
+							state.S2SDir = 2
+						} else {
+							vtui.DebugLog("FILEOP: Server-to-server pull failed (code: %d): %v", codePull, errPull)
+						}
+					}
+				}
+			}
+		}
+
+		if pushed || pulled {
+			if state.Tracker != nil {
+				state.Tracker.UpdateBytes(int(stat.Size))
+				handleArchiveIndexOp(srcVfs, srcPath, dstVfs, destPathForFile, state.IsMove)
+				state.Tracker.FileDone()
+				if state.UpdateUI != nil {
+					state.UpdateUI(false)
+				}
+			}
+			return nil
+		} else if state.S2SDir == 0 {
+			// If both probed and failed (or couldn't even probe), disable S2S for this operation
+			state.S2SDir = 3
+			vtui.DebugLog("FILEOP: Server-to-server copy disabled after probing failed or unavailable")
 		}
 	}
 

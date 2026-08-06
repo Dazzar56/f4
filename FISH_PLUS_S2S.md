@@ -29,23 +29,29 @@ Simply open both the left and right panels to the same host using FISH+ (the con
 
 When copying or moving files between *two different* remote hosts (Host A and Host B), `f4` leverages the network link between the two servers.
 
-*   **How it works:**
-    `f4` spawns a managed background process on Host A (the source) that copies files directly to Host B (the destination) using the standard secure copy utility:
-    ```bash
-    scp -P <port> -o StrictHostKeyChecking=no -p "/src/file" user@hostB:"/dst/file"
-    ```
+*   **How it works (Bidirectional Probing):**
+    `f4` automatically probes both directions to find a working transfer path using the standard secure copy utility (`scp`).
+    1.  **Push:** `f4` attempts to run `scp` on Host A (the source) to push the file to Host B (the destination).
+    2.  **Pull:** If pushing fails (e.g., Host A is not authorized to connect to Host B), `f4` attempts to run `scp` on Host B to pull the file from Host A.
+
+    Once a successful direction is established, `f4` remembers it for the rest of the operation, avoiding repeated timeouts.
+
 *   **Benefits:**
     *   **Datacenter speeds:** Files travel over high-bandwidth datacenter links instead of saturating your home or office connection.
-    *   **Non-blocking and cancellable:** The transfer runs as a managed remote job. If you click **[ Cancel ]** in the f4 progress dialog, the client instantly sends a `jkill` signal to Host A, killing the remote `scp` process immediately.
+    *   **Firewall resilience:** Only one server needs to be able to reach and authenticate to the other. If Host B is a secure internal server that can reach Host A, but Host A cannot reach Host B, `f4` will automatically use the "Pull" strategy.
+    *   **Non-blocking and cancellable:** The transfer runs as a managed remote job. If you click **[ Cancel ]** in the f4 progress dialog, the client instantly sends a `jkill` signal, killing the remote `scp` process immediately.
     *   **Metadata preservation:** The `-p` flag in `scp` automatically preserves modification times, access times, and mode permissions.
 
 ### Authentication & Security:
-Since Host A must authenticate with Host B, `f4` supports two seamless authentication paths:
+Since the servers must authenticate with each other, `f4` supports two seamless authentication paths:
 
 1.  **Server-to-Server Keys (No configuration needed):**
-    If Host A is already authorized to connect to Host B (i.e. Host B's `authorized_keys` contains Host A's public key), the transfer succeeds out of the box.
+    If one host is already authorized to connect to the other (i.e. `authorized_keys` contains the public key), the transfer succeeds out of the box.
 2.  **SSH Agent Forwarding (Secure local key delegation):**
-    If your private keys are stored only on your local desktop machine, `f4` automatically forwards your active local `ssh-agent` to Host A. Host A can then authenticate with Host B using your local keys *without* those keys ever being exposed or written to Host A's disk.
+    If your private keys are stored only on your local desktop machine, `f4` automatically forwards your active local `ssh-agent`. The executing host can then authenticate with the other host using your local keys *without* those keys ever being exposed or written to disk.
+
+**Username Requirements:**
+To ensure S2S copying works correctly, the **username MUST be explicitly specified** in the connection settings for both servers in `f4` (e.g., `userA@HostA` and `userB@HostB`). If the username is omitted in the f4 connection dialog, `scp` will attempt to use the executing host's local username, which may cause authentication failures if the usernames on the two servers do not match.
 
 ---
 
