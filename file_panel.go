@@ -101,8 +101,12 @@ func splitFileExtension(name string) (string, string) {
 	return name[:lastDot], name[lastDot+1:]
 }
 
+func shouldSeparatePanelExtension(entry *fileEntry) bool {
+	return AppConfig.SeparateFileExtensions && !entry.IsDir && !entry.NoExtension && entry.Name != ".."
+}
+
 func formatPanelFileName(entry *fileEntry, width int) string {
-	if !AppConfig.SeparateFileExtensions || entry.IsDir || entry.Name == ".." || width <= 0 {
+	if !shouldSeparatePanelExtension(entry) || width <= 0 {
 		return entry.displayName(entry.Name)
 	}
 	base, extension := splitFileExtension(entry.Name)
@@ -155,7 +159,7 @@ func panelFileNameMatchSpans(entry *fileEntry, width, matchStartRunes, matchedRu
 		prefixWidth = runewidth.StringWidth(entry.displayName(""))
 	}
 
-	if !AppConfig.SeparateFileExtensions || entry.IsDir || entry.Name == ".." {
+	if !shouldSeparatePanelExtension(entry) {
 		if span, ok := clippedPanelMatchSpan(
 			prefixWidth+runewidth.StringWidth(string(nameRunes[:matchStartRunes])),
 			runewidth.StringWidth(string(nameRunes[matchStartRunes:matchEndRunes])), width,

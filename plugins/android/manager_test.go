@@ -70,6 +70,9 @@ func TestManagerReadDirDiscoversAndLabelsDevices(t *testing.T) {
 		if item.IsDir {
 			t.Errorf("device row %q unexpectedly marked as directory", item.Name)
 		}
+		if !item.NoExtension {
+			t.Errorf("device row %q may be mistaken for a filename with an extension", item.Name)
+		}
 	}
 	wantNames := []string{
 		"Pixel 9 (serial-z)",

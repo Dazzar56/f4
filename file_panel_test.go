@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -765,6 +766,14 @@ func TestFormatPanelFileNameSeparateExtension(t *testing.T) {
 	if got := formatPanelFileName(entry, 20); got != "folder.ext" {
 		t.Fatalf("directory extension was separated: %q", got)
 	}
+
+	entry = &fileEntry{VFSItem: vfs.VFSItem{
+		Name:        "V2454A (192.168.1.100:38477)",
+		NoExtension: true,
+	}}
+	if got := formatPanelFileName(entry, 40); got != entry.Name {
+		t.Fatalf("extensionless virtual row was split: %q", got)
+	}
 }
 
 func TestSeparateExtensionAppliesToEveryViewMode(t *testing.T) {
@@ -1273,6 +1282,23 @@ func TestPanelFileNameMatchSpans_AlignedExtension(t *testing.T) {
 	}
 	if spans[1] != (panelMatchSpan{start: 12, width: 3}) {
 		t.Fatalf("extension span = %#v, want start 12 width 3", spans[1])
+	}
+}
+
+func TestPanelFileNameMatchSpans_NoExtension(t *testing.T) {
+	oldCfg := AppConfig
+	defer func() { AppConfig = oldCfg }()
+	AppConfig.SeparateFileExtensions = true
+
+	entry := &fileEntry{VFSItem: vfs.VFSItem{
+		Name:        "V2454A (192.168.1.100:38477)",
+		NoExtension: true,
+	}}
+	start := strings.Index(entry.Name, "100:38477")
+	got := panelFileNameMatchSpans(entry, 40, start, len("100:38477"))
+	want := []panelMatchSpan{{start: start, width: len("100:38477")}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("virtual-row match spans = %#v, want %#v", got, want)
 	}
 }
 

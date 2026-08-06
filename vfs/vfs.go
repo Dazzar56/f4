@@ -51,6 +51,11 @@ type VFSItem struct {
 	Mode         string
 	IsExecutable bool
 	IsHidden     bool
+	// NoExtension keeps dots in Name as part of the complete display name.
+	// Virtual rows such as device selectors are not files and may contain an
+	// IP address or another dotted identifier that must not be right-aligned
+	// as though its tail were a file extension.
+	NoExtension bool
 	// IsSymlink is true when the entry is a filesystem symlink (or a
 	// Windows reparse point that Go reports as a symlink). IsDir may
 	// still be true for symlink-to-directory — the two flags are

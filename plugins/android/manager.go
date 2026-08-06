@@ -196,6 +196,7 @@ func (m *ManagerVFS) ReadDir(ctx context.Context, _ string, onChunk func([]vfs.V
 		items = append(items, vfs.VFSItem{
 			Name:         name,
 			IsExecutable: device.State == DeviceStateOnline,
+			NoExtension:  true,
 		})
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].Name < items[j].Name })
@@ -280,6 +281,7 @@ func (m *ManagerVFS) Stat(_ context.Context, p string) (vfs.VFSItem, error) {
 	return vfs.VFSItem{
 		Name:         DeviceDisplayName(device),
 		IsExecutable: device.State == DeviceStateOnline,
+		NoExtension:  true,
 	}, nil
 }
 
