@@ -150,6 +150,7 @@ func TestDragOutGestureIgnoresPlainPress(t *testing.T) {
 		t.Fatal("an unarmed drag belongs to the panel")
 	}
 }
+
 // dragBackendStub is a backend that supports both directions and does
 // nothing, which is all dragOutRefusal asks of one.
 type dragBackendStub struct{}

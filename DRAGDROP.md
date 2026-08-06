@@ -30,11 +30,16 @@ an unmarked file still only moves the cursor, so nothing about the old mouse
 behaviour changed. Only copy is offered, and only from a local panel - an
 archive or a network panel says so in a toast instead.
 
-Under the gogpu backend both directions work as well, with two differences
-gogpu's own API imposes: a drop always copies, because gogpu tells us
-neither what the source allows nor which modifiers are held, and nothing
-happens before the drop, because gogpu reports nothing before it. It needs
-gogpu v0.50.0 or later.
+Under the gogpu backend a drop works as well, with two differences gogpu's
+own API imposes: it always copies, because gogpu tells us neither what the
+source allows nor which modifiers are held, and nothing happens before the
+drop, because gogpu reports nothing before it. The destination comes from
+the pointer rather than from the position gogpu reports, which is always
+0,0; see vtui's DRAGDROP.md. It needs gogpu v0.50.0 or later.
+
+Dragging out under gogpu is not confirmed to work: the gesture is handed
+over and gogpu runs a real session, but every one so far has come back
+cancelled. Whether that is gogpu or the targets tried is still open.
 
 ## When nothing happens
 
