@@ -62,6 +62,7 @@ type fishConn struct {
 	client *fishplus.Client
 	ka     *fishplus.Keepalive
 	dial   FishDialer
+	closer io.Closer
 
 	mu     sync.Mutex
 	refs   int
@@ -144,11 +145,12 @@ func (c *fishConn) reconnect(ctx context.Context, dead *fishplus.Client) (*fishp
 	old, oldKA := c.client, c.ka
 	c.client = client
 	c.ka = fishplus.StartKeepalive(client, fishplus.DefaultKeepaliveInterval)
+	c.closer = closer
 	c.mu.Unlock()
 
 	oldKA.Stop()
 	if old != nil {
-		old.Session().Close()
+		old.Session().Close() // This also closes its session's closer automatically
 	}
 	return client, nil
 }
@@ -215,6 +217,7 @@ func newFishVFSOnStream(ctx context.Context, parent vfs.VFS, stdin io.Writer, st
 			refs:   1,
 			ka:     fishplus.StartKeepalive(client, fishplus.DefaultKeepaliveInterval),
 			dial:   dial,
+			closer: closer,
 		},
 		path:  cwd,
 		title: title,
@@ -231,6 +234,16 @@ type sshShell struct {
 func (s *sshShell) Close() error {
 	s.sess.Close()
 	return s.client.Close()
+}
+
+func (s *sshShell) OpenPty(cols, rows int) (any, error) {
+	pty, err := NewSSHPty(s.client)
+	if err != nil {
+		return nil, err
+	}
+	pty.SetSize(cols, rows)
+	pty.Run("")
+	return pty, nil
 }
 
 // sshFishDialer builds the transport a FISH+ site speaks over, and — the whole
@@ -323,6 +336,15 @@ func (v *FishVFS) client() *fishplus.Client {
 // Client exposes the underlying protocol client, mostly so a caller can ask
 // what the remote host turned out to be capable of.
 func (v *FishVFS) Client() *fishplus.Client { return v.client() }
+func (v *FishVFS) OpenPty(cols, rows int) (any, error) {
+	v.conn.mu.Lock()
+	closer := v.conn.closer
+	v.conn.mu.Unlock()
+	if pp, ok := closer.(vfs.PtyProvider); ok {
+		return pp.OpenPty(cols, rows)
+	}
+	return nil, errors.New("pty not supported on this FISH+ connection")
+}
 
 // CanReconnect reports whether this file system can rebuild its session. A
 // site opened from a configuration can; one handed a pair of streams cannot,

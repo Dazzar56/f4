@@ -66,5 +66,9 @@ func GetSystemShell() string {
 	if shell == "" {
 		return "/bin/sh"
 	}
+	base := filepath.Base(shell)
+	if base == "fish" || base == "csh" || base == "tcsh" {
+		return "bash"
+	}
 	return shell
 }
