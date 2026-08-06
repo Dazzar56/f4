@@ -20,6 +20,10 @@ import (
 // FishVFS, which is the only way to check the mapping against output real
 // tools produced rather than against captured samples.
 func newLocalFishVFS(t *testing.T) *FishVFS {
+	return newLocalFishVFSWithTitle(t, "local")
+}
+
+func newLocalFishVFSWithTitle(t *testing.T, title string) *FishVFS {
 	t.Helper()
 	if runtime.GOOS == "windows" {
 		t.Skip("no POSIX shell on Windows")
@@ -40,7 +44,7 @@ func newLocalFishVFS(t *testing.T) *FishVFS {
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start %s: %v", shell, err)
 	}
-	v, err := NewFishVFSOnStream(context.Background(), nil, stdin, stdout, stdin, "local")
+	v, err := NewFishVFSOnStream(context.Background(), nil, stdin, stdout, stdin, title)
 	if err != nil {
 		cmd.Process.Kill()
 		if strings.Contains(err.Error(), "base64") {
@@ -759,11 +763,11 @@ func TestFishVFSServerSideCopyAndMove(t *testing.T) {
 		t.Error("expected SameSession to be true for clones")
 	}
 
-	// Test different session
-	v3 := newLocalFishVFS(t)
+	// Test different session (with different titles)
+	v3 := newLocalFishVFSWithTitle(t, "local-diff")
 	defer v3.Close()
 
 	if vfs.SameSession(v1, v3) {
-		t.Error("expected SameSession to be false for distinct sessions")
+		t.Error("expected SameSession to be false for distinct sessions with different titles")
 	}
 }

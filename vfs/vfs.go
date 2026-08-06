@@ -356,7 +356,8 @@ type ServerSideCopier interface {
 	Copy(ctx context.Context, oldpath, newpath string) error
 }
 
-// SameSession reports whether two VFS instances share the same session/connection.
+// SameSession reports whether two VFS instances share the same session/connection
+// or point to the same remote host/user (using TitleProvider).
 func SameSession(v1, v2 VFS) bool {
 	if v1 == v2 {
 		return true
@@ -365,7 +366,18 @@ func SameSession(v1, v2 VFS) bool {
 		if id2, ok2 := v2.(SessionIdentity); ok2 {
 			k1 := id1.SessionKey()
 			k2 := id2.SessionKey()
-			return k1 != nil && k1 == k2
+			if k1 != nil && k1 == k2 {
+				return true
+			}
+		}
+	}
+	t1, ok1 := v1.(TitleProvider)
+	t2, ok2 := v2.(TitleProvider)
+	if ok1 && ok2 {
+		title1 := t1.GetTitle()
+		title2 := t2.GetTitle()
+		if title1 != "" && title1 == title2 {
+			return true
 		}
 	}
 	return false
