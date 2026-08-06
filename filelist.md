@@ -12,6 +12,7 @@
 ├── action_restore_selection_test.go
 ├── actions.go
 ├── actions_test.go
+├── afix.ap
 ├── ansi_parser.go
 ├── ansi_parser_test.go
 ├── api.go
@@ -83,6 +84,9 @@
 ├── cpu_info_windows.go
 ├── detach_unix.go
 ├── detach_windows.go
+├── dragdrop.go
+├── DRAGDROP.md
+├── dragdrop_test.go
 ├── drives_unix.go
 ├── drives_windows.go
 ├── editor_delta_test.go
@@ -548,5 +552,5 @@
 ├── WORDNAV.md
 └── word_nav_test.go
 
-37 directories, 509 files
+37 directories, 513 files
 ```

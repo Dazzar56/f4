@@ -285,6 +285,7 @@ func NewPanelsFrame() *PanelsFrame {
 	// Parser will be fully initialized in initPTY once pty is ready
 	pf.initPTY()
 	pf.termView.pty = pf.pty
+	installPanelDropTarget(pf)
 
 	return pf
 }

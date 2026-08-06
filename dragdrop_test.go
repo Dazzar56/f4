@@ -1,0 +1,104 @@
+package main
+
+import (
+	"path/filepath"
+	"reflect"
+	"testing"
+
+	"github.com/unxed/f4/vfs"
+	"github.com/unxed/vtinput"
+	"github.com/unxed/vtui"
+)
+
+func TestGroupDropSources(t *testing.T) {
+	paths := []string{
+		filepath.FromSlash("/tmp/one/b.txt"),
+		filepath.FromSlash("/tmp/one/a.txt"),
+		filepath.FromSlash("/tmp/one/a.txt"),
+		filepath.FromSlash("/tmp/two/dir/"),
+		"   ",
+	}
+	got := groupDropSources(paths)
+	want := []dropSourceGroup{
+		{dir: filepath.FromSlash("/tmp/one"), names: []string{"a.txt", "b.txt"}},
+		{dir: filepath.FromSlash("/tmp/two"), names: []string{"dir"}},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("groups = %#v, want %#v", got, want)
+	}
+	if len(groupDropSources(nil)) != 0 {
+		t.Fatal("nothing dropped means nothing to do")
+	}
+}
+
+func TestChooseDropAction(t *testing.T) {
+	both := vtui.DropCopy | vtui.DropMove
+	cases := []struct {
+		name               string
+		allowed, suggested vtui.DropAction
+		mods               vtinput.ControlKeyState
+		want               vtui.DropAction
+	}{
+		{"shift moves", both, vtui.DropCopy, vtinput.ShiftPressed, vtui.DropMove},
+		{"ctrl copies", both, vtui.DropMove, vtinput.LeftCtrlPressed, vtui.DropCopy},
+		{"right ctrl copies too", both, vtui.DropMove, vtinput.RightCtrlPressed, vtui.DropCopy},
+		{"suggestion wins when free", both, vtui.DropMove, 0, vtui.DropMove},
+		{"copy is the fallback", both, vtui.DropNone, 0, vtui.DropCopy},
+		{"move only source", vtui.DropMove, vtui.DropNone, 0, vtui.DropMove},
+		{"shift cannot invent move", vtui.DropCopy, vtui.DropNone, vtinput.ShiftPressed, vtui.DropCopy},
+		{"nothing allowed", vtui.DropNone, vtui.DropCopy, 0, vtui.DropNone},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := chooseDropAction(c.allowed, c.suggested, c.mods); got != c.want {
+				t.Fatalf("action = %s, want %s", got, c.want)
+			}
+		})
+	}
+}
+
+type readOnlyTestVFS struct {
+	vfs.VFS
+}
+
+func (readOnlyTestVFS) IsReadOnly() bool { return true }
+
+func TestVFSAcceptsDrop(t *testing.T) {
+	if vfsAcceptsDrop(nil) {
+		t.Fatal("no file system accepts nothing")
+	}
+	local := vfs.NewOSVFS(t.TempDir())
+	if !vfsAcceptsDrop(local) {
+		t.Fatal("a writable file system accepts a drop")
+	}
+	if vfsAcceptsDrop(readOnlyTestVFS{local}) {
+		t.Fatal("a read-only file system must refuse before the drop")
+	}
+}
+
+func TestHandleDragWithoutTargetPanel(t *testing.T) {
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	defer vtui.SetDropTarget(nil)
+
+	ev := &vtui.DragEvent{
+		Phase:   vtui.DragEnter,
+		X:       5,
+		Y:       5,
+		Allowed: vtui.DropCopy,
+		Payload: vtui.DragPayload{Paths: []string{filepath.FromSlash("/tmp/a.txt")}},
+	}
+	if got := pf.HandleDrag(ev); got != vtui.DropNone {
+		t.Fatalf("action = %s, want none over no panel", got)
+	}
+
+	ev.Payload = vtui.DragPayload{Text: "hello"}
+	if got := pf.HandleDrag(ev); got != vtui.DropNone {
+		t.Fatalf("action = %s, want none for a payload without files", got)
+	}
+
+	ev.Phase = vtui.DragLeave
+	if got := pf.HandleDrag(ev); got != vtui.DropNone {
+		t.Fatalf("action = %s, want none on leave", got)
+	}
+}
