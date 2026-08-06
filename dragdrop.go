@@ -317,6 +317,7 @@ func localDragPaths(fsp *FileSystemPanel, names []string) ([]string, bool) {
 	}
 	return paths, true
 }
+
 // installPanelDropTarget makes the panels the drop target of whatever
 // graphical backend is running. In a terminal no backend registers a drag
 // and drop protocol, so the target is simply never asked anything.

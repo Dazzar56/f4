@@ -114,7 +114,7 @@ type Panel interface {
 // PanelsFrame is the main frame of the f4 manager, containing left and right panels.
 type PanelsFrame struct {
 	vtui.BaseFrame
-	panels [2]Panel
+	panels  [2]Panel
 	dragOut dragOutState
 	// altPanels[i] holds an alternate view (Info / Quick view / Tree)
 	// covering slot i's file panel. When non-nil it's rendered in
