@@ -495,6 +495,8 @@ func (v *FishVFS) Open(ctx context.Context, p string) (vfs.ReadAtCloser, error) 
 
 func (v *FishVFS) GetCapabilities() vfs.VFSCapabilities {
 	return vfs.VFSCapabilities{
+		HasServerSideCopy:  true,
+		HasServerSideMove:  true,
 		HasRandomAccess:    true,
 		HasUnixPermissions: true,
 		HasSearch:          v.client().CanGrep(),
@@ -712,6 +714,11 @@ func (v *FishVFS) Remove(ctx context.Context, p string) error {
 
 func (v *FishVFS) Rename(ctx context.Context, o, n string) error {
 	return v.client().Rename(ctx, v.abs(o), v.abs(n))
+}
+
+// Copy implements vfs.ServerSideCopier.
+func (v *FishVFS) Copy(ctx context.Context, o, n string) error {
+	return v.client().Copy(ctx, v.abs(o), v.abs(n))
 }
 
 // Create truncates the file, or creates it, and hands back a handle that

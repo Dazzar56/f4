@@ -349,6 +349,28 @@ type SessionReconnector interface {
 type SessionIdentity interface {
 	SessionKey() any
 }
+
+// ServerSideCopier is implemented by a file system that can copy an object
+// on the server side, avoiding pulling bytes back and forth through the client.
+type ServerSideCopier interface {
+	Copy(ctx context.Context, oldpath, newpath string) error
+}
+
+// SameSession reports whether two VFS instances share the same session/connection.
+func SameSession(v1, v2 VFS) bool {
+	if v1 == v2 {
+		return true
+	}
+	if id1, ok1 := v1.(SessionIdentity); ok1 {
+		if id2, ok2 := v2.(SessionIdentity); ok2 {
+			k1 := id1.SessionKey()
+			k2 := id2.SessionKey()
+			return k1 != nil && k1 == k2
+		}
+	}
+	return false
+}
+
 type ReadAtCloser interface {
 	ReadAt(ctx context.Context, p []byte, off int64) (n int, err error)
 	Read(ctx context.Context, p []byte) (n int, err error)
