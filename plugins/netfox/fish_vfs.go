@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -27,11 +29,16 @@ const fishReadDirChunk = 500
 // the caller handed over, which is what lets the tests run it on a local
 // shell instead of on ssh.
 type FishVFS struct {
-	parent vfs.VFS
-	conn   *fishConn
-	path   string
-	title  string
-	once   sync.Once
+	parent              vfs.VFS
+	conn                *fishConn
+	pathMu              sync.RWMutex
+	path                string
+	title               string
+	once                sync.Once
+	panelTitleFormatter func(title, path string) string
+
+	panelInfoMu sync.RWMutex
+	panelInfo   vfs.PanelInfoProvider
 }
 
 // fishConn keeps one FISH+ session alive for as long as any of the VFS
@@ -181,7 +188,15 @@ func (c *fishConn) release() error {
 // started in. closer may be nil; when set it is closed together with the
 // session, which is also what makes the remote helper exit.
 func NewFishVFSOnStream(ctx context.Context, parent vfs.VFS, stdin io.Writer, stdout io.Reader, closer io.Closer, title string) (*FishVFS, error) {
-	return newFishVFSOnStream(ctx, parent, stdin, stdout, closer, title, nil)
+	return newFishVFSOnStream(ctx, parent, stdin, stdout, closer, title, nil, fishplus.HandshakeOptions{})
+}
+
+// NewFishVFSOnStreamWithOptions is the transport-specific variant of
+// NewFishVFSOnStream. Most callers should keep the default line bootstrap;
+// transports such as Android shell_v2 can select the single-line base64
+// bootstrap without changing the FISH+ filesystem implementation.
+func NewFishVFSOnStreamWithOptions(ctx context.Context, parent vfs.VFS, stdin io.Writer, stdout io.Reader, closer io.Closer, title string, opts fishplus.HandshakeOptions) (*FishVFS, error) {
+	return newFishVFSOnStream(ctx, parent, stdin, stdout, closer, title, nil, opts)
 }
 
 // NewFishVFSOnDialer builds a session the same way and remembers how to build
@@ -196,12 +211,12 @@ func NewFishVFSOnDialer(ctx context.Context, parent vfs.VFS, dial FishDialer, ti
 	if err != nil {
 		return nil, err
 	}
-	return newFishVFSOnStream(ctx, parent, stdin, stdout, closer, title, dial)
+	return newFishVFSOnStream(ctx, parent, stdin, stdout, closer, title, dial, fishplus.HandshakeOptions{})
 }
 
-func newFishVFSOnStream(ctx context.Context, parent vfs.VFS, stdin io.Writer, stdout io.Reader, closer io.Closer, title string, dial FishDialer) (*FishVFS, error) {
+func newFishVFSOnStream(ctx context.Context, parent vfs.VFS, stdin io.Writer, stdout io.Reader, closer io.Closer, title string, dial FishDialer, opts fishplus.HandshakeOptions) (*FishVFS, error) {
 	sess := fishplus.NewSession(stdin, stdout, closer)
-	if err := sess.Handshake(ctx); err != nil {
+	if err := sess.HandshakeWithOptions(ctx, opts); err != nil {
 		sess.Close()
 		return nil, err
 	}
@@ -336,7 +351,26 @@ func (v *FishVFS) client() *fishplus.Client {
 // Client exposes the underlying protocol client, mostly so a caller can ask
 // what the remote host turned out to be capable of.
 func (v *FishVFS) Client() *fishplus.Client { return v.client() }
+
+// PtyAvailable distinguishes SSH-backed FISH+ from transports such as
+// Android shell_v2. The concrete FishVFS type has OpenPty for the SSH case,
+// but treating every instance as a remote PTY makes Android navigation send
+// Unix cd commands into f4's local terminal on every path change.
+func (v *FishVFS) PtyAvailable() bool {
+	if v.conn == nil {
+		return false
+	}
+	v.conn.mu.Lock()
+	closer := v.conn.closer
+	v.conn.mu.Unlock()
+	_, ok := closer.(vfs.PtyProvider)
+	return ok
+}
+
 func (v *FishVFS) OpenPty(cols, rows int) (any, error) {
+	if v.conn == nil {
+		return nil, errors.New("pty not supported on this FISH+ connection")
+	}
 	v.conn.mu.Lock()
 	closer := v.conn.closer
 	v.conn.mu.Unlock()
@@ -397,8 +431,64 @@ func (v *FishVFS) Reconnect(ctx context.Context) error {
 
 func (v *FishVFS) GetTitle() string { return v.title }
 
-func (v *FishVFS) IsAtRoot() bool      { return v.path == "/" || v.path == "" }
-func (v *FishVFS) GetPath() string     { return v.path }
+// SetPanelTitleFormatter customizes only the path rendered in the panel
+// border. The canonical POSIX path and the session title remain untouched.
+func (v *FishVFS) SetPanelTitleFormatter(formatter func(title, path string) string) {
+	v.panelTitleFormatter = formatter
+}
+
+func (v *FishVFS) PanelTitle(path string) string {
+	if v.panelTitleFormatter == nil {
+		return ""
+	}
+	return v.panelTitleFormatter(v.title, path)
+}
+
+// SetPanelInfoProvider attaches transport-specific facts without wrapping the
+// filesystem. Keeping *FishVFS as the mounted concrete type is important to
+// the Android session pool and to callers that inspect protocol features.
+func (v *FishVFS) SetPanelInfoProvider(provider vfs.PanelInfoProvider) {
+	v.panelInfoMu.Lock()
+	v.panelInfo = provider
+	v.panelInfoMu.Unlock()
+}
+
+func (v *FishVFS) panelInfoProvider() vfs.PanelInfoProvider {
+	v.panelInfoMu.RLock()
+	defer v.panelInfoMu.RUnlock()
+	return v.panelInfo
+}
+
+func (v *FishVFS) PanelInfoKey(req vfs.PanelInfoRequest) string {
+	if provider := v.panelInfoProvider(); provider != nil {
+		return provider.PanelInfoKey(req)
+	}
+	return ""
+}
+
+func (v *FishVFS) CachedPanelInfo(req vfs.PanelInfoRequest) (vfs.PanelInfoSnapshot, bool) {
+	if provider := v.panelInfoProvider(); provider != nil {
+		return provider.CachedPanelInfo(req)
+	}
+	return vfs.PanelInfoSnapshot{}, true
+}
+
+func (v *FishVFS) RefreshPanelInfo(ctx context.Context, req vfs.PanelInfoRequest) (vfs.PanelInfoSnapshot, error) {
+	if provider := v.panelInfoProvider(); provider != nil {
+		return provider.RefreshPanelInfo(ctx, req)
+	}
+	return vfs.PanelInfoSnapshot{}, nil
+}
+
+func (v *FishVFS) IsAtRoot() bool {
+	p := v.GetPath()
+	return p == "/" || p == ""
+}
+func (v *FishVFS) GetPath() string {
+	v.pathMu.RLock()
+	defer v.pathMu.RUnlock()
+	return v.path
+}
 func (v *FishVFS) IsAbs(p string) bool { return path.IsAbs(p) }
 
 func (v *FishVFS) Join(e ...string) string { return path.Join(e...) }
@@ -409,12 +499,12 @@ func (v *FishVFS) Abs(p string) (string, error) { return v.abs(p), nil }
 
 func (v *FishVFS) abs(p string) string {
 	if p == "" {
-		return v.path
+		return v.GetPath()
 	}
 	if path.IsAbs(p) {
 		return path.Clean(p)
 	}
-	return path.Join(v.path, p)
+	return path.Join(v.GetPath(), p)
 }
 
 func (v *FishVFS) SetPath(p string) error {
@@ -426,22 +516,32 @@ func (v *FishVFS) SetPath(p string) error {
 	if !item.IsDir {
 		return os.ErrInvalid
 	}
+	v.pathMu.Lock()
 	v.path = target
+	v.pathMu.Unlock()
 	return nil
 }
 
-// entryToItem converts one remote entry. A symlink keeps its own mode bits,
-// but the panel needs to know whether entering it lands in a directory: the
-// find backend says so for free, the stat backends cost one extra round
-// trip per link.
-func (v *FishVFS) entryToItem(ctx context.Context, dir string, e fishplus.Entry) vfs.VFSItem {
+// SetPathOptimistic only changes this view's client-side path. A panel calls
+// it for a row already known to be a directory, including a cached row, then
+// validates that possibly stale knowledge with its asynchronous ReadDir. FISH+
+// sends absolute paths with every command and has no server-side cwd, so no
+// protocol request is needed here.
+func (v *FishVFS) SetPathOptimistic(p string) error {
+	target := v.abs(p)
+	v.pathMu.Lock()
+	v.path = target
+	v.pathMu.Unlock()
+	return nil
+}
+
+// entryToItem converts one remote entry. A symlink keeps its own mode bits;
+// TargetIsDir is filled by the find listing backend, by ReadDir's one batched
+// query, or by Stat's single target query before conversion.
+func (v *FishVFS) entryToItem(e fishplus.Entry) vfs.VFSItem {
 	isDir := e.IsDir()
-	if e.IsSymlink() {
-		if e.TargetIsDir {
-			isDir = true
-		} else if target, err := v.client().Stat(ctx, path.Join(dir, e.Name)); err == nil {
-			isDir = target.IsDir()
-		}
+	if e.IsSymlink() && e.TargetIsDir {
+		isDir = true
 	}
 	return vfs.VFSItem{
 		Name:         e.Name,
@@ -464,16 +564,66 @@ func (v *FishVFS) ReadDir(ctx context.Context, p string, onChunk func([]vfs.VFSI
 	if err != nil {
 		return err
 	}
+	// Validate every basename before joining it into a path sent back to the
+	// remote. Then collect all unresolved symlinks for one request. The find
+	// backend already marks links to directories, so those need no work.
+	filtered := make([]fishplus.Entry, 0, len(entries))
+	var linkIndexes []int
+	var linkPaths []string
+	for _, e := range entries {
+		if e.Name == "." || e.Name == ".." {
+			continue
+		}
+		if err := validateFishEntryName(e.Name); err != nil {
+			return err
+		}
+		filtered = append(filtered, e)
+		if e.IsSymlink() && !e.TargetIsDir {
+			linkIndexes = append(linkIndexes, len(filtered)-1)
+			linkPaths = append(linkPaths, path.Join(dir, e.Name))
+		}
+	}
+	if len(linkPaths) != 0 {
+		targetDirs, resolveErr := v.client().TargetDirs(ctx, linkPaths)
+		if resolveErr == nil {
+			for i, isDir := range targetDirs {
+				filtered[linkIndexes[i]].TargetIsDir = isDir
+			}
+		} else if err := ctx.Err(); err != nil {
+			return err
+		}
+		// A broken, missing or inaccessible target did not make the old
+		// per-link Stat loop fail the directory listing. Keep that property:
+		// unresolved links remain links, just not enterable directories.
+	}
 	items := make([]vfs.VFSItem, 0, fishReadDirChunk)
-	for i, e := range entries {
+	for _, e := range filtered {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		items = append(items, v.entryToItem(ctx, dir, e))
-		if len(items) >= fishReadDirChunk || i == len(entries)-1 {
+		items = append(items, v.entryToItem(e))
+		if len(items) >= fishReadDirChunk {
 			onChunk(items)
 			items = make([]vfs.VFSItem, 0, fishReadDirChunk)
 		}
+	}
+	if len(items) != 0 {
+		onChunk(items)
+	}
+	return nil
+}
+
+// validateFishEntryName keeps a remote basename from becoming a local path
+// when a generic VFS copy joins it to its destination. Slash cannot occur in a
+// real POSIX directory entry. Backslash can occur on Android/Unix, but on a
+// Windows host it is a separator and names such as `..\outside` would escape
+// the selected local directory. AOSP adb applies the same host-side rule.
+func validateFishEntryName(name string) error {
+	if name == "" || strings.IndexByte(name, 0) >= 0 || strings.Contains(name, "/") {
+		return fmt.Errorf("fishplus: unsafe directory entry name %q", name)
+	}
+	if runtime.GOOS == "windows" && strings.Contains(name, `\`) {
+		return fmt.Errorf("fishplus: unsafe Windows directory entry name %q", name)
 	}
 	return nil
 }
@@ -486,7 +636,12 @@ func (v *FishVFS) Stat(ctx context.Context, p string) (vfs.VFSItem, error) {
 	if err != nil {
 		return vfs.VFSItem{}, err
 	}
-	return v.entryToItem(ctx, path.Dir(target), e), nil
+	if e.IsSymlink() && !e.TargetIsDir {
+		if followed, followErr := v.client().Stat(ctx, target); followErr == nil {
+			e.TargetIsDir = followed.IsDir()
+		}
+	}
+	return v.entryToItem(e), nil
 }
 
 func (v *FishVFS) Open(ctx context.Context, p string) (vfs.ReadAtCloser, error) {
@@ -757,16 +912,27 @@ func (v *FishVFS) ParentVFS() vfs.VFS { return v.parent }
 // password prompt, and would buy nothing: the remote shell answers one
 // command at a time either way.
 func (v *FishVFS) Clone() vfs.VFS {
+	return v.CloneForParent(v.parent)
+}
+
+// CloneForParent returns another view of the same live session attached to a
+// different mount parent. Session pools use it to retain a parentless anchor
+// while every panel still gets the manager instance it was opened from.
+func (v *FishVFS) CloneForParent(parent vfs.VFS) *FishVFS {
 	if v.conn != nil {
 		v.conn.retain()
 	}
 	return &FishVFS{
-		parent: v.parent,
-		conn:   v.conn,
-		path:   v.path,
-		title:  v.title,
+		parent:              parent,
+		conn:                v.conn,
+		path:                v.GetPath(),
+		title:               v.title,
+		panelTitleFormatter: v.panelTitleFormatter,
+		panelInfo:           v.panelInfoProvider(),
 	}
 }
+
+var _ vfs.PanelInfoProvider = (*FishVFS)(nil)
 
 // Close releases this view. The session itself goes away with its last
 // user, and closing the same view twice is harmless: a panel may well be

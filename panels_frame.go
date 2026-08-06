@@ -379,6 +379,37 @@ func (pf *PanelsFrame) setCommandLineFocus(focused bool) {
 	vtui.FrameManager.Redraw()
 }
 
+// insertSelectedFileName is shared by the bindable Ctrl+Enter action and the
+// frame-level safety net for a key event that bypasses hotkey dispatch. Keeping
+// the operation here prevents a modified Enter from ever degrading into plain
+// directory activation.
+func (pf *PanelsFrame) insertSelectedFileName() bool {
+	fsp := pf.getActivePanel()
+	if fsp == nil {
+		return false
+	}
+	name := fsp.GetSelectedName()
+	if name == "" {
+		return false
+	}
+	// Escape spaces and special characters for shell commands.
+	if strings.ContainsAny(name, " &|;<>()$`\\\"'") {
+		if runtime.GOOS == "windows" {
+			if !strings.HasPrefix(name, "\"") {
+				name = "\"" + name + "\""
+			}
+		} else if !strings.HasPrefix(name, "'") {
+			name = "'" + strings.ReplaceAll(name, "'", "'\\''") + "'"
+		}
+	}
+	txt := pf.cmdLine.Edit.GetText()
+	if len(txt) > 0 && txt[len(txt)-1] != ' ' {
+		pf.cmdLine.InsertString(" ")
+	}
+	pf.cmdLine.InsertString(name)
+	return true
+}
+
 // applyNavigationMode resets transient focus when the setting is changed.
 func (pf *PanelsFrame) applyNavigationMode() {
 	pf.commandLineFocused = false
@@ -720,13 +751,18 @@ func (pf *PanelsFrame) Close() {
 
 	for _, p := range pf.panels {
 		if fsp, ok := p.(*FileSystemPanel); ok && fsp != nil {
+			fsp.cancelProviderOpen()
 			if fsp.cancelLoad != nil {
 				fsp.cancelLoad()
 			}
-			if fsp.loadingTimer != nil {
-				fsp.loadingTimer.Stop()
-			}
+			fsp.stopLoadingAnimation()
 		}
+	}
+	for i, alt := range pf.altPanels {
+		if closer, ok := alt.(interface{ Close() }); ok {
+			closer.Close()
+		}
+		pf.altPanels[i] = nil
 	}
 
 	if pf.pty != nil {
@@ -1140,13 +1176,16 @@ func (pf *PanelsFrame) VetoActionKey(e *vtinput.InputEvent) bool {
 	if e.Char != 0 {
 		return true
 	}
-	// Fast Find owns plain Esc, plain F2 (search mode toggle) and
+	// Fast Find owns plain Esc, plain Delete, plain F2 (search mode toggle) and
 	// Ctrl+Enter; the filter must not turn them into Panel.Toggle,
 	// Panel.UserMenu or Panel.InsertFileName.
 	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
 	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
 	if e.VirtualKeyCode == vtinput.VK_ESCAPE && !ctrl && !alt && !shift {
+		return true
+	}
+	if e.VirtualKeyCode == vtinput.VK_DELETE && !ctrl && !alt && !shift {
 		return true
 	}
 	if e.VirtualKeyCode == vtinput.VK_F2 && !ctrl && !alt && !shift {
@@ -1220,14 +1259,15 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		}
 	}
 
-	// Fast Find owns Esc, F2 and Ctrl+Enter before in-frame hotkeys and
+	// Fast Find owns Esc, Delete, F2 and Ctrl+Enter before in-frame hotkeys and
 	// command-line handling. Delegate them to the panel's normal handler.
 	if pf.showPanels && e.KeyDown {
 		if fsp := pf.getActivePanel(); fsp != nil && fsp.fastFindMode {
 			isFindEnter := e.VirtualKeyCode == vtinput.VK_RETURN && ctrl && !alt
 			isFindModeToggle := e.VirtualKeyCode == vtinput.VK_F2 && !ctrl && !alt && !shift
 			plainEscape := e.VirtualKeyCode == vtinput.VK_ESCAPE && !ctrl && !alt && !shift
-			if plainEscape || isFindEnter || isFindModeToggle {
+			plainDelete := e.VirtualKeyCode == vtinput.VK_DELETE && !ctrl && !alt && !shift
+			if plainEscape || plainDelete || isFindEnter || isFindModeToggle {
 				return fsp.ProcessKey(e)
 			}
 		}
@@ -1456,6 +1496,14 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 
 	// Enter handling
 	if e.VirtualKeyCode == vtinput.VK_RETURN {
+		// The hotkey filter normally handles Ctrl+Enter. Keep an in-frame
+		// fallback because platform input and injected events can bypass that
+		// filter; under no circumstances should Ctrl+Enter become plain Enter
+		// and enter the selected directory.
+		if ctrl && !alt && !shift && pf.showPanels {
+			pf.insertSelectedFileName()
+			return true
+		}
 		commandInputActive := !pf.searchFirstMode() || pf.commandLineFocused || !pf.showPanels
 		if commandInputActive && !pf.cmdLine.IsEmpty() {
 			cmd := pf.cmdLine.Edit.GetText()
@@ -1542,6 +1590,23 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				}
 			}
 
+			// A remote filesystem may support commands without exposing an
+			// interactive PTY. Android FISH+ deliberately uses this shape over ADB
+			// shell_v2: route the typed command to its job runner instead of falling
+			// through to the local Windows shell. SSH-backed FISH+ keeps using its
+			// PTY below, preserving the full interactive terminal experience.
+			if fsp := pf.getActivePanel(); fsp != nil && !vfsHasRemotePTY(fsp.vfs) {
+				if runner, ok := fsp.vfs.(vfs.CommandRunner); ok {
+					pf.cmdLine.Clear()
+					pf.cmdLine.Edit.HistoryPos = -1
+					if pf.searchFirstMode() && !AppConfig.SearchCommandStayFocused {
+						pf.setCommandLineFocus(false)
+					}
+					showRemoteCommandOutput(pf, runner, fsp.vfs.GetPath(), cmd)
+					return true
+				}
+			}
+
 			// Fallthrough for regular commands or if directory change failed (to show error in terminal)
 			activePty := pf.getActivePTY()
 			if activePty != nil {
@@ -1550,7 +1615,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				if fsp, ok := pf.panels[pf.activeIdx].(*FileSystemPanel); ok {
 					if _, isOS := fsp.vfs.(*vfs.OSVFS); isOS {
 						path = fsp.vfs.GetPath()
-					} else if _, isPty := fsp.vfs.(vfs.PtyProvider); isPty {
+					} else if vfsHasRemotePTY(fsp.vfs) {
 						path = fsp.vfs.GetPath()
 						isWindowsShell = false
 					}
@@ -2534,6 +2599,13 @@ func (pf *PanelsFrame) showDummyOpDialog() {
 // RunProgressTask encapsulates the boilerplate for creating a progress dialog,
 // running a background task with cancellation, and optionally forking the workspace.
 func (pf *PanelsFrame) RunProgressTask(title, startMsg string, forked bool, worker func(ctx context.Context, update func(msg string, percent int)) error, onComplete func(err error)) {
+	pf.runProgressTaskAfter(0, title, startMsg, forked, worker, onComplete)
+}
+
+// runProgressTaskAfter starts the worker immediately but postpones showing its
+// dialog. A task that completes before delay never creates a visible screen,
+// avoiding a one-frame flash for fast remote operations.
+func (pf *PanelsFrame) runProgressTaskAfter(delay time.Duration, title, startMsg string, forked bool, worker func(ctx context.Context, update func(msg string, percent int)) error, onComplete func(err error)) {
 	dlg := vtui.NewCenteredDialog(50, 12, title)
 	dlg.AttentionSuppressed = true
 
@@ -2566,7 +2638,16 @@ func (pf *PanelsFrame) RunProgressTask(title, startMsg string, forked bool, work
 		}
 	}
 
-	vtui.FrameManager.PostTask(func() {
+	done := make(chan struct{})
+	dialogShown := false // accessed only from UI tasks
+	showDialog := func() {
+		if delay > 0 {
+			select {
+			case <-done:
+				return
+			default:
+			}
+		}
 		if forked && pf != nil {
 			clone := pf.Clone()
 			vtui.FrameManager.AddScreen(clone)
@@ -2574,7 +2655,19 @@ func (pf *PanelsFrame) RunProgressTask(title, startMsg string, forked bool, work
 		} else {
 			vtui.FrameManager.AddScreenHeadless(dlg)
 		}
-	})
+		dialogShown = true
+	}
+
+	var showTimer *time.Timer
+	if delay > 0 {
+		showTimer = time.AfterFunc(delay, func() {
+			vtui.FrameManager.PostTask(showDialog)
+		})
+	} else {
+		// Preserve the existing immediate-dialog contract for callers that do
+		// not opt into a delay.
+		vtui.FrameManager.PostTask(showDialog)
+	}
 
 	taskCtx = vtui.RunAsync(func(ctx *vtui.TaskContext) {
 		update := func(msg string, percent int) {
@@ -2591,8 +2684,14 @@ func (pf *PanelsFrame) RunProgressTask(title, startMsg string, forked bool, work
 			})
 		}
 		err := worker(ctx.Context, update)
+		close(done)
+		if showTimer != nil {
+			showTimer.Stop()
+		}
 		ctx.RunOnUI(func() {
-			dlg.Close()
+			if dialogShown {
+				dlg.Close()
+			}
 			if onComplete != nil {
 				onComplete(err)
 			}
@@ -2787,7 +2886,7 @@ func (pf *PanelsFrame) syncPTYDirectory(path string, v vfs.VFS) bool {
 	sync := false
 	if _, isOS := v.(*vfs.OSVFS); isOS {
 		sync = true
-	} else if _, isPty := v.(vfs.PtyProvider); isPty {
+	} else if vfsHasRemotePTY(v) {
 		sync = true
 		isWindowsShell = false
 	}
@@ -2809,6 +2908,16 @@ func (pf *PanelsFrame) syncPTYDirectory(path string, v vfs.VFS) bool {
 	return false
 }
 
+func vfsHasRemotePTY(v vfs.VFS) bool {
+	if _, ok := v.(vfs.PtyProvider); !ok {
+		return false
+	}
+	if availability, ok := v.(vfs.PtyAvailability); ok {
+		return availability.PtyAvailable()
+	}
+	return true
+}
+
 func (pf *PanelsFrame) getActivePTYUnsafe() PtyBackend {
 	if pf.remotePtys == nil {
 		pf.remotePtys = make(map[vfs.VFS]PtyBackend)
@@ -2819,7 +2928,7 @@ func (pf *PanelsFrame) getActivePTYUnsafe() PtyBackend {
 		activeVfs = fsp.vfs
 	}
 
-	if pp, ok := activeVfs.(vfs.PtyProvider); ok {
+	if pp, ok := activeVfs.(vfs.PtyProvider); ok && vfsHasRemotePTY(activeVfs) {
 		if pty, exists := pf.remotePtys[activeVfs]; exists {
 			return pty
 		}
@@ -3003,9 +3112,7 @@ func (pf *PanelsFrame) Clone() *PanelsFrame {
 			// Important: reset isLoading so the clone doesn't think it's still
 			// waiting for that cancelled initial load.
 			cloneFsp.isLoading = false
-			if cloneFsp.loadingTimer != nil {
-				cloneFsp.loadingTimer.Stop()
-			}
+			cloneFsp.stopLoadingAnimation()
 
 			cloneFsp.vfs.SetPath(fsp.vfs.GetPath())
 			cloneFsp.SetViewMode(fsp.viewMode)
@@ -3013,7 +3120,7 @@ func (pf *PanelsFrame) Clone() *PanelsFrame {
 			cloneFsp.sortMode = fsp.sortMode
 			cloneFsp.sortReverse = fsp.sortReverse
 
-			cloneFsp.dirCache = make(map[string]dirCacheEntry)
+			cloneFsp.dirCache = make(map[dirCacheKey]dirCacheEntry)
 			for k, v := range fsp.dirCache {
 				cloneFsp.dirCache[k] = v
 			}
@@ -3109,10 +3216,12 @@ func (pf *PanelsFrame) showDriveMenuAt(panelIdx, selectPos int) {
 	// 1. Other panel (focused by default)
 	menu.AddItem(vtui.MenuItem{Text: Msg("Panel.Other"), UserData: func(fsp *FileSystemPanel) {
 		otherFsp := pf.panels[1-panelIdx].(*FileSystemPanel)
+		fsp.cancelProviderOpen()
 		if fsp.vfs != nil {
 			fsp.vfs.Close()
 		}
 		fsp.vfs = otherFsp.vfs.Clone()
+		fsp.showCurrentVFSLoadingRows()
 		fsp.ReadDirectory()
 		pf.RefreshAll()
 	}})
@@ -3332,6 +3441,7 @@ func (pf *PanelsFrame) clearBookmarkSlot(slot int, menu *vtui.VMenu, reopen func
 
 func (pf *PanelsFrame) switchToVFS(fsp *FileSystemPanel, newVFS vfs.VFS) {
 	if newVFS != nil {
+		fsp.cancelProviderOpen()
 		if fsp.vfs != nil {
 			fsp.vfs.Close()
 			pf.ptyMutex.Lock()
@@ -3341,9 +3451,10 @@ func (pf *PanelsFrame) switchToVFS(fsp *FileSystemPanel, newVFS vfs.VFS) {
 			}
 			pf.ptyMutex.Unlock()
 		}
-		fsp.dirCache = make(map[string]dirCacheEntry)
+		fsp.dirCache = make(map[dirCacheKey]dirCacheEntry)
 		fsp.providerEntryName = ""
 		fsp.vfs = newVFS
+		fsp.showCurrentVFSLoadingRows()
 		fsp.ReadDirectory()
 		pf.RefreshAll()
 	}
@@ -3352,6 +3463,10 @@ func (pf *PanelsFrame) NavigateToPath(fsp *FileSystemPanel, targetPath string) b
 	if targetPath == "" {
 		return false
 	}
+	// An explicit command/history navigation supersedes a provider mount that
+	// has not installed its child VFS yet.
+	providerOpenCanceled := fsp.providerOpenTask != nil
+	fsp.cancelProviderOpen()
 
 	// 1. Handle "cd .." at the root of a nested VFS (e.g. escaping an archive)
 	if targetPath == ".." && fsp.vfs.IsAtRoot() && fsp.vfs.ParentVFS() != nil {
@@ -3366,8 +3481,9 @@ func (pf *PanelsFrame) NavigateToPath(fsp *FileSystemPanel, targetPath string) b
 		}
 		pf.ptyMutex.Unlock()
 
-		fsp.dirCache = make(map[string]dirCacheEntry)
+		fsp.dirCache = make(map[dirCacheKey]dirCacheEntry)
 		fsp.vfs = parent
+		fsp.showCurrentVFSLoadingRows()
 		if fsp.providerEntryName != "" {
 			fsp.pendingSelection = fsp.providerEntryName
 			fsp.providerEntryName = ""
@@ -3452,13 +3568,23 @@ func (pf *PanelsFrame) NavigateToPath(fsp *FileSystemPanel, targetPath string) b
 		}
 	}
 
-	// 3. Try simple SetPath on current VFS (handles relative paths and absolute paths within same VFS)
-	if err := fsp.vfs.SetPath(targetPath); err == nil {
+	// 3. Change path on the current VFS. Remote VFSes may take the optimistic,
+	// no-I/O route here; ReadDirectory validates the target in the background
+	// while a cached view can become interactive immediately.
+	if err := fsp.setKnownDirectoryPath(targetPath); err == nil {
 		fsp.pendingSelection = ".."
 		fsp.ReadDirectory()
 		return true
 	}
 
+	if providerOpenCanceled {
+		// No replacement VFS/read was started, so restore the manager panel's
+		// loading state after superseding its pending provider transition.
+		fsp.isLoading = false
+		fsp.stopLoadingAnimation()
+		fsp.updateTitle(nil)
+		vtui.FrameManager.Redraw()
+	}
 	return false
 }
 

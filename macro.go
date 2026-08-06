@@ -93,11 +93,14 @@ func EventToFarString(e *vtinput.InputEvent) string {
 	}
 
 	vk := e.VirtualKeyCode
+	// Windows marks the numeric-keypad Enter as enhanced, while the main
+	// keyboard Enter is not enhanced. Delete is the opposite: the navigation
+	// cluster key is enhanced and the keypad decimal/delete key is not.
+	if mods.Contains(vtinput.EnhancedKey) && vk == vtinput.VK_RETURN {
+		sb.WriteString("NumEnter")
+		return sb.String()
+	}
 	if !mods.Contains(vtinput.EnhancedKey) {
-		if vk == vtinput.VK_RETURN {
-			sb.WriteString("NumEnter")
-			return sb.String()
-		}
 		if vk == vtinput.VK_DELETE {
 			sb.WriteString("NumDel")
 			return sb.String()
@@ -147,6 +150,7 @@ func ParseFarKey(s string) *vtinput.InputEvent {
 	if strings.EqualFold(s, "NumEnter") {
 		e.VirtualKeyCode = vtinput.VK_RETURN
 		e.Char = '\r'
+		e.ControlKeyState |= vtinput.EnhancedKey
 		return e
 	}
 	if strings.EqualFold(s, "NumDel") {
@@ -171,7 +175,7 @@ func ParseFarKey(s string) *vtinput.InputEvent {
 			}
 			if vk == vtinput.VK_INSERT || vk == vtinput.VK_DELETE || vk == vtinput.VK_HOME || vk == vtinput.VK_END ||
 				vk == vtinput.VK_PRIOR || vk == vtinput.VK_NEXT || vk == vtinput.VK_UP || vk == vtinput.VK_DOWN ||
-				vk == vtinput.VK_LEFT || vk == vtinput.VK_RIGHT || vk == vtinput.VK_RETURN {
+				vk == vtinput.VK_LEFT || vk == vtinput.VK_RIGHT {
 				e.ControlKeyState |= vtinput.EnhancedKey
 			}
 			return e
@@ -284,11 +288,12 @@ func isPanelBookmarkHotkey(e *vtinput.InputEvent) bool {
 	return e.VirtualKeyCode == vtinput.VK_OEM_3 && isGoto
 }
 
-// isPanelFastFindEscape identifies the contextual Escape owned by Fast Find.
-// It must reach PanelsFrame before macros and configurable hotkeys, otherwise
-// a Shell binding such as Esc -> Panel.Toggle hides the panels first.
-func isPanelFastFindEscape(e *vtinput.InputEvent) bool {
-	if e.Type != vtinput.KeyEventType || !e.KeyDown || e.VirtualKeyCode != vtinput.VK_ESCAPE {
+// isPanelFastFindToggleKey identifies contextual panel-toggle keys owned by
+// Fast Find. They must reach PanelsFrame before macros and configurable
+// hotkeys, otherwise Esc/Del -> Panel.Toggle hides the panels first.
+func isPanelFastFindToggleKey(e *vtinput.InputEvent) bool {
+	if e.Type != vtinput.KeyEventType || !e.KeyDown ||
+		(e.VirtualKeyCode != vtinput.VK_ESCAPE && e.VirtualKeyCode != vtinput.VK_DELETE) {
 		return false
 	}
 	mods := e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed |
@@ -352,7 +357,7 @@ func (m *MacroManager) Filter(e *vtinput.InputEvent) bool {
 	}
 
 	currentArea := m.GetCurrentArea()
-	if currentArea == "Shell" && (isPanelBookmarkHotkey(e) || isPanelFastFindEscape(e)) {
+	if currentArea == "Shell" && (isPanelBookmarkHotkey(e) || isPanelFastFindToggleKey(e)) {
 		return false
 	}
 

@@ -182,8 +182,10 @@ func (fp *FileSystemPanel) leaveVFS() {
 		return
 	}
 	oldPath := fp.vfs.GetPath()
+	fp.cancelProviderOpen()
 	fp.vfs.Close()
 	fp.vfs = parent
+	fp.showCurrentVFSLoadingRows()
 	if fp.providerEntryName != "" {
 		fp.pendingSelection = fp.providerEntryName
 		fp.providerEntryName = ""

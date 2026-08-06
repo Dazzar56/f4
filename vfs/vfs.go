@@ -131,6 +131,84 @@ type VFS interface {
 type TitleProvider interface {
 	GetTitle() string
 }
+
+// PanelTitleProvider can replace the complete path shown in a file-panel
+// border without changing the canonical path used for filesystem operations.
+// Returning an empty string keeps the ordinary TitleProvider + path layout.
+type PanelTitleProvider interface {
+	PanelTitle(path string) string
+}
+
+// PanelInfoRequest describes the file-panel state mirrored by an information
+// panel. Providers must treat it as an immutable value; SelectedName may be
+// empty when the panel has no actionable row under the cursor.
+type PanelInfoRequest struct {
+	Path         string
+	SelectedName string
+}
+
+// PanelInfoValueKind tells the host how to format a provider field. Byte and
+// usage values are deliberately typed so the Ctrl+L panel's B toggle applies
+// to local and remote values in exactly the same way.
+type PanelInfoValueKind uint8
+
+const (
+	PanelInfoText PanelInfoValueKind = iota
+	PanelInfoBytes
+	// PanelInfoUsage renders a two-line total/available meter. TotalBytes and
+	// AvailableBytes carry the values; Bytes and Value are ignored.
+	PanelInfoUsage
+)
+
+// PanelInfoField is one copyable label/value row. LabelKey is optional and,
+// when present, is resolved by the host's localization catalog; Label is the
+// provider-supplied fallback used by third-party plugins without catalog keys.
+type PanelInfoField struct {
+	ID       string
+	LabelKey string
+	Label    string
+	Value    string
+	Kind     PanelInfoValueKind
+	Bytes    uint64
+	// TotalBytes and AvailableBytes are used by PanelInfoUsage. Available may
+	// legitimately be zero; providers should omit the field only when Total is
+	// unknown.
+	TotalBytes     uint64
+	AvailableBytes uint64
+}
+
+// PanelInfoSection groups related fields under one heading. TitleKey follows
+// the same localization/fallback rules as PanelInfoField.LabelKey.
+type PanelInfoSection struct {
+	ID       string
+	TitleKey string
+	Title    string
+	Fields   []PanelInfoField
+}
+
+// PanelInfoSnapshot is an immutable rendering snapshot. Authoritative means
+// the provider describes the system behind the current VFS (for example an
+// Android device), so host computer/disk/memory rows must not be mixed into it.
+type PanelInfoSnapshot struct {
+	Authoritative bool
+	Sections      []PanelInfoSection
+	RefreshedAt   time.Time
+}
+
+// PanelInfoProvider lets a VFS contribute structured Ctrl+L information
+// without blocking the UI thread. PanelInfoKey and CachedPanelInfo MUST be
+// local, bounded and non-blocking. PanelInfoKey is also the async generation
+// identity: it must change whenever Path or SelectedName would change the
+// refresh result. RefreshPanelInfo may perform I/O and is always called by the
+// host on a cancellable background task. The bool returned by CachedPanelInfo
+// says whether the snapshot is still fresh; a stale snapshot remains useful
+// while a refresh is in flight.
+type PanelInfoProvider interface {
+	PanelInfoKey(PanelInfoRequest) string
+	CachedPanelInfo(PanelInfoRequest) (PanelInfoSnapshot, bool)
+	RefreshPanelInfo(context.Context, PanelInfoRequest) (PanelInfoSnapshot, error)
+}
+
 type BulkCopier interface {
 	CopyBulk(ctx context.Context, srcPaths []string, dstVfs VFS, dstDir string, reporter TaskReporter) error
 }
@@ -182,6 +260,22 @@ func (m *ArchiveLockManager) Unlock(path string) {
 // (e.g. an SSH session for remote systems).
 type PtyProvider interface {
 	OpenPty(cols, rows int) (any, error)
+}
+
+// PtyAvailability lets a VFS whose concrete type can open a PTY report that
+// the transport behind this particular instance cannot. For example, FISH+
+// over SSH has a PTY provider while FISH+ over Android shell_v2 does not.
+type PtyAvailability interface {
+	PtyAvailable() bool
+}
+
+// OptimisticPathSetter changes a VFS view to a directory that the panel has
+// already obtained from a directory listing. It must not perform remote I/O:
+// the following ReadDir is the authoritative validation and handles a stale
+// cached row asynchronously. VFS implementations that need SetPath's normal
+// validation should expose this optional fast path in addition to SetPath.
+type OptimisticPathSetter interface {
+	SetPathOptimistic(path string) error
 }
 
 // VFSProvider умеет определять, может ли он открыть путь, и создавать экземпляр VFS.

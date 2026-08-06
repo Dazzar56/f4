@@ -37,6 +37,7 @@ Operations like calculating directory sizes, finding duplicate files, or complex
     *   `job.go` — background jobs, and the tree scan that is the first of them.
 *   `plugins/netfox/fish_vfs.go` — the `vfs.VFS` implementation, registered as the `fish+` protocol of the NetFox connection manager. A plain `fish` type is accepted as a synonym.
 *   `plugins/netfox/ssh_dial.go` — the SSH dialer shared with the SFTP backend.
+*   `plugins/android/` — an ADB smart-socket, shell-v2 and Sync client. Its Android drive first carries this same FISH+ session over a raw ADB shell; a device whose userspace cannot provide complete FISH+ listing/read/write modes uses ADB Sync for that whole panel session instead.
 
 ### Licensing
 
@@ -53,6 +54,8 @@ Getting the helper there takes two steps, and the reason is worth writing down. 
 So the script is not parsed off the stream at all. What the shell parses is one line, the bootstrap, which prints a marker and then reads the script in through the shell's own `read` builtin, ending at `F4EOF`, and `eval`s it. `read` takes its bytes from the file descriptor and cannot run ahead of itself. The client sends that line, waits for the marker, and only then sends the script, so nothing is ever in flight while the parser is working. The marker carries the session token and is printed in two pieces, `F4R"DY"`, so that a terminal echoing the line back cannot be mistaken for the shell answering.
 
 A shell that ended up on a pseudo terminal needs one more step. A terminal echoes back everything it is fed, turns every `\n` on the way out into `\r\n` — which destroys binary frames — and in canonical mode truncates an input line at a few kilobytes, which would cut off a long path. So the helper checks whether its stdin is a terminal and, if it is, puts it into a transparent mode with POSIX `stty` operands only, announcing `tty` among its features. A client whose transport is a terminal and which does not see `tty` in the banner must treat binary payload as unsafe.
+
+A binary-clean transport may instead send the complete helper as base64 inside the first command. The command verifies a token-bearing sentinel after decoding before it calls `eval`, tries the common GNU/BusyBox/toybox, BSD and OpenSSL decoder spellings, and creates no temporary file. Android shell-v2 uses this form because assembling the helper one shell `read` at a time is measurably expensive there; if no decoder accepts it, the shell returns a framed handshake error and Android retries the portable two-step form on a fresh stream.
 
 ### Request
 
@@ -94,6 +97,7 @@ Everything printed before that line (motd, shell warnings, login banners) is dis
 *   `ping` + payload line — echoes the payload back; keepalive and synchronization check.
 *   `feats` — repeats the version and feature list.
 *   `enum` + path — lists a directory.
+*   `isdirs <count>` + `count` paths — reports in one round trip which paths resolve to directories; directory listings use it to classify symlink targets without one `info` request per link.
 *   `info` + path — metadata, following symlinks.
 *   `linfo` + path — metadata of the link itself.
 *   `rdlink` + path — the target of a symlink.

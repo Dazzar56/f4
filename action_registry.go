@@ -982,7 +982,7 @@ func init() {
 		Label:        "Toggle Panels",
 		Description:  "Show or hide panels",
 		DescKey:      "Action.Panel.Toggle.Desc",
-		DefaultKeys:  []string{"CtrlO:NoAltScreenApp", "Esc:EscToggle"},
+		DefaultKeys:  []string{"CtrlO:NoAltScreenApp", "Esc:EscToggle", "Del:EscToggle", "NumDel:EscToggle"},
 		DefaultAreas: []string{"Terminal"},
 		Handler: withPF(func(pf *PanelsFrame) {
 			pf.exitWide()
@@ -1393,28 +1393,7 @@ func init() {
 		DescKey:     "Action.Panel.InsertFileName.Desc",
 		DefaultKeys: []string{"CtrlEnter"},
 		Handler: withPF(func(pf *PanelsFrame) {
-			name := pf.Active().GetSelectedName()
-			if name == "" {
-				return
-			}
-			// Escape spaces and special characters for shell commands
-			if strings.ContainsAny(name, " &|;<>()$`\\\"'") {
-				if runtime.GOOS == "windows" {
-					if !strings.HasPrefix(name, "\"") {
-						name = "\"" + name + "\""
-					}
-				} else {
-					if !strings.HasPrefix(name, "'") {
-						name = "'" + strings.ReplaceAll(name, "'", "'\\''") + "'"
-					}
-				}
-			}
-			txt := pf.cmdLine.Edit.GetText()
-			// Add space if the line is not empty and doesn't end with a space.
-			if len(txt) > 0 && txt[len(txt)-1] != ' ' {
-				pf.cmdLine.InsertString(" ")
-			}
-			pf.cmdLine.InsertString(name)
+			pf.insertSelectedFileName()
 		}),
 	})
 	RegisterAction(Action{

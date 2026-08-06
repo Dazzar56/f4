@@ -2,6 +2,8 @@ package fishplus
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -160,6 +162,68 @@ func TestParseListingRejectsMissingMarker(t *testing.T) {
 	}
 	if _, _, err := ParseListing(nil); err == nil {
 		t.Error("empty listing accepted")
+	}
+}
+
+func TestTargetDirsUsesOneRequestAndPreservesPathEncoding(t *testing.T) {
+	paths := []string{"/tmp/link to dir", "/tmp/link\nwith newline", "/tmp/broken"}
+	seen := make(chan mockRequest, 1)
+	sess := newMockPeer(t, "ok FISHPLUS 1 stat", func(w io.Writer, token string, req mockRequest) {
+		seen <- req
+		fmt.Fprintln(w, "1")
+		fmt.Fprintln(w, "0")
+		fmt.Fprintln(w, "0")
+		fmt.Fprintf(w, ".%s %s ok\n", token, req.ID)
+	}, len(paths))
+	if err := sess.Handshake(context.Background()); err != nil {
+		t.Fatalf("handshake: %v", err)
+	}
+	c := NewClient(sess)
+
+	empty, err := c.TargetDirs(context.Background(), nil)
+	if err != nil || len(empty) != 0 {
+		t.Fatalf("TargetDirs(nil) = %v, %v", empty, err)
+	}
+	got, err := c.TargetDirs(context.Background(), paths)
+	if err != nil {
+		t.Fatalf("TargetDirs: %v", err)
+	}
+	want := []bool{true, false, false}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Errorf("TargetDirs = %v, want %v", got, want)
+	}
+
+	req := <-seen
+	if req.Cmd != "isdirs" || len(req.Args) != 1 || req.Args[0] != "3" {
+		t.Fatalf("request = %q %q, want isdirs 3", req.Cmd, req.Args)
+	}
+	if decoded := req.decodePaths(t); fmt.Sprint(decoded) != fmt.Sprint(paths) {
+		t.Errorf("paths = %q, want %q", decoded, paths)
+	}
+}
+
+func TestTargetDirsRejectsMalformedAnswers(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		lines []string
+	}{
+		{name: "too few", lines: []string{"1"}},
+		{name: "invalid value", lines: []string{"1", "yes"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sess := newMockPeer(t, "ok FISHPLUS 1 stat", func(w io.Writer, token string, req mockRequest) {
+				for _, line := range tc.lines {
+					fmt.Fprintln(w, line)
+				}
+				fmt.Fprintf(w, ".%s %s ok\n", token, req.ID)
+			}, 2)
+			if err := sess.Handshake(context.Background()); err != nil {
+				t.Fatalf("handshake: %v", err)
+			}
+			if _, err := NewClient(sess).TargetDirs(context.Background(), []string{"/a", "/b"}); err == nil {
+				t.Fatal("malformed isdirs response accepted")
+			}
+		})
 	}
 }
 
@@ -338,6 +402,40 @@ func TestListingAgainstLocalShell(t *testing.T) {
 	}
 	if tried == 0 {
 		t.Fatal("no metadata backend available on this host")
+	}
+}
+
+func TestTargetDirsAgainstLocalShell(t *testing.T) {
+	c := newLocalShellClient(t)
+	dir := t.TempDir()
+	targetDir := filepath.Join(dir, "target dir")
+	targetFile := filepath.Join(dir, "target file")
+	if err := os.Mkdir(targetDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(targetFile, []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	dirLink := filepath.Join(dir, "directory link")
+	fileLink := filepath.Join(dir, "file link")
+	brokenLink := filepath.Join(dir, "broken link")
+	if err := os.Symlink(targetDir, dirLink); err != nil {
+		t.Skipf("symlinks not supported here: %v", err)
+	}
+	if err := os.Symlink(targetFile, fileLink); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(dir, "missing"), brokenLink); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := c.TargetDirs(context.Background(), []string{dirLink, fileLink, brokenLink})
+	if err != nil {
+		t.Fatalf("TargetDirs: %v", err)
+	}
+	want := []bool{true, false, false}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Errorf("TargetDirs = %v, want %v", got, want)
 	}
 }
 

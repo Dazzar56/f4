@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
+	"sync"
 	"time"
 
 	"strings"
@@ -256,9 +258,6 @@ func (m *mediumRow) GetCellAttr(col int, defaultAttr uint64) uint64 {
 		attr = vtui.Palette[ColPanelDir]
 	}
 
-	if e.IsCached {
-		attr = vtui.DimColor(attr)
-	}
 	return attr
 }
 
@@ -272,10 +271,13 @@ const (
 )
 
 const (
-	panelSizeColumnWidth     = 11
-	panelModifiedColumnWidth = 14
-	panelDragScrollInterval  = 75 * time.Millisecond
+	panelSizeColumnWidth      = 11
+	panelModifiedColumnWidth  = 14
+	panelDragScrollInterval   = 75 * time.Millisecond
+	panelLoadingPulseInterval = 100 * time.Millisecond
 )
+
+var panelLoadingPulse = [...]string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
 type SortMode int
 
@@ -324,9 +326,6 @@ func (f *fileEntry) GetCellAttr(col int, defaultAttr uint64) uint64 {
 		attr = vtui.Palette[ColPanelDir]
 	}
 
-	if f.IsCached {
-		attr = vtui.DimColor(attr)
-	}
 	return attr
 }
 
@@ -337,6 +336,18 @@ type dirCacheEntry struct {
 	items []vfs.VFSItem
 	time  time.Time
 }
+
+// dirCacheKey qualifies a path with the filesystem it belongs to. Remote
+// roots are commonly all named "/"; using the path alone briefly showed one
+// Android device's cached directory while another device was being loaded.
+// A shared-session identity preserves the fast preview across pooled FISH+
+// views. Other comparable VFS implementations are scoped to their exact
+// instance, giving a safe cache miss rather than a false hit after reopening.
+type dirCacheKey struct {
+	identity      any
+	qualifiedPath string
+}
+
 type FileSystemPanel struct {
 	vtui.ScreenObject
 	table                *vtui.Table
@@ -363,6 +374,12 @@ type FileSystemPanel struct {
 	cancelLoad                context.CancelFunc
 	isLoading                 bool
 	loadingTimer              *time.Timer
+	loadingFrame              int
+	loadingGeneration         uint64
+	loadQueueMu               sync.Mutex
+	loadWorkerActive          bool
+	pendingDirectoryLoad      func()
+	providerOpenTask          *vtui.TaskContext
 	pendingSelection          string
 	providerEntryName         string // name of entry used to enter a provider VFS (e.g. NetFox connection name)
 	suppressFolderHistoryPath string // one-shot: history/menu navigation must not reorder MRU
@@ -374,7 +391,7 @@ type FileSystemPanel struct {
 	sortReverse bool
 
 	lastDirMTime time.Time
-	dirCache     map[string]dirCacheEntry
+	dirCache     map[dirCacheKey]dirCacheEntry
 
 	isCheckingRefresh bool
 	currentTitle      string
@@ -404,7 +421,7 @@ func NewFileSystemPanel(x, y, w, h int, vfs vfs.VFS) *FileSystemPanel {
 		table:               vtui.NewTable(x+1, y+1, w-2, h-2, nil),
 		viewMode:            ViewModeMedium,
 		lastRightClickedIdx: -1,
-		dirCache:            make(map[string]dirCacheEntry),
+		dirCache:            make(map[dirCacheKey]dirCacheEntry),
 		selectedItems:       make(map[string]bool),
 		//entries:             []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}},
 	}
@@ -425,22 +442,63 @@ func NewFileSystemPanel(x, y, w, h int, vfs vfs.VFS) *FileSystemPanel {
 	return fp
 }
 
-func (fp *FileSystemPanel) saveToCache(path string, items []vfs.VFSItem) {
-	if fp.dirCache == nil {
-		fp.dirCache = make(map[string]dirCacheEntry)
+func directoryCacheKey(fs vfs.VFS, path string) dirCacheKey {
+	key := dirCacheKey{qualifiedPath: FileStateKey(fs, path)}
+	if identity, ok := fs.(vfs.SessionIdentity); ok {
+		if sessionKey := identity.SessionKey(); sessionKey != nil {
+			key.identity = sessionKey
+			return key
+		}
 	}
-	fp.dirCache[path] = dirCacheEntry{items: items, time: time.Now()}
+	// VFS is an interface and implementations are not required to be
+	// comparable. Every built-in VFS is pointer-backed, but keep the fallback
+	// safe for plugins that use a slice/map-bearing value implementation.
+	if fs != nil && reflect.TypeOf(fs).Comparable() {
+		key.identity = fs
+	}
+	return key
+}
+
+// sameVFSInstance is deliberately stricter than cache identity. Two pooled
+// remote views may share cached directory data, but an asynchronous provider
+// transition belongs to the exact parent object it was started from.
+func sameVFSInstance(a, b vfs.VFS) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	ta, tb := reflect.TypeOf(a), reflect.TypeOf(b)
+	if ta != tb || !ta.Comparable() {
+		return false
+	}
+	return a == b
+}
+
+func (fp *FileSystemPanel) cacheKey(path string) dirCacheKey {
+	return directoryCacheKey(fp.vfs, path)
+}
+
+func (fp *FileSystemPanel) saveToCache(path string, items []vfs.VFSItem) {
+	fp.saveToCacheKey(fp.cacheKey(path), items)
+}
+
+func (fp *FileSystemPanel) saveToCacheKey(key dirCacheKey, items []vfs.VFSItem) {
+	if fp.dirCache == nil {
+		fp.dirCache = make(map[dirCacheKey]dirCacheEntry)
+	}
+	fp.dirCache[key] = dirCacheEntry{items: items, time: time.Now()}
 
 	if len(fp.dirCache) > maxDirCache {
-		var oldestPath string
+		var oldestKey dirCacheKey
 		var oldestTime time.Time
-		for p, entry := range fp.dirCache {
-			if oldestPath == "" || entry.time.Before(oldestTime) {
-				oldestPath = p
+		hasOldest := false
+		for candidate, entry := range fp.dirCache {
+			if !hasOldest || entry.time.Before(oldestTime) {
+				oldestKey = candidate
 				oldestTime = entry.time
+				hasOldest = true
 			}
 		}
-		delete(fp.dirCache, oldestPath)
+		delete(fp.dirCache, oldestKey)
 	}
 }
 func (fp *FileSystemPanel) SetItemSelected(idx int, state bool) {
@@ -480,12 +538,10 @@ func (fp *FileSystemPanel) SetSortMode(mode SortMode) {
 		fp.sortReverse = !fp.sortReverse
 	} else {
 		fp.sortMode = mode
-		// Far по умолчанию сортирует время и размер по убыванию
-		if mode == SortTime || mode == SortSize {
-			fp.sortReverse = true
-		} else {
-			fp.sortReverse = false
-		}
+		// Every mode's base comparator is its desired first-use direction:
+		// name/extension ascend, while time/size descend. Repeated activation
+		// below toggles that direction uniformly for hotkeys, menus and headers.
+		fp.sortReverse = false
 	}
 	fp.updateSortColumnTitles()
 	fp.ReadDirectory()
@@ -1187,20 +1243,59 @@ func (fp *FileSystemPanel) SetCursorIndex(idx int) {
 }
 
 func (fp *FileSystemPanel) updateTitle(err error) {
-	title := fp.vfs.GetPath()
-	if tp, ok := fp.vfs.(vfs.TitleProvider); ok {
-		if prefix := tp.GetTitle(); prefix != "" {
-			title = prefix + ":" + title
+	path := fp.vfs.GetPath()
+	title := ""
+	if tp, ok := fp.vfs.(vfs.PanelTitleProvider); ok {
+		title = tp.PanelTitle(path)
+	}
+	if title == "" {
+		title = path
+		if tp, ok := fp.vfs.(vfs.TitleProvider); ok {
+			if prefix := tp.GetTitle(); prefix != "" {
+				title = prefix + ":" + title
+			}
 		}
 	}
 
 	if err != nil && err != context.Canceled {
 		title += " [Error]"
 	} else if fp.isLoading {
-		title += " [Loading...]"
+		title += " " + panelLoadingPulse[fp.loadingFrame%len(panelLoadingPulse)]
 	}
 	fp.currentTitle = title
 	fp.frame.SetTitle("")
+}
+
+func (fp *FileSystemPanel) stopLoadingAnimation() {
+	fp.loadingGeneration++
+	if fp.loadingTimer != nil {
+		fp.loadingTimer.Stop()
+		fp.loadingTimer = nil
+	}
+}
+
+func (fp *FileSystemPanel) startLoadingAnimation() {
+	fp.stopLoadingAnimation()
+	fp.loadingFrame = 0
+	fp.updateTitle(nil)
+	vtui.FrameManager.Redraw()
+
+	generation := fp.loadingGeneration
+	var scheduleNext func()
+	scheduleNext = func() {
+		fp.loadingTimer = time.AfterFunc(panelLoadingPulseInterval, func() {
+			vtui.FrameManager.PostTask(func() {
+				if !fp.isLoading || fp.loadingGeneration != generation {
+					return
+				}
+				fp.loadingFrame = (fp.loadingFrame + 1) % len(panelLoadingPulse)
+				fp.updateTitle(nil)
+				vtui.FrameManager.Redraw()
+				scheduleNext()
+			})
+		})
+	}
+	scheduleNext()
 }
 
 func (fp *FileSystemPanel) pathTitleHitTest(x, y int) bool {
@@ -1223,23 +1318,93 @@ func (fp *FileSystemPanel) ReadDirectory() {
 	fp.readDirectoryEx(false)
 }
 
+// enqueueDirectoryLoad keeps at most one backend read running and one newer
+// read waiting. Repeated navigation replaces the pending closure instead of
+// creating a FIFO of stale Stat/ReadDir goroutines. The running request is
+// cancelled by readDirectoryEx; it may still need to drain one FISH+ response,
+// after which only the most recent path is allowed to start.
+func (fp *FileSystemPanel) enqueueDirectoryLoad(load func()) {
+	fp.loadQueueMu.Lock()
+	if fp.loadWorkerActive {
+		fp.pendingDirectoryLoad = load
+		fp.loadQueueMu.Unlock()
+		return
+	}
+	fp.loadWorkerActive = true
+	fp.loadQueueMu.Unlock()
+
+	go func() {
+		next := load
+		for next != nil {
+			next()
+
+			fp.loadQueueMu.Lock()
+			next = fp.pendingDirectoryLoad
+			fp.pendingDirectoryLoad = nil
+			if next == nil {
+				fp.loadWorkerActive = false
+			}
+			fp.loadQueueMu.Unlock()
+		}
+	}()
+}
+
+// cancelProviderOpen invalidates an asynchronous VFS mount before asking its
+// context to stop. A completion already queued on the UI thread will see that
+// it no longer owns the transition and close any VFS it produced instead of
+// replacing the panel's newer file system.
+func (fp *FileSystemPanel) cancelProviderOpen() {
+	if task := fp.providerOpenTask; task != nil {
+		fp.providerOpenTask = nil
+		task.Cancel()
+	}
+}
+
+// showCurrentVFSLoadingRows atomically stops the panel from exposing rows that
+// belonged to a VFS it has just left. ReadDirectory will replace this minimal
+// view immediately from cache when allowed; without a cache (or when
+// SyncPanelLoad deliberately bypasses it), only a real parent row is safe to
+// keep interactive while the new listing is in flight.
+func (fp *FileSystemPanel) showCurrentVFSLoadingRows() {
+	fp.entries = nil
+	if fp.vfs != nil && (!fp.vfs.IsAtRoot() || fp.vfs.ParentVFS() != nil) {
+		fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
+	}
+	fp.SetCursorIndex(0)
+	fp.Refresh()
+	vtui.FrameManager.Redraw()
+}
+
+// setKnownDirectoryPath takes the no-I/O route offered by remote VFSes when
+// the target came from a panel row. Cancel first so the old background refresh
+// starts leaving the shared session before the new cache is rendered.
+func (fp *FileSystemPanel) setKnownDirectoryPath(target string) error {
+	if setter, ok := fp.vfs.(vfs.OptimisticPathSetter); ok {
+		if fp.cancelLoad != nil {
+			fp.cancelLoad()
+			fp.cancelLoad = nil
+		}
+		return setter.SetPathOptimistic(target)
+	}
+	return fp.vfs.SetPath(target)
+}
+
 func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 	if fp.cancelLoad != nil {
 		fp.cancelLoad()
 		fp.cancelLoad = nil
 	}
-	if fp.loadingTimer != nil {
-		fp.loadingTimer.Stop()
-		fp.loadingTimer = nil
-	}
-
 	ctx, cancel := context.WithCancel(context.Background())
 	fp.loadCtx = ctx
 	fp.cancelLoad = cancel
 	fp.isLoading = true
+	fp.startLoadingAnimation()
 
-	// 1. Устанавливаем флаг, но НЕ обновляем UI немедленно, чтобы избежать мерцания
-	path := fp.vfs.GetPath()
+	loadVFS := fp.vfs
+	path := loadVFS.GetPath()
+	cacheKey := directoryCacheKey(loadVFS, path)
+	loadAtRoot := loadVFS.IsAtRoot()
+	showUpEntry := !loadAtRoot || loadVFS.ParentVFS() != nil
 
 	// Drop persistent selection when we've navigated to a different
 	// directory. Without this the map (keyed by bare filename)
@@ -1262,16 +1427,18 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 	}
 
 	hasCache := false
+	cacheInitialCursorName := ""
+	cacheInitialCursorIndex := -1
 	if !keepEntries {
 		if fp.dirCache == nil {
-			fp.dirCache = make(map[string]dirCacheEntry)
+			fp.dirCache = make(map[dirCacheKey]dirCacheEntry)
 		}
-		if cached, ok := fp.dirCache[path]; ok && !AppConfig.SyncPanelLoad {
+		if cached, ok := fp.dirCache[cacheKey]; ok && !AppConfig.SyncPanelLoad {
 			hasCache = true
 			vtui.DebugLog("PANEL: Using cached entries for %s", path)
 			fp.entries = nil
 
-			if !fp.vfs.IsAtRoot() || fp.vfs.ParentVFS() != nil {
+			if showUpEntry {
 				fp.entries = append(fp.entries, &fileEntry{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}, IsCached: true})
 			}
 
@@ -1293,52 +1460,36 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 				for i, entry := range fp.entries {
 					if entry.Name == target {
 						fp.SetCursorIndex(i)
+						fp.pendingSelection = ""
 						break
 					}
 				}
 			}
 			fp.Refresh()
+			cacheInitialCursorName = fp.getRawSelectedName()
+			cacheInitialCursorIndex = fp.GetCursorIndex()
 			vtui.FrameManager.Redraw()
 		}
 	}
 
 	isFirstChunk := true
-
-	// 2. Таймер для индикатора "Loading..." (появится через 200мс если VFS тормозит)
-	fp.loadingTimer = time.AfterFunc(200*time.Millisecond, func() {
-		vtui.FrameManager.PostTask(func() {
-			// Если данные всё еще не пришли (isFirstChunk == true), только тогда "портим" UI
-			if fp.isLoading && isFirstChunk {
-				if !keepEntries && !hasCache {
-					fp.entries = nil
-					if !fp.vfs.IsAtRoot() || fp.vfs.ParentVFS() != nil {
-						fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
-					}
-					fp.SetCursorIndex(0)
-					fp.Refresh()
-				}
-				// Теперь, когда таймаут вышел, показываем [Loading...] в заголовке
-				fp.updateTitle(nil)
-				vtui.FrameManager.Redraw()
-			}
-		})
-	})
-
-	go func() {
-		dirStat, _ := fp.vfs.Stat(ctx, path)
-		var upItemStat vfs.VFSItem
-		hasUpItemStat := false
-		if !fp.vfs.IsAtRoot() || fp.vfs.ParentVFS() != nil {
-			parentPath := fp.vfs.Dir(path)
-			if pStat, err := fp.vfs.Stat(ctx, parentPath); err == nil {
-				upItemStat = pStat
-				hasUpItemStat = true
-			}
+	if !keepEntries && !hasCache {
+		fp.entries = nil
+		if showUpEntry {
+			fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
 		}
+		fp.SetCursorIndex(0)
+		fp.Refresh()
+		vtui.FrameManager.Redraw()
+	}
 
+	fp.enqueueDirectoryLoad(func() {
+		if ctx.Err() != nil {
+			return
+		}
 		var accumulated []vfs.VFSItem
 
-		err := fp.vfs.ReadDir(ctx, path, func(chunk []vfs.VFSItem) {
+		err := loadVFS.ReadDir(ctx, path, func(chunk []vfs.VFSItem) {
 			if ctx.Err() != nil {
 				return
 			}
@@ -1347,7 +1498,12 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 				return
 			}
 
-			if AppConfig.SyncPanelLoad {
+			// A cached directory is already a complete, interactive view. Keep it
+			// on screen while all real chunks are collected and replace it once,
+			// atomically, in the completion task. Rendering partial real chunks
+			// would make the panel jump and could overwrite user interaction with
+			// a stale pendingSelection.
+			if AppConfig.SyncPanelLoad || hasCache {
 				return
 			}
 
@@ -1366,35 +1522,25 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 			}
 
 			vtui.FrameManager.PostTask(func() {
-				if ctx.Err() != nil {
+				if ctx.Err() != nil || fp.loadCtx != ctx {
 					return
 				}
 
+				currentSelected := fp.getRawSelectedName()
 				if fp.pendingSelection == "" {
-					uName := fp.getRawSelectedName()
-					if uName != "" && uName != ".." {
-						fp.pendingSelection = uName
+					if currentSelected != "" && currentSelected != ".." {
+						fp.pendingSelection = currentSelected
 					}
 				}
 
 				if isFirstChunk {
 					fp.entries = nil
-					if !fp.vfs.IsAtRoot() || fp.vfs.ParentVFS() != nil {
+					if showUpEntry {
 						upItem := vfs.VFSItem{Name: "..", IsDir: true}
-						if hasUpItemStat {
-							upItem.MTime = upItemStat.MTime
-							upItem.ATime = upItemStat.ATime
-							upItem.CTime = upItemStat.CTime
-							upItem.UnixMode = upItemStat.UnixMode
-							upItem.Uid = upItemStat.Uid
-							upItem.Gid = upItemStat.Gid
-						}
 						fp.entries = []*fileEntry{{VFSItem: upItem}}
 					}
 					isFirstChunk = false
 				}
-
-				currentSelected := fp.GetSelectedName()
 
 				// Apply persistent selection to incoming items
 				for _, e := range newEntries {
@@ -1439,29 +1585,127 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 		if ctx.Err() != nil {
 			return
 		}
-		vtui.FrameManager.PostTask(func() {
+
+		// The listing is the only mandatory request and gets the shared remote
+		// session first. Directory timestamps and metadata for ".." are useful
+		// decoration/auto-refresh state, so fetch them only after ReadDir and
+		// skip them entirely when the listing failed or was superseded.
+		var dirStat vfs.VFSItem
+		var upItemStat vfs.VFSItem
+		hasUpItemStat := false
+		if err == nil {
+			var dirStatErr error
+			dirStat, dirStatErr = loadVFS.Stat(ctx, path)
 			if ctx.Err() != nil {
+				return
+			}
+			if showUpEntry {
+				parentPath := loadVFS.Dir(path)
+				if parentPath == path && dirStatErr == nil {
+					upItemStat = dirStat
+					hasUpItemStat = true
+				} else if pStat, statErr := loadVFS.Stat(ctx, parentPath); statErr == nil {
+					upItemStat = pStat
+					hasUpItemStat = true
+				}
+			}
+		}
+		if ctx.Err() != nil {
+			return
+		}
+		vtui.FrameManager.PostTask(func() {
+			if ctx.Err() != nil || fp.loadCtx != ctx {
 				return
 			}
 
 			if err == nil {
-				fp.saveToCache(path, accumulated)
-
-				// Clean up persistent selection state (remove non-existent files)
-				validNames := make(map[string]bool)
-				for _, e := range fp.entries {
-					validNames[e.Name] = true
-				}
-				for name := range fp.selectedItems {
-					if !validNames[name] {
-						delete(fp.selectedItems, name)
-					}
-				}
+				fp.saveToCacheKey(cacheKey, accumulated)
 			}
 
-			if AppConfig.SyncPanelLoad && err == nil {
+			if hasCache && err == nil {
+				// The cached rows stayed interactive during ReadDir. Snapshot their
+				// live state immediately before replacing them; this is deliberately
+				// done in the UI task rather than when the load was started.
+				liveCursorName := fp.getRawSelectedName()
+				liveCursorIndex := fp.GetCursorIndex()
+				liveCursorOffset := liveCursorIndex - fp.table.TopPos
+				cursorMoved := liveCursorName != cacheInitialCursorName || liveCursorIndex != cacheInitialCursorIndex
+
+				if fp.selectedItems == nil {
+					fp.selectedItems = make(map[string]bool)
+				}
+				for _, entry := range fp.entries {
+					if entry.Name == ".." {
+						continue
+					}
+					if entry.Selected {
+						fp.selectedItems[entry.Name] = true
+					} else {
+						delete(fp.selectedItems, entry.Name)
+					}
+				}
+
 				fp.entries = nil
-				if !fp.vfs.IsAtRoot() || fp.vfs.ParentVFS() != nil {
+				if showUpEntry {
+					upItem := vfs.VFSItem{Name: "..", IsDir: true}
+					if hasUpItemStat {
+						upItem.MTime = upItemStat.MTime
+						upItem.ATime = upItemStat.ATime
+						upItem.CTime = upItemStat.CTime
+						upItem.UnixMode = upItemStat.UnixMode
+						upItem.Uid = upItemStat.Uid
+						upItem.Gid = upItemStat.Gid
+					}
+					fp.entries = []*fileEntry{{VFSItem: upItem}}
+				}
+
+				for _, item := range accumulated {
+					if !AppConfig.ShowHiddenFiles && item.Name != ".." && item.IsHidden {
+						continue
+					}
+					entry := &fileEntry{VFSItem: item}
+					if fp.selectedItems[item.Name] {
+						entry.Selected = true
+					}
+					fp.entries = append(fp.entries, entry)
+				}
+				fp.sortEntries()
+
+				// An unresolved navigation target still wins if the user did not
+				// move on the cache. Once the cursor moved, the live cached row is
+				// the user's latest and therefore authoritative choice.
+				target := liveCursorName
+				if fp.pendingSelection != "" && !cursorMoved {
+					target = fp.pendingSelection
+				}
+				newCursorIndex := -1
+				for i, entry := range fp.entries {
+					if entry.Name == target {
+						newCursorIndex = i
+						break
+					}
+				}
+				if newCursorIndex < 0 {
+					newCursorIndex = liveCursorIndex
+				}
+				if newCursorIndex >= len(fp.entries) {
+					newCursorIndex = len(fp.entries) - 1
+				}
+				if newCursorIndex < 0 {
+					newCursorIndex = 0
+				}
+
+				newTop := newCursorIndex - liveCursorOffset
+				if newTop < 0 {
+					newTop = 0
+				}
+				fp.table.TopPos = newTop
+				fp.SetCursorIndex(newCursorIndex)
+				fp.pendingSelection = ""
+				isFirstChunk = false
+			} else if AppConfig.SyncPanelLoad && err == nil {
+				fp.entries = nil
+				if showUpEntry {
 					upItem := vfs.VFSItem{Name: "..", IsDir: true}
 					if hasUpItemStat {
 						upItem.MTime = upItemStat.MTime
@@ -1497,10 +1741,22 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 				isFirstChunk = false
 			}
 
-			// Останавливаем таймер. Если он не успел сработать — заголовок так и не моргнул.
-			if fp.loadingTimer != nil {
-				fp.loadingTimer.Stop()
+			if err == nil {
+				// Clean up persistent selection only after the fresh list has been
+				// built. With a cache, doing this earlier would compare the marks
+				// against stale rows rather than the completed ReadDir result.
+				validNames := make(map[string]bool, len(fp.entries))
+				for _, e := range fp.entries {
+					validNames[e.Name] = true
+				}
+				for name := range fp.selectedItems {
+					if !validNames[name] {
+						delete(fp.selectedItems, name)
+					}
+				}
 			}
+
+			fp.stopLoadingAnimation()
 			suppressFolderHistory := sameFolderHistoryPath(path, fp.suppressFolderHistoryPath)
 			fp.suppressFolderHistoryPath = ""
 
@@ -1513,20 +1769,21 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 				if fp.offerPanelReconnect(err, keepEntries) {
 					return
 				}
-				if os.IsNotExist(err) && !fp.vfs.IsAtRoot() && !keepEntries {
+				if os.IsNotExist(err) && !loadAtRoot && !keepEntries {
 					// If the directory disappeared (e.g., deleted from other panel),
 					// attempt to go up one level silently.
 					vtui.DebugLog("PANEL[%p]: Directory disappeared, attempting to go up. Error: %v", fp, err)
-					fp.vfs.SetPath("..")
-					fp.readDirectoryEx(true)
+					_ = fp.setKnownDirectoryPath("..")
+					fp.ReadDirectory()
 					return
 				}
 
 				// For permission or network errors, go back to parent and show the error.
-				if !fp.vfs.IsAtRoot() && !keepEntries {
+				if !loadAtRoot && !keepEntries {
 					folderName := filepath.Base(path)
-					fp.vfs.SetPath("..")
+					_ = fp.setKnownDirectoryPath("..")
 					fp.pendingSelection = folderName
+					fp.ReadDirectory()
 					fp.updateTitle(err)
 					vtui.ShowMessage(" Error ", fmt.Sprintf("Cannot access folder:\n%v", err), []string{"&Ok"})
 					return
@@ -1541,7 +1798,7 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 
 			if isFirstChunk {
 				fp.entries = nil
-				if !fp.vfs.IsAtRoot() || fp.vfs.ParentVFS() != nil {
+				if showUpEntry {
 					upItem := vfs.VFSItem{Name: "..", IsDir: true}
 					if hasUpItemStat {
 						upItem.MTime = upItemStat.MTime
@@ -1567,7 +1824,7 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 			fp.Refresh()
 			vtui.FrameManager.Redraw()
 		})
-	}()
+	})
 }
 
 func (fp *FileSystemPanel) Refresh() {
@@ -1932,6 +2189,22 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 	if !e.KeyDown {
 		return false
 	}
+	if fp.providerOpenTask != nil {
+		// A provider row has started an asynchronous mount, but there is no
+		// child VFS to navigate yet. Autorepeat Enter must be idempotent here;
+		// once the real child is installed, later repeats may navigate it.
+		if e.VirtualKeyCode == vtinput.VK_RETURN {
+			return true
+		}
+		if e.VirtualKeyCode == vtinput.VK_ESCAPE {
+			fp.cancelProviderOpen()
+			fp.isLoading = false
+			fp.stopLoadingAnimation()
+			fp.updateTitle(nil)
+			vtui.FrameManager.Redraw()
+			return true
+		}
+	}
 
 	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
 
@@ -1978,6 +2251,11 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 			fp.fastFindMode = false
 			fp.fastFindStr = ""
 			vtui.FrameManager.Redraw()
+			return true
+		case vtinput.VK_DELETE:
+			// Fast Find keeps its insertion point at the end, so forward Delete
+			// has nothing to remove. Consume it here rather than allowing the
+			// panel-level Del binding to hide the panels.
 			return true
 		}
 		if e.VirtualKeyCode == vtinput.VK_F2 && !shift && !ctrl && !alt {
@@ -2176,20 +2454,27 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 				parent := fp.vfs.ParentVFS()
 				isRoot := fp.vfs.IsAtRoot()
 
-				if parent != nil && isRoot {
-					oldPath := fp.vfs.GetPath()
+				if isRoot {
+					if parent != nil {
+						oldPath := fp.vfs.GetPath()
 
-					// Закрываем текущую систему (удаляем временные файлы)
-					fp.vfs.Close()
+						fp.cancelProviderOpen()
+						// Закрываем текущую систему (удаляем временные файлы)
+						fp.vfs.Close()
 
-					fp.vfs = parent
-					if fp.providerEntryName != "" {
-						fp.pendingSelection = fp.providerEntryName
-						fp.providerEntryName = ""
-					} else {
-						fp.pendingSelection = fp.vfs.Base(oldPath)
+						fp.vfs = parent
+						if fp.providerEntryName != "" {
+							fp.pendingSelection = fp.providerEntryName
+							fp.providerEntryName = ""
+						} else {
+							fp.pendingSelection = fp.vfs.Base(oldPath)
+						}
+						fp.showCurrentVFSLoadingRows()
+						fp.ReadDirectory()
 					}
-					fp.ReadDirectory()
+					// A root without a parent has nowhere to go. This is also a
+					// final safety net for a stale ".." row left by an asynchronous
+					// VFS transition: never turn it into manager.Join(root, "..").
 					return true
 				}
 			}
@@ -2198,7 +2483,7 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 				oldPath := fp.vfs.GetPath()
 				newPath := fp.vfs.Join(oldPath, selected.Name)
 				vtui.DebugLog("PANEL: Navigating %q -> %q", oldPath, newPath)
-				if err := fp.vfs.SetPath(newPath); err == nil {
+				if err := fp.setKnownDirectoryPath(newPath); err == nil {
 					if selected.Name == ".." {
 						fp.pendingSelection = fp.vfs.Base(oldPath)
 					} else {
@@ -2216,28 +2501,61 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 				// Просим VFS реестр подобрать провайдера для этого файла
 				fullPath := fp.vfs.Join(fp.vfs.GetPath(), selected.Name)
 				if provider := vfs.FindProvider(context.Background(), fp.vfs, fullPath); provider != nil {
-					// Мгновенная реакция UI: показываем ".." для возможности отмены
-					fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
-					fp.isLoading = true
-					fp.updateTitle(nil)
-					fp.Refresh()
-					fp.SetCursorIndex(0)
-					vtui.FrameManager.Redraw()
+					// The rows must continue to belong to the manager VFS until Open
+					// actually succeeds. In particular, a synthetic actionable ".."
+					// here would turn held Enter into manager.Join(root, "..").
+					if fp.cancelLoad != nil {
+						fp.cancelLoad()
+						fp.cancelLoad = nil
+					}
+					fp.stopLoadingAnimation()
 
-					vtui.RunAsync(func(ctx *vtui.TaskContext) {
-						newVfs, err := provider.Open(ctx.Context, fp.vfs, fullPath)
+					sourceVFS := fp.vfs
+					sourcePath := sourceVFS.GetPath()
+					selectedName := selected.Name
+					fp.isLoading = true
+					fp.startLoadingAnimation()
+					fp.Refresh()
+
+					fp.providerOpenTask = vtui.RunAsync(func(ctx *vtui.TaskContext) {
+						newVfs, err := provider.Open(ctx.Context, sourceVFS, fullPath)
+						if err == nil && newVfs == nil {
+							err = fmt.Errorf("provider %s returned no file system", provider.Name())
+						}
 						ctx.RunOnUI(func() {
-							if err != nil {
-								fp.isLoading = false
-								fp.updateTitle(err)
-								fp.pendingSelection = selected.Name
-								fp.ReadDirectory() // Возвращаемся к списку соединений
-								vtui.ShowMessage(" Connection Error ", fmt.Sprintf("Failed to connect to %s:\n%v", selected.Name, err), []string{"&Ok"})
+							// A drive change, cancellation, or a newer transition makes this
+							// result stale. Never let it hijack the panel; returned VFSes own
+							// resources and must be closed explicitly.
+							if fp.providerOpenTask != ctx {
+								if newVfs != nil {
+									_ = newVfs.Close()
+								}
 								return
 							}
-							fp.providerEntryName = selected.Name
+							fp.providerOpenTask = nil
+							if !sameVFSInstance(fp.vfs, sourceVFS) || fp.vfs.GetPath() != sourcePath {
+								if newVfs != nil {
+									_ = newVfs.Close()
+								}
+								return
+							}
+							if err != nil {
+								if newVfs != nil {
+									_ = newVfs.Close()
+								}
+								fp.isLoading = false
+								fp.updateTitle(err)
+								fp.pendingSelection = selectedName
+								fp.ReadDirectory() // Возвращаемся к списку соединений
+								vtui.ShowMessage(" Connection Error ", fmt.Sprintf("Failed to connect to %s:\n%v", selectedName, err), []string{"&Ok"})
+								return
+							}
+							fp.providerEntryName = selectedName
 							fp.vfs = newVfs
+							// From this point the row belongs to the real mounted VFS and is
+							// safe for a subsequent autorepeat Enter to activate.
 							fp.pendingSelection = ".."
+							fp.showCurrentVFSLoadingRows()
 							fp.ReadDirectory()
 						})
 					})
