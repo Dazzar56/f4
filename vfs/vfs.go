@@ -443,6 +443,46 @@ type SessionReconnector interface {
 type SessionIdentity interface {
 	SessionKey() any
 }
+
+// ServerSideCopier is implemented by a file system that can copy an object
+// on the server side, avoiding pulling bytes back and forth through the client.
+type ServerSideCopier interface {
+	Copy(ctx context.Context, oldpath, newpath string) error
+}
+
+// SameSession reports whether two VFS instances share the same session/connection
+// or point to the same remote host/user (using TitleProvider).
+func SameSession(v1, v2 VFS) bool {
+	if v1 == v2 {
+		return true
+	}
+	if id1, ok1 := v1.(SessionIdentity); ok1 {
+		if id2, ok2 := v2.(SessionIdentity); ok2 {
+			k1 := id1.SessionKey()
+			k2 := id2.SessionKey()
+			if k1 != nil && k1 == k2 {
+				return true
+			}
+		}
+	}
+	t1, ok1 := v1.(TitleProvider)
+	t2, ok2 := v2.(TitleProvider)
+	if ok1 && ok2 {
+		title1 := t1.GetTitle()
+		title2 := t2.GetTitle()
+		if title1 != "" && title1 == title2 {
+			return true
+		}
+	}
+	return false
+}
+
+// ConnectionInfoProvider allows a VFS to expose its remote connection details
+// (host, port, user) so other VFSes on different hosts can connect to it directly.
+type ConnectionInfoProvider interface {
+	ConnectionInfo() (host, port, user string, ok bool)
+}
+
 type ReadAtCloser interface {
 	ReadAt(ctx context.Context, p []byte, off int64) (n int, err error)
 	Read(ctx context.Context, p []byte) (n int, err error)

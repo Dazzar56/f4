@@ -11,3 +11,6 @@ _failed_tests_f4.log
 rsrc_windows_amd64.syso
 rsrc_windows_arm64.syso
 Profile/
+afix.ap
+afailed.*
+.codex-build/

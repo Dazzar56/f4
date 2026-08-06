@@ -14,6 +14,7 @@ import (
 	"sync"
 
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/agent"
 
 	"github.com/unxed/f4/plugins/netfox/fishplus"
 	"github.com/unxed/f4/vfs"
@@ -36,6 +37,9 @@ type FishVFS struct {
 	title               string
 	once                sync.Once
 	panelTitleFormatter func(title, path string) string
+	host                string
+	port                string
+	user                string
 
 	panelInfoMu sync.RWMutex
 	panelInfo   vfs.PanelInfoProvider
@@ -293,6 +297,13 @@ func sshFishDialer(host, port, user, pass string, timeout int) FishDialer {
 			client.Close()
 			return nil, nil, nil, err
 		}
+		if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
+			if err := agent.RequestAgentForwarding(sess); err != nil {
+				vtui.DebugLog("SSH: Failed to request agent forwarding: %v", err)
+			} else {
+				vtui.DebugLog("SSH: Requested agent forwarding")
+			}
+		}
 		shell := &sshShell{sess: sess, client: client}
 		stdin, err := sess.StdinPipe()
 		if err != nil {
@@ -333,8 +344,16 @@ func NewFishVFS(parent vfs.VFS, host, port, user, pass string, timeout int) (*Fi
 	if err != nil {
 		return nil, err
 	}
+	v.host = host
+	v.port = port
+	v.user = user
 	vtui.DebugLog("NET: FISH+ session established, features: %s", v.client().Session().Features().Raw)
 	return v, nil
+}
+
+// ConnectionInfo implements vfs.ConnectionInfoProvider.
+func (v *FishVFS) ConnectionInfo() (host, port, user string, ok bool) {
+	return v.host, v.port, v.user, true
 }
 
 // client is how every request reaches the session. It asks the connection
@@ -650,6 +669,8 @@ func (v *FishVFS) Open(ctx context.Context, p string) (vfs.ReadAtCloser, error) 
 
 func (v *FishVFS) GetCapabilities() vfs.VFSCapabilities {
 	return vfs.VFSCapabilities{
+		HasServerSideCopy:  true,
+		HasServerSideMove:  true,
 		HasRandomAccess:    true,
 		HasUnixPermissions: true,
 		HasSearch:          v.client().CanGrep(),
@@ -869,6 +890,11 @@ func (v *FishVFS) Rename(ctx context.Context, o, n string) error {
 	return v.client().Rename(ctx, v.abs(o), v.abs(n))
 }
 
+// Copy implements vfs.ServerSideCopier.
+func (v *FishVFS) Copy(ctx context.Context, o, n string) error {
+	return v.client().Copy(ctx, v.abs(o), v.abs(n))
+}
+
 // Create truncates the file, or creates it, and hands back a handle that
 // streams from the beginning. The handle buffers up to one transfer chunk,
 // so the copier's small writes do not each become a round trip.
@@ -929,6 +955,9 @@ func (v *FishVFS) CloneForParent(parent vfs.VFS) *FishVFS {
 		title:               v.title,
 		panelTitleFormatter: v.panelTitleFormatter,
 		panelInfo:           v.panelInfoProvider(),
+		host:                v.host,
+		port:                v.port,
+		user:                v.user,
 	}
 }
 

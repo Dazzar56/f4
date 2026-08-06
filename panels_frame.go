@@ -166,7 +166,8 @@ type Panel interface {
 // PanelsFrame is the main frame of the f4 manager, containing left and right panels.
 type PanelsFrame struct {
 	vtui.BaseFrame
-	panels [2]Panel
+	panels  [2]Panel
+	dragOut dragOutState
 	// altPanels[i] holds an alternate view (Info / Quick view / Tree)
 	// covering slot i's file panel. When non-nil it's rendered in
 	// place of panels[i]; panels[i] stays alive underneath and is
@@ -337,6 +338,7 @@ func NewPanelsFrame() *PanelsFrame {
 	// Parser will be fully initialized in initPTY once pty is ready
 	pf.initPTY()
 	pf.termView.pty = pf.pty
+	installPanelDropTarget(pf)
 
 	return pf
 }
@@ -2026,6 +2028,9 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 	}
 
 	mx, my := int(e.MouseX), int(e.MouseY)
+	if pf.processDragOutGesture(e, mx, my) {
+		return true
+	}
 
 	// A middle-button gesture that already emitted Enter owns its remaining
 	// motion/release events and must not fall through to panels or scrollbars.

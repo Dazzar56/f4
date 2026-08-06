@@ -173,6 +173,10 @@ func TestFishVFSReadDirResolvesAllSymlinksInOneRequest(t *testing.T) {
 // FishVFS, which is the only way to check the mapping against output real
 // tools produced rather than against captured samples.
 func newLocalFishVFS(t *testing.T) *FishVFS {
+	return newLocalFishVFSWithTitle(t, "local")
+}
+
+func newLocalFishVFSWithTitle(t *testing.T, title string) *FishVFS {
 	t.Helper()
 	if runtime.GOOS == "windows" {
 		t.Skip("no POSIX shell on Windows")
@@ -193,7 +197,7 @@ func newLocalFishVFS(t *testing.T) *FishVFS {
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start %s: %v", shell, err)
 	}
-	v, err := NewFishVFSOnStream(context.Background(), nil, stdin, stdout, stdin, "local")
+	v, err := NewFishVFSOnStream(context.Background(), nil, stdin, stdout, stdin, title)
 	if err != nil {
 		cmd.Process.Kill()
 		if strings.Contains(err.Error(), "base64") {
@@ -874,5 +878,89 @@ func TestFishVFSFindFiles(t *testing.T) {
 	// The VFS is a vfs.FileFinder, which is what the search asserts for.
 	if _, ok := interface{}(v).(vfs.FileFinder); !ok {
 		t.Error("FishVFS does not satisfy vfs.FileFinder")
+	}
+}
+
+func TestFishVFSServerSideCopyAndMove(t *testing.T) {
+	v1 := newLocalFishVFS(t)
+	ctx := context.Background()
+
+	tmpDir := t.TempDir()
+	srcPath := filepath.Join(tmpDir, "source.txt")
+	content := []byte("Hello Server-Side Copy/Move")
+	if err := os.WriteFile(srcPath, content, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify Capabilities
+	caps := v1.GetCapabilities()
+	if !caps.HasServerSideCopy {
+		t.Error("expected HasServerSideCopy to be true")
+	}
+	if !caps.HasServerSideMove {
+		t.Error("expected HasServerSideMove to be true")
+	}
+
+	// Assert v1 implements ServerSideCopier
+	ssc, ok := interface{}(v1).(vfs.ServerSideCopier)
+	if !ok {
+		t.Fatal("FishVFS does not satisfy vfs.ServerSideCopier")
+	}
+
+	// Test Copy
+	dstCopy := filepath.Join(tmpDir, "copied.txt")
+	if err := ssc.Copy(ctx, srcPath, dstCopy); err != nil {
+		t.Fatalf("Copy: %v", err)
+	}
+
+	gotCopy, err := os.ReadFile(dstCopy)
+	if err != nil {
+		t.Fatalf("os.ReadFile copied: %v", err)
+	}
+	if string(gotCopy) != string(content) {
+		t.Errorf("got copy content %q, want %q", gotCopy, content)
+	}
+
+	// Test SameSession helper
+	v2 := v1.Clone()
+	defer v2.Close()
+
+	if !vfs.SameSession(v1, v2) {
+		t.Error("expected SameSession to be true for clones")
+	}
+
+	// Test different session (with different titles)
+	v3 := newLocalFishVFSWithTitle(t, "local-diff")
+	defer v3.Close()
+
+	if vfs.SameSession(v1, v3) {
+		t.Error("expected SameSession to be false for distinct sessions with different titles")
+	}
+}
+
+func TestFishVFSServerToServerInfo(t *testing.T) {
+	v1 := newLocalFishVFS(t)
+	defer v1.Close()
+
+	v1.host = "runcity.org"
+	v1.port = "22"
+	v1.user = "unxed"
+
+	cip, ok := interface{}(v1).(vfs.ConnectionInfoProvider)
+	if !ok {
+		t.Fatal("FishVFS does not satisfy vfs.ConnectionInfoProvider")
+	}
+
+	h, p, u, ok := cip.ConnectionInfo()
+	if !ok || h != "runcity.org" || p != "22" || u != "unxed" {
+		t.Errorf("ConnectionInfo = (%q, %q, %q, %t), want (runcity.org, 22, unxed, true)", h, p, u, ok)
+	}
+
+	v2 := v1.Clone().(*FishVFS)
+	defer v2.Close()
+
+	h2, p2, u2, ok2 := interface{}(v2).(vfs.ConnectionInfoProvider).ConnectionInfo()
+	if !ok2 || h2 != h || p2 != p || u2 != u {
+		t.Errorf("cloned ConnectionInfo mismatch: (%q, %q, %q, %t)", h2, p2, u2, ok2)
 	}
 }
