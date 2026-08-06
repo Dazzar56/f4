@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -870,9 +869,8 @@ func recursiveCopy(ctx context.Context, srcVfs vfs.VFS, srcPath string, dstVfs v
 	}
 
 	// Optimize using server-to-server direct copy if they are on different hosts,
-	// but we can run commands on the source, have connection info for the destination,
-	// and we have local SSH Agent forwarding enabled.
-	if rner, ok1 := srcVfs.(vfs.CommandRunner); ok1 && os.Getenv("SSH_AUTH_SOCK") != "" {
+	// but we can run commands on the source and have connection info for the destination.
+	if rner, ok1 := srcVfs.(vfs.CommandRunner); ok1 {
 		if cip, ok2 := dstVfs.(vfs.ConnectionInfoProvider); ok2 {
 			if host, port, user, ok := cip.ConnectionInfo(); ok {
 				scpCmd := fmt.Sprintf("scp -P %s -o StrictHostKeyChecking=no -p %q %s@%s:%q",
