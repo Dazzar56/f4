@@ -334,6 +334,21 @@ type SessionReconnector interface {
 	// retry rather than this method retrying anything itself.
 	Reconnect(ctx context.Context) error
 }
+
+// SessionIdentity is implemented by a file system that shares its connection
+// with other views of itself. Two of them answering the same key speak
+// through the same session, so whatever happens to it happens to both. The
+// key is compared and nothing else, which is why it is only ever an opaque
+// value: a caller that starts to read it is asking a question the file system
+// did not offer to answer. It must therefore be comparable, and a pointer to
+// whatever holds the connection is the obvious thing to hand over.
+//
+// It exists because a reconnect is not a private matter. Work started from
+// one panel dies with a session another panel rebuilt, and the only way to
+// find that work is to know which panels were on the same connection.
+type SessionIdentity interface {
+	SessionKey() any
+}
 type ReadAtCloser interface {
 	ReadAt(ctx context.Context, p []byte, off int64) (n int, err error)
 	Read(ctx context.Context, p []byte) (n int, err error)

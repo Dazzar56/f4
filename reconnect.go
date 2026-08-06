@@ -70,6 +70,20 @@ func reconnectorFor(fs vfs.VFS, err error) vfs.SessionReconnector {
 	return r
 }
 
+// sessionKeyOf identifies the connection a file system speaks through, so that
+// everything running on it can be found again. A file system that does not
+// share a connection answers as itself, which is an identity nothing else will
+// match; one that has no session at all is nil, and nil matches nothing.
+func sessionKeyOf(fs vfs.VFS) any {
+	if fs == nil {
+		return nil
+	}
+	if id, ok := fs.(vfs.SessionIdentity); ok {
+		return id.SessionKey()
+	}
+	return nil
+}
+
 // offerReconnect asks what to do about a connection that died under an
 // operation, and reports whether it took responsibility for the error. When it
 // returns false nothing was shown and the caller reports the error itself.
@@ -91,7 +105,19 @@ func offerReconnect(fs vfs.VFS, err error, what string, retryable bool, done fun
 	if r == nil {
 		return false
 	}
+	// The far side keeps nothing of a session that dropped, so whatever was
+	// running there is already gone. The registry is told now rather than
+	// after a successful reconnect: the work is equally dead if the user
+	// chooses to work offline, and a job left in the list waiting for an
+	// answer that cannot arrive is worse than one that says it was lost.
+	lost := GlobalBackgroundJobs.SessionLost(sessionKeyOf(fs))
+
 	msg := fmt.Sprintf("The connection was lost while %s:\n%v", what, err)
+	if lost == 1 {
+		msg += "\n\nOne background job was running on it and is gone."
+	} else if lost > 1 {
+		msg += fmt.Sprintf("\n\n%d background jobs were running on it and are gone.", lost)
+	}
 	if retryable {
 		msg += "\n\nReconnecting starts a new session and repeats the operation."
 	} else {

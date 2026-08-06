@@ -49,6 +49,10 @@ type backgroundJobEntry struct {
 	state  BackgroundJobState
 	cancel func()
 	open   func()
+	// owner identifies the connection the work runs on, for work that runs
+	// somewhere else. It is compared and never read: see vfs.SessionIdentity.
+	// A nil owner is work running here, which no reconnect can take away.
+	owner any
 }
 
 // GlobalBackgroundJobs is the registry the interface shows.
@@ -61,17 +65,68 @@ func NewBackgroundJobRegistry() *BackgroundJobRegistry {
 // Start records a job that has begun. cancel may be nil for work that cannot
 // be stopped, in which case the list shows it and offers nothing.
 func (r *BackgroundJobRegistry) Start(title string, cancel func()) *BackgroundJob {
+	return r.StartOn(nil, title, cancel)
+}
+
+// StartOn records a job that runs on somebody else's machine, together with
+// the connection it runs on. That is what lets SessionLost find it later: the
+// far side of a session that dropped keeps nothing, so a job started through
+// it is gone whether or not anything here noticed.
+func (r *BackgroundJobRegistry) StartOn(owner any, title string, cancel func()) *BackgroundJob {
 	r.mu.Lock()
 	r.next++
 	id := r.next
 	r.jobs[id] = &backgroundJobEntry{
 		state:  BackgroundJobState{ID: id, Title: title, Started: time.Now()},
 		cancel: cancel,
+		owner:  owner,
 	}
 	r.mu.Unlock()
 	r.changed()
 	return &BackgroundJob{id: id, registry: r}
 }
+
+// SessionLost tells the registry that a connection is gone and everything
+// that was running on it with it. It reports how many jobs that was.
+//
+// The jobs are marked as ended rather than removed, because the user asked
+// for that work and is owed the news that it will not arrive: a scan that
+// silently vanished from the list would look like one that finished. There is
+// nothing left to cancel and nothing to open, so both are dropped.
+//
+// A job that had already finished keeps its result. It was computed while the
+// session was alive and is no less true now that the session is not.
+//
+// An owner of nil matches nothing: that is work running here, which no
+// reconnect can take away.
+func (r *BackgroundJobRegistry) SessionLost(owner any) int {
+	if owner == nil {
+		return 0
+	}
+	lost := 0
+	r.mu.Lock()
+	for _, e := range r.jobs {
+		if e.owner != owner || e.state.Done {
+			continue
+		}
+		e.state.Done = true
+		e.state.Status = backgroundJobLostText
+		e.state.Result = backgroundJobLostText
+		e.cancel = nil
+		e.open = nil
+		lost++
+	}
+	r.mu.Unlock()
+	if lost > 0 {
+		r.changed()
+	}
+	return lost
+}
+
+// backgroundJobLostText is what the list says about work that died with its
+// connection. It is one line because that is all the list has room for, and
+// it says gone rather than failed: nothing went wrong with the work itself.
+const backgroundJobLostText = "lost with the connection"
 
 // SetStatus replaces the line the list shows for a job. It is called from
 // the job's own progress callback, so it does nothing expensive.

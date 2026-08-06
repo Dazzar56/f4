@@ -345,6 +345,11 @@ func (v *FishVFS) SessionLost(err error) bool {
 	return err != nil && errors.Is(err, fishplus.ErrBroken)
 }
 
+// SessionKey implements vfs.SessionIdentity. The connection is the identity:
+// a clone shares it, which is exactly the property a caller looking for
+// everything that died with one session needs.
+func (v *FishVFS) SessionKey() any { return v.conn }
+
 // Reconnect rebuilds the session behind this file system and points this view
 // at the result. The new shell knows nothing of what the old one was doing:
 // background jobs are gone, and a write or a patch that was in flight cannot be
