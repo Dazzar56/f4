@@ -383,6 +383,12 @@ func SameSession(v1, v2 VFS) bool {
 	return false
 }
 
+// ConnectionInfoProvider allows a VFS to expose its remote connection details
+// (host, port, user) so other VFSes on different hosts can connect to it directly.
+type ConnectionInfoProvider interface {
+	ConnectionInfo() (host, port, user string, ok bool)
+}
+
 type ReadAtCloser interface {
 	ReadAt(ctx context.Context, p []byte, off int64) (n int, err error)
 	Read(ctx context.Context, p []byte) (n int, err error)

@@ -33,6 +33,9 @@ type FishVFS struct {
 	path   string
 	title  string
 	once   sync.Once
+	host   string
+	port   string
+	user   string
 }
 
 // fishConn keeps one FISH+ session alive for as long as any of the VFS
@@ -326,8 +329,16 @@ func NewFishVFS(parent vfs.VFS, host, port, user, pass string, timeout int) (*Fi
 	if err != nil {
 		return nil, err
 	}
+	v.host = host
+	v.port = port
+	v.user = user
 	vtui.DebugLog("NET: FISH+ session established, features: %s", v.client().Session().Features().Raw)
 	return v, nil
+}
+
+// ConnectionInfo implements vfs.ConnectionInfoProvider.
+func (v *FishVFS) ConnectionInfo() (host, port, user string, ok bool) {
+	return v.host, v.port, v.user, true
 }
 
 // client is how every request reaches the session. It asks the connection
@@ -780,6 +791,9 @@ func (v *FishVFS) Clone() vfs.VFS {
 		conn:   v.conn,
 		path:   v.path,
 		title:  v.title,
+		host:   v.host,
+		port:   v.port,
+		user:   v.user,
 	}
 }
 

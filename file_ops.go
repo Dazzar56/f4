@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -866,6 +867,32 @@ func recursiveCopy(ctx context.Context, srcVfs vfs.VFS, srcPath string, dstVfs v
 			return nil
 		}
 		vtui.DebugLog("FILEOP: Server-side copy failed, falling back to streaming: %v", err)
+	}
+
+	// Optimize using server-to-server direct copy if they are on different hosts,
+	// but we can run commands on the source, have connection info for the destination,
+	// and we have local SSH Agent forwarding enabled.
+	if rner, ok1 := srcVfs.(vfs.CommandRunner); ok1 && os.Getenv("SSH_AUTH_SOCK") != "" {
+		if cip, ok2 := dstVfs.(vfs.ConnectionInfoProvider); ok2 {
+			if host, port, user, ok := cip.ConnectionInfo(); ok {
+				scpCmd := fmt.Sprintf("scp -P %s -o StrictHostKeyChecking=no -p %q %s@%s:%q",
+					port, srcPath, user, host, destPathForFile)
+				vtui.DebugLog("FILEOP: Attempting server-to-server copy: %s", scpCmd)
+				_, err := rner.RunCommand(ctx, srcVfs.Dir(srcPath), scpCmd, nil)
+				if err == nil {
+					if state.Tracker != nil {
+						state.Tracker.UpdateBytes(int(stat.Size))
+						handleArchiveIndexOp(srcVfs, srcPath, dstVfs, destPathForFile, state.IsMove)
+						state.Tracker.FileDone()
+						if state.UpdateUI != nil {
+							state.UpdateUI(false)
+						}
+					}
+					return nil
+				}
+				vtui.DebugLog("FILEOP: Server-to-server copy failed, falling back to streaming: %v", err)
+			}
+		}
 	}
 
 	var srcFile vfs.ReadAtCloser

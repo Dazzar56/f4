@@ -763,11 +763,38 @@ func TestFishVFSServerSideCopyAndMove(t *testing.T) {
 		t.Error("expected SameSession to be true for clones")
 	}
 
-	// Test different session (with different titles)
-	v3 := newLocalFishVFSWithTitle(t, "local-diff")
-	defer v3.Close()
+		// Test different session (with different titles)
+		v3 := newLocalFishVFSWithTitle(t, "local-diff")
+		defer v3.Close()
 
-	if vfs.SameSession(v1, v3) {
-		t.Error("expected SameSession to be false for distinct sessions with different titles")
+		if vfs.SameSession(v1, v3) {
+			t.Error("expected SameSession to be false for distinct sessions with different titles")
+		}
 	}
-}
+
+	func TestFishVFSServerToServerInfo(t *testing.T) {
+		v1 := newLocalFishVFS(t)
+		defer v1.Close()
+
+		v1.host = "runcity.org"
+		v1.port = "22"
+		v1.user = "unxed"
+
+		cip, ok := interface{}(v1).(vfs.ConnectionInfoProvider)
+		if !ok {
+			t.Fatal("FishVFS does not satisfy vfs.ConnectionInfoProvider")
+		}
+
+		h, p, u, ok := cip.ConnectionInfo()
+		if !ok || h != "runcity.org" || p != "22" || u != "unxed" {
+			t.Errorf("ConnectionInfo = (%q, %q, %q, %t), want (runcity.org, 22, unxed, true)", h, p, u, ok)
+		}
+
+		v2 := v1.Clone().(*FishVFS)
+		defer v2.Close()
+
+		h2, p2, u2, ok2 := interface{}(v2).(vfs.ConnectionInfoProvider).ConnectionInfo()
+		if !ok2 || h2 != h || p2 != p || u2 != u {
+			t.Errorf("cloned ConnectionInfo mismatch: (%q, %q, %q, %t)", h2, p2, u2, ok2)
+		}
+	}
