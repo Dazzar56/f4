@@ -886,7 +886,7 @@ func TestPanelsFrame_KeyHandling(t *testing.T) {
 		fsp.Refresh()
 		fsp.SetCursorIndex(1)
 	}
-	pressKey(pf, &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN, ControlKeyState: vtinput.LeftCtrlPressed | vtinput.EnhancedKey})
+	pressKey(pf, &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN, ControlKeyState: vtinput.LeftCtrlPressed})
 
 	expectedName := pf.panels[0].GetSelectedName()
 	if pf.cmdLine.Edit.GetText() != expectedName {
@@ -957,6 +957,29 @@ func TestPanelsFrame_MenuCommands(t *testing.T) {
 	}
 }
 
+func TestPanelsFrame_SortCommandsUseDefaultDirection(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pf := setupMockPanelsFrame()
+	defer pf.Close()
+
+	left := pf.panels[0].(*FileSystemPanel)
+	right := pf.panels[1].(*FileSystemPanel)
+	left.sortMode, left.sortReverse = SortUnsorted, true
+	right.sortMode, right.sortReverse = SortUnsorted, true
+
+	pf.HandleCommand(CmLeftSortTime, nil)
+	if left.sortMode != SortTime || left.sortIsAscending() {
+		t.Fatalf("left sort command = mode %v ascending %v, want Time descending",
+			left.sortMode, left.sortIsAscending())
+	}
+
+	pf.HandleCommand(CmRightSortSize, nil)
+	if right.sortMode != SortSize || right.sortIsAscending() {
+		t.Fatalf("right sort command = mode %v ascending %v, want Size descending",
+			right.sortMode, right.sortIsAscending())
+	}
+}
+
 func TestPanelsFrame_CtrlF12SortMenu(t *testing.T) {
 	scr := vtui.NewSilentScreenBuf()
 	scr.AllocBuf(80, 25)
@@ -1002,8 +1025,9 @@ func TestPanelsFrame_CtrlF12SortMenu(t *testing.T) {
 
 	menu.SetSelectPos(int(SortSize))
 	menu.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN})
-	if fsp.sortMode != SortSize {
-		t.Fatalf("sort menu selection set mode %v, want SortSize", fsp.sortMode)
+	if fsp.sortMode != SortSize || fsp.sortIsAscending() {
+		t.Fatalf("sort menu selection = mode %v ascending %v, want Size descending",
+			fsp.sortMode, fsp.sortIsAscending())
 	}
 	menu.Close()
 	vtui.FrameManager.Pop()
@@ -2350,6 +2374,70 @@ func TestPanelsFrame_CommandLineEnter(t *testing.T) {
 	}
 }
 
+type commandRunnerPanelVFS struct {
+	*vfs.NullVFS
+	path  string
+	calls chan [2]string
+}
+
+func (v *commandRunnerPanelVFS) GetPath() string { return v.path }
+func (v *commandRunnerPanelVFS) RunCommand(_ context.Context, dir, command string, cb func(string)) (int, error) {
+	v.calls <- [2]string{dir, command}
+	if cb != nil {
+		cb("remote output")
+	}
+	return 0, nil
+}
+
+func TestPanelsFrame_CommandLineUsesRemoteRunnerWithoutPTY(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pf := setupMockPanelsFrame()
+	defer pf.Close()
+
+	runner := &commandRunnerPanelVFS{
+		NullVFS: vfs.NewNullVFS(0),
+		path:    "/sdcard/Download",
+		calls:   make(chan [2]string, 1),
+	}
+	fsp := pf.getActivePanel()
+	fsp.vfs = runner
+	pty := pf.pty.(*mockPty)
+	localBytesBefore := len(pty.written)
+	pf.cmdLine.Edit.SetText("ls -la")
+
+	pressKey(pf, &vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_RETURN,
+	})
+
+	select {
+	case call := <-runner.calls:
+		if call != [2]string{"/sdcard/Download", "ls -la"} {
+			t.Fatalf("remote command call = %#v", call)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("typed command did not reach the remote CommandRunner")
+	}
+	if got := len(pty.written); got != localBytesBefore {
+		t.Fatalf("local PTY received %d new bytes for a remote command", got-localBytesBefore)
+	}
+	if !pf.showPanels {
+		t.Fatal("remote command without a PTY unexpectedly hid the panels")
+	}
+	if !pf.cmdLine.IsEmpty() {
+		t.Fatalf("command line was not cleared: %q", pf.cmdLine.Edit.GetText())
+	}
+	if top := vtui.FrameManager.GetTopFrame(); top == nil || !strings.Contains(top.GetTitle(), Msg("RemoteCmd.Title")) {
+		t.Fatalf("remote command output frame = %T %q", top, func() string {
+			if top != nil {
+				return top.GetTitle()
+			}
+			return ""
+		}())
+	}
+}
+
 func TestPanelsFrame_CommandLineEnter_WhenBusy(t *testing.T) {
 	pf := setupMockPanelsFrame()
 	pty := pf.pty.(*mockPty)
@@ -2449,7 +2537,7 @@ func TestPanelsFrame_SwitchVFS_CacheClear(t *testing.T) {
 	pf.ResizeConsole(80, 25)
 
 	fsp := pf.panels[0].(*FileSystemPanel)
-	fsp.dirCache["/test/path"] = dirCacheEntry{}
+	fsp.dirCache[fsp.cacheKey("/test/path")] = dirCacheEntry{}
 	if len(fsp.dirCache) != 1 {
 		t.Fatal("Cache setup failed")
 	}
@@ -2469,7 +2557,8 @@ func TestPanelsFrame_Clone_CachePreservation(t *testing.T) {
 
 	fsp := pf.panels[0].(*FileSystemPanel)
 	items := []vfs.VFSItem{{Name: "cached_item"}}
-	fsp.dirCache["/test/path"] = dirCacheEntry{items: items}
+	cacheKey := fsp.cacheKey("/test/path")
+	fsp.dirCache[cacheKey] = dirCacheEntry{items: items}
 
 	clone := pf.Clone()
 	defer clone.Close()
@@ -2478,12 +2567,12 @@ func TestPanelsFrame_Clone_CachePreservation(t *testing.T) {
 	if len(cloneFsp.dirCache) != 1 {
 		t.Fatalf("Cache not cloned, length is %d", len(cloneFsp.dirCache))
 	}
-	if cached, ok := cloneFsp.dirCache["/test/path"]; !ok || len(cached.items) != 1 || cached.items[0].Name != "cached_item" {
+	if cached, ok := cloneFsp.dirCache[cacheKey]; !ok || len(cached.items) != 1 || cached.items[0].Name != "cached_item" {
 		t.Error("Cloned cache content is incorrect")
 	}
 
 	// Verify independence
-	cloneFsp.dirCache["/new/path"] = dirCacheEntry{}
+	cloneFsp.dirCache[cloneFsp.cacheKey("/new/path")] = dirCacheEntry{}
 	if len(fsp.dirCache) != 1 {
 		t.Error("Cloned cache is not independent from original")
 	}

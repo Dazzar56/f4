@@ -674,24 +674,19 @@ func (vv *ViewerView) jumpToEnd() {
 			chunkSize = 16 * 1024
 		}
 
-		// A file system that can index lines remotely knows exactly where the
-		// last screenful starts, so nothing before it has to cross the wire.
-		// Wrapping turns one line into several, hence the generous multiple
-		// of the height: the scan below still places the top precisely, it
-		// just no longer has to start a megabyte early.
-		startOff, indexed := vv.backend.LineStartFromEnd(ctx.Context, contentHeight*4+16)
-		if !indexed {
-			startOff = vv.backend.Size() - chunkSize
-			if startOff < 0 {
-				startOff = 0
-			}
-
-			if startOff < vv.backend.Size()-1024*1024 {
-				startOff = vv.backend.Size() - 1024*1024
-			}
-			if startOff < 0 {
-				startOff = 0
-			}
+		// Ctrl+End must be a random-access operation. A remote line index has
+		// to scan the entire file to count its lines; for a binary file that
+		// usually yields line 1 at offset 0 and makes the viewer download the
+		// whole file as well. One backend cache window is enough to lay out the
+		// final screen, including wrapped text, and maps to a bounded FISH+
+		// range read regardless of the file size.
+		const tailWindow = 192 * 1024
+		if chunkSize < tailWindow {
+			chunkSize = tailWindow
+		}
+		startOff := vv.backend.Size() - chunkSize
+		if startOff < 0 {
+			startOff = 0
 		}
 
 		for {
@@ -704,8 +699,6 @@ func (vv *ViewerView) jumpToEnd() {
 			}
 			time.Sleep(10 * time.Millisecond)
 		}
-		startOff = vv.backend.FindLineStart(startOff)
-
 		var offsets []int64
 		currOff := startOff
 

@@ -13,3 +13,4 @@ rsrc_windows_arm64.syso
 Profile/
 afix.ap
 afailed.*
+.codex-build/

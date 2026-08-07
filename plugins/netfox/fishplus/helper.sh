@@ -42,7 +42,7 @@ f4_flat() {
 }
 
 f4_have() {
- command -v "$1" >/dev/null 2>&1 || which "$1" >/dev/null 2>&1
+ command -v "$1" >/dev/null 2>&1
 }
 
 f4_num() {
@@ -143,47 +143,51 @@ F4FMT_BSD='%p %z %m %a %c %u %g %N'
 # exit status would have said "BSD timestamps" about a listing with no year
 # in it, and every date would have been wrong by up to a year.
 F4LSTIME=
-set -- `ls -lan --time-style=+%s -d . 2>/dev/null`
-if [ $# -ge 7 ]; then
- case $6 in
-  '' | *[!0-9]* ) ;;
-  * ) F4LSTIME=epoch ;;
- esac
-fi
-if [ -z "$F4LSTIME" ]; then
- set -- `ls -lan --full-time -d . 2>/dev/null`
- if [ $# -ge 9 ]; then
-  case $6 in
-   [0-9][0-9][0-9][0-9]-[0-9][0-9]-* ) F4LSTIME=iso ;;
-  esac
- fi
-fi
-if [ -z "$F4LSTIME" ]; then
- set -- `ls -lanT -d . 2>/dev/null`
- if [ $# -ge 10 ]; then
-  case $9 in
-   [0-9][0-9][0-9][0-9] ) case $8 in *:*:* ) F4LSTIME=bsd ;; esac ;;
-  esac
- fi
-fi
-# The dialect decides two more things, because find cannot -exec a shell
-# function: the options ls has to be given, and how many columns stand
-# before the name in what it prints. The tree search and the scan job both
-# run ls from inside find and then read what came back.
 F4LSOPT=
 F4LSN=0
-case $F4LSTIME in
- epoch ) F4LSOPT='-lan --time-style=+%s'; F4LSN=6 ;;
- iso ) F4LSOPT='-lan --full-time'; F4LSN=8 ;;
- bsd ) F4LSOPT='-lanT'; F4LSN=9 ;;
-esac
+F4LSDONE=
+f4_probe_ls() {
+ [ -n "$F4LSDONE" ] && return
+ F4LSDONE=1
+ set -- `ls -lan --time-style=+%s -d . 2>/dev/null`
+ if [ $# -ge 7 ]; then
+  case $6 in
+   '' | *[!0-9]* ) ;;
+   * ) F4LSTIME=epoch ;;
+  esac
+ fi
+ if [ -z "$F4LSTIME" ]; then
+  set -- `ls -lan --full-time -d . 2>/dev/null`
+  if [ $# -ge 9 ]; then
+   case $6 in
+    [0-9][0-9][0-9][0-9]-[0-9][0-9]-* ) F4LSTIME=iso ;;
+   esac
+  fi
+ fi
+ if [ -z "$F4LSTIME" ]; then
+  set -- `ls -lanT -d . 2>/dev/null`
+  if [ $# -ge 10 ]; then
+   case $9 in
+    [0-9][0-9][0-9][0-9] ) case $8 in *:*:* ) F4LSTIME=bsd ;; esac ;;
+   esac
+  fi
+ fi
+ # The dialect decides two more things, because find cannot -exec a shell
+ # function: the options ls has to be given, and how many columns stand
+ # before the name in what it prints.
+ case $F4LSTIME in
+  epoch ) F4LSOPT='-lan --time-style=+%s'; F4LSN=6 ;;
+  iso ) F4LSOPT='-lan --full-time'; F4LSN=8 ;;
+  bsd ) F4LSOPT='-lanT'; F4LSN=9 ;;
+ esac
+}
 
 f4_try_mode() {
  case $1 in
   find ) find -H . -mindepth 0 -maxdepth 0 -printf "$F4FMT_FIND" >/dev/null 2>&1 ;;
   stat ) stat -c "$F4FMT_STAT" . >/dev/null 2>&1 ;;
   statbsd ) stat -f "$F4FMT_BSD" . >/dev/null 2>&1 ;;
-  ls ) [ -n "$F4LSTIME" ] ;;
+  ls ) f4_probe_ls; [ -n "$F4LSTIME" ] ;;
   * ) false ;;
  esac
 }
@@ -201,38 +205,81 @@ for f4c in find stat statbsd ls; do
  fi
 done
 
+F4STATL=
+if [ "$F4MODE" = stat ] && stat -L -c "$F4FMT_STAT" . >/dev/null 2>&1; then
+ F4STATL=1
+fi
+
+# Set F4SP/F4SOPT for a stat operation that follows a symlink. Older Android
+# toolbox stat has no -L and its readlink -f is unreliable, so resolve the
+# link chain with plain readlink in that case.
+f4_stat_follow() {
+ F4SP=$1
+ F4SOPT=
+ if [ -n "$F4STATL" ]; then
+  F4SOPT=-L
+ else
+  f4_sn=0
+  while [ -L "$F4SP" ]; do
+   [ "$f4_sn" -lt 40 ] || return 1
+   f4_sl=`readlink "$F4SP" 2>/dev/null` || return 1
+   case $f4_sl in
+    /* ) F4SP=$f4_sl ;;
+    * )
+     f4_sd=${F4SP%/*}
+     [ -n "$f4_sd" ] || f4_sd=/
+     F4SP=$f4_sd/$f4_sl
+     ;;
+   esac
+   f4_sn=$(( f4_sn + 1 ))
+  done
+ fi
+ return 0
+}
+
 # How "head -c" behaves decides more than it looks: on macOS it swallows the
 # whole pipe instead of stopping after n bytes, so it can never be used on a
 # stream someone else still has to read from. One probe answers both
 # questions, whether -c is supported at all and whether it stops in time.
 F4HEADC=
 F4HEADSAFE=
-if f4_have head; then
- case "`printf 12345 | { head -c 2 2>/dev/null; printf '|'; cat; }`" in
-  '12|345' ) F4HEADC=1; F4HEADSAFE=1 ;;
-  '12|' ) F4HEADC=1 ;;
- esac
-fi
-
 F4TAILC=
-if f4_have tail && [ "`printf 12345 | tail -c +3 2>/dev/null`" = 345 ]; then
- F4TAILC=1
+F4HTDONE=
+f4_probe_headtail() {
+ [ -n "$F4HTDONE" ] && return
+ F4HTDONE=1
+ if f4_have head; then
+  case "`printf 12345 | { head -c 2 2>/dev/null; printf '|'; cat; }`" in
+   '12|345' ) F4HEADC=1; F4HEADSAFE=1 ;;
+   '12|' ) F4HEADC=1 ;;
+  esac
+ fi
+ if f4_have tail && [ "`printf 12345 | tail -c +3 2>/dev/null`" = 345 ]; then
+  F4TAILC=1
+ fi
+}
+
+F4DDNOTRUNC=
+if f4_have dd && printf x | dd of=/dev/null bs=1 count=1 conv=notrunc 2>/dev/null; then
+ F4DDNOTRUNC=1
 fi
 
 f4_try_rmode() {
  case $1 in
-  ddbytes ) f4_have dd && dd if=/dev/null of=/dev/null bs=1 count=0 iflag=skip_bytes,count_bytes 2>/dev/null ;;
-  dd ) f4_have dd && dd if=/dev/null of=/dev/null count=0 2>/dev/null ;;
-  tailc ) [ -n "$F4TAILC" ] && [ -n "$F4HEADC" ] ;;
+  ddbytes ) f4_have dd && printf x | dd of=/dev/null bs=1 count=1 iflag=skip_bytes,count_bytes 2>/dev/null ;;
+  dd ) f4_have dd && printf x | dd of=/dev/null bs=1 count=1 2>/dev/null ;;
+  tailc ) f4_probe_headtail; [ -n "$F4TAILC" ] && [ -n "$F4HEADC" ] ;;
   cat ) f4_have cat ;;
   * ) false ;;
  esac
 }
 
 F4RD=
+F4RDD_BYTES=
 for f4c in ddbytes dd tailc cat; do
  if f4_try_rmode $f4c; then
   F4RD=$f4c
+  [ "$f4c" = ddbytes ] && F4RDD_BYTES=1
   break
  fi
 done
@@ -245,9 +292,9 @@ done
 # faster of the two even with a third more traffic on the wire.
 f4_try_wmode() {
  case $1 in
-  ddbytes ) f4_have dd && dd if=/dev/null of=/dev/null bs=1 count=0 iflag=fullblock,count_bytes oflag=seek_bytes 2>/dev/null ;;
+  ddbytes ) f4_have dd && printf x | dd of=/dev/null bs=1 count=1 iflag=fullblock,count_bytes oflag=seek_bytes 2>/dev/null ;;
   b64 ) f4_have dd && [ -n "$F4DEC" ] ;;
-  ddbs1 ) f4_have dd ;;
+  ddbs1 ) f4_have dd && [ -n "$F4DDNOTRUNC" ] ;;
   * ) false ;;
  esac
 }
@@ -268,7 +315,7 @@ done
 # writable directory among the usual candidates; a host with none of them
 # simply does not announce the feature.
 F4JBASE=
-for f4c in "$TMPDIR" /tmp "$HOME" .; do
+for f4c in "$TMPDIR" /tmp /data/local/tmp "$HOME" .; do
  [ -n "$f4c" ] || continue
  if [ -d "$f4c" ] && [ -w "$f4c" ]; then
   F4JBASE=$f4c
@@ -299,13 +346,13 @@ F4FEATS=
 for f4c in cp dd base64 readlink du grep sed awk wc head tail stty truncate chown touch date sha256sum; do
  f4_have $f4c && F4FEATS="$F4FEATS $f4c"
 done
-for f4c in find stat statbsd ls; do
- f4_try_mode $f4c && F4FEATS="$F4FEATS $f4c"
-done
+[ -n "$F4MODE" ] && F4FEATS="$F4FEATS $F4MODE"
 [ -n "$F4HEADC" ] && F4FEATS="$F4FEATS headc"
 [ -n "$F4HEADSAFE" ] && F4FEATS="$F4FEATS headsafe"
 [ -n "$F4TAILC" ] && F4FEATS="$F4FEATS tailc"
-f4_try_rmode ddbytes && F4FEATS="$F4FEATS ddbytes"
+[ -n "$F4DDNOTRUNC" ] && F4FEATS="$F4FEATS ddnotrunc"
+[ -n "$F4STATL" ] && F4FEATS="$F4FEATS statl"
+[ -n "$F4RDD_BYTES" ] && F4FEATS="$F4FEATS ddbytes"
 [ -n "$F4TTY" ] && F4FEATS="$F4FEATS tty"
 [ -n "$F4AWKFL" ] && F4FEATS="$F4FEATS awkflush"
 f4_have find && F4FEATS="$F4FEATS findbin"
@@ -417,7 +464,11 @@ f4_size() {
  F4SZ=
  case $F4MODE in
   find ) F4SZ=`find -H "$1" -mindepth 0 -maxdepth 0 -printf '%s\n' 2>/dev/null` ;;
-  stat ) F4SZ=`stat -c '%s' -- "$1" 2>/dev/null` ;;
+  stat )
+   if f4_stat_follow "$1"; then
+    F4SZ=`stat $F4SOPT -c '%s' -- "$F4SP" 2>/dev/null`
+   fi
+   ;;
   statbsd ) F4SZ=`stat -f '%z' -- "$1" 2>/dev/null` ;;
   ls ) set -- `f4_ls -dL -- "$1" 2>/dev/null`; F4SZ=$5 ;;
  esac
@@ -448,8 +499,17 @@ f4_read_range() {
    dd if="$1" bs=1048576 iflag=skip_bytes,count_bytes skip="$2" count="$3" 2>/dev/null
    ;;
   dd )
-   f4_bs "$2" "$3"
-   dd if="$1" bs=$F4BS skip=$(( $2 / F4BS )) count=$(( $3 / F4BS )) 2>/dev/null
+   # For the last range, EOF already trims the final block to the exact
+   # requested length. Do not force the block size to divide an odd file
+   # length: that can degrade an otherwise large read to hundreds of
+   # thousands of one-byte dd blocks (notably with Android toybox dd).
+   if [ $(( $2 + $3 )) -eq "$F4SZ" ]; then
+    f4_bs "$2" 0
+    dd if="$1" bs=$F4BS skip=$(( $2 / F4BS )) count=$(( ($3 + F4BS - 1) / F4BS )) 2>/dev/null
+   else
+    f4_bs "$2" "$3"
+    dd if="$1" bs=$F4BS skip=$(( $2 / F4BS )) count=$(( $3 / F4BS )) 2>/dev/null
+   fi
    ;;
   tailc )
    tail -c +$(( $2 + 1 )) < "$1" 2>/dev/null | head -c "$3" 2>/dev/null
@@ -479,15 +539,50 @@ f4_cmd_enum() {
  f4_end ok
 }
 
+# isdirs <count> reads count paths and reports whether each one resolves to a
+# directory. Directory listings produced by stat/ls only say that an entry is
+# a symlink; resolving every target with a separate info request turns a
+# directory with a handful of links into a handful of network round trips.
+# Shell -d follows symlinks itself, so all answers can be produced in one
+# request without invoking an external command.
+f4_cmd_isdirs() {
+ if ! f4_num "$1"; then
+  f4_end err "bad path count"
+  return
+ fi
+ f4_i=0
+ while [ "$f4_i" -lt "$1" ]; do
+  f4_path
+  if [ -d "$F4PATH" ]; then
+   echo 1
+  else
+   echo 0
+  fi
+  f4_i=$(( f4_i + 1 ))
+ done
+ f4_end ok
+}
+
 f4_cmd_info() {
  f4_path
  if [ -z "$F4MODE" ]; then
   f4_end err "no supported stat tool on remote host"
   return
  fi
+ F4RV=
  case $F4MODE in
   find ) F4OUT=`find $1 "$F4PATH" -mindepth 0 -maxdepth 0 -printf "$F4FMT_FIND" 2>&1`; F4RV=$? ;;
-  stat ) F4OUT=`stat $2 -c "$F4FMT_STAT" -- "$F4PATH" 2>&1`; F4RV=$? ;;
+  stat )
+   F4SP=$F4PATH
+   F4SOPT=
+   if [ "$2" != -L ] || f4_stat_follow "$F4PATH"; then
+    F4OUT=`stat $F4SOPT -c "$F4FMT_STAT" -- "$F4SP" 2>&1`
+    F4RV=$?
+   else
+    F4OUT="cannot resolve symlink"
+    F4RV=1
+   fi
+   ;;
   statbsd ) F4OUT=`stat $2 -f "$F4FMT_BSD" -- "$F4PATH" 2>&1`; F4RV=$? ;;
   ls ) F4OUT=`f4_ls -d $2 -- "$F4PATH" 2>&1`; F4RV=$? ;;
  esac
@@ -503,7 +598,7 @@ f4_cmd_info() {
 f4_cmd_rdlink() {
  f4_path
  if f4_have readlink; then
-  F4OUT=`readlink -- "$F4PATH" 2>&1`
+  F4OUT=`readlink "$F4PATH" 2>&1`
   F4RV=$?
  elif f4_have sed; then
   F4OUT=`ls -ld -- "$F4PATH" 2>&1 | sed -n 's/^.* -> //p'`
@@ -578,7 +673,38 @@ f4_write_raw() {
 
 f4_write_b64() {
  f4_bs "$2" "$3"
- printf '%s\n' "$F4B64" | $F4DEC | dd of="$1" bs=$F4BS seek=$(( $2 / F4BS )) conv=notrunc
+ f4_wbs=$F4BS
+ f4_wseek=$(( $2 / F4BS ))
+ if [ -n "$F4DDNOTRUNC" ]; then
+  printf '%s\n' "$F4B64" | $F4DEC | dd of="$1" bs=$f4_wbs seek=$f4_wseek conv=notrunc
+  return
+ fi
+
+ # Android toybox dd can position writes but builds the applet without
+ # conv=notrunc. In that dialect dd preserves the prefix selected by seek,
+ # but truncates the old tail. Save that tail, perform the positioned write,
+ # then append it again. The session token and pid keep concurrent helpers
+ # from sharing the scratch file.
+ f4_wbase=$F4JBASE
+ [ -n "$f4_wbase" ] || f4_wbase=$F4WDIR
+ F4WT=$f4_wbase/.f4write.$$.$F4TOKEN
+ : > "$F4WT" || return 1
+ if [ -f "$1" ]; then
+  f4_woff=$(( $2 + $3 ))
+  f4_bs "$f4_woff" 0
+  if ! dd if="$1" bs=$F4BS skip=$(( f4_woff / F4BS )) 2>/dev/null > "$F4WT"; then
+   rm -f "$F4WT" 2>/dev/null
+   return 1
+  fi
+ fi
+ if ! printf '%s\n' "$F4B64" | $F4DEC | dd of="$1" bs=$f4_wbs seek=$f4_wseek; then
+  rm -f "$F4WT" 2>/dev/null
+  return 1
+ fi
+ cat "$F4WT" >> "$1"
+ f4_wrv=$?
+ rm -f "$F4WT" 2>/dev/null
+ return "$f4_wrv"
 }
 
 # Everything the payload was supposed to become, when the request cannot be
@@ -1293,6 +1419,9 @@ while :; do
    ;;
   enum )
    f4_cmd_enum
+   ;;
+  isdirs )
+   f4_cmd_isdirs "$F4A1"
    ;;
   info )
    f4_cmd_info -H -L

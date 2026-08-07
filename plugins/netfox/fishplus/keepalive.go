@@ -112,8 +112,13 @@ func (k *Keepalive) run(c *Client, every time.Duration) {
 		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), keepaliveTimeout)
-		err := s.Noop(ctx)
+		attempted, err := s.TryNoop(ctx)
 		cancel()
+		if !attempted && err == nil {
+			// A request won the race after IdleFor. It is activity, not a
+			// reason to queue a keepalive behind it.
+			continue
+		}
 		if err != nil {
 			// The point of the keepalive is to find this out now rather than
 			// under the user's next request. Marking it is all that can be done

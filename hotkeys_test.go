@@ -126,6 +126,11 @@ func TestHotkeyManager_ShellDefaults_Issue289(t *testing.T) {
 			t.Errorf("Shell/%s: expected %q, got %q", tc.key, tc.expected, got)
 		}
 	}
+	for _, key := range []string{"Del", "NumDel"} {
+		if got := hm.Defaults["Shell"][key]; got != "Panel.Toggle:EscToggle" {
+			t.Errorf("Shell/%s default: expected %q, got %q", key, "Panel.Toggle:EscToggle", got)
+		}
+	}
 }
 
 func TestHotkeyManager_Conditions(t *testing.T) {

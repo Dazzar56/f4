@@ -66,7 +66,9 @@ func TestReadAgainstLocalShell(t *testing.T) {
 	ctx := context.Background()
 
 	dir := t.TempDir()
-	blob := make([]byte, 300000)
+	// Keep the length odd. Plain dd must not fall back to bs=1 when a read
+	// reaches EOF merely because the final byte count has no useful divisor.
+	blob := make([]byte, 300001)
 	rng := rand.New(rand.NewSource(7))
 	rng.Read(blob)
 	blobPath := filepath.Join(dir, "a blob.bin")

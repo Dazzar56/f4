@@ -299,6 +299,38 @@ func (c *Client) Enum(ctx context.Context, dir string) ([]Entry, error) {
 	return entries, nil
 }
 
+// TargetDirs reports, in the same order, whether each path resolves to a
+// directory. All paths travel in one protocol request: callers use this for
+// symlinks returned by a directory listing, where one Stat round trip per
+// link would dominate the listing itself. A missing, broken or inaccessible
+// target is reported as false, matching the shell's -d predicate.
+func (c *Client) TargetDirs(ctx context.Context, paths []string) ([]bool, error) {
+	if len(paths) == 0 {
+		return []bool{}, nil
+	}
+	resp, err := c.sess.ExecPaths(ctx, "isdirs", paths, strconv.Itoa(len(paths)))
+	if err != nil {
+		return nil, err
+	}
+	if err := resp.Err("isdirs"); err != nil {
+		return nil, err
+	}
+	if len(resp.Lines) != len(paths) {
+		return nil, fmt.Errorf("fishplus: isdirs returned %d answers for %d paths", len(resp.Lines), len(paths))
+	}
+	out := make([]bool, len(paths))
+	for i, line := range resp.Lines {
+		switch line {
+		case "0":
+		case "1":
+			out[i] = true
+		default:
+			return nil, fmt.Errorf("fishplus: isdirs returned invalid answer %q for path %d", line, i)
+		}
+	}
+	return out, nil
+}
+
 // Stat resolves symlinks, Lstat reports the link itself.
 func (c *Client) Stat(ctx context.Context, p string) (Entry, error) {
 	return c.info(ctx, "info", p)

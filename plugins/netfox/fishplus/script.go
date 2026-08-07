@@ -2,6 +2,7 @@ package fishplus
 
 import (
 	_ "embed"
+	"encoding/base64"
 	"strings"
 )
 
@@ -29,6 +30,10 @@ func Compact(src string) string {
 	var b strings.Builder
 	b.Grow(len(src))
 	for _, line := range strings.Split(src, "\n") {
+		// Embedded files use the working tree's line endings. On Windows a
+		// CRLF helper would otherwise send the carriage return to the remote
+		// shell as part of every command (for example "in\r" and "}\r").
+		line = strings.TrimSuffix(line, "\r")
 		trimmed := strings.TrimLeft(line, " \t")
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
 			continue
@@ -72,6 +77,51 @@ func BootstrapLine(token string) string {
 		"; F4NL=$(printf '\\nx'); F4NL=${F4NL%x}; F4S=; " +
 		"while IFS= read -r F4L; do [ \"$F4L\" = " + HelperEndMarker + " ] && break; " +
 		"F4S=$F4S$F4L$F4NL; done; eval \"$F4S\"\n"
+}
+
+// Base64BootstrapLine returns a self-contained bootstrap command. Unlike
+// BootstrapLine, it carries the complete helper in the same shell line, so a
+// high-latency shell does not have to assemble the script one read at a time.
+// Only printable ASCII plus the terminating newline goes over the wire.
+//
+// The decoded payload starts with a per-session sentinel. Merely exiting with
+// status zero is not enough to accept a decoder: some base64 implementations
+// silently ignore an option they do not understand. The sentinel proves that
+// the whole pipeline produced the expected bytes before eval is allowed.
+//
+// The decoder spellings cover toybox/BusyBox/GNU (including Android API 24),
+// BSD/macOS, and OpenSSL. No temporary file is created. If none works, the
+// command emits a properly framed handshake error instead of leaving the
+// client waiting for a banner that will never arrive.
+func Base64BootstrapLine(token string) string {
+	prefix := ": F4B64" + token + ";"
+	payload := prefix + "\n" + HelperScript(token)
+	encoded := base64.StdEncoding.EncodeToString([]byte(payload))
+	// The encoded bytes are opaque, but the readiness marker must be absent
+	// from the command source by construction rather than probability. Split
+	// a coincidental occurrence into adjacent shell literals; their value is
+	// identical while a terminal echo contains two quote bytes in the middle.
+	encoded = splitReadyMarker(encoded, token)
+	quotedToken := shellSingleQuote(token)
+	quotedPrefix := shellSingleQuote(prefix)
+
+	// The readiness marker is split in the source so a terminal echo of this
+	// command cannot be mistaken for the marker printed by the running shell.
+	return "F4B='" + encoded + "'; " +
+		"printf '%s%s\\n' F4R\"DY\" " + quotedToken + "; " +
+		"F4S=; for F4D in 'base64 -d' 'base64 -D' 'base64 --decode' 'openssl base64 -A -d'; do " +
+		"F4S=$(printf '%s\\n' \"$F4B\" | $F4D 2>/dev/null) || F4S=; " +
+		"case \"$F4S\" in " + quotedPrefix + "*) break;; *) F4S=;; esac; done; " +
+		"unset F4B F4D; if [ -n \"$F4S\" ]; then eval \"$F4S\"; " +
+		"else printf '\\n.%s 0 err bootstrap base64 decoder unavailable\\n' " + quotedToken + "; fi\n"
+}
+
+func shellSingleQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
+}
+
+func splitReadyMarker(s, token string) string {
+	return strings.ReplaceAll(s, ReadyMarker(token), "F''4RDY"+token)
 }
 
 // HelperScript returns the compacted helper script with the session token

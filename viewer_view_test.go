@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -13,6 +15,51 @@ import (
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
+
+type trackedReadRange struct {
+	offset int64
+	length int
+}
+
+type tailTrackingFile struct {
+	size int64
+	mu   sync.Mutex
+	read []trackedReadRange
+}
+
+func (f *tailTrackingFile) Size() int64  { return f.size }
+func (f *tailTrackingFile) Close() error { return nil }
+func (f *tailTrackingFile) Read(ctx context.Context, p []byte) (int, error) {
+	return f.ReadAt(ctx, p, 0)
+}
+func (f *tailTrackingFile) ReadAt(ctx context.Context, p []byte, off int64) (int, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+	if off >= f.size {
+		return 0, io.EOF
+	}
+	n := len(p)
+	if remaining := f.size - off; int64(n) > remaining {
+		n = int(remaining)
+	}
+	for i := 0; i < n; i++ {
+		p[i] = 'x'
+	}
+	f.mu.Lock()
+	f.read = append(f.read, trackedReadRange{offset: off, length: n})
+	f.mu.Unlock()
+	if n < len(p) {
+		return n, io.EOF
+	}
+	return n, nil
+}
+
+func (f *tailTrackingFile) ranges() []trackedReadRange {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]trackedReadRange(nil), f.read...)
+}
 
 type mockCloseFile struct {
 	vfs.ReadAtCloser
@@ -117,6 +164,64 @@ func TestViewerView_NavigationAndEOF(t *testing.T) {
 		t.Errorf("VK_DOWN should be blocked when eofVisible is true. Offset changed from %d to %d", oldOffset, vv.TopOffset)
 	}
 }
+
+func TestViewerView_EndJumpReadsOnlyTailOfLargeFile(t *testing.T) {
+	const fileSize = int64(392077017)
+	for _, tc := range []struct {
+		name string
+		wrap bool
+	}{{name: "wrapped", wrap: true}, {name: "unwrapped", wrap: false}} {
+		t.Run(tc.name, func(t *testing.T) {
+			vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+			file := &tailTrackingFile{size: fileSize}
+			indexer := &indexingVFS{offsets: []int64{0}, total: 1}
+			ctx, cancel := context.WithCancel(context.Background())
+			backend := &ViewerBackend{
+				file:         file,
+				size:         fileSize,
+				indexer:      indexer,
+				totalLines:   -1,
+				totalForSize: -1,
+				ctx:          ctx,
+				cancelCtx:    cancel,
+			}
+			vv := &ViewerView{backend: backend, WrapMode: tc.wrap}
+			defer vv.Close()
+			vv.SetPosition(0, 0, 120, 40)
+
+			if !vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_END}) {
+				t.Fatal("End was not handled")
+			}
+			deadline := time.After(2 * time.Second)
+			for vv.Busy || vv.TopOffset == 0 {
+				select {
+				case task := <-vtui.FrameManager.TaskChan:
+					task()
+				case <-deadline:
+					t.Fatal("tail-only End jump timed out")
+				}
+			}
+
+			if indexer.calls != 0 {
+				t.Fatalf("End jump made %d whole-file line-index calls", indexer.calls)
+			}
+			ranges := file.ranges()
+			if len(ranges) != 1 {
+				t.Fatalf("End jump made %d range reads, want one: %+v", len(ranges), ranges)
+			}
+			if ranges[0].length > 256*1024 {
+				t.Fatalf("End jump read %d bytes, want at most one 256 KiB window", ranges[0].length)
+			}
+			if ranges[0].offset < fileSize-256*1024 {
+				t.Fatalf("End jump read from offset %d, want only the file tail", ranges[0].offset)
+			}
+			if vv.TopOffset < fileSize-256*1024 {
+				t.Fatalf("End jump landed at %d, outside the final cache window", vv.TopOffset)
+			}
+		})
+	}
+}
+
 func TestViewerView_MouseScrollbar(t *testing.T) {
 	vtui.SetDefaultPalette()
 	// Create a file with enough content to scroll

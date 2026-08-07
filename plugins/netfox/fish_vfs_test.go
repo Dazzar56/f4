@@ -1,8 +1,10 @@
 package netfox
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,8 +15,159 @@ import (
 	"testing"
 	"time"
 
+	"github.com/unxed/f4/plugins/netfox/fishplus"
 	"github.com/unxed/f4/vfs"
 )
+
+type fishPanelInfoStub struct {
+	key          string
+	snapshot     vfs.PanelInfoSnapshot
+	refreshCalls int
+}
+
+func (p *fishPanelInfoStub) PanelInfoKey(vfs.PanelInfoRequest) string { return p.key }
+func (p *fishPanelInfoStub) CachedPanelInfo(vfs.PanelInfoRequest) (vfs.PanelInfoSnapshot, bool) {
+	return p.snapshot, false
+}
+func (p *fishPanelInfoStub) RefreshPanelInfo(context.Context, vfs.PanelInfoRequest) (vfs.PanelInfoSnapshot, error) {
+	p.refreshCalls++
+	return p.snapshot, nil
+}
+
+func TestFishVFSPanelInfoProviderSurvivesCloneForParent(t *testing.T) {
+	provider := &fishPanelInfoStub{
+		key: "android:serial:/sdcard",
+		snapshot: vfs.PanelInfoSnapshot{Authoritative: true, Sections: []vfs.PanelInfoSection{{
+			ID: "android", Fields: []vfs.PanelInfoField{{ID: "model", Value: "phone"}},
+		}}},
+	}
+	original := &FishVFS{path: "/sdcard", title: "phone"}
+	original.SetPanelInfoProvider(provider)
+	original.SetPanelTitleFormatter(func(title, path string) string {
+		return title + "|" + path
+	})
+	parent := vfs.NewNullVFS(0)
+	clone := original.CloneForParent(parent)
+	if clone == original || clone.ParentVFS() != parent || clone.GetPath() != "/sdcard" {
+		t.Fatalf("clone identity = cloneSame %v parent %T path %q", clone == original, clone.ParentVFS(), clone.GetPath())
+	}
+	if clone.panelInfoProvider() != provider {
+		t.Fatal("clone did not retain the attached panel-info provider")
+	}
+	if got := clone.PanelTitle("/sdcard/Download"); got != "phone|/sdcard/Download" {
+		t.Fatalf("clone PanelTitle = %q", got)
+	}
+	req := vfs.PanelInfoRequest{Path: "/sdcard"}
+	if got := clone.PanelInfoKey(req); got != provider.key {
+		t.Fatalf("PanelInfoKey = %q", got)
+	}
+	if snapshot, fresh := clone.CachedPanelInfo(req); fresh || !snapshot.Authoritative || len(snapshot.Sections) != 1 {
+		t.Fatalf("CachedPanelInfo = %#v, fresh %v", snapshot, fresh)
+	}
+	if _, err := clone.RefreshPanelInfo(context.Background(), req); err != nil || provider.refreshCalls != 1 {
+		t.Fatalf("RefreshPanelInfo = %v, calls %d", err, provider.refreshCalls)
+	}
+}
+
+func TestValidateFishEntryNameRejectsHostTraversal(t *testing.T) {
+	for _, name := range []string{"", "a/b", "../outside", "bad\x00name"} {
+		if err := validateFishEntryName(name); err == nil {
+			t.Errorf("validateFishEntryName(%q) succeeded", name)
+		}
+	}
+	if err := validateFishEntryName("ordinary name"); err != nil {
+		t.Fatalf("ordinary name rejected: %v", err)
+	}
+	if err := validateFishEntryName(`..\outside`); runtime.GOOS == "windows" && err == nil {
+		t.Fatal("Windows traversal name was accepted")
+	} else if runtime.GOOS != "windows" && err != nil {
+		t.Fatalf("legal Unix backslash name rejected: %v", err)
+	}
+}
+
+// TestFishVFSReadDirResolvesAllSymlinksInOneRequest exercises the VFS over a
+// tiny protocol peer. It is intentionally not a local-shell test: besides
+// running on Windows, it proves the wire contains one isdirs request rather
+// than merely proving that both implementations eventually classify links.
+func TestFishVFSReadDirResolvesAllSymlinksInOneRequest(t *testing.T) {
+	peerR, clientW := io.Pipe()
+	clientR, peerW := io.Pipe()
+	sess := fishplus.NewSession(clientW, clientR, nil)
+	t.Cleanup(func() {
+		clientW.Close()
+		peerW.Close()
+	})
+
+	done := make(chan error, 1)
+	go func() {
+		scanner := bufio.NewScanner(peerR)
+		if !scanner.Scan() {
+			done <- fmt.Errorf("missing enum header: %v", scanner.Err())
+			return
+		}
+		enumHeader := strings.Fields(scanner.Text())
+		if len(enumHeader) != 2 || enumHeader[1] != "enum" {
+			done <- fmt.Errorf("first request = %q, want enum", scanner.Text())
+			return
+		}
+		if !scanner.Scan() || scanner.Text() != "/" {
+			done <- fmt.Errorf("enum path = %q, want /", scanner.Text())
+			return
+		}
+		fmt.Fprintln(peerW, "M stat")
+		fmt.Fprintln(peerW, "a1ff 8 1 1 1 0 0 /directory-link")
+		fmt.Fprintln(peerW, "a1ff 8 1 1 1 0 0 /file-link")
+		fmt.Fprintln(peerW, "81a4 1 1 1 1 0 0 /ordinary")
+		fmt.Fprintf(peerW, ".%s %s ok\n", sess.Token(), enumHeader[0])
+
+		if !scanner.Scan() {
+			done <- fmt.Errorf("missing isdirs header: %v", scanner.Err())
+			return
+		}
+		batchHeader := strings.Fields(scanner.Text())
+		if len(batchHeader) != 3 || batchHeader[1] != "isdirs" || batchHeader[2] != "2" {
+			done <- fmt.Errorf("second request = %q, want isdirs 2", scanner.Text())
+			return
+		}
+		wantPaths := []string{"/directory-link", "/file-link"}
+		for _, want := range wantPaths {
+			if !scanner.Scan() || scanner.Text() != want {
+				done <- fmt.Errorf("isdirs path = %q, want %q", scanner.Text(), want)
+				return
+			}
+		}
+		fmt.Fprintln(peerW, "1")
+		fmt.Fprintln(peerW, "0")
+		fmt.Fprintf(peerW, ".%s %s ok\n", sess.Token(), batchHeader[0])
+		done <- nil
+	}()
+
+	v := &FishVFS{
+		conn: &fishConn{client: fishplus.NewClient(sess), refs: 1},
+		path: "/",
+	}
+	items := make(map[string]vfs.VFSItem)
+	err := v.ReadDir(context.Background(), "/", func(chunk []vfs.VFSItem) {
+		for _, item := range chunk {
+			items[item.Name] = item
+		}
+	})
+	if err != nil {
+		t.Fatalf("ReadDir: %v", err)
+	}
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if item := items["directory-link"]; !item.IsSymlink || !item.IsDir {
+		t.Errorf("directory link = %+v", item)
+	}
+	if item := items["file-link"]; !item.IsSymlink || item.IsDir {
+		t.Errorf("file link = %+v", item)
+	}
+	if item := items["ordinary"]; item.IsSymlink || item.IsDir {
+		t.Errorf("ordinary file = %+v", item)
+	}
+}
 
 // newLocalFishVFS runs the real helper in a local shell and wraps it in a
 // FishVFS, which is the only way to check the mapping against output real
@@ -66,6 +219,19 @@ func newLocalFishVFSWithTitle(t *testing.T, title string) *FishVFS {
 		}
 	})
 	return v
+}
+
+func TestFishVFSOptimisticPathChangeNeedsNoSession(t *testing.T) {
+	v := &FishVFS{path: "/"}
+	if err := v.SetPathOptimistic("sdcard"); err != nil {
+		t.Fatalf("SetPathOptimistic: %v", err)
+	}
+	if got := v.GetPath(); got != "/sdcard" {
+		t.Fatalf("optimistic path = %q, want /sdcard", got)
+	}
+	if v.PtyAvailable() {
+		t.Fatal("a FISH+ view without a PTY transport reported one available")
+	}
 }
 
 func TestFishVFSBrowsesLocalShell(t *testing.T) {

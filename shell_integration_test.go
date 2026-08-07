@@ -35,7 +35,7 @@ func TestPanelsFrame_CtrlEnter_Escaping(t *testing.T) {
 		Type:            vtinput.KeyEventType,
 		KeyDown:         true,
 		VirtualKeyCode:  vtinput.VK_RETURN,
-		ControlKeyState: vtinput.LeftCtrlPressed | vtinput.EnhancedKey,
+		ControlKeyState: vtinput.LeftCtrlPressed,
 	})
 
 	got := pf.cmdLine.Edit.GetText()
@@ -52,6 +52,47 @@ func TestPanelsFrame_CtrlEnter_Escaping(t *testing.T) {
 		if got != expected {
 			t.Errorf("Unix escaping failed. Got %q, want %q", got, expected)
 		}
+	}
+}
+
+func TestPanelsFrame_CtrlEnterOnDirectoryInsertsWithoutEntering(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pf := setupMockPanelsFrame()
+	defer pf.Close()
+
+	tmp := t.TempDir()
+	if err := os.Mkdir(filepath.Join(tmp, "subdir"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	fsp := pf.panels[0].(*FileSystemPanel)
+	pf.activeIdx = 0
+	fsp.vfs = vfs.NewOSVFS(tmp)
+	fsp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "subdir", IsDir: true}}}
+	fsp.Refresh()
+	fsp.SetCursorIndex(0)
+
+	mainCtrlEnter := &vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_RETURN,
+		ControlKeyState: vtinput.LeftCtrlPressed,
+	}
+	pressKey(pf, mainCtrlEnter)
+	if got := pf.cmdLine.Edit.GetText(); got != "subdir" {
+		t.Fatalf("hotkey Ctrl+Enter inserted %q, want subdir", got)
+	}
+	if got := fsp.vfs.GetPath(); got != tmp {
+		t.Fatalf("hotkey Ctrl+Enter entered %q, want to stay in %q", got, tmp)
+	}
+
+	// Exercise the frame-level fallback independently of MacroManager.Filter.
+	pf.cmdLine.Clear()
+	pf.ProcessKey(mainCtrlEnter)
+	if got := pf.cmdLine.Edit.GetText(); got != "subdir" {
+		t.Fatalf("direct Ctrl+Enter inserted %q, want subdir", got)
+	}
+	if got := fsp.vfs.GetPath(); got != tmp {
+		t.Fatalf("direct Ctrl+Enter entered %q, want to stay in %q", got, tmp)
 	}
 }
 

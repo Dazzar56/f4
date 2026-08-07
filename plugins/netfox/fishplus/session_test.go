@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os/exec"
 	"runtime"
 	"strconv"
@@ -22,6 +23,18 @@ type mockRequest struct {
 	Cmd   string
 	Args  []string
 	Paths []string
+}
+
+type gateBlockingReader struct {
+	started chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func (r *gateBlockingReader) Read([]byte) (int, error) {
+	r.once.Do(func() { close(r.started) })
+	<-r.release
+	return 0, io.EOF
 }
 
 // decodePaths returns the path lines of a mock request, undoing the tilde
@@ -129,6 +142,398 @@ func TestHandshakeParsesBannerAndSkipsNoise(t *testing.T) {
 	}
 	if got := strings.Join(feats.Names(), " "); got != "base64 dd stat" {
 		t.Errorf("Names() = %q, want %q", got, "base64 dd stat")
+	}
+}
+
+func TestHandshakeBase64WritesOneLine(t *testing.T) {
+	var stdin bytes.Buffer
+	var stdout bytes.Buffer
+	sess := NewSession(&stdin, &stdout, nil)
+	fmt.Fprintf(&stdout, "login noise\n%s\n.%s 0 ok FISHPLUS 1 dd base64\n", ReadyMarker(sess.Token()), sess.Token())
+
+	err := sess.HandshakeWithOptions(context.Background(), HandshakeOptions{Bootstrap: BootstrapBase64Line})
+	if err != nil {
+		t.Fatalf("base64 handshake: %v", err)
+	}
+	if got := strings.Count(stdin.String(), "\n"); got != 1 {
+		t.Fatalf("base64 handshake wrote %d lines, want 1", got)
+	}
+	if strings.Contains(stdin.String(), HelperEndMarker+"\n") {
+		t.Fatal("base64 handshake also uploaded the streaming end marker")
+	}
+	if !sess.Features().Has("base64") {
+		t.Fatal("base64 handshake did not parse the helper banner")
+	}
+}
+
+func TestHandshakeBase64ReportsDecoderFailure(t *testing.T) {
+	var stdin bytes.Buffer
+	var stdout bytes.Buffer
+	sess := NewSession(&stdin, &stdout, nil)
+	fmt.Fprintf(&stdout, "%s\n.%s 0 err bootstrap base64 decoder unavailable\n", ReadyMarker(sess.Token()), sess.Token())
+
+	err := sess.HandshakeWithOptions(context.Background(), HandshakeOptions{Bootstrap: BootstrapBase64Line})
+	if err == nil || !strings.Contains(err.Error(), "decoder unavailable") {
+		t.Fatalf("base64 handshake error = %v, want framed decoder failure", err)
+	}
+	if !sess.Broken() {
+		t.Fatal("failed base64 handshake did not mark the session broken")
+	}
+}
+
+func TestHandshakeRejectsUnknownBootstrapBeforeWriting(t *testing.T) {
+	var stdin bytes.Buffer
+	sess := NewSession(&stdin, strings.NewReader(""), nil)
+	err := sess.HandshakeWithOptions(context.Background(), HandshakeOptions{Bootstrap: BootstrapMethod(255)})
+	if err == nil || !strings.Contains(err.Error(), "unsupported bootstrap") {
+		t.Fatalf("unknown bootstrap error = %v", err)
+	}
+	if stdin.Len() != 0 {
+		t.Fatalf("unknown bootstrap wrote %d bytes", stdin.Len())
+	}
+	if sess.Broken() {
+		t.Fatal("a locally rejected bootstrap method should not break the untouched session")
+	}
+}
+
+func TestHandshakeOwnsCancellableRequestGate(t *testing.T) {
+	reader := &gateBlockingReader{
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(reader.release) }) }
+	defer release()
+
+	sess := NewSession(io.Discard, reader, nil)
+	handshakeDone := make(chan error, 1)
+	go func() { handshakeDone <- sess.Handshake(context.Background()) }()
+	select {
+	case <-reader.started:
+	case <-time.After(time.Second):
+		t.Fatal("handshake did not start reading")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	defer cancel()
+	execDone := make(chan error, 1)
+	go func() {
+		_, err := sess.Exec(ctx, "queued")
+		execDone <- err
+	}()
+	select {
+	case err := <-execDone:
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("request queued behind handshake = %v, want context deadline", err)
+		}
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("request cancellation could not bypass the active handshake")
+	}
+
+	release()
+	select {
+	case err := <-handshakeDone:
+		if !errors.Is(err, io.EOF) {
+			t.Fatalf("handshake after release = %v, want EOF", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("handshake did not stop after reader release")
+	}
+}
+
+func TestTryNoopDoesNotQueueBehindBusySession(t *testing.T) {
+	sess := NewSession(io.Discard, strings.NewReader(""), io.NopCloser(strings.NewReader("")))
+	sess.mu.Lock()
+	start := time.Now()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	attempted, err := sess.TryNoop(ctx)
+	sess.mu.Unlock()
+	if err != nil {
+		t.Fatalf("TryNoop on busy session: %v", err)
+	}
+	if attempted {
+		t.Fatal("TryNoop queued behind a busy session")
+	}
+	if elapsed := time.Since(start); elapsed > 200*time.Millisecond {
+		t.Fatalf("busy TryNoop took %s", elapsed)
+	}
+}
+
+func TestCanceledRequestLeavesBusyQueueImmediately(t *testing.T) {
+	clientConn, peerConn := net.Pipe()
+	t.Cleanup(func() {
+		_ = clientConn.Close()
+		_ = peerConn.Close()
+	})
+	sess := NewSession(clientConn, clientConn, clientConn)
+	activeSeen := make(chan struct{})
+	releaseActive := make(chan struct{})
+	latestSeen := make(chan string, 1)
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(releaseActive) }) }
+	t.Cleanup(release)
+
+	go func() {
+		reader := bufio.NewReader(peerConn)
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			return
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			return
+		}
+		close(activeSeen)
+		<-releaseActive
+		_, _ = fmt.Fprintf(peerConn, ".%s %s ok\n", sess.Token(), fields[0])
+
+		line, err = reader.ReadString('\n')
+		if err != nil {
+			return
+		}
+		fields = strings.Fields(line)
+		if len(fields) < 2 {
+			return
+		}
+		latestSeen <- fields[1]
+		_, _ = fmt.Fprintf(peerConn, ".%s %s ok\n", sess.Token(), fields[0])
+	}()
+
+	activeDone := make(chan error, 1)
+	go func() {
+		_, err := sess.Exec(context.Background(), "active")
+		activeDone <- err
+	}()
+	select {
+	case <-activeSeen:
+	case <-time.After(time.Second):
+		t.Fatal("active request did not reach the peer")
+	}
+
+	cancelled, cancel := context.WithCancel(context.Background())
+	staleStarted := make(chan struct{})
+	staleDone := make(chan error, 1)
+	go func() {
+		close(staleStarted)
+		_, err := sess.Exec(cancelled, "stale")
+		staleDone <- err
+	}()
+	<-staleStarted
+	// Give the request a chance to enter the gate wait before cancelling it.
+	// The assertion below still has a generous margin for a loaded test host.
+	time.Sleep(10 * time.Millisecond)
+	start := time.Now()
+	cancel()
+	select {
+	case err := <-staleDone:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("cancelled queued request = %v, want context.Canceled", err)
+		}
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("cancelled queued request remained behind the active request")
+	}
+	if elapsed := time.Since(start); elapsed > 200*time.Millisecond {
+		t.Fatalf("cancelled queued request waited %s for the active request", elapsed)
+	}
+
+	latestDone := make(chan error, 1)
+	go func() {
+		_, err := sess.Exec(context.Background(), "latest")
+		latestDone <- err
+	}()
+	release()
+
+	select {
+	case err := <-activeDone:
+		if err != nil {
+			t.Fatalf("active request: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("active request did not finish")
+	}
+	select {
+	case command := <-latestSeen:
+		if command != "latest" {
+			t.Fatalf("peer received %q after active request, want latest", command)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("latest request did not reach the peer")
+	}
+	select {
+	case err := <-latestDone:
+		if err != nil {
+			t.Fatalf("latest request: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("latest request did not finish")
+	}
+}
+
+func TestCloseWakesRequestWaitingForGate(t *testing.T) {
+	clientConn, peerConn := net.Pipe()
+	t.Cleanup(func() {
+		_ = clientConn.Close()
+		_ = peerConn.Close()
+	})
+	// Deliberately omit a closer: Close cannot interrupt the active read, so
+	// only closeCh can release the request waiting behind it.
+	sess := NewSession(clientConn, clientConn, nil)
+	activeSeen := make(chan string, 1)
+	releaseActive := make(chan struct{})
+	go func() {
+		reader := bufio.NewReader(peerConn)
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			return
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			return
+		}
+		activeSeen <- fields[0]
+		<-releaseActive
+		_, _ = fmt.Fprintf(peerConn, ".%s %s ok\n", sess.Token(), fields[0])
+	}()
+
+	activeDone := make(chan error, 1)
+	go func() {
+		_, err := sess.Exec(context.Background(), "active")
+		activeDone <- err
+	}()
+	var activeID string
+	select {
+	case activeID = <-activeSeen:
+		if activeID == "" {
+			t.Fatal("peer received an empty active request id")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("active request did not reach the peer")
+	}
+
+	waiterStarted := make(chan struct{})
+	waiterDone := make(chan error, 1)
+	go func() {
+		close(waiterStarted)
+		_, err := sess.Exec(context.Background(), "waiting")
+		waiterDone <- err
+	}()
+	<-waiterStarted
+	time.Sleep(10 * time.Millisecond)
+	if err := sess.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	select {
+	case err := <-waiterDone:
+		if !errors.Is(err, ErrBroken) {
+			t.Fatalf("waiting request after Close = %v, want ErrBroken", err)
+		}
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("Close did not wake the request waiting for the protocol gate")
+	}
+
+	close(releaseActive)
+	select {
+	case err := <-activeDone:
+		if err != nil {
+			t.Fatalf("active request after release: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("active request did not finish after release")
+	}
+}
+
+func TestTryNoopTimeoutInterruptsSilentTransport(t *testing.T) {
+	clientConn, peerConn := net.Pipe()
+	defer peerConn.Close()
+	sess := NewSession(clientConn, clientConn, clientConn)
+	requestSeen := make(chan struct{})
+	go func() {
+		reader := bufio.NewReader(peerConn)
+		_, _ = reader.ReadString('\n')
+		close(requestSeen)
+		_, _ = io.Copy(io.Discard, reader)
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	defer cancel()
+	type result struct {
+		attempted bool
+		err       error
+	}
+	done := make(chan result, 1)
+	go func() {
+		attempted, err := sess.TryNoop(ctx)
+		done <- result{attempted: attempted, err: err}
+	}()
+	select {
+	case <-requestSeen:
+	case <-time.After(time.Second):
+		t.Fatal("TryNoop did not send its request")
+	}
+	select {
+	case got := <-done:
+		if !got.attempted || !errors.Is(got.err, context.DeadlineExceeded) {
+			t.Fatalf("TryNoop = attempted %t, err %v", got.attempted, got.err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("TryNoop timeout did not interrupt the blocked transport read")
+	}
+	if !sess.Broken() {
+		t.Fatal("timed-out probe left the half-read session reusable")
+	}
+}
+
+func TestTryNoopReleasesSessionBeforeReturning(t *testing.T) {
+	clientConn, peerConn := net.Pipe()
+	defer clientConn.Close()
+	defer peerConn.Close()
+	sess := NewSession(clientConn, clientConn, clientConn)
+	go func() {
+		reader := bufio.NewReader(peerConn)
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			return
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 1 {
+			return
+		}
+		_, _ = fmt.Fprintf(peerConn, ".%s %s ok\n", sess.Token(), fields[0])
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	attempted, err := sess.TryNoop(ctx)
+	if err != nil || !attempted {
+		t.Fatalf("TryNoop = attempted %t, err %v", attempted, err)
+	}
+	if !sess.mu.TryLock() {
+		t.Fatal("TryNoop returned before releasing the protocol mutex")
+	}
+	sess.mu.Unlock()
+	if !sess.tryAcquireRequest() {
+		t.Fatal("TryNoop returned before releasing the request gate")
+	}
+	sess.releaseRequest()
+}
+
+func TestTryNoopWithoutCloserDoesNotAttempt(t *testing.T) {
+	var output bytes.Buffer
+	sess := NewSession(&output, strings.NewReader(""), nil)
+	start := time.Now()
+	attempted, err := sess.TryNoop(context.Background())
+	if err != nil {
+		t.Fatalf("TryNoop without closer: %v", err)
+	}
+	if attempted {
+		t.Fatal("TryNoop used a transport that cannot be interrupted")
+	}
+	if output.Len() != 0 {
+		t.Fatalf("TryNoop without closer wrote %q", output.String())
+	}
+	if elapsed := time.Since(start); elapsed > 200*time.Millisecond {
+		t.Fatalf("TryNoop without closer took %s", elapsed)
 	}
 }
 
@@ -337,6 +742,64 @@ func (b *syncBuffer) String() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.buf.String()
+}
+
+// TestBase64BootstrapAgainstLocalShell proves that the generated one-line
+// command is valid POSIX shell, finds a real decoder, evaluates the embedded
+// helper without a temporary file, and leaves the protocol synchronized.
+func TestBase64BootstrapAgainstLocalShell(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no POSIX shell on Windows")
+	}
+	shell, err := exec.LookPath("sh")
+	if err != nil {
+		t.Skip("no POSIX shell available")
+	}
+	cmd := exec.Command(shell)
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		t.Fatalf("stdin: %v", err)
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatalf("stdout: %v", err)
+	}
+	stderr := &syncBuffer{}
+	cmd.Stderr = stderr
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start %s: %v", shell, err)
+	}
+	sess := NewSession(stdin, stdout, stdin)
+	t.Cleanup(func() {
+		sess.Close()
+		done := make(chan struct{})
+		go func() {
+			cmd.Wait()
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			cmd.Process.Kill()
+		}
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := sess.HandshakeWithOptions(ctx, HandshakeOptions{Bootstrap: BootstrapBase64Line}); err != nil {
+		if strings.Contains(err.Error(), "base64") {
+			t.Skipf("no base64 decoder on this host: %v", err)
+		}
+		t.Fatalf("base64 handshake: %v (shell stderr: %s)", err, stderr.String())
+	}
+	const payload = "one-line bootstrap: spaces, '$VARS', and\na newline"
+	got, err := sess.Ping(ctx, payload)
+	if err != nil {
+		t.Fatalf("ping after base64 handshake: %v (shell stderr: %s)", err, stderr.String())
+	}
+	if got != payload {
+		t.Fatalf("ping after base64 handshake = %q, want %q", got, payload)
+	}
 }
 
 // TestHelperAgainstLocalShell runs the real helper script in a local POSIX

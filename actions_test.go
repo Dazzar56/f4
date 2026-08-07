@@ -1240,7 +1240,7 @@ func TestActionRename_CacheAndSelection(t *testing.T) {
 	pf.activeIdx = 0
 
 	// Заполняем кэш данными
-	fsp.dirCache[fsp.vfs.GetPath()] = dirCacheEntry{items: []vfs.VFSItem{{Name: "old.txt"}}}
+	fsp.dirCache[fsp.cacheKey(fsp.vfs.GetPath())] = dirCacheEntry{items: []vfs.VFSItem{{Name: "old.txt"}}}
 
 	// 1. Тест успешного переименования
 	// Перехватываем InputBox внутри actionRename (в тестах он не блокирует)
@@ -1253,11 +1253,11 @@ func TestActionRename_CacheAndSelection(t *testing.T) {
 	fsp.vfs.Rename(context.Background(), oldPath, newPath)
 
 	// Выполняем UI-часть из actionRename (успех)
-	delete(fsp.dirCache, fsp.vfs.GetPath())
+	delete(fsp.dirCache, fsp.cacheKey(fsp.vfs.GetPath()))
 	fsp.pendingSelection = newName
 	pf.RefreshAll()
 
-	if _, ok := fsp.dirCache[fsp.vfs.GetPath()]; ok {
+	if _, ok := fsp.dirCache[fsp.cacheKey(fsp.vfs.GetPath())]; ok {
 		t.Error("Cache was not cleared after rename")
 	}
 	if fsp.pendingSelection != "new.txt" {
@@ -1318,7 +1318,8 @@ func (m *mockRenameVFS) Rename(ctx context.Context, old, new string) error {
 
 type mockSlowVFS struct {
 	vfs.VFS
-	onOpen func()
+	onOpen    func()
+	openDelay time.Duration
 }
 
 func (m *mockSlowVFS) GetPath() string     { return "/mock" }
@@ -1329,6 +1330,15 @@ func (m *mockSlowVFS) Stat(ctx context.Context, p string) (vfs.VFSItem, error) {
 func (m *mockSlowVFS) Open(ctx context.Context, p string) (vfs.ReadAtCloser, error) {
 	if m.onOpen != nil {
 		m.onOpen()
+	}
+	if m.openDelay > 0 {
+		timer := time.NewTimer(m.openDelay)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
 	}
 	tmp, _ := os.CreateTemp("", "f4mock-*")
 	return &vfs.TempFileWrapper{File: tmp, SizeVal: 0, TempPath: tmp.Name()}, nil
@@ -1343,6 +1353,10 @@ func TestActionOpenViewer_ProgressTask(t *testing.T) {
 
 	called := false
 	mv := &mockSlowVFS{
+		// Leave a generous observation window after the delayed dialog appears;
+		// loaded Windows CI can otherwise schedule the UI drain only after Open
+		// has already completed and legitimately closed it.
+		openDelay: openingProgressDelay + 500*time.Millisecond,
 		onOpen: func() {
 			called = true
 		},
@@ -1380,6 +1394,45 @@ LoopOpen:
 	}
 
 	t.Log("SUCCESS: Progress dialog was correctly displayed during slow file load.")
+}
+
+func TestActionOpenViewer_FastTaskDoesNotFlashProgressDialog(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	called := false
+	mv := &mockSlowVFS{onOpen: func() { called = true }}
+	actionOpenViewer(pf, mv, "/mock/file.txt")
+
+	deadline := time.NewTimer(openingProgressDelay + 150*time.Millisecond)
+	defer deadline.Stop()
+	foundProgress := false
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			for _, screen := range vtui.FrameManager.Screens {
+				for _, frame := range screen.Frames {
+					if strings.Contains(frame.GetTitle(), "Opening") {
+						foundProgress = true
+					}
+				}
+			}
+		case <-deadline.C:
+			if !called {
+				t.Fatal("mock VFS Open was not called")
+			}
+			if foundProgress {
+				t.Fatal("fast viewer open flashed a delayed progress dialog")
+			}
+			return
+		default:
+			time.Sleep(time.Millisecond)
+		}
+	}
 }
 
 func TestActionCommandHistory_Flow(t *testing.T) {

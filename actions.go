@@ -17,6 +17,8 @@ import (
 	"github.com/unxed/vtui"
 )
 
+const openingProgressDelay = 250 * time.Millisecond
+
 var (
 	LastFindFileMask = "*"
 	LastFindFileText = ""
@@ -711,7 +713,7 @@ func openEditorInternal(pf *PanelsFrame, v vfs.VFS, path string) {
 	}
 
 	var f vfs.ReadAtCloser
-	pf.RunProgressTask(" Opening... ", "Preparing to edit file...", false, func(ctx context.Context, update func(msg string, percent int)) error {
+	pf.runProgressTaskAfter(openingProgressDelay, " Opening... ", "Preparing to edit file...", false, func(ctx context.Context, update func(msg string, percent int)) error {
 		update("Opening file...", -1)
 		var err error
 		if v != nil {
@@ -927,7 +929,7 @@ func openViewerInternal(pf *PanelsFrame, v vfs.VFS, path string) {
 	}
 
 	var viewer *ViewerView
-	pf.RunProgressTask(" Opening... ", "Preparing to open file...", false, func(ctx context.Context, update func(msg string, percent int)) error {
+	pf.runProgressTaskAfter(openingProgressDelay, " Opening... ", "Preparing to open file...", false, func(ctx context.Context, update func(msg string, percent int)) error {
 		update("Opening file...", -1)
 		ctx = context.WithValue(ctx, vfs.ProgressKey, vfs.ProgressCallback(update))
 		var err error
@@ -1406,7 +1408,7 @@ func actionRename(pf *PanelsFrame) {
 					fsp.pendingSelection = name
 				} else {
 					// Clear cache to ensure the new name is visible immediately
-					delete(fsp.dirCache, fsp.vfs.GetPath())
+					delete(fsp.dirCache, fsp.cacheKey(fsp.vfs.GetPath()))
 					fsp.pendingSelection = newName
 				}
 				pf.RefreshAll()
