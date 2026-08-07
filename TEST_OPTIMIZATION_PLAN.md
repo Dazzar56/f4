@@ -1,48 +1,63 @@
-# Test Optimization Plan
+# Test Optimization Plan – Updated 2026-08-07
 
-**Goal:** Reduce the test suite wall-clock time from ~30s to ~10s for local development.
+**Goal:** Reduce the test suite wall-clock time from ~23s to ~10s for local development.
 
-**Current baseline (from `run_all_tests.sh`):** ~26.8s for ~500 tests.
+**Current baseline:** ~22.9–23.3s (measured after reverting the parallelization attempt; see below).
 
-**Top offenders (from the analysis log):**
+**Top offenders (still relevant, but note that Colorer caching has been applied):**
 
-| Test | Time | Issue |
-|------|------|-------|
-| `TestAllDialogs_LayoutValidation/Settings.Colorer` | 2.09s | Colorer schema generation |
-| `TestAllDialogs_LayoutValidation/Settings.Editor` | 1.40s | Editor settings dialog |
-| `TestPanelsFrame_DriveMenuBookmarkKeys` | 1.42s | Uses `t.Setenv` + `t.Parallel` (panic) |
-| `TestLayout_F4ActionDialogs_Validity/EditorSettingsDialog` | 0.63s | Dialog setup |
-| `TestTerminalView_ProcessFar2lInteract_ConcurrentRace` | 1.51s | Artificial delays for race detection |
-| `TestIssue117_OSC52_Read_SecurityDenial` | 1.53s | Security timeouts |
+| Test | Time (approx.) | Issue |
+|------|---------------|-------|
+| `TestAllDialogs_LayoutValidation/Settings.Colorer` | ~0.3s (was 2.09s) | **Cached** – now fast |
+| `TestAllDialogs_LayoutValidation/Settings.Editor` | ~1.4s | Editor settings dialog (still slow) |
+| `TestPanelsFrame_DriveMenuBookmarkKeys` | 1.42s | Uses `t.Setenv` + `t.Parallel` (causes panic) |
+| `TestTerminalView_ProcessFar2lInteract_ConcurrentRace` | 1.51s | Artificial delays |
+| `TestIssue117_OSC52_Read_SecurityDenial` | 1.53s | Timeouts |
 | `TestAsyncBuffer_ContextRace` | 1.05s | Race condition test |
 
-**Priorities:**
-1. **Cache Colorer schemas** — reuse generated schemas across dialog tests (biggest win, ~2s).
-2. **Parallelize safe tests** — add `t.Parallel()` only where there is no global state.
-3. **Replace `time.Sleep` with `assert.Eventually`** in async tests.
-4. **Remove `t.Parallel()` from tests that use `t.Setenv` / `t.Chdir`** (or restructure them).
+---
 
-**Current step (patch #3):** Update the plan with the detailed analysis.
+## Progress Status
 
-**Next step (patch #4):** Implement Colorer schema caching in `colorer_plugin_test.go` and `dialog_layouts_test.go`.
+| Step | Description | Status |
+|------|-------------|--------|
+| 1 | **Cache Colorer schemas** | **DONE** for `TestAllDialogs_LayoutValidation` (added `_ = ListColorerSchemes()` at the start). This reduced `Settings.Colorer` from ~2s to ~0.3s. Still needs to be applied to other tests that use Colorer (e.g., `colorer_plugin_test.go`). |
+| 2 | **Parallelize safe tests** | **ATTEMPTED & REVERTED** for `TestAllDialogs_LayoutValidation`. Parallelization caused panics due to global `vtui.FrameManager` state and required complex isolation; after fixing panics, the overall time increased to ~25s (overhead outweighed benefits). The attempt taught us that this test is not a good candidate. Other tests that do not share global state can still be parallelized. |
+| 3 | **Replace `time.Sleep` with `assert.Eventually`** | **NOT YET DONE** – planned for the next iteration. Expected savings: ~1–2s. |
+| 4 | **Remove `t.Parallel()` from tests using `t.Setenv` / `t.Chdir`** | **NOT YET DONE** – will be addressed when profiling those tests. |
+| 5 | **Add `-short` flag** | **NOT YET DONE** – will skip integration tests (Lua, 7z, external processes) in normal runs. |
 
-**Criteria for adding `t.Parallel()`:**
-- The test does not modify global variables without restoring them.
-- The test uses `t.TempDir()` or isolated temporary resources.
-- The test creates its own `vtui.FrameManager` and closes it.
-- The test does **not** use `t.Setenv` or `t.Chdir`.
-- The test does not rely on global clipboard or PTY state.
+---
 
-**Exclusions (not parallelized yet):**
-- Tests that modify `AppConfig` without full restore.
-- Tests using global managers (`GlobalHotkeysMgr`, `MacroMgr`) without save/restore.
-- `dialog_layouts_test.go` (complex multilingual loop).
-- Any test that uses `t.Setenv` or `t.Chdir`.
+## Lessons Learned from the Parallelization Attempt
 
-**Expected effect:** 40-50% reduction in `main` package test time, once parallelization is fully applied.
+- **Global singletons are the enemy of parallelism.** `vtui.FrameManager`, `AppConfig`, `GlobalHotkeysMgr`, etc., are all shared across tests. Isolating them per subtest required copying and overriding, which introduced overhead and race conditions.
+- **Creating a fresh `FrameManager` for each subtest is expensive** – it reinitialises screens, panels, and VFS, which adds significant CPU time.
+- **`t.Parallel()` does not guarantee speed-up** if the parent test is not parallel and the subtests are not truly independent. In our case, the parent test was sequential, so subtests ran sequentially anyway, but with extra setup cost.
+- **Conclusion:** For `TestAllDialogs_LayoutValidation`, the sequential version with Colorer caching is optimal. Parallelization should be reserved for tests that are already fast and do not share heavy resources.
 
-**Next steps (detailed):**
-- Add `-short` flag to skip integration tests (Lua, 7z, external processes).
-- Refactor global singletons in tests (use `TestMain` or per‑test init with restore).
-- Profile to identify the slowest tests.
-- Add `t.Parallel()` to individual tests incrementally, verifying each one.
+---
+
+## Revised Priorities
+
+1. **Cache Colorer schemas in other tests** – extend the warm-up to `colorer_plugin_test.go` and any other test that loads schemas repeatedly.
+2. **Eliminate `time.Sleep`** – replace with `assert.Eventually` in the three async tests listed above.
+3. **Add `-short` flag** – skip long integration tests during local development.
+4. **Parallelize only isolated tests** – those that do not touch global managers or filesystem outside `t.TempDir()`. This includes many unit tests in sub‑packages (`piecetable`, `textlayout`, `vfs`, etc.).
+5. **Refactor global state** (long‑term) – consider using dependency injection or a test‑specific context to make tests more independent.
+
+---
+
+## Next Steps (Detailed)
+
+- **Immediate:** Apply patch to replace `time.Sleep` with `assert.Eventually` in `terminal_view_test.go`, `ansi_parser_test.go`, and `async_buffer_test.go`.
+- **Short‑term:** Add `-short` flag to `run_all_tests.sh` and skip integration tests.
+- **Medium‑term:** Audit all tests for `t.Setenv` / `t.Chdir` usage and either remove `t.Parallel()` or restructure them to use `t.TempDir()`.
+- **Long‑term:** Refactor global singletons to support per‑test instances (e.g., using `sync.Once` with reset functions).
+
+---
+
+## Expected Outcome
+
+After implementing steps 2 and 3, we aim to reduce the total time from ~23s to ~18–20s. Further gains will come from parallelizing independent tests and skipping integration tests, potentially reaching the ~10s goal.
+
