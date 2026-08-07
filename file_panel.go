@@ -1892,7 +1892,10 @@ func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
 	if fp.Y2-fp.Y1+1 > 6 {
 		p := vtui.NewPainter(scr)
 		attrBox := vtui.Palette[ColPanelBox]
-		attrInfo := vtui.Palette[ColPanelInfoText]
+		// far2l paints the per-file status line with COL_PANELTEXT;
+		// COL_PANELINFOTEXT (Panel.Text.Info) belongs to the info panel and
+		// quick view, which use it in info_panel.go and quick_view_panel.go.
+		attrInfo := vtui.Palette[ColPanelText]
 
 		p.DrawLine(fp.X1+1, fp.Y2-2, fp.X2-1, fp.Y2-2, '─', attrBox, false, false)
 		scr.Write(fp.X1, fp.Y2-2, vtui.StringToCharInfo("├", attrBox))

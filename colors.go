@@ -186,6 +186,13 @@ var ColorSlots = []ColorSlot{
 	{Canonical: "Dialog.Button.Highlight.Selected", Index: vtui.ColDialogHighlightSelectedButton, Group: "Dialog", ConstantName: "ColDialogHighlightSelectedButton"},
 	{Canonical: "Dialog.Edit.Unchanged", Index: vtui.ColDialogEditUnchanged, Group: "Dialog", ConstantName: "ColDialogEditUnchanged"},
 	{Canonical: "Dialog.Edit.Selected", Index: vtui.ColDialogEditSelected, Group: "Dialog", ConstantName: "ColDialogEditSelected"},
+	{Canonical: "Dialog.Combo.Text", Index: vtui.ColDialogComboText, Group: "Dialog", ConstantName: "ColDialogComboText"},
+	{Canonical: "Dialog.Combo.Text.Selected", Index: vtui.ColDialogComboSelectedText, Group: "Dialog", ConstantName: "ColDialogComboSelectedText"},
+	{Canonical: "Dialog.Combo.Highlight", Index: vtui.ColDialogComboHighlight, Group: "Dialog", ConstantName: "ColDialogComboHighlight"},
+	{Canonical: "Dialog.Combo.Highlight.Selected", Index: vtui.ColDialogComboSelectedHighlight, Group: "Dialog", ConstantName: "ColDialogComboSelectedHighlight"},
+	{Canonical: "Dialog.Combo.Box", Index: vtui.ColDialogComboBox, Group: "Dialog", ConstantName: "ColDialogComboBox"},
+	{Canonical: "Dialog.Combo.Title", Index: vtui.ColDialogComboTitle, Group: "Dialog", ConstantName: "ColDialogComboTitle"},
+	{Canonical: "Dialog.Combo.Scrollbar", Index: vtui.ColDialogComboScrollbar, Group: "Dialog", ConstantName: "ColDialogComboScrollbar"},
 
 	// Warning message Group
 	{Canonical: "WarnDialog.Text", Index: vtui.ColWarnText, Group: "Warning message", ConstantName: "ColWarnText"},
@@ -244,8 +251,18 @@ func init() {
 	}
 }
 
-// InitColors parses the farcolors section and applies it to the vtui.Palette
+// InitColors parses the farcolors section and applies it to the vtui.Palette.
+// It is the whole chain in one call: use it when a single ini is the only
+// source. Layering several inis goes through ApplyColorIni + FinishColors, so
+// that the contrast pass runs once at the end rather than after every layer.
 func InitColors(ini *IniFile) {
+	ApplyColorIni(ini)
+	FinishColors()
+}
+
+// ApplyColorIni overlays one farcolors section onto the current palette.
+// Aliases are applied first so that a canonical key in the same file wins.
+func ApplyColorIni(ini *IniFile) {
 	for _, slot := range ColorSlots {
 		for _, alias := range slot.Aliases {
 			expr := ini.GetString("farcolors", alias, "")
@@ -260,7 +277,11 @@ func InitColors(ini *IniFile) {
 			vtui.Palette[slot.Index] = ParseFarColor(expr, vtui.Palette[slot.Index])
 		}
 	}
+}
 
+// FinishColors performs the steps that must happen once, after every layer of
+// the palette is in place.
+func FinishColors() {
 	// Terminal history uses indexed background color 0 for default and blank cells.
 	// Keep it in sync with the configurable user-screen background.
 	vtui.ThemePalette[0] = vtui.GetRGBBack(vtui.Palette[ColCommandLineUserScreen])
@@ -330,14 +351,11 @@ func GetLuminance(rgb uint32) float64 {
 	return relativeLuminance(toRGBF(rgb))
 }
 
-// CorrectContrast returns the foreground far2l would use for this pair. When
-// the pair needs no correction the original value comes back untouched, rather
-// than a colour that survived a round trip through L*a*b*.
+// CorrectContrast returns the foreground far2l would use for this pair.
+// Packing to 8 bits and back is lossless, so a pair the algorithm leaves alone
+// comes back bit-identical and callers can simply compare against the input.
 func CorrectContrast(fg, bg uint32) uint32 {
-	newFg, _, changed := ComputeContrast(toRGBF(fg), toRGBF(bg))
-	if !changed {
-		return fg
-	}
+	newFg, _ := ComputeContrast(toRGBF(fg), toRGBF(bg))
 	return toRGB24(newFg)
 }
 

@@ -234,11 +234,14 @@ func deltaE2000(c1, c2 labF) float64 {
 // --- ComputeContrast -------------------------------------------------------
 
 // ComputeContrast is the Go equivalent of far2l's function of the same name.
-// It returns the (possibly adjusted) foreground, the level it settled on, and
-// whether the foreground was actually moved. The caller uses the last value to
-// leave untouched colours bit-identical instead of round-tripping them through
-// L*a*b* for nothing.
-func ComputeContrast(fg, bg rgbF) (newFg rgbF, level ContrastLevel, changed bool) {
+// It returns the possibly adjusted foreground and the level it settled on.
+//
+// A pass that succeeds can still hand back the colour it was given: the walk
+// stops as soon as the target is reached, which on the very first iteration
+// means nothing moved but the value went through L*a*b* and back. far2l has
+// the same behaviour and simply compares the 8-bit results, so callers should
+// do that rather than treat "a pass ran" as "the colour changed".
+func ComputeContrast(fg, bg rgbF) (newFg rgbF, level ContrastLevel) {
 	labFg := rgbToLAB(fg)
 	labBg := rgbToLAB(bg)
 
@@ -249,23 +252,23 @@ func ComputeContrast(fg, bg rgbF) (newFg rgbF, level ContrastLevel, changed bool
 	goodLab := dL >= 40.0 || dE >= 50.0
 	goodWcag := ratio >= 7.0
 	if goodLab && goodWcag {
-		return fg, ContrastGood, false
+		return fg, ContrastGood
 	}
 
 	// First pass: walk L* away from the background until ΔE2000 reaches 30.
 	// The direction is re-evaluated every step, so a foreground that starts on
 	// the wrong side crosses over rather than saturating.
 	if adjusted, ok := walkLightness(labFg, labBg, 30.0, false); ok {
-		return adjusted, ContrastGood, true
+		return adjusted, ContrastGood
 	}
 
 	// Second pass: settle for ΔE2000 20, this time choosing the direction once
 	// from whether the background is light or dark.
 	if adjusted, ok := walkLightness(rgbToLAB(fg), labBg, 20.0, true); ok {
-		return adjusted, ContrastGood, true
+		return adjusted, ContrastGood
 	}
 
-	return fg, ContrastBad, false
+	return fg, ContrastBad
 }
 
 // walkLightness nudges labFg.L towards the target ΔE2000 in at most 50 steps.

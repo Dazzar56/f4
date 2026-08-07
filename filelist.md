@@ -71,6 +71,8 @@
 ├── colorer_settings_test.go
 ├── colors.go
 ├── COLORS.md
+├── colorspace.go
+├── colorspace_test.go
 ├── colors_test.go
 ├── command_line.go
 ├── command_line_test.go
@@ -452,11 +454,13 @@
 ├── solaris_streams.go
 ├── solaris_streams_mock_test.go
 ├── solaris_streams_test.go
-├── style_far2l_test.go
+├── style_combo_colors_test.go
+├── style_default_dark_test.go
 ├── style.go
+├── style_overrides_test.go
 ├── styles
 │   ├── classic.ini
-│   ├── far2l_dark.ini
+│   ├── default_dark.ini
 │   └── modern.ini
 ├── style_test.go
 ├── terminal_log_vfs.go
@@ -580,5 +584,5 @@
 ├── word_nav.go
 └── word_nav_test.go
 
-38 directories, 540 files
+38 directories, 544 files
 ```

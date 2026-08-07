@@ -8,40 +8,42 @@ import (
 // Values taken from far2l's own algorithm. If the port drifts, these move.
 func TestComputeContrast_MatchesFar2l(t *testing.T) {
 	cases := []struct {
-		name    string
-		fg, bg  uint32
-		want    uint32
-		changed bool
+		name   string
+		fg, bg uint32
+		want   uint32
 	}{
 		// Keybar and horizontal menu in default dark: dark grey on teal. far2l
 		// leaves this alone; the old WCAG-only approximation turned it white.
-		{"keybar label", 0x2E3436, 0x06989A, 0x2E3436, false},
+		{"keybar label", 0x2E3436, 0x06989A, 0x2E3436},
 		// Panel text in far2l's stock palette.
-		{"panel text", 0x34E2E2, 0x3465A4, 0x34E2E2, false},
+		{"panel text", 0x34E2E2, 0x3465A4, 0x34E2E2},
 		// Yellow highlight on a light grey dialog: WCAG says 1.2:1, far2l keeps it.
-		{"dialog highlight", 0xFCE94F, 0xD3D7CF, 0xFBE94F, true},
+		{"dialog highlight", 0xFCE94F, 0xD3D7CF, 0xFBE94F},
 		// Genuinely too close: the inactive prompt gets lifted.
-		{"inactive prompt", 0x555753, 0x2E3436, 0x848682, true},
+		{"inactive prompt", 0x555753, 0x2E3436, 0x848682},
 		// A dim scrollbar over a dark background.
-		{"dim scrollbar", 0x5A5A5A, 0x232323, 0x7A7A7A, true},
+		{"dim scrollbar", 0x5A5A5A, 0x232323, 0x7A7A7A},
 		// Nothing to do at either extreme.
-		{"white on black", 0xFFFFFF, 0x000000, 0xFFFFFF, false},
+		{"white on black", 0xFFFFFF, 0x000000, 0xFFFFFF},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			newFg, _, changed := ComputeContrast(toRGBF(tc.fg), toRGBF(tc.bg))
-			if changed != tc.changed {
-				t.Errorf("changed = %v, want %v", changed, tc.changed)
-			}
-			got := tc.fg
-			if changed {
-				got = toRGB24(newFg)
-			}
-			if got != tc.want {
+			if got := CorrectContrast(tc.fg, tc.bg); got != tc.want {
 				t.Errorf("#%06x on #%06x -> #%06x, want #%06x", tc.fg, tc.bg, got, tc.want)
 			}
 		})
+	}
+}
+
+// Packing a colour to 8 bits and unpacking it must be lossless, otherwise
+// every pair the algorithm leaves alone would drift by a unit on each call.
+func TestRGBRoundTripIsLossless(t *testing.T) {
+	for c := uint32(0); c < 256; c++ {
+		packed := c<<16 | c<<8 | c
+		if got := toRGB24(toRGBF(packed)); got != packed {
+			t.Fatalf("#%06x round-tripped to #%06x", packed, got)
+		}
 	}
 }
 
