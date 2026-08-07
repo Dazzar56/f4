@@ -81,10 +81,23 @@ func (f *fileEntry) displayName(name string) string {
 		return ".."
 	}
 	marker := GlobalFileHighlighter.GetMarker(&f.VFSItem)
+	prefix := ""
+	if f.IsDir {
+		if AppConfig.ShowDirPrefix {
+			if marker == "/" {
+				marker = ""
+			}
+			prefix = "/"
+		} else {
+			if marker == "/" {
+				marker = ""
+			}
+		}
+	}
 	if marker != "" {
 		name = marker + " " + name
 	}
-	return name
+	return prefix + name
 }
 
 func splitFileExtension(name string) (string, string) {

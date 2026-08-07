@@ -99,7 +99,7 @@ type F4Config struct {
 	HelpLanguage             string
 	AlwaysShowMenuBar        bool
 	ShowHiddenFiles          bool
-	HighlightDir             bool
+	ShowDirPrefix            bool
 	SeparateFileExtensions   bool
 	PanelScrollbarMode       PanelScrollbarMode
 	SavePanelPaths           bool
@@ -177,7 +177,7 @@ var AppConfig = F4Config{
 	HelpLanguage:             "en",
 	AlwaysShowMenuBar:        false,
 	ShowHiddenFiles:          true,
-	HighlightDir:             true,
+	ShowDirPrefix:            false,
 	SeparateFileExtensions:   false,
 	PanelScrollbarMode:       PanelScrollbarMinimal,
 	SavePanelPaths:           true,
@@ -286,7 +286,7 @@ func LoadConfig() {
 	if AppConfig.ConsoleTitleTemplate == "f4 - %State" {
 		AppConfig.ConsoleTitleTemplate = "f4 %Ver %Platform %Admin - %State"
 	}
-	AppConfig.HighlightDir = ini.GetString("Panel", "HighlightDir", "1") == "1"
+	AppConfig.ShowDirPrefix = ini.GetString("Panel", "ShowDirPrefix", "0") == "1"
 	AppConfig.SeparateFileExtensions = ini.GetString("Panel", "SeparateFileExtensions", "0") == "1"
 	if mode := ini.GetString("Panel", "PanelScrollbarMode", ""); mode != "" {
 		AppConfig.PanelScrollbarMode = ParsePanelScrollbarMode(mode)
@@ -422,7 +422,7 @@ func SaveConfig() {
 	sb.WriteString(fmt.Sprintf("AlwaysShowMenuBar = %d\n\n", map[bool]int{true: 1, false: 0}[AppConfig.AlwaysShowMenuBar]))
 	sb.WriteString("[Panel]\n")
 	sb.WriteString(fmt.Sprintf("ShowHiddenFiles = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.ShowHiddenFiles]))
-	sb.WriteString(fmt.Sprintf("HighlightDir = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.HighlightDir]))
+	sb.WriteString(fmt.Sprintf("ShowDirPrefix = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.ShowDirPrefix]))
 	sb.WriteString(fmt.Sprintf("SeparateFileExtensions = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.SeparateFileExtensions]))
 	sb.WriteString(fmt.Sprintf("PanelScrollbarMode = %s\n", AppConfig.PanelScrollbarMode.String()))
 	sb.WriteString(fmt.Sprintf("SavePanelPaths = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.SavePanelPaths]))

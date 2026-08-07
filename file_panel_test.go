@@ -79,8 +79,19 @@ NormalColor = foreground:#FFFFFF
 	dir := &fileEntry{VFSItem: vfs.VFSItem{Name: "work", IsDir: true}}
 
 	// Column 0 should have the marker '/' prepended
-	if got, want := dir.GetCellText(0), "/ work"; got != want {
-		t.Errorf("Expected dir name to have marker, got %q, want %q", got, want)
+	oldConfig := AppConfig
+	defer func() { AppConfig = oldConfig }()
+
+	// 1. By default, ShowDirPrefix is false, so no prefix should be shown
+	AppConfig.ShowDirPrefix = false
+	if got, want := dir.GetCellText(0), "work"; got != want {
+		t.Errorf("Expected dir name without prefix, got %q, want %q", got, want)
+	}
+
+	// 2. When ShowDirPrefix is true, the marker '/' should be prepended (no space)
+	AppConfig.ShowDirPrefix = true
+	if got, want := dir.GetCellText(0), "/work"; got != want {
+		t.Errorf("Expected dir name with '/' prefix, got %q, want %q", got, want)
 	}
 
 	// Color should match ColPanelText (since foreground:#FFFFFF resolves to truecolor or index, but we just want a non-zero attribute)
@@ -748,7 +759,7 @@ func TestFormatPanelFileNameSeparateExtension(t *testing.T) {
 	oldConfig := AppConfig
 	defer func() { AppConfig = oldConfig }()
 	AppConfig.SeparateFileExtensions = true
-	AppConfig.HighlightDir = true
+	AppConfig.ShowDirPrefix = false
 
 	entry := &fileEntry{VFSItem: vfs.VFSItem{Name: "report.txt"}}
 	if got, want := formatPanelFileName(entry, 20), "report           txt"; got != want {

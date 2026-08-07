@@ -2059,10 +2059,10 @@ func actionPanelSettings(pf *PanelsFrame) {
 		chkHidden.State = 1
 	}
 
-	chkHighlight := vtui.NewCheckbox(0, 0, Msg("PanelSettings.HighlightDir"), false)
-	chkHighlight.State = 0
-	if AppConfig.HighlightDir {
-		chkHighlight.State = 1
+	chkDirPrefix := vtui.NewCheckbox(0, 0, Msg("PanelSettings.ShowDirPrefix"), false)
+	chkDirPrefix.State = 0
+	if AppConfig.ShowDirPrefix {
+		chkDirPrefix.State = 1
 	}
 
 	chkSeparateExtensions := vtui.NewCheckbox(0, 0, Msg("PanelSettings.SeparateExtensions"), false)
@@ -2164,7 +2164,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
 
 	dlg.AddItem(chkHidden)
-	dlg.AddItem(chkHighlight)
+	dlg.AddItem(chkDirPrefix)
 	dlg.AddItem(chkSeparateExtensions)
 	dlg.AddItem(lblScrollbars)
 	dlg.AddItem(comboScrollbars)
@@ -2188,7 +2188,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 
 	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 54-4, dialogHeight-4)
 	vbox.Add(chkHidden, vtui.Margins{}, vtui.AlignLeft)
-	vbox.Add(chkHighlight, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	vbox.Add(chkDirPrefix, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(chkSeparateExtensions, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	rowScrollbars := vtui.NewHBoxLayout(0, 0, 54-4, 1)
 	rowScrollbars.Add(lblScrollbars, vtui.Margins{Right: 1}, vtui.AlignLeft)
@@ -2231,7 +2231,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 	btnCancel.OnClick = func() { dlg.Close() }
 	btnOk.OnClick = func() {
 		AppConfig.ShowHiddenFiles = chkHidden.State == 1
-		AppConfig.HighlightDir = chkHighlight.State == 1
+		AppConfig.ShowDirPrefix = chkDirPrefix.State == 1
 		AppConfig.SeparateFileExtensions = chkSeparateExtensions.State == 1
 		AppConfig.PanelScrollbarMode = PanelScrollbarMode(comboScrollbars.Menu.SelectPos)
 		AppConfig.SavePanelPaths = chkPaths.State == 1
