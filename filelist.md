@@ -81,8 +81,6 @@
 ├── cpu_info_linux.go
 ├── cpu_info_other.go
 ├── cpu_info_windows.go
-├── debug.1.log
-├── debug.log
 ├── detach_unix.go
 ├── detach_windows.go
 ├── dragdrop.go
@@ -127,6 +125,7 @@
 ├── find_file_test.go
 ├── FISH+.md
 ├── FISH_PLUS_S2S.md
+├── fkeys_hidden_panels_test.go
 ├── folder_history_actions_test.go
 ├── folder_history_navigation_test.go
 ├── fs_info_darwin.go
@@ -579,5 +578,5 @@
 ├── word_nav.go
 └── word_nav_test.go
 
-38 directories, 539 files
+38 directories, 538 files
 ```

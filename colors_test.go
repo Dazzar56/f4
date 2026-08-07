@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/unxed/vtui"
 	"os"
 	"path/filepath"
