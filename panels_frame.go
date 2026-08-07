@@ -2813,6 +2813,14 @@ func (pf *PanelsFrame) toggleAltPanel(kind string, factory func(src *FileSystemP
 				tryClose(pf.altPanels[opp])
 			}
 			pf.altPanels[opp] = factory(fsp)
+			// If the opposite side is currently hidden (Ctrl+F1/F2), un-hide
+			// it — otherwise the alt panel installs into an invisible slot
+			// and Ctrl+L / Ctrl+Q look like a no-op.
+			if opp == 0 {
+				pf.showLeftPanel = true
+			} else {
+				pf.showRightPanel = true
+			}
 		}
 	}
 	pf.ResizeConsole(pf.lastW, pf.lastH)
