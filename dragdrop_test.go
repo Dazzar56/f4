@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	androidfs "github.com/unxed/f4/plugins/android"
+	"github.com/unxed/f4/plugins/netfox"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
@@ -75,11 +77,11 @@ func TestVFSAcceptsDrop(t *testing.T) {
 	if vfsAcceptsDrop(readOnlyTestVFS{local}) {
 		t.Fatal("a read-only file system must refuse before the drop")
 	}
-	androidManager := &ManagerVFS{}
+	androidManager := &androidfs.ManagerVFS{}
 	if vfsAcceptsDrop(androidManager) {
 		t.Fatal("android manager must be read-only")
 	}
-	netfoxVFS := &NetFoxVFS{}
+	netfoxVFS := &netfox.NetFoxVFS{}
 	if vfsAcceptsDrop(netfoxVFS) {
 		t.Fatal("netfox VFS must be read-only")
 	}
@@ -187,16 +189,18 @@ func TestDragOutRefusal(t *testing.T) {
 		t.Fatalf("reason = %q, want the empty selection", got)
 	}
 }
+
 func TestDragOutRemotePanel(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	defer vtui.SetDragBackend(nil)
 	vtui.SetDragBackend(dragBackendStub{})
 
-	pf := NewPanelsFrame()
+	pf := setupMockPanelsFrame()
 	defer pf.Close()
+	pf.ResizeConsole(80, 25)
 
 	remoteVFS := vfs.NewNullVFS(0)
-	fsp := pf.getActivePanel()
+	fsp := pf.panels[pf.activeIdx].(*FileSystemPanel)
 	fsp.vfs = remoteVFS
 	fsp.entries = []*fileEntry{
 		{VFSItem: vfs.VFSItem{Name: ".."}},
