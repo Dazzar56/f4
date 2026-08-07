@@ -194,16 +194,20 @@ func TestColors_GenerateDocumentation(t *testing.T) {
 		return slots[i].Canonical < slots[j].Canonical
 	})
 
-	for _, slot := range slots {
-		aliasesStr := "None"
-		if len(slot.Aliases) > 0 {
-			aliasesStr = "`" + strings.Join(slot.Aliases, "`, `") + "`"
+		for _, slot := range slots {
+			aliasesStr := "None"
+			if len(slot.Aliases) > 0 {
+				aliasesStr = "`" + strings.Join(slot.Aliases, "`, `") + "`"
+			}
+			sb.WriteString(fmt.Sprintf("| `%s` | `%s` | %s |\n", slot.Canonical, slot.ConstantName, aliasesStr))
 		}
-		sb.WriteString(fmt.Sprintf("| `%s` | `%s` | %s |\n", slot.Canonical, slot.ConstantName, aliasesStr))
-	}
 
-	_ = os.WriteFile("COLORS.md", []byte(sb.String()), 0644)
-}
+		targetPath := "COLORS.md"
+		if os.Getenv("F4_GENERATE_DOCS") != "1" {
+			targetPath = filepath.Join(t.TempDir(), "COLORS.md")
+		}
+		_ = os.WriteFile(targetPath, []byte(sb.String()), 0644)
+	}
 func TestColors_ContrastCorrection(t *testing.T) {
 	// Dark grey on black is well below the ΔE2000 floor far2l enforces, so the
 	// foreground has to move. Note the target is ΔE2000, not a WCAG ratio: the
