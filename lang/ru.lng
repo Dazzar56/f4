@@ -526,6 +526,17 @@ AndroidInfo.Storage=Хранилище
 AndroidInfo.StorageTotal=Всего в хранилище
 AndroidInfo.StorageAvailable=Доступно в хранилище
 AndroidInfo.Protocol=Протокол
+IOSInfo.DeviceTitle=Мобильное устройство Apple
+IOSInfo.Name=Имя
+IOSInfo.Model=Модель
+IOSInfo.ProductType=Тип устройства
+IOSInfo.UDID=UDID
+IOSInfo.OSVersion=Версия iOS
+IOSInfo.Build=Сборка
+IOSInfo.Connection=Подключение
+IOSInfo.State=Состояние
+IOSInfo.Paired=Доверенное устройство
+IOSInfo.DeveloperMode=Режим разработчика
 
 QuickView.Title= Быстрый просмотр
 QuickView.NoSelection=<нет выделения>
