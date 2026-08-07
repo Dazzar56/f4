@@ -420,13 +420,6 @@ UPD: This part is already implemented by another model. We are skipping it for n
 
 *   **Step 23 — one command engine for every backend.** SFTP wants `vfs.CommandRunner` too, and SCP will when NetFox grows it; all three sit on an SSH connection that can already run a command. Sharing the contract and the plumbing, and leaving each backend only the starting and the reading, keeps the three from answering the same questions differently. See `IDEAS.md`.
 
-// И если у тебя нет полного кода встроенного терминала far2l, попроси его у пользователя, прежде чем браться за пункт 15.
-// Я обновил номера пунктов в To do в соответствии с собственными пожеланиями по приоритетам. Если технически такой порядок невозможен,
-// скорректируй его с по возможности минимальными изменениями. Держи в голове, что интерактивный терминал сложная задача,
-// поэтому начать стоит с более простых, чтобы как можно раньше дать пользователям новые возможности для тестирования.
-// А вот всякие рефакторинги наоборот должны быть в конце списка - по той же причине.
-// Пункт 16 можно сделать до 15, если это делается сравнительно быстро.
-
 ## Testing
 
     go test ./plugins/netfox/fishplus/ ./plugins/netfox/
