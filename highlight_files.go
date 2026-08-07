@@ -342,6 +342,13 @@ func (fh *FileHighlighter) GetColor(item *vfs.VFSItem, defaultAttr uint64, isSel
 	}
 
 	if matchedAny {
+		if AppConfig.EnforceColorCorrection {
+			fg, bg := GetColorRGBBoth(attr)
+			nfg := CorrectContrast(fg, bg)
+			if nfg != fg {
+				attr = vtui.SetRGBFore(attr, nfg)
+			}
+		}
 		return attr
 	}
 	return defaultAttr

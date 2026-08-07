@@ -452,3 +452,33 @@ func TestHighlightRule_DateTypes(t *testing.T) {
 		t.Error("DateCreated matching failed (should have passed)")
 	}
 }
+
+func TestFileHighlighter_GetColor_ContrastCorrection(t *testing.T) {
+	vtui.SetDefaultPalette()
+	SetDefaultF4Palette()
+
+	oldCfg := AppConfig
+	AppConfig.EnforceColorCorrection = true
+	defer func() { AppConfig = oldCfg }()
+
+	// Low contrast rule: Dark Gray on Black background
+	iniData := `[Highlight_0]
+Name = DarkOnBlack
+Mask = *.txt
+NormalColor = foreground:#111111 | background:#000000
+`
+	ini := ParseIni(strings.NewReader(iniData))
+	highlighter := &FileHighlighter{}
+	highlighter.LoadFromIni(ini)
+
+	item := vfs.VFSItem{Name: "doc.txt"}
+	attr := highlighter.GetColor(&item, 0, false, false)
+
+	fg := vtui.GetRGBFore(attr)
+	bg := vtui.GetRGBBack(attr)
+
+	ratio := GetContrastRatio(GetLuminance(fg), GetLuminance(bg))
+	if ratio < 4.5 {
+		t.Errorf("Highlighter failed to correct low contrast: ratio is %f, want >= 4.5", ratio)
+	}
+}

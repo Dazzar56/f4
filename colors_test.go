@@ -200,3 +200,21 @@ func TestColors_GenerateDocumentation(t *testing.T) {
 
 	_ = os.WriteFile("COLORS.md", []byte(sb.String()), 0644)
 }
+func TestColors_ContrastCorrection(t *testing.T) {
+	// Test that a very low contrast color combination (e.g. Dark Gray text on Black background)
+	// is adjusted to have better contrast.
+	black := uint32(0x000000)
+	darkGray := uint32(0x111111)
+
+	corrected := CorrectContrast(darkGray, black)
+
+	// Since background is pure black, the foreground should be lightened significantly
+	if GetLuminance(corrected) <= GetLuminance(darkGray) {
+		t.Errorf("Contrast correction failed: expected lighter foreground, got luminance %f", GetLuminance(corrected))
+	}
+
+	ratio := GetContrastRatio(GetLuminance(corrected), GetLuminance(black))
+	if ratio < 4.5 {
+		t.Errorf("Expected contrast ratio >= 4.5, got %f", ratio)
+	}
+}

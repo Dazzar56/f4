@@ -149,8 +149,9 @@ type F4Config struct {
 	GuiCols                  int
 	GuiRows                  int
 	ConsoleTitleTemplate     string
-	UpdateChannel            int    // 0 = Stable, 1 = Nightly
-	UpdateInterval           int    // 0 = Never, 1 = Every start, 2 = Daily, 3 = Weekly
+	UpdateChannel            int // 0 = Stable, 1 = Nightly
+	UpdateInterval           int // 0 = Never, 1 = Every start, 2 = Daily, 3 = Weekly
+	EnforceColorCorrection   bool
 	LastUpdateCheck          int64  // Unix timestamp
 	LastUpdateVersion        string // Version string or PublishedAt timestamp
 
@@ -226,6 +227,7 @@ var AppConfig = F4Config{
 	ConsoleTitleTemplate:     "f4 %Ver %Platform %Admin - %State",
 	UpdateChannel:            0,
 	UpdateInterval:           3, // Default to Weekly
+	EnforceColorCorrection:   true,
 	LastUpdateCheck:          0,
 	LastUpdateVersion:        "",
 }
@@ -333,6 +335,7 @@ func LoadConfig() {
 	if AppConfig.GuiRows <= 0 {
 		AppConfig.GuiRows = 30
 	}
+	AppConfig.EnforceColorCorrection = ini.GetString("Dialogs", "EnforceColorCorrection", "1") == "1"
 	fmt.Sscanf(ini.GetString("Update", "Channel", "0"), "%d", &AppConfig.UpdateChannel)
 	fmt.Sscanf(ini.GetString("Update", "Interval", "3"), "%d", &AppConfig.UpdateInterval)
 	fmt.Sscanf(ini.GetString("Update", "LastCheck", "0"), "%d", &AppConfig.LastUpdateCheck)
@@ -439,6 +442,9 @@ func SaveConfig() {
 	sb.WriteString(fmt.Sprintf("DeleteCancelFocused = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.DeleteCancelFocused]))
 	sb.WriteString(fmt.Sprintf("AnnounceKittyTerm = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.AnnounceKittyTerm]))
 	sb.WriteString(fmt.Sprintf("MacroRecordFormat = %d\n", AppConfig.MacroRecordFormat))
+
+	sb.WriteString("\n[Dialogs]\n")
+	sb.WriteString(fmt.Sprintf("EnforceColorCorrection = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.EnforceColorCorrection]))
 
 	sb.WriteString("\n[Appearance]\n")
 	sb.WriteString(fmt.Sprintf("GuiFont = %s\n", AppConfig.GuiFont))
