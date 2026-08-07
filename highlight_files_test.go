@@ -482,3 +482,27 @@ NormalColor = foreground:#111111 | background:#000000
 		t.Errorf("Highlighter failed to correct low contrast: ratio is %f, want >= 4.5", ratio)
 	}
 }
+func TestFileHighlighter_CursorSemantics(t *testing.T) {
+	vtui.SetDefaultPalette()
+	SetDefaultF4Palette()
+
+	iniData := `[Highlight_0]
+Name = Executables
+Mask = *.exe
+NormalColor = foreground:#00FF00
+`
+	ini := ParseIni(strings.NewReader(iniData))
+	highlighter := &FileHighlighter{}
+	highlighter.LoadFromIni(ini)
+
+	// Item under cursor (default cursor attribute is ColPanelCursor)
+	cursorAttr := vtui.Palette[ColPanelCursor]
+	item := vfs.VFSItem{Name: "app.exe"}
+
+	got := highlighter.GetColor(&item, cursorAttr, false, true)
+
+	// Since the rule has no CursorColor defined, it must remain the default cursorAttr!
+	if got != cursorAttr {
+		t.Errorf("Expected cursor color to be untouched, got %X, want %X", got, cursorAttr)
+	}
+}

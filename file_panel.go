@@ -83,13 +83,6 @@ func (f *fileEntry) displayName(name string) string {
 	if marker != "" {
 		name = marker + " " + name
 	}
-
-	if f.IsDir {
-		if AppConfig.HighlightDir {
-			return name
-		}
-		return string(os.PathSeparator) + name
-	}
 	return name
 }
 
@@ -258,10 +251,6 @@ func (m *mediumRow) GetCellAttr(col int, defaultAttr uint64) uint64 {
 
 	attr = GlobalFileHighlighter.GetColor(&e.VFSItem, attr, e.Selected, isCursor)
 
-	if attr == defaultAttr && AppConfig.HighlightDir && e.IsDir && e.Name != ".." {
-		attr = vtui.Palette[ColPanelDir]
-	}
-
 	return attr
 }
 
@@ -325,10 +314,6 @@ func (f *fileEntry) GetCellAttr(col int, defaultAttr uint64) uint64 {
 	isCursor := (defaultAttr == vtui.Palette[ColPanelCursor] || defaultAttr == vtui.Palette[ColPanelSelectedCursor])
 
 	attr = GlobalFileHighlighter.GetColor(&f.VFSItem, attr, f.Selected, isCursor)
-
-	if attr == defaultAttr && AppConfig.HighlightDir && f.IsDir && f.Name != ".." {
-		attr = vtui.Palette[ColPanelDir]
-	}
 
 	return attr
 }

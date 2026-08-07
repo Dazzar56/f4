@@ -20,10 +20,6 @@ import (
 )
 
 func TestFileEntry_GetCellText(t *testing.T) {
-	// Ensure predictable environment for this test
-	orig := AppConfig.HighlightDir
-	AppConfig.HighlightDir = false
-	defer func() { AppConfig.HighlightDir = orig }()
 	// Mock entries
 	file := &fileEntry{VFSItem: vfs.VFSItem{Name: "test.txt", Size: 1024, IsDir: false}}
 	dir := &fileEntry{VFSItem: vfs.VFSItem{Name: "work", IsDir: true}}
@@ -32,7 +28,7 @@ func TestFileEntry_GetCellText(t *testing.T) {
 	if file.GetCellText(0) != "test.txt" {
 		t.Errorf("File name mismatch: %s", file.GetCellText(0))
 	}
-	if dir.GetCellText(0) != string(os.PathSeparator)+"work" {
+	if dir.GetCellText(0) != "work" {
 		t.Errorf("Dir name mismatch: %s", dir.GetCellText(0))
 	}
 
@@ -67,33 +63,27 @@ func TestFileEntry_HighlightDir(t *testing.T) {
 	vtui.SetDefaultPalette()
 	SetDefaultF4Palette()
 
-	// Protect global config
-	oldCfg := AppConfig
-	defer func() { AppConfig = oldCfg }()
+	// Load default rules
+	iniData := `[Highlight_0]
+Name = Directories
+IncludeAttributes = Directory
+Mark = /
+NormalColor = foreground:#FFFFFF
+`
+	ini := ParseIni(strings.NewReader(iniData))
+	GlobalFileHighlighter.LoadFromIni(ini)
 
 	dir := &fileEntry{VFSItem: vfs.VFSItem{Name: "work", IsDir: true}}
 
-	// 1. Without highlighting
-	AppConfig.HighlightDir = false
-
-	if dir.GetCellText(0) != string(os.PathSeparator)+"work" {
-		t.Errorf("Expected separator prefix when HighlightDir is false, got %q", dir.GetCellText(0))
-	}
-	if dir.GetCellAttr(0, 0) != 0 {
-		t.Error("Expected default attribute when HighlightDir is false")
+	// Column 0 should have the marker '/' prepended
+	if got, want := dir.GetCellText(0), "/ work"; got != want {
+		t.Errorf("Expected dir name to have marker, got %q, want %q", got, want)
 	}
 
-	// 2. With highlighting
-	AppConfig.HighlightDir = true
-	if dir.GetCellText(0) != "work" {
-		t.Errorf("Expected raw name when HighlightDir is true, got %q", dir.GetCellText(0))
+	// Color should match ColPanelText (since foreground:#FFFFFF resolves to truecolor or index, but we just want a non-zero attribute)
+	if attr := dir.GetCellAttr(0, 0); attr == 0 {
+		t.Error("Expected highlighted attribute for directory")
 	}
-	if dir.GetCellAttr(0, 0) != vtui.Palette[ColPanelDir] {
-		t.Error("Expected ColPanelDir attribute when HighlightDir is true")
-	}
-
-	// Reset global state
-	AppConfig.HighlightDir = false
 }
 
 func TestFileSystemPanel_FocusLoss_FastFind(t *testing.T) {
