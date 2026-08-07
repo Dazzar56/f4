@@ -397,6 +397,7 @@ AppearanceSettings.Font=Шрифт &GUI (Путь/Имя):
 AppearanceSettings.FontSize=Размер шрифта &GUI:
 AppearanceSettings.TitleTemplate=Шаблон &заголовка окна:
 AppearanceSettings.ExportBtn=&Экспорт цветовой схемы
+AppearanceSettings.ColorCorrection=Корректировать &контрастность цветов
 
 ConfirmationsSettings.Title= Подтверждения
 ConfirmationsSettings.Copy=Подтверждать &копирование

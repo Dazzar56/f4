@@ -2407,7 +2407,7 @@ func actionUpdateSettings(pf *PanelsFrame) {
 }
 
 func actionAppearanceSettings(pf *PanelsFrame) {
-	const width, height = 60, 19
+	const width, height = 60, 21
 	dlg := vtui.NewCenteredDialog(width, height, Msg("AppearanceSettings.Title"))
 	dlg.ShowClose = true
 	// Snapshot the whole palette (not just the style name) so a
@@ -2460,6 +2460,12 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 		chkCursor.State = 1
 	}
 
+	chkContrast := vtui.NewCheckbox(0, 0, Msg("AppearanceSettings.ColorCorrection"), false)
+	chkContrast.State = 0
+	if AppConfig.EnforceColorCorrection {
+		chkContrast.State = 1
+	}
+
 	btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))
 	btnOk.IsDefault = true
 	btnExport := vtui.NewButton(0, 0, Msg("AppearanceSettings.ExportBtn"))
@@ -2474,6 +2480,7 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 	dlg.AddItem(lblTitle)
 	dlg.AddItem(editTitle)
 	dlg.AddItem(chkCursor)
+	dlg.AddItem(chkContrast)
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnExport)
 	dlg.AddItem(btnCancel)
@@ -2500,6 +2507,7 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 	vbox.Add(rowTitle, vtui.Margins{Top: 1}, vtui.AlignFill)
 
 	vbox.Add(chkCursor, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	vbox.Add(chkContrast, vtui.Margins{Top: 1}, vtui.AlignLeft)
 
 	buttons := vtui.NewHBoxLayout(0, 0, width-4, 1)
 	buttons.HorizontalAlign = vtui.AlignCenter
@@ -2536,6 +2544,7 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 		}
 		AppConfig.KeepTerminalCursor = chkCursor.State == 1
 		vtui.ManageCursorStyle = !AppConfig.KeepTerminalCursor
+		AppConfig.EnforceColorCorrection = chkContrast.State == 1
 		SaveConfig()
 
 		dlg.SetExitCode(1)
