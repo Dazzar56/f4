@@ -77,7 +77,11 @@ jobs:
       if: matrix.goos == 'linux' && matrix.goarch == 'amd64' || (matrix.goos == 'windows' && matrix.goarch == 'amd64')
       run: |
         echo "Running f4 core tests..."
-        go test -v ./...
+        go test -v -skip '^TestAllDialogs_LayoutValidation$' ./...
+        # Layout validation mutates shared UI registries from parallel
+        # subtests. Go 1.26 schedules them aggressively enough to expose the
+        # upstream race, so isolate that test in a single-threaded process.
+        GOMAXPROCS=1 go test -v -run '^TestAllDialogs_LayoutValidation$' .
 
     - name: Build binaries
       env:
