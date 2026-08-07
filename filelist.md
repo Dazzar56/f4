@@ -471,6 +471,7 @@
     ├── terminal_view.go
     ├── terminal_view_test.go
     ├── test_main_test.go
+    ├── TEST_OPTIMIZATION_PLAN.md
     ├── test_plugins.sh
     ├── test_resurrect.sh
     ├── textlayout
@@ -585,4 +586,4 @@
     ├── word_nav.go
     └── word_nav_test.go
     
-    38 directories, 546 files
+    38 directories, 547 files
