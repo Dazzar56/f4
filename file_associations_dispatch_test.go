@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -40,6 +41,15 @@ func setupPanelWithFile(t *testing.T, name string) (*PanelsFrame, *mockPty) {
 	pf.ResizeConsole(80, 25)
 
 	tmpDir := t.TempDir()
+	if name != ".." && name != "" {
+		fullPath := filepath.Join(tmpDir, name)
+		if name == "some_subdir" {
+			_ = os.MkdirAll(fullPath, 0755)
+		} else {
+			_ = os.WriteFile(fullPath, []byte("mock"), 0644)
+		}
+	}
+
 	fsp := pf.panels[pf.activeIdx].(*FileSystemPanel)
 	fsp.vfs.SetPath(tmpDir)
 	fsp.entries = []*fileEntry{

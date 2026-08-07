@@ -64,6 +64,8 @@ An automated layout validation suite has been implemented in `f4/dialog_layouts_
 It acts as a single source of truth by iterating over all actions from `action_registry.go` and verifying their layout constraints (overlaps, border collisions, and multi-language overflows) across all available translation packs.
 
 - When creating or modifying dialogs, developers no longer need to write custom test logic; the layout test suite automatically discovers them as long as they are registered as standard actions.
+## File Association Test Race Condition Fixed
+We resolved a test-flake race condition in `TestFileAssociation_PickerRunsChosenCommand` where asynchronous panel refreshes (`f4/file_associations_dispatch_test.go`) would overwrite manually-mocked panel entries with actual repository root files (such as `.git`). This was fixed by physically creating the mock files and directories within the temporary test directory on disk before triggering the refresh.
 
 ## The indexer's batch size is a constant nobody has measured
 
