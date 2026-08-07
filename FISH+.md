@@ -407,8 +407,6 @@ time, which is exactly what makes it useful.
 
 ### To do
 
-The numbering follows the order the steps were planned in, not the order they were done: the plan was arranged so that something usable arrived early, and a browsable, readable panel existed from step 4 onwards.
-
 *   **Step 16 — the rest of the odd hosts.** Whatever the compatibility issue turns up beyond the `ls` backend; `tools/fishplus_probe.sh` collects the raw material. Nothing is outstanding from the reports so far.
 *   **Step 17 — Connection pooling / Keep-alive.** Do not close the SSH/shell connection immediately when a FISH+ panel is closed. Keep the session alive so that opening it again connects instantly. (Requires looking at far2l's NetRocks implementation as a conceptual reference, but must be written from scratch under BSD-3).
 *   **Step 18 — what a reconnect still cannot do.** The keepalive and the reconnect have landed; what is left under this number needs more than a new session. A transfer that resumes where it stopped needs the remote side to say how much of it arrived, which nothing on the wire reports today. A session that outlives the process — a job whose answer nobody looked at before f4 was closed, a panel that reopens where it was — needs state on disk rather than in memory. And the call sites: the viewer, the editor and the file operations all meet `ErrBroken` and none of them asks yet, so a lost session is only a question in the panel and still a plain error everywhere else. Each of the three is separate work and none of them blocks the others.
