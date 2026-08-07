@@ -11,11 +11,11 @@ import (
 	"strings"
 	"sync"
 
-	_ "image/gif"
-	_ "image/jpeg"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 	"github.com/woozymasta/png"
+	_ "image/gif"
+	_ "image/jpeg"
 )
 
 // ImageDecoder describes one way of turning file bytes into pixels. Several
