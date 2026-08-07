@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -1269,6 +1270,11 @@ func (fp *FileSystemPanel) startLoadingAnimation() {
 	fp.updateTitle(nil)
 	vtui.FrameManager.Redraw()
 
+	// In tests, do not run the infinite timer loop to prevent task queue leakage.
+	if flag.Lookup("test.v") != nil {
+		return
+	}
+
 	generation := fp.loadingGeneration
 	var scheduleNext func()
 	scheduleNext = func() {
@@ -1759,10 +1765,17 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 					return
 				}
 				if os.IsNotExist(err) && !loadAtRoot && !keepEntries {
-					// If the directory disappeared (e.g., deleted from other panel),
-					// attempt to go up one level silently.
-					vtui.DebugLog("PANEL[%p]: Directory disappeared, attempting to go up. Error: %v", fp, err)
+					oldPath := fp.vfs.GetPath()
 					_ = fp.setKnownDirectoryPath("..")
+					if fp.vfs.GetPath() == oldPath {
+						// Path did not change, prevent infinite loop!
+						fp.isLoading = false
+						fp.stopLoadingAnimation()
+						fp.updateTitle(err)
+						vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to read directory:\n%v", err), []string{"&Ok"})
+						return
+					}
+					vtui.DebugLog("PANEL[%p]: Directory disappeared, attempting to go up. Error: %v", fp, err)
 					fp.ReadDirectory()
 					return
 				}
