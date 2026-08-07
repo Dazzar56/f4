@@ -61,6 +61,10 @@ func TestFileHighlighter_GetColor(t *testing.T) {
 	vtui.SetDefaultPalette()
 	SetDefaultF4Palette()
 
+	oldCfg := AppConfig
+	AppConfig.EnforceColorCorrection = false
+	defer func() { AppConfig = oldCfg }()
+
 	iniData := `[Highlight_0]
 Name = Executables
 Mask = *.exe, *.sh

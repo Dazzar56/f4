@@ -70,6 +70,7 @@
 ├── colorer_settings.go
 ├── colorer_settings_test.go
 ├── colors.go
+├── COLORS.md
 ├── colors_test.go
 ├── command_line.go
 ├── command_line_test.go
@@ -162,6 +163,7 @@
 ├── highlight_files.go
 ├── highlight_files_test.go
 ├── HIGHLIGHTING.md
+├── highlight.ini
 ├── history_dialog.go
 ├── history_dialog_test.go
 ├── history_hint_test.go
@@ -578,5 +580,5 @@
 ├── word_nav.go
 └── word_nav_test.go
 
-38 directories, 538 files
+38 directories, 540 files
 ```

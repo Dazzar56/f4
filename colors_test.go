@@ -50,6 +50,10 @@ func TestColors_InitColors_FromIni(t *testing.T) {
 	vtui.SetDefaultPalette()
 	SetDefaultF4Palette()
 
+	oldCfg := AppConfig
+	AppConfig.EnforceColorCorrection = false
+	defer func() { AppConfig = oldCfg }()
+
 	tmpDir := t.TempDir()
 	iniPath := filepath.Join(tmpDir, "farcolors.ini")
 
@@ -139,7 +143,7 @@ func TestColors_ExportColors_Grouped(t *testing.T) {
 		"WarnDialog.Box",
 		"WarnDialog.Text",
 		"Help.Text",
-		"Help.Link",
+		"Help.Topic",
 	}
 
 	for _, k := range expectedKeys {

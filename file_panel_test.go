@@ -63,6 +63,9 @@ func TestFileEntry_HighlightDir(t *testing.T) {
 	vtui.SetDefaultPalette()
 	SetDefaultF4Palette()
 
+	oldRules := GlobalFileHighlighter.Rules
+	defer func() { GlobalFileHighlighter.Rules = oldRules }()
+
 	// Load default rules
 	iniData := `[Highlight_0]
 Name = Directories
