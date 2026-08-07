@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
@@ -71,10 +72,18 @@ func TestVFSAcceptsDrop(t *testing.T) {
 	if !vfsAcceptsDrop(local) {
 		t.Fatal("a writable file system accepts a drop")
 	}
-	if vfsAcceptsDrop(readOnlyTestVFS{local}) {
-		t.Fatal("a read-only file system must refuse before the drop")
+		if vfsAcceptsDrop(readOnlyTestVFS{local}) {
+			t.Fatal("a read-only file system must refuse before the drop")
+		}
+		androidManager := &ManagerVFS{}
+		if vfsAcceptsDrop(androidManager) {
+			t.Fatal("android manager must be read-only")
+		}
+		netfoxVFS := &NetFoxVFS{}
+		if vfsAcceptsDrop(netfoxVFS) {
+			t.Fatal("netfox VFS must be read-only")
+		}
 	}
-}
 
 func TestHandleDragWithoutTargetPanel(t *testing.T) {
 	pf := NewPanelsFrame()
@@ -176,5 +185,37 @@ func TestDragOutRefusal(t *testing.T) {
 	defer vtui.SetDragBackend(nil)
 	if got := dragOutRefusal(fsp); got != "nothing is marked" {
 		t.Fatalf("reason = %q, want the empty selection", got)
+	}
+}
+func TestDragOutRemotePanel(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	defer vtui.SetDragBackend(nil)
+	vtui.SetDragBackend(dragBackendStub{})
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+
+	remoteVFS := vfs.NewNullVFS(0)
+	fsp := pf.getActivePanel()
+	fsp.vfs = remoteVFS
+	fsp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: ".."}},
+		{VFSItem: vfs.VFSItem{Name: "1KB.bin"}, Selected: true},
+	}
+	fsp.Refresh()
+
+	if !pf.startDragOut(fsp) {
+		t.Fatal("expected startDragOut to succeed")
+	}
+
+	timeout := time.After(100 * time.Millisecond)
+loop:
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			break loop
+		}
 	}
 }

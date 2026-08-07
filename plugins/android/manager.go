@@ -349,6 +349,7 @@ func (m *ManagerVFS) Close() error {
 	m.replaceDevices(nil)
 	return nil
 }
+func (m *ManagerVFS) IsReadOnly() bool { return true }
 
 var _ vfs.PanelInfoProvider = (*ManagerVFS)(nil)
 var _ vfs.PanelTitleProvider = (*ManagerVFS)(nil)
