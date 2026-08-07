@@ -72,18 +72,18 @@ func TestVFSAcceptsDrop(t *testing.T) {
 	if !vfsAcceptsDrop(local) {
 		t.Fatal("a writable file system accepts a drop")
 	}
-		if vfsAcceptsDrop(readOnlyTestVFS{local}) {
-			t.Fatal("a read-only file system must refuse before the drop")
-		}
-		androidManager := &ManagerVFS{}
-		if vfsAcceptsDrop(androidManager) {
-			t.Fatal("android manager must be read-only")
-		}
-		netfoxVFS := &NetFoxVFS{}
-		if vfsAcceptsDrop(netfoxVFS) {
-			t.Fatal("netfox VFS must be read-only")
-		}
+	if vfsAcceptsDrop(readOnlyTestVFS{local}) {
+		t.Fatal("a read-only file system must refuse before the drop")
 	}
+	androidManager := &ManagerVFS{}
+	if vfsAcceptsDrop(androidManager) {
+		t.Fatal("android manager must be read-only")
+	}
+	netfoxVFS := &NetFoxVFS{}
+	if vfsAcceptsDrop(netfoxVFS) {
+		t.Fatal("netfox VFS must be read-only")
+	}
+}
 
 func TestHandleDragWithoutTargetPanel(t *testing.T) {
 	pf := NewPanelsFrame()
