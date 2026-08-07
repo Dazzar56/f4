@@ -1,17 +1,12 @@
 package main
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 )
 
 func TestEnforceColorCorrection_ConfigRoundtrip(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "f4-config-test-*")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	oldGetConfig := getUserConfigIniPath
 	defer func() { getUserConfigIniPath = oldGetConfig }()

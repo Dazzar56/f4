@@ -15,11 +15,7 @@ func TestAllDialogs_LayoutValidation(t *testing.T) {
 	vtui.SetDefaultPalette()
 
 	// 1. Temporary redirect of the config paths to prevent writing/reading from the user's home directory.
-	tmpDir, err := os.MkdirTemp("", "f4-dialog-test-*")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	oldGetConfig := getUserConfigIniPath
 	oldConfig := AppConfig
