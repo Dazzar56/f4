@@ -25,6 +25,7 @@ require (
 	github.com/unxed/zip v0.1.127
 	github.com/unxed/zipper v0.1.145
 	github.com/vmihailenco/msgpack/v5 v5.4.1
+	github.com/woozymasta/png v1.2.0
 	github.com/yuin/gopher-lua v1.1.1
 	golang.org/x/crypto v0.53.0
 	golang.org/x/image v0.44.0
@@ -62,7 +63,7 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/jezek/xgb v1.3.1 // indirect
-	github.com/klauspost/compress v1.19.1 // indirect
+	github.com/klauspost/compress v1.19.2 // indirect
 	github.com/klauspost/pgzip v1.2.6 // indirect
 	github.com/kr/fs v0.1.0 // indirect
 	github.com/kr/text v0.2.0 // indirect
