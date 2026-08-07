@@ -16,6 +16,7 @@
 ├── ansi_parser_test.go
 ├── api.go
 ├── api_test.go
+├── appearance_settings_test.go
 ├── archive_index_fallback.go
 ├── archive_index.go
 ├── archive_index_test.go
@@ -584,5 +585,5 @@
 ├── word_nav.go
 └── word_nav_test.go
 
-38 directories, 544 files
+38 directories, 545 files
 ```
