@@ -81,6 +81,8 @@
 ├── cpu_info_linux.go
 ├── cpu_info_other.go
 ├── cpu_info_windows.go
+├── debug.1.log
+├── debug.log
 ├── detach_unix.go
 ├── detach_windows.go
 ├── dragdrop.go
@@ -104,6 +106,11 @@
 ├── farmenu_file.go
 ├── farmenu_file_test.go
 ├── FFI.md
+├── file_associations_dispatch_test.go
+├── file_associations_editor.go
+├── file_associations.go
+├── file_associations_test.go
+├── file_associations_ui.go
 ├── filelist_update.sh
 ├── file_op_dialog.go
 ├── file_op_dialog_test.go
@@ -191,6 +198,7 @@
 ├── image_view_test.go
 ├── info_panel.go
 ├── info_panel_test.go
+├── info_usage.go
 ├── ini.go
 ├── ini_test.go
 ├── input_translation.go
@@ -264,6 +272,25 @@
 ├── plugin_permissions_ui_test.go
 ├── PLUGIN_PLAN.md
 ├── plugins
+│   ├── android
+│   │   ├── adb_integration_test.go
+│   │   ├── adb_sync.go
+│   │   ├── adb_sync_test.go
+│   │   ├── adb_transport.go
+│   │   ├── adb_transport_test.go
+│   │   ├── device.go
+│   │   ├── device_test.go
+│   │   ├── fish_pool.go
+│   │   ├── fish_pool_test.go
+│   │   ├── info.go
+│   │   ├── info_test.go
+│   │   ├── manager.go
+│   │   ├── manager_test.go
+│   │   ├── pathutil.go
+│   │   ├── pathutil_test.go
+│   │   ├── README.md
+│   │   ├── sync_vfs.go
+│   │   └── sync_vfs_test.go
 │   ├── archive
 │   │   ├── archive.go
 │   │   ├── archive_test.go
@@ -398,6 +425,8 @@
 ├── rpc_plugin_test.go
 ├── rpc_vfs.go
 ├── rpc_vfs_test.go
+├── rsrc_windows_amd64.syso
+├── rsrc_windows_arm64.syso
 ├── screenshot.png
 ├── sdk
 │   ├── extui
@@ -550,5 +579,5 @@
 ├── word_nav.go
 └── word_nav_test.go
 
-37 directories, 511 files
+38 directories, 539 files
 ```
