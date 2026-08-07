@@ -14,34 +14,43 @@ import (
 func TestAllDialogs_LayoutValidation(t *testing.T) {
 	vtui.SetDefaultPalette()
 
-	// Warm up the Colorer scheme cache so subsequent dialog openings don't pay the
-	// disk scan cost for every test case.
-	_ = ListColorerSchemes()
+	// 1. Temporary redirect of the config paths to prevent writing/reading from the user's home directory.
+	tmpDir := t.TempDir()
+
+	oldGetConfig := getUserConfigIniPath
+	oldConfig := AppConfig
+	defer func() {
+		getUserConfigIniPath = oldGetConfig
+		AppConfig = oldConfig
+	}()
+	getUserConfigIniPath = func() string {
+		return filepath.Join(tmpDir, "settings.ini")
+	}
 
 	// Actions that are destructive, async, or mutate global state without a dialog.
 	skipActions := map[string]bool{
 		"app.quit":                         true,
 		"panel.systemexplorer":             true,
 		"app.togglewindowsize":             true,
-		"panel.rescan":                     true,
-		"panel.swap":                       true,
-		"panel.toggle":                     true,
-		"panel.toggleleftpanel":            true,
-		"panel.togglerightpanel":           true,
-		"panel.togglepassivepanel":         true,
-		"panel.splitleft":                  true,
-		"panel.splitright":                 true,
-		"panel.splitup":                    true,
-		"panel.splitdown":                  true,
-		"panel.splitactiveup":              true,
-		"panel.splitactivedown":            true,
-		"panel.splitreset":                 true,
-		"panel.viewbrief":                  true,
-		"panel.viewmedium":                 true,
-		"panel.viewdetailed":               true,
-		"panel.viewwide":                   true,
-		"panel.sortbyname":                 true,
-		"panel.sortbyext":                  true,
+		"panel.rescan":                     true, // no dialog
+		"panel.swap":                       true, // no dialog
+		"panel.toggle":                     true, // no dialog
+		"panel.toggleleftpanel":            true, // no dialog
+		"panel.togglerightpanel":           true, // no dialog
+		"panel.togglepassivepanel":         true, // no dialog
+		"panel.splitleft":                  true, // no dialog
+		"panel.splitright":                 true, // no dialog
+		"panel.splitup":                    true, // no dialog
+		"panel.splitdown":                  true, // no dialog
+		"panel.splitactiveup":              true, // no dialog
+		"panel.splitactivedown":            true, // no dialog
+		"panel.splitreset":                 true, // no dialog
+		"panel.viewbrief":                  true, // no dialog
+		"panel.viewmedium":                 true, // no dialog
+		"panel.viewdetailed":               true, // no dialog
+		"panel.viewwide":                   true, // no dialog
+		"panel.sortbyname":                 true, // no dialog
+		"panel.sortbyext":                  true, // no dialog
 		"panel.sortbytime":                 true,
 		"panel.sortbysize":                 true,
 		"panel.sortunsorted":               true,
@@ -50,55 +59,69 @@ func TestAllDialogs_LayoutValidation(t *testing.T) {
 		"panel.togglehidden":               true,
 		"panel.historyback":                true,
 		"panel.historyforward":             true,
-		"file.view":                        true,
-		"file.edit":                        true,
-		"file.new":                         true,
-		"file.attributes":                  true,
-		"file.findduplicates":              true,
-		"terminal.viewlog":                 true,
-		"terminal.editlog":                 true,
-		"editor.switchtoviewer":            true,
-		"viewer.switchtoeditor":            true,
-		"editor.codepagenext":              true,
-		"viewer.codepagenext":              true,
-		"editor.save":                      true,
-		"editor.undo":                      true,
-		"editor.redo":                      true,
-		"editor.copy":                      true,
-		"editor.cut":                       true,
-		"editor.paste":                     true,
-		"editor.selectall":                 true,
-		"editor.deleteline":                true,
-		"editor.toggleovertype":            true,
-		"editor.searchnext":                true,
-		"editor.wordwrap":                  true,
-		"editor.showwhitespaces":           true,
-		"editor.insertleftpanelpath":       true,
-		"editor.insertrightpanelpath":      true,
-		"editor.insertactivepanelfilename": true,
-		"editor.deletespacersforward":      true,
-		"viewer.wrapmode":                  true,
-		"viewer.hexmode":                   true,
-		"app.savesettings":                 true,
-		"panel.copypath":                   true,
-		"panel.copyname":                   true,
-		"panel.copyselectednames":          true,
-		"panel.copyselectedpaths":          true,
-		"panel.copyselectedrealpaths":      true,
-		"panel.invertselection":            true,
-		"panel.restoreselection":           true,
-		"app.screengrab":                   true,
-		"app.plugring":                     true,
-		"panel.leftdrivemenu":              true,
-		"panel.rightdrivemenu":             true,
-		"panel.enterdirectory":             true,
-		"panel.insertfilename":             true,
-		"panel.insertleftpath":             true,
-		"panel.insertrightpath":            true,
-		"debug.dummyoperation":             true,
-		"panel.infopanel":                  true,
-		"panel.quickview":                  true,
+		"file.view":                        true, // async launch
+		"file.edit":                        true, // async launch
+		"file.new":                         true, // async launch
+		"file.attributes":                  true, // async launch
+		"file.findduplicates":              true, // async launch
+		"terminal.viewlog":                 true, // async launch
+		"terminal.editlog":                 true, // async launch
+		"editor.switchtoviewer":            true, // async launch
+		"viewer.switchtoeditor":            true, // async launch
+		"editor.codepagenext":              true, // modifies config
+		"viewer.codepagenext":              true, // modifies config
+		"editor.save":                      true, // no dialog
+		"editor.undo":                      true, // no dialog
+		"editor.redo":                      true, // no dialog
+		"editor.copy":                      true, // no dialog
+		"editor.cut":                       true, // no dialog
+		"editor.paste":                     true, // no dialog
+		"editor.selectall":                 true, // no dialog
+		"editor.deleteline":                true, // no dialog
+		"editor.toggleovertype":            true, // no dialog
+		"editor.searchnext":                true, // no dialog
+		"editor.wordwrap":                  true, // no dialog
+		"editor.showwhitespaces":           true, // no dialog
+		"editor.insertleftpanelpath":       true, // no dialog
+		"editor.insertrightpanelpath":      true, // no dialog
+		"editor.insertactivepanelfilename": true, // no dialog
+		"editor.deletespacersforward":      true, // no dialog
+		"viewer.wrapmode":                  true, // no dialog
+		"viewer.hexmode":                   true, // no dialog
+		"app.savesettings":                 true, // no dialog
+		"panel.copypath":                   true, // no dialog
+		"panel.copyname":                   true, // no dialog
+		"panel.copyselectednames":          true, // no dialog
+		"panel.copyselectedpaths":          true, // no dialog
+		"panel.copyselectedrealpaths":      true, // no dialog
+		"panel.invertselection":            true, // no dialog
+		"panel.restoreselection":           true, // no dialog
+		"app.screengrab":                   true, // full screen raw frame
+		"app.plugring":                     true, // async fetch
+		"panel.leftdrivemenu":              true, // relies on active pty/panels
+		"panel.rightdrivemenu":             true, // relies on active pty/panels
+		"panel.enterdirectory":             true, // no dialog
+		"panel.insertfilename":             true, // no dialog
+		"panel.insertleftpath":             true, // no dialog
+		"panel.insertrightpath":            true, // no dialog
+		"debug.dummyoperation":             true, // async queue
+		"panel.infopanel":                  true, // no dialog
+		"panel.quickview":                  true, // no dialog
 	}
+
+	// 3. Create a dummy file in the temp directory so file operations (Copy, Edit, etc.)
+	// have a valid target and will naturally display their progress/confirmation dialogs.
+	srcFile := filepath.Join(tmpDir, "test.txt")
+	os.WriteFile(srcFile, []byte("dummy content"), 0644)
+
+	oldHotkeys := GlobalHotkeysMgr
+	oldMacro := MacroMgr
+	defer func() {
+		GlobalHotkeysMgr = oldHotkeys
+		MacroMgr = oldMacro
+	}()
+	GlobalHotkeysMgr = NewHotkeyManager(filepath.Join(tmpDir, "hotkeys.ini"))
+	MacroMgr = NewMacroManager(filepath.Join(tmpDir, "key_macros.ini"))
 
 	// Load all language packs so the validator can assert layout against all translations dynamically
 	packs := LoadAllLanguagePacks()
@@ -110,51 +133,25 @@ func TestAllDialogs_LayoutValidation(t *testing.T) {
 		}
 
 		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			subTmp := t.TempDir()
-
-			// Override config path for this subtest
-			oldGetConfig := getUserConfigIniPath
-			oldConfig := AppConfig
-			defer func() {
-				getUserConfigIniPath = oldGetConfig
-				AppConfig = oldConfig
-			}()
-			getUserConfigIniPath = func() string {
-				return filepath.Join(subTmp, "settings.ini")
-			}
-
-			// Create a dummy file in the sub-temp directory
-			srcFile := filepath.Join(subTmp, "test.txt")
-			if err := os.WriteFile(srcFile, []byte("dummy content"), 0644); err != nil {
-				t.Fatal(err)
-			}
-
-			oldHotkeys := GlobalHotkeysMgr
-			oldMacro := MacroMgr
-			defer func() {
-				GlobalHotkeysMgr = oldHotkeys
-				MacroMgr = oldMacro
-			}()
-			GlobalHotkeysMgr = NewHotkeyManager(filepath.Join(subTmp, "hotkeys.ini"))
-			MacroMgr = NewMacroManager(filepath.Join(subTmp, "key_macros.ini"))
-
 			rules := vtui.DefaultLayoutRules
-			rules.MaxWidth = 120
+			rules.MaxWidth = 120 // Allow configurator/large dialogs to exceed default 78 columns
 
 			errs := vtui.ValidateLayoutInLanguagesWithRules(packs, rules, func() vtui.Container {
+				// Re-init FrameManager and Screen for each test pass
 				scr := vtui.NewSilentScreenBuf()
 				scr.AllocBuf(120, 60)
 				vtui.FrameManager.Init(scr)
 
-				localVFS := vfs.NewOSVFS(subTmp)
-				_ = localVFS.SetPath(subTmp)
+				// Create and push a dummy PanelsFrame so context-aware actions find it
+				localVFS := vfs.NewOSVFS(tmpDir)
+				_ = localVFS.SetPath(tmpDir)
 				pf := NewPanelsFrame()
 				pf.panels[0] = NewFileSystemPanel(0, 0, 40, 20, localVFS)
 				pf.panels[1] = NewFileSystemPanel(40, 0, 40, 20, localVFS.Clone())
 				pf.ResizeConsole(120, 60)
 				vtui.FrameManager.Push(pf)
 
+				// Setup editor/viewer context if testing editor/viewer actions
 				if strings.HasPrefix(name, "Editor.") {
 					showEditor(pf, localVFS, srcFile, &vfs.MemoryReadAtCloser{Data: []byte("dummy")})
 				} else if strings.HasPrefix(name, "Viewer.") {
@@ -165,11 +162,18 @@ func TestAllDialogs_LayoutValidation(t *testing.T) {
 				}
 
 				initialCount := len(vtui.FrameManager.Screens[vtui.FrameManager.ActiveIdx].Frames)
+
+				// Trigger the action handler!
 				act.Handler()
+
 				frames := vtui.FrameManager.Screens[vtui.FrameManager.ActiveIdx].Frames
 				if len(frames) <= initialCount {
+					// Many actions are silent and do not open a dialog (e.g. Editor.Save).
+					// This is completely expected, so we safely return nil and skip validation.
 					return nil
 				}
+
+				// Check if the top-most frame is a container. If not (e.g. raw drawing view), skip it safely.
 				topFrame := frames[len(frames)-1]
 				container, ok := topFrame.(vtui.Container)
 				if !ok {
@@ -178,7 +182,7 @@ func TestAllDialogs_LayoutValidation(t *testing.T) {
 				return container
 			})
 
-			// Clean up frames
+			// Clean up and close all frames to release file descriptors and prevent resource leaks.
 			for _, s := range vtui.FrameManager.Screens {
 				for _, f := range s.Frames {
 					f.Close()
