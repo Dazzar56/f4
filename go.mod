@@ -117,5 +117,5 @@ require (
 
 replace github.com/ebitengine/purego => github.com/unxed/pureffi v0.1.13
 
-//replace github.com/unxed/vtui => ../../../dev/vtui
 //replace github.com/unxed/colorer4go => ../../../dev/colorer4go
+//replace github.com/unxed/vtui => ../../../dev/vtui
