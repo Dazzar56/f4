@@ -1962,14 +1962,16 @@ func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
 	}
 
 	totalStr := ""
+	var attrTotal uint64
 	if selFiles > 0 || selDirs > 0 {
 		totalStr = fmt.Sprintf(" "+Msg("Panel.SelectedInfo")+" ", formatIntWithSpaces(selSize), selFiles, selDirs)
+		attrTotal = vtui.Palette[ColPanelSelectedInfo]
 	} else if totCount > 0 {
 		totalStr = fmt.Sprintf(" %s (%d) ", formatSize(totSize), totCount)
+		attrTotal = vtui.Palette[ColPanelTotalInfo]
 	}
 
 	if totalStr != "" {
-		attrTotal := vtui.Palette[ColPanelTitle]
 		totalW := runewidth.StringWidth(totalStr)
 		availBottom := fp.X2 - fp.X1 - 1
 		if totalW < availBottom {
@@ -2077,7 +2079,7 @@ func (fp *FileSystemPanel) drawFastFindMatches(scr *vtui.ScreenBuf) {
 		return
 	}
 	columns := fp.gridColumnCount()
-	matchAttr := vtui.Palette[vtui.ColMenuHighlight]
+	matchAttr := vtui.Palette[ColPanelHighlightText]
 
 	for rowOffset := 0; rowOffset < height; rowOffset++ {
 		row := fp.table.TopPos + rowOffset

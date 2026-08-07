@@ -613,6 +613,12 @@ func TestFileSystemPanel_SelectedInfo(t *testing.T) {
 
 	fp.Show(scr)
 
+	// Verify that the color of the bottom bar is ColPanelSelectedInfo when items are selected
+	cell := scr.GetCell(40, 23)
+	if cell.Attributes != vtui.Palette[ColPanelSelectedInfo] {
+		t.Errorf("Expected Selected Info color %X, got %X", vtui.Palette[ColPanelSelectedInfo], cell.Attributes)
+	}
+
 	var sb strings.Builder
 	for x := 0; x < 80; x++ {
 		cell := scr.GetCell(x, 23)
@@ -631,6 +637,19 @@ func TestFileSystemPanel_SelectedInfo(t *testing.T) {
 	}
 	if !strings.Contains(result, "folders:1") {
 		t.Errorf("Expected bottom bar to contain 'folders:1', got: %q", result)
+	}
+
+	// Clear selection to check ColPanelTotalInfo
+	for _, e := range fp.entries {
+		e.Selected = false
+	}
+	fp.selectedItems = make(map[string]bool)
+	fp.Refresh()
+	fp.Show(scr)
+
+	cell = scr.GetCell(40, 23)
+	if cell.Attributes != vtui.Palette[ColPanelTotalInfo] {
+		t.Errorf("Expected Total Info color %X, got %X", vtui.Palette[ColPanelTotalInfo], cell.Attributes)
 	}
 }
 
@@ -1344,7 +1363,7 @@ func TestFileSystemPanel_DrawFastFindMatches(t *testing.T) {
 	beforeNonMatch := scr.GetCell(fp.table.X1, y+1).Attributes
 
 	fp.drawFastFindMatches(scr)
-	matchColor := vtui.GetRGBFore(vtui.Palette[vtui.ColMenuHighlight])
+	matchColor := vtui.GetRGBFore(vtui.Palette[ColPanelHighlightText])
 	for _, row := range []int{0, 2} {
 		for x := 0; x < 3; x++ {
 			cell := scr.GetCell(fp.table.X1+x, y+row)
@@ -1390,7 +1409,7 @@ func TestFileSystemPanel_DrawFastFindMatchesInEveryGridColumn(t *testing.T) {
 		scr.AllocBuf(60, 12)
 		fp.table.Show(scr)
 		fp.drawFastFindMatches(scr)
-		wantForeground := vtui.GetRGBFore(vtui.Palette[vtui.ColMenuHighlight])
+		wantForeground := vtui.GetRGBFore(vtui.Palette[ColPanelHighlightText])
 		x := fp.table.X1
 		y := fp.table.Y1 + fp.table.MarginTop
 		for column, tableColumn := range fp.table.Columns {
