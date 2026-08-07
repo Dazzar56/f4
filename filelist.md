@@ -259,6 +259,7 @@
 │   │   └── f4.desktop
 │   └── macos
 │       └── Info.plist
+├── panel_settings_layout_test.go
 ├── panels_frame.go
 ├── panels_frame_test.go
 ├── piecetable
@@ -585,5 +586,5 @@
 ├── word_nav.go
 └── word_nav_test.go
 
-38 directories, 545 files
+38 directories, 546 files
 ```
