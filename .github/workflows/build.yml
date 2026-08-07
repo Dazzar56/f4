@@ -51,7 +51,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.24'
+        go-version: '1.26.x'
         cache-dependency-path: go.sum
 
     - name: Check formatting
@@ -109,6 +109,7 @@ jobs:
         cp -r lang help build/
         mkdir -p build/licenses
         cp plugins/visren/LICENSE.upstream build/licenses/VisRen-BSD-3-Clause.txt
+        cp plugins/ios/LICENSE.go-ios build/licenses/go-ios-MIT.txt
 
         # Add freedesktop launch metadata and the application icon to Linux archives.
         if [ "$GOOS" = "linux" ]; then

@@ -162,6 +162,63 @@ type queuedNavigationVFS struct {
 	items              map[string][]vfs.VFSItem
 }
 
+// absoluteRecoveryVFS models AFC's path contract: panel navigation may set an
+// absolute path optimistically, but a bare ".." is rejected. SystemData is
+// visible in the container root while iOS denies listing its contents.
+type absoluteRecoveryVFS struct {
+	*vfs.NullVFS
+	pathMu       sync.RWMutex
+	currentPath  string
+	readDirCalls atomic.Int64
+}
+
+func newAbsoluteRecoveryVFS() *absoluteRecoveryVFS {
+	return &absoluteRecoveryVFS{NullVFS: vfs.NewNullVFS(0), currentPath: "/SystemData"}
+}
+
+func (v *absoluteRecoveryVFS) GetPath() string {
+	v.pathMu.RLock()
+	defer v.pathMu.RUnlock()
+	return v.currentPath
+}
+
+func (v *absoluteRecoveryVFS) IsAtRoot() bool { return v.GetPath() == "/" }
+func (*absoluteRecoveryVFS) Dir(p string) string {
+	return path.Dir(p)
+}
+func (*absoluteRecoveryVFS) Base(p string) string {
+	return path.Base(p)
+}
+func (*absoluteRecoveryVFS) Join(elem ...string) string {
+	return path.Join(elem...)
+}
+func (v *absoluteRecoveryVFS) SetPath(p string) error { return v.SetPathOptimistic(p) }
+func (v *absoluteRecoveryVFS) SetPathOptimistic(p string) error {
+	if !path.IsAbs(p) {
+		return fmt.Errorf("absolute path required: %q", p)
+	}
+	v.pathMu.Lock()
+	v.currentPath = path.Clean(p)
+	v.pathMu.Unlock()
+	return nil
+}
+func (*absoluteRecoveryVFS) Stat(context.Context, string) (vfs.VFSItem, error) {
+	return vfs.VFSItem{Name: "/", IsDir: true}, nil
+}
+func (v *absoluteRecoveryVFS) ReadDir(ctx context.Context, p string, onChunk func([]vfs.VFSItem)) error {
+	v.readDirCalls.Add(1)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if path.Clean(p) == "/SystemData" {
+		return fmt.Errorf("read dir /SystemData: AFC status 10: %w", os.ErrPermission)
+	}
+	if onChunk != nil {
+		onChunk([]vfs.VFSItem{{Name: "SystemData", IsDir: true}})
+	}
+	return nil
+}
+
 const providerTestRoot = "provider-test://"
 
 type blockingProviderManagerVFS struct {
@@ -209,7 +266,7 @@ func (m *blockingProviderManagerVFS) ReadDir(ctx context.Context, _ string, onCh
 		}
 	}
 	if onChunk != nil {
-		onChunk([]vfs.VFSItem{{Name: m.rowName}})
+		onChunk([]vfs.VFSItem{{Name: m.rowName, IsDir: true}})
 	}
 	return nil
 }
@@ -229,6 +286,7 @@ func (m *trackedMountedVFS) Close() error {
 type blockingMountProvider struct {
 	source      *blockingProviderManagerVFS
 	result      *trackedMountedVFS
+	virtualDirs bool
 	started     chan struct{}
 	release     chan struct{}
 	startedOnce sync.Once
@@ -237,15 +295,15 @@ type blockingMountProvider struct {
 
 func newBlockingMountProvider(source *blockingProviderManagerVFS) *blockingMountProvider {
 	return &blockingMountProvider{
-		source:  source,
+		source: source, virtualDirs: true,
 		result:  &trackedMountedVFS{NullVFS: vfs.NewNullVFS(0), parent: source},
-		started: make(chan struct{}),
-		release: make(chan struct{}),
+		started: make(chan struct{}), release: make(chan struct{}),
 	}
 }
 
-func (*blockingMountProvider) Name() string  { return "blocking-provider-test" }
-func (*blockingMountProvider) Priority() int { return 10000 }
+func (*blockingMountProvider) Name() string                    { return "blocking-provider-test" }
+func (*blockingMountProvider) Priority() int                   { return 10000 }
+func (p *blockingMountProvider) OpensVirtualDirectories() bool { return p.virtualDirs }
 func (p *blockingMountProvider) CanOpen(_ context.Context, parent vfs.VFS, target string) bool {
 	return parent == p.source && target == providerTestRoot+p.source.rowName
 }
@@ -3077,6 +3135,64 @@ func waitForLoad(t *testing.T, fp *FileSystemPanel) {
 		}
 	}
 }
+
+func TestFileSystemPanel_PermissionFailureRestoresAbsoluteParentWithoutDialogLoop(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	oldConfig := AppConfig
+	AppConfig.SyncPanelLoad = true
+	AppConfig.ShowHiddenFiles = true
+	defer func() { AppConfig = oldConfig }()
+
+	remote := newAbsoluteRecoveryVFS()
+	fp := NewFileSystemPanel(0, 0, 60, 20, remote)
+	t.Cleanup(func() {
+		if fp.cancelLoad != nil {
+			fp.cancelLoad()
+		}
+		if fp.loadingTimer != nil {
+			fp.loadingTimer.Stop()
+		}
+	})
+	waitForLoad(t, fp)
+
+	if got := remote.GetPath(); got != "/" {
+		t.Fatalf("path after denied /SystemData read = %q, want root", got)
+	}
+	if got := remote.readDirCalls.Load(); got != 2 {
+		t.Fatalf("ReadDir calls = %d, want one denied child read and one root recovery read", got)
+	}
+	if got := fp.getRawSelectedName(); got != "SystemData" {
+		t.Fatalf("cursor after recovery = %q, want denied folder", got)
+	}
+
+	countLiveErrors := func() int {
+		count := 0
+		for _, frame := range vtui.FrameManager.GetActiveFrames(vtui.FrameManager.ActiveIdx) {
+			if frame.GetType() == vtui.TypeDialog && !frame.IsDone() && frame.GetTitle() == " Error " {
+				count++
+			}
+		}
+		return count
+	}
+	if got := countLiveErrors(); got != 1 {
+		t.Fatalf("live directory error dialogs = %d, want 1", got)
+	}
+
+	// Even if another completion reports an error before the user presses OK,
+	// the existing modal must remain the only actionable dialog.
+	fp.showDirectoryError(" Error ", "second asynchronous failure")
+	if got := countLiveErrors(); got != 1 {
+		t.Fatalf("live directory error dialogs after duplicate = %d, want 1", got)
+	}
+	if fp.directoryErrorDialog == nil {
+		t.Fatal("directory error dialog was not tracked")
+	}
+	fp.directoryErrorDialog.SetExitCode(0)
+	if fp.directoryErrorDialog != nil {
+		t.Fatal("closing the error dialog did not clear its deduplication slot")
+	}
+}
+
 func TestFileSystemPanel_StructLiteralLazySelection(t *testing.T) {
 	// Create panel as a struct literal (nil selectedItems map)
 	fp := &FileSystemPanel{}
@@ -3448,6 +3564,35 @@ func TestFileSystemPanel_DirectoryLoadQueueKeepsOnlyLatest(t *testing.T) {
 
 	if got := middleRuns.Load(); got != 0 {
 		t.Fatalf("superseded pending load ran %d times", got)
+	}
+}
+
+func TestFileSystemPanel_OrdinaryDirectoryDoesNotUseFileProvider(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	manager := newBlockingProviderManagerVFS("backup.zip")
+	provider := newBlockingMountProvider(manager)
+	provider.virtualDirs = false
+	vfs.RegisterProvider(provider)
+	fp := NewFileSystemPanel(0, 0, 40, 20, manager)
+	t.Cleanup(func() {
+		if fp.cancelLoad != nil {
+			fp.cancelLoad()
+		}
+		if fp.loadingTimer != nil {
+			fp.loadingTimer.Stop()
+		}
+	})
+	waitForLoad(t, fp)
+
+	enter := &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN}
+	if !fp.ProcessKey(enter) {
+		t.Fatal("directory Enter was not handled")
+	}
+	if got := provider.openCalls.Load(); got != 0 {
+		t.Fatalf("ordinary directory started %d provider opens", got)
+	}
+	if got := manager.setPathCalls.Load(); got != 1 {
+		t.Fatalf("ordinary directory made %d SetPath calls, want 1", got)
 	}
 }
 

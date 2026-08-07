@@ -195,6 +195,7 @@ func (m *ManagerVFS) ReadDir(ctx context.Context, _ string, onChunk func([]vfs.V
 		byName[name] = device
 		items = append(items, vfs.VFSItem{
 			Name:         name,
+			IsDir:        true,
 			IsExecutable: device.State == DeviceStateOnline,
 			NoExtension:  true,
 		})
@@ -280,6 +281,7 @@ func (m *ManagerVFS) Stat(_ context.Context, p string) (vfs.VFSItem, error) {
 	}
 	return vfs.VFSItem{
 		Name:         DeviceDisplayName(device),
+		IsDir:        true,
 		IsExecutable: device.State == DeviceStateOnline,
 		NoExtension:  true,
 	}, nil
@@ -356,8 +358,9 @@ var _ vfs.PanelTitleProvider = (*ManagerVFS)(nil)
 
 type deviceProvider struct{}
 
-func (*deviceProvider) Name() string  { return "Android-device" }
-func (*deviceProvider) Priority() int { return 200 }
+func (*deviceProvider) Name() string                  { return "Android-device" }
+func (*deviceProvider) Priority() int                 { return 200 }
+func (*deviceProvider) OpensVirtualDirectories() bool { return true }
 
 func (*deviceProvider) CanOpen(_ context.Context, parent vfs.VFS, p string) bool {
 	manager, ok := parent.(*ManagerVFS)

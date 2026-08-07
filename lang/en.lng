@@ -526,6 +526,17 @@ AndroidInfo.Storage=Storage
 AndroidInfo.StorageTotal=Storage total
 AndroidInfo.StorageAvailable=Storage available
 AndroidInfo.Protocol=Protocol
+IOSInfo.DeviceTitle=Apple mobile device
+IOSInfo.Name=Name
+IOSInfo.Model=Model
+IOSInfo.ProductType=Product type
+IOSInfo.UDID=UDID
+IOSInfo.OSVersion=iOS version
+IOSInfo.Build=Build
+IOSInfo.Connection=Connection
+IOSInfo.State=State
+IOSInfo.Paired=Trusted
+IOSInfo.DeveloperMode=Developer Mode
 
 QuickView.Title= Quick view
 QuickView.NoSelection=<no selection>
