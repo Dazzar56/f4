@@ -17,6 +17,7 @@ require (
 	github.com/unxed/archives v0.0.0-20260728171610-555945c76813
 	github.com/unxed/colorer4go v0.1.5
 	github.com/unxed/ffibridge v0.1.0
+	github.com/unxed/localecp v0.1.5
 	github.com/unxed/sevenzip v0.0.0-20260704211908-25d317f8295f
 	github.com/unxed/tar v0.1.126
 	github.com/unxed/vtinput v0.1.2
@@ -85,7 +86,6 @@ require (
 	github.com/tadglines/go-pkgs v0.0.0-20210623144937-b983b20f54f9 // indirect
 	github.com/ulikunitz/xz v0.5.15 // indirect
 	github.com/unxed/keytrans v0.1.30 // indirect
-	github.com/unxed/localecp v0.1.4 // indirect
 	github.com/unxed/par2 v0.1.2 // indirect
 	github.com/unxed/winkeys v0.1.1 // indirect
 	github.com/unxed/xkb-go v0.1.8 // indirect
