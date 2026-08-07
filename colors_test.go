@@ -205,20 +205,46 @@ func TestColors_GenerateDocumentation(t *testing.T) {
 	_ = os.WriteFile("COLORS.md", []byte(sb.String()), 0644)
 }
 func TestColors_ContrastCorrection(t *testing.T) {
-	// Test that a very low contrast color combination (e.g. Dark Gray text on Black background)
-	// is adjusted to have better contrast.
+	// Dark grey on black is well below the ΔE2000 floor far2l enforces, so the
+	// foreground has to move. Note the target is ΔE2000, not a WCAG ratio: the
+	// corrected pair here still sits around 3.6:1 and far2l considers it done.
 	black := uint32(0x000000)
 	darkGray := uint32(0x111111)
 
 	corrected := CorrectContrast(darkGray, black)
 
-	// Since background is pure black, the foreground should be lightened significantly
 	if GetLuminance(corrected) <= GetLuminance(darkGray) {
-		t.Errorf("Contrast correction failed: expected lighter foreground, got luminance %f", GetLuminance(corrected))
+		t.Errorf("expected a lighter foreground on black, got #%06x", corrected)
 	}
 
-	ratio := GetContrastRatio(GetLuminance(corrected), GetLuminance(black))
-	if ratio < 4.5 {
-		t.Errorf("Expected contrast ratio >= 4.5, got %f", ratio)
+	dE := deltaE2000(rgbToLAB(toRGBF(corrected)), rgbToLAB(toRGBF(black)))
+	if dE < 29.0 {
+		t.Errorf("corrected pair has deltaE2000 %.2f, want the ~30 far2l aims for", dE)
+	}
+}
+
+// A pair far2l leaves alone must come back bit-identical rather than shifted by
+// a unit through the L*a*b* round trip.
+func TestColors_ContrastCorrectionLeavesGoodPairsAlone(t *testing.T) {
+	white, black := uint32(0xFFFFFF), uint32(0x000000)
+	if got := CorrectContrast(white, black); got != white {
+		t.Errorf("white on black was rewritten to #%06x", got)
+	}
+}
+
+// far2l keeps yellow on light grey despite a WCAG ratio near 1.2, because the
+// perceptual distance is already large enough. This is the case that told us
+// the previous WCAG-only approximation was wrong.
+func TestColors_ContrastCorrectionKeepsLowWcagPair(t *testing.T) {
+	yellow, lightGray := uint32(0xFCE94F), uint32(0xD3D7CF)
+
+	corrected := CorrectContrast(yellow, lightGray)
+
+	for shift := 0; shift < 24; shift += 8 {
+		got := int((corrected >> shift) & 0xFF)
+		want := int((yellow >> shift) & 0xFF)
+		if diff := got - want; diff > 1 || diff < -1 {
+			t.Fatalf("yellow on light grey drifted to #%06x, want it left near #%06x", corrected, yellow)
+		}
 	}
 }

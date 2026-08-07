@@ -481,9 +481,9 @@ NormalColor = foreground:#111111 | background:#000000
 	fg := vtui.GetRGBFore(attr)
 	bg := vtui.GetRGBBack(attr)
 
-	ratio := GetContrastRatio(GetLuminance(fg), GetLuminance(bg))
-	if ratio < 4.5 {
-		t.Errorf("Highlighter failed to correct low contrast: ratio is %f, want >= 4.5", ratio)
+	dE := deltaE2000(rgbToLAB(toRGBF(fg)), rgbToLAB(toRGBF(bg)))
+	if dE < 29.0 {
+		t.Errorf("highlighter left deltaE2000 at %.2f, want the ~30 far2l aims for", dE)
 	}
 }
 func TestFileHighlighter_CursorSemantics(t *testing.T) {

@@ -274,6 +274,11 @@ func LoadConfig() {
 
 	AppConfig.ShowHiddenFiles = ini.GetString("Panel", "ShowHiddenFiles", "1") == "1"
 	AppConfig.ColorStyle = ini.GetString("Interface", "ColorStyle", "Modern")
+	// "Far2l Dark" was an approximate port of the far2l theme "default dark".
+	// It has been replaced by an exact one; carry existing configs over.
+	if strings.EqualFold(AppConfig.ColorStyle, "Far2l Dark") {
+		AppConfig.ColorStyle = "Default Dark"
+	}
 	AppConfig.Language = ini.GetString("Interface", "Language", "en")
 	AppConfig.HelpLanguage = ini.GetString("Interface", "HelpLanguage", "en")
 	AppConfig.ConsoleTitleTemplate = ini.GetString("Interface", "ConsoleTitleTemplate", "f4 %Ver %Platform %Admin - %State")

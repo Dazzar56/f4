@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"math"
 	"os"
 	"sort"
 	"strings"
@@ -326,67 +325,20 @@ func GetColorRGBBoth(attr uint64) (fg uint32, bg uint32) {
 	return fg, bg
 }
 
-func sRGBToLuminance(c uint32) float64 {
-	val := float64(c) / 255.0
-	if val <= 0.03928 {
-		return val / 12.92
-	}
-	return math.Pow((val+0.055)/1.055, 2.4)
-}
-
+// GetLuminance returns the WCAG relative luminance of a packed 0xRRGGBB value.
 func GetLuminance(rgb uint32) float64 {
-	r := (rgb >> 16) & 0xFF
-	g := (rgb >> 8) & 0xFF
-	b := rgb & 0xFF
-	return 0.2126*sRGBToLuminance(r) + 0.7152*sRGBToLuminance(g) + 0.0722*sRGBToLuminance(b)
+	return relativeLuminance(toRGBF(rgb))
 }
 
-func GetContrastRatio(l1, l2 float64) float64 {
-	if l1 > l2 {
-		return (l1 + 0.05) / (l2 + 0.05)
-	}
-	return (l2 + 0.05) / (l1 + 0.05)
-}
-
+// CorrectContrast returns the foreground far2l would use for this pair. When
+// the pair needs no correction the original value comes back untouched, rather
+// than a colour that survived a round trip through L*a*b*.
 func CorrectContrast(fg, bg uint32) uint32 {
-	lBg := GetLuminance(bg)
-	lFg := GetLuminance(fg)
-	ratio := GetContrastRatio(lFg, lBg)
-	if ratio >= 4.5 {
+	newFg, _, changed := ComputeContrast(toRGBF(fg), toRGBF(bg))
+	if !changed {
 		return fg
 	}
-
-	r := float64((fg >> 16) & 0xFF)
-	g := float64((fg >> 8) & 0xFF)
-	b := float64(fg & 0xFF)
-
-	if lBg < 0.5 {
-		// Lighten towards 255
-		for step := 0; step < 10; step++ {
-			factor := float64(step+1) / 10.0
-			nr := r + (255.0-r)*factor
-			ng := g + (255.0-g)*factor
-			nb := b + (255.0-b)*factor
-			nfg := (uint32(nr) << 16) | (uint32(ng) << 8) | uint32(nb)
-			if GetContrastRatio(GetLuminance(nfg), lBg) >= 4.5 {
-				return nfg
-			}
-		}
-		return 0xFFFFFF
-	} else {
-		// Darken towards 0
-		for step := 0; step < 10; step++ {
-			factor := float64(step+1) / 10.0
-			nr := r * (1.0 - factor)
-			ng := g * (1.0 - factor)
-			nb := b * (1.0 - factor)
-			nfg := (uint32(nr) << 16) | (uint32(ng) << 8) | uint32(nb)
-			if GetContrastRatio(GetLuminance(nfg), lBg) >= 4.5 {
-				return nfg
-			}
-		}
-		return 0x000000
-	}
+	return toRGB24(newFg)
 }
 
 func AdjustContrastLevels() {
@@ -394,10 +346,14 @@ func AdjustContrastLevels() {
 		return
 	}
 	vtui.DebugLog("COLORS: Adjusting contrast levels for palette")
+	// Several canonical names map onto one palette slot, so correct each slot
+	// once: a second pass would feed an already-corrected foreground back in.
+	done := make(map[int]bool, len(ColorSlots))
 	for _, slot := range ColorSlots {
-		if strings.HasSuffix(slot.Canonical, ".Box") {
+		if strings.HasSuffix(slot.Canonical, ".Box") || done[slot.Index] {
 			continue
 		}
+		done[slot.Index] = true
 		attr := vtui.Palette[slot.Index]
 		fg, bg := GetColorRGBBoth(attr)
 		nfg := CorrectContrast(fg, bg)
