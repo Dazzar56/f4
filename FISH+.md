@@ -428,7 +428,6 @@ UPD: This part is already implemented by another model. We are skipping it for n
 // Пункт 16 можно сделать до 15, если это делается сравнительно быстро.
 
 ## Testing
-## Testing
 
     go test ./plugins/netfox/fishplus/ ./plugins/netfox/
 
