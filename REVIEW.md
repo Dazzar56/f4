@@ -62,4 +62,11 @@ for nothing.
 
 500 line offsets per batch, 64 KB per read. Both were picked to keep the UI
 thread from being flooded by a local file, and neither has been measured
-against a link where a read is a round trip.
+against a link where a read is a round trip.### Postponed far2l Color Porting (Roadmap / Future Tasks)
+
+The following color entities and features from `far2l` have been explicitly postponed during the initial alignment phase and remain on our future roadmap:
+- **Explicit Disabled Colors:** Transition to dedicated disabled color slots from themes/palette instead of using the dynamically computed `DimColor` fallback.
+- **Granular Lists & Comboboxes:** Support custom coloring for `Dialog.List.*` and `Dialog.Combo.*` sub-elements.
+- **Default Buttons:** Map and apply styling for `Dialog.DefaultButton.*` elements.
+- **Editor & Viewer Selection:** Map and support dedicated selection slots `Editor.Text.Selected` / `Viewer.Text.Selected` (currently falls back to standard text selection).
+- **Secondary Widgets:** Support `Clock`, `Panel.ScreensNumber`, and `Panel.DragText` slots.
