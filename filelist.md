@@ -186,6 +186,8 @@
     ├── image_formats_test.go
     ├── image_gallery.go
     ├── image_gallery_test.go
+    ├── image_native_darwin.go
+    ├── image_native_darwin_test.go
     ├── image_pipeline.go
     ├── image_pipeline_test.go
     ├── image_preview.go
@@ -316,6 +318,43 @@
     │   │   └── README.md
     │   ├── dummy_rpc
     │   │   └── main.go
+    │   ├── ios
+    │   │   ├── afc_vfs.go
+    │   │   ├── afc_vfs_test.go
+    │   │   ├── apps.go
+    │   │   ├── core_access.go
+    │   │   ├── core_access_stub.go
+    │   │   ├── core_access_supported.go
+    │   │   ├── core_access_supported_test.go
+    │   │   ├── core_tunnel_supported.go
+    │   │   ├── core_vfs.go
+    │   │   ├── core_vfs_test.go
+    │   │   ├── internal
+    │   │   │   ├── afcproto
+    │   │   │   │   ├── client.go
+    │   │   │   │   ├── client_test.go
+    │   │   │   │   ├── doc.go
+    │   │   │   │   ├── errors.go
+    │   │   │   │   ├── file.go
+    │   │   │   │   ├── path.go
+    │   │   │   │   ├── protocol.go
+    │   │   │   │   ├── protocol_test.go
+    │   │   │   │   └── types.go
+    │   │   │   └── corefileservice
+    │   │   │       ├── doc.go
+    │   │   │       ├── fileservice.go
+    │   │   │       └── fileservice_test.go
+    │   │   ├── ios_integration_test.go
+    │   │   ├── LICENSE.go-ios
+    │   │   ├── manager.go
+    │   │   ├── manager_test.go
+    │   │   ├── native_source.go
+    │   │   ├── plugin.go
+    │   │   ├── plugin_test.go
+    │   │   ├── README.md
+    │   │   ├── selectors.go
+    │   │   ├── selectors_test.go
+    │   │   └── services.go
     │   ├── netfox
     │   │   ├── crypto.go
     │   │   ├── crypto_test.go
@@ -529,6 +568,7 @@
     │   ├── codepages.go
     │   ├── codepages_test.go
     │   ├── codepages_unix.go
+    │   ├── codepages_unix_test.go
     │   ├── codepages_windows.go
     │   ├── hidden_unix.go
     │   ├── hidden_windows.go
@@ -586,4 +626,4 @@
     ├── word_nav.go
     └── word_nav_test.go
     
-    38 directories, 547 files
+    42 directories, 583 files
