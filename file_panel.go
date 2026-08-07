@@ -402,6 +402,8 @@ type FileSystemPanel struct {
 	shiftSessionMode   bool // true = select, false = deselect
 }
 
+var DisableLoadingAnimationInTests = true
+
 func NewFileSystemPanel(x, y, w, h int, vfs vfs.VFS) *FileSystemPanel {
 	path := vfs.GetPath()
 
@@ -1271,7 +1273,7 @@ func (fp *FileSystemPanel) startLoadingAnimation() {
 	vtui.FrameManager.Redraw()
 
 	// In tests, do not run the infinite timer loop to prevent task queue leakage.
-	if flag.Lookup("test.v") != nil {
+	if DisableLoadingAnimationInTests && flag.Lookup("test.v") != nil {
 		return
 	}
 

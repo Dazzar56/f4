@@ -3737,6 +3737,10 @@ func TestFileSystemPanel_CachedEnterStaysResponsiveAndCoalescesRefresh(t *testin
 	AppConfig.ShowHiddenFiles = true
 	defer func() { AppConfig = oldConfig }()
 
+	oldDisable := DisableLoadingAnimationInTests
+	DisableLoadingAnimationInTests = false
+	defer func() { DisableLoadingAnimationInTests = oldDisable }()
+
 	fp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(t.TempDir()))
 	waitForLoad(t, fp)
 	remote := newQueuedNavigationVFS()

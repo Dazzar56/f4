@@ -47,6 +47,10 @@ func TestApplyColorStyleModernAndClassic(t *testing.T) {
 	getUserStylesDir = func() string { return userDir }
 	defer func() { getUserStylesDir = oldDir }()
 
+	oldCfg := AppConfig
+	AppConfig.EnforceColorCorrection = false
+	defer func() { AppConfig = oldCfg }()
+
 	if err := ApplyColorStyle("Modern"); err != nil {
 		t.Fatal(err)
 	}
