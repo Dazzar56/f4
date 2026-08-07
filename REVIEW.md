@@ -58,6 +58,13 @@ the cursor, so that is defensible, but it is not the same test the keyboard now
 applies, and a click that lands on the cursor's own position cancels the jump
 for nothing.
 
+## Automated Layout Verification
+
+An automated layout validation suite has been implemented in `f4/dialog_layouts_test.go`.
+It acts as a single source of truth by iterating over all actions from `action_registry.go` and verifying their layout constraints (overlaps, border collisions, and multi-language overflows) across all available translation packs.
+
+- When creating or modifying dialogs, developers no longer need to write custom test logic; the layout test suite automatically discovers them as long as they are registered as standard actions.
+
 ## The indexer's batch size is a constant nobody has measured
 
 500 line offsets per batch, 64 KB per read. Both were picked to keep the UI
