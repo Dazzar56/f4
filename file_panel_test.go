@@ -3174,20 +3174,24 @@ func TestFileSystemPanel_PermissionFailureRestoresAbsoluteParentWithoutDialogLoo
 		}
 		return count
 	}
-	if got := countLiveErrors(); got != 1 {
-		t.Fatalf("live directory error dialogs = %d, want 1", got)
+	trackedDialog := fp.directoryErrorDialog
+	if trackedDialog == nil || trackedDialog.IsDone() {
+		t.Fatal("directory error dialog was not tracked as a live dialog")
 	}
+	liveBeforeDuplicate := countLiveErrors()
 
 	// Even if another completion reports an error before the user presses OK,
-	// the existing modal must remain the only actionable dialog.
+	// this panel must keep its existing modal. Other tests may have left their
+	// own dialogs in the process-wide FrameManager, so compare against the
+	// baseline instead of assuming this is the only dialog globally.
 	fp.showDirectoryError(" Error ", "second asynchronous failure")
-	if got := countLiveErrors(); got != 1 {
-		t.Fatalf("live directory error dialogs after duplicate = %d, want 1", got)
+	if fp.directoryErrorDialog != trackedDialog {
+		t.Fatal("duplicate failure replaced the tracked directory error dialog")
 	}
-	if fp.directoryErrorDialog == nil {
-		t.Fatal("directory error dialog was not tracked")
+	if got := countLiveErrors(); got != liveBeforeDuplicate {
+		t.Fatalf("live directory error dialogs after duplicate = %d, want unchanged %d", got, liveBeforeDuplicate)
 	}
-	fp.directoryErrorDialog.SetExitCode(0)
+	trackedDialog.SetExitCode(0)
 	if fp.directoryErrorDialog != nil {
 		t.Fatal("closing the error dialog did not clear its deduplication slot")
 	}
