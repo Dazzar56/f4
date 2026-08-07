@@ -444,6 +444,9 @@ func SetupUI() {
 		if previousEventFilter != nil && previousEventFilter(e) {
 			return true
 		}
+		if handlePanelPathEditHotkey(e) {
+			return true
+		}
 		return handleHelpSearchHotkey(e)
 	}
 

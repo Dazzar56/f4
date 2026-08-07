@@ -71,8 +71,13 @@ func TestFolderHistoryNavigationAndMenuDoNotReorderHistory(t *testing.T) {
 	vtui.GlobalHistoryProvider = provider
 	defer func() { vtui.GlobalHistoryProvider = oldProvider }()
 
+	panel.fastFindMode = true
+	panel.fastFindStr = "new"
 	if !pf.moveFolderHistory(panel, -1) {
 		t.Fatal("Alt+Left history move was not performed")
+	}
+	if panel.fastFindMode || panel.fastFindStr != "" {
+		t.Fatalf("folder history navigation left fast find open: mode=%v query=%q", panel.fastFindMode, panel.fastFindStr)
 	}
 	waitForLoad(t, panel)
 	if !sameFolderHistoryPath(panel.vfs.GetPath(), middle) {

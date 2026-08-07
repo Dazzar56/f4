@@ -216,7 +216,7 @@ var AppConfig = F4Config{
 	ConfirmMove:              true,
 	ConfirmDelete:            true,
 	ConfirmExit:              true,
-	DeleteCancelFocused:      true,
+	DeleteCancelFocused:      false,
 	DefaultFileOpMode:        0,
 	FileOpPathDisplay:        0,
 	GuiFont:                  "",
@@ -316,7 +316,7 @@ func LoadConfig() {
 	AppConfig.ConfirmMove = ini.GetString("System", "ConfirmMove", "1") == "1"
 	AppConfig.ConfirmDelete = ini.GetString("System", "ConfirmDelete", "1") == "1"
 	AppConfig.ConfirmExit = ini.GetString("System", "ConfirmExit", "1") == "1"
-	AppConfig.DeleteCancelFocused = ini.GetString("System", "DeleteCancelFocused", "1") == "1"
+	AppConfig.DeleteCancelFocused = ini.GetString("System", "DeleteCancelFocused", "0") == "1"
 	AppConfig.AnnounceKittyTerm = ini.GetString("System", "AnnounceKittyTerm", "1") == "1"
 	fmt.Sscanf(ini.GetString("System", "MacroRecordFormat", "0"), "%d", &AppConfig.MacroRecordFormat)
 	fmt.Sscanf(ini.GetString("Panel", "FileOpPathDisplay", "0"), "%d", &AppConfig.FileOpPathDisplay)

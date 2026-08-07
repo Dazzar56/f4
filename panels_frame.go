@@ -94,6 +94,58 @@ func (pf *PanelsFrame) insertPathToCmdLine(path string) {
 	}
 }
 
+// handlePanelPathEditHotkey inserts a panel path into the focused dialog edit.
+// It lives in the frame-level event filter because modal dialogs otherwise
+// consume Ctrl+[ and Ctrl+] before PanelsFrame can see them.
+func handlePanelPathEditHotkey(e *vtinput.InputEvent) bool {
+	if e == nil || e.Type != vtinput.KeyEventType || !e.KeyDown {
+		return false
+	}
+	ctrl := e.ControlKeyState&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed) != 0
+	alt := e.ControlKeyState&(vtinput.LeftAltPressed|vtinput.RightAltPressed) != 0
+	shift := e.ControlKeyState&vtinput.ShiftPressed != 0
+	left := e.VirtualKeyCode == vtinput.VK_OEM_4 || e.Char == '['
+	right := e.VirtualKeyCode == vtinput.VK_OEM_6 || e.Char == ']'
+	if !ctrl || alt || shift || (!left && !right) || vtui.FrameManager == nil {
+		return false
+	}
+
+	top := vtui.FrameManager.GetTopFrame()
+	focusContainer, ok := top.(vtui.FocusContainer)
+	if !ok {
+		return false
+	}
+	edit, ok := focusContainer.GetFocusedItem().(*vtui.Edit)
+	if !ok || edit.IsDisabled() {
+		return false
+	}
+
+	var pf *PanelsFrame
+	frames := vtui.FrameManager.GetActiveFrames(vtui.FrameManager.ActiveIdx)
+	for i := len(frames) - 1; i >= 0; i-- {
+		if candidate, ok := frames[i].(*PanelsFrame); ok {
+			pf = candidate
+			break
+		}
+	}
+	if pf == nil {
+		return false
+	}
+
+	var panel *FileSystemPanel
+	if left {
+		panel = pf.visualLeftFSP()
+	} else {
+		panel = pf.visualRightFSP()
+	}
+	if panel == nil || panel.vfs == nil || panel.vfs.GetPath() == "" {
+		return false
+	}
+	edit.InsertString(panel.vfs.GetPath())
+	vtui.FrameManager.Redraw()
+	return true
+}
+
 type PanelController interface {
 	ProcessPanelKey(app vfs.App, e *vtinput.InputEvent) bool
 }
@@ -1619,6 +1671,16 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		}
 	}
 	// 2. Try global hotkeys handled by PanelsFrame
+	// Ctrl+Shift+Left / Ctrl+Shift+Right open the drive menu for the
+	// corresponding visual panel without changing the active panel.
+	if (e.VirtualKeyCode == vtinput.VK_LEFT || e.VirtualKeyCode == vtinput.VK_RIGHT) && ctrl && !alt && shift && e.KeyDown && pf.showPanels {
+		panelIdx := 0
+		if e.VirtualKeyCode == vtinput.VK_RIGHT {
+			panelIdx = 1
+		}
+		pf.showDriveMenu(panelIdx)
+		return true
+	}
 
 	// Tab switches panels
 	if e.VirtualKeyCode == vtinput.VK_TAB && !ctrl {
@@ -2033,6 +2095,20 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 		x1, y1, x2, y2 := p.GetPosition()
 		if mx >= x1 && mx <= x2 && my >= y1 && my <= y2 {
 			isInitialPress := e.ButtonState != 0 && e.KeyDown && e.MouseEventFlags&vtinput.MouseMoved == 0
+			// Context menus target the clicked side without activating it or
+			// moving its cursor.
+			if isInitialPress && e.ButtonState&vtinput.RightmostButtonPressed != 0 {
+				if fsp, ok := p.(*FileSystemPanel); ok {
+					if fsp.pathTitleHitTest(mx, my) {
+						pf.showDriveMenu(i)
+						return true
+					}
+					if _, header := fsp.headerSortModeAt(mx, my); header {
+						actionSortMenuForPanel(pf, fsp)
+						return true
+					}
+				}
+			}
 			if pf.activeIdx != i && e.ButtonState != 0 {
 				pf.activeIdx = i
 				pf.lastKey = 0
@@ -2040,14 +2116,6 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 			}
 			if pf.searchFirstMode() && e.ButtonState != 0 {
 				pf.setCommandLineFocus(false)
-			}
-			if isInitialPress && e.ButtonState&vtinput.RightmostButtonPressed != 0 {
-				if fsp, ok := p.(*FileSystemPanel); ok {
-					if _, header := fsp.headerSortModeAt(mx, my); header {
-						RunAction("Panel.SortMenu")
-						return true
-					}
-				}
 			}
 			if isInitialPress {
 				pf.panelMouseCapture = p
@@ -3456,6 +3524,10 @@ func (pf *PanelsFrame) navigateFolderHistory(fsp *FileSystemPanel, path string, 
 	if fsp == nil || path == "" {
 		return false
 	}
+	// Folder history is a panel navigation action, so it ends the transient
+	// fast-find session before changing the directory.
+	fsp.fastFindMode = false
+	fsp.fastFindStr = ""
 	fsp.suppressFolderHistoryPath = path
 	if !pf.NavigateToPath(fsp, path) {
 		fsp.suppressFolderHistoryPath = ""
