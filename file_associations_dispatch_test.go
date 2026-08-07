@@ -36,11 +36,16 @@ func setupPanelWithFile(t *testing.T, name string) (*PanelsFrame, *mockPty) {
 	t.Helper()
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	SetDefaultF4Palette()
-	pf := setupMockPanelsFrame()
-	t.Cleanup(pf.Close)
-	pf.ResizeConsole(80, 25)
 
 	tmpDir := t.TempDir()
+	cwd, err := os.Getwd()
+	if err == nil {
+		_ = os.Chdir(tmpDir)
+		t.Cleanup(func() {
+			_ = os.Chdir(cwd)
+		})
+	}
+
 	if name != ".." && name != "" {
 		fullPath := filepath.Join(tmpDir, name)
 		if name == "some_subdir" {
@@ -49,6 +54,10 @@ func setupPanelWithFile(t *testing.T, name string) (*PanelsFrame, *mockPty) {
 			_ = os.WriteFile(fullPath, []byte("mock"), 0644)
 		}
 	}
+
+	pf := setupMockPanelsFrame()
+	t.Cleanup(pf.Close)
+	pf.ResizeConsole(80, 25)
 
 	fsp := pf.panels[pf.activeIdx].(*FileSystemPanel)
 	fsp.vfs.SetPath(tmpDir)
