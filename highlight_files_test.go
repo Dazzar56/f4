@@ -372,6 +372,10 @@ func TestFileEntry_HighlightIntegration(t *testing.T) {
 	vtui.SetDefaultPalette()
 	SetDefaultF4Palette()
 
+	oldConfig := AppConfig
+	defer func() { AppConfig = oldConfig }()
+	AppConfig.ShowHighlightMarks = true
+
 	// Загружаем тестовые правила в глобальный объект подсветки
 	iniData := `[Highlight_0]
 Name = TestGo

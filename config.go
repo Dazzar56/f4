@@ -100,6 +100,7 @@ type F4Config struct {
 	AlwaysShowMenuBar        bool
 	ShowHiddenFiles          bool
 	ShowDirPrefix            bool
+	ShowHighlightMarks       bool
 	SeparateFileExtensions   bool
 	PanelScrollbarMode       PanelScrollbarMode
 	SavePanelPaths           bool
@@ -179,6 +180,7 @@ var AppConfig = F4Config{
 	AlwaysShowMenuBar:        false,
 	ShowHiddenFiles:          true,
 	ShowDirPrefix:            false,
+	ShowHighlightMarks:       false,
 	SeparateFileExtensions:   false,
 	PanelScrollbarMode:       PanelScrollbarMinimal,
 	SavePanelPaths:           true,
@@ -289,6 +291,7 @@ func LoadConfig() {
 		AppConfig.ConsoleTitleTemplate = "f4 %Ver %Platform %Admin - %State"
 	}
 	AppConfig.ShowDirPrefix = ini.GetString("Panel", "ShowDirPrefix", "0") == "1"
+	AppConfig.ShowHighlightMarks = ini.GetString("Panel", "ShowHighlightMarks", "0") == "1"
 	AppConfig.SeparateFileExtensions = ini.GetString("Panel", "SeparateFileExtensions", "0") == "1"
 	if mode := ini.GetString("Panel", "PanelScrollbarMode", ""); mode != "" {
 		AppConfig.PanelScrollbarMode = ParsePanelScrollbarMode(mode)
@@ -426,6 +429,7 @@ func SaveConfig() {
 	sb.WriteString("[Panel]\n")
 	sb.WriteString(fmt.Sprintf("ShowHiddenFiles = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.ShowHiddenFiles]))
 	sb.WriteString(fmt.Sprintf("ShowDirPrefix = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.ShowDirPrefix]))
+	sb.WriteString(fmt.Sprintf("ShowHighlightMarks = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.ShowHighlightMarks]))
 	sb.WriteString(fmt.Sprintf("SeparateFileExtensions = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.SeparateFileExtensions]))
 	sb.WriteString(fmt.Sprintf("PanelScrollbarMode = %s\n", AppConfig.PanelScrollbarMode.String()))
 	sb.WriteString(fmt.Sprintf("SavePanelPaths = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.SavePanelPaths]))

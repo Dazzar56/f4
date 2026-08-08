@@ -80,7 +80,10 @@ func (f *fileEntry) displayName(name string) string {
 	if f.Name == ".." {
 		return ".."
 	}
-	marker := GlobalFileHighlighter.GetMarker(&f.VFSItem)
+	marker := ""
+	if AppConfig.ShowHighlightMarks {
+		marker = GlobalFileHighlighter.GetMarker(&f.VFSItem)
+	}
 	prefix := ""
 	if f.IsDir {
 		if AppConfig.ShowDirPrefix {

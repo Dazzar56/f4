@@ -4212,3 +4212,38 @@ func TestFileSystemPanel_PendingSelectionPriority(t *testing.T) {
 		t.Errorf("Cursor failed to snap to the renamed file. On: %q", fp.GetSelectedName())
 	}
 }
+func TestFileEntry_HighlightMarks(t *testing.T) {
+	vtui.SetDefaultPalette()
+	SetDefaultF4Palette()
+
+	oldRules := GlobalFileHighlighter.Rules
+	defer func() { GlobalFileHighlighter.Rules = oldRules }()
+
+	iniData := `[Highlight_0]
+Name = TestGo
+Mask = *.go
+Mark = •
+NormalColor = foreground:#00FF00
+`
+	ini := ParseIni(strings.NewReader(iniData))
+	GlobalFileHighlighter.LoadFromIni(ini)
+
+	entry := &fileEntry{
+		VFSItem: vfs.VFSItem{Name: "main.go", IsDir: false},
+	}
+
+	oldConfig := AppConfig
+	defer func() { AppConfig = oldConfig }()
+
+	AppConfig.ShowHighlightMarks = false
+	if got := entry.GetCellText(0); got != "main.go" {
+		t.Errorf("Expected name without marker when ShowHighlightMarks=false, got %q", got)
+	}
+
+	AppConfig.ShowHighlightMarks = true
+	text := entry.GetCellText(0)
+	expectedText := "• main.go"
+	if text != expectedText {
+		t.Errorf("Marker integration in GetCellText failed: got %q, want %q", text, expectedText)
+	}
+}

@@ -2062,7 +2062,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 	// blank lines between them (see #298). Blank rows are kept only at
 	// transitions between widget kinds (checkbox↔combo↔radio↔button)
 	// so groups still read as groups.
-	const dialogHeight = 31
+	const dialogHeight = 32
 	dlg := vtui.NewCenteredDialog(60, dialogHeight, Msg("PanelSettings.Title"))
 	dlg.ShowClose = true
 
@@ -2076,6 +2076,12 @@ func actionPanelSettings(pf *PanelsFrame) {
 	chkDirPrefix.State = 0
 	if AppConfig.ShowDirPrefix {
 		chkDirPrefix.State = 1
+	}
+
+	chkHighlightMarks := vtui.NewCheckbox(0, 0, "Show highlight &marks", false)
+	chkHighlightMarks.State = 0
+	if AppConfig.ShowHighlightMarks {
+		chkHighlightMarks.State = 1
 	}
 
 	chkSeparateExtensions := vtui.NewCheckbox(0, 0, Msg("PanelSettings.SeparateExtensions"), false)
@@ -2178,6 +2184,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 
 	dlg.AddItem(chkHidden)
 	dlg.AddItem(chkDirPrefix)
+	dlg.AddItem(chkHighlightMarks)
 	dlg.AddItem(chkSeparateExtensions)
 	dlg.AddItem(lblScrollbars)
 	dlg.AddItem(comboScrollbars)
@@ -2203,6 +2210,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 	// First checkbox cluster — stack tight, no blank rows between.
 	vbox.Add(chkHidden, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkDirPrefix, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(chkHighlightMarks, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkSeparateExtensions, vtui.Margins{}, vtui.AlignLeft)
 	// Blank row before the scrollbar combo — transition to a different
 	// widget kind, worth the visual separator.
@@ -2251,6 +2259,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 	btnOk.OnClick = func() {
 		AppConfig.ShowHiddenFiles = chkHidden.State == 1
 		AppConfig.ShowDirPrefix = chkDirPrefix.State == 1
+		AppConfig.ShowHighlightMarks = chkHighlightMarks.State == 1
 		AppConfig.SeparateFileExtensions = chkSeparateExtensions.State == 1
 		AppConfig.PanelScrollbarMode = PanelScrollbarMode(comboScrollbars.Menu.SelectPos)
 		AppConfig.SavePanelPaths = chkPaths.State == 1
