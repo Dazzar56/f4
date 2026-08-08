@@ -2931,16 +2931,16 @@ func actionHelpLanguage(pf *PanelsFrame) {
 						name = "Polski"
 					case "uk":
 						name = "Українська"
-							case "zh":
-								name = "中文"
-							case "hu":
-								name = "Magyar"
-							}
-							langs = append(langs, langInfo{code, name})
-							seen[code] = true
-						}
+					case "zh":
+						name = "中文"
+					case "hu":
+						name = "Magyar"
 					}
+					langs = append(langs, langInfo{code, name})
+					seen[code] = true
 				}
+			}
+		}
 	}
 
 	menu := vtui.NewVMenu(Msg("HelpLanguage.Title"))
