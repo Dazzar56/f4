@@ -33,7 +33,6 @@ func (p *ID3EditorPlugin) GetName() string {
 }
 
 func (p *ID3EditorPlugin) handleEdit(app vfs.App) {
-	vtui.DebugLog("ID3EDITOR: handleEdit called")
 	activeVFS := app.GetActivePanelVFS()
 	if activeVFS == nil {
 		vtui.ShowMessage(" Error ", vtui.Msg("ID3Editor.LocalOnly"), []string{"&Ok"})
