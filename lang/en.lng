@@ -651,3 +651,12 @@ UpdateSettings.IntervalDaily=Daily
 UpdateSettings.IntervalWeekly=Weekly
 Plugins.AddTitle= Add Plugin
 Plugins.SelectFilePrompt=Select plugin file:
+
+FindFile.SearchingTitle= Searching...
+FindFile.Scanning=Scanning:
+FindFile.FoundCount=Found: %d
+FindFile.SearchResultsTitle= Search Results
+FindFile.BtnGoTo=&Go to
+FindFile.BtnView=&View
+FindFile.BtnEdit=&Edit
+FindFile.BtnClose=&Close

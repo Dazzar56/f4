@@ -608,3 +608,12 @@ UpdateSettings.IntervalDaily=每天
 UpdateSettings.IntervalWeekly=每周
 Plugins.AddTitle= 添加插件
 Plugins.SelectFilePrompt=选择插件文件:
+
+FindFile.SearchingTitle= 正在搜索...
+FindFile.Scanning=正在扫描:
+FindFile.FoundCount=已找到: %d
+FindFile.SearchResultsTitle= 搜索结果
+FindFile.BtnGoTo=跳转至(&G)
+FindFile.BtnView=查看(&V)
+FindFile.BtnEdit=编辑(&E)
+FindFile.BtnClose=关闭(&C)

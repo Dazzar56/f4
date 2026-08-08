@@ -25,14 +25,14 @@ const maxRemoteFindResults = 10000
 
 // ExecuteFindFile initiates a background search and displays a progress dialog.
 func ExecuteFindFile(pf *PanelsFrame, v vfs.VFS, startDir, mask, text string) {
-	dlg := vtui.NewCenteredDialog(60, 9, " Searching... ")
+	dlg := vtui.NewCenteredDialog(60, 9, Msg("FindFile.SearchingTitle"))
 	dlg.AttentionSuppressed = true
 
-	lblMask := vtui.NewLabel(0, 0, "Mask: "+mask, nil)
-	lblDir := vtui.NewLabel(0, 0, "Scanning: ...", nil)
-	lblFound := vtui.NewLabel(0, 0, "Found: 0", nil)
+	lblMask := vtui.NewLabel(0, 0, Msg("FindFile.MaskPrompt")+" "+mask, nil)
+	lblDir := vtui.NewLabel(0, 0, Msg("FindFile.Scanning")+" ...", nil)
+	lblFound := vtui.NewLabel(0, 0, fmt.Sprintf(Msg("FindFile.FoundCount"), 0), nil)
 
-	btnCancel := vtui.NewButton(0, 0, "Cancel")
+	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
 
 	dlg.AddItem(lblMask)
 	dlg.AddItem(lblDir)
@@ -85,8 +85,8 @@ func ExecuteFindFile(pf *PanelsFrame, v vfs.VFS, startDir, mask, text string) {
 				currentCount := len(found) // Always use the actual length of the slice
 				displayDir := runewidth.Truncate(dir, 56, "...")
 				ctx.RunOnUI(func() {
-					lblDir.SetText("Scanning: " + displayDir)
-					lblFound.SetText(fmt.Sprintf("Found: %d", currentCount))
+					lblDir.SetText(Msg("FindFile.Scanning") + " " + displayDir)
+					lblFound.SetText(fmt.Sprintf(Msg("FindFile.FoundCount"), currentCount))
 					vtui.FrameManager.Redraw()
 				})
 			}
@@ -304,7 +304,7 @@ func (srw *SearchResultsWindow) GetKeyLabels() *vtui.KeySet {
 
 func ShowSearchResults(pf *PanelsFrame, v vfs.VFS, found []FoundFile) {
 	dlgW, dlgH := 76, 20
-	baseDlg := vtui.NewCenteredDialog(dlgW, dlgH, " Search Results ")
+	baseDlg := vtui.NewCenteredDialog(dlgW, dlgH, Msg("FindFile.SearchResultsTitle"))
 
 	srw := &SearchResultsWindow{
 		Window: *baseDlg,
@@ -328,13 +328,13 @@ func ShowSearchResults(pf *PanelsFrame, v vfs.VFS, found []FoundFile) {
 	}
 	srw.table.SetRows(rows)
 
-	btnGo := vtui.NewButton(0, 0, "&Go to")
+	btnGo := vtui.NewButton(0, 0, Msg("FindFile.BtnGoTo"))
 	btnGo.SetOwner(srw)
-	btnView := vtui.NewButton(0, 0, "&View")
+	btnView := vtui.NewButton(0, 0, Msg("FindFile.BtnView"))
 	btnView.SetOwner(srw)
-	btnEdit := vtui.NewButton(0, 0, "&Edit")
+	btnEdit := vtui.NewButton(0, 0, Msg("FindFile.BtnEdit"))
 	btnEdit.SetOwner(srw)
-	btnClose := vtui.NewButton(0, 0, "&Close")
+	btnClose := vtui.NewButton(0, 0, Msg("FindFile.BtnClose"))
 	btnClose.SetOwner(srw)
 
 	btnGo.IsDefault = true

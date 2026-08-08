@@ -649,5 +649,15 @@ UpdateSettings.IntervalNever=Никогда
 UpdateSettings.IntervalStart=При каждом запуске
 UpdateSettings.IntervalDaily=Ежедневно
 UpdateSettings.IntervalWeekly=Еженедельно
+
 Plugins.AddTitle= Добавить плагин
-Plugins.SelectFilePrompt=Выберите файл плагина:
+Plugins.SelectFilePrompt=Выберите file плагина:
+
+FindFile.SearchingTitle= Поиск... 
+FindFile.Scanning=Сканирование:
+FindFile.FoundCount=Найдено: %d
+FindFile.SearchResultsTitle= Результаты поиска 
+FindFile.BtnGoTo=&Перейти
+FindFile.BtnView=&Просмотр
+FindFile.BtnEdit=&Правка
+FindFile.BtnClose=&Закрыть
