@@ -1,0 +1,625 @@
+@Contents
+$Indice della guida di f4 (Versione: %Ver)
+f4 è un clone sperimentale di Far Manager / far2l in Go.
+
+~Tasti del visualizzatore e dell'editor~ViewerEditor@
+~Navigazione del pannello~PanelNav@
+~Rinomina file visivo (VisRen)~VisRen@
+~Visualizza README.md~README@
+
+@VisRen
+$Rinomina file visivo (VisRen)
+
+VisRen è lo strumento nativo di rinomina batch visiva di F4. Costruisce ogni
+nuovo nome prima che venga apportata qualsiasi modifica e mostra i nomi sorgente
+e di destinazione fianco a fianco. Funziona con file e directory su un pannello
+di file system locale.
+
+Se gli elementi del pannello sono contrassegnati, VisRen li apre nell'ordine del
+pannello. Se non ci sono elementi contrassegnati, viene utilizzato l'elemento sotto
+il cursore del pannello. L'inserimento superiore ".." non viene mai utilizzato.
+Aprire VisRen premendo F11 e selezionando "Visual File Renamer". La lettera di scelta
+rapida assegnata al menu può anche attivarlo.
+
+~Avvio rapido e campi di dialogo~VisRenQuickStart@
+~Maschere dei nomi, estensioni, intervalli, contatori ed escape~VisRenMasks@
+~Conversione maiuscole/minuscole, traslitterazione e ordine di elaborazione~VisRenTransforms@
+~Date, ID3, immagine/EXIF e tag di metadati eseguibili~VisRenMetadata@
+~Ricerca, sostituzione semplice ed espressioni regolari~VisRenSearch@
+~Navigazione dell'anteprima, riferimento a tastiera e mouse~VisRenPreview@
+~Modifica dell'elenco di rinomina nell'editor UTF-8~VisRenEditor@
+~Esecuzione della rinomina, errori, registro e annullamento~VisRenRename@
+~Regole dei nomi di file portatili e importanti limitazioni~VisRenSafety@
+~Ricette e consigli pratici~VisRenExamples@
+
+L'implementazione segue FarPlugins VisRen 3.2.0, ma con una validazione più rigorosa
+del nome del file e dell'editor, valori casuali stabili e tag di metadati portatili.
+
+@VisRenQuickStart
+$VisRen: Avvio rapido e campi di dialogo
+
+#Un tipico processo di rinomina#
+
+  1. Contrassegnare i file/directory desiderati con il tasto Ins, oppure posizionare
+     il cursore del pannello su un elemento (se è necessario solo quell'elemento).
+  2. Premere F11 e selezionare l'opzione VisRen.
+  3. Inserire le maschere per il nome e l'estensione. I valori predefiniti [N] e [E]
+     mantengono entrambe le parti invariate.
+  4. Facoltativamente, inserire testo per "Cerca" e "Sostituisci con". Il focus inizia
+     nel campo "Cerca"; il tasto Tab passa direttamente al campo "Sostituisci con".
+  5. Controllare i nomi di destinazione. Premendo F3 è possibile visualizzare il nome
+     sorgente completo, il nome di destinazione o la diagnostica degli errori per la riga corrente.
+  6. Selezionare "Rinomina" o premere Invio sul pulsante predefinito.
+
+#Nome ed estensione#
+
+Questi due campi costruiscono separatamente il nome di base e l'estensione di destinazione.
+Il campo dell'estensione non contiene il punto. Un risultato dell'estensione vuoto
+rimuove completamente l'estensione. Il testo letterale viene copiato esattamente come
+è stato inserito; le espressioni tra parentesi inseriscono testo sorgente, contatori,
+tag di metadati o trasformazioni.
+
+L'ultimo punto separa il nome sorgente e l'estensione. Quindi, nel caso di archive.tar.gz
+il nome è archive.tar, l'estensione invece è gz. Il file README non ha estensione.
+Un file nascosto, come .gitignore, ha un nome vuoto e l'estensione gitignore.
+
+#Modelli e pulsante [+]#
+
+Le liste Modelli nome e Modelli estensione contengono espressioni valide per la
+maschera corrispondente. Selezionare un elemento lo evidenzia solo. Il pulsante [+]
+inserisce questo modello selezionato nella posizione del cursore e restituisce il
+focus alla maschera corrispondente, proprio come nel VisRen originale. Se la lista dei
+modelli è in focus, il tasto Ins inserisce la voce corrente, mentre il focus rimane nella lista.
+I segnaposto per intervallo e contatore diventano valori utilizzabili al momento dell'inserimento.
+
+#Controlli di ricerca#
+
+La ricerca e la sostituzione vengono applicate dopo che entrambe le maschere hanno
+costruito il nome completo del file (compreso il punto generato e l'estensione). Per
+impostazione predefinita è abilitata l'opzione "Case sensitive". "Espressione regolare"
+passa dalla ricerca letterale alla modalità regex. Vedere i dettagli nel tema "Ricerca".
+
+#Anteprima in tempo reale e diagnostica dei guasti#
+
+Ogni modifica aggiorna immediatamente l'anteprima. Se una maschera, un intervallo,
+un contatore, un regex o il nome del file risultante non è valido, tutti i campi di
+destinazione mostrano <Error!>. La rinomina e l'editor F4 sono quindi disabilitati. Premere
+F3 per visualizzare le informazioni diagnostiche effettive.
+
+I quattro campi di modifica utilizzano la cronologia di F4. I valori utilizzati per
+la rinomina vengono aggiunti alla cronologia. I delimitatori di parole per [T] sono
+memorizzati separatamente nella configurazione utente VisRen.
+
+Premere il tasto Backspace per tornare all'indice della guida di VisRen.
+
+@VisRenMasks
+$VisRen: Maschere dei nomi, intervalli, contatori ed escape
+
+#Espressioni di base#
+
+  [N]          Nome originale senza l'ultima estensione.
+  [E]          Estensione originale senza il punto iniziale.
+  [[]          Parentesi quadra aperta letterale.
+  []]          Parentesi quadra chiusa letterale.
+
+Tutto il testo esterno alle espressioni è letterale. Una parentesi chiusa orfana,
+una parentesi quadra aperta non chiusa o un'espressione sconosciuta sono considerate un errore.
+
+#Intervalli#
+
+Un intervallo segue direttamente N o E. Le posizioni contano i caratteri Unicode (non i
+byte) e iniziano da 1. Una posizione negativa conta all'indietro a partire dalla fine.
+Le stesse forme funzionano con E, ad esempio [E1-3].
+
+Con il nome sorgente abcdefghij:
+
+  [N2]         b                 un carattere
+  [N2-5]       bcde              posizione da 2 a 5 inclusi (entrambi inclusi)
+  [N2,5]       bcdef             cinque caratteri a partire dalla posizione 2
+  [N2-]        bcdefghij         posizione da 2 alla fine
+  [N-2]        i                 penultimo carattere
+  [N2--5]      bcdef             posizione da 2 al 5° carattere contato dalla fine
+  [N-8-5]      cde               dall'8° al 5° carattere a partire dalla fine
+  [N-8,5]      cdefg             cinque caratteri a partire dall'8° posizione contata dalla fine
+  [N-5-]       fghij             dal 5° carattere a partire dalla fine fino alla fine
+
+Le parti esterne all'intervallo vengono troncate se possibile o danno un risultato vuoto.
+La posizione 0 e un intervallo invertito sono errori. Il modello di intervallo della lista
+utilizza il nome sorgente o l'estensione più lunghi.
+
+#Contatori#
+
+  [C1]         1, 2, 3, ...
+  [C001]       001, 002, 003, ...
+  [C001+5]     001, 006, 011, ...
+  [C10+-2]     10, 08, 06, ...
+
+Le prime cifre determinano il valore iniziale e la larghezza minima di visualizzazione. Possono
+contenere al massimo nove cifre. Se si omette la +dimensione passo, la dimensione passo è 1.
+Il contatore segue l'ordine dell'anteprima, quindi con i tasti Ctrl+Up/Down o trascinando
+con il mouse si modificano i valori assegnati. La larghezza è un valore minimo: i numeri
+più grandi non vengono troncati.
+
+#Combinazione di espressioni#
+
+Espressioni e testo letterale possono essere combinati liberamente. Ad esempio la
+[C001+1]_[N1-12] genera una sequenza a tre cifre, un trattino basso e i primi dodici
+caratteri del nome originale. Le espressioni di trasformazione tidak aggiungono testo;
+modificano solo la parte completata come descritto nel tema della trasformazione.
+
+Premere il tasto Backspace per tornare all'indice della guida di VisRen.
+
+@VisRenTransforms
+$VisRen: Trasformazioni e ordine di elaborazione
+
+#Trasformazioni Case sensitive#
+
+  [L]          Converte l'intero risultato della maschera in lettere minuscole.
+  [U]          Converte l'intero risultato della maschera in lettere maiuscole.
+  [F]          La prima lettera diventa maiuscola, le altre minuscole.
+  [T]          La prima lettera di ogni parola diventa maiuscola.
+  [M]          Formatta il nome della musica nello stile "Artista - Titolo".
+
+La [T] utilizza per impostazione predefinita i delimitatori di parole "-. _&". Selezionare
+la [T] in una delle liste dei modelli e premere F4 per modificare i caratteri di
+delimitazione. Un massimo di 18 caratteri viene memorizzato nella configurazione VisRen e
+potrà essere riutilizzato in seguito.
+
+La [M] riconosce i delimitatori " - " o "_-_" tra l'artista e il titolo. Il nome
+dell'artista ottiene la formattazione "Title Case" (ogni parola con lettera maiuscola);
+il titolo del brano inizia con una sola lettera maiuscola, le altre minuscole. Nel nome
+dell'artista l'isolata congiunzione russa "и" rimane minuscola, il che corrisponde
+all'originale funzionamento di VisRen.
+
+Se in una maschera compaiono più espressioni case sensitive, la priorità è fissata nel
+seguente ordine: [L], [U], [F], [T], [M]. Solo l'espressione con la massima priorità
+entra in vigore.
+
+#Traslitterazione#
+
+  [TL]         Traslitterazione dei caratteri cirillici russi secondo la tabella di
+               traslitterazione VisRen.
+  [TR]         Ripristino della traslitterazione in caratteri cirillici russi.
+
+La corrispondenza corrisponde alla tabella originale di VisRen: ad esempio ё -> jo, ж -> zh,
+х -> kh, щ -> shh, ю -> ju, я -> ja. La dimensione del carattere viene conservata se
+possibile. La conversione inversa sceglie la sequenza latina corrispondente più lunga. Se sono
+presenti sia [TL] che [TR], [TL] ha la priorità.
+
+#Ordine esatto di elaborazione#
+
+  1. Le espressioni del nome e dell'estensione vengono espanse.
+  2. Se l'estensione non è vuota, le due parti sono collegate da un punto.
+  3. Cerca/sostituisci viene applicato al nome file completo generato.
+  4. Il risultato viene nuovamente suddiviso all'ultimo punto.
+  5. La traslitterazione ha effetto sulla parte in cui la maschera lo ha richiesto.
+  6. Infine entra in vigore la trasformazione case sensitive selezionata.
+  7. Il nome file risultante viene convalidato.
+
+Questo ordine è importante. La trasformazione case sensitive influisce anche sul testo
+inserito da cerca/sostituisci, mentre la ricerca può coincidere anche con la
+generata estensione.
+
+Premere il tasto Backspace per tornare all'indice della guida di VisRen.
+
+@VisRenMetadata
+$VisRen: Date e tag di metadati del file
+
+I tag di metadati vengono letti in ritardo (lazy) e memorizzati nella cache solo
+una volta per ciascun file sorgente. I campi mancanti o non supportati vengono
+sostituiti da una stringa vuota, non interrompendo l'anteprima.
+
+#Timestamp del file e valori della sessione#
+
+  [DM]         Data dell'ultima modifica in ora locale: YYYY.MM.DD
+  [TM]         Ora dell'ultima modifica in ora locale: hh-mm-ss
+  [R]          Numero decimale casuale tra 0 e 32767
+
+La [R] viene assegnata una volta all'apertura del dialoogvenster. Rimane stabile durante
+la modifica delle maschere e segue la sua riga durante il riordino dell'anteprima. Una
+nuova sessione VisRen assegna nuovi valori casuali.
+
+#MP3 / ID3#
+
+L'espressione sorszám del brano è una parentesi aperta, l'ASCII kettőskereszt
+(U+0023) e una parentesi chiusa. Le altre espressioni sono:
+
+  [t]          Titolo del brano
+  [a]          Artista
+  [l]          Nome dell'album
+  [y]          Anno/Data
+  [g]          Genere
+
+Se esiste un tag ID3v2, i frame ID3v2.3 e ID3v2.4 hanno la priorità. Altrimenti viene
+letto l'ID3v1.1, compreso il sorszám e la tabella dei generi. I kódolások supportati
+includono il legacy-systeemkódolás, l'UTF-8 e l'UTF-16.
+
+#Immagini ed EXIF#
+
+  [c]          Produttore della fotocamera JPEG EXIF
+  [m]          Modello della fotocamera JPEG EXIF
+  [d]          Data dello scatto: YYYY.MM.DD hh-mm-ss
+  [r]          Risoluzione in pixel, come LARGHEZZAxALTEZZA
+
+Le dimensioni sono disponibili nei formati JPEG, BMP, GIF e PNG. Produttore, modello e
+data dello scatto vengono letti dai campi EXIF di JPEG. Se non è disponibile una data
+EXIF appropriata, [d] utilizzerà l'ora dell'ultima modifica del file. Nota: le minuscole
+[m]/[r] sono metadatatag-helyőrzők, mentre le maiuscole [M]/[R] sono le espressioni di
+trasformazione o di numero casuale.
+
+#Versione del programma#
+
+  [V]          Versione file fissa da risorsa Windows PE .exe o .dll
+
+I dati della versione PE vengono analizzati nativamente su tutti i sistemi operativi
+supportati. Per i file che tidak contengono informazioni sulla versione, [V] viene
+esteso a una stringa vuota.
+
+I delimitatori di percorso del file o altri caratteri non validi nei tag di metadati
+vengono scartati o rimangono bloccati durante la convalida finale del nome del file.
+Controllare sempre l'anteprima se i tag provengono da file che non si gestiscono
+personalmente.
+
+Premere il tasto Backspace per tornare all'indice della guida di VisRen.
+
+@VisRenSearch
+$VisRen: Ricerca, sostituzione ed espressioni regolari
+
+La ricerca e sostituzione viene eseguita sul nome completo del file costruito da entrambe
+le maschere (compreso il punto generato e l'estensione). Se il campo "Cerca" è vuoto,
+questa sezione è disattivata. Tutte le corrispondenze non sovrapposte vengono sostituite.
+
+#Modalità letterale semplice#
+
+Se "Espressione regolare" non è selezionato, "Cerca" indica testo letterale. Se la
+"Case sensitive" opzione è abilitata, "File" e "file" sono considerati diversi. Se non
+è selezionato, viene eseguito un confronto minuscolo, il testo sostituito viene
+inserito esattamente nella forma digitata.
+
+Esempio: maschere [N] e [E], cerca "bozza_", testo sostituito vuoto, lo trasforma
+nel seguente: bozza_relazione.txt -> relazione.txt.
+
+#Modalità espressione regolare#
+
+Abilita l'opzione "Espressione regolare" per utilizzare l'evidenziatore basato su
+Go/coregex di F4. È possibile immettere il modello direttamente, o in /modello/i forma.
+In questa forma con barre, la barra letterale deve essere specificata come \/. L'opzione
+i-póttag ignora le lettere maiuscole e minuscole. La "Case sensitive" opzione
+disattivarla produce lo stesso risultato. Altri póttags rispetto alla i non vengono
+accettati.
+
+Le variabili di sostituzione utilizzano $0 per indicare la corrispondenza completa, la
+$1...$9 per le zárójeles cartelle. Ad esempio nel caso di 001-report.txt:
+
+  Cerca:            /(\d+)-([^.]+)/
+  Sostituisci con:  $2-$1
+  Risultato:         report-001.txt
+
+Un modello non valido, un /modello/ non chiuso o un flag non supportato danno
+<Error!>, la rinomina e la funzione dell'editor vengono disabilitate. La diagnosi dei
+guasti dettagliata può essere visualizzata con il tasto F3.
+
+Premere il tasto Backspace per tornare all'indice della guida di VisRen.
+
+Le corrispondenze trovate nel nome del file originale vengono visualizzate colorate nella
+colonna dell'anteprima sinistra. La marcatura segue le impostazioni di "Case sensitive" e
+"Espressione regolare", contrassegnando tutte le corrispondenze visibili e rimane al suo
+posto anche scorrendo l'elenco. Il testo generato da "Sostituisci con" sarà evidenziato
+nella colonna destra. Nel caso di un'espressione regolare, questo include l'intero testo
+inserito; in caso di sostituzione vuota non c'è testo da evidenziare.
+
+@VisRenPreview
+$VisRen: Súgó, scorciatoie e muis
+
+La colonna dell'anteprima sinistra è la sorgente; la destra è la destinazione. All'apertura
+del dialoogvenster è selezionata la prima riga e la fókusz inizia nel campo "Cerca".
+Con il tasto F12 è possibile spostare la fókusz sull'elenco dell'anteprima e con il campo
+della maschera del nome è possibile tornare indietro.
+
+Se il numero di righe supera la finestra visibile, a destra appare una barra di
+scorrimento verticale. Con le frecce, il dispositivo di scorrimento e la rotella del mouse
+è possibile navigare nell'elenco. In caso di elenco più corto, la barra di scorrimento
+viene nascosta automaticamente.
+
+#Tasti generali#
+
+  F1                   Aprire questa guida.
+  F2                   Umschaltolare la registrazione del registro di rinomina.
+  F3                   Visualizzare nomi completi o messaggi diagnostici.
+  F4                   Aprire l'elenco nel proprio editor di F4.
+  F4 (fókusz sotto [T]) Modificare i caratteri delimitatori di parole.
+  F5                   Massimizzare/ripristinare la finestra.
+  F6                   Caricare l'ultima operazione di annullamento (Undo).
+  F8                   Cancellare il registro di rinomina dopo la conferma.
+  F12                  Scambiare la fókusz tra l'elenco di anteprima e i campi dati.
+  Alt+N                Fókusz sulla maschera del nome.
+  Alt+E                Fókusz sulla maschera dell'estensione.
+  Alt+S                Fókusz sul campo "Cerca".
+  Alt+P                Fókusz sul campo "Sostituisci con".
+  Alt+C                Umschaltolare "Case sensitive".
+  Alt+G                Umschaltolare "Espressione regolare".
+  Alt+T                Fókusz sull'elenco dei modelli di nome.
+  Alt+L                Fókusz sull'elenco dei modelli di estensione.
+  Enter                Attivare il pulsante predefinito "Rinomina".
+  Esc                  Chiudere la finestra senza rinominare.
+
+#Tasti sotto fókusz nell'anteprima#
+
+  Auf/Ab               Spostare la riga attiva.
+  Pos1/Ende            Saltare alla prima / ultima riga.
+  BildAuf/BildAb       Scorrere una pagina in alto / in basso.
+  Entf                 Rimuovere la riga da questo processo di rinomina.
+  Strg+Auf/Ab          Modificare l'ordine; i contatori si adattano al nuovo ordine.
+  Strg+Links/Rechts    Spostare la linea di divisione tra la colonna sinistra e destra.
+  Strg+Num5            Centrare la linea di divisione e azzerare i valori di scorrimento.
+  Alt+Links/Rechts     Scorrimento orizzontale della colonna sorgente sinistra.
+  Links/Rechts         Scorrimento orizzontale della colonna destinazione destra.
+  Strg+BildAuf         Chiudere VisRen, tornare al file selezionato sul pannello.
+
+#Modelli e azioni del mouse#
+
+  Il tasto Ins nell'elenco dei modelli inserisce il modello selezionato nella maschera corrispondente.
+  Tenendo premuto il pulsante sinistro del mouse e trascinando è possibile riordinare le righe.
+  Facendo clic con il pulsante destro del mouse su una riga è possibile visualizzare il percorso completo o la diagnostica.
+  Un doppio clic chiude VisRen e torna al file corrispondente sul pannello.
+  Facendo clic sul pulsante di ingrandimento nella barra del titolo è possibile massimizzare/ripristinare la finestra.
+  Facendo clic su "Registra rinominazione" è possibile umschaltolare la registrazione; facendo clic
+  sul testo della rinomina e confermando, è possibile cancellare il registro esistente.
+
+Il ridimensionamento del terminale e il tasto F5 ripristinano il rapporto paritario delle
+due colonne. La regolazione manuale o lo scorrimento orizzontale possono essere modificati nuovamente in seguito.
+
+Premere il tasto Backspace per tornare all'indice della guida di VisRen.
+
+@VisRenEditor
+$VisRen: Modifica dell'elenco nell'editor UTF-8
+
+Con il tasto F4 è possibile selezionare il formato per l'esportazione e la modifica, dopo di che
+un file temporaneo UTF-8 con il titolo "Rename list of files" viene aperto nell'editor F4:
+
+  Sorgente + Destinazione "nome file originale"    "nuovo nome file"
+  Solo destinazioni                                "nuovo nome file"
+
+Ogni valore è racchiuso tra virgolette doppie. Le virgolette, i backslash e i caratteri
+di controllo nel nome del file sono codificati. Mantenere intatte le virgolette esterne.
+
+#Validazione rigorosa#
+
+Alla chiusura dell'editor, VisRen esegue i seguenti controlli:
+
+  - il numero di righe deve corrispondere esattamente a quello dell'anteprima;
+  - ogni riga deve contenere esattamente 1 o 2 colonne citate (a seconda della modalità);
+  - al di fuori delle virgolette non ci devono essere caratteri superflui;
+  - nella modalità a due colonne, il contenuto e l'ordine della colonna sorgente devono essere completamente invariati;
+  - ogni nome di destinazione deve essere un nome file portatile valido.
+
+Non aggiungere, eliminare o riordinare righe nell'editor. Nella modalità a due colonne,
+può essere modificata solo la colonna di destinazione. Con questi controlli, le virgolette
+danneggiate o le modifiche accidentali alle righe sorgente possono essere filtrate in sicurezza
+prima della rinomina effettiva.
+
+In caso di errore, VisRen indica il motivo e offre l'opzione "Modifica di nuovo" (Edit again).
+L'editor si riapre sulla riga con l'errore, mentre le modifiche vengono mantenute. L'elenco
+validato avvia direttamente il processo di rinomina alla chiusura dell'editor. Se l'elenco generato
+non è cambiato affatto a livello di byte, ma le maschere sono state modificate, VisRen chiede
+conferma prima di procedere.
+
+In caso di errore dell'anteprima (<Error!>) o durante un'azione di annullamento, l'editor è disabilitato.
+
+Premere il tasto Backspace per tornare all'indice della guida di VisRen.
+
+@VisRenRename
+$VisRen: Esecuzione, gestione degli errori, registro e annullamento
+
+#Rinomina sequenziale#
+
+L'azione di rinomina procede rigorosamente dall'alto verso il basso nell'elenco. Gli
+elementi che non cambiano vengono saltati. Se un file sorgente è stato nel frattempo rimosso
+dal disco, anch'esso viene saltato. Le stesse regole valgono per file e cartelle.
+
+Un percorso occupato da un altro file non viene mai sovrascritto. La rinomina con sola
+modifica di lettere minuscole/maiuscole dello stesso file è supportata, utilizzando se necessario
+nomi di file temporanei. F4 non calcola scambi circolari: ad esempio a -> b e b -> a porta in genere
+a un errore ("il file di destinazione esiste già"), il che corrisponde al funzionamento originale di VisRen.
+
+#Errori a runtime#
+
+In caso di problemi di autorizzazione, percorsi di destinazione occupati o doppi e altri
+errori di sistema, vengono visualizzate le seguenti opzioni:
+
+  Riprova (Retry)      Tenta nuovamente la rinomina della riga corrispondente.
+  Salta (Skip)         Lascia il file invariato e continua con il successivo.
+  Salta tutto (Skip all) Non chiede per gli errori successivi, li salta direttamente.
+  Mentre (Cancel)      Arresta l'operazione; le righe rimanenti non vengono elaborate.
+
+La rinomina di gruppo non è di natura transazionale. I file che sono già stati rinominati
+con successo rimangono modificati dopo il salto o l'arresto. I file non riusciti e non
+elaborati rimangono selezionati al ritorno al pannello, in modo da poter essere riprovati in seguito.
+Le statistiche alla fine riportano le rinomine riuscite.
+
+#Registro di rinomina#
+
+La registrazione è abilitata per impostazione predefinita. Selezionare la 복選框 significa
+che ogni coppia di rinomina riuscita viene registrata in memoria. Con il tasto F2 o facendo
+clic su "Registra rinominazione" è possibile umschaltolare la registrazione. Il registro non viene
+scritto su disco e si perde alla chiusura di F4. Memorizza solo i dati delle rinomine riuscite
+più recenti e la cartella di esecuzione corrispondente; il segno * dietro il nome indica la presenza del registro.
+
+Premendo F8 o facendo clic sul testo della rinomina e confermando, è possibile cancellare il registro.
+Se si esegue la rinomina con la funzione di registro disabilitata, non vengono salvati dati di annullamento.
+
+#Visszavonás (F6)#
+
+Con il tasto F6 è possibile caricare l'ultimo registro memorizzato e visualizzare le righe
+in ordine inverso, in modo che i nuovi nomi vengano ripristinati a quelli vecchi. Nella barra del
+titolo è visibile la cartella di esecuzione corrispondente. Selezionare la rinomina e approvare
+il ripristino, oppure scegliere No per tornare alla normale modalità di rinomina.
+
+All'annullamento (Undo) si applicano le stesse regole e messaggi di errore. Prima del processo,
+F4 passa alla cartella di esecuzione salvata. Sia che l'annullamento sia andato a buon fine sia
+che sia avvenuto solo parzialmente, il registro viene cancellato dopo il processo e gli elementi
+eventualmente non ripristinati rimangono selezionati.
+
+Premere il tasto Backspace per tornare all'indice della guida di VisRen.
+
+@VisRenSafety
+$VisRen: Sicurezza dei nomi di file e limitazioni
+
+Ogni nome file di destinazione modificato deve essere un nome file portatile valido. VisRen
+vieta:
+
+  - nome vuoto, "." o "..";
+  - caratteri di controllo (codici Unicode inferiori a U+0020 o NUL);
+  - <, >, :, ", *, ?, /, backslash o barra verticale;
+  - uno spazio o un punto alla fine del nome;
+  - nomi riservati dal sistema DOS: CON, PRN, AUX, NUL, COM1..COM9 e LPT1..LPT9,
+    indipendentemente dall'estensione e dalle maiuscole/minuscole.
+
+Il carattere '/' non può essere utilizzato per spostare file in un'altra cartella. Il nome
+file sorgente invariato è consentito e viene saltato direttamente, anche se il nome
+file originale stesso non soddisfarebbe le regole sui nomi portatili riportate sopra.
+
+Il controllo preventivo filtra la maggior parte degli errori di maschera e di portabilità,
+ma non riserva i percorsi di destinazione in anticipo. Percorsi di destinazione occupati o doppi,
+autorizzazioni mancanti, problemi di lunghezza e scambi circolari possono comunque causare errori
+durante l'esecuzione. Potete essere certi che nessun file verrà sovrascritto accidentalmente.
+
+I tag di metadati mancanti o danneggiati vengono estesi a testo vuoto. Prestare attenzione all'uso
+dei delimitatori e controllare sempre l'anteprima. VisRen non crea transazioni e non applica
+automaticamente nomi di file temporanei per gli scambi circolari.
+
+Premere il tasto Backspace per tornare all'indice della guida di VisRen.
+
+@VisRenExamples
+$VisRen: Consigli e ricette pratiche
+
+#Numerazione dei file e normalizzazione delle estensioni#
+
+  Maschera del nome:        [C001+1]_[N]
+  Maschera dell'estensione: [E][L]
+
+Questo produce: 001_Alter Name.jpg, 002_Anderer Name.jpg ecc. Se il sorszám deve seguire
+un altro ordine, ordinare prima le righe nella visualizzazione rapida.
+
+#Ritaglio di una parte di un nome file a larghezza fissa#
+
+  File sorgente:     20260805_bericht_final.txt
+  Maschera del nome:        [N10-21]
+  Maschera dell'estensione: [E]
+  Risultato:         bericht_final.txt
+
+#Rimozione di un prefisso letterale fisso#
+
+  Maschere:          [N] e [E]
+  Cerca:             bozza_
+  Sostituisci con:   (vuoto)
+
+#Scambio di gruppi con un'espressione regolare#
+
+  File sorgente:     001-report.txt
+  Cerca:             /(\d+)-([^.]+)/
+  Sostituisci con:   $2-$1
+  Risultato:         report-001.txt
+
+#Denominazione dei file MP3 in base ai tag#
+
+  Maschera del nome:        [a] - [t]
+  Maschera dell'estensione: [E][L]
+
+È possibile creare il prefisso sorszám con un contatore o con l'espressione ID3 track
+descritta nel tema "Date e tag di metadati". Poiché l'artista o il titolo in caso di assenza
+rimane vuoto, controllare attentamente l'anteprima.
+
+#Denominazione delle foto in base alla data e alla dimensione dello scatto#
+
+  Maschera del nome:        [d]_[r]_[C001]
+  Maschera dell'estensione: [E][L]
+
+Nel caso di JPEG, la data dello scatto EXIF ha la priorità, in altri formati supportati
+la [d] utilizza il tempo di modifica del file.
+
+#Traslitterazione e aggiunta di parentesi quadre letterali#
+
+  Maschera del nome:        [[]archive[]]_[N][TL]
+  Maschera dell'estensione: [E][L]
+
+In base alla tabella originale, il file Пример.TXT viene rinominato in [archive]_Primer.txt.
+
+Premere il tasto Backspace per tornare all'indice della guida di VisRen.
+
+@Panels
+$Indice della guida di f4 (Versione: %Ver)
+f4 è un clone sperimentale di Far Manager / far2l in Go.
+
+~Tasti del visualizzatore e dell'editor~ViewerEditor@
+~Navigazione del pannello~PanelNav@
+~Visualizza README.md~README@
+
+@ViewerEditor
+$Tasti del visualizzatore e dell'editor
+Questa sezione viene generata dinamicamente in base ai comandi registrati.
+
+@ViewerNav
+$Tasti di navigazione
+Editor:
+  Strg+Links    - Salta al limite della parola precedente
+  Strg+Rechts   - Salta al limite della parola successiva
+  Strg+Umschalt+Links/Rechts - Seleziona parole
+  Pos1/Ende     - Salta all'inizio / fine della riga
+  BildAuf/BildAb - Scorri la pagina in alto / in basso
+
+Visualizzatore:
+  Auf/Ab        - Scorri di una riga
+  BildAuf/BildAb - Scorri di una pagina
+  Pos1/Ende     - Salta all'inizio / fine del file
+
+@Panels
+$Navigazione del pannello
+Questa sezione viene generata dinamicamente in base ai comandi registrati.
+
+@ShellNav
+$Tasti di navigazione del pannello
+  Tab           - Scambia il pannello attivo
+  Insert        - Seleziona o deseleziona file/cartella
+  Strg+Tab      - Umschaltola l'area di lavoro
+  Strg+W        - Chiudi l'area di lavoro corrente
+  Strg+N        - Clona il pannello attivo in una nuova area di lavoro
+
+@History
+$Cronologia comandi (Alt+F8)
+    La cronologia dei comandi mostra l'elenco dei comandi eseguiti in precedenza.
+Oltre alle frecce cursore sono disponibili le seguenti combinazioni di tasti:
+
+  Inserisci il comando selezionato nella riga di comando Enter
+  (Fare clic con il pulsante sinistro del mouse fa lo stesso)
+  Chiudi la finestra di dialogo                        Esc, F10
+
+  Ricerca incrementale basata su sottostringa / prefisso F2
+  Digitando un carattere qualsiasi è possibile filtrare l'elenco
+  Backspace cancella l'ultimo carattere del filtro
+
+  Elimina l'elemento della cronologia selezionato      Shift+Del
+  Cancella l'intera cronologia dei comandi con conferma Del
+
+  Copia il comando selezionato negli appunti           Strg+C, Strg+Einfg
+
+@HistoryFolders
+$Cronologia cartelle (Alt+F12)
+    La cronologia delle cartelle mostra l'elenco delle cartelle visitate in precedenza.
+Oltre alle frecce cursore sono disponibili le seguenti combinazioni di tasti:
+
+  Vai alla cartella selezionata sul pannello attivo    Enter
+  (Fare clic con il pulsante sinistro del mouse fa lo stesso)
+  Vai alla cartella selezionata sul pannello passivo   Shift+Enter
+  Inserisci il percorso direttamente nella riga di comando Ctrl+Enter
+  Chiudi la finestra di dialogo                        Esc, F10
+
+  Ricerca incrementale basata su sottostringa / prefisso F2
+  Digitando un carattere qualsiasi è possibile filtrare l'elenco
+  Backspace cancella l'ultimo carattere del filtro
+
+  Elimina l'elemento della cronologia selezionato      Shift+Del
+  Cancella l'intera cronologia delle cartelle con conferma Del
+  Rimuovi i percorsi eliminati, non più esistenti (confermato) Ctrl+R
+
+  Copia il percorso selezionato negli appunti           Strg+C, Strg+Einfg
