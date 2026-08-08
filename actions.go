@@ -2915,28 +2915,32 @@ func actionHelpLanguage(pf *PanelsFrame) {
 		if err != nil {
 			continue
 		}
-			for _, e := range entries {
-				if !e.IsDir() && strings.HasSuffix(e.Name(), ".hlf") {
-					code := strings.TrimSuffix(e.Name(), ".hlf")
-					if !seen[code] {
-						name := strings.ToUpper(code)
-						switch code {
-						case "ru":
-							name = "Русский"
-						case "de":
-							name = "Deutsch"
-						case "cs":
-							name = "Čeština"
-						case "pl":
-							name = "Polski"
-						case "uk":
-							name = "Українська"
+		for _, e := range entries {
+			if !e.IsDir() && strings.HasSuffix(e.Name(), ".hlf") {
+				code := strings.TrimSuffix(e.Name(), ".hlf")
+				if !seen[code] {
+					name := strings.ToUpper(code)
+					switch code {
+					case "ru":
+						name = "Русский"
+					case "de":
+						name = "Deutsch"
+					case "cs":
+						name = "Čeština"
+					case "pl":
+						name = "Polski"
+					case "uk":
+						name = "Українська"
+							case "zh":
+								name = "中文"
+							case "hu":
+								name = "Magyar"
+							}
+							langs = append(langs, langInfo{code, name})
+							seen[code] = true
 						}
-						langs = append(langs, langInfo{code, name})
-						seen[code] = true
 					}
 				}
-			}
 	}
 
 	menu := vtui.NewVMenu(Msg("HelpLanguage.Title"))
