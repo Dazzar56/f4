@@ -154,7 +154,6 @@ type F4Config struct {
 	EnforceColorCorrection   bool
 	LastUpdateCheck          int64  // Unix timestamp
 	LastUpdateVersion        string // Version string or PublishedAt timestamp
-	LastSkippedVersion       string // Version string or PublishedAt timestamp
 
 	// [Layout] mirrors far2l's config.ini section of the same name so
 	// a config shared with far2l keeps working in both. Adjusted by
@@ -231,7 +230,6 @@ var AppConfig = F4Config{
 	EnforceColorCorrection:   true,
 	LastUpdateCheck:          0,
 	LastUpdateVersion:        "",
-	LastSkippedVersion:       "",
 }
 
 var getUserConfigIniPath = func() string {
@@ -347,7 +345,6 @@ func LoadConfig() {
 	fmt.Sscanf(ini.GetString("Update", "Interval", "3"), "%d", &AppConfig.UpdateInterval)
 	fmt.Sscanf(ini.GetString("Update", "LastCheck", "0"), "%d", &AppConfig.LastUpdateCheck)
 	AppConfig.LastUpdateVersion = ini.GetString("Update", "LastVersion", "")
-	AppConfig.LastSkippedVersion = ini.GetString("Update", "LastSkippedVersion", "")
 
 	AppConfig.EditorAutoComplete = ini.GetString("Editor", "AutoComplete", "1") == "1"
 	AppConfig.EditorAutoCompleteMask = ini.GetString("Editor", "AutoCompleteMask", "*.go;*.c;*.cpp;*.h;*.hpp;*.py;*.js;*.ts;*.rs;*.java;*.sh;*.txt;*.md;*.html;*.css;*.json")
@@ -465,7 +462,6 @@ func SaveConfig() {
 	sb.WriteString(fmt.Sprintf("Interval = %d\n", AppConfig.UpdateInterval))
 	sb.WriteString(fmt.Sprintf("LastCheck = %d\n", AppConfig.LastUpdateCheck))
 	sb.WriteString(fmt.Sprintf("LastVersion = %s\n", AppConfig.LastUpdateVersion))
-	sb.WriteString(fmt.Sprintf("LastSkippedVersion = %s\n", AppConfig.LastSkippedVersion))
 	sb.WriteString("\n[Editor]\n")
 	sb.WriteString(fmt.Sprintf("AutoComplete = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.EditorAutoComplete]))
 	sb.WriteString(fmt.Sprintf("AutoCompleteMask = %s\n", AppConfig.EditorAutoCompleteMask))

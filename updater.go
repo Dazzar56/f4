@@ -149,16 +149,12 @@ func CheckForUpdates(pf *PanelsFrame, manual bool) {
 		}
 		displayVersion = "Nightly (" + displayTime + ")"
 		if AppConfig.LastUpdateVersion != updateKey {
-			if manual || AppConfig.LastSkippedVersion != updateKey {
-				needsUpdate = true
-			}
+			needsUpdate = true
 		}
 	} else {
 		current := getCurrentVersion()
 		if release.TagName != current && release.TagName != AppConfig.LastUpdateVersion {
-			if manual || release.TagName != AppConfig.LastSkippedVersion {
-				needsUpdate = true
-			}
+			needsUpdate = true
 		}
 	}
 
@@ -173,12 +169,12 @@ func CheckForUpdates(pf *PanelsFrame, manual bool) {
 
 	vtui.FrameManager.PostTask(func() {
 		msg := fmt.Sprintf("An update is available: %s\n\nDo you want to download and install it now?", displayVersion)
-		dlg := vtui.ShowMessage(" Auto Update ", msg, []string{"&Yes", "&Later", "&Skip"})
+		dlg := vtui.ShowMessage(" Auto Update ", msg, []string{"&Yes", "&No"})
 		dlg.OnResult = func(code int) {
 			if code == 0 {
 				performUpdate(pf, downloadURL, currentOS != "windows", release.TagName, updateKey)
-			} else if code == 2 {
-				AppConfig.LastSkippedVersion = updateKey
+			} else {
+				AppConfig.LastUpdateVersion = updateKey
 				SaveConfig()
 			}
 		}
