@@ -64,6 +64,12 @@
     ├── bookmarks_test.go
     ├── child_env.go
     ├── child_env_test.go
+    ├── colorer
+    │   └── configs
+    │       └── base
+    │           └── hrd
+    │               └── rgb
+    │                   └── fonokai.hrd
     ├── colorer_downloader.go
     ├── colorer_plugin.go
     ├── colorer_plugin_test.go
@@ -79,14 +85,13 @@
     ├── commands.go
     ├── config.go
     ├── config_test.go
+    ├── console_ctrl_handler_other.go
+    ├── console_ctrl_handler_windows.go
     ├── cpu_info_darwin.go
     ├── cpu_info.go
     ├── cpu_info_linux.go
     ├── cpu_info_other.go
     ├── cpu_info_windows.go
-    ├── debug.1.log
-    ├── debug.2.log
-    ├── debug.log
     ├── detach_unix.go
     ├── detach_windows.go
     ├── dialog_layouts_test.go
@@ -509,8 +514,8 @@
     │   ├── classic.ini
     │   ├── default_dark.ini
     │   ├── fonokai.ini
-    │   ├── modern.ini
-    │   └── README.md
+    │   ├── fonokai.md
+    │   └── modern.ini
     ├── style_test.go
     ├── terminal_log_vfs.go
     ├── terminal_log_vfs_test.go
@@ -635,4 +640,4 @@
     ├── word_nav.go
     └── word_nav_test.go
     
-    43 directories, 591 files
+    48 directories, 591 files
