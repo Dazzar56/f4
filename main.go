@@ -17,6 +17,7 @@ import (
 
 func main() {
 	vtui.AppName = "f4"
+	installConsoleCtrlHandler()
 	var sudoDispatcher string
 
 	// Initialize SudoClient immediately for all process types
