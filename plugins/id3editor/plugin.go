@@ -46,14 +46,17 @@ func (p *ID3EditorPlugin) handleEdit(app vfs.App) {
 
 	names := app.GetSelectedNames()
 	if len(names) == 0 {
-		vtui.ShowMessage(" Warning ", vtui.Msg("ID3Editor.SelectFile"), []string{"&Ok"})
+		// Neutral hint ("select a file first"), not an alarm — a
+		// non-whitelist title keeps this on the info palette. See #379.
+		vtui.ShowMessage(" ID3 Editor ", vtui.Msg("ID3Editor.SelectFile"), []string{"&Ok"})
 		return
 	}
 
 	name := names[0]
 	ext := strings.ToLower(filepath.Ext(name))
 	if ext != ".mp3" {
-		vtui.ShowMessage(" Warning ", vtui.Msg("ID3Editor.OnlyMP3"), []string{"&Ok"})
+		// Same rationale as the SelectFile hint above.
+		vtui.ShowMessage(" ID3 Editor ", vtui.Msg("ID3Editor.OnlyMP3"), []string{"&Ok"})
 		return
 	}
 
