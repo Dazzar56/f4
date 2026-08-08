@@ -5,13 +5,45 @@ import (
 	"bytes"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/unxed/vtui"
 )
 
+func TestColorer_EnsureFonokaiSchema(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	baseDir := filepath.Join(tmpDir, "base")
+	_ = os.MkdirAll(baseDir, 0755)
+	_ = os.WriteFile(filepath.Join(baseDir, "catalog.xml"), []byte("<catalog/>"), 0644)
+
+	hrdDir := filepath.Join(baseDir, "hrd")
+	_ = os.MkdirAll(hrdDir, 0755)
+
+	catalogRGBContent := `        <hrd class="rgb" name="default" description="far2l default">
+            <location link="&hrd;/rgb/default.hrd"/>
+        </hrd>`
+	_ = os.WriteFile(filepath.Join(hrdDir, "catalog-rgb.xml"), []byte(catalogRGBContent), 0644)
+
+	ensureFonokaiSchema(tmpDir)
+
+	hrdFile := filepath.Join(hrdDir, "rgb", "fonokai.hrd")
+	if _, err := os.Stat(hrdFile); err != nil {
+		t.Errorf("Expected fonokai.hrd to be created, got error: %v", err)
+	}
+
+	updatedCatalog, err := os.ReadFile(filepath.Join(hrdDir, "catalog-rgb.xml"))
+	if err != nil {
+		t.Fatalf("Failed to read updated catalog: %v", err)
+	}
+	if !strings.Contains(string(updatedCatalog), "name=\"Fonokai\"") {
+		t.Error("Expected catalog-rgb.xml to contain Fonokai entry")
+	}
+}
 func TestColorer_SchemasExist(t *testing.T) {
 	_ = SchemasExist()
 }

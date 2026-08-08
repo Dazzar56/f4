@@ -113,6 +113,7 @@ func ApplyColorStyle(name string) error {
 				ApplyColorIni(LoadIni(path))
 			}
 			FinishColors()
+			GlobalFileHighlighter.LoadThemeRules(style.ini)
 			return nil
 		}
 	}

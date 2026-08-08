@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -81,7 +82,110 @@ var (
 	colorerIdleDir string
 )
 
+func ensureFonokaiSchema(configsDir string) {
+	catalogPath := filepath.Join(configsDir, "base", "catalog.xml")
+	if _, err := os.Stat(catalogPath); os.IsNotExist(err) {
+		return
+	}
+
+	hrdDir := filepath.Join(configsDir, "base", "hrd", "rgb")
+	hrdPath := filepath.Join(hrdDir, "fonokai.hrd")
+
+	_ = os.MkdirAll(hrdDir, 0755)
+
+	fonokaiHRDContent := `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE hrd PUBLIC "-//Cail Lomecb//DTD Colorer HRD take5//EN"
+  "http://colorer.sf.net/2003/hrd.dtd">
+<hrd xmlns="http://colorer.sf.net/2003/hrd">
+
+  <assign name="def:Text" fore="#dbd3c4" back="#37322c"/>
+  <assign name="def:HorzCross" fore="#dbd3c4" back="#2e2a24"/>
+  <assign name="def:VertCross" fore="#dbd3c4" back="#2e2a24"/>
+
+  <assign name="def:Number" fore="#e6cf70"/>
+  <assign name="def:NumberDec" fore="#e6cf70"/>
+  <assign name="def:NumHex" fore="#e6cf70"/>
+  <assign name="def:NumberBin" fore="#e6cf70"/>
+  <assign name="def:NumberOct" fore="#e6cf70"/>
+  <assign name="def:NumberFloat" fore="#e6cf70"/>
+  <assign name="def:NumberSuffix" fore="#e6b450"/>
+
+  <assign name="def:String" fore="#ec6a2c"/>
+  <assign name="def:StringContent" fore="#ec6a2c"/>
+  <assign name="def:StringEdge" fore="#a04020"/>
+  <assign name="def:CharacterContent" fore="#ec6a2c"/>
+
+  <assign name="def:Comment" fore="#6a6458"/>
+  <assign name="def:CommentContent" fore="#6a6458" style="1"/>
+  <assign name="def:CommentDoc" fore="#c4b8a8"/>
+
+  <assign name="def:Symbol" fore="#e6b450"/>
+  <assign name="def:SymbolStrong" fore="#e6cf70"/>
+  <assign name="def:Prefix" fore="#ec6a2c"/>
+  <assign name="def:PrefixStrong" fore="#a04020"/>
+
+  <assign name="def:Operator" fore="#e6b450"/>
+
+  <assign name="def:Keyword" fore="#a04020" style="1"/>
+  <assign name="def:KeywordStrong" fore="#a04020"/>
+  <assign name="def:ClassKeyword" fore="#e6cf70" style="1"/>
+  <assign name="def:TypeKeyword" fore="#e6cf70"/>
+
+  <assign name="def:Function"/>
+  <assign name="def:Register" fore="#e6b450"/>
+  <assign name="def:Constant" fore="#ec6a2c"/>
+  <assign name="def:BooleanConstant" fore="#ec6a2c"/>
+
+  <assign name="def:Var" />
+  <assign name="def:VarStrong" fore="#e6cf70"/>
+  <assign name="def:Identifier" fore="#dbd3c4"/>
+
+  <assign name="def:Directive" fore="#a04020"/>
+  <assign name="def:Param" fore="#e6b450"/>
+
+  <assign name="def:Tag" fore="#a04020"/>
+  <assign name="def:OpenTag" fore="#ec6a2c"/>
+  <assign name="def:CloseTag" fore="#ec6a2c"/>
+
+  <assign name="def:Label" fore="#e6cf70"/>
+  <assign name="def:LabelStrong" fore="#37322c" back="#e6b450"/>
+
+  <assign name="def:Insertion" fore="#dbd3c4" back="#2e2a24"/>
+  <assign name="def:InsertionStart" fore="#37322c" back="#e6cf70"/>
+  <assign name="def:InsertionEnd" fore="#37322c" back="#e6cf70"/>
+
+  <assign name="def:Error" fore="#eeeeec" back="#c44500"/>
+  <assign name="def:ErrorText" fore="#e6cf70"/>
+  <assign name="def:TODO" fore="#eeeeec" back="#a04020"/>
+  <assign name="def:Debug" fore="#eeeeec" back="#a04020"/>
+
+  <assign name="def:Path" fore="#e6b450"/>
+  <assign name="def:URL" fore="#ec6a2c"/>
+  <assign name="def:EMail" fore="#ec6a2c"/>
+
+  <assign name="def:Date" fore="#e6cf70"/>
+  <assign name="def:Time" fore="#e6cf70"/>
+
+  <assign name="def:PairStart" fore="#37322c" back="#e6b450"/>
+  <assign name="def:PairEnd" fore="#37322c" back="#e6b450"/>
+</hrd>
+`
+	_ = os.WriteFile(hrdPath, []byte(fonokaiHRDContent), 0644)
+
+	catalogRGBPath := filepath.Join(configsDir, "base", "hrd", "catalog-rgb.xml")
+	data, err := os.ReadFile(catalogRGBPath)
+	if err == nil {
+		content := string(data)
+		if !strings.Contains(content, "name=\"Fonokai\"") {
+			entry := "\n        <hrd class=\"rgb\" name=\"Fonokai\" description=\"Fonokai\">\n            <location link=\"&hrd;/rgb/fonokai.hrd\"/>\n        </hrd>\n"
+			_ = os.WriteFile(catalogRGBPath, []byte(content+entry), 0644)
+		}
+	}
+}
+
 func acquireColorerSession(configsDir string) (*colorer.Session, error) {
+	ensureFonokaiSchema(configsDir)
+
 	colorerPoolMu.Lock()
 	if colorerIdle != nil && colorerIdleDir == configsDir {
 		session := colorerIdle

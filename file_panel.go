@@ -261,7 +261,7 @@ func (m *mediumRow) GetCellAttr(col int, defaultAttr uint64) uint64 {
 	}
 	e := m.fp.entries[idx]
 	attr := defaultAttr
-	isCursor := (defaultAttr == vtui.Palette[ColPanelCursor] || defaultAttr == vtui.Palette[ColPanelSelectedCursor])
+	isCursor := (defaultAttr == vtui.Palette[ColPanelCursor] || defaultAttr == vtui.Palette[ColPanelSelectedCursor] || defaultAttr == vtui.Palette[ColPanelInactiveCursor] || defaultAttr == vtui.Palette[ColPanelInactiveSelectedCursor])
 
 	attr = GlobalFileHighlighter.GetColor(&e.VFSItem, attr, e.Selected, isCursor)
 
@@ -325,7 +325,7 @@ func (f *fileEntry) GetCellText(col int) string {
 }
 func (f *fileEntry) GetCellAttr(col int, defaultAttr uint64) uint64 {
 	attr := defaultAttr
-	isCursor := (defaultAttr == vtui.Palette[ColPanelCursor] || defaultAttr == vtui.Palette[ColPanelSelectedCursor])
+	isCursor := (defaultAttr == vtui.Palette[ColPanelCursor] || defaultAttr == vtui.Palette[ColPanelSelectedCursor] || defaultAttr == vtui.Palette[ColPanelInactiveCursor] || defaultAttr == vtui.Palette[ColPanelInactiveSelectedCursor])
 
 	attr = GlobalFileHighlighter.GetColor(&f.VFSItem, attr, f.Selected, isCursor)
 

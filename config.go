@@ -152,6 +152,7 @@ type F4Config struct {
 	UpdateChannel            int // 0 = Stable, 1 = Nightly
 	UpdateInterval           int // 0 = Never, 1 = Every start, 2 = Daily, 3 = Weekly
 	EnforceColorCorrection   bool
+	HighlightPriority        int    // 0 = User wins, 1 = Theme wins
 	LastUpdateCheck          int64  // Unix timestamp
 	LastUpdateVersion        string // Version string or PublishedAt timestamp
 
@@ -228,6 +229,7 @@ var AppConfig = F4Config{
 	UpdateChannel:            0,
 	UpdateInterval:           3, // Default to Weekly
 	EnforceColorCorrection:   true,
+	HighlightPriority:        0,
 	LastUpdateCheck:          0,
 	LastUpdateVersion:        "",
 }
@@ -341,6 +343,7 @@ func LoadConfig() {
 		AppConfig.GuiRows = 30
 	}
 	AppConfig.EnforceColorCorrection = ini.GetString("Dialogs", "EnforceColorCorrection", "1") == "1"
+	fmt.Sscanf(ini.GetString("Appearance", "HighlightPriority", "0"), "%d", &AppConfig.HighlightPriority)
 	fmt.Sscanf(ini.GetString("Update", "Channel", "0"), "%d", &AppConfig.UpdateChannel)
 	fmt.Sscanf(ini.GetString("Update", "Interval", "3"), "%d", &AppConfig.UpdateInterval)
 	fmt.Sscanf(ini.GetString("Update", "LastCheck", "0"), "%d", &AppConfig.LastUpdateCheck)
@@ -456,6 +459,7 @@ func SaveConfig() {
 	sb.WriteString(fmt.Sprintf("GuiFontSize = %d\n", AppConfig.GuiFontSize))
 	sb.WriteString(fmt.Sprintf("GuiCols = %d\n", AppConfig.GuiCols))
 	sb.WriteString(fmt.Sprintf("GuiRows = %d\n", AppConfig.GuiRows))
+	sb.WriteString(fmt.Sprintf("HighlightPriority = %d\n", AppConfig.HighlightPriority))
 
 	sb.WriteString("\n[Update]\n")
 	sb.WriteString(fmt.Sprintf("Channel = %d\n", AppConfig.UpdateChannel))
@@ -546,3 +550,18 @@ var (
 )
 
 const saveConfigDebounce = 500 * time.Millisecond
+
+func createDefaultHighlightIni(path string) {
+	content := `# User highlight rules.
+#
+# f4 applies file highlighting rules from both the active Color Style (Theme)
+# and this file. By default, rules in this file have higher priority.
+#
+# You can add your custom highlight groups here (e.g. Mask = *.mp3).
+# Default groups (Hidden, Executables, Directories) are already defined
+# by the active Color Style, so you don't need to duplicate them unless
+# you specifically want to override the theme's colors.
+
+`
+	_ = os.WriteFile(path, []byte(content), 0644)
+}
