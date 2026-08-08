@@ -206,7 +206,7 @@ var ColorSlots = []ColorSlot{
 	{Canonical: "WarnDialog.Button.Highlight", Index: vtui.ColWarnHighlightButton, Group: "Warning message", ConstantName: "ColWarnHighlightButton"},
 	{Canonical: "WarnDialog.Button.Highlight.Selected", Index: vtui.ColWarnHighlightSelectedButton, Group: "Warning message", ConstantName: "ColWarnHighlightSelectedButton"},
 	{Canonical: "WarnDialog.Edit.Unchanged", Index: vtui.ColWarnEdit, Group: "Warning message", ConstantName: "ColWarnEdit"},
-	{Canonical: "WarnDialog.Edit.Selected", Index: vtui.ColWarnSelectedButton, Group: "Warning message", ConstantName: "ColWarnSelectedButton"},
+	{Canonical: "WarnDialog.Edit.Selected", Index: vtui.ColWarnEdit, Group: "Warning message", ConstantName: "ColWarnEdit"},
 
 	// Key bar Group
 	{Canonical: "Keybar.Num", Index: vtui.ColKeyBarNum, Group: "Key bar", ConstantName: "ColKeyBarNum", Aliases: []string{"KeyBar.Numbers"}},
