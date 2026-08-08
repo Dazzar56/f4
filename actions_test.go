@@ -185,7 +185,7 @@ Loop:
 			}
 
 			// Ждем, когда на вершине стека окажется диалог с заголовком " Deletion Errors "
-			if fm.GetTopFrameType() == vtui.TypeDialog && fm.GetTopFrame().GetTitle() == " Deletion Errors " {
+			if fm.GetTopFrameType() == vtui.TypeDialog && fm.GetTopFrame().GetTitle() == Msg("FileOp.DeletionErrors") {
 				break Loop
 			}
 
@@ -422,7 +422,7 @@ Loop:
 			}
 
 			// Ждем финальный диалог со списком ошибок
-			if fm.GetTopFrameType() == vtui.TypeDialog && fm.GetTopFrame().GetTitle() == " Deletion Errors " {
+			if fm.GetTopFrameType() == vtui.TypeDialog && fm.GetTopFrame().GetTitle() == Msg("FileOp.DeletionErrors") {
 				break Loop
 			}
 
