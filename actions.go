@@ -1469,7 +1469,9 @@ func actionCopyInPlace(pf *PanelsFrame) {
 	})
 }
 func actionEditorSettings(pf *PanelsFrame) {
-	width, height := 78, 27
+	// Height sized so the 3×2 checkbox grid stacks tight (no blank
+	// rows between rows of the grid). See #298.
+	width, height := 78, 25
 	dlg := vtui.NewCenteredDialog(width, height, Msg("EditorSettings.Title"))
 	dlg.ShowClose = true
 
@@ -1610,17 +1612,17 @@ func actionEditorSettings(pf *PanelsFrame) {
 	rowTabSize.Add(editTabSize, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(rowTabSize, vtui.Margins{Top: 1}, vtui.AlignFill)
 
-	col1 := vtui.NewVBoxLayout(0, 0, (width-4)/2, 5)
+	col1 := vtui.NewVBoxLayout(0, 0, (width-4)/2, 3)
 	col1.Add(chkAutoIndent, vtui.Margins{}, vtui.AlignLeft)
-	col1.Add(chkEditorConfig, vtui.Margins{Top: 1}, vtui.AlignLeft)
-	col1.Add(chkColorerBg, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	col1.Add(chkEditorConfig, vtui.Margins{}, vtui.AlignLeft)
+	col1.Add(chkColorerBg, vtui.Margins{}, vtui.AlignLeft)
 
-	col2 := vtui.NewVBoxLayout(0, 0, (width-4)/2, 5)
+	col2 := vtui.NewVBoxLayout(0, 0, (width-4)/2, 3)
 	col2.Add(chkCursorEOL, vtui.Margins{}, vtui.AlignLeft)
-	col2.Add(chkAuto, vtui.Margins{Top: 1}, vtui.AlignLeft)
-	col2.Add(chkCrosshair, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	col2.Add(chkAuto, vtui.Margins{}, vtui.AlignLeft)
+	col2.Add(chkCrosshair, vtui.Margins{}, vtui.AlignLeft)
 
-	rowChecks := vtui.NewHBoxLayout(0, 0, width-4, 5)
+	rowChecks := vtui.NewHBoxLayout(0, 0, width-4, 3)
 	rowChecks.Add(col1, vtui.Margins{}, vtui.AlignFill)
 	rowChecks.Add(col2, vtui.Margins{}, vtui.AlignFill)
 	vbox.Add(rowChecks, vtui.Margins{Top: 1}, vtui.AlignFill)
@@ -2056,7 +2058,11 @@ func actionFindFile(pf *PanelsFrame) {
 	vtui.FrameManager.Push(dlg)
 }
 func actionPanelSettings(pf *PanelsFrame) {
-	const dialogHeight = 36
+	// Height sized so consecutive checkbox rows stack tightly without
+	// blank lines between them (see #298). Blank rows are kept only at
+	// transitions between widget kinds (checkbox↔combo↔radio↔button)
+	// so groups still read as groups.
+	const dialogHeight = 31
 	dlg := vtui.NewCenteredDialog(60, dialogHeight, Msg("PanelSettings.Title"))
 	dlg.ShowClose = true
 
@@ -2194,22 +2200,28 @@ func actionPanelSettings(pf *PanelsFrame) {
 	dlg.AddItem(btnCancel)
 
 	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 56, dialogHeight-4)
+	// First checkbox cluster — stack tight, no blank rows between.
 	vbox.Add(chkHidden, vtui.Margins{}, vtui.AlignLeft)
-	vbox.Add(chkDirPrefix, vtui.Margins{Top: 1}, vtui.AlignLeft)
-	vbox.Add(chkSeparateExtensions, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	vbox.Add(chkDirPrefix, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(chkSeparateExtensions, vtui.Margins{}, vtui.AlignLeft)
+	// Blank row before the scrollbar combo — transition to a different
+	// widget kind, worth the visual separator.
 	rowScrollbars := vtui.NewHBoxLayout(0, 0, 56, 1)
 	rowScrollbars.Add(lblScrollbars, vtui.Margins{Right: 1}, vtui.AlignLeft)
 	rowScrollbars.Add(comboScrollbars, vtui.Margins{}, vtui.AlignFill)
-	vbox.Add(rowScrollbars, vtui.Margins{}, vtui.AlignFill)
+	vbox.Add(rowScrollbars, vtui.Margins{Top: 1}, vtui.AlignFill)
+	// Second checkbox cluster.
 	vbox.Add(chkPaths, vtui.Margins{Top: 1}, vtui.AlignLeft)
-	vbox.Add(chkCmdAc, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	vbox.Add(chkCmdAc, vtui.Margins{}, vtui.AlignLeft)
+	// Navigation radio group — its own visual island.
 	vbox.Add(lblNavigation, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(navigation, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkStayFocused, vtui.Margins{Left: 2}, vtui.AlignLeft)
+	// Third checkbox cluster.
 	vbox.Add(chkSync, vtui.Margins{Top: 1}, vtui.AlignLeft)
-	vbox.Add(chkAlwaysMenu, vtui.Margins{Top: 1}, vtui.AlignLeft)
-	vbox.Add(chkCPUGPU, vtui.Margins{Top: 1}, vtui.AlignLeft)
-	vbox.Add(chkEscToggle, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	vbox.Add(chkAlwaysMenu, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(chkCPUGPU, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(chkEscToggle, vtui.Margins{}, vtui.AlignLeft)
 
 	rowMode := vtui.NewHBoxLayout(0, 0, 56, 1)
 	rowMode.Add(lblMode, vtui.Margins{Right: 1}, vtui.AlignLeft)
@@ -2415,7 +2427,9 @@ func actionUpdateSettings(pf *PanelsFrame) {
 }
 
 func actionAppearanceSettings(pf *PanelsFrame) {
-	const width, height = 60, 21
+	// One row shaved by dropping the blank between the two trailing
+	// checkboxes (see #298).
+	const width, height = 60, 20
 	dlg := vtui.NewCenteredDialog(width, height, Msg("AppearanceSettings.Title"))
 	dlg.ShowClose = true
 	// Snapshot the whole palette (not just the style name) so a
@@ -2515,7 +2529,7 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 	vbox.Add(rowTitle, vtui.Margins{Top: 1}, vtui.AlignFill)
 
 	vbox.Add(chkCursor, vtui.Margins{Top: 1}, vtui.AlignLeft)
-	vbox.Add(chkContrast, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	vbox.Add(chkContrast, vtui.Margins{}, vtui.AlignLeft)
 
 	buttons := vtui.NewHBoxLayout(0, 0, width-4, 1)
 	buttons.HorizontalAlign = vtui.AlignCenter
