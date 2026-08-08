@@ -214,7 +214,7 @@ f4 is inspired by:
 * [Far Manager 2/3](https://github.com/FarGroup/FarManager), [far2l](https://github.com/elfmz/far2l/), [far2m](https://github.com/shmuz/far2m)
 * [FreeType](https://github.com/freetype/freetype) — auto-hinting
 * [Telegram](https://telegram.org/) — single-binary distribution and automatic updates
-* [Turbo Text Editor](https://github.com/magiblot/tvision)
+* [Turbo Text Editor](https://github.com/magiblot/turbo)
 * [Turbo Vision](https://github.com/magiblot/tvision)
 * TrueType — [bytecode hinting](https://learn.microsoft.com/en-us/typography/opentype/spec/tt_instructions)
 * [Visual Studio Code](https://github.com/microsoft/vscode) — piece table
