@@ -764,6 +764,38 @@ func TestDelete_FocusCustomization(t *testing.T) {
 	}
 	fm.Pop()
 }
+
+// TestActionDelete_UsesWarnPalette_Issue379 pins the fix for #379:
+// delete is destructive, so the confirmation dialog must render on the
+// red WarnDialog palette instead of the neutral one.
+func TestActionDelete_UsesWarnPalette_Issue379(t *testing.T) {
+	fm := vtui.FrameManager
+	fm.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	fsp := pf.panels[0].(*FileSystemPanel)
+	fsp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "goner.txt"}, Selected: true}}
+	pf.activeIdx = 0
+
+	actionDelete(pf)
+
+	top := fm.GetTopFrame()
+	if top == nil {
+		t.Fatal("Delete confirmation dialog was not shown")
+	}
+	dlg, ok := top.(*vtui.Window)
+	if !ok {
+		t.Fatalf("Top frame is not a *vtui.Window, got %T", top)
+	}
+	if !dlg.IsWarning {
+		t.Error("Delete confirmation must render on the WarnDialog palette (see #379)")
+	}
+	fm.Pop()
+}
+
 func TestActionOpenEditor_AlreadyOpened(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	SetDefaultF4Palette()
@@ -799,8 +831,13 @@ func TestActionOpenEditor_AlreadyOpened(t *testing.T) {
 	// Attempt second open
 	actionOpenEditor(pf, v, path)
 
-	// Wait for warning dialog
-	foundWarning := false
+	// Wait for the reprompt dialog. Per #379 this is a choice
+	// ("switch / reload / new instance / cancel"), not a warning —
+	// so the dialog now carries the semantic FileOp.AlreadyOpenedTitle
+	// and must render on the neutral (non-warning) palette.
+	wantTitle := Msg("FileOp.AlreadyOpenedTitle")
+	found := false
+	var foundWin *vtui.Window
 	timeout = time.After(2 * time.Second)
 Loop:
 	for {
@@ -809,8 +846,11 @@ Loop:
 			task()
 			if vtui.FrameManager.GetTopFrameType() == vtui.TypeDialog {
 				top := vtui.FrameManager.GetTopFrame()
-				if top != nil && strings.Contains(top.GetTitle(), "Warning") {
-					foundWarning = true
+				if top != nil && top.GetTitle() == wantTitle {
+					found = true
+					if w, ok := top.(*vtui.Window); ok {
+						foundWin = w
+					}
 					break Loop
 				}
 			}
@@ -819,8 +859,11 @@ Loop:
 		}
 	}
 
-	if !foundWarning {
-		t.Error("Expected warning dialog when trying to open an already opened file")
+	if !found {
+		t.Errorf("Expected reprompt dialog with title %q when trying to open an already opened file", wantTitle)
+	}
+	if foundWin != nil && foundWin.IsWarning {
+		t.Error("Already-opened dialog must not render as a warning (see #379)")
 	}
 }
 
@@ -859,8 +902,11 @@ func TestActionOpenViewer_AlreadyOpened(t *testing.T) {
 	// Attempt second open
 	actionOpenViewer(pf, v, path)
 
-	// Wait for warning dialog
-	foundWarning := false
+	// Same rationale as TestActionOpenEditor_AlreadyOpened above:
+	// per #379 the reprompt is a neutral choice, not a warning.
+	wantTitle := Msg("FileOp.AlreadyViewedTitle")
+	found := false
+	var foundWin *vtui.Window
 	timeout = time.After(2 * time.Second)
 Loop:
 	for {
@@ -869,8 +915,11 @@ Loop:
 			task()
 			if vtui.FrameManager.GetTopFrameType() == vtui.TypeDialog {
 				top := vtui.FrameManager.GetTopFrame()
-				if top != nil && strings.Contains(top.GetTitle(), "Warning") {
-					foundWarning = true
+				if top != nil && top.GetTitle() == wantTitle {
+					found = true
+					if w, ok := top.(*vtui.Window); ok {
+						foundWin = w
+					}
 					break Loop
 				}
 			}
@@ -879,8 +928,11 @@ Loop:
 		}
 	}
 
-	if !foundWarning {
-		t.Error("Expected warning dialog when trying to open an already viewed file")
+	if !found {
+		t.Errorf("Expected reprompt dialog with title %q when trying to open an already viewed file", wantTitle)
+	}
+	if foundWin != nil && foundWin.IsWarning {
+		t.Error("Already-viewed dialog must not render as a warning (see #379)")
 	}
 }
 

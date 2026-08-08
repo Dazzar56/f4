@@ -638,7 +638,9 @@ func actionOpenEditor(pf *PanelsFrame, v vfs.VFS, path string) {
 		}
 
 		vtui.FrameManager.PostTask(func() {
-			dlg := vtui.ShowMessage(Msg("Warning.Title"), fmt.Sprintf(Msg("FileOp.AlreadyOpened"), vtui.TruncateMiddle(v.Base(path), 40)), buttons)
+			// This is a choice dialog ("switch / reload / new instance / cancel"),
+			// not a warning — render on the neutral dialog palette. See #379.
+			dlg := vtui.ShowMessageEx(Msg("FileOp.AlreadyOpenedTitle"), fmt.Sprintf(Msg("FileOp.AlreadyOpened"), vtui.TruncateMiddle(v.Base(path), 40)), buttons, vtui.MessageInfo)
 			dlg.OnResult = func(res int) {
 				if res == 0 {
 					vtui.FrameManager.SwitchScreen(screenIdx)
@@ -801,7 +803,9 @@ func actionOpenViewer(pf *PanelsFrame, v vfs.VFS, path string) {
 	existingViewer, screenIdx := findOpenedViewer(v, path)
 	if existingViewer != nil {
 		vtui.FrameManager.PostTask(func() {
-			dlg := vtui.ShowMessage(Msg("Warning.Title"), fmt.Sprintf(Msg("FileOp.AlreadyViewed"), vtui.TruncateMiddle(v.Base(path), 40)), []string{Msg("FileOp.BtnCurrent"), Msg("FileOp.BtnReload"), Msg("FileOp.BtnNewInstance"), Msg("vtui.Cancel")})
+			// Same as actionOpenEditor above — this is a choice
+			// dialog, render on the neutral dialog palette. See #379.
+			dlg := vtui.ShowMessageEx(Msg("FileOp.AlreadyViewedTitle"), fmt.Sprintf(Msg("FileOp.AlreadyViewed"), vtui.TruncateMiddle(v.Base(path), 40)), []string{Msg("FileOp.BtnCurrent"), Msg("FileOp.BtnReload"), Msg("FileOp.BtnNewInstance"), Msg("vtui.Cancel")}, vtui.MessageInfo)
 			dlg.OnResult = func(res int) {
 				if res == 0 {
 					vtui.FrameManager.SwitchScreen(screenIdx)
@@ -1697,6 +1701,9 @@ func actionDelete(pf *PanelsFrame) {
 	lines := vtui.WrapText(msg, 46)
 
 	dlg := vtui.NewCenteredDialog(50, 8+len(lines), title)
+	// Delete is destructive — render on the red WarnDialog palette
+	// so the confirmation reads as an alarm, not a neutral question.
+	dlg.IsWarning = true
 	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 50-4, (8+len(lines))-4)
 
 	for _, l := range lines {
