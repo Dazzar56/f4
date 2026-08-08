@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/unxed/f4/vfs"
+	"github.com/unxed/sevenzip"
 	"github.com/unxed/vtui"
 )
 
@@ -174,7 +175,55 @@ func TestUpdater_Extractors(t *testing.T) {
 	if string(b1) != "fake_executable_data" || string(b2) != "plugin_data" {
 		t.Errorf("TarGz extraction mismatch")
 	}
+
+	sevenPath := filepath.Join(t.TempDir(), "fixture.7z")
+	sevenFile, err := os.Create(sevenPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sw, err := sevenzip.NewWriter(sevenFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sf1, err := sw.Create("f4.exe")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sf1.Write(binaryContent)
+	sf1.Close()
+	sf2, err := sw.Create("plugins/dummy.dll")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sf2.Write(pluginContent)
+	sf2.Close()
+	sfBad, err := sw.Create(badAbsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sfBad.Write([]byte("hacked"))
+	sfBad.Close()
+	if err := sw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	sevenFile.Close()
+
+	sevenData, _ := os.ReadFile(sevenPath)
+	dest7z := t.TempDir()
+	err = extract7zToDir(sevenData, dest7z)
+	if err != nil {
+		t.Fatalf("extract7zToDir failed: %v", err)
+	}
+	b1, _ = os.ReadFile(filepath.Join(dest7z, "f4.exe"))
+	b2, _ = os.ReadFile(filepath.Join(dest7z, "plugins", "dummy.dll"))
+	if string(b1) != "fake_executable_data" || string(b2) != "plugin_data" {
+		t.Errorf("7z extraction mismatch")
+	}
+	if _, err := os.Stat(filepath.Join(dest7z, "etc", "passwd")); !os.IsNotExist(err) {
+		t.Error("7z Zip Slip vulnerability detected (absolute path extracted)!")
+	}
 }
+
 func TestUpdater_GetCurrentVersion(t *testing.T) {
 	/*
 		tests := []struct {
@@ -512,7 +561,7 @@ func TestUpdater_PerformUpdate(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()
 
-	performUpdate(pf, ts.URL, true, "v9.9.9", "2026-01-01")
+	performUpdate(pf, ts.URL, "targz", "v9.9.9", "2026-01-01")
 
 	timeout := time.After(3 * time.Second)
 	successDialogFound := false
