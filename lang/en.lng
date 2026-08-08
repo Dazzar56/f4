@@ -660,3 +660,12 @@ FindFile.BtnGoTo=&Go to
 FindFile.BtnView=&View
 FindFile.BtnEdit=&Edit
 FindFile.BtnClose=&Close
+
+FileOp.DeletionErrors= Deletion Errors
+FileOp.FileAlreadyExists=File already exists
+FileOp.RememberChoice=Reme&mber choice
+FileOp.Overwrite=&Overwrite
+FileOp.Skip=&Skip
+FileOp.Rename=&Rename
+FileOp.Append=&Append
+FileOp.Resume=Res&ume

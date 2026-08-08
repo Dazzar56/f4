@@ -661,3 +661,12 @@ FindFile.BtnGoTo=&Перейти
 FindFile.BtnView=&Просмотр
 FindFile.BtnEdit=&Правка
 FindFile.BtnClose=&Закрыть
+
+FileOp.DeletionErrors= Ошибки удаления
+FileOp.FileAlreadyExists=Файл уже существует
+FileOp.RememberChoice=Запо&мнить выбор
+FileOp.Overwrite=&Переписать
+FileOp.Skip=&Пропустить
+FileOp.Rename=Пере&именовать
+FileOp.Append=&Дописать
+FileOp.Resume=Возоб&новить

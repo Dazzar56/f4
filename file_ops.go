@@ -566,7 +566,7 @@ func ExecuteDeleteOp(pf *PanelsFrame, activeVfs vfs.VFS, names []string, mode in
 					dlgH = 8
 				}
 
-				dlg := vtui.NewCenteredDialog(dlgW, dlgH, " Deletion Errors ")
+				dlg := vtui.NewCenteredDialog(dlgW, dlgH, Msg("FileOp.DeletionErrors"))
 				dlg.ShowClose = true
 
 				var listItems []string
@@ -580,7 +580,7 @@ func ExecuteDeleteOp(pf *PanelsFrame, activeVfs vfs.VFS, names []string, mode in
 				}
 
 				lb := vtui.NewListBox(0, 0, dlgW-4, dlgH-6, listItems)
-				btnOk := vtui.NewButton(0, 0, "&Ok")
+				btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))
 				btnOk.IsDefault = true
 				btnOk.OnClick = func() { dlg.Close() }
 
@@ -1059,9 +1059,9 @@ func AskOverwrite(ctx context.Context, destPath string, srcStat, dstStat vfs.VFS
 
 		width := 76
 		height := 13
-		dlg = vtui.NewCenteredDialog(width, height, " Warning ")
+		dlg = vtui.NewCenteredDialog(width, height, Msg("Warning.Title"))
 
-		lbl1 := vtui.NewLabel(0, 0, "File already exists", nil)
+		lbl1 := vtui.NewLabel(0, 0, Msg("FileOp.FileAlreadyExists"), nil)
 		truncPath := vtui.TruncateMiddle(destPath, width-6)
 		lbl2 := vtui.NewLabel(0, 0, truncPath, nil)
 
@@ -1077,17 +1077,17 @@ func AskOverwrite(ctx context.Context, destPath string, srcStat, dstStat vfs.VFS
 
 		sep2 := vtui.NewSeparator(0, 0, width, true, true)
 
-		chkRem := vtui.NewCheckbox(0, 0, "Reme&mber choice", false)
+		chkRem := vtui.NewCheckbox(0, 0, Msg("FileOp.RememberChoice"), false)
 
 		sep3 := vtui.NewSeparator(0, 0, width, true, true)
 
-		btnOver := vtui.NewButton(0, 0, "&Overwrite")
+		btnOver := vtui.NewButton(0, 0, Msg("FileOp.Overwrite"))
 		btnOver.IsDefault = true
-		btnSkip := vtui.NewButton(0, 0, "&Skip")
-		btnRen := vtui.NewButton(0, 0, "&Rename")
-		btnApp := vtui.NewButton(0, 0, "&Append")
-		btnRes := vtui.NewButton(0, 0, "Res&ume")
-		btnCan := vtui.NewButton(0, 0, "&Cancel")
+		btnSkip := vtui.NewButton(0, 0, Msg("FileOp.Skip"))
+		btnRen := vtui.NewButton(0, 0, Msg("FileOp.Rename"))
+		btnApp := vtui.NewButton(0, 0, Msg("FileOp.Append"))
+		btnRes := vtui.NewButton(0, 0, Msg("FileOp.Resume"))
+		btnCan := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
 
 		dlg.AddItem(lbl1)
 		dlg.AddItem(lbl2)

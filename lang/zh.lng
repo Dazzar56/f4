@@ -617,3 +617,12 @@ FindFile.BtnGoTo=跳转至(&G)
 FindFile.BtnView=查看(&V)
 FindFile.BtnEdit=编辑(&E)
 FindFile.BtnClose=关闭(&C)
+
+FileOp.DeletionErrors= 删除错误
+FileOp.FileAlreadyExists=文件已存在
+FileOp.RememberChoice=记住选择(&M)
+FileOp.Overwrite=覆盖(&O)
+FileOp.Skip=跳过(&S)
+FileOp.Rename=重命名(&R)
+FileOp.Append=追加(&A)
+FileOp.Resume=恢复(&U)
