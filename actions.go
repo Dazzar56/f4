@@ -2407,6 +2407,7 @@ func actionUpdateSettings(pf *PanelsFrame) {
 
 	vbox.Add(hbox, vtui.Margins{Top: 2}, vtui.AlignFill)
 	vbox.Apply()
+	dlg.SetFocusedItem(btnCheck)
 
 	btnCancel.OnClick = func() { dlg.Close() }
 	btnOk.OnClick = func() {
