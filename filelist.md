@@ -84,6 +84,9 @@
     ├── cpu_info_linux.go
     ├── cpu_info_other.go
     ├── cpu_info_windows.go
+    ├── debug.1.log
+    ├── debug.2.log
+    ├── debug.log
     ├── detach_unix.go
     ├── detach_windows.go
     ├── dialog_layouts_test.go
@@ -498,13 +501,16 @@
     ├── solaris_streams_mock_test.go
     ├── solaris_streams_test.go
     ├── style_combo_colors_test.go
+    ├── style_completeness_test.go
     ├── style_default_dark_test.go
     ├── style.go
     ├── style_overrides_test.go
     ├── styles
     │   ├── classic.ini
     │   ├── default_dark.ini
-    │   └── modern.ini
+    │   ├── fonokai.ini
+    │   ├── modern.ini
+    │   └── README.md
     ├── style_test.go
     ├── terminal_log_vfs.go
     ├── terminal_log_vfs_test.go
@@ -629,4 +635,4 @@
     ├── word_nav.go
     └── word_nav_test.go
     
-    43 directories, 585 files
+    43 directories, 591 files
