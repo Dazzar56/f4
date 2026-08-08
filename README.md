@@ -202,3 +202,22 @@ To achieve near-instantaneous pasting text via terminal Paste feature for large 
 2.  **Busy State Signaling:** Components can signal a `Busy` state to the `FrameManager`. While busy, the UI rendering phase and terminal `Flush()` are entirely suppressed, eliminating visual jitter.
 3.  **Event Draining (Burst Processing):** The `FrameManager` implements an "event draining" loop with a micro-timeout. It aggressively consumes all pending input events from the OS buffer before attempting a single render pass.
 4.  **Zero-Allocation Rendering:** The `vtui` core minimizes heap allocations during the `Flush()` cycle, sending only the minimum necessary ANSI sequences to the terminal.
+
+### Acknowledgements
+
+f4 is inspired by:
+
+* [Apple Auto Layout](https://developer.apple.com/library/archive/documentation/UserExperience/Conceptual/AutolayoutPG/index.html)
+* [ConEmu](https://github.com/ConEmu/ConEmu)
+* ConPTY — [Win32 Input Mode](https://github.com/microsoft/terminal/blob/main/doc/specs/%234999%20-%20Improved%20keyboard%20handling%20in%20Conpty.md)
+* [DN (DOS Navigator)](https://www.ritlabs.com/en/products/dn/)
+* [Far Manager 2/3](https://github.com/FarGroup/FarManager), [far2l](https://github.com/elfmz/far2l/), [far2m](https://github.com/shmuz/far2m)
+* [FreeType](https://github.com/freetype/freetype) — auto-hinting
+* [Telegram](https://telegram.org/) — single-binary distribution and automatic updates
+* [Turbo Text Editor](https://github.com/magiblot/tvision)
+* [Turbo Vision](https://github.com/magiblot/tvision)
+* TrueType — [bytecode hinting](https://learn.microsoft.com/en-us/typography/opentype/spec/tt_instructions)
+* [Visual Studio Code](https://github.com/microsoft/vscode) — piece table
+* [vtm](https://github.com/directvt/vtm)
+* [Windows Console API](https://learn.microsoft.com/en-us/windows/console/console-functions) — data types
+* [Windows Notepad](https://apps.microsoft.com/detail/9msmlrh6lzf3) — word wrapping
