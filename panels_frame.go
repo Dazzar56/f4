@@ -2246,6 +2246,12 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 				msg = fmt.Sprintf("There are %d active background operations!\nIf you exit, they will be aborted.\n\n%s", active, msg)
 			}
 			dlg := vtui.ShowMessage(Msg("Quit.Title"), msg, []string{Msg("Quit.Btn"), Msg("vtui.Cancel")})
+			// When background operations would be aborted the exit is
+			// genuinely destructive — flip to the WarnDialog palette.
+			// Plain "confirm on exit" stays on the neutral palette.
+			if active > 0 {
+				dlg.IsWarning = true
+			}
 			dlg.OnResult = func(code int) {
 				if code == 0 {
 					SaveSession()

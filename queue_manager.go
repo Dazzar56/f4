@@ -546,7 +546,11 @@ func (qf *QueueFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			t.mu.Unlock()
 
 			if isErr && errMsg != nil {
-				vtui.ShowMessageOn(qf, " Error Details ", errMsg.Error(), []string{"&Ok"})
+				// "Error Details" is an error dialog — the plain "Error"
+				// title would auto-detect as a warning, but this one does
+				// not match the legacy whitelist. Flip explicitly (#379).
+				dlg := vtui.ShowMessageOn(qf, " Error Details ", errMsg.Error(), []string{"&Ok"})
+				dlg.IsWarning = true
 			}
 			return true
 		}

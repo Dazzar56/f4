@@ -385,6 +385,9 @@ func actionRemovePlugRingItem(pf *PanelsFrame, parent *vtui.Window, item PlugRin
 	}
 
 	dlg := vtui.ShowMessageOn(parent, " Remove Plugin ", fmt.Sprintf("Do you want to completely remove %s?", item.Name), []string{"&Remove", "Cancel"})
+	// Destructive — wipes the plugin directory. Render on the WarnDialog
+	// palette so the confirmation reads as an alarm.
+	dlg.IsWarning = true
 	dlg.OnResult = func(code int) {
 		if code == 0 {
 			// Grants belong to the plugin, not to its id. Leaving them
