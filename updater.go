@@ -39,6 +39,13 @@ var (
 	osExecutable = os.Executable
 	currentOS    = runtime.GOOS
 	currentArch  = runtime.GOARCH
+
+	// sessionDismissedUpdateKey remembers which update the user
+	// declined during the current f4 session, so an interval-driven
+	// auto-check does not re-prompt for the same version this run.
+	// The dismissal deliberately does NOT persist across restarts —
+	// see #374 — and a manual "Check for updates" always ignores it.
+	sessionDismissedUpdateKey string
 )
 
 func getCurrentVersion() string {
@@ -167,16 +174,31 @@ func CheckForUpdates(pf *PanelsFrame, manual bool) {
 		return
 	}
 
+	// An update is available, but the user already said "no" to this
+	// exact release earlier in this session. Skip the auto-prompt so
+	// the next interval-driven check does not nag; a manual "Check
+	// for updates" from the settings dialog goes through regardless
+	// (see #374).
+	if !manual && sessionDismissedUpdateKey == updateKey {
+		vtui.DebugLog("UPDATER: skipping prompt — update %q dismissed this session", updateKey)
+		return
+	}
+
 	vtui.FrameManager.PostTask(func() {
 		msg := fmt.Sprintf("An update is available: %s\n\nDo you want to download and install it now?", displayVersion)
 		dlg := vtui.ShowMessage(" Auto Update ", msg, []string{"&Yes", "&No"})
 		dlg.OnResult = func(code int) {
 			if code == 0 {
 				performUpdate(pf, downloadURL, currentOS != "windows", release.TagName, updateKey)
-			} else {
-				AppConfig.LastUpdateVersion = updateKey
-				SaveConfig()
+				return
 			}
+			// User declined. Remember only for this session — the
+			// next restart (or a manual check) will offer it again.
+			// AppConfig.LastUpdateVersion is deliberately NOT touched
+			// here: that field is the "we already installed this
+			// version" marker and must survive across restarts, while
+			// a declined prompt must not (see #374).
+			sessionDismissedUpdateKey = updateKey
 		}
 	})
 }
