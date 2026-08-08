@@ -1,0 +1,632 @@
+@Contents
+$f4 help-index (Versie: %Ver)
+f4 is een experimentele Far Manager / far2l-kloon in Go.
+
+~Viewer- / editorsneltoetsen~ViewerEditor@
+~Panel-navigation~PanelNav@
+~Visual File Renamer (VisRen)~VisRen@
+~README.md weergeven~README@
+
+@VisRen
+$Visual File Renamer (VisRen)
+
+VisRen is de ingebouwde, visuele batch-hernoemer van F4. Deze bouwt elke nieuwe
+naam vooraf op, nog voordat er wijzigingen worden doorgevoerd, en toont bron-
+en doelnamen naast elkaar. Het werkt met bestanden en mappen op een lokaal
+bestandssysteempaneel.
+
+Als paneelitems zijn geselecteerd, opent VisRen deze in de volgorde van het
+paneel. Als er geen items zijn geselecteerd, wordt het item onder de cursor
+van het paneel gebruikt. De bovenliggende map ".." wordt nooit gebruikt. Open
+VisRen door op F11 te drukken en "Visual File Renamer" te selecteren; de
+toegewezen sneltoets van het menu kan het ook activeren.
+
+~Snelstart en dialoogvelden~VisRenQuickStart@
+~Naammaskers, extensies, bereiken, tellers en escapes~VisRenMasks@
+~Hoofdletterconversie, transliteratie en verwerkingsvolgorde~VisRenTransforms@
+~Datums, ID3, afbeelding/EXIF en uitvoerbare metadatatags~VisRenMetadata@
+~Zoeken, eenvoudige vervanging en reguliere expressies~VisRenSearch@
+~Voorbeeldweergave-navigatie, sneltoetsen en muisreferentie~VisRenPreview@
+~De hernoemingslijst bewerken in de UTF-8-editor~VisRenEditor@
+~Hernoemen uitvoeren, fouten, logboek en ongedaan maken~VisRenRename@
+~Draagbare bestandsnaamregels and belangrijke beperkingen~VisRenSafety@
+~Praktische tips en recepten~VisRenExamples@
+
+De implementatie volgt FarPlugins VisRen 3.2.0, maar met een strengere
+bestandsnaam- en editorvalidatie, stabiele willekeurige waarden en draagbare
+metadatatags.
+
+@VisRenQuickStart
+$VisRen: Snelstart and dialoogvelden
+
+#Een typische hernoemingsproces#
+
+  1. Selecteer de gewenste bestanden/mappen met de Ins-toets, of plaats de
+     paneelcursor op één item (als u alleen dat item nodig heeft).
+  2. Druk op F11 en selecteer VisRen.
+  3. Voer maskers in voor de naam en de extensie. De standaardwaarden [N] en
+     [E] behouden beide delen ongewijzigd.
+  4. Voer optioneel tekst in voor "Zoeken naar" und "Vervangen door". De fókusz
+     begint in het veld "Zoeken naar"; de Tab-toets springt direct naar het
+     veld "Vervangen door".
+  5. Controleer de doelnamen. Druk op F3 om de volledige bronnaam, doelnaam
+     of de foutdiagnose voor de actuele regel weer te geven.
+  6. Selecteer "Hernoemen" of druk op Enter op de standaardknop.
+
+#Naam en extensie#
+
+Deze twee velden bouwen de doel-basisnaam en de extensie apart op. Het
+extensieveld bevat de punt niet. Een leeg extensieresultaat verwijdert de
+extensie. Literale tekst wordt precies zo gekopieerd als u deze hebt ingevoerd;
+zárójeles expressies voegen brontekst, tellers, metadatatags of transformaties
+in.
+
+De laatste punt scheidt de bronnaam en de extensie. Dus bij archive.tar.gz
+is de naam archive.tar en de extensie gz. De README-bestand heeft geen
+extensie. Een verborgen bestand, zoals .gitignore, heeft een lege naam en de
+extensie gitignore.
+
+#Sjablonen en de [+] knop#
+
+De Naamsjablonen- en Extensiesjablonen-lijsten bevatten expressies die voor het
+betreffende masker geldig zijn. Het selecteren van een item markeert het alleen.
+De [+] knop voegt dit geselecteerde sjabloon in op de cursorpositie en geeft de
+fókus weer terug aan het betreffende masker, precies zoals in de originele
+VisRen. Als de sjabloonlijst in fókusz is, voegt de Ins-toets het actuele item
+in, terwijl de fókusz in de lijst blijft. Bereik- en teller-helyőrzők worden
+bij invoeging bruikbare waarden.
+
+#Zoekinstellingen#
+
+Zoeken en vervangen wordt toegepast nadat beide maskers de volledige bestandsnaam
+hebben opgebouwd (inclusief de gegenereerde punt en extensie). Standaard is de
+"Hoofdlettergevoelig" optie ingeschakeld. "Reguliere expressie" schakelt tussen
+literale zoekopdracht en regex-modus. Zie de details in het thema "Zoeken".
+
+#Live-voorweergave en foutdiagnose#
+
+Elke bewerking werkt de voorweergave onmiddellijk bij. Als een masker, bereik,
+teller, regex of de resulterende bestandsnaam ongeldig is, tonen alle doelvelden
+<Error!>. Hernoemen en de F4-editor zijn dan uitgeschakeld. Druk op F3 om de
+daadwerkelijke diagnostische informatie te bekijken.
+
+De vier bewerkingsvelden maken gebruik van de geschiedenis van F4. Voor het
+hernoemen gebruikte waarden worden aan de geschiedenis toegevoegd. De
+woordscheidingstekens voor [T] worden apart opgeslagen in de VisRen-gebruikersconfiguratie.
+
+Druk op Backspace om terug te keren naar de VisRen-inhoudsopgave.
+
+@VisRenMasks
+$VisRen: Naammaskers, bereiken, tellers en escapes
+
+#Basisexpressies#
+
+  [N]          Originele naam zonder de laatste extensie.
+  [E]          Originele extensie zonder de voorloop-punt.
+  [[]          Literale openende szögletes zárójel.
+  []]          Literale sluitende szögletes zárójel.
+
+Alle tekst buiten de expressies is literaal. Een verweesde sluitende haak, een
+niet geopende szögletes zárójel of een onbekende expressie wordt als fout beschouwd.
+
+#Bereiken#
+
+Een bereik volgt direct na N of E. De posities tellen Unicode-karakters (niet
+bytes) en beginnen bij 1. Een negatieve positie telt vanaf het einde terug.
+Dezelfde vormen werken met E, bijvoorbeeld [E1-3].
+
+Bij de bronnaam abcdefghij:
+
+  [N2]         b                 één karakter
+  [N2-5]       bcde              positie 2 tot 5 (inclusief beide)
+  [N2,5]       bcdef             vijf karakters vanaf positie 2
+  [N2-]        bcdefghij         positie 2 tot het einde
+  [N-2]        i                 voorlaatste karakter
+  [N2--5]      bcdef             positie 2 tot het vanaf de achterkant getelde 5e karakter
+  [N-8-5]      cde               harness 8 tot 5 vanaf het einde
+  [N-8,5]      cdefg             vijf karakters vanaf de achterkant getelde 8e positie
+  [N-5-]       fghij             vanaf het 5e karakter vanaf het einde tot het einde
+
+Onderdelen buiten het bereik worden indien mogelijk afgeknipt of geven een leeg
+resultaat. Positie 0 en een omgedraaid bereik zijn fouten. Het bereiksjabloon
+uit de lijst gebruikt de langste bronnaam of extensie.
+
+#Tellers#
+
+  [C1]         1, 2, 3, ...
+  [C001]       001, 002, 003, ...
+  [C001+5]     001, 006, 011, ...
+  [C10+-2]     10, 08, 06, ...
+
+De eerste cijfers bepalen de startwaarde en de minimale weergavebreedte. Ze mogen
+maximaal negen cijfers bevatten. Als u de +stapgrootte weglaat, is de stapgrootte
+1. De teller volgt de volgorde van de voorweergave, dus met Ctrl+Up/Down-toetsen of
+drag-and-drop verandert u de toegewezen waarden. De breedte is de minimale waarde:
+grotere getallen worden niet afgeknipt.
+
+#Gecombineerde expressies#
+
+Expressies en literale tekst kunnen vrij worden gecombineerd. Bijvoorbeeld de
+[C001+1]_[N1-12] geeft een driecijferig sorszám, een liggend streepje en de eerste
+twaalf karakters van de originele naam. Transformatie-expressies voegen geen tekst toe;
+ze wijzigen alleen het voltooide deel volgens de beschrijving in het transformatiethema.
+
+Druk op Backspace om terug te keren naar de VisRen-inhoudsopgave.
+
+@VisRenTransforms
+$VisRen: transformaties en verwerkingsvolgorde
+
+#Kis/Nagybetű transformaties#
+
+  [L]          De volledige maskerresultaat converteren naar kleine letters.
+  [U]          De volledige maskerresultaat converteren naar hoofdletters.
+  [F]          Eerste letter hoofdletter, de rest wordt kleine letters.
+  [T]          De eerste letter van elk woord wordt een hoofdletter.
+  [M]          Muziekbestanden formatteren in "Artiest - Titel" stijl.
+
+De [T] gebruikt standaard de woordscheidingstekens "-. _&". Selecteer de [T] in
+een van de sjabloonlijsten en druk op F4 om de scheidingskarakters te bewerken. Maximaal
+18 karakters worden opgeslagen in de VisRen-configuratie en kunnen later opnieuw
+worden gebruikt.
+
+De [M] herkent de scheidingstekens " - " of "_-_" tussen de artiest en de titel. De
+naam van de artiest krijgt "Title Case" formattering (elk woord krijgt een hoofdletter);
+de titel van het nummer begint met slechts één hoofdletter, de rest wordt kleine letters.
+In de naam van de artiest blijft het geïsoleerde Russische "и" voegwoord kleine letters,
+wat overeenkomt met de originele VisRen-werking.
+
+Als er meerdere kis/nagybetű-expressies in een masker voorkomen, is de prioriteit
+als volgt vastgelegd: [L], [U], [F], [T], [M]. Alleen de expressie met de hoogste
+prioriteit treedt in werking.
+
+#Transliteratie#
+
+  [TL]         Transliteratie van Russische cyrillische letters volgens de VisRen-tabel.
+  [TR]         De transliteratie terugzetten naar Russische cyrillische letters.
+
+De toewijzing komt overeen met de originele VisRen-tabel: bijvoorbeeld ё -> jo, ж -> zh,
+х -> kh, щ -> shh, ю -> ju, я -> ja. De lettergrootte blijft indien mogelijk behouden. De
+omgekeerde conversie kiest de langste overeenkomstige Latijnse sequentie. Als zowel
+de [TL] als de [TR] aanwezig is, heeft de [TL] prioriteit.
+
+#Exacte verwerkingsvolgorde#
+
+  1. De naam- en extensie-expressies worden uitgebreid.
+  2. Als de extensie niet leeg is, worden de twee delen verbonden met een punt.
+  3. Zoeken/vervangen wordt toegepast op de gegenereerde volledige bestandsnaam.
+  4. Het resultaat wordt bij de laatste punt opnieuw opgesplitst.
+  5. Transliteratie wordt toegepast op het deel waar de masker dit heeft aangevraagd.
+  6. Ten slotte treedt de geselecteerde kis/nagybetű-transformatie in werking.
+  7. De resulterende bestandsnaam wordt gevalideerd.
+
+Deze volgorde is belangrijk. De kis/nagybetű-transformatie heeft ook invloed op de
+tekst die door zoeken/vervangen is ingevoegd, terwijl de zoekopdracht ook kan
+overeenkomen met de gegenereerde extensie.
+
+Druk op Backspace om terug te keren naar de VisRen-inhoudsopgave.
+
+@VisRenMetadata
+$VisRen: Datums en bestands-metadatatags
+
+De metadatatags worden vertraagd (lazy) ingelezen en voor elk bronbestand slechts
+eenmaal opgeslagen in de cache. Ontbrekende of niet-ondersteunde velden worden
+vervangen door een lege tekenreeks en onderbreken de voorweergave niet.
+
+#Bestandstijdstempels en sessiewaarden#
+
+  [DM]         Laatste mappersdatum in lokale tijd: YYYY.MM.DD
+  [TM]         Laatste mappers-tijd in lokale tijd: hh-mm-ss
+  [R]          Willekeurig decimaal getal tussen 0 en 32767
+
+De [R] wordt eenmaal toegekend bij het openen van het dialoogvenster. Het blijft
+stabiel tijdens het bewerken van de maskers en volgt zijn regel bij het herordenen
+van de voorweergave. Een nieuwe VisRen-sessie deelt nieuwe willekeurige waarden uit.
+
+#MP3 / ID3#
+
+De sorszám-expressie van het nummer is een openende haak, de ASCII-kettőskereszt
+(U+0023) en een sluitende haak. De overige expressies zijn:
+
+  [t]          Titel van het nummer
+  [a]          Artiest
+  [l]          Albumnaam
+  [y]          Jaar/Datum
+  [g]          Genre
+
+Als er een ID3v2-tag bestaat, hebben de ID3v2.3 en ID3v2.4 frames prioriteit. Anders
+wordt de ID3v1.1 ingelezen, inclusief het sorszám en de genre-tabel. Ondersteunde
+kódolások omvatten de legacy-systeemkódolás, de UTF-8 en de UTF-16.
+
+#Afbeeldingen en EXIF#
+
+  [c]          JPEG EXIF-camerafabrikant
+  [m]          JPEG EXIF-cameramodel
+  [d]          Opnamedatum: YYYY.MM.DD hh-mm-ss
+  [r]          Karaktergrootte in pixels, zoals BREEDTExHOOGTE
+
+De afmetingen zijn beschikbaar bij JPEG, BMP, GIF en PNG-formaten. Fabrikant, model
+en de opnamedatum worden ingelezen uit de EXIF-velden van JPEG. Als er geen EXIF-datum
+beschikbaar is, gebruikt de [d] de laatste mappers-tijd van het bestand. Let op: de
+kleine [m]/[r] zijn metadatatag-helyőrzők, terwijl de grote [M]/[R] de transformatie-,
+respectievelijk de willekeurige getalexpressies zijn.
+
+#Programmaversie#
+
+  [V]          Vaste bestandsversie uit Windows PE .exe of .dll resource
+
+De PE-versiegegevens worden op alle ondersteunde besturingssystemen natief
+geanalyseerd. Voor bestanden die geen versie-informatie bevatten, wordt de [V]
+uitgebreid tot een lege tekenreeks.
+
+Bestandspad-scheidingstekens of andere ongeldige karakters in de metadatatags
+worden weggegooid of blijven hangen tijdens de uiteindelijke bestandsnaamvalidatie.
+Controleer altijd de voorweergave als de tags afkomstig zijn van bestanden die u
+niet zelf beheert.
+
+Druk op Backspace om terug te keren naar de VisRen-inhoudsopgave.
+
+@VisRenSearch
+$VisRen: Zoeken, vervangen en reguliere expressies
+
+De zoek- en vervangingsactie wordt uitgevoerd op de door beide maskers opgebouwde
+volledige bestandsnaam (inclusief de gegenereerde punt en extensie). Als het veld
+"Zoeken naar" leeg is, is deze sectie uitgeschakeld. Alle niet-overlappende
+overeenkomsten worden vervangen.
+
+#Eenvoudige literale modus#
+
+Als "Reguliere expressie" niet is aangevinkt, is "Zoeken naar" literale tekst. Als de
+"Hoofdlettergevoelig" optie is ingeschakeld, worden "Bestand" en "bestand" als
+verschillend beschouwd. Als het niet is aangevinkt, wordt een kleine-lettervergelijking
+uitgevoerd; de vervangende tekst wordt precies in de ingevoerde vorm ingevoegd.
+
+Voorbeeld: [N] en [E] maskers, zoeken "ontwerp_", vervangende tekst leeg, verandert
+het in: ontwerp_verslag.txt -> verslag.txt.
+
+#Reguliere expressiemodus#
+
+Schakel de optie "Reguliere expressie" in om de op Go/coregex gebaseerde reguliere-
+expressie-engine van F4 te gebruiken. U kunt het patroon rechtstreeks invoeren, of in
+/patroon/i vorm. In deze perjeles vorm moet de letterlijke perjel als \/ worden
+opgegeven. De optionele i-póttag negeert kleine en grote letters. De optie
+"Hoofdlettergevoelig" uitschakelen heeft hetzelfde resultaat. Andere póttags dan de i
+wordt niet geaccepteerd.
+
+De csere-variabelen gebruiken de $0 om de volledige overeenkomst aan te geven, de
+$1...$9 voor de zárójeles groepen. Bijvoorbeeld bij de 001-report.txt:
+
+  Zoeken naar:      /(\d+)-([^.]+)/
+  Vervangen door:   $2-$1
+  Resultaat:         report-001.txt
+
+Een ongeldig patroon, een niet-gesloten /patroon/ of een niet-ondersteunde flag geeft
+<Error!> aan; hernoemen en de editorfunctie worden dan uitgeschakeld. De gedetailleerde
+foutdiagnose kan met de F3-toets worden bekeken.
+
+Druk op Backspace om terug te keren naar de VisRen-inhoudsopgave.
+
+Overeenkomsten in de originele bestandsnaam worden in de linker voorweergavekolom
+gekleurd weergegeven. De markering volgt de instellingen van "Hoofdlettergevoelig" en
+"Reguliere expressie", markeert alle zichtbare overeenkomsten en blijft bij het
+scollen van de lijst op zijn plaats. De door "Vervangen door" gegenereerde tekst
+wordt in de rechterkolom gemarkeerd. Bij een reguliere expressie omvat dit de volledige
+ingevoegde tekst; bij een lege vervanging is er geen tekst om te markeren.
+
+@VisRenPreview
+$VisRen: Súgó, sneltoetsen en muis
+
+De linker voorweergavekolom is de bron; de rechter is het doel. Bij het openen van het
+dialoogvenster is de eerste regel geselecteerd en de fókusz begint in het "Zoeken naar"
+veld. Met de F12-toets kunt u de fókusz naar de voorweergavelijst verplaatsen en met het
+naammaskerveld kunt u terugkeren.
+
+Als het aantal regels groter is dan het zichtbare venster, verschijnt er aan de rechterkant
+een verticale scrollbar. U kunt met de pijlen, de schuifregelaar en het scrollwiel door de
+lijst navigeren. Bij een kortere lijst wordt de scrollbar automatisch verborgen.
+
+#Algemene toetsen#
+
+  F1                   Deze helppagina openen.
+  F2                   Het loggen van hernoemingen umschaltolen.
+  F3                   Volledige namen of diagnostische meldingen weergeven.
+  F4                   De lijst openen in de F4-editor.
+  F4 (onder fókusz [T]) Woordscheidingskarakters bewerken.
+  F5                   Venster maximaliseren/herstellen.
+  F6                   Laatste ongedaan gemaakte hernoemingsactie (Undo) laden.
+  F8                   Het hernoemlogboek wissen na bevestiging.
+  F12                  Fókusz wisselen tussen de voorweergavelijst en de gegevensvelden.
+  Alt+N                Fókusz op het naammasker.
+  Alt+E                Fókusz op het extensiemasker.
+  Alt+S                Fókusz op het "Zoeken naar" veld.
+  Alt+P                Fókusz op het "Vervangen door" veld.
+  Alt+C                "Hoofdlettergevoelig" umschaltolen.
+  Alt+G                "Reguliere expressie" umschaltolen.
+  Alt+T                Fókusz op de lijst met naamsjablonen.
+  Alt+L                Fókusz op de lijst met extensiesjablonen.
+  Enter                De standaardknop "Hernoemen" activeren.
+  Esc                  Venster sluiten zonder hernoemen.
+
+#Toetsen onder fókusz in de voorweergave#
+
+  Auf/Ab               Actieve regel verplaatsen.
+  Pos1/Ende            Naar de eerste / laatste regel springen.
+  BildAuf/BildAb       Een pagina omhoog / omlaag scrollen.
+  Entf                 Regel verwijderen uit deze hernoemingsgroep.
+  Strg+Auf/Ab          Volgorde wijzigen; de tellers worden aan de nieuwe volgorde aangepast.
+  Strg+Links/Rechts    De scheidingslijn tussen de linker- en rechterkolom verschuiven.
+  Strg+Num5            Scheidingslijn centreren en de scrollposities resetten.
+  Alt+Links/Rechts     De linker bronkolom horizontaal scrollen.
+  Links/Rechts         De rechter doelkolom horizontaal scrollen.
+  Strg+BildAuf         VisRen sluiten, terugkeren naar het geselecteerde bestand op het paneel.
+
+#Sjablonen en muisacties#
+
+  De Ins-toets in een sjabloonlijst voegt het geselecteerde sjabloon in het betreffende masker in.
+  Houd de linkermuisknop ingedrukt en sleep om de regels te herordenen.
+  Klik met de rechtermuisknop op een regel om het volledige pad of de foutdiagnose weer te geven.
+  Dubbelklikken sluit de VisRen en keert terug naar het betreffende bestand op het paneel.
+  Klik op het vergrootglas-icoon in de titelbalk om het venster te maximaliseren/herstellen.
+  Klik op de復選框 om het loggen in of uit te schakelen; klik op de tekst en bevestig
+  om het bestaande logboek te wissen.
+
+Het aanpassen van de grootte van de terminal en de F5-toets herstellen de gelijke verhouding van
+de twee kolommen. Handmatige uitlijning of horizontaal scrollen kan daarna opnieuw worden toegepast.
+
+Druk op Backspace om terug te keren naar de VisRen-inhoudsopgave.
+
+@VisRenEditor
+$VisRen: De hernoemingslijst bewerken in de UTF-8-editor
+
+Met de F4-toets kunt u het formaat voor export en bewerking selecteren, waarna er een
+tijdelijk UTF-8-document met de titel "Rename list of files" wordt geopend in de F4-editor:
+
+  Bron + Doel          "originele bestandsnaam"    "nieuwe bestandsnaam"
+  Alleen doelen                                    "nieuwe bestandsnaam"
+
+Elke waarde staat tussen dubbele aanhalingstekens. De aanhalingstekens, backslashes en
+besturingskarakters in de bestandsnaam zijn gecodeerd aanwezig. Houd de buitenste aanhalingstekens intact.
+
+#Szigorú validatie#
+
+Bij het sluiten van de editor voert de VisRen de volgende controles uit:
+
+  - het aantal regels moet exact overeenkomen met het aantal regels in de voorweergave;
+  - elke regel moet exact 1 of 2 geciteerde kolommen bevatten (afhankelijk van de modus);
+  - buiten de aanhalingstekens mogen er geen overtollige karakters staan;
+  - in de tweekolommodus moet de inhoud en volgorde van de bronkolom volledig ongewijzigd zijn;
+  - elke doelbestandsnaam moet een geldige draagbare bestandsnaam zijn.
+
+Voeg geen regels toe, verwijder er geen en wijzig de volgorde niet in de editor. In de
+tweekolommodus kan alleen de doelkolom worden gewijzigd. Met deze controles kunnen beschadigde
+aanhalingstekens of onbedoelde wijzigingen in de bronregels veilig worden gefilterd vóór de
+daadwerkelijke hernoeming.
+
+In het geval van een fout geeft de VisRen de reden aan en biedt de optie "Opnieuw bewerken"
+(Edit again) aan. De editor opent opnieuw op de regel met de fout, terwijl uw wijzigingen
+behouden blijven. De gevalideerde lijst start direct het hernoemingsproces bij het sluiten
+van de editor. Als de gegenereerde lijst op bájtniveau helemaal niet is gewijzigd, maar de
+maskers wel zijn aangepast, vraagt de VisRen om bevestiging voordat deze doorgaat.
+
+Bij een voorweergavefout (<Error!>) of tijdens een ongedaan-maakactie is de editor uitgeschakeld.
+
+Nyomja meg a Backspace gombot a VisRen tartalomjegyzékéhez való visszatéréshez.
+
+@VisRenRename
+$VisRen: Uitvoering, foutbehandeling, logboek en ongedaan maken
+
+#Sequentiële hernoeming#
+
+De hernoemingsactie verloopt strikt van boven naar beneden in de lijst. De items die
+niet veranderen, worden overgeslagen. Als een bronbestand in de tussentijd van de schijf is
+verwijderd, wordt dit eveneens overgeslagen. Dezelfde regels gelden voor bestanden en mappen.
+
+Een doel dat door een ander bestand bezet is, wordt nooit overschreven. Het hernoemen met alleen
+wijziging van kleine/grote letters van hetzelfde bestand wordt ondersteund, waarbij indien nodig
+een tijdelijke bestandsnaam wordt gebruikt. De F4 berekent geen circulaire uitwisselingen:
+bijvoorbeeld de a -> b en b -> a leidt meestal tot een fout ("het doelbestand bestaat al"),
+wat overeenkomt met de originele VisRen-werking.
+
+#Laufzeit-fouten#
+
+Bij rechtenproblemen, bezette of dubbele doelpaden en andere systeemfouten verschijnen de
+volgende opties:
+
+  Opnieuw (Retry)      Probeert de hernoeming van de betreffende regel opnieuw.
+  Overslaan (Skip)     Laat het bestand ongewijzigd en gaat door naar de volgende.
+  Alles overslaan (Skip all) Vraagt niet naar latere fouten, slaat ze direct over.
+  Mégse (Cancel)       Stopt de operatie; de resterende regels worden niet verwerkt.
+
+De hernoeming is niet transactioneel van aard. De bestanden die al succesvol zijn hernoemd,
+blijven na overslaan of stoppen gewijzigd. De mislukte en niet-verwerkte bestanden blijven
+bij terugkeer naar het paneel geselecteerd, zodat ze later opnieuw kunnen worden geprobeerd.
+De statistieken aan het einde rapporteren over de succesvolle hernoemingen.
+
+#Hernoemlogboek#
+
+Het loggen van hernoemingen is standaard ingeschakeld. Het aanvinken van de 复選框 betekent
+dat elke succesvolle hernoeming in het geheugen wordt opgeslagen. Met de F2-toets of door op
+de复選框 te klikken kunt u de rögzítést umschaltolen. Het logboek wordt niet op schijf opgeslagen
+en gaat verloren bij het sluiten van de F4. Het slaat alleen de gegevens op van de meest recente
+succesvolle hernoemingen en de bijbehorende map; een * achter de naam geeft aan dat er een logboek
+beschikbaar is.
+
+Druk op F8 of klik op de tekst van de hernoeming en bevestig om het logboek te wissen.
+Als u de hernoeming uitvoert met uitgeschakelde logfunctie, worden er geen ongedaan-maakgegevens
+opgeslagen.
+
+#Visszavonás (F6)#
+
+Met de F6-toets kunt u het laatste in het geheugen opgeslagen logboek laden en de regels in
+omgekeerde volgorde weergeven, zodat de nieuwe namen weer worden hersteld naar de oude. In de
+titelbalk is de bijbehorende map te zien. Selecteer de hernoeming en keur de terugdraaiing goed,
+of kies No om terug te keren naar de normale hernoemingsmodus.
+
+Op het ongedaan maken (Undo) zijn dezelfde regels en foutmeldingen van toepassing. Vóór het proces
+schakelt de F4 over naar de opgeslagen map. Of het ongedaan maken nu volledig succesvol was of
+slechts gedeeltelijk, het logboek wordt na het proces gewist, en de eventueel niet-herstelde items
+blijven geselecteerd.
+
+Nyomja meg a Backspace gombot a VisRen tartalomjegyzékéhez való visszatéréshez.
+
+@VisRenSafety
+$VisRen: Bestandsnaam-veiligheid en beperkingen
+
+Elke gewijzigde bestandsnaam moet een geldige draagbare bestandsnaam zijn. De VisRen
+verbiedt het volgende:
+
+  - lege naam, "." of "..";
+  - besturingskarakters (Unicode-kodes onder U+0020 of NUL);
+  - <, >, :, ", *, ?, /, backslash of verticale lijn;
+  - een spatie of punt aan het einde van de naam;
+  - door het DOS-systeem gereserveerde namen: CON, PRN, AUX, NUL, COM1..COM9 en LPT1..LPT9,
+    ongeacht extensie en hoofdletters/kleine letters.
+
+Het '/' karakter kan niet worden gebruikt om bestanden naar een andere map te verplaatsen. De
+onveranderde bronbestandsnaam is toegestaan en wordt direct overgeslagen, zelfs als de originele
+bestandsnaam zelf anders niet aan de bovenstaande draagbare naamregels zou voldoen.
+
+De controle vooraf filtert het grootste deel van de masker- en draagbaarheidsfouten, maar
+reserveert de doelpaden niet vooraf. Bezette of dubbele doelpaden, ontbrekende rechten,
+lengtekwesties en circulaire uitwisselingen kunnen nog steeds fouten veroorzaken tijdens de
+uitvoering. U kunt er zeker van zijn dat er geen enkel bestand per ongeluk zal worden overschreven.
+
+De hiányzó of beschadigde metadatatags worden uitgebreid tot lege tekst. Wees voorzichtig met het
+gebruik van elválasztók en controleer altijd de voorweergave. De VisRen maakt geen transacties
+aan en gebruikt niet automatisch tijdelijke bestandsnamen voor circulaire uitwisselingen.
+
+Nyomja meg a Backspace gombot a VisRen tartalomjegyzékéhez való visszatéréshez.
+
+@VisRenExamples
+$VisRen: Praktische tips en recepten
+
+#Bestanden nummeren en extensies normaliseren#
+
+  Naammasker:        [C001+1]_[N]
+  Extensiemasker:    [E][L]
+
+Dit resulteert in: 001_Alter Name.jpg, 002_Anderer Name.jpg enz. Als de sorszám een andere
+volgorde moet volgen, ordent u de regels eerst in de snelweergave.
+
+#Een deel van een bestandsnaam met vaste breedte uitsnijden#
+
+  Bronbestand:       20260805_bericht_final.txt
+  Naammasker:        [N10-21]
+  Extensiemasker:    [E]
+  Resultaat:         bericht_final.txt
+
+#Een vaste letterlijke voorlooptekst verwijderen#
+
+  Maskers:           [N] en [E]
+  Zoeken naar:       ontwerp_
+  Vervangen door:    (leeg)
+
+#Groepen verwisselen met een reguliere expressie#
+
+  Bronbestand:       001-report.txt
+  Zoeken naar:       /(\d+)-([^.]+)/
+  Vervangen door:    $2-$1
+  Resultaat:         report-001.txt
+
+#MP3-bestanden benoemen op basis van tags#
+
+  Naammasker:        [a] - [t]
+  Extensiemasker:    [E][L]
+
+U kunt het sorszám-voorvoegsel maken met een teller of met de in de sectie metadatatags
+beschreven ID3 track-expressie. Omdat de artiest of de titel bij afwezigheid leeg blijft,
+dient u de voorweergave goed te controleren.
+
+#Foto's benoemen op basis van opnametijd en -grootte#
+
+  Naammasker:        [d]_[r]_[C001]
+  Extensiemasker:    [E][L]
+
+Bij JPEG heeft de EXIF-opnamedatum prioriteit, bij andere ondersteunde formaten gebruikt
+de [d]-expressie de wijzigingstijd van het bestand.
+
+#Translitereren en letterlijke schuine haken toevoegen#
+
+  Naammasker:        [[]archive[]]_[N][TL]
+  Extensiemasker:    [E][L]
+
+Op basis van de originele tabel wordt het bestand Пример.TXT hernoemd naar
+[archive]_Primer.txt.
+
+Nyomja meg a Backspace gombot a VisRen tartalomjegyzékéhez való visszatéréshez.
+
+@Panels
+$f4 help-index (Versie: %Ver)
+f4 is een experimentele Far Manager / far2l-kloon in Go.
+
+~Viewer- / editorsneltoetsen~ViewerEditor@
+~Panel-navigation~PanelNav@
+~README.md weergeven~README@
+
+@ViewerEditor
+$Viewer- & editorsneltoetsen
+Dit deel wordt dynamisch gegenereerd op basis van de geregistreerde opdrachten.
+
+@ViewerNav
+$Navigatietoetsen
+Editor:
+  Strg+Links    - Naar de vorige woordgrens springen
+  Strg+Rechts   - Naar de volgende woordgrens springen
+  Strg+Umschalt+Links/Rechts - Woorden selecteren
+  Pos1/Ende     - Naar het begin / einde van de regel springen
+  BildAuf/BildAb - Pagina omhoog / omlaag scrollen
+
+Viewer:
+  Auf/Ab        - Eén regel scrollen
+  BildAuf/BildAb - Eén pagina scrollen
+  Pos1/Ende     - Naar het begin / einde van het bestand springen
+
+@PanelNav
+$Panel-navigation
+Dit deel wordt dynamisch gegenereerd op basis van de geregistreerde opdrachten.
+
+@ShellNav
+$Paneelnavigatietoetsen
+  Tab           - Actief paneel wisselen
+  Insert        - Bestand/map selecteren of deselecteren
+  Strg+Tab      - Werkruimten umschaltolen
+  Strg+W        - Actieve werkruimte sluiten
+  Strg+N        - Actief paneel klonen naar een nieuwe werkruimte
+
+@History
+$Opdrachtengeschiedenis (Alt+F8)
+    De opdrachtengeschiedenis toont de lijst met eerder uitgevoerde opdrachten.
+Naast de cursortoetsen zijn de volgende sneltoetsen beschikbaar:
+
+  Geselecteerde opdracht in de parancssor invoegen  Enter
+  (Met de linkermuisknop klikken doet hetzelfde)
+  Dialoogvenster bezárása                            Esc, F10
+
+  Inkrementális zoeken op basis van substring / prefix F2
+  U kunt de lijst filteren door een willekeurig karakter in te typen
+  Backspace wist het laatste filterkarakter
+
+  Geselecteerd geschiedenisitem verwijderen          Shift+Del
+  Volledige geschiedenis wissen met bevestiging      Del
+
+  Geselecteerde opdracht kopiëren naar het klembord   Strg+C, Strg+Einfg
+
+@HistoryFolders
+$Mappengeschiedenis (Alt+F12)
+    De mappengeschiedenis toont de lijst met eerder bezochte mappen.
+Naast de cursortoetsen zijn de volgende sneltoetsen beschikbaar:
+
+  Naar de geselecteerde map gaan op het actieve paneel Enter
+  (Met de linkermuisknop klikken doet hetzelfde)
+  Naar de geselecteerde map gaan op het passieve paneel Shift+Enter
+  Pad direct in de parancssor invoegen              Ctrl+Enter
+  Dialoogvenster bezárása                            Esc, F10
+
+  Inkrementális zoeken op basis van substring / prefix F2
+  U kunt de lijst filteren door een willekeurig karakter in te typen
+  Backspace wist het laatste filterkarakter
+
+  Geselecteerd geschiedenisitem verwijderen          Shift+Del
+  Volledige mappenlijst wissen met bevestiging       Del
+  Niet meer bestaande, verwijderde paden opruimen (bevestigd) Ctrl+R
+
+  Geselecteerd pad kopiëren naar het klembord        Strg+C, Strg+Einfg
