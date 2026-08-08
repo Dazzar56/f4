@@ -172,57 +172,57 @@ Action.Editor.Quit=Kilé&pés
 Action.Editor.Quit.Desc=Szerkesztő bezárása
 Action.Editor.Undo=Visszavoná&s
 Action.Editor.Undo.Desc=Utolsó módosítás visszavonása
-Action.Editor.RedoÚj&ra
+Action.Editor.Redo=Új&ra
 Action.Editor.Redo.Desc=Utoljára visszavont módosítás ismétlése
 Action.Editor.Copy=Másolá&s
 Action.Editor.Copy.Desc=Kijelölés másolása a vágólapra
-Action.Editor.CutKivágá&s
+Action.Editor.Cut=Kivágá&s
 Action.Editor.Cut.Desc=Kijelölés kivágása a vágólapra
-Action.Editor.PasteBeilleszté&s
+Action.Editor.Paste=Beilleszté&s
 Action.Editor.Paste.Desc=Szöveg beillesztése a vágólapról
-Action.Editor.SelectAllMind &kijelöl
+Action.Editor.SelectAll=Mind &kijelöl
 Action.Editor.SelectAll.Desc=A teljes dokumentum kijelölése
-Action.Editor.DeleteLineSor &törlése
+Action.Editor.DeleteLine=Sor &törlése
 Action.Editor.DeleteLine.Desc=Aktuális sor törlése
 Action.Editor.ToggleOvertype=Beszúrás/&Felülírás
 Action.Editor.ToggleOvertype.Desc=Váltás beszúrás és felülírás mód között
-Action.Editor.Search&Keresés
+Action.Editor.Search=&Keresés
 Action.Editor.Search.Desc=Szöveg keresése
-Action.Editor.ReplaceC&sere
+Action.Editor.Replace=C&sere
 Action.Editor.Replace.Desc=Szöveg cseréje
-Action.Editor.SearchNextKövetkező ker&esése
+Action.Editor.SearchNext=Következő ker&esése
 Action.Editor.SearchNext.Desc=Keresés folytatása
-Action.Editor.WordWrapSor&törés
+Action.Editor.WordWrap=Sor&törés
 Action.Editor.WordWrap.Desc=Sortörés umschaltolása
-Action.Editor.ShowWhitespacesSzóközök meg&jelenítése
+Action.Editor.ShowWhitespaces=Szóközök meg&jelenítése
 Action.Editor.ShowWhitespaces.Desc=Szóköz karakterek láthatóságának umschaltolása
-Action.Editor.CodepageNextKövetkező &kódlap
+Action.Editor.CodepageNext=Következő &kódlap
 Action.Editor.CodepageNext.Desc=Váltás a következő kódlapra
-Action.Editor.CodepageMenuKódla&p menü
+Action.Editor.CodepageMenu=Kódla&p menü
 Action.Editor.CodepageMenu.Desc=Kódlap kiválasztása
-Action.Editor.ConvertCodepageKódlap kon&vertálása...
+Action.Editor.ConvertCodepage=Kódlap kon&vertálása...
 Action.Editor.ConvertCodepage.Desc=Fájl kódlapjának módosítása a szöveg megváltoztatása nélkül
-Action.Editor.InsertLeftPanelPath&Bal oldali panel útvonalának beillesztése
+Action.Editor.InsertLeftPanelPath=&Bal oldali panel útvonalának beillesztése
 Action.Editor.InsertLeftPanelPath.Desc=Beilleszti a bal oldali panel útvonalát a kurzor pozíciójában
-Action.Editor.InsertRightPanelPath&Jobb oldali panel útvonalának beillesztése
+Action.Editor.InsertRightPanelPath=&Jobb oldali panel útvonalának beillesztése
 Action.Editor.InsertRightPanelPath.Desc=Beilleszti a jobb oldali panel útvonalát a kurzor pozíciójában
-Action.Editor.InsertActivePanelFileNameAktuális &fájlnév beillesztése
+Action.Editor.InsertActivePanelFileName=Aktuális &fájlnév beillesztése
 Action.Editor.InsertActivePanelFileName.Desc=Beilleszti az aktív panel kurzor alatti fájlnevét a kurzor pozíciójában
-Action.Editor.DeleteSpacersForwardS&zó törlése előre
+Action.Editor.DeleteSpacersForward=S&zó törlése előre
 Action.Editor.DeleteSpacersForward.Desc=Szóközök és a következő szó törlése
-Action.Viewer.SwitchToEditorVáltás &szerkesztőre
+Action.Viewer.SwitchToEditor=Váltás &szerkesztőre
 Action.Viewer.SwitchToEditor.Desc=Váltás szerkesztő módba
-Action.Viewer.QuitKilé&pés
+Action.Viewer.Quit=Kilé&pés
 Action.Viewer.Quit.Desc=Nézegető bezárása
-Action.Viewer.WrapModeSor&törés
+Action.Viewer.WrapMode=Sor&törés
 Action.Viewer.WrapMode.Desc=Sortörés umschaltolása
-Action.Viewer.HexMode&Hex
+Action.Viewer.HexMode=&Hex
 Action.Viewer.HexMode.Desc=Hexadecimális nézet umschaltolása
-Action.Viewer.Search&Keresés
+Action.Viewer.Search=&Keresés
 Action.Viewer.Search.Desc=Szöveg keresése
-Action.Viewer.CodepageNextKövetkező &kódlap
+Action.Viewer.CodepageNext=Következő &kódlap
 Action.Viewer.CodepageNext.Desc=Váltás a következő kódlapra
-Action.Viewer.CodepageMenuKódla&p menü
+Action.Viewer.CodepageMenu=Kódla&p menü
 Action.Viewer.CodepageMenu.Desc=Kódlap kiválasztása
 Help.ViewerEditor=Nézegető és Szerkesztő billentyűi
 Help.PanelNav=Panel billentyűi

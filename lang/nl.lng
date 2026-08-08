@@ -172,57 +172,57 @@ Action.Editor.Quit=Af&sluiten
 Action.Editor.Quit.Desc=Editor sluiten
 Action.Editor.Undo=Ongedaan &maken
 Action.Editor.Undo.Desc=Laatste wijziging ongedaan maken
-Action.Editor.Redo&Opnieuw uitvoeren
+Action.Editor.Redo=&Opnieuw uitvoeren
 Action.Editor.Redo.Desc=Laatste ongedaan gemaakte wijziging opnieuw uitvoeren
 Action.Editor.Copy=&Kopiëren
 Action.Editor.Copy.Desc=Selectie kopiëren naar klembord
-Action.Editor.CutK&nippen
+Action.Editor.Cut=K&nippen
 Action.Editor.Cut.Desc=Selectie knippen naar klembord
-Action.Editor.Paste&Plakken
+Action.Editor.Paste=&Plakken
 Action.Editor.Paste.Desc=Tekst plakken van klembord
-Action.Editor.SelectAll&Alles selecteren
+Action.Editor.SelectAll=&Alles selecteren
 Action.Editor.SelectAll.Desc=Het volledige document selecteren
-Action.Editor.DeleteLineRegel &verwijderen
+Action.Editor.DeleteLine=Regel &verwijderen
 Action.Editor.DeleteLine.Desc=Huidige regel verwijderen
 Action.Editor.ToggleOvertype=Invoegen/&Overschrijven
 Action.Editor.ToggleOvertype.Desc=Schakelen tussen invoeg- en overschrijfmodus
-Action.Editor.Search&Zoeken
+Action.Editor.Search=&Zoeken
 Action.Editor.Search.Desc=Naar tekst zoeken
-Action.Editor.Replace&Vervangen
+Action.Editor.Replace=&Vervangen
 Action.Editor.Replace.Desc=Tekst vervangen
-Action.Editor.SearchNextVolgende zo&eken
+Action.Editor.SearchNext=Volgende zo&eken
 Action.Editor.SearchNext.Desc=Zoeken voortzetten
-Action.Editor.WordWrapRegel&terugloop
+Action.Editor.WordWrap=Regel&terugloop
 Action.Editor.WordWrap.Desc=Regelterugloop umschaltolen
-Action.Editor.ShowWhitespacesSpaties &weergeven
+Action.Editor.ShowWhitespaces=Spaties &weergeven
 Action.Editor.ShowWhitespaces.Desc=Zichtbaarheid van spaties umschaltolen
-Action.Editor.CodepageNextVolgende &codepagina
+Action.Editor.CodepageNext=Volgende &codepagina
 Action.Editor.CodepageNext.Desc=Wisselen naar de volgende codepagina
-Action.Editor.CodepageMenuCode&paginamenu
+Action.Editor.CodepageMenu=Code&paginamenu
 Action.Editor.CodepageMenu.Desc=Codepagina selecteren
-Action.Editor.ConvertCodepageCodepagina con&verteren...
+Action.Editor.ConvertCodepage=Codepagina con&verteren...
 Action.Editor.ConvertCodepage.Desc=Codepagina van het bestand wijzigen zonder de tekst te veranderen
-Action.Editor.InsertLeftPanelPathPad &linkerpaneel invoegen
+Action.Editor.InsertLeftPanelPath=Pad &linkerpaneel invoegen
 Action.Editor.InsertLeftPanelPath.Desc=Voegt het pad van het linkerpaneel in op de cursorpositie
-Action.Editor.InsertRightPanelPathPad &rechterpaneel invoegen
+Action.Editor.InsertRightPanelPath=Pad &rechterpaneel invoegen
 Action.Editor.InsertRightPanelPath.Desc=Voegt het pad van het rechterpaneel in op de cursorpositie
-Action.Editor.InsertActivePanelFileNameHuidige &bestandsnaam invoegen
+Action.Editor.InsertActivePanelFileName=Huidige &bestandsnaam invoegen
 Action.Editor.InsertActivePanelFileName.Desc=Voegt de bestandsnaam onder de cursor van het actieve paneel in op de cursorpositie
-Action.Editor.DeleteSpacersForwardWoord &vooruit verwijderen
+Action.Editor.DeleteSpacersForward=Woord &vooruit verwijderen
 Action.Editor.DeleteSpacersForward.Desc=Spaties en het volgende woord verwijderen
-Action.Viewer.SwitchToEditorWisselen naar &editor
+Action.Viewer.SwitchToEditor=Wisselen naar &editor
 Action.Viewer.SwitchToEditor.Desc=Wisselen naar editor-modus
-Action.Viewer.QuitAf&sluiten
+Action.Viewer.Quit=Af&sluiten
 Action.Viewer.Quit.Desc=Viewer sluiten
-Action.Viewer.WrapModeRegel&terugloop
+Action.Viewer.WrapMode=Regel&terugloop
 Action.Viewer.WrapMode.Desc=Regelterugloop umschaltolen
-Action.Viewer.HexMode&Hex
+Action.Viewer.HexMode=&Hex
 Action.Viewer.HexMode.Desc=Hexadecimale weergave umschaltolen
-Action.Viewer.Search&Zoeken
+Action.Viewer.Search=&Zoeken
 Action.Viewer.Search.Desc=Naar tekst zoeken
-Action.Viewer.CodepageNextVolgende &codepagina
+Action.Viewer.CodepageNext=Volgende &codepagina
 Action.Viewer.CodepageNext.Desc=Wisselen naar de volgende codepagina
-Action.Viewer.CodepageMenuCode&paginamenu
+Action.Viewer.CodepageMenu=Code&paginamenu
 Action.Viewer.CodepageMenu.Desc=Codepagina selecteren
 Help.ViewerEditor=Viewer- & editorsneltoetsen
 Help.PanelNav=Paneelsneltoetsen

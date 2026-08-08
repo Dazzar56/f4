@@ -554,16 +554,16 @@ Ez a rész dinamikusan generálódik a regisztrált parancsok alapján.
 @ViewerNav
 $Navigációs billentyűk
 Szerkesztő:
-  Strg+Links    - Előző szóhatárra ugrás
-  Strg+Rechts   - Következő szóhatárra ugrás
-  Strg+Umschalt+Links/Rechts - Szavak kijelölése
-  Pos1/Ende     - Sor elejére / végére ugrás
-  BildAuf/BildAb - Oldal görgetése fel / le
+  Ctrl+Left     - Előző szóhatárra ugrás
+  Ctrl+Right    - Következő szóhatárra ugrás
+  Ctrl+Shift+Left/Right - Szavak kijelölése
+  Home/End      - Sor elejére / végére ugrás
+  PgUp/PgDn     - Oldal görgetése fel / le
 
 Nézegető:
-  Auf/Ab        - Egy sor görgetése
-  BildAuf/BildAb - Egy oldal görgetése
-  Pos1/Ende     - Fájl elejére / végére ugrás
+  Up/Down       - Egy sor görgetése
+  PgUp/PgDn     - Egy oldal görgetése
+  Home/End      - Fájl elejére / végére ugrás
 
 @PanelNav
 $Panel navigáció
@@ -573,9 +573,9 @@ Ez a rész dinamikusan generálódik a regisztrált parancsok alapján.
 $Panel-navigációs billentyűk
   Tab           - Aktív panel váltása
   Insert        - Fájl/Mappa kijelölése vagy feloldása
-  Strg+Tab      - Munkaterületek umschaltolása
-  Strg+W        - Aktuális munkaterület bezárása
-  Strg+N        - Aktív panel klónozása új munkaterületre
+  Ctrl+Tab      - Munkaterületek umschaltolása
+  Ctrl+W        - Aktuális munkaterület bezárása
+  Ctrl+N        - Aktív panel klónozása új munkaterületre
 
 @History
 $Parancselőzmények (Alt+F8)
@@ -593,7 +593,28 @@ A kurzornyilakon kívül a következő billentyűkombinációk érhetőek el:
   Kiválasztott előzményelem törlése                  Shift+Del
   Teljes parancselőzmény törlése megerősítéssel      Del
 
-  Kiválasztott parancs másolása a vágólapra          Strg+C, Strg+Einfg
+  Kiválasztott parancs másolása a vágólapra          Ctrl+C, Ctrl+Ins
+
+@HistoryFolders
+$Mappa előzmények (Alt+F12)
+    A mappa előzmények a korábban látogatott könyvtárak listáját mutatják.
+A kurzornyilakon kívül a következő billentyűkombinációk érhetőek el:
+
+  Ugrás a kiválasztott mappára az aktív panelen      Enter
+  (Egér bal gombos kattintás ugyanazt teszi)
+  Ugrás a kiválasztott mappára a passzív panelen     Shift+Enter
+  Útvonal beillesztése közvetlenül a parancssorba     Ctrl+Enter
+  Párbeszédpanel bezárása                            Esc, F10
+
+  Részstring- / prefix-alapú inkrementális keresés   F2
+  Bármilyen karakter beírásával szűrheti a listát
+  Backspace törli az utolsó szűrési karaktert
+
+  Kiválasztott előzményelem törlése                  Shift+Del
+  Teljes mappa előzmény törlése megerősítéssel       Del
+  Már nem létező, törölt útvonalak eltávolítása (megerősítve) Ctrl+R
+
+  Kiválasztott útvonal másolása a vágólapra          Ctrl+C, Ctrl+Ins
 
 @HistoryFolders
 $Mappa előzmények (Alt+F12)

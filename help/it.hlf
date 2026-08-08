@@ -562,16 +562,16 @@ Questa sezione viene generata dinamicamente in base ai comandi registrati.
 @ViewerNav
 $Tasti di navigazione
 Editor:
-  Strg+Links    - Salta al limite della parola precedente
-  Strg+Rechts   - Salta al limite della parola successiva
-  Strg+Umschalt+Links/Rechts - Seleziona parole
-  Pos1/Ende     - Salta all'inizio / fine della riga
-  BildAuf/BildAb - Scorri la pagina in alto / in basso
+  Ctrl+Left     - Salta al limite della parola precedente
+  Ctrl+Right    - Salta al limite della parola successiva
+  Ctrl+Shift+Left/Right - Seleziona parole
+  Home/End      - Salta all'inizio / fine della riga
+  PgUp/PgDn     - Scorri la pagina in alto / in basso
 
 Visualizzatore:
-  Auf/Ab        - Scorri di una riga
-  BildAuf/BildAb - Scorri di una pagina
-  Pos1/Ende     - Salta all'inizio / fine del file
+  Up/Down       - Scorri di una riga
+  PgUp/PgDn     - Scorri di una pagina
+  Home/End      - Salta all'inizio / fine del file
 
 @Panels
 $Navigazione del pannello
@@ -581,9 +581,9 @@ Questa sezione viene generata dinamicamente in base ai comandi registrati.
 $Tasti di navigazione del pannello
   Tab           - Scambia il pannello attivo
   Insert        - Seleziona o deseleziona file/cartella
-  Strg+Tab      - Umschaltola l'area di lavoro
-  Strg+W        - Chiudi l'area di lavoro corrente
-  Strg+N        - Clona il pannello attivo in una nuova area di lavoro
+  Ctrl+Tab      - Umschaltola l'area di lavoro
+  Ctrl+W        - Chiudi l'area di lavoro corrente
+  Ctrl+N        - Clona il pannello attivo in una nuova area di lavoro
 
 @History
 $Cronologia comandi (Alt+F8)
@@ -601,7 +601,28 @@ Oltre alle frecce cursore sono disponibili le seguenti combinazioni di tasti:
   Elimina l'elemento della cronologia selezionato      Shift+Del
   Cancella l'intera cronologia dei comandi con conferma Del
 
-  Copia il comando selezionato negli appunti           Strg+C, Strg+Einfg
+  Copia il comando selezionato negli appunti           Ctrl+C, Ctrl+Ins
+
+@HistoryFolders
+$Cronologia cartelle (Alt+F12)
+    La cronologia delle cartelle mostra l'elenco delle cartelle visitate in precedenza.
+Oltre alle frecce cursore sono disponibili le seguenti combinazioni di tasti:
+
+  Vai alla cartella selezionata sul pannello attivo    Enter
+  (Fare clic con il pulsante sinistro del mouse fa lo stesso)
+  Vai alla cartella selezionata sul pannello passivo   Shift+Enter
+  Inserisci il percorso direttamente nella riga di comando Ctrl+Enter
+  Chiudi la finestra di dialogo                        Esc, F10
+
+  Ricerca incrementale basata su sottostringa / prefisso F2
+  Digitando un carattere qualsiasi è possibile filtrare l'elenco
+  Backspace cancella l'ultimo carattere del filtro
+
+  Elimina l'elemento della cronologia selezionato      Shift+Del
+  Cancella l'intera cronologia delle cartelle con conferma Del
+  Rimuovi i percorsi eliminati, non più esistenti (confermato) Ctrl+R
+
+  Copia il percorso selezionato negli appunti           Ctrl+C, Ctrl+Ins
 
 @HistoryFolders
 $Cronologia cartelle (Alt+F12)

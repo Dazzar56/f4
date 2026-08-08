@@ -172,57 +172,57 @@ Action.Editor.Quit=Es&ci
 Action.Editor.Quit.Desc=Chiudi l'editor
 Action.Editor.Undo=A&nnulla
 Action.Editor.Undo.Desc=Annulla l'ultima modifica
-Action.Editor.Redo&Ripristina
+Action.Editor.Redo=&Ripristina
 Action.Editor.Redo.Desc=Ripristina l'ultima modifica annullata
 Action.Editor.Copy=&Copia
 Action.Editor.Copy.Desc=Copia la selezione negli appunti
-Action.Editor.Cut&Taglia
+Action.Editor.Cut=&Taglia
 Action.Editor.Cut.Desc=Taglia la selezione negli appunti
-Action.Editor.PasteIn&colla
+Action.Editor.Paste=In&colla
 Action.Editor.Paste.Desc=Incolla il testo dagli appunti
-Action.Editor.SelectAll&Seleziona tutto
+Action.Editor.SelectAll=&Seleziona tutto
 Action.Editor.SelectAll.Desc=Seleziona l'intero documento
-Action.Editor.DeleteLineRigel &eliminata
+Action.Editor.DeleteLine=Riga &eliminata
 Action.Editor.DeleteLine.Desc=Elimina la riga corrente
-Action.Editor.ToggleOvertypeInserisci/&Sovrascrivi
+Action.Editor.ToggleOvertype=Inserisci/&Sovrascrivi
 Action.Editor.ToggleOvertype.Desc=Passa dalla modalità di inserimento a quella di sovrascrittura
-Action.Editor.Search&Cerca
+Action.Editor.Search=&Cerca
 Action.Editor.Search.Desc=Cerca testo
-Action.Editor.ReplaceSostit&uisci
+Action.Editor.Replace=Sostit&uisci
 Action.Editor.Replace.Desc=Sostituisci testo
-Action.Editor.SearchNextCerca s&uccessivo
+Action.Editor.SearchNext=Cerca s&uccessivo
 Action.Editor.SearchNext.Desc=Continua la ricerca
-Action.Editor.WordWrapA capo au&tomatico
+Action.Editor.WordWrap=A capo au&tomatico
 Action.Editor.WordWrap.Desc=Umschaltola a capo automatico
-Action.Editor.ShowWhitespacesSpazi &bianchi
+Action.Editor.ShowWhitespaces=Spazi &bianchi
 Action.Editor.ShowWhitespaces.Desc=Umschaltola la visibilità degli spazi bianchi
-Action.Editor.CodepageNextCodepage s&uccessiva
+Action.Editor.CodepageNext=Codepage s&uccessiva
 Action.Editor.CodepageNext.Desc=Passa alla codepage successiva
-Action.Editor.CodepageMenu&Menu codepage
+Action.Editor.CodepageMenu=&Menu codepage
 Action.Editor.CodepageMenu.Desc=Seleziona codepage
-Action.Editor.ConvertCodepageConverti cod&epage...
+Action.Editor.ConvertCodepage=Converti cod&epage...
 Action.Editor.ConvertCodepage.Desc=Modifica la codepage del file senza modificare il testo
-Action.Editor.InsertLeftPanelPathInserisci percorso pannello &sinistro
+Action.Editor.InsertLeftPanelPath=Inserisci percorso pannello &sinistro
 Action.Editor.InsertLeftPanelPath.Desc=Inserisce il percorso del pannello sinistro nella posizione del cursore
-Action.Editor.InsertRightPanelPathInserisci percorso pannello &destro
+Action.Editor.InsertRightPanelPath=Inserisci percorso pannello &destro
 Action.Editor.InsertRightPanelPath.Desc=Inserisce il percorso del pannello destro nella posizione del cursore
-Action.Editor.InsertActivePanelFileNameInserisci nome &file corrente
+Action.Editor.InsertActivePanelFileName=Inserisci nome &file corrente
 Action.Editor.InsertActivePanelFileName.Desc=Inserisce il nome del file sotto il cursore del pannello attivo nella posizione del cursore
-Action.Editor.DeleteSpacersForwardElimina &parola successiva
+Action.Editor.DeleteSpacersForward=Elimina &parola successiva
 Action.Editor.DeleteSpacersForward.Desc=Elimina gli spazi e la parola successiva
-Action.Viewer.SwitchToEditorPassa all'&editor
+Action.Viewer.SwitchToEditor=Passa all'&editor
 Action.Viewer.SwitchToEditor.Desc=Passa alla modalità editor
-Action.Viewer.QuitEs&ci
+Action.Viewer.Quit=Es&ci
 Action.Viewer.Quit.Desc=Chiudi il visualizzatore
-Action.Viewer.WrapModeA capo au&tomatico
+Action.Viewer.WrapMode=A capo au&tomatico
 Action.Viewer.WrapMode.Desc=Umschaltola a capo automatico
-Action.Viewer.HexMode&Hex
+Action.Viewer.HexMode=&Hex
 Action.Viewer.HexMode.Desc=Umschaltola la visualizzazione esadecimale
-Action.Viewer.Search&Cerca
+Action.Viewer.Search=&Cerca
 Action.Viewer.Search.Desc=Cerca testo
-Action.Viewer.CodepageNextCodepage s&uccessiva
+Action.Viewer.CodepageNext=Codepage s&uccessiva
 Action.Viewer.CodepageNext.Desc=Passa alla codepage successiva
-Action.Viewer.CodepageMenu&Menu codepage
+Action.Viewer.CodepageMenu=&Menu codepage
 Action.Viewer.CodepageMenu.Desc=Seleziona codepage
 Help.ViewerEditor=Tasti del visualizzatore e dell'editor
 Help.PanelNav=Tasti del pannello

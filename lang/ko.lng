@@ -164,65 +164,65 @@ Menu.Viewer.Search=검색(&S)
 Menu.Viewer.Options=옵션(&O)
 Action.App.ScreenGrab=화면 캡처(&G)
 Action.App.ScreenGrab.Desc=화면 영역을 선택하고 복사합니다
-Action.Editor.Save저장(&S)
+Action.Editor.Save=저장(&S)
 Action.Editor.Save.Desc=파일 저장
 Action.Editor.SwitchToViewer=뷰어로 전환(&V)
 Action.Editor.SwitchToViewer.Desc=뷰어 모드로 전환
-Action.Editor.Quit종료(&X)
+Action.Editor.Quit=종료(&X)
 Action.Editor.Quit.Desc=편집기 닫기
-Action.Editor.Undo되돌리기(&U)
+Action.Editor.Undo=되돌리기(&U)
 Action.Editor.Undo.Desc=이전 수정 되돌리기
-Action.Editor.Redo다시 실행(&R)
+Action.Editor.Redo=다시 실행(&R)
 Action.Editor.Redo.Desc=마지막 되돌린 작업 다시 실행
-Action.Editor.Copy복사(&C)
+Action.Editor.Copy=복사(&C)
 Action.Editor.Copy.Desc=선택 영역을 클립보드에 복사
-Action.Editor.Cut잘라내기(&U)
+Action.Editor.Cut=잘라내기(&U)
 Action.Editor.Cut.Desc=선택 영역을 클립보드로 잘라내기
-Action.Editor.Paste붙여넣기(&P)
+Action.Editor.Paste=붙여넣기(&P)
 Action.Editor.Paste.Desc=클립보드에서 텍스트 붙여넣기
-Action.Editor.SelectAll모두 선택(&A)
+Action.Editor.SelectAll=모두 선택(&A)
 Action.Editor.SelectAll.Desc=전체 텍스트 선택
-Action.Editor.DeleteLine줄 삭제(&D)
+Action.Editor.DeleteLine=줄 삭제(&D)
 Action.Editor.DeleteLine.Desc=현재 줄 삭제
-Action.Editor.ToggleOvertype삽입/겹쳐쓰기(&I)
+Action.Editor.ToggleOvertype=삽입/겹쳐쓰기(&I)
 Action.Editor.ToggleOvertype.Desc=삽입 및 겹쳐쓰기 모드 간 전환
-Action.Editor.Search찾기(&F)
+Action.Editor.Search=찾기(&F)
 Action.Editor.Search.Desc=텍스트 찾기
-Action.Editor.Replace바꾸기(&R)
+Action.Editor.Replace=바꾸기(&R)
 Action.Editor.Replace.Desc=텍스트 바꾸기
-Action.Editor.SearchNext다음 찾기(&N)
+Action.Editor.SearchNext=다음 찾기(&N)
 Action.Editor.SearchNext.Desc=계속 찾기
-Action.Editor.WordWrap자동 줄 바꿈(&W)
+Action.Editor.WordWrap=자동 줄 바꿈(&W)
 Action.Editor.WordWrap.Desc=자동 줄 바꿈 토글
-Action.Editor.ShowWhitespaces공백 표시(&S)
+Action.Editor.ShowWhitespaces=공백 표시(&S)
 Action.Editor.ShowWhitespaces.Desc=공백 문자 표시 여부 토글
-Action.Editor.CodepageNext다음 코드 페이지(&E)
+Action.Editor.CodepageNext=다음 코드 페이지(&E)
 Action.Editor.CodepageNext.Desc=다음 코드 페이지로 로테이션 전환
-Action.Editor.CodepageMenu코드 페이지 메뉴(&C)
+Action.Editor.CodepageMenu=코드 페이지 메뉴(&C)
 Action.Editor.CodepageMenu.Desc=코드 페이지 선택
-Action.Editor.ConvertCodepage코드 페이지 변환(&C)...
+Action.Editor.ConvertCodepage=코드 페이지 변환(&C)...
 Action.Editor.ConvertCodepage.Desc=텍스트를 수정하지 않고 파일의 코드 페이지 변경
-Action.Editor.InsertLeftPanelPath왼쪽 패널 경로 삽입(&L)
+Action.Editor.InsertLeftPanelPath=왼쪽 패널 경로 삽입(&L)
 Action.Editor.InsertLeftPanelPath.Desc=커서 위치에 왼쪽 패널의 경로를 삽입합니다
-Action.Editor.InsertRightPanelPath오른쪽 패널 경로 삽입(&R)
+Action.Editor.InsertRightPanelPath=오른쪽 패널 경로 삽입(&R)
 Action.Editor.InsertRightPanelPath.Desc=커서 위치에 오른쪽 패널의 경로를 삽입합니다
-Action.Editor.InsertActivePanelFileName현재 파일 이름 삽입(&F)
+Action.Editor.InsertActivePanelFileName=현재 파일 이름 삽입(&F)
 Action.Editor.InsertActivePanelFileName.Desc=커서 위치에 활성 패널의 현재 파일 이름을 삽입합니다
-Action.Editor.DeleteSpacersForward앞 단어 삭제(&W)
+Action.Editor.DeleteSpacersForward=앞 단어 삭제(&W)
 Action.Editor.DeleteSpacersForward.Desc=공백과 다음 단어 삭제
-Action.Viewer.SwitchToEditor편집기로 전환(&E)
+Action.Viewer.SwitchToEditor=편집기로 전환(&E)
 Action.Viewer.SwitchToEditor.Desc=편집기 모드로 전환
-Action.Viewer.Quit종료(&X)
+Action.Viewer.Quit=종료(&X)
 Action.Viewer.Quit.Desc=뷰어 닫기
-Action.Viewer.WrapMode자동 줄 바꿈(&W)
+Action.Viewer.WrapMode=자동 줄 바꿈(&W)
 Action.Viewer.WrapMode.Desc=자동 줄 바꿈 토글
-Action.Viewer.HexMode16진수(&H)
+Action.Viewer.HexMode=16진수(&H)
 Action.Viewer.HexMode.Desc=16진수 뷰 토글
-Action.Viewer.Search찾기(&F)
+Action.Viewer.Search=찾기(&F)
 Action.Viewer.Search.Desc=텍스트 찾기
-Action.Viewer.CodepageNext다음 코드 페이지(&E)
+Action.Viewer.CodepageNext=다음 코드 페이지(&E)
 Action.Viewer.CodepageNext.Desc=다음 코드 페이지로 로테이션 전환
-Action.Viewer.CodepageMenu코드 페이지 메뉴(&C)
+Action.Viewer.CodepageMenu=코드 페이지 메뉴(&C)
 Action.Viewer.CodepageMenu.Desc=코드 페이지 선택
 Help.ViewerEditor=뷰어 및 편집기 키
 Help.PanelNav=패널 키

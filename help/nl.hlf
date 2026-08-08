@@ -569,16 +569,16 @@ Dit deel wordt dynamisch gegenereerd op basis van de geregistreerde opdrachten.
 @ViewerNav
 $Navigatietoetsen
 Editor:
-  Strg+Links    - Naar de vorige woordgrens springen
-  Strg+Rechts   - Naar de volgende woordgrens springen
-  Strg+Umschalt+Links/Rechts - Woorden selecteren
-  Pos1/Ende     - Naar het begin / einde van de regel springen
-  BildAuf/BildAb - Pagina omhoog / omlaag scrollen
+  Ctrl+Left     - Naar de vorige woordgrens springen
+  Ctrl+Right    - Naar de volgende woordgrens springen
+  Ctrl+Shift+Left/Right - Woorden selecteren
+  Home/End      - Naar het begin / einde van de regel springen
+  PgUp/PgDn     - Pagina omhoog / omlaag scrollen
 
 Viewer:
-  Auf/Ab        - Eén regel scrollen
-  BildAuf/BildAb - Eén pagina scrollen
-  Pos1/Ende     - Naar het begin / einde van het bestand springen
+  Up/Down       - Eén regel scrollen
+  PgUp/PgDn     - Eén pagina scrollen
+  Home/End      - Naar het begin / einde van het bestand springen
 
 @PanelNav
 $Panel-navigation
@@ -588,9 +588,9 @@ Dit deel wordt dynamisch gegenereerd op basis van de geregistreerde opdrachten.
 $Paneelnavigatietoetsen
   Tab           - Actief paneel wisselen
   Insert        - Bestand/map selecteren of deselecteren
-  Strg+Tab      - Werkruimten umschaltolen
-  Strg+W        - Actieve werkruimte sluiten
-  Strg+N        - Actief paneel klonen naar een nieuwe werkruimte
+  Ctrl+Tab      - Werkruimten umschaltolen
+  Ctrl+W        - Actieve werkruimte sluiten
+  Ctrl+N        - Actief paneel klonen naar een nieuwe werkruimte
 
 @History
 $Opdrachtengeschiedenis (Alt+F8)
@@ -608,7 +608,28 @@ Naast de cursortoetsen zijn de volgende sneltoetsen beschikbaar:
   Geselecteerd geschiedenisitem verwijderen          Shift+Del
   Volledige geschiedenis wissen met bevestiging      Del
 
-  Geselecteerde opdracht kopiëren naar het klembord   Strg+C, Strg+Einfg
+  Geselecteerde opdracht kopiëren naar het klembord   Ctrl+C, Ctrl+Ins
+
+@HistoryFolders
+$Mappengeschiedenis (Alt+F12)
+    De mappengeschiedenis toont de lijst met eerder bezochte mappen.
+Naast de cursortoetsen zijn de volgende sneltoetsen beschikbaar:
+
+  Naar de geselecteerde map gaan op het actieve paneel Enter
+  (Met de linkermuisknop klikken doet hetzelfde)
+  Naar de geselecteerde map gaan op het passieve paneel Shift+Enter
+  Pad direct in de parancssor invoegen              Ctrl+Enter
+  Dialoogvenster bezárása                            Esc, F10
+
+  Inkrementális zoeken op basis van substring / prefix F2
+  U kunt de lijst filteren door een willekeurig karakter in te typen
+  Backspace wist het laatste filterkarakter
+
+  Geselecteerd geschiedenisitem verwijderen          Shift+Del
+  Volledige mappenlijst wissen met bevestiging       Del
+  Niet meer bestaande, verwijderde paden opruimen (bevestigd) Ctrl+R
+
+  Geselecteerd pad kopiëren naar het klembord        Ctrl+C, Ctrl+Ins
 
 @HistoryFolders
 $Mappengeschiedenis (Alt+F12)

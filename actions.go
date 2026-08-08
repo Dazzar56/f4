@@ -1477,16 +1477,16 @@ func actionEditorSettings(pf *PanelsFrame) {
 
 	// 1. Initialize Widgets
 	comboExpand := vtui.NewComboBox(0, 0, 40, []string{
-		"Do not expand tabs",
-		"Expand newly entered tabs to spaces",
-		"Expand all tabs to spaces",
+		Msg("EditorSettings.TabExpandNone"),
+		Msg("EditorSettings.TabExpandNew"),
+		Msg("EditorSettings.TabExpandAll"),
 	})
 	comboExpand.DropdownOnly = true
 	if AppConfig.EditorExpandTabs >= 0 && AppConfig.EditorExpandTabs <= 2 {
 		comboExpand.Menu.SetSelectPos(AppConfig.EditorExpandTabs)
 		comboExpand.Edit.SetText(comboExpand.Menu.Items[AppConfig.EditorExpandTabs].Text)
 	}
-	lblExpand := vtui.NewLabel(0, 0, "Expand t&abs:", comboExpand)
+	lblExpand := vtui.NewLabel(0, 0, Msg("EditorSettings.ExpandTabs"), comboExpand)
 	engines := []string{"Chroma", "Colorer", "None"}
 	selectedEngine := 0
 	for i, eng := range engines {
@@ -1499,9 +1499,9 @@ func actionEditorSettings(pf *PanelsFrame) {
 	comboHighlighter.DropdownOnly = true
 	comboHighlighter.Menu.SetSelectPos(selectedEngine)
 	comboHighlighter.Edit.SetText(engines[selectedEngine])
-	lblHighlighter := vtui.NewLabel(0, 0, "Hi&ghlighter:", comboHighlighter)
+	lblHighlighter := vtui.NewLabel(0, 0, Msg("EditorSettings.Highlighter"), comboHighlighter)
 	schemeNames := []string{""}
-	schemeItems := []string{"(built-in)"}
+	schemeItems := []string{Msg("ColorerSettings.BuiltIn")}
 	for _, scheme := range ListColorerSchemes() {
 		schemeNames = append(schemeNames, scheme.Name)
 		schemeItems = append(schemeItems, colorerSchemeLabel(scheme))
@@ -1517,23 +1517,23 @@ func actionEditorSettings(pf *PanelsFrame) {
 	comboScheme.DropdownOnly = true
 	comboScheme.Menu.SetSelectPos(selectedScheme)
 	comboScheme.Edit.SetText(schemeItems[selectedScheme])
-	lblScheme := vtui.NewLabel(0, 0, "Colorer st&yle:", comboScheme)
+	lblScheme := vtui.NewLabel(0, 0, Msg("EditorSettings.ColorerStyle"), comboScheme)
 
 	editTabSize := vtui.NewEdit(0, 0, 4, fmt.Sprintf("%d", AppConfig.EditorTabSize))
 	editTabSize.ClearSelection()
-	lblTabSize := vtui.NewLabel(0, 0, "Tab si&ze:", editTabSize)
+	lblTabSize := vtui.NewLabel(0, 0, Msg("EditorSettings.TabSize"), editTabSize)
 
-	chkAutoIndent := vtui.NewCheckbox(0, 0, "Auto i&ndent", false)
+	chkAutoIndent := vtui.NewCheckbox(0, 0, Msg("EditorSettings.AutoIndent"), false)
 	if AppConfig.EditorAutoIndent {
 		chkAutoIndent.State = 1
 	}
 
-	chkCursorEOL := vtui.NewCheckbox(0, 0, "Cursor beyond end of &line", false)
+	chkCursorEOL := vtui.NewCheckbox(0, 0, Msg("EditorSettings.CursorBeyondEOL"), false)
 	if AppConfig.EditorCursorBeyondEOL {
 		chkCursorEOL.State = 1
 	}
 
-	chkEditorConfig := vtui.NewCheckbox(0, 0, "Use .&editorconfig settings files", false)
+	chkEditorConfig := vtui.NewCheckbox(0, 0, Msg("EditorSettings.UseEditorConfig"), false)
 	if AppConfig.EditorUseEditorConfig {
 		chkEditorConfig.State = 1
 	}
@@ -1543,11 +1543,11 @@ func actionEditorSettings(pf *PanelsFrame) {
 		chkAuto.State = 1
 	}
 
-	chkCrosshair := vtui.NewCheckbox(0, 0, "Show cross&hair", false)
+	chkCrosshair := vtui.NewCheckbox(0, 0, Msg("EditorSettings.Crosshair"), false)
 	if AppConfig.EditorCrosshair {
 		chkCrosshair.State = 1
 	}
-	chkColorerBg := vtui.NewCheckbox(0, 0, "Colorer &background", false)
+	chkColorerBg := vtui.NewCheckbox(0, 0, Msg("EditorSettings.ColorerBg"), false)
 	if AppConfig.EditorColorerBackground {
 		chkColorerBg.State = 1
 	}
@@ -1555,13 +1555,13 @@ func actionEditorSettings(pf *PanelsFrame) {
 	editMask := vtui.NewEdit(0, 0, 56, AppConfig.EditorAutoCompleteMask)
 	lblMask := vtui.NewLabel(0, 0, Msg("EditorSettings.Mask"), editMask)
 
-	chkExtEdit := vtui.NewCheckbox(0, 0, "Use e&xternal editor", false)
+	chkExtEdit := vtui.NewCheckbox(0, 0, Msg("EditorSettings.UseExternalEditor"), false)
 	if AppConfig.UseExternalEditor {
 		chkExtEdit.State = 1
 	}
 
 	editExtCmd := vtui.NewEdit(0, 0, 20, AppConfig.ExternalEditorCommand)
-	lblExtCmd := vtui.NewLabel(0, 0, "E&xternal command:", editExtCmd)
+	lblExtCmd := vtui.NewLabel(0, 0, Msg("EditorSettings.ExternalCommand"), editExtCmd)
 
 	btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))
 	btnOk.IsDefault = true
@@ -2311,7 +2311,7 @@ func actionConfirmationsSettings(pf *PanelsFrame) {
 		chkExit.State = 1
 	}
 
-	chkDelFocus := vtui.NewCheckbox(0, 0, "Focus 'Cancel' on delete", false)
+	chkDelFocus := vtui.NewCheckbox(0, 0, Msg("ConfirmationsSettings.DeleteCancelFocused"), false)
 	chkDelFocus.State = 0
 	if AppConfig.DeleteCancelFocused {
 		chkDelFocus.State = 1
@@ -2933,20 +2933,20 @@ func actionHelpLanguage(pf *PanelsFrame) {
 						name = "Українська"
 					case "zh":
 						name = "中文"
-							case "hu":
-								name = "Magyar"
-							case "nl":
-								name = "Nederlands"
-							case "ko":
-								name = "한국어"
-							case "it":
-								name = "Italiano"
-							}
-							langs = append(langs, langInfo{code, name})
-							seen[code] = true
-						}
+					case "hu":
+						name = "Magyar"
+					case "nl":
+						name = "Nederlands"
+					case "ko":
+						name = "한국어"
+					case "it":
+						name = "Italiano"
 					}
+					langs = append(langs, langInfo{code, name})
+					seen[code] = true
 				}
+			}
+		}
 	}
 
 	menu := vtui.NewVMenu(Msg("HelpLanguage.Title"))
