@@ -276,10 +276,20 @@ LoopJSON:
 	}
 }
 
+// TestUpdater_UserDeclinesUpdate pins the fix for #374: declining an
+// update must NOT persist across sessions. Concretely:
+//   - AppConfig.LastUpdateVersion must stay untouched (that field is the
+//     "we already installed this version" marker and would suppress the
+//     prompt on every subsequent restart, which is the reported bug).
+//   - sessionDismissedUpdateKey must be set, so a follow-up automatic
+//     check within the same run does not re-prompt for the same version.
 func TestUpdater_UserDeclinesUpdate(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	oldCfg := AppConfig
 	defer func() { AppConfig = oldCfg }()
+	oldDismissed := sessionDismissedUpdateKey
+	defer func() { sessionDismissedUpdateKey = oldDismissed }()
+	sessionDismissedUpdateKey = ""
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		resp := githubRelease{
@@ -330,9 +340,119 @@ Loop:
 		t.Fatal("Update prompt dialog not found")
 	}
 
-	// Verify that LastUpdateVersion was updated so we don't prompt again for this version
-	if AppConfig.LastUpdateVersion != "v100.0.0" {
-		t.Errorf("Expected LastUpdateVersion to be 'v100.0.0' after decline, got %q", AppConfig.LastUpdateVersion)
+	if AppConfig.LastUpdateVersion != "" {
+		t.Errorf("declining the prompt must NOT persist across restarts (see #374); LastUpdateVersion=%q, want empty",
+			AppConfig.LastUpdateVersion)
+	}
+	if sessionDismissedUpdateKey != "v100.0.0" {
+		t.Errorf("declining the prompt must arm the session-level dismiss; sessionDismissedUpdateKey=%q, want %q",
+			sessionDismissedUpdateKey, "v100.0.0")
+	}
+}
+
+// TestUpdater_ManualCheckIgnoresSessionDismiss guards the second half
+// of #374: after the user declined once, an explicit "Check for
+// updates" from the settings dialog must still offer the update.
+// The session-level dismissal only silences the automatic prompt.
+func TestUpdater_ManualCheckIgnoresSessionDismiss(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	oldCfg := AppConfig
+	defer func() { AppConfig = oldCfg }()
+	oldDismissed := sessionDismissedUpdateKey
+	defer func() { sessionDismissedUpdateKey = oldDismissed }()
+	// Simulate the user having declined the same release earlier.
+	sessionDismissedUpdateKey = "v100.0.0"
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := githubRelease{
+			TagName:     "v100.0.0",
+			PublishedAt: "2030-01-01T00:00:00Z",
+			Assets: []githubAsset{
+				{Name: "f4-linux-amd64.tar.gz", BrowserDownloadURL: "http://mock"},
+				{Name: "f4-windows-amd64.zip", BrowserDownloadURL: "http://mock"},
+			},
+		}
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer ts.Close()
+
+	origAPIURL := githubAPIURL
+	githubAPIURL = ts.URL + "/repos/unxed/f4/releases"
+	defer func() { githubAPIURL = origAPIURL }()
+
+	AppConfig.UpdateChannel = 0
+	AppConfig.LastUpdateVersion = ""
+
+	CheckForUpdates(nil, true) // manual == true
+
+	timeout := time.After(2 * time.Second)
+	sawPrompt := false
+	for !sawPrompt {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			top := vtui.FrameManager.GetTopFrame()
+			if top != nil && top.GetTitle() == " Auto Update " {
+				sawPrompt = true
+			}
+		case <-timeout:
+			t.Fatal("manual check must re-offer the update even after a session-level dismiss (see #374)")
+		}
+	}
+}
+
+// TestUpdater_AutoCheckSkipsSessionDismiss is the other side of the
+// same coin: within one session, an interval-driven automatic check
+// must NOT re-prompt for a version the user already declined this
+// run. This keeps the manual override useful without introducing the
+// #374 spam.
+func TestUpdater_AutoCheckSkipsSessionDismiss(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	oldCfg := AppConfig
+	defer func() { AppConfig = oldCfg }()
+	oldDismissed := sessionDismissedUpdateKey
+	defer func() { sessionDismissedUpdateKey = oldDismissed }()
+	sessionDismissedUpdateKey = "v100.0.0"
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := githubRelease{
+			TagName:     "v100.0.0",
+			PublishedAt: "2030-01-01T00:00:00Z",
+			Assets: []githubAsset{
+				{Name: "f4-linux-amd64.tar.gz", BrowserDownloadURL: "http://mock"},
+				{Name: "f4-windows-amd64.zip", BrowserDownloadURL: "http://mock"},
+			},
+		}
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer ts.Close()
+
+	origAPIURL := githubAPIURL
+	githubAPIURL = ts.URL + "/repos/unxed/f4/releases"
+	defer func() { githubAPIURL = origAPIURL }()
+
+	AppConfig.UpdateChannel = 0
+	AppConfig.LastUpdateVersion = ""
+	// Force shouldCheck() to allow the auto path to reach the dismiss guard.
+	AppConfig.UpdateInterval = 1
+	AppConfig.LastUpdateCheck = 0
+
+	CheckForUpdates(nil, false) // manual == false
+
+	// Give the goroutine a chance to reach the guard and return without
+	// pushing a task; a leaking prompt would enqueue one within ~200ms.
+	timeout := time.After(500 * time.Millisecond)
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			top := vtui.FrameManager.GetTopFrame()
+			if top != nil && top.GetTitle() == " Auto Update " {
+				t.Fatal("auto check must respect the session-level dismiss (see #374)")
+			}
+		case <-timeout:
+			return
+		}
 	}
 }
 
