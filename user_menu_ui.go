@@ -636,6 +636,8 @@ func (s *userMenuState) deleteAt(current *vtui.VMenu, items []UserMenuItem) {
 	dlg := vtui.ShowMessage(" User menu ",
 		fmt.Sprintf("Delete menu item:\n\n  %s", label),
 		[]string{"&Delete", "Cancel"})
+	// Destructive — render on the WarnDialog palette (see #379).
+	dlg.IsWarning = true
 	dlg.OnResult = func(code int) {
 		if code == 0 {
 			apply()

@@ -127,6 +127,8 @@ func (s *assocEditorState) openList(selected int) {
 			dlg := vtui.ShowMessageOn(menu, " "+Msg("FileAssoc.DeleteTitle")+" ",
 				fmt.Sprintf(Msg("FileAssoc.DeleteConfirm"), assocDisplayLabel(it)),
 				[]string{"&Delete", "Cancel"})
+			// Destructive — render on the WarnDialog palette (see #379).
+			dlg.IsWarning = true
 			dlg.OnResult = func(code int) {
 				if code != 0 {
 					return
