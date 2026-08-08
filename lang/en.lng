@@ -18,6 +18,7 @@ ID3Editor.FieldAlbum=Album:
 ID3Editor.FieldYear=Year:
 ID3Editor.FieldGenre=Genre:
 ID3Editor.FieldComment=Comment:
+ID3Editor.FieldVersion=Version:
 VisRen.Title=Visual File Renamer
 VisRen.HostUnsupported=This F4 host does not provide the VisRen UI bridge.
 VisRen.LocalOnly=VisRen works only on a local file panel.

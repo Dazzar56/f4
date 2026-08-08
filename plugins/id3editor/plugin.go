@@ -33,33 +33,34 @@ func (p *ID3EditorPlugin) GetName() string {
 }
 
 func (p *ID3EditorPlugin) handleEdit(app vfs.App) {
+	vtui.DebugLog("ID3EDITOR: handleEdit called")
 	activeVFS := app.GetActivePanelVFS()
 	if activeVFS == nil {
-		app.Message(" Error ", vtui.Msg("ID3Editor.LocalOnly"), []string{"&Ok"})
+		vtui.ShowMessage(" Error ", vtui.Msg("ID3Editor.LocalOnly"), []string{"&Ok"})
 		return
 	}
 
 	if _, isLocal := activeVFS.(*vfs.OSVFS); !isLocal {
-		app.Message(" Error ", vtui.Msg("ID3Editor.LocalOnly"), []string{"&Ok"})
+		vtui.ShowMessage(" Error ", vtui.Msg("ID3Editor.LocalOnly"), []string{"&Ok"})
 		return
 	}
 
 	names := app.GetSelectedNames()
 	if len(names) == 0 {
-		app.Message(" Warning ", vtui.Msg("ID3Editor.SelectFile"), []string{"&Ok"})
+		vtui.ShowMessage(" Warning ", vtui.Msg("ID3Editor.SelectFile"), []string{"&Ok"})
 		return
 	}
 
 	name := names[0]
 	ext := strings.ToLower(filepath.Ext(name))
 	if ext != ".mp3" {
-		app.Message(" Warning ", vtui.Msg("ID3Editor.OnlyMP3"), []string{"&Ok"})
+		vtui.ShowMessage(" Warning ", vtui.Msg("ID3Editor.OnlyMP3"), []string{"&Ok"})
 		return
 	}
 
 	fullPath, err := activeVFS.Abs(name)
 	if err != nil {
-		app.Message(" Error ", fmt.Sprintf(vtui.Msg("ID3Editor.OpenError"), err), []string{"&Ok"})
+		vtui.ShowMessage(" Error ", fmt.Sprintf(vtui.Msg("ID3Editor.OpenError"), err), []string{"&Ok"})
 		return
 	}
 
@@ -132,6 +133,13 @@ func (p *ID3EditorPlugin) showEditorDialog(app vfs.App, fullPath string) {
 	dlg.AddItem(btnSave)
 	dlg.AddItem(btnCancel)
 
+	versionText := file.Version()
+	lblVersion := vtui.NewLabel(0, 0, padLabel(vtui.Msg("ID3Editor.FieldVersion")), nil)
+	valVersion := vtui.NewLabel(0, 0, versionText, nil)
+	dlg.AddItem(lblVersion)
+	dlg.AddItem(valVersion)
+	valVersion.SetText(versionText)
+
 	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, width-4, height-4)
 
 	addFormRow := func(lbl vtui.UIElement, edit vtui.UIElement, topMargin int) {
@@ -153,6 +161,11 @@ func (p *ID3EditorPlugin) showEditorDialog(app vfs.App, fullPath string) {
 	vbox.Add(rowYearGenre, vtui.Margins{Top: 1}, vtui.AlignFill)
 
 	addFormRow(lblComment, editComment, 1)
+
+	rowVersion := vtui.NewHBoxLayout(0, 0, width-4, 1)
+	rowVersion.Add(lblVersion, vtui.Margins{Right: 1}, vtui.AlignLeft)
+	rowVersion.Add(valVersion, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(rowVersion, vtui.Margins{Top: 1}, vtui.AlignFill)
 
 	rowBtns := vtui.NewHBoxLayout(0, 0, width-4, 1)
 	rowBtns.HorizontalAlign = vtui.AlignCenter

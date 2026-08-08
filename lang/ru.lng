@@ -58,6 +58,7 @@ ID3Editor.FieldAlbum=Альбом:
 ID3Editor.FieldYear=Год:
 ID3Editor.FieldGenre=Жанр:
 ID3Editor.FieldComment=Комментарий:
+ID3Editor.FieldVersion=Версия:
 vtui.Ok=&Ок
 vtui.Cancel=Отмена
 Panel.Other=&Другая панель

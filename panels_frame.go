@@ -3198,6 +3198,7 @@ func (pf *PanelsFrame) Clone() *PanelsFrame {
 }
 
 func (pf *PanelsFrame) showPluginMenu() {
+	vtui.DebugLog("PLUGIN_MENU: showPluginMenu called with %d items", len(PluginMenuItems))
 	if len(PluginMenuItems) == 0 {
 		vtui.ShowMessage(" Plugins ", "No plugins registered for F11 menu.", []string{"&Ok"})
 		return
@@ -3207,8 +3208,12 @@ func (pf *PanelsFrame) showPluginMenu() {
 		labels = append(labels, itm.Label)
 	}
 	pf.Menu(" Plugins ", labels, func(idx int) {
+		vtui.DebugLog("PLUGIN_MENU: item %d selected", idx)
 		if idx >= 0 && idx < len(PluginMenuItems) {
-			PluginMenuItems[idx].Handler(pf)
+			handler := PluginMenuItems[idx].Handler
+			vtui.FrameManager.PostTask(func() {
+				handler(pf)
+			})
 		}
 	})
 }
