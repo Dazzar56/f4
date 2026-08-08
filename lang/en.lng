@@ -638,3 +638,16 @@ EditorSettings.ColorerBg=Colorer &background
 EditorSettings.UseExternalEditor=Use e&xternal editor
 EditorSettings.ExternalCommand=E&xternal command:
 ConfirmationsSettings.DeleteCancelFocused=Focus 'Cancel' on delete
+
+PanelSettings.ShowHighlightMarks=Show highlight &marks
+PanelSettings.CommandLineAutoComplete=Enable command line &auto-completion
+PanelSettings.AlwaysShowMenuBar=Always show &menu bar
+PanelSettings.RecordMacrosTo=Record macros to:
+UpdateSettings.ChannelStable=Stable releases
+UpdateSettings.ChannelNightly=Nightly builds
+UpdateSettings.IntervalNever=Never
+UpdateSettings.IntervalStart=Every start
+UpdateSettings.IntervalDaily=Daily
+UpdateSettings.IntervalWeekly=Weekly
+Plugins.AddTitle= Add Plugin
+Plugins.SelectFilePrompt=Select plugin file:

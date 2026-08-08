@@ -638,3 +638,16 @@ EditorSettings.ColorerBg=Фон &Colorer
 EditorSettings.UseExternalEditor=Использовать в&нешний редактор
 EditorSettings.ExternalCommand=Ко&манда запуска:
 ConfirmationsSettings.DeleteCancelFocused=Фокус на кнопке 'Cancel' при удалении
+
+PanelSettings.ShowHighlightMarks=Показывать пометки &подсветки файлов
+PanelSettings.CommandLineAutoComplete=Включить авто&дополнение командной строки
+PanelSettings.AlwaysShowMenuBar=Всегда показывать строку &меню
+PanelSettings.RecordMacrosTo=Записывать макросы в:
+UpdateSettings.ChannelStable=Стабильные выпуски
+UpdateSettings.ChannelNightly=Ночные сборки
+UpdateSettings.IntervalNever=Никогда
+UpdateSettings.IntervalStart=При каждом запуске
+UpdateSettings.IntervalDaily=Ежедневно
+UpdateSettings.IntervalWeekly=Еженедельно
+Plugins.AddTitle= Добавить плагин
+Plugins.SelectFilePrompt=Выберите файл плагина:

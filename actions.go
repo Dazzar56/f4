@@ -2078,7 +2078,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 		chkDirPrefix.State = 1
 	}
 
-	chkHighlightMarks := vtui.NewCheckbox(0, 0, "Show highlight &marks", false)
+	chkHighlightMarks := vtui.NewCheckbox(0, 0, Msg("PanelSettings.ShowHighlightMarks"), false)
 	chkHighlightMarks.State = 0
 	if AppConfig.ShowHighlightMarks {
 		chkHighlightMarks.State = 1
@@ -2106,7 +2106,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 		chkPaths.State = 1
 	}
 
-	chkCmdAc := vtui.NewCheckbox(0, 0, "Enable command line &auto-completion", false)
+	chkCmdAc := vtui.NewCheckbox(0, 0, Msg("PanelSettings.CommandLineAutoComplete"), false)
 	chkCmdAc.State = 0
 	if AppConfig.CommandLineAutoComplete {
 		chkCmdAc.State = 1
@@ -2139,7 +2139,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 		chkSync.State = 1
 	}
 
-	chkAlwaysMenu := vtui.NewCheckbox(0, 0, "Always show &menu bar", false)
+	chkAlwaysMenu := vtui.NewCheckbox(0, 0, Msg("PanelSettings.AlwaysShowMenuBar"), false)
 	chkAlwaysMenu.State = 0
 	if AppConfig.AlwaysShowMenuBar {
 		chkAlwaysMenu.State = 1
@@ -2176,7 +2176,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 	comboMacro.DropdownOnly = true
 	comboMacro.Menu.SetSelectPos(AppConfig.MacroRecordFormat)
 	comboMacro.Edit.SetText(macroModes[AppConfig.MacroRecordFormat])
-	lblMacro := vtui.NewLabel(0, 0, "Record macros to:", comboMacro)
+	lblMacro := vtui.NewLabel(0, 0, Msg("PanelSettings.RecordMacrosTo"), comboMacro)
 
 	btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))
 	btnOk.IsDefault = true
@@ -2364,7 +2364,7 @@ func actionUpdateSettings(pf *PanelsFrame) {
 	dlg := vtui.NewCenteredDialog(width, height, Msg("UpdateSettings.Title"))
 	dlg.ShowClose = true
 
-	channels := []string{"Stable releases", "Nightly builds"}
+	channels := []string{Msg("UpdateSettings.ChannelStable"), Msg("UpdateSettings.ChannelNightly")}
 	comboChannel := vtui.NewComboBox(0, 0, 24, channels)
 	comboChannel.DropdownOnly = true
 	if AppConfig.UpdateChannel >= 0 && AppConfig.UpdateChannel < len(channels) {
@@ -2373,7 +2373,7 @@ func actionUpdateSettings(pf *PanelsFrame) {
 	}
 	lblChannel := vtui.NewLabel(0, 0, Msg("UpdateSettings.Channel"), comboChannel)
 
-	intervals := []string{"Never", "Every start", "Daily", "Weekly"}
+	intervals := []string{Msg("UpdateSettings.IntervalNever"), Msg("UpdateSettings.IntervalStart"), Msg("UpdateSettings.IntervalDaily"), Msg("UpdateSettings.IntervalWeekly")}
 	comboInterval := vtui.NewComboBox(0, 0, 24, intervals)
 	comboInterval.DropdownOnly = true
 	if AppConfig.UpdateInterval >= 0 && AppConfig.UpdateInterval < len(intervals) {
