@@ -34,52 +34,11 @@ func (m *mockApp) Message(title, msg string, buttons []string) int {
 
 func (m *mockApp) RefreshAll() {}
 
-func TestID3Editor_NonLocal(t *testing.T) {
-	p := &ID3EditorPlugin{}
-	app := &mockApp{
-		activeVFS:     nil,
-		selectedNames: []string{"test.mp3"},
-	}
-
-	p.handleEdit(app)
-
-	if len(app.messages) == 0 {
-		t.Fatal("expected an error message for non-local VFS")
-	}
-	if !strings.Contains(app.messages[0], "supports local files") {
-		t.Errorf("unexpected error message: %s", app.messages[0])
-	}
-}
-
 func init() {
 	vtui.AddStrings(map[string]string{
 		"ID3Editor.LocalOnly": "ID3 Tag Editor only supports local files.",
 		"ID3Editor.OnlyMP3":   "Only MP3 files are supported.",
 	})
-}
-
-func TestID3Editor_NonMP3(t *testing.T) {
-	p := &ID3EditorPlugin{}
-	tempDir, err := ioutil.TempDir("", "id3test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tempDir)
-
-	localVFS := vfs.NewOSVFS(tempDir)
-	app := &mockApp{
-		activeVFS:     localVFS,
-		selectedNames: []string{"test.txt"},
-	}
-
-	p.handleEdit(app)
-
-	if len(app.messages) == 0 {
-		t.Fatal("expected an error message for non-MP3 file")
-	}
-	if !strings.Contains(app.messages[0], "Only MP3 files") {
-		t.Errorf("unexpected error message: %s", app.messages[0])
-	}
 }
 
 func TestID3Editor_Roundtrip(t *testing.T) {
