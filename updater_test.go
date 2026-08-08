@@ -298,14 +298,16 @@ func TestUpdater_UserDeclinesUpdate(t *testing.T) {
 	githubAPIURL = ts.URL + "/repos/unxed/f4/releases"
 	defer func() { githubAPIURL = origAPIURL }()
 
+	// Case 1: Click "Later" (index 1) - should not save skipped/updated version state
 	AppConfig.UpdateChannel = 0 // Stable
 	AppConfig.LastUpdateVersion = ""
+	AppConfig.LastSkippedVersion = ""
 
 	CheckForUpdates(nil, true)
 
 	timeout := time.After(2 * time.Second)
 	dialogHandled := false
-Loop:
+LoopLater:
 	for {
 		select {
 		case task := <-vtui.FrameManager.TaskChan:
@@ -313,26 +315,64 @@ Loop:
 			top := vtui.FrameManager.GetTopFrame()
 			if top != nil && top.GetTitle() == " Auto Update " {
 				if dlg, ok := top.(*vtui.Window); ok && dlg.OnResult != nil {
-					// Simulate clicking "No" (button index 1)
-					dlg.OnResult(1)
+					dlg.OnResult(1) // "Later"
 					top.SetExitCode(-1)
 					vtui.FrameManager.Pop()
 					dialogHandled = true
-					break Loop
+					break LoopLater
 				}
 			}
 		case <-timeout:
-			break Loop
+			break LoopLater
 		}
 	}
 
 	if !dialogHandled {
-		t.Fatal("Update prompt dialog not found")
+		t.Fatal("Update prompt dialog not found for Later case")
 	}
 
-	// Verify that LastUpdateVersion was updated so we don't prompt again for this version
-	if AppConfig.LastUpdateVersion != "v100.0.0" {
-		t.Errorf("Expected LastUpdateVersion to be 'v100.0.0' after decline, got %q", AppConfig.LastUpdateVersion)
+	if AppConfig.LastSkippedVersion != "" || AppConfig.LastUpdateVersion != "" {
+		t.Errorf("Expected LastSkippedVersion and LastUpdateVersion to be empty after Later, got skipped=%q, updated=%q", AppConfig.LastSkippedVersion, AppConfig.LastUpdateVersion)
+	}
+
+	// Case 2: Click "Skip" (index 2) - should set LastSkippedVersion
+	AppConfig.UpdateChannel = 0 // Stable
+	AppConfig.LastUpdateVersion = ""
+	AppConfig.LastSkippedVersion = ""
+
+	CheckForUpdates(nil, true)
+
+	timeout = time.After(2 * time.Second)
+	dialogHandled = false
+LoopSkip:
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			top := vtui.FrameManager.GetTopFrame()
+			if top != nil && top.GetTitle() == " Auto Update " {
+				if dlg, ok := top.(*vtui.Window); ok && dlg.OnResult != nil {
+					dlg.OnResult(2) // "Skip"
+					top.SetExitCode(-1)
+					vtui.FrameManager.Pop()
+					dialogHandled = true
+					break LoopSkip
+				}
+			}
+		case <-timeout:
+			break LoopSkip
+		}
+	}
+
+	if !dialogHandled {
+		t.Fatal("Update prompt dialog not found for Skip case")
+	}
+
+	if AppConfig.LastSkippedVersion != "v100.0.0" {
+		t.Errorf("Expected LastSkippedVersion to be 'v100.0.0' after Skip, got %q", AppConfig.LastSkippedVersion)
+	}
+	if AppConfig.LastUpdateVersion != "" {
+		t.Errorf("Expected LastUpdateVersion to remain empty after Skip, got %q", AppConfig.LastUpdateVersion)
 	}
 }
 

@@ -36,6 +36,7 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	AppConfig.SeparateFileExtensions = true
 	AppConfig.PanelScrollbarMode = PanelScrollbarMinimal
 	AppConfig.MacroRecordFormat = 1
+	AppConfig.LastSkippedVersion = "v10.0.1-nightly"
 
 	// 2. Save
 	SaveConfig()
@@ -49,6 +50,7 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	AppConfig.SeparateFileExtensions = false
 	AppConfig.PanelScrollbarMode = PanelScrollbarOff
 	AppConfig.MacroRecordFormat = 0
+	AppConfig.LastSkippedVersion = ""
 
 	// 4. Load
 	LoadConfig()
@@ -83,6 +85,9 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	}
 	if AppConfig.MacroRecordFormat != 1 {
 		t.Error("LoadConfig failed to restore MacroRecordFormat")
+	}
+	if AppConfig.LastSkippedVersion != "v10.0.1-nightly" {
+		t.Errorf("LoadConfig failed to restore LastSkippedVersion: %q", AppConfig.LastSkippedVersion)
 	}
 }
 
