@@ -161,9 +161,18 @@
     ├── gui_unix.go
     ├── gui_windows.go
     ├── help
+    │   ├── cs.hlf
+    │   ├── de.hlf
     │   ├── en.hlf
+    │   ├── hu.hlf
+    │   ├── it.hlf
+    │   ├── ko.hlf
+    │   ├── nl.hlf
+    │   ├── pl.hlf
     │   ├── README.md
-    │   └── ru.hlf
+    │   ├── ru.hlf
+    │   ├── uk.hlf
+    │   └── zh.hlf
     ├── help.go
     ├── help_keys_ru_test.go
     ├── help_keys_test.go
@@ -226,8 +235,18 @@
     ├── kitty_placements.go
     ├── kitty_placements_test.go
     ├── lang
+    │   ├── cs.lng
+    │   ├── de.lng
     │   ├── en.lng
-    │   └── ru.lng
+    │   ├── hu.lng
+    │   ├── it.lng
+    │   ├── ja.lng
+    │   ├── ko.lng
+    │   ├── nl.lng
+    │   ├── pl.lng
+    │   ├── ru.lng
+    │   ├── uk.lng
+    │   └── zh.lng
     ├── lang.go
     ├── lang_packs.go
     ├── lang_packs_test.go
@@ -536,6 +555,7 @@
     ├── title_unix.go
     ├── title_windows.go
     ├── tools
+    │   ├── find_hardcoded.go
     │   ├── fishplus_probe.sh
     │   ├── fishplus_testlab
     │   │   ├── fishclient.py
@@ -640,4 +660,4 @@
     ├── word_nav.go
     └── word_nav_test.go
     
-    48 directories, 591 files
+    48 directories, 611 files
