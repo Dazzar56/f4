@@ -454,7 +454,9 @@ Info.Title= Info
 ExtEdit.TempError=Cannot create temp file: %v
 
 FileOp.AlreadyOpened=File is already opened:\n%s
+FileOp.AlreadyOpenedTitle= File already open
 FileOp.AlreadyViewed=File is already being viewed:\n%s
+FileOp.AlreadyViewedTitle= File already open in viewer
 FileOp.BtnCurrent=&Current
 FileOp.BtnReload=&Reload
 FileOp.BtnNewInstance=&New instance

@@ -454,7 +454,9 @@ Info.Title= Информация
 ExtEdit.TempError=Не удалось создать временный файл: %v
 
 FileOp.AlreadyOpened=Файл уже открыт в редакторе:\n%s
+FileOp.AlreadyOpenedTitle= Файл уже открыт в редакторе
 FileOp.AlreadyViewed=Файл уже открыт для просмотра:\n%s
+FileOp.AlreadyViewedTitle= Файл уже открыт в просмотрщике
 FileOp.BtnCurrent=&Текущий
 FileOp.BtnReload=&Обновить
 FileOp.BtnNewInstance=&Новая копия
