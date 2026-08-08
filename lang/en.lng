@@ -5,6 +5,19 @@ Author=f4 Team
 
 [Strings]
 VisRen.Menu=&Visual File Renamer
+ID3Editor.Menu=ID3 Tag &Editor
+ID3Editor.Title=ID3 Tag Editor
+ID3Editor.LocalOnly=ID3 Tag Editor only supports local files.
+ID3Editor.SelectFile=Select an MP3 file first.
+ID3Editor.OnlyMP3=Only MP3 files are supported.
+ID3Editor.SaveError=Failed to save ID3 tags:\n%v
+ID3Editor.OpenError=Failed to open MP3 file:\n%v
+ID3Editor.FieldTitle=Title:
+ID3Editor.FieldArtist=Artist:
+ID3Editor.FieldAlbum=Album:
+ID3Editor.FieldYear=Year:
+ID3Editor.FieldGenre=Genre:
+ID3Editor.FieldComment=Comment:
 VisRen.Title=Visual File Renamer
 VisRen.HostUnsupported=This F4 host does not provide the VisRen UI bridge.
 VisRen.LocalOnly=VisRen works only on a local file panel.

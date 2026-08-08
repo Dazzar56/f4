@@ -3386,16 +3386,23 @@ func TestPanelsFrame_AutoRefresh_Locking(t *testing.T) {
 	fsp.isCheckingRefresh = false
 
 	// First Show() should trigger auto-refresh
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
 	pf.lastAutoRefresh = time.Now().Add(-5 * time.Second)
-	pf.Show(vtui.NewSilentScreenBuf())
+	pf.Show(scr)
 
-	// Give RunAsync a moment to start
-	deadline = time.Now().Add(100 * time.Millisecond)
+	// Pump tasks so the auto-refresh goroutine can run
+	deadline = time.Now().Add(1 * time.Second)
 	for time.Now().Before(deadline) {
-		if fsp.isCheckingRefresh {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		default:
+			time.Sleep(5 * time.Millisecond)
+		}
+		if fsp.isCheckingRefresh && mv.statCalls.Load() >= 1 {
 			break
 		}
-		time.Sleep(5 * time.Millisecond)
 	}
 	if !fsp.isCheckingRefresh {
 		t.Error("Expected isCheckingRefresh to be true while Stat is pending")
@@ -3403,8 +3410,6 @@ func TestPanelsFrame_AutoRefresh_Locking(t *testing.T) {
 	if mv.statCalls.Load() < 1 {
 		t.Error("Expected the auto refresh to have called Stat")
 	}
-
-	// Second Show() must NOT trigger another Stat while the first is pending.
 	before := mv.statCalls.Load()
 	pf.lastAutoRefresh = time.Now().Add(-5 * time.Second)
 	pf.Show(vtui.NewSilentScreenBuf())

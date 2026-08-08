@@ -318,6 +318,9 @@
     │   │   └── README.md
     │   ├── dummy_rpc
     │   │   └── main.go
+    │   ├── id3editor
+    │   │   ├── plugin.go
+    │   │   └── plugin_test.go
     │   ├── ios
     │   │   ├── afc_vfs.go
     │   │   ├── afc_vfs_test.go
@@ -626,4 +629,4 @@
     ├── word_nav.go
     └── word_nav_test.go
     
-    42 directories, 583 files
+    43 directories, 585 files
