@@ -12,12 +12,12 @@ import (
 
 // UI constructors we want to inspect for hardcoded string arguments.
 var uiConstructors = map[string]bool{
-	"NewLabel":            true,
-	"NewButton":           true,
-	"NewCheckbox":         true,
-	"NewCenteredDialog":   true,
-	"NewVMenu":            true,
-	"NewText":             true,
+	"NewLabel":          true,
+	"NewButton":         true,
+	"NewCheckbox":       true,
+	"NewCenteredDialog": true,
+	"NewVMenu":          true,
+	"NewText":           true,
 }
 
 func main() {
