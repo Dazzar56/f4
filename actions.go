@@ -2939,6 +2939,8 @@ func actionHelpLanguage(pf *PanelsFrame) {
 						name = "中文"
 					case "hu":
 						name = "Magyar"
+					case "fi":
+						name = "Suomi"
 					case "nl":
 						name = "Nederlands"
 					case "ko":
