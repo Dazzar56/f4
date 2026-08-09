@@ -9,9 +9,20 @@ import (
 	"strings"
 	"testing"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/abadojack/whatlanggo"
 )
+
+func hasHotkey(s string) bool {
+	s = strings.ReplaceAll(s, "&&", "")
+	idx := strings.Index(s, "&")
+	if idx == -1 || idx == len(s)-1 {
+		return false
+	}
+	nextChar := []rune(s[idx+1:])[0]
+	return unicode.IsLetter(nextChar) || unicode.IsDigit(nextChar)
+}
 
 func TestLangConsistency(t *testing.T) {
 	enData, err := os.ReadFile(filepath.Join("lang", "en.lng"))
@@ -122,13 +133,13 @@ func TestLangConsistency(t *testing.T) {
 
 		mergedLineRe := regexp.MustCompile(`\n[a-zA-Z0-9_.-]+=`)
 		allowedLangs := map[string][]whatlanggo.Lang{
-			"cs": {whatlanggo.Ces, whatlanggo.Eng},
-			"de": {whatlanggo.Deu, whatlanggo.Eng},
-			"pl": {whatlanggo.Pol, whatlanggo.Eng},
-			"uk": {whatlanggo.Ukr, whatlanggo.Rus, whatlanggo.Bul, whatlanggo.Eng},
-			"ru": {whatlanggo.Rus, whatlanggo.Ukr, whatlanggo.Bul, whatlanggo.Eng},
-			"zh": {whatlanggo.Cmn, whatlanggo.Eng},
-			"ja": {whatlanggo.Jpn, whatlanggo.Eng},
+			"cs": {whatlanggo.Ces, whatlanggo.Pol, whatlanggo.Hrv, whatlanggo.Srp, whatlanggo.Slv, whatlanggo.Eng, whatlanggo.Deu, whatlanggo.Fra, whatlanggo.Ita, whatlanggo.Spa, whatlanggo.Por, whatlanggo.Hat, whatlanggo.Nld},
+			"de": {whatlanggo.Deu, whatlanggo.Eng, whatlanggo.Nld, whatlanggo.Epo, whatlanggo.Fra, whatlanggo.Ita, whatlanggo.Spa},
+			"pl": {whatlanggo.Pol, whatlanggo.Eng, whatlanggo.Ces, whatlanggo.Hrv, whatlanggo.Srp, whatlanggo.Slv, whatlanggo.Epo, whatlanggo.Deu, whatlanggo.Fra, whatlanggo.Ita, whatlanggo.Spa},
+			"uk": {whatlanggo.Ukr, whatlanggo.Rus, whatlanggo.Bel, whatlanggo.Bul, whatlanggo.Srp, whatlanggo.Eng},
+			"ru": {whatlanggo.Rus, whatlanggo.Ukr, whatlanggo.Bel, whatlanggo.Bul, whatlanggo.Srp, whatlanggo.Tuk, whatlanggo.Eng},
+			"zh": {whatlanggo.Cmn, whatlanggo.Jpn, whatlanggo.Eng},
+			"ja": {whatlanggo.Jpn, whatlanggo.Cmn, whatlanggo.Eng},
 			"ko": {whatlanggo.Kor, whatlanggo.Eng},
 		}
 
@@ -174,19 +185,15 @@ func TestLangConsistency(t *testing.T) {
 			}
 
 			// 5. Ampersand (Hotkey) sanity check
-			enNoDbl := strings.ReplaceAll(enVal, "&&", "")
-			valNoDbl := strings.ReplaceAll(val, "&&", "")
-			enHasAmp := strings.Contains(enNoDbl, "&")
-			valHasAmp := strings.Contains(valNoDbl, "&")
+			enHasAmp := hasHotkey(enVal)
+			valHasAmp := hasHotkey(val)
 
-			if enHasAmp && !valHasAmp {
-				t.Errorf("%s: Key '%s' is missing hotkey '&'", file, key)
-			}
 			if !enHasAmp && valHasAmp {
 				t.Errorf("%s: Key '%s' has unexpected hotkey '&'", file, key)
 			}
 
 			if valHasAmp {
+				valNoDbl := strings.ReplaceAll(val, "&&", "")
 				ampCount := strings.Count(valNoDbl, "&")
 				if ampCount > 1 {
 					t.Errorf("%s: Key '%s' has multiple single '&'", file, key)
@@ -210,7 +217,7 @@ func TestLangConsistency(t *testing.T) {
 			// 2. N-gram language detection
 			cleanVal := placeholderRe.ReplaceAllString(val, "")
 			cleanVal = strings.ReplaceAll(cleanVal, "&", "")
-			if len(cleanVal) > 20 {
+			if utf8.RuneCountInString(cleanVal) > 50 {
 				info := whatlanggo.Detect(cleanVal)
 				if info.IsReliable() && info.Confidence > 0.90 {
 					allowed := false

@@ -636,7 +636,7 @@ EditorSettings.Crosshair=クロスヘアを表示(&H)
 EditorSettings.ColorerBg=Colorer背景(&B)
 EditorSettings.UseExternalEditor=外部エディタを使用(&E)
 EditorSettings.ExternalCommand=外部コマンド(&X):
-ConfirmationsSettings.DeleteCancelFocused=削除確認で「キャンセル」を選択(&C)
+ConfirmationsSettings.DeleteCancelFocused=削除確認で「キャンセル」を選択
 
 PanelSettings.ShowHighlightMarks=ハイライトマークを表示(&M)
 PanelSettings.CommandLineAutoComplete=コマンドラインの自動補完を有効にする(&A)

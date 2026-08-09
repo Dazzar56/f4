@@ -637,7 +637,7 @@ EditorSettings.Crosshair=Pokaż celo&wnik
 EditorSettings.ColorerBg=&Tło Colorer
 EditorSettings.UseExternalEditor=Zewnęt&rzny edytor
 EditorSettings.ExternalCommand=Pole&cenie:
-ConfirmationsSettings.DeleteCancelFocused=Przy usuwaniu skup na 'Anuluj'(&A)
+ConfirmationsSettings.DeleteCancelFocused=Przy usuwaniu skup na 'Anuluj'
 
 PanelSettings.ShowHighlightMarks=Pokaż &znaczniki podświetlania plików
 PanelSettings.CommandLineAutoComplete=Włącz &autouzupełnianie wiersza poleceń
