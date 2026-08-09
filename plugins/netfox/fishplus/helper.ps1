@@ -188,6 +188,9 @@ function Test-SafeTarget([string]$winPath) {
     # Absolute: either drive-letter (X:\) or UNC (\\srv\share).
     if ($winPath.Length -ge 3 -and $winPath[1] -eq ':' -and ($winPath[2] -eq '\' -or $winPath[2] -eq '/')) { return $true }
     if ($winPath.StartsWith('\\')) { return $true }
+    # On a non-Windows host, path translation is a no-op and the path
+    # arrives here in native POSIX shape: absolute means leading '/'.
+    if (-not $script:OnWindowsHost -and $winPath.StartsWith('/')) { return $true }
     return $false
 }
 
