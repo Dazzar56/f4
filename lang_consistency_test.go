@@ -143,6 +143,7 @@ func TestLangConsistency(t *testing.T) {
 			"ja": {whatlanggo.Jpn, whatlanggo.Cmn, whatlanggo.Eng},
 			"ko": {whatlanggo.Kor, whatlanggo.Eng},
 			"ka": {whatlanggo.Kat, whatlanggo.Eng},
+			"hu": {whatlanggo.Hun, whatlanggo.Eng},
 		}
 
 		for _, key := range enKeys {
