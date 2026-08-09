@@ -81,11 +81,21 @@ $F4NlBytes  = [byte[]]@($F4LF)
 # Path translation and safety guard.
 # ---------------------------------------------------------------------
 
+# The helper's target host is Windows; the wire uses Cygwin-shaped POSIX
+# paths that must be translated back to native Windows form. PowerShell
+# also runs on Linux and macOS, where paths are already POSIX and no
+# translation is meaningful — those platforms come up in the test suite
+# (CI runs the pwsh helper on Linux to catch wire-format regressions),
+# so translation is skipped there.
+$script:OnWindowsHost = ($env:OS -eq 'Windows_NT')
+
 # Decodes a wire path to a Windows path. The empty string, the virtual
 # root "/", and single-drive paths like "/c/" are handled explicitly so
-# the caller does not have to.
+# the caller does not have to. Under a non-Windows host the wire path
+# already matches the local filesystem, so it is returned verbatim.
 function Convert-PosixToWin([string]$p) {
     if ($null -eq $p) { return $null }
+    if (-not $script:OnWindowsHost) { return $p }
     if ($p -eq '' -or $p -eq '/') { return '' }
     # UNC: //server/share/rest -> \\server\share\rest
     if ($p.StartsWith('//')) {
@@ -121,6 +131,7 @@ function Convert-PosixToWin([string]$p) {
 # helper.sh's tools produce.
 function Convert-WinToPosix([string]$w) {
     if ($null -eq $w -or $w -eq '') { return '/' }
+    if (-not $script:OnWindowsHost) { return $w }
     if ($w.StartsWith('\\')) {
         # \\server\share\rest
         $tail = $w.Substring(2).Replace('\', '/')
