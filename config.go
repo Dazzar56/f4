@@ -96,6 +96,7 @@ func ParsePanelScrollbarMode(value string) PanelScrollbarMode {
 type F4Config struct {
 	ColorStyle               string
 	Language                 string
+	FallbackLanguage         string
 	HelpLanguage             string
 	AlwaysShowMenuBar        bool
 	ShowHiddenFiles          bool
@@ -176,6 +177,7 @@ type F4Config struct {
 var AppConfig = F4Config{
 	ColorStyle:               "Modern",
 	Language:                 "en",
+	FallbackLanguage:         "",
 	HelpLanguage:             "en",
 	AlwaysShowMenuBar:        false,
 	ShowHiddenFiles:          true,
@@ -284,6 +286,7 @@ func LoadConfig() {
 		AppConfig.ColorStyle = "Default Dark"
 	}
 	AppConfig.Language = ini.GetString("Interface", "Language", "en")
+	AppConfig.FallbackLanguage = ini.GetString("Interface", "FallbackLanguage", "")
 	AppConfig.HelpLanguage = ini.GetString("Interface", "HelpLanguage", "en")
 	AppConfig.ConsoleTitleTemplate = ini.GetString("Interface", "ConsoleTitleTemplate", "f4 %Ver %Platform %Admin - %State")
 	AppConfig.AlwaysShowMenuBar = ini.GetString("Interface", "AlwaysShowMenuBar", "0") == "1"
@@ -423,6 +426,7 @@ func SaveConfig() {
 	sb.WriteString("[Interface]\n")
 	sb.WriteString(fmt.Sprintf("ColorStyle = %s\n", AppConfig.ColorStyle))
 	sb.WriteString(fmt.Sprintf("Language = %s\n", AppConfig.Language))
+	sb.WriteString(fmt.Sprintf("FallbackLanguage = %s\n", AppConfig.FallbackLanguage))
 	sb.WriteString(fmt.Sprintf("HelpLanguage = %s\n", AppConfig.HelpLanguage))
 	sb.WriteString(fmt.Sprintf("ConsoleTitleTemplate = %s\n", AppConfig.ConsoleTitleTemplate))
 	sb.WriteString(fmt.Sprintf("AlwaysShowMenuBar = %d\n\n", map[bool]int{true: 1, false: 0}[AppConfig.AlwaysShowMenuBar]))
