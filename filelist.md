@@ -167,6 +167,7 @@
     │   ├── de.hlf
     │   ├── en.hlf
     │   ├── hu.hlf
+    │   ├── hy.hlf
     │   ├── ja.hlf
     │   ├── ko.hlf
     │   ├── pl.hlf
@@ -671,4 +672,4 @@
     ├── word_nav.go
     └── word_nav_test.go
     
-    49 directories, 621 files
+    49 directories, 622 files
