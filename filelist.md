@@ -172,6 +172,7 @@
     │   ├── ja.hlf
     │   ├── ka.hlf
     │   ├── ko.hlf
+    │   ├── lt.hlf
     │   ├── pl.hlf
     │   ├── README.md
     │   ├── ru.hlf
@@ -250,6 +251,7 @@
     │   ├── ja.lng
     │   ├── ka.lng
     │   ├── ko.lng
+    │   ├── lt.lng
     │   ├── pl.lng
     │   ├── ru.lng
     │   ├── uk.lng
@@ -674,4 +676,4 @@
     ├── word_nav.go
     └── word_nav_test.go
     
-    49 directories, 624 files
+    49 directories, 626 files
