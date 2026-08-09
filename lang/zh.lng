@@ -574,6 +574,7 @@ QuickView.ReadError=读取失败
 Bookmarks.Title= Bookmarks
 Bookmarks.RowPrefix=[RCtrl | Ctrl+Alt] +
 Bookmarks.EmptySlot=<空>
+Bookmarks.BottomHint= Del Ins F4 Shift+Up Shift+Down
 Bookmarks.LoadError=加载书签失败:\n%v
 Bookmarks.SaveError=保存书签失败:\n%v
 Bookmarks.EditTitle= 编辑书签路径
