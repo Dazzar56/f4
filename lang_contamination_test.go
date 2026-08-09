@@ -73,3 +73,60 @@ func TestTranslationsAreFreeOfGermanLeftovers(t *testing.T) {
 		}
 	}
 }
+func TestTranslationsAreFreeOfAIGarbage(t *testing.T) {
+	paths, err := filepath.Glob("lang/*.lng")
+	if err != nil {
+		t.Fatalf("cannot list language files: %v", err)
+	}
+	helpPaths, err := filepath.Glob("help/*.hlf")
+	if err != nil {
+		t.Fatalf("cannot list help files: %v", err)
+	}
+	paths = append(paths, helpPaths...)
+
+	for _, path := range paths {
+		base := filepath.Base(path)
+		code := base[:len(base)-len(filepath.Ext(base))]
+
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+
+		lines := strings.Split(string(data), "\n")
+		historyFoldersCount := 0
+
+		for i, line := range lines {
+			s := strings.TrimSpace(line)
+
+			if s == "@HistoryFolders" {
+				historyFoldersCount++
+				if historyFoldersCount > 1 {
+					t.Errorf("%s:%d: Duplicated section @HistoryFolders", path, i+1)
+				}
+			}
+
+			if strings.Contains(s, "->") {
+				isAllowedArrow := strings.HasPrefix(s, "Op.PathSrcDst=") ||
+					strings.Contains(s, "ё -> jo") ||
+					strings.Contains(s, "ж -> zh") ||
+					strings.Contains(s, "х -> kh") ||
+					strings.Contains(s, "щ -> shh") ||
+					strings.Contains(s, "ю -> ju") ||
+					strings.Contains(s, "я -> ja") ||
+					strings.Contains(s, "a -> b") ||
+					strings.Contains(s, "b -> a")
+				if !isAllowedArrow {
+					t.Errorf("%s:%d: Suspicious '->': %s", path, i+1, s)
+				}
+			}
+
+			if code != "en" {
+				lower := strings.ToLower(s)
+				if strings.Contains(lower, " will ") || strings.Contains(lower, " the ") {
+					t.Errorf("%s:%d: Possible English words detected: %s", path, i+1, s)
+				}
+			}
+		}
+	}
+}

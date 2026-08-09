@@ -285,8 +285,8 @@ Stisknutím klávesy Backspace se vrátíte k obsahu VisRen.
 
 Nalezené shody v původním jméně se zvýrazní barevně v levém sloupci náhledu.
 Zvýraznění respektuje volby "Rozlišovat velikost" a "Regulární výraz", označuje
-všechny viditelné shody a zachovává se při proкрутке. Text vytvořený polem
-"Zažmunit na" se zvýrazní v pravém sloupci. U regulárního výrazu se zvýrazní celá
+všechny viditelné shody a zachovává se při posouvání. Text vytvořený polem
+"Nahradit za" se zvýrazní v pravém sloupci. U regulárního výrazu se zvýrazní celá
 rozbalená podpora; při prázdném nahrazení není viditelný text pro zvýraznění k
 dispozici.
 

@@ -238,7 +238,11 @@
     │   ├── cs.lng
     │   ├── de.lng
     │   ├── en.lng
+    │   ├── fi.lng
+    │   ├── hu.lng
+    │   ├── hy.lng
     │   ├── ja.lng
+    │   ├── ka.lng
     │   ├── ko.lng
     │   ├── pl.lng
     │   ├── ru.lng
@@ -664,4 +668,4 @@
     ├── word_nav.go
     └── word_nav_test.go
     
-    49 directories, 614 files
+    49 directories, 618 files

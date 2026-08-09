@@ -394,8 +394,8 @@ można zmieniać tylko kolumnę docelową. Dzięki tym kontrolom ewentualne uszk
 cudzysłowy lub niezamierzone zmiany źródła zostaną bezpiecznie wykryte jeszcze
 przed rozpoczęciem operacji.
 
-Przy błędzie VisRen wyjaśni powód i zaoferuje "Upravit znovu" (Edytuj ponownie).
-Edytor otworzy się ponownie na chłodnym wierszu z zachowaniem Twojego tekstu.
+Przy błędzie VisRen wyjaśni powód i zaoferuje "Edytuj ponownie".
+Edytor otworzy się ponownie na błędnym wierszu z zachowaniem Twojego tekstu.
 Poprawna zmieniona lista uruchomi sekwencyjne zmienianie nazw po zamknięciu edytora.
 Jeśli wygenerowana lista nie uległa zmianie bajtowej, ale zawiera zmiany masek,
 VisRen wymaga potwierdzenia przed rozpoczęciem.

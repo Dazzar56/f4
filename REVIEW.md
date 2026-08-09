@@ -58,6 +58,11 @@ the cursor, so that is defensible, but it is not the same test the keyboard now
 applies, and a click that lands on the cursor's own position cancels the jump
 for nothing.
 
+## Missing Help Files
+
+The translation packs (`.lng` files) exist for several languages that are currently missing their corresponding help files (`.hlf`).
+These languages are: `be`, `fi`, `hu`, `hy`, `ja`, `ka`.
+As a fallback, `f4` will display the English help for these languages, but they should eventually be translated.
 ## Automated Layout Verification
 
 An automated layout validation suite has been implemented in `f4/dialog_layouts_test.go`.
@@ -96,11 +101,11 @@ human decision at review time:
   occurrence kept; the INI parser silently preferred the last one before that.
 - `TestExecuteFindFile_MaskMatching` times out. Unrelated to localization, not
   investigated here.
-  - The Hungarian, Italian and Dutch translations were deleted rather than
+  - The Italian and Dutch translations were deleted rather than
     repaired, because a mixture of four languages cannot be sanitized in a way
     anybody can verify. Roughly 450 usable strings per file went with them. If
     that turns out to be the wrong call, they are one `git revert` away.
-  - `actions.go` still maps the language codes `hu`, `it` and `nl` to display
+  - `actions.go` still maps the language codes `it` and `nl` to display
     names for the help language menu. The cases are dead until those languages
     come back, and were left in place on purpose.
     - `ParseIni` trims whitespace around values, which silently ate the padding

@@ -303,7 +303,7 @@ Drücken Sie die Rücktaste, um zum VisRen-Inhaltsverzeichnis zurückzukehren.
 
 Im Originalnamen gefundene Übereinstimmungen werden in der linken Vorschauspalte
 farblich hervorgehoben. Die Hervorhebung folgt "Groß-/Kleinschreibung" und "Regulärer
-Ausdruck", markiert jede sichtbare Übereinstimmung und bleibt bei der Prokurrung
+Ausdruck", markiert jede sichtbare Übereinstimmung und bleibt beim Scrollen
 ausgerichtet. Durch "Ersetzen durch" erzeugter Text wird in der rechten Spalte
 hervorgehoben. Bei einem regulären Ausdruck umfasst dies die vollständige erweiterte
 Ersetzung; eine leere Ersetzung hat keinen sichtbaren Text zum Hervorheben.
@@ -408,7 +408,7 @@ bleibt. Eine gültige bearbeitete Liste startet das sequentielle Umbenennen, sob
 Editor schließt. Wenn die generierte Liste bytegenau unverändert ist, aber Maskenänderungen
 enthält, fragt VisRen vor der Verwendung nach einer Bestätigung.
 
-Der Editor is deaktiviert, während die Vorschau <Error!> enthält oder eine
+Der Editor ist deaktiviert, während die Vorschau <Error!> enthält oder eine
 Rückgängig-Liste angezeigt wird.
 
 Drücken Sie die Rücktaste, um zum VisRen-Inhaltsverzeichnis zurückzukehren.
