@@ -11,7 +11,6 @@
     ├── action_restore_selection_test.go
     ├── actions.go
     ├── actions_test.go
-    ├── afix.ap
     ├── ansi_parser.go
     ├── ansi_parser_test.go
     ├── api.go
@@ -167,6 +166,7 @@
     │   ├── cs.hlf
     │   ├── de.hlf
     │   ├── en.hlf
+    │   ├── et.hlf
     │   ├── fi.hlf
     │   ├── hu.hlf
     │   ├── hy.hlf
@@ -247,6 +247,7 @@
     │   ├── cs.lng
     │   ├── de.lng
     │   ├── en.lng
+    │   ├── et.lng
     │   ├── fi.lng
     │   ├── hu.lng
     │   ├── hy.lng
@@ -679,4 +680,4 @@
     ├── word_nav.go
     └── word_nav_test.go
     
-    49 directories, 629 files
+    49 directories, 630 files

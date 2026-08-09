@@ -1,57 +1,57 @@
 @Contents
-$f4 Palīdzība (Versija: %Ver)
-f4 ir eksperimentāls Far Manager / far2l failu pārvaldnieka klons Go valodā.
+$f4 Abi (Versioon: %Ver)
+f4 on eksperimentaalne Far Manager / far2l failihalduri kloon Go keeles.
 
-~Skatītāja / redaktora taustiņi~ViewerEditor@
-~Paneļu navigācija~PanelNav@
-~Vizuālā failu pārdēvēšana (VisRen)~VisRen@
-~Rādīt README.md~README@
+~Vaataja / redaktori kiirklahvid~ViewerEditor@
+~Paneeli navigatsioon~PanelNav@
+~Visuaalne failide ümbernimetamine (VisRen)~VisRen@
+~Näita README.md~README@
 
 @VisRen
-$Vizuālā failu pārdēvēšana (VisRen)
+$Visuaalne failide ümbernimetamine (VisRen)
 
-VisRen ir F4 iebūvētais rīks vizuālai failu grupveida pārdēvēšanai. Tas izveido katru
-jaunu nosaukumu pirms jebkādu izmaiņu veikšanas un rāda sākotnējos un mērķa nosaukumus
-blakus vienu otram. Darbojas ar failiem un direktorijām vietējā failu sistēmas panelī.
+VisRen on f4 sisse-ehitatud tööriist failide visuaalseks rühmiti ümbernimetamiseks.
+See koostab iga uue nime enne muudatuste tegemist ja kuvab algsed ning sihtnimed
+kõrvuti. Töötab failide ja kataloogidega kohalikul failisüsteemi paneelil.
 
-Ja paneļa elementi ir atzīmēti, VisRen atver tos paneļa secībā. Ja neviens elements
-nav atzīmēts, tiek izmantots elements zem paneļa kursora. Vecāku mape „..“ nekad
-netiek izmantota. Atveriet VisRen, nospiežot F11 un izvēloties „Vizuālā failu pārdēvēšana“;
-izvēlnei piešķirtais burts arī var to aktivizēt.
+Kui paneeli elemendid on märgistatud, avab VisRen need paneeli järjekorras. Kui ühtegi
+elementi pole märgistatud, kasutatakse elementu paneeli kursori all. Ülemkausta „..“
+ei kasutata kunagi. Ava VisRen vajutades F11 ja valides „Visuaalne failide ümbernimetamine“;
+menüüsse määratud kiirklahv võib selle samuti aktiveerida.
 
-~Ātrais starts un dialoga lauki~VisRenQuickStart@
-~Nosaukumu maskas, paplašinājumi, rāmji, skaitītāji un pēdiņas~VisRenMasks@
-~Reģistrs, transliterācija un apstrādes secība~VisRenTransforms@
-~Datumi, ID3, attēla/EXIF un versijas metadata~VisRenMetadata@
-~Meklēšana, parastā aizvietošana un regulārās izteiksmes~VisRenSearch@
-~Priekšskatījuma navigacija, tastatūra un pele~VisRenPreview@
-~Pārdēvēšanas saraksta rediģēšana UTF-8 redaktorā~VisRenEditor@
-~Pārdēvēšanas izpilde, kļūdas, žurnāli un atcelšana~VisRenRename@
-~Pārnesamo failu nosaukumu noteikumi un svarīgi ierobežojumi~VisRenSafety@
-~Praktiskas receptes~VisRenExamples@
+~Kiirjuhend ja dialoogi väljad~VisRenQuickStart@
+~Nime maskid, laiendid, vahemikud, loendurid ja sulgude eripärad~VisRenMasks@
+~Suur- ja väiketähtede teisendamine, transliteratsioon ja käsitlemise järjekord~VisRenTransforms@
+~Kuupäevad, ID3, pildi/EXIF ja faili versiooni metandmed~VisRenMetadata@
+~Otsing, lihtne asendamine ja regulaaravaldised~VisRenSearch@
+~Eelvaate navigeerimine, klaviatuur ja hiir~VisRenPreview@
+~Nimekirja redigeerimine UTF-8 redaktoris~VisRenEditor@
+~Ümbernimetamise täitmine, vead, logi ja tühistamine~VisRenRename@
+~Portatiivsete failinimede reeglid ja olulised piirangud~VisRenSafety@
+~Praktilised retseptid~VisRenExamples@
 
-Realizācija pagrādīta uz FarPlugins VisRen 3.2.0, bet papildināta ar stingrāku failu
-nosaukumu un redaktora tikrināšanu, stabilām atsitiktinėmis vērtībām un pārnesamiem metadatiem.
+Realizatsioon pagrādīta uz FarPlugins VisRen 3.2.0, bet papildināta ar stingrāku failu
+nosaukumu ja redaktora tikrināšanu, stabilām atsitiktinėmis vērtībām un pārnesamiem metadatiem.
 
 @VisRenQuickStart
-$VisRen: ātrais starts un dialoga lauki
+$VisRen: kiirjuhend ja dialoogi väljad
 
-#Parastā pārdēvēšanas secība#
+#Tüüpiline ümbernimetamine#
 
-  1. Atzīmējiet vēlamos failus/katalogus ar Ins taustiņu. Vienam elementam pietiek novietot
-     uz tā paneļa kursoru.
-  2. Nospiediet F11 un izvēlieties VisRen.
-  3. Ievadiet nosaukuma un paplašinājuma maskas. Noklusējuma [N] un [E] saglabā abas sākotnējā
-     nosaukuma daļas nemainīgas.
-  4. Ja nepieciešams, aizpildiet laukus „Meklēt“ un „Aizvietot ar“. Atverot fokuss ir laukā
-     „Meklēt“, bet Tab pārvieto tieši uz lauku „Aizvietot ar“.
-  5. Pārbaudiet katru mērķa nosaukumu. F3 rāda pilnu sākotnējo nosaukumu, jauno nosaukumu vai
-     pašreizējās rindas diagnostiku.
-  6. Izvēlieties „Pārdēvēt“ vai nospiediet Enter uz noklusētās pogas.
+  1. Märgista vajalikud failid/kataloogid klahviga Ins või aseta paneeli kursor
+     ühele elemendile, kui sul on vaja ainult seda.
+  2. Vajuta F11 ja vali VisRen.
+  3. Sisesta nime ja laiendi maskid. Vaikimisi [N] ja [E] säilitavad algse nime
+     mõlemad osad muutmata.
+  4. Vajadusel täida lahtrid „Otsi“ ja „Asenda millega“. Fookus algab lahtris
+     „Otsi“; Tab viib otse lahtrisse „Asenda millega“.
+  5. Kontrolli iga sihtnime. F3 kuvab täieliku algse nime, uue nime või
+     praeguse rea diagnostika.
+  6. Vali „Nimeta ümber“ vai vajuta Enter vaikimisi nupul.
 
-#Vārds un plėtinys#
+#Vardas un plėtinys#
 
-Šie divi lauki atskirai sudaro jaunu bazinį nosaukumu un plėtinį. Plėtinio laukelī
+Šie du laukai atskirai sudaro naują bazinį nosaukumu un plėtinį. Plėtinio laukelī
 nav punkta. Tukšs plėtinio rezultatas to pilnībā pašalina. Paprastas tekstas
 kopijuojamas pažodžiui; laužtiniuose skliaustuose esantys reiškiniai įterpia pradinį
 tekstą, skaitiklius, metaduomenis arba transformacijas.
@@ -141,7 +141,7 @@ tekstu nepievieno, bet maina paruoštą nosaukuma daļu.
 Lai atgrieztos pie VisRen satura, nospiediet Backspace.
 
 @VisRenTransforms
-$VisRen: transformācijas un apstrādes secība
+$VisRen: transformāciju un apstrādes secība
 
 #Reģistra maiņa#
 
@@ -274,7 +274,7 @@ Lai atgrieztos pie VisRen satura, nospiediet Backspace.
 Atrastie sutapimai sākotnējā vārdā tiek izcelti ar krāsu kreisajā priekšskatījuma kolonnā. Izcelšana
 ņem vērā „Reģistrjūtīgs“ un „Regulārā izteiksme“ iestatījumus, atzīmē visus redzamos sutapimus un
 tiek saglabāta rullējot. Teksts, kas izveidots ar lauku „Aizvietot ar“, tiek izcelts labajā kolonnā.
-Regulārās izteiksmes gadījumā tiek izcelta visa izplestā aizvietojuma daļa; ja aizvietojums ir tukšs,
+Regulārās izteiksmes gadījumā tiek izcelta visa izplestā aizvietojuma daļa; ja aizvietojums istubks,
 redzama teksta izcelšanai nav.
 
 @VisRenPreview
@@ -402,7 +402,7 @@ apstrādāto rindu skaitu.
 
 Katru reizi atverot dįalogu, žurnāla ierakstīšana ir ieslēgta. Varde rindā „Pārdēvēšanas žurnāls“
 nozīmē, ka veiksmīgās pāri tiks ierakstīti atmiņā. F2 vai uzklikšķināšana uz zīmes pārslēdz
-ierakstīšanu. Žurnāls netiek rakstīts diskā un izejot no F4 izzūd. Tiek saglabāti tikai veiksmīgie
+ierakstīšanu. Žurnāls netiek rakstīts diskā un izejot no F4 izzūd. Tiek saglabāti tylko sėkmingos
 pāri un pēdējās operācijas katalogs; zvaigznīte pēc uzraksta nozīmē, ka atcelšana ir pieejama.
 
 F8 vai uzklikšķināšana uz atlikušās rindas daļas iztīra žurnālu pēc apstiprinājuma. Pārdēvēšana

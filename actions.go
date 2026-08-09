@@ -2953,6 +2953,8 @@ func actionHelpLanguage(pf *PanelsFrame) {
 						name = "Lietuvių"
 					case "lv":
 						name = "Latviešu"
+					case "et":
+						name = "Eesti"
 					}
 					langs = append(langs, langInfo{code, name})
 					seen[code] = true
