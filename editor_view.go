@@ -2814,22 +2814,54 @@ func (ev *EditorView) getSelectionRange() (int, int) {
 	return min, max
 }
 
-// findPanelsFrameAnyScreen locates a PanelsFrame on any of the
-// frame manager's screens. The plain findPanelsFrame() only walks
-// the active screen — that works for macros invoked from panel
-// mode, but fails from a full-screen editor (added via AddScreen,
-// so the editor is the active screen and the panels frame lives
-// on the previous one). Kept editor-local so we don't broaden
-// findPanelsFrame's contract and change the behaviour for macros.
+// findPanelsFrameAnyScreen locates the PanelsFrame the user is
+// currently working in. The active screen is consulted first: with
+// several workspaces open (Ctrl+N) every screen has a PanelsFrame of
+// its own, and answering with whichever one happens to sit earliest
+// in the slice is how hotkeys ended up hiding panels in one workspace
+// while the user was looking at another (issue #424).
+//
+// When the active screen has none — a full-screen editor or viewer is
+// added via AddScreen, so it becomes the active screen while the
+// panels stay on the one before — the search walks outwards in
+// most-recently-used order. SwitchScreen moves the screen it switches
+// to to the end of the slice, so walking down from ActiveIdx visits
+// the workspaces in the order the user last used them, and the editor
+// finds the panels it was opened from rather than the oldest ones.
 func findPanelsFrameAnyScreen() *PanelsFrame {
 	if vtui.FrameManager == nil {
 		return nil
 	}
-	for _, s := range vtui.FrameManager.Screens {
-		for _, f := range s.Frames {
-			if pf, ok := f.(*PanelsFrame); ok && !pf.closed {
+	screens := vtui.FrameManager.Screens
+	if len(screens) == 0 {
+		return nil
+	}
+
+	pick := func(idx int) *PanelsFrame {
+		if idx < 0 || idx >= len(screens) || screens[idx] == nil {
+			return nil
+		}
+		frames := screens[idx].Frames
+		for i := len(frames) - 1; i >= 0; i-- {
+			if pf, ok := frames[i].(*PanelsFrame); ok && !pf.closed {
 				return pf
 			}
+		}
+		return nil
+	}
+
+	active := vtui.FrameManager.ActiveIdx
+	if pf := pick(active); pf != nil {
+		return pf
+	}
+	for i := active - 1; i >= 0; i-- {
+		if pf := pick(i); pf != nil {
+			return pf
+		}
+	}
+	for i := active + 1; i < len(screens); i++ {
+		if pf := pick(i); pf != nil {
+			return pf
 		}
 	}
 	return nil

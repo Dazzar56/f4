@@ -118,3 +118,18 @@ human decision at review time:
       now sit exactly on the limit (the German font label ends on the last allowed
       column), so a future dialog resize will need a look at `L10N_PLAN.md`
       section 7.1 rather than a guess.
+      ## `CloneStateFrom` copies the PTY handle along with the screen
+
+      `TerminalView.CloneStateFrom` assigns `other.pty` to the clone, while the
+      clone's own `initPTY` goroutine assigns its freshly created PTY to the same
+      field. Which one wins is a race. A PTY is ownership rather than visual state
+      and has no business in a state clone. Left alone here because it belongs to
+      the terminal umbrella (#425); recorded in `TERMINAL_WINDOWS.md` section 5.
+
+      ## The sync excision also mangles commands a human typed
+
+      The fallback branch in `AnsiParser.Process` removes `cd /d "..." & ` even when
+      the `rem f4_sync` marker is absent, so a `cd /d "X" & dir` typed by the user
+      loses its first half in the log. Fixing it properly means marking our own
+      writes rather than pattern-matching text, which is `TERMINAL_WINDOWS.md`
+      section 6.
