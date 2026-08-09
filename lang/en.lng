@@ -440,6 +440,10 @@ UserMenu.MainMenuFAR=FAR
 
 Language.Title= Languages
 Language.Changed=Language changed.\nSome UI elements require application restart\nto fully apply the new language.
+LanguageSettings.Title= Language Settings
+LanguageSettings.Primary=Primary language:
+LanguageSettings.Fallback=Fallback language:
+LanguageSettings.None=<none>
 HelpLanguage.Title=Help Languages
 HelpLanguage.Changed=Help language changed.
 

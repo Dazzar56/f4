@@ -2862,40 +2862,91 @@ func actionLanguage(pf *PanelsFrame) {
 		}
 	}
 
-	menu := vtui.NewVMenu(Msg("Language.Title"))
-	currIdx := 0
+	width, height := 54, 11
+	dlg := vtui.NewCenteredDialog(width, height, Msg("LanguageSettings.Title"))
+	dlg.ShowClose = true
+
+	namesPrimary := make([]string, len(langs))
+	currPrimaryIdx := 0
 	for i, l := range langs {
-		menu.AddItem(vtui.MenuItem{Text: l.name})
-		if l.code == AppConfig.Language {
-			currIdx = i
+		namesPrimary[i] = l.name
+		if l.code == AppConfig.Language || (l.code == "en" && AppConfig.Language == "") {
+			currPrimaryIdx = i
 		}
 	}
 
-	scrW := vtui.FrameManager.GetScreenSize()
-	scrH := vtui.FrameManager.GetScreenHeight()
-	w, h := 30, len(langs)+2
-	if h > 15 {
-		h = 15
+	namesFallback := []string{Msg("LanguageSettings.None")}
+	currFallbackIdx := 0
+	for i, l := range langs {
+		namesFallback = append(namesFallback, l.name)
+		if l.code == AppConfig.FallbackLanguage {
+			currFallbackIdx = i + 1
+		}
 	}
-	x := (scrW - w) / 2
-	y := (scrH - h) / 2
-	menu.SetPosition(x, y, x+w-1, y+h-1)
-	menu.SetSelectPos(currIdx)
 
-	menu.OnAction = func(idx int) {
-		AppConfig.Language = langs[idx].code
+	comboPrimary := vtui.NewComboBox(0, 0, 26, namesPrimary)
+	comboPrimary.DropdownOnly = true
+	comboPrimary.Menu.SetSelectPos(currPrimaryIdx)
+	comboPrimary.Edit.SetText(namesPrimary[currPrimaryIdx])
+	lblPrimary := vtui.NewLabel(0, 0, Msg("LanguageSettings.Primary"), comboPrimary)
+
+	comboFallback := vtui.NewComboBox(0, 0, 26, namesFallback)
+	comboFallback.DropdownOnly = true
+	comboFallback.Menu.SetSelectPos(currFallbackIdx)
+	comboFallback.Edit.SetText(namesFallback[currFallbackIdx])
+	lblFallback := vtui.NewLabel(0, 0, Msg("LanguageSettings.Fallback"), comboFallback)
+
+	btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))
+	btnOk.IsDefault = true
+	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
+
+	dlg.AddItem(lblPrimary)
+	dlg.AddItem(comboPrimary)
+	dlg.AddItem(lblFallback)
+	dlg.AddItem(comboFallback)
+	dlg.AddItem(btnOk)
+	dlg.AddItem(btnCancel)
+
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, width-4, height-4)
+
+	rowPrimary := vtui.NewHBoxLayout(0, 0, width-4, 1)
+	rowPrimary.Add(lblPrimary, vtui.Margins{Right: 1}, vtui.AlignLeft)
+	rowPrimary.Add(comboPrimary, vtui.Margins{}, vtui.AlignFill)
+	vbox.Add(rowPrimary, vtui.Margins{}, vtui.AlignFill)
+
+	rowFallback := vtui.NewHBoxLayout(0, 0, width-4, 1)
+	rowFallback.Add(lblFallback, vtui.Margins{Right: 1}, vtui.AlignLeft)
+	rowFallback.Add(comboFallback, vtui.Margins{}, vtui.AlignFill)
+	vbox.Add(rowFallback, vtui.Margins{Top: 1}, vtui.AlignFill)
+
+	hbox := vtui.NewHBoxLayout(0, 0, width-4, 1)
+	hbox.HorizontalAlign = vtui.AlignCenter
+	hbox.Spacing = 2
+	hbox.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
+	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
+
+	vbox.Add(hbox, vtui.Margins{Top: 2}, vtui.AlignFill)
+	vbox.Apply()
+
+	btnCancel.OnClick = func() { dlg.Close() }
+	btnOk.OnClick = func() {
+		AppConfig.Language = langs[comboPrimary.Menu.SelectPos].code
+		if comboFallback.Menu.SelectPos == 0 {
+			AppConfig.FallbackLanguage = ""
+		} else {
+			AppConfig.FallbackLanguage = langs[comboFallback.Menu.SelectPos-1].code
+		}
 		SaveConfig()
 		InitLang()
-		// Key binding help topics are generated from the action
-		// registry and must be rebuilt in the new language.
 		InitHelpSystem()
+		dlg.Close()
 		vtui.FrameManager.PostTask(func() {
 			vtui.ShowMessage(Msg("Info.Title"), Msg("Language.Changed"), []string{Msg("vtui.Ok")})
 			vtui.FrameManager.Redraw()
 		})
 	}
 
-	vtui.FrameManager.Push(menu)
+	vtui.FrameManager.Push(dlg)
 }
 func actionHelpLanguage(pf *PanelsFrame) {
 	type langInfo struct {
