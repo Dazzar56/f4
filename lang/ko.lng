@@ -52,7 +52,7 @@ VisRen.Summary=총 %d / %d개 항목의 이름을 성공적으로 변경했습�
 VisRen.FullName=전체 이름
 VisRen.EditorFormat=편집기 목록 형식:
 VisRen.EditorSourceTarget=기존 이름 + 새 이름(&S)
-VisRen.EditorTargetsOnly새 이름만(&O)
+VisRen.EditorTargetsOnly=새 이름만(&O)
 VisRen.EditorTitle=파일 이름 변경 목록
 VisRen.RenameQuestion=이 목록을 사용하여 파일 이름을 변경하시겠습니까?
 VisRen.WordDivTitle=단어 구분 기호
@@ -83,8 +83,8 @@ Move.Prompt=%d개 항목 이름 변경 또는 이동 위치:
 Move.Btn=이름 변경(&R)
 Btn.OverwriteAll=모두 덮어쓰기(&A)
 Btn.SkipAll=모두 건너뛰기(&K)
-Btn.Retry재시도(&R)
-Btn.Ignore무시(&I)
+Btn.Retry=재시도(&R)
+Btn.Ignore=무시(&I)
 Operation.Error=작업 실패:\n%s
 Op.ClonePanels=새 작업 공간으로 패널 복제(&C)
 Op.SwitchHint=Ctrl+Tab을 눌러 창 전환
@@ -382,8 +382,8 @@ ColorerSettings.CrossBoth=둘 다 표시
 ColorerSettings.Syntax=구문 강조(&S)
 ColorerSettings.Background=스타일에 따라 편집기 배경색 변경(&B)
 ColorerSettings.Catalog=스키마 폴더 (catalog.xml)(&C):
-ColorerSettings.Reload재로드(&L)
-ColorerSettings.Download스키마 다운로드(&D)
+ColorerSettings.Reload=재로드(&L)
+ColorerSettings.Download=스키마 다운로드(&D)
 PanelSettings.Title= 패널 설정
 PanelSettings.ShowHidden=숨김 및 시스템 파일 표시(&H)
 PanelSettings.ShowDirPrefix=폴더 이름 앞에 '/' 표시(&F)
@@ -571,7 +571,7 @@ QuickView.Image=<이미지>
 QuickView.Binary=<바이너리 내용 — 16진수 미리 보기>
 QuickView.ReadError=읽기 실패
 
-Bookmarks.Title= Bookmarks
+Bookmarks.Title= 북마크
 Bookmarks.RowPrefix=[RCtrl | Ctrl+Alt] +
 Bookmarks.EmptySlot=<비어 있음>
 Bookmarks.BottomHint= Del Ins F4 Shift+Up Shift+Down
@@ -621,7 +621,9 @@ KeyBar.ViewerF3=종료
 KeyBar.ViewerF4=16진수
 KeyBar.ViewerF7=검색
 KeyBar.ViewerAltF8=이동
-KeyBar.ViewerF10=종료EditorSettings.TabExpandNone=탭을 확장하지 않음
+KeyBar.ViewerF10=종료
+
+EditorSettings.TabExpandNone=탭을 확장하지 않음
 EditorSettings.TabExpandNew=새로 입력된 탭을 공백으로 확장
 EditorSettings.TabExpandAll=모든 탭을 공백으로 확장
 EditorSettings.ExpandTabs=탭 확장(&A):

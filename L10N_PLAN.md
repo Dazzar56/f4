@@ -41,13 +41,13 @@ Snapshot taken on 2026-08-09 against `lang/en.lng` with 639 keys in
 | language | keys | missing |
 | -------- | ---- | ------- |
 | ru       | 639  | 0       |
-| zh       | 599  | 40      |
-| cs       | 596  | 43      |
-| de       | 596  | 43      |
-| pl       | 596  | 43      |
-| uk       | 596  | 43      |
-| ko       | 553  | 86      |
-| ja       | 358  | 281     |
+| zh       | 639  | 0       |
+| cs       | 639  | 0       |
+| de       | 639  | 0       |
+| pl       | 639  | 0       |
+| uk       | 639  | 0       |
+| ko       | 639  | 0       |
+| ja       | 639  | 0       |
 
 ### 3.2 Wrong-language contamination (purged)
 
@@ -108,7 +108,7 @@ translated.
 
 The stages are numbered in the order they were designed, not in the order they
 are executed. Current execution order: S0 (done), S2 (done), S4 (done), then
-**S1 (next)**, S3, S5, S6, S7 at a calmer pace. Section 7 has step by step
+**S1 (done)**, S3, S5, S6, S7 at a calmer pace. Section 7 has step by step
 recipes for the remaining ones.
 
 ### S0 - hardcode gate (DONE)
@@ -132,7 +132,7 @@ Notes on the mechanism:
 * If the file is missing it is created on the next test run and the test
   passes once, so the very first run after this commit produces the list.
 
-### S1 - .lng consistency test (NEXT)
+### S1 - .lng consistency test (DONE)
 
 Add `lang_consistency_test.go` that walks `lang/*.lng` and fails on:
 

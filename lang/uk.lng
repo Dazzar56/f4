@@ -7,7 +7,7 @@ Author=f4 Team
 VisRen.Menu=&Візуальне перейменування файлів
 ID3Editor.Menu=Редактор ID3-&тегів
 ID3Editor.Title=Редактор ID3-тегів
-ID3Editor.LocalOnly=Редаktor ID3-тегів підтримує тільки локальні файли.
+ID3Editor.LocalOnly=Редактор ID3-тегів підтримує тільки локальні файли.
 ID3Editor.SelectFile=Спочатку виберіть файл MP3.
 ID3Editor.OnlyMP3=Підтримуються тільки файли MP3.
 ID3Editor.SaveError=Не вдалося зберегти ID3-теги:\n%v
@@ -343,7 +343,7 @@ Action.Panel.SplitRight.Desc=Зсунути вертикальний розді�
 Action.Panel.SplitUp.Desc=Зменшити обидві панелі по вертикалі
 Action.Panel.SplitDown.Desc=Збільшити обидві панелі по вертикалі
 Action.Panel.SplitActiveUp.Desc=Зменшити активну панель по вертикалі
-Action.Panel.SplitActiveDown.Desc=Збільшити активну панель по verticali
+Action.Panel.SplitActiveDown.Desc=Збільшити активну панель по вертикалі
 Action.Panel.SplitReset.Desc=Скинути роздільник панелей
 Action.Panel.ToggleInfoBytes.Desc=Перемкнути формат чисел в інформаційній панелі та швидкому перегляді
 Action.Panel.ViewBrief.Desc=Короткий режим активної панелі
@@ -571,7 +571,7 @@ QuickView.Image=<зображення>
 QuickView.Binary=<бінарні дані — шістнадцятковий перегляд>
 QuickView.ReadError=Помилка читання
 
-Bookmarks.Title= Bookmarks
+Bookmarks.Title= Закладки
 Bookmarks.RowPrefix=[RCtrl | Ctrl+Alt] +
 Bookmarks.EmptySlot=<порожньо>
 Bookmarks.BottomHint= Del Ins F4 Shift+Up Shift+Down
@@ -621,7 +621,9 @@ KeyBar.ViewerF3=Вихід
 KeyBar.ViewerF4=Hex
 KeyBar.ViewerF7=Пошук
 KeyBar.ViewerAltF8=Перейти
-KeyBar.ViewerF10=ВихідEditorSettings.TabExpandNone=Не замінювати табуляцію пробілами
+KeyBar.ViewerF10=Вихід
+
+EditorSettings.TabExpandNone=Не замінювати табуляцію пробілами
 EditorSettings.TabExpandNew=Замінювати пробілами тільки нові символи Tab
 EditorSettings.TabExpandAll=Завжди замінювати табуляцію пробілами
 EditorSettings.ExpandTabs=Замінювати та&буляцію пробілами:

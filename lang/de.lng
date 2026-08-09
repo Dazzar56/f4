@@ -571,7 +571,7 @@ QuickView.Image=<Bild>
 QuickView.Binary=<Binärer Inhalt — Hex-Vorschau>
 QuickView.ReadError=Lesen fehlgeschlagen
 
-Bookmarks.Title= Bookmarks
+Bookmarks.Title= Lesezeichen
 Bookmarks.RowPrefix=[RStrg | Strg+Alt] +
 Bookmarks.EmptySlot=<leer>
 Bookmarks.BottomHint= Entf Einfg F4 Umschalt+Up Umschalt+Down
@@ -621,7 +621,9 @@ KeyBar.ViewerF3=Beenden
 KeyBar.ViewerF4=Hex
 KeyBar.ViewerF7=Suchen
 KeyBar.ViewerAltF8=GeheZu
-KeyBar.ViewerF10=BeendenEditorSettings.TabExpandNone=Tabulatoren nicht expandieren
+KeyBar.ViewerF10=Beenden
+
+EditorSettings.TabExpandNone=Tabulatoren nicht expandieren
 EditorSettings.TabExpandNew=Neu eingegebene Tabulatoren zu Leerzeichen expandieren
 EditorSettings.TabExpandAll=Alle Tabulatoren zu Leerzeichen expandieren
 EditorSettings.ExpandTabs=Tabulatoren e&xpandieren:
@@ -629,8 +631,8 @@ EditorSettings.Highlighter=Hi&ghlighter:
 EditorSettings.ColorerStyle=Colorer-St&il:
 EditorSettings.TabSize=Tabulator&größe:
 EditorSettings.AutoIndent=Auto-E&inzug
-EditorSettings.CursorBeyondEOL=Cursor über das Zeilenende &hinaus
-EditorSettings.UseEditorConfig=.&editorconfig-Einstellungen verwenden
+EditorSettings.CursorBeyondEOL=Cursor über Zeilenende &hinaus
+EditorSettings.UseEditorConfig=.&editorconfig verwenden
 EditorSettings.Crosshair=Fadenkreuz an&zeigen
 EditorSettings.ColorerBg=Colorer-&Hintergrund
 EditorSettings.UseExternalEditor=E&xternen Editor verwenden
