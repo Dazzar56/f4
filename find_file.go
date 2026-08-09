@@ -18,6 +18,24 @@ type FoundFile struct {
 	Item vfs.VFSItem
 }
 
+// padLabelTo returns s padded with trailing spaces to at least w display
+// cells. Used to force a vtui label to open at its full future width —
+// the widget freezes its width at construction time (label.go: X2 = X1
+// + runewidth.StringWidth(cleanText) - 1), and SetText later cannot
+// grow it back. A label built from short initial text truncates every
+// longer SetText silently to the first-N chars, which was visible in
+// the find dialog as "Scanning: /li" — three characters of a wire path
+// that would otherwise say the full one. (An existing padLabel in
+// attributes_dialog is fixed at 12 columns; this takes an explicit
+// target so a caller can size a label to the dialog width it lives in.)
+func padLabelTo(s string, w int) string {
+	pad := w - runewidth.StringWidth(s)
+	if pad <= 0 {
+		return s
+	}
+	return s + strings.Repeat(" ", pad)
+}
+
 // maxRemoteFindResults caps what a remote search brings back in one answer.
 // The local walk has no such limit because it costs nothing to keep going;
 // a remote one pays for every hit on the wire.
@@ -28,9 +46,14 @@ func ExecuteFindFile(pf *PanelsFrame, v vfs.VFS, startDir, mask, text string) {
 	dlg := vtui.NewCenteredDialog(60, 9, Msg("FindFile.SearchingTitle"))
 	dlg.AttentionSuppressed = true
 
-	lblMask := vtui.NewLabel(0, 0, Msg("FindFile.MaskPrompt")+" "+mask, nil)
-	lblDir := vtui.NewLabel(0, 0, Msg("FindFile.Scanning")+" ...", nil)
-	lblFound := vtui.NewLabel(0, 0, fmt.Sprintf(Msg("FindFile.FoundCount"), 0), nil)
+	// lblMask and lblDir sit inside a 56-column vbox; lblFound shares a
+	// row with the Cancel button and 24 columns is enough for the count
+	// text it ever holds. Pad each to its future width so a longer
+	// SetText later shows in full — see padLabelTo above for the
+	// underlying vtui gotcha.
+	lblMask := vtui.NewLabel(0, 0, padLabelTo(Msg("FindFile.MaskPrompt")+" "+mask, 56), nil)
+	lblDir := vtui.NewLabel(0, 0, padLabelTo(Msg("FindFile.Scanning")+" ...", 56), nil)
+	lblFound := vtui.NewLabel(0, 0, padLabelTo(fmt.Sprintf(Msg("FindFile.FoundCount"), 0), 24), nil)
 
 	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
 
