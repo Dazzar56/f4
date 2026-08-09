@@ -47,13 +47,14 @@ func ExecuteFindFile(pf *PanelsFrame, v vfs.VFS, startDir, mask, text string) {
 	dlg.AttentionSuppressed = true
 
 	// lblMask and lblDir sit inside a 56-column vbox; lblFound shares a
-	// row with the Cancel button and 24 columns is enough for the count
-	// text it ever holds. Pad each to its future width so a longer
-	// SetText later shows in full — see padLabelTo above for the
-	// underlying vtui gotcha.
+	// row with the Cancel button. Pad each to its future width so a
+	// longer SetText later shows in full — see padLabelTo above for
+	// the underlying vtui gotcha. lblFound holds
+	// "Found: 999999 (scanned 999999999)" and then some, and AlignRight
+	// on the button anchors it at the far end.
 	lblMask := vtui.NewLabel(0, 0, padLabelTo(Msg("FindFile.MaskPrompt")+" "+mask, 56), nil)
 	lblDir := vtui.NewLabel(0, 0, padLabelTo(Msg("FindFile.Scanning")+" ...", 56), nil)
-	lblFound := vtui.NewLabel(0, 0, padLabelTo(fmt.Sprintf(Msg("FindFile.FoundCount"), 0), 24), nil)
+	lblFound := vtui.NewLabel(0, 0, padLabelTo(fmt.Sprintf(Msg("FindFile.FoundCount"), 0), 40), nil)
 
 	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
 
@@ -100,16 +101,46 @@ func ExecuteFindFile(pf *PanelsFrame, v vfs.VFS, startDir, mask, text string) {
 		searchTextLower := strings.ToLower(text)
 		var found []FoundFile
 		var lastUpdate time.Time // Used for throttling UI redraws
+		// A remote finder that supports progress reports intermediate
+		// counters before we get the entries themselves: what has been
+		// scanned so far and how many have matched. During the walk
+		// found is still empty on our side, so the "Found:" line has to
+		// prefer the reported number until the final answer lands.
+		// remotePath is what a remote progress last reported as the
+		// head of the walk; the "final" updateUI at the end otherwise
+		// reverts the label to startDir and loses the last frame.
+		var remoteFound int64
+		var remoteScanned int64
+		var remotePath string
 
 		updateUI := func(dir string, force bool) {
 			now := time.Now()
 			if force || now.Sub(lastUpdate) > 50*time.Millisecond {
 				lastUpdate = now
-				currentCount := len(found) // Always use the actual length of the slice
-				displayDir := runewidth.Truncate(dir, 56, "...")
+				currentCount := int64(len(found))
+				if remoteFound > currentCount {
+					currentCount = remoteFound
+				}
+				showDir := dir
+				if remotePath != "" {
+					showDir = remotePath
+				}
+				displayDir := runewidth.Truncate(showDir, 56, "...")
+				// A remote job reports how many entries the walk has
+				// visited; showing it next to "Found" gives the user
+				// a sense of progress even when the pattern is rare
+				// enough that the "Found" counter barely moves. The
+				// local walk does not report scanned separately (its
+				// pace is dominated by the ReadDir round trips it
+				// makes), so the parenthetical is only shown when a
+				// remote finder actually supplied a number.
+				foundText := fmt.Sprintf(Msg("FindFile.FoundCount"), currentCount)
+				if remoteScanned > 0 {
+					foundText = fmt.Sprintf("%s (scanned %d)", foundText, remoteScanned)
+				}
 				ctx.RunOnUI(func() {
 					lblDir.SetText(Msg("FindFile.Scanning") + " " + displayDir)
-					lblFound.SetText(fmt.Sprintf(Msg("FindFile.FoundCount"), currentCount))
+					lblFound.SetText(foundText)
 					vtui.FrameManager.Redraw()
 				})
 			}
@@ -180,6 +211,20 @@ func ExecuteFindFile(pf *PanelsFrame, v vfs.VFS, startDir, mask, text string) {
 				Text:       text,
 				IgnoreCase: true,
 				Limit:      maxRemoteFindResults,
+				// A remote finder that supports progress reports the
+				// last path it visited and running counters. Force the
+				// redraw (helper's own P cadence is 300 ms, well above
+				// the client-side throttle, so nothing to save here)
+				// and remember the path so the final updateUI at the
+				// end does not revert the label back to startDir.
+				Progress: func(p vfs.FindProgress) {
+					remoteFound = p.Found
+					remoteScanned = p.Scanned
+					if p.Path != "" {
+						remotePath = p.Path
+					}
+					updateUI(p.Path, true)
+				},
 			})
 			if findErr == nil {
 				for _, hit := range hits {
