@@ -368,7 +368,7 @@ Action.Terminal.EditLog=Terminal-Log &bearbeiten
 Action.Terminal.EditLog.Desc=Terminal-Log im Editor öffnen
 
 EditorSettings.Title= Editor-Einstellungen
-EditorSettings.AutoComplete=A&uto-Vervollständigung aktivieren
+EditorSettings.AutoComplete=A&uto-Vervollständigung
 EditorSettings.Mask=Aktiv für Dateim&asken:
 ColorerSettings.Title= Colorer-Einstellungen
 ColorerSettings.Enabled=Colorer-Hervorhebung &aktivieren
@@ -399,7 +399,7 @@ PanelSettings.NavigationClassic=&Klassisch
 PanelSettings.NavigationVim=&Vim (j, k, dd, cc, mm)
 PanelSettings.NavigationSearch=Standardmäßig &suchen
 PanelSettings.SearchStayFocused=Nach der Eingabe in der Befehls&zeile bleiben
-PanelSettings.SyncPanelLoad=S&ynchrones Laden der Panels (Deaktiviere Cache/Chunking)
+PanelSettings.SyncPanelLoad=S&ynchrones Laden (kein Cache)
 PanelSettings.DefaultMode=Standard-Operations&modus:
 PanelSettings.PathDisplay=Dateipfad im Fortschritt:
 PanelSettings.InfoPanelCPUGPU=CPU/GPU-Schnittstelle im &Info-Panel anzeigen
@@ -407,7 +407,7 @@ PanelSettings.EscTogglePanels=&Esc schaltet Panel-Sichtbarkeit um
 
 AppearanceSettings.Title= Aussehen-Einstellungen
 AppearanceSettings.Style=Anwendungs&stil:
-AppearanceSettings.Font=GUI-Schri&ftart (Pfad/Name):
+AppearanceSettings.Font=GUI-Schri&ft (Pfad/Name):
 AppearanceSettings.FontSize=GUI-Schrift&größe:
 AppearanceSettings.TitleTemplate=Fenster&titel-Vorlage:
 AppearanceSettings.ExportBtn=&Farbschema exportieren
@@ -476,8 +476,8 @@ Op.PathSrcDst=Quelle -> Ziel
 
 Plugins.Title= Plugins verwalten (RPC)
 Plugins.BtnAdd=&Hinzufügen
-Plugins.BtnRemove=&Entfernen
-Plugins.BtnPermissions=&Berechtigungen
+Plugins.BtnRemove=&Löschen
+Plugins.BtnPermissions=&Rechte
 Plugins.BtnClose=&Schließen
 
 InfoPanel.Title= Information

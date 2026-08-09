@@ -160,14 +160,12 @@
     ├── grabber_test.go
     ├── gui_unix.go
     ├── gui_windows.go
+    ├── hardcoded_strings_test.go
     ├── help
     │   ├── cs.hlf
     │   ├── de.hlf
     │   ├── en.hlf
-    │   ├── hu.hlf
-    │   ├── it.hlf
     │   ├── ko.hlf
-    │   ├── nl.hlf
     │   ├── pl.hlf
     │   ├── README.md
     │   ├── ru.hlf
@@ -234,19 +232,18 @@
     ├── kitty_metrics_test.go
     ├── kitty_placements.go
     ├── kitty_placements_test.go
+    ├── L10N_PLAN.md
     ├── lang
     │   ├── cs.lng
     │   ├── de.lng
     │   ├── en.lng
-    │   ├── hu.lng
-    │   ├── it.lng
     │   ├── ja.lng
     │   ├── ko.lng
-    │   ├── nl.lng
     │   ├── pl.lng
     │   ├── ru.lng
     │   ├── uk.lng
     │   └── zh.lng
+    ├── lang_contamination_test.go
     ├── lang.go
     ├── lang_packs.go
     ├── lang_packs_test.go
@@ -561,6 +558,10 @@
     │   │   ├── fishclient.py
     │   │   ├── TESTLAB.md
     │   │   └── test_patch.py
+    │   ├── hardcode
+    │   │   ├── hardcode.go
+    │   │   └── hardcode_test.go
+    │   ├── hardcoded_baseline.txt
     │   ├── icons
     │   │   ├── go.mod
     │   │   ├── go.sum
@@ -660,4 +661,4 @@
     ├── word_nav.go
     └── word_nav_test.go
     
-    48 directories, 611 files
+    49 directories, 611 files

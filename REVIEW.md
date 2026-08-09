@@ -79,3 +79,37 @@ The following color entities and features from `far2l` have been explicitly post
 - **Default Buttons:** Map and apply styling for `Dialog.DefaultButton.*` elements.
 - **Editor & Viewer Selection:** Map and support dedicated selection slots `Editor.Text.Selected` / `Viewer.Text.Selected` (currently falls back to standard text selection).
 - **Secondary Widgets:** Support `Clock`, `Panel.ScreensNumber`, and `Panel.DragText` slots.
+### Localization debt and open questions
+
+The state of the localization work lives in `L10N_PLAN.md`. Points that need a
+human decision at review time:
+
+- `tools/hardcoded_baseline.txt` de-duplicates identical entries, so a second
+  copy of an already known caption in the same file and constructor slips
+  through the gate. Line numbers would close that hole but would make the
+  baseline churn on every unrelated edit. Revisit once the baseline is close
+  to empty.
+- The scanner knows only a handful of vtui constructors. Menu items, input
+  boxes and titles assembled with `fmt.Sprintf` are invisible to it.
+- `lang/pl.lng` contained `Action.Editor.Undo` and `Action.Editor.Redo` twice,
+  with different hotkey positions. The duplicates were removed and the first
+  occurrence kept; the INI parser silently preferred the last one before that.
+- `TestExecuteFindFile_MaskMatching` times out. Unrelated to localization, not
+  investigated here.
+  - The Hungarian, Italian and Dutch translations were deleted rather than
+    repaired, because a mixture of four languages cannot be sanitized in a way
+    anybody can verify. Roughly 450 usable strings per file went with them. If
+    that turns out to be the wrong call, they are one `git revert` away.
+  - `actions.go` still maps the language codes `hu`, `it` and `nl` to display
+    names for the help language menu. The cases are dead until those languages
+    come back, and were left in place on purpose.
+    - `ParseIni` trims whitespace around values, which silently ate the padding
+      spaces of every dialog title (`FindFile.Title= Find File`). Some translations
+      have since lost their trailing space to whitespace-stripping editors, so the
+      padding cannot be restored from the data alone. Either the language files need
+      a parser that preserves values, or `NewCenteredDialog` should pad the title
+      itself. Deferred as cosmetic, recorded in `L10N_PLAN.md` section 6.
+    - The layout failures were all fixed by shortening translations. Some captions
+      now sit exactly on the limit (the German font label ends on the last allowed
+      column), so a future dialog resize will need a look at `L10N_PLAN.md`
+      section 7.1 rather than a guess.

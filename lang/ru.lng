@@ -631,13 +631,13 @@ EditorSettings.Highlighter=Инс&трумент подсветки:
 EditorSettings.ColorerStyle=С&тиль Colorer:
 EditorSettings.TabSize=Ра&змер табуляции:
 EditorSettings.AutoIndent=Авто&отступ
-EditorSettings.CursorBeyondEOL=Разрешить курсор за &конецом строки
-EditorSettings.UseEditorConfig=Использовать настройки .&editorconfig
+EditorSettings.CursorBeyondEOL=Курсор за &концом строки
+EditorSettings.UseEditorConfig=Использовать .&editorconfig
 EditorSettings.Crosshair=Показывать к&рест в редакторе
 EditorSettings.ColorerBg=Фон &Colorer
-EditorSettings.UseExternalEditor=Использовать в&нешний редактор
+EditorSettings.UseExternalEditor=В&нешний редактор
 EditorSettings.ExternalCommand=Ко&манда запуска:
-ConfirmationsSettings.DeleteCancelFocused=Фокус на кнопке 'Cancel' при удалении
+ConfirmationsSettings.DeleteCancelFocused=Фокус на 'Отмена' при удалении
 
 PanelSettings.ShowHighlightMarks=Показывать пометки &подсветки файлов
 PanelSettings.CommandLineAutoComplete=Включить авто&дополнение командной строки
