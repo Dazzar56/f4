@@ -415,6 +415,45 @@ type FileFinder interface {
 	FindFiles(ctx context.Context, dir string, q FindQuery) ([]FoundEntry, error)
 }
 
+// PtyShellIntegration is an optional interface for a VFS that owns a
+// remote PTY. It lets the VFS compose the exact bytes to send for the
+// integration tasks the panel does through the PTY — syncing its cwd
+// to the panel's, running a command line from the cmdline, sending an
+// interrupt — so a peer whose PTY runs a non-POSIX shell (cmd.exe on
+// Windows) can be driven correctly without the caller learning about
+// its shell. Fallback for a VFS that does not implement this is the
+// caller's built-in POSIX-style templates.
+type PtyShellIntegration interface {
+	// PtyChangeDirCommand returns the bytes to send to the PTY to
+	// change to dir. Path is in whatever shape the VFS uses on its
+	// wire; translation to what the PTY shell expects is the VFS's
+	// job. An empty return means "do not sync this path" (the VFS
+	// declines gracefully rather than sending broken syntax).
+	PtyChangeDirCommand(dir string) []byte
+
+	// PtyRunCommand returns the bytes to send to the PTY to run
+	// command in dir. If dir is empty, run wherever the PTY is now.
+	// An empty return declines the run.
+	PtyRunCommand(dir, command string) []byte
+
+	// PtyInterrupt returns the bytes to send to interrupt whatever
+	// command the PTY is currently running. Typically {0x03} — a
+	// literal Ctrl+C byte — since both cmd.exe over ConPTY and every
+	// POSIX shell treat that as SIGINT.
+	PtyInterrupt() []byte
+
+	// PtyInitSequence returns bytes to send to the PTY exactly once,
+	// right after it opens and before the caller sends anything else.
+	// A Windows peer uses this to install a PROMPT that embeds an OSC
+	// 133 D marker, matching what the local Windows PTY does — every
+	// time cmd shows the prompt (which is when the last command
+	// finished) the caller's OSC 133 handler is fired and the panel
+	// frame's OnBusyChange returns to panels. Returning nil means the
+	// shell needs no init, which is the honest answer for a POSIX
+	// peer whose command templates emit their own OSC 133.
+	PtyInitSequence() []byte
+}
+
 // LineIndexResult is what a LineIndexer answers with.
 type LineIndexResult struct {
 	// First is the one-based number of the line Offsets[0] belongs to.
