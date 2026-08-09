@@ -401,7 +401,7 @@ PanelSettings.NavigationSearch=Ieškoti pagal &nutylėjimą
 PanelSettings.SearchStayFocused=Likti komandų &eilutėje po Enter
 PanelSettings.SyncPanelLoad=S&ynchroninis skydelių įkėlimas (išjungti kešą)
 PanelSettings.DefaultMode=Numatytasis &režimas:
-PanelSettings.PathDisplay=Kelio &rodymas:
+PanelSettings.PathDisplay=Kelio rodymas:
 PanelSettings.InfoPanelCPUGPU=Rodyti CPU/GPU skiltį info s&kydelyje
 PanelSettings.EscTogglePanels=&Esc perjungia skydelių matomumą
 
@@ -642,7 +642,7 @@ ConfirmationsSettings.DeleteCancelFocused=Trinant sufokusuoti 'Atšaukti'
 PanelSettings.ShowHighlightMarks=Rodyti failų &pažymėjimo ženklus
 PanelSettings.CommandLineAutoComplete=Įjungti komandų eilutės &autoužbaigimą
 PanelSettings.AlwaysShowMenuBar=Visada rodyti &meniu juostą
-PanelSettings.RecordMacrosTo=Įrašyti &makrosus į:
+PanelSettings.RecordMacrosTo=Įrašyti makrosus į:
 UpdateSettings.ChannelStable=Stabilūs leidimai
 UpdateSettings.ChannelNightly=Naktiniai rinkiniai
 UpdateSettings.IntervalNever=Niekada

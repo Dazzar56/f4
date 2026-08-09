@@ -407,7 +407,7 @@ PanelSettings.EscTogglePanels=&Esc pārslēdz paneļu redzamību
 
 AppearanceSettings.Title= Izskata iestatījumi
 AppearanceSettings.Style=Lietotnes &stils:
-AppearanceSettings.Font=GUI šri&fts (Kelias/Nosaukums):
+AppearanceSettings.Font=GUI šri&fts (fonts):
 AppearanceSettings.FontSize=GUI šrifto &izmērs:
 AppearanceSettings.TitleTemplate=Loga &virsraksta veidne:
 AppearanceSettings.ExportBtn=&Eksportēt krāsu shēmu
