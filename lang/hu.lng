@@ -668,4 +668,7 @@ FileOp.Overwrite=&Felülírás
 FileOp.Skip=&Kihagyás
 FileOp.Rename=&Átnevezés
 FileOp.Append=&Melléírás
-FileOp.Resume=Folyt&atás
+FileOp.Resume=Folyt&atásLanguageSettings.Title= Nyelvi beállítások
+LanguageSettings.Primary=Elsődleges nyelv:
+LanguageSettings.Fallback=Tartalék nyelv:
+LanguageSettings.None=<nincs>

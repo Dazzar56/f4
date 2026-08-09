@@ -669,3 +669,7 @@ FileOp.Skip=건너뛰기(&S)
 FileOp.Rename=이름 변경(&R)
 FileOp.Append=이어쓰기(&A)
 FileOp.Resume=계속(&U)
+LanguageSettings.Title= 언어 설정
+LanguageSettings.Primary=기본 언어:
+LanguageSettings.Fallback=보조 언어:
+LanguageSettings.None=<없음>

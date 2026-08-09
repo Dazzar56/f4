@@ -669,3 +669,7 @@ KeyBar.ViewerF4=16进制
 KeyBar.ViewerF7=查找
 KeyBar.ViewerAltF8=跳转
 KeyBar.ViewerF10=退出
+LanguageSettings.Title= 语言设置
+LanguageSettings.Primary=首选语言:
+LanguageSettings.Fallback=备用语言:
+LanguageSettings.None=<无>

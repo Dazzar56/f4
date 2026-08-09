@@ -669,3 +669,7 @@ FileOp.Skip=&Пропустити
 FileOp.Rename=Пере&йменувати
 FileOp.Append=&Дописати
 FileOp.Resume=Віднов&ити
+LanguageSettings.Title= Налаштування мови
+LanguageSettings.Primary=Основна мова:
+LanguageSettings.Fallback=Резервна мова:
+LanguageSettings.None=<немає>

@@ -668,4 +668,7 @@ FileOp.Overwrite=&Վերագրել
 FileOp.Skip=&Բաց թողնել
 FileOp.Rename=&Անվանափոխել
 FileOp.Append=&Լրացնել
-FileOp.Resume=Վերա&սկսել
+FileOp.Resume=Վերա&սկսելLanguageSettings.Title= Լեզվի կարգավորումներ
+LanguageSettings.Primary=Հիմնական լեզու՝
+LanguageSettings.Fallback=Պահուստային լեզու՝
+LanguageSettings.None=<չկա>

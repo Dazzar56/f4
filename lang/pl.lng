@@ -669,3 +669,7 @@ FileOp.Skip=P&omiń
 FileOp.Rename=Z&mień nazwę
 FileOp.Append=&Dołącz
 FileOp.Resume=Wz&nów
+LanguageSettings.Title= Ustawienia języka
+LanguageSettings.Primary=Język podstawowy:
+LanguageSettings.Fallback=Język zapasowy:
+LanguageSettings.None=<brak>

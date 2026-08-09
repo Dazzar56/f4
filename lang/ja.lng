@@ -668,3 +668,7 @@ FileOp.Skip=スキップ(&S)
 FileOp.Rename=名前変更(&R)
 FileOp.Append=追記(&A)
 FileOp.Resume=再開(&U)
+LanguageSettings.Title= 言語設定
+LanguageSettings.Primary=優先言語:
+LanguageSettings.Fallback=予備言語:
+LanguageSettings.None=<なし>

@@ -8,11 +8,16 @@ import (
 func TestConfig_FallbackLanguagePersistence(t *testing.T) {
 	tmpDir := t.TempDir()
 	oldGetUserConfigIniPath := getUserConfigIniPath
+	oldGetConfigPaths := getConfigIniPaths
 	defer func() {
 		getUserConfigIniPath = oldGetUserConfigIniPath
+		getConfigIniPaths = oldGetConfigPaths
 	}()
 	getUserConfigIniPath = func() string {
 		return filepath.Join(tmpDir, "settings.ini")
+	}
+	getConfigIniPaths = func() []string {
+		return []string{filepath.Join(tmpDir, "settings.ini")}
 	}
 
 	AppConfig.Language = "ka"

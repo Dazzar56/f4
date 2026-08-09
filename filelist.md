@@ -247,6 +247,7 @@
     │   ├── cs.lng
     │   ├── de.lng
     │   ├── en.lng
+    │   ├── es.lng
     │   ├── et.lng
     │   ├── fi.lng
     │   ├── hu.lng
@@ -558,6 +559,8 @@
     ├── terminal_selection_test.go
     ├── terminal_view.go
     ├── terminal_view_test.go
+    ├── test_cache_helper_test.go
+    ├── test_fallback_lang_test.go
     ├── test_main_test.go
     ├── TEST_OPTIMIZATION_PLAN.md
     ├── test_plugins.sh
@@ -680,4 +683,4 @@
     ├── word_nav.go
     └── word_nav_test.go
     
-    49 directories, 630 files
+    49 directories, 633 files

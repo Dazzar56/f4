@@ -669,3 +669,7 @@ FileOp.Skip=&Přeskočit
 FileOp.Rename=Pře&jmenovat
 FileOp.Append=&Připojit
 FileOp.Resume=&Pokračovat
+LanguageSettings.Title= Nastavení jazyka
+LanguageSettings.Primary=Hlavní jazyk:
+LanguageSettings.Fallback=Záložní jazyk:
+LanguageSettings.None=<žádný>

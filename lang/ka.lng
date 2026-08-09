@@ -668,4 +668,7 @@ FileOp.Overwrite=&თავზე გადაწერა
 FileOp.Skip=&გამოტოვება
 FileOp.Rename=&გადარქმევა
 FileOp.Append=&მიწერა
-FileOp.Resume=გაგ&რძელება
+FileOp.Resume=გაგ&რძელებაLanguageSettings.Title= ენის პარამეტრები
+LanguageSettings.Primary=ძირითადი ენა:
+LanguageSettings.Fallback=სარეზერვო ენა:
+LanguageSettings.None=<არცერთი>
