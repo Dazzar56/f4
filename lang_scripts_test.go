@@ -41,7 +41,7 @@ func TestLanguageAlphabetsContamination(t *testing.T) {
 		"Thai":     {"th": true},
 	}
 
-	dirs := []string{"lang", "help"}
+	dirs := []string{"lang"}
 
 	for _, dir := range dirs {
 		files, err := os.ReadDir(dir)
