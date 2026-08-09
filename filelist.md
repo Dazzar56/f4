@@ -232,7 +232,6 @@
     ├── kitty_metrics_test.go
     ├── kitty_placements.go
     ├── kitty_placements_test.go
-    ├── L10N_PLAN.md
     ├── lang
     │   ├── be.lng
     │   ├── coverage_baseline.txt
@@ -665,4 +664,4 @@
     ├── word_nav.go
     └── word_nav_test.go
     
-    49 directories, 615 files
+    49 directories, 614 files
