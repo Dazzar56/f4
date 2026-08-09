@@ -8,6 +8,9 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"unicode"
+
+	"github.com/abadojack/whatlanggo"
 )
 
 func TestLangConsistency(t *testing.T) {
@@ -20,6 +23,7 @@ func TestLangConsistency(t *testing.T) {
 	enStrings := loadLangMapFromINI(enIni)
 
 	var enKeys []string
+	enRawStrings := make(map[string]string)
 	lines := strings.Split(string(enData), "\n")
 	inStringsSection := false
 	for _, line := range lines {
@@ -37,6 +41,7 @@ func TestLangConsistency(t *testing.T) {
 		idx := strings.Index(line, "=")
 		if idx > 0 {
 			key := strings.TrimSpace(line[:idx])
+			enRawStrings[key] = line[idx+1:]
 			if _, ok := enStrings[key]; ok {
 				found := false
 				for _, k := range enKeys {
@@ -83,6 +88,7 @@ func TestLangConsistency(t *testing.T) {
 		}
 
 		seenKeys := make(map[string]bool)
+		targetRawStrings := make(map[string]string)
 		flines := strings.Split(string(data), "\n")
 		targetInStringsSection := false
 		for _, line := range flines {
@@ -100,6 +106,7 @@ func TestLangConsistency(t *testing.T) {
 			idx := strings.Index(line, "=")
 			if idx > 0 {
 				key := strings.TrimSpace(line[:idx])
+				targetRawStrings[key] = line[idx+1:]
 				if seenKeys[key] {
 					t.Errorf("%s: Duplicate key found: %s", file, key)
 				}
@@ -111,6 +118,18 @@ func TestLangConsistency(t *testing.T) {
 			} else {
 				t.Errorf("%s: Invalid line without '=' in [Strings]: %s", file, line)
 			}
+		}
+
+		mergedLineRe := regexp.MustCompile(`\n[a-zA-Z0-9_.-]+=`)
+		allowedLangs := map[string][]whatlanggo.Lang{
+			"cs": {whatlanggo.Ces, whatlanggo.Eng},
+			"de": {whatlanggo.Deu, whatlanggo.Eng},
+			"pl": {whatlanggo.Pol, whatlanggo.Eng},
+			"uk": {whatlanggo.Ukr, whatlanggo.Rus, whatlanggo.Bul, whatlanggo.Eng},
+			"ru": {whatlanggo.Rus, whatlanggo.Ukr, whatlanggo.Bul, whatlanggo.Eng},
+			"zh": {whatlanggo.Cmn, whatlanggo.Eng},
+			"ja": {whatlanggo.Jpn, whatlanggo.Eng},
+			"ko": {whatlanggo.Kor, whatlanggo.Eng},
 		}
 
 		for _, key := range enKeys {
@@ -139,14 +158,71 @@ func TestLangConsistency(t *testing.T) {
 				}
 			}
 
-			// Check & hotkeys
+			// 1. Anti-merge
+			if mergedLineRe.MatchString(val) {
+				t.Errorf("%s: Key '%s' contains a merged line pattern", file, key)
+			}
+
+			// 4. Whitespace drift
+			enRawVal := enRawStrings[key]
+			valRawVal := targetRawStrings[key]
+			if strings.HasPrefix(enRawVal, " ") != strings.HasPrefix(valRawVal, " ") {
+				t.Errorf("%s: Key '%s' leading space mismatch", file, key)
+			}
+			if strings.HasSuffix(enRawVal, " ") != strings.HasSuffix(valRawVal, " ") {
+				t.Errorf("%s: Key '%s' trailing space mismatch", file, key)
+			}
+
+			// 5. Ampersand (Hotkey) sanity check
+			enNoDbl := strings.ReplaceAll(enVal, "&&", "")
 			valNoDbl := strings.ReplaceAll(val, "&&", "")
-			ampCount := strings.Count(valNoDbl, "&")
-			if ampCount > 1 {
-				t.Errorf("%s: Key '%s' has multiple single '&'", file, key)
-			} else if ampCount == 1 {
-				if strings.HasSuffix(valNoDbl, "&") {
-					t.Errorf("%s: Key '%s' has trailing '&'", file, key)
+			enHasAmp := strings.Contains(enNoDbl, "&")
+			valHasAmp := strings.Contains(valNoDbl, "&")
+
+			if enHasAmp && !valHasAmp {
+				t.Errorf("%s: Key '%s' is missing hotkey '&'", file, key)
+			}
+			if !enHasAmp && valHasAmp {
+				t.Errorf("%s: Key '%s' has unexpected hotkey '&'", file, key)
+			}
+
+			if valHasAmp {
+				ampCount := strings.Count(valNoDbl, "&")
+				if ampCount > 1 {
+					t.Errorf("%s: Key '%s' has multiple single '&'", file, key)
+				}
+				idx := strings.Index(valNoDbl, "&")
+				if idx == len(valNoDbl)-1 {
+					t.Errorf("%s: Key '%s' has '&' at the end of the string", file, key)
+				} else {
+					nextChar := []rune(valNoDbl[idx+1:])[0]
+					if !unicode.IsLetter(nextChar) && !unicode.IsDigit(nextChar) {
+						t.Errorf("%s: Key '%s' has invalid char after '&': %c", file, key, nextChar)
+					}
+					if code == "zh" || code == "ja" || code == "ko" {
+						if nextChar < 'A' || (nextChar > 'Z' && nextChar < 'a') || nextChar > 'z' {
+							t.Errorf("%s: Key '%s' in CJK must use Latin letter for hotkey, got: %c", file, key, nextChar)
+						}
+					}
+				}
+			}
+
+			// 2. N-gram language detection
+			cleanVal := placeholderRe.ReplaceAllString(val, "")
+			cleanVal = strings.ReplaceAll(cleanVal, "&", "")
+			if len(cleanVal) > 20 {
+				info := whatlanggo.Detect(cleanVal)
+				if info.IsReliable() && info.Confidence > 0.90 {
+					allowed := false
+					for _, l := range allowedLangs[code] {
+						if info.Lang == l {
+							allowed = true
+							break
+						}
+					}
+					if !allowed && info.Lang != whatlanggo.Eng {
+						t.Errorf("%s: Key '%s' detected as %s with high confidence (%.2f)", file, key, info.Lang.String(), info.Confidence)
+					}
 				}
 			}
 		}

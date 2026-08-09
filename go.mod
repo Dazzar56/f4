@@ -4,6 +4,7 @@ go 1.26.0
 
 require (
 	github.com/Masterminds/semver v1.5.0
+	github.com/abadojack/whatlanggo v1.0.1
 	github.com/alecthomas/chroma/v2 v2.15.0
 	github.com/coregx/coregex v0.12.19
 	github.com/danielpaulus/go-ios v1.2.2-0.20260805152531-ebec9a0b076c
