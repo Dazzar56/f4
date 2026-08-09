@@ -234,6 +234,8 @@
     ├── kitty_placements_test.go
     ├── L10N_PLAN.md
     ├── lang
+    │   ├── be.lng
+    │   ├── coverage_baseline.txt
     │   ├── cs.lng
     │   ├── de.lng
     │   ├── en.lng
@@ -243,10 +245,12 @@
     │   ├── ru.lng
     │   ├── uk.lng
     │   └── zh.lng
+    ├── lang_consistency_test.go
     ├── lang_contamination_test.go
     ├── lang.go
     ├── lang_packs.go
     ├── lang_packs_test.go
+    ├── lang_scripts_test.go
     ├── lang_test.go
     ├── LICENSE
     ├── LUA.md
@@ -661,4 +665,4 @@
     ├── word_nav.go
     └── word_nav_test.go
     
-    49 directories, 611 files
+    49 directories, 615 files

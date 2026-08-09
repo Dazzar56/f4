@@ -41,6 +41,7 @@ Snapshot taken on 2026-08-09 against `lang/en.lng` with 639 keys in
 | language | keys | missing |
 | -------- | ---- | ------- |
 | ru       | 639  | 0       |
+| be       | 639  | 0       |
 | zh       | 639  | 0       |
 | cs       | 639  | 0       |
 | de       | 639  | 0       |
