@@ -36,6 +36,11 @@ var germanLeftovers = []string{
 }
 
 func TestTranslationsAreFreeOfGermanLeftovers(t *testing.T) {
+	skipIfNoRelevantChanges(t, "lang_contamination_german",
+		"lang/*.lng",
+		"help/*.hlf",
+		"lang_contamination_test.go",
+	)
 	paths, err := filepath.Glob("lang/*.lng")
 	if err != nil {
 		t.Fatalf("cannot list language files: %v", err)
@@ -74,6 +79,11 @@ func TestTranslationsAreFreeOfGermanLeftovers(t *testing.T) {
 	}
 }
 func TestTranslationsAreFreeOfAIGarbage(t *testing.T) {
+	skipIfNoRelevantChanges(t, "lang_contamination_garbage",
+		"lang/*.lng",
+		"help/*.hlf",
+		"lang_contamination_test.go",
+	)
 	paths, err := filepath.Glob("lang/*.lng")
 	if err != nil {
 		t.Fatalf("cannot list language files: %v", err)

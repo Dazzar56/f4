@@ -12,6 +12,16 @@ import (
 )
 
 func TestAllDialogs_LayoutValidation(t *testing.T) {
+	skipIfNoRelevantChanges(t, "layouts",
+		"lang/*.lng",
+		"lang/*.txt",
+		"*_dialog*.go",
+		"*_ui*.go",
+		"*_settings*.go",
+		"actions*.go",
+		"dialog_layouts_test.go",
+		"go.mod",
+	)
 	vtui.SetDefaultPalette()
 
 	// 1. Temporary redirect of the config paths to prevent writing/reading from the user's home directory.

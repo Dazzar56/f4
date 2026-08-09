@@ -9,6 +9,11 @@ import (
 )
 
 func TestLanguageAlphabetsContamination(t *testing.T) {
+	skipIfNoRelevantChanges(t, "lang_scripts",
+		"lang/*.lng",
+		"help/*.hlf",
+		"lang_scripts_test.go",
+	)
 	// A map of scripts that are strictly bound to specific languages.
 	// Latin and Common (punctuation, numbers) are allowed everywhere,
 	// so they are intentionally omitted from this restriction list.

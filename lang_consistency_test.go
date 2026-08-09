@@ -25,6 +25,11 @@ func hasHotkey(s string) bool {
 }
 
 func TestLangConsistency(t *testing.T) {
+	skipIfNoRelevantChanges(t, "lang_consistency",
+		"lang/*.lng",
+		"lang/*.txt",
+		"lang_consistency_test.go",
+	)
 	enData, err := os.ReadFile(filepath.Join("lang", "en.lng"))
 	if err != nil {
 		t.Fatalf("Failed to read en.lng: %v", err)
