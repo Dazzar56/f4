@@ -497,6 +497,9 @@ func TestViewerView_GetTitle(t *testing.T) {
 	if vv.GetTitle() != "View: doc.txt" {
 		t.Errorf("GetTitle failed: %s", vv.GetTitle())
 	}
+	if vv.GetWorkspaceTabTitle() != "👁  doc.txt" {
+		t.Errorf("GetWorkspaceTabTitle failed: %s", vv.GetWorkspaceTabTitle())
+	}
 
 }
 func TestLayout_ViewerSearchDialog_Validity(t *testing.T) {
