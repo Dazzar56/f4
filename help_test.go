@@ -67,6 +67,10 @@ func TestVisRenHelpReference(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	heHelp, err := os.ReadFile("help/he.hlf")
+	if err != nil {
+		t.Fatal(err)
+	}
 	topics := []string{
 		"VisRen", "VisRenQuickStart", "VisRenMasks", "VisRenTransforms",
 		"VisRenMetadata", "VisRenSearch", "VisRenPreview", "VisRenEditor",
@@ -81,6 +85,7 @@ func TestVisRenHelpReference(t *testing.T) {
 		{name: "Russian", data: string(ruHelp)},
 		{name: "Spanish", data: string(esHelp)},
 		{name: "Arabic", data: string(arHelp)},
+		{name: "Hebrew", data: string(heHelp)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if !utf8.ValidString(tc.data) {
