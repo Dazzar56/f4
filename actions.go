@@ -3195,47 +3195,7 @@ func actionHelpLanguage(pf *PanelsFrame) {
 			if !e.IsDir() && strings.HasSuffix(e.Name(), ".hlf") {
 				code := strings.TrimSuffix(e.Name(), ".hlf")
 				if !seen[code] {
-					name := strings.ToUpper(code)
-					switch code {
-					case "ru":
-						name = "Русский"
-					case "de":
-						name = "Deutsch"
-					case "cs":
-						name = "Čeština"
-					case "pl":
-						name = "Polski"
-					case "uk":
-						name = "Українська"
-					case "be":
-						name = "Беларуская"
-					case "ka":
-						name = "ქართული"
-					case "zh":
-						name = "中文"
-					case "hu":
-						name = "Magyar"
-					case "fi":
-						name = "Suomi"
-					case "hy":
-						name = "Հայերեն"
-					case "nl":
-						name = "Nederlands"
-					case "ko":
-						name = "한국어"
-					case "it":
-						name = "Italiano"
-					case "lt":
-						name = "Lietuvių"
-					case "lv":
-						name = "Latviešu"
-					case "et":
-						name = "Eesti"
-					case "es":
-						name = "Español"
-					case "tr":
-						name = "Türkçe"
-					}
+					name := getLanguageName(code)
 					langs = append(langs, langInfo{code, name})
 					seen[code] = true
 				}
@@ -3274,4 +3234,26 @@ func actionHelpLanguage(pf *PanelsFrame) {
 	}
 
 	vtui.FrameManager.Push(menu)
+}
+
+func getLanguageName(code string) string {
+	if code == "en" || code == "eng" {
+		return "English"
+	}
+	exeDir := filepath.Dir(os.Args[0])
+	userDir := filepath.Join(GetF4ConfigDir(), "lang")
+	candidates := []string{
+		filepath.Join(userDir, code+".lng"),
+		filepath.Join(exeDir, "lang", code+".lng"),
+		filepath.Join("lang", code+".lng"),
+	}
+	for _, cand := range candidates {
+		if _, err := os.Stat(cand); err == nil {
+			ini := LoadIni(cand)
+			if name := ini.GetString("Language", "Name", ""); name != "" {
+				return name
+			}
+		}
+	}
+	return strings.ToUpper(code)
 }
