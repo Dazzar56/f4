@@ -540,8 +540,8 @@ f4 هو تطبيق تجريبي يحاكي Far Manager / far2l مكتوب بلغ
 ~عرض ملف README.md~README@
 
 @ViewerEditor
-$Viewer & Editor Keys
-This topic is generated dynamically from the action registry.
+$مفاتيح المستعرض والمحرر
+يتم إنشاء هذا الموضوع ديناميكيًا من سجل الإجراءات.
 
 @ViewerNav
 $مفاتيح التنقل
@@ -559,7 +559,7 @@ $مفاتيح التنقل
 
 @PanelNav
 $تنقل اللوحة
-This topic is generated dynamically from the action registry.
+يتم إنشاء هذا الموضوع ديناميكيًا من سجل الإجراءات.
 
 @ShellNav
 $مفاتيح تنقل اللوحة

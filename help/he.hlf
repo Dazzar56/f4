@@ -526,8 +526,8 @@ f4 הוא שיבוט ניסיוני של Far Manager / far2l הכתוב בשפת
 ~הצג קובץ README.md~README@
 
 @ViewerEditor
-$Viewer & Editor Keys
-This topic is generated dynamically from the action registry.
+$מקשי צופה ועורך
+נושא זה מופק באופן דינמי מרשם הפעולות.
 
 @ViewerNav
 $מקשי ניווט
@@ -545,7 +545,7 @@ $מקשי ניווט
 
 @PanelNav
 $ניווט בפאנלים
-This topic is generated dynamically from the action registry.
+נושא זה מופק באופן דינמי מרשם הפעולות.
 
 @ShellNav
 $מקשי ניווט פאנל
