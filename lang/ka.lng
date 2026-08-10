@@ -59,7 +59,7 @@ VisRen.WordDivTitle=სიტყვის გამყოფები
 VisRen.WordDivPrompt=სიტყვების გამყოფი სიმბოლოები (მაქსიმუმ 18):
 VisRen.OldName=ძველი სახელი
 VisRen.NewName=ახალი სახელი
-vtui.Ok=&Oკ
+vtui.Ok=&Ok
 vtui.Cancel=გაუქმება
 Panel.Other=&სხვა პანელი
 Panel.Column.Name=სახელი
@@ -702,7 +702,7 @@ Search.BtnFind=&ძებნა
 Replace.Title= ჩანაცვლება
 Replace.Prompt=ჩანაცვლება:
 Replace.BtnReplace=&ჩანაცვლება
-Replace.BtnReplaceAll=ჩაანაცვლе &ყველა
+Replace.BtnReplaceAll=ჩაანაცვლე &ყველა
 Codepage.Title= კოდირებები
 Codepage.ConvertTitle= კოდირების კონვერტაცია
 
@@ -715,7 +715,7 @@ UserMenu.LabelHotkey=ცხელი &კლავიში:
 UserMenu.LabelLabel=&იარლიყი:
 UserMenu.LabelCommand=&ბრძანება:
 
-Hotkeys.Title= ცხელი კლავიშების კონფიგুরატორი
+Hotkeys.Title= ცხელი კლავიშების კონფიგურატორი
 Hotkeys.BtnAssign=&მინიჭება
 Hotkeys.BtnUnbind=&მოხსნა
 Hotkeys.BtnClose=&დახურვა

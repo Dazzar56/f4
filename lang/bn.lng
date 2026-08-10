@@ -659,13 +659,9 @@ Attributes.Title= বৈশিষ্ট্যসমূহ
 Attributes.BtnSet=সেট করুন
 Attributes.BtnSecurity=নিরাপত্তা (&S)
 Attributes.Read=পাঠ
-Attributes.Write=лиখন
-# Wait, "лиখন" is Russian script typo for "লিখন" in Bengali!
 Attributes.Write=লিখন
 Attributes.Execute=সম্পাদন
 Attributes.ReadOnly=শুধুমাত্র পাঠযোগ্য (&R)
-Attributes.Hidden=লुकানো (&H)
-# Wait, "लुकানো" is Devanagari typo for "লুকানো"!
 Attributes.Hidden=লুকানো (&H)
 Attributes.System=সিস্টেম (&S)
 Attributes.Archive=আর্কাইভ (&A)

@@ -108,7 +108,7 @@ PlugRing.Title= f4 PlugRing
 PlugRing.BtnInstall=&התקנה/עדכון
 PlugRing.BtnRemove=ה&סרה
 PlugRing.BtnRefresh=&רענון
-PlugRing.BtnClose=&סგירה
+PlugRing.BtnClose=&סגירה
 
 Attributes.Title= מאפיינים
 Attributes.BtnSet=קבע
@@ -132,8 +132,8 @@ Replace.Title= החלף
 Replace.Prompt=החלף ב-:
 Replace.BtnReplace=&החלף
 Replace.BtnReplaceAll=החלף את ה&כל
-Codepage.Title= דפי קידود
-Codepage.ConvertTitle= המר דף קידود
+Codepage.Title= דפי קידוד
+Codepage.ConvertTitle= המר דף קידוד
 
 vtui.Save=ש&מור
 UserMenu.EditTitle= עריכת תפריט משתמש
@@ -141,7 +141,7 @@ UserMenu.CreateTitle= יצירת תפריט משתמש
 UserMenu.EditSubmenuTitle= עריכת תפריט משנה
 UserMenu.CreateSubmenuTitle= יצירת תפריט משנה
 UserMenu.LabelHotkey=מקש ק&יצור:
-UserMenu.LabelLabel=&תווیت:
+UserMenu.LabelLabel=&תווית:
 UserMenu.LabelCommand=&פקודה:
 
 Hotkeys.Title= מגדיר מקשי קיצור
@@ -168,13 +168,13 @@ NetFox.LabelPort=&פורט:
 NetFox.LabelUser=&משתמש:
 NetFox.LabelPassword=&סיסמה:
 NetFox.LabelTimeout=פסק &זמן:
-NetFox.LabelCodepage=&דף קידود:
+NetFox.LabelCodepage=&דף קידוד:
 NetFox.ErrorEmptyName=השם אינו יכול להיות ריק
-NetFox.ErrorReservedName=שם חיבור שמور
+NetFox.ErrorReservedName=שם חיבור שמור
 
-FileOp.BtnCancel=&ביטول
+FileOp.BtnCancel=&ביטול
 FileOp.BtnBackground=ב&רקע
-Queue.BtnCancel=ב&טל משיма
+Queue.BtnCancel=ב&טל משימה
 Queue.BtnClear=נקה &הושלמו
 Session.Title= בחר סשן
 
@@ -234,7 +234,7 @@ Menu.Editor.Search=ח&יפוש
 Menu.Editor.Options=א&פשרויות
 Menu.Editor.Insert=ה&כנסה
 Menu.Viewer.File=קו&בץ
-Menu.Viewer.View=צ&פייה
+Menu.Viewer.View=ת&צוגה
 Menu.Viewer.Search=ח&יפוש
 Menu.Viewer.Options=א&פשרויות
 Action.App.ScreenGrab=לכידת מ&סך

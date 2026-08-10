@@ -168,8 +168,6 @@ NetFox.LabelPort=&पोर्ट:
 NetFox.LabelUser=उपभोक्&ता:
 NetFox.LabelPassword=पासव&र्ड:
 NetFox.LabelTimeout=समय सी&मा:
-NetFox.LabelCodepage=코드페이지(&C):
-# Wait, "코드페이지(&C)" is Korean. Let's fix this legacy typo as well!
 NetFox.LabelCodepage=कोडपे&ज:
 NetFox.ErrorEmptyName=नाम खाली नहीं हो सकता
 NetFox.ErrorReservedName=आरक्षित कनेक्शन नाम

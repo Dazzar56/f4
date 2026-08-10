@@ -708,8 +708,8 @@ Codepage.Title= Кадыроўкі
 Codepage.ConvertTitle= Канвертаваць кадыроўку
 
 vtui.Save=&Захаваць
-UserMenu.EditTitle= Рэдагаваць меню карыстальніka
-UserMenu.CreateTitle= Стварыць меню карыстальніka
+UserMenu.EditTitle= Рэдагаваць меню карыстальніка
+UserMenu.CreateTitle= Стварыць меню карыстальніка
 UserMenu.EditSubmenuTitle= Рэдагаваць падменю
 UserMenu.CreateSubmenuTitle= Стварыць падменю
 UserMenu.LabelHotkey=Гарачая &клавіша:

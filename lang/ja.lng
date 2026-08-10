@@ -734,8 +734,6 @@ NetFox.LabelPort=ポート(&P):
 NetFox.LabelUser=ユーザー(&U):
 NetFox.LabelPassword=パスワード(&W):
 NetFox.LabelTimeout=タイムアウト(&T):
-NetFox.LabelCodepage=코드페이지(&C):
-# Note: Fixing "코드페이지(&C)" Korean translation leak to "コードページ(&C)"
 NetFox.LabelCodepage=コードページ(&C):
 NetFox.ErrorEmptyName=名前を入力してください
 NetFox.ErrorReservedName=予約された接続名です
