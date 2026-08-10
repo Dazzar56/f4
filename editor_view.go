@@ -3363,7 +3363,7 @@ func (ev *EditorView) Search(pattern string, caseSensitive, reverse, regexp, who
 		dlg := vtui.NewCenteredDialog(50, 8, title)
 		lbl := vtui.NewLabel(0, 0, msg, nil)
 		dlg.AddItem(lbl)
-		btnCancel := vtui.NewButton(0, 0, "&Cancel")
+		btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
 		dlg.AddItem(btnCancel)
 
 		vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 50-4, 8-4)
