@@ -116,9 +116,9 @@ func (p *ID3EditorPlugin) showEditorDialog(app vfs.App, fullPath string) {
 	lblGenre := vtui.NewLabel(0, 0, padLabel(vtui.Msg("ID3Editor.FieldGenre")), editGenre)
 	lblComment := vtui.NewLabel(0, 0, padLabel(vtui.Msg("ID3Editor.FieldComment")), editComment)
 
-	btnSave := vtui.NewButton(0, 0, "&Save")
+	btnSave := vtui.NewButton(0, 0, vtui.Msg("vtui.Save"))
 	btnSave.IsDefault = true
-	btnCancel := vtui.NewButton(0, 0, "Cancel")
+	btnCancel := vtui.NewButton(0, 0, vtui.Msg("vtui.Cancel"))
 
 	dlg.AddItem(lblTitle)
 	dlg.AddItem(editTitle)

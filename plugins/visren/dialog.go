@@ -779,7 +779,7 @@ func (d *Dialog) showDetails() {
 		text := vtui.NewText(details.X1+3, details.Y1+8+idx, line, vtui.Palette[vtui.ColDialogText])
 		details.AddItem(text)
 	}
-	ok := vtui.NewButton(details.X1+33, details.Y1+13, "&Ok")
+	ok := vtui.NewButton(details.X1+33, details.Y1+13, vtui.Msg("vtui.Ok"))
 	ok.IsDefault = true
 	ok.OnClick = details.Close
 	details.AddItem(ok)
