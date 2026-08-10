@@ -423,11 +423,13 @@ func TestConfig_GuiFontPersistence(t *testing.T) {
 
 	// Задаем тестовые значения
 	AppConfig.GuiFont = "UbuntuMono-Regular"
+	AppConfig.GuiUseSystemMonospace = false
 	AppConfig.GuiFontSize = 22
 	SaveConfig()
 
 	// Сбрасываем текущую конфигурацию в памяти
 	AppConfig.GuiFont = ""
+	AppConfig.GuiUseSystemMonospace = true
 	AppConfig.GuiFontSize = 0
 
 	// Читаем заново из временного файла
@@ -438,6 +440,9 @@ func TestConfig_GuiFontPersistence(t *testing.T) {
 	}
 	if AppConfig.GuiFontSize != 22 {
 		t.Errorf("Expected GuiFontSize to be 22, got %d", AppConfig.GuiFontSize)
+	}
+	if AppConfig.GuiUseSystemMonospace {
+		t.Error("Expected GuiUseSystemMonospace to remain disabled")
 	}
 }
 
