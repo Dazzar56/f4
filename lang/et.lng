@@ -668,7 +668,8 @@ FileOp.Overwrite=&Kirjuta üle
 FileOp.Skip=Jä&ta vahele
 FileOp.Rename=&Nimeta ümber
 FileOp.Append=Lisa &juurde
-FileOp.Resume=Jä&tkaLanguageSettings.Title= Keele seaded
+FileOp.Resume=Jä&tka
+LanguageSettings.Title= Keele seaded
 LanguageSettings.Primary=Põhikeel:
 LanguageSettings.Fallback=Varukeel:
 LanguageSettings.None=<puudub>

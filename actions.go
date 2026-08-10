@@ -2654,7 +2654,7 @@ func actionImportFar2lHistory(pf *PanelsFrame) {
 func actionAppearanceSettings(pf *PanelsFrame) {
 	// One row shaved by dropping the blank between the two trailing
 	// checkboxes (see #298).
-	const width, height = 60, 20
+	const width, height = 64, 20
 	dlg := vtui.NewCenteredDialog(width, height, Msg("AppearanceSettings.Title"))
 	dlg.ShowClose = true
 	// Snapshot the whole palette (not just the style name) so a

@@ -668,7 +668,8 @@ FileOp.Overwrite=&Korvaa
 FileOp.Skip=&Ohita
 FileOp.Rename=&Nimeä uudelleen
 FileOp.Append=&Liitä loppuun
-FileOp.Resume=&JatkaLanguageSettings.Title= Kieliasetukset
+FileOp.Resume=&Jatka
+LanguageSettings.Title= Kieliasetukset
 LanguageSettings.Primary=Ensisijainen kieli:
 LanguageSettings.Fallback=Varakieli:
 LanguageSettings.None=<ei mitään>

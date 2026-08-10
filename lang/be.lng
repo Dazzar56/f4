@@ -669,7 +669,8 @@ FileOp.Overwrite=&Перапісаць
 FileOp.Skip=&Прапусціць
 FileOp.Rename=Пера&іменаваць
 FileOp.Append=&Дапісаць
-FileOp.Resume=Аднав&іцьLanguageSettings.Title= Налады мовы
+FileOp.Resume=Аднав&іць
+LanguageSettings.Title= Налады мовы
 LanguageSettings.Primary=Асноўная мова:
 LanguageSettings.Fallback=Рэзервовая мова:
 LanguageSettings.None=<няма>

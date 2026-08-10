@@ -255,8 +255,9 @@ func (s *historySearch) draw(scr *vtui.ScreenBuf) {
 	}
 
 	height := s.menu.Y2 - s.menu.Y1 - 1
+	var itemIdx int
 	for row := 0; row < height; row++ {
-		itemIdx := s.menu.TopPos + row
+		itemIdx = s.menu.TopPos + row
 		if itemIdx >= len(s.menu.Items) {
 			break
 		}

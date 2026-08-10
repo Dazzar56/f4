@@ -668,7 +668,8 @@ FileOp.Overwrite=&Perrašyti
 FileOp.Skip=Pr&aleisti
 FileOp.Rename=&Pervardyti
 FileOp.Append=&Prirašyti
-FileOp.Resume=Tę&stiLanguageSettings.Title= Kalbos nustatymai
+FileOp.Resume=Tę&sti
+LanguageSettings.Title= Kalbos nustatymai
 LanguageSettings.Primary=Pagrindinė kalba:
 LanguageSettings.Fallback=Atsarginė kalba:
 LanguageSettings.None=<nėra>

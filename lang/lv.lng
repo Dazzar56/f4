@@ -668,7 +668,8 @@ FileOp.Overwrite=&Pārrakstīt
 FileOp.Skip=Iz&laist
 FileOp.Rename=&Pārdēvēt
 FileOp.Append=&Pievienot
-FileOp.Resume=Tur&pinātLanguageSettings.Title= Valodas iestatījumi
+FileOp.Resume=Tur&pināt
+LanguageSettings.Title= Valodas iestatījumi
 LanguageSettings.Primary=Galvenā valoda:
 LanguageSettings.Fallback=Rezerves valoda:
 LanguageSettings.None=<nav>

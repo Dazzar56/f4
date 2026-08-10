@@ -1584,8 +1584,8 @@ func TestActionAppearanceSettings_SaveCursor(t *testing.T) {
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
-	origVal := AppConfig.KeepTerminalCursor
-	defer func() { AppConfig.KeepTerminalCursor = origVal }()
+	oldCfg := AppConfig
+	defer func() { AppConfig = oldCfg }()
 
 	AppConfig.KeepTerminalCursor = false
 
