@@ -2472,6 +2472,7 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 			}
 			dlg.OnResult = func(code int) {
 				if code == 0 {
+					cancelOperationsForShutdown()
 					SaveSession()
 					if pty := pf.takeLocalPTY(); pty != nil {
 						pty.Close()
@@ -2481,6 +2482,7 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 				}
 			}
 		} else {
+			cancelOperationsForShutdown()
 			SaveSession()
 			if pty := pf.takeLocalPTY(); pty != nil {
 				pty.Close()

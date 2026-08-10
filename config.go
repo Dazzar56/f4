@@ -129,6 +129,7 @@ type F4Config struct {
 	NavigationMode           PanelNavigationMode
 	SearchCommandStayFocused bool
 	SyncPanelLoad            bool
+	ApplyCommandParallelism  int // 0 = unlimited; absent config defaults to runtime.NumCPU()
 	EditorAutoComplete       bool
 	EditorAutoCompleteMask   string
 	EditorExpandTabs         int
@@ -215,6 +216,7 @@ var AppConfig = F4Config{
 	NavigationMode:           NavigationClassic,
 	SearchCommandStayFocused: false,
 	SyncPanelLoad:            false,
+	ApplyCommandParallelism:  runtime.NumCPU(),
 	EditorAutoComplete:       true,
 	EditorAutoCompleteMask:   "*.go;*.c;*.cpp;*.h;*.hpp;*.py;*.js;*.ts;*.rs;*.java;*.sh;*.txt;*.md;*.html;*.css;*.json",
 	EditorExpandTabs:         0,
@@ -358,6 +360,11 @@ func LoadConfig() {
 	}
 	AppConfig.SearchCommandStayFocused = ini.GetString("Panel", "SearchCommandStayFocused", "0") == "1"
 	AppConfig.SyncPanelLoad = ini.GetString("Panel", "SyncPanelLoad", "0") == "1"
+	AppConfig.ApplyCommandParallelism = runtime.NumCPU()
+	fmt.Sscanf(ini.GetString("Panel", "ApplyCommandParallelism", fmt.Sprintf("%d", runtime.NumCPU())), "%d", &AppConfig.ApplyCommandParallelism)
+	if AppConfig.ApplyCommandParallelism < 0 {
+		AppConfig.ApplyCommandParallelism = runtime.NumCPU()
+	}
 	fmt.Sscanf(ini.GetString("Panel", "DefaultFileOpMode", "0"), "%d", &AppConfig.DefaultFileOpMode)
 	AppConfig.ConfirmCopy = ini.GetString("System", "ConfirmCopy", "1") == "1"
 	AppConfig.ConfirmMove = ini.GetString("System", "ConfirmMove", "1") == "1"
@@ -494,6 +501,7 @@ func SaveConfig() {
 	// Keep the legacy key synchronized for older f4 versions and shared configs.
 	sb.WriteString(fmt.Sprintf("VimHotkeys = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.NavigationMode == NavigationVim]))
 	sb.WriteString(fmt.Sprintf("SyncPanelLoad = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.SyncPanelLoad]))
+	sb.WriteString(fmt.Sprintf("ApplyCommandParallelism = %d\n", AppConfig.ApplyCommandParallelism))
 	sb.WriteString(fmt.Sprintf("DefaultFileOpMode = %d\n", AppConfig.DefaultFileOpMode))
 	sb.WriteString(fmt.Sprintf("FileOpPathDisplay = %d\n", AppConfig.FileOpPathDisplay))
 
