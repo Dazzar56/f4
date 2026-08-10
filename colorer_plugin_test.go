@@ -10,6 +10,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
+
+	"github.com/unxed/f4/piecetable"
 
 	"github.com/unxed/vtui"
 )
@@ -48,27 +51,66 @@ func TestColorer_SchemasExist(t *testing.T) {
 	_ = SchemasExist()
 }
 
-func TestColorer_UTF16ToRuneIndex(t *testing.T) {
+func TestColorer_RegionOffsetsAreRuneIndices(t *testing.T) {
+	// Colorer counts code points, so the last character of this line is rune
+	// 2 of 3. The old code read the offsets as UTF-16 units and mapped them
+	// through a surrogate aware table, which turned the pair (2, 3) into
+	// (1, 2): every colour after the emoji landed one position to the left
+	// and stayed there to the end of the line.
+	const line = "a\U0001F600b"
+
+	if got := colorerLineRuneCount(line); got != 3 {
+		t.Fatalf("Expected 3 attributes for %q, got %d", line, got)
+	}
+	if got := colorerLineRuneCount(line); got != utf8.RuneCountInString(line) {
+		t.Errorf("Expected the attribute count to follow the rune count, got %d", got)
+	}
+
 	cases := []struct {
-		line string
-		want []int
+		start, end, lineRunes int
+		wantStart, wantEnd    int
+		wantEOL               bool
 	}{
-		{"", []int{0}},
-		{"abc", []int{0, 1, 2, 3}},
-		{"aé b", []int{0, 1, 2, 3, 4}},
-		{"a\U0001F600b", []int{0, 1, 1, 2, 3}},
+		{2, 3, 3, 2, 3, false},
+		{0, 1, 3, 0, 1, false},
+		{1, -1, 3, 1, 3, true},
+		{0, 9, 3, 0, 3, false},
+		{-4, 2, 3, 0, 2, false},
+		{5, 9, 3, 3, 3, false},
+		{2, 1, 3, 2, 2, false},
 	}
 	for _, c := range cases {
-		got := colorerUTF16ToRuneIndex(c.line)
-		if len(got) != len(c.want) {
-			t.Errorf("Line %q mapped to %v, expected %v", c.line, got, c.want)
-			continue
+		start, end, eol := colorerRegionRunes(c.start, c.end, c.lineRunes)
+		if start != c.wantStart || end != c.wantEnd || eol != c.wantEOL {
+			t.Errorf("colorerRegionRunes(%d, %d, %d) = (%d, %d, %v), expected (%d, %d, %v)",
+				c.start, c.end, c.lineRunes,
+				start, end, eol,
+				c.wantStart, c.wantEnd, c.wantEOL)
 		}
-		for i := range c.want {
-			if got[i] != c.want[i] {
-				t.Errorf("Line %q mapped to %v, expected %v", c.line, got, c.want)
-				break
-			}
+	}
+}
+
+func TestColorer_AttributesLandOnTheCellsAfterAnEmoji(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	// Runes: 'a', the emoji, 'b', 'c'.
+	// Cells: 'a', the emoji, its filler, 'b', 'c'.
+	text := []byte("a\U0001F600bc")
+	pt := piecetable.New(text)
+	ev := NewEditorView(pt, nil, "test.txt")
+	defer ev.Close()
+
+	const hot = uint64(0x40)
+	syntax := []uint64{0, 0, hot, hot}
+
+	cells := ev.fillCells(nil, text, 0, 0, 0, false, 0, 0, syntax, 0, false, -1, 0, 0, 0)
+	if len(cells) != 5 {
+		t.Fatalf("Expected 5 cells for %q, got %d", text, len(cells))
+	}
+	for i, want := range []uint64{0, 0, 0, hot, hot} {
+		if cells[i].Attributes != want {
+			t.Errorf("Cell %d carries attribute %#x, expected %#x", i, cells[i].Attributes, want)
 		}
 	}
 }

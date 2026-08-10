@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	colorer "github.com/unxed/colorer4go"
 	"github.com/unxed/vtui"
@@ -45,17 +46,45 @@ func applyColorerStyle(base uint64, style *colorer.RegionDefine) uint64 {
 	return attr
 }
 
-func colorerUTF16ToRuneIndex(line string) []int {
-	index := make([]int, 0, len(line)+1)
-	runeIdx := 0
-	for _, r := range line {
-		index = append(index, runeIdx)
-		if r > 0xFFFF {
-			index = append(index, runeIdx)
-		}
-		runeIdx++
+// colorerLineRuneCount reports how many indexing units Colorer uses for a
+// line, which is also how many attributes the editor needs for it.
+//
+// Colorer keeps a line in its legacy UnicodeString, one element per code
+// point. Its UTF-8 decoder in strings/legacy/CString.cpp writes a whole
+// decoded code point into a single wchar_t, 32 bits wide under wasi-sdk, and
+// never builds a surrogate pair; strings/legacy/Character.h states that the
+// library has no surrogate support at all. Region offsets are therefore rune
+// indices. They are not UTF-16 unit indices, which is what this file used to
+// assume, and the difference showed as colours sliding one position left
+// after every astral character on the line and staying there.
+//
+// Malformed UTF-8 is the one place the two counts can still drift: Go yields
+// one replacement rune per bad byte, while Colorer's decoder swallows the
+// continuation bytes of a truncated sequence. See REVIEW.md.
+func colorerLineRuneCount(line string) int {
+	return utf8.RuneCountInString(line)
+}
+
+// colorerRegionRunes fits a region Colorer reported onto the attribute slice
+// of a line holding lineRunes runes. The offsets pass through unchanged,
+// because they are already rune indices; only the clamping is work. A
+// negative end means the region runs to the end of the line, which the caller
+// also paints the rest of the row with, so it is reported through toEOL.
+func colorerRegionRunes(start, end, lineRunes int) (int, int, bool) {
+	toEOL := end < 0
+	if toEOL || end > lineRunes {
+		end = lineRunes
 	}
-	return append(index, runeIdx)
+	if start < 0 {
+		start = 0
+	}
+	if start > lineRunes {
+		start = lineRunes
+	}
+	if end < start {
+		end = start
+	}
+	return start, end, toEOL
 }
 
 func colorerLineIndex(prevState any, known int) int {
@@ -533,51 +562,32 @@ func (ch *ColorerHighlighter) Highlight(line string, prevState any, baseAttr uin
 		return nil, logIdx
 	}
 
-	unitToRune := colorerUTF16ToRuneIndex(line)
-	lineUnits := len(unitToRune) - 1
-	attrs := make([]uint64, unitToRune[lineUnits])
+	lineRunes := colorerLineRuneCount(line)
+	attrs := make([]uint64, lineRunes)
 	for i := range attrs {
 		attrs[i] = baseAttr
 	}
 
 	eolBg := baseAttr
 	for _, reg := range regions {
-		start, end := reg.Start, reg.End
-		if start < 0 {
-			start = 0
-		}
-		if end < 0 {
-			if AppConfig.EditorColorerSyntax {
-				rd := colorer.RegionDefine{
-					Fore:      reg.Fore,
-					Back:      reg.Back,
-					Style:     reg.Style,
-					IsForeSet: reg.IsForeSet,
-					IsBackSet: reg.IsBackSet,
-				}
-				eolBg = applyColorerStyle(eolBg, &rd)
-			}
-			end = lineUnits
-		} else if end > lineUnits {
-			end = lineUnits
-		}
-		if start >= end {
+		if !AppConfig.EditorColorerSyntax {
 			continue
 		}
-		startRune := unitToRune[start]
-		endRune := unitToRune[end]
 
-		if AppConfig.EditorColorerSyntax {
-			rd := colorer.RegionDefine{
-				Fore:      reg.Fore,
-				Back:      reg.Back,
-				Style:     reg.Style,
-				IsForeSet: reg.IsForeSet,
-				IsBackSet: reg.IsBackSet,
-			}
-			for i := startRune; i < endRune && i < len(attrs); i++ {
-				attrs[i] = applyColorerStyle(attrs[i], &rd)
-			}
+		start, end, toEOL := colorerRegionRunes(reg.Start, reg.End, lineRunes)
+		rd := colorer.RegionDefine{
+			Fore:      reg.Fore,
+			Back:      reg.Back,
+			Style:     reg.Style,
+			IsForeSet: reg.IsForeSet,
+			IsBackSet: reg.IsBackSet,
+		}
+
+		if toEOL {
+			eolBg = applyColorerStyle(eolBg, &rd)
+		}
+		for i := start; i < end; i++ {
+			attrs[i] = applyColorerStyle(attrs[i], &rd)
 		}
 	}
 
