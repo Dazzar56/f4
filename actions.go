@@ -1046,7 +1046,7 @@ func actionViewerSearch(vv *ViewerView) {
 			dlg := vtui.NewCenteredDialog(50, 8, title)
 			lbl := vtui.NewLabel(0, 0, msg, nil)
 			dlg.AddItem(lbl)
-			btnCancel := vtui.NewButton(0, 0, "&Cancel")
+			btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
 			dlg.AddItem(btnCancel)
 
 			vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 50-4, 8-4)
@@ -1460,7 +1460,7 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 	}
 	dlg.AddItem(btnOk)
 
-	btnCancel := vtui.NewButton(0, 0, "Cancel")
+	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
 	btnCancel.OnClick = func() { dlg.Close() }
 	dlg.AddItem(btnCancel)
 
@@ -1807,7 +1807,7 @@ func actionDelete(pf *PanelsFrame) {
 	vbox.Add(comboMode, vtui.Margins{Top: 1}, vtui.AlignCenter)
 
 	btnDel := vtui.NewButton(0, 0, Msg("Delete.Btn"))
-	btnCancel := vtui.NewButton(0, 0, "Cancel")
+	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
 
 	if AppConfig.DeleteCancelFocused {
 		btnCancel.IsDefault = true
@@ -1870,9 +1870,9 @@ func actionMkDir(pf *PanelsFrame) {
 	comboMode.Edit.SetText(modes[defMode])
 	dlg.AddItem(comboMode)
 
-	btnOk := vtui.NewButton(0, 0, "&Ok")
+	btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))
 	btnOk.IsDefault = true
-	btnCancel := vtui.NewButton(0, 0, "Cancel")
+	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnCancel)
 
@@ -2902,16 +2902,16 @@ func actionManagePlugins(pf *PanelsFrame) {
 
 func showPluginFileDialog(parent *vtui.Window, startPath string, onSelect func(string)) {
 	w, h := 70, 22
-	dlg := vtui.NewCenteredDialog(w, h, " Add Plugin ")
+	dlg := vtui.NewCenteredDialog(w, h, Msg("Plugins.AddTitle"))
 	dlg.ShowClose = true
 
-	lbl := vtui.NewLabel(0, 0, "Select plugin file:", nil)
+	lbl := vtui.NewLabel(0, 0, Msg("Plugins.SelectFilePrompt"), nil)
 	edit := vtui.NewEdit(0, 0, w-4, startPath)
 	lb := vtui.NewListBox(0, 0, w-4, h-10, nil)
 
-	btnOk := vtui.NewButton(0, 0, "&Ok")
+	btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))
 	btnOk.IsDefault = true
-	btnCancel := vtui.NewButton(0, 0, "Cancel")
+	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
 
 	dlg.AddItem(lbl)
 	dlg.AddItem(edit)
