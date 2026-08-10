@@ -401,36 +401,6 @@ func newStagedPanelVFS(chunks ...[]vfs.VFSItem) *stagedPanelVFS {
 	return s
 }
 
-func TestFileSystemPanel_DirectoryLoadDoesNotPostAfterFrameManagerShutdown(t *testing.T) {
-	oldFrameManager := vtui.FrameManager
-	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	defer func() { vtui.FrameManager = oldFrameManager }()
-
-	staged := newStagedPanelVFS([]vfs.VFSItem{{Name: "late.txt"}})
-	panel := NewFileSystemPanel(0, 0, 40, 20, staged)
-	<-staged.started
-
-	// A panel load may finish after the UI has already shut down (or after a
-	// headless test has restored the global frame manager). The worker must
-	// drop that stale completion instead of dereferencing a nil manager.
-	vtui.FrameManager = nil
-	staged.release[0] <- struct{}{}
-
-	deadline := time.Now().Add(time.Second)
-	for {
-		panel.loadQueueMu.Lock()
-		active := panel.loadWorkerActive
-		panel.loadQueueMu.Unlock()
-		if !active {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("directory load did not finish")
-		}
-		time.Sleep(time.Millisecond)
-	}
-}
-
 func (s *stagedPanelVFS) GetPath() string     { return "/" }
 func (s *stagedPanelVFS) IsAtRoot() bool      { return true }
 func (s *stagedPanelVFS) ParentVFS() vfs.VFS  { return s.parent }

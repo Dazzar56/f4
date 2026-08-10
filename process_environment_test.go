@@ -577,11 +577,15 @@ func TestPanelsFrameEnvironmentBusyDefersCoalescesAndAcknowledges(t *testing.T) 
 	pf.closeProcessEnvironmentShell()
 }
 
-func TestPanelsFrameEnvironmentGatesLocalInputAndLeavesRemoteUntouched(t *testing.T) {
-	oldFrameManager := vtui.FrameManager
-	vtui.FrameManager = nil
-	defer func() { vtui.FrameManager = oldFrameManager }()
+func runProcessEnvironmentUIInline(t *testing.T) {
+	t.Helper()
+	previous := processEnvironmentRunOnUI
+	processEnvironmentRunOnUI = func(task func()) { task() }
+	t.Cleanup(func() { processEnvironmentRunOnUI = previous })
+}
 
+func TestPanelsFrameEnvironmentGatesLocalInputAndLeavesRemoteUntouched(t *testing.T) {
+	runProcessEnvironmentUIInline(t)
 	local := &processEnvironmentPTY{}
 	remote := &processEnvironmentPTY{}
 	pf := &PanelsFrame{pty: local, termView: NewTerminalView(80, 24)}
@@ -613,9 +617,7 @@ func TestPanelsFrameEnvironmentGatesLocalInputAndLeavesRemoteUntouched(t *testin
 }
 
 func TestPanelsFrameEnvironmentPrepareFailureGatesInputUntilRetry(t *testing.T) {
-	oldFrameManager := vtui.FrameManager
-	vtui.FrameManager = nil
-	defer func() { vtui.FrameManager = oldFrameManager }()
+	runProcessEnvironmentUIInline(t)
 	originalPreparer := processEnvironmentPayloadPreparer
 	prepareFailed := true
 	processEnvironmentPayloadPreparer = func(changes []vfs.ProcessEnvironmentChange) (processEnvironmentShellPayload, error) {
@@ -660,10 +662,7 @@ func TestPanelsFrameEnvironmentPrepareFailureGatesInputUntilRetry(t *testing.T) 
 }
 
 func TestPanelsFrameEnvironmentWriteFailureGatesInputUntilRetry(t *testing.T) {
-	oldFrameManager := vtui.FrameManager
-	vtui.FrameManager = nil
-	defer func() { vtui.FrameManager = oldFrameManager }()
-
+	runProcessEnvironmentUIInline(t)
 	local := &processEnvironmentPTY{err: errors.New("injected PTY write failure")}
 	pf := &PanelsFrame{pty: local, termView: NewTerminalView(80, 24)}
 	pf.queueProcessEnvironment(6, []vfs.ProcessEnvironmentChange{{Name: "WRITE_RETRY", Value: "private"}}, true)
@@ -691,10 +690,7 @@ func TestPanelsFrameEnvironmentWriteFailureGatesInputUntilRetry(t *testing.T) {
 }
 
 func TestPanelsFrameEnvironmentSerializesParserReplies(t *testing.T) {
-	oldFrameManager := vtui.FrameManager
-	vtui.FrameManager = nil
-	defer func() { vtui.FrameManager = oldFrameManager }()
-
+	runProcessEnvironmentUIInline(t)
 	local := &processEnvironmentPTY{}
 	remote := &processEnvironmentPTY{}
 	pf := &PanelsFrame{pty: local, termView: NewTerminalView(80, 24)}
@@ -726,10 +722,7 @@ func TestPanelsFrameEnvironmentSerializesParserReplies(t *testing.T) {
 }
 
 func TestPanelsFrameEnvironmentFailureKeepsInputUntilSuccessfulRetry(t *testing.T) {
-	oldFrameManager := vtui.FrameManager
-	vtui.FrameManager = nil
-	defer func() { vtui.FrameManager = oldFrameManager }()
-
+	runProcessEnvironmentUIInline(t)
 	local := &processEnvironmentPTY{}
 	pf := &PanelsFrame{pty: local, termView: NewTerminalView(80, 24)}
 	pf.queueProcessEnvironment(4, []vfs.ProcessEnvironmentChange{{Name: "RETRY_ME", Value: "private"}}, true)
@@ -776,9 +769,7 @@ func TestPanelsFrameEnvironmentFailureKeepsInputUntilSuccessfulRetry(t *testing.
 }
 
 func TestPanelsFrameEnvironmentAcknowledgementTimeoutKeepsDeferredInput(t *testing.T) {
-	oldFrameManager := vtui.FrameManager
-	vtui.FrameManager = nil
-	defer func() { vtui.FrameManager = oldFrameManager }()
+	runProcessEnvironmentUIInline(t)
 	oldTimeout := processEnvironmentAcknowledgementTimeout
 	processEnvironmentAcknowledgementTimeout = 15 * time.Millisecond
 	defer func() { processEnvironmentAcknowledgementTimeout = oldTimeout }()
@@ -815,10 +806,7 @@ func TestPanelsFrameEnvironmentAcknowledgementTimeoutKeepsDeferredInput(t *testi
 }
 
 func TestPanelsFrameExplicitBusyNeverExpiresFromBackendIdle(t *testing.T) {
-	oldFrameManager := vtui.FrameManager
-	vtui.FrameManager = nil
-	defer func() { vtui.FrameManager = oldFrameManager }()
-
+	runProcessEnvironmentUIInline(t)
 	local := &processEnvironmentPTY{busy: false}
 	pf := &PanelsFrame{pty: local, termView: NewTerminalView(80, 24)}
 	pf.noteLocalShellBusy(true)
@@ -921,9 +909,6 @@ func TestPanelsFrameCloseCleansItsOwnedRuntimeFiles(t *testing.T) {
 }
 
 func TestProcessEnvironmentShutdownCleansExactSession(t *testing.T) {
-	oldFrameManager := vtui.FrameManager
-	vtui.FrameManager = nil
-	defer func() { vtui.FrameManager = oldFrameManager }()
 	if err := initializeProcessEnvironmentRuntime(); err != nil {
 		t.Fatal(err)
 	}

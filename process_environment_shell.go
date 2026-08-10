@@ -488,6 +488,14 @@ func (pf *PanelsFrame) noteLocalShellCommandInput(data []byte, err error) {
 
 const processEnvironmentMarkerPrefix = "\x1b]133;"
 
+var processEnvironmentRunOnUI = func(task func()) {
+	if frameManager := vtui.FrameManager; frameManager != nil {
+		frameManager.PostTask(task)
+		return
+	}
+	task()
+}
+
 func (pf *PanelsFrame) processEnvironmentShellOutput(data []byte) {
 	pf.processEnvironmentMu.Lock()
 	combined := append(append([]byte(nil), pf.processEnvironmentOutputTail...), data...)
@@ -535,12 +543,7 @@ func (pf *PanelsFrame) processEnvironmentShellOutput(data []byte) {
 			pf.noteLocalShellBusy(true)
 		case marker == "D" || strings.HasPrefix(marker, "D;"):
 			pf.noteLocalShellBusy(false)
-			flush := func() { pf.catchUpProcessEnvironment(true) }
-			if vtui.FrameManager != nil {
-				vtui.FrameManager.PostTask(flush)
-			} else {
-				flush()
-			}
+			processEnvironmentRunOnUI(func() { pf.catchUpProcessEnvironment(true) })
 		case strings.HasPrefix(marker, "E;"):
 			parts := strings.Split(strings.TrimPrefix(marker, "E;"), ";")
 			if len(parts) == 2 && (parts[1] == "0" || parts[1] == "1") {
@@ -602,11 +605,7 @@ func (pf *PanelsFrame) completeProcessEnvironmentShellUpdate(token string, succe
 		}
 		return
 	}
-	if vtui.FrameManager != nil {
-		vtui.FrameManager.PostTask(release)
-	} else {
-		release()
-	}
+	processEnvironmentRunOnUI(release)
 }
 
 func (pf *PanelsFrame) releaseDeferredProcessEnvironmentInput(flushPending bool) {
