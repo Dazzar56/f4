@@ -2762,7 +2762,7 @@ func actionImportFar2lHistory(pf *PanelsFrame) {
 func actionAppearanceSettings(pf *PanelsFrame) {
 	// One row shaved by dropping the blank between the two trailing
 	// checkboxes (see #298).
-	const width, height = 64, 24
+	const width, height = 64, 26
 	dlg := vtui.NewCenteredDialog(width, height, Msg("AppearanceSettings.Title"))
 	dlg.ShowClose = true
 	// Snapshot the whole palette (not just the style name) so a
@@ -2801,6 +2801,17 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 	}
 	editFont := vtui.NewEdit(0, 0, 30, AppConfig.GuiFont)
 	lblFont := vtui.NewLabel(0, 0, Msg("AppearanceSettings.Font"), editFont)
+	chkSystemMonospace := vtui.NewCheckbox(0, 0, Msg("AppearanceSettings.UseSystemMonospace"), false)
+	if AppConfig.GuiUseSystemMonospace {
+		chkSystemMonospace.State = 1
+	}
+	updateFontEditor := func() {
+		usePlatformFont := chkSystemMonospace.State == 1 && (runtime.GOOS == "windows" || runtime.GOOS == "darwin")
+		lblFont.SetDisabled(usePlatformFont)
+		editFont.SetDisabled(usePlatformFont)
+	}
+	chkSystemMonospace.OnChange = func(int) { updateFontEditor() }
+	updateFontEditor()
 
 	editSize := vtui.NewEdit(0, 0, 6, fmt.Sprintf("%d", AppConfig.GuiFontSize))
 	editSize.Validator = &vtui.IntRangeValidator{Min: 6, Max: 72}
@@ -2862,6 +2873,7 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 
 	dlg.AddItem(lblStyle)
 	dlg.AddItem(comboStyle)
+	dlg.AddItem(chkSystemMonospace)
 	dlg.AddItem(lblFont)
 	dlg.AddItem(editFont)
 	dlg.AddItem(lblSize)
@@ -2885,6 +2897,7 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 	rowStyle.Add(comboStyle, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(rowStyle, vtui.Margins{}, vtui.AlignFill)
 
+	vbox.Add(chkSystemMonospace, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(lblFont, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(editFont, vtui.Margins{}, vtui.AlignFill)
 
@@ -2935,13 +2948,15 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 		if len(names) > 0 {
 			AppConfig.ColorStyle = names[comboStyle.Menu.SelectPos]
 		}
-		fontChanged := AppConfig.GuiFont != editFont.GetText() || fmt.Sprintf("%d", AppConfig.GuiFontSize) != editSize.GetText()
+		useSystemMonospace := chkSystemMonospace.State == 1
+		fontChanged := AppConfig.GuiUseSystemMonospace != useSystemMonospace || AppConfig.GuiFont != editFont.GetText() || fmt.Sprintf("%d", AppConfig.GuiFontSize) != editSize.GetText()
 
 		AppConfig.ConsoleTitleTemplate = editTitle.GetText()
+		AppConfig.GuiUseSystemMonospace = useSystemMonospace
 		AppConfig.GuiFont = editFont.GetText()
 		fmt.Sscanf(editSize.GetText(), "%d", &AppConfig.GuiFontSize)
 		if AppConfig.GuiFontSize <= 0 {
-			AppConfig.GuiFontSize = 18
+			AppConfig.GuiFontSize = defaultGuiFontSize(runtime.GOOS)
 		}
 		AppConfig.KeepTerminalCursor = chkCursor.State == 1
 		vtui.ManageCursorStyle = !AppConfig.KeepTerminalCursor

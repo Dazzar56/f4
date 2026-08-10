@@ -1030,12 +1030,18 @@ func TestEditorView_GetTitle(t *testing.T) {
 	if ev1.GetTitle() != "Edit: syslog" {
 		t.Errorf("GetTitle failed for valid path: %s", ev1.GetTitle())
 	}
+	if ev1.GetWorkspaceTabTitle() != "✎ syslog" {
+		t.Errorf("GetWorkspaceTabTitle failed for valid path: %s", ev1.GetWorkspaceTabTitle())
+	}
 
 	// Without path
 	ev2 := NewEditorView(pt, nil, "")
 	defer ev2.Close()
 	if ev2.GetTitle() != "Editor" {
 		t.Errorf("GetTitle failed for empty path: %s", ev2.GetTitle())
+	}
+	if ev2.GetWorkspaceTabTitle() != "✎ Editor" {
+		t.Errorf("GetWorkspaceTabTitle failed for empty path: %s", ev2.GetWorkspaceTabTitle())
 	}
 
 	// Internal editor workflows can hide a temporary filename.
@@ -1044,6 +1050,9 @@ func TestEditorView_GetTitle(t *testing.T) {
 	ev3.DisplayTitle = "Rename list of files"
 	if ev3.GetTitle() != "Rename list of files" {
 		t.Errorf("GetTitle ignored DisplayTitle: %s", ev3.GetTitle())
+	}
+	if ev3.GetWorkspaceTabTitle() != "✎ Rename list of files" {
+		t.Errorf("GetWorkspaceTabTitle ignored DisplayTitle: %s", ev3.GetWorkspaceTabTitle())
 	}
 }
 func TestViewerView_CodepageSwitch_Crash(t *testing.T) {

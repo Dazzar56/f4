@@ -3510,6 +3510,19 @@ func (ev *EditorView) GetTitle() string {
 	}
 	return "Editor"
 }
+
+// GetWorkspaceTabTitle provides a compact, icon-led title for the workspace
+// tab bar while leaving GetTitle available for contexts that need the fuller
+// textual description.
+func (ev *EditorView) GetWorkspaceTabTitle() string {
+	if ev.DisplayTitle != "" {
+		return "✎ " + ev.DisplayTitle
+	}
+	if ev.filePath != "" {
+		return "✎ " + filepath.Base(ev.filePath)
+	}
+	return "✎ Editor"
+}
 func (ev *EditorView) Search(pattern string, caseSensitive, reverse, regexp, wholeWord, next bool) {
 	if pattern == "" {
 		return

@@ -1625,6 +1625,46 @@ func TestActionAppearanceSettings_SaveCursor(t *testing.T) {
 	}
 }
 
+func TestActionAppearanceSettingsSavesSystemMonospace(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	oldConfig := AppConfig
+	oldPath := getUserConfigIniPath
+	getUserConfigIniPath = func() string { return filepath.Join(t.TempDir(), "settings.ini") }
+	defer func() {
+		AppConfig = oldConfig
+		getUserConfigIniPath = oldPath
+	}()
+	AppConfig.GuiUseSystemMonospace = true
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	actionAppearanceSettings(pf)
+	top := vtui.FrameManager.GetTopFrame().(vtui.Container)
+
+	var systemFont *vtui.Checkbox
+	for _, child := range top.GetChildren() {
+		checkbox, ok := child.(*vtui.Checkbox)
+		if ok && checkbox.GetText() == Msg("AppearanceSettings.UseSystemMonospace") {
+			systemFont = checkbox
+			break
+		}
+	}
+	if systemFont == nil {
+		t.Fatal("system monospace checkbox not found in Appearance Settings")
+	}
+	if systemFont.State != 1 {
+		t.Fatal("system monospace checkbox must be enabled by default")
+	}
+	systemFont.Toggle()
+	clickDialogButton(t, top, "Ok")
+	if AppConfig.GuiUseSystemMonospace {
+		t.Fatal("system monospace setting was not saved")
+	}
+}
+
 // TestActionAppearanceSettings_CancelPreservesPalette locks in the
 // fix: farcolors.ini overrides applied at startup were wiped when
 // the user opened Appearance settings and pressed Cancel, because

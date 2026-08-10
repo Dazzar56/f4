@@ -556,6 +556,7 @@ PanelSettings.TerminalCtrlNWorkspace=Use Ctrl+N in terminal to &clone panels
 
 AppearanceSettings.Title= Appearance settings
 AppearanceSettings.Style=Application &style:
+AppearanceSettings.UseSystemMonospace=Use &system monospace font
 AppearanceSettings.Font=GUI F&ont (Path/Name):
 AppearanceSettings.FontSize=GUI Font Si&ze:
 AppearanceSettings.TitleTemplate=Window &Title Template:

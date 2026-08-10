@@ -164,6 +164,7 @@ type F4Config struct {
 	FileOpPathDisplay        int
 	MacroRecordFormat        int
 	GuiFont                  string
+	GuiUseSystemMonospace    bool
 	GuiFontSize              int
 	GuiCols                  int
 	GuiRows                  int
@@ -249,7 +250,8 @@ var AppConfig = F4Config{
 	DefaultFileOpMode:        0,
 	FileOpPathDisplay:        0,
 	GuiFont:                  "",
-	GuiFontSize:              18,
+	GuiUseSystemMonospace:    true,
+	GuiFontSize:              defaultGuiFontSize(runtime.GOOS),
 	GuiCols:                  100,
 	GuiRows:                  30,
 	ConsoleTitleTemplate:     "f4 %Ver %Platform %Admin - %State",
@@ -376,9 +378,11 @@ func LoadConfig() {
 	fmt.Sscanf(ini.GetString("System", "MacroRecordFormat", "0"), "%d", &AppConfig.MacroRecordFormat)
 	fmt.Sscanf(ini.GetString("Panel", "FileOpPathDisplay", "0"), "%d", &AppConfig.FileOpPathDisplay)
 	AppConfig.GuiFont = ini.GetString("Appearance", "GuiFont", "")
-	fmt.Sscanf(ini.GetString("Appearance", "GuiFontSize", "18"), "%d", &AppConfig.GuiFontSize)
+	AppConfig.GuiUseSystemMonospace = ini.GetString("Appearance", "GuiUseSystemMonospace", "1") == "1"
+	defaultFontSize := defaultGuiFontSize(runtime.GOOS)
+	fmt.Sscanf(ini.GetString("Appearance", "GuiFontSize", fmt.Sprintf("%d", defaultFontSize)), "%d", &AppConfig.GuiFontSize)
 	if AppConfig.GuiFontSize <= 0 {
-		AppConfig.GuiFontSize = 18
+		AppConfig.GuiFontSize = defaultFontSize
 	}
 	fmt.Sscanf(ini.GetString("Appearance", "GuiCols", "100"), "%d", &AppConfig.GuiCols)
 	if AppConfig.GuiCols <= 0 {
@@ -520,6 +524,7 @@ func SaveConfig() {
 
 	sb.WriteString("\n[Appearance]\n")
 	sb.WriteString(fmt.Sprintf("GuiFont = %s\n", AppConfig.GuiFont))
+	sb.WriteString(fmt.Sprintf("GuiUseSystemMonospace = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.GuiUseSystemMonospace]))
 	sb.WriteString(fmt.Sprintf("GuiFontSize = %d\n", AppConfig.GuiFontSize))
 	sb.WriteString(fmt.Sprintf("GuiCols = %d\n", AppConfig.GuiCols))
 	sb.WriteString(fmt.Sprintf("GuiRows = %d\n", AppConfig.GuiRows))

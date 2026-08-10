@@ -988,3 +988,13 @@ func (vv *ViewerView) GetTitle() string {
 	}
 	return "Viewer"
 }
+
+// GetWorkspaceTabTitle provides a compact, icon-led title for the workspace
+// tab bar while leaving GetTitle available for contexts that need the fuller
+// textual description.
+func (vv *ViewerView) GetWorkspaceTabTitle() string {
+	if vv.path != "" {
+		return "👁  " + filepath.Base(vv.path)
+	}
+	return "👁  Viewer"
+}
