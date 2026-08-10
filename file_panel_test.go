@@ -657,6 +657,10 @@ done2:
 	}
 }
 func TestFileSystemPanel_SelectedInfo(t *testing.T) {
+	oldCfg := AppConfig
+	defer func() { AppConfig = oldCfg }()
+	AppConfig.ShowPanelFileInfo = true
+
 	vtui.SetDefaultPalette()
 	SetDefaultF4Palette()
 	scr := vtui.NewSilentScreenBuf()
@@ -708,6 +712,18 @@ func TestFileSystemPanel_SelectedInfo(t *testing.T) {
 		t.Errorf("Expected bottom bar to contain 'folders:1', got: %q", result)
 	}
 
+	// Hiding the separate file-information line must not hide the selection
+	// summary drawn directly on the panel's bottom border.
+	AppConfig.ShowPanelFileInfo = false
+	fp.SetPosition(0, 0, 79, 23)
+	fp.Show(scr)
+	if cell = scr.GetCell(40, 23); cell.Attributes != vtui.Palette[ColPanelSelectedInfo] {
+		t.Errorf("selected summary disappeared with file info hidden: got color %X", cell.Attributes)
+	}
+	if cell = scr.GetCell(0, 21); cell.Char == '├' {
+		t.Error("file-information separator remained visible when the option was disabled")
+	}
+
 	// Clear selection to check ColPanelTotalInfo
 	for _, e := range fp.entries {
 		e.Selected = false
@@ -723,6 +739,10 @@ func TestFileSystemPanel_SelectedInfo(t *testing.T) {
 }
 
 func TestFileSystemPanel_Initialization(t *testing.T) {
+	oldCfg := AppConfig
+	defer func() { AppConfig = oldCfg }()
+	AppConfig.ShowPanelFileInfo = false
+
 	if ViewModeMedium != 0 || ViewModeDetailed != 1 {
 		t.Fatalf("legacy view mode values changed: Medium=%d Detailed=%d", ViewModeMedium, ViewModeDetailed)
 	}
@@ -737,11 +757,15 @@ func TestFileSystemPanel_Initialization(t *testing.T) {
 	// Internal table must match panel interior (excluding borders)
 	tx1, ty1, tx2, ty2 := fp.table.GetPosition()
 	expectedTy2 := y + h - 2
-	if h > 6 {
-		expectedTy2 = y + h - 4
-	}
 	if tx1 != x+1 || ty1 != y+1 || tx2 != x+w-2 || ty2 != expectedTy2 {
 		t.Errorf("Internal table coordinates mismatch: got (%d,%d)-(%d,%d)", tx1, ty1, tx2, ty2)
+	}
+
+	AppConfig.ShowPanelFileInfo = true
+	fp.SetPosition(x, y, x+w-1, y+h-1)
+	_, _, _, ty2 = fp.table.GetPosition()
+	if expected := y + h - 4; ty2 != expected {
+		t.Errorf("table bottom with status info = %d, want %d", ty2, expected)
 	}
 
 	if fp.viewMode != ViewModeMedium {
