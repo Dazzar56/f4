@@ -1551,7 +1551,7 @@ func actionCopyInPlace(pf *PanelsFrame) {
 func actionEditorSettings(pf *PanelsFrame) {
 	// Height sized so the 3×2 checkbox grid stacks tight (no blank
 	// rows between rows of the grid). See #298.
-	width, height := 94, 25
+	width, height := 78, 25
 	dlg := vtui.NewCenteredDialog(width, height, Msg("EditorSettings.Title"))
 	dlg.ShowClose = true
 
@@ -2143,7 +2143,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 	// transitions between widget kinds (checkbox↔combo↔radio↔button)
 	// so groups still read as groups.
 	const dialogHeight = 32
-	dlg := vtui.NewCenteredDialog(72, dialogHeight, Msg("PanelSettings.Title"))
+	dlg := vtui.NewCenteredDialog(60, dialogHeight, Msg("PanelSettings.Title"))
 	dlg.ShowClose = true
 
 	chkHidden := vtui.NewCheckbox(0, 0, Msg("PanelSettings.ShowHidden"), false)
@@ -2286,7 +2286,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnCancel)
 
-	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 68, dialogHeight-4)
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 56, dialogHeight-4)
 	// First checkbox cluster — stack tight, no blank rows between.
 	vbox.Add(chkHidden, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkDirPrefix, vtui.Margins{}, vtui.AlignLeft)
@@ -2294,7 +2294,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 	vbox.Add(chkSeparateExtensions, vtui.Margins{}, vtui.AlignLeft)
 	// Blank row before the scrollbar combo — transition to a different
 	// widget kind, worth the visual separator.
-	rowScrollbars := vtui.NewHBoxLayout(0, 0, 68, 1)
+	rowScrollbars := vtui.NewHBoxLayout(0, 0, 56, 1)
 	rowScrollbars.Add(lblScrollbars, vtui.Margins{Right: 1}, vtui.AlignLeft)
 	rowScrollbars.Add(comboScrollbars, vtui.Margins{}, vtui.AlignFill)
 	vbox.Add(rowScrollbars, vtui.Margins{Top: 1}, vtui.AlignFill)
@@ -2311,22 +2311,22 @@ func actionPanelSettings(pf *PanelsFrame) {
 	vbox.Add(chkCPUGPU, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkEscToggle, vtui.Margins{}, vtui.AlignLeft)
 
-	rowMode := vtui.NewHBoxLayout(0, 0, 68, 1)
+	rowMode := vtui.NewHBoxLayout(0, 0, 56, 1)
 	rowMode.Add(lblMode, vtui.Margins{Right: 1}, vtui.AlignLeft)
 	rowMode.Add(comboMode, vtui.Margins{}, vtui.AlignFill)
 	vbox.Add(rowMode, vtui.Margins{Top: 1}, vtui.AlignFill)
 
-	rowPath := vtui.NewHBoxLayout(0, 0, 68, 1)
+	rowPath := vtui.NewHBoxLayout(0, 0, 56, 1)
 	rowPath.Add(lblPath, vtui.Margins{Right: 1}, vtui.AlignLeft)
 	rowPath.Add(comboPath, vtui.Margins{}, vtui.AlignFill)
 	vbox.Add(rowPath, vtui.Margins{Top: 1}, vtui.AlignFill)
 
-	rowMacro := vtui.NewHBoxLayout(0, 0, 68, 1)
+	rowMacro := vtui.NewHBoxLayout(0, 0, 56, 1)
 	rowMacro.Add(lblMacro, vtui.Margins{Right: 1}, vtui.AlignLeft)
 	rowMacro.Add(comboMacro, vtui.Margins{}, vtui.AlignFill)
 	vbox.Add(rowMacro, vtui.Margins{Top: 1}, vtui.AlignFill)
 
-	hbox := vtui.NewHBoxLayout(0, 0, 68, 1)
+	hbox := vtui.NewHBoxLayout(0, 0, 56, 1)
 	hbox.HorizontalAlign = vtui.AlignCenter
 	hbox.Spacing = 2
 	hbox.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
