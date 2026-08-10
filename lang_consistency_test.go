@@ -138,6 +138,7 @@ func TestLangConsistency(t *testing.T) {
 
 		mergedLineRe := regexp.MustCompile(`[a-zA-Z0-9_.-]+=`)
 		allowedLangs := map[string][]whatlanggo.Lang{
+			"ar": {whatlanggo.Arb, whatlanggo.Eng},
 			"be": {whatlanggo.Bel, whatlanggo.Rus, whatlanggo.Ukr, whatlanggo.Eng},
 			"cs": {whatlanggo.Ces, whatlanggo.Pol, whatlanggo.Hrv, whatlanggo.Srp, whatlanggo.Slv, whatlanggo.Eng, whatlanggo.Deu, whatlanggo.Fra, whatlanggo.Ita, whatlanggo.Spa, whatlanggo.Por, whatlanggo.Hat, whatlanggo.Nld},
 			"de": {whatlanggo.Deu, whatlanggo.Eng, whatlanggo.Nld, whatlanggo.Epo, whatlanggo.Fra, whatlanggo.Ita, whatlanggo.Spa},
