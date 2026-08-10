@@ -155,7 +155,7 @@ func plainLabel(s string) string {
 func init() {
 	withPF := func(fn func(pf *PanelsFrame)) func() bool {
 		return func() bool {
-			if pf := findPanelsFrame(); pf != nil {
+			if pf := findPanelsFrameAnyScreen(); pf != nil {
 				fn(pf)
 				return true
 			}
@@ -272,7 +272,13 @@ func init() {
 		DefaultKeys: []string{"CtrlG"},
 		MenuPath:    "Files",
 		Visible:     panelCanApplyCommand,
-		Handler:     withPF(func(pf *PanelsFrame) { actionApplyCommand(pf) }),
+		Handler: func() bool {
+			if pf := findPanelsFrame(); pf != nil {
+				actionApplyCommand(pf)
+				return true
+			}
+			return false
+		},
 	})
 	RegisterAction(Action{
 		Name:        "File.Copy",
