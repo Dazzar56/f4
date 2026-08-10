@@ -155,7 +155,7 @@ func plainLabel(s string) string {
 func init() {
 	withPF := func(fn func(pf *PanelsFrame)) func() bool {
 		return func() bool {
-			if pf := findPanelsFrameAnyScreen(); pf != nil {
+			if pf := findPanelsFrame(); pf != nil {
 				fn(pf)
 				return true
 			}
@@ -261,6 +261,18 @@ func init() {
 		DefaultAreas: []string{"Terminal"},
 		MenuPath:     "Files",
 		Handler:      withPF(func(pf *PanelsFrame) { actionNewFile(pf) }),
+	})
+	RegisterAction(Action{
+		Name:        "File.ApplyCommand",
+		Area:        "Shell",
+		Label:       "Apply command",
+		LabelKey:    "Action.File.ApplyCommand",
+		Description: "Apply a command template to selected files or the current file",
+		DescKey:     "Action.File.ApplyCommand.Desc",
+		DefaultKeys: []string{"CtrlG"},
+		MenuPath:    "Files",
+		Visible:     panelCanApplyCommand,
+		Handler:     withPF(func(pf *PanelsFrame) { actionApplyCommand(pf) }),
 	})
 	RegisterAction(Action{
 		Name:        "File.Copy",
