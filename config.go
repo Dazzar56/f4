@@ -17,6 +17,7 @@ import (
 
 var (
 	cachedF4ConfigDir string
+	cachedF4Portable  bool
 	configDirOnce     sync.Once
 )
 
@@ -43,6 +44,7 @@ func GetF4ConfigDir() string {
 		}
 
 		if !useSystemProfiles {
+			cachedF4Portable = true
 			cachedF4ConfigDir = filepath.Join(exeDir, "Profile")
 			_ = os.MkdirAll(cachedF4ConfigDir, 0755)
 		} else {
@@ -53,6 +55,14 @@ func GetF4ConfigDir() string {
 	return cachedF4ConfigDir
 }
 
+// IsPortableProfile reports whether f4.ini selected the executable-local
+// Profile directory. It shares GetF4ConfigDir's once-only detection so plugin
+// initialization cannot disagree with the directory already in use.
+func IsPortableProfile() bool {
+	_ = GetF4ConfigDir()
+	return cachedF4Portable
+}
+
 func bytesReader(p string) io.Reader {
 	b, _ := os.ReadFile(p)
 	return bytes.NewReader(b)
@@ -61,6 +71,7 @@ func bytesReader(p string) io.Reader {
 func resetConfigDirForTest() {
 	configDirOnce = sync.Once{}
 	cachedF4ConfigDir = ""
+	cachedF4Portable = false
 }
 
 type PanelScrollbarMode int
@@ -99,6 +110,9 @@ type F4Config struct {
 	FallbackLanguage         string
 	HelpLanguage             string
 	AlwaysShowMenuBar        bool
+	WorkspaceTabMode         int
+	CtrlTabShowsMenu         bool
+	AltNumberSwitchesTabs    bool
 	ShowHiddenFiles          bool
 	ShowDirPrefix            bool
 	ShowHighlightMarks       bool
@@ -108,6 +122,7 @@ type F4Config struct {
 	InfoPanelBytes           bool // Ctrl+L info panel: true = raw bytes, false = human (GiB/MiB…)
 	InfoPanelCPUGPU          bool // Ctrl+L info panel: show CPU and GPU sections (off by default)
 	EscTogglePanels          bool // ESC toggles panels visibility (Far ships this as a macro; on by default)
+	TerminalCtrlNWorkspace   bool // reserve Ctrl+N in terminal views for cloning panels to a workspace
 	KeepTerminalCursor       bool
 	AnnounceKittyTerm        bool // introduce the built-in terminal as kitty, so that image tools use the graphics protocol
 	CommandLineAutoComplete  bool
@@ -141,6 +156,7 @@ type F4Config struct {
 	ConfirmCopy              bool
 	ConfirmMove              bool
 	ConfirmDelete            bool
+	UseTrash                 bool
 	ConfirmExit              bool
 	DeleteCancelFocused      bool
 	DefaultFileOpMode        int
@@ -180,6 +196,9 @@ var AppConfig = F4Config{
 	FallbackLanguage:         "",
 	HelpLanguage:             "en",
 	AlwaysShowMenuBar:        false,
+	WorkspaceTabMode:         int(vtui.WorkspaceTabsOnCtrl),
+	CtrlTabShowsMenu:         false,
+	AltNumberSwitchesTabs:    true,
 	ShowHiddenFiles:          true,
 	ShowDirPrefix:            false,
 	ShowHighlightMarks:       false,
@@ -189,6 +208,7 @@ var AppConfig = F4Config{
 	InfoPanelBytes:           false,
 	InfoPanelCPUGPU:          false,
 	EscTogglePanels:          true,
+	TerminalCtrlNWorkspace:   true,
 	KeepTerminalCursor:       false,
 	AnnounceKittyTerm:        true,
 	CommandLineAutoComplete:  true,
@@ -221,6 +241,7 @@ var AppConfig = F4Config{
 	ConfirmCopy:              true,
 	ConfirmMove:              true,
 	ConfirmDelete:            true,
+	UseTrash:                 false,
 	ConfirmExit:              true,
 	DeleteCancelFocused:      false,
 	DefaultFileOpMode:        0,
@@ -290,6 +311,16 @@ func LoadConfig() {
 	AppConfig.HelpLanguage = ini.GetString("Interface", "HelpLanguage", "en")
 	AppConfig.ConsoleTitleTemplate = ini.GetString("Interface", "ConsoleTitleTemplate", "f4 %Ver %Platform %Admin - %State")
 	AppConfig.AlwaysShowMenuBar = ini.GetString("Interface", "AlwaysShowMenuBar", "0") == "1"
+	switch strings.ToLower(ini.GetString("Interface", "WorkspaceTabMode", "ctrl")) {
+	case "always":
+		AppConfig.WorkspaceTabMode = int(vtui.WorkspaceTabsAlways)
+	case "ctrl":
+		AppConfig.WorkspaceTabMode = int(vtui.WorkspaceTabsOnCtrl)
+	default:
+		AppConfig.WorkspaceTabMode = int(vtui.WorkspaceTabsMultiple)
+	}
+	AppConfig.CtrlTabShowsMenu = strings.EqualFold(ini.GetString("Interface", "CtrlTabMode", "direct"), "menu")
+	AppConfig.AltNumberSwitchesTabs = ini.GetString("Interface", "AltNumberSwitchesTabs", "1") != "0"
 	if AppConfig.ConsoleTitleTemplate == "f4 - %State" {
 		AppConfig.ConsoleTitleTemplate = "f4 %Ver %Platform %Admin - %State"
 	}
@@ -314,6 +345,7 @@ func LoadConfig() {
 	AppConfig.InfoPanelBytes = ini.GetString("Panel", "InfoPanelBytes", "0") == "1"
 	AppConfig.InfoPanelCPUGPU = ini.GetString("Panel", "InfoPanelCPUGPU", "0") == "1"
 	AppConfig.EscTogglePanels = ini.GetString("Panel", "EscTogglePanels", "1") == "1"
+	AppConfig.TerminalCtrlNWorkspace = ini.GetString("Panel", "TerminalCtrlNWorkspace", "1") == "1"
 	AppConfig.KeepTerminalCursor = ini.GetString("Panel", "KeepTerminalCursor", "0") == "1"
 	AppConfig.CommandLineAutoComplete = ini.GetString("Panel", "CommandLineAutoComplete", "1") == "1"
 	if mode := ini.GetString("Panel", "NavigationMode", ""); mode != "" {
@@ -330,6 +362,7 @@ func LoadConfig() {
 	AppConfig.ConfirmCopy = ini.GetString("System", "ConfirmCopy", "1") == "1"
 	AppConfig.ConfirmMove = ini.GetString("System", "ConfirmMove", "1") == "1"
 	AppConfig.ConfirmDelete = ini.GetString("System", "ConfirmDelete", "1") == "1"
+	AppConfig.UseTrash = ini.GetString("System", "UseTrash", "0") == "1"
 	AppConfig.ConfirmExit = ini.GetString("System", "ConfirmExit", "1") == "1"
 	AppConfig.DeleteCancelFocused = ini.GetString("System", "DeleteCancelFocused", "0") == "1"
 	AppConfig.AnnounceKittyTerm = ini.GetString("System", "AnnounceKittyTerm", "1") == "1"
@@ -429,7 +462,20 @@ func SaveConfig() {
 	sb.WriteString(fmt.Sprintf("FallbackLanguage = %s\n", AppConfig.FallbackLanguage))
 	sb.WriteString(fmt.Sprintf("HelpLanguage = %s\n", AppConfig.HelpLanguage))
 	sb.WriteString(fmt.Sprintf("ConsoleTitleTemplate = %s\n", AppConfig.ConsoleTitleTemplate))
-	sb.WriteString(fmt.Sprintf("AlwaysShowMenuBar = %d\n\n", map[bool]int{true: 1, false: 0}[AppConfig.AlwaysShowMenuBar]))
+	sb.WriteString(fmt.Sprintf("AlwaysShowMenuBar = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.AlwaysShowMenuBar]))
+	workspaceTabMode := "multiple"
+	if AppConfig.WorkspaceTabMode == int(vtui.WorkspaceTabsAlways) {
+		workspaceTabMode = "always"
+	} else if AppConfig.WorkspaceTabMode == int(vtui.WorkspaceTabsOnCtrl) {
+		workspaceTabMode = "ctrl"
+	}
+	ctrlTabMode := "direct"
+	if AppConfig.CtrlTabShowsMenu {
+		ctrlTabMode = "menu"
+	}
+	sb.WriteString(fmt.Sprintf("WorkspaceTabMode = %s\n", workspaceTabMode))
+	sb.WriteString(fmt.Sprintf("CtrlTabMode = %s\n", ctrlTabMode))
+	sb.WriteString(fmt.Sprintf("AltNumberSwitchesTabs = %d\n\n", map[bool]int{true: 1, false: 0}[AppConfig.AltNumberSwitchesTabs]))
 	sb.WriteString("[Panel]\n")
 	sb.WriteString(fmt.Sprintf("ShowHiddenFiles = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.ShowHiddenFiles]))
 	sb.WriteString(fmt.Sprintf("ShowDirPrefix = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.ShowDirPrefix]))
@@ -440,6 +486,7 @@ func SaveConfig() {
 	sb.WriteString(fmt.Sprintf("InfoPanelBytes = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.InfoPanelBytes]))
 	sb.WriteString(fmt.Sprintf("InfoPanelCPUGPU = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.InfoPanelCPUGPU]))
 	sb.WriteString(fmt.Sprintf("EscTogglePanels = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.EscTogglePanels]))
+	sb.WriteString(fmt.Sprintf("TerminalCtrlNWorkspace = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.TerminalCtrlNWorkspace]))
 	sb.WriteString(fmt.Sprintf("KeepTerminalCursor = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.KeepTerminalCursor]))
 	sb.WriteString(fmt.Sprintf("CommandLineAutoComplete = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.CommandLineAutoComplete]))
 	sb.WriteString(fmt.Sprintf("NavigationMode = %s\n", AppConfig.NavigationMode.String()))
@@ -454,6 +501,7 @@ func SaveConfig() {
 	sb.WriteString(fmt.Sprintf("ConfirmCopy = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.ConfirmCopy]))
 	sb.WriteString(fmt.Sprintf("ConfirmMove = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.ConfirmMove]))
 	sb.WriteString(fmt.Sprintf("ConfirmDelete = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.ConfirmDelete]))
+	sb.WriteString(fmt.Sprintf("UseTrash = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.UseTrash]))
 	sb.WriteString(fmt.Sprintf("ConfirmExit = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.ConfirmExit]))
 	sb.WriteString(fmt.Sprintf("DeleteCancelFocused = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.DeleteCancelFocused]))
 	sb.WriteString(fmt.Sprintf("AnnounceKittyTerm = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.AnnounceKittyTerm]))

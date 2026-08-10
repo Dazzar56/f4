@@ -167,6 +167,7 @@ func actionCommandHistory(pf *PanelsFrame) {
 	menu := vtui.NewVMenu(Msg("History.CommandsTitle"))
 	menu.SetHelp("History")
 	search := newHistorySearch(menu, h, Msg("History.CommandsHint"))
+	search.setSecondary(loadCommandHistoryPaths(h), true)
 
 	// Shared "paste selected command" path used by Enter and mouse click.
 	pasteCurrent := func() {
@@ -199,10 +200,29 @@ func actionCommandHistory(pf *PanelsFrame) {
 		if !ok {
 			return false
 		}
+		path := search.selectedSecondary()
 
 		if e.VirtualKeyCode == vtinput.VK_RETURN {
+			if ctrl && shift && !alt {
+				if path != "" {
+					search.cleanup()
+					menu.Close()
+					pf.insertPathToCmdLine(path)
+				}
+				return true
+			}
 			menu.Close()
 			pasteCurrent()
+			return true
+		}
+
+		if e.VirtualKeyCode == vtinput.VK_NEXT && ctrl && !shift && !alt {
+			if path != "" {
+				if targetPanel := pf.getActivePanel(); targetPanel != nil && pf.NavigateToPath(targetPanel, path) {
+					search.cleanup()
+					menu.Close()
+				}
+			}
 			return true
 		}
 
@@ -213,6 +233,7 @@ func actionCommandHistory(pf *PanelsFrame) {
 			pf.cmdLine.Edit.History = h
 			if vtui.GlobalHistoryProvider != nil {
 				vtui.GlobalHistoryProvider.SaveHistory("cmdline", h)
+				saveCommandHistoryPaths(search.all, search.secondary)
 			}
 			if len(search.all) == 0 {
 				search.cleanup()
@@ -226,6 +247,9 @@ func actionCommandHistory(pf *PanelsFrame) {
 			confirmAndClearHistory(Msg("History.CommandsTitle"), "cmdline", &h, func() {
 				pf.cmdLine.Edit.History = nil
 				pf.cmdLine.Edit.HistoryPos = -1
+				if vtui.GlobalHistoryProvider != nil {
+					vtui.GlobalHistoryProvider.SaveHistory(commandHistoryPathsID, nil)
+				}
 			}, search, menu)
 			return true
 		}
@@ -278,6 +302,10 @@ func confirmAndPruneMissingFolderHistory(h *[]string, search *historySearch, men
 		}
 		kept := make([]string, 0, len(*h))
 		for _, p := range *h {
+			if isPersistentURIPath(p) || vfs.FindStandaloneProvider(context.Background(), nil, p) != nil {
+				kept = append(kept, p)
+				continue
+			}
 			if _, err := os.Stat(p); err == nil {
 				kept = append(kept, p)
 			}
@@ -362,6 +390,7 @@ func actionSortMenuForPanel(pf *PanelsFrame, fsp *FileSystemPanel) {
 }
 
 func actionEditFileExternal(pf *PanelsFrame, v vfs.VFS, path string, size int64) {
+	rememberViewerEditorHistory(v, path, historyModeEdit)
 	cmdStr := AppConfig.ExternalEditorCommand
 	if cmdStr == "" {
 		cmdStr = os.Getenv("EDITOR")
@@ -628,6 +657,7 @@ func findOpenedEditor(v vfs.VFS, path string) (*EditorView, int) {
 }
 
 func actionOpenEditor(pf *PanelsFrame, v vfs.VFS, path string) {
+	rememberViewerEditorHistory(v, path, historyModeEdit)
 	existingEditor, screenIdx := findOpenedEditor(v, path)
 	if existingEditor != nil {
 		var buttons []string
@@ -800,6 +830,7 @@ func showViewer(pf *PanelsFrame, viewer *ViewerView, path string) {
 }
 
 func actionOpenViewer(pf *PanelsFrame, v vfs.VFS, path string) {
+	rememberViewerEditorHistory(v, path, historyModeView)
 	existingViewer, screenIdx := findOpenedViewer(v, path)
 	if existingViewer != nil {
 		vtui.FrameManager.PostTask(func() {
@@ -1067,6 +1098,7 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 					historyCmd = "./" + historyCmd
 				}
 				pf.cmdLine.Edit.AddHistory(historyCmd)
+				rememberCommandHistoryPath(historyCmd, dir, pf.cmdLine.Edit.History)
 				pf.cmdLine.Edit.HistoryPos = -1
 
 				activePty := pf.getActivePTY()
@@ -1115,7 +1147,7 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 					if !isWindowsShell {
 						pf.termView.SetMuted(true)
 					}
-					activePty.Write([]byte(cmdToWire))
+					pf.writePTY(activePty, []byte(cmdToWire))
 					pf.showPanels = false
 				}
 			})
@@ -1126,21 +1158,14 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 				})
 				return
 			}
-			var cmd *exec.Cmd
-			switch runtime.GOOS {
-			case "linux":
-				cmd = exec.Command("xdg-open", path)
-			case "windows":
-				cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", path)
-			case "darwin":
-				cmd = exec.Command("open", path)
-			}
-			if cmd != nil {
+			command, args, ok := associatedFileCommand(path)
+			if ok {
+				workingDir := ""
 				if _, isLocal := v.(*vfs.OSVFS); isLocal {
-					cmd.Dir = dir
+					workingDir = dir
 				}
-				vtui.DebugLog("ACTIONS: Executing external command: %s", cmd.String())
-				err := cmd.Run()
+				vtui.DebugLog("ACTIONS: Executing external command: %s %q", command, args)
+				err := pf.runExternalUICommand(command, args, workingDir)
 				if err != nil {
 					vtui.DebugLog("ACTIONS: External command failed: %v", err)
 					ctx.RunOnUI(func() {
@@ -1155,6 +1180,9 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 func actionNewFile(pf *PanelsFrame) {
 	if fsp := pf.getActivePanel(); fsp != nil {
 		dir := fsp.vfs.GetPath()
+		if dispatchPanelAction(pf, vfs.PanelActionCreate, []string{dir}) {
+			return
+		}
 		activeVfs := fsp.vfs
 		vtui.InputBox(Msg("Edit.NewFileTitle"), Msg("Edit.NewFilePrompt"), "", func(name string) {
 			if name == "" {
@@ -1267,6 +1295,9 @@ func actionCalcDirSize(pf *PanelsFrame, fsp *FileSystemPanel, idx int) {
 
 func actionEditFile(pf *PanelsFrame) {
 	if fsp := pf.getActivePanel(); fsp != nil {
+		if dispatchPanelAction(pf, vfs.PanelActionEdit, selectedPanelActionPaths(fsp)) {
+			return
+		}
 		idx := fsp.GetCursorIndex()
 		if idx < 0 || idx >= len(fsp.entries) {
 			return
@@ -1312,6 +1343,7 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 	}
 
 	srcVfs, dstVfs := fspSrc.vfs, fspDst.vfs
+	srcBasePath := srcVfs.GetPath()
 
 	initialDest := dstVfs.GetPath()
 	if initialDest != "" && !strings.HasSuffix(initialDest, "/") && !strings.HasSuffix(initialDest, "\\") {
@@ -1335,12 +1367,12 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 	}
 
 	if isMove && !AppConfig.ConfirmMove {
-		go ExecuteFileOp(pf, srcVfs, dstVfs, names, initialDest, isMove, AppConfig.DefaultFileOpMode, onCompleteWithClear)
+		go ExecuteFileOpAt(pf, srcVfs, dstVfs, srcBasePath, names, initialDest, isMove, AppConfig.DefaultFileOpMode, onCompleteWithClear)
 		return
 	}
 
 	if !isMove && !AppConfig.ConfirmCopy {
-		go ExecuteFileOp(pf, srcVfs, dstVfs, names, initialDest, isMove, AppConfig.DefaultFileOpMode, onCompleteWithClear)
+		go ExecuteFileOpAt(pf, srcVfs, dstVfs, srcBasePath, names, initialDest, isMove, AppConfig.DefaultFileOpMode, onCompleteWithClear)
 		return
 	}
 
@@ -1375,7 +1407,7 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 		mode := comboMode.Menu.SelectPos
 		dlg.Close()
 		if dest != "" {
-			go ExecuteFileOp(pf, srcVfs, dstVfs, names, dest, isMove, mode, onCompleteWithClear)
+			go ExecuteFileOpAt(pf, srcVfs, dstVfs, srcBasePath, names, dest, isMove, mode, onCompleteWithClear)
 		}
 	}
 	dlg.AddItem(btnOk)
@@ -1421,7 +1453,10 @@ func actionRename(pf *PanelsFrame) {
 		newPath := fsp.vfs.Join(fsp.vfs.GetPath(), newName)
 
 		vtui.RunAsync(func(ctx *vtui.TaskContext) {
-			err := fsp.vfs.Rename(ctx.Context, oldPath, newPath)
+			// The rename dialog never asks for overwrite confirmation. Carry an
+			// atomic no-replace decision so remote providers cannot silently
+			// destroy an entry that already has the requested name.
+			err := fsp.vfs.Rename(vfs.WithDestinationOverwrite(ctx.Context, false), oldPath, newPath)
 			ctx.RunOnUI(func() {
 				if err != nil {
 					vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to rename:\n%v", err), []string{"&Ok"})
@@ -1447,11 +1482,13 @@ func actionCopyInPlace(pf *PanelsFrame) {
 		return
 	}
 
+	sourceVFS := fsp.vfs
+	sourceBasePath := sourceVFS.GetPath()
 	vtui.InputBox(" Copy ", "Copy '"+name+"' to:", name, func(newName string) {
 		if newName == "" || newName == name {
 			return
 		}
-		newPath := fsp.vfs.Join(fsp.vfs.GetPath(), newName)
+		newPath := sourceVFS.Join(sourceBasePath, newName)
 
 		onCompleteWithClear := func() {
 			if pf != nil {
@@ -1465,7 +1502,7 @@ func actionCopyInPlace(pf *PanelsFrame) {
 			}
 		}
 
-		go ExecuteFileOp(pf, fsp.vfs, fsp.vfs, []string{name}, newPath, false, AppConfig.DefaultFileOpMode, onCompleteWithClear)
+		go ExecuteFileOpAt(pf, sourceVFS, sourceVFS, sourceBasePath, []string{name}, newPath, false, AppConfig.DefaultFileOpMode, onCompleteWithClear)
 	})
 }
 func actionEditorSettings(pf *PanelsFrame) {
@@ -1676,30 +1713,64 @@ func actionEditorSettings(pf *PanelsFrame) {
 	vtui.FrameManager.Push(dlg)
 }
 
+// actionDelete follows the global trash preference. The disposition is
+// resolved here, before a task can be queued, so later settings changes cannot
+// alter the meaning of an already confirmed operation.
 func actionDelete(pf *PanelsFrame) {
+	disposition := vfs.DeletePermanently
+	if AppConfig.UseTrash {
+		disposition = vfs.DeleteToTrash
+	}
+	actionDeleteWithDisposition(pf, disposition, false)
+}
+
+// actionDeletePermanent is bound to Shift+Del/Shift+NumDel and intentionally
+// ignores the global trash preference.
+func actionDeletePermanent(pf *PanelsFrame) {
+	actionDeleteWithDisposition(pf, vfs.DeletePermanently, true)
+}
+
+func actionDeleteWithDisposition(pf *PanelsFrame, disposition vfs.DeleteDisposition, explicitPermanent bool) {
 	fsp := pf.getActivePanel()
 	if fsp == nil {
 		return
 	}
 
 	activeVfs := fsp.vfs
+	basePath := activeVfs.GetPath()
 	names := fsp.GetSelectedNames()
 	if len(names) == 0 {
 		return
 	}
+	if dispatchPanelAction(pf, vfs.PanelActionDelete, selectedPanelActionPaths(fsp)) {
+		return
+	}
+
+	titleKey := "Delete.Title"
+	confirmKey := "Delete.ConfirmPermanent"
+	buttonKey := "Delete.BtnPermanent"
+	if !explicitPermanent {
+		buttonKey = "Delete.Btn"
+	}
+	if disposition == vfs.DeleteToTrash {
+		titleKey = "Trash.Title"
+		confirmKey = "Trash.Confirm"
+		buttonKey = "Trash.Btn"
+	}
 
 	if AppConfig.ConfirmDelete == false {
-		go ExecuteDeleteOp(pf, activeVfs, names, AppConfig.DefaultFileOpMode, pf.RefreshAll)
+		fsp.pendingSelection = fsp.GetSuccessorName()
+		go ExecuteDeleteOpWithDispositionAt(pf, activeVfs, basePath, names, AppConfig.DefaultFileOpMode, disposition, pf.RefreshAll)
 		return
 	}
 
 	msgName := names[0]
 	if len(names) > 1 {
-		msgName = fmt.Sprintf("%d items", len(names))
+		msgName = fmt.Sprintf(Msg("Delete.Items"), len(names))
 	}
 
-	title := Msg("Delete.Title")
-	msg := fmt.Sprintf(Msg("Delete.Confirm"), msgName)
+	title := Msg(titleKey)
+	msg := fmt.Sprintf(Msg(confirmKey), msgName)
 	lines := vtui.WrapText(msg, 46)
 
 	dlg := vtui.NewCenteredDialog(50, 8+len(lines), title)
@@ -1726,8 +1797,8 @@ func actionDelete(pf *PanelsFrame) {
 	dlg.AddItem(comboMode)
 	vbox.Add(comboMode, vtui.Margins{Top: 1}, vtui.AlignCenter)
 
-	btnDel := vtui.NewButton(0, 0, Msg("Delete.Btn"))
-	btnCancel := vtui.NewButton(0, 0, "Cancel")
+	btnDel := vtui.NewButton(0, 0, Msg(buttonKey))
+	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
 
 	if AppConfig.DeleteCancelFocused {
 		btnCancel.IsDefault = true
@@ -1751,7 +1822,7 @@ func actionDelete(pf *PanelsFrame) {
 		mode := comboMode.Menu.SelectPos
 		fsp.pendingSelection = fsp.GetSuccessorName()
 		dlg.Close()
-		go ExecuteDeleteOp(pf, activeVfs, names, mode, pf.RefreshAll)
+		go ExecuteDeleteOpWithDispositionAt(pf, activeVfs, basePath, names, mode, disposition, pf.RefreshAll)
 	}
 
 	if AppConfig.DeleteCancelFocused {
@@ -2062,7 +2133,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 	// blank lines between them (see #298). Blank rows are kept only at
 	// transitions between widget kinds (checkbox↔combo↔radio↔button)
 	// so groups still read as groups.
-	const dialogHeight = 32
+	const dialogHeight = 33
 	dlg := vtui.NewCenteredDialog(60, dialogHeight, Msg("PanelSettings.Title"))
 	dlg.ShowClose = true
 
@@ -2157,6 +2228,11 @@ func actionPanelSettings(pf *PanelsFrame) {
 		chkEscToggle.State = 1
 	}
 
+	chkTerminalCtrlN := vtui.NewCheckbox(0, 0, Msg("PanelSettings.TerminalCtrlNWorkspace"), false)
+	if AppConfig.TerminalCtrlNWorkspace {
+		chkTerminalCtrlN.State = 1
+	}
+
 	modes := []string{Msg("Op.Queue"), Msg("Op.Background"), Msg("Op.Foreground")}
 	comboMode := vtui.NewComboBox(0, 0, 24, modes)
 	comboMode.DropdownOnly = true
@@ -2197,6 +2273,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 	dlg.AddItem(chkAlwaysMenu)
 	dlg.AddItem(chkCPUGPU)
 	dlg.AddItem(chkEscToggle)
+	dlg.AddItem(chkTerminalCtrlN)
 	dlg.AddItem(lblMode)
 	dlg.AddItem(comboMode)
 	dlg.AddItem(lblPath)
@@ -2230,6 +2307,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 	vbox.Add(chkAlwaysMenu, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkCPUGPU, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkEscToggle, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(chkTerminalCtrlN, vtui.Margins{}, vtui.AlignLeft)
 
 	rowMode := vtui.NewHBoxLayout(0, 0, 56, 1)
 	rowMode.Add(lblMode, vtui.Margins{Right: 1}, vtui.AlignLeft)
@@ -2270,6 +2348,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 		AppConfig.AlwaysShowMenuBar = chkAlwaysMenu.State == 1
 		AppConfig.InfoPanelCPUGPU = chkCPUGPU.State == 1
 		AppConfig.EscTogglePanels = chkEscToggle.State == 1
+		AppConfig.TerminalCtrlNWorkspace = chkTerminalCtrlN.State == 1
 		AppConfig.DefaultFileOpMode = comboMode.Menu.SelectPos
 		AppConfig.FileOpPathDisplay = comboPath.Menu.SelectPos
 		AppConfig.MacroRecordFormat = comboMacro.Menu.SelectPos
@@ -2284,7 +2363,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 }
 
 func actionConfirmationsSettings(pf *PanelsFrame) {
-	dlg := vtui.NewCenteredDialog(44, 13, Msg("ConfirmationsSettings.Title"))
+	dlg := vtui.NewCenteredDialog(52, 15, Msg("ConfirmationsSettings.Title"))
 	dlg.ShowClose = true
 
 	chkCopy := vtui.NewCheckbox(0, 0, Msg("ConfirmationsSettings.Copy"), false)
@@ -2303,6 +2382,11 @@ func actionConfirmationsSettings(pf *PanelsFrame) {
 	chkDelete.State = 0
 	if AppConfig.ConfirmDelete {
 		chkDelete.State = 1
+	}
+
+	chkUseTrash := vtui.NewCheckbox(0, 0, Msg("ConfirmationsSettings.UseTrash"), false)
+	if AppConfig.UseTrash {
+		chkUseTrash.State = 1
 	}
 
 	chkExit := vtui.NewCheckbox(0, 0, Msg("ConfirmationsSettings.Exit"), false)
@@ -2324,19 +2408,21 @@ func actionConfirmationsSettings(pf *PanelsFrame) {
 	dlg.AddItem(chkCopy)
 	dlg.AddItem(chkMove)
 	dlg.AddItem(chkDelete)
+	dlg.AddItem(chkUseTrash)
 	dlg.AddItem(chkExit)
 	dlg.AddItem(chkDelFocus)
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnCancel)
 
-	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 44-4, 13-4)
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 52-4, 15-4)
 	vbox.Add(chkCopy, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkMove, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkDelete, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(chkUseTrash, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkExit, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkDelFocus, vtui.Margins{}, vtui.AlignLeft)
 
-	hbox := vtui.NewHBoxLayout(0, 0, 44-4, 1)
+	hbox := vtui.NewHBoxLayout(0, 0, 52-4, 1)
 	hbox.HorizontalAlign = vtui.AlignCenter
 	hbox.Spacing = 2
 	hbox.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
@@ -2350,6 +2436,7 @@ func actionConfirmationsSettings(pf *PanelsFrame) {
 		AppConfig.ConfirmCopy = chkCopy.State == 1
 		AppConfig.ConfirmMove = chkMove.State == 1
 		AppConfig.ConfirmDelete = chkDelete.State == 1
+		AppConfig.UseTrash = chkUseTrash.State == 1
 		AppConfig.ConfirmExit = chkExit.State == 1
 		AppConfig.DeleteCancelFocused = chkDelFocus.State == 1
 		SaveConfig()
@@ -2439,7 +2526,7 @@ func actionUpdateSettings(pf *PanelsFrame) {
 func actionAppearanceSettings(pf *PanelsFrame) {
 	// One row shaved by dropping the blank between the two trailing
 	// checkboxes (see #298).
-	const width, height = 60, 20
+	const width, height = 60, 24
 	dlg := vtui.NewCenteredDialog(width, height, Msg("AppearanceSettings.Title"))
 	dlg.ShowClose = true
 	// Snapshot the whole palette (not just the style name) so a
@@ -2486,6 +2573,40 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 	editTitle := vtui.NewEdit(0, 0, 30, AppConfig.ConsoleTitleTemplate)
 	lblTitle := vtui.NewLabel(0, 0, Msg("AppearanceSettings.TitleTemplate"), editTitle)
 
+	workspaceTabModes := []string{
+		Msg("AppearanceSettings.WorkspaceTabsAlways"),
+		Msg("AppearanceSettings.WorkspaceTabsMultiple"),
+		Msg("AppearanceSettings.WorkspaceTabsCtrl"),
+	}
+	comboWorkspaceTabs := vtui.NewComboBox(0, 0, 30, workspaceTabModes)
+	comboWorkspaceTabs.DropdownOnly = true
+	workspaceTabSelection := AppConfig.WorkspaceTabMode
+	if workspaceTabSelection < 0 || workspaceTabSelection >= len(workspaceTabModes) {
+		workspaceTabSelection = int(vtui.WorkspaceTabsMultiple)
+	}
+	comboWorkspaceTabs.Menu.SetSelectPos(workspaceTabSelection)
+	comboWorkspaceTabs.Edit.SetText(workspaceTabModes[workspaceTabSelection])
+	lblWorkspaceTabs := vtui.NewLabel(0, 0, Msg("AppearanceSettings.WorkspaceTabs"), comboWorkspaceTabs)
+
+	ctrlTabModes := []string{
+		Msg("AppearanceSettings.CtrlTabDirect"),
+		Msg("AppearanceSettings.CtrlTabMenu"),
+	}
+	comboCtrlTab := vtui.NewComboBox(0, 0, 30, ctrlTabModes)
+	comboCtrlTab.DropdownOnly = true
+	ctrlTabSelection := 0
+	if AppConfig.CtrlTabShowsMenu {
+		ctrlTabSelection = 1
+	}
+	comboCtrlTab.Menu.SetSelectPos(ctrlTabSelection)
+	comboCtrlTab.Edit.SetText(ctrlTabModes[ctrlTabSelection])
+	lblCtrlTab := vtui.NewLabel(0, 0, Msg("AppearanceSettings.CtrlTab"), comboCtrlTab)
+
+	chkAltNumberTabs := vtui.NewCheckbox(0, 0, Msg("AppearanceSettings.AltNumberTabs"), AppConfig.AltNumberSwitchesTabs)
+	if AppConfig.AltNumberSwitchesTabs {
+		chkAltNumberTabs.State = 1
+	}
+
 	chkCursor := vtui.NewCheckbox(0, 0, Msg("PanelSettings.KeepCursor"), false)
 	chkCursor.State = 0
 	if AppConfig.KeepTerminalCursor {
@@ -2511,6 +2632,11 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 	dlg.AddItem(editSize)
 	dlg.AddItem(lblTitle)
 	dlg.AddItem(editTitle)
+	dlg.AddItem(lblWorkspaceTabs)
+	dlg.AddItem(comboWorkspaceTabs)
+	dlg.AddItem(lblCtrlTab)
+	dlg.AddItem(comboCtrlTab)
+	dlg.AddItem(chkAltNumberTabs)
 	dlg.AddItem(chkCursor)
 	dlg.AddItem(chkContrast)
 	dlg.AddItem(btnOk)
@@ -2538,7 +2664,18 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 	rowTitle.Add(editTitle, vtui.Margins{}, vtui.AlignFill)
 	vbox.Add(rowTitle, vtui.Margins{Top: 1}, vtui.AlignFill)
 
-	vbox.Add(chkCursor, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	rowWorkspaceTabs := vtui.NewHBoxLayout(0, 0, width-4, 1)
+	rowWorkspaceTabs.Add(lblWorkspaceTabs, vtui.Margins{Right: 1}, vtui.AlignLeft)
+	rowWorkspaceTabs.Add(comboWorkspaceTabs, vtui.Margins{}, vtui.AlignFill)
+	vbox.Add(rowWorkspaceTabs, vtui.Margins{Top: 1}, vtui.AlignFill)
+
+	rowCtrlTab := vtui.NewHBoxLayout(0, 0, width-4, 1)
+	rowCtrlTab.Add(lblCtrlTab, vtui.Margins{Right: 1}, vtui.AlignLeft)
+	rowCtrlTab.Add(comboCtrlTab, vtui.Margins{}, vtui.AlignFill)
+	vbox.Add(rowCtrlTab, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Add(chkAltNumberTabs, vtui.Margins{Top: 1}, vtui.AlignLeft)
+
+	vbox.Add(chkCursor, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkContrast, vtui.Margins{}, vtui.AlignLeft)
 
 	buttons := vtui.NewHBoxLayout(0, 0, width-4, 1)
@@ -2577,9 +2714,18 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 		AppConfig.KeepTerminalCursor = chkCursor.State == 1
 		vtui.ManageCursorStyle = !AppConfig.KeepTerminalCursor
 		AppConfig.EnforceColorCorrection = chkContrast.State == 1
+		AppConfig.WorkspaceTabMode = comboWorkspaceTabs.Menu.SelectPos
+		AppConfig.CtrlTabShowsMenu = comboCtrlTab.Menu.SelectPos == 1
+		AppConfig.AltNumberSwitchesTabs = chkAltNumberTabs.State == 1
 		SaveConfig()
 
 		dlg.SetExitCode(1)
+		ctrlTabMode := vtui.WorkspaceCtrlTabDirect
+		if AppConfig.CtrlTabShowsMenu {
+			ctrlTabMode = vtui.WorkspaceCtrlTabMenu
+		}
+		vtui.FrameManager.ConfigureWorkspaceTabs(vtui.WorkspaceTabMode(AppConfig.WorkspaceTabMode), ctrlTabMode)
+		vtui.FrameManager.ConfigureWorkspaceAltNumberSwitch(AppConfig.AltNumberSwitchesTabs)
 
 		if fontChanged {
 			vtui.FrameManager.PostTask(func() {

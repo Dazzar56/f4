@@ -23,6 +23,9 @@ func TestHelpLanguageSwitch(t *testing.T) {
 		t.Fatalf("failed to write test hlf: %v", err)
 	}
 
+	// Ensure GetF4ConfigDir's once-only detector cannot overwrite the test
+	// override on its first call from InitHelpSystem.
+	_ = GetF4ConfigDir()
 	oldF4ConfigDir := cachedF4ConfigDir
 	cachedF4ConfigDir = tempDir
 	defer func() { cachedF4ConfigDir = oldF4ConfigDir }()

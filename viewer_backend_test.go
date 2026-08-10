@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +13,40 @@ import (
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 )
+
+type failingViewerFile struct {
+	err error
+}
+
+func (f *failingViewerFile) Size() int64 { return 16 }
+func (f *failingViewerFile) ReadAt(context.Context, []byte, int64) (int, error) {
+	return 0, f.err
+}
+func (f *failingViewerFile) Read(context.Context, []byte) (int, error) { return 0, f.err }
+func (f *failingViewerFile) Close() error                              { return nil }
+
+func TestViewerBackendPreservesBackgroundReadError(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	want := errors.New("remote range failed")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	backend := &ViewerBackend{file: &failingViewerFile{err: want}, size: 16, ctx: ctx, cancelCtx: cancel}
+
+	if _, err := backend.ReadAt(0, 4); err != piecetable.ErrLoading {
+		t.Fatalf("first ReadAt error = %v, want ErrLoading", err)
+	}
+	select {
+	case task := <-vtui.FrameManager.TaskChan:
+		task()
+	case <-time.After(time.Second):
+		t.Fatal("background read did not finish")
+	}
+	if _, err := backend.ReadAt(0, 4); !errors.Is(err, want) {
+		t.Fatalf("second ReadAt error = %v, want %v", err, want)
+	}
+}
+
+var _ vfs.ReadAtCloser = (*failingViewerFile)(nil)
 
 func TestViewerBackend_ReadAndFindLineStart(t *testing.T) {
 	tmp := filepath.Join(t.TempDir(), "test.txt")
