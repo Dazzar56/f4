@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -96,9 +97,36 @@ func allWordFriendly(scripts []string) bool {
 	return true
 }
 
+// homoglyphBaselinePath lists the findings that are known and not repaired
+// yet, one "<path>:<line>" per line. It exists so this check can guard
+// everything else from today instead of waiting until the whole backlog is
+// worked off, the same trick tools/hardcoded_baseline.txt plays for hardcoded
+// strings. The list may only shrink: anything not in it fails the test.
+const homoglyphBaselinePath = "lang/homoglyph_baseline.txt"
+
+func loadHomoglyphBaseline(t *testing.T) map[string]bool {
+	baseline := make(map[string]bool)
+	data, err := os.ReadFile(homoglyphBaselinePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return baseline
+		}
+		t.Fatalf("cannot read %s: %v", homoglyphBaselinePath, err)
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		baseline[line] = true
+	}
+	return baseline
+}
+
 func TestTranslationsAreFreeOfHomoglyphs(t *testing.T) {
 	skipIfNoRelevantChanges(t, "lang_homoglyphs",
 		"lang/*.lng",
+		"lang/*.txt",
 		"help/*.hlf",
 		"lang_homoglyphs_test.go",
 	)
@@ -116,6 +144,9 @@ func TestTranslationsAreFreeOfHomoglyphs(t *testing.T) {
 	if len(paths) == 0 {
 		t.Fatal("no localization files found, is the test running from the repository root?")
 	}
+
+	baseline := loadHomoglyphBaseline(t)
+	seen := make(map[string]bool)
 
 	escapes := strings.NewReplacer(`\n`, " ", `\t`, " ", `\r`, " ")
 
@@ -141,9 +172,27 @@ func TestTranslationsAreFreeOfHomoglyphs(t *testing.T) {
 				if len(scripts) < 2 || allWordFriendly(scripts) {
 					continue
 				}
-				t.Errorf("%s:%d: word %q mixes scripts %s, most likely a look-alike letter from another alphabet",
-					path, i+1, word, strings.Join(scripts, "+"))
-			}
-		}
-	}
-}
+								location := fmt.Sprintf("%s:%d", path, i+1)
+								if baseline[location] {
+									seen[location] = true
+									t.Logf("Tech Debt -> %s: word %q mixes scripts %s (known, listed in %s)",
+										location, word, strings.Join(scripts, "+"), homoglyphBaselinePath)
+									continue
+								}
+								t.Errorf("%s: word %q mixes scripts %s, most likely a look-alike letter from another alphabet",
+									location, word, strings.Join(scripts, "+"))
+							}
+						}
+					}
+
+					stale := make([]string, 0, len(baseline))
+					for location := range baseline {
+						if !seen[location] {
+							stale = append(stale, location)
+						}
+					}
+					sort.Strings(stale)
+					for _, location := range stale {
+						t.Logf("%s: %s is clean now, drop it from the baseline", homoglyphBaselinePath, location)
+					}
+				}
