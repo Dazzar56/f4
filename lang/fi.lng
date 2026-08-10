@@ -679,7 +679,7 @@ PlugRing.Title= f4 PlugRing
 PlugRing.BtnInstall=&Asenna/Päivitä
 PlugRing.BtnRemove=&Poista
 PlugRing.BtnRefresh=Päi&vitä
-PlugRing.BtnClose=&Sulge
+PlugRing.BtnClose=&Sulje
 
 Attributes.Title= Määritteet
 Attributes.BtnSet=Aseta

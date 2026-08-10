@@ -409,7 +409,7 @@ func findDriveMenu(t *testing.T) *vtui.VMenu {
 	t.Helper()
 	frames := openFrames()
 	for i := len(frames) - 1; i >= 0; i-- {
-		if m, ok := frames[i].(*vtui.VMenu); ok && m.GetTitle() == " Drive " {
+		if m, ok := frames[i].(*vtui.VMenu); ok && m.GetTitle() == Msg("Drive.Title") {
 			return m
 		}
 	}
@@ -3044,7 +3044,7 @@ func TestPanelsFrame_DriveMenu_OtherPanel(t *testing.T) {
 	}
 
 	// Ensure "Other panel" is at index 0 and selected
-	if menu.GetTitle() != " Drive " || menu.SelectPos != 0 {
+	if menu.GetTitle() != Msg("Drive.Title") || menu.SelectPos != 0 {
 		t.Errorf("Menu state invalid: title=%q, pos=%d", menu.GetTitle(), menu.SelectPos)
 	}
 

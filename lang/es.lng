@@ -741,6 +741,6 @@ NetFox.ErrorReservedName=Nombre de conexión reservado
 
 FileOp.BtnCancel=&Cancelar
 FileOp.BtnBackground=&Segundo plano
-Queue.BtnCancel=C&ancelar tarefa
+Queue.BtnCancel=C&ancelar tarea
 Queue.BtnClear=Limpiar &completadas
 Session.Title= Seleccionar sesión

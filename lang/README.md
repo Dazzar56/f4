@@ -38,4 +38,20 @@ What is left of the localization audit, in the order it should be done:
 Damage of the kind these canaries catch was introduced by translating with a
 model and reviewing by eye. Any new translation pass should run the command
 above before the commit, not after.
+Two rules the caption pass of 2026-08-10 had to learn the hard way:
+
+  A dialog title is written here with one leading space (" Attributes"), the
+  way far writes it, but ParseIni trims the value and Painter.DrawTitle pads
+  the title with a space on each side while drawing. So Msg("X.Title") never
+  contains a space, and a test that compares a title must compare it against
+  Msg(), never against a literal " X ". TestLangConsistency does enforce that
+  the leading space is present in every translation, because it is what tells
+  a translator the string is a title.
+
+  A plugin under plugins/ is a separate test binary. package main does not
+  link into it, so InitLang never runs and every vtui.Msg call returns "{Key}"
+  unless vtui itself has a built-in for it. Any plugin whose dialogs are
+  layout-tested has to load lang/en.lng on its own; plugins/netfox/lang_test.go
+  is the pattern to copy, and its TestPluginCaptionsResolve also catches keys
+  that exist in the source but never made it into en.lng.
 

@@ -704,7 +704,7 @@ Replace.Prompt=Zastąp tekst:
 Replace.BtnReplace=&Zastąp
 Replace.BtnReplaceAll=Zastąp &wszystko
 Codepage.Title= Strony kodowe
-Codepage.ConvertTitle= Konvertuj stronę kodową
+Codepage.ConvertTitle= Konwertuj stronę kodową
 
 vtui.Save=&Zapisz
 UserMenu.EditTitle= Edytuj menu użytkownika
