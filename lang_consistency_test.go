@@ -136,7 +136,7 @@ func TestLangConsistency(t *testing.T) {
 			}
 		}
 
-		mergedLineRe := regexp.MustCompile(`\n[a-zA-Z0-9_.-]+=`)
+		mergedLineRe := regexp.MustCompile(`[a-zA-Z0-9_.-]+=`)
 		allowedLangs := map[string][]whatlanggo.Lang{
 			"be": {whatlanggo.Bel, whatlanggo.Rus, whatlanggo.Ukr, whatlanggo.Eng},
 			"cs": {whatlanggo.Ces, whatlanggo.Pol, whatlanggo.Hrv, whatlanggo.Srp, whatlanggo.Slv, whatlanggo.Eng, whatlanggo.Deu, whatlanggo.Fra, whatlanggo.Ita, whatlanggo.Spa, whatlanggo.Por, whatlanggo.Hat, whatlanggo.Nld},
@@ -187,8 +187,14 @@ func TestLangConsistency(t *testing.T) {
 			}
 
 			// 1. Anti-merge
-			if mergedLineRe.MatchString(val) {
-				t.Errorf("%s: Key '%s' contains a merged line pattern", file, key)
+			for _, match := range mergedLineRe.FindAllString(val, -1) {
+				s := match[:len(match)-1]
+				for i := 0; i < len(s); i++ {
+					if _, ok := enStrings[s[i:]]; ok {
+						t.Errorf("%s: Key '%s' contains a merged line pattern for key '%s'", file, key, s[i:])
+						break
+					}
+				}
 			}
 
 			// 4. Whitespace drift
