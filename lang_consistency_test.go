@@ -287,3 +287,47 @@ func TestLangConsistency(t *testing.T) {
 		}
 	}
 }
+func TestAntiMergeLogic(t *testing.T) {
+	enStrings := map[string]string{
+		"LanguageSettings.Title": "Language Settings",
+		"FileOp.Resume":          "Resume",
+		"Some.OtherKey":          "Value",
+	}
+
+	mergedLineRe := regexp.MustCompile(`[a-zA-Z0-9_.-]+=`)
+
+	checkMerged := func(val string) (string, bool) {
+		for _, match := range mergedLineRe.FindAllString(val, -1) {
+			s := match[:len(match)-1]
+			for i := 0; i < len(s); i++ {
+				if _, ok := enStrings[s[i:]]; ok {
+					return s[i:], true
+				}
+			}
+		}
+		return "", false
+	}
+
+	tests := []struct {
+		input     string
+		wantKey   string
+		wantFound bool
+	}{
+		{"Аднав&іцьLanguageSettings.Title= Налады мовы", "LanguageSettings.Title", true},
+		{"ResumeLanguageSettings.Title= Налады мовы", "LanguageSettings.Title", true},
+		{"This is a normal translation.", "", false},
+		{"Some value = 42", "", false},
+		{"NotAKey.Title= some text", "", false},
+		{"FirstSome.OtherKey=SecondLanguageSettings.Title=foo", "Some.OtherKey", true},
+	}
+
+	for _, tt := range tests {
+		gotKey, gotFound := checkMerged(tt.input)
+		if gotFound != tt.wantFound {
+			t.Errorf("checkMerged(%q) found = %v, want %v", tt.input, gotFound, tt.wantFound)
+		}
+		if gotFound && gotKey != tt.wantKey {
+			t.Errorf("checkMerged(%q) found key = %q, want %q", tt.input, gotKey, tt.wantKey)
+		}
+	}
+}
