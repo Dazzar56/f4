@@ -705,3 +705,12 @@ Replace.BtnReplace=&Replace
 Replace.BtnReplaceAll=Replace &All
 Codepage.Title= Code pages
 Codepage.ConvertTitle= Convert Codepage
+
+vtui.Save=&Save
+UserMenu.EditTitle= Edit User Menu
+UserMenu.CreateTitle= Create User Menu
+UserMenu.EditSubmenuTitle= Edit Submenu
+UserMenu.CreateSubmenuTitle= Create Submenu
+UserMenu.LabelHotkey=Hot &key:
+UserMenu.LabelLabel=&Label:
+UserMenu.LabelCommand=&Command:
