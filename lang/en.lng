@@ -729,3 +729,16 @@ Op.DummyBackground=Background panel clone
 Op.DummyForeground=Foreground lock
 Op.BtnStart=&Start
 Drive.Title= Drive
+
+NetFox.ConnectionTitle= Site Connection
+NetFox.PassiveMode=Passive mode
+NetFox.LabelName=&Name:
+NetFox.LabelProtocol=P&rotocol:
+NetFox.LabelHost=&Host:
+NetFox.LabelPort=P&ort:
+NetFox.LabelUser=&User:
+NetFox.LabelPassword=Pass&word:
+NetFox.LabelTimeout=Time&out:
+NetFox.LabelCodepage=Cod&epage:
+NetFox.ErrorEmptyName=Name cannot be empty
+NetFox.ErrorReservedName=Reserved connection name
