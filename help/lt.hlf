@@ -41,7 +41,7 @@ $VisRen: greitas startas ir dialogo laukai
 
   1. Pažymėkite reikiamus failus/katalogus klavišu Ins. Vienam elementui pakanka užvesti
      ant jo skydelio žymeklį.
-  2. Pasπαuskite F11 ir pasirinkite VisRen.
+  2. Paspauskite F11 ir pasirinkite VisRen.
   3. Įveskite vardo ir plėtinio kaukes. Pradiniai [N] ir [E] išlaiko abi pradinio pavadinimo
      dalis nekeistas.
   4. Jei reikia, užpildykite „Ieškoti“ ir „Pakeisti kuo“ laukus. Atidarius fokusas yra
@@ -365,7 +365,7 @@ Redaktoriuje negalima pridėti, trinti ir keisti eilučių tvarkos. Dviejų stul
 leidžiama keisti tik galutinį. Tikrinimų dėka iškreiptos kabutės ir atsitiktinis šaltinio
 pakeitimas saugiai aptinkami prieš prasidedant operacijai.
 
-Esant klaidai VisRen paaiškina priežastįและ siūlo „Ištaisyti“. Redaktorius vėl atsidarys
+Esant klaidai VisRen paaiškina priežastį ir siūlo „Ištaisyti“. Redaktorius vėl atsidarys
 probleminėje eilutėje, išlaikęs jūsų tekstą. Leistinas pakeistas sąrašas paleidžia nuoseklų
 pervardijimą uždarius redaktorių. Jei sukurtas kaukėmis sąrašas nesikeitė baitais, bet turi
 naujus pavadinimus, VisRen pirmiausia reikalauja patvirtinimo.
@@ -444,7 +444,7 @@ Trūkstami arba pažeisti metaduomenys virsta tuščiu tekstu. Atsargiai pridėk
 kaukėse ir visada tikrinkite rezultatą. VisRen nesukuria transakcijos ir parenka laikinus vardus ciklams
 iš kelių elementų.
 
-Norėdami grįžti į VisRen oglavlį, pasπαuskite Backspace.
+Norėdami grįžti į VisRen oglavlį, paspauskite Backspace.
 
 @VisRenExamples
 $VisRen: praktiniai receptai
@@ -564,7 +564,7 @@ $Katalogų istorija (Alt+F12)
 Be žymeklio klavišų, galimos šios nuorodos:
 
   Eiti į pasirinktą katalogą aktyviame skydelyje      Enter
-  (Pelės pasπαudimas veikia taip pat)
+  (Pelės paspaudimas veikia taip pat)
   Eiti į pasirinktą katalogą pasyviame skydelyje      Shift+Enter
   Įterpti kelią į komandų eilutę                       Ctrl+Enter
   Uždaryti dialogą                                     Esc, F10
