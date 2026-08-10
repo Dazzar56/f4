@@ -28,9 +28,10 @@ import (
 // each side of an all-ASCII key list. No other language did anything of the
 // kind for the same string.
 //
-// help/*.hlf is deliberately not scanned yet: those files still carry the
-// backlog listed in lang/homoglyph_baseline.txt and have not been audited.
-// Widen the glob below in the same pass that empties that baseline.
+// help/*.hlf is scanned too, since the homoglyph backlog those files carried
+// has been worked off and lang/homoglyph_baseline.txt is gone. A help topic
+// is the likelier place for a stray control to survive: it is prose rather
+// than a caption, it is long, and much of it was pasted in from a browser.
 var bidiControls = map[rune]string{
 	'\u061C': "ALM",
 	'\u200E': "LRM",
@@ -49,6 +50,7 @@ var bidiControls = map[rune]string{
 func TestTranslationsHaveNoBidiControls(t *testing.T) {
 	skipIfNoRelevantChanges(t, "lang_bidi",
 		"lang/*.lng",
+		"help/*.hlf",
 		"lang_bidi_test.go",
 	)
 
@@ -56,8 +58,13 @@ func TestTranslationsHaveNoBidiControls(t *testing.T) {
 	if err != nil {
 		t.Fatalf("cannot list language files: %v", err)
 	}
+	helpPaths, err := filepath.Glob("help/*.hlf")
+	if err != nil {
+		t.Fatalf("cannot list help files: %v", err)
+	}
+	paths = append(paths, helpPaths...)
 	if len(paths) == 0 {
-		t.Fatal("no language files found, is the test running from the repository root?")
+		t.Fatal("no localization files found, is the test running from the repository root?")
 	}
 	sort.Strings(paths)
 
@@ -74,13 +81,13 @@ func TestTranslationsHaveNoBidiControls(t *testing.T) {
 				if !isControl {
 					continue
 				}
-				key := line
-				if idx := strings.Index(line, "="); idx > 0 {
-					key = line[:idx]
+				where := strings.TrimSpace(line)
+				if idx := strings.Index(line, "="); idx > 0 && strings.HasSuffix(path, ".lng") {
+					where = line[:idx]
 				}
-				t.Errorf("%s:%d: key %q carries a %s (%s), an invisible bidi control; "+
+				t.Errorf("%s:%d: %q carries a %s (%s), an invisible bidi control; "+
 					"strip it and let the renderer order the text",
-					path, i+1, key, name, fmt.Sprintf("U+%04X", r))
+					path, i+1, where, name, fmt.Sprintf("U+%04X", r))
 			}
 		}
 	}

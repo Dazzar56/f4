@@ -20,20 +20,25 @@ against machine translation damage:
 All three cache their result and skip when nothing they depend on changed.
 Set F4_FORCE_TESTS=1 (or CI=1) to run them unconditionally.
 
-What is left of the localization audit, in the order it should be done:
+The homoglyph backlog is closed. The 39 damaged lines in help/*.hlf have been
+repaired, lang/homoglyph_baseline.txt is gone, and both script canaries now
+guard every file with no exceptions, lang/*.lng and help/*.hlf alike. The
+loader in lang_homoglyphs_test.go still tolerates a missing baseline, so a
+pass that ever uncovers a large batch of damage can re-create the file, work
+it off and delete it again.
 
-  1. Repair the lines listed in lang/homoglyph_baseline.txt, deleting each
-     entry as it is fixed. Start with help/he.hlf, which holds 17 of the 39.
-     Entry format is <path>:<line>; the header of that file explains the two
-     kinds of damage and the fix for each.
-  2. Widen TestTranslationsHaveNoBidiControls from lang/*.lng to help/*.hlf
-     in the same pass, once those files have been read at all.
-  3. Delete lang/homoglyph_baseline.txt when it is empty; the homoglyph check
-     then guards everything with no exceptions.
-  4. Only then work off the "Tech Debt -> Missing key" list that
-     TestLangConsistency prints. Those keys fall back to English at runtime,
-     so they are the least urgent part. The longest lists are hi, hy, hu, zh
-     and ar.
+What is left of the localization audit:
+
+  1. The "Tech Debt -> Missing key" list that TestLangConsistency prints.
+     Those keys fall back to English at runtime, so they are the least urgent
+     part. The longest lists are hi, hy, hu, zh and ar.
+  2. A reading pass over the captions added on 2026-08-10. They came from a
+     model and needed six hand fixes afterwards: a Polish verb in the middle
+     of a Belarusian string, an Estonian button in fi.lng, a Portuguese noun
+     in es.lng, a Belarusian conjunction in uk.lng, Konvertuj for Konwertuj
+     in pl.lng, and a whole block duplicated into hi.lng. No canary can see
+     any of that: they are real words, spelled correctly, in the wrong
+     language. Only a speaker catches those.
 
 Damage of the kind these canaries catch was introduced by translating with a
 model and reviewing by eye. Any new translation pass should run the command

@@ -720,6 +720,30 @@ func (pf *PanelsFrame) buildPrompt() []vtui.CharInfo {
 	return prompt
 }
 
+// localPTY reads the local PTY under the mutex initPTY publishes it with.
+// The read has to be locked and not merely nil checked: an interface value
+// is two words wide, and a racing reader can see the type word of a *PTY
+// with the data word still zero. Such a value passes an "!= nil" guard and
+// then calls the method on a nil receiver, which is how F10 pressed in the
+// first milliseconds of a session used to crash inside PTY.Close while the
+// shell was still being spawned.
+func (pf *PanelsFrame) localPTY() PtyBackend {
+	pf.ptyMutex.Lock()
+	defer pf.ptyMutex.Unlock()
+	return pf.pty
+}
+
+// takeLocalPTY hands the local PTY to the caller and clears the field, so a
+// shutdown path owns it outright: whoever gets it closes it, and a second
+// path finds nothing left to close twice.
+func (pf *PanelsFrame) takeLocalPTY() PtyBackend {
+	pf.ptyMutex.Lock()
+	defer pf.ptyMutex.Unlock()
+	pty := pf.pty
+	pf.pty = nil
+	return pty
+}
+
 func (pf *PanelsFrame) initPTY() {
 	// Always initialize the parser to prevent nil dereference
 	pf.parser = NewAnsiParser(pf.termView, nil)
@@ -877,10 +901,10 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 		termH = 0
 	}
 
-	if pf.pty != nil {
+	if pty := pf.localPTY(); pty != nil {
 		pf.ptyMutex.Lock()
 		cw, ch := pf.termView.CellSize()
-		setPtySize(pf.pty, w, termH, cw, ch)
+		setPtySize(pty, w, termH, cw, ch)
 		for _, remotePty := range pf.remotePtys {
 			setPtySize(remotePty, w, termH, cw, ch)
 		}
@@ -1377,11 +1401,12 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 
 	// Handle bracketed paste for terminal apps
 	if e.Type == vtinput.PasteEventType {
-		if !pf.showPanels && pf.termView.BracketedPasteMode && pf.pty != nil {
+		pty := pf.localPTY()
+		if !pf.showPanels && pf.termView.BracketedPasteMode && pty != nil {
 			if e.PasteStart {
-				pf.pty.Write([]byte("\x1b[200~"))
+				pty.Write([]byte("\x1b[200~"))
 			} else {
-				pf.pty.Write([]byte("\x1b[201~"))
+				pty.Write([]byte("\x1b[201~"))
 			}
 			return true
 		}
@@ -2344,16 +2369,16 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 			dlg.OnResult = func(code int) {
 				if code == 0 {
 					SaveSession()
-					if pf.pty != nil {
-						pf.pty.Close()
+					if pty := pf.takeLocalPTY(); pty != nil {
+						pty.Close()
 					}
 					vtui.FrameManager.Shutdown()
 				}
 			}
 		} else {
 			SaveSession()
-			if pf.pty != nil {
-				pf.pty.Close()
+			if pty := pf.takeLocalPTY(); pty != nil {
+				pty.Close()
 			}
 			vtui.FrameManager.Shutdown()
 		}

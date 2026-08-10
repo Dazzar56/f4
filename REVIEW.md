@@ -155,4 +155,20 @@ human decision at review time:
       where the shifts should be 18 and 12. Anything above U+FFFF that leaves the
       library as UTF-8 comes out wrong. Nothing on our path does that today - region
       names are ASCII and lines travel inwards, not outwards - so this is recorded
-      rather than patched. It is upstream code and a patch belongs upstream.
+            rather than patched. It is upstream code and a patch belongs upstream.
+
+      ## The PTY is published once but copied three times
+
+      `initPTY` sets `pf.pty` under `ptyMutex` and, in the same critical section,
+      `pf.parser.pty` and `pf.termView.pty`. `PanelsFrame` now reads its own field
+      through `localPTY`, but the parser and the terminal view read their copies
+      straight from the UI thread, and `NewPanelsFrame` writes `pf.termView.pty` a
+      second time, unlocked, right after starting the goroutine. That is the same
+      two word interface race that crashed the quit path, only with a smaller
+      window and a less obvious symptom, since a torn value there gets a `Write`
+      rather than a `Close`.
+
+      The tidy fix is for one owner to hold the PTY and for the other two to ask it,
+      which means touching the parser and the view and is more than a crash fix
+      should carry. Recorded here so it is done deliberately, with the terminal
+      tests in front of whoever does it.
