@@ -111,7 +111,7 @@ func BuildPlugRingRows(items []PlugRingItem, installed map[string]PlugRingItem) 
 
 func actionPlugRing(pf *PanelsFrame) {
 	w, h := 76, 22
-	dlg := vtui.NewCenteredDialog(w, h, " f4 PlugRing ")
+	dlg := vtui.NewCenteredDialog(w, h, Msg("PlugRing.Title"))
 	dlg.ShowClose = true
 
 	table := vtui.NewTable(0, 0, w-4, h-6, []vtui.TableColumn{
@@ -124,10 +124,10 @@ func actionPlugRing(pf *PanelsFrame) {
 	useDialogTableColors(table)
 	table.ShowScrollBar = true
 
-	btnInstall := vtui.NewButton(0, 0, "&Install/Update")
-	btnRemove := vtui.NewButton(0, 0, "&Remove")
-	btnRefresh := vtui.NewButton(0, 0, "Re&fresh")
-	btnClose := vtui.NewButton(0, 0, "&Close")
+	btnInstall := vtui.NewButton(0, 0, Msg("PlugRing.BtnInstall"))
+	btnRemove := vtui.NewButton(0, 0, Msg("PlugRing.BtnRemove"))
+	btnRefresh := vtui.NewButton(0, 0, Msg("PlugRing.BtnRefresh"))
+	btnClose := vtui.NewButton(0, 0, Msg("PlugRing.BtnClose"))
 
 	dlg.AddItem(table)
 	dlg.AddItem(btnInstall)

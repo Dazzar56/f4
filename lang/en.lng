@@ -673,3 +673,10 @@ FileOp.Skip=&Skip
 FileOp.Rename=&Rename
 FileOp.Append=&Append
 FileOp.Resume=Res&ume
+
+Arkanoid.HighScores= High Scores
+PlugRing.Title= f4 PlugRing
+PlugRing.BtnInstall=&Install/Update
+PlugRing.BtnRemove=&Remove
+PlugRing.BtnRefresh=Re&fresh
+PlugRing.BtnClose=&Close
