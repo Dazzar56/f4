@@ -163,6 +163,7 @@
     ├── gui_windows.go
     ├── hardcoded_strings_test.go
     ├── help
+    │   ├── ar.hlf
     │   ├── be.hlf
     │   ├── cs.hlf
     │   ├── de.hlf
@@ -170,6 +171,7 @@
     │   ├── es.hlf
     │   ├── et.hlf
     │   ├── fi.hlf
+    │   ├── he.hlf
     │   ├── hu.hlf
     │   ├── hy.hlf
     │   ├── ja.hlf
@@ -183,6 +185,8 @@
     │   ├── uk.hlf
     │   └── zh.hlf
     ├── help.go
+    ├── help_keys_ar_test.go
+    ├── help_keys_he_test.go
     ├── help_keys_ru_test.go
     ├── help_keys_test.go
     ├── help_lang_test.go
@@ -253,6 +257,7 @@
     │   ├── es.lng
     │   ├── et.lng
     │   ├── fi.lng
+    │   ├── he.lng
     │   ├── hu.lng
     │   ├── hy.lng
     │   ├── ja.lng
@@ -694,4 +699,4 @@
     ├── word_nav_test.go
     └── workspace_routing_test.go
     
-    49 directories, 644 files
+    49 directories, 649 files
