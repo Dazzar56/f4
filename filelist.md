@@ -11,7 +11,6 @@
     ├── action_restore_selection_test.go
     ├── actions.go
     ├── actions_test.go
-    ├── afix.ap
     ├── ansi_parser.go
     ├── ansi_parser_test.go
     ├── api.go
@@ -93,6 +92,7 @@
     ├── cpu_info_linux.go
     ├── cpu_info_other.go
     ├── cpu_info_windows.go
+    ├── debug.log
     ├── detach_unix.go
     ├── detach_windows.go
     ├── dialog_layouts_test.go
@@ -423,6 +423,7 @@
     │   │   │   ├── fs_test.go
     │   │   │   ├── hash.go
     │   │   │   ├── hash_test.go
+    │   │   │   ├── helper.ps1
     │   │   │   ├── helper.sh
     │   │   │   ├── job.go
     │   │   │   ├── job_test.go
@@ -434,15 +435,20 @@
     │   │   │   ├── mutate_test.go
     │   │   │   ├── patch.go
     │   │   │   ├── patch_test.go
+    │   │   │   ├── paths.go
+    │   │   │   ├── paths_test.go
     │   │   │   ├── read.go
     │   │   │   ├── read_test.go
     │   │   │   ├── script.go
+    │   │   │   ├── script_pwsh_test.go
     │   │   │   ├── script_test.go
     │   │   │   ├── search.go
     │   │   │   ├── search_test.go
     │   │   │   ├── session.go
+    │   │   │   ├── session_pwsh_test.go
     │   │   │   ├── session_test.go
     │   │   │   ├── sizes
+    │   │   │   ├── WINDOWS_PORT.md
     │   │   │   ├── write.go
     │   │   │   └── write_test.go
     │   │   ├── fish_reconnect_entry_test.go
@@ -561,6 +567,7 @@
     ├── terminal_selection_test.go
     ├── terminal_view.go
     ├── terminal_view_test.go
+    ├── TERMINAL_WINDOWS.md
     ├── test_cache_helper_test.go
     ├── test_fallback_lang_test.go
     ├── test_main_test.go
@@ -683,6 +690,7 @@
     ├── window_icon_windows.go
     ├── window_icon_windows_test.go
     ├── word_nav.go
-    └── word_nav_test.go
+    ├── word_nav_test.go
+    └── workspace_routing_test.go
     
-    49 directories, 635 files
+    49 directories, 643 files
