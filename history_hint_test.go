@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -358,7 +359,11 @@ func TestActionCommandHistory_PathColumnAndInsertion(t *testing.T) {
 		VirtualKeyCode:  vtinput.VK_RETURN,
 		ControlKeyState: vtinput.LeftCtrlPressed | vtinput.ShiftPressed,
 	})
-	if got, want := pf.cmdLine.Edit.GetText(), `"`+path+`"`; got != want {
+	want := `"` + path + `"`
+	if runtime.GOOS != "windows" {
+		want = "'" + strings.ReplaceAll(path, "'", "'\\''") + "'"
+	}
+	if got := pf.cmdLine.Edit.GetText(); got != want {
 		t.Fatalf("Ctrl+Shift+Enter inserted %q, want %q", got, want)
 	}
 }

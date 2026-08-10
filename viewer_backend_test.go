@@ -35,14 +35,19 @@ func TestViewerBackendPreservesBackgroundReadError(t *testing.T) {
 	if _, err := backend.ReadAt(0, 4); err != piecetable.ErrLoading {
 		t.Fatalf("first ReadAt error = %v, want ErrLoading", err)
 	}
-	select {
-	case task := <-vtui.FrameManager.TaskChan:
-		task()
-	case <-time.After(time.Second):
-		t.Fatal("background read did not finish")
-	}
-	if _, err := backend.ReadAt(0, 4); !errors.Is(err, want) {
-		t.Fatalf("second ReadAt error = %v, want %v", err, want)
+	deadline := time.After(time.Second)
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-deadline:
+			t.Fatal("background read did not finish")
+		}
+		if _, err := backend.ReadAt(0, 4); errors.Is(err, want) {
+			break
+		} else if err != piecetable.ErrLoading {
+			t.Fatalf("second ReadAt error = %v, want %v", err, want)
+		}
 	}
 }
 

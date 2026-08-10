@@ -530,6 +530,7 @@ func TestLayout_ViewerSearchDialog_Validity(t *testing.T) {
 
 func TestViewerView_HexModeToggle(t *testing.T) {
 	vtui.SetDefaultPalette()
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	tmpDir := t.TempDir()
 	tmp := filepath.Join(tmpDir, "hex.txt")
 	// 32 bytes of data
@@ -545,7 +546,11 @@ func TestViewerView_HexModeToggle(t *testing.T) {
 		t.Fatalf("Failed to create ViewerView: %v", err)
 	}
 	defer vv.Close()
+	vtui.FrameManager.Push(vv)
 
+	// Binary detection may open this fixture in hex mode already. Exercise the
+	// toggle itself from a deterministic text-mode starting state.
+	vv.HexMode = false
 	// Set an offset that is NOT aligned to 16
 	vv.TopOffset = 10
 

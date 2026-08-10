@@ -565,6 +565,17 @@ func (pf *PanelsFrame) completeProcessEnvironmentShellUpdate(token string, succe
 		pf.processEnvironmentGeneration = inFlight.generation
 	}
 	pf.processEnvironmentDeliveryFailed = !success
+	if !success {
+		// Restore the rejected update before publishing the idle state. Readers
+		// must never observe neither an in-flight nor a pending delivery.
+		pf.pendingProcessEnvironment = coalesceProcessEnvironmentChanges(append(
+			cloneProcessEnvironmentChanges(inFlight.changes),
+			pf.pendingProcessEnvironment...,
+		))
+		if inFlight.generation > pf.pendingProcessEnvironmentGeneration {
+			pf.pendingProcessEnvironmentGeneration = inFlight.generation
+		}
+	}
 	closed := pf.processEnvironmentClosed
 	pf.processEnvironmentMu.Unlock()
 
@@ -572,7 +583,6 @@ func (pf *PanelsFrame) completeProcessEnvironmentShellUpdate(token string, succe
 		inFlight.cleanup()
 	}
 	if !success {
-		pf.requeueProcessEnvironment(inFlight.generation, inFlight.changes)
 		vtui.DebugLog("ENV: local shell rejected private update for %d variables", len(inFlight.changes))
 	}
 

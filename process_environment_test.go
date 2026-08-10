@@ -360,7 +360,7 @@ func TestPOSIXProcessEnvironmentPayloadHidesValuesWithVerboseTracing(t *testing.
 	defer payload.cleanup()
 	resultPath := filepath.Join(t.TempDir(), "result")
 	command := "set -evx\n" + strings.ReplaceAll(string(payload.wire), "\r", "\n") +
-		"printf '%s' \"$" + name + "\" > " + posixProcessEnvironmentQuote(resultPath) + "\n"
+		"set +vx\nprintf '%s' \"$" + name + "\" > " + posixProcessEnvironmentQuote(resultPath) + "\n"
 	cmd := exec.Command(shellPath)
 	cmd.Stdin = strings.NewReader(command)
 	output, err := cmd.CombinedOutput()
