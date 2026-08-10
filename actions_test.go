@@ -531,6 +531,32 @@ func TestActionExecute_HistoryQuoting(t *testing.T) {
 		t.Errorf("History entry with spaces must be quoted, got: %q", lastHistory)
 	}
 }
+func TestImportFar2lHistory(t *testing.T) {
+	tmpDir := t.TempDir()
+	hstPath := filepath.Join(tmpDir, "commands.hst")
+	content := `[SavedHistory]
+Lines="cmd1\ncmd2\ncmd3"
+Extras="/dir1\n/dir2\n/dir3"
+Locks=100
+Times=804c4587aa28dd01 004e237daa28dd01 0021f27baa28dd01
+`
+	os.WriteFile(hstPath, []byte(content), 0644)
+
+	recs, err := importFar2lHistory(hstPath)
+	if err != nil {
+		t.Fatalf("importFar2lHistory failed: %v", err)
+	}
+	if len(recs) != 3 {
+		t.Fatalf("Expected 3 records, got %d", len(recs))
+	}
+
+	if recs[0].Name != "cmd1" || recs[0].Extra != "/dir1" || !recs[0].Lock {
+		t.Errorf("Record 0 mismatch: %+v", recs[0])
+	}
+	if recs[1].Name != "cmd2" || recs[1].Extra != "/dir2" || recs[1].Lock {
+		t.Errorf("Record 1 mismatch: %+v", recs[1])
+	}
+}
 func TestActionDelete_SuccessorLogic(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pf := NewPanelsFrame()

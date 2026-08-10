@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
@@ -41,6 +43,13 @@ var (
 	LastShowRight  = true
 )
 
+func extractNames(recs []HistoryRecord) []string {
+	var res []string
+	for _, r := range recs {
+		res = append(res, r.Name)
+	}
+	return res
+}
 func actionFoldersHistory(pf *PanelsFrame) {
 	if vtui.GlobalHistoryProvider == nil {
 		return
@@ -53,7 +62,13 @@ func actionFoldersHistory(pf *PanelsFrame) {
 
 	menu := vtui.NewVMenu(Msg("History.FoldersTitle"))
 	menu.SetHelp("HistoryFolders")
-	search := newHistorySearch(menu, h, Msg("History.FoldersHint"))
+
+	var richFolders []HistoryRecord
+	for _, path := range h {
+		richFolders = append(richFolders, HistoryRecord{Name: path})
+	}
+	search := newHistorySearch(menu, richFolders, Msg("History.FoldersHint"))
+
 	if activePanel := pf.getActivePanel(); activePanel != nil {
 		currentPath := activePanel.vfs.GetPath()
 		for historyPos, path := range h {
@@ -100,10 +115,11 @@ func actionFoldersHistory(pf *PanelsFrame) {
 			return true
 		}
 
-		historyPos, path, ok := search.selected()
+		historyPos, rec, ok := search.selected()
 		if !ok {
 			return false
 		}
+		path := rec.Name
 
 		if e.VirtualKeyCode == vtinput.VK_RETURN {
 			if ctrl {
@@ -129,7 +145,7 @@ func actionFoldersHistory(pf *PanelsFrame) {
 		if (e.VirtualKeyCode == vtinput.VK_DELETE || e.VirtualKeyCode == vtinput.VK_BACK) && shift {
 			// Delete item
 			search.deleteSelected()
-			h = append([]string(nil), search.all...)
+			h = extractNames(search.all)
 			vtui.GlobalHistoryProvider.SaveHistory("folders", h)
 			if len(search.all) == 0 {
 				search.cleanup()
@@ -164,18 +180,43 @@ func actionCommandHistory(pf *PanelsFrame) {
 		return
 	}
 
+	var richCmds []HistoryRecord
+	hp, isF4 := vtui.GlobalHistoryProvider.(*F4HistoryProvider)
+	if isF4 {
+		richCmds = hp.LoadRichHistory("cmdline")
+	} else {
+		for _, c := range h {
+			richCmds = append(richCmds, HistoryRecord{Name: c})
+		}
+	}
+
 	menu := vtui.NewVMenu(Msg("History.CommandsTitle"))
 	menu.SetHelp("History")
-	search := newHistorySearch(menu, h, Msg("History.CommandsHint"))
+	search := newHistorySearch(menu, richCmds, Msg("History.CommandsHint"))
+
+	search.onLockToggled = func() {
+		if isF4 {
+			hp.SaveRichHistory("cmdline", search.all)
+		}
+	}
+	search.onCtrlF10 = func(rec HistoryRecord) {
+		if rec.Extra != "" {
+			search.cleanup()
+			menu.Close()
+			if targetPanel := pf.getActivePanel(); targetPanel != nil {
+				pf.NavigateToPath(targetPanel, rec.Extra)
+			}
+		}
+	}
 
 	// Shared "paste selected command" path used by Enter and mouse click.
 	pasteCurrent := func() {
-		_, cmd, ok := search.selected()
+		_, rec, ok := search.selected()
 		if !ok {
 			return
 		}
 		search.cleanup()
-		pf.cmdLine.Edit.SetText(cmd)
+		pf.cmdLine.Edit.SetText(rec.Name)
 		pf.cmdLine.Edit.HistoryPos = -1
 	}
 	// VMenu.ProcessMouse calls SetExitCode after OnAction, so click closes
@@ -195,7 +236,7 @@ func actionCommandHistory(pf *PanelsFrame) {
 			return false
 		}
 
-		_, cmd, ok := search.selected()
+		_, rec, ok := search.selected()
 		if !ok {
 			return false
 		}
@@ -208,11 +249,15 @@ func actionCommandHistory(pf *PanelsFrame) {
 
 		if (e.VirtualKeyCode == vtinput.VK_DELETE || e.VirtualKeyCode == vtinput.VK_BACK) && shift {
 			// Delete item
-			search.deleteSelected()
-			h = append([]string(nil), search.all...)
-			pf.cmdLine.Edit.History = h
-			if vtui.GlobalHistoryProvider != nil {
-				vtui.GlobalHistoryProvider.SaveHistory("cmdline", h)
+			if search.deleteSelected() {
+				if isF4 {
+					hp.SaveRichHistory("cmdline", search.all)
+				}
+				h = extractNames(search.all)
+				pf.cmdLine.Edit.History = h
+				if !isF4 && vtui.GlobalHistoryProvider != nil {
+					vtui.GlobalHistoryProvider.SaveHistory("cmdline", h)
+				}
 			}
 			if len(search.all) == 0 {
 				search.cleanup()
@@ -223,16 +268,20 @@ func actionCommandHistory(pf *PanelsFrame) {
 
 		// Del (no modifiers): clear the whole history with a confirmation.
 		if e.VirtualKeyCode == vtinput.VK_DELETE && !ctrl && !alt && !shift {
-			confirmAndClearHistory(Msg("History.CommandsTitle"), "cmdline", &h, func() {
-				pf.cmdLine.Edit.History = nil
+			confirmAndClearRichHistory(Msg("History.CommandsTitle"), "cmdline", &richCmds, func() {
+				h = extractNames(richCmds)
+				pf.cmdLine.Edit.History = h
 				pf.cmdLine.Edit.HistoryPos = -1
+				if !isF4 && vtui.GlobalHistoryProvider != nil {
+					vtui.GlobalHistoryProvider.SaveHistory("cmdline", h)
+				}
 			}, search, menu)
 			return true
 		}
 
 		// Ctrl+C / Ctrl+Ins: copy the selected entry to the clipboard.
 		if (e.VirtualKeyCode == vtinput.VK_C || e.VirtualKeyCode == vtinput.VK_INSERT) && ctrl && !alt && !shift {
-			go vtui.SetClipboard(cmd)
+			go vtui.SetClipboard(rec.Name)
 			return true
 		}
 		return false
@@ -269,6 +318,33 @@ func confirmAndClearHistory(title, providerName string, h *[]string, localReset 
 // handler in folder history: prompt, then keep only paths that still
 // exist on disk. Locked-entry semantics don't apply here — f4 has no
 // per-entry lock flag yet.
+func confirmAndClearRichHistory(title, providerName string, h *[]HistoryRecord, localReset func(), search *historySearch, menu *vtui.VMenu) {
+	buttons := []string{Msg("vtui.Ok"), Msg("vtui.Cancel")}
+	dlg := vtui.ShowMessage(title, Msg("History.ConfirmClearAll"), buttons)
+	dlg.OnResult = func(code int) {
+		if code != 0 {
+			return
+		}
+		kept := make([]HistoryRecord, 0)
+		for _, r := range *h {
+			if r.Lock {
+				kept = append(kept, r)
+			}
+		}
+		*h = kept
+		if localReset != nil {
+			localReset()
+		}
+		if hp, ok := vtui.GlobalHistoryProvider.(*F4HistoryProvider); ok {
+			hp.SaveRichHistory(providerName, kept)
+		}
+		search.setItems(kept)
+		if len(kept) == 0 {
+			search.cleanup()
+			menu.Close()
+		}
+	}
+}
 func confirmAndPruneMissingFolderHistory(h *[]string, search *historySearch, menu *vtui.VMenu) {
 	buttons := []string{Msg("vtui.Ok"), Msg("vtui.Cancel")}
 	dlg := vtui.ShowMessage(Msg("History.FoldersTitle"), Msg("History.ConfirmPruneMissing"), buttons)
@@ -289,7 +365,11 @@ func confirmAndPruneMissingFolderHistory(h *[]string, search *historySearch, men
 		if vtui.GlobalHistoryProvider != nil {
 			vtui.GlobalHistoryProvider.SaveHistory("folders", kept)
 		}
-		search.setItems(kept)
+		var richFolders []HistoryRecord
+		for _, p := range kept {
+			richFolders = append(richFolders, HistoryRecord{Name: p})
+		}
+		search.setItems(richFolders)
 		if len(kept) == 0 {
 			search.cleanup()
 			menu.Close()
@@ -1066,7 +1146,7 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 				if !isWindowsShell {
 					historyCmd = "./" + historyCmd
 				}
-				pf.cmdLine.Edit.AddHistory(historyCmd)
+				pf.addCommandHistory(historyCmd)
 				pf.cmdLine.Edit.HistoryPos = -1
 
 				activePty := pf.getActivePTY()
@@ -2434,6 +2514,141 @@ func actionUpdateSettings(pf *PanelsFrame) {
 	}
 
 	vtui.FrameManager.Push(dlg)
+}
+
+func decodeFar2lTime(hexStr string) (time.Time, error) {
+	if len(hexStr) != 16 {
+		return time.Time{}, fmt.Errorf("invalid time length")
+	}
+	b, err := hex.DecodeString(hexStr)
+	if err != nil {
+		return time.Time{}, err
+	}
+	val := binary.LittleEndian.Uint64(b)
+	sec := int64(val / 10000000)
+	nsec := int64(val%10000000) * 100
+	sec -= 11644473600
+	return time.Unix(sec, nsec), nil
+}
+
+func unescapeFar2lString(s string) string {
+	if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
+		s = s[1 : len(s)-1]
+	}
+	s = strings.ReplaceAll(s, "\\n", "\n")
+	s = strings.ReplaceAll(s, "\\r", "\r")
+	s = strings.ReplaceAll(s, "\\\"", "\"")
+	s = strings.ReplaceAll(s, "\\\\", "\\")
+	return s
+}
+
+func importFar2lHistory(path string) ([]HistoryRecord, error) {
+	ini := LoadIni(path)
+	linesStr := ini.GetString("SavedHistory", "Lines", "")
+	extrasStr := ini.GetString("SavedHistory", "Extras", "")
+	locksStr := ini.GetString("SavedHistory", "Locks", "")
+	timesStr := ini.GetString("SavedHistory", "Times", "")
+
+	if linesStr == "" {
+		return nil, fmt.Errorf("no Lines found in %s", path)
+	}
+
+	linesStr = unescapeFar2lString(linesStr)
+	extrasStr = unescapeFar2lString(extrasStr)
+
+	lines := strings.Split(linesStr, "\n")
+	var extras []string
+	if extrasStr != "" {
+		extras = strings.Split(extrasStr, "\n")
+	}
+	times := strings.Fields(timesStr)
+
+	var res []HistoryRecord
+	for i, name := range lines {
+		rec := HistoryRecord{Name: name}
+		if i < len(extras) {
+			rec.Extra = extras[i]
+		}
+		if i < len(locksStr) && locksStr[i] != '0' {
+			rec.Lock = true
+		}
+		if i < len(times) {
+			if t, err := decodeFar2lTime(times[i]); err == nil {
+				rec.Timestamp = t
+			}
+		}
+		res = append(res, rec)
+	}
+
+	return res, nil
+}
+
+func actionImportFar2lHistory(pf *PanelsFrame) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		vtui.ShowMessage(" Error ", "Cannot find user home directory.", []string{"&Ok"})
+		return
+	}
+	far2lConfig := filepath.Join(home, ".config", "far2l", "history", "commands.hst")
+	if _, err := os.Stat(far2lConfig); os.IsNotExist(err) {
+		vtui.ShowMessage(" Error ", "far2l history not found at:\n"+far2lConfig, []string{"&Ok"})
+		return
+	}
+
+	dlg := vtui.ShowMessage(" Import History ", "Do you want to import command history from far2l?\nThis will merge it with your current history.", []string{"&Import", "Cancel"})
+	dlg.OnResult = func(code int) {
+		if code != 0 {
+			return
+		}
+		vtui.RunAsync(func(ctx *vtui.TaskContext) {
+			recs, err := importFar2lHistory(far2lConfig)
+			ctx.RunOnUI(func() {
+				if err != nil {
+					vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to import history:\n%v", err), []string{"&Ok"})
+					return
+				}
+
+				hp, isF4 := vtui.GlobalHistoryProvider.(*F4HistoryProvider)
+				if !isF4 {
+					vtui.ShowMessage(" Error ", "Incompatible history provider.", []string{"&Ok"})
+					return
+				}
+
+				current := hp.LoadRichHistory("cmdline")
+				seen := make(map[string]bool)
+				var merged []HistoryRecord
+
+				for _, r := range current {
+					if !seen[r.Name] {
+						seen[r.Name] = true
+						merged = append(merged, r)
+					}
+				}
+
+				for _, r := range recs {
+					if !seen[r.Name] {
+						seen[r.Name] = true
+						merged = append(merged, r)
+					}
+				}
+
+				limit := pf.cmdLine.Edit.HistoryLimit
+				if limit <= 0 {
+					limit = 100
+				}
+				if len(merged) > limit {
+					merged = merged[:limit]
+				}
+
+				hp.SaveRichHistory("cmdline", merged)
+
+				h := extractNames(merged)
+				pf.cmdLine.Edit.History = h
+
+				vtui.ShowToast(fmt.Sprintf("Imported %d new commands from far2l.", len(merged)-len(current)), 3*time.Second)
+			})
+		})
+	}
 }
 
 func actionAppearanceSettings(pf *PanelsFrame) {

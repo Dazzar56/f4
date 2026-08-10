@@ -11,13 +11,18 @@ import (
 // historySearch adds incremental filtering to a VMenu while keeping the menu
 // itself as the frame. Keeping the original item index in UserData lets callers
 // delete the right history entry even when only a filtered subset is visible.
+import "fmt"
+import "time"
+
 type historySearch struct {
-	menu       *vtui.VMenu
-	title      string
-	hint       string
-	all        []string
-	query      []rune
-	prefixOnly bool
+	menu          *vtui.VMenu
+	title         string
+	hint          string
+	all           []HistoryRecord
+	query         []rune
+	prefixOnly    bool
+	onLockToggled func()
+	onCtrlF10     func(HistoryRecord)
 }
 
 var (
@@ -29,12 +34,12 @@ type historySearchEntry struct {
 	index int
 }
 
-func newHistorySearch(menu *vtui.VMenu, items []string, hint string) *historySearch {
+func newHistorySearch(menu *vtui.VMenu, items []HistoryRecord, hint string) *historySearch {
 	s := &historySearch{
 		menu:  menu,
 		title: menu.GetTitle(),
 		hint:  hint,
-		all:   append([]string(nil), items...),
+		all:   append([]HistoryRecord(nil), items...),
 	}
 	s.applyFilter()
 	s.installRenderer()
@@ -46,7 +51,7 @@ func (s *historySearch) applyFilter() {
 	// History providers keep the newest entry first. Dialogs show chronological
 	// order instead: the oldest entry at the top and the newest at the bottom.
 	for i := len(s.all) - 1; i >= 0; i-- {
-		text := s.all[i]
+		text := s.all[i].DisplayText()
 		matched, _ := historySearchMatch(text, s.query, s.prefixOnly)
 		if matched {
 			items = append(items, vtui.MenuItem{
@@ -90,14 +95,14 @@ func (s *historySearch) resize() {
 	s.menu.SetPosition(x1, y1, x1+width-1, y1+height-1)
 }
 
-func (s *historySearch) selected() (int, string, bool) {
+func (s *historySearch) selected() (int, HistoryRecord, bool) {
 	idx := s.menu.SelectPos
 	if idx < 0 || idx >= len(s.menu.Items) {
-		return 0, "", false
+		return 0, HistoryRecord{}, false
 	}
 	entry, ok := s.menu.Items[idx].UserData.(historySearchEntry)
 	if !ok || entry.index < 0 || entry.index >= len(s.all) {
-		return 0, "", false
+		return 0, HistoryRecord{}, false
 	}
 	return entry.index, s.all[entry.index], true
 }
@@ -114,8 +119,8 @@ func (s *historySearch) selectOriginalIndex(originalIndex int) bool {
 }
 
 func (s *historySearch) deleteSelected() bool {
-	idx, _, ok := s.selected()
-	if !ok {
+	idx, rec, ok := s.selected()
+	if !ok || rec.Lock {
 		return false
 	}
 	s.all = append(s.all[:idx], s.all[idx+1:]...)
@@ -125,8 +130,8 @@ func (s *historySearch) deleteSelected() bool {
 
 // setItems replaces the full item list (used by the "clear all" and
 // "remove missing paths" hotkeys) and re-applies the active filter.
-func (s *historySearch) setItems(items []string) {
-	s.all = append([]string(nil), items...)
+func (s *historySearch) setItems(items []HistoryRecord) {
+	s.all = append([]HistoryRecord(nil), items...)
 	s.applyFilter()
 }
 
@@ -138,6 +143,36 @@ func (s *historySearch) processKey(e *vtinput.InputEvent) bool {
 	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
 	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 
+	if e.VirtualKeyCode == vtinput.VK_F3 && !shift && !ctrl && !alt {
+		_, rec, ok := s.selected()
+		if ok {
+			tStr := "None"
+			if !rec.Timestamp.IsZero() {
+				tStr = rec.Timestamp.Format(time.RFC1123)
+			}
+			msg := fmt.Sprintf("Command: %s\nDirectory: %s\nTime: %s", vtui.TruncateMiddle(rec.Name, 40), vtui.TruncateMiddle(rec.Extra, 40), tStr)
+			vtui.ShowMessage(" Details ", msg, []string{"&Ok"})
+		}
+		return true
+	}
+	if e.VirtualKeyCode == vtinput.VK_INSERT && !shift && !ctrl && !alt {
+		idx, _, ok := s.selected()
+		if ok {
+			s.all[idx].Lock = !s.all[idx].Lock
+			vtui.FrameManager.Redraw()
+			if s.onLockToggled != nil {
+				s.onLockToggled()
+			}
+		}
+		return true
+	}
+	if e.VirtualKeyCode == vtinput.VK_F10 && ctrl && !shift && !alt {
+		_, rec, ok := s.selected()
+		if ok && s.onCtrlF10 != nil {
+			s.onCtrlF10(rec)
+		}
+		return true
+	}
 	if e.VirtualKeyCode == vtinput.VK_F2 && !shift && !ctrl && !alt {
 		s.prefixOnly = !s.prefixOnly
 		s.applyFilter()
@@ -237,7 +272,19 @@ func (s *historySearch) draw(scr *vtui.ScreenBuf) {
 
 		y := s.menu.Y1 + 1 + row
 		p.Fill(s.menu.X1+1, y, s.menu.X2-1, y, ' ', baseAttr)
-		cells := []vtui.CharInfo{{Char: uint64(' '), Attributes: baseAttr}}
+
+		lockChar := uint64(' ')
+		itemIdx := s.menu.TopPos + row
+		if entry, ok := s.menu.Items[itemIdx].UserData.(historySearchEntry); ok && s.all[entry.index].Lock {
+			lockChar = uint64('*')
+		}
+
+		cells := []vtui.CharInfo{
+			{Char: uint64(' '), Attributes: baseAttr},
+			{Char: lockChar, Attributes: vtui.Palette[vtui.ColMenuHighlight]},
+			{Char: uint64(' '), Attributes: baseAttr},
+		}
+
 		for i, r := range []rune(text) {
 			attr := baseAttr
 			if i < len(highlights) && highlights[i] {

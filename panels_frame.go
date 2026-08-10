@@ -73,6 +73,52 @@ func (pf *PanelsFrame) SetPendingSelection(name string) {
 	}
 }
 
+func (pf *PanelsFrame) addCommandHistory(cmd string) {
+	pf.cmdLine.Edit.AddHistory(cmd)
+	hp, isF4 := vtui.GlobalHistoryProvider.(*F4HistoryProvider)
+	if !isF4 {
+		if vtui.GlobalHistoryProvider != nil {
+			vtui.GlobalHistoryProvider.SaveHistory("cmdline", pf.cmdLine.Edit.History)
+		}
+		return
+	}
+
+	rich := hp.LoadRichHistory("cmdline")
+	var newRich []HistoryRecord
+	curDir := ""
+	if fsp := pf.getActivePanel(); fsp != nil {
+		curDir = fsp.vfs.GetPath()
+	}
+
+	newRich = append(newRich, HistoryRecord{
+		Name:      cmd,
+		Extra:     curDir,
+		Timestamp: time.Now(),
+	})
+
+	for _, r := range rich {
+		if r.Name != cmd {
+			newRich = append(newRich, r)
+		} else if r.Lock {
+			newRich[0].Lock = true
+		}
+	}
+
+	limit := pf.cmdLine.Edit.HistoryLimit
+	if limit <= 0 {
+		limit = 100
+	}
+	if len(newRich) > limit {
+		newRich = newRich[:limit]
+	}
+	hp.SaveRichHistory("cmdline", newRich)
+
+	var strHist []string
+	for _, r := range newRich {
+		strHist = append(strHist, r.Name)
+	}
+	pf.cmdLine.Edit.History = strHist
+}
 func (pf *PanelsFrame) insertPathToCmdLine(path string) {
 	if path != "" {
 		if strings.ContainsAny(path, " &|;<>()$`\\\"'") {
@@ -1529,7 +1575,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		commandInputActive := !pf.searchFirstMode() || pf.commandLineFocused || !pf.showPanels
 		if commandInputActive && !pf.cmdLine.IsEmpty() {
 			cmd := pf.cmdLine.Edit.GetText()
-			pf.cmdLine.Edit.AddHistory(cmd)
+			pf.addCommandHistory(cmd)
 			pf.cmdLine.Edit.HistoryPos = -1
 
 			trimmedCmd := strings.TrimSpace(cmd)
