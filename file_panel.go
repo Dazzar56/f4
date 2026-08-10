@@ -805,7 +805,11 @@ func (fp *FileSystemPanel) dragAutoScrollStep(direction int) bool {
 
 func (fp *FileSystemPanel) scheduleDragAutoScroll(generation uint64) {
 	fp.dragScrollTimer = time.AfterFunc(panelDragScrollInterval, func() {
-		vtui.FrameManager.PostTask(func() {
+		frameManager := vtui.FrameManager
+		if frameManager == nil {
+			return
+		}
+		frameManager.PostTask(func() {
 			if generation != fp.dragScrollGeneration || fp.dragScrollDirection == 0 {
 				return
 			}
@@ -1408,7 +1412,11 @@ func (fp *FileSystemPanel) startLoadingAnimation() {
 	var scheduleNext func()
 	scheduleNext = func() {
 		fp.loadingTimer = time.AfterFunc(panelLoadingPulseInterval, func() {
-			vtui.FrameManager.PostTask(func() {
+			frameManager := vtui.FrameManager
+			if frameManager == nil {
+				return
+			}
+			frameManager.PostTask(func() {
 				if !fp.isLoading || fp.loadingGeneration != generation {
 					return
 				}
@@ -1781,7 +1789,11 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 				return
 			}
 
-			vtui.FrameManager.PostTask(func() {
+			frameManager := vtui.FrameManager
+			if frameManager == nil {
+				return
+			}
+			frameManager.PostTask(func() {
 				if ctx.Err() != nil || fp.loadCtx != ctx {
 					return
 				}
@@ -1871,7 +1883,11 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 		if ctx.Err() != nil {
 			return
 		}
-		vtui.FrameManager.PostTask(func() {
+		frameManager := vtui.FrameManager
+		if frameManager == nil {
+			return
+		}
+		frameManager.PostTask(func() {
 			if ctx.Err() != nil || fp.loadCtx != ctx {
 				return
 			}
