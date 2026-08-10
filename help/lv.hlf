@@ -236,7 +236,7 @@ PE resursas tiek analizēts ar integrētu kodu visās atbalstītajajās OS. Ja d
 Metadatu tekstas ar ceļa atdalītājiem vai citiem aizliegtiem simboliem tiek noraidīts vai
 tiek bloķēts galīgā tikrinimo laikā. Vienmēr pārbaudiet priekšskatījumu strādājot ar svešiem tagiem.
 
-Lai atgrieztos pie VisRen satura, pasπαuskite Backspace.
+Lai atgrieztos pie VisRen satura, paspauskite Backspace.
 
 @VisRenSearch
 $VisRen: meklēšana, aizvietošana un regulārās izteiksmes
@@ -354,7 +354,7 @@ tiek ierakstīti ar ekranēšanu. Neizdzēsiet ārējās pēdiņas.
 Aizverot redaktoru VisRen pieprasa:
 
   - precīzi tikpat rindu, cik bija priekšskatījumā;
-  - vienu vai divas kolonnas pēdiņās pēc izvēlētā režīма;
+  - vienu vai divas kolonnas pēdiņās pēc izvēlētā režīma;
   - nekāda sveša teksta ārpus pēdiņām;
   - nemainīgu sākotnējo kolonnu divu kolonnu režīmā;
   - pieļaujamu pārnesamu komponentu katram galīgajam vārdam.
@@ -442,7 +442,7 @@ Trūkstošie vai bojātie metadati virst par tukšu tekstu. Uzmanīgi pievienoji
 maskās un vienmēr pārbaudiet rezultātu. VisRen nesukuria transakcijas un parenka pagaidu vārdus ciklams
 no vairākiem elementiem.
 
-Lai atgrieztos pie VisRen satura, pasπαuskite Backspace.
+Lai atgrieztos pie VisRen satura, paspauskite Backspace.
 
 @VisRenExamples
 $VisRen: praktiskas receptes

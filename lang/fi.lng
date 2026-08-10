@@ -668,7 +668,83 @@ FileOp.Overwrite=&Korvaa
 FileOp.Skip=&Ohita
 FileOp.Rename=&Nimeä uudelleen
 FileOp.Append=&Liitä loppuun
-FileOp.Resume=&JatkaLanguageSettings.Title= Kieliasetukset
+FileOp.Resume=&Jatka
+LanguageSettings.Title= Kieliasetukset
 LanguageSettings.Primary=Ensisijainen kieli:
 LanguageSettings.Fallback=Varakieli:
 LanguageSettings.None=<ei mitään>
+
+Arkanoid.HighScores= Ennätykset
+PlugRing.Title= f4 PlugRing
+PlugRing.BtnInstall=&Asenna/Päivitä
+PlugRing.BtnRemove=&Poista
+PlugRing.BtnRefresh=Päi&vitä
+PlugRing.BtnClose=&Sulje
+
+Attributes.Title= Määritteet
+Attributes.BtnSet=Aseta
+Attributes.BtnSecurity=&Suojaus
+Attributes.Read=Luku
+Attributes.Write=Kirjoitus
+Attributes.Execute=Suoritus
+Attributes.ReadOnly=Vain &luku
+Attributes.Hidden=&Piilotettu
+Attributes.System=&Järjestelmä
+Attributes.Archive=&Arkisto
+Permissions.Title= Liitännäisten oikeudet
+Permissions.BtnRevoke=&Peruuta
+Permissions.BtnClose=&Sulje
+
+Search.Prompt=Etsi kohteesta:
+Search.WholeWords=Kokonaiset sanat
+Search.Regex=Säännölliset lausekkeet
+Search.BtnFind=&Etsi
+Replace.Title= Korvaa
+Replace.Prompt=Korvaa kohteella:
+Replace.BtnReplace=&Korvaa
+Replace.BtnReplaceAll=Korvaa &kaikki
+Codepage.Title= Koodisivut
+Codepage.ConvertTitle= Muunna koodisivu
+
+vtui.Save=&Tallenna
+UserMenu.EditTitle= Muokkaa käyttäjävalikkoa
+UserMenu.CreateTitle= Luo käyttäjävalikko
+UserMenu.EditSubmenuTitle= Muokkaa alivalikkoa
+UserMenu.CreateSubmenuTitle= Luo alivalikko
+UserMenu.LabelHotkey=Pika&näppäin:
+UserMenu.LabelLabel=&Nimi:
+UserMenu.LabelCommand=&Komento:
+
+Hotkeys.Title= Pikanäppäinten määritys
+Hotkeys.BtnAssign=&Määritä
+Hotkeys.BtnUnbind=&Poista pikanäppäin
+Hotkeys.BtnClose=&Sulje
+Hotkeys.SelectTitle= Valitse alue ja ehto
+Hotkeys.BtnNext=Seuraava >
+Hotkeys.LabelArea=Alue:
+Hotkeys.LabelWhen=Ehto:
+Hotkeys.AssignTitle= Määritä pikanäppäin
+Op.DummyQueue=Jono (Oletus)
+Op.DummyBackground=Taustapaneelin klooni
+Op.DummyForeground=Etualalukitus
+Op.BtnStart=&Aloita
+Drive.Title= Asema
+
+NetFox.ConnectionTitle= Yhteys
+NetFox.PassiveMode=Passiivitila
+NetFox.LabelName=&Nimi:
+NetFox.LabelProtocol=P&rotokolla:
+NetFox.LabelHost=&Isäntä:
+NetFox.LabelPort=P&ortti:
+NetFox.LabelUser=&Käyttäjä:
+NetFox.LabelPassword=&Salasana:
+NetFox.LabelTimeout=&Aikakatkaisu:
+NetFox.LabelCodepage=Koodi&sivu:
+NetFox.ErrorEmptyName=Nimi ei voi olla tyhjä
+NetFox.ErrorReservedName=Varattu yhteysnimi
+
+FileOp.BtnCancel=&Peruuta
+FileOp.BtnBackground=&Tausta
+Queue.BtnCancel=&Peruuta työ
+Queue.BtnClear=Tyhjennä &valmiit
+Session.Title= Valitse istunto

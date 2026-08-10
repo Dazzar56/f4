@@ -59,7 +59,7 @@ VisRen.WordDivTitle=Բառերի բաժանարարներ
 VisRen.WordDivPrompt=Բառերը բաժանող նշաններ (առավելագույնը 18)՝
 VisRen.OldName=Հին անուն
 VisRen.NewName=Նոր անուն
-vtui.Ok=&Oկ
+vtui.Ok=&Լավ
 vtui.Cancel=Չեղարկել
 Panel.Other=&Այլ վահանակ
 Panel.Column.Name=Անուն
@@ -410,7 +410,7 @@ AppearanceSettings.Style=Ձևավորման &ոճը՝
 AppearanceSettings.Font=GUI &տառատեսակ՝
 AppearanceSettings.FontSize=GUI տառատեսակի &չափը՝
 AppearanceSettings.TitleTemplate=Պատուհանի &վերնագիր՝
-AppearanceSettings.ExportBtn=&Արտահանել գունային սխেման
+AppearanceSettings.ExportBtn=&Արտահանել սխեման
 AppearanceSettings.ColorCorrection=Կարգավորել գունային &կոնտրաստը
 
 ConfirmationsSettings.Title= Հաստատումներ
@@ -668,7 +668,8 @@ FileOp.Overwrite=&Վերագրել
 FileOp.Skip=&Բաց թողնել
 FileOp.Rename=&Անվանափոխել
 FileOp.Append=&Լրացնել
-FileOp.Resume=Վերա&սկսելLanguageSettings.Title= Լեզվի կարգավորումներ
+FileOp.Resume=Վերա&սկսել
+LanguageSettings.Title= Լեզվի կարգավորումներ
 LanguageSettings.Primary=Հիմնական լեզու՝
 LanguageSettings.Fallback=Պահուստային լեզու՝
 LanguageSettings.None=<չկա>

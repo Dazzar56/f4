@@ -90,6 +90,52 @@ func (pf *PanelsFrame) SetPendingSelection(name string) {
 	}
 }
 
+func (pf *PanelsFrame) addCommandHistory(cmd string) {
+	pf.cmdLine.Edit.AddHistory(cmd)
+	hp, isF4 := vtui.GlobalHistoryProvider.(*F4HistoryProvider)
+	if !isF4 {
+		if vtui.GlobalHistoryProvider != nil {
+			vtui.GlobalHistoryProvider.SaveHistory("cmdline", pf.cmdLine.Edit.History)
+		}
+		return
+	}
+
+	rich := hp.LoadRichHistory("cmdline")
+	var newRich []HistoryRecord
+	curDir := ""
+	if fsp := pf.getActivePanel(); fsp != nil {
+		curDir = fsp.vfs.GetPath()
+	}
+
+	newRich = append(newRich, HistoryRecord{
+		Name:      cmd,
+		Extra:     curDir,
+		Timestamp: time.Now(),
+	})
+
+	for _, r := range rich {
+		if r.Name != cmd {
+			newRich = append(newRich, r)
+		} else if r.Lock {
+			newRich[0].Lock = true
+		}
+	}
+
+	limit := pf.cmdLine.Edit.HistoryLimit
+	if limit <= 0 {
+		limit = 100
+	}
+	if len(newRich) > limit {
+		newRich = newRich[:limit]
+	}
+	hp.SaveRichHistory("cmdline", newRich)
+
+	var strHist []string
+	for _, r := range newRich {
+		strHist = append(strHist, r.Name)
+	}
+	pf.cmdLine.Edit.History = strHist
+}
 func (pf *PanelsFrame) insertPathToCmdLine(path string) {
 	if path != "" {
 		if strings.ContainsAny(path, " &|;<>()$`\\\"'") {
@@ -729,6 +775,30 @@ func (pf *PanelsFrame) buildPrompt() []vtui.CharInfo {
 	return prompt
 }
 
+// localPTY reads the local PTY under the mutex initPTY publishes it with.
+// The read has to be locked and not merely nil checked: an interface value
+// is two words wide, and a racing reader can see the type word of a *PTY
+// with the data word still zero. Such a value passes an "!= nil" guard and
+// then calls the method on a nil receiver, which is how F10 pressed in the
+// first milliseconds of a session used to crash inside PTY.Close while the
+// shell was still being spawned.
+func (pf *PanelsFrame) localPTY() PtyBackend {
+	pf.ptyMutex.Lock()
+	defer pf.ptyMutex.Unlock()
+	return pf.pty
+}
+
+// takeLocalPTY hands the local PTY to the caller and clears the field, so a
+// shutdown path owns it outright: whoever gets it closes it, and a second
+// path finds nothing left to close twice.
+func (pf *PanelsFrame) takeLocalPTY() PtyBackend {
+	pf.ptyMutex.Lock()
+	defer pf.ptyMutex.Unlock()
+	pty := pf.pty
+	pf.pty = nil
+	return pty
+}
+
 func (pf *PanelsFrame) initPTY() {
 	// Always initialize the parser to prevent nil dereference
 	pf.parser = NewAnsiParser(pf.termView, nil)
@@ -892,10 +962,10 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 		termH = 0
 	}
 
-	if pf.pty != nil {
+	if pty := pf.localPTY(); pty != nil {
 		pf.ptyMutex.Lock()
 		cw, ch := pf.termView.CellSize()
-		setPtySize(pf.pty, w, termH, cw, ch)
+		setPtySize(pty, w, termH, cw, ch)
 		for _, remotePty := range pf.remotePtys {
 			setPtySize(remotePty, w, termH, cw, ch)
 		}
@@ -1364,6 +1434,26 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	if e.VirtualKeyCode == vtinput.VK_C && alt && ctrl && e.KeyDown {
 		panic("Manual safe crash triggered by user (Ctrl+Alt+C) for testing!")
 	}
+
+	// Ctrl+C on a remote panel that carries a PTY-integration hint
+	// interrupts whatever is running on the far side, ahead of the
+	// Panel.SplitReset action bound to Ctrl+C globally. A user driving
+	// a remote command from the panel cmdline reaches for Ctrl+C to
+	// stop it; making them switch to the terminal view first (Ctrl+O)
+	// just to be heard would be worse than losing the split-reset
+	// binding on remote panels.
+	if e.KeyDown && ctrl && !alt && !shift && e.VirtualKeyCode == vtinput.VK_C {
+		if fsp := pf.getActivePanel(); fsp != nil {
+			if integ, ok := fsp.vfs.(vfs.PtyShellIntegration); ok {
+				if pty := pf.getActivePTY(); pty != nil {
+					if seq := integ.PtyInterrupt(); len(seq) > 0 {
+						pty.Write(seq)
+						return true
+					}
+				}
+			}
+		}
+	}
 	if e.Type == vtinput.FocusEventType {
 		if !e.SetFocus {
 			pf.cancelFastFind()
@@ -1385,11 +1475,12 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 
 	// Handle bracketed paste for terminal apps
 	if e.Type == vtinput.PasteEventType {
-		if !pf.showPanels && pf.termView.BracketedPasteMode && pf.pty != nil {
+		pty := pf.localPTY()
+		if !pf.showPanels && pf.termView.BracketedPasteMode && pty != nil {
 			if e.PasteStart {
-				pf.writePTY(pf.pty, []byte("\x1b[200~"))
+				pf.writePTY(pty, []byte("\x1b[200~"))
 			} else {
-				pf.writePTY(pf.pty, []byte("\x1b[201~"))
+				pf.writePTY(pty, []byte("\x1b[201~"))
 			}
 			return true
 		}
@@ -1583,12 +1674,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		commandInputActive := !pf.searchFirstMode() || pf.commandLineFocused || !pf.showPanels
 		if commandInputActive && !pf.cmdLine.IsEmpty() {
 			cmd := pf.cmdLine.Edit.GetText()
-			executionPath := ""
-			if fsp := pf.getActivePanel(); fsp != nil {
-				executionPath = fsp.persistentPath()
-			}
-			pf.cmdLine.Edit.AddHistory(cmd)
-			rememberCommandHistoryPath(cmd, executionPath, pf.cmdLine.Edit.History)
+			pf.addCommandHistory(cmd)
 			pf.cmdLine.Edit.HistoryPos = -1
 
 			trimmedCmd := strings.TrimSpace(cmd)
@@ -1700,12 +1786,22 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			if activePty != nil {
 				var path string
 				isWindowsShell := runtime.GOOS == "windows"
+				var integration vfs.PtyShellIntegration
 				if fsp, ok := pf.panels[pf.activeIdx].(*FileSystemPanel); ok {
 					if _, isOS := fsp.vfs.(*vfs.OSVFS); isOS {
 						path = fsp.vfs.GetPath()
 					} else if vfsHasRemotePTY(fsp.vfs) {
 						path = fsp.vfs.GetPath()
 						isWindowsShell = false
+					}
+					// A VFS that carries its own PTY-shell templates
+					// takes over the wire-command composition. FISH+
+					// against a Windows peer takes this branch so the
+					// PTY (cmd.exe by default) gets syntax cmd actually
+					// parses — the bash-shaped OSC-133-wrapped template
+					// below would come through as literal noise.
+					if integ, ok2 := fsp.vfs.(vfs.PtyShellIntegration); ok2 {
+						integration = integ
 					}
 				}
 
@@ -1719,7 +1815,13 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 					cmd = resolveWindowsCommand(cmd)
 				}
 
-				if isWindowsShell {
+				if integration != nil {
+					if seq := integration.PtyRunCommand(path, cmd); len(seq) > 0 {
+						fullWireCmd = string(seq)
+						pf.executing = true
+						pf.returnToPanels = pf.showPanels
+					}
+				} else if isWindowsShell {
 					// Use a combined command for reliable excision in AnsiParser: cd /d "path" & command
 					if path != "" {
 						fullWireCmd = fmt.Sprintf("cd /d \"%s\" & %s\r", path, cmd)
@@ -1750,11 +1852,18 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 					}
 				}
 
-				if !isWindowsShell {
+				// Print the clean command in the local terminal echo
+				// so the user sees what was sent. OSC-133 mute is only
+				// safe for the shells that emit the matching D marker
+				// — the bash templates above do, cmd.exe and the
+				// integration path do not.
+				if !isWindowsShell && integration == nil {
 					pf.termView.PrintCleanCommand(cmd)
 					if !isBackground {
 						pf.termView.SetMuted(true)
 					}
+				} else if integration != nil {
+					pf.termView.PrintCleanCommand(cmd)
 				}
 				pf.workspaceCommandTitle = workspaceCommandName(trimmedCmd)
 				pf.writePTY(activePty, []byte(fullWireCmd))
@@ -2364,8 +2473,8 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 			dlg.OnResult = func(code int) {
 				if code == 0 {
 					SaveSession()
-					if pf.pty != nil {
-						pf.pty.Close()
+					if pty := pf.takeLocalPTY(); pty != nil {
+						pty.Close()
 					}
 					shutdownProcessEnvironmentRuntime()
 					vtui.FrameManager.Shutdown()
@@ -2373,8 +2482,8 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 			}
 		} else {
 			SaveSession()
-			if pf.pty != nil {
-				pf.pty.Close()
+			if pty := pf.takeLocalPTY(); pty != nil {
+				pty.Close()
 			}
 			shutdownProcessEnvironmentRuntime()
 			vtui.FrameManager.Shutdown()
@@ -2697,14 +2806,15 @@ func (pf *PanelsFrame) showDummyOpDialog() {
 		vbox.Add(t, vtui.Margins{}, vtui.AlignLeft)
 	}
 
-	comboMode := vtui.NewComboBox(0, 0, 32, []string{"Queue (Default)", "Background panel clone", "Foreground lock"})
+	modes := []string{Msg("Op.DummyQueue"), Msg("Op.DummyBackground"), Msg("Op.DummyForeground")}
+	comboMode := vtui.NewComboBox(0, 0, 32, modes)
 	comboMode.DropdownOnly = true
 	comboMode.Menu.SetSelectPos(0)
 	comboMode.Edit.SetText(comboMode.Menu.Items[0].Text)
 	dlg.AddItem(comboMode)
 
-	btnStart := vtui.NewButton(0, 0, "&Start")
-	btnCancel := vtui.NewButton(0, 0, "&Cancel")
+	btnStart := vtui.NewButton(0, 0, Msg("Op.BtnStart"))
+	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
 	dlg.AddItem(btnStart)
 	dlg.AddItem(btnCancel)
 
@@ -2754,7 +2864,7 @@ func (pf *PanelsFrame) runProgressTaskAfter(delay time.Duration, title, startMsg
 	lblHint := vtui.NewText(0, 0, Msg("Op.SwitchHint"), vtui.Palette[vtui.ColDialogText])
 	dlg.AddItem(lblHint)
 
-	btnCancel := vtui.NewButton(0, 0, "&Cancel")
+	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
 	dlg.AddItem(btnCancel)
 
 	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 50-4, 10-4)
@@ -3040,16 +3150,29 @@ func (pf *PanelsFrame) syncPTYDirectory(path string, v vfs.VFS) bool {
 	}
 
 	activePty := pf.getActivePTY()
-	if activePty != nil {
-		if isWindowsShell {
-			pf.writePTY(activePty, []byte(fmt.Sprintf("cd /d \"%s\" & rem f4_sync\r", path)))
-		} else {
-			sqPath := strings.ReplaceAll(path, "'", "'\\''")
-			pf.writePTY(activePty, []byte(fmt.Sprintf(" cd '%s' # f4_sync\r", sqPath)))
+	if activePty == nil {
+		return false
+	}
+
+	// A VFS that knows what its own PTY speaks composes the sync line
+	// itself. FISH+ against a Windows peer takes this branch so the
+	// PTY (cmd.exe by default) sees a "cd /d \"C:\\...\" & rem f4_sync"
+	// instead of the bash-shaped one, which cmd treats as a broken
+	// argument and complains about at every step.
+	if integ, ok := v.(vfs.PtyShellIntegration); ok {
+		if seq := integ.PtyChangeDirCommand(path); len(seq) > 0 {
+			pf.writePTY(activePty, seq)
 		}
 		return true
 	}
-	return false
+
+	if isWindowsShell {
+		pf.writePTY(activePty, []byte(fmt.Sprintf("cd /d \"%s\" & rem f4_sync\r", path)))
+	} else {
+		sqPath := strings.ReplaceAll(path, "'", "'\\''")
+		pf.writePTY(activePty, []byte(fmt.Sprintf(" cd '%s' # f4_sync\r", sqPath)))
+	}
+	return true
 }
 
 func vfsHasRemotePTY(v vfs.VFS) bool {
@@ -3082,6 +3205,18 @@ func (pf *PanelsFrame) getActivePTYUnsafe() PtyBackend {
 			pty := res.(PtyBackend)
 			vtui.DebugLog("Created new remote PTY background session for VFS")
 			pf.remotePtys[activeVfs] = pty
+
+			// Give the VFS one chance to install shell settings before
+			// anyone else writes to the PTY. FISH+ against a Windows
+			// peer sends "prompt $E]133;D$E\$P$G" so cmd's own prompt
+			// embeds an OSC 133 D marker on every command completion —
+			// otherwise the panel frame never sees "command done" and
+			// stays in terminal mode instead of returning to panels.
+			if integ, ok := activeVfs.(vfs.PtyShellIntegration); ok {
+				if init := integ.PtyInitSequence(); len(init) > 0 {
+					pty.Write(init)
+				}
+			}
 
 			go func() {
 				buf := make([]byte, 32768) // Увеличен буфер
@@ -3480,7 +3615,7 @@ func (pf *PanelsFrame) showDriveMenu(panelIdx int) {
 // bookmark keys reopen the menu at the row they acted on, the way far2l
 // loops ChangeDiskMenu around its own Pos (panels/panel.cpp:168).
 func (pf *PanelsFrame) showDriveMenuAt(panelIdx, selectPos int) {
-	menu := vtui.NewVMenu(" Drive ")
+	menu := vtui.NewVMenu(Msg("Drive.Title"))
 
 	usedHotkeys := make(map[rune]bool)
 	usedHotkeys['o'] = true // "Other panel"

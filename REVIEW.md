@@ -118,3 +118,57 @@ human decision at review time:
       now sit exactly on the limit (the German font label ends on the last allowed
       column), so a future dialog resize will need a look at `L10N_PLAN.md`
       section 7.1 rather than a guess.
+      ## `CloneStateFrom` copies the PTY handle along with the screen
+
+      `TerminalView.CloneStateFrom` assigns `other.pty` to the clone, while the
+      clone's own `initPTY` goroutine assigns its freshly created PTY to the same
+      field. Which one wins is a race. A PTY is ownership rather than visual state
+      and has no business in a state clone. Left alone here because it belongs to
+      the terminal umbrella (#425); recorded in `TERMINAL_WINDOWS.md` section 5.
+
+      ## The sync excision also mangles commands a human typed
+
+      The fallback branch in `AnsiParser.Process` removes `cd /d "..." & ` even when
+      the `rem f4_sync` marker is absent, so a `cd /d "X" & dir` typed by the user
+      loses its first half in the log. Fixing it properly means marking our own
+      writes rather than pattern-matching text, which is `TERMINAL_WINDOWS.md`
+      section 6.
+      ## Colorer and Go disagree on how to count malformed UTF-8
+
+      Colorer's region offsets are rune indices, and the editor now takes them as
+      such. On well formed text the two sides count identically. On a truncated or
+      stray multi byte sequence they do not: Go yields one replacement rune per bad
+      byte, while Colorer's decoder in `strings/legacy/CString.cpp` reads the length
+      out of the lead byte and consumes that many bytes regardless of what they are.
+      A binary file opened in the editor can therefore still see colours land beside
+      the character they belong to, on the damaged line and after it.
+
+      Fixing this means either counting the way Colorer does when building the
+      attribute slice, or sanitising the line before handing it over. The second is
+      better and belongs with whatever eventually decides how the editor displays
+      binary content, so it is not being done here.
+
+      ## Colorer's UTF-8 encoder mangles astral characters
+
+      `Encodings::toBytes` in the vendored Colorer library builds a four byte
+      sequence as `0xF0 + (wc >> 14)` with the second byte taking bits 12 and up,
+      where the shifts should be 18 and 12. Anything above U+FFFF that leaves the
+      library as UTF-8 comes out wrong. Nothing on our path does that today - region
+      names are ASCII and lines travel inwards, not outwards - so this is recorded
+            rather than patched. It is upstream code and a patch belongs upstream.
+
+      ## The PTY is published once but copied three times
+
+      `initPTY` sets `pf.pty` under `ptyMutex` and, in the same critical section,
+      `pf.parser.pty` and `pf.termView.pty`. `PanelsFrame` now reads its own field
+      through `localPTY`, but the parser and the terminal view read their copies
+      straight from the UI thread, and `NewPanelsFrame` writes `pf.termView.pty` a
+      second time, unlocked, right after starting the goroutine. That is the same
+      two word interface race that crashed the quit path, only with a smaller
+      window and a less obvious symptom, since a torn value there gets a `Write`
+      rather than a `Close`.
+
+      The tidy fix is for one owner to hold the PTY and for the other two to ask it,
+      which means touching the parser and the view and is more than a crash fix
+      should carry. Recorded here so it is done deliberately, with the terminal
+      tests in front of whoever does it.

@@ -318,12 +318,6 @@ func (pf *PanelsFrame) localShellStarted(inheritedGeneration uint64) {
 	pf.catchUpProcessEnvironment(true)
 }
 
-func (pf *PanelsFrame) localPTY() PtyBackend {
-	pf.ptyMutex.Lock()
-	defer pf.ptyMutex.Unlock()
-	return pf.pty
-}
-
 func (pf *PanelsFrame) isLocalPTY(pty PtyBackend) bool {
 	if pty == nil {
 		return false

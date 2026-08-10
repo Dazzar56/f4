@@ -1988,7 +1988,7 @@ func (ev *EditorView) showSearchDialog() {
 	dlg := vtui.NewCenteredDialog(dlgW, dlgH, Msg("Viewer.SearchTitle"))
 	dlg.ShowClose = true
 
-	lblPrompt := vtui.NewLabel(0, 0, "Search for:", nil)
+	lblPrompt := vtui.NewLabel(0, 0, Msg("Search.Prompt"), nil)
 	editPattern := vtui.NewEdit(0, 0, 40, LastEditorSearch)
 	editPattern.SelectAll()
 	lblPrompt.FocusLink = editPattern
@@ -1999,7 +1999,7 @@ func (ev *EditorView) showSearchDialog() {
 		chkCase.State = 1
 	}
 
-	chkWholeWord := vtui.NewCheckbox(0, 0, "Whole words", false)
+	chkWholeWord := vtui.NewCheckbox(0, 0, Msg("Search.WholeWords"), false)
 	if LastEditorSearchWholeWord {
 		chkWholeWord.State = 1
 	}
@@ -2009,14 +2009,14 @@ func (ev *EditorView) showSearchDialog() {
 		chkReverse.State = 1
 	}
 
-	chkRegexp := vtui.NewCheckbox(0, 0, "Regular expressions", false)
+	chkRegexp := vtui.NewCheckbox(0, 0, Msg("Search.Regex"), false)
 	if LastEditorSearchRegexp {
 		chkRegexp.State = 1
 	}
 
-	btnFind := vtui.NewButton(0, 0, "&Find")
+	btnFind := vtui.NewButton(0, 0, Msg("Search.BtnFind"))
 	btnFind.IsDefault = true
-	btnCancel := vtui.NewButton(0, 0, "Cancel")
+	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
 
 	dlg.AddItem(lblPrompt)
 	dlg.AddItem(editPattern)
@@ -2196,16 +2196,16 @@ func (ev *EditorView) Replace(pattern, replacement string, caseSensitive, revers
 
 func (ev *EditorView) showReplaceDialog() {
 	dlgW, dlgH := 66, 19
-	dlg := vtui.NewCenteredDialog(dlgW, dlgH, " Replace ")
+	dlg := vtui.NewCenteredDialog(dlgW, dlgH, Msg("Replace.Title"))
 	dlg.ShowClose = true
 
-	lblPrompt := vtui.NewLabel(0, 0, "Search for:", nil)
+	lblPrompt := vtui.NewLabel(0, 0, Msg("Search.Prompt"), nil)
 	editPattern := vtui.NewEdit(0, 0, 40, LastEditorSearch)
 	editPattern.SelectAll()
 	lblPrompt.FocusLink = editPattern
 	dlg.SetFocusedItem(editPattern)
 
-	lblReplace := vtui.NewLabel(0, 0, "Replace with:", nil)
+	lblReplace := vtui.NewLabel(0, 0, Msg("Replace.Prompt"), nil)
 	editReplace := vtui.NewEdit(0, 0, 40, "")
 
 	chkCase := vtui.NewCheckbox(0, 0, Msg("Search.CaseSensitive"), false)
@@ -2213,7 +2213,7 @@ func (ev *EditorView) showReplaceDialog() {
 		chkCase.State = 1
 	}
 
-	chkWholeWord := vtui.NewCheckbox(0, 0, "Whole words", false)
+	chkWholeWord := vtui.NewCheckbox(0, 0, Msg("Search.WholeWords"), false)
 	if LastEditorSearchWholeWord {
 		chkWholeWord.State = 1
 	}
@@ -2223,14 +2223,14 @@ func (ev *EditorView) showReplaceDialog() {
 		chkReverse.State = 1
 	}
 
-	chkRegexp := vtui.NewCheckbox(0, 0, "Regular expressions", false)
+	chkRegexp := vtui.NewCheckbox(0, 0, Msg("Search.Regex"), false)
 	if LastEditorSearchRegexp {
 		chkRegexp.State = 1
 	}
 
-	btnReplace := vtui.NewButton(0, 0, "&Replace")
-	btnReplaceAll := vtui.NewButton(0, 0, "Replace &All")
-	btnCancel := vtui.NewButton(0, 0, "Cancel")
+	btnReplace := vtui.NewButton(0, 0, Msg("Replace.BtnReplace"))
+	btnReplaceAll := vtui.NewButton(0, 0, Msg("Replace.BtnReplaceAll"))
+	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
 	btnReplace.IsDefault = true
 
 	dlg.AddItem(lblPrompt)
@@ -2364,7 +2364,7 @@ func (ev *EditorView) ReloadWithAutoDetect() {
 
 func (ev *EditorView) showCodepageDialog() {
 	items, currIdx := vfs.BuildCodepageMenuItems(ev.Codepage, AppConfig.EditorAutodetectCodePage)
-	menu := vtui.NewVMenu(" Code pages ")
+	menu := vtui.NewVMenu(Msg("Codepage.Title"))
 	for _, item := range items {
 		menu.AddItem(item)
 	}
@@ -2411,7 +2411,7 @@ func (ev *EditorView) showCodepageDialog() {
 }
 func (ev *EditorView) showConvertCodepageDialog() {
 	items, _ := vfs.BuildCodepageMenuItems(ev.Codepage, false)
-	menu := vtui.NewVMenu(" Convert Codepage ")
+	menu := vtui.NewVMenu(Msg("Codepage.ConvertTitle"))
 	realItems := 0
 	for _, item := range items {
 		if item.UserData == -1 {
@@ -2984,33 +2984,54 @@ func (ev *EditorView) getSelectionRange() (int, int) {
 	return min, max
 }
 
-// findPanelsFrameAnyScreen locates a PanelsFrame on any of the
-// frame manager's screens. The plain findPanelsFrame() only walks
-// the active screen — that works for macros invoked from panel
-// mode, but fails from a full-screen editor (added via AddScreen,
-// so the editor is the active screen and the panels frame lives
-// on the previous one). Kept editor-local so we don't broaden
-// findPanelsFrame's contract and change the behaviour for macros.
+// findPanelsFrameAnyScreen locates the PanelsFrame the user is
+// currently working in. The active screen is consulted first: with
+// several workspaces open (Ctrl+N) every screen has a PanelsFrame of
+// its own, and answering with whichever one happens to sit earliest
+// in the slice is how hotkeys ended up hiding panels in one workspace
+// while the user was looking at another (issue #424).
+//
+// When the active screen has none — a full-screen editor or viewer is
+// added via AddScreen, so it becomes the active screen while the
+// panels stay on the one before — the search walks outwards in
+// most-recently-used order. SwitchScreen moves the screen it switches
+// to to the end of the slice, so walking down from ActiveIdx visits
+// the workspaces in the order the user last used them, and the editor
+// finds the panels it was opened from rather than the oldest ones.
 func findPanelsFrameAnyScreen() *PanelsFrame {
 	if vtui.FrameManager == nil {
 		return nil
 	}
-	// Most callers are global actions or hotkey conditions. Prefer the
-	// currently active workspace so a command such as Ctrl+O never mutates the
-	// first workspace merely because it appears first in Screens. Full-screen
-	// editor/viewer workspaces may not contain a PanelsFrame, so retain the
-	// cross-screen fallback for those callers.
-	if pf := findPanelsFrame(); pf != nil && !pf.closed {
-		return pf
+	screens := vtui.FrameManager.Screens
+	if len(screens) == 0 {
+		return nil
 	}
-	for screenIdx, s := range vtui.FrameManager.Screens {
-		if screenIdx == vtui.FrameManager.ActiveIdx {
-			continue
+
+	pick := func(idx int) *PanelsFrame {
+		if idx < 0 || idx >= len(screens) || screens[idx] == nil {
+			return nil
 		}
-		for _, f := range s.Frames {
-			if pf, ok := f.(*PanelsFrame); ok && !pf.closed {
+		frames := screens[idx].Frames
+		for i := len(frames) - 1; i >= 0; i-- {
+			if pf, ok := frames[i].(*PanelsFrame); ok && !pf.closed {
 				return pf
 			}
+		}
+		return nil
+	}
+
+	active := vtui.FrameManager.ActiveIdx
+	if pf := pick(active); pf != nil {
+		return pf
+	}
+	for i := active - 1; i >= 0; i-- {
+		if pf := pick(i); pf != nil {
+			return pf
+		}
+	}
+	for i := active + 1; i < len(screens); i++ {
+		if pf := pick(i); pf != nil {
+			return pf
 		}
 	}
 	return nil
@@ -3512,7 +3533,7 @@ func (ev *EditorView) Search(pattern string, caseSensitive, reverse, regexp, who
 		dlg := vtui.NewCenteredDialog(50, 8, title)
 		lbl := vtui.NewLabel(0, 0, msg, nil)
 		dlg.AddItem(lbl)
-		btnCancel := vtui.NewButton(0, 0, "&Cancel")
+		btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
 		dlg.AddItem(btnCancel)
 
 		vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 50-4, 8-4)

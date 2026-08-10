@@ -392,7 +392,11 @@ func TestConfig_GuiFontPersistence(t *testing.T) {
 	getUserConfigIniPath = func() string {
 		return filepath.Join(tmpDir, "settings.ini")
 	}
-	defer func() { getUserConfigIniPath = oldPathFunc }()
+	oldCfg := AppConfig
+	defer func() {
+		getUserConfigIniPath = oldPathFunc
+		AppConfig = oldCfg
+	}()
 
 	// Задаем тестовые значения
 	AppConfig.GuiFont = "UbuntuMono-Regular"

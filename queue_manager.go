@@ -437,8 +437,8 @@ func NewQueueFrame() *QueueFrame {
 	qf.table.SetGrowMode(vtui.GrowHiX | vtui.GrowHiY)
 	qf.table.ShowScrollBar = true
 
-	btnCancel := vtui.NewButton(0, 0, "C&ancel Task")
-	btnClear := vtui.NewButton(0, 0, "Clear &Done")
+	btnCancel := vtui.NewButton(0, 0, Msg("Queue.BtnCancel"))
+	btnClear := vtui.NewButton(0, 0, Msg("Queue.BtnClear"))
 
 	qf.AddItem(qf.table)
 	qf.AddItem(btnCancel)

@@ -668,7 +668,83 @@ FileOp.Overwrite=&Kirjuta üle
 FileOp.Skip=Jä&ta vahele
 FileOp.Rename=&Nimeta ümber
 FileOp.Append=Lisa &juurde
-FileOp.Resume=Jä&tkaLanguageSettings.Title= Keele seaded
+FileOp.Resume=Jä&tka
+LanguageSettings.Title= Keele seaded
 LanguageSettings.Primary=Põhikeel:
 LanguageSettings.Fallback=Varukeel:
 LanguageSettings.None=<puudub>
+
+Arkanoid.HighScores= Rekordid
+PlugRing.Title= f4 PlugRing
+PlugRing.BtnInstall=&Paigalda/Värskenda
+PlugRing.BtnRemove=&Eemalda
+PlugRing.BtnRefresh=Vär&skenda
+PlugRing.BtnClose=&Sulge
+
+Attributes.Title= Atribuudid
+Attributes.BtnSet=Määra
+Attributes.BtnSecurity=&Turvalisus
+Attributes.Read=Loe
+Attributes.Write=Kirjuta
+Attributes.Execute=Käivita
+Attributes.ReadOnly=&Kirjutuskaitstud
+Attributes.Hidden=&Peidetud
+Attributes.System=&Süsteemne
+Attributes.Archive=&Arhiiv
+Permissions.Title= Pluginate õigused
+Permissions.BtnRevoke=&Tühista
+Permissions.BtnClose=&Sulge
+
+Search.Prompt=Otsi:
+Search.WholeWords=Terviksõnad
+Search.Regex=Regulaaravaldised
+Search.BtnFind=&Otsi
+Replace.Title= Asenda
+Replace.Prompt=Asenda millega:
+Replace.BtnReplace=&Asenda
+Replace.BtnReplaceAll=Asenda &kõik
+Codepage.Title= Kooditabelid
+Codepage.ConvertTitle= Teisenda kooditabel
+
+vtui.Save=&Salvesta
+UserMenu.EditTitle= Muuda kasutaja menüüd
+UserMenu.CreateTitle= Loo kasutaja menüü
+UserMenu.EditSubmenuTitle= Muuda alammenüüd
+UserMenu.CreateSubmenuTitle= Loo alammenüü
+UserMenu.LabelHotkey=Kiir&klahv:
+UserMenu.LabelLabel=&Silt:
+UserMenu.LabelCommand=&Käsk:
+
+Hotkeys.Title= Kiirklahvide konfiguraator
+Hotkeys.BtnAssign=&Määra
+Hotkeys.BtnUnbind=&Eemalda
+Hotkeys.BtnClose=&Sulge
+Hotkeys.SelectTitle= Vali ala ja tingimus
+Hotkeys.BtnNext=Edasi >
+Hotkeys.LabelArea=Ala:
+Hotkeys.LabelWhen=Tingimus:
+Hotkeys.AssignTitle= Määra kiirklahv
+Op.DummyQueue=Järjekord (Vaikimisi)
+Op.DummyBackground=Taustapaneeli kloonimine
+Op.DummyForeground=Esiplaani lukustus
+Op.BtnStart=&Alusta
+Drive.Title= Ketas
+
+NetFox.ConnectionTitle= Ühenduse loomine
+NetFox.PassiveMode=Passiivne režiim
+NetFox.LabelName=&Nimi:
+NetFox.LabelProtocol=P&rotokoll:
+NetFox.LabelHost=&Host:
+NetFox.LabelPort=&Port:
+NetFox.LabelUser=&Kasutaja:
+NetFox.LabelPassword=&Parool:
+NetFox.LabelTimeout=&Ajalõpp:
+NetFox.LabelCodepage=Koodi&tabel:
+NetFox.ErrorEmptyName=Nimi ei tohi olla tühi
+NetFox.ErrorReservedName=Reserveeritud ühenduse nimi
+
+FileOp.BtnCancel=&Tühista
+FileOp.BtnBackground=&Taustal
+Queue.BtnCancel=&Tühista toiming
+Queue.BtnClear=Puhasta &tehtud
+Session.Title= Vali seanss

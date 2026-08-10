@@ -158,10 +158,10 @@ func actionViewerEditorHistory(pf *PanelsFrame) {
 		return
 	}
 
-	paths := make([]string, len(entries))
+	paths := make([]HistoryRecord, len(entries))
 	modes := make([]string, len(entries))
 	for i, entry := range entries {
-		paths[i] = entry.Display
+		paths[i] = HistoryRecord{Name: entry.Display}
 		if entry.Mode == historyModeEdit {
 			modes[i] = Msg("History.Mode.Edit")
 		} else {
@@ -228,7 +228,8 @@ func actionViewerEditorHistory(pf *PanelsFrame) {
 			return true
 		}
 		if e.VirtualKeyCode == vtinput.VK_DELETE && !ctrl && !alt && !shift {
-			confirmAndClearHistory(Msg("History.ViewEditTitle"), viewerEditorHistoryID, &paths, func() {
+			pathNames := extractNames(paths)
+			confirmAndClearHistory(Msg("History.ViewEditTitle"), viewerEditorHistoryID, &pathNames, func() {
 				entries = nil
 			}, search, menu)
 			return true

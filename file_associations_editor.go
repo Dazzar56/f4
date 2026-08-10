@@ -288,9 +288,9 @@ func (s *assocEditorState) editAt(idx int, isCreate bool) {
 		slotEdits[k] = ed
 	}
 
-	btnOk := vtui.NewButton(0, 0, "&Save")
+	btnOk := vtui.NewButton(0, 0, Msg("vtui.Save"))
 	btnOk.IsDefault = true
-	btnCancel := vtui.NewButton(0, 0, "Cancel")
+	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
 
 	// Register widgets. Order matters for Tab traversal, so we register
 	// in the visual order (mask → desc → each slot pair → buttons).

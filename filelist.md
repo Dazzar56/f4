@@ -11,12 +11,12 @@
     ├── action_restore_selection_test.go
     ├── actions.go
     ├── actions_test.go
-    ├── afix.ap
     ├── ansi_parser.go
     ├── ansi_parser_test.go
     ├── api.go
     ├── api_test.go
     ├── appearance_settings_test.go
+    ├── ARABIC_L10N.md
     ├── archive_index_fallback.go
     ├── archive_index.go
     ├── archive_index_test.go
@@ -163,6 +163,7 @@
     ├── gui_windows.go
     ├── hardcoded_strings_test.go
     ├── help
+    │   ├── ar.hlf
     │   ├── be.hlf
     │   ├── cs.hlf
     │   ├── de.hlf
@@ -170,6 +171,8 @@
     │   ├── es.hlf
     │   ├── et.hlf
     │   ├── fi.hlf
+    │   ├── he.hlf
+    │   ├── hi.hlf
     │   ├── hu.hlf
     │   ├── hy.hlf
     │   ├── ja.hlf
@@ -180,11 +183,15 @@
     │   ├── pl.hlf
     │   ├── README.md
     │   ├── ru.hlf
+    │   ├── tr.hlf
     │   ├── uk.hlf
     │   └── zh.hlf
     ├── help.go
+    ├── help_keys_ar_test.go
+    ├── help_keys_he_test.go
     ├── help_keys_ru_test.go
     ├── help_keys_test.go
+    ├── help_keys_tr_test.go
     ├── help_lang_test.go
     ├── help_search.go
     ├── help_search_test.go
@@ -244,6 +251,7 @@
     ├── kitty_placements.go
     ├── kitty_placements_test.go
     ├── lang
+    │   ├── ar.lng
     │   ├── be.lng
     │   ├── coverage_baseline.txt
     │   ├── cs.lng
@@ -252,6 +260,8 @@
     │   ├── es.lng
     │   ├── et.lng
     │   ├── fi.lng
+    │   ├── he.lng
+    │   ├── hi.lng
     │   ├── hu.lng
     │   ├── hy.lng
     │   ├── hi.lng
@@ -262,6 +272,7 @@
     │   ├── lv.lng
     │   ├── pl.lng
     │   ├── ru.lng
+    │   ├── tr.lng
     │   ├── uk.lng
     │   └── zh.lng
     ├── lang_consistency_test.go
@@ -424,6 +435,7 @@
     │   │   │   ├── fs_test.go
     │   │   │   ├── hash.go
     │   │   │   ├── hash_test.go
+    │   │   │   ├── helper.ps1
     │   │   │   ├── helper.sh
     │   │   │   ├── job.go
     │   │   │   ├── job_test.go
@@ -435,15 +447,20 @@
     │   │   │   ├── mutate_test.go
     │   │   │   ├── patch.go
     │   │   │   ├── patch_test.go
+    │   │   │   ├── paths.go
+    │   │   │   ├── paths_test.go
     │   │   │   ├── read.go
     │   │   │   ├── read_test.go
     │   │   │   ├── script.go
+    │   │   │   ├── script_pwsh_test.go
     │   │   │   ├── script_test.go
     │   │   │   ├── search.go
     │   │   │   ├── search_test.go
     │   │   │   ├── session.go
+    │   │   │   ├── session_pwsh_test.go
     │   │   │   ├── session_test.go
     │   │   │   ├── sizes
+    │   │   │   ├── WINDOWS_PORT.md
     │   │   │   ├── write.go
     │   │   │   └── write_test.go
     │   │   ├── fish_reconnect_entry_test.go
@@ -562,6 +579,7 @@
     ├── terminal_selection_test.go
     ├── terminal_view.go
     ├── terminal_view_test.go
+    ├── TERMINAL_WINDOWS.md
     ├── test_cache_helper_test.go
     ├── test_fallback_lang_test.go
     ├── test_main_test.go
@@ -684,6 +702,7 @@
     ├── window_icon_windows.go
     ├── window_icon_windows_test.go
     ├── word_nav.go
-    └── word_nav_test.go
+    ├── word_nav_test.go
+    └── workspace_routing_test.go
     
-    49 directories, 635 files
+    49 directories, 654 files

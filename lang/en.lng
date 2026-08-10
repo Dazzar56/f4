@@ -856,8 +856,6 @@ EditorSettings.Crosshair=Show cross&hair
 EditorSettings.ColorerBg=Colorer &background
 EditorSettings.UseExternalEditor=Use e&xternal editor
 EditorSettings.ExternalCommand=E&xternal command:
-ConfirmationsSettings.DeleteCancelFocused=Focus 'Cancel' on delete
-
 PanelSettings.ShowHighlightMarks=Show highlight &marks
 PanelSettings.CommandLineAutoComplete=Enable command line &auto-completion
 PanelSettings.AlwaysShowMenuBar=Always show &menu bar
@@ -888,3 +886,78 @@ FileOp.Skip=&Skip
 FileOp.Rename=&Rename
 FileOp.Append=&Append
 FileOp.Resume=Res&ume
+
+Arkanoid.HighScores= High Scores
+PlugRing.Title= f4 PlugRing
+PlugRing.BtnInstall=&Install/Update
+PlugRing.BtnRemove=&Remove
+PlugRing.BtnRefresh=Re&fresh
+PlugRing.BtnClose=&Close
+
+Attributes.Title= Attributes
+Attributes.BtnSet=Set
+Attributes.BtnSecurity=&Security
+Attributes.Read=Read
+Attributes.Write=Write
+Attributes.Execute=Execute
+Attributes.ReadOnly=&Read only
+Attributes.Hidden=&Hidden
+Attributes.System=&System
+Attributes.Archive=&Archive
+Permissions.Title= Plugin Permissions
+Permissions.BtnRevoke=&Revoke
+Permissions.BtnClose=&Close
+
+Search.Prompt=Search for:
+Search.WholeWords=Whole words
+Search.Regex=Regular expressions
+Search.BtnFind=&Find
+Replace.Title= Replace
+Replace.Prompt=Replace with:
+Replace.BtnReplace=&Replace
+Replace.BtnReplaceAll=Replace &All
+Codepage.Title= Code pages
+Codepage.ConvertTitle= Convert Codepage
+
+vtui.Save=&Save
+UserMenu.EditTitle= Edit User Menu
+UserMenu.CreateTitle= Create User Menu
+UserMenu.EditSubmenuTitle= Edit Submenu
+UserMenu.CreateSubmenuTitle= Create Submenu
+UserMenu.LabelHotkey=Hot &key:
+UserMenu.LabelLabel=&Label:
+UserMenu.LabelCommand=&Command:
+
+Hotkeys.Title= Hotkey Configurator
+Hotkeys.BtnAssign=&Assign
+Hotkeys.BtnUnbind=&Unbind
+Hotkeys.BtnClose=&Close
+Hotkeys.SelectTitle= Select Area & Condition
+Hotkeys.BtnNext=Next >
+Hotkeys.LabelArea=Area:
+Hotkeys.LabelWhen=When:
+Hotkeys.AssignTitle= Assign Hotkey
+Op.DummyQueue=Queue (Default)
+Op.DummyBackground=Background panel clone
+Op.DummyForeground=Foreground lock
+Op.BtnStart=&Start
+Drive.Title= Drive
+
+NetFox.ConnectionTitle= Site Connection
+NetFox.PassiveMode=Passive mode
+NetFox.LabelName=&Name:
+NetFox.LabelProtocol=P&rotocol:
+NetFox.LabelHost=&Host:
+NetFox.LabelPort=P&ort:
+NetFox.LabelUser=&User:
+NetFox.LabelPassword=Pass&word:
+NetFox.LabelTimeout=Time&out:
+NetFox.LabelCodepage=Cod&epage:
+NetFox.ErrorEmptyName=Name cannot be empty
+NetFox.ErrorReservedName=Reserved connection name
+
+FileOp.BtnCancel=&Cancel
+FileOp.BtnBackground=&Background
+Queue.BtnCancel=C&ancel Task
+Queue.BtnClear=Clear &Done
+Session.Title= Select Session

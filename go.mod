@@ -16,14 +16,14 @@ require (
 	github.com/pkg/sftp v1.13.6
 	github.com/tetratelabs/wazero v1.12.0
 	github.com/unxed/archives v0.0.0-20260728171610-555945c76813
-	github.com/unxed/colorer4go v0.1.5
+	github.com/unxed/colorer4go v0.1.9
 	github.com/unxed/ffibridge v0.1.0
 	github.com/unxed/id3-go v0.1.1
 	github.com/unxed/localecp v0.1.5
 	github.com/unxed/sevenzip v0.0.0-20260704211908-25d317f8295f
 	github.com/unxed/tar v0.1.126
 	github.com/unxed/vtinput v0.1.2
-	github.com/unxed/vtui v0.1.141
+	github.com/unxed/vtui v0.1.148
 	github.com/unxed/zip v0.1.127
 	github.com/unxed/zipper v0.1.145
 	github.com/vmihailenco/msgpack/v5 v5.4.1
@@ -60,7 +60,7 @@ require (
 	github.com/go-webgpu/webgpu v0.5.5 // indirect
 	github.com/gogpu/gg v0.50.14 // indirect
 	github.com/gogpu/gogpu v0.50.2 // indirect
-	github.com/gogpu/gpucontext v0.24.0 // indirect
+	github.com/gogpu/gpucontext v0.26.0 // indirect
 	github.com/gogpu/gputypes v0.5.1 // indirect
 	github.com/gogpu/naga v0.18.0 // indirect
 	github.com/gogpu/wgpu v0.30.37 // indirect
@@ -125,4 +125,5 @@ replace github.com/ebitengine/purego => github.com/unxed/pureffi v0.1.13
 
 // replace github.com/unxed/colorer4go => ../../../dev/colorer4go
 
+// Temporary until the merged VTUI TabControl commit is followed by a buildable upstream release.
 replace github.com/unxed/vtui => github.com/Zoinen/vtui v0.0.0-20260810200426-2e8d2aafd9c7
