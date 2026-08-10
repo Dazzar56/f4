@@ -556,6 +556,7 @@ PanelSettings.TerminalCtrlNWorkspace=Ctrl+N в терминале &клонир�
 
 AppearanceSettings.Title= Внешний вид
 AppearanceSettings.Style=Стиль &оформления:
+AppearanceSettings.UseSystemMonospace=Использовать системный &моноширинный шрифт
 AppearanceSettings.Font=Шрифт &GUI (Путь/Имя):
 AppearanceSettings.FontSize=Размер шрифта &GUI:
 AppearanceSettings.TitleTemplate=Шаблон &заголовка окна:
