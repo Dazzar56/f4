@@ -2463,7 +2463,8 @@ func actionPanelSettings(pf *PanelsFrame) {
 }
 
 func actionConfirmationsSettings(pf *PanelsFrame) {
-	dlg := vtui.NewCenteredDialog(52, 15, Msg("ConfirmationsSettings.Title"))
+	const width, height = 56, 15
+	dlg := vtui.NewCenteredDialog(width, height, Msg("ConfirmationsSettings.Title"))
 	dlg.ShowClose = true
 
 	chkCopy := vtui.NewCheckbox(0, 0, Msg("ConfirmationsSettings.Copy"), false)
@@ -2514,7 +2515,7 @@ func actionConfirmationsSettings(pf *PanelsFrame) {
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnCancel)
 
-	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 52-4, 15-4)
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, width-4, height-4)
 	vbox.Add(chkCopy, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkMove, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkDelete, vtui.Margins{}, vtui.AlignLeft)
@@ -2522,7 +2523,7 @@ func actionConfirmationsSettings(pf *PanelsFrame) {
 	vbox.Add(chkExit, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkDelFocus, vtui.Margins{}, vtui.AlignLeft)
 
-	hbox := vtui.NewHBoxLayout(0, 0, 52-4, 1)
+	hbox := vtui.NewHBoxLayout(0, 0, width-4, 1)
 	hbox.HorizontalAlign = vtui.AlignCenter
 	hbox.Spacing = 2
 	hbox.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
