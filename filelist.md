@@ -264,6 +264,7 @@
     │   ├── hi.lng
     │   ├── hu.lng
     │   ├── hy.lng
+    │   ├── hi.lng
     │   ├── ja.lng
     │   ├── ka.lng
     │   ├── ko.lng

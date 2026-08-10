@@ -1684,6 +1684,60 @@ func TestActionAppearanceSettings_CancelPreservesPalette(t *testing.T) {
 	}
 }
 
+func TestActionAppearanceSettings_LivePreviewRecolorsExistingLabels(t *testing.T) {
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+	SetDefaultF4Palette()
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	actionAppearanceSettings(pf)
+	frame := vtui.FrameManager.GetTopFrame()
+	top := frame.(vtui.Container)
+
+	var combo *vtui.ComboBox
+	var label *vtui.Text
+	for _, item := range top.GetChildren() {
+		switch control := item.(type) {
+		case *vtui.ComboBox:
+			if combo == nil {
+				combo = control
+			}
+		case *vtui.Text:
+			if label == nil {
+				label = control
+			}
+		}
+	}
+	if combo == nil || label == nil {
+		t.Fatal("Appearance dialog style combobox or label not found")
+	}
+
+	before := vtui.Palette[vtui.ColDialogText]
+	target := -1
+	for idx := range combo.Menu.Items {
+		combo.Menu.OnAction(idx)
+		if vtui.Palette[vtui.ColDialogText] != before {
+			target = idx
+			break
+		}
+	}
+	if target < 0 {
+		t.Fatal("no available style changes Dialog.Text; cannot verify live preview")
+	}
+
+	frame.Show(scr)
+	_, y, x, _ := label.GetPosition()
+	if got, want := scr.GetCell(x, y).Attributes, vtui.Palette[vtui.ColDialogText]; got != want {
+		t.Fatalf("existing Appearance label kept stale color %#x after style switch, want %#x", got, want)
+	}
+
+	clickDialogButton(t, top, "Cancel")
+}
+
 func TestPanelsFrame_RunAdvancedProgressTask(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	SetDefaultF4Palette()

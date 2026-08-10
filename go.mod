@@ -29,12 +29,18 @@ require (
 	github.com/vmihailenco/msgpack/v5 v5.4.1
 	github.com/woozymasta/png v1.2.0
 	github.com/yuin/gopher-lua v1.1.1
+	github.com/zzl/go-win32api/v2 v2.1.0
 	golang.org/x/crypto v0.53.0
 	golang.org/x/image v0.44.0
 	golang.org/x/sys v0.47.0
 	golang.org/x/term v0.44.0
 	golang.org/x/text v0.40.0
 	gopkg.in/yaml.v3 v3.0.1
+)
+
+require (
+	github.com/kr/text v0.2.0 // indirect
+	github.com/rogpeppe/go-internal v1.14.1 // indirect
 )
 
 require (
@@ -68,7 +74,6 @@ require (
 	github.com/klauspost/compress v1.19.2 // indirect
 	github.com/klauspost/pgzip v1.2.6
 	github.com/kr/fs v0.1.0 // indirect
-	github.com/kr/text v0.2.0 // indirect
 	github.com/miekg/dns v1.1.57 // indirect
 	github.com/mikelolasagasti/xz v1.0.1 // indirect
 	github.com/minio/minlz v1.1.1 // indirect
@@ -99,7 +104,6 @@ require (
 	github.com/vishvananda/netns v0.0.5 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	github.com/yalue/native_endian v1.0.2 // indirect
-	github.com/zzl/go-win32api/v2 v2.1.0 // indirect
 	go.mozilla.org/pkcs7 v0.9.0 // indirect
 	go4.org v0.0.0-20260112195520-a5071408f32f // indirect
 	golang.design/x/clipboard v0.7.0 // indirect
@@ -121,4 +125,5 @@ replace github.com/ebitengine/purego => github.com/unxed/pureffi v0.1.13
 
 // replace github.com/unxed/colorer4go => ../../../dev/colorer4go
 
-// replace github.com/unxed/vtui => ../../../dev/vtui
+// Temporary until the merged VTUI TabControl commit is followed by a buildable upstream release.
+replace github.com/unxed/vtui => github.com/Zoinen/vtui v0.0.0-20260810200426-2e8d2aafd9c7

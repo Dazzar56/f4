@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -52,9 +53,18 @@ func NewViewerView(ctx context.Context, v vfs.VFS, path string) (*ViewerView, er
 		detectLen = int(size)
 	}
 	header := make([]byte, detectLen)
-	_, _ = f.ReadAt(ctx, header, 0)
+	if _, err := f.ReadAt(ctx, header, 0); err != nil && err != io.EOF {
+		_ = f.Close()
+		return nil, fmt.Errorf("read file header: %w", err)
+	}
 
 	cpID := vfs.DetectEncoding(header, AppConfig.ViewerAutodetectCodePage, AppConfig.ViewerDefaultCodePage)
+	binary := viewerHeaderLooksBinary(header, cpID)
+	if binary {
+		// Binary data has no text codepage to materialize. Keeping the remote
+		// handle lets the hex viewer fetch only its small visible windows.
+		cpID = 65001
+	}
 
 	var backend *ViewerBackend
 	bCtx, bCancel := context.WithCancel(context.Background())
@@ -97,6 +107,7 @@ func NewViewerView(ctx context.Context, v vfs.VFS, path string) (*ViewerView, er
 		backend:  backend,
 		vfs:      v,
 		path:     path,
+		HexMode:  binary,
 		WrapMode: true,
 		Codepage: cpID,
 	}
@@ -179,13 +190,23 @@ func NewViewerView(ctx context.Context, v vfs.VFS, path string) (*ViewerView, er
 	return vv, nil
 }
 
+func viewerHeaderLooksBinary(header []byte, cpID int) bool {
+	decoded := header
+	if cpID != 65001 {
+		if converted, err := vfs.DecodeBytes(header, cpID); err == nil {
+			decoded = converted
+		}
+	}
+	return looksBinary(decoded)
+}
+
 func (vv *ViewerView) SetPosition(x1, y1, x2, y2 int) {
 	vv.ScreenObject.SetPosition(x1, y1, x2, y2)
 	if vv.topBar != nil {
 		vv.topBar.SetPosition(x1, y1, x2, y1)
 	}
 	if vv.menuBar != nil {
-		vv.menuBar.SetPosition(x1, 0, x2, 0)
+		vv.menuBar.SetPosition(x1, y1, x2, y1)
 	}
 	if vv.scrollBar != nil {
 		vv.scrollBar.SetPosition(x2, y1+1, x2, y2)
@@ -294,6 +315,10 @@ func (vv *ViewerView) renderHex(scr *vtui.ScreenBuf, width, contentHeight int) {
 			scr.Write(vv.X1, vv.Y1+1+y, vtui.StringToCharInfo(" [ Loading... ] ", attr))
 			break
 		}
+		if err != nil {
+			scr.Write(vv.X1, vv.Y1+1+y, vtui.StringToCharInfo(fmt.Sprintf(" [ Error: %v ] ", err), attr))
+			break
+		}
 
 		line := fmt.Sprintf("%010X: ", currOffset)
 		scr.Write(vv.X1, vv.Y1+1+y, vtui.StringToCharInfo(line, offAttr))
@@ -346,6 +371,10 @@ func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, contentHeight int) 
 		data, err := vv.backend.ReadAt(currOffset, width*4)
 		if err == piecetable.ErrLoading {
 			scr.Write(vv.X1, vv.Y1+1+y, vtui.StringToCharInfo(" [ Loading... ] ", attr))
+			break
+		}
+		if err != nil {
+			scr.Write(vv.X1, vv.Y1+1+y, vtui.StringToCharInfo(fmt.Sprintf(" [ Error: %v ] ", err), attr))
 			break
 		}
 		if len(data) == 0 {
@@ -913,7 +942,9 @@ func (vv *ViewerView) ProcessMouse(e *vtinput.InputEvent) bool {
 	}
 	return false
 }
-func (vv *ViewerView) ResizeConsole(w, h int) { vv.SetPosition(0, 0, w-1, h-2) }
+func (vv *ViewerView) ResizeConsole(w, h int) {
+	vv.SetPosition(0, vtui.FrameManager.WorkspaceTopInset(), w-1, h-2)
+}
 
 func (vv *ViewerView) Close() {
 	if GlobalFileState != nil && vv.path != "" {

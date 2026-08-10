@@ -26,8 +26,11 @@ type DriveEntry struct {
 }
 
 var DriveRegistry []DriveEntry
+var pluginRegistryMu sync.RWMutex
 
 func RegisterDrive(name string, factory func() vfs.VFS) {
+	pluginRegistryMu.Lock()
+	defer pluginRegistryMu.Unlock()
 	for i, d := range DriveRegistry {
 		if d.Name == name {
 			DriveRegistry[i].Factory = factory
@@ -35,6 +38,12 @@ func RegisterDrive(name string, factory func() vfs.VFS) {
 		}
 	}
 	DriveRegistry = append(DriveRegistry, DriveEntry{Name: name, Factory: factory})
+}
+
+func driveRegistrySnapshot() []DriveEntry {
+	pluginRegistryMu.RLock()
+	defer pluginRegistryMu.RUnlock()
+	return append([]DriveEntry(nil), DriveRegistry...)
 }
 
 type HotkeyEntry struct {
@@ -46,7 +55,15 @@ type HotkeyEntry struct {
 var GlobalHotkeys []HotkeyEntry
 
 func RegisterGlobalHotkey(vk uint16, mods vtinput.ControlKeyState, handler func(app vfs.App)) {
+	pluginRegistryMu.Lock()
 	GlobalHotkeys = append(GlobalHotkeys, HotkeyEntry{VK: vk, Mods: mods, Handler: handler})
+	pluginRegistryMu.Unlock()
+}
+
+func globalHotkeysSnapshot() []HotkeyEntry {
+	pluginRegistryMu.RLock()
+	defer pluginRegistryMu.RUnlock()
+	return append([]HotkeyEntry(nil), GlobalHotkeys...)
 }
 func (pf *PanelsFrame) GetActivePanelVFS() vfs.VFS  { return pf.Active().(*FileSystemPanel).vfs }
 func (pf *PanelsFrame) GetPassivePanelVFS() vfs.VFS { return pf.Passive().(*FileSystemPanel).vfs }
@@ -214,16 +231,21 @@ type PanelsFrame struct {
 	vtui.BaseFrame
 	panels  [2]Panel
 	dragOut dragOutState
+	// externalUIRunner is normally nil, which selects the real desktop
+	// launcher. Tests install a per-frame recorder instead of spawning native
+	// Explorer/association windows.
+	externalUIRunner externalUICommandRunner
 	// altPanels[i] holds an alternate view (Info / Quick view / Tree)
 	// covering slot i's file panel. When non-nil it's rendered in
 	// place of panels[i]; panels[i] stays alive underneath and is
 	// still the "logical" panel for command dispatch. Alt panels
 	// never take focus (see AltPanel in info_panel.go).
-	altPanels        [2]AltPanel
-	activeIdx        int    // 0 for left, 1 for right
-	folderHistoryPos [2]int // position in provider's newest-first folder history
-	executing        bool
-	returnToPanels   bool
+	altPanels             [2]AltPanel
+	activeIdx             int    // 0 for left, 1 for right
+	folderHistoryPos      [2]int // position in provider's newest-first folder history
+	executing             bool
+	returnToPanels        bool
+	workspaceCommandTitle string
 
 	menuBar *vtui.MenuBar
 	cmdLine *CommandLine
@@ -261,6 +283,20 @@ type PanelsFrame struct {
 	ptyMutex   sync.Mutex
 	termView   *TerminalView
 	parser     *AnsiParser
+
+	// Process-environment updates use their own locks so an Apply from a
+	// plugin cannot interleave a private assignment script with user input.
+	processEnvironmentMu                sync.Mutex
+	processEnvironmentWriteMu           sync.Mutex
+	processEnvironmentGeneration        uint64
+	pendingProcessEnvironmentGeneration uint64
+	pendingProcessEnvironment           []vfs.ProcessEnvironmentChange
+	processEnvironmentBusy              bool
+	processEnvironmentDeliveryFailed    bool
+	processEnvironmentInFlight          *processEnvironmentShellInFlight
+	processEnvironmentOutputTail        []byte
+	deferredProcessEnvironmentInput     []byte
+	processEnvironmentClosed            bool
 
 	lastAlt        bool
 	lastBusy       bool
@@ -360,6 +396,10 @@ func NewPanelsFrame() *PanelsFrame {
 
 	pf.termView = NewTerminalView(80, 24)
 	pf.termView.OnBusyChange = func(busy bool) {
+		localShell := pf.localShellIsActive()
+		if localShell {
+			pf.noteLocalShellBusy(busy)
+		}
 		// Use PostTask to ensure state changes happen on the UI thread
 		vtui.FrameManager.PostTask(func() {
 			if busy {
@@ -367,6 +407,7 @@ func NewPanelsFrame() *PanelsFrame {
 			} else {
 				if pf.executing {
 					pf.executing = false
+					pf.workspaceCommandTitle = ""
 					if pf.returnToPanels {
 						pf.showPanels = true
 						if !pf.showLeftPanel && !pf.showRightPanel {
@@ -378,6 +419,9 @@ func NewPanelsFrame() *PanelsFrame {
 						vtui.FrameManager.Redraw()
 					}
 				}
+			}
+			if localShell && !busy {
+				pf.catchUpProcessEnvironment(true)
 			}
 		})
 	}
@@ -639,8 +683,12 @@ func (pf *PanelsFrame) buildPrompt() []vtui.CharInfo {
 	var path string
 	var vfsTitle string
 	if fsp, ok := pf.Active().(*FileSystemPanel); ok {
-		path = fsp.vfs.GetPath()
-		if tp, ok := fsp.vfs.(vfs.TitleProvider); ok {
+		path = fsp.persistentPath()
+		if fsp.providerOpenTask != nil {
+			if colon := strings.IndexByte(path, ':'); colon > 0 {
+				vfsTitle = path[:colon]
+			}
+		} else if tp, ok := fsp.vfs.(vfs.TitleProvider); ok {
 			vfsTitle = tp.GetTitle()
 		}
 	}
@@ -681,6 +729,13 @@ func (pf *PanelsFrame) buildPrompt() []vtui.CharInfo {
 		suffixStr = ">"
 		// Windows prompt usually displays the absolute path without '~'
 		displayPath = path
+	}
+	// Some virtual filesystems expose a complete visual path whose root already
+	// contains their title (for example "Account:\\Folder"). Keep the coloured
+	// title prefix, but do not duplicate it before the path.
+	if vfsTitle != "" && strings.HasPrefix(displayPath, vfsTitle+":") {
+		displayPath = strings.TrimPrefix(displayPath, vfsTitle)
+		sepStr = ""
 	}
 
 	maxPromptLen := pf.lastW / 2
@@ -768,6 +823,7 @@ func (pf *PanelsFrame) initPTY() {
 			if runtime.GOOS == "windows" {
 				os.Setenv("PROMPT", "$E]133;D$E\\$P$G")
 			}
+			inheritedEnvironmentGeneration := globalProcessEnvironment.currentGeneration()
 
 			shell := GetSystemShell()
 			if err := p.Run(shell); err != nil {
@@ -783,9 +839,11 @@ func (pf *PanelsFrame) initPTY() {
 				return
 			}
 			pf.pty = p
-			pf.parser.pty = p
-			pf.termView.pty = p
+			serializedPTY := &processEnvironmentSerializedPTY{owner: pf, backend: p}
+			pf.parser.pty = serializedPTY
+			pf.termView.pty = serializedPTY
 			pf.ptyMutex.Unlock()
+			pf.localShellStarted(inheritedEnvironmentGeneration)
 
 			vtui.FrameManager.PostTask(func() {
 				pf.ResizeConsole(pf.lastW, pf.lastH)
@@ -802,6 +860,7 @@ func (pf *PanelsFrame) initPTY() {
 				vtui.DebugLog("PTY: Local read loop exited: %v", err)
 				return
 			}
+			pf.processEnvironmentShellOutput(buf[:n])
 
 			pf.ptyMutex.Lock()
 			shouldProcess := (pf.getActivePTYUnsafe() == p)
@@ -816,9 +875,10 @@ func (pf *PanelsFrame) initPTY() {
 }
 
 func (pf *PanelsFrame) Close() {
+	pf.closeProcessEnvironmentShell()
+
 	pf.ptyMutex.Lock()
 	defer pf.ptyMutex.Unlock()
-
 	pf.closed = true
 
 	for _, p := range pf.panels {
@@ -883,11 +943,12 @@ func (pf *PanelsFrame) setPanelViewMode(idx int, mode ViewMode) {
 func (pf *PanelsFrame) ResizeConsole(w, h int) {
 	pf.lastW, pf.lastH = w, h
 	pf.SetPosition(0, 0, w-1, h-1) // Update hit-box for FrameManager hit-testing
-	pf.menuBar.SetPosition(0, 0, w-1, 0)
+	topInset := vtui.FrameManager.WorkspaceTopInset()
+	pf.menuBar.SetPosition(0, topInset, w-1, topInset)
 
-	contentY1 := 0
+	contentY1 := topInset
 	if AppConfig.AlwaysShowMenuBar && pf.showPanels {
-		contentY1 = 1
+		contentY1++
 	}
 
 	// 1. Terminal Area: Fills everything except KeyBar
@@ -1054,7 +1115,7 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 	if !isBusy {
 		if fsp := pf.getActivePanel(); fsp != nil {
 			currentPath := fsp.vfs.GetPath()
-			if currentPath != pf.lastPtyPath || fsp.vfs != pf.lastPtyVFS {
+			if currentPath != pf.lastPtyPath || !sameVFSInstance(fsp.vfs, pf.lastPtyVFS) {
 				if pf.syncPTYDirectory(currentPath, fsp.vfs) {
 					pf.lastPtyPath = currentPath
 					pf.lastPtyVFS = fsp.vfs
@@ -1202,7 +1263,7 @@ func (pf *PanelsFrame) InterceptPluginKey(e *vtinput.InputEvent) bool {
 	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
 
 	// Check global hotkeys (ignoring Lock and Enhanced keys)
-	for _, hk := range GlobalHotkeys {
+	for _, hk := range globalHotkeysSnapshot() {
 		hkCtrl := (hk.Mods & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
 		hkAlt := (hk.Mods & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 		hkShift := (hk.Mods & vtinput.ShiftPressed) != 0
@@ -1235,6 +1296,13 @@ func (pf *PanelsFrame) VetoActionKey(e *vtinput.InputEvent) bool {
 		return false
 	}
 	fsp := pf.getActivePanel()
+	if fsp != nil && fsp.providerOpenTask != nil {
+		// Cached rows from the destination are visible immediately, but the old
+		// VFS remains installed until the asynchronous provider restore succeeds.
+		// Route keys through the panel so file actions cannot accidentally target
+		// the old filesystem. Cursor/workspace UI remains responsive; Esc cancels.
+		return true
+	}
 	if fsp == nil || !fsp.fastFindMode {
 		// A focused alt panel gets its own keys first: e.g. F2 toggles
 		// wrap in quick view and must not fire Panel.UserMenu.
@@ -1278,30 +1346,33 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
 
-	// Raw input mode check at the very top. If an interactive AltScreen app is active (e.g. mc, htop),
-	// we forward ALL keys to PTY, except workspace switcher keys (Ctrl+Tab in standard mode, Ctrl+Shift+Tab in advanced).
-	if !pf.showPanels && pf.termView.UseAltScreen {
-		isAdvanced := pf.termView.Win32InputMode || pf.termView.KittyFlags != 0
-		isWorkspaceSwitch := false
-		if e.VirtualKeyCode == vtinput.VK_TAB && ctrl {
-			if isAdvanced {
-				isWorkspaceSwitch = shift
-			} else {
-				isWorkspaceSwitch = true
-			}
-		}
+	// Workspace switching is global and must remain reachable while a child
+	// process owns the terminal. Returning false lets FrameManager handle both
+	// directions instead of forwarding the key to an AltScreen application or
+	// to a busy ordinary PTY such as the Python REPL.
+	if e.Type == vtinput.KeyEventType && e.VirtualKeyCode == vtinput.VK_TAB && ctrl && !alt {
+		return false
+	}
+	// Ctrl+N normally forks the active panels into a new workspace. Terminal
+	// applications may use that key themselves, so this interception is a
+	// default-on preference rather than an unconditional global shortcut.
+	if e.Type == vtinput.KeyEventType && e.KeyDown && !pf.showPanels &&
+		e.VirtualKeyCode == vtinput.VK_N && ctrl && !alt && !shift && AppConfig.TerminalCtrlNWorkspace {
+		return false
+	}
 
-		if !isWorkspaceSwitch {
-			if e.KeyDown || pf.termView.Win32InputMode || pf.termView.KittyFlags != 0 {
-				active := pf.getActivePTY()
-				if active != nil {
-					if seq := TranslateInput(e, pf.termView.Win32InputMode, pf.termView.KittyFlags, pf.termView.ApplicationCursorKeys); seq != "" {
-						active.Write([]byte(seq))
-					}
+	// Raw input mode check at the very top. If an interactive AltScreen app is active (e.g. mc, htop),
+	// we forward all non-global keys to PTY.
+	if !pf.showPanels && pf.termView.UseAltScreen {
+		if e.KeyDown || pf.termView.Win32InputMode || pf.termView.KittyFlags != 0 {
+			active := pf.getActivePTY()
+			if active != nil {
+				if seq := TranslateInput(e, pf.termView.Win32InputMode, pf.termView.KittyFlags, pf.termView.ApplicationCursorKeys); seq != "" {
+					pf.writePTY(active, []byte(seq))
 				}
 			}
-			return true
 		}
+		return true
 	}
 
 	// In search-first command focus, Alt+the grave key inserts a literal
@@ -1384,6 +1455,9 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		}
 	}
 	if e.Type == vtinput.FocusEventType {
+		if !e.SetFocus {
+			pf.cancelFastFind()
+		}
 		pf.SetFocus(e.SetFocus)
 		// Reload macros from disk when regaining focus to share them across instances
 		if e.SetFocus && MacroMgr != nil {
@@ -1404,9 +1478,9 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		pty := pf.localPTY()
 		if !pf.showPanels && pf.termView.BracketedPasteMode && pty != nil {
 			if e.PasteStart {
-				pty.Write([]byte("\x1b[200~"))
+				pf.writePTY(pty, []byte("\x1b[200~"))
 			} else {
-				pty.Write([]byte("\x1b[201~"))
+				pf.writePTY(pty, []byte("\x1b[201~"))
 			}
 			return true
 		}
@@ -1424,7 +1498,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			active := pf.getActivePTY()
 			if active != nil {
 				if seq := TranslateInput(e, pf.termView.Win32InputMode, pf.termView.KittyFlags, pf.termView.ApplicationCursorKeys); seq != "" {
-					active.Write([]byte(seq))
+					pf.writePTY(active, []byte(seq))
 				}
 			}
 		}
@@ -1605,6 +1679,13 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 
 			trimmedCmd := strings.TrimSpace(cmd)
 			lowerCmd := strings.ToLower(trimmedCmd)
+			if dispatchCommandPrefix(pf, trimmedCmd) {
+				pf.cmdLine.Clear()
+				if pf.searchFirstMode() && !AppConfig.SearchCommandStayFocused {
+					pf.setCommandLineFocus(false)
+				}
+				return true
+			}
 			isDirChange := false
 			targetPath := ""
 
@@ -1784,7 +1865,8 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				} else if integration != nil {
 					pf.termView.PrintCleanCommand(cmd)
 				}
-				activePty.Write([]byte(fullWireCmd))
+				pf.workspaceCommandTitle = workspaceCommandName(trimmedCmd)
+				pf.writePTY(activePty, []byte(fullWireCmd))
 			}
 
 			pf.cmdLine.Clear()
@@ -1799,12 +1881,16 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		} else if !pf.showPanels {
 			activePty := pf.getActivePTY()
 			if activePty != nil {
-				activePty.Write([]byte("\r"))
+				pf.writePTY(activePty, []byte("\r"))
 			}
 			return true
 		} else {
 
 			// CommandLine is empty, panels are visible.
+			if fsp := pf.getActivePanel(); fsp != nil && !ctrl && !alt && !shift &&
+				dispatchPanelAction(pf, vfs.PanelActionActivate, selectedPanelActionPaths(fsp)) {
+				return true
+			}
 
 			// 1. Try passing to panel to handle directory entry.
 			handled := pf.Active().ProcessKey(e)
@@ -2005,9 +2091,9 @@ func (pf *PanelsFrame) handleTerminalMouseSelection(e *vtinput.InputEvent) bool 
 			text := tv.readClipboard()
 			if text != "" {
 				if tv.BracketedPasteMode {
-					pty.Write([]byte("\x1b[200~" + text + "\x1b[201~"))
+					pf.writePTY(pty, []byte("\x1b[200~"+text+"\x1b[201~"))
 				} else {
-					pty.Write([]byte(text))
+					pf.writePTY(pty, []byte(text))
 				}
 			}
 		}
@@ -2128,7 +2214,7 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 		active := pf.getActivePTY()
 		if active != nil && (pf.termView.MouseTrackingMode != 0 || pf.termView.MouseSGRMode) {
 			seq := TranslateMouseInput(e)
-			active.Write([]byte(seq))
+			pf.writePTY(active, []byte(seq))
 			return true
 		}
 		// No TUI is grabbing the mouse — treat clicks/drags in the
@@ -2334,13 +2420,31 @@ func (pf *PanelsFrame) getInactivePanel() *FileSystemPanel {
 	return nil
 }
 
+// cancelFastFind closes the transient search UI whenever control leaves the
+// file panels. It is intentionally frame-wide: only one panel should own Fast
+// Find, but clearing both slots prevents a stale inactive search from coming
+// back after Tab, a panel swap, or an overlay closes.
+func (pf *PanelsFrame) cancelFastFind() bool {
+	cancelled := false
+	for _, panel := range pf.panels {
+		fsp, ok := panel.(*FileSystemPanel)
+		if !ok || !fsp.fastFindMode {
+			continue
+		}
+		fsp.fastFindMode = false
+		fsp.fastFindStr = ""
+		cancelled = true
+	}
+	return cancelled
+}
+
 func (pf *PanelsFrame) GetPaths() (string, string) {
 	l, r := "", ""
 	if fsp, ok := pf.panels[0].(*FileSystemPanel); ok {
-		l = fsp.vfs.GetPath()
+		l = fsp.persistentPath()
 	}
 	if fsp, ok := pf.panels[1].(*FileSystemPanel); ok {
-		r = fsp.vfs.GetPath()
+		r = fsp.persistentPath()
 	}
 	return l, r
 }
@@ -2373,6 +2477,7 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 					if pty := pf.takeLocalPTY(); pty != nil {
 						pty.Close()
 					}
+					shutdownProcessEnvironmentRuntime()
 					vtui.FrameManager.Shutdown()
 				}
 			}
@@ -2382,6 +2487,7 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 			if pty := pf.takeLocalPTY(); pty != nil {
 				pty.Close()
 			}
+			shutdownProcessEnvironmentRuntime()
 			vtui.FrameManager.Shutdown()
 		}
 		return true
@@ -2501,7 +2607,21 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 
 	case vtui.CmResize: // Used as a hack for 'fork' command from FrameManager
 		if s, ok := args.(string); ok && s == "fork" {
-			vtui.FrameManager.AddScreen(pf.Clone())
+			clone := pf.Clone()
+			// Ctrl+N means "fork the panels", including when it is invoked
+			// while the terminal is visible. Copying showPanels=false creates
+			// two visually identical cmd.exe workspaces and makes a successful
+			// switch look like it did nothing. Keep the running terminal in the
+			// original workspace and expose the cloned panels in the new one.
+			if !pf.showPanels {
+				clone.showPanels = true
+				if clone.lastW > 0 && clone.lastH > 0 {
+					clone.ResizeConsole(clone.lastW, clone.lastH)
+				} else {
+					clone.updateMenuCheckmarks()
+				}
+			}
+			vtui.FrameManager.AddScreen(clone)
 			return true
 		}
 
@@ -3043,16 +3163,16 @@ func (pf *PanelsFrame) syncPTYDirectory(path string, v vfs.VFS) bool {
 	// argument and complains about at every step.
 	if integ, ok := v.(vfs.PtyShellIntegration); ok {
 		if seq := integ.PtyChangeDirCommand(path); len(seq) > 0 {
-			activePty.Write(seq)
+			pf.writePTY(activePty, seq)
 		}
 		return true
 	}
 
 	if isWindowsShell {
-		activePty.Write([]byte(fmt.Sprintf("cd /d \"%s\" & rem f4_sync\r", path)))
+		pf.writePTY(activePty, []byte(fmt.Sprintf("cd /d \"%s\" & rem f4_sync\r", path)))
 	} else {
 		sqPath := strings.ReplaceAll(path, "'", "'\\''")
-		activePty.Write([]byte(fmt.Sprintf(" cd '%s' # f4_sync\r", sqPath)))
+		pf.writePTY(activePty, []byte(fmt.Sprintf(" cd '%s' # f4_sync\r", sqPath)))
 	}
 	return true
 }
@@ -3152,10 +3272,14 @@ func (pf *PanelsFrame) GetTitle() string {
 
 	path := ""
 	if fsp, ok := pf.Active().(*FileSystemPanel); ok {
-		path = fsp.vfs.GetPath()
-		if tp, ok := fsp.vfs.(vfs.TitleProvider); ok {
-			if prefix := tp.GetTitle(); prefix != "" {
-				path = prefix + ":" + path
+		path = fsp.persistentPath()
+		if fsp.providerOpenTask == nil {
+			if tp, ok := fsp.vfs.(vfs.TitleProvider); ok {
+				if prefix := tp.GetTitle(); prefix != "" {
+					if !strings.HasPrefix(path, prefix+":") {
+						path = prefix + ":" + path
+					}
+				}
 			}
 		}
 	}
@@ -3164,6 +3288,116 @@ func (pf *PanelsFrame) GetTitle() string {
 		return "Panels: " + path
 	}
 	return "Panels"
+}
+
+func (pf *PanelsFrame) GetWorkspaceTabTitle() string {
+	if !pf.showPanels {
+		title := "Terminal"
+		if pf.executing && pf.workspaceCommandTitle != "" {
+			title = pf.workspaceCommandTitle
+		}
+		// U+2328 is measured as one cell by runewidth but is rendered as a
+		// two-cell glyph by the Windows GUI font. Keep an extra spacer so the
+		// visible gap before the title matches the folder icon tabs.
+		return "⌨  " + title
+	}
+
+	panelPath := func(panel Panel) string {
+		fsp, ok := panel.(*FileSystemPanel)
+		if !ok || fsp.vfs == nil {
+			return "—"
+		}
+		path := fsp.persistentPath()
+		if path == "" {
+			return "."
+		}
+		if fsp.providerOpenTask == nil && fsp.vfs.IsAtRoot() {
+			if provider, ok := fsp.vfs.(vfs.TitleProvider); ok {
+				if title := provider.GetTitle(); title != "" {
+					return title
+				}
+			}
+			return path
+		}
+		if name := filepath.Base(path); name != "" && name != "." && name != string(os.PathSeparator) {
+			return name
+		}
+		return path
+	}
+
+	return "📁 " + panelPath(pf.panels[0]) + " ↔ " + panelPath(pf.panels[1])
+}
+
+// GetWorkspaceMenuInfo supplies the Screens popup with full panel paths. The
+// compact tab title above intentionally uses only leaf directory names.
+func (pf *PanelsFrame) GetWorkspaceMenuInfo() vtui.WorkspaceMenuInfo {
+	if !pf.showPanels {
+		title := "Terminal"
+		if pf.executing && pf.workspaceCommandTitle != "" {
+			title = pf.workspaceCommandTitle
+		}
+		return vtui.WorkspaceMenuInfo{Icon: "⌨", Primary: title}
+	}
+
+	panelPath := func(panel Panel) string {
+		fsp, ok := panel.(*FileSystemPanel)
+		if !ok || fsp.vfs == nil {
+			return "—"
+		}
+		path := fsp.persistentPath()
+		if fsp.providerOpenTask == nil {
+			if provider, ok := fsp.vfs.(vfs.TitleProvider); ok {
+				if title := strings.TrimSpace(provider.GetTitle()); title != "" {
+					if path == "" || path == "." {
+						return title
+					}
+					if strings.HasPrefix(path, title+":") {
+						return path
+					}
+					return title + ":" + path
+				}
+			}
+		}
+		if path == "" {
+			return "."
+		}
+		return path
+	}
+
+	return vtui.WorkspaceMenuInfo{
+		Icon:      "📁",
+		Primary:   panelPath(pf.panels[0]),
+		Secondary: panelPath(pf.panels[1]),
+	}
+}
+
+func workspaceCommandName(command string) string {
+	command = strings.TrimSpace(command)
+	if command == "" {
+		return "Terminal"
+	}
+
+	executable := ""
+	if command[0] == '"' || command[0] == '\'' {
+		quote := command[0]
+		if end := strings.IndexByte(command[1:], quote); end >= 0 {
+			executable = command[1 : end+1]
+		}
+	}
+	if executable == "" {
+		if fields := strings.Fields(command); len(fields) > 0 {
+			executable = fields[0]
+		}
+	}
+	executable = strings.TrimSuffix(filepath.Base(executable), filepath.Ext(executable))
+	switch strings.ToLower(executable) {
+	case "python", "python3", "py":
+		return "Python"
+	}
+	if executable == "" {
+		return "Terminal"
+	}
+	return executable
 }
 
 func executeCapturedCommand(pf *PanelsFrame, action string, cmdStr string) {
@@ -3346,19 +3580,30 @@ func (pf *PanelsFrame) Clone() *PanelsFrame {
 }
 
 func (pf *PanelsFrame) showPluginMenu() {
-	if len(PluginMenuItems) == 0 {
+	items := pluginMenuItemsSnapshot()
+	commands := pluginCommandsSnapshot(vfs.PluginCommandPanel, pf)
+	if len(items) == 0 && len(commands) == 0 {
 		vtui.ShowMessage(" Plugins ", "No plugins registered for F11 menu.", []string{"&Ok"})
 		return
 	}
-	var labels []string
-	for _, itm := range PluginMenuItems {
+	labels := make([]string, 0, len(items)+len(commands))
+	for _, itm := range items {
 		labels = append(labels, itm.Label)
 	}
+	for _, command := range commands {
+		labels = append(labels, command.Label)
+	}
 	pf.Menu(" Plugins ", labels, func(idx int) {
-		if idx >= 0 && idx < len(PluginMenuItems) {
-			handler := PluginMenuItems[idx].Handler
+		switch {
+		case idx >= 0 && idx < len(items):
+			handler := items[idx].Handler
 			vtui.FrameManager.PostTask(func() {
 				handler(pf)
+			})
+		case idx >= len(items) && idx < len(items)+len(commands):
+			command := commands[idx-len(items)]
+			vtui.FrameManager.PostTask(func() {
+				command.Run(pf)
 			})
 		}
 	})
@@ -3442,9 +3687,10 @@ func (pf *PanelsFrame) showDriveMenuAt(panelIdx, selectPos int) {
 	}
 
 	// 4. Plugins & custom drives
-	if len(DriveRegistry) > 0 {
+	drives := driveRegistrySnapshot()
+	if len(drives) > 0 {
 		menu.AddSeparator()
-		for _, drv := range DriveRegistry {
+		for _, drv := range drives {
 			factory := drv.Factory
 
 			// Clean name: strip existing hotkeys/numbering if any
@@ -3615,7 +3861,6 @@ func (pf *PanelsFrame) switchToVFS(fsp *FileSystemPanel, newVFS vfs.VFS) {
 			}
 			pf.ptyMutex.Unlock()
 		}
-		fsp.dirCache = make(map[dirCacheKey]dirCacheEntry)
 		fsp.providerEntryName = ""
 		fsp.vfs = newVFS
 		fsp.showCurrentVFSLoadingRows()
@@ -3645,7 +3890,6 @@ func (pf *PanelsFrame) NavigateToPath(fsp *FileSystemPanel, targetPath string) b
 		}
 		pf.ptyMutex.Unlock()
 
-		fsp.dirCache = make(map[dirCacheKey]dirCacheEntry)
 		fsp.vfs = parent
 		fsp.showCurrentVFSLoadingRows()
 		if fsp.providerEntryName != "" {
@@ -3656,6 +3900,31 @@ func (pf *PanelsFrame) NavigateToPath(fsp *FileSystemPanel, targetPath string) b
 		}
 		fsp.ReadDirectory()
 		return true
+	}
+
+	// A provider-owned visual path (for example Account:\Folder) must be
+	// restored before OS path probing. This keeps bookmarks and folder history
+	// entirely user-facing while allowing the provider to translate the path to
+	// its internal object identity in the asynchronous Open call.
+	if fsp.vfs.IsAbs(targetPath) {
+		if err := fsp.setKnownDirectoryPath(targetPath); err == nil {
+			fsp.pendingSelection = ".."
+			fsp.ReadDirectory()
+			return true
+		}
+	}
+	if provider := vfs.FindStandaloneProvider(context.Background(), fsp.vfs, targetPath); provider != nil {
+		sourceVFS := fsp.vfs
+		return fsp.openVFSAsync(
+			targetPath,
+			func(ctx context.Context) (vfs.VFS, error) {
+				return provider.Open(ctx, sourceVFS, targetPath)
+			},
+			func(newVFS vfs.VFS) { pf.switchToVFS(fsp, newVFS) },
+			func(err error) {
+				vtui.ShowMessage(" Connection Error ", fmt.Sprintf("Failed to open %s:\n%v", targetPath, err), []string{"&Ok"})
+			},
+		)
 	}
 
 	// 2. Handle absolute paths. It could be an OS path, or a path deep inside an archive.
@@ -3732,7 +4001,38 @@ func (pf *PanelsFrame) NavigateToPath(fsp *FileSystemPanel, targetPath string) b
 		}
 	}
 
-	// 3. Change path on the current VFS. Remote VFSes may take the optimistic,
+	// 3. Persistent virtual-file-system URIs are opened through the provider
+	// registered during synchronous built-in plugin initialization. Opening is
+	// asynchronous, but a recognized URI counts as accepted immediately so a
+	// caller never feeds it to the current OS VFS as a fallback path.
+	if provider := vfs.FindURIProvider(targetPath); provider != nil {
+		sourceVFS := fsp.vfs
+		return fsp.openVFSAsync(
+			targetPath,
+			func(ctx context.Context) (vfs.VFS, error) {
+				return provider.OpenURI(ctx, sourceVFS, targetPath)
+			},
+			func(newVFS vfs.VFS) {
+				pf.switchToVFS(fsp, newVFS)
+			},
+			func(err error) {
+				vtui.ShowMessage(" Connection Error ", fmt.Sprintf("Failed to open %s:\n%v", targetPath, err), []string{"&Ok"})
+			},
+		)
+	}
+	if vfs.IsURIPath(targetPath) && !fsp.vfs.IsAbs(targetPath) {
+		// The URI is syntactically valid but its plugin is unavailable. Do not
+		// let SetPath reinterpret it as a relative path in the current VFS.
+		if providerOpenCanceled {
+			fsp.isLoading = false
+			fsp.stopLoadingAnimation()
+			fsp.updateTitle(nil)
+			vtui.FrameManager.Redraw()
+		}
+		return false
+	}
+
+	// 4. Change path on the current VFS. Remote VFSes may take the optimistic,
 	// no-I/O route here; ReadDirectory validates the target in the background
 	// while a cached view can become interactive immediately.
 	if err := fsp.setKnownDirectoryPath(targetPath); err == nil {
@@ -3755,6 +4055,24 @@ func (pf *PanelsFrame) NavigateToPath(fsp *FileSystemPanel, targetPath string) b
 func sameFolderHistoryPath(a, b string) bool {
 	if a == "" || b == "" {
 		return false
+	}
+	uriA, aIsURI := normalizedURIIdentity(a)
+	uriB, bIsURI := normalizedURIIdentity(b)
+	if aIsURI || bIsURI {
+		return aIsURI && bIsURI && uriA == uriB
+	}
+	isVisualVirtual := func(value string) bool {
+		colon := strings.IndexByte(value, ':')
+		return colon > 1 && len(value) > colon+1 && (value[colon+1] == '/' || value[colon+1] == '\\')
+	}
+	if isVisualVirtual(a) || isVisualVirtual(b) {
+		if !isVisualVirtual(a) || !isVisualVirtual(b) {
+			return false
+		}
+		normalize := func(value string) string {
+			return nativeVisualCachePath(value)
+		}
+		return normalize(a) == normalize(b)
 	}
 	a = filepath.Clean(a)
 	b = filepath.Clean(b)
@@ -3805,26 +4123,6 @@ func (pf *PanelsFrame) folderHistoryPanelIndex(fsp *FileSystemPanel) int {
 	return pf.activeIdx
 }
 
-func (pf *PanelsFrame) navigateFolderHistory(fsp *FileSystemPanel, path string, pos int) bool {
-	if fsp == nil || path == "" {
-		return false
-	}
-	// Folder history is a panel navigation action, so it ends the transient
-	// fast-find session before changing the directory.
-	fsp.fastFindMode = false
-	fsp.fastFindStr = ""
-	fsp.suppressFolderHistoryPath = path
-	if !pf.NavigateToPath(fsp, path) {
-		fsp.suppressFolderHistoryPath = ""
-		return false
-	}
-	idx := pf.folderHistoryPanelIndex(fsp)
-	if idx >= 0 && idx < len(pf.folderHistoryPos) {
-		pf.folderHistoryPos[idx] = pos
-	}
-	return true
-}
-
 // navigateAvailableFolderHistory tries history entries in storage-index order
 // until one can actually be opened. A positive step walks towards older MRU
 // entries; a negative step walks towards newer entries.
@@ -3833,9 +4131,37 @@ func (pf *PanelsFrame) navigateAvailableFolderHistory(fsp *FileSystemPanel, hist
 		return false
 	}
 	for pos := startPos; pos >= 0 && pos < len(history); pos += step {
-		if pf.navigateFolderHistory(fsp, history[pos], pos) {
+		path := history[pos]
+		if fsp == nil || path == "" {
+			continue
+		}
+		fsp.fastFindMode = false
+		fsp.fastFindStr = ""
+		fsp.suppressFolderHistoryPath = path
+		if !pf.NavigateToPath(fsp, path) {
+			fsp.suppressFolderHistoryPath = ""
+			continue
+		}
+		idx := pf.folderHistoryPanelIndex(fsp)
+		if fsp.providerOpenTask != nil && sameFolderHistoryPath(fsp.providerOpenTarget, path) {
+			historySnapshot := append([]string(nil), history...)
+			pendingPos := pos
+			fsp.providerOpenResult = func(success bool) bool {
+				if success {
+					if idx >= 0 && idx < len(pf.folderHistoryPos) {
+						pf.folderHistoryPos[idx] = pendingPos
+					}
+					return false
+				}
+				fsp.suppressFolderHistoryPath = ""
+				return pf.navigateAvailableFolderHistory(fsp, historySnapshot, pendingPos+step, step)
+			}
 			return true
 		}
+		if idx >= 0 && idx < len(pf.folderHistoryPos) {
+			pf.folderHistoryPos[idx] = pos
+		}
+		return true
 	}
 	return false
 }

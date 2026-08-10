@@ -2,8 +2,12 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -91,6 +95,13 @@ type EditorView struct {
 	inGroup    bool
 	lastOp     undoOpType
 	cleanState piecetable.TableState // State of the file on disk
+	// unsavedBaseline keeps a create-new buffer dirty until its first
+	// successful save, even when edit + Undo restores the supplied content.
+	unsavedBaseline bool
+	// createNewTarget forbids replacing a path that appeared after this
+	// editor was opened. Plugin-generated reports use this for their first
+	// save; normal editors continue to replace the file they opened.
+	createNewTarget bool
 
 	// Autocomplete state
 	acEnabled    bool
@@ -222,6 +233,10 @@ func (ev *EditorView) Close() {
 }
 
 func NewEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string) *EditorView {
+	return newEditorView(pt, v, path, true)
+}
+
+func newEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string, useEditorConfig bool) *EditorView {
 	li := piecetable.NewLineIndex()
 	li.Rebuild(pt)
 	ev := &EditorView{
@@ -241,7 +256,7 @@ func NewEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string) *EditorVie
 		ExpandTabs:      AppConfig.EditorExpandTabs,
 		AutoIndent:      AppConfig.EditorAutoIndent,
 		CursorBeyondEOL: AppConfig.EditorCursorBeyondEOL,
-		UseEditorConfig: AppConfig.EditorUseEditorConfig,
+		UseEditorConfig: useEditorConfig && AppConfig.EditorUseEditorConfig,
 		Codepage:        65001,
 	}
 	if ev.TabSize <= 0 {
@@ -410,7 +425,7 @@ func (ev *EditorView) Undo() {
 
 	ev.clearCaches()
 	// Intelligent modified flag: if structure matches clean state, it's not modified
-	ev.modified = !ev.pt.GetState().Equals(ev.cleanState)
+	ev.modified = ev.unsavedBaseline || !ev.pt.GetState().Equals(ev.cleanState)
 	ev.lastOp = opNone
 	ev.ensureCursorVisible()
 	vtui.DebugLog("EDITOR: Executed Undo, remaining: %d, modified: %v", len(ev.undoStack), ev.modified)
@@ -448,7 +463,7 @@ func (ev *EditorView) Redo() {
 
 	ev.clearCaches()
 	// Intelligent modified flag
-	ev.modified = !ev.pt.GetState().Equals(ev.cleanState)
+	ev.modified = ev.unsavedBaseline || !ev.pt.GetState().Equals(ev.cleanState)
 	ev.lastOp = opNone
 	ev.ensureCursorVisible()
 	vtui.DebugLog("EDITOR: Executed Redo, remaining: %d, modified: %v", len(ev.redoStack), ev.modified)
@@ -1765,7 +1780,7 @@ func (ev *EditorView) SetPosition(x1, y1, x2, y2 int) {
 		ev.topBar.SetPosition(x1, y1, x2, y1)
 	}
 	if ev.menuBar != nil {
-		ev.menuBar.SetPosition(x1, 0, x2, 0)
+		ev.menuBar.SetPosition(x1, y1, x2, y1)
 	}
 	if ev.scrollBar != nil {
 		ev.scrollBar.SetPosition(x2, y1+1, x2, y2)
@@ -1777,7 +1792,7 @@ func (ev *EditorView) SetPosition(x1, y1, x2, y2 int) {
 
 func (ev *EditorView) ResizeConsole(w, h int) {
 	// Редактор в f4 занимает всё пространство до KeyBar (h-1)
-	ev.SetPosition(0, 0, w-1, h-2)
+	ev.SetPosition(0, vtui.FrameManager.WorkspaceTopInset(), w-1, h-2)
 }
 
 // GetMenuBar returns the editor's menu bar. Items are regenerated from
@@ -2580,6 +2595,53 @@ func patchPiecesFromTable(pt *piecetable.PieceTable) ([]vfs.PatchPiece, bool) {
 	}
 	return pieces, true
 }
+
+// editorTempSibling returns a temporary name through the VFS path algebra
+// instead of appending bytes to the serialized path. Cloud files use opaque
+// canonical URIs (for example g:item:<id>), where `path + ".f4tmp"` corrupts
+// the identifier rather than naming a sibling object.
+func editorTempSiblingWithToken(filesystem vfs.VFS, filePath, token string) (string, error) {
+	if filesystem == nil || filePath == "" {
+		return "", os.ErrInvalid
+	}
+	if token == "" || strings.ContainsAny(token, `/\\:`) {
+		return "", errors.New("invalid editor temporary-file token")
+	}
+	name := filesystem.Base(filePath)
+	parent := filesystem.Dir(filePath)
+	if name == "" || parent == "" {
+		return "", errors.New("cannot resolve a sibling temporary path")
+	}
+	// Keep the component independent of the original basename. Appending a
+	// token to a valid 240-byte filename can exceed the common 255-byte limit.
+	// A unique hidden sibling plus explicit no-overwrite creation also prevents
+	// concurrent editors (or a user file) from clobbering staged data.
+	tempPath := filesystem.Join(parent, ".f4tmp-"+token)
+	if tempPath == "" || tempPath == filePath {
+		return "", errors.New("cannot create a distinct sibling temporary path")
+	}
+	return tempPath, nil
+}
+
+func cleanupEditorStage(filesystem vfs.VFS, tempPath string) {
+	if filesystem == nil || tempPath == "" {
+		return
+	}
+	// Cleanup is a single best-effort mutation detached from the task Cancel.
+	// The VFS session lifetime still gates CloudFox operations internally.
+	cleanupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = filesystem.Remove(cleanupCtx, tempPath)
+}
+
+func editorTempSibling(filesystem vfs.VFS, filePath string) (string, error) {
+	var random [16]byte
+	if _, err := rand.Read(random[:]); err != nil {
+		return "", fmt.Errorf("generate editor temporary-file name: %w", err)
+	}
+	return editorTempSiblingWithToken(filesystem, filePath, hex.EncodeToString(random[:]))
+}
+
 func (ev *EditorView) SaveToFile(afterSave func()) {
 	if ev.filePath == "" || ev.vfs == nil || ev.saving {
 		return
@@ -2597,6 +2659,7 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 
 	// Capture visible offset for preloading before we destroy the current engine
 	visStart := ev.engine.VisualToLogical(ev.ScrollTopRow, 0)
+	createNewTarget := ev.createNewTarget
 
 	vtui.RunAsync(func(ctx *vtui.TaskContext) {
 		// To preserve original file ownership, permissions and xattrs (crucial for root-owned files),
@@ -2605,12 +2668,47 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 		oldFile := ev.file
 		//needsBufferRecovery := oldAsync != nil && ev.pt.GetOriginalBuffer() == oldAsync
 
+		capabilities := ev.vfs.GetCapabilities()
 		// Capture original metadata to restore it after atomic rename
 		originalStat, statErr := ev.vfs.Stat(ctx.Context, ev.filePath)
+		if createNewTarget {
+			var destinationErr error
+			switch {
+			case statErr == nil:
+				destinationErr = vfs.ErrDestinationExists
+			case !errors.Is(statErr, os.ErrNotExist):
+				destinationErr = statErr
+			}
+			if destinationErr != nil {
+				ctx.RunOnUI(func() {
+					ev.saving = false
+					vtui.ShowMessage(" Error ", fmt.Sprintf("Cannot create the new file without replacing an existing target:\n%v", destinationErr), []string{"&Ok"})
+				})
+				return
+			}
+			if !capabilities.HasAtomicNoReplaceRename {
+				ctx.RunOnUI(func() {
+					ev.saving = false
+					vtui.ShowMessage(" Error ", fmt.Sprintf("This file system cannot safely create the new file without replacing a concurrent destination:\n%v", vfs.ErrNoReplaceUnsupported), []string{"&Ok"})
+				})
+				return
+			}
+		}
 
-		useTemp := !isAlternateDataStream(ev.filePath)
+		// Google Drive can update media on the existing object ID. Prefer that
+		// explicit capability over generic temp+Rename: replacing the Drive item
+		// would sever permissions, share links, shortcuts, comments and history.
+		identityPreservingWrite := capabilities.HasIdentityPreservingWrite && !createNewTarget
+		// A colon denotes an NTFS alternate stream only for a local OS VFS.
+		// Treating cloud:// as an ADS used to bypass staging and overwrite remote
+		// objects directly on Windows.
+		useTemp := !identityPreservingWrite && (!isLocalOSVFS(ev.vfs) || !isAlternateDataStream(ev.filePath))
+		tempPath := ""
 		var f io.WriteCloser
 		var err error
+		if useTemp {
+			tempPath, err = editorTempSibling(ev.vfs, ev.filePath)
+		}
 
 		// A file system that can assemble a file out of pieces of another
 		// one saves the unchanged parts from ever crossing the network. It
@@ -2618,24 +2716,37 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 		// provides, and a buffer whose offsets still describe the file on
 		// disk, which is only true for a raw UTF-8 load.
 		saved := false
-		if delta, isDelta := ev.vfs.(vfs.DeltaWriter); isDelta && useTemp && ev.Codepage == 65001 {
-			if pieces, ok := patchPiecesFromTable(ev.pt); ok {
-				perr := delta.PatchFile(ctx.Context, ev.filePath, ev.filePath+".f4tmp", pieces)
-				if perr == nil {
-					saved = true
-				} else {
-					vtui.DebugLog("EDITOR: delta save unavailable, writing in full: %v", perr)
+		if err == nil {
+			if delta, isDelta := ev.vfs.(vfs.DeltaWriter); isDelta && useTemp && ev.Codepage == 65001 {
+				if pieces, ok := patchPiecesFromTable(ev.pt); ok {
+					perr := delta.PatchFile(vfs.WithDestinationOverwrite(ctx.Context, false), ev.filePath, tempPath, pieces)
+					if perr == nil {
+						saved = true
+					} else {
+						vtui.DebugLog("EDITOR: delta save unavailable, writing in full: %v", perr)
+					}
 				}
 			}
 		}
 
 		if saved {
 			f = nopWriteCloser{}
-		} else if useTemp {
-			tempPath := ev.filePath + ".f4tmp"
-			f, err = ev.vfs.Create(ctx.Context, tempPath)
-		} else {
-			f, err = ev.vfs.Create(ctx.Context, ev.filePath)
+		} else if useTemp && err == nil {
+			f, err = ev.vfs.Create(vfs.WithDestinationOverwrite(ctx.Context, false), tempPath)
+		} else if err == nil {
+			f, err = ev.vfs.Create(vfs.WithDestinationOverwrite(ctx.Context, !createNewTarget), ev.filePath)
+		}
+		if err == nil && useTemp && !saved {
+			// os.Create-style APIs commonly start at 0666/umask (often 0644).
+			// Tighten the stage before the first byte of potentially sensitive
+			// content is written. Providers without Unix modes safely ignore this.
+			stageAttrErr := ev.vfs.SetAttributes(ctx.Context, tempPath, vfs.VFSItem{UnixMode: 0o600, Uid: -1, Gid: -1})
+			if stageAttrErr != nil && isLocalOSVFS(ev.vfs) {
+				_ = f.Close()
+				cleanupEditorStage(ev.vfs, tempPath)
+				f = nil
+				err = fmt.Errorf("secure editor temporary file: %w", stageAttrErr)
+			}
 		}
 
 		if err != nil {
@@ -2704,8 +2815,8 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 		}
 
 		if saveErr != nil {
-			if useTemp {
-				ev.vfs.Remove(ctx.Context, ev.filePath+".f4tmp")
+			if useTemp && tempPath != "" {
+				cleanupEditorStage(ev.vfs, tempPath)
 			}
 			ctx.RunOnUI(func() {
 				ev.saving = false
@@ -2714,29 +2825,64 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 			return
 		}
 
-		// Success: finalize the save atomically.
-		// Close reading handles to the OLD file so it can be replaced by Rename.
-		if oldAsync != nil {
-			oldAsync.Close()
-		}
-		if oldFile != nil {
-			oldFile.Close()
-		}
-
+		// Success: finalize the save atomically. Keep the old read handles alive
+		// through Rename and the subsequent reopen. Remote mutations do not need
+		// them closed, and on an error the current piece table may still depend on
+		// that lazy AsyncBuffer. Closing it early made the editor unreadable and
+		// unretryable after a failed finalization.
+		oldBackingClosed := false
 		if useTemp {
-			tempPath := ev.filePath + ".f4tmp"
-			if err := ev.vfs.Rename(ctx.Context, tempPath, ev.filePath); err != nil {
+			// Windows does not allow replacing a local file while our reader handle
+			// is open. A full local save has already read every piece still referenced
+			// by the piece table, so its AsyncBuffer remains a usable recovery snapshot
+			// after cancellation. Remote VFS handles stay open: their Rename can have
+			// an unknown/partial outcome and closing a lazy source there would strand
+			// the editor precisely when recovery matters most.
+			if isLocalOSVFS(ev.vfs) {
+				if oldAsync != nil {
+					oldAsync.Close()
+				}
+				if oldFile != nil {
+					_ = oldFile.Close()
+				}
+				oldBackingClosed = true
+			}
+			renameCtx := vfs.WithDestinationOverwrite(ctx.Context, !createNewTarget)
+			if err := ev.vfs.Rename(renameCtx, tempPath, ev.filePath); err != nil {
+				// Do not remove the staged path after an uncertain/partial rename.
+				// A remote provider may have committed the move and merely lost the
+				// response (or failed while removing its backup). In that state the
+				// temp alias can already identify the newly saved authoritative file;
+				// deleting it here would turn a save error into data loss. The random
+				// sibling name also makes leaving an unconfirmed stage non-destructive.
+				// Definitive pre-commit errors are safe to clean once; uncertain,
+				// partial and canceled operations must remain untouched.
+				if !operationMustNotRetry(err) {
+					cleanupEditorStage(ev.vfs, tempPath)
+				}
 				ctx.RunOnUI(func() {
 					ev.saving = false
 					vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to finalize save (rename failed):\n%v", err), []string{"&Ok"})
 				})
 				return
 			}
+			// Replacement can change a remote object's immutable identity (Google
+			// Drive moves the new temp object into place and deletes the old ID).
+			// Persist the VFS-remapped canonical path so reopen/history survives a
+			// later session instead of retaining the deleted object URI.
+			if canonical, absErr := ev.vfs.Abs(ev.filePath); absErr == nil && canonical != "" {
+				ev.filePath = canonical
+			}
 		}
 
-		// Restore original metadata (owner, group, perms, times)
+		// Restore original metadata (owner, group, perms, times). Remote VFSes may
+		// explicitly not support attributes; local failures are a committed but
+		// user-visible partial save and must not be silently ignored.
+		var metadataErr error
 		if statErr == nil {
-			ev.vfs.SetAttributes(ctx.Context, ev.filePath, originalStat)
+			if attrErr := ev.vfs.SetAttributes(ctx.Context, ev.filePath, originalStat); attrErr != nil && isLocalOSVFS(ev.vfs) {
+				metadataErr = attrErr
+			}
 		}
 
 		newFile, err := ev.vfs.Open(ctx.Context, ev.filePath)
@@ -2760,6 +2906,15 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 			}
 			// Reuse the existing LineIndex since the logical content is identical
 			newEngine = textlayout.NewWrapEngine(newPt, ev.li)
+			// A confirmed replacement and a confirmed new backing make it safe to
+			// release the old lazy reader. If reopen failed, retaining it is what
+			// keeps the in-memory edit session usable.
+			if oldAsync != nil && !oldBackingClosed {
+				oldAsync.Close()
+			}
+			if oldFile != nil && !oldBackingClosed {
+				_ = oldFile.Close()
+			}
 		}
 
 		// PRELOAD CACHE TO PREVENT SCREEN FLICKER
@@ -2786,6 +2941,8 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 
 			if err == nil {
 				ev.modified = false
+				ev.unsavedBaseline = false
+				ev.createNewTarget = false
 				if afterSave != nil {
 					afterSave()
 				}
@@ -2797,6 +2954,19 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 				ev.editSession++
 				ev.ensureEngineWidth()
 				ev.edited = false
+				if metadataErr != nil {
+					vtui.ShowMessage(" Warning ", fmt.Sprintf("File content was saved, but original metadata could not be restored:\n%v", metadataErr), []string{"&Ok"})
+				}
+			} else {
+				// The content mutation already committed. Keep the old backing alive,
+				// mark the current logical state clean, and report only the failed
+				// reopen; retrying the save mutation would be unsafe and unnecessary.
+				ev.modified = false
+				ev.unsavedBaseline = false
+				ev.createNewTarget = false
+				ev.cleanState = ev.pt.GetState()
+				ev.edited = false
+				vtui.ShowMessage(" Warning ", fmt.Sprintf("File content was saved, but the file could not be reopened:\n%v", err), []string{"&Ok"})
 			}
 		})
 	})
@@ -3630,6 +3800,10 @@ func (ev *EditorView) updateAutocomplete() {
 
 func isAlternateDataStream(path string) bool {
 	if runtime.GOOS != "windows" {
+		return false
+	}
+	// URI schemes contain a colon but can never denote an NTFS stream.
+	if strings.Contains(path, "://") {
 		return false
 	}
 	vol := filepath.VolumeName(path)

@@ -162,7 +162,7 @@ func AddFolderHistory(path string) {
 	// Deduplicate and move to top
 	newHist := []string{path}
 	for _, item := range h {
-		if item != path {
+		if !sameFolderHistoryPath(item, path) {
 			newHist = append(newHist, item)
 		}
 	}

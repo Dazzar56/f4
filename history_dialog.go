@@ -4,6 +4,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/mattn/go-runewidth"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
@@ -19,8 +20,11 @@ type historySearch struct {
 	title         string
 	hint          string
 	all           []HistoryRecord
+	secondary     []string
 	query         []rune
 	prefixOnly    bool
+	showSecond    bool
+	secondWidth   int
 	onLockToggled func()
 	onCtrlF10     func(HistoryRecord)
 }
@@ -107,6 +111,53 @@ func (s *historySearch) selected() (int, HistoryRecord, bool) {
 	return entry.index, s.all[entry.index], true
 }
 
+func (s *historySearch) selectedSecondary() string {
+	idx, rec, ok := s.selected()
+	if !ok {
+		return ""
+	}
+	if idx >= 0 && idx < len(s.secondary) && s.secondary[idx] != "" {
+		return s.secondary[idx]
+	}
+	return rec.Extra
+}
+
+func (s *historySearch) setSecondary(items []string, visible bool) {
+	s.setSecondaryWidth(items, visible, 24)
+}
+
+func (s *historySearch) setSecondaryWidth(items []string, visible bool, width int) {
+	s.secondary = make([]string, len(s.all))
+	copy(s.secondary, items)
+	s.showSecond = visible && s.hasSecondary()
+	s.secondWidth = width
+	s.applyFilter()
+}
+
+func (s *historySearch) hasSecondary() bool {
+	for _, text := range s.secondary {
+		if text != "" {
+			return true
+		}
+	}
+	for _, rec := range s.all {
+		if rec.Extra != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *historySearch) secondaryAt(index int) string {
+	if index < 0 || index >= len(s.all) {
+		return ""
+	}
+	if index < len(s.secondary) && s.secondary[index] != "" {
+		return s.secondary[index]
+	}
+	return s.all[index].Extra
+}
+
 func (s *historySearch) selectOriginalIndex(originalIndex int) bool {
 	for visibleIndex, item := range s.menu.Items {
 		entry, ok := item.UserData.(historySearchEntry)
@@ -124,6 +175,9 @@ func (s *historySearch) deleteSelected() bool {
 		return false
 	}
 	s.all = append(s.all[:idx], s.all[idx+1:]...)
+	if idx < len(s.secondary) {
+		s.secondary = append(s.secondary[:idx], s.secondary[idx+1:]...)
+	}
 	s.applyFilter()
 	return true
 }
@@ -176,6 +230,11 @@ func (s *historySearch) processKey(e *vtinput.InputEvent) bool {
 	if e.VirtualKeyCode == vtinput.VK_F2 && !shift && !ctrl && !alt {
 		s.prefixOnly = !s.prefixOnly
 		s.applyFilter()
+		return true
+	}
+	if e.VirtualKeyCode == vtinput.VK_F2 && ctrl && !shift && !alt && s.hasSecondary() {
+		s.showSecond = !s.showSecond
+		vtui.FrameManager.Redraw()
 		return true
 	}
 	if e.VirtualKeyCode == vtinput.VK_BACK && !shift && !ctrl && !alt && len(s.query) > 0 {
@@ -261,7 +320,8 @@ func (s *historySearch) draw(scr *vtui.ScreenBuf) {
 		if itemIdx >= len(s.menu.Items) {
 			break
 		}
-		text := s.menu.Items[itemIdx].Text
+		item := s.menu.Items[itemIdx]
+		text := item.Text
 		_, highlights := historySearchMatch(text, s.query, s.prefixOnly)
 
 		baseAttr := vtui.Palette[vtui.ColMenuText]
@@ -273,6 +333,12 @@ func (s *historySearch) draw(scr *vtui.ScreenBuf) {
 
 		y := s.menu.Y1 + 1 + row
 		p.Fill(s.menu.X1+1, y, s.menu.X2-1, y, ' ', baseAttr)
+		innerWidth := s.menu.X2 - s.menu.X1 - 1
+		secondaryWidth := s.secondaryColumnWidth(innerWidth)
+		commandWidth := innerWidth
+		if secondaryWidth > 0 {
+			commandWidth -= secondaryWidth + 2
+		}
 
 		lockChar := uint64(' ')
 		if entry, ok := s.menu.Items[itemIdx].UserData.(historySearchEntry); ok && s.all[entry.index].Lock {
@@ -284,7 +350,6 @@ func (s *historySearch) draw(scr *vtui.ScreenBuf) {
 			{Char: lockChar, Attributes: vtui.Palette[vtui.ColMenuHighlight]},
 			{Char: uint64(' '), Attributes: baseAttr},
 		}
-
 		for i, r := range []rune(text) {
 			attr := baseAttr
 			if i < len(highlights) && highlights[i] {
@@ -299,14 +364,65 @@ func (s *historySearch) draw(scr *vtui.ScreenBuf) {
 				cells = append(cells, vtui.CharInfo{Char: vtui.WideCharFiller, Attributes: attr})
 			}
 		}
-		maxCells := s.menu.X2 - s.menu.X1 - 1
+		maxCells := commandWidth
 		if len(cells) > maxCells {
 			cells = cells[:maxCells]
 		}
 		scr.Write(s.menu.X1+1, y, cells)
+
+		entry, ok := item.UserData.(historySearchEntry)
+		if secondaryWidth > 0 && ok {
+			path := truncateHistoryPath(s.secondaryAt(entry.index), secondaryWidth)
+			if path != "" {
+				x := s.menu.X2 - runewidth.StringWidth(path)
+				p.DrawString(x, y, path, baseAttr)
+			}
+		}
 	}
 	// Redrawing the rows above may cover the menu's scrollbar cell.
 	s.menu.DrawScrollBar(scr)
+}
+
+func (s *historySearch) secondaryColumnWidth(innerWidth int) int {
+	if !s.showSecond || !s.hasSecondary() || innerWidth < 36 {
+		return 0
+	}
+	width := s.secondWidth
+	if width <= 0 {
+		width = 24
+	}
+	if maxWidth := innerWidth / 3; width > maxWidth {
+		width = maxWidth
+	}
+	return width
+}
+
+func truncateHistoryPath(path string, maxWidth int) string {
+	if path == "" || maxWidth <= 0 {
+		return ""
+	}
+	if runewidth.StringWidth(path) <= maxWidth {
+		return path
+	}
+	if maxWidth < 5 {
+		return runewidth.Truncate(path, maxWidth, "")
+	}
+
+	leftBudget := (maxWidth - 3 + 1) / 2
+	rightBudget := maxWidth - 3 - leftBudget
+	left := runewidth.Truncate(path, leftBudget, "")
+	runes := []rune(path)
+	rightStart := len(runes)
+	rightWidth := 0
+	for rightStart > 0 {
+		width := runewidth.RuneWidth(runes[rightStart-1])
+		if rightWidth+width > rightBudget {
+			break
+		}
+		rightStart--
+		rightWidth += width
+	}
+	return left + "..." + string(runes[rightStart:])
 }
 
 func (s *historySearch) drawSearchTitle(scr *vtui.ScreenBuf, titleAttr uint64) {

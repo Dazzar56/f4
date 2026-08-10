@@ -352,8 +352,8 @@ func (fh *FileHighlighter) GetColor(item *vfs.VFSItem, defaultAttr uint64, isSel
 				if isSelected {
 					if rule.SelectedCursorStr != "" {
 						colorExpr = rule.SelectedCursorStr
-					} else if rule.CursorStr != "" {
-						colorExpr = rule.CursorStr
+					} else if rule.SelectedStr != "" {
+						colorExpr = rule.SelectedStr
 					}
 				} else {
 					if rule.CursorStr != "" {

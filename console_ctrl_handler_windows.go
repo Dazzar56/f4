@@ -64,7 +64,9 @@ func interruptActivePTY() {
 	for _, fr := range screens[idx].Frames {
 		if pf, ok := fr.(*PanelsFrame); ok {
 			if active := pf.getActivePTY(); active != nil {
-				active.Write([]byte{3}) // ETX = Ctrl+C
+				// Treat the interrupt as user input so it cannot interleave a
+				// private environment update. Remote PTYs remain passthrough.
+				_, _ = pf.writePTY(active, []byte{3}) // ETX = Ctrl+C
 			}
 			return
 		}

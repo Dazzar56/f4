@@ -6,6 +6,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/unxed/vtui"
 )
 
 func TestConfig_SaveAndLoad(t *testing.T) {
@@ -37,6 +39,11 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	AppConfig.SeparateFileExtensions = true
 	AppConfig.PanelScrollbarMode = PanelScrollbarMinimal
 	AppConfig.MacroRecordFormat = 1
+	AppConfig.UseTrash = true
+	AppConfig.TerminalCtrlNWorkspace = false
+	AppConfig.WorkspaceTabMode = int(vtui.WorkspaceTabsOnCtrl)
+	AppConfig.CtrlTabShowsMenu = true
+	AppConfig.AltNumberSwitchesTabs = false
 	AppConfig.ApplyCommandParallelism = 0
 
 	// 2. Save
@@ -51,6 +58,11 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	AppConfig.SeparateFileExtensions = false
 	AppConfig.PanelScrollbarMode = PanelScrollbarOff
 	AppConfig.MacroRecordFormat = 0
+	AppConfig.UseTrash = false
+	AppConfig.TerminalCtrlNWorkspace = true
+	AppConfig.WorkspaceTabMode = int(vtui.WorkspaceTabsAlways)
+	AppConfig.CtrlTabShowsMenu = false
+	AppConfig.AltNumberSwitchesTabs = true
 	AppConfig.ApplyCommandParallelism = 1
 
 	// 4. Load
@@ -62,6 +74,15 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	// 5. Verify
 	if AppConfig.ShowHiddenFiles {
 		t.Error("LoadConfig failed to restore ShowHiddenFiles")
+	}
+	if AppConfig.WorkspaceTabMode != int(vtui.WorkspaceTabsOnCtrl) {
+		t.Errorf("LoadConfig failed to restore workspace tab mode: %d", AppConfig.WorkspaceTabMode)
+	}
+	if !AppConfig.CtrlTabShowsMenu {
+		t.Error("LoadConfig failed to restore Ctrl+Tab menu mode")
+	}
+	if AppConfig.AltNumberSwitchesTabs {
+		t.Error("LoadConfig failed to restore disabled Alt+number tab switching")
 	}
 	if !AppConfig.ShowDirPrefix {
 		t.Error("LoadConfig failed to restore ShowDirPrefix")
@@ -87,8 +108,115 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	if AppConfig.MacroRecordFormat != 1 {
 		t.Error("LoadConfig failed to restore MacroRecordFormat")
 	}
+	if !AppConfig.UseTrash {
+		t.Error("LoadConfig failed to restore UseTrash")
+	}
+	if AppConfig.TerminalCtrlNWorkspace {
+		t.Error("LoadConfig failed to restore TerminalCtrlNWorkspace")
+	}
 	if AppConfig.ApplyCommandParallelism != 0 {
 		t.Errorf("ApplyCommandParallelism = %d, want Unlimited (0)", AppConfig.ApplyCommandParallelism)
+	}
+}
+
+func TestConfig_TrashDefaultsOffWhenKeyIsAbsent(t *testing.T) {
+	tmpDir := t.TempDir()
+	userIniPath := filepath.Join(tmpDir, "settings.ini")
+	if err := os.WriteFile(userIniPath, []byte("[System]\nConfirmDelete = 1\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	origUserPathFunc := getUserConfigIniPath
+	origPathsFunc := getConfigIniPaths
+	oldCfg := AppConfig
+	defer func() {
+		getUserConfigIniPath = origUserPathFunc
+		getConfigIniPaths = origPathsFunc
+		AppConfig = oldCfg
+	}()
+	getUserConfigIniPath = func() string { return userIniPath }
+	getConfigIniPaths = func() []string { return []string{userIniPath} }
+
+	AppConfig.UseTrash = true
+	LoadConfig()
+	if AppConfig.UseTrash {
+		t.Fatal("UseTrash must default to false when the setting is absent")
+	}
+}
+
+func TestConfig_TerminalCtrlNWorkspaceDefaultsOnWhenKeyIsAbsent(t *testing.T) {
+	tmpDir := t.TempDir()
+	userIniPath := filepath.Join(tmpDir, "settings.ini")
+	if err := os.WriteFile(userIniPath, []byte("[Panel]\nShowHiddenFiles = 1\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	origUserPathFunc := getUserConfigIniPath
+	origPathsFunc := getConfigIniPaths
+	oldCfg := AppConfig
+	defer func() {
+		getUserConfigIniPath = origUserPathFunc
+		getConfigIniPaths = origPathsFunc
+		AppConfig = oldCfg
+	}()
+	getUserConfigIniPath = func() string { return userIniPath }
+	getConfigIniPaths = func() []string { return []string{userIniPath} }
+
+	AppConfig.TerminalCtrlNWorkspace = false
+	LoadConfig()
+	if !AppConfig.TerminalCtrlNWorkspace {
+		t.Fatal("TerminalCtrlNWorkspace must default to true when the setting is absent")
+	}
+}
+
+func TestConfig_AltNumberSwitchesTabsDefaultsOnWhenKeyIsAbsent(t *testing.T) {
+	tmpDir := t.TempDir()
+	userIniPath := filepath.Join(tmpDir, "settings.ini")
+	if err := os.WriteFile(userIniPath, []byte("[Interface]\nWorkspaceTabMode = multiple\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	origUserPathFunc := getUserConfigIniPath
+	origPathsFunc := getConfigIniPaths
+	oldCfg := AppConfig
+	defer func() {
+		getUserConfigIniPath = origUserPathFunc
+		getConfigIniPaths = origPathsFunc
+		AppConfig = oldCfg
+	}()
+	getUserConfigIniPath = func() string { return userIniPath }
+	getConfigIniPaths = func() []string { return []string{userIniPath} }
+
+	AppConfig.AltNumberSwitchesTabs = false
+	LoadConfig()
+	if !AppConfig.AltNumberSwitchesTabs {
+		t.Fatal("AltNumberSwitchesTabs must default to true when the setting is absent")
+	}
+}
+
+func TestConfig_WorkspaceTabModeDefaultsToOnCtrlWhenKeyIsAbsent(t *testing.T) {
+	tmpDir := t.TempDir()
+	userIniPath := filepath.Join(tmpDir, "settings.ini")
+	if err := os.WriteFile(userIniPath, []byte("[Interface]\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	origUserPathFunc := getUserConfigIniPath
+	origPathsFunc := getConfigIniPaths
+	oldCfg := AppConfig
+	defer func() {
+		getUserConfigIniPath = origUserPathFunc
+		getConfigIniPaths = origPathsFunc
+		AppConfig = oldCfg
+	}()
+	getUserConfigIniPath = func() string { return userIniPath }
+	getConfigIniPaths = func() []string { return []string{userIniPath} }
+
+	AppConfig.WorkspaceTabMode = int(vtui.WorkspaceTabsMultiple)
+	LoadConfig()
+	if AppConfig.WorkspaceTabMode != int(vtui.WorkspaceTabsOnCtrl) {
+		t.Fatalf("WorkspaceTabMode without a saved key = %d, want Ctrl-only mode %d",
+			AppConfig.WorkspaceTabMode, vtui.WorkspaceTabsOnCtrl)
 	}
 }
 
