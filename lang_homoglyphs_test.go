@@ -172,27 +172,27 @@ func TestTranslationsAreFreeOfHomoglyphs(t *testing.T) {
 				if len(scripts) < 2 || allWordFriendly(scripts) {
 					continue
 				}
-								location := fmt.Sprintf("%s:%d", path, i+1)
-								if baseline[location] {
-									seen[location] = true
-									t.Logf("Tech Debt -> %s: word %q mixes scripts %s (known, listed in %s)",
-										location, word, strings.Join(scripts, "+"), homoglyphBaselinePath)
-									continue
-								}
-								t.Errorf("%s: word %q mixes scripts %s, most likely a look-alike letter from another alphabet",
-									location, word, strings.Join(scripts, "+"))
-							}
-						}
-					}
-
-					stale := make([]string, 0, len(baseline))
-					for location := range baseline {
-						if !seen[location] {
-							stale = append(stale, location)
-						}
-					}
-					sort.Strings(stale)
-					for _, location := range stale {
-						t.Logf("%s: %s is clean now, drop it from the baseline", homoglyphBaselinePath, location)
-					}
+				location := fmt.Sprintf("%s:%d", path, i+1)
+				if baseline[location] {
+					seen[location] = true
+					t.Logf("Tech Debt -> %s: word %q mixes scripts %s (known, listed in %s)",
+						location, word, strings.Join(scripts, "+"), homoglyphBaselinePath)
+					continue
 				}
+				t.Errorf("%s: word %q mixes scripts %s, most likely a look-alike letter from another alphabet",
+					location, word, strings.Join(scripts, "+"))
+			}
+		}
+	}
+
+	stale := make([]string, 0, len(baseline))
+	for location := range baseline {
+		if !seen[location] {
+			stale = append(stale, location)
+		}
+	}
+	sort.Strings(stale)
+	for _, location := range stale {
+		t.Logf("%s: %s is clean now, drop it from the baseline", homoglyphBaselinePath, location)
+	}
+}
