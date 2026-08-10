@@ -92,7 +92,6 @@
     ├── cpu_info_linux.go
     ├── cpu_info_other.go
     ├── cpu_info_windows.go
-    ├── debug.log
     ├── detach_unix.go
     ├── detach_windows.go
     ├── dialog_layouts_test.go
@@ -693,4 +692,4 @@
     ├── word_nav_test.go
     └── workspace_routing_test.go
     
-    49 directories, 643 files
+    49 directories, 642 files
