@@ -680,3 +680,17 @@ PlugRing.BtnInstall=&Install/Update
 PlugRing.BtnRemove=&Remove
 PlugRing.BtnRefresh=Re&fresh
 PlugRing.BtnClose=&Close
+
+Attributes.Title= Attributes
+Attributes.BtnSet=Set
+Attributes.BtnSecurity=&Security
+Attributes.Read=Read
+Attributes.Write=Write
+Attributes.Execute=Execute
+Attributes.ReadOnly=&Read only
+Attributes.Hidden=&Hidden
+Attributes.System=&System
+Attributes.Archive=&Archive
+Permissions.Title= Plugin Permissions
+Permissions.BtnRevoke=&Revoke
+Permissions.BtnClose=&Close
