@@ -88,7 +88,7 @@ Btn.Ignore=अंदे&खा करें
 Operation.Error=ऑपरेशन विफल रहा:\n%s
 Op.ClonePanels=नए कार्यस्थान में पैनल की प्र&तिलिपि बनाएं
 Op.SwitchHint=विंडोज़ बदलने के लिए Ctrl+Tab दबाएं
-Op.DummyTitle= डमी ऑपरेशन
+Op.DummyTitle= डमी Operation
 Op.DummyText=यह एक डमी 5 मिनट का ऑपरेशन है।\nपृष्ठभूमि मोड चुनें:
 Viewer.Title= देखें
 Viewer.ModeText=पाठ
@@ -102,6 +102,83 @@ Quit.Title= बाहर निकलें
 Quit.Confirm=क्या आप f4 छोड़ना चाहते हैं?
 Quit.Btn=&छोड़ें
 Select.Mask=चयन मा&स्क दर्ज करें:
+
+Arkanoid.HighScores= उच्च स्कोर
+PlugRing.Title= f4 PlugRing
+PlugRing.BtnInstall=&इंस्टॉल/अद्यतन
+PlugRing.BtnRemove=ह&टाएं
+PlugRing.BtnRefresh=ता&ज़ा करें
+PlugRing.BtnClose=बं&द करें
+
+Attributes.Title= विशेषताएं
+Attributes.BtnSet=सेट करें
+Attributes.BtnSecurity=&सुरक्षा
+Attributes.Read=पढ़ना
+Attributes.Write=लिखना
+Attributes.Execute=निष्पादन
+Attributes.ReadOnly=केवल प&ढ़ने के लिए
+Attributes.Hidden=&छिपा हुआ
+Attributes.System=&सिस्टम
+Attributes.Archive=अ&भिलेख
+Permissions.Title= प्लगइन अनुमतियां
+Permissions.BtnRevoke=अधिकार वा&पस लें
+Permissions.BtnClose=बं&द करें
+
+Search.Prompt=खोजें:
+Search.WholeWords=केवल पूरा शब्द
+Search.Regex=नियमित अभिव्यक्ति
+Search.BtnFind=खोजें (&F)
+Replace.Title= बदलें
+Replace.Prompt=इसके साथ बदलें:
+Replace.BtnReplace=बद&लें
+Replace.BtnReplaceAll=सभी को बद&लें
+Codepage.Title= कोडपेज
+Codepage.ConvertTitle= कोडपेज परिवर्तित करें
+
+vtui.Save=सहे&जें
+UserMenu.EditTitle= उपयोगकर्ता मेनू संपादित करें
+UserMenu.CreateTitle= उपयोगकर्ता मेनू बनाएं
+UserMenu.EditSubmenuTitle= उप-मेनू संपादित करें
+UserMenu.CreateSubmenuTitle= उप-मेनू बनाएं
+UserMenu.LabelHotkey=शॉर्ट&कट कुंजी:
+UserMenu.LabelLabel=&लेबल:
+UserMenu.LabelCommand=&कमांड:
+
+Hotkeys.Title= हॉटकी कॉन्फ़िगरेशन
+Hotkeys.BtnAssign=अ&साइन करें
+Hotkeys.BtnUnbind=ह&टाएं
+Hotkeys.BtnClose=बं&द करें
+Hotkeys.SelectTitle= क्षेत्र और शर्त चुनें
+Hotkeys.BtnNext=आगे >
+Hotkeys.LabelArea=क्षेत्र:
+Hotkeys.LabelWhen=शर्त:
+Hotkeys.AssignTitle= शॉर्टकट कुंजी असाइन करें
+Op.DummyQueue=कतार (डिफ़ॉल्ट)
+Op.DummyBackground=पृष्ठभूमि पैनल प्रतिलिपि
+Op.DummyForeground=अग्रभूमि लॉक
+Op.BtnStart=&प्रारंभ
+Drive.Title= ड्राइव
+
+NetFox.ConnectionTitle= कनेक्शन सेटिंग
+NetFox.PassiveMode=निष्क्रिय मोड (Passive)
+NetFox.LabelName=&नाम:
+NetFox.LabelProtocol=प्रोटोकॉ&ल:
+NetFox.LabelHost=होस्&ट:
+NetFox.LabelPort=&पोर्ट:
+NetFox.LabelUser=उपभोक्&ता:
+NetFox.LabelPassword=पासव&र्ड:
+NetFox.LabelTimeout=समय सी&मा:
+NetFox.LabelCodepage=코드페이지(&C):
+# Wait, "코드페이지(&C)" is Korean. Let's fix this legacy typo as well!
+NetFox.LabelCodepage=कोडपे&ज:
+NetFox.ErrorEmptyName=नाम खाली नहीं हो सकता
+NetFox.ErrorReservedName=आरक्षित कनेक्शन नाम
+
+FileOp.BtnCancel=रद्द &करें
+FileOp.BtnBackground=पृष्ठ&भूमि
+Queue.BtnCancel=कार्य रद्द &करें
+Queue.BtnClear=पूर्ण कार्यों को सा&फ़ करें
+Session.Title= सत्र चुनें
 
 Macro.AssignTitle= मैक्रो असाइन करें
 Macro.AssignPrompt=वांछित कुंजी संयोजन दबाएं

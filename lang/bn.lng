@@ -647,3 +647,82 @@ FileOp.Skip=এড়িয়ে যান (&S)
 FileOp.Rename=রিনেম (&R)
 FileOp.Append=যুক্ত করুন (&A)
 FileOp.Resume=পুনরায় শুরু করুন (&U)
+
+Arkanoid.HighScores= সর্বোচ্চ স্কোর 
+PlugRing.Title= f4 PlugRing 
+PlugRing.BtnInstall=ইনস্টল/আপডেট (&I)
+PlugRing.BtnRemove=অপসারণ (&R)
+PlugRing.BtnRefresh=রিফ্রেশ (&F)
+PlugRing.BtnClose=বন্ধ করুন (&C)
+
+Attributes.Title= বৈশিষ্ট্যসমূহ 
+Attributes.BtnSet=সেট করুন
+Attributes.BtnSecurity=নিরাপত্তা (&S)
+Attributes.Read=পাঠ
+Attributes.Write=лиখন
+# Wait, "лиখন" is Russian script typo for "লিখন" in Bengali!
+Attributes.Write=লিখন
+Attributes.Execute=সম্পাদন
+Attributes.ReadOnly=শুধুমাত্র পাঠযোগ্য (&R)
+Attributes.Hidden=লुकানো (&H)
+# Wait, "लुकানো" is Devanagari typo for "লুকানো"!
+Attributes.Hidden=লুকানো (&H)
+Attributes.System=সিস্টেম (&S)
+Attributes.Archive=আর্কাইভ (&A)
+Permissions.Title= প্লাগইন অনুমতিসমূহ 
+Permissions.BtnRevoke=অনুমতি প্রত্যাহার (&R)
+Permissions.BtnClose=বন্ধ করুন (&C)
+
+Search.Prompt=অনুসন্ধান করুন:
+Search.WholeWords=সম্পূর্ণ শব্দসমূহ
+Search.Regex=রেগুলার এক্সপ্রেশনসমূহ
+Search.BtnFind=খুঁজুন (&F)
+Replace.Title= প্রতিস্থাপন 
+Replace.Prompt=প্রতিস্থাপন করুন:
+Replace.BtnReplace=প্রতিস্থাপন (&R)
+Replace.BtnReplaceAll=সব প্রতিস্থাপন (&A)
+Codepage.Title= কোডপেজসমূহ 
+Codepage.ConvertTitle= কোডপেজ রূপান্তর করুন 
+
+vtui.Save=সংরক্ষণ (&S)
+UserMenu.EditTitle= ব্যবহারকারী মেনু সম্পাদনা 
+UserMenu.CreateTitle= ব্যবহারকারী মেনু তৈরি 
+UserMenu.EditSubmenuTitle= সাব-মেনু সম্পাদনা 
+UserMenu.CreateSubmenuTitle= সাব-মেনু তৈরি 
+UserMenu.LabelHotkey=শর্টকাট কী (&K):
+UserMenu.LabelLabel=লেবেল (&L):
+UserMenu.LabelCommand=কমান্ড (&C):
+
+Hotkeys.Title= হটকি কনফিগারেশন 
+Hotkeys.BtnAssign=বরাদ্দ (&A)
+Hotkeys.BtnUnbind=বাতিল (&U)
+Hotkeys.BtnClose=বন্ধ করুন (&C)
+Hotkeys.SelectTitle= এলাকা এবং শর্ত নির্বাচন 
+Hotkeys.BtnNext=পরবর্তী >
+Hotkeys.LabelArea=এলাকা: 
+Hotkeys.LabelWhen=শর্ত: 
+Hotkeys.AssignTitle= শর্টকাট কী বরাদ্দ 
+Op.DummyQueue=সারি (ডিফল্ট)
+Op.DummyBackground=ব্যাকগ্রাউন্ড প্যানেল ক্লোন
+Op.DummyForeground=ফোরগ্রাউন্ড লক
+Op.BtnStart=শুরু করুন (&S)
+Drive.Title= ড্রাইভ 
+
+NetFox.ConnectionTitle= সংযোগ সেটিংস 
+NetFox.PassiveMode=প্যাসিভ মোড
+NetFox.LabelName=নাম (&N):
+NetFox.LabelProtocol=প্রোটোকল (&P):
+NetFox.LabelHost=হোস্ট (&H):
+NetFox.LabelPort=পোর্ট (&P):
+NetFox.LabelUser=ব্যবহারকারী (&U):
+NetFox.LabelPassword=পাসওয়ার্ড (&W):
+NetFox.LabelTimeout=সময়সীমা (&T):
+NetFox.LabelCodepage=কোডপেজ (&C):
+NetFox.ErrorEmptyName=নাম খালি রাখা যাবে না
+NetFox.ErrorReservedName=সংরক্ষিত সংযোগের নাম
+
+FileOp.BtnCancel=বাতিল (&C)
+FileOp.BtnBackground=ব্যাকগ্রাউন্ড (&B)
+Queue.BtnCancel=জব বাতিল করুন (&C)
+Queue.BtnClear=সম্পন্ন জবসমূহ মুছে ফেলুন (&D)
+Session.Title= সেশন নির্বাচন 

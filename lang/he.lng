@@ -103,6 +103,81 @@ Quit.Confirm=האם ברצונך לצאת מ-f4?
 Quit.Btn=י&ציאה
 Select.Mask=ה&כנס מסכת בחירה:
 
+Arkanoid.HighScores= שיאים
+PlugRing.Title= f4 PlugRing
+PlugRing.BtnInstall=&התקנה/עדכון
+PlugRing.BtnRemove=ה&סרה
+PlugRing.BtnRefresh=&רענון
+PlugRing.BtnClose=&סგירה
+
+Attributes.Title= מאפיינים
+Attributes.BtnSet=קבע
+Attributes.BtnSecurity=&אבטחה
+Attributes.Read=קריאה
+Attributes.Write=כתיבה
+Attributes.Execute=הפעלה
+Attributes.ReadOnly=לקריאה &בלבד
+Attributes.Hidden=&מוסתר
+Attributes.System=מ&ערכת
+Attributes.Archive=&ארכיון
+Permissions.Title= הרשאות תוספים
+Permissions.BtnRevoke=&בטל
+Permissions.BtnClose=&סגירה
+
+Search.Prompt=חפש את:
+Search.WholeWords=מילים שלמות בלבד
+Search.Regex=ביטויים רגולריים
+Search.BtnFind=&חפש
+Replace.Title= החלף
+Replace.Prompt=החלף ב-:
+Replace.BtnReplace=&החלף
+Replace.BtnReplaceAll=החלף את ה&כל
+Codepage.Title= דפי קידود
+Codepage.ConvertTitle= המר דף קידود
+
+vtui.Save=ש&מור
+UserMenu.EditTitle= עריכת תפריט משתמש
+UserMenu.CreateTitle= יצירת תפריט משתמש
+UserMenu.EditSubmenuTitle= עריכת תפריט משנה
+UserMenu.CreateSubmenuTitle= יצירת תפריט משנה
+UserMenu.LabelHotkey=מקש ק&יצור:
+UserMenu.LabelLabel=&תווیت:
+UserMenu.LabelCommand=&פקודה:
+
+Hotkeys.Title= מגדיר מקשי קיצור
+Hotkeys.BtnAssign=&הקצה
+Hotkeys.BtnUnbind=&בטל שיוך
+Hotkeys.BtnClose=&סגירה
+Hotkeys.SelectTitle= בחר אזור ותנאי
+Hotkeys.BtnNext=הבא >
+Hotkeys.LabelArea=אזור:
+Hotkeys.LabelWhen=תנאי:
+Hotkeys.AssignTitle= הקצה מקש קיצור
+Op.DummyQueue=תור (ברירת מחדל)
+Op.DummyBackground=שכפול פאנל ברקע
+Op.DummyForeground=נעילת חזית
+Op.BtnStart=ה&פעל
+Drive.Title= כונן
+
+NetFox.ConnectionTitle= חיבור אתר
+NetFox.PassiveMode=מצב פסיבי
+NetFox.LabelName=&שם:
+NetFox.LabelProtocol=פ&רוטוקול:
+NetFox.LabelHost=&מארח:
+NetFox.LabelPort=&פורט:
+NetFox.LabelUser=&משתמש:
+NetFox.LabelPassword=&סיסמה:
+NetFox.LabelTimeout=פסק &זמן:
+NetFox.LabelCodepage=&דף קידود:
+NetFox.ErrorEmptyName=השם אינו יכול להיות ריק
+NetFox.ErrorReservedName=שם חיבור שמور
+
+FileOp.BtnCancel=&ביטول
+FileOp.BtnBackground=ב&רקע
+Queue.BtnCancel=ב&טל משיма
+Queue.BtnClear=נקה &הושלמו
+Session.Title= בחר סשן
+
 Macro.AssignTitle= שיוך מאקרו
 Macro.AssignPrompt=לחץ על שילוב המקשים הרצוי
 Macro.AssignCancel=לחץ על Esc לביטול

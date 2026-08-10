@@ -103,6 +103,81 @@ Quit.Confirm=هل تريد مغادرة f4؟
 Quit.Btn=م&غادرة
 Select.Mask=أدخل قناع الت&حديد:
 
+Arkanoid.HighScores= أعلى النتائج
+PlugRing.Title= f4 PlugRing
+PlugRing.BtnInstall=ت&ثبيت/تحديث
+PlugRing.BtnRemove=إ&زالة
+PlugRing.BtnRefresh=ت&حديث
+PlugRing.BtnClose=إ&غلاق
+
+Attributes.Title= الخصائص
+Attributes.BtnSet=تعيين
+Attributes.BtnSecurity=الأ&مان
+Attributes.Read=قراءة
+Attributes.Write=كتابة
+Attributes.Execute=تنفيذ
+Attributes.ReadOnly=للقراءة &فقط
+Attributes.Hidden=م&خفي
+Attributes.System=ن&ظام
+Attributes.Archive=أ&رشيف
+Permissions.Title= أذونات الإضافات
+Permissions.BtnRevoke=س&حب
+Permissions.BtnClose=إ&غلاق
+
+Search.Prompt=البحث عن:
+Search.WholeWords=كلمات كاملة فقط
+Search.Regex=تعبيرات نمطية
+Search.BtnFind=ب&حث
+Replace.Title= استبدال
+Replace.Prompt=استبدال بـ:
+Replace.BtnReplace=است&بدال
+Replace.BtnReplaceAll=استبدال ال&كل
+Codepage.Title= صفحات الترميز
+Codepage.ConvertTitle= تحويل صفحة الترميز
+
+vtui.Save=ح&فظ
+UserMenu.EditTitle= تعديل قائمة المستخدم
+UserMenu.CreateTitle= إنشاء قائمة المستخدم
+UserMenu.EditSubmenuTitle= تعديل القائمة الفرعية
+UserMenu.CreateSubmenuTitle= إنشاء القائمة الفرعية
+UserMenu.LabelHotkey=مفتاح ال&اختصار:
+UserMenu.LabelLabel=الت&سمية:
+UserMenu.LabelCommand=الأ&مر:
+
+Hotkeys.Title= أداة تكوين مفاتيح الاختصار
+Hotkeys.BtnAssign=ت&عيين
+Hotkeys.BtnUnbind=إ&لغاء التعيين
+Hotkeys.BtnClose=إ&غلاق
+Hotkeys.SelectTitle= تحديد المنطقة والشرط
+Hotkeys.BtnNext=التالي >
+Hotkeys.LabelArea=المنطقة:
+Hotkeys.LabelWhen=الشرط:
+Hotkeys.AssignTitle= تعيين مفتاح الاختصار
+Op.DummyQueue=الانتظار (الافتراضي)
+Op.DummyBackground=نسخ لوحة الخلفية
+Op.DummyForeground=قفل الواجهة
+Op.BtnStart=ب&دء
+Drive.Title= القرص
+
+NetFox.ConnectionTitle= اتصال الموقع
+NetFox.PassiveMode=الوضع الخامل
+NetFox.LabelName=الا&سم:
+NetFox.LabelProtocol=ال&بروتوكol:
+NetFox.LabelHost=الم&ضيف:
+NetFox.LabelPort=الم&نفذ:
+NetFox.LabelUser=المست&خدم:
+NetFox.LabelPassword=كلمة الم&رور:
+NetFox.LabelTimeout=مهلة الا&نتظار:
+NetFox.LabelCodepage=صفحة التر&ميز:
+NetFox.ErrorEmptyName=الاسم لا يمكن أن يكون فارغًا
+NetFox.ErrorReservedName=اسم اتصال محجوز
+
+FileOp.BtnCancel=إ&لغاء الأمر
+FileOp.BtnBackground=ال&خلفية
+Queue.BtnCancel=إل&غاء المهمة
+Queue.BtnClear=مسح الم&كتمل
+Session.Title= تحديد الجلسة
+
 Macro.AssignTitle= تعيين ماكرو
 Macro.AssignPrompt=اضغط على تركيبة المفاتيح المطلوبة
 Macro.AssignCancel=اضغط على Esc للإلغاء
