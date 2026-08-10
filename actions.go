@@ -2738,20 +2738,16 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 	rowStyle.Add(comboStyle, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(rowStyle, vtui.Margins{}, vtui.AlignFill)
 
-	rowFont := vtui.NewHBoxLayout(0, 0, width-4, 1)
-	rowFont.Add(lblFont, vtui.Margins{Right: 1}, vtui.AlignLeft)
-	rowFont.Add(editFont, vtui.Margins{}, vtui.AlignFill)
-	vbox.Add(rowFont, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Add(lblFont, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	vbox.Add(editFont, vtui.Margins{}, vtui.AlignFill)
 
 	rowSize := vtui.NewHBoxLayout(0, 0, width-4, 1)
 	rowSize.Add(lblSize, vtui.Margins{Right: 1}, vtui.AlignLeft)
 	rowSize.Add(editSize, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(rowSize, vtui.Margins{Top: 1}, vtui.AlignFill)
 
-	rowTitle := vtui.NewHBoxLayout(0, 0, width-4, 1)
-	rowTitle.Add(lblTitle, vtui.Margins{Right: 1}, vtui.AlignLeft)
-	rowTitle.Add(editTitle, vtui.Margins{}, vtui.AlignFill)
-	vbox.Add(rowTitle, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Add(lblTitle, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	vbox.Add(editTitle, vtui.Margins{}, vtui.AlignFill)
 
 	vbox.Add(chkCursor, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(chkContrast, vtui.Margins{}, vtui.AlignLeft)
