@@ -3,6 +3,7 @@
 How to test (in repo root):
 
 GOMAXPROCS=1 go test -run="Test.*(Lang|Layout|Translation|Contamination)" -v
+
 This command must stay green. Two cheap canaries guard the translation files
 against machine translation damage:
 
