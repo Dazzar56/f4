@@ -274,7 +274,6 @@ func (s *historySearch) draw(scr *vtui.ScreenBuf) {
 		p.Fill(s.menu.X1+1, y, s.menu.X2-1, y, ' ', baseAttr)
 
 		lockChar := uint64(' ')
-		itemIdx := s.menu.TopPos + row
 		if entry, ok := s.menu.Items[itemIdx].UserData.(historySearchEntry); ok && s.all[entry.index].Lock {
 			lockChar = uint64('*')
 		}
