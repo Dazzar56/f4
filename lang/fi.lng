@@ -704,7 +704,7 @@ Replace.Prompt=Korvaa kohteella:
 Replace.BtnReplace=&Korvaa
 Replace.BtnReplaceAll=Korvaa &kaikki
 Codepage.Title= Koodisivut
-Codepage.ConvertTitle= Käännä koodisivu
+Codepage.ConvertTitle= Muunna koodisivu
 
 vtui.Save=&Tallenna
 UserMenu.EditTitle= Muokkaa käyttäjävalikkoa
