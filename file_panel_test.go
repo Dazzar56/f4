@@ -794,12 +794,13 @@ func TestMediumRow_GetCellText(t *testing.T) {
 		t.Errorf("Out of bounds should be empty")
 	}
 
-	fp.entries = make([]*fileEntry, 10)
-	for i := 0; i < 10; i++ {
+	columnHeight := fp.table.ViewHeight
+	fp.entries = make([]*fileEntry, columnHeight*2)
+	for i := range fp.entries {
 		fp.entries[i] = &fileEntry{VFSItem: vfs.VFSItem{Name: "f"}}
 	}
 	fp.entries[0].Name = "Left"
-	fp.entries[7].Name = "Right"
+	fp.entries[columnHeight].Name = "Right"
 	mRow = &mediumRow{fp: fp, r: 0}
 	if mRow.GetCellText(0) != "Left" {
 		t.Errorf("Expected 'Left', got %q", mRow.GetCellText(0))
@@ -944,9 +945,10 @@ func TestFileSystemPanel_CursorMapping(t *testing.T) {
 		t.Errorf("Medium mapping index 3: expected pos 3 col 0, got pos %d col %d", fp.table.SelectPos, fp.table.SelectCol)
 	}
 
-	fp.SetCursorIndex(10) // Index 10 with H=7 -> Col 1, Row 3
+	columnHeight := fp.table.ViewHeight
+	fp.SetCursorIndex(columnHeight + 3)
 	if fp.table.SelectPos != 3 || fp.table.SelectCol != 1 {
-		t.Errorf("Medium mapping index 10: expected pos 3 col 1, got pos %d col %d", fp.table.SelectPos, fp.table.SelectCol)
+		t.Errorf("Medium mapping index %d: expected pos 3 col 1, got pos %d col %d", columnHeight+3, fp.table.SelectPos, fp.table.SelectCol)
 	}
 
 	// 2. Detailed Mode
