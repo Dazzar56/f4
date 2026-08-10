@@ -1973,7 +1973,7 @@ func (ev *EditorView) showSearchDialog() {
 	dlg := vtui.NewCenteredDialog(dlgW, dlgH, Msg("Viewer.SearchTitle"))
 	dlg.ShowClose = true
 
-	lblPrompt := vtui.NewLabel(0, 0, "Search for:", nil)
+	lblPrompt := vtui.NewLabel(0, 0, Msg("Search.Prompt"), nil)
 	editPattern := vtui.NewEdit(0, 0, 40, LastEditorSearch)
 	editPattern.SelectAll()
 	lblPrompt.FocusLink = editPattern
@@ -1984,7 +1984,7 @@ func (ev *EditorView) showSearchDialog() {
 		chkCase.State = 1
 	}
 
-	chkWholeWord := vtui.NewCheckbox(0, 0, "Whole words", false)
+	chkWholeWord := vtui.NewCheckbox(0, 0, Msg("Search.WholeWords"), false)
 	if LastEditorSearchWholeWord {
 		chkWholeWord.State = 1
 	}
@@ -1994,14 +1994,14 @@ func (ev *EditorView) showSearchDialog() {
 		chkReverse.State = 1
 	}
 
-	chkRegexp := vtui.NewCheckbox(0, 0, "Regular expressions", false)
+	chkRegexp := vtui.NewCheckbox(0, 0, Msg("Search.Regex"), false)
 	if LastEditorSearchRegexp {
 		chkRegexp.State = 1
 	}
 
-	btnFind := vtui.NewButton(0, 0, "&Find")
+	btnFind := vtui.NewButton(0, 0, Msg("Search.BtnFind"))
 	btnFind.IsDefault = true
-	btnCancel := vtui.NewButton(0, 0, "Cancel")
+	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
 
 	dlg.AddItem(lblPrompt)
 	dlg.AddItem(editPattern)
@@ -2181,16 +2181,16 @@ func (ev *EditorView) Replace(pattern, replacement string, caseSensitive, revers
 
 func (ev *EditorView) showReplaceDialog() {
 	dlgW, dlgH := 66, 19
-	dlg := vtui.NewCenteredDialog(dlgW, dlgH, " Replace ")
+	dlg := vtui.NewCenteredDialog(dlgW, dlgH, Msg("Replace.Title"))
 	dlg.ShowClose = true
 
-	lblPrompt := vtui.NewLabel(0, 0, "Search for:", nil)
+	lblPrompt := vtui.NewLabel(0, 0, Msg("Search.Prompt"), nil)
 	editPattern := vtui.NewEdit(0, 0, 40, LastEditorSearch)
 	editPattern.SelectAll()
 	lblPrompt.FocusLink = editPattern
 	dlg.SetFocusedItem(editPattern)
 
-	lblReplace := vtui.NewLabel(0, 0, "Replace with:", nil)
+	lblReplace := vtui.NewLabel(0, 0, Msg("Replace.Prompt"), nil)
 	editReplace := vtui.NewEdit(0, 0, 40, "")
 
 	chkCase := vtui.NewCheckbox(0, 0, Msg("Search.CaseSensitive"), false)
@@ -2198,7 +2198,7 @@ func (ev *EditorView) showReplaceDialog() {
 		chkCase.State = 1
 	}
 
-	chkWholeWord := vtui.NewCheckbox(0, 0, "Whole words", false)
+	chkWholeWord := vtui.NewCheckbox(0, 0, Msg("Search.WholeWords"), false)
 	if LastEditorSearchWholeWord {
 		chkWholeWord.State = 1
 	}
@@ -2208,14 +2208,14 @@ func (ev *EditorView) showReplaceDialog() {
 		chkReverse.State = 1
 	}
 
-	chkRegexp := vtui.NewCheckbox(0, 0, "Regular expressions", false)
+	chkRegexp := vtui.NewCheckbox(0, 0, Msg("Search.Regex"), false)
 	if LastEditorSearchRegexp {
 		chkRegexp.State = 1
 	}
 
-	btnReplace := vtui.NewButton(0, 0, "&Replace")
-	btnReplaceAll := vtui.NewButton(0, 0, "Replace &All")
-	btnCancel := vtui.NewButton(0, 0, "Cancel")
+	btnReplace := vtui.NewButton(0, 0, Msg("Replace.BtnReplace"))
+	btnReplaceAll := vtui.NewButton(0, 0, Msg("Replace.BtnReplaceAll"))
+	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
 	btnReplace.IsDefault = true
 
 	dlg.AddItem(lblPrompt)
@@ -2349,7 +2349,7 @@ func (ev *EditorView) ReloadWithAutoDetect() {
 
 func (ev *EditorView) showCodepageDialog() {
 	items, currIdx := vfs.BuildCodepageMenuItems(ev.Codepage, AppConfig.EditorAutodetectCodePage)
-	menu := vtui.NewVMenu(" Code pages ")
+	menu := vtui.NewVMenu(Msg("Codepage.Title"))
 	for _, item := range items {
 		menu.AddItem(item)
 	}
@@ -2396,7 +2396,7 @@ func (ev *EditorView) showCodepageDialog() {
 }
 func (ev *EditorView) showConvertCodepageDialog() {
 	items, _ := vfs.BuildCodepageMenuItems(ev.Codepage, false)
-	menu := vtui.NewVMenu(" Convert Codepage ")
+	menu := vtui.NewVMenu(Msg("Codepage.ConvertTitle"))
 	realItems := 0
 	for _, item := range items {
 		if item.UserData == -1 {

@@ -850,7 +850,7 @@ func (vv *ViewerView) ReloadWithAutoDetect() {
 
 func (vv *ViewerView) showCodepageDialog() {
 	items, currIdx := vfs.BuildCodepageMenuItems(vv.Codepage, AppConfig.ViewerAutodetectCodePage)
-	menu := vtui.NewVMenu(" Code pages ")
+	menu := vtui.NewVMenu(Msg("Codepage.Title"))
 	for _, item := range items {
 		menu.AddItem(item)
 	}

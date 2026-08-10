@@ -694,3 +694,14 @@ Attributes.Archive=&Archive
 Permissions.Title= Plugin Permissions
 Permissions.BtnRevoke=&Revoke
 Permissions.BtnClose=&Close
+
+Search.Prompt=Search for:
+Search.WholeWords=Whole words
+Search.Regex=Regular expressions
+Search.BtnFind=&Find
+Replace.Title= Replace
+Replace.Prompt=Replace with:
+Replace.BtnReplace=&Replace
+Replace.BtnReplaceAll=Replace &All
+Codepage.Title= Code pages
+Codepage.ConvertTitle= Convert Codepage
