@@ -182,6 +182,7 @@
     │   ├── pl.hlf
     │   ├── README.md
     │   ├── ru.hlf
+    │   ├── tr.hlf
     │   ├── uk.hlf
     │   └── zh.hlf
     ├── help.go
@@ -189,6 +190,7 @@
     ├── help_keys_he_test.go
     ├── help_keys_ru_test.go
     ├── help_keys_test.go
+    ├── help_keys_tr_test.go
     ├── help_lang_test.go
     ├── help_search.go
     ├── help_search_test.go
@@ -267,6 +269,7 @@
     │   ├── lv.lng
     │   ├── pl.lng
     │   ├── ru.lng
+    │   ├── tr.lng
     │   ├── uk.lng
     │   └── zh.lng
     ├── lang_consistency_test.go
@@ -699,4 +702,4 @@
     ├── word_nav_test.go
     └── workspace_routing_test.go
     
-    49 directories, 649 files
+    49 directories, 652 files
