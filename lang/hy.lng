@@ -410,7 +410,7 @@ AppearanceSettings.Style=Ձևավորման &ոճը՝
 AppearanceSettings.Font=GUI &տառատեսակ՝
 AppearanceSettings.FontSize=GUI տառատեսակի &չափը՝
 AppearanceSettings.TitleTemplate=Պատուհանի &վերնագիր՝
-AppearanceSettings.ExportBtn=&Արտահանել գունային սխেման
+AppearanceSettings.ExportBtn=&Արտահանել սխեման
 AppearanceSettings.ColorCorrection=Կարգավորել գունային &կոնտրաստը
 
 ConfirmationsSettings.Title= Հաստատումներ
