@@ -2661,14 +2661,15 @@ func (pf *PanelsFrame) showDummyOpDialog() {
 		vbox.Add(t, vtui.Margins{}, vtui.AlignLeft)
 	}
 
-	comboMode := vtui.NewComboBox(0, 0, 32, []string{"Queue (Default)", "Background panel clone", "Foreground lock"})
+	modes := []string{Msg("Op.DummyQueue"), Msg("Op.DummyBackground"), Msg("Op.DummyForeground")}
+	comboMode := vtui.NewComboBox(0, 0, 32, modes)
 	comboMode.DropdownOnly = true
 	comboMode.Menu.SetSelectPos(0)
 	comboMode.Edit.SetText(comboMode.Menu.Items[0].Text)
 	dlg.AddItem(comboMode)
 
-	btnStart := vtui.NewButton(0, 0, "&Start")
-	btnCancel := vtui.NewButton(0, 0, "&Cancel")
+	btnStart := vtui.NewButton(0, 0, Msg("Op.BtnStart"))
+	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
 	dlg.AddItem(btnStart)
 	dlg.AddItem(btnCancel)
 
@@ -2718,7 +2719,7 @@ func (pf *PanelsFrame) runProgressTaskAfter(delay time.Duration, title, startMsg
 	lblHint := vtui.NewText(0, 0, Msg("Op.SwitchHint"), vtui.Palette[vtui.ColDialogText])
 	dlg.AddItem(lblHint)
 
-	btnCancel := vtui.NewButton(0, 0, "&Cancel")
+	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
 	dlg.AddItem(btnCancel)
 
 	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 50-4, 10-4)
@@ -3344,7 +3345,7 @@ func (pf *PanelsFrame) showDriveMenu(panelIdx int) {
 // bookmark keys reopen the menu at the row they acted on, the way far2l
 // loops ChangeDiskMenu around its own Pos (panels/panel.cpp:168).
 func (pf *PanelsFrame) showDriveMenuAt(panelIdx, selectPos int) {
-	menu := vtui.NewVMenu(" Drive ")
+	menu := vtui.NewVMenu(Msg("Drive.Title"))
 
 	usedHotkeys := make(map[rune]bool)
 	usedHotkeys['o'] = true // "Other panel"
