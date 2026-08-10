@@ -16,6 +16,7 @@
     ├── api.go
     ├── api_test.go
     ├── appearance_settings_test.go
+    ├── ARABIC_L10N.md
     ├── archive_index_fallback.go
     ├── archive_index.go
     ├── archive_index_test.go
@@ -243,6 +244,7 @@
     ├── kitty_placements.go
     ├── kitty_placements_test.go
     ├── lang
+    │   ├── ar.lng
     │   ├── be.lng
     │   ├── coverage_baseline.txt
     │   ├── cs.lng
@@ -692,4 +694,4 @@
     ├── word_nav_test.go
     └── workspace_routing_test.go
     
-    49 directories, 642 files
+    49 directories, 644 files
