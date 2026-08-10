@@ -172,6 +172,7 @@
     │   ├── et.hlf
     │   ├── fi.hlf
     │   ├── he.hlf
+    │   ├── hi.hlf
     │   ├── hu.hlf
     │   ├── hy.hlf
     │   ├── ja.hlf
@@ -260,6 +261,7 @@
     │   ├── et.lng
     │   ├── fi.lng
     │   ├── he.lng
+    │   ├── hi.lng
     │   ├── hu.lng
     │   ├── hy.lng
     │   ├── ja.lng
@@ -702,4 +704,4 @@
     ├── word_nav_test.go
     └── workspace_routing_test.go
     
-    49 directories, 652 files
+    49 directories, 654 files
