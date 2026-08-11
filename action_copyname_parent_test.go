@@ -102,6 +102,25 @@ func TestAction_PanelCopyPath_CursorOnParentUsesCurrentFolderPath(t *testing.T) 
 	}
 }
 
+func TestAction_PanelInsertPath_CursorOnFile(t *testing.T) {
+	tmp := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmp, "a.txt"), []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	pf := seedPanelForCopyName(t, tmp)
+	fsp := pf.getActivePanel()
+	fsp.SetCursorIndex(1) // "a.txt"
+	pf.cmdLine.Edit.SetText("echo")
+
+	if !RunAction("Panel.InsertPath") {
+		t.Fatal("Panel.InsertPath did not run")
+	}
+	want := `echo "` + filepath.Join(tmp, "a.txt") + `"`
+	if got := pf.cmdLine.Edit.GetText(); got != want {
+		t.Errorf("command line = %q, want %q", got, want)
+	}
+}
+
 func TestAction_PanelCopyName_CursorOnParentUsesCurrentFolderName(t *testing.T) {
 	// t.TempDir() returns a stable, existing dir; take its basename to know
 	// what the far2l "cursor on .. = current folder name" rule should yield.

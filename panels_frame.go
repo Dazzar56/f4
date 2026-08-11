@@ -3296,10 +3296,7 @@ func (pf *PanelsFrame) GetWorkspaceTabTitle() string {
 		if pf.executing && pf.workspaceCommandTitle != "" {
 			title = pf.workspaceCommandTitle
 		}
-		// U+2328 is measured as one cell by runewidth but is rendered as a
-		// two-cell glyph by the Windows GUI font. Keep an extra spacer so the
-		// visible gap before the title matches the folder icon tabs.
-		return "⌨  " + title
+		return title
 	}
 
 	panelPath := func(panel Panel) string {
@@ -3325,7 +3322,14 @@ func (pf *PanelsFrame) GetWorkspaceTabTitle() string {
 		return path
 	}
 
-	return "📁 " + panelPath(pf.panels[0]) + " ─ " + panelPath(pf.panels[1])
+	return panelPath(pf.panels[0]) + " ─ " + panelPath(pf.panels[1])
+}
+
+func (pf *PanelsFrame) GetWorkspaceTabMarker() string {
+	if pf.showPanels {
+		return "P"
+	}
+	return "T"
 }
 
 // GetWorkspaceMenuInfo supplies the Screens popup with full panel paths. The
@@ -3336,7 +3340,7 @@ func (pf *PanelsFrame) GetWorkspaceMenuInfo() vtui.WorkspaceMenuInfo {
 		if pf.executing && pf.workspaceCommandTitle != "" {
 			title = pf.workspaceCommandTitle
 		}
-		return vtui.WorkspaceMenuInfo{Icon: "⌨", Primary: title}
+		return vtui.WorkspaceMenuInfo{Icon: "T", Primary: title}
 	}
 
 	panelPath := func(panel Panel) string {
@@ -3365,7 +3369,7 @@ func (pf *PanelsFrame) GetWorkspaceMenuInfo() vtui.WorkspaceMenuInfo {
 	}
 
 	return vtui.WorkspaceMenuInfo{
-		Icon:      "📁",
+		Icon:      "P",
 		Primary:   panelPath(pf.panels[0]),
 		Secondary: panelPath(pf.panels[1]),
 	}

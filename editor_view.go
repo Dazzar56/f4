@@ -3563,18 +3563,20 @@ func (ev *EditorView) GetTitle() string {
 	return "Editor"
 }
 
-// GetWorkspaceTabTitle provides a compact, icon-led title for the workspace
+// GetWorkspaceTabTitle provides a compact title for the workspace
 // tab bar while leaving GetTitle available for contexts that need the fuller
 // textual description.
 func (ev *EditorView) GetWorkspaceTabTitle() string {
 	if ev.DisplayTitle != "" {
-		return "✎ " + ev.DisplayTitle
+		return ev.DisplayTitle
 	}
 	if ev.filePath != "" {
-		return "✎ " + filepath.Base(ev.filePath)
+		return filepath.Base(ev.filePath)
 	}
-	return "✎ Editor"
+	return "Editor"
 }
+
+func (ev *EditorView) GetWorkspaceTabMarker() string { return "E" }
 
 // buildSearchRegex compiles an editor search pattern with the rules shared
 // by Find, Find All and Replace: non-regex input is quoted literally, case
