@@ -4398,6 +4398,62 @@ func TestEditorView_SearchPersistence(t *testing.T) {
 			LastEditorSearch, LastEditorSearchCase, LastEditorSearchReverse)
 	}
 }
+
+func TestEditorView_Replace_FirstClickReplaces(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	pt := piecetable.New([]byte("match one, match two"))
+	ev := NewEditorView(pt, nil, "test.txt")
+	defer ev.Close()
+	ev.SetPosition(0, 0, 80, 24)
+
+	// No selection: a single Replace must consume the first occurrence,
+	// not merely select it (the old behavior needed a second dialog
+	// round-trip per occurrence).
+	ev.Replace("match", "X", false, false, false, false, false)
+
+	want := "X one, match two"
+	timeout := time.After(2 * time.Second)
+	for {
+		data, _ := ev.pt.Bytes()
+		if string(data) == want && ev.selActive {
+			break
+		}
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			data, _ := ev.pt.Bytes()
+			t.Fatalf("first Replace click did not replace, buffer: %q", string(data))
+		}
+	}
+
+	// The follow-up search must leave the next occurrence selected.
+	if ev.selAnchorOffset != len("X one, ") {
+		t.Errorf("expected next occurrence selected at %d, got %d",
+			len("X one, "), ev.selAnchorOffset)
+	}
+
+	// A second Replace consumes the selected occurrence; no more matches
+	// remain, so the buffer must settle at the final text.
+	ev.Replace("match", "X", false, false, false, false, false)
+	want = "X one, X two"
+	timeout = time.After(2 * time.Second)
+	for {
+		data, _ := ev.pt.Bytes()
+		if string(data) == want {
+			break
+		}
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			data, _ := ev.pt.Bytes()
+			t.Fatalf("second Replace click did not replace, buffer: %q", string(data))
+		}
+	}
+}
+
 func TestEditorView_Autocomplete_Logic(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 

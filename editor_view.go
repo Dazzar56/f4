@@ -16,6 +16,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/charlievieth/strcase"
 	"github.com/coregx/coregex"
 	"github.com/mattn/go-runewidth"
 	"github.com/unxed/f4/piecetable"
@@ -39,6 +40,7 @@ type lineFragment struct {
 
 var (
 	LastEditorSearch          string
+	LastEditorReplace         string
 	LastEditorSearchCase      bool
 	LastEditorSearchReverse   bool
 	LastEditorSearchRegexp    bool
@@ -2016,6 +2018,7 @@ func (ev *EditorView) showSearchDialog() {
 
 	btnFind := vtui.NewButton(0, 0, Msg("Search.BtnFind"))
 	btnFind.IsDefault = true
+	btnAll := vtui.NewButton(0, 0, Msg("Search.BtnAll"))
 	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
 
 	dlg.AddItem(lblPrompt)
@@ -2025,6 +2028,7 @@ func (ev *EditorView) showSearchDialog() {
 	dlg.AddItem(chkReverse)
 	dlg.AddItem(chkRegexp)
 	dlg.AddItem(btnFind)
+	dlg.AddItem(btnAll)
 	dlg.AddItem(btnCancel)
 
 	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, dlgW-4, dlgH-4)
@@ -2048,43 +2052,64 @@ func (ev *EditorView) showSearchDialog() {
 	hbox.HorizontalAlign = vtui.AlignCenter
 	hbox.Spacing = 2
 	hbox.Add(btnFind, vtui.Margins{}, vtui.AlignTop)
+	hbox.Add(btnAll, vtui.Margins{}, vtui.AlignTop)
 	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
 	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
 	vbox.Apply()
 
-	btnFind.OnClick = func() {
+	saveSearchParams := func() {
 		LastEditorSearch = editPattern.GetText()
 		LastEditorSearchCase = chkCase.State == 1
 		LastEditorSearchReverse = chkReverse.State == 1
 		LastEditorSearchRegexp = chkRegexp.State == 1
 		LastEditorSearchWholeWord = chkWholeWord.State == 1
 		SaveSession()
+	}
+	btnFind.OnClick = func() {
+		saveSearchParams()
 		dlg.Close()
 		ev.Search(LastEditorSearch, LastEditorSearchCase, LastEditorSearchReverse, LastEditorSearchRegexp, LastEditorSearchWholeWord, false)
+	}
+	btnAll.OnClick = func() {
+		saveSearchParams()
+		dlg.Close()
+		ev.FindAll(LastEditorSearch, LastEditorSearchCase, LastEditorSearchRegexp, LastEditorSearchWholeWord)
 	}
 	btnCancel.OnClick = func() { dlg.Close() }
 
 	vtui.FrameManager.Push(dlg)
 }
+
+// replaceAllFold is a case-insensitive ReplaceAll under Unicode simple
+// case-folding (strings.EqualFold semantics). strcase locates matches in
+// the original string — no lowered copy, so no offset drift — and a folded
+// match can be a different byte length than old (K U+212A matches "k"),
+// which is why the consumed length comes from CutPrefix per match.
 func replaceAllFold(s, old, new string) string {
 	if old == "" {
 		return s
 	}
-	lowerS := strings.ToLower(s)
-	lowerOld := strings.ToLower(old)
 	var b strings.Builder
 	b.Grow(len(s))
 
 	start := 0
 	for {
-		idx := strings.Index(lowerS[start:], lowerOld)
+		idx := strcase.Index(s[start:], old)
 		if idx == -1 {
 			b.WriteString(s[start:])
 			break
 		}
-		b.WriteString(s[start : start+idx])
+		pos := start + idx
+		after, ok := strcase.CutPrefix(s[pos:], old)
+		if !ok {
+			// Cannot happen: Index just matched at pos. Bail rather than
+			// loop forever if the two ever disagree.
+			b.WriteString(s[start:])
+			break
+		}
+		b.WriteString(s[start:pos])
 		b.WriteString(new)
-		start += idx + len(old)
+		start = len(s) - len(after)
 	}
 	return b.String()
 }
@@ -2094,21 +2119,12 @@ func (ev *EditorView) Replace(pattern, replacement string, caseSensitive, revers
 		return
 	}
 
+	// Only whole-word matching needs the regex engine (for the \b wrapping);
+	// literal replace, case-sensitive or folded, is handled without it.
 	var re *coregex.Regex
 	if regexp || wholeWord {
-		finalPattern := pattern
-		if !regexp {
-			finalPattern = coregex.QuoteMeta(pattern)
-		}
-		if !caseSensitive {
-			finalPattern = "(?i)" + finalPattern
-		}
-		if wholeWord {
-			finalPattern = `\b(?:` + finalPattern + `)\b`
-		}
-
 		var err error
-		re, err = coregex.Compile(finalPattern)
+		re, err = buildSearchRegex(pattern, caseSensitive, regexp, wholeWord)
 		if err != nil {
 			vtui.ShowMessage(" Error ", fmt.Sprintf("Invalid regular expression:\n%v", err), []string{"&Ok"})
 			return
@@ -2120,14 +2136,17 @@ func (ev *EditorView) Replace(pattern, replacement string, caseSensitive, revers
 			bytes, _ := ev.pt.Bytes()
 			text := string(bytes)
 			var newText string
-			if regexp || wholeWord {
+			switch {
+			case regexp:
 				newText = string(re.ReplaceAll(bytes, []byte(replacement)))
-			} else {
-				if caseSensitive {
-					newText = strings.ReplaceAll(text, pattern, replacement)
-				} else {
-					newText = replaceAllFold(text, pattern, replacement)
-				}
+			case re != nil:
+				// Whole-word mode. The pattern was typed as plain text, so
+				// the replacement is plain text too: no $group expansion.
+				newText = string(re.ReplaceAllLiteral(bytes, []byte(replacement)))
+			case caseSensitive:
+				newText = strings.ReplaceAll(text, pattern, replacement)
+			default:
+				newText = replaceAllFold(text, pattern, replacement)
 			}
 			if newText != text {
 				ctx.RunOnUI(func() {
@@ -2146,6 +2165,20 @@ func (ev *EditorView) Replace(pattern, replacement string, caseSensitive, revers
 		return
 	}
 
+	// replacementFor renders the replacement for one matched span, following
+	// the same rules as replace-all: $group expansion only when the user
+	// typed a regex.
+	replacementFor := func(match []byte) []byte {
+		switch {
+		case regexp:
+			return re.ReplaceAll(match, []byte(replacement))
+		case re != nil:
+			return re.ReplaceAllLiteral(match, []byte(replacement))
+		default:
+			return []byte(replacement)
+		}
+	}
+
 	if ev.selActive {
 		min, max := ev.getSelectionRange()
 		data, _ := ev.pt.GetRange(min, max-min)
@@ -2160,38 +2193,82 @@ func (ev *EditorView) Replace(pattern, replacement string, caseSensitive, revers
 			}
 		}
 		if match {
-			ev.saveUndo(opOther)
-			ev.modified = true
-			ev.pt.Delete(min, max-min)
-			ev.li.UpdateAfterDelete(min, max-min)
-
-			var repBytes []byte
-			if regexp || wholeWord {
-				repBytes = re.ReplaceAll(data, []byte(replacement))
-			} else {
-				repBytes = []byte(replacement)
-			}
-			ev.pt.Insert(min, repBytes)
-			ev.li.UpdateAfterInsert(min, repBytes)
-
-			ev.invalidateStates(ev.CursorLine)
-			ev.engine.InvalidateFrom(ev.CursorLine)
-
-			newCursorOff := min + len(repBytes)
-			ev.CursorLine = ev.li.GetLineAtOffset(newCursorOff)
-			ev.CursorPos = newCursorOff - ev.li.GetLineOffset(ev.CursorLine)
-
-			ev.selActive = false
-			ev.updateDesiredVisualCol()
-			ev.ensureCursorVisible()
-			vtui.FrameManager.Redraw()
-
-			ev.Search(pattern, caseSensitive, reverse, regexp, wholeWord, true)
+			ev.replaceRange(min, max, replacementFor(data))
+			// next=false: the cursor sits at the end of the replacement,
+			// and a match can begin exactly there (e.g. "aa"->"x" in
+			// "aaaa"); next=true would skip it.
+			ev.Search(pattern, caseSensitive, reverse, regexp, wholeWord, false)
 			return
 		}
 	}
 
-	ev.Search(pattern, caseSensitive, reverse, regexp, wholeWord, false)
+	// Nothing suitable selected: find the first occurrence from the cursor
+	// and replace it in the same click, then show the next one. The old
+	// find-only fallback needed a second dialog round-trip per occurrence,
+	// which read as the Replace button doing nothing.
+	vtui.FrameManager.PostTask(func() {
+		runSearchWithProgress(pattern, func(ctx *vtui.TaskContext, dlg *vtui.Window) {
+			startOff := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
+
+			data, errBytes := ev.pt.Bytes()
+			if errBytes != nil {
+				ctx.RunOnUI(func() {
+					dlg.Close()
+					vtui.ShowMessage(" Error ", "Failed to read file buffer.", []string{"&Ok"})
+				})
+				return
+			}
+
+			off, mLen, err := findMatch(data, pattern, caseSensitive, reverse, regexp, wholeWord, false, startOff)
+
+			ctx.RunOnUI(func() {
+				// Closing the dialog cancels the task via OnResult, so the
+				// cancellation state must be read first: a canceled replace
+				// must not touch the buffer.
+				canceled := ctx.Err() != nil
+				dlg.Close()
+				if canceled {
+					return
+				}
+				if err != nil {
+					vtui.ShowMessage(" Error ", fmt.Sprintf("Invalid regular expression:\n%v", err), []string{"&Ok"})
+					return
+				}
+				if off == -1 {
+					vtui.ShowMessage(" Replace ", "Pattern not found.", []string{"&Ok"})
+					return
+				}
+				ev.replaceRange(off, off+mLen, replacementFor(data[off:off+mLen]))
+				ev.Search(pattern, caseSensitive, reverse, regexp, wholeWord, false)
+			})
+		})
+	})
+}
+
+// replaceRange replaces bytes [min, max) with repBytes as a single
+// undoable edit and leaves the cursor at the end of the replacement.
+func (ev *EditorView) replaceRange(min, max int, repBytes []byte) {
+	ev.saveUndo(opOther)
+	ev.modified = true
+	ev.pt.Delete(min, max-min)
+	ev.li.UpdateAfterDelete(min, max-min)
+	ev.pt.Insert(min, repBytes)
+	ev.li.UpdateAfterInsert(min, repBytes)
+
+	// Invalidate from the edit, not from the cursor: a reverse replace
+	// edits text above the current line.
+	startLine := ev.li.GetLineAtOffset(min)
+	ev.invalidateStates(startLine)
+	ev.engine.InvalidateFrom(startLine)
+
+	newCursorOff := min + len(repBytes)
+	ev.CursorLine = ev.li.GetLineAtOffset(newCursorOff)
+	ev.CursorPos = newCursorOff - ev.li.GetLineOffset(ev.CursorLine)
+
+	ev.selActive = false
+	ev.updateDesiredVisualCol()
+	ev.ensureCursorVisible()
+	vtui.FrameManager.Redraw()
 }
 
 func (ev *EditorView) showReplaceDialog() {
@@ -2206,7 +2283,8 @@ func (ev *EditorView) showReplaceDialog() {
 	dlg.SetFocusedItem(editPattern)
 
 	lblReplace := vtui.NewLabel(0, 0, Msg("Replace.Prompt"), nil)
-	editReplace := vtui.NewEdit(0, 0, 40, "")
+	editReplace := vtui.NewEdit(0, 0, 40, LastEditorReplace)
+	editReplace.SelectAll()
 
 	chkCase := vtui.NewCheckbox(0, 0, Msg("Search.CaseSensitive"), false)
 	if LastEditorSearchCase {
@@ -2273,26 +2351,19 @@ func (ev *EditorView) showReplaceDialog() {
 	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
 	vbox.Apply()
 
-	btnReplace.OnClick = func() {
+	doReplace := func(all bool) {
 		LastEditorSearch = editPattern.GetText()
+		LastEditorReplace = editReplace.GetText()
 		LastEditorSearchCase = chkCase.State == 1
 		LastEditorSearchReverse = chkReverse.State == 1
 		LastEditorSearchRegexp = chkRegexp.State == 1
 		LastEditorSearchWholeWord = chkWholeWord.State == 1
 		SaveSession()
 		dlg.Close()
-		ev.Replace(LastEditorSearch, editReplace.GetText(), LastEditorSearchCase, LastEditorSearchReverse, LastEditorSearchRegexp, LastEditorSearchWholeWord, false)
+		ev.Replace(LastEditorSearch, LastEditorReplace, LastEditorSearchCase, LastEditorSearchReverse, LastEditorSearchRegexp, LastEditorSearchWholeWord, all)
 	}
-	btnReplaceAll.OnClick = func() {
-		LastEditorSearch = editPattern.GetText()
-		LastEditorSearchCase = chkCase.State == 1
-		LastEditorSearchReverse = chkReverse.State == 1
-		LastEditorSearchRegexp = chkRegexp.State == 1
-		LastEditorSearchWholeWord = chkWholeWord.State == 1
-		SaveSession()
-		dlg.Close()
-		ev.Replace(LastEditorSearch, editReplace.GetText(), LastEditorSearchCase, LastEditorSearchReverse, LastEditorSearchRegexp, LastEditorSearchWholeWord, true)
-	}
+	btnReplace.OnClick = func() { doReplace(false) }
+	btnReplaceAll.OnClick = func() { doReplace(true) }
 	btnCancel.OnClick = func() { dlg.Close() }
 
 	vtui.FrameManager.Push(dlg)
@@ -3523,6 +3594,156 @@ func (ev *EditorView) GetWorkspaceTabTitle() string {
 	}
 	return "✎ Editor"
 }
+
+// buildSearchRegex compiles an editor search pattern with the rules shared
+// by Find, Find All and Replace: non-regex input is quoted literally, case
+// insensitivity becomes an (?i) prefix and whole-word wraps the pattern in
+// word boundaries.
+func buildSearchRegex(pattern string, caseSensitive, useRegex, wholeWord bool) (*coregex.Regex, error) {
+	finalPattern := pattern
+	if !useRegex {
+		finalPattern = coregex.QuoteMeta(pattern)
+	}
+	if !caseSensitive {
+		finalPattern = "(?i)" + finalPattern
+	}
+	if wholeWord {
+		finalPattern = `\b(?:` + finalPattern + `)\b`
+	}
+	return coregex.Compile(finalPattern)
+}
+
+// showSearchProgressDialog shows the cancelable " Searching... " popup used
+// by Find and Find All while the buffer scan runs in the background.
+func showSearchProgressDialog(pattern string) (dlg *vtui.Window, btnCancel *vtui.Button) {
+	dlg = vtui.NewCenteredDialog(50, 8, Msg("Search.Searching"))
+	lbl := vtui.NewLabel(0, 0, fmt.Sprintf("Looking for: %s", pattern), nil)
+	dlg.AddItem(lbl)
+	btnCancel = vtui.NewButton(0, 0, Msg("vtui.Cancel"))
+	dlg.AddItem(btnCancel)
+
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 50-4, 8-4)
+	vbox.Add(lbl, vtui.Margins{}, vtui.AlignCenter)
+	vbox.Add(btnCancel, vtui.Margins{Top: 1}, vtui.AlignCenter)
+	vbox.Apply()
+
+	vtui.FrameManager.AddScreenHeadless(dlg)
+	return dlg, btnCancel
+}
+
+// runSearchWithProgress shows the progress popup and runs worker in the
+// background. The cancel wiring lives here, on the UI thread: the Cancel
+// button and any other close of the dialog (Esc, F10, a border click) all
+// cancel the task, so a dismissed search can never resurface its result.
+// Wiring after RunAsync is race-free because queued UI tasks only run once
+// the current one returns. Must be called on the UI thread; workers close
+// dlg from their RunOnUI callback and must check ctx.Err() before acting.
+func runSearchWithProgress(pattern string, worker func(ctx *vtui.TaskContext, dlg *vtui.Window)) (*vtui.Window, *vtui.TaskContext) {
+	dlg, btnCancel := showSearchProgressDialog(pattern)
+	ctx := vtui.RunAsync(func(c *vtui.TaskContext) { worker(c, dlg) })
+	btnCancel.OnClick = func() { ctx.Cancel(); dlg.Close() }
+	dlg.OnResult = func(int) { ctx.Cancel() }
+	return dlg, ctx
+}
+
+// findMatch locates one occurrence of pattern in data: forward from
+// startOff, or backward from just before it when reverse is set; next
+// additionally skips a match starting exactly at startOff. The offset is
+// -1 when nothing matches. The returned length is the matched byte length,
+// which for regex or case-folded matches can differ from len(pattern).
+func findMatch(data []byte, pattern string, caseSensitive, reverse, regexp, wholeWord, next bool, startOff int) (int, int, error) {
+	foundOffset := -1
+	matchLen := len(pattern)
+	totalSize := len(data)
+
+	// Only whole-word matching needs the regex engine (for the \b
+	// wrapping); literal search, case-sensitive or folded, is handled
+	// below without it.
+	if regexp || wholeWord {
+		re, err := buildSearchRegex(pattern, caseSensitive, regexp, wholeWord)
+		if err != nil {
+			return -1, 0, err
+		}
+
+		if !reverse {
+			currOff := startOff
+			if next {
+				currOff++
+			}
+			if currOff < totalSize {
+				loc := re.FindIndex(data[currOff:])
+				if loc != nil {
+					foundOffset = currOff + loc[0]
+					matchLen = loc[1] - loc[0]
+				}
+			}
+		} else {
+			currOff := startOff
+			if next {
+				currOff--
+			}
+			if currOff > totalSize {
+				currOff = totalSize
+			}
+			if currOff > 0 {
+				// FindAllIndex scans left-to-right without overlap, so for
+				// self-overlapping patterns (e.g. "яя" in "яяя") this can
+				// land left of the true rightmost hit. Accepted: unlike the
+				// old ToLower+LastIndex path it cannot corrupt byte offsets.
+				locs := re.FindAllIndex(data[:currOff], -1)
+				if len(locs) > 0 {
+					last := locs[len(locs)-1]
+					foundOffset = last[0]
+					matchLen = last[1] - last[0]
+				}
+			}
+		}
+		return foundOffset, matchLen, nil
+	}
+
+	text := string(data)
+	index, lastIndex := strings.Index, strings.LastIndex
+	if !caseSensitive {
+		// strcase folds while scanning the original text, so the offsets
+		// it returns need no translation.
+		index, lastIndex = strcase.Index, strcase.LastIndex
+	}
+	if !reverse {
+		currOff := startOff
+		if next {
+			currOff++
+		}
+		if currOff < len(text) {
+			idx := index(text[currOff:], pattern)
+			if idx != -1 {
+				foundOffset = currOff + idx
+			}
+		}
+	} else {
+		currOff := startOff
+		if next {
+			currOff--
+		}
+		if currOff > len(text) {
+			currOff = len(text)
+		}
+		if currOff > 0 {
+			idx := lastIndex(text[:currOff], pattern)
+			if idx != -1 {
+				foundOffset = idx
+			}
+		}
+	}
+	// A folded match can differ in byte length from the pattern
+	// (K U+212A matches "k"), so measure what it consumed.
+	if foundOffset != -1 && !caseSensitive {
+		if after, ok := strcase.CutPrefix(text[foundOffset:], pattern); ok {
+			matchLen = len(text) - foundOffset - len(after)
+		}
+	}
+	return foundOffset, matchLen, nil
+}
+
 func (ev *EditorView) Search(pattern string, caseSensitive, reverse, regexp, wholeWord, next bool) {
 	if pattern == "" {
 		return
@@ -3539,29 +3760,9 @@ func (ev *EditorView) Search(pattern string, caseSensitive, reverse, regexp, who
 	vtui.DebugLog("EDITOR_SEARCH: Starting for %q (sensitive=%v, reverse=%v, regexp=%v, wholeWord=%v, next=%v)",
 		pattern, caseSensitive, reverse, regexp, wholeWord, next)
 
-	title := " Searching... "
-	msg := fmt.Sprintf("Looking for: %s", pattern)
-
 	vtui.FrameManager.PostTask(func() {
-		dlg := vtui.NewCenteredDialog(50, 8, title)
-		lbl := vtui.NewLabel(0, 0, msg, nil)
-		dlg.AddItem(lbl)
-		btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
-		dlg.AddItem(btnCancel)
-
-		vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 50-4, 8-4)
-		vbox.Add(lbl, vtui.Margins{}, vtui.AlignCenter)
-		vbox.Add(btnCancel, vtui.Margins{Top: 1}, vtui.AlignCenter)
-		vbox.Apply()
-
-		vtui.FrameManager.AddScreenHeadless(dlg)
-
-		_ = vtui.RunAsync(func(ctx *vtui.TaskContext) {
-			btnCancel.OnClick = func() { ctx.Cancel(); dlg.Close() }
-
+		runSearchWithProgress(pattern, func(ctx *vtui.TaskContext, dlg *vtui.Window) {
 			startOff := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
-			foundOffset := -1
-			matchLen := len(pattern)
 
 			bytes, errBytes := ev.pt.Bytes()
 			if errBytes != nil {
@@ -3571,114 +3772,48 @@ func (ev *EditorView) Search(pattern string, caseSensitive, reverse, regexp, who
 				})
 				return
 			}
-			totalSize := len(bytes)
 
-			if regexp || wholeWord {
-				finalPattern := pattern
-				if !regexp {
-					finalPattern = coregex.QuoteMeta(pattern)
-				}
-				if !caseSensitive {
-					finalPattern = "(?i)" + finalPattern
-				}
-				if wholeWord {
-					finalPattern = `\b(?:` + finalPattern + `)\b`
-				}
-
-				re, err := coregex.Compile(finalPattern)
-				if err != nil {
-					ctx.RunOnUI(func() {
-						dlg.Close()
-						vtui.ShowMessage(" Error ", fmt.Sprintf("Invalid regular expression:\n%v", err), []string{"&Ok"})
-					})
-					return
-				}
-
-				if !reverse {
-					currOff := startOff
-					if next {
-						currOff++
-					}
-					if currOff < totalSize {
-						loc := re.FindIndex(bytes[currOff:])
-						if loc != nil {
-							foundOffset = currOff + loc[0]
-							matchLen = loc[1] - loc[0]
-						}
-					}
-				} else {
-					currOff := startOff
-					if next {
-						currOff--
-					}
-					if currOff > totalSize {
-						currOff = totalSize
-					}
-					if currOff > 0 {
-						locs := re.FindAllIndex(bytes[:currOff], -1)
-						if len(locs) > 0 {
-							last := locs[len(locs)-1]
-							foundOffset = last[0]
-							matchLen = last[1] - last[0]
-						}
-					}
-				}
-			} else {
-				text := string(bytes)
-				searchData := text
-				searchPat := pattern
-				if !caseSensitive {
-					searchData = strings.ToLower(text)
-					searchPat = strings.ToLower(pattern)
-				}
-
-				if !reverse {
-					currOff := startOff
-					if next {
-						currOff++
-					}
-					if currOff < len(searchData) {
-						idx := strings.Index(searchData[currOff:], searchPat)
-						if idx != -1 {
-							foundOffset = currOff + idx
-						}
-					}
-				} else {
-					currOff := startOff
-					if next {
-						currOff--
-					}
-					if currOff > len(searchData) {
-						currOff = len(searchData)
-					}
-					if currOff > 0 {
-						idx := strings.LastIndex(searchData[:currOff], searchPat)
-						if idx != -1 {
-							foundOffset = idx
-						}
-					}
-				}
+			foundOffset, matchLen, err := findMatch(bytes, pattern, caseSensitive, reverse, regexp, wholeWord, next, startOff)
+			if err != nil {
+				ctx.RunOnUI(func() {
+					dlg.Close()
+					vtui.ShowMessage(" Error ", fmt.Sprintf("Invalid regular expression:\n%v", err), []string{"&Ok"})
+				})
+				return
 			}
 
 			ctx.RunOnUI(func() {
+				// Closing the dialog cancels the task via OnResult, so the
+				// cancellation state must be read first: a search the user
+				// dismissed neither jumps nor complains.
+				canceled := ctx.Err() != nil
 				dlg.Close()
+				if canceled {
+					return
+				}
 				if foundOffset != -1 {
-					ev.selActive = true
-					ev.selAnchorOffset = foundOffset
-
-					endFound := foundOffset + matchLen
-					ev.CursorLine = ev.li.GetLineAtOffset(endFound)
-					ev.CursorPos = endFound - ev.li.GetLineOffset(ev.CursorLine)
-
-					ev.updateDesiredVisualCol()
-					ev.ensureCursorVisible()
-					vtui.FrameManager.Redraw()
-				} else if ctx.Err() == nil {
+					ev.selectFoundPattern(foundOffset, matchLen)
+				} else {
 					vtui.ShowMessage(" Search ", "Pattern not found.", []string{"&Ok"})
 				}
 			})
 		})
 	})
+}
+
+// selectFoundPattern selects a match found by Search or FindAll: the match
+// becomes the active selection and the cursor lands at its end.
+func (ev *EditorView) selectFoundPattern(off, length int) {
+	ev.selActive = true
+	ev.selAnchorOffset = off
+
+	end := off + length
+	ev.CursorLine = ev.li.GetLineAtOffset(end)
+	ev.CursorPos = end - ev.li.GetLineOffset(ev.CursorLine)
+
+	ev.updateDesiredVisualCol()
+	ev.ensureCursorVisible()
+	vtui.FrameManager.Redraw()
 }
 
 // updateAutocomplete scans nearby lines for words matching the current prefix.
