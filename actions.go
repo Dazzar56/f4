@@ -2820,6 +2820,7 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 		Msg("AppearanceSettings.WorkspaceTabsAlways"),
 		Msg("AppearanceSettings.WorkspaceTabsMultiple"),
 		Msg("AppearanceSettings.WorkspaceTabsCtrl"),
+		Msg("AppearanceSettings.WorkspaceTabsNever"),
 	}
 	comboWorkspaceTabs := vtui.NewComboBox(0, 0, 30, workspaceTabModes)
 	comboWorkspaceTabs.DropdownOnly = true
