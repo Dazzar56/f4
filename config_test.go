@@ -42,7 +42,7 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	AppConfig.MacroRecordFormat = 1
 	AppConfig.UseTrash = true
 	AppConfig.TerminalCtrlNWorkspace = false
-	AppConfig.WorkspaceTabMode = int(vtui.WorkspaceTabsOnCtrl)
+	AppConfig.WorkspaceTabMode = int(vtui.WorkspaceTabsNever)
 	AppConfig.CtrlTabShowsMenu = true
 	AppConfig.AltNumberSwitchesTabs = false
 	AppConfig.ApplyCommandParallelism = 0
@@ -77,7 +77,7 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	if AppConfig.ShowHiddenFiles {
 		t.Error("LoadConfig failed to restore ShowHiddenFiles")
 	}
-	if AppConfig.WorkspaceTabMode != int(vtui.WorkspaceTabsOnCtrl) {
+	if AppConfig.WorkspaceTabMode != int(vtui.WorkspaceTabsNever) {
 		t.Errorf("LoadConfig failed to restore workspace tab mode: %d", AppConfig.WorkspaceTabMode)
 	}
 	if !AppConfig.CtrlTabShowsMenu {

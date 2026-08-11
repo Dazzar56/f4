@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -407,5 +408,42 @@ func TestUnsupportedPlatformsStillAnswer(t *testing.T) {
 	}
 	if got := List(); len(got) != 0 {
 		t.Fatalf("no mounts can exist here, got %d", len(got))
+	}
+}
+func TestMountAndUnmount(t *testing.T) {
+	if !Supported() {
+		// Use a valid source path so it passes os.Stat and reaches MountVFS
+		_, err := MountSource(t.TempDir(), Options{MountPoint: t.TempDir()})
+		if !errors.Is(err, ErrUnsupported) {
+			t.Errorf("expected ErrUnsupported, got %v", err)
+		}
+		return
+	}
+
+	tmpDir := t.TempDir()
+	mountPoint := filepath.Join(t.TempDir(), "mnt")
+
+	m, err := MountSource(tmpDir, Options{MountPoint: mountPoint, ReadOnly: true})
+	if err != nil {
+		// FUSE mounts can fail in environments without /dev/fuse access (like CI)
+		t.Skipf("Mount failed (missing FUSE privileges?): %v", err)
+	}
+	defer m.Unmount()
+
+	if m.MountPoint != mountPoint {
+		t.Errorf("expected mount point %s, got %s", mountPoint, m.MountPoint)
+	}
+
+	found := Find(mountPoint)
+	if found == nil || found.ID != m.ID {
+		t.Errorf("Find failed to locate the mount")
+	}
+
+	if err := Unmount(mountPoint); err != nil {
+		t.Fatalf("Unmount failed: %v", err)
+	}
+
+	if m.Active() {
+		t.Errorf("expected mount to be inactive after Unmount")
 	}
 }

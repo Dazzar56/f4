@@ -4398,6 +4398,219 @@ func TestEditorView_SearchPersistence(t *testing.T) {
 			LastEditorSearch, LastEditorSearchCase, LastEditorSearchReverse)
 	}
 }
+
+// countDialogButtons tells a Replace confirmation prompt (4 buttons) apart
+// from the summary box (1 button) that shares its title.
+func countDialogButtons(w *vtui.Window) int {
+	n := 0
+	for _, c := range w.GetChildren() {
+		if _, ok := c.(*vtui.Button); ok {
+			n++
+		}
+	}
+	return n
+}
+
+// pumpReplacePrompt drains UI tasks until a Replace confirmation dialog
+// other than prev is on top, and returns it.
+func pumpReplacePrompt(t *testing.T, prev *vtui.Window) *vtui.Window {
+	t.Helper()
+	var dlg *vtui.Window
+	pumpFindAll(t, func() bool {
+		w, ok := vtui.FrameManager.GetTopFrame().(*vtui.Window)
+		if ok && w != prev && w.GetTitle() == Msg("Replace.ConfirmTitle") && countDialogButtons(w) == 4 {
+			dlg = w
+		}
+		return dlg != nil
+	})
+	return dlg
+}
+
+// pumpReplaceSummary drains UI tasks until the "N occurrence(s) replaced"
+// box shows up, proving the loop ended with a report instead of the bare
+// not-found message.
+func pumpReplaceSummary(t *testing.T) {
+	t.Helper()
+	pumpFindAll(t, func() bool {
+		w, ok := vtui.FrameManager.GetTopFrame().(*vtui.Window)
+		return ok && w.GetTitle() == Msg("Replace.ConfirmTitle") && countDialogButtons(w) == 1
+	})
+}
+
+func TestEditorView_Replace_InteractivePromptFlow(t *testing.T) {
+	content := "match one, match two, match three"
+	ev := newFindAllEditor(t, content)
+
+	// One click on [ Replace ] with no selection prompts at the first
+	// occurrence without touching the buffer.
+	ev.Replace("match", "X", false, false, false, false, false)
+	dlg := pumpReplacePrompt(t, nil)
+	if data, _ := ev.pt.Bytes(); string(data) != content {
+		t.Fatalf("the prompt must not replace by itself, buffer: %q", data)
+	}
+	if !ev.selActive || ev.selAnchorOffset != 0 {
+		t.Errorf("first occurrence should be selected at 0, got active=%v anchor=%d",
+			ev.selActive, ev.selAnchorOffset)
+	}
+
+	// Replace: exactly this occurrence, then a prompt at the next one.
+	dlg.SetExitCode(replaceBtnReplace)
+	dlg2 := pumpReplacePrompt(t, dlg)
+	want := "X one, match two, match three"
+	if data, _ := ev.pt.Bytes(); string(data) != want {
+		t.Fatalf("after Replace, buffer: %q, want %q", data, want)
+	}
+	if ev.selAnchorOffset != len("X one, ") {
+		t.Errorf("second occurrence should be selected at %d, got %d",
+			len("X one, "), ev.selAnchorOffset)
+	}
+
+	// Skip: buffer untouched, prompt advances.
+	dlg2.SetExitCode(replaceBtnSkip)
+	dlg3 := pumpReplacePrompt(t, dlg2)
+	if data, _ := ev.pt.Bytes(); string(data) != want {
+		t.Fatalf("Skip must not edit, buffer: %q", data)
+	}
+	wantThird := len("X one, match two, ")
+	if ev.selAnchorOffset != wantThird {
+		t.Errorf("third occurrence should be selected at %d, got %d", wantThird, ev.selAnchorOffset)
+	}
+
+	// Cancel: the loop stops, nothing else changes, the occurrence stays
+	// selected with the cursor on it.
+	dlg3.SetExitCode(replaceBtnCancel)
+	pumpFindAllFor(t, 300*time.Millisecond, func() (string, bool) {
+		w, ok := vtui.FrameManager.GetTopFrame().(*vtui.Window)
+		if ok && w != dlg3 && w.GetTitle() == Msg("Replace.ConfirmTitle") {
+			return "Cancel must end the loop, but another Replace dialog appeared", true
+		}
+		return "", false
+	})
+	if data, _ := ev.pt.Bytes(); string(data) != want {
+		t.Errorf("Cancel must not edit, buffer: %q", data)
+	}
+	if !ev.selActive || ev.selAnchorOffset != wantThird {
+		t.Errorf("canceled occurrence should stay selected at %d, got active=%v anchor=%d",
+			wantThird, ev.selActive, ev.selAnchorOffset)
+	}
+}
+
+func TestEditorView_Replace_InteractiveAllSingleUndo(t *testing.T) {
+	content := "match one, match two, match three"
+	ev := newFindAllEditor(t, content)
+	ev.Replace("match", "X", false, false, false, false, false)
+
+	// All at the first prompt finishes the rest without further prompts
+	// and reports the total.
+	dlg := pumpReplacePrompt(t, nil)
+	dlg.SetExitCode(replaceBtnAll)
+	want := "X one, X two, X three"
+	pumpFindAll(t, func() bool { data, _ := ev.pt.Bytes(); return string(data) == want })
+	pumpReplaceSummary(t)
+
+	// Far wraps the All tail in a single undo block: one Undo restores
+	// everything the button replaced.
+	ev.Undo()
+	if data, _ := ev.pt.Bytes(); string(data) != content {
+		t.Errorf("All should be one undo step, after Undo: %q", data)
+	}
+}
+
+func TestEditorView_Replace_AdjacentOccurrenceNotSkipped(t *testing.T) {
+	ev := newFindAllEditor(t, "aaaa")
+	ev.Replace("aa", "x", false, false, false, false, false)
+
+	// Replace-Replace on "aaaa" with aa->x must produce "xx": the second
+	// occurrence starts exactly at the end of the first replacement.
+	dlg := pumpReplacePrompt(t, nil)
+	dlg.SetExitCode(replaceBtnReplace)
+	dlg2 := pumpReplacePrompt(t, dlg)
+	dlg2.SetExitCode(replaceBtnReplace)
+	pumpFindAll(t, func() bool { data, _ := ev.pt.Bytes(); return string(data) == "xx" })
+	pumpReplaceSummary(t)
+}
+
+func TestEditorView_Replace_ReplacementContainsPattern(t *testing.T) {
+	ev := newFindAllEditor(t, "aa")
+	ev.Replace("a", "aa", false, false, false, false, false)
+
+	// The replacement's own output must never be re-matched: exactly two
+	// prompts, then the summary.
+	dlg := pumpReplacePrompt(t, nil)
+	dlg.SetExitCode(replaceBtnReplace)
+	dlg2 := pumpReplacePrompt(t, dlg)
+	dlg2.SetExitCode(replaceBtnReplace)
+	pumpFindAll(t, func() bool { data, _ := ev.pt.Bytes(); return string(data) == "aaaa" })
+	pumpReplaceSummary(t)
+}
+
+func TestEditorView_Replace_RegexExpandsPerOccurrence(t *testing.T) {
+	ev := newFindAllEditor(t, "a1 b2")
+	ev.Replace(`([a-z])(\d)`, "$2$1", true, false, true, false, false)
+
+	dlg := pumpReplacePrompt(t, nil)
+	dlg.SetExitCode(replaceBtnReplace)
+	dlg2 := pumpReplacePrompt(t, dlg)
+	dlg2.SetExitCode(replaceBtnReplace)
+	pumpFindAll(t, func() bool { data, _ := ev.pt.Bytes(); return string(data) == "1a 2b" })
+	pumpReplaceSummary(t)
+}
+
+func TestReplacePrompt_RegexShowsExpandedReplacement(t *testing.T) {
+	// The prompt shows what will really be inserted for this occurrence,
+	// not the raw "$2$1" the user typed.
+	re, err := buildSearchRegex(`([a-z])(\d)`, true, true, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := &replaceLoop{replacement: "$2$1", regexp: true, re: re}
+	rendered := string(st.renderReplacement([]byte("a1")))
+	if rendered != "1a" {
+		t.Fatalf("rendered replacement = %q, want \"1a\"", rendered)
+	}
+	body := replacePromptBody("a1", rendered)
+	if !strings.Contains(body, "\"a1\"") || !strings.Contains(body, "\"1a\"") {
+		t.Errorf("prompt body should quote the match and the expanded replacement, got %q", body)
+	}
+}
+
+func TestEditorView_Replace_FoldedDifferentLength(t *testing.T) {
+	// K (U+212A, 3 bytes) case-folds to "k": the replacement must consume
+	// the folded character's real byte width, not len(pattern).
+	ev := newFindAllEditor(t, "K x k")
+	ev.Replace("k", "q", false, false, false, false, false)
+
+	dlg := pumpReplacePrompt(t, nil)
+	dlg.SetExitCode(replaceBtnReplace)
+	dlg2 := pumpReplacePrompt(t, dlg)
+	dlg2.SetExitCode(replaceBtnReplace)
+	pumpFindAll(t, func() bool { data, _ := ev.pt.Bytes(); return string(data) == "q x q" })
+	pumpReplaceSummary(t)
+}
+
+func TestEditorView_Replace_ReverseWalksRightToLeft(t *testing.T) {
+	content := "match one, match two"
+	ev := newFindAllEditor(t, content)
+	ev.CursorLine = 0
+	ev.CursorPos = len(content)
+	ev.Replace("match", "X", false, true, false, false, false)
+
+	dlg := pumpReplacePrompt(t, nil)
+	second := len("match one, ")
+	if ev.selAnchorOffset != second {
+		t.Fatalf("reverse should prompt the rightmost occurrence at %d, got %d",
+			second, ev.selAnchorOffset)
+	}
+	dlg.SetExitCode(replaceBtnReplace)
+	dlg2 := pumpReplacePrompt(t, dlg)
+	if ev.selAnchorOffset != 0 {
+		t.Errorf("second prompt should be at offset 0, got %d", ev.selAnchorOffset)
+	}
+	dlg2.SetExitCode(replaceBtnReplace)
+	pumpFindAll(t, func() bool { data, _ := ev.pt.Bytes(); return string(data) == "X one, X two" })
+	pumpReplaceSummary(t)
+}
+
 func TestEditorView_Autocomplete_Logic(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 

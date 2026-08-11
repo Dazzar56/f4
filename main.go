@@ -483,6 +483,7 @@ func LoadSession() {
 	ini := LoadIni(path)
 
 	LastEditorSearch = ini.GetString("EditorSearch", "Pattern", "")
+	LastEditorReplace = ini.GetString("EditorSearch", "Replace", "")
 	LastEditorSearchCase = ini.GetString("EditorSearch", "CaseSensitive", "0") == "1"
 	LastEditorSearchReverse = ini.GetString("EditorSearch", "Reverse", "0") == "1"
 	LastEditorSearchRegexp = ini.GetString("EditorSearch", "Regexp", "0") == "1"
@@ -555,6 +556,7 @@ func SaveSession() {
 	var sb strings.Builder
 	sb.WriteString("[EditorSearch]\n")
 	sb.WriteString(fmt.Sprintf("Pattern = %s\n", LastEditorSearch))
+	sb.WriteString(fmt.Sprintf("Replace = %s\n", LastEditorReplace))
 	sb.WriteString(fmt.Sprintf("CaseSensitive = %d\n", map[bool]int{true: 1, false: 0}[LastEditorSearchCase]))
 	sb.WriteString(fmt.Sprintf("Reverse = %d\n", map[bool]int{true: 1, false: 0}[LastEditorSearchReverse]))
 	sb.WriteString(fmt.Sprintf("Regexp = %d\n", map[bool]int{true: 1, false: 0}[LastEditorSearchRegexp]))

@@ -355,6 +355,8 @@ func LoadConfig() {
 		AppConfig.WorkspaceTabMode = int(vtui.WorkspaceTabsAlways)
 	case "ctrl":
 		AppConfig.WorkspaceTabMode = int(vtui.WorkspaceTabsOnCtrl)
+	case "never":
+		AppConfig.WorkspaceTabMode = int(vtui.WorkspaceTabsNever)
 	default:
 		AppConfig.WorkspaceTabMode = int(vtui.WorkspaceTabsMultiple)
 	}
@@ -542,6 +544,8 @@ func SaveConfig() {
 		workspaceTabMode = "always"
 	} else if AppConfig.WorkspaceTabMode == int(vtui.WorkspaceTabsOnCtrl) {
 		workspaceTabMode = "ctrl"
+	} else if AppConfig.WorkspaceTabMode == int(vtui.WorkspaceTabsNever) {
+		workspaceTabMode = "never"
 	}
 	ctrlTabMode := "direct"
 	if AppConfig.CtrlTabShowsMenu {
