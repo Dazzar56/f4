@@ -1,4 +1,4 @@
-# f4 (an experimental Far Manager / far2l clone in Go)
+# f4 — efficient and cozy file manager in go
 
 ![](https://raw.githubusercontent.com/unxed/f4/refs/heads/main/screenshot.png)
 ### ⚡ Quick Download (Nightly Builds)
