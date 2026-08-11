@@ -23,7 +23,7 @@ require (
 	github.com/unxed/sevenzip v0.0.0-20260704211908-25d317f8295f
 	github.com/unxed/tar v0.1.126
 	github.com/unxed/vtinput v0.1.2
-	github.com/unxed/vtui v0.1.154
+	github.com/unxed/vtui v0.1.155
 	github.com/unxed/zip v0.1.127
 	github.com/unxed/zipper v0.1.145
 	github.com/vmihailenco/msgpack/v5 v5.4.1
@@ -128,4 +128,4 @@ replace github.com/ebitengine/purego => github.com/unxed/pureffi v0.1.13
 
 // replace github.com/unxed/colorer4go => ../../../dev/colorer4go
 
-// replace github.com/unxed/colorer4go => ../../../dev/vtui
+// replace github.com/unxed/vtui => ../../../dev/vtui
