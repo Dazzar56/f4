@@ -2137,12 +2137,8 @@ func (ev *EditorView) Replace(pattern, replacement string, caseSensitive, revers
 			text := string(bytes)
 			var newText string
 			switch {
-			case regexp:
-				newText = string(re.ReplaceAll(bytes, []byte(replacement)))
 			case re != nil:
-				// Whole-word mode. The pattern was typed as plain text, so
-				// the replacement is plain text too: no $group expansion.
-				newText = string(re.ReplaceAllLiteral(bytes, []byte(replacement)))
+				newText = string(renderReplacement(re, regexp, bytes, []byte(replacement)))
 			case caseSensitive:
 				newText = strings.ReplaceAll(text, pattern, replacement)
 			default:
@@ -2158,110 +2154,91 @@ func (ev *EditorView) Replace(pattern, replacement string, caseSensitive, revers
 				})
 			} else {
 				ctx.RunOnUI(func() {
-					vtui.ShowMessage(" Replace ", "Pattern not found.", []string{"&Ok"})
+					vtui.ShowMessage(Msg("Replace.ConfirmTitle"), Msg("Search.NotFound"), []string{Msg("vtui.Ok")})
 				})
 			}
 		})
 		return
 	}
 
-	// replacementFor renders the replacement for one matched span, following
-	// the same rules as replace-all: $group expansion only when the user
-	// typed a regex.
-	replacementFor := func(match []byte) []byte {
-		switch {
-		case regexp:
-			return re.ReplaceAll(match, []byte(replacement))
-		case re != nil:
-			return re.ReplaceAllLiteral(match, []byte(replacement))
-		default:
-			return []byte(replacement)
-		}
+	// Interactive path, ported from Far Manager: every occurrence is
+	// confirmed with a Replace / All / Skip / Cancel dialog; replacing
+	// without confirmation is only reachable through [ Replace all ].
+	st := &replaceLoop{
+		ev:            ev,
+		pattern:       pattern,
+		replacement:   replacement,
+		caseSensitive: caseSensitive,
+		reverse:       reverse,
+		regexp:        regexp,
+		wholeWord:     wholeWord,
+		re:            re,
+		session:       ev.editSession,
 	}
-
+	// A selection that is exactly one occurrence (made deliberately by the
+	// user, or left by a previous Cancel) is prompted as-is: re-searching
+	// from its start could pick a wider match (regex "a+" around a
+	// one-character selection) and silently replace more than was selected.
 	if ev.selActive {
-		min, max := ev.getSelectionRange()
-		data, _ := ev.pt.GetRange(min, max-min)
-		match := false
-		if regexp || wholeWord {
-			match = re.Match(data) && len(re.Find(data)) == len(data)
-		} else {
-			if caseSensitive {
-				match = string(data) == pattern
-			} else {
-				match = strings.EqualFold(string(data), pattern)
-			}
-		}
-		if match {
-			ev.replaceRange(min, max, replacementFor(data))
-			// next=false: the cursor sits at the end of the replacement,
-			// and a match can begin exactly there (e.g. "aa"->"x" in
-			// "aaaa"); next=true would skip it.
-			ev.Search(pattern, caseSensitive, reverse, regexp, wholeWord, false)
+		selMin, selMax := ev.getSelectionRange()
+		if data, err := ev.pt.Bytes(); err == nil && selMax > selMin &&
+			selectionIsMatch(data[selMin:selMax], pattern, caseSensitive, re) {
+			st.promptAt(data, selMin, selMax-selMin)
 			return
 		}
 	}
+	st.searchFrom = ev.searchSeedOffset(reverse, true)
+	st.findNext()
+}
 
-	// Nothing suitable selected: find the first occurrence from the cursor
-	// and replace it in the same click, then show the next one. The old
-	// find-only fallback needed a second dialog round-trip per occurrence,
-	// which read as the Replace button doing nothing.
-	vtui.FrameManager.PostTask(func() {
-		runSearchWithProgress(pattern, func(ctx *vtui.TaskContext, dlg *vtui.Window) {
-			startOff := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
-
-			data, errBytes := ev.pt.Bytes()
-			if errBytes != nil {
-				ctx.RunOnUI(func() {
-					dlg.Close()
-					vtui.ShowMessage(" Error ", "Failed to read file buffer.", []string{"&Ok"})
-				})
-				return
-			}
-
-			off, mLen, err := findMatch(data, pattern, caseSensitive, reverse, regexp, wholeWord, false, startOff)
-
-			ctx.RunOnUI(func() {
-				// Closing the dialog cancels the task via OnResult, so the
-				// cancellation state must be read first: a canceled replace
-				// must not touch the buffer.
-				canceled := ctx.Err() != nil
-				dlg.Close()
-				if canceled {
-					return
-				}
-				if err != nil {
-					vtui.ShowMessage(" Error ", fmt.Sprintf("Invalid regular expression:\n%v", err), []string{"&Ok"})
-					return
-				}
-				if off == -1 {
-					vtui.ShowMessage(" Replace ", "Pattern not found.", []string{"&Ok"})
-					return
-				}
-				ev.replaceRange(off, off+mLen, replacementFor(data[off:off+mLen]))
-				ev.Search(pattern, caseSensitive, reverse, regexp, wholeWord, false)
-			})
-		})
-	})
+// noteBufferEdit records that the buffer is about to change: the background
+// line indexer is canceled and every editSession fence held by an in-flight
+// task goes stale.
+func (ev *EditorView) noteBufferEdit() {
+	if !ev.edited {
+		ev.edited = true
+		if ev.indexCancel != nil {
+			ev.indexCancel()
+		}
+	}
+	ev.editSession++
 }
 
 // replaceRange replaces bytes [min, max) with repBytes as a single
 // undoable edit and leaves the cursor at the end of the replacement.
 func (ev *EditorView) replaceRange(min, max int, repBytes []byte) {
+	ev.replaceSpans([]matchSpan{{min, max - min}}, [][]byte{repBytes})
+}
+
+// replaceSpans replaces each span (ascending, non-overlapping) with its
+// rendered replacement as one undoable edit; the cursor lands at the end of
+// the last replacement. Splicing per span keeps memory at the size of the
+// replacements instead of the whole covered region.
+func (ev *EditorView) replaceSpans(spans []matchSpan, renders [][]byte) {
+	if len(spans) == 0 {
+		return
+	}
+	ev.noteBufferEdit()
 	ev.saveUndo(opOther)
 	ev.modified = true
-	ev.pt.Delete(min, max-min)
-	ev.li.UpdateAfterDelete(min, max-min)
-	ev.pt.Insert(min, repBytes)
-	ev.li.UpdateAfterInsert(min, repBytes)
+
+	// Splice bottom-up so the still-pending spans keep their offsets.
+	for i := len(spans) - 1; i >= 0; i-- {
+		s := spans[i]
+		ev.pt.Delete(s.Off, s.Len)
+		ev.li.UpdateAfterDelete(s.Off, s.Len)
+		ev.pt.Insert(s.Off, renders[i])
+		ev.li.UpdateAfterInsert(s.Off, renders[i])
+	}
 
 	// Invalidate from the edit, not from the cursor: a reverse replace
 	// edits text above the current line.
-	startLine := ev.li.GetLineAtOffset(min)
+	startLine := ev.li.GetLineAtOffset(spans[0].Off)
 	ev.invalidateStates(startLine)
 	ev.engine.InvalidateFrom(startLine)
 
-	newCursorOff := min + len(repBytes)
+	last := len(spans) - 1
+	newCursorOff := spans[last].Off + len(renders[last])
 	ev.CursorLine = ev.li.GetLineAtOffset(newCursorOff)
 	ev.CursorPos = newCursorOff - ev.li.GetLineOffset(ev.CursorLine)
 
@@ -3744,6 +3721,23 @@ func findMatch(data []byte, pattern string, caseSensitive, reverse, regexp, whol
 	return foundOffset, matchLen, nil
 }
 
+// searchSeedOffset returns the offset a buffer scan starts from. An active
+// selection — typically the previously found or confirmed match — takes
+// precedence over the raw cursor: a replace scan (includeSelection) starts
+// at the selection's near edge so the highlighted occurrence is prompted
+// again, while a plain search starts at its end and continues past it,
+// exactly as if the cursor sat there.
+func (ev *EditorView) searchSeedOffset(reverse, includeSelection bool) int {
+	if ev.selActive {
+		selMin, selMax := ev.getSelectionRange()
+		if includeSelection && !reverse {
+			return selMin
+		}
+		return selMax
+	}
+	return ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
+}
+
 func (ev *EditorView) Search(pattern string, caseSensitive, reverse, regexp, wholeWord, next bool) {
 	if pattern == "" {
 		return
@@ -3761,9 +3755,10 @@ func (ev *EditorView) Search(pattern string, caseSensitive, reverse, regexp, who
 		pattern, caseSensitive, reverse, regexp, wholeWord, next)
 
 	vtui.FrameManager.PostTask(func() {
-		runSearchWithProgress(pattern, func(ctx *vtui.TaskContext, dlg *vtui.Window) {
-			startOff := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
+		// Read on the UI thread, before the background scan starts.
+		startOff := ev.searchSeedOffset(reverse, false)
 
+		runSearchWithProgress(pattern, func(ctx *vtui.TaskContext, dlg *vtui.Window) {
 			bytes, errBytes := ev.pt.Bytes()
 			if errBytes != nil {
 				ctx.RunOnUI(func() {
@@ -3794,7 +3789,7 @@ func (ev *EditorView) Search(pattern string, caseSensitive, reverse, regexp, who
 				if foundOffset != -1 {
 					ev.selectFoundPattern(foundOffset, matchLen)
 				} else {
-					vtui.ShowMessage(" Search ", "Pattern not found.", []string{"&Ok"})
+					vtui.ShowMessage(Msg("Search.Title"), Msg("Search.NotFound"), []string{Msg("vtui.Ok")})
 				}
 			})
 		})

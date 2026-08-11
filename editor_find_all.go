@@ -258,7 +258,7 @@ func (ev *EditorView) FindAll(pattern string, caseSensitive, useRegex, wholeWord
 					return // buffer changed while scanning; offsets are stale
 				}
 				if len(spans) == 0 {
-					vtui.ShowMessage(" Search ", "Pattern not found.", []string{"&Ok"})
+					vtui.ShowMessage(Msg("Search.Title"), Msg("Search.NotFound"), []string{Msg("vtui.Ok")})
 					return
 				}
 				ev.showFindAllMenu(pattern, bytes, spans)
