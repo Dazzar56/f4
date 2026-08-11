@@ -6,6 +6,7 @@ require (
 	github.com/Masterminds/semver v1.5.0
 	github.com/abadojack/whatlanggo v1.0.1
 	github.com/alecthomas/chroma/v2 v2.15.0
+	github.com/charlievieth/strcase v0.0.6
 	github.com/coregx/coregex v0.12.19
 	github.com/danielpaulus/go-ios v1.2.2-0.20260805152531-ebec9a0b076c
 	github.com/ebitengine/purego v0.11.0-alpha.8
@@ -40,7 +41,6 @@ require (
 )
 
 require (
-	github.com/charlievieth/strcase v0.0.6 // indirect
 	github.com/ebitengine/gomobile v0.0.0-20260211053922-3d992dae95d1 // indirect
 	github.com/ebitengine/hideconsole v1.0.0 // indirect
 	github.com/hajimehoshi/ebiten/v2 v2.10.0-alpha.13.0.20260810130116-34df2187de81 // indirect

@@ -45,7 +45,9 @@ func startServer(ctx context.Context, m *Mount, opts Options) error {
 	fsOpts.MountOptions.Name = "f4"
 	fsOpts.MountOptions.AllowOther = opts.AllowOther
 	fsOpts.MountOptions.Debug = opts.Debug
-	fsOpts.MountOptions.Options = append(fsOpts.MountOptions.Options, "ro")
+	if opts.ReadOnly {
+		fsOpts.MountOptions.Options = append(fsOpts.MountOptions.Options, "ro")
+	}
 
 	root := &node{b: m.bridge, path: m.RootPath}
 	server, err := fs.Mount(m.MountPoint, root, fsOpts)

@@ -50,6 +50,8 @@ type Options struct {
 	// AllowOther lets other users (including root) see the mount. It needs
 	// user_allow_other in /etc/fuse.conf.
 	AllowOther bool
+	// ReadOnly forces the mount to be read-only.
+	ReadOnly bool
 	// Debug turns on go-fuse's protocol logging.
 	Debug bool
 	// AttrTimeout and EntryTimeout are how long the kernel may cache
@@ -167,6 +169,42 @@ func MountVFS(ctx context.Context, v vfs.VFS, opts Options) (*Mount, error) {
 	return m, nil
 }
 
+// MountSource resolves source into a fresh VFS, mounts it at opts.MountPoint,
+// and returns the live Mount.
+func MountSource(source string, opts Options) (*Mount, error) {
+	ctx := context.Background()
+	var v vfs.VFS
+	var err error
+
+	prov := vfs.FindProvider(ctx, nil, source)
+	if prov != nil {
+		v, err = prov.Open(ctx, nil, source)
+		if err != nil {
+			return nil, fmt.Errorf("open source %s: %w", source, err)
+		}
+	} else {
+		abs, err := filepath.Abs(source)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := os.Stat(abs); err != nil {
+			return nil, err
+		}
+		v = vfs.NewOSVFS(abs)
+	}
+
+	return MountVFS(ctx, v, opts)
+}
+
+// Unmount detaches the mount identified by target (an ID or a mount point).
+func Unmount(target string) error {
+	m := Find(target)
+	if m == nil {
+		return fmt.Errorf("no such mount: %s", target)
+	}
+	return m.Unmount()
+}
+
 // watch waits for the kernel connection to end, whatever ended it, and does
 // the cleanup exactly once. Unmounting from a shell must free the VFS just
 // like the in-app command does.
@@ -233,6 +271,14 @@ func (m *Mount) Active() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return !m.stopped
+}
+
+// Wait blocks until the mount has ended and all cleanup has completed.
+func (m *Mount) Wait() {
+	if m == nil {
+		return
+	}
+	<-m.done
 }
 
 // List returns the live mounts, oldest first.
