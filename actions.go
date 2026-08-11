@@ -1077,25 +1077,8 @@ func actionViewerSearch(vv *ViewerView) {
 		if pattern == "" {
 			return
 		}
-		title := " Searching... "
-		msg := fmt.Sprintf("Looking for: %s", pattern)
-
 		vtui.FrameManager.PostTask(func() {
-			dlg := vtui.NewCenteredDialog(50, 8, title)
-			lbl := vtui.NewLabel(0, 0, msg, nil)
-			dlg.AddItem(lbl)
-			btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
-			dlg.AddItem(btnCancel)
-
-			vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 50-4, 8-4)
-			vbox.Add(lbl, vtui.Margins{}, vtui.AlignCenter)
-			vbox.Add(btnCancel, vtui.Margins{Top: 1}, vtui.AlignCenter)
-			vbox.Apply()
-
-			vtui.FrameManager.AddScreenHeadless(dlg)
-
-			_ = vtui.RunAsync(func(ctx *vtui.TaskContext) {
-				btnCancel.OnClick = func() { ctx.Cancel(); dlg.Close() }
+			runSearchWithProgress(pattern, func(ctx *vtui.TaskContext, dlg *vtui.Window) {
 				foundOffset := int64(-1)
 				currOff := vv.TopOffset + 1
 				fileSize := vv.backend.Size()
@@ -1137,11 +1120,17 @@ func actionViewerSearch(vv *ViewerView) {
 				}
 
 				ctx.RunOnUI(func() {
+					// Closing the dialog cancels the task via OnResult; read
+					// the state before Close so completions still deliver.
+					canceled := ctx.Err() != nil
 					dlg.Close()
+					if canceled {
+						return
+					}
 					if foundOffset != -1 {
 						vv.TopOffset = vv.backend.FindLineStart(foundOffset)
 						vtui.FrameManager.Redraw()
-					} else if ctx.Err() == nil {
+					} else {
 						vtui.ShowMessage(" Search ", "Pattern not found.", []string{"&Ok"})
 					}
 				})
