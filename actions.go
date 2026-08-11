@@ -2554,6 +2554,133 @@ func actionConfirmationsSettings(pf *PanelsFrame) {
 
 	vtui.FrameManager.Push(dlg)
 }
+func actionMouseWheelSettings(pf *PanelsFrame) {
+	const width, height = 56, 17
+	dlg := vtui.NewCenteredDialog(width, height, Msg("MouseWheel.Title"))
+	dlg.ShowClose = true
+
+	// 1. Initialize Widgets
+	lblHint := vtui.NewText(0, 0, Msg("MouseWheel.Hint"), 0)
+
+	lblPanels := vtui.NewText(0, 0, Msg("MouseWheel.Panels"), 0)
+	editPanelUp := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelPanelUp))
+	editPanelDown := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelPanelDown))
+	lblPanelUp := vtui.NewLabel(0, 0, Msg("MouseWheel.Up"), editPanelUp)
+	lblPanelDown := vtui.NewLabel(0, 0, Msg("MouseWheel.Down"), editPanelDown)
+
+	lblEditor := vtui.NewText(0, 0, Msg("MouseWheel.Editor"), 0)
+	editEditorUp := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelEditorUp))
+	editEditorDown := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelEditorDown))
+	lblEditorUp := vtui.NewLabel(0, 0, Msg("MouseWheel.Up"), editEditorUp)
+	lblEditorDown := vtui.NewLabel(0, 0, Msg("MouseWheel.Down"), editEditorDown)
+
+	lblViewer := vtui.NewText(0, 0, Msg("MouseWheel.Viewer"), 0)
+	editViewerUp := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelViewerUp))
+	editViewerDown := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelViewerDown))
+	lblViewerUp := vtui.NewLabel(0, 0, Msg("MouseWheel.Up"), editViewerUp)
+	lblViewerDown := vtui.NewLabel(0, 0, Msg("MouseWheel.Down"), editViewerDown)
+
+	lblMenus := vtui.NewText(0, 0, Msg("MouseWheel.Menus"), 0)
+	editMenuUp := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelMenuUp))
+	editMenuDown := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelMenuDown))
+	lblMenuUp := vtui.NewLabel(0, 0, Msg("MouseWheel.Up"), editMenuUp)
+	lblMenuDown := vtui.NewLabel(0, 0, Msg("MouseWheel.Down"), editMenuDown)
+
+	lblTables := vtui.NewText(0, 0, Msg("MouseWheel.Tables"), 0)
+	editTableUp := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelTableUp))
+	editTableDown := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelTableDown))
+	lblTableUp := vtui.NewLabel(0, 0, Msg("MouseWheel.Up"), editTableUp)
+	lblTableDown := vtui.NewLabel(0, 0, Msg("MouseWheel.Down"), editTableDown)
+
+	btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))
+	btnOk.IsDefault = true
+	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
+
+	// 2. Add to Dialog
+	dlg.AddItem(lblHint)
+	dlg.AddItem(lblPanels)
+	dlg.AddItem(lblPanelUp)
+	dlg.AddItem(editPanelUp)
+	dlg.AddItem(lblPanelDown)
+	dlg.AddItem(editPanelDown)
+	dlg.AddItem(lblEditor)
+	dlg.AddItem(lblEditorUp)
+	dlg.AddItem(editEditorUp)
+	dlg.AddItem(lblEditorDown)
+	dlg.AddItem(editEditorDown)
+	dlg.AddItem(lblViewer)
+	dlg.AddItem(lblViewerUp)
+	dlg.AddItem(editViewerUp)
+	dlg.AddItem(lblViewerDown)
+	dlg.AddItem(editViewerDown)
+	dlg.AddItem(lblMenus)
+	dlg.AddItem(lblMenuUp)
+	dlg.AddItem(editMenuUp)
+	dlg.AddItem(lblMenuDown)
+	dlg.AddItem(editMenuDown)
+	dlg.AddItem(lblTables)
+	dlg.AddItem(lblTableUp)
+	dlg.AddItem(editTableUp)
+	dlg.AddItem(lblTableDown)
+	dlg.AddItem(editTableDown)
+	dlg.AddItem(btnOk)
+	dlg.AddItem(btnCancel)
+
+	// 3. Layout Configuration
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, width-4, height-4)
+	vbox.Add(lblHint, vtui.Margins{}, vtui.AlignLeft)
+
+	addWheelRow := func(area *vtui.Text, lblUp, lblDown *vtui.Text, editUp, editDown *vtui.Edit) {
+		row := vtui.NewHBoxLayout(0, 0, width-4, 1)
+		row.Add(area, vtui.Margins{Right: 2}, vtui.AlignLeft)
+		row.Add(lblUp, vtui.Margins{Right: 1}, vtui.AlignLeft)
+		row.Add(editUp, vtui.Margins{Right: 2}, vtui.AlignLeft)
+		row.Add(lblDown, vtui.Margins{Right: 1}, vtui.AlignLeft)
+		row.Add(editDown, vtui.Margins{}, vtui.AlignLeft)
+		vbox.Add(row, vtui.Margins{Top: 1}, vtui.AlignFill)
+	}
+	addWheelRow(lblPanels, lblPanelUp, lblPanelDown, editPanelUp, editPanelDown)
+	addWheelRow(lblEditor, lblEditorUp, lblEditorDown, editEditorUp, editEditorDown)
+	addWheelRow(lblViewer, lblViewerUp, lblViewerDown, editViewerUp, editViewerDown)
+	addWheelRow(lblMenus, lblMenuUp, lblMenuDown, editMenuUp, editMenuDown)
+	addWheelRow(lblTables, lblTableUp, lblTableDown, editTableUp, editTableDown)
+
+	hbox := vtui.NewHBoxLayout(0, 0, width-4, 1)
+	hbox.HorizontalAlign = vtui.AlignCenter
+	hbox.Spacing = 2
+	hbox.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
+	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
+	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Apply()
+
+	// 4. Logic
+	parseWheel := func(e *vtui.Edit) int {
+		n := 0
+		fmt.Sscanf(e.GetText(), "%d", &n)
+		if n < 0 {
+			n = 0
+		}
+		return n
+	}
+	btnCancel.OnClick = func() { dlg.Close() }
+	btnOk.OnClick = func() {
+		AppConfig.WheelPanelUp = parseWheel(editPanelUp)
+		AppConfig.WheelPanelDown = parseWheel(editPanelDown)
+		AppConfig.WheelEditorUp = parseWheel(editEditorUp)
+		AppConfig.WheelEditorDown = parseWheel(editEditorDown)
+		AppConfig.WheelViewerUp = parseWheel(editViewerUp)
+		AppConfig.WheelViewerDown = parseWheel(editViewerDown)
+		AppConfig.WheelMenuUp = parseWheel(editMenuUp)
+		AppConfig.WheelMenuDown = parseWheel(editMenuDown)
+		AppConfig.WheelTableUp = parseWheel(editTableUp)
+		AppConfig.WheelTableDown = parseWheel(editTableDown)
+		applyWheelSettings()
+		SaveConfig()
+		dlg.Close()
+	}
+
+	vtui.FrameManager.Push(dlg)
+}
 func actionUpdateSettings(pf *PanelsFrame) {
 	width, height := 54, 11
 	dlg := vtui.NewCenteredDialog(width, height, Msg("UpdateSettings.Title"))

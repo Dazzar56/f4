@@ -1691,10 +1691,14 @@ func (ev *EditorView) ProcessMouse(e *vtinput.InputEvent) bool {
 	}
 
 	if e.WheelDirection != 0 {
+		speed := AppConfig.WheelEditorDown
+		vk := uint16(vtinput.VK_DOWN)
 		if e.WheelDirection > 0 {
-			ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_UP})
-		} else {
-			ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
+			speed = AppConfig.WheelEditorUp
+			vk = vtinput.VK_UP
+		}
+		for i := 0; i < wheelScrollLines(speed); i++ {
+			ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vk})
 		}
 		return true
 	}

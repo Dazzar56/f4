@@ -2867,9 +2867,12 @@ func (fp *FileSystemPanel) ProcessMouse(e *vtinput.InputEvent) bool {
 	if e.WheelDirection != 0 {
 		// Determine direction: up is -1, down is 1
 		direction := 1
+		speed := AppConfig.WheelPanelDown
 		if e.WheelDirection > 0 {
 			direction = -1
+			speed = AppConfig.WheelPanelUp
 		}
+		step := direction * wheelScrollLines(speed)
 
 		H := fp.table.ViewHeight
 		if H <= 0 {
@@ -2879,7 +2882,7 @@ func (fp *FileSystemPanel) ProcessMouse(e *vtinput.InputEvent) bool {
 		if fp.gridColumnCount() == 1 {
 			// Detailed view (1-column)
 			idx := fp.GetCursorIndex()
-			newIdx := idx + direction
+			newIdx := idx + step
 			if newIdx < 0 {
 				newIdx = 0
 			}
@@ -2888,7 +2891,7 @@ func (fp *FileSystemPanel) ProcessMouse(e *vtinput.InputEvent) bool {
 			}
 
 			// Scroll the list if possible, keeping the cursor visually stable
-			newTop := fp.table.TopPos + direction
+			newTop := fp.table.TopPos + step
 			maxTop := len(fp.entries) - H
 			if maxTop < 0 {
 				maxTop = 0
@@ -2907,7 +2910,7 @@ func (fp *FileSystemPanel) ProcessMouse(e *vtinput.InputEvent) bool {
 		} else {
 			// Medium/Brief grid view.
 			idx := fp.GetCursorIndex()
-			newIdx := idx + direction
+			newIdx := idx + step
 			if newIdx < 0 {
 				newIdx = 0
 			}
@@ -2916,7 +2919,7 @@ func (fp *FileSystemPanel) ProcessMouse(e *vtinput.InputEvent) bool {
 			}
 
 			// Scroll the list if possible, keeping the cursor visually stable
-			newTop := fp.table.TopPos + direction
+			newTop := fp.table.TopPos + step
 			maxTop := len(fp.entries) - fp.gridColumnCount()*H
 			if maxTop < 0 {
 				maxTop = 0
