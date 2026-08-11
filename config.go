@@ -153,16 +153,22 @@ type F4Config struct {
 	ViewerDefaultCodePage    int
 	// Wheel scroll speed (lines per notch) per area and direction.
 	// 0 = follow the system setting.
-	WheelPanelUp           int
-	WheelPanelDown         int
-	WheelEditorUp          int
-	WheelEditorDown        int
-	WheelViewerUp          int
-	WheelViewerDown        int
-	WheelMenuUp            int
-	WheelMenuDown          int
-	WheelTableUp           int
-	WheelTableDown         int
+	WheelPanelUp    int
+	WheelPanelDown  int
+	WheelEditorUp   int
+	WheelEditorDown int
+	WheelViewerUp   int
+	WheelViewerDown int
+	WheelMenuUp     int
+	WheelMenuDown   int
+	WheelTableUp    int
+	WheelTableDown  int
+	// Path hints (autocomplete in path inputs and the command line).
+	PathHintTimeout        int  // seconds for a VFS ReadDir behind a hint
+	PathHintFullPath       bool // show full paths in the hint, false = final element only
+	PathHintSource         int  // 0 = active panel, 1 = passive panel, 2 = both
+	PathHintMaxVisible     int  // visible rows cap in the hint list
+	PathHintPerCategory    bool // the cap applies per category (active/passive/history)
 	SlideShowDelay         int
 	ImageExternalTimeout   int
 	ImageDecoderPriority   string
@@ -262,6 +268,11 @@ var AppConfig = F4Config{
 	WheelMenuDown:            0,
 	WheelTableUp:             0,
 	WheelTableDown:           0,
+	PathHintTimeout:          2,
+	PathHintFullPath:         false,
+	PathHintSource:           2,
+	PathHintMaxVisible:       5,
+	PathHintPerCategory:      true,
 	SlideShowDelay:           defaultSlideShowDelay,
 	ImageExternalTimeout:     defaultImageExternalTimeout,
 	ImageDecoderPriority:     "",
@@ -459,6 +470,21 @@ func LoadConfig() {
 	AppConfig.WheelMenuDown = loadWheelLines(ini, "MenuDown")
 	AppConfig.WheelTableUp = loadWheelLines(ini, "TableUp")
 	AppConfig.WheelTableDown = loadWheelLines(ini, "TableDown")
+
+	// [PathHints]
+	AppConfig.PathHintTimeout = 2
+	fmt.Sscanf(ini.GetString("PathHints", "Timeout", "2"), "%d", &AppConfig.PathHintTimeout)
+	if AppConfig.PathHintTimeout < 1 {
+		AppConfig.PathHintTimeout = 1
+	}
+	AppConfig.PathHintFullPath = ini.GetString("PathHints", "FullPath", "0") == "1"
+	fmt.Sscanf(ini.GetString("PathHints", "Source", "2"), "%d", &AppConfig.PathHintSource)
+	AppConfig.PathHintMaxVisible = 5
+	fmt.Sscanf(ini.GetString("PathHints", "MaxVisible", "5"), "%d", &AppConfig.PathHintMaxVisible)
+	if AppConfig.PathHintMaxVisible < 1 {
+		AppConfig.PathHintMaxVisible = 1
+	}
+	AppConfig.PathHintPerCategory = ini.GetString("PathHints", "PerCategory", "1") == "1"
 	AppConfig.SlideShowDelay = defaultSlideShowDelay
 	fmt.Sscanf(ini.GetString("Images", "SlideShowDelay", "5"), "%d", &AppConfig.SlideShowDelay)
 	if AppConfig.SlideShowDelay <= 0 {
@@ -608,6 +634,12 @@ func SaveConfig() {
 	sb.WriteString(fmt.Sprintf("MenuDown = %d\n", AppConfig.WheelMenuDown))
 	sb.WriteString(fmt.Sprintf("TableUp = %d\n", AppConfig.WheelTableUp))
 	sb.WriteString(fmt.Sprintf("TableDown = %d\n", AppConfig.WheelTableDown))
+	sb.WriteString("\n[PathHints]\n")
+	sb.WriteString(fmt.Sprintf("Timeout = %d\n", AppConfig.PathHintTimeout))
+	sb.WriteString(fmt.Sprintf("FullPath = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.PathHintFullPath]))
+	sb.WriteString(fmt.Sprintf("Source = %d\n", AppConfig.PathHintSource))
+	sb.WriteString(fmt.Sprintf("MaxVisible = %d\n", AppConfig.PathHintMaxVisible))
+	sb.WriteString(fmt.Sprintf("PerCategory = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.PathHintPerCategory]))
 	sb.WriteString("\n[Images]\n")
 	sb.WriteString(fmt.Sprintf("SlideShowDelay = %d\n", AppConfig.SlideShowDelay))
 	sb.WriteString(fmt.Sprintf("ExternalTimeout = %d\n", AppConfig.ImageExternalTimeout))

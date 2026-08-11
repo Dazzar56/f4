@@ -948,6 +948,16 @@ func init() {
 		Handler:     withPF(func(pf *PanelsFrame) { actionMouseWheelSettings(pf) }),
 	})
 	RegisterAction(Action{
+		Name:        "Settings.PathHints",
+		Area:        "Shell",
+		Label:       "Path Hints Settings",
+		LabelKey:    "Menu.PathHintSettings",
+		Description: "Open path hints settings dialog",
+		DescKey:     "Action.Settings.PathHints.Desc",
+		MenuPath:    "Options",
+		Handler:     withPF(func(pf *PanelsFrame) { actionPathHintSettings(pf) }),
+	})
+	RegisterAction(Action{
 		Name:                "Settings.Hotkeys",
 		Area:                "Shell",
 		Label:               "Hotkey Configuration",
