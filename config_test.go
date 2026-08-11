@@ -572,3 +572,85 @@ func TestConfig_LayoutRoundTrip(t *testing.T) {
 		}
 	}
 }
+
+func TestLoadWheelLines(t *testing.T) {
+	ini := &IniFile{data: map[string]map[string]string{
+		"Mouse": {"PanelUp": "5", "PanelDown": "-2"},
+	}}
+	if got := loadWheelLines(ini, "PanelUp"); got != 5 {
+		t.Errorf("Expected 5, got %d", got)
+	}
+	if got := loadWheelLines(ini, "PanelDown"); got != 0 {
+		t.Errorf("Expected negative value to clamp to 0, got %d", got)
+	}
+	if got := loadWheelLines(ini, "ViewerUp"); got != 0 {
+		t.Errorf("Expected missing key to default to 0, got %d", got)
+	}
+}
+
+func TestWheelScrollLines(t *testing.T) {
+	if got := wheelScrollLines(7); got != 7 {
+		t.Errorf("Expected configured 7, got %d", got)
+	}
+	if got := wheelScrollLines(0); got != vtui.WheelLinesPerNotch() {
+		t.Errorf("Expected 0 to resolve to system %d, got %d", vtui.WheelLinesPerNotch(), got)
+	}
+	if got := wheelScrollLines(-3); got != vtui.WheelLinesPerNotch() {
+		t.Errorf("Expected negative to resolve to system %d, got %d", vtui.WheelLinesPerNotch(), got)
+	}
+}
+
+func TestConfig_MouseWheelRoundTrip(t *testing.T) {
+	tmpDir := t.TempDir()
+	userIniPath := filepath.Join(tmpDir, "settings.ini")
+
+	origUserPathFunc := getUserConfigIniPath
+	getUserConfigIniPath = func() string { return userIniPath }
+	origPathsFunc := getConfigIniPaths
+	getConfigIniPaths = func() []string { return []string{userIniPath} }
+
+	oldCfg := AppConfig
+	defer func() {
+		getUserConfigIniPath = origUserPathFunc
+		getConfigIniPaths = origPathsFunc
+		AppConfig = oldCfg
+	}()
+
+	AppConfig.WheelPanelUp = 1
+	AppConfig.WheelPanelDown = 2
+	AppConfig.WheelEditorUp = 3
+	AppConfig.WheelEditorDown = 4
+	AppConfig.WheelViewerUp = 5
+	AppConfig.WheelViewerDown = 6
+	AppConfig.WheelMenuUp = 7
+	AppConfig.WheelMenuDown = 8
+	AppConfig.WheelTableUp = 9
+	AppConfig.WheelTableDown = 10
+	SaveConfig()
+
+	AppConfig.WheelPanelUp = 0
+	AppConfig.WheelPanelDown = 0
+	AppConfig.WheelEditorUp = 0
+	AppConfig.WheelEditorDown = 0
+	AppConfig.WheelViewerUp = 0
+	AppConfig.WheelViewerDown = 0
+	AppConfig.WheelMenuUp = 0
+	AppConfig.WheelMenuDown = 0
+	AppConfig.WheelTableUp = 0
+	AppConfig.WheelTableDown = 0
+	LoadConfig()
+
+	got := []int{
+		AppConfig.WheelPanelUp, AppConfig.WheelPanelDown,
+		AppConfig.WheelEditorUp, AppConfig.WheelEditorDown,
+		AppConfig.WheelViewerUp, AppConfig.WheelViewerDown,
+		AppConfig.WheelMenuUp, AppConfig.WheelMenuDown,
+		AppConfig.WheelTableUp, AppConfig.WheelTableDown,
+	}
+	want := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("wheel config field %d: expected %d, got %d", i, want[i], got[i])
+		}
+	}
+}

@@ -1458,6 +1458,7 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 	dlg.AddItem(promptLbl)
 
 	editDest := vtui.NewEdit(0, 0, 10, initialDest)
+	editDest.PathHintsEnabled = true
 	dlg.AddItem(editDest)
 
 	modes := []string{Msg("Op.Queue"), Msg("Op.Background"), Msg("Op.Foreground")}
@@ -2543,6 +2544,239 @@ func actionConfirmationsSettings(pf *PanelsFrame) {
 
 	vtui.FrameManager.Push(dlg)
 }
+func actionMouseWheelSettings(pf *PanelsFrame) {
+	const width, height = 56, 17
+	dlg := vtui.NewCenteredDialog(width, height, Msg("MouseWheel.Title"))
+	dlg.ShowClose = true
+
+	// 1. Initialize Widgets
+	lblHint := vtui.NewText(0, 0, Msg("MouseWheel.Hint"), 0)
+
+	lblPanels := vtui.NewText(0, 0, Msg("MouseWheel.Panels"), 0)
+	editPanelUp := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelPanelUp))
+	editPanelDown := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelPanelDown))
+	lblPanelUp := vtui.NewLabel(0, 0, Msg("MouseWheel.Up"), editPanelUp)
+	lblPanelDown := vtui.NewLabel(0, 0, Msg("MouseWheel.Down"), editPanelDown)
+
+	lblEditor := vtui.NewText(0, 0, Msg("MouseWheel.Editor"), 0)
+	editEditorUp := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelEditorUp))
+	editEditorDown := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelEditorDown))
+	lblEditorUp := vtui.NewLabel(0, 0, Msg("MouseWheel.Up"), editEditorUp)
+	lblEditorDown := vtui.NewLabel(0, 0, Msg("MouseWheel.Down"), editEditorDown)
+
+	lblViewer := vtui.NewText(0, 0, Msg("MouseWheel.Viewer"), 0)
+	editViewerUp := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelViewerUp))
+	editViewerDown := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelViewerDown))
+	lblViewerUp := vtui.NewLabel(0, 0, Msg("MouseWheel.Up"), editViewerUp)
+	lblViewerDown := vtui.NewLabel(0, 0, Msg("MouseWheel.Down"), editViewerDown)
+
+	lblMenus := vtui.NewText(0, 0, Msg("MouseWheel.Menus"), 0)
+	editMenuUp := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelMenuUp))
+	editMenuDown := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelMenuDown))
+	lblMenuUp := vtui.NewLabel(0, 0, Msg("MouseWheel.Up"), editMenuUp)
+	lblMenuDown := vtui.NewLabel(0, 0, Msg("MouseWheel.Down"), editMenuDown)
+
+	lblTables := vtui.NewText(0, 0, Msg("MouseWheel.Tables"), 0)
+	editTableUp := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelTableUp))
+	editTableDown := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelTableDown))
+	lblTableUp := vtui.NewLabel(0, 0, Msg("MouseWheel.Up"), editTableUp)
+	lblTableDown := vtui.NewLabel(0, 0, Msg("MouseWheel.Down"), editTableDown)
+
+	btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))
+	btnOk.IsDefault = true
+	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
+
+	// 2. Add to Dialog
+	dlg.AddItem(lblHint)
+	dlg.AddItem(lblPanels)
+	dlg.AddItem(lblPanelUp)
+	dlg.AddItem(editPanelUp)
+	dlg.AddItem(lblPanelDown)
+	dlg.AddItem(editPanelDown)
+	dlg.AddItem(lblEditor)
+	dlg.AddItem(lblEditorUp)
+	dlg.AddItem(editEditorUp)
+	dlg.AddItem(lblEditorDown)
+	dlg.AddItem(editEditorDown)
+	dlg.AddItem(lblViewer)
+	dlg.AddItem(lblViewerUp)
+	dlg.AddItem(editViewerUp)
+	dlg.AddItem(lblViewerDown)
+	dlg.AddItem(editViewerDown)
+	dlg.AddItem(lblMenus)
+	dlg.AddItem(lblMenuUp)
+	dlg.AddItem(editMenuUp)
+	dlg.AddItem(lblMenuDown)
+	dlg.AddItem(editMenuDown)
+	dlg.AddItem(lblTables)
+	dlg.AddItem(lblTableUp)
+	dlg.AddItem(editTableUp)
+	dlg.AddItem(lblTableDown)
+	dlg.AddItem(editTableDown)
+	dlg.AddItem(btnOk)
+	dlg.AddItem(btnCancel)
+
+	// 3. Layout Configuration
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, width-4, height-4)
+	vbox.Add(lblHint, vtui.Margins{}, vtui.AlignLeft)
+
+	addWheelRow := func(area *vtui.Text, lblUp, lblDown *vtui.Text, editUp, editDown *vtui.Edit) {
+		row := vtui.NewHBoxLayout(0, 0, width-4, 1)
+		row.Add(area, vtui.Margins{Right: 2}, vtui.AlignLeft)
+		row.Add(lblUp, vtui.Margins{Right: 1}, vtui.AlignLeft)
+		row.Add(editUp, vtui.Margins{Right: 2}, vtui.AlignLeft)
+		row.Add(lblDown, vtui.Margins{Right: 1}, vtui.AlignLeft)
+		row.Add(editDown, vtui.Margins{}, vtui.AlignLeft)
+		vbox.Add(row, vtui.Margins{Top: 1}, vtui.AlignFill)
+	}
+	addWheelRow(lblPanels, lblPanelUp, lblPanelDown, editPanelUp, editPanelDown)
+	addWheelRow(lblEditor, lblEditorUp, lblEditorDown, editEditorUp, editEditorDown)
+	addWheelRow(lblViewer, lblViewerUp, lblViewerDown, editViewerUp, editViewerDown)
+	addWheelRow(lblMenus, lblMenuUp, lblMenuDown, editMenuUp, editMenuDown)
+	addWheelRow(lblTables, lblTableUp, lblTableDown, editTableUp, editTableDown)
+
+	hbox := vtui.NewHBoxLayout(0, 0, width-4, 1)
+	hbox.HorizontalAlign = vtui.AlignCenter
+	hbox.Spacing = 2
+	hbox.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
+	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
+	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Apply()
+
+	// 4. Logic
+	parseWheel := func(e *vtui.Edit) int {
+		n := 0
+		fmt.Sscanf(e.GetText(), "%d", &n)
+		if n < 0 {
+			n = 0
+		}
+		return n
+	}
+	btnCancel.OnClick = func() { dlg.Close() }
+	btnOk.OnClick = func() {
+		AppConfig.WheelPanelUp = parseWheel(editPanelUp)
+		AppConfig.WheelPanelDown = parseWheel(editPanelDown)
+		AppConfig.WheelEditorUp = parseWheel(editEditorUp)
+		AppConfig.WheelEditorDown = parseWheel(editEditorDown)
+		AppConfig.WheelViewerUp = parseWheel(editViewerUp)
+		AppConfig.WheelViewerDown = parseWheel(editViewerDown)
+		AppConfig.WheelMenuUp = parseWheel(editMenuUp)
+		AppConfig.WheelMenuDown = parseWheel(editMenuDown)
+		AppConfig.WheelTableUp = parseWheel(editTableUp)
+		AppConfig.WheelTableDown = parseWheel(editTableDown)
+		applyWheelSettings()
+		SaveConfig()
+		dlg.Close()
+	}
+
+	vtui.FrameManager.Push(dlg)
+}
+func actionPathHintSettings(pf *PanelsFrame) {
+	const width, height = 56, 18
+	dlg := vtui.NewCenteredDialog(width, height, Msg("PathHints.Title"))
+	dlg.ShowClose = true
+
+	// 1. Initialize Widgets
+	chkFullPath := vtui.NewCheckbox(0, 0, Msg("PathHints.FullPath"), false)
+	if AppConfig.PathHintFullPath {
+		chkFullPath.State = 1
+	}
+
+	sources := []string{Msg("PathHints.SourceActive"), Msg("PathHints.SourcePassive"), Msg("PathHints.SourceBoth")}
+	comboSource := vtui.NewComboBox(0, 0, 24, sources)
+	comboSource.DropdownOnly = true
+	if AppConfig.PathHintSource >= 0 && AppConfig.PathHintSource < len(sources) {
+		comboSource.Menu.SetSelectPos(AppConfig.PathHintSource)
+		comboSource.Edit.SetText(sources[AppConfig.PathHintSource])
+	}
+	lblSource := vtui.NewLabel(0, 0, Msg("PathHints.Source"), comboSource)
+
+	editTimeout := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.PathHintTimeout))
+	lblTimeout := vtui.NewLabel(0, 0, Msg("PathHints.Timeout"), editTimeout)
+
+	editMaxVisible := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.PathHintMaxVisible))
+	lblMaxVisible := vtui.NewLabel(0, 0, Msg("PathHints.MaxVisible"), editMaxVisible)
+
+	chkPerCategory := vtui.NewCheckbox(0, 0, Msg("PathHints.PerCategory"), false)
+	if AppConfig.PathHintPerCategory {
+		chkPerCategory.State = 1
+	}
+
+	lblNote := vtui.NewText(0, 0, Msg("PathHints.MarkersNote"), 0)
+
+	btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))
+	btnOk.IsDefault = true
+	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
+
+	// 2. Add to Dialog
+	dlg.AddItem(chkFullPath)
+	dlg.AddItem(lblSource)
+	dlg.AddItem(comboSource)
+	dlg.AddItem(lblTimeout)
+	dlg.AddItem(editTimeout)
+	dlg.AddItem(lblMaxVisible)
+	dlg.AddItem(editMaxVisible)
+	dlg.AddItem(chkPerCategory)
+	dlg.AddItem(lblNote)
+	dlg.AddItem(btnOk)
+	dlg.AddItem(btnCancel)
+
+	// 3. Layout Configuration
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, width-4, height-4)
+	vbox.Add(chkFullPath, vtui.Margins{}, vtui.AlignLeft)
+
+	rowSource := vtui.NewHBoxLayout(0, 0, width-4, 1)
+	rowSource.Add(lblSource, vtui.Margins{Right: 1}, vtui.AlignLeft)
+	rowSource.Add(comboSource, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(rowSource, vtui.Margins{Top: 1}, vtui.AlignFill)
+
+	rowTimeout := vtui.NewHBoxLayout(0, 0, width-4, 1)
+	rowTimeout.Add(lblTimeout, vtui.Margins{Right: 1}, vtui.AlignLeft)
+	rowTimeout.Add(editTimeout, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(rowTimeout, vtui.Margins{}, vtui.AlignFill)
+
+	rowMaxVisible := vtui.NewHBoxLayout(0, 0, width-4, 1)
+	rowMaxVisible.Add(lblMaxVisible, vtui.Margins{Right: 1}, vtui.AlignLeft)
+	rowMaxVisible.Add(editMaxVisible, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(rowMaxVisible, vtui.Margins{}, vtui.AlignFill)
+
+	vbox.Add(chkPerCategory, vtui.Margins{}, vtui.AlignLeft)
+
+	vbox.Add(lblNote, vtui.Margins{Top: 1}, vtui.AlignLeft)
+
+	hbox := vtui.NewHBoxLayout(0, 0, width-4, 1)
+	hbox.HorizontalAlign = vtui.AlignCenter
+	hbox.Spacing = 2
+	hbox.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
+	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
+	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Apply()
+
+	// 4. Logic
+	btnCancel.OnClick = func() { dlg.Close() }
+	btnOk.OnClick = func() {
+		AppConfig.PathHintFullPath = chkFullPath.State == 1
+		AppConfig.PathHintSource = comboSource.Menu.SelectPos
+		timeout := 2
+		fmt.Sscanf(editTimeout.GetText(), "%d", &timeout)
+		if timeout < 1 {
+			timeout = 1
+		}
+		AppConfig.PathHintTimeout = timeout
+		maxVisible := 5
+		fmt.Sscanf(editMaxVisible.GetText(), "%d", &maxVisible)
+		if maxVisible < 1 {
+			maxVisible = 1
+		}
+		AppConfig.PathHintMaxVisible = maxVisible
+		AppConfig.PathHintPerCategory = chkPerCategory.State == 1
+		applyPathHintSettings()
+		SaveConfig()
+		dlg.Close()
+	}
+
+	vtui.FrameManager.Push(dlg)
+}
 func actionUpdateSettings(pf *PanelsFrame) {
 	width, height := 54, 11
 	dlg := vtui.NewCenteredDialog(width, height, Msg("UpdateSettings.Title"))
@@ -3086,6 +3320,7 @@ func showPluginFileDialog(parent *vtui.Window, startPath string, onSelect func(s
 
 	lbl := vtui.NewLabel(0, 0, Msg("Plugins.SelectFilePrompt"), nil)
 	edit := vtui.NewEdit(0, 0, w-4, startPath)
+	edit.PathHintsEnabled = true
 	lb := vtui.NewListBox(0, 0, w-4, h-10, nil)
 
 	btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))

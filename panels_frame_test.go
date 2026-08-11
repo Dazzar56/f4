@@ -5259,3 +5259,51 @@ func TestPanelsFrame_ProcessMouse_HoverWheel_Detailed_Boundaries(t *testing.T) {
 		t.Errorf("Expected cursor to remain at the last item %d, got %d", lastIdx, lp.GetCursorIndex())
 	}
 }
+
+func TestFilePanel_WheelScrollSpeed(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	oldCfg := AppConfig
+	defer func() { AppConfig = oldCfg }()
+	AppConfig.WheelPanelUp = 2
+	AppConfig.WheelPanelDown = 3
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	p := pf.panels[0].(*FileSystemPanel)
+	if p.cancelLoad != nil {
+		p.cancelLoad()
+	}
+	p.isLoading = false
+
+	for i := 0; i < 10; i++ {
+		p.entries = append(p.entries, &fileEntry{VFSItem: vfs.VFSItem{Name: fmt.Sprintf("f%d", i)}})
+	}
+	p.Refresh()
+	p.SetCursorIndex(0)
+
+	x1, y1, _, _ := p.GetPosition()
+	wheel := func(dir int) {
+		ev := &vtinput.InputEvent{
+			Type:           vtinput.MouseEventType,
+			MouseX:         int16(x1 + 2),
+			MouseY:         int16(y1 + 2),
+			WheelDirection: dir,
+		}
+		if !p.ProcessMouse(ev) {
+			t.Fatal("Mouse wheel event was not handled")
+		}
+	}
+
+	wheel(-1) // down: 3 lines
+	if got := p.GetCursorIndex(); got != 3 {
+		t.Errorf("Expected cursor at 3 after wheel down, got %d", got)
+	}
+	wheel(1) // up: 2 lines
+	if got := p.GetCursorIndex(); got != 1 {
+		t.Errorf("Expected cursor at 1 after wheel up, got %d", got)
+	}
+}

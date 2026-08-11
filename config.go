@@ -151,31 +151,49 @@ type F4Config struct {
 	EditorDefaultCodePage    int
 	ViewerAutodetectCodePage bool
 	ViewerDefaultCodePage    int
-	SlideShowDelay           int
-	ImageExternalTimeout     int
-	ImageDecoderPriority     string
-	RegisteredPlugins        []string
-	ConfirmCopy              bool
-	ConfirmMove              bool
-	ConfirmDelete            bool
-	UseTrash                 bool
-	ConfirmExit              bool
-	DeleteCancelFocused      bool
-	DefaultFileOpMode        int
-	FileOpPathDisplay        int
-	MacroRecordFormat        int
-	GuiFont                  string
-	GuiUseSystemMonospace    bool
-	GuiFontSize              int
-	GuiCols                  int
-	GuiRows                  int
-	ConsoleTitleTemplate     string
-	UpdateChannel            int // 0 = Stable, 1 = Nightly
-	UpdateInterval           int // 0 = Never, 1 = Every start, 2 = Daily, 3 = Weekly
-	EnforceColorCorrection   bool
-	HighlightPriority        int    // 0 = User wins, 1 = Theme wins
-	LastUpdateCheck          int64  // Unix timestamp
-	LastUpdateVersion        string // Version string or PublishedAt timestamp
+	// Wheel scroll speed (lines per notch) per area and direction.
+	// 0 = follow the system setting.
+	WheelPanelUp    int
+	WheelPanelDown  int
+	WheelEditorUp   int
+	WheelEditorDown int
+	WheelViewerUp   int
+	WheelViewerDown int
+	WheelMenuUp     int
+	WheelMenuDown   int
+	WheelTableUp    int
+	WheelTableDown  int
+	// Path hints (autocomplete in path inputs and the command line).
+	PathHintTimeout        int  // seconds for a VFS ReadDir behind a hint
+	PathHintFullPath       bool // show full paths in the hint, false = final element only
+	PathHintSource         int  // 0 = active panel, 1 = passive panel, 2 = both
+	PathHintMaxVisible     int  // visible rows cap in the hint list
+	PathHintPerCategory    bool // the cap applies per category (active/passive/history)
+	SlideShowDelay         int
+	ImageExternalTimeout   int
+	ImageDecoderPriority   string
+	RegisteredPlugins      []string
+	ConfirmCopy            bool
+	ConfirmMove            bool
+	ConfirmDelete          bool
+	UseTrash               bool
+	ConfirmExit            bool
+	DeleteCancelFocused    bool
+	DefaultFileOpMode      int
+	FileOpPathDisplay      int
+	MacroRecordFormat      int
+	GuiFont                string
+	GuiUseSystemMonospace  bool
+	GuiFontSize            int
+	GuiCols                int
+	GuiRows                int
+	ConsoleTitleTemplate   string
+	UpdateChannel          int // 0 = Stable, 1 = Nightly
+	UpdateInterval         int // 0 = Never, 1 = Every start, 2 = Daily, 3 = Weekly
+	EnforceColorCorrection bool
+	HighlightPriority      int    // 0 = User wins, 1 = Theme wins
+	LastUpdateCheck        int64  // Unix timestamp
+	LastUpdateVersion      string // Version string or PublishedAt timestamp
 
 	// [Layout] mirrors far2l's config.ini section of the same name so
 	// a config shared with far2l keeps working in both. Adjusted by
@@ -240,6 +258,21 @@ var AppConfig = F4Config{
 	EditorDefaultCodePage:    65001,
 	ViewerAutodetectCodePage: true,
 	ViewerDefaultCodePage:    65001,
+	WheelPanelUp:             0,
+	WheelPanelDown:           0,
+	WheelEditorUp:            0,
+	WheelEditorDown:          0,
+	WheelViewerUp:            0,
+	WheelViewerDown:          0,
+	WheelMenuUp:              0,
+	WheelMenuDown:            0,
+	WheelTableUp:             0,
+	WheelTableDown:           0,
+	PathHintTimeout:          2,
+	PathHintFullPath:         false,
+	PathHintSource:           2,
+	PathHintMaxVisible:       5,
+	PathHintPerCategory:      true,
 	SlideShowDelay:           defaultSlideShowDelay,
 	ImageExternalTimeout:     defaultImageExternalTimeout,
 	ImageDecoderPriority:     "",
@@ -427,6 +460,33 @@ func LoadConfig() {
 	fmt.Sscanf(ini.GetString("Editor", "DefaultCodePage", "65001"), "%d", &AppConfig.EditorDefaultCodePage)
 	AppConfig.ViewerAutodetectCodePage = ini.GetString("Viewer", "AutodetectCodePage", "1") == "1"
 	fmt.Sscanf(ini.GetString("Viewer", "DefaultCodePage", "65001"), "%d", &AppConfig.ViewerDefaultCodePage)
+
+	// [Mouse] — wheel scroll speed (lines per notch), 0 = system default.
+	AppConfig.WheelPanelUp = loadWheelLines(ini, "PanelUp")
+	AppConfig.WheelPanelDown = loadWheelLines(ini, "PanelDown")
+	AppConfig.WheelEditorUp = loadWheelLines(ini, "EditorUp")
+	AppConfig.WheelEditorDown = loadWheelLines(ini, "EditorDown")
+	AppConfig.WheelViewerUp = loadWheelLines(ini, "ViewerUp")
+	AppConfig.WheelViewerDown = loadWheelLines(ini, "ViewerDown")
+	AppConfig.WheelMenuUp = loadWheelLines(ini, "MenuUp")
+	AppConfig.WheelMenuDown = loadWheelLines(ini, "MenuDown")
+	AppConfig.WheelTableUp = loadWheelLines(ini, "TableUp")
+	AppConfig.WheelTableDown = loadWheelLines(ini, "TableDown")
+
+	// [PathHints]
+	AppConfig.PathHintTimeout = 2
+	fmt.Sscanf(ini.GetString("PathHints", "Timeout", "2"), "%d", &AppConfig.PathHintTimeout)
+	if AppConfig.PathHintTimeout < 1 {
+		AppConfig.PathHintTimeout = 1
+	}
+	AppConfig.PathHintFullPath = ini.GetString("PathHints", "FullPath", "0") == "1"
+	fmt.Sscanf(ini.GetString("PathHints", "Source", "2"), "%d", &AppConfig.PathHintSource)
+	AppConfig.PathHintMaxVisible = 5
+	fmt.Sscanf(ini.GetString("PathHints", "MaxVisible", "5"), "%d", &AppConfig.PathHintMaxVisible)
+	if AppConfig.PathHintMaxVisible < 1 {
+		AppConfig.PathHintMaxVisible = 1
+	}
+	AppConfig.PathHintPerCategory = ini.GetString("PathHints", "PerCategory", "1") == "1"
 	AppConfig.SlideShowDelay = defaultSlideShowDelay
 	fmt.Sscanf(ini.GetString("Images", "SlideShowDelay", "5"), "%d", &AppConfig.SlideShowDelay)
 	if AppConfig.SlideShowDelay <= 0 {
@@ -567,6 +627,23 @@ func SaveConfig() {
 	sb.WriteString("\n[Viewer]\n")
 	sb.WriteString(fmt.Sprintf("AutodetectCodePage = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.ViewerAutodetectCodePage]))
 	sb.WriteString(fmt.Sprintf("DefaultCodePage = %d\n", AppConfig.ViewerDefaultCodePage))
+	sb.WriteString("\n[Mouse]\n")
+	sb.WriteString(fmt.Sprintf("PanelUp = %d\n", AppConfig.WheelPanelUp))
+	sb.WriteString(fmt.Sprintf("PanelDown = %d\n", AppConfig.WheelPanelDown))
+	sb.WriteString(fmt.Sprintf("EditorUp = %d\n", AppConfig.WheelEditorUp))
+	sb.WriteString(fmt.Sprintf("EditorDown = %d\n", AppConfig.WheelEditorDown))
+	sb.WriteString(fmt.Sprintf("ViewerUp = %d\n", AppConfig.WheelViewerUp))
+	sb.WriteString(fmt.Sprintf("ViewerDown = %d\n", AppConfig.WheelViewerDown))
+	sb.WriteString(fmt.Sprintf("MenuUp = %d\n", AppConfig.WheelMenuUp))
+	sb.WriteString(fmt.Sprintf("MenuDown = %d\n", AppConfig.WheelMenuDown))
+	sb.WriteString(fmt.Sprintf("TableUp = %d\n", AppConfig.WheelTableUp))
+	sb.WriteString(fmt.Sprintf("TableDown = %d\n", AppConfig.WheelTableDown))
+	sb.WriteString("\n[PathHints]\n")
+	sb.WriteString(fmt.Sprintf("Timeout = %d\n", AppConfig.PathHintTimeout))
+	sb.WriteString(fmt.Sprintf("FullPath = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.PathHintFullPath]))
+	sb.WriteString(fmt.Sprintf("Source = %d\n", AppConfig.PathHintSource))
+	sb.WriteString(fmt.Sprintf("MaxVisible = %d\n", AppConfig.PathHintMaxVisible))
+	sb.WriteString(fmt.Sprintf("PerCategory = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.PathHintPerCategory]))
 	sb.WriteString("\n[Images]\n")
 	sb.WriteString(fmt.Sprintf("SlideShowDelay = %d\n", AppConfig.SlideShowDelay))
 	sb.WriteString(fmt.Sprintf("ExternalTimeout = %d\n", AppConfig.ImageExternalTimeout))
@@ -627,6 +704,33 @@ var (
 )
 
 const saveConfigDebounce = 500 * time.Millisecond
+
+// loadWheelLines reads a [Mouse] wheel-speed key: lines per notch,
+// 0 = system default. Negative values are treated as 0.
+func loadWheelLines(ini *IniFile, key string) int {
+	n := 0
+	fmt.Sscanf(ini.GetString("Mouse", key, "0"), "%d", &n)
+	if n < 0 {
+		n = 0
+	}
+	return n
+}
+
+// wheelScrollLines resolves a configured wheel speed (0 = follow the system
+// setting) into the number of lines to scroll per wheel notch.
+func wheelScrollLines(cfg int) int {
+	if cfg <= 0 {
+		return vtui.WheelLinesPerNotch()
+	}
+	return cfg
+}
+
+// applyWheelSettings pushes the menu/table wheel speed overrides into vtui.
+// Panels, editor and viewer are handled by f4 itself via wheelScrollLines.
+func applyWheelSettings() {
+	vtui.SetWheelAreaLines(vtui.WheelAreaMenu, AppConfig.WheelMenuUp, AppConfig.WheelMenuDown)
+	vtui.SetWheelAreaLines(vtui.WheelAreaList, AppConfig.WheelTableUp, AppConfig.WheelTableDown)
+}
 
 func createDefaultHighlightIni(path string) {
 	content := `# User highlight rules.

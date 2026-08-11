@@ -338,6 +338,9 @@ func SetupUI() {
 
 	SetDefaultF4Palette()
 	LoadConfig()
+	applyWheelSettings()
+	vtui.PathHintProvider = pathHintProvider
+	applyPathHintSettings()
 	ctrlTabMode := vtui.WorkspaceCtrlTabDirect
 	if AppConfig.CtrlTabShowsMenu {
 		ctrlTabMode = vtui.WorkspaceCtrlTabMenu

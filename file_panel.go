@@ -401,6 +401,8 @@ type FileSystemPanel struct {
 	suppressFolderHistoryPath string // one-shot: history/menu navigation must not reorder MRU
 	fastFindMode              bool
 	fastFindStr               string
+	fastFindMatcherKey        string
+	fastFindMatchers          []*vtui.FuzzyMatcher
 	showInactiveCursor        bool
 
 	sortMode    SortMode
@@ -2304,20 +2306,35 @@ func (fp *FileSystemPanel) fastFindMatch(name string) (startRunes, matchedRunes 
 	if queryText == "" {
 		return 0, 0, anywhere
 	}
-	nameLower := strings.ToLower(name)
-	for _, query := range []string{
-		strings.ToLower(queryText),
-		strings.ToLower(vtui.GlobalXlator.TranscodeString(queryText)),
-	} {
-		if query == "" {
-			continue
-		}
-		byteOffset := strings.Index(nameLower, query)
-		if byteOffset >= 0 && (anywhere || byteOffset == 0) {
-			return len([]rune(nameLower[:byteOffset])), len([]rune(query)), true
+	// Matchers are cached per query text: the needle tables are built once
+	// per keystroke, not once per visible row per redraw.
+	if fp.fastFindMatcherKey != queryText {
+		fp.fastFindMatcherKey = queryText
+		fp.fastFindMatchers = fp.fastFindMatchers[:0]
+		for _, query := range []string{
+			queryText,
+			vtui.GlobalXlator.TranscodeString(queryText),
+		} {
+			if m := vtui.NewFuzzyMatcher(query, false); m != nil {
+				fp.fastFindMatchers = append(fp.fastFindMatchers, m)
+			}
 		}
 	}
-	return 0, 0, false
+	bestScore := -1
+	bestStart, bestEnd := 0, -1
+	for _, m := range fp.fastFindMatchers {
+		score, start, end, found := m.Match(name)
+		if !found || (!anywhere && start != 0) {
+			continue
+		}
+		if bestScore < 0 || score < bestScore || (score == bestScore && start < bestStart) {
+			bestScore, bestStart, bestEnd = score, start, end
+		}
+	}
+	if bestScore < 0 {
+		return 0, 0, false
+	}
+	return bestStart, bestEnd - bestStart + 1, true
 }
 
 func (fp *FileSystemPanel) fastFindHasMatches() bool {
@@ -2867,9 +2884,12 @@ func (fp *FileSystemPanel) ProcessMouse(e *vtinput.InputEvent) bool {
 	if e.WheelDirection != 0 {
 		// Determine direction: up is -1, down is 1
 		direction := 1
+		speed := AppConfig.WheelPanelDown
 		if e.WheelDirection > 0 {
 			direction = -1
+			speed = AppConfig.WheelPanelUp
 		}
+		step := direction * wheelScrollLines(speed)
 
 		H := fp.table.ViewHeight
 		if H <= 0 {
@@ -2879,7 +2899,7 @@ func (fp *FileSystemPanel) ProcessMouse(e *vtinput.InputEvent) bool {
 		if fp.gridColumnCount() == 1 {
 			// Detailed view (1-column)
 			idx := fp.GetCursorIndex()
-			newIdx := idx + direction
+			newIdx := idx + step
 			if newIdx < 0 {
 				newIdx = 0
 			}
@@ -2888,7 +2908,7 @@ func (fp *FileSystemPanel) ProcessMouse(e *vtinput.InputEvent) bool {
 			}
 
 			// Scroll the list if possible, keeping the cursor visually stable
-			newTop := fp.table.TopPos + direction
+			newTop := fp.table.TopPos + step
 			maxTop := len(fp.entries) - H
 			if maxTop < 0 {
 				maxTop = 0
@@ -2907,7 +2927,7 @@ func (fp *FileSystemPanel) ProcessMouse(e *vtinput.InputEvent) bool {
 		} else {
 			// Medium/Brief grid view.
 			idx := fp.GetCursorIndex()
-			newIdx := idx + direction
+			newIdx := idx + step
 			if newIdx < 0 {
 				newIdx = 0
 			}
@@ -2916,7 +2936,7 @@ func (fp *FileSystemPanel) ProcessMouse(e *vtinput.InputEvent) bool {
 			}
 
 			// Scroll the list if possible, keeping the cursor visually stable
-			newTop := fp.table.TopPos + direction
+			newTop := fp.table.TopPos + step
 			maxTop := len(fp.entries) - fp.gridColumnCount()*H
 			if maxTop < 0 {
 				maxTop = 0
