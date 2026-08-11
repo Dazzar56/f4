@@ -969,6 +969,14 @@ Replace.Title= Замена
 Replace.Prompt=Заменить на:
 Replace.BtnReplace=&Заменить
 Replace.BtnReplaceAll=Заменить &все
+Replace.ConfirmTitle= Замена
+Replace.AskReplace=Заменить это вхождение
+Replace.AskWith=на
+Replace.BtnAll=&Все
+Replace.BtnSkip=&Пропустить
+Replace.Replaced=Заменено вхождений: %d
+Search.Title= Поиск
+Search.NotFound=Строка поиска не найдена.
 Codepage.Title= Кодировки
 Codepage.ConvertTitle= Конвертировать кодировку
 
