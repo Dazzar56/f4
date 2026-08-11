@@ -1,6 +1,6 @@
 @Contents
 $f4 Help Index (Version: %Ver)
-f4 is an experimental Far Manager / far2l clone in Go.
+f4 — efficient and cozy file manager in go
 
 ~Viewer / Editor keys~ViewerEditor@
 ~Panel navigation~PanelNav@
