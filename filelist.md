@@ -119,6 +119,7 @@
     ├── cpu_info_linux.go
     ├── cpu_info_other.go
     ├── cpu_info_windows.go
+    ├── debug.log
     ├── delete_trash_test.go
     ├── detach_unix.go
     ├── detach_windows.go
@@ -856,4 +857,4 @@
     ├── workspace_session.go
     └── workspace_session_test.go
     
-    54 directories, 801 files
+    54 directories, 802 files
