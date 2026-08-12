@@ -16,17 +16,6 @@ func restoreBars(t *testing.T) {
 	t.Cleanup(func() { vtui.FrameManager.HideBars = was })
 }
 
-// screenRow reads a stretch of one row back out of the screen.
-func screenRow(scr *vtui.ScreenBuf, y, x1, x2 int) string {
-	var b strings.Builder
-	for x := x1; x <= x2; x++ {
-		if r := rune(scr.GetCell(x, y).Char); r != 0 {
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
-}
-
 func TestImageViewFullScreenIsAToggle(t *testing.T) {
 	restoreBars(t)
 	scr := newImageTestScreen(t)

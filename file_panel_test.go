@@ -4489,17 +4489,6 @@ NormalColor = foreground:#00FF00
 		t.Errorf("Marker integration in GetCellText failed: got %q, want %q", text, expectedText)
 	}
 }
-func screenRow(scr *vtui.ScreenBuf, y, x1, x2 int) string {
-	runes := make([]rune, x2-x1+1)
-	for i := range runes {
-		cell := scr.GetCell(x1+i, y)
-		runes[i] = rune(cell.Char)
-		if runes[i] == 0 {
-			runes[i] = ' '
-		}
-	}
-	return string(runes)
-}
 
 func TestFileSystemPanel_BottomFrameShowsCursorEntry(t *testing.T) {
 	vtui.SetDefaultPalette()
