@@ -3238,11 +3238,11 @@ func TestPanelsFrame_CopyShortcuts(t *testing.T) {
 		t.Fatalf("Ctrl+Ins failed: expected 'target.txt', got %q", got)
 	}
 
-	// 2. Test Ctrl+F (Full Path)
+	// 2. Test Ctrl+D (copy full path)
 	vtui.SetClipboard("")
 	pressKey(pf, &vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
-		VirtualKeyCode: 'F', ControlKeyState: vtinput.LeftCtrlPressed,
+		VirtualKeyCode: 'D', ControlKeyState: vtinput.LeftCtrlPressed,
 	})
 	expectedPath := fsp.vfs.Join(fsp.vfs.GetPath(), "target.txt")
 
@@ -3253,7 +3253,21 @@ func TestPanelsFrame_CopyShortcuts(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	if got := vtui.GetClipboard(); got != expectedPath {
-		t.Fatalf("Ctrl+F failed: expected %q, got %q", expectedPath, got)
+		t.Fatalf("Ctrl+D failed: expected %q, got %q", expectedPath, got)
+	}
+
+	// 3. Test Ctrl+F (insert full path into the command line)
+	pf.cmdLine.Edit.SetText("")
+	pressKey(pf, &vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: 'F', ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+	expectedCommand := expectedPath
+	if runtime.GOOS == "windows" {
+		expectedCommand = `"` + expectedPath + `"`
+	}
+	if got := pf.cmdLine.Edit.GetText(); got != expectedCommand {
+		t.Fatalf("Ctrl+F failed: expected command line %q, got %q", expectedCommand, got)
 	}
 }
 func TestLayout_F4ActionDialogs_Validity(t *testing.T) {
