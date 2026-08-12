@@ -1262,6 +1262,21 @@ func (pf *PanelsFrame) InterceptPluginKey(e *vtinput.InputEvent) bool {
 	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
 
+	// Arkanoid easter egg: Ctrl+Alt+A
+	if e.VirtualKeyCode == 'A' && alt && ctrl {
+		for i, s := range vtui.FrameManager.Screens {
+			for _, f := range s.Frames {
+				if f.GetTitle() == "Arkanoid" {
+					vtui.FrameManager.SwitchScreen(i)
+					return true
+				}
+			}
+		}
+		// Запускаем без десктопа, чтобы воркспейс был прозрачным
+		vtui.FrameManager.AddScreenHeadless(NewArkanoidFrame())
+		return true
+	}
+
 	// Check global hotkeys (ignoring Lock and Enhanced keys)
 	for _, hk := range globalHotkeysSnapshot() {
 		hkCtrl := (hk.Mods & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
@@ -1414,21 +1429,6 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				return fsp.ProcessKey(e)
 			}
 		}
-	}
-
-	// Arkanoid easter egg: Ctrl+Alt+A
-	if e.VirtualKeyCode == 'A' && alt && ctrl && e.KeyDown {
-		for i, s := range vtui.FrameManager.Screens {
-			for _, f := range s.Frames {
-				if f.GetTitle() == "Arkanoid" {
-					vtui.FrameManager.SwitchScreen(i)
-					return true
-				}
-			}
-		}
-		// Запускаем без десктопа, чтобы воркспейс был прозрачным
-		vtui.FrameManager.AddScreenHeadless(NewArkanoidFrame())
-		return true
 	}
 	// Crash test hotkey: Ctrl+Alt+C
 	if e.VirtualKeyCode == vtinput.VK_C && alt && ctrl && e.KeyDown {

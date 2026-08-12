@@ -1056,6 +1056,7 @@ Op.DummyBackground=Background panel clone
 Op.DummyForeground=Foreground lock
 Op.BtnStart=&Start
 Drive.Title= Drive
+Mounts.Title= Mounts
 
 NetFox.ConnectionTitle= Site Connection
 NetFox.PassiveMode=Passive mode

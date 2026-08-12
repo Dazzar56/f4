@@ -88,11 +88,11 @@ func mountRows() []mountRow {
 func showMountList(pf *PanelsFrame) {
 	rows := mountRows()
 	if len(rows) == 0 {
-		vtui.ShowMessage(" Mounts ", "Nothing is mounted.", []string{"&Ok"})
+		vtui.ShowMessage(Msg("Mounts.Title"), "Nothing is mounted.", []string{"&Ok"})
 		return
 	}
 
-	menu := vtui.NewVMenu(" Mounts ")
+	menu := vtui.NewVMenu(Msg("Mounts.Title"))
 	if live := liveRows(rows); len(live) > 1 {
 		menu.AddItem(vtui.MenuItem{
 			Text:     fmt.Sprintf("Unmount all (%d)", len(live)),
@@ -192,7 +192,7 @@ func unmountAll(rows []mountRow) {
 		}
 	}
 	if len(failed) > 0 {
-		vtui.ShowMessage(" Mounts ", "Still mounted:\n"+strings.Join(failed, "\n"), []string{"&Ok"})
+		vtui.ShowMessage(Msg("Mounts.Title"), "Still mounted:\n"+strings.Join(failed, "\n"), []string{"&Ok"})
 	}
 }
 
