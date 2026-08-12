@@ -44,7 +44,7 @@ type bridge struct {
 	readOnly bool
 	// writeOK is what the backend says about itself, kept next to readOnly
 	// so the two reasons a write can be refused stay distinguishable.
-	writeOK bool
+	writeOK  bool
 	cacheTTL time.Duration
 	cacheMu  sync.Mutex
 	dirCache map[string]dirCacheEntry
