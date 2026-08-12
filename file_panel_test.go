@@ -738,6 +738,80 @@ func TestFileSystemPanel_SelectedInfo(t *testing.T) {
 	}
 }
 
+func TestFileSystemPanel_HiddenInfoShowsCursorFileSizeOnMulticolumnBorder(t *testing.T) {
+	oldCfg := AppConfig
+	oldColor := vtui.Palette[ColPanelTotalInfo]
+	defer func() {
+		AppConfig = oldCfg
+		vtui.Palette[ColPanelTotalInfo] = oldColor
+	}()
+	AppConfig.ShowPanelFileInfo = false
+
+	vtui.SetDefaultPalette()
+	SetDefaultF4Palette()
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 12)
+	vtui.FrameManager.Init(scr)
+
+	fp := NewFileSystemPanel(0, 0, 80, 12, vfs.NewOSVFS(t.TempDir()))
+	if fp.cancelLoad != nil {
+		fp.cancelLoad()
+	}
+	fp.isLoading = false
+	if fp.loadingTimer != nil {
+		fp.loadingTimer.Stop()
+	}
+	fp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "file.bin", Size: 1234567}},
+		{VFSItem: vfs.VFSItem{Name: "other.bin", Size: 10}},
+	}
+	fp.SetViewMode(ViewModeMedium)
+	fp.SetCursorIndex(0)
+	rowText := func(x, y, width int) string {
+		runes := make([]rune, width)
+		for i := range runes {
+			cell := scr.GetCell(x+i, y)
+			runes[i] = rune(cell.Char)
+			if runes[i] == 0 {
+				runes[i] = ' '
+			}
+		}
+		return string(runes)
+	}
+
+	const themedAttr uint64 = 0x123456789ABCDEF0
+	vtui.Palette[ColPanelTotalInfo] = themedAttr
+	fp.Show(scr)
+
+	if got := rowText(1, fp.Y2, 13); got != " 1 234 567 B " {
+		t.Fatalf("medium bottom-left cursor size = %q, want %q", got, " 1 234 567 B ")
+	}
+	if got := scr.GetCell(2, fp.Y2).Attributes; got != themedAttr {
+		t.Fatalf("cursor size color = %#x, want current themed Panel.TotalInfo %#x", got, themedAttr)
+	}
+
+	// Brief is the other multicolumn mode and must expose the same compact
+	// status, while Detailed already has a visible Size column and must not.
+	fp.SetViewMode(ViewModeBrief)
+	fp.Show(scr)
+	if got := rowText(1, fp.Y2, 13); got != " 1 234 567 B " {
+		t.Fatalf("brief bottom-left cursor size = %q, want %q", got, " 1 234 567 B ")
+	}
+
+	fp.SetViewMode(ViewModeDetailed)
+	fp.Show(scr)
+	if got := rowText(1, fp.Y2, 13); strings.Contains(got, "1 234 567") {
+		t.Fatalf("detailed mode unexpectedly duplicated cursor size on bottom border: %q", got)
+	}
+
+	fp.SetViewMode(ViewModeMedium)
+	AppConfig.ShowPanelFileInfo = true
+	fp.Show(scr)
+	if got := rowText(1, fp.Y2, 13); strings.Contains(got, "1 234 567") {
+		t.Fatalf("visible file-info row unexpectedly duplicated cursor size on bottom border: %q", got)
+	}
+}
+
 func TestFileSystemPanel_Initialization(t *testing.T) {
 	oldCfg := AppConfig
 	defer func() { AppConfig = oldCfg }()

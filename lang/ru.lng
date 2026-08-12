@@ -581,6 +581,11 @@ AppearanceSettings.CtrlTab=Поведение &Ctrl+Tab:
 AppearanceSettings.CtrlTabDirect=Переключать сразу
 AppearanceSettings.CtrlTabMenu=Показывать меню Screens
 AppearanceSettings.AltNumberTabs=Alt+&цифра переключает вкладку пространства
+AppearanceSettings.RestoreWorkspaceTabs=&Восстанавливать открытые вкладки при запуске
+AppearanceSettings.WorkspaceNumbers=&Нумерация вкладок:
+AppearanceSettings.WorkspaceNumbersAlways=Всегда сохранять номера
+AppearanceSettings.WorkspaceNumbersSession=Сохранять в текущей сессии
+AppearanceSettings.WorkspaceNumbersOrder=Следовать текущему порядку вкладок
 AppearanceSettings.ExportBtn=&Экспорт цветовой схемы
 AppearanceSettings.ColorCorrection=Корректировать &контрастность цветов
 

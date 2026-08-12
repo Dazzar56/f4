@@ -3072,9 +3072,7 @@ func actionImportFar2lHistory(pf *PanelsFrame) {
 }
 
 func actionAppearanceSettings(pf *PanelsFrame) {
-	// One row shaved by dropping the blank between the two trailing
-	// checkboxes (see #298).
-	const width, height = 64, 26
+	const width, height = 64, 28
 	dlg := vtui.NewCenteredDialog(width, height, Msg("AppearanceSettings.Title"))
 	dlg.ShowClose = true
 	// Snapshot the whole palette (not just the style name) so a
@@ -3166,6 +3164,24 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 	if AppConfig.AltNumberSwitchesTabs {
 		chkAltNumberTabs.State = 1
 	}
+	chkRestoreWorkspaceTabs := vtui.NewCheckbox(0, 0, Msg("AppearanceSettings.RestoreWorkspaceTabs"), AppConfig.RestoreWorkspaceTabs)
+	if AppConfig.RestoreWorkspaceTabs {
+		chkRestoreWorkspaceTabs.State = 1
+	}
+	workspaceNumberingModes := []string{
+		Msg("AppearanceSettings.WorkspaceNumbersAlways"),
+		Msg("AppearanceSettings.WorkspaceNumbersSession"),
+		Msg("AppearanceSettings.WorkspaceNumbersOrder"),
+	}
+	comboWorkspaceNumbering := vtui.NewComboBox(0, 0, 30, workspaceNumberingModes)
+	comboWorkspaceNumbering.DropdownOnly = true
+	workspaceNumberingSelection := int(AppConfig.WorkspaceTabNumbering)
+	if workspaceNumberingSelection < 0 || workspaceNumberingSelection >= len(workspaceNumberingModes) {
+		workspaceNumberingSelection = int(WorkspaceTabNumbersAlways)
+	}
+	comboWorkspaceNumbering.Menu.SetSelectPos(workspaceNumberingSelection)
+	comboWorkspaceNumbering.Edit.SetText(workspaceNumberingModes[workspaceNumberingSelection])
+	lblWorkspaceNumbering := vtui.NewLabel(0, 0, Msg("AppearanceSettings.WorkspaceNumbers"), comboWorkspaceNumbering)
 
 	chkCursor := vtui.NewCheckbox(0, 0, Msg("PanelSettings.KeepCursor"), false)
 	chkCursor.State = 0
@@ -3198,6 +3214,9 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 	dlg.AddItem(lblCtrlTab)
 	dlg.AddItem(comboCtrlTab)
 	dlg.AddItem(chkAltNumberTabs)
+	dlg.AddItem(chkRestoreWorkspaceTabs)
+	dlg.AddItem(lblWorkspaceNumbering)
+	dlg.AddItem(comboWorkspaceNumbering)
 	dlg.AddItem(chkCursor)
 	dlg.AddItem(chkContrast)
 	dlg.AddItem(btnOk)
@@ -3232,6 +3251,11 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 	rowCtrlTab.Add(comboCtrlTab, vtui.Margins{}, vtui.AlignFill)
 	vbox.Add(rowCtrlTab, vtui.Margins{Top: 1}, vtui.AlignFill)
 	vbox.Add(chkAltNumberTabs, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	vbox.Add(chkRestoreWorkspaceTabs, vtui.Margins{}, vtui.AlignLeft)
+	rowWorkspaceNumbering := vtui.NewHBoxLayout(0, 0, width-4, 1)
+	rowWorkspaceNumbering.Add(lblWorkspaceNumbering, vtui.Margins{Right: 1}, vtui.AlignLeft)
+	rowWorkspaceNumbering.Add(comboWorkspaceNumbering, vtui.Margins{}, vtui.AlignFill)
+	vbox.Add(rowWorkspaceNumbering, vtui.Margins{Top: 1}, vtui.AlignFill)
 
 	vbox.Add(chkCursor, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkContrast, vtui.Margins{}, vtui.AlignLeft)
@@ -3277,6 +3301,11 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 		AppConfig.WorkspaceTabMode = comboWorkspaceTabs.Menu.SelectPos
 		AppConfig.CtrlTabShowsMenu = comboCtrlTab.Menu.SelectPos == 1
 		AppConfig.AltNumberSwitchesTabs = chkAltNumberTabs.State == 1
+		AppConfig.RestoreWorkspaceTabs = chkRestoreWorkspaceTabs.State == 1
+		AppConfig.WorkspaceTabNumbering = WorkspaceTabNumberingMode(comboWorkspaceNumbering.Menu.SelectPos)
+		if AppConfig.WorkspaceTabNumbering == WorkspaceTabNumbersOrder {
+			renumberWorkspaceScreens()
+		}
 		SaveConfig()
 
 		dlg.SetExitCode(1)

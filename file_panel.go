@@ -2117,6 +2117,21 @@ func (fp *FileSystemPanel) Refresh() {
 	}
 }
 
+func (fp *FileSystemPanel) cursorSizeOnBottomBorder() string {
+	if AppConfig.ShowPanelFileInfo || (fp.viewMode != ViewModeBrief && fp.viewMode != ViewModeMedium) {
+		return ""
+	}
+	idx := fp.GetCursorIndex()
+	if idx < 0 || idx >= len(fp.entries) {
+		return ""
+	}
+	entry := fp.entries[idx]
+	if entry == nil || entry.IsDir || entry.Name == ".." {
+		return ""
+	}
+	return " " + formatIntWithSpaces(entry.Size) + " B "
+}
+
 func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
 	fp.frame.Show(scr)
 	titleAttr := vtui.Palette[ColPanelTitle]
@@ -2239,12 +2254,25 @@ func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
 		attrTotal = vtui.Palette[ColPanelTotalInfo]
 	}
 
+	totalStart := fp.X2
 	if totalStr != "" {
 		totalW := runewidth.StringWidth(totalStr)
 		availBottom := fp.X2 - fp.X1 - 1
 		if totalW < availBottom {
+			totalStart = fp.X1 + 1 + (availBottom-totalW)/2
 			p := vtui.NewPainter(scr)
-			p.DrawString(fp.X1+1+(availBottom-totalW)/2, fp.Y2, totalStr, attrTotal)
+			p.DrawString(totalStart, fp.Y2, totalStr, attrTotal)
+		}
+	}
+
+	if cursorSize := fp.cursorSizeOnBottomBorder(); cursorSize != "" {
+		cursorSizeW := runewidth.StringWidth(cursorSize)
+		cursorSizeX := fp.X1 + 1
+		// Keep at least one frame cell between the cursor size and the centered
+		// selection/directory summary. On narrow panels the summary wins.
+		if cursorSizeX+cursorSizeW < totalStart {
+			p := vtui.NewPainter(scr)
+			p.DrawString(cursorSizeX, fp.Y2, cursorSize, vtui.Palette[ColPanelTotalInfo])
 		}
 	}
 
