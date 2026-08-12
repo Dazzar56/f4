@@ -32,22 +32,58 @@ func init() {
 	})
 }
 
+// mountRow is one line of the dialog: a mount this process owns, or a record
+// of one some other f4 owns.
+type mountRow struct {
+	point  string
+	source string
+	note   string
+	live   *fusefs.Mount // nil when the mount belongs to another process
+}
+
+// mountRows lists what is mounted right now: this process's mounts first,
+// then the registry records that describe everybody else's — a mount started
+// from a shell or by fstab is invisible otherwise.
+func mountRows() []mountRow {
+	var rows []mountRow
+	seen := make(map[string]bool)
+	for _, m := range fusefs.List() {
+		rows = append(rows, mountRow{point: m.MountPoint, source: m.Source, live: m})
+		seen[m.MountPoint] = true
+	}
+	recs, err := fusefs.Mounts()
+	if err != nil {
+		return rows
+	}
+	for _, r := range recs {
+		if seen[r.MountPoint] {
+			continue
+		}
+		rows = append(rows, mountRow{
+			point:  r.MountPoint,
+			source: r.Source,
+			note:   fmt.Sprintf(" (pid %d)", r.PID),
+		})
+	}
+	return rows
+}
+
 func showMountList(pf *PanelsFrame) {
-	mounts := fusefs.List()
-	if len(mounts) == 0 {
+	rows := mountRows()
+	if len(rows) == 0 {
 		vtui.ShowMessage(" Mounts ", "Nothing is mounted.", []string{"&Ok"})
 		return
 	}
 
 	menu := vtui.NewVMenu(" Mounts ")
-	for i, m := range mounts {
+	for i, r := range rows {
 		menu.AddItem(vtui.MenuItem{
-			Text:     fmt.Sprintf("%s  ←  %s", m.MountPoint, m.Source),
+			Text:     fmt.Sprintf("%s  \u2190  %s%s", r.point, r.source, r.note),
 			UserData: i,
 		})
 	}
 
-	w, h := 70, len(mounts)+2
+	w, h := 70, len(rows)+2
 	scrW := vtui.FrameManager.GetScreenSize()
 	scrH := vtui.FrameManager.GetScreenHeight()
 	if maxH := scrH - 2; h > maxH && maxH >= 5 {
@@ -71,29 +107,34 @@ func showMountList(pf *PanelsFrame) {
 			return
 		}
 		i, ok := menu.Items[idx].UserData.(int)
-		if !ok || i < 0 || i >= len(mounts) {
+		if !ok || i < 0 || i >= len(rows) {
 			return
 		}
-		askMountAction(pf, mounts[i])
+		askMountAction(pf, rows[i])
 	}
 	vtui.FrameManager.Push(menu)
 }
 
-// askMountAction offers the two things worth doing to a live mount. Unmount
-// does not force: a busy mount is a question for the user ("something is
-// still in there"), not an error to paper over.
-func askMountAction(pf *PanelsFrame, m *fusefs.Mount) {
-	point := m.MountPoint
-	dlg := vtui.ShowMessage(" Mount ", point, []string{"&Go to", "&Unmount", "&Cancel"})
+// askMountAction offers what can be done to the selected mount. Unmount does
+// not force: a busy mount is a question for the user ("something is still in
+// there"), not an error to paper over. A mount owned by another process can
+// only be visited from here — taking it down is what f4 --umount is for.
+func askMountAction(pf *PanelsFrame, row mountRow) {
+	buttons := []string{"&Go to", "&Unmount", "&Cancel"}
+	if row.live == nil {
+		buttons = []string{"&Go to", "&Cancel"}
+	}
+	dlg := vtui.ShowMessage(" Mount ", row.point, buttons)
 	dlg.OnResult = func(code int) {
-		switch code {
-		case 0:
+		if code == 0 {
 			if fsp := pf.getActivePanel(); fsp != nil {
-				pf.NavigateToPath(fsp, point)
+				pf.NavigateToPath(fsp, row.point)
 			}
-		case 1:
-			if err := m.Unmount(); err != nil {
-				vtui.ShowMessage(" Mount ", fmt.Sprintf("Cannot unmount %s:\n%v", point, err), []string{"&Ok"})
+			return
+		}
+		if code == 1 && row.live != nil {
+			if err := row.live.Unmount(); err != nil {
+				vtui.ShowMessage(" Mount ", fmt.Sprintf("Cannot unmount %s:\n%v", row.point, err), []string{"&Ok"})
 			}
 		}
 	}

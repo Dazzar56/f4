@@ -116,6 +116,10 @@ func MountVFS(ctx context.Context, v vfs.VFS, opts Options) (*Mount, error) {
 	if v == nil {
 		return nil, errors.New("mount: no file system given")
 	}
+	if !opts.ReadOnly && !v.GetCapabilities().HasWrite {
+		v.Close()
+		return nil, errors.New("mount: this file system cannot be written through")
+	}
 	point := strings.TrimSpace(opts.MountPoint)
 	if point == "" {
 		return nil, errors.New("mount: no mount point given")
