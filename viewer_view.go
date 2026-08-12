@@ -31,9 +31,13 @@ type ViewerView struct {
 	TopOffset int64 // Current byte offset of the first visible line
 
 	// For Text mode: offsets of lines currently on screen
-	lineOffsets   []int64
-	eofVisible    bool
-	lastKnownSize int64
+	lineOffsets         []int64
+	eofVisible          bool
+	lastKnownSize       int64
+	lastSearch          string
+	lastSearchOffset    int64
+	lastSearchTopOffset int64
+	lastSearchFound     bool
 
 	scrollBar *vtui.ScrollBar
 
@@ -993,12 +997,13 @@ func (vv *ViewerView) GetTitle() string {
 	return "Viewer"
 }
 
-// GetWorkspaceTabTitle provides a compact, icon-led title for the workspace
+// GetWorkspaceTabTitle provides a compact title for the workspace
 // tab bar while leaving GetTitle available for contexts that need the fuller
 // textual description.
 func (vv *ViewerView) GetWorkspaceTabTitle() string {
 	if vv.path != "" {
-		return "👁  " + filepath.Base(vv.path)
+		return filepath.Base(vv.path)
 	}
-	return "👁  Viewer"
+	return "Viewer"
 }
+func (vv *ViewerView) GetWorkspaceTabMarker() string { return "V" }
