@@ -97,6 +97,11 @@ func (c Config) Chat(ctx context.Context, msgs []Message) (string, Usage, error)
 		req.Tools = []any{
 			map[string]any{"google_search": map[string]any{}},
 			map[string]any{"url_context": map[string]any{}},
+			// err 400 invalid parameter
+			/*
+			map[string]any{"google_search": map[string]any{}},
+			map[string]any{"url_context": map[string]any{}},
+			*/
 		}
 	}
 	body, err = json.Marshal(req)
