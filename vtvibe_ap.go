@@ -177,15 +177,22 @@ func aiShowPatchResult(pf *PanelsFrame, root string, dry bool, exitCode int, out
 	}
 
 	output = strings.TrimSpace(output)
-	if len(output) > 1500 {
-		output = "..." + output[len(output)-1500:]
+	preview := output
+	if len(preview) > 500 {
+		preview = preview[:500] + "\n..."
 	}
+
 	body := head
-	if output != "" {
-		body += "\n\n" + output
+	if preview != "" {
+		body += "\n\n" + preview
 	}
 
 	buttons := []string{Msg("vtui.Ok")}
+	hasOutput := output != ""
+	if hasOutput {
+		buttons = append(buttons, Msg("AI.BtnViewLog"))
+	}
+
 	reportPath := filepath.Join(root, "afailed.md")
 	hasReport := false
 	if exitCode != 0 {
@@ -197,7 +204,29 @@ func aiShowPatchResult(pf *PanelsFrame, root string, dry bool, exitCode int, out
 
 	dlg := vtui.ShowMessage(Msg("AI.PatchTitle"), body, buttons)
 	dlg.OnResult = func(code int) {
-		if hasReport && code == 1 {
+		var viewLogIdx = -1
+		var attachReportIdx = -1
+
+		currIdx := 1
+		if hasOutput {
+			viewLogIdx = currIdx
+			currIdx++
+		}
+		if hasReport {
+			attachReportIdx = currIdx
+			currIdx++
+		}
+
+		if code == viewLogIdx {
+			dir, err := os.MkdirTemp("", "vtvibe-ap-log-")
+			if err == nil {
+				logPath := filepath.Join(dir, "ap_output.log")
+				if os.WriteFile(logPath, []byte(output), 0600) == nil {
+					tempVfs := vfs.NewOSVFS(dir)
+					actionOpenViewer(pf, tempVfs, "ap_output.log")
+				}
+			}
+		} else if code == attachReportIdx {
 			aiAttachFailureReport(reportPath)
 		}
 	}

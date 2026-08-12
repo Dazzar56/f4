@@ -1130,10 +1130,11 @@ AI.PatchRunning=Применение патча...
 AI.PatchDownloading=Скачивание патчера AP...
 AI.PatchBadDownload=Скачанный файл не похож на патчер AP.
 AI.NoPython=Не найден Python, необходимый для патчера AP. Установите python3 или задайте python= либо ap_patcher= в vtvibe.ini.
-AI.PatchOk=Патч успешно применён.
-AI.PatchDryOk=Холостой прогон завершён, ничего не записано.
-AI.PatchPartial=Некоторые модификации были пропущены. См. afailed.ap и afailed.md в целевой папке.
-AI.PatchFailed=Патч не был применён.
+AI.PatchOk=🟢 OK: Патч успешно применён.
+AI.PatchDryOk=🟢 OK: Холостой прогон завершён, ничего не записано.
+AI.PatchPartial=⚠️ ЧАСТИЧНО: Некоторые модификации были пропущены. См. afailed.ap и afailed.md в целевой папке.
+AI.PatchFailed=🔴 FAIL: Патч не был применён.
+AI.BtnViewLog=&Лог
 AI.BtnAttachReport=Прикрепить &отчёт
 AI.PatchReportAttached=afailed.md был прикреплён к диалогу
 AI.SpecDownloading=Скачивание спецификации AP...
