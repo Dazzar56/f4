@@ -235,7 +235,6 @@ func aiTogglePanel(pf *PanelsFrame) {
 	pf.switchToVFS(fsp, &aiVFSWrapper{vtvibe.NewVFS(aiSession())})
 
 	AiSetViewModePanel(pf, idx, "ai://chat", true)
-	pf.setWidePanel(idx)
 }
 
 func AiSetViewModePanel(pf *PanelsFrame, idx int, path string, isChat bool) {
@@ -385,7 +384,6 @@ func aiAskAction() bool {
 			aiPrevPath[idx] = fsp.vfs.GetPath()
 			vtvibeConfig()
 			aiPf.switchToVFS(fsp, &aiVFSWrapper{vtvibe.NewVFS(aiSession())})
-			aiPf.setWidePanel(idx)
 		}
 	}
 
@@ -414,7 +412,6 @@ func aiAskAction() bool {
 		}
 		if aiIdx != -1 {
 			aiPf.activeIdx = aiIdx
-			aiPf.setWidePanel(aiIdx)
 		}
 	}
 
