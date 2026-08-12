@@ -740,10 +740,10 @@ func TestFileSystemPanel_SelectedInfo(t *testing.T) {
 
 func TestFileSystemPanel_HiddenInfoShowsCursorFileSizeOnMulticolumnBorder(t *testing.T) {
 	oldCfg := AppConfig
-	oldColor := vtui.Palette[ColPanelTotalInfo]
+	oldColor := vtui.Palette[ColPanelText]
 	defer func() {
 		AppConfig = oldCfg
-		vtui.Palette[ColPanelTotalInfo] = oldColor
+		vtui.Palette[ColPanelText] = oldColor
 	}()
 	AppConfig.ShowPanelFileInfo = false
 
@@ -780,14 +780,14 @@ func TestFileSystemPanel_HiddenInfoShowsCursorFileSizeOnMulticolumnBorder(t *tes
 	}
 
 	const themedAttr uint64 = 0x123456789ABCDEF0
-	vtui.Palette[ColPanelTotalInfo] = themedAttr
+	vtui.Palette[ColPanelText] = themedAttr
 	fp.Show(scr)
 
 	if got := rowText(1, fp.Y2, 13); got != " ▸ 1 234 567 " {
 		t.Fatalf("medium bottom-left cursor size = %q, want %q", got, " ▸ 1 234 567 ")
 	}
 	if got := scr.GetCell(2, fp.Y2).Attributes; got != themedAttr {
-		t.Fatalf("cursor size color = %#x, want current themed Panel.TotalInfo %#x", got, themedAttr)
+		t.Fatalf("cursor size color = %#x, want current themed Panel.Text %#x", got, themedAttr)
 	}
 
 	// Brief is the other multicolumn mode and must expose the same compact
