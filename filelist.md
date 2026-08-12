@@ -137,6 +137,7 @@
     ├── editor_view_ads_test.go
     ├── editor_view.go
     ├── editor_view_test.go
+    ├── envman_help_test.go
     ├── external_ui.go
     ├── extui_host.go
     ├── extui_test.go
@@ -192,6 +193,8 @@
     │   ├── platform_unix.go
     │   └── registry.go
     ├── FUSE.md
+    ├── fuse_mount_action.go
+    ├── fuse_mount_list.go
     ├── .github
     │   └── workflows
     │       └── build.yml
@@ -445,6 +448,33 @@
     │   │   └── README.md
     │   ├── dummy_rpc
     │   │   └── main.go
+    │   ├── envman
+    │   │   ├── codec.go
+    │   │   ├── codec_test.go
+    │   │   ├── commands.go
+    │   │   ├── commands_test.go
+    │   │   ├── dialogs.go
+    │   │   ├── environment_document.go
+    │   │   ├── far3_import.go
+    │   │   ├── far3_import_other.go
+    │   │   ├── far3_import_test.go
+    │   │   ├── far3_import_ui.go
+    │   │   ├── far3_import_windows.go
+    │   │   ├── far3_import_windows_test.go
+    │   │   ├── manager_frame.go
+    │   │   ├── manager_ops.go
+    │   │   ├── manager_ui.go
+    │   │   ├── messages.go
+    │   │   ├── model.go
+    │   │   ├── model_test.go
+    │   │   ├── plugin.go
+    │   │   ├── plugin_test.go
+    │   │   ├── README.md
+    │   │   ├── settings.go
+    │   │   ├── settings_test.go
+    │   │   ├── strings.go
+    │   │   ├── ui_test.go
+    │   │   └── vfs_io.go
     │   ├── id3editor
     │   │   ├── plugin.go
     │   │   └── plugin_test.go
@@ -798,7 +828,15 @@
     ├── viewer_view_test.go
     ├── visren_editor_bridge.go
     ├── VTML.md
+    ├── vtvibe
+    │   ├── memtree.go
+    │   ├── pack.go
+    │   ├── provider.go
+    │   ├── session.go
+    │   └── vfs.go
+    ├── vtvibe_host.go
     ├── vtvibe.md
+    ├── VTVIBE.md
     ├── wasm_plugin.go
     ├── wasm_plugin_test.go
     ├── window_icon_windows.go
@@ -809,4 +847,4 @@
     ├── workspace_session.go
     └── workspace_session_test.go
     
-    52 directories, 756 files
+    54 directories, 792 files
