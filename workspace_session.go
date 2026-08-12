@@ -214,6 +214,27 @@ func loadWorkspaceSessions(ini *IniFile) ([]workspaceSessionState, int) {
 	return states, active
 }
 
+func workspaceSessionsForRestore(states []workspaceSessionState, active int, restoreTabs bool) ([]workspaceSessionState, int) {
+	if restoreTabs || len(states) == 0 {
+		return states, active
+	}
+	if active < 0 || active >= len(states) {
+		active = 0
+	}
+	return []workspaceSessionState{states[active]}, 0
+}
+
+func renumberWorkspaceScreens() {
+	if vtui.FrameManager == nil {
+		return
+	}
+	for i, screen := range vtui.FrameManager.Screens {
+		if screen != nil {
+			screen.Number = i + 1
+		}
+	}
+}
+
 func writePanelSession(sb *strings.Builder, section string, state panelSessionState) {
 	fmt.Fprintf(sb, "\n[%s]\n", section)
 	fmt.Fprintf(sb, "Folder = %s\n", state.Path)

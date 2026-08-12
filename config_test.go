@@ -45,6 +45,8 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	AppConfig.WorkspaceTabMode = int(vtui.WorkspaceTabsNever)
 	AppConfig.CtrlTabShowsMenu = true
 	AppConfig.AltNumberSwitchesTabs = false
+	AppConfig.RestoreWorkspaceTabs = false
+	AppConfig.WorkspaceTabNumbering = WorkspaceTabNumbersOrder
 	AppConfig.ApplyCommandParallelism = 0
 
 	// 2. Save
@@ -65,6 +67,8 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	AppConfig.WorkspaceTabMode = int(vtui.WorkspaceTabsAlways)
 	AppConfig.CtrlTabShowsMenu = false
 	AppConfig.AltNumberSwitchesTabs = true
+	AppConfig.RestoreWorkspaceTabs = true
+	AppConfig.WorkspaceTabNumbering = WorkspaceTabNumbersAlways
 	AppConfig.ApplyCommandParallelism = 1
 
 	// 4. Load
@@ -85,6 +89,12 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	}
 	if AppConfig.AltNumberSwitchesTabs {
 		t.Error("LoadConfig failed to restore disabled Alt+number tab switching")
+	}
+	if AppConfig.RestoreWorkspaceTabs {
+		t.Error("LoadConfig failed to restore disabled workspace tab restoration")
+	}
+	if AppConfig.WorkspaceTabNumbering != WorkspaceTabNumbersOrder {
+		t.Errorf("LoadConfig restored workspace tab numbering %v, want order", AppConfig.WorkspaceTabNumbering)
 	}
 	if !AppConfig.ShowDirPrefix {
 		t.Error("LoadConfig failed to restore ShowDirPrefix")
@@ -222,6 +232,56 @@ func TestConfig_WorkspaceTabModeDefaultsToAlwaysWhenKeyIsAbsent(t *testing.T) {
 	if AppConfig.WorkspaceTabMode != int(vtui.WorkspaceTabsAlways) {
 		t.Fatalf("WorkspaceTabMode without a saved key = %d, want always-visible mode %d",
 			AppConfig.WorkspaceTabMode, vtui.WorkspaceTabsAlways)
+	}
+}
+
+func TestConfig_RestoreWorkspaceTabsDefaultsOnWhenKeyIsAbsent(t *testing.T) {
+	tmpDir := t.TempDir()
+	userIniPath := filepath.Join(tmpDir, "settings.ini")
+	if err := os.WriteFile(userIniPath, []byte("[Interface]\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	origUserPathFunc := getUserConfigIniPath
+	origPathsFunc := getConfigIniPaths
+	oldCfg := AppConfig
+	defer func() {
+		getUserConfigIniPath = origUserPathFunc
+		getConfigIniPaths = origPathsFunc
+		AppConfig = oldCfg
+	}()
+	getUserConfigIniPath = func() string { return userIniPath }
+	getConfigIniPaths = func() []string { return []string{userIniPath} }
+
+	AppConfig.RestoreWorkspaceTabs = false
+	LoadConfig()
+	if !AppConfig.RestoreWorkspaceTabs {
+		t.Fatal("RestoreWorkspaceTabs must default to true when the setting is absent")
+	}
+}
+
+func TestConfig_WorkspaceTabNumberingDefaultsToAlwaysWhenKeyIsAbsent(t *testing.T) {
+	tmpDir := t.TempDir()
+	userIniPath := filepath.Join(tmpDir, "settings.ini")
+	if err := os.WriteFile(userIniPath, []byte("[Interface]\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	origUserPathFunc := getUserConfigIniPath
+	origPathsFunc := getConfigIniPaths
+	oldCfg := AppConfig
+	defer func() {
+		getUserConfigIniPath = origUserPathFunc
+		getConfigIniPaths = origPathsFunc
+		AppConfig = oldCfg
+	}()
+	getUserConfigIniPath = func() string { return userIniPath }
+	getConfigIniPaths = func() []string { return []string{userIniPath} }
+
+	AppConfig.WorkspaceTabNumbering = WorkspaceTabNumbersOrder
+	LoadConfig()
+	if AppConfig.WorkspaceTabNumbering != WorkspaceTabNumbersAlways {
+		t.Fatalf("WorkspaceTabNumbering must default to always, got %v", AppConfig.WorkspaceTabNumbering)
 	}
 }
 

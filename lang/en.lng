@@ -582,6 +582,11 @@ AppearanceSettings.CtrlTab=&Ctrl+Tab behavior:
 AppearanceSettings.CtrlTabDirect=Switch immediately
 AppearanceSettings.CtrlTabMenu=Show Screens menu
 AppearanceSettings.AltNumberTabs=Alt+&number switches workspace tab
+AppearanceSettings.RestoreWorkspaceTabs=&Restore open workspace tabs on startup
+AppearanceSettings.WorkspaceNumbers=Tab &numbering:
+AppearanceSettings.WorkspaceNumbersAlways=Always preserve numbers
+AppearanceSettings.WorkspaceNumbersSession=Preserve during current session
+AppearanceSettings.WorkspaceNumbersOrder=Follow current tab order
 AppearanceSettings.ExportBtn=E&xport Scheme
 AppearanceSettings.ColorCorrection=Enforce color &contrast correction
 

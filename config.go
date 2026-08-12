@@ -93,6 +93,36 @@ func (m PanelScrollbarMode) String() string {
 	}
 }
 
+type WorkspaceTabNumberingMode int
+
+const (
+	WorkspaceTabNumbersAlways WorkspaceTabNumberingMode = iota
+	WorkspaceTabNumbersSession
+	WorkspaceTabNumbersOrder
+)
+
+func (m WorkspaceTabNumberingMode) String() string {
+	switch m {
+	case WorkspaceTabNumbersSession:
+		return "session"
+	case WorkspaceTabNumbersOrder:
+		return "order"
+	default:
+		return "always"
+	}
+}
+
+func ParseWorkspaceTabNumberingMode(value string) WorkspaceTabNumberingMode {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "session":
+		return WorkspaceTabNumbersSession
+	case "order":
+		return WorkspaceTabNumbersOrder
+	default:
+		return WorkspaceTabNumbersAlways
+	}
+}
+
 func ParsePanelScrollbarMode(value string) PanelScrollbarMode {
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case "minimal":
@@ -113,6 +143,8 @@ type F4Config struct {
 	WorkspaceTabMode         int
 	CtrlTabShowsMenu         bool
 	AltNumberSwitchesTabs    bool
+	RestoreWorkspaceTabs     bool
+	WorkspaceTabNumbering    WorkspaceTabNumberingMode
 	ShowHiddenFiles          bool
 	ShowDirPrefix            bool
 	ShowHighlightMarks       bool
@@ -220,6 +252,8 @@ var AppConfig = F4Config{
 	WorkspaceTabMode:         int(vtui.WorkspaceTabsAlways),
 	CtrlTabShowsMenu:         false,
 	AltNumberSwitchesTabs:    true,
+	RestoreWorkspaceTabs:     true,
+	WorkspaceTabNumbering:    WorkspaceTabNumbersAlways,
 	ShowHiddenFiles:          true,
 	ShowDirPrefix:            false,
 	ShowHighlightMarks:       false,
@@ -362,6 +396,8 @@ func LoadConfig() {
 	}
 	AppConfig.CtrlTabShowsMenu = strings.EqualFold(ini.GetString("Interface", "CtrlTabMode", "direct"), "menu")
 	AppConfig.AltNumberSwitchesTabs = ini.GetString("Interface", "AltNumberSwitchesTabs", "1") != "0"
+	AppConfig.RestoreWorkspaceTabs = ini.GetString("Interface", "RestoreWorkspaceTabs", "1") != "0"
+	AppConfig.WorkspaceTabNumbering = ParseWorkspaceTabNumberingMode(ini.GetString("Interface", "WorkspaceTabNumbering", "always"))
 	if AppConfig.ConsoleTitleTemplate == "f4 - %State" {
 		AppConfig.ConsoleTitleTemplate = "f4 %Ver %Platform %Admin - %State"
 	}
@@ -553,7 +589,9 @@ func SaveConfig() {
 	}
 	sb.WriteString(fmt.Sprintf("WorkspaceTabMode = %s\n", workspaceTabMode))
 	sb.WriteString(fmt.Sprintf("CtrlTabMode = %s\n", ctrlTabMode))
-	sb.WriteString(fmt.Sprintf("AltNumberSwitchesTabs = %d\n\n", map[bool]int{true: 1, false: 0}[AppConfig.AltNumberSwitchesTabs]))
+	sb.WriteString(fmt.Sprintf("AltNumberSwitchesTabs = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.AltNumberSwitchesTabs]))
+	sb.WriteString(fmt.Sprintf("RestoreWorkspaceTabs = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.RestoreWorkspaceTabs]))
+	sb.WriteString(fmt.Sprintf("WorkspaceTabNumbering = %s\n\n", AppConfig.WorkspaceTabNumbering.String()))
 	sb.WriteString("[Panel]\n")
 	sb.WriteString(fmt.Sprintf("ShowHiddenFiles = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.ShowHiddenFiles]))
 	sb.WriteString(fmt.Sprintf("ShowDirPrefix = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.ShowDirPrefix]))
