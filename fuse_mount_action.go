@@ -60,11 +60,36 @@ func mountActivePanel(pf *PanelsFrame) {
 	if fsp == nil || fsp.vfs == nil {
 		return
 	}
+	label, run := mountPlan(fsp)
+	if run == nil {
+		return
+	}
+	// Opening a location can take as long as it likes: an archive is
+	// extracted before it can be listed, a remote host may have to answer.
+	// Only the plan above touches the panel's own VFS, and it runs here on
+	// the UI thread; everything the task does afterwards belongs to the
+	// mount alone.
+	var m *fusefs.Mount
+	pf.RunProgressTask(" Mount ", "Mounting "+label+"...", false,
+		func(ctx context.Context, _ func(msg string, percent int)) error {
+			mounted, err := run(ctx)
+			if err != nil {
+				return err
+			}
+			m = mounted
+			return nil
+		},
+		func(err error) { reportMount(label, m, err) })
+}
 
+// mountPlan decides what the active panel would have mounted, and returns a
+// label for it plus the work that produces the mount. It returns a nil run
+// when there is nothing to mount, having said why.
+func mountPlan(fsp *FileSystemPanel) (string, func(context.Context) (*fusefs.Mount, error)) {
 	if _, isOS := fsp.vfs.(*vfs.OSVFS); isOS {
 		dir := fsp.vfs.GetPath()
 		if dir == "" {
-			return
+			return "", nil
 		}
 		// An archive under the cursor is a location of its own, and the
 		// file is exactly the source a fresh VFS is opened from. It is
@@ -72,36 +97,34 @@ func mountActivePanel(pf *PanelsFrame) {
 		// needs a parent to read the file through — a brand new OSVFS,
 		// never the one the panel is holding.
 		if entry := currentPanelEntryPath(fsp); entry != "" && entry != dir {
-			ctx := context.Background()
 			parent := vfs.NewOSVFS(dir)
-			if prov := vfs.FindProvider(ctx, parent, entry); prov != nil {
-				v, err := prov.Open(ctx, parent, entry)
-				if err != nil {
-					reportMount(entry, nil, err)
-					return
+			if prov := vfs.FindProvider(context.Background(), parent, entry); prov != nil {
+				return entry, func(ctx context.Context) (*fusefs.Mount, error) {
+					v, err := prov.Open(ctx, parent, entry)
+					if err != nil {
+						return nil, err
+					}
+					return fusefs.MountVFS(ctx, v, fusefs.Options{
+						MountPoint: fusefs.SuggestMountPoint(entry),
+						Source:     entry,
+						ReadOnly:   true,
+					})
 				}
-				m, err := fusefs.MountVFS(ctx, v, fusefs.Options{
-					MountPoint: fusefs.SuggestMountPoint(entry),
-					Source:     entry,
-					ReadOnly:   true,
-				})
-				reportMount(entry, m, err)
-				return
 			}
 		}
-		m, err := fusefs.MountSource(dir, fusefs.Options{
-			MountPoint: fusefs.SuggestMountPoint(dir),
-			ReadOnly:   true,
-		})
-		reportMount(dir, m, err)
-		return
+		return dir, func(ctx context.Context) (*fusefs.Mount, error) {
+			return fusefs.MountSource(dir, fusefs.Options{
+				MountPoint: fusefs.SuggestMountPoint(dir),
+				ReadOnly:   true,
+			})
+		}
 	}
 
 	clone := fsp.vfs.Clone()
 	if clone == nil || clone == fsp.vfs {
 		vtui.ShowMessage(" Mount ", "This file system cannot be mounted yet:\n"+
 			"it cannot hand out a handle of its own.", []string{"&Ok"})
-		return
+		return "", nil
 	}
 	root := clone.GetPath()
 	label := root
@@ -110,13 +133,14 @@ func mountActivePanel(pf *PanelsFrame) {
 			label = title
 		}
 	}
-	m, err := fusefs.MountVFS(context.Background(), clone, fusefs.Options{
-		MountPoint: fusefs.SuggestMountPoint(label),
-		RootPath:   root,
-		Source:     label,
-		ReadOnly:   true,
-	})
-	reportMount(label, m, err)
+	return label, func(ctx context.Context) (*fusefs.Mount, error) {
+		return fusefs.MountVFS(ctx, clone, fusefs.Options{
+			MountPoint: fusefs.SuggestMountPoint(label),
+			RootPath:   root,
+			Source:     label,
+			ReadOnly:   true,
+		})
+	}
 }
 
 func reportMount(source string, m *fusefs.Mount, err error) {
