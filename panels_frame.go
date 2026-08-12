@@ -902,6 +902,11 @@ func (pf *PanelsFrame) initPTY() {
 }
 
 func (pf *PanelsFrame) Close() {
+	if pf.wide && pf.widePanel >= 0 && pf.widePanel < 2 {
+		if isAIPanel(pf.panels[pf.widePanel]) {
+			pf.exitWide()
+		}
+	}
 	pf.closeProcessEnvironmentShell()
 
 	pf.ptyMutex.Lock()

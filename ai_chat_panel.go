@@ -298,11 +298,14 @@ func (cp *AIChatPanel) updateLines() {
 	}
 
 	var lines []chatLine
-	aiVfs, ok := cp.src.vfs.(*vtvibe.AIVFS)
-	if !ok {
-		return
+	var session *vtvibe.Session
+	if w, ok := cp.src.vfs.(*aiVFSWrapper); ok {
+		session = w.Session()
+	} else if a, ok := cp.src.vfs.(*vtvibe.AIVFS); ok {
+		session = a.Session()
+	} else {
+		session = aiSession()
 	}
-	session := aiVfs.Session()
 	turns := session.Turns()
 
 	attr := vtui.Palette[ColPanelText]
