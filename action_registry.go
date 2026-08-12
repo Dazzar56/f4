@@ -447,8 +447,13 @@ func init() {
 		LabelKey:    "Action.Panel.SystemExplorer",
 		Description: "Open current file in the system file manager",
 		DescKey:     "Action.Panel.SystemExplorer.Desc",
-		DefaultKeys: []string{"ShiftEnter"},
-		MenuPath:    "Files",
+		// Same reasoning as Panel.InsertFileName: the panel cursor
+		// survives Ctrl+O, so Shift+Enter keeps working with the panels
+		// hidden, but yields to a child process that is using the
+		// terminal (many REPLs read Shift+Enter themselves).
+		DefaultKeys:  []string{"ShiftEnter:NoTerminalApp"},
+		DefaultAreas: []string{"Terminal"},
+		MenuPath:     "Files",
 		Handler: withPF(func(pf *PanelsFrame) {
 			fsp := pf.getActivePanel()
 			if fsp == nil {
@@ -1562,7 +1567,13 @@ func init() {
 		Label:       "Insert File Name",
 		Description: "Insert the current file name into the command line",
 		DescKey:     "Action.Panel.InsertFileName.Desc",
-		DefaultKeys: []string{"CtrlEnter"},
+		// Hiding the panels does not drop the panel cursor: the command
+		// line is still on screen and Ctrl+Enter still pastes the current
+		// file name into it, as in far2l. NoTerminalApp keeps the key out
+		// of the way of a running child process, which owns Ctrl+Enter and
+		// leaves the command line hidden anyway.
+		DefaultKeys:  []string{"CtrlEnter:NoTerminalApp"},
+		DefaultAreas: []string{"Terminal"},
 		Handler: withPF(func(pf *PanelsFrame) {
 			pf.insertSelectedFileName()
 		}),

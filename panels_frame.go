@@ -1349,8 +1349,44 @@ func (pf *PanelsFrame) InterceptPluginKey(e *vtinput.InputEvent) bool {
 // the key before the global hotkey dispatcher. During fast find,
 // printable characters and the gray selection keys belong to the
 // panel's own search input.
+// commandLineOwnsSelection reports the keys that belong to the command
+// line's own text selection rather than to a panel action: Ctrl+Shift+
+// Left/Right walk the selection word by word there exactly as they do in
+// any other edit field, whether or not the panels are visible. They fall
+// back to the drive menus (far2l's Alt+F1 / Alt+F2 aliases) only while
+// the line is empty and there is nothing to select — the same trade the
+// EmptyCommandLine condition already makes for plain Ctrl+Left/Right.
+func (pf *PanelsFrame) commandLineOwnsSelection(e *vtinput.InputEvent) bool {
+	if e.Type != vtinput.KeyEventType || !e.KeyDown {
+		return false
+	}
+	if e.VirtualKeyCode != vtinput.VK_LEFT && e.VirtualKeyCode != vtinput.VK_RIGHT {
+		return false
+	}
+	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
+	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
+	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
+	if !ctrl || !shift || alt {
+		return false
+	}
+	return pf.cmdLine != nil && pf.cmdLine.IsVisible() && !pf.cmdLine.IsEmpty()
+}
+
+// VetoActionKey reports modal input states in which the panels must see
+// the key before the global hotkey dispatcher. During fast find,
+// printable characters and the gray selection keys belong to the
+// panel's own search input.
 func (pf *PanelsFrame) VetoActionKey(e *vtinput.InputEvent) bool {
-	if e.Type != vtinput.KeyEventType || !e.KeyDown || !pf.showPanels {
+	if e.Type != vtinput.KeyEventType || !e.KeyDown {
+		return false
+	}
+	// Checked ahead of the panels-visible guard: the command line keeps
+	// its selection keys in terminal mode too, where the drive menus are
+	// bound in the Terminal area.
+	if pf.commandLineOwnsSelection(e) {
+		return true
+	}
+	if !pf.showPanels {
 		return false
 	}
 	fsp := pf.getActivePanel()
@@ -1718,12 +1754,20 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 
 	// Enter handling
 	if e.VirtualKeyCode == vtinput.VK_RETURN {
-		// The hotkey filter normally handles Ctrl+Enter. Keep an in-frame
-		// fallback because platform input and injected events can bypass that
-		// filter; under no circumstances should Ctrl+Enter become plain Enter
-		// and enter the selected directory.
-		if ctrl && !alt && !shift && pf.showPanels {
+		// The hotkey filter normally handles Ctrl+Enter and Shift+Enter.
+		// Keep in-frame fallbacks because platform input and injected events
+		// can bypass that filter; under no circumstances should a modified
+		// Enter become plain Enter and enter the selected directory or run
+		// the command line. Hidden panels are included: an AltScreen app or
+		// a busy PTY has already been served by the raw-forwarding returns
+		// at the top of this function, so reaching this point means f4
+		// itself owns the keyboard and the panel cursor is still live.
+		if ctrl && !alt && !shift {
 			pf.insertSelectedFileName()
+			return true
+		}
+		if shift && !ctrl && !alt {
+			RunAction("Panel.SystemExplorer")
 			return true
 		}
 		commandInputActive := !pf.searchFirstMode() || pf.commandLineFocused || !pf.showPanels
@@ -1992,8 +2036,10 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 	// 2. Try global hotkeys handled by PanelsFrame
 	// Ctrl+Shift+Left / Ctrl+Shift+Right open the drive menu for the
-	// corresponding visual panel without changing the active panel.
-	if (e.VirtualKeyCode == vtinput.VK_LEFT || e.VirtualKeyCode == vtinput.VK_RIGHT) && ctrl && !alt && shift && e.KeyDown && pf.showPanels {
+	// corresponding visual panel without changing the active panel — but
+	// only while there is no text to select, see commandLineOwnsSelection.
+	if (e.VirtualKeyCode == vtinput.VK_LEFT || e.VirtualKeyCode == vtinput.VK_RIGHT) && ctrl && !alt && shift && e.KeyDown && pf.showPanels &&
+		!pf.commandLineOwnsSelection(e) {
 		panelIdx := 0
 		if e.VirtualKeyCode == vtinput.VK_RIGHT {
 			panelIdx = 1
@@ -2046,6 +2092,14 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			pf.cmdLine.ProcessKey(e)
 			return true
 		}
+	}
+
+	// Ctrl+Shift+Left/Right extend that selection word by word. This has
+	// to run before the injected-event hotkey lookup below, which would
+	// otherwise reach the drive menu the same way the filter does.
+	if pf.commandLineOwnsSelection(e) {
+		pf.cmdLine.ProcessKey(e)
+		return true
 	}
 
 	// 3. Try Active Panel
