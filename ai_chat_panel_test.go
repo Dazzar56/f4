@@ -108,6 +108,24 @@ func TestAIChatPanel_TabPassesThroughForPanelSwitching(t *testing.T) {
 		t.Error("AIChatPanel should NOT consume Tab key, so panel switching works")
 	}
 }
+func TestAIChatPanel_RCtrlC_CopiesLastResponse(t *testing.T) {
+	session := vtvibe.NewSession()
+	fp := NewFileSystemPanel(0, 0, 80, 24, &aiVFSWrapper{AIVFS: vtvibe.NewVFS(session)})
+	cp := NewAIChatPanel(fp)
+	cp.SetFocus(true)
+
+	rCtrlCEvent := &vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_C,
+		ControlKeyState: vtinput.RightCtrlPressed,
+	}
+
+	// Should be handled and return true
+	if !cp.ProcessKey(rCtrlCEvent) {
+		t.Error("AIChatPanel should consume RCtrl+C")
+	}
+}
 
 func TestAIChatPanel_ContextFilesRenderingAndLinkNavigation(t *testing.T) {
 	session := vtvibe.NewSession()

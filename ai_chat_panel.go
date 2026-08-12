@@ -122,6 +122,21 @@ func (cp *AIChatPanel) ProcessKey(e *vtinput.InputEvent) bool {
 	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
 
+	rctrl := (e.ControlKeyState & vtinput.RightCtrlPressed) != 0
+
+	if e.VirtualKeyCode == vtinput.VK_C && rctrl && !alt && !shift {
+		session := cp.getSession()
+		turns := session.Turns()
+		for i := len(turns) - 1; i >= 0; i-- {
+			if turns[i].Role != "user" && turns[i].Text != "RCtrl+A to hide" {
+				go vtui.SetClipboard(turns[i].Text)
+				vtui.ShowToast("Copied last response to clipboard", 2*time.Second)
+				break
+			}
+		}
+		return true
+	}
+
 	if cp.focusedLinkIdx == -2 {
 		// Focus is on the Attached Files bar above the input box
 		if e.VirtualKeyCode == vtinput.VK_RETURN {
