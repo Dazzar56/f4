@@ -74,6 +74,7 @@ func (s *Session) reset() {
 	_ = s.tree.mkdirAll(outDir)
 	_ = s.tree.writeFile(draftFile, []byte(draftTemplate))
 	_ = s.tree.mkdirAll("/mem")
+	s.appendTurn(Turn{Role: "model", Text: "RCtrl+A to hide", Time: time.Now()})
 	s.writeSessionFile()
 }
 
@@ -169,6 +170,9 @@ func (s *Session) Ask(ctx context.Context, cfg Config, question string) error {
 	msgs := make([]Message, 0, len(history)+2)
 	msgs = append(msgs, Message{Role: "system", Content: system})
 	for _, t := range history {
+		if t.Text == "RCtrl+A to hide" {
+			continue
+		}
 		msgs = append(msgs, Message{Role: t.Role, Content: t.Text})
 	}
 	msgs = append(msgs, Message{Role: "user", Content: question})

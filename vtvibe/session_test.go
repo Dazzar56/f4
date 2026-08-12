@@ -25,8 +25,8 @@ func TestSession_Reset(t *testing.T) {
 	s.appendTurn(Turn{Role: "user", Text: "hello"})
 
 	s.Reset(true)
-	if len(s.Turns()) != 0 {
-		t.Errorf("expected turns to be cleared")
+	if len(s.Turns()) != 1 {
+		t.Errorf("expected 1 turn (RCtrl+A hint), got %d", len(s.Turns()))
 	}
 	if _, ok := s.tree.readFile("/ctx/test.go"); !ok {
 		t.Errorf("expected context to be kept")
