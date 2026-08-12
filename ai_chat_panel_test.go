@@ -1,7 +1,11 @@
 package main
 
 import (
+	"github.com/mattn/go-runewidth"
 	"github.com/unxed/f4/vfs"
+	"github.com/unxed/f4/vtvibe"
+	"github.com/unxed/vtinput"
+	"strings"
 	"testing"
 )
 

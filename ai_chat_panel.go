@@ -564,20 +564,6 @@ func (cp *AIChatPanel) Show(scr *vtui.ScreenBuf) {
 	scr.Write(cp.X1, cp.input.Y1-1, vtui.StringToCharInfo("├", attrBox))
 	scr.Write(cp.X2, cp.input.Y1-1, vtui.StringToCharInfo("┤", attrBox))
 
-	/*
-		session := cp.getSession()
-		if ctxFiles := session.ContextFiles(); len(ctxFiles) > 0 {
-			label := " 📎 " + strings.Join(ctxFiles, ", ") + " "
-			availW := cp.X2 - cp.X1 - 3
-			if runewidth.StringWidth(label) > availW && availW > 5 {
-				label = vtui.TruncateMiddle(label, availW)
-			}
-			if runewidth.StringWidth(label) <= availW {
-				vtui.NewPainter(scr).DrawString(cp.X1+2, cp.input.Y1-1, label, vtui.Palette[ColPanelHighlightText])
-			}
-		}
-	*/
-
 	session := cp.getSession()
 	if ctxFiles := session.ContextFiles(); len(ctxFiles) > 0 {
 		availW := cp.X2 - cp.X1 - 3
@@ -692,6 +678,7 @@ func formatAttachedFilesLabel(files []string, maxW int) string {
 	}
 	return prefix + strings.Join(parts, "") + " "
 }
+
 func cellCutChat(s string, width int) int {
 	if width <= 0 || s == "" {
 		return len(s)
