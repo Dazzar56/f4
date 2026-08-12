@@ -119,6 +119,42 @@ func init() {
 		Handler:     withAI(func(pf *PanelsFrame) { aiTogglePanel(pf) }),
 	})
 	RegisterAction(Action{
+		Name:        "AI.ViewContext",
+		Area:        "Shell",
+		Label:       "AI View: Context",
+		LabelKey:    "Action.AI.ViewContext",
+		DefaultKeys: []string{"Ctrl1"},
+		MenuPath:    "Commands",
+		Handler:     withAI(func(pf *PanelsFrame) { aiSetViewMode(pf, "ai://ctx", false) }),
+	})
+	RegisterAction(Action{
+		Name:        "AI.ViewChat",
+		Area:        "Shell",
+		Label:       "AI View: Chat",
+		LabelKey:    "Action.AI.ViewChat",
+		DefaultKeys: []string{"Ctrl2"},
+		MenuPath:    "Commands",
+		Handler:     withAI(func(pf *PanelsFrame) { aiSetViewMode(pf, "ai://chat", true) }),
+	})
+	RegisterAction(Action{
+		Name:        "AI.ViewOut",
+		Area:        "Shell",
+		Label:       "AI View: Artifacts",
+		LabelKey:    "Action.AI.ViewOut",
+		DefaultKeys: []string{"Ctrl3"},
+		MenuPath:    "Commands",
+		Handler:     withAI(func(pf *PanelsFrame) { aiSetViewMode(pf, "ai://out", false) }),
+	})
+	RegisterAction(Action{
+		Name:        "AI.ViewMem",
+		Area:        "Shell",
+		Label:       "AI View: Memory",
+		LabelKey:    "Action.AI.ViewMem",
+		DefaultKeys: []string{"Ctrl4"},
+		MenuPath:    "Commands",
+		Handler:     withAI(func(pf *PanelsFrame) { aiSetViewMode(pf, "ai://mem", false) }),
+	})
+	RegisterAction(Action{
 		Name:        "AI.Ask",
 		Area:        "Shell",
 		Label:       "Ask the AI",
@@ -155,22 +191,80 @@ func init() {
 var aiPrevPath [2]string
 
 func aiTogglePanel(pf *PanelsFrame) {
-	fsp := pf.getInactivePanel()
-	if fsp == nil {
-		return
-	}
-	idx := 1 - pf.activeIdx
-	if _, isAI := fsp.vfs.(*vtvibe.AIVFS); isAI {
-		target := aiPrevPath[idx]
-		if target == "" {
-			target, _ = os.UserHomeDir()
+	// If any panel is AI, close it entirely
+	for i, p := range pf.panels {
+		if fsp, ok := p.(*FileSystemPanel); ok {
+			if _, isAI := fsp.vfs.(*vtvibe.AIVFS); isAI {
+				pf.exitWide()
+				// close alt panel if active
+				if pf.altPanels[i] != nil && pf.altPanels[i].Kind() == "ai_chat" {
+					if c, ok := pf.altPanels[i].(interface{ Close() }); ok {
+						c.Close()
+					}
+					pf.altPanels[i] = nil
+				}
+				target := aiPrevPath[i]
+				if target == "" {
+					target, _ = os.UserHomeDir()
+				}
+				pf.switchToVFS(fsp, vfs.NewOSVFS(target))
+				pf.activeIdx = 1 - i
+				return
+			}
 		}
-		pf.switchToVFS(fsp, vfs.NewOSVFS(target))
-		return
 	}
+
+	// Open AI in the inactive panel and make it full screen
+	idx := 1 - pf.activeIdx
+	fsp := pf.panels[idx].(*FileSystemPanel)
 	aiPrevPath[idx] = fsp.vfs.GetPath()
 	vtvibeConfig()
 	pf.switchToVFS(fsp, vtvibe.NewVFS(aiSession()))
+
+	// Default to Chat View
+	aiSetViewMode(pf, "ai://chat", true)
+	pf.setWidePanel(idx)
+}
+
+func aiSetViewMode(pf *PanelsFrame, path string, isChat bool) {
+	fsp := pf.getActivePanel()
+	if fsp == nil {
+		return
+	}
+	if _, isAI := fsp.vfs.(*vtvibe.AIVFS); !isAI {
+		return
+	}
+
+	idx := pf.activeIdx
+	currentAlt := pf.altPanels[idx]
+
+	if isChat {
+		if currentAlt == nil || currentAlt.Kind() != "ai_chat" {
+			if currentAlt != nil {
+				if c, ok := currentAlt.(interface{ Close() }); ok {
+					c.Close()
+				}
+			}
+			chatAlt := NewAIChatPanel(fsp)
+			pf.altPanels[idx] = chatAlt
+			chatAlt.ScrollToBottom()
+		}
+		if path != "" {
+			pf.NavigateToPath(fsp, path)
+		}
+	} else {
+		if currentAlt != nil && currentAlt.Kind() == "ai_chat" {
+			if c, ok := currentAlt.(interface{ Close() }); ok {
+				c.Close()
+			}
+			pf.altPanels[idx] = nil
+		}
+		if path != "" {
+			pf.NavigateToPath(fsp, path)
+		}
+	}
+	pf.ResizeConsole(pf.lastW, pf.lastH)
+	vtui.FrameManager.HardRefresh()
 }
 
 func aiNewSession(pf *PanelsFrame) {
@@ -284,7 +378,12 @@ func aiSend(pf *PanelsFrame, question string) {
 				return
 			}
 			pf.RefreshAll()
-			if path := aiLastAnswerPath(session); path != "" {
+			if pf.altPanels[pf.activeIdx] != nil && pf.altPanels[pf.activeIdx].Kind() == "ai_chat" {
+				if cp, ok := pf.altPanels[pf.activeIdx].(*AIChatPanel); ok {
+					cp.ScrollToBottom()
+				}
+				vtui.FrameManager.Redraw()
+			} else if path := aiLastAnswerPath(session); path != "" {
 				actionOpenViewer(pf, vtvibe.NewVFS(session), path)
 			}
 		})

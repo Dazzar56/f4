@@ -73,6 +73,7 @@ func (s *Session) reset() {
 	_ = s.tree.mkdirAll(chatDir)
 	_ = s.tree.mkdirAll(outDir)
 	_ = s.tree.writeFile(draftFile, []byte(draftTemplate))
+	_ = s.tree.mkdirAll("/mem")
 	s.writeSessionFile()
 }
 
