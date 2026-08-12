@@ -31,9 +31,11 @@ func (v *AIVFS) Session() *Session { return v.s }
 // file onto itself is refused the way it is on any other file system.
 func (v *AIVFS) SessionKey() any { return v.s }
 
-func (v *AIVFS) IsAtRoot() bool      { return v.cwd == "/" }
-func (v *AIVFS) GetPath() string     { return v.cwd }
-func (v *AIVFS) IsAbs(p string) bool { return strings.HasPrefix(p, "/") || strings.HasPrefix(p, "ai://") }
+func (v *AIVFS) IsAtRoot() bool  { return v.cwd == "/" }
+func (v *AIVFS) GetPath() string { return v.cwd }
+func (v *AIVFS) IsAbs(p string) bool {
+	return strings.HasPrefix(p, "/") || strings.HasPrefix(p, "ai://")
+}
 
 func (v *AIVFS) SetPath(p string) error {
 	target := v.normalize(p)
