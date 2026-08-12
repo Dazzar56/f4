@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -181,7 +183,7 @@ func init() {
 		LabelKey:    "Action.AI.Setup",
 		Description: "Set the API key and the model used by the AI panel",
 		DescKey:     "Action.AI.Setup.Desc",
-		MenuPath:    "Commands",
+		MenuPath:    "Options",
 		Handler:     withAI(func(pf *PanelsFrame) { aiSetupDialog(pf) }),
 	})
 }
@@ -356,7 +358,15 @@ func aiSend(pf *PanelsFrame, question string) {
 	cfg, keySource := vtvibeConfig()
 	if cfg.APIKey == "" && keySource == "" && !strings.Contains(cfg.BaseURL, "127.0.0.1") &&
 		!strings.Contains(cfg.BaseURL, "localhost") {
-		vtui.ShowMessage(Msg("AI.Title"), Msg("AI.NoKey"), []string{Msg("vtui.Ok")})
+		vtui.FrameManager.PostTask(func() {
+			dlg := vtui.ShowMessage(Msg("AI.Title"), Msg("AI.NoKeyBrowserPrompt"), []string{Msg("AI.BtnGetToken"), Msg("vtui.Cancel")})
+			dlg.OnResult = func(code int) {
+				if code == 0 {
+					openBrowser("https://aistudio.google.com/apikey")
+					aiSetupDialog(pf)
+				}
+			}
+		})
 		return
 	}
 	if aiSession().Busy() {
@@ -434,4 +444,18 @@ func aiShowError(err error) {
 		msg = msg[:600] + "..."
 	}
 	vtui.ShowMessage(Msg("AI.ErrorTitle"), msg, []string{Msg("vtui.Ok")})
+}
+func openBrowser(url string) {
+	var err error
+	switch runtime.GOOS {
+	case "linux":
+		err = exec.Command("xdg-open", url).Start()
+	case "windows":
+		err = exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
+	case "darwin":
+		err = exec.Command("open", url).Start()
+	}
+	if err != nil {
+		vtui.DebugLog("VTVIBE: failed to open browser: %v", err)
+	}
 }
