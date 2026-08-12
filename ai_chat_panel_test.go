@@ -20,3 +20,12 @@ func TestAIChatPanel_Resize(t *testing.T) {
 		t.Errorf("Expected Kind 'ai_chat', got '%s'", cp.Kind())
 	}
 }
+
+func TestAIChatPanel_CellCutChat(t *testing.T) {
+	if cut := cellCutChat("hello", 10); cut != 5 {
+		t.Errorf("cellCutChat expected 5, got %d", cut)
+	}
+	if cut := cellCutChat("hello", 2); cut != 2 {
+		t.Errorf("cellCutChat expected 2, got %d", cut)
+	}
+}

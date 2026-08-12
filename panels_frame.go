@@ -520,11 +520,30 @@ func (pf *PanelsFrame) applyNavigationMode() {
 		}
 	}
 }
+func isAIPanel(panel Panel) bool {
+	if fsp, ok := panel.(*FileSystemPanel); ok && fsp != nil && fsp.vfs != nil {
+		if tp, ok := fsp.vfs.(vfs.TitleProvider); ok {
+			return tp.GetTitle() == "ai"
+		}
+	}
+	return false
+}
 
 // leftMenu builds the custom side menu for the left panel. View and
 // sort modes act on a fixed side through Cm commands, so they stay
 // command-routed rather than generated from the action registry.
 func (pf *PanelsFrame) leftMenu() vtui.MenuBarItem {
+	if isAIPanel(pf.panels[0]) {
+		return vtui.MenuBarItem{Label: "&" + Msg("Menu.Left"), SubItems: []vtui.MenuItem{
+			{Text: "&1. " + Msg("Action.AI.ViewContext"), Command: CmLeftAIContext, Shortcut: "Ctrl+1"},
+			{Text: "&2. " + Msg("Action.AI.ViewChat"), Command: CmLeftAIChat, Shortcut: "Ctrl+2"},
+			{Text: "&3. " + Msg("Action.AI.ViewOut"), Command: CmLeftAIOut, Shortcut: "Ctrl+3"},
+			{Text: "&4. " + Msg("Action.AI.ViewMem"), Command: CmLeftAIMem, Shortcut: "Ctrl+4"},
+			{Separator: true},
+			{Text: "Bac&kground", Command: CmBackground},
+			{Text: Msg("Menu.Exit"), Command: vtui.CmQuit},
+		}}
+	}
 	return vtui.MenuBarItem{Label: "&" + Msg("Menu.Left"), SubItems: []vtui.MenuItem{
 		{Text: "&" + Msg("Menu.Left.Brief"), Command: CmLeftBrief},
 		{Text: "&" + Msg("Menu.Left.Medium"), Command: CmLeftMedium},
@@ -544,6 +563,14 @@ func (pf *PanelsFrame) leftMenu() vtui.MenuBarItem {
 
 // rightMenu builds the custom side menu for the right panel.
 func (pf *PanelsFrame) rightMenu() vtui.MenuBarItem {
+	if isAIPanel(pf.panels[1]) {
+		return vtui.MenuBarItem{Label: "&" + Msg("Menu.Right"), SubItems: []vtui.MenuItem{
+			{Text: "&1. " + Msg("Action.AI.ViewContext"), Command: CmRightAIContext, Shortcut: "Ctrl+1"},
+			{Text: "&2. " + Msg("Action.AI.ViewChat"), Command: CmRightAIChat, Shortcut: "Ctrl+2"},
+			{Text: "&3. " + Msg("Action.AI.ViewOut"), Command: CmRightAIOut, Shortcut: "Ctrl+3"},
+			{Text: "&4. " + Msg("Action.AI.ViewMem"), Command: CmRightAIMem, Shortcut: "Ctrl+4"},
+		}}
+	}
 	return vtui.MenuBarItem{Label: "&" + Msg("Menu.Right"), SubItems: []vtui.MenuItem{
 		{Text: "&" + Msg("Menu.Left.Brief"), Command: CmRightBrief},
 		{Text: "&" + Msg("Menu.Left.Medium"), Command: CmRightMedium},
@@ -2664,6 +2691,46 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 		return true
 	case CmRightWide:
 		pf.setWidePanel(1)
+		return true
+	case CmLeftAIContext:
+		if aiCmd, ok := pf.panels[0].(interface{ AiSetViewMode(string, bool) }); ok {
+			aiCmd.AiSetViewMode("ai://ctx", false)
+		}
+		return true
+	case CmLeftAIChat:
+		if aiCmd, ok := pf.panels[0].(interface{ AiSetViewMode(string, bool) }); ok {
+			aiCmd.AiSetViewMode("ai://chat", true)
+		}
+		return true
+	case CmLeftAIOut:
+		if aiCmd, ok := pf.panels[0].(interface{ AiSetViewMode(string, bool) }); ok {
+			aiCmd.AiSetViewMode("ai://out", false)
+		}
+		return true
+	case CmLeftAIMem:
+		if aiCmd, ok := pf.panels[0].(interface{ AiSetViewMode(string, bool) }); ok {
+			aiCmd.AiSetViewMode("ai://mem", false)
+		}
+		return true
+	case CmRightAIContext:
+		if aiCmd, ok := pf.panels[1].(interface{ AiSetViewMode(string, bool) }); ok {
+			aiCmd.AiSetViewMode("ai://ctx", false)
+		}
+		return true
+	case CmRightAIChat:
+		if aiCmd, ok := pf.panels[1].(interface{ AiSetViewMode(string, bool) }); ok {
+			aiCmd.AiSetViewMode("ai://chat", true)
+		}
+		return true
+	case CmRightAIOut:
+		if aiCmd, ok := pf.panels[1].(interface{ AiSetViewMode(string, bool) }); ok {
+			aiCmd.AiSetViewMode("ai://out", false)
+		}
+		return true
+	case CmRightAIMem:
+		if aiCmd, ok := pf.panels[1].(interface{ AiSetViewMode(string, bool) }); ok {
+			aiCmd.AiSetViewMode("ai://mem", false)
+		}
 		return true
 
 	case CmLeftSortName:

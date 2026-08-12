@@ -3,6 +3,8 @@ package main
 import (
 	"github.com/mattn/go-runewidth"
 	"github.com/unxed/f4/vtvibe"
+	"unicode/utf8"
+
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 	"strings"
@@ -103,7 +105,7 @@ func (cp *AIChatPanel) navigateToTarget(target string) {
 		if strings.HasPrefix(target, "ai://out/") || strings.HasPrefix(target, "ai://ctx/") {
 			actionOpenViewer(pf, cp.src.vfs, target)
 		} else {
-			aiSetViewMode(pf, target, false)
+			AiSetViewModePanel(pf, pf.activeIdx, target, false)
 		}
 	}
 }
@@ -305,10 +307,11 @@ func (cp *AIChatPanel) updateLines() {
 
 	attr := vtui.Palette[ColPanelText]
 	headerAttr := vtui.Palette[ColPanelTitle]
-	codeAttr := vtui.Palette[ColPanelInfoText]
 	linkAttr := vtui.Palette[vtui.ColMenuHighlight]
 
-	inCodeBlock := false
+	highlighter := vtui.GetHighlighter("chat.md", "")
+	var hlState any
+	bgAttr := vtui.Palette[ColPanelText]
 
 	appendWrapped := func(runes []rune, attrs []uint64, targets []string) {
 		col := 0
@@ -368,54 +371,23 @@ func (cp *AIChatPanel) updateLines() {
 		}
 
 		for _, p := range strings.Split(t.Text, "\n") {
-			pStr := strings.TrimSpace(p)
-			if strings.HasPrefix(pStr, "```") {
-				inCodeBlock = !inCodeBlock
-				lines = append(lines, makePlainLine("  "+p, codeAttr))
-				if inCodeBlock {
-					colon := strings.Index(pStr, ":")
-					if colon != -1 {
-						filename := strings.TrimSpace(pStr[colon+1:])
-						if filename != "" {
-							target := "ai://out/" + filename
-							runes := []rune("  " + target)
-							var attrs []uint64
-							var targets []string
-							for i := 0; i < len(runes); i++ {
-								if i < 2 {
-									attrs = append(attrs, codeAttr)
-									targets = append(targets, "")
-								} else {
-									attrs = append(attrs, linkAttr)
-									targets = append(targets, target)
-								}
-							}
-							appendWrapped(runes, attrs, targets)
-						}
-					}
-				}
-				continue
+			var lineSyntax []uint64
+			if highlighter != nil {
+				lineSyntax, hlState = highlighter.Highlight(p, hlState, bgAttr)
 			}
 
-			// Parse markdown inline links [text](url) and raw ai:// URLs
 			runesSrc := []rune("  " + p)
+			syntaxPad := []uint64{attr, attr}
+			fullSyntax := append(syntaxPad, lineSyntax...)
+
 			var runes []rune
 			var attrs []uint64
 			var targets []string
 
 			i := 0
-			inInlineCode := false
 			for i < len(runesSrc) {
-				if !inCodeBlock && runesSrc[i] == '`' {
-					inInlineCode = !inInlineCode
-					runes = append(runes, runesSrc[i])
-					attrs = append(attrs, attr)
-					targets = append(targets, "")
-					i++
-					continue
-				}
-
-				if !inCodeBlock && !inInlineCode && runesSrc[i] == '[' {
+				// Parse markdown inline links [text](url)
+				if runesSrc[i] == '[' {
 					closeBracket := -1
 					for j := i + 1; j < len(runesSrc); j++ {
 						if runesSrc[j] == ']' {
@@ -445,7 +417,8 @@ func (cp *AIChatPanel) updateLines() {
 					}
 				}
 
-				if !inCodeBlock && !inInlineCode && i+5 <= len(runesSrc) && string(runesSrc[i:i+5]) == "ai://" {
+				// Parse raw ai:// URLs
+				if i+5 <= len(runesSrc) && string(runesSrc[i:i+5]) == "ai://" {
 					end := i
 					for end < len(runesSrc) && runesSrc[end] > 32 && runesSrc[end] != ')' && runesSrc[end] != ']' {
 						end++
@@ -460,15 +433,45 @@ func (cp *AIChatPanel) updateLines() {
 					continue
 				}
 
-				runes = append(runes, runesSrc[i])
+				// Default syntax mapping
 				curAttr := attr
-				if inCodeBlock || inInlineCode {
-					curAttr = codeAttr
+				if i < len(fullSyntax) {
+					curAttr = fullSyntax[i]
+					// If Colorer applied default bg, ensure it blends with panel text bg
+					if curAttr&vtui.IsBgRGB == 0 && vtui.GetIndexBack(curAttr) == vtui.GetIndexBack(vtui.Palette[ColEditorText]) {
+						curAttr = vtui.SetIndexBack(curAttr, vtui.GetIndexBack(attr))
+					}
 				}
+				runes = append(runes, runesSrc[i])
 				attrs = append(attrs, curAttr)
 				targets = append(targets, "")
 				i++
 			}
+
+			// Add virtual link for explicit file output markers (```go:filename)
+			pStr := strings.TrimSpace(p)
+			if strings.HasPrefix(pStr, "```") {
+				colon := strings.Index(pStr, ":")
+				if colon != -1 {
+					filename := strings.TrimSpace(pStr[colon+1:])
+					if filename != "" {
+						target := "ai://out/" + filename
+						tr := []rune("  " + target)
+						for j := 0; j < len(tr); j++ {
+							if j < 2 {
+								runes = append(runes, tr[j])
+								attrs = append(attrs, attr)
+								targets = append(targets, "")
+							} else {
+								runes = append(runes, tr[j])
+								attrs = append(attrs, linkAttr)
+								targets = append(targets, target)
+							}
+						}
+					}
+				}
+			}
+
 			appendWrapped(runes, attrs, targets)
 		}
 		lines = append(lines, chatLine{})
@@ -551,4 +554,20 @@ func (cp *AIChatPanel) Show(scr *vtui.ScreenBuf) {
 	}
 
 	cp.input.Show(scr)
+}
+func cellCutChat(s string, width int) int {
+	if width <= 0 || s == "" {
+		return len(s)
+	}
+	used := 0
+	for i := 0; i < len(s); {
+		r, sz := utf8.DecodeRuneInString(s[i:])
+		w := runewidth.RuneWidth(r)
+		if used+w > width {
+			return i
+		}
+		used += w
+		i += sz
+	}
+	return len(s)
 }

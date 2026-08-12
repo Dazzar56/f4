@@ -13,6 +13,7 @@ import (
 
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/f4/vtvibe"
+	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
 
@@ -93,7 +94,7 @@ func vtvibeSaveSetting(key, value string) error {
 }
 
 func init() {
-	RegisterDrive("AI", func() vfs.VFS { return vtvibe.NewVFS(aiSession()) })
+	RegisterDrive("AI", func() vfs.VFS { return &aiVFSWrapper{vtvibe.NewVFS(aiSession())} })
 
 	if _, err := (&coreAPI{}).RegisterCommandPrefix("vtvibe", "ai", aiCommand); err != nil {
 		vtui.DebugLog("VTVIBE: cannot register the ai: prefix: %v", err)
@@ -119,46 +120,6 @@ func init() {
 		DefaultKeys: []string{"CtrlAltA"},
 		MenuPath:    "Commands",
 		Handler:     withAI(func(pf *PanelsFrame) { aiTogglePanel(pf) }),
-	})
-	RegisterAction(Action{
-		Name:        "AI.ViewContext",
-		Area:        "Shell",
-		Label:       "AI View: Context",
-		LabelKey:    "Action.AI.ViewContext",
-		DefaultKeys: []string{"Ctrl1"},
-		MenuPath:    "View",
-		Visible:     func() bool { return isAIPanelActive() },
-		Handler:     withAI(func(pf *PanelsFrame) { aiSetViewMode(pf, "ai://ctx", false) }),
-	})
-	RegisterAction(Action{
-		Name:        "AI.ViewChat",
-		Area:        "Shell",
-		Label:       "AI View: Chat",
-		LabelKey:    "Action.AI.ViewChat",
-		DefaultKeys: []string{"Ctrl2"},
-		MenuPath:    "View",
-		Visible:     func() bool { return isAIPanelActive() },
-		Handler:     withAI(func(pf *PanelsFrame) { aiSetViewMode(pf, "ai://chat", true) }),
-	})
-	RegisterAction(Action{
-		Name:        "AI.ViewOut",
-		Area:        "Shell",
-		Label:       "AI View: Artifacts",
-		LabelKey:    "Action.AI.ViewOut",
-		DefaultKeys: []string{"Ctrl3"},
-		MenuPath:    "View",
-		Visible:     func() bool { return isAIPanelActive() },
-		Handler:     withAI(func(pf *PanelsFrame) { aiSetViewMode(pf, "ai://out", false) }),
-	})
-	RegisterAction(Action{
-		Name:        "AI.ViewMem",
-		Area:        "Shell",
-		Label:       "AI View: Memory",
-		LabelKey:    "Action.AI.ViewMem",
-		DefaultKeys: []string{"Ctrl4"},
-		MenuPath:    "View",
-		Visible:     func() bool { return isAIPanelActive() },
-		Handler:     withAI(func(pf *PanelsFrame) { aiSetViewMode(pf, "ai://mem", false) }),
 	})
 	RegisterAction(Action{
 		Name:        "AI.Ask",
@@ -197,13 +158,59 @@ func init() {
 // same key brings the files back.
 var aiPrevPath [2]string
 
+type aiVFSWrapper struct {
+	*vtvibe.AIVFS
+}
+
+func (w *aiVFSWrapper) ProcessPanelKey(app vfs.App, e *vtinput.InputEvent) bool {
+	if !e.KeyDown {
+		return false
+	}
+	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
+	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
+	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
+
+	if ctrl && !alt && !shift {
+		pf, ok := app.(*PanelsFrame)
+		if !ok {
+			return false
+		}
+
+		idx := -1
+		for i, p := range pf.panels {
+			if fsp, isFsp := p.(*FileSystemPanel); isFsp && fsp.vfs == w {
+				idx = i
+				break
+			}
+		}
+		if idx == -1 {
+			return false
+		}
+
+		switch e.VirtualKeyCode {
+		case vtinput.VK_1:
+			AiSetViewModePanel(pf, idx, "ai://ctx", false)
+			return true
+		case vtinput.VK_2:
+			AiSetViewModePanel(pf, idx, "ai://chat", true)
+			return true
+		case vtinput.VK_3:
+			AiSetViewModePanel(pf, idx, "ai://out", false)
+			return true
+		case vtinput.VK_4:
+			AiSetViewModePanel(pf, idx, "ai://mem", false)
+			return true
+		}
+	}
+	return false
+}
+
 func aiTogglePanel(pf *PanelsFrame) {
 	// If any panel is AI, close it entirely
 	for i, p := range pf.panels {
 		if fsp, ok := p.(*FileSystemPanel); ok {
-			if _, isAI := fsp.vfs.(*vtvibe.AIVFS); isAI {
+			if _, isAI := fsp.vfs.(*aiVFSWrapper); isAI {
 				pf.exitWide()
-				// close alt panel if active
 				if pf.altPanels[i] != nil && pf.altPanels[i].Kind() == "ai_chat" {
 					if c, ok := pf.altPanels[i].(interface{ Close() }); ok {
 						c.Close()
@@ -221,28 +228,22 @@ func aiTogglePanel(pf *PanelsFrame) {
 		}
 	}
 
-	// Open AI in the inactive panel and make it full screen
 	idx := 1 - pf.activeIdx
 	fsp := pf.panels[idx].(*FileSystemPanel)
 	aiPrevPath[idx] = fsp.vfs.GetPath()
 	vtvibeConfig()
-	pf.switchToVFS(fsp, vtvibe.NewVFS(aiSession()))
+	pf.switchToVFS(fsp, &aiVFSWrapper{vtvibe.NewVFS(aiSession())})
 
-	// Default to Chat View
-	aiSetViewMode(pf, "ai://chat", true)
+	AiSetViewModePanel(pf, idx, "ai://chat", true)
 	pf.setWidePanel(idx)
 }
 
-func aiSetViewMode(pf *PanelsFrame, path string, isChat bool) {
-	fsp := pf.getActivePanel()
-	if fsp == nil {
-		return
-	}
-	if _, isAI := fsp.vfs.(*vtvibe.AIVFS); !isAI {
+func AiSetViewModePanel(pf *PanelsFrame, idx int, path string, isChat bool) {
+	fsp := pf.panels[idx].(*FileSystemPanel)
+	if _, isAI := fsp.vfs.(*aiVFSWrapper); !isAI {
 		return
 	}
 
-	idx := pf.activeIdx
 	currentAlt := pf.altPanels[idx]
 
 	if isChat {
@@ -272,6 +273,23 @@ func aiSetViewMode(pf *PanelsFrame, path string, isChat bool) {
 	}
 	pf.ResizeConsole(pf.lastW, pf.lastH)
 	vtui.FrameManager.HardRefresh()
+}
+
+// Support for reflection cast from commands.go
+func (fsp *FileSystemPanel) AiSetViewMode(path string, isChat bool) {
+	pf := findPanelsFrameAnyScreen()
+	if pf != nil {
+		idx := -1
+		if pf.panels[0] == fsp {
+			idx = 0
+		}
+		if pf.panels[1] == fsp {
+			idx = 1
+		}
+		if idx != -1 {
+			AiSetViewModePanel(pf, idx, path, isChat)
+		}
+	}
 }
 
 func aiNewSession(pf *PanelsFrame) {
@@ -360,14 +378,14 @@ func aiAskAction() bool {
 			fsp := aiPf.panels[idx].(*FileSystemPanel)
 			aiPrevPath[idx] = fsp.vfs.GetPath()
 			vtvibeConfig()
-			aiPf.switchToVFS(fsp, vtvibe.NewVFS(aiSession()))
+			aiPf.switchToVFS(fsp, &aiVFSWrapper{vtvibe.NewVFS(aiSession())})
 			aiPf.setWidePanel(idx)
 		}
 	}
 
 	// 3. Set up the chat, inject context, and start a new session
 	if aiPf != nil {
-		aiSetViewMode(aiPf, "ai://chat", true)
+		AiSetViewModePanel(aiPf, aiPf.activeIdx, "ai://chat", true)
 		aiSession().Reset(true) // Keep files in ctx/, clear chat history
 
 		if aiPf.altPanels[aiPf.activeIdx] != nil {

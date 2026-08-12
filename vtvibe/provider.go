@@ -60,6 +60,7 @@ var httpClient = &http.Client{
 type chatRequest struct {
 	Model    string    `json:"model"`
 	Messages []Message `json:"messages"`
+	Tools    []any     `json:"tools,omitempty"`
 }
 
 type chatResponse struct {
@@ -86,6 +87,19 @@ func (c Config) Chat(ctx context.Context, msgs []Message) (string, Usage, error)
 		return "", Usage{}, ErrNoKey
 	}
 	body, err := json.Marshal(chatRequest{Model: c.Model, Messages: msgs})
+	if err != nil {
+		return "", Usage{}, err
+	}
+
+	req := chatRequest{Model: c.Model, Messages: msgs}
+	if strings.Contains(strings.ToLower(c.Model), "gemini") {
+		// Embed native Gemini search tools directly into OpenAI-compatible payload
+		req.Tools = []any{
+			map[string]any{"googleSearch": map[string]any{}},
+			map[string]any{"retrieval": map[string]any{}},
+		}
+	}
+	body, err = json.Marshal(req)
 	if err != nil {
 		return "", Usage{}, err
 	}

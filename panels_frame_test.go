@@ -4785,6 +4785,17 @@ func TestPanelsFrame_CtrlP_TogglesPassivePanel(t *testing.T) {
 	}
 }
 
+func TestPanelsFrame_AICmds(t *testing.T) {
+	pf := NewPanelsFrame()
+	defer pf.Close()
+
+	handled := pf.HandleCommand(CmLeftAIChat, nil)
+	// It should gracefully handle these even if no AI panel is there
+	if !handled {
+		t.Error("CmLeftAIChat should be handled")
+	}
+}
+
 func panelWidth(p Panel) int  { x1, _, x2, _ := p.GetPosition(); return x2 - x1 + 1 }
 func panelHeight(p Panel) int { _, y1, _, y2 := p.GetPosition(); return y2 - y1 + 1 }
 
