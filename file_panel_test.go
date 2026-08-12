@@ -4511,7 +4511,7 @@ func TestFileSystemPanel_BottomFrameShowsCursorEntry(t *testing.T) {
 	}
 	fp.Refresh()
 
-	bottom := func() string { return screenRow(scr, fp.Y2, fp.X1, fp.X2) }
+	bottom := func() string { return ScreenRow(scr, fp.Y2, fp.X1, fp.X2) }
 
 	// The total keeps the centre, the entry under the cursor sits in the
 	// left corner; both are spelled out in exact bytes.

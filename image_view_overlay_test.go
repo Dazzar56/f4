@@ -118,10 +118,10 @@ func TestImageViewOverlayGoesOverThePicture(t *testing.T) {
 	iv.Show(scr)
 	scr.Graphics().EndFrame()
 
-	if row := screenRow(scr, 1, 0, 20); !strings.Contains(row, "photo.png") {
+	if row := ScreenRow(scr, 1, 0, 20); !strings.Contains(row, "photo.png") {
 		t.Errorf("the first line of the panel is %q", row)
 	}
-	if row := screenRow(scr, 2, 0, 20); !strings.Contains(row, "100x100") {
+	if row := ScreenRow(scr, 2, 0, 20); !strings.Contains(row, "100x100") {
 		t.Errorf("the second line of the panel is %q", row)
 	}
 
