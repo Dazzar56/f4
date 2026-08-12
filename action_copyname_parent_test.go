@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -115,7 +116,11 @@ func TestAction_PanelInsertPath_CursorOnFile(t *testing.T) {
 	if !RunAction("Panel.InsertPath") {
 		t.Fatal("Panel.InsertPath did not run")
 	}
-	want := `echo "` + filepath.Join(tmp, "a.txt") + `"`
+	path := filepath.Join(tmp, "a.txt")
+	want := "echo " + path
+	if runtime.GOOS == "windows" {
+		want = `echo "` + path + `"`
+	}
 	if got := pf.cmdLine.Edit.GetText(); got != want {
 		t.Errorf("command line = %q, want %q", got, want)
 	}
