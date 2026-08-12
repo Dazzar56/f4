@@ -62,15 +62,38 @@ func mountActivePanel(pf *PanelsFrame) {
 	}
 
 	if _, isOS := fsp.vfs.(*vfs.OSVFS); isOS {
-		source := fsp.vfs.GetPath()
-		if source == "" {
+		dir := fsp.vfs.GetPath()
+		if dir == "" {
 			return
 		}
-		m, err := fusefs.MountSource(source, fusefs.Options{
-			MountPoint: fusefs.SuggestMountPoint(source),
+		// An archive under the cursor is a location of its own, and the
+		// file is exactly the source a fresh VFS is opened from. It is
+		// opened here rather than through MountSource because an archive
+		// needs a parent to read the file through — a brand new OSVFS,
+		// never the one the panel is holding.
+		if entry := currentPanelEntryPath(fsp); entry != "" && entry != dir {
+			ctx := context.Background()
+			parent := vfs.NewOSVFS(dir)
+			if prov := vfs.FindProvider(ctx, parent, entry); prov != nil {
+				v, err := prov.Open(ctx, parent, entry)
+				if err != nil {
+					reportMount(entry, nil, err)
+					return
+				}
+				m, err := fusefs.MountVFS(ctx, v, fusefs.Options{
+					MountPoint: fusefs.SuggestMountPoint(entry),
+					Source:     entry,
+					ReadOnly:   true,
+				})
+				reportMount(entry, m, err)
+				return
+			}
+		}
+		m, err := fusefs.MountSource(dir, fusefs.Options{
+			MountPoint: fusefs.SuggestMountPoint(dir),
 			ReadOnly:   true,
 		})
-		reportMount(source, m, err)
+		reportMount(dir, m, err)
 		return
 	}
 
