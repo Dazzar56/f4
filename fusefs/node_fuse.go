@@ -135,13 +135,29 @@ func (n *node) Open(ctx context.Context, flags uint32) (fs.FileHandle, uint32, s
 	return &fileHandle{h: h}, 0, 0
 }
 
-// Statfs reports something plausible rather than nothing: tools like df and
-// some file dialogs treat a failing statfs as a broken file system.
+// Statfs numbers. A VFS backend knows neither its size nor its free space —
+// an archive has no such notion, and asking a remote host for one would be a
+// round trip per df(1). The figures below are deliberately synthetic and
+// deliberately large: their only job is to be an answer a writer accepts.
+const (
+	statfsBlockSize   = 4096
+	statfsTotalBlocks = 1 << 28 // 1 TiB in 4 KiB blocks
+	statfsTotalInodes = 1 << 20
+)
+
+// Statfs reports a plausible size rather than nothing. Zeroes are a fine
+// answer for a read-only mount and a bad one for a writable mount: cp, git
+// and most file dialogs check free space first and refuse to write to a file
+// system that claims to have none. A failing statfs is worse still — df and
+// some dialogs read that as a broken file system.
 func (n *node) Statfs(ctx context.Context, out *fuse.StatfsOut) syscall.Errno {
-	out.Blocks = 0
-	out.Bfree = 0
-	out.Bavail = 0
-	out.Bsize = 4096
+	out.Blocks = statfsTotalBlocks
+	out.Bfree = statfsTotalBlocks
+	out.Bavail = statfsTotalBlocks
+	out.Bsize = statfsBlockSize
+	out.Frsize = statfsBlockSize
+	out.Files = statfsTotalInodes
+	out.Ffree = statfsTotalInodes
 	out.NameLen = 255
 	return 0
 }
