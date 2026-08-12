@@ -2272,7 +2272,7 @@ func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
 	// the selected-files line. Directories say <DIR>/UP-DIR instead. When
 	// the far2l status line is switched on it already states all of this
 	// right above, so the marker steps aside.
-	if !AppConfig.ShowPanelFileInfo {
+	if !AppConfig.ShowPanelFileInfo && fp.gridColumnCount() > 1 {
 		if idx := fp.GetCursorIndex(); idx >= 0 && idx < len(fp.entries) {
 			e := fp.entries[idx]
 			curStr := formatIntWithSpaces(e.Size)

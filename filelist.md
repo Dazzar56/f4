@@ -11,6 +11,8 @@
     ├── action_restore_selection_test.go
     ├── actions.go
     ├── actions_test.go
+    ├── ai_chat_panel.go
+    ├── ai_chat_panel_test.go
     ├── ansi_parser.go
     ├── ansi_parser_test.go
     ├── api.go
@@ -374,6 +376,7 @@
     ├── mem_info_linux.go
     ├── mem_info_other.go
     ├── mem_info_windows.go
+    ├── misc.go
     ├── navigation_mode.go
     ├── navigation_mode_test.go
     ├── packaging
@@ -832,11 +835,13 @@
     │   ├── memtree.go
     │   ├── pack.go
     │   ├── provider.go
+    │   ├── provider_test.go
     │   ├── session.go
+    │   ├── session_test.go
     │   └── vfs.go
     ├── vtvibe_host.go
+    ├── vtvibe_host_test.go
     ├── vtvibe.md
-    ├── VTVIBE.md
     ├── wasm_plugin.go
     ├── wasm_plugin_test.go
     ├── window_icon_windows.go
@@ -847,4 +852,4 @@
     ├── workspace_session.go
     └── workspace_session_test.go
     
-    54 directories, 792 files
+    54 directories, 797 files
