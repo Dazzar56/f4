@@ -248,8 +248,23 @@ func validSessionViewMode(mode int) ViewMode {
 }
 
 func applyWorkspaceSession(pf *PanelsFrame, state workspaceSessionState, width, height int, restorePaths bool) {
-	left := pf.panels[0].(*FileSystemPanel)
-	right := pf.panels[1].(*FileSystemPanel)
+	if pf == nil {
+		return
+	}
+	left, leftOK := pf.panels[0].(*FileSystemPanel)
+	right, rightOK := pf.panels[1].(*FileSystemPanel)
+	if !leftOK || left == nil || !rightOK || right == nil {
+		// A freshly constructed background workspace has not been laid out yet,
+		// so ResizeConsole must create its file panels before session state can
+		// be applied. The first workspace is already resized by SetupUI, while
+		// restored background workspaces reach this function directly.
+		pf.ResizeConsole(width, height)
+		left, leftOK = pf.panels[0].(*FileSystemPanel)
+		right, rightOK = pf.panels[1].(*FileSystemPanel)
+		if !leftOK || left == nil || !rightOK || right == nil {
+			return
+		}
+	}
 	if restorePaths {
 		left.pendingSelection, right.pendingSelection = state.Left.Cursor, state.Right.Cursor
 	}
