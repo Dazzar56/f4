@@ -66,6 +66,13 @@ const (
 // barKind decides what the strip shows right now.
 func (cp *AIChatPanel) barKind() int {
 	session := cp.getSession()
+	if session.HasNewContextFiles() {
+		return aiBarFiles
+	}
+	if session.LastPatch() != nil {
+		return aiBarPatch
+	}
+	// Fallback when there are some context files but no new ones
 	ctxFiles := session.ContextFiles()
 	userFilesCount := 0
 	for _, f := range ctxFiles {
@@ -73,11 +80,8 @@ func (cp *AIChatPanel) barKind() int {
 			userFilesCount++
 		}
 	}
-	if userFilesCount > 0 {
+	if userFilesCount > 0 && session.LastPatch() == nil {
 		return aiBarFiles
-	}
-	if session.LastPatch() != nil {
-		return aiBarPatch
 	}
 	return aiBarNone
 }
@@ -585,6 +589,10 @@ func (cp *AIChatPanel) updateLines() {
 				colon := strings.Index(pStr, ":")
 				if colon != -1 {
 					filename := strings.TrimSpace(pStr[colon+1:])
+					filename = strings.TrimPrefix(filename, "ai://out/")
+					filename = strings.TrimPrefix(filename, "ai://")
+					filename = strings.TrimPrefix(filename, "/out/")
+					filename = strings.TrimPrefix(filename, "out/")
 					if filename != "" {
 						target := "ai://out/" + filename
 						tr := []rune("  " + target)

@@ -14,6 +14,7 @@ func TestArtifactName(t *testing.T) {
 		{"python: src/app.py ", "app.py"},
 		{"bash: /etc/passwd", "passwd"},
 		{"yaml:../secret.yml", "secret.yml"},
+		{"ap:ai://out/x11_backend.ap", "x11_backend.ap"},
 	}
 
 	for _, tt := range tests {

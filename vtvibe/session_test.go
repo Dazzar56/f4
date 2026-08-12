@@ -37,6 +37,34 @@ func TestSession_Reset(t *testing.T) {
 		t.Errorf("expected context to be cleared")
 	}
 }
+func TestSession_HasNewContextFiles(t *testing.T) {
+	s := NewSession()
+
+	// Case 1: No turns, should be false
+	if s.HasNewContextFiles() {
+		t.Error("Expected HasNewContextFiles to be false on empty session")
+	}
+
+	// Add user files to /ctx
+	_ = s.tree.writeFile("/ctx/run.sh", []byte("echo hello"))
+
+	// Add a turn
+	s.appendTurn(Turn{Role: "user", Text: "Hello", Time: time.Now()})
+
+	// Case 2: Files exist but are older than the turn
+	if s.HasNewContextFiles() {
+		t.Error("Expected HasNewContextFiles to be false when files are older than the turn")
+	}
+
+	// Add a new file after the turn
+	time.Sleep(10 * time.Millisecond) // Ensure time advances
+	_ = s.tree.writeFile("/ctx/new.go", []byte("package main"))
+
+	// Case 3: A new file is added after the turn
+	if !s.HasNewContextFiles() {
+		t.Error("Expected HasNewContextFiles to be true when a new file is added after the turn")
+	}
+}
 func TestAIVFS_CreateRedirectsToContextWhenCwdIsChat(t *testing.T) {
 	s := NewSession()
 	v := NewVFS(s)

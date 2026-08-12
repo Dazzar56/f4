@@ -82,6 +82,30 @@ func (s *Session) PatchMode() bool {
 	return s.apMode
 }
 
+// HasNewContextFiles reports whether there are files in /ctx that were created
+// or modified after the last turn of the conversation.
+func (s *Session) HasNewContextFiles() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.turns) == 0 {
+		return false
+	}
+	lastTurnTime := s.turns[len(s.turns)-1].Time
+
+	files := s.tree.walkFiles(ctxDir)
+	for _, f := range files {
+		if f == ctxDir+"/ap.md" {
+			continue
+		}
+		if node, ok := s.tree.stat(f); ok {
+			if node.mtime.After(lastTurnTime) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // NewSession creates an empty dialog with its folder skeleton in place.
 func NewSession() *Session {
 	s := &Session{tree: newMemTree()}
@@ -320,6 +344,10 @@ func artifactName(info string) string {
 		return "" // just a language tag, e.g. ```go
 	}
 	candidate = strings.TrimSpace(candidate)
+	candidate = strings.TrimPrefix(candidate, "ai://out/")
+	candidate = strings.TrimPrefix(candidate, "ai://")
+	candidate = strings.TrimPrefix(candidate, "/out/")
+	candidate = strings.TrimPrefix(candidate, "out/")
 	candidate = strings.ReplaceAll(candidate, "\\", "/")
 	base := path.Base(candidate)
 	if base == "" || base == "." || base == ".." || base == "/" {
