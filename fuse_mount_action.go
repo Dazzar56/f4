@@ -79,7 +79,7 @@ func mountActivePanel(pf *PanelsFrame) {
 			m = mounted
 			return nil
 		},
-		func(err error) { reportMount(label, m, err) })
+		func(err error) { reportMount(pf, label, m, err) })
 }
 
 // mountPlan decides what the active panel would have mounted, and returns a
@@ -143,10 +143,22 @@ func mountPlan(fsp *FileSystemPanel) (string, func(context.Context) (*fusefs.Mou
 	}
 }
 
-func reportMount(source string, m *fusefs.Mount, err error) {
+// reportMount says what happened, and on success offers the one thing the
+// user almost certainly wants next: to be standing in the mount.
+func reportMount(pf *PanelsFrame, source string, m *fusefs.Mount, err error) {
 	if err != nil {
 		vtui.ShowMessage(" Mount ", fmt.Sprintf("Cannot mount %s:\n%v", source, err), []string{"&Ok"})
 		return
 	}
-	vtui.ShowMessage(" Mount ", fmt.Sprintf("%s\nis mounted at\n%s", source, m.MountPoint), []string{"&Ok"})
+	point := m.MountPoint
+	dlg := vtui.ShowMessage(" Mount ", fmt.Sprintf("%s\nis mounted at\n%s", source, point),
+		[]string{"&Go to", "&Ok"})
+	dlg.OnResult = func(code int) {
+		if code != 0 {
+			return
+		}
+		if fsp := pf.getActivePanel(); fsp != nil {
+			pf.NavigateToPath(fsp, point)
+		}
+	}
 }

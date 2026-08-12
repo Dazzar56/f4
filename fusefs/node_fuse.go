@@ -76,6 +76,7 @@ var (
 	_ = (fs.NodeMkdirer)((*node)(nil))
 	_ = (fs.NodeUnlinker)((*node)(nil))
 	_ = (fs.NodeRmdirer)((*node)(nil))
+	_ = (fs.NodeRenamer)((*node)(nil))
 )
 
 // writeRefusal reports why a write cannot happen, or 0 when it can. The mount
@@ -326,6 +327,31 @@ func (n *node) removeChild(ctx context.Context, name string) syscall.Errno {
 		return errno
 	}
 	if err := n.b.remove(ctx, n.path, name); err != nil {
+		return errnoOf(err)
+	}
+	return 0
+}
+
+// Rename is the last write that needs no open handle. The destination arrives
+// as a node rather than a path, because the kernel may be moving the entry
+// into a different directory of the same mount; anything else is not ours to
+// serve and the kernel does not ask us to.
+//
+// RENAME_EXCHANGE and RENAME_NOREPLACE are refused rather than approximated:
+// vfs.Rename has no way to promise either, and a rename that silently loses
+// the guarantee the caller asked for is worse than one that fails.
+func (n *node) Rename(ctx context.Context, name string, newParent fs.InodeEmbedder, newName string, flags uint32) syscall.Errno {
+	if errno := n.writeRefusal(); errno != 0 {
+		return errno
+	}
+	if flags != 0 {
+		return syscall.EINVAL
+	}
+	target, ok := newParent.(*node)
+	if !ok {
+		return syscall.EXDEV
+	}
+	if err := n.b.rename(ctx, n.path, name, target.path, newName); err != nil {
 		return errnoOf(err)
 	}
 	return 0

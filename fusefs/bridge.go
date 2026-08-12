@@ -204,6 +204,24 @@ func (b *bridge) remove(ctx context.Context, dirPath, name string) error {
 	return err
 }
 
+// rename moves one entry, possibly into another directory. Both listings are
+// dropped: the entry has to stop appearing in the old one and start appearing
+// in the new one, and a cache that lags either way looks like a lost file.
+func (b *bridge) rename(ctx context.Context, oldDir, oldName, newDir, newName string) error {
+	b.mu.Lock()
+	if b.closed {
+		b.mu.Unlock()
+		return errClosed
+	}
+	err := b.v.Rename(ctx, b.join(oldDir, oldName), b.join(newDir, newName))
+	b.mu.Unlock()
+	b.invalidate(oldDir)
+	if newDir != oldDir {
+		b.invalidate(newDir)
+	}
+	return err
+}
+
 func (b *bridge) lookup(ctx context.Context, dirPath, name string) (vfs.VFSItem, error) {
 	if items, ok := b.cachedDir(dirPath); ok {
 		for _, item := range items {
