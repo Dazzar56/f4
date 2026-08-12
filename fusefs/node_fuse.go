@@ -73,7 +73,41 @@ var (
 	_ = (fs.NodeReaddirer)((*node)(nil))
 	_ = (fs.NodeOpener)((*node)(nil))
 	_ = (fs.NodeStatfser)((*node)(nil))
+	_ = (fs.NodeMkdirer)((*node)(nil))
 )
+
+// writeRefusal reports why a write cannot happen, or 0 when it can. The mount
+// being read-only and the backend being unable to write are different facts
+// and are asked separately, so turning writes on is one check to change.
+func (n *node) writeRefusal() syscall.Errno {
+	if n.b.readOnly || !n.b.writeOK {
+		return syscall.EROFS
+	}
+	return 0
+}
+
+// Mkdir is the first write opcode: it needs no staging file, no handle table
+// and no commit-on-close semantics, so it exercises the write path end to end
+// without any of what iteration 4 still has to decide.
+func (n *node) Mkdir(ctx context.Context, name string, mode uint32, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
+	if errno := n.writeRefusal(); errno != 0 {
+		return nil, errno
+	}
+	if err := n.b.mkdir(ctx, n.path, name); err != nil {
+		return nil, errnoOf(err)
+	}
+	childPath := n.b.join(n.path, name)
+	item, err := n.b.stat(ctx, childPath)
+	if err != nil {
+		// The directory is there; the backend simply cannot describe it
+		// yet. Answering with what we know beats failing a mkdir that
+		// actually succeeded.
+		item = vfs.VFSItem{Name: name, IsDir: true, MTime: time.Now()}
+	}
+	fillAttr(&out.Attr, item, childPath)
+	stable := fs.StableAttr{Ino: inodeOf(childPath), Mode: typeBits(item)}
+	return n.NewInode(ctx, &node{b: n.b, path: childPath}, stable), 0
+}
 
 func (n *node) Getattr(ctx context.Context, f fs.FileHandle, out *fuse.AttrOut) syscall.Errno {
 	item, err := n.b.stat(ctx, n.path)
@@ -123,9 +157,10 @@ func (n *node) Open(ctx context.Context, flags uint32) (fs.FileHandle, uint32, s
 		// clear "this file system does not do that" instead of a
 		// confusing partial success. The two reasons stay separate so
 		// iteration 4 only has to change the first one.
-		if n.b.readOnly || !n.b.writeOK {
-			return nil, 0, syscall.EROFS
+		if errno := n.writeRefusal(); errno != 0 {
+			return nil, 0, errno
 		}
+		// Writing to a file is iteration 4; the mount does not pretend.
 		return nil, 0, syscall.ENOSYS
 	}
 	item, err := n.b.stat(ctx, n.path)

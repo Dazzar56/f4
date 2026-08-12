@@ -174,6 +174,22 @@ func (b *bridge) stat(ctx context.Context, itemPath string) (vfs.VFSItem, error)
 
 // lookup resolves one name inside a directory, preferring the listing the
 // kernel just walked over a fresh per-name round trip.
+// mkdir is the first write the bridge does. It drops the parent's cached
+// listing on the way out: without that, `mkdir x && ls` would not show x for
+// as long as the cache lives, which reads as the mount having ignored the
+// command.
+func (b *bridge) mkdir(ctx context.Context, dirPath, name string) error {
+	b.mu.Lock()
+	if b.closed {
+		b.mu.Unlock()
+		return errClosed
+	}
+	err := b.v.MkDir(ctx, b.join(dirPath, name))
+	b.mu.Unlock()
+	b.invalidate(dirPath)
+	return err
+}
+
 func (b *bridge) lookup(ctx context.Context, dirPath, name string) (vfs.VFSItem, error) {
 	if items, ok := b.cachedDir(dirPath); ok {
 		for _, item := range items {

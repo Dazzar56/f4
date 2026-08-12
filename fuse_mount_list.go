@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/unxed/f4/fusefs"
 	"github.com/unxed/vtui"
@@ -38,6 +39,8 @@ func init() {
 type mountRow struct {
 	point  string
 	source string
+	mode   string
+	age    time.Duration
 	note   string
 	live   *fusefs.Mount // nil when the mount belongs to another process
 }
@@ -49,7 +52,13 @@ func mountRows() []mountRow {
 	var rows []mountRow
 	seen := make(map[string]bool)
 	for _, m := range fusefs.List() {
-		rows = append(rows, mountRow{point: m.MountPoint, source: m.Source, live: m})
+		rows = append(rows, mountRow{
+			point:  m.MountPoint,
+			source: m.Source,
+			mode:   mountMode(m.ReadOnly),
+			age:    time.Since(m.Since).Truncate(time.Second),
+			live:   m,
+		})
 		seen[m.MountPoint] = true
 	}
 	recs, err := fusefs.Mounts()
@@ -63,6 +72,8 @@ func mountRows() []mountRow {
 		rows = append(rows, mountRow{
 			point:  r.MountPoint,
 			source: r.Source,
+			mode:   r.Mode(),
+			age:    r.Age().Truncate(time.Second),
 			note:   fmt.Sprintf(" (pid %d)", r.PID),
 		})
 	}
@@ -85,7 +96,7 @@ func showMountList(pf *PanelsFrame) {
 	}
 	for i, r := range rows {
 		menu.AddItem(vtui.MenuItem{
-			Text:     fmt.Sprintf("%s  \u2190  %s%s", r.point, r.source, r.note),
+			Text:     fmt.Sprintf("%s  %s %s  \u2190  %s%s", r.point, r.mode, r.age, r.source, r.note),
 			UserData: i,
 		})
 	}
@@ -178,4 +189,13 @@ func unmountAll(rows []mountRow) {
 	if len(failed) > 0 {
 		vtui.ShowMessage(" Mounts ", "Still mounted:\n"+strings.Join(failed, "\n"), []string{"&Ok"})
 	}
+}
+
+// mountMode renders the access mode the way mount(8) output does, so a mount
+// this process owns and a record from the registry read the same.
+func mountMode(readOnly bool) string {
+	if readOnly {
+		return "ro"
+	}
+	return "rw"
 }

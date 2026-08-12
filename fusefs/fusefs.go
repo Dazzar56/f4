@@ -74,6 +74,9 @@ type Mount struct {
 	Source     string
 	RootPath   string
 	Since      time.Time
+	// ReadOnly is the mode the mount came up in, so a caller listing mounts
+	// can say which is which without asking the bridge.
+	ReadOnly bool
 
 	server     mountServer
 	bridge     *bridge
@@ -142,6 +145,7 @@ func MountVFS(ctx context.Context, v vfs.VFS, opts Options) (*Mount, error) {
 	}
 
 	m := &Mount{
+		ReadOnly:   opts.ReadOnly,
 		MountPoint: point,
 		Source:     describeSource(opts.Source, v, root),
 		RootPath:   root,
