@@ -5,6 +5,7 @@ import (
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/f4/vtvibe"
 	"github.com/unxed/vtinput"
+	"github.com/unxed/vtui"
 	"strings"
 	"testing"
 )
