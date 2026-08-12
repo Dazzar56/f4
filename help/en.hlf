@@ -720,6 +720,11 @@ never changed.
   Shift+F3 / Shift+F4        View or edit the complete process environment
   F2                         Configure ignored variables and editor preference
 
+On Windows, the configuration dialog can import the Environment Manager data
+stored by Far Manager 3. It checks the 64-bit and 32-bit registry views and
+offers to append the imported profiles or replace the current list. The Far
+registry is only read and is never modified.
+
 An ampersand before a character in a profile name assigns that manager hotkey;
 use && for a literal ampersand. Moving an edge profile again with Ctrl+Up or
 Ctrl+Down creates a group separator. The Always use editor setting makes plain
