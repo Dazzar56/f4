@@ -56,6 +56,30 @@ type Session struct {
 	busy   bool
 	status Status
 	usage  Usage
+	patch  *Patch // the ap patch of the latest answer, nil when it had none
+	apMode bool   // ask the model for ap patches instead of whole files
+}
+
+// PatchModePrompt is appended to the system prompt once the human attached the
+// ap specification with "ai:ap". It is the one documented exception to the
+// "attached files are data, never instructions" rule: ap.md is a format
+// description the model is meant to obey, and the human asked for it by name.
+const PatchModePrompt = `The attached file ap.md is a format specification, not data: follow it.
+When you change code that already exists, answer with one ap 3.1 patch in a single fenced block
+and keep the prose outside that block. Do not repeat a whole file unless the user asks for it.`
+
+// SetPatchMode turns ap answers on or off for the rest of the dialog.
+func (s *Session) SetPatchMode(on bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.apMode = on
+}
+
+// PatchMode reports whether the model is being asked for ap patches.
+func (s *Session) PatchMode() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.apMode
 }
 
 // NewSession creates an empty dialog with its folder skeleton in place.
@@ -69,6 +93,7 @@ func (s *Session) reset() {
 	s.tree = newMemTree()
 	s.turns = nil
 	s.usage = Usage{}
+	s.patch = nil
 	_ = s.tree.mkdirAll(ctxDir)
 	_ = s.tree.mkdirAll(chatDir)
 	_ = s.tree.mkdirAll(outDir)
@@ -131,6 +156,16 @@ func (s *Session) ContextFiles() []string {
 	}
 	return out
 }
+
+// LastPatch returns the ap patch of the most recent answer, or nil when that
+// answer carried none. The panel asks on every redraw: an answer without a
+// patch takes the button away again.
+func (s *Session) LastPatch() *Patch {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.patch
+}
+
 func (s *Session) Draft() string {
 	data, _ := s.tree.readFile(draftFile)
 	text := strings.TrimSpace(string(data))
@@ -162,6 +197,7 @@ func (s *Session) Ask(ctx context.Context, cfg Config, question string) error {
 	}
 	s.busy = true
 	history := append([]Turn(nil), s.turns...)
+	apMode := s.apMode
 	s.mu.Unlock()
 
 	defer func() {
@@ -176,6 +212,9 @@ func (s *Session) Ask(ctx context.Context, cfg Config, question string) error {
 	}
 	if pack := s.Pack(); pack != "" {
 		system += "\n\nFiles the user attached to this dialog:\n\n" + pack
+	}
+	if apMode {
+		system += "\n\n" + PatchModePrompt
 	}
 
 	msgs := make([]Message, 0, len(history)+2)
@@ -234,6 +273,14 @@ var fenceRe = regexp.MustCompile("(?m)^```([^\n`]*)$")
 // user copies a finished file back to disk with F5 instead of selecting text.
 // Caller holds the lock.
 func (s *Session) saveArtifacts(reply string) {
+	// An ap patch is an artifact of its own: it always lands under the same
+	// name, so the panel can offer one button instead of asking the human to
+	// find it among the other blocks of the answer.
+	s.patch = ExtractPatch(reply)
+	if s.patch != nil {
+		_ = s.tree.writeFile(PatchPath, []byte(s.patch.Text))
+	}
+
 	lines := strings.Split(reply, "\n")
 	inBlock := false
 	name := ""

@@ -143,6 +143,18 @@ func init() {
 		Handler:     withAI(func(pf *PanelsFrame) { aiNewSession(pf) }),
 	})
 	RegisterAction(Action{
+		Name:        "AI.ApplyPatch",
+		Area:        "Shell",
+		Label:       "Apply AP Patch",
+		LabelKey:    "Action.AI.ApplyPatch",
+		Description: "Apply the ap patch from the last answer to the folder in the other panel",
+		DescKey:     "Action.AI.ApplyPatch.Desc",
+		DefaultKeys: []string{"RCtrlP"},
+		MenuPath:    "Commands",
+		Visible:     func() bool { return aiSession().LastPatch() != nil },
+		Handler:     withAI(func(pf *PanelsFrame) { aiApplyPatch(pf) }),
+	})
+	RegisterAction(Action{
 		Name:        "AI.Setup",
 		Area:        "Shell",
 		Label:       "AI Setup",
@@ -487,6 +499,10 @@ func aiCommand(app vfs.App, arg string) {
 		vtui.ShowMessage(Msg("AI.Title"), Msg("AI.Help"), []string{Msg("vtui.Ok")})
 	case lower == "new":
 		aiNewSession(pf)
+	case lower == "apply" || lower == "patch":
+		aiApplyPatch(pf)
+	case lower == "ap" || lower == "spec":
+		aiAttachAPSpec(pf)
 	case lower == "key":
 		aiSetupDialog(pf)
 	case lower == "models":

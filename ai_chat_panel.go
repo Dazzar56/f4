@@ -54,6 +54,41 @@ func NewAIChatPanel(src *FileSystemPanel) *AIChatPanel {
 	return cp
 }
 
+// The strip between the chat and the input box carries one thing at a time.
+// Attached files win: once the human starts collecting context, that is what
+// they are working on, and the patch is still one keypress away in ai://out.
+const (
+	aiBarNone = iota
+	aiBarFiles
+	aiBarPatch
+)
+
+// barKind decides what the strip shows right now.
+func (cp *AIChatPanel) barKind() int {
+	session := cp.getSession()
+	if len(session.ContextFiles()) > 0 {
+		return aiBarFiles
+	}
+	if session.LastPatch() != nil {
+		return aiBarPatch
+	}
+	return aiBarNone
+}
+
+// activateBar is what Enter on the strip does.
+func (cp *AIChatPanel) activateBar() {
+	pf := findPanelsFrameAnyScreen()
+	if pf == nil {
+		return
+	}
+	switch cp.barKind() {
+	case aiBarFiles:
+		AiSetViewModePanel(pf, pf.activeIdx, "ai://ctx", false)
+	case aiBarPatch:
+		aiApplyPatch(pf)
+	}
+}
+
 func (cp *AIChatPanel) Kind() string             { return "ai_chat" }
 func (cp *AIChatPanel) Source() *FileSystemPanel { return cp.src }
 func (cp *AIChatPanel) IsFocused() bool          { return cp.focused }
@@ -137,13 +172,21 @@ func (cp *AIChatPanel) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	}
 
+	if e.VirtualKeyCode == vtinput.VK_P && rctrl && !alt && !shift {
+		aiApplyPatch(findPanelsFrameAnyScreen())
+		return true
+	}
+
 	if cp.focusedLinkIdx == -2 {
-		// Focus is on the Attached Files bar above the input box
+		// Focus is on the strip above the input box: attached files or the
+		// "apply patch" button, whichever it is showing.
 		if e.VirtualKeyCode == vtinput.VK_RETURN {
-			pf := findPanelsFrameAnyScreen()
-			if pf != nil {
-				AiSetViewModePanel(pf, pf.activeIdx, "ai://ctx", false)
-			}
+			cp.activateBar()
+			return true
+		}
+		if e.VirtualKeyCode == vtinput.VK_F3 && cp.barKind() == aiBarPatch {
+			// Read the patch before trusting it.
+			cp.navigateToTarget("ai://out/afix.ap")
 			return true
 		}
 		if e.VirtualKeyCode == vtinput.VK_DOWN || e.VirtualKeyCode == vtinput.VK_RIGHT {
@@ -193,8 +236,7 @@ func (cp *AIChatPanel) ProcessKey(e *vtinput.InputEvent) bool {
 		if e.VirtualKeyCode == vtinput.VK_RIGHT || e.VirtualKeyCode == vtinput.VK_DOWN {
 			cp.focusedLinkIdx++
 			if cp.focusedLinkIdx >= len(cp.visibleLinks) {
-				session := cp.getSession()
-				if len(session.ContextFiles()) > 0 {
+				if cp.barKind() != aiBarNone {
 					cp.focusedLinkIdx = -2
 				} else {
 					cp.focusedLinkIdx = -1
@@ -218,8 +260,7 @@ func (cp *AIChatPanel) ProcessKey(e *vtinput.InputEvent) bool {
 	if cp.focusedLinkIdx == -1 && !ctrl && !alt && !shift {
 		row, col := cp.input.CursorPos()
 		if (e.VirtualKeyCode == vtinput.VK_UP && row == 0) || (e.VirtualKeyCode == vtinput.VK_LEFT && row == 0 && col == 0) {
-			session := cp.getSession()
-			if len(session.ContextFiles()) > 0 {
+			if cp.barKind() != aiBarNone {
 				cp.focusedLinkIdx = -2
 				cp.input.SetFocus(false)
 				vtui.FrameManager.Redraw()
@@ -580,16 +621,20 @@ func (cp *AIChatPanel) Show(scr *vtui.ScreenBuf) {
 	scr.Write(cp.X2, cp.input.Y1-1, vtui.StringToCharInfo("┤", attrBox))
 
 	session := cp.getSession()
-	if ctxFiles := session.ContextFiles(); len(ctxFiles) > 0 {
-		availW := cp.X2 - cp.X1 - 3
-		label := formatAttachedFilesLabel(ctxFiles, availW)
-		if label != "" {
-			attr := vtui.Palette[ColPanelHighlightText]
-			if cp.focused && cp.focusedLinkIdx == -2 {
-				attr = vtui.Palette[ColPanelCursor]
-			}
-			vtui.NewPainter(scr).DrawString(cp.X1+2, cp.input.Y1-1, label, attr)
+	availW := cp.X2 - cp.X1 - 3
+	label := ""
+	switch cp.barKind() {
+	case aiBarFiles:
+		label = formatAttachedFilesLabel(session.ContextFiles(), availW)
+	case aiBarPatch:
+		label = formatApplyPatchLabel(session.LastPatch(), availW)
+	}
+	if label != "" {
+		attr := vtui.Palette[ColPanelHighlightText]
+		if cp.focused && cp.focusedLinkIdx == -2 {
+			attr = vtui.Palette[ColPanelCursor]
 		}
+		vtui.NewPainter(scr).DrawString(cp.X1+2, cp.input.Y1-1, label, attr)
 	}
 
 	h := cp.input.Y1 - cp.Y1 - 2
@@ -651,11 +696,37 @@ func (cp *AIChatPanel) Show(scr *vtui.ScreenBuf) {
 
 	cp.input.Show(scr)
 }
-func formatAttachedFilesLabel(files []string, maxW int) string {
-	if len(files) == 0 || maxW <= 5 {
+
+// formatApplyPatchLabel draws the button this whole feature exists for: the
+// model answered with an ap patch, one keypress applies it.
+func formatApplyPatchLabel(p *vtvibe.Patch, maxW int) string {
+	if p == nil {
 		return ""
 	}
-	prefix := " 📎 "
+	head := " ⚡ " + Msg("AI.ApplyPatchBar")
+	label := formatBarLabel(head+" (RCtrl+P): ", p.Files, maxW)
+	if label == "" {
+		label = formatBarLabel(head+" ", nil, maxW)
+	}
+	if label == "" {
+		label = formatBarLabel(" ⚡ ", nil, maxW)
+	}
+	return label
+}
+
+func formatAttachedFilesLabel(files []string, maxW int) string {
+	if len(files) == 0 {
+		return ""
+	}
+	return formatBarLabel(" 📎 ", files, maxW)
+}
+
+// formatBarLabel renders "<prefix>a.go, b.go " into maxW cells, dropping names
+// and then the list itself rather than overflowing the frame.
+func formatBarLabel(prefix string, files []string, maxW int) string {
+	if maxW <= 5 {
+		return ""
+	}
 	prefixW := runewidth.StringWidth(prefix)
 	if prefixW >= maxW {
 		return ""
@@ -689,6 +760,9 @@ func formatAttachedFilesLabel(files []string, maxW int) string {
 		}
 	}
 	if len(parts) == 0 {
+		if len(files) == 0 && prefixW+1 <= maxW {
+			return prefix
+		}
 		return ""
 	}
 	return prefix + strings.Join(parts, "") + " "

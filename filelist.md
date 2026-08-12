@@ -119,7 +119,6 @@
     ├── cpu_info_linux.go
     ├── cpu_info_other.go
     ├── cpu_info_windows.go
-    ├── debug.log
     ├── delete_trash_test.go
     ├── detach_unix.go
     ├── detach_windows.go
@@ -194,7 +193,8 @@
     │   ├── node_unsupported.go
     │   ├── platform_other.go
     │   ├── platform_unix.go
-    │   └── registry.go
+    │   ├── registry.go
+    │   └── writers_test.go
     ├── FUSE.md
     ├── fuse_mount_action.go
     ├── fuse_mount_list.go
@@ -833,6 +833,8 @@
     ├── visren_editor_bridge.go
     ├── VTML.md
     ├── vtvibe
+    │   ├── ap.go
+    │   ├── ap_test.go
     │   ├── memtree.go
     │   ├── pack.go
     │   ├── provider.go
@@ -840,6 +842,7 @@
     │   ├── session.go
     │   ├── session_test.go
     │   └── vfs.go
+    ├── vtvibe_ap.go
     ├── vtvibe_host.go
     ├── vtvibe_host_test.go
     ├── vtvibe.md
@@ -853,4 +856,4 @@
     ├── workspace_session.go
     └── workspace_session_test.go
     
-    54 directories, 798 files
+    54 directories, 801 files
