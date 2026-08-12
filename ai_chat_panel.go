@@ -1,13 +1,16 @@
 package main
 
 import (
-	"github.com/mattn/go-runewidth"
-	"github.com/unxed/f4/vtvibe"
+	"context"
+	"io"
+	"strings"
+	"time"
 	"unicode/utf8"
 
+	"github.com/mattn/go-runewidth"
+	"github.com/unxed/f4/vtvibe"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
-	"strings"
 )
 
 type AIChatPanel struct {
@@ -119,29 +122,50 @@ func (cp *AIChatPanel) ProcessKey(e *vtinput.InputEvent) bool {
 	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
 
-	// Handle Tab focus cycling
-	if e.VirtualKeyCode == vtinput.VK_TAB && !ctrl && !alt {
-		if shift {
-			cp.focusedLinkIdx--
-			if cp.focusedLinkIdx < -1 {
-				cp.focusedLinkIdx = len(cp.visibleLinks) - 1
+	if cp.focusedLinkIdx == -2 {
+		// Focus is on the Attached Files bar above the input box
+		if e.VirtualKeyCode == vtinput.VK_RETURN {
+			pf := findPanelsFrameAnyScreen()
+			if pf != nil {
+				AiSetViewModePanel(pf, pf.activeIdx, "ai://ctx", false)
 			}
-		} else {
-			cp.focusedLinkIdx++
-			if cp.focusedLinkIdx >= len(cp.visibleLinks) {
-				cp.focusedLinkIdx = -1
-			}
+			return true
 		}
-		cp.input.SetFocus(cp.focusedLinkIdx == -1)
-		vtui.FrameManager.Redraw()
-		return true
+		if e.VirtualKeyCode == vtinput.VK_DOWN || e.VirtualKeyCode == vtinput.VK_RIGHT {
+			cp.focusedLinkIdx = -1
+			cp.input.SetFocus(true)
+			vtui.FrameManager.Redraw()
+			return true
+		}
+		if e.VirtualKeyCode == vtinput.VK_UP || e.VirtualKeyCode == vtinput.VK_LEFT {
+			if len(cp.visibleLinks) > 0 {
+				cp.focusedLinkIdx = len(cp.visibleLinks) - 1
+			} else {
+				cp.focusedLinkIdx = -1
+				cp.input.SetFocus(true)
+			}
+			vtui.FrameManager.Redraw()
+			return true
+		}
+		if e.VirtualKeyCode == vtinput.VK_ESCAPE {
+			cp.focusedLinkIdx = -1
+			cp.input.SetFocus(true)
+			vtui.FrameManager.Redraw()
+			return true
+		}
 	}
 
-	if cp.focusedLinkIdx != -1 {
-		// We are focusing a link
+	if cp.focusedLinkIdx >= 0 {
+		// We are focusing a response link
 		if e.VirtualKeyCode == vtinput.VK_RETURN {
-			if cp.focusedLinkIdx >= 0 && cp.focusedLinkIdx < len(cp.visibleLinks) {
+			if cp.focusedLinkIdx < len(cp.visibleLinks) {
 				cp.navigateToTarget(cp.visibleLinks[cp.focusedLinkIdx].target)
+			}
+			return true
+		}
+		if e.VirtualKeyCode == vtinput.VK_F5 {
+			if cp.focusedLinkIdx < len(cp.visibleLinks) {
+				cp.copyLinkTarget(cp.visibleLinks[cp.focusedLinkIdx].target)
 			}
 			return true
 		}
@@ -150,6 +174,47 @@ func (cp *AIChatPanel) ProcessKey(e *vtinput.InputEvent) bool {
 			cp.input.SetFocus(true)
 			vtui.FrameManager.Redraw()
 			return true
+		}
+		if e.VirtualKeyCode == vtinput.VK_RIGHT || e.VirtualKeyCode == vtinput.VK_DOWN {
+			cp.focusedLinkIdx++
+			if cp.focusedLinkIdx >= len(cp.visibleLinks) {
+				session := cp.getSession()
+				if len(session.ContextFiles()) > 0 {
+					cp.focusedLinkIdx = -2
+				} else {
+					cp.focusedLinkIdx = -1
+					cp.input.SetFocus(true)
+				}
+			}
+			vtui.FrameManager.Redraw()
+			return true
+		}
+		if e.VirtualKeyCode == vtinput.VK_LEFT || e.VirtualKeyCode == vtinput.VK_UP {
+			cp.focusedLinkIdx--
+			if cp.focusedLinkIdx < 0 {
+				cp.focusedLinkIdx = 0
+			}
+			vtui.FrameManager.Redraw()
+			return true
+		}
+	}
+
+	// Transition from input box (row 0) to attached files or response links
+	if cp.focusedLinkIdx == -1 && !ctrl && !alt && !shift {
+		row, col := cp.input.CursorPos()
+		if (e.VirtualKeyCode == vtinput.VK_UP && row == 0) || (e.VirtualKeyCode == vtinput.VK_LEFT && row == 0 && col == 0) {
+			session := cp.getSession()
+			if len(session.ContextFiles()) > 0 {
+				cp.focusedLinkIdx = -2
+				cp.input.SetFocus(false)
+				vtui.FrameManager.Redraw()
+				return true
+			} else if len(cp.visibleLinks) > 0 {
+				cp.focusedLinkIdx = len(cp.visibleLinks) - 1
+				cp.input.SetFocus(false)
+				vtui.FrameManager.Redraw()
+				return true
+			}
 		}
 	}
 
@@ -499,6 +564,33 @@ func (cp *AIChatPanel) Show(scr *vtui.ScreenBuf) {
 	scr.Write(cp.X1, cp.input.Y1-1, vtui.StringToCharInfo("├", attrBox))
 	scr.Write(cp.X2, cp.input.Y1-1, vtui.StringToCharInfo("┤", attrBox))
 
+	/*
+		session := cp.getSession()
+		if ctxFiles := session.ContextFiles(); len(ctxFiles) > 0 {
+			label := " 📎 " + strings.Join(ctxFiles, ", ") + " "
+			availW := cp.X2 - cp.X1 - 3
+			if runewidth.StringWidth(label) > availW && availW > 5 {
+				label = vtui.TruncateMiddle(label, availW)
+			}
+			if runewidth.StringWidth(label) <= availW {
+				vtui.NewPainter(scr).DrawString(cp.X1+2, cp.input.Y1-1, label, vtui.Palette[ColPanelHighlightText])
+			}
+		}
+	*/
+
+	session := cp.getSession()
+	if ctxFiles := session.ContextFiles(); len(ctxFiles) > 0 {
+		availW := cp.X2 - cp.X1 - 3
+		label := formatAttachedFilesLabel(ctxFiles, availW)
+		if label != "" {
+			attr := vtui.Palette[ColPanelHighlightText]
+			if cp.focused && cp.focusedLinkIdx == -2 {
+				attr = vtui.Palette[ColPanelCursor]
+			}
+			vtui.NewPainter(scr).DrawString(cp.X1+2, cp.input.Y1-1, label, attr)
+		}
+	}
+
 	h := cp.input.Y1 - cp.Y1 - 2
 	if h > 0 {
 		maxTop := len(cp.lines) - h
@@ -558,6 +650,48 @@ func (cp *AIChatPanel) Show(scr *vtui.ScreenBuf) {
 
 	cp.input.Show(scr)
 }
+func formatAttachedFilesLabel(files []string, maxW int) string {
+	if len(files) == 0 || maxW <= 5 {
+		return ""
+	}
+	prefix := " 📎 "
+	prefixW := runewidth.StringWidth(prefix)
+	if prefixW >= maxW {
+		return ""
+	}
+
+	avail := maxW - prefixW
+	var parts []string
+	currW := 0
+
+	for i, f := range files {
+		item := f
+		if i > 0 {
+			item = ", " + f
+		}
+		w := runewidth.StringWidth(item)
+		if currW+w <= avail {
+			parts = append(parts, item)
+			currW += w
+		} else {
+			dots := "..."
+			dotsW := 3
+			for currW+dotsW > avail && len(parts) > 0 {
+				last := parts[len(parts)-1]
+				currW -= runewidth.StringWidth(last)
+				parts = parts[:len(parts)-1]
+			}
+			if currW+dotsW <= avail {
+				parts = append(parts, dots)
+			}
+			break
+		}
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return prefix + strings.Join(parts, "") + " "
+}
 func cellCutChat(s string, width int) int {
 	if width <= 0 || s == "" {
 		return len(s)
@@ -573,4 +707,88 @@ func cellCutChat(s string, width int) int {
 		i += sz
 	}
 	return len(s)
+}
+
+func (cp *AIChatPanel) getSession() *vtvibe.Session {
+	if cp.src != nil && cp.src.vfs != nil {
+		if w, ok := cp.src.vfs.(*aiVFSWrapper); ok {
+			return w.Session()
+		} else if a, ok := cp.src.vfs.(*vtvibe.AIVFS); ok {
+			return a.Session()
+		}
+	}
+	return aiSession()
+}
+
+func (cp *AIChatPanel) copyLinkTarget(target string) {
+	pf := findPanelsFrameAnyScreen()
+	if pf == nil || cp.src == nil {
+		return
+	}
+
+	var dstFSP *FileSystemPanel
+	for _, p := range pf.panels {
+		if fsp, ok := p.(*FileSystemPanel); ok && fsp != cp.src {
+			dstFSP = fsp
+			break
+		}
+	}
+	if dstFSP == nil || dstFSP.vfs == nil {
+		return
+	}
+
+	cleanTarget := strings.TrimPrefix(target, "ai://")
+	if !strings.HasPrefix(cleanTarget, "/") {
+		cleanTarget = "/" + cleanTarget
+	}
+
+	fileName := cp.src.vfs.Base(cleanTarget)
+	dstDir := dstFSP.vfs.GetPath()
+	dstPath := dstFSP.vfs.Join(dstDir, fileName)
+
+	pf.RunProgressTask(" Copy ", "Copying "+fileName+"...", false,
+		func(ctx context.Context, update func(msg string, percent int)) error {
+			srcFile, err := cp.src.vfs.Open(ctx, cleanTarget)
+			if err != nil {
+				return err
+			}
+			defer srcFile.Close()
+
+			dstFile, err := dstFSP.vfs.Create(ctx, dstPath)
+			if err != nil {
+				return err
+			}
+			defer dstFile.Close()
+
+			buf := make([]byte, 32768)
+			total := srcFile.Size()
+			var copied int64
+			for {
+				n, readErr := srcFile.Read(ctx, buf)
+				if n > 0 {
+					if _, writeErr := dstFile.Write(buf[:n]); writeErr != nil {
+						return writeErr
+					}
+					copied += int64(n)
+					if total > 0 {
+						update("", int(copied*100/total))
+					}
+				}
+				if readErr != nil {
+					if readErr == io.EOF {
+						break
+					}
+					return readErr
+				}
+			}
+			return nil
+		},
+		func(err error) {
+			if err != nil {
+				vtui.ShowMessage(" Error ", "Copy failed:\n"+err.Error(), []string{"&Ok"})
+			} else {
+				dstFSP.ReadDirectory()
+				vtui.ShowToast("Copied "+fileName+" to "+dstDir, 2*time.Second)
+			}
+		})
 }

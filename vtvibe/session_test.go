@@ -37,3 +37,27 @@ func TestSession_Reset(t *testing.T) {
 		t.Errorf("expected context to be cleared")
 	}
 }
+func TestAIVFS_CreateRedirectsToContextWhenCwdIsChat(t *testing.T) {
+	s := NewSession()
+	v := NewVFS(s)
+
+	wc, err := v.Create(nil, "/chat/status.sh")
+	if err != nil {
+		t.Fatalf("expected Create on /chat/status.sh to succeed, got %v", err)
+	}
+	_, _ = wc.Write([]byte("echo ok"))
+	if err := wc.Close(); err != nil {
+		t.Fatalf("Close failed: %v", err)
+	}
+
+	files := s.ContextFiles()
+	if len(files) != 1 || files[0] != "status.sh" {
+		t.Fatalf("expected ContextFiles() = ['status.sh'], got %v", files)
+	}
+
+	r, err := v.Open(nil, "/chat/status.sh")
+	if err != nil {
+		t.Fatalf("expected Open /chat/status.sh to find /ctx/status.sh, got %v", err)
+	}
+	_ = r.Close()
+}

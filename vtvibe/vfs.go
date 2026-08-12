@@ -88,6 +88,13 @@ func (v *AIVFS) Stat(ctx context.Context, p string) (vfs.VFSItem, error) {
 	target := v.normalize(p)
 	n, ok := v.s.tree.stat(target)
 	if !ok {
+		if altNode, altOk := v.s.tree.stat(path.Join(ctxDir, path.Base(target))); altOk {
+			n, ok = altNode, true
+		} else if altNode, altOk := v.s.tree.stat(path.Join(outDir, path.Base(target))); altOk {
+			n, ok = altNode, true
+		}
+	}
+	if !ok {
 		return vfs.VFSItem{}, os.ErrNotExist
 	}
 	item := toItem(n)
@@ -139,6 +146,14 @@ func writable(p string) bool {
 func (v *AIVFS) MkDir(ctx context.Context, p string) error {
 	target := v.normalize(p)
 	if !writable(target) {
+		if strings.HasPrefix(target, chatDir) || target == "/" || !strings.Contains(strings.TrimPrefix(target, "/"), "/") {
+			base := path.Base(target)
+			if base != "." && base != ".." && base != "/" {
+				target = path.Join(ctxDir, base)
+			}
+		}
+	}
+	if !writable(target) {
 		return os.ErrPermission
 	}
 	return v.s.tree.mkdirAll(target)
@@ -179,6 +194,13 @@ func (v *AIVFS) Open(ctx context.Context, p string) (vfs.ReadAtCloser, error) {
 	target := v.normalize(p)
 	data, ok := v.s.tree.readFile(target)
 	if !ok {
+		if altData, altOk := v.s.tree.readFile(path.Join(ctxDir, path.Base(target))); altOk {
+			data, ok = altData, true
+		} else if altData, altOk := v.s.tree.readFile(path.Join(outDir, path.Base(target))); altOk {
+			data, ok = altData, true
+		}
+	}
+	if !ok {
 		return nil, os.ErrNotExist
 	}
 	return &memReader{data: data}, nil
@@ -186,6 +208,14 @@ func (v *AIVFS) Open(ctx context.Context, p string) (vfs.ReadAtCloser, error) {
 
 func (v *AIVFS) Create(ctx context.Context, p string) (io.WriteCloser, error) {
 	target := v.normalize(p)
+	if !writable(target) {
+		if strings.HasPrefix(target, chatDir) || target == "/" || !strings.Contains(strings.TrimPrefix(target, "/"), "/") {
+			base := path.Base(target)
+			if base != "." && base != ".." && base != "/" {
+				target = path.Join(ctxDir, base)
+			}
+		}
+	}
 	if !writable(target) {
 		return nil, os.ErrPermission
 	}

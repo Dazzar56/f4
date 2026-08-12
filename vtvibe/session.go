@@ -120,6 +120,17 @@ func (s *Session) Busy() bool {
 }
 
 // Draft returns the text of draft.md without the template comment.
+// ContextFiles returns the relative paths of all files in /ctx.
+func (s *Session) ContextFiles() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	files := s.tree.walkFiles(ctxDir)
+	out := make([]string, 0, len(files))
+	for _, f := range files {
+		out = append(out, strings.TrimPrefix(f, ctxDir+"/"))
+	}
+	return out
+}
 func (s *Session) Draft() string {
 	data, _ := s.tree.readFile(draftFile)
 	text := strings.TrimSpace(string(data))
