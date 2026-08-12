@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/unxed/f4/fusefs"
 	"github.com/unxed/vtui"
@@ -76,6 +77,12 @@ func showMountList(pf *PanelsFrame) {
 	}
 
 	menu := vtui.NewVMenu(" Mounts ")
+	if live := liveRows(rows); len(live) > 1 {
+		menu.AddItem(vtui.MenuItem{
+			Text:     fmt.Sprintf("Unmount all (%d)", len(live)),
+			UserData: -1,
+		})
+	}
 	for i, r := range rows {
 		menu.AddItem(vtui.MenuItem{
 			Text:     fmt.Sprintf("%s  \u2190  %s%s", r.point, r.source, r.note),
@@ -107,7 +114,14 @@ func showMountList(pf *PanelsFrame) {
 			return
 		}
 		i, ok := menu.Items[idx].UserData.(int)
-		if !ok || i < 0 || i >= len(rows) {
+		if !ok {
+			return
+		}
+		if i < 0 {
+			unmountAll(rows)
+			return
+		}
+		if i >= len(rows) {
 			return
 		}
 		askMountAction(pf, rows[i])
@@ -137,5 +151,31 @@ func askMountAction(pf *PanelsFrame, row mountRow) {
 				vtui.ShowMessage(" Mount ", fmt.Sprintf("Cannot unmount %s:\n%v", row.point, err), []string{"&Ok"})
 			}
 		}
+	}
+}
+
+// liveRows are the mounts this process can actually take down.
+func liveRows(rows []mountRow) []mountRow {
+	var live []mountRow
+	for _, r := range rows {
+		if r.live != nil {
+			live = append(live, r)
+		}
+	}
+	return live
+}
+
+// unmountAll takes down every mount this process owns and reports the ones
+// that would not go, rather than stopping at the first. A busy mount is not a
+// reason to leave the others up.
+func unmountAll(rows []mountRow) {
+	var failed []string
+	for _, r := range liveRows(rows) {
+		if err := r.live.Unmount(); err != nil {
+			failed = append(failed, fmt.Sprintf("%s: %v", r.point, err))
+		}
+	}
+	if len(failed) > 0 {
+		vtui.ShowMessage(" Mounts ", "Still mounted:\n"+strings.Join(failed, "\n"), []string{"&Ok"})
 	}
 }

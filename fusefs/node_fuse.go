@@ -119,7 +119,14 @@ func (n *node) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
 
 func (n *node) Open(ctx context.Context, flags uint32) (fs.FileHandle, uint32, syscall.Errno) {
 	if flags&uint32(syscall.O_ACCMODE) != uint32(syscall.O_RDONLY) {
-		return nil, 0, syscall.EROFS
+		// EROFS rather than EPERM either way: a write attempt gets a
+		// clear "this file system does not do that" instead of a
+		// confusing partial success. The two reasons stay separate so
+		// iteration 4 only has to change the first one.
+		if n.b.readOnly || !n.b.writeOK {
+			return nil, 0, syscall.EROFS
+		}
+		return nil, 0, syscall.ENOSYS
 	}
 	item, err := n.b.stat(ctx, n.path)
 	if err != nil {

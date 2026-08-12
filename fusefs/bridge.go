@@ -38,6 +38,13 @@ type bridge struct {
 
 	root     string
 	randomOK bool
+	// readOnly is the mount's mode, not the backend's. Until iteration 4
+	// every mount sets it, but the write side has to ask a fact rather than
+	// a constant, or turning writes on means hunting for hardcoded EROFS.
+	readOnly bool
+	// writeOK is what the backend says about itself, kept next to readOnly
+	// so the two reasons a write can be refused stay distinguishable.
+	writeOK bool
 	cacheTTL time.Duration
 	cacheMu  sync.Mutex
 	dirCache map[string]dirCacheEntry
@@ -57,6 +64,8 @@ func newBridge(v vfs.VFS, root string, opts Options) *bridge {
 		v:        v,
 		root:     root,
 		randomOK: v.GetCapabilities().HasRandomAccess,
+		readOnly: opts.ReadOnly,
+		writeOK:  v.GetCapabilities().HasWrite,
 		cacheTTL: ttl,
 		dirCache: make(map[string]dirCacheEntry),
 	}
