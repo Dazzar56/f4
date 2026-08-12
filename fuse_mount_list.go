@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -63,6 +64,7 @@ func mountRows() []mountRow {
 	}
 	recs, err := fusefs.Mounts()
 	if err != nil {
+		sort.SliceStable(rows, func(i, j int) bool { return rows[i].age > rows[j].age })
 		return rows
 	}
 	for _, r := range recs {
@@ -77,6 +79,9 @@ func mountRows() []mountRow {
 			note:   fmt.Sprintf(" (pid %d)", r.PID),
 		})
 	}
+	// Oldest first, the way fusefs.List() orders its own: a merged list that
+	// kept this process's mounts on top would read as two lists stacked.
+	sort.SliceStable(rows, func(i, j int) bool { return rows[i].age > rows[j].age })
 	return rows
 }
 

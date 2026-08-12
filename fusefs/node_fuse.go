@@ -74,6 +74,8 @@ var (
 	_ = (fs.NodeOpener)((*node)(nil))
 	_ = (fs.NodeStatfser)((*node)(nil))
 	_ = (fs.NodeMkdirer)((*node)(nil))
+	_ = (fs.NodeUnlinker)((*node)(nil))
+	_ = (fs.NodeRmdirer)((*node)(nil))
 )
 
 // writeRefusal reports why a write cannot happen, or 0 when it can. The mount
@@ -306,4 +308,25 @@ func errnoOf(err error) syscall.Errno {
 		return syscall.EINVAL
 	}
 	return syscall.EIO
+}
+
+// Unlink and Rmdir are the other two writes that need no open handle. vfs.VFS
+// has one Remove for both, so the difference lives here rather than in the
+// backend: the kernel has already checked which of the two it is asking for.
+func (n *node) Unlink(ctx context.Context, name string) syscall.Errno {
+	return n.removeChild(ctx, name)
+}
+
+func (n *node) Rmdir(ctx context.Context, name string) syscall.Errno {
+	return n.removeChild(ctx, name)
+}
+
+func (n *node) removeChild(ctx context.Context, name string) syscall.Errno {
+	if errno := n.writeRefusal(); errno != 0 {
+		return errno
+	}
+	if err := n.b.remove(ctx, n.path, name); err != nil {
+		return errnoOf(err)
+	}
+	return 0
 }

@@ -190,6 +190,20 @@ func (b *bridge) mkdir(ctx context.Context, dirPath, name string) error {
 	return err
 }
 
+// remove deletes one entry. Like mkdir it drops the parent's cached listing,
+// so a file the kernel just unlinked stops being offered by the next ls.
+func (b *bridge) remove(ctx context.Context, dirPath, name string) error {
+	b.mu.Lock()
+	if b.closed {
+		b.mu.Unlock()
+		return errClosed
+	}
+	err := b.v.Remove(ctx, b.join(dirPath, name))
+	b.mu.Unlock()
+	b.invalidate(dirPath)
+	return err
+}
+
 func (b *bridge) lookup(ctx context.Context, dirPath, name string) (vfs.VFSItem, error) {
 	if items, ok := b.cachedDir(dirPath); ok {
 		for _, item := range items {
