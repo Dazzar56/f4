@@ -216,6 +216,7 @@ f4 is inspired by:
 * [DN (DOS Navigator)](https://www.ritlabs.com/en/products/dn/)
 * [Far Manager 2/3](https://github.com/FarGroup/FarManager), [far2l](https://github.com/elfmz/far2l/), [far2m](https://github.com/shmuz/far2m)
 * [FreeType](https://github.com/freetype/freetype) — auto-hinting
+* [Midnight Commander](https://midnight-commander.org/) — FISH/SHELL protocol concept
 * [Telegram](https://telegram.org/) — single-binary distribution and automatic updates
 * [Turbo Text Editor](https://github.com/magiblot/turbo)
 * [Turbo Vision](https://github.com/magiblot/tvision)
