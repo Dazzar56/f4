@@ -1131,10 +1131,10 @@ AI.PatchRunning=Applying the patch...
 AI.PatchDownloading=Downloading the ap patcher...
 AI.PatchBadDownload=The downloaded file does not look like the ap patcher.
 AI.NoPython=Python was not found, and the ap patcher needs it. Install python3, or set python= or ap_patcher= in vtvibe.ini.
-AI.PatchOk=🟢 OK: The patch was applied.
-AI.PatchDryOk=🟢 OK: Dry run finished, nothing was written.
-AI.PatchPartial=⚠️ PARTIAL: Some modifications were skipped. See afailed.ap and afailed.md in the target folder.
-AI.PatchFailed=🔴 FAIL: The patch was not applied.
+AI.PatchOk=[x] the patch was applied.
+AI.PatchDryOk=[x] dry run finished, nothing was written.
+AI.PatchPartial=[~] PARTIAL: Some modifications were skipped. See afailed.ap and afailed.md in the target folder.
+AI.PatchFailed=[!] FAIL: The patch was not applied.
 AI.BtnViewLog=&View log
 AI.BtnAttachReport=Attach &report
 AI.PatchReportAttached=afailed.md was attached to the dialog
