@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/unxed/f4/vtvibe"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -173,6 +174,21 @@ func plainLabel(s string) string {
 		b.WriteByte(s[i])
 	}
 	return b.String()
+}
+
+// isAIPanelActive returns true if the currently active panel is an AI panel.
+// Used to dynamically show/hide specific menu items.
+func isAIPanelActive() bool {
+	pf := findPanelsFrameAnyScreen()
+	if pf == nil {
+		return false
+	}
+	fsp := pf.getActivePanel()
+	if fsp == nil {
+		return false
+	}
+	_, isAI := fsp.vfs.(*vtvibe.AIVFS)
+	return isAI
 }
 
 func repeatEditorSearchDirection(ev *EditorView, reverse bool) {
@@ -1414,6 +1430,7 @@ func init() {
 		Description: "Set active panel to brief mode",
 		DescKey:     "Action.Panel.ViewBrief.Desc",
 		DefaultKeys: []string{"Ctrl1"},
+		Visible:     func() bool { return !isAIPanelActive() },
 		Handler:     withPF(func(pf *PanelsFrame) { pf.setPanelViewMode(pf.activeIdx, ViewModeBrief) }),
 	})
 	RegisterAction(Action{
@@ -1423,6 +1440,7 @@ func init() {
 		Description: "Set active panel to medium mode",
 		DescKey:     "Action.Panel.ViewMedium.Desc",
 		DefaultKeys: []string{"Ctrl2"},
+		Visible:     func() bool { return !isAIPanelActive() },
 		Handler:     withPF(func(pf *PanelsFrame) { pf.setPanelViewMode(pf.activeIdx, ViewModeMedium) }),
 	})
 	RegisterAction(Action{
@@ -1432,6 +1450,7 @@ func init() {
 		Description: "Set active panel to detailed mode",
 		DescKey:     "Action.Panel.ViewDetailed.Desc",
 		DefaultKeys: []string{"Ctrl3"},
+		Visible:     func() bool { return !isAIPanelActive() },
 		Handler:     withPF(func(pf *PanelsFrame) { pf.setPanelViewMode(pf.activeIdx, ViewModeDetailed) }),
 	})
 	RegisterAction(Action{
@@ -1441,6 +1460,7 @@ func init() {
 		Description: "Set active panel to wide mode",
 		DescKey:     "Action.Panel.ViewWide.Desc",
 		DefaultKeys: []string{"Ctrl4"},
+		Visible:     func() bool { return !isAIPanelActive() },
 		Handler:     withPF(func(pf *PanelsFrame) { pf.setWidePanel(pf.activeIdx) }),
 	})
 	RegisterAction(Action{

@@ -126,7 +126,8 @@ func init() {
 		Label:       "AI View: Context",
 		LabelKey:    "Action.AI.ViewContext",
 		DefaultKeys: []string{"Ctrl1"},
-		MenuPath:    "Commands",
+		MenuPath:    "View",
+		Visible:     func() bool { return isAIPanelActive() },
 		Handler:     withAI(func(pf *PanelsFrame) { aiSetViewMode(pf, "ai://ctx", false) }),
 	})
 	RegisterAction(Action{
@@ -135,7 +136,8 @@ func init() {
 		Label:       "AI View: Chat",
 		LabelKey:    "Action.AI.ViewChat",
 		DefaultKeys: []string{"Ctrl2"},
-		MenuPath:    "Commands",
+		MenuPath:    "View",
+		Visible:     func() bool { return isAIPanelActive() },
 		Handler:     withAI(func(pf *PanelsFrame) { aiSetViewMode(pf, "ai://chat", true) }),
 	})
 	RegisterAction(Action{
@@ -144,7 +146,8 @@ func init() {
 		Label:       "AI View: Artifacts",
 		LabelKey:    "Action.AI.ViewOut",
 		DefaultKeys: []string{"Ctrl3"},
-		MenuPath:    "Commands",
+		MenuPath:    "View",
+		Visible:     func() bool { return isAIPanelActive() },
 		Handler:     withAI(func(pf *PanelsFrame) { aiSetViewMode(pf, "ai://out", false) }),
 	})
 	RegisterAction(Action{
@@ -153,18 +156,19 @@ func init() {
 		Label:       "AI View: Memory",
 		LabelKey:    "Action.AI.ViewMem",
 		DefaultKeys: []string{"Ctrl4"},
-		MenuPath:    "Commands",
+		MenuPath:    "View",
+		Visible:     func() bool { return isAIPanelActive() },
 		Handler:     withAI(func(pf *PanelsFrame) { aiSetViewMode(pf, "ai://mem", false) }),
 	})
 	RegisterAction(Action{
 		Name:        "AI.Ask",
-		Area:        "Shell",
+		Area:        "Common",
 		Label:       "Ask the AI",
 		LabelKey:    "Action.AI.Ask",
 		Description: "Type a question and send it together with the ai:// context",
 		DescKey:     "Action.AI.Ask.Desc",
 		MenuPath:    "Commands",
-		Handler:     withAI(func(pf *PanelsFrame) { aiAskDialog(pf) }),
+		Handler:     func() bool { return aiAskAction() },
 	})
 	RegisterAction(Action{
 		Name:        "AI.NewSession",
@@ -174,6 +178,7 @@ func init() {
 		Description: "Clear the AI dialog history and artifacts, keeping the context files",
 		DescKey:     "Action.AI.NewSession.Desc",
 		MenuPath:    "Commands",
+		Visible:     func() bool { return isAIPanelActive() },
 		Handler:     withAI(func(pf *PanelsFrame) { aiNewSession(pf) }),
 	})
 	RegisterAction(Action{
@@ -276,12 +281,111 @@ func aiNewSession(pf *PanelsFrame) {
 	vtui.ShowMessage(Msg("AI.Title"), Msg("AI.NewSessionDone"), []string{Msg("vtui.Ok")})
 }
 
-func aiAskDialog(pf *PanelsFrame) {
-	vtui.InputBox(Msg("AI.Title"), Msg("AI.AskPrompt"), "", func(text string) {
-		if strings.TrimSpace(text) != "" {
-			aiSend(pf, text)
+func aiAskAction() bool {
+	fm := vtui.FrameManager
+	if fm == nil {
+		return false
+	}
+
+	// 1. Gather context from the currently active frame before switching workspaces
+	var ctxParts []string
+	top := fm.GetTopFrame()
+
+	if top != nil {
+		if help := top.GetHelp(); help != "" {
+			ctxParts = append(ctxParts, "UI Context: "+help)
 		}
-	})
+		if fc, ok := top.(vtui.FocusContainer); ok {
+			if foc := fc.GetFocusedItem(); foc != nil {
+				if h := foc.GetHelp(); h != "" {
+					ctxParts = append(ctxParts, "Focused Item: "+h)
+				}
+			}
+		}
+	}
+
+	switch f := top.(type) {
+	case *EditorView:
+		ctxParts = append(ctxParts, "Editor: "+f.vfs.Base(f.filePath))
+		ctxParts = append(ctxParts, fmt.Sprintf("Line: %d", f.CursorLine+1))
+		if f.selActive || f.rectSelActive {
+			ctxParts = append(ctxParts, "[Text is selected]")
+		}
+	case *ViewerView:
+		ctxParts = append(ctxParts, "Viewer: "+f.vfs.Base(f.path))
+		ctxParts = append(ctxParts, fmt.Sprintf("Offset: %d", f.TopOffset))
+	}
+
+	pf := findPanelsFrameAnyScreen()
+	if pf != nil {
+		fsp := pf.getActivePanel()
+		if fsp != nil {
+			_, isAI := fsp.vfs.(*vtvibe.AIVFS)
+			if !isAI {
+				ctxParts = append(ctxParts, "Path: "+fsp.vfs.GetPath())
+				if name := fsp.GetSelectedName(); name != "" && name != ".." {
+					ctxParts = append(ctxParts, "Focus: "+name)
+				}
+				marked := fsp.GetMarkedNames()
+				if len(marked) > 0 {
+					ctxParts = append(ctxParts, fmt.Sprintf("Selected files: %d", len(marked)))
+				}
+			}
+		}
+	}
+
+	// 2. Find an existing AI workspace or create a new one by forking
+	var aiPf *PanelsFrame
+	for i, s := range fm.Screens {
+		if len(s.Frames) > 0 {
+			if screenPf, ok := s.Frames[len(s.Frames)-1].(*PanelsFrame); ok {
+				fsp := screenPf.getActivePanel()
+				if fsp != nil {
+					if _, isAI := fsp.vfs.(*vtvibe.AIVFS); isAI {
+						fm.SwitchScreen(i)
+						aiPf = screenPf
+						break
+					}
+				}
+			}
+		}
+	}
+
+	if aiPf == nil && pf != nil {
+		// Fork current PanelsFrame into a new workspace
+		fm.EmitCommand(vtui.CmResize, "fork")
+		if topPf, ok := fm.GetTopFrame().(*PanelsFrame); ok {
+			aiPf = topPf
+			idx := 1 - aiPf.activeIdx
+			fsp := aiPf.panels[idx].(*FileSystemPanel)
+			aiPrevPath[idx] = fsp.vfs.GetPath()
+			vtvibeConfig()
+			aiPf.switchToVFS(fsp, vtvibe.NewVFS(aiSession()))
+			aiPf.setWidePanel(idx)
+		}
+	}
+
+	// 3. Set up the chat, inject context, and start a new session
+	if aiPf != nil {
+		aiSetViewMode(aiPf, "ai://chat", true)
+		aiSession().Reset(true) // Keep files in ctx/, clear chat history
+
+		if aiPf.altPanels[aiPf.activeIdx] != nil {
+			if cp, ok := aiPf.altPanels[aiPf.activeIdx].(*AIChatPanel); ok {
+				prompt := ""
+				if len(ctxParts) > 0 {
+					prompt = "[" + strings.Join(ctxParts, ", ") + "]\n"
+				}
+				cp.input.SetText(prompt)
+				lines := len(strings.Split(prompt, "\n"))
+				if lines > 0 {
+					cp.input.SetCursorPos(lines-1, 0)
+				}
+			}
+		}
+		return true
+	}
+	return false
 }
 
 // aiSetupDialog is the whole first-run wizard at MVP scale: paste a key, name
