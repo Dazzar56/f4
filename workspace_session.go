@@ -70,8 +70,16 @@ func panelsFrameOnScreen(screen *vtui.AppScreen) *PanelsFrame {
 }
 
 func captureWorkspaceSession(pf *PanelsFrame) workspaceSessionState {
+	activePanel := pf.activeIdx
+	for idx, p := range pf.panels {
+		if isAIPanel(p) {
+			activePanel = 1 - idx
+			break
+		}
+	}
+
 	state := workspaceSessionState{
-		ActivePanel: pf.activeIdx,
+		ActivePanel: activePanel,
 		WidePanel:   -1,
 		ShowPanels:  pf.showPanels,
 		ShowLeft:    pf.showLeftPanel,
