@@ -1073,70 +1073,152 @@ func openViewerInternal(pf *PanelsFrame, v vfs.VFS, path string) {
 }
 
 func actionViewerSearch(vv *ViewerView) {
-	vtui.InputBox(Msg("Viewer.SearchTitle"), "Search for:", "", func(pattern string) {
+	actionViewerSearchDirection(vv, false)
+}
+
+func actionViewerSearchDirection(vv *ViewerView, reverse bool) {
+	vtui.InputBox(Msg("Viewer.SearchTitle"), "Search for:", vv.lastSearch, func(pattern string) {
 		if pattern == "" {
 			return
 		}
-		vtui.FrameManager.PostTask(func() {
-			runSearchWithProgress(pattern, func(ctx *vtui.TaskContext, dlg *vtui.Window) {
-				foundOffset := int64(-1)
-				currOff := vv.TopOffset + 1
-				fileSize := vv.backend.Size()
-				patternLower := strings.ToLower(pattern)
+		if pattern != vv.lastSearch {
+			vv.lastSearchFound = false
+		}
+		vv.lastSearch = pattern
+		runViewerSearch(vv, pattern, reverse)
+	})
+}
 
-				// A file system that can search its own copy answers in one round
-				// trip. Scanning here would mean reading the whole file, which
-				// for a remote one means downloading it.
-				if at, searched := vv.backend.SearchFrom(ctx.Context, pattern, currOff); searched {
-					foundOffset = at
-					currOff = fileSize
+func actionViewerSearchAgain(vv *ViewerView, reverse bool) {
+	if vv.lastSearch == "" {
+		actionViewerSearchDirection(vv, reverse)
+		return
+	}
+	runViewerSearch(vv, vv.lastSearch, reverse)
+}
+
+func runViewerSearch(vv *ViewerView, pattern string, reverse bool) {
+	vtui.FrameManager.PostTask(func() {
+		runSearchWithProgress(pattern, func(ctx *vtui.TaskContext, dlg *vtui.Window) {
+			start := vv.TopOffset + 1
+			if reverse {
+				start = vv.TopOffset
+			}
+			if vv.lastSearchFound && vv.TopOffset == vv.lastSearchTopOffset {
+				start = vv.lastSearchOffset + 1
+				if reverse {
+					start = vv.lastSearchOffset
 				}
+			}
+			foundOffset := viewerSearchOffset(ctx.Context, vv.backend, pattern, start, reverse, func(percent int) {
+				ctx.RunOnUI(func() { dlg.SetProgress(percent) })
+			})
 
-				for currOff < fileSize {
-					if ctx.Err() != nil {
-						return
-					}
-					percent := int((currOff * 100) / fileSize)
-					ctx.RunOnUI(func() { dlg.SetProgress(percent) })
-
-					data, err := vv.backend.ReadAt(currOff, 256*1024)
-					if err == piecetable.ErrLoading {
-						time.Sleep(20 * time.Millisecond)
-						continue
-					}
-					if err != nil || len(data) == 0 {
-						break
-					}
-
-					idx := strings.Index(strings.ToLower(string(data)), patternLower)
-					if idx != -1 {
-						foundOffset = currOff + int64(idx)
-						break
-					}
-					currOff += int64(len(data)) - int64(len(patternLower))
-					if currOff < 0 {
-						currOff = 0
-					}
+			ctx.RunOnUI(func() {
+				canceled := ctx.Err() != nil
+				dlg.Close()
+				if canceled {
+					return
 				}
-
-				ctx.RunOnUI(func() {
-					// Closing the dialog cancels the task via OnResult; read
-					// the state before Close so completions still deliver.
-					canceled := ctx.Err() != nil
-					dlg.Close()
-					if canceled {
-						return
-					}
-					if foundOffset != -1 {
-						vv.TopOffset = vv.backend.FindLineStart(foundOffset)
-						vtui.FrameManager.Redraw()
-					} else {
-						vtui.ShowMessage(" Search ", "Pattern not found.", []string{"&Ok"})
-					}
-				})
+				if foundOffset != -1 {
+					vv.TopOffset = vv.backend.FindLineStart(foundOffset)
+					vv.lastSearchOffset = foundOffset
+					vv.lastSearchTopOffset = vv.TopOffset
+					vv.lastSearchFound = true
+					vtui.FrameManager.Redraw()
+				} else {
+					vtui.ShowMessage(" Search ", "Pattern not found.", []string{"&Ok"})
+				}
 			})
 		})
 	})
+}
+
+func viewerSearchOffset(ctx context.Context, backend *ViewerBackend, pattern string, start int64, reverse bool, progress func(int)) int64 {
+	if backend == nil || pattern == "" {
+		return -1
+	}
+	fileSize := backend.Size()
+	if fileSize <= 0 {
+		return -1
+	}
+	if start < 0 {
+		start = 0
+	}
+	if start > fileSize {
+		start = fileSize
+	}
+	patternLower := strings.ToLower(pattern)
+	chunkSize := int64(256 * 1024)
+	if int64(len(patternLower)) > chunkSize {
+		chunkSize = int64(len(patternLower))
+	}
+	overlap := int64(len(patternLower) - 1)
+
+	if reverse {
+		if at, searched := backend.SearchBefore(ctx, pattern, start); searched {
+			return at
+		}
+		end := start
+		for end > 0 {
+			if ctx.Err() != nil {
+				return -1
+			}
+			begin := end - chunkSize
+			if begin < 0 {
+				begin = 0
+			}
+			if progress != nil {
+				progress(int(((fileSize - end) * 100) / fileSize))
+			}
+			data, err := backend.ReadAt(begin, int(end-begin))
+			if err == piecetable.ErrLoading {
+				time.Sleep(20 * time.Millisecond)
+				continue
+			}
+			if err != nil || len(data) == 0 {
+				return -1
+			}
+			if idx := strings.LastIndex(strings.ToLower(string(data)), patternLower); idx >= 0 {
+				return begin + int64(idx)
+			}
+			if begin == 0 {
+				break
+			}
+			end = begin + overlap
+		}
+		return -1
+	}
+
+	if at, searched := backend.SearchFrom(ctx, pattern, start); searched {
+		return at
+	}
+	current := start
+	for current < fileSize {
+		if ctx.Err() != nil {
+			return -1
+		}
+		if progress != nil {
+			progress(int((current * 100) / fileSize))
+		}
+		data, err := backend.ReadAt(current, int(chunkSize))
+		if err == piecetable.ErrLoading {
+			time.Sleep(20 * time.Millisecond)
+			continue
+		}
+		if err != nil || len(data) == 0 {
+			break
+		}
+		if idx := strings.Index(strings.ToLower(string(data)), patternLower); idx >= 0 {
+			return current + int64(idx)
+		}
+		advance := int64(len(data)) - overlap
+		if advance < 1 {
+			advance = 1
+		}
+		current += advance
+	}
+	return -1
 }
 
 func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {

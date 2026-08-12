@@ -53,6 +53,9 @@ func TestPanelsFrame_WorkspaceTabTitleUsesFolderNames(t *testing.T) {
 	pf := &PanelsFrame{showPanels: true}
 	pf.panels[0] = &FileSystemPanel{vfs: vfs.NewOSVFS(leftPath)}
 	pf.panels[1] = &FileSystemPanel{vfs: vfs.NewOSVFS(rightPath)}
+	if marker := pf.GetWorkspaceTabMarker(); marker != "P" {
+		t.Fatalf("panel workspace marker = %q, want P", marker)
+	}
 	title := pf.GetWorkspaceTabTitle()
 	if !strings.Contains(title, "left-leaf ─ right-leaf") {
 		t.Fatalf("workspace tab title = %q, want both leaf folder names", title)
@@ -77,7 +80,7 @@ func TestPanelsFrame_WorkspaceMenuInfoUsesFullPanelPaths(t *testing.T) {
 	pf.panels[0] = &FileSystemPanel{vfs: vfs.NewOSVFS(leftPath)}
 	pf.panels[1] = &FileSystemPanel{vfs: vfs.NewOSVFS(rightPath)}
 	info := pf.GetWorkspaceMenuInfo()
-	if info.Icon != "📁" || info.Primary != leftPath || info.Secondary != rightPath {
+	if info.Icon != "P" || info.Primary != leftPath || info.Secondary != rightPath {
 		t.Fatalf("workspace menu info = %#v, want full left/right paths", info)
 	}
 
@@ -85,7 +88,7 @@ func TestPanelsFrame_WorkspaceMenuInfoUsesFullPanelPaths(t *testing.T) {
 	pf.executing = true
 	pf.workspaceCommandTitle = "Python"
 	info = pf.GetWorkspaceMenuInfo()
-	if info.Icon != "⌨" || info.Primary != "Python" || info.Secondary != "" {
+	if info.Icon != "T" || info.Primary != "Python" || info.Secondary != "" {
 		t.Fatalf("terminal workspace menu info = %#v", info)
 	}
 }
@@ -97,19 +100,22 @@ func TestPanelsFrame_WorkspaceTabTitleTracksTerminalTitle(t *testing.T) {
 		workspaceCommandTitle: workspaceCommandName("python script.py"),
 		termView:              &TerminalView{Title: "Administrator: C:\\Windows\\System32\\cmd.exe - Python"},
 	}
-	if got := pf.GetWorkspaceTabTitle(); got != "⌨  Python" {
-		t.Fatalf("terminal workspace tab title = %q, want %q", got, "⌨  Python")
+	if got := pf.GetWorkspaceTabTitle(); got != "Python" {
+		t.Fatalf("terminal workspace tab title = %q, want %q", got, "Python")
+	}
+	if marker := pf.GetWorkspaceTabMarker(); marker != "T" {
+		t.Fatalf("terminal workspace marker = %q, want T", marker)
 	}
 	pf.executing = false
 	pf.workspaceCommandTitle = ""
-	if got := pf.GetWorkspaceTabTitle(); got != "⌨  Terminal" {
-		t.Fatalf("manually revealed terminal tab title = %q, want %q", got, "⌨  Terminal")
+	if got := pf.GetWorkspaceTabTitle(); got != "Terminal" {
+		t.Fatalf("manually revealed terminal tab title = %q, want %q", got, "Terminal")
 	}
 	pf.showPanels = true
 	pf.panels[0] = &FileSystemPanel{vfs: vfs.NewOSVFS(t.TempDir())}
 	pf.panels[1] = &FileSystemPanel{vfs: vfs.NewOSVFS(t.TempDir())}
-	if got := pf.GetWorkspaceTabTitle(); strings.HasPrefix(got, "⌨") {
-		t.Fatalf("panel workspace kept terminal icon after returning to panels: %q", got)
+	if marker := pf.GetWorkspaceTabMarker(); marker != "P" {
+		t.Fatalf("panel workspace kept terminal marker after returning to panels: %q", marker)
 	}
 }
 

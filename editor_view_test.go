@@ -1030,8 +1030,11 @@ func TestEditorView_GetTitle(t *testing.T) {
 	if ev1.GetTitle() != "Edit: syslog" {
 		t.Errorf("GetTitle failed for valid path: %s", ev1.GetTitle())
 	}
-	if ev1.GetWorkspaceTabTitle() != "✎ syslog" {
+	if ev1.GetWorkspaceTabTitle() != "syslog" {
 		t.Errorf("GetWorkspaceTabTitle failed for valid path: %s", ev1.GetWorkspaceTabTitle())
+	}
+	if ev1.GetWorkspaceTabMarker() != "E" {
+		t.Errorf("GetWorkspaceTabMarker failed: %s", ev1.GetWorkspaceTabMarker())
 	}
 
 	// Without path
@@ -1040,7 +1043,7 @@ func TestEditorView_GetTitle(t *testing.T) {
 	if ev2.GetTitle() != "Editor" {
 		t.Errorf("GetTitle failed for empty path: %s", ev2.GetTitle())
 	}
-	if ev2.GetWorkspaceTabTitle() != "✎ Editor" {
+	if ev2.GetWorkspaceTabTitle() != "Editor" {
 		t.Errorf("GetWorkspaceTabTitle failed for empty path: %s", ev2.GetWorkspaceTabTitle())
 	}
 
@@ -1051,7 +1054,7 @@ func TestEditorView_GetTitle(t *testing.T) {
 	if ev3.GetTitle() != "Rename list of files" {
 		t.Errorf("GetTitle ignored DisplayTitle: %s", ev3.GetTitle())
 	}
-	if ev3.GetWorkspaceTabTitle() != "✎ Rename list of files" {
+	if ev3.GetWorkspaceTabTitle() != "Rename list of files" {
 		t.Errorf("GetWorkspaceTabTitle ignored DisplayTitle: %s", ev3.GetWorkspaceTabTitle())
 	}
 }
