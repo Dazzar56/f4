@@ -91,13 +91,21 @@ func (cp *AIChatPanel) ProcessKey(e *vtinput.InputEvent) bool {
 	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
 
-	if e.VirtualKeyCode == vtinput.VK_RETURN && ctrl && !alt && !shift {
-		text := cp.input.GetText()
-		if strings.TrimSpace(text) != "" {
-			aiSend(findPanelsFrameAnyScreen(), text)
-			cp.input.SetText("")
+	if e.VirtualKeyCode == vtinput.VK_RETURN && !ctrl && !alt {
+		if shift {
+			// MultiLineEdit ignores Shift+Enter. We synthesize a plain Enter
+			// to trigger a new line in the text field without modifying vtui.
+			ePlain := *e
+			ePlain.ControlKeyState &^= vtinput.ShiftPressed
+			return cp.input.ProcessKey(&ePlain)
+		} else {
+			text := cp.input.GetText()
+			if strings.TrimSpace(text) != "" {
+				aiSend(findPanelsFrameAnyScreen(), text)
+				cp.input.SetText("")
+			}
+			return true
 		}
-		return true
 	}
 
 	h := cp.input.Y1 - cp.Y1 - 2

@@ -1226,8 +1226,12 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 	if (!pf.showPanels && (pf.termView.UseAltScreen || isBusy)) || topType == vtui.TypeUser+2 {
 		pf.cmdLine.SetVisible(false)
 	} else {
+		isChatFocused := false
+		if pf.showPanels && pf.altPanels[pf.activeIdx] != nil && pf.altPanels[pf.activeIdx].Kind() == "ai_chat" && pf.altPanels[pf.activeIdx].IsFocused() {
+			isChatFocused = true
+		}
 		pf.cmdLine.SetVisible(true)
-		pf.cmdLine.Edit.HideCursor = isFastFind || (pf.searchFirstMode() && pf.showPanels && !pf.commandLineFocused)
+		pf.cmdLine.Edit.HideCursor = isFastFind || isChatFocused || (pf.searchFirstMode() && pf.showPanels && !pf.commandLineFocused)
 		cmdLineY := pf.lastH - 1
 		if pf.showKeyBar {
 			cmdLineY = pf.lastH - 2
@@ -1324,6 +1328,13 @@ func (pf *PanelsFrame) VetoActionKey(e *vtinput.InputEvent) bool {
 		if e.VirtualKeyCode == vtinput.VK_F2 && pf.activeIdx >= 0 && pf.activeIdx < len(pf.altPanels) {
 			if a := pf.altPanels[pf.activeIdx]; a != nil && a.IsFocused() {
 				return true
+			}
+		}
+		if pf.activeIdx >= 0 && pf.activeIdx < len(pf.altPanels) {
+			if a := pf.altPanels[pf.activeIdx]; a != nil && a.IsFocused() && a.Kind() == "ai_chat" {
+				if e.Char != 0 || e.VirtualKeyCode == vtinput.VK_RETURN || e.VirtualKeyCode == vtinput.VK_BACK || e.VirtualKeyCode == vtinput.VK_DELETE {
+					return true
+				}
 			}
 		}
 		return false
@@ -1612,8 +1623,13 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			isFastFind = fsp.fastFindMode
 		}
 
-		// If fast find is active, Vim hotkeys must be ignored to allow searching by 'j', 'k', etc.
-		if !isFastFind {
+		isChatFocused := false
+		if pf.altPanels[pf.activeIdx] != nil && pf.altPanels[pf.activeIdx].Kind() == "ai_chat" && pf.altPanels[pf.activeIdx].IsFocused() {
+			isChatFocused = true
+		}
+
+		// If fast find or chat is active, Vim hotkeys must be ignored to allow typing 'j', 'k', etc.
+		if !isFastFind && !isChatFocused {
 			now := time.Now()
 			key := e.Char
 			cmdLineText := pf.cmdLine.Edit.GetText()
