@@ -66,7 +66,14 @@ const (
 // barKind decides what the strip shows right now.
 func (cp *AIChatPanel) barKind() int {
 	session := cp.getSession()
-	if len(session.ContextFiles()) > 0 {
+	ctxFiles := session.ContextFiles()
+	userFilesCount := 0
+	for _, f := range ctxFiles {
+		if f != "ap.md" {
+			userFilesCount++
+		}
+	}
+	if userFilesCount > 0 {
 		return aiBarFiles
 	}
 	if session.LastPatch() != nil {

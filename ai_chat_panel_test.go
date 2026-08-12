@@ -165,3 +165,35 @@ func TestAIChatPanel_ContextFilesRenderingAndLinkNavigation(t *testing.T) {
 		t.Error("Attached file app.go not rendered in AIChatPanel")
 	}
 }
+func TestAIChatPanel_BarKindExcludesApSpec(t *testing.T) {
+	session := vtvibe.NewSession()
+	fp := NewFileSystemPanel(0, 0, 80, 24, &aiVFSWrapper{AIVFS: vtvibe.NewVFS(session)})
+	cp := NewAIChatPanel(fp)
+
+	// Case 1: No files
+	if k := cp.barKind(); k != aiBarNone {
+		t.Errorf("Expected aiBarNone, got %v", k)
+	}
+
+	vfsInst := vtvibe.NewVFS(session)
+
+	// Case 2: Only ap.md in ctx
+	w, err := vfsInst.Create(nil, "/ctx/ap.md")
+	if err == nil {
+		_, _ = w.Write([]byte("AP specification content"))
+		_ = w.Close()
+	}
+	if k := cp.barKind(); k != aiBarNone {
+		t.Errorf("Expected aiBarNone when only ap.md is attached, got %v", k)
+	}
+
+	// Case 3: ap.md + user file in ctx
+	w2, err2 := vfsInst.Create(nil, "/ctx/main.go")
+	if err2 == nil {
+		_, _ = w2.Write([]byte("package main"))
+		_ = w2.Close()
+	}
+	if k := cp.barKind(); k != aiBarFiles {
+		t.Errorf("Expected aiBarFiles when a user file is attached, got %v", k)
+	}
+}
