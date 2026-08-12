@@ -165,6 +165,12 @@ func askMountAction(pf *PanelsFrame, row mountRow) {
 		if code == 1 && row.live != nil {
 			if err := row.live.Unmount(); err != nil {
 				vtui.ShowMessage(" Mount ", fmt.Sprintf("Cannot unmount %s:\n%v", row.point, err), []string{"&Ok"})
+				return
+			}
+			// Unmounting several is one gesture repeated, not a reason
+			// to reopen the dialog by hand each time.
+			if len(mountRows()) > 0 {
+				showMountList(pf)
 			}
 		}
 	}

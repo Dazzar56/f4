@@ -48,6 +48,24 @@ type bridge struct {
 	cacheTTL time.Duration
 	cacheMu  sync.Mutex
 	dirCache map[string]dirCacheEntry
+
+	// writeMu guards writers only. It is deliberately not b.mu: looking up
+	// who is writing a file must not queue behind a VFS call that is busy
+	// reading something else.
+	writeMu sync.Mutex
+	writers map[string]*writeHandle
+}
+
+// writeHandle is one file being written through the mount, shared by every
+// kernel handle open on that path.
+//
+// The table exists because FUSE hands out one handle per open() and a file
+// manager, a shell and an editor may all be writing the same file. Without a
+// table each of them would stage a private copy and the last close would
+// silently win, which is exactly the kind of loss a mount must not invent.
+type writeHandle struct {
+	path string
+	refs int
 }
 
 type dirCacheEntry struct {
@@ -68,6 +86,7 @@ func newBridge(v vfs.VFS, root string, opts Options) *bridge {
 		writeOK:  v.GetCapabilities().HasWrite,
 		cacheTTL: ttl,
 		dirCache: make(map[string]dirCacheEntry),
+		writers:  make(map[string]*writeHandle),
 	}
 }
 
@@ -441,4 +460,54 @@ func displayName(name string) string {
 		return name[idx+1:]
 	}
 	return name
+}
+
+// acquireWriter returns the handle for path, creating it if this is the first
+// writer. created says which happened, so the caller knows whether it still
+// has to prepare the staging file that chunk 2 adds.
+func (b *bridge) acquireWriter(path string) (h *writeHandle, created bool) {
+	b.writeMu.Lock()
+	defer b.writeMu.Unlock()
+	if b.writers == nil {
+		b.writers = make(map[string]*writeHandle)
+	}
+	if existing, ok := b.writers[path]; ok {
+		existing.refs++
+		return existing, false
+	}
+	h = &writeHandle{path: path, refs: 1}
+	b.writers[path] = h
+	return h, true
+}
+
+// releaseWriter drops one reference and reports whether that was the last
+// one — the moment the file has to be committed to the backend.
+func (b *bridge) releaseWriter(h *writeHandle) (last bool) {
+	if h == nil {
+		return false
+	}
+	b.writeMu.Lock()
+	defer b.writeMu.Unlock()
+	h.refs--
+	if h.refs > 0 {
+		return false
+	}
+	delete(b.writers, h.path)
+	return true
+}
+
+// writerFor reports the open write handle for path, if there is one. A read
+// of a file being written has to see the staged copy rather than the version
+// the backend still holds.
+func (b *bridge) writerFor(path string) *writeHandle {
+	b.writeMu.Lock()
+	defer b.writeMu.Unlock()
+	return b.writers[path]
+}
+
+// openWriters is how many files are being written right now.
+func (b *bridge) openWriters() int {
+	b.writeMu.Lock()
+	defer b.writeMu.Unlock()
+	return len(b.writers)
 }
