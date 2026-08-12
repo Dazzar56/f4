@@ -78,17 +78,37 @@ func captureWorkspaceSession(pf *PanelsFrame) workspaceSessionState {
 		ShowRight:   pf.showRightPanel,
 	}
 	if pf.wide {
-		state.WidePanel = pf.widePanel
+		if pf.widePanel >= 0 && pf.widePanel < 2 && !isAIPanel(pf.panels[pf.widePanel]) {
+			state.WidePanel = pf.widePanel
+		}
 	}
 	if left, ok := pf.panels[0].(*FileSystemPanel); ok {
+		path := left.vfs.GetPath()
+		cursor := left.GetSelectedName()
+		if isAIPanel(left) {
+			path = aiPrevPath[0]
+			if path == "" {
+				path = "."
+			}
+			cursor = ""
+		}
 		state.Left = panelSessionState{
-			Path: left.vfs.GetPath(), Cursor: left.GetSelectedName(), ViewMode: int(left.viewMode),
+			Path: path, Cursor: cursor, ViewMode: int(left.viewMode),
 			SortMode: int(left.sortMode), SortReverse: left.sortReverse,
 		}
 	}
 	if right, ok := pf.panels[1].(*FileSystemPanel); ok {
+		path := right.vfs.GetPath()
+		cursor := right.GetSelectedName()
+		if isAIPanel(right) {
+			path = aiPrevPath[1]
+			if path == "" {
+				path = "."
+			}
+			cursor = ""
+		}
 		state.Right = panelSessionState{
-			Path: right.vfs.GetPath(), Cursor: right.GetSelectedName(), ViewMode: int(right.viewMode),
+			Path: path, Cursor: cursor, ViewMode: int(right.viewMode),
 			SortMode: int(right.sortMode), SortReverse: right.sortReverse,
 		}
 	}
@@ -101,10 +121,16 @@ func captureWorkspaceSessions() ([]workspaceSessionState, int) {
 	}
 	states := make([]workspaceSessionState, 0, len(vtui.FrameManager.Screens))
 	active := 0
+	lastNonAIActive := 0
+
 	for screenIdx, screen := range vtui.FrameManager.Screens {
 		pf := panelsFrameOnScreen(screen)
 		if pf == nil {
 			continue
+		}
+		hasAI := isAIPanel(pf.panels[0]) || isAIPanel(pf.panels[1])
+		if !hasAI {
+			lastNonAIActive = len(states)
 		}
 		if screenIdx == vtui.FrameManager.ActiveIdx {
 			active = len(states)
@@ -115,6 +141,13 @@ func captureWorkspaceSessions() ([]workspaceSessionState, int) {
 	}
 	if active >= len(states) {
 		active = 0
+	}
+	if active < len(vtui.FrameManager.Screens) {
+		if pf := panelsFrameOnScreen(vtui.FrameManager.Screens[vtui.FrameManager.ActiveIdx]); pf != nil {
+			if isAIPanel(pf.panels[0]) || isAIPanel(pf.panels[1]) {
+				active = lastNonAIActive
+			}
+		}
 	}
 	return states, active
 }
