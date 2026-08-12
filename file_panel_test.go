@@ -783,8 +783,8 @@ func TestFileSystemPanel_HiddenInfoShowsCursorFileSizeOnMulticolumnBorder(t *tes
 	vtui.Palette[ColPanelTotalInfo] = themedAttr
 	fp.Show(scr)
 
-	if got := rowText(1, fp.Y2, 13); got != " 1 234 567 B " {
-		t.Fatalf("medium bottom-left cursor size = %q, want %q", got, " 1 234 567 B ")
+	if got := rowText(1, fp.Y2, 13); got != " ▸ 1 234 567 " {
+		t.Fatalf("medium bottom-left cursor size = %q, want %q", got, " ▸ 1 234 567 ")
 	}
 	if got := scr.GetCell(2, fp.Y2).Attributes; got != themedAttr {
 		t.Fatalf("cursor size color = %#x, want current themed Panel.TotalInfo %#x", got, themedAttr)
@@ -794,8 +794,8 @@ func TestFileSystemPanel_HiddenInfoShowsCursorFileSizeOnMulticolumnBorder(t *tes
 	// status, while Detailed already has a visible Size column and must not.
 	fp.SetViewMode(ViewModeBrief)
 	fp.Show(scr)
-	if got := rowText(1, fp.Y2, 13); got != " 1 234 567 B " {
-		t.Fatalf("brief bottom-left cursor size = %q, want %q", got, " 1 234 567 B ")
+	if got := rowText(1, fp.Y2, 13); got != " ▸ 1 234 567 " {
+		t.Fatalf("brief bottom-left cursor size = %q, want %q", got, " ▸ 1 234 567 ")
 	}
 
 	fp.SetViewMode(ViewModeDetailed)
@@ -4487,5 +4487,67 @@ NormalColor = foreground:#00FF00
 	expectedText := "• main.go"
 	if text != expectedText {
 		t.Errorf("Marker integration in GetCellText failed: got %q, want %q", text, expectedText)
+	}
+}
+func screenRow(scr *vtui.ScreenBuf, y, x1, x2 int) string {
+	runes := make([]rune, x2-x1+1)
+	for i := range runes {
+		cell := scr.GetCell(x1+i, y)
+		runes[i] = rune(cell.Char)
+		if runes[i] == 0 {
+			runes[i] = ' '
+		}
+	}
+	return string(runes)
+}
+
+func TestFileSystemPanel_BottomFrameShowsCursorEntry(t *testing.T) {
+	vtui.SetDefaultPalette()
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+	was := AppConfig.ShowPanelFileInfo
+	AppConfig.ShowPanelFileInfo = false
+	t.Cleanup(func() { AppConfig.ShowPanelFileInfo = was })
+
+	fp := NewFileSystemPanel(0, 0, 60, 20, vfs.NewOSVFS(t.TempDir()))
+	fp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
+		{VFSItem: vfs.VFSItem{Name: "sub", IsDir: true}},
+		{VFSItem: vfs.VFSItem{Name: "big.bin", Size: 1234567}},
+	}
+	fp.isLoading = false
+	if fp.loadingTimer != nil {
+		fp.loadingTimer.Stop()
+	}
+	fp.Refresh()
+
+	bottom := func() string { return screenRow(scr, fp.Y2, fp.X1, fp.X2) }
+
+	// The total keeps the centre, the entry under the cursor sits in the
+	// left corner; both are spelled out in exact bytes.
+	fp.SetCursorIndex(2)
+	fp.Show(scr)
+	if got := bottom(); !strings.Contains(got, "▸ 1 234 567") || !strings.Contains(got, "1 234 567 (2)") {
+		t.Errorf("bottom frame for a file: %q", got)
+	}
+
+	// Directories say what they are instead of a size.
+	fp.SetCursorIndex(1)
+	fp.Show(scr)
+	if got := bottom(); !strings.Contains(got, "▸ <DIR>") {
+		t.Errorf("bottom frame for a dir: %q", got)
+	}
+	fp.SetCursorIndex(0)
+	fp.Show(scr)
+	if got := bottom(); !strings.Contains(got, "▸ UP-DIR") {
+		t.Errorf("bottom frame for the up-dir: %q", got)
+	}
+
+	// With the far2l status line on, the marker steps aside.
+	AppConfig.ShowPanelFileInfo = true
+	fp.Show(scr)
+	if got := bottom(); strings.Contains(got, "▸") {
+		t.Errorf("marker should be dropped when the status line is on: %q", got)
 	}
 }

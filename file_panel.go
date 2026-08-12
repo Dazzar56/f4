@@ -2250,7 +2250,7 @@ func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
 		totalStr = fmt.Sprintf(" "+Msg("Panel.SelectedInfo")+" ", formatIntWithSpaces(selSize), selFiles, selDirs)
 		attrTotal = vtui.Palette[ColPanelSelectedInfo]
 	} else if totCount > 0 {
-		totalStr = fmt.Sprintf(" %s (%d) ", formatSize(totSize), totCount)
+		totalStr = fmt.Sprintf(" %s (%d) ", formatIntWithSpaces(totSize), totCount)
 		attrTotal = vtui.Palette[ColPanelTotalInfo]
 	}
 
@@ -2265,14 +2265,28 @@ func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
 		}
 	}
 
-	if cursorSize := fp.cursorSizeOnBottomBorder(); cursorSize != "" {
-		cursorSizeW := runewidth.StringWidth(cursorSize)
-		cursorSizeX := fp.X1 + 1
-		// Keep at least one frame cell between the cursor size and the centered
-		// selection/directory summary. On narrow panels the summary wins.
-		if cursorSizeX+cursorSizeW < totalStart {
-			p := vtui.NewPainter(scr)
-			p.DrawString(cursorSizeX, fp.Y2, cursorSize, vtui.Palette[ColPanelTotalInfo])
+	// The bottom frame now carries two numbers, so they must not read as one.
+	// The panel total keeps the centre and its own colour; the entry under
+	// the cursor is pinned to the left corner behind a ▸ marker. Both are in
+	// exact bytes, the way far2l and the Size column spell them, and so is
+	// the selected-files line. Directories say <DIR>/UP-DIR instead. When
+	// the far2l status line is switched on it already states all of this
+	// right above, so the marker steps aside.
+	if !AppConfig.ShowPanelFileInfo {
+		if idx := fp.GetCursorIndex(); idx >= 0 && idx < len(fp.entries) {
+			e := fp.entries[idx]
+			curStr := formatIntWithSpaces(e.Size)
+			if e.IsDir && !e.SizeCalculated {
+				curStr = "<DIR>"
+				if e.Name == ".." {
+					curStr = "UP-DIR"
+				}
+			}
+			curStr = " ▸ " + curStr + " "
+			if curW := runewidth.StringWidth(curStr); fp.X1+1+curW < totalStart {
+				p := vtui.NewPainter(scr)
+				p.DrawString(fp.X1+1, fp.Y2, curStr, vtui.Palette[ColPanelText])
+			}
 		}
 	}
 
