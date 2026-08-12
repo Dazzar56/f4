@@ -81,11 +81,13 @@ var farKeyNames = map[uint16]string{
 
 func EventToFarString(e *vtinput.InputEvent) string {
 	var sb strings.Builder
-	mods := normalizeMods(e.ControlKeyState)
-	if mods.Contains(vtinput.LeftCtrlPressed) {
+	mods := e.ControlKeyState
+	if mods.Contains(vtinput.RightCtrlPressed) {
+		sb.WriteString("RCtrl")
+	} else if mods.Contains(vtinput.LeftCtrlPressed) {
 		sb.WriteString("Ctrl")
 	}
-	if mods.Contains(vtinput.LeftAltPressed) {
+	if mods.Contains(vtinput.LeftAltPressed | vtinput.RightAltPressed) {
 		sb.WriteString("Alt")
 	}
 	if mods.Contains(vtinput.ShiftPressed) {
@@ -131,7 +133,10 @@ func EventToFarString(e *vtinput.InputEvent) string {
 func ParseFarKey(s string) *vtinput.InputEvent {
 	e := &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true}
 	orig := s
-	if strings.HasPrefix(s, "Ctrl") {
+	if strings.HasPrefix(s, "RCtrl") {
+		e.ControlKeyState |= vtinput.RightCtrlPressed
+		s = strings.TrimPrefix(s, "RCtrl")
+	} else if strings.HasPrefix(s, "Ctrl") {
 		e.ControlKeyState |= vtinput.LeftCtrlPressed
 		s = strings.TrimPrefix(s, "Ctrl")
 	}

@@ -6,7 +6,7 @@ import (
 )
 
 func TestAIChatPanel_Resize(t *testing.T) {
-	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewNullVFS())
+	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewNullVFS(0))
 	cp := NewAIChatPanel(fp)
 	cp.SetPosition(0, 0, 79, 23)
 

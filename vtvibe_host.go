@@ -117,7 +117,7 @@ func init() {
 		LabelKey:    "Action.AI.TogglePanel",
 		Description: "Open or close the AI panel on the passive panel",
 		DescKey:     "Action.AI.TogglePanel.Desc",
-		DefaultKeys: []string{"CtrlAltA"},
+		DefaultKeys: []string{"RCtrlA"},
 		MenuPath:    "Commands",
 		Handler:     withAI(func(pf *PanelsFrame) { aiTogglePanel(pf) }),
 	})
@@ -338,7 +338,7 @@ func aiAskAction() bool {
 	if pf != nil {
 		fsp := pf.getActivePanel()
 		if fsp != nil {
-			_, isAI := fsp.vfs.(*vtvibe.AIVFS)
+			_, isAI := fsp.vfs.(*aiVFSWrapper)
 			if !isAI {
 				ctxParts = append(ctxParts, "Path: "+fsp.vfs.GetPath())
 				if name := fsp.GetSelectedName(); name != "" && name != ".." {
@@ -357,13 +357,19 @@ func aiAskAction() bool {
 	for i, s := range fm.Screens {
 		if len(s.Frames) > 0 {
 			if screenPf, ok := s.Frames[len(s.Frames)-1].(*PanelsFrame); ok {
-				fsp := screenPf.getActivePanel()
-				if fsp != nil {
-					if _, isAI := fsp.vfs.(*vtvibe.AIVFS); isAI {
-						fm.SwitchScreen(i)
-						aiPf = screenPf
-						break
+				aiIdx := -1
+				for idx, p := range screenPf.panels {
+					if fsp, ok := p.(*FileSystemPanel); ok && fsp != nil && fsp.vfs != nil {
+						if _, isAI := fsp.vfs.(*aiVFSWrapper); isAI {
+							aiIdx = idx
+							break
+						}
 					}
+				}
+				if aiIdx != -1 {
+					fm.SwitchScreen(i)
+					aiPf = screenPf
+					break
 				}
 			}
 		}
@@ -383,6 +389,35 @@ func aiAskAction() bool {
 		}
 	}
 
+	if aiPf == nil && pf != nil {
+		// Fork current PanelsFrame into a new workspace
+		fm.EmitCommand(vtui.CmResize, "fork")
+		if topPf, ok := fm.GetTopFrame().(*PanelsFrame); ok {
+			aiPf = topPf
+			idx := 1 - aiPf.activeIdx
+			fsp := aiPf.panels[idx].(*FileSystemPanel)
+			aiPrevPath[idx] = fsp.vfs.GetPath()
+			vtvibeConfig()
+			aiPf.switchToVFS(fsp, &aiVFSWrapper{vtvibe.NewVFS(aiSession())})
+			aiPf.setWidePanel(idx)
+		}
+	} else if aiPf != nil {
+		// Ensure the AI panel is active and wide in the existing workspace
+		aiIdx := -1
+		for idx, p := range aiPf.panels {
+			if fsp, ok := p.(*FileSystemPanel); ok && fsp != nil && fsp.vfs != nil {
+				if _, isAI := fsp.vfs.(*aiVFSWrapper); isAI {
+					aiIdx = idx
+					break
+				}
+			}
+		}
+		if aiIdx != -1 {
+			aiPf.activeIdx = aiIdx
+			aiPf.setWidePanel(aiIdx)
+		}
+	}
+
 	// 3. Set up the chat, inject context, and start a new session
 	if aiPf != nil {
 		AiSetViewModePanel(aiPf, aiPf.activeIdx, "ai://chat", true)
@@ -399,6 +434,7 @@ func aiAskAction() bool {
 				if lines > 0 {
 					cp.input.SetCursorPos(lines-1, 0)
 				}
+				cp.ScrollToBottom()
 			}
 		}
 		return true

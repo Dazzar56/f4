@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/unxed/f4/vtvibe"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -187,8 +186,10 @@ func isAIPanelActive() bool {
 	if fsp == nil {
 		return false
 	}
-	_, isAI := fsp.vfs.(*vtvibe.AIVFS)
-	return isAI
+	if tp, ok := fsp.vfs.(vfs.TitleProvider); ok {
+		return tp.GetTitle() == "ai"
+	}
+	return false
 }
 
 func repeatEditorSearchDirection(ev *EditorView, reverse bool) {
@@ -1145,7 +1146,6 @@ func init() {
 		DefaultKeys:  []string{"CtrlO:NoAltScreenApp", "Esc:EscToggle", "Del:EscToggle", "NumDel:EscToggle"},
 		DefaultAreas: []string{"Terminal"},
 		Handler: withPF(func(pf *PanelsFrame) {
-			pf.exitWide()
 			pf.showPanels = !pf.showPanels
 			if pf.showPanels && !pf.showLeftPanel && !pf.showRightPanel {
 				pf.showLeftPanel = true

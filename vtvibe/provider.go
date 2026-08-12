@@ -95,8 +95,8 @@ func (c Config) Chat(ctx context.Context, msgs []Message) (string, Usage, error)
 	if strings.Contains(strings.ToLower(c.Model), "gemini") {
 		// Embed native Gemini search tools directly into OpenAI-compatible payload
 		req.Tools = []any{
-			map[string]any{"googleSearch": map[string]any{}},
-			map[string]any{"retrieval": map[string]any{}},
+			map[string]any{"google_search": map[string]any{}},
+			map[string]any{"url_context": map[string]any{}},
 		}
 	}
 	body, err = json.Marshal(req)
