@@ -129,10 +129,9 @@ checkpoint on jumps. Map `invalidateStates` onto checkpoint granularity.
 Show walker progress in the top bar (e.g. `HL 42%`) while a visible region is
 still uncoloured, so the user sees work in progress instead of plain text.
 
-### Phase 5 — Colorer
-Backward jumps and `ch.lines` growth. Options to evaluate then: bounding
-`ch.lines` to the walked window, a dedicated session for the walker, or asking
-the colorer session for a restorable state.
+### Phase 5 — Colorer (now the blocking one, see the phase 2b findings)
+Colorer must leave the state chain entirely and switch to an anchored window.
+Split into 5a..5d below.
 
 ### Phase 6 — optional fast path
 During the walk we only need the state, not the attribute slice. If the
@@ -147,14 +146,18 @@ change.
 - [x] Phase 2 — throttled background walker (non-blocking state catch-up)
 - [x] Phase 2a — slices bounded by wall clock, not by line count; walker yields
       to the line indexer while a file is still being opened
+- [ ] Phase 5a — take Colorer out of the walker
+- [ ] Phase 5b — anchored context in `ColorerHighlighter`
+- [ ] Phase 5c — drop `ch.lines`, bound `attrCache`
+- [ ] Phase 5d — periodic re-anchor to bound wasm memory
 - [ ] Phase 0 — seam
 - [ ] Phase 3 — checkpoints
 - [ ] Phase 4 — feedback
-- [ ] Phase 5 — Colorer
 - [ ] Phase 6 — optional fast path
 
-**Current step:** phase 2a landed, waiting for numbers from the reporter. Next:
-phase 0 unless the log points elsewhere.
+**Current step:** phases 1/2/2a landed and Chroma is fixed — the tail of a 40MB
+file appears and colours instantly. Colorer is not fixed and the walker is now
+part of its problem; see phase 2b below. Next: phase 5a.
 
 ### Phase 2a — what changed and why
 
@@ -229,3 +232,84 @@ large:
   If they turn out to need tuning per machine, they are the obvious candidates
   for `AppConfig` (principle 5), but do not add settings before the numbers ask
   for them.
+
+### Phase 2b — findings after phases 1/2/2a
+
+Reported: Chroma is fixed — the tail of a 40MB / 600k line file appears and
+colours instantly. Colorer is not. It colours the beginning of the document,
+and further down only if you scroll there from an already coloured region;
+a file opened in the middle never gets colours at all. Holding `PgDn` from the
+top does colour as you go, but responsiveness collapses — an `Esc` pressed
+after releasing `PgDn` fires some fifteen seconds later.
+
+Four things are behind that, and they compound.
+
+**1. Colorer has no state to chain.** `ColorerHighlighter.Highlight` takes the
+line number out of `prevState.(int)`; the actual parser state lives in the
+forward-only wasm session. So `ev.lineStates` holds, for Colorer, a list of
+consecutive integers and nothing else. The walker is not building anything.
+
+**2. Walking the file is not free on the Colorer side — it is destructive.**
+Every `Highlight` reaches `colorer_parse_line`, and that function does
+`session->line_source.lines.push_back(...)` and parses with
+`TPM_CACHE_UPDATE`. Both the line vector and the parser cache grow for every
+line ever parsed and are released only by `colorer_reset_session`. Walking
+600k lines therefore copies the whole file into wasm linear memory as UTF-16
+and grows the parse cache alongside it — while `ch.lines` keeps a second full
+copy on the Go side. Worth confirming from the outside: watch RSS while
+holding `PgDn` with Colorer selected; it should climb and never come back.
+
+**3. The walker and the renderer fight over `parsedIdx`.** The walker runs
+*ahead* of the viewport (`hlDutyAhead`). The renderer then asks for a line
+behind `parsedIdx`, `resync` sees a rewind, and for `upTo > 2000` it takes the
+escape hatch added with phase 1: `Reset()`, `parsedIdx = upTo`, return — the
+parser's whole context is thrown away. The next walker slice moves ahead
+again, the next frame resets again. During a held `PgDn` this repeats per frame
+and the discarded work queues up on the UI thread. That is the fifteen seconds
+before `Esc`.
+
+**4. Nothing calls the highlighter for a distant viewport.** In `DisplayObject`
+the `logIdx >= len(ev.lineStates)+syncHighlightGapLimit` branch gives Chroma an
+immediate stateless `Highlight(line, nil, bgAttr)` and gives Colorer nothing:
+`lineSyntax` stays nil until the chain has been walked all the way to the
+viewport. With (2) and (3) in the way, that never arrives. Hence "opened in the
+middle, never coloured" — it is not a slow path, it is no path.
+
+### Phase 5 — anchored window for Colorer
+
+Drop the idea of a state chain for Colorer. What the session needs is not a
+snapshot but a *position*, and the only positions worth holding are near the
+viewport.
+
+- **5a — take Colorer out of the walker.** `startHighlighting` and
+  `highlightSlice` skip a `*ColorerHighlighter` entirely, and the render path
+  stops waiting on `ev.lineStates` for it. On its own this ends the wasm memory
+  growth and the `parsedIdx` ping-pong; the file still colours only where the
+  session happens to be, so 5b follows immediately.
+- **5b — anchored context.** One `EnsureContext(topLine)` per frame, before the
+  render loop:
+  - `parsedIdx <= top` and `top - parsedIdx` small (~2000): parse forward, full
+    context preserved — this is the sequential-scrolling case and it stays
+    exact;
+  - otherwise: `Reset()`, parse `hlColorerContext` (~300) lines ending just
+    above `top`, anchor there. Cost is bounded by the context plus a screen,
+    so it is the same on line 3 and on line 500000.
+
+  The renderer then parses the visible lines forward as it does today and
+  always has colours. Trade-off, identical to the one already accepted for
+  Chroma: a construct opened more than `hlColorerContext` lines above the
+  viewport may be mis-coloured right after a jump, and comes out right once you
+  scroll to it. `colorer_reset_session` keeps the file type — `setFileType`
+  survives — so re-anchoring does not need `SelectType` again.
+- **5c — one copy of the text, one window of attributes.** `ch.lines` goes
+  away; the highlighter gets a line provider backed by the piece table and the
+  line index, which is where the text already is. `maxCachedAttrLines` /
+  `attrCacheKeepWindow` (5000000 / 1000000 today, i.e. unbounded in practice)
+  shrink to the anchored window.
+- **5d — bounded session.** Re-anchor unconditionally after
+  `hlColorerParsedMax` (~20000) lines parsed since the last `Reset()`, so the
+  wasm line vector and the parse cache stay bounded during a long sequential
+  scroll.
+
+Only after that does the checkpoint work (phase 3) make sense, and it applies
+to Chroma-style highlighters alone — the ones whose state really is a value.
