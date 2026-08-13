@@ -207,6 +207,7 @@ func TestUpdater_Extractors(t *testing.T) {
 		t.Fatal(err)
 	}
 	sevenFile.Close()
+	runtime.KeepAlive(sevenFile)
 
 	sevenData, _ := os.ReadFile(sevenPath)
 	dest7z := t.TempDir()
