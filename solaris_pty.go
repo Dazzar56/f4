@@ -66,7 +66,8 @@ func (p *SolarisPTY) Run(name string, args ...string) error {
 	p.Cmd.Stderr = p.Slave
 	p.Cmd.Env = terminalChildEnv()
 	p.Cmd.SysProcAttr = &syscall.SysProcAttr{
-		Setsid: true, // Создаем новую сессию для управления TTY
+		Setsid:  true, // Создаем новую сессию для управления TTY
+		Setctty: true, // Тот же терминал становится управляющим для сессии
 	}
 
 	p.SetSize(80, 24)
@@ -115,8 +116,12 @@ func OpenSolarisPTY(api SolarisStreamsAPI) (*SolarisPTY, error) {
 		return nil, err
 	}
 
-	// 5. Открытие подчиненного терминала
-	slave, err := api.Open(slaveName, os.O_RDWR, 0)
+	// 5. Открытие подчиненного терминала. O_NOCTTY — тот же флаг, что уже
+	// стоит при открытии слейва в linux/freebsd/darwin-ветках: без него
+	// открытие слейва в процессе без управляющего терминала само делает
+	// его управляющим, и им рискует стать терминал самого f4, а не только
+	// терминал дочернего шелла.
+	slave, err := api.Open(slaveName, os.O_RDWR|unix.O_NOCTTY, 0)
 	if err != nil {
 		master.Close()
 		return nil, err

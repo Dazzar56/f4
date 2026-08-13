@@ -819,6 +819,7 @@ EnvMan.Menu=&Менеджер окружения
 EnvMan.ConfigMenu=Менеджер окружения
 EnvMan.ManagerTitle=Профили окружения
 EnvMan.ManagerProfilesPane=Профили
+Terminal.PTYAllocFailed=Не удалось запустить локальный терминал в этой системе.
 EnvMan.ManagerDetailsPane=Содержимое профиля
 EnvMan.ManagerEditingPane=Редактирование профиля
 EnvMan.ManagerKeys=Ins Добавить  Del Удалить  F4 Правка  F5 Копия  Space Переключить  Ctrl+↑/↓ Переместить  F2 Настройки

@@ -844,6 +844,7 @@ func (pf *PanelsFrame) initPTY() {
 			p, err = NewPTY()
 			if err != nil {
 				vtui.DebugLog("PTY: Failed to allocate local PTY: %v", err)
+				pf.reportLocalPTYFailure()
 				return
 			}
 
@@ -899,6 +900,23 @@ func (pf *PanelsFrame) initPTY() {
 			}
 		}
 	}()
+}
+
+// reportLocalPTYFailure surfaces a NewPTY() failure to the person instead of
+// leaving it only in the debug log. Without this, a platform where PTY
+// allocation fails (see issue #444, FreeBSD and illumos before their
+// backends were fixed) looked identical to a healthy f4 whose terminal
+// silently ignores every keystroke: panels, menus and the viewer all work,
+// because none of them touch the PTY, so the only visible symptom was an
+// empty terminal and no error anywhere the person could see without
+// starting f4 with --debug.
+func (pf *PanelsFrame) reportLocalPTYFailure() {
+	if vtui.FrameManager == nil {
+		return
+	}
+	vtui.FrameManager.PostTask(func() {
+		vtui.ShowToast(Msg("Terminal.PTYAllocFailed"), 5*time.Second)
+	})
 }
 
 func (pf *PanelsFrame) Close() {
