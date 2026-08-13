@@ -111,10 +111,14 @@ reaches disk when `VTUI_DEBUG` is set.
   `SERVER: Entering fm.Run()`. The last line from the daemon's `[P<pid>]`
   pinpoints the stall.
 * Everything in `crashes/` next to the profile directory (`stderr_*.log` and any
-  crash report).
+  crash report). **As of 4.8, this is now the fastest path:** find the daemon
+  pid (`ps -axl | grep f4` or the session picker), run `kill -USR1 <pid>`, and
+  send back the resulting `crashes/crash_<ts>_<pid>.log` — no `--debug`
+  rebuild or reproduction steps needed, and the process is left running.
 * OpenBSD has no `truss`: `ktrace -di -f /tmp/f4.kt f4`, then
-  `kdump -f /tmp/f4.kt | tail -200`. Plus `ps -axl | grep f4` and
-  `kill -QUIT <daemon pid>` for a Go goroutine dump.
+  `kdump -f /tmp/f4.kt | tail -200`. Useful if the `SIGUSR1` dump points at a
+  specific blocking syscall and more detail is needed on what that syscall is
+  doing.
 * Did it work on 7.7 — regression or never-worked.
 
 ---
@@ -214,12 +218,31 @@ channel — instead of only into `/dev/null`.
 
 ### P2 — permanent diagnostics
 
-**4.8 State dump on signal**
-`SIGUSR1` handler in both daemon and client: write `runtime.Stack(all=true)`
-plus the in-memory ring buffer that `vtui.DebugLog`/`recordLogMemory` already
-maintains (it records unconditionally, independent of `VTUI_DEBUG`) into
-`crashes/`. Then the answer to any "it hangs" is `kill -USR1 <pid>` rather than
-"rebuild with --debug and reproduce".
+**4.8 State dump on signal — DONE**
+`installHangDumpHandler()` (`hang_dump_unix.go`, no-op stub in
+`hang_dump_windows.go`), wired up in `main()` right after `vtui.CrashDirFull`
+is set — so it covers every process shape (`--server` daemon, client, GUI,
+plain foreground run) from as early as possible, including a stall inside
+`InitCore()`/`SetupUI()` itself. On `SIGUSR1` it calls the already-exported
+`vtui.RecordCrash(...)` — no changes needed in vtui — which writes goroutine
+stacks, `TERM`/`LANG`, open fd count, terminal size, the UI frame stack and
+recent log history to `crashes/crash_<ts>_<pid>.log`, without exiting or
+otherwise disturbing the process. The answer to any "it hangs" is now
+`kill -USR1 <pid>` (pid from `ps` or the session picker) instead of "rebuild
+with --debug and reproduce".
+
+*Verification:* built the daemon (`--server` mode) standalone, backgrounded
+it, confirmed via `ps` it was genuinely blocked (not exited), sent
+`SIGUSR1`, and got a dump showing goroutine 1 parked exactly where expected —
+inside `net.(*UnixConn).ReadMsgUnix` called from `main.runServer`
+(`session_unix.go:285`) — while the process stayed alive and undisturbed
+afterward. This is the same mechanism that would catch a real OpenBSD stall,
+wherever in the startup path it turns out to be.
+
+*Not done yet, left for later:* a client-side SIGUSR1 handler exists too
+(same `installHangDumpHandler` call in `main()` covers it), but it hasn't been
+exercised against a client stuck in the `runClient` notify-pipe read — worth
+a quick check before relying on it for that specific case.
 
 **4.9 Always-on session milestone log**
 A dozen lines with rotation — spawn / listen / attach / raw mode / first flush /

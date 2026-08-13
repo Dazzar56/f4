@@ -53,6 +53,7 @@ func main() {
 	// Setup crash/stderr location before any logging starts; in portable mode
 	// this keeps crash reports inside <configDir>\crashes (Profile\crashes).
 	vtui.CrashDirFull = filepath.Join(GetF4ConfigDir(), "crashes")
+	installHangDumpHandler()
 
 	vtui.SetupStderrLog()
 	vtui.DebugLog("MAIN: Starting with args: %v", os.Args)
