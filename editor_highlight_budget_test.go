@@ -201,3 +201,43 @@ func TestEditor_BackgroundWalker_NoLongUIStalls(t *testing.T) {
 		}
 	}
 }
+
+// Colorer must stay out of the walker. Its "state" is a line number, the real
+// one lives in a forward-only wasm session, and dragging that session through
+// the file is what left a viewport opened in the middle of a large file
+// without colours: the walk fills the session with lines nobody is looking at
+// and parks it ahead of the viewport, so every frame has to rewind it.
+func TestEditor_HighlightWalker_SkipsColorer(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	if usesStateChain(&ColorerHighlighter{}) {
+		t.Error("Colorer's state cannot be carried in the chain")
+	}
+	if !usesStateChain(&mockSlowHighlighter{}) {
+		t.Error("a highlighter that returns a real state must keep the walker")
+	}
+	if usesStateChain(nil) {
+		t.Error("no highlighter, nothing to walk")
+	}
+
+	ev := NewEditorView(buildLinesPT(5000), nil, "test.txt")
+	defer ev.Close()
+	ev.SetPosition(0, 0, 80, 10)
+	ev.highlighter = &ColorerHighlighter{}
+
+	plan := ev.highlightSlice(0)
+	if plan.lines != 0 {
+		t.Errorf("slice walked %d lines of a Colorer session", plan.lines)
+	}
+	if !plan.done {
+		t.Error("a slice that must not run has to report itself finished, or the walker loops on it")
+	}
+	if len(ev.lineStates) != 0 {
+		t.Errorf("state chain grew to %d for a highlighter that has no state", len(ev.lineStates))
+	}
+
+	ev.startHighlighting()
+	if ev.highlighting {
+		t.Error("walker started for Colorer")
+	}
+}

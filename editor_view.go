@@ -584,12 +584,38 @@ func highlightIdleGap(work time.Duration, duty int) time.Duration {
 	return idle
 }
 
+// usesStateChain reports whether a highlighter's state can be carried in
+// ev.lineStates at all.
+//
+// Colorer's cannot. What it returns is the line number; the parser state lives
+// inside the wasm session as a cache that only moves forward. Walking the file
+// for it therefore builds nothing, and it is not free: every line handed to
+// the session is copied into its line source and grows the parse cache beside
+// it, and the walk leaves the session parked ahead of the viewport, so the
+// next frame has to rewind it to draw. The session belongs to whoever is
+// drawing. See HIGHLIGHT.md, phase 5.
+func usesStateChain(h vtui.Highlighter) bool {
+	if h == nil {
+		return false
+	}
+	_, isColorer := h.(*ColorerHighlighter)
+	return !isColorer
+}
+
 // highlightSlice extends the state chain for at most hlSliceBudget and
 // reports what it managed. It runs on the UI thread, so the budget is exactly
 // the stall the user can feel; how many lines fit into it is left to the
 // highlighter.
 func (ev *EditorView) highlightSlice(bgAttr uint64) highlightSlicePlan {
 	var plan highlightSlicePlan
+
+	// The highlighter can be replaced under a running walker: the Colorer
+	// session finishes loading in the background and takes the place of the
+	// fallback it started with.
+	if !usesStateChain(ev.highlighter) {
+		plan.done = true
+		return plan
+	}
 
 	lineCount := ev.li.LineCount()
 	cIdx := len(ev.lineStates)
@@ -651,6 +677,9 @@ func (ev *EditorView) highlightSlice(bgAttr uint64) highlightSlicePlan {
 
 func (ev *EditorView) startHighlighting() {
 	if ev.highlighter == nil || ev.highlighting {
+		return
+	}
+	if !usesStateChain(ev.highlighter) {
 		return
 	}
 	if len(ev.lineStates) >= ev.li.LineCount() {
