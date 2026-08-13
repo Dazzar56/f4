@@ -1313,7 +1313,10 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 		return true
 
 	case vtinput.VK_BACK:
-		if ev.selActive {
+		// A vertical block is a selection too. It lives in rectSelActive
+		// rather than selActive, and checking only the latter is what made
+		// Del eat the character under the cursor while a block was up.
+		if ev.selActive || ev.rectSelActive {
 			ev.DeleteSelection()
 		} else {
 			ev.saveUndo(opOther)
@@ -1363,7 +1366,7 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 		return true
 
 	case vtinput.VK_DELETE:
-		if ev.selActive {
+		if ev.selActive || ev.rectSelActive {
 			ev.DeleteSelection()
 		} else {
 			ev.saveUndo(opOther)

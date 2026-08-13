@@ -5425,3 +5425,45 @@ func TestEditorView_DeleteSpacersForward(t *testing.T) {
 		})
 	}
 }
+
+// A vertical block must be deleted by Del and by Backspace, the way a stream
+// selection is. It lives in rectSelActive rather than selActive, and the two
+// handlers used to look at selActive alone: with a block up, Del silently ate
+// the character under the cursor and left the block on screen.
+func TestEditorView_DeleteRemovesRectSelection(t *testing.T) {
+	press := func(vk uint16) *EditorView {
+		vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+		pt := piecetable.New([]byte("abcdef\nabcdef\nabcdef"))
+		ev := NewEditorView(pt, nil, "rect.txt")
+		t.Cleanup(func() { ev.Close() })
+		ev.li.Rebuild(pt)
+		ev.SetPosition(0, 0, 40, 10)
+
+		// A 2-column block over the first two lines, columns 2..4.
+		ev.rectSelActive = true
+		ev.rectSelStartLine = 0
+		ev.rectSelStartCol = 2
+		ev.CursorLine = 1
+		ev.CursorPos = 4
+		ev.updateDesiredVisualCol()
+
+		ev.ProcessKey(keyEvent(vk, 0))
+		return ev
+	}
+
+	for _, tc := range []struct {
+		name string
+		vk   uint16
+	}{{"Del", vtinput.VK_DELETE}, {"Backspace", vtinput.VK_BACK}} {
+		t.Run(tc.name, func(t *testing.T) {
+			ev := press(tc.vk)
+			got, _ := ev.pt.GetRange(0, ev.pt.Size())
+			if string(got) != "abef\nabef\nabcdef" {
+				t.Errorf("%s should cut the block out, got %q", tc.name, string(got))
+			}
+			if ev.rectSelActive {
+				t.Errorf("%s left the block active", tc.name)
+			}
+		})
+	}
+}
