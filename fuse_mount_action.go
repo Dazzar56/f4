@@ -29,7 +29,7 @@ func init() {
 			if pf == nil {
 				return false
 			}
-			mountActivePanel(pf)
+			mountActivePanel(pf, true)
 			return true
 		},
 	})
@@ -55,12 +55,31 @@ func init() {
 // would mean extracting everything twice — is refused rather than mounted:
 // the mount would be sharing one object with the panel, and the panel closes
 // that object when the user walks out of it.
-func mountActivePanel(pf *PanelsFrame) {
+func init() {
+	RegisterAction(Action{
+		Name:  "Panel.MountRW",
+		Area:  "Shell",
+		Label: "Mount via FUSE (read-write)",
+		Description: "Mount what the active panel shows as a writable directory",
+		MenuPath:    "Commands",
+		Visible:     fusefs.Supported,
+		Handler: func() bool {
+			pf := findPanelsFrameAnyScreen()
+			if pf == nil {
+				return false
+			}
+			mountActivePanel(pf, false)
+			return true
+		},
+	})
+}
+
+func mountActivePanel(pf *PanelsFrame, readOnly bool) {
 	fsp := pf.getActivePanel()
 	if fsp == nil || fsp.vfs == nil {
 		return
 	}
-	label, run := mountPlan(fsp)
+	label, run := mountPlan(fsp, readOnly)
 	if run == nil {
 		return
 	}
@@ -85,7 +104,7 @@ func mountActivePanel(pf *PanelsFrame) {
 // mountPlan decides what the active panel would have mounted, and returns a
 // label for it plus the work that produces the mount. It returns a nil run
 // when there is nothing to mount, having said why.
-func mountPlan(fsp *FileSystemPanel) (string, func(context.Context) (*fusefs.Mount, error)) {
+func mountPlan(fsp *FileSystemPanel, readOnly bool) (string, func(context.Context) (*fusefs.Mount, error)) {
 	if _, isOS := fsp.vfs.(*vfs.OSVFS); isOS {
 		dir := fsp.vfs.GetPath()
 		if dir == "" {
@@ -107,7 +126,7 @@ func mountPlan(fsp *FileSystemPanel) (string, func(context.Context) (*fusefs.Mou
 					return fusefs.MountVFS(ctx, v, fusefs.Options{
 						MountPoint: fusefs.SuggestMountPoint(entry),
 						Source:     entry,
-						ReadOnly:   true,
+						ReadOnly:   readOnly,
 					})
 				}
 			}
@@ -115,7 +134,7 @@ func mountPlan(fsp *FileSystemPanel) (string, func(context.Context) (*fusefs.Mou
 		return dir, func(ctx context.Context) (*fusefs.Mount, error) {
 			return fusefs.MountSource(dir, fusefs.Options{
 				MountPoint: fusefs.SuggestMountPoint(dir),
-				ReadOnly:   true,
+				ReadOnly:   readOnly,
 			})
 		}
 	}
@@ -138,7 +157,7 @@ func mountPlan(fsp *FileSystemPanel) (string, func(context.Context) (*fusefs.Mou
 			MountPoint: fusefs.SuggestMountPoint(label),
 			RootPath:   root,
 			Source:     label,
-			ReadOnly:   true,
+			ReadOnly:   readOnly,
 		})
 	}
 }

@@ -94,7 +94,7 @@ func showMountList(pf *PanelsFrame) {
 		dlg := vtui.ShowMessage(Msg("Mounts.Title"), "Nothing is mounted.", []string{"&Mount this panel", "&Ok"})
 		dlg.OnResult = func(code int) {
 			if code == 0 {
-				mountActivePanel(pf)
+				mountActivePanel(pf, true)
 			}
 		}
 		return

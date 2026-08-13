@@ -152,12 +152,15 @@ func TestParseArgsRejectsConflictingCommands(t *testing.T) {
 	}
 }
 
-func TestValidateRefusesWrite(t *testing.T) {
+// --rw used to be refused while parsing. Now that writes exist, whether a
+// mount can be writable is the backend's answer, given by MountVFS through
+// VFSCapabilities.HasWrite — Validate must not pre-empt it.
+func TestValidateAcceptsWrite(t *testing.T) {
 	s := NewSpec()
 	s.Source = "x"
 	s.ReadOnly = false
-	if err := s.Validate(); !errors.Is(err, ErrWriteNotImplemented) {
-		t.Fatalf("--rw must be refused outright, got %v", err)
+	if err := s.Validate(); err != nil {
+		t.Fatalf("--rw must reach the backend, got %v", err)
 	}
 }
 

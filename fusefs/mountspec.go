@@ -119,9 +119,10 @@ func (s *Spec) Validate() error {
 	if strings.TrimSpace(s.Source) == "" {
 		return errors.New("no mount source given")
 	}
-	if !s.ReadOnly {
-		return ErrWriteNotImplemented
-	}
+	// A read-write mount is no longer refused here. Whether it can actually
+	// come up depends on the backend, which this Spec has not resolved yet:
+	// MountVFS asks VFSCapabilities.HasWrite and refuses there, with the
+	// backend named, instead of guessing at parse time.
 	if s.Timeout <= 0 {
 		s.Timeout = DefaultReadyTimeout
 	}
