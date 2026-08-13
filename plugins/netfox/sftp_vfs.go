@@ -140,6 +140,7 @@ func (v *SFTPVFS) EncodeCommandListANSI(text []byte) ([]byte, error) {
 }
 
 func (v *SFTPVFS) GetTitle() string { return v.title }
+func (v *SFTPVFS) SessionKey() any  { return v.client }
 
 func (v *SFTPVFS) IsAtRoot() bool {
 	p := v.GetPath()

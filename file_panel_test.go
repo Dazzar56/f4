@@ -59,6 +59,7 @@ func TestFileEntry_GetCellText(t *testing.T) {
 		t.Errorf("cached attribute %#x differs from fresh attribute %#x", cachedAttr, freshAttr)
 	}
 }
+
 func TestFileEntry_HighlightDir(t *testing.T) {
 	vtui.SetDefaultPalette()
 	SetDefaultF4Palette()
@@ -2898,7 +2899,7 @@ func TestDirectoryCacheIdentitySurvivesReconnection(t *testing.T) {
 func TestFileSystemPanelShowsStandaloneCacheBeforeProviderOpen(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	separator := string(os.PathSeparator)
-	target := "zoin.shadow:" + separator + "Photos"
+	target := "cloud.example:" + separator + "Photos"
 	fp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(t.TempDir()))
 	if fp.cancelLoad != nil {
 		fp.cancelLoad()
@@ -2906,8 +2907,9 @@ func TestFileSystemPanelShowsStandaloneCacheBeforeProviderOpen(t *testing.T) {
 	}
 	fp.dirCache = make(map[dirCacheKey]dirCacheEntry)
 	fp.dirCache[dirCacheKey{identity: "old-cloud-session", qualifiedPath: target}] = dirCacheEntry{
-		items: []vfs.VFSItem{{Name: "cached.jpg", Size: 42}},
-		time:  time.Now(),
+		items:       []vfs.VFSItem{{Name: "cached.jpg", Size: 42}},
+		time:        time.Now(),
+		showUpEntry: true,
 	}
 	if !fp.showCachedStandalonePath(target) {
 		t.Fatal("standalone visual path did not reuse its cached listing")
@@ -2921,6 +2923,22 @@ func TestFileSystemPanelShowsStandaloneCacheBeforeProviderOpen(t *testing.T) {
 	}
 	if strings.Contains(target, foreign) {
 		t.Fatalf("native visual target %q contains foreign separator %q", target, foreign)
+	}
+
+	// A mounted provider root is visually shallow but still has a real parent
+	// VFS (CloudFox:\). Cache-first rendering must preserve that relationship
+	// instead of guessing from the number of path components.
+	rootTarget := "drive.example:" + separator
+	fp.dirCache[dirCacheKey{identity: "old-google-session", qualifiedPath: rootTarget}] = dirCacheEntry{
+		items:       []vfs.VFSItem{{Name: "My Drive", IsDir: true}, {Name: "Shared drives", IsDir: true}},
+		time:        time.Now(),
+		showUpEntry: true,
+	}
+	if !fp.showCachedStandalonePath(rootTarget) {
+		t.Fatal("standalone Google root did not reuse its cached listing")
+	}
+	if len(fp.entries) != 3 || fp.entries[0].Name != ".." || fp.entries[1].Name != "My Drive" || fp.entries[2].Name != "Shared drives" {
+		t.Fatalf("cached Google root entries = %#v", fp.entries)
 	}
 }
 
@@ -4261,6 +4279,10 @@ func TestFileSystemPanelCachedNavigateUpSelectsFolderLeft(t *testing.T) {
 	AppConfig.SyncPanelLoad = false
 	AppConfig.ShowHiddenFiles = true
 	defer func() { AppConfig = oldConfig }()
+	history := &stubHistoryProvider{}
+	oldHistory := vtui.GlobalHistoryProvider
+	vtui.GlobalHistoryProvider = history
+	defer func() { vtui.GlobalHistoryProvider = oldHistory }()
 
 	fp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(t.TempDir()))
 	waitForLoad(t, fp)
@@ -4291,6 +4313,75 @@ func TestFileSystemPanelCachedNavigateUpSelectsFolderLeft(t *testing.T) {
 	waitForLoad(t, fp)
 	if got := fp.getRawSelectedName(); got != "sdcard" {
 		t.Fatalf("fresh parent listing selected %q, want folder left sdcard", got)
+	}
+	if got := history.LoadHistory("folders"); len(got) == 0 || got[0] != "/" {
+		t.Fatalf("navigate-up folder history = %#v, want parent / recorded", got)
+	}
+}
+
+func TestFileSystemPanelPendingSelectionDoesNotSuppressFolderHistory(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	oldConfig := AppConfig
+	AppConfig.SyncPanelLoad = false
+	defer func() { AppConfig = oldConfig }()
+	history := &stubHistoryProvider{}
+	oldHistory := vtui.GlobalHistoryProvider
+	vtui.GlobalHistoryProvider = history
+	defer func() { vtui.GlobalHistoryProvider = oldHistory }()
+
+	fp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(t.TempDir()))
+	waitForLoad(t, fp)
+	remote := newQueuedNavigationVFS()
+	fp.vfs = remote
+	fp.lastLoadedPath = "/"
+	fp.dirCache = make(map[dirCacheKey]dirCacheEntry)
+	fp.saveToCache("/sdcard", remote.items["/sdcard"])
+	fp.pendingSelection = ".."
+	if err := fp.setKnownDirectoryPath("/sdcard"); err != nil {
+		t.Fatal(err)
+	}
+	fp.ReadDirectory()
+	if got := fp.getRawSelectedName(); got != ".." {
+		t.Fatalf("cached child listing selected %q, want ..", got)
+	}
+	waitForPanelSignal(t, remote.firstReadStarted, "background child refresh")
+	remote.releaseFirstRead <- struct{}{}
+	waitForLoad(t, fp)
+	if got := history.LoadHistory("folders"); len(got) == 0 || got[0] != "/sdcard" {
+		t.Fatalf("navigate-down folder history = %#v, want /sdcard recorded", got)
+	}
+}
+
+func TestFileSystemPanelSlowOlderLoadDoesNotReorderNewerFolderHistory(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	oldConfig := AppConfig
+	AppConfig.SyncPanelLoad = false
+	defer func() { AppConfig = oldConfig }()
+	history := &stubHistoryProvider{}
+	oldHistory := vtui.GlobalHistoryProvider
+	vtui.GlobalHistoryProvider = history
+	defer func() { vtui.GlobalHistoryProvider = oldHistory }()
+
+	fp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(t.TempDir()))
+	waitForLoad(t, fp)
+	remote := newQueuedNavigationVFS()
+	fp.vfs = remote
+	fp.lastLoadedPath = "/"
+	if err := fp.setKnownDirectoryPath("/sdcard"); err != nil {
+		t.Fatal(err)
+	}
+	fp.ReadDirectory()
+	waitForPanelSignal(t, remote.firstReadStarted, "older directory refresh")
+
+	// This is a newer navigation order established while the older backend
+	// read is still in flight. Its eventual completion must not promote
+	// /sdcard and rewrite this MRU order.
+	want := []string{"/newest", "/sdcard", "/oldest"}
+	history.SaveHistory("folders", want)
+	remote.releaseFirstRead <- struct{}{}
+	waitForLoad(t, fp)
+	if got := history.LoadHistory("folders"); !reflect.DeepEqual(got, want) {
+		t.Fatalf("slow older load reordered folder history: got %#v, want %#v", got, want)
 	}
 }
 

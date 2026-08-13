@@ -891,6 +891,9 @@ Loop:
 	if foundWin != nil && foundWin.IsWarning {
 		t.Error("Already-opened dialog must not render as a warning (see #379)")
 	}
+	if ev, _ := findOpenedEditor(v, path); ev != nil {
+		ev.Close()
+	}
 }
 
 func TestActionOpenViewer_AlreadyOpened(t *testing.T) {
@@ -959,6 +962,9 @@ Loop:
 	}
 	if foundWin != nil && foundWin.IsWarning {
 		t.Error("Already-viewed dialog must not render as a warning (see #379)")
+	}
+	if vv, _ := findOpenedViewer(v, path); vv != nil {
+		vv.Close()
 	}
 }
 

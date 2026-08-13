@@ -55,8 +55,9 @@ func actionFoldersHistory(pf *PanelsFrame) {
 	if vtui.GlobalHistoryProvider == nil {
 		return
 	}
-	h := vtui.GlobalHistoryProvider.LoadHistory("folders")
-	if len(h) == 0 {
+	richFolders, folderHP := loadFolderHistoryRecords(vtui.GlobalHistoryProvider)
+	h := extractNames(richFolders)
+	if len(richFolders) == 0 {
 		vtui.ShowMessage(Msg("History.Title"), Msg("History.EmptyFolders"), []string{Msg("vtui.Ok")})
 		return
 	}
@@ -64,14 +65,18 @@ func actionFoldersHistory(pf *PanelsFrame) {
 	menu := vtui.NewVMenu(Msg("History.FoldersTitle"))
 	menu.SetHelp("HistoryFolders")
 
-	var richFolders []HistoryRecord
-	for _, path := range h {
-		richFolders = append(richFolders, HistoryRecord{Name: path})
-	}
 	search := newHistorySearch(menu, richFolders, Msg("History.FoldersHint"))
+	search.supportsLocks = folderHP != nil
+	search.onLockToggled = func() {
+		if folderHP != nil {
+			richFolders = append([]HistoryRecord(nil), search.all...)
+			h = extractNames(richFolders)
+			saveFolderHistoryRecords(folderHP, richFolders)
+		}
+	}
 
 	if activePanel := pf.getActivePanel(); activePanel != nil {
-		currentPath := activePanel.vfs.GetPath()
+		currentPath := activePanel.persistentPath()
 		for historyPos, path := range h {
 			if sameFolderHistoryPath(path, currentPath) {
 				search.selectOriginalIndex(historyPos)
@@ -112,7 +117,7 @@ func actionFoldersHistory(pf *PanelsFrame) {
 
 		// Ctrl+R: drop entries whose path no longer exists on disk (far2l).
 		if e.VirtualKeyCode == vtinput.VK_R && ctrl && !alt && !shift {
-			confirmAndPruneMissingFolderHistory(&h, search, menu)
+			confirmAndPruneMissingFolderHistory(&h, &richFolders, folderHP, search, menu)
 			return true
 		}
 
@@ -145,9 +150,15 @@ func actionFoldersHistory(pf *PanelsFrame) {
 
 		if (e.VirtualKeyCode == vtinput.VK_DELETE || e.VirtualKeyCode == vtinput.VK_BACK) && shift {
 			// Delete item
-			search.deleteSelected()
-			h = extractNames(search.all)
-			vtui.GlobalHistoryProvider.SaveHistory("folders", h)
+			if search.deleteSelected() {
+				richFolders = append([]HistoryRecord(nil), search.all...)
+				h = extractNames(richFolders)
+				if folderHP != nil {
+					saveFolderHistoryRecords(folderHP, richFolders)
+				} else {
+					vtui.GlobalHistoryProvider.SaveHistory("folders", h)
+				}
+			}
 			if len(search.all) == 0 {
 				search.cleanup()
 				menu.Close()
@@ -157,9 +168,17 @@ func actionFoldersHistory(pf *PanelsFrame) {
 
 		// Del (no modifiers): clear the whole history with a confirmation.
 		if e.VirtualKeyCode == vtinput.VK_DELETE && !ctrl && !alt && !shift {
-			confirmAndClearHistory(Msg("History.FoldersTitle"), "folders", &h, func() {
-				pf.cmdLine.Edit.HistoryPos = -1
-			}, search, menu)
+			if folderHP != nil {
+				confirmAndClearRichHistory(Msg("History.FoldersTitle"), "folders", &richFolders, func() {
+					h = extractNames(richFolders)
+					folderHP.SaveHistory("folders", h)
+					pf.cmdLine.Edit.HistoryPos = -1
+				}, search, menu)
+			} else {
+				confirmAndClearHistory(Msg("History.FoldersTitle"), "folders", &h, func() {
+					pf.cmdLine.Edit.HistoryPos = -1
+				}, search, menu)
+			}
 			return true
 		}
 
@@ -203,6 +222,8 @@ func actionCommandHistory(pf *PanelsFrame) {
 	menu := vtui.NewVMenu(Msg("History.CommandsTitle"))
 	menu.SetHelp("History")
 	search := newHistorySearch(menu, richCmds, Msg("History.CommandsHint"))
+	search.supportsLocks = isF4
+	search.showDetails = true
 	search.showSecond = search.hasSecondary()
 	search.secondWidth = 24
 
@@ -345,10 +366,8 @@ func confirmAndClearHistory(title, providerName string, h *[]string, localReset 
 	}
 }
 
-// confirmAndPruneMissingFolderHistory implements the far2l Ctrl+R
-// handler in folder history: prompt, then keep only paths that still
-// exist on disk. Locked-entry semantics don't apply here — f4 has no
-// per-entry lock flag yet.
+// confirmAndClearRichHistory clears every unpinned record while preserving
+// entries explicitly pinned with Insert.
 func confirmAndClearRichHistory(title, providerName string, h *[]HistoryRecord, localReset func(), search *historySearch, menu *vtui.VMenu) {
 	buttons := []string{Msg("vtui.Ok"), Msg("vtui.Cancel")}
 	dlg := vtui.ShowMessage(title, Msg("History.ConfirmClearAll"), buttons)
@@ -376,35 +395,39 @@ func confirmAndClearRichHistory(title, providerName string, h *[]HistoryRecord, 
 		}
 	}
 }
-func confirmAndPruneMissingFolderHistory(h *[]string, search *historySearch, menu *vtui.VMenu) {
+func confirmAndPruneMissingFolderHistory(h *[]string, rich *[]HistoryRecord, hp *F4HistoryProvider, search *historySearch, menu *vtui.VMenu) {
 	buttons := []string{Msg("vtui.Ok"), Msg("vtui.Cancel")}
 	dlg := vtui.ShowMessage(Msg("History.FoldersTitle"), Msg("History.ConfirmPruneMissing"), buttons)
 	dlg.OnResult = func(code int) {
 		if code != 0 {
 			return
 		}
-		kept := make([]string, 0, len(*h))
-		for _, p := range *h {
+		kept := make([]HistoryRecord, 0, len(*rich))
+		for _, record := range *rich {
+			p := record.Name
+			if record.Lock {
+				kept = append(kept, record)
+				continue
+			}
 			if isPersistentURIPath(p) || vfs.FindStandaloneProvider(context.Background(), nil, p) != nil {
-				kept = append(kept, p)
+				kept = append(kept, record)
 				continue
 			}
 			if _, err := os.Stat(p); err == nil {
-				kept = append(kept, p)
+				kept = append(kept, record)
 			}
 		}
-		if len(kept) == len(*h) {
+		if len(kept) == len(*rich) {
 			return
 		}
-		*h = kept
-		if vtui.GlobalHistoryProvider != nil {
-			vtui.GlobalHistoryProvider.SaveHistory("folders", kept)
+		*rich = kept
+		*h = extractNames(kept)
+		if hp != nil {
+			saveFolderHistoryRecords(hp, kept)
+		} else if vtui.GlobalHistoryProvider != nil {
+			vtui.GlobalHistoryProvider.SaveHistory("folders", *h)
 		}
-		var richFolders []HistoryRecord
-		for _, p := range kept {
-			richFolders = append(richFolders, HistoryRecord{Name: p})
-		}
-		search.setItems(richFolders)
+		search.setItems(kept)
 		if len(kept) == 0 {
 			search.cleanup()
 			menu.Close()

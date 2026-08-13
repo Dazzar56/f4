@@ -7,6 +7,7 @@ import (
 	androidfs "github.com/unxed/f4/plugins/android"
 	"github.com/unxed/f4/plugins/archive"
 	"github.com/unxed/f4/plugins/chroma"
+	"github.com/unxed/f4/plugins/cloudfox"
 	"github.com/unxed/f4/plugins/dummy_internal"
 	"github.com/unxed/f4/plugins/envman"
 	"github.com/unxed/f4/plugins/id3editor"
@@ -175,6 +176,10 @@ func (pm *PluginManager) loadInternal() {
 		&archive.ArchivePlugin{},
 		androidfs.NewPlugin(),
 		iosfs.NewPlugin(),
+		cloudfox.NewPlugin(cloudfox.Options{
+			ConfigDir: GetF4ConfigDir(),
+			Portable:  IsPortableProfile(),
+		}),
 		&netfox.NetFoxPlugin{},
 		&visren.Plugin{},
 		&id3editor.ID3EditorPlugin{},

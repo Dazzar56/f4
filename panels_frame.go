@@ -125,9 +125,7 @@ func (pf *PanelsFrame) addCommandHistory(cmd string) {
 	if limit <= 0 {
 		limit = 100
 	}
-	if len(newRich) > limit {
-		newRich = newRich[:limit]
-	}
+	newRich = limitRichHistory(newRich, limit)
 	hp.SaveRichHistory("cmdline", newRich)
 
 	var strHist []string
@@ -1409,6 +1407,15 @@ func (pf *PanelsFrame) VetoActionKey(e *vtinput.InputEvent) bool {
 	}
 	fsp := pf.getActivePanel()
 	if fsp != nil && fsp.providerOpenTask != nil {
+		ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
+		alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
+		shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
+		if alt && !ctrl && !shift && (e.VirtualKeyCode == vtinput.VK_LEFT || e.VirtualKeyCode == vtinput.VK_RIGHT) {
+			// History navigation is safe while a cache-first provider restore is
+			// pending: it cancels that restore and uses persistentPath, not the
+			// source VFS hidden beneath the cached rows.
+			return false
+		}
 		// Cached rows from the destination are visible immediately, but the old
 		// VFS remains installed until the asynchronous provider restore succeeds.
 		// Route keys through the panel so file actions cannot accidentally target
@@ -4311,9 +4318,9 @@ func (pf *PanelsFrame) navigateAvailableFolderHistory(fsp *FileSystemPanel, hist
 		}
 		fsp.fastFindMode = false
 		fsp.fastFindStr = ""
-		fsp.suppressFolderHistoryPath = path
+		fsp.suppressNextFolderHistory(path)
 		if !pf.NavigateToPath(fsp, path) {
-			fsp.suppressFolderHistoryPath = ""
+			fsp.clearFolderHistorySuppression()
 			continue
 		}
 		idx := pf.folderHistoryPanelIndex(fsp)
@@ -4327,7 +4334,7 @@ func (pf *PanelsFrame) navigateAvailableFolderHistory(fsp *FileSystemPanel, hist
 					}
 					return false
 				}
-				fsp.suppressFolderHistoryPath = ""
+				fsp.clearFolderHistorySuppression()
 				return pf.navigateAvailableFolderHistory(fsp, historySnapshot, pendingPos+step, step)
 			}
 			return true
@@ -4350,7 +4357,12 @@ func (pf *PanelsFrame) moveFolderHistory(fsp *FileSystemPanel, direction int) bo
 	if idx >= 0 && idx < len(pf.folderHistoryPos) {
 		pos = pf.folderHistoryPos[idx]
 	}
-	targetPos, _, ok := folderHistoryStep(history, fsp.vfs.GetPath(), pos, direction)
+	// During a cache-first cross-provider restore, the panel already presents
+	// providerOpenTarget while the source VFS remains installed until the
+	// asynchronous mount succeeds. History must follow the presented/persisted
+	// location; using the source VFS here skips that source entry on Alt+Left.
+	current := fsp.persistentPath()
+	targetPos, _, ok := folderHistoryStep(history, current, pos, direction)
 	if !ok {
 		return false
 	}
