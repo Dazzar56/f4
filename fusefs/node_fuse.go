@@ -106,7 +106,7 @@ func (n *node) Create(ctx context.Context, name string, flags uint32, mode uint3
 		return nil, nil, 0, errno
 	}
 	childPath := n.b.join(n.path, name)
-	wh, _, err := n.b.acquireStagedWriter(childPath)
+	wh, _, err := n.b.acquireWriteHandle(ctx, childPath)
 	if err != nil {
 		return nil, nil, 0, errnoOf(err)
 	}
@@ -118,7 +118,7 @@ func (n *node) Create(ctx context.Context, name string, flags uint32, mode uint3
 }
 
 func (f *writeFileHandle) Write(ctx context.Context, data []byte, off int64) (uint32, syscall.Errno) {
-	written, err := f.wh.staged.WriteAt(data, off)
+	written, err := f.wh.writeAt(data, off)
 	if err != nil {
 		return uint32(written), errnoOf(err)
 	}
@@ -136,7 +136,7 @@ func (f *writeFileHandle) Fsync(ctx context.Context, flags uint32) syscall.Errno
 // program that wrote the file, so the commit happens here when this is the
 // last handle. Release does it again only if Flush never ran.
 func (f *writeFileHandle) Flush(ctx context.Context) syscall.Errno {
-	if f.committed || !f.b.isLastWriter(f.wh) {
+	if !f.wh.needsCommit() || f.committed || !f.b.isLastWriter(f.wh) {
 		return 0
 	}
 	if errno := f.commit(ctx); errno != 0 {
@@ -148,10 +148,15 @@ func (f *writeFileHandle) Flush(ctx context.Context) syscall.Errno {
 func (f *writeFileHandle) Release(ctx context.Context) syscall.Errno {
 	last := f.b.releaseWriter(f.wh)
 	if last {
-		if !f.committed {
+		if f.wh.needsCommit() && !f.committed {
 			f.commit(ctx)
 		}
-		f.wh.staged.Close()
+		f.wh.close()
+		if !f.wh.needsCommit() {
+			// A direct write never went through commit(), which is
+			// where the parent listing is normally dropped.
+			f.b.invalidate(f.b.parentOf(f.path))
+		}
 	}
 	return 0
 }
@@ -211,7 +216,7 @@ func (n *node) Getattr(ctx context.Context, f fs.FileHandle, out *fuse.AttrOut) 
 	// there in its old shape. Answering from the staging copy is what makes
 	// `cp a b && ls -l b` show b at its real size instead of zero, and what
 	// stops a reader from being told the file ends before it does.
-	if wh := n.b.writerFor(n.path); wh != nil {
+	if wh := n.b.writerFor(n.path); wh != nil && wh.staged != nil {
 		if size, err := wh.staged.Size(); err == nil {
 			item, statErr := n.b.stat(ctx, n.path)
 			if statErr != nil {
@@ -480,11 +485,22 @@ func (n *node) Rename(ctx context.Context, name string, newParent fs.InodeEmbedd
 // the commit sends the whole file back, so anything the caller does not
 // overwrite has to be in there to send.
 func (n *node) openForWrite(ctx context.Context, flags uint32) (fs.FileHandle, uint32, syscall.Errno) {
-	wh, created, err := n.b.acquireStagedWriter(n.path)
+	wh, created, err := n.b.acquireWriteHandle(ctx, n.path)
 	if err != nil {
 		return nil, 0, errnoOf(err)
 	}
-	if created && flags&uint32(syscall.O_TRUNC) == 0 {
+	if flags&uint32(syscall.O_TRUNC) != 0 {
+		if err := wh.truncate(0); err != nil {
+			if n.b.releaseWriter(wh) {
+				wh.close()
+			}
+			return nil, 0, errnoOf(err)
+		}
+	}
+	// A directly written file needs no download: the backend already holds
+	// what the caller is not overwriting. This is the whole point of
+	// iteration 5.
+	if created && wh.needsCommit() && flags&uint32(syscall.O_TRUNC) == 0 {
 		if item, statErr := n.b.stat(ctx, n.path); statErr == nil && !item.IsDir && item.Size > 0 {
 			if err := n.b.loadStaged(ctx, n.path, wh.staged); err != nil {
 				// Nothing has been written yet, so the backend's
@@ -492,7 +508,7 @@ func (n *node) openForWrite(ctx context.Context, flags uint32) (fs.FileHandle, u
 				// commit a file with a hole where the old
 				// contents should have been.
 				if n.b.releaseWriter(wh) {
-					wh.staged.Close()
+					wh.close()
 				}
 				return nil, 0, errnoOf(err)
 			}
@@ -552,21 +568,31 @@ func (n *node) Setattr(ctx context.Context, f fs.FileHandle, in *fuse.SetAttrIn,
 // that would otherwise do it.
 func (n *node) truncate(ctx context.Context, size int64) syscall.Errno {
 	if wh := n.b.writerFor(n.path); wh != nil {
-		if err := wh.staged.Truncate(size); err != nil {
+		if err := wh.truncate(size); err != nil {
 			return errnoOf(err)
 		}
 		return 0
 	}
 
-	wh, created, err := n.b.acquireStagedWriter(n.path)
+	wh, created, err := n.b.acquireWriteHandle(ctx, n.path)
 	if err != nil {
 		return errnoOf(err)
 	}
 	defer func() {
 		if n.b.releaseWriter(wh) {
-			wh.staged.Close()
+			wh.close()
 		}
 	}()
+
+	// A backend written at an offset resizes its own file; there is nothing
+	// to fetch and nothing to send back.
+	if !wh.needsCommit() {
+		if err := wh.truncate(size); err != nil {
+			return errnoOf(err)
+		}
+		n.b.invalidate(n.b.parentOf(n.path))
+		return 0
+	}
 
 	// Shortening keeps what comes before the cut, so the old contents have
 	// to be fetched first. Truncating to nothing does not: downloading a

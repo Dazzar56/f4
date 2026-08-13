@@ -69,9 +69,37 @@ type writeHandle struct {
 	path string
 	refs int
 
-	// staged is where the writes actually land until the file is committed.
-	// It is nil until the first writer creates it.
+	// staged is where the writes land when the backend can only be handed a
+	// whole file. Exactly one of staged and direct is set.
 	staged *stagedFile
+	// direct is the backend's own file, written at the offset the kernel
+	// asked for. No staging, no download on open, no commit on close.
+	direct vfs.WriterAtCloser
+}
+
+// needsCommit says whether closing this handle still has to send anything.
+// A directly written file is already in the backend; a staged one is not.
+func (h *writeHandle) needsCommit() bool { return h.direct == nil }
+
+func (h *writeHandle) writeAt(p []byte, off int64) (int, error) {
+	if h.direct != nil {
+		return h.direct.WriteAt(p, off)
+	}
+	return h.staged.WriteAt(p, off)
+}
+
+func (h *writeHandle) truncate(size int64) error {
+	if h.direct != nil {
+		return h.direct.Truncate(size)
+	}
+	return h.staged.Truncate(size)
+}
+
+func (h *writeHandle) close() error {
+	if h.direct != nil {
+		return h.direct.Close()
+	}
+	return h.staged.Close()
 }
 
 // stagedFile is a file being assembled on local disk before it is handed to
@@ -593,7 +621,7 @@ func (b *bridge) releaseWriter(h *writeHandle) (last bool) {
 // acquireStagedWriter is acquireWriter plus the staging file, created under
 // the same lock. Doing it in one step matters: two processes creating the
 // same file at once must not race over who has a staging file yet.
-func (b *bridge) acquireStagedWriter(itemPath string) (h *writeHandle, created bool, err error) {
+func (b *bridge) acquireWriteHandle(ctx context.Context, itemPath string) (h *writeHandle, created bool, err error) {
 	b.writeMu.Lock()
 	defer b.writeMu.Unlock()
 	if b.writers == nil {
@@ -603,6 +631,31 @@ func (b *bridge) acquireStagedWriter(itemPath string) (h *writeHandle, created b
 		existing.refs++
 		return existing, false, nil
 	}
+
+	// A backend that can write at an offset gets written at an offset. The
+	// staging file is the fallback, not the design.
+	if rw, ok := b.v.(vfs.RandomWriteVFS); ok {
+		b.mu.Lock()
+		closed := b.closed
+		var f vfs.WriterAtCloser
+		if !closed {
+			f, err = rw.OpenWriteAt(ctx, itemPath)
+		}
+		b.mu.Unlock()
+		if closed {
+			return nil, false, errClosed
+		}
+		if err != nil {
+			// Staging would not rescue this: committing goes through
+			// Create on the same backend and would fail the same way,
+			// only later and after a pointless download.
+			return nil, false, err
+		}
+		h = &writeHandle{path: itemPath, refs: 1, direct: f}
+		b.writers[itemPath] = h
+		return h, true, nil
+	}
+
 	staged, err := newStagedFile()
 	if err != nil {
 		return nil, false, err
