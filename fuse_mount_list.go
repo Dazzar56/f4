@@ -172,7 +172,10 @@ func askMountAction(pf *PanelsFrame, row mountRow) {
 	if row.live == nil {
 		buttons = []string{"&Go to", "&Cancel"}
 	}
-	dlg := vtui.ShowMessage(" Mount ", row.point, buttons)
+	// The point alone left the user checking it against the list; the row's
+	// own words are what they picked.
+	body := fmt.Sprintf("%s\n%s  %s%s", row.point, row.mode, row.source, row.note)
+	dlg := vtui.ShowMessage(" Mount ", body, buttons)
 	dlg.OnResult = func(code int) {
 		if code == 0 {
 			if fsp := pf.getActivePanel(); fsp != nil {

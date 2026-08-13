@@ -493,9 +493,11 @@ func (n *node) Setattr(ctx context.Context, f fs.FileHandle, in *fuse.SetAttrIn,
 		item.MTime = mtime
 		wanted = true
 	}
-	if _, ok := in.GetSize(); ok && !wanted {
-		// Nothing else was asked for, so this is a plain truncate.
-		return syscall.ENOSYS
+	if size, ok := in.GetSize(); ok {
+		if errno := n.truncate(ctx, int64(size)); errno != 0 {
+			return errno
+		}
+		wanted = true
 	}
 	if !wanted {
 		// Something we do not serve — uid/gid, for one. Answering with
@@ -503,8 +505,56 @@ func (n *node) Setattr(ctx context.Context, f fs.FileHandle, in *fuse.SetAttrIn,
 		// can honestly do.
 		return n.Getattr(ctx, f, out)
 	}
-	if err := n.b.setAttributes(ctx, n.path, item); err != nil {
-		return errnoOf(err)
+	if item.UnixMode != 0 || !item.MTime.IsZero() {
+		if err := n.b.setAttributes(ctx, n.path, item); err != nil {
+			return errnoOf(err)
+		}
 	}
 	return n.Getattr(ctx, f, out)
+}
+
+// truncate resizes a file. With the file already open for writing it is one
+// operation on the staging copy, and the commit at close carries it; with the
+// file closed — `truncate -s 0 x`, or a shell redirect onto an existing
+// file — the whole round trip happens here, because there is no close coming
+// that would otherwise do it.
+func (n *node) truncate(ctx context.Context, size int64) syscall.Errno {
+	if wh := n.b.writerFor(n.path); wh != nil {
+		if err := wh.staged.Truncate(size); err != nil {
+			return errnoOf(err)
+		}
+		return 0
+	}
+
+	wh, created, err := n.b.acquireStagedWriter(n.path)
+	if err != nil {
+		return errnoOf(err)
+	}
+	defer func() {
+		if n.b.releaseWriter(wh) {
+			wh.staged.Close()
+		}
+	}()
+
+	// Shortening keeps what comes before the cut, so the old contents have
+	// to be fetched first. Truncating to nothing does not: downloading a
+	// file in order to throw all of it away is the one case worth spotting.
+	if created && size > 0 {
+		if item, statErr := n.b.stat(ctx, n.path); statErr == nil && !item.IsDir && item.Size > 0 {
+			if err := n.b.loadStaged(ctx, n.path, wh.staged); err != nil {
+				return errnoOf(err)
+			}
+		}
+	}
+	if err := wh.staged.Truncate(size); err != nil {
+		return errnoOf(err)
+	}
+	r, err := wh.staged.Reader()
+	if err != nil {
+		return errnoOf(err)
+	}
+	if err := n.b.commit(ctx, n.path, r); err != nil {
+		return errnoOf(err)
+	}
+	return 0
 }
