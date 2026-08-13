@@ -98,7 +98,7 @@ func mountActivePanel(pf *PanelsFrame, readOnly bool) {
 			m = mounted
 			return nil
 		},
-		func(err error) { reportMount(pf, label, m, err) })
+		func(err error) { reportMount(pf, label, m, err, readOnly) })
 }
 
 // mountPlan decides what the active panel would have mounted, and returns a
@@ -164,8 +164,20 @@ func mountPlan(fsp *FileSystemPanel, readOnly bool) (string, func(context.Contex
 
 // reportMount says what happened, and on success offers the one thing the
 // user almost certainly wants next: to be standing in the mount.
-func reportMount(pf *PanelsFrame, source string, m *fusefs.Mount, err error) {
+func reportMount(pf *PanelsFrame, source string, m *fusefs.Mount, err error, readOnly bool) {
 	if err != nil {
+		if !readOnly {
+			// A backend that cannot be written through can still be
+			// read, and that is almost always better than nothing.
+			dlg := vtui.ShowMessage(" Mount ", fmt.Sprintf("Cannot mount %s read-write:\n%v", source, err),
+				[]string{"&Mount read-only", "&Ok"})
+			dlg.OnResult = func(code int) {
+				if code == 0 {
+					mountActivePanel(pf, true)
+				}
+			}
+			return
+		}
 		vtui.ShowMessage(" Mount ", fmt.Sprintf("Cannot mount %s:\n%v", source, err), []string{"&Ok"})
 		return
 	}

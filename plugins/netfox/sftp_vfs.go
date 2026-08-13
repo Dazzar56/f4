@@ -340,7 +340,11 @@ func (v *SFTPVFS) SetAttributes(ctx context.Context, path string, item vfs.VFSIt
 }
 
 func (v *SFTPVFS) GetCapabilities() vfs.VFSCapabilities {
-	return vfs.VFSCapabilities{HasRandomAccess: true, HasUnixPermissions: true}
+	// HasWrite: the panels have been copying files onto SFTP hosts through
+	// Create for as long as this backend has existed, and a FUSE mount
+	// commits a file through exactly that call. Writable SFTP mounts are
+	// the reason the whole feature was worth building.
+	return vfs.VFSCapabilities{HasRandomAccess: true, HasUnixPermissions: true, HasWrite: true}
 }
 func (v *SFTPVFS) Search(ctx context.Context, p, pat string) (chan int64, error) { return nil, nil }
 
