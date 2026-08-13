@@ -22,6 +22,7 @@ func init() {
 		Area:        "Shell",
 		Label:       "FUSE Mounts",
 		Description: "List the live FUSE mounts, go to one or unmount it",
+		DefaultKeys: []string{"CtrlAltL"},
 		MenuPath:    "Commands",
 		Visible:     fusefs.Supported,
 		Handler: func() bool {

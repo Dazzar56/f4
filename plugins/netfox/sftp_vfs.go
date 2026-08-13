@@ -734,3 +734,22 @@ func (w *sftpFileWrapper) ReadAt(ctx context.Context, p []byte, off int64) (int,
 func (w *sftpFileWrapper) Read(ctx context.Context, p []byte) (int, error) {
 	return w.File.Read(p)
 }
+
+// Readlink and Symlink make SFTPVFS a vfs.SymlinkVFS. The protocol has both
+// operations, so a mounted host behaves like the file system it is rather
+// than like a listing of one: tar -x can extract into it, and ls -l shows
+// what a link points at instead of a file that happens to be short.
+
+func (v *SFTPVFS) Readlink(ctx context.Context, p string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	return v.client.ReadLink(v.encodePath(p))
+}
+
+func (v *SFTPVFS) Symlink(ctx context.Context, target, linkPath string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return v.client.Symlink(target, v.encodePath(linkPath))
+}
