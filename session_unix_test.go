@@ -30,7 +30,48 @@ func TestSessionDir_Isolation(t *testing.T) {
 	}
 }
 
-// TestSetCloseOnExec_NotInheritedByChild reproduces, at unit-test scale, the
+// TestClearNonBlock_ClearsFlag guards the OpenBSD 7.5+ regression described
+// in PORTABILITY_BSD.md, 4.4: the original code called
+// syscall.Syscall(syscall.SYS_FCNTL, ...) directly, an indirect syscall that
+// OpenBSD 7.5+ no longer supports (golang/go#63900) — it returns ENOSYS and
+// silently leaves O_NONBLOCK set. clearNonBlock instead goes through
+// unix.FcntlInt, which uses the libc fcntl(2) stub and keeps working there.
+//
+// This test can't reproduce the ENOSYS behavior itself (that only happens on
+// real OpenBSD 7.5+), but it pins down the contract clearNonBlock must
+// satisfy everywhere: given a fd with O_NONBLOCK set, F_GETFL must no longer
+// report it afterwards.
+func TestClearNonBlock_ClearsFlag(t *testing.T) {
+	var p [2]int
+	if err := syscall.Pipe(p[:]); err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	readEnd, writeEnd := p[0], p[1]
+	defer syscall.Close(readEnd)
+	defer syscall.Close(writeEnd)
+
+	if _, err := unix.FcntlInt(uintptr(readEnd), unix.F_SETFL, unix.O_NONBLOCK); err != nil {
+		t.Fatalf("set O_NONBLOCK: %v", err)
+	}
+	flags, err := unix.FcntlInt(uintptr(readEnd), unix.F_GETFL, 0)
+	if err != nil {
+		t.Fatalf("F_GETFL: %v", err)
+	}
+	if flags&unix.O_NONBLOCK == 0 {
+		t.Fatalf("test setup broken: O_NONBLOCK not observed as set")
+	}
+
+	f := os.NewFile(uintptr(readEnd), "pipe-read")
+	clearNonBlock(f)
+
+	flags, err = unix.FcntlInt(uintptr(readEnd), unix.F_GETFL, 0)
+	if err != nil {
+		t.Fatalf("F_GETFL after clearNonBlock: %v", err)
+	}
+	if flags&unix.O_NONBLOCK != 0 {
+		t.Fatalf("O_NONBLOCK still set after clearNonBlock")
+	}
+}
 // mechanism behind the #429 investigation (PORTABILITY_BSD.md, 4.1): fds
 // received via SCM_RIGHTS carry no FD_CLOEXEC, so a child process spawned
 // afterwards (e.g. the built-in terminal's shell, via initPTY) inherits them

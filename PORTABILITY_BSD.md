@@ -164,14 +164,28 @@ shows up in the session picker.
 
 ### P1 — definite bugs, fixable without a reproduction
 
-**4.4 `clearNonBlock` never runs on OpenBSD 7.5+**
-`session_unix.go:341-343` uses `syscall.Syscall(syscall.SYS_FCNTL, ...)`, which
-returns `ENOSYS` there (§2.1), so `O_NONBLOCK` is never cleared from the shared
-tty description on exit and the parent shell inherits a non-blocking stdin.
-Replace with `unix.FcntlInt`, and stop discarding the error — log it.
+**4.4 `clearNonBlock` never runs on OpenBSD 7.5+ — DONE**
+`session_unix.go:341-343` used `syscall.Syscall(syscall.SYS_FCNTL, ...)`, which
+returns `ENOSYS` there (§2.1), so `O_NONBLOCK` was never cleared from the
+shared tty description on exit and the parent shell inherited a non-blocking
+stdin. This is the same failure class as #444.
 
-*Test:* after a session ends, assert `O_NONBLOCK` is clear on the fds handed
-back. This is the same failure class as #444.
+Replaced with a package-level `clearNonBlock(f *os.File)` using
+`unix.FcntlInt(f.Fd(), unix.F_GETFL/F_SETFL, ...)`, which goes through the
+libc `fcntl(2)` stub and keeps working under OpenBSD's restriction. Errors
+from both fcntl calls are now logged via `vtui.DebugLog` instead of discarded.
+
+*Test:* `TestClearNonBlock_ClearsFlag` (`session_unix_test.go`) sets
+`O_NONBLOCK` on a pipe fd, calls `clearNonBlock`, and asserts `F_GETFL` no
+longer reports it. Negative control: with the fix reverted, the test fails
+with "O_NONBLOCK still set after clearNonBlock" (confirmed locally, not
+committed).
+
+*Verification:* builds clean on `openbsd/amd64`, `linux/amd64`; scoped test
+run (session + clearNonBlock + setCloseOnExec) green. Full `go test .` has two
+pre-existing failures (`TestExecuteFileOp_Move_PermissionDenied_Recovery`,
+`TestUpdateFailureMessageRepro`) reproduced identically on an unmodified
+checkout — unrelated to this change (root/network environment effects).
 
 **4.5 NetBSD `PTMGET` constant is wrong**
 `pty_ptm.go:38` hardcodes the OpenBSD value for a file built with

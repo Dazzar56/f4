@@ -239,6 +239,21 @@ func setCloseOnExec(fds []int) {
 	}
 }
 
+// clearNonBlock clears O_NONBLOCK on f, going through the libc fcntl(2) stub
+// via unix.FcntlInt rather than a raw syscall — see the call site in
+// runServer for why that distinction matters on OpenBSD. Failures are
+// logged, not fatal.
+func clearNonBlock(f *os.File) {
+	flags, err := unix.FcntlInt(f.Fd(), unix.F_GETFL, 0)
+	if err != nil {
+		vtui.DebugLog("SERVER: WARNING: F_GETFL on fd %d failed: %v", f.Fd(), err)
+		return
+	}
+	if _, err := unix.FcntlInt(f.Fd(), unix.F_SETFL, flags&^unix.O_NONBLOCK); err != nil {
+		vtui.DebugLog("SERVER: WARNING: F_SETFL (clear O_NONBLOCK) on fd %d failed: %v", f.Fd(), err)
+	}
+}
+
 func runServer(sockPath string) {
 	vtui.DebugLog("SERVER: Starting daemon at %s", sockPath)
 
@@ -359,10 +374,15 @@ func runServer(sockPath string) {
 
 			// 2. CRITICAL: Clear O_NONBLOCK that Go automatically sets.
 			// Shared FD description means bash will also get EAGAIN if we don't.
-			clearNonBlock := func(f *os.File) {
-				flags, _, _ := syscall.Syscall(syscall.SYS_FCNTL, f.Fd(), syscall.F_GETFL, 0)
-				syscall.Syscall(syscall.SYS_FCNTL, f.Fd(), syscall.F_SETFL, flags & ^uintptr(syscall.O_NONBLOCK))
-			}
+			//
+			// This used syscall.Syscall(SYS_FCNTL, ...) directly, which is an
+			// indirect syscall. OpenBSD 7.5+ removed the kernel entry point
+			// for those (golang/go#63900): the call returns ENOSYS and
+			// O_NONBLOCK is silently never cleared, leaving the parent shell
+			// with a non-blocking stdin/stdout after the session ends.
+			// clearNonBlock goes through the libc fcntl(2) stub instead,
+			// which keeps working under that restriction. See
+			// PORTABILITY_BSD.md, 4.4.
 			clearNonBlock(os.Stdin)
 			clearNonBlock(os.Stdout)
 
