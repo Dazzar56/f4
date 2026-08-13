@@ -126,6 +126,36 @@ func (s *stagedFile) Reader() (io.Reader, error) {
 	return s.f, nil
 }
 
+// LoadFrom replaces the staged contents with r, leaving the file exactly as
+// long as what was read: a shorter source must not leave the tail of a longer
+// previous version behind.
+func (s *stagedFile) LoadFrom(ctx context.Context, r vfs.ReadAtCloser) error {
+	if _, err := s.f.Seek(0, io.SeekStart); err != nil {
+		return err
+	}
+	buf := make([]byte, spoolChunk)
+	var total int64
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		n, readErr := r.Read(ctx, buf)
+		if n > 0 {
+			if _, err := s.f.Write(buf[:n]); err != nil {
+				return err
+			}
+			total += int64(n)
+		}
+		if readErr == io.EOF {
+			break
+		}
+		if readErr != nil {
+			return readErr
+		}
+	}
+	return s.f.Truncate(total)
+}
+
 func (s *stagedFile) Close() error {
 	return s.f.Close()
 }
@@ -561,7 +591,7 @@ func (b *bridge) releaseWriter(h *writeHandle) (last bool) {
 // acquireStagedWriter is acquireWriter plus the staging file, created under
 // the same lock. Doing it in one step matters: two processes creating the
 // same file at once must not race over who has a staging file yet.
-func (b *bridge) acquireStagedWriter(itemPath string) (*writeHandle, error) {
+func (b *bridge) acquireStagedWriter(itemPath string) (h *writeHandle, created bool, err error) {
 	b.writeMu.Lock()
 	defer b.writeMu.Unlock()
 	if b.writers == nil {
@@ -569,15 +599,36 @@ func (b *bridge) acquireStagedWriter(itemPath string) (*writeHandle, error) {
 	}
 	if existing, ok := b.writers[itemPath]; ok {
 		existing.refs++
-		return existing, nil
+		return existing, false, nil
 	}
 	staged, err := newStagedFile()
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	h := &writeHandle{path: itemPath, refs: 1, staged: staged}
+	h = &writeHandle{path: itemPath, refs: 1, staged: staged}
 	b.writers[itemPath] = h
-	return h, nil
+	return h, true, nil
+}
+
+// loadStaged fills a staging file with what the backend already holds. This
+// is the read-modify-write an editor's save needs: FUSE may write two bytes
+// in the middle of a file, and the commit sends the whole thing back, so what
+// was not overwritten has to be there to send.
+//
+// It is also the one place where writing costs a full download. Backends that
+// can write at an offset natively are iteration 5.
+func (b *bridge) loadStaged(ctx context.Context, itemPath string, s *stagedFile) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.closed {
+		return errClosed
+	}
+	rc, err := b.v.Open(ctx, itemPath)
+	if err != nil {
+		return err
+	}
+	defer rc.Close()
+	return s.LoadFrom(ctx, rc)
 }
 
 // isLastWriter reports whether h is the only handle left on its file, which

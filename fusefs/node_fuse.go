@@ -103,7 +103,7 @@ func (n *node) Create(ctx context.Context, name string, flags uint32, mode uint3
 		return nil, nil, 0, errno
 	}
 	childPath := n.b.join(n.path, name)
-	wh, err := n.b.acquireStagedWriter(childPath)
+	wh, _, err := n.b.acquireStagedWriter(childPath)
 	if err != nil {
 		return nil, nil, 0, errnoOf(err)
 	}
@@ -249,8 +249,7 @@ func (n *node) Open(ctx context.Context, flags uint32) (fs.FileHandle, uint32, s
 		if errno := n.writeRefusal(); errno != 0 {
 			return nil, 0, errno
 		}
-		// Writing to a file is iteration 4; the mount does not pretend.
-		return nil, 0, syscall.ENOSYS
+		return n.openForWrite(ctx, flags)
 	}
 	item, err := n.b.stat(ctx, n.path)
 	if err != nil {
@@ -441,4 +440,30 @@ func (n *node) Rename(ctx context.Context, name string, newParent fs.InodeEmbedd
 		return errnoOf(err)
 	}
 	return 0
+}
+
+// openForWrite opens a file that already exists. Unless the caller asked for
+// O_TRUNC, the staging file starts as a copy of what the backend holds:
+// the commit sends the whole file back, so anything the caller does not
+// overwrite has to be in there to send.
+func (n *node) openForWrite(ctx context.Context, flags uint32) (fs.FileHandle, uint32, syscall.Errno) {
+	wh, created, err := n.b.acquireStagedWriter(n.path)
+	if err != nil {
+		return nil, 0, errnoOf(err)
+	}
+	if created && flags&uint32(syscall.O_TRUNC) == 0 {
+		if item, statErr := n.b.stat(ctx, n.path); statErr == nil && !item.IsDir && item.Size > 0 {
+			if err := n.b.loadStaged(ctx, n.path, wh.staged); err != nil {
+				// Nothing has been written yet, so the backend's
+				// copy is still intact: fail the open rather than
+				// commit a file with a hole where the old
+				// contents should have been.
+				if n.b.releaseWriter(wh) {
+					wh.staged.Close()
+				}
+				return nil, 0, errnoOf(err)
+			}
+		}
+	}
+	return &writeFileHandle{b: n.b, wh: wh, path: n.path}, 0, 0
 }

@@ -148,6 +148,11 @@ func showMountList(pf *PanelsFrame) {
 		}
 		if i < 0 {
 			unmountAll(rows)
+			// Same as a single unmount: if anything is still up, the
+			// list is where the user was.
+			if len(mountRows()) > 0 {
+				showMountList(pf)
+			}
 			return
 		}
 		if i >= len(rows) {
