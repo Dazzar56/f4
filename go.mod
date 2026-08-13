@@ -24,7 +24,7 @@ require (
 	github.com/pkg/sftp v1.13.6
 	github.com/tetratelabs/wazero v1.12.0
 	github.com/unxed/archives v0.0.0-20260728171610-555945c76813
-	github.com/unxed/colorer4go v0.1.9
+	github.com/unxed/colorer4go v0.1.10
 	github.com/unxed/ffibridge v0.1.0
 	github.com/unxed/id3-go v0.1.1
 	github.com/unxed/localecp v0.1.5
