@@ -116,6 +116,11 @@ func showMountList(pf *PanelsFrame) {
 		w = scrW - 2
 	}
 
+	here := ""
+	if fsp := pf.getActivePanel(); fsp != nil && fsp.vfs != nil {
+		here = fsp.vfs.GetPath()
+	}
+
 	menu := vtui.NewVMenu(Msg("Mounts.Title"))
 	if live := liveRows(rows); len(live) > 1 {
 		menu.AddItem(vtui.MenuItem{
@@ -128,8 +133,10 @@ func showMountList(pf *PanelsFrame) {
 			// A remote source can be far longer than the dialog; a row
 			// that overflows hides the mount point, which is the one
 			// thing the row exists to show.
-			Text: vtui.TruncateMiddle(fmt.Sprintf("%s  %s %s  \u2190  %s%s",
-				r.point, r.mode, r.age, r.source, r.note), w-4),
+			// The mount the panel is standing in is the one whose
+			// unmount will move the panel, so say which it is.
+			Text: vtui.TruncateMiddle(fmt.Sprintf("%s  %s %s  \u2190  %s%s%s",
+				r.point, r.mode, r.age, r.source, r.note, hereMark(here, r.point)), w-4),
 			UserData: i,
 		})
 	}
@@ -254,4 +261,12 @@ func withinMount(panelPath, mountPoint string) bool {
 		return true
 	}
 	return strings.HasPrefix(panelPath, mountPoint+string(filepath.Separator))
+}
+
+// hereMark labels the mount the active panel is inside.
+func hereMark(panelPath, mountPoint string) string {
+	if withinMount(panelPath, mountPoint) {
+		return "  (here)"
+	}
+	return ""
 }

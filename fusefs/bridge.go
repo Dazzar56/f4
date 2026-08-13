@@ -159,7 +159,7 @@ func (s *stagedFile) Reader() (io.Reader, error) {
 // LoadFrom replaces the staged contents with r, leaving the file exactly as
 // long as what was read: a shorter source must not leave the tail of a longer
 // previous version behind.
-func (s *stagedFile) LoadFrom(ctx context.Context, r vfs.ReadAtCloser) error {
+func (s *stagedFile) LoadFrom(ctx context.Context, b *bridge, r vfs.ReadAtCloser) error {
 	if _, err := s.f.Seek(0, io.SeekStart); err != nil {
 		return err
 	}
@@ -169,7 +169,13 @@ func (s *stagedFile) LoadFrom(ctx context.Context, r vfs.ReadAtCloser) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
+		b.mu.Lock()
+		if b.closed {
+			b.mu.Unlock()
+			return errClosed
+		}
 		n, readErr := r.Read(ctx, buf)
+		b.mu.Unlock()
 		if n > 0 {
 			if _, err := s.f.Write(buf[:n]); err != nil {
 				return err
@@ -444,13 +450,6 @@ func (h *handle) spool(ctx context.Context) error {
 	}
 	os.Remove(tmp.Name())
 
-	h.b.mu.Lock()
-	defer h.b.mu.Unlock()
-	if h.b.closed {
-		tmp.Close()
-		return errClosed
-	}
-
 	buf := make([]byte, spoolChunk)
 	var total int64
 	for {
@@ -458,7 +457,19 @@ func (h *handle) spool(ctx context.Context) error {
 			tmp.Close()
 			return err
 		}
+		// The lock is taken per chunk rather than held for the whole
+		// transfer. Backends are still one conversation at a time, but a
+		// 4 GiB download no longer means the mount answers nothing for
+		// the length of it: every other request gets its turn between
+		// chunks. Writing to the local spool needs no lock at all.
+		h.b.mu.Lock()
+		if h.b.closed {
+			h.b.mu.Unlock()
+			tmp.Close()
+			return errClosed
+		}
 		n, readErr := h.r.Read(ctx, buf)
+		h.b.mu.Unlock()
 		if n > 0 {
 			if _, err := tmp.Write(buf[:n]); err != nil {
 				tmp.Close()
@@ -674,16 +685,20 @@ func (b *bridge) acquireWriteHandle(ctx context.Context, itemPath string) (h *wr
 // can write at an offset natively are iteration 5.
 func (b *bridge) loadStaged(ctx context.Context, itemPath string, s *stagedFile) error {
 	b.mu.Lock()
-	defer b.mu.Unlock()
 	if b.closed {
+		b.mu.Unlock()
 		return errClosed
 	}
 	rc, err := b.v.Open(ctx, itemPath)
+	b.mu.Unlock()
 	if err != nil {
 		return err
 	}
 	defer rc.Close()
-	return s.LoadFrom(ctx, rc)
+	// Like the read spool: the lock is taken per chunk, so opening a large
+	// file for writing does not stall every other request for the length of
+	// the download.
+	return s.LoadFrom(ctx, b, rc)
 }
 
 // isLastWriter reports whether h is the only handle left on its file, which
