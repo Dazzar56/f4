@@ -13,6 +13,10 @@ set -eu
 
 HOST=${1:-www-test.runcity.org}
 RDIR=${2:-claude/f4bench}
+# How big the one large file is. The default is small on purpose: the point of
+# that file is to measure bandwidth, and on a slow link a 64 MiB file measures
+# the user's patience instead. Raise it on a fast connection.
+MB=${BENCH_MB:-8}
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 WORK=${TMPDIR:-/tmp}/f4bench.$$
 REPORT=$HERE/bench-report.txt
@@ -25,6 +29,7 @@ mkdir -p "$WORK"
 log "f4 fusefs benchmark baseline"
 log "date:   $(date -u '+%Y-%m-%d %H:%M:%SZ')"
 log "system: $(uname -srm)"
+log "fixture: ${MB} MiB big file, 500 small files"
 log ""
 
 # --- 1. the binary ------------------------------------------------------
@@ -39,7 +44,7 @@ log ""
 make_fixture() {
 	dir=$1
 	mkdir -p "$dir/many"
-	dd if=/dev/urandom of="$dir/big.bin" bs=1M count=64 2>/dev/null
+	dd if=/dev/urandom of="$dir/big.bin" bs=1M count="$MB" 2>/dev/null
 	i=0
 	while [ $i -lt 500 ]; do
 		printf 'file %d\nTODO marker\n' "$i" > "$dir/many/f$i.txt"
@@ -67,7 +72,7 @@ if [ -n "$HOST" ] && ssh -o BatchMode=yes -o ConnectTimeout=10 "$HOST" true 2>/d
 		set -e
 		rm -rf '$RDIR'
 		mkdir -p '$RDIR/many' '$RDIR/nested/a/b/c'
-		dd if=/dev/urandom of='$RDIR/big.bin' bs=1M count=64 2>/dev/null
+		dd if=/dev/urandom of='$RDIR/big.bin' bs=1M count=$MB 2>/dev/null
 		i=0
 		while [ \$i -lt 500 ]; do
 			printf 'file %d\nTODO marker\n' \$i > '$RDIR'/many/f\$i.txt

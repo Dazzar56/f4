@@ -48,6 +48,9 @@ run() {
 
 # One big sequential read: bandwidth, and whether a transfer blocks everything.
 BIG=$(find "$MNT" -type f -size +1M 2>/dev/null | head -n 1 || true)
+# Everything below this line reads through the mount, so a slow backend is
+# measured, not waited on: the search skips binaries rather than pulling the
+# big file down a second time to decide it has no text in it.
 if [ -n "$BIG" ]; then
 	run "sequential read (dd)" dd "if=$BIG" of=/dev/null bs=1M
 else
@@ -62,9 +65,9 @@ run "stat every entry (ls -lR)" ls -lR "$MNT"
 
 # Reads with seeks in them, which is where spooling shows up.
 if command -v rg >/dev/null 2>&1; then
-	run "search (rg)" rg --files-with-matches --no-messages TODO "$MNT"
+	run "search (rg)" rg --files-with-matches --no-messages --binary TODO "$MNT"
 else
-	run "search (grep -r)" grep -rl TODO "$MNT"
+	run "search (grep -r)" grep -rlI TODO "$MNT"
 fi
 
 echo "done; record these numbers before changing the locking, not after"
