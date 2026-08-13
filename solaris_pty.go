@@ -5,6 +5,7 @@ package main
 import (
 	"os"
 	"os/exec"
+	"runtime"
 	"syscall"
 
 	"golang.org/x/sys/unix"
@@ -56,6 +57,7 @@ func (p *SolarisPTY) Wait() error {
 	if p.Cmd == nil {
 		return nil
 	}
+	defer runtime.KeepAlive(p)
 	return p.Cmd.Wait()
 }
 
