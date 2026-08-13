@@ -5661,3 +5661,58 @@ func TestEditorView_DeleteRemovesRectSelection(t *testing.T) {
 		})
 	}
 }
+
+// Colorer is drawn by line number, not by walking a chain of states from the
+// top of the file. A viewport far down a large file has to come out coloured
+// without anything having touched the lines above it.
+func TestEditor_ColorerDrawsWithoutAStateChain(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	var sb strings.Builder
+	for i := 0; i < 5000; i++ {
+		fmt.Fprintf(&sb, "line %d\n", i)
+	}
+	ev := NewEditorView(piecetable.New([]byte(sb.String())), nil, "test.txt")
+	defer ev.Close()
+	ev.SetPosition(0, 0, 80, 10)
+
+	ch := &ColorerHighlighter{}
+	ch.SetLineSource(ev.lineTextForHighlight)
+	ev.highlighter = ch
+
+	ev.CursorLine = 4000
+	ev.ensureCursorVisible()
+
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	ev.Show(scr)
+
+	if len(ev.lineStates) != 0 {
+		t.Errorf("Colorer grew a state chain of %d entries", len(ev.lineStates))
+	}
+	if ev.highlighting {
+		t.Error("Colorer started the walker")
+	}
+}
+
+func TestEditor_LineTextForHighlight(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	ev := NewEditorView(piecetable.New([]byte("alpha\nbeta\ngamma")), nil, "test.txt")
+	defer ev.Close()
+
+	// The terminator is part of what the parsers are fed, and the parse
+	// state of the next line depends on having seen it.
+	if got, ok := ev.lineTextForHighlight(0); !ok || got != "alpha\n" {
+		t.Errorf("line 0 came back as %q, ok=%v", got, ok)
+	}
+	if got, ok := ev.lineTextForHighlight(2); !ok || got != "gamma" {
+		t.Errorf("the last line came back as %q, ok=%v", got, ok)
+	}
+	if _, ok := ev.lineTextForHighlight(3); ok {
+		t.Error("a line past the end must not report success")
+	}
+	if _, ok := ev.lineTextForHighlight(-1); ok {
+		t.Error("a negative line must not report success")
+	}
+}

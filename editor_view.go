@@ -388,6 +388,11 @@ func (ev *EditorView) SetText(text string) {
 
 func (ev *EditorView) clearCaches() {
 	ev.engine.InvalidateCache()
+	// Undo, redo and a reload replace the text wholesale. Colorer caches
+	// colours by line number and has no way to notice that on its own.
+	if ch, ok := ev.highlighter.(*ColorerHighlighter); ok {
+		ch.DropFrom(0)
+	}
 }
 func (ev *EditorView) saveUndo(op undoOpType) {
 	if ev.inGroup {
@@ -508,6 +513,36 @@ func (ev *EditorView) invalidateStates(fromLine int) {
 	if fromLine < len(ev.lineStates) {
 		ev.lineStates = ev.lineStates[:fromLine]
 	}
+	if ch, ok := ev.highlighter.(*ColorerHighlighter); ok {
+		ch.DropFrom(fromLine)
+	}
+}
+
+// lineTextForHighlight returns one logical line as the highlighters see it:
+// the terminator included, and a long binary line cut short so no parser is
+// ever handed a megabyte. Not ok means the text is not available yet — the
+// piece table is still loading it — and the caller should leave the line plain
+// and come back on the next frame.
+func (ev *EditorView) lineTextForHighlight(idx int) (string, bool) {
+	if idx < 0 || idx >= ev.li.LineCount() {
+		return "", false
+	}
+	start := ev.li.GetLineOffset(idx)
+	end := ev.pt.Size()
+	if idx+1 < ev.li.LineCount() {
+		end = ev.li.GetLineOffset(idx + 1)
+	}
+	if end-start > 64*1024 {
+		end = start + 64*1024
+	}
+	if end <= start {
+		return "", true
+	}
+	data, err := ev.pt.GetRange(start, end-start)
+	if err != nil {
+		return "", false
+	}
+	return string(data), true
 }
 
 // Background highlighting runs in slices on the UI thread: highlighters are
@@ -870,7 +905,14 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 
 		// Stateful Highlighting
 		var lineSyntax []uint64
-		if ev.highlighter != nil {
+		if ch, isColorer := ev.highlighter.(*ColorerHighlighter); isColorer {
+			// Colorer is addressed by line number: its parser state cannot
+			// be carried in ev.lineStates, so it keeps its own anchor near
+			// the viewport instead. See HIGHLIGHT.md, phase 5.
+			if text, ok := ev.lineTextForHighlight(logIdx); ok {
+				lineSyntax = ch.HighlightLine(logIdx, text, bgAttr)
+			}
+		} else if ev.highlighter != nil {
 			// Catch up synchronously only if the uncomputed gap is small (<= 50 lines).
 			// For large jumps, render unhighlighted immediately and compute in background.
 			const syncHighlightGapLimit = 50

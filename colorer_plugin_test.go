@@ -302,3 +302,52 @@ Loop:
 		t.Error("SchemasExist returned false after successful extraction")
 	}
 }
+
+func TestColorer_ContextPlan(t *testing.T) {
+	if start, reset := colorerContextPlan(120, 140); reset || start != 120 {
+		t.Errorf("a short step forward must feed the session, got start=%d reset=%v", start, reset)
+	}
+	if start, reset := colorerContextPlan(7, 7); reset || start != 7 {
+		t.Errorf("no move, no work, got start=%d reset=%v", start, reset)
+	}
+	if start, reset := colorerContextPlan(0, hlColorerForward); reset || start != 0 {
+		t.Error("the forward limit itself must still be reached by feeding")
+	}
+	// A jump of any size costs the same: the anchor, and nothing before it.
+	start, reset := colorerContextPlan(0, 500000)
+	if !reset {
+		t.Error("a jump past the forward limit must re-anchor")
+	}
+	if start != 500000-hlColorerContext {
+		t.Errorf("anchor placed at %d, expected %d lines of context", start, hlColorerContext)
+	}
+	// Backwards is a re-anchor whatever the distance: the session cannot be
+	// rewound, only thrown away.
+	if start, reset := colorerContextPlan(200, 199); !reset || start != 0 {
+		t.Errorf("a step back near the top must re-anchor from 0, got start=%d reset=%v", start, reset)
+	}
+	if _, reset := colorerContextPlan(500000, 499000); !reset {
+		t.Error("a step back must re-anchor")
+	}
+	if start, _ := colorerContextPlan(500, 10); start != 0 {
+		t.Errorf("the anchor must not go below the first line, got %d", start)
+	}
+}
+
+func TestColorer_DropFromForgetsColours(t *testing.T) {
+	ch := &ColorerHighlighter{}
+	for i := 0; i < 10; i++ {
+		ch.storeAttrs(i, []uint64{uint64(i)}, 0)
+	}
+
+	ch.DropFrom(4)
+	if _, ok := ch.attrCache[4]; ok {
+		t.Error("the edited line kept its colours")
+	}
+	if _, ok := ch.attrCache[9]; ok {
+		t.Error("lines below the edit kept their colours")
+	}
+	if _, ok := ch.attrCache[3]; !ok {
+		t.Error("lines above the edit lost theirs for nothing")
+	}
+}
