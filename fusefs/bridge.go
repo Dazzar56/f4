@@ -66,6 +66,68 @@ type bridge struct {
 type writeHandle struct {
 	path string
 	refs int
+
+	// staged is where the writes actually land until the file is committed.
+	// It is nil until the first writer creates it.
+	staged *stagedFile
+}
+
+// stagedFile is a file being assembled on local disk before it is handed to
+// the backend in one piece.
+//
+// It exists because FUSE writes arrive as many small offsets while vfs.Create
+// returns a plain io.WriteCloser: there is no way to hand the backend a write
+// at offset 40000 and then one at offset 0. Staging locally also means a
+// failed transfer leaves the backend's copy untouched rather than half
+// rewritten.
+//
+// The file is unlinked immediately after creation, exactly like the read-side
+// spool, so it disappears with the process even on a crash and never shows up
+// in anybody's temp directory listing.
+type stagedFile struct {
+	f *os.File
+}
+
+func newStagedFile() (*stagedFile, error) {
+	f, err := os.CreateTemp("", "f4-fuse-w-*")
+	if err != nil {
+		return nil, err
+	}
+	os.Remove(f.Name())
+	return &stagedFile{f: f}, nil
+}
+
+func (s *stagedFile) WriteAt(p []byte, off int64) (int, error) {
+	return s.f.WriteAt(p, off)
+}
+
+func (s *stagedFile) ReadAt(p []byte, off int64) (int, error) {
+	return s.f.ReadAt(p, off)
+}
+
+func (s *stagedFile) Truncate(size int64) error {
+	return s.f.Truncate(size)
+}
+
+func (s *stagedFile) Size() (int64, error) {
+	fi, err := s.f.Stat()
+	if err != nil {
+		return 0, err
+	}
+	return fi.Size(), nil
+}
+
+// Reader rewinds the staged file so it can be copied into the backend. The
+// commit is one sequential pass, which is all vfs.Create can accept.
+func (s *stagedFile) Reader() (io.Reader, error) {
+	if _, err := s.f.Seek(0, io.SeekStart); err != nil {
+		return nil, err
+	}
+	return s.f, nil
+}
+
+func (s *stagedFile) Close() error {
+	return s.f.Close()
 }
 
 type dirCacheEntry struct {

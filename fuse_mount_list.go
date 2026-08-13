@@ -88,7 +88,15 @@ func mountRows() []mountRow {
 func showMountList(pf *PanelsFrame) {
 	rows := mountRows()
 	if len(rows) == 0 {
-		vtui.ShowMessage(Msg("Mounts.Title"), "Nothing is mounted.", []string{"&Ok"})
+		// An empty list is the most likely moment for someone to want
+		// their first mount, so offer it here instead of sending them
+		// back to the menu.
+		dlg := vtui.ShowMessage(Msg("Mounts.Title"), "Nothing is mounted.", []string{"&Mount this panel", "&Ok"})
+		dlg.OnResult = func(code int) {
+			if code == 0 {
+				mountActivePanel(pf)
+			}
+		}
 		return
 	}
 
