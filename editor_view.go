@@ -1168,11 +1168,7 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 		} else {
 			ev.pasting = false
 			if len(ev.pasteBuffer) > 0 {
-				if ev.indexCancel != nil {
-					ev.indexCancel()
-					ev.indexCancel = nil
-				}
-				ev.edited = true
+				ev.noteBufferEdit()
 
 				ev.saveUndo(opOther)
 				if ev.selActive {
@@ -1240,7 +1236,11 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 				match := ev.acMatches[ev.acCurrentIdx]
 				tail := match[len(ev.acPrefix):]
 				ev.acMatches = nil // Clear state
+				if tail == "" {
+					return true
+				}
 
+				ev.noteBufferEdit()
 				ev.saveUndo(opTyping)
 				ev.modified = true
 				offset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
@@ -1658,11 +1658,11 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 		if ev.selActive || ev.rectSelActive {
 			ev.DeleteSelection()
 		} else {
-			ev.noteBufferEdit()
-			ev.saveUndo(opOther)
-			ev.modified = true
 			offset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 			if offset > 0 {
+				ev.noteBufferEdit()
+				ev.saveUndo(opOther)
+				ev.modified = true
 				if ev.CursorPos == 0 {
 					// Merge with the previous line (remove line break)
 					prevLen := ev.getLineLength(ev.CursorLine - 1)
@@ -1709,11 +1709,11 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 		if ev.selActive || ev.rectSelActive {
 			ev.DeleteSelection()
 		} else {
-			ev.noteBufferEdit()
-			ev.saveUndo(opOther)
-			ev.modified = true
 			offset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 			if offset < ev.pt.Size() {
+				ev.noteBufferEdit()
+				ev.saveUndo(opOther)
+				ev.modified = true
 				// Remove the UTF-8 character under the cursor
 				peekLen := 4
 				if ev.pt.Size()-offset < 4 {
@@ -3604,6 +3604,7 @@ func (ev *EditorView) insertTextAtCursor(data []byte) {
 	if len(data) == 0 {
 		return
 	}
+	ev.noteBufferEdit()
 	ev.saveUndo(opOther)
 	if ev.selActive || ev.rectSelActive {
 		ev.inGroup = true
@@ -3654,6 +3655,7 @@ func (ev *EditorView) deleteSpacersForward() {
 	if count == 0 {
 		return
 	}
+	ev.noteBufferEdit()
 	ev.saveUndo(opOther)
 	ev.modified = true
 	ev.pt.Delete(offset, count)
@@ -3739,15 +3741,31 @@ func (ev *EditorView) CopySelection() {
 }
 
 func (ev *EditorView) PasteRectangular(text string, targetCol int) {
+	if text == "" {
+		return
+	}
 	lines := strings.Split(text, "\n")
 	if len(lines) == 0 {
 		return
 	}
+	neededLines := ev.CursorLine + len(lines)
+	mutates := neededLines > ev.li.LineCount()
+	if !mutates {
+		for _, line := range lines {
+			if line != "" {
+				mutates = true
+				break
+			}
+		}
+	}
+	if !mutates {
+		return
+	}
 
+	ev.noteBufferEdit()
 	ev.saveUndo(opOther)
 	ev.modified = true
 
-	neededLines := ev.CursorLine + len(lines)
 	for ev.li.LineCount() < neededLines {
 		offset := ev.pt.Size()
 		ev.pt.Insert(offset, []byte("\n"))
@@ -3809,20 +3827,16 @@ func (ev *EditorView) PasteRectangular(text string, targetCol int) {
 }
 
 func (ev *EditorView) PasteText(text string) {
-	if !ev.edited {
-		ev.edited = true
-		if ev.indexCancel != nil {
-			ev.indexCancel()
-		}
-	}
-	ev.editSession++
-
 	if GlobalLastClipboardWasRectangular {
 		targetCol := ev.getVisualColOf(ev.CursorLine, ev.CursorPos)
 		ev.PasteRectangular(text, targetCol)
 		return
 	}
+	if text == "" && !ev.selActive {
+		return
+	}
 
+	ev.noteBufferEdit()
 	ev.saveUndo(opOther)
 	ev.inGroup = true
 	if ev.selActive {
@@ -3856,8 +3870,7 @@ func (ev *EditorView) DeleteSelection() {
 			minX, maxX = maxX, minX
 		}
 
-		ev.saveUndo(opOther)
-		ev.modified = true
+		mutated := false
 
 		for y := maxY; y >= minY; y-- {
 			lineStart := ev.li.GetLineOffset(y)
@@ -3902,6 +3915,14 @@ func (ev *EditorView) DeleteSelection() {
 					endByte = byteAcc
 				}
 				if endByte > startByte {
+					if !mutated {
+						if !ev.inGroup {
+							ev.noteBufferEdit()
+						}
+						ev.saveUndo(opOther)
+						ev.modified = true
+						mutated = true
+					}
 					delOff := lineStart + startByte
 					delLen := endByte - startByte
 					ev.pt.Delete(delOff, delLen)
@@ -3910,8 +3931,10 @@ func (ev *EditorView) DeleteSelection() {
 			}
 		}
 
-		ev.invalidateStates(minY)
-		ev.engine.InvalidateFrom(minY)
+		if mutated {
+			ev.invalidateStates(minY)
+			ev.engine.InvalidateFrom(minY)
+		}
 		ev.rectSelActive = false
 		ev.ensureCursorVisible()
 		return
@@ -3925,13 +3948,9 @@ func (ev *EditorView) DeleteSelection() {
 		max = ev.pt.Size()
 	}
 	if max > min {
-		if !ev.edited {
-			ev.edited = true
-			if ev.indexCancel != nil {
-				ev.indexCancel()
-			}
+		if !ev.inGroup {
+			ev.noteBufferEdit()
 		}
-		ev.editSession++
 
 		ev.saveUndo(opOther)
 
@@ -3949,6 +3968,7 @@ func (ev *EditorView) DeleteCurrentLine() {
 	if ev.pt.Size() == 0 {
 		return
 	}
+	ev.noteBufferEdit()
 	ev.saveUndo(opOther)
 	ev.modified = true
 
