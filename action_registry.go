@@ -803,9 +803,13 @@ func init() {
 		LabelKey:    "Action.Panel.CopyName",
 		Description: "Copy the current file name to clipboard",
 		DescKey:     "Action.Panel.CopyName.Desc",
-		DefaultKeys: []string{"CtrlIns:EmptyCommandLine"},
+		DefaultKeys: []string{"CtrlIns"},
 		MenuPath:    "Commands",
 		Handler: withPF(func(pf *PanelsFrame) {
+			if !pf.cmdLine.IsEmpty() {
+				vtui.SetClipboard(pf.cmdLine.Edit.GetText())
+				return
+			}
 			if fsp := pf.getActivePanel(); fsp != nil {
 				idx := fsp.GetCursorIndex()
 				if idx < 0 || idx >= len(fsp.entries) {

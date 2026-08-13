@@ -65,6 +65,25 @@ func TestAction_PanelCopyName_CursorOnFile(t *testing.T) {
 	}
 }
 
+func TestAction_PanelCopyName_CopiesCommandLineWhenNotEmpty(t *testing.T) {
+	tmp := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmp, "a.txt"), []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	pf := seedPanelForCopyName(t, tmp)
+	fsp := pf.getActivePanel()
+	fsp.SetCursorIndex(1) // "a.txt"
+	pf.cmdLine.Edit.SetText("echo hello world")
+	vtui.SetClipboard("")
+
+	if !RunAction("Panel.CopyName") {
+		t.Fatal("Panel.CopyName did not run")
+	}
+	if got := waitForCopyNameClipboard(t, "echo hello world"); got != "echo hello world" {
+		t.Errorf("clipboard = %q, want %q", got, "echo hello world")
+	}
+}
+
 func TestAction_PanelCopyPath_CursorOnFile(t *testing.T) {
 	tmp := t.TempDir()
 	if err := os.WriteFile(filepath.Join(tmp, "a.txt"), []byte("x"), 0644); err != nil {
