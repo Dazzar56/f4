@@ -119,6 +119,11 @@
     ├── cpu_info_linux.go
     ├── cpu_info_other.go
     ├── cpu_info_windows.go
+    ├── debug.1.log
+    ├── debug.2.log
+    ├── debug.3.log
+    ├── debug.4.log
+    ├── debug.5.log
     ├── debug.log
     ├── delete_trash_test.go
     ├── detach_unix.go
@@ -849,6 +854,8 @@
     ├── vtvibe.md
     ├── wasm_plugin.go
     ├── wasm_plugin_test.go
+    ├── window_icon_darwin.go
+    ├── window_icon_unix.go
     ├── window_icon_windows.go
     ├── window_icon_windows_test.go
     ├── word_nav.go
@@ -857,4 +864,4 @@
     ├── workspace_session.go
     └── workspace_session_test.go
     
-    54 directories, 802 files
+    54 directories, 809 files
