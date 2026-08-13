@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -189,6 +190,13 @@ func askMountAction(pf *PanelsFrame, row mountRow) {
 			return
 		}
 		if code == 1 && row.live != nil {
+			// A panel standing inside the mount is a program holding
+			// it open, and the unmount would come back EBUSY because
+			// of us. Step out first: the user asked for the mount to
+			// go, not for an explanation of why it cannot.
+			if fsp := pf.getActivePanel(); fsp != nil && withinMount(fsp.vfs.GetPath(), row.point) {
+				pf.NavigateToPath(fsp, filepath.Dir(row.point))
+			}
 			if err := row.live.Unmount(); err != nil {
 				vtui.ShowMessage(" Mount ", fmt.Sprintf("Cannot unmount %s:\n%v", row.point, err), []string{"&Ok"})
 				return
@@ -235,4 +243,15 @@ func mountMode(readOnly bool) string {
 		return "ro"
 	}
 	return "rw"
+}
+
+// withinMount reports whether a panel path sits inside a mount point.
+func withinMount(panelPath, mountPoint string) bool {
+	if panelPath == "" || mountPoint == "" {
+		return false
+	}
+	if panelPath == mountPoint {
+		return true
+	}
+	return strings.HasPrefix(panelPath, mountPoint+string(filepath.Separator))
 }

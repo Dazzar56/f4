@@ -45,6 +45,15 @@ func startServer(ctx context.Context, m *Mount, opts Options) error {
 	fsOpts.MountOptions.Name = "f4"
 	fsOpts.MountOptions.AllowOther = opts.AllowOther
 	fsOpts.MountOptions.Debug = opts.Debug
+	// A VFS round trip costs far more than a memory copy, so the fewer and
+	// larger the requests, the better. go-fuse defaults to 128 KiB writes
+	// and 12 background requests, which were chosen for local file systems.
+	fsOpts.MountOptions.MaxWrite = 1 << 20
+	fsOpts.MountOptions.MaxBackground = 64
+	// Nothing here has extended attributes, and without this a single ls
+	// produces a burst of getxattr calls that all have to be refused one at
+	// a time, each behind the bridge lock.
+	fsOpts.MountOptions.DisableXAttrs = true
 	if opts.ReadOnly {
 		fsOpts.MountOptions.Options = append(fsOpts.MountOptions.Options, "ro")
 	}
