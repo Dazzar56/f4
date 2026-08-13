@@ -181,6 +181,15 @@ func MountVFS(ctx context.Context, v vfs.VFS, opts Options) (*Mount, error) {
 // and returns the live Mount.
 func MountSource(source string, opts Options) (*Mount, error) {
 	ctx := context.Background()
+	// An omitted mount point means "you name it", which is what the command
+	// line documents and what makes $(f4 --mount x --daemon) a usable shell
+	// idiom. Only the manager knows where mounts live, so only it can.
+	if strings.TrimSpace(opts.MountPoint) == "" {
+		opts.MountPoint = SuggestMountPoint(source)
+	}
+	if strings.TrimSpace(opts.Source) == "" {
+		opts.Source = source
+	}
 	var v vfs.VFS
 	var err error
 

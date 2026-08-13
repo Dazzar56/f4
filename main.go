@@ -10,6 +10,7 @@ import (
 	"runtime/pprof"
 	"strings"
 
+	"github.com/unxed/f4/fusefs"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
@@ -31,6 +32,17 @@ func main() {
 	if os.Getenv("F4_ASKPASS_PARENT") != "" {
 		vfs.RunSudoAskpass()
 		return
+	}
+
+	// --mount, --umount and --list-mounts are answered here and nowhere
+	// else: they are a command, not a way to start the file manager. RunCLI
+	// reports handled=false for every argument vector that says nothing
+	// about mounting, so normal startup carries on untouched. It sits after
+	// the askpass and sudo hooks because a helper process is not a command
+	// line at all, and before everything else because a daemon child must
+	// not build a UI it will never draw.
+	if code, handled := fusefs.RunCLI(os.Args); handled {
+		os.Exit(code)
 	}
 
 	for i := 1; i < len(os.Args); i++ {
