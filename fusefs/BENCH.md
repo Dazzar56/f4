@@ -66,6 +66,29 @@ roughly the same call counts as `tar` and each call is slower, the problem is
 in the calls; if it produces vastly more of them, the problem is that the read
 path is doing work the request never asked for.
 
+## Where this stopped, 2026-08-13
+
+Confirmed on the mobile link with an 8 MiB fixture: `dd` 16.94s, `tar -c`
+2.11s, `ls -lR` 0.01s, `grep` 241.70s. The search is not an artefact — it is
+reproducible, it grows faster than the fixture, and `tar` reading the same
+bytes over the same link is a hundred times quicker.
+
+The counting run has not been done yet. That is the next action, and it is one
+command twice:
+
+    BENCH_KEEP=1 ./fusefs/bench-all.sh          # fixtures stay in place
+
+    # run 1, in one shell:
+    F4_FUSE_STATS=1 ./f4 --mount sftp://USER@HOST/PATH --foreground
+    # in another: tar -cf /dev/null -C MOUNTPOINT . ; ./f4 --umount MOUNTPOINT
+    # run 2: the same, with grep -rlI TODO MOUNTPOINT instead of tar
+
+The tally prints in the first shell on unmount. Comparing the two answers the
+question directly: similar call counts with slower calls means the cost is in
+the calls; far more calls means the read path is doing work the request never
+asked for. Nothing about the locking should be touched until that number
+exists.
+
 ## Next
 
 * Find out what the search actually does differently — per-file open cost, or
