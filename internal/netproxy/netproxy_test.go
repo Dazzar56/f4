@@ -227,6 +227,10 @@ func TestSecretRoundTrip(t *testing.T) {
 func TestSystemModeAttachesAppCredentialsIfMissingInEnv(t *testing.T) {
 	t.Setenv("HTTP_PROXY", "http://127.0.0.1:3128")
 	t.Setenv("HTTPS_PROXY", "http://127.0.0.1:3128")
+	t.Setenv("http_proxy", "http://127.0.0.1:3128")
+	t.Setenv("https_proxy", "http://127.0.0.1:3128")
+	t.Setenv("ALL_PROXY", "")
+	t.Setenv("all_proxy", "")
 
 	s := Settings{Mode: ModeSystem, User: "bob", Pass: "s3cret"}
 	req, _ := http.NewRequest("GET", "https://api.github.com/", nil)
@@ -255,6 +259,10 @@ func TestSystemModeAttachesAppCredentialsIfMissingInEnv(t *testing.T) {
 func TestSystemModePreservesEnvCredentialsIfPresent(t *testing.T) {
 	t.Setenv("HTTP_PROXY", "http://envuser:envpass@127.0.0.1:3128")
 	t.Setenv("HTTPS_PROXY", "http://envuser:envpass@127.0.0.1:3128")
+	t.Setenv("http_proxy", "http://envuser:envpass@127.0.0.1:3128")
+	t.Setenv("https_proxy", "http://envuser:envpass@127.0.0.1:3128")
+	t.Setenv("ALL_PROXY", "")
+	t.Setenv("all_proxy", "")
 
 	s := Settings{Mode: ModeSystem, User: "appuser", Pass: "apppass"}
 	req, _ := http.NewRequest("GET", "https://api.github.com/", nil)
