@@ -118,6 +118,7 @@ func NewFTPVFS(parent vfs.VFS, host, port, user, pass string, timeout int, optio
 }
 
 func (v *FTPVFS) GetTitle() string { return v.title }
+func (v *FTPVFS) SessionKey() any  { return v.conn }
 
 func (v *FTPVFS) IsAtRoot() bool      { return v.cwd == "/" || v.cwd == "" || v.cwd == "." }
 func (v *FTPVFS) GetPath() string     { return v.cwd }
