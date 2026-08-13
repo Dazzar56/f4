@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/unxed/f4/internal/netproxy"
 	"github.com/unxed/vtui"
 )
 
@@ -227,6 +228,15 @@ type F4Config struct {
 	LastUpdateCheck        int64  // Unix timestamp
 	LastUpdateVersion      string // Version string or PublishedAt timestamp
 
+	// [Proxy] applies to everything f4 sends out on its own: update checks
+	// and downloads, the plugin ring, colorer schemes and netfox site
+	// connections. A netfox connection may override it, see netproxy.
+	ProxyMode int // netproxy.Mode*: 1 = system env (default), 2 = direct, 3 = HTTP, 4 = SOCKS5
+	ProxyHost string
+	ProxyPort string
+	ProxyUser string
+	ProxyPass string
+
 	// [Layout] mirrors far2l's config.ini section of the same name so
 	// a config shared with far2l keeps working in both. Adjusted by
 	// Ctrl+Left/Right (width split) and Ctrl+Up/Down (panel/terminal
@@ -325,6 +335,7 @@ var AppConfig = F4Config{
 	GuiRows:                  30,
 	ConsoleTitleTemplate:     "f4 %Ver %Platform %Admin - %State",
 	UpdateChannel:            0,
+	ProxyMode:                netproxy.ModeSystem,
 	UpdateInterval:           3, // Default to Weekly
 	EnforceColorCorrection:   true,
 	HighlightPriority:        0,
@@ -473,6 +484,15 @@ func LoadConfig() {
 	fmt.Sscanf(ini.GetString("Update", "LastCheck", "0"), "%d", &AppConfig.LastUpdateCheck)
 	AppConfig.LastUpdateVersion = ini.GetString("Update", "LastVersion", "")
 
+	// The proxy password is stored obfuscated, exactly like netfox stores
+	// site passwords; a hand-written plain one keeps working.
+	fmt.Sscanf(ini.GetString("Proxy", "Mode", "1"), "%d", &AppConfig.ProxyMode)
+	AppConfig.ProxyHost = ini.GetString("Proxy", "Host", "")
+	AppConfig.ProxyPort = ini.GetString("Proxy", "Port", "")
+	AppConfig.ProxyUser = ini.GetString("Proxy", "User", "")
+	AppConfig.ProxyPass = netproxy.DecodeSecret(ini.GetString("Proxy", "Password", ""))
+	ApplyProxySettings()
+
 	AppConfig.EditorAutoComplete = ini.GetString("Editor", "AutoComplete", "1") == "1"
 	AppConfig.EditorAutoCompleteMask = ini.GetString("Editor", "AutoCompleteMask", "*.go;*.c;*.cpp;*.h;*.hpp;*.py;*.js;*.ts;*.rs;*.java;*.sh;*.txt;*.md;*.html;*.css;*.json")
 
@@ -564,6 +584,10 @@ func LoadConfig() {
 }
 
 func SaveConfig() {
+	// Settings dialogs write into AppConfig and call SaveConfig; publishing
+	// here means a proxy change takes effect without a restart.
+	ApplyProxySettings()
+
 	path := getUserConfigIniPath()
 	os.MkdirAll(filepath.Dir(path), 0755)
 
@@ -641,6 +665,13 @@ func SaveConfig() {
 	sb.WriteString(fmt.Sprintf("Interval = %d\n", AppConfig.UpdateInterval))
 	sb.WriteString(fmt.Sprintf("LastCheck = %d\n", AppConfig.LastUpdateCheck))
 	sb.WriteString(fmt.Sprintf("LastVersion = %s\n", AppConfig.LastUpdateVersion))
+
+	sb.WriteString("\n[Proxy]\n")
+	sb.WriteString(fmt.Sprintf("Mode = %d\n", AppConfig.ProxyMode))
+	sb.WriteString(fmt.Sprintf("Host = %s\n", AppConfig.ProxyHost))
+	sb.WriteString(fmt.Sprintf("Port = %s\n", AppConfig.ProxyPort))
+	sb.WriteString(fmt.Sprintf("User = %s\n", AppConfig.ProxyUser))
+	sb.WriteString(fmt.Sprintf("Password = %s\n", netproxy.EncodeSecret(AppConfig.ProxyPass)))
 	sb.WriteString("\n[Editor]\n")
 	sb.WriteString(fmt.Sprintf("AutoComplete = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.EditorAutoComplete]))
 	sb.WriteString(fmt.Sprintf("AutoCompleteMask = %s\n", AppConfig.EditorAutoCompleteMask))
@@ -783,4 +814,17 @@ func createDefaultHighlightIni(path string) {
 
 `
 	_ = os.WriteFile(path, []byte(content), 0644)
+}
+
+// ApplyProxySettings publishes the configured proxy to netproxy, which is
+// where the updater, the plugin ring, the colorer downloader and netfox all
+// read it from.
+func ApplyProxySettings() {
+	netproxy.SetGlobal(netproxy.Settings{
+		Mode: AppConfig.ProxyMode,
+		Host: AppConfig.ProxyHost,
+		Port: AppConfig.ProxyPort,
+		User: AppConfig.ProxyUser,
+		Pass: AppConfig.ProxyPass,
+	})
 }

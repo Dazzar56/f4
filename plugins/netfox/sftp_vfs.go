@@ -19,6 +19,7 @@ import (
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/text/encoding"
 
+	"github.com/unxed/f4/internal/netproxy"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 )
@@ -90,9 +91,9 @@ func (v *SFTPVFS) encodePath(p string) string {
 	return p
 }
 
-func NewSFTPVFS(parent vfs.VFS, host, port, user, pass string, timeout int, cp string) (*SFTPVFS, error) {
+func NewSFTPVFS(parent vfs.VFS, host, port, user, pass string, timeout int, cp string, px netproxy.Settings) (*SFTPVFS, error) {
 	vtui.DebugLog("NET: Initiating SFTP connection to %s:%s (user: %s)", host, port, user)
-	sshClient, err := DialSSH(host, port, user, pass, timeout)
+	sshClient, err := DialSSH(host, port, user, pass, timeout, px)
 	if err != nil {
 		return nil, err
 	}
@@ -701,7 +702,7 @@ func (p *sftpProvider) Open(ctx context.Context, parent vfs.VFS, pth string) (vf
 			timeout = t
 		}
 	}
-	return NewSFTPVFS(parent, cfg.Host, port, cfg.User, cfg.Pass, timeout, cfg.Codepage)
+	return NewSFTPVFS(parent, cfg.Host, port, cfg.User, cfg.Pass, timeout, cfg.Codepage, cfg.Proxy())
 }
 
 type sftpProtocolHandler struct{}

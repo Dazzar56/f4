@@ -59,6 +59,7 @@ const (
 	CmPlugins
 	CmHotkeyConfig
 	CmUpdateSettings
+	CmProxySettings
 	CmBookmarks
 	CmSwitchToViewer
 	CmSwitchToEditor

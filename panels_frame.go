@@ -2699,6 +2699,9 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 	case CmUpdateSettings:
 		actionUpdateSettings(pf)
 		return true
+	case CmProxySettings:
+		actionProxySettings()
+		return true
 	case CmPlugins:
 		actionManagePlugins(pf)
 		return true

@@ -1036,6 +1036,16 @@ func init() {
 		Handler:             withPF(func(pf *PanelsFrame) { vtui.FrameManager.EmitCommand(CmUpdateSettings, nil) }),
 	})
 	RegisterAction(Action{
+		Name:        "Settings.Proxy",
+		Area:        "Shell",
+		Label:       "Proxy Settings",
+		LabelKey:    "Menu.ProxySettings",
+		Description: "Configure the proxy used for updates, plugins and network connections",
+		DescKey:     "Action.Settings.Proxy.Desc",
+		MenuPath:    "Options",
+		Handler:     withPF(func(pf *PanelsFrame) { vtui.FrameManager.EmitCommand(CmProxySettings, nil) }),
+	})
+	RegisterAction(Action{
 		Name:                "Settings.PluginConfiguration",
 		Area:                "Shell",
 		Label:               "Plugin Configuration",

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	gzip "github.com/klauspost/pgzip"
+	"github.com/unxed/f4/internal/netproxy"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/sevenzip"
 	"github.com/unxed/vtui"
@@ -106,7 +107,8 @@ func CheckForUpdates(pf *PanelsFrame, manual bool) {
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
 	req.Header.Set("User-Agent", "f4-updater")
 
-	resp, err := http.DefaultClient.Do(req)
+	// Everything f4 fetches goes through the configured proxy, if any.
+	resp, err := netproxy.HTTPClient(0).Do(req)
 	if err != nil {
 		reportUpdateError(manual, "Network error: "+err.Error())
 		return
@@ -230,7 +232,7 @@ func performUpdate(pf *PanelsFrame, url, archiveKind, newTag, publishedAt string
 		}
 		req.Header.Set("User-Agent", "f4-updater")
 
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := netproxy.HTTPClient(0).Do(req)
 		if err != nil {
 			return err
 		}

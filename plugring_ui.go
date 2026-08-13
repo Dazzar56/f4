@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/mattn/go-runewidth"
+	"github.com/unxed/f4/internal/netproxy"
 	"github.com/unxed/vtui"
 )
 
@@ -264,7 +265,7 @@ func actionInstallPlugRingItem(pf *PanelsFrame, parent *vtui.Window, item PlugRi
 			}
 			req.Header.Set("User-Agent", "f4-plugring")
 
-			resp, err := http.DefaultClient.Do(req)
+			resp, err := netproxy.HTTPClient(0).Do(req)
 			if err != nil {
 				return err
 			}
