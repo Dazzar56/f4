@@ -82,6 +82,10 @@ type EditorView struct {
 	pasteBuffer []rune
 	asyncBuf    *AsyncBuffer
 	indexCancel context.CancelFunc
+	// indexing is true from StartIndexing until that run ends, by completion
+	// or by cancellation. indexCancel cannot answer the question: it is left
+	// set after a normal finish, so it reads as "indexing forever".
+	indexing    bool
 	renderBytes []byte          // Reusable buffer for text data
 	renderCells []vtui.CharInfo // Reusable buffer for row rendering
 
@@ -506,6 +510,145 @@ func (ev *EditorView) invalidateStates(fromLine int) {
 	}
 }
 
+// Background highlighting runs in slices on the UI thread: highlighters are
+// not thread safe and the Colorer session is a pooled external resource. What
+// a slice may cost is therefore a wall-clock budget, not a line count. The
+// same 2500 lines are a few milliseconds of Chroma and roughly a hundred of
+// Colorer, so a fixed count is either a wasted frame or a visible freeze,
+// depending on which highlighter happens to be selected.
+const (
+	// hlSliceBudget is the longest stall one slice may put on the UI thread.
+	hlSliceBudget = 4 * time.Millisecond
+	// hlClockStride is how many lines pass between two clock readings inside
+	// a slice. Reading the clock per line is measurable next to a fast
+	// highlighter; eight lines keep the overshoot small even for a slow one.
+	hlClockStride = 8
+	// Share of wall-clock time, in percent, the walker may occupy.
+	hlDutyIndexing = 10 // line index still building: it owns the machine
+	hlDutyVisible  = 50 // viewport is waiting for colours, the user sees it
+	hlDutyAhead    = 25 // walking past the viewport, nobody is looking yet
+	// Bounds for the gap between two slices.
+	hlIdleMin = 1 * time.Millisecond
+	hlIdleMax = 100 * time.Millisecond
+	// A slice that highlighted nothing is waiting for the piece table to
+	// load. Retry, but give up after a while and let the next render restart
+	// the walker instead of polling the task queue forever.
+	hlStallIdle      = 10 * time.Millisecond
+	hlMaxStallSlices = 100
+)
+
+// highlightSlicePlan is what one slice did and when the next one may start.
+// It crosses from the UI thread back to the walker goroutine, which is why
+// every view field the decision depends on is read inside the slice itself.
+type highlightSlicePlan struct {
+	done  bool
+	lines int
+	work  time.Duration
+	idle  time.Duration
+}
+
+// highlightDuty reports the share of wall-clock time the walker may spend on
+// the UI thread.
+//
+// While the line index is still being built the walker yields to it. The
+// scroll bar, Ctrl+End and any restore of a saved position all wait for the
+// index, and on a 38MB log that wait is what the user actually notices;
+// colours arriving a few seconds later are not.
+func highlightDuty(behindViewport, indexing bool) int {
+	switch {
+	case indexing:
+		return hlDutyIndexing
+	case behindViewport:
+		return hlDutyVisible
+	default:
+		return hlDutyAhead
+	}
+}
+
+// highlightIdleGap turns the time a slice spent into the pause that keeps the
+// walker at the requested duty cycle.
+func highlightIdleGap(work time.Duration, duty int) time.Duration {
+	if duty >= 100 {
+		return 0
+	}
+	if duty <= 0 {
+		return hlIdleMax
+	}
+	idle := work * time.Duration(100-duty) / time.Duration(duty)
+	if idle < hlIdleMin {
+		idle = hlIdleMin
+	}
+	if idle > hlIdleMax {
+		idle = hlIdleMax
+	}
+	return idle
+}
+
+// highlightSlice extends the state chain for at most hlSliceBudget and
+// reports what it managed. It runs on the UI thread, so the budget is exactly
+// the stall the user can feel; how many lines fit into it is left to the
+// highlighter.
+func (ev *EditorView) highlightSlice(bgAttr uint64) highlightSlicePlan {
+	var plan highlightSlicePlan
+
+	lineCount := ev.li.LineCount()
+	cIdx := len(ev.lineStates)
+	if cIdx >= lineCount {
+		plan.done = true
+		return plan
+	}
+
+	// Sampled here, on the thread that owns these fields. The previous
+	// version read the viewport from the walker goroutine while the UI thread
+	// was writing it, and GetLogLineAtVisualRow updates the wrap engine's
+	// caches as a side effect.
+	startLogLine, _ := ev.engine.GetLogLineAtVisualRow(ev.ScrollTopRow)
+	behind := cIdx < startLogLine
+
+	start := time.Now()
+	for cIdx < lineCount {
+		lStart := ev.li.GetLineOffset(cIdx)
+		lineLen := ev.getLineLength(cIdx)
+		if lineLen > 64*1024 {
+			lineLen = 64 * 1024
+		}
+
+		var prevState any
+		if cIdx > 0 {
+			prevState = ev.lineStates[cIdx-1]
+		}
+
+		lineData, err := ev.pt.GetRange(lStart, lineLen)
+		if err == piecetable.ErrLoading {
+			break
+		}
+
+		_, nextState := ev.highlighter.Highlight(string(lineData), prevState, bgAttr)
+		ev.lineStates = append(ev.lineStates, nextState)
+		cIdx++
+		plan.lines++
+
+		if plan.lines%hlClockStride == 0 && time.Since(start) >= hlSliceBudget {
+			break
+		}
+	}
+	plan.work = time.Since(start)
+	plan.done = cIdx >= ev.li.LineCount()
+
+	if plan.lines == 0 {
+		plan.idle = hlStallIdle
+	} else {
+		plan.idle = highlightIdleGap(plan.work, highlightDuty(behind, ev.indexing))
+	}
+
+	vStart, _ := ev.engine.GetLogLineAtVisualRow(ev.ScrollTopRow)
+	vEnd := vStart + (ev.Y2 - ev.Y1) + 1
+	if cIdx >= vStart && cIdx-plan.lines <= vEnd+400 {
+		vtui.FrameManager.Redraw()
+	}
+	return plan
+}
+
 func (ev *EditorView) startHighlighting() {
 	if ev.highlighter == nil || ev.highlighting {
 		return
@@ -530,30 +673,26 @@ func (ev *EditorView) startHighlighting() {
 
 		bgAttr := ColorerEditorBaseAttr(vtui.Palette[ColEditorText])
 
+		startedAt := time.Now()
+		walked := 0
+		stalls := 0
+		var uiTime time.Duration
+
+		defer func() {
+			vtui.DebugLog("EDITOR: Highlight walker stopped: %d lines, %v on the UI thread, %v wall clock",
+				walked, uiTime, time.Since(startedAt))
+		}()
+
+		plans := make(chan highlightSlicePlan, 1)
+
 		for {
 			if ctx.Err() != nil || ev.IsDone() {
 				return
 			}
 
-			startLogLine, _ := ev.engine.GetLogLineAtVisualRow(ev.ScrollTopRow)
-			height := ev.Y2 - ev.Y1
-			if height <= 0 {
-				height = 24
-			}
-
-			currIdx := len(ev.lineStates)
-
-			batchSize := 200
-			sleepDur := 15 * time.Millisecond
-			if currIdx < startLogLine {
-				batchSize = 2500
-				sleepDur = 2 * time.Millisecond
-			}
-
-			batchDone := make(chan bool, 1)
-
 			vtui.FrameManager.PostTask(func() {
-				defer func() { batchDone <- true }()
+				plan := highlightSlicePlan{done: true}
+				defer func() { plans <- plan }()
 
 				if ctx.Err() != nil {
 					return
@@ -562,64 +701,32 @@ func (ev *EditorView) startHighlighting() {
 					cancel() // Self-terminate stale worker loop
 					return
 				}
-
-				lineCount := ev.li.LineCount()
-				cIdx := len(ev.lineStates)
-				if cIdx >= lineCount {
-					return
-				}
-
-				limit := cIdx + batchSize
-				if limit > lineCount {
-					limit = lineCount
-				}
-
-				for cIdx < limit {
-					lStart := ev.li.GetLineOffset(cIdx)
-					lineLen := ev.getLineLength(cIdx)
-					if lineLen > 64*1024 {
-						lineLen = 64 * 1024
-					}
-
-					var prevState any
-					if cIdx > 0 {
-						prevState = ev.lineStates[cIdx-1]
-					}
-
-					lineData, err := ev.pt.GetRange(lStart, lineLen)
-					if err == piecetable.ErrLoading {
-						break
-					}
-
-					_, nextState := ev.highlighter.Highlight(string(lineData), prevState, bgAttr)
-					ev.lineStates = append(ev.lineStates, nextState)
-					cIdx++
-				}
-
-				vStart, _ := ev.engine.GetLogLineAtVisualRow(ev.ScrollTopRow)
-				vEnd := vStart + (ev.Y2 - ev.Y1) + 1
-
-				shouldRedraw := len(ev.lineStates) >= vStart && len(ev.lineStates)-batchSize <= vEnd+400
-				if shouldRedraw {
-					vtui.FrameManager.Redraw()
-				}
+				plan = ev.highlightSlice(bgAttr)
 			})
 
+			var plan highlightSlicePlan
 			select {
 			case <-ctx.Done():
 				return
-			case <-batchDone:
+			case plan = <-plans:
 			}
 
+			walked += plan.lines
+			uiTime += plan.work
+			if plan.lines == 0 {
+				stalls++
+			} else {
+				stalls = 0
+			}
+
+			if plan.done || stalls >= hlMaxStallSlices {
+				return
+			}
 			if ctx.Err() != nil || ev.IsDone() {
 				return
 			}
 
-			time.Sleep(sleepDur)
-
-			if len(ev.lineStates) >= ev.li.LineCount() {
-				return
-			}
+			time.Sleep(plan.idle)
 		}
 	}()
 }
@@ -2029,6 +2136,27 @@ func (ev *EditorView) GetMenuBar() *vtui.MenuBar {
 	return ev.menuBar
 }
 
+// The async buffer hands data over as it loads. A single fixed sleep is a
+// hard cap on indexing throughput: when the loader delivers pieces smaller
+// than one chunk, the indexer spends the whole load asleep rather than
+// scanning. Backing off geometrically from a short first wait keeps that loss
+// bounded without turning a slow VFS into a busy loop.
+const (
+	indexPollMin = 200 * time.Microsecond
+	indexPollMax = 5 * time.Millisecond
+)
+
+func nextIndexPoll(cur time.Duration) time.Duration {
+	next := cur * 2
+	if next < indexPollMin {
+		next = indexPollMin
+	}
+	if next > indexPollMax {
+		next = indexPollMax
+	}
+	return next
+}
+
 func (ev *EditorView) StartIndexing() {
 	if ev.asyncBuf == nil {
 		return
@@ -2042,11 +2170,28 @@ func (ev *EditorView) StartIndexing() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	ev.indexCancel = cancel
+	ev.indexing = true
 
 	go func() {
+		startedAt := time.Now()
+		indexed, batches := 0, 0
+		var waited time.Duration
+
+		// Runs on completion and on cancellation alike, so the flag the
+		// highlight walker throttles on can never stay stuck at true.
+		defer func() {
+			vtui.FrameManager.PostTask(func() {
+				if ev.editSession == sessionID {
+					ev.indexing = false
+				}
+				vtui.DebugLog("EDITOR: Indexer stopped: %d lines in %v, %v of it waiting for data, %d UI batches",
+					indexed, time.Since(startedAt), waited, batches)
+			})
+		}()
 
 		absPos := 0
 		chunkSize := 1024 * 1024 // 1MB chunks for fast disk I/O
+		poll := indexPollMin
 		buf := ev.asyncBuf
 		li := ev.li
 		maxSize := buf.Size()
@@ -2065,9 +2210,12 @@ func (ev *EditorView) StartIndexing() {
 
 			data, err := buf.Read(absPos, chunkSize)
 			if err == piecetable.ErrLoading {
-				time.Sleep(20 * time.Millisecond)
+				time.Sleep(poll)
+				waited += poll
+				poll = nextIndexPoll(poll)
 				continue
 			}
+			poll = indexPollMin
 			if err != nil {
 				break
 			}
@@ -2089,6 +2237,8 @@ func (ev *EditorView) StartIndexing() {
 			if len(pendingOffsets) >= 5000 || absPos >= maxSize {
 				currentBatch := pendingOffsets
 				batchEnd := absPos
+				indexed += len(currentBatch)
+				batches++
 				pendingOffsets = make([]int, 0, 10000)
 
 				vtui.FrameManager.PostTask(func() {

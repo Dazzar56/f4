@@ -145,13 +145,75 @@ change.
 
 - [x] Phase 1 — instant unhighlighted rendering on distant jumps (0ms initial delay)
 - [x] Phase 2 — throttled background walker (non-blocking state catch-up)
+- [x] Phase 2a — slices bounded by wall clock, not by line count; walker yields
+      to the line indexer while a file is still being opened
 - [ ] Phase 0 — seam
 - [ ] Phase 3 — checkpoints
 - [ ] Phase 4 — feedback
 - [ ] Phase 5 — Colorer
 - [ ] Phase 6 — optional fast path
 
-**Current step:** none started. Next: phase 0.
+**Current step:** phase 2a landed, waiting for numbers from the reporter. Next:
+phase 0 unless the log points elsewhere.
+
+### Phase 2a — what changed and why
+
+Reported on top of phase 2: opening a 38MB / 600k line log takes about half a
+minute with a jumping scroll bar, Colorer slower than Chroma but both slow.
+
+The scroll bar tracks `LineIndex.LineCount()`, so what the user watches for
+those thirty seconds is the *indexer*, not the colours. Yet the choice of
+highlighter changes the wait — which can only happen if the two are competing.
+They are: `StartIndexing` publishes each batch of offsets through
+`FrameManager.PostTask`, and the phase 2 walker ran its batches through the
+same queue, on the same thread.
+
+The walker sized a batch in lines: 200 normally, 2500 when it was still behind
+the viewport. A line is not a unit of time. 2500 lines is a few milliseconds of
+Chroma and around a hundred of Colorer, so on a file this size the queue spent
+most of its time inside the highlighter and the indexer's batches waited their
+turn. Fixed in three parts:
+
+- a slice now runs until `hlSliceBudget` (4ms) of wall clock is up, checking
+  the clock every `hlClockStride` lines. The stall is bounded whatever the
+  highlighter costs per line, and a fast one gets more lines done per slice
+  than the old fixed 200;
+- the pause between slices is derived from the work just done, so the walker
+  holds a duty cycle instead of a fixed sleep: `hlDutyVisible` when the
+  viewport is still uncoloured, `hlDutyAhead` when it is walking past it, and
+  `hlDutyIndexing` while the index is still being built. The index wins,
+  because the scroll bar, `Ctrl+End` and position restore all wait for it;
+- the schedule is computed inside the slice, on the UI thread. Phase 2 sampled
+  `ScrollTopRow`, `lineStates` and `GetLogLineAtVisualRow` from the walker
+  goroutine while the UI thread was writing them.
+
+`EditorView.indexing` is the flag the duty cycle reads. `indexCancel` could not
+serve: it is left non-nil after a normal finish, so it reads as "indexing
+forever".
+
+Also on the indexer side: the retry after `piecetable.ErrLoading` was a flat
+20ms, which caps indexing at 50 chunk reads per second whenever the reader
+outruns the loader. It now backs off from `indexPollMin` to `indexPollMax`.
+
+### Phase 2a — what to measure next
+
+Both loops now log a summary at `--debug`:
+
+    EDITOR: Indexer stopped: N lines in T, W of it waiting for data, B UI batches
+    EDITOR: Highlight walker stopped: N lines, U on the UI thread, T wall clock
+
+That splits the wait three ways, and the next step depends on which one is
+large:
+
+- **W dominates** — the indexer is asleep on the async buffer, not scanning.
+  The problem is in `async_buffer.go` / `piecetable.PieceTable.Read`, not here;
+  pull those two files.
+- **T minus W dominates with few batches** — the per-batch UI work is the cost.
+  Suspects are `LineIndex.AppendOffsets` and `WrapEngine.InvalidateFrom`; pull
+  `piecetable/lineindex.go` and `textlayout/wrap.go`.
+- **the walker's U is comparable to the indexer's T** — the duty cycle is still
+  too generous, or `Highlight` is being called for lines nobody will look at.
+  That is phase 3, and phase 6 for the wasted attribute slices.
 
 **Notes carried between sessions:**
 - Word wrap is off by default, so `WrapEngine.ensureRowCountCache` is the cheap
@@ -160,3 +222,10 @@ change.
   `Ctrl+End`.
 - Quick check that the diagnosis still holds: set `EditorHighlighter = None`
   and press `Ctrl+End` — it should be instant.
+- Second quick check, for the open-time report: `EditorHighlighter = None` and
+  open the file. If it is still slow, nothing in this document is involved and
+  the cost is in the loader or the line index.
+- The slice budget and the three duty levels are constants in `editor_view.go`.
+  If they turn out to need tuning per machine, they are the obvious candidates
+  for `AppConfig` (principle 5), but do not add settings before the numbers ask
+  for them.

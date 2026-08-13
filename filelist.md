@@ -185,6 +185,8 @@
     ├── fs_info_other.go
     ├── fs_info_windows.go
     ├── fusefs
+    │   ├── bench-all.sh
+    │   ├── BENCH.md
     │   ├── bench.sh
     │   ├── bridge.go
     │   ├── bridge_test.go
@@ -262,6 +264,7 @@
     ├── highlight_files_test.go
     ├── HIGHLIGHTING.md
     ├── highlight.ini
+    ├── HIGHLIGHT.md
     ├── history_dialog.go
     ├── history_dialog_test.go
     ├── history_hint_test.go
@@ -587,6 +590,7 @@
     │   │   ├── proxy_dialog.go
     │   │   ├── registry.go
     │   │   ├── sftp_command_test.go
+    │   │   ├── sftp_uri.go
     │   │   ├── sftp_vfs.go
     │   │   ├── ssh_dial.go
     │   │   ├── ssh_pty.go
@@ -638,6 +642,7 @@
     ├── pty_bsd_dragonfly.go
     ├── pty_bsd_freebsd.go
     ├── pty_bsd.go
+    ├── pty_bsd_test.go
     ├── pty_darwin.go
     ├── pty_interface.go
     ├── pty_ptm.go
@@ -878,4 +883,4 @@
     ├── workspace_session.go
     └── workspace_session_test.go
     
-    55 directories, 822 files
+    55 directories, 827 files
