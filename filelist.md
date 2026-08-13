@@ -120,10 +120,6 @@
     ├── cpu_info_other.go
     ├── cpu_info_windows.go
     ├── debug.1.log
-    ├── debug.2.log
-    ├── debug.3.log
-    ├── debug.4.log
-    ├── debug.5.log
     ├── debug.log
     ├── delete_trash_test.go
     ├── detach_unix.go
@@ -135,6 +131,7 @@
     ├── drives_unix.go
     ├── drives_windows.go
     ├── editor_delta_test.go
+    ├── editor_fade.go
     ├── editor_features_test.go
     ├── editor_find_all.go
     ├── editor_find_all_test.go
@@ -162,6 +159,8 @@
     ├── file_associations_test.go
     ├── file_associations_ui.go
     ├── filelist_update.sh
+    ├── file_mask.go
+    ├── file_mask_test.go
     ├── file_op_dialog.go
     ├── file_op_dialog_test.go
     ├── file_ops.go
@@ -188,6 +187,7 @@
     ├── fs_info_other.go
     ├── fs_info_windows.go
     ├── fusefs
+    │   ├── bench.sh
     │   ├── bridge.go
     │   ├── bridge_test.go
     │   ├── cli.go
@@ -200,6 +200,7 @@
     │   ├── platform_other.go
     │   ├── platform_unix.go
     │   ├── registry.go
+    │   ├── staged_test.go
     │   └── writers_test.go
     ├── FUSE.md
     ├── fuse_mount_action.go
@@ -221,6 +222,8 @@
     ├── gui_font_test.go
     ├── gui_unix.go
     ├── gui_windows.go
+    ├── hang_dump_unix.go
+    ├── hang_dump_windows.go
     ├── hardcoded_strings_test.go
     ├── help
     │   ├── ar.hlf
@@ -304,9 +307,12 @@
     ├── input_translation.go
     ├── input_translation_test.go
     ├── internal
-    │   └── hideconsole
-    │       ├── go.mod
-    │       └── hideconsole.go
+    │   ├── hideconsole
+    │   │   ├── go.mod
+    │   │   └── hideconsole.go
+    │   └── netproxy
+    │       ├── netproxy.go
+    │       └── netproxy_test.go
     ├── issue149_test.go
     ├── issue54_test.go
     ├── keybar_injected_test.go
@@ -580,6 +586,7 @@
     │   │   ├── lang_test.go
     │   │   ├── netfox.go
     │   │   ├── netfox_test.go
+    │   │   ├── proxy_dialog.go
     │   │   ├── registry.go
     │   │   ├── sftp_command_test.go
     │   │   ├── sftp_vfs.go
@@ -621,16 +628,23 @@
     ├── plugring_test.go
     ├── plugring_ui.go
     ├── plugring_ui_test.go
+    ├── PORTABILITY_BSD.md
     ├── portable_test.go
     ├── process_environment.go
     ├── process_environment_runtime_unix.go
     ├── process_environment_runtime_windows.go
     ├── process_environment_shell.go
     ├── process_environment_test.go
+    ├── proxy_settings_test.go
+    ├── proxy_settings_ui.go
+    ├── pty_bsd_dragonfly.go
+    ├── pty_bsd_freebsd.go
     ├── pty_bsd.go
     ├── pty_darwin.go
     ├── pty_interface.go
     ├── pty_ptm.go
+    ├── pty_ptm_netbsd.go
+    ├── pty_ptm_openbsd.go
     ├── pty_solaris.go
     ├── pty_test.go
     ├── pty_unix.go
@@ -679,6 +693,8 @@
     ├── solaris_pty_backend_test.go
     ├── solaris_pty.go
     ├── solaris_streams.go
+    ├── solaris_streams_mock_linux_test.go
+    ├── solaris_streams_mock_other_test.go
     ├── solaris_streams_mock_test.go
     ├── solaris_streams_test.go
     ├── style_combo_colors_test.go
@@ -864,4 +880,4 @@
     ├── workspace_session.go
     └── workspace_session_test.go
     
-    54 directories, 809 files
+    55 directories, 824 files
