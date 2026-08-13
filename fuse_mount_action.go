@@ -57,9 +57,9 @@ func init() {
 // that object when the user walks out of it.
 func init() {
 	RegisterAction(Action{
-		Name:  "Panel.MountRW",
-		Area:  "Shell",
-		Label: "Mount via FUSE (read-write)",
+		Name:        "Panel.MountRW",
+		Area:        "Shell",
+		Label:       "Mount via FUSE (read-write)",
 		Description: "Mount what the active panel shows as a writable directory",
 		MenuPath:    "Commands",
 		Visible:     fusefs.Supported,

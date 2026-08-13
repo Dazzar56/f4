@@ -118,7 +118,7 @@ func ManageSessions() {
 			if selected.PID == 0 {
 				startNewSession()
 			} else {
-				runClient(selected.SockPath)
+				runClient(selected.SockPath, selected.PID)
 			}
 			return
 		} else {
@@ -164,20 +164,27 @@ func startNewSession() {
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	runClient(sockPath)
+	// The daemon's pid is known here. Letting runClient look it up instead
+	// would race: it resolves the pid through listSessions(), i.e. through
+	// the json that runServer writes *after* creating the socket, while the
+	// loop above waits only for the socket itself. Losing that race is
+	// silent — serverPID stays 0 and SIGWINCH is simply never forwarded, so
+	// a fresh session never learns that the terminal was resized.
+	runClient(sockPath, cmd.Process.Pid)
 }
 
-func runClient(sockPath string) {
+func runClient(sockPath string, serverPID int) {
 	vtui.DebugLog("CLIENT: Start runClient, target socket: %s", sockPath)
 	if !term.IsTerminal(int(os.Stdin.Fd())) {
 		vtui.DebugLog("CLIENT: WARNING: os.Stdin (fd %d) is not a terminal!", os.Stdin.Fd())
 	}
 
-	var serverPID int
-	for _, s := range listSessions() {
-		if s.SockPath == sockPath {
-			serverPID = s.PID
-			break
+	if serverPID <= 0 {
+		for _, s := range listSessions() {
+			if s.SockPath == sockPath {
+				serverPID = s.PID
+				break
+			}
 		}
 	}
 	if serverPID > 0 {
@@ -216,6 +223,7 @@ func runClient(sockPath string) {
 	n, oobn, err := conn.WriteMsgUnix([]byte("ATTACH"), oob, raddr)
 	if err != nil {
 		vtui.DebugLog("CLIENT: ATTACH FAILURE: Failed to send FDs to daemon at %s: %v", sockPath, err)
+		syscall.Close(notifyPipe[1])
 		return
 	}
 	vtui.DebugLog("CLIENT: FDs transmitted (sent %d bytes, %d oob). Relinquishing terminal control.", n, oobn)
@@ -223,7 +231,18 @@ func runClient(sockPath string) {
 
 	vtui.DebugLog("CLIENT: Waiting for server signal on pipe %d...", notifyPipe[0])
 	dummy := make([]byte, 1)
-	nRead, err := syscall.Read(notifyPipe[0], dummy)
+	var nRead int
+	for {
+		nRead, err = syscall.Read(notifyPipe[0], dummy)
+		// Go installs its signal handlers with SA_RESTART, so this is rare
+		// rather than impossible. Returning on EINTR would hand the shell
+		// its prompt back while the daemon still owns the terminal and is
+		// drawing into it.
+		if err == syscall.EINTR {
+			continue
+		}
+		break
+	}
 	vtui.DebugLog("CLIENT: Server released pipe. nRead=%d, err=%v", nRead, err)
 }
 
