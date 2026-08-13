@@ -206,10 +206,12 @@ func TestUpdater_Extractors(t *testing.T) {
 	if err := sw.Close(); err != nil {
 		t.Fatal(err)
 	}
-	sevenFile.Close()
-	runtime.KeepAlive(sevenFile)
+	defer sevenFile.Close()
 
-	sevenData, _ := os.ReadFile(sevenPath)
+	sevenData, err := os.ReadFile(sevenPath)
+	if err != nil {
+		t.Fatal(err)
+	}
 	dest7z := t.TempDir()
 	err = extract7zToDir(sevenData, dest7z)
 	if err != nil {
@@ -223,6 +225,8 @@ func TestUpdater_Extractors(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dest7z, "etc", "passwd")); !os.IsNotExist(err) {
 		t.Error("7z Zip Slip vulnerability detected (absolute path extracted)!")
 	}
+	runtime.KeepAlive(sw)
+	runtime.KeepAlive(sevenFile)
 }
 
 func TestUpdater_GetCurrentVersion(t *testing.T) {
