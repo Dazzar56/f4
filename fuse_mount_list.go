@@ -160,6 +160,16 @@ func showMountList(pf *PanelsFrame) {
 			return
 		}
 		if i < 0 {
+			// Same courtesy as a single unmount: our own panel must
+			// not be the thing that makes the unmount fail.
+			if fsp := pf.getActivePanel(); fsp != nil && fsp.vfs != nil {
+				for _, r := range liveRows(rows) {
+					if withinMount(fsp.vfs.GetPath(), r.point) {
+						pf.NavigateToPath(fsp, filepath.Dir(r.point))
+						break
+					}
+				}
+			}
 			unmountAll(rows)
 			// Same as a single unmount: if anything is still up, the
 			// list is where the user was.
