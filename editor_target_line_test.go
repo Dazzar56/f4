@@ -181,3 +181,45 @@ func TestEditorView_IndexerAppliesTargetLineWhenFileShrank(t *testing.T) {
 		t.Fatalf("cursor at line %d, want the last line %d", ev.CursorLine, want)
 	}
 }
+
+// A saved position deep in a large file takes seconds to become reachable,
+// and until phase 1 of this the editor showed nothing at all for that whole
+// time. Blank is only allowed for as long as a flicker would have lasted.
+func TestEditor_BlankWhileRestoringIsTimeBoxed(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	var sb strings.Builder
+	for i := 0; i < 200; i++ {
+		fmt.Fprintf(&sb, "line %d\n", i)
+	}
+	ev := NewEditorView(piecetable.New([]byte(sb.String())), nil, "test.txt")
+	defer ev.Close()
+	ev.SetPosition(0, 0, 80, 10)
+	ev.targetLine = 150
+
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+
+	painted := func() bool {
+		for x := 0; x < 20; x++ {
+			if scr.GetCell(x, 1).Char != ' ' {
+				return true
+			}
+		}
+		return false
+	}
+
+	ev.Show(scr)
+	if painted() {
+		t.Error("the editor painted the document before the restore had a chance to land")
+	}
+
+	ev.opened = time.Now().Add(-2 * restoreBlankGrace)
+	ev.Show(scr)
+	if !painted() {
+		t.Error("the editor is still blank long after the grace period; the user is watching nothing")
+	}
+	if ev.targetLine != 150 {
+		t.Error("drawing the document must not abandon the pending restore")
+	}
+}

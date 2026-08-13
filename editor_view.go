@@ -120,6 +120,9 @@ type EditorView struct {
 	acMatches    []string
 	acCurrentIdx int
 
+	// opened is when this view was created, and the clock restoreBlankGrace
+	// is measured against.
+	opened       time.Time
 	targetLine   int
 	targetPos    int
 	targetTopRow int
@@ -266,6 +269,7 @@ func newEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string, useEditorC
 		WordWrap:        false,
 		ShowWhitespaces: false,
 		cleanState:      pt.GetState(),
+		opened:          time.Now(),
 		targetLine:      -1,
 		targetPos:       -1,
 		targetTopRow:    -1,
@@ -552,6 +556,10 @@ func (ev *EditorView) lineTextForHighlight(idx int) (string, bool) {
 // Colorer, so a fixed count is either a wasted frame or a visible freeze,
 // depending on which highlighter happens to be selected.
 const (
+	// restoreBlankGrace is how long the editor stays blank waiting for a
+	// saved position to become reachable. Past it the document is drawn from
+	// the top and the restore, when it lands, costs one frame.
+	restoreBlankGrace = 250 * time.Millisecond
 	// hlSliceBudget is the longest stall one slice may put on the UI thread.
 	hlSliceBudget = 4 * time.Millisecond
 	// hlClockStride is how many lines pass between two clock readings inside
@@ -845,9 +853,11 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 	// A saved position deep in the file is restored only once the background
 	// indexer has reached that line. Painting the top of the file until then
 	// means the whole screen jumps the moment it does, which reads as a
-	// flicker and undoes the point of easing the colours in. An empty area
-	// costs the same wait and stays quiet.
-	if ev.targetLine != -1 {
+	// flicker, so the wait is left blank — but only for as long as a flicker
+	// would have lasted. On a 40MB file the index needs seconds to reach a
+	// position saved near the end, and seconds of an empty window is the
+	// worse of the two.
+	if ev.targetLine != -1 && time.Since(ev.opened) < restoreBlankGrace {
 		scr.FillRect(ev.X1, ev.Y1+1, ev.X2, ev.Y2, ' ', bgAttr)
 		return
 	}
