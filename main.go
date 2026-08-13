@@ -202,7 +202,7 @@ func main() {
 		return
 	}
 	if clientPath != "" {
-		runClient(clientPath)
+		runClient(clientPath, 0)
 		return
 	}
 	if cpuprofile != "" {
