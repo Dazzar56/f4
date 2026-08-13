@@ -72,6 +72,7 @@ func TestClearNonBlock_ClearsFlag(t *testing.T) {
 		t.Fatalf("O_NONBLOCK still set after clearNonBlock")
 	}
 }
+
 // mechanism behind the #429 investigation (PORTABILITY_BSD.md, 4.1): fds
 // received via SCM_RIGHTS carry no FD_CLOEXEC, so a child process spawned
 // afterwards (e.g. the built-in terminal's shell, via initPTY) inherits them
