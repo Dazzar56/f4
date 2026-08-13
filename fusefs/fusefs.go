@@ -325,6 +325,16 @@ func (m *Mount) Active() bool {
 }
 
 // Wait blocks until the mount has ended and all cleanup has completed.
+// Stats renders what this mount asked of its backend, or "" unless
+// F4_FUSE_STATS is set. It is printed when the mount ends, which is the only
+// moment the whole picture exists.
+func (m *Mount) Stats() string {
+	if m == nil || m.bridge == nil {
+		return ""
+	}
+	return m.bridge.statsReport()
+}
+
 func (m *Mount) Wait() {
 	if m == nil {
 		return

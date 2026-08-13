@@ -133,7 +133,17 @@ func mountAndServe(spec *Spec, stdout, stderr io.Writer) int {
 	emit(stdout, spec.JSON, readyMessage{OK: true, MountPoint: mountPoint, PID: os.Getpid()},
 		mountPoint+"\n")
 
+	// Held from here rather than looked up afterwards: by the time the wait
+	// returns the mount is gone from the registry, which is exactly when
+	// its tally is finally complete.
+	mounted := Find(mountPoint)
+
 	waitOrSignal(wait, mountPoint)
+	if mounted != nil {
+		if report := mounted.Stats(); report != "" {
+			fmt.Fprint(stderr, report)
+		}
+	}
 	return ExitOK
 }
 

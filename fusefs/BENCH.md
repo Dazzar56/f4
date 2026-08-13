@@ -42,6 +42,30 @@ held per call cannot explain a 65x gap against a single-threaded reader, so
 either the per-open cost is much higher than `tar` makes it look, or something
 in the read path is doing far more work than the request needs.
 
+## Counting what the mount actually asks for
+
+`F4_FUSE_STATS=1` makes a mount tally every call it makes to its backend and
+print the tally when it ends:
+
+    F4_FUSE_STATS=1 ./f4 --mount sftp://user@host/path --foreground
+    # in another shell: run the slow command, then ./f4 --umount <point>
+
+    f4 fuse: VFS calls made by this mount
+      ReadDir           2 calls          0s total       100µs each
+      Open             20 calls          0s total         9µs each
+      Stat             21 calls          0s total         7µs each
+      ReadAt           20 calls          0s total         1µs each
+
+A benchmark can only say that something is slow. This says which call is being
+made and how many times, which is the part that says why — a backend answering
+500 opens is a different problem from one answering 50 000 lookups, and from
+the outside the two look identical.
+
+For the search outlier the question it answers is precise: if `grep` produces
+roughly the same call counts as `tar` and each call is slower, the problem is
+in the calls; if it produces vastly more of them, the problem is that the read
+path is doing work the request never asked for.
+
 ## Next
 
 * Find out what the search actually does differently — per-file open cost, or

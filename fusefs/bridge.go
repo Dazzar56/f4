@@ -3,10 +3,12 @@ package fusefs
 import (
 	"context"
 	"errors"
+	"fmt"
 	"hash/fnv"
 	"io"
 	"os"
 	"path"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -56,6 +58,74 @@ type bridge struct {
 	// reading something else.
 	writeMu sync.Mutex
 	writers map[string]*writeHandle
+
+	// stats counts VFS calls and the time spent in them, when
+	// F4_FUSE_STATS is set. Off by default: a mount should not pay for
+	// bookkeeping nobody asked for.
+	statsOn bool
+	statsMu sync.Mutex
+	stats   map[string]*opStat
+}
+
+// opStat is one operation's tally.
+type opStat struct {
+	calls int64
+	total time.Duration
+}
+
+// track times one VFS call. The returned function must be called when the
+// call finishes; it costs a map lookup and is skipped entirely when stats are
+// off.
+//
+// This exists because a benchmark can only say that something is slow. Which
+// call is being made, and how many times, is the part that says why: a
+// backend answering 500 opens is a different problem from one answering
+// 50 000 lookups, and the two are indistinguishable from the outside.
+func (b *bridge) track(op string) func() {
+	if !b.statsOn {
+		return func() {}
+	}
+	start := time.Now()
+	return func() {
+		elapsed := time.Since(start)
+		b.statsMu.Lock()
+		st, ok := b.stats[op]
+		if !ok {
+			st = &opStat{}
+			b.stats[op] = st
+		}
+		st.calls++
+		st.total += elapsed
+		b.statsMu.Unlock()
+	}
+}
+
+// StatsReport renders the tally, busiest first, or "" when stats are off.
+func (b *bridge) statsReport() string {
+	if !b.statsOn {
+		return ""
+	}
+	b.statsMu.Lock()
+	defer b.statsMu.Unlock()
+	if len(b.stats) == 0 {
+		return ""
+	}
+	names := make([]string, 0, len(b.stats))
+	for name := range b.stats {
+		names = append(names, name)
+	}
+	sort.Slice(names, func(i, j int) bool {
+		return b.stats[names[i]].total > b.stats[names[j]].total
+	})
+	var sb strings.Builder
+	sb.WriteString("f4 fuse: VFS calls made by this mount\n")
+	for _, name := range names {
+		st := b.stats[name]
+		per := st.total / time.Duration(st.calls)
+		fmt.Fprintf(&sb, "  %-12s %6d calls  %10s total  %10s each\n",
+			name, st.calls, st.total.Truncate(time.Millisecond), per.Truncate(time.Microsecond))
+	}
+	return sb.String()
 }
 
 // writeHandle is one file being written through the mount, shared by every
@@ -215,6 +285,8 @@ func newBridge(v vfs.VFS, root string, opts Options) *bridge {
 		cacheTTL: ttl,
 		dirCache: make(map[string]dirCacheEntry),
 		writers:  make(map[string]*writeHandle),
+		statsOn:  os.Getenv("F4_FUSE_STATS") != "",
+		stats:    make(map[string]*opStat),
 	}
 }
 
@@ -260,9 +332,11 @@ func (b *bridge) readDir(ctx context.Context, dirPath string) ([]vfs.VFSItem, er
 		return nil, errClosed
 	}
 	var items []vfs.VFSItem
+	doneList := b.track("ReadDir")
 	err := b.v.ReadDir(ctx, dirPath, func(chunk []vfs.VFSItem) {
 		items = append(items, chunk...)
 	})
+	doneList()
 	b.mu.Unlock()
 	if err != nil {
 		return nil, err
@@ -308,7 +382,9 @@ func (b *bridge) stat(ctx context.Context, itemPath string) (vfs.VFSItem, error)
 		b.mu.Unlock()
 		return vfs.VFSItem{}, errClosed
 	}
+	done := b.track("Stat")
 	item, err := b.v.Stat(ctx, itemPath)
+	done()
 	b.mu.Unlock()
 	if err == nil {
 		return item, nil
@@ -418,7 +494,9 @@ func (b *bridge) open(ctx context.Context, itemPath string, size int64) (*handle
 		b.mu.Unlock()
 		return nil, errClosed
 	}
+	doneOpen := b.track("Open")
 	reader, err := b.v.Open(ctx, itemPath)
+	doneOpen()
 	random := b.randomOK
 	b.mu.Unlock()
 	if err != nil {
@@ -468,7 +546,9 @@ func (h *handle) spool(ctx context.Context) error {
 			tmp.Close()
 			return errClosed
 		}
+		doneChunk := h.b.track("Read(spool)")
 		n, readErr := h.r.Read(ctx, buf)
+		doneChunk()
 		h.b.mu.Unlock()
 		if n > 0 {
 			if _, err := tmp.Write(buf[:n]); err != nil {
@@ -526,7 +606,9 @@ func (h *handle) readAt(ctx context.Context, dest []byte, off int64) (int, error
 	if h.b.closed {
 		return 0, errClosed
 	}
+	doneRead := h.b.track("ReadAt")
 	n, err := reader.ReadAt(ctx, dest, off)
+	doneRead()
 	if err == io.EOF {
 		err = nil
 	}
