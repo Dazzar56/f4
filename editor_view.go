@@ -594,7 +594,7 @@ func (ev *EditorView) highlightSlice(bgAttr uint64) highlightSlicePlan {
 	lineCount := ev.li.LineCount()
 	cIdx := len(ev.lineStates)
 	if cIdx >= lineCount {
-		plan.done = true
+		plan.done = !ev.indexing
 		return plan
 	}
 
@@ -633,7 +633,7 @@ func (ev *EditorView) highlightSlice(bgAttr uint64) highlightSlicePlan {
 		}
 	}
 	plan.work = time.Since(start)
-	plan.done = cIdx >= ev.li.LineCount()
+	plan.done = cIdx >= ev.li.LineCount() && !ev.indexing
 
 	if plan.lines == 0 {
 		plan.idle = hlStallIdle
@@ -713,13 +713,14 @@ func (ev *EditorView) startHighlighting() {
 
 			walked += plan.lines
 			uiTime += plan.work
+
 			if plan.lines == 0 {
 				stalls++
 			} else {
 				stalls = 0
 			}
 
-			if plan.done || stalls >= hlMaxStallSlices {
+			if plan.done || (stalls >= hlMaxStallSlices && !ev.indexing) {
 				return
 			}
 			if ctx.Err() != nil || ev.IsDone() {
@@ -846,6 +847,17 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 			const syncHighlightGapLimit = 50
 			if logIdx >= len(ev.lineStates)+syncHighlightGapLimit {
 				ev.startHighlighting()
+
+				// Allow stateless highlighters (like Chroma) to provide instant colors
+				if _, isColorer := ev.highlighter.(*ColorerHighlighter); !isColorer {
+					lStart := ev.li.GetLineOffset(logIdx)
+					highlightLen := lineLen
+					if highlightLen > 64*1024 {
+						highlightLen = 64 * 1024
+					}
+					lineData, _ := ev.pt.GetRange(lStart, highlightLen)
+					lineSyntax, _ = ev.highlighter.Highlight(string(lineData), nil, bgAttr)
+				}
 			} else {
 				for len(ev.lineStates) <= logIdx {
 					currIdx := len(ev.lineStates)
@@ -1575,6 +1587,7 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 		if ev.selActive || ev.rectSelActive {
 			ev.DeleteSelection()
 		} else {
+			ev.noteBufferEdit()
 			ev.saveUndo(opOther)
 			ev.modified = true
 			offset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
@@ -1625,6 +1638,7 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 		if ev.selActive || ev.rectSelActive {
 			ev.DeleteSelection()
 		} else {
+			ev.noteBufferEdit()
 			ev.saveUndo(opOther)
 			ev.modified = true
 			offset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
@@ -1653,6 +1667,7 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 		return true
 
 	case vtinput.VK_RETURN:
+		ev.noteBufferEdit()
 		ev.saveUndo(opOther)
 		if ev.selActive || ev.rectSelActive {
 			ev.inGroup = true
@@ -1701,6 +1716,7 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 
 	case vtinput.VK_TAB:
 		if !shift && !ctrl && !alt {
+			ev.noteBufferEdit()
 			ev.saveUndo(opTyping)
 			if ev.selActive || ev.rectSelActive {
 				ev.inGroup = true
@@ -1746,6 +1762,7 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 	}
 
 	if e.Char != 0 && ctrl == false {
+		ev.noteBufferEdit()
 		ev.saveUndo(opTyping)
 		if ev.selActive || ev.rectSelActive {
 			ev.inGroup = true
@@ -2270,6 +2287,9 @@ func (ev *EditorView) StartIndexing() {
 					}
 
 					ev.engine.InvalidateFrom(lastLineBefore)
+					if ev.highlighter != nil && !ev.highlighting && len(ev.lineStates) < li.LineCount() {
+						ev.startHighlighting()
+					}
 					vtui.FrameManager.Redraw()
 				})
 			}
@@ -2295,6 +2315,9 @@ func (ev *EditorView) StartIndexing() {
 					ev.ensureCursorVisible()
 					ev.updateDesiredVisualCol()
 					vtui.FrameManager.Redraw()
+				}
+				if ev.highlighter != nil && !ev.highlighting && len(ev.lineStates) < li.LineCount() {
+					ev.startHighlighting()
 				}
 			}
 		})

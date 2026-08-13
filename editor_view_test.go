@@ -259,6 +259,43 @@ func TestEditor_StatefulHighlighting_BackgroundCatchUpAfterEdit(t *testing.T) {
 		t.Errorf("Expected background highlighting to process lines past 1400 even if edited is true, got %d", len(ev.lineStates))
 	}
 }
+func TestEditor_BackgroundHighlighting_FullCoverage(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	var sb strings.Builder
+	for i := 0; i < 500; i++ {
+		fmt.Fprintf(&sb, "line %d\n", i)
+	}
+	pt := piecetable.New([]byte(sb.String()))
+	ev := NewEditorView(pt, nil, "test.txt")
+	defer ev.Close()
+	ev.SetPosition(0, 0, 80, 10)
+
+	mh := &mockStatefulHighlighter{}
+	ev.highlighter = mh
+
+	// Simulate indexing in progress
+	ev.indexing = true
+	ev.startHighlighting()
+
+	// Finish indexing after a short delay
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		vtui.FrameManager.PostTask(func() {
+			ev.indexing = false
+		})
+	}()
+
+	timeout := time.After(2 * time.Second)
+	for len(ev.lineStates) < 500 {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatalf("Background highlighting did not reach end of file: expected 500 states, got %d", len(ev.lineStates))
+		}
+	}
+}
 
 // waitPtString waits for a PieceTable to settle and returns its content as string.
 // Used for tests involving AsyncBuffers.

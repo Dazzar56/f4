@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	maxCachedAttrLines  = 8192
-	attrCacheKeepWindow = 2048
+	maxCachedAttrLines  = 5000000
+	attrCacheKeepWindow = 1000000
 )
 
 // The style bits an hrd assign carries, as StyledRegion defines them.
@@ -525,9 +525,11 @@ func (ch *ColorerHighlighter) Highlight(line string, prevState any, baseAttr uin
 		return attrs, logIdx
 	}
 
-	// Guard against heavy synchronous backward resyncs during UI rendering.
-	// Allow fast resync if logIdx is near top of document (< 2000 lines) or close behind parsedIdx (< 2000 lines).
-	if logIdx < ch.parsedIdx-2000 && logIdx >= 2000 {
+	// Guard against heavy synchronous backward or forward resyncs during UI rendering.
+	if logIdx < ch.parsedIdx-100 {
+		return nil, logIdx
+	}
+	if logIdx > ch.parsedIdx+100 {
 		return nil, logIdx
 	}
 
@@ -558,13 +560,12 @@ func (ch *ColorerHighlighter) Highlight(line string, prevState any, baseAttr uin
 			ch.lines = ch.lines[:logIdx]
 			ch.dropCacheFrom(logIdx)
 		}
-		ch.lines = append(ch.lines, line)
+		if logIdx == len(ch.lines) {
+			ch.lines = append(ch.lines, line)
+		}
 	}
 
-	if logIdx < ch.parsedIdx-100 {
-		if attrs, ok := ch.attrCache[logIdx]; ok {
-			return attrs, logIdx
-		}
+	if logIdx > ch.parsedIdx+100 {
 		return nil, logIdx
 	}
 
@@ -621,15 +622,32 @@ func (ch *ColorerHighlighter) resync(upTo int) {
 	}
 
 	from := ch.parsedIdx
-	if colorerNeedsRewind(from, upTo) {
-		ch.session.Reset()
-		firstLine := ch.firstLine
-		if len(ch.lines) > 0 {
-			firstLine = ch.lines[0]
+	isRewind := colorerNeedsRewind(from, upTo)
+
+	if isRewind {
+		if upTo <= 2000 {
+			// Short rewind from 0 is fast enough
+			ch.session.Reset()
+			firstLine := ch.firstLine
+			if len(ch.lines) > 0 {
+				firstLine = ch.lines[0]
+			}
+			_, _ = ch.session.SelectType(ch.filename, firstLine)
+			from = 0
+		} else {
+			// Rewind is too deep. Parsing from 0 would freeze the UI.
+			// Reset and start statelessly at upTo.
+			ch.session.Reset()
+			ch.parsedIdx = upTo
+			return
 		}
-		_, _ = ch.session.SelectType(ch.filename, firstLine)
-		from = 0
+	} else if upTo-from > 2000 {
+		// Massive forward jump. Shouldn't happen due to guards, but just in case.
+		ch.session.Reset()
+		ch.parsedIdx = upTo
+		return
 	}
+
 	for i := from; i < upTo; i++ {
 		_, _ = ch.session.ParseLine(ch.lines[i])
 	}
