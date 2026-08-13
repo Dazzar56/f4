@@ -131,6 +131,9 @@ type EditorView struct {
 	CursorVirtualSpaces int
 	UseEditorConfig     bool
 
+	highlighting    bool
+	highlightCancel context.CancelFunc
+
 	// OnClose, if set, fires once after the editor has been torn down.
 	// Used by callers (e.g. the user menu's Ctrl+F4 handler) that want
 	// to react to the file content once the user is done editing.
@@ -219,6 +222,10 @@ type editorState struct {
 func (ev *EditorView) Close() {
 	if GlobalFileState != nil && ev.filePath != "" {
 		GlobalFileState.SaveEditorStateAsync(FileStateKey(ev.vfs, ev.filePath), ev.CursorLine, ev.CursorPos, ev.ScrollTopRow, ev.ScrollLeft, ev.WordWrap)
+	}
+	if ev.highlightCancel != nil {
+		ev.highlightCancel()
+		ev.highlightCancel = nil
 	}
 	if ev.indexCancel != nil {
 		ev.indexCancel()
@@ -310,6 +317,20 @@ func newEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string, useEditorC
 	ev.scrollBar.SetOwner(ev)
 	ev.scrollBar.OnScroll = func(v int) {
 		ev.ScrollTopRow = v
+		height := ev.Y2 - ev.Y1
+		if height > 0 {
+			startLogLine, _ := ev.engine.GetLogLineAtVisualRow(ev.ScrollTopRow)
+			endLogLine, _ := ev.engine.GetLogLineAtVisualRow(ev.ScrollTopRow + height - 1)
+			if ev.CursorLine < startLogLine {
+				ev.CursorLine = startLogLine
+				ev.CursorPos = 0
+				ev.updateDesiredVisualCol()
+			} else if ev.CursorLine > endLogLine {
+				ev.CursorLine = endLogLine
+				ev.CursorPos = 0
+				ev.updateDesiredVisualCol()
+			}
+		}
 		vtui.FrameManager.Redraw()
 	}
 	ev.menuBar = vtui.NewMenuBar(nil)
@@ -475,9 +496,134 @@ func (ev *EditorView) Redo() {
 	vtui.DebugLog("EDITOR: Executed Redo, remaining: %d, modified: %v", len(ev.redoStack), ev.modified)
 }
 func (ev *EditorView) invalidateStates(fromLine int) {
+	if ev.highlightCancel != nil {
+		ev.highlightCancel()
+		ev.highlightCancel = nil
+	}
 	if fromLine < len(ev.lineStates) {
 		ev.lineStates = ev.lineStates[:fromLine]
 	}
+}
+
+func (ev *EditorView) startHighlighting() {
+	if ev.highlighter == nil || ev.highlighting {
+		return
+	}
+	if len(ev.lineStates) >= ev.li.LineCount() {
+		return
+	}
+
+	ev.highlighting = true
+	sessionID := ev.editSession
+
+	ctx, cancel := context.WithCancel(context.Background())
+	ev.highlightCancel = cancel
+
+	go func() {
+		defer func() {
+			vtui.FrameManager.PostTask(func() {
+				ev.highlighting = false
+				vtui.FrameManager.Redraw()
+			})
+		}()
+
+		bgAttr := ColorerEditorBaseAttr(vtui.Palette[ColEditorText])
+
+		for {
+			if ctx.Err() != nil || ev.IsDone() {
+				return
+			}
+
+			startLogLine, _ := ev.engine.GetLogLineAtVisualRow(ev.ScrollTopRow)
+			height := ev.Y2 - ev.Y1
+			if height <= 0 {
+				height = 24
+			}
+
+			currIdx := len(ev.lineStates)
+
+			batchSize := 200
+			sleepDur := 15 * time.Millisecond
+			if currIdx < startLogLine {
+				batchSize = 2500
+				sleepDur = 2 * time.Millisecond
+			}
+
+			batchDone := make(chan bool, 1)
+
+			vtui.FrameManager.PostTask(func() {
+				defer func() { batchDone <- true }()
+
+				if ctx.Err() != nil {
+					return
+				}
+				if ev.editSession != sessionID || ev.highlighter == nil {
+					cancel() // Self-terminate stale worker loop
+					return
+				}
+
+				lineCount := ev.li.LineCount()
+				cIdx := len(ev.lineStates)
+				if cIdx >= lineCount {
+					return
+				}
+
+				limit := cIdx + batchSize
+				if limit > lineCount {
+					limit = lineCount
+				}
+
+				for cIdx < limit {
+					lStart := ev.li.GetLineOffset(cIdx)
+					lEnd := ev.pt.Size()
+					if cIdx+1 < lineCount {
+						lEnd = ev.li.GetLineOffset(cIdx + 1)
+					}
+					if lEnd-lStart > 64*1024 {
+						lEnd = lStart + 64*1024
+					}
+
+					var prevState any
+					if cIdx > 0 {
+						prevState = ev.lineStates[cIdx-1]
+					}
+
+					lineData, err := ev.pt.GetRange(lStart, lEnd-lStart)
+					if err == piecetable.ErrLoading {
+						break
+					}
+
+					_, nextState := ev.highlighter.Highlight(string(lineData), prevState, bgAttr)
+					ev.lineStates = append(ev.lineStates, nextState)
+					cIdx++
+				}
+
+				vStart, _ := ev.engine.GetLogLineAtVisualRow(ev.ScrollTopRow)
+				vEnd := vStart + (ev.Y2 - ev.Y1) + 1
+
+				shouldRedraw := len(ev.lineStates) >= vStart && len(ev.lineStates)-batchSize <= vEnd+400
+				if shouldRedraw {
+					vtui.FrameManager.Redraw()
+				}
+			})
+
+			select {
+			case <-ctx.Done():
+				return
+			case <-batchDone:
+			}
+
+			if ctx.Err() != nil || ev.IsDone() {
+				return
+			}
+
+			time.Sleep(sleepDur)
+
+			if len(ev.lineStates) >= ev.li.LineCount() {
+				return
+			}
+		}
+	}()
 }
 func (ev *EditorView) ensureEngineWidth() {
 	width := ev.X2 - ev.X1 + 1
@@ -590,49 +736,55 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 		// Stateful Highlighting
 		var lineSyntax []uint64
 		if ev.highlighter != nil {
-			// Ensure we have computed states up to this line
-			for len(ev.lineStates) <= logIdx {
-				currIdx := len(ev.lineStates)
-				lStart := ev.li.GetLineOffset(currIdx)
-				lEnd := ev.pt.Size()
-				if currIdx+1 < ev.li.LineCount() {
-					lEnd = ev.li.GetLineOffset(currIdx + 1)
-				}
-				// Prevent highlighter from crashing on huge binary lines
-				if lEnd-lStart > 64*1024 {
-					lEnd = lStart + 64*1024
-				}
+			// Catch up synchronously only if the uncomputed gap is small (<= 50 lines).
+			// For large jumps, render unhighlighted immediately and compute in background.
+			const syncHighlightGapLimit = 50
+			if logIdx >= len(ev.lineStates)+syncHighlightGapLimit {
+				ev.startHighlighting()
+			} else {
+				for len(ev.lineStates) <= logIdx {
+					currIdx := len(ev.lineStates)
+					lStart := ev.li.GetLineOffset(currIdx)
+					lEnd := ev.pt.Size()
+					if currIdx+1 < ev.li.LineCount() {
+						lEnd = ev.li.GetLineOffset(currIdx + 1)
+					}
+					// Prevent highlighter from crashing on huge binary lines
+					if lEnd-lStart > 64*1024 {
+						lEnd = lStart + 64*1024
+					}
 
-				var prevState any
-				if currIdx > 0 {
-					prevState = ev.lineStates[currIdx-1]
-				}
+					var prevState any
+					if currIdx > 0 {
+						prevState = ev.lineStates[currIdx-1]
+					}
 
-				lineData, err := ev.pt.GetRange(lStart, lEnd-lStart)
-				if err == piecetable.ErrLoading {
-					break // Wait for data
-				}
+					lineData, err := ev.pt.GetRange(lStart, lEnd-lStart)
+					if err == piecetable.ErrLoading {
+						break // Wait for data
+					}
 
-				attrs, nextState := ev.highlighter.Highlight(string(lineData), prevState, bgAttr)
-				ev.lineStates = append(ev.lineStates, nextState)
-				if currIdx == logIdx {
-					lineSyntax = attrs
+					attrs, nextState := ev.highlighter.Highlight(string(lineData), prevState, bgAttr)
+					ev.lineStates = append(ev.lineStates, nextState)
+					if currIdx == logIdx {
+						lineSyntax = attrs
+					}
 				}
-			}
-			if logIdx < len(ev.lineStates) && lineSyntax == nil {
-				// State was already cached, but we need the actual attributes for the current visible line
-				lStart := ev.li.GetLineOffset(logIdx)
-				// Re-apply highlighter OOM protection for the rendering path
-				highlightLen := lineLen
-				if highlightLen > 64*1024 {
-					highlightLen = 64 * 1024
+				if logIdx < len(ev.lineStates) && lineSyntax == nil {
+					// State was already cached, but we need the actual attributes for the current visible line
+					lStart := ev.li.GetLineOffset(logIdx)
+					// Re-apply highlighter OOM protection for the rendering path
+					highlightLen := lineLen
+					if highlightLen > 64*1024 {
+						highlightLen = 64 * 1024
+					}
+					lineData, _ := ev.pt.GetRange(lStart, highlightLen)
+					var prevState any
+					if logIdx > 0 {
+						prevState = ev.lineStates[logIdx-1]
+					}
+					lineSyntax, _ = ev.highlighter.Highlight(string(lineData), prevState, bgAttr)
 				}
-				lineData, _ := ev.pt.GetRange(lStart, highlightLen)
-				var prevState any
-				if logIdx > 0 {
-					prevState = ev.lineStates[logIdx-1]
-				}
-				lineSyntax, _ = ev.highlighter.Highlight(string(lineData), prevState, bgAttr)
 			}
 		}
 
@@ -688,8 +840,10 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 			scr.Write(ev.X1-ev.ScrollLeft, currY, ev.renderCells)
 
 			lineBg := bgAttr
-			if ch, ok := ev.highlighter.(*ColorerHighlighter); ok {
-				lineBg = ch.GetLineBackground(logIdx, bgAttr)
+			if logIdx < len(ev.lineStates) {
+				if ch, ok := ev.highlighter.(*ColorerHighlighter); ok {
+					lineBg = ch.GetLineBackground(logIdx, bgAttr)
+				}
 			}
 			fillBg := lineBg
 			if isCrossRow && horzCrossAttr != 0 {

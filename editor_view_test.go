@@ -124,6 +124,131 @@ func TestEditor_HighlightingInvalidation(t *testing.T) {
 	}
 }
 
+func TestEditor_StatefulHighlighting_InstantDistantJump(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	var sb strings.Builder
+	for i := 0; i < 2500; i++ {
+		fmt.Fprintf(&sb, "line %d\n", i)
+	}
+	pt := piecetable.New([]byte(sb.String()))
+	ev := NewEditorView(pt, nil, "test.txt")
+	defer ev.Close()
+	ev.SetPosition(0, 0, 80, 10)
+
+	mh := &mockStatefulHighlighter{}
+	ev.highlighter = mh
+
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+
+	// Jump to a distant line (> 50 lines ahead)
+	ev.CursorLine = 2400
+	ev.ensureCursorVisible()
+
+	// Show must return immediately without calculating all 2400 line states
+	ev.Show(scr)
+
+	if len(ev.lineStates) > 50 {
+		t.Errorf("Expected distant jump to render unhighlighted instantly without sync backfill, got %d states", len(ev.lineStates))
+	}
+}
+func TestEditor_StatefulHighlighting_DynamicCatchUpSpeed(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	var sb strings.Builder
+	for i := 0; i < 5000; i++ {
+		fmt.Fprintf(&sb, "line %d\n", i)
+	}
+	pt := piecetable.New([]byte(sb.String()))
+	ev := NewEditorView(pt, nil, "test.txt")
+	defer ev.Close()
+	ev.SetPosition(0, 0, 80, 10)
+
+	mh := &mockStatefulHighlighter{}
+	ev.highlighter = mh
+
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+
+	ev.CursorLine = 4500
+	ev.ensureCursorVisible()
+
+	ev.Show(scr)
+
+	timeout := time.After(1 * time.Second)
+	for len(ev.lineStates) < 4500 {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatalf("Fast catch-up failed: expected lineStates >= 4500 within 1s, got %d", len(ev.lineStates))
+		}
+	}
+}
+func TestEditorView_ScrollBarOnScrollAdjustsCursor(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	var sb strings.Builder
+	for i := 0; i < 500; i++ {
+		fmt.Fprintf(&sb, "line %d\n", i)
+	}
+	pt := piecetable.New([]byte(sb.String()))
+	ev := NewEditorView(pt, nil, "test.txt")
+	defer ev.Close()
+	ev.SetPosition(0, 0, 80, 10)
+
+	ev.CursorLine = 0
+	ev.CursorPos = 0
+
+	if ev.scrollBar != nil && ev.scrollBar.OnScroll != nil {
+		ev.scrollBar.OnScroll(200)
+	}
+
+	if ev.CursorLine < 200 {
+		t.Errorf("Expected CursorLine to be adjusted into visible viewport (>= 200), got %d", ev.CursorLine)
+	}
+}
+func TestEditor_StatefulHighlighting_BackgroundCatchUpAfterEdit(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	var sb strings.Builder
+	for i := 0; i < 1500; i++ {
+		fmt.Fprintf(&sb, "line %d\n", i)
+	}
+	pt := piecetable.New([]byte(sb.String()))
+	ev := NewEditorView(pt, nil, "test.txt")
+	defer ev.Close()
+	ev.SetPosition(0, 0, 80, 10)
+
+	mh := &mockStatefulHighlighter{}
+	ev.highlighter = mh
+
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+
+	ev.edited = true
+
+	ev.CursorLine = 1400
+	ev.ensureCursorVisible()
+
+	ev.Show(scr)
+
+	timeout := time.After(2 * time.Second)
+	for len(ev.lineStates) < 1400 {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Timeout waiting for background highlighting to catch up when edited is true")
+		}
+	}
+
+	if len(ev.lineStates) < 1400 {
+		t.Errorf("Expected background highlighting to process lines past 1400 even if edited is true, got %d", len(ev.lineStates))
+	}
+}
+
 // waitPtString waits for a PieceTable to settle and returns its content as string.
 // Used for tests involving AsyncBuffers.
 func waitPtString(t *testing.T, pt *piecetable.PieceTable) string {

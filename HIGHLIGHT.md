@@ -143,9 +143,9 @@ change.
 
 ## 5. Status
 
+- [x] Phase 1 — instant unhighlighted rendering on distant jumps (0ms initial delay)
+- [x] Phase 2 — throttled background walker (non-blocking state catch-up)
 - [ ] Phase 0 — seam
-- [ ] Phase 1 — stop the freeze
-- [ ] Phase 2 — background walker
 - [ ] Phase 3 — checkpoints
 - [ ] Phase 4 — feedback
 - [ ] Phase 5 — Colorer
