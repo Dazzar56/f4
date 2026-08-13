@@ -190,27 +190,61 @@ func MountSource(source string, opts Options) (*Mount, error) {
 	if strings.TrimSpace(opts.Source) == "" {
 		opts.Source = source
 	}
-	var v vfs.VFS
-	var err error
+	v, err := resolveSource(ctx, source)
+	if err != nil {
+		return nil, err
+	}
+	return MountVFS(ctx, v, opts)
+}
 
-	prov := vfs.FindProvider(ctx, nil, source)
-	if prov != nil {
-		v, err = prov.Open(ctx, nil, source)
+// resolveSource turns a source string into a VFS the mount will own.
+//
+// The three kinds of source are resolved through three different registries,
+// and using the wrong one is silent rather than loud: a URI handed to the
+// path resolver becomes a relative filename, and a file handed to a provider
+// with no parent becomes a provider that cannot read it.
+func resolveSource(ctx context.Context, source string) (vfs.VFS, error) {
+	// A URI — sftp://, ftp:// and friends — lives in the URI registry.
+	// FindProvider does not look there, which is why a mount of
+	// sftp://host/srv used to end up stat()ing a directory called "sftp:".
+	if vfs.IsURIPath(source) {
+		prov := vfs.FindURIProvider(source)
+		if prov == nil {
+			return nil, fmt.Errorf("no handler for %s", source)
+		}
+		v, err := prov.OpenURI(ctx, nil, source)
 		if err != nil {
 			return nil, fmt.Errorf("open source %s: %w", source, err)
 		}
-	} else {
-		abs, err := filepath.Abs(source)
-		if err != nil {
-			return nil, err
-		}
-		if _, err := os.Stat(abs); err != nil {
-			return nil, err
-		}
-		v = vfs.NewOSVFS(abs)
+		return v, nil
 	}
 
-	return MountVFS(ctx, v, opts)
+	abs, err := filepath.Abs(source)
+	if err != nil {
+		return nil, err
+	}
+	st, err := os.Stat(abs)
+	if err != nil {
+		return nil, err
+	}
+	if st.IsDir() {
+		return vfs.NewOSVFS(abs), nil
+	}
+
+	// A file may be an archive. The provider needs something to read it
+	// through, so it gets a fresh OSVFS on the containing directory —
+	// fresh, because a mount owns what it was given and closes it. Passing
+	// nil here is what made a mounted archive come up empty: the provider
+	// accepted the file, then had no way to open it.
+	parent := vfs.NewOSVFS(filepath.Dir(abs))
+	if prov := vfs.FindProvider(ctx, parent, abs); prov != nil {
+		v, err := prov.Open(ctx, parent, abs)
+		if err != nil {
+			return nil, fmt.Errorf("open source %s: %w", source, err)
+		}
+		return v, nil
+	}
+	return nil, fmt.Errorf("%s is a file nothing can mount", source)
 }
 
 // Unmount detaches the mount identified by target (an ID or a mount point).

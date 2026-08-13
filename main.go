@@ -37,11 +37,14 @@ func main() {
 	// --mount, --umount and --list-mounts are answered here and nowhere
 	// else: they are a command, not a way to start the file manager. RunCLI
 	// reports handled=false for every argument vector that says nothing
-	// about mounting, so normal startup carries on untouched. It sits after
-	// the askpass and sudo hooks because a helper process is not a command
-	// line at all, and before everything else because a daemon child must
-	// not build a UI it will never draw.
-	if code, handled := fusefs.RunCLI(os.Args); handled {
+	// about mounting, so normal startup carries on untouched.
+	//
+	// The built-in plugins are loaded first, because they are what registers
+	// the VFS providers: without them the registry is empty, an archive
+	// resolves to a plain file and sftp:// resolves to a directory called
+	// "sftp:". Nothing else of the UI is started — a mount command must not
+	// build panels it will never draw.
+	if code, handled := runMountCLI(); handled {
 		os.Exit(code)
 	}
 
@@ -659,4 +662,16 @@ func isHexSequence(s []rune) bool {
 
 func isHexChar(r rune) bool {
 	return (r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')
+}
+
+// runMountCLI answers the mount command line, with the VFS providers loaded
+// and nothing else. It is separate from InitCore because a command needs the
+// providers and none of the terminal, the session or the panels.
+func runMountCLI() (int, bool) {
+	if cmd, _, _ := fusefs.ParseArgs(os.Args); cmd == fusefs.CmdNone {
+		return 0, false
+	}
+	GlobalPluginManager = NewPluginManager()
+	GlobalPluginManager.LoadInternal()
+	return fusefs.RunCLI(os.Args)
 }
