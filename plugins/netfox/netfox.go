@@ -95,6 +95,11 @@ func (p *NetFoxPlugin) Init(api vfs.HostAPI) error {
 		}
 		return &netFoxVFSWrapper{NewNetFoxVFS(filepath.Join(cfgDir, "NetFox.json"))}
 	})
+	// sftp:// as a string, for every caller that has no stored connection
+	// to point at: the mount command line, an fstab line, a script.
+	if err := api.RegisterURIProvider(&sftpURIProvider{}); err != nil {
+		return err
+	}
 	return nil
 }
 
