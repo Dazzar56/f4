@@ -20,6 +20,8 @@ const (
 )
 
 // errClosed is returned once the mount has released its VFS.
+var errNoSymlinks = errors.New("this file system has no symbolic links")
+
 var errClosed = errors.New("mount is closed")
 
 // bridge owns one vfs.VFS and turns path-based FUSE requests into calls on
@@ -676,6 +678,42 @@ func (b *bridge) setAttributes(ctx context.Context, itemPath string, item vfs.VF
 	err := b.v.SetAttributes(ctx, itemPath, item)
 	b.mu.Unlock()
 	b.invalidate(path.Dir(itemPath))
+	return err
+}
+
+// readlink asks the backend what a link points at. A backend with no links
+// answers "not supported", which is how a link ends up presented as an
+// ordinary file — the behaviour every mount had before this existed.
+func (b *bridge) readlink(ctx context.Context, itemPath string) (string, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.closed {
+		return "", errClosed
+	}
+	sl, ok := b.v.(vfs.SymlinkVFS)
+	if !ok {
+		return "", errNoSymlinks
+	}
+	return sl.Readlink(ctx, itemPath)
+}
+
+// symlink creates a link. tar -x makes symlinks, so an extraction into a
+// mount that cannot make them simply fails — which is the honest outcome, and
+// far better than an extraction that quietly produces regular files.
+func (b *bridge) symlink(ctx context.Context, target, dirPath, name string) error {
+	b.mu.Lock()
+	if b.closed {
+		b.mu.Unlock()
+		return errClosed
+	}
+	sl, ok := b.v.(vfs.SymlinkVFS)
+	if !ok {
+		b.mu.Unlock()
+		return errNoSymlinks
+	}
+	err := sl.Symlink(ctx, target, b.join(dirPath, name))
+	b.mu.Unlock()
+	b.invalidate(dirPath)
 	return err
 }
 

@@ -883,3 +883,18 @@ type FileProgress interface {
 	DirDone()
 	FileSkipped()
 }
+
+// SymlinkVFS is implemented by backends that have real symbolic links.
+//
+// It is deliberately optional rather than part of VFS: an archive listing has
+// no link target to give, and a backend that cannot make links should fail
+// the attempt rather than silently create something else. Callers type-assert
+// and fall back to treating a link as an ordinary file, which is what f4 did
+// everywhere before this existed.
+type SymlinkVFS interface {
+	// Readlink returns what the link points at, unresolved.
+	Readlink(ctx context.Context, path string) (string, error)
+	// Symlink creates linkPath pointing at target. target is stored as
+	// given: a relative link has to stay relative.
+	Symlink(ctx context.Context, target, linkPath string) error
+}

@@ -79,6 +79,8 @@ var (
 	_ = (fs.NodeRenamer)((*node)(nil))
 	_ = (fs.NodeCreater)((*node)(nil))
 	_ = (fs.NodeSetattrer)((*node)(nil))
+	_ = (fs.NodeReadlinker)((*node)(nil))
+	_ = (fs.NodeSymlinker)((*node)(nil))
 	_ = (fs.FileWriter)((*writeFileHandle)(nil))
 	_ = (fs.FileFlusher)((*writeFileHandle)(nil))
 	_ = (fs.FileReleaser)((*writeFileHandle)(nil))
@@ -341,6 +343,9 @@ func typeBits(item vfs.VFSItem) uint32 {
 	if item.IsDir {
 		return fuse.S_IFDIR
 	}
+	if item.IsSymlink {
+		return fuse.S_IFLNK
+	}
 	return fuse.S_IFREG
 }
 
@@ -354,6 +359,12 @@ func fillAttr(out *fuse.Attr, item vfs.VFSItem, itemPath string) {
 	if item.IsDir {
 		out.Mode = fuse.S_IFDIR | perm
 		out.Nlink = 2
+	} else if item.IsSymlink {
+		// A link reported as a regular file is a link ls -l cannot show
+		// and cp -a cannot copy.
+		out.Mode = fuse.S_IFLNK | perm
+		out.Nlink = 1
+		out.Size = uint64(item.Size)
 	} else {
 		out.Mode = fuse.S_IFREG | perm
 		out.Nlink = 1
@@ -578,4 +589,26 @@ func (n *node) truncate(ctx context.Context, size int64) syscall.Errno {
 		return errnoOf(err)
 	}
 	return 0
+}
+
+func (n *node) Readlink(ctx context.Context) ([]byte, syscall.Errno) {
+	target, err := n.b.readlink(ctx, n.path)
+	if err != nil {
+		return nil, errnoOf(err)
+	}
+	return []byte(target), 0
+}
+
+func (n *node) Symlink(ctx context.Context, target, name string, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
+	if errno := n.writeRefusal(); errno != 0 {
+		return nil, errno
+	}
+	if err := n.b.symlink(ctx, target, n.path, name); err != nil {
+		return nil, errnoOf(err)
+	}
+	childPath := n.b.join(n.path, name)
+	item := vfs.VFSItem{Name: name, IsSymlink: true, Size: int64(len(target)), MTime: time.Now()}
+	fillAttr(&out.Attr, item, childPath)
+	stable := fs.StableAttr{Ino: inodeOf(childPath), Mode: typeBits(item)}
+	return n.NewInode(ctx, &node{b: n.b, path: childPath}, stable), 0
 }

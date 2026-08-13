@@ -559,3 +559,28 @@ func stripExtendedPrefix(p string) string {
 	}
 	return p
 }
+
+// Readlink and Symlink make OSVFS a SymlinkVFS. The local file system is the
+// one backend where a symbolic link is exactly what the word means.
+
+func (v *OSVFS) Readlink(ctx context.Context, path string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	abs, err := v.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	return os.Readlink(prepareOSPath(abs))
+}
+
+func (v *OSVFS) Symlink(ctx context.Context, target, linkPath string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	abs, err := v.Abs(linkPath)
+	if err != nil {
+		return err
+	}
+	return os.Symlink(target, prepareOSPath(abs))
+}
