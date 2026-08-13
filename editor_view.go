@@ -91,6 +91,10 @@ type EditorView struct {
 	highlighter vtui.Highlighter
 	lineStates  []any // Cache of highlighter states per logical line
 
+	// Highlighting arrives late and all at once; these ease it in.
+	syntaxFadeStart time.Time
+	fadeBuf         []uint64
+
 	// Undo/Redo
 	undoStack  []editorState
 	redoStack  []editorState
@@ -522,6 +526,16 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 		return
 	}
 
+	// A saved position deep in the file is restored only once the background
+	// indexer has reached that line. Painting the top of the file until then
+	// means the whole screen jumps the moment it does, which reads as a
+	// flicker and undoes the point of easing the colours in. An empty area
+	// costs the same wait and stays quiet.
+	if ev.targetLine != -1 {
+		scr.FillRect(ev.X1, ev.Y1+1, ev.X2, ev.Y2, ' ', bgAttr)
+		return
+	}
+
 	// Calculate crosshair parameters before usage
 	curOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 	curVRow, curVCol := ev.engine.LogicalToVisual(curOffset)
@@ -669,7 +683,7 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 
 			_, startVCol := ev.engine.LogicalToVisual(frag.ByteOffsetStart)
 			isCrossRow := (absVRow == crossVRow)
-			ev.renderCells = ev.fillCells(ev.renderCells, ev.renderBytes, bgAttr, selAttr, frag.ByteOffsetStart, ev.selActive, selMin, selMax, fragSyntax, startVCol, isCrossRow, crossVCol, horzCrossAttr, vertCrossAttr, absVRow)
+			ev.renderCells = ev.fillCells(ev.renderCells, ev.renderBytes, bgAttr, selAttr, frag.ByteOffsetStart, ev.selActive, selMin, selMax, ev.fadeSyntax(fragSyntax, bgAttr), startVCol, isCrossRow, crossVCol, horzCrossAttr, vertCrossAttr, absVRow)
 
 			scr.Write(ev.X1-ev.ScrollLeft, currY, ev.renderCells)
 
