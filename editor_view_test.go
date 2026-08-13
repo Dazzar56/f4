@@ -153,6 +153,17 @@ func TestEditor_StatefulHighlighting_InstantDistantJump(t *testing.T) {
 		t.Errorf("Expected distant jump to render unhighlighted instantly without sync backfill, got %d states", len(ev.lineStates))
 	}
 }
+func TestEditorView_LineLengthStringConsistency(t *testing.T) {
+	pt := piecetable.New([]byte("line1\nline2\r\nline3"))
+	ev := NewEditorView(pt, nil, "test.txt")
+	defer ev.Close()
+
+	l0 := ev.getLineLength(0)
+	d0, _ := ev.pt.GetRange(ev.li.GetLineOffset(0), l0)
+	if string(d0) != "line1" {
+		t.Errorf("Expected 'line1', got %q", string(d0))
+	}
+}
 func TestEditor_StatefulHighlighting_DynamicCatchUpSpeed(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
@@ -1505,6 +1516,27 @@ func TestEditorView_Indexer_ModifierSafety(t *testing.T) {
 	}
 	if !cancelled {
 		t.Error("Real text input failed to cancel the indexer")
+	}
+}
+func TestEditorView_Indexer_NonEditingKeysDoNotCancel(t *testing.T) {
+	pt := piecetable.New([]byte("test content"))
+	ev := NewEditorView(pt, nil, "test.txt")
+	defer ev.Close()
+
+	cancelled := false
+	ev.indexCancel = func() { cancelled = true }
+	ev.edited = false
+
+	pressKey(ev, &vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_F3,
+	})
+
+	if ev.edited {
+		t.Error("F3 key erroneously set the 'edited' flag")
+	}
+	if cancelled {
+		t.Error("F3 key erroneously cancelled the indexer")
 	}
 }
 

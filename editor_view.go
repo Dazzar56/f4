@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -575,12 +576,9 @@ func (ev *EditorView) startHighlighting() {
 
 				for cIdx < limit {
 					lStart := ev.li.GetLineOffset(cIdx)
-					lEnd := ev.pt.Size()
-					if cIdx+1 < lineCount {
-						lEnd = ev.li.GetLineOffset(cIdx + 1)
-					}
-					if lEnd-lStart > 64*1024 {
-						lEnd = lStart + 64*1024
+					lineLen := ev.getLineLength(cIdx)
+					if lineLen > 64*1024 {
+						lineLen = 64 * 1024
 					}
 
 					var prevState any
@@ -588,7 +586,7 @@ func (ev *EditorView) startHighlighting() {
 						prevState = ev.lineStates[cIdx-1]
 					}
 
-					lineData, err := ev.pt.GetRange(lStart, lEnd-lStart)
+					lineData, err := ev.pt.GetRange(lStart, lineLen)
 					if err == piecetable.ErrLoading {
 						break
 					}
@@ -1105,23 +1103,6 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 		} else {
 			ev.selActive = false
 			ev.rectSelActive = false
-		}
-	}
-
-	// Any key that can reach this point and is not a pure navigation key
-	// should stop the background indexer to prevent index corruption.
-	switch e.VirtualKeyCode {
-	case vtinput.VK_UP, vtinput.VK_DOWN, vtinput.VK_LEFT, vtinput.VK_RIGHT,
-		vtinput.VK_PRIOR, vtinput.VK_NEXT, vtinput.VK_HOME, vtinput.VK_END,
-		vtinput.VK_SHIFT, vtinput.VK_CONTROL, vtinput.VK_MENU:
-		// ignore navigation and modifiers
-	default:
-		if !ev.edited {
-			ev.edited = true
-			ev.editSession++
-			if ev.indexCancel != nil {
-				ev.indexCancel()
-			}
 		}
 	}
 
@@ -2063,15 +2044,14 @@ func (ev *EditorView) StartIndexing() {
 	ev.indexCancel = cancel
 
 	go func() {
+
 		absPos := 0
-		chunkSize := 64 * 1024
+		chunkSize := 1024 * 1024 // 1MB chunks for fast disk I/O
 		buf := ev.asyncBuf
 		li := ev.li
 		maxSize := buf.Size()
 
-		// BATCHING OPTIMIZATION: Collect offsets and update UI in larger chunks
-		// to reduce main thread overhead and prevent "redraw storms".
-		pendingOffsets := make([]int, 0, 1000)
+		pendingOffsets := make([]int, 0, 10000)
 
 		for absPos < maxSize {
 			select {
@@ -2085,33 +2065,31 @@ func (ev *EditorView) StartIndexing() {
 
 			data, err := buf.Read(absPos, chunkSize)
 			if err == piecetable.ErrLoading {
-				time.Sleep(50 * time.Millisecond)
+				time.Sleep(20 * time.Millisecond)
 				continue
 			}
 			if err != nil {
 				break
 			}
 
-			for i, b := range data {
-				if b == '\n' {
-					pendingOffsets = append(pendingOffsets, absPos+i+1)
+			// Fast SIMD-accelerated newline scanning using bytes.IndexByte
+			scanPos := 0
+			for scanPos < len(data) {
+				idx := bytes.IndexByte(data[scanPos:], '\n')
+				if idx == -1 {
+					break
 				}
+				pendingOffsets = append(pendingOffsets, absPos+scanPos+idx+1)
+				scanPos += idx + 1
 			}
 
 			absPos += len(data)
 
-			// Update UI if we have enough lines or reached EOF
-			if len(pendingOffsets) >= 500 || absPos >= maxSize {
+			// Update UI in 5000-line batches to avoid UI thread congestion
+			if len(pendingOffsets) >= 5000 || absPos >= maxSize {
 				currentBatch := pendingOffsets
-				// The closure below runs on the UI thread, and by then the
-				// scanning goroutine has moved absPos on: over FISH+ a burst
-				// of chunks arrives at once and the whole scan can finish
-				// while several batches are still waiting in the queue.
-				// Snapshot how far this batch reached, so "the file is fully
-				// scanned" is a question about the batch and not about the
-				// future.
 				batchEnd := absPos
-				pendingOffsets = make([]int, 0, 1000)
+				pendingOffsets = make([]int, 0, 10000)
 
 				vtui.FrameManager.PostTask(func() {
 					if ctx.Err() != nil || ev.edited || ev.editSession != sessionID {
@@ -2170,7 +2148,6 @@ func (ev *EditorView) StartIndexing() {
 				}
 			}
 		})
-		vtui.DebugLog("INDEXER: Finished for %s", ev.filePath)
 	}()
 }
 

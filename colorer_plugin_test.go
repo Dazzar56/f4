@@ -226,6 +226,45 @@ func TestColorer_HighlighterNilSession(t *testing.T) {
 	_ = ch.Close()
 }
 
+func TestColorer_NoHeavyBackwardSyncOnRender(t *testing.T) {
+	ch := &ColorerHighlighter{
+		parsedIdx: 50000,
+		attrCache: make(map[int][]uint64),
+		bgCache:   make(map[int]uint64),
+	}
+	ch.attrCache[20] = []uint64{1, 2, 3}
+
+	attrs, nextState := ch.Highlight("test line", 19, 0)
+	if len(attrs) != 3 {
+		t.Errorf("Expected cached attributes for line 20, got %v", attrs)
+	}
+	if nextState != 20 {
+		t.Errorf("Expected nextState 20, got %v", nextState)
+	}
+
+	// Uncached line 2500 far behind parsedIdx (50000) should hit guard and return nil
+	attrs2, _ := ch.Highlight("test line 2500", 2499, 0)
+	if attrs2 != nil {
+		t.Errorf("Expected nil for uncached distant line 2500, got %v", attrs2)
+	}
+}
+func TestColorer_StoreAttrsPreservesTopLines(t *testing.T) {
+	ch := &ColorerHighlighter{
+		attrCache: make(map[int][]uint64),
+		bgCache:   make(map[int]uint64),
+	}
+
+	ch.storeAttrs(0, []uint64{100}, 0)
+
+	for i := 1; i < maxCachedAttrLines+100; i++ {
+		ch.storeAttrs(i, []uint64{uint64(i)}, 0)
+	}
+
+	if _, ok := ch.attrCache[0]; !ok {
+		t.Error("Expected line 0 (top of document) to be preserved in attrCache after purging distant lines")
+	}
+}
+
 func TestColorer_DownloadColorerSchemas(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	SetDefaultF4Palette()

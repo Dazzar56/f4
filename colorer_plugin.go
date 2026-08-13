@@ -521,6 +521,16 @@ func (ch *ColorerHighlighter) Highlight(line string, prevState any, baseAttr uin
 
 	logIdx := colorerLineIndex(prevState, len(ch.lines))
 
+	if attrs, ok := ch.attrCache[logIdx]; ok {
+		return attrs, logIdx
+	}
+
+	// Guard against heavy synchronous backward resyncs during UI rendering.
+	// Allow fast resync if logIdx is near top of document (< 2000 lines) or close behind parsedIdx (< 2000 lines).
+	if logIdx < ch.parsedIdx-2000 && logIdx >= 2000 {
+		return nil, logIdx
+	}
+
 	gen := ColorerSchemeGeneration()
 	if !ch.baseKnown || ch.baseAttr != baseAttr || ch.schemeGen != gen {
 		ch.baseAttr = baseAttr
@@ -549,6 +559,13 @@ func (ch *ColorerHighlighter) Highlight(line string, prevState any, baseAttr uin
 			ch.dropCacheFrom(logIdx)
 		}
 		ch.lines = append(ch.lines, line)
+	}
+
+	if logIdx < ch.parsedIdx-100 {
+		if attrs, ok := ch.attrCache[logIdx]; ok {
+			return attrs, logIdx
+		}
+		return nil, logIdx
 	}
 
 	if ch.parsedIdx != logIdx {
@@ -623,6 +640,12 @@ func (ch *ColorerHighlighter) GetLineBackground(idx int, defaultAttr uint64) uin
 	if ch.bgCache == nil {
 		return defaultAttr
 	}
+	if idx < ch.parsedIdx-100 {
+		if bg, ok := ch.bgCache[idx]; ok {
+			return bg
+		}
+		return defaultAttr
+	}
 	if bg, ok := ch.bgCache[idx]; ok {
 		return bg
 	}
@@ -638,7 +661,8 @@ func (ch *ColorerHighlighter) storeAttrs(idx int, attrs []uint64, bg uint64) {
 	}
 	if len(ch.attrCache) >= maxCachedAttrLines {
 		for key := range ch.attrCache {
-			if key < idx-attrCacheKeepWindow || key > idx+attrCacheKeepWindow {
+			// Do not evict lines near top of document (0..2000) so Ctrl+Home always retains instant cached colors
+			if key > 2000 && (key < idx-attrCacheKeepWindow || key > idx+attrCacheKeepWindow) {
 				delete(ch.attrCache, key)
 				delete(ch.bgCache, key)
 			}
