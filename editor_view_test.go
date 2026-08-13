@@ -1358,6 +1358,7 @@ func TestEditorView_Indexer_EditInterference(t *testing.T) {
 	defer ev.Close()
 	ev.asyncBuf = buf
 	ev.file = f
+	ev.CursorPos = 1
 
 	// 1. Start indexing
 	ev.StartIndexing()
@@ -1574,6 +1575,145 @@ func TestEditorView_Indexer_NonEditingKeysDoNotCancel(t *testing.T) {
 	}
 	if cancelled {
 		t.Error("F3 key erroneously cancelled the indexer")
+	}
+}
+
+func TestEditorView_IndexerNoOpDeletesDoNotCancel(t *testing.T) {
+	tests := []struct {
+		name string
+		key  uint16
+		pos  int
+	}{
+		{name: "backspace at beginning", key: vtinput.VK_BACK, pos: 0},
+		{name: "delete at end", key: vtinput.VK_DELETE, pos: len("test content")},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ev := NewEditorView(piecetable.New([]byte("test content")), nil, "test.txt")
+			defer ev.Close()
+			ev.CursorPos = tt.pos
+			cancelled := false
+			ev.indexCancel = func() { cancelled = true }
+			initialSession := ev.editSession
+
+			ev.ProcessKey(&vtinput.InputEvent{
+				Type: vtinput.KeyEventType, KeyDown: true,
+				VirtualKeyCode: tt.key,
+			})
+
+			if ev.edited || cancelled || ev.editSession != initialSession {
+				t.Fatalf("no-op edit changed indexer state: edited=%t cancelled=%t session=%d, want %d", ev.edited, cancelled, ev.editSession, initialSession)
+			}
+		})
+	}
+
+	t.Run("zero-width rectangular selection", func(t *testing.T) {
+		ev := NewEditorView(piecetable.New([]byte("test content")), nil, "test.txt")
+		defer ev.Close()
+		ev.rectSelActive = true
+		ev.rectSelStartLine = 0
+		ev.rectSelStartCol = 0
+		ev.CursorLine = 0
+		ev.CursorPos = 0
+		cancelled := false
+		ev.indexCancel = func() { cancelled = true }
+		initialSession := ev.editSession
+
+		ev.DeleteSelection()
+
+		if ev.edited || cancelled || ev.editSession != initialSession {
+			t.Fatalf("empty rectangular selection changed indexer state: edited=%t cancelled=%t session=%d, want %d", ev.edited, cancelled, ev.editSession, initialSession)
+		}
+	})
+
+	t.Run("empty rectangular rows in existing lines", func(t *testing.T) {
+		ev := NewEditorView(piecetable.New([]byte("first\nsecond")), nil, "test.txt")
+		defer ev.Close()
+		cancelled := false
+		ev.indexCancel = func() { cancelled = true }
+		initialSession := ev.editSession
+
+		ev.PasteRectangular("\n", 0)
+
+		if ev.edited || cancelled || ev.editSession != initialSession {
+			t.Fatalf("empty rectangular paste changed indexer state: edited=%t cancelled=%t session=%d, want %d", ev.edited, cancelled, ev.editSession, initialSession)
+		}
+	})
+}
+
+func TestEditorView_BufferMutationsFenceIndexerOnce(t *testing.T) {
+	selectFirstByte := func(ev *EditorView) {
+		ev.selActive = true
+		ev.selAnchorOffset = 0
+		ev.CursorPos = 1
+	}
+
+	tests := []struct {
+		name    string
+		content string
+		prepare func(*EditorView)
+		mutate  func(*EditorView)
+	}{
+		{
+			name:    "bracketed paste",
+			content: "abc",
+			prepare: func(ev *EditorView) {
+				ev.pasting = true
+				ev.pasteBuffer = []rune("X")
+			},
+			mutate: func(ev *EditorView) {
+				ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.PasteEventType})
+			},
+		},
+		{
+			name:    "autocomplete",
+			content: "foo",
+			prepare: func(ev *EditorView) {
+				ev.CursorPos = 3
+				ev.acEnabled = true
+				ev.acPrefix = "foo"
+				ev.acMatches = []string{"foobar"}
+			},
+			mutate: func(ev *EditorView) {
+				ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_TAB})
+			},
+		},
+		{name: "insert helper", content: "abc", mutate: func(ev *EditorView) { ev.insertTextAtCursor([]byte("X")) }},
+		{name: "delete spacers", content: "  abc", mutate: func(ev *EditorView) { ev.deleteSpacersForward() }},
+		{name: "rectangular paste", content: "abc", mutate: func(ev *EditorView) { ev.PasteRectangular("X", 0) }},
+		{
+			name:    "paste over selection",
+			content: "abc",
+			prepare: selectFirstByte,
+			mutate:  func(ev *EditorView) { ev.PasteText("X") },
+		},
+		{
+			name:    "delete selection",
+			content: "abc",
+			prepare: selectFirstByte,
+			mutate:  func(ev *EditorView) { ev.DeleteSelection() },
+		},
+		{name: "delete current line", content: "abc", mutate: func(ev *EditorView) { ev.DeleteCurrentLine() }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ev := NewEditorView(piecetable.New([]byte(tt.content)), nil, "test.txt")
+			defer ev.Close()
+			if tt.prepare != nil {
+				tt.prepare(ev)
+			}
+
+			cancelCount := 0
+			ev.indexCancel = func() { cancelCount++ }
+			initialSession := ev.editSession
+			tt.mutate(ev)
+
+			if !ev.edited || cancelCount != 1 || ev.editSession != initialSession+1 {
+				t.Fatalf("mutation fence: edited=%t, cancels=%d, session=%d; want true, 1, %d", ev.edited, cancelCount, ev.editSession, initialSession+1)
+			}
+		})
 	}
 }
 
@@ -4607,6 +4747,7 @@ func TestEditorView_Indexer_SessionFencing(t *testing.T) {
 	pt := piecetable.New([]byte("line1\nline2"))
 	ev := NewEditorView(pt, nil, "fencing.txt")
 	defer ev.Close()
+	ev.CursorPos = 1
 
 	// 1. Запоминаем текущую сессию
 	initialSession := ev.editSession
