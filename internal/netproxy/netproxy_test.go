@@ -224,3 +224,70 @@ func TestSecretRoundTrip(t *testing.T) {
 		t.Error("empty passwords must stay empty")
 	}
 }
+func TestSystemModeAttachesAppCredentialsIfMissingInEnv(t *testing.T) {
+	t.Setenv("HTTP_PROXY", "http://127.0.0.1:3128")
+	t.Setenv("HTTPS_PROXY", "http://127.0.0.1:3128")
+
+	s := Settings{Mode: ModeSystem, User: "bob", Pass: "s3cret"}
+	req, _ := http.NewRequest("GET", "https://api.github.com/", nil)
+
+	pFunc := s.proxyFunc()
+	if pFunc == nil {
+		t.Fatal("proxyFunc returned nil for ModeSystem")
+	}
+
+	u, err := pFunc(req)
+	if err != nil || u == nil {
+		t.Fatalf("expected proxy URL, got err=%v, u=%v", err, u)
+	}
+
+	if u.User == nil {
+		t.Fatal("proxy URL missing User credentials")
+	}
+	if u.User.Username() != "bob" {
+		t.Errorf("got username %q, want %q", u.User.Username(), "bob")
+	}
+	if pass, _ := u.User.Password(); pass != "s3cret" {
+		t.Errorf("got password %q, want %q", pass, "s3cret")
+	}
+}
+
+func TestSystemModePreservesEnvCredentialsIfPresent(t *testing.T) {
+	t.Setenv("HTTP_PROXY", "http://envuser:envpass@127.0.0.1:3128")
+	t.Setenv("HTTPS_PROXY", "http://envuser:envpass@127.0.0.1:3128")
+
+	s := Settings{Mode: ModeSystem, User: "appuser", Pass: "apppass"}
+	req, _ := http.NewRequest("GET", "https://api.github.com/", nil)
+
+	u, err := s.proxyFunc()(req)
+	if err != nil || u == nil {
+		t.Fatalf("expected proxy URL, got err=%v, u=%v", err, u)
+	}
+
+	if u.User.Username() != "envuser" {
+		t.Errorf("got username %q, want envuser", u.User.Username())
+	}
+}
+
+func TestSystemModeAllProxyFallback(t *testing.T) {
+	t.Setenv("HTTP_PROXY", "")
+	t.Setenv("HTTPS_PROXY", "")
+	t.Setenv("http_proxy", "")
+	t.Setenv("https_proxy", "")
+	t.Setenv("ALL_PROXY", "http://127.0.0.1:3128")
+
+	s := Settings{Mode: ModeSystem, User: "bob", Pass: "s3cret"}
+	req, _ := http.NewRequest("GET", "https://api.github.com/", nil)
+
+	u, err := s.proxyFunc()(req)
+	if err != nil || u == nil {
+		t.Fatalf("expected proxy URL from ALL_PROXY, got err=%v, u=%v", err, u)
+	}
+
+	if u.Host != "127.0.0.1:3128" {
+		t.Errorf("got host %q, want 127.0.0.1:3128", u.Host)
+	}
+	if u.User == nil || u.User.Username() != "bob" {
+		t.Errorf("credentials not attached to ALL_PROXY fallback: %v", u.User)
+	}
+}

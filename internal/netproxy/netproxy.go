@@ -150,10 +150,33 @@ func (s Settings) Describe() string {
 }
 
 // proxyFunc is what net/http wants for Transport.Proxy.
+func systemProxyURL(req *http.Request) (*url.URL, error) {
+	u, err := http.ProxyFromEnvironment(req)
+	if err != nil || u == nil {
+		for _, env := range []string{"ALL_PROXY", "all_proxy", "HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"} {
+			if val := os.Getenv(env); val != "" {
+				if parsed, parseErr := url.Parse(val); parseErr == nil && parsed != nil {
+					return parsed, nil
+				}
+			}
+		}
+	}
+	return u, err
+}
+
+// proxyFunc is what net/http wants for Transport.Proxy.
 func (s Settings) proxyFunc() func(*http.Request) (*url.URL, error) {
 	switch s.Mode {
 	case ModeSystem:
-		return http.ProxyFromEnvironment
+		return func(req *http.Request) (*url.URL, error) {
+			u, err := systemProxyURL(req)
+			if u != nil && s.User != "" && u.User == nil {
+				uCopy := *u
+				uCopy.User = url.UserPassword(s.User, s.Pass)
+				return &uCopy, nil
+			}
+			return u, err
+		}
 	case ModeHTTP, ModeSOCKS5:
 		if u := s.URL(); u != nil {
 			return func(*http.Request) (*url.URL, error) { return u, nil }
@@ -194,9 +217,31 @@ func (s Settings) DialContext(ctx context.Context, network, addr string) (net.Co
 		return direct.DialContext(ctx, network, addr)
 
 	case ModeSystem:
-		// x/net/proxy reads all_proxy/ALL_PROXY, the variable that speaks
-		// about arbitrary TCP rather than about HTTP requests. http:// and
-		// https:// values work too, see the RegisterDialerType calls below.
+		if reqURL, err := url.Parse("https://" + addr); err == nil {
+			if u, _ := systemProxyURL(&http.Request{URL: reqURL}); u != nil {
+				user := s.User
+				pass := s.Pass
+				if u.User != nil {
+					user = u.User.Username()
+					pass, _ = u.User.Password()
+				}
+				host := u.Hostname()
+				port := u.Port()
+				mode := ModeHTTP
+				if u.Scheme == "socks5" {
+					mode = ModeSOCKS5
+				}
+				if host != "" {
+					return Settings{
+						Mode: mode,
+						Host: host,
+						Port: port,
+						User: user,
+						Pass: pass,
+					}.DialContext(ctx, network, addr)
+				}
+			}
+		}
 		d := xproxy.FromEnvironment()
 		if cd, ok := d.(xproxy.ContextDialer); ok {
 			return cd.DialContext(ctx, network, addr)
