@@ -286,9 +286,6 @@ func applyWorkspaceSession(pf *PanelsFrame, state workspaceSessionState, width, 
 			return
 		}
 	}
-	if restorePaths {
-		left.pendingSelection, right.pendingSelection = state.Left.Cursor, state.Right.Cursor
-	}
 	left.SetViewMode(validSessionViewMode(state.Left.ViewMode))
 	right.SetViewMode(validSessionViewMode(state.Right.ViewMode))
 	left.sortMode, right.sortMode = SortMode(state.Left.SortMode), SortMode(state.Right.SortMode)
@@ -306,6 +303,7 @@ func applyWorkspaceSession(pf *PanelsFrame, state workspaceSessionState, width, 
 	if restorePaths {
 		navigate(left, state.Left.Path)
 		navigate(right, state.Right.Path)
+		left.pendingSelection, right.pendingSelection = state.Left.Cursor, state.Right.Cursor
 	}
 
 	pf.activeIdx = state.ActivePanel
