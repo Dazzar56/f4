@@ -584,3 +584,16 @@ func (v *OSVFS) Symlink(ctx context.Context, target, linkPath string) error {
 	}
 	return os.Symlink(target, prepareOSPath(abs))
 }
+
+// OpenWriteAt makes OSVFS a RandomWriteVFS. A local file is the case where
+// staging a second copy on the same disk buys nothing at all.
+func (v *OSVFS) OpenWriteAt(ctx context.Context, path string) (WriterAtCloser, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	abs, err := v.Abs(path)
+	if err != nil {
+		return nil, err
+	}
+	return os.OpenFile(prepareOSPath(abs), os.O_RDWR|os.O_CREATE, 0o644)
+}

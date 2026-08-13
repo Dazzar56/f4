@@ -380,6 +380,17 @@ escalating to a more forceful helper.
 Kept here rather than in an issue tracker because each one is a deliberate
 decision for now, not an oversight:
 
+* **fish+ is behind sftp.** Everything done for SFTP has to be done for the
+  fish backend as well, one flag at a time and in the same order, because the
+  same reasoning applies to it: `HasWrite` once its `Create` has been put under
+  a mount's commit-on-close pattern; `vfs.SymlinkVFS`, so `tar -x` into a fish
+  mount does not stop at the first link and `ls -l` does not flatten one;
+  `OpenWriteAt` when iteration 5 lands, if the shell transport can address a
+  file at an offset at all — and if it cannot, that is an answer too, and the
+  spool stays. Until each is turned on, a fish mount is read-only, which is a
+  refusal the user can understand, rather than a mount that fails halfway
+  through a copy.
+
 * A mount whose server was killed with `SIGKILL` leaves a wedged mount point
   and a record that looks live until the pid is reused. Detecting it needs a
   bounded probe of the mount point; `--list-mounts` must stay non-blocking.

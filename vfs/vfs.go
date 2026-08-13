@@ -898,3 +898,27 @@ type SymlinkVFS interface {
 	// given: a relative link has to stay relative.
 	Symlink(ctx context.Context, target, linkPath string) error
 }
+
+// RandomWriteVFS is implemented by backends that can write at an offset
+// without being handed the whole file.
+//
+// It is what removes the staging copy. A mount without it has to assemble a
+// file locally and send it in one piece, which means an editor saving a
+// ten-byte change to a large remote file downloads it and uploads it whole;
+// with it, the ten bytes go where they belong. Local files and SFTP really do
+// support positional writes, which is why the interface exists at all — for a
+// stream-only backend the spool is not a workaround but the only correct
+// answer, so this stays optional.
+type RandomWriteVFS interface {
+	// OpenWriteAt opens path for positional writing, creating it if it is
+	// not there. The file is not truncated: a caller that wants that asks
+	// for it through Truncate.
+	OpenWriteAt(ctx context.Context, path string) (WriterAtCloser, error)
+}
+
+// WriterAtCloser is a file that can be written at an offset and resized.
+type WriterAtCloser interface {
+	WriteAt(p []byte, off int64) (int, error)
+	Truncate(size int64) error
+	Close() error
+}

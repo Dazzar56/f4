@@ -753,3 +753,13 @@ func (v *SFTPVFS) Symlink(ctx context.Context, target, linkPath string) error {
 	}
 	return v.client.Symlink(target, v.encodePath(linkPath))
 }
+
+// OpenWriteAt makes SFTPVFS a vfs.RandomWriteVFS. This is the backend the
+// interface was written for: a remote file is exactly where re-uploading
+// everything to change ten bytes hurts.
+func (v *SFTPVFS) OpenWriteAt(ctx context.Context, p string) (vfs.WriterAtCloser, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return v.client.OpenFile(v.encodePath(p), os.O_RDWR|os.O_CREATE)
+}
