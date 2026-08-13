@@ -116,6 +116,13 @@ func CheckForUpdates(pf *PanelsFrame, manual bool) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
+		proxyAuthHeader := resp.Header.Get("Proxy-Authenticate")
+		vtui.DebugLog("UPDATER ERROR: HTTP %d from %s (Proxy: %s, Proxy-Authenticate: %q)",
+			resp.StatusCode, url, netproxy.Global().Describe(), proxyAuthHeader)
+		if resp.StatusCode == http.StatusProxyAuthRequired {
+			reportUpdateError(manual, fmt.Sprintf("GitHub API returned status 407 (Proxy Authentication Required).\nProxy: %s, Proxy-Authenticate: %s", netproxy.Global().Describe(), proxyAuthHeader))
+			return
+		}
 		reportUpdateError(manual, fmt.Sprintf("GitHub API returned status %d", resp.StatusCode))
 		return
 	}
@@ -239,6 +246,12 @@ func performUpdate(pf *PanelsFrame, url, archiveKind, newTag, publishedAt string
 		defer resp.Body.Close()
 
 		if resp.StatusCode != 200 {
+			proxyAuthHeader := resp.Header.Get("Proxy-Authenticate")
+			vtui.DebugLog("UPDATER ERROR: Download failed HTTP %d from %s (Proxy: %s, Proxy-Authenticate: %q)",
+				resp.StatusCode, url, netproxy.Global().Describe(), proxyAuthHeader)
+			if resp.StatusCode == http.StatusProxyAuthRequired {
+				return fmt.Errorf("download failed with status 407 (Proxy Authentication Required).\nProxy: %s, Proxy-Authenticate: %s", netproxy.Global().Describe(), proxyAuthHeader)
+			}
 			return fmt.Errorf("download failed with status %d", resp.StatusCode)
 		}
 
