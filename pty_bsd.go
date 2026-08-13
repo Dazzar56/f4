@@ -3,7 +3,6 @@
 package main
 
 import (
-	"bytes"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -28,21 +27,15 @@ func NewPTY() (*PTY, error) {
 	}
 	master := os.NewFile(uintptr(masterFd), "/dev/ptmx")
 
-	// FreeBSD 13+ supports TIOCPTYGNAME to get the slave name
-	// _IOR('t', 72, char[128]) -> 0x40807448
-	const tiocptygname = 0x40807448
-
-	ptyName := make([]byte, 128)
-	if _, _, e := syscall.Syscall(syscall.SYS_IOCTL, uintptr(masterFd), tiocptygname, uintptr(unsafe.Pointer(&ptyName[0]))); e != 0 {
+	// Naming the slave is the one step that differs between the BSDs here,
+	// so each of them supplies its own ptySlaveName. Neither needs grantpt
+	// or unlockpt: in FreeBSD's libc both are strong references to
+	// __isptmaster and do nothing beyond validating the descriptor.
+	slaveName, err := ptySlaveName(masterFd)
+	if err != nil {
 		master.Close()
-		return nil, e
+		return nil, err
 	}
-
-	nameLen := bytes.IndexByte(ptyName, 0)
-	if nameLen == -1 {
-		nameLen = len(ptyName)
-	}
-	slaveName := string(ptyName[:nameLen])
 
 	slaveFd, err := unix.Open(slaveName, unix.O_RDWR|unix.O_NOCTTY, 0)
 	if err != nil {
