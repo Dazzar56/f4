@@ -389,6 +389,16 @@ func (m *MacroManager) Filter(e *vtinput.InputEvent) bool {
 		return true
 	}
 
+	// The command palette is the application-wide escape hatch for finding
+	// commands, so its configurable binding stays reachable even when a panel
+	// plugin or a transient input mode would otherwise claim the same event.
+	if hm := GlobalHotkeysMgr; hm != nil {
+		if actionName := hm.GetAction(currentArea, keyStr); strings.EqualFold(actionName, commandPaletteActionName) {
+			RunAction(actionName)
+			return true
+		}
+	}
+
 	// Plugin key interception: global plugin hotkeys and the active
 	// panel's PanelController may override built-in hotkeys, so they
 	// are consulted before the hotkey manager.

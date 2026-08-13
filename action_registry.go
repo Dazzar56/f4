@@ -274,6 +274,16 @@ func init() {
 		MenuPath:    "File",
 		Handler:     func() bool { OpenGrabber(); return true },
 	})
+	RegisterAction(Action{
+		Name:        commandPaletteActionName,
+		Area:        "Common",
+		Label:       "Command Palette",
+		LabelKey:    "Action.App.CommandPalette",
+		Description: "Search and run available commands",
+		DescKey:     "Action.App.CommandPalette.Desc",
+		DefaultKeys: []string{"CtrlShiftP"},
+		Handler:     ShowCommandPalette,
+	})
 
 	// --- Shell (panels) actions ---
 	// Registration order defines the menu order inside each top-level menu.
