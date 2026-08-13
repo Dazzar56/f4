@@ -1,315 +1,461 @@
-# Editor highlighting: background state checkpoints
+# Editor syntax highlighting on large files
 
-Working document for issue #458 ("Тормоза в редакторе").
-Status is kept at the bottom; update it at the end of every step.
+Design document and work queue. Rewritten from scratch on 2026-08-13; it
+replaces the earlier version, whose numbering had drifted across several
+attempts. Everything below describes the code as it stands now.
 
-## 1. The problem
+Origin: issue #458, "Тормоза в редакторе". Reference file for every
+measurement in this document: `objdump -d install/far2l > far2l.s`, about 40 MB
+and 600 000 lines, opened with F4.
 
-Opening a huge file (e.g. `objdump -d install/far2l > far2l.s`) and pressing
-`Ctrl+End` freezes the editor for 30-40 seconds. Leaving and re-entering the
-editor makes it happen again.
+---
 
-The piece table is not involved. The cause is in `editor_view.go`,
-`DisplayObject`, the "Stateful Highlighting" block:
+## 1. How the editor draws text
 
-```go
-if ev.highlighter != nil {
-    for len(ev.lineStates) <= logIdx {
-        currIdx := len(ev.lineStates)
-        ...
-        attrs, nextState := ev.highlighter.Highlight(string(lineData), prevState, bgAttr)
-        ev.lineStates = append(ev.lineStates, nextState)
-    }
-}
-```
+Four things cooperate, and all four run on the UI thread.
 
-`ev.lineStates` is a contiguous array starting at line 0: `lineStates[i]` is the
-highlighter state *after* line `i`, and the state passed into line `i` is
-`lineStates[i-1]`. To draw line N the loop must therefore run the highlighter
-over every line before it — synchronously, inside the draw path.
+**Piece table** (`piecetable/piecetable.go`) holds the text. For an unedited
+file it is one piece over the loading buffer, so `GetRange` is cheap. It can
+return `piecetable.ErrLoading` when the data has not arrived yet.
 
-`Ctrl+End` sets `CursorLine = LineCount()-1`, so the next frame starts drawing
-near the last line and the loop highlights the whole file in one go.
+**Line index** (`piecetable/lineindex.go`) maps line numbers to byte offsets.
+It is built in the background by `EditorView.StartIndexing`
+(`editor_view.go`), which scans the file in 64 KB chunks off-thread and
+publishes batches of offsets through `vtui.FrameManager.PostTask`. Until it
+finishes, `li.LineCount()` keeps growing. `ev.indexing` says whether it is
+still running. The scroll bar, `Ctrl+End` and any restore of a saved position
+all wait for it.
 
-Consequences that match the report:
+**Wrap engine** (`textlayout/wrap.go`) turns logical lines into visual rows.
+Word wrap is off by default, in which case its row bookkeeping is a trivial
+`rowOffsets[i] = i` loop. It is not involved in any problem described here.
 
-- the choice of highlighter does not matter — Chroma and Colorer are both O(N)
-  over the file;
-- re-entering the editor repeats the wait: a fresh `EditorView` has an empty
-  `lineStates`, and the restored cursor position is again at the end;
-- editing near the top of the file and then jumping to the end repeats it too,
-  because `invalidateStates(line)` truncates the chain at the edited line;
-- `colorer_plugin.go` calls `invalidateStates(0)` when the session or scheme
-  becomes ready, with the same effect.
+**Render loop** (`EditorView.DisplayObject`, `editor_view.go`) walks the
+logical lines from the top of the viewport, asks the highlighter for the
+attributes of each one, and paints. Everything it calls is synchronous: time
+spent there is a frame the user waits for.
 
-## 2. What we are building
+### Two kinds of highlighter
 
-A state chain is unavoidable for a stateful highlighter: colouring line N
-correctly requires having parsed lines 0..N-1 at least once. The goal is
-therefore not to avoid the work but to
+They share the `vtui.Highlighter` interface
 
-1. **never do it on the draw path** — the UI must stay responsive;
-2. **do it once per file** and keep sparse *checkpoints*, so that any later
-   jump only has to replay a bounded number of lines;
-3. **degrade visibly, not silently** — a region whose state is not known yet is
-   drawn unhighlighted and is repainted when the walker reaches it.
+    Highlight(line string, prevState any, baseAttr uint64) ([]uint64, any)
 
-Target structure:
+but they are not the same kind of object, and the whole design turns on the
+difference.
 
-```
-checkpoints[k]   = highlighter state entering line k*Step   (checkpoints[0] = nil)
-validLines       = number of lines already walked (states known for [0, validLines))
-window{base, states[]}  = dense states for the currently visible region
-```
+**Chroma-style — state is a value.** `Highlight` returns a state that fully
+describes where the lexer stands. Feed it back for the next line and the
+result is correct; keep it in a slice and any line can be resumed later. The
+editor stores these in `ev.lineStates`, dense from line 0, where
+`lineStates[i]` is the state *after* line `i`.
 
-`Step` starts at 1000 lines. Drawing line L needs the state entering L:
+**Colorer — state is a position.** `ColorerHighlighter` (`colorer_plugin.go`)
+drives a wasm session from `github.com/unxed/colorer4go`. The value it returns
+is a line number, nothing more. The real state is a parse cache inside the
+session, and the C++ wrapper (`colorer_wrapper.cpp`) only ever appends:
+`colorer_parse_line` pushes the line into `line_source.lines` and parses with
+`TPM_CACHE_UPDATE` at `lno = lines.size()`. Consequences, all load-bearing:
 
-- `L < validLines` → take `checkpoints[L/Step]`, replay at most `Step` lines
-  into the window (single-digit milliseconds), draw with colours;
-- `L >= validLines` → draw without colours and let the background walker
-  continue; repaint when it passes L.
+- the session can only be fed **forward**, one line at a time, in order;
+- going backwards is impossible; the only way back is
+  `colorer_reset_session`, which clears the line vector and the parse cache
+  (and keeps the selected file type — verified against v_2.8.0 configs with
+  colorer4go v0.1.9);
+- everything ever fed to the session stays in wasm memory until that reset.
+  A full pass over the reference file puts all 40 MB into the wasm heap as
+  UTF-16, plus the parse cache;
+- there is no snapshot. The state cannot be saved, copied or restored.
 
-The walker is driven by `vtui.FrameManager.PostTask` in short time slices, the
-same way `StartIndexing` feeds the line index. This is deliberate: highlighters
-are not thread-safe, and the Colorer session is a pooled external resource.
-Slices give responsiveness without concurrency.
+---
 
-## 3. Constraints and traps
+## 2. What was wrong, and where it stands
 
-- **`vtui.Highlighter` is an external interface.** Signature:
-  `Highlight(line string, prevState any, baseAttr uint64) ([]uint64, any)`.
-  We cannot add methods to it; anything extra has to be an optional interface
-  discovered with a type assertion.
-- **Colorer's "state" is not a state.** `ColorerHighlighter.Highlight` derives
-  the line number from `prevState.(int)`, and the real parser state lives in a
-  forward-only `colorer.Session`. `resync` can only move forward; going
-  backwards triggers `Reset()` + re-parse from line 0. So for Colorer:
-  - a forward sequential walk is fine and incremental,
-  - replaying from a checkpoint *backwards* is not cheap and will need its own
-    step (phase 5),
-  - `ch.lines` accumulates every line of the file as a Go string — a real
-    memory problem on a 100+ MB file, also phase 5.
-- **The background line indexer runs in parallel.** `li.LineCount()` grows
-  while we walk. The walker must tolerate that and must be cancelled and
-  restarted like the indexer is (`editSession` counter, `ctx`).
-- **Invalidation granularity.** `invalidateStates(fromLine)` is called from ~15
-  places on every edit. It must stay cheap: truncate `validLines` and drop
-  checkpoints above `fromLine/Step` only.
-- **Tests.** `editor_view_test.go` (lines ~60-125) pokes `ev.lineStates`
-  directly. Those assertions have to move to whatever replaces it; keep the
-  behaviour they check (chain is built, invalidation truncates it).
+`Ctrl+End` on the reference file froze the editor for 30 to 40 seconds. The
+render loop built `ev.lineStates` from line 0 up to the first visible line,
+inside the draw path, because a chain has no other way to reach line 600 000.
 
-## 4. Plan
+Fixed, in order:
 
-Each phase is one commit, one patch, verified before the next one starts.
+1. **Never highlight from the draw path.** A gap larger than
+   `syncHighlightGapLimit` (50 lines) is not caught up synchronously any more.
+   Chroma-style highlighters get one stateless call so the jump lands on
+   coloured text immediately; the chain catches up behind it.
+2. **A throttled walker.** `startHighlighting` runs slices of at most
+   `hlSliceBudget` (4 ms) of UI time each, spaced by a duty cycle
+   (`highlightDuty`, `highlightIdleGap`), yielding to the line indexer while it
+   is still building. Slices are scheduled through `PostTask` and their
+   decisions are made inside the slice, on the thread that owns the fields.
+3. **Colorer out of the walker** (`usesStateChain`). See section 3.
+4. **Colorer drawn from an anchor** (`HighlightLine`). See section 3.
 
-### Phase 0 — seam
-Move the state-chain logic out of `DisplayObject` into a `stateCache` type in a
-new file `editor_states.go`. Behaviour identical, still synchronous, still
-building from line 0. `lineStates` becomes `states.at(i)`; the tests follow.
-Purpose: a single place to change in every later phase.
+Reported after (4): the tail of the file appears and colours immediately, with
+both highlighters. One problem left from the user's point of view, and it is
+item 1 of the queue: **after opening the file the editor shows an empty window
+for several seconds** before anything appears.
 
-### Phase 1 — stop the freeze
-Give `stateCache` a per-call budget (a few thousand lines). If the requested
-line is out of reach, report "not ready" and let `DisplayObject` draw the
-visible fragments with base attributes only. After this phase `Ctrl+End` is
-instant on `far2l.s`, initially without colours.
+That one is not about highlighting at all. `DisplayObject` paints a blank
+rectangle and returns while `ev.targetLine != -1`, which is the state of an
+editor whose saved cursor position has not been reached by the line indexer
+yet. On a 40 MB file the indexer needs seconds to get there, and the reasoning
+behind the blank — that painting the top of the file and then jumping looks
+like a flicker — trades a flicker for several seconds of nothing.
 
-### Phase 2 — background walker
-A `PostTask` loop that keeps extending the chain toward the line the view
-actually needs, ~5 ms per slice, with cancellation on close/edit/reload and a
-generation counter. `Redraw()` when the walked region reaches the viewport.
+---
 
-### Phase 3 — checkpoints
-Stop keeping one `any` per line for the whole file. Keep `checkpoints` every
-`Step` lines plus a dense window around the viewport. Replay from the nearest
-checkpoint on jumps. Map `invalidateStates` onto checkpoint granularity.
+## 3. Design decisions
 
-### Phase 4 — feedback
-Show walker progress in the top bar (e.g. `HL 42%`) while a visible region is
-still uncoloured, so the user sees work in progress instead of plain text.
+### 3.1 Colorer keeps no state chain
 
-### Phase 5 — Colorer (now the blocking one, see the phase 2b findings)
-Colorer must leave the state chain entirely and switch to an anchored window.
-Split into 5a..5d below.
+`usesStateChain(h)` in `editor_view.go` returns false for
+`*ColorerHighlighter`, and both `startHighlighting` and `highlightSlice` refuse
+to run for it.
 
-### Phase 6 — optional fast path
-During the walk we only need the state, not the attribute slice. If the
-highlighter also implements something like
-`HighlightState(line string, prev any) any`, use it and skip the per-line
-allocation. Chroma-side support lives in vtui, so this may become an upstream
-change.
+*Why.* Walking the file for Colorer builds nothing — the chain would hold
+consecutive integers. It is also actively harmful: the walk feeds every line
+to the session, so the wasm heap fills with the whole file, and it leaves the
+parse position ahead of the viewport, so each frame has to rewind it. Before
+this change, the render path and the walker took turns dragging the session in
+opposite directions; the discarded work is what made `Esc` arrive fifteen
+seconds after a held `PgDn`.
 
-## 5. Status
+### 3.2 Colorer is addressed by line number, from an anchor
 
-- [x] Phase 1 — instant unhighlighted rendering on distant jumps (0ms initial delay)
-- [x] Phase 2 — throttled background walker (non-blocking state catch-up)
-- [x] Phase 2a — slices bounded by wall clock, not by line count; walker yields
-      to the line indexer while a file is still being opened
-- [ ] Phase 5a — take Colorer out of the walker
-- [ ] Phase 5b — anchored context in `ColorerHighlighter`
-- [ ] Phase 5c — drop `ch.lines`, bound `attrCache`
-- [ ] Phase 5d — periodic re-anchor to bound wasm memory
-- [ ] Phase 0 — seam
-- [ ] Phase 3 — checkpoints
-- [ ] Phase 4 — feedback
-- [ ] Phase 6 — optional fast path
+`ColorerHighlighter.HighlightLine(idx, line, baseAttr)` is what the render loop
+calls. Internally:
 
-**Current step:** phases 1/2/2a landed and Chroma is fixed — the tail of a 40MB
-file appears and colours instantly. Colorer is not fixed and the walker is now
-part of its problem; see phase 2b below. Next: phase 5a.
+- `colorerContextPlan(parsedIdx, idx)` — pure, and the whole decision. If the
+  wanted line is ahead of the session and no further than `hlColorerForward`
+  (2000) lines, feed the session forward. Otherwise reset and restart
+  `hlColorerContext` (300) lines above the target.
+- `ensureContext` is called **only on an attribute-cache miss**, so a screen
+  that is already coloured costs nothing and does not move the session.
+- `resetSessionAt(start)` resets, re-selects the file type, and declares
+  `start` to be the session's first line.
+- `parseThrough(idx)` feeds lines up to but not including `idx`, reading them
+  through `ch.lineAt`.
 
-### Phase 2a — what changed and why
+*Why an anchor.* A jump then costs the same at line 500 and at line 500 000,
+which is the only way a 600 000-line file can behave. Sequential scrolling
+downwards still feeds the same session forward and stays exactly correct.
 
-Reported on top of phase 2: opening a 38MB / 600k line log takes about half a
-minute with a jumping scroll bar, Colorer slower than Chroma but both slow.
+*What it costs.* A construct opened more than `hlColorerContext` lines above
+the viewport is invisible to the parser after a jump, so the first screen after
+`Ctrl+End` can be coloured as if a block comment had never started. Scrolling
+down to it from above gives the exact answer. This is accepted deliberately —
+it is the same trade already accepted for the stateless Chroma call on a jump.
 
-The scroll bar tracks `LineIndex.LineCount()`, so what the user watches for
-those thirty seconds is the *indexer*, not the colours. Yet the choice of
-highlighter changes the wait — which can only happen if the two are competing.
-They are: `StartIndexing` publishes each batch of offsets through
-`FrameManager.PostTask`, and the phase 2 walker ran its batches through the
-same queue, on the same thread.
+### 3.3 One source of line text
 
-The walker sized a batch in lines: 200 normally, 2500 when it was still behind
-the viewport. A line is not a unit of time. 2500 lines is a few milliseconds of
-Chroma and around a hundred of Colorer, so on a file this size the queue spent
-most of its time inside the highlighter and the indexer's batches waited their
-turn. Fixed in three parts:
+`EditorView.lineTextForHighlight(idx) (string, bool)` returns a line as the
+highlighters see it: **line terminator included** (the parse state of the next
+line depends on it) and cut at 64 KB so no parser is handed a megabyte of
+binary. It feeds both the render loop and, through `ch.lineAt`, the context
+lines of a re-anchor, so those are byte for byte the same text. `ok == false`
+means the text is not available yet; leave the line plain and come back next
+frame.
 
-- a slice now runs until `hlSliceBudget` (4ms) of wall clock is up, checking
-  the clock every `hlClockStride` lines. The stall is bounded whatever the
-  highlighter costs per line, and a fast one gets more lines done per slice
-  than the old fixed 200;
-- the pause between slices is derived from the work just done, so the walker
-  holds a duty cycle instead of a fixed sleep: `hlDutyVisible` when the
-  viewport is still uncoloured, `hlDutyAhead` when it is walking past it, and
-  `hlDutyIndexing` while the index is still being built. The index wins,
-  because the scroll bar, `Ctrl+End` and position restore all wait for it;
-- the schedule is computed inside the slice, on the UI thread. Phase 2 sampled
-  `ScrollTopRow`, `lineStates` and `GetLogLineAtVisualRow` from the walker
-  goroutine while the UI thread was writing them.
+### 3.4 Invalidation
 
-`EditorView.indexing` is the flag the duty cycle reads. `indexCancel` could not
-serve: it is left non-nil after a normal finish, so it reads as "indexing
-forever".
+Colours are cached by line number now, so the highlighter cannot notice an edit
+on its own. Two hooks:
 
-Also on the indexer side: the retry after `piecetable.ErrLoading` was a flat
-20ms, which caps indexing at 50 chunk reads per second whenever the reader
-outruns the loader. It now backs off from `indexPollMin` to `indexPollMax`.
+- `invalidateStates(fromLine)` — every edit path already calls it. Truncates
+  the chain and calls `ch.DropFrom(fromLine)`.
+- `clearCaches()` — undo, redo, reload. Calls `ch.DropFrom(0)`.
 
-### Phase 2a — what to measure next
+`DropFrom(idx)` drops cached attributes from `idx` on, and if the session has
+already parsed past `idx` it throws the session away: its cache cannot be
+unwound.
 
-Both loops now log a summary at `--debug`:
+### 3.5 A fallback engine is handed to the editor
+
+When the Colorer session cannot be created, or no schema matches the file,
+`useFallback` moves `ch.fallback` into `ev.highlighter` instead of proxying it.
+Otherwise a perfectly ordinary Chroma highlighter would be treated as Colorer
+by `usesStateChain` and lose both its chain and its walker.
+
+### 3.6 Everything runs on the UI thread
+
+The walker's slices, the render loop and every highlighter call happen there,
+through `PostTask`. Highlighters are not thread-safe, the Colorer session is a
+pooled external resource, and the wrap engine mutates its caches as a side
+effect of what look like reads. Responsiveness comes from bounding each slice
+in time, not from moving work to another thread.
+
+---
+
+## 4. Approaches that were tried or considered and dropped
+
+**Build a state chain for Colorer by walking the file.** Shipped, then
+removed. See 3.1. It cannot work: there is no state to chain, and the walk
+damages the session.
+
+**Deep-rewind escape hatch.** When a rewind was too deep, `resync` did
+`Reset(); parsedIdx = upTo; return`, leaving the session with no context and
+its internal line numbering divorced from the document. Together with the
+walker this is what produced "a file opened in the middle never gets colours".
+Replaced by the anchor.
+
+**Serialize the Colorer parser state.** The state is a stack of schemas in
+libcolorer's `TextParser` cache. Making it serializable is a change to
+libcolorer itself, not to the Go binding. Snapshotting the wasm linear memory
+instead would mean tens of megabytes per snapshot. Not pursued.
+
+**A second Colorer session for the walker.** Doubles the wasm memory and still
+provides no way to move state from one session to the other.
+
+**Filling the Chroma chain gap with nil states after a jump** (re-anchor the
+chain heuristically instead of walking). Rejected in favour of checkpoints
+(item 7): the nil-gap version permanently mis-states everything above the
+anchor, and the checkpoints give exact colours for the price of a bounded
+replay. It stays the fallback if checkpoints prove too expensive.
+
+**A background goroutine instead of time-sliced UI tasks.** See 3.6.
+
+---
+
+## 5. Invariants
+
+Breaking any of these produces silent, hard-to-trace mis-colouring.
+
+1. `ch.parsedIdx - ch.anchor` is the session's own line number. Lines are fed
+   in order, one at a time, starting at the anchor. Never feed a line out of
+   order; never assume the session can go back.
+2. Any move backwards, and any forward jump beyond `hlColorerForward`, is a
+   reset. There is no third option.
+3. `ev.lineStates` is dense from line 0 and `lineStates[i]` is the state
+   *after* line `i`. It belongs to Chroma-style highlighters only.
+4. Nothing calls `ev.highlighter.Highlight` for a Colorer with a live session.
+   The render path uses `HighlightLine`; the walker refuses to run.
+5. All highlighter text comes from `lineTextForHighlight`.
+6. A slice of background work must be bounded by wall clock, not by a line
+   count: one line of Colorer and one line of Chroma differ by two orders of
+   magnitude.
+7. The line indexer outranks the highlighter. If both want the UI thread, the
+   index wins — it is what the scroll bar and every jump are waiting for.
+
+---
+
+## 6. Work queue
+
+Each item is one commit. Do them in order unless a measurement says otherwise;
+do not start the next one before the previous is verified. Every item lists
+where to look, what "done" means, and what not to touch.
+
+### Item 1 — show the file while the saved position is still being indexed
+
+*Problem.* Opening the reference file leaves the editor blank for several
+seconds. `DisplayObject` (`editor_view.go`, the `if ev.targetLine != -1` guard
+near the top) fills the text area with spaces and returns. `targetLine` is set
+in `actions.go` when a saved state exists for the file, and cleared by the
+indexer once it reaches that line — or by any key that moves the cursor.
+
+*Why it is there.* Painting from the top and then jumping when the restore
+lands reads as a flicker. That reasoning holds for a small file, where the wait
+is a few frames. It does not survive a wait of seconds.
+
+*What to do.* Time-box the blank. Record the moment the editor was created
+(or the moment `targetLine` was set) and keep the blank only for
+`restoreBlankGrace` — start with 250 ms. After that, draw the document
+normally while the restore is still pending; the jump, when it lands, is one
+frame and strictly better than an empty window.
+
+*Notes.* While `targetLine != -1` the restore path controls the scroll
+position, so the document renders from the top; do not change that. Do not
+remove the restore, do not touch `ProcessKey`'s rule about abandoning it.
+
+*Acceptance.* Opening the reference file shows the top of the file within a
+frame or two, still uncoloured or partly coloured, and jumps to the saved
+position when the index reaches it. `editor_target_line_test.go` still passes.
+
+*Test.* With `targetLine` set and the grace period pushed into the past, one
+`ev.Show(scr)` must leave non-blank cells in the text area (`scr.GetCell`);
+with the grace period still running, it must not.
+
+### Item 2 — delete the dead Colorer state-chain code
+
+Nothing calls it any more; it exists only to confuse the next reader and to be
+accidentally reachable.
+
+*Remove from `colorer_plugin.go`:* `ch.lines`, `resync`, `colorerNeedsRewind`,
+`colorerLineIndex`, and the body of the `Highlight` shim that uses them. Keep
+`Highlight` itself: it is still the `vtui.Highlighter` entry point, and it must
+keep working while the session is loading (`starting` → nil) and while a
+fallback engine is in place. With a live session it should now delegate
+nothing and return nil — `HighlightLine` is the way in.
+
+*Also remove* the tests that only covered the deleted helpers
+(`TestColorer_LineIndexComesFromTheEditorState`,
+`TestColorer_RewindsOnlyWhenTheParserIsAhead` in `colorer_plugin_test.go`).
+Keep the fallback tests.
+
+*Acceptance.* `go build ./... && go test .` unchanged, and `ch` no longer holds
+a copy of the document.
+
+### Item 3 — bound the attribute cache
+
+`maxCachedAttrLines` (5 000 000) and `attrCacheKeepWindow` (1 000 000) in
+`colorer_plugin.go` are effectively no limit: colours are kept for every line
+ever drawn, each as a `[]uint64` the width of the line. Scrolling through the
+reference file accumulates hundreds of megabytes.
+
+*What to do.* Shrink them to a window around the viewport — start with 20 000
+and 5 000 — and check `storeAttrs`'s eviction actually keeps the map near that
+size. Keep the existing exception that protects the first lines of the file, so
+`Ctrl+Home` stays instant.
+
+*Cost to expect.* A line evicted from the cache and then scrolled back to is a
+miss, and a miss above the parse position is a re-anchor. That is the designed
+behaviour; the window only has to be larger than a screen by a comfortable
+margin.
+
+*Acceptance.* `TestColorer_AttrCacheIsBounded` extended to push past the new
+limit and assert the map stays bounded.
+
+### Item 4 — bound the session on a long forward scroll
+
+Re-anchoring resets the session, which is what releases the wasm line vector
+and the parse cache. One case never re-anchors: scrolling straight down, which
+feeds the session forward for as long as the user holds `PgDn`.
+
+*What to do.* Force a re-anchor after `hlColorerParsedMax` lines have been fed
+since the last reset — start with 20 000. `ensureContext` is the place;
+`colorerContextPlan` gains the counter as an argument so the decision stays
+pure and testable.
+
+*Measure first.* Hold `PgDn` from the top of the reference file to the bottom
+and watch RSS. If it does not grow meaningfully, skip this item: the reset
+costs the exactness of every construct opened before it.
+
+### Item 5 — cheaper editing in a large file
+
+Typing at line 500 000 currently throws the session away on every keystroke
+(item 3.4), so the next frame re-anchors: roughly `hlColorerContext` lines of
+parsing per character. In a file small enough to be reached from line 0 this
+does not arise.
+
+*Measure first.* Type a line into the reference file and see whether it is
+felt. If it is: the fix is a smaller anchor while an edit is in flight, not a
+different design. Do not reintroduce a state chain.
+
+### Item 6 — progress feedback
+
+While a viewport is uncoloured and the walker is behind it, the user has no
+way to tell work from breakage. Show it in the top bar
+(`EditorView.topBar`, right-hand side, next to the codepage and cursor
+position) — a percentage while `ev.highlighting` is true and the walker is
+behind the viewport, nothing otherwise. Colorer has no walker and needs no
+indicator.
+
+### Item 7 — checkpoints for Chroma-style highlighters
+
+`ev.lineStates` holds one `any` per line for the whole document, and after a
+jump the walker still has to reach the viewport from wherever it stands.
+
+*What to do.* Keep a checkpoint every `Step` (start with 1000) lines —
+`checkpoints[k]` is the state entering line `k*Step`, `checkpoints[0]` is nil —
+plus a dense window around the viewport. Drawing line L takes the nearest
+checkpoint at or below L and replays at most `Step` lines. `invalidateStates`
+maps onto checkpoint granularity: drop checkpoints above `fromLine/Step`.
+
+*Why this and not a heuristic re-anchor.* See section 4. Correct colours for a
+bounded replay.
+
+*Prerequisite.* Only start this after items 1-3; it touches the same render
+path.
+
+### Item 8 — state-only fast path for the walker
+
+The walker calls `Highlight` and throws the attribute slice away — one
+allocation per line for nothing. If a highlighter also offers something like
+`HighlightState(line string, prev any) any`, discover it with a type assertion
+and use it. Chroma-side support lives in vtui, so this may become an upstream
+change there.
+
+### Item 9 — colorer4go: trim the session window
+
+Upstream, in `github.com/unxed/colorer4go`. The wrapper only appends; a
+`colorer_forget_before(lno)` (or a ring buffer in `WasmLineSource`) would let
+the session drop lines the editor will never ask about again, which makes item
+4 unnecessary and removes the only reason a long scroll ever resets. Ask for
+this after items 1-4 have shown exactly which shape is needed. Do **not** ask
+for state snapshots — see section 4.
+
+---
+
+## 7. How to build and test
+
+    go build ./...
+    go vet .
+
+Targeted, while working in this area:
+
+    go test -run 'Colorer|Highlight|State|Editor_' .
+
+Whole package before sending a patch:
+
+    go test .
+
+Two failures are expected in a container and unrelated to this work:
+`TestExecuteFileOp_Move_PermissionDenied_Recovery` (runs as root, so the
+permission it wants to be denied is granted) and `TestUpdateFailureMessageRepro`
+(wants the network). Verify against a clean checkout before blaming a change
+for anything else.
+
+Manual check on the reference file, in this order: open it (item 1), `Ctrl+End`,
+hold `PgDn` from the top, `Esc` right after releasing it, `Ctrl+Home`, and type
+a character deep in the file. With `--debug`, the two loops report
 
     EDITOR: Indexer stopped: N lines in T, W of it waiting for data, B UI batches
     EDITOR: Highlight walker stopped: N lines, U on the UI thread, T wall clock
 
-That splits the wait three ways, and the next step depends on which one is
-large:
+Quick check that a problem is about highlighting at all: set
+`EditorHighlighter = None` and repeat. If it is still slow, the cost is in the
+loader or the line index, and nothing in this document applies.
 
-- **W dominates** — the indexer is asleep on the async buffer, not scanning.
-  The problem is in `async_buffer.go` / `piecetable.PieceTable.Read`, not here;
-  pull those two files.
-- **T minus W dominates with few batches** — the per-batch UI work is the cost.
-  Suspects are `LineIndex.AppendOffsets` and `WrapEngine.InvalidateFrom`; pull
-  `piecetable/lineindex.go` and `textlayout/wrap.go`.
-- **the walker's U is comparable to the indexer's T** — the duty cycle is still
-  too generous, or `Highlight` is being called for lines nobody will look at.
-  That is phase 3, and phase 6 for the wasted attribute slices.
+---
 
-**Notes carried between sessions:**
-- Word wrap is off by default, so `WrapEngine.ensureRowCountCache` is the cheap
-  branch and is *not* part of this problem.
-- Test file for the regression: `objdump -d install/far2l > far2l.s`, then F4,
-  `Ctrl+End`.
-- Quick check that the diagnosis still holds: set `EditorHighlighter = None`
-  and press `Ctrl+End` — it should be instant.
-- Second quick check, for the open-time report: `EditorHighlighter = None` and
-  open the file. If it is still slow, nothing in this document is involved and
-  the cost is in the loader or the line index.
-- The slice budget and the three duty levels are constants in `editor_view.go`.
-  If they turn out to need tuning per machine, they are the obvious candidates
-  for `AppConfig` (principle 5), but do not add settings before the numbers ask
-  for them.
+## 8. Constants
 
-### Phase 2b — findings after phases 1/2/2a
+`editor_view.go`, walker:
 
-Reported: Chroma is fixed — the tail of a 40MB / 600k line file appears and
-colours instantly. Colorer is not. It colours the beginning of the document,
-and further down only if you scroll there from an already coloured region;
-a file opened in the middle never gets colours at all. Holding `PgDn` from the
-top does colour as you go, but responsiveness collapses — an `Esc` pressed
-after releasing `PgDn` fires some fifteen seconds later.
+| name | value | meaning |
+|---|---|---|
+| `hlSliceBudget` | 4 ms | longest stall one slice may put on the UI thread |
+| `hlClockStride` | 8 | lines between two clock readings inside a slice |
+| `hlDutyIndexing` | 10 % | walker's share while the line index is building |
+| `hlDutyVisible` | 50 % | share while the viewport is still uncoloured |
+| `hlDutyAhead` | 25 % | share while walking past the viewport |
+| `hlIdleMin` / `hlIdleMax` | 1 / 100 ms | bounds on the gap between slices |
+| `hlStallIdle` | 10 ms | retry gap when a slice got no data |
+| `hlMaxStallSlices` | 100 | give up after this many empty slices |
+| `syncHighlightGapLimit` | 50 | largest chain gap still caught up in the draw path |
 
-Four things are behind that, and they compound.
+`colorer_plugin.go`, anchor:
 
-**1. Colorer has no state to chain.** `ColorerHighlighter.Highlight` takes the
-line number out of `prevState.(int)`; the actual parser state lives in the
-forward-only wasm session. So `ev.lineStates` holds, for Colorer, a list of
-consecutive integers and nothing else. The walker is not building anything.
+| name | value | meaning |
+|---|---|---|
+| `hlColorerForward` | 2000 | furthest the session is fed forward instead of re-anchored |
+| `hlColorerContext` | 300 | context lines parsed above a new anchor |
+| `maxCachedAttrLines` | 5 000 000 | attribute cache limit (item 3) |
+| `attrCacheKeepWindow` | 1 000 000 | eviction window (item 3) |
 
-**2. Walking the file is not free on the Colorer side — it is destructive.**
-Every `Highlight` reaches `colorer_parse_line`, and that function does
-`session->line_source.lines.push_back(...)` and parses with
-`TPM_CACHE_UPDATE`. Both the line vector and the parser cache grow for every
-line ever parsed and are released only by `colorer_reset_session`. Walking
-600k lines therefore copies the whole file into wasm linear memory as UTF-16
-and grows the parse cache alongside it — while `ch.lines` keeps a second full
-copy on the Go side. Worth confirming from the outside: watch RSS while
-holding `PgDn` with Colorer selected; it should climb and never come back.
+None of these are settings. Do not add them to `AppConfig` before a
+measurement asks for it.
 
-**3. The walker and the renderer fight over `parsedIdx`.** The walker runs
-*ahead* of the viewport (`hlDutyAhead`). The renderer then asks for a line
-behind `parsedIdx`, `resync` sees a rewind, and for `upTo > 2000` it takes the
-escape hatch added with phase 1: `Reset()`, `parsedIdx = upTo`, return — the
-parser's whole context is thrown away. The next walker slice moves ahead
-again, the next frame resets again. During a held `PgDn` this repeats per frame
-and the discarded work queues up on the UI thread. That is the fifteen seconds
-before `Esc`.
+---
 
-**4. Nothing calls the highlighter for a distant viewport.** In `DisplayObject`
-the `logIdx >= len(ev.lineStates)+syncHighlightGapLimit` branch gives Chroma an
-immediate stateless `Highlight(line, nil, bgAttr)` and gives Colorer nothing:
-`lineSyntax` stays nil until the chain has been walked all the way to the
-viewport. With (2) and (3) in the way, that never arrives. Hence "opened in the
-middle, never coloured" — it is not a slow path, it is no path.
+## 9. Log
 
-### Phase 5 — anchored window for Colorer
-
-Drop the idea of a state chain for Colorer. What the session needs is not a
-snapshot but a *position*, and the only positions worth holding are near the
-viewport.
-
-- **5a — take Colorer out of the walker.** `startHighlighting` and
-  `highlightSlice` skip a `*ColorerHighlighter` entirely, and the render path
-  stops waiting on `ev.lineStates` for it. On its own this ends the wasm memory
-  growth and the `parsedIdx` ping-pong; the file still colours only where the
-  session happens to be, so 5b follows immediately.
-- **5b — anchored context.** One `EnsureContext(topLine)` per frame, before the
-  render loop:
-  - `parsedIdx <= top` and `top - parsedIdx` small (~2000): parse forward, full
-    context preserved — this is the sequential-scrolling case and it stays
-    exact;
-  - otherwise: `Reset()`, parse `hlColorerContext` (~300) lines ending just
-    above `top`, anchor there. Cost is bounded by the context plus a screen,
-    so it is the same on line 3 and on line 500000.
-
-  The renderer then parses the visible lines forward as it does today and
-  always has colours. Trade-off, identical to the one already accepted for
-  Chroma: a construct opened more than `hlColorerContext` lines above the
-  viewport may be mis-coloured right after a jump, and comes out right once you
-  scroll to it. `colorer_reset_session` keeps the file type — `setFileType`
-  survives — so re-anchoring does not need `SelectType` again.
-- **5c — one copy of the text, one window of attributes.** `ch.lines` goes
-  away; the highlighter gets a line provider backed by the piece table and the
-  line index, which is where the text already is. `maxCachedAttrLines` /
-  `attrCacheKeepWindow` (5000000 / 1000000 today, i.e. unbounded in practice)
-  shrink to the anchored window.
-- **5d — bounded session.** Re-anchor unconditionally after
-  `hlColorerParsedMax` (~20000) lines parsed since the last `Reset()`, so the
-  wasm line vector and the parse cache stay bounded during a long sequential
-  scroll.
-
-Only after that does the checkpoint work (phase 3) make sense, and it applies
-to Chroma-style highlighters alone — the ones whose state really is a value.
+- Ctrl+End froze for 30-40 s: the chain was built from line 0 inside the draw
+  path.
+- Draw path no longer catches up over a large gap; Chroma gets an immediate
+  stateless call. Chroma fixed.
+- Walker added, then bounded by wall clock and put on a duty cycle, yielding to
+  the line indexer.
+- Colorer taken out of the walker.
+- Colorer drawn from an anchor next to the viewport; `ch.lines` no longer
+  needed; fallback engine handed to the editor.
+- Reported: the tail of the reference file appears and colours immediately with
+  both highlighters. Remaining: the blank window on open, item 1.
