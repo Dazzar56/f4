@@ -78,6 +78,7 @@ var (
 	_ = (fs.NodeRmdirer)((*node)(nil))
 	_ = (fs.NodeRenamer)((*node)(nil))
 	_ = (fs.NodeCreater)((*node)(nil))
+	_ = (fs.NodeSetattrer)((*node)(nil))
 	_ = (fs.FileWriter)((*writeFileHandle)(nil))
 	_ = (fs.FileFlusher)((*writeFileHandle)(nil))
 	_ = (fs.FileReleaser)((*writeFileHandle)(nil))
@@ -466,4 +467,44 @@ func (n *node) openForWrite(ctx context.Context, flags uint32) (fs.FileHandle, u
 		}
 	}
 	return &writeFileHandle{b: n.b, wh: wh, path: n.path}, 0, 0
+}
+
+// Setattr answers chmod and touch. Size is not handled here yet: truncating
+// means rewriting the staged copy, which is its own step.
+//
+// A no-op Setattr would be worse than a refusal in one specific way: cp -p,
+// tar -x and rsync all set the mode after writing the file, and a silent
+// success would tell them the permissions were preserved when they were not.
+func (n *node) Setattr(ctx context.Context, f fs.FileHandle, in *fuse.SetAttrIn, out *fuse.AttrOut) syscall.Errno {
+	if errno := n.writeRefusal(); errno != 0 {
+		return errno
+	}
+	var item vfs.VFSItem
+	var wanted bool
+
+	if mode, ok := in.GetMode(); ok {
+		// Only the permission bits: the file type is not the caller's
+		// to change, and passing it through would be a mode the
+		// backend cannot honour.
+		item.UnixMode = uint32(mode) & 0o7777
+		wanted = true
+	}
+	if mtime, ok := in.GetMTime(); ok {
+		item.MTime = mtime
+		wanted = true
+	}
+	if _, ok := in.GetSize(); ok && !wanted {
+		// Nothing else was asked for, so this is a plain truncate.
+		return syscall.ENOSYS
+	}
+	if !wanted {
+		// Something we do not serve — uid/gid, for one. Answering with
+		// the current attributes is what a mount that cannot own files
+		// can honestly do.
+		return n.Getattr(ctx, f, out)
+	}
+	if err := n.b.setAttributes(ctx, n.path, item); err != nil {
+		return errnoOf(err)
+	}
+	return n.Getattr(ctx, f, out)
 }

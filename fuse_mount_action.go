@@ -170,7 +170,13 @@ func reportMount(pf *PanelsFrame, source string, m *fusefs.Mount, err error) {
 		return
 	}
 	point := m.MountPoint
-	dlg := vtui.ShowMessage(" Mount ", fmt.Sprintf("%s\nis mounted at\n%s", source, point),
+	mode := "read-only"
+	if !m.ReadOnly {
+		mode = "read-write"
+	}
+	// Which mode came up is worth stating: the two commands sit next to each
+	// other in the menu, and a mount is not something to guess about.
+	dlg := vtui.ShowMessage(" Mount ", fmt.Sprintf("%s\nis mounted %s at\n%s", source, mode, point),
 		[]string{"&Go to", "&Ok"})
 	dlg.OnResult = func(code int) {
 		if code != 0 {

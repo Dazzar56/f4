@@ -663,6 +663,22 @@ func (b *bridge) commit(ctx context.Context, itemPath string, r io.Reader) error
 	return err
 }
 
+// setAttributes changes metadata. vfs.VFS takes a whole VFSItem, so only the
+// fields the kernel actually asked about are filled in: a zero UnixMode or a
+// zero time means "leave it alone" on the backend side, which is why chmod
+// and touch can be answered separately without one clobbering the other.
+func (b *bridge) setAttributes(ctx context.Context, itemPath string, item vfs.VFSItem) error {
+	b.mu.Lock()
+	if b.closed {
+		b.mu.Unlock()
+		return errClosed
+	}
+	err := b.v.SetAttributes(ctx, itemPath, item)
+	b.mu.Unlock()
+	b.invalidate(path.Dir(itemPath))
+	return err
+}
+
 // writerFor reports the open write handle for path, if there is one. A read
 // of a file being written has to see the staged copy rather than the version
 // the backend still holds.
