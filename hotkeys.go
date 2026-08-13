@@ -286,6 +286,27 @@ func (hm *HotkeyManager) Save() {
 	os.WriteFile(hm.iniPath, []byte(sb.String()), 0644)
 }
 
+// delKeyAlias returns the other spelling of a Del key string, or "" when the
+// key is not a Del key. "ShiftDel" <-> "ShiftNumDel", "Del" <-> "NumDel".
+//
+// EventToFarString derives the Num prefix from the EnhancedKey flag, but no
+// input backend f4 supports reports that flag consistently for Delete: the
+// GUI hosts (ebiten, gogpu, x11, wayland) build events with plain Shift/Ctrl/
+// Alt state and never set it, and CSI 3~ carries no such flag either, so the
+// navigation Del arrives named "NumDel" and every "…Del" binding silently
+// misses. far2l has the same two names and binds them to one handler
+// (editor.cpp: KEY_SHIFTDEL/KEY_SHIFTNUMDEL/KEY_SHIFTDECIMAL); resolving the
+// alias here keeps a binding working whichever name the backend produced.
+func delKeyAlias(key string) string {
+	if strings.HasSuffix(key, "NumDel") {
+		return strings.TrimSuffix(key, "NumDel") + "Del"
+	}
+	if strings.HasSuffix(key, "Del") {
+		return strings.TrimSuffix(key, "Del") + "NumDel"
+	}
+	return ""
+}
+
 // GetAction returns the action name mapped to the key in the given area.
 func (hm *HotkeyManager) GetAction(area, key string) string {
 	evalBinding := func(binding string) string {
@@ -317,6 +338,28 @@ func (hm *HotkeyManager) GetAction(area, key string) string {
 			if binding, ok := binds[key]; ok {
 				if action := evalBinding(binding); action != "" {
 					return action
+				}
+			}
+		}
+	}
+
+	// Nothing is bound under this exact name. Before giving up, try the other
+	// spelling of a Del key (see delKeyAlias): an explicit binding always wins,
+	// this only fills in the name the backend did not produce.
+	if alias := delKeyAlias(key); alias != "" {
+		if binds, ok := hm.Bindings[area]; ok {
+			if binding, ok := binds[alias]; ok {
+				if action := evalBinding(binding); action != "" {
+					return action
+				}
+			}
+		}
+		if area != "Common" {
+			if binds, ok := hm.Bindings["Common"]; ok {
+				if binding, ok := binds[alias]; ok {
+					if action := evalBinding(binding); action != "" {
+						return action
+					}
 				}
 			}
 		}

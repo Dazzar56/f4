@@ -1706,6 +1706,29 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 		return true
 
 	case vtinput.VK_DELETE:
+		// Shift+Del is Cut, and Cut it stays even if the hotkey dispatcher
+		// never resolved it: far2l copies the block to the clipboard and only
+		// then deletes it, and does nothing at all when no block is marked
+		// (editor.cpp, KEY_SHIFTDEL). Falling through to the plain delete below
+		// destroys a selection with no clipboard copy — unrecoverable — so the
+		// modified key is answered here rather than left to key naming, which
+		// differs between input backends. Ctrl+Del is likewise handled instead
+		// of eating the character under the cursor.
+		if shift && !ctrl && !alt {
+			if ev.selActive || ev.rectSelActive {
+				ev.CopySelection()
+				ev.DeleteSelection()
+			}
+			ev.updateDesiredVisualCol()
+			ev.ensureCursorVisible()
+			return true
+		}
+		if ctrl && !shift && !alt {
+			ev.deleteSpacersForward()
+			ev.updateDesiredVisualCol()
+			ev.ensureCursorVisible()
+			return true
+		}
 		if ev.selActive || ev.rectSelActive {
 			ev.DeleteSelection()
 		} else {
