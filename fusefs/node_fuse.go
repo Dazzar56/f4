@@ -77,7 +77,93 @@ var (
 	_ = (fs.NodeUnlinker)((*node)(nil))
 	_ = (fs.NodeRmdirer)((*node)(nil))
 	_ = (fs.NodeRenamer)((*node)(nil))
+	_ = (fs.NodeCreater)((*node)(nil))
+	_ = (fs.FileWriter)((*writeFileHandle)(nil))
+	_ = (fs.FileFlusher)((*writeFileHandle)(nil))
+	_ = (fs.FileReleaser)((*writeFileHandle)(nil))
+	_ = (fs.FileFsyncer)((*writeFileHandle)(nil))
 )
+
+// writeFileHandle is one open handle on a file being written. The data goes
+// into the staging file shared by every handle on that path, and reaches the
+// backend once, when the last of them closes.
+type writeFileHandle struct {
+	b         *bridge
+	wh        *writeHandle
+	path      string
+	committed bool
+}
+
+// Create makes a new file. The file exists in the mount immediately — the
+// kernel gets an inode and a handle — but reaches the backend only on close,
+// because vfs.Create takes one sequential stream and the kernel writes in
+// whatever order it likes.
+func (n *node) Create(ctx context.Context, name string, flags uint32, mode uint32, out *fuse.EntryOut) (*fs.Inode, fs.FileHandle, uint32, syscall.Errno) {
+	if errno := n.writeRefusal(); errno != 0 {
+		return nil, nil, 0, errno
+	}
+	childPath := n.b.join(n.path, name)
+	wh, err := n.b.acquireStagedWriter(childPath)
+	if err != nil {
+		return nil, nil, 0, errnoOf(err)
+	}
+	item := vfs.VFSItem{Name: name, MTime: time.Now()}
+	fillAttr(&out.Attr, item, childPath)
+	stable := fs.StableAttr{Ino: inodeOf(childPath), Mode: typeBits(item)}
+	inode := n.NewInode(ctx, &node{b: n.b, path: childPath}, stable)
+	return inode, &writeFileHandle{b: n.b, wh: wh, path: childPath}, 0, 0
+}
+
+func (f *writeFileHandle) Write(ctx context.Context, data []byte, off int64) (uint32, syscall.Errno) {
+	written, err := f.wh.staged.WriteAt(data, off)
+	if err != nil {
+		return uint32(written), errnoOf(err)
+	}
+	return uint32(written), 0
+}
+
+// Fsync is a no-op on purpose. Committing per fsync would turn a tool that
+// syncs every chunk into one full upload per chunk; the semantics are
+// commit-on-close and are documented as such in FUSE.md.
+func (f *writeFileHandle) Fsync(ctx context.Context, flags uint32) syscall.Errno {
+	return 0
+}
+
+// Flush runs on every close(2) and is where an error can still reach the
+// program that wrote the file, so the commit happens here when this is the
+// last handle. Release does it again only if Flush never ran.
+func (f *writeFileHandle) Flush(ctx context.Context) syscall.Errno {
+	if f.committed || !f.b.isLastWriter(f.wh) {
+		return 0
+	}
+	if errno := f.commit(ctx); errno != 0 {
+		return errno
+	}
+	return 0
+}
+
+func (f *writeFileHandle) Release(ctx context.Context) syscall.Errno {
+	last := f.b.releaseWriter(f.wh)
+	if last {
+		if !f.committed {
+			f.commit(ctx)
+		}
+		f.wh.staged.Close()
+	}
+	return 0
+}
+
+func (f *writeFileHandle) commit(ctx context.Context) syscall.Errno {
+	r, err := f.wh.staged.Reader()
+	if err != nil {
+		return errnoOf(err)
+	}
+	if err := f.b.commit(ctx, f.path, r); err != nil {
+		return errnoOf(err)
+	}
+	f.committed = true
+	return 0
+}
 
 // writeRefusal reports why a write cannot happen, or 0 when it can. The mount
 // being read-only and the backend being unable to write are different facts

@@ -100,20 +100,6 @@ func showMountList(pf *PanelsFrame) {
 		return
 	}
 
-	menu := vtui.NewVMenu(Msg("Mounts.Title"))
-	if live := liveRows(rows); len(live) > 1 {
-		menu.AddItem(vtui.MenuItem{
-			Text:     fmt.Sprintf("Unmount all (%d)", len(live)),
-			UserData: -1,
-		})
-	}
-	for i, r := range rows {
-		menu.AddItem(vtui.MenuItem{
-			Text:     fmt.Sprintf("%s  %s %s  \u2190  %s%s", r.point, r.mode, r.age, r.source, r.note),
-			UserData: i,
-		})
-	}
-
 	w, h := 70, len(rows)+2
 	scrW := vtui.FrameManager.GetScreenSize()
 	scrH := vtui.FrameManager.GetScreenHeight()
@@ -123,6 +109,25 @@ func showMountList(pf *PanelsFrame) {
 	if w > scrW-2 {
 		w = scrW - 2
 	}
+
+	menu := vtui.NewVMenu(Msg("Mounts.Title"))
+	if live := liveRows(rows); len(live) > 1 {
+		menu.AddItem(vtui.MenuItem{
+			Text:     fmt.Sprintf("Unmount all (%d)", len(live)),
+			UserData: -1,
+		})
+	}
+	for i, r := range rows {
+		menu.AddItem(vtui.MenuItem{
+			// A remote source can be far longer than the dialog; a row
+			// that overflows hides the mount point, which is the one
+			// thing the row exists to show.
+			Text: vtui.TruncateMiddle(fmt.Sprintf("%s  %s %s  \u2190  %s%s",
+				r.point, r.mode, r.age, r.source, r.note), w-4),
+			UserData: i,
+		})
+	}
+
 	x, y := (scrW-w)/2, (scrH-h)/2
 	if x < 0 {
 		x = 0

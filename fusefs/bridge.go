@@ -558,6 +558,60 @@ func (b *bridge) releaseWriter(h *writeHandle) (last bool) {
 	return true
 }
 
+// acquireStagedWriter is acquireWriter plus the staging file, created under
+// the same lock. Doing it in one step matters: two processes creating the
+// same file at once must not race over who has a staging file yet.
+func (b *bridge) acquireStagedWriter(itemPath string) (*writeHandle, error) {
+	b.writeMu.Lock()
+	defer b.writeMu.Unlock()
+	if b.writers == nil {
+		b.writers = make(map[string]*writeHandle)
+	}
+	if existing, ok := b.writers[itemPath]; ok {
+		existing.refs++
+		return existing, nil
+	}
+	staged, err := newStagedFile()
+	if err != nil {
+		return nil, err
+	}
+	h := &writeHandle{path: itemPath, refs: 1, staged: staged}
+	b.writers[itemPath] = h
+	return h, nil
+}
+
+// isLastWriter reports whether h is the only handle left on its file, which
+// is how a close knows it is the one that has to commit.
+func (b *bridge) isLastWriter(h *writeHandle) bool {
+	if h == nil {
+		return false
+	}
+	b.writeMu.Lock()
+	defer b.writeMu.Unlock()
+	return h.refs <= 1
+}
+
+// commit hands the staged file to the backend in one sequential pass, which
+// is all vfs.Create can accept. The parent listing is dropped afterwards, or
+// cp a b && ls would not show b.
+func (b *bridge) commit(ctx context.Context, itemPath string, r io.Reader) error {
+	b.mu.Lock()
+	if b.closed {
+		b.mu.Unlock()
+		return errClosed
+	}
+	w, err := b.v.Create(ctx, itemPath)
+	if err == nil {
+		_, err = io.Copy(w, r)
+		if cerr := w.Close(); err == nil {
+			err = cerr
+		}
+	}
+	b.mu.Unlock()
+	b.invalidate(path.Dir(itemPath))
+	return err
+}
+
 // writerFor reports the open write handle for path, if there is one. A read
 // of a file being written has to see the staged copy rather than the version
 // the backend still holds.
