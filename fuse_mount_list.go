@@ -91,10 +91,14 @@ func showMountList(pf *PanelsFrame) {
 		// An empty list is the most likely moment for someone to want
 		// their first mount, so offer it here instead of sending them
 		// back to the menu.
-		dlg := vtui.ShowMessage(Msg("Mounts.Title"), "Nothing is mounted.", []string{"&Mount this panel", "&Ok"})
+		dlg := vtui.ShowMessage(Msg("Mounts.Title"), "Nothing is mounted.",
+			[]string{"&Mount this panel", "Mount read-&write", "&Ok"})
 		dlg.OnResult = func(code int) {
-			if code == 0 {
+			switch code {
+			case 0:
 				mountActivePanel(pf, true)
+			case 1:
+				mountActivePanel(pf, false)
 			}
 		}
 		return

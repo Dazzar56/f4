@@ -679,6 +679,9 @@ func (b *bridge) setAttributes(ctx context.Context, itemPath string, item vfs.VF
 	return err
 }
 
+// parentOf is the directory an item lives in, in VFS path terms.
+func (b *bridge) parentOf(itemPath string) string { return path.Dir(itemPath) }
+
 // writerFor reports the open write handle for path, if there is one. A read
 // of a file being written has to see the staged copy rather than the version
 // the backend still holds.

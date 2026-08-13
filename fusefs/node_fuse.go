@@ -163,6 +163,11 @@ func (f *writeFileHandle) commit(ctx context.Context) syscall.Errno {
 		return errnoOf(err)
 	}
 	f.committed = true
+	// The kernel may still be holding attributes from before the write, and
+	// AttrTimeout is measured in seconds. Dropping the entry the file was
+	// listed under is the cheap half of the answer; the Getattr override
+	// above is the other half, for as long as the handle is open.
+	f.b.invalidate(f.b.parentOf(f.path))
 	return 0
 }
 
@@ -200,6 +205,22 @@ func (n *node) Mkdir(ctx context.Context, name string, mode uint32, out *fuse.En
 }
 
 func (n *node) Getattr(ctx context.Context, f fs.FileHandle, out *fuse.AttrOut) syscall.Errno {
+	// A file being written does not exist in the backend yet, or exists
+	// there in its old shape. Answering from the staging copy is what makes
+	// `cp a b && ls -l b` show b at its real size instead of zero, and what
+	// stops a reader from being told the file ends before it does.
+	if wh := n.b.writerFor(n.path); wh != nil {
+		if size, err := wh.staged.Size(); err == nil {
+			item, statErr := n.b.stat(ctx, n.path)
+			if statErr != nil {
+				item = vfs.VFSItem{Name: displayName(n.path)}
+			}
+			item.Size = size
+			item.MTime = time.Now()
+			fillAttr(&out.Attr, item, n.path)
+			return 0
+		}
+	}
 	item, err := n.b.stat(ctx, n.path)
 	if err != nil {
 		return errnoOf(err)
