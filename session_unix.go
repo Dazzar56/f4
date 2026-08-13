@@ -227,6 +227,18 @@ func runClient(sockPath string) {
 	vtui.DebugLog("CLIENT: Server released pipe. nRead=%d, err=%v", nRead, err)
 }
 
+// setCloseOnExec marks each fd FD_CLOEXEC. Used on descriptors received over
+// SCM_RIGHTS, which the kernel never flags this way on their own — see the
+// call site in runServer for why that matters. Failures are logged, not
+// fatal: the attach can still proceed, just without the safety net.
+func setCloseOnExec(fds []int) {
+	for _, fd := range fds {
+		if _, err := unix.FcntlInt(uintptr(fd), unix.F_SETFD, unix.FD_CLOEXEC); err != nil {
+			vtui.DebugLog("SERVER: WARNING: failed to set FD_CLOEXEC on fd %d: %v", fd, err)
+		}
+	}
+}
+
 func runServer(sockPath string) {
 	vtui.DebugLog("SERVER: Starting daemon at %s", sockPath)
 
@@ -281,6 +293,15 @@ func runServer(sockPath string) {
 			vtui.DebugLog("SERVER: Failed to parse Unix rights")
 			continue
 		}
+
+		// Fds arriving via SCM_RIGHTS have no FD_CLOEXEC set. Without it, any
+		// child process the daemon spawns after attach (in particular the
+		// built-in terminal's shell, started by initPTY) inherits the notify
+		// pipe's write end along with stdin/stdout. If the daemon then dies,
+		// that inherited copy keeps the pipe open and the client's blocking
+		// read on it never returns, turning a daemon crash into what looks
+		// like an indefinite hang. See PORTABILITY_BSD.md, 4.1.
+		setCloseOnExec(fds)
 
 		vtui.DebugLog("SERVER: FDs received (In:%d Out:%d Pipe:%d). Goroutines: %d. Attaching terminal.", fds[0], fds[1], fds[2], runtime.NumGoroutine())
 		// We don't log individual FD flags in production to keep logs clean.
