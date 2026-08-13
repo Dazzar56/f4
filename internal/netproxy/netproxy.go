@@ -28,6 +28,7 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/net/http/httpproxy"
 	xproxy "golang.org/x/net/proxy"
 )
 
@@ -151,7 +152,10 @@ func (s Settings) Describe() string {
 
 // proxyFunc is what net/http wants for Transport.Proxy.
 func systemProxyURL(req *http.Request) (*url.URL, error) {
-	u, err := http.ProxyFromEnvironment(req)
+	if req == nil || req.URL == nil {
+		return nil, nil
+	}
+	u, err := httpproxy.FromEnvironment().ProxyFunc()(req.URL)
 	if err != nil || u == nil {
 		for _, env := range []string{"ALL_PROXY", "all_proxy", "HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"} {
 			if val := os.Getenv(env); val != "" {
