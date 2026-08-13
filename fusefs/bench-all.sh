@@ -75,10 +75,20 @@ if [ -n "$HOST" ] && ssh -o BatchMode=yes -o ConnectTimeout=10 "$HOST" true 2>/d
 		done
 		printf 'TODO deep\n' > '$RDIR/nested/a/b/c/deep.txt'
 		pwd
-	" > "$WORK/remote-pwd" 2>/dev/null || true
-	RHOME=$(cat "$WORK/remote-pwd" 2>/dev/null || echo "")
+		id -un
+	" > "$WORK/remote-info" 2>/dev/null || true
+	RHOME=$(sed -n 1p "$WORK/remote-info" 2>/dev/null || echo "")
+	RUSER=$(sed -n 2p "$WORK/remote-info" 2>/dev/null || echo "")
 	if [ -n "$RHOME" ]; then
-		REMOTE="sftp://$HOST/$RHOME/$RDIR"
+		# The URL is assembled rather than pasted together: $RHOME is
+		# already absolute, so a slash in front of it makes the double
+		# slash that f4 then reads as an empty first path element. The
+		# user has to be in there too — ssh takes it from its own config,
+		# and f4 has no way to see that.
+		case "$HOST" in
+		*@*) REMOTE="sftp://$HOST$RHOME/$RDIR" ;;
+		*)   REMOTE="sftp://${RUSER:+$RUSER@}$HOST$RHOME/$RDIR" ;;
+		esac
 	fi
 else
 	log "remote: skipped (no passwordless ssh to ${HOST:-<none>})"
