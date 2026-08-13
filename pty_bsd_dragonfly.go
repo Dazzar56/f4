@@ -3,33 +3,19 @@
 package main
 
 import (
-	"bytes"
-	"syscall"
-	"unsafe"
+	"fmt"
+
+	"golang.org/x/sys/unix"
 )
 
-// ptySlaveName is carried over unchanged from the time DragonFly shared its
-// implementation with FreeBSD. It is almost certainly broken in the same way
-// the FreeBSD one was: 0x40807448 decodes to _IOR('t', 72, char[128]), and
-// DragonFly's sys/sys/ttycom.h defines no command 72 in the 't' group.
-//
-// It is left alone on purpose rather than "fixed" by analogy. DragonFly has
-// no TIOCGPTN, and its libc names the slave through fdevname_r() on the
-// master, which is a different mechanism from the one FreeBSD uses; writing
-// that blind, with no DragonFly machine to run it on, is what produced issue
-// #444 in the first place. Anyone with access to DragonFly should replace
-// this with the fdevname path and verify it there.
+// ptySlaveName asks the master which pts unit number it is paired with.
+// DragonFly BSD uses unix98 pts devices under /dev/pts/N.
+// TIOCGPTN is _IOR('t', 15, int) = 0x4004740f in sys/sys/ttycom.h.
 func ptySlaveName(masterFd int) (string, error) {
-	const tiocptygname = 0x40807448
-
-	ptyName := make([]byte, 128)
-	if _, _, e := syscall.Syscall(syscall.SYS_IOCTL, uintptr(masterFd), tiocptygname, uintptr(unsafe.Pointer(&ptyName[0]))); e != 0 {
-		return "", e
+	const tiocgptn = 0x4004740f
+	n, err := unix.IoctlGetInt(masterFd, tiocgptn)
+	if err != nil {
+		return "", err
 	}
-
-	nameLen := bytes.IndexByte(ptyName, 0)
-	if nameLen == -1 {
-		nameLen = len(ptyName)
-	}
-	return string(ptyName[:nameLen]), nil
+	return fmt.Sprintf("/dev/pts/%d", n), nil
 }
