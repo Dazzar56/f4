@@ -22,21 +22,37 @@ import (
 // entry (Label/MenuPath), a help topic line (Description) and a default
 // hotkey (DefaultKeys) at the same time.
 type Action struct {
-	Name        string // stable ID and macro command, e.g. "Editor.Save"
-	Area        string // primary area: "Shell", "Editor", "Viewer", "Terminal", "Common"
-	Label       string // English fallback for menu/keybar
-	LabelKey    string // optional i18n key resolved via Msg()
+	Name     string // stable ID and macro command, e.g. "Editor.Save"
+	Area     string // primary area: "Shell", "Editor", "Viewer", "Terminal", "Common"
+	Label    string // English fallback for menu/keybar
+	LabelKey string // optional i18n key resolved via Msg()
+	// SearchKeys are additional localization keys whose values are indexed by
+	// discoverability surfaces but are not rendered as the action label.
+	SearchKeys  []string
 	Description string // English fallback for help
 	DescKey     string // optional i18n key resolved via Msg()
 	// DefaultKeys are Far-style key names ("F2", "CtrlIns") with an
 	// optional ":Condition" suffix per key (e.g. "Esc:EscToggle").
 	DefaultKeys []string
+	// NativeKeys documents shortcuts owned by vtui's frame dispatcher rather
+	// than HotkeyManager. Like DefaultKeys, they may carry a :Condition suffix.
+	// They are shown in discoverability surfaces, but are
+	// deliberately not installed as configurable defaults: claiming them in
+	// EventFilter would run the action before the focused frame gets its normal
+	// chance to consume the key (notably terminal Ctrl+W and Ctrl+N).
+	NativeKeys []string
 	// DefaultAreas lists extra areas (besides Area) that get the default
 	// bindings too (e.g. Panel.Toggle works in both Shell and Terminal).
 	DefaultAreas []string
 	// MenuPath is the top-level menu the action appears in ("File",
 	// "Edit", ...). Empty means the action is not listed in menus.
 	MenuPath string
+	// HideFromMenu keeps an action out of registry-generated menus while still
+	// retaining MenuPath as its localized command-palette category. This is for
+	// commands exposed by a custom menu, such as the fixed Left/Right panel
+	// actions, whose exact command IDs must remain discoverable without creating
+	// a second generated copy of the custom menu.
+	HideFromMenu bool
 	// MenuSeparatorBefore inserts a separator above this action's menu item.
 	MenuSeparatorBefore bool
 	// Checked, when set, reports the toggle state shown in menus ("√ ").
@@ -283,6 +299,94 @@ func init() {
 		DescKey:     "Action.App.CommandPalette.Desc",
 		DefaultKeys: []string{"CtrlShiftP"},
 		Handler:     ShowCommandPalette,
+	})
+	RegisterAction(Action{
+		Name:        "App.Help",
+		Area:        "Common",
+		Label:       "Context Help",
+		LabelKey:    "Action.App.Help",
+		SearchKeys:  []string{"KeyBar.F1"},
+		Description: "Open help for the current screen or focused control",
+		DescKey:     "Action.App.Help.Desc",
+		NativeKeys:  []string{"F1:FrameworkNoTerminalApp"},
+		Handler:     actionContextHelp,
+	})
+	RegisterAction(Action{
+		Name:        "App.MainMenu",
+		Area:        "Common",
+		Label:       "Main Menu",
+		LabelKey:    "Action.App.MainMenu",
+		SearchKeys:  []string{"UserMenu.MainMenuTitle"},
+		Description: "Open the main menu for the current screen",
+		DescKey:     "Action.App.MainMenu.Desc",
+		NativeKeys:  []string{"F9:FrameworkNoTerminalApp"},
+		Handler:     actionActivateMainMenu,
+	})
+	RegisterAction(Action{
+		Name:        "Workspace.New",
+		Area:        "Common",
+		Label:       "New Workspace",
+		LabelKey:    "Action.Workspace.New",
+		SearchKeys:  []string{"AppearanceSettings.WorkspaceTabs", "PanelSettings.TerminalCtrlNWorkspace"},
+		Description: "Clone the current panels into a new workspace",
+		DescKey:     "Action.Workspace.New.Desc",
+		NativeKeys:  []string{"CtrlN:TerminalCtrlNWorkspace"},
+		Handler:     actionWorkspaceNew,
+	})
+	RegisterAction(Action{
+		Name:        "Workspace.Close",
+		Area:        "Common",
+		Label:       "Close Workspace",
+		LabelKey:    "Action.Workspace.Close",
+		SearchKeys:  []string{"AppearanceSettings.WorkspaceTabs", "AppearanceSettings.RestoreWorkspaceTabs"},
+		Description: "Close the active workspace",
+		DescKey:     "Action.Workspace.Close.Desc",
+		NativeKeys:  []string{"CtrlW:FrameworkNoTerminalApp"},
+		Handler:     actionWorkspaceClose,
+	})
+	RegisterAction(Action{
+		Name:        "Workspace.Next",
+		Area:        "Common",
+		Label:       "Next Workspace",
+		LabelKey:    "Action.Workspace.Next",
+		SearchKeys:  []string{"AppearanceSettings.WorkspaceTabs"},
+		Description: "Switch to the next workspace",
+		DescKey:     "Action.Workspace.Next.Desc",
+		NativeKeys:  []string{"CtrlTab"},
+		Visible:     multipleWorkspacesAvailable,
+		Handler:     actionWorkspaceNext,
+	})
+	RegisterAction(Action{
+		Name:        "Workspace.Previous",
+		Area:        "Common",
+		Label:       "Previous Workspace",
+		LabelKey:    "Action.Workspace.Previous",
+		SearchKeys:  []string{"AppearanceSettings.WorkspaceTabs"},
+		Description: "Switch to the previous workspace",
+		DescKey:     "Action.Workspace.Previous.Desc",
+		NativeKeys:  []string{"CtrlShiftTab"},
+		Visible:     multipleWorkspacesAvailable,
+		Handler:     actionWorkspacePrevious,
+	})
+	RegisterAction(Action{
+		Name:        "Workspace.List",
+		Area:        "Common",
+		Label:       "Workspace List",
+		LabelKey:    "Action.Workspace.List",
+		SearchKeys:  []string{"AppearanceSettings.WorkspaceTabs"},
+		Description: "Show all workspaces",
+		DescKey:     "Action.Workspace.List.Desc",
+		NativeKeys:  []string{"F12:FrameworkNoTerminalApp"},
+		Handler:     actionWorkspaceList,
+	})
+	RegisterAction(Action{
+		Name:        "Debug.ScreenDump",
+		Area:        "Common",
+		Label:       "Dump Screen",
+		LabelKey:    "Action.Debug.ScreenDump",
+		Description: "Write the current screen buffer to vtui.screen.log",
+		DescKey:     "Action.Debug.ScreenDump.Desc",
+		Handler:     actionScreenDump,
 	})
 
 	// --- Shell (panels) actions ---

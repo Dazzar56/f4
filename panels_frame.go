@@ -538,7 +538,7 @@ func (pf *PanelsFrame) leftMenu() vtui.MenuBarItem {
 			{Text: "&3. " + Msg("Action.AI.ViewOut"), Command: CmLeftAIOut, Shortcut: "Ctrl+3"},
 			{Text: "&4. " + Msg("Action.AI.ViewMem"), Command: CmLeftAIMem, Shortcut: "Ctrl+4"},
 			{Separator: true},
-			{Text: "Bac&kground", Command: CmBackground},
+			{Text: Msg("FileOp.BtnBackground"), Command: CmBackground},
 			{Text: Msg("Menu.Exit"), Command: vtui.CmQuit},
 		}}
 	}
@@ -554,7 +554,7 @@ func (pf *PanelsFrame) leftMenu() vtui.MenuBarItem {
 		{Text: "&" + Msg("Menu.SortSize"), Command: CmLeftSortSize},
 		{Text: "&" + Msg("Menu.SortUnsorted"), Command: CmLeftSortUnsorted},
 		{Separator: true},
-		{Text: "Bac&kground", Command: CmBackground},
+		{Text: Msg("FileOp.BtnBackground"), Command: CmBackground},
 		{Text: Msg("Menu.Exit"), Command: vtui.CmQuit},
 	}}
 }
@@ -619,14 +619,34 @@ func getSortMenuText(current, target SortMode, label string) string {
 }
 
 var commandToActionName = map[int]string{
-	CmLeftBrief:             "Panel.ViewBrief",
-	CmLeftMedium:            "Panel.ViewMedium",
-	CmLeftDetailed:          "Panel.ViewDetailed",
-	CmLeftWide:              "Panel.ViewWide",
-	CmRightBrief:            "Panel.ViewBrief",
-	CmRightMedium:           "Panel.ViewMedium",
-	CmRightDetailed:         "Panel.ViewDetailed",
-	CmRightWide:             "Panel.ViewWide",
+	CmLeftBrief:             "Panel.Left.ViewBrief",
+	CmLeftMedium:            "Panel.Left.ViewMedium",
+	CmLeftDetailed:          "Panel.Left.ViewDetailed",
+	CmLeftWide:              "Panel.Left.ViewWide",
+	CmRightBrief:            "Panel.Right.ViewBrief",
+	CmRightMedium:           "Panel.Right.ViewMedium",
+	CmRightDetailed:         "Panel.Right.ViewDetailed",
+	CmRightWide:             "Panel.Right.ViewWide",
+	CmLeftSortName:          "Panel.Left.SortByName",
+	CmLeftSortExt:           "Panel.Left.SortByExt",
+	CmLeftSortTime:          "Panel.Left.SortByTime",
+	CmLeftSortSize:          "Panel.Left.SortBySize",
+	CmLeftSortUnsorted:      "Panel.Left.SortUnsorted",
+	CmRightSortName:         "Panel.Right.SortByName",
+	CmRightSortExt:          "Panel.Right.SortByExt",
+	CmRightSortTime:         "Panel.Right.SortByTime",
+	CmRightSortSize:         "Panel.Right.SortBySize",
+	CmRightSortUnsorted:     "Panel.Right.SortUnsorted",
+	CmLeftAIContext:         "AI.Left.ViewContext",
+	CmLeftAIChat:            "AI.Left.ViewChat",
+	CmLeftAIOut:             "AI.Left.ViewOut",
+	CmLeftAIMem:             "AI.Left.ViewMem",
+	CmRightAIContext:        "AI.Right.ViewContext",
+	CmRightAIChat:           "AI.Right.ViewChat",
+	CmRightAIOut:            "AI.Right.ViewOut",
+	CmRightAIMem:            "AI.Right.ViewMem",
+	CmBackground:            "App.Background",
+	vtui.CmQuit:             "App.Quit",
 	CmView:                  "File.View",
 	CmEdit:                  "File.Edit",
 	CmCopy:                  "File.Copy",
@@ -643,6 +663,31 @@ var commandToActionName = map[int]string{
 	CmLanguage:              "Settings.Language",
 	CmHelpLanguage:          "Settings.HelpLanguage",
 	CmPlugins:               "Settings.Plugins",
+}
+
+// Fixed-side menu commands intentionally have exact action IDs above so every
+// user-invokable item is represented in the registry. Their shortcut column,
+// however, keeps showing the active-panel bindings used by Ctrl+1..4 and
+// Ctrl+F3..F7; the fixed-side actions themselves do not claim extra keys.
+var commandShortcutActionName = map[int]string{
+	CmLeftBrief:         "Panel.ViewBrief",
+	CmLeftMedium:        "Panel.ViewMedium",
+	CmLeftDetailed:      "Panel.ViewDetailed",
+	CmLeftWide:          "Panel.ViewWide",
+	CmRightBrief:        "Panel.ViewBrief",
+	CmRightMedium:       "Panel.ViewMedium",
+	CmRightDetailed:     "Panel.ViewDetailed",
+	CmRightWide:         "Panel.ViewWide",
+	CmLeftSortName:      "Panel.SortByName",
+	CmLeftSortExt:       "Panel.SortByExt",
+	CmLeftSortTime:      "Panel.SortByTime",
+	CmLeftSortSize:      "Panel.SortBySize",
+	CmLeftSortUnsorted:  "Panel.SortUnsorted",
+	CmRightSortName:     "Panel.SortByName",
+	CmRightSortExt:      "Panel.SortByExt",
+	CmRightSortTime:     "Panel.SortByTime",
+	CmRightSortSize:     "Panel.SortBySize",
+	CmRightSortUnsorted: "Panel.SortUnsorted",
 }
 
 func (pf *PanelsFrame) updateMenuCheckmarks() {
@@ -693,6 +738,9 @@ func (pf *PanelsFrame) updateMenuCheckmarks() {
 			for j := range pf.menuBar.Items[i].SubItems {
 				sub := &pf.menuBar.Items[i].SubItems[j]
 				if actName, ok := commandToActionName[sub.Command]; ok {
+					if shortcutAction, exists := commandShortcutActionName[sub.Command]; exists {
+						actName = shortcutAction
+					}
 					if key := hm.GetKeyForAction(area, actName); key != "" {
 						sub.Shortcut = FormatKeyForUI(key)
 					} else {
@@ -1324,17 +1372,7 @@ func (pf *PanelsFrame) InterceptPluginKey(e *vtinput.InputEvent) bool {
 
 	// Arkanoid easter egg: Ctrl+Alt+A
 	if e.VirtualKeyCode == 'A' && alt && ctrl {
-		for i, s := range vtui.FrameManager.Screens {
-			for _, f := range s.Frames {
-				if f.GetTitle() == "Arkanoid" {
-					vtui.FrameManager.SwitchScreen(i)
-					return true
-				}
-			}
-		}
-		// Запускаем без десктопа, чтобы воркспейс был прозрачным
-		vtui.FrameManager.AddScreenHeadless(NewArkanoidFrame())
-		return true
+		return actionArkanoid()
 	}
 
 	// Check global hotkeys (ignoring Lock and Enhanced keys)
@@ -2736,12 +2774,7 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 		actionPlugRing(pf)
 		return true
 	case CmBackground:
-		if !SupportsBackgrounding() {
-			vtui.ShowMessage(" Background ", "Backgrounding is not supported on this OS.", []string{"&Ok"})
-			return true
-		}
-		vtui.FrameManager.Stop() // Clean exit from the main loop
-		return true
+		return actionBackground()
 
 	case vtui.CmResize: // Used as a hack for 'fork' command from FrameManager
 		if s, ok := args.(string); ok && s == "fork" {
@@ -3773,7 +3806,7 @@ func (pf *PanelsFrame) showPluginMenu() {
 		labels = append(labels, itm.Label)
 	}
 	for _, command := range commands {
-		labels = append(labels, command.Label)
+		labels = append(labels, pluginCommandDisplayLabel(command))
 	}
 	pf.Menu(" Plugins ", labels, func(idx int) {
 		switch {
@@ -3783,9 +3816,9 @@ func (pf *PanelsFrame) showPluginMenu() {
 				handler(pf)
 			})
 		case idx >= len(items) && idx < len(items)+len(commands):
-			command := commands[idx-len(items)]
+			commandID := commands[idx-len(items)].ID
 			vtui.FrameManager.PostTask(func() {
-				command.Run(pf)
+				executeRegisteredPluginCommand(vfs.PluginCommandPanel, commandID, pf)
 			})
 		}
 	})

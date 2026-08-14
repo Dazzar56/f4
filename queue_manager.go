@@ -660,24 +660,40 @@ func (qf *QueueFrame) openTaskDetails(idx int) {
 	}
 }
 
+func queueHasActiveTasks() bool {
+	manager := GlobalQueueManager
+	if manager == nil {
+		return false
+	}
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	for _, task := range manager.tasks {
+		if task == nil {
+			continue
+		}
+		task.mu.Lock()
+		active := queueTaskActive(task.State)
+		task.mu.Unlock()
+		if active {
+			return true
+		}
+	}
+	return false
+}
+
+func (qf *QueueFrame) vetoCloseWhileActive() bool {
+	if !queueHasActiveTasks() {
+		return false
+	}
+	vtui.ShowToast("Cannot close queue while operations are active. Use Ctrl+Tab to switch.", 3*time.Second)
+	return true
+}
+
 func (qf *QueueFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	ctrlW := e.KeyDown && e.VirtualKeyCode == vtinput.VK_W &&
 		(e.ControlKeyState&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed)) != 0
 	if e.KeyDown && (e.VirtualKeyCode == vtinput.VK_ESCAPE || e.VirtualKeyCode == vtinput.VK_F10 || ctrlW) {
-		active := false
-		GlobalQueueManager.mu.Lock()
-		for _, t := range GlobalQueueManager.tasks {
-			t.mu.Lock()
-			isActive := queueTaskActive(t.State)
-			t.mu.Unlock()
-			if isActive {
-				active = true
-				break
-			}
-		}
-		GlobalQueueManager.mu.Unlock()
-		if active {
-			vtui.ShowToast("Cannot close queue while operations are active. Use Ctrl+Tab to switch.", 3*time.Second)
+		if qf.vetoCloseWhileActive() {
 			return true // Swallow ESC/F10
 		}
 	}

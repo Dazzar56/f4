@@ -56,11 +56,49 @@ func validatePluginCommand(command vfs.PluginCommand) error {
 	return nil
 }
 
+func clonePluginCommand(command vfs.PluginCommand) vfs.PluginCommand {
+	command.SearchKeys = append([]string(nil), command.SearchKeys...)
+	return command
+}
+
+func pluginCommandDisplayText(key, fallback string) string {
+	key = strings.TrimSpace(key)
+	if key != "" {
+		if value := Msg(key); !strings.HasPrefix(value, "{") {
+			return value
+		}
+	}
+	return fallback
+}
+
+func pluginCommandDisplayLabel(command vfs.PluginCommand) string {
+	return pluginCommandDisplayText(command.LabelKey, command.Label)
+}
+
+func pluginCommandDisplayDescription(command vfs.PluginCommand) string {
+	return pluginCommandDisplayText(command.DescriptionKey, command.Description)
+}
+
+func pluginCommandTranslationKeys(command vfs.PluginCommand) []string {
+	keys := make([]string, 0, 2+len(command.SearchKeys))
+	seen := make(map[string]bool, 2+len(command.SearchKeys))
+	for _, key := range append([]string{command.LabelKey, command.DescriptionKey}, command.SearchKeys...) {
+		key = strings.TrimSpace(key)
+		if key == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		keys = append(keys, key)
+	}
+	return keys
+}
+
 func (c *coreAPI) RegisterPluginCommand(command vfs.PluginCommand) (vfs.Registration, error) {
 	command.ID = strings.TrimSpace(command.ID)
 	if err := validatePluginCommand(command); err != nil {
 		return nil, err
 	}
+	command = clonePluginCommand(command)
 
 	token := &struct{}{}
 	pluginCommandRegistry.Lock()
@@ -92,7 +130,7 @@ func pluginCommandsSnapshot(location vfs.PluginCommandLocation, app vfs.App) []v
 	ordered := append([]string(nil), pluginCommandRegistry.order...)
 	registered := make(map[string]registeredPluginCommand, len(pluginCommandRegistry.byID))
 	for id, command := range pluginCommandRegistry.byID {
-		registered[id] = command
+		registered[id] = registeredPluginCommand{command: clonePluginCommand(command.command), token: command.token}
 	}
 	pluginCommandRegistry.RUnlock()
 
@@ -105,9 +143,24 @@ func pluginCommandsSnapshot(location vfs.PluginCommandLocation, app vfs.App) []v
 		if entry.command.Visible != nil && !entry.command.Visible(app) {
 			continue
 		}
-		commands = append(commands, entry.command)
+		commands = append(commands, clonePluginCommand(entry.command))
 	}
 	return commands
+}
+
+// executeRegisteredPluginCommand resolves a menu/palette selection against
+// the live registry. Menus keep a label snapshot while open, but a plugin can
+// disconnect and unregister in the meantime; retaining its old Run closure
+// would call unloaded plugin code.
+func executeRegisteredPluginCommand(location vfs.PluginCommandLocation, id string, app vfs.App) bool {
+	for _, command := range pluginCommandsSnapshot(location, app) {
+		if !strings.EqualFold(command.ID, id) {
+			continue
+		}
+		command.Run(app)
+		return true
+	}
+	return false
 }
 
 func actionPluginConfiguration(pf *PanelsFrame) {
@@ -119,11 +172,11 @@ func actionPluginConfiguration(pf *PanelsFrame) {
 
 	labels := make([]string, len(commands))
 	for i := range commands {
-		labels[i] = commands[i].Label
+		labels[i] = pluginCommandDisplayLabel(commands[i])
 	}
 	pf.Menu(Msg("Plugins.ConfigTitle"), labels, func(index int) {
 		if index >= 0 && index < len(commands) {
-			commands[index].Run(pf)
+			executeRegisteredPluginCommand(vfs.PluginCommandConfig, commands[index].ID, pf)
 		}
 	})
 }
