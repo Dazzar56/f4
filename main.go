@@ -106,6 +106,7 @@ func main() {
 	var guiBackend string
 	var ttyMode bool
 	var version bool
+	var print_help bool
 	var attachedMode bool
 
 	exeName := filepath.Base(absExecPath)
@@ -125,6 +126,8 @@ func main() {
 		}
 
 		switch flagName {
+		case "-h", "--help":
+			print_help = true
 		case "-v", "--version":
 			version = true
 		case "--debug":
@@ -202,6 +205,34 @@ func main() {
 
 	if version {
 		fmt.Println(getFormattedVersionInfo())
+		return
+	}
+	if print_help {
+		fmt.Printf(`f4 version: %s
+f4 is efficient and cozy two-panel file manager in go
+Usage: f4 [switches]
+The following switches may be used in the command line:
+ -h or --help               This help and exit
+ -v or --version            Displays the current version and exit
+ --debug                    Debug mode
+ --gui [Backend]            Force run in GUI-mode
+ --log
+ --server [serverPath]
+ --client [clientPath]
+ --input [InputMode]
+ --cpuprofile [cpuprofile]
+ --new-plugin [pluginName]
+ -test-plugins              Plugin test mode
+ --tty                      Force run in TTY-mode
+ --attached                 Force run in Attached-mode
+
+Details see in build-in help (F1 inside f4)
+and in project home: https://github.com/unxed/f4
+
+If you want to report a problem with the program, please create bugreport
+at https://github.com/unxed/f4/issues
+`,
+			getFormattedVersionInfo());
 		return
 	}
 
