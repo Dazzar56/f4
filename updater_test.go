@@ -548,8 +548,11 @@ func TestUpdater_WriteFileSafe_FallbackOldName(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Make os.Remove(oldPath) fail by creating a directory
+	// Make os.Remove(oldPath) fail by creating a non-empty directory
 	if err := os.Mkdir(oldPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(oldPath, "lock"), []byte("lock"), 0644); err != nil {
 		t.Fatal(err)
 	}
 

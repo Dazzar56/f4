@@ -326,7 +326,8 @@ func performUpdate(pf *PanelsFrame, url, archiveKind, newTag, publishedAt string
 }
 
 func writeFileSafe(targetPath string, r io.Reader, mode os.FileMode) error {
-	oldPath := targetPath + ".old"
+	primaryOldPath := targetPath + ".old"
+	oldPath := primaryOldPath
 
 	err := os.Remove(oldPath)
 	if err != nil && os.IsPermission(err) && vfs.GetSudoClient().IsAvailable() {
@@ -335,7 +336,7 @@ func writeFileSafe(targetPath string, r io.Reader, mode os.FileMode) error {
 
 	if _, err := os.Stat(oldPath); err == nil {
 		for i := 1; i < 1000; i++ {
-			cand := fmt.Sprintf("%s.%d", oldPath, i)
+			cand := fmt.Sprintf("%s.%d", primaryOldPath, i)
 			err := os.Remove(cand)
 			if err != nil && os.IsPermission(err) && vfs.GetSudoClient().IsAvailable() {
 				_ = vfs.GetSudoClient().Remove(cand)
@@ -377,13 +378,13 @@ func writeFileSafe(targetPath string, r io.Reader, mode os.FileMode) error {
 		return err
 	}
 
-	errRemove := os.Remove(oldPath)
-	if errRemove != nil && os.IsPermission(errRemove) && vfs.GetSudoClient().IsAvailable() {
-		_ = vfs.GetSudoClient().Remove(oldPath)
-	}
+		errRemove := os.Remove(primaryOldPath)
+		if errRemove != nil && os.IsPermission(errRemove) && vfs.GetSudoClient().IsAvailable() {
+			_ = vfs.GetSudoClient().Remove(primaryOldPath)
+		}
 
-	return nil
-}
+		return nil
+	}
 
 func sanitizeExtractPath(name, destDir string) (string, error) {
 	// Archive paths are always slash-separated

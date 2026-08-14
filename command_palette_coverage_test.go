@@ -141,15 +141,6 @@ var commandPaletteNewVMenuAudit = map[string]commandPaletteSurfaceAudit{
 	"actions.go:actionSortMenuForPanel#1": {
 		class: paletteAuditDynamicAction, rationale: "the registered sort-menu action opens choices that are also backed by sort actions",
 	},
-	"actions.go:actionLanguage#1": {
-		class: paletteAuditDynamicAction, rationale: "the registered language action opens the installed-language inventory",
-	},
-	"actions.go:actionFallbackLanguage#1": {
-		class: paletteAuditDynamicAction, rationale: "the registered fallback-language action opens the installed-language inventory",
-	},
-	"actions.go:actionHelpLanguage#1": {
-		class: paletteAuditDynamicAction, rationale: "the registered Help-language action opens the installed-language inventory",
-	},
 	"bookmarks_dialog.go:(*bookmarksDialog).open#1": {
 		class: paletteAuditDynamicProvider, rationale: "bookmark slots are runtime data and live slots are exposed by commandPaletteBookmarkEntries",
 	},

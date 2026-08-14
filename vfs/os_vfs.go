@@ -284,7 +284,11 @@ func (v *OSVFS) Lstat(ctx context.Context, path string) (VFSItem, error) {
 	if ctx.Err() != nil {
 		return VFSItem{}, ctx.Err()
 	}
-	preparedPath := prepareOSPath(path)
+	absPath, err := v.Abs(path)
+	if err != nil {
+		return VFSItem{}, err
+	}
+	preparedPath := prepareOSPath(absPath)
 	info, err := os.Lstat(preparedPath)
 	if err != nil {
 		if os.IsPermission(err) && globalSudoClient.IsAvailable() {

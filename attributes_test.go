@@ -743,7 +743,9 @@ func TestAttributesDialog_SymlinkTarget(t *testing.T) {
 	targetPath := filepath.Join(tmpDir, "target.txt")
 	os.WriteFile(targetPath, []byte("target"), 0644)
 	linkPath := filepath.Join(tmpDir, "link.txt")
-	_ = os.Symlink(targetPath, linkPath)
+	if err := os.Symlink(targetPath, linkPath); err != nil {
+		t.Skipf("Symlink creation not supported: %v", err)
+	}
 
 	v := vfs.NewOSVFS(tmpDir)
 	litem, err := v.Lstat(context.Background(), "link.txt")
