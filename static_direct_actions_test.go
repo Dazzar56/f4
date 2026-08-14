@@ -228,10 +228,13 @@ func TestFixedSideMenuKeepsActivePanelShortcutHints(t *testing.T) {
 func TestFixedSidePaletteEntriesUseLocalizedSideCategories(t *testing.T) {
 	oldScreens := vtui.FrameManager.Screens
 	oldActive := vtui.FrameManager.ActiveIdx
+	oldHotkeys := GlobalHotkeysMgr
 	defer func() {
 		vtui.FrameManager.Screens = oldScreens
 		vtui.FrameManager.ActiveIdx = oldActive
+		GlobalHotkeysMgr = oldHotkeys
 	}()
+	GlobalHotkeysMgr = NewHotkeyManager("")
 
 	pf := &PanelsFrame{cmdLine: NewCommandLine(""), panels: [2]Panel{&FileSystemPanel{}, &FileSystemPanel{}}}
 	vtui.FrameManager.Screens = []*vtui.AppScreen{{Number: 1, Frames: []vtui.Frame{pf}}}

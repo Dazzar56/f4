@@ -100,6 +100,31 @@ func TestCommandPaletteActionShortcutsAreDeterministic(t *testing.T) {
 	}
 }
 
+func TestCommandPaletteActionShortcutsIgnoreUnrelatedConditions(t *testing.T) {
+	const unrelatedCondition = "commandpaletteunrelatedpanic"
+	conditionRegistry[unrelatedCondition] = func() bool {
+		panic("an unrelated shortcut condition was evaluated")
+	}
+	t.Cleanup(func() { delete(conditionRegistry, unrelatedCondition) })
+
+	previous := GlobalHotkeysMgr
+	GlobalHotkeysMgr = &HotkeyManager{
+		Defaults: map[string]map[string]string{},
+		Bindings: map[string]map[string]string{
+			"Shell": {
+				"CtrlP": "Test.PaletteAction",
+				"Esc":   "Other.Action:" + unrelatedCondition,
+			},
+		},
+	}
+	t.Cleanup(func() { GlobalHotkeysMgr = previous })
+
+	want := []string{"Ctrl+P"}
+	if got := commandPaletteActionShortcuts("Shell", "test.paletteaction"); !reflect.DeepEqual(got, want) {
+		t.Fatalf("shortcuts = %v, want %v", got, want)
+	}
+}
+
 func TestCommandPaletteIncludesBothPluginLocationsAndReResolves(t *testing.T) {
 	api := &coreAPI{}
 	runs := 0

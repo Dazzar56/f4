@@ -41,6 +41,9 @@ var conditionRegistry = map[string]func() bool{
 			if pf.showPanels {
 				return true
 			}
+			if pf.termView == nil {
+				return false
+			}
 			return !pf.termView.UseAltScreen && !pf.isPtyBusy()
 		}
 		return false
@@ -49,7 +52,7 @@ var conditionRegistry = map[string]func() bool{
 	// application (mc, htop) instead of triggering f4's own actions.
 	"noaltscreenapp": func() bool {
 		if pf := findPanelsFrameAnyScreen(); pf != nil {
-			return pf.showPanels || !pf.termView.UseAltScreen
+			return pf.showPanels || (pf.termView != nil && !pf.termView.UseAltScreen)
 		}
 		return false
 	},
@@ -61,7 +64,7 @@ var conditionRegistry = map[string]func() bool{
 	// way, which keeps the Shell binding of such a key unconditional.
 	"noterminalapp": func() bool {
 		if pf := findPanelsFrameAnyScreen(); pf != nil {
-			return pf.showPanels || (!pf.termView.UseAltScreen && !pf.isPtyBusy())
+			return pf.showPanels || (pf.termView != nil && !pf.termView.UseAltScreen && !pf.isPtyBusy())
 		}
 		return false
 	},
@@ -70,7 +73,7 @@ var conditionRegistry = map[string]func() bool{
 	// being forwarded to the running application.
 	"terminalquiet": func() bool {
 		if pf := findPanelsFrameAnyScreen(); pf != nil {
-			return !pf.termView.UseAltScreen && !pf.isPtyBusy()
+			return pf.termView != nil && !pf.termView.UseAltScreen && !pf.isPtyBusy()
 		}
 		return false
 	},
