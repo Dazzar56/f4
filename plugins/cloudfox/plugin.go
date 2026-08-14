@@ -15,6 +15,12 @@ import (
 	"golang.org/x/oauth2"
 )
 
+const (
+	cloudFoxAddConnectionCommandID    = "cloudfox.add-connection"
+	cloudFoxEditConnectionCommandID   = "cloudfox.edit-connection"
+	cloudFoxDeleteConnectionCommandID = "cloudfox.delete-connection"
+)
+
 // Options configures CloudFox without performing network I/O.
 type Options struct {
 	ConfigDir      string
@@ -61,6 +67,8 @@ type Plugin struct {
 
 	mu        sync.RWMutex
 	factories map[ProviderType]BackendFactory
+
+	registrations []vfs.Registration
 }
 
 // NewPlugin accepts zero or one Options value. The variadic form preserves a
@@ -230,21 +238,153 @@ func (p *Plugin) manager() *ManagerVFS {
 	return newManagerVFS(p, p.repo, p.editor, p.strings)
 }
 
+func activeCloudFoxManager(app vfs.App) (*ManagerVFS, bool) {
+	if app == nil {
+		return nil, false
+	}
+	manager, ok := app.GetActivePanelVFS().(*ManagerVFS)
+	return manager, ok && manager != nil
+}
+
+func cloudFoxManagerPaths(app vfs.App, manager *ManagerVFS) []string {
+	if app == nil || manager == nil {
+		return nil
+	}
+	names := app.GetSelectedNames()
+	paths := make([]string, 0, len(names))
+	for _, name := range names {
+		if name == "" || name == ".." || name == manager.strings.AddConnection {
+			continue
+		}
+		paths = append(paths, manager.Join(manager.GetPath(), name))
+	}
+	return paths
+}
+
+func cloudFoxAddConnectionVisible(app vfs.App) bool {
+	_, ok := activeCloudFoxManager(app)
+	return ok
+}
+
+func cloudFoxEditConnectionVisible(app vfs.App) bool {
+	manager, ok := activeCloudFoxManager(app)
+	return ok && len(cloudFoxManagerPaths(app, manager)) == 1
+}
+
+func cloudFoxDeleteConnectionVisible(app vfs.App) bool {
+	manager, ok := activeCloudFoxManager(app)
+	return ok && len(cloudFoxManagerPaths(app, manager)) != 0
+}
+
+func addCloudFoxConnection(app vfs.App) {
+	manager, ok := activeCloudFoxManager(app)
+	if !ok || manager.editor == nil {
+		return
+	}
+	manager.editor.EditProfile(app, manager, nil)
+}
+
+func editCloudFoxConnection(app vfs.App) {
+	manager, ok := activeCloudFoxManager(app)
+	if !ok {
+		return
+	}
+	paths := cloudFoxManagerPaths(app, manager)
+	if len(paths) == 1 {
+		manager.HandlePanelAction(app, vfs.PanelActionEdit, paths)
+	}
+}
+
+func deleteCloudFoxConnections(app vfs.App) {
+	manager, ok := activeCloudFoxManager(app)
+	if !ok {
+		return
+	}
+	if paths := cloudFoxManagerPaths(app, manager); len(paths) != 0 {
+		manager.HandlePanelAction(app, vfs.PanelActionDelete, paths)
+	}
+}
+
 func (p *Plugin) Init(api vfs.HostAPI) error {
 	if api == nil {
 		return errors.New("cloudfox: host API is nil")
 	}
-	if err := api.RegisterURIProvider(&cloudURIProvider{plugin: p}); err != nil {
-		return err
+	registrations := make([]vfs.Registration, 0, 3)
+	rollback := func(cause error) error {
+		for index := len(registrations) - 1; index >= 0; index-- {
+			registrations[index].Unregister()
+		}
+		return cause
 	}
-	// URI registration is the only fallible global registration. Do it first
-	// so a duplicate scheme cannot leave a half-installed panel provider.
+	if contributions, ok := api.(vfs.ContributionHost); ok {
+		commands := []vfs.PluginCommand{
+			{
+				ID:             cloudFoxAddConnectionCommandID,
+				Location:       vfs.PluginCommandPanel,
+				Label:          "&Add cloud connection",
+				LabelKey:       "CloudFox.Command.AddConnection",
+				Description:    "Create a CloudFox storage connection",
+				DescriptionKey: "CloudFox.Command.AddConnection.Desc",
+				SearchTerms:    []string{"cloud storage", "Google Drive", "Yandex Disk", "S3", "WebDAV"},
+				Shortcut:       "Shift+F4",
+				Visible:        cloudFoxAddConnectionVisible,
+				Run:            addCloudFoxConnection,
+			},
+			{
+				ID:             cloudFoxEditConnectionCommandID,
+				Location:       vfs.PluginCommandPanel,
+				Label:          "&Edit cloud connection",
+				LabelKey:       "CloudFox.Command.EditConnection",
+				Description:    "Edit the selected CloudFox storage connection",
+				DescriptionKey: "CloudFox.Command.EditConnection.Desc",
+				SearchTerms:    []string{"cloud storage connection"},
+				Shortcut:       "F4",
+				Visible:        cloudFoxEditConnectionVisible,
+				Run:            editCloudFoxConnection,
+			},
+			{
+				ID:             cloudFoxDeleteConnectionCommandID,
+				Location:       vfs.PluginCommandPanel,
+				Label:          "&Delete cloud connection",
+				LabelKey:       "CloudFox.Command.DeleteConnection",
+				Description:    "Delete the selected CloudFox storage connections",
+				DescriptionKey: "CloudFox.Command.DeleteConnection.Desc",
+				SearchTerms:    []string{"cloud storage connection"},
+				Shortcut:       "F8",
+				Visible:        cloudFoxDeleteConnectionVisible,
+				Run:            deleteCloudFoxConnections,
+			},
+		}
+		for _, command := range commands {
+			registration, err := contributions.RegisterPluginCommand(command)
+			if err != nil {
+				return rollback(fmt.Errorf("cloudfox: register command %q: %w", command.ID, err))
+			}
+			registrations = append(registrations, registration)
+		}
+	}
+	if err := api.RegisterURIProvider(&cloudURIProvider{plugin: p}); err != nil {
+		return rollback(err)
+	}
+	// URI registration is the last fallible step. Keep the irreversible VFS
+	// and drive registrations after it so a duplicate scheme cannot leave a
+	// half-installed panel provider; rich commands above can still roll back.
 	api.RegisterVFSProvider(&connectionProvider{plugin: p})
 	api.RegisterDrive(DriveName, func() vfs.VFS { return p.manager() })
+	p.mu.Lock()
+	p.registrations = append(p.registrations, registrations...)
+	p.mu.Unlock()
 	return nil
 }
 
 func (p *Plugin) Close() error {
+	p.mu.Lock()
+	registrations := append([]vfs.Registration(nil), p.registrations...)
+	p.registrations = nil
+	p.mu.Unlock()
+	for index := len(registrations) - 1; index >= 0; index-- {
+		registrations[index].Unregister()
+	}
 	err := p.pool.close()
 	if p.vault != nil {
 		p.vault.Lock()

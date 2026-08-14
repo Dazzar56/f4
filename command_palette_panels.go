@@ -20,6 +20,77 @@ func commandPalettePanelsContextEntries(pf *PanelsFrame) []commandPaletteEntry {
 	if pf.getActivePanel() != nil {
 		entries = append(entries, commandPaletteLocalizedPanelKeyEntry(pf, "Panel.ToggleSelection", "CommandPalette.Panel.ToggleSelection", "Toggle item selection", "CommandPalette.Panel.ToggleSelection.Desc", "Toggle selection of the current item and advance", "Ins", "Ins", category, nil, "Help.PanelNav"))
 	}
+	if panel := pf.getActivePanel(); panel != nil {
+		if task := panel.providerOpenTask; task != nil {
+			entries = append(entries, commandPaletteLocalizedPanelKeyEntry(
+				pf,
+				"Provider.CancelOpen",
+				"CommandPalette.Provider.CancelOpen",
+				"Cancel opening provider",
+				"CommandPalette.Provider.CancelOpen.Desc",
+				"Cancel the pending provider connection and restore the source panel",
+				"Esc",
+				"Esc",
+				category,
+				func() bool { return pf.getActivePanel() == panel && panel.providerOpenTask == task },
+				"Provider.Opening",
+			))
+		}
+		if panel.fastFindMode {
+			entry := commandPaletteLocalizedPanelKeyEntry(
+				pf,
+				"FastFind.ToggleMatchMode",
+				"CommandPalette.FastFind.ToggleMatchMode",
+				"Toggle Fast Find match mode",
+				"CommandPalette.FastFind.ToggleMatchMode.Desc",
+				"Switch Fast Find between prefix matching and matching anywhere in the name",
+				"F2",
+				"F2",
+				category,
+				func() bool { return pf.getActivePanel() == panel && panel.fastFindMode },
+				"Help.FastFind",
+			)
+			entry.Checked = strings.HasPrefix(panel.fastFindStr, "*")
+			entries = append(entries, entry)
+		}
+	}
+
+	if pf.searchFirstMode() {
+		commandLineFocused := pf.commandLineFocused
+		entry := commandPaletteLocalizedPanelKeyEntry(
+			pf,
+			"Panel.ToggleCommandLineFocus",
+			"CommandPalette.Panel.ToggleCommandLineFocus",
+			"Toggle command-line focus",
+			"CommandPalette.Panel.ToggleCommandLineFocus.Desc",
+			"Switch input focus between the active file panel and the command line",
+			"` / ~ / ё",
+			"`",
+			category,
+			func() bool {
+				return pf.showPanels && pf.searchFirstMode() && pf.commandLineFocused == commandLineFocused
+			},
+			"Config.NavigationMode.SearchFirst",
+		)
+		entry.Checked = commandLineFocused
+		entries = append(entries, entry)
+	}
+
+	if target := pf.currentRemotePTYInterruptTarget(); target != nil {
+		entries = append(entries, commandPaletteLocalizedPanelKeyEntry(
+			pf,
+			"Panel.InterruptRemoteCommand",
+			"CommandPalette.Panel.InterruptRemoteCommand",
+			"Interrupt remote command",
+			"CommandPalette.Panel.InterruptRemoteCommand.Desc",
+			"Send the remote shell's interrupt sequence to the active panel PTY",
+			"Ctrl+C",
+			"CtrlC",
+			category,
+			func() bool { return target.matches(pf.currentRemotePTYInterruptTarget()) },
+			"Help.Terminal",
+		))
+	}
 
 	if pf.activeIdx >= 0 && pf.activeIdx < len(pf.altPanels) {
 		switch panel := pf.altPanels[pf.activeIdx].(type) {
@@ -151,6 +222,28 @@ func commandPaletteAIChatFocusedEntries(pf *PanelsFrame, panel *AIChatPanel, bar
 		return nil
 	}
 	category := plainLabel(Msg("Action.AI.ViewChat"))
+	if panel.focusedLinkIdx == -1 {
+		draft := panel.input.GetText()
+		if strings.TrimSpace(draft) == "" {
+			return nil
+		}
+		return []commandPaletteEntry{commandPaletteLocalizedPanelKeyEntry(
+			pf,
+			"AI.SendDraft",
+			"CommandPalette.AI.SendDraft",
+			"Send AI message",
+			"CommandPalette.AI.SendDraft.Desc",
+			"Send the current AI chat draft",
+			"Enter",
+			"Enter",
+			category,
+			func() bool {
+				return commandPaletteAIChatPanelFocused(pf, panel) &&
+					panel.focusedLinkIdx == -1 && panel.input.GetText() == draft
+			},
+			"AI.InputLabel",
+		)}
+	}
 	if panel.focusedLinkIdx == -2 {
 		if barKind == aiBarNone {
 			return nil

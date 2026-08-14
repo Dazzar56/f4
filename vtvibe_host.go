@@ -164,6 +164,36 @@ func init() {
 		MenuPath:    "Options",
 		Handler:     withAI(func(pf *PanelsFrame) { aiSetupDialog(pf) }),
 	})
+	RegisterAction(Action{
+		Name:        "AI.Help",
+		Area:        "Shell",
+		Label:       "AI command help",
+		LabelKey:    "Action.AI.Help",
+		Description: "Show the available AI commands and command-line forms",
+		DescKey:     "Action.AI.Help.Desc",
+		MenuPath:    "Commands",
+		Handler:     withAI(func(pf *PanelsFrame) { aiCommand(pf, "help") }),
+	})
+	RegisterAction(Action{
+		Name:        "AI.AttachAPSpec",
+		Area:        "Shell",
+		Label:       "Attach AP specification",
+		LabelKey:    "Action.AI.AttachAPSpec",
+		Description: "Attach the current project's AP specification to the AI context",
+		DescKey:     "Action.AI.AttachAPSpec.Desc",
+		MenuPath:    "Commands",
+		Handler:     withAI(func(pf *PanelsFrame) { aiAttachAPSpec(pf) }),
+	})
+	RegisterAction(Action{
+		Name:        "AI.ListModels",
+		Area:        "Shell",
+		Label:       "List AI models",
+		LabelKey:    "Action.AI.ListModels",
+		Description: "Query and show the AI models available from the configured provider",
+		DescKey:     "Action.AI.ListModels.Desc",
+		MenuPath:    "Commands",
+		Handler:     withAI(func(pf *PanelsFrame) { aiListModels(pf) }),
+	})
 }
 
 // aiPrevPath remembers where a panel was before it showed the dialog, so the

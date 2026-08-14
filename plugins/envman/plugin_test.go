@@ -155,6 +155,17 @@ func TestPluginRegistersContributionsAppliesProfilesAndClosesIdempotently(t *tes
 	if len(host.commands) != 2 || host.commands[0].ID != panelCommandID || host.commands[1].ID != configCommandID {
 		t.Fatalf("commands = %#v", host.commands)
 	}
+	panelCommand, configCommand := host.commands[0], host.commands[1]
+	if panelCommand.Label != "&Environment Manager" || panelCommand.LabelKey != "EnvMan.Menu" ||
+		panelCommand.Description == "" || panelCommand.DescriptionKey != "EnvMan.Command.Open.Desc" ||
+		len(panelCommand.SearchKeys) != 3 {
+		t.Fatalf("panel command metadata = %#v", panelCommand)
+	}
+	if configCommand.Label != "Environment Manager" || configCommand.LabelKey != "EnvMan.ConfigMenu" ||
+		configCommand.Description == "" || configCommand.DescriptionKey != "EnvMan.Command.Configure.Desc" ||
+		len(configCommand.SearchKeys) != 3 {
+		t.Fatalf("configuration command metadata = %#v", configCommand)
+	}
 	if host.prefix == nil || host.prefix.prefix != commandPrefix {
 		t.Fatalf("prefix = %#v", host.prefix)
 	}

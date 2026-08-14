@@ -12,8 +12,19 @@ import (
 )
 
 var commandPaletteTranslationsCache struct {
-	sync.Once
-	byKey map[string][]string
+	sync.Mutex
+	loaded bool
+	byKey  map[string][]string
+}
+
+// resetCommandPaletteTranslations invalidates installed-pack aliases after a
+// language reload. Besides switching the UI language, InitLang is also the
+// point where newly installed/user-supplied packs become visible at runtime.
+func resetCommandPaletteTranslations() {
+	commandPaletteTranslationsCache.Lock()
+	commandPaletteTranslationsCache.loaded = false
+	commandPaletteTranslationsCache.byKey = nil
+	commandPaletteTranslationsCache.Unlock()
 }
 
 // commandPaletteTranslations returns invisible search aliases for localization
@@ -21,16 +32,20 @@ var commandPaletteTranslationsCache struct {
 // active UI language; aliases only make the same command discoverable by a
 // translation from any installed language pack.
 func commandPaletteTranslations(keys ...string) []string {
-	commandPaletteTranslationsCache.Do(func() {
+	commandPaletteTranslationsCache.Lock()
+	if !commandPaletteTranslationsCache.loaded {
 		packs := LoadAllLanguagePacks()
 		packs = append(packs, loadInstalledCommandPaletteLanguagePacks()...)
 		commandPaletteTranslationsCache.byKey = buildCommandPaletteTranslationIndex(packs)
-	})
+		commandPaletteTranslationsCache.loaded = true
+	}
+	byKey := commandPaletteTranslationsCache.byKey
+	commandPaletteTranslationsCache.Unlock()
 
 	seen := make(map[string]bool)
 	var result []string
 	for _, key := range keys {
-		for _, value := range commandPaletteTranslationsCache.byKey[key] {
+		for _, value := range byKey[key] {
 			normalized := normalizeCommandPaletteText(value)
 			if normalized == "" || seen[normalized] {
 				continue
