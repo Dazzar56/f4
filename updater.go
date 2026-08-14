@@ -378,13 +378,13 @@ func writeFileSafe(targetPath string, r io.Reader, mode os.FileMode) error {
 		return err
 	}
 
-		errRemove := os.Remove(primaryOldPath)
-		if errRemove != nil && os.IsPermission(errRemove) && vfs.GetSudoClient().IsAvailable() {
-			_ = vfs.GetSudoClient().Remove(primaryOldPath)
-		}
-
-		return nil
+	errRemove := os.Remove(primaryOldPath)
+	if errRemove != nil && os.IsPermission(errRemove) && vfs.GetSudoClient().IsAvailable() {
+		_ = vfs.GetSudoClient().Remove(primaryOldPath)
 	}
+
+	return nil
+}
 
 func sanitizeExtractPath(name, destDir string) (string, error) {
 	// Archive paths are always slash-separated
