@@ -1326,6 +1326,56 @@ func TestEditorView_CodepageDialog_DynamicHeight(t *testing.T) {
 		t.Errorf("Selected position %d out of bounds", menu.SelectPos)
 	}
 }
+
+type mockRemoteIndexerVFS struct {
+	vfs.VFS
+	calls int
+}
+
+func (m *mockRemoteIndexerVFS) LineIndex(ctx context.Context, path string, first, count int64) (vfs.LineIndexResult, error) {
+	m.calls++
+	if first == 2 {
+		return vfs.LineIndexResult{First: 2, Offsets: []int64{7, 14}, Total: 3}, nil
+	}
+	return vfs.LineIndexResult{First: first, Total: 3}, nil
+}
+
+func TestEditorView_StartIndexing_UsesRemoteIndexer(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	tmp := filepath.Join(t.TempDir(), "remote_idx.txt")
+	os.WriteFile(tmp, []byte("Line 1\nLine 2\nLine 3"), 0644)
+
+	mv := &mockRemoteIndexerVFS{VFS: vfs.NewOSVFS(filepath.Dir(tmp))}
+	f, _ := mv.Open(context.Background(), tmp)
+	defer f.Close()
+
+	buf := NewAsyncBuffer(context.Background(), f)
+	pt := piecetable.NewWithBuffer(buf)
+	ev := NewEditorView(pt, mv, tmp)
+	defer ev.Close()
+	ev.asyncBuf = buf
+	ev.file = f
+	ev.Codepage = 65001 // required for remote indexing
+
+	ev.StartIndexing()
+
+	timeout := time.After(2 * time.Second)
+	for ev.indexing {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Timeout waiting for remote indexer to finish")
+		}
+	}
+
+	if mv.calls == 0 {
+		t.Error("Remote LineIndexer was not called")
+	}
+	if ev.li.LineCount() != 3 {
+		t.Errorf("Expected 3 lines, got %d", ev.li.LineCount())
+	}
+}
 func TestEditorView_AsyncIndexing(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 

@@ -33,7 +33,7 @@ func NewAsyncBuffer(ctx context.Context, f vfs.ReadAtCloser) *AsyncBuffer {
 		cancelCtx: bCancel,
 		loaded:    make(map[int][]byte),
 		fetching:  make(map[int]bool),
-		chunkSize: 256 * 1024, // 256 KB chunks
+		chunkSize: 32 * 1024, // 32 KB chunks
 	}
 }
 

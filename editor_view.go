@@ -2857,12 +2857,122 @@ func (ev *EditorView) StartIndexing() {
 			})
 		}()
 
-		absPos := 0
-		chunkSize := 256 * 1024 // 256KB chunks to match AsyncBuffer
 		poll := indexPollMin
 		buf := ev.asyncBuf
 		li := ev.li
 		maxSize := buf.Size()
+
+		if indexer, ok := ev.vfs.(vfs.LineIndexer); ok && ev.Codepage == 65001 {
+			vtui.DebugLog("EDITOR_INDEX: Using remote LineIndexer")
+			var currentLine int64 = int64(li.LineCount() + 1)
+			const batchSize = 100000
+			remoteSuccess := true
+			for {
+				if ctx.Err() != nil || ev.IsDone() {
+					return
+				}
+				res, err := indexer.LineIndex(ctx, ev.filePath, currentLine, batchSize)
+				if err != nil {
+					vtui.DebugLog("EDITOR_INDEX: Remote LineIndex failed: %v, falling back to local", err)
+					remoteSuccess = false
+					break
+				}
+
+				if len(res.Offsets) > 0 {
+					batchOffsets := make([]int, 0, len(res.Offsets))
+					for _, off := range res.Offsets {
+						batchOffsets = append(batchOffsets, int(off))
+					}
+
+					vtui.FrameManager.PostTask(func() {
+						if ctx.Err() != nil || ev.edited || ev.editSession != sessionID {
+							return
+						}
+						lastLineBefore := li.LineCount() - 1
+						li.AppendOffsets(batchOffsets, maxSize)
+
+						if ev.targetLine != -1 && (li.LineCount() > ev.targetLine || len(res.Offsets) < batchSize) {
+							ev.CursorLine = ev.targetLine
+							if ev.CursorLine >= li.LineCount() {
+								ev.CursorLine = li.LineCount() - 1
+							}
+							if ev.CursorLine < 0 {
+								ev.CursorLine = 0
+							}
+
+							targetOff := li.GetLineOffset(ev.CursorLine) + ev.targetPos
+							if targetOff >= 0 && ev.asyncBuf != nil {
+								_, _ = ev.asyncBuf.Read(targetOff, 4096)
+							}
+
+							ev.CursorPos = ev.targetPos
+							ev.ScrollTopRow = ev.targetTopRow
+							ev.ScrollLeft = ev.targetLeft
+							if ev.ScrollLeft < 0 {
+								ev.ScrollLeft = 0
+							}
+							ev.targetLine = -1
+							ev.ensureCursorVisible()
+							ev.updateDesiredVisualCol()
+						}
+
+						ev.engine.InvalidateFrom(lastLineBefore)
+						if ev.highlighter != nil && !ev.highlighting && len(ev.lineStates) < li.LineCount() {
+							ev.startHighlighting()
+						}
+						vtui.FrameManager.Redraw()
+					})
+
+					indexed += len(batchOffsets)
+					batches++
+					currentLine += int64(len(res.Offsets))
+				}
+
+				if len(res.Offsets) < batchSize || (res.Total >= 0 && currentLine > res.Total) {
+					break
+				}
+			}
+
+			if remoteSuccess {
+				vtui.FrameManager.PostTask(func() {
+					if ctx.Err() == nil && !ev.edited && ev.editSession == sessionID {
+						if ev.targetLine != -1 {
+							ev.CursorLine = ev.targetLine
+							if ev.CursorLine >= li.LineCount() {
+								ev.CursorLine = li.LineCount() - 1
+							}
+							if ev.CursorLine < 0 {
+								ev.CursorLine = 0
+							}
+							targetOff := li.GetLineOffset(ev.CursorLine) + ev.targetPos
+							if targetOff >= 0 && ev.asyncBuf != nil {
+								_, _ = ev.asyncBuf.Read(targetOff, 4096)
+							}
+							ev.CursorPos = ev.targetPos
+							ev.ScrollTopRow = ev.targetTopRow
+							ev.ScrollLeft = ev.targetLeft
+							if ev.ScrollLeft < 0 {
+								ev.ScrollLeft = 0
+							}
+							ev.targetLine = -1
+							ev.ensureCursorVisible()
+							ev.updateDesiredVisualCol()
+							vtui.FrameManager.Redraw()
+						}
+						if ev.highlighter != nil && !ev.highlighting && len(ev.lineStates) < li.LineCount() {
+							ev.startHighlighting()
+						}
+					}
+				})
+				return
+			}
+		}
+
+		absPos := 0
+		if li.LineCount() > 1 {
+			absPos = li.GetLineOffset(li.LineCount() - 1)
+		}
+		chunkSize := 256 * 1024 // 256KB chunks to match AsyncBuffer
 
 		pendingOffsets := make([]int, 0, 10000)
 
