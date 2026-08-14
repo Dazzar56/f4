@@ -1440,15 +1440,15 @@ func (pf *PanelsFrame) VetoActionKey(e *vtinput.InputEvent) bool {
 		}
 		return false
 	}
-	if e.Char != 0 {
+	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
+	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
+	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
+	if e.Char != 0 && !ctrl && !alt {
 		return true
 	}
 	// Fast Find owns plain Esc, plain Delete, plain F2 (search mode toggle) and
 	// Ctrl+Enter; the filter must not turn them into Panel.Toggle,
 	// Panel.UserMenu or Panel.InsertFileName.
-	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
-	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
-	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
 	if e.VirtualKeyCode == vtinput.VK_ESCAPE && !ctrl && !alt && !shift {
 		return true
 	}
