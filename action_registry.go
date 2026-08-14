@@ -197,7 +197,7 @@ func repeatEditorSearchDirection(ev *EditorView, reverse bool) {
 		return
 	}
 	rememberedDirection := LastEditorSearchReverse
-	ev.Search(LastEditorSearch, LastEditorSearchCase, reverse, LastEditorSearchRegexp, LastEditorSearchWholeWord, LastEditorSearchHex, true)
+	ev.Search(LastEditorSearch, LastEditorSearchCase, reverse, LastEditorSearchRegexp, LastEditorSearchWholeWord, true)
 	LastEditorSearchReverse = rememberedDirection
 }
 
@@ -1824,26 +1824,6 @@ func init() {
 			ev.ensureCursorVisible()
 		}),
 	})
-	RegisterAction(Action{
-		Name:        "Editor.HexMode",
-		Area:        "Editor",
-		Label:       "Hex Mode",
-		LabelKey:    "Action.Editor.HexMode",
-		Description: "Toggle hex view/edit",
-		DescKey:     "Action.Editor.HexMode.Desc",
-		DefaultKeys: []string{"F4"},
-		MenuPath:    "Options",
-		Checked:     editorState(func(ev *EditorView) bool { return ev.HexMode }),
-		Handler: withEditor(func(ev *EditorView) {
-			ev.HexMode = !ev.HexMode
-			if ev.HexMode {
-				ev.HexTopOffset = (ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos) &^ 0xF
-				ev.HexNibble = 0
-			}
-			ev.ensureCursorVisible()
-			vtui.FrameManager.Redraw()
-		}),
-	})
 
 	RegisterAction(Action{
 		Name:        "Editor.Search",
@@ -1878,7 +1858,7 @@ func init() {
 		MenuPath:    "Search",
 		Handler: withEditor(func(ev *EditorView) {
 			if LastEditorSearch != "" {
-				ev.Search(LastEditorSearch, LastEditorSearchCase, LastEditorSearchReverse, LastEditorSearchRegexp, LastEditorSearchWholeWord, LastEditorSearchHex, true)
+				ev.Search(LastEditorSearch, LastEditorSearchCase, LastEditorSearchReverse, LastEditorSearchRegexp, LastEditorSearchWholeWord, true)
 			}
 		}),
 	})
@@ -1918,6 +1898,26 @@ func init() {
 			ev.ScrollLeft = 0
 			ev.clearCaches()
 			ev.ensureCursorVisible()
+		}),
+	})
+	RegisterAction(Action{
+		Name:        "Editor.HexMode",
+		Area:        "Editor",
+		Label:       "Hex Mode",
+		LabelKey:    "Action.Editor.HexMode",
+		Description: "Toggle hex view/edit",
+		DescKey:     "Action.Editor.HexMode.Desc",
+		DefaultKeys: []string{"F4"},
+		MenuPath:    "Options",
+		Checked:     editorState(func(ev *EditorView) bool { return ev.HexMode }),
+		Handler: withEditor(func(ev *EditorView) {
+			ev.HexMode = !ev.HexMode
+			if ev.HexMode {
+				ev.HexTopOffset = (ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos) &^ 0xF
+				ev.HexNibble = 0
+			}
+			ev.ensureCursorVisible()
+			vtui.FrameManager.Redraw()
 		}),
 	})
 	RegisterAction(Action{

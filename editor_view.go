@@ -2935,7 +2935,7 @@ func (ev *EditorView) showSearchDialog() {
 		LastEditorSearchHex = chkHex.State == 1
 		saveSearchParams()
 		dlg.Close()
-		ev.Search(LastEditorSearch, LastEditorSearchCase, LastEditorSearchReverse, LastEditorSearchRegexp, LastEditorSearchWholeWord, LastEditorSearchHex, false)
+		ev.Search(LastEditorSearch, LastEditorSearchCase, LastEditorSearchReverse, LastEditorSearchRegexp, LastEditorSearchWholeWord, false)
 	}
 	btnAll.OnClick = func() {
 		LastEditorSearchHex = chkHex.State == 1
@@ -2983,13 +2983,13 @@ func replaceAllFold(s, old, new string) string {
 	return b.String()
 }
 
-func (ev *EditorView) Replace(pattern, replacement string, caseSensitive, reverse, regexp, wholeWord, isHex, all bool) {
+func (ev *EditorView) Replace(pattern, replacement string, caseSensitive, reverse, regexp, wholeWord, all bool) {
 	if pattern == "" {
 		return
 	}
 
 	searchPattern := pattern
-	if isHex {
+	if LastEditorSearchHex {
 		var err error
 		searchPattern, err = parseHexPatternToRegex(pattern)
 		if err != nil {
@@ -3246,7 +3246,7 @@ func (ev *EditorView) showReplaceDialog() {
 		SaveSession()
 		dlg.Close()
 		LastEditorSearchHex = chkHex.State == 1
-		ev.Replace(LastEditorSearch, LastEditorReplace, LastEditorSearchCase, LastEditorSearchReverse, LastEditorSearchRegexp, LastEditorSearchWholeWord, LastEditorSearchHex, all)
+		ev.Replace(LastEditorSearch, LastEditorReplace, LastEditorSearchCase, LastEditorSearchReverse, LastEditorSearchRegexp, LastEditorSearchWholeWord, all)
 	}
 	btnReplace.OnClick = func() { doReplace(false) }
 	btnReplaceAll.OnClick = func() { doReplace(true) }
@@ -4718,22 +4718,21 @@ func parseHexReplacement(repl string) ([]byte, error) {
 	}
 	return res, nil
 }
-func (ev *EditorView) Search(pattern string, caseSensitive, reverse, regexp, wholeWord, isHex, next bool) {
+func (ev *EditorView) Search(pattern string, caseSensitive, reverse, regexp, wholeWord, next bool) {
 	if pattern == "" {
 		return
 	}
-	if LastEditorSearch != pattern || LastEditorSearchCase != caseSensitive || LastEditorSearchReverse != reverse || LastEditorSearchRegexp != regexp || LastEditorSearchWholeWord != wholeWord || LastEditorSearchHex != isHex {
+	if LastEditorSearch != pattern || LastEditorSearchCase != caseSensitive || LastEditorSearchReverse != reverse || LastEditorSearchRegexp != regexp || LastEditorSearchWholeWord != wholeWord {
 		LastEditorSearch = pattern
 		LastEditorSearchCase = caseSensitive
 		LastEditorSearchReverse = reverse
 		LastEditorSearchRegexp = regexp
 		LastEditorSearchWholeWord = wholeWord
-		LastEditorSearchHex = isHex
 		SaveSession()
 	}
 
 	searchPattern := pattern
-	if isHex {
+	if LastEditorSearchHex {
 		var err error
 		searchPattern, err = parseHexPatternToRegex(pattern)
 		if err != nil {
@@ -4745,8 +4744,8 @@ func (ev *EditorView) Search(pattern string, caseSensitive, reverse, regexp, who
 		caseSensitive = true
 	}
 
-	vtui.DebugLog("EDITOR_SEARCH: Starting for %q (sensitive=%v, reverse=%v, regexp=%v, wholeWord=%v, hex=%v, next=%v)",
-		pattern, caseSensitive, reverse, regexp, wholeWord, isHex, next)
+	vtui.DebugLog("EDITOR_SEARCH: Starting for %q (sensitive=%v, reverse=%v, regexp=%v, wholeWord=%v, next=%v)",
+		pattern, caseSensitive, reverse, regexp, wholeWord, next)
 
 	vtui.FrameManager.PostTask(func() {
 		// Read on the UI thread, before the background scan starts.

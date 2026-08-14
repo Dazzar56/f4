@@ -2,6 +2,7 @@ package vfs
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"time"
@@ -480,15 +481,15 @@ func (v *OSVFS) Open(ctx context.Context, path string) (ReadAtCloser, error) {
 		f.Close()
 		return nil, err
 	}
-		size := info.Size()
-		if info.Mode()&(os.ModeDevice|os.ModeCharDevice) != 0 {
-			if pos, err := f.Seek(0, io.SeekEnd); err == nil && pos > 0 {
-				size = pos
-				f.Seek(0, io.SeekStart)
-			}
+	size := info.Size()
+	if info.Mode()&(os.ModeDevice|os.ModeCharDevice) != 0 {
+		if pos, err := f.Seek(0, io.SeekEnd); err == nil && pos > 0 {
+			size = pos
+			f.Seek(0, io.SeekStart)
 		}
-		return &osFileWrapper{File: f, size: size}, nil
 	}
+	return &osFileWrapper{File: f, size: size}, nil
+}
 
 func (v *OSVFS) Create(ctx context.Context, path string) (io.WriteCloser, error) {
 	if ctx.Err() != nil {

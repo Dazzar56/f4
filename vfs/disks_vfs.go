@@ -40,11 +40,11 @@ func NewDisksVFS() *DisksVFS {
 	return &DisksVFS{NullVFS: NewNullVFS(0)}
 }
 
-func (v *DisksVFS) GetPath() string { return "disks://" }
-func (v *DisksVFS) IsAbs(p string) bool { return true }
-func (v *DisksVFS) IsAtRoot() bool { return true }
+func (v *DisksVFS) GetPath() string      { return "disks://" }
+func (v *DisksVFS) IsAbs(p string) bool  { return true }
+func (v *DisksVFS) IsAtRoot() bool       { return true }
 func (v *DisksVFS) Base(p string) string { return strings.TrimPrefix(p, "disks://") }
-func (v *DisksVFS) Dir(p string) string { return "disks://" }
+func (v *DisksVFS) Dir(p string) string  { return "disks://" }
 func (v *DisksVFS) Join(elem ...string) string {
 	if len(elem) == 0 {
 		return "disks://"
