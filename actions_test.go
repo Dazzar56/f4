@@ -2100,3 +2100,77 @@ func TestActionEditFile_DirectoryRedirectsToAttributes(t *testing.T) {
 		t.Error("Expected Attributes dialog to open when pressing F4 on a directory")
 	}
 }
+func TestActionCreateLink_Flow(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	tmpDir := t.TempDir()
+	fspSrc := pf.panels[0].(*FileSystemPanel)
+	fspDst := pf.panels[1].(*FileSystemPanel)
+
+	srcDir := filepath.Join(tmpDir, "src")
+	dstDir := filepath.Join(tmpDir, "dst")
+	os.MkdirAll(srcDir, 0755)
+	os.MkdirAll(dstDir, 0755)
+
+	targetFile := filepath.Join(srcDir, "target.txt")
+	os.WriteFile(targetFile, []byte("link target content"), 0644)
+
+	fspSrc.vfs = vfs.NewOSVFS(srcDir)
+	fspDst.vfs = vfs.NewOSVFS(dstDir)
+	fspSrc.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "target.txt"}}}
+	fspSrc.SetCursorIndex(0)
+	pf.activeIdx = 0
+
+	actionCreateLink(pf)
+
+	top := vtui.FrameManager.GetTopFrame()
+	if top == nil || top.GetTitle() != Msg("Link.Title") {
+		t.Fatalf("Expected Link dialog, got %v", top)
+	}
+
+	dlg, ok := top.(vtui.Container)
+	if !ok {
+		t.Fatal("Link dialog is not a container")
+	}
+
+	var editDest *vtui.Edit
+	for _, child := range dlg.GetChildren() {
+		if e, ok := child.(*vtui.Edit); ok {
+			editDest = e
+			break
+		}
+	}
+	if editDest == nil {
+		t.Fatal("Destination edit field not found in dialog")
+	}
+
+	linkPath := filepath.Join(dstDir, "link.txt")
+	editDest.SetText(linkPath)
+
+	clickDialogButton(t, dlg, "Create link")
+
+	// Drain task queue to execute async creation task
+	timeout := time.After(2 * time.Second)
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Timeout waiting for link creation task")
+		default:
+		}
+		if _, err := os.Lstat(linkPath); err == nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	if _, err := os.Lstat(linkPath); err != nil {
+		t.Fatalf("Link was not created at %s: %v", linkPath, err)
+	}
+}

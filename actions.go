@@ -1659,6 +1659,145 @@ func actionRename(pf *PanelsFrame) {
 		})
 	})
 }
+func actionCreateLink(pf *PanelsFrame) {
+	fspSrc := pf.getActivePanel()
+	fspDst := pf.getInactivePanel()
+	if fspSrc == nil || fspDst == nil {
+		return
+	}
+
+	names := fspSrc.GetSelectedNames()
+	if len(names) == 0 {
+		return
+	}
+
+	prompt := fmt.Sprintf(Msg("Link.Prompt"), names[0])
+	if len(names) > 1 {
+		prompt = fmt.Sprintf(Msg("Link.PromptMultiple"), len(names))
+	}
+
+	initialDest := fspDst.vfs.GetPath()
+	if initialDest != "" && !strings.HasSuffix(initialDest, "/") && !strings.HasSuffix(initialDest, "\\") {
+		sep := "/"
+		if _, isOS := fspDst.vfs.(*vfs.OSVFS); isOS && runtime.GOOS == "windows" {
+			sep = "\\"
+		}
+		initialDest += sep
+	}
+
+	dlg := vtui.NewCenteredDialog(52, 11, Msg("Link.Title"))
+	dlg.ShowClose = true
+
+	promptLbl := vtui.NewLabel(0, 0, prompt, nil)
+	dlg.AddItem(promptLbl)
+
+	editDest := vtui.NewEdit(0, 0, 10, initialDest)
+	editDest.PathHintsEnabled = true
+	dlg.AddItem(editDest)
+
+	linkTypes := []string{
+		Msg("Link.TypeSymlink"),
+		Msg("Link.TypeJunction"),
+		Msg("Link.TypeHardlink"),
+	}
+	comboType := vtui.NewComboBox(0, 0, 32, linkTypes)
+	comboType.DropdownOnly = true
+	comboType.Menu.SetSelectPos(0)
+	comboType.Edit.SetText(linkTypes[0])
+	lblType := vtui.NewLabel(0, 0, Msg("Link.Type"), comboType)
+	dlg.AddItem(lblType)
+	dlg.AddItem(comboType)
+
+	btnOk := vtui.NewButton(0, 0, Msg("Link.Btn"))
+	btnOk.IsDefault = true
+	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
+
+	btnOk.OnClick = func() {
+		dest := editDest.GetText()
+		linkType := comboType.Menu.SelectPos
+		dlg.Close()
+		if dest == "" {
+			return
+		}
+
+		vtui.RunAsync(func(ctx *vtui.TaskContext) {
+			srcVfs := fspSrc.vfs
+			dstVfs := fspDst.vfs
+			srcBasePath := srcVfs.GetPath()
+
+			var errs []string
+			for _, name := range names {
+				targetPath := srcVfs.Join(srcBasePath, name)
+				linkPath := dest
+				if len(names) > 1 || strings.HasSuffix(dest, "/") || strings.HasSuffix(dest, "\\") {
+					linkPath = dstVfs.Join(dest, name)
+				} else if stat, err := dstVfs.Stat(ctx.Context, dest); err == nil && stat.IsDir {
+					linkPath = dstVfs.Join(dest, name)
+				}
+
+				var err error
+				switch linkType {
+				case 0: // Symlink
+					if symVFS, ok := dstVfs.(vfs.SymlinkVFS); ok {
+						err = symVFS.Symlink(ctx.Context, targetPath, linkPath)
+					} else {
+						err = fmt.Errorf("symlinks are not supported on destination filesystem")
+					}
+				case 1: // Junction
+					if juncVFS, ok := dstVfs.(vfs.JunctionVFS); ok {
+						err = juncVFS.Junction(ctx.Context, targetPath, linkPath)
+					} else if symVFS, ok := dstVfs.(vfs.SymlinkVFS); ok {
+						err = symVFS.Symlink(ctx.Context, targetPath, linkPath)
+					} else {
+						err = fmt.Errorf("junctions are not supported on destination filesystem")
+					}
+				case 2: // Hardlink
+					if hlVFS, ok := dstVfs.(vfs.HardlinkVFS); ok {
+						err = hlVFS.Hardlink(ctx.Context, targetPath, linkPath)
+					} else {
+						err = fmt.Errorf("hardlinks are not supported on destination filesystem")
+					}
+				}
+
+				if err != nil {
+					errs = append(errs, fmt.Sprintf("%s: %v", name, err))
+				}
+			}
+
+			ctx.RunOnUI(func() {
+				if len(errs) > 0 {
+					vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to create link(s):\n%s", strings.Join(errs, "\n")), []string{"&Ok"})
+				}
+				pf.RefreshAll()
+			})
+		})
+	}
+	btnCancel.OnClick = func() { dlg.Close() }
+
+	dlg.AddItem(btnOk)
+	dlg.AddItem(btnCancel)
+
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 52-4, 11-4)
+	vbox.Add(promptLbl, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(editDest, vtui.Margins{Top: 1}, vtui.AlignFill)
+
+	rowType := vtui.NewHBoxLayout(0, 0, 52-4, 1)
+	rowType.Add(lblType, vtui.Margins{Right: 1}, vtui.AlignLeft)
+	rowType.Add(comboType, vtui.Margins{}, vtui.AlignFill)
+	vbox.Add(rowType, vtui.Margins{Top: 1}, vtui.AlignFill)
+
+	hbox := vtui.NewHBoxLayout(0, 0, 52-4, 1)
+	hbox.HorizontalAlign = vtui.AlignCenter
+	hbox.Spacing = 2
+	hbox.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
+	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
+
+	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Apply()
+	dlg.SetFocusedItem(editDest)
+
+	vtui.FrameManager.Push(dlg)
+}
 func actionCopyInPlace(pf *PanelsFrame) {
 	fsp := pf.getActivePanel()
 	if fsp == nil {

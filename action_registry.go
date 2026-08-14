@@ -481,6 +481,17 @@ func init() {
 		Handler:     withPF(func(pf *PanelsFrame) { actionCopyMove(pf, true) }),
 	})
 	RegisterAction(Action{
+		Name:        "File.CreateLink",
+		Area:        "Shell",
+		Label:       "Create Link",
+		LabelKey:    "Action.File.CreateLink",
+		Description: "Create symbolic link, directory junction or hard link",
+		DescKey:     "Action.File.CreateLink.Desc",
+		DefaultKeys: []string{"AltF6"},
+		MenuPath:    "Files",
+		Handler:     withPF(func(pf *PanelsFrame) { actionCreateLink(pf) }),
+	})
+	RegisterAction(Action{
 		Name:        "File.Rename",
 		Area:        "Shell",
 		Label:       "Rename",

@@ -906,6 +906,16 @@ type SymlinkVFS interface {
 	Symlink(ctx context.Context, target, linkPath string) error
 }
 
+// HardlinkVFS is implemented by backends that support creating hard links.
+type HardlinkVFS interface {
+	Hardlink(ctx context.Context, target, linkPath string) error
+}
+
+// JunctionVFS is implemented by backends that support directory junctions.
+type JunctionVFS interface {
+	Junction(ctx context.Context, target, linkPath string) error
+}
+
 // Readlink is a helper that calls Readlink if VFS implements SymlinkVFS.
 func Readlink(ctx context.Context, v VFS, path string) (string, error) {
 	if s, ok := v.(SymlinkVFS); ok {

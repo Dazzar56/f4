@@ -687,3 +687,33 @@ func (v *OSVFS) OpenWriteAt(ctx context.Context, path string) (WriterAtCloser, e
 	}
 	return os.OpenFile(prepareOSPath(abs), os.O_RDWR|os.O_CREATE, 0o644)
 }
+
+func (v *OSVFS) Hardlink(ctx context.Context, target, linkPath string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	absTarget, err := v.Abs(target)
+	if err != nil {
+		return err
+	}
+	absLink, err := v.Abs(linkPath)
+	if err != nil {
+		return err
+	}
+	return os.Link(prepareOSPath(absTarget), prepareOSPath(absLink))
+}
+
+func (v *OSVFS) Junction(ctx context.Context, target, linkPath string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	absTarget, err := v.Abs(target)
+	if err != nil {
+		return err
+	}
+	absLink, err := v.Abs(linkPath)
+	if err != nil {
+		return err
+	}
+	return os.Symlink(absTarget, prepareOSPath(absLink))
+}
