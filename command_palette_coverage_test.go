@@ -117,6 +117,12 @@ var commandPaletteProcessKeyAudit = map[string]commandPaletteSurfaceAudit{
 	"plugins/envman/manager_frame.go:(*managerWindow).ProcessKey": {
 		class: paletteAuditPluginLocal, rationale: "Environment Manager owns these keys inside its plugin window, reached through its rich command",
 	},
+	"plugins/mediainfo/dialog.go:(*reportWindow).ProcessKey": {
+		class: paletteAuditPluginLocal, rationale: "MediaInfo owns its F4 editor handoff while the modal report window is open",
+	},
+	"plugins/mediainfo/report_view.go:(*reportTextView).ProcessKey": {
+		class: paletteAuditPluginLocal, rationale: "the MediaInfo report view consumes scrolling and navigation keys as an embedded dialog control",
+	},
 	"plugins/netfox/dialog.go:(*protoUIContainer).ProcessKey": {
 		class: paletteAuditPluginLocal, rationale: "NetFox protocol controls consume keys inside the connection dialog",
 	},
