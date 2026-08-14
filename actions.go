@@ -716,6 +716,9 @@ func showEditor(pf *PanelsFrame, v vfs.VFS, path string, f vfs.ReadAtCloser) {
 
 	editor := NewEditorView(pt, v, path)
 	editor.Codepage = cpID
+	if _, isDisks := v.(*vfs.DisksVFS); isDisks {
+		editor.HexMode = true
+	}
 	if GlobalFileState != nil && path != "" {
 		if state := GlobalFileState.GetState(FileStateKey(v, path)); state != nil {
 			editor.WordWrap = state.EditorWrap
@@ -820,7 +823,7 @@ func openEditorInternal(pf *PanelsFrame, v vfs.VFS, path string) {
 		}()
 		return
 	}
-	if _, isLocal := v.(*vfs.OSVFS); isLocal {
+	if isLocalOSVFS(v) {
 		vtui.RunAsync(func(ctx *vtui.TaskContext) {
 			var f vfs.ReadAtCloser
 			if v != nil {
@@ -1045,7 +1048,7 @@ func openViewerInternal(pf *PanelsFrame, v vfs.VFS, path string) {
 	if tryOpenImageViewer(pf, v, path) {
 		return
 	}
-	if _, isLocal := v.(*vfs.OSVFS); isLocal {
+	if isLocalOSVFS(v) {
 		vtui.RunAsync(func(ctx *vtui.TaskContext) {
 			if v != nil {
 				if stat, err := v.Stat(ctx.Context, path); err == nil && stat.IsDir {
@@ -1063,7 +1066,7 @@ func openViewerInternal(pf *PanelsFrame, v vfs.VFS, path string) {
 				} else {
 					vtui.DebugLog("PANELS: Failed to open viewer for %s: %v", path, err)
 					if err == os.ErrInvalid {
-						vtui.ShowMessage(" Error ", "Cannot open special files (Named Pipes, Sockets, Devices).", []string{"&Ok"})
+						vtui.ShowMessage(" Error ", "Cannot open special files (Named Pipes, Sockets).", []string{"&Ok"})
 					} else {
 						vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to open file:\n%v", err), []string{"&Ok"})
 					}
@@ -1249,6 +1252,10 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 	// Commands → File associations). A matching association intercepts
 	// before the runnable / xdg-open fallback; no match → default flow.
 	if tryFileAssociation(pf, AssocExecute) {
+		return
+	}
+	if _, isDisks := v.(*vfs.DisksVFS); isDisks {
+		actionOpenEditor(pf, v, path)
 		return
 	}
 	vtui.RunAsync(func(ctx *vtui.TaskContext) {

@@ -34,6 +34,9 @@ func isLocalOSVFS(v any) bool {
 		if _, ok := val.Interface().(*vfs.OSVFS); ok {
 			return true
 		}
+		if _, ok := val.Interface().(*vfs.DisksVFS); ok {
+			return true
+		}
 		val = val.Elem()
 	}
 	if val.Kind() == reflect.Struct {

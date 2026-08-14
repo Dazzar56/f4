@@ -1044,6 +1044,7 @@ Permissions.BtnClose=&Close
 Search.Prompt=Search for:
 Search.WholeWords=Whole words
 Search.Regex=Regular expressions
+Search.HexPattern=He&x pattern
 Search.BtnFind=&Find
 Search.BtnAll=&All
 Search.Searching= Searching...

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"runtime"
 	"strings"
 	"time"
 )
@@ -29,7 +28,7 @@ func (f *diskFileWrapper) ReadAt(ctx context.Context, p []byte, off int64) (n in
 	return f.File.ReadAt(p, off)
 }
 
-// DisksVFS is a specialized read-only virtual filesystem that lists
+// DisksVFS is a specialized virtual filesystem that lists
 // physical block devices (PhysicalDriveX on Windows, /dev block devices on Unix)
 // allowing the user to view and hex-edit raw disks.
 type DisksVFS struct {
@@ -45,74 +44,25 @@ func (v *DisksVFS) IsAbs(p string) bool  { return true }
 func (v *DisksVFS) IsAtRoot() bool       { return true }
 func (v *DisksVFS) Base(p string) string { return strings.TrimPrefix(p, "disks://") }
 func (v *DisksVFS) Dir(p string) string  { return "disks://" }
-func (v *DisksVFS) Join(elem ...string) string {
-	if len(elem) == 0 {
-		return "disks://"
-	}
-	return "disks://" + elem[len(elem)-1]
-}
-
+func (v *DisksVFS) Clone() VFS           { return NewDisksVFS() }
 func (v *DisksVFS) SetPath(p string) error {
 	if p == "disks://" || p == "" || p == "/" {
 		return nil
 	}
 	return os.ErrNotExist
 }
-
-func (v *DisksVFS) Clone() VFS {
-	return NewDisksVFS()
+func (v *DisksVFS) Join(elem ...string) string {
+	if len(elem) == 0 {
+		return "disks://"
+	}
+	return "disks://" + elem[len(elem)-1]
+}
+func (v *DisksVFS) Create(ctx context.Context, path string) (io.WriteCloser, error) {
+	return nil, fmt.Errorf("cannot create new files on physical disks")
 }
 
 func (v *DisksVFS) ReadDir(ctx context.Context, path string, onChunk func([]VFSItem)) error {
-	var items []VFSItem
-	if runtime.GOOS == "windows" {
-		for i := 0; i < 64; i++ {
-			if ctx.Err() != nil {
-				break
-			}
-			name := fmt.Sprintf("PhysicalDrive%d", i)
-			f, err := os.Open(prepareOSPath("\\\\.\\" + name))
-			if err == nil {
-				size, _ := f.Seek(0, io.SeekEnd)
-				f.Close()
-				if size > 0 {
-					items = append(items, VFSItem{
-						Name:      name,
-						Size:      size,
-						SizeKnown: true,
-						MTime:     time.Now(),
-					})
-				}
-			}
-		}
-	} else {
-		entries, err := os.ReadDir("/dev")
-		if err == nil {
-			for _, e := range entries {
-				if ctx.Err() != nil {
-					break
-				}
-				info, err := e.Info()
-				// Include block devices
-				if err == nil && info.Mode()&os.ModeDevice != 0 && info.Mode()&os.ModeCharDevice == 0 {
-					f, err := os.Open("/dev/" + e.Name())
-					size := int64(0)
-					if err == nil {
-						size, _ = f.Seek(0, io.SeekEnd)
-						f.Close()
-					}
-					if size > 0 {
-						items = append(items, VFSItem{
-							Name:      e.Name(),
-							Size:      size,
-							SizeKnown: true,
-							MTime:     info.ModTime(),
-						})
-					}
-				}
-			}
-		}
-	}
+	items := getPlatformBlockDevices(ctx)
 	if len(items) > 0 && onChunk != nil {
 		onChunk(items)
 	}
@@ -121,48 +71,52 @@ func (v *DisksVFS) ReadDir(ctx context.Context, path string, onChunk func([]VFSI
 
 func (v *DisksVFS) Stat(ctx context.Context, path string) (VFSItem, error) {
 	name := v.Base(path)
-	prefix := "/dev/"
-	if runtime.GOOS == "windows" {
-		prefix = "\\\\.\\"
-	}
-	f, err := os.Open(prepareOSPath(prefix + name))
-	if err != nil {
-		return VFSItem{}, err
-	}
-	size, _ := f.Seek(0, io.SeekEnd)
-	f.Close()
+	devPath := resolveDevicePath(name)
+	size := getDeviceSize(devPath, nil)
 	return VFSItem{Name: name, Size: size, SizeKnown: true, MTime: time.Now()}, nil
 }
 
 func (v *DisksVFS) Open(ctx context.Context, path string) (ReadAtCloser, error) {
 	name := v.Base(path)
-	prefix := "/dev/"
-	if runtime.GOOS == "windows" {
-		prefix = "\\\\.\\"
-	}
-	f, err := os.OpenFile(prepareOSPath(prefix+name), os.O_RDWR, 0)
-	if err != nil {
-		f, err = os.Open(prepareOSPath(prefix + name))
-		if err != nil {
-			return nil, err
-		}
-	}
-	size, _ := f.Seek(0, io.SeekEnd)
-	f.Seek(0, io.SeekStart)
-	return &diskFileWrapper{File: f, size: size}, nil
-}
+	devPath := resolveDevicePath(name)
 
-func (v *DisksVFS) Create(ctx context.Context, path string) (io.WriteCloser, error) {
-	return nil, fmt.Errorf("cannot create files on physical disks")
+	f, err := os.OpenFile(prepareOSPath(devPath), os.O_RDWR, 0)
+	if err != nil {
+		f, err = os.Open(prepareOSPath(devPath))
+	}
+
+	if err != nil && os.IsPermission(err) && globalSudoClient.IsAvailable() {
+		sudoF, sudoErr := globalSudoClient.Open(prepareOSPath(devPath), os.O_RDWR, 0)
+		if sudoErr == nil {
+			size := getDeviceSize(devPath, sudoF)
+			return &diskFileWrapper{File: sudoF, size: size}, nil
+		}
+		sudoF, sudoErr = globalSudoClient.Open(prepareOSPath(devPath), os.O_RDONLY, 0)
+		if sudoErr == nil {
+			size := getDeviceSize(devPath, sudoF)
+			return &diskFileWrapper{File: sudoF, size: size}, nil
+		}
+		return nil, sudoErr
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	size := getDeviceSize(devPath, f)
+	return &diskFileWrapper{File: f, size: size}, nil
 }
 
 func (v *DisksVFS) PatchInPlace(ctx context.Context, path string, pieces []PatchPiece) error {
 	name := v.Base(path)
-	prefix := "/dev/"
-	if runtime.GOOS == "windows" {
-		prefix = "\\\\.\\"
+	devPath := resolveDevicePath(name)
+
+	var f *os.File
+	var err error
+	f, err = os.OpenFile(prepareOSPath(devPath), os.O_RDWR, 0)
+	if err != nil && os.IsPermission(err) && globalSudoClient.IsAvailable() {
+		f, err = globalSudoClient.Open(prepareOSPath(devPath), os.O_RDWR, 0)
 	}
-	f, err := os.OpenFile(prepareOSPath(prefix+name), os.O_RDWR, 0)
 	if err != nil {
 		return err
 	}
@@ -179,7 +133,7 @@ func (v *DisksVFS) PatchInPlace(ctx context.Context, path string, pieces []Patch
 			}
 		} else {
 			if p.Offset != newOffset {
-				return fmt.Errorf("in-place patching requires unchanged pieces to remain at their original offsets (no insertions/deletions)")
+				return fmt.Errorf("in-place patching requires unchanged pieces to remain at their original offsets (no insertions/deletions on raw disks)")
 			}
 		}
 		newOffset += p.Length

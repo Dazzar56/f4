@@ -15,6 +15,7 @@ import (
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
+	"golang.org/x/arch/x86/x86asm"
 )
 
 // ViewerView is a high-performance file viewer component.
@@ -26,9 +27,11 @@ type ViewerView struct {
 	vfs     vfs.VFS
 	path    string
 
-	HexMode   bool
-	WrapMode  bool
-	TopOffset int64 // Current byte offset of the first visible line
+	HexMode    bool
+	DecodeMode bool
+	WrapMode   bool
+	DisasmMode int   // 16, 32, or 64
+	TopOffset  int64 // Current byte offset of the first visible line
 
 	// For Text mode: offsets of lines currently on screen
 	lineOffsets         []int64
@@ -181,7 +184,13 @@ func NewViewerView(ctx context.Context, v vfs.VFS, path string) (*ViewerView, er
 				}
 			}
 			mode := Msg("Viewer.ModeText")
-			if vv.HexMode {
+			if vv.DecodeMode {
+				modeBits := vv.DisasmMode
+				if modeBits == 0 {
+					modeBits = 64
+				}
+				mode = fmt.Sprintf("Dec:%d", modeBits)
+			} else if vv.HexMode {
 				mode = Msg("Viewer.ModeHex")
 			}
 			cpName := vfs.DisplayCodepageName(vv.Codepage)
@@ -277,7 +286,9 @@ func (vv *ViewerView) DisplayObject(scr *vtui.ScreenBuf) {
 	}
 
 	if contentHeight > 0 {
-		if vv.HexMode {
+		if vv.DecodeMode {
+			vv.renderDecode(scr, width, contentHeight)
+		} else if vv.HexMode {
 			vv.renderHex(scr, width, contentHeight)
 		} else {
 			vv.renderText(scr, width, contentHeight)
@@ -353,6 +364,53 @@ func (vv *ViewerView) renderHex(scr *vtui.ScreenBuf, width, contentHeight int) {
 		scr.Write(vv.X1+12+50, vv.Y1+1+y, vtui.StringToCharInfo(asciiStr, attr))
 
 		currOffset += 16
+	}
+	vv.eofVisible = (currOffset >= vv.backend.Size())
+}
+func (vv *ViewerView) renderDecode(scr *vtui.ScreenBuf, width, contentHeight int) {
+	attr := vtui.Palette[ColViewerText]
+	offAttr := vtui.Palette[ColViewerArrows]
+	currOffset := vv.TopOffset
+
+	for y := 0; y < contentHeight; y++ {
+		if currOffset >= vv.backend.Size() {
+			break
+		}
+
+		data, err := vv.backend.ReadAt(currOffset, 15)
+		if err == piecetable.ErrLoading {
+			scr.Write(vv.X1, vv.Y1+1+y, vtui.StringToCharInfo(" [ Loading... ] ", attr))
+			break
+		}
+		if err != nil && len(data) == 0 {
+			scr.Write(vv.X1, vv.Y1+1+y, vtui.StringToCharInfo(fmt.Sprintf(" [ Error: %v ] ", err), attr))
+			break
+		}
+
+		if vv.DisasmMode == 0 {
+			header, _ := vv.backend.ReadAt(0, 1024)
+			vv.DisasmMode = detectX86Mode(header)
+		}
+
+		instLen := 1
+		asmStr := fmt.Sprintf("db 0x%02X", data[0])
+		inst, err := x86asm.Decode(data, vv.DisasmMode)
+		if err == nil {
+			instLen = inst.Len
+			asmStr = x86asm.IntelSyntax(inst, uint64(currOffset), nil)
+		}
+
+		line := fmt.Sprintf("%010X: ", currOffset)
+		scr.Write(vv.X1, vv.Y1+1+y, vtui.StringToCharInfo(line, offAttr))
+
+		hexStr := ""
+		for i := 0; i < instLen; i++ {
+			hexStr += fmt.Sprintf("%02X ", data[i])
+		}
+		scr.Write(vv.X1+12, vv.Y1+1+y, vtui.StringToCharInfo(fmt.Sprintf("%-24s", hexStr), attr))
+		scr.Write(vv.X1+38, vv.Y1+1+y, vtui.StringToCharInfo(asmStr, attr))
+
+		currOffset += int64(instLen)
 	}
 	vv.eofVisible = (currOffset >= vv.backend.Size())
 }
@@ -509,7 +567,21 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 		if vv.eofVisible {
 			return true // Prevent scrolling past End of File
 		}
-		if vv.HexMode {
+		if vv.DecodeMode {
+			data, _ := vv.backend.ReadAt(vv.TopOffset, 15)
+			if len(data) > 0 {
+				if vv.DisasmMode == 0 {
+					header, _ := vv.backend.ReadAt(0, 1024)
+					vv.DisasmMode = detectX86Mode(header)
+				}
+				inst, err := x86asm.Decode(data, vv.DisasmMode)
+				if err == nil {
+					vv.TopOffset += int64(inst.Len)
+				} else {
+					vv.TopOffset += 1
+				}
+			}
+		} else if vv.HexMode {
 			if vv.TopOffset+16 < vv.backend.Size() {
 				vv.TopOffset += 16
 			}
@@ -559,7 +631,9 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 
 	case vtinput.VK_UP:
-		if vv.HexMode {
+		if vv.DecodeMode {
+			vv.TopOffset -= 1
+		} else if vv.HexMode {
 			vv.TopOffset -= step
 		} else {
 			vv.TopOffset = vv.backend.FindLineStart(vv.TopOffset - 1)
@@ -570,7 +644,22 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 
 	case vtinput.VK_NEXT: // PgDn
-		if vv.HexMode {
+		if vv.DecodeMode {
+			for i := 0; i < int(contentHeight); i++ {
+				data, _ := vv.backend.ReadAt(vv.TopOffset, 15)
+				if len(data) > 0 {
+					inst, err := x86asm.Decode(data, 64)
+					if err == nil {
+						vv.TopOffset += int64(inst.Len)
+					} else {
+						vv.TopOffset += 1
+					}
+				}
+			}
+			if vv.TopOffset >= vv.backend.Size() {
+				vv.TopOffset = vv.backend.Size() - 1
+			}
+		} else if vv.HexMode {
 			vv.TopOffset += 16 * contentHeight
 			if vv.TopOffset >= vv.backend.Size() {
 				vv.TopOffset = (vv.backend.Size() - 1) &^ 0xF
@@ -584,7 +673,9 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 
 	case vtinput.VK_PRIOR: // PgUp
-		if vv.HexMode {
+		if vv.DecodeMode {
+			vv.TopOffset -= 15 * contentHeight
+		} else if vv.HexMode {
 			vv.TopOffset -= step * contentHeight
 		} else {
 			for i := 0; i < int(contentHeight); i++ {

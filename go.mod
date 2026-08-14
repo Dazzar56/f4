@@ -39,6 +39,7 @@ require (
 	github.com/yuin/gopher-lua v1.1.1
 	github.com/zalando/go-keyring v0.2.8
 	github.com/zzl/go-win32api/v2 v2.1.0
+	golang.org/x/arch v0.30.0
 	golang.org/x/crypto v0.54.0
 	golang.org/x/image v0.44.0
 	golang.org/x/net v0.57.0

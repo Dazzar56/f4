@@ -26,6 +26,7 @@ import (
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
+import "golang.org/x/arch/x86/x86asm"
 
 type visualCell struct {
 	info       vtui.CharInfo
@@ -64,8 +65,10 @@ type EditorView struct {
 
 	WordWrap         bool
 	HexMode          bool
+	DecodeMode       bool
 	HexTopOffset     int
 	HexNibble        int // 0 = high nibble, 1 = low nibble
+	DisasmMode       int // 16, 32, or 64
 	overtype         bool
 	modified         bool
 	CursorLine       int // Текущая логическая строка (для плагинов)
@@ -326,8 +329,12 @@ func newEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string, useEditorC
 	ev.scrollBar = vtui.NewScrollBar(0, 0, 0)
 	ev.scrollBar.SetOwner(ev)
 	ev.scrollBar.OnScroll = func(v int) {
-		if ev.HexMode {
-			ev.HexTopOffset = v &^ 0xF
+		if ev.HexMode || ev.DecodeMode {
+			if ev.HexMode {
+				ev.HexTopOffset = v &^ 0xF
+			} else {
+				ev.HexTopOffset = v
+			}
 			vtui.FrameManager.Redraw()
 			return
 		}
@@ -364,7 +371,14 @@ func newEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string, useEditorC
 		},
 		func() string {
 			cpName := vfs.DisplayCodepageName(ev.Codepage)
-			if ev.HexMode {
+			if ev.DecodeMode {
+				absPos := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
+				modeBits := ev.DisasmMode
+				if modeBits == 0 {
+					modeBits = 64
+				}
+				return fmt.Sprintf(" %s │ Dec:%d │ 0x%08X     ", cpName, modeBits, absPos)
+			} else if ev.HexMode {
 				absPos := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 				return fmt.Sprintf(" %s │ Hex │ 0x%08X     ", cpName, absPos)
 			}
@@ -907,7 +921,112 @@ func (ev *EditorView) renderHex(scr *vtui.ScreenBuf, width, contentHeight int) {
 		currOffset += 16
 	}
 }
+func (ev *EditorView) renderDecode(scr *vtui.ScreenBuf, width, contentHeight int) {
+	bgAttr := ColorerEditorBaseAttr(vtui.Palette[ColEditorText])
+	offAttr := vtui.Palette[ColEditorStatus]
+	currOffset := ev.HexTopOffset
+	absPos := int(ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos)
 
+	for y := 0; y < contentHeight; y++ {
+		if currOffset >= ev.pt.Size() {
+			break
+		}
+		if currOffset == ev.pt.Size() && currOffset != 0 {
+			if absPos != currOffset {
+				break
+			}
+		}
+
+		take := 15
+		if currOffset+take > ev.pt.Size() {
+			take = ev.pt.Size() - currOffset
+		}
+
+		var data []byte
+		if take > 0 {
+			var err error
+			data, err = ev.pt.GetRange(currOffset, take)
+			if err == piecetable.ErrLoading {
+				scr.Write(ev.X1, ev.Y1+1+y, vtui.StringToCharInfo(" [ Loading... ] ", bgAttr))
+				break
+			}
+		}
+
+		if len(data) == 0 && currOffset < ev.pt.Size() {
+			break
+		}
+
+		if ev.DisasmMode == 0 {
+			header, _ := ev.pt.GetRange(0, 1024)
+			ev.DisasmMode = detectX86Mode(header)
+		}
+
+		instLen := 1
+		asmStr := ""
+		if len(data) > 0 {
+			inst, err := x86asm.Decode(data, ev.DisasmMode)
+			asmStr = fmt.Sprintf("db 0x%02X", data[0])
+			if err == nil {
+				instLen = inst.Len
+				asmStr = x86asm.IntelSyntax(inst, uint64(currOffset), nil)
+			}
+		}
+
+		line := fmt.Sprintf("%010X: ", currOffset)
+
+		cellAttr := bgAttr
+		if ev.IsFocused() && absPos >= currOffset && absPos < currOffset+instLen {
+			cellAttr = vtui.Palette[vtui.ColDialogEditSelected]
+		}
+
+		scr.Write(ev.X1, ev.Y1+1+y, vtui.StringToCharInfo(line, offAttr))
+
+		hexStr := ""
+		for i := 0; i < instLen; i++ {
+			if i < len(data) {
+				hexStr += fmt.Sprintf("%02X", data[i])
+				if i < instLen-1 {
+					hexStr += " "
+				}
+			}
+		}
+		scr.Write(ev.X1+12, ev.Y1+1+y, vtui.StringToCharInfo(fmt.Sprintf("%-24s", hexStr), cellAttr))
+		scr.Write(ev.X1+38, ev.Y1+1+y, vtui.StringToCharInfo(asmStr, cellAttr))
+		scr.FillRect(ev.X1+38+len(asmStr), ev.Y1+1+y, ev.X2, ev.Y1+1+y, ' ', cellAttr)
+
+		if ev.IsFocused() && absPos >= currOffset && absPos < currOffset+instLen {
+			byteOffset := absPos - currOffset
+			cx := ev.X1 + 12 + byteOffset*3
+			scr.SetCursorPos(cx+ev.HexNibble, ev.Y1+1+y)
+			scr.SetCursorVisible(true)
+			scr.SetCursorShape(vtui.CursorShapeUnderline)
+		}
+
+		currOffset += instLen
+	}
+}
+
+func detectX86Mode(data []byte) int {
+	if len(data) >= 6 && bytes.HasPrefix(data, []byte("\x7fELF")) {
+		if data[4] == 1 {
+			return 32
+		}
+		return 64
+	}
+	if len(data) >= 0x40 && bytes.HasPrefix(data, []byte("MZ")) {
+		peOff := int(data[0x3C]) | (int(data[0x3D]) << 8) | (int(data[0x3E]) << 16) | (int(data[0x3F]) << 24)
+		if peOff > 0 && peOff+6 <= len(data) && bytes.Equal(data[peOff:peOff+4], []byte("PE\x00\x00")) {
+			machine := uint16(data[peOff+4]) | (uint16(data[peOff+5]) << 8)
+			if machine == 0x014C { // IMAGE_FILE_MACHINE_I386
+				return 32
+			}
+			if machine == 0x8664 { // IMAGE_FILE_MACHINE_AMD64
+				return 64
+			}
+		}
+	}
+	return 64 // Default
+}
 func hexCharToByte(c rune) byte {
 	if c >= '0' && c <= '9' {
 		return byte(c - '0')
@@ -967,17 +1086,35 @@ func (ev *EditorView) processKeyHex(e *vtinput.InputEvent) bool {
 		syncCursor()
 		return true
 	case vtinput.VK_UP:
-		if absPos >= 16 {
-			absPos -= 16
+		if ev.DecodeMode {
+			absPos -= 1
 		} else {
+			absPos -= 16
+		}
+		if absPos < 0 {
 			absPos = 0
 		}
 		syncCursor()
 		return true
 	case vtinput.VK_DOWN:
-		if absPos+16 <= size {
-			absPos += 16
+		if ev.DecodeMode {
+			data, _ := ev.pt.GetRange(absPos, 15)
+			if len(data) > 0 {
+				if ev.DisasmMode == 0 {
+					header, _ := ev.pt.GetRange(0, 1024)
+					ev.DisasmMode = detectX86Mode(header)
+				}
+				inst, err := x86asm.Decode(data, ev.DisasmMode)
+				if err == nil {
+					absPos += int(inst.Len)
+				} else {
+					absPos += 1
+				}
+			}
 		} else {
+			absPos += 16
+		}
+		if absPos > size {
 			absPos = size
 		}
 		syncCursor()
@@ -1193,6 +1330,31 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 			contentHeight := ev.Y2 - ev.Y1
 			if contentHeight > 0 {
 				lastLineOffset := int((ev.pt.Size() - 1) &^ 0xF)
+				maxOffset = lastLineOffset - (contentHeight-1)*16
+				if maxOffset < 0 {
+					maxOffset = 0
+				}
+			}
+			ev.scrollBar.SetParams(ev.HexTopOffset, 0, maxOffset)
+			ev.scrollBar.Show(scr)
+		}
+		return
+	}
+
+	if ev.DecodeMode {
+		ev.renderDecode(scr, width, height-1)
+		if ev.scrollBar != nil && ev.pt.Size() > 0 {
+			ev.scrollBar.SetParams(ev.HexTopOffset, 0, ev.pt.Size())
+			ev.scrollBar.Show(scr)
+		}
+		return
+	} else if ev.HexMode {
+		ev.renderHex(scr, width, height-1)
+		if ev.scrollBar != nil && ev.pt.Size() > 0 {
+			maxOffset := ev.pt.Size()
+			contentHeight := ev.Y2 - ev.Y1
+			if contentHeight > 0 {
+				lastLineOffset := (ev.pt.Size() - 1) &^ 0xF
 				maxOffset = lastLineOffset - (contentHeight-1)*16
 				if maxOffset < 0 {
 					maxOffset = 0
@@ -1530,7 +1692,7 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 		return true
 	}
 
-	if ev.HexMode {
+	if ev.HexMode || ev.DecodeMode {
 		if ev.processKeyHex(e) {
 			return true
 		}
@@ -2411,19 +2573,50 @@ func (ev *EditorView) ensureCursorVisible() {
 		return // Skip clamping and scrolling while waiting for the target line to be indexed
 	}
 
-	if ev.HexMode {
+	if ev.HexMode || ev.DecodeMode {
 		height := ev.Y2 - ev.Y1
 		if height <= 0 {
 			return
 		}
 		absPos := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
-		row := absPos / 16
-		topRow := ev.HexTopOffset / 16
 
-		if row < topRow {
-			ev.HexTopOffset = row * 16
-		} else if row >= topRow+height {
-			ev.HexTopOffset = (row - height + 1) * 16
+		if ev.HexMode {
+			row := absPos / 16
+			topRow := ev.HexTopOffset / 16
+
+			if row < topRow {
+				ev.HexTopOffset = row * 16
+			} else if row >= topRow+height {
+				ev.HexTopOffset = (row - height + 1) * 16
+			}
+		} else {
+			curr := ev.HexTopOffset
+			visible := false
+			for y := 0; y < height; y++ {
+				if curr >= ev.pt.Size() {
+					break
+				}
+				data, _ := ev.pt.GetRange(curr, 15)
+				instLen := 1
+				if len(data) > 0 {
+					if ev.DisasmMode == 0 {
+						header, _ := ev.pt.GetRange(0, 1024)
+						ev.DisasmMode = detectX86Mode(header)
+					}
+					inst, err := x86asm.Decode(data, ev.DisasmMode)
+					if err == nil {
+						instLen = inst.Len
+					}
+				}
+				if absPos >= curr && absPos < curr+instLen {
+					visible = true
+					break
+				}
+				curr += instLen
+			}
+			if !visible {
+				ev.HexTopOffset = absPos
+			}
 		}
 		return
 	}
@@ -2877,7 +3070,7 @@ func (ev *EditorView) showSearchDialog() {
 		chkRegexp.State = 1
 	}
 
-	chkHex := vtui.NewCheckbox(0, 0, "He&x pattern", false)
+	chkHex := vtui.NewCheckbox(0, 0, Msg("Search.HexPattern"), false)
 	if LastEditorSearchHex {
 		chkHex.State = 1
 	}
@@ -3182,7 +3375,7 @@ func (ev *EditorView) showReplaceDialog() {
 		chkRegexp.State = 1
 	}
 
-	chkHex := vtui.NewCheckbox(0, 0, "He&x pattern", false)
+	chkHex := vtui.NewCheckbox(0, 0, Msg("Search.HexPattern"), false)
 	if LastEditorSearchHex {
 		chkHex.State = 1
 	}

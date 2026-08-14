@@ -407,7 +407,7 @@ func (v *OSVFS) PatchInPlace(ctx context.Context, path string, pieces []PatchPie
 			}
 		} else {
 			if p.Offset != newOffset {
-				return fmt.Errorf("in-place patching requires unchanged pieces to remain at their original offsets (no insertions/deletions)")
+				return fmt.Errorf("in-place patching requires unchanged pieces to remain at their original offsets (no insertions/deletions allowed on raw disks)")
 			}
 		}
 		newOffset += p.Length
@@ -469,8 +469,15 @@ func (v *OSVFS) Open(ctx context.Context, path string) (ReadAtCloser, error) {
 			sudoF, sudoErr := globalSudoClient.Open(prepareOSPath(path), os.O_RDONLY, 0)
 			if sudoErr == nil {
 				info, _ := sudoF.Stat()
-				vtui.DebugLog("VFS: Sudo Open(%q) SUCCESS, size: %d", path, info.Size())
-				return &osFileWrapper{File: sudoF, size: info.Size()}, nil
+				size := info.Size()
+				if info.Mode()&(os.ModeDevice|os.ModeCharDevice) != 0 {
+					if pos, err := sudoF.Seek(0, io.SeekEnd); err == nil && pos > 0 {
+						size = pos
+						sudoF.Seek(0, io.SeekStart)
+					}
+				}
+				vtui.DebugLog("VFS: Sudo Open(%q) SUCCESS, size: %d", path, size)
+				return &osFileWrapper{File: sudoF, size: size}, nil
 			}
 			vtui.DebugLog("VFS: Sudo Open(%q) FAILED: %v", path, sudoErr)
 		}

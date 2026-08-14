@@ -55,6 +55,20 @@ func TestActionRegistry(t *testing.T) {
 		t.Error("RunAction should return false for missing action")
 	}
 }
+func TestRegistry_HexModeAndWorkspaceActions(t *testing.T) {
+	a, ok := GetAction("Editor.HexMode")
+	if !ok {
+		t.Fatal("Editor.HexMode should be registered")
+	}
+	if a.MenuPath != "Options" {
+		t.Errorf("MenuPath = %q, want Options", a.MenuPath)
+	}
+
+	_, ok = GetAction("Workspace.New")
+	if !ok {
+		t.Fatal("Workspace.New should be registered")
+	}
+}
 
 func TestHotkeyManager_BookmarksDefault(t *testing.T) {
 	hm := NewHotkeyManager("")

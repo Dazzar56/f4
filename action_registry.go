@@ -2013,12 +2013,19 @@ func init() {
 		DescKey:     "Action.Editor.HexMode.Desc",
 		DefaultKeys: []string{"F4"},
 		MenuPath:    "Options",
-		Checked:     editorState(func(ev *EditorView) bool { return ev.HexMode }),
+		Checked:     editorState(func(ev *EditorView) bool { return ev.HexMode || ev.DecodeMode }),
 		Handler: withEditor(func(ev *EditorView) {
-			ev.HexMode = !ev.HexMode
-			if ev.HexMode {
+			if !ev.HexMode && !ev.DecodeMode {
+				ev.HexMode = true
 				ev.HexTopOffset = (ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos) &^ 0xF
 				ev.HexNibble = 0
+			} else if ev.HexMode {
+				ev.HexMode = false
+				ev.DecodeMode = true
+				ev.HexTopOffset = ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
+				ev.HexNibble = 0
+			} else {
+				ev.DecodeMode = false
 			}
 			ev.ensureCursorVisible()
 			vtui.FrameManager.Redraw()
@@ -2177,12 +2184,18 @@ func init() {
 		DescKey:     "Action.Viewer.HexMode.Desc",
 		DefaultKeys: []string{"F4"},
 		MenuPath:    "View",
-		Checked:     viewerState(func(vv *ViewerView) bool { return vv.HexMode }),
+		Checked:     viewerState(func(vv *ViewerView) bool { return vv.HexMode || vv.DecodeMode }),
 		Handler: withViewer(func(vv *ViewerView) {
-			vv.HexMode = !vv.HexMode
-			if vv.HexMode {
+			if !vv.HexMode && !vv.DecodeMode {
+				vv.HexMode = true
 				vv.TopOffset &= ^int64(0xF)
+			} else if vv.HexMode {
+				vv.HexMode = false
+				vv.DecodeMode = true
+			} else {
+				vv.DecodeMode = false
 			}
+			vtui.FrameManager.Redraw()
 		}),
 	})
 
