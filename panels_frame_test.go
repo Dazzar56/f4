@@ -4784,6 +4784,88 @@ func TestPanelsFrame_CtrlP_TogglesPassivePanel(t *testing.T) {
 		t.Errorf("Ctrl+P should have shown the right panel again, got R=%v", pf.showRightPanel)
 	}
 }
+func TestPanelsFrame_TabWithSinglePanelDoesNotEnablePassivePanel(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pf := setupMockPanelsFrame()
+	defer pf.Close()
+
+	// Active = right (1), hide left panel
+	pf.activeIdx = 1
+	pf.showLeftPanel = false
+	pf.showRightPanel = true
+	pf.showPanels = true
+
+	// Press Tab
+	pressKey(pf, &vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_TAB,
+	})
+
+	// Active panel must remain right (1) and left panel must remain hidden
+	if pf.activeIdx != 1 {
+		t.Errorf("Tab moved activeIdx to %d, expected 1", pf.activeIdx)
+	}
+	if pf.showLeftPanel {
+		t.Error("Tab re-enabled the hidden left panel")
+	}
+}
+
+func TestPanelsFrame_CtrlOAndCtrlPSequence(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pf := setupMockPanelsFrame()
+	defer pf.Close()
+
+	sendCtrlO := func() {
+		pressKey(pf, &vtinput.InputEvent{
+			Type: vtinput.KeyEventType, KeyDown: true,
+			VirtualKeyCode:  vtinput.VK_O,
+			ControlKeyState: vtinput.LeftCtrlPressed,
+		})
+	}
+	sendCtrlP := func() {
+		pressKey(pf, &vtinput.InputEvent{
+			Type: vtinput.KeyEventType, KeyDown: true,
+			VirtualKeyCode:  vtinput.VK_P,
+			ControlKeyState: vtinput.LeftCtrlPressed,
+		})
+	}
+
+	pf.activeIdx = 0 // Left active
+	pf.showLeftPanel = true
+	pf.showRightPanel = true
+	pf.showPanels = true
+
+	// 1. Ctrl+O -> hide all panels
+	sendCtrlO()
+	if pf.showPanels {
+		t.Fatal("Ctrl+O failed to hide panels")
+	}
+
+	// 2. Ctrl+P -> toggle passive panel off, but panels stay hidden
+	sendCtrlP()
+	if pf.showRightPanel {
+		t.Error("Ctrl+P failed to toggle passive panel off")
+	}
+	if pf.showPanels {
+		t.Error("Ctrl+P while panels hidden should NOT force showPanels=true")
+	}
+
+	// 3. Ctrl+O -> show panels (only Left panel is visible)
+	sendCtrlO()
+	if !pf.showPanels {
+		t.Fatal("Ctrl+O failed to show panels")
+	}
+	if pf.showRightPanel || !pf.showLeftPanel {
+		t.Errorf("Expected only left panel visible, got L=%v R=%v", pf.showLeftPanel, pf.showRightPanel)
+	}
+
+	// 4. Ctrl+P -> toggle passive panel on
+	sendCtrlP()
+	if !pf.showRightPanel || !pf.showLeftPanel {
+		t.Errorf("Expected both panels visible after Ctrl+P, got L=%v R=%v", pf.showLeftPanel, pf.showRightPanel)
+	}
+}
 
 func TestPanelsFrame_AICmds(t *testing.T) {
 	pf := NewPanelsFrame()

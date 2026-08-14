@@ -1319,9 +1319,11 @@ func init() {
 		Handler: withPF(func(pf *PanelsFrame) {
 			pf.exitWide()
 			pf.showLeftPanel = !pf.showLeftPanel
-			pf.showPanels = pf.showLeftPanel || pf.showRightPanel
-			if !pf.showLeftPanel && pf.showPanels {
+			if !pf.showLeftPanel && pf.activeIdx == 0 && pf.showRightPanel {
 				pf.activeIdx = 1
+			}
+			if !pf.showLeftPanel && !pf.showRightPanel {
+				pf.showPanels = false
 			}
 			vtui.FrameManager.HardRefresh()
 			if pf.showPanels {
@@ -1339,9 +1341,11 @@ func init() {
 		Handler: withPF(func(pf *PanelsFrame) {
 			pf.exitWide()
 			pf.showRightPanel = !pf.showRightPanel
-			pf.showPanels = pf.showLeftPanel || pf.showRightPanel
-			if !pf.showRightPanel && pf.showPanels {
+			if !pf.showRightPanel && pf.activeIdx == 1 && pf.showLeftPanel {
 				pf.activeIdx = 0
+			}
+			if !pf.showLeftPanel && !pf.showRightPanel {
+				pf.showPanels = false
 			}
 			vtui.FrameManager.HardRefresh()
 			if pf.showPanels {
@@ -1364,7 +1368,9 @@ func init() {
 			} else {
 				pf.showLeftPanel = !pf.showLeftPanel
 			}
-			pf.showPanels = pf.showLeftPanel || pf.showRightPanel
+			if !pf.showLeftPanel && !pf.showRightPanel {
+				pf.showPanels = false
+			}
 			vtui.FrameManager.HardRefresh()
 			if pf.showPanels {
 				pf.RefreshAll()

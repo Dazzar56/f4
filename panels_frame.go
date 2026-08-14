@@ -2114,36 +2114,32 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	// Tab switches panels
 	if e.VirtualKeyCode == vtinput.VK_TAB && !ctrl {
 		if pf.showPanels && (!pf.searchFirstMode() || !pf.commandLineFocused) {
-			pf.activeIdx = 1 - pf.activeIdx
-			if pf.wide {
-				pf.widePanel = pf.activeIdx
-				pf.ResizeConsole(pf.lastW, pf.lastH)
-				pf.lastKey = 0
-				return true
-			}
-			pf.lastKey = 0
-			if pf.activeIdx == 0 && !pf.showLeftPanel {
-				pf.showLeftPanel = true
-			}
-			if pf.activeIdx == 1 && !pf.showRightPanel {
-				pf.showRightPanel = true
-			}
-			if pf.searchFirstMode() {
-				pf.setCommandLineFocus(false)
-			}
-			// Alt panels survive Tab — matches far2l where the
-			// info / quick view / tree panel becomes visually
-			// focused but stays put; commands still target the
-			// source file panel underneath.
-			return true
-		} else {
-			if AppConfig.CommandLineAutoComplete && !pf.cmdLine.IsEmpty() {
-				acMenu := vtui.NewAutoCompleteMenu(pf.cmdLine.Edit)
-				if acMenu.HasMatches() {
-					vtui.FrameManager.Push(acMenu)
+			otherIdx := 1 - pf.activeIdx
+			otherVisible := pf.wide || (otherIdx == 0 && pf.showLeftPanel) || (otherIdx == 1 && pf.showRightPanel)
+			if otherVisible {
+				pf.activeIdx = otherIdx
+				if pf.wide {
+					pf.widePanel = pf.activeIdx
+					pf.ResizeConsole(pf.lastW, pf.lastH)
+					pf.lastKey = 0
 					return true
 				}
+				pf.lastKey = 0
+				if pf.searchFirstMode() {
+					pf.setCommandLineFocus(false)
+				}
+				return true
 			}
+		}
+		if AppConfig.CommandLineAutoComplete && !pf.cmdLine.IsEmpty() {
+			acMenu := vtui.NewAutoCompleteMenu(pf.cmdLine.Edit)
+			if acMenu.HasMatches() {
+				vtui.FrameManager.Push(acMenu)
+				return true
+			}
+		}
+		if pf.showPanels {
+			return true
 		}
 	}
 
