@@ -17,10 +17,16 @@ func commandPaletteFrameEntries() []commandPaletteEntry {
 	switch frame := vtui.FrameManager.GetTopFrame().(type) {
 	case *PanelsFrame:
 		return commandPalettePanelsContextEntries(frame)
+	case commandPaletteHelpFrame:
+		return commandPaletteHelpEntries(frame)
 	case *ImageView:
-		return commandPaletteImageEntries(frame)
+		return append(commandPaletteImageEntries(frame), commandPaletteImageGalleryOpenEntry(frame)...)
 	case *QueueFrame:
-		return commandPaletteQueueEntries(frame)
+		return append(commandPaletteQueueEntries(frame), commandPaletteQueueZoomEntry(frame)...)
+	case *GrabberFrame:
+		return commandPaletteGrabberEntries(frame)
+	case *ArkanoidFrame:
+		return commandPaletteArkanoidEntries(frame)
 	default:
 		return nil
 	}
@@ -143,10 +149,7 @@ func actionCloseQueueWorkspace(queue *QueueFrame) bool {
 	if queue == nil || vtui.FrameManager == nil || vtui.FrameManager.GetTopFrame() != queue {
 		return false
 	}
-	if queue.vetoCloseWhileActive() {
-		return true
-	}
-	return actionWorkspaceCloseSemantic()
+	return actionWorkspaceClose()
 }
 
 func commandPaletteCancelQueueTask(queue *QueueFrame) bool {

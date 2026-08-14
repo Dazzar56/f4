@@ -208,6 +208,42 @@ func TestFrameworkHelpAndMainMenuActionsPreserveFrameBehavior(t *testing.T) {
 	}
 }
 
+func TestPaletteMainMenuMatchesPanelsF9ActiveSide(t *testing.T) {
+	initFrameworkActionTestScreen(t)
+	panels := &PanelsFrame{
+		activeIdx:  1,
+		showPanels: true,
+		menuBar:    vtui.NewMenuBar(nil),
+		cmdLine:    NewCommandLine(">"),
+		termView:   NewTerminalView(100, 30),
+	}
+	panels.menuBar.SetOwner(panels)
+	vtui.FrameManager.Push(panels)
+
+	panels.menuBar.SelectPos = 2
+	if !actionActivateMainMenu() {
+		t.Fatal("palette main-menu action failed for PanelsFrame")
+	}
+	if got := panels.menuBar.SelectPos; got != 4 {
+		t.Fatalf("right-panel menu position = %d, want physical F9 position 4", got)
+	}
+	if top := vtui.FrameManager.GetTopFrame(); top == panels || top.GetType() != vtui.TypeMenu {
+		t.Fatalf("right-panel F9 top frame = %T, want menu", top)
+	}
+	vtui.FrameManager.Pop()
+	vtui.FrameManager.SyncCurrentScreen()
+	panels.menuBar.Active = false
+
+	panels.activeIdx = 0
+	panels.menuBar.SelectPos = 3
+	if !actionActivateMainMenu() {
+		t.Fatal("palette main-menu action failed for left panel")
+	}
+	if got := panels.menuBar.SelectPos; got != 0 {
+		t.Fatalf("left-panel menu position = %d, want physical F9 position 0", got)
+	}
+}
+
 func TestFrameworkContextHelpPrefersFocusedTopicAndFallsBackToContents(t *testing.T) {
 	screen := initFrameworkActionTestScreen(t)
 	previousHelpEngine := vtui.GlobalHelpEngine
@@ -277,20 +313,30 @@ func TestWorkspacePaletteEntriesResolveStableNumbersAtExecution(t *testing.T) {
 	vtui.FrameManager.ConfigureWorkspaceAltNumberSwitch(true)
 
 	entries := commandPaletteWorkspaceEntries()
-	if len(entries) != 2 {
-		t.Fatalf("workspace entries = %d, want 2", len(entries))
+	if len(entries) != 4 {
+		t.Fatalf("workspace entries = %d, want activate and close for both workspaces", len(entries))
 	}
-	var firstEntry, secondEntry commandPaletteEntry
+	var firstEntry, secondEntry, firstClose, secondClose commandPaletteEntry
 	for _, entry := range entries {
+		if strings.HasPrefix(entry.ID, "Workspace.Move.") || strings.HasPrefix(entry.ID, "Workspace.Reorder.") {
+			t.Fatalf("gesture-only workspace reorder leaked into the palette: %s", entry.ID)
+		}
 		switch entry.ID {
 		case "Workspace.Activate.7":
 			firstEntry = entry
 		case "Workspace.Activate.3":
 			secondEntry = entry
+		case "Workspace.Close.7":
+			firstClose = entry
+		case "Workspace.Close.3":
+			secondClose = entry
 		}
 	}
-	if firstEntry.ID == "" || secondEntry.ID == "" {
+	if firstEntry.ID == "" || secondEntry.ID == "" || firstClose.ID == "" || secondClose.ID == "" {
 		t.Fatalf("stable workspace IDs missing: %#v", entries)
+	}
+	if !strings.Contains(commandPaletteWorkspaceReorderExclusion, "no stable workspace reorder semantic action") {
+		t.Fatalf("workspace gesture exclusion is not explicit: %q", commandPaletteWorkspaceReorderExclusion)
 	}
 	if secondEntry.Checked != true || firstEntry.Checked {
 		t.Fatalf("checked states first=%v second=%v, active workspace is 3", firstEntry.Checked, secondEntry.Checked)
@@ -301,8 +347,14 @@ func TestWorkspacePaletteEntriesResolveStableNumbersAtExecution(t *testing.T) {
 	if !strings.Contains(firstEntry.Label, "7") || !strings.Contains(firstEntry.Label, "Left files") {
 		t.Fatalf("workspace label = %q, want stable number and title", firstEntry.Label)
 	}
+	if firstClose.Shortcut != "" || !strings.Contains(firstClose.Label, "7") || !strings.Contains(firstClose.Label, "Left files") {
+		t.Fatalf("workspace close metadata = %#v", firstClose)
+	}
 	if results := rankCommandPaletteEntries([]commandPaletteEntry{firstEntry}, "рабочее пространство", nil); len(results) != 1 {
 		t.Fatal("Russian workspace translation did not find the current-language entry")
+	}
+	if results := rankCommandPaletteEntries([]commandPaletteEntry{firstClose}, "закрыть рабочее пространство", nil); len(results) != 1 {
+		t.Fatal("Russian workspace close translation did not find the current-language entry")
 	}
 
 	// Reorder the tabs after taking the palette snapshot while preserving the
@@ -336,11 +388,76 @@ func TestWorkspacePaletteEntriesResolveStableNumbersAtExecution(t *testing.T) {
 	}
 	vtui.FrameManager.Pop()
 	vtui.FrameManager.SyncCurrentScreen()
-	if !actionWorkspaceClose() {
-		t.Fatal("close workspace action failed")
+	if !executeCommandPaletteEntry(firstClose) {
+		t.Fatal("stable workspace close entry failed after tab reorder")
 	}
 	if len(vtui.FrameManager.Screens) != 1 || vtui.FrameManager.Screens[0].Number != 3 || !first.IsDone() {
 		t.Fatalf("close left screens=%d number=%d firstDone=%v", len(vtui.FrameManager.Screens), vtui.FrameManager.Screens[0].Number, first.IsDone())
+	}
+	if executeCommandPaletteEntry(firstClose) {
+		t.Fatal("stale workspace close entry succeeded after its stable target disappeared")
+	}
+}
+
+func TestWorkspaceClosePreservesQueueVetoBelowHelpAndForBackgroundTarget(t *testing.T) {
+	initFrameworkActionTestScreen(t)
+	previousQueue := GlobalQueueManager
+	previousHelp := vtui.GlobalHelpEngine
+	t.Cleanup(func() {
+		GlobalQueueManager = previousQueue
+		vtui.GlobalHelpEngine = previousHelp
+	})
+
+	vtui.FrameManager.Push(&frameworkActionTestFrame{title: "Files"})
+	task := &QueueTask{ID: 41, State: "Running"}
+	GlobalQueueManager = &OpQueueManager{
+		tasks:      []*QueueTask{task},
+		activeKeys: make(map[string]bool),
+	}
+	queue := NewQueueFrame()
+	queue.UpdateTasks([]*QueueTask{task})
+	vtui.FrameManager.AddScreen(queue)
+	vtui.FrameManager.RestoreScreenNumbers([]int{11, 29})
+
+	helpEngine := vtui.NewHelpEngine(nil)
+	helpEngine.AddTopic(&vtui.HelpTopic{Name: "Contents", Lines: []string{"Queue help"}})
+	vtui.GlobalHelpEngine = helpEngine
+	help := vtui.NewHelpView(helpEngine, "Contents")
+	vtui.FrameManager.Push(help)
+
+	var closeQueue commandPaletteEntry
+	for _, entry := range commandPaletteWorkspaceEntries() {
+		if entry.ID == "Workspace.Close.29" {
+			closeQueue = entry
+			break
+		}
+	}
+	if closeQueue.ID == "" {
+		t.Fatal("dynamic close for queue workspace 29 is missing")
+	}
+	if !actionWorkspaceClose() || len(vtui.FrameManager.Screens) != 2 {
+		t.Fatal("active Workspace.Close bypassed Queue veto below Help")
+	}
+	if help.IsDone() || queue.IsDone() {
+		t.Fatal("Queue veto closed frames beneath Help")
+	}
+
+	vtui.FrameManager.SwitchScreen(0)
+	if !executeCommandPaletteEntry(closeQueue) || len(vtui.FrameManager.Screens) != 2 {
+		t.Fatal("stable background Workspace.Close bypassed Queue veto")
+	}
+
+	task.mu.Lock()
+	task.State = "Done"
+	task.mu.Unlock()
+	if !executeCommandPaletteEntry(closeQueue) {
+		t.Fatal("stable background Workspace.Close failed after Queue became idle")
+	}
+	if len(vtui.FrameManager.Screens) != 1 || vtui.FrameManager.Screens[0].Number != 11 {
+		t.Fatalf("idle queue close left workspaces %#v", vtui.FrameManager.Screens)
+	}
+	if !help.IsDone() || !queue.IsDone() {
+		t.Fatal("idle queue workspace did not close its complete frame stack")
 	}
 }
 

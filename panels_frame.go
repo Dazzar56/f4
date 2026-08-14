@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"sync"
@@ -1397,6 +1398,13 @@ func (pf *PanelsFrame) InterceptPluginKey(e *vtinput.InputEvent) bool {
 			}
 		}
 	}
+
+	// A remote shell owns Ctrl+C after plugins and the active PanelController
+	// have had their documented first chance. This filter still runs before
+	// HotkeyManager, so Panel.SplitReset cannot shadow the interrupt fallback.
+	if e.VirtualKeyCode == vtinput.VK_C && ctrl && !alt && !shift && pf.interruptRemotePTY(nil) {
+		return true
+	}
 	return false
 }
 
@@ -1592,17 +1600,8 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	// stop it; making them switch to the terminal view first (Ctrl+O)
 	// just to be heard would be worse than losing the split-reset
 	// binding on remote panels.
-	if e.KeyDown && ctrl && !alt && !shift && e.VirtualKeyCode == vtinput.VK_C {
-		if fsp := pf.getActivePanel(); fsp != nil {
-			if integ, ok := fsp.vfs.(vfs.PtyShellIntegration); ok {
-				if pty := pf.getActivePTY(); pty != nil {
-					if seq := integ.PtyInterrupt(); len(seq) > 0 {
-						pty.Write(seq)
-						return true
-					}
-				}
-			}
-		}
+	if e.KeyDown && ctrl && !alt && !shift && e.VirtualKeyCode == vtinput.VK_C && pf.interruptRemotePTY(nil) {
+		return true
 	}
 	if e.Type == vtinput.FocusEventType {
 		if !e.SetFocus {
@@ -3468,6 +3467,68 @@ func (pf *PanelsFrame) getActivePTY() PtyBackend {
 	pf.ptyMutex.Lock()
 	defer pf.ptyMutex.Unlock()
 	return pf.getActivePTYUnsafe()
+}
+
+// remotePTYInterruptTarget is a side-effect-free snapshot of the remote shell
+// that currently owns Ctrl+C. In particular, discovering palette commands must
+// not create a remote PTY merely to decide whether Interrupt is available.
+type remotePTYInterruptTarget struct {
+	panel    *FileSystemPanel
+	pty      PtyBackend
+	sequence string
+}
+
+func (target *remotePTYInterruptTarget) matches(other *remotePTYInterruptTarget) bool {
+	return target != nil && other != nil &&
+		target.panel == other.panel && sameRemotePTYBackend(target.pty, other.pty) &&
+		target.sequence == other.sequence
+}
+
+func sameRemotePTYBackend(left, right PtyBackend) bool {
+	typeOfLeft := reflect.TypeOf(left)
+	return typeOfLeft != nil && typeOfLeft == reflect.TypeOf(right) && typeOfLeft.Comparable() && left == right
+}
+
+func (pf *PanelsFrame) currentRemotePTYInterruptTarget() *remotePTYInterruptTarget {
+	if pf == nil || pf.closed || !pf.showPanels {
+		return nil
+	}
+	fsp := pf.getActivePanel()
+	if fsp == nil || fsp.vfs == nil || fsp.providerOpenTask != nil {
+		return nil
+	}
+	integration, ok := fsp.vfs.(vfs.PtyShellIntegration)
+	if !ok {
+		return nil
+	}
+	sequence := integration.PtyInterrupt()
+	if len(sequence) == 0 {
+		return nil
+	}
+
+	pf.ptyMutex.Lock()
+	pty := pf.remotePtys[fsp.vfs]
+	pf.ptyMutex.Unlock()
+	if pty == nil {
+		return nil
+	}
+	return &remotePTYInterruptTarget{
+		panel:    fsp,
+		pty:      pty,
+		sequence: string(sequence),
+	}
+}
+
+// interruptRemotePTY writes the integration-defined interrupt sequence only
+// when the same panel, VFS and live PTY still own the command. expected is nil
+// for the physical Ctrl+C path and a discovery snapshot for palette callbacks.
+func (pf *PanelsFrame) interruptRemotePTY(expected *remotePTYInterruptTarget) bool {
+	target := pf.currentRemotePTYInterruptTarget()
+	if target == nil || (expected != nil && !target.matches(expected)) {
+		return false
+	}
+	_, _ = pf.writePTY(target.pty, []byte(target.sequence))
+	return true
 }
 
 func (pf *PanelsFrame) GetTitle() string {

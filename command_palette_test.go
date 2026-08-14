@@ -159,13 +159,22 @@ func TestCommandPaletteIncludesBothPluginLocationsAndReResolves(t *testing.T) {
 	if panel.Category == config.Category {
 		t.Fatalf("panel and configuration commands have the same category %q", panel.Category)
 	}
-	if !executeCommandPaletteEntry(panel) || runs != 1 {
-		t.Fatalf("live plugin command ran %d times", runs)
-	}
-	registrations[0].Unregister()
-	if executeCommandPaletteEntry(panel) || runs != 1 {
-		t.Fatal("unregistered plugin command was invoked from a stale palette entry")
-	}
+	func() {
+		// This registry test uses a deliberately minimal PanelsFrame that is not
+		// installed in the global frame manager. Disable workspace validation so
+		// the assertions remain focused on live registration re-resolution.
+		oldFrameManager := vtui.FrameManager
+		vtui.FrameManager = nil
+		defer func() { vtui.FrameManager = oldFrameManager }()
+
+		if !executeCommandPaletteEntry(panel) || runs != 1 {
+			t.Fatalf("live plugin command ran %d times", runs)
+		}
+		registrations[0].Unregister()
+		if executeCommandPaletteEntry(panel) || runs != 1 {
+			t.Fatal("unregistered plugin command was invoked from a stale palette entry")
+		}
+	}()
 }
 
 func TestCommandPalettePluginMetadataUsesCurrentLanguageAndAllLanguageAliases(t *testing.T) {
@@ -182,15 +191,18 @@ func TestCommandPalettePluginMetadataUsesCurrentLanguageAndAllLanguageAliases(t 
 
 	api := &coreAPI{}
 	registration, err := api.RegisterPluginCommand(vfs.PluginCommand{
-		ID:             "test.command-palette.localized-plugin",
-		Location:       vfs.PluginCommandPanel,
-		Label:          "English fallback label",
-		LabelKey:       "Archive.Command.Extract",
-		Description:    "English fallback description",
-		DescriptionKey: "Archive.Command.Extract.Desc",
-		SearchKeys:     []string{"NetFox.ConnectionTitle"},
-		Shortcut:       "Ctrl+Alt+X",
-		Run:            func(vfs.App) {},
+		ID:                    "test.command-palette.localized-plugin",
+		Location:              vfs.PluginCommandPanel,
+		Label:                 "English fallback label",
+		LabelKey:              "Archive.Command.Extract",
+		LocalizedLabels:       map[string]string{"es": "Extraer archivos del complemento"},
+		Description:           "English fallback description",
+		DescriptionKey:        "Archive.Command.Extract.Desc",
+		LocalizedDescriptions: map[string]string{"es": "Extraer el archivo seleccionado"},
+		SearchKeys:            []string{"NetFox.ConnectionTitle"},
+		SearchTerms:           []string{"object metadata alias"},
+		Shortcut:              "Ctrl+Alt+X",
+		Run:                   func(vfs.App) {},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -218,6 +230,9 @@ func TestCommandPalettePluginMetadataUsesCurrentLanguageAndAllLanguageAliases(t 
 		"Извлечь файлы",
 		"Извлечь выбранный архив в пассивную панель",
 		"Настройка подключения",
+		"Extraer archivos del complemento",
+		"Extraer el archivo seleccionado",
+		"object metadata alias",
 	} {
 		results := rankCommandPaletteEntries([]commandPaletteEntry{entry}, query, nil)
 		if len(results) != 1 || results[0].Label != "Extract files" {

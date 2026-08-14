@@ -80,3 +80,18 @@ func TestCommandPaletteActionCatalogIndexesTranslationsButDisplaysCurrentLanguag
 		t.Fatalf("result label = %q, want current UI label %q", results[0].Label, wantLabel)
 	}
 }
+
+func TestResetCommandPaletteTranslationsDropsStaleIndex(t *testing.T) {
+	commandPaletteTranslationsCache.Lock()
+	commandPaletteTranslationsCache.loaded = true
+	commandPaletteTranslationsCache.byKey = map[string][]string{"stale": {"old value"}}
+	commandPaletteTranslationsCache.Unlock()
+
+	resetCommandPaletteTranslations()
+
+	commandPaletteTranslationsCache.Lock()
+	defer commandPaletteTranslationsCache.Unlock()
+	if commandPaletteTranslationsCache.loaded || commandPaletteTranslationsCache.byKey != nil {
+		t.Fatalf("translation cache was not reset: loaded=%v index=%#v", commandPaletteTranslationsCache.loaded, commandPaletteTranslationsCache.byKey)
+	}
+}

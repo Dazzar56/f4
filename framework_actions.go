@@ -14,7 +14,7 @@ import (
 // route synthesized keys back through configured hotkeys, where a user binding
 // of F1 to App.Help would recursively invoke this action.
 func actionContextHelp() bool {
-	if vtui.FrameManager == nil {
+	if !contextHelpActionAvailable() {
 		return false
 	}
 	top := vtui.FrameManager.GetTopFrame()
@@ -38,32 +38,62 @@ func actionContextHelp() bool {
 	return true
 }
 
-// actionActivateMainMenu implements the same eligibility rules as the native
-// F9 fallback. The palette executes it only after its own dialog has gone away,
-// so GetTopFrame refers to the screen the user was working in.
-func actionActivateMainMenu() bool {
+func contextHelpActionAvailable() bool {
 	if vtui.FrameManager == nil {
 		return false
 	}
 	top := vtui.FrameManager.GetTopFrame()
-	menu := vtui.FrameManager.GetActiveMenuBar()
-	if top == nil || menu == nil {
+	if top == nil {
 		return false
 	}
+	_, alreadyHelp := top.(commandPaletteHelpFrame)
+	return !alreadyHelp
+}
+
+func mainMenuActionAvailable() bool {
+	if vtui.FrameManager == nil {
+		return false
+	}
+	top := vtui.FrameManager.GetTopFrame()
+	if top == nil || vtui.FrameManager.GetActiveMenuBar() == nil {
+		return false
+	}
+	return !top.IsModal() || top.GetType() == vtui.TypeMenu || top.GetMenuBar() != nil
+}
+
+// actionActivateMainMenu implements the same eligibility rules as the native
+// F9 fallback. The palette executes it only after its own dialog has gone away,
+// so GetTopFrame refers to the screen the user was working in.
+func actionActivateMainMenu() bool {
+	if !mainMenuActionAvailable() {
+		return false
+	}
+	top := vtui.FrameManager.GetTopFrame()
+	menu := vtui.FrameManager.GetActiveMenuBar()
 	if menu.Active {
 		return true
-	}
-	canActivate := !top.IsModal() || top.GetType() == vtui.TypeMenu || top.GetMenuBar() != nil
-	if !canActivate {
-		return false
 	}
 
 	menu.Active = true
 	if len(menu.Items) > 0 {
-		if menu.SelectPos < 0 || menu.SelectPos >= len(menu.Items) {
-			menu.SelectPos = 0
+		selectPos := menu.SelectPos
+		if panels, ok := top.(*PanelsFrame); ok {
+			// PanelsFrame owns F9 before vtui's fallback and always opens the
+			// fixed-side menu belonging to the active panel. Do not retain the
+			// previously visited menu when the command comes from the palette.
+			selectPos = 0
+			if panels.activeIdx == 1 {
+				selectPos = 4
+				if selectPos >= len(menu.Items) {
+					selectPos = 0
+				}
+			}
 		}
-		menu.ActivateSubMenu(menu.SelectPos)
+		if selectPos < 0 || selectPos >= len(menu.Items) {
+			selectPos = 0
+		}
+		menu.SelectPos = selectPos
+		menu.ActivateSubMenu(selectPos)
 	}
 	vtui.FrameManager.Redraw()
 	return true
@@ -128,22 +158,45 @@ func actionActivateWorkspaceNumber(number int) bool {
 }
 
 func actionWorkspaceClose() bool {
-	if vtui.FrameManager == nil {
-		return false
-	}
-	// QueueFrame deliberately owns close attempts while work is active. The
-	// semantic workspace API closes screens directly and would otherwise bypass
-	// that veto when Workspace.Close is selected from the palette.
-	if queue, ok := vtui.FrameManager.GetTopFrame().(*QueueFrame); ok {
-		return actionCloseQueueWorkspace(queue)
-	}
-	return actionWorkspaceCloseSemantic()
+	number, ok := activeWorkspaceNumber()
+	return ok && actionWorkspaceCloseNumber(number)
 }
 
-func actionWorkspaceCloseSemantic() bool {
-	number, ok := activeWorkspaceNumber()
-	if !ok {
+func workspaceByNumber(number int) *vtui.AppScreen {
+	if vtui.FrameManager == nil || number < 1 {
+		return nil
+	}
+	for _, screen := range vtui.FrameManager.Screens {
+		if screen != nil && screen.Number == number {
+			return screen
+		}
+	}
+	return nil
+}
+
+func queueFrameInWorkspace(screen *vtui.AppScreen) *QueueFrame {
+	if screen == nil {
+		return nil
+	}
+	for index := len(screen.Frames) - 1; index >= 0; index-- {
+		if queue, ok := screen.Frames[index].(*QueueFrame); ok {
+			return queue
+		}
+	}
+	return nil
+}
+
+// actionWorkspaceCloseNumber resolves the stable workspace number at
+// execution time. Queue may be underneath contextual Help, or the target may
+// be a background workspace selected by a dynamic palette entry; both cases
+// must preserve QueueFrame's active-operation veto before semantic close.
+func actionWorkspaceCloseNumber(number int) bool {
+	screen := workspaceByNumber(number)
+	if screen == nil {
 		return false
+	}
+	if queue := queueFrameInWorkspace(screen); queue != nil && queue.vetoCloseWhileActive() {
+		return true
 	}
 	return vtui.FrameManager.HandleSemanticAction(map[string]any{
 		"action": "workspace.close",

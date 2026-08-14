@@ -135,4 +135,5 @@ func InitLang() {
 
 	languageState.core = vtui.SnapshotStrings()
 	vtui.AddStrings(runtimeOverlays)
+	resetCommandPaletteTranslations()
 }

@@ -49,8 +49,10 @@ func TestPluginCommandRegistrationRejectsDuplicateID(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(registration.Unregister)
-	if _, err := api.RegisterPluginCommand(command); err == nil {
-		t.Fatal("duplicate command ID was accepted")
+	duplicate := command
+	duplicate.ID = "TEST.DUPLICATE-COMMAND"
+	if _, err := api.RegisterPluginCommand(duplicate); err == nil {
+		t.Fatal("case-insensitive duplicate command ID was accepted")
 	}
 }
 
@@ -75,14 +77,20 @@ func TestPluginCommandExecutionReResolvesAfterUnregister(t *testing.T) {
 	}
 }
 
-func TestPluginCommandRegistrationClonesSearchKeys(t *testing.T) {
+func TestPluginCommandRegistrationClonesMetadata(t *testing.T) {
 	api := &coreAPI{}
 	searchKeys := []string{"Test.PluginCommand.Search"}
+	searchTerms := []string{"literal alias"}
+	localizedLabels := map[string]string{"ru": "Localized label"}
+	localizedDescriptions := map[string]string{"ru": "Localized description"}
 	registration, err := api.RegisterPluginCommand(vfs.PluginCommand{
-		ID:         "test.plugin-command-metadata-copy",
-		Label:      "Metadata copy",
-		SearchKeys: searchKeys,
-		Run:        func(vfs.App) {},
+		ID:                    "test.plugin-command-metadata-copy",
+		Label:                 "Metadata copy",
+		SearchKeys:            searchKeys,
+		SearchTerms:           searchTerms,
+		LocalizedLabels:       localizedLabels,
+		LocalizedDescriptions: localizedDescriptions,
+		Run:                   func(vfs.App) {},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -90,15 +98,92 @@ func TestPluginCommandRegistrationClonesSearchKeys(t *testing.T) {
 	t.Cleanup(registration.Unregister)
 
 	searchKeys[0] = "mutated by plugin"
+	searchTerms[0] = "mutated by plugin"
+	localizedLabels["ru"] = "mutated by plugin"
+	localizedDescriptions["ru"] = "mutated by plugin"
 	commands := pluginCommandsSnapshot(vfs.PluginCommandPanel, nil)
-	if len(commands) != 1 || !reflect.DeepEqual(commands[0].SearchKeys, []string{"Test.PluginCommand.Search"}) {
-		t.Fatalf("registered search keys = %#v", commands)
+	if len(commands) != 1 ||
+		!reflect.DeepEqual(commands[0].SearchKeys, []string{"Test.PluginCommand.Search"}) ||
+		!reflect.DeepEqual(commands[0].SearchTerms, []string{"literal alias"}) ||
+		!reflect.DeepEqual(commands[0].LocalizedLabels, map[string]string{"ru": "Localized label"}) ||
+		!reflect.DeepEqual(commands[0].LocalizedDescriptions, map[string]string{"ru": "Localized description"}) {
+		t.Fatalf("registered metadata = %#v", commands)
 	}
 
 	commands[0].SearchKeys[0] = "mutated snapshot"
+	commands[0].SearchTerms[0] = "mutated snapshot"
+	commands[0].LocalizedLabels["ru"] = "mutated snapshot"
+	commands[0].LocalizedDescriptions["ru"] = "mutated snapshot"
 	commands = pluginCommandsSnapshot(vfs.PluginCommandPanel, nil)
-	if len(commands) != 1 || !reflect.DeepEqual(commands[0].SearchKeys, []string{"Test.PluginCommand.Search"}) {
+	if len(commands) != 1 ||
+		!reflect.DeepEqual(commands[0].SearchKeys, []string{"Test.PluginCommand.Search"}) ||
+		!reflect.DeepEqual(commands[0].SearchTerms, []string{"literal alias"}) ||
+		!reflect.DeepEqual(commands[0].LocalizedLabels, map[string]string{"ru": "Localized label"}) ||
+		!reflect.DeepEqual(commands[0].LocalizedDescriptions, map[string]string{"ru": "Localized description"}) {
 		t.Fatalf("snapshot mutation reached registry: %#v", commands)
+	}
+}
+
+func TestPluginCommandOwnedLocalizationUsesCurrentAndFallbackLanguages(t *testing.T) {
+	oldLanguage := AppConfig.Language
+	oldFallbackLanguage := AppConfig.FallbackLanguage
+	t.Cleanup(func() {
+		AppConfig.Language = oldLanguage
+		AppConfig.FallbackLanguage = oldFallbackLanguage
+	})
+
+	command := vfs.PluginCommand{
+		Label:                 "English fallback label",
+		LocalizedLabels:       map[string]string{"fr-CA": "Libelle francais", "de": "Deutsche Beschriftung"},
+		Description:           "English fallback description",
+		LocalizedDescriptions: map[string]string{"fr-CA": "Description francaise", "de": "Deutsche Beschreibung"},
+		SearchTerms:           []string{"literal alias"},
+	}
+
+	AppConfig.Language = "fr_CA"
+	AppConfig.FallbackLanguage = "de"
+	if got := pluginCommandDisplayLabel(command); got != "Libelle francais" {
+		t.Fatalf("regional current-language label = %q", got)
+	}
+	if got := pluginCommandDisplayDescription(command); got != "Description francaise" {
+		t.Fatalf("regional current-language description = %q", got)
+	}
+
+	AppConfig.Language = "it"
+	if got := pluginCommandDisplayLabel(command); got != "Deutsche Beschriftung" {
+		t.Fatalf("fallback-language label = %q", got)
+	}
+	if got := pluginCommandSearchTerms(command); !reflect.DeepEqual(got, []string{
+		"literal alias",
+		"Deutsche Beschriftung",
+		"Libelle francais",
+		"Deutsche Beschreibung",
+		"Description francaise",
+	}) {
+		t.Fatalf("all-language search terms = %#v", got)
+	}
+}
+
+func TestPluginCommandExecutionRejectsClosedPanelsFrame(t *testing.T) {
+	api := &coreAPI{}
+	called := 0
+	registration, err := api.RegisterPluginCommand(vfs.PluginCommand{
+		ID:       "test.closed-panels-frame-command",
+		Location: vfs.PluginCommandPanel,
+		Label:    "Closed frame command",
+		Run:      func(vfs.App) { called++ },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(registration.Unregister)
+
+	panels := &PanelsFrame{closed: true}
+	if executeRegisteredPluginCommand(vfs.PluginCommandPanel, "TEST.CLOSED-PANELS-FRAME-COMMAND", panels) {
+		t.Fatal("command executed for a closed PanelsFrame")
+	}
+	if called != 0 {
+		t.Fatalf("closed-frame handler calls = %d", called)
 	}
 }
 

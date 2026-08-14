@@ -109,10 +109,14 @@ func (plugin *Plugin) Init(api vfs.HostAPI) error {
 	}
 
 	panelRegistration, err := contributions.RegisterPluginCommand(vfs.PluginCommand{
-		ID:       panelCommandID,
-		Location: vfs.PluginCommandPanel,
-		Label:    plugin.text("EnvMan.Menu", "&Environment Manager", "&Менеджер окружения"),
-		Run:      plugin.openFromMenu,
+		ID:             panelCommandID,
+		Location:       vfs.PluginCommandPanel,
+		Label:          "&Environment Manager",
+		LabelKey:       "EnvMan.Menu",
+		Description:    "Open environment profiles and apply them to f4",
+		DescriptionKey: "EnvMan.Command.Open.Desc",
+		SearchKeys:     []string{"EnvMan.Name", "EnvMan.ManagerTitle", "EnvMan.EnvironmentViewTitle"},
+		Run:            plugin.openFromMenu,
 	})
 	if err != nil {
 		return rollback(fmt.Errorf("Environment Manager: register panel command: %w", err))
@@ -120,10 +124,14 @@ func (plugin *Plugin) Init(api vfs.HostAPI) error {
 	registrations = append(registrations, panelRegistration)
 
 	configRegistration, err := contributions.RegisterPluginCommand(vfs.PluginCommand{
-		ID:       configCommandID,
-		Location: vfs.PluginCommandConfig,
-		Label:    plugin.text("EnvMan.ConfigMenu", "Environment Manager", "Менеджер окружения"),
-		Run:      plugin.configure,
+		ID:             configCommandID,
+		Location:       vfs.PluginCommandConfig,
+		Label:          "Environment Manager",
+		LabelKey:       "EnvMan.ConfigMenu",
+		Description:    "Configure Environment Manager profiles and command integration",
+		DescriptionKey: "EnvMan.Command.Configure.Desc",
+		SearchKeys:     []string{"EnvMan.Name", "EnvMan.SettingsTitle", "EnvMan.PrefixInfo"},
+		Run:            plugin.configure,
 	})
 	if err != nil {
 		return rollback(fmt.Errorf("Environment Manager: register configuration command: %w", err))

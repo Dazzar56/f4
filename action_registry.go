@@ -106,8 +106,10 @@ func RunAction(name string) bool {
 		// Fast Find is a transient panel input mode. Any action means the user
 		// is leaving it, including actions that replace a file panel in place
 		// (Info/Quick View) and therefore do not push a focus-stealing frame.
-		if pf := findPanelsFrame(); pf != nil && pf.cancelFastFind() && vtui.FrameManager != nil {
-			vtui.FrameManager.Redraw()
+		if !strings.EqualFold(name, commandPaletteActionName) {
+			if pf := findPanelsFrame(); pf != nil && pf.cancelFastFind() && vtui.FrameManager != nil {
+				vtui.FrameManager.Redraw()
+			}
 		}
 		return a.Handler()
 	}
@@ -288,7 +290,7 @@ func init() {
 		DescKey:     "Action.App.ScreenGrab.Desc",
 		DefaultKeys: []string{"AltIns"},
 		MenuPath:    "File",
-		Handler:     func() bool { OpenGrabber(); return true },
+		Handler:     actionScreenGrab,
 	})
 	RegisterAction(Action{
 		Name:        commandPaletteActionName,
@@ -309,6 +311,7 @@ func init() {
 		Description: "Open help for the current screen or focused control",
 		DescKey:     "Action.App.Help.Desc",
 		NativeKeys:  []string{"F1:FrameworkNoTerminalApp"},
+		Visible:     contextHelpActionAvailable,
 		Handler:     actionContextHelp,
 	})
 	RegisterAction(Action{
@@ -320,6 +323,7 @@ func init() {
 		Description: "Open the main menu for the current screen",
 		DescKey:     "Action.App.MainMenu.Desc",
 		NativeKeys:  []string{"F9:FrameworkNoTerminalApp"},
+		Visible:     mainMenuActionAvailable,
 		Handler:     actionActivateMainMenu,
 	})
 	RegisterAction(Action{

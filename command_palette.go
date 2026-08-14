@@ -60,6 +60,11 @@ func ShowCommandPalette() bool {
 	if _, alreadyOpen := vtui.FrameManager.GetTopFrame().(*commandPaletteDialog); alreadyOpen {
 		return true
 	}
+	if top := vtui.FrameManager.GetTopFrame(); top != nil && top.IsModal() && !commandPaletteModalFrameSupported(top) {
+		// Unknown modal owners keep their complete input contract. Consume the
+		// palette chord without stacking an unrelated dialog above them.
+		return true
+	}
 	if menu := vtui.FrameManager.GetActiveMenuBar(); menu != nil && menu.Active {
 		return true
 	}
@@ -71,6 +76,14 @@ func ShowCommandPalette() bool {
 	}
 
 	pf := findPanelsFrameAnyScreen()
+	var fastFindPanel *FileSystemPanel
+	fastFindText := ""
+	if topPanels, ok := vtui.FrameManager.GetTopFrame().(*PanelsFrame); ok && topPanels == pf && !pf.closed {
+		if active := pf.getActivePanel(); active != nil && active.fastFindMode {
+			fastFindPanel = active
+			fastFindText = active.fastFindStr
+		}
+	}
 	entries := buildCommandPaletteEntries(area, pf)
 	dialog := newCommandPaletteDialog(entries, loadCommandPaletteRecent(), func(entry commandPaletteEntry) {
 		// A Window marked Done remains on the stack until the current input
@@ -83,6 +96,15 @@ func ShowCommandPalette() bool {
 		})
 	})
 	vtui.FrameManager.Push(dialog)
+	// Pushing any ordinary overlay cancels Fast Find on focus loss. The command
+	// palette is the exception: it has just indexed the transient F2 command and
+	// must keep that mode alive until the user either runs it, cancels the
+	// palette, or chooses an ordinary action (RunAction then performs the normal
+	// cancellation). Revalidate the original panel before restoring the snapshot.
+	if fastFindPanel != nil && !pf.closed && pf.getActivePanel() == fastFindPanel {
+		fastFindPanel.fastFindMode = true
+		fastFindPanel.fastFindStr = fastFindText
+	}
 	return true
 }
 
@@ -286,6 +308,7 @@ func commandPalettePluginEntries(pf *PanelsFrame) []commandPaletteEntry {
 				englishDescription = command.ID
 			}
 			searchFields := []string{category, command.Label, command.Description}
+			searchFields = append(searchFields, pluginCommandSearchTerms(command)...)
 			translationKeys := append([]string{categoryKey}, pluginCommandTranslationKeys(command)...)
 			searchFields = append(searchFields, commandPaletteTranslations(translationKeys...)...)
 			entries = append(entries, commandPaletteEntry{
@@ -441,6 +464,14 @@ func commandPaletteCanonicalPath(path string) string {
 }
 
 func executeCommandPaletteEntry(entry commandPaletteEntry) bool {
+	// The Fast Find toggle is the only palette command that operates inside the
+	// transient search itself. Every other selection leaves that mode, including
+	// dynamic/plugin commands that do not pass through RunAction.
+	if !strings.EqualFold(entry.ID, "FastFind.ToggleMatchMode") {
+		if pf := findPanelsFrame(); pf != nil && pf.cancelFastFind() && vtui.FrameManager != nil {
+			vtui.FrameManager.Redraw()
+		}
+	}
 	if entry.run != nil {
 		return entry.run()
 	}

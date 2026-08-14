@@ -235,6 +235,13 @@ func nativeShortcutOwnedByCurrentContext(actionName, key string) bool {
 	if top == nil {
 		return false
 	}
+	// TypeUser modal frames (notably Help and Screen Grabber) own their input
+	// before vtui's framework fallbacks. Some deliberately release individual
+	// keys, but there is no ownership API that can prove that generically; omit
+	// native hints rather than advertise a chord the current modal may swallow.
+	if top.IsModal() {
+		return true
+	}
 
 	// Ctrl+N's native implementation is an active-stack CmResize broadcast.
 	// It is truthful only when the current screen actually contains a panels
