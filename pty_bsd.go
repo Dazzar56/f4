@@ -3,6 +3,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,10 +21,28 @@ type PTY struct {
 	shellPgrp int
 }
 
+// ptyStep names the step of PTY allocation that failed and records its
+// numeric errno. Reporting only the final error leaves a trace log saying
+// that a PTY could not be allocated without saying which call refused it,
+// which is not enough to tell a missing ioctl apart from an exhausted or
+// unreachable device. Errno numbers differ per platform, so the number is
+// logged alongside the name.
+func ptyStep(step string, err error) error {
+	if err == nil {
+		return nil
+	}
+	if errno, ok := err.(syscall.Errno); ok {
+		vtui.DebugLog("PTY: step=%s failed: errno=%d (%v)", step, int(errno), errno)
+		return fmt.Errorf("%s: errno=%d: %w", step, int(errno), err)
+	}
+	vtui.DebugLog("PTY: step=%s failed: %v", step, err)
+	return fmt.Errorf("%s: %w", step, err)
+}
+
 func NewPTY() (*PTY, error) {
 	masterFd, err := unix.Open("/dev/ptmx", unix.O_RDWR|unix.O_NOCTTY, 0)
 	if err != nil {
-		return nil, err
+		return nil, ptyStep("open /dev/ptmx", err)
 	}
 	master := os.NewFile(uintptr(masterFd), "/dev/ptmx")
 
@@ -34,13 +53,13 @@ func NewPTY() (*PTY, error) {
 	slaveName, err := ptySlaveName(masterFd)
 	if err != nil {
 		master.Close()
-		return nil, err
+		return nil, ptyStep("ptySlaveName", err)
 	}
 
 	slaveFd, err := unix.Open(slaveName, unix.O_RDWR|unix.O_NOCTTY, 0)
 	if err != nil {
 		master.Close()
-		return nil, err
+		return nil, ptyStep("open "+slaveName, err)
 	}
 	slave := os.NewFile(uintptr(slaveFd), slaveName)
 
