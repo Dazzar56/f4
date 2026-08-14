@@ -1185,6 +1185,24 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 		return
 	}
 
+	if ev.HexMode {
+		ev.renderHex(scr, width, height-1)
+		if ev.scrollBar != nil && ev.pt.Size() > 0 {
+			maxOffset := int(ev.pt.Size())
+			contentHeight := ev.Y2 - ev.Y1
+			if contentHeight > 0 {
+				lastLineOffset := int((ev.pt.Size() - 1) &^ 0xF)
+				maxOffset = lastLineOffset - (contentHeight-1)*16
+				if maxOffset < 0 {
+					maxOffset = 0
+				}
+			}
+			ev.scrollBar.SetParams(ev.HexTopOffset, 0, maxOffset)
+			ev.scrollBar.Show(scr)
+		}
+		return
+	}
+
 	scr.PushClipRect(ev.X1, ev.Y1+1, ev.X1+width-1, ev.Y2)
 
 	// 2. Отрисовка
@@ -1509,6 +1527,21 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 			}
 		}
 		return true
+	}
+
+	if ev.HexMode {
+		if ev.processKeyHex(e) {
+			return true
+		}
+		// Prevent fallthrough to text editing keys
+		switch e.VirtualKeyCode {
+		case vtinput.VK_F1, vtinput.VK_F2, vtinput.VK_F3, vtinput.VK_F4, vtinput.VK_F5, vtinput.VK_F6, vtinput.VK_F7, vtinput.VK_F8, vtinput.VK_F9, vtinput.VK_F10, vtinput.VK_F11, vtinput.VK_F12:
+			return false // Let global hotkeys handle it
+		}
+		if MacroMgr.LookupHotkey(e) {
+			return true
+		}
+		return true // Consume all other keys in Hex mode so they don't insert text
 	}
 
 	if ev.HexMode {
