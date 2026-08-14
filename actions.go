@@ -877,7 +877,7 @@ func openEditorInternal(pf *PanelsFrame, v vfs.VFS, path string) {
 		if err != nil {
 			if err != context.Canceled {
 				if err == os.ErrInvalid {
-					vtui.ShowMessage(" Error ", "Cannot open special files (Named Pipes, Sockets, Devices).", []string{"&Ok"})
+					vtui.ShowMessage(" Error ", "Cannot open special files (Named Pipes, Sockets).", []string{"&Ok"})
 				} else {
 					vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to open file:\n%v", err), []string{"&Ok"})
 				}
@@ -1084,7 +1084,7 @@ func openViewerInternal(pf *PanelsFrame, v vfs.VFS, path string) {
 		if err != nil {
 			if err != context.Canceled {
 				if err == os.ErrInvalid {
-					vtui.ShowMessage(" Error ", "Cannot open special files (Named Pipes, Sockets, Devices).", []string{"&Ok"})
+					vtui.ShowMessage(" Error ", "Cannot open special files (Named Pipes, Sockets).", []string{"&Ok"})
 				} else {
 					vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to open file:\n%v", err), []string{"&Ok"})
 				}
@@ -1254,9 +1254,9 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 	vtui.RunAsync(func(ctx *vtui.TaskContext) {
 		if _, isLocal := v.(*vfs.OSVFS); isLocal {
 			if fi, err := os.Stat(path); err == nil {
-				if fi.Mode()&(os.ModeNamedPipe|os.ModeSocket|os.ModeDevice|os.ModeCharDevice) != 0 {
+				if fi.Mode()&(os.ModeNamedPipe|os.ModeSocket) != 0 {
 					ctx.RunOnUI(func() {
-						vtui.ShowMessage(" Error ", "Cannot open special files (Named Pipes, Sockets, Devices).", []string{"&Ok"})
+						vtui.ShowMessage(" Error ", "Cannot open special files (Named Pipes, Sockets).", []string{"&Ok"})
 					})
 					return
 				}

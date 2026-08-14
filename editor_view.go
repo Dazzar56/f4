@@ -3674,6 +3674,19 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 		// disk, which is only true for a raw UTF-8 load.
 		saved := false
 		if err == nil {
+			if patcher, ok := ev.vfs.(vfs.InPlacePatcher); ok && ev.Codepage == 65001 && !createNewTarget {
+				if pieces, ok := patchPiecesFromTable(ev.pt); ok {
+					perr := patcher.PatchInPlace(ctx.Context, ev.filePath, pieces)
+					if perr == nil {
+						saved = true
+					} else {
+						vtui.DebugLog("EDITOR: in-place patch unavailable: %v", perr)
+					}
+				}
+			}
+		}
+
+		if !saved && err == nil {
 			if delta, isDelta := ev.vfs.(vfs.DeltaWriter); isDelta && useTemp && ev.Codepage == 65001 {
 				if pieces, ok := patchPiecesFromTable(ev.pt); ok {
 					perr := delta.PatchFile(vfs.WithDestinationOverwrite(ctx.Context, false), ev.filePath, tempPath, pieces)

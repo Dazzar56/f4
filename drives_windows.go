@@ -13,15 +13,19 @@ func getPlatformDrives() []DriveEntry {
 	if err != nil {
 		return drives
 	}
-	for i := 0; i < 26; i++ {
-		if bitmask&(1<<uint(i)) != 0 {
-			letter := string(rune('A' + i))
-			path := letter + ":\\"
-			drives = append(drives, DriveEntry{
-				Name:    letter + ": Local",
-				Factory: func() vfs.VFS { return vfs.NewOSVFS(path) },
-			})
+		for i := 0; i < 26; i++ {
+			if bitmask&(1<<uint(i)) != 0 {
+				letter := string(rune('A' + i))
+				path := letter + ":\\"
+				drives = append(drives, DriveEntry{
+					Name:    letter + ": Local",
+					Factory: func() vfs.VFS { return vfs.NewOSVFS(path) },
+				})
+			}
 		}
+		drives = append(drives, DriveEntry{
+			Name:    "Physical Disks",
+			Factory: func() vfs.VFS { return vfs.NewDisksVFS() },
+		})
+		return drives
 	}
-	return drives
-}

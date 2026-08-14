@@ -623,6 +623,13 @@ type DeltaWriter interface {
 	PatchFile(ctx context.Context, src, dst string, pieces []PatchPiece) error
 }
 
+// InPlacePatcher is implemented by a file system that can apply patches directly
+// to the original file without creating a temporary copy. Essential for physical
+// disks and block devices where creating a sibling temp file is impossible.
+type InPlacePatcher interface {
+	PatchInPlace(ctx context.Context, path string, pieces []PatchPiece) error
+}
+
 // FoundEntry is one hit of a tree search.
 type FoundEntry struct {
 	// Path is the full path of the file, in the file system's own notation.

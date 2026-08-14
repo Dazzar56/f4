@@ -388,6 +388,31 @@ func (v *OSVFS) SetAttributes(ctx context.Context, path string, item VFSItem) er
 	return errPlat
 }
 
+func (v *OSVFS) PatchInPlace(ctx context.Context, path string, pieces []PatchPiece) error {
+	f, err := os.OpenFile(prepareOSPath(path), os.O_RDWR, 0)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	var newOffset int64 = 0
+	for _, p := range pieces {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if p.Data != nil {
+			if _, err := f.WriteAt(p.Data, newOffset); err != nil {
+				return err
+			}
+		} else {
+			if p.Offset != newOffset {
+				return fmt.Errorf("in-place patching requires unchanged pieces to remain at their original offsets (no insertions/deletions)")
+			}
+		}
+		newOffset += p.Length
+	}
+	return nil
+}
 func (v *OSVFS) GetCapabilities() VFSCapabilities {
 	return VFSCapabilities{
 		HasServerSideCopy:        true,
@@ -430,10 +455,13 @@ func (v *OSVFS) Open(ctx context.Context, path string) (ReadAtCloser, error) {
 		return nil, ctx.Err()
 	}
 	fi, err := os.Stat(prepareOSPath(path))
-	if err == nil && (fi.Mode()&(os.ModeNamedPipe|os.ModeSocket|os.ModeDevice|os.ModeCharDevice) != 0) {
+	if err == nil && (fi.Mode()&(os.ModeNamedPipe|os.ModeSocket) != 0) {
 		return nil, os.ErrInvalid
 	}
-	f, err := os.Open(prepareOSPath(path))
+	f, err := os.OpenFile(prepareOSPath(path), os.O_RDWR, 0)
+	if err != nil {
+		f, err = os.Open(prepareOSPath(path))
+	}
 	if err != nil {
 		if os.IsPermission(err) && globalSudoClient.IsAvailable() {
 			vtui.DebugLog("VFS: Permission denied for Open(%q), attempting sudo...", path)
@@ -452,8 +480,15 @@ func (v *OSVFS) Open(ctx context.Context, path string) (ReadAtCloser, error) {
 		f.Close()
 		return nil, err
 	}
-	return &osFileWrapper{File: f, size: info.Size()}, nil
-}
+		size := info.Size()
+		if info.Mode()&(os.ModeDevice|os.ModeCharDevice) != 0 {
+			if pos, err := f.Seek(0, io.SeekEnd); err == nil && pos > 0 {
+				size = pos
+				f.Seek(0, io.SeekStart)
+			}
+		}
+		return &osFileWrapper{File: f, size: size}, nil
+	}
 
 func (v *OSVFS) Create(ctx context.Context, path string) (io.WriteCloser, error) {
 	if ctx.Err() != nil {
@@ -461,10 +496,13 @@ func (v *OSVFS) Create(ctx context.Context, path string) (io.WriteCloser, error)
 	}
 	prepared := prepareOSPath(path)
 	fi, err := os.Stat(prepared)
-	if err == nil && (fi.Mode()&(os.ModeNamedPipe|os.ModeSocket|os.ModeDevice|os.ModeCharDevice) != 0) {
+	if err == nil && (fi.Mode()&(os.ModeNamedPipe|os.ModeSocket) != 0) {
 		return nil, os.ErrInvalid
 	}
 	flags := os.O_CREATE | os.O_WRONLY | os.O_TRUNC
+	if err == nil && (fi.Mode()&(os.ModeDevice|os.ModeCharDevice) != 0) {
+		flags = os.O_WRONLY // Do not truncate devices
+	}
 	createMode := os.FileMode(0o666)
 	if overwrite, known := DestinationOverwrite(ctx); known && !overwrite {
 		// O_EXCL makes the editor's unique sibling creation collision-safe and
