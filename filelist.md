@@ -104,14 +104,21 @@
     ├── command_history_paths_test.go
     ├── command_line.go
     ├── command_line_test.go
+    ├── command_palette_coverage_test.go
+    ├── command_palette_direct_frames.go
+    ├── command_palette_direct_frames_test.go
+    ├── command_palette_direct_panels_test.go
     ├── command_palette_drives.go
     ├── command_palette_drives_test.go
     ├── command_palette_dynamic_test.go
     ├── command_palette_frames.go
     ├── command_palette.go
+    ├── command_palette_help.go
+    ├── command_palette_help_test.go
     ├── command_palette_i18n.go
     ├── command_palette_i18n_test.go
     ├── command_palette_macros.go
+    ├── command_palette_modal.go
     ├── command_palette_panels.go
     ├── command_palette_prefixes.go
     ├── command_palette_search.go
@@ -499,6 +506,7 @@
     │   │   ├── manager.go
     │   │   ├── oauth.go
     │   │   ├── password_prompt.go
+    │   │   ├── plugin_contributions_test.go
     │   │   ├── plugin.go
     │   │   ├── plugin_test.go
     │   │   ├── provider_capabilities_test.go
@@ -585,6 +593,7 @@
     │   │   ├── ui_test.go
     │   │   └── vfs_io.go
     │   ├── id3editor
+    │   │   ├── plugin_contributions_test.go
     │   │   ├── plugin.go
     │   │   └── plugin_test.go
     │   ├── ios
@@ -671,6 +680,7 @@
     │   │   │   ├── WINDOWS_PORT.md
     │   │   │   ├── write.go
     │   │   │   └── write_test.go
+    │   │   ├── fish_pool.go
     │   │   ├── fish_reconnect_entry_test.go
     │   │   ├── fish_reconnect_test.go
     │   │   ├── fish_vfs.go
@@ -760,6 +770,8 @@
     ├── resolve_command_other.go
     ├── resolve_command_windows.go
     ├── REVIEW.md
+    ├── rpc_commands.go
+    ├── rpc_commands_test.go
     ├── rpc_lua_test.go
     ├── rpc_plugin.go
     ├── rpc_plugin_test.go
@@ -984,4 +996,4 @@
     ├── workspace_session.go
     └── workspace_session_test.go
     
-    56 directories, 927 files
+    56 directories, 939 files
