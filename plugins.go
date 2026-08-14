@@ -12,6 +12,7 @@ import (
 	"github.com/unxed/f4/plugins/envman"
 	"github.com/unxed/f4/plugins/id3editor"
 	iosfs "github.com/unxed/f4/plugins/ios"
+	"github.com/unxed/f4/plugins/mediainfo"
 	"github.com/unxed/f4/plugins/netfox"
 	"github.com/unxed/f4/plugins/visren"
 	"github.com/unxed/f4/vfs"
@@ -184,6 +185,7 @@ func (pm *PluginManager) loadInternal() {
 		&visren.Plugin{},
 		&id3editor.ID3EditorPlugin{},
 		envman.NewPlugin(GetF4ConfigDir()),
+		mediainfo.NewPlugin(GetF4ConfigDir()),
 	}
 
 	for _, p := range plugins {
