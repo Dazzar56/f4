@@ -1066,16 +1066,6 @@ func init() {
 		Handler:     withPF(func(pf *PanelsFrame) { actionLanguage(pf) }),
 	})
 	RegisterAction(Action{
-		Name:        "Settings.HelpLanguage",
-		Area:        "Shell",
-		Label:       "Help Language",
-		LabelKey:    "Menu.HelpLanguage",
-		Description: "Open help language selection dialog",
-		DescKey:     "Action.Settings.HelpLanguage.Desc",
-		MenuPath:    "Options",
-		Handler:     withPF(func(pf *PanelsFrame) { actionHelpLanguage(pf) }),
-	})
-	RegisterAction(Action{
 		Name:                "Settings.Panel",
 		Area:                "Shell",
 		Label:               "Panel Settings",

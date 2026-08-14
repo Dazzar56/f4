@@ -3735,17 +3735,15 @@ func actionFileAttributes(pf *PanelsFrame) {
 	})
 }
 
-func actionLanguage(pf *PanelsFrame) {
-	type langInfo struct {
-		code string
-		name string
-	}
-	langs := []langInfo{{"en", "English"}}
+type langInfo struct {
+	code string
+	name string
+}
 
+func listAvailableUILanguages() []langInfo {
+	langs := []langInfo{{"en", "English"}}
 	exeDir := filepath.Dir(os.Args[0])
 	userDir := filepath.Join(GetF4ConfigDir(), "lang")
-
-	// We add "lang" to support running f4 via "go run ." from the project root
 	dirs := []string{filepath.Join(exeDir, "lang"), userDir, "lang"}
 	seen := map[string]bool{"en": true}
 
@@ -3760,123 +3758,19 @@ func actionLanguage(pf *PanelsFrame) {
 				if !seen[code] {
 					ini := LoadIni(filepath.Join(d, e.Name()))
 					name := ini.GetString("Language", "Name", code)
-					langs = append(langs, langInfo{code, name})
+					langs = append(langs, langInfo{code: code, name: name})
 					seen[code] = true
 				}
 			}
 		}
 	}
-
-	menu := vtui.NewVMenu(Msg("Language.Title"))
-	currIdx := 0
-	for i, l := range langs {
-		menu.AddItem(vtui.MenuItem{Text: l.name})
-		if l.code == AppConfig.Language {
-			currIdx = i
-		}
-	}
-
-	scrW := vtui.FrameManager.GetScreenSize()
-	scrH := vtui.FrameManager.GetScreenHeight()
-	w, h := 30, len(langs)+2
-	if h > 15 {
-		h = 15
-	}
-	x := (scrW - w) / 2
-	y := (scrH - h) / 2
-	menu.SetPosition(x, y, x+w-1, y+h-1)
-	menu.SetSelectPos(currIdx)
-
-	menu.OnAction = func(idx int) {
-		AppConfig.Language = langs[idx].code
-		SaveConfig()
-		InitLang()
-		// Key binding help topics are generated from the action
-		// registry and must be rebuilt in the new language.
-		InitHelpSystem()
-		vtui.FrameManager.PostTask(func() {
-			vtui.ShowMessage(Msg("Info.Title"), Msg("Language.Changed"), []string{Msg("vtui.Ok")})
-			vtui.FrameManager.Redraw()
-		})
-	}
-
-	vtui.FrameManager.Push(menu)
+	return langs
 }
 
-func actionFallbackLanguage(pf *PanelsFrame) {
-	type langInfo struct {
-		code string
-		name string
-	}
-	langs := []langInfo{{"", Msg("LanguageSettings.None")}, {"en", "English"}}
-
-	exeDir := filepath.Dir(os.Args[0])
-	userDir := filepath.Join(GetF4ConfigDir(), "lang")
-
-	dirs := []string{filepath.Join(exeDir, "lang"), userDir, "lang"}
-	seen := map[string]bool{"en": true}
-
-	for _, d := range dirs {
-		entries, err := os.ReadDir(d)
-		if err != nil {
-			continue
-		}
-		for _, e := range entries {
-			if !e.IsDir() && strings.HasSuffix(e.Name(), ".lng") {
-				code := strings.TrimSuffix(e.Name(), ".lng")
-				if !seen[code] {
-					ini := LoadIni(filepath.Join(d, e.Name()))
-					name := ini.GetString("Language", "Name", code)
-					langs = append(langs, langInfo{code, name})
-					seen[code] = true
-				}
-			}
-		}
-	}
-
-	menu := vtui.NewVMenu(Msg("LanguageSettings.Fallback"))
-	currIdx := 0
-	for i, l := range langs {
-		menu.AddItem(vtui.MenuItem{Text: l.name})
-		if l.code == AppConfig.FallbackLanguage {
-			currIdx = i
-		}
-	}
-
-	scrW := vtui.FrameManager.GetScreenSize()
-	scrH := vtui.FrameManager.GetScreenHeight()
-	w, h := 30, len(langs)+2
-	if h > 15 {
-		h = 15
-	}
-	x := (scrW - w) / 2
-	y := (scrH - h) / 2
-	menu.SetPosition(x, y, x+w-1, y+h-1)
-	menu.SetSelectPos(currIdx)
-
-	menu.OnAction = func(idx int) {
-		AppConfig.FallbackLanguage = langs[idx].code
-		SaveConfig()
-		InitLang()
-		InitHelpSystem()
-		vtui.FrameManager.PostTask(func() {
-			vtui.ShowMessage(Msg("Info.Title"), Msg("Language.Changed"), []string{Msg("vtui.Ok")})
-			vtui.FrameManager.Redraw()
-		})
-	}
-
-	vtui.FrameManager.Push(menu)
-}
-func actionHelpLanguage(pf *PanelsFrame) {
-	type langInfo struct {
-		code string
-		name string
-	}
+func listAvailableHelpLanguages() []langInfo {
 	langs := []langInfo{{"en", "English"}}
-
 	exeDir := filepath.Dir(os.Args[0])
 	userDir := filepath.Join(GetF4ConfigDir(), "help")
-
 	dirs := []string{filepath.Join(exeDir, "help"), userDir, "help"}
 	seen := map[string]bool{"en": true}
 
@@ -3890,44 +3784,118 @@ func actionHelpLanguage(pf *PanelsFrame) {
 				code := strings.TrimSuffix(e.Name(), ".hlf")
 				if !seen[code] {
 					name := getLanguageName(code)
-					langs = append(langs, langInfo{code, name})
+					langs = append(langs, langInfo{code: code, name: name})
 					seen[code] = true
 				}
 			}
 		}
 	}
+	return langs
+}
 
-	menu := vtui.NewVMenu(Msg("HelpLanguage.Title"))
-	currIdx := 0
-	for i, l := range langs {
-		menu.AddItem(vtui.MenuItem{Text: l.name})
-		if l.code == AppConfig.HelpLanguage {
-			currIdx = i
+func actionLanguage(pf *PanelsFrame) {
+	uiLangs := listAvailableUILanguages()
+	helpLangs := listAvailableHelpLanguages()
+
+	width, height := 54, 13
+	dlg := vtui.NewCenteredDialog(width, height, Msg("LanguageSettings.Title"))
+	dlg.ShowClose = true
+
+	uiNames := make([]string, len(uiLangs))
+	selectedUI := 0
+	for i, l := range uiLangs {
+		uiNames[i] = l.name
+		if l.code == AppConfig.Language {
+			selectedUI = i
 		}
 	}
+	comboUI := vtui.NewComboBox(0, 0, 24, uiNames)
+	comboUI.DropdownOnly = true
+	comboUI.Menu.SetSelectPos(selectedUI)
+	comboUI.Edit.SetText(uiNames[selectedUI])
+	lblUI := vtui.NewLabel(0, 0, Msg("LanguageSettings.Primary"), comboUI)
 
-	scrW := vtui.FrameManager.GetScreenSize()
-	scrH := vtui.FrameManager.GetScreenHeight()
-	w, h := 30, len(langs)+2
-	if h > 15 {
-		h = 15
+	helpNames := make([]string, len(helpLangs))
+	selectedHelp := 0
+	for i, l := range helpLangs {
+		helpNames[i] = l.name
+		if l.code == AppConfig.HelpLanguage {
+			selectedHelp = i
+		}
 	}
-	x := (scrW - w) / 2
-	y := (scrH - h) / 2
-	menu.SetPosition(x, y, x+w-1, y+h-1)
-	menu.SetSelectPos(currIdx)
+	comboHelp := vtui.NewComboBox(0, 0, 24, helpNames)
+	comboHelp.DropdownOnly = true
+	comboHelp.Menu.SetSelectPos(selectedHelp)
+	comboHelp.Edit.SetText(helpNames[selectedHelp])
+	lblHelp := vtui.NewLabel(0, 0, Msg("HelpLanguage.Title")+":", comboHelp)
 
-	menu.OnAction = func(idx int) {
-		AppConfig.HelpLanguage = langs[idx].code
-		SaveConfig()
-		InitHelpSystem()
-		vtui.FrameManager.PostTask(func() {
-			vtui.ShowMessage(Msg("Info.Title"), Msg("HelpLanguage.Changed"), []string{Msg("vtui.Ok")})
-			vtui.FrameManager.Redraw()
-		})
+	btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))
+	btnOk.IsDefault = true
+	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
+
+	dlg.AddItem(lblUI)
+	dlg.AddItem(comboUI)
+	dlg.AddItem(lblHelp)
+	dlg.AddItem(comboHelp)
+	dlg.AddItem(btnOk)
+	dlg.AddItem(btnCancel)
+
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, width-4, height-4)
+
+	rowUI := vtui.NewHBoxLayout(0, 0, width-4, 1)
+	rowUI.Add(lblUI, vtui.Margins{Right: 1}, vtui.AlignLeft)
+	rowUI.Add(comboUI, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(rowUI, vtui.Margins{}, vtui.AlignFill)
+
+	rowHelp := vtui.NewHBoxLayout(0, 0, width-4, 1)
+	rowHelp.Add(lblHelp, vtui.Margins{Right: 1}, vtui.AlignLeft)
+	rowHelp.Add(comboHelp, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(rowHelp, vtui.Margins{Top: 1}, vtui.AlignFill)
+
+	hbox := vtui.NewHBoxLayout(0, 0, width-4, 1)
+	hbox.HorizontalAlign = vtui.AlignCenter
+	hbox.Spacing = 2
+	hbox.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
+	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
+
+	vbox.Add(hbox, vtui.Margins{Top: 2}, vtui.AlignFill)
+	vbox.Apply()
+
+	btnCancel.OnClick = func() { dlg.Close() }
+	btnOk.OnClick = func() {
+		uiChanged := false
+		helpChanged := false
+		if idx := comboUI.Menu.SelectPos; idx >= 0 && idx < len(uiLangs) {
+			if AppConfig.Language != uiLangs[idx].code {
+				AppConfig.Language = uiLangs[idx].code
+				uiChanged = true
+			}
+		}
+		if idx := comboHelp.Menu.SelectPos; idx >= 0 && idx < len(helpLangs) {
+			if AppConfig.HelpLanguage != helpLangs[idx].code {
+				AppConfig.HelpLanguage = helpLangs[idx].code
+				helpChanged = true
+			}
+		}
+		if uiChanged || helpChanged {
+			SaveConfig()
+			InitLang()
+			InitHelpSystem()
+			vtui.FrameManager.PostTask(func() {
+				if uiChanged {
+					vtui.ShowMessage(Msg("Info.Title"), Msg("Language.Changed"), []string{Msg("vtui.Ok")})
+				}
+				vtui.FrameManager.Redraw()
+			})
+		}
+		dlg.Close()
 	}
 
-	vtui.FrameManager.Push(menu)
+	vtui.FrameManager.Push(dlg)
+}
+
+func actionHelpLanguage(pf *PanelsFrame) {
+	actionLanguage(pf)
 }
 
 func getLanguageName(code string) string {

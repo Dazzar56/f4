@@ -1213,33 +1213,41 @@ func TestActionLanguage_Flow(t *testing.T) {
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
-	// 1. Вызываем диалог выбора языка
 	actionLanguage(pf)
 
 	top := vtui.FrameManager.GetTopFrame()
 	if top == nil {
-		t.Fatalf("Expected menu, got nil")
+		t.Fatalf("Expected Language dialog, got nil")
 	}
 
-	menu, ok := top.(*vtui.VMenu)
+	dlg, ok := top.(vtui.Container)
 	if !ok {
-		t.Fatalf("Expected VMenu for Language selection, got %T", top)
+		t.Fatalf("Expected container dialog for Language settings, got %T", top)
 	}
 
-	// 2. Проверяем, что в списке есть как минимум дефолтный English
-	foundEnglish := false
-	for _, itm := range menu.Items {
-		if itm.Text == "English" {
-			foundEnglish = true
-			break
+	foundUICombo := false
+	foundHelpCombo := false
+
+	for _, child := range dlg.GetChildren() {
+		if combo, ok := child.(*vtui.ComboBox); ok {
+			for _, item := range combo.Menu.Items {
+				if item.Text == "English" {
+					if !foundUICombo {
+						foundUICombo = true
+					} else {
+						foundHelpCombo = true
+					}
+					break
+				}
+			}
 		}
 	}
-	if !foundEnglish {
-		t.Errorf("English language option not found in menu")
+
+	if !foundUICombo || !foundHelpCombo {
+		t.Errorf("Language dialog missing UI/Help comboboxes. UICombo: %v, HelpCombo: %v", foundUICombo, foundHelpCombo)
 	}
 
-	// 3. Закрываем
-	menu.Close()
+	top.SetExitCode(-1)
 	vtui.FrameManager.Pop()
 }
 func TestActionManagePlugins_Flow(t *testing.T) {
