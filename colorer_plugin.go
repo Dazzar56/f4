@@ -788,14 +788,20 @@ func (ch *ColorerHighlighter) ensureContext(idx int) {
 	if ch.session == nil || ch.lineAt == nil || ch.parsedIdx == idx {
 		return
 	}
-	if start, reset := colorerContextPlan(ch.parsedIdx, idx); reset {
-		ch.resetSessionAt(start)
+	start := time.Now()
+	oldParsed := ch.parsedIdx
+	startLine, reset := colorerContextPlan(ch.parsedIdx, idx)
+	if reset {
+		ch.resetSessionAt(startLine)
 	}
 	// Falling short here means the document could not be read that far —
 	// the line index is still growing, or the piece table is still loading.
 	// Re-anchoring would hit the same wall, so leave it for the next frame.
 	ch.parseThrough(idx)
 	ch.forgetBehind()
+	if elapsed := time.Since(start); elapsed > 1*time.Millisecond {
+		vtui.DebugLog("COLORER_PERF: ensureContext(%d) oldParsed=%d startLine=%d reset=%v took %v", idx, oldParsed, startLine, reset, elapsed)
+	}
 }
 
 // parseThrough feeds the session every line up to, but not including, idx.

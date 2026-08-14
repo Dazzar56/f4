@@ -318,6 +318,7 @@ func newEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string, useEditorC
 	default:
 		ev.highlighter = vtui.GetHighlighter(path, "")
 	}
+	vtui.DebugLog("EDITOR_INIT: Path=%q, Highlighter=%T", path, ev.highlighter)
 	ev.scrollBar = vtui.NewScrollBar(0, 0, 0)
 	ev.scrollBar.SetOwner(ev)
 	ev.scrollBar.OnScroll = func(v int) {
@@ -849,6 +850,7 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 	// costs the same wait and stays quiet.
 	if ev.targetLine != -1 {
 		scr.FillRect(ev.X1, ev.Y1+1, ev.X2, ev.Y2, ' ', bgAttr)
+		vtui.DebugLog("EDITOR_RENDER: Blank screen shown, waiting for targetLine=%d (current line count=%d)", ev.targetLine, ev.li.LineCount())
 		return
 	}
 
@@ -927,7 +929,11 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 						highlightLen = 64 * 1024
 					}
 					lineData, _ := ev.pt.GetRange(lStart, highlightLen)
+					startHighlight := time.Now()
 					lineSyntax, _ = ev.highlighter.Highlight(string(lineData), nil, bgAttr)
+					if elapsed := time.Since(startHighlight); elapsed > 1*time.Millisecond {
+						vtui.DebugLog("CHROMA_PERF: Sync stateless Highlight for line %d took %v", logIdx, elapsed)
+					}
 				}
 			} else {
 				for len(ev.lineStates) <= logIdx {
@@ -952,7 +958,11 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 						break // Wait for data
 					}
 
+					startHighlight := time.Now()
 					attrs, nextState := ev.highlighter.Highlight(string(lineData), prevState, bgAttr)
+					if elapsed := time.Since(startHighlight); elapsed > 1*time.Millisecond {
+						vtui.DebugLog("HIGHLIGHT_PERF: Sync chain Highlight for line %d took %v", currIdx, elapsed)
+					}
 					ev.lineStates = append(ev.lineStates, nextState)
 					if currIdx == logIdx {
 						lineSyntax = attrs
@@ -2285,6 +2295,7 @@ func (ev *EditorView) StartIndexing() {
 
 	go func() {
 		startedAt := time.Now()
+		vtui.DebugLog("EDITOR_INDEX: Start indexing with targetLine=%d", ev.targetLine)
 		indexed, batches := 0, 0
 		var waited time.Duration
 
@@ -2362,6 +2373,7 @@ func (ev *EditorView) StartIndexing() {
 					li.AppendOffsets(currentBatch, maxSize)
 
 					if ev.targetLine != -1 && (li.LineCount() > ev.targetLine || batchEnd >= maxSize) {
+						oldTarget := ev.targetLine
 						ev.CursorLine = ev.targetLine
 						if ev.CursorLine >= li.LineCount() {
 							ev.CursorLine = li.LineCount() - 1
@@ -2378,6 +2390,7 @@ func (ev *EditorView) StartIndexing() {
 						ev.targetLine = -1
 						ev.ensureCursorVisible()
 						ev.updateDesiredVisualCol()
+						vtui.DebugLog("EDITOR_INDEX: targetLine=%d resolved. CursorLine=%d, took %v", oldTarget, ev.CursorLine, time.Since(startedAt))
 					}
 
 					ev.engine.InvalidateFrom(lastLineBefore)
