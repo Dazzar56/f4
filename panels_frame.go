@@ -1728,7 +1728,8 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 
 	// F9 opens the main menu (other F-keys are action bindings now).
-	if e.VirtualKeyCode == vtinput.VK_F9 {
+	// Alt+F9 is App.ToggleWindowSize and must not fall through to this.
+	if e.VirtualKeyCode == vtinput.VK_F9 && !alt {
 		pos := 0 // Left
 		if pf.activeIdx == 1 {
 			pos = 4 // Right

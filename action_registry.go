@@ -1220,7 +1220,7 @@ func init() {
 	})
 	RegisterAction(Action{
 		Name:        "App.ToggleWindowSize",
-		Area:        "Shell",
+		Area:        "Common",
 		Label:       "Toggle Window Size",
 		LabelKey:    "Action.App.ToggleWindowSize",
 		Description: "Toggle between two window sizes",
