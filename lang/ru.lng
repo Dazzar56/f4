@@ -1040,6 +1040,7 @@ Permissions.BtnClose=&Закрыть
 Search.Prompt=Искать:
 Search.WholeWords=Только целые слова
 Search.Regex=Регулярные выражения
+Search.HexPattern=&Шестнадцатеричный шаблон
 Search.BtnFind=&Найти
 Search.BtnAll=&Все
 Search.Searching= Поиск...

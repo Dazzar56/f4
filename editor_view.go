@@ -2877,7 +2877,7 @@ func (ev *EditorView) showSearchDialog() {
 		chkRegexp.State = 1
 	}
 
-	chkHex := vtui.NewCheckbox(0, 0, "He&x pattern", false)
+	chkHex := vtui.NewCheckbox(0, 0, Msg("Search.HexPattern"), false)
 	if LastEditorSearchHex {
 		chkHex.State = 1
 	}
@@ -3182,7 +3182,7 @@ func (ev *EditorView) showReplaceDialog() {
 		chkRegexp.State = 1
 	}
 
-	chkHex := vtui.NewCheckbox(0, 0, "He&x pattern", false)
+	chkHex := vtui.NewCheckbox(0, 0, Msg("Search.HexPattern"), false)
 	if LastEditorSearchHex {
 		chkHex.State = 1
 	}

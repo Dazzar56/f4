@@ -250,10 +250,13 @@ func commandPaletteActionShortcuts(area, actionName string) []string {
 	for _, bindingArea := range areas {
 		for key, binding := range active[bindingArea] {
 			name, condition, _ := strings.Cut(binding, ":")
+			if !strings.EqualFold(name, actionName) {
+				continue
+			}
 			if condition != "" && !commandPaletteConditionTrue(condition) {
 				continue
 			}
-			if strings.EqualFold(name, actionName) && !seen[key] {
+			if !seen[key] {
 				seen[key] = true
 				keys = append(keys, FormatKeyForUI(key))
 			}
