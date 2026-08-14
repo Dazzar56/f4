@@ -1336,6 +1336,48 @@ func TestEditorView_AsyncIndexing(t *testing.T) {
 		t.Errorf("Indexer failed: expected 3 lines, got %d", ev.li.LineCount())
 	}
 }
+
+func TestEditorView_StartIndexing_TargetLineImmediateBatch(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	var sb strings.Builder
+	for i := 0; i < 10000; i++ {
+		fmt.Fprintf(&sb, "Line %d\n", i)
+	}
+	tmp := filepath.Join(t.TempDir(), "target_fast.txt")
+	os.WriteFile(tmp, []byte(sb.String()), 0644)
+
+	v := vfs.NewOSVFS(t.TempDir())
+	f, err := v.Open(context.Background(), tmp)
+	if err != nil {
+		t.Fatalf("Failed to open file: %v", err)
+	}
+	defer f.Close()
+
+	buf := NewAsyncBuffer(context.Background(), f)
+	pt := piecetable.NewWithBuffer(buf)
+	ev := NewEditorView(pt, v, tmp)
+	defer ev.Close()
+	ev.asyncBuf = buf
+	ev.file = f
+	ev.targetLine = 500
+
+	ev.StartIndexing()
+
+	timeout := time.After(2 * time.Second)
+	for ev.targetLine != -1 {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Timeout waiting for targetLine to resolve")
+		}
+	}
+
+	if ev.CursorLine != 500 {
+		t.Errorf("Expected CursorLine 500, got %d", ev.CursorLine)
+	}
+}
 func TestEditorView_Indexer_EditInterference(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 

@@ -850,7 +850,12 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 	// costs the same wait and stays quiet.
 	if ev.targetLine != -1 {
 		scr.FillRect(ev.X1, ev.Y1+1, ev.X2, ev.Y2, ' ', bgAttr)
-		vtui.DebugLog("EDITOR_RENDER: Blank screen shown, waiting for targetLine=%d (current line count=%d)", ev.targetLine, ev.li.LineCount())
+		msg := " [ Loading... ] "
+		cx := ev.X1 + (width-len(msg))/2
+		cy := ev.Y1 + 1 + height/2
+		if cx >= ev.X1 && cy <= ev.Y2 {
+			scr.Write(cx, cy, vtui.StringToCharInfo(msg, bgAttr))
+		}
 		return
 	}
 
@@ -929,11 +934,7 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 						highlightLen = 64 * 1024
 					}
 					lineData, _ := ev.pt.GetRange(lStart, highlightLen)
-					startHighlight := time.Now()
 					lineSyntax, _ = ev.highlighter.Highlight(string(lineData), nil, bgAttr)
-					if elapsed := time.Since(startHighlight); elapsed > 1*time.Millisecond {
-						vtui.DebugLog("CHROMA_PERF: Sync stateless Highlight for line %d took %v", logIdx, elapsed)
-					}
 				}
 			} else {
 				for len(ev.lineStates) <= logIdx {
@@ -958,11 +959,7 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 						break // Wait for data
 					}
 
-					startHighlight := time.Now()
 					attrs, nextState := ev.highlighter.Highlight(string(lineData), prevState, bgAttr)
-					if elapsed := time.Since(startHighlight); elapsed > 1*time.Millisecond {
-						vtui.DebugLog("HIGHLIGHT_PERF: Sync chain Highlight for line %d took %v", currIdx, elapsed)
-					}
 					ev.lineStates = append(ev.lineStates, nextState)
 					if currIdx == logIdx {
 						lineSyntax = attrs
@@ -2312,7 +2309,7 @@ func (ev *EditorView) StartIndexing() {
 		}()
 
 		absPos := 0
-		chunkSize := 1024 * 1024 // 1MB chunks for fast disk I/O
+		chunkSize := 256 * 1024 // 256KB chunks to match AsyncBuffer
 		poll := indexPollMin
 		buf := ev.asyncBuf
 		li := ev.li
@@ -2328,6 +2325,16 @@ func (ev *EditorView) StartIndexing() {
 			}
 			if ev.IsDone() {
 				return
+			}
+
+			// Pre-fetch ahead to keep AsyncBuffer busy and avoid sequential latency.
+			// 16 chunks of 256KB = 4MB read-ahead sliding window.
+			readAhead := 16
+			for i := 0; i < readAhead; i++ {
+				p := absPos + i*chunkSize
+				if p < maxSize {
+					_, _ = buf.Read(p, chunkSize)
+				}
 			}
 
 			data, err := buf.Read(absPos, chunkSize)
@@ -2355,8 +2362,8 @@ func (ev *EditorView) StartIndexing() {
 
 			absPos += len(data)
 
-			// Update UI in 5000-line batches to avoid UI thread congestion
-			if len(pendingOffsets) >= 5000 || absPos >= maxSize {
+			// Update UI in 5000-line batches, or immediately when targetLine is reached, to avoid UI thread congestion
+			if len(pendingOffsets) >= 5000 || absPos >= maxSize || (ev.targetLine != -1 && li.LineCount()+len(pendingOffsets) > ev.targetLine) {
 				currentBatch := pendingOffsets
 				batchEnd := absPos
 				indexed += len(currentBatch)
@@ -2373,7 +2380,6 @@ func (ev *EditorView) StartIndexing() {
 					li.AppendOffsets(currentBatch, maxSize)
 
 					if ev.targetLine != -1 && (li.LineCount() > ev.targetLine || batchEnd >= maxSize) {
-						oldTarget := ev.targetLine
 						ev.CursorLine = ev.targetLine
 						if ev.CursorLine >= li.LineCount() {
 							ev.CursorLine = li.LineCount() - 1
@@ -2390,7 +2396,6 @@ func (ev *EditorView) StartIndexing() {
 						ev.targetLine = -1
 						ev.ensureCursorVisible()
 						ev.updateDesiredVisualCol()
-						vtui.DebugLog("EDITOR_INDEX: targetLine=%d resolved. CursorLine=%d, took %v", oldTarget, ev.CursorLine, time.Since(startedAt))
 					}
 
 					ev.engine.InvalidateFrom(lastLineBefore)
