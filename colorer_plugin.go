@@ -14,8 +14,19 @@ import (
 )
 
 const (
-	maxCachedAttrLines  = 5000000
-	attrCacheKeepWindow = 1000000
+	// maxCachedAttrLines and attrCacheKeepWindow bound how many lines of
+	// already-computed colours storeAttrs keeps around. Each entry is a
+	// []uint64 the width of its line, and nothing ever evicted it before
+	// this: scrolling through a large file accumulated colours for every
+	// line ever drawn, hundreds of megabytes on the reference file. See
+	// HIGHLIGHT.md, item 3.
+	//
+	// The window only needs to be larger than a screen by a comfortable
+	// margin — a line evicted and then scrolled back to is just a cache
+	// miss, and a miss above the parse position costs a re-anchor, which is
+	// the designed fallback, not a bug.
+	maxCachedAttrLines  = 20000
+	attrCacheKeepWindow = 5000
 
 	// How far the session may be fed forward to reach a line. Beyond this
 	// the anchor is thrown away and rebuilt, which costs a fixed

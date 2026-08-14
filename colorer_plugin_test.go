@@ -130,6 +130,37 @@ func TestColorer_AttrCacheIsBounded(t *testing.T) {
 	}
 }
 
+// TestColorer_AttrCacheStaysBoundedOnALongForwardScroll pushes storeAttrs
+// well past maxCachedAttrLines — the way holding PgDn through a large file
+// does — and checks eviction actually keeps the map small instead of the
+// limit being effectively no limit at all (HIGHLIGHT.md item 3).
+func TestColorer_AttrCacheStaysBoundedOnALongForwardScroll(t *testing.T) {
+	ch := &ColorerHighlighter{}
+	const scrolled = maxCachedAttrLines * 3
+	for i := 0; i < scrolled; i++ {
+		ch.storeAttrs(i, []uint64{uint64(i)}, 0)
+	}
+
+	if len(ch.attrCache) >= maxCachedAttrLines {
+		t.Errorf("cache holds %d entries after scrolling %d lines, eviction did not bound it",
+			len(ch.attrCache), scrolled)
+	}
+	if len(ch.bgCache) != len(ch.attrCache) {
+		t.Errorf("attrCache and bgCache drifted apart: %d vs %d entries", len(ch.attrCache), len(ch.bgCache))
+	}
+
+	// The line just drawn, and its near neighbours, must survive: otherwise
+	// every single line drawn during the scroll would cost a re-anchor.
+	last := scrolled - 1
+	if _, ok := ch.attrCache[last]; !ok {
+		t.Error("the most recently drawn line fell out of the cache")
+	}
+	// Ctrl+Home must stay instant regardless of how far the scroll has gone.
+	if _, ok := ch.attrCache[0]; !ok {
+		t.Error("line 0 was evicted; Ctrl+Home would no longer be instant")
+	}
+}
+
 type stubHighlighter struct {
 	calls int
 }
