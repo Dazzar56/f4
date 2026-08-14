@@ -334,6 +334,40 @@ func TestColorer_ContextPlan(t *testing.T) {
 	}
 }
 
+func TestColorer_ForgetPlan(t *testing.T) {
+	// Fresh session, nothing fed yet past the batch threshold: no call.
+	if _, do := colorerForgetPlan(500, 0); do {
+		t.Error("under hlColorerForgetEvery lines fed, forgetBehind should not call yet")
+	}
+	// Right at the threshold, with a keep window that leaves something to
+	// drop: it should call, and land exactly hlColorerKeepBehind behind the
+	// parse position.
+	keepFrom, do := colorerForgetPlan(hlColorerForgetEvery, 0)
+	if !do {
+		t.Fatal("at the threshold forgetBehind should call")
+	}
+	if want := hlColorerForgetEvery - hlColorerKeepBehind; keepFrom != want {
+		t.Errorf("keepFrom = %d, want %d", keepFrom, want)
+	}
+	// Called again immediately after: not enough new lines fed since the
+	// last cut, so no second wasm call for the same ground.
+	if _, do := colorerForgetPlan(hlColorerForgetEvery, keepFrom); do {
+		t.Error("forgetBehind should not repeat work it already did")
+	}
+	// A fresh anchor sets forgottenUpTo to the anchor itself (resetSessionAt
+	// does this): nothing to forget until hlColorerForgetEvery more lines
+	// are fed from there, even if parsedIdx is a large absolute number.
+	if _, do := colorerForgetPlan(500000, 500000); do {
+		t.Error("right after a re-anchor there is nothing new to forget")
+	}
+	if _, do := colorerForgetPlan(500000+hlColorerForgetEvery-1, 500000); do {
+		t.Error("one line short of the threshold should still not call")
+	}
+	if _, do := colorerForgetPlan(500000+hlColorerForgetEvery, 500000); !do {
+		t.Error("hlColorerForgetEvery lines after a re-anchor should call")
+	}
+}
+
 func TestColorer_DropFromForgetsColours(t *testing.T) {
 	ch := &ColorerHighlighter{}
 	for i := 0; i < 10; i++ {

@@ -26,6 +26,18 @@ const (
 	// would have told us is lost; this is the price of a parser whose
 	// state cannot be snapshotted. See HIGHLIGHT.md, phase 5.
 	hlColorerContext = 300
+
+	// How many lines behind the parse position stay in the wasm session
+	// once forgetBehind starts trimming it. Kept equal to hlColorerContext:
+	// that is already the margin the rest of this file trusts for a replay,
+	// so forgetting does not introduce a second, untested number.
+	hlColorerKeepBehind = hlColorerContext
+
+	// How often forgetBehind actually calls into wasm, in lines fed. Calling
+	// it on every ParseLine would double the wasm calls a forward scroll
+	// makes; batching keeps the cost negligible while still bounding memory
+	// well under file size. See HIGHLIGHT.md, item 9 and item 4's log.
+	hlColorerForgetEvery = 1000
 )
 
 // The style bits an hrd assign carries, as StyledRegion defines them.
@@ -537,6 +549,18 @@ type ColorerHighlighter struct {
 	// them: parsedIdx - anchor is the session's own line number, and the
 	// two must never drift apart.
 	anchor int
+
+	// forgottenUpTo is the last line forgetBehind released the session's
+	// hold on. Lines below it may already be gone from the wasm heap; lines
+	// at or above it are still there whether or not forgetBehind has ever
+	// run, which is why it starts at the same value as anchor.
+	forgottenUpTo int
+	// forgetDisabled is set once colorer_forget_before turns out not to be
+	// exported by the embedded wasm (an older colorer4go). Forgetting is
+	// an optimization, not a correctness requirement, so the highlighter
+	// falls back to the old behaviour — a reset stays the only thing that
+	// releases memory — instead of logging the same failure forever.
+	forgetDisabled bool
 }
 
 // SetLineSource gives the highlighter a way to read the document.
@@ -696,6 +720,7 @@ func (ch *ColorerHighlighter) HighlightLine(idx int, line string, baseAttr uint6
 
 	attrs, eolBg := ch.attrsFor(line, regions, baseAttr)
 	ch.storeAttrs(idx, attrs, eolBg)
+	ch.forgetBehind()
 	return attrs
 }
 
@@ -717,7 +742,48 @@ func colorerContextPlan(parsedIdx, idx int) (start int, reset bool) {
 	return start, true
 }
 
-// ensureContext parks the session so that idx is the next line it expects.
+// colorerForgetPlan decides whether forgetBehind has enough new lines behind
+// the parse position to be worth a wasm call, and where the cut should land.
+// Pure, like colorerContextPlan, so the batching threshold is tested without
+// a session.
+func colorerForgetPlan(parsedIdx, forgottenUpTo int) (keepFrom int, do bool) {
+	if parsedIdx-forgottenUpTo < hlColorerForgetEvery {
+		return 0, false
+	}
+	keepFrom = parsedIdx - hlColorerKeepBehind
+	if keepFrom <= forgottenUpTo {
+		return 0, false
+	}
+	return keepFrom, true
+}
+
+// forgetBehind releases the session's hold on lines that are behind the parse
+// position by more than hlColorerKeepBehind, batched so a long forward scroll
+// pays for it roughly once every hlColorerForgetEvery lines instead of on
+// every ParseLine call.
+//
+// This is what keeps holding PgDn from filling the wasm heap with the whole
+// file now that a reset is not the only way to release it (colorer4go
+// v0.1.12, colorer_forget_before / HIGHLIGHT.md item 9). Safe for the same
+// reason ForgetBefore documents on its own side: the parser only ever reads
+// forward from ch.parsedIdx, so nothing below hlColorerKeepBehind lines back
+// from there will be asked for again before the next reset.
+func (ch *ColorerHighlighter) forgetBehind() {
+	if ch.session == nil || ch.forgetDisabled {
+		return
+	}
+	keepFrom, do := colorerForgetPlan(ch.parsedIdx, ch.forgottenUpTo)
+	if !do {
+		return
+	}
+	if err := ch.session.ForgetBefore(keepFrom); err != nil {
+		vtui.DebugLog("COLORER: ForgetBefore unsupported, disabling for this session: %v", err)
+		ch.forgetDisabled = true
+		return
+	}
+	ch.forgottenUpTo = keepFrom
+}
+
 func (ch *ColorerHighlighter) ensureContext(idx int) {
 	if ch.session == nil || ch.lineAt == nil || ch.parsedIdx == idx {
 		return
@@ -729,6 +795,7 @@ func (ch *ColorerHighlighter) ensureContext(idx int) {
 	// the line index is still growing, or the piece table is still loading.
 	// Re-anchoring would hit the same wall, so leave it for the next frame.
 	ch.parseThrough(idx)
+	ch.forgetBehind()
 }
 
 // parseThrough feeds the session every line up to, but not including, idx.
@@ -762,6 +829,7 @@ func (ch *ColorerHighlighter) resetSessionAt(start int) {
 
 	ch.anchor = start
 	ch.parsedIdx = start
+	ch.forgottenUpTo = start
 }
 
 // DropFrom forgets everything the highlighter knows from line idx on. An edit
