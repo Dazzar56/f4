@@ -232,7 +232,7 @@ and in project home: https://github.com/unxed/f4
 If you want to report a problem with the program, please create bugreport
 at https://github.com/unxed/f4/issues
 `,
-			getFormattedVersionInfo());
+			getFormattedVersionInfo())
 		return
 	}
 
