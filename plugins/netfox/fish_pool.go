@@ -18,7 +18,7 @@ import (
 // into it — the "other panel" swap, a quick trip to a local directory and
 // back — costs nothing over a remote link that a fresh connection would
 // have made the user wait for.
-var FishPoolIdleTimeout = 2 * time.Minute
+var FishPoolIdleTimeout = 15 * time.Minute
 
 // fishPoolKey identifies a site closely enough that handing a session
 // dialled for one request to another is safe. Host, port and user reach
