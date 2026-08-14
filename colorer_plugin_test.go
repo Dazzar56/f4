@@ -130,42 +130,6 @@ func TestColorer_AttrCacheIsBounded(t *testing.T) {
 	}
 }
 
-func TestColorer_LineIndexComesFromTheEditorState(t *testing.T) {
-	cases := []struct {
-		prevState any
-		known     int
-		want      int
-	}{
-		{nil, 0, 0},
-		{nil, 500, 0},
-		{7, 500, 8},
-		{"a state of the fallback engine", 500, 0},
-		{499, 500, 500},
-		{500, 500, 500},
-		{-9, 500, 0},
-	}
-	for _, c := range cases {
-		if got := colorerLineIndex(c.prevState, c.known); got != c.want {
-			t.Errorf("colorerLineIndex(%v, %d) = %d, expected %d", c.prevState, c.known, got, c.want)
-		}
-	}
-}
-
-func TestColorer_RewindsOnlyWhenTheParserIsAhead(t *testing.T) {
-	if colorerNeedsRewind(3, 7) {
-		t.Error("Expected the parser to be fed forward while it is behind")
-	}
-	if colorerNeedsRewind(7, 7) {
-		t.Error("Expected no work when the parser is already in place")
-	}
-	if !colorerNeedsRewind(9, 7) {
-		t.Error("Expected a rewind when the parser is past the requested line")
-	}
-	if !colorerNeedsRewind(-1, 7) {
-		t.Error("Expected a rewind from an unknown parser position")
-	}
-}
-
 type stubHighlighter struct {
 	calls int
 }

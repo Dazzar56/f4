@@ -109,24 +109,6 @@ func colorerRegionRunes(start, end, lineRunes int) (int, int, bool) {
 	return start, end, toEOL
 }
 
-func colorerLineIndex(prevState any, known int) int {
-	idx := 0
-	if prevIdx, ok := prevState.(int); ok {
-		idx = prevIdx + 1
-	}
-	if idx < 0 {
-		idx = 0
-	}
-	if idx > known {
-		idx = known
-	}
-	return idx
-}
-
-func colorerNeedsRewind(parsedIdx, upTo int) bool {
-	return parsedIdx < 0 || parsedIdx > upTo
-}
-
 var (
 	colorerPoolMu  sync.Mutex
 	colorerIdle    *colorer.Session
@@ -490,7 +472,6 @@ func newColorerHighlighter(ev *EditorView, filename, firstLine string, fallback 
 			ch.fallback = nil
 			ch.session = session
 			ch.starting = false
-			ch.lines = nil
 			ch.attrCache = nil
 			ch.parsedIdx = 0
 			if ev != nil {
@@ -527,7 +508,6 @@ func (ch *ColorerHighlighter) useFallback(ev *EditorView) {
 type ColorerHighlighter struct {
 	session    *colorer.Session
 	fallback   vtui.Highlighter
-	lines      []string
 	attrCache  map[int][]uint64
 	bgCache    map[int]uint64
 	baseAttr   uint64
@@ -568,9 +548,10 @@ func (ch *ColorerHighlighter) SetLineSource(fn func(idx int) (string, bool)) {
 	ch.lineAt = fn
 }
 
-// Highlight is the vtui.Highlighter entry point, and is now only reached while
-// the session is still loading or has been given up on: the editor draws
-// Colorer through HighlightLine. See HIGHLIGHT.md, phase 5c.
+// Highlight is the vtui.Highlighter entry point. It is still needed while
+// the session is loading or has been given up on; the editor draws Colorer
+// with a live session through HighlightLine instead, so this delegates
+// nothing in that case. See HIGHLIGHT.md, phase 5c and item 2.
 func (ch *ColorerHighlighter) Highlight(line string, prevState any, baseAttr uint64) ([]uint64, any) {
 	if ch.session == nil {
 		if ch.starting {
@@ -581,55 +562,7 @@ func (ch *ColorerHighlighter) Highlight(line string, prevState any, baseAttr uin
 		}
 		return nil, nil
 	}
-
-	logIdx := colorerLineIndex(prevState, len(ch.lines))
-
-	if attrs, ok := ch.attrCache[logIdx]; ok {
-		return attrs, logIdx
-	}
-
-	// Guard against heavy synchronous backward or forward resyncs during UI rendering.
-	if logIdx < ch.parsedIdx-100 {
-		return nil, logIdx
-	}
-	if logIdx > ch.parsedIdx+100 {
-		return nil, logIdx
-	}
-
-	ch.syncScheme(baseAttr)
-
-	if logIdx < len(ch.lines) && ch.lines[logIdx] == line {
-		if attrs, ok := ch.attrCache[logIdx]; ok {
-			return attrs, logIdx
-		}
-	} else {
-		if logIdx < len(ch.lines) {
-			ch.lines = ch.lines[:logIdx]
-			ch.dropCacheFrom(logIdx)
-		}
-		if logIdx == len(ch.lines) {
-			ch.lines = append(ch.lines, line)
-		}
-	}
-
-	if logIdx > ch.parsedIdx+100 {
-		return nil, logIdx
-	}
-
-	if ch.parsedIdx != logIdx {
-		ch.resync(logIdx)
-	}
-
-	regions, err := ch.session.ParseLine(line)
-	ch.parsedIdx = logIdx + 1
-	if err != nil {
-		vtui.DebugLog("COLORER: ParseLine failed at line %d: %v", logIdx, err)
-		return nil, logIdx
-	}
-
-	attrs, eolBg := ch.attrsFor(line, regions, baseAttr)
-	ch.storeAttrs(logIdx, attrs, eolBg)
-	return attrs, logIdx
+	return nil, nil
 }
 
 // syncScheme picks up a change of colour scheme or of the editor's base
@@ -846,47 +779,6 @@ func (ch *ColorerHighlighter) DropFrom(idx int) {
 	}
 }
 
-func (ch *ColorerHighlighter) resync(upTo int) {
-	if upTo > len(ch.lines) {
-		upTo = len(ch.lines)
-	}
-	if upTo < 0 {
-		upTo = 0
-	}
-
-	from := ch.parsedIdx
-	isRewind := colorerNeedsRewind(from, upTo)
-
-	if isRewind {
-		if upTo <= 2000 {
-			// Short rewind from 0 is fast enough
-			ch.session.Reset()
-			firstLine := ch.firstLine
-			if len(ch.lines) > 0 {
-				firstLine = ch.lines[0]
-			}
-			_, _ = ch.session.SelectType(ch.filename, firstLine)
-			from = 0
-		} else {
-			// Rewind is too deep. Parsing from 0 would freeze the UI.
-			// Reset and start statelessly at upTo.
-			ch.session.Reset()
-			ch.parsedIdx = upTo
-			return
-		}
-	} else if upTo-from > 2000 {
-		// Massive forward jump. Shouldn't happen due to guards, but just in case.
-		ch.session.Reset()
-		ch.parsedIdx = upTo
-		return
-	}
-
-	for i := from; i < upTo; i++ {
-		_, _ = ch.session.ParseLine(ch.lines[i])
-	}
-	ch.parsedIdx = upTo
-}
-
 func (ch *ColorerHighlighter) GetLineBackground(idx int, defaultAttr uint64) uint64 {
 	if ch.bgCache == nil {
 		return defaultAttr
@@ -942,7 +834,6 @@ func (ch *ColorerHighlighter) dropCacheFrom(idx int) {
 
 func (ch *ColorerHighlighter) Close() error {
 	ch.closed = true
-	ch.lines = nil
 	ch.attrCache = nil
 	ch.parsedIdx = 0
 	if closer, ok := ch.fallback.(io.Closer); ok {
