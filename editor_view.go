@@ -46,6 +46,7 @@ var (
 	LastEditorSearchReverse   bool
 	LastEditorSearchRegexp    bool
 	LastEditorSearchWholeWord bool
+	LastEditorSearchHex       bool
 )
 var GlobalLastClipboardWasRectangular bool
 
@@ -2876,6 +2877,11 @@ func (ev *EditorView) showSearchDialog() {
 		chkRegexp.State = 1
 	}
 
+	chkHex := vtui.NewCheckbox(0, 0, "He&x pattern", false)
+	if LastEditorSearchHex {
+		chkHex.State = 1
+	}
+
 	btnFind := vtui.NewButton(0, 0, Msg("Search.BtnFind"))
 	btnFind.IsDefault = true
 	btnAll := vtui.NewButton(0, 0, Msg("Search.BtnAll"))
@@ -2926,13 +2932,16 @@ func (ev *EditorView) showSearchDialog() {
 		SaveSession()
 	}
 	btnFind.OnClick = func() {
+		LastEditorSearchHex = chkHex.State == 1
 		saveSearchParams()
 		dlg.Close()
-		ev.Search(LastEditorSearch, LastEditorSearchCase, LastEditorSearchReverse, LastEditorSearchRegexp, LastEditorSearchWholeWord, false)
+		ev.Search(LastEditorSearch, LastEditorSearchCase, LastEditorSearchReverse, LastEditorSearchRegexp, LastEditorSearchWholeWord, LastEditorSearchHex, false)
 	}
 	btnAll.OnClick = func() {
+		LastEditorSearchHex = chkHex.State == 1
 		saveSearchParams()
 		dlg.Close()
+		// FindAll doesn't support hex pattern search yet
 		ev.FindAll(LastEditorSearch, LastEditorSearchCase, LastEditorSearchRegexp, LastEditorSearchWholeWord)
 	}
 	btnCancel.OnClick = func() { dlg.Close() }
@@ -2974,9 +2983,39 @@ func replaceAllFold(s, old, new string) string {
 	return b.String()
 }
 
-func (ev *EditorView) Replace(pattern, replacement string, caseSensitive, reverse, regexp, wholeWord, all bool) {
+func (ev *EditorView) Replace(pattern, replacement string, caseSensitive, reverse, regexp, wholeWord, isHex, all bool) {
 	if pattern == "" {
 		return
+	}
+
+	searchPattern := pattern
+	if isHex {
+		var err error
+		searchPattern, err = parseHexPatternToRegex(pattern)
+		if err != nil {
+			vtui.ShowMessage(" Error ", fmt.Sprintf("Invalid hex pattern:\n%v", err), []string{"&Ok"})
+			return
+		}
+		regexp = true
+		wholeWord = false
+		caseSensitive = true
+
+		repBytes, err := parseHexReplacement(replacement)
+		if err != nil {
+			vtui.ShowMessage(" Error ", fmt.Sprintf("Invalid hex replacement:\n%v", err), []string{"&Ok"})
+			return
+		}
+		var escapedRepl strings.Builder
+		for _, b := range repBytes {
+			if b == '$' {
+				escapedRepl.WriteString("$$")
+			} else if b == '\\' {
+				escapedRepl.WriteString("\\\\")
+			} else {
+				escapedRepl.WriteByte(b)
+			}
+		}
+		replacement = escapedRepl.String()
 	}
 
 	// Only whole-word matching needs the regex engine (for the \b wrapping);
@@ -2984,7 +3023,7 @@ func (ev *EditorView) Replace(pattern, replacement string, caseSensitive, revers
 	var re *coregex.Regex
 	if regexp || wholeWord {
 		var err error
-		re, err = buildSearchRegex(pattern, caseSensitive, regexp, wholeWord)
+		re, err = buildSearchRegex(searchPattern, caseSensitive, regexp, wholeWord)
 		if err != nil {
 			vtui.ShowMessage(" Error ", fmt.Sprintf("Invalid regular expression:\n%v", err), []string{"&Ok"})
 			return
@@ -3143,6 +3182,11 @@ func (ev *EditorView) showReplaceDialog() {
 		chkRegexp.State = 1
 	}
 
+	chkHex := vtui.NewCheckbox(0, 0, "He&x pattern", false)
+	if LastEditorSearchHex {
+		chkHex.State = 1
+	}
+
 	btnReplace := vtui.NewButton(0, 0, Msg("Replace.BtnReplace"))
 	btnReplaceAll := vtui.NewButton(0, 0, Msg("Replace.BtnReplaceAll"))
 	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
@@ -3174,6 +3218,10 @@ func (ev *EditorView) showReplaceDialog() {
 	col2 := vtui.NewVBoxLayout(0, 0, (dlgW-4)/2, 5)
 	col2.Add(chkRegexp, vtui.Margins{}, vtui.AlignLeft)
 
+	col2.Add(chkHex, vtui.Margins{Top: 1}, vtui.AlignLeft)
+
+	col2.Add(chkHex, vtui.Margins{Top: 1}, vtui.AlignLeft)
+
 	rowChecks := vtui.NewHBoxLayout(0, 0, dlgW-4, 5)
 	rowChecks.Add(col1, vtui.Margins{}, vtui.AlignFill)
 	rowChecks.Add(col2, vtui.Margins{}, vtui.AlignFill)
@@ -3197,7 +3245,8 @@ func (ev *EditorView) showReplaceDialog() {
 		LastEditorSearchWholeWord = chkWholeWord.State == 1
 		SaveSession()
 		dlg.Close()
-		ev.Replace(LastEditorSearch, LastEditorReplace, LastEditorSearchCase, LastEditorSearchReverse, LastEditorSearchRegexp, LastEditorSearchWholeWord, all)
+		LastEditorSearchHex = chkHex.State == 1
+		ev.Replace(LastEditorSearch, LastEditorReplace, LastEditorSearchCase, LastEditorSearchReverse, LastEditorSearchRegexp, LastEditorSearchWholeWord, LastEditorSearchHex, all)
 	}
 	btnReplace.OnClick = func() { doReplace(false) }
 	btnReplaceAll.OnClick = func() { doReplace(true) }
@@ -4620,27 +4669,77 @@ func (ev *EditorView) searchSeedOffset(reverse, includeSelection bool) int {
 	return ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 }
 
-func (ev *EditorView) Search(pattern string, caseSensitive, reverse, regexp, wholeWord, next bool) {
+func parseHexPatternToRegex(pattern string) (string, error) {
+	var re strings.Builder
+	re.WriteString("(?s)") // dot matches newline
+	tokens := strings.Fields(pattern)
+	for _, t := range tokens {
+		if t == "?" || t == "??" {
+			re.WriteString(".")
+		} else {
+			if len(t) == 1 {
+				t = "0" + t
+			}
+			b, err := hex.DecodeString(t)
+			if err != nil {
+				return "", fmt.Errorf("invalid hex token: %s", t)
+			}
+			re.WriteString(fmt.Sprintf("\\x%02x", b[0]))
+		}
+	}
+	return re.String(), nil
+}
+
+func parseHexReplacement(repl string) ([]byte, error) {
+	var res []byte
+	tokens := strings.Fields(repl)
+	for _, t := range tokens {
+		if len(t) == 1 {
+			t = "0" + t
+		}
+		b, err := hex.DecodeString(t)
+		if err != nil {
+			return nil, fmt.Errorf("invalid hex token: %s", t)
+		}
+		res = append(res, b[0])
+	}
+	return res, nil
+}
+func (ev *EditorView) Search(pattern string, caseSensitive, reverse, regexp, wholeWord, isHex, next bool) {
 	if pattern == "" {
 		return
 	}
-	if LastEditorSearch != pattern || LastEditorSearchCase != caseSensitive || LastEditorSearchReverse != reverse || LastEditorSearchRegexp != regexp || LastEditorSearchWholeWord != wholeWord {
+	if LastEditorSearch != pattern || LastEditorSearchCase != caseSensitive || LastEditorSearchReverse != reverse || LastEditorSearchRegexp != regexp || LastEditorSearchWholeWord != wholeWord || LastEditorSearchHex != isHex {
 		LastEditorSearch = pattern
 		LastEditorSearchCase = caseSensitive
 		LastEditorSearchReverse = reverse
 		LastEditorSearchRegexp = regexp
 		LastEditorSearchWholeWord = wholeWord
+		LastEditorSearchHex = isHex
 		SaveSession()
 	}
 
-	vtui.DebugLog("EDITOR_SEARCH: Starting for %q (sensitive=%v, reverse=%v, regexp=%v, wholeWord=%v, next=%v)",
-		pattern, caseSensitive, reverse, regexp, wholeWord, next)
+	searchPattern := pattern
+	if isHex {
+		var err error
+		searchPattern, err = parseHexPatternToRegex(pattern)
+		if err != nil {
+			vtui.ShowMessage(" Error ", fmt.Sprintf("Invalid hex pattern:\n%v", err), []string{"&Ok"})
+			return
+		}
+		regexp = true
+		wholeWord = false
+		caseSensitive = true
+	}
+
+	vtui.DebugLog("EDITOR_SEARCH: Starting for %q (sensitive=%v, reverse=%v, regexp=%v, wholeWord=%v, hex=%v, next=%v)",
+		pattern, caseSensitive, reverse, regexp, wholeWord, isHex, next)
 
 	vtui.FrameManager.PostTask(func() {
 		// Read on the UI thread, before the background scan starts.
 		startOff := ev.searchSeedOffset(reverse, false)
 
-		runSearchWithProgress(pattern, func(ctx *vtui.TaskContext, dlg *vtui.Window) {
+		runSearchWithProgress(searchPattern, func(ctx *vtui.TaskContext, dlg *vtui.Window) {
 			bytes, errBytes := ev.pt.Bytes()
 			if errBytes != nil {
 				ctx.RunOnUI(func() {

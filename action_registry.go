@@ -197,7 +197,7 @@ func repeatEditorSearchDirection(ev *EditorView, reverse bool) {
 		return
 	}
 	rememberedDirection := LastEditorSearchReverse
-	ev.Search(LastEditorSearch, LastEditorSearchCase, reverse, LastEditorSearchRegexp, LastEditorSearchWholeWord, true)
+	ev.Search(LastEditorSearch, LastEditorSearchCase, reverse, LastEditorSearchRegexp, LastEditorSearchWholeWord, LastEditorSearchHex, true)
 	LastEditorSearchReverse = rememberedDirection
 }
 
@@ -1878,7 +1878,7 @@ func init() {
 		MenuPath:    "Search",
 		Handler: withEditor(func(ev *EditorView) {
 			if LastEditorSearch != "" {
-				ev.Search(LastEditorSearch, LastEditorSearchCase, LastEditorSearchReverse, LastEditorSearchRegexp, LastEditorSearchWholeWord, true)
+				ev.Search(LastEditorSearch, LastEditorSearchCase, LastEditorSearchReverse, LastEditorSearchRegexp, LastEditorSearchWholeWord, LastEditorSearchHex, true)
 			}
 		}),
 	})

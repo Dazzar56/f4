@@ -2291,6 +2291,21 @@ func TestEditorView_Search_Backward(t *testing.T) {
 	}
 }
 
+func TestParseHexPatternToRegex(t *testing.T) {
+	re, err := parseHexPatternToRegex("EB ? 90")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if re != "(?s)\\xeb.\\x90" {
+		t.Errorf("Unexpected regex: %s", re)
+	}
+
+	_, err = parseHexPatternToRegex("INVALID")
+	if err == nil {
+		t.Error("Expected error for invalid hex pattern")
+	}
+}
+
 func TestEditorView_Search_ShiftF7_Reverse(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
