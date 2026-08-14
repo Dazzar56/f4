@@ -391,14 +391,25 @@ decision for now, not an oversight:
   refusal the user can understand, rather than a mount that fails halfway
   through a copy.
 
+* **One lock, still.** The bridge serializes every VFS call through a single
+  mutex; two readers of the same mount take turns rather than run at once.
+  Replacing it with per-backend policy is the rest of iteration 6, and it is
+  gated on a benchmark — see `fusefs/BENCH.md`. The benchmark itself has no
+  concurrent case yet, so that has to exist before the change can be judged.
+* **A search over a remote mount is far slower than it should be.** On the
+  same files and the same link, `tar -c` reads everything in ~2s while `grep`
+  takes minutes and can time out. This is not bandwidth — see `BENCH.md`,
+  "Where this stopped" — and the counting run (`F4_FUSE_STATS=1`) that would
+  say why has not been done yet.
 * A mount whose server was killed with `SIGKILL` leaves a wedged mount point
   and a record that looks live until the pid is reused. Detecting it needs a
   bounded probe of the mount point; `--list-mounts` must stay non-blocking.
-* `--rw` is refused, not implemented (iteration 4).
-* Symlinks are shown as ordinary files (iteration 3).
 * A daemon child's stderr goes nowhere. Use `--foreground` to see why a mount
   failed for reasons the handshake could not carry.
 * Passwords: a detached mount cannot prompt. Backends that need credentials
   have to get them from the existing configuration, and a `--password-command`
   is needed before SFTP mounts are genuinely usable from `fstab` or a script.
   Until then a mount that would prompt must fail fast rather than hang silently.
+* No FUSE on Windows: `Supported()` is false, the panel command hides, `--mount`
+  answers "not supported on this platform". A Windows story is a separate
+  exporter (WinFsp), same as the planned loopback-NFS for macOS.
