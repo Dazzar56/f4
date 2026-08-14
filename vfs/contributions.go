@@ -18,9 +18,19 @@ const (
 
 // PluginCommand contributes one command to an f4 plugin menu.
 type PluginCommand struct {
-	ID       string
-	Location PluginCommandLocation
-	Label    string
+	ID          string
+	Location    PluginCommandLocation
+	Label       string // English fallback shown when LabelKey is empty or unavailable.
+	LabelKey    string // optional host localization key resolved in the active UI language.
+	Description string // optional English fallback for discoverability surfaces.
+	// DescriptionKey is an optional host localization key for Description.
+	DescriptionKey string
+	// SearchKeys are additional host localization keys whose translations are
+	// indexed by discoverability surfaces but are not rendered as the label.
+	SearchKeys []string
+	// Shortcut is display-only metadata, formatted for the host UI (for example,
+	// "Shift+F4"). The plugin remains responsible for registering the hotkey.
+	Shortcut string
 	Visible  func(App) bool
 	Run      func(App)
 }

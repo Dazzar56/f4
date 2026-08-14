@@ -39,6 +39,10 @@ type commandPaletteEntry struct {
 	Shortcut           string
 	SearchFields       []string
 	Checked            bool
+	// run is used by dynamic command providers whose target must be resolved
+	// at execution time (workspaces, macros, drives). Static actions and plugin
+	// contributions keep using the source-specific fields below.
+	run func() bool
 
 	source         commandPaletteSource
 	pluginLocation vfs.PluginCommandLocation
@@ -47,7 +51,7 @@ type commandPaletteEntry struct {
 	panels         *PanelsFrame
 }
 
-// ShowCommandPalette opens the palette only from the four primary work areas.
+// ShowCommandPalette opens the palette from every full-screen work area.
 // Modal dialogs and menus deliberately remain in control of their own input.
 func ShowCommandPalette() bool {
 	if vtui.FrameManager == nil {
@@ -84,7 +88,7 @@ func ShowCommandPalette() bool {
 
 func commandPaletteAreaAllowed(area string) bool {
 	switch area {
-	case "Shell", "Terminal", "Editor", "Viewer":
+	case "Shell", "Terminal", "Editor", "Viewer", "Other":
 		return true
 	default:
 		return false
@@ -93,8 +97,13 @@ func commandPaletteAreaAllowed(area string) bool {
 
 func buildCommandPaletteEntries(area string, pf *PanelsFrame) []commandPaletteEntry {
 	entries := commandPaletteActionEntries(area)
+	entries = append(entries, commandPaletteFrameEntries()...)
+	entries = append(entries, commandPaletteWorkspaceEntries()...)
+	entries = append(entries, commandPaletteMacroEntries(area)...)
 	if pf != nil {
 		entries = append(entries, commandPalettePluginEntries(pf)...)
+		entries = append(entries, commandPaletteDriveEntries(pf)...)
+		entries = append(entries, commandPalettePrefixEntries(area, pf)...)
 		// User-menu execution feeds the underlying command line. It is safe in
 		// every primary area except a terminal currently owned by a busy PTY.
 		if commandPaletteCanIncludeUserMenu(area) {
@@ -121,9 +130,12 @@ func commandPaletteActionEntries(area string) []commandPaletteEntry {
 		label := plainLabel(action.DisplayLabel())
 		englishLabel := plainLabel(action.Label)
 		category := commandPaletteActionCategory(action)
-		shortcuts := commandPaletteActionShortcuts(area, action.Name)
+		shortcuts := mergeCommandPaletteShortcuts(
+			commandPaletteActionShortcuts(area, action.Name),
+			NativeShortcutsForAction(area, action),
+		)
 		searchFields := []string{action.Area, action.MenuPath, area}
-		translationKeys := []string{action.LabelKey, action.DescKey}
+		translationKeys := append([]string{action.LabelKey, action.DescKey}, action.SearchKeys...)
 		translationKeys = append(translationKeys, commandPaletteActionCategoryKeys(action)...)
 		searchFields = append(searchFields, commandPaletteTranslations(translationKeys...)...)
 		entry := commandPaletteEntry{
@@ -144,6 +156,23 @@ func commandPaletteActionEntries(area string) []commandPaletteEntry {
 		entries = append(entries, entry)
 	}
 	return entries
+}
+
+func mergeCommandPaletteShortcuts(groups ...[]string) []string {
+	seen := make(map[string]bool)
+	var merged []string
+	for _, group := range groups {
+		for _, shortcut := range group {
+			shortcut = strings.TrimSpace(shortcut)
+			if shortcut == "" || seen[shortcut] {
+				continue
+			}
+			seen[shortcut] = true
+			merged = append(merged, shortcut)
+		}
+	}
+	sort.Strings(merged)
+	return merged
 }
 
 func commandPaletteActionApplies(action Action, area string) bool {
@@ -194,13 +223,17 @@ func commandPaletteActionCategory(action Action) string {
 }
 
 func commandPaletteActionCategoryKeys(action Action) []string {
-	if action.MenuPath == "" {
-		return nil
+	var keys []string
+	if strings.HasPrefix(action.Name, "Workspace.") {
+		keys = append(keys, "CommandPalette.CategoryWorkspace")
 	}
-	return []string{
-		"Menu." + action.Area + "." + action.MenuPath,
-		"Menu." + action.MenuPath,
+	if action.MenuPath != "" {
+		keys = append(keys,
+			"Menu."+action.Area+"."+action.MenuPath,
+			"Menu."+action.MenuPath,
+		)
 	}
+	return keys
 }
 
 func commandPaletteActionShortcuts(area, actionName string) []string {
@@ -240,15 +273,28 @@ func commandPalettePluginEntries(pf *PanelsFrame) []commandPaletteEntry {
 			category = Msg("CommandPalette.CategoryPluginConfig")
 		}
 		for _, command := range pluginCommandsSnapshot(location, pf) {
+			label := plainLabel(pluginCommandDisplayLabel(command))
+			description := pluginCommandDisplayDescription(command)
+			if description == "" {
+				description = command.ID
+			}
+			englishDescription := command.Description
+			if englishDescription == "" {
+				englishDescription = command.ID
+			}
+			searchFields := []string{category, command.Label, command.Description}
+			translationKeys := append([]string{categoryKey}, pluginCommandTranslationKeys(command)...)
+			searchFields = append(searchFields, commandPaletteTranslations(translationKeys...)...)
 			entries = append(entries, commandPaletteEntry{
 				Key:                fmt.Sprintf("plugin:%d:%s", location, strings.ToLower(command.ID)),
-				Label:              plainLabel(command.Label),
+				Label:              label,
 				EnglishLabel:       plainLabel(command.Label),
-				Description:        command.ID,
-				EnglishDescription: command.ID,
+				Description:        description,
+				EnglishDescription: englishDescription,
 				ID:                 command.ID,
 				Category:           category,
-				SearchFields:       append([]string{category}, commandPaletteTranslations(categoryKey)...),
+				Shortcut:           command.Shortcut,
+				SearchFields:       searchFields,
 				source:             commandPaletteSourcePlugin,
 				pluginLocation:     location,
 				panels:             pf,
@@ -392,16 +438,14 @@ func commandPaletteCanonicalPath(path string) string {
 }
 
 func executeCommandPaletteEntry(entry commandPaletteEntry) bool {
+	if entry.run != nil {
+		return entry.run()
+	}
 	switch entry.source {
 	case commandPaletteSourceAction:
 		return RunAction(entry.ID)
 	case commandPaletteSourcePlugin:
-		for _, command := range pluginCommandsSnapshot(entry.pluginLocation, entry.panels) {
-			if command.ID == entry.ID {
-				command.Run(entry.panels)
-				return true
-			}
-		}
+		return executeRegisteredPluginCommand(entry.pluginLocation, entry.ID, entry.panels)
 	case commandPaletteSourceLegacyPlugin:
 		items := pluginMenuItemsSnapshot()
 		if entry.legacyIndex >= 0 && entry.legacyIndex < len(items) && items[entry.legacyIndex].Handler != nil {

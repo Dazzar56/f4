@@ -143,6 +143,71 @@ func TestCommandPaletteIncludesBothPluginLocationsAndReResolves(t *testing.T) {
 	}
 }
 
+func TestCommandPalettePluginMetadataUsesCurrentLanguageAndAllLanguageAliases(t *testing.T) {
+	oldLanguage := AppConfig.Language
+	oldFallbackLanguage := AppConfig.FallbackLanguage
+	t.Cleanup(func() {
+		AppConfig.Language = oldLanguage
+		AppConfig.FallbackLanguage = oldFallbackLanguage
+		InitLang()
+	})
+	AppConfig.Language = "en"
+	AppConfig.FallbackLanguage = ""
+	InitLang()
+
+	api := &coreAPI{}
+	registration, err := api.RegisterPluginCommand(vfs.PluginCommand{
+		ID:             "test.command-palette.localized-plugin",
+		Location:       vfs.PluginCommandPanel,
+		Label:          "English fallback label",
+		LabelKey:       "Archive.Command.Extract",
+		Description:    "English fallback description",
+		DescriptionKey: "Archive.Command.Extract.Desc",
+		SearchKeys:     []string{"NetFox.ConnectionTitle"},
+		Shortcut:       "Ctrl+Alt+X",
+		Run:            func(vfs.App) {},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(registration.Unregister)
+
+	findEntry := func() commandPaletteEntry {
+		for _, entry := range commandPalettePluginEntries(&PanelsFrame{}) {
+			if entry.ID == "test.command-palette.localized-plugin" {
+				return entry
+			}
+		}
+		t.Fatal("localized plugin command is missing from the palette")
+		return commandPaletteEntry{}
+	}
+
+	entry := findEntry()
+	if entry.Label != "Extract files" || entry.Description != "Extract the selected archive to the passive panel" {
+		t.Fatalf("English display metadata = %#v", entry)
+	}
+	if entry.EnglishLabel != "English fallback label" || entry.EnglishDescription != "English fallback description" || entry.Shortcut != "Ctrl+Alt+X" {
+		t.Fatalf("fallback/shortcut metadata = %#v", entry)
+	}
+	for _, query := range []string{
+		"Извлечь файлы",
+		"Извлечь выбранный архив в пассивную панель",
+		"Настройка подключения",
+	} {
+		results := rankCommandPaletteEntries([]commandPaletteEntry{entry}, query, nil)
+		if len(results) != 1 || results[0].Label != "Extract files" {
+			t.Errorf("query %q returned %#v", query, results)
+		}
+	}
+
+	AppConfig.Language = "ru"
+	InitLang()
+	entry = findEntry()
+	if entry.Label != "Извлечь файлы" || entry.Description != "Извлечь выбранный архив в пассивную панель" {
+		t.Fatalf("Russian display metadata = %#v", entry)
+	}
+}
+
 func TestCommandPaletteFlattensExecutableUserMenuLeaves(t *testing.T) {
 	source := commandPaletteUserMenuSource{
 		mode:  MenuModeLocal,

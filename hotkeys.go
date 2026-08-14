@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/unxed/vtui"
@@ -179,6 +180,117 @@ func FormatKeyForUI(key string) string {
 		parts = append(parts, key)
 	}
 	return strings.Join(parts, "+")
+}
+
+// NativeShortcutsForAction returns framework-owned shortcuts that still reach
+// action in area. Native keys are intentionally absent from Defaults, because
+// vtui must offer them to the focused frame before running its fallback. An
+// explicit user binding on the same key can nevertheless override or silence
+// that fallback, so do not advertise a native shortcut that is currently
+// claimed by another action (or by None).
+func NativeShortcutsForAction(area string, action Action) []string {
+	seen := make(map[string]bool)
+	var shortcuts []string
+	for _, spec := range action.NativeKeys {
+		key, condition, _ := strings.Cut(spec, ":")
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		if !nativeShortcutConditionTrue(area, condition) {
+			continue
+		}
+		if nativeShortcutOwnedByCurrentContext(action.Name, key) {
+			continue
+		}
+		if GlobalHotkeysMgr != nil {
+			bound := GlobalHotkeysMgr.GetAction(area, key)
+			if bound != "" && !strings.EqualFold(bound, action.Name) {
+				continue
+			}
+		}
+		formatted := FormatKeyForUI(key)
+		if formatted == "" || seen[formatted] {
+			continue
+		}
+		seen[formatted] = true
+		shortcuts = append(shortcuts, formatted)
+	}
+	sort.Strings(shortcuts)
+	return shortcuts
+}
+
+// nativeShortcutOwnedByCurrentContext filters framework fallbacks that never
+// reach the advertised action in the active frame. This is separate from
+// HotkeyManager overrides: these keys are consumed directly by the frame
+// before vtui gets a chance to apply its workspace/help fallback.
+func nativeShortcutOwnedByCurrentContext(actionName, key string) bool {
+	if vtui.FrameManager == nil {
+		return false
+	}
+	top := vtui.FrameManager.GetTopFrame()
+	if top == nil {
+		return false
+	}
+
+	// Ctrl+N's native implementation is an active-stack CmResize broadcast.
+	// It is truthful only when the current screen actually contains a panels
+	// frame. The palette action itself can still fork the nearest panels frame
+	// from editor/viewer/image/queue screens via actionWorkspaceNew.
+	if strings.EqualFold(actionName, "Workspace.New") && strings.EqualFold(key, "CtrlN") {
+		frames := vtui.FrameManager.GetActiveFrames(vtui.FrameManager.ActiveIdx)
+		hasPanels := false
+		for _, frame := range frames {
+			if panels, ok := frame.(*PanelsFrame); ok && !panels.closed {
+				hasPanels = true
+				break
+			}
+		}
+		if !hasPanels {
+			return true
+		}
+	}
+
+	switch frame := top.(type) {
+	case *ImageView:
+		// F12 belongs to the gallery while the image viewer is active, not to
+		// vtui's workspace list fallback.
+		return strings.EqualFold(key, "F12")
+	case *QueueFrame:
+		// An active queue swallows Ctrl+W to preserve running operations.
+		return strings.EqualFold(key, "CtrlW") && queueHasActiveTasks()
+	case *PanelsFrame:
+		terminalOwnsInput := !frame.showPanels &&
+			((frame.termView != nil && frame.termView.UseAltScreen) || frame.isPtyBusy())
+		if !terminalOwnsInput {
+			return false
+		}
+		// PanelsFrame explicitly releases workspace cycling and, when the
+		// preference is enabled, Ctrl+N before raw terminal forwarding.
+		if strings.EqualFold(key, "CtrlTab") || strings.EqualFold(key, "CtrlShiftTab") {
+			return false
+		}
+		if strings.EqualFold(key, "CtrlN") && AppConfig.TerminalCtrlNWorkspace {
+			return false
+		}
+		return true
+	}
+	return false
+}
+
+func nativeShortcutConditionTrue(area, condition string) bool {
+	condition = strings.TrimSpace(condition)
+	if condition == "" {
+		return true
+	}
+	switch strings.ToLower(condition) {
+	case "frameworknoterminalapp":
+		return !strings.EqualFold(area, "Terminal") || commandPaletteConditionTrue("NoTerminalApp")
+	case "terminalctrlnworkspace":
+		return !strings.EqualFold(area, "Terminal") || AppConfig.TerminalCtrlNWorkspace
+	default:
+		return commandPaletteConditionTrue(condition)
+	}
 }
 
 // initDefaults builds the default bindings from the action registry.
