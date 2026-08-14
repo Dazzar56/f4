@@ -68,6 +68,7 @@
     ├── attributes_dialog.go
     ├── attributes_dialog_unix.go
     ├── attributes_dialog_windows.go
+    ├── attributes_dialog_windows_test.go
     ├── attributes_test.go
     ├── background_jobs.go
     ├── background_jobs_session_test.go
@@ -79,6 +80,10 @@
     ├── bookmarks_test.go
     ├── child_env.go
     ├── child_env_test.go
+    ├── cloudfox_real_archive_test.go
+    ├── cloudfox_real_cross_cloud_test.go
+    ├── cloudfox_real_large_f5_test.go
+    ├── cloudfox_real_ui_test.go
     ├── colorer
     │   └── configs
     │       └── base
@@ -99,6 +104,14 @@
     ├── command_history_paths_test.go
     ├── command_line.go
     ├── command_line_test.go
+    ├── command_palette.go
+    ├── command_palette_i18n.go
+    ├── command_palette_i18n_test.go
+    ├── command_palette_search.go
+    ├── command_palette_search_test.go
+    ├── command_palette_test.go
+    ├── command_palette_ui.go
+    ├── command_palette_ui_test.go
     ├── command_prefix_registry.go
     ├── command_prefix_registry_test.go
     ├── command_quoting.go
@@ -133,8 +146,10 @@
     ├── editor_features_test.go
     ├── editor_find_all.go
     ├── editor_find_all_test.go
+    ├── editor_highlight_budget_test.go
     ├── editor_replace_confirm.go
     ├── editor_restore_keys_test.go
+    ├── editor_shiftdel_test.go
     ├── editor_target_line_test.go
     ├── editor_veto_test.go
     ├── editor_view_ads_test.go
@@ -447,7 +462,11 @@
     │   ├── archive
     │   │   ├── archive.go
     │   │   ├── archive_test.go
+    │   │   ├── extraction_security_test.go
+    │   │   ├── materialize.go
+    │   │   ├── production_regression_test.go
     │   │   ├── provider.go
+    │   │   ├── provider_special_unix_test.go
     │   │   ├── provider_test.go
     │   │   ├── repro_test.go
     │   │   ├── vfs.go
@@ -457,6 +476,68 @@
     │   ├── chroma
     │   │   ├── chroma.go
     │   │   └── chroma_test.go
+    │   ├── cloudfox
+    │   │   ├── cloud_vfs.go
+    │   │   ├── cloud_vfs_share_test.go
+    │   │   ├── cloud_vfs_test.go
+    │   │   ├── credential_scope.go
+    │   │   ├── credential_scope_test.go
+    │   │   ├── dialog.go
+    │   │   ├── dialog_google_test.go
+    │   │   ├── dialog_s3_test.go
+    │   │   ├── manager.go
+    │   │   ├── oauth.go
+    │   │   ├── password_prompt.go
+    │   │   ├── plugin.go
+    │   │   ├── plugin_test.go
+    │   │   ├── provider_capabilities_test.go
+    │   │   ├── provider_google.go
+    │   │   ├── provider_google_production_test.go
+    │   │   ├── provider_google_real_native_integration_test.go
+    │   │   ├── provider_google_share.go
+    │   │   ├── provider_google_share_test.go
+    │   │   ├── provider_google_test.go
+    │   │   ├── provider_helpers.go
+    │   │   ├── provider_helpers_test.go
+    │   │   ├── provider_mutation_test.go
+    │   │   ├── provider_real_diagnostics_test.go
+    │   │   ├── provider_real_saved_integration_test.go
+    │   │   ├── provider_real_semantics_test.go
+    │   │   ├── provider_real_sharing_integration_test.go
+    │   │   ├── provider_real_upload_cancellation_test.go
+    │   │   ├── provider_s3_discovery_core_test.go
+    │   │   ├── provider_s3_discovery_regression_test.go
+    │   │   ├── provider_s3.go
+    │   │   ├── provider_s3_real_discovery_test.go
+    │   │   ├── provider_s3_share.go
+    │   │   ├── provider_s3_share_test.go
+    │   │   ├── provider_s3_test.go
+    │   │   ├── provider_webdav_edge_test.go
+    │   │   ├── provider_webdav.go
+    │   │   ├── provider_webdav_integration_test.go
+    │   │   ├── provider_webdav_share.go
+    │   │   ├── provider_webdav_share_test.go
+    │   │   ├── provider_webdav_test.go
+    │   │   ├── provider_yandex_cache.go
+    │   │   ├── provider_yandex.go
+    │   │   ├── provider_yandex_info.go
+    │   │   ├── provider_yandex_production_test.go
+    │   │   ├── provider_yandex_share.go
+    │   │   ├── provider_yandex_share_test.go
+    │   │   ├── provider_yandex_test.go
+    │   │   ├── secrets.go
+    │   │   ├── secrets_test.go
+    │   │   ├── session.go
+    │   │   ├── store.go
+    │   │   ├── store_lock_unix.go
+    │   │   ├── store_lock_windows.go
+    │   │   ├── store_test.go
+    │   │   ├── test_main_test.go
+    │   │   ├── types.go
+    │   │   ├── uri.go
+    │   │   ├── uri_test.go
+    │   │   ├── vault.go
+    │   │   └── yandex_code_prompt.go
     │   ├── dummy_internal
     │   │   ├── dummy_internal.go
     │   │   └── dummy_internal_test.go
@@ -644,6 +725,8 @@
     ├── pty_bsd.go
     ├── pty_bsd_test.go
     ├── pty_darwin.go
+    ├── pty_diag_unix.go
+    ├── pty_diag_windows.go
     ├── pty_interface.go
     ├── pty_ptm.go
     ├── pty_ptm_netbsd.go
@@ -883,4 +966,4 @@
     ├── workspace_session.go
     └── workspace_session_test.go
     
-    55 directories, 827 files
+    56 directories, 909 files
