@@ -156,7 +156,7 @@ func ensureFonokaiSchema(configsDir string) {
 
   <assign name="def:String" fore="#ec6a2c"/>
   <assign name="def:StringContent" fore="#ec6a2c"/>
-  <assign name="def:StringEdge" fore="#a04020"/>
+  <assign name="def:StringEdge" fore="#ff5544"/>
   <assign name="def:CharacterContent" fore="#ec6a2c"/>
 
   <assign name="def:Comment" fore="#6a6458"/>
@@ -166,12 +166,12 @@ func ensureFonokaiSchema(configsDir string) {
   <assign name="def:Symbol" fore="#e6b450"/>
   <assign name="def:SymbolStrong" fore="#e6cf70"/>
   <assign name="def:Prefix" fore="#ec6a2c"/>
-  <assign name="def:PrefixStrong" fore="#a04020"/>
+  <assign name="def:PrefixStrong" fore="#ff5544"/>
 
   <assign name="def:Operator" fore="#e6b450"/>
 
-  <assign name="def:Keyword" fore="#a04020" style="1"/>
-  <assign name="def:KeywordStrong" fore="#a04020"/>
+  <assign name="def:Keyword" fore="#ff5544" style="1"/>
+  <assign name="def:KeywordStrong" fore="#ff5544"/>
   <assign name="def:ClassKeyword" fore="#e6cf70" style="1"/>
   <assign name="def:TypeKeyword" fore="#e6cf70"/>
 
@@ -184,10 +184,10 @@ func ensureFonokaiSchema(configsDir string) {
   <assign name="def:VarStrong" fore="#e6cf70"/>
   <assign name="def:Identifier" fore="#dbd3c4"/>
 
-  <assign name="def:Directive" fore="#a04020"/>
+  <assign name="def:Directive" fore="#ff5544"/>
   <assign name="def:Param" fore="#e6b450"/>
 
-  <assign name="def:Tag" fore="#a04020"/>
+  <assign name="def:Tag" fore="#ff5544"/>
   <assign name="def:OpenTag" fore="#ec6a2c"/>
   <assign name="def:CloseTag" fore="#ec6a2c"/>
 
