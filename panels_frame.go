@@ -842,6 +842,7 @@ func (pf *PanelsFrame) initPTY() {
 			p, err = NewPTY()
 			if err != nil {
 				vtui.DebugLog("PTY: Failed to allocate local PTY: %v", err)
+				logPTYDiagnostics()
 				pf.reportLocalPTYFailure()
 				return
 			}
