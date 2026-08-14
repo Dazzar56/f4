@@ -1702,7 +1702,7 @@ func init() {
 		LabelKey:    "Action.Editor.Quit",
 		Description: "Close editor",
 		DescKey:     "Action.Editor.Quit.Desc",
-		DefaultKeys: []string{"F10", "Esc", "F4"},
+		DefaultKeys: []string{"F10", "Esc"},
 		MenuPath:    "File",
 		Handler:     withEditor(func(ev *EditorView) { ev.tryClose() }),
 	})
@@ -1822,6 +1822,26 @@ func init() {
 		Handler: withEditor(func(ev *EditorView) {
 			ev.overtype = !ev.overtype
 			ev.ensureCursorVisible()
+		}),
+	})
+	RegisterAction(Action{
+		Name:        "Editor.HexMode",
+		Area:        "Editor",
+		Label:       "Hex Mode",
+		LabelKey:    "Action.Editor.HexMode",
+		Description: "Toggle hex view/edit",
+		DescKey:     "Action.Editor.HexMode.Desc",
+		DefaultKeys: []string{"F4"},
+		MenuPath:    "Options",
+		Checked:     editorState(func(ev *EditorView) bool { return ev.HexMode }),
+		Handler: withEditor(func(ev *EditorView) {
+			ev.HexMode = !ev.HexMode
+			if ev.HexMode {
+				ev.HexTopOffset = (ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos) &^ 0xF
+				ev.HexNibble = 0
+			}
+			ev.ensureCursorVisible()
+			vtui.FrameManager.Redraw()
 		}),
 	})
 

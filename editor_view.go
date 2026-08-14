@@ -62,6 +62,9 @@ type EditorView struct {
 	ScrollLeft   int // Горизонтальный скролл (когда WordWrap=false)
 
 	WordWrap         bool
+	HexMode          bool
+	HexTopOffset     int
+	HexNibble        int // 0 = high nibble, 1 = low nibble
 	overtype         bool
 	modified         bool
 	CursorLine       int // Текущая логическая строка (для плагинов)
@@ -322,6 +325,11 @@ func newEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string, useEditorC
 	ev.scrollBar = vtui.NewScrollBar(0, 0, 0)
 	ev.scrollBar.SetOwner(ev)
 	ev.scrollBar.OnScroll = func(v int) {
+		if ev.HexMode {
+			ev.HexTopOffset = v &^ 0xF
+			vtui.FrameManager.Redraw()
+			return
+		}
 		ev.ScrollTopRow = v
 		height := ev.Y2 - ev.Y1
 		if height > 0 {
@@ -355,6 +363,10 @@ func newEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string, useEditorC
 		},
 		func() string {
 			cpName := vfs.DisplayCodepageName(ev.Codepage)
+			if ev.HexMode {
+				absPos := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
+				return fmt.Sprintf(" %s │ Hex │ 0x%08X     ", cpName, absPos)
+			}
 			return fmt.Sprintf(" %s │ %d,%d     ", cpName, ev.CursorLine+1, ev.CursorPos)
 		},
 	)
@@ -813,6 +825,266 @@ func (ev *EditorView) updateDesiredVisualCol() {
 	_, vCol := ev.engine.LogicalToVisual(curOffset)
 	ev.DesiredVisualCol = vCol + ev.CursorVirtualSpaces
 }
+func (ev *EditorView) renderHex(scr *vtui.ScreenBuf, width, contentHeight int) {
+	bgAttr := ColorerEditorBaseAttr(vtui.Palette[ColEditorText])
+	offAttr := vtui.Palette[ColEditorStatus]
+	currOffset := ev.HexTopOffset
+	absPos := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
+
+	for y := 0; y < contentHeight; y++ {
+		if currOffset > ev.pt.Size() {
+			break
+		}
+		if currOffset == ev.pt.Size() && currOffset != 0 {
+			if absPos != currOffset {
+				break
+			}
+		}
+
+		take := 16
+		if currOffset+take > ev.pt.Size() {
+			take = ev.pt.Size() - currOffset
+		}
+
+		var data []byte
+		if take > 0 {
+			var err error
+			data, err = ev.pt.GetRange(currOffset, take)
+			if err == piecetable.ErrLoading {
+				scr.Write(ev.X1, ev.Y1+1+y, vtui.StringToCharInfo(" [ Loading... ] ", bgAttr))
+				break
+			}
+		}
+
+		line := fmt.Sprintf("%010X: ", currOffset)
+		scr.Write(ev.X1, ev.Y1+1+y, vtui.StringToCharInfo(line, offAttr))
+
+		// Hex part
+		for i := 0; i < 16; i++ {
+			cx := ev.X1 + 12 + i*3
+			if i >= 8 {
+				cx++
+			}
+			if i < len(data) {
+				hexStr := fmt.Sprintf("%02X", data[i])
+				scr.Write(cx, ev.Y1+1+y, vtui.StringToCharInfo(hexStr, bgAttr))
+			}
+
+			// Cursor
+			if ev.IsFocused() && currOffset+i == absPos {
+				scr.SetCursorPos(cx+ev.HexNibble, ev.Y1+1+y)
+				scr.SetCursorVisible(true)
+				scr.SetCursorShape(vtui.CursorShapeUnderline)
+			}
+		}
+
+		// EOF Cursor
+		if ev.IsFocused() && currOffset+len(data) == absPos && len(data) < 16 {
+			cx := ev.X1 + 12 + len(data)*3
+			if len(data) >= 8 {
+				cx++
+			}
+			scr.SetCursorPos(cx+ev.HexNibble, ev.Y1+1+y)
+			scr.SetCursorVisible(true)
+			scr.SetCursorShape(vtui.CursorShapeUnderline)
+		}
+
+		// ASCII part
+		asciiStartX := ev.X1 + 12 + 50
+		scr.Write(asciiStartX-2, ev.Y1+1+y, vtui.StringToCharInfo("│ ", offAttr))
+		for i := 0; i < len(data); i++ {
+			r := rune(data[i])
+			if r < 32 || r > 126 {
+				r = '.'
+			}
+			cellAttr := bgAttr
+			if ev.IsFocused() && currOffset+i == absPos {
+				cellAttr = vtui.Palette[vtui.ColDialogEditSelected]
+			}
+			scr.Write(asciiStartX+i, ev.Y1+1+y, []vtui.CharInfo{{Char: uint64(r), Attributes: cellAttr}})
+		}
+		currOffset += 16
+	}
+}
+
+func hexCharToByte(c rune) byte {
+	if c >= '0' && c <= '9' {
+		return byte(c - '0')
+	}
+	if c >= 'a' && c <= 'f' {
+		return byte(c - 'a' + 10)
+	}
+	if c >= 'A' && c <= 'F' {
+		return byte(c - 'A' + 10)
+	}
+	return 0
+}
+
+func (ev *EditorView) processKeyHex(e *vtinput.InputEvent) bool {
+	if !e.KeyDown {
+		return false
+	}
+	absPos := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
+	size := ev.pt.Size()
+
+	syncCursor := func() {
+		if absPos < 0 {
+			absPos = 0
+		}
+		if absPos > size {
+			absPos = size
+		}
+		ev.CursorLine = ev.li.GetLineAtOffset(absPos)
+		ev.CursorPos = absPos - ev.li.GetLineOffset(ev.CursorLine)
+		ev.ensureCursorVisible()
+		vtui.FrameManager.Redraw()
+	}
+
+	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
+	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
+
+	switch e.VirtualKeyCode {
+	case vtinput.VK_LEFT:
+		if ev.HexNibble == 1 {
+			ev.HexNibble = 0
+		} else if absPos > 0 {
+			absPos--
+			ev.HexNibble = 1
+		}
+		syncCursor()
+		return true
+	case vtinput.VK_RIGHT:
+		if absPos == size {
+			return true
+		}
+		if ev.HexNibble == 0 {
+			ev.HexNibble = 1
+		} else if absPos < size {
+			absPos++
+			ev.HexNibble = 0
+		}
+		syncCursor()
+		return true
+	case vtinput.VK_UP:
+		if absPos >= 16 {
+			absPos -= 16
+		} else {
+			absPos = 0
+		}
+		syncCursor()
+		return true
+	case vtinput.VK_DOWN:
+		if absPos+16 <= size {
+			absPos += 16
+		} else {
+			absPos = size
+		}
+		syncCursor()
+		return true
+	case vtinput.VK_HOME:
+		if ctrl {
+			absPos = 0
+		} else {
+			absPos = absPos &^ 0xF
+		}
+		ev.HexNibble = 0
+		syncCursor()
+		return true
+	case vtinput.VK_END:
+		if ctrl {
+			absPos = size
+		} else {
+			absPos = (absPos &^ 0xF) + 15
+			if absPos > size {
+				absPos = size
+			}
+		}
+		ev.HexNibble = 0
+		syncCursor()
+		return true
+	case vtinput.VK_PRIOR:
+		height := ev.Y2 - ev.Y1
+		absPos -= 16 * height
+		syncCursor()
+		return true
+	case vtinput.VK_NEXT:
+		height := ev.Y2 - ev.Y1
+		absPos += 16 * height
+		syncCursor()
+		return true
+	case vtinput.VK_DELETE:
+		if !shift && !ctrl && absPos < size {
+			ev.noteBufferEdit()
+			ev.saveUndo(opOther)
+			ev.modified = true
+			ev.pt.Delete(absPos, 1)
+			ev.li.UpdateAfterDelete(absPos, 1)
+			ev.clearCaches()
+			size--
+			syncCursor()
+		}
+		return true
+	case vtinput.VK_BACK:
+		if absPos > 0 {
+			ev.noteBufferEdit()
+			ev.saveUndo(opOther)
+			ev.modified = true
+			ev.pt.Delete(absPos-1, 1)
+			ev.li.UpdateAfterDelete(absPos-1, 1)
+			ev.clearCaches()
+			absPos--
+			size--
+			syncCursor()
+		}
+		return true
+	}
+
+	if (e.Char >= '0' && e.Char <= '9') || (e.Char >= 'a' && e.Char <= 'f') || (e.Char >= 'A' && e.Char <= 'F') {
+		val := hexCharToByte(e.Char)
+		ev.noteBufferEdit()
+		ev.saveUndo(opTyping)
+		ev.modified = true
+
+		if absPos == size {
+			b := byte(0)
+			if ev.HexNibble == 0 {
+				b = val << 4
+			} else {
+				b = val
+			}
+			ev.pt.Insert(absPos, []byte{b})
+			ev.li.UpdateAfterInsert(absPos, []byte{b})
+			size++
+		} else {
+			data, _ := ev.pt.GetRange(absPos, 1)
+			b := byte(0)
+			if len(data) > 0 {
+				b = data[0]
+			}
+			if ev.HexNibble == 0 {
+				b = (b & 0x0F) | (val << 4)
+			} else {
+				b = (b & 0xF0) | val
+			}
+			ev.pt.Delete(absPos, 1)
+			ev.li.UpdateAfterDelete(absPos, 1)
+			ev.pt.Insert(absPos, []byte{b})
+			ev.li.UpdateAfterInsert(absPos, []byte{b})
+		}
+		ev.clearCaches()
+
+		if ev.HexNibble == 0 {
+			ev.HexNibble = 1
+		} else {
+			ev.HexNibble = 0
+			absPos++
+		}
+		syncCursor()
+		return true
+	}
+
+	return false
+}
 
 func (ev *EditorView) Show(scr *vtui.ScreenBuf) {
 	ev.ScreenObject.Show(scr)
@@ -893,6 +1165,24 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 		if cx >= ev.X1 && cx < ev.X1+width {
 			scr.FillRect(cx, ev.Y1+1, cx, ev.Y2, ' ', vertCrossAttr)
 		}
+	}
+
+	if ev.HexMode {
+		ev.renderHex(scr, width, height-1)
+		if ev.scrollBar != nil && ev.pt.Size() > 0 {
+			maxOffset := int(ev.pt.Size())
+			contentHeight := ev.Y2 - ev.Y1
+			if contentHeight > 0 {
+				lastLineOffset := int((ev.pt.Size() - 1) &^ 0xF)
+				maxOffset = lastLineOffset - (contentHeight-1)*16
+				if maxOffset < 0 {
+					maxOffset = 0
+				}
+			}
+			ev.scrollBar.SetParams(ev.HexTopOffset, 0, maxOffset)
+			ev.scrollBar.Show(scr)
+		}
+		return
 	}
 
 	scr.PushClipRect(ev.X1, ev.Y1+1, ev.X1+width-1, ev.Y2)
@@ -1219,6 +1509,21 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 			}
 		}
 		return true
+	}
+
+	if ev.HexMode {
+		if ev.processKeyHex(e) {
+			return true
+		}
+		// Prevent fallthrough to text editing keys
+		switch e.VirtualKeyCode {
+		case vtinput.VK_F1, vtinput.VK_F2, vtinput.VK_F3, vtinput.VK_F4, vtinput.VK_F5, vtinput.VK_F6, vtinput.VK_F7, vtinput.VK_F8, vtinput.VK_F9, vtinput.VK_F10, vtinput.VK_F11, vtinput.VK_F12:
+			return false // Let global hotkeys handle it
+		}
+		if MacroMgr.LookupHotkey(e) {
+			return true
+		}
+		return true // Consume all other keys in Hex mode so they don't insert text
 	}
 
 	// 3. Regular key processing
@@ -2070,6 +2375,23 @@ func (ev *EditorView) scrollViewBy(delta int) {
 func (ev *EditorView) ensureCursorVisible() {
 	if ev.targetLine != -1 {
 		return // Skip clamping and scrolling while waiting for the target line to be indexed
+	}
+
+	if ev.HexMode {
+		height := ev.Y2 - ev.Y1
+		if height <= 0 {
+			return
+		}
+		absPos := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
+		row := absPos / 16
+		topRow := ev.HexTopOffset / 16
+
+		if row < topRow {
+			ev.HexTopOffset = row * 16
+		} else if row >= topRow+height {
+			ev.HexTopOffset = (row - height + 1) * 16
+		}
+		return
 	}
 
 	// Safety constraints for binary files or corrupted indices

@@ -738,6 +738,40 @@ func TestEditorView_HomeEnd(t *testing.T) {
 		t.Errorf("Home failed: expected pos 0, got %d", ev.CursorPos)
 	}
 }
+func TestEditorView_HexModeToggleAndTyping(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pt := piecetable.New([]byte("abc"))
+	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
+	ev.SetPosition(0, 0, 80, 24)
+
+	vtui.FrameManager.Push(ev)
+
+	// Toggle Hex Mode
+	RunAction("Editor.HexMode")
+	if !ev.HexMode {
+		t.Fatal("HexMode should be true")
+	}
+
+	// 'a' is 0x61. Let's type '4' '1' to change it to 'A' (0x41)
+	ev.CursorPos = 0
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: '4'})
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: '1'})
+
+	if pt.String() != "Abc" {
+		t.Errorf("Hex typing failed, got %q", pt.String())
+	}
+
+	if ev.CursorPos != 1 || ev.HexNibble != 0 {
+		t.Errorf("Cursor did not advance correctly after hex typing, got pos %d, nibble %d", ev.CursorPos, ev.HexNibble)
+	}
+
+	// Test navigation (left by nibble)
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_LEFT})
+	if ev.CursorPos != 0 || ev.HexNibble != 1 {
+		t.Errorf("Left arrow in hex mode failed, got pos %d, nibble %d", ev.CursorPos, ev.HexNibble)
+	}
+}
 
 func TestEditorView_WideCharBackspace(t *testing.T) {
 	// "A世" -> 'A' (1), '世' (3 bytes)
