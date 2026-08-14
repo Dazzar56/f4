@@ -118,6 +118,39 @@ func TestOSVFS_Symlinks(t *testing.T) {
 		t.Error("Symlink entry not found in ReadDir")
 	}
 }
+func TestOSVFS_Lstat(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Symlinks on Windows require special privileges")
+	}
+
+	tmpDir := t.TempDir()
+	v := NewOSVFS(tmpDir)
+
+	targetFile := filepath.Join(tmpDir, "target.txt")
+	os.WriteFile(targetFile, []byte("hello world"), 0644)
+
+	linkFile := filepath.Join(tmpDir, "link.txt")
+	os.Symlink(targetFile, linkFile)
+
+	statItem, err := v.Stat(context.Background(), linkFile)
+	if err != nil {
+		t.Fatalf("Stat failed: %v", err)
+	}
+	if statItem.Size != 11 {
+		t.Errorf("Stat on symlink should give target size 11, got %d", statItem.Size)
+	}
+
+	lstatItem, err := v.Lstat(context.Background(), linkFile)
+	if err != nil {
+		t.Fatalf("Lstat failed: %v", err)
+	}
+	if !lstatItem.IsSymlink {
+		t.Error("Lstat item should have IsSymlink = true")
+	}
+	if lstatItem.Size == 11 {
+		t.Errorf("Lstat on symlink should give symlink size (len of target path), got target size %d", lstatItem.Size)
+	}
+}
 
 func TestOSVFS_Capabilities(t *testing.T) {
 	vfs := NewOSVFS(".")

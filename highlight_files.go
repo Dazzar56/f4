@@ -22,6 +22,7 @@ const (
 	AttrReadOnly
 	AttrSystem
 	AttrArchive
+	AttrSymlink
 )
 
 type DateType int
@@ -230,6 +231,8 @@ func parseAttrFlags(s string) AttrFlags {
 			flags |= AttrSystem
 		case "archive", "arc":
 			flags |= AttrArchive
+		case "symlink", "link", "sym", "l":
+			flags |= AttrSymlink
 		}
 	}
 	return flags
@@ -262,19 +265,21 @@ func (r *HighlightRule) Match(item *vfs.VFSItem) bool {
 			return isSystem == set
 		case AttrArchive:
 			return isArchive == set
+		case AttrSymlink:
+			return item.IsSymlink == set
 		}
 		return true
 	}
 
 	// Проверка AttrSet (должны присутствовать)
-	for _, f := range []AttrFlags{AttrDirectory, AttrHidden, AttrExecutable, AttrReadOnly, AttrSystem, AttrArchive} {
+	for _, f := range []AttrFlags{AttrDirectory, AttrHidden, AttrExecutable, AttrReadOnly, AttrSystem, AttrArchive, AttrSymlink} {
 		if r.AttrSet&f != 0 && !matchAttr(f, true) {
 			return false
 		}
 	}
 
 	// Проверка AttrClear (должны отсутствовать)
-	for _, f := range []AttrFlags{AttrDirectory, AttrHidden, AttrExecutable, AttrReadOnly, AttrSystem, AttrArchive} {
+	for _, f := range []AttrFlags{AttrDirectory, AttrHidden, AttrExecutable, AttrReadOnly, AttrSystem, AttrArchive, AttrSymlink} {
 		if r.AttrClear&f != 0 && !matchAttr(f, false) {
 			return false
 		}

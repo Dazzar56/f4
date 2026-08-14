@@ -56,6 +56,31 @@ func TestHighlightRule_MatchAttributes(t *testing.T) {
 		}
 	}
 }
+func TestHighlightRule_MatchSymlinkAttribute(t *testing.T) {
+	ruleSym := HighlightRule{
+		AttrSet: AttrSymlink,
+	}
+
+	tests := []struct {
+		item vfs.VFSItem
+		want bool
+	}{
+		{vfs.VFSItem{Name: "link_file", IsSymlink: true}, true},
+		{vfs.VFSItem{Name: "link_dir", IsDir: true, IsSymlink: true}, true},
+		{vfs.VFSItem{Name: "normal_file", IsSymlink: false}, false},
+	}
+
+	for _, tt := range tests {
+		if got := ruleSym.Match(&tt.item); got != tt.want {
+			t.Errorf("Rule Match on symlink attribute failed for %q: got %v, want %v", tt.item.Name, got, tt.want)
+		}
+	}
+
+	parsed := parseAttrFlags("symlink,link,sym,l")
+	if parsed&AttrSymlink == 0 {
+		t.Error("parseAttrFlags failed to parse symlink flag")
+	}
+}
 
 func TestFileHighlighter_GetColor(t *testing.T) {
 	vtui.SetDefaultPalette()

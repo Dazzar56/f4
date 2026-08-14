@@ -906,6 +906,24 @@ type SymlinkVFS interface {
 	Symlink(ctx context.Context, target, linkPath string) error
 }
 
+// Readlink is a helper that calls Readlink if VFS implements SymlinkVFS.
+func Readlink(ctx context.Context, v VFS, path string) (string, error) {
+	if s, ok := v.(SymlinkVFS); ok {
+		return s.Readlink(ctx, path)
+	}
+	return "", os.ErrInvalid
+}
+
+// Lstat is a helper that calls Lstat if VFS implements Lstat, otherwise falls back to Stat.
+func Lstat(ctx context.Context, v VFS, path string) (VFSItem, error) {
+	if l, ok := v.(interface {
+		Lstat(ctx context.Context, path string) (VFSItem, error)
+	}); ok {
+		return l.Lstat(ctx, path)
+	}
+	return v.Stat(ctx, path)
+}
+
 // RandomWriteVFS is implemented by backends that can write at an offset
 // without being handed the whole file.
 //

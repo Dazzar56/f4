@@ -84,6 +84,9 @@ func (f *fileEntry) displayName(name string) string {
 	if AppConfig.ShowHighlightMarks {
 		marker = GlobalFileHighlighter.GetMarker(&f.VFSItem)
 	}
+	if marker == "" && f.IsSymlink {
+		marker = "→"
+	}
 	prefix := ""
 	if f.IsDir {
 		if AppConfig.ShowDirPrefix {
@@ -2223,15 +2226,25 @@ func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
 					sizeStr = formatIntWithSpaces(e.Size)
 				} else if e.Name == ".." {
 					sizeStr = "UP-DIR"
+				} else if e.IsSymlink {
+					sizeStr = "<LNK-DIR>"
 				} else {
 					sizeStr = "<DIR>"
 				}
+			} else if e.IsSymlink {
+				sizeStr = "<LNK>"
 			} else {
 				sizeStr = formatIntWithSpaces(e.Size)
 			}
 
 			rightStr := fmt.Sprintf("%s  %s", sizeStr, dateStr)
 			nameStr := e.Name
+
+			if e.IsSymlink && fp.vfs != nil {
+				if target, err := vfs.Readlink(context.Background(), fp.vfs, fp.vfs.Join(fp.vfs.GetPath(), e.Name)); err == nil && target != "" {
+					nameStr = e.Name + " -> " + target
+				}
+			}
 
 			availW := (fp.X2 - 1) - (fp.X1 + 1) + 1
 			rightW := runewidth.StringWidth(rightStr)

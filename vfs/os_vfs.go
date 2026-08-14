@@ -280,6 +280,46 @@ func (v *OSVFS) Stat(ctx context.Context, path string) (VFSItem, error) {
 }
 
 func (v *OSVFS) Join(elem ...string) string { return filepath.Join(elem...) }
+func (v *OSVFS) Lstat(ctx context.Context, path string) (VFSItem, error) {
+	if ctx.Err() != nil {
+		return VFSItem{}, ctx.Err()
+	}
+	preparedPath := prepareOSPath(path)
+	info, err := os.Lstat(preparedPath)
+	if err != nil {
+		if os.IsPermission(err) && globalSudoClient.IsAvailable() {
+			item, sudoErr := globalSudoClient.Stat(prepareOSPath(path))
+			if sudoErr == nil {
+				return item, nil
+			}
+		}
+		return VFSItem{}, err
+	}
+	isSymlink := info.Mode()&os.ModeSymlink != 0 || isReparsePoint(info)
+	isDir := info.IsDir()
+	if isSymlink {
+		if target, err := os.Stat(preparedPath); err == nil {
+			isDir = target.IsDir()
+		}
+	}
+
+	item := VFSItem{
+		Name:         info.Name(),
+		Size:         info.Size(),
+		SizeKnown:    true,
+		IsDir:        isDir,
+		IsSymlink:    isSymlink,
+		MTime:        info.ModTime(),
+		UnixMode:     uint32(info.Mode().Perm()),
+		IsExecutable: info.Mode().Perm()&0111 != 0,
+		IsHidden:     isHidden(path, info.Name(), info),
+	}
+
+	fillPlatformTimes(&item, info)
+	fillPhysicalSize(&item, info, preparedPath)
+
+	return item, nil
+}
 
 func (v *OSVFS) Abs(path string) (string, error) {
 	if filepath.IsAbs(path) {
@@ -352,7 +392,11 @@ func (v *OSVFS) SetAttributes(ctx context.Context, path string, item VFSItem) er
 	var errOwn error
 	if runtime.GOOS != "windows" {
 		if item.Uid != -1 && item.Gid != -1 {
-			errOwn = os.Chown(prepareOSPath(path), item.Uid, item.Gid)
+			if item.IsSymlink {
+				errOwn = os.Lchown(prepareOSPath(path), item.Uid, item.Gid)
+			} else {
+				errOwn = os.Chown(prepareOSPath(path), item.Uid, item.Gid)
+			}
 		}
 	}
 

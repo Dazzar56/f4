@@ -53,6 +53,9 @@ func isLocalOSVFS(v any) bool {
 }
 
 func ShowAttributesDialog(pf *PanelsFrame, v vfs.VFS, path string, item vfs.VFSItem) {
+	if litem, err := vfs.Lstat(context.Background(), v, path); err == nil && litem.IsSymlink {
+		item = litem
+	}
 	caps := v.GetCapabilities()
 	if !caps.HasUnixPermissions {
 		showAttributesWindows(pf, v, path, item)
@@ -62,8 +65,10 @@ func ShowAttributesDialog(pf *PanelsFrame, v vfs.VFS, path string, item vfs.VFSI
 }
 
 func showAttributesUnix(pf *PanelsFrame, v vfs.VFS, path string, item vfs.VFSItem) {
-	// Увеличиваем высоту до 24, чтобы кнопкам было просторно
 	width, height := 70, 24
+	if item.IsSymlink {
+		height = 26
+	}
 
 	dlg := vtui.NewCenteredDialog(width, height, Msg("Attributes.Title"))
 	dlg.ShowClose = true
@@ -81,6 +86,19 @@ func showAttributesUnix(pf *PanelsFrame, v vfs.VFS, path string, item vfs.VFSIte
 		t := vtui.NewText(0, 0, l, vtui.Palette[vtui.ColDialogText])
 		dlg.AddItem(t)
 		mainVBox.Add(t, vtui.Margins{}, vtui.AlignCenter)
+	}
+
+	var editTarget *vtui.Edit
+	if item.IsSymlink {
+		targetVal, _ := vfs.Readlink(context.Background(), v, path)
+		editTarget = vtui.NewEdit(0, 0, 35, targetVal)
+		lblTarget := vtui.NewLabel(0, 0, padLabel("T&arget:"), editTarget)
+		rowTarget := vtui.NewHBoxLayout(0, 0, 66, 1)
+		rowTarget.Add(lblTarget, vtui.Margins{Left: 2, Right: 1}, vtui.AlignLeft)
+		rowTarget.Add(editTarget, vtui.Margins{}, vtui.AlignFill)
+		dlg.AddItem(lblTarget)
+		dlg.AddItem(editTarget)
+		mainVBox.Add(rowTarget, vtui.Margins{Top: 1}, vtui.AlignFill)
 	}
 
 	// Ownership Group
@@ -247,6 +265,17 @@ func showAttributesUnix(pf *PanelsFrame, v vfs.VFS, path string, item vfs.VFSIte
 	}
 
 	btnSet.OnClick = func() {
+		if item.IsSymlink && editTarget != nil {
+			newTarget := editTarget.GetText()
+			oldTarget, _ := vfs.Readlink(context.Background(), v, path)
+			if newTarget != "" && newTarget != oldTarget {
+				if symVFS, ok := v.(vfs.SymlinkVFS); ok {
+					_ = v.Remove(context.Background(), path)
+					_ = symVFS.Symlink(context.Background(), newTarget, path)
+				}
+			}
+		}
+
 		uidStr := editOwner.GetText()
 		if u, err := user.Lookup(uidStr); err == nil {
 			item.Uid, _ = strconv.Atoi(u.Uid)

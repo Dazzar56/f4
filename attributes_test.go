@@ -735,6 +735,40 @@ func TestShowAttributesDialog_Dispatch(t *testing.T) {
 		vtui.FrameManager.Pop()
 	}
 }
+func TestAttributesDialog_SymlinkTarget(t *testing.T) {
+	fm := vtui.FrameManager
+	fm.Init(vtui.NewSilentScreenBuf())
+
+	tmpDir := t.TempDir()
+	targetPath := filepath.Join(tmpDir, "target.txt")
+	os.WriteFile(targetPath, []byte("target"), 0644)
+	linkPath := filepath.Join(tmpDir, "link.txt")
+	_ = os.Symlink(targetPath, linkPath)
+
+	v := vfs.NewOSVFS(tmpDir)
+	litem, err := v.Lstat(context.Background(), "link.txt")
+	if err != nil {
+		t.Fatalf("Lstat failed: %v", err)
+	}
+
+	showAttributesUnix(nil, v, "link.txt", litem)
+	dlg := fm.GetTopFrame().(vtui.Container)
+
+	var editTarget *vtui.Edit
+	walkUI(dlg.(vtui.UIElement), func(el vtui.UIElement) bool {
+		if e, ok := el.(*vtui.Edit); ok && strings.Contains(e.GetText(), "target.txt") {
+			editTarget = e
+			return false
+		}
+		return true
+	})
+
+	if editTarget == nil {
+		t.Error("Symlink target edit box not found in Unix attributes dialog")
+	}
+	fm.GetTopFrame().SetExitCode(-1)
+	fm.Pop()
+}
 
 func TestAttributesDialog_WindowsSetTime(t *testing.T) {
 	fm := vtui.FrameManager

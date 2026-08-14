@@ -4580,6 +4580,20 @@ NormalColor = foreground:#00FF00
 		t.Errorf("Marker integration in GetCellText failed: got %q, want %q", text, expectedText)
 	}
 }
+func TestFileEntry_SymlinkDisplayNameAndStatus(t *testing.T) {
+	vtui.SetDefaultPalette()
+	SetDefaultF4Palette()
+
+	entryFile := &fileEntry{VFSItem: vfs.VFSItem{Name: "link_file", IsSymlink: true}}
+	entryDir := &fileEntry{VFSItem: vfs.VFSItem{Name: "link_dir", IsDir: true, IsSymlink: true}}
+
+	if got := entryFile.displayName(entryFile.Name); !strings.Contains(got, "→") {
+		t.Errorf("Symlink file displayName = %q, want it to contain '→'", got)
+	}
+	if got := entryDir.displayName(entryDir.Name); !strings.Contains(got, "→") {
+		t.Errorf("Symlink dir displayName = %q, want it to contain '→'", got)
+	}
+}
 
 func TestFileSystemPanel_BottomFrameShowsCursorEntry(t *testing.T) {
 	vtui.SetDefaultPalette()
