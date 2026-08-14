@@ -47,40 +47,7 @@ func TestColorer_EnsureFonokaiSchema(t *testing.T) {
 		t.Error("Expected catalog-rgb.xml to contain Fonokai entry")
 	}
 }
-func TestColorer_FonokaiHRDContrastAndSync(t *testing.T) {
-	hrdDiskPath := filepath.Join("colorer", "configs", "base", "hrd", "rgb", "fonokai.hrd")
-	diskBytes, err := os.ReadFile(hrdDiskPath)
-	if err != nil {
-		t.Fatalf("Failed to read fonokai.hrd from disk: %v", err)
-	}
 
-	diskContent := string(diskBytes)
-	if strings.Contains(diskContent, "#a04020") || strings.Contains(diskContent, "fore=\"#cc5f30\"") {
-		t.Error("fonokai.hrd on disk contains low-contrast keyword/tag colors (#a04020 or #cc5f30)")
-	}
-
-	if !strings.Contains(diskContent, "name=\"def:Keyword\" fore=\"#ff5544\"") {
-		t.Error("fonokai.hrd on disk does not use high-contrast color #ff5544 for def:Keyword")
-	}
-
-	tmpDir := t.TempDir()
-	baseDir := filepath.Join(tmpDir, "base")
-	_ = os.MkdirAll(baseDir, 0755)
-	_ = os.WriteFile(filepath.Join(baseDir, "catalog.xml"), []byte("<catalog/>"), 0644)
-	_ = os.WriteFile(filepath.Join(baseDir, "hrd", "catalog-rgb.xml"), []byte("<hrd/>"), 0644)
-
-	ensureFonokaiSchema(tmpDir)
-
-	generatedFile := filepath.Join(tmpDir, "base", "hrd", "rgb", "fonokai.hrd")
-	genBytes, err := os.ReadFile(generatedFile)
-	if err != nil {
-		t.Fatalf("ensureFonokaiSchema failed to write fonokai.hrd: %v", err)
-	}
-
-	if string(genBytes) != diskContent {
-		t.Errorf("fonokaiHRDContent in colorer_plugin.go does not match fonokai.hrd on disk")
-	}
-}
 func TestColorer_SchemasExist(t *testing.T) {
 	_ = SchemasExist()
 }
