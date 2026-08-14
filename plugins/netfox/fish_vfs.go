@@ -88,6 +88,14 @@ type fishConn struct {
 	mu     sync.Mutex
 	refs   int
 	closed bool
+
+	// key is set once, at construction, on a connection built for a real
+	// site (see NewFishVFS). It is what tells fishConn.release whether a
+	// connection whose last view just closed belongs in the pool or should
+	// simply be shut down — a connection built on a bare stream, with no
+	// site of its own to be reopened, carries the zero key and is never
+	// pooled.
+	key fishPoolKey
 }
 
 // ErrNoDialer is what a reconnect answers when nobody told the connection how
@@ -186,17 +194,23 @@ func (c *fishConn) retain() {
 
 func (c *fishConn) release() error {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	c.refs--
 	if c.refs > 0 || c.closed {
+		c.mu.Unlock()
 		return nil
 	}
-	c.closed = true
-	// Stopped before the session goes away, so the loop does not send a noop
-	// into a stream that is being torn down. It does not wait, so closing a
-	// panel never blocks on the far side.
-	c.ka.Stop()
-	return c.client.Session().Close()
+	key := c.key
+	c.mu.Unlock()
+
+	if key.valid() {
+		// Keep the session running rather than closing it: the pool's own
+		// idle timer decides when it has genuinely gone unused for too
+		// long, which is what step 18 asks for. Closing a panel therefore
+		// never blocks on the far side either way.
+		globalFishPool.park(c, key)
+		return nil
+	}
+	return c.shutdown()
 }
 
 // NewFishVFSOnStream completes the handshake on an already established pair
@@ -475,6 +489,11 @@ func sshFishDialerWith(host, port, user, pass string, timeout int, px netproxy.S
 // rebuilt after the connection drops; a site opened any other way would have
 // to be reopened by hand.
 func NewFishVFS(parent vfs.VFS, host, port, user, pass string, timeout int, px netproxy.Settings) (*FishVFS, error) {
+	key := fishPoolKey{host: host, port: port, user: user, proxy: px}
+	if conn := globalFishPool.take(key); conn != nil {
+		return newFishVFSFromPooledConn(parent, conn, host, port, user), nil
+	}
+
 	vtui.DebugLog("NET: Initiating FISH+ connection to %s:%s (user: %s)", host, port, user)
 	title := host
 	if user != "" {
@@ -499,6 +518,9 @@ func NewFishVFS(parent vfs.VFS, host, port, user, pass string, timeout int, px n
 	v.host = host
 	v.port = port
 	v.user = user
+	v.conn.mu.Lock()
+	v.conn.key = key
+	v.conn.mu.Unlock()
 	vtui.DebugLog("NET: FISH+ session established, features: %s", v.client().Session().Features().Raw)
 	return v, nil
 }
