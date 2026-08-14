@@ -539,6 +539,35 @@ func TestUpdater_AutoCheckSkipsSessionDismiss(t *testing.T) {
 	}
 }
 
+func TestUpdater_WriteFileSafe_FallbackOldName(t *testing.T) {
+	tmpDir := t.TempDir()
+	targetPath := filepath.Join(tmpDir, "binary.exe")
+	oldPath := targetPath + ".old"
+
+	if err := os.WriteFile(targetPath, []byte("v1"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Make os.Remove(oldPath) fail by creating a directory
+	if err := os.Mkdir(oldPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	err := writeFileSafe(targetPath, strings.NewReader("v2"), 0755)
+	if err != nil {
+		t.Fatalf("writeFileSafe failed with fallback: %v", err)
+	}
+
+	b, _ := os.ReadFile(targetPath)
+	if string(b) != "v2" {
+		t.Errorf("Expected 'v2', got %q", string(b))
+	}
+
+	b, _ = os.ReadFile(oldPath + ".1")
+	if string(b) != "v1" {
+		t.Errorf("Expected old file to be renamed to .old.1, got %q", string(b))
+	}
+}
 func TestUpdater_WriteFileSafe(t *testing.T) {
 	tmpDir := t.TempDir()
 	targetPath := filepath.Join(tmpDir, "binary.exe")

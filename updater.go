@@ -333,6 +333,20 @@ func writeFileSafe(targetPath string, r io.Reader, mode os.FileMode) error {
 		_ = vfs.GetSudoClient().Remove(oldPath)
 	}
 
+	if _, err := os.Stat(oldPath); err == nil {
+		for i := 1; i < 1000; i++ {
+			cand := fmt.Sprintf("%s.%d", oldPath, i)
+			err := os.Remove(cand)
+			if err != nil && os.IsPermission(err) && vfs.GetSudoClient().IsAvailable() {
+				_ = vfs.GetSudoClient().Remove(cand)
+			}
+			if _, err := os.Stat(cand); os.IsNotExist(err) {
+				oldPath = cand
+				break
+			}
+		}
+	}
+
 	if _, err := os.Stat(targetPath); err == nil {
 		errRename := os.Rename(targetPath, oldPath)
 		if errRename != nil && os.IsPermission(errRename) && vfs.GetSudoClient().IsAvailable() {
