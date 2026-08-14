@@ -104,14 +104,22 @@
     ├── command_history_paths_test.go
     ├── command_line.go
     ├── command_line_test.go
+    ├── command_palette_drives.go
+    ├── command_palette_drives_test.go
+    ├── command_palette_dynamic_test.go
+    ├── command_palette_frames.go
     ├── command_palette.go
     ├── command_palette_i18n.go
     ├── command_palette_i18n_test.go
+    ├── command_palette_macros.go
+    ├── command_palette_panels.go
+    ├── command_palette_prefixes.go
     ├── command_palette_search.go
     ├── command_palette_search_test.go
     ├── command_palette_test.go
     ├── command_palette_ui.go
     ├── command_palette_ui_test.go
+    ├── command_palette_workspace.go
     ├── command_prefix_registry.go
     ├── command_prefix_registry_test.go
     ├── command_quoting.go
@@ -194,6 +202,8 @@
     ├── fkeys_hidden_panels_test.go
     ├── folder_history_actions_test.go
     ├── folder_history_navigation_test.go
+    ├── framework_actions.go
+    ├── framework_actions_test.go
     ├── fs_info_darwin.go
     ├── fs_info.go
     ├── fs_info_linux.go
@@ -461,6 +471,7 @@
     │   │   └── sync_vfs_test.go
     │   ├── archive
     │   │   ├── archive.go
+    │   │   ├── archive_plugin_test.go
     │   │   ├── archive_test.go
     │   │   ├── extraction_security_test.go
     │   │   ├── materialize.go
@@ -668,6 +679,7 @@
     │   │   ├── lang_test.go
     │   │   ├── netfox.go
     │   │   ├── netfox_test.go
+    │   │   ├── plugin_contributions_test.go
     │   │   ├── proxy_dialog.go
     │   │   ├── registry.go
     │   │   ├── sftp_command_test.go
@@ -783,6 +795,8 @@
     ├── solaris_streams_mock_other_test.go
     ├── solaris_streams_mock_test.go
     ├── solaris_streams_test.go
+    ├── static_direct_actions.go
+    ├── static_direct_actions_test.go
     ├── style_combo_colors_test.go
     ├── style_completeness_test.go
     ├── style_default_dark_test.go
@@ -875,6 +889,10 @@
     │   ├── codepages_windows.go
     │   ├── contributions.go
     │   ├── destination_overwrite_test.go
+    │   ├── disks_unix.go
+    │   ├── disks_vfs.go
+    │   ├── disks_vfs_test.go
+    │   ├── disks_windows.go
     │   ├── hidden_unix.go
     │   ├── hidden_windows.go
     │   ├── isabs_test.go
@@ -966,4 +984,4 @@
     ├── workspace_session.go
     └── workspace_session_test.go
     
-    56 directories, 909 files
+    56 directories, 927 files
