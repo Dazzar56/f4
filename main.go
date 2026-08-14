@@ -214,9 +214,11 @@ Usage: f4 [switches]
 The following switches may be used in the command line:
  -h or --help               This help and exit
  -v or --version            Displays the current version and exit
- --debug                    Debug mode
- --gui [Backend]            Force run in GUI-mode
- --log
+ --debug                    Debug mode (equivalent --log=1)
+ --gui [Backend]            Force run in GUI-mode,
+                            (Backend may be: gogpu or ebiten or x11 or wayland,
+                            if Backend omited, f4 try to use the most suitable)
+ --log [logtype]
  --server [serverPath]
  --client [clientPath]
  --input [InputMode]
