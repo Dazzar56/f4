@@ -40,7 +40,7 @@ func TestStartIndexingSkipsHexAndDecodeModes(t *testing.T) {
 		hex  bool
 		deco bool
 	}{{"hex", true, false}, {"decode", false, true}} {
-		ev := newEditorView(pt, nil, "", false)
+		ev := newEditorView(pt, nil, "", false, true)
 		ev.HexMode, ev.DecodeMode = tc.hex, tc.deco
 		ev.targetLine = 1
 		ev.StartIndexing()

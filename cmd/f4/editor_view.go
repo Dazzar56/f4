@@ -323,12 +323,28 @@ func (ev *EditorView) Close() {
 }
 
 func NewEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string) *EditorView {
-	return newEditorView(pt, v, path, true)
+	return newEditorView(pt, v, path, true, true)
 }
 
-func newEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string, useEditorConfig bool) *EditorView {
+// NewEditorViewIndexedLater builds an editor with an empty line index, for a
+// file whose index StartIndexing owns: one backed by a mapping or by a chunk
+// buffer.
+//
+// Building it here would mean reading the whole file before the editor can
+// appear, on the thread that would have to draw it — which is what opening a
+// mapped 8 GB file used to do, for twenty seconds. The background scan reads
+// the same bytes without holding the UI, reports progress, and can be
+// cancelled; there is no reason to do the work twice, and every reason not to
+// do it here.
+func NewEditorViewIndexedLater(pt *piecetable.PieceTable, v vfs.VFS, path string) *EditorView {
+	return newEditorView(pt, v, path, true, false)
+}
+
+func newEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string, useEditorConfig, buildIndex bool) *EditorView {
 	li := piecetable.NewLineIndex()
-	li.Rebuild(pt)
+	if buildIndex {
+		li.Rebuild(pt)
+	}
 	ev := &EditorView{
 		pt:              pt,
 		li:              li,
@@ -2889,6 +2905,48 @@ func nextIndexPoll(cur time.Duration) time.Duration {
 	return next
 }
 
+// indexReadChunk is how much of the file the scan asks for at a time when it
+// reads the file rather than the mapping. Large enough that the kernel reads
+// ahead of it, small enough that cancelling the scan is still immediate.
+const indexReadChunk = 4 << 20
+
+// readIndexChunk fills dst with the file's own bytes for a stretch of the text,
+// and reports false when the scan should read that stretch through the piece
+// table instead.
+//
+// A mapped file can be scanned by walking the mapping, which is what the piece
+// table hands out — but walking it means a page fault per page, and each fault
+// waits for its own page. Asking the file for megabytes at a time is the same
+// bytes at the speed the disk can actually deliver them: indexing the 8 GB test
+// file goes from ~18 s to ~4 s, and the difference is entirely the reading.
+//
+// The mapping is not disturbed. It stays what the paint path and the search
+// scan read, where a window onto the file is exactly what is wanted.
+//
+// The answer is false unless the stretch still sits untouched in the original
+// buffer, so text that has been typed is scanned through the piece table as
+// before, and the offsets keep describing the buffer rather than the file.
+func (ev *EditorView) readIndexChunk(ctx context.Context, dst []byte, offset, length int) (int, bool) {
+	if dst == nil || ev.file == nil || length <= 0 || length > len(dst) {
+		return 0, false
+	}
+	fileOffset, ok := ev.pt.OriginalRange(offset, length)
+	if !ok {
+		return 0, false
+	}
+	n, err := ev.file.ReadAt(ctx, dst[:length], int64(fileOffset))
+	if n <= 0 {
+		if err != nil {
+			vtui.DebugLog("EDITOR_INDEX: reading %d bytes at %d failed, scanning the buffer instead: %v",
+				length, fileOffset, err)
+		}
+		return 0, false
+	}
+	// A short read is still progress: the scan takes what arrived and comes
+	// back for the rest.
+	return n, true
+}
+
 func (ev *EditorView) StartIndexing() {
 	// Hex/decode render by byte offset: the index is only needed if the user
 	// switches back to text, and scanning a big binary is a full read.
@@ -3044,6 +3102,15 @@ func (ev *EditorView) StartIndexing() {
 		scannedTo.Store(int64(absPos))
 		chunkSize := 256 * 1024 // 256KB chunks to match AsyncBuffer
 
+		// A mapped file is scanned by reading it, not by walking the mapping:
+		// see readIndexChunk. The buffer that read lands in is allocated once
+		// for the whole scan.
+		var scanBuf []byte
+		if ev.mapped != nil && ev.file != nil {
+			chunkSize = indexReadChunk
+			scanBuf = make([]byte, chunkSize)
+		}
+
 		pendingOffsets := make([]int, 0, 10000)
 
 		for absPos < maxSize {
@@ -3074,7 +3141,9 @@ func (ev *EditorView) StartIndexing() {
 			var data []byte
 			var err error
 			take := min(chunkSize, maxSize-absPos)
-			if view, ok := ev.pt.View(absPos, take); ok {
+			if n, ok := ev.readIndexChunk(ctx, scanBuf, absPos, take); ok {
+				data = scanBuf[:n]
+			} else if view, ok := ev.pt.View(absPos, take); ok {
 				data = view
 			} else {
 				data, err = ev.pt.GetRange(absPos, take)

@@ -33,7 +33,7 @@ func TestIndexRestore_ResolvesForFullyReadFile(t *testing.T) {
 	drainPendingTasks()
 
 	pt := piecetable.New([]byte("line one\nline two\nline three\nline four\nline five\n"))
-	ev := newEditorView(pt, nil, "", false)
+	ev := newEditorView(pt, nil, "", false, true)
 	ev.targetLine = 3
 	ev.targetPos = 2
 	ev.targetTopRow = 3
@@ -58,7 +58,7 @@ func TestIndexStatus_ReachesCompleteAndNotifies(t *testing.T) {
 
 	content, _, _ := bigSearchCorpus()
 	pt, buf := lazyEditorBuffer(t, content)
-	ev := newEditorView(pt, nil, "", false)
+	ev := newEditorView(pt, nil, "", false, true)
 	ev.asyncBuf = buf
 
 	var phases []IndexPhase
@@ -101,7 +101,7 @@ func TestIndexStatus_ResumesAfterAnEdit(t *testing.T) {
 
 	content, _, _ := bigSearchCorpus()
 	pt, buf := lazyEditorBuffer(t, content)
-	ev := newEditorView(pt, nil, "", false)
+	ev := newEditorView(pt, nil, "", false, true)
 	ev.asyncBuf = buf
 
 	ev.StartIndexing()
@@ -141,7 +141,7 @@ func TestEnsureIndexedTo_ResolvesAMatchPastTheScan(t *testing.T) {
 	needleOff := len(content)
 	content += "NEEDLE here\n"
 
-	ev := newEditorView(piecetable.New([]byte(content)), nil, "", false)
+	ev := newEditorView(piecetable.New([]byte(content)), nil, "", false, true)
 	// An index that stopped early, which is what a scan in progress looks like.
 	ev.li.Rebuild(piecetable.New([]byte(content[:1000])))
 	ev.setIndexStatus(IndexStatus{Phase: IndexScanning, Total: int64(len(content))})

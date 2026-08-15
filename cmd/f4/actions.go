@@ -757,7 +757,15 @@ func showEditor(pf *PanelsFrame, v vfs.VFS, path string, f vfs.ReadAtCloser) {
 		pt = piecetable.New(nil)
 	}
 
-	editor := NewEditorView(pt, v, path)
+	// A mapped or lazily loaded file is indexed by StartIndexing below; anything
+	// else — an empty buffer, or a file decoded into memory — has its index
+	// built with it, as it always has.
+	var editor *EditorView
+	if mapped != nil || buf != nil {
+		editor = NewEditorViewIndexedLater(pt, v, path)
+	} else {
+		editor = NewEditorView(pt, v, path)
+	}
 	editor.Codepage = cpID
 	// StartIndexing skips hex, so binary files open without a line scan.
 	if _, isDisks := v.(*vfs.DisksVFS); isDisks || binary {

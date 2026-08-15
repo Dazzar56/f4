@@ -393,6 +393,33 @@ func (pt *PieceTable) View(offset, length int) ([]byte, bool) {
 	return v.View(p.Start+offInPiece, length)
 }
 
+// OriginalRange reports where a stretch of the text sits in the original
+// buffer, and false when it does not sit there in one piece. It answers what
+// View answers, minus the bytes.
+//
+// That is the whole point of it: a caller who has another way of reading the
+// original — the descriptor of the file the buffer was made from — can read
+// the range for itself instead of through the buffer. The answer is only yes
+// for a range inside one untouched Original piece, so the bytes at that
+// position are the bytes of that range no matter what has been typed elsewhere.
+func (pt *PieceTable) OriginalRange(offset, length int) (int, bool) {
+	pt.mu.RLock()
+	defer pt.mu.RUnlock()
+	if offset < 0 || length <= 0 || offset+length > pt.size {
+		return 0, false
+	}
+
+	idx, offInPiece := pt.offsetToPiece(offset)
+	if idx >= len(pt.pieces) {
+		return 0, false
+	}
+	p := pt.pieces[idx]
+	if p.Buf != Original || offInPiece+length > p.Length {
+		return 0, false
+	}
+	return p.Start + offInPiece, true
+}
+
 // GetRange returns a byte slice for the specified range.
 func (pt *PieceTable) GetRange(offset, length int) ([]byte, error) {
 	pt.mu.RLock()

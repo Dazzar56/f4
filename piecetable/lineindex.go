@@ -1,5 +1,6 @@
 package piecetable
 
+import "bytes"
 import "sort"
 import "sync"
 
@@ -318,11 +319,17 @@ func (li *LineIndex) Rebuild(pt *PieceTable) {
 
 	absPos := 0
 	pt.ForEachRange(func(data []byte) error {
-		for i, b := range data {
-			if b == '\n' {
-				// Next line starts immediately after the newline character
-				li.appendOffset(absPos + i + 1)
+		// IndexByte finds a newline a machine word at a time, where looking at
+		// every byte in turn looks at every byte in turn.
+		pos := 0
+		for pos < len(data) {
+			idx := bytes.IndexByte(data[pos:], '\n')
+			if idx < 0 {
+				break
 			}
+			// Next line starts immediately after the newline character
+			li.appendOffset(absPos + pos + idx + 1)
+			pos += idx + 1
 		}
 		absPos += len(data)
 		return nil

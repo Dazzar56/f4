@@ -3418,7 +3418,7 @@ func TestEditorViewCreateNewSaveDoesNotReplaceRacingDestination(t *testing.T) {
 		filesystem.mu.Unlock()
 	}
 
-	editor := newEditorView(piecetable.New([]byte("generated report")), filesystem, filesystem.original, false)
+	editor := newEditorView(piecetable.New([]byte("generated report")), filesystem, filesystem.original, false, true)
 	editor.modified = true
 	editor.unsavedBaseline = true
 	editor.createNewTarget = true
@@ -3443,7 +3443,7 @@ func TestEditorViewCreateNewSaveRejectsVFSWithoutAtomicNoReplace(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	filesystem := newEditorCloudSaveVFS(nil)
 	delete(filesystem.data, filesystem.original)
-	editor := newEditorView(piecetable.New([]byte("generated report")), filesystem, filesystem.original, false)
+	editor := newEditorView(piecetable.New([]byte("generated report")), filesystem, filesystem.original, false, true)
 	editor.modified = true
 	editor.unsavedBaseline = true
 	editor.createNewTarget = true
