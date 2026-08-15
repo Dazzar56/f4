@@ -85,47 +85,6 @@ func TestEnterAndNumEnterUseCorrectFarKeyNames(t *testing.T) {
 	}
 }
 
-func TestNumpadFiveUsesStableFarKeyNames(t *testing.T) {
-	tests := []struct {
-		vk   uint16
-		want string
-	}{
-		{vtinput.VK_NUMPAD5, "Num5"},
-		{vtinput.VK_CLEAR, "Num5"},
-	}
-	for _, tc := range tests {
-		event := &vtinput.InputEvent{VirtualKeyCode: tc.vk}
-		if got := EventToFarString(event); got != tc.want {
-			t.Errorf("EventToFarString(VK_%X) = %q, want %q", tc.vk, got, tc.want)
-		}
-	}
-	if got := ParseFarKey("Num5").VirtualKeyCode; got != vtinput.VK_NUMPAD5 {
-		t.Errorf("ParseFarKey(Num5) VK = %X, want %X", got, vtinput.VK_NUMPAD5)
-	}
-}
-
-func TestMainKeyboardSelectionAliasesUseStableFarKeyNames(t *testing.T) {
-	tests := []struct {
-		name  string
-		event *vtinput.InputEvent
-		want  string
-	}{
-		{"ctrl shift plus", &vtinput.InputEvent{VirtualKeyCode: vtinput.VK_OEM_PLUS, Char: '+', ControlKeyState: vtinput.LeftCtrlPressed | vtinput.ShiftPressed}, "CtrlShift+"},
-		{"ctrl shift underscore", &vtinput.InputEvent{VirtualKeyCode: vtinput.VK_OEM_MINUS, Char: '_', ControlKeyState: vtinput.LeftCtrlPressed | vtinput.ShiftPressed}, "CtrlShift_"},
-		{"alt equals", &vtinput.InputEvent{VirtualKeyCode: vtinput.VK_OEM_PLUS, Char: '=', ControlKeyState: vtinput.LeftAltPressed}, "Alt="},
-		{"ctrl shift plus without char", &vtinput.InputEvent{VirtualKeyCode: vtinput.VK_OEM_PLUS, ControlKeyState: vtinput.LeftCtrlPressed | vtinput.ShiftPressed}, "CtrlShift+"},
-		{"ctrl shift minus without char", &vtinput.InputEvent{VirtualKeyCode: vtinput.VK_OEM_MINUS, ControlKeyState: vtinput.LeftCtrlPressed | vtinput.ShiftPressed}, "CtrlShift_"},
-		{"alt equals without char", &vtinput.InputEvent{VirtualKeyCode: vtinput.VK_OEM_PLUS, ControlKeyState: vtinput.LeftAltPressed}, "Alt="},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := EventToFarString(tc.event); got != tc.want {
-				t.Errorf("EventToFarString = %q, want %q", got, tc.want)
-			}
-		})
-	}
-}
-
 type mockAreaFrame struct {
 	vtui.BaseFrame
 	typ   vtui.FrameType

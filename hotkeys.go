@@ -140,41 +140,22 @@ func (hm *HotkeyManager) GetActiveBindings() map[string]map[string]string {
 
 // GetKeyForAction searches for a key combination bound to the given action in an area.
 func (hm *HotkeyManager) GetKeyForAction(area, actionName string) string {
-	areas := []string{area}
+	if binds, ok := hm.Bindings[area]; ok {
+		for key, binding := range binds {
+			parts := strings.SplitN(binding, ":", 2)
+			if strings.EqualFold(parts[0], actionName) {
+				return key
+			}
+		}
+	}
 	if area != "Common" {
-		areas = append(areas, "Common")
-	}
-	bindingMatches := func(binding string) bool {
-		name, _, _ := strings.Cut(binding, ":")
-		return strings.EqualFold(name, actionName)
-	}
-
-	// Preserve the action author's ordering for aliases. In particular, F3
-	// must remain the displayed shortcut when Num5 is added as an alternative;
-	// iterating the bindings map directly would choose either at random.
-	if action, ok := GetAction(actionName); ok {
-		for _, keySpec := range action.DefaultKeys {
-			key, _, _ := strings.Cut(keySpec, ":")
-			for _, candidateArea := range areas {
-				if bindingMatches(hm.Bindings[candidateArea][key]) {
+		if binds, ok := hm.Bindings["Common"]; ok {
+			for key, binding := range binds {
+				parts := strings.SplitN(binding, ":", 2)
+				if strings.EqualFold(parts[0], actionName) {
 					return key
 				}
 			}
-		}
-	}
-
-	// Custom bindings have no registry ordering, so sort them to keep menus,
-	// help and tests stable across processes.
-	for _, candidateArea := range areas {
-		var keys []string
-		for key, binding := range hm.Bindings[candidateArea] {
-			if bindingMatches(binding) {
-				keys = append(keys, key)
-			}
-		}
-		if len(keys) > 0 {
-			sort.Strings(keys)
-			return keys[0]
 		}
 	}
 	return ""
