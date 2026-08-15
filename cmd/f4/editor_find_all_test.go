@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -730,5 +732,98 @@ func TestEditorFindAll_F4DumpCapped(t *testing.T) {
 	want := "1: unit one\n2: unit two\n" + fmt.Sprintf(Msg("Search.AllEditorMore"), 2) + "\n"
 	if string(data) != want {
 		t.Errorf("dump mismatch:\n got %q\nwant %q", string(data), want)
+	}
+}
+
+// openMappedFindAllEditor opens a real file the way showEditor opens a mapped
+// one: the index is empty on arrival and the background scan fills it.
+func openMappedFindAllEditor(t *testing.T, content string) *EditorView {
+	t.Helper()
+	vtui.SetDefaultPalette()
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+	drainPendingTasks()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "occurrences.txt")
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	ev := openMappedEditor(t, dir, path)
+	t.Cleanup(func() { ev.Close() })
+	ev.SetPosition(0, 0, 80, 24)
+	return ev
+}
+
+// findAllCorpus is big enough that the scan of it is still running when the
+// search over it finishes, which is the case the waiting exists for.
+func findAllCorpus() string {
+	var sb strings.Builder
+	sb.WriteString("Unit 15 The Avenue\nno match here\nUnited Kingdom\n")
+	for sb.Len() < 16<<20 {
+		sb.WriteString("filler line with nothing of interest in it\n")
+	}
+	sb.WriteString("unit again\n")
+	return sb.String()
+}
+
+// TestEditorFindAll_WaitsForTheLineIndex is the bug that opening a file
+// without indexing it first introduced: the list resolves the line of every
+// row against the live index, so a list opened while the scan was still
+// running reported every occurrence on line 1, with the whole file as the text
+// of the line.
+func TestEditorFindAll_WaitsForTheLineIndex(t *testing.T) {
+	content := findAllCorpus()
+	ev := openMappedFindAllEditor(t, content)
+	ev.StartIndexing() // as showEditor does, and then straight into the search
+
+	frame := openFindAllMenu(t, ev, "unit", false, false, false)
+	if frame == nil {
+		t.Fatal("no occurrences frame appeared")
+	}
+	if !ev.indexIsComplete() {
+		t.Errorf("the list opened against an index that is still %v", ev.indexStatus.Phase)
+	}
+
+	rows := paintFindAll(t, frame)
+	if len(rows) < 3 {
+		t.Fatalf("painted %d rows, want at least 3", len(rows))
+	}
+	lastLine := strings.Count(content, "\n")
+	want := []string{
+		"     1│1│ Unit 15 The Avenue",
+		"     3│1│ United Kingdom",
+		fmt.Sprintf("%6d│1│ unit again", lastLine),
+	}
+	for i, w := range want {
+		if got := strings.TrimRight(rows[i], " "); got != w {
+			t.Errorf("row %d = %q, want %q", i, got, w)
+		}
+	}
+}
+
+// TestEditorFindAll_ResolvesWithNoScanRunning covers the other half: there is
+// not always a scan to wait for — one cancelled by an edit leaves the index
+// short until the resume fires — and a list must not open on offsets the index
+// cannot place either way.
+func TestEditorFindAll_ResolvesWithNoScanRunning(t *testing.T) {
+	content := "Unit 15 The Avenue\nno match here\nUnited Kingdom\n" +
+		strings.Repeat("filler\n", 50) + "unit again\n"
+	ev := openMappedFindAllEditor(t, content)
+	if ev.li.LineCount() != 1 {
+		t.Fatalf("precondition: index holds %d lines, want an empty one", ev.li.LineCount())
+	}
+
+	frame := openFindAllMenu(t, ev, "unit", false, false, false)
+	if frame == nil {
+		t.Fatal("no occurrences frame appeared")
+	}
+	rows := paintFindAll(t, frame)
+	want := []string{" 1│1│ Unit 15 The Avenue", " 3│1│ United Kingdom", "54│1│ unit again"}
+	for i, w := range want {
+		if got := strings.TrimRight(rows[i], " "); got != w {
+			t.Errorf("row %d = %q, want %q", i, got, w)
+		}
 	}
 }

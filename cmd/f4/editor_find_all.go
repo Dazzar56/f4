@@ -448,12 +448,20 @@ func (ev *EditorView) FindAll(pattern string, caseSensitive, useRegex, wholeWord
 				uniqueLines = countMatchLines(ctx, bytes, spans)
 			}
 
+			// The list is a window onto these offsets and asks the index for
+			// the line of each row as it paints it, so it cannot open before
+			// the index can answer.
+			indexed := true
+			if err == nil && len(spans) > 0 {
+				indexed = ev.awaitIndexForResults(ctx)
+			}
+
 			ctx.RunOnUI(func() {
 				// Closing the dialog cancels the task via OnResult; read the
 				// state before Close so normal completions still deliver.
 				canceled := ctx.Err() != nil
 				dlg.Close()
-				if canceled {
+				if canceled || !indexed {
 					return
 				}
 				if err != nil {
@@ -474,6 +482,15 @@ func (ev *EditorView) FindAll(pattern string, caseSensitive, useRegex, wholeWord
 }
 
 func (ev *EditorView) showFindAllMenu(pattern string, data []byte, spans []matchSpan, uniqueLines int) {
+	// Every row is resolved against the index as it is painted, so the index
+	// has to reach the last occurrence before the list opens. The task waited
+	// for a running scan to get there; this covers the case where there was no
+	// scan to wait for, by counting the remainder here — the same gap-filling
+	// a search match gets in selectFoundPattern.
+	if len(spans) > 0 {
+		ev.ensureIndexedTo(spans[len(spans)-1].Off)
+	}
+
 	menuTitle := " " + fmt.Sprintf(Msg("Search.AllStatistics"), len(spans), uniqueLines) + " "
 	menu := vtui.NewVMenu(menuTitle)
 	// The menu holds no items: it is a window onto the spans, and everything

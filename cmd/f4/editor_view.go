@@ -3559,6 +3559,54 @@ func (ev *EditorView) noteBufferEdit() {
 	ev.scheduleIndexResume()
 }
 
+// awaitIndexForResults blocks a search task until the line index holds as much
+// of the buffer as it is ever going to: either it describes all of it, or
+// nothing is filling it any more.
+//
+// A search reads the whole buffer, but it reports what it found as lines and
+// columns, and those come from the index. Asking an index that stops short
+// about an offset past its end answers with its last line and a column counted
+// from there — so a Find All list opened while a file was still being scanned
+// put every occurrence on line 1, with the whole file as its text. Waiting for
+// the scan that is already reading those bytes is also what keeps the reading
+// off the UI thread: the alternative, counting the gap when the answer is
+// needed, is the freeze this whole change set exists to remove.
+//
+// It reports false when the wait ended for any other reason — the task was
+// cancelled, or the editor closed under it.
+func (ev *EditorView) awaitIndexForResults(ctx *vtui.TaskContext) bool {
+	// Buffered, so that a late notification never blocks the UI thread on a
+	// task that has already given up.
+	ready := make(chan bool, 1)
+
+	ctx.RunOnUI(func() {
+		if ev.IsDone() {
+			ready <- false
+			return
+		}
+		// Nothing scanning means nothing is coming: an editor over a buffer
+		// held in memory has its index built with it and never starts one.
+		if ev.indexIsComplete() || !ev.indexing {
+			ready <- true
+			return
+		}
+		var unsubscribe func()
+		unsubscribe = ev.SubscribeIndex(func(IndexStatus) {
+			if ev.indexIsComplete() || !ev.indexing {
+				unsubscribe()
+				ready <- true
+			}
+		})
+	})
+
+	select {
+	case ok := <-ready:
+		return ok
+	case <-ctx.Done():
+		return false
+	}
+}
+
 // ensureIndexedTo extends the line index far enough to describe offset, when
 // the running scan has not reached it yet. It counts newlines from the last
 // line the index knows about, which is the same work the scan would do — done
@@ -5463,10 +5511,11 @@ func (ev *EditorView) Search(pattern string, caseSensitive, reverse, regexp, who
 					caseSensitive, reverse, next, startOff)
 				logSearchDelegation(ok, searchPattern)
 				if ok {
+					indexed := off == -1 || ev.awaitIndexForResults(ctx)
 					ctx.RunOnUI(func() {
 						canceled := ctx.Err() != nil
 						dlg.Close()
-						if canceled || ev.editSession != session {
+						if canceled || !indexed || ev.editSession != session {
 							return
 						}
 						ev.selectFoundPattern(off, mLen)
@@ -5496,13 +5545,20 @@ func (ev *EditorView) Search(pattern string, caseSensitive, reverse, regexp, who
 				return
 			}
 
+			// The match is about to become a cursor position, which is a line
+			// and a column the index has to answer for.
+			indexed := true
+			if foundOffset != -1 {
+				indexed = ev.awaitIndexForResults(ctx)
+			}
+
 			ctx.RunOnUI(func() {
 				// Closing the dialog cancels the task via OnResult, so the
 				// cancellation state must be read first: a search the user
 				// dismissed neither jumps nor complains.
 				canceled := ctx.Err() != nil
 				dlg.Close()
-				if canceled {
+				if canceled || !indexed {
 					return
 				}
 				if foundOffset != -1 {
