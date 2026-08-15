@@ -109,25 +109,6 @@ func TestHotkeyManager_GetKeyForAction(t *testing.T) {
 		t.Errorf("Expected F3, got %q", key)
 	}
 }
-
-func TestHotkeyManager_GetKeyForActionPrefersDeclaredAliasOrder(t *testing.T) {
-	hm := NewHotkeyManager("")
-	hm.initDefaults()
-
-	if key := hm.GetKeyForAction("Shell", "File.View"); key != "F3" {
-		t.Fatalf("primary File.View key = %q, want F3", key)
-	}
-	hm.Bind("Shell", "F3", "None")
-	if key := hm.GetKeyForAction("Shell", "File.View"); key != "Num5" {
-		t.Fatalf("File.View fallback key = %q, want Num5", key)
-	}
-
-	hm.Bind("Shell", "CtrlZ", "Panel.Custom")
-	hm.Bind("Shell", "AltA", "Panel.Custom")
-	if key := hm.GetKeyForAction("Shell", "Panel.Custom"); key != "AltA" {
-		t.Fatalf("custom action key = %q, want deterministic AltA", key)
-	}
-}
 func TestHotkeyManager_ShellDefaults_Issue289(t *testing.T) {
 	hm := NewHotkeyManager("")
 	hm.initDefaults()

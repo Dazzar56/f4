@@ -3393,50 +3393,6 @@ func (fp *FileSystemPanel) ApplyMaskSelection(mask string, state bool) {
 	vtui.FrameManager.Redraw()
 }
 
-// ApplyCurrentExtensionSelection selects or deselects every item whose
-// extension matches the item under the cursor. When the current item is a
-// directory, all directories are treated as one group; ".." is never marked.
-func (fp *FileSystemPanel) ApplyCurrentExtensionSelection(state bool) {
-	idx := fp.GetCursorIndex()
-	if idx < 0 || idx >= len(fp.entries) {
-		return
-	}
-	current := fp.entries[idx]
-	if current.Name == ".." {
-		return
-	}
-	if current.IsDir {
-		fp.SaveSelection()
-		for i, entry := range fp.entries {
-			if entry.Name != ".." && entry.IsDir {
-				fp.SetItemSelected(i, state)
-			}
-		}
-		vtui.FrameManager.Redraw()
-		return
-	}
-
-	extension := ""
-	if !current.NoExtension {
-		extension = filepath.Ext(current.Name)
-	}
-
-	fp.SaveSelection()
-	for i, entry := range fp.entries {
-		if entry.Name == ".." || entry.IsDir {
-			continue
-		}
-		entryExtension := ""
-		if !entry.NoExtension {
-			entryExtension = filepath.Ext(entry.Name)
-		}
-		if strings.EqualFold(entryExtension, extension) {
-			fp.SetItemSelected(i, state)
-		}
-	}
-	vtui.FrameManager.Redraw()
-}
-
 func (fp *FileSystemPanel) GetSuccessorName() string {
 	if len(fp.entries) <= 1 {
 		return ".."
