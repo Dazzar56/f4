@@ -75,6 +75,7 @@ var farKeyNames = map[uint16]string{
 	vtinput.VK_MULTIPLY: "Multiply",
 	vtinput.VK_ADD:      "Add",
 	vtinput.VK_SUBTRACT: "Subtract",
+	vtinput.VK_NUMPAD5:  "Num5",
 	vtinput.VK_DECIMAL:  "Decimal",
 	vtinput.VK_DIVIDE:   "Divide",
 }
@@ -93,6 +94,38 @@ func EventToFarString(e *vtinput.InputEvent) string {
 	}
 
 	vk := e.VirtualKeyCode
+	ctrl := mods.Contains(vtinput.LeftCtrlPressed)
+	alt := mods.Contains(vtinput.LeftAltPressed)
+	shift := mods.Contains(vtinput.ShiftPressed)
+	// Normalize keypad 5 with Num Lock off and main-keyboard +/- aliases.
+	// Several backends omit Char for modified OEM keys, but users should see
+	// and configure one stable Far-style name rather than backend-specific VKs.
+	if vk == vtinput.VK_CLEAR && !ctrl && !alt && !shift {
+		sb.WriteString("Num5")
+		return sb.String()
+	}
+	if vk == vtinput.VK_OEM_PLUS && !alt {
+		if ctrl && shift {
+			sb.WriteRune('+')
+			return sb.String()
+		}
+		if ctrl && !shift {
+			sb.WriteRune('=')
+			return sb.String()
+		}
+	}
+	if vk == vtinput.VK_OEM_PLUS && alt && !ctrl && !shift {
+		sb.WriteRune('=')
+		return sb.String()
+	}
+	if vk == vtinput.VK_OEM_MINUS && ctrl && !alt {
+		if shift {
+			sb.WriteRune('_')
+		} else {
+			sb.WriteRune('-')
+		}
+		return sb.String()
+	}
 	// Windows marks the numeric-keypad Enter as enhanced, while the main
 	// keyboard Enter is not enhanced. Delete is the opposite: the navigation
 	// cluster key is enhanced and the keypad decimal/delete key is not.
@@ -216,6 +249,10 @@ func ParseFarKey(s string) *vtinput.InputEvent {
 				e.VirtualKeyCode = vtinput.VK_OEM_MINUS
 			case '=':
 				e.VirtualKeyCode = vtinput.VK_OEM_PLUS
+			case '+':
+				e.VirtualKeyCode = vtinput.VK_OEM_PLUS
+			case '_':
+				e.VirtualKeyCode = vtinput.VK_OEM_MINUS
 			case '/':
 				e.VirtualKeyCode = vtinput.VK_OEM_2
 			case '`', '~':

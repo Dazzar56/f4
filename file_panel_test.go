@@ -60,6 +60,59 @@ func TestFileEntry_GetCellText(t *testing.T) {
 	}
 }
 
+func TestFileSystemPanel_ApplyCurrentExtensionSelection(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	fp := &FileSystemPanel{
+		vfs:            vfs.NewOSVFS(t.TempDir()),
+		table:          vtui.NewTable(0, 0, 40, 10, nil),
+		selectedItems:  make(map[string]bool),
+		selectionEpoch: make(map[string]uint64),
+		entries: []*fileEntry{
+			{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
+			{VFSItem: vfs.VFSItem{Name: "one.TXT"}},
+			{VFSItem: vfs.VFSItem{Name: "two.txt"}},
+			{VFSItem: vfs.VFSItem{Name: "archive.tar.gz"}},
+			{VFSItem: vfs.VFSItem{Name: "folder.txt", IsDir: true}},
+			{VFSItem: vfs.VFSItem{Name: "other", IsDir: true}},
+			{VFSItem: vfs.VFSItem{Name: "README"}},
+			{VFSItem: vfs.VFSItem{Name: "virtual.txt", NoExtension: true}},
+		},
+	}
+	fp.SetCursorIndex(1)
+	fp.ApplyCurrentExtensionSelection(true)
+
+	for i, want := range []bool{false, true, true, false, false, false, false, false} {
+		if got := fp.entries[i].Selected; got != want {
+			t.Errorf("entry %q selected = %v, want %v", fp.entries[i].Name, got, want)
+		}
+	}
+
+	fp.ApplyCurrentExtensionSelection(false)
+	if fp.entries[1].Selected || fp.entries[2].Selected {
+		t.Fatal("deselect-current-extension left matching files selected")
+	}
+
+	// Extension-less files form their own group. A VFS row marked NoExtension
+	// belongs to that group even when its display name contains a dot.
+	fp.SetCursorIndex(6)
+	fp.ApplyCurrentExtensionSelection(true)
+	if !fp.entries[6].Selected || !fp.entries[7].Selected {
+		t.Fatal("extension-less selection did not respect NoExtension semantics")
+	}
+
+	// A directory under the cursor selects all directories regardless of dots
+	// in their names, while leaving files and the parent entry unchanged.
+	fp.SetCursorIndex(4)
+	fp.ApplyCurrentExtensionSelection(true)
+	if !fp.entries[4].Selected || !fp.entries[5].Selected || fp.entries[0].Selected {
+		t.Fatal("directory selection did not select all folders or selected parent entry")
+	}
+	fp.ApplyCurrentExtensionSelection(false)
+	if fp.entries[4].Selected || fp.entries[5].Selected {
+		t.Fatal("directory deselection left folders selected")
+	}
+}
+
 func TestFileEntry_HighlightDir(t *testing.T) {
 	vtui.SetDefaultPalette()
 	SetDefaultF4Palette()
