@@ -55,6 +55,38 @@ func TestActionRegistry(t *testing.T) {
 		t.Error("RunAction should return false for missing action")
 	}
 }
+
+func TestPanelNumpadAndExtensionSelectionDefaultKeys(t *testing.T) {
+	tests := []struct {
+		action string
+		keys   []string
+	}{
+		{"File.View", []string{"F3", "Num5", "VK_C"}},
+		{"Panel.SelectGroup", []string{"Add", "CtrlShift+", "CtrlShift=", "CtrlShiftVK_BB"}},
+		{"Panel.DeselectGroup", []string{"Subtract", "CtrlShift_", "CtrlShift-", "CtrlShiftVK_BD"}},
+		{"Panel.InvertSelection", []string{"Multiply", "Alt=", "AltVK_BB"}},
+		{"Panel.SelectCurrentExtension", []string{"CtrlAdd", "Ctrl=", "CtrlVK_BB"}},
+		{"Panel.DeselectCurrentExtension", []string{"CtrlSubtract", "Ctrl-", "CtrlVK_BD"}},
+	}
+	for _, tc := range tests {
+		action, ok := GetAction(tc.action)
+		if !ok {
+			t.Fatalf("action %q is not registered", tc.action)
+		}
+		for _, want := range tc.keys {
+			found := false
+			for _, got := range action.DefaultKeys {
+				if got == want {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("action %q is missing default key %q: %v", tc.action, want, action.DefaultKeys)
+			}
+		}
+	}
+}
 func TestRegistry_HexModeAndWorkspaceActions(t *testing.T) {
 	a, ok := GetAction("Editor.HexMode")
 	if !ok {

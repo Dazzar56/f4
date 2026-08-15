@@ -75,6 +75,7 @@ var farKeyNames = map[uint16]string{
 	vtinput.VK_MULTIPLY: "Multiply",
 	vtinput.VK_ADD:      "Add",
 	vtinput.VK_SUBTRACT: "Subtract",
+	vtinput.VK_NUMPAD5:  "Num5",
 	vtinput.VK_DECIMAL:  "Decimal",
 	vtinput.VK_DIVIDE:   "Divide",
 }

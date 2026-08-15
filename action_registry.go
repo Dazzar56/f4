@@ -402,7 +402,7 @@ func init() {
 		LabelKey:    "Menu.Files.View",
 		Description: "Open file in viewer",
 		DescKey:     "Action.File.View.Desc",
-		DefaultKeys: []string{"F3"},
+		DefaultKeys: []string{"F3", "Num5", "VK_C"},
 		MenuPath:    "Files",
 		Handler:     withPF(func(pf *PanelsFrame) { actionViewFile(pf) }),
 	})
@@ -622,7 +622,7 @@ func init() {
 		LabelKey:    "Action.Panel.SelectGroup",
 		Description: "Select files by mask",
 		DescKey:     "Action.Panel.SelectGroup.Desc",
-		DefaultKeys: []string{"Add"},
+		DefaultKeys: []string{"Add", "CtrlShift+", "CtrlShift=", "CtrlShiftVK_BB"},
 		MenuPath:    "Files",
 		Handler: withPF(func(pf *PanelsFrame) {
 			if fsp := pf.getActivePanel(); fsp != nil {
@@ -639,7 +639,7 @@ func init() {
 		LabelKey:    "Action.Panel.DeselectGroup",
 		Description: "Deselect files by mask",
 		DescKey:     "Action.Panel.DeselectGroup.Desc",
-		DefaultKeys: []string{"Subtract"},
+		DefaultKeys: []string{"Subtract", "CtrlShift_", "CtrlShift-", "CtrlShiftVK_BD"},
 		MenuPath:    "Files",
 		Handler: withPF(func(pf *PanelsFrame) {
 			if fsp := pf.getActivePanel(); fsp != nil {
@@ -650,13 +650,39 @@ func init() {
 		}),
 	})
 	RegisterAction(Action{
+		Name:        "Panel.SelectCurrentExtension",
+		Area:        "Shell",
+		Label:       "Select Current Extension",
+		Description: "Select files with the current extension, or all folders",
+		DefaultKeys: []string{"CtrlAdd", "Ctrl=", "CtrlVK_BB"},
+		MenuPath:    "Files",
+		Handler: withPF(func(pf *PanelsFrame) {
+			if fsp := pf.getActivePanel(); fsp != nil {
+				fsp.ApplyCurrentExtensionSelection(true)
+			}
+		}),
+	})
+	RegisterAction(Action{
+		Name:        "Panel.DeselectCurrentExtension",
+		Area:        "Shell",
+		Label:       "Deselect Current Extension",
+		Description: "Deselect files with the current extension, or all folders",
+		DefaultKeys: []string{"CtrlSubtract", "Ctrl-", "CtrlVK_BD"},
+		MenuPath:    "Files",
+		Handler: withPF(func(pf *PanelsFrame) {
+			if fsp := pf.getActivePanel(); fsp != nil {
+				fsp.ApplyCurrentExtensionSelection(false)
+			}
+		}),
+	})
+	RegisterAction(Action{
 		Name:        "Panel.InvertSelection",
 		Area:        "Shell",
 		Label:       "Invert Selection",
 		LabelKey:    "Action.Panel.InvertSelection",
 		Description: "Invert file selection",
 		DescKey:     "Action.Panel.InvertSelection.Desc",
-		DefaultKeys: []string{"Multiply"},
+		DefaultKeys: []string{"Multiply", "Alt=", "AltVK_BB"},
 		MenuPath:    "Files",
 		Handler: withPF(func(pf *PanelsFrame) {
 			if fsp := pf.getActivePanel(); fsp != nil {
