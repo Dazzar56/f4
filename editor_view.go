@@ -90,6 +90,13 @@ type EditorView struct {
 	edited      bool
 	pasteBuffer []rune
 	asyncBuf    *AsyncBuffer
+	// mapped is the file itself, mapped read-only, when the editor could take
+	// that route: the piece table's original buffer is then a window onto it
+	// rather than a copy assembled from chunks. Nil for everything else.
+	mapped *MappedFile
+	// mapFaulted records that reading through the mapping has already failed
+	// once, so the report goes out once rather than on every repaint.
+	mapFaulted  bool
 	indexCancel context.CancelFunc
 	// indexing is true from StartIndexing until that run ends, by completion
 	// or by cancellation. indexCancel cannot answer the question: it is left
@@ -257,6 +264,13 @@ func (ev *EditorView) Close() {
 	}
 	if ev.asyncBuf != nil {
 		ev.asyncBuf.Close()
+	}
+	// Every window the piece table handed out points into the mapping, so this
+	// has to come after the background work above has been told to stop. A
+	// straggler that still reads is what the fault guards are there for.
+	if ev.mapped != nil {
+		_ = ev.mapped.Close()
+		ev.mapped = nil
 	}
 	if ev.file != nil {
 		ev.file.Close()
@@ -1246,6 +1260,7 @@ func (ev *EditorView) Show(scr *vtui.ScreenBuf) {
 }
 
 func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
+	defer ev.guardMapping("rendering")()
 	if !ev.IsVisible() || ev.pasting {
 		return
 	}
@@ -2838,7 +2853,9 @@ func nextIndexPoll(cur time.Duration) time.Duration {
 }
 
 func (ev *EditorView) StartIndexing() {
-	if ev.asyncBuf == nil {
+	// A mapped file has no chunk buffer and needs indexing just the same, so
+	// the question is whether there is any text at all, not how it is backed.
+	if ev.asyncBuf == nil && ev.mapped == nil {
 		return
 	}
 	if ev.indexCancel != nil {
@@ -2853,6 +2870,7 @@ func (ev *EditorView) StartIndexing() {
 	ev.indexing = true
 
 	go func() {
+		defer ev.guardMapping("indexing")()
 		startedAt := time.Now()
 		vtui.DebugLog("EDITOR_INDEX: Start indexing with targetLine=%d", ev.targetLine)
 		indexed, batches := 0, 0
@@ -2873,7 +2891,10 @@ func (ev *EditorView) StartIndexing() {
 		poll := indexPollMin
 		buf := ev.asyncBuf
 		li := ev.li
-		maxSize := buf.Size()
+		maxSize := ev.pt.Size()
+		if buf != nil {
+			maxSize = buf.Size()
+		}
 
 		if indexer, ok := ev.vfs.(vfs.LineIndexer); ok && ev.Codepage == 65001 {
 			vtui.DebugLog("EDITOR_INDEX: Using remote LineIndexer")
@@ -2999,17 +3020,30 @@ func (ev *EditorView) StartIndexing() {
 				return
 			}
 
-			// Pre-fetch ahead to keep AsyncBuffer busy and avoid sequential latency.
-			// 16 chunks of 256KB = 4MB read-ahead sliding window.
-			readAhead := 16
-			for i := 0; i < readAhead; i++ {
-				p := absPos + i*chunkSize
-				if p < maxSize {
-					_, _ = buf.Read(p, chunkSize)
+			var data []byte
+			var err error
+			if buf != nil {
+				// Pre-fetch ahead to keep AsyncBuffer busy and avoid sequential latency.
+				// 16 chunks of 256KB = 4MB read-ahead sliding window.
+				readAhead := 16
+				for i := 0; i < readAhead; i++ {
+					p := absPos + i*chunkSize
+					if p < maxSize {
+						_, _ = buf.Read(p, chunkSize)
+					}
+				}
+				data, err = buf.Read(absPos, chunkSize)
+			} else {
+				// A mapped file is already whole: read the window straight out
+				// of the piece table, which for the original buffer costs
+				// nothing but the bounds arithmetic.
+				take := min(chunkSize, maxSize-absPos)
+				if view, ok := ev.pt.View(absPos, take); ok {
+					data = view
+				} else {
+					data, err = ev.pt.GetRange(absPos, take)
 				}
 			}
-
-			data, err := buf.Read(absPos, chunkSize)
 			if err == piecetable.ErrLoading {
 				time.Sleep(poll)
 				waited += poll
@@ -3349,6 +3383,7 @@ func (ev *EditorView) Replace(pattern, replacement string, caseSensitive, revers
 	if all {
 		session := ev.editSession
 		vtui.RunAsync(func(ctx *vtui.TaskContext) {
+			defer ev.guardMapping("replacing")()
 			// Dropping this error used to turn a not-yet-loaded buffer into an
 			// empty one, so [ Replace all ] on a large file reported "not
 			// found" and changed nothing.
@@ -3948,6 +3983,8 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 	createNewTarget := ev.createNewTarget
 
 	vtui.RunAsync(func(ctx *vtui.TaskContext) {
+		// The writer reads the unchanged pieces straight out of the mapping.
+		defer ev.guardMapping("saving")()
 		// To preserve original file ownership, permissions and xattrs (crucial for root-owned files),
 		// we write directly to the original file instead of using atomic rename via temp file.
 		oldAsync := ev.asyncBuf
@@ -4196,11 +4233,24 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 		var newPt *piecetable.PieceTable
 		var newEngine *textlayout.WrapEngine
 		var newBuf *AsyncBuffer
+		var newMapped *MappedFile
 
 		if err == nil {
 			if ev.Codepage == 65001 {
-				newBuf = NewAsyncBuffer(ctx.Context, newFile)
-				newPt = piecetable.NewWithBuffer(newBuf)
+				// Re-map rather than fall back to lazy chunks: a saved file is
+				// as mappable as the one that was opened, and dropping to the
+				// chunk buffer here would quietly cost every later search the
+				// copy that mapping avoids.
+				if ev.mapped != nil && AppConfig.EditorMemoryMap {
+					if m, mapErr := MapEditorFile(ev.vfs, newFile); mapErr == nil {
+						newMapped = m
+						newPt = piecetable.New(m.Bytes())
+					}
+				}
+				if newPt == nil {
+					newBuf = NewAsyncBuffer(ctx.Context, newFile)
+					newPt = piecetable.NewWithBuffer(newBuf)
+				}
 			} else {
 				size := newFile.Size()
 				fullData := make([]byte, size)
@@ -4255,6 +4305,14 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 				}
 				ev.file = newFile
 				ev.asyncBuf = newBuf
+				// The old mapping described the file as it was before the
+				// save. Nothing reads through it once the piece table below
+				// points at the new one, and this runs on the UI thread, so
+				// the render path cannot be inside it either.
+				if ev.mapped != nil && ev.mapped != newMapped {
+					_ = ev.mapped.Close()
+				}
+				ev.mapped = newMapped
 				ev.pt = newPt
 				ev.cleanState = newPt.GetState()
 				ev.engine = newEngine
@@ -5248,6 +5306,7 @@ func (ev *EditorView) Search(pattern string, caseSensitive, reverse, regexp, who
 		session := ev.editSession
 
 		runSearchWithProgress(searchPattern, func(ctx *vtui.TaskContext, dlg *vtui.Window) {
+			defer ev.guardMapping("searching")()
 			bytes, errBytes := ev.searchBuffer(ctx, session)
 			if errBytes != nil {
 				if ctx.Err() != nil {

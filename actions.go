@@ -683,6 +683,7 @@ func runExternalEditor(pf *PanelsFrame, cmdStr, path string) {
 func showEditor(pf *PanelsFrame, v vfs.VFS, path string, f vfs.ReadAtCloser) {
 	var pt *piecetable.PieceTable
 	var buf *AsyncBuffer
+	var mapped *MappedFile
 	cpID := AppConfig.EditorDefaultCodePage
 
 	if f != nil {
@@ -697,9 +698,25 @@ func showEditor(pf *PanelsFrame, v vfs.VFS, path string, f vfs.ReadAtCloser) {
 		cpID = vfs.DetectEncoding(header, AppConfig.EditorAutodetectCodePage, AppConfig.EditorDefaultCodePage)
 
 		if cpID == 65001 {
-			buf = NewAsyncBuffer(context.Background(), f)
-			buf.prewarm()
-			pt = piecetable.NewWithBuffer(buf)
+			// A local file is mapped rather than read: the mapping is one
+			// contiguous buffer, so the piece table can hand windows onto it
+			// and a search scans the file itself instead of a copy of it.
+			// Everything else — remote, empty, or a mapping the kernel
+			// refused — keeps the lazily fetched chunk buffer.
+			if AppConfig.EditorMemoryMap {
+				var mapErr error
+				mapped, mapErr = MapEditorFile(v, f)
+				if mapErr != nil && mapErr != errNotMappable {
+					vtui.DebugLog("EDITOR: memory mapping %s failed, reading lazily instead: %v", path, mapErr)
+				}
+			}
+			if mapped != nil {
+				pt = piecetable.New(mapped.Bytes())
+			} else {
+				buf = NewAsyncBuffer(context.Background(), f)
+				buf.prewarm()
+				pt = piecetable.NewWithBuffer(buf)
+			}
 		} else {
 			fullData := make([]byte, size)
 			_, _ = f.ReadAt(context.Background(), fullData, 0)
@@ -730,6 +747,7 @@ func showEditor(pf *PanelsFrame, v vfs.VFS, path string, f vfs.ReadAtCloser) {
 	}
 	editor.file = f
 	editor.asyncBuf = buf
+	editor.mapped = mapped
 	editor.ResizeConsole(pf.lastW, pf.lastH)
 	editor.StartIndexing()
 

@@ -231,6 +231,7 @@ func (ev *EditorView) FindAll(pattern string, caseSensitive, useRegex, wholeWord
 		session := ev.editSession
 
 		runSearchWithProgress(pattern, func(ctx *vtui.TaskContext, dlg *vtui.Window) {
+			defer ev.guardMapping("collecting occurrences")()
 			bytes, errBytes := ev.searchBuffer(ctx, session)
 			if errBytes != nil {
 				if ctx.Err() != nil {
