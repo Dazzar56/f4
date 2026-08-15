@@ -182,6 +182,10 @@ type F4Config struct {
 	EditorColorerCatalog     string
 	EditorCrossMode          int
 	EditorDefaultCodePage    int
+	// EditorMemoryMap lets the editor map a local file instead of reading it
+	// in chunks. Off means every buffer takes the lazily fetched path, which
+	// is the escape hatch for a file system where mapping misbehaves.
+	EditorMemoryMap          bool
 	ViewerAutodetectCodePage bool
 	ViewerDefaultCodePage    int
 	// Wheel scroll speed (lines per notch) per area and direction.
@@ -300,6 +304,7 @@ var AppConfig = F4Config{
 	EditorColorerCatalog:     "",
 	EditorCrossMode:          ColorerCrossBoth,
 	EditorDefaultCodePage:    65001,
+	EditorMemoryMap:          true,
 	ViewerAutodetectCodePage: true,
 	ViewerDefaultCodePage:    65001,
 	WheelPanelUp:             0,
@@ -503,6 +508,7 @@ func LoadConfig() {
 	AppConfig.EditorUseEditorConfig = ini.GetString("Editor", "UseEditorConfig", "1") == "1"
 	AppConfig.EditorCrosshair = ini.GetString("Editor", "Crosshair", "0") == "1"
 	AppConfig.EditorAutodetectCodePage = ini.GetString("Editor", "AutodetectCodePage", "1") == "1"
+	AppConfig.EditorMemoryMap = ini.GetString("Editor", "MemoryMap", "1") == "1"
 	AppConfig.EditorHighlighter = normalizeHighlighter(ini.GetString("Editor", "Highlighter", "Chroma"))
 	AppConfig.EditorColorerScheme = ini.GetString("Editor", "ColorerScheme", "")
 	AppConfig.EditorColorerBackground = ini.GetString("Editor", "ColorerBackground", "1") == "1"
@@ -685,6 +691,7 @@ func SaveConfig() {
 	sb.WriteString(fmt.Sprintf("UseExternalEditor = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.UseExternalEditor]))
 	sb.WriteString(fmt.Sprintf("ExternalEditorCommand = %s\n", AppConfig.ExternalEditorCommand))
 	sb.WriteString(fmt.Sprintf("AutodetectCodePage = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.EditorAutodetectCodePage]))
+	sb.WriteString(fmt.Sprintf("MemoryMap = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.EditorMemoryMap]))
 	sb.WriteString(fmt.Sprintf("Highlighter = %s\n", AppConfig.EditorHighlighter))
 	sb.WriteString(fmt.Sprintf("ColorerScheme = %s\n", AppConfig.EditorColorerScheme))
 	sb.WriteString(fmt.Sprintf("ColorerBackground = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.EditorColorerBackground]))

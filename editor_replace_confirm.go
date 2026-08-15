@@ -92,6 +92,7 @@ func (st *replaceLoop) findNext() {
 	vtui.FrameManager.PostTask(func() {
 		session := st.session
 		runSearchWithProgress(st.pattern, func(ctx *vtui.TaskContext, dlg *vtui.Window) {
+			defer ev.guardMapping("replacing")()
 			data, errBytes := ev.searchBuffer(ctx, session)
 			if errBytes != nil {
 				if ctx.Err() != nil {
@@ -228,6 +229,7 @@ func (st *replaceLoop) replaceRemaining(off, mLen int) {
 	vtui.FrameManager.PostTask(func() {
 		session := st.session
 		runSearchWithProgress(st.pattern, func(ctx *vtui.TaskContext, dlg *vtui.Window) {
+			defer ev.guardMapping("replacing")()
 			data, errBytes := ev.searchBuffer(ctx, session)
 			if errBytes != nil {
 				if ctx.Err() != nil {

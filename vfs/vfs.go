@@ -2,6 +2,7 @@ package vfs
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"reflect"
@@ -612,6 +613,25 @@ type PatchPiece struct {
 	Offset int64
 	Length int64
 	Data   []byte
+}
+
+// ValidateInPlacePieces reports whether pieces can be written over the file
+// they came from. Patching in place can only express edits that leave every
+// unchanged piece at the offset it already occupies, because the writing is
+// what moves the bytes and there is nowhere to move them to.
+//
+// It exists to be called before the first write rather than during: refusing
+// halfway through is not a refusal at all, since the file is already damaged
+// and a caller falling back to a full rewrite reads those bytes back.
+func ValidateInPlacePieces(pieces []PatchPiece) error {
+	var offset int64
+	for _, p := range pieces {
+		if p.Data == nil && p.Offset != offset {
+			return fmt.Errorf("in-place patching requires unchanged pieces to remain at their original offsets (no insertions or deletions)")
+		}
+		offset += p.Length
+	}
+	return nil
 }
 
 // DeltaWriter is implemented by a file system that can build a file out of
