@@ -2,7 +2,6 @@ package vfs
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"os"
 	"time"
@@ -438,6 +437,12 @@ func (v *OSVFS) SetAttributes(ctx context.Context, path string, item VFSItem) er
 }
 
 func (v *OSVFS) PatchInPlace(ctx context.Context, path string, pieces []PatchPiece) error {
+	// Before the first byte goes out: a patch this cannot express has to be
+	// refused while the file is still intact.
+	if err := ValidateInPlacePieces(pieces); err != nil {
+		return err
+	}
+
 	f, err := os.OpenFile(prepareOSPath(path), os.O_RDWR, 0)
 	if err != nil {
 		return err
@@ -452,10 +457,6 @@ func (v *OSVFS) PatchInPlace(ctx context.Context, path string, pieces []PatchPie
 		if p.Data != nil {
 			if _, err := f.WriteAt(p.Data, newOffset); err != nil {
 				return err
-			}
-		} else {
-			if p.Offset != newOffset {
-				return fmt.Errorf("in-place patching requires unchanged pieces to remain at their original offsets (no insertions/deletions allowed on raw disks)")
 			}
 		}
 		newOffset += p.Length

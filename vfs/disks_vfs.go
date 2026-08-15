@@ -108,6 +108,12 @@ func (v *DisksVFS) Open(ctx context.Context, path string) (ReadAtCloser, error) 
 }
 
 func (v *DisksVFS) PatchInPlace(ctx context.Context, path string, pieces []PatchPiece) error {
+	// A raw disk cannot grow or shift, so a patch that would move the pieces
+	// after it has to be refused before anything is written over the device.
+	if err := ValidateInPlacePieces(pieces); err != nil {
+		return err
+	}
+
 	name := v.Base(path)
 	devPath := resolveDevicePath(name)
 
@@ -130,10 +136,6 @@ func (v *DisksVFS) PatchInPlace(ctx context.Context, path string, pieces []Patch
 		if p.Data != nil {
 			if _, err := f.WriteAt(p.Data, newOffset); err != nil {
 				return err
-			}
-		} else {
-			if p.Offset != newOffset {
-				return fmt.Errorf("in-place patching requires unchanged pieces to remain at their original offsets (no insertions/deletions on raw disks)")
 			}
 		}
 		newOffset += p.Length
