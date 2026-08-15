@@ -88,8 +88,15 @@ func (p *SolarisPTY) IsBusy() bool {
 // OpenSolarisPTY реализует чистый алгоритм выделения PTY для Solaris/Illumos.
 // Он открывает мастер-клон, определяет подчиненное имя (ptsname) и настраивает STREAMS.
 func OpenSolarisPTY(api SolarisStreamsAPI) (*SolarisPTY, error) {
-	// 1. Открытие мультиплексора мастера
-	master, err := api.Open("/dev/ptmx", os.O_RDWR, 0)
+	// 1. Открытие мультиплексора мастера. O_CLOEXEC здесь так же важен, как
+	// O_NOCTTY ниже: Go выставляет close-on-exec на дескрипторы, которые
+	// открывает сам, но сырой unix.Open, обёрнутый в os.NewFile, сохраняет
+	// те флаги, с которыми дескриптор был создан, а forkExec сам ничего не
+	// закрывает. Без флага шелл наследует копию собственного мастера, число
+	// ссылок на мастер никогда не падает до нуля при смерти f4, ядро не
+	// шлёт SIGHUP, шелл остаётся сиротой и держит свой узел /dev/pts, а
+	// после достаточного числа перезапусков лимит pty исчерпывается.
+	master, err := api.Open("/dev/ptmx", os.O_RDWR|unix.O_CLOEXEC, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +130,11 @@ func OpenSolarisPTY(api SolarisStreamsAPI) (*SolarisPTY, error) {
 	// открытие слейва в процессе без управляющего терминала само делает
 	// его управляющим, и им рискует стать терминал самого f4, а не только
 	// терминал дочернего шелла.
-	slave, err := api.Open(slaveName, os.O_RDWR|unix.O_NOCTTY, 0)
+	// Слейв тоже помечается close-on-exec. Run() отдаёт его ребёнку как
+	// stdin, stdout и stderr, а dup2, который ставит его на 0, 1 и 2,
+	// снимает флаг с этих копий, так что терминал ребёнок получает; флаг
+	// убирает только лишний унаследованный дескриптор.
+	slave, err := api.Open(slaveName, os.O_RDWR|unix.O_NOCTTY|unix.O_CLOEXEC, 0)
 	if err != nil {
 		master.Close()
 		return nil, err

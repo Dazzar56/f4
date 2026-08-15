@@ -41,6 +41,14 @@ func NewPTY() (*PTY, error) {
 		return nil, errno
 	}
 
+	// The O_CLOEXEC above covers only the /dev/ptm handle, which is closed
+	// on the way out anyway. PTMGET hands back two freshly opened
+	// descriptors that carry no FD_CLOEXEC of their own, so they must be
+	// flagged here: otherwise the shell inherits a copy of its own master,
+	// the master never drops to zero references when f4 dies, no SIGHUP is
+	// delivered, and the shell survives as an orphan pinning its pty.
+	setCloseOnExec([]int{int(pg.Cfd), int(pg.Sfd)})
+
 	master := os.NewFile(uintptr(pg.Cfd), "/dev/ptmx")
 	slave := os.NewFile(uintptr(pg.Sfd), "slave")
 
