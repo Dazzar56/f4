@@ -126,18 +126,18 @@ var (
 	colorerIdleDir string
 )
 
-func ensureFonokaiSchema(configsDir string) {
+func ensureRadiolaSchema(configsDir string) {
 	catalogPath := filepath.Join(configsDir, "base", "catalog.xml")
 	if _, err := os.Stat(catalogPath); os.IsNotExist(err) {
 		return
 	}
 
 	hrdDir := filepath.Join(configsDir, "base", "hrd", "rgb")
-	hrdPath := filepath.Join(hrdDir, "fonokai.hrd")
+	hrdPath := filepath.Join(hrdDir, "radiola.hrd")
 
 	_ = os.MkdirAll(hrdDir, 0755)
 
-	fonokaiHRDContent := `<?xml version="1.0" encoding="UTF-8"?>
+	radiolaHRDContent := `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE hrd PUBLIC "-//Cail Lomecb//DTD Colorer HRD take5//EN"
   "http://colorer.sf.net/2003/hrd.dtd">
 <hrd xmlns="http://colorer.sf.net/2003/hrd">
@@ -214,21 +214,21 @@ func ensureFonokaiSchema(configsDir string) {
   <assign name="def:PairEnd" fore="#37322c" back="#e6b450"/>
 </hrd>
 `
-	_ = os.WriteFile(hrdPath, []byte(fonokaiHRDContent), 0644)
+	_ = os.WriteFile(hrdPath, []byte(radiolaHRDContent), 0644)
 
 	catalogRGBPath := filepath.Join(configsDir, "base", "hrd", "catalog-rgb.xml")
 	data, err := os.ReadFile(catalogRGBPath)
 	if err == nil {
 		content := string(data)
-		if !strings.Contains(content, "name=\"Fonokai\"") {
-			entry := "\n        <hrd class=\"rgb\" name=\"Fonokai\" description=\"Fonokai\">\n            <location link=\"&hrd;/rgb/fonokai.hrd\"/>\n        </hrd>\n"
+		if !strings.Contains(content, "name=\"Radiola\"") {
+			entry := "\n        <hrd class=\"rgb\" name=\"Radiola\" description=\"Radiola\">\n            <location link=\"&hrd;/rgb/radiola.hrd\"/>\n        </hrd>\n"
 			_ = os.WriteFile(catalogRGBPath, []byte(content+entry), 0644)
 		}
 	}
 }
 
 func acquireColorerSession(configsDir string) (*colorer.Session, error) {
-	ensureFonokaiSchema(configsDir)
+	ensureRadiolaSchema(configsDir)
 
 	colorerPoolMu.Lock()
 	if colorerIdle != nil && colorerIdleDir == configsDir {

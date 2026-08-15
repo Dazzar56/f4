@@ -17,7 +17,7 @@ import (
 	"github.com/unxed/vtui"
 )
 
-func TestColorer_EnsureFonokaiSchema(t *testing.T) {
+func TestColorer_EnsureRadiolaSchema(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	baseDir := filepath.Join(tmpDir, "base")
@@ -32,19 +32,19 @@ func TestColorer_EnsureFonokaiSchema(t *testing.T) {
         </hrd>`
 	_ = os.WriteFile(filepath.Join(hrdDir, "catalog-rgb.xml"), []byte(catalogRGBContent), 0644)
 
-	ensureFonokaiSchema(tmpDir)
+	ensureRadiolaSchema(tmpDir)
 
-	hrdFile := filepath.Join(hrdDir, "rgb", "fonokai.hrd")
+	hrdFile := filepath.Join(hrdDir, "rgb", "radiola.hrd")
 	if _, err := os.Stat(hrdFile); err != nil {
-		t.Errorf("Expected fonokai.hrd to be created, got error: %v", err)
+		t.Errorf("Expected radiola.hrd to be created, got error: %v", err)
 	}
 
 	updatedCatalog, err := os.ReadFile(filepath.Join(hrdDir, "catalog-rgb.xml"))
 	if err != nil {
 		t.Fatalf("Failed to read updated catalog: %v", err)
 	}
-	if !strings.Contains(string(updatedCatalog), "name=\"Fonokai\"") {
-		t.Error("Expected catalog-rgb.xml to contain Fonokai entry")
+	if !strings.Contains(string(updatedCatalog), "name=\"Radiola\"") {
+		t.Error("Expected catalog-rgb.xml to contain Radiola entry")
 	}
 }
 

@@ -20,7 +20,7 @@ func TestAvailableColorStylesIncludesBuiltInsAndUserStyles(t *testing.T) {
 	}
 
 	styles := AvailableColorStyles()
-	// The built-in set grows with the repo (Fonokai landed after this
+	// The built-in set grows with the repo (Radiola landed after this
 	// test was first written); accept "the built-ins plus our
 	// Solarized" without pinning the exact count.
 	if len(styles) < 4 {
@@ -137,7 +137,7 @@ func TestApplyColorStyleModernAndClassic(t *testing.T) {
 	}
 }
 
-func TestApplyColorStyleFonokaiWorkspaceTabs(t *testing.T) {
+func TestApplyColorStyleRadiolaWorkspaceTabs(t *testing.T) {
 	oldDir := getUserStylesDir
 	getUserStylesDir = func() string { return t.TempDir() }
 	defer func() { getUserStylesDir = oldDir }()
@@ -146,25 +146,25 @@ func TestApplyColorStyleFonokaiWorkspaceTabs(t *testing.T) {
 	AppConfig.EnforceColorCorrection = false
 	defer func() { AppConfig = oldCfg }()
 
-	if err := ApplyColorStyle("Fonokai"); err != nil {
+	if err := ApplyColorStyle("Radiola"); err != nil {
 		t.Fatal(err)
 	}
 	if fg, bg := GetColorRGBBoth(vtui.Palette[ColPanelWorkspaceTabs]); fg != 0xA69F94 || bg != 0x292620 {
-		t.Fatalf("fonokai inactive workspace tabs: got %06X on %06X", fg, bg)
+		t.Fatalf("radiola inactive workspace tabs: got %06X on %06X", fg, bg)
 	}
 	if fg, bg := GetColorRGBBoth(vtui.Palette[ColPanelWorkspaceTabsActive]); fg != 0xEEEEEC || bg != 0x37322C {
-		t.Fatalf("fonokai active workspace tab: got %06X on %06X", fg, bg)
+		t.Fatalf("radiola active workspace tab: got %06X on %06X", fg, bg)
 	}
 	if fg, _ := GetColorRGBBoth(vtui.Palette[ColPanelWorkspaceTabsAccent]); fg != 0xE6B450 {
-		t.Fatalf("fonokai workspace tab accent: got %06X", fg)
+		t.Fatalf("radiola workspace tab accent: got %06X", fg)
 	}
 	if fg, _ := GetColorRGBBoth(vtui.Palette[ColPanelWorkspaceTabsAttention]); fg != 0xEC6A2C {
-		t.Fatalf("fonokai workspace tab attention: got %06X", fg)
+		t.Fatalf("radiola workspace tab attention: got %06X", fg)
 	}
 	if _, textBG := GetColorRGBBoth(vtui.Palette[vtui.ColDialogComboText]); textBG != 0xC4B8A8 {
-		t.Fatalf("fonokai combo dropdown background: got %06X", textBG)
+		t.Fatalf("radiola combo dropdown background: got %06X", textBG)
 	} else if _, boxBG := GetColorRGBBoth(vtui.Palette[vtui.ColDialogComboBox]); boxBG != textBG {
-		t.Fatalf("fonokai combo border background: got %06X, want dropdown background %06X", boxBG, textBG)
+		t.Fatalf("radiola combo border background: got %06X, want dropdown background %06X", boxBG, textBG)
 	}
 	scr := vtui.NewSilentScreenBuf()
 	scr.AllocBuf(20, 6)
@@ -174,7 +174,7 @@ func TestApplyColorStyleFonokaiWorkspaceTabs(t *testing.T) {
 	borderBG := vtui.GetRGBBack(scr.GetCell(0, 2).Attributes)
 	itemBG := vtui.GetRGBBack(scr.GetCell(2, 2).Attributes)
 	if borderBG != itemBG {
-		t.Fatalf("rendered fonokai combo border background %06X differs from dropdown row %06X", borderBG, itemBG)
+		t.Fatalf("rendered radiola combo border background %06X differs from dropdown row %06X", borderBG, itemBG)
 	}
 }
 

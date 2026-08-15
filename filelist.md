@@ -162,8 +162,16 @@
     ├── editor_find_all.go
     ├── editor_find_all_test.go
     ├── editor_highlight_budget_test.go
+    ├── editor_index_status.go
+    ├── editor_index_status_test.go
+    ├── editor_mmap_test.go
     ├── editor_replace_confirm.go
     ├── editor_restore_keys_test.go
+    ├── editor_save_inplace_test.go
+    ├── editor_search_lazy_test.go
+    ├── editor_search_remote.go
+    ├── editor_search_remote_test.go
+    ├── editor_search_zerocopy_test.go
     ├── editor_shiftdel_test.go
     ├── editor_target_line_test.go
     ├── editor_veto_test.go
@@ -418,6 +426,10 @@
     ├── MACROS.md
     ├── macro_test.go
     ├── main.go
+    ├── mapped_file.go
+    ├── mapped_file_test.go
+    ├── mapped_file_unix.go
+    ├── mapped_file_windows.go
     ├── mem_info.go
     ├── mem_info_linux.go
     ├── mem_info_other.go
@@ -440,6 +452,8 @@
     ├── path_identity.go
     ├── path_identity_test.go
     ├── piecetable
+    │   ├── concurrent_test.go
+    │   ├── lineindex_equivalence_test.go
     │   ├── lineindex.go
     │   ├── lineindex_test.go
     │   ├── piecetable.go
@@ -633,6 +647,47 @@
     │   │   ├── selectors.go
     │   │   ├── selectors_test.go
     │   │   └── services.go
+    │   ├── mediainfo
+    │   │   ├── analyzer.go
+    │   │   ├── backend_test.go
+    │   │   ├── cache.go
+    │   │   ├── cache_test.go
+    │   │   ├── config_dialog.go
+    │   │   ├── dialog.go
+    │   │   ├── dialog_theme_test.go
+    │   │   ├── exif_report_test.go
+    │   │   ├── format_gaps_test.go
+    │   │   ├── locale.go
+    │   │   ├── macro.go
+    │   │   ├── macro_test.go
+    │   │   ├── matroska_bounds_test.go
+    │   │   ├── model.go
+    │   │   ├── open.go
+    │   │   ├── open_test.go
+    │   │   ├── parse_audio.go
+    │   │   ├── parse_ebu_stl.go
+    │   │   ├── parse_heif.go
+    │   │   ├── parse_image.go
+    │   │   ├── parse_iso.go
+    │   │   ├── parse_matroska.go
+    │   │   ├── parse_riff.go
+    │   │   ├── parse_subtitle.go
+    │   │   ├── parse_tiff.go
+    │   │   ├── parse_tiff_limits_test.go
+    │   │   ├── plugin.go
+    │   │   ├── plugin_test.go
+    │   │   ├── quickview_provider.go
+    │   │   ├── quickview_provider_test.go
+    │   │   ├── README.md
+    │   │   ├── render.go
+    │   │   ├── render_limits_test.go
+    │   │   ├── report_text.go
+    │   │   ├── report_view.go
+    │   │   ├── settings.go
+    │   │   ├── settings_test.go
+    │   │   ├── source.go
+    │   │   ├── subtitle_limits_test.go
+    │   │   └── util.go
     │   ├── netfox
     │   │   ├── crypto.go
     │   │   ├── crypto_test.go
@@ -746,6 +801,7 @@
     ├── pty_bsd_freebsd.go
     ├── pty_bsd.go
     ├── pty_bsd_test.go
+    ├── pty_cloexec_test.go
     ├── pty_darwin.go
     ├── pty_diag_unix.go
     ├── pty_diag_windows.go
@@ -817,9 +873,9 @@
     ├── styles
     │   ├── classic.ini
     │   ├── default_dark.ini
-    │   ├── fonokai.ini
-    │   ├── fonokai.md
-    │   └── modern.ini
+    │   ├── modern.ini
+    │   ├── radiola.ini
+    │   └── radiola.md
     ├── style_test.go
     ├── terminal_log_vfs.go
     ├── terminal_log_vfs_test.go
@@ -928,6 +984,7 @@
     │   ├── os_vfs_unix_test.go
     │   ├── os_vfs_windows.go
     │   ├── os_vfs_windows_test.go
+    │   ├── patch_inplace_test.go
     │   ├── privileges_windows.go
     │   ├── quick_view.go
     │   ├── quick_view_test.go
@@ -996,4 +1053,4 @@
     ├── workspace_session.go
     └── workspace_session_test.go
     
-    56 directories, 939 files
+    57 directories, 995 files
