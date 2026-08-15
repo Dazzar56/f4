@@ -11,6 +11,19 @@ type Buffer interface {
 	Read(offset, length int) ([]byte, error)
 }
 
+// Viewer is an optional Buffer capability: a buffer that can hand out a
+// window into its own bytes instead of a copy of them. A buffer answers
+// false whenever it cannot — the range is not contiguous in its memory, or
+// not resident yet — and the caller falls back to Read.
+//
+// The window aliases the buffer, so callers must treat it as read-only. That
+// is safe for the Original buffer of a piece table by construction: edits
+// only ever append to the add buffer, and no code path writes through an
+// Original buffer.
+type Viewer interface {
+	View(offset, length int) ([]byte, bool)
+}
+
 type MemoryBuffer []byte
 
 func (m MemoryBuffer) Size() int { return len(m) }
@@ -23,6 +36,15 @@ func (m MemoryBuffer) Read(offset, length int) ([]byte, error) {
 		end = len(m)
 	}
 	return m[offset:end], nil
+}
+
+// View implements Viewer. A memory buffer is one contiguous allocation, so
+// any in-bounds range can be answered without copying.
+func (m MemoryBuffer) View(offset, length int) ([]byte, bool) {
+	if offset < 0 || length < 0 || offset+length > len(m) {
+		return nil, false
+	}
+	return m[offset : offset+length], true
 }
 
 type BufferType int
@@ -298,6 +320,43 @@ func (s TableState) Equals(other TableState) bool {
 		}
 	}
 	return true
+}
+
+// View returns a window into the text without copying it, and reports false
+// when it cannot. It succeeds when the requested range lies inside a single
+// piece whose backing buffer can provide a contiguous window: the add buffer
+// always can, an Original buffer only if it implements Viewer.
+//
+// An unedited file is exactly one piece, so View(0, Size()) answers the whole
+// buffer — which is what lets a search scan the file in place instead of
+// assembling a copy of it. After edits the text is spread over several
+// pieces and callers fall back to GetRange.
+//
+// The result aliases the buffer and must not be modified.
+func (pt *PieceTable) View(offset, length int) ([]byte, bool) {
+	if offset < 0 || length <= 0 || offset+length > pt.size {
+		return nil, false
+	}
+
+	idx, offInPiece := pt.offsetToPiece(offset)
+	if idx >= len(pt.pieces) {
+		return nil, false
+	}
+	p := pt.pieces[idx]
+	if offInPiece+length > p.Length {
+		return nil, false // the range crosses a piece boundary
+	}
+
+	if p.Buf == Add {
+		start := p.Start + offInPiece
+		return pt.add[start : start+length], true
+	}
+
+	v, ok := pt.orig.(Viewer)
+	if !ok {
+		return nil, false
+	}
+	return v.View(p.Start+offInPiece, length)
 }
 
 // GetRange returns a byte slice for the specified range.

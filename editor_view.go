@@ -13,9 +13,11 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 	"unicode/utf8"
+	"unsafe"
 
 	"github.com/charlievieth/strcase"
 	"github.com/coregx/coregex"
@@ -92,7 +94,18 @@ type EditorView struct {
 	// indexing is true from StartIndexing until that run ends, by completion
 	// or by cancellation. indexCancel cannot answer the question: it is left
 	// set after a normal finish, so it reads as "indexing forever".
-	indexing    bool
+	indexing bool
+
+	// searchSnapshot caches the assembled buffer one search pass works on,
+	// for the buffers that cannot be scanned in place. Every search used to
+	// rebuild it, which on a large file is the whole file copied again per
+	// F7 and, worse, per confirmation of an interactive Replace. It is keyed
+	// by editSession, so any edit retires it. The mutex is what makes it
+	// readable from the background scan goroutines.
+	searchSnapMu      sync.Mutex
+	searchSnapshot    []byte
+	searchSnapSession int
+
 	renderBytes []byte          // Reusable buffer for text data
 	renderCells []vtui.CharInfo // Reusable buffer for row rendering
 
@@ -404,7 +417,7 @@ func (ev *EditorView) SetText(text string) {
 		ev.indexCancel = nil
 	}
 	ev.edited = true
-	ev.editSession++
+	ev.retireEditSession()
 
 	ev.pt = piecetable.New([]byte(text))
 	ev.li.Rebuild(ev.pt)
@@ -469,7 +482,7 @@ func (ev *EditorView) Undo() {
 			ev.indexCancel()
 		}
 	}
-	ev.editSession++
+	ev.retireEditSession()
 
 	// Save current state to redo stack
 	ev.redoStack = append(ev.redoStack, editorState{
@@ -508,7 +521,7 @@ func (ev *EditorView) Redo() {
 			ev.indexCancel()
 		}
 	}
-	ev.editSession++
+	ev.retireEditSession()
 
 	// Save current state to undo stack
 	ev.undoStack = append(ev.undoStack, editorState{
@@ -2832,7 +2845,7 @@ func (ev *EditorView) StartIndexing() {
 		ev.indexCancel()
 	}
 
-	ev.editSession++
+	ev.retireEditSession()
 	sessionID := ev.editSession
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -3334,9 +3347,22 @@ func (ev *EditorView) Replace(pattern, replacement string, caseSensitive, revers
 	}
 
 	if all {
+		session := ev.editSession
 		vtui.RunAsync(func(ctx *vtui.TaskContext) {
-			bytes, _ := ev.pt.Bytes()
-			text := string(bytes)
+			// Dropping this error used to turn a not-yet-loaded buffer into an
+			// empty one, so [ Replace all ] on a large file reported "not
+			// found" and changed nothing.
+			bytes, errBytes := ev.searchBuffer(ctx, session)
+			if errBytes != nil {
+				if ctx.Err() != nil {
+					return
+				}
+				ctx.RunOnUI(func() {
+					vtui.ShowMessage(" Error ", "Failed to read file buffer.", []string{"&Ok"})
+				})
+				return
+			}
+			text := bytesToString(bytes)
 			var newText string
 			switch {
 			case re != nil:
@@ -3403,7 +3429,7 @@ func (ev *EditorView) noteBufferEdit() {
 			ev.indexCancel()
 		}
 	}
-	ev.editSession++
+	ev.retireEditSession()
 }
 
 // replaceRange replaces bytes [min, max) with repBytes as a single
@@ -3982,6 +4008,14 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 					perr := patcher.PatchInPlace(ctx.Context, ev.filePath, pieces)
 					if perr == nil {
 						saved = true
+						// This one writes through to the destination itself, so
+						// no stage was ever created. Leaving useTemp set sent
+						// the finalize step on to rename a path that does not
+						// exist, which failed the save — with the new content
+						// already on disk — for every edit that kept the file's
+						// length, and for saving an unmodified buffer.
+						useTemp = false
+						tempPath = ""
 					} else {
 						vtui.DebugLog("EDITOR: in-place patch unavailable: %v", perr)
 					}
@@ -4224,7 +4258,7 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 				ev.pt = newPt
 				ev.cleanState = newPt.GetState()
 				ev.engine = newEngine
-				ev.editSession++
+				ev.retireEditSession()
 				ev.ensureEngineWidth()
 				ev.edited = false
 				if metadataErr != nil {
@@ -4870,6 +4904,164 @@ func runSearchWithProgress(pattern string, worker func(ctx *vtui.TaskContext, dl
 	return dlg, ctx
 }
 
+// searchSnapshotChunk bounds how much readSearchSnapshot asks for per read.
+// A lazily loaded buffer starts a fetch for every missing chunk it is asked
+// about, so requesting the whole file at once would spawn one goroutine per
+// chunk of it; stepping forward in bounded reads keeps that fan-out small.
+const searchSnapshotChunk = 256 * 1024
+
+// searchSnapshotPoll is how long to wait before retrying a read whose
+// backing chunk has not arrived yet.
+const searchSnapshotPoll = 10 * time.Millisecond
+
+// searchSnapshotStall gives up once no data at all has arrived for this
+// long, so a buffer whose fetches keep failing ends in the caller's error
+// dialog instead of spinning behind the progress popup forever.
+const searchSnapshotStall = 30 * time.Second
+
+// searchSnapshotReadAhead is how many later steps are poked when a read finds
+// its data missing. Reading strictly in order would spend one poll interval
+// per chunk of the file, since a step is exactly one chunk wide and its fetch
+// only starts when that step is reached; poking ahead keeps several fetches
+// in flight without reverting to a fan-out over the whole file.
+const searchSnapshotReadAhead = 8
+
+// readSearchSnapshot assembles the whole buffer for one search pass, waiting
+// for lazily loaded data instead of giving up the moment it is missing.
+//
+// pt.Bytes() reads every piece in one go and fails as soon as one of them is
+// still unfetched, which on a freshly opened large file is the normal state:
+// showEditor only prewarms the first chunk, so any search started before the
+// background indexer had walked the file died with "Failed to read file
+// buffer". Reading forward in bounded steps and retrying on ErrLoading lets
+// the reads themselves pull the file in, the way StartIndexing does.
+//
+// This blocks, and the chunks it waits for are stored by tasks posted to the
+// UI thread, so it must only be called from a background goroutine: on the UI
+// thread it would be waiting for work that only the UI thread can do.
+func readSearchSnapshot(ctx *vtui.TaskContext, pt *piecetable.PieceTable) ([]byte, error) {
+	size := pt.Size()
+	if size == 0 {
+		return nil, nil
+	}
+
+	// An unedited file backed by memory is one contiguous piece, so the scan
+	// can run on the buffer itself. Assembling a copy of it would cost the
+	// file size in allocation and two passes over it before the search even
+	// starts. The window is read-only, which every caller here honours.
+	if data, ok := pt.View(0, size); ok {
+		return data, nil
+	}
+
+	res := make([]byte, 0, size)
+	lastProgress := time.Now()
+
+	for len(res) < size {
+		if ctx != nil && ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+
+		take := min(size-len(res), searchSnapshotChunk)
+		// GetRange reports a partly loaded range as one failure and keeps no
+		// partial result, so a retry re-reads this step from its start.
+		chunk, err := pt.GetRange(len(res), take)
+		if err == piecetable.ErrLoading {
+			if time.Since(lastProgress) > searchSnapshotStall {
+				return nil, err
+			}
+			// Asking for the later steps is what starts their fetches, so the
+			// wait below overlaps with them instead of following them.
+			for i := 1; i <= searchSnapshotReadAhead; i++ {
+				ahead := len(res) + i*searchSnapshotChunk
+				if ahead >= size {
+					break
+				}
+				_, _ = pt.GetRange(ahead, min(size-ahead, searchSnapshotChunk))
+			}
+			time.Sleep(searchSnapshotPoll)
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		if len(chunk) == 0 {
+			// No error and nothing read: the backing buffer is shorter than
+			// the table claims. Search what there is instead of spinning.
+			break
+		}
+
+		res = append(res, chunk...)
+		lastProgress = time.Now()
+	}
+
+	return res, nil
+}
+
+// searchBuffer returns the buffer one search pass scans, reusing the previous
+// pass's when the text has not changed since. It must be called from a
+// background goroutine, like readSearchSnapshot itself; session is the
+// editSession read on the UI thread before the scan was started, and is what
+// decides whether a cached buffer still describes the current text.
+//
+// A buffer that can be scanned in place costs nothing to reassemble, so it is
+// never cached: pt.View hands back the same window every time.
+func (ev *EditorView) searchBuffer(ctx *vtui.TaskContext, session int) ([]byte, error) {
+	size := ev.pt.Size()
+	if size == 0 {
+		return nil, nil
+	}
+	if data, ok := ev.pt.View(0, size); ok {
+		return data, nil
+	}
+
+	ev.searchSnapMu.Lock()
+	if ev.searchSnapshot != nil && ev.searchSnapSession == session && len(ev.searchSnapshot) == size {
+		data := ev.searchSnapshot
+		ev.searchSnapMu.Unlock()
+		return data, nil
+	}
+	ev.searchSnapMu.Unlock()
+
+	data, err := readSearchSnapshot(ctx, ev.pt)
+	if err != nil {
+		return nil, err
+	}
+
+	ev.searchSnapMu.Lock()
+	ev.searchSnapshot = data
+	ev.searchSnapSession = session
+	ev.searchSnapMu.Unlock()
+	return data, nil
+}
+
+// retireEditSession invalidates everything keyed to the text as it was: the
+// fence in-flight background tasks compare themselves against moves, and the
+// cached search buffer is released rather than left to outlive the edit that
+// retired it. Call it from the UI thread wherever the buffer changes.
+func (ev *EditorView) retireEditSession() {
+	ev.editSession++
+	ev.dropSearchSnapshot()
+}
+
+// dropSearchSnapshot releases the cached search buffer. Keying it by
+// editSession is what makes a stale one unusable; dropping it is what stops a
+// file-sized allocation from outliving the edit that retired it.
+func (ev *EditorView) dropSearchSnapshot() {
+	ev.searchSnapMu.Lock()
+	ev.searchSnapshot = nil
+	ev.searchSnapMu.Unlock()
+}
+
+// bytesToString views bytes as a string without copying them. Every caller
+// here only reads, and the bytes are either a private snapshot or a window
+// into a buffer nothing writes through.
+func bytesToString(b []byte) string {
+	if len(b) == 0 {
+		return ""
+	}
+	return unsafe.String(unsafe.SliceData(b), len(b))
+}
+
 // findMatch locates one occurrence of pattern in data: forward from
 // startOff, or backward from just before it when reverse is set; next
 // additionally skips a match starting exactly at startOff. The offset is
@@ -4925,7 +5117,7 @@ func findMatch(data []byte, pattern string, caseSensitive, reverse, regexp, whol
 		return foundOffset, matchLen, nil
 	}
 
-	text := string(data)
+	text := bytesToString(data)
 	index, lastIndex := strings.Index, strings.LastIndex
 	if !caseSensitive {
 		// strcase folds while scanning the original text, so the offsets
@@ -5053,10 +5245,14 @@ func (ev *EditorView) Search(pattern string, caseSensitive, reverse, regexp, who
 	vtui.FrameManager.PostTask(func() {
 		// Read on the UI thread, before the background scan starts.
 		startOff := ev.searchSeedOffset(reverse, false)
+		session := ev.editSession
 
 		runSearchWithProgress(searchPattern, func(ctx *vtui.TaskContext, dlg *vtui.Window) {
-			bytes, errBytes := ev.pt.Bytes()
+			bytes, errBytes := ev.searchBuffer(ctx, session)
 			if errBytes != nil {
+				if ctx.Err() != nil {
+					return // canceled; the dialog is already closing
+				}
 				ctx.RunOnUI(func() {
 					dlg.Close()
 					vtui.ShowMessage(" Error ", "Failed to read file buffer.", []string{"&Ok"})
