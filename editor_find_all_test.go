@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -236,6 +237,24 @@ func newFindAllEditor(t *testing.T, content string) *EditorView {
 	return newFindAllEditorSized(t, content, 80, 25)
 }
 
+// paintFindAll renders the frame and returns the text of each row inside the
+// border. The list holds no items, so painting is the only place its contents
+// exist; asserting on the screen is asserting on the list.
+func paintFindAll(t *testing.T, frame *findAllFrame) []string {
+	t.Helper()
+	w, h := vtui.FrameManager.GetScreenSize(), vtui.FrameManager.GetScreenHeight()
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(w, h)
+	frame.Show(scr)
+
+	x1, y1, x2, y2 := frame.VMenu.GetPosition()
+	rows := make([]string, 0, max(y2-y1-1, 0))
+	for y := y1 + 1; y < y2; y++ {
+		rows = append(rows, strings.TrimRight(vtui.ScreenRow(scr, y, x1+2, x2-1), " "))
+	}
+	return rows
+}
+
 func keyEvent(vk uint16, ctrlState vtinput.ControlKeyState) *vtinput.InputEvent {
 	return &vtinput.InputEvent{
 		Type:            vtinput.KeyEventType,
@@ -255,14 +274,13 @@ func TestEditorFindAll_MenuContents(t *testing.T) {
 	if !strings.Contains(frame.GetTitle(), "2") {
 		t.Errorf("title should mention occurrence count, got %q", frame.GetTitle())
 	}
-	if frame.Items[0].AccentPrefix != "1│1│ " {
-		t.Errorf("unexpected accent prefix %q", frame.Items[0].AccentPrefix)
+	// The list holds no menu items at all: rows are resolved as they are
+	// painted, which is what keeps a million occurrences openable.
+	if len(frame.Items) != 0 {
+		t.Errorf("menu materialized %d items, want none", len(frame.Items))
 	}
-	if frame.Items[1].AccentPrefix != "3│1│ " {
-		t.Errorf("unexpected accent prefix %q", frame.Items[1].AccentPrefix)
-	}
-	if frame.Items[0].Text != "Unit 15 The Avenue" {
-		t.Errorf("unexpected item text %q", frame.Items[0].Text)
+	if got := paintFindAll(t, frame); got[0] != "1│1│ Unit 15 The Avenue" || got[1] != "3│1│ United Kingdom" {
+		t.Errorf("unexpected painted rows %q", got[:2])
 	}
 }
 
@@ -381,12 +399,14 @@ func TestEditorFindAll_F5Zoom(t *testing.T) {
 	}
 }
 
-func TestEditorFindAll_AmpersandEscaping(t *testing.T) {
+func TestEditorFindAll_AmpersandRendersLiterally(t *testing.T) {
+	// Rows are painted as plain strings, not as vtui control text, so a '&'
+	// in the file reaches the screen as itself and eats no following letter.
 	ev := newFindAllEditor(t, "a & unit b")
 	frame := openFindAllMenu(t, ev, "unit", false, false, false)
 
-	if !strings.Contains(frame.Items[0].Text, "&&") {
-		t.Errorf("literal '&' must be doubled for vtui, got %q", frame.Items[0].Text)
+	if got := paintFindAll(t, frame)[0]; !strings.HasSuffix(got, "a & unit b") {
+		t.Errorf("literal '&' should survive to the screen, got %q", got)
 	}
 }
 
@@ -394,8 +414,8 @@ func TestEditorFindAll_TabsBecomeSpaces(t *testing.T) {
 	ev := newFindAllEditor(t, "a\tunit\tb")
 	frame := openFindAllMenu(t, ev, "unit", false, false, false)
 
-	if frame.Items[0].Text != "a unit b" {
-		t.Errorf("tabs should render as single spaces, got %q", frame.Items[0].Text)
+	if got := paintFindAll(t, frame)[0]; !strings.HasSuffix(got, "a unit b") {
+		t.Errorf("tabs should render as single spaces, got %q", got)
 	}
 }
 
@@ -498,16 +518,17 @@ func TestEditorFindAll_HighlightMatchesDisplayBytes(t *testing.T) {
 	}
 	// The invariant behind the highlight overpaint: whenever a row claims a
 	// highlight, its byte range in the display string must hold the match.
-	for i, r := range frame.rows {
-		if r.cellWidth == 0 {
+	for i := 0; i < frame.GetItemCount(); i++ {
+		r := frame.resolveRow(i)
+		if r.byteEnd == r.byteStart {
 			continue
 		}
-		if got := frame.displays[i][r.byteStart:r.byteEnd]; got != "needle" {
+		if got := r.text[r.byteStart:r.byteEnd]; got != "needle" {
 			t.Errorf("row %d highlight bytes = %q, want \"needle\"", i, got)
 		}
 	}
 	// The control-free line must keep its highlight.
-	if frame.rows[1].cellWidth == 0 {
+	if r := frame.resolveRow(1); r.byteEnd == r.byteStart {
 		t.Error("control-free long line should still highlight its match")
 	}
 }
@@ -516,7 +537,8 @@ func TestEditorFindAll_AccentWidthMeasured(t *testing.T) {
 	ev := newFindAllEditor(t, "unit\n\n\n\n\n\n\n\n\n\nunit at line eleven")
 	frame := openFindAllMenu(t, ev, "unit", false, false, false)
 
-	if want := vtui.StringWidth(frame.Items[0].AccentPrefix); frame.accentW != want {
+	paintFindAll(t, frame)
+	if want := vtui.StringWidth(frame.prefixFor(frame.resolveRow(0).match)); frame.accentW != want {
 		t.Errorf("accentW = %d, want measured width %d", frame.accentW, want)
 	}
 }
@@ -548,9 +570,165 @@ func TestEditorFindAll_NarrowTerminalKeepsText(t *testing.T) {
 	ev := newFindAllEditorSized(t, "unit and more text here\nunit", 24, 10)
 	frame := openFindAllMenu(t, ev, "unit", false, false, false)
 
-	for i := range frame.Items {
-		if frame.Items[i].Text == "" {
+	for i, row := range paintFindAll(t, frame)[:frame.GetItemCount()] {
+		if strings.TrimSpace(row) == "" {
 			t.Errorf("item %d text blanked out on a narrow terminal", i)
 		}
+	}
+}
+
+// --- the list is a window onto the spans, not a copy of them ---
+
+func TestCountMatchLines(t *testing.T) {
+	cases := []struct {
+		name    string
+		data    string
+		pattern string
+		want    int
+	}{
+		{"one per line", "aa\naa\naa\n", "aa", 3},
+		{"several per line", "aa aa aa\nbb\naa aa\n", "aa", 2},
+		{"all on one line", "aa aa aa aa", "aa", 1},
+		{"single match", "xx\nyy aa\n", "aa", 1},
+		{"match ends a line", "aa\nbb aa\naa cc\n", "aa", 3},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			spans, err := findAllMatchSpans(nil, []byte(c.data), c.pattern, true, false, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := countMatchLines(nil, []byte(c.data), spans); got != c.want {
+				t.Errorf("countMatchLines = %d, want %d (%d occurrences)", got, c.want, len(spans))
+			}
+		})
+	}
+}
+
+func TestEditorFindAll_LargeListOpensWithoutMaterializing(t *testing.T) {
+	// Half a million occurrences. Materializing one menu item each cost ~2 µs
+	// and ~210 bytes, so this used to be a second of frozen UI and 100 MB; it
+	// is now bounded by the width sample.
+	const n = 500_000
+	ev := newFindAllEditor(t, strings.Repeat("aaa bbbbb\n", n))
+	data := []byte(strings.Repeat("aaa bbbbb\n", n))
+	spans, err := findAllMatchSpans(nil, data, "aaa", true, false, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(spans) != n {
+		t.Fatalf("expected %d occurrences, got %d", n, len(spans))
+	}
+
+	start := time.Now()
+	ev.showFindAllMenu("aaa", data, spans, countMatchLines(nil, data, spans))
+	elapsed := time.Since(start)
+
+	frame, ok := vtui.FrameManager.GetTopFrame().(*findAllFrame)
+	if !ok {
+		t.Fatal("occurrences menu did not open")
+	}
+	defer frame.Close()
+	if elapsed > 200*time.Millisecond {
+		t.Errorf("opening a %d-occurrence list took %v; it should not scale with the list", n, elapsed)
+	}
+	if len(frame.Items) != 0 {
+		t.Errorf("menu materialized %d items, want none", len(frame.Items))
+	}
+	if got := frame.GetItemCount(); got != n {
+		t.Errorf("item count = %d, want %d", got, n)
+	}
+	if !strings.Contains(frame.GetTitle(), "500000") {
+		t.Errorf("title should report the true total, got %q", frame.GetTitle())
+	}
+
+	// The last occurrence must paint as cheaply as the first.
+	frame.SetSelectPos(n - 1)
+	start = time.Now()
+	rows := paintFindAll(t, frame)
+	if elapsed := time.Since(start); elapsed > 100*time.Millisecond {
+		t.Errorf("painting the end of the list took %v", elapsed)
+	}
+	last := rows[len(rows)-1]
+	if want := "500000│1│ aaa bbbbb"; last != want {
+		t.Errorf("last row = %q, want %q", last, want)
+	}
+}
+
+func TestEditorFindAll_ColumnsResolveInAnyOrder(t *testing.T) {
+	// One long line, many matches: columns are counted from wherever the last
+	// resolved row left off, so they have to come out right whichever way the
+	// list is scrolled.
+	ev := newFindAllEditor(t, strings.Repeat("word ", 50))
+	frame := openFindAllMenu(t, ev, "word", false, false, false)
+
+	for _, i := range []int{0, 5, 3, 49, 2, 48, 0} {
+		if got := frame.resolveRow(i).match.Col; got != i*5+1 {
+			t.Errorf("row %d column = %d, want %d", i, got, i*5+1)
+		}
+	}
+}
+
+func TestEditorFindAll_ColumnsCountRunesNotBytes(t *testing.T) {
+	ev := newFindAllEditor(t, "ёжикёжик unit\nunit")
+	frame := openFindAllMenu(t, ev, "unit", false, false, false)
+
+	if got := frame.resolveRow(0).match.Col; got != 10 {
+		t.Errorf("column = %d, want 10 (runes, not bytes)", got)
+	}
+}
+
+func TestEditorFindAll_MouseClickJumps(t *testing.T) {
+	ev := newFindAllEditor(t, "Unit 15 The Avenue\nno match here\nUnited Kingdom")
+	frame := openFindAllMenu(t, ev, "unit", false, false, false)
+
+	x1, y1, _, _ := frame.VMenu.GetPosition()
+	click := &vtinput.InputEvent{
+		Type:        vtinput.MouseEventType,
+		KeyDown:     true,
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+		MouseX:      int16(x1 + 2),
+		MouseY:      int16(y1 + 2), // second row
+	}
+	if !frame.ProcessMouse(click) {
+		t.Fatal("click on an occurrence was not handled")
+	}
+	pumpFindAll(t, func() bool { return ev.selActive })
+
+	wantOff := len("Unit 15 The Avenue\nno match here\n")
+	if ev.selAnchorOffset != wantOff {
+		t.Errorf("clicked occurrence anchor = %d, want %d", ev.selAnchorOffset, wantOff)
+	}
+	if !frame.IsDone() {
+		t.Error("clicking an occurrence should close the menu")
+	}
+}
+
+func TestEditorFindAll_F4DumpCapped(t *testing.T) {
+	old := findAllDumpMaxLines
+	findAllDumpMaxLines = 2
+	defer func() { findAllDumpMaxLines = old }()
+
+	ev := newFindAllEditor(t, "unit one\nunit two\nunit three\nunit four")
+	frame := openFindAllMenu(t, ev, "unit", false, false, false)
+
+	frame.ProcessKey(keyEvent(vtinput.VK_F4, 0))
+	var newEd *EditorView
+	pumpFindAll(t, func() bool {
+		ed, ok := vtui.FrameManager.GetTopFrame().(*EditorView)
+		if ok && ed != ev {
+			newEd = ed
+		}
+		return newEd != nil
+	})
+	defer newEd.Close()
+
+	data, err := newEd.pt.Bytes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "1: unit one\n2: unit two\n" + fmt.Sprintf(Msg("Search.AllEditorMore"), 2) + "\n"
+	if string(data) != want {
+		t.Errorf("dump mismatch:\n got %q\nwant %q", string(data), want)
 	}
 }

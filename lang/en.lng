@@ -1063,6 +1063,7 @@ Search.BtnFind=&Find
 Search.BtnAll=&All
 Search.Searching= Searching...
 Search.AllStatistics=Occurrences: %d, lines: %d
+Search.AllEditorMore=... and %d more occurrences, not listed
 Search.AllBottomHint= Ctrl+Enter Ctrl+Up/Down F4 F5
 Search.AllEditorTitle=Found: %s
 Replace.Title= Replace
