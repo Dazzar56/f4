@@ -625,7 +625,7 @@ func TestEditorFindAll_LargeListOpensWithoutMaterializing(t *testing.T) {
 	}
 
 	start := time.Now()
-	ev.showFindAllMenu("aaa", data, spans, countMatchLines(nil, data, spans))
+	ev.showFindAllMenu("aaa", spans, countMatchLines(nil, data, spans))
 	elapsed := time.Since(start)
 
 	frame, ok := vtui.FrameManager.GetTopFrame().(*findAllFrame)
@@ -853,5 +853,121 @@ func TestFindAllMatchSpans_FoldedScanReadsTheBufferInPlace(t *testing.T) {
 	}
 	if allocated := after.TotalAlloc - before.TotalAlloc; allocated > uint64(len(corpus))/4 {
 		t.Errorf("collecting allocated %d bytes over a %d byte buffer", allocated, len(corpus))
+	}
+}
+
+// taskContextForTest is the handle the collection expects; the search dialog
+// supplies one in the app.
+func taskContextForTest(t *testing.T) *vtui.TaskContext {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	return &vtui.TaskContext{Context: ctx, Cancel: cancel}
+}
+
+// findAllSeamCorpus is built so that matches land on, before and after every
+// seam for a range of window sizes, and so that folding changes a match's byte
+// length (K U+212A folds to "k") right where a window might be cut.
+func findAllSeamCorpus() string {
+	var sb strings.Builder
+	for i := 0; sb.Len() < 40000; i++ {
+		switch i % 7 {
+		case 0:
+			sb.WriteString("needle in a line\n")
+		case 1:
+			sb.WriteString("NEEDLE shouting\n")
+		case 2:
+			sb.WriteString("nothing here at all, just filler to move the seam along\n")
+		case 3:
+			sb.WriteString("two needle and needle on one line\n")
+		case 4:
+			sb.WriteString("Kneedle after a kelvin sign\n")
+		case 5:
+			sb.WriteString("needle")
+		default:
+			sb.WriteString("tail\n")
+		}
+	}
+	return sb.String()
+}
+
+// TestCollectMatchSpans_WindowsMatchTheWholeBuffer is what makes reading the
+// file in windows safe to do: for every window size, the occurrences and the
+// line count must be exactly what one pass over the whole buffer produces,
+// including for matches that straddle a seam.
+func TestCollectMatchSpans_WindowsMatchTheWholeBuffer(t *testing.T) {
+	content := findAllSeamCorpus()
+	data := []byte(content)
+
+	for _, caseSensitive := range []bool{true, false} {
+		want, err := findAllMatchSpans(nil, data, "needle", caseSensitive, false, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		wantLines := countMatchLines(nil, data, want)
+		if len(want) == 0 {
+			t.Fatal("corpus matches nothing")
+		}
+
+		for _, window := range []int{7, 64, 1000, 4096, len(data) * 2} {
+			ev := newFindAllEditor(t, content)
+			restore := findAllWindow
+			findAllWindow = window
+			got, gotLines, err := ev.collectMatchSpans(taskContextForTest(t), ev.editSession,
+				"needle", caseSensitive, false, false)
+			findAllWindow = restore
+			if err != nil {
+				t.Fatalf("window %d: %v", window, err)
+			}
+
+			if len(got) != len(want) {
+				t.Fatalf("window %d, caseSensitive=%v: %d occurrences, want %d",
+					window, caseSensitive, len(got), len(want))
+			}
+			for i := range want {
+				if got[i] != want[i] {
+					t.Fatalf("window %d, caseSensitive=%v: occurrence %d = %+v, want %+v",
+						window, caseSensitive, i, got[i], want[i])
+				}
+			}
+			if gotLines != wantLines {
+				t.Errorf("window %d, caseSensitive=%v: %d matching lines, want %d",
+					window, caseSensitive, gotLines, wantLines)
+			}
+		}
+	}
+}
+
+// TestCollectMatchSpans_ReadsTheFileNotTheMapping: the collection is why Find
+// All on a large file used to fault the whole thing into residency. It should
+// now ask the file for windows, as the line index does.
+func TestCollectMatchSpans_ReadsTheFileNotTheMapping(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	drainPendingTasks()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "occurrences.txt")
+	content := strings.Repeat("a line with needle in it\n", 20000)
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	ev := openMappedEditor(t, dir, path)
+	t.Cleanup(func() { ev.Close() })
+
+	counter := &countingReadAtCloser{ReadAtCloser: ev.file}
+	ev.file = counter
+
+	spans, lines, err := ev.collectMatchSpans(taskContextForTest(t), ev.editSession, "needle", true, false, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(spans) != 20000 {
+		t.Errorf("found %d occurrences, want 20000", len(spans))
+	}
+	if lines != 20000 {
+		t.Errorf("counted %d matching lines, want 20000", lines)
+	}
+	if calls, read := counter.counted(); calls == 0 || read < int64(len(content)) {
+		t.Errorf("the collection read %d bytes in %d calls; it walked the mapping instead", read, calls)
 	}
 }

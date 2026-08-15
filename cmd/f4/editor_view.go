@@ -3198,6 +3198,11 @@ func (ev *EditorView) StartIndexing() {
 					if ev.highlighter != nil && !ev.highlighting && len(ev.lineStates) < li.LineCount() {
 						ev.startHighlighting()
 					}
+					// Say how far it has got. Nothing did, so the status line
+					// held whatever the scan started from — 0% for the whole of
+					// a fresh scan, which on a file big enough to watch reads as
+					// a scan that is stuck rather than one that is working.
+					ev.noteIndexProgress(int64(batchEnd), li.LineCount())
 					vtui.FrameManager.Redraw()
 				})
 			}
@@ -3604,6 +3609,62 @@ func (ev *EditorView) awaitIndexForResults(ctx *vtui.TaskContext) bool {
 		return ok
 	case <-ctx.Done():
 		return false
+	}
+}
+
+// bufferRange returns a stretch of the buffer for a caller that only reads it,
+// without copying when the piece table can hand out a window. On a mapped file
+// that window is the file, so reading a line to paint it touches the pages of
+// that line and no others.
+//
+// It answers nil for a range that is not there, which every caller treats as
+// an empty line rather than an error: these are paint paths.
+func (ev *EditorView) bufferRange(offset, length int) []byte {
+	size := ev.pt.Size()
+	if offset < 0 || offset >= size || length <= 0 {
+		return nil
+	}
+	if offset+length > size {
+		length = size - offset
+	}
+	if view, ok := ev.pt.View(offset, length); ok {
+		return view
+	}
+	data, err := ev.pt.GetRange(offset, length)
+	if err != nil {
+		return nil
+	}
+	return data
+}
+
+// readSearchWindow fills dst with one window of the buffer, preferring the
+// file itself over the mapping for the same reason readIndexChunk does. The
+// result may alias dst or the buffer, and is only valid until the next call.
+func (ev *EditorView) readSearchWindow(ctx context.Context, dst []byte, offset, length int) ([]byte, error) {
+	if n, ok := ev.readIndexChunk(ctx, dst, offset, length); ok {
+		return dst[:n], nil
+	}
+	if view, ok := ev.pt.View(offset, length); ok {
+		return view, nil
+	}
+	// An edited stretch, or a chunk buffer that has not fetched this yet. The
+	// wait is the one readSearchSnapshot does, for the same reason.
+	deadline := time.Now().Add(searchSnapshotStall)
+	for {
+		data, err := ev.pt.GetRange(offset, length)
+		if err == nil {
+			return data, nil
+		}
+		if err != piecetable.ErrLoading {
+			return nil, err
+		}
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		if time.Now().After(deadline) {
+			return nil, err
+		}
+		time.Sleep(searchSnapshotPoll)
 	}
 }
 
