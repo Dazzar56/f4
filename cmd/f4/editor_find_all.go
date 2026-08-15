@@ -392,8 +392,10 @@ func findAllMatchSpans(ctx context.Context, data []byte, pattern string, caseSen
 
 	// strcase folds while scanning the original data, so the offsets need
 	// no translation; a folded match can differ in byte length from the
-	// pattern (K U+212A matches "k"), hence CutPrefix per match.
-	text := string(data)
+	// pattern (K U+212A matches "k"), hence CutPrefix per match. The string
+	// is a view, not a copy: on a mapped file, copying here would cost the
+	// whole file's size in heap for the most ordinary search there is.
+	text := bytesToString(data)
 	curr := 0
 	for {
 		if ctx != nil && len(spans)%1024 == 0 && ctx.Err() != nil {

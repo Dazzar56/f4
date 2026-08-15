@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -825,5 +827,31 @@ func TestEditorFindAll_ResolvesWithNoScanRunning(t *testing.T) {
 		if got := strings.TrimRight(rows[i], " "); got != w {
 			t.Errorf("row %d = %q, want %q", i, got, w)
 		}
+	}
+}
+
+// TestFindAllMatchSpans_FoldedScanReadsTheBufferInPlace: a case-insensitive
+// collection hands the buffer to strcase as a string, which used to mean a
+// copy of the whole file on the most ordinary search there is — 8 GB of heap
+// for the 8 GB file, on top of the mapping it was copied from. The matches
+// here are sparse, so anything approaching the corpus size is that copy and
+// not the spans.
+func TestFindAllMatchSpans_FoldedScanReadsTheBufferInPlace(t *testing.T) {
+	const gap = 4096
+	corpus := bytes.Repeat(append([]byte("Needle"), bytes.Repeat([]byte("x"), gap)...), 2000)
+
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	spans, err := findAllMatchSpans(nil, corpus, "needle", false, false, false)
+	runtime.ReadMemStats(&after)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(spans) != 2000 {
+		t.Fatalf("found %d occurrences, want 2000", len(spans))
+	}
+	if allocated := after.TotalAlloc - before.TotalAlloc; allocated > uint64(len(corpus))/4 {
+		t.Errorf("collecting allocated %d bytes over a %d byte buffer", allocated, len(corpus))
 	}
 }
