@@ -4008,6 +4008,14 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 					perr := patcher.PatchInPlace(ctx.Context, ev.filePath, pieces)
 					if perr == nil {
 						saved = true
+						// This one writes through to the destination itself, so
+						// no stage was ever created. Leaving useTemp set sent
+						// the finalize step on to rename a path that does not
+						// exist, which failed the save — with the new content
+						// already on disk — for every edit that kept the file's
+						// length, and for saving an unmodified buffer.
+						useTemp = false
+						tempPath = ""
 					} else {
 						vtui.DebugLog("EDITOR: in-place patch unavailable: %v", perr)
 					}
