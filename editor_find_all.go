@@ -231,8 +231,11 @@ func (ev *EditorView) FindAll(pattern string, caseSensitive, useRegex, wholeWord
 		session := ev.editSession
 
 		runSearchWithProgress(pattern, func(ctx *vtui.TaskContext, dlg *vtui.Window) {
-			bytes, errBytes := ev.pt.Bytes()
+			bytes, errBytes := ev.searchBuffer(ctx, session)
 			if errBytes != nil {
+				if ctx.Err() != nil {
+					return // canceled; the dialog is already closing
+				}
 				ctx.RunOnUI(func() {
 					dlg.Close()
 					vtui.ShowMessage(" Error ", "Failed to read file buffer.", []string{"&Ok"})

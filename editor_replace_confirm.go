@@ -90,9 +90,13 @@ func selectionIsMatch(sel []byte, pattern string, caseSensitive bool, re *corege
 func (st *replaceLoop) findNext() {
 	ev := st.ev
 	vtui.FrameManager.PostTask(func() {
+		session := st.session
 		runSearchWithProgress(st.pattern, func(ctx *vtui.TaskContext, dlg *vtui.Window) {
-			data, errBytes := ev.pt.Bytes()
+			data, errBytes := ev.searchBuffer(ctx, session)
 			if errBytes != nil {
+				if ctx.Err() != nil {
+					return // canceled; the dialog is already closing
+				}
 				ctx.RunOnUI(func() {
 					dlg.Close()
 					vtui.ShowMessage(" Error ", "Failed to read file buffer.", []string{"&Ok"})
@@ -222,9 +226,13 @@ func (st *replaceLoop) promptAt(data []byte, off, mLen int) {
 func (st *replaceLoop) replaceRemaining(off, mLen int) {
 	ev := st.ev
 	vtui.FrameManager.PostTask(func() {
+		session := st.session
 		runSearchWithProgress(st.pattern, func(ctx *vtui.TaskContext, dlg *vtui.Window) {
-			data, errBytes := ev.pt.Bytes()
+			data, errBytes := ev.searchBuffer(ctx, session)
 			if errBytes != nil {
+				if ctx.Err() != nil {
+					return // canceled; the dialog is already closing
+				}
 				ctx.RunOnUI(func() {
 					dlg.Close()
 					vtui.ShowMessage(" Error ", "Failed to read file buffer.", []string{"&Ok"})
