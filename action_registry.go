@@ -402,7 +402,7 @@ func init() {
 		LabelKey:    "Menu.Files.View",
 		Description: "Open file in viewer",
 		DescKey:     "Action.File.View.Desc",
-		DefaultKeys: []string{"F3", "Num5", "VK_C"},
+		DefaultKeys: []string{"F3", "Num5"},
 		MenuPath:    "Files",
 		Handler:     withPF(func(pf *PanelsFrame) { actionViewFile(pf) }),
 	})
@@ -622,7 +622,7 @@ func init() {
 		LabelKey:    "Action.Panel.SelectGroup",
 		Description: "Select files by mask",
 		DescKey:     "Action.Panel.SelectGroup.Desc",
-		DefaultKeys: []string{"Add", "CtrlShift+", "CtrlShift=", "CtrlShiftVK_BB"},
+		DefaultKeys: []string{"Add", "CtrlShift+"},
 		MenuPath:    "Files",
 		Handler: withPF(func(pf *PanelsFrame) {
 			if fsp := pf.getActivePanel(); fsp != nil {
@@ -639,7 +639,7 @@ func init() {
 		LabelKey:    "Action.Panel.DeselectGroup",
 		Description: "Deselect files by mask",
 		DescKey:     "Action.Panel.DeselectGroup.Desc",
-		DefaultKeys: []string{"Subtract", "CtrlShift_", "CtrlShift-", "CtrlShiftVK_BD"},
+		DefaultKeys: []string{"Subtract", "CtrlShift_"},
 		MenuPath:    "Files",
 		Handler: withPF(func(pf *PanelsFrame) {
 			if fsp := pf.getActivePanel(); fsp != nil {
@@ -654,7 +654,7 @@ func init() {
 		Area:        "Shell",
 		Label:       "Select Current Extension",
 		Description: "Select files with the current extension, or all folders",
-		DefaultKeys: []string{"CtrlAdd", "Ctrl=", "CtrlVK_BB"},
+		DefaultKeys: []string{"CtrlAdd", "Ctrl="},
 		MenuPath:    "Files",
 		Handler: withPF(func(pf *PanelsFrame) {
 			if fsp := pf.getActivePanel(); fsp != nil {
@@ -667,7 +667,7 @@ func init() {
 		Area:        "Shell",
 		Label:       "Deselect Current Extension",
 		Description: "Deselect files with the current extension, or all folders",
-		DefaultKeys: []string{"CtrlSubtract", "Ctrl-", "CtrlVK_BD"},
+		DefaultKeys: []string{"CtrlSubtract", "Ctrl-"},
 		MenuPath:    "Files",
 		Handler: withPF(func(pf *PanelsFrame) {
 			if fsp := pf.getActivePanel(); fsp != nil {
@@ -682,7 +682,7 @@ func init() {
 		LabelKey:    "Action.Panel.InvertSelection",
 		Description: "Invert file selection",
 		DescKey:     "Action.Panel.InvertSelection.Desc",
-		DefaultKeys: []string{"Multiply", "Alt=", "AltVK_BB"},
+		DefaultKeys: []string{"Multiply", "Alt="},
 		MenuPath:    "Files",
 		Handler: withPF(func(pf *PanelsFrame) {
 			if fsp := pf.getActivePanel(); fsp != nil {

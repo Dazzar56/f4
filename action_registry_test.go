@@ -61,12 +61,12 @@ func TestPanelNumpadAndExtensionSelectionDefaultKeys(t *testing.T) {
 		action string
 		keys   []string
 	}{
-		{"File.View", []string{"F3", "Num5", "VK_C"}},
-		{"Panel.SelectGroup", []string{"Add", "CtrlShift+", "CtrlShift=", "CtrlShiftVK_BB"}},
-		{"Panel.DeselectGroup", []string{"Subtract", "CtrlShift_", "CtrlShift-", "CtrlShiftVK_BD"}},
-		{"Panel.InvertSelection", []string{"Multiply", "Alt=", "AltVK_BB"}},
-		{"Panel.SelectCurrentExtension", []string{"CtrlAdd", "Ctrl=", "CtrlVK_BB"}},
-		{"Panel.DeselectCurrentExtension", []string{"CtrlSubtract", "Ctrl-", "CtrlVK_BD"}},
+		{"File.View", []string{"F3", "Num5"}},
+		{"Panel.SelectGroup", []string{"Add", "CtrlShift+"}},
+		{"Panel.DeselectGroup", []string{"Subtract", "CtrlShift_"}},
+		{"Panel.InvertSelection", []string{"Multiply", "Alt="}},
+		{"Panel.SelectCurrentExtension", []string{"CtrlAdd", "Ctrl="}},
+		{"Panel.DeselectCurrentExtension", []string{"CtrlSubtract", "Ctrl-"}},
 	}
 	for _, tc := range tests {
 		action, ok := GetAction(tc.action)
