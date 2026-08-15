@@ -154,3 +154,33 @@ func TestCommandLine_AutoCompleteDisabled(t *testing.T) {
 		t.Error("AutoCompleteMenu was shown even though CommandLineAutoComplete is false")
 	}
 }
+
+func TestCommandLine_NoAutoCompleteMenuWhenDisabled(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	oldCfg := AppConfig
+	AppConfig.CommandLineAutoComplete = false
+	defer func() { AppConfig = oldCfg }()
+
+	cl := NewCommandLine("> ")
+	cl.SetPosition(0, 0, 30, 0)
+	// PathHintsEnabled follows the option (synced like the settings dialog does).
+	cl.Edit.PathHintsEnabled = AppConfig.CommandLineAutoComplete
+	cl.Edit.History = []string{"dir /s", "dir /s d", "dir /s"}
+
+	// Type "dir /s": the separator and the trailing character must not open
+	// the autocomplete menu (neither path hints nor legacy history).
+	for _, r := range "dir /s" {
+		cl.ProcessKey(&vtinput.InputEvent{
+			Type:    vtinput.KeyEventType,
+			KeyDown: true,
+			Char:    r,
+		})
+	}
+
+	top := vtui.FrameManager.GetTopFrame()
+	if _, isAc := top.(*vtui.AutoCompleteMenu); isAc {
+		t.Error("AutoCompleteMenu was shown even though CommandLineAutoComplete is false")
+	}
+}
