@@ -126,7 +126,7 @@ func main() {
 		}
 
 		switch flagName {
-		case "-h", "--help":
+		case "-h", "-?", "--help":
 			print_help = true
 		case "-v", "--version":
 			version = true
@@ -212,27 +212,34 @@ func main() {
 f4 is efficient and cozy two-panel file manager in go
 Usage: f4 [switches]
 The following switches may be used in the command line:
- -h or --help               This help and exit
- -v or --version            Displays the current version and exit
- --debug                    Debug mode (equivalent --log=1)
- --gui [Backend]            Force run in GUI-mode,
-                            (Backend may be: gogpu or ebiten or x11 or wayland,
-                            if Backend omited, f4 try to use the most suitable)
- --log [logtype]
- --server [serverPath]
+ -h, -?, --help         This help and exit
+ -v, --version          Displays the current version and exit
+ --attached             Force run in Attached-mode
  --client [clientPath]
- --input [InputMode]
  --cpuprofile [cpuprofile]
+ --debug                Log to "debug.log" (equivalent to --log=1)
+ --gui [Backend]        Force run in GUI-mode
+                         [Backend] values: "gogpu", "ebiten", "x11", "wayland",
+                         if Backend omited, f4 try to use the most suitable
+ --input [InputMode]    Defines the preferred vtinput parser method;
+                         [InputMode] values: "", "ansi", "ConPTY"
+ --log [logfile]        If =1 or =true uses "debug.log", otherwise logfile
+ --server [serverPath]
  --new-plugin [pluginName]
- -test-plugins              Plugin test mode
- --tty                      Force run in TTY-mode
- --attached                 Force run in Attached-mode
+ -test-plugins          Plugin test mode
+ --tty                  Force run in TTY-mode
 
 Details see in build-in help (F1 inside f4)
 and in project home: https://github.com/unxed/f4
 
 If you want to report a problem with the program, please create bugreport
 at https://github.com/unxed/f4/issues
+
+Details about valid values of [Backend] and [logtype]
+see in vtui project: https://github.com/unxed/vtui
+
+Details about valid values of [InputMode]
+see in vtinput project: https://github.com/unxed/vtinput
 `,
 			getFormattedVersionInfo())
 		return
