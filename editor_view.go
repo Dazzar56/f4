@@ -5434,9 +5434,31 @@ func (ev *EditorView) Search(pattern string, caseSensitive, reverse, regexp, who
 		// Read on the UI thread, before the background scan starts.
 		startOff := ev.searchSeedOffset(reverse, false)
 		session := ev.editSession
+		delegate, canDelegate := ev.searchDelegation(regexp, wholeWord)
 
 		runSearchWithProgress(searchPattern, func(ctx *vtui.TaskContext, dlg *vtui.Window) {
 			defer ev.guardMapping("searching")()
+
+			// A file system that can search its own copy answers without the
+			// file having to travel. Anything it cannot answer for certain
+			// falls through to the scan below.
+			if canDelegate {
+				off, mLen, ok := ev.searchViaFileSystem(ctx.Context, delegate, searchPattern,
+					caseSensitive, reverse, next, startOff)
+				logSearchDelegation(ok, searchPattern)
+				if ok {
+					ctx.RunOnUI(func() {
+						canceled := ctx.Err() != nil
+						dlg.Close()
+						if canceled || ev.editSession != session {
+							return
+						}
+						ev.selectFoundPattern(off, mLen)
+					})
+					return
+				}
+			}
+
 			bytes, errBytes := ev.searchBuffer(ctx, session)
 			if errBytes != nil {
 				if ctx.Err() != nil {
