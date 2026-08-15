@@ -215,7 +215,7 @@ f4 is inspired by:
 * ConPTY — [Win32 Input Mode](https://github.com/microsoft/terminal/blob/main/doc/specs/%234999%20-%20Improved%20keyboard%20handling%20in%20Conpty.md)
 * [DN (DOS Navigator)](https://www.ritlabs.com/en/products/dn/)
 * [Far Manager 2/3](https://github.com/FarGroup/FarManager), [far2l](https://github.com/elfmz/far2l/), [far2m](https://github.com/shmuz/far2m)
-* [FreeType](https://github.com/freetype/freetype) — auto-hinting ([details](https://github.com/unxed/kiwi-go#discrete-cassowary--tui-grid-hinting), [other details](https://github.com/unxed/vtui/blob/main/AUTOLAYOUT.md))
+* [FreeType](https://github.com/freetype/freetype) — [auto-hinting](https://freetype.org/autohinting/index.html) ([details](https://github.com/unxed/kiwi-go#discrete-cassowary--tui-grid-hinting), [other details](https://github.com/unxed/vtui/blob/main/AUTOLAYOUT.md))
 * [Midnight Commander](https://midnight-commander.org/) — FISH/SHELL protocol concept
 * [Telegram](https://telegram.org/) — single-binary distribution and automatic updates
 * [Turbo Text Editor](https://github.com/magiblot/turbo)
