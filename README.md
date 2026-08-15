@@ -129,10 +129,11 @@ To maintain the performance and quality of `f4`, all contributors (including AI 
 5. **FFI and Native Interoperability:** Avoid CGO to preserve easy cross-compilation. If native interoperability is necessary, utilize the `unxed/pureffi` library for fast, non-CGO FFI.
 6. **Language:** All code, comments, documentation, and commit messages must be in English to facilitate international collaboration.
 7. **Plan-First & Fail-Fast:** For complex tasks, start with a clear plan, break the work into incremental, logical chunks, and focus on failing fast to catch architectural flaws early.
+8. **Dialog Layouts (vtui AutoLayout):** All new dialogs must be built using `vtui` AutoLayout. Existing dialogs should be gradually refactored to AutoLayout (starting with those where layout misalignment occurs on resize). For details and API reference, see the [AutoLayout Engine Guide](https://github.com/unxed/vtui/blob/main/AUTOLAYOUT.md).
 
 Recommended instruction for LLMs:
 
-> If the task is large, break it down into multiple responses and start with a plan. For complex tasks, use an iterative, incremental approach similar to Agile or RUP. Follow the "fail fast" principle. Write tests for the generated code immediately. Use English for comments and similar elements to facilitate international collaboration. Keep licensing compliance in mind: for example, you cannot copy code verbatim—or nearly verbatim—from a GPL project into a BSD project; you must implement your own solution for the same problem. In garbage-collected languages, avoid allocating memory within hot loops.
+> If the task is large, break it down into multiple responses and start with a plan. For complex tasks, use an iterative, incremental approach similar to Agile or RUP. Follow the "fail fast" principle. Write tests for the generated code immediately. Use English for comments and similar elements to facilitate international collaboration. Build all new dialogs using vtui AutoLayout and gradually refactor existing ones (see https://github.com/unxed/vtui/blob/main/AUTOLAYOUT.md). Keep licensing compliance in mind: for example, you cannot copy code verbatim—or nearly verbatim—from a GPL project into a BSD project; you must implement your own solution for the same problem. In garbage-collected languages, avoid allocating memory within hot loops.
 
 ---
 ### Getting Started (Ubuntu)
