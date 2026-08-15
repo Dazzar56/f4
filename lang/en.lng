@@ -1075,6 +1075,7 @@ Replace.AskWith=with
 Replace.BtnAll=&All
 Replace.BtnSkip=&Skip
 Replace.Replaced=%d occurrence(s) replaced
+Editor.Indexing=Indexing
 Search.Title= Search
 Search.NotFound=Pattern not found.
 Codepage.Title= Code pages

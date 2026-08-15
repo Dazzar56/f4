@@ -1071,6 +1071,7 @@ Replace.AskWith=на
 Replace.BtnAll=&Все
 Replace.BtnSkip=&Пропустить
 Replace.Replaced=Заменено вхождений: %d
+Editor.Indexing=Индексация
 Search.Title= Поиск
 Search.NotFound=Строка поиска не найдена.
 Codepage.Title= Кодировки
