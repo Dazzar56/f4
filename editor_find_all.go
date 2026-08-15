@@ -34,32 +34,138 @@ type editorMatch struct {
 	Col      int // 1-based rune column within the line
 }
 
-// findAllRow holds per-item metrics for painting the match highlight over
-// the menu text. Byte offsets index the untruncated display string; cell
-// values are terminal columns.
+// findAllRow is one occurrence resolved for painting: where it sits, the text
+// of its line, and where inside that text the match falls. Rows are produced
+// on demand for the dozen or so visible items and thrown away after the paint,
+// so the list costs nothing per occurrence.
 type findAllRow struct {
-	byteStart, byteEnd int // match range in the display string
-	cellStart          int // columns before the match
-	cellWidth          int // 0 = nothing to highlight (match truncated away)
-	visW               int // width of the currently truncated item text
+	match editorMatch
+	text  string // line text, tabs flattened, capped at findAllMaxItemWidth
+	// Match range within text. byteEnd == byteStart means there is nothing to
+	// highlight: the match starts past the cap, or truncation rewrote the
+	// bytes it would have covered.
+	byteStart, byteEnd int
 }
 
-// findAllFrame wraps the occurrences VMenu to draw the key hint on the
-// bottom border and repaint each visible match in the highlight color,
-// following the userMenuFrame pattern (vtui ships as a separate module,
-// so the menu itself is not extended).
+// findAllAnchor remembers where the last resolved row landed so the next one
+// can count runes from there.
+type findAllAnchor struct {
+	valid    bool
+	line     int
+	off, col int
+}
+
+// findAllFrame is the occurrences list. It renders straight out of the span
+// slice the search produced: VMenu keeps the scroll and selection state
+// (ItemCount, TopPos, SelectPos, the scrollbar), but its Items slice stays
+// empty, because one MenuItem per occurrence costs ~2 µs and ~210 bytes and a
+// short pattern in a large file hits millions of times — 21M matches in a
+// 200 MB buffer took ~43 s and ~4.4 GB to materialize, all inside the single
+// RunOnUI callback that opened the menu. Painting only ever touches the
+// visible rows, so nothing about the list needed to exist in the first place.
+//
+// The price is that the parts of VMenu that read Items — item painting, hover,
+// click, Enter — are re-implemented here (vtui ships as a separate module, so
+// the menu itself is not extended).
 type findAllFrame struct {
 	*vtui.VMenu
+	ev    *EditorView
+	data  []byte
+	spans []matchSpan
+
 	bottomHint string
-	accentW    int      // width of the "line│col│ " prefix, same for all items
-	displays   []string // untruncated (but capped) display line per item
-	rows       []findAllRow
+	lineW      int // digits reserved for the line number
+	colW       int // digits reserved for the column; grows, never shrinks
+	accentW    int // width of the "line│col│ " prefix as last painted
 	normalRect [4]int
 	zoomed     bool
+
+	anchor findAllAnchor
+}
+
+// columnAt returns the 1-based rune column of off within its line. Counting
+// starts from the previously resolved row when that row was on the same line,
+// which keeps scrolling through one minified megabyte-long line proportional
+// to the distance moved instead of rescanning from the line start per row.
+func (f *findAllFrame) columnAt(line, lineStart, off int) int {
+	var col int
+	switch a := f.anchor; {
+	case a.valid && a.line == line && off >= a.off:
+		col = a.col + utf8.RuneCount(f.data[a.off:off])
+	case a.valid && a.line == line:
+		col = a.col - utf8.RuneCount(f.data[off:a.off])
+	default:
+		col = 1 + utf8.RuneCount(f.data[lineStart:off])
+	}
+	col = max(col, 1)
+	f.anchor = findAllAnchor{valid: true, line: line, off: off, col: col}
+	return col
+}
+
+// resolveRow turns occurrence i into everything needed to paint its row.
+func (f *findAllFrame) resolveRow(i int) findAllRow {
+	s := f.spans[i]
+	line := f.ev.li.GetLineAtOffset(s.Off)
+	// The background indexer may still be catching up on a large file; clamp
+	// every bound against the buffer so a partially indexed file cannot panic
+	// or render the rest of the buffer as one line.
+	lineStart := min(max(f.ev.li.GetLineOffset(line), 0), len(f.data))
+	lineEnd := min(lineStart+max(f.ev.getLineLength(line), 0), len(f.data))
+	raw := strings.TrimRight(string(f.data[lineStart:lineEnd]), "\r\n")
+	// Tabs become single spaces: a 1-byte-for-1-byte substitution keeps the
+	// match's byte offsets valid in the display string, which keeps the
+	// highlight math trivial.
+	raw = strings.ReplaceAll(raw, "\t", " ")
+	text := vtui.TruncateString(raw, findAllMaxItemWidth, "")
+
+	row := findAllRow{
+		match: editorMatch{
+			Off:  s.Off,
+			Len:  s.Len,
+			Line: line,
+			Col:  f.columnAt(line, lineStart, min(max(s.Off, lineStart), len(f.data))),
+		},
+		text: text,
+	}
+
+	start := s.Off - lineStart
+	end := min(start+s.Len, len(text))
+	if start < 0 || start >= len(text) || start >= end ||
+		// Truncation sanitizes control characters while rebuilding the
+		// string, which shifts byte offsets; highlight only when the display
+		// bytes still hold the match where the buffer had it.
+		end > len(raw) || text[start:end] != raw[start:end] {
+		return row
+	}
+	row.byteStart, row.byteEnd = start, end
+	return row
+}
+
+// prefixFor renders the "line│col│ " accent. Every row on a page is formatted
+// with the same widths, so the item texts line up.
+func (f *findAllFrame) prefixFor(m editorMatch) string {
+	return fmt.Sprintf("%*d│%*d│ ", f.lineW, m.Line+1, f.colW, m.Col)
+}
+
+// resolvePage resolves the rows currently in view and reserves enough digits
+// for the widest column among them.
+func (f *findAllFrame) resolvePage(height int) []findAllRow {
+	rows := make([]findAllRow, 0, max(height, 0))
+	for i := 0; i < height; i++ {
+		idx := f.TopPos + i
+		if idx < 0 || idx >= len(f.spans) {
+			break
+		}
+		rows = append(rows, f.resolveRow(idx))
+	}
+	for _, r := range rows {
+		f.colW = max(f.colW, len(strconv.Itoa(r.match.Col)))
+	}
+	return rows
 }
 
 func (f *findAllFrame) Show(scr *vtui.ScreenBuf) {
-	f.VMenu.Show(scr)
+	f.VMenu.Show(scr) // box, title and scrollbar; Items is empty, so no rows
 	x1, y1, x2, y2 := f.VMenu.GetPosition()
 	p := vtui.NewPainter(scr)
 	if f.bottomHint != "" {
@@ -67,50 +173,101 @@ func (f *findAllFrame) Show(scr *vtui.ScreenBuf) {
 	}
 
 	// Same visible-row bounds as VMenu.DisplayObject.
-	height := y2 - y1 - 1
-	for i := 0; i < height; i++ {
+	rows := f.resolvePage(y2 - y1 - 1)
+
+	prefixes := make([]string, len(rows))
+	accentW := 0
+	for i, r := range rows {
+		prefixes[i] = f.prefixFor(r.match)
+		accentW = max(accentW, vtui.StringWidth(prefixes[i]))
+	}
+	f.accentW = accentW
+
+	// The Painter does not clip, so every string is cut to the room left
+	// inside the border. A terminal narrower than the prefix leaves nothing
+	// for the text; keep one column so rows degrade instead of going blank.
+	innerW := max((x2-x1+1)-4-accentW, 1)
+
+	for i, r := range rows {
 		idx := f.TopPos + i
-		if idx >= len(f.rows) {
-			break
+		y := y1 + 1 + i
+		attr := vtui.Palette[vtui.ColMenuText]
+		hiAttr := vtui.Palette[vtui.ColMenuHighlight]
+		if idx == f.SelectPos {
+			attr = vtui.Palette[vtui.ColMenuSelectedText]
+			hiAttr = vtui.Palette[vtui.ColMenuSelectedHighlight]
 		}
-		r := f.rows[idx]
-		if r.cellWidth == 0 {
+		p.Fill(x1+1, y, x2-1, y, ' ', attr)
+		p.DrawString(x1+2, y, vtui.TruncateString(prefixes[i], max(x2-2-x1, 0), ""), hiAttr)
+
+		textX := x1 + 2 + accentW
+		if textX > x2-1 {
 			continue
 		}
-		textX := x1 + 2 + f.accentW
-		startX := textX + r.cellStart
-		maxX := textX + r.visW - 1
-		if maxX > x2-1 {
-			maxX = x2 - 1
+		text := vtui.TruncateString(r.text, min(innerW, x2-textX), "")
+		p.DrawString(textX, y, text, attr)
+
+		if r.byteEnd == r.byteStart {
+			continue
 		}
+		startX := textX + vtui.StringWidth(r.text[:r.byteStart])
+		maxX := min(textX+vtui.StringWidth(text)-1, x2-1)
 		if startX > maxX {
 			continue
 		}
-		attr := vtui.Palette[vtui.ColMenuHighlight]
-		if idx == f.SelectPos {
-			attr = vtui.Palette[vtui.ColMenuSelectedHighlight]
-		}
-		sub := f.displays[idx][r.byteStart:r.byteEnd]
-		p.DrawString(startX, y1+1+i, vtui.TruncateString(sub, maxX-startX+1, ""), attr)
+		sub := vtui.TruncateString(r.text[r.byteStart:r.byteEnd], maxX-startX+1, "")
+		p.DrawString(startX, y, sub, hiAttr)
 	}
 }
 
-// retruncate refits every item text to the menu's current inner width.
-// Needed after each geometry change: the Painter does not clip, so an item
-// longer than the box would bleed past the border.
-func (f *findAllFrame) retruncate() {
-	x1, _, x2, _ := f.VMenu.GetPosition()
-	innerW := (x2 - x1 + 1) - 4 - f.accentW
-	// A terminal narrower than the line/col prefix leaves no room for text;
-	// keep one column so the items degrade instead of going blank.
-	if innerW < 1 {
-		innerW = 1
+// GetItemCount reports the occurrence count. The embedded VMenu would answer
+// with len(Items), which this frame deliberately keeps at zero.
+func (f *findAllFrame) GetItemCount() int { return f.ItemCount }
+
+// activate jumps to occurrence idx and closes the menu. VMenu's own Enter and
+// click paths read Items to find the action, so the frame runs them instead.
+func (f *findAllFrame) activate(idx int) {
+	if idx < 0 || idx >= len(f.spans) {
+		return
 	}
-	for i := range f.Items {
-		trunc := vtui.TruncateString(f.displays[i], innerW, "")
-		f.Items[i].Text = escapeAmpersand(trunc)
-		f.rows[i].visW = vtui.StringWidth(trunc)
+	s := f.spans[idx]
+	// vtui pops the menu after the key handler returns, so the jump is posted
+	// for after the frame stack has settled.
+	vtui.FrameManager.PostTask(func() {
+		f.ev.selectFoundPattern(s.Off, s.Len)
+	})
+	f.SetExitCode(idx)
+}
+
+// ProcessMouse re-implements VMenu's hover and click handling against the
+// span slice, for the same reason as activate.
+func (f *findAllFrame) ProcessMouse(e *vtinput.InputEvent) bool {
+	if f.IsDisabled() || e.Type != vtinput.MouseEventType {
+		return false
 	}
+	if f.HandleMouseScroll(e) {
+		return true
+	}
+	if (e.MouseEventFlags & vtinput.MouseMoved) != 0 {
+		x1, _, x2, _ := f.VMenu.GetPosition()
+		if mx := int(e.MouseX); mx <= x1 || mx >= x2 {
+			return false
+		}
+		idx := f.GetClickIndex(int(e.MouseY))
+		if idx == -1 {
+			return false
+		}
+		f.SetSelectPos(idx)
+		return true
+	}
+	if e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
+		if idx := f.GetClickIndex(int(e.MouseY)); idx != -1 {
+			f.SetSelectPos(idx)
+			f.activate(idx)
+			return true
+		}
+	}
+	return false
 }
 
 // zoomRect is the near-full-screen position used while F5-zoomed.
@@ -140,13 +297,52 @@ func (f *findAllFrame) ResizeConsole(w, h int) {
 		r = clampMenuRect([4]int{x1, y1, x2, y2}, w, h)
 	}
 	f.SetPosition(r[0], r[1], r[2], r[3])
-	f.retruncate()
 	f.SetSelectPos(f.SelectPos) // re-clamp TopPos to the new height
 }
 
 // findAllMaxItemWidth caps the stored display text so a single minified
 // megabyte-long line cannot bloat the menu.
 const findAllMaxItemWidth = 512
+
+// findAllWidthSample is how many occurrences are measured to pick the menu
+// width. The list itself is unbounded, and the longest of twenty million
+// matching lines cannot be found without resolving all of them, so the width
+// hugs the longest line in the first sample instead. Lists shorter than this
+// are still sized exactly; longer ones get F5 to zoom.
+const findAllWidthSample = 1000
+
+// findAllDumpMaxLines caps the F4 dump. The list renders lazily, but the dump
+// materializes real text into a new editor, and dumping every matching line of
+// a file that matches on all 21M of them would be a second copy of the file.
+// A var so the test can reach the cap without a file that large.
+var findAllDumpMaxLines = 100000
+
+// countMatchLines returns how many distinct lines the occurrences fall on.
+// Two consecutive matches sit on different lines exactly when a '\n' separates
+// them, so the whole list costs one forward pass over the bytes between the
+// first and the last match: the spans are ordered and non-overlapping, so the
+// gaps scanned are disjoint. Resolving each match against the line index
+// instead would be a locked binary search per occurrence, seconds of them at
+// the counts this path exists for. Runs on the collecting goroutine, off the
+// UI thread.
+func countMatchLines(ctx context.Context, data []byte, spans []matchSpan) int {
+	if len(spans) == 0 {
+		return 0
+	}
+	lines := 1
+	off := min(max(spans[0].Off, 0), len(data))
+	for i, s := range spans[1:] {
+		if ctx != nil && i%1024 == 0 && ctx.Err() != nil {
+			return lines
+		}
+		end := min(max(s.Off, off), len(data))
+		if bytes.IndexByte(data[off:end], '\n') >= 0 {
+			lines++
+		}
+		off = end
+	}
+	return lines
+}
 
 // findAllMatchSpans returns every non-overlapping occurrence of pattern in
 // data, using the same pattern-building rules as EditorView.Search. A nil
@@ -245,6 +441,12 @@ func (ev *EditorView) FindAll(pattern string, caseSensitive, useRegex, wholeWord
 			}
 
 			spans, err := findAllMatchSpans(ctx, bytes, pattern, caseSensitive, useRegex, wholeWord)
+			// Counted here rather than in the menu, so that opening it stays
+			// O(one screenful) however many occurrences there are.
+			uniqueLines := 0
+			if err == nil {
+				uniqueLines = countMatchLines(ctx, bytes, spans)
+			}
 
 			ctx.RunOnUI(func() {
 				// Closing the dialog cancels the task via OnResult; read the
@@ -265,103 +467,47 @@ func (ev *EditorView) FindAll(pattern string, caseSensitive, useRegex, wholeWord
 					vtui.ShowMessage(Msg("Search.Title"), Msg("Search.NotFound"), []string{Msg("vtui.Ok")})
 					return
 				}
-				ev.showFindAllMenu(pattern, bytes, spans)
+				ev.showFindAllMenu(pattern, bytes, spans, uniqueLines)
 			})
 		})
 	})
 }
 
-func (ev *EditorView) showFindAllMenu(pattern string, data []byte, spans []matchSpan) {
-	matches := make([]editorMatch, len(spans))
-	displays := make([]string, len(spans))
-	rows := make([]findAllRow, len(spans))
+func (ev *EditorView) showFindAllMenu(pattern string, data []byte, spans []matchSpan, uniqueLines int) {
+	menuTitle := " " + fmt.Sprintf(Msg("Search.AllStatistics"), len(spans), uniqueLines) + " "
+	menu := vtui.NewVMenu(menuTitle)
+	// The menu holds no items: it is a window onto the spans, and everything
+	// VMenu would read out of Items the frame answers from them instead.
+	menu.ItemCount = len(spans)
+	menu.IsSelectable = func(i int) bool { return i >= 0 && i < len(spans) }
 
-	uniqueLines := 0
-	prevLine := -1
-	prevLineStart := 0
-	prevRaw := ""     // tab-replaced line text, offsets 1:1 with the buffer
-	prevDisplay := "" // prevRaw truncated (and sanitized) to findAllMaxItemWidth
-	prevRuneOff := 0
-	prevCol := 1
-	maxCol := 1
-	for i, s := range spans {
-		line := ev.li.GetLineAtOffset(s.Off)
-		if line != prevLine {
-			uniqueLines++
-			prevLine = line
-			// The background indexer may still be catching up on a large
-			// file; clamp every bound against the snapshot so a partially
-			// indexed file cannot panic or materialize the rest of the
-			// buffer as one line.
-			prevLineStart = min(ev.li.GetLineOffset(line), len(data))
-			lineEnd := min(prevLineStart+max(ev.getLineLength(line), 0), len(data))
-			raw := strings.TrimRight(string(data[prevLineStart:lineEnd]), "\r\n")
-			// Tabs become single spaces: a 1-byte-for-1-byte substitution
-			// keeps the match's byte offsets valid in the display string,
-			// which keeps the highlight math trivial.
-			prevRaw = strings.ReplaceAll(raw, "\t", " ")
-			prevDisplay = vtui.TruncateString(prevRaw, findAllMaxItemWidth, "")
-			prevRuneOff = prevLineStart
-			prevCol = 1
-		}
-		// Spans arrive in offset order, so the column is counted from the
-		// previous match on the same line: a long line with many matches is
-		// scanned once overall, not once per match.
-		if prevRuneOff > s.Off {
-			prevRuneOff = s.Off
-		}
-		col := prevCol + utf8.RuneCount(data[prevRuneOff:s.Off])
-		prevRuneOff = s.Off
-		prevCol = col
-		matches[i] = editorMatch{Off: s.Off, Len: s.Len, Line: line, Col: col}
-		if col > maxCol {
-			maxCol = col
-		}
-
-		display := prevDisplay
-		displays[i] = display
-
-		start := s.Off - prevLineStart
-		end := min(start+s.Len, len(display))
-		if start < 0 || start >= len(display) || start >= end ||
-			// Truncation sanitizes control characters while rebuilding the
-			// string, which shifts byte offsets; highlight only when the
-			// display bytes still hold the match where the buffer had it.
-			end > len(prevRaw) || display[start:end] != prevRaw[start:end] {
-			rows[i] = findAllRow{}
-			continue
-		}
-		rows[i] = findAllRow{
-			byteStart: start,
-			byteEnd:   end,
-			cellStart: vtui.StringWidth(display[:start]),
-			cellWidth: vtui.StringWidth(display[start:end]),
-		}
+	frame := &findAllFrame{
+		VMenu:      menu,
+		ev:         ev,
+		data:       data,
+		spans:      spans,
+		bottomHint: Msg("Search.AllBottomHint"),
+		// The last occurrence sits on the highest line number in the list, so
+		// one lookup fixes the width of the line column for good.
+		lineW: len(strconv.Itoa(ev.li.GetLineAtOffset(spans[len(spans)-1].Off) + 1)),
+		colW:  1,
 	}
 
-	lineW := len(strconv.Itoa(matches[len(matches)-1].Line + 1))
-	colW := len(strconv.Itoa(maxCol))
-	prefixFor := func(m editorMatch) string {
-		return fmt.Sprintf("%*d│%*d│ ", lineW, m.Line+1, colW, m.Col)
+	// Sizing needs real rows, so a bounded sample of the head is resolved
+	// here; every other row is resolved when it is painted.
+	maxDisplayW := 0
+	for i := 0; i < min(len(spans), findAllWidthSample); i++ {
+		r := frame.resolveRow(i)
+		maxDisplayW = max(maxDisplayW, vtui.StringWidth(r.text))
+		frame.colW = max(frame.colW, len(strconv.Itoa(r.match.Col)))
 	}
+	frame.anchor = findAllAnchor{}
 	// Measured, not counted: '│' is East-Asian-Ambiguous and renders two
 	// cells wide under CJK locales, where a lineW+colW+3 guess would paint
-	// the highlight two columns off.
-	accentW := vtui.StringWidth(prefixFor(matches[0]))
-
-	menuTitle := " " + fmt.Sprintf(Msg("Search.AllStatistics"), len(matches), uniqueLines) + " "
-	menu := vtui.NewVMenu(menuTitle)
-	maxDisplayW := 0
-	for i := range matches {
-		if w := vtui.StringWidth(displays[i]); w > maxDisplayW {
-			maxDisplayW = w
-		}
-		menu.AddItem(vtui.MenuItem{
-			AccentPrefix: prefixFor(matches[i]),
-			// Text is filled by the initial retruncate below.
-			UserData: i,
-		})
-	}
+	// the highlight two columns off. The numbers formatted here do not matter,
+	// only the widths they are padded to.
+	accentW := vtui.StringWidth(frame.prefixFor(editorMatch{}))
+	frame.accentW = accentW
 
 	scrW := vtui.FrameManager.GetScreenSize()
 	scrH := vtui.FrameManager.GetScreenHeight()
@@ -378,7 +524,7 @@ func (ev *EditorView) showFindAllMenu(pattern string, data []byte, spans []match
 	if w < 10 {
 		w = 10
 	}
-	h := len(matches) + 2
+	h := len(spans) + 2
 	if h > 12 {
 		h = 12 // Far caps the list at 10 rows plus the borders
 	}
@@ -391,28 +537,8 @@ func (ev *EditorView) showFindAllMenu(pattern string, data []byte, spans []match
 	x := max((scrW-w)/2, 0)
 	y := max((scrH-h)/2, 0)
 	menu.SetPosition(x, y, x+w-1, y+h-1)
-
-	frame := &findAllFrame{
-		VMenu:      menu,
-		bottomHint: Msg("Search.AllBottomHint"),
-		accentW:    accentW,
-		displays:   displays,
-		rows:       rows,
-		normalRect: [4]int{x, y, x + w - 1, y + h - 1},
-	}
-	frame.retruncate()
-
-	// vtui pops the menu after OnAction returns, so the jump is posted for
-	// after the frame stack has settled.
-	menu.OnAction = func(idx int) {
-		if idx < 0 || idx >= len(matches) {
-			return
-		}
-		m := matches[idx]
-		vtui.FrameManager.PostTask(func() {
-			ev.selectFoundPattern(m.Off, m.Len)
-		})
-	}
+	menu.SetSelectPos(0) // AddItem would have done this for a normal menu
+	frame.normalRect = [4]int{x, y, x + w - 1, y + h - 1}
 
 	menu.OnKeyDown = func(e *vtinput.InputEvent) bool {
 		if !e.KeyDown {
@@ -428,9 +554,9 @@ func (ev *EditorView) showFindAllMenu(pattern string, data []byte, spans []match
 			switch e.VirtualKeyCode {
 			case vtinput.VK_RETURN:
 				// Jump to the occurrence but keep the menu open.
-				if idx := menu.SelectPos; idx >= 0 && idx < len(matches) {
-					m := matches[idx]
-					ev.selectFoundPattern(m.Off, m.Len)
+				if idx := menu.SelectPos; idx >= 0 && idx < len(spans) {
+					s := spans[idx]
+					ev.selectFoundPattern(s.Off, s.Len)
 				}
 				return true
 			case vtinput.VK_UP, vtinput.VK_DOWN:
@@ -450,10 +576,15 @@ func (ev *EditorView) showFindAllMenu(pattern string, data []byte, spans []match
 
 		if noMods {
 			switch e.VirtualKeyCode {
+			case vtinput.VK_RETURN:
+				// VMenu's own Enter handling reads Items to find the action,
+				// and this menu has none.
+				frame.activate(menu.SelectPos)
+				return true
 			case vtinput.VK_F4:
 				menu.Close()
 				vtui.FrameManager.PostTask(func() {
-					ev.openFoundLinesEditor(pattern, matches, data)
+					ev.openFoundLinesEditor(pattern, data, spans)
 				})
 				return true
 			case vtinput.VK_F5:
@@ -470,7 +601,6 @@ func (ev *EditorView) showFindAllMenu(pattern string, data []byte, spans []match
 					frame.zoomed = false
 				}
 				frame.SetPosition(r[0], r[1], r[2], r[3])
-				frame.retruncate()
 				frame.SetSelectPos(frame.SelectPos) // re-clamp TopPos to the new height
 				vtui.FrameManager.Redraw()
 				return true
@@ -493,24 +623,36 @@ func (ev *EditorView) showFindAllMenu(pattern string, data []byte, spans []match
 
 // openFoundLinesEditor dumps the unique matching lines, each prefixed with
 // its 1-based line number, into a fresh editor (Far's F4 in the find-all
-// list).
-func (ev *EditorView) openFoundLinesEditor(pattern string, matches []editorMatch, data []byte) {
-	if len(matches) == 0 {
+// list). Unlike the list, this one materializes text, so it stops after
+// findAllDumpMaxLines and says how much it left out.
+func (ev *EditorView) openFoundLinesEditor(pattern string, data []byte, spans []matchSpan) {
+	if len(spans) == 0 {
 		return
 	}
-	lineW := len(strconv.Itoa(matches[len(matches)-1].Line + 1))
+	lineW := len(strconv.Itoa(ev.li.GetLineAtOffset(spans[len(spans)-1].Off) + 1))
 
 	var b strings.Builder
-	prev := -1
-	for _, m := range matches {
-		if m.Line == prev {
+	lines, i, lineEnd, prevLine := 0, 0, 0, -1
+	for ; i < len(spans) && lines < findAllDumpMaxLines; i++ {
+		// Spans are ordered, so every match before the end of the line just
+		// written is on that line: skipping them by offset keeps a line with
+		// millions of matches from costing a line-index lookup each.
+		if lines > 0 && spans[i].Off < lineEnd {
 			continue
 		}
-		prev = m.Line
-		lineStart := min(ev.li.GetLineOffset(m.Line), len(data))
-		lineEnd := min(lineStart+max(ev.getLineLength(m.Line), 0), len(data))
+		line := ev.li.GetLineAtOffset(spans[i].Off)
+		if line == prevLine {
+			continue // a still-indexing file can report a zero-length line
+		}
+		prevLine = line
+		lineStart := min(max(ev.li.GetLineOffset(line), 0), len(data))
+		lineEnd = min(lineStart+max(ev.getLineLength(line), 0), len(data))
 		raw := strings.TrimRight(string(data[lineStart:lineEnd]), "\r\n")
-		fmt.Fprintf(&b, "%*d: %s\n", lineW, m.Line+1, raw)
+		fmt.Fprintf(&b, "%*d: %s\n", lineW, line+1, raw)
+		lines++
+	}
+	if left := len(spans) - i; left > 0 {
+		fmt.Fprintf(&b, Msg("Search.AllEditorMore")+"\n", left)
 	}
 
 	editor := NewEditorView(piecetable.New([]byte(b.String())), nil, "")

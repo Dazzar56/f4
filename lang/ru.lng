@@ -1059,6 +1059,7 @@ Search.BtnFind=&Найти
 Search.BtnAll=&Все
 Search.Searching= Поиск...
 Search.AllStatistics=Вхождений: %d, строк: %d
+Search.AllEditorMore=... и ещё %d вхождений, не показаны
 Search.AllBottomHint= Ctrl+Enter Ctrl+Up/Down F4 F5
 Search.AllEditorTitle=Найдено: %s
 Replace.Title= Замена
