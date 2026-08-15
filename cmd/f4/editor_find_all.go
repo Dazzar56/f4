@@ -165,6 +165,12 @@ func (f *findAllFrame) resolvePage(height int) []findAllRow {
 }
 
 func (f *findAllFrame) Show(scr *vtui.ScreenBuf) {
+	// Rows are read out of the buffer as they are painted, and on a mapped
+	// file that buffer is the file: this paints through the mapping every
+	// frame, where the editor's own paint has the same guard for the same
+	// reason. A list built from materialized rows never touched it again.
+	defer f.ev.guardMapping("listing occurrences")()
+
 	f.VMenu.Show(scr) // box, title and scrollbar; Items is empty, so no rows
 	x1, y1, x2, y2 := f.VMenu.GetPosition()
 	p := vtui.NewPainter(scr)
@@ -484,6 +490,10 @@ func (ev *EditorView) FindAll(pattern string, caseSensitive, useRegex, wholeWord
 }
 
 func (ev *EditorView) showFindAllMenu(pattern string, data []byte, spans []matchSpan, uniqueLines int) {
+	// Sizing the menu resolves a sample of rows, which reads the buffer here
+	// on the UI thread, mapping and all.
+	defer ev.guardMapping("sizing the occurrences list")()
+
 	// Every row is resolved against the index as it is painted, so the index
 	// has to reach the last occurrence before the list opens. The task waited
 	// for a running scan to get there; this covers the case where there was no
@@ -648,6 +658,10 @@ func (ev *EditorView) openFoundLinesEditor(pattern string, data []byte, spans []
 	if len(spans) == 0 {
 		return
 	}
+	// The dump copies the matching lines out of the buffer, so it reads
+	// through the mapping too.
+	defer ev.guardMapping("dumping the matching lines")()
+
 	lineW := len(strconv.Itoa(ev.li.GetLineAtOffset(spans[len(spans)-1].Off) + 1))
 
 	var b strings.Builder
