@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"unsafe"
 
@@ -18,6 +19,8 @@ type PTY struct {
 	Master    *os.File
 	Slave     *os.File
 	Cmd       *exec.Cmd
+	closed    bool
+	closeOnce sync.Once
 	shellPgrp int
 }
 
@@ -52,6 +55,13 @@ func NewPTY() (*PTY, error) {
 	if err != nil {
 		return nil, ptyStep("open /dev/ptmx", err)
 	}
+	// Put the master fd in non-blocking mode before wrapping it in
+	// os.NewFile; see pty_unix.go for why Close() cannot otherwise
+	// interrupt a Master.Read() blocked in another goroutine.
+	if err := unix.SetNonblock(masterFd, true); err != nil {
+		unix.Close(masterFd)
+		return nil, ptyStep("set non-blocking", err)
+	}
 	master := os.NewFile(uintptr(masterFd), "/dev/ptmx")
 
 	// Naming the slave is the one step that differs between the BSDs here,
@@ -75,10 +85,12 @@ func NewPTY() (*PTY, error) {
 	}
 	slave := os.NewFile(uintptr(slaveFd), slaveName)
 
-	return &PTY{
+	p := &PTY{
 		Master: master,
 		Slave:  slave,
-	}, nil
+	}
+	registerPTYOpened()
+	return p, nil
 }
 
 func (p *PTY) Write(b []byte) (int, error) {
@@ -90,18 +102,22 @@ func (p *PTY) Read(b []byte) (int, error) {
 }
 
 func (p *PTY) Close() error {
-	vtui.DebugLog("PTY: Closing PTY and killing child process group")
-	if p.Cmd != nil && p.Cmd.Process != nil {
-		_ = syscall.Kill(-p.Cmd.Process.Pid, syscall.SIGKILL)
-		p.Cmd.Process.Kill()
-	}
 	var err error
-	if p.Master != nil {
-		err = p.Master.Close()
-	}
-	if p.Slave != nil {
-		p.Slave.Close()
-	}
+	p.closeOnce.Do(func() {
+		vtui.DebugLog("PTY: Closing PTY and killing child process group")
+		if p.Cmd != nil && p.Cmd.Process != nil {
+			_ = syscall.Kill(-p.Cmd.Process.Pid, syscall.SIGKILL)
+			p.Cmd.Process.Kill()
+		}
+		if p.Master != nil {
+			err = p.Master.Close()
+		}
+		if p.Slave != nil {
+			p.Slave.Close()
+		}
+		p.closed = true
+		registerPTYClosed()
+	})
 	return err
 }
 

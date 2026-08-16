@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"unsafe"
 
@@ -19,6 +20,8 @@ type PTY struct {
 	Master    *os.File
 	Slave     *os.File
 	Cmd       *exec.Cmd
+	closed    bool
+	closeOnce sync.Once
 	shellPgrp int
 }
 
@@ -36,6 +39,16 @@ func NewPTY() (*PTY, error) {
 		return nil, err
 	}
 	master := os.NewFile(uintptr(masterFd), "/dev/ptmx")
+	// Put the master fd in non-blocking mode before wrapping it in
+	// os.NewFile; see pty_unix.go for why Close() cannot otherwise
+	// interrupt a Master.Read() blocked in another goroutine. This must
+	// happen right after the fd is wrapped here (rather than before, as
+	// on the other platforms) because the TIOCPTY* ioctls below take the
+	// wrapped *os.File's Fd() as their argument.
+	if err := unix.SetNonblock(masterFd, true); err != nil {
+		master.Close()
+		return nil, err
+	}
 
 	if _, _, e := syscall.Syscall(syscall.SYS_IOCTL, uintptr(masterFd), unix.TIOCPTYGRANT, 0); e != 0 {
 		master.Close()
@@ -70,10 +83,12 @@ func NewPTY() (*PTY, error) {
 	}
 	slave := os.NewFile(uintptr(slaveFd), slaveName)
 
-	return &PTY{
+	p := &PTY{
 		Master: master,
 		Slave:  slave,
-	}, nil
+	}
+	registerPTYOpened()
+	return p, nil
 }
 
 func (p *PTY) Write(b []byte) (int, error) {
@@ -85,18 +100,22 @@ func (p *PTY) Read(b []byte) (int, error) {
 }
 
 func (p *PTY) Close() error {
-	vtui.DebugLog("PTY: Closing PTY and killing child process group")
-	if p.Cmd != nil && p.Cmd.Process != nil {
-		_ = syscall.Kill(-p.Cmd.Process.Pid, syscall.SIGKILL)
-		p.Cmd.Process.Kill()
-	}
 	var err error
-	if p.Master != nil {
-		err = p.Master.Close()
-	}
-	if p.Slave != nil {
-		p.Slave.Close()
-	}
+	p.closeOnce.Do(func() {
+		vtui.DebugLog("PTY: Closing PTY and killing child process group")
+		if p.Cmd != nil && p.Cmd.Process != nil {
+			_ = syscall.Kill(-p.Cmd.Process.Pid, syscall.SIGKILL)
+			p.Cmd.Process.Kill()
+		}
+		if p.Master != nil {
+			err = p.Master.Close()
+		}
+		if p.Slave != nil {
+			p.Slave.Close()
+		}
+		p.closed = true
+		registerPTYClosed()
+	})
 	return err
 }
 

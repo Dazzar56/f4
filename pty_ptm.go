@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"unsafe"
 
@@ -17,6 +18,8 @@ type PTY struct {
 	Master    *os.File
 	Slave     *os.File
 	Cmd       *exec.Cmd
+	closed    bool
+	closeOnce sync.Once
 	shellPgrp int
 }
 
@@ -29,18 +32,22 @@ func (p *PTY) Read(b []byte) (int, error) {
 }
 
 func (p *PTY) Close() error {
-	vtui.DebugLog("PTY: Closing PTY and killing child process group")
-	if p.Cmd != nil && p.Cmd.Process != nil {
-		_ = syscall.Kill(-p.Cmd.Process.Pid, syscall.SIGKILL)
-		p.Cmd.Process.Kill()
-	}
 	var err error
-	if p.Master != nil {
-		err = p.Master.Close()
-	}
-	if p.Slave != nil {
-		p.Slave.Close()
-	}
+	p.closeOnce.Do(func() {
+		vtui.DebugLog("PTY: Closing PTY and killing child process group")
+		if p.Cmd != nil && p.Cmd.Process != nil {
+			_ = syscall.Kill(-p.Cmd.Process.Pid, syscall.SIGKILL)
+			p.Cmd.Process.Kill()
+		}
+		if p.Master != nil {
+			err = p.Master.Close()
+		}
+		if p.Slave != nil {
+			p.Slave.Close()
+		}
+		p.closed = true
+		registerPTYClosed()
+	})
 	return err
 }
 

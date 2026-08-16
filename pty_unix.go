@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"unsafe"
 
@@ -19,6 +20,8 @@ type PTY struct {
 	Master    *os.File
 	Slave     *os.File
 	Cmd       *exec.Cmd
+	closed    bool
+	closeOnce sync.Once
 	shellPgrp int
 }
 
@@ -33,6 +36,19 @@ func NewPTY() (*PTY, error) {
 	// until allocation fails.
 	masterFd, err := unix.Open("/dev/ptmx", unix.O_RDWR|unix.O_NOCTTY|unix.O_CLOEXEC, 0)
 	if err != nil {
+		return nil, err
+	}
+	// Put the master fd in non-blocking mode *before* wrapping it in
+	// os.NewFile. Go's os.File only registers a descriptor with the
+	// runtime poller when it is already non-blocking; if it isn't,
+	// Master.Read() falls back to a raw blocking syscall.Read that
+	// Close() from another goroutine cannot interrupt. Without this, a
+	// terminal reader goroutine left blocked in Read() when its
+	// PanelsFrame gets torn down leaks forever -- both the goroutine and
+	// the underlying pty slot -- which is exactly what eventually
+	// exhausts the system's pty limit across a long `go test ./...` run.
+	if err := unix.SetNonblock(masterFd, true); err != nil {
+		unix.Close(masterFd)
 		return nil, err
 	}
 
@@ -64,10 +80,12 @@ func NewPTY() (*PTY, error) {
 
 	slave := os.NewFile(uintptr(slaveFd), slaveName)
 
-	return &PTY{
+	p := &PTY{
 		Master: master,
 		Slave:  slave,
-	}, nil
+	}
+	registerPTYOpened()
+	return p, nil
 }
 
 func (p *PTY) Write(b []byte) (int, error) {
@@ -79,19 +97,23 @@ func (p *PTY) Read(b []byte) (int, error) {
 }
 
 func (p *PTY) Close() error {
-	vtui.DebugLog("PTY: Closing PTY and killing child process group")
-	if p.Cmd != nil && p.Cmd.Process != nil {
-		// Kill the whole process group because we used Setsid
-		_ = syscall.Kill(-p.Cmd.Process.Pid, syscall.SIGKILL)
-		p.Cmd.Process.Kill()
-	}
 	var err error
-	if p.Master != nil {
-		err = p.Master.Close()
-	}
-	if p.Slave != nil {
-		p.Slave.Close()
-	}
+	p.closeOnce.Do(func() {
+		vtui.DebugLog("PTY: Closing PTY and killing child process group")
+		if p.Cmd != nil && p.Cmd.Process != nil {
+			// Kill the whole process group because we used Setsid
+			_ = syscall.Kill(-p.Cmd.Process.Pid, syscall.SIGKILL)
+			p.Cmd.Process.Kill()
+		}
+		if p.Master != nil {
+			err = p.Master.Close()
+		}
+		if p.Slave != nil {
+			p.Slave.Close()
+		}
+		p.closed = true
+		registerPTYClosed()
+	})
 	return err
 }
 

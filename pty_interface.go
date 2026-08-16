@@ -1,6 +1,9 @@
 package main
 
-import "io"
+import (
+	"io"
+	"sync/atomic"
+)
 
 // PtyBackend abstracts the difference between Unix PTY and Windows ConPTY.
 type PtyBackend interface {
@@ -43,4 +46,29 @@ func ptyPixels(v int) uint16 {
 		return 0xFFFF
 	}
 	return uint16(v)
+}
+
+// livePTYCount tracks pseudo-terminals opened by any platform's NewPTY
+// that have not yet been closed. It exists purely as a leak detector:
+// a PTY that is opened but never Close()'d leaves a live goroutine
+// blocked in Master.Read() and a real pty slot allocated for the rest
+// of the process lifetime. In `go test ./...`, where every test in a
+// package shares one process, that adds up test by test until the
+// system's pty limit is exhausted and unrelated, timing-sensitive
+// tests start failing for no reason connected to what they actually
+// test. See zzz_pty_leak_check_test.go for where this is reported.
+var livePTYCount int64
+
+func registerPTYOpened() {
+	atomic.AddInt64(&livePTYCount, 1)
+}
+
+func registerPTYClosed() {
+	atomic.AddInt64(&livePTYCount, -1)
+}
+
+// LivePTYCount reports how many PTYs opened through any platform's
+// NewPTY are still considered open right now.
+func LivePTYCount() int64 {
+	return atomic.LoadInt64(&livePTYCount)
 }

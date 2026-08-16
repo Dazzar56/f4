@@ -48,12 +48,23 @@ func NewPTY() (*PTY, error) {
 	// the master never drops to zero references when f4 dies, no SIGHUP is
 	// delivered, and the shell survives as an orphan pinning its pty.
 	setCloseOnExec([]int{int(pg.Cfd), int(pg.Sfd)})
+	// TIOCPTMGET's master descriptor needs the same non-blocking flag as
+	// the Linux/BSD paths (see pty_unix.go): otherwise a blocked
+	// Master.Read() cannot be interrupted by Close() from another
+	// goroutine, and the reader goroutine leaks along with the pty.
+	if err := unix.SetNonblock(int(pg.Cfd), true); err != nil {
+		unix.Close(int(pg.Cfd))
+		unix.Close(int(pg.Sfd))
+		return nil, err
+	}
 
 	master := os.NewFile(uintptr(pg.Cfd), "/dev/ptmx")
 	slave := os.NewFile(uintptr(pg.Sfd), "slave")
 
-	return &PTY{
+	p := &PTY{
 		Master: master,
 		Slave:  slave,
-	}, nil
+	}
+	registerPTYOpened()
+	return p, nil
 }
