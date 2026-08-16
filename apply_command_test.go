@@ -65,10 +65,8 @@ func TestApplyCommandActionRegistered(t *testing.T) {
 }
 
 func TestApplyCommandActionUsesActivePanelWorkspace(t *testing.T) {
-	oldFM := vtui.FrameManager
-	isolatedFM := *oldFM
-	vtui.FrameManager = &isolatedFM
-	defer func() { vtui.FrameManager = oldFM }()
+	// See swapFrameManager for why this isn't a plain struct copy.
+	defer swapFrameManager(t)()
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	pfA := setupMockPanelsFrame()

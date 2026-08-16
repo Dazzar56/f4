@@ -1051,6 +1051,7 @@
     ├── word_nav_test.go
     ├── workspace_routing_test.go
     ├── workspace_session.go
-    └── workspace_session_test.go
+    ├── workspace_session_test.go
+    └── zzz_pty_leak_check_test.go
     
-    57 directories, 995 files
+    57 directories, 996 files

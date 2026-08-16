@@ -24,11 +24,8 @@ func TestUpdateWindowTitle(t *testing.T) {
 	scr.AllocBuf(80, 25)
 	scr.Writer = &out
 
-	// Безопасное сохранение состояния глобального FrameManager через разыменование указателя
-	oldFM := *vtui.FrameManager
-	defer func() {
-		*vtui.FrameManager = oldFM
-	}()
+	// See snapshotFrameManagerState for why this isn't a plain struct copy.
+	defer snapshotFrameManagerState(t)()
 
 	// Инициализируем чистый стек окон во фреймворке
 	vtui.FrameManager.Init(scr)
