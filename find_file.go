@@ -324,7 +324,7 @@ func (r foundFileRow) GetCellText(col int) string {
 }
 
 type SearchResultsWindow struct {
-	vtui.Window
+	*vtui.Window
 	table *vtui.Table
 	found []FoundFile
 	vfs   vfs.VFS
@@ -375,7 +375,7 @@ func ShowSearchResults(pf *PanelsFrame, v vfs.VFS, found []FoundFile) {
 	baseDlg := vtui.NewCenteredDialog(dlgW, dlgH, Msg("FindFile.SearchResultsTitle"))
 
 	srw := &SearchResultsWindow{
-		Window: *baseDlg,
+		Window: baseDlg,
 		found:  found,
 		vfs:    v,
 		pf:     pf,

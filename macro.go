@@ -594,7 +594,7 @@ func (m *MacroManager) Save() {
 
 // MacroAssignFrame is a modal frame that captures a key combination to assign a macro.
 type MacroAssignFrame struct {
-	vtui.Window
+	*vtui.Window
 	mgr *MacroManager
 }
 
@@ -602,7 +602,7 @@ func NewMacroAssignFrame(m *MacroManager) *MacroAssignFrame {
 	width, height := 42, 7
 	base := vtui.NewCenteredDialog(width, height, Msg("Macro.AssignTitle"))
 	f := &MacroAssignFrame{
-		Window: *base,
+		Window: base,
 		mgr:    m,
 	}
 
