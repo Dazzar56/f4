@@ -28,6 +28,10 @@ func applyPathHintSettings() {
 // AppConfig.PathHintSource and returns directory listing items for the
 // autocomplete menu.
 func pathHintProvider(edit *vtui.Edit, word string, from, to int) []vtui.AutoCompleteItem {
+	// Path hints only make sense when command line autocompletion is enabled.
+	if !AppConfig.CommandLineAutoComplete {
+		return nil
+	}
 	if vtui.FrameManager == nil {
 		return nil
 	}
