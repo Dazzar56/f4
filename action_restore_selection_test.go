@@ -20,6 +20,11 @@ func seedPanelForRestore(t *testing.T, names []string) *PanelsFrame {
 
 	fsp := pf.getActivePanel()
 	fsp.vfs = vfs.NewOSVFS(".")
+	// NewFileSystemPanel starts an asynchronous directory read. Let it finish
+	// before returning, otherwise its completion task leaks into the shared
+	// FrameManager queue and corrupts the next test that drains it (and, if
+	// this test swaps the VFS, the late callback panics against the new VFS).
+	waitForLoad(t, fsp)
 
 	entries := []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
 	for _, n := range names {
