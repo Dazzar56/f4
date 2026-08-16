@@ -1,6 +1,9 @@
 package luaplug
 
 import (
+	"runtime"
+	"strings"
+
 	"github.com/unxed/ffibridge"
 	lua "github.com/yuin/gopher-lua"
 )
@@ -229,7 +232,19 @@ func (r *Runtime) ffiCallback(b *ffibridge.Bridge) lua.LGFunction {
 		signature := L.CheckString(1)
 		handler := L.CheckFunction(2)
 
-		addr, err := b.NewCallback(signature, func(args []any) (any, error) {
+		// The Windows trampoline only accepts uintptr-sized argument and
+		// return slots, so narrow integers are widened to ptr for the native
+		// side and narrowed back before they reach the Lua function.
+		trampSig, origKinds := widenCallbackSignature(signature)
+
+		addr, err := b.NewCallback(trampSig, func(args []any) (any, error) {
+			if origKinds != nil {
+				for i, kind := range origKinds {
+					if kind != ffibridge.KindVoid {
+						args[i] = narrowCallbackValue(kind, args[i])
+					}
+				}
+			}
 			var result any
 			err := r.Do(func(L *lua.LState) error {
 				L.Push(handler)
@@ -253,4 +268,80 @@ func (r *Runtime) ffiCallback(b *ffibridge.Bridge) lua.LGFunction {
 		L.Push(lua.LNumber(addr))
 		return 1
 	}
+}
+
+// widenCallbackSignature rewrites a callback signature for the native
+// trampoline. On Windows only uintptr-sized slots are legal, so narrow
+// integers become ptr; it returns the widened signature and, per argument,
+// the original kind to narrow back to (KindVoid means the slot was not
+// widened). On other platforms, or when nothing needs widening, the second
+// result is nil and the signature is returned unchanged.
+func widenCallbackSignature(sig string) (string, []ffibridge.Kind) {
+	if runtime.GOOS != "windows" {
+		return sig, nil
+	}
+	parsed, err := ffibridge.ParseSignature(sig)
+	if err != nil {
+		return sig, nil // let NewCallback report the parse error unchanged
+	}
+
+	retName := parsed.Ret.String()
+	widened := callbackNeedsWidening(parsed.Ret)
+	if widened {
+		retName = "ptr"
+	}
+
+	origKinds := make([]ffibridge.Kind, len(parsed.Args))
+	names := make([]string, len(parsed.Args))
+	for i, arg := range parsed.Args {
+		if callbackNeedsWidening(arg) {
+			origKinds[i] = arg
+			names[i] = "ptr"
+			widened = true
+		} else {
+			names[i] = arg.String()
+		}
+	}
+	if !widened {
+		return sig, nil
+	}
+
+	return retName + "(" + strings.Join(names, ",") + ")", origKinds
+}
+
+// callbackNeedsWidening reports whether a slot kind is too narrow for the
+// Windows callback trampoline, which only accepts int/int64/uint/uint64/
+// uintptr/pointer-sized values.
+func callbackNeedsWidening(k ffibridge.Kind) bool {
+	switch k {
+	case ffibridge.KindBool,
+		ffibridge.KindI8, ffibridge.KindU8,
+		ffibridge.KindI16, ffibridge.KindU16,
+		ffibridge.KindI32, ffibridge.KindU32:
+		return true
+	}
+	return false
+}
+
+// narrowCallbackValue turns a widened uintptr slot back into the value the
+// original signature described, so Lua sees e.g. -1 and not 2^64-1.
+func narrowCallbackValue(k ffibridge.Kind, v any) any {
+	p, _ := v.(uintptr)
+	switch k {
+	case ffibridge.KindI8:
+		return int8(uint8(p))
+	case ffibridge.KindU8:
+		return uint8(p)
+	case ffibridge.KindI16:
+		return int16(uint16(p))
+	case ffibridge.KindU16:
+		return uint16(p)
+	case ffibridge.KindI32:
+		return int32(uint32(p))
+	case ffibridge.KindU32:
+		return uint32(p)
+	case ffibridge.KindBool:
+		return p != 0
+	}
+	return v
 }
