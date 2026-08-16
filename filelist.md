@@ -217,6 +217,7 @@
     ├── fkeys_hidden_panels_test.go
     ├── folder_history_actions_test.go
     ├── folder_history_navigation_test.go
+    ├── frame_manager_test_helpers_test.go
     ├── framework_actions.go
     ├── framework_actions_test.go
     ├── fs_info_darwin.go
@@ -1054,4 +1055,4 @@
     ├── workspace_session_test.go
     └── zzz_pty_leak_check_test.go
     
-    57 directories, 996 files
+    57 directories, 997 files
