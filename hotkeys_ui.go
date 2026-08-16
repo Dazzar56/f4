@@ -247,7 +247,7 @@ func showAreaSelectDialog(actionName, defaultArea, defaultCond string, onComplet
 }
 
 type HotkeyAssignFrame struct {
-	vtui.Window
+	*vtui.Window
 	actionName string
 	area       string
 	onComplete func()
@@ -257,7 +257,7 @@ func NewHotkeyAssignFrame(actionName, area string, onComplete func()) *HotkeyAss
 	width, height := 42, 9
 	base := vtui.NewCenteredDialog(width, height, Msg("Hotkeys.AssignTitle"))
 	f := &HotkeyAssignFrame{
-		Window:     *base,
+		Window:     base,
 		actionName: actionName,
 		area:       area,
 		onComplete: onComplete,
