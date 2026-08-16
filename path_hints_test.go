@@ -203,6 +203,7 @@ func TestPathHintProvider_BothPanels(t *testing.T) {
 
 	oldCfg := AppConfig
 	defer func() { AppConfig = oldCfg }()
+	AppConfig.CommandLineAutoComplete = true
 	AppConfig.PathHintSource = PathHintSourceBoth
 	AppConfig.PathHintFullPath = false
 
@@ -233,5 +234,31 @@ func TestPathHintProvider_BothPanels(t *testing.T) {
 	items = pathHintProvider(nil, "sub/", 0, 4)
 	if len(items) != 1 || !strings.HasSuffix(items[0].Display, "active.txt") {
 		t.Fatalf("Active-only source failed: %v", items)
+	}
+}
+
+func TestPathHintProvider_DisabledWhenCommandLineAutoCompleteOff(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	dir := t.TempDir()
+	os.Mkdir(filepath.Join(dir, "sub"), 0755)
+	os.WriteFile(filepath.Join(dir, "sub", "file.txt"), []byte("x"), 0644)
+
+	pf := setupMockPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	pf.panels[1].(*FileSystemPanel).vfs = vfs.NewOSVFS(dir)
+	vtui.FrameManager.Push(pf)
+	defer vtui.FrameManager.Pop()
+
+	oldCfg := AppConfig
+	defer func() { AppConfig = oldCfg }()
+	AppConfig.CommandLineAutoComplete = false
+	AppConfig.PathHintSource = PathHintSourceBoth
+	AppConfig.PathHintFullPath = false
+
+	if items := pathHintProvider(nil, "sub/", 0, 4); items != nil {
+		t.Fatalf("Path hints should be disabled when command line autocompletion is off, got %d items", len(items))
 	}
 }
