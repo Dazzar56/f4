@@ -1303,6 +1303,18 @@ func init() {
 				if !pf.showPanels {
 					vtui.SetAltScreen(false)
 					pf.SetBusy(true)
+					// The cached pf.lastW/lastH can be stale the first time a
+					// session enters the console view: under Wine the initial
+					// terminal/console geometry probe in InitCore() sometimes
+					// races the console window's own resize to its final size,
+					// and no later WINCH-equivalent event corrects it because,
+					// from the OS's point of view, no resize ever happened.
+					// Re-probe right before computing the overlay so the
+					// command line and keybar land on the real bottom rows
+					// instead of wherever the stale size implied.
+					if w, h, err := vtui.GetTerminalSize(); err == nil && w > 0 && h > 0 {
+						pf.ResizeConsole(w, h)
+					}
 					if pf.consoleStyle() == ConsoleViewFar {
 						// Far style: the console keeps whatever the commands
 						// printed, and f4 puts its command line and keybar on
