@@ -2,6 +2,7 @@ package main
 
 import (
 	"testing"
+	"time"
 
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
@@ -88,7 +89,22 @@ func TestSimpleCaptured_ToggleShowsToast(t *testing.T) {
 	if !pf.showPanels {
 		t.Fatal("Panel.Toggle should not hide panels in SimpleCaptured mode")
 	}
-	toast := vtui.FrameManager.GetActiveToast()
+
+	// ShowToast is posted to the UI task queue; pump it like the main loop would.
+	var toast string
+	timeout := time.After(1 * time.Second)
+Loop:
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			if toast = vtui.FrameManager.GetActiveToast(); toast != "" {
+				break Loop
+			}
+		case <-timeout:
+			t.Fatal("Timeout waiting for toast")
+		}
+	}
 	if toast != Msg("Terminal.NotAvailableInEnv") {
 		t.Errorf("Expected toast %q, got %q", Msg("Terminal.NotAvailableInEnv"), toast)
 	}
