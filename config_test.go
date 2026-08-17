@@ -42,6 +42,8 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	AppConfig.MacroRecordFormat = 1
 	AppConfig.UseTrash = true
 	AppConfig.TerminalCtrlNWorkspace = false
+	AppConfig.ConsoleMode = "host"
+	AppConfig.ConsoleOverlayUI = true
 	AppConfig.WorkspaceTabMode = int(vtui.WorkspaceTabsNever)
 	AppConfig.CtrlTabShowsMenu = true
 	AppConfig.AltNumberSwitchesTabs = false
@@ -64,6 +66,8 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	AppConfig.MacroRecordFormat = 0
 	AppConfig.UseTrash = false
 	AppConfig.TerminalCtrlNWorkspace = true
+	AppConfig.ConsoleMode = "own"
+	AppConfig.ConsoleOverlayUI = false
 	AppConfig.WorkspaceTabMode = int(vtui.WorkspaceTabsAlways)
 	AppConfig.CtrlTabShowsMenu = false
 	AppConfig.AltNumberSwitchesTabs = true
@@ -129,8 +133,43 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	if AppConfig.TerminalCtrlNWorkspace {
 		t.Error("LoadConfig failed to restore TerminalCtrlNWorkspace")
 	}
+	if AppConfig.ConsoleMode != "host" {
+		t.Errorf("LoadConfig failed to restore ConsoleMode: got %q, want %q", AppConfig.ConsoleMode, "host")
+	}
+	if !AppConfig.ConsoleOverlayUI {
+		t.Error("LoadConfig failed to restore ConsoleOverlayUI")
+	}
 	if AppConfig.ApplyCommandParallelism != 0 {
 		t.Errorf("ApplyCommandParallelism = %d, want Unlimited (0)", AppConfig.ApplyCommandParallelism)
+	}
+}
+
+func TestConfig_ConsoleModeDefaultsWhenAbsent(t *testing.T) {
+	tmpDir := t.TempDir()
+	userIniPath := filepath.Join(tmpDir, "settings.ini")
+	if err := os.WriteFile(userIniPath, []byte("[Panel]\nShowHiddenFiles = 1\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	origUserPathFunc := getUserConfigIniPath
+	origPathsFunc := getConfigIniPaths
+	oldCfg := AppConfig
+	defer func() {
+		getUserConfigIniPath = origUserPathFunc
+		getConfigIniPaths = origPathsFunc
+		AppConfig = oldCfg
+	}()
+	getUserConfigIniPath = func() string { return userIniPath }
+	getConfigIniPaths = func() []string { return []string{userIniPath} }
+
+	AppConfig.ConsoleMode = "host"
+	AppConfig.ConsoleOverlayUI = true
+	LoadConfig()
+	if AppConfig.ConsoleMode != "own" {
+		t.Fatalf("ConsoleMode must default to 'own' when setting is absent, got %q", AppConfig.ConsoleMode)
+	}
+	if AppConfig.ConsoleOverlayUI {
+		t.Fatal("ConsoleOverlayUI must default to false when setting is absent")
 	}
 }
 

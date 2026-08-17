@@ -1293,7 +1293,28 @@ func init() {
 				pf.ResizeConsole(pf.lastW, pf.lastH)
 				pf.lastShowPanels = pf.showPanels
 			}
-			vtui.FrameManager.HardRefresh()
+			if pf.shellMode == ShellModeHost {
+				if pf.showPanels {
+					pf.leaveHostConsole()
+				} else {
+					pf.enterHostConsole()
+				}
+			} else if pf.shellMode == ShellModeSimpleInline {
+				if pf.showPanels {
+					pf.showPanels = false
+					vtui.SetAltScreen(false)
+					pf.SetBusy(true)
+				} else {
+					pf.showPanels = true
+					vtui.SetAltScreen(true)
+					pf.SetBusy(false)
+					vtui.FrameManager.HardRefresh()
+				}
+			} else if pf.shellMode == ShellModeSimpleCaptured {
+				vtui.ShowToast(Msg("Terminal.NotAvailableInEnv"), 3*time.Second)
+			} else {
+				vtui.FrameManager.HardRefresh()
+			}
 			if pf.showPanels {
 				pf.RefreshAll()
 			}

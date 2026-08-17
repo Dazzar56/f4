@@ -544,6 +544,7 @@ f4 is an experimental Far Manager / far2l clone in Go.
 ~Viewer / Editor keys~ViewerEditor@
 ~Panel navigation~PanelNav@
 ~MediaInfo plugin~MediaInfo@
+~Console modes (Ctrl+O)~ConsoleModes@
 ~Environment Manager plugin~EnvironmentManager@
 ~View README.md~README@
 
@@ -574,6 +575,21 @@ operation if the active file system has no recoverable trash; it never falls
 back to permanent deletion. Shift+Del and Shift+NumDel always delete
 permanently. Permanent removal is also available as a separate Files-menu
 command and can be assigned its own hotkey.
+@ConsoleModes
+$Console modes (Ctrl+O)
+    f4 supports two modes for running shell commands and viewing console output:
+
+  Own terminal (default)
+    Commands run in f4's built-in terminal emulator underneath the panels.
+    Ctrl+O toggles between the panels and the internal terminal screen.
+
+  Host console
+    Commands run directly in the host terminal's primary screen buffer with
+    full native scrollback, mouse selection, and job control (Ctrl+C, Ctrl+Z).
+    Panels live in the alternate screen buffer; Ctrl+O switches between the
+    panels and the real host console.
+    When "Show command line over host console" is enabled, f4 keeps its command
+    line and keybar at the bottom of the host screen.
 
 @ApplyCmd
 $Apply command (Ctrl+G)
