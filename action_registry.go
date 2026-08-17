@@ -1303,6 +1303,7 @@ func init() {
 				if pf.showPanels {
 					pf.showPanels = false
 					vtui.SetAltScreen(false)
+					restoreHostConsoleBuffer()
 					pf.SetBusy(true)
 				} else {
 					pf.showPanels = true

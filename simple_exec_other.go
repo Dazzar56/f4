@@ -7,3 +7,6 @@ func modMsvcrtProcImpl() interface {
 } {
 	return nil
 }
+
+func captureHostConsoleBufferImpl(w, h int) {}
+func restoreHostConsoleBufferImpl()         {}

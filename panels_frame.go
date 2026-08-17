@@ -2011,7 +2011,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			// shell_v2: route the typed command to its job runner instead of falling
 			// through to the local Windows shell. SSH-backed FISH+ keeps using its
 			// PTY below, preserving the full interactive terminal experience.
-			if fsp := pf.getActivePanel(); fsp != nil && !vfsHasRemotePTY(fsp.vfs) {
+			if fsp := pf.getActivePanel(); fsp != nil && !isLocalOSVFS(fsp.vfs) && !vfsHasRemotePTY(fsp.vfs) {
 				if runner, ok := fsp.vfs.(vfs.CommandRunner); ok {
 					pf.cmdLine.Clear()
 					pf.cmdLine.Edit.HistoryPos = -1

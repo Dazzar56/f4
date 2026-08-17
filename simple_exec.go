@@ -53,11 +53,21 @@ func (pf *PanelsFrame) runSimpleInlineCommand(dir, command string) {
 	fmt.Print("\r\nPress any key to return to f4...")
 	waitForAnyKey()
 
+	captureHostConsoleBuffer(pf.lastW, pf.lastH)
+
 	vtui.Resume()
 	if vtui.FrameManager != nil {
 		vtui.FrameManager.HardRefresh()
 	}
 	pf.RefreshAll()
+}
+
+func captureHostConsoleBuffer(w, h int) {
+	captureHostConsoleBufferImpl(w, h)
+}
+
+func restoreHostConsoleBuffer() {
+	restoreHostConsoleBufferImpl()
 }
 
 // runSimpleCapturedCommand executes a command via LocalCommandRunner and displays

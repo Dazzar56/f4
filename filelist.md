@@ -185,6 +185,7 @@
     ├── external_ui.go
     ├── extui_host.go
     ├── extui_test.go
+    ├── f4.exe
     ├── far2l_auth.go
     ├── farcolor_exp.go
     ├── farcolor_test.go
@@ -863,7 +864,9 @@
     ├── shell_mode_test.go
     ├── should_try_gui_test.go
     ├── simple_exec.go
+    ├── simple_exec_other.go
     ├── simple_exec_test.go
+    ├── simple_exec_windows.go
     ├── solaris_pty_alloc_test.go
     ├── solaris_pty_backend_test.go
     ├── solaris_pty.go
@@ -1064,4 +1067,4 @@
     ├── workspace_session_test.go
     └── zzz_pty_leak_check_test.go
     
-    57 directories, 1006 files
+    57 directories, 1009 files
