@@ -1041,8 +1041,22 @@ func actionSwitchEditorToViewer(ev *EditorView) {
 
 		ev.Close()
 		if screenIdx != -1 && screenIdx < len(vtui.FrameManager.Screens) {
-			vtui.FrameManager.Screens[screenIdx].Frames = []vtui.Frame{viewer}
-			vtui.FrameManager.SwitchScreen(screenIdx)
+			// SwitchScreen() is a no-op when idx == ActiveIdx (the common case
+			// here, since switching to the viewer normally happens from the
+			// editor screen currently on-screen). Writing straight into
+			// Screens[screenIdx].Frames wouldn't be picked up by GetTopFrame(),
+			// which reads the live fm.frames slice. Go through
+			// RemoveFrame()/Push() instead for the active-screen case, since
+			// those mutate fm.frames directly; keep the direct Screens[] +
+			// SwitchScreen() combo for background screens, where
+			// SwitchScreen() does perform the swap.
+			if screenIdx == vtui.FrameManager.ActiveIdx {
+				vtui.FrameManager.RemoveFrame(ev)
+				vtui.FrameManager.Push(viewer)
+			} else {
+				vtui.FrameManager.Screens[screenIdx].Frames = []vtui.Frame{viewer}
+				vtui.FrameManager.SwitchScreen(screenIdx)
+			}
 		} else if vtui.FrameManager != nil {
 			vtui.FrameManager.AddScreen(viewer)
 		}
@@ -1180,8 +1194,17 @@ func actionSwitchViewerToEditor(vv *ViewerView) {
 
 	vv.Close()
 	if screenIdx != -1 && screenIdx < len(vtui.FrameManager.Screens) {
-		vtui.FrameManager.Screens[screenIdx].Frames = []vtui.Frame{editor}
-		vtui.FrameManager.SwitchScreen(screenIdx)
+		// See the matching comment in actionSwitchEditorToViewer: SwitchScreen()
+		// no-ops when idx == ActiveIdx, so update the live frame stack directly
+		// for that (common) case instead of writing into Screens[] and relying
+		// on SwitchScreen() to pick it up.
+		if screenIdx == vtui.FrameManager.ActiveIdx {
+			vtui.FrameManager.RemoveFrame(vv)
+			vtui.FrameManager.Push(editor)
+		} else {
+			vtui.FrameManager.Screens[screenIdx].Frames = []vtui.Frame{editor}
+			vtui.FrameManager.SwitchScreen(screenIdx)
+		}
 	} else if vtui.FrameManager != nil {
 		vtui.FrameManager.AddScreen(editor)
 	}
