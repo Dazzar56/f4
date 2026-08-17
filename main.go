@@ -18,6 +18,7 @@ import (
 
 // SelectedTTYBackend holds the user-chosen or auto-detected console renderer name ("ansi" or "winapi").
 var SelectedTTYBackend string
+
 func main() {
 	vtui.AppName = "f4"
 	installConsoleCtrlHandler()
