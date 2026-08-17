@@ -17,6 +17,7 @@ var (
 	procGetConsoleScreenBufferInfoOverlay = kernel32SimpleExec.NewProc("GetConsoleScreenBufferInfo")
 	procSetConsoleCursorPositionOverlay   = kernel32SimpleExec.NewProc("SetConsoleCursorPosition")
 	procSetConsoleCursorInfoOverlay       = kernel32SimpleExec.NewProc("SetConsoleCursorInfo")
+	procSetConsoleWindowInfoOverlay       = kernel32SimpleExec.NewProc("SetConsoleWindowInfo")
 )
 
 type overlayCoord struct {
@@ -75,6 +76,26 @@ func winOverlayCoordArg(x, y int16) uintptr {
 	return uintptr(uint32(uint16(x)) | uint32(uint16(y))<<16)
 }
 
+// pinOverlayWindow re-asserts the console window's rectangle before every
+// draw, exactly like vtui's own resetConsoleWindowPos() does on every
+// Flush() of f4's own screen buffer (win32_console_windows.go) — the code
+// path that, per every screenshot so far, renders correctly under Wine.
+// The overlay never did this for the host buffer: it only ever *read*
+// GetConsoleScreenBufferInfo and trusted the answer. Under a real Wine
+// console the buffer legitimately has scrollback (dwSize taller than
+// srWindow — confirmed via wineconsole f4.exe: dwSize=80x150,
+// srWindow=25 rows), and if the window rect conhost/wineconsole is tracking
+// internally ever drifts from what GetConsoleScreenBufferInfo reports back
+// (a caching or repaint-ordering gap, not something visible from outside),
+// passively trusting the read is exactly the class of bug that produces
+// "the numbers say bottom, the pixels say top." Pinning the window to the
+// same rectangle we just read is a no-op if Wine's internal state already
+// agrees with it, and forces a resync if it does not.
+func pinOverlayWindow(h syscall.Handle, w *simpleSmallRect) {
+	rect := *w
+	procSetConsoleWindowInfoOverlay.Call(uintptr(h), uintptr(1), uintptr(unsafe.Pointer(&rect)))
+}
+
 func newOverlayRow(width int) []simpleCharInfo {
 	row := make([]simpleCharInfo, width)
 	for i := range row {
@@ -129,6 +150,13 @@ func winDrawConsoleOverlay(ov consoleOverlayContent) {
 	if !ok {
 		return
 	}
+	pinOverlayWindow(h, &info.Window)
+	// Re-read after pinning: if the pin forced Wine to reconcile a stale
+	// window rect, this is the corrected geometry; if the pin was a no-op,
+	// this is identical to what was already read above.
+	if info2, ok2 := winOverlayInfo(h); ok2 {
+		info = info2
+	}
 	left, right := info.Window.Left, info.Window.Right
 	width := int(right-left) + 1
 	if width <= 0 {
@@ -141,6 +169,9 @@ func winDrawConsoleOverlay(ov consoleOverlayContent) {
 	// This is the geometry actually driving the write below, queried by this
 	// function itself rather than a separate probe call — if it ever
 	// disagrees with the OVERLAY: line's own probe, that gap is the bug.
+	// After the pin-and-reread above, so a nonempty diff between this line
+	// and the OVERLAY: line one above it in the log means the pin actually
+	// changed what Wine reports.
 	vtui.DebugLog("OVERLAY_WIN: dwSize=%dx%d srWindow=L%dT%dR%dB%d cmdRow=%d cursor=%d,%d",
 		info.Size.X, info.Size.Y, info.Window.Left, info.Window.Top, info.Window.Right, info.Window.Bottom,
 		cmdRow, info.CursorPosition.X, info.CursorPosition.Y)
@@ -187,6 +218,10 @@ func winClearConsoleOverlay(n int) {
 	info, ok := winOverlayInfo(h)
 	if !ok {
 		return
+	}
+	pinOverlayWindow(h, &info.Window)
+	if info2, ok2 := winOverlayInfo(h); ok2 {
+		info = info2
 	}
 	left, right := info.Window.Left, info.Window.Right
 	width := int(right-left) + 1
