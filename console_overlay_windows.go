@@ -5,6 +5,8 @@ package main
 import (
 	"syscall"
 	"unsafe"
+
+	"github.com/unxed/vtui"
 )
 
 // Painting the overlay on Windows cannot go through ANSI: with the winapi
@@ -36,8 +38,13 @@ type overlayBufferInfo struct {
 }
 
 const (
-	overlayAttrText = uint16(0x07) // light gray on black
-	overlayAttrKey  = uint16(0x30) // black on cyan
+	// Matches vtui's real KeyBar palette (palette.go: ColKeyBarNum /
+	// ColKeyBarText, "LightGray on DarkGray / DarkGray on Teal"). The overlay
+	// used to have these two swapped — light text on cyan for the number,
+	// plain gray for the label — which is why it read as a different, off
+	// keybar next to the real one instead of a seamless continuation of it.
+	overlayAttrNum  = uint16(0x07) // light gray on dark gray — the "N" digit
+	overlayAttrText = uint16(0x30) // dark text on teal — the label
 )
 
 // The console cursor as the child process left it. The overlay moves the cursor
@@ -131,6 +138,12 @@ func winDrawConsoleOverlay(ov consoleOverlayContent) {
 	if cmdRow < info.Window.Top {
 		return
 	}
+	// This is the geometry actually driving the write below, queried by this
+	// function itself rather than a separate probe call — if it ever
+	// disagrees with the OVERLAY: line's own probe, that gap is the bug.
+	vtui.DebugLog("OVERLAY_WIN: dwSize=%dx%d srWindow=L%dT%dR%dB%d cmdRow=%d cursor=%d,%d",
+		info.Size.X, info.Size.Y, info.Window.Left, info.Window.Top, info.Window.Right, info.Window.Bottom,
+		cmdRow, info.CursorPosition.X, info.CursorPosition.Y)
 
 	if !overlaySavedCursorValid {
 		overlaySavedCursor = info.CursorPosition
@@ -146,7 +159,7 @@ func winDrawConsoleOverlay(ov consoleOverlayContent) {
 		for _, k := range ov.Keys {
 			// Each slot knows its own column: slot widths are uneven once the
 			// width does not divide by 12, so appending sequentially drifts.
-			col := fillOverlayText(keyCells, k.Col, k.Num, overlayAttrKey)
+			col := fillOverlayText(keyCells, k.Col, k.Num, overlayAttrNum)
 			fillOverlayText(keyCells, col, k.Label, overlayAttrText)
 		}
 		winWriteOverlayRow(h, left, right, info.Window.Bottom, keyCells)

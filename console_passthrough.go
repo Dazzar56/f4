@@ -236,7 +236,11 @@ func (pf *PanelsFrame) emitAnsiConsoleOverlay(ov consoleOverlayContent) {
 			// Slots carry their own start column now: rounding leftovers make
 			// the widths uneven, so walking them by concatenation would drift.
 			sb.WriteString(fmt.Sprintf("\x1b[%d;%dH", h, k.Col+1))
-			sb.WriteString(fmt.Sprintf("\x1b[0;30;46m%s\x1b[0;37;40m%s", k.Num, k.Label))
+			// Matches vtui's real KeyBar palette (ColKeyBarNum/ColKeyBarText:
+			// "LightGray on DarkGray / DarkGray on Teal"). This used to be
+			// swapped, which made the overlay look like a different, alien
+			// keybar sitting next to the real one instead of matching it.
+			sb.WriteString(fmt.Sprintf("\x1b[0;37;40m%s\x1b[0;30;46m%s", k.Num, k.Label))
 		}
 	}
 
