@@ -2182,3 +2182,159 @@ func TestActionCreateLink_Flow(t *testing.T) {
 		t.Fatalf("Link was not created at %s: %v", linkPath, err)
 	}
 }
+func TestActionSwitchEditorToViewerAndBack(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "switch_test.txt")
+	content := "Line 0\nLine 1\nLine 2\nLine 3\nLine 4\n"
+	os.WriteFile(filePath, []byte(content), 0644)
+
+	v := vfs.NewOSVFS(tmpDir)
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	actionOpenEditor(pf, v, filePath)
+
+	timeout := time.After(2 * time.Second)
+	var ev *EditorView
+	for ev == nil {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			if top, ok := vtui.FrameManager.GetTopFrame().(*EditorView); ok {
+				ev = top
+			}
+		case <-timeout:
+			t.Fatal("Timeout waiting for editor to open")
+		}
+	}
+
+	ev.CursorLine = 2
+	ev.CursorPos = 0
+
+	// 1. Switch Editor -> Viewer via action
+	if !RunAction("Editor.SwitchToViewer") {
+		t.Fatal("Editor.SwitchToViewer failed to run")
+	}
+
+	timeout = time.After(2 * time.Second)
+	var vv *ViewerView
+	for vv == nil {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			if top, ok := vtui.FrameManager.GetTopFrame().(*ViewerView); ok {
+				vv = top
+			}
+		case <-timeout:
+			t.Fatal("Timeout waiting for viewer after switch")
+		}
+	}
+
+	expectedOffset := int64(len("Line 0\nLine 1\n"))
+	if vv.TopOffset != expectedOffset {
+		t.Errorf("Viewer TopOffset mismatch: got %d, want %d", vv.TopOffset, expectedOffset)
+	}
+
+	// 2. Switch Viewer -> Editor via action
+	if !RunAction("Viewer.SwitchToEditor") {
+		t.Fatal("Viewer.SwitchToEditor failed to run")
+	}
+
+	timeout = time.After(2 * time.Second)
+	var ev2 *EditorView
+	for ev2 == nil {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			if top, ok := vtui.FrameManager.GetTopFrame().(*EditorView); ok {
+				ev2 = top
+			}
+		case <-timeout:
+			t.Fatal("Timeout waiting for editor after switch back")
+		}
+	}
+	defer ev2.Close()
+
+	if ev2.CursorLine != 2 {
+		t.Errorf("Editor CursorLine mismatch after switch back: got %d, want 2", ev2.CursorLine)
+	}
+}
+
+func TestActionSwitchEditorToViewer_ModifiedFilePrompt(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "modified_switch.txt")
+	os.WriteFile(filePath, []byte("Original Content"), 0644)
+
+	v := vfs.NewOSVFS(tmpDir)
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	actionOpenEditor(pf, v, filePath)
+
+	timeout := time.After(2 * time.Second)
+	var ev *EditorView
+	for ev == nil {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			if top, ok := vtui.FrameManager.GetTopFrame().(*EditorView); ok {
+				ev = top
+			}
+		case <-timeout:
+			t.Fatal("Timeout waiting for editor to open")
+		}
+	}
+
+	// Modify content
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: '!'})
+	if !ev.modified {
+		t.Fatal("Editor should be modified")
+	}
+
+	// Trigger SwitchToViewer -> should show confirmation dialog
+	RunAction("Editor.SwitchToViewer")
+
+	var confirmDlg *vtui.Window
+	timeout = time.After(2 * time.Second)
+	for confirmDlg == nil {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			if top, ok := vtui.FrameManager.GetTopFrame().(*vtui.Window); ok && top.GetTitle() == " Confirm " {
+				confirmDlg = top
+			}
+		case <-timeout:
+			t.Fatal("Timeout waiting for save confirmation dialog")
+		}
+	}
+
+	// Choose "Don't Save" (code 1)
+	confirmDlg.OnResult(1)
+
+	var vv *ViewerView
+	timeout = time.After(2 * time.Second)
+	for vv == nil {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			if top, ok := vtui.FrameManager.GetTopFrame().(*ViewerView); ok {
+				vv = top
+			}
+		case <-timeout:
+			t.Fatal("Timeout waiting for viewer after Don't Save switch")
+		}
+	}
+	defer vv.Close()
+
+	if vv.path != filePath {
+		t.Errorf("Viewer opened path %q, want %q", vv.path, filePath)
+	}
+}

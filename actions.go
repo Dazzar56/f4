@@ -983,6 +983,211 @@ func actionOpenViewer(pf *PanelsFrame, v vfs.VFS, path string) {
 	}
 	openViewerInternal(pf, v, path)
 }
+func actionSwitchEditorToViewer(ev *EditorView) {
+	if ev == nil || ev.filePath == "" || ev.vfs == nil {
+		return
+	}
+
+	doSwitch := func() {
+		targetOffset := int64(0)
+		if ev.HexMode || ev.DecodeMode {
+			targetOffset = int64(ev.HexTopOffset)
+		} else if ev.li != nil && ev.CursorLine >= 0 && ev.CursorLine < ev.li.LineCount() {
+			targetOffset = int64(ev.li.GetLineOffset(ev.CursorLine))
+		}
+
+		ctx := context.Background()
+		viewer, err := NewViewerView(ctx, ev.vfs, ev.filePath)
+		if err != nil {
+			vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to open file in viewer:\n%v", err), []string{"&Ok"})
+			return
+		}
+
+		viewer.Codepage = ev.Codepage
+		viewer.HexMode = ev.HexMode
+		viewer.DecodeMode = ev.DecodeMode
+		viewer.DisasmMode = ev.DisasmMode
+		viewer.WrapMode = ev.WordWrap
+		if viewer.HexMode {
+			viewer.TopOffset = targetOffset &^ 0xF
+		} else {
+			viewer.TopOffset = targetOffset
+		}
+
+		w, h := ev.X2-ev.X1+1, ev.Y2-ev.Y1+1
+		if w <= 0 || h <= 0 {
+			w = vtui.FrameManager.GetScreenSize()
+			h = vtui.FrameManager.GetScreenHeight()
+		}
+		viewer.ResizeConsole(w, h)
+
+		screenIdx := -1
+		frameIdx := -1
+		if vtui.FrameManager != nil {
+			for sIdx, s := range vtui.FrameManager.Screens {
+				for fIdx, f := range s.Frames {
+					if f == ev {
+						screenIdx = sIdx
+						frameIdx = fIdx
+						break
+					}
+				}
+				if screenIdx != -1 {
+					break
+				}
+			}
+		}
+
+		ev.Close()
+		if screenIdx != -1 && frameIdx != -1 && screenIdx < len(vtui.FrameManager.Screens) {
+			vtui.FrameManager.Screens[screenIdx].Frames[frameIdx] = viewer
+			vtui.FrameManager.SwitchScreen(screenIdx)
+		} else if vtui.FrameManager != nil {
+			vtui.FrameManager.AddScreen(viewer)
+		}
+		if vtui.FrameManager != nil {
+			vtui.FrameManager.Redraw()
+		}
+		rememberViewerEditorHistory(ev.vfs, ev.filePath, historyModeView)
+	}
+
+	if ev.modified {
+		msg := "The file has been modified.\nDo you want to save it?"
+		dlg := vtui.ShowMessage(" Confirm ", msg, []string{"&Save", "&Don't Save", "Cancel"})
+		dlg.OnResult = func(code int) {
+			switch code {
+			case 0: // Save
+				ev.SaveToFile(func() {
+					doSwitch()
+				})
+			case 1: // Don't save
+				doSwitch()
+			}
+		}
+		return
+	}
+
+	doSwitch()
+}
+
+func actionSwitchViewerToEditor(vv *ViewerView) {
+	if vv == nil || vv.path == "" || vv.vfs == nil {
+		return
+	}
+
+	if stat, err := vv.vfs.Stat(context.Background(), vv.path); err == nil && stat.IsDir {
+		vtui.ShowMessage(" Error ", "Cannot edit a directory.", []string{"&Ok"})
+		return
+	}
+
+	ctx := context.Background()
+	f, err := vv.vfs.Open(ctx, vv.path)
+	if err != nil {
+		if err == os.ErrInvalid {
+			vtui.ShowMessage(" Error ", "Cannot open special files (Named Pipes, Sockets).", []string{"&Ok"})
+		} else {
+			vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to open file for editing:\n%v", err), []string{"&Ok"})
+		}
+		return
+	}
+
+	var pt *piecetable.PieceTable
+	var buf *AsyncBuffer
+	var mapped *MappedFile
+	cpID := vv.Codepage
+
+	if cpID == 65001 {
+		if AppConfig.EditorMemoryMap {
+			var mapErr error
+			mapped, mapErr = MapEditorFile(vv.vfs, f)
+			if mapErr != nil && mapErr != errNotMappable {
+				vtui.DebugLog("EDITOR: memory mapping %s failed, reading lazily instead: %v", vv.path, mapErr)
+			}
+		}
+		if mapped != nil {
+			pt = piecetable.New(mapped.Bytes())
+		} else {
+			buf = NewAsyncBuffer(ctx, f)
+			buf.prewarm()
+			pt = piecetable.NewWithBuffer(buf)
+		}
+	} else {
+		size := f.Size()
+		fullData := make([]byte, size)
+		_, _ = f.ReadAt(ctx, fullData, 0)
+		decoded, errDec := vfs.DecodeBytes(fullData, cpID)
+		if errDec != nil {
+			decoded = fullData
+			cpID = 65001
+		}
+		pt = piecetable.New(decoded)
+	}
+
+	editor := NewEditorView(pt, vv.vfs, vv.path)
+	editor.file = f
+	editor.asyncBuf = buf
+	editor.mapped = mapped
+	editor.Codepage = cpID
+	editor.WordWrap = vv.WrapMode
+	editor.HexMode = vv.HexMode
+	editor.DecodeMode = vv.DecodeMode
+	editor.DisasmMode = vv.DisasmMode
+
+	targetOff := int(vv.TopOffset)
+	if editor.HexMode || editor.DecodeMode {
+		editor.HexTopOffset = targetOff &^ 0xF
+		editor.CursorLine = editor.li.GetLineAtOffset(targetOff)
+		editor.CursorPos = targetOff - editor.li.GetLineOffset(editor.CursorLine)
+	} else {
+		editor.ensureIndexedTo(targetOff)
+		line := editor.li.GetLineAtOffset(targetOff)
+		pos := targetOff - editor.li.GetLineOffset(line)
+		editor.CursorLine = line
+		editor.CursorPos = pos
+		editor.targetLine = line
+		editor.targetPos = pos
+		editor.targetTopRow = editor.engine.GetRowOffset(line)
+		editor.targetLeft = 0
+		editor.ScrollTopRow = editor.targetTopRow
+	}
+	editor.StartIndexing()
+
+	w, h := vv.X2-vv.X1+1, vv.Y2-vv.Y1+1
+	if w <= 0 || h <= 0 {
+		w = vtui.FrameManager.GetScreenSize()
+		h = vtui.FrameManager.GetScreenHeight()
+	}
+	editor.ResizeConsole(w, h)
+
+	screenIdx := -1
+	frameIdx := -1
+	if vtui.FrameManager != nil {
+		for sIdx, s := range vtui.FrameManager.Screens {
+			for fIdx, f := range s.Frames {
+				if f == vv {
+					screenIdx = sIdx
+					frameIdx = fIdx
+					break
+				}
+			}
+			if screenIdx != -1 {
+				break
+			}
+		}
+	}
+
+	vv.Close()
+	if screenIdx != -1 && frameIdx != -1 && screenIdx < len(vtui.FrameManager.Screens) {
+		vtui.FrameManager.Screens[screenIdx].Frames[frameIdx] = editor
+		vtui.FrameManager.SwitchScreen(screenIdx)
+	} else if vtui.FrameManager != nil {
+		vtui.FrameManager.AddScreen(editor)
+	}
+	if vtui.FrameManager != nil {
+		vtui.FrameManager.Redraw()
+	}
+	rememberViewerEditorHistory(vv.vfs, vv.path, historyModeEdit)
+}
 
 // tryOpenImageViewer opens the picture viewer when the file looks like an
 // image and the backend can actually show one. It returns false to let the

@@ -3200,6 +3200,10 @@ func (ev *EditorView) HandleCommand(cmd int, args any) bool {
 		ev.tryClose()
 		return true
 	}
+	if cmd == CmSwitchToViewer {
+		actionSwitchEditorToViewer(ev)
+		return true
+	}
 	if cmd == CmSearch {
 		ev.showSearchDialog()
 		return true
@@ -3238,7 +3242,7 @@ func (ev *EditorView) GetKeyLabels() *vtui.KeySet {
 	fallbacks := &vtui.KeySet{
 		Normal: vtui.KeyBarLabels{
 			Msg("KeyBar.EditorF1"), Msg("KeyBar.EditorF2"), Msg("KeyBar.EditorF3"),
-			"", Msg("KeyBar.EditorF5"), "", Msg("KeyBar.EditorF7"), nextCpName, "", Msg("KeyBar.EditorF10"),
+			"", Msg("KeyBar.EditorF5"), Msg("KeyBar.F3"), Msg("KeyBar.EditorF7"), nextCpName, "", Msg("KeyBar.EditorF10"),
 		},
 	}
 	res := KeyBarLabelsForArea("Editor", fallbacks)

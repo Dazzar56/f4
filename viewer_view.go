@@ -239,6 +239,10 @@ func (vv *ViewerView) HandleCommand(cmd int, args any) bool {
 		vv.Close()
 		return true
 	}
+	if cmd == CmSwitchToEditor {
+		actionSwitchViewerToEditor(vv)
+		return true
+	}
 	if cmd == CmSearch {
 		actionViewerSearch(vv)
 		return true
@@ -1065,7 +1069,7 @@ func (vv *ViewerView) GetKeyLabels() *vtui.KeySet {
 	fallbacks := &vtui.KeySet{
 		Normal: vtui.KeyBarLabels{
 			Msg("KeyBar.ViewerF1"), Msg("KeyBar.ViewerF2"), Msg("KeyBar.ViewerF3"), Msg("KeyBar.ViewerF4"),
-			"", "", Msg("KeyBar.ViewerF7"), nextCpName, "", Msg("KeyBar.ViewerF10"),
+			"", Msg("KeyBar.F4"), Msg("KeyBar.ViewerF7"), nextCpName, "", Msg("KeyBar.ViewerF10"),
 		},
 		Alt: vtui.KeyBarLabels{
 			"", "", "", "", "", "", "", Msg("KeyBar.ViewerAltF8"), "", "",

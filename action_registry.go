@@ -1808,7 +1808,7 @@ func init() {
 		DescKey:     "Action.Editor.SwitchToViewer.Desc",
 		DefaultKeys: []string{"F6"},
 		MenuPath:    "File",
-		Handler:     withEditor(func(ev *EditorView) { vtui.FrameManager.EmitCommand(CmSwitchToViewer, ev) }),
+		Handler:     withEditor(func(ev *EditorView) { actionSwitchEditorToViewer(ev) }),
 	})
 	RegisterAction(Action{
 		Name:        "Editor.Quit",
@@ -2160,7 +2160,7 @@ func init() {
 		DescKey:     "Action.Viewer.SwitchToEditor.Desc",
 		DefaultKeys: []string{"F6"},
 		MenuPath:    "File",
-		Handler:     withViewer(func(vv *ViewerView) { vtui.FrameManager.EmitCommand(CmSwitchToEditor, vv) }),
+		Handler:     withViewer(func(vv *ViewerView) { actionSwitchViewerToEditor(vv) }),
 	})
 	RegisterAction(Action{
 		Name:        "Viewer.Quit",
