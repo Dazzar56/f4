@@ -422,6 +422,9 @@ func NewPanelsFrame() *PanelsFrame {
 							pf.showRightPanel = true
 						}
 						pf.returnToPanels = false
+						if pf.shellMode == ShellModeHost {
+							pf.leaveHostConsole()
+						}
 						pf.RefreshAll()
 						vtui.FrameManager.Redraw()
 					}
@@ -987,6 +990,9 @@ func (pf *PanelsFrame) reportLocalPTYFailure() {
 }
 
 func (pf *PanelsFrame) Close() {
+	if pf.shellMode == ShellModeHost && pf.isHostConsoleActive() {
+		pf.leaveHostConsole()
+	}
 	if pf.wide && pf.widePanel >= 0 && pf.widePanel < 2 {
 		if isAIPanel(pf.panels[pf.widePanel]) {
 			pf.exitWide()
@@ -1235,6 +1241,9 @@ func (pf *PanelsFrame) isPtyBusy() bool {
 	return pf.executing
 }
 func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
+	if pf.shellMode == ShellModeHost && pf.isHostConsoleActive() {
+		return
+	}
 	isBusy := pf.isPtyBusy()
 
 	// 1. Dynamic Layout Adjustment
@@ -1675,9 +1684,10 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	// by the hotkey dispatcher; F3/F4 for the terminal log are bound in
 	// the Terminal area with the TerminalQuiet condition.
 
-	// Raw input mode fallback for active shell commands (non-AltScreen, e.g. ping).
+	// Raw input mode fallback for active shell commands (non-AltScreen, e.g. ping),
+	// and for any interactive shell session when host console mode is active.
 	// We forward text and navigation to PTY, but let global shortcuts (Ctrl+O) fall through.
-	if !pf.showPanels && pf.isPtyBusy() {
+	if !pf.showPanels && (pf.isPtyBusy() || pf.shellMode == ShellModeHost) {
 		if e.KeyDown || pf.termView.Win32InputMode || pf.termView.KittyFlags != 0 {
 			active := pf.getActivePTY()
 			if active != nil {
@@ -2072,6 +2082,9 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				pf.setCommandLineFocus(false)
 			}
 			pf.showPanels = false
+			if pf.shellMode == ShellModeHost {
+				pf.enterHostConsole()
+			}
 			return true
 		} else if pf.searchFirstMode() && pf.commandLineFocused && pf.showPanels {
 			// An empty command line must not activate the selected panel item.

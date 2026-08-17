@@ -98,3 +98,85 @@ func TestChildEnv_HostModeLeavesTERMUntouched(t *testing.T) {
 		t.Errorf("host mode must export F4_NESTED and TERM_PROGRAM: %v", env)
 	}
 }
+func TestHostConsole_PanelToggleAction(t *testing.T) {
+	scr := vtui.NewSilentScreenBuf()
+	var out bytes.Buffer
+	scr.Writer = &out
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+	SetDefaultF4Palette()
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.shellMode = ShellModeHost
+	pf.ResizeConsole(80, 25)
+	vtui.FrameManager.Push(pf)
+
+	if !pf.showPanels {
+		t.Fatal("panels should be visible initially")
+	}
+
+	// 1. Run Panel.Toggle -> should hide panels and enter host console
+	if !RunAction("Panel.Toggle") {
+		t.Fatal("Panel.Toggle action failed")
+	}
+	if pf.showPanels {
+		t.Fatal("Panel.Toggle did not hide panels")
+	}
+	if !pf.isHostConsoleActive() {
+		t.Fatal("hostConsoleActive should be true after toggling panels off in host mode")
+	}
+
+	// 2. Run Panel.Toggle again -> should show panels and leave host console
+	if !RunAction("Panel.Toggle") {
+		t.Fatal("Panel.Toggle second action failed")
+	}
+	if !pf.showPanels {
+		t.Fatal("Panel.Toggle second action did not show panels")
+	}
+	if pf.isHostConsoleActive() {
+		t.Fatal("hostConsoleActive should be false after toggling panels back on in host mode")
+	}
+}
+
+func TestHostConsole_InputForwardingWhenIdle(t *testing.T) {
+	pf := setupMockPanelsFrame()
+	defer pf.Close()
+	pf.shellMode = ShellModeHost
+	pf.showPanels = false
+	pf.enterHostConsole()
+
+	mock := pf.pty.(*mockPty)
+	mock.Reset()
+
+	// Send key 'x'
+	pressKey(pf, &vtinput.InputEvent{
+		Type:    vtinput.KeyEventType,
+		KeyDown: true,
+		Char:    'x',
+	})
+
+	if got := mock.String(); got != "x" {
+		t.Errorf("Host mode idle forwarding: got %q, want %q", got, "x")
+	}
+}
+
+func TestHostConsole_CloseLeavesHostConsole(t *testing.T) {
+	scr := vtui.NewSilentScreenBuf()
+	var out bytes.Buffer
+	scr.Writer = &out
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+
+	pf := NewPanelsFrame()
+	pf.shellMode = ShellModeHost
+	pf.enterHostConsole()
+	if !pf.isHostConsoleActive() {
+		t.Fatal("host console must be active before Close")
+	}
+
+	pf.Close()
+	if pf.isHostConsoleActive() {
+		t.Fatal("Close must leave host console")
+	}
+}

@@ -1293,7 +1293,15 @@ func init() {
 				pf.ResizeConsole(pf.lastW, pf.lastH)
 				pf.lastShowPanels = pf.showPanels
 			}
-			vtui.FrameManager.HardRefresh()
+			if pf.shellMode == ShellModeHost {
+				if pf.showPanels {
+					pf.leaveHostConsole()
+				} else {
+					pf.enterHostConsole()
+				}
+			} else {
+				vtui.FrameManager.HardRefresh()
+			}
 			if pf.showPanels {
 				pf.RefreshAll()
 			}
