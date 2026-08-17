@@ -2223,14 +2223,17 @@ func TestActionSwitchEditorToViewerAndBack(t *testing.T) {
 	timeout = time.After(2 * time.Second)
 	var vv *ViewerView
 	for vv == nil {
+		if top, ok := vtui.FrameManager.GetTopFrame().(*ViewerView); ok {
+			vv = top
+			break
+		}
 		select {
 		case task := <-vtui.FrameManager.TaskChan:
 			task()
-			if top, ok := vtui.FrameManager.GetTopFrame().(*ViewerView); ok {
-				vv = top
-			}
 		case <-timeout:
 			t.Fatal("Timeout waiting for viewer after switch")
+		default:
+			time.Sleep(10 * time.Millisecond)
 		}
 	}
 
@@ -2247,14 +2250,17 @@ func TestActionSwitchEditorToViewerAndBack(t *testing.T) {
 	timeout = time.After(2 * time.Second)
 	var ev2 *EditorView
 	for ev2 == nil {
+		if top, ok := vtui.FrameManager.GetTopFrame().(*EditorView); ok {
+			ev2 = top
+			break
+		}
 		select {
 		case task := <-vtui.FrameManager.TaskChan:
 			task()
-			if top, ok := vtui.FrameManager.GetTopFrame().(*EditorView); ok {
-				ev2 = top
-			}
 		case <-timeout:
 			t.Fatal("Timeout waiting for editor after switch back")
+		default:
+			time.Sleep(10 * time.Millisecond)
 		}
 	}
 	defer ev2.Close()
@@ -2322,14 +2328,17 @@ func TestActionSwitchEditorToViewer_ModifiedFilePrompt(t *testing.T) {
 	var vv *ViewerView
 	timeout = time.After(2 * time.Second)
 	for vv == nil {
+		if top, ok := vtui.FrameManager.GetTopFrame().(*ViewerView); ok {
+			vv = top
+			break
+		}
 		select {
 		case task := <-vtui.FrameManager.TaskChan:
 			task()
-			if top, ok := vtui.FrameManager.GetTopFrame().(*ViewerView); ok {
-				vv = top
-			}
 		case <-timeout:
 			t.Fatal("Timeout waiting for viewer after Don't Save switch")
+		default:
+			time.Sleep(10 * time.Millisecond)
 		}
 	}
 	defer vv.Close()
@@ -2374,14 +2383,17 @@ func TestActionSwitchEditorViewer_HeightPreserved(t *testing.T) {
 		var vv *ViewerView
 		timeout = time.After(1 * time.Second)
 		for vv == nil {
+			if top, ok := vtui.FrameManager.GetTopFrame().(*ViewerView); ok {
+				vv = top
+				break
+			}
 			select {
 			case task := <-vtui.FrameManager.TaskChan:
 				task()
-				if top, ok := vtui.FrameManager.GetTopFrame().(*ViewerView); ok {
-					vv = top
-				}
 			case <-timeout:
 				t.Fatalf("Iteration %d: timeout waiting for viewer", i)
+			default:
+				time.Sleep(10 * time.Millisecond)
 			}
 		}
 		if vv.Y1 != initialY1 || vv.Y2 != initialY2 {
@@ -2392,14 +2404,17 @@ func TestActionSwitchEditorViewer_HeightPreserved(t *testing.T) {
 		var evCurrent *EditorView
 		timeout = time.After(1 * time.Second)
 		for evCurrent == nil {
+			if top, ok := vtui.FrameManager.GetTopFrame().(*EditorView); ok {
+				evCurrent = top
+				break
+			}
 			select {
 			case task := <-vtui.FrameManager.TaskChan:
 				task()
-				if top, ok := vtui.FrameManager.GetTopFrame().(*EditorView); ok {
-					evCurrent = top
-				}
 			case <-timeout:
 				t.Fatalf("Iteration %d: timeout waiting for editor", i)
+			default:
+				time.Sleep(10 * time.Millisecond)
 			}
 		}
 		if evCurrent.Y1 != initialY1 || evCurrent.Y2 != initialY2 {
