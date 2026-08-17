@@ -28,9 +28,19 @@ const kittyTermName = "xterm-kitty"
 // that missed the news would keep the wrong environment for its whole life.
 var terminalGraphicsSeen atomic.Bool
 
+var currentHostShellMode = func() ShellMode {
+	return resolveShellMode(ShellModeConfig{
+		ConsoleMode:      AppConfig.ConsoleMode,
+		ConsoleOverlayUI: AppConfig.ConsoleOverlayUI,
+	})
+}
+
 // terminalChildEnv builds the environment of a program started in the
 // built-in terminal.
 func terminalChildEnv() []string {
+	if currentHostShellMode() == ShellModeHost {
+		return buildChildEnv(os.Environ(), false, false)
+	}
 	graphics := terminalShowsImages()
 	return buildChildEnv(os.Environ(), graphics, graphics && announceKittyTerm())
 }

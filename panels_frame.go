@@ -310,6 +310,10 @@ type PanelsFrame struct {
 	lastPtyVFS  vfs.VFS
 	closed      bool
 
+	shellMode         ShellMode
+	hostConsoleActive bool
+	hostConsoleMu     sync.Mutex
+
 	// Terminal mouse-selection state. Kept in PanelsFrame because
 	// mouse routing lives here; the highlight and text extraction
 	// live on the TerminalView itself.
@@ -377,6 +381,10 @@ func NewPanelsFrame() *PanelsFrame {
 	pf.widthDecrement = AppConfig.WidthDecrement
 	pf.leftHeightDecrement = AppConfig.LeftHeightDecrement
 	pf.rightHeightDecrement = AppConfig.RightHeightDecrement
+	pf.shellMode = resolveShellMode(ShellModeConfig{
+		ConsoleMode:      AppConfig.ConsoleMode,
+		ConsoleOverlayUI: AppConfig.ConsoleOverlayUI,
+	})
 
 	pf.menuBar = vtui.NewMenuBar(nil)
 	pf.menuBar.SetOwner(pf)
@@ -916,8 +924,14 @@ func (pf *PanelsFrame) initPTY() {
 			}
 			pf.pty = p
 			serializedPTY := &processEnvironmentSerializedPTY{owner: pf, backend: p}
-			pf.parser.pty = serializedPTY
-			pf.termView.pty = serializedPTY
+			if pf.shellMode == ShellModeHost {
+				muted := mutedPTY{backend: serializedPTY}
+				pf.parser.pty = muted
+				pf.termView.pty = muted
+			} else {
+				pf.parser.pty = serializedPTY
+				pf.termView.pty = serializedPTY
+			}
 			pf.ptyMutex.Unlock()
 			pf.localShellStarted(inheritedEnvironmentGeneration)
 
@@ -943,8 +957,13 @@ func (pf *PanelsFrame) initPTY() {
 			pf.ptyMutex.Unlock()
 
 			if shouldProcess {
-				pf.parser.Process(buf[:n])
-				vtui.FrameManager.Redraw()
+				if pf.shellMode == ShellModeHost && pf.isHostConsoleActive() {
+					vtui.WritePassthrough(buf[:n])
+					pf.parser.Process(buf[:n])
+				} else {
+					pf.parser.Process(buf[:n])
+					vtui.FrameManager.Redraw()
+				}
 			}
 		}
 	}()
@@ -1051,26 +1070,42 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 
 	// 1. Terminal Area: Fills everything except KeyBar
 	termY2 := h - 1
-	// KeyBar only takes space if it's actually visible (not in AltScreen and not busy)
-	if pf.showKeyBar && !pf.termView.UseAltScreen && !pf.isPtyBusy() {
-		termY2 = h - 2
-	}
-	termH := termY2 - contentY1 + 1
-	if termH < 0 {
-		termH = 0
-	}
+	if pf.shellMode == ShellModeHost {
+		termH := h
+		if pty := pf.localPTY(); pty != nil {
+			pf.ptyMutex.Lock()
+			cw, ch := pf.termView.CellSize()
+			setPtySize(pty, w, termH, cw, ch)
+			for _, remotePty := range pf.remotePtys {
+				setPtySize(remotePty, w, termH, cw, ch)
+			}
+			pf.ptyMutex.Unlock()
 
-	if pty := pf.localPTY(); pty != nil {
-		pf.ptyMutex.Lock()
-		cw, ch := pf.termView.CellSize()
-		setPtySize(pty, w, termH, cw, ch)
-		for _, remotePty := range pf.remotePtys {
-			setPtySize(remotePty, w, termH, cw, ch)
+			pf.termView.SetPosition(0, 0, w-1, h-1)
+			pf.termView.Resize(w, termH)
 		}
-		pf.ptyMutex.Unlock()
+	} else {
+		// KeyBar only takes space if it's actually visible (not in AltScreen and not busy)
+		if pf.showKeyBar && !pf.termView.UseAltScreen && !pf.isPtyBusy() {
+			termY2 = h - 2
+		}
+		termH := termY2 - contentY1 + 1
+		if termH < 0 {
+			termH = 0
+		}
 
-		pf.termView.SetPosition(0, contentY1, w-1, termY2)
-		pf.termView.Resize(w, termH)
+		if pty := pf.localPTY(); pty != nil {
+			pf.ptyMutex.Lock()
+			cw, ch := pf.termView.CellSize()
+			setPtySize(pty, w, termH, cw, ch)
+			for _, remotePty := range pf.remotePtys {
+				setPtySize(remotePty, w, termH, cw, ch)
+			}
+			pf.ptyMutex.Unlock()
+
+			pf.termView.SetPosition(0, contentY1, w-1, termY2)
+			pf.termView.Resize(w, termH)
+		}
 	}
 
 	// 2. Panel Area: Leaves one additional line for the f4 CommandLine.
@@ -3830,6 +3865,7 @@ func (pf *PanelsFrame) Clone() *PanelsFrame {
 	clone.showRightPanel = pf.showRightPanel
 	clone.widePanel = pf.widePanel
 	clone.wide = pf.wide
+	clone.shellMode = pf.shellMode
 
 	if pf.termView != nil && clone.termView != nil {
 		clone.termView.CloneStateFrom(pf.termView)
