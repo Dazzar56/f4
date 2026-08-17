@@ -1019,13 +1019,11 @@ func actionSwitchEditorToViewer(ev *EditorView) {
 		viewer.ResizeConsole(w, h)
 
 		screenIdx := -1
-		frameIdx := -1
 		if vtui.FrameManager != nil {
 			for sIdx, s := range vtui.FrameManager.Screens {
-				for fIdx, f := range s.Frames {
+				for _, f := range s.Frames {
 					if f == ev {
 						screenIdx = sIdx
-						frameIdx = fIdx
 						break
 					}
 				}
@@ -1036,8 +1034,8 @@ func actionSwitchEditorToViewer(ev *EditorView) {
 		}
 
 		ev.Close()
-		if screenIdx != -1 && frameIdx != -1 && screenIdx < len(vtui.FrameManager.Screens) {
-			vtui.FrameManager.Screens[screenIdx].Frames[frameIdx] = viewer
+		if screenIdx != -1 && screenIdx < len(vtui.FrameManager.Screens) {
+			vtui.FrameManager.Screens[screenIdx].Frames = []vtui.Frame{viewer}
 			vtui.FrameManager.SwitchScreen(screenIdx)
 		} else if vtui.FrameManager != nil {
 			vtui.FrameManager.AddScreen(viewer)
@@ -1154,13 +1152,11 @@ func actionSwitchViewerToEditor(vv *ViewerView) {
 	editor.ResizeConsole(w, h)
 
 	screenIdx := -1
-	frameIdx := -1
 	if vtui.FrameManager != nil {
 		for sIdx, s := range vtui.FrameManager.Screens {
-			for fIdx, f := range s.Frames {
+			for _, f := range s.Frames {
 				if f == vv {
 					screenIdx = sIdx
-					frameIdx = fIdx
 					break
 				}
 			}
@@ -1171,8 +1167,8 @@ func actionSwitchViewerToEditor(vv *ViewerView) {
 	}
 
 	vv.Close()
-	if screenIdx != -1 && frameIdx != -1 && screenIdx < len(vtui.FrameManager.Screens) {
-		vtui.FrameManager.Screens[screenIdx].Frames[frameIdx] = editor
+	if screenIdx != -1 && screenIdx < len(vtui.FrameManager.Screens) {
+		vtui.FrameManager.Screens[screenIdx].Frames = []vtui.Frame{editor}
 		vtui.FrameManager.SwitchScreen(screenIdx)
 	} else if vtui.FrameManager != nil {
 		vtui.FrameManager.AddScreen(editor)

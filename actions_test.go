@@ -2316,8 +2316,8 @@ func TestActionSwitchEditorToViewer_ModifiedFilePrompt(t *testing.T) {
 		}
 	}
 
-	// Choose "Don't Save" (code 1)
-	confirmDlg.OnResult(1)
+	// Click "Don't Save" button in confirmation dialog
+	clickDialogButton(t, confirmDlg, "Don't Save")
 
 	var vv *ViewerView
 	timeout = time.After(2 * time.Second)
