@@ -11,6 +11,8 @@
     ├── action_restore_selection_test.go
     ├── actions.go
     ├── actions_test.go
+    ├── afailed.md
+    ├── afix.ap
     ├── ai_chat_panel.go
     ├── ai_chat_panel_test.go
     ├── ansi_parser.go
@@ -182,6 +184,7 @@
     ├── external_ui.go
     ├── extui_host.go
     ├── extui_test.go
+    ├── f4.exe
     ├── far2l_auth.go
     ├── farcolor_exp.go
     ├── farcolor_test.go
@@ -1044,6 +1047,7 @@
     ├── vtvibe.md
     ├── wasm_plugin.go
     ├── wasm_plugin_test.go
+    ├── win32_backend_test.go
     ├── window_icon_darwin.go
     ├── window_icon_unix.go
     ├── window_icon_windows.go
@@ -1055,4 +1059,4 @@
     ├── workspace_session_test.go
     └── zzz_pty_leak_check_test.go
     
-    57 directories, 997 files
+    57 directories, 1001 files

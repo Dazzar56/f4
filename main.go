@@ -229,7 +229,8 @@ The following switches may be used in the command line:
  --cpuprofile [cpuprofile]
  --debug                Log to "debug.log" (equivalent to --log=1)
  --gui [Backend]        Force run in GUI-mode
-                         [Backend] values: "gogpu", "ebiten", "x11", "wayland",
+                         [Backend] values: "win32" (or "winapi", "gdi"),
+                         "gogpu", "ebiten", "x11", "wayland",
                          if Backend omited, f4 try to use the most suitable
  --input [InputMode]    Defines the preferred vtinput parser method;
                          [InputMode] values: "", "ansi", "ConPTY"
@@ -323,8 +324,8 @@ see in vtinput project: https://github.com/unxed/vtinput
 
 func shouldTryGui() bool {
 	if vtui.IsWine() {
-		// Under Wine, default to TTY mode because graphical backends (gogpu) are not yet functional.
-		return false
+		// Under Wine, default to Win32 GUI mode.
+		return true
 	}
 	if runtime.GOOS == "windows" {
 		// On Windows, we compile separate binaries for console (f4.exe) and GUI (f4-gui.exe).
@@ -339,10 +340,21 @@ func shouldTryGui() bool {
 
 func tryRunDefaultGui() error {
 	if vtui.IsWine() {
-		return fmt.Errorf("GUI backends disabled under Wine")
+		vtui.DebugLog("GUI_AUTO: Under Wine, trying win32 GUI backend...")
+		if err := RunGui("win32"); err == nil {
+			return nil
+		}
 	}
 	var errs []string
 	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
+		if runtime.GOOS == "windows" {
+			vtui.DebugLog("GUI_AUTO: Trying win32...")
+			if err := RunGui("win32"); err == nil {
+				return nil
+			} else {
+				errs = append(errs, fmt.Sprintf("win32: %v", err))
+			}
+		}
 		vtui.DebugLog("GUI_AUTO: Trying gogpu...")
 		if err := RunGui("gogpu"); err == nil {
 			return nil

@@ -56,6 +56,7 @@ UI & input libraries are developed separately ([vtui](https://github.com/unxed/v
 
 **Command Line Options:**
 *   `--gui`: Start in GUI mode using the best available backend for your OS.
+*   `--gui=win32`: Use native Win32/GDI graphical windowing (Windows and Wine).
 *   `--gui=gogpu`: Use the hardware-accelerated (GPU) renderer.
 *   `--gui=x11`: Use native X11 windowing (Linux/BSD/macOS).
 *   `--gui=wayland`: Use native Wayland windowing (Linux/BSD).
