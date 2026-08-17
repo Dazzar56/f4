@@ -149,7 +149,12 @@ drain:
 		t.Fatal("Panel.Toggle should not hide panels in SimpleCaptured mode")
 	}
 
-	// ShowToast is posted to the UI task queue; pump it like the main loop would.
+	// ShowToast is posted to the UI task queue; pump it like the main loop
+	// would. FrameManager.currentToast is global and Init() does not clear
+	// it, so a toast left over from an earlier test in this package may
+	// still be unexpired: wait for the toast we expect rather than for the
+	// first non-empty one.
+	want := Msg("Terminal.NotAvailableInEnv")
 	var toast string
 	timeout := time.After(1 * time.Second)
 Loop:
@@ -157,14 +162,11 @@ Loop:
 		select {
 		case task := <-vtui.FrameManager.TaskChan:
 			task()
-			if toast = vtui.FrameManager.GetActiveToast(); toast != "" {
+			if toast = vtui.FrameManager.GetActiveToast(); toast == want {
 				break Loop
 			}
 		case <-timeout:
-			t.Fatal("Timeout waiting for toast")
+			t.Fatalf("Timeout waiting for toast %q, last seen %q", want, toast)
 		}
-	}
-	if toast != Msg("Terminal.NotAvailableInEnv") {
-		t.Errorf("Expected toast %q, got %q", Msg("Terminal.NotAvailableInEnv"), toast)
 	}
 }
