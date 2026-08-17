@@ -1289,7 +1289,20 @@ func init() {
 				pf.showLeftPanel = true
 				pf.showRightPanel = true
 			}
-			if pf.menuBar != nil && pf.lastW > 0 && pf.lastH > 0 {
+			// ShellModeSimpleInline manages its own geometry refresh below,
+			// timed to when the real terminal screen is actually the one f4
+			// is about to draw on (see the two branches). Calling the full,
+			// layout-and-repaint-triggering ResizeConsole() here, before that
+			// screen switch happens, let vtui's own panel/keybar repaint land
+			// on whichever screen (primary or alt) happened to still be
+			// active at that exact moment: sometimes the host console the
+			// user just switched to, leaving a stray copy of the keybar that
+			// a later Ctrl+O toggle would reveal stacked on top of the next
+			// one. Every other shell mode keeps the previous unconditional
+			// call.
+			if pf.shellMode == ShellModeSimpleInline {
+				pf.lastShowPanels = pf.showPanels
+			} else if pf.menuBar != nil && pf.lastW > 0 && pf.lastH > 0 {
 				pf.ResizeConsole(pf.lastW, pf.lastH)
 				pf.lastShowPanels = pf.showPanels
 			}
@@ -1311,9 +1324,12 @@ func init() {
 					// from the OS's point of view, no resize ever happened.
 					// Re-probe right before computing the overlay so the
 					// command line and keybar land on the real bottom rows
-					// instead of wherever the stale size implied.
+					// instead of wherever the stale size implied. Only the
+					// two fields are touched (not the full ResizeConsole):
+					// we are on the host screen now, and re-running panel
+					// layout here is exactly the leak described above.
 					if w, h, err := vtui.GetTerminalSize(); err == nil && w > 0 && h > 0 {
-						pf.ResizeConsole(w, h)
+						pf.lastW, pf.lastH = w, h
 					}
 					if pf.consoleStyle() == ConsoleViewFar {
 						// Far style: the console keeps whatever the commands
@@ -1330,6 +1346,12 @@ func init() {
 					pf.clearConsoleOverlay()
 					vtui.SetAltScreen(true)
 					pf.SetBusy(false)
+					// Layout refresh belongs here, after the real terminal
+					// screen is back to the alt screen f4 owns — see the
+					// comment above the shellMode dispatch.
+					if pf.menuBar != nil && pf.lastW > 0 && pf.lastH > 0 {
+						pf.ResizeConsole(pf.lastW, pf.lastH)
+					}
 					vtui.FrameManager.HardRefresh()
 				}
 			} else if pf.shellMode == ShellModeSimpleCaptured {
