@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/unxed/vtui"
 	"runtime"
 	"testing"
 )
