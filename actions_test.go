@@ -2247,7 +2247,9 @@ func TestActionCreateLink_Flow(t *testing.T) {
 	}
 }
 func TestActionSwitchEditorToViewerAndBack(t *testing.T) {
-	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
 	SetDefaultF4Palette()
 
 	tmpDir := t.TempDir()
@@ -2273,6 +2275,8 @@ func TestActionSwitchEditorToViewerAndBack(t *testing.T) {
 			}
 		case <-timeout:
 			t.Fatal("Timeout waiting for editor to open")
+		default:
+			time.Sleep(10 * time.Millisecond)
 		}
 	}
 
@@ -2335,7 +2339,9 @@ func TestActionSwitchEditorToViewerAndBack(t *testing.T) {
 }
 
 func TestActionSwitchEditorToViewer_ModifiedFilePrompt(t *testing.T) {
-	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
 	SetDefaultF4Palette()
 
 	tmpDir := t.TempDir()
@@ -2360,6 +2366,8 @@ func TestActionSwitchEditorToViewer_ModifiedFilePrompt(t *testing.T) {
 			}
 		case <-timeout:
 			t.Fatal("Timeout waiting for editor to open")
+		default:
+			time.Sleep(10 * time.Millisecond)
 		}
 	}
 
@@ -2375,14 +2383,17 @@ func TestActionSwitchEditorToViewer_ModifiedFilePrompt(t *testing.T) {
 	var confirmDlg *vtui.Window
 	timeout = time.After(2 * time.Second)
 	for confirmDlg == nil {
+		if top, ok := vtui.FrameManager.GetTopFrame().(*vtui.Window); ok && top.GetTitle() == " Confirm " {
+			confirmDlg = top
+			break
+		}
 		select {
 		case task := <-vtui.FrameManager.TaskChan:
 			task()
-			if top, ok := vtui.FrameManager.GetTopFrame().(*vtui.Window); ok && top.GetTitle() == " Confirm " {
-				confirmDlg = top
-			}
 		case <-timeout:
 			t.Fatal("Timeout waiting for save confirmation dialog")
+		default:
+			time.Sleep(10 * time.Millisecond)
 		}
 	}
 
@@ -2411,8 +2422,11 @@ func TestActionSwitchEditorToViewer_ModifiedFilePrompt(t *testing.T) {
 		t.Errorf("Viewer opened path %q, want %q", vv.path, filePath)
 	}
 }
+
 func TestActionSwitchEditorViewer_HeightPreserved(t *testing.T) {
-	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
 	SetDefaultF4Palette()
 
 	tmpDir := t.TempDir()
@@ -2437,6 +2451,8 @@ func TestActionSwitchEditorViewer_HeightPreserved(t *testing.T) {
 			}
 		case <-timeout:
 			t.Fatal("Timeout waiting for editor to open")
+		default:
+			time.Sleep(10 * time.Millisecond)
 		}
 	}
 
