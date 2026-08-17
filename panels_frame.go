@@ -1697,7 +1697,11 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	// by the hotkey dispatcher; F3/F4 for the terminal log are bound in
 	// the Terminal area with the TerminalQuiet condition.
 
-	// In SimpleInline mode without panels, any keypress returns to panels.
+	// In SimpleInline mode without panels the console view comes in two
+	// flavours. Far style: f4 owns the keyboard, so keys go to its command
+	// line and Enter falls through to the command execution path below,
+	// leaving the user in the console. mc style: view only, any keypress
+	// returns to the panels.
 	// Must check e.KeyDown: without it, the trailing KeyUp of the very
 	// Ctrl+O press that just hid the panels (handled above by the hotkey
 	// dispatcher on its KeyDown) falls through to here unfiltered and
@@ -1706,13 +1710,20 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	// reliably delivered as separate events.
 	if pf.shellMode == ShellModeSimpleInline && !pf.showPanels &&
 		e.Type == vtinput.KeyEventType && e.KeyDown {
-		pf.showPanels = true
-		vtui.SetAltScreen(true)
-		pf.SetBusy(false)
-		if vtui.FrameManager != nil {
-			vtui.FrameManager.HardRefresh()
+		if pf.consoleStyle() == ConsoleViewFar {
+			if e.VirtualKeyCode != vtinput.VK_RETURN && pf.cmdLine != nil && pf.cmdLine.ProcessKey(e) {
+				pf.drawConsoleOverlay()
+				return true
+			}
+		} else {
+			pf.showPanels = true
+			vtui.SetAltScreen(true)
+			pf.SetBusy(false)
+			if vtui.FrameManager != nil {
+				vtui.FrameManager.HardRefresh()
+			}
+			return true
 		}
-		return true
 	}
 
 	// In Far-style host console with an overlay, route editing keys to CommandLine first

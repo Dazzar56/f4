@@ -125,3 +125,40 @@ func TestResolveShellMode_Matrix(t *testing.T) {
 		})
 	}
 }
+
+func TestConsoleViewStyleOf(t *testing.T) {
+	cases := []struct {
+		name string
+		cfg  ShellModeConfig
+		want string
+	}{
+		{"default", ShellModeConfig{ConsoleMode: "own"}, ConsoleViewOwn},
+		{"empty", ShellModeConfig{}, ConsoleViewOwn},
+		{"far", ShellModeConfig{ConsoleMode: "far"}, ConsoleViewFar},
+		{"mc", ShellModeConfig{ConsoleMode: "mc"}, ConsoleViewMc},
+		{"legacy host with overlay", ShellModeConfig{ConsoleMode: "host", ConsoleOverlayUI: true}, ConsoleViewFar},
+		{"legacy host without overlay", ShellModeConfig{ConsoleMode: "host"}, ConsoleViewMc},
+		{"case insensitive", ShellModeConfig{ConsoleMode: "FAR"}, ConsoleViewFar},
+	}
+	for _, c := range cases {
+		if got := consoleViewStyleOf(c.cfg); got != c.want {
+			t.Errorf("%s: consoleViewStyleOf() = %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
+// Without a PTY the "own terminal" choice cannot be honoured, and leaving it in
+// place is what used to give users a blank screen on Ctrl+O.
+func TestConsoleViewStyleFor_OwnDegradesWithoutPTY(t *testing.T) {
+	oldCfg := AppConfig
+	defer func() { AppConfig = oldCfg }()
+	AppConfig.ConsoleMode = ConsoleViewOwn
+	AppConfig.ConsoleOverlayUI = false
+
+	if got := consoleViewStyleFor(ShellModeSimpleInline); got != ConsoleViewFar {
+		t.Errorf("consoleViewStyleFor(SimpleInline) = %q, want %q", got, ConsoleViewFar)
+	}
+	if got := consoleViewStyleFor(ShellModeOwn); got != ConsoleViewOwn {
+		t.Errorf("consoleViewStyleFor(Own) = %q, want %q", got, ConsoleViewOwn)
+	}
+}

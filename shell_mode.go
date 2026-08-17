@@ -59,7 +59,7 @@ func resolveShellMode(cfg ShellModeConfig) ShellMode {
 		}
 		return ShellModeSimpleCaptured
 	}
-	if !strings.EqualFold(cfg.ConsoleMode, "host") {
+	if consoleViewStyleOf(cfg) == ConsoleViewOwn {
 		return ShellModeOwn
 	}
 	if probeGUIBackend() != "" {
@@ -69,4 +69,50 @@ func resolveShellMode(cfg ShellModeConfig) ShellMode {
 		return ShellModeOwn
 	}
 	return ShellModeHost
+}
+
+// Console view styles for the Ctrl+O screen. This is a single user choice of
+// three: ConsoleViewOwn needs a PTY, the other two work with and without one.
+const (
+	ConsoleViewOwn = "own"
+	ConsoleViewFar = "far"
+	ConsoleViewMc  = "mc"
+)
+
+// consoleViewStyleOf resolves the configured console view. It accepts both the
+// current three-way ConsoleMode and the older ConsoleMode+ConsoleOverlayUI pair,
+// so configs written by earlier builds keep working untouched.
+func consoleViewStyleOf(cfg ShellModeConfig) string {
+	switch strings.ToLower(cfg.ConsoleMode) {
+	case ConsoleViewFar:
+		return ConsoleViewFar
+	case ConsoleViewMc:
+		return ConsoleViewMc
+	case "host":
+		if cfg.ConsoleOverlayUI {
+			return ConsoleViewFar
+		}
+		return ConsoleViewMc
+	}
+	return ConsoleViewOwn
+}
+
+// consoleViewStyle returns the console view configured for this instance.
+func consoleViewStyle() string {
+	return consoleViewStyleOf(ShellModeConfig{
+		ConsoleMode:      AppConfig.ConsoleMode,
+		ConsoleOverlayUI: AppConfig.ConsoleOverlayUI,
+	})
+}
+
+// consoleViewStyleFor adapts the configured style to an already resolved shell
+// mode. "Own terminal" is meaningless where no PTY could be allocated (Wine,
+// pre-ConPTY Windows), so it degrades to the Far style instead of leaving the
+// user with a blank screen after Ctrl+O.
+func consoleViewStyleFor(mode ShellMode) string {
+	style := consoleViewStyle()
+	if style == ConsoleViewOwn && (mode == ShellModeSimpleInline || mode == ShellModeSimpleCaptured) {
+		return ConsoleViewFar
+	}
+	return style
 }

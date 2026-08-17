@@ -1302,9 +1302,20 @@ func init() {
 			} else if pf.shellMode == ShellModeSimpleInline {
 				if !pf.showPanels {
 					vtui.SetAltScreen(false)
-					restoreHostConsoleBuffer()
 					pf.SetBusy(true)
+					if pf.consoleStyle() == ConsoleViewFar {
+						// Far style: the console keeps whatever the commands
+						// printed, and f4 puts its command line and keybar on
+						// the bottom rows so the user can type right there.
+						pf.drawConsoleOverlay()
+					} else {
+						// mc style is view only. A snapshot taken at a
+						// different size used to be blitted back regardless,
+						// leaving torn rows of the old panels on screen.
+						restoreHostConsoleBufferIfSize(pf.lastW, pf.lastH)
+					}
 				} else {
+					pf.clearConsoleOverlay()
 					vtui.SetAltScreen(true)
 					pf.SetBusy(false)
 					vtui.FrameManager.HardRefresh()

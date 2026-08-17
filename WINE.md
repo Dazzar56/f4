@@ -140,26 +140,26 @@ ANSI-последовательности от `SetAltScreen/Suspend/Resume` (Wi
 
 Обобщаем существующий Far-стиль так, чтобы он работал и когда PTY нет.
 
-- [ ] `console_passthrough.go`: `overlayLines()` перестаёт зависеть от
+- [x] `console_passthrough.go`: `overlayLines()` перестаёт зависеть от
       `AppConfig.ConsoleOverlayUI`, начинает зависеть от нового `consoleViewStyle()`
       (см. A4) и возвращает 0 для стиля `mc`.
-- [ ] `drawHostConsoleOverlay()` разбить на две части:
+- [x] `drawHostConsoleOverlay()` разбить на две части:
       расчёт содержимого (строка приглашения `pf.buildPrompt()` + текст
       `pf.cmdLine.Edit.GetText()`, ярлыки `pf.GetKeyLabels()`) и вывод.
       Условие `pf.shellMode != ShellModeHost` заменить на «мы в консольном виде»
       (`!pf.showPanels` и режим из множества `{ShellModeHost, ShellModeSimpleInline}`).
-- [ ] Два вывода:
+- [x] Два вывода:
       * **ANSI** — как сейчас, `vtui.WritePassthrough`;
       * **winapi** — новый `console_overlay_windows.go`: `WriteConsoleOutputW` в
         `STD_OUTPUT_HANDLE`. Заглушка `console_overlay_other.go` для остальных ОС.
-- [ ] Геометрия для winapi (это главный источник ошибок):
+- [x] Геометрия для winapi (это главный источник ошибок):
       * размер брать из `GetConsoleScreenBufferInfo`, **строки считать от
         `srWindow.Bottom`, а не от `dwSize.Y`** — консольный буфер часто выше окна;
       * ширину брать `srWindow.Right - srWindow.Left + 1`;
       * пересчитывать перед каждой отрисовкой: вывод команды скроллит буфер.
-- [ ] Курсор: `SetConsoleCursorPosition` в позицию редактирования командной строки +
+- [x] Курсор: `SetConsoleCursorPosition` в позицию редактирования командной строки +
       `SetConsoleCursorInfo` (видимый). Для ANSI — `\x1b[<row>;<col>H` и `\x1b[?25h`.
-- [ ] Перед запуском команды оверлей **стирать** и возвращать курсор туда, где его
+- [x] Перед запуском команды оверлей **стирать** и возвращать курсор туда, где его
       оставил предыдущий вывод: сохранять `dwCursorPosition` и содержимое строк под
       оверлеем (`ReadConsoleOutputW`) при отрисовке, восстанавливать перед `exec`.
       Иначе копия командной строки уедет в скроллбэк.
@@ -168,12 +168,12 @@ ANSI-последовательности от `SetAltScreen/Suspend/Resume` (Wi
 
 ### Этап A3. Вход в консольный вид и ввод
 
-- [ ] `action_registry.go`, handler `Panel.Toggle`, ветка `ShellModeSimpleInline`:
+- [x] `action_registry.go`, handler `Panel.Toggle`, ветка `ShellModeSimpleInline`:
       после `SetAltScreen(false)` не звать `restoreHostConsoleBuffer()` вслепую
       (он и есть источник «куска панелей»): восстанавливать только если сохранённый
       буфер актуального размера. При стиле `far` — далее рисовать оверлей и
       **не** ставить `SetBusy(true)` навсегда, а держать флаг «консольный вид».
-- [ ] `panels_frame.go` (~1707): правило «любая клавиша возвращает панели» оставить
+- [x] `panels_frame.go` (~1707): правило «любая клавиша возвращает панели» оставить
       **только для стиля `mc`**. Для `far`:
       * Ctrl+O / Esc → панели (уже работает через диспетчер хоткеев);
       * Enter → выполнить команду тем же путём, что и сейчас
@@ -181,11 +181,11 @@ ANSI-последовательности от `SetAltScreen/Suspend/Resume` (Wi
         оверлей и **остаться в консольном виде** (панели возвращает только Ctrl+O);
       * остальное → `pf.cmdLine.ProcessKey(e)` + перерисовка оверлея (взять за образец
         существующую ветку для `ShellModeHost` в `panels_frame.go:1719`).
-- [ ] `runSimpleInlineCommand()`: «Press any key to return to f4…» показывать только
+- [x] `runSimpleInlineCommand()`: «Press any key to return to f4…» показывать только
       при возврате в панели (то есть при запуске команды с панелей). Если команда
       запущена из консольного вида — паузы нет, сразу рисуем оверлей обратно.
 - [ ] `Close()` и выход из f4: гарантированно вернуть исходный активный буфер/курсор.
-- [ ] Тесты в `simple_exec_test.go`: в стиле `far` обычная клавиша **не** возвращает
+- [x] Тесты в `simple_exec_test.go`: в стиле `far` обычная клавиша **не** возвращает
       панели, а попадает в командную строку; в стиле `mc` — возвращает (существующий
       тест `TestSimpleInline_ToggleAndAnyKeyReturn` перевести на явную установку стиля).
       Тест `TestSimpleInline_CtrlOKeyUpDoesNotRestorePanels` обязан продолжать проходить.
@@ -197,10 +197,10 @@ ANSI-последовательности от `SetAltScreen/Suspend/Resume` (Wi
       `host` + `ConsoleOverlayUI=1` → `far`, `host` + `ConsoleOverlayUI=0` → `mc`.
       Поле `ConsoleOverlayUI` оставить в структуре только на время миграции чтения;
       в UI и в новом коде им не пользоваться.
-- [ ] Хелпер `consoleViewStyle() string` в `shell_mode.go` — единственная точка правды.
+- [x] Хелпер `consoleViewStyle() string` в `shell_mode.go` — единственная точка правды.
       Он **не** зависит от наличия PTY: `far` остаётся `far` и в `ShellModeHost`,
       и в `ShellModeSimpleInline`.
-- [ ] `resolveShellMode()`: `own` → `ShellModeOwn`; `far`/`mc` → `ShellModeHost` при
+- [x] `resolveShellMode()`: `own` → `ShellModeOwn`; `far`/`mc` → `ShellModeHost` при
       живом PTY и `ShellModeSimpleInline`/`ShellModeSimpleCaptured` без него; `own` без
       PTY откатывается на `far`.
 - [ ] `actions.go` (`actionPanelSettings`, ~2831): радиогруппа `ConsoleMode` расширяется
@@ -211,6 +211,30 @@ ANSI-последовательности от `SetAltScreen/Suspend/Resume` (Wi
       (последняя больше не используется); остальные языки подхватят fallback (`I18N.md`).
 - [ ] Обязательный `vtui.AssertLayout`-тест диалога (правило vtui).
 - [ ] Раздел в `help/en.hlf` и `help/ru.hlf`.
+
+### Состояние на сейчас
+
+Сделано (один коммит, см. историю): консольный вид без PTY в стиле `far` —
+командная строка, приглашение, keybar и мигающий курсор поверх настоящей консоли,
+ввод идёт в командную строку, Enter выполняет команду и оставляет пользователя в
+консоли. Отрисовка: ANSI и Win32 Console API (`console_overlay_windows.go`).
+Стиль `mc` сохраняет прежнее поведение «просмотр, любая клавиша — назад».
+Больше не восстанавливается снимок консоли неподходящего размера — это и был
+«кусок панелей над логом».
+
+Не сделано и ждёт своей очереди:
+
+* **A0** — диагностика и `--wine-probe`. От её результата зависит, нужен ли A1.
+* **A1** — vtui перестаёт писать VT-последовательности в winapi-консоль. Отдельный
+  патч в другом репозитории; пока мусор от `SetAltScreen/Suspend/Resume` может
+  оставаться в видимом буфере под `wineconsole`.
+* **A4, вторая половина** — трёхпозиционная радиогруппа в настройках, строки
+  локализации, `AssertLayout`-тест, справка. Пока стиль выбирается только правкой
+  `ConsoleMode` в ini (`own`/`far`/`mc`), старая пара `host`+`ConsoleOverlayUI`
+  читается как раньше.
+* Курсор в командной строке ставится в конец текста: `vtui.Edit` не отдаёт позицию
+  каретки наружу. Точное место появится, когда в vtui будет `Edit.CursorPos()`.
+* Гарантированное восстановление консоли в `Close()` и юнит-тест геометрии оверлея.
 
 ### Этап A5. Приёмка части A
 

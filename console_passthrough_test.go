@@ -189,6 +189,7 @@ func TestHostConsole_OverlayLines(t *testing.T) {
 	defer pf.Close()
 
 	// 1. ConsoleOverlayUI disabled -> 0 lines
+	AppConfig.ConsoleMode = "host"
 	AppConfig.ConsoleOverlayUI = false
 	if got := pf.overlayLines(); got != 0 {
 		t.Errorf("overlayLines() with ConsoleOverlayUI=false = %d, want 0", got)
@@ -217,6 +218,7 @@ func TestHostConsole_FarStyleScrollRegion(t *testing.T) {
 
 	oldCfg := AppConfig
 	defer func() { AppConfig = oldCfg }()
+	AppConfig.ConsoleMode = "host"
 	AppConfig.ConsoleOverlayUI = true
 
 	pf := NewPanelsFrame()
@@ -248,6 +250,7 @@ func TestHostConsole_FarStyleScrollRegion(t *testing.T) {
 func TestHostConsole_FarStylePTYSizing(t *testing.T) {
 	oldCfg := AppConfig
 	defer func() { AppConfig = oldCfg }()
+	AppConfig.ConsoleMode = "host"
 	AppConfig.ConsoleOverlayUI = true
 
 	pf := setupMockPanelsFrame()

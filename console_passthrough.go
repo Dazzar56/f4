@@ -34,9 +34,14 @@ func (pf *PanelsFrame) SetBusy(busy bool) {
 	pf.Busy = busy
 }
 
+// consoleStyle returns the console view style effective for this frame.
+func (pf *PanelsFrame) consoleStyle() string {
+	return consoleViewStyleFor(pf.shellMode)
+}
+
 // overlayLines returns the number of bottom rows reserved for the f4 overlay (0, 1, or 2).
 func (pf *PanelsFrame) overlayLines() int {
-	if !AppConfig.ConsoleOverlayUI {
+	if pf.consoleStyle() != ConsoleViewFar {
 		return 0
 	}
 	n := 1 // CommandLine
@@ -46,17 +51,124 @@ func (pf *PanelsFrame) overlayLines() int {
 	return n
 }
 
-// drawHostConsoleOverlay renders the CommandLine and KeyBar directly to the host terminal
-// using minimal ANSI escape sequences without involving ScreenBuf.
-func (pf *PanelsFrame) drawHostConsoleOverlay() {
-	if pf.shellMode != ShellModeHost || !pf.isHostConsoleActive() || pf.overlayLines() == 0 {
+// consoleOverlayContent is the backend-independent description of the overlay:
+// what to put on the command line row, where the cursor belongs, and the keybar
+// labels. The ANSI and Win32 Console emitters below render the same struct.
+type consoleOverlayContent struct {
+	Lines     int
+	Cmd       string
+	CursorCol int
+	KeyNums   []string
+	KeyLabels []string
+}
+
+// buildConsoleOverlayContent collects the overlay text from the live UI state.
+func (pf *PanelsFrame) buildConsoleOverlayContent() consoleOverlayContent {
+	ov := consoleOverlayContent{Lines: pf.overlayLines()}
+
+	var sb strings.Builder
+	for _, ci := range pf.buildPrompt() {
+		if ci.Char != vtui.WideCharFiller {
+			sb.WriteRune(rune(ci.Char))
+		}
+	}
+	if pf.cmdLine != nil && pf.cmdLine.Edit != nil {
+		sb.WriteString(pf.cmdLine.Edit.GetText())
+	}
+	ov.Cmd = sb.String()
+	// Edit keeps its caret position private, so the cursor is parked at the end
+	// of the typed text. Exact placement needs an accessor in vtui.
+	ov.CursorCol = len([]rune(ov.Cmd))
+
+	if pf.showKeyBar && ov.Lines >= 2 {
+		if labels := pf.GetKeyLabels(); labels != nil {
+			for i := 0; i < 12; i++ {
+				lbl := []rune(labels.Normal[i])
+				if len(lbl) > 5 {
+					lbl = lbl[:5]
+				}
+				ov.KeyNums = append(ov.KeyNums, fmt.Sprintf("%d", i+1))
+				ov.KeyLabels = append(ov.KeyLabels, fmt.Sprintf("%-5s", string(lbl)))
+			}
+		}
+	}
+	return ov
+}
+
+// consoleOverlayUsesWinAPI reports whether the overlay must be painted with the
+// Windows Console API instead of ANSI: under the winapi renderer the visible
+// screen buffer is not a VT stream and escape sequences would land in it as
+// literal text.
+func consoleOverlayUsesWinAPI() bool {
+	if SelectedTTYBackend != "winapi" && SelectedTTYBackend != "win32" {
+		return false
+	}
+	return winConsoleOverlayAvailable()
+}
+
+// consoleViewActive reports whether the frame currently shows a console view
+// (host console with a live shell, or the no-PTY console) rather than panels.
+func (pf *PanelsFrame) consoleViewActive() bool {
+	switch pf.shellMode {
+	case ShellModeHost:
+		return pf.isHostConsoleActive()
+	case ShellModeSimpleInline:
+		return !pf.showPanels
+	}
+	return false
+}
+
+// drawConsoleOverlay paints the f4 command line and keybar over the console.
+func (pf *PanelsFrame) drawConsoleOverlay() {
+	if pf.overlayLines() == 0 || !pf.consoleViewActive() {
+		return
+	}
+	ov := pf.buildConsoleOverlayContent()
+	if consoleOverlayUsesWinAPI() {
+		winDrawConsoleOverlay(ov)
+		return
+	}
+	pf.emitAnsiConsoleOverlay(ov)
+}
+
+// clearConsoleOverlay takes the overlay off the screen and gives the cursor back
+// to the spot where the previous output ended. Without it, a command's output
+// scrolls a copy of the command line into the console history.
+func (pf *PanelsFrame) clearConsoleOverlay() {
+	n := pf.overlayLines()
+	if n == 0 {
+		return
+	}
+	if consoleOverlayUsesWinAPI() {
+		winClearConsoleOverlay(n)
 		return
 	}
 	h := pf.lastH
 	if h <= 0 {
 		return
 	}
-	n := pf.overlayLines()
+	var sb strings.Builder
+	sb.WriteString("\x1b7")
+	for i := 0; i < n; i++ {
+		sb.WriteString(fmt.Sprintf("\x1b[%d;1H\x1b[0m\x1b[2K", h-n+1+i))
+	}
+	sb.WriteString("\x1b8")
+	vtui.WritePassthrough([]byte(sb.String()))
+}
+
+// drawHostConsoleOverlay is kept as the name used by the host console call sites.
+func (pf *PanelsFrame) drawHostConsoleOverlay() {
+	pf.drawConsoleOverlay()
+}
+
+// emitAnsiConsoleOverlay renders the overlay directly to the host terminal
+// using minimal ANSI escape sequences without involving ScreenBuf.
+func (pf *PanelsFrame) emitAnsiConsoleOverlay(ov consoleOverlayContent) {
+	h := pf.lastH
+	if h <= 0 {
+		return
+	}
+	n := ov.Lines
 	cmdRow := h - n + 1 // 1-based row index
 
 	var sb strings.Builder
@@ -65,35 +177,25 @@ func (pf *PanelsFrame) drawHostConsoleOverlay() {
 
 	// 2. Draw CommandLine
 	sb.WriteString(fmt.Sprintf("\x1b[%d;1H\x1b[0m\x1b[2K", cmdRow))
-	prompt := pf.buildPrompt()
-	for _, ci := range prompt {
-		if ci.Char != vtui.WideCharFiller {
-			sb.WriteRune(rune(ci.Char))
-		}
-	}
-	if pf.cmdLine != nil && pf.cmdLine.Edit != nil {
-		sb.WriteString(pf.cmdLine.Edit.GetText())
-	}
+	sb.WriteString(ov.Cmd)
 
 	// 3. Draw KeyBar if visible
-	if pf.showKeyBar && n >= 2 {
-		keyRow := h
-		sb.WriteString(fmt.Sprintf("\x1b[%d;1H\x1b[0m\x1b[2K", keyRow))
-		labels := pf.GetKeyLabels()
-		if labels != nil {
-			for i := 0; i < 12; i++ {
-				num := fmt.Sprintf("%d", i+1)
-				lbl := labels.Normal[i]
-				if len(lbl) > 5 {
-					lbl = lbl[:5]
-				}
-				sb.WriteString(fmt.Sprintf("\x1b[0;30;46m%s\x1b[0;37;40m%-5s", num, lbl))
-			}
+	if len(ov.KeyNums) > 0 {
+		sb.WriteString(fmt.Sprintf("\x1b[%d;1H\x1b[0m\x1b[2K", h))
+		for i := range ov.KeyNums {
+			sb.WriteString(fmt.Sprintf("\x1b[0;30;46m%s\x1b[0;37;40m%s", ov.KeyNums[i], ov.KeyLabels[i]))
 		}
 	}
 
 	// 4. Restore cursor position and visibility
 	sb.WriteString("\x1b[0m\x1b8")
+
+	// Without a PTY there is no shell to own the cursor, so f4 parks it in its
+	// own command line: that blinking caret is what tells the user the console
+	// is waiting for a command rather than hung.
+	if pf.shellMode == ShellModeSimpleInline {
+		sb.WriteString(fmt.Sprintf("\x1b[%d;%dH\x1b[?25h", cmdRow, ov.CursorCol+1))
+	}
 	vtui.WritePassthrough([]byte(sb.String()))
 }
 

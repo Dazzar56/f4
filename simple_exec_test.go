@@ -4,6 +4,9 @@ import (
 	"testing"
 	"time"
 
+	"bytes"
+	"strings"
+
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
@@ -50,6 +53,10 @@ func TestSimpleInline_ToggleAndAnyKeyReturn(t *testing.T) {
 	vtui.FrameManager.Init(scr)
 	SetDefaultF4Palette()
 
+	oldCfg := AppConfig
+	defer func() { AppConfig = oldCfg }()
+	AppConfig.ConsoleMode = ConsoleViewMc
+
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	pf.shellMode = ShellModeSimpleInline
@@ -84,6 +91,10 @@ func TestSimpleInline_CtrlOKeyUpDoesNotRestorePanels(t *testing.T) {
 	scr.AllocBuf(80, 25)
 	vtui.FrameManager.Init(scr)
 	SetDefaultF4Palette()
+
+	oldCfg := AppConfig
+	defer func() { AppConfig = oldCfg }()
+	AppConfig.ConsoleMode = ConsoleViewMc
 
 	pf := NewPanelsFrame()
 	defer pf.Close()
@@ -168,5 +179,55 @@ Loop:
 		case <-timeout:
 			t.Fatalf("Timeout waiting for toast %q, last seen %q", want, toast)
 		}
+	}
+}
+
+// TestSimpleInline_FarStyleKeepsConsoleAndTypes covers the Ctrl+O screen users
+// actually get under Wine: the console stays visible, the f4 command line is
+// drawn on it, and typing edits that command line instead of throwing the user
+// back to the panels.
+func TestSimpleInline_FarStyleKeepsConsoleAndTypes(t *testing.T) {
+	scr := vtui.NewSilentScreenBuf()
+	var out bytes.Buffer
+	scr.Writer = &out
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+	SetDefaultF4Palette()
+
+	oldCfg := AppConfig
+	defer func() { AppConfig = oldCfg }()
+	AppConfig.ConsoleMode = ConsoleViewFar
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.shellMode = ShellModeSimpleInline
+	pf.showKeyBar = true
+	pf.ResizeConsole(80, 25)
+	vtui.FrameManager.Push(pf)
+
+	if got := pf.overlayLines(); got != 2 {
+		t.Fatalf("overlayLines() in Far style with keybar = %d, want 2", got)
+	}
+
+	out.Reset()
+	RunAction("Panel.Toggle")
+	if pf.showPanels {
+		t.Fatal("Panel.Toggle should hide panels in SimpleInline mode")
+	}
+	// Command line row of an 80x25 screen with a two line overlay is row 24.
+	if written := out.String(); !strings.Contains(written, "\x1b[24;1H") {
+		t.Errorf("entering the Far-style console must draw the overlay, got %q", written)
+	}
+
+	pressKey(pf, &vtinput.InputEvent{
+		Type:    vtinput.KeyEventType,
+		KeyDown: true,
+		Char:    'd',
+	})
+	if pf.showPanels {
+		t.Fatal("typing in the Far-style console must not restore panels")
+	}
+	if got := pf.cmdLine.Edit.GetText(); got != "d" {
+		t.Errorf("typed character should reach the command line, got %q", got)
 	}
 }

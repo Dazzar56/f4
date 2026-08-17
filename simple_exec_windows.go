@@ -107,3 +107,11 @@ func restoreHostConsoleBufferImpl() {
 		uintptr(unsafe.Pointer(&writeRegion)),
 	)
 }
+
+// hostConsoleBufferMatches reports whether the saved snapshot still describes a
+// screen of the given size.
+func hostConsoleBufferMatches(w, h int) bool {
+	savedHostConsoleMu.Lock()
+	defer savedHostConsoleMu.Unlock()
+	return len(savedHostConsoleBuffer) > 0 && savedHostConsoleW == w && savedHostConsoleH == h
+}

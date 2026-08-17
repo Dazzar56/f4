@@ -47,8 +47,27 @@ func (pf *PanelsFrame) runSimpleInlineCommand(dir, command string) {
 		cmd.Dir = dir
 	}
 
+	// A command typed in the Far-style console view keeps the user there: no
+	// pause, no panels. The overlay comes off first so the output does not
+	// scroll a copy of the command line into the console history.
+	inConsoleView := !pf.showPanels && pf.shellMode == ShellModeSimpleInline &&
+		pf.consoleStyle() == ConsoleViewFar
+	if inConsoleView {
+		pf.clearConsoleOverlay()
+	}
+
 	vtui.Suspend()
 	_ = cmd.Run()
+
+	if inConsoleView {
+		// Busy is still set, so Resume() cannot repaint the panels over the
+		// console before we switch back to it.
+		vtui.Resume()
+		vtui.SetAltScreen(false)
+		pf.SetBusy(true)
+		pf.drawConsoleOverlay()
+		return
+	}
 
 	fmt.Print("\r\nPress any key to return to f4...")
 	waitForAnyKey()
@@ -68,6 +87,15 @@ func captureHostConsoleBuffer(w, h int) {
 
 func restoreHostConsoleBuffer() {
 	restoreHostConsoleBufferImpl()
+}
+
+// restoreHostConsoleBufferIfSize blits the saved console snapshot back only when
+// it still matches the current screen. Restoring a stale, differently sized
+// snapshot leaves fragments of the old panels hanging over the command output.
+func restoreHostConsoleBufferIfSize(w, h int) {
+	if hostConsoleBufferMatches(w, h) {
+		restoreHostConsoleBufferImpl()
+	}
 }
 
 // runSimpleCapturedCommand executes a command via LocalCommandRunner and displays
