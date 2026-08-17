@@ -289,9 +289,18 @@ func (s *ScreenBuf) WritePassthrough(p []byte)
 Тест: `NewSilentScreenBuf()` с `Writer = &bytes.Buffer{}` — байты дошли дословно, параллельный
 `Flush()` не перемешался.
 
-## 7. План работ
+## 7. План работ (Все этапы реализованы)
 
 Каждый этап — отдельный коммит, компилируется, `go test ./...` зелёный.
+
+* [x] **Этап 1.** Конфиг и разрешение режима (`ShellMode`, `resolveShellMode()`, `ConsoleMode`, `ConsoleOverlayUI`).
+* [x] **Этап 2.** `vtui`: `WritePassthrough` в `ScreenBuf` и пакет `vtui`.
+* [x] **Этап 3.** Роутер вывода: `console_passthrough.go`, `mutedPTY`, `enterHostConsole()` / `leaveHostConsole()` (базовый mc-стиль), read-loop в `initPTY()`.
+* [x] **Этап 4.** Переключение и ввод (`Panel.Toggle`, `ProcessKey`, автовозврат по `OSC 133;D`, гарантированный `leaveHostConsole()` при `Close()`).
+* [x] **Этап 5.** Far-стиль (`ConsoleOverlayUI`, scroll region, ручная отрисовка оверлея, троттлинг перерисовки ~30 мс, роутинг командной строки).
+* [x] **Этап 6.** Простые режимы деградации (`ShellModeSimpleInline` и `ShellModeSimpleCaptured`).
+* [x] **Этап 7.** Настройки и локализация (радиогруппа и чекбокс в `Panel Settings`, строки в `en.lng`/`ru.lng`, автолейаут-тест).
+* [x] **Этап 8.** Документация и граничные случаи (интеграция с сессиями Unix daemon/detach, раздел в `TERMINAL.md`).
 
 **Этап 0. Чтение.** `TERMINAL.md`, `TERMINAL_WINDOWS.md` (там таблица «где что лежит»),
 `UX_GUIDELINES.md`, `I18N.md`, `vtui/UI_TESTING.md`. Кода не писать.

@@ -261,3 +261,35 @@ func TestHostConsole_FarStylePTYSizing(t *testing.T) {
 		t.Errorf("termView height in Far-style host mode = %d, want 23", pf.termView.Height)
 	}
 }
+func TestHostConsole_DetachCleanupSimulation(t *testing.T) {
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.shellMode = ShellModeHost
+	pf.enterHostConsole()
+
+	if !pf.isHostConsoleActive() {
+		t.Fatal("host console must be active")
+	}
+
+	// Simulate session server cleanup loop before detach/restore
+	for _, s := range vtui.FrameManager.Screens {
+		if s == nil {
+			continue
+		}
+		for _, f := range s.Frames {
+			if frame, ok := f.(*PanelsFrame); ok && frame != nil {
+				if frame.shellMode == ShellModeHost && frame.isHostConsoleActive() {
+					frame.leaveHostConsole()
+				}
+			}
+		}
+	}
+
+	if pf.isHostConsoleActive() {
+		t.Error("host console must be left after server detach cleanup loop")
+	}
+}

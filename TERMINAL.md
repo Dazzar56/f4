@@ -95,3 +95,16 @@ During the development of `f4`, the following intrinsic behaviors of the Windows
 ~~1.  **Technical Echo Leakage (Refers to Observation 1):**~~ **SOLVED.** We eliminated the need for `powershell` wrappers entirely by using the `$E` variable in the `PROMPT` environment to automatically emit OSC 133 sequences.
 ~~2.  **The Duplicate Prompt Problem (Refers to Observation 3):**~~ **SOLVED.** We no longer suppress the native shell prompt. We embrace it, allowing it to act as the true command history delimiter, perfectly mimicking Far Manager.
 ~~3.  **Bottom-Alignment Defeat (Refers to Observations 2 & 5):**~~ **SOLVED.** Implemented "Visual Gravity" in the render pipeline (`Show()`). The active viewport is dynamically shifted downwards, guaranteeing bottom-alignment regardless of ConPTY's absolute coordinate positioning.
+## 7. Host Console Mode (`ShellModeHost`)
+
+In addition to the default built-in terminal emulator (`ShellModeOwn`), `f4` provides an optional **Host Console Mode** (`Panel.ConsoleMode = host` in `settings.ini` or configured in Panel Settings):
+
+### 1. Architecture: PTY Passthrough + Silent VTE Mirror
+* **Direct Output Passthrough:** When panels are toggled off (`Ctrl+O`) or a shell command runs, PTY bytes are forwarded byte-for-byte to the real host terminal's primary screen buffer (`vtui.WritePassthrough`).
+* **Silent VTE Mirror:** PTY output is simultaneously fed to the internal `AnsiParser` using `mutedPTY`. The mirror maintains full state (PieceTable log, alt screen state, mouse tracking modes, kitty flags) without generating duplicate terminal responses to queries (CPR, DSR, DA, OSC 52).
+* **Native Terminal Capabilities:** The host terminal provides true native scrollback, mouse selection, native sixel/kitty graphics, and native job control (`Ctrl+C`, `Ctrl+Z`, `SIGTSTP`).
+* **Far-Style Overlay (`ConsoleOverlayUI = true`):** When enabled, `f4` reserves 1–2 lines at the bottom using a `DECSTBM` scroll region (`\x1b[1;<h-n>r`), rendering its command line and keybar directly onto the host console without touching `ScreenBuf`.
+
+### 2. Graceful Degradation Modes
+* **`ShellModeSimpleInline`:** Used when PTY/ConPTY is unavailable on Windows (e.g. running under Wine in console). Runs commands with inherited `stdio` via `vtui.Suspend()` / `exec` / `vtui.Resume()` and a keypress pause.
+* **`ShellModeSimpleCaptured`:** Used in GUI and non-TTY environments when PTY is unavailable. Runs commands via `LocalCommandRunner` and streams output into an `f4` dialog.

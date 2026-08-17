@@ -440,9 +440,32 @@ func runServer(sockPath string) {
 		vtui.DebugLog("SERVER: PRE-RUN: Stdin FD: %d, Stdout FD: %d", os.Stdin.Fd(), os.Stdout.Fd())
 		reader := vtinput.NewReader(os.Stdin, false)
 
+		// Re-enter host console for the new client if active workspace had panels hidden
+		if top := vtui.FrameManager.GetTopFrame(); top != nil {
+			if pf, ok := top.(*PanelsFrame); ok && pf != nil {
+				if pf.shellMode == ShellModeHost && !pf.showPanels {
+					pf.enterHostConsole()
+				}
+			}
+		}
+
 		vtui.DebugLog("SERVER: Entering fm.Run()...")
 		vtui.FrameManager.Run(reader)
 		vtui.DebugLog("SERVER: fm.Run() EXITED.")
+
+		// Ensure any active host console is cleanly left before restoring terminal
+		for _, s := range vtui.FrameManager.Screens {
+			if s == nil {
+				continue
+			}
+			for _, f := range s.Frames {
+				if pf, ok := f.(*PanelsFrame); ok && pf != nil {
+					if pf.shellMode == ShellModeHost && pf.isHostConsoleActive() {
+						pf.leaveHostConsole()
+					}
+				}
+			}
+		}
 
 		close(watchStop)
 
