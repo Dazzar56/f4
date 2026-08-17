@@ -598,6 +598,12 @@ PanelSettings.PathDisplay=Отображение пути в прогрессе:
 PanelSettings.InfoPanelCPUGPU=Показывать CPU/GPU на &инфо-панели
 PanelSettings.EscTogglePanels=&Esc переключает видимость панелей
 PanelSettings.TerminalCtrlNWorkspace=Ctrl+N в терминале &клонирует панели
+PanelSettings.ConsoleMode=Режим &консоли (Ctrl+O):
+PanelSettings.ConsoleModeOwn=Свой &терминал
+PanelSettings.ConsoleModeHost=Консоль &хоста
+PanelSettings.ConsoleOverlayUI=Показывать командную строку поверх &консоли
+PanelSettings.ConsoleModeNote=(применится к новым сессиям)
+PanelSettings.ConsoleModeUnavailable=(недоступно в текущем окружении)
 
 AppearanceSettings.Title= Внешний вид
 AppearanceSettings.Style=Стиль &оформления:

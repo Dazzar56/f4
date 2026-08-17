@@ -1205,6 +1205,70 @@ func TestActionPanelSettings_Flow(t *testing.T) {
 	top.SetExitCode(-1)
 	vtui.FrameManager.Pop()
 }
+func TestActionPanelSettings_ConsoleModes(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	oldCfg := AppConfig
+	defer func() { AppConfig = oldCfg }()
+	AppConfig.ConsoleMode = "own"
+	AppConfig.ConsoleOverlayUI = false
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	actionPanelSettings(pf)
+	top := vtui.FrameManager.GetTopFrame()
+	if top == nil {
+		t.Fatal("Panel settings dialog not shown")
+	}
+	dlg := top.(vtui.Container)
+
+	var radioConsole *vtui.RadioGroup
+	var chkOverlay *vtui.Checkbox
+	for _, child := range dlg.GetChildren() {
+		if r, ok := child.(*vtui.RadioGroup); ok && len(r.Items) == 2 {
+			radioConsole = r
+		}
+		if c, ok := child.(*vtui.Checkbox); ok && strings.Contains(c.GetText(), "command line") {
+			chkOverlay = c
+		}
+	}
+
+	if radioConsole == nil {
+		t.Fatal("Console mode radio group not found in Panel Settings dialog")
+	}
+	if chkOverlay == nil {
+		t.Fatal("Console overlay checkbox not found in Panel Settings dialog")
+	}
+
+	if radioConsole.Selected != 0 {
+		t.Errorf("Expected console mode radio selected 0, got %d", radioConsole.Selected)
+	}
+	if !chkOverlay.IsDisabled() {
+		t.Error("Console overlay checkbox should be disabled when own terminal is selected")
+	}
+
+	// Select host console
+	radioConsole.Selected = 1
+	if radioConsole.OnChange != nil {
+		radioConsole.OnChange(1)
+	}
+	if chkOverlay.IsDisabled() {
+		t.Error("Console overlay checkbox should be enabled when host console is selected")
+	}
+	chkOverlay.State = 1
+
+	clickDialogButton(t, dlg, "Ok")
+
+	if AppConfig.ConsoleMode != "host" {
+		t.Errorf("AppConfig.ConsoleMode = %q, want host", AppConfig.ConsoleMode)
+	}
+	if !AppConfig.ConsoleOverlayUI {
+		t.Error("AppConfig.ConsoleOverlayUI = false, want true")
+	}
+}
 func TestActionLanguage_Flow(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	SetDefaultF4Palette()
