@@ -99,7 +99,10 @@ func pinOverlayWindow(h syscall.Handle, w *simpleSmallRect) {
 func newOverlayRow(width int) []simpleCharInfo {
 	row := make([]simpleCharInfo, width)
 	for i := range row {
-		row[i] = simpleCharInfo{UnicodeChar: ' ', Attributes: overlayAttrText}
+		// Plain background: same light-gray-on-dark as the keybar's own
+		// number cells, never the teal reserved for keybar labels (see
+		// fillOverlayText(cmdCells, ...) below for why this matters).
+		row[i] = simpleCharInfo{UnicodeChar: ' ', Attributes: overlayAttrNum}
 	}
 	return row
 }
@@ -182,7 +185,7 @@ func winDrawConsoleOverlay(ov consoleOverlayContent) {
 	}
 
 	cmdCells := newOverlayRow(width)
-	fillOverlayText(cmdCells, 0, ov.Cmd, overlayAttrText)
+	fillOverlayText(cmdCells, 0, ov.Cmd, overlayAttrNum)
 	winWriteOverlayRow(h, left, right, cmdRow, cmdCells)
 
 	if len(ov.Keys) > 0 {
