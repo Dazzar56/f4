@@ -1697,8 +1697,15 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	// by the hotkey dispatcher; F3/F4 for the terminal log are bound in
 	// the Terminal area with the TerminalQuiet condition.
 
-	// In SimpleInline mode without panels, any keypress returns to panels
-	if pf.shellMode == ShellModeSimpleInline && !pf.showPanels {
+	// In SimpleInline mode without panels, any keypress returns to panels.
+	// Must check e.KeyDown: without it, the trailing KeyUp of the very
+	// Ctrl+O press that just hid the panels (handled above by the hotkey
+	// dispatcher on its KeyDown) falls through to here unfiltered and
+	// immediately flips panels back on — a hide/show flicker on every
+	// single Ctrl+O press, most visible under Wine where KeyUp events are
+	// reliably delivered as separate events.
+	if pf.shellMode == ShellModeSimpleInline && !pf.showPanels &&
+		e.Type == vtinput.KeyEventType && e.KeyDown {
 		pf.showPanels = true
 		vtui.SetAltScreen(true)
 		pf.SetBusy(false)

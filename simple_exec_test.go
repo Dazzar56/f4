@@ -73,6 +73,52 @@ func TestSimpleInline_ToggleAndAnyKeyReturn(t *testing.T) {
 	}
 }
 
+// TestSimpleInline_CtrlOKeyUpDoesNotRestorePanels reproduces a flicker seen
+// under Wine: Ctrl+O's KeyDown correctly hides the panels via the hotkey
+// dispatcher, but its trailing KeyUp event (delivered as a separate
+// InputEvent, e.KeyDown == false) used to fall through to the "any key
+// returns to panels" fallback below unfiltered, immediately undoing the
+// toggle within the same keystroke.
+func TestSimpleInline_CtrlOKeyUpDoesNotRestorePanels(t *testing.T) {
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+	SetDefaultF4Palette()
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.shellMode = ShellModeSimpleInline
+	pf.ResizeConsole(80, 25)
+	vtui.FrameManager.Push(pf)
+
+	RunAction("Panel.Toggle")
+	if pf.showPanels {
+		t.Fatal("Panel.Toggle should hide panels in SimpleInline mode")
+	}
+
+	// The KeyUp of the same Ctrl+O press that triggered the toggle above.
+	pressKey(pf, &vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         false,
+		VirtualKeyCode:  vtinput.VK_O,
+		Char:            0x0F,
+		ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+	if pf.showPanels {
+		t.Fatal("Ctrl+O's KeyUp event must not restore panels on its own")
+	}
+
+	// A genuine subsequent keypress should still restore panels as normal.
+	pressKey(pf, &vtinput.InputEvent{
+		Type:    vtinput.KeyEventType,
+		KeyDown: true,
+		Char:    ' ',
+	})
+	if !pf.showPanels {
+		t.Fatal("A real keypress after Ctrl+O's KeyUp should still restore panels")
+	}
+}
+
 func TestSimpleCaptured_ToggleShowsToast(t *testing.T) {
 	scr := vtui.NewSilentScreenBuf()
 	scr.AllocBuf(80, 25)
