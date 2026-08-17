@@ -1,5 +1,6 @@
 # Project Structure
 
+
     .
     ├── action_copyname_parent_test.go
     ├── action_marked_clipboard_test.go
@@ -185,6 +186,7 @@
     ├── external_ui.go
     ├── extui_host.go
     ├── extui_test.go
+    ├── f4.exe
     ├── far2l_auth.go
     ├── farcolor_exp.go
     ├── farcolor_test.go
@@ -1066,4 +1068,4 @@
     ├── workspace_session_test.go
     └── zzz_pty_leak_check_test.go
     
-    57 directories, 1008 files
+    57 directories, 1009 files
