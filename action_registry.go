@@ -1300,18 +1300,19 @@ func init() {
 					pf.enterHostConsole()
 				}
 			} else if pf.shellMode == ShellModeSimpleInline {
-				if pf.showPanels {
-					pf.showPanels = false
+				if !pf.showPanels {
 					vtui.SetAltScreen(false)
 					restoreHostConsoleBuffer()
 					pf.SetBusy(true)
 				} else {
-					pf.showPanels = true
 					vtui.SetAltScreen(true)
 					pf.SetBusy(false)
 					vtui.FrameManager.HardRefresh()
 				}
 			} else if pf.shellMode == ShellModeSimpleCaptured {
+				// Captured mode has no separate console view to switch to;
+				// output already went to a dialog, so panels stay visible.
+				pf.showPanels = true
 				vtui.ShowToast(Msg("Terminal.NotAvailableInEnv"), 3*time.Second)
 			} else {
 				vtui.FrameManager.HardRefresh()
