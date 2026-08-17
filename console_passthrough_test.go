@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
 
