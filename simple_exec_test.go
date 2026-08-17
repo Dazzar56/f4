@@ -125,6 +125,19 @@ func TestSimpleCaptured_ToggleShowsToast(t *testing.T) {
 	vtui.FrameManager.Init(scr)
 	SetDefaultF4Palette()
 
+	// Drain any stale tasks left over from a previous test sharing the
+	// global TaskChan/FrameManager, so we don't pick up someone else's
+	// queued toast below.
+drain:
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		default:
+			break drain
+		}
+	}
+
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	pf.shellMode = ShellModeSimpleCaptured
