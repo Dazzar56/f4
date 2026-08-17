@@ -154,6 +154,7 @@
     ├── detach_unix.go
     ├── detach_windows.go
     ├── dialog_layouts_test.go
+    ├── DING.md
     ├── dragdrop.go
     ├── DRAGDROP.md
     ├── dragdrop_test.go
@@ -185,7 +186,6 @@
     ├── external_ui.go
     ├── extui_host.go
     ├── extui_test.go
-    ├── f4.exe
     ├── far2l_auth.go
     ├── farcolor_exp.go
     ├── farcolor_test.go
