@@ -154,7 +154,6 @@
     ├── detach_unix.go
     ├── detach_windows.go
     ├── dialog_layouts_test.go
-    ├── DING.md
     ├── dragdrop.go
     ├── DRAGDROP.md
     ├── dragdrop_test.go
@@ -1067,4 +1066,4 @@
     ├── workspace_session_test.go
     └── zzz_pty_leak_check_test.go
     
-    57 directories, 1009 files
+    57 directories, 1008 files
