@@ -323,13 +323,9 @@ see in vtinput project: https://github.com/unxed/vtinput
 }
 
 func shouldTryGui() bool {
-	if vtui.IsWine() {
-		// Under Wine, default to Win32 GUI mode.
-		return true
-	}
 	if runtime.GOOS == "windows" {
-		// On Windows, we compile separate binaries for console (f4.exe) and GUI (f4-gui.exe).
-		// We do not auto-detect GUI mode; it must be requested via filename or --gui flag.
+		// On Windows and Wine, we default to console mode.
+		// GUI mode must be requested via filename (e.g. f4-gui.exe) or --gui flag.
 		return false
 	}
 	if runtime.GOOS == "darwin" {

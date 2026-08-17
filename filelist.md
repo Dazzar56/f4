@@ -11,8 +11,6 @@
     ├── action_restore_selection_test.go
     ├── actions.go
     ├── actions_test.go
-    ├── afailed.md
-    ├── afix.ap
     ├── ai_chat_panel.go
     ├── ai_chat_panel_test.go
     ├── ansi_parser.go
@@ -144,6 +142,9 @@
     ├── config_test.go
     ├── console_ctrl_handler_other.go
     ├── console_ctrl_handler_windows.go
+    ├── CONSOLE_MODES.md
+    ├── console_passthrough.go
+    ├── console_passthrough_test.go
     ├── cpu_info_darwin.go
     ├── cpu_info.go
     ├── cpu_info_linux.go
@@ -184,7 +185,6 @@
     ├── external_ui.go
     ├── extui_host.go
     ├── extui_test.go
-    ├── f4.exe
     ├── far2l_auth.go
     ├── farcolor_exp.go
     ├── farcolor_test.go
@@ -859,6 +859,10 @@
     ├── share_dialog.go
     ├── share_dialog_test.go
     ├── shell_integration_test.go
+    ├── shell_mode.go
+    ├── shell_mode_test.go
+    ├── simple_exec.go
+    ├── simple_exec_test.go
     ├── solaris_pty_alloc_test.go
     ├── solaris_pty_backend_test.go
     ├── solaris_pty.go
@@ -1059,4 +1063,4 @@
     ├── workspace_session_test.go
     └── zzz_pty_leak_check_test.go
     
-    57 directories, 1001 files
+    57 directories, 1005 files
