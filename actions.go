@@ -2715,8 +2715,14 @@ func actionPanelSettings(pf *PanelsFrame) {
 	// Height sized so consecutive checkbox rows stack tightly without
 	// blank lines between them (see #298). Blank rows are kept only at
 	// transitions between widget kinds (checkbox↔combo↔radio↔button)
-	// so groups still read as groups.
-	const dialogHeight = 43
+	// so groups still read as groups. One extra row is reserved when the
+	// console-mode "unavailable" notice needs its own line — see the
+	// consoleModeUnavailable comment below.
+	consoleModeUnavailable := probeGUIBackend() != "" || !probeHostTTY()
+	dialogHeight := 43
+	if consoleModeUnavailable {
+		dialogHeight++
+	}
 	dlg := vtui.NewCenteredDialog(60, dialogHeight, Msg("PanelSettings.Title"))
 	dlg.ShowClose = true
 
@@ -2843,8 +2849,13 @@ func actionPanelSettings(pf *PanelsFrame) {
 	chkOverlay.SetDisabled(radioConsoleMode.Selected != 1)
 
 	noteText := Msg("PanelSettings.ConsoleModeNote")
-	if probeGUIBackend() != "" || !probeHostTTY() {
-		noteText = Msg("PanelSettings.ConsoleModeUnavailable") + " " + noteText
+	// "(unavailable in current environment) (applies to new sessions)" does
+	// not fit the dialog's 56-column content width on one line (auto-sized
+	// Text widgets never wrap), so give the unavailability notice its own
+	// row instead of concatenating it into noteText.
+	var lblConsoleUnavailable *vtui.Text
+	if consoleModeUnavailable {
+		lblConsoleUnavailable = vtui.NewText(0, 0, Msg("PanelSettings.ConsoleModeUnavailable"), 0)
 	}
 	lblConsoleNote := vtui.NewText(0, 0, noteText, 0)
 
@@ -2899,6 +2910,9 @@ func actionPanelSettings(pf *PanelsFrame) {
 	dlg.AddItem(lblConsoleMode)
 	dlg.AddItem(radioConsoleMode)
 	dlg.AddItem(chkOverlay)
+	if lblConsoleUnavailable != nil {
+		dlg.AddItem(lblConsoleUnavailable)
+	}
 	dlg.AddItem(lblConsoleNote)
 	dlg.AddItem(lblMode)
 	dlg.AddItem(comboMode)
@@ -2943,6 +2957,9 @@ func actionPanelSettings(pf *PanelsFrame) {
 	vbox.Add(lblConsoleMode, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(radioConsoleMode, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkOverlay, vtui.Margins{Left: 2}, vtui.AlignLeft)
+	if lblConsoleUnavailable != nil {
+		vbox.Add(lblConsoleUnavailable, vtui.Margins{Left: 2}, vtui.AlignLeft)
+	}
 	vbox.Add(lblConsoleNote, vtui.Margins{Left: 2}, vtui.AlignLeft)
 
 	rowMode := vtui.NewHBoxLayout(0, 0, 56, 1)
