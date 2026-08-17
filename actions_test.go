@@ -2338,3 +2338,72 @@ func TestActionSwitchEditorToViewer_ModifiedFilePrompt(t *testing.T) {
 		t.Errorf("Viewer opened path %q, want %q", vv.path, filePath)
 	}
 }
+func TestActionSwitchEditorViewer_HeightPreserved(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "resize_test.txt")
+	os.WriteFile(filePath, []byte("Content\n"), 0644)
+
+	v := vfs.NewOSVFS(tmpDir)
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	actionOpenEditor(pf, v, filePath)
+
+	timeout := time.After(2 * time.Second)
+	var ev *EditorView
+	for ev == nil {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			if top, ok := vtui.FrameManager.GetTopFrame().(*EditorView); ok {
+				ev = top
+			}
+		case <-timeout:
+			t.Fatal("Timeout waiting for editor to open")
+		}
+	}
+
+	initialY1, initialY2 := ev.Y1, ev.Y2
+
+	for i := 0; i < 5; i++ {
+		RunAction("Editor.SwitchToViewer")
+		var vv *ViewerView
+		timeout = time.After(1 * time.Second)
+		for vv == nil {
+			select {
+			case task := <-vtui.FrameManager.TaskChan:
+				task()
+				if top, ok := vtui.FrameManager.GetTopFrame().(*ViewerView); ok {
+					vv = top
+				}
+			case <-timeout:
+				t.Fatalf("Iteration %d: timeout waiting for viewer", i)
+			}
+		}
+		if vv.Y1 != initialY1 || vv.Y2 != initialY2 {
+			t.Fatalf("Iteration %d: Viewer height changed! Y1: %d (want %d), Y2: %d (want %d)", i, vv.Y1, initialY1, vv.Y2, initialY2)
+		}
+
+		RunAction("Viewer.SwitchToEditor")
+		var evCurrent *EditorView
+		timeout = time.After(1 * time.Second)
+		for evCurrent == nil {
+			select {
+			case task := <-vtui.FrameManager.TaskChan:
+				task()
+				if top, ok := vtui.FrameManager.GetTopFrame().(*EditorView); ok {
+					evCurrent = top
+				}
+			case <-timeout:
+				t.Fatalf("Iteration %d: timeout waiting for editor", i)
+			}
+		}
+		if evCurrent.Y1 != initialY1 || evCurrent.Y2 != initialY2 {
+			t.Fatalf("Iteration %d: Editor height changed! Y1: %d (want %d), Y2: %d (want %d)", i, evCurrent.Y1, initialY1, evCurrent.Y2, initialY2)
+		}
+	}
+}

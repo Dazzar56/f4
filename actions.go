@@ -1014,11 +1014,8 @@ func actionSwitchEditorToViewer(ev *EditorView) {
 			viewer.TopOffset = targetOffset
 		}
 
-		w, h := ev.X2-ev.X1+1, ev.Y2-ev.Y1+1
-		if w <= 0 || h <= 0 {
-			w = vtui.FrameManager.GetScreenSize()
-			h = vtui.FrameManager.GetScreenHeight()
-		}
+		w := vtui.FrameManager.GetScreenSize()
+		h := vtui.FrameManager.GetScreenHeight()
 		viewer.ResizeConsole(w, h)
 
 		screenIdx := -1
@@ -1152,11 +1149,8 @@ func actionSwitchViewerToEditor(vv *ViewerView) {
 	}
 	editor.StartIndexing()
 
-	w, h := vv.X2-vv.X1+1, vv.Y2-vv.Y1+1
-	if w <= 0 || h <= 0 {
-		w = vtui.FrameManager.GetScreenSize()
-		h = vtui.FrameManager.GetScreenHeight()
-	}
+	w := vtui.FrameManager.GetScreenSize()
+	h := vtui.FrameManager.GetScreenHeight()
 	editor.ResizeConsole(w, h)
 
 	screenIdx := -1
