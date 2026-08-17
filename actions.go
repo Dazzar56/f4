@@ -1016,6 +1016,12 @@ func actionSwitchEditorToViewer(ev *EditorView) {
 
 		w := vtui.FrameManager.GetScreenSize()
 		h := vtui.FrameManager.GetScreenHeight()
+		if w <= 0 {
+			w = 80
+		}
+		if h <= 0 {
+			h = 25
+		}
 		viewer.ResizeConsole(w, h)
 
 		screenIdx := -1
@@ -1149,6 +1155,12 @@ func actionSwitchViewerToEditor(vv *ViewerView) {
 
 	w := vtui.FrameManager.GetScreenSize()
 	h := vtui.FrameManager.GetScreenHeight()
+	if w <= 0 {
+		w = 80
+	}
+	if h <= 0 {
+		h = 25
+	}
 	editor.ResizeConsole(w, h)
 
 	screenIdx := -1
