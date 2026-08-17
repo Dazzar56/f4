@@ -141,14 +141,13 @@ func winDrawConsoleOverlay(ov consoleOverlayContent) {
 	fillOverlayText(cmdCells, 0, ov.Cmd, overlayAttrText)
 	winWriteOverlayRow(h, left, right, cmdRow, cmdCells)
 
-	if len(ov.KeyNums) > 0 {
+	if len(ov.Keys) > 0 {
 		keyCells := newOverlayRow(width)
-		col := 0
-		for i := range ov.KeyNums {
-			col = fillOverlayText(keyCells, col, ov.KeyNums[i], overlayAttrKey)
-			if i < len(ov.KeyLabels) {
-				col = fillOverlayText(keyCells, col, ov.KeyLabels[i], overlayAttrText)
-			}
+		for _, k := range ov.Keys {
+			// Each slot knows its own column: slot widths are uneven once the
+			// width does not divide by 12, so appending sequentially drifts.
+			col := fillOverlayText(keyCells, k.Col, k.Num, overlayAttrKey)
+			fillOverlayText(keyCells, col, k.Label, overlayAttrText)
 		}
 		winWriteOverlayRow(h, left, right, info.Window.Bottom, keyCells)
 	}

@@ -298,3 +298,50 @@ func TestHostConsole_DetachCleanupSimulation(t *testing.T) {
 		t.Error("host console must be left after server detach cleanup loop")
 	}
 }
+
+// TestOverlayKeybarSlots_MatchesVtuiLayout pins the overlay keybar to the same
+// column math vtui.KeyBar uses. The overlay used to cut every label to five
+// runes regardless of width, which is why it read "RenMo" while the panel
+// keybar on the same screen had room for the full label.
+func TestOverlayKeybarSlots_MatchesVtuiLayout(t *testing.T) {
+	labels := vtui.KeyBarLabels{
+		"Help", "User menu", "View", "Edit", "Copy", "Rename or move",
+		"Make folder", "Delete", "ConfMenu", "Quit", "Plugin commands", "Screens",
+	}
+
+	slots := overlayKeybarSlots(labels, 120)
+	if len(slots) != 12 {
+		t.Fatalf("overlayKeybarSlots(width=120) returned %d slots, want 12", len(slots))
+	}
+	// width/12 = 10, minus one column for the number and one for the gap.
+	// Ten columns per slot, minus one for the number and one for the gap,
+	// leaves eight — the same cut vtui.KeyBar makes at this width.
+	if got := strings.TrimRight(slots[1].Label, " "); got != "User men" {
+		t.Errorf("F2 label at width 120 = %q, want %q", got, "User men")
+	}
+	if got := len([]rune(slots[1].Label)); got != 8 {
+		t.Errorf("F2 label width at width 120 = %d, want 8", got)
+	}
+	for i, s := range slots {
+		if want := i * 10; s.Col != want {
+			t.Errorf("slot %d starts at column %d, want %d", i+1, s.Col, want)
+		}
+	}
+	// The last slot takes the remainder so the bar reaches the right edge.
+	last := slots[11]
+	if got := last.Col + len([]rune(last.Num)) + len([]rune(last.Label)); got != 120 {
+		t.Errorf("last slot ends at column %d, want 120", got)
+	}
+
+	// A narrow console must not panic or produce negative widths.
+	for _, w := range []int{0, 1, 12, 24, 79, 80} {
+		for _, s := range overlayKeybarSlots(labels, w) {
+			if s.Col < 0 || s.Col >= w {
+				t.Fatalf("width %d: slot column %d out of range", w, s.Col)
+			}
+			if len([]rune(s.Label)) < 0 {
+				t.Fatalf("width %d: negative label width", w)
+			}
+		}
+	}
+}

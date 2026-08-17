@@ -58,8 +58,57 @@ type consoleOverlayContent struct {
 	Lines     int
 	Cmd       string
 	CursorCol int
-	KeyNums   []string
-	KeyLabels []string
+	Keys      []overlayKeySlot
+}
+
+// overlayKeySlot is one F-key cell of the overlay keybar: the number, its
+// label, and the column the number starts at.
+type overlayKeySlot struct {
+	Col   int
+	Num   string
+	Label string
+}
+
+// overlayKeybarSlots lays the keybar out exactly the way vtui.KeyBar does, so
+// the console overlay and the panel keybar agree on slot width and label
+// truncation. The overlay used to hardcode five columns per label, which is why
+// it showed "RenMo" where the real keybar had room for "Rename or move".
+// Column math only, no drawing: unit-testable and shared by both emitters.
+func overlayKeybarSlots(labels vtui.KeyBarLabels, width int) []overlayKeySlot {
+	if width <= 0 {
+		return nil
+	}
+	slotWidth := width / 12
+	if slotWidth < 3 {
+		slotWidth = 3
+	}
+	slots := make([]overlayKeySlot, 0, 12)
+	for i := 0; i < 12; i++ {
+		x := i * slotWidth
+		if x > width-1 {
+			break
+		}
+		num := fmt.Sprintf("%d", i+1)
+		labelX := x + len([]rune(num))
+		labelW := slotWidth - len([]rune(num)) - 1
+		if i == 11 {
+			// The last slot swallows the rounding remainder, as in vtui.
+			labelW = width - labelX
+		}
+		if labelW < 0 {
+			labelW = 0
+		}
+		label := []rune(labels[i])
+		if len(label) > labelW {
+			label = label[:labelW]
+		}
+		slots = append(slots, overlayKeySlot{
+			Col:   x,
+			Num:   num,
+			Label: fmt.Sprintf("%-*s", labelW, string(label)),
+		})
+	}
+	return slots
 }
 
 // buildConsoleOverlayContent collects the overlay text from the live UI state.
@@ -82,14 +131,7 @@ func (pf *PanelsFrame) buildConsoleOverlayContent() consoleOverlayContent {
 
 	if pf.showKeyBar && ov.Lines >= 2 {
 		if labels := pf.GetKeyLabels(); labels != nil {
-			for i := 0; i < 12; i++ {
-				lbl := []rune(labels.Normal[i])
-				if len(lbl) > 5 {
-					lbl = lbl[:5]
-				}
-				ov.KeyNums = append(ov.KeyNums, fmt.Sprintf("%d", i+1))
-				ov.KeyLabels = append(ov.KeyLabels, fmt.Sprintf("%-5s", string(lbl)))
-			}
+			ov.Keys = overlayKeybarSlots(labels.Normal, pf.lastW)
 		}
 	}
 	return ov
@@ -124,6 +166,14 @@ func (pf *PanelsFrame) drawConsoleOverlay() {
 		return
 	}
 	ov := pf.buildConsoleOverlayContent()
+	// The single most useful line in a Wine bug report: which emitter ran and
+	// what geometry it believed in. "Overlay drew at the top of the window"
+	// is either a wrong pf.lastH (ansi) or a wrong srWindow (winapi), and
+	// this tells the two apart without guessing.
+	p := probeConsole()
+	vtui.DebugLog("OVERLAY: backend=%q winapi=%v lastW=%d lastH=%d lines=%d keys=%d csbi=%v win=%dx%d",
+		SelectedTTYBackend, consoleOverlayUsesWinAPI(), pf.lastW, pf.lastH, ov.Lines, len(ov.Keys),
+		p.OK, p.WinCols(), p.WinRows())
 	if consoleOverlayUsesWinAPI() {
 		winDrawConsoleOverlay(ov)
 		return
@@ -180,10 +230,13 @@ func (pf *PanelsFrame) emitAnsiConsoleOverlay(ov consoleOverlayContent) {
 	sb.WriteString(ov.Cmd)
 
 	// 3. Draw KeyBar if visible
-	if len(ov.KeyNums) > 0 {
+	if len(ov.Keys) > 0 {
 		sb.WriteString(fmt.Sprintf("\x1b[%d;1H\x1b[0m\x1b[2K", h))
-		for i := range ov.KeyNums {
-			sb.WriteString(fmt.Sprintf("\x1b[0;30;46m%s\x1b[0;37;40m%s", ov.KeyNums[i], ov.KeyLabels[i]))
+		for _, k := range ov.Keys {
+			// Slots carry their own start column now: rounding leftovers make
+			// the widths uneven, so walking them by concatenation would drift.
+			sb.WriteString(fmt.Sprintf("\x1b[%d;%dH", h, k.Col+1))
+			sb.WriteString(fmt.Sprintf("\x1b[0;30;46m%s\x1b[0;37;40m%s", k.Num, k.Label))
 		}
 	}
 

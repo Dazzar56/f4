@@ -112,6 +112,7 @@ func main() {
 	var version bool
 	var print_help bool
 	var attachedMode bool
+	var wineProbe bool
 
 	exeName := filepath.Base(absExecPath)
 	if strings.Contains(strings.ToLower(exeName), "gui") {
@@ -203,6 +204,8 @@ func main() {
 			}
 		case "--attached":
 			attachedMode = true
+		case "--wine-probe":
+			wineProbe = true
 		case "--sudo-dispatcher":
 			if flagVal != "" {
 				sudoDispatcher = flagVal
@@ -240,6 +243,8 @@ The following switches may be used in the command line:
  -test-plugins          Plugin test mode
  --tty [Backend]        Force run in TTY-mode
                          [Backend] values: "ansi", "winapi" (or "win32")
+ --wine-probe           Print console/terminal environment facts and exit
+                         (renderer backend, console geometry, shell mode)
 
 Details see in build-in help (F1 inside f4)
 and in project home: https://github.com/unxed/f4
@@ -285,6 +290,14 @@ see in vtinput project: https://github.com/unxed/vtinput
 		SelectedTTYBackend = ttyBackend
 	} else {
 		SelectedTTYBackend = vtui.DefaultConsoleBackend()
+	}
+
+	// The probe runs after backend selection (so it can report what f4 would
+	// really use) and before any renderer exists (so it cannot disturb the
+	// console it is describing).
+	if wineProbe {
+		runWineProbe()
+		return
 	}
 
 	if ttyMode {
@@ -406,6 +419,10 @@ func InitCore() *vtui.ScreenBuf {
 	width, height, err := vtui.GetTerminalSize()
 	if err != nil {
 		vtui.DebugLog("CORE: term.GetSize(0) failed: %v", err)
+	}
+	if p := probeConsole(); true {
+		vtui.DebugLog("ENV: wine=%v backend=%q size=%dx%d consoleBuffer=%v window=%dx%d",
+			vtui.IsWine(), SelectedTTYBackend, width, height, p.OK, p.WinCols(), p.WinRows())
 	}
 	if width <= 0 {
 		width = 80

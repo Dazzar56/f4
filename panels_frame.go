@@ -386,6 +386,9 @@ func NewPanelsFrame() *PanelsFrame {
 		ConsoleMode:      AppConfig.ConsoleMode,
 		ConsoleOverlayUI: AppConfig.ConsoleOverlayUI,
 	})
+	vtui.DebugLog("SHELL: mode=%s cfg.ConsoleMode=%q cfg.ConsoleOverlayUI=%v view=%s backend=%q",
+		pf.shellMode, AppConfig.ConsoleMode, AppConfig.ConsoleOverlayUI,
+		consoleViewStyleFor(pf.shellMode), SelectedTTYBackend)
 
 	pf.menuBar = vtui.NewMenuBar(nil)
 	pf.menuBar.SetOwner(pf)
