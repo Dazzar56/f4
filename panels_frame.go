@@ -1697,6 +1697,17 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	// by the hotkey dispatcher; F3/F4 for the terminal log are bound in
 	// the Terminal area with the TerminalQuiet condition.
 
+	// In SimpleInline mode without panels, any keypress returns to panels
+	if pf.shellMode == ShellModeSimpleInline && !pf.showPanels {
+		pf.showPanels = true
+		vtui.SetAltScreen(true)
+		pf.SetBusy(false)
+		if vtui.FrameManager != nil {
+			vtui.FrameManager.HardRefresh()
+		}
+		return true
+	}
+
 	// In Far-style host console with an overlay, route editing keys to CommandLine first
 	if !pf.showPanels && pf.shellMode == ShellModeHost && pf.overlayLines() > 0 {
 		if e.VirtualKeyCode != vtinput.VK_RETURN {
@@ -2012,7 +2023,33 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				}
 			}
 
-			// Fallthrough for regular commands or if directory change failed (to show error in terminal)
+			// Fallthrough for regular commands or if directory change failed
+			if pf.shellMode == ShellModeSimpleInline {
+				pf.cmdLine.Clear()
+				if pf.searchFirstMode() && !AppConfig.SearchCommandStayFocused {
+					pf.setCommandLineFocus(false)
+				}
+				var dir string
+				if fsp, ok := pf.panels[pf.activeIdx].(*FileSystemPanel); ok {
+					dir = fsp.vfs.GetPath()
+				}
+				pf.runSimpleInlineCommand(dir, cmd)
+				return true
+			}
+
+			if pf.shellMode == ShellModeSimpleCaptured {
+				pf.cmdLine.Clear()
+				if pf.searchFirstMode() && !AppConfig.SearchCommandStayFocused {
+					pf.setCommandLineFocus(false)
+				}
+				var dir string
+				if fsp, ok := pf.panels[pf.activeIdx].(*FileSystemPanel); ok {
+					dir = fsp.vfs.GetPath()
+				}
+				pf.runSimpleCapturedCommand(dir, cmd)
+				return true
+			}
+
 			activePty := pf.getActivePTY()
 			if activePty != nil {
 				var path string

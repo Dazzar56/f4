@@ -1299,6 +1299,19 @@ func init() {
 				} else {
 					pf.enterHostConsole()
 				}
+			} else if pf.shellMode == ShellModeSimpleInline {
+				if pf.showPanels {
+					pf.showPanels = false
+					vtui.SetAltScreen(false)
+					pf.SetBusy(true)
+				} else {
+					pf.showPanels = true
+					vtui.SetAltScreen(true)
+					pf.SetBusy(false)
+					vtui.FrameManager.HardRefresh()
+				}
+			} else if pf.shellMode == ShellModeSimpleCaptured {
+				vtui.ShowToast(Msg("Terminal.NotAvailableInEnv"), 3*time.Second)
 			} else {
 				vtui.FrameManager.HardRefresh()
 			}

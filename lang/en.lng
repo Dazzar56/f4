@@ -859,6 +859,7 @@ EnvMan.Command.Configure.Desc=Configure Environment Manager profiles and command
 EnvMan.ManagerTitle=Environment profiles
 EnvMan.ManagerProfilesPane=Profiles
 Terminal.PTYAllocFailed=Could not start the local terminal on this system.
+Terminal.NotAvailableInEnv=Terminal is not available in this environment.
 EnvMan.ManagerDetailsPane=Profile details
 EnvMan.ManagerEditingPane=Editing profile
 EnvMan.ManagerKeys=Ins Add  Del Delete  F4 Edit  F5 Copy  Space Toggle  Ctrl+Up/Down Move  F2 Settings

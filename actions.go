@@ -1501,6 +1501,15 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 				pf.addCommandHistory(historyCmd)
 				pf.cmdLine.Edit.HistoryPos = -1
 
+				if pf.shellMode == ShellModeSimpleInline {
+					pf.runSimpleInlineCommand(actualDir, historyCmd)
+					return
+				}
+				if pf.shellMode == ShellModeSimpleCaptured {
+					pf.runSimpleCapturedCommand(actualDir, historyCmd)
+					return
+				}
+
 				activePty := pf.getActivePTY()
 				if activePty != nil {
 					cmd := name
