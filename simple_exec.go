@@ -9,10 +9,24 @@ import (
 	"github.com/unxed/vtui"
 )
 
-// waitForAnyKey is a mockable hook for reading a pause keypress in SimpleInline mode.
+// waitForAnyKey reads a single keystroke immediately using _getch on Windows/Wine or stdin read on Unix.
 var waitForAnyKey = func() {
+	if runtime.GOOS == "windows" {
+		mod := os.Getenv("COMSPEC")
+		_ = mod
+		if proc := modMsvcrtProc(); proc != nil {
+			proc.Call()
+			return
+		}
+	}
 	var buf [1]byte
 	_, _ = os.Stdin.Read(buf[:])
+}
+
+func modMsvcrtProc() interface {
+	Call(...uintptr) (uintptr, uintptr, error)
+} {
+	return modMsvcrtProcImpl()
 }
 
 // runSimpleInlineCommand executes a command directly in the host console without a PTY
