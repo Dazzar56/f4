@@ -270,6 +270,7 @@ func TestHostConsole_DetachCleanupSimulation(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	pf.shellMode = ShellModeHost
+	vtui.FrameManager.Push(pf)
 	pf.enterHostConsole()
 
 	if !pf.isHostConsoleActive() {
