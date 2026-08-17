@@ -133,9 +133,11 @@ type EditorView struct {
 	highlighter vtui.Highlighter
 	lineStates  []any // Cache of highlighter states per logical line
 
-	// Highlighting arrives late and all at once; these ease it in.
+	// Highlighting arrives late and all at once; these ease it in. fadeReg
+	// pins one heartbeat animation per viewer.
 	syntaxFadeStart time.Time
 	fadeBuf         []uint64
+	fadeReg         bool
 
 	// Undo/Redo
 	undoStack  []editorState

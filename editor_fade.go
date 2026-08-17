@@ -26,21 +26,7 @@ func (ev *EditorView) fadeSyntax(syntax []uint64, base uint64) []uint64 {
 	}
 	if ev.syntaxFadeStart.IsZero() {
 		ev.syntaxFadeStart = time.Now()
-		// The frame heartbeat is too slow to carry a fade on its own.
-		go func() {
-			tick := time.NewTicker(25 * time.Millisecond)
-			defer tick.Stop()
-			deadline := time.After(syntaxFadeDuration)
-			for {
-				select {
-				case <-tick.C:
-					vtui.FrameManager.Redraw()
-				case <-deadline:
-					vtui.FrameManager.Redraw()
-					return
-				}
-			}
-		}()
+		ev.ensureFade()
 	}
 
 	elapsed := time.Since(ev.syntaxFadeStart)
@@ -65,12 +51,29 @@ func (ev *EditorView) fadeSyntax(syntax []uint64, base uint64) []uint64 {
 	return ev.fadeBuf
 }
 
+// ensureFade keeps the vtui heartbeat redrawing while the fade runs; the
+// callback removes itself once the colours have arrived.
+func (ev *EditorView) ensureFade() {
+	if ev.fadeReg {
+		return
+	}
+	ev.fadeReg = true
+	vtui.FrameManager.AddAnimation(ev.fadeTick)
+}
+
+// fadeTick is the heartbeat callback: idle once the fade is over.
+func (ev *EditorView) fadeTick(float64) bool {
+	if time.Since(ev.syntaxFadeStart) >= syntaxFadeDuration {
+		ev.fadeReg = false
+		return true
+	}
+	return false
+}
+
 // mixRGB walks each channel from one packed colour to another.
 func mixRGB(from, to uint32, f float64) uint32 {
-	ch := func(shift uint) uint32 {
-		a := float64((from >> shift) & 0xFF)
-		b := float64((to >> shift) & 0xFF)
-		return uint32(a+(b-a)*f) & 0xFF
-	}
-	return ch(16)<<16 | ch(8)<<8 | ch(0)
+	r := uint32(float64((from>>16)&0xFF)+(float64((to>>16)&0xFF)-float64((from>>16)&0xFF))*f) & 0xFF
+	g := uint32(float64((from>>8)&0xFF)+(float64((to>>8)&0xFF)-float64((from>>8)&0xFF))*f) & 0xFF
+	b := uint32(float64(from&0xFF)+(float64(to&0xFF)-float64(from&0xFF))*f) & 0xFF
+	return r<<16 | g<<8 | b
 }

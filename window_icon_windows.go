@@ -106,6 +106,7 @@ func manageWindowsWindowAppearance(stop <-chan struct{}, findWindow func() uintp
 			appliedDPI = 0
 			appliedTheme = windowsThemeUnknown
 			nextThemeCheck = time.Time{}
+			ticker.Reset(100 * time.Millisecond)
 		}
 		if hwnd != 0 {
 			dpi := windowDPI(hwnd)
@@ -120,6 +121,9 @@ func manageWindowsWindowAppearance(stop <-chan struct{}, findWindow func() uintp
 					appliedTheme = theme
 				}
 				nextThemeCheck = now.Add(themePollInterval)
+			}
+			if appliedDPI != 0 && appliedTheme != windowsThemeUnknown {
+				ticker.Reset(themePollInterval)
 			}
 		}
 

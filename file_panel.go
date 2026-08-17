@@ -386,11 +386,15 @@ type FileSystemPanel struct {
 	dragScrollTimer       *time.Timer
 	dragScrollGeneration  uint64
 
-	loadCtx                    context.Context
-	cancelLoad                 context.CancelFunc
-	isLoading                  bool
-	loadingTimer               *time.Timer
-	loadingFrame               int
+	loadCtx      context.Context
+	cancelLoad   context.CancelFunc
+	isLoading    bool
+	loadingTimer *time.Timer
+	loadingFrame int
+
+	cachedRows                 []vtui.TableRow
+	cachedEntryRows            []panelEntryRow
+	cachedMediumRows           []mediumRow
 	loadingGeneration          uint64
 	loadQueueMu                sync.Mutex
 	loadWorkerActive           bool
@@ -2128,18 +2132,35 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 func (fp *FileSystemPanel) Refresh() {
 	idx := fp.GetCursorIndex()
 	fp.updateSortColumnTitles()
-	if fp.gridColumnCount() == 1 {
-		rows := make([]vtui.TableRow, len(fp.entries))
-		for i, e := range fp.entries {
-			rows[i] = &panelEntryRow{fp: fp, entry: e}
-		}
-		fp.table.SetRows(rows)
+	n := len(fp.entries)
+	if cap(fp.cachedRows) < n {
+		fp.cachedRows = make([]vtui.TableRow, n)
 	} else {
-		rows := make([]vtui.TableRow, len(fp.entries))
-		for i := 0; i < len(rows); i++ {
-			rows[i] = &mediumRow{fp: fp, r: i}
+		fp.cachedRows = fp.cachedRows[:n]
+	}
+
+	if fp.gridColumnCount() == 1 {
+		if cap(fp.cachedEntryRows) < n {
+			fp.cachedEntryRows = make([]panelEntryRow, n)
+		} else {
+			fp.cachedEntryRows = fp.cachedEntryRows[:n]
 		}
-		fp.table.SetRows(rows)
+		for i, e := range fp.entries {
+			fp.cachedEntryRows[i] = panelEntryRow{fp: fp, entry: e}
+			fp.cachedRows[i] = &fp.cachedEntryRows[i]
+		}
+		fp.table.SetRows(fp.cachedRows)
+	} else {
+		if cap(fp.cachedMediumRows) < n {
+			fp.cachedMediumRows = make([]mediumRow, n)
+		} else {
+			fp.cachedMediumRows = fp.cachedMediumRows[:n]
+		}
+		for i := 0; i < n; i++ {
+			fp.cachedMediumRows[i] = mediumRow{fp: fp, r: i}
+			fp.cachedRows[i] = &fp.cachedMediumRows[i]
+		}
+		fp.table.SetRows(fp.cachedRows)
 	}
 	fp.SetCursorIndex(idx)
 	_, _, maxTop, _, _ := fp.panelScrollMetrics()

@@ -107,15 +107,11 @@ func (we *WrapEngine) InvalidateFrom(logLineIdx int) {
 // GetFragments возвращает визуальные фрагменты для одной логической строки.
 func (we *WrapEngine) GetFragments(logLineIdx int) []LineFragment {
 	lineCount := we.li.LineCount()
-	if we.fragmentCache == nil || len(we.fragmentCache) != lineCount {
-		we.fragmentCache = make([][]LineFragment, lineCount)
-	}
-
 	if logLineIdx < 0 || logLineIdx >= lineCount {
 		return nil
 	}
 
-	if we.fragmentCache[logLineIdx] != nil {
+	if we.wordWrap && we.fragmentCache != nil && logLineIdx < len(we.fragmentCache) && we.fragmentCache[logLineIdx] != nil {
 		return we.fragmentCache[logLineIdx]
 	}
 
@@ -194,10 +190,11 @@ func (we *WrapEngine) GetFragments(logLineIdx int) []LineFragment {
 			ByteOffsetEnd:   startOffset + len(lineData),
 			VisualWidth:     width,
 		}
-		if !truncated {
-			we.fragmentCache[logLineIdx] = []LineFragment{frag}
-		}
 		return []LineFragment{frag}
+	}
+
+	if we.fragmentCache == nil || len(we.fragmentCache) != lineCount {
+		we.fragmentCache = make([][]LineFragment, lineCount)
 	}
 
 	var fragments []LineFragment
@@ -263,13 +260,16 @@ func (we *WrapEngine) GetFragments(logLineIdx int) []LineFragment {
 		fragments = append(fragments, LineFragment{LogicalLineIdx: logLineIdx, ByteOffsetStart: startOffset, ByteOffsetEnd: startOffset})
 	}
 
-	if !truncated {
+	if !truncated && logLineIdx < len(we.fragmentCache) {
 		we.fragmentCache[logLineIdx] = fragments
 	}
 	return fragments
 }
 
 func (we *WrapEngine) ensureRowCountCache(until int) {
+	if !we.wordWrap {
+		return
+	}
 	lineCount := we.li.LineCount()
 	if until >= lineCount {
 		until = lineCount - 1
@@ -295,15 +295,6 @@ func (we *WrapEngine) ensureRowCountCache(until int) {
 		}
 	}
 
-	if !we.wordWrap {
-		for i := we.validUntil + 1; i < lineCount; i++ {
-			we.rowOffsets[i] = i
-		}
-		we.totalRows = lineCount
-		we.validUntil = lineCount - 1
-		return
-	}
-
 	currentOffset := 0
 	start := we.validUntil + 1
 	if start > 0 {
@@ -324,12 +315,25 @@ func (we *WrapEngine) ensureRowCountCache(until int) {
 
 // GetTotalVisualRows возвращает общее количество визуальных строк в документе.
 func (we *WrapEngine) GetTotalVisualRows() int {
+	if !we.wordWrap {
+		return we.li.LineCount()
+	}
 	we.ensureRowCountCache(we.li.LineCount() - 1)
 	return we.totalRows
 }
 
 // GetRowOffset возвращает индекс первой визуальной строки для данной логической строки.
 func (we *WrapEngine) GetRowOffset(logLineIdx int) int {
+	if !we.wordWrap {
+		if logLineIdx < 0 {
+			return 0
+		}
+		lineCount := we.li.LineCount()
+		if logLineIdx >= lineCount {
+			return lineCount
+		}
+		return logLineIdx
+	}
 	we.ensureRowCountCache(logLineIdx)
 	if logLineIdx < 0 {
 		return 0
@@ -346,6 +350,16 @@ func (we *WrapEngine) GetRowOffset(logLineIdx int) int {
 func (we *WrapEngine) GetLogLineAtVisualRow(visualRow int) (logLineIdx int, fragIdx int) {
 	if visualRow < 0 {
 		return 0, 0
+	}
+	if !we.wordWrap {
+		lineCount := we.li.LineCount()
+		if visualRow >= lineCount {
+			if lineCount <= 0 {
+				return 0, 0
+			}
+			return lineCount - 1, 0
+		}
+		return visualRow, 0
 	}
 
 	// Lazy calculation until we find the row or hit EOF
@@ -388,9 +402,12 @@ func (we *WrapEngine) LogicalToVisual(byteOffset int) (visualRow, visualCol int)
 		byteOffset = 0
 	}
 	logLineIdx := we.li.GetLineAtOffset(byteOffset)
-	we.ensureRowCountCache(logLineIdx)
+	totalRow := logLineIdx
+	if we.wordWrap {
+		we.ensureRowCountCache(logLineIdx)
+		totalRow = we.rowOffsets[logLineIdx]
+	}
 	fragments := we.GetFragments(logLineIdx)
-	totalRow := we.rowOffsets[logLineIdx]
 
 	if len(fragments) > 0 {
 		lastFrag := fragments[len(fragments)-1]
