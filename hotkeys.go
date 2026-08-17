@@ -52,7 +52,22 @@ var conditionRegistry = map[string]func() bool{
 	// application (mc, htop) instead of triggering f4's own actions.
 	"noaltscreenapp": func() bool {
 		if pf := findPanelsFrameAnyScreen(); pf != nil {
-			return pf.showPanels || (pf.termView != nil && !pf.termView.UseAltScreen)
+			if pf.showPanels {
+				return true
+			}
+			if pf.shellMode == ShellModeSimpleInline {
+				// This mode has no PTY, so pf.termView is a leftover
+				// background object (kept around for cwd-sync passthrough,
+				// see PTY_WIN_TRACE in the debug log) that does not reflect
+				// what's on screen. Nothing it does can ever be a foreign
+				// full-screen app stealing these keys: the console view is
+				// always f4's own overlay. Checking its UseAltScreen here
+				// made a stray flip of that background flag swallow every
+				// key this condition gates — Ctrl+O included, so a second
+				// Ctrl+O while in the console view did nothing at all.
+				return true
+			}
+			return pf.termView != nil && !pf.termView.UseAltScreen
 		}
 		return false
 	},
@@ -64,7 +79,19 @@ var conditionRegistry = map[string]func() bool{
 	// way, which keeps the Shell binding of such a key unconditional.
 	"noterminalapp": func() bool {
 		if pf := findPanelsFrameAnyScreen(); pf != nil {
-			return pf.showPanels || (pf.termView != nil && !pf.termView.UseAltScreen && !pf.isPtyBusy())
+			if pf.showPanels {
+				return true
+			}
+			if pf.shellMode == ShellModeSimpleInline {
+				// Same reasoning as noaltscreenapp above: no PTY means no
+				// foreign process can be busy on screen in this mode. A
+				// command f4 itself launched (runSimpleInlineCommand) still
+				// owns the keyboard while it runs, but that state already
+				// routes through SetBusy/isPtyBusy on f4's own frame, not
+				// through this background termView.
+				return true
+			}
+			return pf.termView != nil && !pf.termView.UseAltScreen && !pf.isPtyBusy()
 		}
 		return false
 	},

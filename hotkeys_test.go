@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/unxed/vtui"
 )
 
 func TestHotkeyManager(t *testing.T) {
@@ -153,5 +155,43 @@ func TestHotkeyManager_Conditions(t *testing.T) {
 	condValue = false
 	if act := hm.GetAction("Shell", "F12"); act != "" {
 		t.Errorf("Expected empty string when condition failed, got %q", act)
+	}
+}
+
+// TestNoAltScreenApp_SimpleInline_IgnoresBackgroundTermView pins the bug from
+// the Wine debug log: a second Ctrl+O while the Far-style console view was up
+// did nothing at all, because the NoAltScreenApp condition consulted
+// pf.termView.UseAltScreen — a leftover background object in this shell mode,
+// unrelated to what's actually on screen — and treated it as a foreign
+// full-screen app that should keep the key. ShellModeSimpleInline has no PTY
+// and therefore no way for a foreign app to own the console view, so the
+// condition must return true unconditionally once panels are hidden.
+func TestNoAltScreenApp_SimpleInline_IgnoresBackgroundTermView(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pf := setupMockPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	pf.shellMode = ShellModeSimpleInline
+	pf.showPanels = false
+	pf.termView.UseAltScreen = true // the stray flip seen in the wild
+	vtui.FrameManager.Push(pf)
+
+	if GlobalHotkeysMgr == nil {
+		GlobalHotkeysMgr = NewHotkeyManager("")
+	}
+	if got := GlobalHotkeysMgr.GetAction("Terminal", "CtrlO"); got != "Panel.Toggle" {
+		t.Errorf("Terminal CtrlO in SimpleInline with stray UseAltScreen=true: got %q, want Panel.Toggle", got)
+	}
+
+	// The same background flag must not swallow the other Terminal-area keys.
+	if got := GlobalHotkeysMgr.GetAction("Terminal", "F10"); got != "App.Quit" {
+		t.Errorf("Terminal F10 in SimpleInline with stray UseAltScreen=true: got %q, want App.Quit", got)
+	}
+
+	// ShellModeOwn keeps the original gating: a real AltScreen app must still
+	// win the key.
+	pf.shellMode = ShellModeOwn
+	if got := GlobalHotkeysMgr.GetAction("Terminal", "CtrlO"); got != "" {
+		t.Errorf("Terminal CtrlO in ShellModeOwn with AltScreen app active: got %q, want empty (must fall through to app)", got)
 	}
 }
