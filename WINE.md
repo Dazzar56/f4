@@ -1,0 +1,401 @@
+# f4 под Wine: Ctrl+O без PTY и POSIX-режим
+
+Диздок и план работ. Исполнителю: читать целиком до написания первой строки кода.
+Раздел 12 — список файлов, которые нужно иметь под рукой.
+Смежные документы: `CONSOLE_MODES.md` (там описан весь механизм режимов Ctrl+O),
+`TERMINAL.md`, `TERMINAL_WINDOWS.md`, `UX_GUIDELINES.md`, `I18N.md`.
+
+## 0. Зачем это нужно
+
+Почему на Wine и ReactOS стоит тратить время?
+
+1. **Тестирование.** Возможность потрогать руками UX f4 на самой распространённой
+   платформе, не идя за вторым ноутбуком. Плюс Wine отлично подходит для автотестов —
+   так делает, например, wxWidgets.
+2. **Расширение списка платформ.** Go под Haiku пока не собирает, а Wine под Haiku есть.
+   Немассовые платформы поддерживать нетрудно, а их пользователи — самые преданные,
+   потому что там обычно совсем печально с альтернативами.
+   По этой же причине, кстати, важно поддерживать и BSD, Solaris, etc.
+3. **Задел на ранние Windows.** Никто не мешает потом натравить агента на репозиторий и
+   попросить бэкпорт на версию Go, собирающую под XP. До сих пор этому мешало то, что f4
+   требовал ConPTY. Режимы без PTY (`CONSOLE_MODES.md` §5) это ограничение снимают — и
+   именно они чинятся в этом документе.
+
+**Бэкпорт f4 на более раннюю версию Go — вне скоупа этого документа.**
+
+## 1. Что есть сейчас (факты, проверены по коду)
+
+* `vtui.IsWine()` (`vtui/win32_console_common.go`) — детект по наличию экспорта
+  `ntdll.dll!wine_get_version`. Уже используется в `main.go` и `shell_mode.go`.
+* `vtui.DefaultConsoleBackend()` возвращает под Wine `"winapi"`, если у процесса есть
+  настоящий Win32-консольный буфер (`hasConsoleBufferOS()` = удачный
+  `GetConsoleScreenBufferInfo`), иначе `"ansi"`. Результат кладётся в
+  `main.SelectedTTYBackend`; при `"winapi"` в `InitCore()` (`main.go:418`) ставится
+  `vtui.NewWin32ConsoleRenderer(scr)`.
+* `Win32ConsoleRenderer` (`vtui/win32_console_windows.go`) создаёт **второй** консольный
+  экранный буфер (`CreateConsoleScreenBuffer`) и рисует в него через
+  `WriteConsoleOutputW`. «Альтернативный экран» = переключение
+  `SetConsoleActiveScreenBuffer` между `hFarOut` (панели f4) и `hStdOut` (исходная
+  консоль). Это ровно то, как делает настоящий Far.
+* `vtui.SetAltScreen()`, `Suspend()`, `Resume()` (`vtui/terminal_env.go`) **всегда**
+  пишут ANSI-последовательности (`\x1b[?1049h/l`, autowrap, палитра) в `os.Stdout`
+  **и дополнительно** дёргают `setAltScreenOS()`. При активном `Win32ConsoleRenderer`
+  ANSI-байты уходят в `hStdOut`, то есть в тот самый буфер, который пользователь видит
+  после Ctrl+O.
+* `shell_mode.go`: `probePTYUsable = !vtui.IsWine()`. Значит под Wine
+  `resolveShellMode()` всегда даёт `ShellModeSimpleInline` (есть tty + windows) или
+  `ShellModeSimpleCaptured` (GUI). ConPTY не создаётся вообще.
+* Ctrl+O = action `Panel.Toggle` (`action_registry.go`, ~строка 1284). Для
+  `ShellModeSimpleInline` он делает ровно три вещи: `vtui.SetAltScreen(false)`,
+  `restoreHostConsoleBuffer()`, `pf.SetBusy(true)` — то есть **f4 перестаёт рисовать
+  вообще** и показывает то, что осталось в исходном буфере.
+* `panels_frame.go` (~1707): в `ShellModeSimpleInline` при скрытых панелях **любое**
+  нажатие с `e.KeyDown` возвращает панели.
+* `simple_exec.go`: `runSimpleInlineCommand()` = `vtui.Suspend()` → `exec` с
+  унаследованным stdio → «Press any key» → `captureHostConsoleBuffer()` →
+  `vtui.Resume()`. `captureHostConsoleBuffer/restoreHostConsoleBuffer`
+  (`simple_exec_windows.go`) читают/пишут `ReadConsoleOutputW/WriteConsoleOutputW` по
+  `STD_OUTPUT_HANDLE` прямоугольником `w×h`, где `w,h` = `pf.lastW/lastH`.
+* Оверлей «командная строка + keybar поверх консоли» уже написан, но только для
+  `ShellModeHost` и только через ANSI: `overlayLines()` и `drawHostConsoleOverlay()`
+  в `console_passthrough.go`, включается конфигом `ConsoleOverlayUI` (по умолчанию `0`).
+* Настройки: `AppConfig.ConsoleMode` (`own`/`host`) и `AppConfig.ConsoleOverlayUI`
+  (`config.go:160-162, 284-286, 447-449, 643-645`), UI в `actions.go:2831…` (радиогруппа
+  + чекбокс), строки `PanelSettings.ConsoleMode*` в `lang/en.lng:601…`, `lang/ru.lng:601…`.
+
+## 2. Наблюдаемые дефекты
+
+1. Ctrl+O под Wine → полностью чёрный экран: ни приглашения, ни командной строки, ни
+   keybar. Любое нажатие возвращает панели.
+2. Выполнили `dir`, нажали Ctrl+O → над логом команды болтается кусок панелей вместо
+   чистого фона.
+
+Оба симптома объясняются §1: после Ctrl+O f4 намеренно ничего не рисует и показывает
+содержимое `hStdOut`, а в этот буфер попадает мусор — либо литеральные
+ANSI-последовательности от `SetAltScreen/Suspend/Resume` (Wine-консоль без
+`ENABLE_VIRTUAL_TERMINAL_PROCESSING` печатает их как текст), либо остатки прошлого
+кадра, восстановленные `restoreHostConsoleBuffer()` прямоугольником неверного размера.
+**Точную причину подтверждать не гаданием, а этапом A0.**
+
+## 3. Целевой UX Ctrl+O
+
+Пользователь выбирает **один пункт из трёх** (одна настройка, не «режим + стиль»):
+
+| Пункт | Что видно после Ctrl+O | Кто владеет клавиатурой | Нужен PTY |
+|---|---|---|---|
+| `own` — свой терминал (как сейчас) | внутренняя сетка встроенного терминала, отрисованная f4 | живой шелл в PTY | да |
+| `far` — как Far2 на Windows | вывод прошлых команд, внизу командная строка f4 с приглашением и мигающим курсором, под ней keybar (если включён) | f4: буквы идут в командную строку, Enter выполняет команду, Ctrl+O возвращает панели | нет |
+| `mc` — как mc | вывод занимает весь экран, ничего своего f4 не рисует | живой шелл (если есть PTY); без PTY — только просмотр, любая клавиша возвращает панели | нет |
+
+Стили `far` и `mc` работают **всегда**, с PTY и без. Разница только в том, что при
+доступном PTY под ними живёт настоящий шелл (`ShellModeHost`), а без PTY — запуск
+команды через `ShellModeSimpleInline`. Пункт `own` при недоступном PTY (Wine,
+ранние Windows) в диалоге дизейблится, выбор молча откатывается на `far`.
+
+```
+ ...                                         <- скроллбэк консоли
+ Volume in drive C has no label
+ 12.08.2026  14:03    <DIR>          .
+ ...
+ /home/user>_                                <- строка h-1: командная строка f4, курсор
+ 1Help 2UserMn 3View 4Edit 5Copy ...         <- строка h: keybar (если showKeyBar)
+```
+
+Дефолты: при доступном PTY — `own` (текущее поведение не меняется), при недоступном —
+`far`. Отдельного «только под Wine» поведения не заводим.
+
+## 4. Часть A. Ctrl+O в режимах без PTY
+
+Все правки — только по ветке «PTY недоступен» и по оверлею. Режим `ShellModeOwn`
+(обычный встроенный терминал на Unix/Windows) не трогаем ни строчкой.
+
+### Этап A0. Диагностика (кода-логики не менять)
+
+- [ ] В `InitCore()` (`main.go`) дописать в `vtui.DebugLog` строку вида
+      `ENV: wine=%v backend=%q consoleBuffer=%v tty=%v`.
+- [ ] В `NewPanelsFrame()` после `resolveShellMode()` логировать выбранный режим и
+      `AppConfig.ConsoleMode/ConsoleOverlayUI`.
+- [ ] Экспортировать из vtui маленький `vtui.HasConsoleBuffer() bool` (обёртка над
+      существующим `hasConsoleBufferOS()`, для не-Windows — `false`).
+- [ ] Добавить скрытый флаг `--wine-probe`: печатает эти же факты в stdout и выходит
+      с кодом 0. Он же пригодится в части B.
+
+Критерий готовности: `wine f4.exe --debug`, затем `wine f4.exe --wine-probe` дают понять,
+какой backend и какой shell-режим реально выбраны. **Результат зафиксировать в issue —
+дальнейшие этапы зависят от того, `winapi` там или `ansi`.**
+
+### Этап A1. vtui: не сорить ANSI в консольный буфер
+
+- [ ] В `vtui/terminal_env.go` завести внутренний предикат `consoleUsesVT() bool`:
+      `false`, если активен `Win32ConsoleRenderer`, иначе `true`.
+- [ ] `SetAltScreen()`, `Suspend()`, `Resume()`, `PrepareTerminal()`: при
+      `!consoleUsesVT()` пропускать запись VT-последовательностей в `out`, оставляя
+      вызовы `setAltScreenOS()` / `vtinput.Enable()` / восстановление ввода.
+- [ ] Тест в vtui: с подменённым рендерером и `Writer = &bytes.Buffer{}` —
+      после `SetAltScreen(true/false)` в буфер не ушло ни байта.
+
+Критерий: под `wineconsole` в исходном буфере больше нет мусорных `←[?1049l`.
+
+### Этап A2. Оверлей без PTY
+
+Обобщаем существующий Far-стиль так, чтобы он работал и когда PTY нет.
+
+- [ ] `console_passthrough.go`: `overlayLines()` перестаёт зависеть от
+      `AppConfig.ConsoleOverlayUI`, начинает зависеть от нового `consoleViewStyle()`
+      (см. A4) и возвращает 0 для стиля `mc`.
+- [ ] `drawHostConsoleOverlay()` разбить на две части:
+      расчёт содержимого (строка приглашения `pf.buildPrompt()` + текст
+      `pf.cmdLine.Edit.GetText()`, ярлыки `pf.GetKeyLabels()`) и вывод.
+      Условие `pf.shellMode != ShellModeHost` заменить на «мы в консольном виде»
+      (`!pf.showPanels` и режим из множества `{ShellModeHost, ShellModeSimpleInline}`).
+- [ ] Два вывода:
+      * **ANSI** — как сейчас, `vtui.WritePassthrough`;
+      * **winapi** — новый `console_overlay_windows.go`: `WriteConsoleOutputW` в
+        `STD_OUTPUT_HANDLE`. Заглушка `console_overlay_other.go` для остальных ОС.
+- [ ] Геометрия для winapi (это главный источник ошибок):
+      * размер брать из `GetConsoleScreenBufferInfo`, **строки считать от
+        `srWindow.Bottom`, а не от `dwSize.Y`** — консольный буфер часто выше окна;
+      * ширину брать `srWindow.Right - srWindow.Left + 1`;
+      * пересчитывать перед каждой отрисовкой: вывод команды скроллит буфер.
+- [ ] Курсор: `SetConsoleCursorPosition` в позицию редактирования командной строки +
+      `SetConsoleCursorInfo` (видимый). Для ANSI — `\x1b[<row>;<col>H` и `\x1b[?25h`.
+- [ ] Перед запуском команды оверлей **стирать** и возвращать курсор туда, где его
+      оставил предыдущий вывод: сохранять `dwCursorPosition` и содержимое строк под
+      оверлеем (`ReadConsoleOutputW`) при отрисовке, восстанавливать перед `exec`.
+      Иначе копия командной строки уедет в скроллбэк.
+- [ ] Тесты: расчёт геометрии (число строк, индекс строки командной строки, обрезка
+      ярлыков) — чистыми функциями, без обращения к консоли.
+
+### Этап A3. Вход в консольный вид и ввод
+
+- [ ] `action_registry.go`, handler `Panel.Toggle`, ветка `ShellModeSimpleInline`:
+      после `SetAltScreen(false)` не звать `restoreHostConsoleBuffer()` вслепую
+      (он и есть источник «куска панелей»): восстанавливать только если сохранённый
+      буфер актуального размера. При стиле `far` — далее рисовать оверлей и
+      **не** ставить `SetBusy(true)` навсегда, а держать флаг «консольный вид».
+- [ ] `panels_frame.go` (~1707): правило «любая клавиша возвращает панели» оставить
+      **только для стиля `mc`**. Для `far`:
+      * Ctrl+O / Esc → панели (уже работает через диспетчер хоткеев);
+      * Enter → выполнить команду тем же путём, что и сейчас
+        (`pf.runSimpleInlineCommand(dir, cmd)`), после завершения — перерисовать
+        оверлей и **остаться в консольном виде** (панели возвращает только Ctrl+O);
+      * остальное → `pf.cmdLine.ProcessKey(e)` + перерисовка оверлея (взять за образец
+        существующую ветку для `ShellModeHost` в `panels_frame.go:1719`).
+- [ ] `runSimpleInlineCommand()`: «Press any key to return to f4…» показывать только
+      при возврате в панели (то есть при запуске команды с панелей). Если команда
+      запущена из консольного вида — паузы нет, сразу рисуем оверлей обратно.
+- [ ] `Close()` и выход из f4: гарантированно вернуть исходный активный буфер/курсор.
+- [ ] Тесты в `simple_exec_test.go`: в стиле `far` обычная клавиша **не** возвращает
+      панели, а попадает в командную строку; в стиле `mc` — возвращает (существующий
+      тест `TestSimpleInline_ToggleAndAnyKeyReturn` перевести на явную установку стиля).
+      Тест `TestSimpleInline_CtrlOKeyUpDoesNotRestorePanels` обязан продолжать проходить.
+
+### Этап A4. Конфиг, настройки, локализация
+
+- [ ] `config.go`: `ConsoleMode` становится трёхпозиционным: `"own"`|`"far"`|`"mc"`,
+      дефолт `"own"`. Миграция со старой пары значений: `own` → `own`,
+      `host` + `ConsoleOverlayUI=1` → `far`, `host` + `ConsoleOverlayUI=0` → `mc`.
+      Поле `ConsoleOverlayUI` оставить в структуре только на время миграции чтения;
+      в UI и в новом коде им не пользоваться.
+- [ ] Хелпер `consoleViewStyle() string` в `shell_mode.go` — единственная точка правды.
+      Он **не** зависит от наличия PTY: `far` остаётся `far` и в `ShellModeHost`,
+      и в `ShellModeSimpleInline`.
+- [ ] `resolveShellMode()`: `own` → `ShellModeOwn`; `far`/`mc` → `ShellModeHost` при
+      живом PTY и `ShellModeSimpleInline`/`ShellModeSimpleCaptured` без него; `own` без
+      PTY откатывается на `far`.
+- [ ] `actions.go` (`actionPanelSettings`, ~2831): радиогруппа `ConsoleMode` расширяется
+      с двух пунктов до трёх, чекбокс `ConsoleOverlayUI` убирается; пункт `own`
+      дизейблится там, где PTY недоступен. Подпись «применится к новым сессиям» оставить.
+- [ ] Строки `PanelSettings.ConsoleModeFar` и `…ConsoleModeMc` в `lang/en.lng` и
+      `lang/ru.lng` рядом с существующими `…ConsoleModeOwn`/`…ConsoleModeHost`
+      (последняя больше не используется); остальные языки подхватят fallback (`I18N.md`).
+- [ ] Обязательный `vtui.AssertLayout`-тест диалога (правило vtui).
+- [ ] Раздел в `help/en.hlf` и `help/ru.hlf`.
+
+### Этап A5. Приёмка части A
+
+1. `wine f4.exe` в обычном терминале и `wineconsole f4.exe` — оба стартуют, панели целы.
+2. Ctrl+O на свежем старте: чистая консоль, внизу приглашение с текущим путём и мигающий
+   курсор, под ним keybar. Никакого мусора и обрывков панелей.
+3. Набрали `dir`, Enter: вывод пошёл в консоль, приглашение вернулось под ним, курсор на
+   месте, можно набирать следующую команду.
+4. Ctrl+O → панели → Ctrl+O: вывод предыдущих команд на месте, ничего не затёрто.
+5. Стиль `mc` в настройках: Ctrl+O даёт консоль без оверлея, любая клавиша возвращает панели.
+   На Linux с живым PTY тот же пункт `mc` даёт полноэкранный живой шелл, а `far` — его же
+   с командной строкой f4 внизу.
+6. Ресайз окна консоли в обоих видах — без артефактов.
+7. F10 из панелей: консоль остаётся в нормальном состоянии, курсор виден.
+8. На Linux с обычным терминалом (`ShellModeOwn`) поведение Ctrl+O не изменилось.
+
+## 5. Часть B. POSIX-режим под Wine
+
+Цель: под Wine f4 определяет, что он под Wine, и показывает пользователю **обычные
+unix-пути** (`/home/user/...`), а не `C:\` и `Z:\home\user`. Внутри при этом остаются
+Win32-вызовы Go — Wine сам транслирует их в POSIX.
+
+### Этап B0. Факты о Wine (читать до кода, интернета у исполнителя нет)
+
+Всё проверено по исходникам Wine и должно приниматься как данность:
+
+* `kernel32.dll` экспортирует две не-виндовые функции (cdecl; на amd64/arm64 совпадает
+  со stdcall, так что `syscall.LazyProc.Call` подходит):
+  * `char *wine_get_unix_file_name(LPCWSTR dos)` — DOS-путь → unix-путь;
+  * `WCHAR *wine_get_dos_file_name(LPCSTR unix)` — unix-путь → DOS-путь.
+  Обе возвращают буфер, который **обязан** быть освобождён
+  `HeapFree(GetProcessHeap(), 0, ptr)`. Строка от первой — в CP_UNIXCP (на практике UTF-8).
+* `ntdll.dll` экспортирует `wine_get_version()` и
+  `wine_get_host_version(const char **sysname, const char **release)` — так можно узнать,
+  что хост именно Linux/FreeBSD/Haiku (эти строки освобождать не нужно).
+* **Главное:** Wine понимает Win32-путь вида `\\?\unix\home\user\file` (в NT-форме это
+  `\??\unix\...`). Именно так `wine_get_dos_file_name` строит имя и так же делает
+  `start.exe /unix`. Это даёт доступ к **любому** unix-пути, даже если он не покрыт ни
+  одной буквой диска. Прямые слэши после префикса Wine тоже принимает.
+* Go на Windows не трогает пути, начинающиеся с `\\?\` (`fixLongPath` возвращает их
+  как есть), поэтому `os.Open/Stat/ReadDir` с такой строкой работают. Но
+  `filepath.Clean/Abs/Join` такие пути калечат — **конвертацию делать в последний
+  момент, у самого системного вызова**.
+
+- [ ] Расширить `--wine-probe` (A0) проверками: `wine_get_version`, host version,
+      `wine_get_unix_file_name("C:\\")`, `wine_get_dos_file_name("/")`, `os.Stat` и
+      `os.ReadDir` по `\\?\unix\`, наличие `/bin/sh`. Печатать таблицей.
+      **Пока эта проверка не пройдена под настоящим Wine, этапы B2+ не начинать.**
+
+### Этап B1. Примитивы
+
+- [ ] Новый `winepath_windows.go` (+ `winepath_other.go` со стабами, чтобы собиралось
+      под все 9 GOOS):
+      `WineAvailable() bool`, `WineUnixFromDOS(string) (string, bool)`,
+      `WineDOSFromUnix(string) (string, bool)`, `WineHostOS() string`.
+- [ ] Каноническая форма OS-пути — `\\?\unix` + путь с `/`, заменёнными на `\`.
+      Реализуется чисто текстово, без вызовов Wine (быстро, работает для
+      несуществующих путей — важно для создания файлов). `wine_get_dos_file_name`
+      используется только как fallback, если probe показал, что префикс не работает.
+- [ ] Обратное преобразование: снять префикс `\\?\unix`, заменить `\` на `/`.
+      Если пришёл обычный DOS-путь (`C:\...`) — конвертировать через
+      `wine_get_unix_file_name`, результат кэшировать (вызов открывает файл, он дорогой).
+- [ ] Тесты — чистые табличные, без Wine: прямое/обратное преобразование, идемпотентность,
+      корень `/`, пути с пробелами и кириллицей, `.`/`..` (чистить `path.Clean` **до**
+      конвертации).
+
+### Этап B2. Переключатель
+
+- [ ] `AppConfig.WinePosixPaths string` = `auto|on|off`, дефолт `auto`
+      (= `on`, если `vtui.IsWine()` и probe успешен, иначе `off`). Плюс флаг
+      `--posix-paths=on|off` для отладки.
+- [ ] Единый предикат `PosixPathSemantics() bool`: на не-Windows всегда `true`, на
+      Windows — по конфигу. `vfs.SetPosixHost(bool)` вызывается один раз из `InitCore()`
+      до создания панелей.
+- [ ] Пока предикат никем не используется — поведение не меняется. Отдельный коммит.
+
+### Этап B3. Трансляция в `vfs.OSVFS`
+
+Это единственная локальная ФС в проекте, поэтому вся работа сосредоточена в
+`vfs/os_vfs.go`.
+
+- [ ] Внутренняя форма пути в posix-режиме — POSIX. Завести приватные
+      `func (v *OSVFS) toOS(p string) string` и `fromOS(p string) string`; в
+      обычном режиме — тождественные.
+- [ ] **Каждый** вызов `os.*`, `syscall.*`, `filepath.EvalSymlinks` внутри `OSVFS`
+      оборачивать `toOS()`, каждый возвращаемый наружу путь — `fromOS()`.
+- [ ] Строковые операции над путями в posix-режиме брать из `path`, а не `filepath`:
+      `Join/Dir/Base/Clean`, `IsAbs = strings.HasPrefix(p, "/")`, `IsAtRoot = p == "/"`.
+- [ ] Скрытые файлы: в posix-режиме правило «имя начинается с точки»
+      (`vfs/hidden_unix.go` уже содержит нужную логику — вынести её в общий файл
+      без build-тега и выбирать по предикату, дублировать код нельзя).
+- [ ] Тесты: подменяем `toOS/fromOS` на фейковые (например, `/x` ↔ `FAKE:\x`) и
+      проверяем, что наружу из `ReadDir/Stat/Join/Abs/SetPath` не утекает ни одного
+      OS-пути. Реального Wine тесты требовать не должны.
+
+### Этап B4. Точки входа
+
+- [ ] Стартовый путь: `os.Getwd()` и аргументы командной строки прогонять через
+      `fromOS()`.
+- [ ] `drives_windows.go`: в posix-режиме отдавать список в духе `drives_unix.go` —
+      `/ Root`, `~ Home`, `Physical Disks`, и отдельным пунктом «DOS drives»
+      (существующее перечисление `GetLogicalDrives`), чтобы `C:` оставался достижим.
+- [ ] Пути, приходящие из сохранённого состояния (конфиг, закладки, история команд и
+      папок): при загрузке нормализовать через `fromOS()`, если строка выглядит как
+      `X:\…` или `\\?\unix\…`.
+- [ ] `~` в командной строке и в диалогах разворачивать в unix-домашку
+      (переменная `HOME` под Wine видна; если пуста — `wine_get_unix_file_name`
+      от `%USERPROFILE%`).
+- [ ] Разделитель в отображении путей (заголовки панелей, приглашение, статусы,
+      F5/F6-диалоги) — `/`.
+
+### Этап B5. Шелл и запуск программ (делать последним, отдельным коммитом)
+
+Самая рискованная часть. Начинать с проверки, а не с кода.
+
+- [ ] Проверить под Wine, что `CreateProcess` умеет запускать unix-бинарник
+      (`exec.Cmd{Path: "\\\\?\\unix\\bin\\sh", Args: []string{"/bin/sh", "-c", "echo ok"}}`).
+      Результат записать в issue.
+- [ ] Если умеет: в posix-режиме `GetSystemShell()` (`pty_windows.go:202`) отдаёт
+      `$SHELL` или `/bin/sh`, а `runSimpleInlineCommand()` использует `-c` вместо `/c`.
+- [ ] Если не умеет: цепочка деградации — `start.exe /unix <path>` → `cmd.exe`.
+      Молча ничего не менять, писать в лог, какой вариант выбран.
+- [ ] Окружение ребёнка (`child_env.go`) в posix-режиме не портить DOS-путями.
+
+### Этап B6. Приёмка части B
+
+1. `wine f4.exe` открывается на `/home/<user>`, в заголовке панели unix-путь.
+2. Alt+F1 показывает `/`, `~`, физические диски и подпункт с DOS-дисками.
+3. Enter по каталогу, `..`, Ctrl+\ (корень) — везде unix-пути, ни одного `C:\`.
+4. F5/F6/F7/F8 (копия, перенос, создание, удаление) работают по unix-путям, в том числе
+   вне буквенных дисков (например, `/tmp` и `/usr/share`).
+5. Точечные файлы скрыты по правилу «начинается с точки», а не по DOS-атрибуту.
+6. `--posix-paths=off` возвращает старое поведение с `C:\` — регрессионный откат работает.
+7. На настоящей Windows и на Unix ничего не изменилось; `go test ./...` зелёный.
+
+## 6. Что вне скоупа
+
+* Бэкпорт на старые версии Go и на Windows XP.
+* Unix-права, владелец/группа, chmod/chown, определение бита исполняемости.
+* Монтирование, управление точками монтирования, `/proc`-специфика.
+* Попытки поднять ConPTY под Wine и «живой» шелл в режиме без PTY.
+* Любые улучшения `ShellModeOwn` и `ShellModeHost` сверх перечисленного.
+
+## 7. Правила и запреты
+
+1. Один этап — один коммит: компилируется, `go test ./...` зелёный, тесты добавлены.
+2. Поведение вне Wine не меняется: дефолт при доступном PTY остаётся `own`,
+   исключений нет.
+3. Тесты не должны требовать Wine, Windows-консоли или живого PTY: всё проверяемое —
+   через подменяемые probe-функции и чистые вычисления геометрии/путей.
+4. OS-специфичный код только в файлах с build-тегами. CI кросс-собирает 9 GOOS —
+   сборка не должна ломаться нигде, включая solaris/illumos/dragonfly.
+5. Не копировать код из mc и far2l: f4 под BSD-3-Clause, mc под GPL. Исходники читать
+   можно только как описание идеи.
+6. Правила `TERMINAL.md` в силе: ресайз 0×0 игнорировать, порядок закрытия хендлов
+   не менять, reflow живой сетки не делать.
+7. Диалоги — с `vtui.AssertLayout`. Строки — только через `Msg()`, база — `en.lng`.
+8. Никаких «заодно»: если по дороге нашлась смежная проблема — записать в issue, не чинить.
+
+## 8. Как собирать и проверять
+
+```
+CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o f4.exe .
+wine f4.exe --wine-probe            # диагностика окружения
+wine f4.exe --debug                 # лог в debug.log
+wineconsole f4.exe                  # вариант с настоящим Win32-консольным буфером
+wine f4.exe --tty=winapi            # принудительный выбор рендерера
+wine f4.exe --tty=ansi
+```
+
+Оба варианта запуска (из unix-терминала и через `wineconsole`) проверять на каждом
+этапе части A: у них разные backend'ы и разные пути отрисовки оверлея.
+
+## 9. Файлы, которые нужны исполнителю
+
+**Часть A:** `action_registry.go`, `panels_frame.go`, `console_passthrough.go`,
+`simple_exec.go`, `simple_exec_windows.go`, `simple_exec_other.go`, `shell_mode.go`,
+`config.go`, `actions.go`, `main.go`, `session_windows.go`, `hotkeys.go`,
+`lang/en.lng`, `lang/ru.lng`, `help/en.hlf`, `help/ru.hlf`, `CONSOLE_MODES.md`, `TERMINAL_WINDOWS.md`.
+Тесты-образцы: `simple_exec_test.go`, `panels_frame_test.go`, `win32_backend_test.go`.
+vtui: `terminal_env.go`, `terminal_env_windows.go`, `win32_console_windows.go`,
+`win32_console_common.go`, `screenbuf.go`, `framemanager.go`.
+
+**Часть B:** `vfs/os_vfs.go`, `vfs/os_vfs_windows.go`, `vfs/os_vfs_platform_windows.go`,
+`vfs/hidden_windows.go`, `vfs/hidden_unix.go`, `drives_windows.go`, `drives_unix.go`,
+`pty_windows.go`, `child_env.go`, `config.go`, `bookmarks.go`, `command_history_paths.go`,
+`main.go`, `VFS.md`.
+Тесты-образцы: `vfs/os_vfs_test.go`, `vfs/isabs_test.go`, `portable_test.go`.
