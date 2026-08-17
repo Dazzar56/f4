@@ -126,3 +126,62 @@ func TestSetCloseOnExec_NotInheritedByChild(t *testing.T) {
 			"end open, i.e. FD_CLOEXEC did not take effect", n, err)
 	}
 }
+func TestListSessions_PurgesMissingSockets(t *testing.T) {
+	dir := sessionDir()
+	staleSock := filepath.Join(dir, "stale-test.sock")
+	staleJSON := filepath.Join(dir, "f4-999999.json")
+
+	info := SessionInfo{
+		PID:      os.Getpid(), // Alive process, but socket is missing
+		Title:    "stale session",
+		SockPath: staleSock,
+	}
+	data, _ := json.Marshal(info)
+	if err := os.WriteFile(staleJSON, data, 0600); err != nil {
+		t.Fatalf("write stale json: %v", err)
+	}
+	defer os.Remove(staleJSON)
+
+	sessions := listSessions()
+	for _, s := range sessions {
+		if s.SockPath == staleSock {
+			t.Errorf("listSessions() returned session with missing socket: %+v", s)
+		}
+	}
+
+	if _, err := os.Stat(staleJSON); !os.IsNotExist(err) {
+		t.Errorf("listSessions() did not purge stale json file for missing socket")
+	}
+}
+
+func TestWatchdog_DetectsClientDisconnect(t *testing.T) {
+	var p [2]int
+	if err := syscall.Pipe(p[:]); err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	readEnd, writeEnd := p[0], p[1]
+	defer syscall.Close(writeEnd)
+
+	// Initially, both ends are open: poll should not report hangup/error
+	pfds := []unix.PollFd{{Fd: int32(writeEnd), Events: 0}}
+	_, err := unix.Poll(pfds, 0)
+	if err != nil {
+		t.Fatalf("poll: %v", err)
+	}
+	if (pfds[0].Revents & (unix.POLLERR | unix.POLLHUP | unix.POLLNVAL)) != 0 {
+		t.Fatalf("unexpected revents on open pipe: %x", pfds[0].Revents)
+	}
+
+	// Close client read end
+	syscall.Close(readEnd)
+
+	// Now poll on writeEnd must report POLLERR, POLLHUP, or POLLNVAL
+	pfds = []unix.PollFd{{Fd: int32(writeEnd), Events: 0}}
+	_, err = unix.Poll(pfds, 0)
+	if err != nil {
+		t.Fatalf("poll after close: %v", err)
+	}
+	if (pfds[0].Revents & (unix.POLLERR | unix.POLLHUP | unix.POLLNVAL)) == 0 {
+		t.Fatalf("watchdog failed to detect closed read end: revents = %x", pfds[0].Revents)
+	}
+}

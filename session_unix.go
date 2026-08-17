@@ -65,7 +65,8 @@ func listSessions() []SessionInfo {
 
 			var info SessionInfo
 			if err := json.Unmarshal(data, &info); err == nil {
-				if isProcessAlive(info.PID) {
+				_, statErr := os.Stat(info.SockPath)
+				if isProcessAlive(info.PID) && statErr == nil {
 					sessions = append(sessions, info)
 				} else {
 					os.Remove(path)
@@ -197,12 +198,13 @@ func runClient(sockPath string, serverPID int) {
 		}()
 	}
 
-	clntPath := filepath.Join(sessionDir(), fmt.Sprintf("clnt-%d-%d.ipc", os.Getpid(), time.Now().UnixNano()))
+	clntPath := filepath.Join(sessionDir(), fmt.Sprintf("c-%d-%x.ipc", os.Getpid(), time.Now().UnixNano()&0xFFFFFFFF))
 	laddr, _ := net.ResolveUnixAddr("unixgram", clntPath)
 
 	conn, err := net.ListenUnixgram("unixgram", laddr)
 	if err != nil {
 		vtui.DebugLog("CLIENT: CRITICAL: Failed to create client socket: %v", err)
+		fmt.Fprintf(os.Stderr, "f4: failed to create IPC socket: %v\n", err)
 		return
 	}
 	defer os.Remove(clntPath)
@@ -213,6 +215,7 @@ func runClient(sockPath string, serverPID int) {
 	notifyPipe := make([]int, 2)
 	if err := syscall.Pipe(notifyPipe); err != nil {
 		vtui.DebugLog("CLIENT: CRITICAL: Failed to create notify pipe: %v", err)
+		fmt.Fprintf(os.Stderr, "f4: failed to create notify pipe: %v\n", err)
 		return
 	}
 	defer syscall.Close(notifyPipe[0])
@@ -223,6 +226,7 @@ func runClient(sockPath string, serverPID int) {
 	n, oobn, err := conn.WriteMsgUnix([]byte("ATTACH"), oob, raddr)
 	if err != nil {
 		vtui.DebugLog("CLIENT: ATTACH FAILURE: Failed to send FDs to daemon at %s: %v", sockPath, err)
+		fmt.Fprintf(os.Stderr, "f4: failed to attach to session at %s: %v\n", sockPath, err)
 		syscall.Close(notifyPipe[1])
 		return
 	}
@@ -273,6 +277,13 @@ func clearNonBlock(f *os.File) {
 	}
 }
 
+type attachRequest struct {
+	in                 *os.File
+	out                *os.File
+	notifyPipeWriteEnd int
+	rawFds             []int
+}
+
 func runServer(sockPath string) {
 	vtui.DebugLog("SERVER: Starting daemon at %s", sockPath)
 
@@ -295,66 +306,83 @@ func runServer(sockPath string) {
 	writeSessionInfo(sockPath)
 	defer removeSessionInfo(sockPath)
 
-	vtui.DebugLog("SERVER: Daemon listener active on %s. Standing by.", sockPath)
-	for {
-		buf := make([]byte, 32)
-		oob := make([]byte, 1024)
+	attachChan := make(chan attachRequest, 16)
 
-		conn.SetReadDeadline(time.Now().Add(5 * time.Second))
-		n, oobn, _, from, err := conn.ReadMsgUnix(buf, oob)
-		if err != nil {
-			if strings.Contains(err.Error(), "timeout") {
+	// Acceptor goroutine: continuously reads ATTACH datagrams so incoming
+	// clients are received even while FrameManager.Run() is executing.
+	go func() {
+		for {
+			buf := make([]byte, 32)
+			oob := make([]byte, 1024)
+
+			n, oobn, _, from, err := conn.ReadMsgUnix(buf, oob)
+			if err != nil {
+				if strings.Contains(err.Error(), "use of closed network connection") {
+					return
+				}
+				vtui.DebugLog("SERVER: IPC read error on %s: %v", sockPath, err)
+				time.Sleep(100 * time.Millisecond)
 				continue
 			}
-			vtui.DebugLog("SERVER: IPC error on %s: %v", sockPath, err)
-			time.Sleep(1 * time.Second)
-			continue
+
+			vtui.DebugLog("SERVER: Connection received from client %v (Message: %q).", from, string(buf[:n]))
+
+			scms, err := syscall.ParseSocketControlMessage(oob[:oobn])
+			if err != nil || len(scms) == 0 {
+				vtui.DebugLog("SERVER: ParseSocketControlMessage error or empty: %v", err)
+				continue
+			}
+
+			fds, err := syscall.ParseUnixRights(&scms[0])
+			if err != nil || len(fds) < 3 {
+				vtui.DebugLog("SERVER: ParseUnixRights error or len(fds)<3 (len=%d): %v", len(fds), err)
+				for _, fd := range fds {
+					syscall.Close(fd)
+				}
+				continue
+			}
+
+			setCloseOnExec(fds)
+
+			req := attachRequest{
+				in:                 os.NewFile(uintptr(fds[0]), "/dev/stdin"),
+				out:                os.NewFile(uintptr(fds[1]), "/dev/stdout"),
+				notifyPipeWriteEnd: fds[2],
+				rawFds:             fds,
+			}
+
+			// Preempt the current attached session (if any) so the new client takes over.
+			vtui.FrameManager.Stop()
+
+			attachChan <- req
+		}
+	}()
+
+	vtui.DebugLog("SERVER: Daemon listener active on %s. Standing by.", sockPath)
+	for {
+		if vtui.FrameManager.IsShutdown() {
+			vtui.DebugLog("SERVER: Shutdown requested. Exiting.")
+			break
 		}
 
-		vtui.DebugLog("SERVER: Connection received from client %v (Message: %q).", from, string(buf[:n]))
+		writeSessionInfo(sockPath)
 
-		scms, err := syscall.ParseSocketControlMessage(oob[:oobn])
-		if err != nil {
-			vtui.DebugLog("SERVER: ParseSocketControlMessage error: %v", err)
-			continue
-		}
-		if len(scms) == 0 {
-			vtui.DebugLog("SERVER: SCM_RIGHTS list is empty")
-			continue
-		}
-		fds, err := syscall.ParseUnixRights(&scms[0])
-		if err != nil || len(fds) < 3 {
-			vtui.DebugLog("SERVER: Failed to parse Unix rights")
-			continue
+		req, ok := <-attachChan
+		if !ok {
+			break
 		}
 
-		// Fds arriving via SCM_RIGHTS have no FD_CLOEXEC set. Without it, any
-		// child process the daemon spawns after attach (in particular the
-		// built-in terminal's shell, started by initPTY) inherits the notify
-		// pipe's write end along with stdin/stdout. If the daemon then dies,
-		// that inherited copy keeps the pipe open and the client's blocking
-		// read on it never returns, turning a daemon crash into what looks
-		// like an indefinite hang. See PORTABILITY_BSD.md, 4.1.
-		setCloseOnExec(fds)
+		fds := req.rawFds
+		newStdin := req.in
+		newStdout := req.out
+		notifyPipeWriteEnd := req.notifyPipeWriteEnd
 
 		vtui.DebugLog("SERVER: FDs received (In:%d Out:%d Pipe:%d). Goroutines: %d. Attaching terminal.", fds[0], fds[1], fds[2], runtime.NumGoroutine())
-		// We don't log individual FD flags in production to keep logs clean.
 
-		newStdin := os.NewFile(uintptr(fds[0]), "/dev/stdin")
-		newStdout := os.NewFile(uintptr(fds[1]), "/dev/stdout")
-		notifyPipeWriteEnd := fds[2]
-
-		// Save global state to restore later
 		oldStdin, oldStdout := os.Stdin, os.Stdout
 		os.Stdin, os.Stdout = newStdin, newStdout
 
-		vtui.DebugLog("SERVER: Enabling raw mode on new Stdin...")
-
-		// Set new Stdin/Stdout before calling Enable
-		os.Stdin, os.Stdout = newStdin, newStdout
-
 		var restore func()
-		// Only try to enable raw mode if we actually have a terminal.
 		if term.IsTerminal(int(os.Stdin.Fd())) {
 			r, err := vtui.PrepareTerminal()
 			if err != nil {
@@ -380,6 +408,35 @@ func runServer(sockPath string) {
 		scr.HardReset()
 		vtui.FrameManager.Redraw()
 
+		// Watchdog goroutine: polls notifyPipeWriteEnd and stdin to detect when
+		// the client terminal dies or closes abruptly (e.g. closing window on macOS).
+		watchStop := make(chan struct{})
+		go func(pipeWriteFD int, inFD int) {
+			ticker := time.NewTicker(250 * time.Millisecond)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-watchStop:
+					return
+				case <-ticker.C:
+					pfds := []unix.PollFd{
+						{Fd: int32(pipeWriteFD), Events: 0},
+						{Fd: int32(inFD), Events: 0},
+					}
+					_, err := unix.Poll(pfds, 0)
+					if err == nil {
+						pipeDead := (pfds[0].Revents & (unix.POLLERR | unix.POLLHUP | unix.POLLNVAL)) != 0
+						inDead := (pfds[1].Revents & (unix.POLLHUP | unix.POLLNVAL)) != 0
+						if pipeDead || inDead {
+							vtui.DebugLog("SERVER: Watchdog detected disconnected client (pipeRevents=%x, inRevents=%x). Stopping FrameManager.", pfds[0].Revents, pfds[1].Revents)
+							vtui.FrameManager.Stop()
+							return
+						}
+					}
+				}
+			}
+		}(notifyPipeWriteEnd, fds[0])
+
 		vtui.DebugLog("SERVER: PRE-RUN: Stdin FD: %d, Stdout FD: %d", os.Stdin.Fd(), os.Stdout.Fd())
 		reader := vtinput.NewReader(os.Stdin, false)
 
@@ -387,33 +444,19 @@ func runServer(sockPath string) {
 		vtui.FrameManager.Run(reader)
 		vtui.DebugLog("SERVER: fm.Run() EXITED.")
 
+		close(watchStop)
+
 		if restore != nil {
 			// Ensure all pending escape sequences are sent before restoring terminal
 			os.Stdout.Sync()
-
-			// 2. CRITICAL: Clear O_NONBLOCK that Go automatically sets.
-			// Shared FD description means bash will also get EAGAIN if we don't.
-			//
-			// This used syscall.Syscall(SYS_FCNTL, ...) directly, which is an
-			// indirect syscall. OpenBSD 7.5+ removed the kernel entry point
-			// for those (golang/go#63900): the call returns ENOSYS and
-			// O_NONBLOCK is silently never cleared, leaving the parent shell
-			// with a non-blocking stdin/stdout after the session ends.
-			// clearNonBlock goes through the libc fcntl(2) stub instead,
-			// which keeps working under that restriction. See
-			// PORTABILITY_BSD.md, 4.4.
 			clearNonBlock(os.Stdin)
 			clearNonBlock(os.Stdout)
-
 			vtui.DebugLog("SERVER: Calling terminal restore()...")
 			restore()
 			vtui.DebugLog("SERVER: terminal restore() done.")
 		}
 
-		// CLOSE the notify pipe to signal the client it can exit.
-
-		// CRITICAL: Redirect standard descriptors to /dev/null to fully release the PTY.
-		// If the daemon keeps PTY FDs open as its own 0,1,2, the host shell hangs.
+		// Redirect standard descriptors to /dev/null to fully release the PTY.
 		devNull, err := os.OpenFile(os.DevNull, os.O_RDWR, 0)
 		if err == nil {
 			dnfd := int(devNull.Fd())
@@ -423,15 +466,10 @@ func runServer(sockPath string) {
 			devNull.Close()
 		}
 
-		// CLOSE the notify pipe to signal the client it can exit.
+		// Close the notify pipe to signal the client it can exit.
 		syscall.Close(notifyPipeWriteEnd)
-
-		// Ensure we don't hold the terminal if the session is logically closed
 		os.Stdout.Sync()
 
-		// CRITICAL: If the system assigned us standard FDs (0, 1, 2) for the new session,
-		// we MUST NOT close them, or os.Stdin/os.Stdout in the server process will become
-		// invalid (EBADF) for all future connections.
 		if fds[0] > 2 {
 			newStdin.Close()
 		}
@@ -439,14 +477,7 @@ func runServer(sockPath string) {
 			newStdout.Close()
 		}
 
-		// Restore original server Stdin/Stdout pointers so they aren't garbage collected.
 		os.Stdin, os.Stdout = oldStdin, oldStdout
-
-		if vtui.FrameManager.IsShutdown() {
-			vtui.DebugLog("SERVER: Shutdown requested. Exiting.")
-			break
-		}
-		writeSessionInfo(sockPath)
 	}
 }
 
