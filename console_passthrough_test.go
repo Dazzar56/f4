@@ -180,3 +180,84 @@ func TestHostConsole_CloseLeavesHostConsole(t *testing.T) {
 		t.Fatal("Close must leave host console")
 	}
 }
+func TestHostConsole_OverlayLines(t *testing.T) {
+	oldCfg := AppConfig
+	defer func() { AppConfig = oldCfg }()
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+
+	// 1. ConsoleOverlayUI disabled -> 0 lines
+	AppConfig.ConsoleOverlayUI = false
+	if got := pf.overlayLines(); got != 0 {
+		t.Errorf("overlayLines() with ConsoleOverlayUI=false = %d, want 0", got)
+	}
+
+	// 2. ConsoleOverlayUI enabled, showKeyBar = true -> 2 lines
+	AppConfig.ConsoleOverlayUI = true
+	pf.showKeyBar = true
+	if got := pf.overlayLines(); got != 2 {
+		t.Errorf("overlayLines() with showKeyBar=true = %d, want 2", got)
+	}
+
+	// 3. ConsoleOverlayUI enabled, showKeyBar = false -> 1 line
+	pf.showKeyBar = false
+	if got := pf.overlayLines(); got != 1 {
+		t.Errorf("overlayLines() with showKeyBar=false = %d, want 1", got)
+	}
+}
+
+func TestHostConsole_FarStyleScrollRegion(t *testing.T) {
+	scr := vtui.NewSilentScreenBuf()
+	var out bytes.Buffer
+	scr.Writer = &out
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+
+	oldCfg := AppConfig
+	defer func() { AppConfig = oldCfg }()
+	AppConfig.ConsoleOverlayUI = true
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.shellMode = ShellModeHost
+	pf.showKeyBar = true
+	pf.ResizeConsole(80, 25)
+
+	out.Reset()
+	pf.enterHostConsole()
+
+	// Scroll region for 25 lines with 2 overlay lines should be rows 1..23 (\x1b[1;23r)
+	written := out.String()
+	wantScrollRegion := "\x1b[1;23r"
+	if !strings.Contains(written, wantScrollRegion) {
+		t.Errorf("enterHostConsole with overlay missing scroll region %q: %q", wantScrollRegion, written)
+	}
+
+	out.Reset()
+	pf.leaveHostConsole()
+
+	// Leaving must restore scroll region (\x1b[r)
+	written = out.String()
+	if !strings.Contains(written, "\x1b[r") {
+		t.Errorf("leaveHostConsole missing scroll region reset \\x1b[r: %q", written)
+	}
+}
+
+func TestHostConsole_FarStylePTYSizing(t *testing.T) {
+	oldCfg := AppConfig
+	defer func() { AppConfig = oldCfg }()
+	AppConfig.ConsoleOverlayUI = true
+
+	pf := setupMockPanelsFrame()
+	defer pf.Close()
+	pf.shellMode = ShellModeHost
+	pf.showKeyBar = true
+
+	pf.ResizeConsole(80, 25)
+
+	// PTY should receive height 25 - 2 = 23
+	if pf.termView.Height != 23 {
+		t.Errorf("termView height in Far-style host mode = %d, want 23", pf.termView.Height)
+	}
+}

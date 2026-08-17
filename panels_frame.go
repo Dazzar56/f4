@@ -313,6 +313,7 @@ type PanelsFrame struct {
 	shellMode         ShellMode
 	hostConsoleActive bool
 	hostConsoleMu     sync.Mutex
+	lastOverlayDraw   time.Time
 
 	// Terminal mouse-selection state. Kept in PanelsFrame because
 	// mouse routing lives here; the highlight and text extraction
@@ -963,6 +964,10 @@ func (pf *PanelsFrame) initPTY() {
 				if pf.shellMode == ShellModeHost && pf.isHostConsoleActive() {
 					vtui.WritePassthrough(buf[:n])
 					pf.parser.Process(buf[:n])
+					if pf.overlayLines() > 0 && time.Since(pf.lastOverlayDraw) > 30*time.Millisecond {
+						pf.drawHostConsoleOverlay()
+						pf.lastOverlayDraw = time.Now()
+					}
 				} else {
 					pf.parser.Process(buf[:n])
 					vtui.FrameManager.Redraw()
@@ -1077,7 +1082,11 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 	// 1. Terminal Area: Fills everything except KeyBar
 	termY2 := h - 1
 	if pf.shellMode == ShellModeHost {
-		termH := h
+		n := pf.overlayLines()
+		termH := h - n
+		if termH <= 0 {
+			termH = 1
+		}
 		if pty := pf.localPTY(); pty != nil {
 			pf.ptyMutex.Lock()
 			cw, ch := pf.termView.CellSize()
@@ -1087,8 +1096,12 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 			}
 			pf.ptyMutex.Unlock()
 
-			pf.termView.SetPosition(0, 0, w-1, h-1)
+			pf.termView.SetPosition(0, 0, w-1, termH-1)
 			pf.termView.Resize(w, termH)
+		}
+		if pf.isHostConsoleActive() && n > 0 {
+			vtui.WritePassthrough([]byte(fmt.Sprintf("\x1b[1;%dr", termH)))
+			pf.drawHostConsoleOverlay()
 		}
 	} else {
 		// KeyBar only takes space if it's actually visible (not in AltScreen and not busy)
@@ -1683,6 +1696,16 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	// Ctrl+O (Panel.Toggle) and Esc (Panel.Toggle:EscToggle) are handled
 	// by the hotkey dispatcher; F3/F4 for the terminal log are bound in
 	// the Terminal area with the TerminalQuiet condition.
+
+	// In Far-style host console with an overlay, route editing keys to CommandLine first
+	if !pf.showPanels && pf.shellMode == ShellModeHost && pf.overlayLines() > 0 {
+		if e.VirtualKeyCode != vtinput.VK_RETURN {
+			if pf.cmdLine.ProcessKey(e) {
+				pf.drawHostConsoleOverlay()
+				return true
+			}
+		}
+	}
 
 	// Raw input mode fallback for active shell commands (non-AltScreen, e.g. ping),
 	// and for any interactive shell session when host console mode is active.
