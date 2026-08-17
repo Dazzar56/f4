@@ -861,6 +861,7 @@
     ├── shell_integration_test.go
     ├── shell_mode.go
     ├── shell_mode_test.go
+    ├── should_try_gui_test.go
     ├── simple_exec.go
     ├── simple_exec_test.go
     ├── solaris_pty_alloc_test.go
@@ -1063,4 +1064,4 @@
     ├── workspace_session_test.go
     └── zzz_pty_leak_check_test.go
     
-    57 directories, 1005 files
+    57 directories, 1006 files
