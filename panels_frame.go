@@ -310,6 +310,11 @@ type PanelsFrame struct {
 	lastPtyVFS  vfs.VFS
 	closed      bool
 
+	shellMode         ShellMode
+	hostConsoleActive bool
+	hostConsoleMu     sync.Mutex
+	lastOverlayDraw   time.Time
+
 	// Terminal mouse-selection state. Kept in PanelsFrame because
 	// mouse routing lives here; the highlight and text extraction
 	// live on the TerminalView itself.
@@ -377,6 +382,10 @@ func NewPanelsFrame() *PanelsFrame {
 	pf.widthDecrement = AppConfig.WidthDecrement
 	pf.leftHeightDecrement = AppConfig.LeftHeightDecrement
 	pf.rightHeightDecrement = AppConfig.RightHeightDecrement
+	pf.shellMode = resolveShellMode(ShellModeConfig{
+		ConsoleMode:      AppConfig.ConsoleMode,
+		ConsoleOverlayUI: AppConfig.ConsoleOverlayUI,
+	})
 
 	pf.menuBar = vtui.NewMenuBar(nil)
 	pf.menuBar.SetOwner(pf)
@@ -414,6 +423,9 @@ func NewPanelsFrame() *PanelsFrame {
 							pf.showRightPanel = true
 						}
 						pf.returnToPanels = false
+						if pf.shellMode == ShellModeHost {
+							pf.leaveHostConsole()
+						}
 						pf.RefreshAll()
 						vtui.FrameManager.Redraw()
 					}
@@ -916,8 +928,14 @@ func (pf *PanelsFrame) initPTY() {
 			}
 			pf.pty = p
 			serializedPTY := &processEnvironmentSerializedPTY{owner: pf, backend: p}
-			pf.parser.pty = serializedPTY
-			pf.termView.pty = serializedPTY
+			if pf.shellMode == ShellModeHost {
+				muted := mutedPTY{backend: serializedPTY}
+				pf.parser.pty = muted
+				pf.termView.pty = muted
+			} else {
+				pf.parser.pty = serializedPTY
+				pf.termView.pty = serializedPTY
+			}
 			pf.ptyMutex.Unlock()
 			pf.localShellStarted(inheritedEnvironmentGeneration)
 
@@ -943,8 +961,17 @@ func (pf *PanelsFrame) initPTY() {
 			pf.ptyMutex.Unlock()
 
 			if shouldProcess {
-				pf.parser.Process(buf[:n])
-				vtui.FrameManager.Redraw()
+				if pf.shellMode == ShellModeHost && pf.isHostConsoleActive() {
+					vtui.WritePassthrough(buf[:n])
+					pf.parser.Process(buf[:n])
+					if pf.overlayLines() > 0 && time.Since(pf.lastOverlayDraw) > 30*time.Millisecond {
+						pf.drawHostConsoleOverlay()
+						pf.lastOverlayDraw = time.Now()
+					}
+				} else {
+					pf.parser.Process(buf[:n])
+					vtui.FrameManager.Redraw()
+				}
 			}
 		}
 	}()
@@ -968,6 +995,9 @@ func (pf *PanelsFrame) reportLocalPTYFailure() {
 }
 
 func (pf *PanelsFrame) Close() {
+	if pf.shellMode == ShellModeHost && pf.isHostConsoleActive() {
+		pf.leaveHostConsole()
+	}
 	if pf.wide && pf.widePanel >= 0 && pf.widePanel < 2 {
 		if isAIPanel(pf.panels[pf.widePanel]) {
 			pf.exitWide()
@@ -1051,26 +1081,50 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 
 	// 1. Terminal Area: Fills everything except KeyBar
 	termY2 := h - 1
-	// KeyBar only takes space if it's actually visible (not in AltScreen and not busy)
-	if pf.showKeyBar && !pf.termView.UseAltScreen && !pf.isPtyBusy() {
-		termY2 = h - 2
-	}
-	termH := termY2 - contentY1 + 1
-	if termH < 0 {
-		termH = 0
-	}
-
-	if pty := pf.localPTY(); pty != nil {
-		pf.ptyMutex.Lock()
-		cw, ch := pf.termView.CellSize()
-		setPtySize(pty, w, termH, cw, ch)
-		for _, remotePty := range pf.remotePtys {
-			setPtySize(remotePty, w, termH, cw, ch)
+	if pf.shellMode == ShellModeHost {
+		n := pf.overlayLines()
+		termH := h - n
+		if termH <= 0 {
+			termH = 1
 		}
-		pf.ptyMutex.Unlock()
+		if pty := pf.localPTY(); pty != nil {
+			pf.ptyMutex.Lock()
+			cw, ch := pf.termView.CellSize()
+			setPtySize(pty, w, termH, cw, ch)
+			for _, remotePty := range pf.remotePtys {
+				setPtySize(remotePty, w, termH, cw, ch)
+			}
+			pf.ptyMutex.Unlock()
 
-		pf.termView.SetPosition(0, contentY1, w-1, termY2)
-		pf.termView.Resize(w, termH)
+			pf.termView.SetPosition(0, 0, w-1, termH-1)
+			pf.termView.Resize(w, termH)
+		}
+		if pf.isHostConsoleActive() && n > 0 {
+			vtui.WritePassthrough([]byte(fmt.Sprintf("\x1b[1;%dr", termH)))
+			pf.drawHostConsoleOverlay()
+		}
+	} else {
+		// KeyBar only takes space if it's actually visible (not in AltScreen and not busy)
+		if pf.showKeyBar && !pf.termView.UseAltScreen && !pf.isPtyBusy() {
+			termY2 = h - 2
+		}
+		termH := termY2 - contentY1 + 1
+		if termH < 0 {
+			termH = 0
+		}
+
+		if pty := pf.localPTY(); pty != nil {
+			pf.ptyMutex.Lock()
+			cw, ch := pf.termView.CellSize()
+			setPtySize(pty, w, termH, cw, ch)
+			for _, remotePty := range pf.remotePtys {
+				setPtySize(remotePty, w, termH, cw, ch)
+			}
+			pf.ptyMutex.Unlock()
+
+			pf.termView.SetPosition(0, contentY1, w-1, termY2)
+			pf.termView.Resize(w, termH)
+		}
 	}
 
 	// 2. Panel Area: Leaves one additional line for the f4 CommandLine.
@@ -1200,6 +1254,9 @@ func (pf *PanelsFrame) isPtyBusy() bool {
 	return pf.executing
 }
 func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
+	if pf.shellMode == ShellModeHost && pf.isHostConsoleActive() {
+		return
+	}
 	isBusy := pf.isPtyBusy()
 
 	// 1. Dynamic Layout Adjustment
@@ -1640,9 +1697,31 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	// by the hotkey dispatcher; F3/F4 for the terminal log are bound in
 	// the Terminal area with the TerminalQuiet condition.
 
-	// Raw input mode fallback for active shell commands (non-AltScreen, e.g. ping).
+	// In SimpleInline mode without panels, any keypress returns to panels
+	if pf.shellMode == ShellModeSimpleInline && !pf.showPanels {
+		pf.showPanels = true
+		vtui.SetAltScreen(true)
+		pf.SetBusy(false)
+		if vtui.FrameManager != nil {
+			vtui.FrameManager.HardRefresh()
+		}
+		return true
+	}
+
+	// In Far-style host console with an overlay, route editing keys to CommandLine first
+	if !pf.showPanels && pf.shellMode == ShellModeHost && pf.overlayLines() > 0 {
+		if e.VirtualKeyCode != vtinput.VK_RETURN {
+			if pf.cmdLine.ProcessKey(e) {
+				pf.drawHostConsoleOverlay()
+				return true
+			}
+		}
+	}
+
+	// Raw input mode fallback for active shell commands (non-AltScreen, e.g. ping),
+	// and for any interactive shell session when host console mode is active.
 	// We forward text and navigation to PTY, but let global shortcuts (Ctrl+O) fall through.
-	if !pf.showPanels && pf.isPtyBusy() {
+	if !pf.showPanels && (pf.isPtyBusy() || pf.shellMode == ShellModeHost) {
 		if e.KeyDown || pf.termView.Win32InputMode || pf.termView.KittyFlags != 0 {
 			active := pf.getActivePTY()
 			if active != nil {
@@ -1944,7 +2023,33 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				}
 			}
 
-			// Fallthrough for regular commands or if directory change failed (to show error in terminal)
+			// Fallthrough for regular commands or if directory change failed
+			if pf.shellMode == ShellModeSimpleInline {
+				pf.cmdLine.Clear()
+				if pf.searchFirstMode() && !AppConfig.SearchCommandStayFocused {
+					pf.setCommandLineFocus(false)
+				}
+				var dir string
+				if fsp, ok := pf.panels[pf.activeIdx].(*FileSystemPanel); ok {
+					dir = fsp.vfs.GetPath()
+				}
+				pf.runSimpleInlineCommand(dir, cmd)
+				return true
+			}
+
+			if pf.shellMode == ShellModeSimpleCaptured {
+				pf.cmdLine.Clear()
+				if pf.searchFirstMode() && !AppConfig.SearchCommandStayFocused {
+					pf.setCommandLineFocus(false)
+				}
+				var dir string
+				if fsp, ok := pf.panels[pf.activeIdx].(*FileSystemPanel); ok {
+					dir = fsp.vfs.GetPath()
+				}
+				pf.runSimpleCapturedCommand(dir, cmd)
+				return true
+			}
+
 			activePty := pf.getActivePTY()
 			if activePty != nil {
 				var path string
@@ -2037,6 +2142,9 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				pf.setCommandLineFocus(false)
 			}
 			pf.showPanels = false
+			if pf.shellMode == ShellModeHost {
+				pf.enterHostConsole()
+			}
 			return true
 		} else if pf.searchFirstMode() && pf.commandLineFocused && pf.showPanels {
 			// An empty command line must not activate the selected panel item.
@@ -3830,6 +3938,7 @@ func (pf *PanelsFrame) Clone() *PanelsFrame {
 	clone.showRightPanel = pf.showRightPanel
 	clone.widePanel = pf.widePanel
 	clone.wide = pf.wide
+	clone.shellMode = pf.shellMode
 
 	if pf.termView != nil && clone.termView != nil {
 		clone.termView.CloneStateFrom(pf.termView)

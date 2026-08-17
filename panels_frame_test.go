@@ -3330,6 +3330,14 @@ func TestLayout_F4ActionDialogs_Validity(t *testing.T) {
 		vtui.AssertLayout(t, dlg)
 		fm.Pop()
 	})
+
+	t.Run("PanelSettingsDialog", func(t *testing.T) {
+		actionPanelSettings(pf)
+		dlg := fm.GetTopFrame().(vtui.Container)
+		vtui.AssertLayout(t, dlg)
+		fm.Pop()
+	})
+
 	t.Run("EditorSettingsDialog", func(t *testing.T) {
 		actionEditorSettings(pf)
 		dlg := fm.GetTopFrame().(vtui.Container)

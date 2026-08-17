@@ -1513,6 +1513,15 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 				pf.addCommandHistory(historyCmd)
 				pf.cmdLine.Edit.HistoryPos = -1
 
+				if pf.shellMode == ShellModeSimpleInline {
+					pf.runSimpleInlineCommand(actualDir, historyCmd)
+					return
+				}
+				if pf.shellMode == ShellModeSimpleCaptured {
+					pf.runSimpleCapturedCommand(actualDir, historyCmd)
+					return
+				}
+
 				activePty := pf.getActivePTY()
 				if activePty != nil {
 					cmd := name
@@ -2685,7 +2694,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 	// blank lines between them (see #298). Blank rows are kept only at
 	// transitions between widget kinds (checkbox↔combo↔radio↔button)
 	// so groups still read as groups.
-	const dialogHeight = 37
+	const dialogHeight = 43
 	dlg := vtui.NewCenteredDialog(60, dialogHeight, Msg("PanelSettings.Title"))
 	dlg.ShowClose = true
 
@@ -2791,6 +2800,36 @@ func actionPanelSettings(pf *PanelsFrame) {
 		chkTerminalCtrlN.State = 1
 	}
 
+	lblConsoleMode := vtui.NewText(0, 0, Msg("PanelSettings.ConsoleMode"), 0)
+	consoleModes := []string{
+		Msg("PanelSettings.ConsoleModeOwn"),
+		Msg("PanelSettings.ConsoleModeHost"),
+	}
+	radioConsoleMode := vtui.NewRadioGroup(0, 0, 1, consoleModes)
+	if strings.EqualFold(AppConfig.ConsoleMode, "host") {
+		radioConsoleMode.Selected = 1
+	} else {
+		radioConsoleMode.Selected = 0
+	}
+	for i := 0; i < radioConsoleMode.Selected; i++ {
+		radioConsoleMode.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
+	}
+	chkOverlay := vtui.NewCheckbox(0, 0, Msg("PanelSettings.ConsoleOverlayUI"), false)
+	if AppConfig.ConsoleOverlayUI {
+		chkOverlay.State = 1
+	}
+	chkOverlay.SetDisabled(radioConsoleMode.Selected != 1)
+
+	noteText := Msg("PanelSettings.ConsoleModeNote")
+	if probeGUIBackend() != "" || !probeHostTTY() {
+		noteText = Msg("PanelSettings.ConsoleModeUnavailable") + " " + noteText
+	}
+	lblConsoleNote := vtui.NewText(0, 0, noteText, 0)
+
+	radioConsoleMode.OnChange = func(selected int) {
+		chkOverlay.SetDisabled(selected != 1)
+	}
+
 	modes := []string{Msg("Op.Queue"), Msg("Op.Background"), Msg("Op.Foreground")}
 	comboMode := vtui.NewComboBox(0, 0, 24, modes)
 	comboMode.DropdownOnly = true
@@ -2835,6 +2874,10 @@ func actionPanelSettings(pf *PanelsFrame) {
 	dlg.AddItem(chkCPUGPU)
 	dlg.AddItem(chkEscToggle)
 	dlg.AddItem(chkTerminalCtrlN)
+	dlg.AddItem(lblConsoleMode)
+	dlg.AddItem(radioConsoleMode)
+	dlg.AddItem(chkOverlay)
+	dlg.AddItem(lblConsoleNote)
 	dlg.AddItem(lblMode)
 	dlg.AddItem(comboMode)
 	dlg.AddItem(lblPath)
@@ -2874,6 +2917,11 @@ func actionPanelSettings(pf *PanelsFrame) {
 	vbox.Add(chkCPUGPU, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkEscToggle, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkTerminalCtrlN, vtui.Margins{}, vtui.AlignLeft)
+
+	vbox.Add(lblConsoleMode, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	vbox.Add(radioConsoleMode, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(chkOverlay, vtui.Margins{Left: 2}, vtui.AlignLeft)
+	vbox.Add(lblConsoleNote, vtui.Margins{Left: 2}, vtui.AlignLeft)
 
 	rowMode := vtui.NewHBoxLayout(0, 0, 56, 1)
 	rowMode.Add(lblMode, vtui.Margins{Right: 1}, vtui.AlignLeft)
@@ -2923,6 +2971,12 @@ func actionPanelSettings(pf *PanelsFrame) {
 		AppConfig.InfoPanelCPUGPU = chkCPUGPU.State == 1
 		AppConfig.EscTogglePanels = chkEscToggle.State == 1
 		AppConfig.TerminalCtrlNWorkspace = chkTerminalCtrlN.State == 1
+		if radioConsoleMode.Selected == 1 {
+			AppConfig.ConsoleMode = "host"
+		} else {
+			AppConfig.ConsoleMode = "own"
+		}
+		AppConfig.ConsoleOverlayUI = chkOverlay.State == 1
 		AppConfig.DefaultFileOpMode = comboMode.Menu.SelectPos
 		AppConfig.FileOpPathDisplay = comboPath.Menu.SelectPos
 		AppConfig.MacroRecordFormat = comboMacro.Menu.SelectPos

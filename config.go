@@ -158,7 +158,9 @@ type F4Config struct {
 	EscTogglePanels          bool // ESC toggles panels visibility (Far ships this as a macro; on by default)
 	TerminalCtrlNWorkspace   bool // reserve Ctrl+N in terminal views for cloning panels to a workspace
 	KeepTerminalCursor       bool
-	AnnounceKittyTerm        bool // introduce the built-in terminal as kitty, so that image tools use the graphics protocol
+	ConsoleMode              string // "own" | "host" (default "own")
+	ConsoleOverlayUI         bool   // Show f4 command line and keybar overlay on top of host console (default false)
+	AnnounceKittyTerm        bool   // introduce the built-in terminal as kitty, so that image tools use the graphics protocol
 	CommandLineAutoComplete  bool
 	NavigationMode           PanelNavigationMode
 	SearchCommandStayFocused bool
@@ -280,6 +282,8 @@ var AppConfig = F4Config{
 	EscTogglePanels:          true,
 	TerminalCtrlNWorkspace:   true,
 	KeepTerminalCursor:       false,
+	ConsoleMode:              "own",
+	ConsoleOverlayUI:         false,
 	AnnounceKittyTerm:        true,
 	CommandLineAutoComplete:  true,
 	NavigationMode:           NavigationClassic,
@@ -441,6 +445,8 @@ func LoadConfig() {
 	AppConfig.EscTogglePanels = ini.GetString("Panel", "EscTogglePanels", "1") == "1"
 	AppConfig.TerminalCtrlNWorkspace = ini.GetString("Panel", "TerminalCtrlNWorkspace", "1") == "1"
 	AppConfig.KeepTerminalCursor = ini.GetString("Panel", "KeepTerminalCursor", "0") == "1"
+	AppConfig.ConsoleMode = ini.GetString("Panel", "ConsoleMode", "own")
+	AppConfig.ConsoleOverlayUI = ini.GetString("Panel", "ConsoleOverlayUI", "0") == "1"
 	AppConfig.CommandLineAutoComplete = ini.GetString("Panel", "CommandLineAutoComplete", "1") == "1"
 	if mode := ini.GetString("Panel", "NavigationMode", ""); mode != "" {
 		AppConfig.NavigationMode = ParsePanelNavigationMode(mode)
@@ -635,6 +641,8 @@ func SaveConfig() {
 	sb.WriteString(fmt.Sprintf("EscTogglePanels = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.EscTogglePanels]))
 	sb.WriteString(fmt.Sprintf("TerminalCtrlNWorkspace = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.TerminalCtrlNWorkspace]))
 	sb.WriteString(fmt.Sprintf("KeepTerminalCursor = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.KeepTerminalCursor]))
+	sb.WriteString(fmt.Sprintf("ConsoleMode = %s\n", AppConfig.ConsoleMode))
+	sb.WriteString(fmt.Sprintf("ConsoleOverlayUI = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.ConsoleOverlayUI]))
 	sb.WriteString(fmt.Sprintf("CommandLineAutoComplete = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.CommandLineAutoComplete]))
 	sb.WriteString(fmt.Sprintf("NavigationMode = %s\n", AppConfig.NavigationMode.String()))
 	sb.WriteString(fmt.Sprintf("SearchCommandStayFocused = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.SearchCommandStayFocused]))
