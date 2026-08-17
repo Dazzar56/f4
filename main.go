@@ -16,6 +16,8 @@ import (
 	"github.com/unxed/vtui"
 )
 
+// SelectedTTYBackend holds the user-chosen or auto-detected console renderer name ("ansi" or "winapi").
+var SelectedTTYBackend string
 func main() {
 	vtui.AppName = "f4"
 	installConsoleCtrlHandler()
@@ -105,6 +107,7 @@ func main() {
 	var guiMode bool
 	var guiBackend string
 	var ttyMode bool
+	var ttyBackend string
 	var version bool
 	var print_help bool
 	var attachedMode bool
@@ -191,6 +194,12 @@ func main() {
 			return
 		case "--tty":
 			ttyMode = true
+			if flagVal != "" {
+				ttyBackend = flagVal
+			} else if i+1 < len(os.Args) && !strings.HasPrefix(os.Args[i+1], "-") {
+				ttyBackend = os.Args[i+1]
+				i++
+			}
 		case "--attached":
 			attachedMode = true
 		case "--sudo-dispatcher":
@@ -227,7 +236,8 @@ The following switches may be used in the command line:
  --server [serverPath]
  --new-plugin [pluginName]
  -test-plugins          Plugin test mode
- --tty                  Force run in TTY-mode
+ --tty [Backend]        Force run in TTY-mode
+                         [Backend] values: "ansi", "winapi" (or "win32")
 
 Details see in build-in help (F1 inside f4)
 and in project home: https://github.com/unxed/f4
@@ -269,6 +279,12 @@ see in vtinput project: https://github.com/unxed/vtinput
 		defer pprof.StopCPUProfile()
 	}
 
+	if ttyBackend != "" {
+		SelectedTTYBackend = ttyBackend
+	} else {
+		SelectedTTYBackend = vtui.DefaultConsoleBackend()
+	}
+
 	if ttyMode {
 		ManageSessions()
 		return
@@ -305,6 +321,10 @@ see in vtinput project: https://github.com/unxed/vtinput
 }
 
 func shouldTryGui() bool {
+	if vtui.IsWine() {
+		// Under Wine, default to TTY mode because graphical backends (gogpu) are not yet functional.
+		return false
+	}
 	if runtime.GOOS == "windows" {
 		// On Windows, we compile separate binaries for console (f4.exe) and GUI (f4-gui.exe).
 		// We do not auto-detect GUI mode; it must be requested via filename or --gui flag.
@@ -317,6 +337,9 @@ func shouldTryGui() bool {
 }
 
 func tryRunDefaultGui() error {
+	if vtui.IsWine() {
+		return fmt.Errorf("GUI backends disabled under Wine")
+	}
 	var errs []string
 	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
 		vtui.DebugLog("GUI_AUTO: Trying gogpu...")
@@ -378,6 +401,9 @@ func InitCore() *vtui.ScreenBuf {
 	}
 
 	scr := vtui.NewScreenBuf()
+	if SelectedTTYBackend == "winapi" || SelectedTTYBackend == "win32" {
+		scr.Renderer = vtui.NewWin32ConsoleRenderer(scr)
+	}
 	scr.AllocBuf(width, height)
 
 	vtui.FrameManager.Init(scr)
