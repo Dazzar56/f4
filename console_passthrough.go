@@ -29,6 +29,11 @@ func (pf *PanelsFrame) isHostConsoleActive() bool {
 	return pf.hostConsoleActive
 }
 
+// SetBusy sets the frame's busy state to suppress rendering during host console operations.
+func (pf *PanelsFrame) SetBusy(busy bool) {
+	pf.Busy = busy
+}
+
 // overlayLines returns the number of bottom rows reserved for the f4 overlay (0, 1, or 2).
 func (pf *PanelsFrame) overlayLines() int {
 	if !AppConfig.ConsoleOverlayUI {

@@ -1513,6 +1513,12 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 				pf.addCommandHistory(historyCmd)
 				pf.cmdLine.Edit.HistoryPos = -1
 
+				useDir := isOS || isPty
+				actualDir := ""
+				if useDir {
+					actualDir = dir
+				}
+
 				if pf.shellMode == ShellModeSimpleInline {
 					pf.runSimpleInlineCommand(actualDir, historyCmd)
 					return
@@ -1526,13 +1532,6 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 				if activePty != nil {
 					cmd := name
 					var cmdToWire string
-
-					useDir := isOS || isPty
-
-					actualDir := ""
-					if useDir {
-						actualDir = dir
-					}
 
 					if isWindowsShell {
 						// Combine directory sync with the command to allow excision
