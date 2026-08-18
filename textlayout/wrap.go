@@ -170,13 +170,18 @@ func (we *WrapEngine) GetFragments(logLineIdx int) []LineFragment {
 		width := 0
 		tmpData := lineData
 		for len(tmpData) > 0 {
-			r, size := utf8.DecodeRune(tmpData)
-			rw := 1
-			if r == '\t' {
-				rw = we.tabSize - (width % we.tabSize)
-			} else if r >= 0x7F {
-				rw = runewidth.RuneWidth(r)
+			b := tmpData[0]
+			if b < 0x80 {
+				if b == '\t' {
+					width += we.tabSize - (width % we.tabSize)
+				} else {
+					width++
+				}
+				tmpData = tmpData[1:]
+				continue
 			}
+			r, size := utf8.DecodeRune(tmpData)
+			rw := runewidth.RuneWidth(r)
 			if rw < 0 {
 				rw = 1
 			}
@@ -210,15 +215,23 @@ func (we *WrapEngine) GetFragments(logLineIdx int) []LineFragment {
 
 		scanPos := bytePos
 		for scanPos < dataLen {
-			r, size := utf8.DecodeRune(lineData[scanPos:])
-			w := 1
-			if r == '\t' {
-				w = we.tabSize - ((cumulativeVisualWidth + visualWidth) % we.tabSize)
-			} else if r >= 0x7F {
+			b := lineData[scanPos]
+			var r rune
+			var size, w int
+			if b < 0x80 {
+				r = rune(b)
+				size = 1
+				if b == '\t' {
+					w = we.tabSize - ((cumulativeVisualWidth + visualWidth) % we.tabSize)
+				} else {
+					w = 1
+				}
+			} else {
+				r, size = utf8.DecodeRune(lineData[scanPos:])
 				w = runewidth.RuneWidth(r)
-			}
-			if w <= 0 {
-				w = 1
+				if w <= 0 {
+					w = 1
+				}
 			}
 
 			if visualWidth+w > we.wrapWidth {
@@ -373,7 +386,7 @@ func (we *WrapEngine) GetLogLineAtVisualRow(visualRow int) (logLineIdx int, frag
 			break
 		}
 		// Expand cache in chunks
-		nextTarget := we.validUntil + 100
+		nextTarget := we.validUntil + 500
 		if nextTarget >= lineCount {
 			nextTarget = lineCount - 1
 		}
