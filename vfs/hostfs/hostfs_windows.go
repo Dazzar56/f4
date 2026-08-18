@@ -2,18 +2,21 @@
 
 // See hostfs_posix.go for the package doc.
 //
-// This is still Stage E1 shape (WINE.md §13.9): every function forwards to
-// os.* exactly as os_vfs.go did before this package existed -- behavior
-// does not change on any platform yet. The actual personality switch
-// (posix via libwinescape vs windows via os.*) is Stage E3, landing in a
-// separate commit once the libwinescape-backed implementation of the File
-// interface below exists and has been verified under live Wine.
+// WINE.md Stage E3: every function now genuinely branches on
+// vfs/hostmode.Posix(). In posix mode, file operations go through
+// libwinescape (hostfs_winescape.go) -- a raw fd, real POSIX errno, no
+// Win32 anywhere in the call chain. In windows mode, behavior is
+// byte-for-byte what it was before this package existed: plain os.*.
 package hostfs
 
 import (
 	"io/fs"
 	"os"
 	"time"
+
+	winescape "github.com/unxed/libwinescape/go"
+
+	"github.com/unxed/f4/vfs/hostmode"
 )
 
 // File -- see hostfs_posix.go. Declared identically here since Go doesn't
@@ -32,30 +35,137 @@ type File interface {
 	Close() error
 }
 
-func Open(name string) (File, error) { return os.Open(name) }
+func Open(name string) (File, error) {
+	if hostmode.Posix() {
+		return winescapeOpenFile(name, os.O_RDONLY, 0)
+	}
+	return os.Open(name)
+}
 
 func OpenFile(name string, flag int, perm os.FileMode) (File, error) {
+	if hostmode.Posix() {
+		return winescapeOpenFile(name, flag, perm)
+	}
 	return os.OpenFile(name, flag, perm)
 }
 
-func Stat(name string) (os.FileInfo, error)  { return os.Stat(name) }
-func Lstat(name string) (os.FileInfo, error) { return os.Lstat(name) }
+func Stat(name string) (os.FileInfo, error) {
+	if hostmode.Posix() {
+		var st winescape.Stat_t
+		if err := winescape.Stat(name, &st); err != nil {
+			return nil, err
+		}
+		return wineStatToInfo("", name, st), nil
+	}
+	return os.Stat(name)
+}
 
-func ReadDir(name string) ([]fs.DirEntry, error) { return os.ReadDir(name) }
+func Lstat(name string) (os.FileInfo, error) {
+	if hostmode.Posix() {
+		var st winescape.Stat_t
+		if err := winescape.Lstat(name, &st); err != nil {
+			return nil, err
+		}
+		return wineStatToInfo("", name, st), nil
+	}
+	return os.Lstat(name)
+}
 
-func Readlink(name string) (string, error)  { return os.Readlink(name) }
-func Symlink(oldname, newname string) error { return os.Symlink(oldname, newname) }
-func Link(oldname, newname string) error    { return os.Link(oldname, newname) }
+func ReadDir(name string) ([]fs.DirEntry, error) {
+	if hostmode.Posix() {
+		return winescapeReadDir(name)
+	}
+	return os.ReadDir(name)
+}
 
-func Rename(oldpath, newpath string) error         { return os.Rename(oldpath, newpath) }
-func RemoveAll(path string) error                  { return os.RemoveAll(path) }
-func Remove(name string) error                     { return os.Remove(name) }
-func MkdirAll(path string, perm os.FileMode) error { return os.MkdirAll(path, perm) }
-func Mkdir(name string, perm os.FileMode) error    { return os.Mkdir(name, perm) }
+func Readlink(name string) (string, error) {
+	if hostmode.Posix() {
+		buf := make([]byte, 4096)
+		n, err := winescape.Readlink(name, buf)
+		if err != nil {
+			return "", err
+		}
+		return string(buf[:n]), nil
+	}
+	return os.Readlink(name)
+}
 
-func Chmod(name string, mode os.FileMode) error { return os.Chmod(name, mode) }
-func Chown(name string, uid, gid int) error     { return os.Chown(name, uid, gid) }
-func Lchown(name string, uid, gid int) error    { return os.Lchown(name, uid, gid) }
+func Symlink(oldname, newname string) error {
+	if hostmode.Posix() {
+		return winescape.Symlink(oldname, newname)
+	}
+	return os.Symlink(oldname, newname)
+}
+
+func Link(oldname, newname string) error {
+	if hostmode.Posix() {
+		// libwinescape does not expose link(2)/linkat(2) yet. Fail plainly
+		// rather than silently falling back to a Win32 hardlink across what
+		// is, in posix mode, not even a Win32-shaped path.
+		return errNotImplemented("Link")
+	}
+	return os.Link(oldname, newname)
+}
+
+func Rename(oldpath, newpath string) error {
+	if hostmode.Posix() {
+		return winescape.Rename(oldpath, newpath)
+	}
+	return os.Rename(oldpath, newpath)
+}
+
+func RemoveAll(path string) error {
+	if hostmode.Posix() {
+		return winescape.RemoveAll(path)
+	}
+	return os.RemoveAll(path)
+}
+
+func Remove(name string) error {
+	if hostmode.Posix() {
+		return winescapeRemove(name)
+	}
+	return os.Remove(name)
+}
+
+func MkdirAll(path string, perm os.FileMode) error {
+	if hostmode.Posix() {
+		return winescape.MkdirAll(path, uint32(perm.Perm()))
+	}
+	return os.MkdirAll(path, perm)
+}
+
+func Mkdir(name string, perm os.FileMode) error {
+	if hostmode.Posix() {
+		return winescape.Mkdir(name, uint32(perm.Perm()))
+	}
+	return os.Mkdir(name, perm)
+}
+
+func Chmod(name string, mode os.FileMode) error {
+	if hostmode.Posix() {
+		return winescape.Chmod(name, uint32(mode.Perm()))
+	}
+	return os.Chmod(name, mode)
+}
+
+func Chown(name string, uid, gid int) error {
+	if hostmode.Posix() {
+		return winescape.Chown(name, uid, gid)
+	}
+	return os.Chown(name, uid, gid)
+}
+
+func Lchown(name string, uid, gid int) error {
+	if hostmode.Posix() {
+		return winescape.Lchown(name, uid, gid)
+	}
+	return os.Lchown(name, uid, gid)
+}
+
 func Chtimes(name string, atime, mtime time.Time) error {
+	if hostmode.Posix() {
+		return winescape.Chtimes(name, atime, mtime)
+	}
 	return os.Chtimes(name, atime, mtime)
 }
