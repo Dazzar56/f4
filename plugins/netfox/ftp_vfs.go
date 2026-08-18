@@ -287,7 +287,12 @@ func (v *FTPVFS) Create(ctx context.Context, p string) (io.WriteCloser, error) {
 }
 
 func (v *FTPVFS) ParentVFS() vfs.VFS { return v.parent }
-func (v *FTPVFS) Close() error       { return v.conn.Quit() }
+func (v *FTPVFS) Close() error {
+	if v == nil || v.conn == nil {
+		return nil
+	}
+	return v.conn.Quit()
+}
 func (v *FTPVFS) Clone() vfs.VFS {
 	return v
 }
@@ -316,7 +321,10 @@ func (p *ftpProvider) CanOpen(ctx context.Context, parent vfs.VFS, pth string) b
 }
 func (p *ftpProvider) Open(ctx context.Context, parent vfs.VFS, pth string) (vfs.VFS, error) {
 	w := parent.(*netFoxVFSWrapper)
-	f, _ := w.Open(ctx, pth)
+	f, err := w.Open(ctx, pth)
+	if err != nil {
+		return nil, err
+	}
 	defer f.Close()
 	var cfg NetFoxConfig
 	json.NewDecoder(ctxReader{f, ctx}).Decode(&cfg)
@@ -330,7 +338,11 @@ func (p *ftpProvider) Open(ctx context.Context, parent vfs.VFS, pth string) (vfs
 			timeout = t
 		}
 	}
-	return NewFTPVFS(parent, cfg.Host, port, cfg.User, cfg.Pass, timeout, cfg.Options, cfg.Codepage, cfg.Proxy())
+	res, err := NewFTPVFS(parent, cfg.Host, port, cfg.User, cfg.Pass, timeout, cfg.Options, cfg.Codepage, cfg.Proxy())
+	if err != nil {
+		return nil, err
+	}
+	return res, nil
 }
 
 type ftpProtocolHandler struct{}

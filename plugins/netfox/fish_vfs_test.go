@@ -965,3 +965,53 @@ func TestFishVFSServerToServerInfo(t *testing.T) {
 		t.Errorf("cloned ConnectionInfo mismatch: (%q, %q, %q, %t)", h2, p2, u2, ok2)
 	}
 }
+func TestFishVFSPtyRunCommandWindowsRoot(t *testing.T) {
+	sess := fishplus.NewSession(nil, nil, nil)
+	v := &FishVFS{
+		conn: &fishConn{
+			client: fishplus.NewClient(sess),
+		},
+	}
+	// Default (non-Windows peer)
+	cmd := string(v.PtyRunCommand("/", "ls"))
+	if !strings.Contains(cmd, "cd '/' && ls") {
+		t.Errorf("POSIX PtyRunCommand = %q", cmd)
+	}
+
+	// Fake features banner for Windows peer
+	sessFeatures, err := fishplus.ParseBannerForTest("FISHPLUS 1 flavor:pwsh")
+	if err == nil {
+		sess.SetFeaturesForTest(sessFeatures)
+		if !v.peerIsWindows() {
+			t.Fatal("expected peerIsWindows to be true")
+		}
+		info := v.CommandRunnerInfo()
+		if info.Dialect != vfs.CommandDialectCmd {
+			t.Errorf("Windows runner dialect = %v, want CommandDialectCmd", info.Dialect)
+		}
+		// At virtual root "/", winDir is "" so command runs directly without cd
+		winCmdRoot := string(v.PtyRunCommand("/", "dir"))
+		if winCmdRoot != "dir\r" {
+			t.Errorf("Windows root PtyRunCommand = %q, want \"dir\\r\"", winCmdRoot)
+		}
+		// Inside /c/Users, cd /d "C:\Users" & dir
+		winCmdSub := string(v.PtyRunCommand("/c/Users", "dir"))
+		if !strings.Contains(winCmdSub, `cd /d "C:\Users" & dir`) {
+			t.Errorf("Windows subfolder PtyRunCommand = %q", winCmdSub)
+		}
+	}
+}
+func TestFishVFSCloseNilReceiver(t *testing.T) {
+	var v *FishVFS
+	if err := v.Close(); err != nil {
+		t.Errorf("nil FishVFS.Close() returned error: %v", err)
+	}
+	var s *SFTPVFS
+	if err := s.Close(); err != nil {
+		t.Errorf("nil SFTPVFS.Close() returned error: %v", err)
+	}
+	var f *FTPVFS
+	if err := f.Close(); err != nil {
+		t.Errorf("nil FTPVFS.Close() returned error: %v", err)
+	}
+}

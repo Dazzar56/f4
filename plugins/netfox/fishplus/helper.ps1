@@ -1755,8 +1755,8 @@ function Cmd-JStart {
                         $latin1 = [System.Text.Encoding]::GetEncoding(28591)
                         $strCmp = if ($cfg.Ci) { [System.StringComparison]::OrdinalIgnoreCase } else { [System.StringComparison]::Ordinal }
                         $chunkSize = $cfg.ChunkSize
-                        $overlap = if ($cfg.Fixed) { [Math]::Max(0, $cfg.BytePat.Length - 1) } else { 8192 }
-                        $emitInterval = [TimeSpan]::FromMilliseconds($cfg.EmitMs)
+                        $overlap = if ($cfg.Fixed) { [System.Math]::Max(0, $cfg.BytePat.Length - 1) } else { 8192 }
+                        $emitInterval = [System.TimeSpan]::FromMilliseconds($cfg.EmitMs)
                         # ISO-8859-1 keeps the WinToPosix conversion
                         # inline: same rule as helper.ps1's top-level
                         # Convert-WinToPosix, minus a bit of the
@@ -1801,7 +1801,7 @@ function Cmd-JStart {
                                         try {
                                             $state.Scanned += $localScanned
                                             $state.LastPath = $fi.FullName.Replace('\', '/')
-                                            $tnow = [DateTime]::UtcNow
+                                            $tnow = [System.DateTime]::UtcNow
                                             if (($tnow - $state.LastEmit) -ge $emitInterval) {
                                                 $state.LastEmit = $tnow
                                                 $writer.WriteLine("P $($state.Scanned) $($state.Count) $($state.LastPath)")
@@ -1918,12 +1918,12 @@ function Cmd-JStart {
                         # Pool cap: min(top-level count, CPU count) so a
                         # wide root uses every core but a narrow one
                         # does not spin up 32 idle runspaces.
-                        $workerCap = [Math]::Max(1, [Environment]::ProcessorCount)
-                        $workerCount = [Math]::Min($topSubs.Count, $workerCap)
+                        $workerCap = [System.Math]::Max(1, [System.Environment]::ProcessorCount)
+                        $workerCount = [System.Math]::Min($topSubs.Count, $workerCap)
                         $pool = $null
                         $workers = New-Object System.Collections.Generic.List[object]
                         if ($workerCount -gt 0) {
-                            $pool = [runspacefactory]::CreateRunspacePool(1, $workerCount)
+                            $pool = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspacePool(1, $workerCount)
                             $pool.Open()
                             foreach ($sd in $topSubs) {
                                 $wps = [System.Management.Automation.PowerShell]::Create()

@@ -1116,8 +1116,12 @@ func (v *FishVFS) CommandRunnerAvailable() bool {
 // CommandRunnerInfo reports the remote shell syntax and the transport's real
 // concurrency limit. A FISH+ connection serializes protocol requests, so
 // advertising more workers would only reorder queued requests locally.
-func (*FishVFS) CommandRunnerInfo() vfs.CommandRunnerInfo {
-	return vfs.CommandRunnerInfo{Dialect: vfs.CommandDialectPOSIX, MaxParallel: 1}
+func (v *FishVFS) CommandRunnerInfo() vfs.CommandRunnerInfo {
+	dialect := vfs.CommandDialectPOSIX
+	if v != nil && v.peerIsWindows() {
+		dialect = vfs.CommandDialectCmd
+	}
+	return vfs.CommandRunnerInfo{Dialect: dialect, MaxParallel: 1}
 }
 
 // FindDuplicates implements vfs.DuplicateFinder. Only the paths of the files
@@ -1273,6 +1277,9 @@ var (
 // user, and closing the same view twice is harmless: a panel may well be
 // closed by both its own teardown and the frame that owned it.
 func (v *FishVFS) Close() error {
+	if v == nil {
+		return nil
+	}
 	var err error
 	v.once.Do(func() {
 		if v.conn != nil {
@@ -1336,7 +1343,11 @@ func (p *fishProvider) Open(ctx context.Context, parent vfs.VFS, pth string) (vf
 			timeout = t
 		}
 	}
-	return NewFishVFS(parent, cfg.Host, port, cfg.User, cfg.Pass, timeout, cfg.Proxy())
+	res, err := NewFishVFS(parent, cfg.Host, port, cfg.User, cfg.Pass, timeout, cfg.Proxy())
+	if err != nil {
+		return nil, err
+	}
+	return res, nil
 }
 
 type fishProtocolHandler struct{}

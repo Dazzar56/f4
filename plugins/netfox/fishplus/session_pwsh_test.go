@@ -275,3 +275,89 @@ func TestHelperAgainstLocalPwshEnumAndRead(t *testing.T) {
 		t.Errorf("read-back %q returned %q, want %q", newFile, string(back), string(newBody))
 	}
 }
+func TestHelperAgainstLocalPwshFind(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("see TestHelperAgainstLocalPwsh")
+	}
+	pwsh, err := exec.LookPath("pwsh")
+	if err != nil {
+		t.Skip("pwsh not on PATH")
+	}
+	dir := t.TempDir()
+	sub := filepath.Join(dir, "subdir")
+	if err := os.MkdirAll(sub, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "one.txt"), []byte("needle here\n"), 0644); err != nil {
+		t.Fatalf("write one: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sub, "two.txt"), []byte("other text\n"), 0644); err != nil {
+		t.Fatalf("write two: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sub, "skip.bin"), []byte("needle binary\n"), 0644); err != nil {
+		t.Fatalf("write skip: %v", err)
+	}
+
+	cmd := exec.Command(pwsh, "-NoProfile", "-NoLogo")
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		t.Fatalf("stdin: %v", err)
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatalf("stdout: %v", err)
+	}
+	stderr := &syncBuffer{}
+	cmd.Stderr = stderr
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start %s: %v", pwsh, err)
+	}
+	sess := NewSession(stdin, stdout, stdin)
+	t.Cleanup(func() {
+		sess.Close()
+		done := make(chan struct{})
+		go func() { cmd.Wait(); close(done) }()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			cmd.Process.Kill()
+		}
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := sess.HandshakeWithOptions(ctx, HandshakeOptions{Bootstrap: BootstrapBase64LinePwsh}); err != nil {
+		t.Fatalf("handshake: %v (pwsh stderr: %s)", err, stderr.String())
+	}
+
+	client := NewClient(sess)
+	wireDir := "/" + strings.TrimPrefix(strings.TrimPrefix(dir, "/"), "\\")
+	wireDir = strings.ReplaceAll(wireDir, "\\", "/")
+
+	// 1. Mask search: should find one.txt and two.txt
+	var progressReports int
+	hits, err := client.Find(ctx, wireDir, FindOptions{
+		Masks: []string{"*.txt"},
+		Progress: func(p FindProgress) {
+			progressReports++
+		},
+	})
+	if err != nil {
+		t.Fatalf("Find by mask: %v (pwsh stderr: %s)", err, stderr.String())
+	}
+	if len(hits) != 2 {
+		t.Fatalf("Find by mask found %d entries, want 2: %+v", len(hits), hits)
+	}
+
+	// 2. Content search: should find one.txt only
+	contentHits, err := client.Find(ctx, wireDir, FindOptions{
+		Masks: []string{"*.txt"},
+		Text:  "needle",
+		Fixed: true,
+	})
+	if err != nil {
+		t.Fatalf("Find with content filter: %v (pwsh stderr: %s)", err, stderr.String())
+	}
+	if len(contentHits) != 1 || !strings.HasSuffix(contentHits[0].Name, "one.txt") {
+		t.Fatalf("Find with content filter returned %+v, want one.txt", contentHits)
+	}
+}

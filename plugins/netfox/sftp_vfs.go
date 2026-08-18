@@ -368,6 +368,9 @@ func (v *SFTPVFS) Create(ctx context.Context, p string) (io.WriteCloser, error) 
 }
 func (v *SFTPVFS) ParentVFS() vfs.VFS { return v.parent }
 func (v *SFTPVFS) Close() error {
+	if v == nil {
+		return nil
+	}
 	var err error
 	v.closeOnce.Do(func() {
 		if v.shared != nil {
@@ -693,7 +696,10 @@ func (p *sftpProvider) CanOpen(ctx context.Context, parent vfs.VFS, pth string) 
 }
 func (p *sftpProvider) Open(ctx context.Context, parent vfs.VFS, pth string) (vfs.VFS, error) {
 	w := parent.(*netFoxVFSWrapper)
-	f, _ := w.Open(ctx, pth)
+	f, err := w.Open(ctx, pth)
+	if err != nil {
+		return nil, err
+	}
 	defer f.Close()
 	var cfg NetFoxConfig
 	json.NewDecoder(ctxReader{f, ctx}).Decode(&cfg)
@@ -707,7 +713,11 @@ func (p *sftpProvider) Open(ctx context.Context, parent vfs.VFS, pth string) (vf
 			timeout = t
 		}
 	}
-	return NewSFTPVFS(parent, cfg.Host, port, cfg.User, cfg.Pass, timeout, cfg.Codepage, cfg.Proxy())
+	res, err := NewSFTPVFS(parent, cfg.Host, port, cfg.User, cfg.Pass, timeout, cfg.Codepage, cfg.Proxy())
+	if err != nil {
+		return nil, err
+	}
+	return res, nil
 }
 
 type sftpProtocolHandler struct{}

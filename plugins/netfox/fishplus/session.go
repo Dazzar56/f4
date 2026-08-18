@@ -337,6 +337,18 @@ func parseBanner(msg string) (Features, error) {
 	return feats, nil
 }
 
+// ParseBannerForTest exports banner parsing for testing.
+func ParseBannerForTest(msg string) (Features, error) {
+	return parseBanner(msg)
+}
+
+// SetFeaturesForTest sets session features for testing.
+func (s *Session) SetFeaturesForTest(f Features) {
+	s.featuresMu.Lock()
+	s.feats = f
+	s.featuresMu.Unlock()
+}
+
 // maxBootstrapLines bounds how much login noise is skipped while waiting
 // for the shell to report itself ready. A motd is long; it is not endless.
 const maxBootstrapLines = 1000
