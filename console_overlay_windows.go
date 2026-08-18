@@ -71,11 +71,20 @@ var (
 	overlayLastPopupState  overlayPopupState
 )
 
-const (
-	overlayAttrPopupFrame = uint16(0x1F) // white on blue (Far classic dialog box)
-	overlayAttrPopupText  = uint16(0x1E) // yellow on blue
-	overlayAttrPopupSel   = uint16(0x30) // black on cyan
-)
+// popupColors reads the actual colors AutoCompleteMenu uses when drawn
+// normally (Palette[ColDialogBox]/[ColDialogText]/[ColDialogSelectedButton],
+// see vtui's autocomplete.go NewAutoCompleteMenu) and converts them to Win32
+// Console attributes. Used instead of hardcoded bytes so the console-view
+// popup matches the current theme instead of a fixed "classic Far" blue --
+// previously frame and text were guessed wrong (white/yellow on blue instead
+// of the dialog's actual black on light gray); only the selection color
+// happened to match by coincidence.
+func popupColors() (frame, text, sel uint16) {
+	frame = vtui.AttrToWin32Attr(vtui.Palette[vtui.ColDialogBox], nil)
+	text = vtui.AttrToWin32Attr(vtui.Palette[vtui.ColDialogText], nil)
+	sel = vtui.AttrToWin32Attr(vtui.Palette[vtui.ColDialogSelectedButton], nil)
+	return
+}
 
 func winConsoleOverlayAvailable() bool { return true }
 
@@ -271,6 +280,10 @@ func winDrawConsoleOverlay(ov consoleOverlayContent) {
 
 	// 1. Determine popup geometry and changes
 	hasPopup := ov.Popup != nil && len(ov.Popup.Items) > 0 && ov.Popup.Width > 0 && ov.Popup.Height > 0
+	var popupFrameAttr, popupTextAttr, popupSelAttr uint16
+	if hasPopup {
+		popupFrameAttr, popupTextAttr, popupSelAttr = popupColors()
+	}
 	var newPopupState overlayPopupState
 	if hasPopup {
 		popW := int16(ov.Popup.Width)
@@ -357,21 +370,21 @@ func winDrawConsoleOverlay(ov consoleOverlayContent) {
 			// Draw popup box
 			popCells := make([]simpleCharInfo, pW*pH)
 			for i := range popCells {
-				popCells[i] = simpleCharInfo{UnicodeChar: ' ', Attributes: overlayAttrPopupText}
+				popCells[i] = simpleCharInfo{UnicodeChar: ' ', Attributes: popupTextAttr}
 			}
 			// Border
 			for cx := 0; cx < pW; cx++ {
-				popCells[cx] = simpleCharInfo{UnicodeChar: 0x2500, Attributes: overlayAttrPopupFrame}
-				popCells[(pH-1)*pW+cx] = simpleCharInfo{UnicodeChar: 0x2500, Attributes: overlayAttrPopupFrame}
+				popCells[cx] = simpleCharInfo{UnicodeChar: 0x2500, Attributes: popupFrameAttr}
+				popCells[(pH-1)*pW+cx] = simpleCharInfo{UnicodeChar: 0x2500, Attributes: popupFrameAttr}
 			}
 			for cy := 0; cy < pH; cy++ {
-				popCells[cy*pW] = simpleCharInfo{UnicodeChar: 0x2502, Attributes: overlayAttrPopupFrame}
-				popCells[cy*pW+pW-1] = simpleCharInfo{UnicodeChar: 0x2502, Attributes: overlayAttrPopupFrame}
+				popCells[cy*pW] = simpleCharInfo{UnicodeChar: 0x2502, Attributes: popupFrameAttr}
+				popCells[cy*pW+pW-1] = simpleCharInfo{UnicodeChar: 0x2502, Attributes: popupFrameAttr}
 			}
-			popCells[0] = simpleCharInfo{UnicodeChar: 0x250C, Attributes: overlayAttrPopupFrame}
-			popCells[pW-1] = simpleCharInfo{UnicodeChar: 0x2510, Attributes: overlayAttrPopupFrame}
-			popCells[(pH-1)*pW] = simpleCharInfo{UnicodeChar: 0x2514, Attributes: overlayAttrPopupFrame}
-			popCells[(pH-1)*pW+pW-1] = simpleCharInfo{UnicodeChar: 0x2518, Attributes: overlayAttrPopupFrame}
+			popCells[0] = simpleCharInfo{UnicodeChar: 0x250C, Attributes: popupFrameAttr}
+			popCells[pW-1] = simpleCharInfo{UnicodeChar: 0x2510, Attributes: popupFrameAttr}
+			popCells[(pH-1)*pW] = simpleCharInfo{UnicodeChar: 0x2514, Attributes: popupFrameAttr}
+			popCells[(pH-1)*pW+pW-1] = simpleCharInfo{UnicodeChar: 0x2518, Attributes: popupFrameAttr}
 
 			// Items
 			for idx, itemText := range ov.Popup.Items {
@@ -379,9 +392,9 @@ func winDrawConsoleOverlay(ov consoleOverlayContent) {
 				if rowIdx >= pH-1 {
 					break
 				}
-				attr := overlayAttrPopupText
+				attr := popupTextAttr
 				if idx == ov.Popup.SelectPos {
-					attr = overlayAttrPopupSel
+					attr = popupSelAttr
 				}
 				for col := 1; col < pW-1; col++ {
 					popCells[rowIdx*pW+col] = simpleCharInfo{UnicodeChar: ' ', Attributes: attr}
@@ -409,29 +422,29 @@ func winDrawConsoleOverlay(ov consoleOverlayContent) {
 
 		popCells := make([]simpleCharInfo, pW*pH)
 		for i := range popCells {
-			popCells[i] = simpleCharInfo{UnicodeChar: ' ', Attributes: overlayAttrPopupText}
+			popCells[i] = simpleCharInfo{UnicodeChar: ' ', Attributes: popupTextAttr}
 		}
 		for cx := 0; cx < pW; cx++ {
-			popCells[cx] = simpleCharInfo{UnicodeChar: 0x2500, Attributes: overlayAttrPopupFrame}
-			popCells[(pH-1)*pW+cx] = simpleCharInfo{UnicodeChar: 0x2500, Attributes: overlayAttrPopupFrame}
+			popCells[cx] = simpleCharInfo{UnicodeChar: 0x2500, Attributes: popupFrameAttr}
+			popCells[(pH-1)*pW+cx] = simpleCharInfo{UnicodeChar: 0x2500, Attributes: popupFrameAttr}
 		}
 		for cy := 0; cy < pH; cy++ {
-			popCells[cy*pW] = simpleCharInfo{UnicodeChar: 0x2502, Attributes: overlayAttrPopupFrame}
-			popCells[cy*pW+pW-1] = simpleCharInfo{UnicodeChar: 0x2502, Attributes: overlayAttrPopupFrame}
+			popCells[cy*pW] = simpleCharInfo{UnicodeChar: 0x2502, Attributes: popupFrameAttr}
+			popCells[cy*pW+pW-1] = simpleCharInfo{UnicodeChar: 0x2502, Attributes: popupFrameAttr}
 		}
-		popCells[0] = simpleCharInfo{UnicodeChar: 0x250C, Attributes: overlayAttrPopupFrame}
-		popCells[pW-1] = simpleCharInfo{UnicodeChar: 0x2510, Attributes: overlayAttrPopupFrame}
-		popCells[(pH-1)*pW] = simpleCharInfo{UnicodeChar: 0x2514, Attributes: overlayAttrPopupFrame}
-		popCells[(pH-1)*pW+pW-1] = simpleCharInfo{UnicodeChar: 0x2518, Attributes: overlayAttrPopupFrame}
+		popCells[0] = simpleCharInfo{UnicodeChar: 0x250C, Attributes: popupFrameAttr}
+		popCells[pW-1] = simpleCharInfo{UnicodeChar: 0x2510, Attributes: popupFrameAttr}
+		popCells[(pH-1)*pW] = simpleCharInfo{UnicodeChar: 0x2514, Attributes: popupFrameAttr}
+		popCells[(pH-1)*pW+pW-1] = simpleCharInfo{UnicodeChar: 0x2518, Attributes: popupFrameAttr}
 
 		for idx, itemText := range ov.Popup.Items {
 			rowIdx := idx + 1
 			if rowIdx >= pH-1 {
 				break
 			}
-			attr := overlayAttrPopupText
+			attr := popupTextAttr
 			if idx == ov.Popup.SelectPos {
-				attr = overlayAttrPopupSel
+				attr = popupSelAttr
 			}
 			for col := 1; col < pW-1; col++ {
 				popCells[rowIdx*pW+col] = simpleCharInfo{UnicodeChar: ' ', Attributes: attr}
