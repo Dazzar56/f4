@@ -1,6 +1,8 @@
 package main
 
 import (
+	"runtime/debug"
+
 	"github.com/unxed/vtui"
 )
 
@@ -15,4 +17,11 @@ func ScreenRow(scr *vtui.ScreenBuf, y, x1, x2 int) string {
 		}
 	}
 	return string(runes)
+}
+
+// ReleaseHeavyMemory forces GC and releases OS memory when heavy sessions (>50MB) close.
+func ReleaseHeavyMemory(sizeBytes int64) {
+	if sizeBytes > 50*1024*1024 {
+		debug.FreeOSMemory()
+	}
 }

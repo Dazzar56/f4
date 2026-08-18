@@ -294,10 +294,24 @@ func (ev *EditorView) Close() {
 	if closer, ok := ev.highlighter.(io.Closer); ok {
 		closer.Close()
 	}
+	var size int
+	if ev.pt != nil {
+		size = ev.pt.Size()
+	}
+	ev.undoStack = nil
+	ev.redoStack = nil
+	ev.lineStates = nil
+	ev.renderBytes = nil
+	ev.renderCells = nil
+	ev.pasteBuffer = nil
+	ev.searchSnapshot = nil
+	ev.fadeBuf = nil
+	ev.scrollBar = nil
 	ev.BaseFrame.Close()
 	if ev.OnClose != nil {
 		ev.OnClose()
 	}
+	ReleaseHeavyMemory(int64(size))
 }
 
 func NewEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string) *EditorView {

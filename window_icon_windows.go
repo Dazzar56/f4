@@ -29,7 +29,7 @@ const (
 	dwmwaUseImmersiveDarkMode = 20
 	themeRegistryPath         = `Software\Microsoft\Windows\CurrentVersion\Themes\Personalize`
 	themeRegistryValue        = "AppsUseLightTheme"
-	themePollInterval         = 500 * time.Millisecond
+	themePollInterval         = 5 * time.Second
 )
 
 var (
