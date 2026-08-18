@@ -1316,6 +1316,7 @@ func init() {
 				if !pf.showPanels {
 					vtui.SetAltScreen(false)
 					pf.SetBusy(true)
+					pf.syncAutoCompleteSuppression()
 					if w, h, err := vtui.GetTerminalSize(); err == nil && w > 0 && h > 0 {
 						pf.lastW, pf.lastH = w, h
 					}
@@ -1327,6 +1328,7 @@ func init() {
 					pf.clearConsoleOverlay()
 					vtui.SetAltScreen(true)
 					pf.SetBusy(false)
+					pf.syncAutoCompleteSuppression()
 					if pf.menuBar != nil && pf.lastW > 0 && pf.lastH > 0 {
 						pf.ResizeConsole(pf.lastW, pf.lastH)
 					}

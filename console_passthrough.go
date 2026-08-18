@@ -280,6 +280,22 @@ func (pf *PanelsFrame) emitAnsiConsoleOverlay(ov consoleOverlayContent) {
 	vtui.WritePassthrough([]byte(sb.String()))
 }
 
+// syncAutoCompleteSuppression keeps CommandLine.AutoCompleteSuppressed in
+// step with where the popup can actually be drawn safely. winDrawConsoleOverlay
+// (console_overlay_windows.go) paints AutoCompleteMenu directly with the
+// Windows Console API, so it's safe there. The ANSI console-view path has no
+// such renderer yet -- pushing the menu there would go through vtui's normal
+// full-frame Show(), which is exactly the leak documented in WINE.md
+// §2c/§2j.5 (one frame of panels/keybar flashed onto the live console).
+// Suppress only in that gap; panels mode and the winapi console view are
+// unaffected.
+func (pf *PanelsFrame) syncAutoCompleteSuppression() {
+	if pf.cmdLine == nil {
+		return
+	}
+	pf.cmdLine.AutoCompleteSuppressed = pf.consoleViewActive() && !consoleOverlayUsesWinAPI()
+}
+
 // enterHostConsole switches the physical terminal to the primary screen and activates
 // live passthrough of PTY output directly to the host console.
 func (pf *PanelsFrame) enterHostConsole() {
@@ -293,6 +309,7 @@ func (pf *PanelsFrame) enterHostConsole() {
 	}
 	pf.hostConsoleActive = true
 	pf.hostConsoleMu.Unlock()
+	pf.syncAutoCompleteSuppression()
 
 	pf.SetBusy(true)
 	vtui.SetAltScreen(false)
@@ -317,6 +334,7 @@ func (pf *PanelsFrame) leaveHostConsole() {
 	}
 	pf.hostConsoleActive = false
 	pf.hostConsoleMu.Unlock()
+	pf.syncAutoCompleteSuppression()
 
 	// Protective reset sequence to clean up any terminal modes left by child applications
 	var resetSeq strings.Builder
