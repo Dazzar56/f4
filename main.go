@@ -566,7 +566,17 @@ func SetupUI() {
 		if handlePanelPathEditHotkey(e) {
 			return true
 		}
-		return handleHelpSearchHotkey(e)
+		if handleHelpSearchHotkey(e) {
+			return true
+		}
+		if panels.shellMode == ShellModeSimpleInline && panels.consoleViewActive() {
+			if e.Type == vtinput.KeyEventType && e.KeyDown {
+				vtui.FrameManager.PostTask(func() {
+					panels.drawConsoleOverlay()
+				})
+			}
+		}
+		return false
 	}
 
 	vtui.FrameManager.MenuBar = panels.menuBar
@@ -577,17 +587,6 @@ func SetupUI() {
 		}
 		UpdateWindowTitle(scr)
 		renderHelpSearch(scr)
-		// The Far-style no-PTY console view (WINE.md §2i) can get a stray
-		// frame pushed above it — the command-line history popup nobody
-		// asked for. While that frame is on top, PanelsFrame.ProcessKey
-		// (and with it pf.drawConsoleOverlay()) never runs, but cmdLine.Edit
-		// keeps changing anyway: keystrokes go invisible until the popup
-		// closes and the next one catches everything up at once. OnRender
-		// fires every frame regardless of which frame is topmost, so
-		// re-asserting the overlay here keeps the screen in sync with
-		// cmdLine.Edit no matter what else is stacked above panels — it
-		// sidesteps the question of why the popup appears instead of
-		// depending on an answer to it.
 		if panels.shellMode == ShellModeSimpleInline && panels.consoleViewActive() {
 			panels.drawConsoleOverlay()
 		}

@@ -184,3 +184,28 @@ func TestCommandLine_NoAutoCompleteMenuWhenDisabled(t *testing.T) {
 		t.Error("AutoCompleteMenu was shown even though CommandLineAutoComplete is false")
 	}
 }
+
+func TestCommandLine_AutoCompleteSuppressed(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	cl := NewCommandLine("> ")
+	cl.SetPosition(0, 0, 10, 0)
+	cl.Edit.History = []string{"ls", "long-command"}
+	cl.AutoCompleteSuppressed = true
+
+	oldCfg := AppConfig
+	AppConfig.CommandLineAutoComplete = true
+	defer func() { AppConfig = oldCfg }()
+
+	cl.ProcessKey(&vtinput.InputEvent{
+		Type:    vtinput.KeyEventType,
+		KeyDown: true,
+		Char:    'l',
+	})
+
+	top := vtui.FrameManager.GetTopFrame()
+	if _, isAc := top.(*vtui.AutoCompleteMenu); isAc {
+		t.Error("AutoCompleteMenu was shown even though AutoCompleteSuppressed is true")
+	}
+}

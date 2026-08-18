@@ -1316,45 +1316,17 @@ func init() {
 				if !pf.showPanels {
 					vtui.SetAltScreen(false)
 					pf.SetBusy(true)
-					// The cached pf.lastW/lastH can be stale the first time a
-					// session enters the console view: under Wine the initial
-					// terminal/console geometry probe in InitCore() sometimes
-					// races the console window's own resize to its final size,
-					// and no later WINCH-equivalent event corrects it because,
-					// from the OS's point of view, no resize ever happened.
-					// Re-probe right before computing the overlay so the
-					// command line and keybar land on the real bottom rows
-					// instead of wherever the stale size implied. Only the
-					// two fields are touched (not the full ResizeConsole):
-					// we are on the host screen now, and re-running panel
-					// layout here is exactly the leak described above.
 					if w, h, err := vtui.GetTerminalSize(); err == nil && w > 0 && h > 0 {
 						pf.lastW, pf.lastH = w, h
 					}
-					// Paint the console background before anything goes on
-					// top of it. Switching the active console buffer is
-					// supposed to reveal the shell's own screen, but under
-					// Wine it does not: the panels f4 just drew are still
-					// the visible pixels, and nothing ever writes over them
-					// (WINE.md §2k.1). Restores the saved console snapshot
-					// when one of the right size exists, blanks otherwise.
-					// Snapshot restore is unconditional; blanking only
-					// happens under Wine, where there is nothing real to
-					// preserve anyway.
 					clearConsoleViewBackground(pf.lastW, pf.lastH)
 					if pf.consoleStyle() == ConsoleViewFar {
-						// Far style: the console keeps whatever the commands
-						// printed, and f4 puts its command line and keybar on
-						// the bottom rows so the user can type right there.
 						pf.drawConsoleOverlay()
 					}
 				} else {
 					pf.clearConsoleOverlay()
 					vtui.SetAltScreen(true)
 					pf.SetBusy(false)
-					// Layout refresh belongs here, after the real terminal
-					// screen is back to the alt screen f4 owns — see the
-					// comment above the shellMode dispatch.
 					if pf.menuBar != nil && pf.lastW > 0 && pf.lastH > 0 {
 						pf.ResizeConsole(pf.lastW, pf.lastH)
 					}

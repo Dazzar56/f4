@@ -59,6 +59,16 @@ type consoleOverlayContent struct {
 	Cmd       string
 	CursorCol int
 	Keys      []overlayKeySlot
+	Popup     *overlayPopupContent
+}
+
+type overlayPopupContent struct {
+	X         int
+	Y         int
+	Width     int
+	Height    int
+	SelectPos int
+	Items     []string
 }
 
 // overlayKeySlot is one F-key cell of the overlay keybar: the number, its
@@ -132,6 +142,20 @@ func (pf *PanelsFrame) buildConsoleOverlayContent() consoleOverlayContent {
 	if pf.showKeyBar && ov.Lines >= 2 {
 		if labels := pf.GetKeyLabels(); labels != nil {
 			ov.Keys = overlayKeybarSlots(labels.Normal, pf.lastW)
+		}
+	}
+
+	if vtui.FrameManager != nil {
+		if ac, ok := vtui.FrameManager.GetTopFrame().(*vtui.AutoCompleteMenu); ok && ac != nil && ac.HasMatches() {
+			x1, y1, x2, y2 := ac.GetPosition()
+			ov.Popup = &overlayPopupContent{
+				X:         x1,
+				Y:         y1,
+				Width:     x2 - x1 + 1,
+				Height:    y2 - y1 + 1,
+				SelectPos: ac.SelectPos(),
+				Items:     ac.Matches,
+			}
 		}
 	}
 	return ov

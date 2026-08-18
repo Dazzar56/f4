@@ -47,14 +47,12 @@ func (pf *PanelsFrame) runSimpleInlineCommand(dir, command string) {
 		cmd.Dir = dir
 	}
 
-	// A command typed in the Far-style console view keeps the user there: no
-	// pause, no panels. The overlay comes off first so the output does not
-	// scroll a copy of the command line into the console history.
+	// Always clear the overlay before running the command so output
+	// does not scroll trailing keybar or command-line cells into history.
+	pf.clearConsoleOverlay()
+
 	inConsoleView := !pf.showPanels && pf.shellMode == ShellModeSimpleInline &&
 		pf.consoleStyle() == ConsoleViewFar
-	if inConsoleView {
-		pf.clearConsoleOverlay()
-	}
 
 	vtui.Suspend()
 	_ = cmd.Run()

@@ -9,9 +9,10 @@ import (
 // CommandLine is a simplified Edit control used for shell input.
 type CommandLine struct {
 	vtui.ScreenObject
-	Edit       *vtui.Edit
-	Prompt     string
-	RichPrompt []vtui.CharInfo
+	Edit                   *vtui.Edit
+	Prompt                 string
+	RichPrompt             []vtui.CharInfo
+	AutoCompleteSuppressed bool
 }
 
 func NewCommandLine(prompt string) *CommandLine {

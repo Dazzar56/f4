@@ -1503,6 +1503,13 @@ func (pf *PanelsFrame) VetoActionKey(e *vtinput.InputEvent) bool {
 	if e.Type != vtinput.KeyEventType || !e.KeyDown {
 		return false
 	}
+	// An active AutoCompleteMenu must consume Esc, arrows, and Enter
+	// before any global action (such as Esc:EscToggle) can intercept it.
+	if vtui.FrameManager != nil {
+		if _, isAc := vtui.FrameManager.GetTopFrame().(*vtui.AutoCompleteMenu); isAc {
+			return true
+		}
+	}
 	// Checked ahead of the panels-visible guard: the command line keeps
 	// its selection keys in terminal mode too, where the drive menus are
 	// bound in the Terminal area.
@@ -1714,15 +1721,6 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	if pf.shellMode == ShellModeSimpleInline && !pf.showPanels &&
 		e.Type == vtinput.KeyEventType && e.KeyDown {
 		if pf.consoleStyle() == ConsoleViewFar {
-			// One log line per keydown that reaches here, unconditionally —
-			// the "every second keystroke does nothing, then the next shows
-			// everything at once" bug (found under real Wine, not yet
-			// reproduced with a debug.log) needs to know whether the event
-			// even arrives at this point on the missed keystrokes, or
-			// whether cmdLine.ProcessKey silently swallows it, or whether
-			// it's drawConsoleOverlay() that fails to paint. This line
-			// answers the first question for free; comparing its count to
-			// keystrokes actually typed answers it completely.
 			vtui.DebugLog("FARKEY: char=%q vk=0x%X before cmdLine.ProcessKey", e.Char, e.VirtualKeyCode)
 			if e.VirtualKeyCode != vtinput.VK_RETURN && pf.cmdLine != nil && pf.cmdLine.ProcessKey(e) {
 				vtui.DebugLog("FARKEY: cmdLine.ProcessKey handled it, drawing overlay")

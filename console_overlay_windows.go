@@ -48,12 +48,33 @@ const (
 	overlayAttrText = uint16(0x30) // dark text on teal — the label
 )
 
+type overlayPopupState struct {
+	left      int16
+	top       int16
+	width     int16
+	height    int16
+	selectPos int
+	count     int
+	firstItem string
+}
+
 // The console cursor as the child process left it. The overlay moves the cursor
 // into the command line, so the original position has to come back before the
 // next command starts printing.
 var (
 	overlaySavedCursor      overlayCoord
 	overlaySavedCursorValid bool
+
+	overlaySavedPopupRect  simpleSmallRect
+	overlaySavedPopupBuf   []simpleCharInfo
+	overlaySavedPopupValid bool
+	overlayLastPopupState  overlayPopupState
+)
+
+const (
+	overlayAttrPopupFrame = uint16(0x1F) // white on blue (Far classic dialog box)
+	overlayAttrPopupText  = uint16(0x1E) // yellow on blue
+	overlayAttrPopupSel   = uint16(0x30) // black on cyan
 )
 
 func winConsoleOverlayAvailable() bool { return true }
@@ -248,6 +269,188 @@ func winDrawConsoleOverlay(ov consoleOverlayContent) {
 		overlaySavedCursorValid = true
 	}
 
+	// 1. Determine popup geometry and changes
+	hasPopup := ov.Popup != nil && len(ov.Popup.Items) > 0 && ov.Popup.Width > 0 && ov.Popup.Height > 0
+	var newPopupState overlayPopupState
+	if hasPopup {
+		popW := int16(ov.Popup.Width)
+		popH := int16(ov.Popup.Height)
+		popLeft := left + int16(ov.Popup.X)
+		if popLeft+popW > right+1 {
+			popLeft = right + 1 - popW
+		}
+		if popLeft < left {
+			popLeft = left
+		}
+		popTop := cmdRow - popH
+		if popTop < info.Window.Top {
+			popTop = info.Window.Top
+		}
+		newPopupState = overlayPopupState{
+			left:      popLeft,
+			top:       popTop,
+			width:     popW,
+			height:    popH,
+			selectPos: ov.Popup.SelectPos,
+			count:     len(ov.Popup.Items),
+			firstItem: ov.Popup.Items[0],
+		}
+	}
+
+	popupNeedsFullRedraw := false
+	if overlaySavedPopupValid {
+		if !hasPopup || newPopupState.left != overlayLastPopupState.left ||
+			newPopupState.top != overlayLastPopupState.top ||
+			newPopupState.width != overlayLastPopupState.width ||
+			newPopupState.height != overlayLastPopupState.height ||
+			newPopupState.count != overlayLastPopupState.count ||
+			newPopupState.firstItem != overlayLastPopupState.firstItem {
+			// Geometry or items changed, or popup closed: restore old background
+			pW := int(overlaySavedPopupRect.Right-overlaySavedPopupRect.Left) + 1
+			pH := int(overlaySavedPopupRect.Bottom-overlaySavedPopupRect.Top) + 1
+			if pW > 0 && pH > 0 && len(overlaySavedPopupBuf) == pW*pH {
+				pBufSize := uintptr(uint32(uint16(pW)) | (uint32(uint16(pH)) << 16))
+				r := overlaySavedPopupRect
+				procWriteConsoleOutputW.Call(
+					uintptr(h),
+					uintptr(unsafe.Pointer(&overlaySavedPopupBuf[0])),
+					pBufSize,
+					0,
+					uintptr(unsafe.Pointer(&r)),
+				)
+			}
+			overlaySavedPopupValid = false
+			popupNeedsFullRedraw = true
+		}
+	} else if hasPopup {
+		popupNeedsFullRedraw = true
+	}
+
+	if hasPopup && popupNeedsFullRedraw {
+		popLeft := newPopupState.left
+		popTop := newPopupState.top
+		popRight := popLeft + newPopupState.width - 1
+		popBottom := popTop + newPopupState.height - 1
+		pW := int(popRight-popLeft) + 1
+		pH := int(popBottom-popTop) + 1
+
+		if pW > 0 && pH > 0 {
+			overlaySavedPopupRect = simpleSmallRect{
+				Left:   popLeft,
+				Top:    popTop,
+				Right:  popRight,
+				Bottom: popBottom,
+			}
+			overlaySavedPopupBuf = make([]simpleCharInfo, pW*pH)
+			pBufSize := uintptr(uint32(uint16(pW)) | (uint32(uint16(pH)) << 16))
+			readR := overlaySavedPopupRect
+			procReadConsoleOutputW.Call(
+				uintptr(h),
+				uintptr(unsafe.Pointer(&overlaySavedPopupBuf[0])),
+				pBufSize,
+				0,
+				uintptr(unsafe.Pointer(&readR)),
+			)
+			overlaySavedPopupValid = true
+			overlayLastPopupState = newPopupState
+
+			// Draw popup box
+			popCells := make([]simpleCharInfo, pW*pH)
+			for i := range popCells {
+				popCells[i] = simpleCharInfo{UnicodeChar: ' ', Attributes: overlayAttrPopupText}
+			}
+			// Border
+			for cx := 0; cx < pW; cx++ {
+				popCells[cx] = simpleCharInfo{UnicodeChar: 0x2500, Attributes: overlayAttrPopupFrame}
+				popCells[(pH-1)*pW+cx] = simpleCharInfo{UnicodeChar: 0x2500, Attributes: overlayAttrPopupFrame}
+			}
+			for cy := 0; cy < pH; cy++ {
+				popCells[cy*pW] = simpleCharInfo{UnicodeChar: 0x2502, Attributes: overlayAttrPopupFrame}
+				popCells[cy*pW+pW-1] = simpleCharInfo{UnicodeChar: 0x2502, Attributes: overlayAttrPopupFrame}
+			}
+			popCells[0] = simpleCharInfo{UnicodeChar: 0x250C, Attributes: overlayAttrPopupFrame}
+			popCells[pW-1] = simpleCharInfo{UnicodeChar: 0x2510, Attributes: overlayAttrPopupFrame}
+			popCells[(pH-1)*pW] = simpleCharInfo{UnicodeChar: 0x2514, Attributes: overlayAttrPopupFrame}
+			popCells[(pH-1)*pW+pW-1] = simpleCharInfo{UnicodeChar: 0x2518, Attributes: overlayAttrPopupFrame}
+
+			// Items
+			for idx, itemText := range ov.Popup.Items {
+				rowIdx := idx + 1
+				if rowIdx >= pH-1 {
+					break
+				}
+				attr := overlayAttrPopupText
+				if idx == ov.Popup.SelectPos {
+					attr = overlayAttrPopupSel
+				}
+				for col := 1; col < pW-1; col++ {
+					popCells[rowIdx*pW+col] = simpleCharInfo{UnicodeChar: ' ', Attributes: attr}
+				}
+				fillOverlayText(popCells[rowIdx*pW+1:], 0, itemText, attr)
+			}
+
+			writeR := overlaySavedPopupRect
+			procWriteConsoleOutputW.Call(
+				uintptr(h),
+				uintptr(unsafe.Pointer(&popCells[0])),
+				pBufSize,
+				0,
+				uintptr(unsafe.Pointer(&writeR)),
+			)
+		}
+	} else if hasPopup && overlayLastPopupState.selectPos != newPopupState.selectPos {
+		// Only selection position changed: update item rows without re-reading background
+		popLeft := newPopupState.left
+		popTop := newPopupState.top
+		popRight := popLeft + newPopupState.width - 1
+		popBottom := popTop + newPopupState.height - 1
+		pW := int(popRight-popLeft) + 1
+		pH := int(popBottom-popTop) + 1
+
+		popCells := make([]simpleCharInfo, pW*pH)
+		for i := range popCells {
+			popCells[i] = simpleCharInfo{UnicodeChar: ' ', Attributes: overlayAttrPopupText}
+		}
+		for cx := 0; cx < pW; cx++ {
+			popCells[cx] = simpleCharInfo{UnicodeChar: 0x2500, Attributes: overlayAttrPopupFrame}
+			popCells[(pH-1)*pW+cx] = simpleCharInfo{UnicodeChar: 0x2500, Attributes: overlayAttrPopupFrame}
+		}
+		for cy := 0; cy < pH; cy++ {
+			popCells[cy*pW] = simpleCharInfo{UnicodeChar: 0x2502, Attributes: overlayAttrPopupFrame}
+			popCells[cy*pW+pW-1] = simpleCharInfo{UnicodeChar: 0x2502, Attributes: overlayAttrPopupFrame}
+		}
+		popCells[0] = simpleCharInfo{UnicodeChar: 0x250C, Attributes: overlayAttrPopupFrame}
+		popCells[pW-1] = simpleCharInfo{UnicodeChar: 0x2510, Attributes: overlayAttrPopupFrame}
+		popCells[(pH-1)*pW] = simpleCharInfo{UnicodeChar: 0x2514, Attributes: overlayAttrPopupFrame}
+		popCells[(pH-1)*pW+pW-1] = simpleCharInfo{UnicodeChar: 0x2518, Attributes: overlayAttrPopupFrame}
+
+		for idx, itemText := range ov.Popup.Items {
+			rowIdx := idx + 1
+			if rowIdx >= pH-1 {
+				break
+			}
+			attr := overlayAttrPopupText
+			if idx == ov.Popup.SelectPos {
+				attr = overlayAttrPopupSel
+			}
+			for col := 1; col < pW-1; col++ {
+				popCells[rowIdx*pW+col] = simpleCharInfo{UnicodeChar: ' ', Attributes: attr}
+			}
+			fillOverlayText(popCells[rowIdx*pW+1:], 0, itemText, attr)
+		}
+
+		pBufSize := uintptr(uint32(uint16(pW)) | (uint32(uint16(pH)) << 16))
+		writeR := overlaySavedPopupRect
+		procWriteConsoleOutputW.Call(
+			uintptr(h),
+			uintptr(unsafe.Pointer(&popCells[0])),
+			pBufSize,
+			0,
+			uintptr(unsafe.Pointer(&writeR)),
+		)
+		overlayLastPopupState.selectPos = newPopupState.selectPos
+	}
+
 	cmdCells := newOverlayRow(width)
 	fillOverlayText(cmdCells, 0, ov.Cmd, overlayAttrNum)
 	winWriteOverlayRow(h, left, right, cmdRow, cmdCells)
@@ -303,6 +506,23 @@ func winClearConsoleOverlay(n int) {
 		}
 		winWriteOverlayRow(h, left, right, row, blank)
 	}
+	if overlaySavedPopupValid {
+		pW := int(overlaySavedPopupRect.Right-overlaySavedPopupRect.Left) + 1
+		pH := int(overlaySavedPopupRect.Bottom-overlaySavedPopupRect.Top) + 1
+		if pW > 0 && pH > 0 && len(overlaySavedPopupBuf) == pW*pH {
+			pBufSize := uintptr(uint32(uint16(pW)) | (uint32(uint16(pH)) << 16))
+			r := overlaySavedPopupRect
+			procWriteConsoleOutputW.Call(
+				uintptr(h),
+				uintptr(unsafe.Pointer(&overlaySavedPopupBuf[0])),
+				pBufSize,
+				0,
+				uintptr(unsafe.Pointer(&r)),
+			)
+		}
+		overlaySavedPopupValid = false
+	}
+
 	if overlaySavedCursorValid {
 		procSetConsoleCursorPositionOverlay.Call(uintptr(h), winOverlayCoordArg(overlaySavedCursor.X, overlaySavedCursor.Y))
 		overlaySavedCursorValid = false

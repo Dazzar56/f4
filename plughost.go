@@ -231,15 +231,13 @@ func newHostMethods(api vfs.HostAPI, back PluginTransport, name string, bridge *
 
 // findPanelsFrame locates the panels frame of the active screen, if any.
 func findPanelsFrame() *PanelsFrame {
-	if vtui.FrameManager == nil || len(vtui.FrameManager.Screens) == 0 {
+	if vtui.FrameManager == nil {
 		return nil
 	}
-	for _, f := range vtui.FrameManager.Screens[vtui.FrameManager.ActiveIdx].Frames {
-		if pf, ok := f.(*PanelsFrame); ok {
-			return pf
-		}
+	if pf, ok := vtui.FrameManager.GetTopFrame().(*PanelsFrame); ok {
+		return pf
 	}
-	return nil
+	return findPanelsFrameAnyScreen()
 }
 
 type rpcHighlighterProvider struct {
