@@ -533,3 +533,43 @@ func TestWrapEngine_LogicalToVisual_CappedLine(t *testing.T) {
 		t.Errorf("LogicalToVisual returned negative coordinates for capped line: (%d, %d)", row, col)
 	}
 }
+
+func BenchmarkWrapEngine_GetFragments_ASCII(b *testing.B) {
+	line := []byte("The quick brown fox jumps over the lazy dog and runs across the wide fields 1234567890\n")
+	var buf bytes.Buffer
+	for i := 0; i < 1000; i++ {
+		buf.Write(line)
+	}
+	pt := piecetable.New(buf.Bytes())
+	li := piecetable.NewLineIndex()
+	li.Rebuild(pt)
+	we := NewWrapEngine(pt, li)
+	we.SetWidth(80)
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		we.InvalidateCache()
+		_ = we.GetFragments(i % 1000)
+	}
+}
+
+func BenchmarkWrapEngine_GetFragments_NoWrap(b *testing.B) {
+	line := []byte("The quick brown fox jumps over the lazy dog and runs across the wide fields 1234567890\n")
+	var buf bytes.Buffer
+	for i := 0; i < 1000; i++ {
+		buf.Write(line)
+	}
+	pt := piecetable.New(buf.Bytes())
+	li := piecetable.NewLineIndex()
+	li.Rebuild(pt)
+	we := NewWrapEngine(pt, li)
+	we.SetWidth(80)
+	we.ToggleWrap(false)
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_ = we.GetFragments(i % 1000)
+	}
+}

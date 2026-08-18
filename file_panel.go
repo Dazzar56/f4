@@ -34,31 +34,6 @@ type mediumRow struct {
 	r  int
 }
 
-type panelEntryRow struct {
-	fp    *FileSystemPanel
-	entry *fileEntry
-}
-
-type panelMatchSpan struct {
-	start int
-	width int
-}
-
-func (r *panelEntryRow) GetCellText(col int) string {
-	if col == 0 && len(r.fp.table.Columns) > 0 {
-		return formatPanelFileName(r.entry, r.fp.table.Columns[0].Width)
-	}
-	return r.entry.GetCellText(col)
-}
-
-func (r *panelEntryRow) IsSelected() bool {
-	return r.entry.IsSelected()
-}
-
-func (r *panelEntryRow) GetCellAttr(col int, defaultAttr uint64) uint64 {
-	return r.entry.GetCellAttr(col, defaultAttr)
-}
-
 func (m *mediumRow) GetCellText(col int) string {
 	H := m.fp.table.ViewHeight
 	if H <= 0 {
@@ -74,6 +49,71 @@ func (m *mediumRow) GetCellText(col int) string {
 		width = m.fp.table.Columns[col].Width
 	}
 	return formatPanelFileName(e, width)
+}
+
+type panelMatchSpan struct {
+	start int
+	width int
+}
+
+func (fp *FileSystemPanel) RowCount() int {
+	return len(fp.entries)
+}
+
+func (fp *FileSystemPanel) GetCellText(row, col int) string {
+	if fp.gridColumnCount() == 1 {
+		if row < 0 || row >= len(fp.entries) {
+			return ""
+		}
+		e := fp.entries[row]
+		if col == 0 && len(fp.table.Columns) > 0 {
+			return formatPanelFileName(e, fp.table.Columns[0].Width)
+		}
+		return e.GetCellText(col)
+	}
+
+	H := fp.table.ViewHeight
+	if H <= 0 {
+		H = 1
+	}
+	idx := row + col*H
+	if idx < 0 || idx >= len(fp.entries) {
+		return ""
+	}
+	e := fp.entries[idx]
+	width := 0
+	if col >= 0 && col < len(fp.table.Columns) {
+		width = fp.table.Columns[col].Width
+	}
+	return formatPanelFileName(e, width)
+}
+
+func (fp *FileSystemPanel) IsRowSelected(row int) bool {
+	if fp.gridColumnCount() == 1 {
+		if row < 0 || row >= len(fp.entries) {
+			return false
+		}
+		return fp.entries[row].IsSelected()
+	}
+	return false
+}
+
+func (fp *FileSystemPanel) GetCellAttr(row, col int, defaultAttr uint64) uint64 {
+	if fp.gridColumnCount() == 1 {
+		if row < 0 || row >= len(fp.entries) {
+			return defaultAttr
+		}
+		return fp.entries[row].GetCellAttr(col, defaultAttr)
+	}
+	H := fp.table.ViewHeight
+	if H <= 0 {
+		H = 1
+	}
+	idx := row + col*H
+	if idx < 0 || idx >= len(fp.entries) {
+		return defaultAttr
+	}
+	return fp.entries[idx].GetCellAttr(0, defaultAttr)
 }
 
 func (f *fileEntry) displayName(name string) string {
@@ -132,13 +172,34 @@ func formatPanelFileName(entry *fileEntry, width int) string {
 	if extensionFieldWidth < 3 {
 		extensionFieldWidth = 3
 	}
-	extensionText := extension + strings.Repeat(" ", extensionFieldWidth-extensionWidth)
 	if extensionFieldWidth >= width {
-		return runewidth.Truncate(extensionText, width, "")
+		if extensionFieldWidth > extensionWidth {
+			return runewidth.Truncate(extension+strings.Repeat(" ", extensionFieldWidth-extensionWidth), width, "")
+		}
+		return runewidth.Truncate(extension, width, "")
 	}
 	left := runewidth.Truncate(entry.displayName(base), width-extensionFieldWidth-1, "")
-	padding := width - runewidth.StringWidth(left) - extensionFieldWidth
-	return left + strings.Repeat(" ", padding) + extensionText
+	leftWidth := runewidth.StringWidth(left)
+	padding := width - leftWidth - extensionFieldWidth
+	if padding < 0 {
+		padding = 0
+	}
+	extPadding := extensionFieldWidth - extensionWidth
+	if extPadding < 0 {
+		extPadding = 0
+	}
+
+	var sb strings.Builder
+	sb.Grow(len(left) + padding + len(extension) + extPadding)
+	sb.WriteString(left)
+	for i := 0; i < padding; i++ {
+		sb.WriteByte(' ')
+	}
+	sb.WriteString(extension)
+	for i := 0; i < extPadding; i++ {
+		sb.WriteByte(' ')
+	}
+	return sb.String()
 }
 
 func clippedPanelMatchSpan(start, width, cellWidth int) (panelMatchSpan, bool) {
@@ -392,9 +453,6 @@ type FileSystemPanel struct {
 	loadingTimer *time.Timer
 	loadingFrame int
 
-	cachedRows                 []vtui.TableRow
-	cachedEntryRows            []panelEntryRow
-	cachedMediumRows           []mediumRow
 	loadingGeneration          uint64
 	loadQueueMu                sync.Mutex
 	loadWorkerActive           bool
@@ -2133,35 +2191,8 @@ func (fp *FileSystemPanel) Refresh() {
 	idx := fp.GetCursorIndex()
 	fp.updateSortColumnTitles()
 	n := len(fp.entries)
-	if cap(fp.cachedRows) < n {
-		fp.cachedRows = make([]vtui.TableRow, n)
-	} else {
-		fp.cachedRows = fp.cachedRows[:n]
-	}
-
-	if fp.gridColumnCount() == 1 {
-		if cap(fp.cachedEntryRows) < n {
-			fp.cachedEntryRows = make([]panelEntryRow, n)
-		} else {
-			fp.cachedEntryRows = fp.cachedEntryRows[:n]
-		}
-		for i, e := range fp.entries {
-			fp.cachedEntryRows[i] = panelEntryRow{fp: fp, entry: e}
-			fp.cachedRows[i] = &fp.cachedEntryRows[i]
-		}
-		fp.table.SetRows(fp.cachedRows)
-	} else {
-		if cap(fp.cachedMediumRows) < n {
-			fp.cachedMediumRows = make([]mediumRow, n)
-		} else {
-			fp.cachedMediumRows = fp.cachedMediumRows[:n]
-		}
-		for i := 0; i < n; i++ {
-			fp.cachedMediumRows[i] = mediumRow{fp: fp, r: i}
-			fp.cachedRows[i] = &fp.cachedMediumRows[i]
-		}
-		fp.table.SetRows(fp.cachedRows)
-	}
+	fp.table.SetCellProvider(fp)
+	fp.table.SetRowCount(n)
 	fp.SetCursorIndex(idx)
 	_, _, maxTop, _, _ := fp.panelScrollMetrics()
 	if fp.table.TopPos > maxTop {
