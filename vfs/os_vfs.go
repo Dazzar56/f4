@@ -130,6 +130,59 @@ verify:
 }
 
 func (v *OSVFS) ReadDir(ctx context.Context, path string, onChunk func([]VFSItem)) error {
+	// Fast path (Stage D5, WINE.md §12): under Wine on a confirmed-safe host,
+	// list names via a raw getdents64 instead of the Win32
+	// FindFirstFile/FindNextFile loop Wine would otherwise translate into
+	// wineserver round trips. Falls straight through to the existing path,
+	// unchanged, on any failure -- see os_vfs_winescape_windows.go.
+	if names, ok := winescapeReadDirNames(path); ok {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		items := make([]VFSItem, 0, len(names))
+		for _, name := range names {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			entryPath := filepath.Join(path, name)
+			info, statErr := os.Lstat(entryPath)
+			if statErr != nil {
+				// Entry vanished between listing and stat, or is otherwise
+				// unreadable -- skip it exactly as a native FindNextFile
+				// race would, rather than failing the whole listing.
+				continue
+			}
+			var isDir bool
+			var isSymlink bool
+			isDir = info.IsDir()
+			isSymlink = info.Mode()&os.ModeSymlink != 0
+			if !isSymlink && isReparsePoint(info) {
+				isSymlink = true
+			}
+			if !isDir && !info.Mode().IsRegular() {
+				if target, err := os.Stat(entryPath); err == nil {
+					isDir = target.IsDir()
+				}
+			}
+			item := VFSItem{
+				Name:         name,
+				Size:         info.Size(),
+				SizeKnown:    true,
+				IsDir:        isDir,
+				IsSymlink:    isSymlink,
+				MTime:        info.ModTime(),
+				IsExecutable: info.Mode().Perm()&0111 != 0,
+				IsHidden:     isHidden(entryPath, name, info),
+			}
+			fillPhysicalSizeCheap(&item, info)
+			items = append(items, item)
+		}
+		if len(items) > 0 && onChunk != nil {
+			onChunk(items)
+		}
+		return nil
+	}
+
 	// Try to open the directory
 	dirPath := path
 	f, err := os.Open(prepareOSPath(dirPath))
