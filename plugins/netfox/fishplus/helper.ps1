@@ -1432,7 +1432,10 @@ function Cmd-JStart {
         $body = {
             param($kind, $paths, $jd, $outP, $errP, $rcP, $xa1 = '', $xa2 = '', $xa3 = '')
             $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+            $onWindows = ($env:OS -eq 'Windows_NT')
             function Convert-PosixToWin([string]$p) {
+                if ($null -eq $p) { return $null }
+                if (-not $onWindows) { return $p }
                 if ($p -eq '' -or $p -eq '/') { return '' }
                 if ($p.StartsWith('//')) { return '\\' + $p.Substring(2).Replace('/', '\') }
                 if (-not $p.StartsWith('/')) { return $p.Replace('/', '\') }
@@ -1444,6 +1447,7 @@ function Cmd-JStart {
             }
             function Convert-WinToPosix([string]$w) {
                 if ([string]::IsNullOrEmpty($w)) { return '/' }
+                if (-not $onWindows) { return $w }
                 if ($w.StartsWith('\\')) { return '//' + $w.Substring(2).Replace('\', '/').TrimEnd('/') }
                 if ($w.Length -ge 2 -and $w[1] -eq ':') {
                     $dr = [char]::ToLower($w[0])
@@ -1743,6 +1747,7 @@ function Cmd-JStart {
                         KillPath = $killPath
                         EmitMs   = 300
                         ChunkSize = 1MB
+                        OnWindows = $onWindows
                     }
 
                     # Self-contained worker body: runs inside its own
@@ -1763,6 +1768,7 @@ function Cmd-JStart {
                         # end-trimming that does not matter for a
                         # full-path emit.
                         function Wp2Wire([string]$w) {
+                            if (-not $cfg.OnWindows) { return $w }
                             if ($w.StartsWith('\\')) { return '//' + $w.Substring(2).Replace('\', '/') }
                             if ($w.Length -ge 2 -and $w[1] -eq ':') {
                                 $dr = [char]::ToLower($w[0])
