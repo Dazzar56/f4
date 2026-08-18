@@ -11,6 +11,7 @@ import (
 	"runtime"
 
 	"github.com/unxed/f4/vfs/hostfs"
+	"github.com/unxed/f4/vfs/hostmode"
 	"github.com/unxed/f4/vfs/hostpath"
 	"github.com/unxed/vtui"
 )
@@ -24,31 +25,11 @@ func NewOSVFS(initialPath string) *OSVFS {
 	return &OSVFS{currentPath: abs}
 }
 
-func (v *OSVFS) GetPath() string {
-	// Display in POSIX form when we're navigating inside Wine's unix bridge
-	// (\\?\unix\...) -- this is the whole visible point of WINE.md Part B:
-	// the panel shows /home/user/Documents, not \\?\unix\home\user\Documents.
-	// Internal representation and every os.* call keep using the
-	// \\?\unix\... form unchanged; this is display-only.
-	//
-	// Deliberately textual-only (WineUnixFromDOSFast, not WineUnixFromDOS):
-	// GetPath can be called from redraw/status-line paths many times per
-	// navigation, and WineUnixFromDOS's fallback for an ordinary DOS path
-	// (e.g. plain drive-letter navigation, not yet inside the unix bridge)
-	// calls into Wine and opens the file to resolve it -- fine once, cached,
-	// but wrong to risk on every redraw. Ordinary Windows/drive-letter
-	// navigation keeps showing its normal path unchanged; only paths already
-	// in \\?\unix\... form (reached via SetPath's POSIX-input branch below,
-	// or via B1's other producers) get the cheap display translation.
-	if p, ok := WineUnixFromDOSFast(v.currentPath); ok {
-		return p
-	}
-	return v.currentPath
-}
+func (v *OSVFS) GetPath() string        { return v.currentPath }
 func (v *OSVFS) IsAbs(path string) bool { return hostpath.IsAbs(path) }
 
 func (v *OSVFS) IsAtRoot() bool {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == "windows" && !hostmode.Posix() {
 		vol := hostpath.VolumeName(v.currentPath)
 		p := hostpath.Clean(v.currentPath)
 		// Standardize to backslash for comparison on Windows
@@ -61,17 +42,6 @@ func (v *OSVFS) IsAtRoot() bool {
 
 func (v *OSVFS) SetPath(path string) error {
 	vtui.DebugLog("VFS: SetPath(%q) called", path)
-	// POSIX-looking input ("/home/user/...") under Wine: translate to the
-	// \\?\unix\... bridge before any of the existing Windows-path logic
-	// below runs, so the rest of SetPath (and everything downstream that
-	// reads v.currentPath) never has to know the difference. This is the
-	// actual user-visible entry point for WINE.md Part B: type or paste a
-	// real unix path (Ctrl+O, command line, go-to-path) and land on it.
-	if strings.HasPrefix(path, "/") {
-		if dos, ok := WineDOSFromUnix(path); ok {
-			path = dos
-		}
-	}
 	target := path
 	if !hostpath.IsAbs(path) && hostpath.VolumeName(path) == "" {
 		target = hostpath.Join(v.currentPath, path)
@@ -663,6 +633,15 @@ func prepareOSPath(p string) string {
 	if runtime.GOOS != "windows" {
 		return p
 	}
+	if hostmode.Posix() {
+		// The \\?\ long-path prefix is a Win32 convention with no meaning
+		// to libwinescape's raw syscalls, which expect the plain POSIX
+		// string as-is. Prepending it here would silently corrupt every
+		// path in posix mode (open("\\?\/home/user/foo") is nonsense to a
+		// real open(2) -- backslashes are ordinary filename bytes on
+		// Linux, not separators).
+		return p
+	}
 	abs, err := hostpath.Abs(p)
 	if err != nil {
 		return p
@@ -680,14 +659,6 @@ func prepareOSPath(p string) string {
 // (like EvalSymlinks) so they display nicely in the UI.
 func stripExtendedPrefix(p string) string {
 	if runtime.GOOS != "windows" {
-		return p
-	}
-	// The \\?\unix\... prefix (see winepath_windows.go) is not a generic
-	// long-path marker -- it's Wine's own bridge to a real POSIX path, and
-	// stripping it here would silently turn "\\?\unix\home\user" into the
-	// nonsense relative path "unix\home\user". Leave it untouched; only the
-	// ordinary Windows long-path forms below are ours to unwrap.
-	if _, ok := stripWineUnixPrefix(p); ok {
 		return p
 	}
 	if strings.HasPrefix(p, `\\?\UNC\`) {

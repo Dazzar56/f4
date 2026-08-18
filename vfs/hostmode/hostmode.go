@@ -6,6 +6,7 @@
 package hostmode
 
 import (
+	"fmt"
 	"os"
 	"sync"
 
@@ -39,12 +40,23 @@ func Posix() bool {
 		switch os.Getenv("F4_WINE_POSIX") {
 		case "1":
 			posix = true
+			fmt.Fprintf(os.Stderr, "[f4-wine] posix mode: forced ON via F4_WINE_POSIX=1\n")
 			return
 		case "0":
 			posix = false
+			fmt.Fprintf(os.Stderr, "[f4-wine] posix mode: forced OFF via F4_WINE_POSIX=0\n")
 			return
 		}
-		posix = winescape.IsWine() && winescape.Available()
+		isWine := winescape.IsWine()
+		available := winescape.Available()
+		hostOS := winescape.HostOS()
+		posix = isWine && available
+		// Deliberately a plain stderr print, not vtui.DebugLog: this needs
+		// to be visible on the very first run, from a plain terminal,
+		// without --debug or knowing where the debug log file lives --
+		// it's the answer to "why didn't posix mode turn on" (WINE.md §13).
+		fmt.Fprintf(os.Stderr, "[f4-wine] posix mode probe: IsWine=%v Available=%v HostOS=%q -> posix=%v\n",
+			isWine, available, hostOS, posix)
 	})
 	return posix
 }

@@ -3,11 +3,27 @@
 package main
 
 import (
+	"os"
+
 	"github.com/unxed/f4/vfs"
+	"github.com/unxed/f4/vfs/hostmode"
 	"golang.org/x/sys/windows"
 )
 
 func getPlatformDrives() []DriveEntry {
+	if hostmode.Posix() {
+		// No drive letters in posix mode -- the whole point of WINE.md
+		// Part E is that under Wine this looks like the Linux build, not
+		// like Windows-with-extra-steps. Mirrors drives_unix.go exactly.
+		home := os.Getenv("HOME")
+		drives := []DriveEntry{
+			{Name: "/ Root", Factory: func() vfs.VFS { return vfs.NewOSVFS("/") }},
+		}
+		if home != "" {
+			drives = append(drives, DriveEntry{Name: "~ Home", Factory: func() vfs.VFS { return vfs.NewOSVFS(home) }})
+		}
+		return drives
+	}
 	var drives []DriveEntry
 	bitmask, err := windows.GetLogicalDrives()
 	if err != nil {
