@@ -12,8 +12,9 @@ import (
 
 // ViewerBackend provides async random access to a file using small cache window.
 type ViewerBackend struct {
-	file vfs.ReadAtCloser
-	size int64
+	file     vfs.ReadAtCloser
+	size     int64
+	codepage int
 
 	path    string
 	owner   vfs.VFS
@@ -63,6 +64,9 @@ func (b *ViewerBackend) Close() error {
 	if b.cancelCtx != nil {
 		b.cancelCtx()
 	}
+	b.mu.Lock()
+	b.cacheData = nil
+	b.mu.Unlock()
 	return b.file.Close()
 }
 
@@ -80,20 +84,22 @@ func (b *ViewerBackend) ReadAt(offset int64, length int) ([]byte, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	if offset >= b.size {
-		return nil, io.EOF
-	}
-	if offset+int64(length) > b.size {
-		length = int(b.size - offset)
-	}
 	if b.readErr != nil {
 		return nil, b.readErr
 	}
 
 	// Check cache hit
-	if b.cacheData != nil && offset >= b.cacheOff && (offset+int64(length)) <= (b.cacheOff+int64(len(b.cacheData))) {
+	if b.cacheData != nil && offset >= b.cacheOff && offset < b.cacheOff+int64(len(b.cacheData)) {
 		start := offset - b.cacheOff
+		avail := int64(len(b.cacheData)) - start
+		if int64(length) > avail {
+			length = int(avail)
+		}
 		return b.cacheData[start : start+int64(length)], nil
+	}
+
+	if offset >= b.size {
+		return nil, io.EOF
 	}
 
 	// Cache miss -> Trigger fetch in background
@@ -104,7 +110,7 @@ func (b *ViewerBackend) ReadAt(offset int64, length int) ([]byte, error) {
 		if fetchOff < 0 {
 			fetchOff = 0
 		}
-		fetchLen := 256 * 1024 // We only keep 256KB in memory
+		fetchLen := 256 * 1024 // 256KB streaming window
 		if fetchOff+int64(fetchLen) > b.size {
 			fetchLen = int(b.size - fetchOff)
 		}
@@ -113,12 +119,26 @@ func (b *ViewerBackend) ReadAt(offset int64, length int) ([]byte, error) {
 			buf := make([]byte, fetchLen)
 			n, err := b.file.ReadAt(b.ctx, buf, fetchOff)
 
+			var cached []byte
+			if n > 0 {
+				if b.codepage != 0 && b.codepage != 65001 {
+					decoded, decErr := vfs.DecodeBytes(buf[:n], b.codepage)
+					if decErr == nil {
+						cached = decoded
+					} else {
+						cached = buf[:n]
+					}
+				} else {
+					cached = buf[:n]
+				}
+			}
+
 			vtui.FrameManager.PostTask(func() {
 				b.mu.Lock()
 				if b.ctx.Err() == nil {
 					if err == nil || err == io.EOF {
 						b.cacheOff = fetchOff
-						b.cacheData = buf[:n]
+						b.cacheData = cached
 					} else {
 						b.readErr = err
 					}

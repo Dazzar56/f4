@@ -35,6 +35,7 @@ type ViewerView struct {
 
 	// For Text mode: offsets of lines currently on screen
 	lineOffsets         []int64
+	rowCells            []vtui.CharInfo
 	eofVisible          bool
 	lastKnownSize       int64
 	lastSearch          string
@@ -73,41 +74,19 @@ func NewViewerView(ctx context.Context, v vfs.VFS, path string) (*ViewerView, er
 		cpID = 65001
 	}
 
-	var backend *ViewerBackend
 	bCtx, bCancel := context.WithCancel(context.Background())
-	if cpID == 65001 {
-		backend = &ViewerBackend{
-			file:         f,
-			size:         size,
-			path:         path,
-			totalLines:   -1,
-			totalForSize: -1,
-			ctx:          bCtx,
-			cancelCtx:    bCancel,
-		}
-		if indexer, ok := v.(vfs.LineIndexer); ok {
-			backend.indexer = indexer
-		}
-	} else {
-		fullData := make([]byte, size)
-		_, _ = f.ReadAt(ctx, fullData, 0)
-		f.Close()
-
-		decoded, err := vfs.DecodeBytes(fullData, cpID)
-		if err != nil {
-			decoded = fullData
-			cpID = 65001
-		}
-		memFile := &vfs.MemoryReadAtCloser{Data: decoded}
-		backend = &ViewerBackend{
-			file:         memFile,
-			size:         int64(len(decoded)),
-			path:         path,
-			totalLines:   -1,
-			totalForSize: -1,
-			ctx:          bCtx,
-			cancelCtx:    bCancel,
-		}
+	backend := &ViewerBackend{
+		file:         f,
+		size:         size,
+		path:         path,
+		codepage:     cpID,
+		totalLines:   -1,
+		totalForSize: -1,
+		ctx:          bCtx,
+		cancelCtx:    bCancel,
+	}
+	if indexer, ok := v.(vfs.LineIndexer); ok {
+		backend.indexer = indexer
 	}
 
 	vv := &ViewerView{
@@ -487,7 +466,7 @@ func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, contentHeight int) 
 		}
 
 		// Build []vtui.CharInfo for the line
-		var cells []vtui.CharInfo
+		vv.rowCells = vv.rowCells[:0]
 		lineBytes := data[:textLen]
 		visualCol := 0
 
@@ -498,7 +477,7 @@ func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, contentHeight int) 
 			if r == '\t' {
 				w := tabSize - (visualCol % tabSize)
 				for i := 0; i < w; i++ {
-					cells = append(cells, vtui.CharInfo{Char: ' ', Attributes: attr})
+					vv.rowCells = append(vv.rowCells, vtui.CharInfo{Char: ' ', Attributes: attr})
 				}
 				visualCol += w
 			} else {
@@ -509,7 +488,7 @@ func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, contentHeight int) 
 				if w > 0 {
 					charVal := uint64(displayRune)
 					for i := 0; i < w; i++ {
-						cells = append(cells, vtui.CharInfo{Char: charVal, Attributes: attr})
+						vv.rowCells = append(vv.rowCells, vtui.CharInfo{Char: charVal, Attributes: attr})
 						charVal = uint64(vtui.WideCharFiller)
 					}
 					visualCol += w
@@ -517,7 +496,7 @@ func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, contentHeight int) 
 			}
 		}
 
-		scr.Write(vv.X1, vv.Y1+1+y, cells)
+		scr.Write(vv.X1, vv.Y1+1+y, vv.rowCells)
 		currOffset += int64(lineLen)
 
 		if !foundNewline && !vv.WrapMode {
@@ -908,42 +887,19 @@ func (vv *ViewerView) ReloadWithCodepage(cpID int) {
 	}
 
 	size := f.Size()
-	var backend *ViewerBackend
-	if cpID == 65001 {
-		bCtx, bCancel := context.WithCancel(context.Background())
-		backend = &ViewerBackend{
-			file:         f,
-			size:         size,
-			path:         vv.path,
-			totalLines:   -1,
-			totalForSize: -1,
-			ctx:          bCtx,
-			cancelCtx:    bCancel,
-		}
-		if indexer, ok := vv.vfs.(vfs.LineIndexer); ok {
-			backend.indexer = indexer
-		}
-	} else {
-		defer f.Close()
-		fullData := make([]byte, size)
-		_, _ = f.ReadAt(context.Background(), fullData, 0)
-
-		decoded, err := vfs.DecodeBytes(fullData, cpID)
-		if err != nil {
-			decoded = fullData
-			cpID = 65001
-		}
-		memFile := &vfs.MemoryReadAtCloser{Data: decoded}
-		bCtx, bCancel := context.WithCancel(context.Background())
-		backend = &ViewerBackend{
-			file:         memFile,
-			size:         int64(len(decoded)),
-			path:         vv.path,
-			totalLines:   -1,
-			totalForSize: -1,
-			ctx:          bCtx,
-			cancelCtx:    bCancel,
-		}
+	bCtx, bCancel := context.WithCancel(context.Background())
+	backend := &ViewerBackend{
+		file:         f,
+		size:         size,
+		path:         vv.path,
+		codepage:     cpID,
+		totalLines:   -1,
+		totalForSize: -1,
+		ctx:          bCtx,
+		cancelCtx:    bCancel,
+	}
+	if indexer, ok := vv.vfs.(vfs.LineIndexer); ok {
+		backend.indexer = indexer
 	}
 
 	oldBackend := vv.backend
@@ -1053,13 +1009,19 @@ func (vv *ViewerView) Close() {
 	if GlobalFileState != nil && vv.path != "" {
 		GlobalFileState.SaveViewerStateAsync(FileStateKey(vv.vfs, vv.path), vv.TopOffset, vv.WrapMode, vv.HexMode)
 	}
+	var size int64
 	if vv.backend != nil {
+		size = vv.backend.Size()
 		vv.backend.Close()
 	}
+	vv.lineOffsets = nil
+	vv.rowCells = nil
+	vv.scrollBar = nil
 	vv.BaseFrame.Close()
 	if vv.OnClose != nil {
 		vv.OnClose()
 	}
+	ReleaseHeavyMemory(size)
 }
 
 func (vv *ViewerView) GetKeyLabels() *vtui.KeySet {
