@@ -162,6 +162,19 @@ func CheckForUpdates(pf *PanelsFrame, manual bool) {
 			displayTime = strings.Replace(displayTime[:16], "T", " ", 1)
 		}
 		displayVersion = "Nightly (" + displayTime + ")"
+		// The asset's updated_at is when the upload finished, which can
+		// trail the actual commit by however long the full multi-OS build
+		// matrix took — the nightly workflow embeds the commit hash and
+		// its own build time in the release body, which is what F1's Help
+		// Index shows after installing. Prefer that so the prompt and the
+		// post-update version line agree. See #343.
+		if commit, builtOn := commitInfoFromReleaseBody(release.Body); commit != "" {
+			if builtOn != "" {
+				displayVersion = "Nightly (" + commit + " [" + builtOn + "])"
+			} else {
+				displayVersion = "Nightly (" + commit + ")"
+			}
+		}
 		if AppConfig.LastUpdateVersion != updateKey {
 			needsUpdate = true
 		}
@@ -208,6 +221,38 @@ func CheckForUpdates(pf *PanelsFrame, manual bool) {
 			sessionDismissedUpdateKey = updateKey
 		}
 	})
+}
+
+// commitInfoFromReleaseBody pulls the commit hash and build time the
+// nightly workflow records in the release body:
+//
+//	**Commit:** `<hash>`
+//	**Built on:** `<time>`
+//
+// Returns empty strings if either line isn't found, so the caller can fall
+// back to the asset timestamp.
+func commitInfoFromReleaseBody(body string) (commit, builtOn string) {
+	commit = extractBacktickedField(body, "**Commit:**")
+	builtOn = extractBacktickedField(body, "**Built on:**")
+	return commit, builtOn
+}
+
+func extractBacktickedField(body, label string) string {
+	i := strings.Index(body, label)
+	if i == -1 {
+		return ""
+	}
+	rest := body[i+len(label):]
+	start := strings.Index(rest, "`")
+	if start == -1 {
+		return ""
+	}
+	rest = rest[start+1:]
+	end := strings.Index(rest, "`")
+	if end == -1 {
+		return ""
+	}
+	return rest[:end]
 }
 
 func reportUpdateError(manual bool, msg string) {
