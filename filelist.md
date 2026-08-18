@@ -1,6 +1,5 @@
 # Project Structure
 
-
     .
     ├── action_copyname_parent_test.go
     ├── action_marked_clipboard_test.go
@@ -144,6 +143,8 @@
     ├── console_ctrl_handler_other.go
     ├── console_ctrl_handler_windows.go
     ├── CONSOLE_MODES.md
+    ├── console_overlay_other.go
+    ├── console_overlay_windows.go
     ├── console_passthrough.go
     ├── console_passthrough_test.go
     ├── cpu_info_darwin.go
@@ -186,7 +187,6 @@
     ├── external_ui.go
     ├── extui_host.go
     ├── extui_test.go
-    ├── f4.exe
     ├── far2l_auth.go
     ├── farcolor_exp.go
     ├── farcolor_test.go
@@ -944,7 +944,11 @@
     │   │           ├── svg_icon.go
     │   │           ├── svg_path.go
     │   │           └── utils.go
-    │   └── test_runner.sh
+    │   ├── test_runner.sh
+    │   └── wine_syscall_probe
+    │       ├── go.mod
+    │       ├── main.go
+    │       └── probe_amd64.s
     ├── top_bar.go
     ├── top_bar_test.go
     ├── translate_kitty.go
@@ -1061,6 +1065,12 @@
     ├── window_icon_unix.go
     ├── window_icon_windows.go
     ├── window_icon_windows_test.go
+    ├── WINE.md
+    ├── winepath_other.go
+    ├── winepath_windows.go
+    ├── wine_probe.go
+    ├── wine_probe_other.go
+    ├── wine_probe_windows.go
     ├── word_nav.go
     ├── word_nav_test.go
     ├── workspace_routing_test.go
@@ -1068,4 +1078,4 @@
     ├── workspace_session_test.go
     └── zzz_pty_leak_check_test.go
     
-    57 directories, 1009 files
+    58 directories, 1019 files
