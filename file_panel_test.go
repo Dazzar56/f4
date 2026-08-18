@@ -974,7 +974,7 @@ func TestSeparateExtensionAppliesToEveryViewMode(t *testing.T) {
 	for _, mode := range []ViewMode{ViewModeBrief, ViewModeMedium, ViewModeDetailed, ViewModeWide} {
 		fp.SetViewMode(mode)
 		fp.Refresh()
-		text := fp.table.Rows[0].GetCellText(0)
+		text := fp.GetCellText(0, 0)
 		if !strings.HasPrefix(text, "sample") || !strings.HasSuffix(text, "go ") {
 			t.Errorf("mode %v did not separate extension: %q", mode, text)
 		}
