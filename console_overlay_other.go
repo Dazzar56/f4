@@ -9,3 +9,5 @@ func winConsoleOverlayAvailable() bool { return false }
 func winDrawConsoleOverlay(ov consoleOverlayContent) {}
 
 func winClearConsoleOverlay(n int) {}
+
+func clearConsoleViewBackground(w, h int) {}

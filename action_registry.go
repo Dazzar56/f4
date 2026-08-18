@@ -1331,16 +1331,22 @@ func init() {
 					if w, h, err := vtui.GetTerminalSize(); err == nil && w > 0 && h > 0 {
 						pf.lastW, pf.lastH = w, h
 					}
+					// Paint the console background before anything goes on
+					// top of it. Switching the active console buffer is
+					// supposed to reveal the shell's own screen, but under
+					// Wine it does not: the panels f4 just drew are still
+					// the visible pixels, and nothing ever writes over them
+					// (WINE.md §2k.1). Restores the saved console snapshot
+					// when one of the right size exists, blanks otherwise.
+					// Snapshot restore is unconditional; blanking only
+					// happens under Wine, where there is nothing real to
+					// preserve anyway.
+					clearConsoleViewBackground(pf.lastW, pf.lastH)
 					if pf.consoleStyle() == ConsoleViewFar {
 						// Far style: the console keeps whatever the commands
 						// printed, and f4 puts its command line and keybar on
 						// the bottom rows so the user can type right there.
 						pf.drawConsoleOverlay()
-					} else {
-						// mc style is view only. A snapshot taken at a
-						// different size used to be blitted back regardless,
-						// leaving torn rows of the old panels on screen.
-						restoreHostConsoleBufferIfSize(pf.lastW, pf.lastH)
 					}
 				} else {
 					pf.clearConsoleOverlay()

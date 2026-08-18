@@ -58,6 +58,70 @@ var (
 
 func winConsoleOverlayAvailable() bool { return true }
 
+// clearConsoleViewBackground paints the visible console window before the
+// overlay goes on top of it.
+//
+// Entering the console view assumes SetConsoleActiveScreenBuffer switches the
+// display to a buffer that already holds the shell's output, so f4 draws only
+// its two overlay rows and nothing else. Under Wine that switch does not
+// produce a visually distinct buffer -- the panels f4 drew are still the
+// pixels on screen, and nothing ever writes over them, so they stay until
+// some unrelated full repaint happens (WINE.md §2k.1).
+//
+// An earlier attempt read the window and wrote the same cells straight back,
+// hoping to force a repaint. That could never work: rewriting the panels with
+// the panels changes nothing. What is actually missing is content -- so write
+// content: the saved console snapshot when one of the right size exists (that
+// is the previous commands' output, which the far-style console view is
+// supposed to keep), otherwise blanks.
+//
+// No-op (and safe to call) if the console handle or geometry can't be read.
+func clearConsoleViewBackground(w, h int) {
+	if hostConsoleBufferMatches(w, h) {
+		restoreHostConsoleBufferImpl()
+		return
+	}
+	// Blanking is a Wine-only fallback. On a real Windows console the buffer
+	// switch works, whatever the shell printed is genuinely there, and
+	// erasing it would throw away exactly what the far-style console view
+	// exists to show.
+	if !vtui.IsWine() {
+		return
+	}
+	h2, ok := winOverlayHandle()
+	if !ok {
+		return
+	}
+	info, ok := winOverlayInfo(h2)
+	if !ok {
+		return
+	}
+	cols := int(info.Window.Right) - int(info.Window.Left) + 1
+	rows := int(info.Window.Bottom) - int(info.Window.Top) + 1
+	if cols <= 0 || rows <= 0 {
+		return
+	}
+	buf := make([]simpleCharInfo, cols*rows)
+	for i := range buf {
+		buf[i].UnicodeChar = ' '
+		buf[i].Attributes = overlayAttrNum
+	}
+	region := simpleSmallRect{
+		Left:   info.Window.Left,
+		Top:    info.Window.Top,
+		Right:  info.Window.Right,
+		Bottom: info.Window.Bottom,
+	}
+	bufSize := uintptr(uint32(uint16(cols)) | (uint32(uint16(rows)) << 16))
+	procWriteConsoleOutputW.Call(
+		uintptr(h2),
+		uintptr(unsafe.Pointer(&buf[0])),
+		bufSize,
+		0,
+		uintptr(unsafe.Pointer(&region)),
+	)
+}
+
 func winOverlayHandle() (syscall.Handle, bool) {
 	h, err := syscall.GetStdHandle(syscall.STD_OUTPUT_HANDLE)
 	if err != nil || h == 0 || h == syscall.InvalidHandle {
