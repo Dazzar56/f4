@@ -12,13 +12,13 @@ package hostpath
 
 import "path/filepath"
 
-func Join(elem ...string) string                { return filepath.Join(elem...) }
-func Dir(path string) string                    { return filepath.Dir(path) }
-func Base(path string) string                   { return filepath.Base(path) }
-func Clean(path string) string                  { return filepath.Clean(path) }
-func IsAbs(path string) bool                    { return filepath.IsAbs(path) }
-func VolumeName(path string) string             { return filepath.VolumeName(path) }
-func Abs(path string) (string, error)           { return filepath.Abs(path) }
-func EvalSymlinks(path string) (string, error)  { return filepath.EvalSymlinks(path) }
+func Join(elem ...string) string               { return filepath.Join(elem...) }
+func Dir(path string) string                   { return filepath.Dir(path) }
+func Base(path string) string                  { return filepath.Base(path) }
+func Clean(path string) string                 { return filepath.Clean(path) }
+func IsAbs(path string) bool                   { return filepath.IsAbs(path) }
+func VolumeName(path string) string            { return filepath.VolumeName(path) }
+func Abs(path string) (string, error)          { return filepath.Abs(path) }
+func EvalSymlinks(path string) (string, error) { return filepath.EvalSymlinks(path) }
 
 const Separator = filepath.Separator

@@ -33,12 +33,12 @@ func Link(oldname, newname string) error    { return os.Link(oldname, newname) }
 func Rename(oldpath, newpath string) error         { return os.Rename(oldpath, newpath) }
 func RemoveAll(path string) error                  { return os.RemoveAll(path) }
 func Remove(name string) error                     { return os.Remove(name) }
-func MkdirAll(path string, perm os.FileMode) error  { return os.MkdirAll(path, perm) }
-func Mkdir(name string, perm os.FileMode) error     { return os.Mkdir(name, perm) }
+func MkdirAll(path string, perm os.FileMode) error { return os.MkdirAll(path, perm) }
+func Mkdir(name string, perm os.FileMode) error    { return os.Mkdir(name, perm) }
 
-func Chmod(name string, mode os.FileMode) error       { return os.Chmod(name, mode) }
-func Chown(name string, uid, gid int) error           { return os.Chown(name, uid, gid) }
-func Lchown(name string, uid, gid int) error          { return os.Lchown(name, uid, gid) }
+func Chmod(name string, mode os.FileMode) error { return os.Chmod(name, mode) }
+func Chown(name string, uid, gid int) error     { return os.Chown(name, uid, gid) }
+func Lchown(name string, uid, gid int) error    { return os.Lchown(name, uid, gid) }
 func Chtimes(name string, atime, mtime time.Time) error {
 	return os.Chtimes(name, atime, mtime)
 }
