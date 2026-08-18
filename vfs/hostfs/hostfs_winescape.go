@@ -23,7 +23,7 @@ func (i *wineFileInfo) Size() int64  { return i.st.Size }
 func (i *wineFileInfo) ModTime() time.Time {
 	return time.Unix(i.st.Mtim.Sec, i.st.Mtim.Nsec)
 }
-func (i *wineFileInfo) IsDir() bool     { return i.st.IsDir() }
+func (i *wineFileInfo) IsDir() bool      { return i.st.IsDir() }
 func (i *wineFileInfo) Sys() interface{} { return &i.st }
 
 func (i *wineFileInfo) Mode() os.FileMode {
