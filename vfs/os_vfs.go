@@ -162,68 +162,14 @@ verify:
 }
 
 func (v *OSVFS) ReadDir(ctx context.Context, path string, onChunk func([]VFSItem)) error {
-	// Fast path (Stage D5, WINE.md §12): under Wine on a confirmed-safe host,
-	// list names via a raw getdents64 instead of the Win32
-	// FindFirstFile/FindNextFile loop Wine would otherwise translate into
-	// wineserver round trips. Falls straight through to the existing path,
-	// unchanged, on any failure -- see os_vfs_winescape_windows.go.
-	if names, ok := winescapeReadDirNames(path); ok {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		items := make([]VFSItem, 0, len(names))
-		for _, name := range names {
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-			entryPath := hostpath.Join(path, name)
-			info, statErr := hostfs.Lstat(entryPath)
-			if statErr != nil {
-				// Entry vanished between listing and stat, or is otherwise
-				// unreadable -- skip it exactly as a native FindNextFile
-				// race would, rather than failing the whole listing.
-				continue
-			}
-			var isDir bool
-			var isSymlink bool
-			isDir = info.IsDir()
-			isSymlink = info.Mode()&os.ModeSymlink != 0
-			if !isSymlink && isReparsePoint(info) {
-				isSymlink = true
-			}
-			if !isDir && !info.Mode().IsRegular() {
-				if target, err := hostfs.Stat(entryPath); err == nil {
-					isDir = target.IsDir()
-				}
-			}
-			item := VFSItem{
-				Name:         name,
-				Size:         info.Size(),
-				SizeKnown:    true,
-				IsDir:        isDir,
-				IsSymlink:    isSymlink,
-				MTime:        info.ModTime(),
-				IsExecutable: info.Mode().Perm()&0111 != 0,
-				IsHidden:     isHidden(entryPath, name, info),
-			}
-			fillPhysicalSizeCheap(&item, info)
-			items = append(items, item)
-		}
-		if len(items) > 0 && onChunk != nil {
-			onChunk(items)
-		}
-		return nil
-	}
-
-	// Try to open the directory
 	dirPath := path
-	f, err := hostfs.Open(prepareOSPath(dirPath))
+	entries, err := hostfs.ReadDir(prepareOSPath(dirPath))
 	if err != nil && os.IsPermission(err) && runtime.GOOS == "windows" {
 		// Try to resolve protected junctions (e.g. "Documents and Settings")
 		if resolved, ok := wellKnownJunction(dirPath); ok {
 			vtui.DebugLog("VFS: ReadDir: resolved junction %q -> %q", dirPath, resolved)
 			dirPath = resolved
-			f, err = hostfs.Open(prepareOSPath(dirPath))
+			entries, err = hostfs.ReadDir(prepareOSPath(dirPath))
 		}
 	}
 	if err != nil {
@@ -243,22 +189,27 @@ func (v *OSVFS) ReadDir(ctx context.Context, path string, onChunk func([]VFSItem
 		}
 		return err
 	}
-	defer f.Close()
 
-	for {
+	// hostfs.ReadDir returns the whole directory at once (both the posix
+	// os.ReadDir backend and, from Stage E3, the libwinescape backend do),
+	// unlike the old *os.File.ReadDir(1000) this replaces, which streamed
+	// incrementally straight from the OS. True incremental disk reading is
+	// gone; what's kept is chunked *delivery* to onChunk, so a huge
+	// directory still arrives to the UI in batches instead of one giant
+	// slice that blocks a single redraw.
+	const chunkSize = 1000
+	for start := 0; start < len(entries); start += chunkSize {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		entries, err := f.ReadDir(1000)
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			return err
+		end := start + chunkSize
+		if end > len(entries) {
+			end = len(entries)
 		}
+		batch := entries[start:end]
 
-		items := make([]VFSItem, 0, len(entries))
-		for _, e := range entries {
+		items := make([]VFSItem, 0, len(batch))
+		for _, e := range batch {
 			info, _ := e.Info()
 			var size int64
 			var mtime time.Time
@@ -566,7 +517,7 @@ func (v *OSVFS) Search(ctx context.Context, path string, pattern string) (chan i
 }
 
 type osFileWrapper struct {
-	*os.File
+	hostfs.File
 	size int64
 }
 

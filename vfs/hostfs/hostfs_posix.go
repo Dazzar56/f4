@@ -13,18 +13,43 @@
 package hostfs
 
 import (
+	"io/fs"
 	"os"
 	"time"
 )
 
-func Open(name string) (*os.File, error) { return os.Open(name) }
+// File is the minimal surface os_vfs.go actually uses on an open file
+// handle (checked exhaustively against every f.X(/sudoF.X( call site).
+// *os.File satisfies it as-is. The Windows posix-personality backend
+// (Stage E3) implements it over libwinescape's raw fd instead of a real
+// os.File, which is why this is an interface and not *os.File: a raw fd
+// obtained via a Linux syscall cannot be wrapped into a genuine *os.File on
+// Windows -- there is no real Win32 handle behind it for os.File's Windows
+// internals to call into.
+type File interface {
+	Read(p []byte) (n int, err error)
+	ReadAt(p []byte, off int64) (n int, err error)
+	Write(p []byte) (n int, err error)
+	WriteAt(p []byte, off int64) (n int, err error)
+	Seek(offset int64, whence int) (int64, error)
+	Stat() (os.FileInfo, error)
+	Truncate(size int64) error
+	Close() error
+}
 
-func OpenFile(name string, flag int, perm os.FileMode) (*os.File, error) {
+func Open(name string) (File, error) { return os.Open(name) }
+
+func OpenFile(name string, flag int, perm os.FileMode) (File, error) {
 	return os.OpenFile(name, flag, perm)
 }
 
 func Stat(name string) (os.FileInfo, error)  { return os.Stat(name) }
 func Lstat(name string) (os.FileInfo, error) { return os.Lstat(name) }
+
+// ReadDir lists a directory's entries. Matches os.ReadDir's shape exactly
+// (sorted by name, lazy Info()) so callers don't need to know which
+// personality produced the result.
+func ReadDir(name string) ([]fs.DirEntry, error) { return os.ReadDir(name) }
 
 func Readlink(name string) (string, error)  { return os.Readlink(name) }
 func Symlink(oldname, newname string) error { return os.Symlink(oldname, newname) }
