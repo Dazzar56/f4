@@ -174,4 +174,4 @@ replace github.com/ebitengine/hideconsole => ./internal/hideconsole
 
 // replace github.com/unxed/colorer4go => ../../../dev/colorer4go
 
-replace github.com/unxed/vtui => github.com/Procrustean/vtui v0.0.0-20260818070002-79f7b3be4c65
+// replace github.com/unxed/vtui => ../../../dev/vtui

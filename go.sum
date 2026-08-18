@@ -6,8 +6,6 @@ cloud.google.com/go/compute/metadata v0.9.0 h1:pDUj4QMoPejqq20dK0Pg2N4yG9zIkYGdB
 cloud.google.com/go/compute/metadata v0.9.0/go.mod h1:E0bWwX5wTnLPedCKqk3pJmVgCBSM6qQI1yTBdEb3C10=
 github.com/Masterminds/semver v1.5.0 h1:H65muMkzWKEuNDnfl9d70GUjFniHKHRbFPGBuZ3QEww=
 github.com/Masterminds/semver v1.5.0/go.mod h1:MB6lktGJrhw8PrUyiEoblNEGEQ+RzHPF078ddwwvV3Y=
-github.com/Procrustean/vtui v0.0.0-20260818070002-79f7b3be4c65 h1:U6LddeyD8aSnQ1SUk4MmYvV32EQ+yDQUQJzRTgjrbwI=
-github.com/Procrustean/vtui v0.0.0-20260818070002-79f7b3be4c65/go.mod h1:38MBRERESLehwBK19qg+w6WAqhcZTE/Xe6P/7vcG8Z4=
 github.com/STARRY-S/zip v0.2.3 h1:luE4dMvRPDOWQdeDdUxUoZkzUIpTccdKdhHHsQJ1fm4=
 github.com/STARRY-S/zip v0.2.3/go.mod h1:lqJ9JdeRipyOQJrYSOtpNAiaesFO6zVDsE8GIGFaoSk=
 github.com/abadojack/whatlanggo v1.0.1 h1:19N6YogDnf71CTHm3Mp2qhYfkRdyvbgwWdd2EPxJRG4=
@@ -268,6 +266,8 @@ github.com/unxed/tar v0.1.126 h1:RleuQKR5lCz+5ESFmED4RS6IizeEVjZ/pn3UER9jTBI=
 github.com/unxed/tar v0.1.126/go.mod h1:PVC2kDNoHYKzggPKeyE+xAr5fn8cBHuU0Y+hHCsleSI=
 github.com/unxed/vtinput v0.1.4 h1:yiYD83SwunjdoKTi6IllVAvKSE+av46DKSHyVhuezHQ=
 github.com/unxed/vtinput v0.1.4/go.mod h1:ZOqbBmEzYb33FrwsJf0y1QSJLo378ciXEgZWD4cTqGU=
+github.com/unxed/vtui v0.1.213 h1:UX8pUV/ebJRKHDr98UR47HF/AdfOEOUkw7T8lOeq8gc=
+github.com/unxed/vtui v0.1.213/go.mod h1:0VXhD7WOMjQ70XQJaYGitMJsf8kDKtYKN0CXA+5Un3E=
 github.com/unxed/winkeys v0.1.1 h1:CeRhzQLrZtO2aVq8C8gPX1ySdbbvPombbUZ15cRjFTI=
 github.com/unxed/winkeys v0.1.1/go.mod h1:eCDbEJFdYcii0Fd4O9u+CAqjJ4SkkhWDkhikNFwBCd4=
 github.com/unxed/xkb-go v0.1.8 h1:hqPI2wJw2LQ7YOqghNYat/TJF3pFamCCPjhxI5I3lhU=
