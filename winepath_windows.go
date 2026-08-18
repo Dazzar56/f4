@@ -19,11 +19,11 @@ import (
 // declared in mem_info_windows.go; ntdllWine is declared here since nothing
 // else in this package needs ntdll.dll yet.
 var (
-	ntdllWine                = syscall.NewLazyDLL("ntdll.dll")
-	procWineGetUnixFileName  = kernel32.NewProc("wine_get_unix_file_name")
-	procWineGetHostVersion   = ntdllWine.NewProc("wine_get_host_version")
-	procGetProcessHeap       = kernel32.NewProc("GetProcessHeap")
-	procHeapFree             = kernel32.NewProc("HeapFree")
+	ntdllWine               = syscall.NewLazyDLL("ntdll.dll")
+	procWineGetUnixFileName = kernel32.NewProc("wine_get_unix_file_name")
+	procWineGetHostVersion  = ntdllWine.NewProc("wine_get_host_version")
+	procGetProcessHeap      = kernel32.NewProc("GetProcessHeap")
+	procHeapFree            = kernel32.NewProc("HeapFree")
 )
 
 // wineUnixPrefix is the canonical form WINE.md §5/B1 settles on for talking
