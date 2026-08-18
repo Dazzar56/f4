@@ -1,6 +1,6 @@
 //go:build windows
 
-package main
+package vfs
 
 import (
 	"path"
@@ -15,10 +15,13 @@ import (
 // wine_get_unix_file_name is a kernel32.dll export, wine_get_host_version an
 // ntdll.dll one — both specific to Wine (see WINE.md §5, Этап B0). They are
 // cdecl, which on amd64/arm64 has the same calling convention as stdcall, so
-// a plain syscall.LazyProc.Call works. `kernel32` is the shared LazyDLL
-// declared in mem_info_windows.go; ntdllWine is declared here since nothing
-// else in this package needs ntdll.dll yet.
+// a plain syscall.LazyProc.Call works. This file lives in package vfs (moved
+// here so vfs.OSVFS can call it directly -- package main cannot be imported
+// by vfs), so it declares its own kernel32/ntdll handles rather than sharing
+// main's; syscall.NewLazyDLL is idempotent per-process, so a second LazyDLL
+// for the same DLL name from a different package costs nothing extra.
 var (
+	kernel32                = syscall.NewLazyDLL("kernel32.dll")
 	ntdllWine               = syscall.NewLazyDLL("ntdll.dll")
 	procWineGetUnixFileName = kernel32.NewProc("wine_get_unix_file_name")
 	procWineGetHostVersion  = ntdllWine.NewProc("wine_get_host_version")
@@ -89,6 +92,24 @@ func WineUnixFromDOS(dosPath string) (string, bool) {
 		return path.Clean(unixPath), true
 	}
 	return wineUnixFromDOSCached(dosPath)
+}
+
+// WineUnixFromDOSFast is WineUnixFromDOS without the wine_get_unix_file_name
+// fallback: it succeeds only when dosPath already carries the \\?\unix (or
+// NT \??\unix) prefix, purely as text, and never calls into Wine or opens
+// anything. Safe to call from hot paths (redraw, status line) where
+// WineUnixFromDOS's cached-but-still-real Wine call on a cache miss would
+// not be.
+func WineUnixFromDOSFast(dosPath string) (string, bool) {
+	rest, matched := stripWineUnixPrefix(dosPath)
+	if !matched {
+		return "", false
+	}
+	unixPath := strings.ReplaceAll(rest, `\`, "/")
+	if !strings.HasPrefix(unixPath, "/") {
+		unixPath = "/" + unixPath
+	}
+	return path.Clean(unixPath), true
 }
 
 // stripWineUnixPrefix recognizes both the Win32 (\\?\unix) and NT (\??\unix)
