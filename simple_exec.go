@@ -52,6 +52,17 @@ func (pf *PanelsFrame) runSimpleInlineCommand(dir, command string) {
 	// does not scroll trailing keybar or command-line cells into history.
 	pf.clearConsoleOverlay()
 
+	// clearConsoleOverlay() just restored the cursor to overlaySavedCursor
+	// -- the console's real cursor position from before f4 ever drew an
+	// overlay over it, e.g. wherever an earlier shell prompt happened to
+	// end. That column is almost never 0. The row it's on was just blanked
+	// by clearConsoleOverlay() (winClearConsoleOverlay), so a bare "\r"
+	// (no newline, no scroll, nothing consumed) is enough to put the
+	// child's own first output character at the start of that already-
+	// blank row instead of wherever a previous, unrelated line of text
+	// used to end.
+	os.Stdout.WriteString("\r")
+
 	inConsoleView := !pf.showPanels && pf.shellMode == ShellModeSimpleInline &&
 		pf.consoleStyle() == ConsoleViewFar
 
