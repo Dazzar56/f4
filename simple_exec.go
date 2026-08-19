@@ -58,6 +58,13 @@ func (pf *PanelsFrame) runSimpleInlineCommand(dir, command string) {
 	_ = cmd.Run()
 
 	if inConsoleView {
+		// Snapshot the console now, while the command's output is still the
+		// visible content of hStdOut. Without this, clearConsoleViewBackground()
+		// finds no saved buffer on the next Ctrl+O round-trip and blanks the
+		// whole window instead of restoring it (the exact bug this comment
+		// used to sit next to, minus the missing capture).
+		captureHostConsoleBuffer(pf.lastW, pf.lastH)
+
 		// Busy is still set, so Resume() cannot repaint the panels over the
 		// console before we switch back to it.
 		vtui.Resume()
