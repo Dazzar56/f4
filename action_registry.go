@@ -390,15 +390,20 @@ func init() {
 		LabelKey:    "Action.Debug.ScreenDump",
 		Description: "Write the current screen buffer to vtui.screen.log",
 		DescKey:     "Action.Debug.ScreenDump.Desc",
-		// CtrlShiftP (and any other Ctrl+Shift+<letter> combo) collapses to
-		// plain Ctrl+<letter> on a legacy ANSI terminal — Shift over a letter
-		// doesn't change the control byte sent, and disambiguating it needs
-		// an extended keyboard protocol (Kitty / win32-input-mode) that Wine's
-		// tty backend does not implement (see WINE.md §15.1). CtrlAlt<letter>
-		// survives that path: Alt is delivered as an ESC prefix, so it stays
-		// unambiguous even over a bare control byte. Same pattern already
-		// used by Panel.CopySelectedRealPaths (CtrlAltIns) above.
+		// CtrlAltP alone isn't reliable either: under Wine's native console
+		// input (Src:ConPTY, "Windows Native mode" — see debug.log captured
+		// live for issue #536, WINE.md §15.1), Alt is a Windows system key
+		// (WM_SYSKEYDOWN) and gets swallowed by the console host's window
+		// procedure before it ever reaches ReadConsoleInputW — confirmed by
+		// RAWKEY logging showing mods=0x8 (LEFT_CTRL_PRESSED only, no Alt
+		// bit) for the very keypress the user intended as Ctrl+Alt+P, and
+		// no VK_MENU record anywhere in the log. CtrlAltP is left in place
+		// since it may still work over legacy ANSI parsing (a different
+		// input path than the one this log exercised), but MenuPath is the
+		// reachable-everywhere fallback: F9 and F10 (plain function keys,
+		// no modifiers) both arrived correctly in that same log.
 		DefaultKeys: []string{"CtrlAltP"},
+		MenuPath:    "Commands",
 		Handler:     actionScreenDump,
 	})
 
