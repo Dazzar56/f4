@@ -187,14 +187,16 @@ func TestCustomSideMenuCommandsResolveToRegisteredActions(t *testing.T) {
 	}
 
 	wantExact := map[int]string{
-		CmLeftBrief:     "Panel.Left.ViewBrief",
-		CmRightWide:     "Panel.Right.ViewWide",
-		CmLeftSortExt:   "Panel.Left.SortByExt",
-		CmRightSortSize: "Panel.Right.SortBySize",
-		CmLeftAIContext: "AI.Left.ViewContext",
-		CmRightAIMem:    "AI.Right.ViewMem",
-		CmBackground:    "App.Background",
-		vtui.CmQuit:     "App.Quit",
+		CmLeftBrief:      "Panel.Left.ViewBrief",
+		CmRightWide:      "Panel.Right.ViewWide",
+		CmLeftSortExt:    "Panel.Left.SortByExt",
+		CmRightSortSize:  "Panel.Right.SortBySize",
+		CmLeftAIContext:  "AI.Left.ViewContext",
+		CmRightAIMem:     "AI.Right.ViewMem",
+		CmBackground:     "App.Background",
+		vtui.CmQuit:      "App.Quit",
+		CmWorkspaceNew:   "Workspace.New",
+		CmWorkspaceClose: "Workspace.Close",
 	}
 	for command, want := range wantExact {
 		if got := commandToActionName[command]; got != want {
