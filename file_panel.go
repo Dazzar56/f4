@@ -2292,6 +2292,10 @@ func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
 			rightStr := fmt.Sprintf("%s  %s", sizeStr, dateStr)
 			nameStr := e.Name
 
+			if fp.vfs != nil && fp.vfs.GetPath() == "net://" {
+				rightStr = ""
+			}
+
 			if e.IsSymlink && fp.vfs != nil {
 				if target, err := vfs.Readlink(context.Background(), fp.vfs, fp.vfs.Join(fp.vfs.GetPath(), e.Name)); err == nil && target != "" {
 					nameStr = e.Name + " -> " + target
