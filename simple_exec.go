@@ -65,10 +65,15 @@ func (pf *PanelsFrame) runSimpleInlineCommand(dir, command string) {
 		// used to sit next to, minus the missing capture).
 		captureHostConsoleBuffer(pf.lastW, pf.lastH)
 
-		// Busy is still set, so Resume() cannot repaint the panels over the
-		// console before we switch back to it.
-		vtui.Resume()
-		vtui.SetAltScreen(false)
+		// Re-enable input without the AltScreen round trip Resume() would do
+		// (host buffer -> f4's own buffer -> host buffer again, all inside a
+		// few milliseconds): the host buffer is already the active one, set
+		// by Suspend() before cmd.Run() and never touched since. Under Wine
+		// that rapid double SetConsoleActiveScreenBuffer is exactly the kind
+		// of call vtui's own WINE.md documents as unreliable -- see the
+		// "single-line command output vanishes after Ctrl+O" report this
+		// call replaced Resume()+SetAltScreen(false) for.
+		vtui.ResumeWithoutAltScreen()
 		pf.SetBusy(true)
 		pf.drawConsoleOverlay()
 		return
