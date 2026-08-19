@@ -390,6 +390,15 @@ func init() {
 		LabelKey:    "Action.Debug.ScreenDump",
 		Description: "Write the current screen buffer to vtui.screen.log",
 		DescKey:     "Action.Debug.ScreenDump.Desc",
+		// CtrlShiftP (and any other Ctrl+Shift+<letter> combo) collapses to
+		// plain Ctrl+<letter> on a legacy ANSI terminal — Shift over a letter
+		// doesn't change the control byte sent, and disambiguating it needs
+		// an extended keyboard protocol (Kitty / win32-input-mode) that Wine's
+		// tty backend does not implement (see WINE.md §15.1). CtrlAlt<letter>
+		// survives that path: Alt is delivered as an ESC prefix, so it stays
+		// unambiguous even over a bare control byte. Same pattern already
+		// used by Panel.CopySelectedRealPaths (CtrlAltIns) above.
+		DefaultKeys: []string{"CtrlAltP"},
 		Handler:     actionScreenDump,
 	})
 

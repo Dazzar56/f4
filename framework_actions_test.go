@@ -91,9 +91,14 @@ func TestFrameworkActionsKeepNativeShortcutsOutOfHotkeyDefaults(t *testing.T) {
 		}
 	}
 
+	// CtrlAltP, not CtrlShiftP: the palette owns CtrlShiftP, and Shift over a
+	// bare letter is indistinguishable from no-Shift on a legacy ANSI
+	// terminal anyway (see WINE.md §15.1) — Wine's tty backend can't deliver
+	// it at all. CtrlAlt<letter> survives because Alt arrives as an ESC
+	// prefix ahead of the plain control byte.
 	dump, ok := GetAction("Debug.ScreenDump")
-	if !ok || len(dump.DefaultKeys) != 0 || len(dump.NativeKeys) != 0 {
-		t.Fatalf("screen dump registration = %+v; Ctrl+Shift+P now belongs to the palette", dump)
+	if !ok || len(dump.DefaultKeys) != 1 || dump.DefaultKeys[0] != "CtrlAltP" || len(dump.NativeKeys) != 0 {
+		t.Fatalf("screen dump registration = %+v; want DefaultKeys=[CtrlAltP]", dump)
 	}
 }
 
