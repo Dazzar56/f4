@@ -247,6 +247,23 @@ func winDrawConsoleOverlay(ov consoleOverlayContent) {
 	if !ok {
 		return
 	}
+	// A child that just finished writing can leave CursorPosition ahead of
+	// srWindow: GetConsoleScreenBufferInfo's cursor field already reflects
+	// the line it printed, but under Wine the window rect that follows the
+	// cursor can lag behind by one repaint tick if this read races the
+	// child's last write. A single-line command like "echo 123" returns
+	// fast enough for that race to matter; a multi-line command like "dir"
+	// spans enough console writes that the window has caught up by the time
+	// we get here -- which is exactly the "dir shows, echo doesn't" split.
+	// pinOverlayWindow() below re-asserts whatever rect we hand it, so
+	// pinning a stale one *locks in* the race instead of letting the next
+	// repaint self-correct. Extend the rect down to include the cursor row
+	// first, so the pin never excludes the output the child just produced.
+	if info.CursorPosition.Y > info.Window.Bottom {
+		shift := info.CursorPosition.Y - info.Window.Bottom
+		info.Window.Top += shift
+		info.Window.Bottom += shift
+	}
 	pinOverlayWindow(h, &info.Window)
 	// Re-read after pinning: if the pin forced Wine to reconcile a stale
 	// window rect, this is the corrected geometry; if the pin was a no-op,
