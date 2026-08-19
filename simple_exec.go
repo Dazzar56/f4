@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strings"
 
 	"github.com/unxed/vtui"
 )
@@ -58,6 +59,29 @@ func (pf *PanelsFrame) runSimpleInlineCommand(dir, command string) {
 	_ = cmd.Run()
 
 	if inConsoleView {
+		// The child just wrote its own output starting wherever the cursor
+		// happened to be: clearConsoleOverlay() above parks it at
+		// overlaySavedCursor, the console's real cursor position from
+		// *before* f4 ever drew an overlay there -- not necessarily column
+		// 0 of a fresh line. A real interactive shell only looks safe to
+		// redraw at a fixed bottom row because it always prints a fresh
+		// "\r\n" before the next prompt, so command output never lands on
+		// the same row the prompt is about to reclaim. Nothing here was
+		// doing that: the child's entire output (all of it, for a
+		// single-line command like "echo 123") could end up sitting on
+		// exactly the rows drawConsoleOverlay() is about to overwrite
+		// below, and get silently erased regardless of platform -- this
+		// isn't a Wine timing issue, it's the same outcome a real Windows
+		// console would produce with this same sequence.
+		//
+		// Force those rows clear first: n newlines guarantee at least n
+		// scroll events by the time the cursor (wherever it started) is
+		// done, which is exactly enough to push anything that was sitting
+		// in the overlay's n reserved rows up and out of them.
+		if n := pf.overlayLines(); n > 0 {
+			os.Stdout.WriteString(strings.Repeat("\r\n", n))
+		}
+
 		// Snapshot the console now, while the command's output is still the
 		// visible content of hStdOut. Without this, clearConsoleViewBackground()
 		// finds no saved buffer on the next Ctrl+O round-trip and blanks the
