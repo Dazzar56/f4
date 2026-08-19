@@ -161,6 +161,7 @@
     ├── dragdrop_test.go
     ├── drives_unix.go
     ├── drives_windows.go
+    ├── editor_binary_open_test.go
     ├── editor_delta_test.go
     ├── editor_fade.go
     ├── editor_features_test.go
@@ -890,6 +891,8 @@
     │   ├── radiola.ini
     │   └── radiola.md
     ├── style_test.go
+    ├── terminal_log_console_other.go
+    ├── terminal_log_console_windows.go
     ├── terminal_log_vfs.go
     ├── terminal_log_vfs_test.go
     ├── TERMINAL.md
@@ -1085,4 +1088,4 @@
     ├── workspace_session_test.go
     └── zzz_pty_leak_check_test.go
     
-    61 directories, 1023 files
+    61 directories, 1026 files
