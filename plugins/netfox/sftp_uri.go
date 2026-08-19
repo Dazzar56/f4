@@ -53,7 +53,7 @@ func (p *sftpURIProvider) OpenURI(ctx context.Context, current vfs.VFS, raw stri
 		}
 	}
 
-	v, err := NewSFTPVFS(nil, host, port, name, pass, 15, "", netproxy.Resolve(netproxy.Settings{}))
+	v, err := NewSFTPVFS(nil, host, port, name, pass, "", 15, "", netproxy.Resolve(netproxy.Settings{}))
 	if err != nil {
 		return nil, err
 	}

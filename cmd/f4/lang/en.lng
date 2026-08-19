@@ -1393,6 +1393,7 @@ NetFox.LabelHost=&Host:
 NetFox.LabelPort=P&ort:
 NetFox.LabelUser=&User:
 NetFox.LabelPassword=Pass&word:
+NetFox.LabelKeyPath=SSH &Key file:
 NetFox.LabelTimeout=Time&out:
 NetFox.LabelCodepage=Cod&epage:
 NetFox.ErrorEmptyName=Name cannot be empty

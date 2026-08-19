@@ -406,8 +406,8 @@ func (s *sshShell) OpenPty(cols, rows int) (any, error) {
 // The command is "exec /bin/sh" rather than a plain shell request, because the
 // account's login shell may well be csh, fish or something else that does not
 // speak the POSIX syntax the helper is written in.
-func sshFishDialer(host, port, user, pass string, timeout int, px netproxy.Settings) FishDialer {
-	return sshFishDialerWith(host, port, user, pass, timeout, px, func(s *ssh.Session) error {
+func sshFishDialer(host, port, user, pass, keyPath string, timeout int, px netproxy.Settings) FishDialer {
+	return sshFishDialerWith(host, port, user, pass, keyPath, timeout, px, func(s *ssh.Session) error {
 		return s.Start("exec /bin/sh")
 	})
 }
@@ -424,8 +424,8 @@ func sshFishDialer(host, port, user, pass string, timeout int, px netproxy.Setti
 // on both. No pseudo-terminal is requested for the same reason as the
 // POSIX side: a ConPTY would echo every request back and inject VT
 // sequences.
-func sshFishDialerPwsh(host, port, user, pass string, timeout int, px netproxy.Settings) FishDialer {
-	return sshFishDialerWith(host, port, user, pass, timeout, px, func(s *ssh.Session) error {
+func sshFishDialerPwsh(host, port, user, pass, keyPath string, timeout int, px netproxy.Settings) FishDialer {
+	return sshFishDialerWith(host, port, user, pass, keyPath, timeout, px, func(s *ssh.Session) error {
 		return s.Start("powershell.exe -NoLogo -NoProfile")
 	})
 }
@@ -434,7 +434,7 @@ func sshFishDialerPwsh(host, port, user, pass string, timeout int, px netproxy.S
 // disagree about is how they ask sshd to give them the shell: exec+cmd
 // on POSIX (which bypasses an exotic login shell), plain shell on
 // Windows (which respects DefaultShell).
-func sshFishDialerWith(host, port, user, pass string, timeout int, px netproxy.Settings, startShell func(*ssh.Session) error) FishDialer {
+func sshFishDialerWith(host, port, user, pass, keyPath string, timeout int, px netproxy.Settings, startShell func(*ssh.Session) error) FishDialer {
 	return func(ctx context.Context) (io.Writer, io.Reader, io.Closer, error) {
 		// DialSSH carries a timeout of its own and cannot be interrupted, so
 		// the context is honoured where it can be: before the dial, and again
@@ -443,7 +443,7 @@ func sshFishDialerWith(host, port, user, pass string, timeout int, px netproxy.S
 		if err := ctx.Err(); err != nil {
 			return nil, nil, nil, err
 		}
-		client, err := DialSSH(host, port, user, pass, timeout, px)
+		client, err := DialSSH(host, port, user, pass, keyPath, timeout, px)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -480,7 +480,7 @@ func sshFishDialerWith(host, port, user, pass string, timeout int, px netproxy.S
 // through a pair of streams, so the session it hands back is one that can be
 // rebuilt after the connection drops; a site opened any other way would have
 // to be reopened by hand.
-func NewFishVFS(parent vfs.VFS, host, port, user, pass string, timeout int, px netproxy.Settings) (*FishVFS, error) {
+func NewFishVFS(parent vfs.VFS, host, port, user, pass, keyPath string, timeout int, px netproxy.Settings) (*FishVFS, error) {
 	key := fishPoolKey{host: host, port: port, user: user, proxy: px}
 	if conn := globalFishPool.take(key); conn != nil {
 		return newFishVFSFromPooledConn(parent, conn, host, port, user), nil
@@ -501,8 +501,8 @@ func NewFishVFS(parent vfs.VFS, host, port, user, pass string, timeout int, px n
 	// asks sshd for a plain shell (which resolves to PowerShell on
 	// Windows), and delivers the base64-encoded helper.ps1 through it.
 	v, err := NewFishVFSOnDialers(ctx, parent,
-		sshFishDialer(host, port, user, pass, timeout, px), fishplus.HandshakeOptions{},
-		sshFishDialerPwsh(host, port, user, pass, timeout, px), fishplus.HandshakeOptions{Bootstrap: fishplus.BootstrapBase64LinePwsh},
+		sshFishDialer(host, port, user, pass, keyPath, timeout, px), fishplus.HandshakeOptions{},
+		sshFishDialerPwsh(host, port, user, pass, keyPath, timeout, px), fishplus.HandshakeOptions{Bootstrap: fishplus.BootstrapBase64LinePwsh},
 		title)
 	if err != nil {
 		return nil, err
@@ -1345,7 +1345,7 @@ func (p *fishProvider) Open(ctx context.Context, parent vfs.VFS, pth string) (vf
 			timeout = t
 		}
 	}
-	res, err := NewFishVFS(parent, cfg.Host, port, cfg.User, cfg.Pass, timeout, cfg.Proxy())
+	res, err := NewFishVFS(parent, cfg.Host, port, cfg.User, cfg.Pass, cfg.KeyPath, timeout, cfg.Proxy())
 	if err != nil {
 		return nil, err
 	}

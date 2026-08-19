@@ -101,7 +101,7 @@ func showConnectionDialog(app vfs.App, nf *NetFoxVFS, oldName string) {
 	}
 	activeProto := protos[currIdx]
 
-	dlg := vtui.NewCenteredDialog(60, 21, vtui.Msg("NetFox.ConnectionTitle"))
+	dlg := vtui.NewCenteredDialog(60, 22, vtui.Msg("NetFox.ConnectionTitle"))
 	dlg.ShowClose = true
 
 	editName := vtui.NewEdit(0, 0, 40, name)
@@ -120,6 +120,7 @@ func showConnectionDialog(app vfs.App, nf *NetFoxVFS, oldName string) {
 	}
 	editUser := vtui.NewEdit(0, 0, 40, cfg.User)
 	editPass := vtui.NewPasswordEdit(0, 0, 40, cfg.Pass)
+	editKeyPath := vtui.NewEdit(0, 0, 40, cfg.KeyPath)
 	editTimeout := vtui.NewEdit(0, 0, 10, cfg.Timeout)
 	if editTimeout.GetText() == "" {
 		editTimeout.SetText("15")
@@ -151,7 +152,7 @@ func showConnectionDialog(app vfs.App, nf *NetFoxVFS, oldName string) {
 		return hbox
 	}
 
-	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 56, 9)
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 56, 10)
 
 	vbox.Add(makeRow(vtui.Msg("NetFox.LabelName"), editName), vtui.Margins{}, vtui.AlignFill)
 	vbox.Add(makeRow(vtui.Msg("NetFox.LabelProtocol"), comboProto), vtui.Margins{Top: 0}, vtui.AlignFill)
@@ -159,12 +160,13 @@ func showConnectionDialog(app vfs.App, nf *NetFoxVFS, oldName string) {
 	vbox.Add(makeRow(vtui.Msg("NetFox.LabelPort"), editPort), vtui.Margins{Top: 0}, vtui.AlignFill)
 	vbox.Add(makeRow(vtui.Msg("NetFox.LabelUser"), editUser), vtui.Margins{Top: 0}, vtui.AlignFill)
 	vbox.Add(makeRow(vtui.Msg("NetFox.LabelPassword"), editPass), vtui.Margins{Top: 0}, vtui.AlignFill)
+	vbox.Add(makeRow(vtui.Msg("NetFox.LabelKeyPath"), editKeyPath), vtui.Margins{Top: 0}, vtui.AlignFill)
 	vbox.Add(makeRow(vtui.Msg("NetFox.LabelTimeout"), editTimeout), vtui.Margins{Top: 0}, vtui.AlignFill)
 	vbox.Add(makeRow(vtui.Msg("NetFox.LabelCodepage"), comboCp), vtui.Margins{Top: 0}, vtui.AlignFill)
 	vbox.Apply()
 
-	// 2. Extra Protocol Area (Y: 14) - architectural proxy
-	extraX, extraY, extraW, extraH := dlg.X1+2, dlg.Y1+14, 56, 1
+	// 2. Extra Protocol Area (Y: 15) - architectural proxy
+	extraX, extraY, extraW, extraH := dlg.X1+2, dlg.Y1+15, 56, 1
 	container := &protoUIContainer{
 		active: activeProto,
 		uis:    make(map[string]vtui.UIElement),
@@ -210,7 +212,7 @@ func showConnectionDialog(app vfs.App, nf *NetFoxVFS, oldName string) {
 		vtui.FrameManager.Redraw()
 	}
 
-	// 3. Bottom Section (Y: 16-18)
+	// 3. Bottom Section (Y: 17-19)
 	btnOk := vtui.NewButton(0, 0, vtui.Msg("vtui.Save"))
 	// The proxy lives in a dialog of its own: it is a rare thing to touch,
 	// and the connection form has no room left for five more fields.
@@ -219,7 +221,7 @@ func showConnectionDialog(app vfs.App, nf *NetFoxVFS, oldName string) {
 	btnOk.IsDefault = true
 	btnProxy.OnClick = func() { showProxyDialog(&cfg) }
 
-	vboxBottom := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+16, 56, 3)
+	vboxBottom := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+17, 56, 3)
 	btnHbox := vtui.NewHBoxLayout(0, 0, 56, 1)
 	btnHbox.HorizontalAlign = vtui.AlignCenter
 	btnHbox.Spacing = 2
@@ -248,6 +250,7 @@ func showConnectionDialog(app vfs.App, nf *NetFoxVFS, oldName string) {
 		cfg.Port = editPort.GetText()
 		cfg.User = editUser.GetText()
 		cfg.Pass = editPass.GetText()
+		cfg.KeyPath = editKeyPath.GetText()
 		cfg.Timeout = editTimeout.GetText()
 		cfg.Codepage = ""
 		cpSel := comboCp.Menu.SelectPos
