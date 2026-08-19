@@ -2891,6 +2891,12 @@ func nextIndexPoll(cur time.Duration) time.Duration {
 }
 
 func (ev *EditorView) StartIndexing() {
+	// Hex/decode render by byte offset: the index is only needed if the user
+	// switches back to text, and scanning a big binary is a full read.
+	if ev.HexMode || ev.DecodeMode {
+		ev.targetLine = -1
+		return
+	}
 	// A mapped file has no chunk buffer and needs indexing just the same, so
 	// the question is whether there is any text at all, not how it is backed.
 	if ev.asyncBuf == nil && ev.mapped == nil {

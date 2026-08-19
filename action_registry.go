@@ -2085,6 +2085,10 @@ func init() {
 				ev.HexNibble = 0
 			} else {
 				ev.DecodeMode = false
+				// A binary file opened straight into hex never ran the indexer.
+				if !ev.indexing && !ev.indexIsComplete() {
+					ev.StartIndexing()
+				}
 			}
 			ev.ensureCursorVisible()
 			vtui.FrameManager.Redraw()

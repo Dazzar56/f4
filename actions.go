@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"encoding/hex"
@@ -21,6 +22,16 @@ import (
 )
 
 const openingProgressDelay = 250 * time.Millisecond
+
+// editorHeaderIsBinary: NUL in the header means binary — text in any codepage
+// (cp1251 included, which the viewer's utf8 check would call binary) has none.
+func editorHeaderIsBinary(header []byte, cpID int) bool {
+	// DecodeBytes is a no-op for 65001 and leaves the data alone on error.
+	if decoded, err := vfs.DecodeBytes(header, cpID); err == nil {
+		header = decoded
+	}
+	return bytes.IndexByte(header, 0) >= 0
+}
 
 var (
 	LastFindFileMask = "*"
@@ -685,6 +696,7 @@ func showEditor(pf *PanelsFrame, v vfs.VFS, path string, f vfs.ReadAtCloser) {
 	var buf *AsyncBuffer
 	var mapped *MappedFile
 	cpID := AppConfig.EditorDefaultCodePage
+	binary := false
 
 	if f != nil {
 		size := f.Size()
@@ -693,9 +705,19 @@ func showEditor(pf *PanelsFrame, v vfs.VFS, path string, f vfs.ReadAtCloser) {
 			detectLen = int(size)
 		}
 		header := make([]byte, detectLen)
-		_, _ = f.ReadAt(context.Background(), header, 0)
+		n, _ := f.ReadAt(context.Background(), header, 0)
+		// Unread bytes stay zero and would look like NULs, so only inspect
+		// what was actually read.
+		header = header[:n]
 
 		cpID = vfs.DetectEncoding(header, AppConfig.EditorAutodetectCodePage, AppConfig.EditorDefaultCodePage)
+
+		// Binary files open straight into hex; 65001 keeps them on the lazy
+		// chunked path instead of a full read, like the viewer.
+		binary = editorHeaderIsBinary(header, cpID)
+		if binary {
+			cpID = 65001
+		}
 
 		if cpID == 65001 {
 			// A local file is mapped rather than read: the mapping is one
@@ -733,10 +755,12 @@ func showEditor(pf *PanelsFrame, v vfs.VFS, path string, f vfs.ReadAtCloser) {
 
 	editor := NewEditorView(pt, v, path)
 	editor.Codepage = cpID
-	if _, isDisks := v.(*vfs.DisksVFS); isDisks {
+	// StartIndexing skips hex, so binary files open without a line scan.
+	if _, isDisks := v.(*vfs.DisksVFS); isDisks || binary {
 		editor.HexMode = true
 	}
-	if GlobalFileState != nil && path != "" {
+	// A saved position is a line number, meaningless for a hex view.
+	if GlobalFileState != nil && path != "" && !binary {
 		if state := GlobalFileState.GetState(FileStateKey(v, path)); state != nil {
 			editor.WordWrap = state.EditorWrap
 			editor.targetLine = state.EditorLine
