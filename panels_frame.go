@@ -555,6 +555,8 @@ func (pf *PanelsFrame) leftMenu() vtui.MenuBarItem {
 			{Text: "&4. " + Msg("Action.AI.ViewMem"), Command: CmLeftAIMem, Shortcut: "Ctrl+4"},
 			{Separator: true},
 			{Text: Msg("FileOp.BtnBackground"), Command: CmBackground},
+			{Text: Msg("Action.Workspace.Next"), Command: CmWorkspaceNew, Shortcut: "Ctrl+N"},
+			{Text: Msg("Action.Workspace.Close"), Command: CmWorkspaceClose, Shortcut: "Ctrl+W"},
 			{Text: Msg("Menu.Exit"), Command: vtui.CmQuit},
 		}}
 	}
@@ -571,6 +573,8 @@ func (pf *PanelsFrame) leftMenu() vtui.MenuBarItem {
 		{Text: "&" + Msg("Menu.SortUnsorted"), Command: CmLeftSortUnsorted},
 		{Separator: true},
 		{Text: Msg("FileOp.BtnBackground"), Command: CmBackground},
+		{Text: Msg("Action.Workspace.Next"), Command: CmWorkspaceNew, Shortcut: "Ctrl+N"},
+		{Text: Msg("Action.Workspace.Close"), Command: CmWorkspaceClose, Shortcut: "Ctrl+W"},
 		{Text: Msg("Menu.Exit"), Command: vtui.CmQuit},
 	}}
 }
@@ -662,6 +666,8 @@ var commandToActionName = map[int]string{
 	CmRightAIOut:            "AI.Right.ViewOut",
 	CmRightAIMem:            "AI.Right.ViewMem",
 	CmBackground:            "App.Background",
+	//CmWorkspaceNew:          "actionWorkspaceNew",
+	//CmWorkspaceClose:        "actionWorkspaceClose",
 	vtui.CmQuit:             "App.Quit",
 	CmView:                  "File.View",
 	CmEdit:                  "File.Edit",
@@ -2910,6 +2916,11 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 		return true
 	case CmBackground:
 		return actionBackground()
+	case CmWorkspaceNew:
+		return actionWorkspaceNew()
+	case CmWorkspaceClose:
+		return actionWorkspaceClose()
+
 
 	case vtui.CmResize: // Used as a hack for 'fork' command from FrameManager
 		if s, ok := args.(string); ok && s == "fork" {

@@ -11,6 +11,8 @@ const (
 	CmEdit
 	CmSearch
 	CmBackground
+	CmWorkspaceNew
+	CmWorkspaceClose
 	CmMkDir
 	CmNew
 	CmLeftBrief
