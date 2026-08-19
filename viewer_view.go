@@ -226,6 +226,9 @@ func (vv *ViewerView) HandleCommand(cmd int, args any) bool {
 		actionViewerSearch(vv)
 		return true
 	}
+	if handleWorkspaceForkCommand(cmd, args) {
+		return true
+	}
 	return vv.BaseFrame.HandleCommand(cmd, args)
 }
 

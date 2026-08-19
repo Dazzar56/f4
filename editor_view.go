@@ -3185,6 +3185,9 @@ func (ev *EditorView) HandleCommand(cmd int, args any) bool {
 		ev.showReplaceDialog()
 		return true
 	}
+	if handleWorkspaceForkCommand(cmd, args) {
+		return true
+	}
 	return ev.BaseFrame.HandleCommand(cmd, args)
 }
 

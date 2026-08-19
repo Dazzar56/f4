@@ -911,6 +911,9 @@ func (iv *ImageView) HandleCommand(cmd int, args any) bool {
 		iv.Close()
 		return true
 	}
+	if handleWorkspaceForkCommand(cmd, args) {
+		return true
+	}
 	return iv.BaseFrame.HandleCommand(cmd, args)
 }
 

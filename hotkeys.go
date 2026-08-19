@@ -271,19 +271,14 @@ func nativeShortcutOwnedByCurrentContext(actionName, key string) bool {
 	}
 
 	// Ctrl+N's native implementation is an active-stack CmResize broadcast.
-	// It is truthful only when the current screen actually contains a panels
-	// frame. The palette action itself can still fork the nearest panels frame
-	// from editor/viewer/image/queue screens via actionWorkspaceNew.
+	// Editor, viewer, image and queue workspaces carry no panels frame of
+	// their own, but they serve that broadcast through
+	// handleWorkspaceForkCommand, so the chord is truthful there too. What it
+	// still cannot do is clone panels that do not exist anywhere: with every
+	// workspace panel-less there is nothing to fork, and advertising the key
+	// would promise a screen flash and no new workspace.
 	if strings.EqualFold(actionName, "Workspace.New") && strings.EqualFold(key, "CtrlN") {
-		frames := vtui.FrameManager.GetActiveFrames(vtui.FrameManager.ActiveIdx)
-		hasPanels := false
-		for _, frame := range frames {
-			if panels, ok := frame.(*PanelsFrame); ok && !panels.closed {
-				hasPanels = true
-				break
-			}
-		}
-		if !hasPanels {
+		if findPanelsFrameAnyScreen() == nil {
 			return true
 		}
 	}

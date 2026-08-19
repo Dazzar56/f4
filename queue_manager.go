@@ -639,6 +639,13 @@ func (qf *QueueFrame) UpdateTasks(tasks []*QueueTask) {
 	vtui.FrameManager.Redraw()
 }
 
+func (qf *QueueFrame) HandleCommand(cmd int, args any) bool {
+	if handleWorkspaceForkCommand(cmd, args) {
+		return true
+	}
+	return qf.BaseWindow.HandleCommand(cmd, args)
+}
+
 func (qf *QueueFrame) GetType() vtui.FrameType { return vtui.TypeUser }
 
 func (qf *QueueFrame) openTaskDetails(idx int) {

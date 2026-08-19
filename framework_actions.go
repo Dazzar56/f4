@@ -119,8 +119,39 @@ func actionWorkspaceNew() bool {
 	// broadcast cannot reach the frame that knows how to clone panels. Reuse
 	// the same MRU-aware resolver used by the rest of f4 and ask that concrete
 	// panels frame to perform its ordinary, well-tested fork operation.
+	return forkNearestPanelsFrame()
+}
+
+// forkNearestPanelsFrame clones the panels the current workspace was opened
+// from into a new workspace, wherever those panels currently live. Returns
+// false only when no workspace holds a PanelsFrame at all, which leaves the
+// caller free to report the request as unhandled.
+func forkNearestPanelsFrame() bool {
 	panels := findPanelsFrameAnyScreen()
 	return panels != nil && panels.HandleCommand(vtui.CmResize, "fork")
+}
+
+// handleWorkspaceForkCommand serves vtui's fork request -- CmResize carrying
+// the string "fork", as emitted by FrameManager's native Ctrl+N fallback and
+// by a click on the "+" workspace tab. Only PanelsFrame implements that
+// command, and FrameManager routes it down the *active* screen's frame stack
+// only, so on a workspace that holds no panels of its own the request used to
+// die unhandled after the framework had already flashed the screen for it
+// (issue #528). Full-screen frames call this from HandleCommand so the chord
+// forks the panels they were opened from instead.
+//
+// It forks those panels directly rather than calling actionWorkspaceNew:
+// that action first hands the request back to
+// FrameManager.HandleSemanticAction, which re-emits this very command into
+// this very frame stack, and the two would recurse.
+func handleWorkspaceForkCommand(cmd int, args any) bool {
+	if cmd != vtui.CmResize {
+		return false
+	}
+	if name, ok := args.(string); !ok || name != "fork" {
+		return false
+	}
+	return forkNearestPanelsFrame()
 }
 
 func activeWorkspaceNumber() (int, bool) {
