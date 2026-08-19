@@ -980,6 +980,15 @@
     │   ├── disks_windows.go
     │   ├── hidden_unix.go
     │   ├── hidden_windows.go
+    │   ├── hostfs
+    │   │   ├── hostfs_posix.go
+    │   │   ├── hostfs_windows.go
+    │   │   └── hostfs_winescape.go
+    │   ├── hostmode
+    │   │   └── hostmode.go
+    │   ├── hostpath
+    │   │   ├── hostpath_posix.go
+    │   │   └── hostpath_windows.go
     │   ├── isabs_test.go
     │   ├── lock_manager_test.go
     │   ├── null_vfs.go
@@ -1066,8 +1075,6 @@
     ├── window_icon_windows.go
     ├── window_icon_windows_test.go
     ├── WINE.md
-    ├── winepath_other.go
-    ├── winepath_windows.go
     ├── wine_probe.go
     ├── wine_probe_other.go
     ├── wine_probe_windows.go
@@ -1078,4 +1085,4 @@
     ├── workspace_session_test.go
     └── zzz_pty_leak_check_test.go
     
-    58 directories, 1019 files
+    61 directories, 1023 files

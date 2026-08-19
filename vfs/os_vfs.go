@@ -505,6 +505,12 @@ func (f *osFileWrapper) ReadAt(ctx context.Context, p []byte, off int64) (n int,
 	}
 	return f.File.ReadAt(p, off)
 }
+func (f *osFileWrapper) Fd() uintptr {
+	if f.File != nil {
+		return f.File.Fd()
+	}
+	return 0
+}
 
 func (v *OSVFS) Open(ctx context.Context, path string) (ReadAtCloser, error) {
 	if ctx.Err() != nil {

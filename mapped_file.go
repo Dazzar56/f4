@@ -76,7 +76,7 @@ func MapEditorFile(v vfs.VFS, f vfs.ReadAtCloser) (*MappedFile, error) {
 		return nil, errNotMappable
 	}
 	fd, ok := f.(fileDescriptor)
-	if !ok {
+	if !ok || fd.Fd() == 0 || fd.Fd() == ^uintptr(0) {
 		return nil, errNotMappable
 	}
 

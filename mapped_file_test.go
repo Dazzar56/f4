@@ -93,6 +93,23 @@ func TestMapEditorFile_DeclinesWhatItShouldNotMap(t *testing.T) {
 			t.Errorf("err = %v, want errNotMappable", err)
 		}
 	})
+	t.Run("osvfs file exposes valid descriptor", func(t *testing.T) {
+		path := filepath.Join(dir, "desc_check.txt")
+		if err := os.WriteFile(path, []byte("data"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		v := vfs.NewOSVFS(dir)
+		f, err := v.Open(context.Background(), path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer f.Close()
+
+		fd, ok := f.(fileDescriptor)
+		if !ok || fd.Fd() == 0 || fd.Fd() == ^uintptr(0) {
+			t.Errorf("OSVFS.Open returned file without valid Fd(): ok=%v, fd=%v", ok, fd)
+		}
+	})
 }
 
 // descriptorlessFile is a vfs.ReadAtCloser with no Fd, like every remote one.

@@ -98,6 +98,7 @@ func (f *wineFile) Truncate(size int64) error {
 }
 
 func (f *wineFile) Close() error { return winescape.Close(f.fd) }
+func (f *wineFile) Fd() uintptr  { return uintptr(f.fd) }
 
 // wineIOResult adapts winescape's (int, error) shape -- where a real read(2)
 // returning 0 bytes at EOF is success, not an error -- to Go's io.Reader/

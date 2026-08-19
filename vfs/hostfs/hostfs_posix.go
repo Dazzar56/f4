@@ -35,6 +35,7 @@ type File interface {
 	Stat() (os.FileInfo, error)
 	Truncate(size int64) error
 	Close() error
+	Fd() uintptr
 }
 
 func Open(name string) (File, error) { return os.Open(name) }
