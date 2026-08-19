@@ -14,6 +14,7 @@ import (
 	"github.com/mattn/go-runewidth"
 
 	"github.com/unxed/f4/vfs"
+	"github.com/unxed/f4/vfs/hostmode"
 	"github.com/unxed/vtui"
 )
 
@@ -479,12 +480,28 @@ func showAttributesWindowsWithProperties(
 			item.MTime = nt
 		}
 
+		// Real POSIX semantics apply on a genuine Unix build (runtime.GOOS
+		// != "windows") and equally in Wine posix mode (hostmode.Posix());
+		// on both, item.UnixMode already holds the actual rwx bits the user
+		// edited via the octal field/checkboxes above, and stomping it with
+		// a synthetic 0444/0666 derived from the Windows-only "read-only"
+		// checkbox would silently discard real per-owner/group/other
+		// permissions. Found while wiring Wine posix mode (WINE.md §14.2)
+		// but the bug is not Wine-specific: item.WinAttrs is only ever
+		// populated on GOOS=windows (vfs/os_vfs_windows.go), so chkRO
+		// defaults to unchecked on a native Linux build too, meaning Set
+		// already reset every file's mode to 0666 there before this fix.
+		posixSemantics := runtime.GOOS != "windows" || hostmode.Posix()
 		if chkRO.State == 1 {
 			item.WinAttrs |= 1
-			item.UnixMode = 0444
+			if !posixSemantics {
+				item.UnixMode = 0444
+			}
 		} else {
 			item.WinAttrs &= ^uint32(1)
-			item.UnixMode = 0666
+			if !posixSemantics {
+				item.UnixMode = 0666
+			}
 		}
 		if chkHD.State == 1 {
 			item.WinAttrs |= 2
