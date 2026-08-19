@@ -11,6 +11,10 @@ import (
 
 type TerminalLogVFS struct {
 	tv *TerminalView
+	// fallback, when set, replaces tv as the data source entirely. Used for
+	// ShellModeSimpleInline's no-PTY console view, where tv is never fed by
+	// anything the user actually ran -- see readHostConsoleFullText.
+	fallback func() []byte
 }
 
 func (v *TerminalLogVFS) IsAtRoot() bool            { return true }
@@ -54,6 +58,9 @@ func (v *TerminalLogVFS) Clone() vfs.VFS     { return v }
 func (v *TerminalLogVFS) Close() error       { return nil }
 
 func (v *TerminalLogVFS) Open(ctx context.Context, path string) (vfs.ReadAtCloser, error) {
+	if v.fallback != nil {
+		return &terminalLogWrapper{data: v.fallback()}, nil
+	}
 	return &terminalLogWrapper{data: v.tv.GetAllLogBytes()}, nil
 }
 

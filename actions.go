@@ -1666,13 +1666,28 @@ func actionNewFile(pf *PanelsFrame) {
 }
 
 func actionViewTerminalLog(pf *PanelsFrame) {
-	v := &TerminalLogVFS{tv: pf.termView}
+	v := &TerminalLogVFS{tv: pf.termView, fallback: pf.hostConsoleLogFallback()}
 	actionOpenViewer(pf, v, "Terminal Log")
 }
 
 func actionEditTerminalLog(pf *PanelsFrame) {
-	v := &TerminalLogVFS{tv: pf.termView}
+	v := &TerminalLogVFS{tv: pf.termView, fallback: pf.hostConsoleLogFallback()}
 	actionOpenEditor(pf, v, "Terminal Log")
+}
+
+// hostConsoleLogFallback selects the data source for F3/F4 (Terminal.ViewLog/
+// EditLog). pf.termView only ever sees bytes that came through a real PTY;
+// under ShellModeSimpleInline (issue #513 / WINE.md -- Wine has no usable
+// ConPTY) commands run with inherited stdio straight into the host console
+// buffer, never touching termView, so its log is permanently empty there.
+// Read the host console buffer itself instead. Every other shell mode keeps
+// using termView exactly as before (nil here).
+func (pf *PanelsFrame) hostConsoleLogFallback() func() []byte {
+	if pf.shellMode != ShellModeSimpleInline || !consoleOverlayUsesWinAPI() {
+		return nil
+	}
+	lines := pf.overlayLines()
+	return func() []byte { return readHostConsoleFullText(lines) }
 }
 
 func actionViewFile(pf *PanelsFrame) {

@@ -569,7 +569,7 @@ func SetupUI() {
 		if handleHelpSearchHotkey(e) {
 			return true
 		}
-		if panels.shellMode == ShellModeSimpleInline && panels.consoleViewActive() {
+		if panels.shellMode == ShellModeSimpleInline && panels.consoleViewActive() && panels.isTopFrame() {
 			if e.Type == vtinput.KeyEventType && e.KeyDown {
 				vtui.FrameManager.PostTask(func() {
 					panels.drawConsoleOverlay()
@@ -581,6 +581,19 @@ func SetupUI() {
 
 	vtui.FrameManager.MenuBar = panels.menuBar
 	vtui.FrameManager.KeyBar = panels.keyBar
+	// consoleOverlayOwnedScreen tracks whether panels was the top frame the
+	// last time OnRender checked, so a foreign frame (editor/viewer/dialog
+	// opened via F3/F4 or similar while the console view is showing) giving
+	// the screen back to panels can be told apart from panels having simply
+	// stayed on top the whole time. Only the former needs a full background
+	// repaint: panels.Busy stays true across that whole round trip (it is
+	// what keeps the console view free of a full panels/keybar flush while
+	// some other frame owns the screen), so once panels is back on top,
+	// renderPhase()'s busy gate blocks any further full redraw -- without an
+	// explicit clearConsoleViewBackground() here, whatever the foreign frame
+	// last drew stays frozen under nothing but the two freshly-painted
+	// overlay rows.
+	consoleOverlayOwnedScreen := true
 	vtui.FrameManager.OnRender = func(scr *vtui.ScreenBuf) {
 		if AppConfig.WorkspaceTabNumbering == WorkspaceTabNumbersOrder {
 			renumberWorkspaceScreens()
@@ -588,7 +601,14 @@ func SetupUI() {
 		UpdateWindowTitle(scr)
 		renderHelpSearch(scr)
 		if panels.shellMode == ShellModeSimpleInline && panels.consoleViewActive() {
-			panels.drawConsoleOverlay()
+			onTop := panels.isTopFrame()
+			if onTop {
+				if !consoleOverlayOwnedScreen {
+					clearConsoleViewBackground(panels.lastW, panels.lastH)
+				}
+				panels.drawConsoleOverlay()
+			}
+			consoleOverlayOwnedScreen = onTop
 		}
 	}
 

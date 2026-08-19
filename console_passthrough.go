@@ -184,6 +184,37 @@ func (pf *PanelsFrame) consoleViewActive() bool {
 	return false
 }
 
+// isTopFrame reports whether pf itself is the frame currently on top of the
+// active screen's stack. consoleViewActive() alone tracks only pf.showPanels,
+// which does NOT flip when some other frame -- an editor or viewer opened via
+// F3/F4 while the console view is showing, a dialog -- gets pushed on top
+// of pf. We also treat an active AutoCompleteMenu as part of the panels
+// frame if it is directly on top of it, so the overlay isn't frozen while
+// autocomplete hints are visible during typing.
+func (pf *PanelsFrame) isTopFrame() bool {
+	if vtui.FrameManager == nil || len(vtui.FrameManager.Screens) == 0 {
+		return false
+	}
+	idx := vtui.FrameManager.ActiveIdx
+	if idx < 0 || idx >= len(vtui.FrameManager.Screens) {
+		return false
+	}
+	frames := vtui.FrameManager.Screens[idx].Frames
+	if len(frames) == 0 {
+		return false
+	}
+	top := frames[len(frames)-1]
+	if top == vtui.Frame(pf) {
+		return true
+	}
+	if _, ok := top.(*vtui.AutoCompleteMenu); ok {
+		if len(frames) >= 2 && frames[len(frames)-2] == vtui.Frame(pf) {
+			return true
+		}
+	}
+	return false
+}
+
 // drawConsoleOverlay paints the f4 command line and keybar over the console.
 func (pf *PanelsFrame) drawConsoleOverlay() {
 	if pf.overlayLines() == 0 || !pf.consoleViewActive() {
