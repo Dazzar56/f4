@@ -3302,11 +3302,11 @@ ReactOS/BSD — сам по себе не список багов, он прям
       Нужна вторая ветка в `fillPhysicalSizeCheap`, проверяющая
       `*winescape.Stat_t` отдельно, иначе физический размер в posix-режиме
       будет молча всегда нулевым.
-- [ ] **Атомарный rename без замены.** `vfs/rename_noreplace_windows.go`:
-      добавить posix-ветку на `winescape.RenameNoReplace` (добавлена в
-      `libwinescape` этой сессией специально под эту задачу — коммит
-      `44bc9ad`/`3d7ed34`). Должна возвращать `ErrDestinationExists` при
-      `EEXIST`, как и `vfs/rename_noreplace_linux.go`.
+- [x] **Атомарный rename без замены.** `vfs/rename_noreplace_windows.go` —
+      сделано (коммит `11d5598`): posix-ветка на `winescape.RenameNoReplace`,
+      `EEXIST` → `ErrDestinationExists`, `ENOSYS` → фоллбэк на
+      `renameNoReplacePortable`. Собрано и протестировано на linux/windows;
+      **под живым Wine не проверялось**.
 - [ ] **Корзина.** `vfs/trash_windows.go`: в posix-режиме — не Windows
       Recycle Bin, а вызвать ту же логику, что `vfs/trash_freedesktop.go`
       (файл уже существует и работает на настоящем Linux — просто сейчас
