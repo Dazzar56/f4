@@ -278,15 +278,50 @@ func dumpScreenTo(path string) error {
 	return file.Close()
 }
 
+// screenDumpCandidateDirs lists, in priority order, where actionScreenDump
+// tries to write vtui.screen.log.
+//
+// os.UserHomeDir() alone is not enough under Wine: on the "windows" build of
+// f4 (which is what a Wine tty session runs), it follows Windows semantics —
+// %USERPROFILE%, or %HOMEDRIVE%+%HOMEPATH% — which resolve inside the
+// wineprefix (e.g. `C:\users\<name>`, i.e.
+// `<WINEPREFIX>/drive_c/users/<name>` on the Unix side), not the real Unix
+// $HOME the user is used to looking in. Nothing about that is broken, but
+// it is exactly where issue #536 testing tripped: the file was written
+// (or the write silently failed) somewhere other than where it was searched
+// for. The executable's own directory is added first because it is the one
+// location a Wine user unambiguously knows without having to think about
+// prefix layout — they just ran the .exe from there.
+func screenDumpCandidateDirs() []string {
+	var dirs []string
+	if exe, err := os.Executable(); err == nil {
+		if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+			exe = resolved
+		}
+		dirs = append(dirs, filepath.Dir(exe))
+	}
+	if home, err := os.UserHomeDir(); err == nil && strings.TrimSpace(home) != "" {
+		dirs = append(dirs, home)
+	}
+	dirs = append(dirs, os.TempDir())
+	return dirs
+}
+
 func actionScreenDump() bool {
-	home, err := os.UserHomeDir()
-	if err != nil || strings.TrimSpace(home) == "" {
-		return false
+	var attempts []string
+	for _, dir := range screenDumpCandidateDirs() {
+		path := filepath.Join(dir, "vtui.screen.log")
+		if err := dumpScreenTo(path); err != nil {
+			attempts = append(attempts, fmt.Sprintf("%s: %v", path, err))
+			continue
+		}
+		vtui.DebugLog("FM: Screen dump saved to %s", path)
+		return true
 	}
-	path := filepath.Join(home, "vtui.screen.log")
-	if err := dumpScreenTo(path); err != nil {
-		return false
-	}
-	vtui.DebugLog("FM: Screen dump saved to %s", path)
-	return true
+	// Every candidate failed — this used to return false with zero trace of
+	// why. Record every attempted path and its error in the in-memory log
+	// ring (GetCurrentLogs()) so it survives even without VTUI_DEBUG set,
+	// which is the only way anyone would have known this action ran at all.
+	vtui.DebugLog("FM: Screen dump failed, tried: %s", strings.Join(attempts, " | "))
+	return false
 }
