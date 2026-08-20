@@ -580,6 +580,28 @@ func sameVFSInstance(a, b vfs.VFS) bool {
 	return a == b
 }
 
+// isNilVFS reports whether v is nil, including a typed nil wrapped inside a
+// non-nil interface (e.g. (*ArchiveVFS)(nil) returned as vfs.VFS). Such a
+// value compares != nil but dereferences to a panic on any method call.
+func isNilVFS(v vfs.VFS) bool {
+	if v == nil {
+		return true
+	}
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Ptr, reflect.Map, reflect.Slice, reflect.Func, reflect.Chan:
+		return rv.IsNil()
+	}
+	return false
+}
+
+// isArchiveProvider reports whether p is the archive/zip plugin's provider,
+// so archive open failures get an "Open Error" dialog instead of the
+// network-oriented "Connection Error" used by remote VFS plugins.
+func isArchiveProvider(p vfs.VFSProvider) bool {
+	return p != nil && p.Name() == "zipper/archive"
+}
+
 func (fp *FileSystemPanel) cacheKey(path string) dirCacheKey {
 	return directoryCacheKey(fp.vfs, path)
 }
@@ -1616,8 +1638,14 @@ func (fp *FileSystemPanel) openVFSAsync(
 			err = fmt.Errorf("provider returned no file system")
 		}
 		task.RunOnUI(func() {
+			// A provider may hand back a typed nil wrapped in the interface
+			// (e.g. (*ArchiveVFS)(nil), err): it compares != nil, so Close()
+			// on it would panic. Normalize it to a plain error instead.
+			if err == nil && isNilVFS(newVFS) {
+				err = fmt.Errorf("provider returned no file system")
+			}
 			if fp.providerOpenTask != task {
-				if newVFS != nil {
+				if !isNilVFS(newVFS) {
 					_ = newVFS.Close()
 				}
 				return
@@ -1628,13 +1656,13 @@ func (fp *FileSystemPanel) openVFSAsync(
 			fp.providerOpenTarget = ""
 			fp.providerOpenSourceSelect = ""
 			if !sameVFSInstance(fp.vfs, sourceVFS) || fp.vfs.GetPath() != sourcePath {
-				if newVFS != nil {
+				if !isNilVFS(newVFS) {
 					_ = newVFS.Close()
 				}
 				return
 			}
 			if err != nil {
-				if newVFS != nil {
+				if !isNilVFS(newVFS) {
 					_ = newVFS.Close()
 				}
 				fp.isLoading = false
@@ -2954,7 +2982,11 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 					},
 					func(err error) {
 						fp.pendingSelection = selectedName
-						vtui.ShowMessage(" Connection Error ", fmt.Sprintf("Failed to connect to %s:\n%v", selectedName, err), []string{"&Ok"})
+						if isArchiveProvider(provider) {
+							vtui.ShowMessage(" Open Error ", fmt.Sprintf("Failed to open %s:\n%v", selectedName, err), []string{"&Ok"})
+						} else {
+							vtui.ShowMessage(" Connection Error ", fmt.Sprintf("Failed to connect to %s:\n%v", selectedName, err), []string{"&Ok"})
+						}
 					},
 				)
 			}
