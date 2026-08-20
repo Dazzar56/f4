@@ -773,7 +773,10 @@ func SaveSession() {
 	path := getSessionIniPath()
 	os.MkdirAll(filepath.Dir(path), 0755)
 
-	if vtui.FrameManager != nil {
+	// The terminal frame manager reports the current terminal geometry too.
+	// Persisting that as the GUI geometry makes a later native window inherit
+	// an arbitrary terminal (or test harness) size.
+	if shouldPersistGUIWindowSize(vtui.ActiveBackend()) && vtui.FrameManager != nil {
 		w := vtui.FrameManager.GetScreenSize()
 		h := vtui.FrameManager.GetScreenHeight()
 		if w > 0 && h > 0 {
@@ -842,6 +845,10 @@ func SaveSession() {
 	}
 
 	vtui.DebugLog("SESSION: Saved state to %s", path)
+}
+
+func shouldPersistGUIWindowSize(backend string) bool {
+	return backend != ""
 }
 
 func getFormattedVersionInfo() string {
