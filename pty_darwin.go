@@ -38,17 +38,19 @@ func NewPTY() (*PTY, error) {
 	if err != nil {
 		return nil, err
 	}
-	master := os.NewFile(uintptr(masterFd), "/dev/ptmx")
-	// Put the master fd in non-blocking mode before wrapping it in
-	// os.NewFile; see pty_unix.go for why Close() cannot otherwise
-	// interrupt a Master.Read() blocked in another goroutine. This must
-	// happen right after the fd is wrapped here (rather than before, as
-	// on the other platforms) because the TIOCPTY* ioctls below take the
-	// wrapped *os.File's Fd() as their argument.
+	// Put the master fd in non-blocking mode *before* wrapping it in
+	// os.NewFile, same as every other platform; see pty_unix.go. Go only
+	// registers a descriptor with the runtime poller when it is already
+	// non-blocking at NewFile time. Setting it afterwards leaves os.File
+	// in raw-syscall mode reading a non-blocking fd: every Read returns
+	// EAGAIN immediately, and the terminal read loop treats that as fatal,
+	// so the console goes permanently dark. The TIOCPTY* ioctls below take
+	// the raw masterFd, so the ordering does not affect them.
 	if err := unix.SetNonblock(masterFd, true); err != nil {
-		master.Close()
+		unix.Close(masterFd)
 		return nil, err
 	}
+	master := os.NewFile(uintptr(masterFd), "/dev/ptmx")
 
 	if _, _, e := syscall.Syscall(syscall.SYS_IOCTL, uintptr(masterFd), unix.TIOCPTYGRANT, 0); e != 0 {
 		master.Close()

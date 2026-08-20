@@ -121,13 +121,17 @@ func InitLang() {
 		}
 	}
 
-	// 2. Load Fallback language if configured (Tier 2)
-	if fallback != "" && fallback != "en" && fallback != primary {
+	// 2. Load Fallback language if configured (Tier 2). A fallback only
+	// fills keys the primary lacks; with an English primary the embedded
+	// base already covers everything, so loading the fallback would
+	// override the primary instead of backing it up.
+	primaryIsEnglish := primary == "en" || primary == "eng"
+	if fallback != "" && fallback != "en" && fallback != primary && !primaryIsEnglish {
 		loadLang(fallback)
 	}
 
 	// 3. Load Primary language (Tier 3)
-	if primary != "en" && primary != "eng" {
+	if !primaryIsEnglish {
 		loadLang(primary)
 	} else {
 		vtui.DebugLog("LANG: Primary is English, relying on base.")

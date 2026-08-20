@@ -723,7 +723,7 @@ func TestAnsiParser_ExcisionExtra(t *testing.T) {
 		},
 		{
 			name:     "Unix background sync excision",
-			input:    "user@host:~$ cd '/new/path' # f4_sync\r\n",
+			input:    "user@host:~$ cd '/new/path' && true f4_sync\r\n",
 			expected: "",
 		},
 		{
@@ -745,6 +745,12 @@ func TestAnsiParser_ExcisionExtra(t *testing.T) {
 
 			if !strings.Contains(logStr, tt.expected) {
 				t.Errorf("Expected log to contain %q, but got %q", tt.expected, logStr)
+			}
+
+			// expected "" makes the check above vacuous; the real assertion
+			// is that the sync marker never leaks into the visible log.
+			if strings.Contains(logStr, "f4_sync") {
+				t.Errorf("Sync marker leaked into log: %q", logStr)
 			}
 		})
 	}
