@@ -88,49 +88,41 @@ func (fp *FileSystemPanel) GetCellText(row, col int) string {
 	return formatPanelFileName(e, width)
 }
 
-func (fp *FileSystemPanel) IsRowSelected(row int) bool {
-	if fp.gridColumnCount() == 1 {
-		if row < 0 || row >= len(fp.entries) {
-			return false
-		}
-		return fp.entries[row].IsSelected()
+// IsCellSelected implements vtui.TableCellColSelectProvider. Unlike a plain
+// row number, (row, col) is enough to resolve exactly which entry sits here
+// even in multi file-column view modes (Medium, Brief), where one row is
+// shared by several columns via the same row+col*H math GetCellAttr uses.
+func (fp *FileSystemPanel) IsCellSelected(row, col int) bool {
+	idx := fp.entryIndex(row, col)
+	if idx < 0 || idx >= len(fp.entries) {
+		return false
 	}
-	return false
+	return fp.entries[idx].IsSelected()
 }
 
-func (fp *FileSystemPanel) GetCellAttr(row, col int, defaultAttr uint64) uint64 {
+// entryIndex resolves the fp.entries index shown at (row, col) for the
+// current view mode: a single file-column in Wide/Detailed, or several
+// file-columns of height ViewHeight in Medium/Brief.
+func (fp *FileSystemPanel) entryIndex(row, col int) int {
 	if fp.gridColumnCount() == 1 {
-		if row < 0 || row >= len(fp.entries) {
-			return defaultAttr
-		}
-		return fp.entries[row].GetCellAttr(col, defaultAttr)
+		return row
 	}
 	H := fp.table.ViewHeight
 	if H <= 0 {
 		H = 1
 	}
-	idx := row + col*H
+	return row + col*H
+}
+
+func (fp *FileSystemPanel) GetCellAttr(row, col int, defaultAttr uint64) uint64 {
+	idx := fp.entryIndex(row, col)
 	if idx < 0 || idx >= len(fp.entries) {
 		return defaultAttr
 	}
-	attr := defaultAttr
-	// vtui.Table asks IsRowSelected(row) to decide the base color before
-	// calling us, but that interface only gets a row number. In multi
-	// file-column view modes (Medium, Brief) one row number is shared by
-	// several columns that each hold a different entry (see the idx
-	// formula above), so IsRowSelected can't tell them apart and always
-	// reports "not selected" — selection highlighting was silently
-	// skipped for every theme in these view modes. Recover the correct
-	// base color from this cell's real entry here, where col is known.
-	if fp.entries[idx].Selected {
-		switch attr {
-		case vtui.Palette[ColPanelCursor], vtui.Palette[ColPanelInactiveCursor]:
-			attr = vtui.Palette[fp.table.ColorItemSelectCursorIdx]
-		default:
-			attr = vtui.Palette[fp.table.ColorItemSelectTextIdx]
-		}
+	if fp.gridColumnCount() == 1 {
+		return fp.entries[idx].GetCellAttr(col, defaultAttr)
 	}
-	return fp.entries[idx].GetCellAttr(0, attr)
+	return fp.entries[idx].GetCellAttr(0, defaultAttr)
 }
 
 func (f *fileEntry) displayName(name string) string {
