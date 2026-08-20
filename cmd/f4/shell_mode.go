@@ -46,7 +46,7 @@ type ShellModeConfig struct {
 var (
 	probeGUIBackend = func() string { return vtui.ActiveBackend() }
 	probeHostTTY    = func() bool { return term.IsTerminal(int(os.Stdout.Fd())) }
-	probePTYUsable  = func() bool { return !vtui.IsWine() }
+	probePTYUsable  = func() bool { return isPlatformPTYUsable() }
 	probeGOOS       = func() string { return runtime.GOOS }
 )
 

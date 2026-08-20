@@ -162,3 +162,30 @@ func TestConsoleViewStyleFor_OwnDegradesWithoutPTY(t *testing.T) {
 		t.Errorf("consoleViewStyleFor(Own) = %q, want %q", got, ConsoleViewOwn)
 	}
 }
+func TestResolveShellMode_LegacyWindowsDegradesToSimpleInlineAndFarOverlay(t *testing.T) {
+	oldProbeGUI := probeGUIBackend
+	oldProbeTTY := probeHostTTY
+	oldProbePTY := probePTYUsable
+	oldProbeGOOS := probeGOOS
+	defer func() {
+		probeGUIBackend = oldProbeGUI
+		probeHostTTY = oldProbeTTY
+		probePTYUsable = oldProbePTY
+		probeGOOS = oldProbeGOOS
+	}()
+
+	probeGUIBackend = func() string { return "" }
+	probeHostTTY = func() bool { return true }
+	probePTYUsable = func() bool { return false } // Simulates Windows 7 / 8 / 8.1 without ConPTY
+	probeGOOS = func() string { return "windows" }
+
+	mode := resolveShellMode(ShellModeConfig{ConsoleMode: "own"})
+	if mode != ShellModeSimpleInline {
+		t.Fatalf("resolveShellMode on legacy Windows = %v, want ShellModeSimpleInline", mode)
+	}
+
+	style := consoleViewStyleFor(mode)
+	if style != ConsoleViewFar {
+		t.Fatalf("consoleViewStyleFor(SimpleInline) = %q, want %q (Far overlay)", style, ConsoleViewFar)
+	}
+}

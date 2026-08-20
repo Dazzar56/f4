@@ -11,3 +11,4 @@ func winDrawConsoleOverlay(ov consoleOverlayContent) {}
 func winClearConsoleOverlay(n int) {}
 
 func clearConsoleViewBackground(w, h int) {}
+func isPlatformPTYUsable() bool           { return true }

@@ -31,6 +31,9 @@ func conPTYAvailable() bool {
 		procResizePseudoConsole.Find() == nil &&
 		procClosePseudoConsole.Find() == nil
 }
+func isPlatformPTYUsable() bool {
+	return conPTYAvailable()
+}
 
 // PTY для Windows реализован через ConPTY API (доступно в Windows 10+).
 type PTY struct {
