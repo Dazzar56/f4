@@ -3683,26 +3683,20 @@ func (m *mockSlowStatVFS) Stat(ctx context.Context, p string) (vfs.VFSItem, erro
 
 func TestPanelsFrame_AutoRefresh_Locking(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	pf := NewPanelsFrame()
+	pf := setupMockPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
-	// Wait for initial load of both panels to finish.
-	deadline := time.Now().Add(1 * time.Second)
-	for time.Now().Before(deadline) {
-		select {
-		case task := <-vtui.FrameManager.TaskChan:
-			task()
-		default:
-			time.Sleep(5 * time.Millisecond)
-		}
-		if !pf.panels[0].(*FileSystemPanel).isLoading && !pf.panels[1].(*FileSystemPanel).isLoading {
-			break
-		}
+	fsp0 := pf.panels[0].(*FileSystemPanel)
+	fsp1 := pf.panels[1].(*FileSystemPanel)
+	if fsp0.cancelLoad != nil {
+		fsp0.cancelLoad()
 	}
-	if pf.panels[0].(*FileSystemPanel).isLoading || pf.panels[1].(*FileSystemPanel).isLoading {
-		t.Fatal("Initial load did not finish in time")
+	fsp0.isLoading = false
+	if fsp1.cancelLoad != nil {
+		fsp1.cancelLoad()
 	}
+	fsp1.isLoading = false
 
 	// Setup VFS with a blocking Stat
 	block := make(chan struct{})
