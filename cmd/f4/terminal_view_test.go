@@ -945,6 +945,12 @@ func TestTerminalView_ProcessFar2lInteract_ConcurrentRace(t *testing.T) {
 	pty := &mockPtyForTerminal{}
 	tv.pty = pty
 
+	// This test exists to hammer the real OS clipboard concurrently — it is
+	// the reproducer for the Win32 thread-ownership race — so it opts back
+	// out of the suite-wide in-process clipboard.
+	vtui.SkipOSClipboard(false)
+	defer vtui.SkipOSClipboard(true)
+
 	vtui.GlobalClipboardAccessManager = &mockClipAuthManager{authorized: true}
 	defer func() { vtui.GlobalClipboardAccessManager = nil }()
 

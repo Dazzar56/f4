@@ -339,7 +339,9 @@ func TestArchiveVFS_OpenCloseNonBlocking(t *testing.T) {
 	select {
 	case <-closeDone:
 		// Success
-	case <-time.After(500 * time.Millisecond):
+	case <-time.After(10 * time.Second):
+		// Generous: on the happy path Close returns immediately, and a bound
+		// this loose still catches the regression — Close blocking forever.
 		t.Fatal("BUG REPRODUCED: ArchiveVFS.Close() blocked because v.Open() holds the mutex during extraction/seeking!")
 	}
 
@@ -349,7 +351,10 @@ func TestArchiveVFS_OpenCloseNonBlocking(t *testing.T) {
 	_ = openErr
 }
 
+// mockSeekingReporter is written from the progress ticker goroutine and read
+// from the test goroutine, so its fields live behind a mutex.
 type mockSeekingReporter struct {
+	mu            sync.Mutex
 	lastAction    string
 	lastFilename  string
 	lastTotalText string
@@ -358,12 +363,36 @@ type mockSeekingReporter struct {
 
 func (r *mockSeekingReporter) UpdateScan(currentPath string, files, dirs int64) {}
 func (r *mockSeekingReporter) UpdateTransfer(action, filename string, currentPct int, totalText string, totalPct int, speedText string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.lastAction = action
 	r.lastFilename = filename
 	r.lastTotalText = totalText
 	r.lastSpeedText = speedText
 }
 func (r *mockSeekingReporter) IsCancelled() bool { return false }
+
+// waitForStatus waits until the reporter shows a status with the given prefix
+// alongside an elapsed-time field. The progress ticker fires every 250ms for
+// as long as the phase lasts, so on any machine the status arrives eventually;
+// sleeping a fixed interval and asserting — what this test used to do — is a
+// bet on the scheduler that a loaded CI runner loses.
+func (r *mockSeekingReporter) waitForStatus(t *testing.T, prefix string) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		r.mu.Lock()
+		total, speed := r.lastTotalText, r.lastSpeedText
+		r.mu.Unlock()
+		if strings.HasPrefix(total, prefix) && strings.Contains(speed, "Time:") {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	t.Fatalf("no %q status with elapsed time; last total %q, speed %q", prefix, r.lastTotalText, r.lastSpeedText)
+}
 
 func TestArchiveVFS_Open_SeekingProgress(t *testing.T) {
 	openBlock := make(chan struct{})
@@ -383,24 +412,13 @@ func TestArchiveVFS_Open_SeekingProgress(t *testing.T) {
 		close(openDone)
 	}()
 
-	// 1. Verify "Locating file..." status and elapsed time presence
-	time.Sleep(400 * time.Millisecond)
-	if !strings.HasPrefix(reporter.lastTotalText, "Locating file") {
-		t.Errorf("Expected 'Locating file...' status while Open is blocked, got %q", reporter.lastTotalText)
-	}
-	if !strings.Contains(reporter.lastSpeedText, "Time:") {
-		t.Errorf("Expected elapsed time in 'Locating' phase, got %q", reporter.lastSpeedText)
-	}
+	// 1. While Open is blocked the ticker must report "Locating file..."
+	// with an elapsed-time field.
+	reporter.waitForStatus(t, "Locating file")
 	close(openBlock)
 
-	// 2. Verify "Seeking/Decompressing..." status and elapsed time presence
-	time.Sleep(400 * time.Millisecond)
-	if !strings.HasPrefix(reporter.lastTotalText, "Seeking/Decompressing") {
-		t.Errorf("Expected 'Seeking/Decompressing...' status while Read is blocked, got %q", reporter.lastTotalText)
-	}
-	if !strings.Contains(reporter.lastSpeedText, "Time:") {
-		t.Errorf("Expected elapsed time in 'Seeking' phase, got %q", reporter.lastSpeedText)
-	}
+	// 2. While Read is blocked it must report "Seeking/Decompressing...".
+	reporter.waitForStatus(t, "Seeking/Decompressing")
 
 	close(readBlock)
 	<-openDone

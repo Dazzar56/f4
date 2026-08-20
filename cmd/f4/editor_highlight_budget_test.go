@@ -10,18 +10,48 @@ import (
 	"github.com/unxed/vtui"
 )
 
-// mockSlowHighlighter spends a fixed amount of time per line, standing in for
-// a parser whose per-line cost is high enough that a fixed batch size turns
-// into a visible freeze (Colorer through wasm, in practice).
+// fakeHLClock replaces the slice budget clock, so a "slow" highlighter costs
+// exact fake time instead of real sleeps. Budget tests then assert equalities
+// instead of wall-clock bounds that a descheduled CI runner blows through.
+type fakeHLClock struct{ now time.Time }
+
+func (c *fakeHLClock) get() time.Time { return c.now }
+
+func installFakeHLClock(t *testing.T) *fakeHLClock {
+	t.Helper()
+	c := &fakeHLClock{now: time.Unix(0, 0)}
+	prev := hlNow
+	hlNow = c.get
+	t.Cleanup(func() { hlNow = prev })
+	return c
+}
+
+// hlSliceLines is how many lines one slice processes before the budget stops
+// it, for a highlighter costing perLine of fake time: the first clock-stride
+// multiple at which the elapsed fake time reaches the budget.
+func hlSliceLines(perLine time.Duration) int {
+	lines := 0
+	for {
+		lines += hlClockStride
+		if time.Duration(lines)*perLine >= hlSliceBudget {
+			return lines
+		}
+	}
+}
+
+// mockSlowHighlighter charges a fixed amount of fake time per line, standing
+// in for a parser whose per-line cost is high enough that a fixed batch size
+// turns into a visible freeze (Colorer through wasm, in practice).
 type mockSlowHighlighter struct {
 	perLine time.Duration
+	clock   *fakeHLClock
 	calls   int
 }
 
 func (m *mockSlowHighlighter) Highlight(line string, prev any, base uint64) ([]uint64, any) {
 	m.calls++
-	if m.perLine > 0 {
-		time.Sleep(m.perLine)
+	if m.clock != nil {
+		m.clock.now = m.clock.now.Add(m.perLine)
 	}
 	depth := 0
 	if prev != nil {
@@ -103,25 +133,25 @@ func TestNextIndexPoll(t *testing.T) {
 // multi-second freeze with a parser this slow.
 func TestEditor_HighlightSlice_StopsOnBudget(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	clock := installFakeHLClock(t)
+
+	const perLine = time.Millisecond
 
 	ev := NewEditorView(buildLinesPT(5000), nil, "test.txt")
 	defer ev.Close()
 	ev.SetPosition(0, 0, 80, 10)
-	ev.highlighter = &mockSlowHighlighter{perLine: time.Millisecond}
+	ev.highlighter = &mockSlowHighlighter{perLine: perLine, clock: clock}
 
 	plan := ev.highlightSlice(0)
 
-	if plan.lines == 0 {
-		t.Fatal("slice highlighted nothing")
-	}
 	if plan.done {
 		t.Error("a budgeted slice cannot have finished 5000 slow lines")
 	}
-	if plan.lines > 8*hlClockStride {
-		t.Errorf("slice ran for %d lines, budget should have stopped it near %d", plan.lines, hlClockStride)
+	if want := hlSliceLines(perLine); plan.lines != want {
+		t.Errorf("slice ran for %d lines, budget stops it at exactly %d", plan.lines, want)
 	}
-	if plan.work > 20*hlSliceBudget {
-		t.Errorf("slice occupied the UI thread for %v, budget is %v", plan.work, hlSliceBudget)
+	if want := time.Duration(plan.lines) * perLine; plan.work != want {
+		t.Errorf("slice reported %v of work, %d lines cost exactly %v", plan.work, plan.lines, want)
 	}
 	if len(ev.lineStates) != plan.lines {
 		t.Errorf("state chain grew by %d, slice reported %d", len(ev.lineStates), plan.lines)
@@ -132,11 +162,12 @@ func TestEditor_HighlightSlice_StopsOnBudget(t *testing.T) {
 // way, because the index is what the scroll bar and every jump wait for.
 func TestEditor_HighlightSlice_YieldsWhileIndexing(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	clock := installFakeHLClock(t)
 
 	ev := NewEditorView(buildLinesPT(5000), nil, "test.txt")
 	defer ev.Close()
 	ev.SetPosition(0, 0, 80, 10)
-	ev.highlighter = &mockSlowHighlighter{perLine: 200 * time.Microsecond}
+	ev.highlighter = &mockSlowHighlighter{perLine: 200 * time.Microsecond, clock: clock}
 
 	ev.indexing = false
 	normal := ev.highlightSlice(0)
@@ -144,8 +175,6 @@ func TestEditor_HighlightSlice_YieldsWhileIndexing(t *testing.T) {
 	ev.indexing = true
 	throttled := ev.highlightSlice(0)
 
-	// Compared against the plan's own measured work, so the assertion holds
-	// on a loaded CI box as well as on a fast desktop.
 	if want := highlightIdleGap(normal.work, hlDutyAhead); normal.idle != want {
 		t.Errorf("idle gap outside indexing is %v, want %v", normal.idle, want)
 	}
@@ -153,7 +182,8 @@ func TestEditor_HighlightSlice_YieldsWhileIndexing(t *testing.T) {
 		t.Errorf("idle gap while indexing is %v, want %v", throttled.idle, want)
 	}
 	if normal.idle >= hlIdleMax || throttled.idle >= hlIdleMax {
-		return // both clamped, the ratio below would prove nothing
+		t.Fatalf("fake-clock slices must not clamp at hlIdleMax (normal %v, throttled %v)",
+			normal.idle, throttled.idle)
 	}
 	if throttled.idle <= normal.idle {
 		t.Errorf("walker must back off harder while indexing: idle %v is not above %v",
@@ -162,17 +192,22 @@ func TestEditor_HighlightSlice_YieldsWhileIndexing(t *testing.T) {
 }
 
 // End to end through the task queue: the chain still gets built, and no single
-// task blocks the UI thread for long enough to be felt.
+// task consumes more than one slice budget's worth of highlighting. The stall
+// is asserted in the fake clock's currency — lines processed per task — not in
+// real elapsed time, which on a shared CI runner measures the machine's load,
+// not this code.
 func TestEditor_BackgroundWalker_NoLongUIStalls(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	clock := installFakeHLClock(t)
 
 	const total = 3000
-	const maxStall = 150 * time.Millisecond
+	const perLine = 50 * time.Microsecond
+	maxLines := hlSliceLines(perLine)
 
 	ev := NewEditorView(buildLinesPT(total), nil, "test.txt")
 	defer ev.Close()
 	ev.SetPosition(0, 0, 80, 10)
-	ev.highlighter = &mockSlowHighlighter{perLine: 50 * time.Microsecond}
+	ev.highlighter = &mockSlowHighlighter{perLine: perLine, clock: clock}
 
 	ev.startHighlighting()
 
@@ -180,10 +215,10 @@ func TestEditor_BackgroundWalker_NoLongUIStalls(t *testing.T) {
 	for len(ev.lineStates) < total {
 		select {
 		case task := <-vtui.FrameManager.TaskChan:
-			began := time.Now()
+			before := len(ev.lineStates)
 			task()
-			if stall := time.Since(began); stall > maxStall {
-				t.Fatalf("a single UI task ran for %v, slice budget is %v", stall, hlSliceBudget)
+			if grew := len(ev.lineStates) - before; grew > maxLines {
+				t.Fatalf("a single UI task highlighted %d lines, the budget stops a slice at %d", grew, maxLines)
 			}
 		case <-timeout:
 			t.Fatalf("walker stalled at %d of %d lines", len(ev.lineStates), total)
