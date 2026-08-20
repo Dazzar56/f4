@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 	"golang.org/x/sys/unix"
@@ -114,6 +115,13 @@ func ManageSessions() {
 
 	sessions := listSessions()
 	if len(sessions) > 0 {
+		// -e skips the interactive picker: `f4 -e file` should just work
+		// non-interactively, reusing whatever session is already running
+		// (matching far2l's -e), not stop to ask which one first.
+		if editFilePath != "" {
+			runClient(sessions[0].SockPath, sessions[0].PID)
+			return
+		}
 		selected := runSessionPicker(sessions)
 		if selected != nil {
 			if selected.PID == 0 {
@@ -223,7 +231,7 @@ func runClient(sockPath string, serverPID int) {
 	oob := syscall.UnixRights(0, 1, notifyPipe[1])
 	vtui.DebugLog("CLIENT: FDs to send: In:0 Out:1 Pipe:%d", notifyPipe[1])
 
-	n, oobn, err := conn.WriteMsgUnix([]byte("ATTACH"), oob, raddr)
+	n, oobn, err := conn.WriteMsgUnix(attachPayload(editFilePath), oob, raddr)
 	if err != nil {
 		vtui.DebugLog("CLIENT: ATTACH FAILURE: Failed to send FDs to daemon at %s: %v", sockPath, err)
 		fmt.Fprintf(os.Stderr, "f4: failed to attach to session at %s: %v\n", sockPath, err)
@@ -282,6 +290,19 @@ type attachRequest struct {
 	out                *os.File
 	notifyPipeWriteEnd int
 	rawFds             []int
+	editPath           string
+}
+
+// attachPayload builds the ATTACH datagram body. Plain "ATTACH" when no
+// file was requested (preserves the exact wire format every existing f4
+// binary already speaks, so an old client can still attach to a new
+// server and vice versa); "ATTACH <path>" when -e named a file, parsed
+// back out in runServer's accept loop below.
+func attachPayload(editPath string) []byte {
+	if editPath == "" {
+		return []byte("ATTACH")
+	}
+	return []byte("ATTACH " + editPath)
 }
 
 func runServer(sockPath string) {
@@ -312,7 +333,9 @@ func runServer(sockPath string) {
 	// clients are received even while FrameManager.Run() is executing.
 	go func() {
 		for {
-			buf := make([]byte, 32)
+			// 4096 (not the old 32-byte "ATTACH"-only size) so "ATTACH
+			// <path>" fits a real filesystem path -- see attachPayload().
+			buf := make([]byte, 4096)
 			oob := make([]byte, 1024)
 
 			n, oobn, _, from, err := conn.ReadMsgUnix(buf, oob)
@@ -344,11 +367,17 @@ func runServer(sockPath string) {
 
 			setCloseOnExec(fds)
 
+			var editPath string
+			if msg := string(buf[:n]); strings.HasPrefix(msg, "ATTACH ") {
+				editPath = msg[len("ATTACH "):]
+			}
+
 			req := attachRequest{
 				in:                 os.NewFile(uintptr(fds[0]), "/dev/stdin"),
 				out:                os.NewFile(uintptr(fds[1]), "/dev/stdout"),
 				notifyPipeWriteEnd: fds[2],
 				rawFds:             fds,
+				editPath:           editPath,
 			}
 
 			// Preempt the current attached session (if any) so the new client takes over.
@@ -376,6 +405,7 @@ func runServer(sockPath string) {
 		newStdin := req.in
 		newStdout := req.out
 		notifyPipeWriteEnd := req.notifyPipeWriteEnd
+		attachEditPath := req.editPath
 
 		vtui.DebugLog("SERVER: FDs received (In:%d Out:%d Pipe:%d). Goroutines: %d. Attaching terminal.", fds[0], fds[1], fds[2], runtime.NumGoroutine())
 
@@ -445,6 +475,25 @@ func runServer(sockPath string) {
 			if pf, ok := top.(*PanelsFrame); ok && pf != nil {
 				if pf.shellMode == ShellModeHost && !pf.showPanels {
 					pf.enterHostConsole()
+				}
+			}
+		}
+
+		if attachEditPath != "" {
+			// -e's actual open, deferred all the way to here: the terminal
+			// is attached, sized, and drawing (scr.HardReset()+Redraw()
+			// already ran above) -- opening any earlier would hand
+			// actionOpenEditor a frame nothing has actually rendered to
+			// yet. Reuses whatever PanelsFrame is already on top rather
+			// than assuming there's exactly one, since -e can attach to an
+			// existing multi-tab session, not just a freshly started one.
+			if abs, err := filepath.Abs(attachEditPath); err != nil {
+				vtui.DebugLog("SERVER: -e %q: filepath.Abs failed: %v", attachEditPath, err)
+			} else if top := vtui.FrameManager.GetTopFrame(); top != nil {
+				if pf, ok := top.(*PanelsFrame); ok && pf != nil {
+					actionOpenEditor(pf, vfs.NewOSVFS(filepath.Dir(abs)), abs)
+				} else {
+					vtui.DebugLog("SERVER: -e %q: top frame is not a *PanelsFrame (%T)", attachEditPath, top)
 				}
 			}
 		}

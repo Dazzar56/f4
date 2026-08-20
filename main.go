@@ -21,6 +21,12 @@ import (
 // SelectedTTYBackend holds the user-chosen or auto-detected console renderer name ("ansi" or "winapi").
 var SelectedTTYBackend string
 
+// editFilePath holds the -e flag's target, if given -- opened in the editor
+// once InitCore() has the panels frame ready. Package-level because the
+// flag is parsed in main() but the hook point (right after the panels
+// frame is pushed) lives in InitCore(), a separate function.
+var editFilePath string
+
 func main() {
 	vtui.AppName = "f4"
 	installConsoleCtrlHandler()
@@ -225,6 +231,21 @@ func main() {
 			if secs, err := strconv.ParseFloat(val, 64); err == nil && secs > 0 {
 				dumpScreenAfter = secs
 			}
+		case "-e":
+			// far2l-compatible: `-e [filename]` opens filename directly in
+			// the editor. far2l also accepts `-e<line>[:<pos>]`, which this
+			// does not implement yet -- only the filename form. Primarily
+			// useful for exactly what it was added for: scripted/headless
+			// testing under Wine, where interactive keyboard navigation to
+			// reach a specific file can be unreliable (issue #536
+			// investigation -- CtrlAltP already showed Wine's native
+			// console input isn't trustworthy for automation).
+			if flagVal != "" {
+				editFilePath = flagVal
+			} else if i+1 < len(os.Args) && !strings.HasPrefix(os.Args[i+1], "-") {
+				editFilePath = os.Args[i+1]
+				i++
+			}
 		case "--sudo-dispatcher":
 			if flagVal != "" {
 				sudoDispatcher = flagVal
@@ -267,6 +288,9 @@ The following switches may be used in the command line:
                         (bypasses hotkeys entirely -- useful under Wine
                         tty mode, where complex combos like CtrlAltP can
                         fail to arrive through native console input)
+ -e [filename]          Open filename directly in the editor on startup
+                        (far2l-compatible; useful for scripted/headless
+                        testing where interactive navigation is unreliable)
                          (renderer backend, console geometry, shell mode)
 
 Details see in build-in help (F1 inside f4)
