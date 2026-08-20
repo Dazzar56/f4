@@ -52,6 +52,15 @@ func TestMain(m *testing.M) {
 	// tests that exercise the PTY path construct one explicitly.
 	spawnLocalShellPTY = false
 
+	// The machine's clipboard is global, slow to reach (pbcopy/xclip) and
+	// shared with whatever else the CI runner is doing; tests keep clipboard
+	// traffic in vtui's process-local buffer instead, and skip the OSC 52
+	// stdout fallback that used to spray base64 into the test logs. A test
+	// that genuinely targets the OS clipboard switches the knob back off
+	// for its own scope.
+	vtui.SkipOSClipboard(true)
+	vtui.DisableTerminalClipboard()
+
 	tmpDir, err := os.MkdirTemp("", "f4-test-config-*")
 	if err == nil {
 		// XDG_CONFIG_HOME/APPDATA cover Linux and Windows; os.UserConfigDir
