@@ -14,6 +14,24 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+var (
+	modKernel32             = windows.NewLazySystemDLL("kernel32.dll")
+	procCreatePseudoConsole = modKernel32.NewProc("CreatePseudoConsole")
+	procResizePseudoConsole = modKernel32.NewProc("ResizePseudoConsole")
+	procClosePseudoConsole  = modKernel32.NewProc("ClosePseudoConsole")
+)
+
+// conPTYAvailable checks whether the Windows ConPTY API is available in kernel32.dll
+// without panicking on older Windows versions (Windows 7, 8, 8.1, Server 2012/2016).
+func conPTYAvailable() bool {
+	if vtui.IsWine() {
+		return false
+	}
+	return procCreatePseudoConsole.Find() == nil &&
+		procResizePseudoConsole.Find() == nil &&
+		procClosePseudoConsole.Find() == nil
+}
+
 // PTY для Windows реализован через ConPTY API (доступно в Windows 10+).
 type PTY struct {
 	mu        sync.Mutex
@@ -31,6 +49,10 @@ type PTY struct {
 }
 
 func NewPTY() (*PTY, error) {
+	if !conPTYAvailable() {
+		return nil, fmt.Errorf("ConPTY is not supported on this Windows version (requires Windows 10 build 1809+)")
+	}
+
 	var inPipeOur, inPipePty windows.Handle
 	var outPipeOur, outPipePty windows.Handle
 
@@ -41,6 +63,8 @@ func NewPTY() (*PTY, error) {
 	}
 	// outPipe: мы читаем, PTY пишет
 	if err := windows.CreatePipe(&outPipeOur, &outPipePty, nil, 0); err != nil {
+		windows.CloseHandle(inPipePty)
+		windows.CloseHandle(inPipeOur)
 		return nil, err
 	}
 
@@ -49,6 +73,10 @@ func NewPTY() (*PTY, error) {
 	size := windows.Coord{X: 80, Y: 24}
 	err := windows.CreatePseudoConsole(size, inPipePty, outPipePty, 0, &console)
 	if err != nil {
+		windows.CloseHandle(inPipePty)
+		windows.CloseHandle(inPipeOur)
+		windows.CloseHandle(outPipePty)
+		windows.CloseHandle(outPipeOur)
 		return nil, fmt.Errorf("failed to create pseudo console: %w (requires Windows 10+)", err)
 	}
 

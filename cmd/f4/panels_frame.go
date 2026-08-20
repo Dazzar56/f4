@@ -995,7 +995,7 @@ func (pf *PanelsFrame) initPTY() {
 // empty terminal and no error anywhere the person could see without
 // starting f4 with --debug.
 func (pf *PanelsFrame) reportLocalPTYFailure() {
-	if vtui.FrameManager == nil {
+	if vtui.FrameManager == nil || pf.shellMode == ShellModeSimpleInline || pf.shellMode == ShellModeSimpleCaptured {
 		return
 	}
 	vtui.FrameManager.PostTask(func() {
