@@ -665,6 +665,11 @@ const (
 	hlMaxStallSlices = 100
 )
 
+// hlNow feeds the slice budget clock. Tests swap it for a fake advanced by
+// the highlighter itself, so budget behavior is asserted deterministically
+// instead of against the wall clock of a loaded CI machine.
+var hlNow = time.Now
+
 // highlightSlicePlan is what one slice did and when the next one may start.
 // It crosses from the UI thread back to the walker goroutine, which is why
 // every view field the decision depends on is read inside the slice itself.
@@ -759,7 +764,7 @@ func (ev *EditorView) highlightSlice(bgAttr uint64) highlightSlicePlan {
 	startLogLine, _ := ev.engine.GetLogLineAtVisualRow(ev.ScrollTopRow)
 	behind := cIdx < startLogLine
 
-	start := time.Now()
+	start := hlNow()
 	for cIdx < lineCount {
 		lStart := ev.li.GetLineOffset(cIdx)
 		lineLen := ev.getLineLength(cIdx)
@@ -782,11 +787,11 @@ func (ev *EditorView) highlightSlice(bgAttr uint64) highlightSlicePlan {
 		cIdx++
 		plan.lines++
 
-		if plan.lines%hlClockStride == 0 && time.Since(start) >= hlSliceBudget {
+		if plan.lines%hlClockStride == 0 && hlNow().Sub(start) >= hlSliceBudget {
 			break
 		}
 	}
-	plan.work = time.Since(start)
+	plan.work = hlNow().Sub(start)
 	plan.done = cIdx >= ev.li.LineCount() && !ev.indexing
 
 	if plan.lines == 0 {
