@@ -146,6 +146,7 @@
     │       ├── cpu_info_linux.go
     │       ├── cpu_info_other.go
     │       ├── cpu_info_windows.go
+    │       ├── debug.log
     │       ├── delete_trash_test.go
     │       ├── detach_unix.go
     │       ├── detach_windows.go
@@ -437,6 +438,7 @@
     │       ├── pty_test.go
     │       ├── pty_unix.go
     │       ├── pty_windows.go
+    │       ├── pty_windows_test.go
     │       ├── queue_manager.go
     │       ├── queue_manager_test.go
     │       ├── quick_view_panel.go
@@ -516,6 +518,8 @@
     │       ├── translate_kitty.go
     │       ├── translate_kitty_test.go
     │       ├── updater.go
+    │       ├── updater_repro_lock_other_test.go
+    │       ├── updater_repro_lock_windows_test.go
     │       ├── updater_repro_test.go
     │       ├── updater_test.go
     │       ├── uri_navigation_test.go
@@ -1097,4 +1101,4 @@
         ├── session_test.go
         └── vfs.go
     
-    64 directories, 1032 files
+    64 directories, 1036 files
