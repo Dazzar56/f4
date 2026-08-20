@@ -948,7 +948,9 @@ func (v *FishVFS) FindFiles(ctx context.Context, dir string, q vfs.FindQuery) ([
 // wants (C:\Users\foo for cmd, /c/Users/foo unchanged for POSIX).
 //
 // f4_sync is a stray marker helper.sh's own log filter can strip: cmd
-// keeps it as a rem comment, POSIX keeps it as a shell comment.
+// keeps it as a rem comment, POSIX carries it as "&& true f4_sync" —
+// not a "#" comment, because stock zsh ships with interactive_comments
+// off and would feed the tail to cd as extra arguments.
 func (v *FishVFS) PtyChangeDirCommand(dir string) []byte {
 	if v.peerIsWindows() {
 		winDir := fishplus.WirePathToWindows(dir)
@@ -958,7 +960,7 @@ func (v *FishVFS) PtyChangeDirCommand(dir string) []byte {
 		return []byte(fmt.Sprintf("cd /d \"%s\" & rem f4_sync\r", winDir))
 	}
 	sq := strings.ReplaceAll(dir, "'", "'\\''")
-	return []byte(fmt.Sprintf(" cd '%s' # f4_sync\r", sq))
+	return []byte(fmt.Sprintf(" cd '%s' && true f4_sync\r", sq))
 }
 
 // PtyRunCommand implements vfs.PtyShellIntegration. Same shell-flavor

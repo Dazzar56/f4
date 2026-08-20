@@ -79,9 +79,9 @@ func (p *AnsiParser) Process(data []byte) {
 		if startIdx == -1 {
 			break
 		}
-		endIdx := bytes.Index(data[startIdx:], []byte("' # f4_sync"))
+		endIdx := bytes.Index(data[startIdx:], []byte("' && true f4_sync"))
 		if endIdx != -1 {
-			actualEnd := startIdx + endIdx + len("' # f4_sync")
+			actualEnd := startIdx + endIdx + len("' && true f4_sync")
 			if actualEnd < len(data) && data[actualEnd] == '\r' {
 				actualEnd++
 			}
