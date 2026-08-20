@@ -293,14 +293,16 @@ func init() {
 		Handler:     actionScreenGrab,
 	})
 	RegisterAction(Action{
-		Name:        commandPaletteActionName,
-		Area:        "Common",
-		Label:       "Command Palette",
-		LabelKey:    "Action.App.CommandPalette",
-		Description: "Search and run available commands",
-		DescKey:     "Action.App.CommandPalette.Desc",
-		DefaultKeys: []string{"CtrlShiftP"},
-		Handler:     ShowCommandPalette,
+		Name:                commandPaletteActionName,
+		Area:                "Common",
+		Label:               "Command Palette",
+		LabelKey:            "Action.App.CommandPalette",
+		Description:         "Search and run available commands",
+		DescKey:             "Action.App.CommandPalette.Desc",
+		DefaultKeys:         []string{"CtrlShiftP"},
+		MenuPath:            "Commands",
+		MenuSeparatorBefore: true,
+		Handler:             ShowCommandPalette,
 	})
 	RegisterAction(Action{
 		Name:        "App.Help",
