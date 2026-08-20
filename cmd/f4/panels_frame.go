@@ -4376,7 +4376,11 @@ func (pf *PanelsFrame) NavigateToPath(fsp *FileSystemPanel, targetPath string) b
 			},
 			func(newVFS vfs.VFS) { pf.switchToVFS(fsp, newVFS) },
 			func(err error) {
-				vtui.ShowMessage(" Connection Error ", fmt.Sprintf("Failed to open %s:\n%v", targetPath, err), []string{"&Ok"})
+				if isArchiveProvider(provider) {
+					vtui.ShowMessage(" Open Error ", fmt.Sprintf("Failed to open %s:\n%v", targetPath, err), []string{"&Ok"})
+				} else {
+					vtui.ShowMessage(" Connection Error ", fmt.Sprintf("Failed to open %s:\n%v", targetPath, err), []string{"&Ok"})
+				}
 			},
 		)
 	}
