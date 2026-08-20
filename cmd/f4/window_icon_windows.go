@@ -205,6 +205,13 @@ func isWindow(hwnd uintptr) bool {
 }
 
 func windowDPI(hwnd uintptr) uint32 {
+	// GetDpiForWindow was added in Windows 10 1607; on older systems (e.g.
+	// Windows 8/8.1) it is absent from user32.dll and LazyProc.Call would
+	// panic via mustFind. Find() performs the same lookup but returns an
+	// error instead of panicking, and caches the result.
+	if err := procIconGetDPIForWindow.Find(); err != nil {
+		return defaultDPI
+	}
 	dpi, _, _ := procIconGetDPIForWindow.Call(hwnd)
 	if dpi == 0 {
 		return defaultDPI
