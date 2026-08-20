@@ -36,7 +36,10 @@ func TestDefaultDarkStyle_PanelColors(t *testing.T) {
 		{"Panel.Title", ColPanelTitle, 0xD3D7CF, 0x2E3436},
 		{"Panel.Title.Selected", ColPanelSelectedTitle, 0xD3D7CF, 0x555753},
 		{"Panel.Title.Column", ColPanelColumnTitle, 0x8AE234, 0x2E3436},
-		{"Panel.Text.Selected", ColPanelSelectedText, 0xFCE94F, 0x2E3436},
+		// Background raised one shade above the base panel (was 0x2E3436,
+		// same as Panel.Text) so selected files are readable without a
+		// cursor on them — see issue #524.
+		{"Panel.Text.Selected", ColPanelSelectedText, 0xFCE94F, 0x3F474A},
 		{"Panel.Info.Total", ColPanelTotalInfo, 0xEEEEEC, 0x2E3436},
 		// Dark text on teal: the pair that used to be flipped to white by the
 		// old contrast approximation.
