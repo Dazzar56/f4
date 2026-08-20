@@ -8,7 +8,9 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/pprof"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/unxed/f4/fusefs"
 	"github.com/unxed/f4/vfs"
@@ -113,6 +115,7 @@ func main() {
 	var print_help bool
 	var attachedMode bool
 	var wineProbe bool
+	var dumpScreenAfter float64
 
 	exeName := filepath.Base(absExecPath)
 	if strings.Contains(strings.ToLower(exeName), "gui") {
@@ -206,6 +209,22 @@ func main() {
 			attachedMode = true
 		case "--wine-probe":
 			wineProbe = true
+		case "--dump-screen-after":
+			// Wine's native console-input translation can drop complex
+			// modifier combos (issue #536 testing: CtrlAltP for
+			// Debug.ScreenDump never arrives under `wine f4.exe` tty mode,
+			// though it works fine under --gui=win32). This sidesteps
+			// keyboard input entirely: schedule one automatic screen dump
+			// N seconds after startup instead of waiting for a hotkey that
+			// may never arrive.
+			val := flagVal
+			if val == "" && i+1 < len(os.Args) && !strings.HasPrefix(os.Args[i+1], "-") {
+				val = os.Args[i+1]
+				i++
+			}
+			if secs, err := strconv.ParseFloat(val, 64); err == nil && secs > 0 {
+				dumpScreenAfter = secs
+			}
 		case "--sudo-dispatcher":
 			if flagVal != "" {
 				sudoDispatcher = flagVal
@@ -244,6 +263,10 @@ The following switches may be used in the command line:
  --tty [Backend]        Force run in TTY-mode
                          [Backend] values: "ansi", "winapi" (or "win32")
  --wine-probe           Print console/terminal environment facts and exit
+ --dump-screen-after N  Auto-run Debug.ScreenDump N seconds after startup
+                        (bypasses hotkeys entirely -- useful under Wine
+                        tty mode, where complex combos like CtrlAltP can
+                        fail to arrive through native console input)
                          (renderer backend, console geometry, shell mode)
 
 Details see in build-in help (F1 inside f4)
@@ -298,6 +321,13 @@ see in vtinput project: https://github.com/unxed/vtinput
 	if wineProbe {
 		runWineProbe()
 		return
+	}
+
+	if dumpScreenAfter > 0 {
+		delay := time.Duration(dumpScreenAfter * float64(time.Second))
+		time.AfterFunc(delay, func() {
+			actionScreenDump()
+		})
 	}
 
 	if ttyMode {
