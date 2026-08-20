@@ -66,6 +66,12 @@ func ShowCommandPalette() bool {
 		return true
 	}
 	if menu := vtui.FrameManager.GetActiveMenuBar(); menu != nil && menu.Active {
+		// vtui's VMenu fires a clicked item's OnClick synchronously, before the
+		// menu bar closes itself (VMenu.FireAction runs ahead of SetExitCode),
+		// so a click on this very item still observes menu.Active == true here.
+		// Defer and retry once the current input dispatch (and the menu close
+		// it triggers) has completed, instead of silently swallowing the click.
+		vtui.FrameManager.PostTask(func() { ShowCommandPalette() })
 		return true
 	}
 	area := (&MacroManager{}).GetCurrentArea()
@@ -142,7 +148,14 @@ func commandPaletteCanIncludeUserMenu(area string) bool {
 func commandPaletteActionEntries(area string) []commandPaletteEntry {
 	entries := make([]commandPaletteEntry, 0, len(actionOrder))
 	for _, action := range GetOrderedActions() {
-		if strings.EqualFold(action.Name, commandPaletteActionName) || !commandPaletteActionApplies(action, area) {
+		// The palette used to skip its own launcher action, but that broke the
+		// invariant (enforced by TestCommandPaletteResolvesEveryActionGeneratedMenuLeafByID)
+		// that every visible menu leaf has a matching palette entry. Listing it
+		// is harmless: the running dialog's own alreadyOpen guard makes
+		// selecting it a no-op while it is still open, and by the time a
+		// deferred re-selection runs the dialog has already been popped, so it
+		// simply reopens a fresh palette, same as the CtrlShiftP shortcut would.
+		if !commandPaletteActionApplies(action, area) {
 			continue
 		}
 		if action.Visible != nil && !action.Visible() {

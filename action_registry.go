@@ -55,6 +55,11 @@ type Action struct {
 	HideFromMenu bool
 	// MenuSeparatorBefore inserts a separator above this action's menu item.
 	MenuSeparatorBefore bool
+	// MenuLast pins this action's menu item to the very end of its MenuPath
+	// group, after every other item (including Common-area ones), regardless
+	// of registration order. Combine with MenuSeparatorBefore to set it off
+	// from the rest of the menu.
+	MenuLast bool
 	// Checked, when set, reports the toggle state shown in menus ("√ ").
 	Checked func() bool
 	// Visible, when set, decides whether the action appears in a menu at
@@ -302,6 +307,7 @@ func init() {
 		DefaultKeys:         []string{"CtrlShiftP"},
 		MenuPath:            "Commands",
 		MenuSeparatorBefore: true,
+		MenuLast:            true,
 		Handler:             ShowCommandPalette,
 	})
 	RegisterAction(Action{

@@ -251,8 +251,12 @@ func TestCommandPaletteResolvesEveryActionGeneratedMenuLeafByID(t *testing.T) {
 type commandPaletteActionMenuGroup struct {
 	path    string
 	actions []Action
+	pinned  []Action
 }
 
+// commandPaletteAuditedActionMenuGroups mirrors BuildMenuBarItems' grouping
+// and ordering rules, including MenuLast pinning, so the coverage test can
+// compare it against the actual generated menu leaf-by-leaf.
 func commandPaletteAuditedActionMenuGroups(area string) []commandPaletteActionMenuGroup {
 	var groups []commandPaletteActionMenuGroup
 	byPath := make(map[string]int)
@@ -265,6 +269,10 @@ func commandPaletteAuditedActionMenuGroups(area string) []commandPaletteActionMe
 			index = len(groups)
 			byPath[action.MenuPath] = index
 			groups = append(groups, commandPaletteActionMenuGroup{path: action.MenuPath})
+		}
+		if action.MenuLast {
+			groups[index].pinned = append(groups[index].pinned, action)
+			return
 		}
 		groups[index].actions = append(groups[index].actions, action)
 	}
@@ -281,6 +289,9 @@ func commandPaletteAuditedActionMenuGroups(area string) []commandPaletteActionMe
 		if _, exists := byPath[action.MenuPath]; exists {
 			appendAction(action)
 		}
+	}
+	for i := range groups {
+		groups[i].actions = append(groups[i].actions, groups[i].pinned...)
 	}
 	return groups
 }

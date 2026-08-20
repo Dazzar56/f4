@@ -10,12 +10,14 @@ import (
 // from the action registry. Every action with a MenuPath set appears in
 // the corresponding top-level menu; items inside a menu follow
 // registration order, with Common-area actions appended after the
-// area's own. The shortcut column reflects the *active* bindings,
-// including user overrides from hotkeys.ini.
+// area's own, except that any action with MenuLast set is pinned after
+// every other item in its group instead. The shortcut column reflects
+// the *active* bindings, including user overrides from hotkeys.ini.
 func BuildMenuBarItems(area string) []vtui.MenuBarItem {
 	type menu struct {
-		title string
-		items []vtui.MenuItem
+		title  string
+		items  []vtui.MenuItem
+		pinned []vtui.MenuItem
 	}
 	var order []string
 	menus := make(map[string]*menu)
@@ -36,9 +38,6 @@ func BuildMenuBarItems(area string) []vtui.MenuBarItem {
 			menus[a.MenuPath] = m
 			order = append(order, a.MenuPath)
 		}
-		if a.MenuSeparatorBefore {
-			m.items = append(m.items, vtui.MenuItem{Separator: true})
-		}
 		text := a.DisplayLabel()
 		if !strings.Contains(text, "&") {
 			text = "&" + text // first letter becomes the menu hotkey
@@ -52,6 +51,16 @@ func BuildMenuBarItems(area string) []vtui.MenuBarItem {
 		}
 		if hm := GlobalHotkeysMgr; hm != nil {
 			item.Shortcut = FormatKeyForUI(hm.GetKeyForAction(area, a.Name))
+		}
+		if a.MenuLast {
+			if a.MenuSeparatorBefore {
+				m.pinned = append(m.pinned, vtui.MenuItem{Separator: true})
+			}
+			m.pinned = append(m.pinned, item)
+			return
+		}
+		if a.MenuSeparatorBefore {
+			m.items = append(m.items, vtui.MenuItem{Separator: true})
 		}
 		m.items = append(m.items, item)
 	}
@@ -73,7 +82,10 @@ func BuildMenuBarItems(area string) []vtui.MenuBarItem {
 	result := make([]vtui.MenuBarItem, 0, len(order))
 	for _, path := range order {
 		m := menus[path]
-		result = append(result, vtui.MenuBarItem{Label: m.title, SubItems: m.items})
+		items := make([]vtui.MenuItem, 0, len(m.items)+len(m.pinned))
+		items = append(items, m.items...)
+		items = append(items, m.pinned...)
+		result = append(result, vtui.MenuBarItem{Label: m.title, SubItems: items})
 	}
 	return result
 }
