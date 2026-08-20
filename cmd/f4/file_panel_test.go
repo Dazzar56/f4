@@ -4645,3 +4645,65 @@ func TestFileSystemPanel_BottomFrameShowsCursorEntry(t *testing.T) {
 		t.Errorf("marker should be dropped when the status line is on: %q", got)
 	}
 }
+
+// TestFileSystemPanel_SelectionColorInMultiColumnViewMode is a regression
+// test for issue #524: vtui.Table asks TableCellSelectProvider.IsRowSelected
+// for a bare row number, but FileSystemPanel's Medium/Brief view modes pack
+// several entries into one row across multiple file-columns (see the
+// row+col*H math in GetCellAttr), so IsRowSelected can never tell which
+// entry a given row actually refers to and always reported "not selected".
+// Selected files and folders rendered with the plain unselected color in
+// every theme whenever the view mode wasn't single-column.
+func TestFileSystemPanel_SelectionColorInMultiColumnViewMode(t *testing.T) {
+	vtui.SetDefaultPalette()
+	SetDefaultF4Palette()
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	if err := ApplyColorStyle("Classic"); err != nil {
+		t.Fatalf("ApplyColorStyle: %v", err)
+	}
+
+	tmp := t.TempDir()
+	if err := os.Mkdir(filepath.Join(tmp, "adir"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	fsp := NewFileSystemPanel(0, 0, 40, 25, vfs.NewOSVFS(tmp))
+	if fsp.viewMode != ViewModeMedium {
+		t.Fatalf("expected default view mode to be Medium (gridColumnCount() > 1), got %v", fsp.viewMode)
+	}
+	waitForLoad(t, fsp)
+	fsp.Refresh()
+
+	idx := -1
+	for i, e := range fsp.entries {
+		if e.Name == "adir" {
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
+		t.Fatalf("adir not found among entries: %v", fsp.entries)
+	}
+	fsp.entries[idx].Selected = true
+
+	if fsp.gridColumnCount() == 1 {
+		t.Fatalf("test assumes a multi file-column view mode (gridColumnCount() > 1), got 1")
+	}
+
+	// row/col for this entry per the panel's own row+col*H layout, matching
+	// how vtui.Table would ask for this exact cell's attribute.
+	H := fsp.table.ViewHeight
+	if H <= 0 {
+		H = 1
+	}
+	row, col := idx%H, idx/H
+
+	got := fsp.GetCellAttr(row, col, vtui.Palette[ColPanelText])
+	want := vtui.Palette[ColPanelSelectedText]
+	if got != want {
+		gfg, gbg := GetColorRGBBoth(got)
+		wfg, wbg := GetColorRGBBoth(want)
+		t.Errorf("selected directory in Medium view mode: got fg=#%06x bg=#%06x, want fg=#%06x bg=#%06x (selection highlight was dropped)",
+			gfg, gbg, wfg, wbg)
+	}
+}
