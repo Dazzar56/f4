@@ -3717,7 +3717,7 @@ func TestPanelsFrame_AutoRefresh_Locking(t *testing.T) {
 	pf.Show(scr)
 
 	// Pump tasks so the auto-refresh goroutine can run
-	deadline = time.Now().Add(1 * time.Second)
+	deadline := time.Now().Add(1 * time.Second)
 	for time.Now().Before(deadline) {
 		select {
 		case task := <-vtui.FrameManager.TaskChan:
