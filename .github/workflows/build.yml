@@ -44,12 +44,12 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
       with:
         submodules: recursive # Автоматически подтягивает vtui и vtinput
 
     - name: Set up Go
-      uses: actions/setup-go@v5
+      uses: actions/setup-go@v7
       with:
         go-version: '1.26.x'
         cache-dependency-path: go.sum
@@ -151,7 +151,7 @@ jobs:
         fi
 
     - name: Upload Artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: f4-${{ matrix.goos }}-${{ matrix.goarch }}
         path: f4-${{ matrix.goos }}-${{ matrix.goarch }}.*
@@ -183,7 +183,7 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
       with:
         submodules: recursive
 
@@ -322,7 +322,7 @@ jobs:
       run: (cd build && zip -r ../f4-windows7-amd64.zip .)
 
     - name: Upload Artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: f4-windows7-amd64
         path: f4-windows7-amd64.zip
@@ -341,12 +341,12 @@ jobs:
       CGO_ENABLED: 0
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
       with:
         submodules: recursive
 
     - name: Set up Go
-      uses: actions/setup-go@v5
+      uses: actions/setup-go@v7
       with:
         go-version: '1.26.x'
         cache-dependency-path: go.sum
@@ -383,12 +383,12 @@ jobs:
       contents: write
     steps:
     - name: Download all artifacts
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         path: artifacts
         merge-multiple: true
     - name: Publish Release
-      uses: softprops/action-gh-release@v2
+      uses: softprops/action-gh-release@v3
       with:
         files: artifacts/*
         generate_release_notes: true
@@ -486,7 +486,7 @@ jobs:
       contents: write
     steps:
     - name: Checkout code (to get git info)
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
 
     - name: Set Release Metadata
       run: |
@@ -494,13 +494,13 @@ jobs:
         echo "BUILD_TIME=$(date +'%Y-%m-%d %H:%M:%S')" >> $GITHUB_ENV
 
     - name: Download all artifacts
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         path: artifacts
         merge-multiple: true
 
     - name: Update Nightly Release
-      uses: softprops/action-gh-release@v2
+      uses: softprops/action-gh-release@v3
       with:
         tag_name: nightly
         name: "Continuous Build (Nightly)"
