@@ -167,10 +167,181 @@ jobs:
         path: f4-${{ matrix.goos }}-${{ matrix.goarch }}.*
         retention-days: 7
 
+  # Эта джоба собирает Windows-бинарник тулчейном thongtech/go-legacy-win7,
+  # чтобы f4 можно было запускать на Windows 7/8/8.1 (см. issue #514).
+  #
+  # Тулчейн go-legacy-win7-1.26.3-1 в остальном полноценен, но в его
+  # sync/atomic отсутствуют методы Or/And у типизированных атомиков
+  # (добавлены в Go 1.23, см. https://go.dev/issue/61395) — это баг
+  # именно сборки тулчейна, а не самого Go 1.26.3
+  # (см. https://github.com/thongtech/go-legacy-win7/issues/13, ещё не
+  # исправлено апстримом). Без них не собираются github.com/gogpu/gg и
+  # github.com/ncruces/go-sqlite3. Вместо патчинга каждой такой
+  # зависимости по отдельности (как это было проверено вручную в
+  # issue #514) добавляем недостающие методы один раз прямо в GOROOT
+  # скачанного тулчейна — это эквивалентно апстримному фиксу и не требует
+  # правок go.mod. Если thongtech поправят это в своей сборке, наш файл
+  # с большой вероятностью начнёт конфликтовать (duplicate method) —
+  # тогда этот шаг нужно будет просто удалить.
+  build-win7:
+    name: Build (windows7/amd64, legacy toolchain)
+    runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: 0
+      GOOS: windows
+      GOARCH: amd64
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Download go-legacy-win7 toolchain
+      run: |
+        set -euo pipefail
+        curl -fL --retry 5 --retry-delay 10 --retry-all-errors \
+          -o go-legacy-win7.tar.gz \
+          https://github.com/thongtech/go-legacy-win7/releases/download/v1.26.3-1/go-legacy-win7-1.26.3-1.linux_amd64.tar.gz
+        echo "8a1acb588fa3ab7827ce7b1be5795b356be65a500c70af297ad94ab2b3370ea6  go-legacy-win7.tar.gz" | sha256sum -c -
+        mkdir -p "$HOME/go-legacy-win7"
+        tar -xzf go-legacy-win7.tar.gz -C "$HOME/go-legacy-win7"
+        echo "GOROOT=$HOME/go-legacy-win7/go-legacy-win7" >> "$GITHUB_ENV"
+        echo "$HOME/go-legacy-win7/go-legacy-win7/bin" >> "$GITHUB_PATH"
+
+    - name: Restore missing sync/atomic Or/And methods (thongtech/go-legacy-win7#13)
+      run: |
+        cat > "$GOROOT/src/sync/atomic/or_and_win7compat.go" <<'EOF'
+        // This file restores the Or/And methods on typed atomics (added
+        // upstream in Go 1.23, see https://go.dev/issue/61395) that are
+        // missing from the go-legacy-win7-1.26.3-1 toolchain despite it
+        // being based on Go 1.26.3. See
+        // https://github.com/thongtech/go-legacy-win7/issues/13.
+        // Remove this file once that's fixed upstream.
+        package atomic
+
+        func (x *Int32) Or(mask int32) (old int32) {
+        	for {
+        		old = x.Load()
+        		if x.CompareAndSwap(old, old|mask) {
+        			return old
+        		}
+        	}
+        }
+
+        func (x *Int32) And(mask int32) (old int32) {
+        	for {
+        		old = x.Load()
+        		if x.CompareAndSwap(old, old&mask) {
+        			return old
+        		}
+        	}
+        }
+
+        func (x *Int64) Or(mask int64) (old int64) {
+        	for {
+        		old = x.Load()
+        		if x.CompareAndSwap(old, old|mask) {
+        			return old
+        		}
+        	}
+        }
+
+        func (x *Int64) And(mask int64) (old int64) {
+        	for {
+        		old = x.Load()
+        		if x.CompareAndSwap(old, old&mask) {
+        			return old
+        		}
+        	}
+        }
+
+        func (x *Uint32) Or(mask uint32) (old uint32) {
+        	for {
+        		old = x.Load()
+        		if x.CompareAndSwap(old, old|mask) {
+        			return old
+        		}
+        	}
+        }
+
+        func (x *Uint32) And(mask uint32) (old uint32) {
+        	for {
+        		old = x.Load()
+        		if x.CompareAndSwap(old, old&mask) {
+        			return old
+        		}
+        	}
+        }
+
+        func (x *Uint64) Or(mask uint64) (old uint64) {
+        	for {
+        		old = x.Load()
+        		if x.CompareAndSwap(old, old|mask) {
+        			return old
+        		}
+        	}
+        }
+
+        func (x *Uint64) And(mask uint64) (old uint64) {
+        	for {
+        		old = x.Load()
+        		if x.CompareAndSwap(old, old&mask) {
+        			return old
+        		}
+        	}
+        }
+
+        func (x *Uintptr) Or(mask uintptr) (old uintptr) {
+        	for {
+        		old = x.Load()
+        		if x.CompareAndSwap(old, old|mask) {
+        			return old
+        		}
+        	}
+        }
+
+        func (x *Uintptr) And(mask uintptr) (old uintptr) {
+        	for {
+        		old = x.Load()
+        		if x.CompareAndSwap(old, old&mask) {
+        			return old
+        		}
+        	}
+        }
+        EOF
+
+    - name: Build binaries
+      run: |
+        mkdir -p build/plugins/dummy_internal
+        LDFLAGS="-s -w"
+
+        go build -trimpath -ldflags="$LDFLAGS" -o build/f4.exe ./cmd/f4
+        # GUI-only binary (no console flash), same as in the main matrix.
+        go build -trimpath -ldflags="$LDFLAGS -H windowsgui" -o build/f4-gui.exe ./cmd/f4
+
+        cp -r cmd/f4/lang cmd/f4/help build/
+        mkdir -p build/licenses
+        cp plugins/visren/LICENSE.upstream build/licenses/VisRen-BSD-3-Clause.txt
+        cp plugins/ios/LICENSE.go-ios build/licenses/go-ios-MIT.txt
+
+        cd plugins/dummy_internal
+        go build -trimpath -ldflags="$LDFLAGS" -o ../../build/plugins/dummy_internal/f4-internal-dummy-plugin.exe .
+
+    - name: Package
+      run: (cd build && zip -r ../f4-windows7-amd64.zip .)
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: f4-windows7-amd64
+        path: f4-windows7-amd64.zip
+        retention-days: 7
+
   # Эта джоба создает постоянные релизы при пуше тэгов v*.*.*
   release:
     name: Create Official Release
-    needs: build
+    needs: [build, build-win7]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
@@ -273,7 +444,7 @@ jobs:
   # Эта джоба обновляет "плавающий" nightly релиз при каждом пуше в main
   nightly:
     name: Update Nightly Release
-    needs: build
+    needs: [build, build-win7]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
