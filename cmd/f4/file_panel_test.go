@@ -4698,12 +4698,58 @@ func TestFileSystemPanel_SelectionColorInMultiColumnViewMode(t *testing.T) {
 	}
 	row, col := idx%H, idx/H
 
-	got := fsp.GetCellAttr(row, col, vtui.Palette[ColPanelText])
-	want := vtui.Palette[ColPanelSelectedText]
-	if got != want {
-		gfg, gbg := GetColorRGBBoth(got)
-		wfg, wbg := GetColorRGBBoth(want)
-		t.Errorf("selected directory in Medium view mode: got fg=#%06x bg=#%06x, want fg=#%06x bg=#%06x (selection highlight was dropped)",
-			gfg, gbg, wfg, wbg)
+	if !fsp.IsCellSelected(row, col) {
+		t.Errorf("expected IsCellSelected(%d, %d) to be true for selected entry %q", row, col, fsp.entries[idx].Name)
+	}
+	if fsp.IsCellSelected(row+1, col) {
+		t.Errorf("expected IsCellSelected(%d, %d) to be false for unselected entry", row+1, col)
+	}
+}
+
+func TestFileSystemPanel_IsCellSelectedAndEntryIndex(t *testing.T) {
+	fp := NewFileSystemPanel(0, 0, 80, 12, vfs.NewOSVFS("."))
+	H := fp.table.ViewHeight
+	if H <= 0 {
+		H = 1
+	}
+
+	fp.entries = make([]*fileEntry, H*3)
+	for i := range fp.entries {
+		fp.entries[i] = &fileEntry{VFSItem: vfs.VFSItem{Name: fmt.Sprintf("file_%d", i)}}
+	}
+
+	// Detailed mode (1 column)
+	fp.SetViewMode(ViewModeDetailed)
+	fp.entries[2].Selected = true
+	if got := fp.entryIndex(2, 0); got != 2 {
+		t.Errorf("Detailed entryIndex(2, 0) = %d, want 2", got)
+	}
+	if got := fp.entryIndex(2, 1); got != 2 {
+		t.Errorf("Detailed entryIndex(2, 1) = %d, want 2 (single column ignores col)", got)
+	}
+	if !fp.IsCellSelected(2, 0) {
+		t.Errorf("Detailed IsCellSelected(2, 0) = false, want true")
+	}
+	if fp.IsCellSelected(1, 0) {
+		t.Errorf("Detailed IsCellSelected(1, 0) = true, want false")
+	}
+
+	// Medium mode (2 columns)
+	fp.SetViewMode(ViewModeMedium)
+	targetIdx := H + 3
+	fp.entries[targetIdx].Selected = true
+	if got := fp.entryIndex(3, 1); got != targetIdx {
+		t.Errorf("Medium entryIndex(3, 1) = %d, want %d", got, targetIdx)
+	}
+	if !fp.IsCellSelected(3, 1) {
+		t.Errorf("Medium IsCellSelected(3, 1) = false, want true")
+	}
+	if fp.IsCellSelected(3, 0) {
+		t.Errorf("Medium IsCellSelected(3, 0) = true, want false")
+	}
+
+	// Out of bounds check
+	if fp.IsCellSelected(-1, 0) || fp.IsCellSelected(H*10, 0) {
+		t.Errorf("IsCellSelected returned true for out-of-bounds indices")
 	}
 }
