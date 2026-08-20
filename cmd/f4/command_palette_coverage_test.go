@@ -7,7 +7,6 @@ import (
 	"go/parser"
 	"go/token"
 	"io/fs"
-	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -60,55 +59,55 @@ var commandPaletteAuditClasses = map[string]bool{
 }
 
 var commandPaletteProcessKeyAudit = map[string]commandPaletteSurfaceAudit{
-	"ai_chat_panel.go:(*AIChatPanel).ProcessKey": {
+	"cmd/f4/ai_chat_panel.go:(*AIChatPanel).ProcessKey": {
 		class: paletteAuditPanelProvider, rationale: "focused AI panel commands are supplied by the panel-context palette provider; text and link navigation remain local",
 	},
-	"arkanoid.go:(*ArkanoidFrame).ProcessKey": {
+	"cmd/f4/arkanoid.go:(*ArkanoidFrame).ProcessKey": {
 		class: paletteAuditFrameProvider, rationale: "Arkanoid commands are supplied by commandPaletteArkanoidEntries",
 	},
-	"apply_command_output.go:(*applyOutputDialog).ProcessKey": {
+	"cmd/f4/apply_command_output.go:(*applyOutputDialog).ProcessKey": {
 		class: paletteAuditModalLocal, rationale: "the apply-output window is modal and only adds its local close key",
 	},
-	"command_line.go:(*CommandLine).ProcessKey": {
+	"cmd/f4/command_line.go:(*CommandLine).ProcessKey": {
 		class: paletteAuditParentControl, rationale: "command-line editing primitives belong to PanelsFrame rather than being standalone commands",
 	},
-	"command_palette_ui.go:(*commandPaletteDialog).ProcessKey": {
+	"cmd/f4/command_palette_ui.go:(*commandPaletteDialog).ProcessKey": {
 		class: paletteAuditModalLocal, rationale: "the palette dialog owns query, navigation, execution, and cancellation while it is open",
 	},
-	"editor_view.go:(*EditorView).ProcessKey": {
+	"cmd/f4/editor_view.go:(*EditorView).ProcessKey": {
 		class: paletteAuditActionArea, rationale: "editor commands are registered actions; raw text and cursor editing remain local primitives",
 	},
-	"find_file.go:(*SearchResultsWindow).ProcessKey": {
+	"cmd/f4/find_file.go:(*SearchResultsWindow).ProcessKey": {
 		class: paletteAuditModalLocal, rationale: "find results are a modal result picker whose F3/F4 buttons route to the existing view/edit operations",
 	},
-	"file_panel.go:(*FileSystemPanel).ProcessKey": {
+	"cmd/f4/file_panel.go:(*FileSystemPanel).ProcessKey": {
 		class: paletteAuditPanelProvider, rationale: "panel actions and audited transient panel keys are exposed by the action registry and panel-context provider",
 	},
-	"grabber.go:(*GrabberFrame).ProcessKey": {
+	"cmd/f4/grabber.go:(*GrabberFrame).ProcessKey": {
 		class: paletteAuditFrameProvider, rationale: "screen-grabber commands are supplied by commandPaletteGrabberEntries",
 	},
-	"hotkeys_ui.go:(*HotkeyAssignFrame).ProcessKey": {
+	"cmd/f4/hotkeys_ui.go:(*HotkeyAssignFrame).ProcessKey": {
 		class: paletteAuditModalLocal, rationale: "the hotkey-capture dialog must consume the next key locally and is not a global command surface",
 	},
-	"image_view.go:(*ImageView).ProcessKey": {
+	"cmd/f4/image_view.go:(*ImageView).ProcessKey": {
 		class: paletteAuditFrameProvider, rationale: "image-viewer commands are supplied by commandPaletteImageEntries",
 	},
-	"info_panel.go:(*InfoPanel).ProcessKey": {
+	"cmd/f4/info_panel.go:(*InfoPanel).ProcessKey": {
 		class: paletteAuditPanelProvider, rationale: "the focused information-panel command is supplied by the panel-context palette provider",
 	},
-	"macro.go:(*MacroAssignFrame).ProcessKey": {
+	"cmd/f4/macro.go:(*MacroAssignFrame).ProcessKey": {
 		class: paletteAuditModalLocal, rationale: "macro assignment intentionally captures the next key inside its modal dialog",
 	},
-	"panels_frame.go:(*PanelsFrame).ProcessKey": {
+	"cmd/f4/panels_frame.go:(*PanelsFrame).ProcessKey": {
 		class: paletteAuditPanelProvider, rationale: "PanelsFrame combines registered actions with audited transient panel-context entries",
 	},
-	"quick_view_panel.go:(*QuickViewPanel).ProcessKey": {
+	"cmd/f4/quick_view_panel.go:(*QuickViewPanel).ProcessKey": {
 		class: paletteAuditPanelProvider, rationale: "the focused Quick View toggle is supplied by the panel-context palette provider",
 	},
-	"queue_manager.go:(*QueueFrame).ProcessKey": {
+	"cmd/f4/queue_manager.go:(*QueueFrame).ProcessKey": {
 		class: paletteAuditFrameProvider, rationale: "queue commands are supplied by commandPaletteQueueEntries",
 	},
-	"viewer_view.go:(*ViewerView).ProcessKey": {
+	"cmd/f4/viewer_view.go:(*ViewerView).ProcessKey": {
 		class: paletteAuditActionArea, rationale: "viewer commands are registered actions; scrolling and selection remain local primitives",
 	},
 	"plugins/dummy_rpc/main.go:(*DummyPlugin).ProcessKey": {
@@ -138,49 +137,49 @@ var commandPaletteProcessKeyAudit = map[string]commandPaletteSurfaceAudit{
 }
 
 var commandPaletteNewVMenuAudit = map[string]commandPaletteSurfaceAudit{
-	"actions.go:actionFoldersHistory#1": {
+	"cmd/f4/actions.go:actionFoldersHistory#1": {
 		class: paletteAuditDynamicAction, rationale: "the registered folder-history action opens a runtime history list",
 	},
-	"actions.go:actionCommandHistory#1": {
+	"cmd/f4/actions.go:actionCommandHistory#1": {
 		class: paletteAuditDynamicAction, rationale: "the registered command-history action opens a runtime history list",
 	},
-	"actions.go:actionSortMenuForPanel#1": {
+	"cmd/f4/actions.go:actionSortMenuForPanel#1": {
 		class: paletteAuditDynamicAction, rationale: "the registered sort-menu action opens choices that are also backed by sort actions",
 	},
-	"bookmarks_dialog.go:(*bookmarksDialog).open#1": {
+	"cmd/f4/bookmarks_dialog.go:(*bookmarksDialog).open#1": {
 		class: paletteAuditDynamicProvider, rationale: "bookmark slots are runtime data and live slots are exposed by commandPaletteBookmarkEntries",
 	},
-	"editor_find_all.go:(*EditorView).showFindAllMenu#1": {
+	"cmd/f4/editor_find_all.go:(*EditorView).showFindAllMenu#1": {
 		class: paletteAuditModalLocal, rationale: "Find All results are a query-local result selector reached through the registered editor search action",
 	},
-	"editor_view.go:(*EditorView).showCodepageDialog#1": {
+	"cmd/f4/editor_view.go:(*EditorView).showCodepageDialog#1": {
 		class: paletteAuditDynamicAction, rationale: "the registered editor codepage action opens the runtime codepage list",
 	},
-	"editor_view.go:(*EditorView).showConvertCodepageDialog#1": {
+	"cmd/f4/editor_view.go:(*EditorView).showConvertCodepageDialog#1": {
 		class: paletteAuditDynamicAction, rationale: "the registered convert-codepage action opens the runtime codepage list",
 	},
-	"file_associations_editor.go:(*assocEditorState).openList#1": {
+	"cmd/f4/file_associations_editor.go:(*assocEditorState).openList#1": {
 		class: paletteAuditModalLocal, rationale: "association rows are edited inside the file-association settings workflow",
 	},
-	"file_associations_ui.go:showAssociationPicker#1": {
+	"cmd/f4/file_associations_ui.go:showAssociationPicker#1": {
 		class: paletteAuditDynamicAction, rationale: "matching file associations are runtime choices reached through the registered file operation",
 	},
-	"fuse_mount_list.go:showMountList#1": {
+	"cmd/f4/fuse_mount_list.go:showMountList#1": {
 		class: paletteAuditDynamicAction, rationale: "the registered mount-list action opens the current mount inventory",
 	},
-	"panels_frame.go:(*PanelsFrame).Menu#1": {
+	"cmd/f4/panels_frame.go:(*PanelsFrame).Menu#1": {
 		class: paletteAuditPluginDialogBridge, rationale: "vfs.App.Menu is the generic callback-based plugin dialog bridge; its rows are not globally enumerable commands",
 	},
-	"panels_frame.go:(*PanelsFrame).showDriveMenuAt#1": {
+	"cmd/f4/panels_frame.go:(*PanelsFrame).showDriveMenuAt#1": {
 		class: paletteAuditDynamicProvider, rationale: "registered drives are mirrored by commandPaletteDriveEntries with live factory re-resolution",
 	},
-	"user_menu_ui.go:(*userMenuState).pushLevel#1": {
+	"cmd/f4/user_menu_ui.go:(*userMenuState).pushLevel#1": {
 		class: paletteAuditDynamicProvider, rationale: "executable user-menu leaves are flattened by commandPaletteUserMenuEntries",
 	},
-	"viewer_editor_history.go:actionViewerEditorHistory#1": {
+	"cmd/f4/viewer_editor_history.go:actionViewerEditorHistory#1": {
 		class: paletteAuditDynamicAction, rationale: "the registered viewer/editor history action opens runtime history entries",
 	},
-	"viewer_view.go:(*ViewerView).showCodepageDialog#1": {
+	"cmd/f4/viewer_view.go:(*ViewerView).showCodepageDialog#1": {
 		class: paletteAuditDynamicAction, rationale: "the registered viewer codepage action opens the runtime codepage list",
 	},
 }
@@ -350,12 +349,11 @@ type commandPaletteParsedGo struct {
 
 func commandPaletteParseProductionGo(t *testing.T) []commandPaletteParsedGo {
 	t.Helper()
-	root, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
+	// The inventory spans the whole module (main package and plugins alike),
+	// so walk from the module root, not this package's directory.
+	root := moduleRootDir(t)
 	var paths []string
-	err = filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}

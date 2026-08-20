@@ -11,7 +11,7 @@ cd ../..
 
 echo "3. Running f4 in test mode (Output will go to debug.log)..."
 rm -f debug.log
-VTUI_DEBUG=1 go run . -test-plugins
+VTUI_DEBUG=1 go run ./cmd/f4 -test-plugins
 
 echo ""
 echo "=== debug.log Output ==="

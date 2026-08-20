@@ -10,14 +10,16 @@ import (
 	"regexp"
 	"strings"
 
+	embedded "github.com/unxed/f4"
 	"github.com/unxed/vtui"
 )
 
 //go:embed help/en.hlf
 var defaultHelpData string
 
-//go:embed README.md
-var readmeData string
+// README.md lives in the repository root (it must render on GitHub), out of
+// go:embed's reach from this directory; the root "embedded" package bridges it.
+var readmeData = embedded.ReadmeMD
 
 type memoryHelpVFS struct {
 	files map[string]string

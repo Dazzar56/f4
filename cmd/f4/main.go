@@ -1,4 +1,4 @@
-//go:generate go -C tools/icons run .
+//go:generate go -C ../../tools/icons run .
 
 package main
 

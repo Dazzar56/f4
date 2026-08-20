@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -37,7 +38,7 @@ func TestLuaPluginIntegration(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	// 3. Initialize the real RPC plugin pointing to the dummy script
-	pluginPath := "plugins/dummy_lua/plugin.lua"
+	pluginPath := filepath.Join(moduleRootDir(t), "plugins", "dummy_lua", "plugin.lua")
 	p := NewRPCPlugin(pluginPath)
 	host := &mockHostAPI{}
 
