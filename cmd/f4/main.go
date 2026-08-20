@@ -448,6 +448,15 @@ func tryRunDefaultGui() error {
 	}
 	var errs []string
 	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
+		// Try gogpu first (for both Windows and macOS)
+		vtui.DebugLog("GUI_AUTO: Trying gogpu...")
+		if err := RunGui("gogpu"); err == nil {
+			return nil
+		} else {
+			errs = append(errs, fmt.Sprintf("gogpu: %v", err))
+		}
+
+		// Fall back to win32 on Windows if gogpu failed
 		if runtime.GOOS == "windows" {
 			vtui.DebugLog("GUI_AUTO: Trying win32...")
 			if err := RunGui("win32"); err == nil {
@@ -456,12 +465,8 @@ func tryRunDefaultGui() error {
 				errs = append(errs, fmt.Sprintf("win32: %v", err))
 			}
 		}
-		vtui.DebugLog("GUI_AUTO: Trying gogpu...")
-		if err := RunGui("gogpu"); err == nil {
-			return nil
-		} else {
-			errs = append(errs, fmt.Sprintf("gogpu: %v", err))
-		}
+
+		// Fallback to X11 if DISPLAY environment variable is set
 		if os.Getenv("DISPLAY") != "" {
 			vtui.DebugLog("GUI_AUTO: Trying x11...")
 			if err := RunGui("x11"); err == nil {
