@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -17,22 +18,24 @@ const hardcodedUpdateHint = "Regenerate it with:\n" +
 // S0. Captions that already existed when the localization audit started are
 // frozen in tools/hardcoded_baseline.txt; that list may only shrink.
 func TestNoNewHardcodedUIStrings(t *testing.T) {
-	findings, err := hardcode.Scan(".")
+	root := moduleRootDir(t)
+	baselinePath := filepath.Join(root, hardcodedBaselinePath)
+	findings, err := hardcode.Scan(root)
 	if err != nil {
 		t.Fatalf("hardcoded string scan failed: %v", err)
 	}
 
 	if os.Getenv("F4_UPDATE_HARDCODED_BASELINE") == "1" {
-		if err := hardcode.WriteBaseline(hardcodedBaselinePath, findings); err != nil {
+		if err := hardcode.WriteBaseline(baselinePath, findings); err != nil {
 			t.Fatalf("cannot update %s: %v", hardcodedBaselinePath, err)
 		}
 		t.Logf("%s regenerated with %d entries, commit it", hardcodedBaselinePath, len(hardcode.IDs(findings)))
 		return
 	}
 
-	baseline, err := hardcode.LoadBaseline(hardcodedBaselinePath)
+	baseline, err := hardcode.LoadBaseline(baselinePath)
 	if os.IsNotExist(err) {
-		if werr := hardcode.WriteBaseline(hardcodedBaselinePath, findings); werr != nil {
+		if werr := hardcode.WriteBaseline(baselinePath, findings); werr != nil {
 			t.Fatalf("cannot create %s: %v", hardcodedBaselinePath, werr)
 		}
 		t.Logf("%s did not exist and was created with %d entries, commit it", hardcodedBaselinePath, len(hardcode.IDs(findings)))
