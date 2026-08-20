@@ -16,5 +16,6 @@ func RunGui(backend string) error {
 	defer stopIconManager()
 	return vtui.RunInGUIWindow(AppConfig.GuiCols, AppConfig.GuiRows, backend, effectiveGuiFont(), float64(AppConfig.GuiFontSize), func() {
 		SetupUI()
+		openDashEFileIfRequested()
 	})
 }

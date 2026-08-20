@@ -27,6 +27,39 @@ var SelectedTTYBackend string
 // frame is pushed) lives in InitCore(), a separate function.
 var editFilePath string
 
+// openDashEFileIfRequested opens -e's target file in the editor on the
+// current top PanelsFrame, if -e was given. Called from every entry point
+// where SetupUI() (or InitCore(), which calls it) already ran in the one
+// process that's actually going to render -- every GUI backend, and the
+// tty path on Windows (session_windows.go). The Unix tty path is the odd
+// one out: it daemonizes, so SetupUI() there runs inside a not-yet-
+// attached background process with nothing to draw to; session_unix.go's
+// runServer() calls openEditFileIn directly instead, timed to the actual
+// client attach, not to this function.
+func openDashEFileIfRequested() {
+	if editFilePath == "" {
+		return
+	}
+	if top := vtui.FrameManager.GetTopFrame(); top != nil {
+		if pf, ok := top.(*PanelsFrame); ok && pf != nil {
+			openEditFileIn(pf, editFilePath)
+		}
+	}
+}
+
+// openEditFileIn resolves path to an absolute path and opens it in pf's
+// editor via the normal action_registry path (the same one F4/double-click
+// use), so -e behaves identically to a user opening the file by hand --
+// same "already open?" dialog, same history entry, same everything.
+func openEditFileIn(pf *PanelsFrame, path string) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		vtui.DebugLog("MAIN: -e %q: filepath.Abs failed: %v", path, err)
+		return
+	}
+	actionOpenEditor(pf, vfs.NewOSVFS(filepath.Dir(abs)), abs)
+}
+
 func main() {
 	vtui.AppName = "f4"
 	installConsoleCtrlHandler()

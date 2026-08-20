@@ -15,7 +15,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 	"golang.org/x/sys/unix"
@@ -487,11 +486,9 @@ func runServer(sockPath string) {
 			// yet. Reuses whatever PanelsFrame is already on top rather
 			// than assuming there's exactly one, since -e can attach to an
 			// existing multi-tab session, not just a freshly started one.
-			if abs, err := filepath.Abs(attachEditPath); err != nil {
-				vtui.DebugLog("SERVER: -e %q: filepath.Abs failed: %v", attachEditPath, err)
-			} else if top := vtui.FrameManager.GetTopFrame(); top != nil {
+			if top := vtui.FrameManager.GetTopFrame(); top != nil {
 				if pf, ok := top.(*PanelsFrame); ok && pf != nil {
-					actionOpenEditor(pf, vfs.NewOSVFS(filepath.Dir(abs)), abs)
+					openEditFileIn(pf, attachEditPath)
 				} else {
 					vtui.DebugLog("SERVER: -e %q: top frame is not a *PanelsFrame (%T)", attachEditPath, top)
 				}
