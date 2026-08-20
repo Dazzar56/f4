@@ -176,7 +176,3 @@ replace github.com/ebitengine/hideconsole => ./internal/hideconsole
 // replace github.com/unxed/colorer4go => ../../../dev/colorer4go
 
 // replace github.com/unxed/vtui => ../../../dev/vtui
-
-replace github.com/unxed/ffibridge => github.com/refaim/ffibridge v0.1.1-0.20260820123535-08752d4a7ca2
-
-replace github.com/unxed/vtui => github.com/refaim/vtui v0.0.0-20260820151951-de829bc2a074
