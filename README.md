@@ -6,6 +6,7 @@
 | Platform | Format | Link |
 | :--- | :--- | :--- |
 | **Windows** | .zip | [amd64](https://github.com/unxed/f4/releases/download/nightly/f4-windows-amd64.zip) / [arm64](https://github.com/unxed/f4/releases/download/nightly/f4-windows-arm64.zip) |
+| **Windows 7/8/8.1** | .zip | [amd64](https://github.com/unxed/f4/releases/download/nightly/f4-windows7-amd64.zip) |
 | **macOS** | .tar.gz | [amd64](https://github.com/unxed/f4/releases/download/nightly/f4-darwin-amd64.tar.gz) / [arm64](https://github.com/unxed/f4/releases/download/nightly/f4-darwin-arm64.tar.gz) |
 | **Linux** | .tar.gz | [amd64](https://github.com/unxed/f4/releases/download/nightly/f4-linux-amd64.tar.gz) / [arm64](https://github.com/unxed/f4/releases/download/nightly/f4-linux-arm64.tar.gz) / [armv7l](https://github.com/unxed/f4/releases/download/nightly/f4-linux-arm.tar.gz) |
 | **FreeBSD** | .tar.gz | [amd64](https://github.com/unxed/f4/releases/download/nightly/f4-freebsd-amd64.tar.gz) / [arm64](https://github.com/unxed/f4/releases/download/nightly/f4-freebsd-arm64.tar.gz) |
