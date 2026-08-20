@@ -3528,7 +3528,11 @@ func (pf *PanelsFrame) syncPTYDirectory(path string, v vfs.VFS) bool {
 		pf.writePTY(activePty, []byte(fmt.Sprintf("cd /d \"%s\" & rem f4_sync\r", path)))
 	} else {
 		sqPath := strings.ReplaceAll(path, "'", "'\\''")
-		pf.writePTY(activePty, []byte(fmt.Sprintf(" cd '%s' # f4_sync\r", sqPath)))
+		// "&& true f4_sync" instead of "# f4_sync": stock zsh ships with
+		// interactive_comments off, so a trailing comment becomes extra cd
+		// arguments ("cd: too many arguments"). true ignores its arguments
+		// in every POSIX-ish shell including fish.
+		pf.writePTY(activePty, []byte(fmt.Sprintf(" cd '%s' && true f4_sync\r", sqPath)))
 	}
 	return true
 }
