@@ -17,7 +17,7 @@ import (
 
 // Bookmark is a single slot of the table.
 type Bookmark struct {
-	Path       string // absolute filesystem path; empty means slot is unset
+	Path       string // filesystem path or expandable path expression; empty means slot is unset
 	Plugin     string // preserved from far2l; f4 does not act on it yet
 	PluginData string
 	PluginFile string

@@ -479,6 +479,74 @@ func TestPanelsFrame_DriveMenuListsAssignedBookmarks(t *testing.T) {
 	}
 }
 
+func TestPanelsFrame_DriveMenuExpandsBookmarkPath(t *testing.T) {
+	cfg := t.TempDir()
+	oldUserConfigDir := userConfigDir
+	userConfigDir = func() (string, error) { return cfg, nil }
+	t.Cleanup(func() { userConfigDir = oldUserConfigDir })
+	if err := os.MkdirAll(filepath.Join(cfg, "f4", "settings"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	for _, dir := range []string{
+		filepath.Join(home, "x"),
+		filepath.Join(home, "sub"),
+		filepath.Join(home, "literal"),
+	} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	cases := []struct {
+		name string
+		path string
+		want string
+	}{
+		{"dollar variable", filepath.Join("$HOME", "x"), filepath.Join(home, "x")},
+		{"percent variable", filepath.Join("%USERPROFILE%", "x"), filepath.Join(home, "x")},
+		{"tilde", "~", home},
+		{"tilde subdirectory", filepath.Join("~", "sub"), filepath.Join(home, "sub")},
+		{"literal", filepath.Join(home, "literal"), filepath.Join(home, "literal")},
+	}
+
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	vtui.FrameManager.Push(pf)
+	fsp := pf.panels[1].(*FileSystemPanel)
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := os.WriteFile(BookmarksFilePath(),
+				[]byte("[6]\nPath="+tc.path+"\nPlugin=\nPluginData=\nPluginFile=\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			if err := fsp.vfs.SetPath(t.TempDir()); err != nil {
+				t.Fatal(err)
+			}
+			pf.showDriveMenu(1)
+			menu, ok := vtui.FrameManager.GetTopFrame().(*vtui.VMenu)
+			if !ok {
+				t.Fatalf("drive menu not shown, top frame is %T", vtui.FrameManager.GetTopFrame())
+			}
+			menu.ProcessKey(&vtinput.InputEvent{
+				Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_6, Char: '6',
+			})
+
+			if got := fsp.vfs.GetPath(); got != tc.want {
+				t.Errorf("bookmark %q navigated to %q, want %q", tc.path, got, tc.want)
+			}
+			vtui.FrameManager.RemoveFrame(menu)
+		})
+	}
+}
+
 // settleFrames does what the render loop does between keystrokes: run the
 // tasks frames posted, then drop the ones that closed themselves.
 func settleFrames(t *testing.T) {

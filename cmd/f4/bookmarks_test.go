@@ -232,6 +232,67 @@ func TestBookmark_IsEmpty(t *testing.T) {
 	}
 }
 
+func TestExpandPathEnv_BookmarkPaths(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	const undefined = "F4_BOOKMARK_UNDEFINED_412"
+	oldUndefined, hadUndefined := os.LookupEnv(undefined)
+	if err := os.Unsetenv(undefined); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if hadUndefined {
+			_ = os.Setenv(undefined, oldUndefined)
+		} else {
+			_ = os.Unsetenv(undefined)
+		}
+	})
+
+	cases := []struct {
+		name string
+		path string
+		want string
+	}{
+		{"dollar variable", filepath.Join("$HOME", "x"), filepath.Join(home, "x")},
+		{"braced dollar variable", filepath.Join("${HOME}", "x"), filepath.Join(home, "x")},
+		{"percent variable", filepath.Join("%USERPROFILE%", "x"), filepath.Join(home, "x")},
+		{"tilde", "~", home},
+		{"tilde subdirectory", filepath.Join("~", "sub"), filepath.Join(home, "sub")},
+		{"literal", filepath.Join(home, "literal"), filepath.Join(home, "literal")},
+		// Unknown variables stay literal. This prevents a typo such as
+		// $HMOE/x from unexpectedly becoming the unrelated rooted path /x.
+		{"undefined dollar variable", filepath.Join("$"+undefined, "x"), filepath.Join("$"+undefined, "x")},
+		{"undefined percent variable", filepath.Join("%"+undefined+"%", "x"), filepath.Join("%"+undefined+"%", "x")},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := expandPathEnv(tc.path); got != tc.want {
+				t.Errorf("expandPathEnv(%q) = %q, want %q", tc.path, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestBookmarks_RoundTripPreservesExpandablePath(t *testing.T) {
+	var in BookmarkSet
+	in[4] = Bookmark{Path: filepath.Join("$HOME", "portable")}
+	p := filepath.Join(t.TempDir(), "bookmarks.ini")
+
+	if err := SaveBookmarks(p, in); err != nil {
+		t.Fatal(err)
+	}
+	out, err := LoadBookmarks(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out != in {
+		t.Fatalf("round trip expanded a stored bookmark:\ngot  %#v\nwant %#v", out, in)
+	}
+}
+
 func TestTruncPathLeft(t *testing.T) {
 	const long = "/mnt/d/!!wrkstk/reps/ssh/ski-analyzer"
 	cases := []struct {

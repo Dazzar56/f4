@@ -1850,7 +1850,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			} else if !set[slot].IsEmpty() {
 				// An unset slot is a silent no-op, as in far2l.
 				if fsp := pf.getActivePanel(); fsp != nil {
-					pf.NavigateToPath(fsp, set[slot].Path)
+					pf.navigateToBookmark(fsp, set[slot])
 				}
 			}
 			return true
@@ -4128,13 +4128,14 @@ func (pf *PanelsFrame) showDriveMenuAt(panelIdx, selectPos int) {
 				menu.AddSeparator()
 				firstBookmark = false
 			}
-			path := set[i].Path
+			bookmark := set[i]
+			path := bookmark.Path
 			usedHotkeys[rune('0'+i)] = true
 			bookmarkRows[menu.GetItemCount()] = i
 			menu.AddItem(vtui.MenuItem{
 				Text: fmt.Sprintf("&%d  %s", i, escapeAmpersand(truncPathLeft(path, 64))),
 				UserData: func(fsp *FileSystemPanel) {
-					pf.NavigateToPath(fsp, path)
+					pf.navigateToBookmark(fsp, bookmark)
 				},
 			})
 		}
@@ -4322,6 +4323,10 @@ func (pf *PanelsFrame) switchToVFS(fsp *FileSystemPanel, newVFS vfs.VFS) {
 		pf.RefreshAll()
 	}
 }
+func (pf *PanelsFrame) navigateToBookmark(fsp *FileSystemPanel, bookmark Bookmark) bool {
+	return pf.NavigateToPath(fsp, expandPathEnv(bookmark.Path))
+}
+
 func (pf *PanelsFrame) NavigateToPath(fsp *FileSystemPanel, targetPath string) bool {
 	if targetPath == "" {
 		return false
@@ -4651,27 +4656,72 @@ func (pf *PanelsFrame) moveFolderHistory(fsp *FileSystemPanel, direction int) bo
 }
 
 func expandPathEnv(s string) string {
-	if runtime.GOOS == "windows" {
-		var buf strings.Builder
-		for i := 0; i < len(s); i++ {
-			if s[i] == '%' {
-				end := strings.IndexByte(s[i+1:], '%')
-				if end <= 0 {
-					buf.WriteByte(s[i])
+	s = expandEnvironmentVariables(s)
+	if s != "~" && !(len(s) > 1 && s[0] == '~' && (s[1] == '/' || s[1] == '\\')) {
+		return s
+	}
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return s
+	}
+	if s == "~" {
+		return home
+	}
+	return filepath.Join(home, s[2:])
+}
+
+func expandEnvironmentVariables(s string) string {
+	var buf strings.Builder
+	for i := 0; i < len(s); {
+		switch s[i] {
+		case '$':
+			start, end := i+1, i+1
+			if start < len(s) && s[start] == '{' {
+				start++
+				if close := strings.IndexByte(s[start:], '}'); close >= 0 {
+					end = start + close
+					if end > start {
+						if value, ok := os.LookupEnv(s[start:end]); ok {
+							buf.WriteString(value)
+						} else {
+							buf.WriteString(s[i : end+1])
+						}
+						i = end + 1
+						continue
+					}
+				}
+			} else {
+				for end < len(s) && isEnvironmentVariableChar(s[end]) {
+					end++
+				}
+				if end > start {
+					if value, ok := os.LookupEnv(s[start:end]); ok {
+						buf.WriteString(value)
+					} else {
+						buf.WriteString(s[i:end])
+					}
+					i = end
 					continue
 				}
-				name := s[i+1 : i+1+end]
-				if v := os.Getenv(name); v != "" {
-					buf.WriteString(v)
+			}
+		case '%':
+			if close := strings.IndexByte(s[i+1:], '%'); close > 0 {
+				end := i + close + 1
+				if value, ok := os.LookupEnv(s[i+1 : end]); ok {
+					buf.WriteString(value)
 				} else {
-					buf.WriteString(s[i : i+end+2])
+					buf.WriteString(s[i : end+1])
 				}
-				i += end + 1
-			} else {
-				buf.WriteByte(s[i])
+				i = end + 1
+				continue
 			}
 		}
-		return buf.String()
+		buf.WriteByte(s[i])
+		i++
 	}
-	return os.ExpandEnv(s)
+	return buf.String()
+}
+
+func isEnvironmentVariableChar(c byte) bool {
+	return c == '_' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9'
 }

@@ -186,6 +186,6 @@ func executeCommandPaletteBookmark(pf *PanelsFrame, panelIndex, slot int) bool {
 	if err != nil || slot < 0 || slot >= len(bookmarks) || bookmarks[slot].IsEmpty() || strings.TrimSpace(bookmarks[slot].Path) == "" {
 		return false
 	}
-	pf.NavigateToPath(fsp, bookmarks[slot].Path)
+	pf.navigateToBookmark(fsp, bookmarks[slot])
 	return true
 }
