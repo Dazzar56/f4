@@ -560,6 +560,8 @@ func (pf *PanelsFrame) leftMenu() vtui.MenuBarItem {
 			{Text: "&3. " + Msg("Action.AI.ViewOut"), Command: CmLeftAIOut, Shortcut: "Ctrl+3"},
 			{Text: "&4. " + Msg("Action.AI.ViewMem"), Command: CmLeftAIMem, Shortcut: "Ctrl+4"},
 			{Separator: true},
+			{Text: Msg("Menu.Left.DriveMenu"), Command: CmLeftDriveMenu, Shortcut: "Alt+F1"},
+			{Separator: true},
 			{Text: Msg("FileOp.BtnBackground"), Command: CmBackground},
 			{Text: Msg("Action.Workspace.New"), Command: CmWorkspaceNew, Shortcut: "Ctrl+N"},
 			{Text: Msg("Action.Workspace.Close"), Command: CmWorkspaceClose, Shortcut: "Ctrl+W"},
@@ -578,6 +580,8 @@ func (pf *PanelsFrame) leftMenu() vtui.MenuBarItem {
 		{Text: "&" + Msg("Menu.SortSize"), Command: CmLeftSortSize},
 		{Text: "&" + Msg("Menu.SortUnsorted"), Command: CmLeftSortUnsorted},
 		{Separator: true},
+		{Text: Msg("Menu.Left.DriveMenu"), Command: CmLeftDriveMenu, Shortcut: "Alt+F1"},
+		{Separator: true},
 		{Text: Msg("FileOp.BtnBackground"), Command: CmBackground},
 		{Text: Msg("Action.Workspace.New"), Command: CmWorkspaceNew, Shortcut: "Ctrl+N"},
 		{Text: Msg("Action.Workspace.Close"), Command: CmWorkspaceClose, Shortcut: "Ctrl+W"},
@@ -593,6 +597,8 @@ func (pf *PanelsFrame) rightMenu() vtui.MenuBarItem {
 			{Text: "&2. " + Msg("Action.AI.ViewChat"), Command: CmRightAIChat, Shortcut: "Ctrl+2"},
 			{Text: "&3. " + Msg("Action.AI.ViewOut"), Command: CmRightAIOut, Shortcut: "Ctrl+3"},
 			{Text: "&4. " + Msg("Action.AI.ViewMem"), Command: CmRightAIMem, Shortcut: "Ctrl+4"},
+			{Separator: true},
+			{Text: Msg("Menu.Right.DriveMenu"), Command: CmRightDriveMenu, Shortcut: "Alt+F2"},
 		}}
 	}
 	return vtui.MenuBarItem{Label: "&" + Msg("Menu.Right"), SubItems: []vtui.MenuItem{
@@ -606,6 +612,8 @@ func (pf *PanelsFrame) rightMenu() vtui.MenuBarItem {
 		{Text: "&" + Msg("Menu.SortTime"), Command: CmRightSortTime},
 		{Text: "&" + Msg("Menu.SortSize"), Command: CmRightSortSize},
 		{Text: "&" + Msg("Menu.SortUnsorted"), Command: CmRightSortUnsorted},
+		{Separator: true},
+		{Text: Msg("Menu.Right.DriveMenu"), Command: CmRightDriveMenu, Shortcut: "Alt+F2"},
 	}}
 }
 
@@ -674,6 +682,8 @@ var commandToActionName = map[int]string{
 	CmBackground:            "App.Background",
 	CmWorkspaceNew:          "Workspace.New",
 	CmWorkspaceClose:        "Workspace.Close",
+	CmLeftDriveMenu:         "Panel.LeftDriveMenu",
+	CmRightDriveMenu:        "Panel.RightDriveMenu",
 	vtui.CmQuit:             "App.Quit",
 	CmView:                  "File.View",
 	CmEdit:                  "File.Edit",
@@ -2947,7 +2957,12 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 		return actionWorkspaceNew()
 	case CmWorkspaceClose:
 		return actionWorkspaceClose()
-
+	case CmLeftDriveMenu:
+		pf.showDriveMenu(0)
+		return true
+	case CmRightDriveMenu:
+		pf.showDriveMenu(1)
+		return true
 	case vtui.CmResize: // Used as a hack for 'fork' command from FrameManager
 		if s, ok := args.(string); ok && s == "fork" {
 			clone := pf.Clone()

@@ -304,6 +304,13 @@ The following switches may be used in the command line:
  --client [clientPath]
  --cpuprofile [cpuprofile]
  --debug                Log to "debug.log" (equivalent to --log=1)
+ --dump-screen-after N  Auto-run Debug.ScreenDump N seconds after startup
+                         (bypasses hotkeys entirely -- useful under Wine
+                         tty mode, where complex combos like CtrlAltP can
+                         fail to arrive through native console input)
+ -e [filename]          Open filename directly in the editor on startup
+                         (far2l-compatible; useful for scripted/headless
+                         testing where interactive navigation is unreliable)
  --gui [Backend]        Force run in GUI-mode
                          [Backend] values: "win32" (or "winapi", "gdi"),
                          "gogpu", "ebiten", "x11", "wayland",
@@ -311,22 +318,15 @@ The following switches may be used in the command line:
  --input [InputMode]    Defines the preferred vtinput parser method;
                          [InputMode] values: "", "ansi", "ConPTY"
  --log [logfile]        If =1 or =true uses "debug.log", otherwise logfile
- --server [serverPath]
  --new-plugin [pluginName]
+ --server [serverPath]
  -test-plugins          Plugin test mode
  --tty [Backend]        Force run in TTY-mode
                          [Backend] values: "ansi", "winapi" (or "win32")
  --wine-probe           Print console/terminal environment facts and exit
- --dump-screen-after N  Auto-run Debug.ScreenDump N seconds after startup
-                        (bypasses hotkeys entirely -- useful under Wine
-                        tty mode, where complex combos like CtrlAltP can
-                        fail to arrive through native console input)
- -e [filename]          Open filename directly in the editor on startup
-                        (far2l-compatible; useful for scripted/headless
-                        testing where interactive navigation is unreliable)
                          (renderer backend, console geometry, shell mode)
 
-Details see in build-in help (F1 inside f4)
+Details see in build-in help (via key F1 inside f4)
 and in project home: https://github.com/unxed/f4
 
 If you want to report a problem with the program, please create bugreport

@@ -343,6 +343,7 @@ func init() {
 		Description: "Clone the current panels into a new workspace",
 		DescKey:     "Action.Workspace.New.Desc",
 		NativeKeys:  []string{"CtrlN:TerminalCtrlNWorkspace"},
+		DefaultKeys: []string{"CtrlN:TerminalCtrlNWorkspace"},
 		Handler:     actionWorkspaceNew,
 	})
 	RegisterAction(Action{
@@ -354,6 +355,7 @@ func init() {
 		Description: "Close the active workspace",
 		DescKey:     "Action.Workspace.Close.Desc",
 		NativeKeys:  []string{"CtrlW:FrameworkNoTerminalApp"},
+		DefaultKeys: []string{"CtrlW:FrameworkNoTerminalApp"},
 		Handler:     actionWorkspaceClose,
 	})
 	RegisterAction(Action{
@@ -1721,6 +1723,7 @@ func init() {
 		Name:         "Panel.LeftDriveMenu",
 		Area:         "Shell",
 		Label:        "Left Drive Menu",
+		LabelKey:     "Menu.Left.DriveMenu",
 		Description:  "Show the drive menu for the left panel",
 		DescKey:      "Action.Panel.LeftDriveMenu.Desc",
 		DefaultKeys:  []string{"AltF1:NoAltScreenApp", "CtrlShiftLeft:NoAltScreenApp"},
@@ -1731,6 +1734,7 @@ func init() {
 		Name:         "Panel.RightDriveMenu",
 		Area:         "Shell",
 		Label:        "Right Drive Menu",
+		LabelKey:     "Menu.Right.DriveMenu",
 		Description:  "Show the drive menu for the right panel",
 		DescKey:      "Action.Panel.RightDriveMenu.Desc",
 		DefaultKeys:  []string{"AltF2:NoAltScreenApp", "CtrlShiftRight:NoAltScreenApp"},
