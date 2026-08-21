@@ -2,6 +2,7 @@ package vfs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -184,10 +185,17 @@ func TestGenericScan_Errors(t *testing.T) {
 	mv := &mockScannerVFS{}
 
 	t.Run("Stat error", func(t *testing.T) {
-		mv.err = fmt.Errorf("stat failed")
+		statErr := fmt.Errorf("stat failed")
+		mv.err = statErr
 		_, err := GenericScan(context.Background(), mv, "/", []string{"badfile"}, nil)
-		if err == nil || err.Error() != "stat failed" {
-			t.Errorf("Expected stat error, got %v", err)
+		// The scan names the item it could not stat and keeps the
+		// original error underneath: with several names in one scan,
+		// which of them failed is the whole question.
+		if !errors.Is(err, statErr) {
+			t.Errorf("Expected the stat error to survive wrapping, got %v", err)
+		}
+		if err == nil || !strings.Contains(err.Error(), "badfile") {
+			t.Errorf("Expected the failing path to be named, got %v", err)
 		}
 	})
 
