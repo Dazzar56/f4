@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -20,6 +22,15 @@ type mockMetadataVFS struct {
 	statErr      error
 	setAttrErr   error
 	statToReturn vfs.VFSItem
+}
+
+type lstatMetadataVFS struct {
+	*mockMetadataVFS
+	item vfs.VFSItem
+}
+
+func (m *lstatMetadataVFS) Lstat(context.Context, string) (vfs.VFSItem, error) {
+	return m.item, nil
 }
 
 func (m *mockMetadataVFS) Stat(ctx context.Context, path string) (vfs.VFSItem, error) {
@@ -79,6 +90,53 @@ Loop:
 
 	if !foundDialog {
 		t.Error("Expected an error dialog when initial Stat fails")
+	}
+}
+
+func TestActionFileAttributes_UsesLstat(t *testing.T) {
+	fm := vtui.FrameManager
+	fm.Init(vtui.NewSilentScreenBuf())
+
+	base := &mockMetadataVFS{
+		VFS:     vfs.NewOSVFS(t.TempDir()),
+		statErr: os.ErrPermission,
+	}
+	mockVFS := &lstatMetadataVFS{
+		mockMetadataVFS: base,
+		item: vfs.VFSItem{
+			Name:     "link.txt",
+			UnixMode: 0o777,
+			MTime:    time.Now(),
+		},
+	}
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 30)
+	fsp := pf.getActivePanel()
+	fsp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "link.txt"}}}
+	fsp.vfs = mockVFS
+
+	actionFileAttributes(pf)
+
+	deadline := time.After(time.Second)
+	for {
+		select {
+		case task := <-fm.TaskChan:
+			task()
+			top := fm.GetTopFrame()
+			if top != nil && strings.Contains(top.GetTitle(), "Attributes") {
+				top.SetExitCode(-1)
+				fm.Pop()
+				return
+			}
+		case <-deadline:
+			top := fm.GetTopFrame()
+			if top == nil {
+				t.Fatal("attributes dialog was not shown")
+			}
+			t.Fatalf("attributes dialog was not shown; top frame is %q", top.GetTitle())
+		}
 	}
 }
 
@@ -735,38 +793,103 @@ func TestShowAttributesDialog_Dispatch(t *testing.T) {
 		vtui.FrameManager.Pop()
 	}
 }
-func TestAttributesDialog_SymlinkTarget(t *testing.T) {
+func TestAttributesDialog_SymlinkUsesLinkMetadata(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink metadata requires privileges on Windows")
+	}
+
 	fm := vtui.FrameManager
 	fm.Init(vtui.NewSilentScreenBuf())
 
 	tmpDir := t.TempDir()
-	targetPath := filepath.Join(tmpDir, "target.txt")
-	os.WriteFile(targetPath, []byte("target"), 0644)
+	targetName := "target-file.txt"
+	targetPath := filepath.Join(tmpDir, targetName)
+	if err := os.WriteFile(targetPath, make([]byte, 4096), 0o600); err != nil {
+		t.Fatalf("create target: %v", err)
+	}
+	targetTime := time.Date(2001, 2, 3, 4, 5, 6, 0, time.Local)
+	if err := os.Chtimes(targetPath, targetTime, targetTime); err != nil {
+		t.Fatalf("set target timestamps: %v", err)
+	}
 	linkPath := filepath.Join(tmpDir, "link.txt")
-	if err := os.Symlink(targetPath, linkPath); err != nil {
+	if err := os.Symlink(targetName, linkPath); err != nil {
 		t.Skipf("Symlink creation not supported: %v", err)
 	}
 
 	v := vfs.NewOSVFS(tmpDir)
-	litem, err := v.Lstat(context.Background(), "link.txt")
+	targetItem, err := v.Stat(context.Background(), linkPath)
+	if err != nil {
+		t.Fatalf("Stat failed: %v", err)
+	}
+	linkInfo, err := os.Lstat(linkPath)
 	if err != nil {
 		t.Fatalf("Lstat failed: %v", err)
 	}
+	if targetItem.Size == linkInfo.Size() || targetItem.UnixMode == uint32(linkInfo.Mode().Perm()) || targetItem.MTime.Equal(linkInfo.ModTime()) {
+		t.Fatalf("test setup did not distinguish target and link metadata: target=%+v link=%+v", targetItem, linkInfo)
+	}
 
-	showAttributesUnix(nil, v, "link.txt", litem)
+	ShowAttributesDialog(nil, v, linkPath, targetItem)
 	dlg := fm.GetTopFrame().(vtui.Container)
 
-	var editTarget *vtui.Edit
+	wantMode := fmt.Sprintf("%04o", linkInfo.Mode().Perm())
+	wantMTime := linkInfo.ModTime().Format("02.01.2006 15:04:05")
+	found := map[string]bool{}
 	walkUI(dlg.(vtui.UIElement), func(el vtui.UIElement) bool {
-		if e, ok := el.(*vtui.Edit); ok && strings.Contains(e.GetText(), "target.txt") {
-			editTarget = e
-			return false
+		if control, ok := el.(*vtui.Edit); ok {
+			found[control.GetText()] = true
 		}
 		return true
 	})
 
-	if editTarget == nil {
-		t.Error("Symlink target edit box not found in Unix attributes dialog")
+	for _, want := range []string{targetName, wantMode, wantMTime} {
+		if !found[want] {
+			t.Errorf("link property %q not found in attributes dialog", want)
+		}
+	}
+	fm.GetTopFrame().SetExitCode(-1)
+	fm.Pop()
+}
+
+func TestAttributesDialog_SymlinkToDirectoryIsIdentifiedAsLink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink metadata requires privileges on Windows")
+	}
+
+	fm := vtui.FrameManager
+	fm.Init(vtui.NewSilentScreenBuf())
+
+	tmpDir := t.TempDir()
+	targetName := "target-dir"
+	if err := os.Mkdir(filepath.Join(tmpDir, targetName), 0o755); err != nil {
+		t.Fatalf("create target directory: %v", err)
+	}
+	linkPath := filepath.Join(tmpDir, "link-dir")
+	if err := os.Symlink(targetName, linkPath); err != nil {
+		t.Skipf("Symlink creation not supported: %v", err)
+	}
+
+	v := vfs.NewOSVFS(tmpDir)
+	targetItem, err := v.Stat(context.Background(), linkPath)
+	if err != nil {
+		t.Fatalf("Stat failed: %v", err)
+	}
+	if !targetItem.IsDir {
+		t.Fatal("test setup: symlink target is not reported as a directory")
+	}
+
+	ShowAttributesDialog(nil, v, linkPath, targetItem)
+	dlg := fm.GetTopFrame().(vtui.Container)
+	foundTarget := false
+	walkUI(dlg.(vtui.UIElement), func(el vtui.UIElement) bool {
+		if control, ok := el.(*vtui.Edit); ok {
+			foundTarget = foundTarget || control.GetText() == targetName
+		}
+		return true
+	})
+
+	if !foundTarget {
+		t.Error("symlink-to-directory Target edit is not present with the link target")
 	}
 	fm.GetTopFrame().SetExitCode(-1)
 	fm.Pop()

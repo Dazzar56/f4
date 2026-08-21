@@ -4080,7 +4080,7 @@ func actionFileAttributes(pf *PanelsFrame) {
 	fullPath := fsp.vfs.Join(fsp.vfs.GetPath(), name)
 
 	vtui.RunAsync(func(ctx *vtui.TaskContext) {
-		item, err := fsp.vfs.Stat(ctx.Context, fullPath)
+		item, err := vfs.Lstat(ctx.Context, fsp.vfs, fullPath)
 		ctx.RunOnUI(func() {
 			if err != nil {
 				vtui.ShowMessage(" Error ", err.Error(), []string{"&Ok"})
