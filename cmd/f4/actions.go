@@ -143,11 +143,13 @@ func actionFoldersHistory(pf *PanelsFrame) {
 				// Insert into command line
 				search.cleanup()
 				pf.cmdLine.InsertString(path)
+				menu.OnAction = nil
 				menu.Close()
 				return true
 			}
 			if shift {
 				search.cleanup()
+				menu.OnAction = nil
 				menu.Close()
 				if targetPanel := pf.getInactivePanel(); targetPanel != nil {
 					pf.navigateAvailableFolderHistory(targetPanel, h, historyPos, -1)
@@ -155,7 +157,6 @@ func actionFoldersHistory(pf *PanelsFrame) {
 				return true
 			}
 			menu.Close()
-			gotoActive()
 			return true
 		}
 

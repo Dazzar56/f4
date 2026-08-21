@@ -17,7 +17,7 @@ func TestSimpleInline_CommandExecution(t *testing.T) {
 	vtui.FrameManager.Init(scr)
 	SetDefaultF4Palette()
 
-	pf := NewPanelsFrame()
+	pf := setupMockPanelsFrame()
 	defer pf.Close()
 	pf.shellMode = ShellModeSimpleInline
 	pf.ResizeConsole(80, 25)
@@ -26,7 +26,17 @@ func TestSimpleInline_CommandExecution(t *testing.T) {
 	waitForAnyKey = func() {}
 	defer func() { waitForAnyKey = oldWait }()
 
-	pf.runSimpleInlineCommand(t.TempDir(), "echo simple_inline_test")
+	dir := t.TempDir()
+	pf.runSimpleInlineCommand(dir, "echo simple_inline_test")
+
+	for i := 0; i < 10; i++ {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		default:
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
 }
 
 func TestSimpleCaptured_CommandExecution(t *testing.T) {
