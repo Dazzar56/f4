@@ -3,8 +3,11 @@
 package main
 
 import (
+	"sync"
 	"syscall"
 	"unsafe"
+
+	"github.com/unxed/vtui"
 )
 
 // Wine is the only thing that knows how the prefix maps drives onto the
@@ -32,10 +35,27 @@ var (
 	procHeapFree       = kernel32DLL.NewProc("HeapFree")
 )
 
+// logWinePathSupport says once whether the exports are actually there. A
+// path that Wine did not translate still usually comes out looking right,
+// because the string fallback covers the common Z: spelling -- so without
+// this line a log cannot distinguish "Wine answered" from "Wine was never
+// asked", and those want opposite fixes.
+var logWinePathSupportOnce sync.Once
+
+func logWinePathSupport() {
+	logWinePathSupportOnce.Do(func() {
+		toUnix := procWineGetUnixFileName.Find()
+		toDos := procWineGetDosFileName.Find()
+		vtui.DebugLog("WINEPATH: ntdll!wine_get_unix_file_name available=%v (%v), ntdll!wine_get_dos_file_name available=%v (%v)",
+			toUnix == nil, toUnix, toDos == nil, toDos)
+	})
+}
+
 // hostUnixPath translates a DOS path into the POSIX path it names. The
 // second result is false when the translation is unavailable -- on real
 // Windows, or for a path no drive covers.
 func hostUnixPath(dos string) (string, bool) {
+	logWinePathSupport()
 	if dos == "" || procWineGetUnixFileName.Find() != nil {
 		return "", false
 	}
@@ -54,6 +74,7 @@ func hostUnixPath(dos string) (string, bool) {
 // hostDosPath is the other direction: the DOS path a Wine application can
 // open, for a POSIX path we already hold.
 func hostDosPath(unix string) (string, bool) {
+	logWinePathSupport()
 	if unix == "" || procWineGetDosFileName.Find() != nil {
 		return "", false
 	}

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -68,8 +70,11 @@ func normalizeExternalDropPath(raw string) string {
 		// just as well name C:\users\... or a drive the user mapped
 		// himself, and those a string rule cannot reach.
 		if unix, ok := hostUnixPath(raw); ok && unix != "" {
-			return hostpath.Clean(unix)
+			cleaned := hostpath.Clean(unix)
+			vtui.DebugLog("DND: Wine translated %q to %q", raw, cleaned)
+			return cleaned
 		}
+		vtui.DebugLog("DND: Wine did not translate %q, falling back to the string rules", raw)
 		// If path came from Wine as Z:\... or z:\... (which maps to root /)
 		if len(raw) >= 3 && (raw[0] == 'Z' || raw[0] == 'z') && raw[1] == ':' && (raw[2] == '\\' || raw[2] == '/') {
 			raw = "/" + strings.TrimPrefix(raw[3:], "\\")
@@ -84,7 +89,9 @@ func normalizeExternalDropPath(raw string) string {
 			raw = "/" + strings.ReplaceAll(raw, "\\", "/")
 		}
 	}
-	return hostpath.Clean(raw)
+	cleaned := hostpath.Clean(raw)
+	vtui.DebugLog("DND: dropped path %q resolved to %q", raw, cleaned)
+	return cleaned
 }
 
 func groupDropSources(paths []string) []dropSourceGroup {
@@ -261,6 +268,19 @@ func (pf *PanelsFrame) dropExternalFiles(info dropTargetInfo, paths []string, is
 
 	dst, dstDir := info.fs, info.dir
 	vtui.DebugLog("DND: dropExternalFiles starting %d group(s) into %q (move=%v)", len(groups), dstDir, isMove)
+
+	groups, missing := reachableDropSources(groups)
+	if len(missing) > 0 {
+		// A queued task that fails leaves nothing on screen but a
+		// refreshed panel, which reads as "the drop did nothing": the
+		// reason is buried in the queue window. A source we cannot even
+		// open is worth saying out loud, before any of it starts.
+		reportUnreachableDropSources(missing)
+	}
+	if len(groups) == 0 {
+		return
+	}
+
 	var run func(i int)
 	run = func(i int) {
 		if i >= len(groups) {
@@ -278,6 +298,53 @@ func (pf *PanelsFrame) dropExternalFiles(info dropTargetInfo, paths []string, is
 		})
 	}
 	run(0)
+}
+
+// reachableDropSources drops every name the source file system cannot stat
+// and returns what is left, along with the full paths that were refused. The
+// point is to fail before the operation starts rather than inside it. A path
+// arriving from another application has crossed at least one translation on
+// its way here, and the failure worth naming is the one that lands somewhere
+// real-looking but wrong: the panel refreshes, the queued task dies quietly,
+// and the drop appears to have done nothing at all.
+func reachableDropSources(groups []dropSourceGroup) ([]dropSourceGroup, []string) {
+	var kept []dropSourceGroup
+	var missing []string
+	for _, g := range groups {
+		src := vfs.NewOSVFS(g.dir)
+		var names []string
+		for _, n := range g.names {
+			full := src.Join(src.GetPath(), n)
+			if _, err := src.Stat(context.Background(), full); err != nil {
+				vtui.DebugLog("DND: dropped source %q cannot be opened: %v", full, err)
+				missing = append(missing, full)
+				continue
+			}
+			names = append(names, n)
+		}
+		if len(names) > 0 {
+			kept = append(kept, dropSourceGroup{dir: g.dir, names: names})
+		}
+	}
+	return kept, missing
+}
+
+// reportUnreachableDropSources names the dropped files that could not be
+// reached. One dialog for the lot: a drop of a directory's worth of
+// unreadable files must not become a dialog each.
+func reportUnreachableDropSources(missing []string) {
+	const maxListed = 5
+	shown := missing
+	if len(shown) > maxListed {
+		shown = shown[:maxListed]
+	}
+	body := "These dropped files could not be read:\n\n" + strings.Join(shown, "\n")
+	if len(missing) > len(shown) {
+		body += fmt.Sprintf("\n... and %d more", len(missing)-len(shown))
+	}
+	vtui.FrameManager.PostTask(func() {
+		vtui.ShowMessage(" Drag and Drop ", body, []string{"&Ok"})
+	})
 }
 
 // processDragOutGesture watches the left button for the start of a drag out
