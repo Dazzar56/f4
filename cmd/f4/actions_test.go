@@ -1205,6 +1205,37 @@ func TestActionPanelSettings_Flow(t *testing.T) {
 	top.SetExitCode(-1)
 	vtui.FrameManager.Pop()
 }
+
+func TestActionPanelSettings_FitsSmallTerminal(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	actionPanelSettings(pf)
+	mainDlg := vtui.FrameManager.GetTopFrame().(*vtui.Window)
+	_, y1, _, y2 := mainDlg.GetPosition()
+	if got := y2 - y1 + 1; got > 25 {
+		t.Fatalf("Panel settings dialog is %d rows tall; want at most 25", got)
+	}
+	vtui.AssertLayout(t, mainDlg)
+
+	clickDialogButton(t, mainDlg, "Additional settings")
+	additionalDlg := vtui.FrameManager.GetTopFrame().(*vtui.Window)
+	_, y1, _, y2 = additionalDlg.GetPosition()
+	if got := y2 - y1 + 1; got > 25 {
+		t.Fatalf("Additional panel settings dialog is %d rows tall; want at most 25", got)
+	}
+	vtui.AssertLayout(t, additionalDlg)
+
+	additionalDlg.SetExitCode(-1)
+	vtui.FrameManager.Pop()
+	mainDlg.SetExitCode(-1)
+	vtui.FrameManager.Pop()
+}
+
 func TestActionPanelSettings_ConsoleModes(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	SetDefaultF4Palette()
@@ -1224,6 +1255,12 @@ func TestActionPanelSettings_ConsoleModes(t *testing.T) {
 		t.Fatal("Panel settings dialog not shown")
 	}
 	dlg := top.(vtui.Container)
+	clickDialogButton(t, dlg, "Additional settings")
+	top = vtui.FrameManager.GetTopFrame()
+	if top == nil {
+		t.Fatal("Additional panel settings dialog not shown")
+	}
+	dlg = top.(vtui.Container)
 
 	var radioConsole *vtui.RadioGroup
 	var chkOverlay *vtui.Checkbox
@@ -1267,6 +1304,10 @@ func TestActionPanelSettings_ConsoleModes(t *testing.T) {
 	}
 	if !AppConfig.ConsoleOverlayUI {
 		t.Error("AppConfig.ConsoleOverlayUI = false, want true")
+	}
+	if top = vtui.FrameManager.GetTopFrame(); top != nil {
+		top.SetExitCode(-1)
+		vtui.FrameManager.Pop()
 	}
 }
 func TestActionLanguage_Flow(t *testing.T) {

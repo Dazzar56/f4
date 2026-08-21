@@ -606,6 +606,8 @@ PanelSettings.ConsoleModeHost=Host &console
 PanelSettings.ConsoleOverlayUI=Show command line &over host console
 PanelSettings.ConsoleModeNote=(applies to new sessions)
 PanelSettings.ConsoleModeUnavailable=(unavailable in current environment)
+PanelSettings.Additional=Additional &settings
+PanelSettings.AdvancedTitle= Additional panel settings
 
 AppearanceSettings.Title= Appearance settings
 AppearanceSettings.Style=Application &style:
