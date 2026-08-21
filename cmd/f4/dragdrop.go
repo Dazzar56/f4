@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/unxed/f4/vfs"
+	"github.com/unxed/f4/vfs/hostpath"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
@@ -60,13 +61,14 @@ func groupDropSources(paths []string) []dropSourceGroup {
 		if strings.TrimSpace(raw) == "" {
 			continue
 		}
-		cleaned := filepath.Clean(raw)
-		dir, name := filepath.Split(cleaned)
-		dir = filepath.Clean(dir)
+		normalized := hostpath.FromOS(raw)
+		cleaned := hostpath.Clean(normalized)
+		dir, name := hostpath.Split(cleaned)
+		dir = hostpath.Clean(dir)
 		if name == "" || name == "." || name == ".." {
 			continue
 		}
-		key := dir + string(filepath.Separator) + name
+		key := hostpath.Join(dir, name)
 		if seen[key] {
 			continue
 		}
@@ -224,6 +226,7 @@ func (pf *PanelsFrame) dropExternalFiles(info dropTargetInfo, paths []string, is
 	}
 
 	dst, dstDir := info.fs, info.dir
+	vtui.DebugLog("DND: dropExternalFiles starting %d group(s) into %q (move=%v)", len(groups), dstDir, isMove)
 	var run func(i int)
 	run = func(i int) {
 		if i >= len(groups) {
@@ -234,6 +237,7 @@ func (pf *PanelsFrame) dropExternalFiles(info dropTargetInfo, paths []string, is
 			return
 		}
 		g := groups[i]
+		vtui.DebugLog("DND: dropExternalFiles group %d: srcDir=%q names=%v -> dstDir=%q", i, g.dir, g.names, dstDir)
 		src := vfs.NewOSVFS(g.dir)
 		go ExecuteFileOp(pf, src, dst, g.names, dstDir, isMove, AppConfig.DefaultFileOpMode, func() {
 			run(i + 1)
@@ -368,7 +372,8 @@ func localDragPaths(fsp *FileSystemPanel, names []string) ([]string, bool) {
 	}
 	paths := make([]string, 0, len(names))
 	for _, n := range names {
-		paths = append(paths, local.Join(local.GetPath(), n))
+		posixPath := local.Join(local.GetPath(), n)
+		paths = append(paths, hostpath.ToOS(posixPath))
 	}
 	return paths, true
 }
