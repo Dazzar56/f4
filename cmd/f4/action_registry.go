@@ -343,7 +343,6 @@ func init() {
 		Description: "Clone the current panels into a new workspace",
 		DescKey:     "Action.Workspace.New.Desc",
 		NativeKeys:  []string{"CtrlN:TerminalCtrlNWorkspace"},
-		DefaultKeys: []string{"CtrlN:TerminalCtrlNWorkspace"},
 		Handler:     actionWorkspaceNew,
 	})
 	RegisterAction(Action{
@@ -355,7 +354,6 @@ func init() {
 		Description: "Close the active workspace",
 		DescKey:     "Action.Workspace.Close.Desc",
 		NativeKeys:  []string{"CtrlW:FrameworkNoTerminalApp"},
-		DefaultKeys: []string{"CtrlW:FrameworkNoTerminalApp"},
 		Handler:     actionWorkspaceClose,
 	})
 	RegisterAction(Action{
