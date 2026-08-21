@@ -438,7 +438,7 @@ func runCommandPaletteBookmarkGoto(pf *PanelsFrame, slot int) bool {
 	if err != nil || fsp == nil || strings.TrimSpace(bookmarks[slot].Path) == "" {
 		return false
 	}
-	pf.NavigateToPath(fsp, bookmarks[slot].Path)
+	pf.navigateToBookmark(fsp, bookmarks[slot])
 	return true
 }
 

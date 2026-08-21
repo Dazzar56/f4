@@ -177,11 +177,11 @@ func (d *bookmarksDialog) open(slot int, onClose func()) {
 		if slot < 0 || d.set[slot].IsEmpty() {
 			return
 		}
-		path := d.set[slot].Path
+		bookmark := d.set[slot]
 		pf := d.pf
 		vtui.FrameManager.PostTask(func() {
 			if fsp := pf.getActivePanel(); fsp != nil {
-				pf.NavigateToPath(fsp, path)
+				pf.navigateToBookmark(fsp, bookmark)
 			}
 		})
 	}
