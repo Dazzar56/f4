@@ -1228,6 +1228,219 @@ func TestEditorView_HandleClose(t *testing.T) {
 		t.Error("EditorView failed to set IsDone after receiving CmClose")
 	}
 }
+
+func pressCtrlWForWorkspaceClose(frame vtui.Frame) {
+	handled := pressKey(frame, &vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_W, ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+	if !handled {
+		// pressKey covers the frame and hotkey portions of vtui's production
+		// dispatch. Reproduce its final framework fallback for Ctrl+W.
+		vtui.FrameManager.CloseActiveScreen()
+	}
+	vtui.FrameManager.Step(0)
+}
+
+func unsavedChangesConfirms(screen *vtui.AppScreen) []vtui.Frame {
+	var confirms []vtui.Frame
+	for _, frame := range screen.Frames {
+		if frame.GetType() == vtui.TypeDialog && frame.GetTitle() == " Confirm " {
+			confirms = append(confirms, frame)
+		}
+	}
+	return confirms
+}
+
+func requireUnsavedChangesConfirm(t *testing.T) vtui.Frame {
+	t.Helper()
+	if vtui.FrameManager.ActiveIdx < 0 || vtui.FrameManager.ActiveIdx >= len(vtui.FrameManager.Screens) {
+		t.Fatalf("active workspace index = %d, want an existing workspace", vtui.FrameManager.ActiveIdx)
+	}
+	confirms := unsavedChangesConfirms(vtui.FrameManager.Screens[vtui.FrameManager.ActiveIdx])
+	if len(confirms) != 1 {
+		t.Fatalf("active workspace has %d unsaved-changes confirmations, want exactly one", len(confirms))
+	}
+	top := vtui.FrameManager.GetTopFrame()
+	if top == nil {
+		t.Fatal("top frame is nil, want unsaved-changes confirmation")
+	}
+	if top != confirms[0] {
+		t.Fatalf("top frame = %T %q, want unsaved-changes confirmation", top, top.GetTitle())
+	}
+	return top
+}
+
+func TestEditorView_CtrlWConfirmsUnsavedChanges(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	t.Cleanup(func() { vtui.FrameManager.Init(vtui.NewSilentScreenBuf()) })
+	vtui.FrameManager.Push(vtui.NewDesktop())
+
+	ev := NewEditorView(piecetable.New([]byte("test")), nil, "file.txt")
+	defer ev.Close()
+	vtui.FrameManager.AddScreen(ev)
+
+	pressKey(ev, &vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true, Char: '!',
+	})
+	if !ev.modified {
+		t.Fatal("editor should be modified before Ctrl+W")
+	}
+
+	pressCtrlWForWorkspaceClose(ev)
+
+	if ev.IsDone() {
+		t.Fatal("Ctrl+W closed an editor with unsaved changes")
+	}
+	if len(vtui.FrameManager.Screens) != 2 {
+		t.Fatalf("Ctrl+W left %d workspaces, want the editor workspace preserved", len(vtui.FrameManager.Screens))
+	}
+	requireUnsavedChangesConfirm(t)
+}
+
+func TestEditorView_CtrlWClosesCleanEditor(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	t.Cleanup(func() { vtui.FrameManager.Init(vtui.NewSilentScreenBuf()) })
+	vtui.FrameManager.Push(vtui.NewDesktop())
+
+	ev := NewEditorView(piecetable.New([]byte("test")), nil, "file.txt")
+	defer ev.Close()
+	vtui.FrameManager.AddScreen(ev)
+
+	pressCtrlWForWorkspaceClose(ev)
+
+	if !ev.IsDone() {
+		t.Fatal("Ctrl+W did not close an unmodified editor")
+	}
+	if len(vtui.FrameManager.Screens) != 1 {
+		t.Fatalf("Ctrl+W left %d workspaces, want the clean editor workspace closed", len(vtui.FrameManager.Screens))
+	}
+}
+
+func TestEditorView_CloseEntryPointsSharePendingConfirm(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	t.Cleanup(func() { vtui.FrameManager.Init(vtui.NewSilentScreenBuf()) })
+	vtui.FrameManager.Push(vtui.NewDesktop())
+
+	ev := NewEditorView(piecetable.New([]byte("test")), nil, "file.txt")
+	defer ev.Close()
+	vtui.FrameManager.AddScreen(ev)
+	pressKey(ev, &vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true, Char: '!',
+	})
+
+	pressCtrlWForWorkspaceClose(ev)
+	requireUnsavedChangesConfirm(t)
+	ev.HandleCommand(vtui.CmClose, nil)
+
+	if ev.IsDone() {
+		t.Fatal("a second close entry point closed an editor with unsaved changes")
+	}
+	if len(vtui.FrameManager.Screens) != 2 {
+		t.Fatalf("a second close entry point left %d workspaces, want the editor workspace preserved", len(vtui.FrameManager.Screens))
+	}
+	requireUnsavedChangesConfirm(t)
+}
+
+func TestEditorView_WorkspaceCloseActionConfirmsUnsavedChanges(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	t.Cleanup(func() { vtui.FrameManager.Init(vtui.NewSilentScreenBuf()) })
+	vtui.FrameManager.Push(vtui.NewDesktop())
+
+	ev := NewEditorView(piecetable.New([]byte("test")), nil, "file.txt")
+	defer ev.Close()
+	vtui.FrameManager.AddScreen(ev)
+	pressKey(ev, &vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true, Char: '!',
+	})
+
+	if !actionWorkspaceClose() {
+		t.Fatal("Workspace.Close action was not handled")
+	}
+	vtui.FrameManager.Step(0)
+
+	if ev.IsDone() {
+		t.Fatal("Workspace.Close action closed an editor with unsaved changes")
+	}
+	if len(vtui.FrameManager.Screens) != 2 {
+		t.Fatalf("Workspace.Close action left %d workspaces, want the editor workspace preserved", len(vtui.FrameManager.Screens))
+	}
+	requireUnsavedChangesConfirm(t)
+}
+
+func TestEditorView_BackgroundWorkspaceCloseAnchorsUnsavedChangesConfirm(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	t.Cleanup(func() { vtui.FrameManager.Init(vtui.NewSilentScreenBuf()) })
+	vtui.FrameManager.Push(vtui.NewDesktop())
+	previouslyActive := vtui.FrameManager.Screens[vtui.FrameManager.ActiveIdx]
+
+	ev := NewEditorView(piecetable.New([]byte("test")), nil, "file.txt")
+	defer ev.Close()
+	vtui.FrameManager.AddScreen(ev)
+	editorScreen := vtui.FrameManager.Screens[vtui.FrameManager.ActiveIdx]
+	pressKey(ev, &vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true, Char: '!',
+	})
+	vtui.FrameManager.SwitchScreen(0)
+
+	if !actionWorkspaceCloseNumber(editorScreen.Number) {
+		t.Fatal("background Workspace.Close action was not handled")
+	}
+	vtui.FrameManager.Step(0)
+
+	if ev.IsDone() {
+		t.Fatal("background Workspace.Close action closed an editor with unsaved changes")
+	}
+	if vtui.FrameManager.Screens[vtui.FrameManager.ActiveIdx] != editorScreen {
+		t.Fatal("unsaved-changes confirmation did not focus the editor's workspace")
+	}
+	if confirms := unsavedChangesConfirms(previouslyActive); len(confirms) != 0 {
+		t.Fatalf("previously active workspace has %d unsaved-changes confirmations, want none", len(confirms))
+	}
+	requireUnsavedChangesConfirm(t)
+}
+
+func TestEditorView_HexModeCtrlWConfirmsUnsavedChanges(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	t.Cleanup(func() { vtui.FrameManager.Init(vtui.NewSilentScreenBuf()) })
+	vtui.FrameManager.Push(vtui.NewDesktop())
+
+	ev := NewEditorView(piecetable.New([]byte("test")), nil, "file.txt")
+	defer ev.Close()
+	vtui.FrameManager.AddScreen(ev)
+	ev.HexMode = true
+	ev.modified = true
+
+	pressCtrlWForWorkspaceClose(ev)
+
+	if ev.IsDone() {
+		t.Fatal("Ctrl+W closed a hex-mode editor with unsaved changes")
+	}
+	requireUnsavedChangesConfirm(t)
+}
+
+func TestEditorView_WorkspaceCloseActionClosesCleanEditor(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	t.Cleanup(func() { vtui.FrameManager.Init(vtui.NewSilentScreenBuf()) })
+	vtui.FrameManager.Push(vtui.NewDesktop())
+
+	ev := NewEditorView(piecetable.New([]byte("test")), nil, "file.txt")
+	defer ev.Close()
+	vtui.FrameManager.AddScreen(ev)
+
+	if !actionWorkspaceClose() {
+		t.Fatal("Workspace.Close action was not handled")
+	}
+	vtui.FrameManager.Step(0)
+
+	if !ev.IsDone() {
+		t.Fatal("Workspace.Close action did not close an unmodified editor")
+	}
+	if len(vtui.FrameManager.Screens) != 1 {
+		t.Fatalf("Workspace.Close action left %d workspaces, want the clean editor workspace closed", len(vtui.FrameManager.Screens))
+	}
+}
+
 func TestEditorView_GetTitle(t *testing.T) {
 	pt := piecetable.New([]byte(""))
 
