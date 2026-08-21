@@ -4100,10 +4100,37 @@ type langInfo struct {
 
 func listAvailableUILanguages() []langInfo {
 	langs := []langInfo{{"en", "English"}}
+	seen := map[string]bool{"en": true}
+
+	// Every .lng shipped with f4 is embedded in the binary (langPackFS), and
+	// InitLang loads the configured language from there even when no lang/
+	// directory exists on disk. The dialog has to enumerate the same set:
+	// built from disk alone it offered English only, silently misrepresenting
+	// a configured non-English language as "English" (selection fell back to
+	// item 0) with no way to see or change the real setting.
+	if entries, err := langPackFS.ReadDir("lang"); err == nil {
+		for _, e := range entries {
+			if e.IsDir() || !strings.HasSuffix(e.Name(), ".lng") {
+				continue
+			}
+			code := strings.TrimSuffix(e.Name(), ".lng")
+			if seen[code] {
+				continue
+			}
+			data, err := langPackFS.ReadFile("lang/" + e.Name())
+			if err != nil {
+				continue
+			}
+			ini := ParseIni(strings.NewReader(string(data)))
+			langs = append(langs, langInfo{code: code, name: ini.GetString("Language", "Name", code)})
+			seen[code] = true
+		}
+	}
+
+	// Packs on disk extend the embedded set (user-supplied translations).
 	exeDir := filepath.Dir(os.Args[0])
 	userDir := filepath.Join(GetF4ConfigDir(), "lang")
 	dirs := []string{filepath.Join(exeDir, "lang"), userDir, "lang"}
-	seen := map[string]bool{"en": true}
 
 	for _, d := range dirs {
 		entries, err := os.ReadDir(d)
