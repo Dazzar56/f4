@@ -2,37 +2,56 @@ package netfox
 
 import (
 	"context"
+	"github.com/unxed/f4/internal/netproxy"
+	"github.com/unxed/f4/vfs"
 	"path/filepath"
 	"testing"
 )
 
-// TestSFTPProviderFailedDialReturnsPlainNil covers the stored-site path used
-// by the panel. NewSFTPVFS returns a nil *SFTPVFS when DialSSH fails; the
-// provider must not wrap that pointer in a non-nil vfs.VFS interface, because
-// the asynchronous opener closes every non-nil result while reporting err.
-func TestSFTPProviderFailedDialReturnsPlainNil(t *testing.T) {
-	manager := NewNetFoxVFS(filepath.Join(t.TempDir(), "NetFox.json"))
-	manager.SaveConfig("key-only", NetFoxConfig{
-		Type:    "sftp",
-		Host:    "127.0.0.1",
-		Port:    "1",
-		User:    "nobody",
-		Pass:    "",
-		Timeout: "1",
-	})
-
-	parent := &netFoxVFSWrapper{NetFoxVFS: manager}
-	opened, err := (&sftpProvider{}).Open(context.Background(), parent, "key-only")
-	if err == nil {
-		if opened != nil {
-			_ = opened.Close()
-		}
-		t.Fatal("opening an unreachable SFTP site succeeded")
+// TestNetFoxProvidersFailedDialReturnPlainNil covers the stored-site paths used
+// by the panel for SFTP, FISH+, and FTP. Their constructors return nil concrete
+// VFS pointers when dialing fails; providers must not wrap those pointers in a
+// non-nil vfs.VFS interface, because the asynchronous opener closes every
+// non-nil result while reporting err.
+func TestNetFoxProvidersFailedDialReturnPlainNil(t *testing.T) {
+	tests := []struct {
+		name     string
+		typeName string
+		provider vfs.VFSProvider
+	}{
+		{name: "sftp", typeName: "sftp", provider: &sftpProvider{}},
+		{name: "fish+", typeName: "fish+", provider: &fishProvider{}},
+		{name: "ftp", typeName: "ftp", provider: &ftpProvider{}},
 	}
-	if opened != nil {
-		// This is the cleanup performed by the asynchronous panel opener. A
-		// typed nil reaches this call and panics instead of showing err.
-		_ = opened.Close()
-		t.Fatalf("failed SFTP open returned non-nil file system %T", opened)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			manager := NewNetFoxVFS(filepath.Join(t.TempDir(), "NetFox.json"))
+			manager.SaveConfig("unreachable", NetFoxConfig{
+				Type:      tt.typeName,
+				Host:      "127.0.0.1",
+				Port:      deadTCPPort(t),
+				User:      "nobody",
+				Pass:      "",
+				Timeout:   "1",
+				ProxyMode: netproxy.ModeDirect,
+			})
+
+			parent := &netFoxVFSWrapper{NetFoxVFS: manager}
+			opened, err := tt.provider.Open(context.Background(), parent, "unreachable")
+			if err == nil {
+				t.Errorf("opening an unreachable %s site succeeded", tt.name)
+				if opened != nil {
+					_ = opened.Close()
+				}
+				return
+			}
+			if opened != nil {
+				t.Errorf("failed %s open returned non-nil file system %T", tt.name, opened)
+				// This is the cleanup performed by the asynchronous panel opener. A
+				// typed nil reaches this call while the opener is reporting err.
+				_ = opened.Close()
+			}
+		})
 	}
 }
