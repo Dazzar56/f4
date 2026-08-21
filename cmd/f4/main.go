@@ -448,7 +448,23 @@ func tryRunDefaultGui() error {
 	}
 	var errs []string
 	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
-		// Try gogpu first (for both Windows and macOS)
+
+		// Windows: try ebiten first. gogpu calls user32!GetDpiForWindow through
+		// LazyProc.Call without a preceding Find(); that export only exists on
+		// Windows 10 1607+, so on Windows 7/8/8.1 the very first CreateWindow
+		// *panics* instead of returning an error, and the fallback chain below
+		// never gets a chance to run. Reported upstream to gogpu; revert this
+		// reordering (back to gogpu-first) once a fixed gogpu is released.
+		if runtime.GOOS == "windows" {
+			vtui.DebugLog("GUI_AUTO: Trying ebiten...")
+			if err := RunGui("ebiten"); err == nil {
+				return nil
+			} else {
+				errs = append(errs, fmt.Sprintf("ebiten: %v", err))
+			}
+		}
+
+		// Try gogpu (macOS default; Windows fallback until gogpu is fixed)
 		vtui.DebugLog("GUI_AUTO: Trying gogpu...")
 		if err := RunGui("gogpu"); err == nil {
 			return nil
