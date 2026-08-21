@@ -146,7 +146,6 @@
     │       ├── cpu_info_linux.go
     │       ├── cpu_info_other.go
     │       ├── cpu_info_windows.go
-    │       ├── debug.log
     │       ├── delete_trash_test.go
     │       ├── detach_unix.go
     │       ├── detach_windows.go
@@ -231,8 +230,12 @@
     │       ├── grabber.go
     │       ├── grabber_test.go
     │       ├── gui_font.go
+    │       ├── gui_font_notwindows.go
     │       ├── gui_font_test.go
+    │       ├── gui_font_windows.go
+    │       ├── gui_font_windows_test.go
     │       ├── gui_unix.go
+    │       ├── gui_unix_test.go
     │       ├── gui_windows.go
     │       ├── hang_dump_unix.go
     │       ├── hang_dump_windows.go
@@ -357,6 +360,7 @@
     │       ├── lang_packs_test.go
     │       ├── lang_scripts_test.go
     │       ├── lang_test.go
+    │       ├── language_list_test.go
     │       ├── lua_plugin.go
     │       ├── lua_plugin_test.go
     │       ├── macro_ctrlletter_test.go
@@ -461,6 +465,7 @@
     │       ├── rsrc_windows_arm64.syso
     │       ├── semantic.go
     │       ├── semantic_test.go
+    │       ├── session_test.go
     │       ├── session_unix.go
     │       ├── session_unix_test.go
     │       ├── session_windows.go
@@ -567,7 +572,7 @@
     │   ├── CONSOLE_MODES.md
     │   ├── DRAGDROP.md
     │   ├── FFI.md
-    │   ├── filelist.md
+    │   ├── FILELIST.md
     │   ├── FISH+.md
     │   ├── FISH_PLUS_S2S.md
     │   ├── FUSE.md
@@ -590,7 +595,7 @@
     │   ├── UX_GUIDELINES.md
     │   ├── VFS.md
     │   ├── VTML.md
-    │   ├── vtvibe.md
+    │   ├── VTVIBE.md
     │   └── WINE.md
     ├── embedded.go
     ├── filelist_update.sh
@@ -929,6 +934,7 @@
     │   │   ├── proxy_dialog.go
     │   │   ├── registry.go
     │   │   ├── sftp_command_test.go
+    │   │   ├── sftp_dial_test.go
     │   │   ├── sftp_uri.go
     │   │   ├── sftp_vfs.go
     │   │   ├── ssh_dial.go
@@ -1101,4 +1107,4 @@
         ├── session_test.go
         └── vfs.go
     
-    64 directories, 1036 files
+    64 directories, 1042 files
