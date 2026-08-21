@@ -445,6 +445,9 @@ func ExecuteFileOpAt(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, srcBasePath string
 	}
 	desc := fmt.Sprintf("%d item(s) -> %s", len(names), vtui.TruncateMiddle(destInput, 15))
 
+	vtui.DebugLog("FILEOP: %s src=%T base=%q names=%v dst=%T destPath=%q isTargetDir=%v mask=%q mode=%d",
+		actionDesc, srcVfs, srcBasePath, names, dstVfs, destPath, isTargetDir, mask, mode)
+
 	runFunc := func(ctx context.Context, reporter TaskReporter, anchor vtui.Frame) error {
 		startTime := time.Now()
 		dirToEnsure := destPath
@@ -476,8 +479,11 @@ func ExecuteFileOpAt(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, srcBasePath string
 		reporter.UpdateScan("", totalStats.Files, totalStats.Dirs)
 
 		if scanErr != nil {
+			vtui.DebugLog("FILEOP: scan of %v under %q failed: %v", names, srcBasePath, scanErr)
 			return scanErr
 		}
+		vtui.DebugLog("FILEOP: scan found %d file(s), %d dir(s), %d byte(s)",
+			totalStats.Files, totalStats.Dirs, totalStats.Bytes)
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -677,6 +683,7 @@ func ExecuteFileOpAt(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, srcBasePath string
 
 			err := recursiveCopy(ctx, srcVfs, srcPath, dstVfs, targetItemPath, state, 0)
 			if err != nil {
+				vtui.DebugLog("FILEOP: copy %q -> %q failed: %v", srcPath, targetItemPath, err)
 				return err
 			}
 

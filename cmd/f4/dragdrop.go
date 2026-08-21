@@ -315,11 +315,16 @@ func reachableDropSources(groups []dropSourceGroup) ([]dropSourceGroup, []string
 		var names []string
 		for _, n := range g.names {
 			full := src.Join(src.GetPath(), n)
-			if _, err := src.Stat(context.Background(), full); err != nil {
+			st, err := src.Stat(context.Background(), full)
+			if err != nil {
 				vtui.DebugLog("DND: dropped source %q cannot be opened: %v", full, err)
 				missing = append(missing, full)
 				continue
 			}
+			// Record the answer, not just its absence. The same path is
+			// looked up again inside the file operation, on another
+			// goroutine, and if the two disagree that is the finding.
+			vtui.DebugLog("DND: dropped source %q is reachable (dir=%v size=%d)", full, st.IsDir, st.Size)
 			names = append(names, n)
 		}
 		if len(names) > 0 {
