@@ -97,21 +97,20 @@ func actionFoldersHistory(pf *PanelsFrame) {
 	}
 
 	// Shared "cd on active panel" path used by bare Enter and by mouse click.
-	gotoActive := func() {
-		historyPos, _, ok := search.selected()
-		if !ok {
-			return
-		}
+	gotoActive := func(pos int) {
 		search.cleanup()
+		menu.Close()
 		if targetPanel := pf.getActivePanel(); targetPanel != nil {
 			// The menu is oldest → newest. If the selected path disappeared,
 			// navigateAvailableFolderHistory walks toward newer entries.
-			pf.navigateAvailableFolderHistory(targetPanel, h, historyPos, -1)
+			pf.navigateAvailableFolderHistory(targetPanel, h, pos, -1)
 		}
 	}
-	// VMenu.ProcessMouse calls SetExitCode after OnAction, so click closes
-	// the menu automatically — gotoActive only does the side effect.
-	menu.OnAction = func(int) { gotoActive() }
+	menu.OnAction = func(int) {
+		if historyPos, _, ok := search.selected(); ok {
+			gotoActive(historyPos)
+		}
+	}
 
 	// Setup shortcuts
 	menu.OnKeyDown = func(e *vtinput.InputEvent) bool {
@@ -143,20 +142,18 @@ func actionFoldersHistory(pf *PanelsFrame) {
 				// Insert into command line
 				search.cleanup()
 				pf.cmdLine.InsertString(path)
-				menu.OnAction = nil
 				menu.Close()
 				return true
 			}
 			if shift {
 				search.cleanup()
-				menu.OnAction = nil
 				menu.Close()
 				if targetPanel := pf.getInactivePanel(); targetPanel != nil {
 					pf.navigateAvailableFolderHistory(targetPanel, h, historyPos, -1)
 				}
 				return true
 			}
-			menu.Close()
+			gotoActive(historyPos)
 			return true
 		}
 
