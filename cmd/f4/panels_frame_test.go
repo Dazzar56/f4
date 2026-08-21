@@ -3347,11 +3347,14 @@ func TestLayout_F4ActionDialogs_Validity(t *testing.T) {
 	vtui.SetDefaultPalette()
 	pf := NewPanelsFrame()
 	defer pf.Close()
-	pf.ResizeConsole(80, 25)
+	// Validate the intended, full dialog layout. Short screens are exercised
+	// separately by the viewport regression test; settings dialogs can now
+	// intentionally extend beyond a small viewport and scroll their contents.
+	pf.ResizeConsole(80, 60)
 	fm := vtui.FrameManager
 
 	scr := vtui.NewSilentScreenBuf()
-	scr.AllocBuf(80, 25)
+	scr.AllocBuf(80, 60)
 	fm.Init(scr)
 
 	// Helper to setup active panel with some files
