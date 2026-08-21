@@ -41,6 +41,19 @@ Both directions under gogpu need gogpu 0.50.1 or later. Before it, a drag
 out reached no target and every drop landed in the first cell of the
 screen; everything that caused either was in gogpu itself.
 
+Under Wine the DOS paths a drop carries, and the DOS paths a drag out has
+to offer, are translated by Wine itself through ntdll's
+`wine_get_unix_file_name` / `wine_get_dos_file_name`. Only Wine knows how
+the prefix maps drives, and a payload names files through whatever drive
+covers them: `Z:` for the root is the common case but not the only one.
+The old string rules are kept as the fallback for when those exports are
+missing, which is every real Windows.
+
+A drag out under Wine reaches other Wine windows only, including f4's own
+other panel. Wine bridges XDND into OLE for drops coming in, but has no
+bridge the other way, so files offered to a native X11 application find no
+target and the pointer says no. That is upstream, not here.
+
 ## When nothing happens
 
 Run with `VTUI_DEBUG=1` and read debug.log. f4 logs why a drag out was not
