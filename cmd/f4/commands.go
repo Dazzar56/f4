@@ -42,6 +42,8 @@ const (
 	CmRightSortUnsorted
 	CmSwapPanels
 	CmAddArchive
+	CmLeftDriveMenu
+	CmRightDriveMenu
 	CmLeftAIContext
 	CmLeftAIChat
 	CmLeftAIOut
