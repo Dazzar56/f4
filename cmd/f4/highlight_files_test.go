@@ -90,6 +90,34 @@ func TestHighlightRule_MatchSymlinkAttribute(t *testing.T) {
 	}
 }
 
+func TestBuiltInStylesHighlightSymlinks(t *testing.T) {
+	styles := loadStylesFromFS(builtInStyles, "styles/*.ini")
+	if len(styles) == 0 {
+		t.Fatal("no built-in styles loaded")
+	}
+
+	linkDir := vfs.VFSItem{Name: "link-dir", IsDir: true, IsSymlink: true}
+	plainDir := vfs.VFSItem{Name: "plain-dir", IsDir: true}
+	for _, style := range styles {
+		found := false
+		for _, rule := range parseHighlightRules(style.ini) {
+			if !rule.Match(&linkDir) {
+				continue
+			}
+			if rule.AttrSet&AttrSymlink != 0 && !rule.Match(&plainDir) && rule.NormalStr != "" {
+				found = true
+				if rule.Mark != "" {
+					t.Errorf("built-in style %q symlink rule marker = %q, want empty so the panel arrow fallback stays authoritative", style.Name, rule.Mark)
+				}
+			}
+			break
+		}
+		if !found {
+			t.Errorf("built-in style %q has no visible symlink highlight rule", style.Name)
+		}
+	}
+}
+
 func TestFileHighlighter_GetColor(t *testing.T) {
 	vtui.SetDefaultPalette()
 	SetDefaultF4Palette()
