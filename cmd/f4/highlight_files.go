@@ -258,7 +258,11 @@ func (r *HighlightRule) Match(item *vfs.VFSItem) bool {
 		case AttrHidden:
 			return item.IsHidden == set
 		case AttrExecutable:
-			return item.IsExecutable == set
+			// On Unix every directory carries the x bit (it means "may be
+			// entered", not "may be run"), so a bare IsExecutable check would
+			// light up all folders (#419). The rule attribute means
+			// "executable program", which a directory never is.
+			return (item.IsExecutable && !item.IsDir) == set
 		case AttrReadOnly:
 			return isReadOnly == set
 		case AttrSystem:

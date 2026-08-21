@@ -39,6 +39,9 @@ func TestHighlightRule_MatchAttributes(t *testing.T) {
 	ruleExec := HighlightRule{
 		AttrSet: AttrExecutable,
 	}
+	ruleNotExec := HighlightRule{
+		AttrClear: AttrExecutable,
+	}
 
 	tests := []struct {
 		item vfs.VFSItem
@@ -48,6 +51,11 @@ func TestHighlightRule_MatchAttributes(t *testing.T) {
 		{vfs.VFSItem{Name: "dir", IsDir: true}, ruleDir, true},
 		{vfs.VFSItem{Name: "file", IsDir: false}, ruleDir, false},
 		{vfs.VFSItem{Name: "run.sh", IsExecutable: true}, ruleExec, true},
+		// On Unix directories carry the x bit, but the Executable rule
+		// attribute means "executable program" and must skip them (#419).
+		{vfs.VFSItem{Name: "dir", IsDir: true, IsExecutable: true}, ruleExec, false},
+		{vfs.VFSItem{Name: "dir", IsDir: true, IsExecutable: true}, ruleNotExec, true},
+		{vfs.VFSItem{Name: "run.sh", IsExecutable: true}, ruleNotExec, false},
 	}
 
 	for _, tt := range tests {
