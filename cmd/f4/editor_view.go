@@ -74,6 +74,7 @@ type EditorView struct {
 	DisasmMode       int // 16, 32, or 64
 	overtype         bool
 	modified         bool
+	closeDlg         *vtui.Window
 	CursorLine       int // Текущая логическая строка (для плагинов)
 	CursorPos        int // Позиция в байтах (для плагинов)
 	DesiredVisualCol int // Колонка, в которую мы хотим попасть при навигации Up/Down
@@ -261,6 +262,14 @@ type editorState struct {
 	table piecetable.TableState
 	line  int
 	pos   int
+}
+
+func (ev *EditorView) ConfirmClose() bool {
+	if !ev.modified {
+		return true
+	}
+	ev.closeDlg = ev.tryClose()
+	return false
 }
 
 func (ev *EditorView) Close() {
@@ -1768,23 +1777,11 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 			return true
 		}
 		// Prevent fallthrough to text editing keys
-		switch e.VirtualKeyCode {
-		case vtinput.VK_F1, vtinput.VK_F2, vtinput.VK_F3, vtinput.VK_F4, vtinput.VK_F5, vtinput.VK_F6, vtinput.VK_F7, vtinput.VK_F8, vtinput.VK_F9, vtinput.VK_F10, vtinput.VK_F11, vtinput.VK_F12:
-			return false // Let global hotkeys handle it
-		}
-		if MacroMgr.LookupHotkey(e) {
-			return true
-		}
-		return true // Consume all other keys in Hex mode so they don't insert text
-	}
-
-	if ev.HexMode {
-		if ev.processKeyHex(e) {
-			return true
-		}
-		// Prevent fallthrough to text editing keys
-		switch e.VirtualKeyCode {
-		case vtinput.VK_F1, vtinput.VK_F2, vtinput.VK_F3, vtinput.VK_F4, vtinput.VK_F5, vtinput.VK_F6, vtinput.VK_F7, vtinput.VK_F8, vtinput.VK_F9, vtinput.VK_F10, vtinput.VK_F11, vtinput.VK_F12:
+		switch {
+		case e.VirtualKeyCode == vtinput.VK_W &&
+			e.ControlKeyState&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed) != 0:
+			return false // Let the framework handle Ctrl+W
+		case e.VirtualKeyCode >= vtinput.VK_F1 && e.VirtualKeyCode <= vtinput.VK_F12:
 			return false // Let global hotkeys handle it
 		}
 		if MacroMgr.LookupHotkey(e) {
@@ -3175,7 +3172,7 @@ func (ev *EditorView) StartIndexing() {
 
 func (ev *EditorView) HandleCommand(cmd int, args any) bool {
 	if cmd == vtui.CmClose {
-		ev.tryClose()
+		ev.closeDlg = ev.tryClose()
 		return true
 	}
 	if cmd == CmSwitchToViewer {
@@ -3196,14 +3193,17 @@ func (ev *EditorView) HandleCommand(cmd int, args any) bool {
 	return ev.BaseFrame.HandleCommand(cmd, args)
 }
 
-func (ev *EditorView) tryClose() {
+func (ev *EditorView) tryClose() *vtui.Window {
+	if ev.closeDlg != nil && !ev.closeDlg.IsDone() {
+		return ev.closeDlg
+	}
 	if !ev.modified {
 		ev.Close()
-		return
+		return nil
 	}
 
 	msg := "The file has been modified.\nDo you want to save it?"
-	dlg := vtui.ShowMessage(" Confirm ", msg, []string{"&Save", "&Don't Save", "Cancel"})
+	dlg := vtui.ShowMessageOn(ev, " Confirm ", msg, []string{"&Save", "&Don't Save", "Cancel"})
 	dlg.OnResult = func(code int) {
 		switch code {
 		case 0: // Save
@@ -3214,6 +3214,7 @@ func (ev *EditorView) tryClose() {
 			ev.Close()
 		}
 	}
+	return dlg
 }
 
 func (ev *EditorView) GetKeyLabels() *vtui.KeySet {
