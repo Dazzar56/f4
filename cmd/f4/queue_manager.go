@@ -495,7 +495,7 @@ func (qm *OpQueueManager) executeTask(t *QueueTask) {
 	}
 	qm.mu.Unlock()
 
-	vtui.DebugLog("QUEUE_DEBUG: Task %d finalized with state %s. Posting OnComplete.", t.ID, finalState)
+	vtui.DebugLog("QUEUE_DEBUG: Task %d finalized with state %s (Error: %v). Posting OnComplete.", t.ID, finalState, t.ErrorMsg)
 
 	qm.postTaskCompletion(t)
 }

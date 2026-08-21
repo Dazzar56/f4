@@ -33,6 +33,20 @@ func TestGroupDropSources(t *testing.T) {
 		t.Fatal("nothing dropped means nothing to do")
 	}
 }
+func TestNormalizeExternalDropPath(t *testing.T) {
+	cases := []struct {
+		input string
+		want  string
+	}{
+		{"/home/user/file.txt", filepath.FromSlash("/home/user/file.txt")},
+		{"   ", ""},
+	}
+	for _, tc := range cases {
+		if got := normalizeExternalDropPath(tc.input); got != tc.want {
+			t.Errorf("normalizeExternalDropPath(%q) = %q, want %q", tc.input, got, tc.want)
+		}
+	}
+}
 
 func TestChooseDropAction(t *testing.T) {
 	both := vtui.DropCopy | vtui.DropMove

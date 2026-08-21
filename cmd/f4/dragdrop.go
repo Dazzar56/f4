@@ -3,10 +3,12 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 
 	"github.com/unxed/f4/vfs"
+	"github.com/unxed/f4/vfs/hostmode"
 	"github.com/unxed/f4/vfs/hostpath"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
@@ -52,19 +54,41 @@ type dropSourceGroup struct {
 // groupDropSources turns the absolute paths of a payload into groups,
 // preserving the order the directories were first seen and sorting the names
 // inside each group, so the same drop always produces the same operations.
+func normalizeExternalDropPath(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	if hostmode.Posix() {
+		// If path came from Wine as Z:\... or z:\... (which maps to root /)
+		if len(raw) >= 3 && (raw[0] == 'Z' || raw[0] == 'z') && raw[1] == ':' && (raw[2] == '\\' || raw[2] == '/') {
+			raw = "/" + strings.TrimPrefix(raw[3:], "\\")
+			raw = strings.ReplaceAll(raw, "\\", "/")
+		} else if strings.HasPrefix(raw, `\\?\unix\`) || strings.HasPrefix(raw, `\\?\unix/`) {
+			raw = strings.TrimPrefix(raw, `\\?\unix\`)
+			raw = strings.TrimPrefix(raw, `\\?\unix/`)
+			raw = "/" + strings.ReplaceAll(raw, "\\", "/")
+		} else if strings.HasPrefix(raw, `\??\unix\`) || strings.HasPrefix(raw, `\??\unix/`) {
+			raw = strings.TrimPrefix(raw, `\??\unix\`)
+			raw = strings.TrimPrefix(raw, `\??\unix/`)
+			raw = "/" + strings.ReplaceAll(raw, "\\", "/")
+		}
+	}
+	return hostpath.Clean(raw)
+}
+
 func groupDropSources(paths []string) []dropSourceGroup {
 	byDir := make(map[string][]string)
 	seen := make(map[string]bool)
 	var order []string
 
 	for _, raw := range paths {
-		if strings.TrimSpace(raw) == "" {
+		normalized := normalizeExternalDropPath(raw)
+		if normalized == "" {
 			continue
 		}
-		normalized := hostpath.FromOS(raw)
-		cleaned := hostpath.Clean(normalized)
-		dir, name := hostpath.Split(cleaned)
-		dir = hostpath.Clean(dir)
+		dir := hostpath.Dir(normalized)
+		name := hostpath.Base(normalized)
 		if name == "" || name == "." || name == ".." {
 			continue
 		}
@@ -350,7 +374,7 @@ func (pf *PanelsFrame) startDragOut(fsp *FileSystemPanel) bool {
 
 	payload := vtui.DragPayload{Kinds: []string{"text/uri-list"}, Paths: paths}
 	go func() {
-		action, err := vtui.StartDrag(payload, vtui.DropCopy)
+		action, err := vtui.StartDrag(payload, vtui.DropCopy|vtui.DropMove|vtui.DropLink)
 		if err != nil {
 			vtui.DebugLog("DND: drag out failed: %v", err)
 			return
@@ -372,8 +396,14 @@ func localDragPaths(fsp *FileSystemPanel, names []string) ([]string, bool) {
 	}
 	paths := make([]string, 0, len(names))
 	for _, n := range names {
-		posixPath := local.Join(local.GetPath(), n)
-		paths = append(paths, hostpath.ToOS(posixPath))
+		p := local.Join(local.GetPath(), n)
+		if hostmode.Posix() && runtime.GOOS == "windows" {
+			// Convert /home/user/... to Z:\home\user\... for Windows/Wine OLE CF_HDROP
+			if strings.HasPrefix(p, "/") {
+				p = `Z:` + strings.ReplaceAll(p, "/", `\`)
+			}
+		}
+		paths = append(paths, p)
 	}
 	return paths, true
 }
