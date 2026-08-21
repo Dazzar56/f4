@@ -1593,6 +1593,7 @@ func AskOverwrite(ctx context.Context, destPath string, srcStat, dstStat vfs.VFS
 		width := 76
 		height := 13
 		dlg = vtui.NewCenteredDialog(width, height, Msg("Warning.Title"))
+		dlg.IsWarning = true
 
 		lbl1 := vtui.NewLabel(0, 0, Msg("FileOp.FileAlreadyExists"), nil)
 		truncPath := vtui.TruncateMiddle(destPath, width-6)

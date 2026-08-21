@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/unxed/f4/vfs"
+	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 	"io"
 	"os"
@@ -1153,6 +1154,47 @@ func TestRecursiveCopy_ByteProgress(t *testing.T) {
 }
 
 // --- UI Integration Tests for Conflict Resolution ---
+
+func TestAskOverwriteUsesWarningPalette(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	result := make(chan int, 1)
+	go func() {
+		choice, _ := AskOverwrite(ctx, "/destination/existing.txt", vfs.VFSItem{}, vfs.VFSItem{}, nil)
+		result <- choice
+	}()
+
+	container := waitForDialog(t, Msg("Warning.Title"))
+	dlg, ok := container.(*vtui.Window)
+	if !ok {
+		t.Fatalf("overwrite dialog is not a *vtui.Window, got %T", container)
+	}
+	if !dlg.IsWarning {
+		t.Error("overwrite confirmation must render on the WarnDialog palette (see #494)")
+	}
+
+	if !pressKey(dlg, &vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_ESCAPE,
+	}) {
+		t.Error("Escape was not handled by the overwrite dialog")
+	}
+
+	select {
+	case choice := <-result:
+		if choice != 6 {
+			t.Errorf("Escape returned overwrite choice %d, want cancel (6)", choice)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("AskOverwrite did not return after Escape")
+	}
+	if dlg.IsDone() {
+		vtui.FrameManager.Pop()
+	}
+}
 
 // Helper to pump UI tasks until a dialog with the given title appears
 func waitForDialog(t *testing.T, title string) vtui.Container {
