@@ -38,14 +38,16 @@ type File interface {
 
 func Open(name string) (File, error) {
 	if hostmode.Posix() {
-		return winescapeOpenFile(name, os.O_RDONLY, 0)
+		f, err := winescapeOpenFile(name, os.O_RDONLY, 0)
+		return f, hostErr(err)
 	}
 	return os.Open(name)
 }
 
 func OpenFile(name string, flag int, perm os.FileMode) (File, error) {
 	if hostmode.Posix() {
-		return winescapeOpenFile(name, flag, perm)
+		f, err := winescapeOpenFile(name, flag, perm)
+		return f, hostErr(err)
 	}
 	return os.OpenFile(name, flag, perm)
 }
@@ -54,7 +56,7 @@ func Stat(name string) (os.FileInfo, error) {
 	if hostmode.Posix() {
 		var st winescape.Stat_t
 		if err := winescape.Stat(name, &st); err != nil {
-			return nil, err
+			return nil, hostErr(err)
 		}
 		return wineStatToInfo("", name, st), nil
 	}
@@ -65,7 +67,7 @@ func Lstat(name string) (os.FileInfo, error) {
 	if hostmode.Posix() {
 		var st winescape.Stat_t
 		if err := winescape.Lstat(name, &st); err != nil {
-			return nil, err
+			return nil, hostErr(err)
 		}
 		return wineStatToInfo("", name, st), nil
 	}
@@ -74,7 +76,8 @@ func Lstat(name string) (os.FileInfo, error) {
 
 func ReadDir(name string) ([]fs.DirEntry, error) {
 	if hostmode.Posix() {
-		return winescapeReadDir(name)
+		entries, err := winescapeReadDir(name)
+		return entries, hostErr(err)
 	}
 	return os.ReadDir(name)
 }
@@ -84,7 +87,7 @@ func Readlink(name string) (string, error) {
 		buf := make([]byte, 4096)
 		n, err := winescape.Readlink(name, buf)
 		if err != nil {
-			return "", err
+			return "", hostErr(err)
 		}
 		return string(buf[:n]), nil
 	}
@@ -93,7 +96,7 @@ func Readlink(name string) (string, error) {
 
 func Symlink(oldname, newname string) error {
 	if hostmode.Posix() {
-		return winescape.Symlink(oldname, newname)
+		return hostErr(winescape.Symlink(oldname, newname))
 	}
 	return os.Symlink(oldname, newname)
 }
@@ -110,63 +113,63 @@ func Link(oldname, newname string) error {
 
 func Rename(oldpath, newpath string) error {
 	if hostmode.Posix() {
-		return winescape.Rename(oldpath, newpath)
+		return hostErr(winescape.Rename(oldpath, newpath))
 	}
 	return os.Rename(oldpath, newpath)
 }
 
 func RemoveAll(path string) error {
 	if hostmode.Posix() {
-		return winescape.RemoveAll(path)
+		return hostErr(winescape.RemoveAll(path))
 	}
 	return os.RemoveAll(path)
 }
 
 func Remove(name string) error {
 	if hostmode.Posix() {
-		return winescapeRemove(name)
+		return hostErr(winescapeRemove(name))
 	}
 	return os.Remove(name)
 }
 
 func MkdirAll(path string, perm os.FileMode) error {
 	if hostmode.Posix() {
-		return winescape.MkdirAll(path, uint32(perm.Perm()))
+		return hostErr(winescape.MkdirAll(path, uint32(perm.Perm())))
 	}
 	return os.MkdirAll(path, perm)
 }
 
 func Mkdir(name string, perm os.FileMode) error {
 	if hostmode.Posix() {
-		return winescape.Mkdir(name, uint32(perm.Perm()))
+		return hostErr(winescape.Mkdir(name, uint32(perm.Perm())))
 	}
 	return os.Mkdir(name, perm)
 }
 
 func Chmod(name string, mode os.FileMode) error {
 	if hostmode.Posix() {
-		return winescape.Chmod(name, uint32(mode.Perm()))
+		return hostErr(winescape.Chmod(name, uint32(mode.Perm())))
 	}
 	return os.Chmod(name, mode)
 }
 
 func Chown(name string, uid, gid int) error {
 	if hostmode.Posix() {
-		return winescape.Chown(name, uid, gid)
+		return hostErr(winescape.Chown(name, uid, gid))
 	}
 	return os.Chown(name, uid, gid)
 }
 
 func Lchown(name string, uid, gid int) error {
 	if hostmode.Posix() {
-		return winescape.Lchown(name, uid, gid)
+		return hostErr(winescape.Lchown(name, uid, gid))
 	}
 	return os.Lchown(name, uid, gid)
 }
 
 func Chtimes(name string, atime, mtime time.Time) error {
 	if hostmode.Posix() {
-		return winescape.Chtimes(name, atime, mtime)
+		return hostErr(winescape.Chtimes(name, atime, mtime))
 	}
 	return os.Chtimes(name, atime, mtime)
 }
