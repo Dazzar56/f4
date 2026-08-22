@@ -97,9 +97,14 @@ func TestActionUpdateSettings_ManualCheckDoesNotBlockMouseDispatch(t *testing.T)
 		close(dispatchDone)
 	}()
 
+	// The server will not answer until allowResponse is closed below, so a
+	// dispatch that waited for the update check could never finish here.
+	// The deadline only guards against a hang; keep it generous so the
+	// synchronous click work (SaveConfig, dialog close) does not trip it
+	// on a loaded CI runner.
 	select {
 	case <-dispatchDone:
-	case <-time.After(250 * time.Millisecond):
+	case <-time.After(10 * time.Second):
 		t.Fatal("manual update check blocked mouse dispatch")
 	}
 
