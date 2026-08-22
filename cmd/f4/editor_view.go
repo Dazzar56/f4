@@ -65,18 +65,19 @@ type EditorView struct {
 	ScrollTopRow int // Индекс первой видимой ВИЗУАЛЬНОЙ строки
 	ScrollLeft   int // Горизонтальный скролл (когда WordWrap=false)
 
-	WordWrap         bool
-	HexMode          bool
-	DecodeMode       bool
-	HexTopOffset     int
-	HexNibble        int // 0 = high nibble, 1 = low nibble
-	DisasmMode       int // 16, 32, or 64
-	overtype         bool
-	modified         bool
-	closeDlg         *vtui.Window
-	CursorLine       int // Текущая логическая строка (для плагинов)
-	CursorPos        int // Позиция в байтах (для плагинов)
-	DesiredVisualCol int // Колонка, в которую мы хотим попасть при навигации Up/Down
+	WordWrap           bool
+	wordWrapSuppressed bool // Unsafe binary/long-line content forbids re-enabling wrapping.
+	HexMode            bool
+	DecodeMode         bool
+	HexTopOffset       int
+	HexNibble          int // 0 = high nibble, 1 = low nibble
+	DisasmMode         int // 16, 32, or 64
+	overtype           bool
+	modified           bool
+	closeDlg           *vtui.Window
+	CursorLine         int // Текущая логическая строка (для плагинов)
+	CursorPos          int // Позиция в байтах (для плагинов)
+	DesiredVisualCol   int // Колонка, в которую мы хотим попасть при навигации Up/Down
 
 	ShowWhitespaces  bool
 	selActive        bool
@@ -2649,6 +2650,9 @@ func (ev *EditorView) ensureCursorVisible() {
 	if ev.targetLine != -1 {
 		return // Skip clamping and scrolling while waiting for the target line to be indexed
 	}
+	if ev.WordWrap && ev.currentLineUnsafeForWordWrap() {
+		ev.disableUnsafeWordWrap()
+	}
 
 	if ev.HexMode || ev.DecodeMode {
 		height := ev.Y2 - ev.Y1
@@ -3013,20 +3017,23 @@ func (ev *EditorView) StartIndexing() {
 		ev.targetLine = -1
 		return
 	}
-	// A mapped file has no chunk buffer and needs indexing just the same, so
-	// the question is whether there is any text at all, not how it is backed.
-	if ev.asyncBuf == nil && ev.mapped == nil {
-		// Fully read files (non-UTF-8 codepages) have a complete index and no
-		// scan; resolve a pending restore here or Loading waits forever.
-		ev.restoreTargetPos()
-		return
-	}
 	if ev.indexCancel != nil {
 		ev.indexCancel()
 	}
-
 	ev.retireEditSession()
 	sessionID := ev.editSession
+	ev.probeUnsafeWordWrap()
+	// Mapped and fully decoded files already have their line index; they still
+	// need the safety scan before wrapping can be enabled.
+	if ev.asyncBuf == nil {
+		// Fully read files (non-UTF-8 codepages) have a complete index and no
+		// line scan; resolve a pending restore here or Loading waits forever.
+		ev.restoreTargetPos()
+		ctx, cancel := context.WithCancel(context.Background())
+		ev.indexCancel = cancel
+		go ev.scanFullyReadForUnsafeWordWrap(ctx, sessionID)
+		return
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	ev.indexCancel = cancel
@@ -3085,8 +3092,10 @@ func (ev *EditorView) StartIndexing() {
 		if indexer, ok := ev.vfs.(vfs.LineIndexer); ok && ev.Codepage == 65001 {
 			vtui.DebugLog("EDITOR_INDEX: Using remote LineIndexer")
 			var currentLine int64 = int64(li.LineCount() + 1)
+			remoteLineStart := int64(li.GetLineOffset(li.LineCount() - 1))
 			const batchSize = 100000
 			remoteSuccess := true
+			wrapUnsafe := false
 			for {
 				if ctx.Err() != nil || ev.IsDone() {
 					return
@@ -3099,6 +3108,16 @@ func (ev *EditorView) StartIndexing() {
 				}
 
 				if len(res.Offsets) > 0 {
+					for _, off := range res.Offsets {
+						if editorWrapIntervalUnsafe(remoteLineStart, off) {
+							if !wrapUnsafe {
+								ev.postUnsafeWordWrap(sessionID, ctx)
+								wrapUnsafe = true
+							}
+							break
+						}
+						remoteLineStart = off
+					}
 					batchOffsets := make([]int, 0, len(res.Offsets))
 					for _, off := range res.Offsets {
 						batchOffsets = append(batchOffsets, int(off))
@@ -3133,6 +3152,9 @@ func (ev *EditorView) StartIndexing() {
 			}
 
 			if remoteSuccess {
+				if editorWrapIntervalUnsafe(remoteLineStart, int64(maxSize)) && !wrapUnsafe {
+					ev.postUnsafeWordWrap(sessionID, ctx)
+				}
 				scannedTo.Store(int64(maxSize))
 				vtui.FrameManager.PostTask(func() {
 					if ctx.Err() == nil && ev.editSession == sessionID {
@@ -3162,6 +3184,8 @@ func (ev *EditorView) StartIndexing() {
 		chunkSize := 256 * 1024 // 256KB chunks to match AsyncBuffer
 
 		pendingOffsets := make([]int, 0, 10000)
+		lineLen := 0
+		wrapUnsafe := false
 
 		for absPos < maxSize {
 			select {
@@ -3205,6 +3229,12 @@ func (ev *EditorView) StartIndexing() {
 			poll = indexPollMin
 			if err != nil {
 				break
+			}
+			var unsafe bool
+			lineLen, unsafe = scanEditorWrapSafety(data, lineLen)
+			if unsafe && !wrapUnsafe {
+				ev.postUnsafeWordWrap(sessionID, ctx)
+				wrapUnsafe = true
 			}
 
 			// Fast SIMD-accelerated newline scanning using bytes.IndexByte
@@ -3667,9 +3697,6 @@ func (ev *EditorView) scheduleIndexResume() {
 	ev.indexResume = time.AfterFunc(indexResumeDelay, func() {
 		vtui.FrameManager.PostTask(func() {
 			if ev.IsDone() || ev.indexing || ev.indexIsComplete() {
-				return
-			}
-			if ev.asyncBuf == nil && ev.mapped == nil {
 				return
 			}
 			ev.StartIndexing()
