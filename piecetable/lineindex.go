@@ -1,5 +1,6 @@
 package piecetable
 
+import "bytes"
 import "sort"
 import "sync"
 
@@ -305,28 +306,52 @@ func (li *LineIndex) removeLines(from, to int) {
 	}
 }
 
-// Rebuild completely reconstructs the line index based on PieceTable.
-func (li *LineIndex) Rebuild(pt *PieceTable) {
+// AppendNewlineOffsets appends the offset just past every newline in data to
+// dst, counting from base. That offset is where the next line starts, which is
+// what a line index holds — and finding it is the one loop every scanner in
+// the editor runs, so they all run this one.
+func AppendNewlineOffsets(dst []int, data []byte, base int) []int {
+	for pos := 0; pos < len(data); {
+		idx := bytes.IndexByte(data[pos:], '\n')
+		if idx < 0 {
+			break
+		}
+		pos += idx + 1
+		dst = append(dst, base+pos)
+	}
+	return dst
+}
+
+// Rebuild reconstructs the line index from the piece table, and reports
+// whether it managed to walk the whole buffer.
+//
+// It can fail to: the walk goes through the piece table, which on a lazily
+// loaded file answers "still loading" for a chunk that has not arrived, and
+// stops there. The index is then correct as far as it goes and short after
+// that, and the caller is the only one in a position to know the difference —
+// hence the return value. Claiming a short index is complete is worse than
+// having one, because everything downstream believes it.
+func (li *LineIndex) Rebuild(pt *PieceTable) bool {
 	li.mu.Lock()
 	defer li.mu.Unlock()
 	// Reset index, first line always starts at 0
 	li.reset()
 
 	if pt.Size() == 0 {
-		return
+		return true
 	}
 
 	absPos := 0
-	pt.ForEachRange(func(data []byte) error {
-		for i, b := range data {
-			if b == '\n' {
-				// Next line starts immediately after the newline character
-				li.appendOffset(absPos + i + 1)
-			}
+	offsets := make([]int, 0, 4096)
+	err := pt.ForEachRange(func(data []byte) error {
+		offsets = AppendNewlineOffsets(offsets[:0], data, absPos)
+		for _, off := range offsets {
+			li.appendOffset(off)
 		}
 		absPos += len(data)
 		return nil
 	})
+	return err == nil && absPos >= pt.Size()
 }
 
 // AppendOffsets adds pre-calculated line offsets (used by background indexer).

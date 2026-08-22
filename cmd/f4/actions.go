@@ -757,7 +757,15 @@ func showEditor(pf *PanelsFrame, v vfs.VFS, path string, f vfs.ReadAtCloser) {
 		pt = piecetable.New(nil)
 	}
 
-	editor := NewEditorView(pt, v, path)
+	// A mapped or lazily loaded file is indexed by StartIndexing below; anything
+	// else — an empty buffer, or a file decoded into memory — has its index
+	// built with it, as it always has.
+	var editor *EditorView
+	if mapped != nil || buf != nil {
+		editor = NewEditorViewIndexedLater(pt, v, path)
+	} else {
+		editor = NewEditorView(pt, v, path)
+	}
 	editor.Codepage = cpID
 	// StartIndexing skips hex, so binary files open without a line scan.
 	if _, isDisks := v.(*vfs.DisksVFS); isDisks || binary {
@@ -1020,8 +1028,15 @@ func actionSwitchEditorToViewer(ev *EditorView) {
 		targetOffset := int64(0)
 		if ev.HexMode || ev.DecodeMode {
 			targetOffset = int64(ev.HexTopOffset)
-		} else if ev.li != nil && ev.CursorLine >= 0 && ev.CursorLine < ev.li.LineCount() {
-			targetOffset = int64(ev.li.GetLineOffset(ev.CursorLine))
+		} else if ev.li != nil && ev.CursorLine >= 0 {
+			// The index owns the answer to "where is line N", and on a file
+			// that is still being scanned it may not have reached the cursor
+			// yet — which used to open the viewer at the top of the file
+			// instead of where the editor was.
+			ev.ensureIndexedToLine(ev.CursorLine)
+			if ev.CursorLine < ev.li.LineCount() {
+				targetOffset = int64(ev.li.GetLineOffset(ev.CursorLine))
+			}
 		}
 
 		ctx := context.Background()
@@ -1166,7 +1181,16 @@ func actionSwitchViewerToEditor(vv *ViewerView) {
 		pt = piecetable.New(decoded)
 	}
 
-	editor := NewEditorView(pt, vv.vfs, vv.path)
+	// Same rule as opening from the panel: a file the indexer owns must not be
+	// indexed on the way in, or switching to the editor pays the whole file's
+	// scan on the UI thread before it appears — twenty seconds of it on the
+	// 8 GB test file.
+	var editor *EditorView
+	if mapped != nil || buf != nil {
+		editor = NewEditorViewIndexedLater(pt, vv.vfs, vv.path)
+	} else {
+		editor = NewEditorView(pt, vv.vfs, vv.path)
+	}
 	editor.file = f
 	editor.asyncBuf = buf
 	editor.mapped = mapped
@@ -1182,9 +1206,18 @@ func actionSwitchViewerToEditor(vv *ViewerView) {
 		editor.CursorLine = editor.li.GetLineAtOffset(targetOff)
 		editor.CursorPos = targetOff - editor.li.GetLineOffset(editor.CursorLine)
 	} else {
-		editor.ensureIndexedTo(targetOff)
-		line := editor.li.GetLineAtOffset(targetOff)
-		pos := targetOff - editor.li.GetLineOffset(line)
+		line, pos := 0, 0
+		if !editor.awaitOffset(targetOff) {
+			line = editor.CursorLine
+			pos = editor.CursorPos
+		} else {
+			// The file has not been read that far — a chunk of a lazily
+			// loaded one is still on its way — so the offset has no line yet.
+			// The editor opens at the top and the scan puts the cursor where
+			// the viewer was when it reads past it, rather than guessing now.
+			vtui.DebugLog("EDITOR: viewer offset %d is past the index; the scan will place it",
+				targetOff)
+		}
 		editor.CursorLine = line
 		editor.CursorPos = pos
 		editor.targetLine = line
