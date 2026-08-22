@@ -16,11 +16,11 @@ func TestDatabaseSessionReadsAndWritesSQLiteValues(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := db.Exec(`CREATE TABLE "odd""name" (id INTEGER, note TEXT, payload BLOB)`); err != nil {
-		db.Close()
+		_ = db.Close()
 		t.Fatal(err)
 	}
 	if _, err := db.Exec(`INSERT INTO "odd""name" VALUES (1, NULL, ?)`, []byte{0, 1, 255}); err != nil {
-		db.Close()
+		_ = db.Close()
 		t.Fatal(err)
 	}
 	if err := db.Close(); err != nil {
