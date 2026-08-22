@@ -1095,6 +1095,9 @@ func (fp *FileSystemPanel) headerSortModeAt(x, y int) (SortMode, bool) {
 	if !fp.table.ShowHeader || y != fp.table.Y1 || x < fp.table.X1 || x > fp.table.X2 {
 		return SortUnsorted, false
 	}
+	if mode, ok := fp.hiddenSortModeHeaderAt(x); ok {
+		return mode, true
+	}
 	columnX := fp.table.X1
 	for column, tableColumn := range fp.table.Columns {
 		if x >= columnX && x < columnX+tableColumn.Width {
@@ -1110,6 +1113,28 @@ func (fp *FileSystemPanel) headerSortModeAt(x, y int) (SortMode, bool) {
 		}
 	}
 	return SortUnsorted, false
+}
+
+func (fp *FileSystemPanel) hiddenSortModeHeaderAt(x int) (SortMode, bool) {
+	if fp.sortMode == SortUnsorted || len(fp.table.Columns) == 0 {
+		return SortUnsorted, false
+	}
+
+	for column := range fp.table.Columns {
+		mode, sortable := fp.columnSortMode(column)
+		if sortable && mode == fp.sortMode {
+			return SortUnsorted, false
+		}
+	}
+
+	width := fp.table.Columns[0].Width
+	right := hiddenSortColumnTitle(fp.sortMode, fp.sortIsAscending(), width)
+	rightWidth := runewidth.StringWidth(right)
+	columnEnd := fp.table.X1 + width
+	if rightWidth >= width {
+		return fp.sortMode, x >= fp.table.X1 && x < columnEnd
+	}
+	return fp.sortMode, x >= columnEnd-rightWidth && x < columnEnd
 }
 
 // panelScrollMetrics maps the panel's item-based scrolling onto the

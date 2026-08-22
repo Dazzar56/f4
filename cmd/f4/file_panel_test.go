@@ -3284,6 +3284,23 @@ func TestFileSystemPanel_HeaderClickSortsAndToggles(t *testing.T) {
 		t.Fatalf("reversed Name title has no down arrow: %q", fp.table.Columns[0].Title)
 	}
 
+	// When the active mode is not represented by a visible column, its
+	// right-aligned label is embedded in the Name header. Clicking that label
+	// must toggle the active mode instead of resetting it to Name.
+	release()
+	fp.sortMode = SortExt
+	fp.sortReverse = false
+	fp.updateSortColumnTitles()
+	hiddenTitle := hiddenSortColumnTitle(SortExt, fp.sortIsAscending(), fp.table.Columns[0].Width)
+	hiddenX := fp.table.X1 + fp.table.Columns[0].Width - runewidth.StringWidth(hiddenTitle)
+	if !fp.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: true,
+		MouseX: int16(hiddenX), MouseY: int16(fp.table.Y1),
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+	}) || fp.sortMode != SortExt || !fp.sortReverse {
+		t.Fatalf("hidden Extension header click: mode=%v reverse=%v title=%q", fp.sortMode, fp.sortReverse, fp.table.Columns[0].Title)
+	}
+
 	// Separator clicks do not select either adjacent sort column.
 	release()
 	separatorX := fp.table.X1 + fp.table.Columns[0].Width
