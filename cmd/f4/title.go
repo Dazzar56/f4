@@ -184,9 +184,27 @@ func UpdateWindowTitle(scr *vtui.ScreenBuf) {
 		return
 	}
 
+	vtui.SetWindowTitle(currentWindowTitle())
+
+	// Macro recording indicator — drawn after MenuBar so it's always on top
+	if MacroMgr != nil && MacroMgr.Recording {
+		scr.Write(0, 0, vtui.StringToCharInfo(" R ", vtui.SetRGBBoth(0, 0xFFFFFF, 0xFF0000)))
+	}
+}
+
+// currentWindowTitle returns the exact title f4 exposes to the host terminal
+// or GUI window. Keeping this separate from UpdateWindowTitle lets actions
+// and macros report the same value the user sees in the window chrome.
+func currentWindowTitle() string {
+	titleOnce.Do(initTitleCache)
+
 	state := "Panels"
-	if len(vtui.FrameManager.Screens) > 0 {
-		state = stableWorkspaceTitle(vtui.FrameManager.Screens[vtui.FrameManager.ActiveIdx])
+	if vtui.FrameManager != nil && len(vtui.FrameManager.Screens) > 0 {
+		active := vtui.FrameManager.ActiveIdx
+		if active < 0 || active >= len(vtui.FrameManager.Screens) {
+			active = 0
+		}
+		state = stableWorkspaceTitle(vtui.FrameManager.Screens[active])
 	}
 
 	template := AppConfig.ConsoleTitleTemplate
@@ -206,15 +224,18 @@ func UpdateWindowTitle(scr *vtui.ScreenBuf) {
 
 	title := r.Replace(template)
 	title = strings.ReplaceAll(title, "  ", " ") // Убираем двойные пробелы, если %Admin пустой
-	vtui.SetWindowTitle(title)
+	return title
+}
 
-	// Macro recording indicator — drawn after MenuBar so it's always on top
-	if MacroMgr != nil && MacroMgr.Recording {
-		scr.Write(0, 0, vtui.StringToCharInfo(" R ", vtui.SetRGBBoth(0, 0xFFFFFF, 0xFF0000)))
-	}
+func actionCopyWindowTitle() bool {
+	go vtui.SetClipboard(currentWindowTitle())
+	return true
 }
 
 func stableWorkspaceTitle(screen *vtui.AppScreen) string {
+	if screen == nil {
+		return "Panels"
+	}
 	// Keep compatibility while the corresponding VTUI API is being reviewed.
 	// Once available, the structural assertion starts using it automatically.
 	if provider, ok := any(screen).(interface{ GetWorkspaceTitle() string }); ok {

@@ -265,7 +265,7 @@ func (s *assocEditorState) editAt(idx int, isCreate bool) {
 	// stacked as one visual row each), buttons (1); plus top/bottom
 	// padding (2) and label lines. We keep the layout compact by
 	// putting each command slot on its own row.
-	const height = 4 /*pad+borders*/ + 2 /*mask+desc*/ + 2 /*spacing*/ + assocKindCount + 2 /*buttons*/
+	const height = 4 /*pad+borders*/ + 2 /*mask+desc*/ + 2 /*spacing*/ + assocKindCount + 2 /*buttons*/ + 2 /*bottom padding*/
 
 	dlg := vtui.NewCenteredDialog(width, height, title)
 	dlg.ShowClose = true
@@ -283,7 +283,9 @@ func (s *assocEditorState) editAt(idx int, isCreate bool) {
 		if work.Enabled[k] {
 			chk.State = 1
 		}
-		ed := vtui.NewEdit(0, 0, width-4-14, work.Commands[k])
+		chkX1, _, chkX2, _ := chk.GetPosition()
+		chkWidth := chkX2 - chkX1 + 1
+		ed := vtui.NewEdit(0, 0, width-4-chkWidth-2, work.Commands[k])
 		slotChecks[k] = chk
 		slotEdits[k] = ed
 	}

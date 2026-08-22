@@ -71,3 +71,25 @@ func TestPatchInPlace_AppliesSameLengthEdits(t *testing.T) {
 		t.Errorf("file = %q, want %q", got, "HELLO world\n")
 	}
 }
+
+func TestPatchInPlace_TruncatesShorterReplacement(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "file.txt")
+	if err := os.WriteFile(path, []byte("aGVsbG8gd29ybGQ=\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	v := NewOSVFS(dir)
+	pieces := []PatchPiece{{Data: []byte("hello world"), Length: 11}}
+	if err := v.PatchInPlace(context.Background(), path, pieces); err != nil {
+		t.Fatalf("PatchInPlace: %v", err)
+	}
+
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "hello world" {
+		t.Errorf("file = %q, want %q", got, "hello world")
+	}
+}

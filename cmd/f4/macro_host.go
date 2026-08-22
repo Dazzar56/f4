@@ -134,6 +134,10 @@ func (f4MacroHost) Version() string {
 	return getShortVersionInfo()
 }
 
+func (f4MacroHost) WindowTitle() string {
+	return onUI(currentWindowTitle)
+}
+
 func (f4MacroHost) Message(title, text string) {
 	if vtui.FrameManager == nil {
 		return

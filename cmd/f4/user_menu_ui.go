@@ -1074,29 +1074,45 @@ func executeMenuCommandsWithResult(pf *PanelsFrame, commands []string) bool {
 	ctx := &SubstContext{Active: active, Passive: passive}
 
 	var lines []string
-	for _, raw := range commands {
-		t := strings.TrimSpace(raw)
-		if t == "" {
+	interpreter, scriptStart := userMenuInterpreter(commands)
+	for i, raw := range commands {
+		if scriptStart && i == 0 {
 			continue
 		}
-		// Skip REM-style comments (case-insensitive, with separator) and ::.
-		if isMenuComment(t) {
-			continue
-		}
-		// "@" silent prefix isn't supported yet (would need to suppress
-		// panel show/hide). Strip it so the command at least runs.
-		t = strings.TrimPrefix(t, "@")
 
-		res := SubstFileName(t, ctx)
+		if !scriptStart {
+			t := strings.TrimSpace(raw)
+			if t == "" {
+				continue
+			}
+			// Skip REM-style comments (case-insensitive, with separator) and ::.
+			if isMenuComment(t) {
+				continue
+			}
+			// "@" silent prefix isn't supported yet (would need to suppress
+			// panel show/hide). Strip it so the command at least runs.
+			raw = strings.TrimPrefix(t, "@")
+		}
+
+		res := SubstFileName(raw, ctx)
 		if res.Cancelled {
 			return false
 		}
-		if res.Command != "" {
+		if scriptStart || res.Command != "" {
 			lines = append(lines, res.Command)
 		}
 	}
 	if len(lines) == 0 {
 		return false
+	}
+
+	if scriptStart {
+		command, err := buildUserMenuScriptCommand(interpreter, strings.Join(lines, "\n"), userMenuCommandDialect(pf))
+		if err != nil {
+			vtui.ShowMessage(" User menu ", fmt.Sprintf("Cannot run script:\n%v", err), []string{"&Ok"})
+			return false
+		}
+		lines = []string{command}
 	}
 
 	// Join so multiple commands run sequentially in one shell.

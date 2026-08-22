@@ -95,5 +95,21 @@ func TestBuildVersionOverridesVCSMetadata(t *testing.T) {
 	}
 	if got := getLongVersionInfo(); !strings.HasPrefix(got, buildVersion) {
 		t.Fatalf("getLongVersionInfo() = %q, want it to start with %q", got, buildVersion)
+  }
+}
+
+func TestCurrentWindowTitleMatchesRenderedTitle(t *testing.T) {
+	origTemplate := AppConfig.ConsoleTitleTemplate
+	defer func() { AppConfig.ConsoleTitleTemplate = origTemplate }()
+
+	defer snapshotFrameManagerState(t)()
+	scr := vtui.NewScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+	vtui.FrameManager.Push(vtui.NewDesktop())
+
+	AppConfig.ConsoleTitleTemplate = "debug %State|%Platform"
+	if got, want := currentWindowTitle(), "debug Desktop|"+cachedPlat; got != want {
+		t.Fatalf("currentWindowTitle() = %q, want %q", got, want)
 	}
 }

@@ -792,6 +792,82 @@ func TestEditorView_WideCharBackspace(t *testing.T) {
 	}
 }
 
+func TestEditorView_GraphemeNavigationAndDeletion(t *testing.T) {
+	tests := []struct {
+		name string
+		text string
+		del  []string
+		back []string
+	}{
+		{
+			name: "Sanskrit",
+			text: "संस्कृतम्",
+			del:  []string{"स्कृतम्", "तम्", "म्", ""},
+			back: []string{"संस्कृतम", "संस्कृत", "संस्कृ", "संस्क", "संस्", "संस", "सं", "स", ""},
+		},
+		{
+			name: "Divehi",
+			text: "ދިވެހިބަސް",
+			del:  []string{"ވެހިބަސް", "ހިބަސް", "ބަސް", "ސް", ""},
+			back: []string{"ދިވެހިބަސ", "ދިވެހިބަ", "ދިވެހިބ", "ދިވެހި", "ދިވެހ", "ދިވެ", "ދިވ", "ދި", "ދ", ""},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name+" Delete", func(t *testing.T) {
+			pt := piecetable.New([]byte(test.text))
+			ev := NewEditorView(pt, nil, "")
+			defer ev.Close()
+			ev.SetPosition(0, 0, 79, 24)
+			ev.CursorPos = 0
+
+			for i, want := range test.del {
+				ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DELETE})
+				if got := pt.String(); got != want {
+					t.Fatalf("delete %d: got %q, want %q", i, got, want)
+				}
+				if ev.CursorPos != 0 {
+					t.Fatalf("delete %d moved cursor to byte offset %d", i, ev.CursorPos)
+				}
+			}
+		})
+
+		t.Run(test.name+" Backspace", func(t *testing.T) {
+			pt := piecetable.New([]byte(test.text))
+			ev := NewEditorView(pt, nil, "")
+			defer ev.Close()
+			ev.SetPosition(0, 0, 79, 24)
+			ev.CursorPos = len([]byte(test.text))
+
+			for i, want := range test.back {
+				ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_BACK})
+				if got := pt.String(); got != want {
+					t.Fatalf("backspace %d: got %q, want %q", i, got, want)
+				}
+				if ev.CursorPos != len([]byte(want)) {
+					t.Fatalf("backspace %d: cursor byte offset %d, want %d", i, ev.CursorPos, len([]byte(want)))
+				}
+			}
+		})
+
+		t.Run(test.name+" Movement", func(t *testing.T) {
+			pt := piecetable.New([]byte(test.text))
+			ev := NewEditorView(pt, nil, "")
+			defer ev.Close()
+			ev.SetPosition(0, 0, 79, 24)
+			ev.CursorPos = 0
+
+			clusters := editorGraphemes([]byte(test.text))
+			for i, cluster := range clusters {
+				ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT})
+				if ev.CursorPos != cluster.end {
+					t.Fatalf("right %d: cursor byte offset %d, want cluster end %d", i, ev.CursorPos, cluster.end)
+				}
+			}
+		})
+	}
+}
+
 func TestEditorView_BracketedPaste(t *testing.T) {
 	pt := piecetable.New([]byte("Start-"))
 	ev := NewEditorView(pt, nil, "")
@@ -4645,34 +4721,34 @@ func TestEditorView_ZeroAndDoubleWidthConsistency(t *testing.T) {
 
 	cells := ev.fillCells(nil, text, 0, 0, 0, false, 0, 0, nil, 0, false, -1, 0, 0, 0)
 
-	if colA != 1 {
-		t.Errorf("Expected column after 'a' to be 1, got %d", colA)
+	if colA != 0 {
+		t.Errorf("Expected an offset inside the a-plus-acute grapheme to map to column 0, got %d", colA)
 	}
-	if colCombining != 2 {
-		t.Errorf("Expected column after combining char to be 2, got %d", colCombining)
+	if colCombining != 1 {
+		t.Errorf("Expected column after the a-plus-acute grapheme to be 1, got %d", colCombining)
 	}
-	if colCJK != 4 {
-		t.Errorf("Expected column after CJK char to be 4, got %d", colCJK)
+	if colCJK != 3 {
+		t.Errorf("Expected column after CJK char to be 3, got %d", colCJK)
 	}
-	if colB != 5 {
-		t.Errorf("Expected column after 'b' to be 5, got %d", colB)
-	}
-
-	if len(cells) != 5 {
-		t.Errorf("Expected exactly 5 cells rendered (1 for 'a', 1 for combining, 2 for CJK, 1 for 'b'), got %d", len(cells))
+	if colB != 4 {
+		t.Errorf("Expected column after 'b' to be 4, got %d", colB)
 	}
 
-	if cells[0].Char != 'a' {
-		t.Errorf("Expected cells[0] to be 'a', got %c", rune(cells[0].Char))
+	if len(cells) != 4 {
+		t.Errorf("Expected exactly 4 cells rendered (1 for a-plus-acute, 2 for CJK, 1 for b), got %d", len(cells))
 	}
-	if cells[2].Char != '世' {
-		t.Errorf("Expected cells[2] to be '世', got %c", rune(cells[2].Char))
+
+	if vtui.CellString(cells[0].Char) != "a\u0301" {
+		t.Errorf("Expected cells[0] to carry the a-plus-acute grapheme, got %q", vtui.CellString(cells[0].Char))
 	}
-	if cells[3].Char != uint64(vtui.WideCharFiller) {
-		t.Errorf("Expected cells[3] to be WideCharFiller, got %d", cells[3].Char)
+	if vtui.CellString(cells[1].Char) != "世" {
+		t.Errorf("Expected cells[1] to be '世', got %q", vtui.CellString(cells[1].Char))
 	}
-	if cells[4].Char != 'b' {
-		t.Errorf("Expected cells[4] to be 'b', got %c", rune(cells[4].Char))
+	if cells[2].Char != uint64(vtui.WideCharFiller) {
+		t.Errorf("Expected cells[2] to be WideCharFiller, got %d", cells[2].Char)
+	}
+	if vtui.CellString(cells[3].Char) != "b" {
+		t.Errorf("Expected cells[3] to be 'b', got %q", vtui.CellString(cells[3].Char))
 	}
 }
 

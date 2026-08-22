@@ -158,6 +158,9 @@ var commandPaletteNewVMenuAudit = map[string]commandPaletteSurfaceAudit{
 	"cmd/f4/editor_view.go:(*EditorView).showConvertCodepageDialog#1": {
 		class: paletteAuditDynamicAction, rationale: "the registered convert-codepage action opens the runtime codepage list",
 	},
+	"cmd/f4/editor_base64.go:(*EditorView).showBase64Menu#1": {
+		class: paletteAuditDynamicAction, rationale: "the registered editor Base64 action opens its two fixed transformations",
+	},
 	"cmd/f4/file_associations_editor.go:(*assocEditorState).openList#1": {
 		class: paletteAuditModalLocal, rationale: "association rows are edited inside the file-association settings workflow",
 	},

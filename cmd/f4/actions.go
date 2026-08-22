@@ -34,14 +34,20 @@ func editorHeaderIsBinary(header []byte, cpID int) bool {
 }
 
 var (
-	LastFindFileMask = "*"
-	LastFindFileText = ""
-	LastLeftPath     = ""
-	LastRightPath    = ""
-	LastLeftCursor   = ""
-	LastRightCursor  = ""
-	LastActivePanel  = 1
-	LastWidePanel    = -1
+	LastFindFileMask          = "*"
+	LastFindFileText          = ""
+	LastFindFileCaseSensitive = false
+	LastFindFileWholeWords    = false
+	LastFindFileRegexp        = false
+	LastFindFileNotContaining = false
+	LastFindFileFolders       = false
+	LastFindFileSymlinks      = false
+	LastLeftPath              = ""
+	LastRightPath             = ""
+	LastLeftCursor            = ""
+	LastRightCursor           = ""
+	LastActivePanel           = 1
+	LastWidePanel             = -1
 
 	LastLeftViewMode  = 0
 	LastRightViewMode = 0
@@ -1712,14 +1718,16 @@ func actionViewFile(pf *PanelsFrame) {
 func actionCalcDirSize(pf *PanelsFrame, fsp *FileSystemPanel, idx int) {
 	entry := fsp.entries[idx]
 	name := entry.Name
+	// ".." is a panel navigation row, not a directory owned by this VFS.
+	// Trying to scan it from an archive crosses the virtual root and produces
+	// misleading path-escape errors (issue #510).
+	if name == ".." {
+		return
+	}
 	basePath := fsp.vfs.GetPath()
 
 	var targetPath string
-	if name == ".." {
-		targetPath = fsp.vfs.Dir(basePath)
-	} else {
-		targetPath = fsp.vfs.Join(basePath, name)
-	}
+	targetPath = fsp.vfs.Join(basePath, name)
 
 	opDlg := NewFileOpProgressDialog(" Calculating Size... ")
 	var taskCtx *vtui.TaskContext
@@ -2689,13 +2697,21 @@ func actionFindDuplicates(pf *PanelsFrame) {
 	})
 }
 
+func boolToCheckboxState(value bool) int {
+	if value {
+		return 1
+	}
+	return 0
+}
+
 func actionFindFile(pf *PanelsFrame) {
 	activePanel := pf.getActivePanel()
 	if activePanel == nil {
 		return
 	}
 
-	dlg := vtui.NewCenteredDialog(54, 13, Msg("FindFile.Title"))
+	const width, height = 78, 20
+	dlg := vtui.NewCenteredDialog(width, height, Msg("FindFile.Title"))
 	dlg.ShowClose = true
 
 	lblMask := vtui.NewLabel(0, 0, Msg("FindFile.MaskPrompt"), nil)
@@ -2707,6 +2723,19 @@ func actionFindFile(pf *PanelsFrame) {
 	editText := vtui.NewEdit(0, 0, 20, LastFindFileText)
 	lblText.FocusLink = editText
 
+	chkCase := vtui.NewCheckbox(0, 0, Msg("FindFile.CaseSensitive"), false)
+	chkCase.State = boolToCheckboxState(LastFindFileCaseSensitive)
+	chkWhole := vtui.NewCheckbox(0, 0, Msg("FindFile.WholeWords"), false)
+	chkWhole.State = boolToCheckboxState(LastFindFileWholeWords)
+	chkRegexp := vtui.NewCheckbox(0, 0, Msg("FindFile.Regexp"), false)
+	chkRegexp.State = boolToCheckboxState(LastFindFileRegexp)
+	chkNotContaining := vtui.NewCheckbox(0, 0, Msg("FindFile.NotContaining"), false)
+	chkNotContaining.State = boolToCheckboxState(LastFindFileNotContaining)
+	chkFolders := vtui.NewCheckbox(0, 0, Msg("FindFile.Folders"), false)
+	chkFolders.State = boolToCheckboxState(LastFindFileFolders)
+	chkSymlinks := vtui.NewCheckbox(0, 0, Msg("FindFile.Symlinks"), false)
+	chkSymlinks.State = boolToCheckboxState(LastFindFileSymlinks)
+
 	btnFind := vtui.NewButton(0, 0, Msg("FindFile.BtnFind"))
 	btnFind.IsDefault = true
 	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
@@ -2715,17 +2744,34 @@ func actionFindFile(pf *PanelsFrame) {
 	dlg.AddItem(editMask)
 	dlg.AddItem(lblText)
 	dlg.AddItem(editText)
+	dlg.AddItem(chkCase)
+	dlg.AddItem(chkWhole)
+	dlg.AddItem(chkRegexp)
+	dlg.AddItem(chkNotContaining)
+	dlg.AddItem(chkFolders)
+	dlg.AddItem(chkSymlinks)
 	dlg.AddItem(btnFind)
 	dlg.AddItem(btnCancel)
 
-	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 54-4, 13-4)
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, width-4, height-4)
 	vbox.Add(lblMask, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(editMask, vtui.Margins{Top: 1}, vtui.AlignFill)
 
 	vbox.Add(lblText, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(editText, vtui.Margins{Top: 1}, vtui.AlignFill)
 
-	hbox := vtui.NewHBoxLayout(0, 0, 54-4, 1)
+	optionsRow := func(left, right *vtui.Checkbox) *vtui.HBoxLayout {
+		row := vtui.NewHBoxLayout(0, 0, width-4, 1)
+		row.Spacing = 8
+		row.Add(left, vtui.Margins{}, vtui.AlignTop)
+		row.Add(right, vtui.Margins{}, vtui.AlignTop)
+		return row
+	}
+	vbox.Add(optionsRow(chkCase, chkWhole), vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Add(optionsRow(chkRegexp, chkNotContaining), vtui.Margins{}, vtui.AlignFill)
+	vbox.Add(optionsRow(chkFolders, chkSymlinks), vtui.Margins{}, vtui.AlignFill)
+
+	hbox := vtui.NewHBoxLayout(0, 0, width-4, 1)
 	hbox.HorizontalAlign = vtui.AlignCenter
 
 	hbox.Spacing = 2
@@ -2739,28 +2785,35 @@ func actionFindFile(pf *PanelsFrame) {
 	btnFind.OnClick = func() {
 		LastFindFileMask = editMask.GetText()
 		LastFindFileText = editText.GetText()
+		LastFindFileCaseSensitive = chkCase.State == 1
+		LastFindFileWholeWords = chkWhole.State == 1
+		LastFindFileRegexp = chkRegexp.State == 1
+		LastFindFileNotContaining = chkNotContaining.State == 1
+		LastFindFileFolders = chkFolders.State == 1
+		LastFindFileSymlinks = chkSymlinks.State == 1
 		SaveSession()
 		dlg.Close()
 		if LastFindFileMask != "" {
-			ExecuteFindFile(pf, activePanel.vfs, activePanel.vfs.GetPath(), LastFindFileMask, LastFindFileText)
+			ExecuteFindFile(pf, activePanel.vfs, activePanel.vfs.GetPath(), LastFindFileMask, LastFindFileText, FindFileOptions{
+				CaseSensitive: LastFindFileCaseSensitive,
+				WholeWords:    LastFindFileWholeWords,
+				Regex:         LastFindFileRegexp,
+				NotContaining: LastFindFileNotContaining,
+				FindFolders:   LastFindFileFolders,
+				FindSymlinks:  LastFindFileSymlinks,
+			})
 		}
 	}
 
 	vtui.FrameManager.Push(dlg)
 }
 func actionPanelSettings(pf *PanelsFrame) {
-	// Height sized so consecutive checkbox rows stack tightly without
-	// blank lines between them (see #298). Blank rows are kept only at
-	// transitions between widget kinds (checkbox↔combo↔radio↔button)
-	// so groups still read as groups. One extra row is reserved when the
-	// console-mode "unavailable" notice needs its own line — see the
-	// consoleModeUnavailable comment below.
-	consoleModeUnavailable := probeGUIBackend() != "" || !probeHostTTY()
-	dialogHeight := 43
-	if consoleModeUnavailable {
-		dialogHeight++
-	}
-	dlg := vtui.NewCenteredDialog(60, dialogHeight, Msg("PanelSettings.Title"))
+	// Keep the frequently used panel and navigation options in a compact
+	// dialog. The less frequently changed performance, console, and operation
+	// display options live in actionPanelAdditionalSettings below. Keeping both
+	// pages as ordinary dialogs means they remain usable on a 25-row terminal
+	// without introducing a second scrolling container for interactive items.
+	dlg := vtui.NewCenteredDialog(60, 22, Msg("PanelSettings.Title"))
 	dlg.ShowClose = true
 
 	chkHidden := vtui.NewCheckbox(0, 0, Msg("PanelSettings.ShowHidden"), false)
@@ -2834,8 +2887,90 @@ func actionPanelSettings(pf *PanelsFrame) {
 		chkStayFocused.SetDisabled(PanelNavigationMode(selected) != NavigationSearchFirst)
 	}
 
+	btnAdditional := vtui.NewButton(0, 0, Msg("PanelSettings.Additional"))
+	btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))
+	btnOk.IsDefault = true
+	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
+
+	dlg.AddItem(chkHidden)
+	dlg.AddItem(chkDirPrefix)
+	dlg.AddItem(chkHighlightMarks)
+	dlg.AddItem(chkSeparateExtensions)
+	dlg.AddItem(chkFileInfo)
+	dlg.AddItem(lblScrollbars)
+	dlg.AddItem(comboScrollbars)
+	dlg.AddItem(chkPaths)
+	dlg.AddItem(chkCmdAc)
+	dlg.AddItem(lblNavigation)
+	dlg.AddItem(navigation)
+	dlg.AddItem(chkStayFocused)
+	dlg.AddItem(btnAdditional)
+	dlg.AddItem(btnOk)
+	dlg.AddItem(btnCancel)
+
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 56, 18)
+	// First checkbox cluster — stack tight, no blank rows between.
+	vbox.Add(chkHidden, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(chkDirPrefix, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(chkHighlightMarks, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(chkSeparateExtensions, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(chkFileInfo, vtui.Margins{}, vtui.AlignLeft)
+	// Blank row before the scrollbar combo — transition to a different
+	// widget kind, worth the visual separator.
+	rowScrollbars := vtui.NewHBoxLayout(0, 0, 56, 1)
+	rowScrollbars.Add(lblScrollbars, vtui.Margins{Right: 1}, vtui.AlignLeft)
+	rowScrollbars.Add(comboScrollbars, vtui.Margins{}, vtui.AlignFill)
+	vbox.Add(rowScrollbars, vtui.Margins{Top: 1}, vtui.AlignFill)
+	// Second checkbox cluster.
+	vbox.Add(chkPaths, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	vbox.Add(chkCmdAc, vtui.Margins{}, vtui.AlignLeft)
+	// Navigation radio group — its own visual island.
+	vbox.Add(lblNavigation, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	vbox.Add(navigation, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(chkStayFocused, vtui.Margins{Left: 2}, vtui.AlignLeft)
+	hbox := vtui.NewHBoxLayout(0, 0, 56, 1)
+	hbox.HorizontalAlign = vtui.AlignCenter
+	hbox.Spacing = 1
+	hbox.Add(btnAdditional, vtui.Margins{}, vtui.AlignTop)
+	hbox.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
+	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
+
+	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Apply()
+
+	btnCancel.OnClick = func() { dlg.Close() }
+	btnOk.OnClick = func() {
+		AppConfig.ShowHiddenFiles = chkHidden.State == 1
+		AppConfig.ShowDirPrefix = chkDirPrefix.State == 1
+		AppConfig.ShowHighlightMarks = chkHighlightMarks.State == 1
+		AppConfig.SeparateFileExtensions = chkSeparateExtensions.State == 1
+		AppConfig.ShowPanelFileInfo = chkFileInfo.State == 1
+		AppConfig.PanelScrollbarMode = PanelScrollbarMode(comboScrollbars.Menu.SelectPos)
+		AppConfig.SavePanelPaths = chkPaths.State == 1
+		AppConfig.CommandLineAutoComplete = chkCmdAc.State == 1
+		pf.cmdLine.Edit.PathHintsEnabled = AppConfig.CommandLineAutoComplete
+		AppConfig.NavigationMode = PanelNavigationMode(navigation.Selected)
+		AppConfig.SearchCommandStayFocused = chkStayFocused.State == 1
+		pf.applyNavigationMode()
+		SaveConfig()
+		dlg.Close()
+		pf.ResizeConsole(pf.lastW, pf.lastH)
+		pf.RefreshAll()
+	}
+	btnAdditional.OnClick = func() { actionPanelAdditionalSettings(pf) }
+
+	vtui.FrameManager.Push(dlg)
+}
+
+func actionPanelAdditionalSettings(pf *PanelsFrame) {
+	// This page contains the options that are changed less often than the
+	// panel/navigation controls. Keep it below 25 rows even when the host
+	// console notice needs a separate line.
+	consoleModeUnavailable := probeGUIBackend() != "" || !probeHostTTY()
+	dlg := vtui.NewCenteredDialog(60, 23, Msg("PanelSettings.AdvancedTitle"))
+	dlg.ShowClose = true
+
 	chkSync := vtui.NewCheckbox(0, 0, Msg("PanelSettings.SyncPanelLoad"), false)
-	chkSync.State = 0
 	if AppConfig.SyncPanelLoad {
 		chkSync.State = 1
 	}
@@ -2843,38 +2978,29 @@ func actionPanelSettings(pf *PanelsFrame) {
 	lblApplyWorkers := vtui.NewLabel(0, 0, Msg("PanelSettings.ApplyWorkers"), editApplyWorkers)
 
 	chkAlwaysMenu := vtui.NewCheckbox(0, 0, Msg("PanelSettings.AlwaysShowMenuBar"), false)
-	chkAlwaysMenu.State = 0
 	if AppConfig.AlwaysShowMenuBar {
 		chkAlwaysMenu.State = 1
 	}
-
 	chkCPUGPU := vtui.NewCheckbox(0, 0, Msg("PanelSettings.InfoPanelCPUGPU"), false)
-	chkCPUGPU.State = 0
 	if AppConfig.InfoPanelCPUGPU {
 		chkCPUGPU.State = 1
 	}
-
 	chkEscToggle := vtui.NewCheckbox(0, 0, Msg("PanelSettings.EscTogglePanels"), false)
-	chkEscToggle.State = 0
 	if AppConfig.EscTogglePanels {
 		chkEscToggle.State = 1
 	}
-
 	chkTerminalCtrlN := vtui.NewCheckbox(0, 0, Msg("PanelSettings.TerminalCtrlNWorkspace"), false)
 	if AppConfig.TerminalCtrlNWorkspace {
 		chkTerminalCtrlN.State = 1
 	}
 
 	lblConsoleMode := vtui.NewText(0, 0, Msg("PanelSettings.ConsoleMode"), 0)
-	consoleModes := []string{
+	radioConsoleMode := vtui.NewRadioGroup(0, 0, 1, []string{
 		Msg("PanelSettings.ConsoleModeOwn"),
 		Msg("PanelSettings.ConsoleModeHost"),
-	}
-	radioConsoleMode := vtui.NewRadioGroup(0, 0, 1, consoleModes)
+	})
 	if strings.EqualFold(AppConfig.ConsoleMode, "host") {
 		radioConsoleMode.Selected = 1
-	} else {
-		radioConsoleMode.Selected = 0
 	}
 	for i := 0; i < radioConsoleMode.Selected; i++ {
 		radioConsoleMode.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
@@ -2884,18 +3010,11 @@ func actionPanelSettings(pf *PanelsFrame) {
 		chkOverlay.State = 1
 	}
 	chkOverlay.SetDisabled(radioConsoleMode.Selected != 1)
-
-	noteText := Msg("PanelSettings.ConsoleModeNote")
-	// "(unavailable in current environment) (applies to new sessions)" does
-	// not fit the dialog's 56-column content width on one line (auto-sized
-	// Text widgets never wrap), so give the unavailability notice its own
-	// row instead of concatenating it into noteText.
 	var lblConsoleUnavailable *vtui.Text
 	if consoleModeUnavailable {
 		lblConsoleUnavailable = vtui.NewText(0, 0, Msg("PanelSettings.ConsoleModeUnavailable"), 0)
 	}
-	lblConsoleNote := vtui.NewText(0, 0, noteText, 0)
-
+	lblConsoleNote := vtui.NewText(0, 0, Msg("PanelSettings.ConsoleModeNote"), 0)
 	radioConsoleMode.OnChange = func(selected int) {
 		chkOverlay.SetDisabled(selected != 1)
 	}
@@ -2925,72 +3044,28 @@ func actionPanelSettings(pf *PanelsFrame) {
 	btnOk.IsDefault = true
 	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
 
-	dlg.AddItem(chkHidden)
-	dlg.AddItem(chkDirPrefix)
-	dlg.AddItem(chkHighlightMarks)
-	dlg.AddItem(chkSeparateExtensions)
-	dlg.AddItem(chkFileInfo)
-	dlg.AddItem(lblScrollbars)
-	dlg.AddItem(comboScrollbars)
-	dlg.AddItem(chkPaths)
-	dlg.AddItem(chkCmdAc)
-	dlg.AddItem(lblNavigation)
-	dlg.AddItem(navigation)
-	dlg.AddItem(chkStayFocused)
-	dlg.AddItem(chkSync)
-	dlg.AddItem(lblApplyWorkers)
-	dlg.AddItem(editApplyWorkers)
-	dlg.AddItem(chkAlwaysMenu)
-	dlg.AddItem(chkCPUGPU)
-	dlg.AddItem(chkEscToggle)
-	dlg.AddItem(chkTerminalCtrlN)
-	dlg.AddItem(lblConsoleMode)
-	dlg.AddItem(radioConsoleMode)
-	dlg.AddItem(chkOverlay)
+	for _, item := range []vtui.UIElement{
+		chkSync, lblApplyWorkers, editApplyWorkers, chkAlwaysMenu, chkCPUGPU,
+		chkEscToggle, chkTerminalCtrlN, lblConsoleMode, radioConsoleMode,
+		chkOverlay, lblConsoleNote, lblMode, comboMode, lblPath, comboPath,
+		lblMacro, comboMacro, btnOk, btnCancel,
+	} {
+		dlg.AddItem(item)
+	}
 	if lblConsoleUnavailable != nil {
 		dlg.AddItem(lblConsoleUnavailable)
 	}
-	dlg.AddItem(lblConsoleNote)
-	dlg.AddItem(lblMode)
-	dlg.AddItem(comboMode)
-	dlg.AddItem(lblPath)
-	dlg.AddItem(comboPath)
-	dlg.AddItem(lblMacro)
-	dlg.AddItem(comboMacro)
-	dlg.AddItem(btnOk)
-	dlg.AddItem(btnCancel)
 
-	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 56, dialogHeight-4)
-	// First checkbox cluster — stack tight, no blank rows between.
-	vbox.Add(chkHidden, vtui.Margins{}, vtui.AlignLeft)
-	vbox.Add(chkDirPrefix, vtui.Margins{}, vtui.AlignLeft)
-	vbox.Add(chkHighlightMarks, vtui.Margins{}, vtui.AlignLeft)
-	vbox.Add(chkSeparateExtensions, vtui.Margins{}, vtui.AlignLeft)
-	vbox.Add(chkFileInfo, vtui.Margins{}, vtui.AlignLeft)
-	// Blank row before the scrollbar combo — transition to a different
-	// widget kind, worth the visual separator.
-	rowScrollbars := vtui.NewHBoxLayout(0, 0, 56, 1)
-	rowScrollbars.Add(lblScrollbars, vtui.Margins{Right: 1}, vtui.AlignLeft)
-	rowScrollbars.Add(comboScrollbars, vtui.Margins{}, vtui.AlignFill)
-	vbox.Add(rowScrollbars, vtui.Margins{Top: 1}, vtui.AlignFill)
-	// Second checkbox cluster.
-	vbox.Add(chkPaths, vtui.Margins{Top: 1}, vtui.AlignLeft)
-	vbox.Add(chkCmdAc, vtui.Margins{}, vtui.AlignLeft)
-	// Navigation radio group — its own visual island.
-	vbox.Add(lblNavigation, vtui.Margins{Top: 1}, vtui.AlignLeft)
-	vbox.Add(navigation, vtui.Margins{}, vtui.AlignLeft)
-	vbox.Add(chkStayFocused, vtui.Margins{Left: 2}, vtui.AlignLeft)
-	// Third checkbox cluster.
-	vbox.Add(chkSync, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 56, 19)
+	vbox.Add(chkSync, vtui.Margins{}, vtui.AlignLeft)
 	rowApplyWorkers := vtui.NewHBoxLayout(0, 0, 56, 1)
 	rowApplyWorkers.Add(lblApplyWorkers, vtui.Margins{Right: 1}, vtui.AlignLeft)
 	rowApplyWorkers.Add(editApplyWorkers, vtui.Margins{}, vtui.AlignFill)
 	vbox.Add(rowApplyWorkers, vtui.Margins{Top: 1}, vtui.AlignFill)
-	vbox.Add(chkAlwaysMenu, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	vbox.Add(chkAlwaysMenu, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkCPUGPU, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkEscToggle, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkTerminalCtrlN, vtui.Margins{}, vtui.AlignLeft)
-
 	vbox.Add(lblConsoleMode, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(radioConsoleMode, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkOverlay, vtui.Margins{Left: 2}, vtui.AlignLeft)
@@ -3002,24 +3077,20 @@ func actionPanelSettings(pf *PanelsFrame) {
 	rowMode := vtui.NewHBoxLayout(0, 0, 56, 1)
 	rowMode.Add(lblMode, vtui.Margins{Right: 1}, vtui.AlignLeft)
 	rowMode.Add(comboMode, vtui.Margins{}, vtui.AlignFill)
-	vbox.Add(rowMode, vtui.Margins{Top: 1}, vtui.AlignFill)
-
+	vbox.Add(rowMode, vtui.Margins{}, vtui.AlignFill)
 	rowPath := vtui.NewHBoxLayout(0, 0, 56, 1)
 	rowPath.Add(lblPath, vtui.Margins{Right: 1}, vtui.AlignLeft)
 	rowPath.Add(comboPath, vtui.Margins{}, vtui.AlignFill)
-	vbox.Add(rowPath, vtui.Margins{Top: 1}, vtui.AlignFill)
-
+	vbox.Add(rowPath, vtui.Margins{}, vtui.AlignFill)
 	rowMacro := vtui.NewHBoxLayout(0, 0, 56, 1)
 	rowMacro.Add(lblMacro, vtui.Margins{Right: 1}, vtui.AlignLeft)
 	rowMacro.Add(comboMacro, vtui.Margins{}, vtui.AlignFill)
-	vbox.Add(rowMacro, vtui.Margins{Top: 1}, vtui.AlignFill)
-
+	vbox.Add(rowMacro, vtui.Margins{}, vtui.AlignFill)
 	hbox := vtui.NewHBoxLayout(0, 0, 56, 1)
 	hbox.HorizontalAlign = vtui.AlignCenter
 	hbox.Spacing = 2
 	hbox.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
 	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
-
 	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
 	vbox.Apply()
 
@@ -3030,17 +3101,6 @@ func actionPanelSettings(pf *PanelsFrame) {
 			vtui.ShowMessageOn(dlg, Msg("ApplyCommand.InvalidWorkersTitle"), Msg("ApplyCommand.InvalidWorkers"), []string{Msg("vtui.Ok")})
 			return
 		}
-		AppConfig.ShowHiddenFiles = chkHidden.State == 1
-		AppConfig.ShowDirPrefix = chkDirPrefix.State == 1
-		AppConfig.ShowHighlightMarks = chkHighlightMarks.State == 1
-		AppConfig.SeparateFileExtensions = chkSeparateExtensions.State == 1
-		AppConfig.ShowPanelFileInfo = chkFileInfo.State == 1
-		AppConfig.PanelScrollbarMode = PanelScrollbarMode(comboScrollbars.Menu.SelectPos)
-		AppConfig.SavePanelPaths = chkPaths.State == 1
-		AppConfig.CommandLineAutoComplete = chkCmdAc.State == 1
-		pf.cmdLine.Edit.PathHintsEnabled = AppConfig.CommandLineAutoComplete
-		AppConfig.NavigationMode = PanelNavigationMode(navigation.Selected)
-		AppConfig.SearchCommandStayFocused = chkStayFocused.State == 1
 		AppConfig.SyncPanelLoad = chkSync.State == 1
 		AppConfig.ApplyCommandParallelism = applyWorkers
 		AppConfig.AlwaysShowMenuBar = chkAlwaysMenu.State == 1
@@ -3056,7 +3116,6 @@ func actionPanelSettings(pf *PanelsFrame) {
 		AppConfig.DefaultFileOpMode = comboMode.Menu.SelectPos
 		AppConfig.FileOpPathDisplay = comboPath.Menu.SelectPos
 		AppConfig.MacroRecordFormat = comboMacro.Menu.SelectPos
-		pf.applyNavigationMode()
 		SaveConfig()
 		dlg.Close()
 		pf.ResizeConsole(pf.lastW, pf.lastH)

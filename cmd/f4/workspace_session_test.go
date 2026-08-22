@@ -70,6 +70,26 @@ func TestCaptureWorkspaceSessionsUsesTabOrderAndActiveIndex(t *testing.T) {
 	}
 }
 
+func TestCaptureWorkspaceSessionPreservesPendingProviderPath(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	t.Cleanup(func() { vtui.FrameManager.Init(vtui.NewSilentScreenBuf()) })
+
+	pf := &PanelsFrame{
+		panels: [2]Panel{
+			&FileSystemPanel{vfs: vfs.NewOSVFS(t.TempDir())},
+			&FileSystemPanel{vfs: vfs.NewOSVFS(t.TempDir())},
+		},
+	}
+	left := pf.panels[0].(*FileSystemPanel)
+	left.providerOpenTarget = "cloud://account/photos"
+	left.providerOpenTask = &vtui.TaskContext{}
+
+	state := captureWorkspaceSession(pf)
+	if state.Left.Path != left.providerOpenTarget {
+		t.Fatalf("saved pending path = %q, want %q", state.Left.Path, left.providerOpenTarget)
+	}
+}
+
 func TestApplyWorkspaceSessionInitializesFreshPanelsFrame(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	t.Cleanup(func() { vtui.FrameManager.Init(vtui.NewSilentScreenBuf()) })
