@@ -88,7 +88,7 @@ func (pf *PanelsFrame) OpenTextEditor(request vfs.TextEditorRequest) error {
 
 	// Generated plugin reports do not need a remote .editorconfig lookup. The
 	// create-new buffer must remain dirty until it is actually saved.
-	editor := newEditorView(piecetable.New(content), filesystem, path, false, true)
+	editor := newEditorView(piecetable.New(content), filesystem, path, false)
 	editor.DisplayTitle = request.DisplayTitle
 	editor.modified = request.Modified
 	editor.unsavedBaseline = request.Modified
