@@ -32,6 +32,7 @@ type PluginCommandDescriptor struct {
 type PluginInitResponse struct {
 	Drives   []string
 	Commands []PluginCommandDescriptor
+	Panels   []PluginPanelDescriptor
 }
 
 // UnmarshalMsgpack keeps the command extension backwards compatible with
@@ -45,6 +46,7 @@ func (r *PluginInitResponse) UnmarshalMsgpack(data []byte) error {
 	if err := msgpack.Unmarshal(data, &legacy); err == nil {
 		r.Drives = append(r.Drives[:0], legacy...)
 		r.Commands = nil
+		r.Panels = nil
 		return nil
 	}
 	type responseAlias PluginInitResponse

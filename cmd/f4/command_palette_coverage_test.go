@@ -101,6 +101,9 @@ var commandPaletteProcessKeyAudit = map[string]commandPaletteSurfaceAudit{
 	"cmd/f4/panels_frame.go:(*PanelsFrame).ProcessKey": {
 		class: paletteAuditPanelProvider, rationale: "PanelsFrame combines registered actions with audited transient panel-context entries",
 	},
+	"cmd/f4/panel_plugins.go:(*pluginPanelInstance).ProcessKey": {
+		class: paletteAuditPanelProvider, rationale: "native panel plugins receive raw input inside their registered panel surface; their semantic commands are plugin-owned",
+	},
 	"cmd/f4/quick_view_panel.go:(*QuickViewPanel).ProcessKey": {
 		class: paletteAuditPanelProvider, rationale: "the focused Quick View toggle is supplied by the panel-context palette provider",
 	},
@@ -133,6 +136,9 @@ var commandPaletteProcessKeyAudit = map[string]commandPaletteSurfaceAudit{
 	},
 	"plugins/visren/dialog.go:(*tokenButton).ProcessKey": {
 		class: paletteAuditPluginLocal, rationale: "the token button is an embedded VisRen dialog control",
+	},
+	"cmd/f4/rpc_panel.go:(*rpcVUIPanel).ProcessKey": {
+		class: paletteAuditTransportHook, rationale: "RPC panel input is forwarded to the remote plugin, whose .vui document owns its semantic commands",
 	},
 }
 

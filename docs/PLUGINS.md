@@ -60,6 +60,43 @@ Because F4-RPC is a full-duplex protocol, plugins can call back into `f4` at any
 *   `Host.AskOverwrite` / `Host.AskError`: Invokes f4's native, rich collision/error dialogs (Retry, Skip, Overwrite All, etc.) during mutations.
 *   `Host.RegisterGlobalHotkey`: Registers a system-wide hotkey that triggers the plugin's `Plugin.OnHotkey` endpoint regardless of which panel is active.
 
+### E. Panel-only plugins
+
+A plugin does not have to mount a VFS to provide a full-screen panel surface.
+Native Go plugins can opt into the optional `vfs.PanelContributionHost` and
+register a `vfs.PanelProvider`. f4 publishes one searchable `Open <title>`
+command for each provider. Opening it replaces the active file-panel surface
+for that slot; the underlying `FileSystemPanel` remains alive as the logical
+source for normal file actions.
+
+The host calls the panel controller with the ordinary `vtui` drawing and input
+interfaces. Before each draw and input event it supplies a `PanelContext` with
+the panel side, screen bounds, active side, current path, cursor name, marked
+names, and the corresponding snapshot from the other file panel. `Esc` closes
+the panel when the controller does not consume it. This keeps panel plugins
+portable and prevents them from reaching into f4's private panel state.
+
+RPC plugins declare panel descriptors in the structured `Plugin.Init` result:
+
+```text
+Panels: [{ ID, Title, Description }]
+```
+
+The host then uses these calls lazily:
+
+* `Plugin.OpenPanel` receives `{ ID, Context }` and returns a UTF-8 JSON `.vui`
+  document in `Document`.
+* `Plugin.PanelEvent` receives `{ ID, Kind, Event, Context }`, where `Kind` is
+  `key` or `mouse`, and returns `{ Handled, Document, Close }`. `Document` is
+  optional; when present it replaces the current widget tree.
+* `Plugin.ClosePanel` receives `{ ID }` when the panel is dismissed.
+
+The `.vui` document is rendered by the same `vtui` controls and wire format
+used by the bindings in the `vtui` repository. The plugin owns semantic
+behavior and may return a new document after any event; f4 owns placement,
+focus routing, and panel context delivery. Existing VFS-only plugins continue
+to use the legacy response shape unchanged.
+
 ## 3. Design Philosophy & Comparisons
 
 If you are coming from the classic Far Manager ecosystem or modern text editors, here is how F4-RPC compares.
