@@ -866,6 +866,19 @@ func TestEditorView_GraphemeNavigationAndDeletion(t *testing.T) {
 	}
 }
 
+func TestEditorMouseOffsetSnapsToClusterBoundary(t *testing.T) {
+	for _, text := range []string{"संस्कृतम्", "ދިވެހިބަސް"} {
+		clusters := editorGraphemes([]byte(text))
+		for _, cluster := range clusters {
+			for pos := cluster.start + 1; pos < cluster.end; pos++ {
+				if got := snapEditorOffsetToClusterBoundary([]byte(text), pos); got != cluster.start {
+					t.Fatalf("%q byte %d snapped to %d, want cluster start %d", text, pos, got, cluster.start)
+				}
+			}
+		}
+	}
+}
+
 func TestEditorView_BracketedPaste(t *testing.T) {
 	pt := piecetable.New([]byte("Start-"))
 	ev := NewEditorView(pt, nil, "")

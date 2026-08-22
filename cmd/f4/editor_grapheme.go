@@ -28,6 +28,43 @@ func editorGraphemes(data []byte) []editorGrapheme {
 	return clusters
 }
 
+// snapEditorOffsetToClusterBoundary prevents a mouse hit inside a multi-code
+// point glyph from becoming a selection anchor in the middle of that glyph.
+// The visual caret map normally returns boundaries already, but its fallback
+// for an incomplete/capped fragment can expose a code-point boundary. Keep the
+// editor's byte-addressable model while making selection starts atomic.
+func snapEditorOffsetToClusterBoundary(data []byte, pos int) int {
+	if pos <= 0 {
+		return 0
+	}
+	if pos >= len(data) {
+		return len(data)
+	}
+	for _, cluster := range textlayout.VisualClusters(string(data)) {
+		if pos > cluster.Start && pos < cluster.End {
+			return cluster.Start
+		}
+	}
+	return pos
+}
+
+func (ev *EditorView) snapMouseOffsetToClusterBoundary(offset int) int {
+	if ev == nil || ev.pt == nil || ev.li == nil || offset < 0 {
+		return offset
+	}
+	line := ev.li.GetLineAtOffset(offset)
+	lineStart := ev.li.GetLineOffset(line)
+	lineLen := ev.getLineLength(line)
+	if offset < lineStart || offset > lineStart+lineLen {
+		return offset
+	}
+	data, err := ev.pt.GetRange(lineStart, lineLen)
+	if err != nil {
+		return offset
+	}
+	return lineStart + snapEditorOffsetToClusterBoundary(data, offset-lineStart)
+}
+
 // lineUsesVisualBidi limits the full visual engine to lines that actually
 // contain RTL text. zoin-bot keeps the common long LTR path bounded by the
 // existing small-window grapheme helpers.

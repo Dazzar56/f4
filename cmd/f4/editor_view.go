@@ -2895,7 +2895,7 @@ func (ev *EditorView) ProcessMouse(e *vtinput.InputEvent) bool {
 		if mx >= ev.X1 && mx <= ev.X2 && my >= ev.Y1+1 && my <= ev.Y2 {
 			visualCol := mx - ev.X1 + ev.ScrollLeft
 			visualRow := my - (ev.Y1 + 1) + ev.ScrollTopRow
-			offset := ev.engine.VisualToLogical(visualRow, visualCol)
+			offset := ev.snapMouseOffsetToClusterBoundary(ev.engine.VisualToLogical(visualRow, visualCol))
 
 			if e.MouseEventFlags&vtinput.DoubleClick != 0 {
 				ev.CursorLine = ev.li.GetLineAtOffset(offset)
@@ -2928,7 +2928,7 @@ func (ev *EditorView) ProcessMouse(e *vtinput.InputEvent) bool {
 		if mx >= ev.X1 && mx <= ev.X2 && my >= ev.Y1+1 && my <= ev.Y2 {
 			visualCol := mx - ev.X1 + ev.ScrollLeft
 			visualRow := my - (ev.Y1 + 1) + ev.ScrollTopRow
-			offset := ev.engine.VisualToLogical(visualRow, visualCol)
+			offset := ev.snapMouseOffsetToClusterBoundary(ev.engine.VisualToLogical(visualRow, visualCol))
 
 			if !ev.rectSelActive || e.MouseEventFlags&vtinput.MouseMoved == 0 {
 				ev.selActive = false
