@@ -27,6 +27,10 @@ import (
 
 var TestSkipDelay time.Duration
 
+// archiveVFSIdleTTL is kept as a variable so tests can exercise the cleanup
+// transition without waiting for the production grace period.
+var archiveVFSIdleTTL = 2 * time.Second
+
 type dummyDirInfo struct {
 	name string
 }
@@ -1303,8 +1307,8 @@ func (v *ArchiveVFS) startCleanupTimer() {
 		_ = v.fsys.Close()
 		v.fsys = nil
 	}
-	// 2-second grace period of complete inactivity
-	v.cleanupTimer = time.AfterFunc(2*time.Second, func() {
+	// Two-second grace period of complete inactivity.
+	v.cleanupTimer = time.AfterFunc(archiveVFSIdleTTL, func() {
 		v.mu.Lock()
 		defer v.mu.Unlock()
 		if v.activeCount == 0 && v.isClosed {
