@@ -635,7 +635,6 @@ func saveConfigWithWindowSize(windowSize bool) {
 	ApplyProxySettings()
 
 	path := getUserConfigIniPath()
-	os.MkdirAll(filepath.Dir(path), 0755)
 	guiCols, guiRows := AppConfig.GuiCols, AppConfig.GuiRows
 	if !windowSize {
 		guiCols, guiRows = persistedGuiWindowSize()
@@ -802,7 +801,7 @@ func saveConfigWithWindowSize(windowSize bool) {
 		sb.WriteString(fmt.Sprintf("%s=%s\n", k, layoutKeys[k]))
 	}
 
-	err := os.WriteFile(path, []byte(sb.String()), 0644)
+	err := writeFileAtomically(path, []byte(sb.String()), 0644)
 	if err != nil {
 		vtui.DebugLog("CONFIG: Failed to save application settings: %v", err)
 		return

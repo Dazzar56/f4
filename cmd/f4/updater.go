@@ -476,6 +476,9 @@ func writeFileSafe(targetPath string, r io.Reader, mode os.FileMode) error {
 
 func sanitizeExtractPath(name, destDir string) (string, error) {
 	// Archive paths are always slash-separated
+	if strings.ContainsRune(name, '\\') || strings.ContainsRune(name, '\x00') {
+		return "", fmt.Errorf("invalid path in archive: %s", name)
+	}
 	cleanName := path.Clean(name)
 	if path.IsAbs(cleanName) || strings.HasPrefix(cleanName, "../") || cleanName == ".." {
 		return "", fmt.Errorf("invalid path in archive: %s", name)
