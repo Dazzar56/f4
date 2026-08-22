@@ -1922,7 +1922,6 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 50-4, 11-4)
 	vbox.Add(promptLbl, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(editDest, vtui.Margins{Top: 1}, vtui.AlignFill)
-	vbox.Add(comboMode, vtui.Margins{Top: 1}, vtui.AlignCenter)
 
 	hbox := vtui.NewHBoxLayout(0, 0, 50-4, 1)
 	hbox.HorizontalAlign = vtui.AlignCenter
@@ -1930,7 +1929,10 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 	hbox.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
 	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
 
+	// Keep the action row above the mode selector. ComboBox.Open() places its
+	// popup below the field, so the popup cannot cover these buttons.
 	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Add(comboMode, vtui.Margins{Top: 1}, vtui.AlignCenter)
 	vbox.Apply()
 	dlg.SetFocusedItem(editDest)
 
@@ -2098,7 +2100,6 @@ func actionCreateLink(pf *PanelsFrame) {
 	rowType := vtui.NewHBoxLayout(0, 0, 52-4, 1)
 	rowType.Add(lblType, vtui.Margins{Right: 1}, vtui.AlignLeft)
 	rowType.Add(comboType, vtui.Margins{}, vtui.AlignFill)
-	vbox.Add(rowType, vtui.Margins{Top: 1}, vtui.AlignFill)
 
 	hbox := vtui.NewHBoxLayout(0, 0, 52-4, 1)
 	hbox.HorizontalAlign = vtui.AlignCenter
@@ -2106,7 +2107,10 @@ func actionCreateLink(pf *PanelsFrame) {
 	hbox.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
 	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
 
+	// Keep the action row above the link-type selector. ComboBox.Open() places
+	// its popup below the field, so the popup cannot cover these buttons.
 	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Add(rowType, vtui.Margins{Top: 1}, vtui.AlignFill)
 	vbox.Apply()
 	dlg.SetFocusedItem(editDest)
 
@@ -2360,6 +2364,8 @@ func actionEditorSettings(pf *PanelsFrame) {
 	hbox.Spacing = 2
 	hbox.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
 	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
+	// Keep the action row above the operation-mode selector. ComboBox.Open()
+	// places its popup below the field, so it cannot cover these buttons.
 	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
 
 	vbox.Apply()
@@ -2478,7 +2484,6 @@ func actionDeleteWithDisposition(pf *PanelsFrame, disposition vfs.DeleteDisposit
 	comboMode.Menu.SetSelectPos(defMode)
 	comboMode.Edit.SetText(modes[defMode])
 	dlg.AddItem(comboMode)
-	vbox.Add(comboMode, vtui.Margins{Top: 1}, vtui.AlignCenter)
 
 	btnDel := vtui.NewButton(0, 0, Msg(buttonKey))
 	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
@@ -2497,7 +2502,11 @@ func actionDeleteWithDisposition(pf *PanelsFrame, disposition vfs.DeleteDisposit
 	hbox.Spacing = 2
 	hbox.Add(btnDel, vtui.Margins{}, vtui.AlignTop)
 	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
+	// Keep the destructive action row above the operation-mode selector.
+	// ComboBox.Open() places its popup below the field, so it cannot cover the
+	// confirmation buttons.
 	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Add(comboMode, vtui.Margins{Top: 1}, vtui.AlignCenter)
 	vbox.Apply()
 
 	btnCancel.OnClick = func() { dlg.Close() }
@@ -2553,7 +2562,6 @@ func actionMkDir(pf *PanelsFrame) {
 	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 40-4, 11-4)
 	vbox.Add(lblPrompt, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(editName, vtui.Margins{Top: 1}, vtui.AlignFill)
-	vbox.Add(comboMode, vtui.Margins{Top: 1}, vtui.AlignCenter)
 
 	hbox := vtui.NewHBoxLayout(0, 0, 40-4, 1)
 	hbox.HorizontalAlign = vtui.AlignCenter
@@ -2561,6 +2569,7 @@ func actionMkDir(pf *PanelsFrame) {
 	hbox.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
 	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
 	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Add(comboMode, vtui.Margins{Top: 1}, vtui.AlignCenter)
 	vbox.Apply()
 
 	dlg.SetFocusedItem(editName)
