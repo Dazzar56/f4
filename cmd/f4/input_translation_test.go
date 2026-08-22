@@ -26,6 +26,7 @@ func TestTranslateInput(t *testing.T) {
 		{"Ctrl+Alt+C no char (gogpu)", &vtinput.InputEvent{VirtualKeyCode: vtinput.VK_C, ControlKeyState: vtinput.LeftCtrlPressed | vtinput.LeftAltPressed, KeyDown: true}, 0, "\x1b\x03"},
 		{"Ctrl+2 no char (gogpu)", &vtinput.InputEvent{VirtualKeyCode: vtinput.VK_2, ControlKeyState: vtinput.LeftCtrlPressed, KeyDown: true}, 0, string(rune(0))},
 		{"Ctrl+Pause no char (gogpu)", &vtinput.InputEvent{VirtualKeyCode: vtinput.VK_PAUSE, ControlKeyState: vtinput.LeftCtrlPressed, KeyDown: true}, 0, string(rune(3))},
+		{"Ctrl+Break no char (Win32/gogpu)", &vtinput.InputEvent{VirtualKeyCode: vtinput.VK_CANCEL, ControlKeyState: vtinput.LeftCtrlPressed, KeyDown: true}, 0, string(rune(3))},
 		{"Pause no ctrl", &vtinput.InputEvent{VirtualKeyCode: vtinput.VK_PAUSE, KeyDown: true}, 0, ""},
 		{"Alt+Enter", &vtinput.InputEvent{VirtualKeyCode: vtinput.VK_RETURN, ControlKeyState: vtinput.LeftAltPressed, KeyDown: true}, 0, "\x1b\r"},
 		{"Standalone Modifier", &vtinput.InputEvent{VirtualKeyCode: vtinput.VK_SHIFT, KeyDown: true}, 0, ""},
