@@ -333,15 +333,15 @@ func validateDeveloperImagePath(imagePath string, version *semver.Version) error
 	}
 	if version.Major() >= 17 {
 		if !info.IsDir() {
-			return fmt.Errorf("Developer Disk Image path %q must be a Restore directory", imagePath)
+			return fmt.Errorf("developer disk image path %q must be a Restore directory", imagePath)
 		}
 		if _, err := os.Stat(filepath.Join(imagePath, "BuildManifest.plist")); err != nil {
-			return fmt.Errorf("Developer Disk Image path %q has no BuildManifest.plist: %w", imagePath, err)
+			return fmt.Errorf("developer disk image path %q has no BuildManifest.plist: %w", imagePath, err)
 		}
 		return nil
 	}
 	if info.IsDir() || !strings.EqualFold(filepath.Ext(imagePath), ".dmg") {
-		return fmt.Errorf("Developer Disk Image path %q must be a .dmg file", imagePath)
+		return fmt.Errorf("developer disk image path %q must be a .dmg file", imagePath)
 	}
 	return nil
 }

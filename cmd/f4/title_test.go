@@ -26,7 +26,7 @@ func TestUpdateWindowTitle(t *testing.T) {
 
 	// Keep the test's FrameManager isolated so Init's task pump cannot race
 	// with teardown of the shared test-global manager.
-	defer swapFrameManager(t)()
+	t.Cleanup(swapFrameManager(t))
 
 	// Инициализируем чистый стек окон во фреймворке
 	vtui.FrameManager.Init(scr)
@@ -103,7 +103,7 @@ func TestCurrentWindowTitleMatchesRenderedTitle(t *testing.T) {
 	origTemplate := AppConfig.ConsoleTitleTemplate
 	defer func() { AppConfig.ConsoleTitleTemplate = origTemplate }()
 
-	defer swapFrameManager(t)()
+	t.Cleanup(swapFrameManager(t))
 	scr := vtui.NewScreenBuf()
 	scr.AllocBuf(80, 25)
 	vtui.FrameManager.Init(scr)

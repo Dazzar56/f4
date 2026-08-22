@@ -468,6 +468,7 @@ func (p *processEnvironmentPTY) snapshotWrites() [][]byte {
 }
 
 func TestProcessEnvironmentBroadcastReachesEveryLocalWorkspace(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	firstPTY := &processEnvironmentPTY{}
 	secondPTY := &processEnvironmentPTY{}

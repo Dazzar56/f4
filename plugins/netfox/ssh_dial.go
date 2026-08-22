@@ -2,15 +2,16 @@ package netfox
 
 import (
 	"context"
-
-	"github.com/unxed/f4/internal/netproxy"
-	"github.com/unxed/vtui"
-	"golang.org/x/crypto/ssh"
-	"golang.org/x/crypto/ssh/agent"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/unxed/f4/internal/netproxy"
+	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/agent"
+	"golang.org/x/crypto/ssh/knownhosts"
 )
 
 // sshTimeout turns the timeout a site configuration carries into a duration,
@@ -27,14 +28,18 @@ func sshTimeout(seconds int) time.Duration {
 // the password. It is shared by the SFTP and the FISH+ backends so that a
 // site behaves identically whichever of them opens it.
 func DialSSH(host, port, user, pass string, timeout int, px netproxy.Settings) (*ssh.Client, error) {
+	hostKeyCallback, err := sshHostKeyCallback()
+	if err != nil {
+		return nil, err
+	}
+
 	auths := []ssh.AuthMethod{}
-	var agentClient agent.Agent
 	var agentConn net.Conn
 
 	if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
 		if conn, err := net.Dial("unix", sock); err == nil {
 			agentConn = conn
-			agentClient = agent.NewClient(conn)
+			agentClient := agent.NewClient(conn)
 			auths = append(auths, ssh.PublicKeysCallback(agentClient.Signers))
 		}
 	}
@@ -60,7 +65,7 @@ func DialSSH(host, port, user, pass string, timeout int, px netproxy.Settings) (
 	config := &ssh.ClientConfig{
 		User:            user,
 		Auth:            auths,
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		HostKeyCallback: hostKeyCallback,
 		Timeout:         sshTimeout(timeout),
 	}
 	// ssh.Dial would open the socket itself; going through netproxy instead
@@ -72,15 +77,52 @@ func DialSSH(host, port, user, pass string, timeout int, px netproxy.Settings) (
 		}
 		return nil, err
 	}
-	if agentClient != nil {
-		if err := agent.ForwardToAgent(client, agentClient); err != nil {
-			vtui.DebugLog("SSH: Failed to forward agent: %v", err)
-			agentConn.Close()
-		} else {
-			vtui.DebugLog("SSH: Agent forwarding enabled")
-		}
+	if agentConn != nil {
+		// The agent is used only for local authentication. Keeping its socket
+		// open after the SSH handshake would make forwarding tempting and would
+		// hold a needless connection to the user's agent for the whole session.
+		_ = agentConn.Close()
 	}
 	return client, nil
+}
+
+func sshHostKeyCallback() (ssh.HostKeyCallback, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, fmt.Errorf("SSH host-key verification: determine home directory: %w", err)
+	}
+	return sshHostKeyCallbackForHome(home)
+}
+
+func sshHostKeyCallbackForHome(home string) (ssh.HostKeyCallback, error) {
+	if home == "" {
+		return nil, fmt.Errorf("SSH host-key verification: home directory is empty")
+	}
+
+	knownHosts := make([]string, 0, 2)
+	for _, name := range []string{"known_hosts", "known_hosts2"} {
+		path := filepath.Join(home, ".ssh", name)
+		info, err := os.Stat(path)
+		switch {
+		case err == nil && !info.IsDir():
+			knownHosts = append(knownHosts, path)
+		case err == nil:
+			return nil, fmt.Errorf("SSH host-key verification: %s is a directory", path)
+		case os.IsNotExist(err):
+			continue
+		default:
+			return nil, fmt.Errorf("SSH host-key verification: inspect %s: %w", path, err)
+		}
+	}
+	if len(knownHosts) == 0 {
+		return nil, fmt.Errorf("SSH host-key verification: no ~/.ssh/known_hosts file found")
+	}
+
+	callback, err := knownhosts.New(knownHosts...)
+	if err != nil {
+		return nil, fmt.Errorf("SSH host-key verification: read known_hosts: %w", err)
+	}
+	return callback, nil
 }
 
 // dialSSHVia opens the transport through px and speaks SSH over it.

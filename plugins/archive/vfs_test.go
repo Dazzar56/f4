@@ -759,8 +759,8 @@ func TestArchiveVFSCopyBulk_ConcurrentQueue(t *testing.T) {
 
 	go func() {
 		defer wg.Done()
-		// Inject AutoQueue into the context so the VFS doesn't block waiting for UI interaction
-		ctx := context.WithValue(context.Background(), "AutoQueue", true)
+		// Auto-queue so the VFS doesn't block waiting for UI interaction.
+		ctx := WithAutoQueue(context.Background())
 		err := copier.CopyBulk(ctx, []string{"file1.txt"}, dstVFS, dstDir, &dummyReporter{})
 		if err != nil {
 			t.Errorf("expected no error, got %v", err)

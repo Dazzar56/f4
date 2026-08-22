@@ -37,12 +37,14 @@ type timeoutConn struct {
 }
 
 func (c *timeoutConn) Read(b []byte) (int, error) {
-	c.Conn.SetReadDeadline(time.Now().Add(c.timeout))
+	// Only fails on a connection already closed, which the Read below
+	// reports properly; swallowing it here would hide nothing.
+	_ = c.SetReadDeadline(time.Now().Add(c.timeout))
 	return c.Conn.Read(b)
 }
 
 func (c *timeoutConn) Write(b []byte) (int, error) {
-	c.Conn.SetWriteDeadline(time.Now().Add(c.timeout))
+	_ = c.SetWriteDeadline(time.Now().Add(c.timeout))
 	return c.Conn.Write(b)
 }
 

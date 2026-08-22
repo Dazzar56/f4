@@ -113,6 +113,7 @@ func TestSemantic_EditorViewActions(t *testing.T) {
 	vtui.SetDefaultPalette()
 	pt := piecetable.New([]byte("hello"))
 	ev := NewEditorView(pt, nil, "test.txt")
+	defer ev.Close()
 	ev.modified = false
 	ev.CursorPos = ev.getLineLength(0)
 

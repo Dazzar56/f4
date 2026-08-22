@@ -417,10 +417,10 @@ func TestFileAssociation_DeleteConfirmIsWarning(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected *userMenuFrame on top after ShowFileAssociations, got %T", top)
 	}
-	umf.VMenu.SetSelectPos(0)
+	umf.SetSelectPos(0)
 
 	// Simulate the Del keypress the editor listens for.
-	handled := umf.VMenu.ProcessKey(&vtinput.InputEvent{
+	handled := umf.ProcessKey(&vtinput.InputEvent{
 		Type:           vtinput.KeyEventType,
 		KeyDown:        true,
 		VirtualKeyCode: vtinput.VK_DELETE,

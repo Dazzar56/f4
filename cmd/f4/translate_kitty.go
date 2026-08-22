@@ -23,12 +23,12 @@ func TranslateKeyToKitty(e *vtinput.InputEvent, flags int, appCursorKeys bool) s
 	enhanced := (e.ControlKeyState & vtinput.EnhancedKey) != 0
 
 	disambiguate := (ctrl && !alt && !shift) || (!ctrl && alt && !shift) || (ctrl && alt && !shift) || (!ctrl && alt && shift)
-	isTextKey := e.Char > 0x1F && e.Char != 0x7F && !(ctrl || alt)
+	isTextKey := e.Char > 0x1F && e.Char != 0x7F && !ctrl && !alt
 
 	if (flags&2) != 0 && (flags&8) == 0 && !e.KeyDown {
-		if (e.VirtualKeyCode == vtinput.VK_RETURN && !(ctrl || alt || shift)) ||
-			(e.VirtualKeyCode == vtinput.VK_TAB && !(ctrl || alt || shift)) ||
-			(e.VirtualKeyCode == vtinput.VK_BACK && !(ctrl || alt || shift)) {
+		if (e.VirtualKeyCode == vtinput.VK_RETURN && !ctrl && !alt && !shift) ||
+			(e.VirtualKeyCode == vtinput.VK_TAB && !ctrl && !alt && !shift) ||
+			(e.VirtualKeyCode == vtinput.VK_BACK && !ctrl && !alt && !shift) {
 			return ""
 		}
 	}
@@ -72,9 +72,10 @@ func TranslateKeyToKitty(e *vtinput.InputEvent, flags int, appCursorKeys bool) s
 	if (flags&1) != 0 && !kitty {
 		if legacy == "" && !isTextKey {
 			kitty = true
-		} else if !isTextKey && !((e.VirtualKeyCode == vtinput.VK_RETURN && !(ctrl || alt || shift)) ||
-			(e.VirtualKeyCode == vtinput.VK_TAB && !(ctrl || alt || shift)) ||
-			(e.VirtualKeyCode == vtinput.VK_BACK && !(ctrl || alt || shift))) {
+		} else if !isTextKey &&
+			(e.VirtualKeyCode != vtinput.VK_RETURN || ctrl || alt || shift) &&
+			(e.VirtualKeyCode != vtinput.VK_TAB || ctrl || alt || shift) &&
+			(e.VirtualKeyCode != vtinput.VK_BACK || ctrl || alt || shift) {
 			kitty = true
 		}
 
@@ -128,7 +129,7 @@ func TranslateKeyToKitty(e *vtinput.InputEvent, flags int, appCursorKeys bool) s
 	caps := (e.ControlKeyState & vtinput.CapsLockOn) != 0
 	isSpecial := ctrl && (e.Char < 32)
 
-	if shift && !(caps && (isLetter || isSpecial)) && e.Char != ' ' {
+	if shift && (!caps || (!isLetter && !isSpecial)) && e.Char != ' ' {
 		shifted = uint(unicode.ToUpper(e.Char))
 	}
 	keycode = uint(unicode.ToLower(e.Char))
@@ -446,7 +447,7 @@ func TranslateKeyToKitty(e *vtinput.InputEvent, flags int, appCursorKeys bool) s
 	out := "\x1b["
 	skipped := false
 
-	if !(keycode == 1 && suffix != 'u' && suffix != '~' && modifiers == 1 && !((flags&2) != 0 && !e.KeyDown)) {
+	if keycode != 1 || suffix == 'u' || suffix == '~' || modifiers != 1 || ((flags&2) != 0 && !e.KeyDown) {
 		out += strconv.Itoa(int(keycode))
 	}
 

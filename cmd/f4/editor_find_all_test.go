@@ -226,6 +226,7 @@ func openFindAllMenu(t *testing.T, ev *EditorView, pattern string, caseSensitive
 
 func newFindAllEditorSized(t *testing.T, content string, w, h int) *EditorView {
 	t.Helper()
+	t.Cleanup(swapFrameManager(t))
 	vtui.SetDefaultPalette()
 	scr := vtui.NewSilentScreenBuf()
 	scr.AllocBuf(w, h)
@@ -252,7 +253,7 @@ func paintFindAll(t *testing.T, frame *findAllFrame) []string {
 	scr.AllocBuf(w, h)
 	frame.Show(scr)
 
-	x1, y1, x2, y2 := frame.VMenu.GetPosition()
+	x1, y1, x2, y2 := frame.GetPosition()
 	rows := make([]string, 0, max(y2-y1-1, 0))
 	for y := y1 + 1; y < y2; y++ {
 		rows = append(rows, strings.TrimRight(vtui.ScreenRow(scr, y, x1+2, x2-1), " "))
@@ -390,15 +391,15 @@ func TestEditorFindAll_F5Zoom(t *testing.T) {
 	ev := newFindAllEditor(t, "Unit 15 The Avenue\nno match here\nUnited Kingdom")
 	frame := openFindAllMenu(t, ev, "unit", false, false, false)
 
-	x1, y1, x2, y2 := frame.VMenu.GetPosition()
+	x1, y1, x2, y2 := frame.GetPosition()
 	frame.ProcessKey(keyEvent(vtinput.VK_F5, 0))
-	zx1, zy1, zx2, zy2 := frame.VMenu.GetPosition()
+	zx1, zy1, zx2, zy2 := frame.GetPosition()
 	if zx2-zx1 <= x2-x1 || zy2-zy1 <= y2-y1 {
 		t.Errorf("F5 should zoom the menu: was (%d,%d)-(%d,%d), got (%d,%d)-(%d,%d)",
 			x1, y1, x2, y2, zx1, zy1, zx2, zy2)
 	}
 	frame.ProcessKey(keyEvent(vtinput.VK_F5, 0))
-	rx1, ry1, rx2, ry2 := frame.VMenu.GetPosition()
+	rx1, ry1, rx2, ry2 := frame.GetPosition()
 	if rx1 != x1 || ry1 != y1 || rx2 != x2 || ry2 != y2 {
 		t.Error("second F5 should restore the original size")
 	}
@@ -554,7 +555,7 @@ func TestEditorFindAll_ResizeConsole(t *testing.T) {
 
 	assertWithin := func(w, h int, when string) {
 		t.Helper()
-		x1, y1, x2, y2 := frame.VMenu.GetPosition()
+		x1, y1, x2, y2 := frame.GetPosition()
 		if x1 < 0 || y1 < 0 || x2 >= w || y2 >= h || x1 > x2 || y1 > y2 {
 			t.Errorf("%s: menu rect (%d,%d)-(%d,%d) outside %dx%d screen", when, x1, y1, x2, y2, w, h)
 		}
@@ -599,11 +600,11 @@ func TestCountMatchLines(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			spans, err := findAllMatchSpans(nil, []byte(c.data), c.pattern, true, false, false)
+			spans, err := findAllMatchSpans(context.Background(), []byte(c.data), c.pattern, true, false, false)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got := countMatchLines(nil, []byte(c.data), spans); got != c.want {
+			if got := countMatchLines(context.Background(), []byte(c.data), spans); got != c.want {
 				t.Errorf("countMatchLines = %d, want %d (%d occurrences)", got, c.want, len(spans))
 			}
 		})
@@ -617,7 +618,7 @@ func TestEditorFindAll_LargeListOpensWithoutMaterializing(t *testing.T) {
 	const n = 500_000
 	ev := newFindAllEditor(t, strings.Repeat("aaa bbbbb\n", n))
 	data := []byte(strings.Repeat("aaa bbbbb\n", n))
-	spans, err := findAllMatchSpans(nil, data, "aaa", true, false, false)
+	spans, err := findAllMatchSpans(context.Background(), data, "aaa", true, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -626,7 +627,7 @@ func TestEditorFindAll_LargeListOpensWithoutMaterializing(t *testing.T) {
 	}
 
 	start := time.Now()
-	ev.showFindAllMenu("aaa", spans, countMatchLines(nil, data, spans))
+	ev.showFindAllMenu("aaa", spans, countMatchLines(context.Background(), data, spans))
 	elapsed := time.Since(start)
 
 	frame, ok := vtui.FrameManager.GetTopFrame().(*findAllFrame)
@@ -687,7 +688,7 @@ func TestEditorFindAll_MouseClickJumps(t *testing.T) {
 	ev := newFindAllEditor(t, "Unit 15 The Avenue\nno match here\nUnited Kingdom")
 	frame := openFindAllMenu(t, ev, "unit", false, false, false)
 
-	x1, y1, _, _ := frame.VMenu.GetPosition()
+	x1, y1, _, _ := frame.GetPosition()
 	click := &vtinput.InputEvent{
 		Type:        vtinput.MouseEventType,
 		KeyDown:     true,
@@ -844,7 +845,7 @@ func TestFindAllMatchSpans_FoldedScanReadsTheBufferInPlace(t *testing.T) {
 	var before, after runtime.MemStats
 	runtime.GC()
 	runtime.ReadMemStats(&before)
-	spans, err := findAllMatchSpans(nil, corpus, "needle", false, false, false)
+	spans, err := findAllMatchSpans(context.Background(), corpus, "needle", false, false, false)
 	runtime.ReadMemStats(&after)
 	if err != nil {
 		t.Fatal(err)
@@ -901,11 +902,11 @@ func TestCollectMatchSpans_WindowsMatchTheWholeBuffer(t *testing.T) {
 	data := []byte(content)
 
 	for _, caseSensitive := range []bool{true, false} {
-		want, err := findAllMatchSpans(nil, data, "needle", caseSensitive, false, false)
+		want, err := findAllMatchSpans(context.Background(), data, "needle", caseSensitive, false, false)
 		if err != nil {
 			t.Fatal(err)
 		}
-		wantLines := countMatchLines(nil, data, want)
+		wantLines := countMatchLines(context.Background(), data, want)
 		if len(want) == 0 {
 			t.Fatal("corpus matches nothing")
 		}

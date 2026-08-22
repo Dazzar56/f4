@@ -60,8 +60,41 @@ func openEditFileIn(pf *PanelsFrame, path string) {
 	actionOpenEditor(pf, vfs.NewOSVFS(filepath.Dir(abs)), abs)
 }
 
+func sudoDispatcherPath(args []string) string {
+	for i, arg := range args {
+		if arg == "--sudo-dispatcher" {
+			if i+1 < len(args) {
+				return args[i+1]
+			}
+			return ""
+		}
+		if strings.HasPrefix(arg, "--sudo-dispatcher=") {
+			return arg[len("--sudo-dispatcher="):]
+		}
+	}
+	return ""
+}
+
+func sudoStartupMode(args []string, askpassParent bool) (dispatcher string, askpass bool) {
+	if dispatcher = sudoDispatcherPath(args); dispatcher != "" {
+		return dispatcher, false
+	}
+	return "", askpassParent
+}
+
 func main() {
 	vtui.AppName = "f4"
+	if archivePath, archiveKind, found, err := parseUpdateHelperArgs(os.Args[1:]); found {
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+		if err := runUpdateHelper(archivePath, archiveKind); err != nil {
+			fmt.Fprintf(os.Stderr, "f4 update helper failed: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
 	installConsoleCtrlHandler()
 	var sudoDispatcher string
 
@@ -73,7 +106,18 @@ func main() {
 	absExecPath, _ := filepath.Abs(execPath)
 	vfs.InitSudoClient(absExecPath, "")
 
-	if os.Getenv("F4_ASKPASS_PARENT") != "" {
+	// The elevated dispatcher inherits F4_ASKPASS_PARENT from the client that
+	// started sudo. Dispatcher mode must win over askpass mode; otherwise the
+	// post-authentication root process asks for a password again instead of
+	// creating its IPC socket, leaving the original operation waiting forever.
+	var askpassParent bool
+	sudoDispatcher, askpassParent = sudoStartupMode(os.Args[1:], os.Getenv("F4_ASKPASS_PARENT") != "")
+	if sudoDispatcher != "" {
+		vfs.RunSudoDispatcher(sudoDispatcher)
+		return
+	}
+
+	if askpassParent {
 		vfs.RunSudoAskpass()
 		return
 	}
@@ -90,23 +134,6 @@ func main() {
 	// build panels it will never draw.
 	if code, handled := runMountCLI(); handled {
 		os.Exit(code)
-	}
-
-	for i := 1; i < len(os.Args); i++ {
-		arg := os.Args[i]
-		if arg == "--sudo-dispatcher" {
-			if i+1 < len(os.Args) {
-				sudoDispatcher = os.Args[i+1]
-			}
-			break
-		} else if strings.HasPrefix(arg, "--sudo-dispatcher=") {
-			sudoDispatcher = arg[len("--sudo-dispatcher="):]
-			break
-		}
-	}
-	if sudoDispatcher != "" {
-		vfs.RunSudoDispatcher(sudoDispatcher)
-		return
 	}
 
 	// Setup crash/stderr location before any logging starts; in portable mode
@@ -226,7 +253,6 @@ func main() {
 			pluginName := flagVal
 			if pluginName == "" && i+1 < len(os.Args) && !strings.HasPrefix(os.Args[i+1], "-") {
 				pluginName = os.Args[i+1]
-				i++
 			}
 			os.Exit(RunNewPlugin(pluginName, os.Stdout, os.Stderr))
 		case "-test-plugins":
@@ -796,19 +822,33 @@ func SaveSession() {
 		vtui.DebugLog("SESSION: Automatic saving is disabled")
 		return
 	}
-	saveSession(true)
+	saveSessionWithOptions(AppConfig.AutoSavePanelSettings, AppConfig.AutoSaveCurrentPanel, AppConfig.AutoSaveGUIWindow)
 }
 
-func saveSession(saveWindowSize bool) {
+func saveSessionWithOptions(savePanelSettings, saveCurrentPanel, saveGUIWindow bool) {
+	if !savePanelSettings && !saveCurrentPanel && !saveGUIWindow && !AppConfig.AutoSaveDialogSettings {
+		return
+	}
 	path := getSessionIniPath()
-	os.MkdirAll(filepath.Dir(path), 0755)
-
-	windowSizeChanged := captureCurrentWindowSize()
-	if saveWindowSize && windowSizeChanged {
-		SaveConfig()
+	if saveGUIWindow {
+		windowChanged := captureCurrentWindowSize()
+		positionChanged := captureCurrentWindowPosition()
+		if windowChanged || positionChanged {
+			if AppConfig.AutoSaveDialogSettings {
+				saveConfigWithWindowSize(true)
+			} else {
+				saveGuiWindowSize()
+			}
+		}
+	} else if AppConfig.AutoSaveDialogSettings {
+		// Flush a pending settings-dialog change at shutdown without replacing
+		// the last GUI geometry when that group is disabled.
+		saveConfigWithWindowSize(false)
 	}
 
-	saveSessionFile(path)
+	if savePanelSettings || saveCurrentPanel {
+		saveSessionFileWithOptions(path, savePanelSettings, saveCurrentPanel)
+	}
 }
 
 func captureCurrentWindowSize() bool {
@@ -825,11 +865,78 @@ func captureCurrentWindowSize() bool {
 	return true
 }
 
+func captureCurrentWindowPosition() bool {
+	if !shouldPersistGUIWindowSize(vtui.ActiveBackend()) || vtui.FrameManager == nil {
+		return false
+	}
+	x, y, ok := vtui.GetWindowPosition()
+	if !ok || (AppConfig.GuiPositionSaved && AppConfig.GuiPosX == x && AppConfig.GuiPosY == y) {
+		return false
+	}
+	AppConfig.GuiPosX = x
+	AppConfig.GuiPosY = y
+	AppConfig.GuiPositionSaved = true
+	return true
+}
+
+func mergeWorkspaceSessionSave(previous []workspaceSessionState, previousActive int, current []workspaceSessionState, currentActive int, savePanelSettings, saveCurrentPanel bool) ([]workspaceSessionState, int) {
+	if len(previous) == 0 || (savePanelSettings && saveCurrentPanel) {
+		return current, currentActive
+	}
+	merged := append([]workspaceSessionState(nil), previous...)
+	findPrevious := func(state workspaceSessionState, index int) int {
+		for i := range merged {
+			if state.Number != 0 && merged[i].Number == state.Number {
+				return i
+			}
+		}
+		if index < len(merged) {
+			return index
+		}
+		return -1
+	}
+	for index, state := range current {
+		previousIndex := findPrevious(state, index)
+		if previousIndex < 0 {
+			if savePanelSettings {
+				merged = append(merged, state)
+			}
+			continue
+		}
+		if savePanelSettings {
+			paths := merged[previousIndex].Left.Path
+			leftCursor := merged[previousIndex].Left.Cursor
+			rightPath := merged[previousIndex].Right.Path
+			rightCursor := merged[previousIndex].Right.Cursor
+			merged[previousIndex] = state
+			merged[previousIndex].Left.Path = paths
+			merged[previousIndex].Left.Cursor = leftCursor
+			merged[previousIndex].Right.Path = rightPath
+			merged[previousIndex].Right.Cursor = rightCursor
+		}
+		if saveCurrentPanel {
+			merged[previousIndex].Left.Path = state.Left.Path
+			merged[previousIndex].Left.Cursor = state.Left.Cursor
+			merged[previousIndex].Right.Path = state.Right.Path
+			merged[previousIndex].Right.Cursor = state.Right.Cursor
+		}
+	}
+	if savePanelSettings {
+		return merged, currentActive
+	}
+	return merged, previousActive
+}
+
 func saveSessionFile(path string) {
+	saveSessionFileWithOptions(path, true, true)
+}
+
+func saveSessionFileWithOptions(path string, savePanelSettings, saveCurrentPanel bool) {
 	os.MkdirAll(filepath.Dir(path), 0755)
 
 	if vtui.FrameManager != nil {
 		if states, active := captureWorkspaceSessions(); len(states) > 0 {
+			states, active = mergeWorkspaceSessionSave(LastWorkspaceSessions, LastActiveWorkspace, states, active, savePanelSettings, saveCurrentPanel)
 			if !AppConfig.SavePanelPaths {
 				for i := range states {
 					states[i].Left.Path, states[i].Right.Path = "", ""
@@ -845,43 +952,43 @@ func saveSessionFile(path string) {
 
 	var sb strings.Builder
 	sb.WriteString("[EditorSearch]\n")
-	sb.WriteString(fmt.Sprintf("Pattern = %s\n", LastEditorSearch))
-	sb.WriteString(fmt.Sprintf("Replace = %s\n", LastEditorReplace))
-	sb.WriteString(fmt.Sprintf("CaseSensitive = %d\n", map[bool]int{true: 1, false: 0}[LastEditorSearchCase]))
-	sb.WriteString(fmt.Sprintf("Reverse = %d\n", map[bool]int{true: 1, false: 0}[LastEditorSearchReverse]))
-	sb.WriteString(fmt.Sprintf("Regexp = %d\n", map[bool]int{true: 1, false: 0}[LastEditorSearchRegexp]))
-	sb.WriteString(fmt.Sprintf("WholeWord = %d\n", map[bool]int{true: 1, false: 0}[LastEditorSearchWholeWord]))
+	fmt.Fprintf(&sb, "Pattern = %s\n", LastEditorSearch)
+	fmt.Fprintf(&sb, "Replace = %s\n", LastEditorReplace)
+	fmt.Fprintf(&sb, "CaseSensitive = %d\n", map[bool]int{true: 1, false: 0}[LastEditorSearchCase])
+	fmt.Fprintf(&sb, "Reverse = %d\n", map[bool]int{true: 1, false: 0}[LastEditorSearchReverse])
+	fmt.Fprintf(&sb, "Regexp = %d\n", map[bool]int{true: 1, false: 0}[LastEditorSearchRegexp])
+	fmt.Fprintf(&sb, "WholeWord = %d\n", map[bool]int{true: 1, false: 0}[LastEditorSearchWholeWord])
 
 	sb.WriteString("\n[FindFile]\n")
-	sb.WriteString(fmt.Sprintf("Mask = %s\n", LastFindFileMask))
-	sb.WriteString(fmt.Sprintf("Text = %s\n", LastFindFileText))
-	sb.WriteString(fmt.Sprintf("CaseSensitive = %d\n", boolToCheckboxState(LastFindFileCaseSensitive)))
-	sb.WriteString(fmt.Sprintf("WholeWords = %d\n", boolToCheckboxState(LastFindFileWholeWords)))
-	sb.WriteString(fmt.Sprintf("Regexp = %d\n", boolToCheckboxState(LastFindFileRegexp)))
-	sb.WriteString(fmt.Sprintf("NotContaining = %d\n", boolToCheckboxState(LastFindFileNotContaining)))
-	sb.WriteString(fmt.Sprintf("Folders = %d\n", boolToCheckboxState(LastFindFileFolders)))
-	sb.WriteString(fmt.Sprintf("Symlinks = %d\n", boolToCheckboxState(LastFindFileSymlinks)))
+	fmt.Fprintf(&sb, "Mask = %s\n", LastFindFileMask)
+	fmt.Fprintf(&sb, "Text = %s\n", LastFindFileText)
+	fmt.Fprintf(&sb, "CaseSensitive = %d\n", boolToCheckboxState(LastFindFileCaseSensitive))
+	fmt.Fprintf(&sb, "WholeWords = %d\n", boolToCheckboxState(LastFindFileWholeWords))
+	fmt.Fprintf(&sb, "Regexp = %d\n", boolToCheckboxState(LastFindFileRegexp))
+	fmt.Fprintf(&sb, "NotContaining = %d\n", boolToCheckboxState(LastFindFileNotContaining))
+	fmt.Fprintf(&sb, "Folders = %d\n", boolToCheckboxState(LastFindFileFolders))
+	fmt.Fprintf(&sb, "Symlinks = %d\n", boolToCheckboxState(LastFindFileSymlinks))
 
 	sb.WriteString("\n[Session]\n")
-	sb.WriteString(fmt.Sprintf("ActivePanel = %d\n", LastActivePanel))
-	sb.WriteString(fmt.Sprintf("WidePanel = %d\n", LastWidePanel))
-	sb.WriteString(fmt.Sprintf("ShowPanels = %d\n", map[bool]int{true: 1, false: 0}[LastShowPanels]))
-	sb.WriteString(fmt.Sprintf("ShowLeft = %d\n", map[bool]int{true: 1, false: 0}[LastShowLeft]))
-	sb.WriteString(fmt.Sprintf("ShowRight = %d\n", map[bool]int{true: 1, false: 0}[LastShowRight]))
+	fmt.Fprintf(&sb, "ActivePanel = %d\n", LastActivePanel)
+	fmt.Fprintf(&sb, "WidePanel = %d\n", LastWidePanel)
+	fmt.Fprintf(&sb, "ShowPanels = %d\n", map[bool]int{true: 1, false: 0}[LastShowPanels])
+	fmt.Fprintf(&sb, "ShowLeft = %d\n", map[bool]int{true: 1, false: 0}[LastShowLeft])
+	fmt.Fprintf(&sb, "ShowRight = %d\n", map[bool]int{true: 1, false: 0}[LastShowRight])
 
 	sb.WriteString("\n[Panel/Left]\n")
-	sb.WriteString(fmt.Sprintf("Folder = %s\n", LastLeftPath))
-	sb.WriteString(fmt.Sprintf("CurFile = %s\n", LastLeftCursor))
-	sb.WriteString(fmt.Sprintf("ViewMode = %d\n", LastLeftViewMode))
-	sb.WriteString(fmt.Sprintf("SortMode = %d\n", LastLeftSortMode))
-	sb.WriteString(fmt.Sprintf("SortReverse = %d\n", map[bool]int{true: 1, false: 0}[LastLeftSortRev]))
+	fmt.Fprintf(&sb, "Folder = %s\n", LastLeftPath)
+	fmt.Fprintf(&sb, "CurFile = %s\n", LastLeftCursor)
+	fmt.Fprintf(&sb, "ViewMode = %d\n", LastLeftViewMode)
+	fmt.Fprintf(&sb, "SortMode = %d\n", LastLeftSortMode)
+	fmt.Fprintf(&sb, "SortReverse = %d\n", map[bool]int{true: 1, false: 0}[LastLeftSortRev])
 
 	sb.WriteString("\n[Panel/Right]\n")
-	sb.WriteString(fmt.Sprintf("Folder = %s\n", LastRightPath))
-	sb.WriteString(fmt.Sprintf("CurFile = %s\n", LastRightCursor))
-	sb.WriteString(fmt.Sprintf("ViewMode = %d\n", LastRightViewMode))
-	sb.WriteString(fmt.Sprintf("SortMode = %d\n", LastRightSortMode))
-	sb.WriteString(fmt.Sprintf("SortReverse = %d\n", map[bool]int{true: 1, false: 0}[LastRightSortRev]))
+	fmt.Fprintf(&sb, "Folder = %s\n", LastRightPath)
+	fmt.Fprintf(&sb, "CurFile = %s\n", LastRightCursor)
+	fmt.Fprintf(&sb, "ViewMode = %d\n", LastRightViewMode)
+	fmt.Fprintf(&sb, "SortMode = %d\n", LastRightSortMode)
+	fmt.Fprintf(&sb, "SortReverse = %d\n", map[bool]int{true: 1, false: 0}[LastRightSortRev])
 	writeWorkspaceSessions(&sb, LastWorkspaceSessions, LastActiveWorkspace)
 
 	err := os.WriteFile(path, []byte(sb.String()), 0644)

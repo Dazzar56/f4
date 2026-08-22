@@ -66,10 +66,10 @@ type yandexCachedReader struct {
 
 func (r *yandexCachedReader) Size() int64 { return r.size }
 func (r *yandexCachedReader) LocalPath() (string, bool) {
-	if r.File == nil || r.File.Name() == "" {
+	if r.File == nil || r.Name() == "" {
 		return "", false
 	}
-	return r.File.Name(), true
+	return r.Name(), true
 }
 func (r *yandexCachedReader) Read(ctx context.Context, p []byte) (int, error) {
 	if err := ctx.Err(); err != nil {

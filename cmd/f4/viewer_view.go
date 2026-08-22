@@ -8,9 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode/utf8"
 
-	"github.com/mattn/go-runewidth"
 	"github.com/unxed/f4/piecetable"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
@@ -419,7 +417,8 @@ func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, contentHeight int) 
 			break
 		}
 
-		// Read a generous chunk to handle wrapping
+		// Read a generous chunk to handle wrapping. The row helper keeps
+		// combining sequences and script conjuncts atomic.
 		data, err := vv.backend.ReadAt(currOffset, width*4)
 		if err == piecetable.ErrLoading {
 			vv.visibleURLRows = append(vv.visibleURLRows, nil)
@@ -436,88 +435,23 @@ func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, contentHeight int) 
 			break
 		}
 
-		lineLen := 0
-		textLen := 0
-		visualWidth := 0
-		foundNewline := false
 		tabSize := 8
 		if AppConfig.EditorTabSize > 0 {
 			tabSize = AppConfig.EditorTabSize
 		}
-
-		for lineLen < len(data) {
-			r, size := utf8.DecodeRune(data[lineLen:])
-			if r == '\n' {
-				lineLen += size
-				foundNewline = true
-				break
-			}
-			if r == '\r' {
-				lineLen += size
-				continue
-			}
-
-			var rw int
-			if r == '\t' {
-				rw = tabSize - (visualWidth % tabSize)
-			} else {
-				rw = runewidth.RuneWidth(r)
-				if rw <= 0 {
-					rw = 1
-				}
-			}
-			if vv.WrapMode && visualWidth+rw > width {
-				// Wrap occurred
-				break
-			}
-			visualWidth += rw
-			lineLen += size
-			textLen = lineLen
-		}
+		row := layoutViewerTextRow(data, width, tabSize, vv.WrapMode)
 
 		// Build []vtui.CharInfo for the line
-		vv.rowCells = vv.rowCells[:0]
-		cellByteOffsets := make([]int, 0, textLen)
-		lineBytes := data[:textLen]
-		visualCol := 0
-		lineByteOffset := 0
+		var cellByteOffsets []int
+		vv.rowCells, cellByteOffsets = viewerTextCells(string(data[:row.textLen]), attr, tabSize, width)
 
-		for len(lineBytes) > 0 {
-			r, size := utf8.DecodeRune(lineBytes)
-			lineBytes = lineBytes[size:]
-
-			if r == '\t' {
-				w := tabSize - (visualCol % tabSize)
-				for i := 0; i < w; i++ {
-					vv.rowCells = append(vv.rowCells, vtui.CharInfo{Char: ' ', Attributes: attr})
-					cellByteOffsets = append(cellByteOffsets, lineByteOffset)
-				}
-				visualCol += w
-			} else {
-				displayRune, w := vtui.SanitizeRune(r)
-				if r < 0x20 || r == 0x7F {
-					displayRune = ' '
-				}
-				if w > 0 {
-					charVal := uint64(displayRune)
-					for i := 0; i < w; i++ {
-						vv.rowCells = append(vv.rowCells, vtui.CharInfo{Char: charVal, Attributes: attr})
-						cellByteOffsets = append(cellByteOffsets, lineByteOffset)
-						charVal = uint64(vtui.WideCharFiller)
-					}
-					visualCol += w
-				}
-			}
-			lineByteOffset += size
-		}
-
-		rowLinks := urlCellRanges(string(data[:textLen]), cellByteOffsets)
+		rowLinks := urlCellRanges(string(data[:row.textLen]), cellByteOffsets)
 		applyURLHoverAttr(vv.rowCells, rowLinks, vv.hoverURL)
 		vv.visibleURLRows = append(vv.visibleURLRows, rowLinks)
 		scr.Write(vv.X1, vv.Y1+1+y, vv.rowCells)
-		currOffset += int64(lineLen)
+		currOffset += int64(row.lineLen)
 
-		if !foundNewline && !vv.WrapMode {
+		if !row.foundNewline && !vv.WrapMode {
 			// In no-wrap mode, we must consume until the actual newline
 			tempOff := currOffset
 			for {
@@ -597,35 +531,13 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 			}
 			data, err := vv.backend.ReadAt(vv.TopOffset, width*4)
 			if err == nil && len(data) > 0 {
-				lineLen := 0
-				visualWidth := 0
 				tabSize := 8
 				if AppConfig.EditorTabSize > 0 {
 					tabSize = AppConfig.EditorTabSize
 				}
-				for lineLen < len(data) {
-					r, size := utf8.DecodeRune(data[lineLen:])
-					if r == '\n' {
-						lineLen += size
-						break
-					}
-					var rw int
-					if r == '\t' {
-						rw = tabSize - (visualWidth % tabSize)
-					} else {
-						rw = runewidth.RuneWidth(r)
-						if rw <= 0 {
-							rw = 1
-						}
-					}
-					if vv.WrapMode && visualWidth+rw > width {
-						break
-					}
-					visualWidth += rw
-					lineLen += size
-				}
-				if lineLen > 0 {
-					vv.TopOffset += int64(lineLen)
+				row := layoutViewerTextRow(data, width, tabSize, vv.WrapMode)
+				if row.lineLen > 0 {
+					vv.TopOffset += int64(row.lineLen)
 				}
 			}
 		}
@@ -847,37 +759,19 @@ func (vv *ViewerView) jumpToEnd() {
 			scanPos := 0
 			for scanPos < len(data) {
 				offsets = append(offsets, currOff+int64(scanPos))
-				lineLen := 0
-				visualWidth := 0
-				foundNewline := false
-				for scanPos+lineLen < len(data) {
-					r, size := utf8.DecodeRune(data[scanPos+lineLen:])
-					if r == '\n' {
-						lineLen += size
-						foundNewline = true
-						break
+				rowData := data[scanPos:]
+				if vv.WrapMode {
+					maxRowData := width * 4
+					if maxRowData < len(rowData) {
+						rowData = rowData[:maxRowData]
 					}
-					if r == '\r' {
-						lineLen += size
-						continue
-					}
-					var rw int
-					if r == '\t' {
-						rw = tabSize - (visualWidth % tabSize)
-					} else {
-						rw = runewidth.RuneWidth(r)
-						if rw <= 0 {
-							rw = 1
-						}
-					}
-					if vv.WrapMode && visualWidth+rw > width {
-						break
-					}
-					visualWidth += rw
-					lineLen += size
 				}
-				scanPos += lineLen
-				if !foundNewline && !vv.WrapMode {
+				row := layoutViewerTextRow(rowData, width, tabSize, vv.WrapMode)
+				scanPos += row.lineLen
+				if !row.foundNewline && !vv.WrapMode {
+					break
+				}
+				if row.lineLen == 0 {
 					break
 				}
 			}

@@ -27,6 +27,21 @@ import (
 
 var TestSkipDelay time.Duration
 
+type autoQueueContextKey struct{}
+
+// WithAutoQueue makes a contended archive operation wait without prompting.
+func WithAutoQueue(ctx context.Context) context.Context {
+	return context.WithValue(ctx, autoQueueContextKey{}, true)
+}
+
+func autoQueueRequested(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	autoQueue, _ := ctx.Value(autoQueueContextKey{}).(bool)
+	return autoQueue
+}
+
 // archiveVFSIdleTTL is kept as a variable so tests can exercise the cleanup
 // transition without waiting for the production grace period.
 var archiveVFSIdleTTL = 2 * time.Second
@@ -1387,8 +1402,8 @@ func (v *ArchiveVFS) CopyBulk(ctx context.Context, srcPaths []string, dstVfs vfs
 
 	waitLock := true
 	if !vfs.GlobalArchiveLockManager.TryLock(absPath) {
-		// If "AutoQueue" is requested via Context (used by headless unit tests), bypass the UI prompt
-		if ctx.Value("AutoQueue") != nil {
+		// Headless callers can request queuing without an interactive prompt.
+		if autoQueueRequested(ctx) {
 			waitLock = true
 		} else if vtui.FrameManager == nil {
 			// Fallback headless mode
@@ -1427,9 +1442,10 @@ func (v *ArchiveVFS) CopyBulk(ctx context.Context, srcPaths []string, dstVfs vfs
 	if format == "" {
 		format = archive.DetectFormat(v.Base(v.arcPath))
 	}
-	if format == "zip" {
+	switch format {
+	case "zip":
 		return v.copyBulkZip(ctx, archiveFile, selectedMap, innerPath, dstVfs, dstDir, reporter)
-	} else if format == "tar" {
+	case "tar":
 		return v.copyBulkTar(ctx, archiveFile, selectedMap, innerPath, dstVfs, dstDir, reporter)
 	}
 	return v.copyBulkFallback(ctx, archiveFile, selectedMap, innerPath, dstVfs, dstDir, reporter)

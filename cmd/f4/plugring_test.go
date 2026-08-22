@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/unxed/vtui"
+	"gopkg.in/yaml.v3"
 )
 
 func TestResolveAssetURL(t *testing.T) {
@@ -27,6 +29,33 @@ func TestResolveAssetURL(t *testing.T) {
 	plain := "https://example.com/plugin.zip"
 	if ResolveAssetURL(plain) != plain {
 		t.Errorf("ResolveAssetURL altered a string without placeholders")
+	}
+}
+
+func TestBundledPlugRingCatalogUsesRemoteAssets(t *testing.T) {
+	_, sourceFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller failed")
+	}
+	catalogPath := filepath.Join(filepath.Dir(sourceFile), "..", "..", "plugring", "index.yaml")
+	data, err := os.ReadFile(catalogPath)
+	if err != nil {
+		t.Fatalf("read bundled PlugRing catalog: %v", err)
+	}
+
+	var items []PlugRingItem
+	if err := yaml.Unmarshal(data, &items); err != nil {
+		t.Fatalf("parse bundled PlugRing catalog: %v", err)
+	}
+	for _, item := range items {
+		u, err := url.Parse(item.URL)
+		if err != nil {
+			t.Errorf("PlugRing item %q has invalid asset URL %q: %v", item.ID, item.URL, err)
+			continue
+		}
+		if u.Scheme != "https" || u.Host == "" {
+			t.Errorf("PlugRing item %q must use an absolute HTTPS asset URL, got %q", item.ID, item.URL)
+		}
 	}
 }
 

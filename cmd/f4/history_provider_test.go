@@ -50,8 +50,9 @@ func TestAddFolderHistory(t *testing.T) {
 		data: make(map[string][]string),
 		rich: make(map[string][]HistoryRecord),
 	}
+	previous := vtui.GlobalHistoryProvider
 	vtui.GlobalHistoryProvider = hp
-	defer func() { vtui.GlobalHistoryProvider = nil }()
+	t.Cleanup(func() { vtui.GlobalHistoryProvider = previous })
 
 	// 1. Начальное наполнение (должно идти в порядке MRU: последний добавленный сверху)
 	AddFolderHistory("/path/a")

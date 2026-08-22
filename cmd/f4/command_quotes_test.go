@@ -13,8 +13,15 @@ func TestCommandHasUnmatchedQuote(t *testing.T) {
 		{name: "posix open single quote", command: "echo 'broken", want: true},
 		{name: "posix open double quote", command: `echo "broken`, want: true},
 		{name: "posix escaped quote", command: `echo can\'t`, want: false},
+		{name: "posix closed backtick", command: "echo `date`", want: false},
+		{name: "posix open backtick", command: "echo `date", want: true},
+		{name: "posix backtick in single quote", command: "echo '`literal'", want: false},
+		{name: "posix escaped backtick", command: "echo \\`literal", want: false},
+		{name: "posix backtick inside double quote", command: "echo \"`date\"", want: true},
+		{name: "posix backtick inside closed double quote", command: "echo \"`date`\"", want: false},
 		{name: "windows open double quote", command: `echo "broken`, windowsShell: true, want: true},
 		{name: "windows single quote is literal", command: "echo 'literal", windowsShell: true, want: false},
+		{name: "windows backtick is literal", command: "echo `literal", windowsShell: true, want: false},
 		{name: "windows caret escaped quote", command: `echo ^"literal`, windowsShell: true, want: false},
 	}
 

@@ -98,7 +98,7 @@ func camelToSnake(s string) string {
 	for i, r := range s {
 		if i > 0 && r >= 'A' && r <= 'Z' {
 			prev := res[len(res)-1]
-			if prev != '_' && !(prev >= 'A' && prev <= 'Z') {
+			if prev != '_' && (prev < 'A' || prev > 'Z') {
 				res = append(res, '_')
 			}
 		}

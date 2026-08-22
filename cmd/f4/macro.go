@@ -110,7 +110,7 @@ func EventToFarString(e *vtinput.InputEvent) string {
 	if name, ok := farKeyNames[vk]; ok {
 		sb.WriteString(name)
 	} else if vk >= vtinput.VK_F1 && vk <= vtinput.VK_F24 {
-		sb.WriteString(fmt.Sprintf("F%d", vk-vtinput.VK_F1+1))
+		fmt.Fprintf(&sb, "F%d", vk-vtinput.VK_F1+1)
 	} else if vk >= 'A' && vk <= 'Z' {
 		// Hotkey key strings are always uppercase for A-Z ("CtrlV",
 		// "ShiftA"). Wayland/X11 gui backends deliver Ctrl+letter events
@@ -123,7 +123,7 @@ func EventToFarString(e *vtinput.InputEvent) string {
 	} else if e.Char > 32 && e.Char < 127 {
 		sb.WriteRune(e.Char)
 	} else {
-		sb.WriteString(fmt.Sprintf("VK_%X", vk))
+		fmt.Fprintf(&sb, "VK_%X", vk)
 	}
 	return sb.String()
 }
@@ -616,14 +616,14 @@ func (m *MacroManager) Save() {
 			if len(seq) == 0 {
 				continue
 			}
-			sb.WriteString(fmt.Sprintf("[KeyMacros/%s/%s]\n", area, hotkey))
+			fmt.Fprintf(&sb, "[KeyMacros/%s/%s]\n", area, hotkey)
 			sb.WriteString("DisableOutput=0x1\n")
 
 			var parts []string
 			for _, e := range seq {
 				parts = append(parts, EventToFarString(e))
 			}
-			sb.WriteString(fmt.Sprintf("Sequence=%s\n\n", strings.Join(parts, " ")))
+			fmt.Fprintf(&sb, "Sequence=%s\n\n", strings.Join(parts, " "))
 		}
 	}
 

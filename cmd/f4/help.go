@@ -19,7 +19,7 @@ import (
 var defaultHelpData string
 
 // README.md lives in the repository root (it must render on GitHub), out of
-// go:embed's reach from this directory; the root "embedded" package bridges it.
+// reach of this directory's embed directive; the root "embedded" package bridges it.
 var readmeData = embedded.ReadmeMD
 
 type memoryHelpVFS struct {
@@ -84,9 +84,7 @@ func appendGeneratedHelpAction(topic *vtui.HelpTopic, keys, desc string) {
 	prefix := fmt.Sprintf("  %-14s - ", keys)
 	prefixWidth := runewidth.StringWidth(prefix)
 	if prefixWidth >= generatedHelpLineWidth {
-		for _, line := range vtui.WrapText(prefix+desc, generatedHelpLineWidth) {
-			topic.Lines = append(topic.Lines, line)
-		}
+		topic.Lines = append(topic.Lines, vtui.WrapText(prefix+desc, generatedHelpLineWidth)...)
 		return
 	}
 

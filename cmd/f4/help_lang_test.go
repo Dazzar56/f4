@@ -11,6 +11,12 @@ import (
 
 func TestHelpLanguageSwitch(t *testing.T) {
 	tempDir := t.TempDir()
+	oldHelpEngine := vtui.GlobalHelpEngine
+	oldHelpActionStrings := helpActionStrings
+	t.Cleanup(func() {
+		vtui.GlobalHelpEngine = oldHelpEngine
+		helpActionStrings = oldHelpActionStrings
+	})
 
 	err := os.MkdirAll(filepath.Join(tempDir, "help"), 0755)
 	if err != nil {
@@ -29,8 +35,10 @@ func TestHelpLanguageSwitch(t *testing.T) {
 	oldF4ConfigDir := cachedF4ConfigDir
 	oldHelpLanguage := AppConfig.HelpLanguage
 	cachedF4ConfigDir = tempDir
-	defer func() { cachedF4ConfigDir = oldF4ConfigDir }()
-	t.Cleanup(func() { AppConfig.HelpLanguage = oldHelpLanguage })
+	t.Cleanup(func() {
+		cachedF4ConfigDir = oldF4ConfigDir
+		AppConfig.HelpLanguage = oldHelpLanguage
+	})
 
 	AppConfig.HelpLanguage = "ru"
 	InitHelpSystem()

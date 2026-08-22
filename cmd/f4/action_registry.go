@@ -1300,7 +1300,9 @@ func init() {
 				targetCols, targetRows = AppConfig.GuiCols+40, AppConfig.GuiRows+15
 			}
 			// xterm resize sequence for console mode
-			os.Stdout.WriteString(fmt.Sprintf("\x1b[8;%d;%dt", targetRows, targetCols))
+			// Terminal writes here are best effort: if stdout is gone there is
+			// nothing left to resize and the next write reports it anyway.
+			_, _ = fmt.Fprintf(os.Stdout, "\x1b[8;%d;%dt", targetRows, targetCols)
 			os.Stdout.Sync()
 			// Forced OS window resize for GUI mode
 			if vtui.FrameManager != nil {
@@ -1373,13 +1375,14 @@ func init() {
 				pf.ResizeConsole(pf.lastW, pf.lastH)
 				pf.lastShowPanels = pf.showPanels
 			}
-			if pf.shellMode == ShellModeHost {
+			switch pf.shellMode {
+			case ShellModeHost:
 				if pf.showPanels {
 					pf.leaveHostConsole()
 				} else {
 					pf.enterHostConsole()
 				}
-			} else if pf.shellMode == ShellModeSimpleInline {
+			case ShellModeSimpleInline:
 				if !pf.showPanels {
 					vtui.SetAltScreen(false)
 					pf.SetBusy(true)
@@ -1401,12 +1404,12 @@ func init() {
 					}
 					vtui.FrameManager.HardRefresh()
 				}
-			} else if pf.shellMode == ShellModeSimpleCaptured {
+			case ShellModeSimpleCaptured:
 				// Captured mode has no separate console view to switch to;
 				// output already went to a dialog, so panels stay visible.
 				pf.showPanels = true
 				vtui.ShowToast(Msg("Terminal.NotAvailableInEnv"), 3*time.Second)
-			} else {
+			default:
 				vtui.FrameManager.HardRefresh()
 			}
 			if pf.showPanels {

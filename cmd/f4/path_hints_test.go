@@ -102,6 +102,30 @@ func TestPathHintItems_Rejects(t *testing.T) {
 	}
 }
 
+func TestPathHintItems_BareDirectoryArgumentPreservesQuote(t *testing.T) {
+	dir := setupPathHintDir(t)
+	v := vfs.NewOSVFS(dir)
+
+	edit := vtui.NewEdit(0, 0, 80, `cd "sub`)
+	from, to, word := edit.WordUnderCursor()
+	items := pathHintItemsForCommand(v, edit, word, from, to)
+	if len(items) != 2 {
+		t.Fatalf("Expected both matching directories, got %d: %v", len(items), items)
+	}
+	if !strings.HasPrefix(items[0].Text, `"subdir`) || !strings.HasSuffix(items[0].Text, string(filepath.Separator)) {
+		t.Errorf("Bare quoted path should preserve its opening quote and separator: %q", items[0].Text)
+	}
+	if items[0].ReplaceFrom != from || items[0].ReplaceTo != to {
+		t.Errorf("Replacement span changed: got %d-%d, want %d-%d", items[0].ReplaceFrom, items[0].ReplaceTo, from, to)
+	}
+
+	other := vtui.NewEdit(0, 0, 80, `echo "sub`)
+	from, to, word = other.WordUnderCursor()
+	if items := pathHintItemsForCommand(v, other, word, from, to); items != nil {
+		t.Fatalf("Bare arguments to non-directory commands must not list panel entries: %v", items)
+	}
+}
+
 func TestPathHintItems_QuotedPath(t *testing.T) {
 	dir := setupPathHintDir(t)
 	v := vfs.NewOSVFS(dir)

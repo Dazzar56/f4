@@ -255,10 +255,10 @@ func TestAnalyzeHonorsCancellation(t *testing.T) {
 	}
 }
 
-func TestAnalyzeNilContextUsesBackground(t *testing.T) {
+func TestAnalyzeWithBackgroundContext(t *testing.T) {
 	data := []byte("RIFF\x04\x00\x00\x00WAVE")
-	if _, err := Analyze(nil, Source{Name: "nil-context.wav", Size: int64(len(data)), Reader: memorySource(data)}, DefaultOptions(ModeFast)); err != nil {
-		t.Fatalf("Analyze(nil) = %v", err)
+	if _, err := Analyze(context.Background(), Source{Name: "background-context.wav", Size: int64(len(data)), Reader: memorySource(data)}, DefaultOptions(ModeFast)); err != nil {
+		t.Fatalf("Analyze() = %v", err)
 	}
 }
 

@@ -105,6 +105,9 @@ func overlayKeybarSlots(labels vtui.KeyBarLabels, width int) []overlayKeySlot {
 			// The last slot swallows the rounding remainder, as in vtui.
 			labelW = width - labelX
 		}
+		if available := width - labelX; labelW > available {
+			labelW = available
+		}
 		if labelW < 0 {
 			labelW = 0
 		}
@@ -267,7 +270,7 @@ func (pf *PanelsFrame) clearConsoleOverlay() {
 	var sb strings.Builder
 	sb.WriteString("\x1b7")
 	for i := 0; i < n; i++ {
-		sb.WriteString(fmt.Sprintf("\x1b[%d;1H\x1b[0m\x1b[2K", h-n+1+i))
+		fmt.Fprintf(&sb, "\x1b[%d;1H\x1b[0m\x1b[2K", h-n+1+i)
 	}
 	sb.WriteString("\x1b8")
 	vtui.WritePassthrough([]byte(sb.String()))
@@ -293,21 +296,21 @@ func (pf *PanelsFrame) emitAnsiConsoleOverlay(ov consoleOverlayContent) {
 	sb.WriteString("\x1b7")
 
 	// 2. Draw CommandLine
-	sb.WriteString(fmt.Sprintf("\x1b[%d;1H\x1b[0m\x1b[2K", cmdRow))
+	fmt.Fprintf(&sb, "\x1b[%d;1H\x1b[0m\x1b[2K", cmdRow)
 	sb.WriteString(ov.Cmd)
 
 	// 3. Draw KeyBar if visible
 	if len(ov.Keys) > 0 {
-		sb.WriteString(fmt.Sprintf("\x1b[%d;1H\x1b[0m\x1b[2K", h))
+		fmt.Fprintf(&sb, "\x1b[%d;1H\x1b[0m\x1b[2K", h)
 		for _, k := range ov.Keys {
 			// Slots carry their own start column now: rounding leftovers make
 			// the widths uneven, so walking them by concatenation would drift.
-			sb.WriteString(fmt.Sprintf("\x1b[%d;%dH", h, k.Col+1))
+			fmt.Fprintf(&sb, "\x1b[%d;%dH", h, k.Col+1)
 			// Matches vtui's real KeyBar palette (ColKeyBarNum/ColKeyBarText:
 			// "LightGray on DarkGray / DarkGray on Teal"). This used to be
 			// swapped, which made the overlay look like a different, alien
 			// keybar sitting next to the real one instead of matching it.
-			sb.WriteString(fmt.Sprintf("\x1b[0;37;40m%s\x1b[0;30;46m%s", k.Num, k.Label))
+			fmt.Fprintf(&sb, "\x1b[0;37;40m%s\x1b[0;30;46m%s", k.Num, k.Label)
 		}
 	}
 
@@ -318,7 +321,7 @@ func (pf *PanelsFrame) emitAnsiConsoleOverlay(ov consoleOverlayContent) {
 	// own command line: that blinking caret is what tells the user the console
 	// is waiting for a command rather than hung.
 	if pf.shellMode == ShellModeSimpleInline {
-		sb.WriteString(fmt.Sprintf("\x1b[%d;%dH\x1b[?25h", cmdRow, ov.CursorCol+1))
+		fmt.Fprintf(&sb, "\x1b[%d;%dH\x1b[?25h", cmdRow, ov.CursorCol+1)
 	}
 	vtui.WritePassthrough([]byte(sb.String()))
 }

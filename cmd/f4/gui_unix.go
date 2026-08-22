@@ -31,6 +31,9 @@ func RunGui(backend string) error {
 	if backend == "qt" || strings.HasPrefix(backend, "ext:") {
 		return RunExternalUIWithMapping(backend)
 	}
+	if err := checkGUIBackendAvailability(backend); err != nil {
+		return err
+	}
 
 	var startupComplete atomic.Bool
 	return runGuiWithStartupRecovery(backend, &startupComplete, func() error {

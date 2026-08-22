@@ -373,10 +373,11 @@ func TestConcurrentBackendReadsOverlap(t *testing.T) {
 }
 
 func TestInodeOfIsStableAndReserved(t *testing.T) {
-	if inodeOf("/root/a") != inodeOf("/root/a") {
+	first := inodeOf("/root/a")
+	if second := inodeOf("/root/a"); first != second {
 		t.Fatalf("inode numbers must be stable for a path")
 	}
-	if inodeOf("/root/a") == inodeOf("/root/b") {
+	if first == inodeOf("/root/b") {
 		t.Fatalf("different paths should not collide this easily")
 	}
 	for _, p := range []string{"", "/", "/root", "x"} {

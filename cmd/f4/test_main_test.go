@@ -95,9 +95,5 @@ func TestMain(m *testing.M) {
 		os.RemoveAll(tmpDir)
 	}
 
-	if result != 0 {
-		// disabled for now
-		//vtui.DumpLogsToFile("_failed_tests_f4.log")
-	}
 	os.Exit(result)
 }

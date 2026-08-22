@@ -50,19 +50,23 @@ func TestNetFoxVFS_ConfigPersistence(t *testing.T) {
 
 	// 3. Test ReadDir (visual representation)
 	found := false
-	nf.ReadDir(nil, "", func(items []vfs.VFSItem) {
+	if err := nf.ReadDir(context.Background(), "", func(items []vfs.VFSItem) {
 		for _, itm := range items {
 			if itm.Name == "My Server" {
 				found = true
 			}
 		}
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 	if !found {
 		t.Error("ReadDir failed to list saved connection")
 	}
 
 	// 4. Test Removal
-	nf.Remove(nil, "My Server")
+	if err := nf.Remove(context.Background(), "My Server"); err != nil {
+		t.Fatal(err)
+	}
 	if len(nf.getConfigs()) != 0 {
 		t.Error("Config was not removed")
 	}

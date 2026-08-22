@@ -690,9 +690,10 @@ func ExecuteFileOpAt(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, srcBasePath string
 						tracker.DirDone()
 					} else {
 						displayString := name
-						if AppConfig.FileOpPathDisplay == 1 {
+						switch AppConfig.FileOpPathDisplay {
+						case 1:
 							displayString = srcPath
-						} else if AppConfig.FileOpPathDisplay == 2 {
+						case 2:
 							displayString = srcPath + " -> " + targetItemPath
 						}
 						wrapRep.StartFileKnown(displayString, itemStat.Size, itemStat.SizeKnown || itemStat.Size > 0, 1, 0)
@@ -1251,9 +1252,10 @@ func recursiveCopy(ctx context.Context, srcVfs vfs.VFS, srcPath string, dstVfs v
 	itemName := dstVfs.Base(destPath)
 	if state.Tracker != nil || state.StartFile != nil {
 		displayString := itemName
-		if AppConfig.FileOpPathDisplay == 1 {
+		switch AppConfig.FileOpPathDisplay {
+		case 1:
 			displayString = srcPath
-		} else if AppConfig.FileOpPathDisplay == 2 {
+		case 2:
 			displayString = srcPath + " -> " + destPath
 		}
 		phases := 1

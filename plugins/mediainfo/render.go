@@ -762,7 +762,7 @@ func normalizeInformField(s string) string {
 
 func renderInformFragment(out *cappedTemplateWriter, src string, fields map[string]string, depth int) error {
 	if depth > maxInformNesting {
-		return errors.New("Inform template nesting is too deep")
+		return errors.New("inform template nesting is too deep")
 	}
 	for i := 0; i < len(src); {
 		switch src[i] {

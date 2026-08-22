@@ -263,7 +263,7 @@ func (dialog *commandPaletteDialog) layoutControls() {
 func (dialog *commandPaletteDialog) ResizeConsole(screenWidth, screenHeight int) {
 	width, height := commandPaletteDialogSizeForScreen(len(dialog.entries), screenWidth, screenHeight)
 	x1, y1 := (screenWidth-width)/2, (screenHeight-height)/2
-	dialog.Window.SetPosition(x1, y1, x1+width-1, y1+height-1)
+	dialog.SetPosition(x1, y1, x1+width-1, y1+height-1)
 	dialog.layoutControls()
 }
 

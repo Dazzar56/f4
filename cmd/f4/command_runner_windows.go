@@ -38,10 +38,8 @@ func normalizeCommandOutput(line []byte) string {
 	if utf8.Valid(line) {
 		return string(line)
 	}
-	if encoding := vfs.GetSystemOEMEncoding(); encoding != nil {
-		if decoded, err := encoding.NewDecoder().Bytes(line); err == nil {
-			return strings.ToValidUTF8(string(decoded), "\uFFFD")
-		}
+	if decoded, err := vfs.GetSystemOEMEncoding().NewDecoder().Bytes(line); err == nil {
+		return strings.ToValidUTF8(string(decoded), "\uFFFD")
 	}
 	return strings.ToValidUTF8(string(line), "\uFFFD")
 }

@@ -43,7 +43,7 @@ func (b *bookmarksFrame) Show(scr *vtui.ScreenBuf) {
 	if b.bottomHint == "" {
 		return
 	}
-	x1, _, x2, y2 := b.VMenu.GetPosition()
+	x1, _, x2, y2 := b.GetPosition()
 	vtui.NewPainter(scr).DrawTitle(x1, y2, x2, b.bottomHint, vtui.Palette[vtui.ColMenuTitle])
 }
 

@@ -13,7 +13,7 @@ func qoiFile() []byte {
 	out = append(out, 4, 0)
 
 	out = append(out, qoiOpRGBA, 10, 20, 30, 255) // the first pixel
-	out = append(out, qoiOpRun|0)                 // and the same one again
+	out = append(out, qoiOpRun)                   // and the same one again
 	out = append(out, qoiOpDiff|(3<<4)|(2<<2)|1)  // +1, 0, -1
 	out = append(out, qoiOpIndex|9)               // back to the first colour
 

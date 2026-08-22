@@ -262,7 +262,7 @@ func TestColors_GenerateDocumentation(t *testing.T) {
 		if len(slot.Aliases) > 0 {
 			aliasesStr = "`" + strings.Join(slot.Aliases, "`, `") + "`"
 		}
-		sb.WriteString(fmt.Sprintf("| `%s` | `%s` | %s |\n", slot.Canonical, slot.ConstantName, aliasesStr))
+		fmt.Fprintf(&sb, "| `%s` | `%s` | %s |\n", slot.Canonical, slot.ConstantName, aliasesStr)
 	}
 
 	targetPath := "COLORS.md"

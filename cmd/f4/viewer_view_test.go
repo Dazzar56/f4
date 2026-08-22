@@ -288,6 +288,7 @@ func TestViewerView_EndJumpReadsOnlyTailOfLargeFile(t *testing.T) {
 }
 
 func TestViewerView_MouseScrollbar(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.SetDefaultPalette()
 	// Create a file with enough content to scroll
 	content := "L1\nL2\nL3\nL4\nL5\nL6\nL7\nL8\nL9\nL10\n" // 10 lines, 33 bytes (3 per line + 1 for last \n)
@@ -301,6 +302,9 @@ func TestViewerView_MouseScrollbar(t *testing.T) {
 		t.Fatalf("Failed to create ViewerView: %v", err)
 	}
 	defer vv.Close()
+	t.Cleanup(func() {
+		vv.ProcessMouse(&vtinput.InputEvent{Type: vtinput.MouseEventType})
+	})
 
 	// Setup viewport: 11 columns (X=0..10), 5 rows (Y=0..4)
 	// Top bar at Y=0. Content area Y=1..4 (4 lines).
@@ -366,6 +370,7 @@ func TestViewerView_MouseScrollbar(t *testing.T) {
 		MouseX:      10, // Scrollbar X position
 		MouseY:      4,  // Bottom arrow Y position (vv.Y2)
 	})
+	vv.ProcessMouse(&vtinput.InputEvent{Type: vtinput.MouseEventType})
 	vv.Show(scr) // Re-render
 
 	if vv.TopOffset == oldOff {
@@ -396,6 +401,7 @@ func TestViewerView_MouseScrollbar(t *testing.T) {
 		MouseX:      10, // Scrollbar X position
 		MouseY:      1,  // Top arrow Y position (vv.Y1+1)
 	})
+	vv.ProcessMouse(&vtinput.InputEvent{Type: vtinput.MouseEventType})
 	vv.Show(scr)
 
 	if vv.TopOffset == oldOff {

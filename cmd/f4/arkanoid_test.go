@@ -1,7 +1,6 @@
 package main
 
 import (
-	"math/rand"
 	"testing"
 	"time"
 
@@ -9,6 +8,7 @@ import (
 )
 
 func TestArkanoid_Init(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	SetDefaultF4Palette()
 
@@ -16,6 +16,7 @@ func TestArkanoid_Init(t *testing.T) {
 	if af == nil {
 		t.Fatal("Failed to create Arkanoid frame")
 	}
+	t.Cleanup(af.Close)
 
 	if af.lives != 3 {
 		t.Errorf("Expected 3 lives, got %d", af.lives)
@@ -25,16 +26,16 @@ func TestArkanoid_Init(t *testing.T) {
 		t.Error("Arkanoid started with no bricks")
 	}
 
-	af.Close()
 }
 
 func TestArkanoid_PhysicsAndCollisions(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	rand.Seed(1) // Стабильный рандом для тестов
 
 	af := NewArkanoidFrame()
 	af.Close() // Останавливаем фоновый цикл, чтобы избежать конфликтов в тесте
 	time.Sleep(10 * time.Millisecond)
+	af.rng = rand.New(rand.NewSource(1)) //nolint:gosec // Deterministic randomness only controls the ball's bounce direction in this test.
 
 	height := af.Y2 - af.Y1 - 1
 
@@ -99,6 +100,7 @@ func TestArkanoid_PhysicsAndCollisions(t *testing.T) {
 }
 
 func TestArkanoid_AutoplayAI(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	af := NewArkanoidFrame()
@@ -129,6 +131,9 @@ func TestArkanoid_HighScores(t *testing.T) {
 	oldUserConfigDir := userConfigDir
 	userConfigDir = func() (string, error) { return tmpDir, nil }
 	t.Cleanup(func() { userConfigDir = oldUserConfigDir })
+
+	oldHighScores := ArkHighScores
+	t.Cleanup(func() { ArkHighScores = oldHighScores })
 
 	// Сбрасываем рекорды в памяти
 	ArkHighScores = nil

@@ -41,7 +41,7 @@ func NewStore(configDir string) (*Store, error) {
 // validation and tests.
 func NewStoreWithOptions(configDir string, opts EngineOptions) (*Store, error) {
 	if strings.TrimSpace(configDir) == "" {
-		return nil, errors.New("Environment Manager config directory is empty")
+		return nil, errors.New("environment manager config directory is empty")
 	}
 	absolute, err := filepath.Abs(configDir)
 	if err != nil {
@@ -84,7 +84,7 @@ func (store *Store) Snapshot() Config {
 // leaves the previous snapshot intact on any error.
 func (store *Store) Reload() error {
 	if store == nil {
-		return errors.New("Environment Manager settings store is unavailable")
+		return errors.New("environment manager settings store is unavailable")
 	}
 	store.ioMu.Lock()
 	defer store.ioMu.Unlock()
@@ -107,7 +107,7 @@ func (store *Store) Reload() error {
 // published.
 func (store *Store) Save(config Config) error {
 	if store == nil {
-		return errors.New("Environment Manager settings store is unavailable")
+		return errors.New("environment manager settings store is unavailable")
 	}
 	if err := config.Validate(store.opts); err != nil {
 		return fmt.Errorf("validate Environment Manager settings: %w", err)
@@ -119,7 +119,7 @@ func (store *Store) Save(config Config) error {
 	}
 	data = append(data, '\n')
 	if len(data) > maxSettingsBytes {
-		return fmt.Errorf("Environment Manager settings exceed %d bytes", maxSettingsBytes)
+		return fmt.Errorf("environment manager settings exceed %d bytes", maxSettingsBytes)
 	}
 
 	store.ioMu.Lock()

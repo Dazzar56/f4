@@ -519,7 +519,7 @@ func TestRecursiveCopyLearnsUnknownMaterializedSizeForManagedPhases(t *testing.T
 	if err := recursiveCopy(ctx, source, sourcePath, destination, destinationPath, state, 0); err != nil {
 		t.Fatal(err)
 	}
-	var uploadHalfAt int = -1
+	var uploadHalfAt = -1
 	for _, event := range capture.events {
 		if event.action == "Uploading" && event.current == 50 {
 			uploadHalfAt = event.total

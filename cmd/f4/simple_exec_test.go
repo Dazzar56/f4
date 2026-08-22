@@ -12,6 +12,7 @@ import (
 )
 
 func TestSimpleInline_CommandExecution(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	scr := vtui.NewSilentScreenBuf()
 	scr.AllocBuf(80, 25)
 	vtui.FrameManager.Init(scr)
@@ -24,7 +25,7 @@ func TestSimpleInline_CommandExecution(t *testing.T) {
 
 	oldWait := waitForAnyKey
 	waitForAnyKey = func() {}
-	defer func() { waitForAnyKey = oldWait }()
+	t.Cleanup(func() { waitForAnyKey = oldWait })
 
 	dir := t.TempDir()
 	pf.runSimpleInlineCommand(dir, "echo simple_inline_test")
@@ -40,6 +41,7 @@ func TestSimpleInline_CommandExecution(t *testing.T) {
 }
 
 func TestSimpleCaptured_CommandExecution(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	scr := vtui.NewSilentScreenBuf()
 	scr.AllocBuf(80, 25)
 	vtui.FrameManager.Init(scr)
@@ -52,19 +54,47 @@ func TestSimpleCaptured_CommandExecution(t *testing.T) {
 
 	pf.runSimpleCapturedCommand(t.TempDir(), "echo simple_captured_test")
 	top := vtui.FrameManager.GetTopFrame()
-	if top == nil || top.GetType() != vtui.TypeDialog {
+	dlg, ok := top.(*vtui.Window)
+	if !ok {
 		t.Fatal("runSimpleCapturedCommand should open a captured output dialog")
+	}
+	var output *vtui.ListBox
+	for _, child := range dlg.GetChildren() {
+		if list, ok := child.(*vtui.ListBox); ok {
+			output = list
+			break
+		}
+	}
+	if output == nil {
+		t.Fatal("captured output dialog should contain an output list")
+	}
+
+	timer := time.NewTimer(time.Second)
+	t.Cleanup(func() { timer.Stop() })
+	for {
+		for _, line := range output.Items {
+			if line == "[exit status 0]" {
+				return
+			}
+		}
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timer.C:
+			t.Fatalf("captured command did not finish, output: %q", output.Items)
+		}
 	}
 }
 
 func TestSimpleInline_ToggleAndAnyKeyReturn(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	scr := vtui.NewSilentScreenBuf()
 	scr.AllocBuf(80, 25)
 	vtui.FrameManager.Init(scr)
 	SetDefaultF4Palette()
 
 	oldCfg := AppConfig
-	defer func() { AppConfig = oldCfg }()
+	t.Cleanup(func() { AppConfig = oldCfg })
 	AppConfig.ConsoleMode = ConsoleViewMc
 
 	pf := NewPanelsFrame()
@@ -97,13 +127,14 @@ func TestSimpleInline_ToggleAndAnyKeyReturn(t *testing.T) {
 // returns to panels" fallback below unfiltered, immediately undoing the
 // toggle within the same keystroke.
 func TestSimpleInline_CtrlOKeyUpDoesNotRestorePanels(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	scr := vtui.NewSilentScreenBuf()
 	scr.AllocBuf(80, 25)
 	vtui.FrameManager.Init(scr)
 	SetDefaultF4Palette()
 
 	oldCfg := AppConfig
-	defer func() { AppConfig = oldCfg }()
+	t.Cleanup(func() { AppConfig = oldCfg })
 	AppConfig.ConsoleMode = ConsoleViewMc
 
 	pf := NewPanelsFrame()
@@ -141,23 +172,11 @@ func TestSimpleInline_CtrlOKeyUpDoesNotRestorePanels(t *testing.T) {
 }
 
 func TestSimpleCaptured_ToggleShowsToast(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	scr := vtui.NewSilentScreenBuf()
 	scr.AllocBuf(80, 25)
 	vtui.FrameManager.Init(scr)
 	SetDefaultF4Palette()
-
-	// Drain any stale tasks left over from a previous test sharing the
-	// global TaskChan/FrameManager, so we don't pick up someone else's
-	// queued toast below.
-drain:
-	for {
-		select {
-		case task := <-vtui.FrameManager.TaskChan:
-			task()
-		default:
-			break drain
-		}
-	}
 
 	pf := NewPanelsFrame()
 	defer pf.Close()
@@ -171,10 +190,7 @@ drain:
 	}
 
 	// ShowToast is posted to the UI task queue; pump it like the main loop
-	// would. FrameManager.currentToast is global and Init() does not clear
-	// it, so a toast left over from an earlier test in this package may
-	// still be unexpired: wait for the toast we expect rather than for the
-	// first non-empty one.
+	// would and wait for the expected toast.
 	want := Msg("Terminal.NotAvailableInEnv")
 	var toast string
 	timeout := time.After(1 * time.Second)
@@ -197,6 +213,7 @@ Loop:
 // drawn on it, and typing edits that command line instead of throwing the user
 // back to the panels.
 func TestSimpleInline_FarStyleKeepsConsoleAndTypes(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	scr := vtui.NewSilentScreenBuf()
 	var out bytes.Buffer
 	scr.Writer = &out
@@ -205,8 +222,11 @@ func TestSimpleInline_FarStyleKeepsConsoleAndTypes(t *testing.T) {
 	SetDefaultF4Palette()
 
 	oldCfg := AppConfig
-	defer func() { AppConfig = oldCfg }()
+	t.Cleanup(func() { AppConfig = oldCfg })
 	AppConfig.ConsoleMode = ConsoleViewFar
+	oldGetTerminalSize := vtui.GetTerminalSize
+	vtui.GetTerminalSize = func() (int, int, error) { return 80, 25, nil }
+	t.Cleanup(func() { vtui.GetTerminalSize = oldGetTerminalSize })
 
 	pf := NewPanelsFrame()
 	defer pf.Close()

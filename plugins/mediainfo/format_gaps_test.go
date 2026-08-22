@@ -279,6 +279,13 @@ func TestAnalyzeEBUSTL(t *testing.T) {
 	}
 }
 
+func TestCleanSTLFieldOnlyRemovesDefinedPaddingBytes(t *testing.T) {
+	want := string([]byte{'A', 0x8e})
+	if got := cleanSTLField([]byte{'A', 0x8e, 0x8f, 0}); got != want {
+		t.Fatalf("cleanSTLField() = %q, want %q", got, want)
+	}
+}
+
 func TestAnalyzeOggFLAC(t *testing.T) {
 	streamInfo := make([]byte, 34)
 	v := uint64(48000)<<44 | uint64(1)<<41 | uint64(23)<<36 | uint64(96000)

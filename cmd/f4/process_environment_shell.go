@@ -129,7 +129,7 @@ func parseProcessEnvironmentRuntimeSessionName(name string) (int, bool) {
 		return 0, false
 	}
 	for _, ch := range token {
-		if !((ch >= '0' && ch <= '9') || (ch >= 'A' && ch <= 'F') || (ch >= 'a' && ch <= 'f')) {
+		if (ch < '0' || ch > '9') && (ch < 'A' || ch > 'F') && (ch < 'a' || ch > 'f') {
 			return 0, false
 		}
 	}

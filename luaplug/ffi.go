@@ -238,11 +238,9 @@ func (r *Runtime) ffiCallback(b *ffibridge.Bridge) lua.LGFunction {
 		trampSig, origKinds := widenCallbackSignature(signature)
 
 		addr, err := b.NewCallback(trampSig, func(args []any) (any, error) {
-			if origKinds != nil {
-				for i, kind := range origKinds {
-					if kind != ffibridge.KindVoid {
-						args[i] = narrowCallbackValue(kind, args[i])
-					}
+			for i, kind := range origKinds {
+				if kind != ffibridge.KindVoid {
+					args[i] = narrowCallbackValue(kind, args[i])
 				}
 			}
 			var result any
