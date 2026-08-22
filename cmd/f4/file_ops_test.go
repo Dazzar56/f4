@@ -500,7 +500,16 @@ func TestFileOp_PathLogic(t *testing.T) {
 		// Target: "new_dir/" (trailing slash should force directory creation)
 		ExecuteFileOp(nil, srcVfs, dstVfs, []string{"source2.txt"}, "new_dir"+string(os.PathSeparator), false, 2, nil)
 
-		for i := 0; i < 50; i++ {
+		// Windows CI can need more than 250ms for the asynchronous copy to
+		// finish after the destination directory has been created. Wait up to
+		// the same bounded deadline used by the rename-copy case above instead
+		// of making the assertion depend on scheduler timing.
+		finalPath := filepath.Join(tmpSrc, "new_dir", "source2.txt")
+		deadline := time.Now().Add(5 * time.Second)
+		for time.Now().Before(deadline) {
+			if _, err := os.Stat(finalPath); err == nil {
+				break
+			}
 			select {
 			case task := <-vtui.FrameManager.TaskChan:
 				task()
@@ -509,9 +518,8 @@ func TestFileOp_PathLogic(t *testing.T) {
 			}
 		}
 
-		finalPath := filepath.Join(tmpSrc, "new_dir", "source2.txt")
-		if _, err := os.Stat(finalPath); os.IsNotExist(err) {
-			t.Error("Trailing slash did not trigger directory creation for single file")
+		if _, err := os.Stat(finalPath); err != nil {
+			t.Error("Trailing slash did not complete the single-file copy into a directory")
 		}
 	})
 }
