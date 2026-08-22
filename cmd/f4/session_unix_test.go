@@ -48,13 +48,24 @@ func TestClearNonBlock_ClearsFlag(t *testing.T) {
 		t.Fatalf("pipe: %v", err)
 	}
 	readEnd, writeEnd := p[0], p[1]
-	defer syscall.Close(readEnd)
 	defer syscall.Close(writeEnd)
+	// os.NewFile takes ownership of readEnd. Closing the raw descriptor while
+	// leaving f to its finalizer can later close an unrelated, reused fd.
+	f := os.NewFile(uintptr(readEnd), "pipe-read")
+	if f == nil {
+		syscall.Close(readEnd)
+		t.Fatal("os.NewFile returned nil for pipe read end")
+	}
+	defer func() {
+		if err := f.Close(); err != nil {
+			t.Errorf("close(pipe-read): %v", err)
+		}
+	}()
 
-	if _, err := unix.FcntlInt(uintptr(readEnd), unix.F_SETFL, unix.O_NONBLOCK); err != nil {
+	if _, err := unix.FcntlInt(f.Fd(), unix.F_SETFL, unix.O_NONBLOCK); err != nil {
 		t.Fatalf("set O_NONBLOCK: %v", err)
 	}
-	flags, err := unix.FcntlInt(uintptr(readEnd), unix.F_GETFL, 0)
+	flags, err := unix.FcntlInt(f.Fd(), unix.F_GETFL, 0)
 	if err != nil {
 		t.Fatalf("F_GETFL: %v", err)
 	}
@@ -62,10 +73,9 @@ func TestClearNonBlock_ClearsFlag(t *testing.T) {
 		t.Fatalf("test setup broken: O_NONBLOCK not observed as set")
 	}
 
-	f := os.NewFile(uintptr(readEnd), "pipe-read")
 	clearNonBlock(f)
 
-	flags, err = unix.FcntlInt(uintptr(readEnd), unix.F_GETFL, 0)
+	flags, err = unix.FcntlInt(f.Fd(), unix.F_GETFL, 0)
 	if err != nil {
 		t.Fatalf("F_GETFL after clearNonBlock: %v", err)
 	}
