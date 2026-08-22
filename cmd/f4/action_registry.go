@@ -298,6 +298,17 @@ func init() {
 		Handler:     actionScreenGrab,
 	})
 	RegisterAction(Action{
+		Name:        "App.CopyWindowTitle",
+		Area:        "Common",
+		Label:       "Copy Window Title",
+		LabelKey:    "Action.App.CopyWindowTitle",
+		Description: "Copy the current f4 window title to the clipboard",
+		DescKey:     "Action.App.CopyWindowTitle.Desc",
+		DefaultKeys: []string{"CtrlAltShiftT"},
+		MenuPath:    "Commands",
+		Handler:     actionCopyWindowTitle,
+	})
+	RegisterAction(Action{
 		Name:                commandPaletteActionName,
 		Area:                "Common",
 		Label:               "Command Palette",
