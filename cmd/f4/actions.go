@@ -2860,7 +2860,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 	// display options live in actionPanelAdditionalSettings below. Keeping both
 	// pages as ordinary dialogs means they remain usable on a 25-row terminal
 	// without introducing a second scrolling container for interactive items.
-	dlg := vtui.NewCenteredDialog(60, 22, Msg("PanelSettings.Title"))
+	dlg := vtui.NewCenteredDialog(60, 23, Msg("PanelSettings.Title"))
 	dlg.ShowClose = true
 
 	chkHidden := vtui.NewCheckbox(0, 0, Msg("PanelSettings.ShowHidden"), false)
@@ -2952,6 +2952,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 	dlg.AddItem(lblScrollbars)
 	dlg.AddItem(comboScrollbars)
 	dlg.AddItem(chkPaths)
+	dlg.AddItem(chkAutoSave)
 	dlg.AddItem(chkCmdAc)
 	dlg.AddItem(lblNavigation)
 	dlg.AddItem(navigation)
@@ -2960,7 +2961,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnCancel)
 
-	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 56, 18)
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 56, 19)
 	// First checkbox cluster — stack tight, no blank rows between.
 	vbox.Add(chkHidden, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkDirPrefix, vtui.Margins{}, vtui.AlignLeft)
@@ -2975,6 +2976,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 	vbox.Add(rowScrollbars, vtui.Margins{Top: 1}, vtui.AlignFill)
 	// Second checkbox cluster.
 	vbox.Add(chkPaths, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	vbox.Add(chkAutoSave, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkCmdAc, vtui.Margins{}, vtui.AlignLeft)
 	// Navigation radio group — its own visual island.
 	vbox.Add(lblNavigation, vtui.Margins{Top: 1}, vtui.AlignLeft)
@@ -2999,6 +3001,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 		AppConfig.ShowPanelFileInfo = chkFileInfo.State == 1
 		AppConfig.PanelScrollbarMode = PanelScrollbarMode(comboScrollbars.Menu.SelectPos)
 		AppConfig.SavePanelPaths = chkPaths.State == 1
+		AppConfig.AutoSaveSettings = chkAutoSave.State == 1
 		AppConfig.CommandLineAutoComplete = chkCmdAc.State == 1
 		pf.cmdLine.Edit.PathHintsEnabled = AppConfig.CommandLineAutoComplete
 		AppConfig.NavigationMode = PanelNavigationMode(navigation.Selected)

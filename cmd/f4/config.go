@@ -709,8 +709,8 @@ func saveConfigWithWindowSize(windowSize bool) {
 	sb.WriteString(fmt.Sprintf("GuiFont = %s\n", AppConfig.GuiFont))
 	sb.WriteString(fmt.Sprintf("GuiUseSystemMonospace = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.GuiUseSystemMonospace]))
 	sb.WriteString(fmt.Sprintf("GuiFontSize = %d\n", AppConfig.GuiFontSize))
-	sb.WriteString(fmt.Sprintf("GuiCols = %d\n", AppConfig.GuiCols))
-	sb.WriteString(fmt.Sprintf("GuiRows = %d\n", AppConfig.GuiRows))
+	sb.WriteString(fmt.Sprintf("GuiCols = %d\n", guiCols))
+	sb.WriteString(fmt.Sprintf("GuiRows = %d\n", guiRows))
 	if AppConfig.GuiPositionSaved {
 		sb.WriteString(fmt.Sprintf("GuiPosX = %d\n", AppConfig.GuiPosX))
 		sb.WriteString(fmt.Sprintf("GuiPosY = %d\n", AppConfig.GuiPosY))

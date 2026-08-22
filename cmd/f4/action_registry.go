@@ -1271,10 +1271,7 @@ func init() {
 		DefaultAreas: []string{"Terminal"},
 		MenuPath:     "Options",
 		Handler: withPF(func(pf *PanelsFrame) {
-			saveGuiWindowPosition()
-			SaveConfig()
-			SaveSession()
-			vtui.ShowToast("Settings saved", 2*time.Second)
+			actionSaveSettings(pf)
 		}),
 	})
 	RegisterAction(Action{
