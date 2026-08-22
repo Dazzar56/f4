@@ -413,6 +413,73 @@ jobs:
         path: f4-windows7-amd64.zip
         retention-days: 7
 
+  # go vet in the quality job below only ever sees the linux build of the tree,
+  # which leaves the 44 windows-only and 8 darwin-only files here unexamined by
+  # any of its analyzers — printf, copylocks, lostcancel, loopclosure and two
+  # dozen more. The build matrix already covers nine GOOS values, so vet them.
+  #
+  # A matrix rather than a loop in one job: a cross-GOOS vet has to build every
+  # dependency for that target from scratch, so each cell costs about as much as
+  # a build (~75s) and running them in sequence would add ten minutes to the
+  # quality job. fail-fast is off so one broken platform does not hide the rest.
+  #
+  # One cell per GOOS, plus one 32-bit cell. Only winepath_{windows,other}.go are
+  # selected by GOARCH, and windows/amd64 and any non-windows target between them
+  # cover both sides, so a second 64-bit arch would vet identical files. Word
+  # size is the exception: the shift analyzer sizes types through the target's
+  # TypesSizes, so a shift that is fine against a 64-bit int is a finding against
+  # a 32-bit one. linux/arm is the matrix's 32-bit cell that builds without the
+  # noffi tag. linux/amd64 is absent because the quality job vets it with the
+  # full analyzer set.
+  #
+  # unsafeptr is the one analyzer that cannot come along. Every one of these
+  # platforms converts a uintptr handed back by a syscall wrapper into a pointer
+  # — the view MapViewOfFile mapped, strings Wine allocated on the process heap,
+  # a pseudoconsole HANDLE, a buffer owned by an NSString — and the analyzer
+  # cannot tell foreign memory from Go's. Those wrappers return uintptr by
+  # signature, and vet accepts a uintptr-to-pointer conversion only for reflect
+  # headers, reflect.Value.Pointer and pointer arithmetic, so moving the
+  # conversion elsewhere only moves the diagnostic. The linux run keeps the full
+  # set, unsafeptr included, so a genuine round trip in portable code still
+  # fails the build.
+  vet:
+    name: Vet (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: windows/amd64 }
+          - { target: linux/arm }
+          - { target: darwin/arm64 }
+          # goffi's fakecgo shim needs the same flag the build step passes.
+          - { target: freebsd/amd64, gcflags: -gcflags=github.com/go-webgpu/goffi/internal/fakecgo=-std }
+          - { target: openbsd/amd64 }
+          - { target: netbsd/amd64 }
+          - { target: dragonfly/amd64 }
+          - { target: illumos/amd64 }
+          - { target: solaris/amd64 }
+    env:
+      CGO_ENABLED: 0
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v7
+      with:
+        submodules: recursive
+
+    - name: Set up Go
+      uses: actions/setup-go@v7
+      with:
+        go-version: '1.26.x'
+        cache-dependency-path: go.sum
+
+    - name: Run go vet
+      env:
+        TARGET: ${{ matrix.target }}
+        GCFLAGS: ${{ matrix.gcflags }}
+      run: |
+        GOOS="${TARGET%/*}" GOARCH="${TARGET#*/}" go vet -unsafeptr=false $GCFLAGS ./...
+
   quality:
     name: Quality (vet and incremental lint)
     runs-on: ubuntu-latest
