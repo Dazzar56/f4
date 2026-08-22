@@ -64,6 +64,10 @@ jobs:
           exit 1
         fi
 
+    - name: Check language file formatting
+      if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
+      run: go run ./tools/langfmt -check cmd/f4/lang/*.lng
+
     - name: Verify generated application icons
       if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
       run: |

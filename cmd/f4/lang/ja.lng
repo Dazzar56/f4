@@ -5,20 +5,6 @@ Author=f4 Team
 
 [Strings]
 VisRen.Menu=ビジュアル一括リネーム(&V)
-ID3Editor.Menu=ID3タグエディタ(&E)
-ID3Editor.Title=ID3タグエディタ
-ID3Editor.LocalOnly=ID3タグエディタはローカルファイルのみサポートしています。
-ID3Editor.SelectFile=最初にMP3ファイルを選択してください。
-ID3Editor.OnlyMP3=MP3ファイルのみサポートされています。
-ID3Editor.SaveError=ID3タグを保存できませんでした:\n%v
-ID3Editor.OpenError=MP3ファイルを開けませんでした:\n%v
-ID3Editor.FieldTitle=タイトル:
-ID3Editor.FieldArtist=アーティスト:
-ID3Editor.FieldAlbum=アルバム:
-ID3Editor.FieldYear=年:
-ID3Editor.FieldGenre=ジャンル:
-ID3Editor.FieldComment=コメント:
-ID3Editor.FieldVersion=バージョン:
 VisRen.Title=ビジュアル一括リネーム
 VisRen.HostUnsupported=このF4ホストはVisRen UIブリッジを提供していません。
 VisRen.LocalOnly=VisRenはローカルファイルパネルでのみ機能します。
@@ -59,109 +45,53 @@ VisRen.WordDivTitle=単語の区切り文字
 VisRen.WordDivPrompt=単語の区切り文字（最大18文字）:
 VisRen.OldName=変更前の名前
 VisRen.NewName=変更後の名前
+
+ID3Editor.Menu=ID3タグエディタ(&E)
+ID3Editor.Title=ID3タグエディタ
+ID3Editor.LocalOnly=ID3タグエディタはローカルファイルのみサポートしています。
+ID3Editor.SelectFile=最初にMP3ファイルを選択してください。
+ID3Editor.OnlyMP3=MP3ファイルのみサポートされています。
+ID3Editor.SaveError=ID3タグを保存できませんでした:\n%v
+ID3Editor.OpenError=MP3ファイルを開けませんでした:\n%v
+ID3Editor.FieldTitle=タイトル:
+ID3Editor.FieldArtist=アーティスト:
+ID3Editor.FieldAlbum=アルバム:
+ID3Editor.FieldYear=年:
+ID3Editor.FieldGenre=ジャンル:
+ID3Editor.FieldComment=コメント:
+ID3Editor.FieldVersion=バージョン:
+
 vtui.Ok=OK(&O)
 vtui.Cancel=キャンセル
+vtui.Save=保存(&S)
+
 Panel.Other=反対のパネル(&O)
 Panel.Column.Name=名前
 Panel.Column.Size=サイズ
 Panel.Column.Modified=更新日時
 Panel.UpDir=親ディレクトリ
 Panel.SelectedInfo=バイト: %s, ファイル: %d, フォルダ: %d
+
 Panels.Prompt=>
+
 Edit.NewFileTitle= 新規ファイル作成
 Edit.NewFilePrompt=ファイル名(&N):
+
 MakeFolder.Title= 新規フォルダ作成
 MakeFolder.Prompt=フォルダを作成(&F):
+
 Delete.Title= 削除
 Delete.Confirm=本当に削除しますか？\n%s
 Delete.Btn=削除(&D)
+
 Copy.Title= コピー
 Copy.Prompt=%d 個のアイテムをコピー中:
 Copy.Btn=コピー(&C)
+
 Move.Title= 移動/名前変更
 Move.Prompt=%d 個 of アイテムを名前変更または移動中:
 Move.Btn=リネーム(&R)
-Btn.OverwriteAll=すべて上書き(&A)
-Btn.SkipAll=すべてスキップ(&K)
-Btn.Retry=再試行(&R)
-Btn.Ignore=無視(&I)
-Operation.Error=操作が失敗しました:\n%s
-Op.ClonePanels=新しいワークスペースにパネルをクローン(&C)
-Op.SwitchHint=Ctrl+Tab でウィンドウを切り替えます
-Op.DummyTitle= デモ操作
-Op.DummyText=これは5分間のデモ操作です。\nバックグラウンド実行モードを選択してください:
-Viewer.Title= ビュー
-Viewer.ModeText=テキスト
-Viewer.ModeHex=16進数
-Viewer.SearchTitle= 検索
-Search.CaseSensitive=大文字小文字を区別(&C)
-Search.Reverse=逆方向検索(&R)
-Select.Title= 選択
-Deselect.Title= 選択解除
-Quit.Title= 終了
-Quit.Confirm=本当に f4 を終了しますか？
-Quit.Btn=終了(&L)
-Select.Mask=選択マスクを入力(&E):
 
-Macro.AssignTitle= マクロの割り当て
-Macro.AssignPrompt=割り当てたいキーコンビネーションを押してください
-Macro.AssignCancel=キャンセルするには Esc キーを押してください
-
-Menu.Language=言語
-Menu.HelpLanguage=ヘルプの言語
-Menu.Left=左
-Menu.Files=ファイル
-Menu.Commands=コマンド
-Menu.Options=オプション
-Menu.Right=右
-Menu.Exit=終了(&X)
-
-Menu.Files.View=ビュー
-Menu.Files.Edit=編集
-Menu.Files.Copy=コピー
-Menu.Files.RenMov=名前変更または移動
-Menu.Files.MkDir=フォルダ作成
-Menu.Files.Delete=削除
-Menu.Left.Brief=簡易
-Menu.Left.Medium=中
-Menu.Left.Detailed=詳細
-Menu.Left.Wide=ワイド
-Menu.Commands.FindFile=ファイル検索
-Menu.Commands.FindDuplicates=重複ファイル検索
-Menu.Commands.BackgroundJobs=バックグラウンドジョブ
-Menu.Commands.RunRemote=リモートでコマンドを実行
-RemoteCmd.Title=リモートコマンド
-RemoteCmd.Prompt=コマンド:
-RemoteCmd.BtnClose=閉じる(&C)
-Jobs.Title=バックグラウンドジョブ
-Jobs.BtnShow=表示(&S)
-Jobs.BtnCancel=ジョブをキャンセル(&C)
-Jobs.BtnClose=閉じる(&C)
-Jobs.Empty=現在実行中のジョブはありません
-Menu.Commands.Bookmarks=ブックマーク
-Menu.SortName=名前
-Menu.SortExt=拡張子
-Menu.SortTime=時間
-Menu.SortSize=サイズ
-Menu.SortUnsorted=未ソート
-Sort.Title=ソート順
-Menu.PanelSettings=パネル設定
-Menu.EditorSettings=エディタ設定
-Menu.ColorerSettings=Colorer設定(&O)
-Menu.AppearanceSettings=外観設定
-Menu.ConfirmationsSettings=確認設定
-Menu.AutoUpdateSettings=自動アップデート(&U)
-Menu.Options.Plugins=プラグイン管理
-
-Menu.Editor.File=ファイル(&F)
-Menu.Editor.Edit=編集(&E)
-Menu.Editor.Search=検索(&S)
-Menu.Editor.Options=オプション(&O)
-Menu.Editor.Insert=挿入(&I)
-Menu.Viewer.File=ファイル(&F)
-Menu.Viewer.View=表示(&V)
-Menu.Viewer.Search=検索(&S)
-Menu.Viewer.Options=オプション(&O)
 Action.App.ScreenGrab=スクリーンショット(&G)
 Action.App.ScreenGrab.Desc=画面領域を選択してコピー
 Action.Editor.Save=保存(&S)
@@ -224,18 +154,6 @@ Action.Viewer.CodepageNext=次のコードページ(&E)
 Action.Viewer.CodepageNext.Desc=次のコードページにローテーション切り替え
 Action.Viewer.CodepageMenu=コードページメニュー(&C)
 Action.Viewer.CodepageMenu.Desc=コードページを選択
-Help.ViewerEditor=ビューアおよびエディタのキー
-Help.PanelNav=パネルのキー
-Help.NavigationKeys=ナビゲーションキー
-Help.Area.Shell=パネル
-Help.Area.Terminal=ターミナル
-Help.Area.Editor=エディタ
-Help.Area.Viewer=ビューア
-Help.Area.Common=共通
-Menu.Shell.Files=ファイル(&F)
-Menu.Shell.Commands=コマンド(&C)
-Menu.Shell.Options=オプション(&O)
-Menu.Terminal.File=ファイル(&F)
 Action.File.New=新規ファイル作成
 Action.File.New.Desc=新規ファイルを作成し、エディタで開きます
 Action.File.CopyInPlace=同じ場所にコピー
@@ -268,19 +186,6 @@ Action.Panel.UserMenu=ユーザーメニュー(&U)
 Action.Panel.UserMenu.Desc=ユーザー定義メニューを表示
 Action.Panel.FileAssociations=ファイル関連付け(&A)...
 Action.Panel.FileAssociations.Desc=マスク別に Enter、F3、F4 の動作コマンドを構成
-FileAssoc.EditorTitle=ファイル関連付け
-FileAssoc.EditTitle=関連付けを編集
-FileAssoc.NewTitle=新規関連付け
-FileAssoc.ErrorTitle=ファイル関連付け
-FileAssoc.EmptyHint=関連付けはありません - Ins キーを押して新しい関連付けを追加してください
-FileAssoc.EmptyMask=ファイルマスクを空にすることはできません。
-FileAssoc.MaskLabel=マスク
-FileAssoc.DescLabel=説明
-FileAssoc.PickTitle.Open=アプリケーションで開く
-FileAssoc.PickTitle.View=ビューアで開く
-FileAssoc.PickTitle.Edit=エディタで開く
-FileAssoc.DeleteTitle=関連付けを削除
-FileAssoc.DeleteConfirm=関連付け %q を削除しますか？
 Action.Panel.Bookmarks.Desc=フォルダブックマークダイアログを表示
 Action.Panel.PluginMenu=プラグインコマンド(&G)
 Action.Panel.PluginMenu.Desc=プラグインコマンドメニューを表示
@@ -366,23 +271,107 @@ Action.Terminal.ViewLog=ターミナルログ表示(&V)
 Action.Terminal.ViewLog.Desc=ビューアでターミナルログを開く
 Action.Terminal.EditLog=ターミナルログ編集(&E)
 Action.Terminal.EditLog.Desc=エディタでターミナルログを開く
-EditorSettings.Title= エディタ設定
-EditorSettings.AutoComplete=オートコンプリート(&A)
-EditorSettings.Mask=対象ファイルマスク(&I):
-ColorerSettings.Title= Colorer設定
-ColorerSettings.Enabled=Colorerハイライトを有効にする(&C)
-ColorerSettings.Style=カラースタイル(&S):
-ColorerSettings.BuiltIn=(内蔵)
-ColorerSettings.Cross=クロスヘアを表示(&R):
-ColorerSettings.CrossOff=表示しない
-ColorerSettings.CrossVertical=垂直線
-ColorerSettings.CrossHorizontal=水平線
-ColorerSettings.CrossBoth=両方
-ColorerSettings.Syntax=構文を強調表示(&S)
-ColorerSettings.Background=エディタの背景色をスタイルに合わせる(&B)
-ColorerSettings.Catalog=スキーマフォルダ (catalog.xml)(&C):
-ColorerSettings.Reload=再読み込み(&L)
-ColorerSettings.Download=スキーマをダウンロード(&D)
+
+Btn.OverwriteAll=すべて上書き(&A)
+Btn.SkipAll=すべてスキップ(&K)
+Btn.Retry=再試行(&R)
+Btn.Ignore=無視(&I)
+
+Operation.Error=操作が失敗しました:\n%s
+
+Op.ClonePanels=新しいワークスペースにパネルをクローン(&C)
+Op.SwitchHint=Ctrl+Tab でウィンドウを切り替えます
+Op.DummyTitle= デモ操作
+Op.DummyText=これは5分間のデモ操作です。\nバックグラウンド実行モードを選択してください:
+Op.Queue=キュー
+Op.Background=バックグラウンドパネルクローン
+Op.Foreground=フォアグラウンドロック
+Op.PathNameOnly=名前のみ
+Op.PathFullPath=フルパス
+Op.PathSrcDst=元 -> 先
+Op.DummyQueue=キュー (デフォルト)
+Op.DummyBackground=バックグラウンドパネルクローン
+Op.DummyForeground=フォアグラウンドロック
+Op.BtnStart=開始(&S)
+
+Viewer.Title= ビュー
+Viewer.ModeText=テキスト
+Viewer.ModeHex=16進数
+Viewer.SearchTitle= 検索
+
+Search.CaseSensitive=大文字小文字を区別(&C)
+Search.Reverse=逆方向検索(&R)
+Search.Prompt=検索:
+Search.WholeWords=単語単位で探す
+Search.Regex=正規表現
+Search.BtnFind=検索(&F)
+
+Select.Title= 選択
+Select.Mask=選択マスクを入力(&E):
+
+Deselect.Title= 選択解除
+
+Quit.Title= 終了
+Quit.Confirm=本当に f4 を終了しますか？
+Quit.Btn=終了(&L)
+
+Macro.AssignTitle= マクロの割り当て
+Macro.AssignPrompt=割り当てたいキーコンビネーションを押してください
+Macro.AssignCancel=キャンセルするには Esc キーを押してください
+
+Menu.Language=言語
+Menu.HelpLanguage=ヘルプの言語
+Menu.Left=左
+Menu.Files=ファイル
+Menu.Commands=コマンド
+Menu.Options=オプション
+Menu.Right=右
+Menu.Exit=終了(&X)
+Menu.Files.View=ビュー
+Menu.Files.Edit=編集
+Menu.Files.Copy=コピー
+Menu.Files.RenMov=名前変更または移動
+Menu.Files.MkDir=フォルダ作成
+Menu.Files.Delete=削除
+Menu.Left.Brief=簡易
+Menu.Left.Medium=中
+Menu.Left.Detailed=詳細
+Menu.Left.Wide=ワイド
+Menu.Commands.FindFile=ファイル検索
+Menu.Commands.FindDuplicates=重複ファイル検索
+Menu.Commands.BackgroundJobs=バックグラウンドジョブ
+Menu.Commands.RunRemote=リモートでコマンドを実行
+Menu.Commands.Bookmarks=ブックマーク
+Menu.SortName=名前
+Menu.SortExt=拡張子
+Menu.SortTime=時間
+Menu.SortSize=サイズ
+Menu.SortUnsorted=未ソート
+Menu.PanelSettings=パネル設定
+Menu.EditorSettings=エディタ設定
+Menu.ColorerSettings=Colorer設定(&O)
+Menu.AppearanceSettings=外観設定
+Menu.ConfirmationsSettings=確認設定
+Menu.AutoUpdateSettings=自動アップデート(&U)
+Menu.Options.Plugins=プラグイン管理
+Menu.Editor.File=ファイル(&F)
+Menu.Editor.Edit=編集(&E)
+Menu.Editor.Search=検索(&S)
+Menu.Editor.Options=オプション(&O)
+Menu.Editor.Insert=挿入(&I)
+Menu.Viewer.File=ファイル(&F)
+Menu.Viewer.View=表示(&V)
+Menu.Viewer.Search=検索(&S)
+Menu.Viewer.Options=オプション(&O)
+Menu.Shell.Files=ファイル(&F)
+Menu.Shell.Commands=コマンド(&C)
+Menu.Shell.Options=オプション(&O)
+Menu.Terminal.File=ファイル(&F)
+
+RemoteCmd.Title=リモートコマンド
+RemoteCmd.Prompt=コマンド:
+RemoteCmd.BtnClose=閉じる(&C)
+
 PanelSettings.Title= パネル設定
 PanelSettings.ShowHidden=隠しファイルとシステムファイルを表示(&H)
 PanelSettings.ShowDirPrefix=フォルダ名に '/' プレフィックスを表示(&F)
@@ -403,6 +392,75 @@ PanelSettings.DefaultMode=デフォルトの操作モード(&M):
 PanelSettings.PathDisplay=進捗状況のファイルパス:
 PanelSettings.InfoPanelCPUGPU=情報パネルにCPU/GPUセクションを表示(&N)
 PanelSettings.EscTogglePanels=Escキーでパネルの表示/非表示を切り替える(&E)
+PanelSettings.ShowHighlightMarks=ハイライトマークを表示(&M)
+PanelSettings.CommandLineAutoComplete=コマンドラインの自動補完を有効にする(&A)
+PanelSettings.AlwaysShowMenuBar=常にメニューバーを表示する(&M)
+PanelSettings.RecordMacrosTo=マクロの記録先:
+
+Jobs.Title=バックグラウンドジョブ
+Jobs.BtnShow=表示(&S)
+Jobs.BtnCancel=ジョブをキャンセル(&C)
+Jobs.BtnClose=閉じる(&C)
+Jobs.Empty=現在実行中のジョブはありません
+
+Sort.Title=ソート順
+
+Help.ViewerEditor=ビューアおよびエディタのキー
+Help.PanelNav=パネルのキー
+Help.NavigationKeys=ナビゲーションキー
+Help.Area.Shell=パネル
+Help.Area.Terminal=ターミナル
+Help.Area.Editor=エディタ
+Help.Area.Viewer=ビューア
+Help.Area.Common=共通
+Help.SearchHint=検索: 文字を入力  次へ: F3/Ctrl+Enter  前へ: Shift+F3/Ctrl+Shift+Enter
+
+FileAssoc.EditorTitle=ファイル関連付け
+FileAssoc.EditTitle=関連付けを編集
+FileAssoc.NewTitle=新規関連付け
+FileAssoc.ErrorTitle=ファイル関連付け
+FileAssoc.EmptyHint=関連付けはありません - Ins キーを押して新しい関連付けを追加してください
+FileAssoc.EmptyMask=ファイルマスクを空にすることはできません。
+FileAssoc.MaskLabel=マスク
+FileAssoc.DescLabel=説明
+FileAssoc.PickTitle.Open=アプリケーションで開く
+FileAssoc.PickTitle.View=ビューアで開く
+FileAssoc.PickTitle.Edit=エディタで開く
+FileAssoc.DeleteTitle=関連付けを削除
+FileAssoc.DeleteConfirm=関連付け %q を削除しますか？
+
+EditorSettings.Title= エディタ設定
+EditorSettings.AutoComplete=オートコンプリート(&A)
+EditorSettings.Mask=対象ファイルマスク(&I):
+EditorSettings.TabExpandNone=タブを拡張しない
+EditorSettings.TabExpandNew=新しく入力されたタブをスペースに拡張する
+EditorSettings.TabExpandAll=すべてのタブをスペースに拡張する
+EditorSettings.ExpandTabs=タブを拡張(&A):
+EditorSettings.Highlighter=ハイライター(&G):
+EditorSettings.ColorerStyle=Colorerスタイル(&Y):
+EditorSettings.TabSize=タブサイズ(&Z):
+EditorSettings.AutoIndent=自動インデント(&N)
+EditorSettings.CursorBeyondEOL=行末越えカーソル移動(&L)
+EditorSettings.UseEditorConfig=.&editorconfig を使用
+EditorSettings.Crosshair=クロスヘアを表示(&H)
+EditorSettings.ColorerBg=Colorer背景(&B)
+EditorSettings.UseExternalEditor=外部エディタを使用(&E)
+EditorSettings.ExternalCommand=外部コマンド(&X):
+
+ColorerSettings.Title= Colorer設定
+ColorerSettings.Enabled=Colorerハイライトを有効にする(&C)
+ColorerSettings.Style=カラースタイル(&S):
+ColorerSettings.BuiltIn=(内蔵)
+ColorerSettings.Cross=クロスヘアを表示(&R):
+ColorerSettings.CrossOff=表示しない
+ColorerSettings.CrossVertical=垂直線
+ColorerSettings.CrossHorizontal=水平線
+ColorerSettings.CrossBoth=両方
+ColorerSettings.Syntax=構文を強調表示(&S)
+ColorerSettings.Background=エディタの背景色をスタイルに合わせる(&B)
+ColorerSettings.Catalog=スキーマフォルダ (catalog.xml)(&C):
+ColorerSettings.Reload=再読み込み(&L)
+ColorerSettings.Download=スキーマをダウンロード(&D)
 
 AppearanceSettings.Title= 外観設定
 AppearanceSettings.Style=アプリケーションスタイル(&S):
@@ -416,15 +474,33 @@ ConfirmationsSettings.Title= 確認設定
 ConfirmationsSettings.Copy=コピー時に確認(&C)
 ConfirmationsSettings.Move=移動時に確認(&M)
 ConfirmationsSettings.Delete=削除時に確認(&D)
+ConfirmationsSettings.DeleteCancelFocused=削除確認で「キャンセル」を選択
 ConfirmationsSettings.Exit=終了時に確認(&E)
+
 UpdateSettings.Title= 自動アップデート
 UpdateSettings.Channel=アップデートチャネル(&C):
 UpdateSettings.Interval=チェック間隔(&I):
 UpdateSettings.BtnCheck=今すぐチェック(&H)
+UpdateSettings.ChannelStable=安定版リリース
+UpdateSettings.ChannelNightly=ナイトリービルド
+UpdateSettings.IntervalNever=しない
+UpdateSettings.IntervalStart=起動時毎回
+UpdateSettings.IntervalDaily=毎日
+UpdateSettings.IntervalWeekly=毎週
+
 FindFile.Title= ファイル検索
 FindFile.MaskPrompt=ファイルマスク (複数指定可):
 FindFile.TextPrompt=含むテキスト:
 FindFile.BtnFind=検索(&F)
+FindFile.SearchingTitle= 検索中...
+FindFile.Scanning=スキャン中:
+FindFile.FoundCount=検出数: %d
+FindFile.SearchResultsTitle= 検索結果
+FindFile.BtnGoTo=移動(&G)
+FindFile.BtnView=表示(&V)
+FindFile.BtnEdit=編集(&E)
+FindFile.BtnClose=閉じる(&C)
+
 History.FoldersTitle= フォルダ履歴
 History.CommandsTitle= コマンド履歴
 History.SearchModeHint=F2: 部分一致 / 前方一致検索を切り替え
@@ -432,22 +508,31 @@ History.CommandsHint=↑↓ Enter Esc Shift+Del Del Ctrl+C Ctrl+Ins F2
 History.FoldersHint=↑↓ Enter Shift+Enter Ctrl+Enter Esc Shift+Del Del Ctrl+C Ctrl+Ins Ctrl+R F2
 History.ConfirmClearAll=履歴をすべてクリアしますか？
 History.ConfirmPruneMissing=存在しないパスの履歴を削除しますか？
-Help.SearchHint=検索: 文字を入力  次へ: F3/Ctrl+Enter  前へ: Shift+F3/Ctrl+Shift+Enter
-UserMenu.LocalMenuTitle=ローカルメニュー
-UserMenu.MainMenuTitle=メインメニュー
-UserMenu.MainMenuFAR=FAR
-
-Language.Title= 言語
-Language.Changed=言語が変更されました。\n一部のUI要素に完全に適用するには\nアプリケーションを再起動する必要があります。
-HelpLanguage.Title=ヘルプの言語
-HelpLanguage.Changed=ヘルプの言語が変更されました。
-
 History.Title= 履歴
 History.EmptyFolders=フォルダ履歴が空です。
 History.EmptyCommands=コマンド履歴が空です。
 
+UserMenu.LocalMenuTitle=ローカルメニュー
+UserMenu.MainMenuTitle=メインメニュー
+UserMenu.MainMenuFAR=FAR
+UserMenu.EditTitle= ユーザーメニューの編集
+UserMenu.CreateTitle= ユーザーメニューの作成
+UserMenu.EditSubmenuTitle= サブメニューの編集
+UserMenu.CreateSubmenuTitle= サブメニューの作成
+UserMenu.LabelHotkey=ホットキー(&K):
+UserMenu.LabelLabel=ラベル(&L):
+UserMenu.LabelCommand=コマンド(&C):
+
+Language.Title= 言語
+Language.Changed=言語が変更されました。\n一部のUI要素に完全に適用するには\nアプリケーションを再起動する必要があります。
+
+HelpLanguage.Title=ヘルプの言語
+HelpLanguage.Changed=ヘルプの言語が変更されました。
+
 Error.Title= エラー
+
 Warning.Title= 警告
+
 Info.Title= 情報
 
 ExtEdit.TempError=一時ファイルを作成できません: %v
@@ -462,22 +547,27 @@ FileOp.BtnNewInstance=新規インスタンス(&N)
 FileOp.CannotEditDir=ディレクトリは編集できません。
 FileOp.CannotViewDir=ディレクトリは表示できません。
 FileOp.CannotOpenSpecial=特殊ファイル (名前付きパイプ、ソケット、デバイス) は開けません。
+FileOp.DeletionErrors= 削除エラー
+FileOp.FileAlreadyExists=ファイルは既に存在します
+FileOp.RememberChoice=選択を記憶する(&M)
+FileOp.Overwrite=上書き(&O)
+FileOp.Skip=スキップ(&S)
+FileOp.Rename=名前変更(&R)
+FileOp.Append=追記(&A)
+FileOp.Resume=再開(&U)
+FileOp.BtnCancel=キャンセル(&C)
+FileOp.BtnBackground=バックグラウンド(&B)
 
 Dialog.RenameTitle= 名前変更
 Dialog.RenamePrompt='%s' の新しい名前:
-
-Op.Queue=キュー
-Op.Background=バックグラウンドパネルクローン
-Op.Foreground=フォアグラウンドロック
-Op.PathNameOnly=名前のみ
-Op.PathFullPath=フルパス
-Op.PathSrcDst=元 -> 先
 
 Plugins.Title= プラグイン管理 (RPC)
 Plugins.BtnAdd=追加(&A)
 Plugins.BtnRemove=削除(&R)
 Plugins.BtnPermissions=権限(&P)
 Plugins.BtnClose=閉じる(&C)
+Plugins.AddTitle= プラグイン追加
+Plugins.SelectFilePrompt=プラグインファイルを選択:
 
 InfoPanel.Title= 情報
 InfoPanel.Computer=コンピュータ名
@@ -541,6 +631,7 @@ AndroidInfo.Storage=ストレージ
 AndroidInfo.StorageTotal=総ストレージ容量
 AndroidInfo.StorageAvailable=空きストレージ容量
 AndroidInfo.Protocol=プロトコル
+
 IOSInfo.DeviceTitle=Apple モバイルデバイス
 IOSInfo.Name=名前
 IOSInfo.Model=モデル
@@ -593,7 +684,6 @@ KeyBar.F9=設定メニュー
 KeyBar.F10=終了
 KeyBar.F11=プラグイン
 KeyBar.F12=選択
-
 KeyBar.AltF1=左
 KeyBar.AltF2=右
 KeyBar.AltF3=16進数
@@ -607,7 +697,6 @@ KeyBar.CtrlF4=拡張子
 KeyBar.CtrlF5=更新日時
 KeyBar.CtrlF6=サイズ
 KeyBar.CtrlF7=未整列
-
 KeyBar.EditorF1=ヘルプ
 KeyBar.EditorF2=保存
 KeyBar.EditorF3=折り返し
@@ -622,54 +711,8 @@ KeyBar.ViewerF7=検索
 KeyBar.ViewerAltF8=移動
 KeyBar.ViewerF10=終了
 
-EditorSettings.TabExpandNone=タブを拡張しない
-EditorSettings.TabExpandNew=新しく入力されたタブをスペースに拡張する
-EditorSettings.TabExpandAll=すべてのタブをスペースに拡張する
-EditorSettings.ExpandTabs=タブを拡張(&A):
-EditorSettings.Highlighter=ハイライター(&G):
-EditorSettings.ColorerStyle=Colorerスタイル(&Y):
-EditorSettings.TabSize=タブサイズ(&Z):
-EditorSettings.AutoIndent=自動インデント(&N)
-EditorSettings.CursorBeyondEOL=行末越えカーソル移動(&L)
-EditorSettings.UseEditorConfig=.&editorconfig を使用
-EditorSettings.Crosshair=クロスヘアを表示(&H)
-EditorSettings.ColorerBg=Colorer背景(&B)
-EditorSettings.UseExternalEditor=外部エディタを使用(&E)
-EditorSettings.ExternalCommand=外部コマンド(&X):
-ConfirmationsSettings.DeleteCancelFocused=削除確認で「キャンセル」を選択
-
-PanelSettings.ShowHighlightMarks=ハイライトマークを表示(&M)
-PanelSettings.CommandLineAutoComplete=コマンドラインの自動補完を有効にする(&A)
-PanelSettings.AlwaysShowMenuBar=常にメニューバーを表示する(&M)
-PanelSettings.RecordMacrosTo=マクロの記録先:
-UpdateSettings.ChannelStable=安定版リリース
-UpdateSettings.ChannelNightly=ナイトリービルド
-UpdateSettings.IntervalNever=しない
-UpdateSettings.IntervalStart=起動時毎回
-UpdateSettings.IntervalDaily=毎日
-UpdateSettings.IntervalWeekly=毎週
-Plugins.AddTitle= プラグイン追加
-Plugins.SelectFilePrompt=プラグインファイルを選択:
-
-FindFile.SearchingTitle= 検索中...
-FindFile.Scanning=スキャン中:
-FindFile.FoundCount=検出数: %d
-FindFile.SearchResultsTitle= 検索結果
-FindFile.BtnGoTo=移動(&G)
-FindFile.BtnView=表示(&V)
-FindFile.BtnEdit=編集(&E)
-FindFile.BtnClose=閉じる(&C)
-
-FileOp.DeletionErrors= 削除エラー
-FileOp.FileAlreadyExists=ファイルは既に存在します
-FileOp.RememberChoice=選択を記憶する(&M)
-FileOp.Overwrite=上書き(&O)
-FileOp.Skip=スキップ(&S)
-FileOp.Rename=名前変更(&R)
-FileOp.Append=追記(&A)
-FileOp.Resume=再開(&U)
-
 Arkanoid.HighScores= ハイスコア
+
 PlugRing.Title= f4 PlugRing
 PlugRing.BtnInstall=インストール/アップデート(&I)
 PlugRing.BtnRemove=削除(&R)
@@ -686,29 +729,18 @@ Attributes.ReadOnly=読み取り専用(&R)
 Attributes.Hidden=隠しファイル(&H)
 Attributes.System=システム(&S)
 Attributes.Archive=アーカイブ(&A)
+
 Permissions.Title= プラグインの権限
 Permissions.BtnRevoke=権限取り消し(&R)
 Permissions.BtnClose=閉じる(&C)
 
-Search.Prompt=検索:
-Search.WholeWords=単語単位で探す
-Search.Regex=正規表現
-Search.BtnFind=検索(&F)
 Replace.Title= 置換
 Replace.Prompt=置換後の文字列:
 Replace.BtnReplace=置換(&R)
 Replace.BtnReplaceAll=すべて置換(&A)
+
 Codepage.Title= コードページ
 Codepage.ConvertTitle= コードページ変換
-
-vtui.Save=保存(&S)
-UserMenu.EditTitle= ユーザーメニューの編集
-UserMenu.CreateTitle= ユーザーメニューの作成
-UserMenu.EditSubmenuTitle= サブメニューの編集
-UserMenu.CreateSubmenuTitle= サブメニューの作成
-UserMenu.LabelHotkey=ホットキー(&K):
-UserMenu.LabelLabel=ラベル(&L):
-UserMenu.LabelCommand=コマンド(&C):
 
 Hotkeys.Title= ホットキー構成
 Hotkeys.BtnAssign=割り当て(&A)
@@ -719,10 +751,7 @@ Hotkeys.BtnNext=次へ >
 Hotkeys.LabelArea=エリア:
 Hotkeys.LabelWhen=条件:
 Hotkeys.AssignTitle= ホットキー割り当て
-Op.DummyQueue=キュー (デフォルト)
-Op.DummyBackground=バックグラウンドパネルクローン
-Op.DummyForeground=フォアグラウンドロック
-Op.BtnStart=開始(&S)
+
 Drive.Title= ドライブ
 
 NetFox.ConnectionTitle= 接続先設定
@@ -738,8 +767,7 @@ NetFox.LabelCodepage=コードページ(&C):
 NetFox.ErrorEmptyName=名前を入力してください
 NetFox.ErrorReservedName=予約された接続名です
 
-FileOp.BtnCancel=キャンセル(&C)
-FileOp.BtnBackground=バックグラウンド(&B)
 Queue.BtnCancel=タスクのキャンセル(&C)
 Queue.BtnClear=完了をクリア(&D)
+
 Session.Title= セッションの選択

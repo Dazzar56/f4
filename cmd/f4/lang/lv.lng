@@ -5,20 +5,6 @@ Author=f4 Team
 
 [Strings]
 VisRen.Menu=Vizuālā &pārdēvēšana
-ID3Editor.Menu=ID3 tagu &redaktors
-ID3Editor.Title=ID3 tagu redaktors
-ID3Editor.LocalOnly=ID3 tagu redaktors atbalsta tikai vietējos failus.
-ID3Editor.SelectFile=Vispirms izvēlieties MP3 failu.
-ID3Editor.OnlyMP3=Tiek atbalstīti tikai MP3 faili.
-ID3Editor.SaveError=Neizdevās saglabāt ID3 tagus:\n%v
-ID3Editor.OpenError=Neizdevās atvērt MP3 failu:\n%v
-ID3Editor.FieldTitle=Nosaukums:
-ID3Editor.FieldArtist=Izpildītājs:
-ID3Editor.FieldAlbum=Albums:
-ID3Editor.FieldYear=Gads:
-ID3Editor.FieldGenre=Žanrs:
-ID3Editor.FieldComment=Komentārs:
-ID3Editor.FieldVersion=Versija:
 VisRen.Title=Vizuālā pārdēvēšana
 VisRen.HostUnsupported=Šī F4 versija nenodrošina VisRen saskarni.
 VisRen.LocalOnly=VisRen darbojas tikai vietējā failu panelī.
@@ -59,109 +45,53 @@ VisRen.WordDivTitle=Vārdu atdalītāji
 VisRen.WordDivPrompt=Rakstzīmes, kas atdala vārdus (maksimāli 18):
 VisRen.OldName=Vecais vārds
 VisRen.NewName=Jaunais vārds
+
+ID3Editor.Menu=ID3 tagu &redaktors
+ID3Editor.Title=ID3 tagu redaktors
+ID3Editor.LocalOnly=ID3 tagu redaktors atbalsta tikai vietējos failus.
+ID3Editor.SelectFile=Vispirms izvēlieties MP3 failu.
+ID3Editor.OnlyMP3=Tiek atbalstīti tikai MP3 faili.
+ID3Editor.SaveError=Neizdevās saglabāt ID3 tagus:\n%v
+ID3Editor.OpenError=Neizdevās atvērt MP3 failu:\n%v
+ID3Editor.FieldTitle=Nosaukums:
+ID3Editor.FieldArtist=Izpildītājs:
+ID3Editor.FieldAlbum=Albums:
+ID3Editor.FieldYear=Gads:
+ID3Editor.FieldGenre=Žanrs:
+ID3Editor.FieldComment=Komentārs:
+ID3Editor.FieldVersion=Versija:
+
 vtui.Ok=&Labi
 vtui.Cancel=Atcelt
+vtui.Save=&Saglabāt
+
 Panel.Other=&Cits panelis
 Panel.Column.Name=Nosaukums
 Panel.Column.Size=Izmērs
 Panel.Column.Modified=Mainīts
 Panel.UpDir=UZ AUGŠU
 Panel.SelectedInfo=Baiti: %s, faili: %d, mapes: %d
+
 Panels.Prompt=>
+
 Edit.NewFileTitle= Create New File
 Edit.NewFilePrompt=Faila &nosaukums:
+
 MakeFolder.Title= Izveidot mapi
 MakeFolder.Prompt=Izveidot &mapi:
+
 Delete.Title= Dzēst
 Delete.Confirm=Vai tiešām vēlaties dzēst\n%s?
 Delete.Btn=&Dzēst
+
 Copy.Title= Kopēt
 Copy.Prompt=Kopēt %d elementus uz:
 Copy.Btn=&Kopēt
+
 Move.Title= Pārvietot
 Move.Prompt=Pārdēvēt vai pārvietot %d elementus uz:
 Move.Btn=&Pārdēvēt
-Btn.OverwriteAll=Pārrakstīt &visus
-Btn.SkipAll=Iz&laist visus
-Btn.Retry=&Atkārtot
-Btn.Ignore=&Ignorēt
-Operation.Error=Operācija neizdevās:\n%s
-Op.ClonePanels=&Klonēt paneļus uz jaunu darba telpu
-Op.SwitchHint=Ctrl+Tab, lai pārslēgtu logus
-Op.DummyTitle= Demonstrācijas operācija
-Op.DummyText=Šī ir demonstrācijas 5 minūšu operācija.\nIzvēlieties fona režīmu:
-Viewer.Title= Skatīt
-Viewer.ModeText=Teksts
-Viewer.ModeHex=Hex
-Viewer.SearchTitle= Meklēt
-Search.CaseSensitive=&Reģistrjūtīgs
-Search.Reverse=At&pakaļejošā meklēšana
-Select.Title= Atlasīt
-Deselect.Title= Atcelt atlasi
-Quit.Title= Iziet
-Quit.Confirm=Vai tiešām vēlaties iziet no f4?
-Quit.Btn=&Iziet
-Select.Mask=Ievadiet atlases &masku:
 
-Macro.AssignTitle= Piešķirt makrosu
-Macro.AssignPrompt=Nospiediet vēlamo taustiņu kombināciju
-Macro.AssignCancel=Nospiediet Esc, lai atceltu
-
-Menu.Language=Valoda
-Menu.HelpLanguage=Palīdzības valoda
-Menu.Left=Kreisais
-Menu.Files=Faili
-Menu.Commands=Komandas
-Menu.Options=Iestatījumi
-Menu.Right=Labais
-Menu.Exit=Iz&iet
-
-Menu.Files.View=Skatīt
-Menu.Files.Edit=Rediģēt
-Menu.Files.Copy=Kopēt
-Menu.Files.RenMov=Pārdēvēt vai pārvietot
-Menu.Files.MkDir=Izveidot mapi
-Menu.Files.Delete=Dzēst
-Menu.Left.Brief=Īss
-Menu.Left.Medium=Vidējs
-Menu.Left.Detailed=Detalizēts
-Menu.Left.Wide=Plats
-Menu.Commands.FindFile=Meklēt failu
-Menu.Commands.FindDuplicates=Meklēt dublikātus
-Menu.Commands.BackgroundJobs=Fona uzdevumi
-Menu.Commands.RunRemote=Palaist komandu attālināti
-RemoteCmd.Title=Attālinātā komanda
-RemoteCmd.Prompt=Komanda:
-RemoteCmd.BtnClose=&Aizvērt
-Jobs.Title=Fona uzdevumi
-Jobs.BtnShow=&Rādīt
-Jobs.BtnCancel=&Atcelt uzdevumu
-Jobs.BtnClose=&Aizvērt
-Jobs.Empty=Nekas netiek izpildīts
-Menu.Commands.Bookmarks=Grāmatzīmes
-Menu.SortName=Nosaukums
-Menu.SortExt=Paplašinājums
-Menu.SortTime=Laiks
-Menu.SortSize=Izmērs
-Menu.SortUnsorted=Nerūšēts
-Sort.Title=Kārtot pēc
-Menu.PanelSettings=Paneļa iestatījumi
-Menu.EditorSettings=Redaktora iestatījumi
-Menu.ColorerSettings=&Colorer iestatījumi
-Menu.AppearanceSettings=Izskats
-Menu.ConfirmationsSettings=Apstiprinājumi
-Menu.AutoUpdateSettings=Automātiska &atjaunināšana
-Menu.Options.Plugins=Spraudņu pārvaldība
-
-Menu.Editor.File=&Fails
-Menu.Editor.Edit=&Rediģēt
-Menu.Editor.Search=&Meklēt
-Menu.Editor.Options=&Iestatījumi
-Menu.Editor.Insert=&Ievietot
-Menu.Viewer.File=&Fails
-Menu.Viewer.View=&Skatīt
-Menu.Viewer.Search=&Meklēt
-Menu.Viewer.Options=&Iestatījumi
 Action.App.ScreenGrab=Ekrāna &kopēšana
 Action.App.ScreenGrab.Desc=Atlasīt un kopēt ekrāna apgabalu
 Action.Editor.Save=&Saglabāt
@@ -224,18 +154,6 @@ Action.Viewer.CodepageNext=Nākamā &kodu tabula
 Action.Viewer.CodepageNext.Desc=Ciklieties uz nākamo kodu tabulu
 Action.Viewer.CodepageMenu=Kodu tabulu &izvēlne
 Action.Viewer.CodepageMenu.Desc=Izvēlēties kodu tabulu
-Help.ViewerEditor=Skatītāja un redaktora taustiņi
-Help.PanelNav=Paneļa taustiņi
-Help.NavigationKeys=Navigācijas taustiņi
-Help.Area.Shell=Paneļi
-Help.Area.Terminal=Terminālis
-Help.Area.Editor=Redaktors
-Help.Area.Viewer=Skatītājs
-Help.Area.Common=Kopīgie
-Menu.Shell.Files=&Faili
-Menu.Shell.Commands=&Komandas
-Menu.Shell.Options=&Iestatījumi
-Menu.Terminal.File=&Fails
 Action.File.New=Jauns fails
 Action.File.New.Desc=Izveidot jaunu failu un atvērto redaktorā
 Action.File.CopyInPlace=Kopēt uz vietas
@@ -268,19 +186,6 @@ Action.Panel.UserMenu=&Lietotāja izvēlne
 Action.Panel.UserMenu.Desc=Rādīt lietotāja izvēlni
 Action.Panel.FileAssociations=Failų &asociacijos…
 Action.Panel.FileAssociations.Desc=Konfigurēt maskas komandas taustiņiem Enter, F3 un F4
-FileAssoc.EditorTitle=Failu asociācijas
-FileAssoc.EditTitle=Rediģēt asociāciju
-FileAssoc.NewTitle=Jauna asociācija
-FileAssoc.ErrorTitle=Failu asociācijas
-FileAssoc.EmptyHint=Vēl nav asociāciju — nospiediet Ins, lai pievienotu
-FileAssoc.EmptyMask=Faila maska nedrīkst būt tukša.
-FileAssoc.MaskLabel=Maska
-FileAssoc.DescLabel=Apraksts
-FileAssoc.PickTitle.Open=Atvērt ar
-FileAssoc.PickTitle.View=Skatīt ar
-FileAssoc.PickTitle.Edit=Rediģēt ar
-FileAssoc.DeleteTitle=Dzēst asociāciju
-FileAssoc.DeleteConfirm=Dzēst asociāciju %q?
 Action.Panel.Bookmarks.Desc=Rādīt mapju grāmatzīmju dialogu
 Action.Panel.PluginMenu=S&praudņu komandas
 Action.Panel.PluginMenu.Desc=Rādīt spraudņu komandu izvēlni
@@ -367,23 +272,106 @@ Action.Terminal.ViewLog.Desc=Atvērto termināļa logu skatītājā
 Action.Terminal.EditLog=Rediģēt termināļa &logu
 Action.Terminal.EditLog.Desc=Atvērt termināļa logu redaktorā
 
-EditorSettings.Title= Redaktora iestatījumi
-EditorSettings.AutoComplete=Iespējot &autopabeigšanu
-EditorSettings.Mask=Aktīvs failu &maskām:
-ColorerSettings.Title= Colorer iestatījumi
-ColorerSettings.Enabled=Iespējot &Colorer izcelšanu
-ColorerSettings.Style=Krāsu &stils:
-ColorerSettings.BuiltIn=(iebūvēts)
-ColorerSettings.Cross=Rādīt k&rustu:
-ColorerSettings.CrossOff=Nerādīt
-ColorerSettings.CrossVertical=Vertikāls
-ColorerSettings.CrossHorizontal=Horizontāls
-ColorerSettings.CrossBoth=Abu
-ColorerSettings.Syntax=Izcelt s&intaksi
-ColorerSettings.Background=Mainīt redaktora &fonu
-ColorerSettings.Catalog=Shēmu &mape (catalog.xml):
-ColorerSettings.Reload=Pār&lādēt
-ColorerSettings.Download=Lejupielā&dēt shēmas
+Btn.OverwriteAll=Pārrakstīt &visus
+Btn.SkipAll=Iz&laist visus
+Btn.Retry=&Atkārtot
+Btn.Ignore=&Ignorēt
+
+Operation.Error=Operācija neizdevās:\n%s
+
+Op.ClonePanels=&Klonēt paneļus uz jaunu darba telpu
+Op.SwitchHint=Ctrl+Tab, lai pārslēgtu logus
+Op.DummyTitle= Demonstrācijas operācija
+Op.DummyText=Šī ir demonstrācijas 5 minūšu operācija.\nIzvēlieties fona režīmu:
+Op.Queue=Rinda
+Op.Background=Fona paneļa klonēšana
+Op.Foreground=Priekšplāna bloķēšana
+Op.PathNameOnly=Tikai nosaukums
+Op.PathFullPath=Pilns ceļš
+Op.PathSrcDst=Avots -> Mērķis
+Op.DummyQueue=Rinda (Noklusējums)
+Op.DummyBackground=Fona paneļa klonēšana
+Op.DummyForeground=Priekšplāna bloķēšana
+Op.BtnStart=&Sākt
+
+Viewer.Title= Skatīt
+Viewer.ModeText=Teksts
+Viewer.ModeHex=Hex
+Viewer.SearchTitle= Meklēt
+
+Search.CaseSensitive=&Reģistrjūtīgs
+Search.Reverse=At&pakaļejošā meklēšana
+Search.Prompt=Meklēt:
+Search.WholeWords=Tikai pilni vārdi
+Search.Regex=Regulārās izteiksmes
+Search.BtnFind=&Meklēt
+
+Select.Title= Atlasīt
+Select.Mask=Ievadiet atlases &masku:
+
+Deselect.Title= Atcelt atlasi
+
+Quit.Title= Iziet
+Quit.Confirm=Vai tiešām vēlaties iziet no f4?
+Quit.Btn=&Iziet
+
+Macro.AssignTitle= Piešķirt makrosu
+Macro.AssignPrompt=Nospiediet vēlamo taustiņu kombināciju
+Macro.AssignCancel=Nospiediet Esc, lai atceltu
+
+Menu.Language=Valoda
+Menu.HelpLanguage=Palīdzības valoda
+Menu.Left=Kreisais
+Menu.Files=Faili
+Menu.Commands=Komandas
+Menu.Options=Iestatījumi
+Menu.Right=Labais
+Menu.Exit=Iz&iet
+Menu.Files.View=Skatīt
+Menu.Files.Edit=Rediģēt
+Menu.Files.Copy=Kopēt
+Menu.Files.RenMov=Pārdēvēt vai pārvietot
+Menu.Files.MkDir=Izveidot mapi
+Menu.Files.Delete=Dzēst
+Menu.Left.Brief=Īss
+Menu.Left.Medium=Vidējs
+Menu.Left.Detailed=Detalizēts
+Menu.Left.Wide=Plats
+Menu.Commands.FindFile=Meklēt failu
+Menu.Commands.FindDuplicates=Meklēt dublikātus
+Menu.Commands.BackgroundJobs=Fona uzdevumi
+Menu.Commands.RunRemote=Palaist komandu attālināti
+Menu.Commands.Bookmarks=Grāmatzīmes
+Menu.SortName=Nosaukums
+Menu.SortExt=Paplašinājums
+Menu.SortTime=Laiks
+Menu.SortSize=Izmērs
+Menu.SortUnsorted=Nerūšēts
+Menu.PanelSettings=Paneļa iestatījumi
+Menu.EditorSettings=Redaktora iestatījumi
+Menu.ColorerSettings=&Colorer iestatījumi
+Menu.AppearanceSettings=Izskats
+Menu.ConfirmationsSettings=Apstiprinājumi
+Menu.AutoUpdateSettings=Automātiska &atjaunināšana
+Menu.Options.Plugins=Spraudņu pārvaldība
+Menu.Editor.File=&Fails
+Menu.Editor.Edit=&Rediģēt
+Menu.Editor.Search=&Meklēt
+Menu.Editor.Options=&Iestatījumi
+Menu.Editor.Insert=&Ievietot
+Menu.Viewer.File=&Fails
+Menu.Viewer.View=&Skatīt
+Menu.Viewer.Search=&Meklēt
+Menu.Viewer.Options=&Iestatījumi
+Menu.Shell.Files=&Faili
+Menu.Shell.Commands=&Komandas
+Menu.Shell.Options=&Iestatījumi
+Menu.Terminal.File=&Fails
+
+RemoteCmd.Title=Attālinātā komanda
+RemoteCmd.Prompt=Komanda:
+RemoteCmd.BtnClose=&Aizvērt
+
 PanelSettings.Title= Paneļa iestatījumi
 PanelSettings.ShowHidden=Rādīt &slēptos un sistēmas failus
 PanelSettings.ShowDirPrefix=Rādīt '/' pirms &mapēm
@@ -404,6 +392,75 @@ PanelSettings.DefaultMode=Noklusētais operācijas &režīms:
 PanelSettings.PathDisplay=Faila ceļa rādīšana procesā:
 PanelSettings.InfoPanelCPUGPU=Rādīt CPU/GPU sadaļu info p&anelī
 PanelSettings.EscTogglePanels=&Esc pārslēdz paneļu redzamību
+PanelSettings.ShowHighlightMarks=Rādīt failu &iezīmēšanas zīmes
+PanelSettings.CommandLineAutoComplete=Iespējot komandrindas &autopabeigšanu
+PanelSettings.AlwaysShowMenuBar=Vienmēr rādīt &izvēlnes joslu
+PanelSettings.RecordMacrosTo=Ierakstīt makrosus mapē:
+
+Jobs.Title=Fona uzdevumi
+Jobs.BtnShow=&Rādīt
+Jobs.BtnCancel=&Atcelt uzdevumu
+Jobs.BtnClose=&Aizvērt
+Jobs.Empty=Nekas netiek izpildīts
+
+Sort.Title=Kārtot pēc
+
+Help.ViewerEditor=Skatītāja un redaktora taustiņi
+Help.PanelNav=Paneļa taustiņi
+Help.NavigationKeys=Navigācijas taustiņi
+Help.Area.Shell=Paneļi
+Help.Area.Terminal=Terminālis
+Help.Area.Editor=Redaktors
+Help.Area.Viewer=Skatītājs
+Help.Area.Common=Kopīgie
+Help.SearchHint=Meklēt: rakstiet  Nākamais: F3/Ctrl+Enter  Iepriekšējais: Shift+F3/Ctrl+Shift+Enter
+
+FileAssoc.EditorTitle=Failu asociācijas
+FileAssoc.EditTitle=Rediģēt asociāciju
+FileAssoc.NewTitle=Jauna asociācija
+FileAssoc.ErrorTitle=Failu asociācijas
+FileAssoc.EmptyHint=Vēl nav asociāciju — nospiediet Ins, lai pievienotu
+FileAssoc.EmptyMask=Faila maska nedrīkst būt tukša.
+FileAssoc.MaskLabel=Maska
+FileAssoc.DescLabel=Apraksts
+FileAssoc.PickTitle.Open=Atvērt ar
+FileAssoc.PickTitle.View=Skatīt ar
+FileAssoc.PickTitle.Edit=Rediģēt ar
+FileAssoc.DeleteTitle=Dzēst asociāciju
+FileAssoc.DeleteConfirm=Dzēst asociāciju %q?
+
+EditorSettings.Title= Redaktora iestatījumi
+EditorSettings.AutoComplete=Iespējot &autopabeigšanu
+EditorSettings.Mask=Aktīvs failu &maskām:
+EditorSettings.TabExpandNone=Neizvērst tabulāciju
+EditorSettings.TabExpandNew=Izvērst tikai jaunos tabulācijas simbolius atstarpēs
+EditorSettings.TabExpandAll=Vienmēr izvērst tabulāciju atstarpēs
+EditorSettings.ExpandTabs=Izvērst ta&bulāciju:
+EditorSettings.Highlighter=&Izcelšana:
+EditorSettings.ColorerStyle=Colorer &stils:
+EditorSettings.TabSize=Tabulācijas &izmērs:
+EditorSettings.AutoIndent=Automātiskā &atkāpe
+EditorSettings.CursorBeyondEOL=Kursors aiz rindas &gala
+EditorSettings.UseEditorConfig=Izmantot .&editorconfig
+EditorSettings.Crosshair=Rādīt t&aikni
+EditorSettings.ColorerBg=Colorer &fons
+EditorSettings.UseExternalEditor=Izmantot ār&ējo redaktoru
+EditorSettings.ExternalCommand=Komanda &palaišanai:
+
+ColorerSettings.Title= Colorer iestatījumi
+ColorerSettings.Enabled=Iespējot &Colorer izcelšanu
+ColorerSettings.Style=Krāsu &stils:
+ColorerSettings.BuiltIn=(iebūvēts)
+ColorerSettings.Cross=Rādīt k&rustu:
+ColorerSettings.CrossOff=Nerādīt
+ColorerSettings.CrossVertical=Vertikāls
+ColorerSettings.CrossHorizontal=Horizontāls
+ColorerSettings.CrossBoth=Abu
+ColorerSettings.Syntax=Izcelt s&intaksi
+ColorerSettings.Background=Mainīt redaktora &fonu
+ColorerSettings.Catalog=Shēmu &mape (catalog.xml):
+ColorerSettings.Reload=Pār&lādēt
+ColorerSettings.Download=Lejupielā&dēt shēmas
 
 AppearanceSettings.Title= Izskata iestatījumi
 AppearanceSettings.Style=Lietotnes &stils:
@@ -417,15 +474,33 @@ ConfirmationsSettings.Title= Apstiprinājumi
 ConfirmationsSettings.Copy=Apstiprināt &kopējot
 ConfirmationsSettings.Move=Apstiprināt p&ārvietojot
 ConfirmationsSettings.Delete=Apstiprināt &dzēšot
+ConfirmationsSettings.DeleteCancelFocused=Dzēšot fokusēt 'Atcelt'
 ConfirmationsSettings.Exit=Apstiprināt iz&ejot
+
 UpdateSettings.Title= Automātiska atjaunināšana
 UpdateSettings.Channel=Atjauninājumu &kanāls:
 UpdateSettings.Interval=Pārbaužu &intervāls:
 UpdateSettings.BtnCheck=Pārbaudīt &tagad
+UpdateSettings.ChannelStable=Stabilie laidieni
+UpdateSettings.ChannelNightly=Nakts laidieni
+UpdateSettings.IntervalNever=Nekad
+UpdateSettings.IntervalStart=Katru reizi palaižot
+UpdateSettings.IntervalDaily=Katru dienu
+UpdateSettings.IntervalWeekly=Katru nedēļu
+
 FindFile.Title= Meklēt failu
 FindFile.MaskPrompt=Faila maska (vai vairākas):
 FindFile.TextPrompt=Satur tekstu:
 FindFile.BtnFind=&Meklēt
+FindFile.SearchingTitle= Meklē...
+FindFile.Scanning=Skenē:
+FindFile.FoundCount=Atrasts: %d
+FindFile.SearchResultsTitle= Meklēšanas rezultāti
+FindFile.BtnGoTo=&Iet uz
+FindFile.BtnView=&Skatīt
+FindFile.BtnEdit=&Rediģēt
+FindFile.BtnClose=&Aizvērt
+
 History.FoldersTitle= Mapju vēsture
 History.CommandsTitle= Komandu vēsture
 History.SearchModeHint=F2: pārslēgt apakšvirknes / prefiksa meklēšanu
@@ -433,22 +508,36 @@ History.CommandsHint=Augšup/Lejup Enter Esc Shift+Del Del Ctrl+C Ctrl+Ins F2
 History.FoldersHint=Augšup/Lejup Enter Shift+Enter Ctrl+Enter Esc Shift+Del Del Ctrl+C Ctrl+Ins Ctrl+R F2
 History.ConfirmClearAll=Notīrīt visu vēsturi?
 History.ConfirmPruneMissing=Noņemt ierakstus, kuru ceļi vairs neeksistē?
-Help.SearchHint=Meklēt: rakstiet  Nākamais: F3/Ctrl+Enter  Iepriekšējais: Shift+F3/Ctrl+Shift+Enter
-UserMenu.LocalMenuTitle=Vietējā izvēlne
-UserMenu.MainMenuTitle=Galvenā izvēlne
-UserMenu.MainMenuFAR=FAR
-
-Language.Title= Valodas
-Language.Changed=Valoda mainīta.\nDažiem saskarnes elementiem var būt nepieciešama programmas\npalaisšana no jauna, lai pilnībā stātos spēkā izmaiņas.
-HelpLanguage.Title=Palīdzības valodas
-HelpLanguage.Changed=Palīdzības valoda mainīta.
-
 History.Title= Vēsture
 History.EmptyFolders=Mapju vēsture ir tukša.
 History.EmptyCommands=Komandu vēsture ir tukša.
 
+UserMenu.LocalMenuTitle=Vietējā izvēlne
+UserMenu.MainMenuTitle=Galvenā izvēlne
+UserMenu.MainMenuFAR=FAR
+UserMenu.EditTitle= Rediģēt lietotāja izvēlni
+UserMenu.CreateTitle= Izveidot lietotāja izvēlni
+UserMenu.EditSubmenuTitle= Rediģēt apakšizvēlni
+UserMenu.CreateSubmenuTitle= Izveidot apakšizvēlni
+UserMenu.LabelHotkey=Karstais &taustiņš:
+UserMenu.LabelLabel=&Etiķete:
+UserMenu.LabelCommand=&Komanda:
+
+Language.Title= Valodas
+Language.Changed=Valoda mainīta.\nDažiem saskarnes elementiem var būt nepieciešama programmas\npalaisšana no jauna, lai pilnībā stātos spēkā izmaiņas.
+
+LanguageSettings.Title= Valodas iestatījumi
+LanguageSettings.Primary=Galvenā valoda:
+LanguageSettings.Fallback=Rezerves valoda:
+LanguageSettings.None=<nav>
+
+HelpLanguage.Title=Palīdzības valodas
+HelpLanguage.Changed=Palīdzības valoda mainīta.
+
 Error.Title= Kļūda
+
 Warning.Title= Brīdinājums
+
 Info.Title= Informācija
 
 ExtEdit.TempError=Neizdevās izveidot pagaidu failu: %v
@@ -463,22 +552,27 @@ FileOp.BtnNewInstance=&Jauna kopija
 FileOp.CannotEditDir=Katalogu rediģēt nevar.
 FileOp.CannotViewDir=Katalogu skatīt nevar.
 FileOp.CannotOpenSpecial=Neizdevās atvērt speciālos failus (caurules, ligzdas, ierīces).
+FileOp.DeletionErrors= Dzēšanas kļūdas
+FileOp.FileAlreadyExists=Fails jau eksistē
+FileOp.RememberChoice=Iega&umēt izvēli
+FileOp.Overwrite=&Pārrakstīt
+FileOp.Skip=Iz&laist
+FileOp.Rename=&Pārdēvēt
+FileOp.Append=&Pievienot
+FileOp.Resume=Tur&pināt
+FileOp.BtnCancel=&Atcelt
+FileOp.BtnBackground=&Fonā
 
 Dialog.RenameTitle= Pārdēvēt
 Dialog.RenamePrompt=Pārdēvēt '%s' par:
-
-Op.Queue=Rinda
-Op.Background=Fona paneļa klonēšana
-Op.Foreground=Priekšplāna bloķēšana
-Op.PathNameOnly=Tikai nosaukums
-Op.PathFullPath=Pilns ceļš
-Op.PathSrcDst=Avots -> Mērķis
 
 Plugins.Title= Spraudņu pārvaldība (RPC)
 Plugins.BtnAdd=&Pievienot
 Plugins.BtnRemove=&Noņemt
 Plugins.BtnPermissions=&Atļaujas
 Plugins.BtnClose=&Aizvērt
+Plugins.AddTitle= Pievienot spraudni
+Plugins.SelectFilePrompt=Izvēlieties spraudņa failu:
 
 InfoPanel.Title= Informācija
 InfoPanel.Computer=Datora nosaukums
@@ -542,6 +636,7 @@ AndroidInfo.Storage=Krātuve
 AndroidInfo.StorageTotal=Kopā krātuvē
 AndroidInfo.StorageAvailable=Pieejams krātuvē
 AndroidInfo.Protocol=Protokols
+
 IOSInfo.DeviceTitle=Apple mobilā ierīce
 IOSInfo.Name=Nosaukums
 IOSInfo.Model=Modelis
@@ -594,7 +689,6 @@ KeyBar.F9=IestIzv
 KeyBar.F10=Iziet
 KeyBar.F11=Spraudnis
 KeyBar.F12=Ekrāns
-
 KeyBar.AltF1=Kreisais
 KeyBar.AltF2=Labais
 KeyBar.AltF3=Hex
@@ -608,7 +702,6 @@ KeyBar.CtrlF4=Papla
 KeyBar.CtrlF5=Laiks
 KeyBar.CtrlF6=Izmērs
 KeyBar.CtrlF7=Nerūš
-
 KeyBar.EditorF1=Palīdzība
 KeyBar.EditorF2=Saglabāt
 KeyBar.EditorF3=Aplauzt
@@ -623,58 +716,8 @@ KeyBar.ViewerF7=Meklēt
 KeyBar.ViewerAltF8=IetUz
 KeyBar.ViewerF10=Iziet
 
-EditorSettings.TabExpandNone=Neizvērst tabulāciju
-EditorSettings.TabExpandNew=Izvērst tikai jaunos tabulācijas simbolius atstarpēs
-EditorSettings.TabExpandAll=Vienmēr izvērst tabulāciju atstarpēs
-EditorSettings.ExpandTabs=Izvērst ta&bulāciju:
-EditorSettings.Highlighter=&Izcelšana:
-EditorSettings.ColorerStyle=Colorer &stils:
-EditorSettings.TabSize=Tabulācijas &izmērs:
-EditorSettings.AutoIndent=Automātiskā &atkāpe
-EditorSettings.CursorBeyondEOL=Kursors aiz rindas &gala
-EditorSettings.UseEditorConfig=Izmantot .&editorconfig
-EditorSettings.Crosshair=Rādīt t&aikni
-EditorSettings.ColorerBg=Colorer &fons
-EditorSettings.UseExternalEditor=Izmantot ār&ējo redaktoru
-EditorSettings.ExternalCommand=Komanda &palaišanai:
-ConfirmationsSettings.DeleteCancelFocused=Dzēšot fokusēt 'Atcelt'
-
-PanelSettings.ShowHighlightMarks=Rādīt failu &iezīmēšanas zīmes
-PanelSettings.CommandLineAutoComplete=Iespējot komandrindas &autopabeigšanu
-PanelSettings.AlwaysShowMenuBar=Vienmēr rādīt &izvēlnes joslu
-PanelSettings.RecordMacrosTo=Ierakstīt makrosus mapē:
-UpdateSettings.ChannelStable=Stabilie laidieni
-UpdateSettings.ChannelNightly=Nakts laidieni
-UpdateSettings.IntervalNever=Nekad
-UpdateSettings.IntervalStart=Katru reizi palaižot
-UpdateSettings.IntervalDaily=Katru dienu
-UpdateSettings.IntervalWeekly=Katru nedēļu
-Plugins.AddTitle= Pievienot spraudni
-Plugins.SelectFilePrompt=Izvēlieties spraudņa failu:
-
-FindFile.SearchingTitle= Meklē...
-FindFile.Scanning=Skenē:
-FindFile.FoundCount=Atrasts: %d
-FindFile.SearchResultsTitle= Meklēšanas rezultāti
-FindFile.BtnGoTo=&Iet uz
-FindFile.BtnView=&Skatīt
-FindFile.BtnEdit=&Rediģēt
-FindFile.BtnClose=&Aizvērt
-
-FileOp.DeletionErrors= Dzēšanas kļūdas
-FileOp.FileAlreadyExists=Fails jau eksistē
-FileOp.RememberChoice=Iega&umēt izvēli
-FileOp.Overwrite=&Pārrakstīt
-FileOp.Skip=Iz&laist
-FileOp.Rename=&Pārdēvēt
-FileOp.Append=&Pievienot
-FileOp.Resume=Tur&pināt
-LanguageSettings.Title= Valodas iestatījumi
-LanguageSettings.Primary=Galvenā valoda:
-LanguageSettings.Fallback=Rezerves valoda:
-LanguageSettings.None=<nav>
-
 Arkanoid.HighScores= Rekordi
+
 PlugRing.Title= f4 PlugRing
 PlugRing.BtnInstall=&Instalēt/Atjaunināt
 PlugRing.BtnRemove=&Noņemt
@@ -691,29 +734,18 @@ Attributes.ReadOnly=Tikai &lasīšanai
 Attributes.Hidden=&Slēpts
 Attributes.System=&Sistēmas
 Attributes.Archive=&Arhīva
+
 Permissions.Title= Spraudņu atļaujas
 Permissions.BtnRevoke=At&saukt
 Permissions.BtnClose=&Aizvērt
 
-Search.Prompt=Meklēt:
-Search.WholeWords=Tikai pilni vārdi
-Search.Regex=Regulārās izteiksmes
-Search.BtnFind=&Meklēt
 Replace.Title= Aizvietot
 Replace.Prompt=Aizvietot ar:
 Replace.BtnReplace=&Aizvietot
 Replace.BtnReplaceAll=Aizvietot &visus
+
 Codepage.Title= Kodu tabulas
 Codepage.ConvertTitle= Konvertēt kodu tabulu
-
-vtui.Save=&Saglabāt
-UserMenu.EditTitle= Rediģēt lietotāja izvēlni
-UserMenu.CreateTitle= Izveidot lietotāja izvēlni
-UserMenu.EditSubmenuTitle= Rediģēt apakšizvēlni
-UserMenu.CreateSubmenuTitle= Izveidot apakšizvēlni
-UserMenu.LabelHotkey=Karstais &taustiņš:
-UserMenu.LabelLabel=&Etiķete:
-UserMenu.LabelCommand=&Komanda:
 
 Hotkeys.Title= Karsto taustiņu konfigurators
 Hotkeys.BtnAssign=&Piešķirt
@@ -724,10 +756,7 @@ Hotkeys.BtnNext=Tālāk >
 Hotkeys.LabelArea=Apgabals:
 Hotkeys.LabelWhen=Nosacījums:
 Hotkeys.AssignTitle= Piešķirt karsto taustiņu
-Op.DummyQueue=Rinda (Noklusējums)
-Op.DummyBackground=Fona paneļa klonēšana
-Op.DummyForeground=Priekšplāna bloķēšana
-Op.BtnStart=&Sākt
+
 Drive.Title= Disks
 
 NetFox.ConnectionTitle= Savienojuma izveide
@@ -743,8 +772,7 @@ NetFox.LabelCodepage=Kodu &tabula:
 NetFox.ErrorEmptyName=Nosaukums nevar būt tukšs
 NetFox.ErrorReservedName=Rezervēts savienojuma nosaukums
 
-FileOp.BtnCancel=&Atcelt
-FileOp.BtnBackground=&Fonā
 Queue.BtnCancel=&Atcelt uzdevumu
 Queue.BtnClear=Notīrīt &pabeigtos
+
 Session.Title= Izvēlēties sesiju

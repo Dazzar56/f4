@@ -5,20 +5,6 @@ Author=f4 Team
 
 [Strings]
 VisRen.Menu=可视化文件重命名(&V)
-ID3Editor.Menu=ID3 标签编辑器(&E)
-ID3Editor.Title=ID3 标签编辑器
-ID3Editor.LocalOnly=ID3 标签编辑器仅支持本地文件。
-ID3Editor.SelectFile=请先选择一个 MP3 文件。
-ID3Editor.OnlyMP3=仅支持 MP3 文件。
-ID3Editor.SaveError=保存 ID3 标签失败:\n%v
-ID3Editor.OpenError=打开 MP3 文件失败:\n%v
-ID3Editor.FieldTitle=标题:
-ID3Editor.FieldArtist=艺术家:
-ID3Editor.FieldAlbum=专辑:
-ID3Editor.FieldYear=年份:
-ID3Editor.FieldGenre=流派:
-ID3Editor.FieldComment=备注:
-ID3Editor.FieldVersion=版本:
 VisRen.Title=可视化文件重命名
 VisRen.HostUnsupported=此 F4 主机不提供 VisRen UI 桥接。
 VisRen.LocalOnly=VisRen 仅适用于本地文件面板。
@@ -59,109 +45,52 @@ VisRen.WordDivTitle=单词分隔符
 VisRen.WordDivPrompt=单词分隔符(最多 18 个字符):
 VisRen.OldName=原名称
 VisRen.NewName=新名称
+
+ID3Editor.Menu=ID3 标签编辑器(&E)
+ID3Editor.Title=ID3 标签编辑器
+ID3Editor.LocalOnly=ID3 标签编辑器仅支持本地文件。
+ID3Editor.SelectFile=请先选择一个 MP3 文件。
+ID3Editor.OnlyMP3=仅支持 MP3 文件。
+ID3Editor.SaveError=保存 ID3 标签失败:\n%v
+ID3Editor.OpenError=打开 MP3 文件失败:\n%v
+ID3Editor.FieldTitle=标题:
+ID3Editor.FieldArtist=艺术家:
+ID3Editor.FieldAlbum=专辑:
+ID3Editor.FieldYear=年份:
+ID3Editor.FieldGenre=流派:
+ID3Editor.FieldComment=备注:
+ID3Editor.FieldVersion=版本:
+
 vtui.Ok=确定(&O)
 vtui.Cancel=取消
+
 Panel.Other=另一个面板(&O)
 Panel.Column.Name=名称
 Panel.Column.Size=大小
 Panel.Column.Modified=修改时间
 Panel.UpDir=返回上级
 Panel.SelectedInfo=字节: %s, 文件: %d, 文件夹: %d
+
 Panels.Prompt=>
+
 Edit.NewFileTitle= 创建新文件
 Edit.NewFilePrompt=文件名(&N):
+
 MakeFolder.Title= 创建文件夹
 MakeFolder.Prompt=创建文件夹(&F):
+
 Delete.Title= 删除
 Delete.Confirm=您确定要删除\n%s 吗？
 Delete.Btn=删除(&D)
+
 Copy.Title= 复制
 Copy.Prompt=复制 %d 个项目到:
 Copy.Btn=复制(&C)
+
 Move.Title= 移动/重命名
 Move.Prompt=重命名或移动 %d 个项目到:
 Move.Btn=重命名(&R)
-Btn.OverwriteAll=全部覆盖(&A)
-Btn.SkipAll=全部跳过(&K)
-Btn.Retry=重试(&R)
-Btn.Ignore=忽略(&I)
-Operation.Error=操作失败:\n%s
-Op.ClonePanels=克隆面板到新工作区(&C)
-Op.SwitchHint=按 Ctrl+Tab 切换窗口
-Op.DummyTitle= 演示操作
-Op.DummyText=这是一个 5 分钟的演示操作。\n请选择后台运行模式:
-Viewer.Title= 查看
-Viewer.ModeText=文本
-Viewer.ModeHex=十六进制
-Viewer.SearchTitle= 搜索
-Search.CaseSensitive=区分大小写(&C)
-Search.Reverse=反向搜索(&R)
-Select.Title= 选择
-Deselect.Title= 取消选择
-Quit.Title= 退出
-Quit.Confirm=您确定要退出 f4 吗？
-Quit.Btn=离开(&L)
-Select.Mask=输入选择掩码(&E):
 
-Macro.AssignTitle= 分配宏
-Macro.AssignPrompt=请按下所需的快捷键组合
-Macro.AssignCancel=按 Esc 键取消
-
-Menu.Language=语言
-Menu.HelpLanguage=帮助语言
-Menu.Left=左侧
-Menu.Files=文件
-Menu.Commands=命令
-Menu.Options=选项
-Menu.Right=右侧
-Menu.Exit=退出(&X)
-
-Menu.Files.View=查看
-Menu.Files.Edit=编辑
-Menu.Files.Copy=复制
-Menu.Files.RenMov=重命名或移动
-Menu.Files.MkDir=创建文件夹
-Menu.Files.Delete=删除
-Menu.Left.Brief=简短
-Menu.Left.Medium=中等
-Menu.Left.Detailed=详细
-Menu.Left.Wide=宽屏
-Menu.Commands.FindFile=查找文件
-Menu.Commands.FindDuplicates=查找重复文件
-Menu.Commands.BackgroundJobs=后台任务
-Menu.Commands.RunRemote=远程执行命令
-RemoteCmd.Title=远程命令
-RemoteCmd.Prompt=命令:
-RemoteCmd.BtnClose=关闭(&C)
-Jobs.Title=后台任务
-Jobs.BtnShow=显示(&S)
-Jobs.BtnCancel=取消任务(&C)
-Jobs.BtnClose=关闭(&C)
-Jobs.Empty=当前没有运行的任务
-Menu.Commands.Bookmarks=书签
-Menu.SortName=名称
-Menu.SortExt=扩展名
-Menu.SortTime=时间
-Menu.SortSize=大小
-Menu.SortUnsorted=未排序
-Sort.Title=排序依据
-Menu.PanelSettings=面板设置
-Menu.EditorSettings=编辑器设置
-Menu.ColorerSettings=Colorer设置(&O)
-Menu.AppearanceSettings=外观设置
-Menu.ConfirmationsSettings=确认设置
-Menu.AutoUpdateSettings=自动更新(&U)
-Menu.Options.Plugins=管理插件
-
-Menu.Editor.File=文件(&F)
-Menu.Editor.Edit=编辑(&E)
-Menu.Editor.Search=搜索(&S)
-Menu.Editor.Options=选项(&O)
-Menu.Editor.Insert=插入(&I)
-Menu.Viewer.File=文件(&F)
-Menu.Viewer.View=视图(&V)
-Menu.Viewer.Search=搜索(&S)
-Menu.Viewer.Options=选项(&O)
 Action.App.ScreenGrab=屏幕截图(&G)
 Action.App.ScreenGrab.Desc=选择并复制屏幕区域
 Action.Editor.Save=保存(&S)
@@ -224,18 +153,6 @@ Action.Viewer.CodepageNext=下一个字符集(&E)
 Action.Viewer.CodepageNext.Desc=循环切换到下一个字符集
 Action.Viewer.CodepageMenu=字符集菜单(&C)
 Action.Viewer.CodepageMenu.Desc=选择字符集
-Help.ViewerEditor=查看器和编辑器键盘快捷键
-Help.PanelNav=面板键盘快捷键
-Help.NavigationKeys=导航键
-Help.Area.Shell=面板
-Help.Area.Terminal=终端
-Help.Area.Editor=编辑器
-Help.Area.Viewer=查看器
-Help.Area.Common=通用
-Menu.Shell.Files=文件(&F)
-Menu.Shell.Commands=命令(&C)
-Menu.Shell.Options=选项(&O)
-Menu.Terminal.File=文件(&F)
 Action.File.New=新建文件
 Action.File.New.Desc=创建新文件并在编辑器中打开
 Action.File.CopyInPlace=同目录下复制
@@ -268,19 +185,6 @@ Action.Panel.UserMenu=用户菜单(&U)
 Action.Panel.UserMenu.Desc=显示用户自定义菜单
 Action.Panel.FileAssociations=文件关联(&A)...
 Action.Panel.FileAssociations.Desc=按掩码配置 Enter、F3 和 F4 执行的命令
-FileAssoc.EditorTitle=文件关联
-FileAssoc.EditTitle=编辑关联
-FileAssoc.NewTitle=新建关联
-FileAssoc.ErrorTitle=文件关联
-FileAssoc.EmptyHint=暂无关联 - 按 Ins 键添加关联
-FileAssoc.EmptyMask=文件掩码不能为空。
-FileAssoc.MaskLabel=掩码
-FileAssoc.DescLabel=说明
-FileAssoc.PickTitle.Open=打开方式
-FileAssoc.PickTitle.View=查看方式
-FileAssoc.PickTitle.Edit=编辑方式
-FileAssoc.DeleteTitle=删除关联
-FileAssoc.DeleteConfirm=是否删除关联 %q？
 Action.Panel.Bookmarks.Desc=显示文件夹书签对话框
 Action.Panel.PluginMenu=插件命令(&G)
 Action.Panel.PluginMenu.Desc=显示插件命令菜单
@@ -367,23 +271,98 @@ Action.Terminal.ViewLog.Desc=在查看器中打开终端日志
 Action.Terminal.EditLog=编辑终端日志(&E)
 Action.Terminal.EditLog.Desc=在编辑器中打开终端日志
 
-EditorSettings.Title= 编辑器设置
-EditorSettings.AutoComplete=启用自动填充(&A)
-EditorSettings.Mask=活动于文件掩码(&I):
-ColorerSettings.Title= Colorer 设置
-ColorerSettings.Enabled=启用 Colorer 高亮(&C)
-ColorerSettings.Style=色彩样式(&S):
-ColorerSettings.BuiltIn=(内置)
-ColorerSettings.Cross=显示光标定位十字交叉(&R):
-ColorerSettings.CrossOff=不显示
-ColorerSettings.CrossVertical=垂直
-ColorerSettings.CrossHorizontal=水平
-ColorerSettings.CrossBoth=两者均显示
-ColorerSettings.Syntax=语法高亮(&S)
-ColorerSettings.Background=根据样式改变编辑器背景(&B)
-ColorerSettings.Catalog=架构文件夹 (catalog.xml)(&C):
-ColorerSettings.Reload=重新加载(&L)
-ColorerSettings.Download=下载架构(&D)
+Btn.OverwriteAll=全部覆盖(&A)
+Btn.SkipAll=全部跳过(&K)
+Btn.Retry=重试(&R)
+Btn.Ignore=忽略(&I)
+
+Operation.Error=操作失败:\n%s
+
+Op.ClonePanels=克隆面板到新工作区(&C)
+Op.SwitchHint=按 Ctrl+Tab 切换窗口
+Op.DummyTitle= 演示操作
+Op.DummyText=这是一个 5 分钟的演示操作。\n请选择后台运行模式:
+Op.Queue=排队
+Op.Background=后台面板克隆
+Op.Foreground=前台独占
+Op.PathNameOnly=仅名称
+Op.PathFullPath=完整路径
+Op.PathSrcDst=源路径 -> 目标路径
+
+Viewer.Title= 查看
+Viewer.ModeText=文本
+Viewer.ModeHex=十六进制
+Viewer.SearchTitle= 搜索
+
+Search.CaseSensitive=区分大小写(&C)
+Search.Reverse=反向搜索(&R)
+
+Select.Title= 选择
+Select.Mask=输入选择掩码(&E):
+
+Deselect.Title= 取消选择
+
+Quit.Title= 退出
+Quit.Confirm=您确定要退出 f4 吗？
+Quit.Btn=离开(&L)
+
+Macro.AssignTitle= 分配宏
+Macro.AssignPrompt=请按下所需的快捷键组合
+Macro.AssignCancel=按 Esc 键取消
+
+Menu.Language=语言
+Menu.HelpLanguage=帮助语言
+Menu.Left=左侧
+Menu.Files=文件
+Menu.Commands=命令
+Menu.Options=选项
+Menu.Right=右侧
+Menu.Exit=退出(&X)
+Menu.Files.View=查看
+Menu.Files.Edit=编辑
+Menu.Files.Copy=复制
+Menu.Files.RenMov=重命名或移动
+Menu.Files.MkDir=创建文件夹
+Menu.Files.Delete=删除
+Menu.Left.Brief=简短
+Menu.Left.Medium=中等
+Menu.Left.Detailed=详细
+Menu.Left.Wide=宽屏
+Menu.Commands.FindFile=查找文件
+Menu.Commands.FindDuplicates=查找重复文件
+Menu.Commands.BackgroundJobs=后台任务
+Menu.Commands.RunRemote=远程执行命令
+Menu.Commands.Bookmarks=书签
+Menu.SortName=名称
+Menu.SortExt=扩展名
+Menu.SortTime=时间
+Menu.SortSize=大小
+Menu.SortUnsorted=未排序
+Menu.PanelSettings=面板设置
+Menu.EditorSettings=编辑器设置
+Menu.ColorerSettings=Colorer设置(&O)
+Menu.AppearanceSettings=外观设置
+Menu.ConfirmationsSettings=确认设置
+Menu.AutoUpdateSettings=自动更新(&U)
+Menu.Options.Plugins=管理插件
+Menu.Editor.File=文件(&F)
+Menu.Editor.Edit=编辑(&E)
+Menu.Editor.Search=搜索(&S)
+Menu.Editor.Options=选项(&O)
+Menu.Editor.Insert=插入(&I)
+Menu.Viewer.File=文件(&F)
+Menu.Viewer.View=视图(&V)
+Menu.Viewer.Search=搜索(&S)
+Menu.Viewer.Options=选项(&O)
+Menu.Shell.Files=文件(&F)
+Menu.Shell.Commands=命令(&C)
+Menu.Shell.Options=选项(&O)
+Menu.Terminal.File=文件(&F)
+
+RemoteCmd.Title=远程命令
+RemoteCmd.Prompt=命令:
+RemoteCmd.BtnClose=关闭(&C)
+
 PanelSettings.Title= 面板设置
 PanelSettings.ShowHidden=显示隐藏和系统文件(&H)
 PanelSettings.ShowDirPrefix=在文件夹名称前显示 '/'(&F)
@@ -404,6 +383,75 @@ PanelSettings.DefaultMode=默认操作模式(&M):
 PanelSettings.PathDisplay=进度条中显示的文件路径:
 PanelSettings.InfoPanelCPUGPU=在信息面板上显示 CPU/GPU 信息(&N)
 PanelSettings.EscTogglePanels=Esc 键切换面板是否显示(&E)
+PanelSettings.ShowHighlightMarks=显示高亮标记(&M)
+PanelSettings.CommandLineAutoComplete=启用命令行自动填充(&A)
+PanelSettings.AlwaysShowMenuBar=总是显示菜单栏(&M)
+PanelSettings.RecordMacrosTo=记录宏到:
+
+Jobs.Title=后台任务
+Jobs.BtnShow=显示(&S)
+Jobs.BtnCancel=取消任务(&C)
+Jobs.BtnClose=关闭(&C)
+Jobs.Empty=当前没有运行的任务
+
+Sort.Title=排序依据
+
+Help.ViewerEditor=查看器和编辑器键盘快捷键
+Help.PanelNav=面板键盘快捷键
+Help.NavigationKeys=导航键
+Help.Area.Shell=面板
+Help.Area.Terminal=终端
+Help.Area.Editor=编辑器
+Help.Area.Viewer=查看器
+Help.Area.Common=通用
+Help.SearchHint=搜索: 输入字符  下一个: F3/Ctrl+Enter  上一个: Shift+F3/Ctrl+Shift+Enter
+
+FileAssoc.EditorTitle=文件关联
+FileAssoc.EditTitle=编辑关联
+FileAssoc.NewTitle=新建关联
+FileAssoc.ErrorTitle=文件关联
+FileAssoc.EmptyHint=暂无关联 - 按 Ins 键添加关联
+FileAssoc.EmptyMask=文件掩码不能为空。
+FileAssoc.MaskLabel=掩码
+FileAssoc.DescLabel=说明
+FileAssoc.PickTitle.Open=打开方式
+FileAssoc.PickTitle.View=查看方式
+FileAssoc.PickTitle.Edit=编辑方式
+FileAssoc.DeleteTitle=删除关联
+FileAssoc.DeleteConfirm=是否删除关联 %q？
+
+EditorSettings.Title= 编辑器设置
+EditorSettings.AutoComplete=启用自动填充(&A)
+EditorSettings.Mask=活动于文件掩码(&I):
+EditorSettings.TabExpandNone=不扩展制表符
+EditorSettings.TabExpandNew=将新输入的制表符扩展为空格
+EditorSettings.TabExpandAll=将所有制表符扩展为空格
+EditorSettings.ExpandTabs=扩展制表符(&A):
+EditorSettings.Highlighter=高亮显示(&G):
+EditorSettings.ColorerStyle=Colorer样式(&Y):
+EditorSettings.TabSize=制表符大小(&Z):
+EditorSettings.AutoIndent=自动缩进(&N)
+EditorSettings.CursorBeyondEOL=光标允许超出行尾(&L)
+EditorSettings.UseEditorConfig=使用 .&editorconfig 设置文件
+EditorSettings.Crosshair=显示十字交叉(&H)
+EditorSettings.ColorerBg=Colorer背景(&B)
+EditorSettings.UseExternalEditor=使用外部编辑器(&E)
+EditorSettings.ExternalCommand=外部启动命令(&X):
+
+ColorerSettings.Title= Colorer 设置
+ColorerSettings.Enabled=启用 Colorer 高亮(&C)
+ColorerSettings.Style=色彩样式(&S):
+ColorerSettings.BuiltIn=(内置)
+ColorerSettings.Cross=显示光标定位十字交叉(&R):
+ColorerSettings.CrossOff=不显示
+ColorerSettings.CrossVertical=垂直
+ColorerSettings.CrossHorizontal=水平
+ColorerSettings.CrossBoth=两者均显示
+ColorerSettings.Syntax=语法高亮(&S)
+ColorerSettings.Background=根据样式改变编辑器背景(&B)
+ColorerSettings.Catalog=架构文件夹 (catalog.xml)(&C):
+ColorerSettings.Reload=重新加载(&L)
+ColorerSettings.Download=下载架构(&D)
 
 AppearanceSettings.Title= 外观设置
 AppearanceSettings.Style=应用风格(&S):
@@ -417,15 +465,33 @@ ConfirmationsSettings.Title= 确认设置
 ConfirmationsSettings.Copy=复制前确认(&C)
 ConfirmationsSettings.Move=移动前确认(&M)
 ConfirmationsSettings.Delete=删除前确认(&D)
+ConfirmationsSettings.DeleteCancelFocused=删除确认默认聚焦“取消”
 ConfirmationsSettings.Exit=退出前确认(&E)
+
 UpdateSettings.Title= 自动更新
 UpdateSettings.Channel=更新渠道(&C):
 UpdateSettings.Interval=检查间隔(&I):
 UpdateSettings.BtnCheck=立即检查(&H)
+UpdateSettings.ChannelStable=稳定版本
+UpdateSettings.ChannelNightly=每日构建版本
+UpdateSettings.IntervalNever=从不
+UpdateSettings.IntervalStart=每次启动时
+UpdateSettings.IntervalDaily=每天
+UpdateSettings.IntervalWeekly=每周
+
 FindFile.Title= 查找文件
 FindFile.MaskPrompt=一个或多个文件掩码:
 FindFile.TextPrompt=包含文本:
 FindFile.BtnFind=查找(&F)
+FindFile.SearchingTitle= 正在搜索...
+FindFile.Scanning=正在扫描:
+FindFile.FoundCount=已找到: %d
+FindFile.SearchResultsTitle= 搜索结果
+FindFile.BtnGoTo=跳转至(&G)
+FindFile.BtnView=查看(&V)
+FindFile.BtnEdit=编辑(&E)
+FindFile.BtnClose=关闭(&C)
+
 History.FoldersTitle= 文件夹历史记录
 History.CommandsTitle= 命令历史记录
 History.SearchModeHint=F2: 切换子串/前缀匹配搜索
@@ -433,22 +499,29 @@ History.CommandsHint=上下键 回车键 Esc Shift+Del Del Ctrl+C Ctrl+Ins F2
 History.FoldersHint=上下键 回车键 左右侧回车 命令行回车 Esc Shift+Del Del Ctrl+C Ctrl+Ins Ctrl+R F2
 History.ConfirmClearAll=是否清除所有历史记录？
 History.ConfirmPruneMissing=是否清除不再存在的历史路径？
-Help.SearchHint=搜索: 输入字符  下一个: F3/Ctrl+Enter  上一个: Shift+F3/Ctrl+Shift+Enter
+History.Title= 历史记录
+History.EmptyFolders=文件夹历史记录为空。
+History.EmptyCommands=命令历史记录为空。
+
 UserMenu.LocalMenuTitle=局部菜单
 UserMenu.MainMenuTitle=主菜单
 UserMenu.MainMenuFAR=FAR
 
 Language.Title= 语言
 Language.Changed=语言已更改。\n部分界面元素需要重新启动应用程序后\n才能完全生效。
+
+LanguageSettings.Title= 语言设置
+LanguageSettings.Primary=首选语言:
+LanguageSettings.Fallback=备用语言:
+LanguageSettings.None=<无>
+
 HelpLanguage.Title=帮助语言
 HelpLanguage.Changed=帮助语言已更改。
 
-History.Title= 历史记录
-History.EmptyFolders=文件夹历史记录为空。
-History.EmptyCommands=命令历史记录为空。
-
 Error.Title= 错误
+
 Warning.Title= 警告
+
 Info.Title= 信息
 
 ExtEdit.TempError=无法创建临时文件: %v
@@ -463,22 +536,25 @@ FileOp.BtnNewInstance=新建实例(&N)
 FileOp.CannotEditDir=无法编辑目录。
 FileOp.CannotViewDir=无法查看目录。
 FileOp.CannotOpenSpecial=无法打开特殊文件(命名管道、套接字、设备)。
+FileOp.DeletionErrors= 删除错误
+FileOp.FileAlreadyExists=文件已存在
+FileOp.RememberChoice=记住选择(&M)
+FileOp.Overwrite=覆盖(&O)
+FileOp.Skip=跳过(&S)
+FileOp.Rename=重命名(&R)
+FileOp.Append=追加(&A)
+FileOp.Resume=恢复(&U)
 
 Dialog.RenameTitle= 重命名
 Dialog.RenamePrompt=重命名 '%s' 为:
-
-Op.Queue=排队
-Op.Background=后台面板克隆
-Op.Foreground=前台独占
-Op.PathNameOnly=仅名称
-Op.PathFullPath=完整路径
-Op.PathSrcDst=源路径 -> 目标路径
 
 Plugins.Title= 管理插件 (RPC)
 Plugins.BtnAdd=添加(&A)
 Plugins.BtnRemove=移除(&R)
 Plugins.BtnPermissions=权限(&P)
 Plugins.BtnClose=关闭(&C)
+Plugins.AddTitle= 添加插件
+Plugins.SelectFilePrompt=选择插件文件:
 
 InfoPanel.Title= 信息
 InfoPanel.Computer=计算机名
@@ -542,6 +618,7 @@ AndroidInfo.Storage=存储
 AndroidInfo.StorageTotal=总存储空间
 AndroidInfo.StorageAvailable=可用存储空间
 AndroidInfo.Protocol=协议
+
 IOSInfo.DeviceTitle=Apple 移动设备
 IOSInfo.Name=设备名称
 IOSInfo.Model=设备型号
@@ -580,53 +657,6 @@ Bookmarks.SaveError=保存书签失败:\n%v
 Bookmarks.EditTitle= 编辑书签路径
 Bookmarks.EditPrompt=路径(&P):
 
-EditorSettings.TabExpandNone=不扩展制表符
-EditorSettings.TabExpandNew=将新输入的制表符扩展为空格
-EditorSettings.TabExpandAll=将所有制表符扩展为空格
-EditorSettings.ExpandTabs=扩展制表符(&A):
-EditorSettings.Highlighter=高亮显示(&G):
-EditorSettings.ColorerStyle=Colorer样式(&Y):
-EditorSettings.TabSize=制表符大小(&Z):
-EditorSettings.AutoIndent=自动缩进(&N)
-EditorSettings.CursorBeyondEOL=光标允许超出行尾(&L)
-EditorSettings.UseEditorConfig=使用 .&editorconfig 设置文件
-EditorSettings.Crosshair=显示十字交叉(&H)
-EditorSettings.ColorerBg=Colorer背景(&B)
-EditorSettings.UseExternalEditor=使用外部编辑器(&E)
-EditorSettings.ExternalCommand=外部启动命令(&X):
-ConfirmationsSettings.DeleteCancelFocused=删除确认默认聚焦“取消”
-
-PanelSettings.ShowHighlightMarks=显示高亮标记(&M)
-PanelSettings.CommandLineAutoComplete=启用命令行自动填充(&A)
-PanelSettings.AlwaysShowMenuBar=总是显示菜单栏(&M)
-PanelSettings.RecordMacrosTo=记录宏到:
-UpdateSettings.ChannelStable=稳定版本
-UpdateSettings.ChannelNightly=每日构建版本
-UpdateSettings.IntervalNever=从不
-UpdateSettings.IntervalStart=每次启动时
-UpdateSettings.IntervalDaily=每天
-UpdateSettings.IntervalWeekly=每周
-Plugins.AddTitle= 添加插件
-Plugins.SelectFilePrompt=选择插件文件:
-
-FindFile.SearchingTitle= 正在搜索...
-FindFile.Scanning=正在扫描:
-FindFile.FoundCount=已找到: %d
-FindFile.SearchResultsTitle= 搜索结果
-FindFile.BtnGoTo=跳转至(&G)
-FindFile.BtnView=查看(&V)
-FindFile.BtnEdit=编辑(&E)
-FindFile.BtnClose=关闭(&C)
-
-FileOp.DeletionErrors= 删除错误
-FileOp.FileAlreadyExists=文件已存在
-FileOp.RememberChoice=记住选择(&M)
-FileOp.Overwrite=覆盖(&O)
-FileOp.Skip=跳过(&S)
-FileOp.Rename=重命名(&R)
-FileOp.Append=追加(&A)
-FileOp.Resume=恢复(&U)
-
 KeyBar.F1=帮助
 KeyBar.F2=菜单
 KeyBar.F2Wrap=折行
@@ -641,7 +671,6 @@ KeyBar.F9=设菜
 KeyBar.F10=退出
 KeyBar.F11=插件
 KeyBar.F12=选择
-
 KeyBar.AltF1=左侧
 KeyBar.AltF2=右侧
 KeyBar.AltF3=16进制
@@ -655,7 +684,6 @@ KeyBar.CtrlF4=扩名
 KeyBar.CtrlF5=时间
 KeyBar.CtrlF6=大小
 KeyBar.CtrlF7=无序
-
 KeyBar.EditorF1=帮助
 KeyBar.EditorF2=保存
 KeyBar.EditorF3=折行
@@ -669,7 +697,3 @@ KeyBar.ViewerF4=16进制
 KeyBar.ViewerF7=查找
 KeyBar.ViewerAltF8=跳转
 KeyBar.ViewerF10=退出
-LanguageSettings.Title= 语言设置
-LanguageSettings.Primary=首选语言:
-LanguageSettings.Fallback=备用语言:
-LanguageSettings.None=<无>

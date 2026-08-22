@@ -5,20 +5,6 @@ Author=f4 Team
 
 [Strings]
 VisRen.Menu=&Візуальнае перайменаванне файлаў
-ID3Editor.Menu=Рэдактар ID3-&тэгаў
-ID3Editor.Title=Рэдактар ID3-тэгаў
-ID3Editor.LocalOnly=Рэдактар ID3-тэгаў падтрымлівае толькі лакальныя файлы.
-ID3Editor.SelectFile=Спачатку абярыце файл MP3.
-ID3Editor.OnlyMP3=Падтрымліваюцца толькі файлы MP3.
-ID3Editor.SaveError=Не ўдалося захаваць ID3-тэгі:\n%v
-ID3Editor.OpenError=Не ўдалося адкрыць файл MP3:\n%v
-ID3Editor.FieldTitle=Назва:
-ID3Editor.FieldArtist=Артыст:
-ID3Editor.FieldAlbum=Альбом:
-ID3Editor.FieldYear=Год:
-ID3Editor.FieldGenre=Жанр:
-ID3Editor.FieldComment=Каментарый:
-ID3Editor.FieldVersion=Версія:
 VisRen.Title=Візуальнае перайменаванне файлаў
 VisRen.HostUnsupported=Гэтая зборка F4 не забяспечвае інтэрфейс VisRen.
 VisRen.LocalOnly=VisRen працуе толькі на лакальнай панэлі файлаў.
@@ -59,109 +45,53 @@ VisRen.WordDivTitle=Раздзяляльнікі слоў
 VisRen.WordDivPrompt=Сімвалы, якія падзяляюць словы (не больш за 18):
 VisRen.OldName=Старое імя
 VisRen.NewName=Новае імя
+
+ID3Editor.Menu=Рэдактар ID3-&тэгаў
+ID3Editor.Title=Рэдактар ID3-тэгаў
+ID3Editor.LocalOnly=Рэдактар ID3-тэгаў падтрымлівае толькі лакальныя файлы.
+ID3Editor.SelectFile=Спачатку абярыце файл MP3.
+ID3Editor.OnlyMP3=Падтрымліваюцца толькі файлы MP3.
+ID3Editor.SaveError=Не ўдалося захаваць ID3-тэгі:\n%v
+ID3Editor.OpenError=Не ўдалося адкрыць файл MP3:\n%v
+ID3Editor.FieldTitle=Назва:
+ID3Editor.FieldArtist=Артыст:
+ID3Editor.FieldAlbum=Альбом:
+ID3Editor.FieldYear=Год:
+ID3Editor.FieldGenre=Жанр:
+ID3Editor.FieldComment=Каментарый:
+ID3Editor.FieldVersion=Версія:
+
 vtui.Ok=&Ок
 vtui.Cancel=Адмена
+vtui.Save=&Захаваць
+
 Panel.Other=&Іншая панэль
 Panel.Column.Name=Імя
 Panel.Column.Size=Памер
 Panel.Column.Modified=Зменены
 Panel.UpDir=УГОРА
 Panel.SelectedInfo=Байт: %s, файлаў: %d, папак: %d
+
 Panels.Prompt=>
+
 Edit.NewFileTitle= Стварыць новы файл
 Edit.NewFilePrompt=Імя &файла:
+
 MakeFolder.Title= Стварыць папку
 MakeFolder.Prompt=Стварыць &папку:
+
 Delete.Title= Выдаленне
 Delete.Confirm=Вы сапраўды хочаце выдаліць\n%s?
 Delete.Btn=&Выдаліць
+
 Copy.Title= Капіраванне
 Copy.Prompt=Скапіраваць %d элемент(аў) у:
 Copy.Btn=&Скапіраваць
+
 Move.Title= Перайменаванне/Перанос
 Move.Prompt=Перайменаваць або перанесці %d элемент(аў) у:
 Move.Btn=&Перанесці
-Btn.OverwriteAll=Перапісаць &усё
-Btn.SkipAll=П&рапусціць усё
-Btn.Retry=&Паўтарыць
-Btn.Ignore=&Ігнараваць
-Operation.Error=Памылка аперацыі:\n%s
-Op.ClonePanels=&Кланіраваць панэлі на новы воркспейс
-Op.SwitchHint=Ctrl+Tab для пераключэння вокнаў
-Op.DummyTitle= Дэма-аперацыя
-Op.DummyText=Гэта дэманстрацыйная 5-хвілінная аперацыя.\nАбярыце рэжым выканання:
-Viewer.Title= Прагляд
-Viewer.ModeText=Тэкст
-Viewer.ModeHex=Hex
-Viewer.SearchTitle= Пошук
-Search.CaseSensitive=Адчувальнасць да &рэгістра
-Search.Reverse=&Зваротны пошук
-Select.Title= Паметка
-Deselect.Title= Зняцце паметкі
-Quit.Title= Выхад
-Quit.Confirm=Вы сапраўды хочаце выйсці з f4?
-Quit.Btn=&Выйсці
-Select.Mask=&Увядзіце маску для паметкі:
 
-Macro.AssignTitle= Прызначыць макрас
-Macro.AssignPrompt=Націсніце жаданую камбінацыю клавіш
-Macro.AssignCancel=Націсніце Esc для адмены
-
-Menu.Language=Мова (Language)
-Menu.HelpLanguage=Мова даведкі (Help Language)
-Menu.Left=Левая
-Menu.Files=Файлы
-Menu.Commands=Каманды
-Menu.Options=Параметры
-Menu.Right=Правая
-Menu.Exit=В&ыхад
-
-Menu.Files.View=Прагляд
-Menu.Files.Edit=Рэдагаванне
-Menu.Files.Copy=Капіраванне
-Menu.Files.RenMov=Перайменаванне/перанос
-Menu.Files.MkDir=Стварэнне папкі
-Menu.Files.Delete=Выдаленне
-Menu.Left.Brief=Кароткі
-Menu.Left.Medium=Сярэдні
-Menu.Left.Detailed=Падрабязны
-Menu.Left.Wide=Шырокі
-Menu.Commands.FindFile=Пошук файла
-Menu.Commands.FindDuplicates=Пошук дублікатаў
-Menu.Commands.BackgroundJobs=Фонавыя заданні
-Menu.Commands.RunRemote=Выканаць каманду на серверы
-RemoteCmd.Title=Каманда на серверы
-RemoteCmd.Prompt=Каманда:
-RemoteCmd.BtnClose=&Закрыць
-Jobs.Title=Фонавыя заданні
-Jobs.BtnShow=&Паказаць
-Jobs.BtnCancel=&Адмяніць
-Jobs.BtnClose=&Закрыць
-Jobs.Empty=Нічога не выконваецца
-Menu.Commands.Bookmarks=Закладкі
-Menu.SortName=Імя
-Menu.SortExt=Пашырэнне
-Menu.SortTime=Час
-Menu.SortSize=Памер
-Menu.SortUnsorted=Без сартавання
-Sort.Title=Сартаванне
-Menu.PanelSettings=Налады панэляў
-Menu.EditorSettings=Налады рэдактара
-Menu.ColorerSettings=Налады &Colorer
-Menu.AppearanceSettings=Знешні выгляд
-Menu.ConfirmationsSettings=Пацвярджэнні
-Menu.AutoUpdateSettings=Аўта&абнаўленне
-Menu.Options.Plugins=Кіраванне плагінамі
-
-Menu.Editor.File=&Файл
-Menu.Editor.Edit=&Праўка
-Menu.Editor.Search=&Пошук
-Menu.Editor.Options=&Параметры
-Menu.Editor.Insert=&Устаўка
-Menu.Viewer.File=&Файл
-Menu.Viewer.View=&Выгляд
-Menu.Viewer.Search=&Пошук
-Menu.Viewer.Options=&Параметры
 Action.App.ScreenGrab=&Захоп экрана
 Action.App.ScreenGrab.Desc=Вылучыць і скапіраваць вобласць экрана
 Action.Editor.Save=&Захаваць
@@ -224,18 +154,6 @@ Action.Viewer.CodepageNext=Наступная &кадыроўка
 Action.Viewer.CodepageNext.Desc=Пераключыцца на наступную кадыроўку
 Action.Viewer.CodepageMenu=Меню кадырова&к
 Action.Viewer.CodepageMenu.Desc=Абраць кадыроўку
-Help.ViewerEditor=Клавішы Прагляду і Рэдактара
-Help.PanelNav=Клавішы панэляў
-Help.NavigationKeys=Клавішы навігацыі
-Help.Area.Shell=Панэлі
-Help.Area.Terminal=Тэрмінал
-Help.Area.Editor=Рэдактар
-Help.Area.Viewer=Прагляднік
-Help.Area.Common=Агульныя
-Menu.Shell.Files=&Файлы
-Menu.Shell.Commands=&Каманды
-Menu.Shell.Options=&Параметры
-Menu.Terminal.File=&Файл
 Action.File.New=Новы файл
 Action.File.New.Desc=Стварыць і адкрыць новы файл у рэдактары
 Action.File.CopyInPlace=Скапіраваць тут
@@ -268,19 +186,6 @@ Action.Panel.UserMenu=&Меню карыстальніка
 Action.Panel.UserMenu.Desc=Паказаць меню карыстальніка
 Action.Panel.FileAssociations=Файлавыя &асацыяцыі…
 Action.Panel.FileAssociations.Desc=Задаць каманды па масках для Enter, F3 і F4
-FileAssoc.EditorTitle=Файлавыя асацыяцыі
-FileAssoc.EditTitle=Рэдагаванне асацыяцыі
-FileAssoc.NewTitle=Новая асацыяцыя
-FileAssoc.ErrorTitle=Файлавыя асацыяцыі
-FileAssoc.EmptyHint=Пакуль няма асацыяцый — націсніце Ins, каб дадаць
-FileAssoc.EmptyMask=Маска файла не можа быць пустой.
-FileAssoc.MaskLabel=Маска
-FileAssoc.DescLabel=Апісанне
-FileAssoc.PickTitle.Open=Адкрыць з дапамогай
-FileAssoc.PickTitle.View=Прагляд з дапамогай
-FileAssoc.PickTitle.Edit=Праўка з дапамогай
-FileAssoc.DeleteTitle=Выдаленне асацыяцыі
-FileAssoc.DeleteConfirm=Выдаліць асацыяцыю %q?
 Action.Panel.Bookmarks.Desc=Паказаць дыялог закладак на папкі
 Action.Panel.PluginMenu=Каманды пла&гінаў
 Action.Panel.PluginMenu.Desc=Паказаць меню каманд плагінаў
@@ -367,23 +272,106 @@ Action.Terminal.ViewLog.Desc=Адкрыць журнал тэрмінала ў �
 Action.Terminal.EditLog=&Праўка журнала
 Action.Terminal.EditLog.Desc=Адкрыць журнал тэрмінала ў рэдактары
 
-EditorSettings.Title= Налады рэдактара
-EditorSettings.AutoComplete=Уключыць &аўтадапаўненне
-EditorSettings.Mask=Актыўна для масак &файлаў:
-ColorerSettings.Title= Налады Colorer
-ColorerSettings.Enabled=Уключыць падсветку &Colorer
-ColorerSettings.Style=Колеравы &стыль:
-ColorerSettings.BuiltIn=(убудаваны)
-ColorerSettings.Cross=Паказваць к&рыж:
-ColorerSettings.CrossOff=Не паказваць
-ColorerSettings.CrossVertical=Вертыкальны
-ColorerSettings.CrossHorizontal=Гарызантальны
-ColorerSettings.CrossBoth=Абодва
-ColorerSettings.Syntax=Падсветка сі&нтаксісу
-ColorerSettings.Background=Фон рэда&ктара са стылю
-ColorerSettings.Catalog=Папка са с&хемамі (catalog.xml):
-ColorerSettings.Reload=Пера&загрузіць
-ColorerSettings.Download=Спа&мпаваць схемы
+Btn.OverwriteAll=Перапісаць &усё
+Btn.SkipAll=П&рапусціць усё
+Btn.Retry=&Паўтарыць
+Btn.Ignore=&Ігнараваць
+
+Operation.Error=Памылка аперацыі:\n%s
+
+Op.ClonePanels=&Кланіраваць панэлі на новы воркспейс
+Op.SwitchHint=Ctrl+Tab для пераключэння вокнаў
+Op.DummyTitle= Дэма-аперацыя
+Op.DummyText=Гэта дэманстрацыйная 5-хвілінная аперацыя.\nАбярыце рэжым выканання:
+Op.Queue=Чарга
+Op.Background=Фонавае кланіраванне панэляў
+Op.Foreground=Манапольны рэжым
+Op.PathNameOnly=Толькі імя
+Op.PathFullPath=Поўны шлях
+Op.PathSrcDst=Крыніца -> Прызначэнне
+Op.DummyQueue=Чарга (Па змаўчанні)
+Op.DummyBackground=Фонавае кланіраванне панэляў
+Op.DummyForeground=Манапольны рэжым
+Op.BtnStart=&Старт
+
+Viewer.Title= Прагляд
+Viewer.ModeText=Тэкст
+Viewer.ModeHex=Hex
+Viewer.SearchTitle= Пошук
+
+Search.CaseSensitive=Адчувальнасць да &рэгістра
+Search.Reverse=&Зваротны пошук
+Search.Prompt=Шукаць:
+Search.WholeWords=Толькі цэлыя словы
+Search.Regex=Рэгулярныя выразы
+Search.BtnFind=&Знайсці
+
+Select.Title= Паметка
+Select.Mask=&Увядзіце маску для паметкі:
+
+Deselect.Title= Зняцце паметкі
+
+Quit.Title= Выхад
+Quit.Confirm=Вы сапраўды хочаце выйсці з f4?
+Quit.Btn=&Выйсці
+
+Macro.AssignTitle= Прызначыць макрас
+Macro.AssignPrompt=Націсніце жаданую камбінацыю клавіш
+Macro.AssignCancel=Націсніце Esc для адмены
+
+Menu.Language=Мова (Language)
+Menu.HelpLanguage=Мова даведкі (Help Language)
+Menu.Left=Левая
+Menu.Files=Файлы
+Menu.Commands=Каманды
+Menu.Options=Параметры
+Menu.Right=Правая
+Menu.Exit=В&ыхад
+Menu.Files.View=Прагляд
+Menu.Files.Edit=Рэдагаванне
+Menu.Files.Copy=Капіраванне
+Menu.Files.RenMov=Перайменаванне/перанос
+Menu.Files.MkDir=Стварэнне папкі
+Menu.Files.Delete=Выдаленне
+Menu.Left.Brief=Кароткі
+Menu.Left.Medium=Сярэдні
+Menu.Left.Detailed=Падрабязны
+Menu.Left.Wide=Шырокі
+Menu.Commands.FindFile=Пошук файла
+Menu.Commands.FindDuplicates=Пошук дублікатаў
+Menu.Commands.BackgroundJobs=Фонавыя заданні
+Menu.Commands.RunRemote=Выканаць каманду на серверы
+Menu.Commands.Bookmarks=Закладкі
+Menu.SortName=Імя
+Menu.SortExt=Пашырэнне
+Menu.SortTime=Час
+Menu.SortSize=Памер
+Menu.SortUnsorted=Без сартавання
+Menu.PanelSettings=Налады панэляў
+Menu.EditorSettings=Налады рэдактара
+Menu.ColorerSettings=Налады &Colorer
+Menu.AppearanceSettings=Знешні выгляд
+Menu.ConfirmationsSettings=Пацвярджэнні
+Menu.AutoUpdateSettings=Аўта&абнаўленне
+Menu.Options.Plugins=Кіраванне плагінамі
+Menu.Editor.File=&Файл
+Menu.Editor.Edit=&Праўка
+Menu.Editor.Search=&Пошук
+Menu.Editor.Options=&Параметры
+Menu.Editor.Insert=&Устаўка
+Menu.Viewer.File=&Файл
+Menu.Viewer.View=&Выгляд
+Menu.Viewer.Search=&Пошук
+Menu.Viewer.Options=&Параметры
+Menu.Shell.Files=&Файлы
+Menu.Shell.Commands=&Каманды
+Menu.Shell.Options=&Параметры
+Menu.Terminal.File=&Файл
+
+RemoteCmd.Title=Каманда на серверы
+RemoteCmd.Prompt=Каманда:
+RemoteCmd.BtnClose=&Закрыць
+
 PanelSettings.Title= Налады панэляў
 PanelSettings.ShowHidden=Паказваць &схаваныя і сістэмныя файлы
 PanelSettings.ShowDirPrefix=Паказваць '/' перад &папкамі
@@ -404,6 +392,75 @@ PanelSettings.DefaultMode=Рэжым аперацый па &змаўчанні:
 PanelSettings.PathDisplay=Шлях файла ў прагрэсе:
 PanelSettings.InfoPanelCPUGPU=Паказваць CPU/GPU на &інфа-панэлі
 PanelSettings.EscTogglePanels=&Esc пераключае бачнасць панэляў
+PanelSettings.ShowHighlightMarks=Паказваць паметкі &падсветкі файлаў
+PanelSettings.CommandLineAutoComplete=Уключыць аўта&дапаўненне каманднага радка
+PanelSettings.AlwaysShowMenuBar=Заўсёды паказваць радок &меню
+PanelSettings.RecordMacrosTo=Запісваць макрасы ў:
+
+Jobs.Title=Фонавыя заданні
+Jobs.BtnShow=&Паказаць
+Jobs.BtnCancel=&Адмяніць
+Jobs.BtnClose=&Закрыць
+Jobs.Empty=Нічога не выконваецца
+
+Sort.Title=Сартаванне
+
+Help.ViewerEditor=Клавішы Прагляду і Рэдактара
+Help.PanelNav=Клавішы панэляў
+Help.NavigationKeys=Клавішы навігацыі
+Help.Area.Shell=Панэлі
+Help.Area.Terminal=Тэрмінал
+Help.Area.Editor=Рэдактар
+Help.Area.Viewer=Прагляднік
+Help.Area.Common=Агульныя
+Help.SearchHint=Пошук: увод  Далей: F3/Ctrl+Enter  Назад: Shift+F3/Ctrl+Shift+Enter
+
+FileAssoc.EditorTitle=Файлавыя асацыяцыі
+FileAssoc.EditTitle=Рэдагаванне асацыяцыі
+FileAssoc.NewTitle=Новая асацыяцыя
+FileAssoc.ErrorTitle=Файлавыя асацыяцыі
+FileAssoc.EmptyHint=Пакуль няма асацыяцый — націсніце Ins, каб дадаць
+FileAssoc.EmptyMask=Маска файла не можа быць пустой.
+FileAssoc.MaskLabel=Маска
+FileAssoc.DescLabel=Апісанне
+FileAssoc.PickTitle.Open=Адкрыць з дапамогай
+FileAssoc.PickTitle.View=Прагляд з дапамогай
+FileAssoc.PickTitle.Edit=Праўка з дапамогай
+FileAssoc.DeleteTitle=Выдаленне асацыяцыі
+FileAssoc.DeleteConfirm=Выдаліць асацыяцыю %q?
+
+EditorSettings.Title= Налады рэдактара
+EditorSettings.AutoComplete=Уключыць &аўтадапаўненне
+EditorSettings.Mask=Актыўна для масак &файлаў:
+EditorSettings.TabExpandNone=Не замяняць табуляцыю прабеламі
+EditorSettings.TabExpandNew=Замяняць прабеламі толькі новыя сімвалы Tab
+EditorSettings.TabExpandAll=Заўсёды замяняць табуляцыю прабеламі
+EditorSettings.ExpandTabs=Замяняць та&буляцыю прабеламі:
+EditorSettings.Highlighter=Інс&трумент падсветкі:
+EditorSettings.ColorerStyle=С&тыль Colorer:
+EditorSettings.TabSize=Ра&змер табуляцыі:
+EditorSettings.AutoIndent=Аўта&адступ
+EditorSettings.CursorBeyondEOL=Курсор за &канцом радка
+EditorSettings.UseEditorConfig=Выкарыстоўваць .&editorconfig
+EditorSettings.Crosshair=Паказваць к&рыж у рэдактары
+EditorSettings.ColorerBg=Фон &Colorer
+EditorSettings.UseExternalEditor=В&онкавы рэдактар
+EditorSettings.ExternalCommand=Ка&манда запуску:
+
+ColorerSettings.Title= Налады Colorer
+ColorerSettings.Enabled=Уключыць падсветку &Colorer
+ColorerSettings.Style=Колеравы &стыль:
+ColorerSettings.BuiltIn=(убудаваны)
+ColorerSettings.Cross=Паказваць к&рыж:
+ColorerSettings.CrossOff=Не паказваць
+ColorerSettings.CrossVertical=Вертыкальны
+ColorerSettings.CrossHorizontal=Гарызантальны
+ColorerSettings.CrossBoth=Абодва
+ColorerSettings.Syntax=Падсветка сі&нтаксісу
+ColorerSettings.Background=Фон рэда&ктара са стылю
+ColorerSettings.Catalog=Папка са с&хемамі (catalog.xml):
+ColorerSettings.Reload=Пера&загрузіць
+ColorerSettings.Download=Спа&мпаваць схемы
 
 AppearanceSettings.Title= Знешні выгляд
 AppearanceSettings.Style=Стыль &афармлення:
@@ -417,15 +474,33 @@ ConfirmationsSettings.Title= Пацвярджэнні
 ConfirmationsSettings.Copy=Пацвярджаць &капіраванне
 ConfirmationsSettings.Move=Пацвярджаць &перанос
 ConfirmationsSettings.Delete=Пацвярджаць &выдаленне
+ConfirmationsSettings.DeleteCancelFocused=Фокус на 'Адмена' пры выдаленні
 ConfirmationsSettings.Exit=Пацвярджаць в&ыхад
+
 UpdateSettings.Title= Абнаўленне
 UpdateSettings.Channel=Канал &абнаўленняў:
 UpdateSettings.Interval=Інтэрвал &праверак:
 UpdateSettings.BtnCheck=&Праверыць зараз
+UpdateSettings.ChannelStable=Стабільныя выпускі
+UpdateSettings.ChannelNightly=Начныя зборкі
+UpdateSettings.IntervalNever=Ніколі
+UpdateSettings.IntervalStart=Пры кожным запуску
+UpdateSettings.IntervalDaily=Штодня
+UpdateSettings.IntervalWeekly=Штотыдзень
+
 FindFile.Title= Пошук файла
 FindFile.MaskPrompt=Маска або некалькі масак файлаў:
 FindFile.TextPrompt=Змяшчае тэкст:
 FindFile.BtnFind=&Знайсці
+FindFile.SearchingTitle= Пошук...
+FindFile.Scanning=Сканіраванне:
+FindFile.FoundCount=Знойдзена: %d
+FindFile.SearchResultsTitle= Вынікі пошуку
+FindFile.BtnGoTo=&Перайсці
+FindFile.BtnView=&Прагляд
+FindFile.BtnEdit=&Праўка
+FindFile.BtnClose=&Закрыць
+
 History.FoldersTitle= Гісторыя папак
 History.CommandsTitle= Гісторыя каманд
 History.SearchModeHint=F2: пераключыць пошук падстракі / з пачатку
@@ -433,22 +508,36 @@ History.CommandsHint=Up/Down Enter Esc Shift+Del Del Ctrl+C Ctrl+Ins F2
 History.FoldersHint=Up/Down Enter Shift+Enter Ctrl+Enter Esc Shift+Del Del Ctrl+C Ctrl+Ins Ctrl+R F2
 History.ConfirmClearAll=Ачысціць усю гісторыю?
 History.ConfirmPruneMissing=Выдаліць запісы з неіснуючымі шляхамі?
-Help.SearchHint=Пошук: увод  Далей: F3/Ctrl+Enter  Назад: Shift+F3/Ctrl+Shift+Enter
-UserMenu.LocalMenuTitle=Лакальнае меню
-UserMenu.MainMenuTitle=Галоўнае меню
-UserMenu.MainMenuFAR=FAR
-
-Language.Title= Мовы (Languages)
-Language.Changed=Мова зменена.\nНекаторым элементам інтэрфейсу можа спатрэбіцца\nперазапуск праграмы для поўнага абнаўлення.
-HelpLanguage.Title=Мовы даведкі
-HelpLanguage.Changed=Мова даведкі зменена.
-
 History.Title= Гісторыя
 History.EmptyFolders=Гісторыя папак пустая.
 History.EmptyCommands=Гісторыя каманд пустая.
 
+UserMenu.LocalMenuTitle=Лакальнае меню
+UserMenu.MainMenuTitle=Галоўнае меню
+UserMenu.MainMenuFAR=FAR
+UserMenu.EditTitle= Рэдагаваць меню карыстальніка
+UserMenu.CreateTitle= Стварыць меню карыстальніка
+UserMenu.EditSubmenuTitle= Рэдагаваць падменю
+UserMenu.CreateSubmenuTitle= Стварыць падменю
+UserMenu.LabelHotkey=Гарачая &клавіша:
+UserMenu.LabelLabel=&Метка:
+UserMenu.LabelCommand=&Каманда:
+
+Language.Title= Мовы (Languages)
+Language.Changed=Мова зменена.\nНекаторым элементам інтэрфейсу можа спатрэбіцца\nперазапуск праграмы для поўнага абнаўлення.
+
+LanguageSettings.Title= Налады мовы
+LanguageSettings.Primary=Асноўная мова:
+LanguageSettings.Fallback=Рэзервовая мова:
+LanguageSettings.None=<няма>
+
+HelpLanguage.Title=Мовы даведкі
+HelpLanguage.Changed=Мова даведкі зменена.
+
 Error.Title= Памылка
+
 Warning.Title= Папярэджанне
+
 Info.Title= Інфармацыя
 
 ExtEdit.TempError=Не ўдалося стварыць часовы файл: %v
@@ -463,22 +552,27 @@ FileOp.BtnNewInstance=&Новая копія
 FileOp.CannotEditDir=Немагчыма рэдагаваць папку.
 FileOp.CannotViewDir=Немагчыма праглядаць папку.
 FileOp.CannotOpenSpecial=Не ўдалося адкрыць спецыяльныя файлы (іменаваныя каналы, сокеты, прылады).
+FileOp.DeletionErrors= Памылкі выдалення
+FileOp.FileAlreadyExists=Файл ужо існуе
+FileOp.RememberChoice=Запа&мніць выбар
+FileOp.Overwrite=&Перапісаць
+FileOp.Skip=&Прапусціць
+FileOp.Rename=Пера&іменаваць
+FileOp.Append=&Дапісаць
+FileOp.Resume=Аднав&іць
+FileOp.BtnCancel=&Адмена
+FileOp.BtnBackground=&У фонавым рэжыме
 
 Dialog.RenameTitle= Перайменаванне
 Dialog.RenamePrompt=Перайменаваць '%s' у:
-
-Op.Queue=Чарга
-Op.Background=Фонавае кланіраванне панэляў
-Op.Foreground=Манапольны рэжым
-Op.PathNameOnly=Толькі імя
-Op.PathFullPath=Поўны шлях
-Op.PathSrcDst=Крыніца -> Прызначэнне
 
 Plugins.Title= Кіраванне плагінамі (RPC)
 Plugins.BtnAdd=&Дадаць
 Plugins.BtnRemove=&Выдаліць
 Plugins.BtnPermissions=&Дазволы
 Plugins.BtnClose=&Закрыць
+Plugins.AddTitle= Дадаць плагін
+Plugins.SelectFilePrompt=Абярыце файл плагіна:
 
 InfoPanel.Title= Інфармацыя
 InfoPanel.Computer=Імя камп'ютара
@@ -542,6 +636,7 @@ AndroidInfo.Storage=Сховішча
 AndroidInfo.StorageTotal=Усяго ў сховішчы
 AndroidInfo.StorageAvailable=Даступна ў сховішчы
 AndroidInfo.Protocol=Пратакол
+
 IOSInfo.DeviceTitle=Мабільная прылада Apple
 IOSInfo.Name=Імя
 IOSInfo.Model=Мадэль
@@ -594,7 +689,6 @@ KeyBar.F9=КанфМеню
 KeyBar.F10=Выхад
 KeyBar.F11=Плагін
 KeyBar.F12=Экран
-
 KeyBar.AltF1=Левая
 KeyBar.AltF2=Правая
 KeyBar.AltF3=Hex
@@ -608,7 +702,6 @@ KeyBar.CtrlF4=Расш
 KeyBar.CtrlF5=Час
 KeyBar.CtrlF6=Памер
 KeyBar.CtrlF7=Несорт
-
 KeyBar.EditorF1=Даведка
 KeyBar.EditorF2=Захаваць
 KeyBar.EditorF3=Згортка
@@ -623,59 +716,8 @@ KeyBar.ViewerF7=Пошук
 KeyBar.ViewerAltF8=Перайсці
 KeyBar.ViewerF10=Выхад
 
-EditorSettings.TabExpandNone=Не замяняць табуляцыю прабеламі
-EditorSettings.TabExpandNew=Замяняць прабеламі толькі новыя сімвалы Tab
-EditorSettings.TabExpandAll=Заўсёды замяняць табуляцыю прабеламі
-EditorSettings.ExpandTabs=Замяняць та&буляцыю прабеламі:
-EditorSettings.Highlighter=Інс&трумент падсветкі:
-EditorSettings.ColorerStyle=С&тыль Colorer:
-EditorSettings.TabSize=Ра&змер табуляцыі:
-EditorSettings.AutoIndent=Аўта&адступ
-EditorSettings.CursorBeyondEOL=Курсор за &канцом радка
-EditorSettings.UseEditorConfig=Выкарыстоўваць .&editorconfig
-EditorSettings.Crosshair=Паказваць к&рыж у рэдактары
-EditorSettings.ColorerBg=Фон &Colorer
-EditorSettings.UseExternalEditor=В&онкавы рэдактар
-EditorSettings.ExternalCommand=Ка&манда запуску:
-ConfirmationsSettings.DeleteCancelFocused=Фокус на 'Адмена' пры выдаленні
-
-PanelSettings.ShowHighlightMarks=Паказваць паметкі &падсветкі файлаў
-PanelSettings.CommandLineAutoComplete=Уключыць аўта&дапаўненне каманднага радка
-PanelSettings.AlwaysShowMenuBar=Заўсёды паказваць радок &меню
-PanelSettings.RecordMacrosTo=Запісваць макрасы ў:
-UpdateSettings.ChannelStable=Стабільныя выпускі
-UpdateSettings.ChannelNightly=Начныя зборкі
-UpdateSettings.IntervalNever=Ніколі
-UpdateSettings.IntervalStart=Пры кожным запуску
-UpdateSettings.IntervalDaily=Штодня
-UpdateSettings.IntervalWeekly=Штотыдзень
-
-Plugins.AddTitle= Дадаць плагін
-Plugins.SelectFilePrompt=Абярыце файл плагіна:
-
-FindFile.SearchingTitle= Пошук...
-FindFile.Scanning=Сканіраванне:
-FindFile.FoundCount=Знойдзена: %d
-FindFile.SearchResultsTitle= Вынікі пошуку
-FindFile.BtnGoTo=&Перайсці
-FindFile.BtnView=&Прагляд
-FindFile.BtnEdit=&Праўка
-FindFile.BtnClose=&Закрыць
-
-FileOp.DeletionErrors= Памылкі выдалення
-FileOp.FileAlreadyExists=Файл ужо існуе
-FileOp.RememberChoice=Запа&мніць выбар
-FileOp.Overwrite=&Перапісаць
-FileOp.Skip=&Прапусціць
-FileOp.Rename=Пера&іменаваць
-FileOp.Append=&Дапісаць
-FileOp.Resume=Аднав&іць
-LanguageSettings.Title= Налады мовы
-LanguageSettings.Primary=Асноўная мова:
-LanguageSettings.Fallback=Рэзервовая мова:
-LanguageSettings.None=<няма>
-
 Arkanoid.HighScores= Рэкорды
+
 PlugRing.Title= f4 PlugRing
 PlugRing.BtnInstall=Ус&таляваць/Абнавіць
 PlugRing.BtnRemove=Вы&даліць
@@ -692,29 +734,18 @@ Attributes.ReadOnly=&Толькі для чытання
 Attributes.Hidden=&Схаваны
 Attributes.System=&Сістэмны
 Attributes.Archive=&Архіўны
+
 Permissions.Title= Дазволы плагінаў
 Permissions.BtnRevoke=&Адклікаць
 Permissions.BtnClose=&Закрыць
 
-Search.Prompt=Шукаць:
-Search.WholeWords=Толькі цэлыя словы
-Search.Regex=Рэгулярныя выразы
-Search.BtnFind=&Знайсці
 Replace.Title= Замена
 Replace.Prompt=Замяніць на:
 Replace.BtnReplace=&Замяніць
 Replace.BtnReplaceAll=Замяніць &усё
+
 Codepage.Title= Кадыроўкі
 Codepage.ConvertTitle= Канвертаваць кадыроўку
-
-vtui.Save=&Захаваць
-UserMenu.EditTitle= Рэдагаваць меню карыстальніка
-UserMenu.CreateTitle= Стварыць меню карыстальніка
-UserMenu.EditSubmenuTitle= Рэдагаваць падменю
-UserMenu.CreateSubmenuTitle= Стварыць падменю
-UserMenu.LabelHotkey=Гарачая &клавіша:
-UserMenu.LabelLabel=&Метка:
-UserMenu.LabelCommand=&Каманда:
 
 Hotkeys.Title= Канфігурацыя гарачых клавіш
 Hotkeys.BtnAssign=&Прызначыць
@@ -725,10 +756,7 @@ Hotkeys.BtnNext=Далей >
 Hotkeys.LabelArea=Абласць:
 Hotkeys.LabelWhen=Калі:
 Hotkeys.AssignTitle= Прызначыць гарачую клавішу
-Op.DummyQueue=Чарга (Па змаўчанні)
-Op.DummyBackground=Фонавае кланіраванне панэляў
-Op.DummyForeground=Манапольны рэжым
-Op.BtnStart=&Старт
+
 Drive.Title= Дыскі
 
 NetFox.ConnectionTitle= Налада падключэння
@@ -744,8 +772,7 @@ NetFox.LabelCodepage=&Кадыроўка:
 NetFox.ErrorEmptyName=Імя не можа быць пустым
 NetFox.ErrorReservedName=Зарэзерваванае імя падключэння
 
-FileOp.BtnCancel=&Адмена
-FileOp.BtnBackground=&У фонавым рэжыме
 Queue.BtnCancel=&Адмяніць задачу
 Queue.BtnClear=Ачысціць &выкананыя
+
 Session.Title= Выберыце сесію

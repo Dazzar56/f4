@@ -5,20 +5,6 @@ Author=f4 Team
 
 [Strings]
 VisRen.Menu=&Vizuális csoportos átnevezés
-ID3Editor.Menu=ID3 Tag &Szerkesztő
-ID3Editor.Title=ID3 Tag Szerkesztő
-ID3Editor.LocalOnly=Az ID3 Tag Szerkesztő csak a helyi fájlokat támogatja.
-ID3Editor.SelectFile=Először válasszon ki egy MP3 fájlt.
-ID3Editor.OnlyMP3=Csak az MP3 fájlok támogatottak.
-ID3Editor.SaveError=Sikertelen az ID3 tagek mentése:\n%v
-ID3Editor.OpenError=Nem sikerült megnyitni az MP3 fájlt:\n%v
-ID3Editor.FieldTitle=Cím:
-ID3Editor.FieldArtist=Előadó:
-ID3Editor.FieldAlbum=Album:
-ID3Editor.FieldYear=Év:
-ID3Editor.FieldGenre=Műfaj:
-ID3Editor.FieldComment=Megjegyzés:
-ID3Editor.FieldVersion=Verzió:
 VisRen.Title=Vizuális csoportos átnevezés
 VisRen.HostUnsupported=Ez az F4 gazdagép nem biztosítja a VisRen UI-hidat.
 VisRen.LocalOnly=A VisRen csak helyi fájlpanelen működik.
@@ -59,109 +45,52 @@ VisRen.WordDivTitle=Szóhatárolók
 VisRen.WordDivPrompt=Szavakat elválasztó karakterek (maximum 18):
 VisRen.OldName=Régi név
 VisRen.NewName=Új név
+
+ID3Editor.Menu=ID3 Tag &Szerkesztő
+ID3Editor.Title=ID3 Tag Szerkesztő
+ID3Editor.LocalOnly=Az ID3 Tag Szerkesztő csak a helyi fájlokat támogatja.
+ID3Editor.SelectFile=Először válasszon ki egy MP3 fájlt.
+ID3Editor.OnlyMP3=Csak az MP3 fájlok támogatottak.
+ID3Editor.SaveError=Sikertelen az ID3 tagek mentése:\n%v
+ID3Editor.OpenError=Nem sikerült megnyitni az MP3 fájlt:\n%v
+ID3Editor.FieldTitle=Cím:
+ID3Editor.FieldArtist=Előadó:
+ID3Editor.FieldAlbum=Album:
+ID3Editor.FieldYear=Év:
+ID3Editor.FieldGenre=Műfaj:
+ID3Editor.FieldComment=Megjegyzés:
+ID3Editor.FieldVersion=Verzió:
+
 vtui.Ok=&Ok
 vtui.Cancel=Mégse
+
 Panel.Other=&Másik panel
 Panel.Column.Name=Név
 Panel.Column.Size=Méret
 Panel.Column.Modified=Módosítva
 Panel.UpDir=FEL-KVT
 Panel.SelectedInfo=Bájt: %s, fájl: %d, mappa: %d
+
 Panels.Prompt=>
+
 Edit.NewFileTitle= Új fájl létrehozása
 Edit.NewFilePrompt=Fájl&név:
+
 MakeFolder.Title= Mappa létrehozása
 MakeFolder.Prompt=&Mappa létrehozása:
+
 Delete.Title= Törlés
 Delete.Confirm=Biztosan törölni szeretné a következőt:\n%s?
 Delete.Btn=&Törlés
+
 Copy.Title= Másolás
 Copy.Prompt=Kopi %d elem ide:
 Copy.Btn=&Másolás
+
 Move.Title= Áthelyezés
 Move.Prompt=%d elem átnevezése vagy áthelyezése ide:
 Move.Btn=&Áthelyezés
-Btn.OverwriteAll=Mindet &felülír
-Btn.SkipAll=Mi&ndet kihagy
-Btn.Retry=&Újra
-Btn.Ignore=&Figyelmen kívül hagy
-Operation.Error=Művelet sikertelen:\n%s
-Op.ClonePanels=&Panelek klónozása új munkaterületre
-Op.SwitchHint=Ctrl+Tab az ablakok közötti váltáshoz
-Op.DummyTitle= Próba művelet
-Op.DummyText=Ez egy próba, 5 perces művelet.\nVálasszon futási módot:
-Viewer.Title= Néző
-Viewer.ModeText=Szöveg
-Viewer.ModeHex=Hex
-Viewer.SearchTitle= Keresés
-Search.CaseSensitive=Kis- és &nagybetű-érzékeny
-Search.Reverse=&Keresés visszafelé
-Select.Title= Kijelölés
-Deselect.Title= Kijelölés megszüntetése
-Quit.Title= Kilépés
-Quit.Confirm=Biztosan ki szeretne lépni a f4-ből?
-Quit.Btn=&Kilépés
-Select.Mask=&Kijelölési maszk megadása:
 
-Macro.AssignTitle= Makró hozzárendelése
-Macro.AssignPrompt=Nyomja meg a kívánt billentyűkombinációt
-Macro.AssignCancel=Nyomja meg az Esc-t a megszakításhoz
-
-Menu.Language=Nyelv
-Menu.HelpLanguage=Súgó nyelve
-Menu.Left=Bal
-Menu.Files=Fájlok
-Menu.Commands=Parancsok
-Menu.Options=Beállítások
-Menu.Right=Jobb
-Menu.Exit=Ki&lépés
-
-Menu.Files.View=Megtekintés
-Menu.Files.Edit=Szerkesztés
-Menu.Files.Copy=Másolás
-Menu.Files.RenMov=Átnevezés vagy áthelyezés
-Menu.Files.MkDir=Mappa létrehozása
-Menu.Files.Delete=Törlés
-Menu.Left.Brief=Rövid
-Menu.Left.Medium=Közepes
-Menu.Left.Detailed=Részletes
-Menu.Left.Wide=Széles
-Menu.Commands.FindFile=Fájl keresése
-Menu.Commands.FindDuplicates=Duplikátumok keresése
-Menu.Commands.BackgroundJobs=Háttérfeladatok
-Jobs.Title=Háttérfeladatok
-Jobs.BtnShow=&Mutat
-Jobs.BtnCancel=&Mégse
-Jobs.BtnClose=&Bezárás
-Jobs.Empty=Nincs futó feladat
-Menu.Commands.RunRemote=Távoli parancs futtatása
-RemoteCmd.Title=Távoli parancs
-RemoteCmd.Prompt=Parancs:
-RemoteCmd.BtnClose=&Bezárás
-Menu.Commands.Bookmarks=Könyvjelzők
-Menu.SortName=Név
-Menu.SortExt=Kiterjesztés
-Menu.SortTime=Idő
-Menu.SortSize=Méret
-Menu.SortUnsorted=Rendezetlen
-Sort.Title=Rendezés
-Menu.PanelSettings=Panel beállítások
-Menu.EditorSettings=Szerkesztő beállítások
-Menu.ColorerSettings=&Colorer beállítások
-Menu.AppearanceSettings=Megjelenés
-Menu.ConfirmationsSettings=Megerősítések
-Menu.AutoUpdateSettings=Auto&frissítés
-Menu.Options.Plugins=Beépülők kezelése
-
-Menu.Editor.File=&Fájl
-Menu.Editor.Edit=&Szerkesztés
-Menu.Editor.Search=&Keresés
-Menu.Editor.Options=&Beállítások
-Menu.Editor.Insert=&Beillesztés
-Menu.Viewer.File=&Fájl
-Menu.Viewer.View=&Nézet
-Menu.Viewer.Search=&Keresés
-Menu.Viewer.Options=&Beállítások
 Action.App.ScreenGrab=Képernyő&kép
 Action.App.ScreenGrab.Desc=Képernyőterület kiválasztása és másolása
 Action.Editor.Save=&Mentés
@@ -224,18 +153,6 @@ Action.Viewer.CodepageNext=Következő &kódlap
 Action.Viewer.CodepageNext.Desc=Váltás a következő kódlapra
 Action.Viewer.CodepageMenu=Kód&lap menü
 Action.Viewer.CodepageMenu.Desc=Kódlap kiválasztása
-Help.ViewerEditor=Néző és szerkesztő billentyűk
-Help.PanelNav=Panel billentyűk
-Help.NavigationKeys=Navigációs billentyűk
-Help.Area.Shell=Panelek
-Help.Area.Terminal=Terminál
-Help.Area.Editor=Szerkesztő
-Help.Area.Viewer=Néző
-Help.Area.Common=Általános
-Menu.Shell.Files=&Fájlok
-Menu.Shell.Commands=&Parancsok
-Menu.Shell.Options=&Beállítások
-Menu.Terminal.File=&Fájl
 Action.File.New=Új fálj
 Action.File.New.Desc=Új fájl létrehozása és megnyitása a szerkesztőben
 Action.File.CopyInPlace=Másolás helyben
@@ -268,19 +185,6 @@ Action.Panel.UserMenu=&Felhasználói menü
 Action.Panel.UserMenu.Desc=A felhasználói menü megjelenítése
 Action.Panel.FileAssociations=Fájl&társítások…
 Action.Panel.FileAssociations.Desc=Enter, F3 és F4 parancsok konfigurálása maszkok alapján
-FileAssoc.EditorTitle=Fájltársítások
-FileAssoc.EditTitle=Társítás szerkesztése
-FileAssoc.NewTitle=Új társítás
-FileAssoc.ErrorTitle=Fájltársítások
-FileAssoc.EmptyHint=Nincsenek társítások – nyomja meg az Ins gombot a hozzáadáshoz
-FileAssoc.EmptyMask=A fájlmaszk nem lehet üres.
-FileAssoc.MaskLabel=Maszk
-FileAssoc.DescLabel=Leírás
-FileAssoc.PickTitle.Open=Megnyitás ezzel
-FileAssoc.PickTitle.View=Megtekintés ezzel
-FileAssoc.PickTitle.Edit=Szerkesztés ezzel
-FileAssoc.DeleteTitle=Társítás törlése
-FileAssoc.DeleteConfirm=Törli a(z) %q társítást?
 Action.Panel.Bookmarks.Desc=Mappa-könyvjelzők párbeszédpanel megjelenítése
 Action.Panel.PluginMenu=Beé&pülő parancsok
 Action.Panel.PluginMenu.Desc=Beépülő parancsok menüjének megjelenítése
@@ -367,23 +271,98 @@ Action.Terminal.ViewLog.Desc=Terminállog megnyitása a nézőben
 Action.Terminal.EditLog=Terminal log &szerkesztése
 Action.Terminal.EditLog.Desc=Terminállog megnyitása a szerkesztőben
 
-EditorSettings.Title= Szerkesztő beállítások
-EditorSettings.AutoComplete=Automatikus &kiegészítés
-EditorSettings.Mask=Aktív a következő &fájlmaszkokra:
-ColorerSettings.Title= Colorer beállítások
-ColorerSettings.Enabled=Colorer kiemelés &engedélyezése
-ColorerSettings.Style=Fény&stílus:
-ColorerSettings.BuiltIn=(beépített)
-ColorerSettings.Cross=&Kereszt mutatása:
-ColorerSettings.CrossOff=Ne mutassa
-ColorerSettings.CrossVertical=Függőleges
-ColorerSettings.CrossHorizontal=Vízszintes
-ColorerSettings.CrossBoth=Mindkettő
-ColorerSettings.Syntax=&Szintaxis kiemelése
-ColorerSettings.Background=Szerkesztő &hátterének módosítása
-ColorerSettings.Catalog=Séma&mappa (catalog.xml):
-ColorerSettings.Reload=Újra&töltés
-ColorerSettings.Download=Sémák &letöltése
+Btn.OverwriteAll=Mindet &felülír
+Btn.SkipAll=Mi&ndet kihagy
+Btn.Retry=&Újra
+Btn.Ignore=&Figyelmen kívül hagy
+
+Operation.Error=Művelet sikertelen:\n%s
+
+Op.ClonePanels=&Panelek klónozása új munkaterületre
+Op.SwitchHint=Ctrl+Tab az ablakok közötti váltáshoz
+Op.DummyTitle= Próba művelet
+Op.DummyText=Ez egy próba, 5 perces művelet.\nVálasszon futási módot:
+Op.Queue=Sor
+Op.Background=Háttérben klónozás
+Op.Foreground=Monopol mód
+Op.PathNameOnly=Csak név
+Op.PathFullPath=Teljes útvonal
+Op.PathSrcDst=Forrás -> Cél
+
+Viewer.Title= Néző
+Viewer.ModeText=Szöveg
+Viewer.ModeHex=Hex
+Viewer.SearchTitle= Keresés
+
+Search.CaseSensitive=Kis- és &nagybetű-érzékeny
+Search.Reverse=&Keresés visszafelé
+
+Select.Title= Kijelölés
+Select.Mask=&Kijelölési maszk megadása:
+
+Deselect.Title= Kijelölés megszüntetése
+
+Quit.Title= Kilépés
+Quit.Confirm=Biztosan ki szeretne lépni a f4-ből?
+Quit.Btn=&Kilépés
+
+Macro.AssignTitle= Makró hozzárendelése
+Macro.AssignPrompt=Nyomja meg a kívánt billentyűkombinációt
+Macro.AssignCancel=Nyomja meg az Esc-t a megszakításhoz
+
+Menu.Language=Nyelv
+Menu.HelpLanguage=Súgó nyelve
+Menu.Left=Bal
+Menu.Files=Fájlok
+Menu.Commands=Parancsok
+Menu.Options=Beállítások
+Menu.Right=Jobb
+Menu.Exit=Ki&lépés
+Menu.Files.View=Megtekintés
+Menu.Files.Edit=Szerkesztés
+Menu.Files.Copy=Másolás
+Menu.Files.RenMov=Átnevezés vagy áthelyezés
+Menu.Files.MkDir=Mappa létrehozása
+Menu.Files.Delete=Törlés
+Menu.Left.Brief=Rövid
+Menu.Left.Medium=Közepes
+Menu.Left.Detailed=Részletes
+Menu.Left.Wide=Széles
+Menu.Commands.FindFile=Fájl keresése
+Menu.Commands.FindDuplicates=Duplikátumok keresése
+Menu.Commands.BackgroundJobs=Háttérfeladatok
+Menu.Commands.RunRemote=Távoli parancs futtatása
+Menu.Commands.Bookmarks=Könyvjelzők
+Menu.SortName=Név
+Menu.SortExt=Kiterjesztés
+Menu.SortTime=Idő
+Menu.SortSize=Méret
+Menu.SortUnsorted=Rendezetlen
+Menu.PanelSettings=Panel beállítások
+Menu.EditorSettings=Szerkesztő beállítások
+Menu.ColorerSettings=&Colorer beállítások
+Menu.AppearanceSettings=Megjelenés
+Menu.ConfirmationsSettings=Megerősítések
+Menu.AutoUpdateSettings=Auto&frissítés
+Menu.Options.Plugins=Beépülők kezelése
+Menu.Editor.File=&Fájl
+Menu.Editor.Edit=&Szerkesztés
+Menu.Editor.Search=&Keresés
+Menu.Editor.Options=&Beállítások
+Menu.Editor.Insert=&Beillesztés
+Menu.Viewer.File=&Fájl
+Menu.Viewer.View=&Nézet
+Menu.Viewer.Search=&Keresés
+Menu.Viewer.Options=&Beállítások
+Menu.Shell.Files=&Fájlok
+Menu.Shell.Commands=&Parancsok
+Menu.Shell.Options=&Beállítások
+Menu.Terminal.File=&Fájl
+
+RemoteCmd.Title=Távoli parancs
+RemoteCmd.Prompt=Parancs:
+RemoteCmd.BtnClose=&Bezárás
+
 PanelSettings.Title= Panel beállítások
 PanelSettings.ShowHidden=&Rejtett és rendszerfájlok megjelenítése
 PanelSettings.ShowDirPrefix=PREFIX '/' mutatása a &mappáknál
@@ -404,6 +383,75 @@ PanelSettings.DefaultMode=Alapértelmezett &művelet:
 PanelSettings.PathDisplay=Fájlútvonal folyamatban:
 PanelSettings.InfoPanelCPUGPU=CPU/GPU rész mutatása az &információs panelen
 PanelSettings.EscTogglePanels=&Esc a panelek láthatóságának váltásához
+PanelSettings.ShowHighlightMarks=Fájlok &kiemelési jeleinek mutatása
+PanelSettings.CommandLineAutoComplete=Parancssor auto&matikus kiegészítése
+PanelSettings.AlwaysShowMenuBar=Mindig mutassa a &menüt
+PanelSettings.RecordMacrosTo=Makrók rögzítése ide:
+
+Jobs.Title=Háttérfeladatok
+Jobs.BtnShow=&Mutat
+Jobs.BtnCancel=&Mégse
+Jobs.BtnClose=&Bezárás
+Jobs.Empty=Nincs futó feladat
+
+Sort.Title=Rendezés
+
+Help.ViewerEditor=Néző és szerkesztő billentyűk
+Help.PanelNav=Panel billentyűk
+Help.NavigationKeys=Navigációs billentyűk
+Help.Area.Shell=Panelek
+Help.Area.Terminal=Terminál
+Help.Area.Editor=Szerkesztő
+Help.Area.Viewer=Néző
+Help.Area.Common=Általános
+Help.SearchHint=Keresés: gépeljen  Következő: F3/Ctrl+Enter  Előző: Shift+F3/Ctrl+Shift+Enter
+
+FileAssoc.EditorTitle=Fájltársítások
+FileAssoc.EditTitle=Társítás szerkesztése
+FileAssoc.NewTitle=Új társítás
+FileAssoc.ErrorTitle=Fájltársítások
+FileAssoc.EmptyHint=Nincsenek társítások – nyomja meg az Ins gombot a hozzáadáshoz
+FileAssoc.EmptyMask=A fájlmaszk nem lehet üres.
+FileAssoc.MaskLabel=Maszk
+FileAssoc.DescLabel=Leírás
+FileAssoc.PickTitle.Open=Megnyitás ezzel
+FileAssoc.PickTitle.View=Megtekintés ezzel
+FileAssoc.PickTitle.Edit=Szerkesztés ezzel
+FileAssoc.DeleteTitle=Társítás törlése
+FileAssoc.DeleteConfirm=Törli a(z) %q társítást?
+
+EditorSettings.Title= Szerkesztő beállítások
+EditorSettings.AutoComplete=Automatikus &kiegészítés
+EditorSettings.Mask=Aktív a következő &fájlmaszkokra:
+EditorSettings.TabExpandNone=Ne fejtse ki a tabulátorokat
+EditorSettings.TabExpandNew=Csak az újonnan beírt Tabokat fejtse ki szóközökké
+EditorSettings.TabExpandAll=Mindig fejtse ki a tabulátorokat szóközökké
+EditorSettings.ExpandTabs=Tabulátorok &kifejtése:
+EditorSettings.Highlighter=Kie&melő:
+EditorSettings.ColorerStyle=Colorer &stílus:
+EditorSettings.TabSize=Tabulátor &mérete:
+EditorSettings.AutoIndent=Auto &behúzás
+EditorSettings.CursorBeyondEOL=Kurzor a sor végén &túl
+EditorSettings.UseEditorConfig=.&editorconfig használata
+EditorSettings.Crosshair=Célkereszt &mutatása
+EditorSettings.ColorerBg=Colorer &háttér
+EditorSettings.UseExternalEditor=Kü&lső szerkesztő
+EditorSettings.ExternalCommand=Parancs in&dítása:
+
+ColorerSettings.Title= Colorer beállítások
+ColorerSettings.Enabled=Colorer kiemelés &engedélyezése
+ColorerSettings.Style=Fény&stílus:
+ColorerSettings.BuiltIn=(beépített)
+ColorerSettings.Cross=&Kereszt mutatása:
+ColorerSettings.CrossOff=Ne mutassa
+ColorerSettings.CrossVertical=Függőleges
+ColorerSettings.CrossHorizontal=Vízszintes
+ColorerSettings.CrossBoth=Mindkettő
+ColorerSettings.Syntax=&Szintaxis kiemelése
+ColorerSettings.Background=Szerkesztő &hátterének módosítása
+ColorerSettings.Catalog=Séma&mappa (catalog.xml):
+ColorerSettings.Reload=Újra&töltés
+ColorerSettings.Download=Sémák &letöltése
 
 AppearanceSettings.Title= Megjelenés beállítások
 AppearanceSettings.Style=Alkalmazás &stílusa:
@@ -417,15 +465,33 @@ ConfirmationsSettings.Title= Megerősítések
 ConfirmationsSettings.Copy=Megerősítés &másoláskor
 ConfirmationsSettings.Move=Megerősítés á&thelyezéskor
 ConfirmationsSettings.Delete=Megerősítés &törléskor
+ConfirmationsSettings.DeleteCancelFocused=Fókusz a 'Mégse' gombra törléskor
 ConfirmationsSettings.Exit=Megerősítés ki&lépéskor
+
 UpdateSettings.Title= Autofrissítés
 UpdateSettings.Channel=Frissítési &csatorna:
 UpdateSettings.Interval=Ellenőrzési &időköz:
 UpdateSettings.BtnCheck=Ellenőrzés &most
+UpdateSettings.ChannelStable=Stabil verziók
+UpdateSettings.ChannelNightly=Nightly kiadások
+UpdateSettings.IntervalNever=Soha
+UpdateSettings.IntervalStart=Minden indításkor
+UpdateSettings.IntervalDaily=Naponta
+UpdateSettings.IntervalWeekly=Hetente
+
 FindFile.Title= Fájl keresése
 FindFile.MaskPrompt=Egy vagy több fájlmaszk:
 FindFile.TextPrompt=Tartalmazott szöveg:
 FindFile.BtnFind=&Keresés
+FindFile.SearchingTitle= Keresés...
+FindFile.Scanning=Szkennelés:
+FindFile.FoundCount=Találat: %d
+FindFile.SearchResultsTitle= Keresési eredmények
+FindFile.BtnGoTo=&Ugrás
+FindFile.BtnView=&Néző
+FindFile.BtnEdit=&Szerkesztés
+FindFile.BtnClose=&Bezárás
+
 History.FoldersTitle= Mappaelőzmények
 History.CommandsTitle= Parancselőzmények
 History.SearchModeHint=F2: részstring / prefix keresés váltása
@@ -433,22 +499,29 @@ History.CommandsHint=Up/Down Enter Esc Shift+Del Del Ctrl+C Ctrl+Ins F2
 History.FoldersHint=Up/Down Enter Shift+Enter Ctrl+Enter Esc Shift+Del Del Ctrl+C Ctrl+Ins Ctrl+R F2
 History.ConfirmClearAll=Törli a teljes előzményt?
 History.ConfirmPruneMissing=Eltávolítja azokat az elemeket, amelyek útvonala már nem létezik?
-Help.SearchHint=Keresés: gépeljen  Következő: F3/Ctrl+Enter  Előző: Shift+F3/Ctrl+Shift+Enter
+History.Title= Előzmények
+History.EmptyFolders=A mappaelőzmények üresek.
+History.EmptyCommands=A parancselőzmények üresek.
+
 UserMenu.LocalMenuTitle=Lokális menü
 UserMenu.MainMenuTitle=Főmenü
 UserMenu.MainMenuFAR=FAR
 
 Language.Title= Nyelvek
 Language.Changed=A nyelv megváltozott.\nNéhány felületi elem teljes frissítéséhez\nszükséges lehet az alkalmazás újraindítása.
+
+LanguageSettings.Title= Nyelvi beállítások
+LanguageSettings.Primary=Elsődleges nyelv:
+LanguageSettings.Fallback=Tartalék nyelv:
+LanguageSettings.None=<nincs>
+
 HelpLanguage.Title=Súgó nyelvek
 HelpLanguage.Changed=A súgó nyelve megváltozott.
 
-History.Title= Előzmények
-History.EmptyFolders=A mappaelőzmények üresek.
-History.EmptyCommands=A parancselőzmények üresek.
-
 Error.Title= Hiba
+
 Warning.Title= Figyelmeztetés
+
 Info.Title= Info
 
 ExtEdit.TempError=Nem sikerült létrehozni az ideiglenes fájlt: %v
@@ -463,22 +536,25 @@ FileOp.BtnNewInstance=&Új példány
 FileOp.CannotEditDir=Könyvtár szerkesztése nem lehetséges.
 FileOp.CannotViewDir=Könyvtár megtekintése nem lehetséges.
 FileOp.CannotOpenSpecial=Speciális fájlok (nevesített csatornák, soke-tok, eszközök) megnyitása nem lehetséges.
+FileOp.DeletionErrors= Törlési hibák
+FileOp.FileAlreadyExists=A fájl már létezik
+FileOp.RememberChoice=Választás &megjegyzése
+FileOp.Overwrite=&Felülírás
+FileOp.Skip=&Kihagyás
+FileOp.Rename=&Átnevezés
+FileOp.Append=&Melléírás
+FileOp.Resume=Folyt&atás
 
 Dialog.RenameTitle= Átnevezés
 Dialog.RenamePrompt=Átnevezés '%s' erre:
-
-Op.Queue=Sor
-Op.Background=Háttérben klónozás
-Op.Foreground=Monopol mód
-Op.PathNameOnly=Csak név
-Op.PathFullPath=Teljes útvonal
-Op.PathSrcDst=Forrás -> Cél
 
 Plugins.Title= Beépülők kezelése (RPC)
 Plugins.BtnAdd=&Hozzáad
 Plugins.BtnRemove=&Töröl
 Plugins.BtnPermissions=&Jogok
 Plugins.BtnClose=&Bezár
+Plugins.AddTitle= Beépülő hozzáadása
+Plugins.SelectFilePrompt=Válassza ki a beépülő fájlt:
 
 InfoPanel.Title= Információ
 InfoPanel.Computer=Számítógép neve
@@ -542,6 +618,7 @@ AndroidInfo.Storage=Tárhely
 AndroidInfo.StorageTotal=Összesen a tárhelyen
 AndroidInfo.StorageAvailable=Szabad a tárhelyen
 AndroidInfo.Protocol=Kapcsolati protokoll
+
 IOSInfo.DeviceTitle=Apple mobil eszköz
 IOSInfo.Name=Név
 IOSInfo.Model=Modell
@@ -594,7 +671,6 @@ KeyBar.F9=BeállMenü
 KeyBar.F10=Kilép
 KeyBar.F11=Beépülő
 KeyBar.F12=Képernyő
-
 KeyBar.AltF1=Bal
 KeyBar.AltF2=Jobb
 KeyBar.AltF3=Hex
@@ -608,7 +684,6 @@ KeyBar.CtrlF4=Kit
 KeyBar.CtrlF5=Idő
 KeyBar.CtrlF6=Méret
 KeyBar.CtrlF7=Rendezetlen
-
 KeyBar.EditorF1=Súgó
 KeyBar.EditorF2=Mentés
 KeyBar.EditorF3=Sortörés
@@ -622,54 +697,3 @@ KeyBar.ViewerF4=Hex
 KeyBar.ViewerF7=Keresés
 KeyBar.ViewerAltF8=Ugrás
 KeyBar.ViewerF10=Kilép
-
-EditorSettings.TabExpandNone=Ne fejtse ki a tabulátorokat
-EditorSettings.TabExpandNew=Csak az újonnan beírt Tabokat fejtse ki szóközökké
-EditorSettings.TabExpandAll=Mindig fejtse ki a tabulátorokat szóközökké
-EditorSettings.ExpandTabs=Tabulátorok &kifejtése:
-EditorSettings.Highlighter=Kie&melő:
-EditorSettings.ColorerStyle=Colorer &stílus:
-EditorSettings.TabSize=Tabulátor &mérete:
-EditorSettings.AutoIndent=Auto &behúzás
-EditorSettings.CursorBeyondEOL=Kurzor a sor végén &túl
-EditorSettings.UseEditorConfig=.&editorconfig használata
-EditorSettings.Crosshair=Célkereszt &mutatása
-EditorSettings.ColorerBg=Colorer &háttér
-EditorSettings.UseExternalEditor=Kü&lső szerkesztő
-EditorSettings.ExternalCommand=Parancs in&dítása:
-ConfirmationsSettings.DeleteCancelFocused=Fókusz a 'Mégse' gombra törléskor
-
-PanelSettings.ShowHighlightMarks=Fájlok &kiemelési jeleinek mutatása
-PanelSettings.CommandLineAutoComplete=Parancssor auto&matikus kiegészítése
-PanelSettings.AlwaysShowMenuBar=Mindig mutassa a &menüt
-PanelSettings.RecordMacrosTo=Makrók rögzítése ide:
-UpdateSettings.ChannelStable=Stabil verziók
-UpdateSettings.ChannelNightly=Nightly kiadások
-UpdateSettings.IntervalNever=Soha
-UpdateSettings.IntervalStart=Minden indításkor
-UpdateSettings.IntervalDaily=Naponta
-UpdateSettings.IntervalWeekly=Hetente
-Plugins.AddTitle= Beépülő hozzáadása
-Plugins.SelectFilePrompt=Válassza ki a beépülő fájlt:
-
-FindFile.SearchingTitle= Keresés...
-FindFile.Scanning=Szkennelés:
-FindFile.FoundCount=Találat: %d
-FindFile.SearchResultsTitle= Keresési eredmények
-FindFile.BtnGoTo=&Ugrás
-FindFile.BtnView=&Néző
-FindFile.BtnEdit=&Szerkesztés
-FindFile.BtnClose=&Bezárás
-
-FileOp.DeletionErrors= Törlési hibák
-FileOp.FileAlreadyExists=A fájl már létezik
-FileOp.RememberChoice=Választás &megjegyzése
-FileOp.Overwrite=&Felülírás
-FileOp.Skip=&Kihagyás
-FileOp.Rename=&Átnevezés
-FileOp.Append=&Melléírás
-FileOp.Resume=Folyt&atás
-LanguageSettings.Title= Nyelvi beállítások
-LanguageSettings.Primary=Elsődleges nyelv:
-LanguageSettings.Fallback=Tartalék nyelv:
-LanguageSettings.None=<nincs>
