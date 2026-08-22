@@ -756,6 +756,50 @@ func TestAnsiParser_ExcisionExtra(t *testing.T) {
 	}
 }
 
+func TestAnsiParser_WindowsExcision_SplitAcrossChunks(t *testing.T) {
+	tests := []struct {
+		name   string
+		chunks []string
+	}{
+		{
+			name: "long path split after path bytes",
+			chunks: []string{
+				"C:\\Old>cd /d \"C:\\Users\\Administrator\\AppData\\Roaming\\Microsoft\\Internet Explorer\\",
+				"Quick Launch\" & rem f4_sync\r",
+				"\nafter\r\n",
+			},
+		},
+		{
+			name: "command marker split",
+			chunks: []string{
+				"C:\\Old>cd /",
+				"d \"C:\\New\" & rem f4_sync\r\n",
+				"after\r\n",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tv := NewTerminalView(80, 24)
+			defer tv.Close()
+			parser := NewAnsiParser(tv, nil)
+
+			for _, chunk := range tt.chunks {
+				parser.Process([]byte(chunk))
+			}
+
+			logStr := string(tv.GetAllLogBytes())
+			if strings.Contains(logStr, "cd /d") || strings.Contains(logStr, "f4_sync") || strings.Contains(logStr, "Quick Launch") {
+				t.Fatalf("split technical command leaked into terminal log: %q", logStr)
+			}
+			if !strings.Contains(logStr, "after") {
+				t.Fatalf("data after split technical command was lost: %q", logStr)
+			}
+		})
+	}
+}
+
 type mockClipAuthManager struct {
 	authorized bool
 }
