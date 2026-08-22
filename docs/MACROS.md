@@ -133,9 +133,10 @@ whether it fired. Everything f4 can do interactively — every menu item and
 every hotkey — is a registered action, so this is the macro doorway to all of
 it. Action names are listed in the Hotkey Configurator.
 
-For debugging, `App.CopyWindowTitle` copies the current window title to the
-clipboard; its default shortcut is `Ctrl+Alt+Shift+T`. A Lua macro can read the
-same value through `Far.Title`.
+For debugging, `App.CopyWindowTitle` copies the active f4 window or dialog
+title to the clipboard; its default shortcut is `Ctrl+Alt+Shift+T`. A Lua
+macro can read the host window title (including `ConsoleTitleTemplate`) through
+`Far.Title`.
 
 `exit()` ends the macro. Keys queued before it are still sent.
 

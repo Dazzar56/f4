@@ -228,8 +228,28 @@ func currentWindowTitle() string {
 }
 
 func actionCopyWindowTitle() bool {
-	go vtui.SetClipboard(currentWindowTitle())
+	title := currentFrameTitle()
+	if title == "" {
+		// Keep a useful value during startup/shutdown, when the frame stack may
+		// briefly be empty. Normal UI operation always has a top frame.
+		title = currentWindowTitle()
+	}
+	go vtui.SetClipboard(title)
 	return true
+}
+
+// currentFrameTitle returns the identity of the frame currently receiving
+// input. Unlike currentWindowTitle, it intentionally includes modal dialogs
+// and menus: App.CopyWindowTitle is a debugging action for the UI context the
+// user is working in, not for the host terminal/workspace title.
+func currentFrameTitle() string {
+	if vtui.FrameManager == nil {
+		return ""
+	}
+	if frame := vtui.FrameManager.GetTopFrame(); frame != nil {
+		return strings.TrimSpace(frame.GetTitle())
+	}
+	return ""
 }
 
 func stableWorkspaceTitle(screen *vtui.AppScreen) string {

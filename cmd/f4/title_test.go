@@ -24,8 +24,9 @@ func TestUpdateWindowTitle(t *testing.T) {
 	scr.AllocBuf(80, 25)
 	scr.Writer = &out
 
-	// See snapshotFrameManagerState for why this isn't a plain struct copy.
-	defer snapshotFrameManagerState(t)()
+	// Keep the test's FrameManager isolated so Init's task pump cannot race
+	// with teardown of the shared test-global manager.
+	defer swapFrameManager(t)()
 
 	// Инициализируем чистый стек окон во фреймворке
 	vtui.FrameManager.Init(scr)
@@ -102,7 +103,7 @@ func TestCurrentWindowTitleMatchesRenderedTitle(t *testing.T) {
 	origTemplate := AppConfig.ConsoleTitleTemplate
 	defer func() { AppConfig.ConsoleTitleTemplate = origTemplate }()
 
-	defer snapshotFrameManagerState(t)()
+	defer swapFrameManager(t)()
 	scr := vtui.NewScreenBuf()
 	scr.AllocBuf(80, 25)
 	vtui.FrameManager.Init(scr)
