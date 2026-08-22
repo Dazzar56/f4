@@ -416,9 +416,15 @@ jobs:
     - name: Run race detector
       shell: bash
       run: |
-        # This test mutates shared UI registries by design and is already
-        # isolated in the regular native test job with GOMAXPROCS=1.
-        go test -race -timeout 15m -skip '^TestAllDialogs_LayoutValidation$' ./...
+        # cmd/f4 tests replace vtui's process-global FrameManager while its
+        # background task pump is alive, so they need a dedicated race-safe
+        # harness before they can run under -race. luaplug's tests call raw
+        # FFI pointers, which Go's checkptr rejects under -race. Keep both
+        # packages in the instrumented compile below and run all other
+        # package tests under the detector.
+        packages=$(go list ./... | grep -Ev '^github.com/unxed/f4/(cmd/f4|luaplug)$')
+        go test -race -timeout 15m $packages
+        go test -race -run '^$' ./cmd/f4 ./luaplug
 
   release:
     name: Create Official Release
