@@ -588,17 +588,58 @@ jobs:
       if: failure()
       shell: bash
       run: |
-        # A crash handler that os.Exit()s bypasses both go test's output and
-        # TestMain's temp-dir cleanup, so the reports it wrote survive here.
-        for base in "${TMPDIR:-/tmp}" "$(cygpath -u "${TEMP:-}" 2>/dev/null)"; do
-          if [ -z "$base" ] || [ ! -d "$base" ]; then
-            continue
+        # Look for crash logs in cache and temp roots (vtui's fallback); never fail.
+        set +e
+        search_roots=()
+        if [ -n "${XDG_CACHE_HOME:-}" ]; then
+          search_roots+=("$XDG_CACHE_HOME/vtui_app/crashes")
+        fi
+        if [ -n "${HOME:-}" ]; then
+          search_roots+=("$HOME/.cache/vtui_app/crashes")
+          search_roots+=("$HOME/Library/Caches/vtui_app/crashes")
+        fi
+        if [ -n "${LOCALAPPDATA:-}" ]; then
+          cache_dir="$LOCALAPPDATA"
+          if command -v cygpath >/dev/null 2>&1; then
+            if converted_cache_dir="$(cygpath -u "$LOCALAPPDATA" 2>/dev/null)"; then
+              cache_dir="$converted_cache_dir"
+            fi
           fi
-          find "$base" -maxdepth 4 -path '*f4-test-config*' -name '*.log' 2>/dev/null | head -20 | while read -r f; do
-            echo "=== $f ==="
-            cat "$f"
+          search_roots+=("$cache_dir/vtui_app/crashes")
+        fi
+        search_roots+=("${TMPDIR:-/tmp}")
+        if [ -n "${TEMP:-}" ]; then
+          temp_dir="$TEMP"
+          if command -v cygpath >/dev/null 2>&1; then
+            if converted_temp_dir="$(cygpath -u "$TEMP" 2>/dev/null)"; then
+              temp_dir="$converted_temp_dir"
+            fi
+          fi
+          search_roots+=("$temp_dir")
+        fi
+        echo "Crash report search roots:"
+        printf '  %s\n' "${search_roots[@]}"
+        report_count=0
+        for _ in {1..20}; do
+          IFS= read -r -d '' report || break
+          report_count=$((report_count + 1))
+          echo "=== $report ==="
+          cat -- "$report"
+        done < <(
+          for base in "${search_roots[@]}"; do
+            [ -d "$base" ] || continue
+            find "$base" -maxdepth 4 -name '*.log' \
+              \( -path '*f4-test-config*' -o -path '*/vtui_app/crashes/*' \) -print0 2>/dev/null
           done
-        done
+        )
+        if [ "$report_count" -eq 0 ]; then
+          echo "No crash reports found."
+        elif [ "$report_count" -eq 20 ]; then
+          echo "Printed 20 crash reports; stopped at the cap."
+        else
+          echo "Printed $report_count crash report(s)."
+        fi
+        exit 0
 
   race:
     name: Race detector
