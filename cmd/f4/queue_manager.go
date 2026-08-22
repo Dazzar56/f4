@@ -30,21 +30,150 @@ type TaskReporter interface {
 }
 
 type DialogReporter struct {
-	dlg *FileOpProgressDialog
+	dlg       *FileOpProgressDialog
+	scheduler *dialogProgressScheduler
+}
+
+const dialogProgressUpdateInterval = 100 * time.Millisecond
+
+type dialogProgressUpdateKind uint8
+
+const (
+	dialogProgressScan dialogProgressUpdateKind = iota + 1
+	dialogProgressTransfer
+)
+
+type dialogProgressUpdate struct {
+	kind dialogProgressUpdateKind
+
+	currentPath string
+	files       int64
+	dirs        int64
+
+	action     string
+	filename   string
+	currentPct int
+	totalText  string
+	totalPct   int
+	speedText  string
+}
+
+// dialogProgressScheduler keeps progress updates lossless from the worker's
+// perspective while limiting UI work to one latest-state update per interval.
+// This matters especially for archive extraction with many small files: the
+// worker can report thousands of intermediate states, but rendering every one
+// of them starves keyboard events and makes the UI queue grow without bound.
+type dialogProgressScheduler struct {
+	mu        sync.Mutex
+	latest    dialogProgressUpdate
+	dirty     bool
+	scheduled bool
+	stopped   bool
+	post      func(func())
+	schedule  func(time.Duration, func())
+	interval  time.Duration
+	apply     func(dialogProgressUpdate)
+}
+
+func newDialogProgressScheduler(post func(func()), schedule func(time.Duration, func()), interval time.Duration, apply func(dialogProgressUpdate)) *dialogProgressScheduler {
+	return &dialogProgressScheduler{
+		post:     post,
+		schedule: schedule,
+		interval: interval,
+		apply:    apply,
+	}
+}
+
+func (s *dialogProgressScheduler) request(update dialogProgressUpdate) {
+	s.mu.Lock()
+	if s.stopped {
+		s.mu.Unlock()
+		return
+	}
+	s.latest = update
+	s.dirty = true
+	if s.scheduled {
+		s.mu.Unlock()
+		return
+	}
+	s.scheduled = true
+	s.dirty = false
+	s.mu.Unlock()
+
+	s.post(s.run)
+}
+
+func (s *dialogProgressScheduler) run() {
+	s.mu.Lock()
+	update := s.latest
+	s.mu.Unlock()
+	s.apply(update)
+
+	s.schedule(s.interval, func() {
+		s.mu.Lock()
+		if s.stopped || !s.dirty {
+			s.scheduled = false
+			s.mu.Unlock()
+			return
+		}
+		s.dirty = false
+		s.mu.Unlock()
+		s.post(s.run)
+	})
+}
+
+func (s *dialogProgressScheduler) stop() {
+	s.mu.Lock()
+	s.stopped = true
+	s.dirty = false
+	s.mu.Unlock()
+}
+
+func newDialogReporter(dlg *FileOpProgressDialog) *DialogReporter {
+	r := &DialogReporter{dlg: dlg}
+	r.scheduler = newDialogProgressScheduler(
+		func(task func()) { vtui.FrameManager.PostTask(task) },
+		func(delay time.Duration, task func()) { time.AfterFunc(delay, task) },
+		dialogProgressUpdateInterval,
+		func(update dialogProgressUpdate) {
+			if r.dlg.IsDone() {
+				return
+			}
+			switch update.kind {
+			case dialogProgressScan:
+				r.dlg.UpdateScan(update.currentPath, update.files, update.dirs)
+			case dialogProgressTransfer:
+				r.dlg.UpdateTransfer(update.action, update.filename, update.currentPct, update.totalText, update.totalPct, update.speedText)
+			}
+			vtui.FrameManager.Redraw()
+		},
+	)
+	return r
 }
 
 func (r *DialogReporter) UpdateScan(currentPath string, files, dirs int64) {
-	vtui.FrameManager.PostTask(func() {
-		r.dlg.UpdateScan(currentPath, files, dirs)
-		vtui.FrameManager.Redraw()
+	r.scheduler.request(dialogProgressUpdate{
+		kind:        dialogProgressScan,
+		currentPath: currentPath,
+		files:       files,
+		dirs:        dirs,
 	})
 }
 
 func (r *DialogReporter) UpdateTransfer(action, filename string, currentPct int, totalText string, totalPct int, speedText string) {
-	vtui.FrameManager.PostTask(func() {
-		r.dlg.UpdateTransfer(action, filename, currentPct, totalText, totalPct, speedText)
-		vtui.FrameManager.Redraw()
+	r.scheduler.request(dialogProgressUpdate{
+		kind:       dialogProgressTransfer,
+		action:     action,
+		filename:   filename,
+		currentPct: currentPct,
+		totalText:  totalText,
+		totalPct:   totalPct,
+		speedText:  speedText,
 	})
+}
+
+func (r *DialogReporter) Stop() {
+	r.scheduler.stop()
 }
 
 func (r *DialogReporter) IsCancelled() bool {
