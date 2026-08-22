@@ -60,6 +60,28 @@ func openEditFileIn(pf *PanelsFrame, path string) {
 	actionOpenEditor(pf, vfs.NewOSVFS(filepath.Dir(abs)), abs)
 }
 
+func sudoDispatcherPath(args []string) string {
+	for i, arg := range args {
+		if arg == "--sudo-dispatcher" {
+			if i+1 < len(args) {
+				return args[i+1]
+			}
+			return ""
+		}
+		if strings.HasPrefix(arg, "--sudo-dispatcher=") {
+			return arg[len("--sudo-dispatcher="):]
+		}
+	}
+	return ""
+}
+
+func sudoStartupMode(args []string, askpassParent bool) (dispatcher string, askpass bool) {
+	if dispatcher = sudoDispatcherPath(args); dispatcher != "" {
+		return dispatcher, false
+	}
+	return "", askpassParent
+}
+
 func main() {
 	vtui.AppName = "f4"
 	if archivePath, archiveKind, found, err := parseUpdateHelperArgs(os.Args[1:]); found {
@@ -84,7 +106,18 @@ func main() {
 	absExecPath, _ := filepath.Abs(execPath)
 	vfs.InitSudoClient(absExecPath, "")
 
-	if os.Getenv("F4_ASKPASS_PARENT") != "" {
+	// The elevated dispatcher inherits F4_ASKPASS_PARENT from the client that
+	// started sudo. Dispatcher mode must win over askpass mode; otherwise the
+	// post-authentication root process asks for a password again instead of
+	// creating its IPC socket, leaving the original operation waiting forever.
+	var askpassParent bool
+	sudoDispatcher, askpassParent = sudoStartupMode(os.Args[1:], os.Getenv("F4_ASKPASS_PARENT") != "")
+	if sudoDispatcher != "" {
+		vfs.RunSudoDispatcher(sudoDispatcher)
+		return
+	}
+
+	if askpassParent {
 		vfs.RunSudoAskpass()
 		return
 	}
@@ -101,23 +134,6 @@ func main() {
 	// build panels it will never draw.
 	if code, handled := runMountCLI(); handled {
 		os.Exit(code)
-	}
-
-	for i := 1; i < len(os.Args); i++ {
-		arg := os.Args[i]
-		if arg == "--sudo-dispatcher" {
-			if i+1 < len(os.Args) {
-				sudoDispatcher = os.Args[i+1]
-			}
-			break
-		} else if strings.HasPrefix(arg, "--sudo-dispatcher=") {
-			sudoDispatcher = arg[len("--sudo-dispatcher="):]
-			break
-		}
-	}
-	if sudoDispatcher != "" {
-		vfs.RunSudoDispatcher(sudoDispatcher)
-		return
 	}
 
 	// Setup crash/stderr location before any logging starts; in portable mode
