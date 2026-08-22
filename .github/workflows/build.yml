@@ -186,12 +186,12 @@ jobs:
         # CGO_ENABLED=0 and -extldflags '-static', and qemu then needs the
         # target's loader. Today that is arm64 alone: amd64 runs natively,
         # and the noffi cells drop goffi and really are static.
-        PACKAGES=qemu-user-static
+        packages=(qemu-user-static)
         set --
         if file build/f4 | grep -q 'dynamically linked'; then
           case "${{ matrix.goarch }}" in
             arm64)
-              PACKAGES="$PACKAGES libc6-arm64-cross"
+              packages+=(libc6-arm64-cross)
               set -- -L /usr/aarch64-linux-gnu
               ;;
             *)
@@ -202,7 +202,7 @@ jobs:
         fi
 
         sudo apt-get update -qq
-        sudo apt-get install -y -qq $PACKAGES
+        sudo apt-get install -y -qq "${packages[@]}"
         "qemu-$QEMU-static" "$@" build/f4 --version
 
     - name: Package
@@ -478,7 +478,13 @@ jobs:
         TARGET: ${{ matrix.target }}
         GCFLAGS: ${{ matrix.gcflags }}
       run: |
-        GOOS="${TARGET%/*}" GOARCH="${TARGET#*/}" go vet -unsafeptr=false $GCFLAGS ./...
+        # An array, so the empty GCFLAGS of most cells contributes no argument
+        # rather than an empty one.
+        flags=(-unsafeptr=false)
+        if [ -n "$GCFLAGS" ]; then
+          flags+=("$GCFLAGS")
+        fi
+        GOOS="${TARGET%/*}" GOARCH="${TARGET#*/}" go vet "${flags[@]}" ./...
 
   quality:
     name: Quality (vet and incremental lint)
@@ -513,6 +519,14 @@ jobs:
     # The tool version is pinned; the vulnerability database it consults is
     # fetched at run time, so a newly published advisory turns this red without
     # any change here — which is the point.
+    # build.yml is approaching 800 lines, most of it shell embedded in run:
+    # blocks that nothing checked. actionlint validates the workflow schema and
+    # every expression, and hands each run: block to shellcheck — which the
+    # ubuntu image already ships, so it needs no setup here. Both classes of
+    # mistake it catches otherwise cost a full CI round trip to discover.
+    - name: Run actionlint
+      run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+
     - name: Run govulncheck
       run: go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
 
@@ -563,7 +577,9 @@ jobs:
         # A crash handler that os.Exit()s bypasses both go test's output and
         # TestMain's temp-dir cleanup, so the reports it wrote survive here.
         for base in "${TMPDIR:-/tmp}" "$(cygpath -u "${TEMP:-}" 2>/dev/null)"; do
-          [ -n "$base" ] && [ -d "$base" ] || continue
+          if [ -z "$base" ] || [ ! -d "$base" ]; then
+            continue
+          fi
           find "$base" -maxdepth 4 -path '*f4-test-config*' -name '*.log' 2>/dev/null | head -20 | while read -r f; do
             echo "=== $f ==="
             cat "$f"
@@ -599,8 +615,16 @@ jobs:
         # FFI pointers, which Go's checkptr rejects under -race. Keep both
         # packages in the instrumented compile below and run all other
         # package tests under the detector.
-        packages=$(go list ./... | grep -Ev '^github.com/unxed/f4/(cmd/f4|luaplug)$')
-        go test -race -timeout 15m $packages
+        mapfile -t packages < <(go list ./... | grep -Ev '^github.com/unxed/f4/(cmd/f4|luaplug)$')
+        # The bare $packages this replaced failed the step when the list came
+        # out empty, because set -e sees the assignment's exit status. mapfile
+        # swallows it, and go test with no arguments would quietly fall back to
+        # the current directory, so check explicitly.
+        if [ ${#packages[@]} -eq 0 ]; then
+          echo "::error::no packages left to run under the race detector"
+          exit 1
+        fi
+        go test -race -timeout 15m "${packages[@]}"
         go test -race -run '^$' ./cmd/f4 ./luaplug
 
   release:
@@ -719,8 +743,8 @@ jobs:
 
     - name: Set Release Metadata
       run: |
-        echo "SHORT_SHA=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-        echo "BUILD_TIME=$(date +'%Y-%m-%d %H:%M:%S')" >> $GITHUB_ENV
+        echo "SHORT_SHA=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
+        echo "BUILD_TIME=$(date +'%Y-%m-%d %H:%M:%S')" >> "$GITHUB_ENV"
 
     - name: Download all artifacts
       uses: actions/download-artifact@v8
