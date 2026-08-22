@@ -42,6 +42,9 @@ var (
 	osExecutable = os.Executable
 	currentOS    = runtime.GOOS
 	currentArch  = runtime.GOARCH
+	// Empty except in builds that target a specific C library; see
+	// libc_musl.go and updateAssetSuffixes.
+	currentLibc = buildLibc
 
 	// zoin-bot: fail a stalled release download instead of leaving the
 	// progress screen without an answer after the network disappears.
@@ -168,14 +171,7 @@ func CheckForUpdates(pf *PanelsFrame, manual bool) {
 		return
 	}
 
-	// Windows: priority order .7z, then .zip.
-	assetSuffixes := []string{fmt.Sprintf("-%s-%s.tar.gz", currentOS, currentArch)}
-	if currentOS == "windows" {
-		assetSuffixes = []string{
-			fmt.Sprintf("-%s-%s.7z", currentOS, currentArch),
-			fmt.Sprintf("-%s-%s.zip", currentOS, currentArch),
-		}
-	}
+	assetSuffixes := updateAssetSuffixes(currentOS, currentArch, currentLibc)
 
 	downloadURL, assetUpdated, archiveKind := pickAsset(release.Assets, assetSuffixes)
 
@@ -632,6 +628,40 @@ func extractZipToDirParallel(data []byte, destDir string, workers int) error {
 
 // pickAsset returns the first release asset whose name ends with one of the
 // suffixes, trying suffixes in order. Returns an empty url when nothing matches.
+// updateAssetSuffixes returns the release asset suffixes to look for, most
+// preferred first.
+//
+// Linux is published in two flavors that share a GOOS and a GOARCH: the
+// generic artifacts are fully static (they start anywhere, including on musl
+// systems, but carry no FFI, so no GPU, Wayland or Ebiten backend), while the
+// musl artifacts link against musl's libc and keep FFI. Only the running
+// binary knows which one it is, hence libc.
+//
+// A musl build therefore asks for the musl asset first and falls back to the
+// generic one, which is a real downgrade -- FFI disappears -- but a working
+// f4 rather than a failed update. The fallback is safe in that direction only:
+// the generic artifact is static, so it runs on Alpine. The reverse is not
+// true, and does not happen, because a musl asset name ends in
+// "-musl-<arch>.tar.gz" and so never matches a glibc build's suffix.
+func updateAssetSuffixes(goos, goarch, libc string) []string {
+	if goos == "windows" {
+		// Windows: priority order .7z, then .zip.
+		return []string{
+			fmt.Sprintf("-%s-%s.7z", goos, goarch),
+			fmt.Sprintf("-%s-%s.zip", goos, goarch),
+		}
+	}
+
+	generic := fmt.Sprintf("-%s-%s.tar.gz", goos, goarch)
+	if goos == "linux" && libc != "" {
+		return []string{
+			fmt.Sprintf("-%s-%s-%s.tar.gz", goos, libc, goarch),
+			generic,
+		}
+	}
+	return []string{generic}
+}
+
 func pickAsset(assets []githubAsset, suffixes []string) (url, updatedAt, kind string) {
 	for _, suffix := range suffixes {
 		for _, a := range assets {

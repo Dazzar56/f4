@@ -52,6 +52,24 @@ everything, which is fine for local development and not for anything else.
 Builds made with the `noffi` tag, and platforms `pureffi` does not cover, keep
 the whole plugin system working and only report the bridge as unsupported.
 
+## Linux release flavors
+
+The Linux release artifacts come in two flavors, and the difference is exactly
+whether this bridge works.
+
+`f4-linux-<arch>.tar.gz` is fully static. It starts on any Linux, including
+musl systems and empty containers, but a static binary cannot `dlopen`
+anything, so the bridge reports itself unsupported there and vtui falls back
+to its pure-Go X11 and ANSI paths.
+
+`f4-linux-musl-<arch>.tar.gz` is built against musl's libc instead
+(`-tags goffi_musl`). It runs only on musl systems — Alpine, postmarketOS —
+and keeps the bridge and every backend. If you are on Alpine, this is the one
+to take; the updater in a musl build asks for it by name.
+
+Everything else on Linux (the cross-built architectures marked `noffi`) has no
+bridge by construction.
+
 ## Reaching the bridge from a sandbox
 
 An embedded Lua plugin gets the broker as the `f4ffi` module. A wasm guest
