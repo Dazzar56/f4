@@ -46,3 +46,106 @@ func TestHotkeyRow(t *testing.T) {
 		t.Errorf("Expected Description")
 	}
 }
+
+func TestHotkeyDialogSizeForScreen(t *testing.T) {
+	if gotW, gotH := hotkeyDialogSizeForScreen(200, 60); gotW != 196 || gotH != 48 {
+		t.Fatalf("large screen size = %dx%d, want 196x48", gotW, gotH)
+	}
+	if gotW, gotH := hotkeyDialogSizeForScreen(80, 25); gotW != 76 || gotH != 23 {
+		t.Fatalf("small screen size = %dx%d, want 76x23", gotW, gotH)
+	}
+}
+
+func TestHotkeyTableColumnsFitContentWhenSpaceAllows(t *testing.T) {
+	rows := []hotkeyRow{{
+		Label:     "A long localized command label",
+		Key:       "Ctrl+Shift+PgDn",
+		Area:      "Terminal",
+		Condition: "CommandLineNotEmpty",
+		Desc:      "A long localized description that remains in the flexible column",
+	}}
+	columns := hotkeyTableColumns(rows, 160)
+	for col := 0; col < 4; col++ {
+		if got, want := columns[col].Width, vtui.StringWidth(rows[0].GetCellText(col)); got < want {
+			t.Errorf("column %d width = %d, want at least %d", col, got, want)
+		}
+	}
+}
+
+func TestNativeHotkeyInventory(t *testing.T) {
+	selectAction, ok := GetAction("Panel.SelectNavigation")
+	if !ok {
+		t.Fatal("Panel.SelectNavigation is not registered")
+	}
+	for _, key := range []string{"Ins", "ShiftUp", "ShiftDown", "ShiftLeft", "ShiftRight"} {
+		found := false
+		for _, native := range selectAction.NativeKeys {
+			if native == key {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("Panel.SelectNavigation is missing native key %q", key)
+		}
+	}
+
+	focusAction, ok := GetAction("Panel.ToggleCommandLineFocus")
+	if !ok {
+		t.Fatal("Panel.ToggleCommandLineFocus is not registered")
+	}
+	if len(focusAction.NativeKeys) == 0 || focusAction.NativeKeys[0] != "VK_C0:SearchFirst" {
+		t.Errorf("command-line focus native keys = %v", focusAction.NativeKeys)
+	}
+}
+
+func TestActionHotkeyConfigBuildsNativeRowsAndFitsScreen(t *testing.T) {
+	previous := GlobalHotkeysMgr
+	GlobalHotkeysMgr = NewHotkeyManager("")
+	t.Cleanup(func() { GlobalHotkeysMgr = previous })
+
+	screen := vtui.NewSilentScreenBuf()
+	screen.AllocBuf(160, 40)
+	vtui.FrameManager.Init(screen)
+	actionHotkeyConfig(nil)
+
+	dlg, ok := vtui.FrameManager.GetTopFrame().(*vtui.Window)
+	if !ok {
+		t.Fatalf("top frame = %T, want hotkey dialog", vtui.FrameManager.GetTopFrame())
+	}
+	defer dlg.Close()
+
+	var table *vtui.Table
+	for _, child := range dlg.GetChildren() {
+		if candidate, ok := child.(*vtui.Table); ok {
+			table = candidate
+			break
+		}
+	}
+	if table == nil {
+		t.Fatal("hotkey dialog has no table")
+	}
+
+	selectInsert := false
+	toggleFocus := false
+	for _, row := range table.Rows {
+		hotkey, ok := row.(hotkeyRow)
+		if !ok {
+			continue
+		}
+		if hotkey.Action == "Panel.SelectNavigation" && hotkey.Key == "Ins" && !hotkey.Editable {
+			selectInsert = true
+		}
+		if hotkey.Action == "Panel.ToggleCommandLineFocus" && hotkey.Key == "`" && hotkey.Condition == "SearchFirst" && !hotkey.Editable {
+			toggleFocus = true
+		}
+	}
+	if !selectInsert || !toggleFocus {
+		t.Fatalf("native rows missing: select=%v toggle-focus=%v", selectInsert, toggleFocus)
+	}
+
+	x1, _, x2, _ := dlg.GetPosition()
+	if got, want := x2-x1+1, 156; got != want {
+		t.Errorf("dialog width = %d, want %d", got, want)
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/unxed/vtui"
@@ -18,6 +19,9 @@ type HotkeyManager struct {
 }
 
 var conditionRegistry = map[string]func() bool{
+	"searchfirst": func() bool {
+		return AppConfig.NavigationMode == NavigationSearchFirst
+	},
 	"emptycommandline": func() bool {
 		if pf := findPanelsFrameAnyScreen(); pf != nil {
 			return pf.cmdLine.IsEmpty()
@@ -120,7 +124,7 @@ var conditionRegistry = map[string]func() bool{
 
 // GetConditions returns the user-friendly names of all registered conditions.
 func GetConditions() []string {
-	return []string{"None", "EmptyCommandLine", "CommandLineNotEmpty", "EscToggle", "TerminalQuiet", "AltPanelVisible", "NoAltScreenApp", "NoTerminalApp"}
+	return []string{"None", "SearchFirst", "EmptyCommandLine", "CommandLineNotEmpty", "EscToggle", "TerminalQuiet", "AltPanelVisible", "NoAltScreenApp", "NoTerminalApp"}
 }
 
 // RegisterCondition adds a dynamic boolean check accessible by hotkey bindings.
@@ -188,6 +192,45 @@ func (hm *HotkeyManager) GetKeyForAction(area, actionName string) string {
 	return ""
 }
 
+var keyTokenDisplayNames = map[string]string{
+	"VK_BA": ";",
+	"VK_BB": "=",
+	"VK_BC": ",",
+	"VK_BD": "-",
+	"VK_BE": ".",
+	"VK_BF": "/",
+	"VK_C0": "`",
+	"VK_DB": "[",
+	"VK_DC": "\\",
+	"VK_DD": "]",
+	"VK_DE": "'",
+	"VK_E2": "\\",
+}
+
+func formatKeyTokenForUI(key string) string {
+	if name, ok := keyTokenDisplayNames[strings.ToUpper(key)]; ok {
+		return name
+	}
+	if strings.HasPrefix(strings.ToUpper(key), "VK_") {
+		if len(key) == len("VK_")+1 {
+			last := key[len(key)-1]
+			if (last >= 'A' && last <= 'Z') || (last >= 'a' && last <= 'z') || (last >= '0' && last <= '9') {
+				return strings.ToUpper(string(last))
+			}
+		}
+		value, err := strconv.ParseUint(key[3:], 16, 8)
+		if err == nil {
+			switch {
+			case value >= 'A' && value <= 'Z':
+				return string(rune(value))
+			case value >= '0' && value <= '9':
+				return string(rune(value))
+			}
+		}
+	}
+	return key
+}
+
 // FormatKeyForUI converts a raw key string (like CtrlShiftF5) into a pretty UI string (Ctrl+Shift+F5).
 func FormatKeyForUI(key string) string {
 	if key == "" {
@@ -207,7 +250,7 @@ func FormatKeyForUI(key string) string {
 		key = key[5:]
 	}
 	if key != "" {
-		parts = append(parts, key)
+		parts = append(parts, formatKeyTokenForUI(key))
 	}
 	return strings.Join(parts, "+")
 }
