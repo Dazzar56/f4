@@ -2086,12 +2086,20 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 				ev.CursorLine--
 				ev.CursorPos = ev.getLineLength(ev.CursorLine)
 			}
-		} else {
+		} else if ev.lineUsesVisualBidi() {
 			currentOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 			newOffset := ev.engine.MoveVisual(currentOffset, -1)
 			if newOffset != currentOffset {
 				ev.CursorLine = ev.li.GetLineAtOffset(newOffset)
 				ev.CursorPos = newOffset - ev.li.GetLineOffset(ev.CursorLine)
+			}
+		} else {
+			if ev.CursorPos > 0 {
+				lineStart := ev.li.GetLineOffset(ev.CursorLine)
+				ev.CursorPos = ev.previousGraphemeBoundaryInLine(lineStart, ev.CursorPos)
+			} else if ev.CursorLine > 0 {
+				ev.CursorLine--
+				ev.CursorPos = ev.getLineLength(ev.CursorLine)
 			}
 		}
 		ev.updateDesiredVisualCol()
@@ -2170,13 +2178,28 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 				ev.CursorLine++
 				ev.CursorPos = 0
 			}
-		} else {
+		} else if ev.lineUsesVisualBidi() {
 			currentOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 			newOffset := ev.engine.MoveVisual(currentOffset, 1)
 			if newOffset != currentOffset {
 				ev.CursorLine = ev.li.GetLineAtOffset(newOffset)
 				ev.CursorPos = newOffset - ev.li.GetLineOffset(ev.CursorLine)
 				ev.CursorVirtualSpaces = 0
+			} else if ev.CursorBeyondEOL {
+				ev.CursorVirtualSpaces++
+			}
+		} else {
+			if ev.CursorPos < lineLen {
+				lineStart := ev.li.GetLineOffset(ev.CursorLine)
+				ev.CursorPos = ev.nextGraphemeBoundaryInLine(lineStart, lineLen, ev.CursorPos)
+			} else if ev.CursorLine < ev.li.LineCount()-1 {
+				if ev.CursorBeyondEOL {
+					ev.CursorVirtualSpaces++
+				} else {
+					ev.CursorLine++
+					ev.CursorPos = 0
+					ev.CursorVirtualSpaces = 0
+				}
 			} else if ev.CursorBeyondEOL {
 				ev.CursorVirtualSpaces++
 			}
@@ -2219,21 +2242,34 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 				ev.noteBufferEdit()
 				ev.saveUndo(opOther)
 				ev.modified = true
-				deleteStart := ev.engine.MoveVisual(offset, -1)
-				if deleteStart == offset {
-					deleteStart = offset - 1
+				if ev.CursorPos == 0 {
+					prevLen := ev.getLineLength(ev.CursorLine - 1)
+					delLen := 1
+					if offset >= 2 {
+						prefix, _ := ev.pt.GetRange(offset-2, 2)
+						if len(prefix) == 2 && prefix[0] == '\r' && prefix[1] == '\n' {
+							delLen = 2
+						}
+					}
+					ev.pt.Delete(offset-delLen, delLen)
+					ev.li.UpdateAfterDelete(offset-delLen, delLen)
+					ev.invalidateStates(ev.CursorLine - 1)
+					ev.engine.InvalidateFrom(ev.CursorLine - 1)
+					ev.CursorLine--
+					ev.CursorPos = prevLen
+				} else {
+					deleteStart := ev.li.GetLineOffset(ev.CursorLine) + ev.previousGraphemeBoundaryInLine(ev.li.GetLineOffset(ev.CursorLine), ev.CursorPos)
+					if ev.lineUsesVisualBidi() {
+						deleteStart = ev.engine.MoveVisual(offset, -1)
+					}
+					ev.pt.Delete(deleteStart, offset-deleteStart)
+					ev.li.UpdateAfterDelete(deleteStart, offset-deleteStart)
+					ev.CursorLine = ev.li.GetLineAtOffset(deleteStart)
+					ev.CursorPos = deleteStart - ev.li.GetLineOffset(ev.CursorLine)
+					minLine := ev.CursorLine
+					ev.invalidateStates(minLine)
+					ev.engine.InvalidateFrom(minLine)
 				}
-				oldLine := ev.CursorLine
-				ev.pt.Delete(deleteStart, offset-deleteStart)
-				ev.li.UpdateAfterDelete(deleteStart, offset-deleteStart)
-				ev.CursorLine = ev.li.GetLineAtOffset(deleteStart)
-				ev.CursorPos = deleteStart - ev.li.GetLineOffset(ev.CursorLine)
-				minLine := oldLine
-				if ev.CursorLine < minLine {
-					minLine = ev.CursorLine
-				}
-				ev.invalidateStates(minLine)
-				ev.engine.InvalidateFrom(minLine)
 			}
 		}
 		ev.updateDesiredVisualCol()
@@ -2272,9 +2308,15 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 				ev.noteBufferEdit()
 				ev.saveUndo(opOther)
 				ev.modified = true
-				deleteEnd := ev.engine.MoveVisual(offset, 1)
-				if deleteEnd == offset {
-					deleteEnd = offset + 1
+				deleteEnd := offset + 1
+				if ev.CursorPos < ev.getLineLength(ev.CursorLine) {
+					if ev.lineUsesVisualBidi() {
+						deleteEnd = ev.engine.MoveVisual(offset, 1)
+					} else {
+						lineStart := ev.li.GetLineOffset(ev.CursorLine)
+						next := ev.nextGraphemeBoundaryInLine(lineStart, ev.getLineLength(ev.CursorLine), ev.CursorPos)
+						deleteEnd = lineStart + next
+					}
 				}
 				ev.pt.Delete(offset, deleteEnd-offset)
 				ev.li.UpdateAfterDelete(offset, deleteEnd-offset)
@@ -2451,66 +2493,22 @@ type editorTextCluster struct {
 	runeEnd   int
 }
 
-// editorVisualClusters keeps the piece table in logical byte order while
-// returning the grapheme order used on screen. zoin-bot uses the same map for
-// editor painting and textlayout caret coordinates.
+// editorVisualClusters uses textlayout's shared grapheme and BiDi order for
+// painting. zoin-bot keeps byte and rune boundaries from the document intact.
 func editorVisualClusters(text string) []editorTextCluster {
-	type clusterMeta struct {
-		offset    int
-		width     int
-		runeIndex int
-	}
-	metas := make([]clusterMeta, 0, len([]rune(text)))
-	vtui.ForEachClusterAt(text, func(_ string, width, offset, runeIndex int) {
-		metas = append(metas, clusterMeta{offset: offset, width: width, runeIndex: runeIndex})
-	})
-	logical := make([]editorTextCluster, 0, len(metas))
-	for i, meta := range metas {
-		end := len(text)
-		if i+1 < len(metas) {
-			end = metas[i+1].offset
-		}
-		clusterText := text[meta.offset:end]
-		logical = append(logical, editorTextCluster{
-			text:      clusterText,
-			width:     meta.width,
-			byteStart: meta.offset,
-			byteEnd:   end,
-			runeStart: meta.runeIndex,
-			runeEnd:   meta.runeIndex + utf8.RuneCountInString(clusterText),
+	base := textlayout.VisualClustersInVisualOrder(text)
+	clusters := make([]editorTextCluster, 0, len(base))
+	for _, cluster := range base {
+		clusters = append(clusters, editorTextCluster{
+			text:      cluster.Text,
+			width:     cluster.Width,
+			byteStart: cluster.Start,
+			byteEnd:   cluster.End,
+			runeStart: cluster.RuneStart,
+			runeEnd:   cluster.RuneEnd,
 		})
 	}
-	if vtui.DefaultBidiMode != vtui.BidiFull || !vtui.HasRTL(text) {
-		return logical
-	}
-
-	byLogical := make(map[int]editorTextCluster, len(logical))
-	for _, cluster := range logical {
-		byLogical[cluster.runeStart] = cluster
-	}
-	visualText, logicalPositions := vtui.VisualStringWithRuneMap(text)
-	visualMetas := make([]clusterMeta, 0, len(logical))
-	vtui.ForEachClusterAt(visualText, func(_ string, width, offset, runeIndex int) {
-		visualMetas = append(visualMetas, clusterMeta{offset: offset, width: width, runeIndex: runeIndex})
-	})
-	visual := make([]editorTextCluster, 0, len(logical))
-	for i, meta := range visualMetas {
-		if i >= len(logicalPositions) {
-			break
-		}
-		original, ok := byLogical[logicalPositions[i]]
-		if !ok {
-			continue
-		}
-		end := len(visualText)
-		if i+1 < len(visualMetas) {
-			end = visualMetas[i+1].offset
-		}
-		original.text = visualText[meta.offset:end]
-		original.width = meta.width
-		visual = append(visual, original)
-	}
-	return visual
+	return clusters
 }
 
 func (ev *EditorView) fillCells(target []vtui.CharInfo, data []byte, defaultAttr, selAttr uint64, offset int, selActive bool, selMin, selMax int, syntax []uint64, startVisualCol int, isCrossRow bool, crossVCol int, horzCrossAttr, vertCrossAttr uint64, visualRow int) []vtui.CharInfo {
