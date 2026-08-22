@@ -510,6 +510,18 @@ func (ev *EditorView) collectMatchSpans(ctx *vtui.TaskContext, session int, patt
 			return nil, 0, err
 		}
 
+		// The first window says how thickly this pattern occurs, which is
+		// enough to ask for the whole result up front instead of letting
+		// append copy it into place a dozen times over. An estimate that
+		// falls short still grows; one that overshoots is one allocation.
+		if spans == nil && len(found) > 0 && len(win) > 0 {
+			perByte := float64(len(found)) / float64(len(win))
+			estimate := int(perByte * float64(size) * 1.1)
+			if estimate > len(found) {
+				spans = make([]matchSpan, 0, estimate)
+			}
+		}
+
 		for _, m := range found {
 			abs := pos + from + m.Off
 			switch {
