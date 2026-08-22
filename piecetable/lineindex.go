@@ -322,20 +322,28 @@ func AppendNewlineOffsets(dst []int, data []byte, base int) []int {
 	return dst
 }
 
-// Rebuild completely reconstructs the line index based on PieceTable.
-func (li *LineIndex) Rebuild(pt *PieceTable) {
+// Rebuild reconstructs the line index from the piece table, and reports
+// whether it managed to walk the whole buffer.
+//
+// It can fail to: the walk goes through the piece table, which on a lazily
+// loaded file answers "still loading" for a chunk that has not arrived, and
+// stops there. The index is then correct as far as it goes and short after
+// that, and the caller is the only one in a position to know the difference —
+// hence the return value. Claiming a short index is complete is worse than
+// having one, because everything downstream believes it.
+func (li *LineIndex) Rebuild(pt *PieceTable) bool {
 	li.mu.Lock()
 	defer li.mu.Unlock()
 	// Reset index, first line always starts at 0
 	li.reset()
 
 	if pt.Size() == 0 {
-		return
+		return true
 	}
 
 	absPos := 0
 	offsets := make([]int, 0, 4096)
-	pt.ForEachRange(func(data []byte) error {
+	err := pt.ForEachRange(func(data []byte) error {
 		offsets = AppendNewlineOffsets(offsets[:0], data, absPos)
 		for _, off := range offsets {
 			li.appendOffset(off)
@@ -343,6 +351,7 @@ func (li *LineIndex) Rebuild(pt *PieceTable) {
 		absPos += len(data)
 		return nil
 	})
+	return err == nil && absPos >= pt.Size()
 }
 
 // AppendOffsets adds pre-calculated line offsets (used by background indexer).

@@ -163,3 +163,38 @@ func TestEnsureIndexedTo_ResolvesAMatchPastTheScan(t *testing.T) {
 		t.Error("the index was not extended to cover the match")
 	}
 }
+
+// TestIndexRebuilt_ShortRebuildIsNotCalledComplete: Undo, Redo and SetText all
+// rebuild the index from the piece table, and on a lazily loaded file that
+// walk stops at the first chunk that has not arrived. Recording that as a
+// complete index is the one answer that must not be given — every reader of
+// the index believes it, so a search would report lines that are not there and
+// nothing would ever go back for the rest.
+func TestIndexRebuilt_ShortRebuildIsNotCalledComplete(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	drainPendingTasks()
+
+	content, _, _ := bigSearchCorpus()
+	pt, buf := lazyEditorBuffer(t, content)
+	ev := newEditorView(pt, nil, "", false, false)
+	ev.asyncBuf = buf
+	t.Cleanup(func() { ev.Close() })
+
+	// Only the prewarmed head is in hand, so the rebuild cannot finish.
+	if complete := ev.li.Rebuild(ev.pt); complete {
+		t.Skip("the whole buffer happened to be loaded; nothing to assert")
+	}
+	ev.noteIndexRebuilt(false)
+
+	if ev.indexIsComplete() {
+		t.Error("a rebuild that stopped short was recorded as a complete index")
+	}
+	if st := ev.IndexState(); st.Lines != ev.li.LineCount() {
+		t.Errorf("status reports %d lines, index holds %d", st.Lines, ev.li.LineCount())
+	}
+	// And the scan it handed the rest to finishes the job.
+	pumpUntil(t, "the scan to finish what the rebuild could not", func() bool { return ev.indexIsComplete() })
+	if got, want := ev.li.LineCount(), strings.Count(content, "\n")+1; got != want {
+		t.Errorf("index holds %d lines after the scan, want %d", got, want)
+	}
+}

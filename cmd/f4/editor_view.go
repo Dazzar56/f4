@@ -488,15 +488,12 @@ func (ev *EditorView) GetTopBar() *TopBar {
 
 // SetText replaces the entire content of the editor.
 func (ev *EditorView) SetText(text string) {
-	if ev.indexCancel != nil {
-		ev.indexCancel()
-		ev.indexCancel = nil
-	}
+	ev.cancelIndexing()
 	ev.edited = true
 	ev.retireEditSession()
 
 	ev.pt = piecetable.New([]byte(text))
-	ev.li.Rebuild(ev.pt)
+	ev.noteIndexRebuilt(ev.li.Rebuild(ev.pt))
 	ev.CursorLine = 0
 	ev.CursorPos = 0
 	ev.engine.SetPointers(ev.pt, ev.li)
@@ -552,12 +549,8 @@ func (ev *EditorView) Undo() {
 		return
 	}
 
-	if !ev.edited {
-		ev.edited = true
-		if ev.indexCancel != nil {
-			ev.indexCancel()
-		}
-	}
+	ev.edited = true
+	ev.cancelIndexing()
 	ev.retireEditSession()
 
 	// Save current state to redo stack
@@ -573,7 +566,7 @@ func (ev *EditorView) Undo() {
 	ev.undoStack = ev.undoStack[:last]
 
 	ev.pt.LoadState(state.table)
-	ev.li.Rebuild(ev.pt)
+	ev.noteIndexRebuilt(ev.li.Rebuild(ev.pt))
 	ev.CursorLine = state.line
 	ev.CursorPos = state.pos
 
@@ -591,12 +584,8 @@ func (ev *EditorView) Redo() {
 		return
 	}
 
-	if !ev.edited {
-		ev.edited = true
-		if ev.indexCancel != nil {
-			ev.indexCancel()
-		}
-	}
+	ev.edited = true
+	ev.cancelIndexing()
 	ev.retireEditSession()
 
 	// Save current state to undo stack
@@ -611,7 +600,7 @@ func (ev *EditorView) Redo() {
 	ev.redoStack = ev.redoStack[:last]
 
 	ev.pt.LoadState(state.table)
-	ev.li.Rebuild(ev.pt)
+	ev.noteIndexRebuilt(ev.li.Rebuild(ev.pt))
 	ev.CursorLine = state.line
 	ev.CursorPos = state.pos
 
@@ -3590,17 +3579,65 @@ func (ev *EditorView) noteBufferEdit() {
 	// The offsets already in the index were moved along with the text by
 	// UpdateAfterInsert and UpdateAfterDelete, and the scan reads the text
 	// through the piece table, so it can pick up from the last line it knows.
-	if ev.indexCancel != nil {
-		ev.indexCancel()
-		ev.indexCancel = nil
-	}
+	ev.cancelIndexing()
 	ev.retireEditSession()
 	ev.scheduleIndexResume()
 }
 
-// awaitIndexForResults blocks a search task until the line index holds as much
-// of the buffer as it is ever going to: either it describes all of it, or
-// nothing is filling it any more.
+// cancelIndexing stops a running scan and records that nothing is scanning.
+// The scan's own cleanup cannot do that: it is fenced by editSession, and
+// every caller here retires the session next, so the goroutine's deferred
+// "indexing = false" would be refused as stale and the flag would read true
+// for the rest of the session — which made scheduleIndexResume decline to
+// restart and left awaitIndexForResults waiting for a scan that was gone.
+func (ev *EditorView) cancelIndexing() {
+	if ev.indexCancel != nil {
+		ev.indexCancel()
+		ev.indexCancel = nil
+	}
+	if !ev.indexing {
+		return
+	}
+	ev.indexing = false
+	if st := ev.indexStatus; st.Phase == IndexScanning {
+		st.Phase = IndexIdle
+		ev.setIndexStatus(st)
+	}
+}
+
+// noteIndexRebuilt records what li.Rebuild managed. A rebuild that walked the
+// whole buffer leaves the index complete and no scan owed; without saying so,
+// a rebuilt index kept the phase of whatever scan it interrupted and the
+// editor went on waiting for a scan that would never come.
+//
+// A rebuild that stopped short — a lazily loaded file with a chunk still on
+// its way — must not be recorded as complete, or every reader of the index
+// believes lines that are not there. That one is handed back to the scan,
+// which resumes from where the rebuild got to.
+func (ev *EditorView) noteIndexRebuilt(complete bool) {
+	ev.indexing = false
+	size := int64(ev.pt.Size())
+	if !complete {
+		ev.setIndexStatus(IndexStatus{
+			Phase:   IndexIdle,
+			Total:   size,
+			Scanned: int64(ev.li.GetLineOffset(ev.li.LineCount() - 1)),
+			Lines:   ev.li.LineCount(),
+		})
+		ev.StartIndexing()
+		return
+	}
+	ev.setIndexStatus(IndexStatus{
+		Phase:   IndexComplete,
+		Total:   size,
+		Scanned: size,
+		Lines:   ev.li.LineCount(),
+	})
+}
+
+// awaitIndexForResults blocks a search task until the line index can answer
+// for offset end: the scan has read past it, the index describes the whole
+// buffer, or nothing is filling it any more.
 //
 // A search reads the whole buffer, but it reports what it found as lines and
 // columns, and those come from the index. Asking an index that stops short
@@ -3609,11 +3646,13 @@ func (ev *EditorView) noteBufferEdit() {
 // put every occurrence on line 1, with the whole file as its text. Waiting for
 // the scan that is already reading those bytes is also what keeps the reading
 // off the UI thread: the alternative, counting the gap when the answer is
-// needed, is the freeze this whole change set exists to remove.
+// needed, is the freeze this whole change set exists to remove. Waiting only
+// as far as the match, rather than for the whole scan, is what lets a hit on
+// line 3 of an 8 GB file show up before the scan has read the other 8 GB.
 //
 // It reports false when the wait ended for any other reason — the task was
 // cancelled, or the editor closed under it.
-func (ev *EditorView) awaitIndexForResults(ctx *vtui.TaskContext) bool {
+func (ev *EditorView) awaitIndexForResults(ctx *vtui.TaskContext, end int) bool {
 	// Buffered, so that a late notification never blocks the UI thread on a
 	// task that has already given up.
 	ready := make(chan bool, 1)
@@ -3625,13 +3664,16 @@ func (ev *EditorView) awaitIndexForResults(ctx *vtui.TaskContext) bool {
 		}
 		// Nothing scanning means nothing is coming: an editor over a buffer
 		// held in memory has its index built with it and never starts one.
-		if ev.indexIsComplete() || !ev.indexing {
+		reached := func(st IndexStatus) bool {
+			return st.Phase == IndexComplete || !ev.indexing || st.Scanned >= int64(end)
+		}
+		if reached(ev.indexStatus) {
 			ready <- true
 			return
 		}
 		var unsubscribe func()
-		unsubscribe = ev.SubscribeIndex(func(IndexStatus) {
-			if ev.indexIsComplete() || !ev.indexing {
+		unsubscribe = ev.SubscribeIndex(func(st IndexStatus) {
+			if reached(st) {
 				unsubscribe()
 				ready <- true
 			}
@@ -3717,31 +3759,10 @@ func (ev *EditorView) readSearchWindow(ctx context.Context, read fileChunkReader
 // has been placed by a restored position and the scan is still on its way
 // there.
 func (ev *EditorView) ensureIndexedToLine(line int) {
-	if line < 0 || line < ev.li.LineCount() || ev.indexIsComplete() {
+	if line < 0 || line < ev.li.LineCount() {
 		return
 	}
-	pos := ev.li.GetLineOffset(ev.li.LineCount() - 1)
-	if pos < 0 {
-		return
-	}
-
-	const step = 256 * 1024
-	pending := make([]int, 0, 1024)
-	for ev.li.LineCount()+len(pending) <= line {
-		take := min(step, ev.pt.Size()-pos)
-		if take <= 0 {
-			break
-		}
-		data, err := ev.pt.GetRange(pos, take)
-		if err != nil || len(data) == 0 {
-			break
-		}
-		pending = piecetable.AppendNewlineOffsets(pending, data, pos)
-		pos += len(data)
-	}
-	if len(pending) > 0 {
-		ev.li.AppendOffsets(pending, ev.pt.Size())
-	}
+	ev.extendIndexUntil(func(_ int, lines int) bool { return lines > line })
 }
 
 // ensureIndexedTo extends the line index far enough to describe offset, when
@@ -3753,33 +3774,60 @@ func (ev *EditorView) ensureIndexedToLine(line int) {
 // It runs on the UI thread and only ever covers the gap up to one offset, so
 // the cost is the distance between the scan's position and the match, not the
 // size of the file.
-func (ev *EditorView) ensureIndexedTo(offset int) {
-	if offset < 0 || ev.indexIsComplete() {
-		return
+// It reports whether the index now describes that offset; false means the
+// buffer could not be read that far — a lazily loaded file whose chunk has not
+// arrived — and the caller must not turn the offset into a line.
+func (ev *EditorView) ensureIndexedTo(offset int) bool {
+	if offset < 0 {
+		return false
 	}
-	last := ev.li.LineCount() - 1
-	from := ev.li.GetLineOffset(last)
-	if from < 0 || offset < from {
-		return
+	return ev.extendIndexUntil(func(pos int, _ int) bool { return pos > offset })
+}
+
+// extendIndexUntil counts newlines from the last line the index knows about
+// until done says so, given the position the count has reached and how many
+// lines the index would hold if the pending ones were applied. It reports
+// whether it got there: false means the buffer ran out first, or a chunk of
+// it was still loading, and the index is still short.
+//
+// It reads the buffer on the UI thread, mapping and all, so the fault guard
+// is armed the same as for every other reader of the mapping.
+func (ev *EditorView) extendIndexUntil(done func(pos, lines int) bool) bool {
+	if ev.indexIsComplete() {
+		return true
+	}
+	defer ev.guardMapping("extending the line index")()
+
+	pos := ev.li.GetLineOffset(ev.li.LineCount() - 1)
+	if pos < 0 {
+		return false
 	}
 
 	const step = 256 * 1024
 	pending := make([]int, 0, 1024)
-	for pos := from; pos <= offset; {
+	// An index that already reaches the caller's mark got there without
+	// reading anything, which is still getting there.
+	reached := done(pos, ev.li.LineCount())
+	for !done(pos, ev.li.LineCount()+len(pending)) {
 		take := min(step, ev.pt.Size()-pos)
 		if take <= 0 {
 			break
 		}
 		data, err := ev.pt.GetRange(pos, take)
 		if err != nil || len(data) == 0 {
+			if err == piecetable.ErrLoading {
+				vtui.DebugLog("EDITOR_INDEX: extending the index stopped at %d: chunk still loading", pos)
+			}
 			break
 		}
 		pending = piecetable.AppendNewlineOffsets(pending, data, pos)
 		pos += len(data)
+		reached = done(pos, ev.li.LineCount()+len(pending))
 	}
 	if len(pending) > 0 {
 		ev.li.AppendOffsets(pending, ev.pt.Size())
 	}
+	return reached
 }
 
 // indexResumeDelay is how long the editor waits for typing to stop before
@@ -4313,10 +4361,7 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 	vtui.DebugLog("EDITOR: Saving %s...", ev.filePath)
 
 	// Stop indexing to prevent async reads on closed buffers
-	if ev.indexCancel != nil {
-		ev.indexCancel()
-		ev.indexCancel = nil
-	}
+	ev.cancelIndexing()
 
 	// Capture visible offset for preloading before we destroy the current engine
 	visStart := ev.engine.VisualToLogical(ev.ScrollTopRow, 0)
@@ -5649,7 +5694,7 @@ func (ev *EditorView) Search(pattern string, caseSensitive, reverse, regexp, who
 					caseSensitive, reverse, next, startOff)
 				logSearchDelegation(ok, searchPattern)
 				if ok {
-					indexed := off == -1 || ev.awaitIndexForResults(ctx)
+					indexed := off == -1 || ev.awaitIndexForResults(ctx, off+mLen)
 					ctx.RunOnUI(func() {
 						canceled := ctx.Err() != nil
 						dlg.Close()
@@ -5687,7 +5732,7 @@ func (ev *EditorView) Search(pattern string, caseSensitive, reverse, regexp, who
 			// and a column the index has to answer for.
 			indexed := true
 			if foundOffset != -1 {
-				indexed = ev.awaitIndexForResults(ctx)
+				indexed = ev.awaitIndexForResults(ctx, foundOffset+matchLen)
 			}
 
 			ctx.RunOnUI(func() {

@@ -1206,9 +1206,21 @@ func actionSwitchViewerToEditor(vv *ViewerView) {
 		editor.CursorLine = editor.li.GetLineAtOffset(targetOff)
 		editor.CursorPos = targetOff - editor.li.GetLineOffset(editor.CursorLine)
 	} else {
-		editor.ensureIndexedTo(targetOff)
-		line := editor.li.GetLineAtOffset(targetOff)
-		pos := targetOff - editor.li.GetLineOffset(line)
+		line, pos := 0, 0
+		if editor.ensureIndexedTo(targetOff) {
+			line = editor.li.GetLineAtOffset(targetOff)
+			pos = targetOff - editor.li.GetLineOffset(line)
+		} else {
+			// The file has not been read that far — a chunk of a lazily
+			// loaded one is still on its way — so the viewer's offset cannot
+			// be turned into a line yet. Asking anyway answers with the last
+			// line the index knows and a column counted from there, which on
+			// a large file is a column measured in gigabytes. Land on that
+			// last line honestly instead, and let the scan carry on.
+			line = max(editor.li.LineCount()-1, 0)
+			vtui.DebugLog("EDITOR: viewer offset %d is past the index; opening at line %d",
+				targetOff, line)
+		}
 		editor.CursorLine = line
 		editor.CursorPos = pos
 		editor.targetLine = line
