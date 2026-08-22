@@ -74,12 +74,13 @@ func TestActionUpdateSettings_ManualCheckDoesNotBlockMouseDispatch(t *testing.T)
 	}
 	checkButton := buttons[1]
 	x, y, _, _ := checkButton.GetPosition()
+	mx, my := checkedMouseCoordinate(t, x), checkedMouseCoordinate(t, y)
 
 	window.ProcessMouse(&vtinput.InputEvent{
 		Type:        vtinput.MouseEventType,
 		KeyDown:     true,
-		MouseX:      int16(x),
-		MouseY:      int16(y),
+		MouseX:      mx,
+		MouseY:      my,
 		ButtonState: vtinput.FromLeft1stButtonPressed,
 	})
 
@@ -87,8 +88,8 @@ func TestActionUpdateSettings_ManualCheckDoesNotBlockMouseDispatch(t *testing.T)
 	go func() {
 		window.ProcessMouse(&vtinput.InputEvent{
 			Type:        vtinput.MouseEventType,
-			MouseX:      int16(x),
-			MouseY:      int16(y),
+			MouseX:      mx,
+			MouseY:      my,
 			KeyDown:     false,
 			ButtonState: 0,
 		})
@@ -112,6 +113,14 @@ func TestActionUpdateSettings_ManualCheckDoesNotBlockMouseDispatch(t *testing.T)
 	case <-time.After(1 * time.Second):
 		t.Fatal("manual update check did not finish after the response was released")
 	}
+}
+
+func checkedMouseCoordinate(t *testing.T, value int) int16 {
+	t.Helper()
+	if value < -32768 || value > 32767 {
+		t.Fatalf("mouse coordinate %d does not fit in int16", value)
+	}
+	return int16(value) // #nosec G115 -- the range is checked immediately above.
 }
 
 func TestActionExecute_RemoteRejection(t *testing.T) {
