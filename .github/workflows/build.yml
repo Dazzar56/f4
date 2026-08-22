@@ -300,8 +300,10 @@ jobs:
           # the musl release asset rather than quietly replacing itself with
           # the static one. The rootfs and qemu are already in place.
           # Rebuilt here rather than carried over: each step is its own
-          # shell, so the Build step's variables are gone by now.
-          go test -c -tags "${BUILD_TAGS:+$BUILD_TAGS,}goffi_musl" \
+          # shell, so the Build step's variables are gone by now -- GOARCH
+          # included. Without it the test binary is built for the runner's
+          # own amd64, and the arm64 cell hands qemu-aarch64 an x86_64 ELF.
+          GOOS=linux GOARCH="$GOARCH_CELL" go test -c -tags "${BUILD_TAGS:+$BUILD_TAGS,}goffi_musl" \
             -gcflags=github.com/go-webgpu/goffi/internal/dl=-std \
             -o /tmp/f4-libc.test ./cmd/f4
           "qemu-$QEMU-static" -L alpine-rootfs /tmp/f4-libc.test \
