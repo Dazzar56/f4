@@ -755,7 +755,7 @@ func ExecuteFileOpAt(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, srcBasePath string
 			}
 		}
 
-		reporter := &DialogReporter{dlg: dlg}
+		reporter := newDialogReporter(dlg)
 
 		vtui.FrameManager.PostTask(func() {
 			if mode == 1 && pf != nil {
@@ -770,6 +770,7 @@ func ExecuteFileOpAt(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, srcBasePath string
 		taskCtx = vtui.RunAsync(func(ctx *vtui.TaskContext) {
 			err := runFunc(ctx.Context, reporter, dlg)
 			ctx.RunOnUI(func() {
+				reporter.Stop()
 				dlg.Close()
 				if pf != nil {
 					pf.RefreshAll()
@@ -1030,7 +1031,7 @@ func ExecuteDeleteOpWithDispositionAt(pf *PanelsFrame, activeVfs vfs.VFS, basePa
 			}
 		}
 
-		reporter := &DialogReporter{dlg: dlg}
+		reporter := newDialogReporter(dlg)
 
 		vtui.FrameManager.PostTask(func() {
 			if mode == 1 && pf != nil {
@@ -1045,6 +1046,7 @@ func ExecuteDeleteOpWithDispositionAt(pf *PanelsFrame, activeVfs vfs.VFS, basePa
 		taskCtx = vtui.RunAsync(func(ctx *vtui.TaskContext) {
 			err := runFunc(ctx.Context, reporter, dlg)
 			ctx.RunOnUI(func() {
+				reporter.Stop()
 				dlg.Close()
 				if pf != nil {
 					pf.RefreshAll()
