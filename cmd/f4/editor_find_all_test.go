@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/unxed/f4/piecetable"
 	"github.com/unxed/vtinput"
@@ -913,7 +914,7 @@ func TestCollectMatchSpans_WindowsMatchTheWholeBuffer(t *testing.T) {
 			ev := newFindAllEditor(t, content)
 			restore := findAllWindow
 			findAllWindow = window
-			got, gotLines, err := ev.collectMatchSpans(taskContextForTest(t), ev.editSession,
+			got, gotLines, err := ev.collectMatchSpans(taskContextForTest(t), ev.editSession, ev.pt, ev.chunkReader(),
 				"needle", caseSensitive, false, false)
 			findAllWindow = restore
 			if err != nil {
@@ -938,6 +939,47 @@ func TestCollectMatchSpans_WindowsMatchTheWholeBuffer(t *testing.T) {
 	}
 }
 
+// TestCollectMatchSpans_NewlineInMatchlessWindow: the newline that separates
+// two matches can sit in a window holding neither of them. It still has to be
+// seen, or the second match is counted on the first one's line.
+func TestCollectMatchSpans_NewlineInMatchlessWindow(t *testing.T) {
+	content := "X" + strings.Repeat("a", 200) + "\n" + strings.Repeat("b", 200) + "X\n"
+	ev := newFindAllEditor(t, content)
+	restore := findAllWindow
+	findAllWindow = 64
+	defer func() { findAllWindow = restore }()
+
+	spans, lines, err := ev.collectMatchSpans(taskContextForTest(t), ev.editSession, ev.pt, ev.chunkReader(),
+		"X", true, false, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(spans) != 2 {
+		t.Fatalf("found %d occurrences, want 2", len(spans))
+	}
+	if lines != 2 {
+		t.Errorf("counted %d matching lines, want 2", lines)
+	}
+}
+
+// TestLineHead_CutsOnACharacterBoundary: a line longer than the cap is cut on
+// a rune boundary and marked, so the dump it is written into stays UTF-8.
+func TestLineHead_CutsOnACharacterBoundary(t *testing.T) {
+	// The euro sign straddles the cap: two of its three bytes fit.
+	content := strings.Repeat("a", findAllMaxLineBytes-2) + "€" + strings.Repeat("b", 100) + "\n"
+	ev := newFindAllEditor(t, content)
+	head := ev.lineHead(0, len(content)-1)
+	if !utf8.ValidString(head) {
+		t.Fatalf("head is not valid UTF-8")
+	}
+	if want := strings.Repeat("a", findAllMaxLineBytes-2) + "…"; head != want {
+		t.Errorf("head = %q..., want %d a's and an ellipsis", head[max(len(head)-8, 0):], findAllMaxLineBytes-2)
+	}
+	if short := ev.lineHead(0, 5); short != "aaaaa" {
+		t.Errorf("short line = %q, want aaaaa", short)
+	}
+}
+
 // TestCollectMatchSpans_ReadsTheFileNotTheMapping: the collection is why Find
 // All on a large file used to fault the whole thing into residency. It should
 // now ask the file for windows, as the line index does.
@@ -957,7 +999,7 @@ func TestCollectMatchSpans_ReadsTheFileNotTheMapping(t *testing.T) {
 	counter := &countingReadAtCloser{ReadAtCloser: ev.file}
 	ev.file = counter
 
-	spans, lines, err := ev.collectMatchSpans(taskContextForTest(t), ev.editSession, "needle", true, false, false)
+	spans, lines, err := ev.collectMatchSpans(taskContextForTest(t), ev.editSession, ev.pt, ev.chunkReader(), "needle", true, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}

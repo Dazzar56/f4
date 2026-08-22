@@ -12,6 +12,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -114,7 +115,7 @@ func (f *findAllFrame) resolveRow(i int) findAllRow {
 	lineEnd := min(lineStart+max(f.ev.getLineLength(line), 0), size)
 	// Only as much of the line as could fill the row is read: a minified line
 	// megabytes long is not worth reading to paint 512 columns of it.
-	raw := strings.TrimRight(string(f.ev.bufferRange(lineStart, min(lineEnd-lineStart, findAllMaxLineBytes))), "\r\n")
+	raw := strings.TrimRight(f.ev.lineHead(lineStart, lineEnd), "\r\n")
 	// Tabs become single spaces: a 1-byte-for-1-byte substitution keeps the
 	// match's byte offsets valid in the display string, which keeps the
 	// highlight math trivial.
@@ -319,6 +320,27 @@ const findAllMaxItemWidth = 512
 // a single enormous line from being read in full for every paint of it.
 const findAllMaxLineBytes = 16 * findAllMaxItemWidth
 
+// lineHead reads the line [lineStart, lineEnd) up to findAllMaxLineBytes. A
+// line cut there is cut on a character boundary and ends in an ellipsis, so
+// the text is valid UTF-8 and says that it is not all of the line: the found
+// lines dump writes it into a buffer the user can save.
+func (ev *EditorView) lineHead(lineStart, lineEnd int) string {
+	n := lineEnd - lineStart
+	if n <= findAllMaxLineBytes {
+		return string(ev.bufferRange(lineStart, n))
+	}
+	head := ev.bufferRange(lineStart, findAllMaxLineBytes)
+	for i := len(head) - 1; i >= 0 && i >= len(head)-utf8.UTFMax; i-- {
+		if utf8.RuneStart(head[i]) {
+			if !utf8.FullRune(head[i:]) {
+				head = head[:i]
+			}
+			break
+		}
+	}
+	return string(head) + "…"
+}
+
 // findAllWidthSample is how many occurrences are measured to pick the menu
 // width. The list itself is unbounded, and the longest of twenty million
 // matching lines cannot be found without resolving all of them, so the width
@@ -441,6 +463,11 @@ var errSearchBuffer = errors.New("cannot read the buffer to search it")
 // tests can shrink it and put a match on every seam.
 var findAllWindow = 4 << 20
 
+// findAllSampleTrust is how far the match density measured over a stretch of
+// the file is extrapolated past it when sizing the result: a 4 MB window is
+// read as saying something about the next 64 MB, not about the next 8 GB.
+const findAllSampleTrust = 16
+
 // collectMatchSpans finds every occurrence of pattern in the buffer, and how
 // many distinct lines they fall on, reading the buffer a window at a time.
 //
@@ -455,8 +482,13 @@ var findAllWindow = 4 << 20
 // Consecutive windows overlap, so no match can fall between two of them, and
 // the scan never looks back before the end of the last match it reported, so
 // none is reported twice.
-func (ev *EditorView) collectMatchSpans(ctx *vtui.TaskContext, session int, pattern string,
-	caseSensitive, useRegex, wholeWord bool) ([]matchSpan, int, error) {
+//
+// pt and readFromFile are the buffer and the file as they were on the UI
+// thread when the search was asked for, captured there for the same reason
+// StartIndexing captures them: a save landing mid-scan swaps and closes both
+// underneath a task goroutine reading them.
+func (ev *EditorView) collectMatchSpans(ctx *vtui.TaskContext, session int, pt *piecetable.PieceTable,
+	readFromFile fileChunkReader, pattern string, caseSensitive, useRegex, wholeWord bool) ([]matchSpan, int, error) {
 
 	// The regex engine matches against one contiguous buffer and its patterns
 	// have no bounded length, so a window cannot stand in for the file. That
@@ -472,12 +504,6 @@ func (ev *EditorView) collectMatchSpans(ctx *vtui.TaskContext, session int, patt
 		}
 		return spans, countMatchLines(ctx, data, spans), nil
 	}
-
-	// One view of the buffer for the whole pass: the file may be reloaded or
-	// the buffer swapped underneath a search of an 8 GB file, and half a scan
-	// of each is not a search of either.
-	pt := ev.pt
-	readFromFile := ev.chunkReader()
 
 	size := pt.Size()
 	if size == 0 || pattern == "" {
@@ -516,16 +542,24 @@ func (ev *EditorView) collectMatchSpans(ctx *vtui.TaskContext, session int, patt
 			return nil, 0, err
 		}
 
-		// The first window says how thickly this pattern occurs, which is
-		// enough to ask for the whole result up front instead of letting
-		// append copy it into place a dozen times over. An estimate that
-		// falls short still grows; one that overshoots is one allocation.
-		if spans == nil && len(found) > 0 && len(win) > 0 {
-			perByte := float64(len(found)) / float64(len(win))
-			estimate := int(perByte * float64(size) * 1.1)
-			if estimate > len(found) {
-				spans = make([]matchSpan, 0, estimate)
+		// What has been scanned says how thickly this pattern occurs, which
+		// is enough to ask for the result ahead of time instead of letting
+		// append copy it into place a dozen times over. A sample is only
+		// trusted so far, though: a dense header extrapolated over 8 GB asked
+		// for more spans than the machine had memory for, so the reservation
+		// covers at most findAllSampleTrust times the bytes measured, and is
+		// measured again, over more of the file, when it fills.
+		if len(spans)+len(found) > cap(spans) {
+			scanned := float64(pos + len(win))
+			perByte := float64(len(spans)+len(found)) / scanned
+			estimate := perByte * min(float64(size), scanned*findAllSampleTrust) * 1.1
+			want := len(spans) + len(found)
+			if estimate > float64(want) && estimate < float64(math.MaxInt32) {
+				want = int(estimate)
 			}
+			grown := make([]matchSpan, len(spans), want)
+			copy(grown, spans)
+			spans = grown
 		}
 
 		for _, m := range found {
@@ -536,10 +570,11 @@ func (ev *EditorView) collectMatchSpans(ctx *vtui.TaskContext, session int, patt
 			case sawNewline:
 				uniqueLines++
 				sawNewline = false
-			case lastEnd >= pos:
-				// The previous match is in this window, so the bytes between
-				// the two of them are in hand.
-				if bytes.IndexByte(win[lastEnd-pos:abs-pos], '\n') >= 0 {
+			default:
+				// The bytes between the previous match and this one are in
+				// hand from wherever this window starts; anything before
+				// that was checked when the window holding it was done with.
+				if bytes.IndexByte(win[max(lastEnd-pos, 0):abs-pos], '\n') >= 0 {
 					uniqueLines++
 				}
 			}
@@ -548,9 +583,11 @@ func (ev *EditorView) collectMatchSpans(ctx *vtui.TaskContext, session int, patt
 		}
 
 		// Whatever follows the last match in this window decides whether the
-		// next one starts on a new line.
-		if lastEnd >= pos && !sawNewline {
-			if tail := lastEnd - pos; tail >= 0 && tail <= len(win) {
+		// next one starts on a new line — and a window with no match in it
+		// still has newlines to report, or a match two windows on would be
+		// counted against the line of the one before.
+		if lastEnd >= 0 && !sawNewline {
+			if tail := max(lastEnd-pos, 0); tail <= len(win) {
 				sawNewline = bytes.IndexByte(win[tail:], '\n') >= 0
 			}
 		}
@@ -574,6 +611,11 @@ func (ev *EditorView) FindAll(pattern string, caseSensitive, useRegex, wholeWord
 		// The menu resolves byte offsets against the live line index, so
 		// results collected before an edit must be dropped, not shown.
 		session := ev.editSession
+		// One view of the buffer for the whole pass: the file may be reloaded
+		// or the buffer swapped underneath a search of an 8 GB file, and half
+		// a scan of each is not a search of either.
+		pt := ev.pt
+		readFromFile := ev.chunkReader()
 
 		runSearchWithProgress(pattern, func(ctx *vtui.TaskContext, dlg *vtui.Window) {
 			defer ev.guardMapping("collecting occurrences")()
@@ -581,7 +623,7 @@ func (ev *EditorView) FindAll(pattern string, caseSensitive, useRegex, wholeWord
 			// The count of matching lines comes out of the same pass, so that
 			// opening the menu stays O(one screenful) however many occurrences
 			// there are.
-			spans, uniqueLines, err := ev.collectMatchSpans(ctx, session, pattern, caseSensitive, useRegex, wholeWord)
+			spans, uniqueLines, err := ev.collectMatchSpans(ctx, session, pt, readFromFile, pattern, caseSensitive, useRegex, wholeWord)
 			if errors.Is(err, errSearchBuffer) {
 				if ctx.Err() != nil {
 					return // canceled; the dialog is already closing
@@ -598,7 +640,7 @@ func (ev *EditorView) FindAll(pattern string, caseSensitive, useRegex, wholeWord
 			// the index can answer.
 			indexed := true
 			if err == nil && len(spans) > 0 {
-				indexed = ev.awaitIndexForResults(ctx)
+				indexed = ev.awaitIndexForResults(ctx, spans[len(spans)-1].Off)
 			}
 
 			ctx.RunOnUI(func() {
@@ -817,7 +859,7 @@ func (ev *EditorView) openFoundLinesEditor(pattern string, spans []matchSpan) {
 		prevLine = line
 		lineStart := min(max(ev.li.GetLineOffset(line), 0), size)
 		lineEnd = min(lineStart+max(ev.getLineLength(line), 0), size)
-		raw := strings.TrimRight(string(ev.bufferRange(lineStart, min(lineEnd-lineStart, findAllMaxLineBytes))), "\r\n")
+		raw := strings.TrimRight(ev.lineHead(lineStart, lineEnd), "\r\n")
 		fmt.Fprintf(&b, "%*d: %s\n", lineW, line+1, raw)
 		lines++
 	}

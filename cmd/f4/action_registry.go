@@ -2192,7 +2192,24 @@ func init() {
 				ev.HexNibble = 0
 			} else {
 				ev.DecodeMode = false
-				// A binary file opened straight into hex never ran the indexer.
+				// Hex and decode address the buffer by byte offset, and a
+				// file opened straight into them never ran the indexer, so
+				// the cursor may be "line 0, column five million". Text mode
+				// needs the real line, counted as far as the cursor before
+				// it is shown; the scan then carries on from there.
+				off := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
+				if ev.ensureIndexedTo(off) {
+					ev.CursorLine = ev.li.GetLineAtOffset(off)
+					ev.CursorPos = off - ev.li.GetLineOffset(ev.CursorLine)
+				} else {
+					// The buffer could not be read that far, so the offset has
+					// no line yet. Asking anyway answers with the last line the
+					// index knows and a column counted from there — the very
+					// "column five million" this is here to get rid of.
+					ev.CursorLine = max(ev.li.LineCount()-1, 0)
+					ev.CursorPos = 0
+				}
+				ev.updateDesiredVisualCol()
 				if !ev.indexing && !ev.indexIsComplete() {
 					ev.StartIndexing()
 				}
