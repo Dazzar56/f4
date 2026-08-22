@@ -30,15 +30,17 @@ var errClosed = errors.New("mount is closed")
 // it. It contains no FUSE types, so the whole VFS side of a mount compiles
 // and can be tested on platforms that cannot mount anything.
 //
-// Every VFS call happens under mu. f4's VFS implementations are stateful
-// and were written for a single UI thread, while FUSE serves requests from
-// many kernel threads at once; serializing is the only assumption that
-// holds for every backend. It also means one slow read stalls the mount,
-// which is the main thing later iterations should improve.
+// VFS calls are serialized by default because f4's VFS implementations are
+// stateful and were written for a single UI thread. Backends that explicitly
+// implement vfs.ConcurrentVFS may overlap independent read-side calls; all
+// mutations and bridge shutdown remain exclusive.
 type bridge struct {
-	mu     sync.Mutex
+	mu     sync.RWMutex
 	v      vfs.VFS
 	closed bool
+	// A backend must opt in before read-side calls can overlap. Writes and
+	// close remain exclusive even for concurrent backends.
+	parallel bool
 
 	root     string
 	randomOK bool
@@ -239,13 +241,12 @@ func (s *stagedFile) LoadFrom(ctx context.Context, b *bridge, r vfs.ReadAtCloser
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		b.mu.Lock()
-		if b.closed {
-			b.mu.Unlock()
-			return errClosed
+		_, unlock, err := b.beginReadCall()
+		if err != nil {
+			return err
 		}
 		n, readErr := r.Read(ctx, buf)
-		b.mu.Unlock()
+		unlock()
 		if n > 0 {
 			if _, err := s.f.Write(buf[:n]); err != nil {
 				return err
@@ -279,6 +280,7 @@ func newBridge(v vfs.VFS, root string, opts Options) *bridge {
 	return &bridge{
 		v:        v,
 		root:     root,
+		parallel: supportsConcurrentCalls(v),
 		randomOK: v.GetCapabilities().HasRandomAccess,
 		readOnly: opts.ReadOnly,
 		writeOK:  v.GetCapabilities().HasWrite,
@@ -288,6 +290,35 @@ func newBridge(v vfs.VFS, root string, opts Options) *bridge {
 		statsOn:  os.Getenv("F4_FUSE_STATS") != "",
 		stats:    make(map[string]*opStat),
 	}
+}
+
+func supportsConcurrentCalls(v vfs.VFS) bool {
+	c, ok := v.(vfs.ConcurrentVFS)
+	return ok && c.SupportsConcurrentCalls()
+}
+
+// beginReadCall protects the bridge lifetime while allowing an explicitly
+// concurrent backend to serve independent reads in parallel. The returned
+// unlock function must be called after the VFS operation completes.
+func (b *bridge) beginReadCall() (vfs.VFS, func(), error) {
+	if b.parallel {
+		b.mu.RLock()
+	} else {
+		b.mu.Lock()
+	}
+	if b.closed {
+		if b.parallel {
+			b.mu.RUnlock()
+		} else {
+			b.mu.Unlock()
+		}
+		return nil, nil, errClosed
+	}
+	v := b.v
+	if b.parallel {
+		return v, b.mu.RUnlock, nil
+	}
+	return v, b.mu.Unlock, nil
 }
 
 // close releases the VFS. Open file handles keep their own spooled copies,
@@ -313,9 +344,9 @@ func (b *bridge) close() {
 // join maps a name inside dirPath to a VFS-native path. Paths are whatever
 // the backend uses; only the VFS knows how to build them.
 func (b *bridge) join(dirPath, name string) string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if b.closed {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	if b.closed || b.v == nil {
 		return path.Join(dirPath, name)
 	}
 	return b.v.Join(dirPath, name)
@@ -326,18 +357,17 @@ func (b *bridge) readDir(ctx context.Context, dirPath string) ([]vfs.VFSItem, er
 		return items, nil
 	}
 
-	b.mu.Lock()
-	if b.closed {
-		b.mu.Unlock()
-		return nil, errClosed
+	v, unlock, err := b.beginReadCall()
+	if err != nil {
+		return nil, err
 	}
 	var items []vfs.VFSItem
 	doneList := b.track("ReadDir")
-	err := b.v.ReadDir(ctx, dirPath, func(chunk []vfs.VFSItem) {
+	err = v.ReadDir(ctx, dirPath, func(chunk []vfs.VFSItem) {
 		items = append(items, chunk...)
 	})
 	doneList()
-	b.mu.Unlock()
+	unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -377,15 +407,14 @@ func (b *bridge) invalidate(dirPath string) {
 // directory even when the backend cannot stat it: a VFS that only lists is
 // still perfectly mountable.
 func (b *bridge) stat(ctx context.Context, itemPath string) (vfs.VFSItem, error) {
-	b.mu.Lock()
-	if b.closed {
-		b.mu.Unlock()
-		return vfs.VFSItem{}, errClosed
+	v, unlock, err := b.beginReadCall()
+	if err != nil {
+		return vfs.VFSItem{}, err
 	}
 	done := b.track("Stat")
-	item, err := b.v.Stat(ctx, itemPath)
+	item, err := v.Stat(ctx, itemPath)
 	done()
-	b.mu.Unlock()
+	unlock()
 	if err == nil {
 		return item, nil
 	}
@@ -402,12 +431,13 @@ func (b *bridge) stat(ctx context.Context, itemPath string) (vfs.VFSItem, error)
 // as long as the cache lives, which reads as the mount having ignored the
 // command.
 func (b *bridge) mkdir(ctx context.Context, dirPath, name string) error {
+	itemPath := b.join(dirPath, name)
 	b.mu.Lock()
 	if b.closed {
 		b.mu.Unlock()
 		return errClosed
 	}
-	err := b.v.MkDir(ctx, b.join(dirPath, name))
+	err := b.v.MkDir(ctx, itemPath)
 	b.mu.Unlock()
 	b.invalidate(dirPath)
 	return err
@@ -416,12 +446,13 @@ func (b *bridge) mkdir(ctx context.Context, dirPath, name string) error {
 // remove deletes one entry. Like mkdir it drops the parent's cached listing,
 // so a file the kernel just unlinked stops being offered by the next ls.
 func (b *bridge) remove(ctx context.Context, dirPath, name string) error {
+	itemPath := b.join(dirPath, name)
 	b.mu.Lock()
 	if b.closed {
 		b.mu.Unlock()
 		return errClosed
 	}
-	err := b.v.Remove(ctx, b.join(dirPath, name))
+	err := b.v.Remove(ctx, itemPath)
 	b.mu.Unlock()
 	b.invalidate(dirPath)
 	return err
@@ -431,12 +462,14 @@ func (b *bridge) remove(ctx context.Context, dirPath, name string) error {
 // dropped: the entry has to stop appearing in the old one and start appearing
 // in the new one, and a cache that lags either way looks like a lost file.
 func (b *bridge) rename(ctx context.Context, oldDir, oldName, newDir, newName string) error {
+	oldPath := b.join(oldDir, oldName)
+	newPath := b.join(newDir, newName)
 	b.mu.Lock()
 	if b.closed {
 		b.mu.Unlock()
 		return errClosed
 	}
-	err := b.v.Rename(ctx, b.join(oldDir, oldName), b.join(newDir, newName))
+	err := b.v.Rename(ctx, oldPath, newPath)
 	b.mu.Unlock()
 	b.invalidate(oldDir)
 	if newDir != oldDir {
@@ -481,6 +514,7 @@ func (b *bridge) lookup(ctx context.Context, dirPath, name string) (vfs.VFSItem,
 type handle struct {
 	b    *bridge
 	mu   sync.Mutex
+	ioMu sync.Mutex
 	r    vfs.ReadAtCloser
 	tmp  *os.File
 	path string
@@ -489,16 +523,15 @@ type handle struct {
 }
 
 func (b *bridge) open(ctx context.Context, itemPath string, size int64) (*handle, error) {
-	b.mu.Lock()
-	if b.closed {
-		b.mu.Unlock()
-		return nil, errClosed
+	v, unlock, err := b.beginReadCall()
+	if err != nil {
+		return nil, err
 	}
 	doneOpen := b.track("Open")
-	reader, err := b.v.Open(ctx, itemPath)
+	reader, err := v.Open(ctx, itemPath)
 	doneOpen()
 	random := b.randomOK
-	b.mu.Unlock()
+	unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -518,9 +551,9 @@ func (b *bridge) open(ctx context.Context, itemPath string, size int64) (*handle
 	return h, nil
 }
 
-// spool copies a sequential-only source into a temporary file. It holds the
-// bridge lock for the whole transfer because the VFS cannot serve anything
-// else meanwhile anyway.
+// spool copies a sequential-only source into a temporary file. Backend reads
+// are protected per chunk so a large transfer does not monopolize a
+// concurrent mount.
 func (h *handle) spool(ctx context.Context) error {
 	tmp, err := os.CreateTemp("", "f4-fuse-*")
 	if err != nil {
@@ -540,16 +573,15 @@ func (h *handle) spool(ctx context.Context) error {
 		// 4 GiB download no longer means the mount answers nothing for
 		// the length of it: every other request gets its turn between
 		// chunks. Writing to the local spool needs no lock at all.
-		h.b.mu.Lock()
-		if h.b.closed {
-			h.b.mu.Unlock()
+		_, unlock, err := h.b.beginReadCall()
+		if err != nil {
 			tmp.Close()
-			return errClosed
+			return err
 		}
 		doneChunk := h.b.track("Read(spool)")
 		n, readErr := h.r.Read(ctx, buf)
 		doneChunk()
-		h.b.mu.Unlock()
+		unlock()
 		if n > 0 {
 			if _, err := tmp.Write(buf[:n]); err != nil {
 				tmp.Close()
@@ -584,6 +616,9 @@ func (h *handle) spool(ctx context.Context) error {
 // readAt fills dest and returns the number of bytes read. A short read at
 // the end of the file is success, not an error: FUSE has no EOF.
 func (h *handle) readAt(ctx context.Context, dest []byte, off int64) (int, error) {
+	h.ioMu.Lock()
+	defer h.ioMu.Unlock()
+
 	h.mu.Lock()
 	tmp := h.tmp
 	reader := h.r
@@ -601,11 +636,11 @@ func (h *handle) readAt(ctx context.Context, dest []byte, off int64) (int, error
 		return n, err
 	}
 
-	h.b.mu.Lock()
-	defer h.b.mu.Unlock()
-	if h.b.closed {
-		return 0, errClosed
+	_, unlock, err := h.b.beginReadCall()
+	if err != nil {
+		return 0, err
 	}
+	defer unlock()
 	doneRead := h.b.track("ReadAt")
 	n, err := reader.ReadAt(ctx, dest, off)
 	doneRead()
@@ -627,14 +662,18 @@ func (h *handle) release() error {
 	h.mu.Unlock()
 
 	if tmp != nil {
+		h.ioMu.Lock()
 		tmp.Close()
+		h.ioMu.Unlock()
 	}
 	if reader != nil {
-		h.b.mu.Lock()
-		if !h.b.closed {
+		h.ioMu.Lock()
+		_, unlock, err := h.b.beginReadCall()
+		if err == nil {
 			reader.Close()
+			unlock()
 		}
-		h.b.mu.Unlock()
+		h.ioMu.Unlock()
 	}
 	return nil
 }
@@ -766,13 +805,12 @@ func (b *bridge) acquireWriteHandle(ctx context.Context, itemPath string) (h *wr
 // It is also the one place where writing costs a full download. Backends that
 // can write at an offset natively are iteration 5.
 func (b *bridge) loadStaged(ctx context.Context, itemPath string, s *stagedFile) error {
-	b.mu.Lock()
-	if b.closed {
-		b.mu.Unlock()
-		return errClosed
+	v, unlock, err := b.beginReadCall()
+	if err != nil {
+		return err
 	}
-	rc, err := b.v.Open(ctx, itemPath)
-	b.mu.Unlock()
+	rc, err := v.Open(ctx, itemPath)
+	unlock()
 	if err != nil {
 		return err
 	}
@@ -835,12 +873,12 @@ func (b *bridge) setAttributes(ctx context.Context, itemPath string, item vfs.VF
 // answers "not supported", which is how a link ends up presented as an
 // ordinary file — the behaviour every mount had before this existed.
 func (b *bridge) readlink(ctx context.Context, itemPath string) (string, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if b.closed {
-		return "", errClosed
+	v, unlock, err := b.beginReadCall()
+	if err != nil {
+		return "", err
 	}
-	sl, ok := b.v.(vfs.SymlinkVFS)
+	defer unlock()
+	sl, ok := v.(vfs.SymlinkVFS)
 	if !ok {
 		return "", errNoSymlinks
 	}
@@ -851,6 +889,7 @@ func (b *bridge) readlink(ctx context.Context, itemPath string) (string, error) 
 // mount that cannot make them simply fails — which is the honest outcome, and
 // far better than an extraction that quietly produces regular files.
 func (b *bridge) symlink(ctx context.Context, target, dirPath, name string) error {
+	itemPath := b.join(dirPath, name)
 	b.mu.Lock()
 	if b.closed {
 		b.mu.Unlock()
@@ -861,7 +900,7 @@ func (b *bridge) symlink(ctx context.Context, target, dirPath, name string) erro
 		b.mu.Unlock()
 		return errNoSymlinks
 	}
-	err := sl.Symlink(ctx, target, b.join(dirPath, name))
+	err := sl.Symlink(ctx, target, itemPath)
 	b.mu.Unlock()
 	b.invalidate(dirPath)
 	return err
