@@ -2157,6 +2157,7 @@ func actionEditorSettings(pf *PanelsFrame) {
 		Msg("EditorSettings.AutoComplete"),
 		Msg("EditorSettings.Crosshair"),
 		Msg("EditorSettings.ColorerBg"),
+		Msg("EditorSettings.SyntaxAnimation"),
 	}
 	maxCheckWidth := 0
 	for _, caption := range checkCaptions {
@@ -2165,11 +2166,12 @@ func actionEditorSettings(pf *PanelsFrame) {
 			maxCheckWidth = checkWidth
 		}
 	}
-	checkRows := 3
+	checkRows := (len(checkCaptions) + 1) / 2
 	singleCheckColumn := maxCheckWidth > (width-4)/2
+	height += checkRows - 3
 	if singleCheckColumn {
+		height += len(checkCaptions) - checkRows
 		checkRows = len(checkCaptions)
-		height += checkRows - 3
 	}
 	dlg := vtui.NewCenteredDialog(width, height, Msg("EditorSettings.Title"))
 	dlg.ShowClose = true
@@ -2251,6 +2253,11 @@ func actionEditorSettings(pf *PanelsFrame) {
 		chkColorerBg.State = 1
 	}
 
+	chkSyntaxAnimation := vtui.NewCheckbox(0, 0, Msg("EditorSettings.SyntaxAnimation"), false)
+	if AppConfig.EditorSyntaxAnimation {
+		chkSyntaxAnimation.State = 1
+	}
+
 	editMask := vtui.NewEdit(0, 0, 56, AppConfig.EditorAutoCompleteMask)
 	lblMask := vtui.NewLabel(0, 0, Msg("EditorSettings.Mask"), editMask)
 
@@ -2281,6 +2288,7 @@ func actionEditorSettings(pf *PanelsFrame) {
 	dlg.AddItem(chkAuto)
 	dlg.AddItem(chkCrosshair)
 	dlg.AddItem(chkColorerBg)
+	dlg.AddItem(chkSyntaxAnimation)
 	dlg.AddItem(lblMask)
 	dlg.AddItem(editMask)
 	dlg.AddItem(chkExtEdit)
@@ -2315,23 +2323,24 @@ func actionEditorSettings(pf *PanelsFrame) {
 		checkColumn := vtui.NewVBoxLayout(0, 0, width-4, checkRows)
 		for _, check := range []*vtui.Checkbox{
 			chkAutoIndent, chkCursorEOL, chkEditorConfig,
-			chkAuto, chkCrosshair, chkColorerBg,
+			chkAuto, chkCrosshair, chkColorerBg, chkSyntaxAnimation,
 		} {
 			checkColumn.Add(check, vtui.Margins{}, vtui.AlignLeft)
 		}
 		vbox.Add(checkColumn, vtui.Margins{Top: 1}, vtui.AlignFill)
 	} else {
-		col1 := vtui.NewVBoxLayout(0, 0, (width-4)/2, 3)
+		col1 := vtui.NewVBoxLayout(0, 0, (width-4)/2, checkRows)
 		col1.Add(chkAutoIndent, vtui.Margins{}, vtui.AlignLeft)
 		col1.Add(chkEditorConfig, vtui.Margins{}, vtui.AlignLeft)
 		col1.Add(chkColorerBg, vtui.Margins{}, vtui.AlignLeft)
 
-		col2 := vtui.NewVBoxLayout(0, 0, (width-4)/2, 3)
+		col2 := vtui.NewVBoxLayout(0, 0, (width-4)/2, checkRows)
 		col2.Add(chkCursorEOL, vtui.Margins{}, vtui.AlignLeft)
 		col2.Add(chkAuto, vtui.Margins{}, vtui.AlignLeft)
 		col2.Add(chkCrosshair, vtui.Margins{}, vtui.AlignLeft)
+		col2.Add(chkSyntaxAnimation, vtui.Margins{}, vtui.AlignLeft)
 
-		rowChecks := vtui.NewHBoxLayout(0, 0, width-4, 3)
+		rowChecks := vtui.NewHBoxLayout(0, 0, width-4, checkRows)
 		rowChecks.Add(col1, vtui.Margins{}, vtui.AlignFill)
 		rowChecks.Add(col2, vtui.Margins{}, vtui.AlignFill)
 		vbox.Add(rowChecks, vtui.Margins{Top: 1}, vtui.AlignFill)
@@ -2376,6 +2385,7 @@ func actionEditorSettings(pf *PanelsFrame) {
 		AppConfig.EditorAutoComplete = chkAuto.State == 1
 		AppConfig.EditorCrosshair = chkCrosshair.State == 1
 		AppConfig.EditorColorerBackground = chkColorerBg.State == 1
+		AppConfig.EditorSyntaxAnimation = chkSyntaxAnimation.State == 1
 		AppConfig.EditorAutoCompleteMask = editMask.GetText()
 		AppConfig.UseExternalEditor = chkExtEdit.State == 1
 		AppConfig.ExternalEditorCommand = editExtCmd.GetText()

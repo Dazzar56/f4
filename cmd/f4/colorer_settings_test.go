@@ -101,11 +101,13 @@ func TestConfig_ColorerSettingsRoundTrip(t *testing.T) {
 
 	catalog := filepath.Join(tmpDir, "configs")
 	AppConfig.EditorColorerSyntax = false
+	AppConfig.EditorSyntaxAnimation = true
 	AppConfig.EditorColorerCatalog = catalog
 	AppConfig.EditorCrossMode = ColorerCrossVertical
 	SaveConfig()
 
 	AppConfig.EditorColorerSyntax = true
+	AppConfig.EditorSyntaxAnimation = false
 	AppConfig.EditorColorerCatalog = ""
 	AppConfig.EditorCrossMode = ColorerCrossBoth
 
@@ -113,6 +115,9 @@ func TestConfig_ColorerSettingsRoundTrip(t *testing.T) {
 
 	if AppConfig.EditorColorerSyntax {
 		t.Error("LoadConfig failed to restore EditorColorerSyntax")
+	}
+	if !AppConfig.EditorSyntaxAnimation {
+		t.Error("LoadConfig failed to restore EditorSyntaxAnimation")
 	}
 	if AppConfig.EditorColorerCatalog != catalog {
 		t.Errorf("LoadConfig failed to restore EditorColorerCatalog: %q", AppConfig.EditorColorerCatalog)

@@ -185,6 +185,7 @@ type F4Config struct {
 	ExternalEditorCommand    string
 	EditorAutodetectCodePage bool
 	EditorHighlighter        string
+	EditorSyntaxAnimation    bool
 	EditorColorerScheme      string
 	EditorColorerBackground  bool
 	EditorColorerSyntax      bool
@@ -313,6 +314,7 @@ var AppConfig = F4Config{
 	ExternalEditorCommand:    "",
 	EditorAutodetectCodePage: true,
 	EditorHighlighter:        "Chroma",
+	EditorSyntaxAnimation:    false,
 	EditorColorerScheme:      "",
 	EditorColorerBackground:  true,
 	EditorColorerSyntax:      true,
@@ -542,6 +544,7 @@ func LoadConfig() {
 	AppConfig.EditorAutodetectCodePage = ini.GetString("Editor", "AutodetectCodePage", "1") == "1"
 	AppConfig.EditorMemoryMap = ini.GetString("Editor", "MemoryMap", "1") == "1"
 	AppConfig.EditorHighlighter = normalizeHighlighter(ini.GetString("Editor", "Highlighter", "Chroma"))
+	AppConfig.EditorSyntaxAnimation = ini.GetString("Editor", "SyntaxAnimation", "0") == "1"
 	AppConfig.EditorColorerScheme = ini.GetString("Editor", "ColorerScheme", "")
 	AppConfig.EditorColorerBackground = ini.GetString("Editor", "ColorerBackground", "1") == "1"
 	AppConfig.EditorColorerSyntax = ini.GetString("Editor", "ColorerSyntax", "1") == "1"
@@ -743,6 +746,7 @@ func saveConfigWithWindowSize(windowSize bool) {
 	sb.WriteString(fmt.Sprintf("AutodetectCodePage = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.EditorAutodetectCodePage]))
 	sb.WriteString(fmt.Sprintf("MemoryMap = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.EditorMemoryMap]))
 	sb.WriteString(fmt.Sprintf("Highlighter = %s\n", AppConfig.EditorHighlighter))
+	fmt.Fprintf(&sb, "SyntaxAnimation = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.EditorSyntaxAnimation])
 	sb.WriteString(fmt.Sprintf("ColorerScheme = %s\n", AppConfig.EditorColorerScheme))
 	sb.WriteString(fmt.Sprintf("ColorerBackground = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.EditorColorerBackground]))
 	sb.WriteString(fmt.Sprintf("ColorerSyntax = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.EditorColorerSyntax]))
