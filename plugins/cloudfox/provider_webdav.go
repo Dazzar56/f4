@@ -2077,10 +2077,13 @@ func (b *webDAVBackend) Create(ctx context.Context, location string) (io.WriteCl
 		if _, err := file.Seek(0, io.SeekStart); err != nil {
 			return err
 		}
-		var body io.Reader = file
+		// Keep ownership of the spool descriptor here. net/http may close a
+		// request body asynchronously after Do returns, which can race cleanup
+		// and leave the descriptor temporarily pinned on Windows.
+		var body io.Reader = io.NewSectionReader(file, 0, size)
 		reporter, hasReporter := uploadCtx.Value(vfs.ReporterKey).(vfs.TaskReporter)
 		if hasReporter {
-			body = &providerProgressReader{r: file, ctx: uploadCtx, reporter: reporter, name: b.Base(location), total: size}
+			body = &providerProgressReader{r: body, ctx: uploadCtx, reporter: reporter, name: b.Base(location), total: size}
 		}
 		req, err := http.NewRequestWithContext(uploadCtx, http.MethodPut, u.String(), body)
 		if err != nil {
@@ -2090,22 +2093,13 @@ func (b *webDAVBackend) Create(ctx context.Context, location string) (io.WriteCl
 		if overwrite, known := vfs.DestinationOverwrite(uploadCtx); known && !overwrite {
 			req.Header.Set("If-None-Match", "*")
 		}
-		tempName := file.Name()
 		req.GetBody = func() (io.ReadCloser, error) {
-			replay, openErr := os.Open(tempName)
-			if openErr != nil {
-				return nil, openErr
-			}
+			var replay io.Reader = io.NewSectionReader(file, 0, size)
 			if !hasReporter {
-				return replay, nil
+				return io.NopCloser(replay), nil
 			}
-			return struct {
-				io.Reader
-				io.Closer
-			}{
-				Reader: &providerProgressReader{r: replay, ctx: uploadCtx, reporter: reporter, name: b.Base(location), total: size},
-				Closer: replay,
-			}, nil
+			replay = &providerProgressReader{r: replay, ctx: uploadCtx, reporter: reporter, name: b.Base(location), total: size}
+			return io.NopCloser(replay), nil
 		}
 		resp, err := b.client.Do(req)
 		// Once PUT is submitted its final state can be unknown even when the
