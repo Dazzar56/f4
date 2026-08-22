@@ -362,7 +362,7 @@ func ExportColors(path string) error {
 			if source, ok := colorSourceExpressions[slot.Canonical]; ok && colorSourcePalette[slot.Canonical] == attr {
 				value = source
 			}
-			sb.WriteString(fmt.Sprintf("%s = %s\n", slot.Canonical, value))
+			fmt.Fprintf(&sb, "%s = %s\n", slot.Canonical, value)
 		}
 	}
 
