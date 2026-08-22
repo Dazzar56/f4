@@ -1104,6 +1104,32 @@ EnvMan.ErrorMacroType=Environment Manager macro operation must be a string
 EnvMan.ErrorMacroInteractive=macro operation requires the interactive Environment Manager UI
 EnvMan.ErrorMacroUnknown=unknown Environment Manager macro operation
 
+SQLite.LanguageCode=en
+SQLite.Title=SQLite
+SQLite.Command.Open=SQLite client
+SQLite.Command.Open.Desc=Browse tables and execute SQL against a local SQLite database
+SQLite.SelectDatabase=Select a local .db, .sqlite, .sqlite3, or .db3 file.
+SQLite.OpeningDatabase=Opening database...
+SQLite.ReadingSchema=Reading database schema...
+SQLite.OpenFailed=Could not open %s:\n\n%v
+SQLite.OK=&OK
+SQLite.TablesViews=Tables / views
+SQLite.ResultLimit=Result (maximum 100 rows)
+SQLite.SQLHint=SQL (F9 or Run)
+SQLite.Run=&Run
+SQLite.Refresh=&Refresh
+SQLite.Close=&Close
+SQLite.NoTables=The database has no user tables or views.
+SQLite.ReadingTable=Reading %s...
+SQLite.ReadingTableProgress=Reading table...
+SQLite.ReadFailed=Could not read %s: %v
+SQLite.TableRows=%s: %d row(s)
+SQLite.EmptySQL=SQL statement is empty
+SQLite.ExecutingSQL=Executing SQL...
+SQLite.SQLError=SQL error: %v
+SQLite.Rows=%d row(s)
+SQLite.StatementCompleted=Statement completed; %d row(s) affected
+
 Terminal.PTYAllocFailed=Could not start the local terminal on this system.
 Terminal.NotAvailableInEnv=Terminal is not available in this environment.
 

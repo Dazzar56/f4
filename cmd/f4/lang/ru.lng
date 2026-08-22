@@ -1093,6 +1093,32 @@ EnvMan.ErrorMacroType=Операция макрокоманды Менеджер
 EnvMan.ErrorMacroInteractive=операция макрокоманды требует интерактивного интерфейса Менеджера окружения
 EnvMan.ErrorMacroUnknown=неизвестная макрооперация Менеджера окружения
 
+SQLite.LanguageCode=ru
+SQLite.Title=SQLite
+SQLite.Command.Open=Клиент SQLite
+SQLite.Command.Open.Desc=Просматривать таблицы и выполнять SQL в локальной базе SQLite
+SQLite.SelectDatabase=Выберите локальный файл .db, .sqlite, .sqlite3 или .db3.
+SQLite.OpeningDatabase=Открытие базы данных...
+SQLite.ReadingSchema=Чтение схемы базы данных...
+SQLite.OpenFailed=Не удалось открыть %s:\n\n%v
+SQLite.OK=&ОК
+SQLite.TablesViews=Таблицы / представления
+SQLite.ResultLimit=Результат (не более 100 строк)
+SQLite.SQLHint=SQL (F9 или Выполнить)
+SQLite.Run=&Выполнить
+SQLite.Refresh=&Обновить
+SQLite.Close=&Закрыть
+SQLite.NoTables=В базе нет пользовательских таблиц или представлений.
+SQLite.ReadingTable=Чтение %s...
+SQLite.ReadingTableProgress=Чтение таблицы...
+SQLite.ReadFailed=Не удалось прочитать %s: %v
+SQLite.TableRows=%s: %d строк(и)
+SQLite.EmptySQL=SQL-запрос пуст.
+SQLite.ExecutingSQL=Выполнение SQL...
+SQLite.SQLError=Ошибка SQL: %v
+SQLite.Rows=%d строк(и)
+SQLite.StatementCompleted=Запрос выполнен; затронуто строк: %d
+
 Terminal.PTYAllocFailed=Не удалось запустить локальный терминал в этой системе.
 Terminal.NotAvailableInEnv=Терминал недоступен в этом окружении.
 
