@@ -101,9 +101,25 @@ jobs:
         EXT=""
         if [ "$GOOS" = "windows" ]; then EXT=".exe"; fi
 
-        # Prepare flags for truly static binary on Linux
+        # Truly static binaries on Linux.
+        #
+        # -extldflags '-static' used to live here and never did anything: it is
+        # forwarded to the external linker, and a CGO_ENABLED=0 build never
+        # invokes one. What actually made these binaries dynamic was goffi's
+        # //go:cgo_import_dynamic directives -- dlopen from libdl.so.2,
+        # __errno_location from libc.so.6, fakecgo's pthread_* from
+        # libpthread.so.0 -- which make the Go linker emit PT_INTERP and
+        # DT_NEEDED whatever the flags say.
+        #
+        # Our goffi fork drops those directives under the goffi_static tag, so
+        # the linker has nothing left to import. FFI goes with them: the GPU,
+        # Wayland and Ebiten backends are unavailable in these builds and vtui
+        # falls back to its pure-Go X11 and ANSI paths. See unxed/f4#693 and
+        # docs/STATIC_BUILDS.md in unxed/goffi.
         LDFLAGS="-s -w"
-        if [ "$GOOS" = "linux" ]; then LDFLAGS="$LDFLAGS -extldflags '-static'"; fi
+        if [ "$GOOS" = "linux" ]; then
+          BUILD_TAGS="${BUILD_TAGS:+$BUILD_TAGS,}goffi_static"
+        fi
 
         # Go embeds the commit in release artifacts, but not the tag. Keep
         # prerelease tags such as v0.2.0-beta available to the updater.
@@ -156,7 +172,7 @@ jobs:
         go build "${BUILD_TAG_ARGS[@]}" -trimpath $GCFLAGS -ldflags="$LDFLAGS" -o ../../build/plugins/dummy_internal/f4-internal-dummy-plugin$EXT .
 
     # A cross-built binary nobody ever started is not evidence of anything,
-    # and the release publishes it all the same. The Linux binaries are
+    # and the release publishes it all the same. Every Linux binary is now
     # static, so qemu-user runs them with no rootfs and no binfmt setup, and
     # Go runs every package's init() before main -- so a single --version
     # call is enough to catch a broken toolchain or an architecture a
@@ -177,34 +193,25 @@ jobs:
           *)        QEMU="${{ matrix.goarch }}" ;;
         esac
 
+        # The claim the release makes about these artifacts, checked rather
+        # than assumed. A binary that grew an interpreter back would still run
+        # here on the runner's own glibc and would fail only later, on Alpine
+        # or in a scratch container, where nobody is watching.
+        if file build/f4 | grep -q 'dynamically linked'; then
+          echo "::error::build/f4 is dynamically linked; the goffi_static tag did not take effect"
+          file build/f4
+          exit 1
+        fi
+
         if [ -z "$QEMU" ]; then
           ./build/f4 --version
           exit 0
         fi
 
-        # goffi's fakecgo emits //go:cgo_import_dynamic, so the cells that
-        # keep the FFI backends come out dynamically linked despite
-        # CGO_ENABLED=0 and -extldflags '-static', and qemu then needs the
-        # target's loader. Today that is arm64 alone: amd64 runs natively,
-        # and the noffi cells drop goffi and really are static.
-        packages=(qemu-user-static)
-        set --
-        if file build/f4 | grep -q 'dynamically linked'; then
-          case "${{ matrix.goarch }}" in
-            arm64)
-              packages+=(libc6-arm64-cross)
-              set -- -L /usr/aarch64-linux-gnu
-              ;;
-            *)
-              echo "::error::${{ matrix.goarch }} is dynamically linked and has no sysroot configured here"
-              exit 1
-              ;;
-          esac
-        fi
-
+        # Static, so qemu-user needs no target sysroot: no -L, no libc6-*-cross.
         sudo apt-get update -qq
-        sudo apt-get install -y -qq "${packages[@]}"
-        "qemu-$QEMU-static" "$@" build/f4 --version
+        sudo apt-get install -y -qq qemu-user-static
+        "qemu-$QEMU-static" build/f4 --version
 
     - name: Package
       run: |
@@ -451,7 +458,9 @@ jobs:
       matrix:
         include:
           - { target: windows/amd64 }
-          - { target: linux/arm }
+          # Linux release builds carry goffi_static, so vet the files the build
+          # actually compiles -- the stubs, not the dlopen wrappers.
+          - { target: linux/arm, tags: goffi_static }
           - { target: darwin/arm64 }
           # goffi's fakecgo shim needs the same flag the build step passes.
           - { target: freebsd/amd64, gcflags: -gcflags=github.com/go-webgpu/goffi/internal/fakecgo=-std }
@@ -478,12 +487,16 @@ jobs:
       env:
         TARGET: ${{ matrix.target }}
         GCFLAGS: ${{ matrix.gcflags }}
+        TAGS: ${{ matrix.tags }}
       run: |
         # An array, so the empty GCFLAGS of most cells contributes no argument
         # rather than an empty one.
         flags=(-unsafeptr=false)
         if [ -n "$GCFLAGS" ]; then
           flags+=("$GCFLAGS")
+        fi
+        if [ -n "$TAGS" ]; then
+          flags+=(-tags "$TAGS")
         fi
         GOOS="${TARGET%/*}" GOARCH="${TARGET#*/}" go vet "${flags[@]}" ./...
 

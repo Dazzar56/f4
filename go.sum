@@ -105,8 +105,6 @@ github.com/go-logr/logr v1.4.3 h1:CjnDlHq8ikf6E492q6eKboGOC0T8CDaOvkHCIg8idEI=
 github.com/go-logr/logr v1.4.3/go.mod h1:9T104GzyrTigFIr8wt5mBrctHMim0Nb2HLGrmQ40KvY=
 github.com/go-logr/stdr v1.2.2 h1:hSWxHoqTgW2S2qGc0LTAI563KZ5YKYRhT3MFKZMbjag=
 github.com/go-logr/stdr v1.2.2/go.mod h1:mMo/vtBO5dYbehREoey6XUKy/eSumjCCveDpRre4VKE=
-github.com/go-webgpu/goffi v0.6.3 h1:p4gKGikHBAQ/8iUiew9MV4C5M1ZGIsk8QGFGuJjMj+A=
-github.com/go-webgpu/goffi v0.6.3/go.mod h1:wfoxNsJkU+5RFbV1kNN1kunhc1lFHuJKK3zpgx08/uM=
 github.com/go-webgpu/webgpu v0.5.5 h1:pIrXzRg0LRlNjNmR+ZNo/ERN88YaObzbCY5oYhir5SA=
 github.com/go-webgpu/webgpu v0.5.5/go.mod h1:vgIuNTa1UlZ4njCGY6Pmp/0c5T5o2Ml2fQ0znLc7B98=
 github.com/godbus/dbus/v5 v5.2.2 h1:TUR3TgtSVDmjiXOgAAyaZbYmIeP3DPkld3jgKGV8mXQ=
@@ -250,6 +248,8 @@ github.com/unxed/colorer4go v0.1.14 h1:7M+LXUwolR5zs+OgXSjSq29Wa1dGgmYHV8BywTN+Q
 github.com/unxed/colorer4go v0.1.14/go.mod h1:3H2jIU3HsmlT7ChlpX+rnYrF2JM22ekgy/eyIBa7Cdo=
 github.com/unxed/ffibridge v0.1.1 h1:Tx7apr+1+8HG979VmnRDjbSukBkmYO7SxDzmSBIu7bQ=
 github.com/unxed/ffibridge v0.1.1/go.mod h1:mw/H12Lta3GveXkAC5aCBKNiEeKGhxBBVi4wY9QfjBE=
+github.com/unxed/goffi v0.1.2 h1:vTLW6WUJI9Q2qi3kJFcDJQ1mC5BIJQILNXwcrvAeWFI=
+github.com/unxed/goffi v0.1.2/go.mod h1:5yfNuseCh+0XTe9cbg8lGtZtOA12DU+Nm9Vfp6IDnFo=
 github.com/unxed/id3-go v0.1.1 h1:uoT2sRwsSQB84FBRGNDOdeY/g2EktD72ABv9Y1JJkA8=
 github.com/unxed/id3-go v0.1.1/go.mod h1:vscXqA1d+PD9t8WiqN8jaHZMDzvcqPbAvpie3QelMnQ=
 github.com/unxed/keytrans v0.1.32 h1:4Exy7S4q/4eGgiO1xmTeVbxLp+SdljSmctI6HjDUHaI=
