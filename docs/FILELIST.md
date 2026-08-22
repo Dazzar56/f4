@@ -566,7 +566,7 @@
     │       └── base
     │           └── hrd
     │               └── rgb
-    │                   └── fonokai.hrd
+    │                   └── radiola.hrd
     ├── docs
     │   ├── COLORS.md
     │   ├── CONSOLE_MODES.md
