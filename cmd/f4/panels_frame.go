@@ -3336,15 +3336,16 @@ func (pf *PanelsFrame) showDummyOpDialog() {
 	dlg.AddItem(btnStart)
 	dlg.AddItem(btnCancel)
 
-	vbox.Add(comboMode, vtui.Margins{Top: 1}, vtui.AlignCenter)
-
 	hbox := vtui.NewHBoxLayout(0, 0, 50-4, 1)
 	hbox.HorizontalAlign = vtui.AlignCenter
 	hbox.Spacing = 2
 	hbox.Add(btnStart, vtui.Margins{}, vtui.AlignTop)
 	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
 
+	// Keep the action row above the operation-mode selector. ComboBox.Open()
+	// places its popup below the field, so it cannot cover these buttons.
 	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Add(comboMode, vtui.Margins{Top: 1}, vtui.AlignCenter)
 	vbox.Apply()
 
 	// Set default focus to Start button

@@ -3353,12 +3353,16 @@ func TestLayout_F4InternalDialogs_Validity(t *testing.T) {
 		// We need to capture the dialog created by showDummyOpDialog.
 		// Since it pushes to the real FrameManager, we'll initialize it.
 		fm := vtui.FrameManager
-		fm.Init(vtui.NewSilentScreenBuf())
+		scr := vtui.NewSilentScreenBuf()
+		scr.AllocBuf(80, 25)
+		fm.Init(scr)
 
 		pf.showDummyOpDialog()
 		top := fm.GetTopFrame()
 		if dlg, ok := top.(vtui.Container); ok {
 			vtui.AssertLayout(t, dlg)
+			assertComboMenuDoesNotCoverButtons(t, dlg, "dummy operation")
+			fm.Pop()
 		} else {
 			t.Fatal("Top frame is not a container")
 		}
@@ -3481,6 +3485,7 @@ func TestLayout_F4ActionDialogs_Validity(t *testing.T) {
 		actionMkDir(pf)
 		dlg := fm.GetTopFrame().(vtui.Container)
 		vtui.AssertLayout(t, dlg)
+		assertComboMenuDoesNotCoverButtons(t, dlg, "make directory")
 		fm.Pop()
 	})
 
@@ -3489,6 +3494,7 @@ func TestLayout_F4ActionDialogs_Validity(t *testing.T) {
 		actionDelete(pf)
 		dlg := fm.GetTopFrame().(vtui.Container)
 		vtui.AssertLayout(t, dlg)
+		assertComboMenuDoesNotCoverButtons(t, dlg, "delete")
 		fm.Pop()
 	})
 	t.Run("FindFileDialog", func(t *testing.T) {

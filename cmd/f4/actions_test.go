@@ -777,6 +777,65 @@ func TestActionCopyMove_TrailingSlash(t *testing.T) {
 	top.SetExitCode(-1)
 	vtui.FrameManager.Pop()
 }
+
+func TestActionCopyMove_ModeMenuDoesNotCoverButtons(t *testing.T) {
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+	SetDefaultF4Palette()
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	src := pf.panels[0].(*FileSystemPanel)
+	src.vfs.SetPath(filepath.FromSlash("/src/dir"))
+	src.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "test.txt"}}}
+	src.SetCursorIndex(0)
+	pf.activeIdx = 0
+
+	actionCopyMove(pf, false)
+	dlg, ok := vtui.FrameManager.GetTopFrame().(vtui.Container)
+	if !ok {
+		t.Fatal("copy dialog not found on top")
+	}
+
+	assertComboMenuDoesNotCoverButtons(t, dlg, "copy")
+	vtui.FrameManager.Pop()
+}
+
+func assertComboMenuDoesNotCoverButtons(t *testing.T, dlg vtui.Container, name string) {
+	t.Helper()
+
+	var combo *vtui.ComboBox
+	var buttons []*vtui.Button
+	for _, item := range dlg.GetChildren() {
+		switch child := item.(type) {
+		case *vtui.ComboBox:
+			combo = child
+		case *vtui.Button:
+			buttons = append(buttons, child)
+		}
+	}
+	if combo == nil || len(buttons) != 2 {
+		t.Fatalf("%s dialog controls: combo=%v buttons=%d", name, combo != nil, len(buttons))
+	}
+
+	combo.Open()
+	menu, ok := vtui.FrameManager.GetTopFrame().(*vtui.VMenu)
+	if !ok {
+		t.Fatalf("%s menu was not opened", name)
+	}
+	mx1, my1, mx2, my2 := menu.GetPosition()
+	for _, button := range buttons {
+		bx1, by1, bx2, by2 := button.GetPosition()
+		if mx1 <= bx2 && bx1 <= mx2 && my1 <= by2 && by1 <= my2 {
+			t.Fatalf("%s menu (%d,%d)-(%d,%d) overlaps button (%d,%d)-(%d,%d)", name, mx1, my1, mx2, my2, bx1, by1, bx2, by2)
+		}
+	}
+
+	vtui.FrameManager.Pop()
+}
+
 func TestActionCopy_ShiftF5_Prefill(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	SetDefaultF4Palette()
@@ -2444,6 +2503,8 @@ func TestActionCreateLink_Flow(t *testing.T) {
 	if editDest == nil {
 		t.Fatal("Destination edit field not found in dialog")
 	}
+
+	assertComboMenuDoesNotCoverButtons(t, dlg, "link")
 
 	linkPath := filepath.Join(dstDir, "link.txt")
 	editDest.SetText(linkPath)
