@@ -659,10 +659,10 @@ type webDAVCachedReader struct {
 
 func (r *webDAVCachedReader) Size() int64 { return r.size }
 func (r *webDAVCachedReader) LocalPath() (string, bool) {
-	if r.File == nil || r.File.Name() == "" {
+	if r.File == nil || r.Name() == "" {
 		return "", false
 	}
-	return r.File.Name(), true
+	return r.Name(), true
 }
 func (r *webDAVCachedReader) Read(ctx context.Context, p []byte) (int, error) {
 	if err := ctx.Err(); err != nil {

@@ -411,7 +411,7 @@ func TestCancellationClosesAndPoisonsConnection(t *testing.T) {
 
 func TestClientSerializesWholeExchange(t *testing.T) {
 	clientConn, rawServer := net.Pipe()
-	serverConn := rawServer.(net.Conn)
+	serverConn := rawServer
 	client := New(clientConn)
 	serverDone := make(chan error, 1)
 	go func() {

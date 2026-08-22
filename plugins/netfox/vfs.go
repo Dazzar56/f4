@@ -280,7 +280,7 @@ func (b *bufferReadAtCloser) Read(ctx context.Context, p []byte) (int, error) {
 func (b *bufferReadAtCloser) ReadAt(ctx context.Context, p []byte, off int64) (int, error) {
 	return b.Reader.ReadAt(p, off)
 }
-func (b *bufferReadAtCloser) Size() int64 { return int64(b.Reader.Len()) }
+func (b *bufferReadAtCloser) Size() int64 { return int64(b.Len()) }
 
 func (v *NetFoxVFS) Open(ctx context.Context, p string) (vfs.ReadAtCloser, error) {
 	name := v.Base(p)

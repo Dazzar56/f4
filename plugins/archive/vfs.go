@@ -1427,9 +1427,10 @@ func (v *ArchiveVFS) CopyBulk(ctx context.Context, srcPaths []string, dstVfs vfs
 	if format == "" {
 		format = archive.DetectFormat(v.Base(v.arcPath))
 	}
-	if format == "zip" {
+	switch format {
+	case "zip":
 		return v.copyBulkZip(ctx, archiveFile, selectedMap, innerPath, dstVfs, dstDir, reporter)
-	} else if format == "tar" {
+	case "tar":
 		return v.copyBulkTar(ctx, archiveFile, selectedMap, innerPath, dstVfs, dstDir, reporter)
 	}
 	return v.copyBulkFallback(ctx, archiveFile, selectedMap, innerPath, dstVfs, dstDir, reporter)

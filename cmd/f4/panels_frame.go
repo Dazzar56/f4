@@ -4802,7 +4802,7 @@ func (pf *PanelsFrame) moveFolderHistory(fsp *FileSystemPanel, direction int) bo
 
 func expandPathEnv(s string) string {
 	s = expandEnvironmentVariables(s)
-	if s != "~" && !(len(s) > 1 && s[0] == '~' && (s[1] == '/' || s[1] == '\\')) {
+	if s != "~" && (len(s) <= 1 || s[0] != '~' || (s[1] != '/' && s[1] != '\\')) {
 		return s
 	}
 	home, err := os.UserHomeDir()

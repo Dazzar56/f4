@@ -239,9 +239,10 @@ func (ev *EditorView) ApplyEditorConfig() {
 
 			switch key {
 			case "indent_style":
-				if val == "space" {
+				switch val {
+				case "space":
 					ev.ExpandTabs = 1
-				} else if val == "tab" {
+				case "tab":
 					ev.ExpandTabs = 0
 				}
 			case "indent_size", "tab_width":
@@ -1768,11 +1769,12 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 		if e.Type == vtinput.KeyEventType && e.KeyDown {
 			if e.Char != 0 {
 				// Handle system line breaks inside the paste
-				if e.Char == '\r' {
+				switch e.Char {
+				case '\r':
 					// Ignore \r to prevent double line breaks
-				} else if e.Char == '\n' {
+				case '\n':
 					ev.pasteBuffer = append(ev.pasteBuffer, '\n')
-				} else {
+				default:
 					ev.pasteBuffer = append(ev.pasteBuffer, e.Char)
 				}
 			} else if e.VirtualKeyCode == vtinput.VK_RETURN {
@@ -1811,7 +1813,8 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 
 	// --- Autocomplete Interception ---
 	if ev.acEnabled && len(ev.acMatches) > 0 {
-		if e.VirtualKeyCode == vtinput.VK_TAB {
+		switch e.VirtualKeyCode {
+		case vtinput.VK_TAB:
 			if (e.ControlKeyState & vtinput.ShiftPressed) != 0 {
 				// Shift+Tab: cycle matches
 				ev.acCurrentIdx = (ev.acCurrentIdx + 1) % len(ev.acMatches)
@@ -1840,7 +1843,7 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 				ev.ensureCursorVisible()
 				return true
 			}
-		} else if e.VirtualKeyCode == vtinput.VK_ESCAPE {
+		case vtinput.VK_ESCAPE:
 			// Esc: Dismiss autocomplete
 			ev.acMatches = nil
 			vtui.FrameManager.Redraw()
@@ -2430,7 +2433,7 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 		}
 	}
 
-	if e.Char != 0 && ctrl == false {
+	if e.Char != 0 && !ctrl {
 		ev.noteBufferEdit()
 		ev.saveUndo(opTyping)
 		if ev.selActive || ev.rectSelActive {
@@ -2886,7 +2889,8 @@ func (ev *EditorView) ProcessMouse(e *vtinput.InputEvent) bool {
 		return true
 	}
 
-	if e.ButtonState == vtinput.FromLeft1stButtonPressed {
+	switch e.ButtonState {
+	case vtinput.FromLeft1stButtonPressed:
 		mx, my := int(e.MouseX), int(e.MouseY)
 		if mx >= ev.X1 && mx <= ev.X2 && my >= ev.Y1+1 && my <= ev.Y2 {
 			visualCol := mx - ev.X1 + ev.ScrollLeft
@@ -2919,7 +2923,7 @@ func (ev *EditorView) ProcessMouse(e *vtinput.InputEvent) bool {
 			vtui.FrameManager.Redraw()
 			return true
 		}
-	} else if e.ButtonState == vtinput.RightmostButtonPressed {
+	case vtinput.RightmostButtonPressed:
 		mx, my := int(e.MouseX), int(e.MouseY)
 		if mx >= ev.X1 && mx <= ev.X2 && my >= ev.Y1+1 && my <= ev.Y2 {
 			visualCol := mx - ev.X1 + ev.ScrollLeft
@@ -2947,7 +2951,7 @@ func (ev *EditorView) ProcessMouse(e *vtinput.InputEvent) bool {
 			vtui.FrameManager.Redraw()
 			return true
 		}
-	} else if e.ButtonState == 0 {
+	case 0:
 		if ev.selActive && ev.selAnchorOffset == ev.li.GetLineOffset(ev.CursorLine)+ev.CursorPos {
 			ev.selActive = false
 			vtui.FrameManager.Redraw()
@@ -3270,7 +3274,7 @@ func (ev *EditorView) StartIndexing() {
 
 		if indexer, ok := ev.vfs.(vfs.LineIndexer); ok && ev.Codepage == 65001 {
 			vtui.DebugLog("EDITOR_INDEX: Using remote LineIndexer")
-			var currentLine int64 = int64(li.LineCount() + 1)
+			var currentLine = int64(li.LineCount() + 1)
 			remoteLineStart := int64(li.GetLineOffset(li.LineCount() - 1))
 			const batchSize = 100000
 			remoteSuccess := true
@@ -3721,11 +3725,12 @@ func (ev *EditorView) Replace(pattern, replacement string, caseSensitive, revers
 		}
 		var escapedRepl strings.Builder
 		for _, b := range repBytes {
-			if b == '$' {
+			switch b {
+			case '$':
 				escapedRepl.WriteString("$$")
-			} else if b == '\\' {
+			case '\\':
 				escapedRepl.WriteString("\\\\")
-			} else {
+			default:
 				escapedRepl.WriteByte(b)
 			}
 		}
@@ -5879,7 +5884,7 @@ func parseHexPatternToRegex(pattern string) (string, error) {
 			if err != nil {
 				return "", fmt.Errorf("invalid hex token: %s", t)
 			}
-			re.WriteString(fmt.Sprintf("\\x%02x", b[0]))
+			fmt.Fprintf(&re, "\\x%02x", b[0])
 		}
 	}
 	return re.String(), nil
@@ -6058,7 +6063,7 @@ func (ev *EditorView) updateAutocomplete() {
 	prefixStart := len(runes)
 	for i := len(runes) - 1; i >= 0; i-- {
 		r := runes[i]
-		if !(unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '-') {
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_' && r != '-' {
 			break
 		}
 		prefixStart = i

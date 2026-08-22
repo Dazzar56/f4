@@ -216,7 +216,8 @@ func aiShowPatchResult(pf *PanelsFrame, root string, dry bool, exitCode int, out
 			attachReportIdx = currIdx
 		}
 
-		if code == viewLogIdx {
+		switch code {
+		case viewLogIdx:
 			dir, err := os.MkdirTemp("", "vtvibe-ap-log-")
 			if err == nil {
 				logPath := filepath.Join(dir, "ap_output.log")
@@ -225,7 +226,7 @@ func aiShowPatchResult(pf *PanelsFrame, root string, dry bool, exitCode int, out
 					actionOpenViewer(pf, tempVfs, "ap_output.log")
 				}
 			}
-		} else if code == attachReportIdx {
+		case attachReportIdx:
 			aiAttachFailureReport(reportPath)
 		}
 	}

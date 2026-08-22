@@ -747,7 +747,8 @@ func (tv *TerminalView) EraseDisplay(mode int, attr uint64) {
 	}
 
 	buf := tv.getBuffer()
-	if mode == 2 {
+	switch mode {
+	case 2:
 		tv.CursorX = 0
 		tv.CursorY = 0
 		tv.lastCharWasCR = true
@@ -757,7 +758,7 @@ func (tv *TerminalView) EraseDisplay(mode int, attr uint64) {
 				buf[i][j] = vtui.CharInfo{Char: ' ', Attributes: attr}
 			}
 		}
-	} else if mode == 0 {
+	case 0:
 		if tv.CursorY >= 0 && tv.CursorY < tv.Height {
 			line := buf[tv.CursorY]
 			for j := (tv.CursorX); j < len(line); j++ {
@@ -796,9 +797,10 @@ func (tv *TerminalView) EraseLine(mode int, attr uint64) {
 	}
 	line := buf[tv.CursorY]
 	start, end := 0, len(line)
-	if mode == 0 {
+	switch mode {
+	case 0:
 		start = tv.CursorX
-	} else if mode == 1 {
+	case 1:
 		end = tv.CursorX + 1
 	}
 	for j := start; j < end; j++ {

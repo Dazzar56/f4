@@ -9,9 +9,10 @@ import (
 
 func sharedTIFFValueFixture(tag, typ uint16, valueCount uint32, entries int, value uint32) []byte {
 	unit := 4
-	if typ == 1 {
+	switch typ {
+	case 1:
 		unit = 1
-	} else if typ == 3 {
+	case 3:
 		unit = 2
 	}
 	ifdSize := 2 + entries*12 + 4

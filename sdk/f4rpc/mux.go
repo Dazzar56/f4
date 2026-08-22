@@ -106,7 +106,8 @@ func (s *Session) Serve() error {
 			return fmt.Errorf("decode error: %w", err)
 		}
 
-		if msg.Type == 1 { // Response
+		switch msg.Type {
+		case 1: // Response
 			s.mu.Lock()
 			ch, ok := s.pending[msg.ID]
 			if ok {
@@ -116,7 +117,7 @@ func (s *Session) Serve() error {
 			if ok {
 				ch <- &msg
 			}
-		} else if msg.Type == 0 { // Request
+		case 0: // Request
 			go s.handleRequest(&msg)
 		}
 	}

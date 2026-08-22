@@ -86,7 +86,7 @@ func fixedPanelViewChecked(index int, mode ViewMode) bool {
 	if mode == ViewModeWide {
 		return pf.wide && pf.widePanel == index
 	}
-	return !(pf.wide && pf.widePanel == index) && fsp.viewMode == mode
+	return (!pf.wide || pf.widePanel != index) && fsp.viewMode == mode
 }
 
 func fixedPanelSortChecked(index int, mode SortMode) bool {

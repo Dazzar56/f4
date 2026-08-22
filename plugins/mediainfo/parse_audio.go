@@ -58,9 +58,10 @@ func decodeMPEGHeader(b []byte) (mpegHeader, bool) {
 		}
 	}
 	base := []int{44100, 48000, 32000}[srIndex]
-	if version == "2" {
+	switch version {
+	case "2":
 		base /= 2
-	} else if version == "2.5" {
+	case "2.5":
 		base /= 4
 	}
 	bitRate := brs[brIndex] * 1000

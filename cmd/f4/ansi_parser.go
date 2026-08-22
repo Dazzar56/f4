@@ -218,23 +218,25 @@ func (p *AnsiParser) Process(data []byte) {
 				p.State = StateGround
 			}
 		case StateOSC:
-			if b == 0x07 { // BEL
+			switch b {
+			case 0x07: // BEL
 				p.handleOSC()
 				p.State = StateGround
-			} else if b == 0x1b { // ESC
+			case 0x1b: // ESC
 				p.handleOSC()
 				p.State = StateEsc
-			} else {
+			default:
 				p.CurParam.WriteByte(b)
 			}
 		case StateAPC:
-			if b == 0x07 { // BEL
+			switch b {
+			case 0x07: // BEL
 				p.handleAPC()
 				p.State = StateGround
-			} else if b == 0x1b { // ESC
+			case 0x1b: // ESC
 				p.handleAPC()
 				p.State = StateEsc
-			} else {
+			default:
 				p.CurParam.WriteByte(b)
 			}
 		}
@@ -321,13 +323,14 @@ func (p *AnsiParser) handleCSI(cmd byte) {
 	case 't':
 		if len(args) > 0 && p.pty != nil {
 			cw, ch := p.term.CellSize()
-			if args[0] == 18 {
+			switch args[0] {
+			case 18:
 				resp := fmt.Sprintf("\x1b[8;%d;%dt", p.term.Height, p.term.Width)
 				p.pty.Write([]byte(resp))
-			} else if args[0] == 14 {
+			case 14:
 				resp := fmt.Sprintf("\x1b[4;%d;%dt", p.term.Height*ch, p.term.Width*cw)
 				p.pty.Write([]byte(resp))
-			} else if args[0] == 16 {
+			case 16:
 				resp := fmt.Sprintf("\x1b[6;%d;%dt", ch, cw)
 				p.pty.Write([]byte(resp))
 			}
@@ -446,11 +449,12 @@ func (p *AnsiParser) handleCSI(cmd byte) {
 		p.term.SetCursor(p.term.CursorX, row-1)
 	case 'n': // DSR - Device Status Report
 		if len(args) > 0 {
-			if args[0] == 5 {
+			switch args[0] {
+			case 5:
 				if p.pty != nil {
 					p.pty.Write([]byte("\x1b[0n"))
 				}
-			} else if args[0] == 6 {
+			case 6:
 				if p.pty != nil {
 					resp := fmt.Sprintf("\x1b[%d;%dR", p.term.CursorY+1, p.term.CursorX+1)
 					p.pty.Write([]byte(resp))
@@ -474,11 +478,12 @@ func (p *AnsiParser) handleCSI(cmd byte) {
 			if len(p.Params) > 1 {
 				mode, _ = strconv.Atoi(p.Params[1])
 			}
-			if mode == 1 {
+			switch mode {
+			case 1:
 				p.term.KittyFlags = flags
-			} else if mode == 2 {
+			case 2:
 				p.term.KittyFlags |= flags
-			} else if mode == 3 {
+			case 3:
 				p.term.KittyFlags &= ^flags
 			}
 		} else if strings.HasPrefix(s0, ">") {
@@ -629,7 +634,8 @@ func (p *AnsiParser) handleOSC() {
 						if allowed {
 							clip := vtui.GetClipboard()
 							b64 := base64.StdEncoding.EncodeToString([]byte(clip))
-							p.pty.Write([]byte(fmt.Sprintf("\x1b]52;%s;%s\x07", subCmd, b64)))
+							// Best effort: a dead pty is reported by the read side.
+							_, _ = fmt.Fprintf(p.pty, "\x1b]52;%s;%s\x07", subCmd, b64)
 						}
 					}(subparts[0])
 				}

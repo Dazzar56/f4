@@ -403,10 +403,10 @@ type googleCachedReader struct {
 
 func (r *googleCachedReader) Size() int64 { return r.size }
 func (r *googleCachedReader) LocalPath() (string, bool) {
-	if r == nil || r.File == nil || r.File.Name() == "" {
+	if r == nil || r.File == nil || r.Name() == "" {
 		return "", false
 	}
-	return r.File.Name(), true
+	return r.Name(), true
 }
 func (r *googleCachedReader) ReadAt(ctx context.Context, p []byte, off int64) (int, error) {
 	if err := ctx.Err(); err != nil {
@@ -1786,7 +1786,7 @@ func (b *googleDriveBackend) Open(ctx context.Context, location string) (vfs.Rea
 		return nil, err
 	}
 	b.cacheGoogleFile(location, file, b.Dir(location))
-	etag := strongETag(file.ServerResponse.Header.Get("ETag"))
+	etag := strongETag(file.Header.Get("ETag"))
 	fingerprint := googleDownloadFingerprint(file, etag, "")
 	if cached, ok := downloads.open(file.Id, fingerprint); ok {
 		return cached, nil

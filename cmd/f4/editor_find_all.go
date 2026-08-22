@@ -176,7 +176,7 @@ func (f *findAllFrame) Show(scr *vtui.ScreenBuf) {
 	defer f.ev.guardMapping("listing occurrences")()
 
 	f.VMenu.Show(scr) // box, title and scrollbar; Items is empty, so no rows
-	x1, y1, x2, y2 := f.VMenu.GetPosition()
+	x1, y1, x2, y2 := f.GetPosition()
 	p := vtui.NewPainter(scr)
 	if f.bottomHint != "" {
 		p.DrawTitle(x1, y2, x2, f.bottomHint, vtui.Palette[vtui.ColMenuTitle])
@@ -259,7 +259,7 @@ func (f *findAllFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 		return true
 	}
 	if (e.MouseEventFlags & vtinput.MouseMoved) != 0 {
-		x1, _, x2, _ := f.VMenu.GetPosition()
+		x1, _, x2, _ := f.GetPosition()
 		if mx := int(e.MouseX); mx <= x1 || mx >= x2 {
 			return false
 		}
@@ -303,7 +303,7 @@ func (f *findAllFrame) ResizeConsole(w, h int) {
 	if f.zoomed {
 		r = zoomRect(w, h)
 	} else {
-		x1, y1, x2, y2 := f.VMenu.GetPosition()
+		x1, y1, x2, y2 := f.GetPosition()
 		r = clampMenuRect([4]int{x1, y1, x2, y2}, w, h)
 	}
 	f.SetPosition(r[0], r[1], r[2], r[3])
@@ -799,7 +799,7 @@ func (ev *EditorView) showFindAllMenu(pattern string, spans []matchSpan, uniqueL
 				scrH := vtui.FrameManager.GetScreenHeight()
 				var r [4]int
 				if !frame.zoomed {
-					fx1, fy1, fx2, fy2 := frame.VMenu.GetPosition()
+					fx1, fy1, fx2, fy2 := frame.GetPosition()
 					frame.normalRect = [4]int{fx1, fy1, fx2, fy2}
 					r = zoomRect(scrW, scrH)
 					frame.zoomed = true

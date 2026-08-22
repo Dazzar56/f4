@@ -226,9 +226,7 @@ func normalizeYandexPath(raw string) (string, error) {
 		cleaned := path.Clean("/" + strings.TrimPrefix(raw, "app:/"))
 		return "app:" + cleaned, nil
 	}
-	if strings.HasPrefix(raw, "disk:/") {
-		raw = strings.TrimPrefix(raw, "disk:/")
-	}
+	raw = strings.TrimPrefix(raw, "disk:/")
 	cleaned := path.Clean("/" + strings.TrimPrefix(raw, "/"))
 	if cleaned == "/" {
 		return "disk:/", nil

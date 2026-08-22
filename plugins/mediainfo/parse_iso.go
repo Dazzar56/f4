@@ -52,7 +52,8 @@ func readISOBox(p *probe, pos, end int64) (isoBox, error) {
 	sz := int64(binary.BigEndian.Uint32(h[:4]))
 	header := int64(8)
 	typ := string(h[4:8])
-	if sz == 1 {
+	switch sz {
+	case 1:
 		b, e := p.readAt(pos+8, 8)
 		if e != nil {
 			return isoBox{}, e
@@ -63,7 +64,7 @@ func readISOBox(p *probe, pos, end int64) (isoBox, error) {
 		}
 		sz = int64(u)
 		header = 16
-	} else if sz == 0 {
+	case 0:
 		sz = end - pos
 	}
 	if sz < header || sz > end-pos {

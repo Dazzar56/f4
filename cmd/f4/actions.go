@@ -1005,12 +1005,13 @@ func actionOpenViewer(pf *PanelsFrame, v vfs.VFS, path string) {
 			// dialog, render on the neutral dialog palette. See #379.
 			dlg := vtui.ShowMessageEx(Msg("FileOp.AlreadyViewedTitle"), fmt.Sprintf(Msg("FileOp.AlreadyViewed"), vtui.TruncateMiddle(v.Base(path), 40)), []string{Msg("FileOp.BtnCurrent"), Msg("FileOp.BtnReload"), Msg("FileOp.BtnNewInstance"), Msg("vtui.Cancel")}, vtui.MessageInfo)
 			dlg.OnResult = func(res int) {
-				if res == 0 {
+				switch res {
+				case 0:
 					vtui.FrameManager.SwitchScreen(screenIdx)
-				} else if res == 1 { // Reload
+				case 1: // Reload
 					existingViewer.Close()
 					openViewerInternal(pf, v, path)
-				} else if res == 2 { // New instance
+				case 2: // New instance
 					openViewerInternal(pf, v, path)
 				}
 			}
@@ -1772,8 +1773,7 @@ func actionCalcDirSize(pf *PanelsFrame, fsp *FileSystemPanel, idx int) {
 	}
 	basePath := fsp.vfs.GetPath()
 
-	var targetPath string
-	targetPath = fsp.vfs.Join(basePath, name)
+	var targetPath = fsp.vfs.Join(basePath, name)
 
 	opDlg := NewFileOpProgressDialog(" Calculating Size... ")
 	var taskCtx *vtui.TaskContext
@@ -2480,7 +2480,7 @@ func actionDeleteWithDisposition(pf *PanelsFrame, disposition vfs.DeleteDisposit
 		buttonKey = "Trash.Btn"
 	}
 
-	if AppConfig.ConfirmDelete == false {
+	if !AppConfig.ConfirmDelete {
 		fsp.pendingSelection = fsp.GetSuccessorName()
 		go ExecuteDeleteOpWithDispositionAt(pf, activeVfs, basePath, names, AppConfig.DefaultFileOpMode, disposition, pf.RefreshAll)
 		return

@@ -48,9 +48,10 @@ func (plugin *Plugin) configure(app vfs.App) {
 	language := vtui.NewComboBox(x+labelWidth, y, width-labelWidth-4, languages)
 	language.DropdownOnly = true
 	selectedLanguage := 0
-	if settings.Language == "en" {
+	switch settings.Language {
+	case "en":
 		selectedLanguage = 1
-	} else if settings.Language == "ru" {
+	case "ru":
 		selectedLanguage = 2
 	}
 	language.Menu.SetSelectPos(selectedLanguage)
