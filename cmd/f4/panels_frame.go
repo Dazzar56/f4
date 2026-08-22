@@ -324,7 +324,7 @@ type PanelsFrame struct {
 	// Terminal mouse-selection state. Kept in PanelsFrame because
 	// mouse routing lives here; the highlight and text extraction
 	// live on the TerminalView itself.
-	termSelDragging bool      // LMB is down after a drag-initiating click
+	termSelDragging bool      // LMB gesture is waiting for its release
 	termSelClickN   int       // 1 / 2 / 3 for triple-click detection
 	termSelClickAt  time.Time // time of the last click
 	termSelClickX   int
@@ -2508,10 +2508,10 @@ func (pf *PanelsFrame) handleTerminalMouseSelection(e *vtinput.InputEvent) bool 
 			pf.termSelDragging = true
 		case 2:
 			tv.SelectWordAt(mx, my)
-			pf.termSelDragging = false
+			pf.termSelDragging = true
 		default: // 3 or more
 			tv.SelectLineAt(my)
-			pf.termSelDragging = false
+			pf.termSelDragging = true
 			pf.termSelClickN = 0
 		}
 		vtui.FrameManager.Redraw()
@@ -2550,7 +2550,7 @@ func (pf *PanelsFrame) handleTerminalMouseSelection(e *vtinput.InputEvent) bool 
 			if text != "" {
 				// SetClipboard can hang for seconds behind far2l IPC
 				// or xclip/wl-copy — same treatment as the grabber.
-				go vtui.SetClipboard(text)
+				go tv.copySelectionToClipboard(text)
 			}
 		}
 		vtui.FrameManager.Redraw()

@@ -125,6 +125,17 @@ func (tv *TerminalView) writeClipboard(text string) {
 	}
 }
 
+// copySelectionToClipboard keeps terminal selection copies on the regular
+// vtui clipboard path while allowing tests to intercept the write without
+// touching the host clipboard.
+func (tv *TerminalView) copySelectionToClipboard(text string) {
+	if tv.clipboardWriter != nil {
+		tv.clipboardWriter(text)
+		return
+	}
+	vtui.SetClipboard(text)
+}
+
 func (tv *TerminalView) CloneStateFrom(other *TerminalView) {
 	other.FlushLog()
 	other.mu.Lock()

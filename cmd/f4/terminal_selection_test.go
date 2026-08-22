@@ -2,6 +2,7 @@ package main
 
 import (
 	"testing"
+	"time"
 
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
@@ -257,6 +258,87 @@ func TestPanelsFrame_TerminalMouseSelect_Drag(t *testing.T) {
 	}
 	if got := tv.ExtractSelection(); got != "llo w" {
 		t.Errorf("post-release extract: got %q, want %q", got, "llo w")
+	}
+}
+
+func TestPanelsFrame_TerminalMouseSelect_ShiftDoubleClickCopiesWord(t *testing.T) {
+	pf, _ := panelsFrameWithMouseSelect(t)
+	tv := pf.termView
+	seedRow(tv, 0, "foo bar baz")
+
+	// Model the second press of a Shift+double-click. The frame's click
+	// counter has already seen the first press, while the terminal backend
+	// reports the modifier and double-click flag on this press.
+	pf.termSelClickN = 1
+	pf.termSelClickAt = time.Now()
+	pf.termSelClickX, pf.termSelClickY = 5, 0
+	copied := make(chan string, 1)
+	tv.clipboardWriter = func(text string) { copied <- text }
+
+	pf.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: true,
+		ButtonState:     vtinput.FromLeft1stButtonPressed,
+		ControlKeyState: vtinput.ShiftPressed,
+		MouseEventFlags: vtinput.DoubleClick,
+		MouseX:          5, MouseY: 0,
+	})
+	if !pf.termSelDragging {
+		t.Fatal("double-click selection must remain active until button release")
+	}
+
+	pf.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: false,
+		ButtonState: 0, ControlKeyState: vtinput.ShiftPressed,
+		MouseX: 5, MouseY: 0,
+	})
+
+	select {
+	case got := <-copied:
+		if got != "bar" {
+			t.Fatalf("copied word = %q, want %q", got, "bar")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Shift+double-click did not copy the selected word")
+	}
+}
+
+func TestPanelsFrame_TerminalMouseSelect_ShiftTripleClickCopiesLine(t *testing.T) {
+	pf, _ := panelsFrameWithMouseSelect(t)
+	tv := pf.termView
+	seedRow(tv, 0, "foo bar baz")
+
+	// Model the third press of a Shift+triple-click after the first two
+	// presses have established the click sequence.
+	pf.termSelClickN = 2
+	pf.termSelClickAt = time.Now()
+	pf.termSelClickX, pf.termSelClickY = 5, 0
+	copied := make(chan string, 1)
+	tv.clipboardWriter = func(text string) { copied <- text }
+
+	pf.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: true,
+		ButtonState:     vtinput.FromLeft1stButtonPressed,
+		ControlKeyState: vtinput.ShiftPressed,
+		MouseEventFlags: vtui.TripleClick,
+		MouseX:          5, MouseY: 0,
+	})
+	if !pf.termSelDragging {
+		t.Fatal("triple-click selection must remain active until button release")
+	}
+
+	pf.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: false,
+		ButtonState: 0, ControlKeyState: vtinput.ShiftPressed,
+		MouseX: 5, MouseY: 0,
+	})
+
+	select {
+	case got := <-copied:
+		if got != "foo bar baz" {
+			t.Fatalf("copied line = %q, want %q", got, "foo bar baz")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Shift+triple-click did not copy the selected line")
 	}
 }
 
