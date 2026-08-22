@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"sync"
+	"sync/atomic"
 
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/tar"
@@ -790,12 +791,12 @@ func TestArchiveVFSCopyBulk_ConcurrentQueue(t *testing.T) {
 }
 
 type mockTickerReporter struct {
-	calls int
+	calls atomic.Int32
 }
 
 func (m *mockTickerReporter) UpdateScan(string, int64, int64) {}
 func (m *mockTickerReporter) UpdateTransfer(action, filename string, currentPct int, totalText string, totalPct int, speedText string) {
-	m.calls++
+	m.calls.Add(1)
 }
 func (m *mockTickerReporter) IsCancelled() bool { return false }
 
@@ -818,7 +819,7 @@ func TestIssue149_TimeTicksDuringBlockingIO(t *testing.T) {
 	close(done)
 
 	// The ticker runs every 250ms. In 1.2 seconds, it should tick at least 4 times.
-	if rep.calls < 4 {
-		t.Errorf("Expected progress ticker to fire at least 4 times during blocking I/O, but got %d", rep.calls)
+	if calls := rep.calls.Load(); calls < 4 {
+		t.Errorf("Expected progress ticker to fire at least 4 times during blocking I/O, but got %d", calls)
 	}
 }
