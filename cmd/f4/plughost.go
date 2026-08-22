@@ -61,6 +61,10 @@ func startPluginSession(sess *f4rpc.Session, api vfs.HostAPI, name string, bridg
 		registrations.Unregister()
 		return nil, err
 	}
+	if err := registerRPCPluginPanels(api, sess, name, res.Panels, registrations); err != nil {
+		registrations.Unregister()
+		return nil, err
+	}
 	for _, drive := range res.Drives {
 		driveName := drive // closure capture
 		api.RegisterDrive(driveName, func() vfs.VFS {
