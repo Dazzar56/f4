@@ -58,19 +58,15 @@ type visualCluster struct {
 func logicalTextClusters(text string) []visualCluster {
 	base := VisualClusters(text)
 	logical := make([]visualCluster, 0, len(base))
-	runeIndex := 0
 	for _, cluster := range base {
-		clusterText := cluster.Text
-		clusterRunes := utf8.RuneCountInString(clusterText)
 		logical = append(logical, visualCluster{
-			text:       clusterText,
+			text:       cluster.Text,
 			width:      cluster.Width,
 			byteStart:  cluster.Start,
 			byteEnd:    cluster.End,
-			logicalPos: runeIndex,
-			logicalEnd: runeIndex + clusterRunes,
+			logicalPos: cluster.RuneStart,
+			logicalEnd: cluster.RuneEnd,
 		})
-		runeIndex += clusterRunes
 	}
 	return logical
 }
@@ -103,6 +99,24 @@ func visualClusters(text string) []visualCluster {
 		index++
 	})
 	return visual
+}
+
+// VisualClustersInVisualOrder returns grapheme clusters in terminal order.
+// zoin-bot uses this shared mapping for editor painting and hit testing.
+func VisualClustersInVisualOrder(text string) []VisualCluster {
+	clusters := visualClusters(text)
+	result := make([]VisualCluster, 0, len(clusters))
+	for _, cluster := range clusters {
+		result = append(result, VisualCluster{
+			Text:      cluster.text,
+			Width:     cluster.width,
+			Start:     cluster.byteStart,
+			End:       cluster.byteEnd,
+			RuneStart: cluster.logicalPos,
+			RuneEnd:   cluster.logicalEnd,
+		})
+	}
+	return result
 }
 
 func byteOffsetAtRune(text string, runeIndex int) int {
