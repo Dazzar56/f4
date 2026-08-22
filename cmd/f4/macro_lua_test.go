@@ -22,6 +22,7 @@ type fakeMacroHost struct {
 	cmdLine    string
 	width      int
 	height     int
+	title      string
 	injected   []*vtinput.InputEvent
 	messages   []string
 	logs       []string
@@ -34,6 +35,7 @@ func newFakeMacroHost() *fakeMacroHost {
 		panels: map[bool]MacroPanelInfo{},
 		width:  80,
 		height: 25,
+		title:  "f4-test",
 	}
 }
 
@@ -57,6 +59,7 @@ func (h *fakeMacroHost) CommandLine() string {
 
 func (h *fakeMacroHost) ScreenSize() (int, int) { return h.width, h.height }
 func (h *fakeMacroHost) Version() string        { return "f4-test" }
+func (h *fakeMacroHost) WindowTitle() string    { return h.title }
 
 func (h *fakeMacroHost) Message(title, text string) {
 	h.mu.Lock()
@@ -458,6 +461,23 @@ func TestMacroStringHelpers(t *testing.T) {
 		if got != tc.want {
 			t.Errorf("%s = %q, want %q", tc.expression, got, tc.want)
 		}
+	}
+}
+
+func TestMacroFarTitleReportsCurrentWindowTitle(t *testing.T) {
+	host := newFakeMacroHost()
+	host.title = "f4 | Panels | Linux ARM64"
+	engine := newTestMacroEngine(t, host, `
+		Macro { area = "Shell"; key = "CtrlT"; action = function()
+			__title = Far.Title
+		end }
+	`)
+
+	if !fireMacro(t, engine, "CtrlT") {
+		t.Fatal("title macro trigger was not consumed")
+	}
+	if got := lua.LVAsString(macroGlobals(t, engine, "__title")["__title"]); got != host.title {
+		t.Fatalf("Far.Title = %q, want %q", got, host.title)
 	}
 }
 

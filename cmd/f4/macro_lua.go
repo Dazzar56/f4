@@ -53,6 +53,7 @@ type MacroHost interface {
 	CommandLine() string
 	ScreenSize() (width, height int)
 	Version() string
+	WindowTitle() string
 	Message(title, text string)
 	InjectKeys(keys []*vtinput.InputEvent)
 	Log(format string, args ...any)

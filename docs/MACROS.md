@@ -114,7 +114,8 @@ the first or last entry.
 
 **`CmdLine`** — `Value`, `Size`, `Empty`.
 
-**`Far`** — `Width`, `Height`, `Version`, `Title`.
+**`Far`** — `Width`, `Height`, `Version`, `Title`. `Title` is the exact
+current f4 window title, including the configured `ConsoleTitleTemplate`.
 
 Fields f4 does not implement read as `nil` rather than raising an error, so a
 ported macro fails where it uses the missing thing, not on the line before.
@@ -128,6 +129,10 @@ macro is bound to several keys.
 whether it fired. Everything f4 can do interactively — every menu item and
 every hotkey — is a registered action, so this is the macro doorway to all of
 it. Action names are listed in the Hotkey Configurator.
+
+For debugging, `App.CopyWindowTitle` copies the current window title to the
+clipboard; its default shortcut is `Ctrl+Alt+Shift+T`. A Lua macro can read the
+same value through `Far.Title`.
 
 `exit()` ends the macro. Keys queued before it are still sent.
 
