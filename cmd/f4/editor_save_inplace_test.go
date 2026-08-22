@@ -149,3 +149,33 @@ func TestEditorSave_InsertionStillStages(t *testing.T) {
 	}
 	assertNoEditorTempSiblings(t, path)
 }
+
+func TestEditorSave_ShrinkingEditStillTruncates(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	drainPendingTasks()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "shrunk.txt")
+	if err := os.WriteFile(path, []byte("aGVsbG8gd29ybGQ=\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	ev := openLocalEditor(t, dir, path)
+	defer ev.Close()
+
+	selectEditorBytes(ev, len("aGVsbG8gd29ybGQ=\n"))
+	if err := ev.transformBase64Selection(false); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	ev.SaveToFile(nil)
+	waitEditorSave(t, ev)
+	drainPendingTasks()
+
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "hello world" {
+		t.Errorf("content = %q, want %q", got, "hello world")
+	}
+}
