@@ -788,7 +788,9 @@ func TestActionCopyMove_ModeMenuDoesNotCoverButtons(t *testing.T) {
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 	src := pf.panels[0].(*FileSystemPanel)
-	src.vfs.SetPath(filepath.FromSlash("/src/dir"))
+	if err := src.vfs.SetPath(t.TempDir()); err != nil {
+		t.Fatalf("set source path: %v", err)
+	}
 	src.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "test.txt"}}}
 	src.SetCursorIndex(0)
 	pf.activeIdx = 0
