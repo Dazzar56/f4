@@ -2,6 +2,7 @@ package vfs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -666,6 +667,18 @@ type FindQuery struct {
 	Text string
 	// IgnoreCase folds case for Text.
 	IgnoreCase bool
+	// WholeWords requires a text match to be delimited by non-word runes.
+	WholeWords bool
+	// Regex treats Text as a Go regular expression instead of a literal.
+	Regex bool
+	// NotContaining inverts the content match. It has no effect when Text is empty.
+	NotContaining bool
+	// FindFolders includes matching directories in the result set. Directories
+	// are still traversed when this is false.
+	FindFolders bool
+	// FindSymlinks includes symlinks as leaves and never follows them into a
+	// directory. This prevents a symlink loop from making a search unbounded.
+	FindSymlinks bool
 	// Limit caps the number of hits; zero leaves it to the file system.
 	Limit int
 	// Progress, when non-nil, is called periodically while the search
@@ -697,6 +710,11 @@ type FindProgress struct {
 type FileFinder interface {
 	FindFiles(ctx context.Context, dir string, q FindQuery) ([]FoundEntry, error)
 }
+
+// ErrFindOptionsUnsupported tells a caller that a server-side finder cannot
+// express the requested query. The caller can then fall back to the generic
+// VFS walk without treating a capability gap as a failed search.
+var ErrFindOptionsUnsupported = errors.New("find options are not supported by this file system")
 
 // PtyShellIntegration is an optional interface for a VFS that owns a
 // remote PTY. It lets the VFS compose the exact bytes to send for the

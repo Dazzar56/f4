@@ -892,10 +892,18 @@ func (v *FishVFS) Search(ctx context.Context, p, pattern string) (chan int64, er
 // A symlink is reported as found without resolving it: the alternative is a
 // round trip per hit, which would give back what the whole command saves.
 func (v *FishVFS) FindFiles(ctx context.Context, dir string, q vfs.FindQuery) ([]vfs.FoundEntry, error) {
+	// The ffind wire command can grep fixed strings or regular expressions,
+	// but it cannot express the richer local semantics without changing the
+	// helper protocol (folders, symlink leaves, whole words, and inverted
+	// matches). Let the caller fall back to the normal VFS walk for those
+	// queries instead of silently returning a different result set.
+	if q.WholeWords || q.NotContaining || q.FindFolders || q.FindSymlinks {
+		return nil, vfs.ErrFindOptionsUnsupported
+	}
 	opts := fishplus.FindOptions{
 		Masks:      q.Masks,
 		Text:       q.Text,
-		Fixed:      true,
+		Fixed:      !q.Regex,
 		IgnoreCase: q.IgnoreCase,
 		Limit:      q.Limit,
 	}

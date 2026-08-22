@@ -746,6 +746,12 @@ func LoadSession() {
 
 	LastFindFileMask = ini.GetString("FindFile", "Mask", "*")
 	LastFindFileText = ini.GetString("FindFile", "Text", "")
+	LastFindFileCaseSensitive = ini.GetString("FindFile", "CaseSensitive", "0") == "1"
+	LastFindFileWholeWords = ini.GetString("FindFile", "WholeWords", "0") == "1"
+	LastFindFileRegexp = ini.GetString("FindFile", "Regexp", "0") == "1"
+	LastFindFileNotContaining = ini.GetString("FindFile", "NotContaining", "0") == "1"
+	LastFindFileFolders = ini.GetString("FindFile", "Folders", "0") == "1"
+	LastFindFileSymlinks = ini.GetString("FindFile", "Symlinks", "0") == "1"
 
 	// Восстанавливаем состояние левой панели
 	LastLeftPath = ini.GetString("Panel/Left", "Folder", "")
@@ -823,6 +829,12 @@ func SaveSession() {
 	sb.WriteString("\n[FindFile]\n")
 	sb.WriteString(fmt.Sprintf("Mask = %s\n", LastFindFileMask))
 	sb.WriteString(fmt.Sprintf("Text = %s\n", LastFindFileText))
+	sb.WriteString(fmt.Sprintf("CaseSensitive = %d\n", boolToCheckboxState(LastFindFileCaseSensitive)))
+	sb.WriteString(fmt.Sprintf("WholeWords = %d\n", boolToCheckboxState(LastFindFileWholeWords)))
+	sb.WriteString(fmt.Sprintf("Regexp = %d\n", boolToCheckboxState(LastFindFileRegexp)))
+	sb.WriteString(fmt.Sprintf("NotContaining = %d\n", boolToCheckboxState(LastFindFileNotContaining)))
+	sb.WriteString(fmt.Sprintf("Folders = %d\n", boolToCheckboxState(LastFindFileFolders)))
+	sb.WriteString(fmt.Sprintf("Symlinks = %d\n", boolToCheckboxState(LastFindFileSymlinks)))
 
 	sb.WriteString("\n[Session]\n")
 	sb.WriteString(fmt.Sprintf("ActivePanel = %d\n", LastActivePanel))
