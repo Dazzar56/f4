@@ -745,6 +745,69 @@ func TestActionNewFile_Flow(t *testing.T) {
 		t.Errorf("Expected New File dialog, got %v", top)
 	}
 }
+
+func TestActionNewFile_AbsoluteExistingPath(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	root := t.TempDir()
+	path := filepath.Join(root, "existing.txt")
+	want := []byte("already here\n")
+	if err := os.WriteFile(path, want, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	fsp := pf.panels[0].(*FileSystemPanel)
+	fsp.vfs = vfs.NewOSVFS(root)
+	pvfs := fsp.vfs
+
+	actionNewFile(pf)
+	dlg, ok := vtui.FrameManager.GetTopFrame().(vtui.Container)
+	if !ok {
+		t.Fatalf("New File dialog is not a container: %T", vtui.FrameManager.GetTopFrame())
+	}
+	var edit *vtui.Edit
+	var okButton *vtui.Button
+	for _, child := range dlg.GetChildren() {
+		switch value := child.(type) {
+		case *vtui.Edit:
+			edit = value
+		case *vtui.Button:
+			if strings.Contains(value.GetText(), Msg("vtui.Ok")) {
+				okButton = value
+			}
+		}
+	}
+	if edit == nil || okButton == nil {
+		t.Fatal("New File dialog controls not found")
+	}
+	edit.SetText(path)
+	okButton.OnClick()
+
+	var editor *EditorView
+	deadline := time.After(2 * time.Second)
+	for editor == nil {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			editor, _ = findOpenedEditor(pvfs, path)
+		case <-deadline:
+			t.Fatal("Timeout waiting for existing file editor")
+		}
+	}
+	defer editor.Close()
+
+	got, err := editor.pt.GetRange(0, editor.pt.Size())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(want) {
+		t.Fatalf("opened content = %q, want %q", got, want)
+	}
+}
 func TestDelete_FocusCustomization(t *testing.T) {
 	fm := vtui.FrameManager
 	fm.Init(vtui.NewSilentScreenBuf())
