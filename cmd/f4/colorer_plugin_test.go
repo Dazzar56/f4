@@ -12,6 +12,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	embedded "github.com/unxed/f4"
 	"github.com/unxed/f4/piecetable"
 
 	"github.com/unxed/vtui"
@@ -45,6 +46,14 @@ func TestColorer_EnsureRadiolaSchema(t *testing.T) {
 	}
 	if !strings.Contains(string(updatedCatalog), "name=\"Radiola\"") {
 		t.Error("Expected catalog-rgb.xml to contain Radiola entry")
+	}
+
+	generated, err := os.ReadFile(hrdFile)
+	if err != nil {
+		t.Fatalf("Failed to read generated radiola.hrd: %v", err)
+	}
+	if string(generated) != embedded.RadiolaHRD {
+		t.Error("generated Radiola HRD differs from the repository's canonical embedded schema")
 	}
 }
 

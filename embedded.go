@@ -8,3 +8,6 @@ import _ "embed"
 
 //go:embed README.md
 var ReadmeMD string
+
+//go:embed colorer/configs/base/hrd/rgb/radiola.hrd
+var RadiolaHRD string
