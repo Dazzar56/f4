@@ -66,6 +66,32 @@ func TestHostConsole_Transitions(t *testing.T) {
 	}
 }
 
+func TestHostConsole_OverlaySuppressesRegisteredKeyBar(t *testing.T) {
+	oldCfg := AppConfig
+	defer func() { AppConfig = oldCfg }()
+	AppConfig.ConsoleMode = "host"
+	AppConfig.ConsoleOverlayUI = true
+
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+	defer func() { vtui.FrameManager.KeyBar = nil }()
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.shellMode = ShellModeHost
+	pf.showPanels = false
+	pf.ResizeConsole(80, 25)
+	vtui.FrameManager.KeyBar = pf.keyBar
+
+	pf.enterHostConsole()
+	if vtui.FrameManager.KeyBar != nil {
+		t.Fatal("host console overlay must unregister the ScreenBuf keybar")
+	}
+
+	pf.leaveHostConsole()
+}
+
 func TestChildEnv_HostModeLeavesTERMUntouched(t *testing.T) {
 	oldProbeGUI := probeGUIBackend
 	oldProbeTTY := probeHostTTY
