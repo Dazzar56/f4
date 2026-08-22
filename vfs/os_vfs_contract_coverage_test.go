@@ -139,7 +139,8 @@ func TestOSVFSLinksAndDirectoryChunkDelivery(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if chunks != 2 || items != 1002 || !executable || !hidden {
+	wantExecutable := runtime.GOOS != "windows"
+	if chunks != 2 || items != 1002 || executable != wantExecutable || !hidden {
 		t.Fatalf("directory delivery = chunks %d items %d executable %v hidden %v", chunks, items, executable, hidden)
 	}
 
