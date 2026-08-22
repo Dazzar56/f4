@@ -3668,6 +3668,51 @@ func (ev *EditorView) readSearchWindow(ctx context.Context, dst []byte, offset, 
 	}
 }
 
+// ensureIndexedToLine extends the line index until it describes the given
+// line, when the running scan has not reached it yet. It is ensureIndexedTo
+// asked the other way round, for a caller that knows which line it wants
+// rather than which offset — switching to the viewer, which has to say where
+// in the file the cursor was.
+//
+// A line the user has actually visited is already indexed, so this normally
+// does nothing; it exists for the moment just after opening, when the cursor
+// has been placed by a restored position and the scan is still on its way
+// there.
+func (ev *EditorView) ensureIndexedToLine(line int) {
+	if line < 0 || line < ev.li.LineCount() || ev.indexIsComplete() {
+		return
+	}
+	pos := ev.li.GetLineOffset(ev.li.LineCount() - 1)
+	if pos < 0 {
+		return
+	}
+
+	const step = 256 * 1024
+	pending := make([]int, 0, 1024)
+	for ev.li.LineCount()+len(pending) <= line {
+		take := min(step, ev.pt.Size()-pos)
+		if take <= 0 {
+			break
+		}
+		data, err := ev.pt.GetRange(pos, take)
+		if err != nil || len(data) == 0 {
+			break
+		}
+		for i := 0; i < len(data); {
+			idx := bytes.IndexByte(data[i:], '\n')
+			if idx == -1 {
+				break
+			}
+			pending = append(pending, pos+i+idx+1)
+			i += idx + 1
+		}
+		pos += len(data)
+	}
+	if len(pending) > 0 {
+		ev.li.AppendOffsets(pending, ev.pt.Size())
+	}
+}
+
 // ensureIndexedTo extends the line index far enough to describe offset, when
 // the running scan has not reached it yet. It counts newlines from the last
 // line the index knows about, which is the same work the scan would do — done

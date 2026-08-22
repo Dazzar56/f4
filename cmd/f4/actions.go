@@ -1028,8 +1028,15 @@ func actionSwitchEditorToViewer(ev *EditorView) {
 		targetOffset := int64(0)
 		if ev.HexMode || ev.DecodeMode {
 			targetOffset = int64(ev.HexTopOffset)
-		} else if ev.li != nil && ev.CursorLine >= 0 && ev.CursorLine < ev.li.LineCount() {
-			targetOffset = int64(ev.li.GetLineOffset(ev.CursorLine))
+		} else if ev.li != nil && ev.CursorLine >= 0 {
+			// The index owns the answer to "where is line N", and on a file
+			// that is still being scanned it may not have reached the cursor
+			// yet — which used to open the viewer at the top of the file
+			// instead of where the editor was.
+			ev.ensureIndexedToLine(ev.CursorLine)
+			if ev.CursorLine < ev.li.LineCount() {
+				targetOffset = int64(ev.li.GetLineOffset(ev.CursorLine))
+			}
 		}
 
 		ctx := context.Background()
