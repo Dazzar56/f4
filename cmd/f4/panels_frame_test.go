@@ -4361,6 +4361,16 @@ func TestPanelsFrame_ShiftF9_SaveSettings(t *testing.T) {
 	if !pressKey(pf, ev) {
 		t.Error("Expected PanelsFrame to handle Shift+F9 keypress")
 	}
+	if dlg, ok := vtui.FrameManager.GetTopFrame().(*vtui.Window); ok {
+		for _, item := range dlg.GetChildren() {
+			if btn, ok := item.(*vtui.Button); ok && btn.IsDefault {
+				btn.OnClick()
+				break
+			}
+		}
+	} else {
+		t.Fatalf("Shift+F9 top frame = %T, want save-settings dialog", vtui.FrameManager.GetTopFrame())
+	}
 
 	// Проверяем, что файл настроек действительно был записан на диск
 	info, err := os.Stat(tmp.Name())

@@ -2807,13 +2807,60 @@ func actionFindFile(pf *PanelsFrame) {
 
 	vtui.FrameManager.Push(dlg)
 }
+func actionSaveSettings(pf *PanelsFrame) {
+	const width, height = 54, 11
+	dlg := vtui.NewCenteredDialog(width, height, Msg("SaveSettings.Title"))
+	dlg.ShowClose = true
+
+	question := vtui.NewText(0, 0, Msg("SaveSettings.Question"), 0)
+	chkGeneral := vtui.NewCheckbox(0, 0, Msg("SaveSettings.General"), false)
+	chkPanel := vtui.NewCheckbox(0, 0, Msg("SaveSettings.Panel"), false)
+	chkWindow := vtui.NewCheckbox(0, 0, Msg("SaveSettings.Window"), false)
+	chkGeneral.State = 1
+	chkPanel.State = 1
+	chkWindow.State = 1
+
+	btnSave := vtui.NewButton(0, 0, Msg("SaveSettings.Save"))
+	btnSave.IsDefault = true
+	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
+
+	dlg.AddItem(question)
+	dlg.AddItem(chkGeneral)
+	dlg.AddItem(chkPanel)
+	dlg.AddItem(chkWindow)
+	dlg.AddItem(btnSave)
+	dlg.AddItem(btnCancel)
+
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, width-4, height-4)
+	vbox.Add(question, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(chkGeneral, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	vbox.Add(chkPanel, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(chkWindow, vtui.Margins{}, vtui.AlignLeft)
+	hbox := vtui.NewHBoxLayout(0, 0, width-4, 1)
+	hbox.HorizontalAlign = vtui.AlignCenter
+	hbox.Spacing = 2
+	hbox.Add(btnSave, vtui.Margins{}, vtui.AlignTop)
+	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
+	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Apply()
+
+	btnCancel.OnClick = func() { dlg.Close() }
+	btnSave.OnClick = func() {
+		saveSettingsGroups(chkGeneral.State == 1, chkPanel.State == 1, chkWindow.State == 1)
+		dlg.Close()
+		vtui.ShowToast(Msg("SaveSettings.Done"), 2*time.Second)
+	}
+
+	vtui.FrameManager.PushToFrameScreen(pf, dlg)
+}
+
 func actionPanelSettings(pf *PanelsFrame) {
 	// Keep the frequently used panel and navigation options in a compact
 	// dialog. The less frequently changed performance, console, and operation
 	// display options live in actionPanelAdditionalSettings below. Keeping both
 	// pages as ordinary dialogs means they remain usable on a 25-row terminal
 	// without introducing a second scrolling container for interactive items.
-	dlg := vtui.NewCenteredDialog(60, 22, Msg("PanelSettings.Title"))
+	dlg := vtui.NewCenteredDialog(60, 23, Msg("PanelSettings.Title"))
 	dlg.ShowClose = true
 
 	chkHidden := vtui.NewCheckbox(0, 0, Msg("PanelSettings.ShowHidden"), false)
@@ -2860,6 +2907,11 @@ func actionPanelSettings(pf *PanelsFrame) {
 		chkPaths.State = 1
 	}
 
+	chkAutoSave := vtui.NewCheckbox(0, 0, Msg("PanelSettings.AutoSave"), false)
+	if AppConfig.AutoSaveSettings {
+		chkAutoSave.State = 1
+	}
+
 	chkCmdAc := vtui.NewCheckbox(0, 0, Msg("PanelSettings.CommandLineAutoComplete"), false)
 	chkCmdAc.State = 0
 	if AppConfig.CommandLineAutoComplete {
@@ -2900,6 +2952,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 	dlg.AddItem(lblScrollbars)
 	dlg.AddItem(comboScrollbars)
 	dlg.AddItem(chkPaths)
+	dlg.AddItem(chkAutoSave)
 	dlg.AddItem(chkCmdAc)
 	dlg.AddItem(lblNavigation)
 	dlg.AddItem(navigation)
@@ -2908,7 +2961,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnCancel)
 
-	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 56, 18)
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 56, 19)
 	// First checkbox cluster — stack tight, no blank rows between.
 	vbox.Add(chkHidden, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkDirPrefix, vtui.Margins{}, vtui.AlignLeft)
@@ -2923,6 +2976,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 	vbox.Add(rowScrollbars, vtui.Margins{Top: 1}, vtui.AlignFill)
 	// Second checkbox cluster.
 	vbox.Add(chkPaths, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	vbox.Add(chkAutoSave, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkCmdAc, vtui.Margins{}, vtui.AlignLeft)
 	// Navigation radio group — its own visual island.
 	vbox.Add(lblNavigation, vtui.Margins{Top: 1}, vtui.AlignLeft)
@@ -2947,6 +3001,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 		AppConfig.ShowPanelFileInfo = chkFileInfo.State == 1
 		AppConfig.PanelScrollbarMode = PanelScrollbarMode(comboScrollbars.Menu.SelectPos)
 		AppConfig.SavePanelPaths = chkPaths.State == 1
+		AppConfig.AutoSaveSettings = chkAutoSave.State == 1
 		AppConfig.CommandLineAutoComplete = chkCmdAc.State == 1
 		pf.cmdLine.Edit.PathHintsEnabled = AppConfig.CommandLineAutoComplete
 		AppConfig.NavigationMode = PanelNavigationMode(navigation.Selected)

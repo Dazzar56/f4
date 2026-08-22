@@ -225,6 +225,7 @@ type F4Config struct {
 	UseTrash               bool
 	ConfirmExit            bool
 	DeleteCancelFocused    bool
+	AutoSaveSettings       bool
 	DefaultFileOpMode      int
 	FileOpPathDisplay      int
 	MacroRecordFormat      int
@@ -345,6 +346,7 @@ var AppConfig = F4Config{
 	UseTrash:                 false,
 	ConfirmExit:              true,
 	DeleteCancelFocused:      false,
+	AutoSaveSettings:         true,
 	DefaultFileOpMode:        0,
 	FileOpPathDisplay:        0,
 	GuiFont:                  "",
@@ -483,6 +485,7 @@ func LoadConfig() {
 	AppConfig.UseTrash = ini.GetString("System", "UseTrash", "0") == "1"
 	AppConfig.ConfirmExit = ini.GetString("System", "ConfirmExit", "1") == "1"
 	AppConfig.DeleteCancelFocused = ini.GetString("System", "DeleteCancelFocused", "0") == "1"
+	AppConfig.AutoSaveSettings = ini.GetString("System", "AutoSaveSettings", "1") != "0"
 	AppConfig.AnnounceKittyTerm = ini.GetString("System", "AnnounceKittyTerm", "1") == "1"
 	fmt.Sscanf(ini.GetString("System", "MacroRecordFormat", "0"), "%d", &AppConfig.MacroRecordFormat)
 	fmt.Sscanf(ini.GetString("Panel", "FileOpPathDisplay", "0"), "%d", &AppConfig.FileOpPathDisplay)
@@ -619,12 +622,24 @@ func LoadConfig() {
 }
 
 func SaveConfig() {
+	saveConfigWithWindowSize(true)
+}
+
+// saveConfigWithWindowSize writes the application settings. When windowSize
+// is false, the last persisted GUI dimensions are retained instead of the
+// dimensions currently held in memory; this keeps the Shift+F9 groups
+// independent.
+func saveConfigWithWindowSize(windowSize bool) {
 	// Settings dialogs write into AppConfig and call SaveConfig; publishing
 	// here means a proxy change takes effect without a restart.
 	ApplyProxySettings()
 
 	path := getUserConfigIniPath()
 	os.MkdirAll(filepath.Dir(path), 0755)
+	guiCols, guiRows := AppConfig.GuiCols, AppConfig.GuiRows
+	if !windowSize {
+		guiCols, guiRows = persistedGuiWindowSize()
+	}
 
 	var sb strings.Builder
 	sb.WriteString("[Interface]\n")
@@ -683,6 +698,7 @@ func SaveConfig() {
 	sb.WriteString(fmt.Sprintf("UseTrash = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.UseTrash]))
 	sb.WriteString(fmt.Sprintf("ConfirmExit = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.ConfirmExit]))
 	sb.WriteString(fmt.Sprintf("DeleteCancelFocused = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.DeleteCancelFocused]))
+	sb.WriteString(fmt.Sprintf("AutoSaveSettings = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.AutoSaveSettings]))
 	sb.WriteString(fmt.Sprintf("AnnounceKittyTerm = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.AnnounceKittyTerm]))
 	sb.WriteString(fmt.Sprintf("MacroRecordFormat = %d\n", AppConfig.MacroRecordFormat))
 
@@ -693,8 +709,8 @@ func SaveConfig() {
 	sb.WriteString(fmt.Sprintf("GuiFont = %s\n", AppConfig.GuiFont))
 	sb.WriteString(fmt.Sprintf("GuiUseSystemMonospace = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.GuiUseSystemMonospace]))
 	sb.WriteString(fmt.Sprintf("GuiFontSize = %d\n", AppConfig.GuiFontSize))
-	sb.WriteString(fmt.Sprintf("GuiCols = %d\n", AppConfig.GuiCols))
-	sb.WriteString(fmt.Sprintf("GuiRows = %d\n", AppConfig.GuiRows))
+	sb.WriteString(fmt.Sprintf("GuiCols = %d\n", guiCols))
+	sb.WriteString(fmt.Sprintf("GuiRows = %d\n", guiRows))
 	if AppConfig.GuiPositionSaved {
 		sb.WriteString(fmt.Sprintf("GuiPosX = %d\n", AppConfig.GuiPosX))
 		sb.WriteString(fmt.Sprintf("GuiPosY = %d\n", AppConfig.GuiPosY))
@@ -795,18 +811,161 @@ func SaveConfig() {
 	vtui.DebugLog("CONFIG: Saved application settings to %s", path)
 }
 
+func persistedGuiWindowSize() (int, int) {
+	cols, rows := AppConfig.GuiCols, AppConfig.GuiRows
+	ini := newIniFile()
+	for _, path := range getConfigIniPaths() {
+		if _, err := os.Stat(path); err == nil {
+			ini.Merge(LoadIni(path))
+		}
+	}
+	fmt.Sscanf(ini.GetString("Appearance", "GuiCols", fmt.Sprintf("%d", cols)), "%d", &cols)
+	fmt.Sscanf(ini.GetString("Appearance", "GuiRows", fmt.Sprintf("%d", rows)), "%d", &rows)
+	if cols <= 0 {
+		cols = AppConfig.GuiCols
+	}
+	if rows <= 0 {
+		rows = AppConfig.GuiRows
+	}
+	return cols, rows
+}
+
+// saveGuiWindowSize updates only the persisted GUI dimensions. It preserves
+// unrelated settings and unknown keys in an existing settings.ini.
+func saveGuiWindowSize() {
+	path := getUserConfigIniPath()
+	os.MkdirAll(filepath.Dir(path), 0755)
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		for _, source := range getConfigIniPaths() {
+			if source == path {
+				continue
+			}
+			if inherited, readErr := os.ReadFile(source); readErr == nil {
+				updated := updateIniValues(inherited, "Appearance", map[string]string{
+					"GuiCols": strconv.Itoa(AppConfig.GuiCols),
+					"GuiRows": strconv.Itoa(AppConfig.GuiRows),
+				})
+				if writeErr := os.WriteFile(path, updated, 0644); writeErr != nil {
+					vtui.DebugLog("CONFIG: Failed to save GUI size: %v", writeErr)
+				}
+				return
+			}
+		}
+		data = []byte(fmt.Sprintf("[Appearance]\nGuiCols = %d\nGuiRows = %d\n", AppConfig.GuiCols, AppConfig.GuiRows))
+		if writeErr := os.WriteFile(path, data, 0644); writeErr != nil {
+			vtui.DebugLog("CONFIG: Failed to save GUI size: %v", writeErr)
+		}
+		return
+	}
+	if err != nil {
+		vtui.DebugLog("CONFIG: Failed to read settings before saving GUI size: %v", err)
+		return
+	}
+	updated := updateIniValues(data, "Appearance", map[string]string{
+		"GuiCols": strconv.Itoa(AppConfig.GuiCols),
+		"GuiRows": strconv.Itoa(AppConfig.GuiRows),
+	})
+	if err := os.WriteFile(path, updated, 0644); err != nil {
+		vtui.DebugLog("CONFIG: Failed to save GUI size: %v", err)
+	}
+}
+
+func saveSettingsGroups(general, panel, window bool) {
+	if !general && !panel && !window {
+		return
+	}
+	if window {
+		captureCurrentWindowSize()
+	}
+	if general {
+		saveConfigWithWindowSize(window)
+	} else if window {
+		saveGuiWindowSize()
+	}
+	if panel {
+		saveSessionFile(getSessionIniPath())
+	}
+}
+
+func updateIniValues(data []byte, section string, values map[string]string) []byte {
+	lines := strings.SplitAfter(string(data), "\n")
+	var out strings.Builder
+	currentSection := ""
+	seenSection := false
+	seen := make(map[string]bool, len(values))
+	appendMissing := func() {
+		if currentSection != section {
+			return
+		}
+		if out.Len() > 0 && !strings.HasSuffix(out.String(), "\n") {
+			out.WriteByte('\n')
+		}
+		for key, value := range values {
+			if !seen[key] {
+				out.WriteString(fmt.Sprintf("%s = %s\n", key, value))
+			}
+		}
+	}
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r"))
+		if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
+			appendMissing()
+			currentSection = trimmed[1 : len(trimmed)-1]
+			if currentSection == section {
+				seenSection = true
+			}
+		}
+		if currentSection == section {
+			if idx := strings.Index(trimmed, "="); idx >= 0 {
+				key := strings.TrimSpace(trimmed[:idx])
+				if value, ok := values[key]; ok {
+					lineEnding := "\n"
+					if strings.HasSuffix(line, "\r\n") {
+						lineEnding = "\r\n"
+					} else if !strings.HasSuffix(line, "\n") {
+						lineEnding = ""
+					}
+					out.WriteString(fmt.Sprintf("%s = %s%s", key, value, lineEnding))
+					seen[key] = true
+					continue
+				}
+			}
+		}
+		out.WriteString(line)
+	}
+	appendMissing()
+	if !seenSection {
+		if out.Len() > 0 && !strings.HasSuffix(out.String(), "\n") {
+			out.WriteByte('\n')
+		}
+		out.WriteString("\n[" + section + "]\n")
+		for key, value := range values {
+			out.WriteString(fmt.Sprintf("%s = %s\n", key, value))
+		}
+	}
+	return []byte(out.String())
+}
+
 // RequestSaveConfig schedules a debounced SaveConfig call. Multiple calls
 // within the debounce window collapse into a single write. Used by the
 // panel-resize hotkeys, where holding Ctrl+Arrow can fire many times per
 // second and we don't want to fsync on every keystroke. The final value
-// still lands on disk because the shutdown path calls SaveConfig directly.
+// still lands on disk when automatic saving is enabled at shutdown.
 func RequestSaveConfig() {
+	if !AppConfig.AutoSaveSettings {
+		return
+	}
 	saveConfigTimerMu.Lock()
 	defer saveConfigTimerMu.Unlock()
 	if saveConfigTimer != nil {
 		saveConfigTimer.Stop()
 	}
-	saveConfigTimer = time.AfterFunc(saveConfigDebounce, SaveConfig)
+	saveConfigTimer = time.AfterFunc(saveConfigDebounce, func() {
+		if AppConfig.AutoSaveSettings {
+			SaveConfig()
+		}
+	})
 }
 
 var (

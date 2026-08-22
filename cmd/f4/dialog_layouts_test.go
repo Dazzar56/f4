@@ -98,7 +98,6 @@ func TestAllDialogs_LayoutValidation(t *testing.T) {
 		"editor.deletespacersforward":      true, // no dialog
 		"viewer.wrapmode":                  true, // no dialog
 		"viewer.hexmode":                   true, // no dialog
-		"app.savesettings":                 true, // no dialog
 		"panel.copypath":                   true, // no dialog
 		"panel.copyname":                   true, // no dialog
 		"panel.copyselectednames":          true, // no dialog

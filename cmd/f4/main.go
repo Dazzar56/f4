@@ -784,23 +784,41 @@ func LoadSession() {
 }
 
 func SaveSession() {
+	if !AppConfig.AutoSaveSettings {
+		vtui.DebugLog("SESSION: Automatic saving is disabled")
+		return
+	}
+	saveSession(true)
+}
+
+func saveSession(saveWindowSize bool) {
 	path := getSessionIniPath()
 	os.MkdirAll(filepath.Dir(path), 0755)
 
-	// The terminal frame manager reports the current terminal geometry too.
-	// Persisting that as the GUI geometry makes a later native window inherit
-	// an arbitrary terminal (or test harness) size.
-	if shouldPersistGUIWindowSize(vtui.ActiveBackend()) && vtui.FrameManager != nil {
-		w := vtui.FrameManager.GetScreenSize()
-		h := vtui.FrameManager.GetScreenHeight()
-		if w > 0 && h > 0 {
-			if AppConfig.GuiCols != w || AppConfig.GuiRows != h {
-				AppConfig.GuiCols = w
-				AppConfig.GuiRows = h
-				SaveConfig()
-			}
-		}
+	windowSizeChanged := captureCurrentWindowSize()
+	if saveWindowSize && windowSizeChanged {
+		SaveConfig()
 	}
+
+	saveSessionFile(path)
+}
+
+func captureCurrentWindowSize() bool {
+	if !shouldPersistGUIWindowSize(vtui.ActiveBackend()) || vtui.FrameManager == nil {
+		return false
+	}
+	w := vtui.FrameManager.GetScreenSize()
+	h := vtui.FrameManager.GetScreenHeight()
+	if w <= 0 || h <= 0 || (AppConfig.GuiCols == w && AppConfig.GuiRows == h) {
+		return false
+	}
+	AppConfig.GuiCols = w
+	AppConfig.GuiRows = h
+	return true
+}
+
+func saveSessionFile(path string) {
+	os.MkdirAll(filepath.Dir(path), 0755)
 
 	if vtui.FrameManager != nil {
 		if states, active := captureWorkspaceSessions(); len(states) > 0 {
