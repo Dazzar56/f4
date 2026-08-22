@@ -309,6 +309,17 @@ func init() {
 		Handler:     actionCopyWindowTitle,
 	})
 	RegisterAction(Action{
+		Name:        "Macro.Reload",
+		Area:        "Common",
+		Label:       "Reload Lua Macros",
+		LabelKey:    "Action.Macro.Reload",
+		Description: "Reload Lua macros from the scripts directory",
+		DescKey:     "Action.Macro.Reload.Desc",
+		DefaultKeys: []string{"CtrlAltShiftM"},
+		MenuPath:    "Commands",
+		Handler:     actionReloadLuaMacros,
+	})
+	RegisterAction(Action{
 		Name:                commandPaletteActionName,
 		Area:                "Common",
 		Label:               "Command Palette",
