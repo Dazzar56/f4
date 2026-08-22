@@ -140,11 +140,7 @@ func SaveBookmarks(path string, s BookmarkSet) error {
 		buf.WriteByte('\n')
 	}
 
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, []byte(buf.String()), 0o644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return writeFileAtomically(path, []byte(buf.String()), 0o644)
 }
 
 // truncPathLeft shortens path to at most width display cells by dropping

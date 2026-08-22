@@ -114,21 +114,11 @@ func saveFarMenuFile(path string, items []UserMenuItem) error {
 			return err
 		}
 	}
-	tmp := path + ".tmp"
-	f, err := os.Create(tmp)
-	if err != nil {
+	var buf bytes.Buffer
+	if err := WriteFarMenu(&buf, items); err != nil {
 		return err
 	}
-	if err := WriteFarMenu(f, items); err != nil {
-		f.Close()
-		os.Remove(tmp)
-		return err
-	}
-	if err := f.Close(); err != nil {
-		os.Remove(tmp)
-		return err
-	}
-	return os.Rename(tmp, path)
+	return writeFileAtomically(path, buf.Bytes(), 0o644)
 }
 
 // loadRootForMode reads the current root menu from disk based on the

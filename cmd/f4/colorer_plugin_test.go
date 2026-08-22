@@ -3,6 +3,7 @@ package main
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -305,6 +306,43 @@ Loop:
 
 	if !SchemasExist() {
 		t.Error("SchemasExist returned false after successful extraction")
+	}
+}
+
+func TestColorer_StagedInstallRejectsTraversalAndPreservesExistingTree(t *testing.T) {
+	dest := filepath.Join(t.TempDir(), "colorer", "configs")
+	if err := os.MkdirAll(filepath.Join(dest, "base"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	catalog := filepath.Join(dest, "base", "catalog.xml")
+	if err := os.WriteFile(catalog, []byte("old-catalog"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	member, err := zw.Create("far2l-v_2.8.0/colorer/configs/../escape.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := member.Write([]byte("must not escape")); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := installColorerSchemas(buf.Bytes(), dest, context.Background()); err == nil {
+		t.Fatal("traversal archive unexpectedly installed")
+	}
+	got, err := os.ReadFile(catalog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "old-catalog" {
+		t.Fatalf("existing catalog changed after rejected archive: %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(dest), "escape.txt")); !os.IsNotExist(err) {
+		t.Fatalf("archive member escaped staging directory: %v", err)
 	}
 }
 
