@@ -283,6 +283,35 @@ func TestUserMenu_ExecuteMultipleCommands(t *testing.T) {
 	}
 }
 
+func TestUserMenu_InterpreterDirectiveUsesScriptMode(t *testing.T) {
+	interpreter, ok := userMenuInterpreter([]string{
+		"#!/usr/bin/env python3",
+		"print('hello')",
+	})
+	if !ok || interpreter != "/usr/bin/env python3" {
+		t.Fatalf("userMenuInterpreter() = %q, %v", interpreter, ok)
+	}
+
+	if _, ok := userMenuInterpreter([]string{"echo plain", "#!/bin/sh", "echo script"}); ok {
+		t.Fatal("a shebang below the first command must not switch a legacy menu item to script mode")
+	}
+}
+
+func TestUserMenu_ScriptCommandUsesInterpreterAndQuotedBody(t *testing.T) {
+	body := "printf '%s\\n' hello\nprintf \"quoted\\\" world\\n\""
+	command, err := buildUserMenuScriptCommand("/usr/bin/env bash", body, vfs.CommandDialectPOSIX)
+	if err != nil {
+		t.Fatal(err)
+	}
+	quotedBody, err := QuoteCommandArgument(vfs.CommandDialectPOSIX, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(command, "printf '%s' "+quotedBody+" | /usr/bin/env bash -") {
+		t.Fatalf("script command = %q", command)
+	}
+}
+
 func TestUserMenu_InteractiveEdit(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	SetDefaultF4Palette()
