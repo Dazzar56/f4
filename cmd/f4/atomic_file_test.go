@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -11,7 +12,7 @@ import (
 func TestWriteFileAtomicallyPublishesCompleteData(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "settings.ini")
-	if err := os.WriteFile(path, []byte("old\n"), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte("old\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	want := []byte(strings.Repeat("new\n", 1000))
@@ -29,7 +30,7 @@ func TestWriteFileAtomicallyPublishesCompleteData(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if mode.Mode().Perm() != 0o600 {
+	if runtime.GOOS != "windows" && mode.Mode().Perm() != 0o600 {
 		t.Fatalf("mode = %o, want 600", mode.Mode().Perm())
 	}
 	if leftovers, err := filepath.Glob(filepath.Join(dir, ".f4-atomic-*")); err != nil {
@@ -47,7 +48,8 @@ func TestWriteFileAtomicallyConcurrentWritersNeverPublishPartialData(t *testing.
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			data := []byte(strings.Repeat(string(rune('A'+i)), 4096))
+			letters := "ABCDEFGHIJKLMNOP"
+			data := []byte(strings.Repeat(string(letters[i]), 4096))
 			if err := writeFileAtomically(path, data, 0o600); err != nil {
 				t.Errorf("writer %d: %v", i, err)
 			}

@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 // writeFileAtomically publishes a complete file without exposing a truncated
@@ -58,8 +59,15 @@ func writeFileAtomically(path string, data []byte, mode os.FileMode) (returnErr 
 	closed = true
 	// The deferred Close is now harmless and the temp name is removed only if
 	// publication fails.
-	if err := os.Rename(tmpPath, path); err != nil {
-		return err
+	var renameErr error
+	for attempt := 0; attempt < 20; attempt++ {
+		if renameErr = os.Rename(tmpPath, path); renameErr == nil {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if renameErr != nil {
+		return renameErr
 	}
 	returnErr = nil
 	// Directory fsync is a best-effort durability improvement. It is not

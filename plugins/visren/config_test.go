@@ -3,6 +3,7 @@ package visren
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/unxed/f4/vfs"
@@ -30,7 +31,7 @@ func TestSaveConfigKeepsPreviousFileOnSuccessiveAtomicSave(t *testing.T) {
 	}
 	if mode, err := os.Stat(configPath()); err != nil {
 		t.Fatal(err)
-	} else if mode.Mode().Perm() != 0o600 {
+	} else if runtime.GOOS != "windows" && mode.Mode().Perm() != 0o600 {
 		t.Fatalf("config mode = %o, want 600", mode.Mode().Perm())
 	}
 }

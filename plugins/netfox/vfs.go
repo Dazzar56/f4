@@ -119,7 +119,9 @@ func saveNetFoxConfigs(configs map[string]NetFoxConfig) ([]byte, error) {
 		encodedConfigs[k] = cfg
 	}
 
-	data, err := json.MarshalIndent(encodedConfigs, "", "  ")
+	// Password fields have already been obfuscated above; this is the
+	// persistence boundary for the encoded representation.
+	data, err := json.MarshalIndent(encodedConfigs, "", "  ") // #nosec G117 -- secrets are obfuscated before serialization.
 	if err != nil {
 		return nil, fmt.Errorf("netfox: encode connections: %w", err)
 	}

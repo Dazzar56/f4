@@ -2,6 +2,7 @@ package netfox
 
 import (
 	"bytes"
+	"context"
 	"github.com/unxed/f4/internal/netproxy"
 	"github.com/unxed/f4/vfs"
 	"net"
@@ -92,7 +93,7 @@ func TestNetFoxVFS_InvalidWriterDoesNotSaveEmptyConfig(t *testing.T) {
 	if err := nf.SaveConfig("existing", NetFoxConfig{Type: "sftp", Host: "example"}); err != nil {
 		t.Fatal(err)
 	}
-	writer, err := nf.Create(nil, "existing")
+	writer, err := nf.Create(context.TODO(), "existing")
 	if err != nil {
 		t.Fatal(err)
 	}
