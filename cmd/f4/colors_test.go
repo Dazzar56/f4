@@ -155,6 +155,66 @@ func TestColors_ExportColors_Grouped(t *testing.T) {
 		}
 	}
 }
+
+func TestColors_ExportColorsPreservesAuthoredExpressions(t *testing.T) {
+	vtui.SetDefaultPalette()
+	SetDefaultF4Palette()
+	oldCfg := AppConfig
+	AppConfig.EnforceColorCorrection = true
+	defer func() { AppConfig = oldCfg }()
+
+	ini := ParseIni(strings.NewReader(`[farcolors]
+Panel.Cursor.Inactive.Selected = foreground:#feff00 | background:#555753
+Panel.FastFindNoMatch = foreground:#d65f5f | background:#0000a0
+Panel.Scrollbar.Minimal = foreground:#0000ff | background:#0000a0
+WarnDialog.Edit = foreground:#ffffff | background:#0000a0
+WarnDialog.Edit.Selected = foreground:#ffffff | background:#000000
+WarnDialog.Edit.Unchanged = foreground:#a0a0a0 | background:#0000a0
+`))
+	InitColors(ini)
+
+	path := filepath.Join(t.TempDir(), "exported.ini")
+	if err := ExportColors(path); err != nil {
+		t.Fatal(err)
+	}
+	exported := LoadIni(path)
+	for key, want := range map[string]string{
+		"Panel.Cursor.Inactive.Selected": "foreground:#feff00 | background:#555753",
+		"Panel.FastFindNoMatch":          "foreground:#d65f5f | background:#0000a0",
+		"Panel.Scrollbar.Minimal":        "foreground:#0000ff | background:#0000a0",
+		"WarnDialog.Edit":                "foreground:#ffffff | background:#0000a0",
+		"WarnDialog.Edit.Selected":       "foreground:#ffffff | background:#000000",
+		"WarnDialog.Edit.Unchanged":      "foreground:#a0a0a0 | background:#0000a0",
+	} {
+		if got := exported.GetString("farcolors", key, ""); got != want {
+			t.Errorf("%s exported as %q, want authored expression %q", key, got, want)
+		}
+	}
+}
+
+func TestColors_ExportColorsUsesCurrentPaletteAfterDirectChange(t *testing.T) {
+	vtui.SetDefaultPalette()
+	SetDefaultF4Palette()
+	oldCfg := AppConfig
+	AppConfig.EnforceColorCorrection = true
+	defer func() { AppConfig = oldCfg }()
+
+	ini := ParseIni(strings.NewReader(`[farcolors]
+Panel.Text = foreground:#123456 | background:#654321
+`))
+	InitColors(ini)
+	vtui.Palette[ColPanelText] = vtui.SetRGBBoth(0, 0xabcdef, 0x102030)
+
+	path := filepath.Join(t.TempDir(), "exported.ini")
+	if err := ExportColors(path); err != nil {
+		t.Fatal(err)
+	}
+	exported := LoadIni(path)
+	if got := exported.GetString("farcolors", "Panel.Text", ""); got != "foreground:#abcdef | background:#102030" {
+		t.Fatalf("direct palette change exported as %q", got)
+	}
+}
+
 func TestColors_AliasesAndCanonicalPrecedence(t *testing.T) {
 	vtui.SetDefaultPalette()
 	SetDefaultF4Palette()
