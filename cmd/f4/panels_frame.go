@@ -249,6 +249,8 @@ type PanelsFrame struct {
 	activeIdx             int    // 0 for left, 1 for right
 	folderHistoryPos      [2]int // position in provider's newest-first folder history
 	executing             bool
+	shellPromptReady      bool
+	ignoreNextPrompt      bool
 	returnToPanels        bool
 	workspaceCommandTitle string
 
@@ -422,7 +424,17 @@ func NewPanelsFrame() *PanelsFrame {
 			if busy {
 				pf.executing = true
 			} else {
-				if pf.executing {
+				pf.shellPromptReady = true
+				ignoredPrompt := pf.executing && pf.ignoreNextPrompt
+				if ignoredPrompt {
+					// A command can be entered before the initial prompt has
+					// finished crossing ConPTY. That prompt belongs to shell
+					// startup, not to the command just sent; consuming it as
+					// completion would return to panels while a batch file is
+					// still running.
+					pf.ignoreNextPrompt = false
+				}
+				if pf.executing && !ignoredPrompt {
 					pf.executing = false
 					pf.workspaceCommandTitle = ""
 					if pf.returnToPanels {
@@ -1353,6 +1365,14 @@ func (pf *PanelsFrame) isPtyBusy() bool {
 	// Managed execution signal from OSC 133
 	return pf.executing
 }
+
+func (pf *PanelsFrame) beginManagedExecution() {
+	pf.executing = true
+	if !pf.shellPromptReady {
+		pf.ignoreNextPrompt = true
+	}
+}
+
 func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 	if pf.shellMode == ShellModeHost && pf.isHostConsoleActive() {
 		return
@@ -2211,7 +2231,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				if integration != nil {
 					if seq := integration.PtyRunCommand(path, cmd); len(seq) > 0 {
 						fullWireCmd = string(seq)
-						pf.executing = true
+						pf.beginManagedExecution()
 						pf.returnToPanels = pf.showPanels
 					}
 				} else if isWindowsShell {
@@ -2221,7 +2241,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 					} else {
 						fullWireCmd = fmt.Sprintf("%s\r", cmd)
 					}
-					pf.executing = true
+					pf.beginManagedExecution()
 					pf.returnToPanels = pf.showPanels
 				} else {
 					// Unix
@@ -2240,7 +2260,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 						} else {
 							fullWireCmd = fmt.Sprintf(" { trap \"printf ''\" INT; printf \"\\033]133;C\\007\"; %s ; FARVTRESULT=$?; printf \"\\033]133;D\\007\"; trap - INT; (exit $FARVTRESULT); }\r", cmd)
 						}
-						pf.executing = true
+						pf.beginManagedExecution()
 						pf.returnToPanels = pf.showPanels
 					}
 				}

@@ -1612,7 +1612,7 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 						pf.termView.PrintCleanCommand(cleanCmd)
 					}
 
-					pf.executing = true
+					pf.beginManagedExecution()
 					pf.returnToPanels = true
 
 					if !isWindowsShell {
