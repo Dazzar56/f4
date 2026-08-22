@@ -90,6 +90,8 @@ type EditorView struct {
 	// once, so the report goes out once rather than on every repaint.
 	mapFaulted  bool
 	indexCancel context.CancelFunc
+	// indexWG joins cancelled indexers before Close tears down their buffers.
+	indexWG sync.WaitGroup
 	// indexing is true from StartIndexing until that run ends, by completion
 	// or by cancellation. indexCancel cannot answer the question: it is left
 	// set after a normal finish, so it reads as "indexing forever".
@@ -292,6 +294,7 @@ func (ev *EditorView) Close() {
 		ev.indexResume.Stop()
 		ev.indexResume = nil
 	}
+	ev.indexWG.Wait()
 	if ev.asyncBuf != nil {
 		ev.asyncBuf.Close()
 	}
@@ -3203,7 +3206,9 @@ func (ev *EditorView) StartIndexing() {
 		ev.resolveTargetOffset()
 		ctx, cancel := context.WithCancel(context.Background())
 		ev.indexCancel = cancel
+		ev.indexWG.Add(1)
 		go func() {
+			defer ev.indexWG.Done()
 			// zoin-bot keeps mapped-file faults recoverable in the fully-read
 			// indexing path just like in the lazy-buffer indexing goroutine.
 			defer ev.guardMapping("indexing fully-read buffer")()
@@ -3227,7 +3232,9 @@ func (ev *EditorView) StartIndexing() {
 	// when each chunk comes round.
 	readFromFile := ev.chunkReader()
 
+	ev.indexWG.Add(1)
 	go func() {
+		defer ev.indexWG.Done()
 		defer ev.guardMapping("indexing")()
 		startedAt := time.Now()
 		vtui.DebugLog("EDITOR_INDEX: Start indexing with targetLine=%d", ev.targetLine)

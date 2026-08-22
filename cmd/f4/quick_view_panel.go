@@ -464,7 +464,7 @@ func (q *QuickViewPanel) startDirScan(fullPath string) {
 			}
 			q.scanMu.Unlock()
 			if redraw {
-				vtui.FrameManager.HardRefresh()
+				vtui.FrameManager.PostTask(vtui.FrameManager.HardRefresh)
 			}
 		})
 		q.scanMu.Lock()
@@ -476,7 +476,7 @@ func (q *QuickViewPanel) startDirScan(fullPath string) {
 			q.scanDone = true
 		}
 		q.scanMu.Unlock()
-		vtui.FrameManager.HardRefresh()
+		vtui.FrameManager.PostTask(vtui.FrameManager.HardRefresh)
 	}()
 }
 
