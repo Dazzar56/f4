@@ -3,6 +3,7 @@ package textlayout
 import (
 	"bytes"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -637,5 +638,69 @@ func BenchmarkWrapEngine_GetFragments_NoWrap(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		_ = we.GetFragments(i % 1000)
+	}
+}
+
+// TestWrapEngine_NoWrapCacheStaysBounded pins the memory ceiling of the
+// unwrapped layout cache. Without a budget, every line the user scrolls past
+// stays cached, so simply paging through a file grew the heap without limit.
+func TestWrapEngine_NoWrapCacheStaysBounded(t *testing.T) {
+	var buf bytes.Buffer
+	for i := 0; i < 20000; i++ {
+		buf.WriteString(strings.Repeat("a", 79))
+		buf.WriteByte('\n')
+	}
+	pt := piecetable.New(buf.Bytes())
+	li := piecetable.NewLineIndex()
+	li.Rebuild(pt)
+	we := NewWrapEngine(pt, li)
+	we.SetWidth(80)
+	we.ToggleWrap(false)
+
+	for i := 0; i < li.LineCount(); i++ {
+		we.GetFragments(i)
+	}
+
+	if we.noWrapCached > noWrapCacheBudget {
+		t.Errorf("cached %d cluster entries, budget is %d", we.noWrapCached, noWrapCacheBudget)
+	}
+
+	// The budget must not cost correctness: an evicted line is recomputed.
+	frags := we.GetFragments(0)
+	if len(frags) != 1 || frags[0].VisualWidth != 79 {
+		t.Fatalf("line 0 after eviction: %+v", frags)
+	}
+	if _, col := we.LogicalToVisual(40); col != 40 {
+		t.Errorf("column after eviction = %d, want 40", col)
+	}
+}
+
+// TestWrapEngine_NoWrapCacheInvalidatedOnEdit guards the counter that backs the
+// budget: a stale count would either leak or evict on every single lookup.
+func TestWrapEngine_NoWrapCacheInvalidatedOnEdit(t *testing.T) {
+	pt := piecetable.New([]byte("hello world\nsecond line\n"))
+	li := piecetable.NewLineIndex()
+	li.Rebuild(pt)
+	we := NewWrapEngine(pt, li)
+	we.SetWidth(80)
+	we.ToggleWrap(false)
+
+	we.GetFragments(0)
+	we.GetFragments(1)
+	cachedBefore := we.noWrapCached
+
+	insert := []byte("XX")
+	pt.Insert(0, insert)
+	li.UpdateAfterInsert(0, insert)
+	we.InvalidateFrom(0)
+
+	if we.noWrapCached != 0 {
+		t.Errorf("cluster count after full invalidation = %d, want 0", we.noWrapCached)
+	}
+	if cachedBefore == 0 {
+		t.Error("expected the unwrapped lines to be cached in the first place")
+	}
+	if got := we.GetFragments(0)[0].VisualWidth; got != 13 {
+		t.Errorf("width after edit = %d, want 13", got)
 	}
 }
