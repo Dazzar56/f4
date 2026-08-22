@@ -44,6 +44,7 @@ jobs:
         # Go supports. vtui's graphical/FFI backends are unavailable there,
         # so these cells use its ANSI-only noffi configuration.
         include:
+          - { goos: linux, goarch: 386,     build_tags: noffi }
           - { goos: linux, goarch: mips,    build_tags: noffi }
           - { goos: linux, goarch: mipsle,  build_tags: noffi }
           - { goos: linux, goarch: mips64,  build_tags: noffi }
