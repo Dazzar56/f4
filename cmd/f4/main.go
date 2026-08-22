@@ -799,10 +799,6 @@ func SaveSession() {
 	saveSessionWithOptions(AppConfig.AutoSavePanelSettings, AppConfig.AutoSaveCurrentPanel, AppConfig.AutoSaveGUIWindow)
 }
 
-func saveSession(saveWindowSize bool) {
-	saveSessionWithOptions(true, true, saveWindowSize)
-}
-
 func saveSessionWithOptions(savePanelSettings, saveCurrentPanel, saveGUIWindow bool) {
 	if !savePanelSettings && !saveCurrentPanel && !saveGUIWindow && !AppConfig.AutoSaveDialogSettings {
 		return
