@@ -379,6 +379,45 @@ func TestMacroFastFindDeleteBypassesPanelToggle(t *testing.T) {
 	}
 }
 
+func TestMacroShellDoesNotRunDuringFastFind(t *testing.T) {
+	oldCfg := AppConfig
+	oldHotkeys := GlobalHotkeysMgr
+	oldMacroMgr := MacroMgr
+	defer func() {
+		AppConfig = oldCfg
+		GlobalHotkeysMgr = oldHotkeys
+		MacroMgr = oldMacroMgr
+	}()
+
+	AppConfig.NavigationMode = NavigationClassic
+	MacroMgr = nil
+	GlobalHotkeysMgr = NewHotkeyManager("")
+	pf, left, _ := newSearchFirstTestFrame(t)
+	vtui.FrameManager.Push(pf)
+	vtui.FrameManager.SyncCurrentScreen()
+	t.Cleanup(func() {
+		pf.Close()
+		vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	})
+
+	mgr := NewMacroManager("")
+	key := &vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_A,
+		Char:           'a',
+	}
+	keyStr := EventToFarString(key)
+	mgr.Macros["Shell"] = map[string][]*vtinput.InputEvent{
+		keyStr: {{Type: vtinput.KeyEventType, KeyDown: true, Char: 'x', VirtualKeyCode: vtinput.VK_X}},
+	}
+
+	left.fastFindMode = true
+	if mgr.Filter(key) {
+		t.Fatal("Shell macro consumed input while Fast Find was active")
+	}
+}
+
 func TestMacroPlaybackLogic(t *testing.T) {
 	mgr := NewMacroManager("unused.ini")
 
