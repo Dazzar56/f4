@@ -337,6 +337,7 @@ func TestQueueFrameUsesDialogThemeColors(t *testing.T) {
 }
 
 func TestQueueManager_BackgroundWorkspace(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	fm := vtui.FrameManager
 	fm.Init(vtui.NewSilentScreenBuf())
 
@@ -351,18 +352,21 @@ func TestQueueManager_BackgroundWorkspace(t *testing.T) {
 	qm.mu.Unlock()
 
 	// Добавляем задачу
+	done := make(chan struct{})
 	qm.Enqueue(&QueueTask{
-		Type: "Test",
-		Run:  func(ctx context.Context, r TaskReporter, a vtui.Frame) error { return nil },
+		Type:       "Test",
+		Run:        func(ctx context.Context, r TaskReporter, a vtui.Frame) error { return nil },
+		OnComplete: func() { close(done) },
 	})
 
 	// Обрабатываем задачи UI (EnsureQueueWorkspace вызывается через PostTask)
-	timeout := time.After(1 * time.Second)
+	timer := time.NewTimer(1 * time.Second)
+	t.Cleanup(func() { timer.Stop() })
 	for len(fm.Screens) < 2 {
 		select {
 		case task := <-fm.TaskChan:
 			task()
-		case <-timeout:
+		case <-timer.C:
 			t.Fatal("Queue workspace was not created in background")
 		}
 	}
@@ -384,6 +388,17 @@ func TestQueueManager_BackgroundWorkspace(t *testing.T) {
 	// The original workspace remains active and keeps its index.
 	if fm.ActiveIdx != 0 {
 		t.Errorf("Focus pointer tracking failed. ActiveIdx: %d, expected 0", fm.ActiveIdx)
+	}
+
+	for {
+		select {
+		case <-done:
+			return
+		case task := <-fm.TaskChan:
+			task()
+		case <-timer.C:
+			t.Fatal("Background queue task did not complete")
+		}
 	}
 }
 

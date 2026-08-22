@@ -101,6 +101,9 @@ func TestStaticDirectActionsRegistered(t *testing.T) {
 }
 
 func TestArkanoidActionKeepsPhysicalShortcutFrameworkOwned(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
 	previous := GlobalHotkeysMgr
 	GlobalHotkeysMgr = NewHotkeyManager("")
 	t.Cleanup(func() { GlobalHotkeysMgr = previous })

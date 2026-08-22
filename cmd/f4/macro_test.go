@@ -136,6 +136,9 @@ func TestMacro_GetCurrentArea(t *testing.T) {
 	vtui.FrameManager.Pop()
 }
 func TestMacroRecordingAndPlayback(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
 	tmpFile := "test_macros.ini"
 	defer os.Remove(tmpFile)
 
@@ -650,6 +653,11 @@ func TestMacro_CharTrigger(t *testing.T) {
 	}
 }
 func TestMacro_AssignFrame_Structure(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+
 	mgr := &MacroManager{
 		Macros:    make(map[string]map[string][]*vtinput.InputEvent),
 		StartArea: "Common",

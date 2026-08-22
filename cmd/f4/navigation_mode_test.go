@@ -64,6 +64,7 @@ func TestPanelNavigationModeConfigRoundTripAndMigration(t *testing.T) {
 
 func newSearchFirstTestFrame(t *testing.T) (*PanelsFrame, *FileSystemPanel, *FileSystemPanel) {
 	t.Helper()
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	left := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(t.TempDir()))
 	right := NewFileSystemPanel(40, 0, 40, 20, vfs.NewOSVFS(t.TempDir()))
@@ -85,6 +86,7 @@ func newSearchFirstTestFrame(t *testing.T) (*PanelsFrame, *FileSystemPanel, *Fil
 	}
 	pf.cmdLine.SetPosition(0, 23, 79, 23)
 	pf.applyNavigationMode()
+	t.Cleanup(pf.Close)
 	return pf, left, right
 }
 

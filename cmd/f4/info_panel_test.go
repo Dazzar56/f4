@@ -433,6 +433,7 @@ func TestInfoPanel_ProviderRefreshRunsInBackground(t *testing.T) {
 }
 
 func TestInfoPanel_IgnoresLateRefreshForPreviousSelection(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	scr := vtui.NewSilentScreenBuf()
 	scr.AllocBuf(100, 35)
 	vtui.FrameManager.Init(scr)
@@ -485,6 +486,7 @@ func TestInfoPanel_IgnoresLateRefreshForPreviousSelection(t *testing.T) {
 }
 
 func TestInfoPanel_IgnoresLateRefreshFromReplacedVFSWithSameKey(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	scr := vtui.NewSilentScreenBuf()
 	scr.AllocBuf(100, 35)
 	vtui.FrameManager.Init(scr)

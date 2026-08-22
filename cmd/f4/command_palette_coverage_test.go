@@ -194,6 +194,9 @@ var commandPaletteNewVMenuAudit = map[string]commandPaletteSurfaceAudit{
 }
 
 func TestCommandPaletteResolvesEveryActionGeneratedMenuLeafByID(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
 	areas := make(map[string]bool)
 	for _, action := range GetOrderedActions() {
 		if action.MenuPath != "" && !action.HideFromMenu && !strings.EqualFold(action.Area, "Common") {

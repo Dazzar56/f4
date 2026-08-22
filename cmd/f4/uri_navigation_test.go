@@ -92,6 +92,7 @@ func (v *navigationURIVFS) Stat(context.Context, string) (vfs.VFSItem, error) {
 }
 
 func TestNavigateToPathRestoresRegisteredURIAsynchronously(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	oldSync := AppConfig.SyncPanelLoad
 	AppConfig.SyncPanelLoad = false
@@ -139,6 +140,7 @@ func TestNavigateToPathRestoresRegisteredURIAsynchronously(t *testing.T) {
 }
 
 func TestNavigateToPathDoesNotFeedUnavailableURIToCurrentVFS(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	source := newQueuedNavigationVFS()
 	t.Cleanup(func() {
@@ -164,6 +166,7 @@ func TestNavigateToPathDoesNotFeedUnavailableURIToCurrentVFS(t *testing.T) {
 }
 
 func TestPendingURIMountIsPersistedAndPlainEscapeCancelsIt(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	oldSync := AppConfig.SyncPanelLoad
 	AppConfig.SyncPanelLoad = false
@@ -218,6 +221,7 @@ func TestPendingURIMountIsPersistedAndPlainEscapeCancelsIt(t *testing.T) {
 }
 
 func TestFolderHistoryBackUsesPendingVisualTargetInsteadOfSourceVFS(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	oldSync := AppConfig.SyncPanelLoad
 	AppConfig.SyncPanelLoad = false
@@ -303,6 +307,7 @@ func TestFolderHistoryBackUsesPendingVisualTargetInsteadOfSourceVFS(t *testing.T
 }
 
 func TestFolderHistoryCommitsPositionOnlyAfterSuccessfulURIMount(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	oldSync := AppConfig.SyncPanelLoad
 	AppConfig.SyncPanelLoad = false

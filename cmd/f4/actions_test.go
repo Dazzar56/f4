@@ -364,6 +364,7 @@ func (m *mockRetryDeleteVFS) Stat(ctx context.Context, path string) (vfs.VFSItem
 }
 
 func TestActionDelete_RetrySuccess(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	fm := vtui.FrameManager
 	scr := vtui.NewSilentScreenBuf()
 	scr.AllocBuf(80, 25)
@@ -1360,12 +1361,33 @@ func TestActionFindFile_Persistence(t *testing.T) {
 func TestSession_DiskPersistence(t *testing.T) {
 	// Создаем временную директорию для теста
 	tmpDir := t.TempDir()
+	oldConfig := AppConfig
+	oldEditorSearch, oldFindMask := LastEditorSearch, LastFindFileMask
+	oldLeftPath, oldRightPath := LastLeftPath, LastRightPath
+	oldLeftCursor, oldRightCursor := LastLeftCursor, LastRightCursor
+	oldActivePanel, oldWidePanel := LastActivePanel, LastWidePanel
+	oldLeftViewMode, oldRightViewMode := LastLeftViewMode, LastRightViewMode
+	oldLeftSortMode, oldRightSortMode := LastLeftSortMode, LastRightSortMode
+	oldLeftSortRev, oldRightSortRev := LastLeftSortRev, LastRightSortRev
+	oldShowPanels, oldShowLeft, oldShowRight := LastShowPanels, LastShowLeft, LastShowRight
+	t.Cleanup(func() {
+		AppConfig = oldConfig
+		LastEditorSearch, LastFindFileMask = oldEditorSearch, oldFindMask
+		LastLeftPath, LastRightPath = oldLeftPath, oldRightPath
+		LastLeftCursor, LastRightCursor = oldLeftCursor, oldRightCursor
+		LastActivePanel, LastWidePanel = oldActivePanel, oldWidePanel
+		LastLeftViewMode, LastRightViewMode = oldLeftViewMode, oldRightViewMode
+		LastLeftSortMode, LastRightSortMode = oldLeftSortMode, oldRightSortMode
+		LastLeftSortRev, LastRightSortRev = oldLeftSortRev, oldRightSortRev
+		LastShowPanels, LastShowLeft, LastShowRight = oldShowPanels, oldShowLeft, oldShowRight
+	})
+	AppConfig.AutoSaveSettings = true
 
 	// Перехватываем путь к ini файлу (в реальном коде он завязан на os.UserConfigDir)
 	// Для теста мы просто вручную вызовем SaveSession и проверим результат в файле.
 	origPathFunc := getSessionIniPath
 	getSessionIniPath = func() string { return filepath.Join(tmpDir, "session.ini") }
-	defer func() { getSessionIniPath = origPathFunc }()
+	t.Cleanup(func() { getSessionIniPath = origPathFunc })
 
 	LastEditorSearch = "disk-test"
 	LastFindFileMask = "*.log"

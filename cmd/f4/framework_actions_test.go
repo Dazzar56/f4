@@ -54,10 +54,10 @@ func (frame *frameworkActionTestFrame) HandleCommand(command int, args any) bool
 
 func initFrameworkActionTestScreen(t *testing.T) *vtui.ScreenBuf {
 	t.Helper()
+	t.Cleanup(swapFrameManager(t))
 	screen := vtui.NewSilentScreenBuf()
 	screen.AllocBuf(100, 30)
 	vtui.FrameManager.Init(screen)
-	t.Cleanup(func() { vtui.FrameManager.Init(vtui.NewSilentScreenBuf()) })
 	return screen
 }
 
@@ -103,6 +103,9 @@ func TestFrameworkActionsKeepNativeShortcutsOutOfHotkeyDefaults(t *testing.T) {
 }
 
 func TestNativeFrameworkShortcutMetadataHonorsExplicitOverrides(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
 	previous := GlobalHotkeysMgr
 	manager := NewHotkeyManager(filepath.Join(t.TempDir(), "hotkeys.ini"))
 	GlobalHotkeysMgr = manager

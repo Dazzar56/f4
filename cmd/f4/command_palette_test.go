@@ -160,11 +160,14 @@ func TestCommandPaletteIncludesBothPluginLocationsAndReResolves(t *testing.T) {
 		t.Fatalf("panel and configuration commands have the same category %q", panel.Category)
 	}
 	func() {
-		// This registry test uses a deliberately minimal PanelsFrame that is not
-		// installed in the global frame manager. Disable workspace validation so
-		// the assertions remain focused on live registration re-resolution.
+		// Install the deliberately minimal PanelsFrame in an isolated manager so
+		// workspace validation stays meaningful without borrowing another test's
+		// active screen.
 		oldFrameManager := vtui.FrameManager
-		vtui.FrameManager = nil
+		manager := vtui.NewFrameManager()
+		manager.Screens = []*vtui.AppScreen{{Number: 1, Frames: []vtui.Frame{pf}}}
+		manager.ActiveIdx = 0
+		vtui.FrameManager = manager
 		defer func() { vtui.FrameManager = oldFrameManager }()
 
 		if !executeCommandPaletteEntry(panel) || runs != 1 {
@@ -322,10 +325,10 @@ func (frame *commandPalettePrimaryFrame) InterceptPluginKey(*vtinput.InputEvent)
 }
 
 func TestCommandPaletteHotkeyPrecedesPluginsAndDoesNotStack(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	screen := vtui.NewSilentScreenBuf()
 	screen.AllocBuf(100, 30)
 	vtui.FrameManager.Init(screen)
-	t.Cleanup(func() { vtui.FrameManager.Init(vtui.NewSilentScreenBuf()) })
 
 	host := &commandPalettePrimaryFrame{}
 	vtui.FrameManager.Push(host)

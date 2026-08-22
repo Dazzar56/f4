@@ -226,6 +226,7 @@ func openFindAllMenu(t *testing.T, ev *EditorView, pattern string, caseSensitive
 
 func newFindAllEditorSized(t *testing.T, content string, w, h int) *EditorView {
 	t.Helper()
+	t.Cleanup(swapFrameManager(t))
 	vtui.SetDefaultPalette()
 	scr := vtui.NewSilentScreenBuf()
 	scr.AllocBuf(w, h)

@@ -137,8 +137,8 @@ func TestAction_PanelToggleHidden(t *testing.T) {
 }
 
 func TestActionPanelToggleTargetsActiveWorkspace(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	t.Cleanup(func() { vtui.FrameManager.Init(vtui.NewSilentScreenBuf()) })
 
 	first := &PanelsFrame{showPanels: true, showLeftPanel: true, showRightPanel: true}
 	active := &PanelsFrame{showPanels: true, showLeftPanel: true, showRightPanel: true}
