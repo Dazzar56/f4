@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -232,6 +233,9 @@ type F4Config struct {
 	GuiFontSize            int
 	GuiCols                int
 	GuiRows                int
+	GuiPosX                int
+	GuiPosY                int
+	GuiPositionSaved       bool
 	ConsoleTitleTemplate   string
 	UpdateChannel          int // 0 = Stable, 1 = Nightly
 	UpdateInterval         int // 0 = Never, 1 = Every start, 2 = Daily, 3 = Weekly
@@ -348,6 +352,9 @@ var AppConfig = F4Config{
 	GuiFontSize:              defaultGuiFontSize(runtime.GOOS),
 	GuiCols:                  100,
 	GuiRows:                  30,
+	GuiPosX:                  0,
+	GuiPosY:                  0,
+	GuiPositionSaved:         false,
 	ConsoleTitleTemplate:     "f4 %Ver %Platform %Admin - %State",
 	UpdateChannel:            0,
 	ProxyMode:                netproxy.ModeSystem,
@@ -493,6 +500,16 @@ func LoadConfig() {
 	fmt.Sscanf(ini.GetString("Appearance", "GuiRows", "30"), "%d", &AppConfig.GuiRows)
 	if AppConfig.GuiRows <= 0 {
 		AppConfig.GuiRows = 30
+	}
+	guiPosX, xErr := strconv.Atoi(ini.GetString("Appearance", "GuiPosX", ""))
+	guiPosY, yErr := strconv.Atoi(ini.GetString("Appearance", "GuiPosY", ""))
+	AppConfig.GuiPositionSaved = xErr == nil && yErr == nil
+	if AppConfig.GuiPositionSaved {
+		AppConfig.GuiPosX = guiPosX
+		AppConfig.GuiPosY = guiPosY
+	} else {
+		AppConfig.GuiPosX = 0
+		AppConfig.GuiPosY = 0
 	}
 	AppConfig.EnforceColorCorrection = ini.GetString("Dialogs", "EnforceColorCorrection", "1") == "1"
 	fmt.Sscanf(ini.GetString("Appearance", "HighlightPriority", "0"), "%d", &AppConfig.HighlightPriority)
@@ -678,6 +695,10 @@ func SaveConfig() {
 	sb.WriteString(fmt.Sprintf("GuiFontSize = %d\n", AppConfig.GuiFontSize))
 	sb.WriteString(fmt.Sprintf("GuiCols = %d\n", AppConfig.GuiCols))
 	sb.WriteString(fmt.Sprintf("GuiRows = %d\n", AppConfig.GuiRows))
+	if AppConfig.GuiPositionSaved {
+		sb.WriteString(fmt.Sprintf("GuiPosX = %d\n", AppConfig.GuiPosX))
+		sb.WriteString(fmt.Sprintf("GuiPosY = %d\n", AppConfig.GuiPosY))
+	}
 	sb.WriteString(fmt.Sprintf("HighlightPriority = %d\n", AppConfig.HighlightPriority))
 
 	sb.WriteString("\n[Update]\n")

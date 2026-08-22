@@ -588,6 +588,9 @@ func TestConfig_GuiDimensionsPersistence(t *testing.T) {
 	// 1. Задаем тестовые значения
 	AppConfig.GuiCols = 120
 	AppConfig.GuiRows = 45
+	AppConfig.GuiPosX = -123
+	AppConfig.GuiPosY = 456
+	AppConfig.GuiPositionSaved = true
 	AppConfig.ConfirmExit = false
 
 	SaveConfig()
@@ -595,6 +598,9 @@ func TestConfig_GuiDimensionsPersistence(t *testing.T) {
 	// 2. Сбрасываем текущую конфигурацию в памяти
 	AppConfig.GuiCols = 0
 	AppConfig.GuiRows = 0
+	AppConfig.GuiPosX = 0
+	AppConfig.GuiPosY = 0
+	AppConfig.GuiPositionSaved = false
 	AppConfig.ConfirmExit = true
 
 	// 3. Читаем заново из временного файла
@@ -606,6 +612,9 @@ func TestConfig_GuiDimensionsPersistence(t *testing.T) {
 	}
 	if AppConfig.GuiRows != 45 {
 		t.Errorf("Expected GuiRows to be 45, got %d", AppConfig.GuiRows)
+	}
+	if !AppConfig.GuiPositionSaved || AppConfig.GuiPosX != -123 || AppConfig.GuiPosY != 456 {
+		t.Errorf("Expected GUI position to be -123,456, got saved=%v x=%d y=%d", AppConfig.GuiPositionSaved, AppConfig.GuiPosX, AppConfig.GuiPosY)
 	}
 	if AppConfig.ConfirmExit {
 		t.Error("Expected ConfirmExit to be loaded as false, got true")
