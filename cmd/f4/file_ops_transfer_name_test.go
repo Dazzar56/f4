@@ -71,6 +71,37 @@ func TestTransferItemNameSanitizesPortableInvalidNames(t *testing.T) {
 	}
 }
 
+func TestTransferItemNameForMaskUsesBasenameOfPathSelection(t *testing.T) {
+	source := vfs.NewOSVFS(t.TempDir())
+	destination := vfs.NewOSVFS(t.TempDir())
+
+	got := transferItemNameForMask(source, source.Join(source.GetPath(), "nested", "file.txt"), destination, "nested/file.txt", "*.bak")
+	if got != "file.bak" {
+		t.Fatalf("masked path selection = %q, want %q", got, "file.bak")
+	}
+}
+
+func TestTransferItemNameForMaskKeepsProviderExportName(t *testing.T) {
+	source := &transferNameOSVFS{OSVFS: vfs.NewOSVFS(t.TempDir())}
+	destination := vfs.NewOSVFS(t.TempDir())
+
+	got := transferItemNameForMask(source, source.Join(source.GetPath(), "document.gdoc [a1b2]"), destination, "document.gdoc [a1b2]", "*.bak")
+	if got != "document.bak" {
+		t.Fatalf("masked provider name = %q, want %q", got, "document.bak")
+	}
+}
+
+func TestTransferItemNameForMaskCanExposeFar2lNameCollision(t *testing.T) {
+	source := vfs.NewOSVFS(t.TempDir())
+	destination := vfs.NewOSVFS(t.TempDir())
+
+	first := transferItemNameForMask(source, "ab.txt", destination, "ab.txt", "?.bak")
+	second := transferItemNameForMask(source, "ac.txt", destination, "ac.txt", "?.bak")
+	if first != "a.bak" || second != first {
+		t.Fatalf("mask collision = %q and %q, want both %q", first, second, "a.bak")
+	}
+}
+
 func TestBulkCopyRequiresIdentityAfterNameSanitization(t *testing.T) {
 	source := vfs.NewOSVFS(t.TempDir())
 	destination := vfs.NewOSVFS(t.TempDir())
