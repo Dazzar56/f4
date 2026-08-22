@@ -757,7 +757,15 @@ func showEditor(pf *PanelsFrame, v vfs.VFS, path string, f vfs.ReadAtCloser) {
 		pt = piecetable.New(nil)
 	}
 
-	editor := NewEditorView(pt, v, path)
+	// A mapped or lazily loaded file is indexed by StartIndexing below; anything
+	// else — an empty buffer, or a file decoded into memory — has its index
+	// built with it, as it always has.
+	var editor *EditorView
+	if mapped != nil || buf != nil {
+		editor = NewEditorViewIndexedLater(pt, v, path)
+	} else {
+		editor = NewEditorView(pt, v, path)
+	}
 	editor.Codepage = cpID
 	// StartIndexing skips hex, so binary files open without a line scan.
 	if _, isDisks := v.(*vfs.DisksVFS); isDisks || binary {
@@ -1020,8 +1028,15 @@ func actionSwitchEditorToViewer(ev *EditorView) {
 		targetOffset := int64(0)
 		if ev.HexMode || ev.DecodeMode {
 			targetOffset = int64(ev.HexTopOffset)
-		} else if ev.li != nil && ev.CursorLine >= 0 && ev.CursorLine < ev.li.LineCount() {
-			targetOffset = int64(ev.li.GetLineOffset(ev.CursorLine))
+		} else if ev.li != nil && ev.CursorLine >= 0 {
+			// The index owns the answer to "where is line N", and on a file
+			// that is still being scanned it may not have reached the cursor
+			// yet — which used to open the viewer at the top of the file
+			// instead of where the editor was.
+			ev.ensureIndexedToLine(ev.CursorLine)
+			if ev.CursorLine < ev.li.LineCount() {
+				targetOffset = int64(ev.li.GetLineOffset(ev.CursorLine))
+			}
 		}
 
 		ctx := context.Background()
@@ -1166,7 +1181,16 @@ func actionSwitchViewerToEditor(vv *ViewerView) {
 		pt = piecetable.New(decoded)
 	}
 
-	editor := NewEditorView(pt, vv.vfs, vv.path)
+	// Same rule as opening from the panel: a file the indexer owns must not be
+	// indexed on the way in, or switching to the editor pays the whole file's
+	// scan on the UI thread before it appears — twenty seconds of it on the
+	// 8 GB test file.
+	var editor *EditorView
+	if mapped != nil || buf != nil {
+		editor = NewEditorViewIndexedLater(pt, vv.vfs, vv.path)
+	} else {
+		editor = NewEditorView(pt, vv.vfs, vv.path)
+	}
 	editor.file = f
 	editor.asyncBuf = buf
 	editor.mapped = mapped
@@ -1182,9 +1206,18 @@ func actionSwitchViewerToEditor(vv *ViewerView) {
 		editor.CursorLine = editor.li.GetLineAtOffset(targetOff)
 		editor.CursorPos = targetOff - editor.li.GetLineOffset(editor.CursorLine)
 	} else {
-		editor.ensureIndexedTo(targetOff)
-		line := editor.li.GetLineAtOffset(targetOff)
-		pos := targetOff - editor.li.GetLineOffset(line)
+		line, pos := 0, 0
+		if !editor.awaitOffset(targetOff) {
+			line = editor.CursorLine
+			pos = editor.CursorPos
+		} else {
+			// The file has not been read that far — a chunk of a lazily
+			// loaded one is still on its way — so the offset has no line yet.
+			// The editor opens at the top and the scan puts the cursor where
+			// the viewer was when it reads past it, rather than guessing now.
+			vtui.DebugLog("EDITOR: viewer offset %d is past the index; the scan will place it",
+				targetOff)
+		}
 		editor.CursorLine = line
 		editor.CursorPos = pos
 		editor.targetLine = line
@@ -3778,7 +3811,7 @@ func actionImportFar2lHistory(pf *PanelsFrame) {
 }
 
 func actionAppearanceSettings(pf *PanelsFrame) {
-	const width, height = 64, 28
+	const width, height = 64, 29
 	dlg := vtui.NewCenteredDialog(width, height, Msg("AppearanceSettings.Title"))
 	dlg.ShowClose = true
 	// Snapshot the whole palette (not just the style name) so a
@@ -3853,6 +3886,10 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 	comboWorkspaceTabs.Menu.SetSelectPos(workspaceTabSelection)
 	comboWorkspaceTabs.Edit.SetText(workspaceTabModes[workspaceTabSelection])
 	lblWorkspaceTabs := vtui.NewLabel(0, 0, Msg("AppearanceSettings.WorkspaceTabs"), comboWorkspaceTabs)
+	chkWorkspaceTabsOverlay := vtui.NewCheckbox(0, 0, Msg("AppearanceSettings.WorkspaceTabsOverlay"), AppConfig.WorkspaceTabsOverlay)
+	if AppConfig.WorkspaceTabsOverlay {
+		chkWorkspaceTabsOverlay.State = 1
+	}
 
 	ctrlTabModes := []string{
 		Msg("AppearanceSettings.CtrlTabDirect"),
@@ -3919,6 +3956,7 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 	dlg.AddItem(editTitle)
 	dlg.AddItem(lblWorkspaceTabs)
 	dlg.AddItem(comboWorkspaceTabs)
+	dlg.AddItem(chkWorkspaceTabsOverlay)
 	dlg.AddItem(lblCtrlTab)
 	dlg.AddItem(comboCtrlTab)
 	dlg.AddItem(chkAltNumberTabs)
@@ -3953,6 +3991,7 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 	rowWorkspaceTabs.Add(lblWorkspaceTabs, vtui.Margins{Right: 1}, vtui.AlignLeft)
 	rowWorkspaceTabs.Add(comboWorkspaceTabs, vtui.Margins{}, vtui.AlignFill)
 	vbox.Add(rowWorkspaceTabs, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Add(chkWorkspaceTabsOverlay, vtui.Margins{}, vtui.AlignLeft)
 
 	rowCtrlTab := vtui.NewHBoxLayout(0, 0, width-4, 1)
 	rowCtrlTab.Add(lblCtrlTab, vtui.Margins{Right: 1}, vtui.AlignLeft)
@@ -4007,6 +4046,7 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 		vtui.ManageCursorStyle = !AppConfig.KeepTerminalCursor
 		AppConfig.EnforceColorCorrection = chkContrast.State == 1
 		AppConfig.WorkspaceTabMode = comboWorkspaceTabs.Menu.SelectPos
+		AppConfig.WorkspaceTabsOverlay = chkWorkspaceTabsOverlay.State == 1
 		AppConfig.CtrlTabShowsMenu = comboCtrlTab.Menu.SelectPos == 1
 		AppConfig.AltNumberSwitchesTabs = chkAltNumberTabs.State == 1
 		AppConfig.RestoreWorkspaceTabs = chkRestoreWorkspaceTabs.State == 1
@@ -4022,6 +4062,7 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 			ctrlTabMode = vtui.WorkspaceCtrlTabMenu
 		}
 		vtui.FrameManager.ConfigureWorkspaceTabs(vtui.WorkspaceTabMode(AppConfig.WorkspaceTabMode), ctrlTabMode)
+		vtui.FrameManager.ConfigureWorkspaceTabOverlay(AppConfig.WorkspaceTabsOverlay)
 		vtui.FrameManager.ConfigureWorkspaceAltNumberSwitch(AppConfig.AltNumberSwitchesTabs)
 
 		if fontChanged {

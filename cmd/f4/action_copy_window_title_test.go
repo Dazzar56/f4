@@ -30,19 +30,26 @@ func TestAction_AppCopyWindowTitle(t *testing.T) {
 
 	origTemplate := AppConfig.ConsoleTitleTemplate
 	defer func() { AppConfig.ConsoleTitleTemplate = origTemplate }()
-	defer snapshotFrameManagerState(t)()
+	defer swapFrameManager(t)()
 
 	scr := vtui.NewScreenBuf()
 	scr.AllocBuf(80, 25)
 	vtui.FrameManager.Init(scr)
 	vtui.FrameManager.Push(vtui.NewDesktop())
-	AppConfig.ConsoleTitleTemplate = "debug %State"
-
 	vtui.SetClipboard("")
 	if !RunAction("App.CopyWindowTitle") {
 		t.Fatal("App.CopyWindowTitle did not run")
 	}
-	if got := waitForWindowTitleClipboard(t, "debug Desktop"); got != "debug Desktop" {
-		t.Fatalf("clipboard = %q, want %q", got, "debug Desktop")
+	if got := waitForWindowTitleClipboard(t, "Desktop"); got != "Desktop" {
+		t.Fatalf("clipboard = %q, want %q", got, "Desktop")
+	}
+
+	vtui.FrameManager.Push(vtui.NewCenteredDialog(40, 10, " User Menu "))
+	vtui.SetClipboard("")
+	if !RunAction("App.CopyWindowTitle") {
+		t.Fatal("App.CopyWindowTitle did not run for dialog")
+	}
+	if got := waitForWindowTitleClipboard(t, "User Menu"); got != "User Menu" {
+		t.Fatalf("dialog clipboard = %q, want %q", got, "User Menu")
 	}
 }

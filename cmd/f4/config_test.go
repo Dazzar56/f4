@@ -45,6 +45,7 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	AppConfig.ConsoleMode = "host"
 	AppConfig.ConsoleOverlayUI = true
 	AppConfig.WorkspaceTabMode = int(vtui.WorkspaceTabsNever)
+	AppConfig.WorkspaceTabsOverlay = false
 	AppConfig.CtrlTabShowsMenu = true
 	AppConfig.AltNumberSwitchesTabs = false
 	AppConfig.RestoreWorkspaceTabs = false
@@ -70,6 +71,7 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	AppConfig.ConsoleMode = "own"
 	AppConfig.ConsoleOverlayUI = false
 	AppConfig.WorkspaceTabMode = int(vtui.WorkspaceTabsAlways)
+	AppConfig.WorkspaceTabsOverlay = true
 	AppConfig.CtrlTabShowsMenu = false
 	AppConfig.AltNumberSwitchesTabs = true
 	AppConfig.RestoreWorkspaceTabs = true
@@ -89,6 +91,9 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	}
 	if AppConfig.WorkspaceTabMode != int(vtui.WorkspaceTabsNever) {
 		t.Errorf("LoadConfig failed to restore workspace tab mode: %d", AppConfig.WorkspaceTabMode)
+	}
+	if AppConfig.WorkspaceTabsOverlay {
+		t.Error("LoadConfig failed to restore disabled workspace tab overlay")
 	}
 	if !AppConfig.CtrlTabShowsMenu {
 		t.Error("LoadConfig failed to restore Ctrl+Tab menu mode")
@@ -373,10 +378,14 @@ func TestConfig_WorkspaceTabModeDefaultsToAlwaysWhenKeyIsAbsent(t *testing.T) {
 	getConfigIniPaths = func() []string { return []string{userIniPath} }
 
 	AppConfig.WorkspaceTabMode = int(vtui.WorkspaceTabsMultiple)
+	AppConfig.WorkspaceTabsOverlay = false
 	LoadConfig()
 	if AppConfig.WorkspaceTabMode != int(vtui.WorkspaceTabsAlways) {
 		t.Fatalf("WorkspaceTabMode without a saved key = %d, want always-visible mode %d",
 			AppConfig.WorkspaceTabMode, vtui.WorkspaceTabsAlways)
+	}
+	if !AppConfig.WorkspaceTabsOverlay {
+		t.Fatal("WorkspaceTabsOverlay must default to true when the setting is absent")
 	}
 }
 

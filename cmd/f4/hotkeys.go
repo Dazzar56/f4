@@ -145,6 +145,45 @@ func NewHotkeyManager(iniPath string) *HotkeyManager {
 	return hm
 }
 
+func cloneHotkeyBindings(src map[string]map[string]string) map[string]map[string]string {
+	if src == nil {
+		return nil
+	}
+
+	dst := make(map[string]map[string]string, len(src))
+	for area, bindings := range src {
+		dst[area] = make(map[string]string, len(bindings))
+		for key, action := range bindings {
+			dst[area][key] = action
+		}
+	}
+	return dst
+}
+
+// CloneForEdit returns an isolated manager for a settings dialog. Mutations
+// made to the clone do not affect runtime dispatch or the user's INI file
+// until ReplaceBindingsFrom followed by Save is explicitly called.
+func (hm *HotkeyManager) CloneForEdit() *HotkeyManager {
+	if hm == nil {
+		return nil
+	}
+	return &HotkeyManager{
+		Bindings: cloneHotkeyBindings(hm.Bindings),
+		Defaults: cloneHotkeyBindings(hm.Defaults),
+		iniPath:  hm.iniPath,
+	}
+}
+
+// ReplaceBindingsFrom commits an isolated settings-dialog draft to the
+// runtime manager. The caller controls when persistence happens by calling
+// Save separately.
+func (hm *HotkeyManager) ReplaceBindingsFrom(src *HotkeyManager) {
+	if hm == nil || src == nil {
+		return
+	}
+	hm.Bindings = cloneHotkeyBindings(src.Bindings)
+}
+
 // GetActiveBindings returns a map of Area -> Key -> ActionName containing all active bindings.
 func (hm *HotkeyManager) GetActiveBindings() map[string]map[string]string {
 	res := make(map[string]map[string]string)

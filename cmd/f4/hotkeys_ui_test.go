@@ -144,8 +144,99 @@ func TestActionHotkeyConfigBuildsNativeRowsAndFitsScreen(t *testing.T) {
 		t.Fatalf("native rows missing: select=%v toggle-focus=%v", selectInsert, toggleFocus)
 	}
 
+	var hasSave, hasCancel bool
+	for _, child := range dlg.GetChildren() {
+		button, ok := child.(*vtui.Button)
+		if !ok {
+			continue
+		}
+		switch getCleanText(button) {
+		case "Save":
+			hasSave = true
+		case "Cancel":
+			hasCancel = true
+		}
+	}
+	if !hasSave || !hasCancel {
+		t.Fatalf("hotkey dialog must expose transactional buttons: save=%v cancel=%v", hasSave, hasCancel)
+	}
+
 	x1, _, x2, _ := dlg.GetPosition()
 	if got, want := x2-x1+1, 156; got != want {
 		t.Errorf("dialog width = %d, want %d", got, want)
+	}
+}
+
+func TestActionHotkeyConfigUnbindUsesDraftUntilSave(t *testing.T) {
+	previous := GlobalHotkeysMgr
+	manager := NewHotkeyManager("")
+	GlobalHotkeysMgr = manager
+	t.Cleanup(func() { GlobalHotkeysMgr = previous })
+
+	screen := vtui.NewSilentScreenBuf()
+	screen.AllocBuf(160, 40)
+	vtui.FrameManager.Init(screen)
+	actionHotkeyConfig(nil)
+
+	openDialog := func() (*vtui.Window, *vtui.Table, *vtui.Button, *vtui.Button) {
+		top, ok := vtui.FrameManager.GetTopFrame().(*vtui.Window)
+		if !ok {
+			t.Fatalf("top frame = %T, want hotkey dialog", vtui.FrameManager.GetTopFrame())
+		}
+		var table *vtui.Table
+		var unbind, save *vtui.Button
+		for _, child := range top.GetChildren() {
+			switch candidate := child.(type) {
+			case *vtui.Table:
+				table = candidate
+			case *vtui.Button:
+				switch getCleanText(candidate) {
+				case "Unbind":
+					unbind = candidate
+				case "Save":
+					save = candidate
+				}
+			}
+		}
+		if table == nil || unbind == nil || save == nil {
+			t.Fatalf("hotkey dialog controls missing: table=%v unbind=%v save=%v", table != nil, unbind != nil, save != nil)
+		}
+		for i, row := range table.Rows {
+			hotkey, ok := row.(hotkeyRow)
+			if ok && hotkey.Action == "File.Delete" && hotkey.RawKey == "F8" {
+				table.SelectPos = i
+				return top, table, unbind, save
+			}
+		}
+		t.Fatal("File.Delete/F8 row not found")
+		return nil, nil, nil, nil
+	}
+
+	mainDialog, _, unbind, save := openDialog()
+	unbind.OnClick()
+	confirmation, ok := vtui.FrameManager.GetTopFrame().(vtui.Container)
+	if !ok {
+		t.Fatalf("confirmation frame = %T, want container", vtui.FrameManager.GetTopFrame())
+	}
+	clickDialogButton(t, confirmation, "Cancel")
+	if got := manager.GetAction("Shell", "F8"); got != "File.Delete" {
+		t.Fatalf("cancelled confirmation changed live binding: got %q", got)
+	}
+
+	unbind.OnClick()
+	confirmation, ok = vtui.FrameManager.GetTopFrame().(vtui.Container)
+	if !ok {
+		t.Fatalf("confirmation frame = %T, want container", vtui.FrameManager.GetTopFrame())
+	}
+	clickDialogButton(t, confirmation, "Ok")
+	if got := manager.GetAction("Shell", "F8"); got != "File.Delete" {
+		t.Fatalf("accepted draft removal changed live binding before Save: got %q", got)
+	}
+	if mainDialog.IsDone() {
+		t.Fatal("unbind confirmation closed the main dialog")
+	}
+	save.OnClick()
+	if got := manager.GetAction("Shell", "F8"); got != "None" {
+		t.Fatalf("saved removal = %q, want None", got)
 	}
 }
