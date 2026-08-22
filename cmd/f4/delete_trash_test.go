@@ -218,7 +218,7 @@ func TestDeleteActionsExposeDistinctDispositions(t *testing.T) {
 
 	AppConfig.UseTrash = true
 	actionDelete(pf)
-	findButton(t, "Move to Trash")
+	findButton(t, "Move to Recycle Bin")
 
 	AppConfig.UseTrash = false
 	actionDelete(pf)
