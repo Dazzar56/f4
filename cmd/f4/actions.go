@@ -34,14 +34,20 @@ func editorHeaderIsBinary(header []byte, cpID int) bool {
 }
 
 var (
-	LastFindFileMask = "*"
-	LastFindFileText = ""
-	LastLeftPath     = ""
-	LastRightPath    = ""
-	LastLeftCursor   = ""
-	LastRightCursor  = ""
-	LastActivePanel  = 1
-	LastWidePanel    = -1
+	LastFindFileMask          = "*"
+	LastFindFileText          = ""
+	LastFindFileCaseSensitive = false
+	LastFindFileWholeWords    = false
+	LastFindFileRegexp        = false
+	LastFindFileNotContaining = false
+	LastFindFileFolders       = false
+	LastFindFileSymlinks      = false
+	LastLeftPath              = ""
+	LastRightPath             = ""
+	LastLeftCursor            = ""
+	LastRightCursor           = ""
+	LastActivePanel           = 1
+	LastWidePanel             = -1
 
 	LastLeftViewMode  = 0
 	LastRightViewMode = 0
@@ -2691,13 +2697,21 @@ func actionFindDuplicates(pf *PanelsFrame) {
 	})
 }
 
+func boolToCheckboxState(value bool) int {
+	if value {
+		return 1
+	}
+	return 0
+}
+
 func actionFindFile(pf *PanelsFrame) {
 	activePanel := pf.getActivePanel()
 	if activePanel == nil {
 		return
 	}
 
-	dlg := vtui.NewCenteredDialog(54, 13, Msg("FindFile.Title"))
+	const width, height = 78, 20
+	dlg := vtui.NewCenteredDialog(width, height, Msg("FindFile.Title"))
 	dlg.ShowClose = true
 
 	lblMask := vtui.NewLabel(0, 0, Msg("FindFile.MaskPrompt"), nil)
@@ -2709,6 +2723,19 @@ func actionFindFile(pf *PanelsFrame) {
 	editText := vtui.NewEdit(0, 0, 20, LastFindFileText)
 	lblText.FocusLink = editText
 
+	chkCase := vtui.NewCheckbox(0, 0, Msg("FindFile.CaseSensitive"), false)
+	chkCase.State = boolToCheckboxState(LastFindFileCaseSensitive)
+	chkWhole := vtui.NewCheckbox(0, 0, Msg("FindFile.WholeWords"), false)
+	chkWhole.State = boolToCheckboxState(LastFindFileWholeWords)
+	chkRegexp := vtui.NewCheckbox(0, 0, Msg("FindFile.Regexp"), false)
+	chkRegexp.State = boolToCheckboxState(LastFindFileRegexp)
+	chkNotContaining := vtui.NewCheckbox(0, 0, Msg("FindFile.NotContaining"), false)
+	chkNotContaining.State = boolToCheckboxState(LastFindFileNotContaining)
+	chkFolders := vtui.NewCheckbox(0, 0, Msg("FindFile.Folders"), false)
+	chkFolders.State = boolToCheckboxState(LastFindFileFolders)
+	chkSymlinks := vtui.NewCheckbox(0, 0, Msg("FindFile.Symlinks"), false)
+	chkSymlinks.State = boolToCheckboxState(LastFindFileSymlinks)
+
 	btnFind := vtui.NewButton(0, 0, Msg("FindFile.BtnFind"))
 	btnFind.IsDefault = true
 	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
@@ -2717,17 +2744,34 @@ func actionFindFile(pf *PanelsFrame) {
 	dlg.AddItem(editMask)
 	dlg.AddItem(lblText)
 	dlg.AddItem(editText)
+	dlg.AddItem(chkCase)
+	dlg.AddItem(chkWhole)
+	dlg.AddItem(chkRegexp)
+	dlg.AddItem(chkNotContaining)
+	dlg.AddItem(chkFolders)
+	dlg.AddItem(chkSymlinks)
 	dlg.AddItem(btnFind)
 	dlg.AddItem(btnCancel)
 
-	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 54-4, 13-4)
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, width-4, height-4)
 	vbox.Add(lblMask, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(editMask, vtui.Margins{Top: 1}, vtui.AlignFill)
 
 	vbox.Add(lblText, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(editText, vtui.Margins{Top: 1}, vtui.AlignFill)
 
-	hbox := vtui.NewHBoxLayout(0, 0, 54-4, 1)
+	optionsRow := func(left, right *vtui.Checkbox) *vtui.HBoxLayout {
+		row := vtui.NewHBoxLayout(0, 0, width-4, 1)
+		row.Spacing = 8
+		row.Add(left, vtui.Margins{}, vtui.AlignTop)
+		row.Add(right, vtui.Margins{}, vtui.AlignTop)
+		return row
+	}
+	vbox.Add(optionsRow(chkCase, chkWhole), vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Add(optionsRow(chkRegexp, chkNotContaining), vtui.Margins{}, vtui.AlignFill)
+	vbox.Add(optionsRow(chkFolders, chkSymlinks), vtui.Margins{}, vtui.AlignFill)
+
+	hbox := vtui.NewHBoxLayout(0, 0, width-4, 1)
 	hbox.HorizontalAlign = vtui.AlignCenter
 
 	hbox.Spacing = 2
@@ -2741,10 +2785,23 @@ func actionFindFile(pf *PanelsFrame) {
 	btnFind.OnClick = func() {
 		LastFindFileMask = editMask.GetText()
 		LastFindFileText = editText.GetText()
+		LastFindFileCaseSensitive = chkCase.State == 1
+		LastFindFileWholeWords = chkWhole.State == 1
+		LastFindFileRegexp = chkRegexp.State == 1
+		LastFindFileNotContaining = chkNotContaining.State == 1
+		LastFindFileFolders = chkFolders.State == 1
+		LastFindFileSymlinks = chkSymlinks.State == 1
 		SaveSession()
 		dlg.Close()
 		if LastFindFileMask != "" {
-			ExecuteFindFile(pf, activePanel.vfs, activePanel.vfs.GetPath(), LastFindFileMask, LastFindFileText)
+			ExecuteFindFile(pf, activePanel.vfs, activePanel.vfs.GetPath(), LastFindFileMask, LastFindFileText, FindFileOptions{
+				CaseSensitive: LastFindFileCaseSensitive,
+				WholeWords:    LastFindFileWholeWords,
+				Regex:         LastFindFileRegexp,
+				NotContaining: LastFindFileNotContaining,
+				FindFolders:   LastFindFileFolders,
+				FindSymlinks:  LastFindFileSymlinks,
+			})
 		}
 	}
 
