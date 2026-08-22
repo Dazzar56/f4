@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"unicode"
@@ -22,6 +24,49 @@ func hasHotkey(s string) bool {
 	}
 	nextChar := []rune(s[idx+1:])[0]
 	return unicode.IsLetter(nextChar) || unicode.IsDigit(nextChar)
+}
+
+const langCoverageBaselinePath = "lang/coverage_baseline.txt"
+
+func loadLangCoverageBaseline(data []byte) (map[string]int, error) {
+	baseline := make(map[string]int)
+	for lineNumber, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("line %d: expected language=count", lineNumber+1)
+		}
+		code := strings.TrimSpace(parts[0])
+		if code == "" {
+			return nil, fmt.Errorf("line %d: language code is empty", lineNumber+1)
+		}
+		if _, exists := baseline[code]; exists {
+			return nil, fmt.Errorf("line %d: duplicate language %q", lineNumber+1, code)
+		}
+		count, err := strconv.Atoi(strings.TrimSpace(parts[1]))
+		if err != nil || count < 0 {
+			return nil, fmt.Errorf("line %d: invalid coverage count for %q", lineNumber+1, code)
+		}
+		baseline[code] = count
+	}
+	return baseline, nil
+}
+
+func writeLangCoverageBaseline(path string, coverage map[string]int) error {
+	codes := make([]string, 0, len(coverage))
+	for code := range coverage {
+		codes = append(codes, code)
+	}
+	sort.Strings(codes)
+
+	var builder strings.Builder
+	for _, code := range codes {
+		fmt.Fprintf(&builder, "%s=%d\n", code, coverage[code])
+	}
+	return os.WriteFile(path, []byte(builder.String()), 0644)
 }
 
 func TestLangConsistency(t *testing.T) {
@@ -79,6 +124,17 @@ func TestLangConsistency(t *testing.T) {
 	}
 
 	placeholderRe := regexp.MustCompile(`%[sdvq]`)
+	baselineData, err := os.ReadFile(langCoverageBaselinePath)
+	if err != nil {
+		t.Fatalf("Failed to read %s: %v", langCoverageBaselinePath, err)
+	}
+	baseline, err := loadLangCoverageBaseline(baselineData)
+	if err != nil {
+		t.Fatalf("Failed to parse %s: %v", langCoverageBaselinePath, err)
+	}
+	updateBaseline := os.Getenv("F4_UPDATE_COVERAGE_BASELINE") == "1"
+	coverage := make(map[string]int)
+	seenCodes := make(map[string]bool)
 
 	for _, file := range files {
 		data, err := os.ReadFile(file)
@@ -97,6 +153,26 @@ func TestLangConsistency(t *testing.T) {
 		}
 		if ini.GetString("Language", "Name", "") == "" {
 			t.Errorf("%s: [Language] Name is missing", file)
+		}
+		seenCodes[code] = true
+
+		missingKeys := make([]string, 0)
+		for _, key := range enKeys {
+			if _, ok := stringsMap[key]; ok {
+				coverage[code]++
+			} else {
+				missingKeys = append(missingKeys, key)
+			}
+		}
+		if !updateBaseline {
+			if expected, ok := baseline[code]; !ok {
+				t.Errorf("%s has no coverage baseline; add %s=<covered key count>", file, code)
+			} else if coverage[code] < expected {
+				t.Errorf("%s covers %d/%d English keys, baseline requires at least %d", code, coverage[code], len(enKeys), expected)
+			}
+		}
+		if code != "en" {
+			t.Logf("%s coverage: %d/%d (%.1f%%); missing keys (%d): %s", code, coverage[code], len(enKeys), 100*float64(coverage[code])/float64(len(enKeys)), len(missingKeys), strings.Join(missingKeys, ", "))
 		}
 
 		if filepath.Base(file) == "en.lng" {
@@ -274,35 +350,55 @@ func TestLangConsistency(t *testing.T) {
 		}
 	}
 
-	baselineData, err := os.ReadFile(filepath.Join("lang", "coverage_baseline.txt"))
-	if err == nil {
-		baselineLines := strings.Split(string(baselineData), "\n")
-		for _, line := range baselineLines {
-			line = strings.TrimSpace(line)
-			if line == "" {
-				continue
-			}
-			parts := strings.Split(line, "=")
-			if len(parts) == 2 {
-				code := parts[0]
-				var expectedCount int
-				fmt.Sscanf(parts[1], "%d", &expectedCount)
+	if updateBaseline {
+		if err := writeLangCoverageBaseline(langCoverageBaselinePath, coverage); err != nil {
+			t.Fatalf("cannot update %s: %v", langCoverageBaselinePath, err)
+		}
+		t.Logf("%s regenerated for %d languages; review and commit it", langCoverageBaselinePath, len(coverage))
+		return
+	}
 
-				file := filepath.Join("lang", code+".lng")
-				data, err := os.ReadFile(file)
-				if err != nil {
-					t.Errorf("Coverage baseline requires %s but file is missing", code)
-					continue
-				}
-				ini := ParseIni(bytes.NewReader(data))
-				stringsMap := loadLangMapFromINI(ini)
-				if len(stringsMap) < expectedCount {
-					t.Errorf("%s has %d keys, baseline requires at least %d", code, len(stringsMap), expectedCount)
-				}
-			}
+	for code := range baseline {
+		if !seenCodes[code] {
+			t.Errorf("coverage baseline requires %s.lng but the language file is missing", code)
 		}
 	}
 }
+
+func TestLangCoverageBaselineParsing(t *testing.T) {
+	baseline, err := loadLangCoverageBaseline([]byte("# comment\nru = 1343\nen=1355\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if baseline["ru"] != 1343 || baseline["en"] != 1355 {
+		t.Fatalf("baseline = %#v", baseline)
+	}
+
+	for _, input := range []string{
+		"ru=1\nru=2\n",
+		"ru=-1\n",
+		"ru\n",
+	} {
+		if _, err := loadLangCoverageBaseline([]byte(input)); err == nil {
+			t.Errorf("loadLangCoverageBaseline(%q) unexpectedly succeeded", input)
+		}
+	}
+}
+
+func TestWriteLangCoverageBaselineSortsCodes(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "coverage_baseline.txt")
+	if err := writeLangCoverageBaseline(path, map[string]int{"zh": 643, "en": 1355, "ar": 668}); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := string(data), "ar=668\nen=1355\nzh=643\n"; got != want {
+		t.Fatalf("baseline = %q, want %q", got, want)
+	}
+}
+
 func TestAntiMergeLogic(t *testing.T) {
 	enStrings := map[string]string{
 		"LanguageSettings.Title": "Language Settings",

@@ -4,6 +4,21 @@ How to test (in repo root):
 
 GOMAXPROCS=1 go test -run="Test.*(Lang|Layout|Translation|Contamination|Bidi)" -v
 
+`TestLangConsistency` measures translation coverage separately for every
+language: a key counts only when it is present in that language and in the
+English source file. The minimum covered-key count for each language is stored
+in `coverage_baseline.txt`; the test fails if a language drops below its
+baseline and reports the complete missing-key list with `-v`.
+
+When a deliberate translation change establishes a new floor, regenerate the
+counts and inspect the diff before committing it:
+
+    F4_UPDATE_COVERAGE_BASELINE=1 go test -run '^TestLangConsistency$' ./cmd/f4
+
+The command records the current coverage only; it does not translate missing
+keys. Review the resulting `coverage_baseline.txt` and commit it together with
+the language changes.
+
 This command must stay green. Three cheap canaries guard the translation files
 against machine translation damage:
 
