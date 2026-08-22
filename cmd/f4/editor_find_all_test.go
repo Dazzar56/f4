@@ -599,11 +599,11 @@ func TestCountMatchLines(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			spans, err := findAllMatchSpans(nil, []byte(c.data), c.pattern, true, false, false)
+			spans, err := findAllMatchSpans(context.Background(), []byte(c.data), c.pattern, true, false, false)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got := countMatchLines(nil, []byte(c.data), spans); got != c.want {
+			if got := countMatchLines(context.Background(), []byte(c.data), spans); got != c.want {
 				t.Errorf("countMatchLines = %d, want %d (%d occurrences)", got, c.want, len(spans))
 			}
 		})
@@ -617,7 +617,7 @@ func TestEditorFindAll_LargeListOpensWithoutMaterializing(t *testing.T) {
 	const n = 500_000
 	ev := newFindAllEditor(t, strings.Repeat("aaa bbbbb\n", n))
 	data := []byte(strings.Repeat("aaa bbbbb\n", n))
-	spans, err := findAllMatchSpans(nil, data, "aaa", true, false, false)
+	spans, err := findAllMatchSpans(context.Background(), data, "aaa", true, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -626,7 +626,7 @@ func TestEditorFindAll_LargeListOpensWithoutMaterializing(t *testing.T) {
 	}
 
 	start := time.Now()
-	ev.showFindAllMenu("aaa", spans, countMatchLines(nil, data, spans))
+	ev.showFindAllMenu("aaa", spans, countMatchLines(context.Background(), data, spans))
 	elapsed := time.Since(start)
 
 	frame, ok := vtui.FrameManager.GetTopFrame().(*findAllFrame)
@@ -844,7 +844,7 @@ func TestFindAllMatchSpans_FoldedScanReadsTheBufferInPlace(t *testing.T) {
 	var before, after runtime.MemStats
 	runtime.GC()
 	runtime.ReadMemStats(&before)
-	spans, err := findAllMatchSpans(nil, corpus, "needle", false, false, false)
+	spans, err := findAllMatchSpans(context.Background(), corpus, "needle", false, false, false)
 	runtime.ReadMemStats(&after)
 	if err != nil {
 		t.Fatal(err)
@@ -901,11 +901,11 @@ func TestCollectMatchSpans_WindowsMatchTheWholeBuffer(t *testing.T) {
 	data := []byte(content)
 
 	for _, caseSensitive := range []bool{true, false} {
-		want, err := findAllMatchSpans(nil, data, "needle", caseSensitive, false, false)
+		want, err := findAllMatchSpans(context.Background(), data, "needle", caseSensitive, false, false)
 		if err != nil {
 			t.Fatal(err)
 		}
-		wantLines := countMatchLines(nil, data, want)
+		wantLines := countMatchLines(context.Background(), data, want)
 		if len(want) == 0 {
 			t.Fatal("corpus matches nothing")
 		}

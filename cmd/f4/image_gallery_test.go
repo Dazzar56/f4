@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -135,7 +136,7 @@ func TestImageViewGalleryEnterOpensTheCursor(t *testing.T) {
 	iv := newTestImageView(t, 100, 100)
 	iv.path = "a.png"
 	iv.SetSiblings([]string{"a.png", "b.png"}, 0)
-	if res := ImagePipe.LoadSync(nil, nil, "b.png"); res.Err != nil {
+	if res := ImagePipe.LoadSync(context.Background(), nil, "b.png"); res.Err != nil {
 		t.Fatalf("b.png: %v", res.Err)
 	}
 

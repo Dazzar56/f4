@@ -4271,8 +4271,8 @@ func TestArchiveBulkExtract_ProgressTracking(t *testing.T) {
 		},
 	}
 
-	// We pass "AutoQueue" in context to bypass the interactive UI busy-lock prompt
-	ctx := context.WithValue(context.Background(), "AutoQueue", true)
+	// Auto-queue to bypass the interactive UI busy-lock prompt.
+	ctx := archive.WithAutoQueue(context.Background())
 
 	// 3. Execute Bulk Copy
 	bulkCopier := arcVFS.(vfs.BulkCopier)

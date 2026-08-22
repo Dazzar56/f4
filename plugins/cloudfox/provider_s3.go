@@ -23,6 +23,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	awss3 "github.com/aws/aws-sdk-go-v2/service/s3"
 	awstypes "github.com/aws/aws-sdk-go-v2/service/s3/types"
+	smithytime "github.com/aws/smithy-go/time"
 	smithyhttp "github.com/aws/smithy-go/transport/http"
 	"github.com/unxed/f4/vfs"
 )
@@ -1419,6 +1420,17 @@ func boolToInt64(value bool) int64 {
 	return 0
 }
 
+func parseS3Expires(value *string) *time.Time {
+	if value == nil {
+		return nil
+	}
+	expires, err := smithytime.ParseHTTPDate(*value)
+	if err != nil {
+		return nil
+	}
+	return &expires
+}
+
 func (b *s3Backend) copyMultipart(ctx context.Context, destination s3Target, copySource string, size int64, source *awss3.HeadObjectOutput) (retErr error) {
 	destinationKey := destination.key
 	partSize, err := s3MultipartCopyPartSize(size)
@@ -1434,7 +1446,7 @@ func (b *s3Backend) copyMultipart(ctx context.Context, destination s3Target, cop
 		ContentEncoding:         source.ContentEncoding,
 		ContentLanguage:         source.ContentLanguage,
 		ContentType:             source.ContentType,
-		Expires:                 source.Expires,
+		Expires:                 parseS3Expires(source.ExpiresString),
 		Metadata:                source.Metadata,
 		SSEKMSKeyId:             source.SSEKMSKeyId,
 		ServerSideEncryption:    source.ServerSideEncryption,

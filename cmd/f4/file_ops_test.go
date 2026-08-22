@@ -269,14 +269,6 @@ func TestRecursiveCopy_CancelCleanup(t *testing.T) {
 		t.Error("Partial destination file was not deleted after cancellation")
 	}
 }
-func TestRecursiveCopy_AskError_Stub(t *testing.T) {
-	// Placeholder for UI-heavy error handling test.
-	// Just ensuring the frame instance can be created.
-	pf := &PanelsFrame{}
-	if pf == nil {
-		t.Error("Failed to create PanelsFrame")
-	}
-}
 
 type mockS2SVFS struct {
 	vfs.VFS

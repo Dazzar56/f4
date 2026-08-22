@@ -50,7 +50,7 @@ func TestNetFoxVFS_ConfigPersistence(t *testing.T) {
 
 	// 3. Test ReadDir (visual representation)
 	found := false
-	nf.ReadDir(nil, "", func(items []vfs.VFSItem) {
+	nf.ReadDir(context.Background(), "", func(items []vfs.VFSItem) {
 		for _, itm := range items {
 			if itm.Name == "My Server" {
 				found = true
@@ -62,7 +62,7 @@ func TestNetFoxVFS_ConfigPersistence(t *testing.T) {
 	}
 
 	// 4. Test Removal
-	nf.Remove(nil, "My Server")
+	nf.Remove(context.Background(), "My Server")
 	if len(nf.getConfigs()) != 0 {
 		t.Error("Config was not removed")
 	}

@@ -226,7 +226,6 @@ func main() {
 			pluginName := flagVal
 			if pluginName == "" && i+1 < len(os.Args) && !strings.HasPrefix(os.Args[i+1], "-") {
 				pluginName = os.Args[i+1]
-				i++
 			}
 			os.Exit(RunNewPlugin(pluginName, os.Stdout, os.Stderr))
 		case "-test-plugins":

@@ -37,13 +37,6 @@ func TestCodepages_GetSystemEncoding(t *testing.T) {
 	oem := GetSystemOEMEncoding()
 	ansi := GetSystemANSIEncoding()
 
-	if oem == nil {
-		t.Fatal("expected GetSystemOEMEncoding to return non-nil encoding")
-	}
-	if ansi == nil {
-		t.Fatal("expected GetSystemANSIEncoding to return non-nil encoding")
-	}
-
 	if oem != localecp.OEMEncoding {
 		t.Errorf("expected OEM encoding %v, got %v", localecp.OEMEncoding, oem)
 	}

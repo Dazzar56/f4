@@ -19,7 +19,7 @@ import (
 var defaultHelpData string
 
 // README.md lives in the repository root (it must render on GitHub), out of
-// go:embed's reach from this directory; the root "embedded" package bridges it.
+// reach of this directory's embed directive; the root "embedded" package bridges it.
 var readmeData = embedded.ReadmeMD
 
 type memoryHelpVFS struct {

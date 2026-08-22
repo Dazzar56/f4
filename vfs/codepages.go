@@ -73,13 +73,9 @@ func DecodeBytes(data []byte, cpID int) ([]byte, error) {
 	var decoder *encoding.Decoder
 	switch cpID {
 	case 11111:
-		if enc := GetSystemANSIEncoding(); enc != nil {
-			decoder = enc.NewDecoder()
-		}
+		decoder = GetSystemANSIEncoding().NewDecoder()
 	case 22222:
-		if enc := GetSystemOEMEncoding(); enc != nil {
-			decoder = enc.NewDecoder()
-		}
+		decoder = GetSystemOEMEncoding().NewDecoder()
 	default:
 		cp, ok := FindCodepage(cpID)
 		if !ok || cp.Enc == nil {
@@ -103,13 +99,9 @@ func EncodeBytes(data []byte, cpID int) ([]byte, error) {
 	var encoder *encoding.Encoder
 	switch cpID {
 	case 11111:
-		if enc := GetSystemANSIEncoding(); enc != nil {
-			encoder = enc.NewEncoder()
-		}
+		encoder = GetSystemANSIEncoding().NewEncoder()
 	case 22222:
-		if enc := GetSystemOEMEncoding(); enc != nil {
-			encoder = enc.NewEncoder()
-		}
+		encoder = GetSystemOEMEncoding().NewEncoder()
 	default:
 		cp, ok := FindCodepage(cpID)
 		if !ok || cp.Enc == nil {
@@ -159,16 +151,12 @@ func GetCodepageDecoderEncoder(cp string) (*encoding.Decoder, *encoding.Encoder)
 	}
 	id, _ := strconv.Atoi(cp)
 	if id == 11111 {
-		if enc := GetSystemANSIEncoding(); enc != nil {
-			return enc.NewDecoder(), enc.NewEncoder()
-		}
-		return nil, nil
+		enc := GetSystemANSIEncoding()
+		return enc.NewDecoder(), enc.NewEncoder()
 	}
 	if id == 22222 {
-		if enc := GetSystemOEMEncoding(); enc != nil {
-			return enc.NewDecoder(), enc.NewEncoder()
-		}
-		return nil, nil
+		enc := GetSystemOEMEncoding()
+		return enc.NewDecoder(), enc.NewEncoder()
 	}
 	if cpObj, ok := FindCodepage(id); ok && cpObj.Enc != nil {
 		return cpObj.Enc.NewDecoder(), cpObj.Enc.NewEncoder()

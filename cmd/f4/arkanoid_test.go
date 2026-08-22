@@ -30,11 +30,11 @@ func TestArkanoid_Init(t *testing.T) {
 
 func TestArkanoid_PhysicsAndCollisions(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	rand.Seed(1) // Стабильный рандом для тестов
 
 	af := NewArkanoidFrame()
 	af.Close() // Останавливаем фоновый цикл, чтобы избежать конфликтов в тесте
 	time.Sleep(10 * time.Millisecond)
+	af.rng = rand.New(rand.NewSource(1)) // Стабильный рандом для тестов
 
 	height := af.Y2 - af.Y1 - 1
 
