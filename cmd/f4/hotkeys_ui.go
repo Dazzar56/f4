@@ -13,6 +13,8 @@ type hotkeyRow struct {
 	Label     string
 	Area      string
 	Key       string
+	RawKey    string
+	Editable  bool
 	Condition string
 	Desc      string
 }
@@ -34,14 +36,96 @@ func (r hotkeyRow) GetCellText(col int) string {
 }
 
 func (r hotkeyRow) GetCellAttr(col int, def uint64) uint64 {
-	if r.Key == "" {
+	if r.Key == "" || !r.Editable {
 		return vtui.DimColor(def)
 	}
 	return def
 }
 
+func hotkeyDialogSizeForScreen(screenWidth, screenHeight int) (int, int) {
+	if screenWidth <= 0 {
+		screenWidth = 120
+	}
+	if screenHeight <= 0 {
+		screenHeight = 48
+	}
+	width := screenWidth - 4
+	if width < 40 {
+		width = 40
+	}
+	height := screenHeight - 2
+	if height < 10 {
+		height = 10
+	}
+	if height > 48 {
+		height = 48
+	}
+	return width, height
+}
+
+func sumInts(values []int) int {
+	total := 0
+	for _, value := range values {
+		total += value
+	}
+	return total
+}
+
+func fitHotkeyColumnWidths(widths []int, budget int) []int {
+	if budget < 0 {
+		budget = 0
+	}
+	for sumInts(widths) > budget {
+		changed := false
+		for i := range widths {
+			if widths[i] <= 1 {
+				continue
+			}
+			widths[i]--
+			changed = true
+			if sumInts(widths) <= budget {
+				break
+			}
+		}
+		if !changed {
+			break
+		}
+	}
+	return widths
+}
+
+func hotkeyTableColumns(rows []hotkeyRow, dialogWidth int) []vtui.TableColumn {
+	titles := []string{"Command", "Key", "Area", "When", "Description"}
+	widths := make([]int, len(titles))
+	for i, title := range titles {
+		widths[i] = vtui.StringWidth(title)
+	}
+	for _, row := range rows {
+		for col := range widths {
+			if cellWidth := vtui.StringWidth(row.GetCellText(col)); cellWidth > widths[col] {
+				widths[col] = cellWidth
+			}
+		}
+	}
+
+	// The description column remains elastic. Reserve its header, the four
+	// column separators, and the table's side padding before fitting the other
+	// columns to the actual dialog width.
+	fixedBudget := dialogWidth - 4 - (len(widths) - 1) - vtui.StringWidth(titles[len(titles)-1])
+	fixed := fitHotkeyColumnWidths(append([]int(nil), widths[:len(widths)-1]...), fixedBudget)
+	columns := make([]vtui.TableColumn, 0, len(widths))
+	for i, width := range fixed {
+		columns = append(columns, vtui.TableColumn{Title: titles[i], Width: width})
+	}
+	columns = append(columns, vtui.TableColumn{Title: titles[len(titles)-1], Width: 0})
+	return columns
+}
+
 func actionHotkeyConfig(pf *PanelsFrame) {
 	w, h := 120, 48
+	if vtui.FrameManager != nil {
+		w, h = hotkeyDialogSizeForScreen(vtui.FrameManager.GetScreenSize(), vtui.FrameManager.GetScreenHeight())
+	}
 
 	btnAssign := vtui.NewButton(0, 0, Msg("Hotkeys.BtnAssign"))
 	btnUnbind := vtui.NewButton(0, 0, Msg("Hotkeys.BtnUnbind"))
@@ -86,7 +170,40 @@ func actionHotkeyConfig(pf *PanelsFrame) {
 					Action:    act.Name,
 					Label:     plainLabel(act.DisplayLabel()),
 					Area:      area,
-					Key:       key,
+					Key:       FormatKeyForUI(key),
+					RawKey:    key,
+					Editable:  true,
+					Condition: cond,
+					Desc:      act.DisplayDescription(),
+				})
+				assignedActions[strings.ToLower(act.Name)] = true
+			}
+		}
+
+		// Native shortcuts are handled by the focused frame rather than the
+		// configurable hotkey manager. They still belong in this inventory so
+		// the dialog describes every shortcut the user can press. Keep these
+		// rows read-only: assigning them would create a misleading binding that
+		// cannot replace the frame-owned behavior.
+		for _, act := range actions {
+			seenNative := make(map[string]bool)
+			for _, spec := range act.NativeKeys {
+				key, cond, _ := strings.Cut(spec, ":")
+				key = strings.TrimSpace(key)
+				displayKey := FormatKeyForUI(key)
+				if key == "" || seenNative[displayKey] {
+					continue
+				}
+				if GlobalHotkeysMgr != nil && GlobalHotkeysMgr.GetAction(act.Area, key) != "" {
+					continue
+				}
+				seenNative[displayKey] = true
+				hkRows = append(hkRows, hotkeyRow{
+					Action:    act.Name,
+					Label:     plainLabel(act.DisplayLabel()),
+					Area:      act.Area,
+					Key:       displayKey,
+					RawKey:    key,
 					Condition: cond,
 					Desc:      act.DisplayDescription(),
 				})
@@ -101,6 +218,7 @@ func actionHotkeyConfig(pf *PanelsFrame) {
 					Label:     plainLabel(act.DisplayLabel()),
 					Area:      act.Area, // unassigned, shown under the action's native area
 					Key:       "",
+					Editable:  true,
 					Condition: "",
 					Desc:      act.DisplayDescription(),
 				})
@@ -124,13 +242,14 @@ func actionHotkeyConfig(pf *PanelsFrame) {
 		for _, r := range hkRows {
 			rows = append(rows, r)
 		}
+		table.Columns = hotkeyTableColumns(hkRows, w)
 		table.SetRows(rows)
 		vtui.FrameManager.Redraw()
 	}
 
 	btnAssign.OnClick = func() {
 		idx := table.SelectPos
-		if idx >= 0 && idx < len(hkRows) {
+		if idx >= 0 && idx < len(hkRows) && hkRows[idx].Editable {
 			row := hkRows[idx]
 			showAreaSelectDialog(row.Action, row.Area, row.Condition, refresh)
 		}
@@ -138,10 +257,10 @@ func actionHotkeyConfig(pf *PanelsFrame) {
 
 	btnUnbind.OnClick = func() {
 		idx := table.SelectPos
-		if idx >= 0 && idx < len(hkRows) {
+		if idx >= 0 && idx < len(hkRows) && hkRows[idx].Editable {
 			row := hkRows[idx]
-			if row.Key != "" && row.Area != "" {
-				GlobalHotkeysMgr.Bind(row.Area, row.Key, "None")
+			if row.RawKey != "" && row.Area != "" {
+				GlobalHotkeysMgr.Bind(row.Area, row.RawKey, "None")
 				GlobalHotkeysMgr.Save()
 				refresh()
 			}

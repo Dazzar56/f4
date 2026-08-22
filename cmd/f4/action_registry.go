@@ -707,6 +707,36 @@ func init() {
 			}
 		}),
 	})
+	RegisterAction(Action{
+		Name:        "Panel.SelectNavigation",
+		Area:        "Shell",
+		Label:       "Select While Navigating",
+		Description: "Select or deselect files with Insert and Shift-navigation",
+		NativeKeys: []string{
+			"Ins", "ShiftUp", "ShiftDown", "ShiftLeft", "ShiftRight",
+			"ShiftPgUp", "ShiftPgDn", "ShiftHome", "ShiftEnd",
+		},
+		Handler: withPF(func(pf *PanelsFrame) {
+			if fsp := pf.getActivePanel(); fsp != nil {
+				fsp.ProcessKey(ParseFarKey("Ins"))
+			}
+		}),
+	})
+	RegisterAction(Action{
+		Name:        "Panel.ToggleCommandLineFocus",
+		Area:        "Shell",
+		Label:       "Toggle Command Line Focus",
+		Description: "Toggle command-line focus in Search by default navigation mode",
+		NativeKeys:  []string{"VK_C0:SearchFirst", "`:SearchFirst", "ё:SearchFirst"},
+		Handler: func() bool {
+			pf := findPanelsFrameAnyScreen()
+			if pf == nil || !pf.searchFirstMode() || !pf.showPanels {
+				return false
+			}
+			pf.setCommandLineFocus(!pf.commandLineFocused)
+			return true
+		},
+	})
 
 	RegisterAction(Action{
 		Name:         "Panel.UserMenu",

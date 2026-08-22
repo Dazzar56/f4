@@ -89,6 +89,9 @@ func TestFormatKeyForUI(t *testing.T) {
 		{"ShiftF4", "Shift+F4"},
 		{"CtrlShiftF5", "Ctrl+Shift+F5"},
 		{"AltF12", "Alt+F12"},
+		{"CtrlVK_C", "Ctrl+C"},
+		{"CtrlVK_DB", "Ctrl+["},
+		{"VK_C0", "`"},
 		{"", ""},
 	}
 	for _, tc := range tests {
