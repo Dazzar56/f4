@@ -2491,8 +2491,39 @@ func (pf *PanelsFrame) hitAltPanel(mx, my int) int {
 // grabbed the mouse via a tracking-mode escape. LMB starts / extends
 // a selection, dbl/triple-click selects word / line, Alt+LMB drag
 // switches to a rectangular block, releasing LMB auto-copies to the
-// clipboard, RMB pastes clipboard content into the PTY. Returns true
-// when it consumed the event.
+// clipboard, RMB pastes clipboard content into the f4 command line when it
+// owns the visible input, or into the PTY otherwise. Returns true when it
+// consumed the event.
+func (pf *PanelsFrame) hiddenConsoleCommandLineOwnsInput() bool {
+	if pf.showPanels || pf.cmdLine == nil || !pf.cmdLine.IsVisible() {
+		return false
+	}
+
+	// zoin-bot: a visible f4 command line must receive mouse paste through
+	// the edit control, otherwise Enter can execute text that was never drawn.
+	switch pf.shellMode {
+	case ShellModeHost:
+		return pf.consoleStyle() == ConsoleViewFar && pf.isHostConsoleActive()
+	case ShellModeSimpleInline:
+		return pf.consoleStyle() == ConsoleViewFar && pf.consoleViewActive()
+	default:
+		return pf.termView != nil && !pf.termView.UseAltScreen && !pf.isPtyBusy()
+	}
+}
+
+func (pf *PanelsFrame) pasteHiddenConsoleText(text string) {
+	if text == "" {
+		return
+	}
+	pf.cmdLine.InsertString(text)
+	pf.cmdLine.SetFocus(true)
+	if pf.shellMode == ShellModeHost {
+		pf.drawHostConsoleOverlay()
+	} else if vtui.FrameManager != nil {
+		vtui.FrameManager.Redraw()
+	}
+}
+
 func (pf *PanelsFrame) handleTerminalMouseSelection(e *vtinput.InputEvent) bool {
 	if e.Type != vtinput.MouseEventType {
 		return false
@@ -2503,9 +2534,13 @@ func (pf *PanelsFrame) handleTerminalMouseSelection(e *vtinput.InputEvent) bool 
 	}
 	mx, my := int(e.MouseX), int(e.MouseY)
 
-	// Right button: paste clipboard into the active PTY. Fires on
-	// button-down so the release doesn't paste a second time.
+	// Right button: paste on button-down so the release doesn't paste a second
+	// time. The visible command line is handled before terminal hit testing.
 	if e.ButtonState == vtinput.RightmostButtonPressed && e.KeyDown {
+		if pf.hiddenConsoleCommandLineOwnsInput() {
+			pf.pasteHiddenConsoleText(tv.readClipboard())
+			return true
+		}
 		if !tv.InTerminalArea(mx, my) {
 			return false
 		}

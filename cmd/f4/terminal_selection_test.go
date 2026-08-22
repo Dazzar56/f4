@@ -195,6 +195,9 @@ func panelsFrameWithMouseSelect(t *testing.T) (*PanelsFrame, *fakePTY) {
 	pf.ResizeConsole(80, 25)
 	pf.showPanels = false
 	pf.termView.SetPosition(0, 0, 79, 22)
+	// zoin-bot: these tests exercise the terminal/PTy mouse path. A visible
+	// f4 command line has its own paste path and is covered separately below.
+	pf.cmdLine.SetVisible(false)
 	pty := &fakePTY{}
 	pf.pty = pty
 	return pf, pty
@@ -479,5 +482,25 @@ func TestPanelsFrame_TerminalMouseSelect_RightClickPasteBracketed(t *testing.T) 
 	want := "\x1b[200~pasted\x1b[201~"
 	if string(pty.writes) != want {
 		t.Errorf("bracketed paste sent %q, want %q", string(pty.writes), want)
+	}
+}
+
+func TestPanelsFrame_TerminalMouseSelect_RightClickPastesIntoVisibleCommandLine(t *testing.T) {
+	pf, pty := panelsFrameWithMouseSelect(t)
+	pf.cmdLine.SetVisible(true)
+	pf.shellMode = ShellModeOwn
+	pf.termView.clipboardReader = func() string { return "echo pasted" }
+
+	pf.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: true,
+		ButtonState: vtinput.RightmostButtonPressed,
+		MouseX:      5, MouseY: 5,
+	})
+
+	if got := pf.cmdLine.Edit.GetText(); got != "echo pasted" {
+		t.Fatalf("visible command line after RMB paste = %q, want %q", got, "echo pasted")
+	}
+	if len(pty.writes) != 0 {
+		t.Fatalf("visible command line RMB paste wrote directly to PTY: %q", string(pty.writes))
 	}
 }
