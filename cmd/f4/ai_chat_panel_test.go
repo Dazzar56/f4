@@ -1,13 +1,15 @@
 package main
 
 import (
+	"context"
+	"strings"
+	"testing"
+
 	"github.com/mattn/go-runewidth"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/f4/vtvibe"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
-	"strings"
-	"testing"
 )
 
 func TestAIChatPanel_Resize(t *testing.T) {
@@ -59,7 +61,7 @@ func TestAIChatPanel_AttachedFilesBarFocusAndNavigation(t *testing.T) {
 
 	// Add file to ctx
 	vfsInst := vtvibe.NewVFS(session)
-	w, err := vfsInst.Create(nil, "/ctx/main.go")
+	w, err := vfsInst.Create(context.Background(), "/ctx/main.go")
 	if err == nil {
 		_, _ = w.Write([]byte("package main"))
 		_ = w.Close()
@@ -137,7 +139,7 @@ func TestAIChatPanel_ContextFilesRenderingAndLinkNavigation(t *testing.T) {
 
 	// Add file to ctx
 	vfsInst := vtvibe.NewVFS(session)
-	w, err := vfsInst.Create(nil, "/ctx/app.go")
+	w, err := vfsInst.Create(context.Background(), "/ctx/app.go")
 	if err == nil {
 		_, _ = w.Write([]byte("package main"))
 		_ = w.Close()
@@ -178,7 +180,7 @@ func TestAIChatPanel_BarKindExcludesApSpec(t *testing.T) {
 	vfsInst := vtvibe.NewVFS(session)
 
 	// Case 2: Only ap.md in ctx
-	w, err := vfsInst.Create(nil, "/ctx/ap.md")
+	w, err := vfsInst.Create(context.Background(), "/ctx/ap.md")
 	if err == nil {
 		_, _ = w.Write([]byte("AP specification content"))
 		_ = w.Close()
@@ -188,7 +190,7 @@ func TestAIChatPanel_BarKindExcludesApSpec(t *testing.T) {
 	}
 
 	// Case 3: ap.md + user file in ctx
-	w2, err2 := vfsInst.Create(nil, "/ctx/main.go")
+	w2, err2 := vfsInst.Create(context.Background(), "/ctx/main.go")
 	if err2 == nil {
 		_, _ = w2.Write([]byte("package main"))
 		_ = w2.Close()

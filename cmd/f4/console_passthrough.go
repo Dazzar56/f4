@@ -105,6 +105,9 @@ func overlayKeybarSlots(labels vtui.KeyBarLabels, width int) []overlayKeySlot {
 			// The last slot swallows the rounding remainder, as in vtui.
 			labelW = width - labelX
 		}
+		if available := width - labelX; labelW > available {
+			labelW = available
+		}
 		if labelW < 0 {
 			labelW = 0
 		}

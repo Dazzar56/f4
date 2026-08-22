@@ -283,9 +283,7 @@ func encodeApplyCommandListForTarget(spec ApplyCommandListFileSpec, dialect vfs.
 		return encoder.EncodeCommandListANSI(data)
 	}
 	if _, local := target.(*vfs.OSVFS); local && runtime.GOOS == "windows" {
-		if encoding := vfs.GetSystemANSIEncoding(); encoding != nil {
-			return encoding.NewEncoder().Bytes(data)
-		}
+		return vfs.GetSystemANSIEncoding().NewEncoder().Bytes(data)
 	}
 	return data, nil
 }

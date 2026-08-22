@@ -1,7 +1,6 @@
 package id3editor
 
 import (
-	"io/ioutil"
 	"os"
 	"strings"
 	"testing"
@@ -19,7 +18,7 @@ func init() {
 }
 
 func TestID3Editor_Roundtrip(t *testing.T) {
-	tempFile, err := ioutil.TempFile("", "test_id3_roundtrip_*.mp3")
+	tempFile, err := os.CreateTemp("", "test_id3_roundtrip_*.mp3")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -66,7 +66,7 @@ func TestRPCPlugin_VFS_Proxy(t *testing.T) {
 	})
 
 	buf := make([]byte, 4)
-	n, err := wrapper.ReadAt(nil, buf, 0)
+	n, err := wrapper.ReadAt(context.Background(), buf, 0)
 	if err != nil {
 		t.Errorf("Proxy ReadAt failed: %v", err)
 	}

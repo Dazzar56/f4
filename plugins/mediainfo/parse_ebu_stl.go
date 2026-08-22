@@ -82,7 +82,11 @@ func parseEBUSTL(p *probe, _ []byte) error {
 }
 
 func cleanSTLField(b []byte) string {
-	return strings.TrimSpace(strings.TrimRight(string(b), "\x00\x8f"))
+	end := len(b)
+	for end > 0 && (b[end-1] == 0 || b[end-1] == 0x8f) {
+		end--
+	}
+	return strings.TrimSpace(string(b[:end]))
 }
 
 func parseSTLDecimal(b []byte) int {

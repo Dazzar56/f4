@@ -145,7 +145,7 @@ func TestIssue149_Reproduction(t *testing.T) {
 		getGlobal: func(action string) (string, int, string) { return "", 0, "" },
 	}
 
-	ctx := context.WithValue(context.Background(), "AutoQueue", true)
+	ctx := archive.WithAutoQueue(context.Background())
 
 	err := arcVfs.CopyBulk(ctx, names, dstVFS, tmpDir, rep)
 	if err != nil {
@@ -225,7 +225,7 @@ func TestIssue149_LocatingStatusReporting(t *testing.T) {
 	rep := &actionCaptureReporter{actions: make(map[string]bool)}
 
 	// We need to use a context that triggers progress updates
-	ctx, cancel := context.WithCancel(context.WithValue(context.Background(), "AutoQueue", true))
+	ctx, cancel := context.WithCancel(archive.WithAutoQueue(context.Background()))
 	defer cancel()
 
 	// Run extraction in background to allow ticker to fire
@@ -450,7 +450,7 @@ func TestIssue149_F5_Extraction_Integrity(t *testing.T) {
 		getGlobal: func(action string) (string, int, string) { return "", 0, "" },
 	}
 
-	ctx := context.WithValue(context.Background(), "AutoQueue", true)
+	ctx := archive.WithAutoQueue(context.Background())
 	err = arcVFS.CopyBulk(ctx, []string{"15_Area51_bunker.dxs"}, dstVFS, dstDir, rep)
 	if err != nil {
 		t.Fatalf("CopyBulk failed: %v", err)
@@ -619,7 +619,7 @@ func TestIssue149_7z_MultiBlock_Solid_Integrity(t *testing.T) {
 		}
 
 		rep := &testBlackBoxReporter{}
-		ctx := context.WithValue(context.Background(), "AutoQueue", true)
+		ctx := archive.WithAutoQueue(context.Background())
 		if err := arcVFS.CopyBulk(ctx, selected, dstVFS, dstDir, rep); err != nil {
 			t.Fatalf("CopyBulk failed: %v", err)
 		}
@@ -646,7 +646,7 @@ func TestIssue149_7z_MultiBlock_Solid_Integrity(t *testing.T) {
 		selected := []string{"Deus Ex"}
 
 		rep := &testBlackBoxReporter{}
-		ctx := context.WithValue(context.Background(), "AutoQueue", true)
+		ctx := archive.WithAutoQueue(context.Background())
 		if err := arcVFS.CopyBulk(ctx, selected, dstVFS, dstDir, rep); err != nil {
 			t.Fatalf("CopyBulk failed: %v", err)
 		}

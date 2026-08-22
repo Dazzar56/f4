@@ -56,6 +56,7 @@ type ArkanoidFrame struct {
 	message         string
 	flashTimer      int
 	autoPlay        bool
+	rng             *rand.Rand
 }
 
 func NewArkanoidFrame() *ArkanoidFrame {
@@ -69,6 +70,7 @@ func NewArkanoidFrame() *ArkanoidFrame {
 		lives:      3,
 		multiplier: 1,
 		level:      1,
+		rng:        rand.New(rand.NewSource(time.Now().UnixNano())), //nolint:gosec // Randomness only controls the ball's bounce direction.
 	}
 	af.Modal = true
 	af.ShowClose = true
@@ -359,7 +361,7 @@ func (af *ArkanoidFrame) update() {
 			}
 		} else {
 			af.ballX, af.ballY = float64(width/2), float64(height-3)
-			af.ballDX, af.ballDY = (rand.Float64() - 0.5), -0.5
+			af.ballDX, af.ballDY = (af.rng.Float64() - 0.5), -0.5
 		}
 	}
 

@@ -365,8 +365,8 @@ func TestOverlayKeybarSlots_MatchesVtuiLayout(t *testing.T) {
 			if s.Col < 0 || s.Col >= w {
 				t.Fatalf("width %d: slot column %d out of range", w, s.Col)
 			}
-			if len([]rune(s.Label)) < 0 {
-				t.Fatalf("width %d: negative label width", w)
+			if end := s.Col + len([]rune(s.Num)) + len([]rune(s.Label)); end > w {
+				t.Fatalf("width %d: slot at column %d ends at column %d", w, s.Col, end)
 			}
 		}
 	}

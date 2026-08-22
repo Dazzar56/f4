@@ -386,6 +386,19 @@ func TestS3CopyUsesMultipartAboveFiveGiB(t *testing.T) {
 	}
 }
 
+func TestParseS3ExpiresPreservesSDKParsingBehavior(t *testing.T) {
+	value := "Mon, 02 Jan 2006 15:04:05 GMT"
+	want := time.Date(2006, time.January, 2, 15, 4, 5, 0, time.UTC)
+	if got := parseS3Expires(&value); got == nil || !got.Equal(want) {
+		t.Fatalf("parseS3Expires(%q) = %v, want %v", value, got, want)
+	}
+
+	invalid := "not an HTTP date"
+	if got := parseS3Expires(&invalid); got != nil {
+		t.Fatalf("parseS3Expires(%q) = %v, want nil", invalid, got)
+	}
+}
+
 func TestS3MultipartCopyCancellationAbortsWithIndependentContext(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())

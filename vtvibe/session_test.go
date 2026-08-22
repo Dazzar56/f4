@@ -1,6 +1,7 @@
 package vtvibe
 
 import (
+	"context"
 	"testing"
 	"time"
 )
@@ -70,7 +71,7 @@ func TestAIVFS_CreateRedirectsToContextWhenCwdIsChat(t *testing.T) {
 	s := NewSession()
 	v := NewVFS(s)
 
-	wc, err := v.Create(nil, "/chat/status.sh")
+	wc, err := v.Create(context.Background(), "/chat/status.sh")
 	if err != nil {
 		t.Fatalf("expected Create on /chat/status.sh to succeed, got %v", err)
 	}
@@ -84,7 +85,7 @@ func TestAIVFS_CreateRedirectsToContextWhenCwdIsChat(t *testing.T) {
 		t.Fatalf("expected ContextFiles() = ['status.sh'], got %v", files)
 	}
 
-	r, err := v.Open(nil, "/chat/status.sh")
+	r, err := v.Open(context.Background(), "/chat/status.sh")
 	if err != nil {
 		t.Fatalf("expected Open /chat/status.sh to find /ctx/status.sh, got %v", err)
 	}
