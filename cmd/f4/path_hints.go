@@ -62,7 +62,7 @@ func pathHintProvider(edit *vtui.Edit, word string, from, to int) []vtui.AutoCom
 		if panel == nil || panel.vfs == nil {
 			continue
 		}
-		group := pathHintItems(panel.vfs, word, from, to)
+		group := pathHintItemsForCommand(panel.vfs, edit, word, from, to)
 		if len(group) == 0 {
 			continue
 		}
@@ -74,28 +74,92 @@ func pathHintProvider(edit *vtui.Edit, word string, from, to int) []vtui.AutoCom
 	return items
 }
 
+// pathHintItemsForCommand adds the current-directory lookup needed by shell
+// directory commands such as `cd "prefix`. A bare token is deliberately not
+// treated as a path for every command: doing so would make typing an ordinary
+// argument such as `echo foo` unexpectedly list panel files.
+func pathHintItemsForCommand(v vfs.VFS, edit *vtui.Edit, word string, from, to int) []vtui.AutoCompleteItem {
+	if strings.ContainsAny(strings.Trim(word, `"`), `/\`) {
+		return pathHintItems(v, word, from, to)
+	}
+	if !allowsBarePathCompletion(edit, from) {
+		return nil
+	}
+	return pathHintItemsWithOptions(v, word, from, to, true)
+}
+
+func allowsBarePathCompletion(edit *vtui.Edit, wordFrom int) bool {
+	if edit == nil {
+		return false
+	}
+	runes := []rune(edit.GetText())
+	if wordFrom <= 0 || wordFrom > len(runes) {
+		return false
+	}
+	fields := strings.Fields(string(runes[:wordFrom]))
+	if len(fields) == 0 {
+		return false
+	}
+	command := strings.Trim(fields[0], `"`)
+	switch strings.ToLower(command) {
+	case "cd", "chdir", "pushd":
+	default:
+		return false
+	}
+	// Windows `cd /d <path>` is also a directory argument. Do not treat a
+	// previous non-option argument as another bare path request.
+	for _, field := range fields[1:] {
+		if !strings.HasPrefix(field, "/") && !strings.HasPrefix(field, "-") {
+			return false
+		}
+	}
+	return true
+}
+
 // pathHintItems does the actual work, decoupled from the panel for tests:
 // split the token at the last path separator, list the directory through
 // the VFS and rank the entries (fuzzy when a needle follows the separator).
 func pathHintItems(v vfs.VFS, word string, from, to int) []vtui.AutoCompleteItem {
-	word = strings.Trim(word, `"`)
+	return pathHintItemsWithOptions(v, word, from, to, false)
+}
+
+func pathHintItemsWithOptions(v vfs.VFS, word string, from, to int, allowBare bool) []vtui.AutoCompleteItem {
+	quotePrefix := ""
+	quoteSuffix := ""
+	if strings.HasPrefix(word, `"`) {
+		quotePrefix = `"`
+		word = strings.TrimPrefix(word, `"`)
+	}
+	if strings.HasSuffix(word, `"`) {
+		quoteSuffix = `"`
+		word = strings.TrimSuffix(word, `"`)
+	}
 	if word == "" {
 		return nil
 	}
 	sepIdx := strings.LastIndexAny(word, `/\`)
-	if sepIdx < 0 {
+	if sepIdx < 0 && !allowBare {
 		return nil
 	}
-	dirPart := word[:sepIdx+1] // includes the trailing separator
-	needle := word[sepIdx+1:]
+	dirPart := ""
+	needle := word
+	if sepIdx >= 0 {
+		dirPart = word[:sepIdx+1] // includes the trailing separator
+		needle = word[sepIdx+1:]
+	}
 
 	dir := dirPart
+	if dirPart == "" {
+		dir = v.GetPath()
+	}
 	if !v.IsAbs(dirPart) {
 		base := v.GetPath()
 		if base == "" {
 			return nil
 		}
-		dir = v.Join(base, dirPart)
+		if dirPart != "" {
+			dir = v.Join(base, dirPart)
+		}
 	}
 
 	// A slow remote VFS degrades to "no hint" instead of freezing the UI.
@@ -121,7 +185,14 @@ func pathHintItems(v vfs.VFS, word string, from, to int) []vtui.AutoCompleteItem
 	})
 
 	matcher := vtui.NewFuzzyMatcher(needle, false) // nil for an empty needle
-	sep := dirPart[len(dirPart)-1:]
+	sep := ""
+	if dirPart != "" {
+		sep = dirPart[len(dirPart)-1:]
+	} else if strings.Contains(v.GetPath(), `\`) {
+		sep = `\`
+	} else {
+		sep = `/`
+	}
 
 	type cand struct {
 		item       vfs.VFSItem
@@ -155,10 +226,11 @@ func pathHintItems(v vfs.VFS, word string, from, to int) []vtui.AutoCompleteItem
 	base := vtui.Palette[vtui.ColDialogText]
 	items := make([]vtui.AutoCompleteItem, 0, len(cands))
 	for _, c := range cands {
-		text := dirPart + c.item.Name
+		text := quotePrefix + dirPart + c.item.Name
 		if c.item.IsDir {
 			text += sep
 		}
+		text += quoteSuffix
 
 		// Display form: full path or just the final element; the highlight
 		// marker prefixes the name exactly like in the panels.
