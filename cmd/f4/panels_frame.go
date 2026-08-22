@@ -3340,12 +3340,12 @@ func (pf *PanelsFrame) showDummyOpDialog() {
 	comboMode.DropdownOnly = true
 	comboMode.Menu.SetSelectPos(0)
 	comboMode.Edit.SetText(comboMode.Menu.Items[0].Text)
-	dlg.AddItem(comboMode)
 
 	btnStart := vtui.NewButton(0, 0, Msg("Op.BtnStart"))
 	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
 	dlg.AddItem(btnStart)
 	dlg.AddItem(btnCancel)
+	dlg.AddItem(comboMode)
 
 	hbox := vtui.NewHBoxLayout(0, 0, 50-4, 1)
 	hbox.HorizontalAlign = vtui.AlignCenter

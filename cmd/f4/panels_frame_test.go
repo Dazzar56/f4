@@ -3362,6 +3362,11 @@ func TestLayout_F4InternalDialogs_Validity(t *testing.T) {
 		if dlg, ok := top.(vtui.Container); ok {
 			vtui.AssertLayout(t, dlg)
 			assertComboMenuDoesNotCoverButtons(t, dlg, "dummy operation")
+			focusDlg, ok := top.(dialogFocusContainer)
+			if !ok {
+				t.Fatal("dummy operation dialog does not expose focus traversal")
+			}
+			assertDialogTabOrderMatchesVisualOrder(t, focusDlg, "dummy operation")
 			fm.Pop()
 		} else {
 			t.Fatal("Top frame is not a container")
@@ -3470,6 +3475,11 @@ func TestLayout_F4ActionDialogs_Validity(t *testing.T) {
 		actionCopyMove(pf, false)
 		dlg := fm.GetTopFrame().(vtui.Container)
 		vtui.AssertLayout(t, dlg)
+		focusDlg, ok := fm.GetTopFrame().(dialogFocusContainer)
+		if !ok {
+			t.Fatal("copy dialog does not expose focus traversal")
+		}
+		assertDialogTabOrderMatchesVisualOrder(t, focusDlg, "copy")
 		fm.Pop()
 	})
 
@@ -3478,6 +3488,11 @@ func TestLayout_F4ActionDialogs_Validity(t *testing.T) {
 		actionCopyMove(pf, true)
 		dlg := fm.GetTopFrame().(vtui.Container)
 		vtui.AssertLayout(t, dlg)
+		focusDlg, ok := fm.GetTopFrame().(dialogFocusContainer)
+		if !ok {
+			t.Fatal("move dialog does not expose focus traversal")
+		}
+		assertDialogTabOrderMatchesVisualOrder(t, focusDlg, "move")
 		fm.Pop()
 	})
 
@@ -3486,6 +3501,11 @@ func TestLayout_F4ActionDialogs_Validity(t *testing.T) {
 		dlg := fm.GetTopFrame().(vtui.Container)
 		vtui.AssertLayout(t, dlg)
 		assertComboMenuDoesNotCoverButtons(t, dlg, "make directory")
+		focusDlg, ok := fm.GetTopFrame().(dialogFocusContainer)
+		if !ok {
+			t.Fatal("make directory dialog does not expose focus traversal")
+		}
+		assertDialogTabOrderMatchesVisualOrder(t, focusDlg, "make directory")
 		fm.Pop()
 	})
 
@@ -3495,6 +3515,11 @@ func TestLayout_F4ActionDialogs_Validity(t *testing.T) {
 		dlg := fm.GetTopFrame().(vtui.Container)
 		vtui.AssertLayout(t, dlg)
 		assertComboMenuDoesNotCoverButtons(t, dlg, "delete")
+		focusDlg, ok := fm.GetTopFrame().(dialogFocusContainer)
+		if !ok {
+			t.Fatal("delete dialog does not expose focus traversal")
+		}
+		assertDialogTabOrderMatchesVisualOrder(t, focusDlg, "delete")
 		fm.Pop()
 	})
 	t.Run("FindFileDialog", func(t *testing.T) {
