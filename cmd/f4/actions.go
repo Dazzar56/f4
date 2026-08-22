@@ -1712,14 +1712,16 @@ func actionViewFile(pf *PanelsFrame) {
 func actionCalcDirSize(pf *PanelsFrame, fsp *FileSystemPanel, idx int) {
 	entry := fsp.entries[idx]
 	name := entry.Name
+	// ".." is a panel navigation row, not a directory owned by this VFS.
+	// Trying to scan it from an archive crosses the virtual root and produces
+	// misleading path-escape errors (issue #510).
+	if name == ".." {
+		return
+	}
 	basePath := fsp.vfs.GetPath()
 
 	var targetPath string
-	if name == ".." {
-		targetPath = fsp.vfs.Dir(basePath)
-	} else {
-		targetPath = fsp.vfs.Join(basePath, name)
-	}
+	targetPath = fsp.vfs.Join(basePath, name)
 
 	opDlg := NewFileOpProgressDialog(" Calculating Size... ")
 	var taskCtx *vtui.TaskContext

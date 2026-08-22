@@ -68,6 +68,17 @@ func TestActionMkDir_Flow(t *testing.T) {
 	vtui.FrameManager.Pop()
 }
 
+func TestActionCalcDirSize_IgnoresParentRow(t *testing.T) {
+	fsp := &FileSystemPanel{
+		entries: []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}},
+	}
+
+	// The parent row is navigation metadata, not an item that can be scanned.
+	// In particular, it must not ask an ArchiveVFS to stat a path outside its
+	// virtual root (issue #510).
+	actionCalcDirSize(nil, fsp, 0)
+}
+
 type mockDeletionFailingVFS struct {
 	vfs.VFS
 	failedFiles  []string

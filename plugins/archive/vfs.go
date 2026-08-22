@@ -468,6 +468,13 @@ func (v *ArchiveVFS) ReadDir(ctx context.Context, path string, onChunk func([]vf
 	for _, e := range entries {
 		info, _ := e.Info()
 		name := e.Name()
+		// Archive containers commonly store an explicit "./" root entry.
+		// archive.FileSystem exposes it as an empty child name; returning that
+		// row makes a recursive VFS scan join the root with "" and visit the
+		// same directory forever (see issue #510).
+		if name == "" || name == "." || name == ".." {
+			continue
+		}
 
 		items = append(items, vfs.VFSItem{
 			Name:     name,
