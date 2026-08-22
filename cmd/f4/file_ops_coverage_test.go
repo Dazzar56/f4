@@ -133,7 +133,7 @@ func TestFileOperationPureSafetyHelpers(t *testing.T) {
 		t.Skip("symlinks unavailable")
 	}
 	resolved := resolveSymlinksForCompare(filepath.Join(link, "new", "file.txt"))
-	want := filepath.Join(linkTarget, "new", "file.txt")
+	want := filepath.Join(resolveSymlinksForCompare(linkTarget), "new", "file.txt")
 	if resolved != want {
 		t.Fatalf("resolved comparison path = %q, want %q", resolved, want)
 	}
