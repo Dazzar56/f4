@@ -282,8 +282,8 @@ github.com/unxed/zipcharset v0.1.4 h1:vt9klapB93tmEP5/ISzBms696V/s7TrmVqFJvEOBp4
 github.com/unxed/zipcharset v0.1.4/go.mod h1:Q3alPBTdl/XT/UdJvkVNWm2yxu+69CRBpoIGuZxJvzI=
 github.com/unxed/zipper v0.1.147 h1:7DArExZoIfVUnvsKj9rKTY6DtZ7ROEs3pDbOTBi6f9w=
 github.com/unxed/zipper v0.1.147/go.mod h1:KmUYIOAzTgwu5vhzO3NgEmbTrIoXR2jf0JMU5jDZD6s=
-github.com/unxed/zlib4go v0.1.15 h1:CqMODpd/i0Qwmv7fsISicC1MgGZyN3y4UVU9BLElYuc=
-github.com/unxed/zlib4go v0.1.15/go.mod h1:qRMFsoCer5rxQP5K0zRWvFIwR6L3apsyQqsLRxBYUA4=
+github.com/unxed/zlib4go v0.1.16 h1:ywe3uP+psijItyOKJq4lQSMTyjEwtvZ9lHfJlgDWpy0=
+github.com/unxed/zlib4go v0.1.16/go.mod h1:qRMFsoCer5rxQP5K0zRWvFIwR6L3apsyQqsLRxBYUA4=
 github.com/vishvananda/netlink v1.3.1 h1:3AEMt62VKqz90r0tmNhog0r/PpWKmrEShJU0wJW6bV0=
 github.com/vishvananda/netlink v1.3.1/go.mod h1:ARtKouGSTGchR8aMwmkzC0qiNPrrWO5JS/XMVl45+b4=
 github.com/vishvananda/netns v0.0.5 h1:DfiHV+j8bA32MFM7bfEunvT8IAqQ/NzSJHtcmW5zdEY=

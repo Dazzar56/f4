@@ -148,7 +148,7 @@ require (
 	github.com/unxed/xkb-go v0.1.8 // indirect
 	github.com/unxed/xz v0.1.41 // indirect
 	github.com/unxed/zipcharset v0.1.4 // indirect
-	github.com/unxed/zlib4go v0.1.15 // indirect
+	github.com/unxed/zlib4go v0.1.16 // indirect
 	github.com/vishvananda/netlink v1.3.1 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect

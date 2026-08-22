@@ -39,8 +39,21 @@ jobs:
             goarch: arm
           - goos: solaris
             goarch: arm
+        # Linux is also cross-built for the additional architectures that
+        # Go supports. vtui's graphical/FFI backends are unavailable there,
+        # so these cells use its ANSI-only noffi configuration.
+        include:
+          - { goos: linux, goarch: mips,    build_tags: noffi }
+          - { goos: linux, goarch: mipsle,  build_tags: noffi }
+          - { goos: linux, goarch: mips64,  build_tags: noffi }
+          - { goos: linux, goarch: mips64le, build_tags: noffi }
+          - { goos: linux, goarch: riscv64, build_tags: noffi }
+          - { goos: linux, goarch: loong64, build_tags: noffi }
+          - { goos: linux, goarch: ppc64,  build_tags: noffi }
+          - { goos: linux, goarch: ppc64le, build_tags: noffi }
     env:
       CGO_ENABLED: 0
+      BUILD_TAGS: ${{ matrix.build_tags || '' }}
 
     steps:
     - name: Checkout code
@@ -102,12 +115,17 @@ jobs:
           GCFLAGS="-gcflags=github.com/go-webgpu/goffi/internal/fakecgo=-std"
         fi
 
+        BUILD_TAG_ARGS=()
+        if [ -n "$BUILD_TAGS" ]; then
+          BUILD_TAG_ARGS=(-tags "$BUILD_TAGS")
+        fi
+
         # Build core
-        go build -trimpath $GCFLAGS -ldflags="$APP_LDFLAGS" -o build/f4$EXT ./cmd/f4
+        go build "${BUILD_TAG_ARGS[@]}" -trimpath $GCFLAGS -ldflags="$APP_LDFLAGS" -o build/f4$EXT ./cmd/f4
 
         # Build GUI-only binary for Windows (no console flash)
         if [ "$GOOS" = "windows" ]; then
-          go build -trimpath $GCFLAGS -ldflags="$APP_LDFLAGS -H windowsgui" -o build/f4-gui$EXT ./cmd/f4
+          go build "${BUILD_TAG_ARGS[@]}" -trimpath $GCFLAGS -ldflags="$APP_LDFLAGS -H windowsgui" -o build/f4-gui$EXT ./cmd/f4
         fi
 
         # Copy language and help assets
@@ -133,7 +151,7 @@ jobs:
 
         # Build internal dummy plugin
         cd plugins/dummy_internal
-        go build -trimpath $GCFLAGS -ldflags="$LDFLAGS" -o ../../build/plugins/dummy_internal/f4-internal-dummy-plugin$EXT .
+        go build "${BUILD_TAG_ARGS[@]}" -trimpath $GCFLAGS -ldflags="$LDFLAGS" -o ../../build/plugins/dummy_internal/f4-internal-dummy-plugin$EXT .
 
     - name: Package
       run: |
