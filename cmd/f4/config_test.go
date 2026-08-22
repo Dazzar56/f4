@@ -50,6 +50,7 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	AppConfig.RestoreWorkspaceTabs = false
 	AppConfig.WorkspaceTabNumbering = WorkspaceTabNumbersOrder
 	AppConfig.ApplyCommandParallelism = 0
+	AppConfig.AutoSaveSettings = false
 
 	// 2. Save
 	SaveConfig()
@@ -74,6 +75,7 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	AppConfig.RestoreWorkspaceTabs = true
 	AppConfig.WorkspaceTabNumbering = WorkspaceTabNumbersAlways
 	AppConfig.ApplyCommandParallelism = 1
+	AppConfig.AutoSaveSettings = true
 
 	// 4. Load
 	LoadConfig()
@@ -105,6 +107,9 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	}
 	if AppConfig.SavePanelPaths {
 		t.Error("LoadConfig failed to restore SavePanelPaths")
+	}
+	if AppConfig.AutoSaveSettings {
+		t.Error("LoadConfig failed to restore disabled AutoSaveSettings")
 	}
 	if !AppConfig.EditorCrosshair {
 		t.Error("LoadConfig failed to restore EditorCrosshair")
@@ -141,6 +146,107 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	}
 	if AppConfig.ApplyCommandParallelism != 0 {
 		t.Errorf("ApplyCommandParallelism = %d, want Unlimited (0)", AppConfig.ApplyCommandParallelism)
+	}
+}
+
+func TestSaveSettingsGroupsKeepUnselectedValues(t *testing.T) {
+	tmpDir := t.TempDir()
+	settingsPath := filepath.Join(tmpDir, "settings.ini")
+	sessionPath := filepath.Join(tmpDir, "session.ini")
+
+	oldConfig := AppConfig
+	oldUserPath := getUserConfigIniPath
+	oldConfigPaths := getConfigIniPaths
+	oldSessionPath := getSessionIniPath
+	oldFrameManager := vtui.FrameManager
+	defer func() {
+		AppConfig = oldConfig
+		getUserConfigIniPath = oldUserPath
+		getConfigIniPaths = oldConfigPaths
+		getSessionIniPath = oldSessionPath
+		vtui.FrameManager = oldFrameManager
+	}()
+
+	getUserConfigIniPath = func() string { return settingsPath }
+	getConfigIniPaths = func() []string { return []string{settingsPath} }
+	getSessionIniPath = func() string { return sessionPath }
+	vtui.FrameManager = nil
+
+	AppConfig.ColorStyle = "Persisted"
+	AppConfig.GuiCols = 80
+	AppConfig.GuiRows = 25
+	SaveConfig()
+
+	AppConfig.ColorStyle = "Pending"
+	AppConfig.GuiCols = 120
+	AppConfig.GuiRows = 40
+	saveSettingsGroups(true, false, false)
+	ini := LoadIni(settingsPath)
+	if got := ini.GetString("Interface", "ColorStyle", ""); got != "Pending" {
+		t.Fatalf("general settings were not saved: ColorStyle = %q", got)
+	}
+	if got := ini.GetString("Appearance", "GuiCols", ""); got != "80" {
+		t.Fatalf("unselected GUI width changed: %q", got)
+	}
+	if got := ini.GetString("Appearance", "GuiRows", ""); got != "25" {
+		t.Fatalf("unselected GUI height changed: %q", got)
+	}
+
+	data, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = append(data, []byte("\n[ThirdParty]\nKeep=1\n")...)
+	if err := os.WriteFile(settingsPath, data, 0644); err != nil {
+		t.Fatal(err)
+	}
+	AppConfig.ColorStyle = "Not persisted"
+	AppConfig.GuiCols = 140
+	AppConfig.GuiRows = 50
+	saveSettingsGroups(false, false, true)
+	ini = LoadIni(settingsPath)
+	if got := ini.GetString("Interface", "ColorStyle", ""); got != "Pending" {
+		t.Fatalf("window-only save changed general settings: %q", got)
+	}
+	if got := ini.GetString("Appearance", "GuiCols", ""); got != "140" {
+		t.Fatalf("window-only save did not save width: %q", got)
+	}
+	if got := ini.GetString("Appearance", "GuiRows", ""); got != "50" {
+		t.Fatalf("window-only save did not save height: %q", got)
+	}
+	if got := ini.GetString("ThirdParty", "Keep", ""); got != "1" {
+		t.Fatalf("window-only save discarded unknown settings: %q", got)
+	}
+
+	freshSettingsPath := filepath.Join(tmpDir, "fresh-settings.ini")
+	getUserConfigIniPath = func() string { return freshSettingsPath }
+	getConfigIniPaths = func() []string { return []string{freshSettingsPath} }
+	AppConfig.GuiCols = 90
+	AppConfig.GuiRows = 30
+	saveSettingsGroups(false, false, true)
+	fresh, err := os.ReadFile(freshSettingsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(fresh), "[Interface]") {
+		t.Fatalf("window-only save created unrelated settings on a fresh profile:\n%s", fresh)
+	}
+}
+
+func TestSaveSessionDisabled(t *testing.T) {
+	oldConfig := AppConfig
+	oldSessionPath := getSessionIniPath
+	defer func() {
+		AppConfig = oldConfig
+		getSessionIniPath = oldSessionPath
+	}()
+
+	path := filepath.Join(t.TempDir(), "session.ini")
+	getSessionIniPath = func() string { return path }
+	AppConfig.AutoSaveSettings = false
+	SaveSession()
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("disabled automatic session save created %s, err=%v", path, err)
 	}
 }
 

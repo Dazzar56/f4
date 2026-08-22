@@ -2807,6 +2807,53 @@ func actionFindFile(pf *PanelsFrame) {
 
 	vtui.FrameManager.Push(dlg)
 }
+func actionSaveSettings(pf *PanelsFrame) {
+	const width, height = 54, 11
+	dlg := vtui.NewCenteredDialog(width, height, Msg("SaveSettings.Title"))
+	dlg.ShowClose = true
+
+	question := vtui.NewText(0, 0, Msg("SaveSettings.Question"), 0)
+	chkGeneral := vtui.NewCheckbox(0, 0, Msg("SaveSettings.General"), false)
+	chkPanel := vtui.NewCheckbox(0, 0, Msg("SaveSettings.Panel"), false)
+	chkWindow := vtui.NewCheckbox(0, 0, Msg("SaveSettings.Window"), false)
+	chkGeneral.State = 1
+	chkPanel.State = 1
+	chkWindow.State = 1
+
+	btnSave := vtui.NewButton(0, 0, Msg("SaveSettings.Save"))
+	btnSave.IsDefault = true
+	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
+
+	dlg.AddItem(question)
+	dlg.AddItem(chkGeneral)
+	dlg.AddItem(chkPanel)
+	dlg.AddItem(chkWindow)
+	dlg.AddItem(btnSave)
+	dlg.AddItem(btnCancel)
+
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, width-4, height-4)
+	vbox.Add(question, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(chkGeneral, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	vbox.Add(chkPanel, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(chkWindow, vtui.Margins{}, vtui.AlignLeft)
+	hbox := vtui.NewHBoxLayout(0, 0, width-4, 1)
+	hbox.HorizontalAlign = vtui.AlignCenter
+	hbox.Spacing = 2
+	hbox.Add(btnSave, vtui.Margins{}, vtui.AlignTop)
+	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
+	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Apply()
+
+	btnCancel.OnClick = func() { dlg.Close() }
+	btnSave.OnClick = func() {
+		saveSettingsGroups(chkGeneral.State == 1, chkPanel.State == 1, chkWindow.State == 1)
+		dlg.Close()
+		vtui.ShowToast(Msg("SaveSettings.Done"), 2*time.Second)
+	}
+
+	vtui.FrameManager.PushToFrameScreen(pf, dlg)
+}
+
 func actionPanelSettings(pf *PanelsFrame) {
 	// Keep the frequently used panel and navigation options in a compact
 	// dialog. The less frequently changed performance, console, and operation
@@ -2858,6 +2905,11 @@ func actionPanelSettings(pf *PanelsFrame) {
 	chkPaths.State = 0
 	if AppConfig.SavePanelPaths {
 		chkPaths.State = 1
+	}
+
+	chkAutoSave := vtui.NewCheckbox(0, 0, Msg("PanelSettings.AutoSave"), false)
+	if AppConfig.AutoSaveSettings {
+		chkAutoSave.State = 1
 	}
 
 	chkCmdAc := vtui.NewCheckbox(0, 0, Msg("PanelSettings.CommandLineAutoComplete"), false)
