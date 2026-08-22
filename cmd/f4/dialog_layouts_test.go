@@ -134,16 +134,7 @@ func TestAllDialogs_LayoutValidation(t *testing.T) {
 
 	// Load all language packs so the validator can assert layout against all translations dynamically
 	packs := LoadAllLanguagePacks()
-	// Filter out languages with complex scripts (bn, hi) whose in-memory TUI layout
-	// validation produces false failures due to lack of Unicode shaping in ScreenBuf.
-	var filteredPacks []vtui.LanguagePack
-	for _, pack := range packs {
-		if pack.Name != "bn" && pack.Name != "hi" {
-			filteredPacks = append(filteredPacks, pack)
-		}
-	}
-	packs = filteredPacks
-
+	// Complex-script widths are handled by vtui's grapheme-cell shaping.
 	for _, act := range GetActions() {
 		name := act.Name
 		if skipActions[strings.ToLower(name)] {
