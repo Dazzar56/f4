@@ -228,6 +228,10 @@ type F4Config struct {
 	ConfirmExit            bool
 	DeleteCancelFocused    bool
 	AutoSaveSettings       bool
+	AutoSaveDialogSettings bool
+	AutoSavePanelSettings  bool
+	AutoSaveCurrentPanel   bool
+	AutoSaveGUIWindow      bool
 	DefaultFileOpMode      int
 	FileOpPathDisplay      int
 	MacroRecordFormat      int
@@ -351,6 +355,10 @@ var AppConfig = F4Config{
 	ConfirmExit:              true,
 	DeleteCancelFocused:      false,
 	AutoSaveSettings:         true,
+	AutoSaveDialogSettings:   true,
+	AutoSavePanelSettings:    true,
+	AutoSaveCurrentPanel:     true,
+	AutoSaveGUIWindow:        true,
 	DefaultFileOpMode:        0,
 	FileOpPathDisplay:        0,
 	GuiFont:                  "",
@@ -490,7 +498,16 @@ func LoadConfig() {
 	AppConfig.UseTrash = ini.GetString("System", "UseTrash", "0") == "1"
 	AppConfig.ConfirmExit = ini.GetString("System", "ConfirmExit", "1") == "1"
 	AppConfig.DeleteCancelFocused = ini.GetString("System", "DeleteCancelFocused", "0") == "1"
-	AppConfig.AutoSaveSettings = ini.GetString("System", "AutoSaveSettings", "1") != "0"
+	legacyAutoSave := ini.GetString("System", "AutoSaveSettings", "1") != "0"
+	AppConfig.AutoSaveSettings = legacyAutoSave
+	autoSaveDefault := "0"
+	if legacyAutoSave {
+		autoSaveDefault = "1"
+	}
+	AppConfig.AutoSaveDialogSettings = ini.GetString("System", "AutoSaveDialogSettings", autoSaveDefault) != "0"
+	AppConfig.AutoSavePanelSettings = ini.GetString("System", "AutoSavePanelSettings", autoSaveDefault) != "0"
+	AppConfig.AutoSaveCurrentPanel = ini.GetString("System", "AutoSaveCurrentPanel", autoSaveDefault) != "0"
+	AppConfig.AutoSaveGUIWindow = ini.GetString("System", "AutoSaveGUIWindow", autoSaveDefault) != "0"
 	AppConfig.AnnounceKittyTerm = ini.GetString("System", "AnnounceKittyTerm", "1") == "1"
 	fmt.Sscanf(ini.GetString("System", "MacroRecordFormat", "0"), "%d", &AppConfig.MacroRecordFormat)
 	fmt.Sscanf(ini.GetString("Panel", "FileOpPathDisplay", "0"), "%d", &AppConfig.FileOpPathDisplay)
@@ -705,6 +722,10 @@ func saveConfigWithWindowSize(windowSize bool) {
 	fmt.Fprintf(&sb, "ConfirmExit = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.ConfirmExit])
 	fmt.Fprintf(&sb, "DeleteCancelFocused = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.DeleteCancelFocused])
 	fmt.Fprintf(&sb, "AutoSaveSettings = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.AutoSaveSettings])
+	fmt.Fprintf(&sb, "AutoSaveDialogSettings = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.AutoSaveDialogSettings])
+	fmt.Fprintf(&sb, "AutoSavePanelSettings = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.AutoSavePanelSettings])
+	fmt.Fprintf(&sb, "AutoSaveCurrentPanel = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.AutoSaveCurrentPanel])
+	fmt.Fprintf(&sb, "AutoSaveGUIWindow = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.AutoSaveGUIWindow])
 	fmt.Fprintf(&sb, "AnnounceKittyTerm = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.AnnounceKittyTerm])
 	fmt.Fprintf(&sb, "MacroRecordFormat = %d\n", AppConfig.MacroRecordFormat)
 
@@ -849,10 +870,7 @@ func saveGuiWindowSize() {
 				continue
 			}
 			if inherited, readErr := os.ReadFile(source); readErr == nil {
-				updated := updateIniValues(inherited, "Appearance", map[string]string{
-					"GuiCols": strconv.Itoa(AppConfig.GuiCols),
-					"GuiRows": strconv.Itoa(AppConfig.GuiRows),
-				})
+				updated := updateIniValues(inherited, "Appearance", guiWindowValues())
 				if writeErr := os.WriteFile(path, updated, 0644); writeErr != nil {
 					vtui.DebugLog("CONFIG: Failed to save GUI size: %v", writeErr)
 				}
@@ -860,6 +878,9 @@ func saveGuiWindowSize() {
 			}
 		}
 		data = []byte(fmt.Sprintf("[Appearance]\nGuiCols = %d\nGuiRows = %d\n", AppConfig.GuiCols, AppConfig.GuiRows))
+		if AppConfig.GuiPositionSaved {
+			data = append(data, []byte(fmt.Sprintf("GuiPosX = %d\nGuiPosY = %d\n", AppConfig.GuiPosX, AppConfig.GuiPosY))...)
+		}
 		if writeErr := os.WriteFile(path, data, 0644); writeErr != nil {
 			vtui.DebugLog("CONFIG: Failed to save GUI size: %v", writeErr)
 		}
@@ -869,13 +890,22 @@ func saveGuiWindowSize() {
 		vtui.DebugLog("CONFIG: Failed to read settings before saving GUI size: %v", err)
 		return
 	}
-	updated := updateIniValues(data, "Appearance", map[string]string{
-		"GuiCols": strconv.Itoa(AppConfig.GuiCols),
-		"GuiRows": strconv.Itoa(AppConfig.GuiRows),
-	})
+	updated := updateIniValues(data, "Appearance", guiWindowValues())
 	if err := os.WriteFile(path, updated, 0644); err != nil {
 		vtui.DebugLog("CONFIG: Failed to save GUI size: %v", err)
 	}
+}
+
+func guiWindowValues() map[string]string {
+	values := map[string]string{
+		"GuiCols": strconv.Itoa(AppConfig.GuiCols),
+		"GuiRows": strconv.Itoa(AppConfig.GuiRows),
+	}
+	if AppConfig.GuiPositionSaved {
+		values["GuiPosX"] = strconv.Itoa(AppConfig.GuiPosX)
+		values["GuiPosY"] = strconv.Itoa(AppConfig.GuiPosY)
+	}
+	return values
 }
 
 func saveSettingsGroups(general, panel, window bool) {
@@ -884,6 +914,7 @@ func saveSettingsGroups(general, panel, window bool) {
 	}
 	if window {
 		captureCurrentWindowSize()
+		captureCurrentWindowPosition()
 	}
 	if general {
 		saveConfigWithWindowSize(window)
@@ -893,6 +924,11 @@ func saveSettingsGroups(general, panel, window bool) {
 	if panel {
 		saveSessionFile(getSessionIniPath())
 	}
+}
+
+func syncAutoSaveMaster() {
+	AppConfig.AutoSaveSettings = AppConfig.AutoSaveDialogSettings ||
+		AppConfig.AutoSavePanelSettings || AppConfig.AutoSaveCurrentPanel || AppConfig.AutoSaveGUIWindow
 }
 
 func updateIniValues(data []byte, section string, values map[string]string) []byte {
@@ -960,7 +996,7 @@ func updateIniValues(data []byte, section string, values map[string]string) []by
 // second and we don't want to fsync on every keystroke. The final value
 // still lands on disk when automatic saving is enabled at shutdown.
 func RequestSaveConfig() {
-	if !AppConfig.AutoSaveSettings {
+	if !AppConfig.AutoSaveSettings || !AppConfig.AutoSaveDialogSettings {
 		return
 	}
 	saveConfigTimerMu.Lock()
@@ -969,7 +1005,7 @@ func RequestSaveConfig() {
 		saveConfigTimer.Stop()
 	}
 	saveConfigTimer = time.AfterFunc(saveConfigDebounce, func() {
-		if AppConfig.AutoSaveSettings {
+		if AppConfig.AutoSaveSettings && AppConfig.AutoSaveDialogSettings {
 			SaveConfig()
 		}
 	})

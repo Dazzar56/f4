@@ -2951,6 +2951,58 @@ func actionSaveSettings(pf *PanelsFrame) {
 	vtui.FrameManager.PushToFrameScreen(pf, dlg)
 }
 
+func actionAutoSaveSettings(pf *PanelsFrame) {
+	const width, height = 66, 13
+	dlg := vtui.NewCenteredDialog(width, height, Msg("PanelSettings.AutoSaveDetails"))
+	dlg.ShowClose = true
+
+	question := vtui.NewText(0, 0, Msg("SaveSettings.Question"), 0)
+	chkDialog := vtui.NewCheckbox(0, 0, Msg("PanelSettings.AutoSave.Dialog"), false)
+	chkPanel := vtui.NewCheckbox(0, 0, Msg("PanelSettings.AutoSave.Panel"), false)
+	chkCurrent := vtui.NewCheckbox(0, 0, Msg("PanelSettings.AutoSave.Current"), false)
+	chkWindow := vtui.NewCheckbox(0, 0, Msg("PanelSettings.AutoSave.GUI"), false)
+	chkDialog.State = boolToCheckboxState(AppConfig.AutoSaveDialogSettings)
+	chkPanel.State = boolToCheckboxState(AppConfig.AutoSavePanelSettings)
+	chkCurrent.State = boolToCheckboxState(AppConfig.AutoSaveCurrentPanel)
+	chkWindow.State = boolToCheckboxState(AppConfig.AutoSaveGUIWindow)
+
+	btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))
+	btnOk.IsDefault = true
+	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
+	for _, item := range []vtui.UIElement{question, chkDialog, chkPanel, chkCurrent, chkWindow, btnOk, btnCancel} {
+		dlg.AddItem(item)
+	}
+
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, width-4, height-4)
+	vbox.Add(question, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(chkDialog, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	vbox.Add(chkPanel, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(chkCurrent, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(chkWindow, vtui.Margins{}, vtui.AlignLeft)
+	buttons := vtui.NewHBoxLayout(0, 0, width-4, 1)
+	buttons.HorizontalAlign = vtui.AlignCenter
+	buttons.Spacing = 2
+	buttons.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
+	buttons.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
+	vbox.Add(buttons, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Apply()
+
+	btnCancel.OnClick = func() { dlg.Close() }
+	btnOk.OnClick = func() {
+		AppConfig.AutoSaveDialogSettings = chkDialog.State == 1
+		AppConfig.AutoSavePanelSettings = chkPanel.State == 1
+		AppConfig.AutoSaveCurrentPanel = chkCurrent.State == 1
+		AppConfig.AutoSaveGUIWindow = chkWindow.State == 1
+		syncAutoSaveMaster()
+		// Changing the autosave policy is an explicit settings action. Persist
+		// the policy itself even when the new policy disables future writes.
+		saveConfigWithWindowSize(false)
+		dlg.Close()
+	}
+
+	vtui.FrameManager.PushToFrameScreen(pf, dlg)
+}
+
 func actionPanelSettings(pf *PanelsFrame) {
 	// Keep the frequently used panel and navigation options in a compact
 	// dialog. The less frequently changed performance, console, and operation
@@ -3008,6 +3060,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 	if AppConfig.AutoSaveSettings {
 		chkAutoSave.State = 1
 	}
+	btnAutoSaveDetails := vtui.NewButton(0, 0, Msg("PanelSettings.AutoSaveDetails"))
 
 	chkUseTrash := vtui.NewCheckbox(0, 0, Msg("PanelSettings.UseTrash"), false)
 	if AppConfig.UseTrash {
@@ -3054,6 +3107,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 	dlg.AddItem(comboScrollbars)
 	dlg.AddItem(chkPaths)
 	dlg.AddItem(chkAutoSave)
+	dlg.AddItem(btnAutoSaveDetails)
 	dlg.AddItem(chkUseTrash)
 	dlg.AddItem(chkCmdAc)
 	dlg.AddItem(lblNavigation)
@@ -3075,14 +3129,17 @@ func actionPanelSettings(pf *PanelsFrame) {
 	rowScrollbars := vtui.NewHBoxLayout(0, 0, 56, 1)
 	rowScrollbars.Add(lblScrollbars, vtui.Margins{Right: 1}, vtui.AlignLeft)
 	rowScrollbars.Add(comboScrollbars, vtui.Margins{}, vtui.AlignFill)
-	vbox.Add(rowScrollbars, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Add(rowScrollbars, vtui.Margins{}, vtui.AlignFill)
 	// Second checkbox cluster.
-	vbox.Add(chkPaths, vtui.Margins{Top: 1}, vtui.AlignLeft)
-	vbox.Add(chkAutoSave, vtui.Margins{}, vtui.AlignLeft)
-	vbox.Add(chkUseTrash, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(chkPaths, vtui.Margins{}, vtui.AlignLeft)
+	autoSaveRow := vtui.NewHBoxLayout(0, 0, 56, 1)
+	autoSaveRow.Add(chkAutoSave, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(autoSaveRow, vtui.Margins{}, vtui.AlignFill)
+	vbox.Add(btnAutoSaveDetails, vtui.Margins{Top: 1, Left: 2}, vtui.AlignLeft)
+	vbox.Add(chkUseTrash, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(chkCmdAc, vtui.Margins{}, vtui.AlignLeft)
 	// Navigation radio group — its own visual island.
-	vbox.Add(lblNavigation, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	vbox.Add(lblNavigation, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(navigation, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkStayFocused, vtui.Margins{Left: 2}, vtui.AlignLeft)
 	hbox := vtui.NewHBoxLayout(0, 0, 56, 1)
@@ -3104,7 +3161,18 @@ func actionPanelSettings(pf *PanelsFrame) {
 		AppConfig.ShowPanelFileInfo = chkFileInfo.State == 1
 		AppConfig.PanelScrollbarMode = PanelScrollbarMode(comboScrollbars.Menu.SelectPos)
 		AppConfig.SavePanelPaths = chkPaths.State == 1
-		AppConfig.AutoSaveSettings = chkAutoSave.State == 1
+		if chkAutoSave.State == 0 {
+			AppConfig.AutoSaveDialogSettings = false
+			AppConfig.AutoSavePanelSettings = false
+			AppConfig.AutoSaveCurrentPanel = false
+			AppConfig.AutoSaveGUIWindow = false
+		} else if !AppConfig.AutoSaveDialogSettings && !AppConfig.AutoSavePanelSettings && !AppConfig.AutoSaveCurrentPanel && !AppConfig.AutoSaveGUIWindow {
+			AppConfig.AutoSaveDialogSettings = true
+			AppConfig.AutoSavePanelSettings = true
+			AppConfig.AutoSaveCurrentPanel = true
+			AppConfig.AutoSaveGUIWindow = true
+		}
+		syncAutoSaveMaster()
 		AppConfig.UseTrash = chkUseTrash.State == 1
 		AppConfig.CommandLineAutoComplete = chkCmdAc.State == 1
 		pf.cmdLine.Edit.PathHintsEnabled = AppConfig.CommandLineAutoComplete
@@ -3117,6 +3185,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 		pf.RefreshAll()
 	}
 	btnAdditional.OnClick = func() { actionPanelAdditionalSettings(pf) }
+	btnAutoSaveDetails.OnClick = func() { actionAutoSaveSettings(pf) }
 
 	vtui.FrameManager.Push(dlg)
 }

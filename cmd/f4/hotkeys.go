@@ -210,21 +210,29 @@ func (hm *HotkeyManager) GetActiveBindings() map[string]map[string]string {
 
 // GetKeyForAction searches for a key combination bound to the given action in an area.
 func (hm *HotkeyManager) GetKeyForAction(area, actionName string) string {
-	if binds, ok := hm.Bindings[area]; ok {
+	find := func(binds map[string]string) string {
+		var keys []string
 		for key, binding := range binds {
 			parts := strings.SplitN(binding, ":", 2)
 			if strings.EqualFold(parts[0], actionName) {
-				return key
+				keys = append(keys, key)
 			}
+		}
+		sort.Strings(keys)
+		if len(keys) > 0 {
+			return keys[0]
+		}
+		return ""
+	}
+	if binds, ok := hm.Bindings[area]; ok {
+		if key := find(binds); key != "" {
+			return key
 		}
 	}
 	if area != "Common" {
 		if binds, ok := hm.Bindings["Common"]; ok {
-			for key, binding := range binds {
-				parts := strings.SplitN(binding, ":", 2)
-				if strings.EqualFold(parts[0], actionName) {
-					return key
-				}
+			if key := find(binds); key != "" {
+				return key
 			}
 		}
 	}

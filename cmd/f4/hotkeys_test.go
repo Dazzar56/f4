@@ -144,6 +144,18 @@ func TestHotkeyManager_GetKeyForAction(t *testing.T) {
 		t.Errorf("Expected F3, got %q", key)
 	}
 }
+
+func TestHotkeyManager_GetKeyForActionIsDeterministic(t *testing.T) {
+	hm := NewHotkeyManager("")
+	hm.Bindings["Shell"]["CtrlShiftLeft"] = "Panel.LeftDriveMenu"
+	hm.Bindings["Shell"]["AltF1"] = "Panel.LeftDriveMenu"
+
+	for i := 0; i < 20; i++ {
+		if key := hm.GetKeyForAction("Shell", "Panel.LeftDriveMenu"); key != "AltF1" {
+			t.Fatalf("iteration %d returned %q, want stable AltF1", i, key)
+		}
+	}
+}
 func TestHotkeyManager_ShellDefaults_Issue289(t *testing.T) {
 	hm := NewHotkeyManager("")
 	hm.initDefaults()

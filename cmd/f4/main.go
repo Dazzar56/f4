@@ -806,19 +806,33 @@ func SaveSession() {
 		vtui.DebugLog("SESSION: Automatic saving is disabled")
 		return
 	}
-	saveSession(true)
+	saveSessionWithOptions(AppConfig.AutoSavePanelSettings, AppConfig.AutoSaveCurrentPanel, AppConfig.AutoSaveGUIWindow)
 }
 
-func saveSession(saveWindowSize bool) {
+func saveSessionWithOptions(savePanelSettings, saveCurrentPanel, saveGUIWindow bool) {
+	if !savePanelSettings && !saveCurrentPanel && !saveGUIWindow && !AppConfig.AutoSaveDialogSettings {
+		return
+	}
 	path := getSessionIniPath()
-	os.MkdirAll(filepath.Dir(path), 0755)
-
-	windowSizeChanged := captureCurrentWindowSize()
-	if saveWindowSize && windowSizeChanged {
-		SaveConfig()
+	if saveGUIWindow {
+		windowChanged := captureCurrentWindowSize()
+		positionChanged := captureCurrentWindowPosition()
+		if windowChanged || positionChanged {
+			if AppConfig.AutoSaveDialogSettings {
+				saveConfigWithWindowSize(true)
+			} else {
+				saveGuiWindowSize()
+			}
+		}
+	} else if AppConfig.AutoSaveDialogSettings {
+		// Flush a pending settings-dialog change at shutdown without replacing
+		// the last GUI geometry when that group is disabled.
+		saveConfigWithWindowSize(false)
 	}
 
-	saveSessionFile(path)
+	if savePanelSettings || saveCurrentPanel {
+		saveSessionFileWithOptions(path, savePanelSettings, saveCurrentPanel)
+	}
 }
 
 func captureCurrentWindowSize() bool {
@@ -835,11 +849,78 @@ func captureCurrentWindowSize() bool {
 	return true
 }
 
+func captureCurrentWindowPosition() bool {
+	if !shouldPersistGUIWindowSize(vtui.ActiveBackend()) || vtui.FrameManager == nil {
+		return false
+	}
+	x, y, ok := vtui.GetWindowPosition()
+	if !ok || (AppConfig.GuiPositionSaved && AppConfig.GuiPosX == x && AppConfig.GuiPosY == y) {
+		return false
+	}
+	AppConfig.GuiPosX = x
+	AppConfig.GuiPosY = y
+	AppConfig.GuiPositionSaved = true
+	return true
+}
+
+func mergeWorkspaceSessionSave(previous []workspaceSessionState, previousActive int, current []workspaceSessionState, currentActive int, savePanelSettings, saveCurrentPanel bool) ([]workspaceSessionState, int) {
+	if len(previous) == 0 || (savePanelSettings && saveCurrentPanel) {
+		return current, currentActive
+	}
+	merged := append([]workspaceSessionState(nil), previous...)
+	findPrevious := func(state workspaceSessionState, index int) int {
+		for i := range merged {
+			if state.Number != 0 && merged[i].Number == state.Number {
+				return i
+			}
+		}
+		if index < len(merged) {
+			return index
+		}
+		return -1
+	}
+	for index, state := range current {
+		previousIndex := findPrevious(state, index)
+		if previousIndex < 0 {
+			if savePanelSettings {
+				merged = append(merged, state)
+			}
+			continue
+		}
+		if savePanelSettings {
+			paths := merged[previousIndex].Left.Path
+			leftCursor := merged[previousIndex].Left.Cursor
+			rightPath := merged[previousIndex].Right.Path
+			rightCursor := merged[previousIndex].Right.Cursor
+			merged[previousIndex] = state
+			merged[previousIndex].Left.Path = paths
+			merged[previousIndex].Left.Cursor = leftCursor
+			merged[previousIndex].Right.Path = rightPath
+			merged[previousIndex].Right.Cursor = rightCursor
+		}
+		if saveCurrentPanel {
+			merged[previousIndex].Left.Path = state.Left.Path
+			merged[previousIndex].Left.Cursor = state.Left.Cursor
+			merged[previousIndex].Right.Path = state.Right.Path
+			merged[previousIndex].Right.Cursor = state.Right.Cursor
+		}
+	}
+	if savePanelSettings {
+		return merged, currentActive
+	}
+	return merged, previousActive
+}
+
 func saveSessionFile(path string) {
+	saveSessionFileWithOptions(path, true, true)
+}
+
+func saveSessionFileWithOptions(path string, savePanelSettings, saveCurrentPanel bool) {
 	os.MkdirAll(filepath.Dir(path), 0755)
 
 	if vtui.FrameManager != nil {
 		if states, active := captureWorkspaceSessions(); len(states) > 0 {
+			states, active = mergeWorkspaceSessionSave(LastWorkspaceSessions, LastActiveWorkspace, states, active, savePanelSettings, saveCurrentPanel)
 			if !AppConfig.SavePanelPaths {
 				for i := range states {
 					states[i].Left.Path, states[i].Right.Path = "", ""
