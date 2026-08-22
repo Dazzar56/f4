@@ -133,15 +133,16 @@ func TestArchivePluginRegistersDiscoverableCommands(t *testing.T) {
 		labelKey       string
 		menuPath       string
 		descriptionKey string
+		shortcut       string
 	}{
-		{id: archiveAddCommandID, label: "Add to archive", labelKey: "Archive.Command.Add", menuPath: "Files", descriptionKey: "Archive.Command.Add.Desc"},
-		{id: archiveExtractCommandID, label: "Extract files", labelKey: "Archive.Command.Extract", menuPath: "Files", descriptionKey: "Archive.Command.Extract.Desc"},
+		{id: archiveAddCommandID, label: "Add to archive", labelKey: "Archive.Command.Add", menuPath: "Files", descriptionKey: "Archive.Command.Add.Desc", shortcut: "Alt+F5"},
+		{id: archiveExtractCommandID, label: "Extract files", labelKey: "Archive.Command.Extract", menuPath: "Files", descriptionKey: "Archive.Command.Extract.Desc", shortcut: "Alt+F6"},
 	}
 	for index, expected := range want {
 		command := host.commands[index]
 		if command.ID != expected.id || command.Location != vfs.PluginCommandPanel || command.Label != expected.label || command.MenuPath != expected.menuPath ||
 			command.LabelKey != expected.labelKey || command.Description == "" || command.DescriptionKey != expected.descriptionKey ||
-			!reflect.DeepEqual(command.SearchKeys, []string{"Attributes.Archive"}) || command.Shortcut != "" {
+			!reflect.DeepEqual(command.SearchKeys, []string{"Attributes.Archive"}) || command.Shortcut != expected.shortcut {
 			t.Errorf("command %d = %#v, want id=%q location=Panel label=%q", index, command, expected.id, expected.label)
 		}
 		if strings.Contains(command.Label, "&") {
@@ -176,8 +177,8 @@ func TestArchivePluginKeepsShiftF1MenuWithoutContributionHost(t *testing.T) {
 	if host.providers != 1 {
 		t.Fatalf("registered archive providers = %d, want 1", host.providers)
 	}
-	if len(host.hotkeys) != 1 {
-		t.Fatalf("registered global hotkeys = %d, want 1", len(host.hotkeys))
+	if len(host.hotkeys) != 3 {
+		t.Fatalf("registered global hotkeys = %d, want 3", len(host.hotkeys))
 	}
 	hotkey := host.hotkeys[0]
 	if hotkey.vk != vtinput.VK_F1 || hotkey.mods != vtinput.ShiftPressed || hotkey.handler == nil {
@@ -197,5 +198,11 @@ func TestArchivePluginKeepsShiftF1MenuWithoutContributionHost(t *testing.T) {
 		if app.items[index] != wantItems[index] {
 			t.Errorf("legacy menu item %d = %q, want %q", index, app.items[index], wantItems[index])
 		}
+	}
+	if host.hotkeys[1].vk != vtinput.VK_F5 || host.hotkeys[1].mods != vtinput.LeftAltPressed || host.hotkeys[1].handler == nil {
+		t.Fatalf("add archive hotkey = %#v, want Alt+F5", host.hotkeys[1])
+	}
+	if host.hotkeys[2].vk != vtinput.VK_F6 || host.hotkeys[2].mods != vtinput.LeftAltPressed || host.hotkeys[2].handler == nil {
+		t.Fatalf("extract archive hotkey = %#v, want Alt+F6", host.hotkeys[2])
 	}
 }
