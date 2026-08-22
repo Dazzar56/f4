@@ -44,6 +44,27 @@ func TestUpdater_ParseUpdateHelperArgs(t *testing.T) {
 	}
 }
 
+func TestUpdater_ManualBuildVersionUsesBuildTimestamp(t *testing.T) {
+	oldCfg := AppConfig
+	defer func() { AppConfig = oldCfg }()
+	AppConfig.LastUpdateVersion = ""
+
+	buildTime := time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
+	newerLocalBuild := githubRelease{TagName: "v0.2.0-beta", PublishedAt: "2026-08-20T12:00:00Z"}
+	if stableReleaseNeedsUpdate(newerLocalBuild, "manual-build-sha", buildTime) {
+		t.Fatal("a manual build newer than the release must not request a downgrade")
+	}
+
+	newerRelease := githubRelease{TagName: "v0.2.0-beta", PublishedAt: "2026-08-22T12:00:00Z"}
+	if !stableReleaseNeedsUpdate(newerRelease, "manual-build-sha", buildTime) {
+		t.Fatal("a release newer than a manual build must be offered")
+	}
+
+	if stableReleaseNeedsUpdate(newerRelease, "v0.2.0-beta", buildTime) {
+		t.Fatal("an exact release build must not request an update to itself")
+	}
+}
+
 func (w *memoryWriteSeeker) Write(p []byte) (int, error) {
 	end := w.off + int64(len(p))
 	if w.off < 0 || end < w.off {
