@@ -2692,6 +2692,46 @@ func TestPanelsFrame_CommandLineEnter(t *testing.T) {
 	}
 }
 
+func TestPanelsFrame_CommandLineEnterRejectsUnmatchedBacktick(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("backticks are literal in the Windows shell")
+	}
+
+	pf := setupMockPanelsFrame()
+	pty := pf.pty.(*mockPty)
+	defer pf.Close()
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	before := len(pty.written)
+	pf.cmdLine.Edit.SetText("echo `date")
+	pressKey(pf, &vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_RETURN,
+	})
+
+	if !pf.showPanels {
+		t.Fatal("panels hid after an unmatched backtick instead of showing an error")
+	}
+	if got := string(pty.written[before:]); got != "" {
+		t.Fatalf("unmatched backtick reached the PTY: %q", got)
+	}
+	top := vtui.FrameManager.GetTopFrame()
+	if top == nil || top.GetTitle() != " Error " {
+		t.Fatalf("unmatched backtick did not open an error dialog: top=%T title=%q", top, func() string {
+			if top != nil {
+				return top.GetTitle()
+			}
+			return ""
+		}())
+	}
+	pressKey(top, &vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_ESCAPE,
+	})
+}
+
 type commandRunnerPanelVFS struct {
 	*vfs.NullVFS
 	path  string
