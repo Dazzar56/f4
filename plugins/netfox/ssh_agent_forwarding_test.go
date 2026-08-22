@@ -62,7 +62,10 @@ func assertAgentNotForwarded(t *testing.T, forwarded <-chan struct{}) {
 
 func startTestSSHAgent(t *testing.T) string {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "agent.sock")
+	// Darwin has a much shorter limit for Unix socket paths than Linux. Keep
+	// the socket directly under the system temp directory instead of nesting
+	// it under t.TempDir(), whose randomized path can exceed that limit.
+	path := filepath.Join(os.TempDir(), fmt.Sprintf("f4-agent-%d.sock", os.Getpid()))
 	listener, err := net.Listen("unix", path)
 	if err != nil {
 		t.Fatalf("listen for test SSH agent: %v", err)
