@@ -163,6 +163,12 @@ type EditorView struct {
 	targetPos    int
 	targetTopRow int
 	targetLeft   int
+	// targetOffset is a position known only as a byte offset — where a viewer
+	// was looking, or where a hex cursor sat — for a buffer whose index has
+	// not reached it. The scan turns it into a line and a column when it reads
+	// past it; -1 is none. It is the byte-offset twin of targetLine, and only
+	// one of the two is ever set.
+	targetOffset int
 	Codepage     int
 	// DisplayTitle overrides the temporary filename in frame and top-bar
 	// titles. It is used by internal editor round-trip workflows.
@@ -355,6 +361,7 @@ func newEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string, useEditorC
 		ShowWhitespaces: false,
 		cleanState:      pt.GetState(),
 		targetLine:      -1,
+		targetOffset:    -1,
 		targetPos:       -1,
 		targetTopRow:    -1,
 		targetLeft:      -1,
@@ -2638,6 +2645,62 @@ func (ev *EditorView) restoreTargetPos() bool {
 	return true
 }
 
+// awaitOffset asks for the cursor to land at a byte offset the index cannot
+// place yet, and reports whether the wait was needed. The alternative, when
+// the index stops short of the offset, is to answer with the last line it
+// knows and a column counted from there — which on a large file is a column
+// measured in gigabytes.
+func (ev *EditorView) awaitOffset(offset int) bool {
+	if offset < 0 {
+		return false
+	}
+	if ev.ensureIndexedTo(offset) {
+		ev.targetOffset = -1
+		line := ev.li.GetLineAtOffset(offset)
+		ev.CursorLine = line
+		ev.CursorPos = offset - ev.li.GetLineOffset(line)
+		ev.updateDesiredVisualCol()
+		return false
+	}
+	// Until the scan gets there the cursor sits at the top rather than
+	// somewhere arbitrary, and the file is readable while it waits.
+	ev.targetOffset = offset
+	ev.targetLine = -1
+	ev.CursorLine = 0
+	ev.CursorPos = 0
+	if !ev.indexing && !ev.indexIsComplete() {
+		ev.StartIndexing()
+	}
+	return true
+}
+
+// resolveTargetOffset places the cursor once the scan has read past the offset
+// it was asked to wait for. The scan's batches call it, as they call
+// restoreTargetPos for a target that was known as a line all along.
+//
+// "Read past" means the index holds a line that starts after the offset, or
+// describes the whole buffer: only then is the line the offset falls in the
+// last word on the subject, rather than the last line the index happens to
+// know.
+func (ev *EditorView) resolveTargetOffset() bool {
+	if ev.targetOffset < 0 {
+		return false
+	}
+	last := ev.li.GetLineOffset(ev.li.LineCount() - 1)
+	if last <= ev.targetOffset && !ev.indexIsComplete() {
+		return false
+	}
+	offset := min(ev.targetOffset, max(ev.pt.Size()-1, 0))
+	ev.targetOffset = -1
+	line := ev.li.GetLineAtOffset(offset)
+	ev.CursorLine = line
+	ev.CursorPos = offset - ev.li.GetLineOffset(line)
+	ev.ensureCursorVisible()
+	ev.updateDesiredVisualCol()
+	vtui.FrameManager.Redraw()
+	return true
+}
+
 func (ev *EditorView) ensureCursorVisible() {
 	if ev.targetLine != -1 {
 		return // Skip clamping and scrolling while waiting for the target line to be indexed
@@ -2978,6 +3041,7 @@ func (ev *EditorView) StartIndexing() {
 		// Fully read files (non-UTF-8 codepages) have a complete index and no
 		// scan; resolve a pending restore here or Loading waits forever.
 		ev.restoreTargetPos()
+		ev.resolveTargetOffset()
 		return
 	}
 	if ev.indexCancel != nil {
@@ -3079,6 +3143,10 @@ func (ev *EditorView) StartIndexing() {
 						if ev.targetLine != -1 && (li.LineCount() > ev.targetLine || len(res.Offsets) < batchSize) {
 							ev.restoreTargetPos()
 						}
+						// Unconditional: a position waiting as a byte offset
+						// has no target line to be reached, which is the whole
+						// reason it is waiting.
+						ev.resolveTargetOffset()
 
 						ev.engine.InvalidateFrom(lastLineBefore)
 						if ev.highlighter != nil && !ev.highlighting && len(ev.lineStates) < li.LineCount() {
@@ -3104,6 +3172,7 @@ func (ev *EditorView) StartIndexing() {
 						if ev.restoreTargetPos() {
 							vtui.FrameManager.Redraw()
 						}
+						ev.resolveTargetOffset()
 						if ev.highlighter != nil && !ev.highlighting && len(ev.lineStates) < li.LineCount() {
 							ev.startHighlighting()
 						}
@@ -3216,6 +3285,7 @@ func (ev *EditorView) StartIndexing() {
 					if ev.targetLine != -1 && (li.LineCount() > ev.targetLine || batchEnd >= maxSize) {
 						ev.restoreTargetPos()
 					}
+					ev.resolveTargetOffset()
 
 					ev.engine.InvalidateFrom(lastLineBefore)
 					if ev.highlighter != nil && !ev.highlighting && len(ev.lineStates) < li.LineCount() {
@@ -3236,6 +3306,7 @@ func (ev *EditorView) StartIndexing() {
 				if ev.restoreTargetPos() {
 					vtui.FrameManager.Redraw()
 				}
+				ev.resolveTargetOffset()
 				if ev.highlighter != nil && !ev.highlighting && len(ev.lineStates) < li.LineCount() {
 					ev.startHighlighting()
 				}
@@ -3571,6 +3642,10 @@ func (ev *EditorView) Replace(pattern, replacement string, caseSensitive, revers
 // line indexer is canceled and every editSession fence held by an in-flight
 // task goes stale.
 func (ev *EditorView) noteBufferEdit() {
+	// A position waiting on the scan describes the text as it was; typing has
+	// since moved it, and the cursor is where the user put it.
+	ev.targetOffset = -1
+
 	if !ev.edited {
 		ev.edited = true
 	}

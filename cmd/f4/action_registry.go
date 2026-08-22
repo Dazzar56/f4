@@ -2197,22 +2197,12 @@ func init() {
 				// the cursor may be "line 0, column five million". Text mode
 				// needs the real line, counted as far as the cursor before
 				// it is shown; the scan then carries on from there.
-				off := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
-				if ev.ensureIndexedTo(off) {
-					ev.CursorLine = ev.li.GetLineAtOffset(off)
-					ev.CursorPos = off - ev.li.GetLineOffset(ev.CursorLine)
-				} else {
-					// The buffer could not be read that far, so the offset has
-					// no line yet. Asking anyway answers with the last line the
-					// index knows and a column counted from there — the very
-					// "column five million" this is here to get rid of.
-					ev.CursorLine = max(ev.li.LineCount()-1, 0)
-					ev.CursorPos = 0
-				}
-				ev.updateDesiredVisualCol()
-				if !ev.indexing && !ev.indexIsComplete() {
-					ev.StartIndexing()
-				}
+				// awaitOffset places the cursor now when the index can say
+				// where that byte is, and hands the offset to the scan when it
+				// cannot — rather than answering with the last line the index
+				// knows and a column counted from there, which is the very
+				// "column five million" this is here to get rid of.
+				ev.awaitOffset(ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos)
 			}
 			ev.ensureCursorVisible()
 			vtui.FrameManager.Redraw()

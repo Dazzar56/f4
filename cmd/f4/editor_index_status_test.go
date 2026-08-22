@@ -198,3 +198,41 @@ func TestIndexRebuilt_ShortRebuildIsNotCalledComplete(t *testing.T) {
 		t.Errorf("index holds %d lines after the scan, want %d", got, want)
 	}
 }
+
+// TestAwaitOffset_ScanPlacesThePositionItCouldNotResolve: switching in from
+// the viewer, and leaving hex mode, both know where the cursor belongs only as
+// a byte offset. On a file the index has not reached, that offset cannot be
+// turned into a line yet — and the answer used to be the last line the index
+// knew, with a column counted from there, which on a large file is a column
+// measured in gigabytes. The scan places it instead, when it reads past.
+func TestAwaitOffset_ScanPlacesThePositionItCouldNotResolve(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	drainPendingTasks()
+
+	content, _, _ := bigSearchCorpus()
+	pt, buf := lazyEditorBuffer(t, content)
+	ev := newEditorView(pt, nil, "", false, false)
+	ev.asyncBuf = buf
+	t.Cleanup(func() { ev.Close() })
+
+	// A byte well past anything a prewarmed head can describe.
+	target := len(content) - len(content)/4
+	wanted := strings.Count(content[:target], "\n")
+
+	if !ev.awaitOffset(target) {
+		t.Fatal("precondition: the index should not be able to place that offset yet")
+	}
+	if ev.CursorLine != 0 || ev.CursorPos != 0 {
+		t.Errorf("while waiting the cursor sits at %d,%d; want the top of the file",
+			ev.CursorLine, ev.CursorPos)
+	}
+
+	pumpUntil(t, "the scan to place the waiting position", func() bool { return ev.targetOffset < 0 })
+
+	if got := ev.CursorLine; got != wanted {
+		t.Errorf("cursor landed on line %d, want %d", got, wanted)
+	}
+	if got, want := ev.li.GetLineOffset(ev.CursorLine)+ev.CursorPos, target; got != want {
+		t.Errorf("cursor is at byte %d, want %d", got, want)
+	}
+}
