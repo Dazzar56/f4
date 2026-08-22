@@ -13,6 +13,7 @@ jobs:
     name: Build (${{ matrix.goos }}/${{ matrix.goarch }})
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         goos: [linux, windows, darwin, freebsd, dragonfly, openbsd, netbsd, illumos, solaris]
         goarch: [amd64, arm64, arm]
@@ -152,6 +153,57 @@ jobs:
         # Build internal dummy plugin
         cd plugins/dummy_internal
         go build "${BUILD_TAG_ARGS[@]}" -trimpath $GCFLAGS -ldflags="$LDFLAGS" -o ../../build/plugins/dummy_internal/f4-internal-dummy-plugin$EXT .
+
+    # A cross-built binary nobody ever started is not evidence of anything,
+    # and the release publishes it all the same. The Linux binaries are
+    # static, so qemu-user runs them with no rootfs and no binfmt setup, and
+    # Go runs every package's init() before main -- so a single --version
+    # call is enough to catch a broken toolchain or an architecture a
+    # dependency cannot actually handle. --version returns before any
+    # terminal setup, so no tty is needed.
+    - name: Smoke test the binary
+      if: matrix.goos == 'linux'
+      run: |
+        set -euo pipefail
+        # GOARCH and qemu-user spell five of these differently.
+        case "${{ matrix.goarch }}" in
+          amd64)    QEMU="" ;;
+          386)      QEMU=i386 ;;
+          arm64)    QEMU=aarch64 ;;
+          mipsle)   QEMU=mipsel ;;
+          mips64le) QEMU=mips64el ;;
+          loong64)  QEMU=loongarch64 ;;
+          *)        QEMU="${{ matrix.goarch }}" ;;
+        esac
+
+        if [ -z "$QEMU" ]; then
+          ./build/f4 --version
+          exit 0
+        fi
+
+        # goffi's fakecgo emits //go:cgo_import_dynamic, so the cells that
+        # keep the FFI backends come out dynamically linked despite
+        # CGO_ENABLED=0 and -extldflags '-static', and qemu then needs the
+        # target's loader. Today that is arm64 alone: amd64 runs natively,
+        # and the noffi cells drop goffi and really are static.
+        PACKAGES=qemu-user-static
+        set --
+        if file build/f4 | grep -q 'dynamically linked'; then
+          case "${{ matrix.goarch }}" in
+            arm64)
+              PACKAGES="$PACKAGES libc6-arm64-cross"
+              set -- -L /usr/aarch64-linux-gnu
+              ;;
+            *)
+              echo "::error::${{ matrix.goarch }} is dynamically linked and has no sysroot configured here"
+              exit 1
+              ;;
+          esac
+        fi
+
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq $PACKAGES
+        "qemu-$QEMU-static" "$@" build/f4 --version
 
     - name: Package
       run: |
