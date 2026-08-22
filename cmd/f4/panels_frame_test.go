@@ -3295,6 +3295,54 @@ func TestPanelsFrame_F9Context(t *testing.T) {
 	}
 }
 
+func TestPanelsFrame_F9HiddenPanels_UsesShellMenuAndKeepsTerminalLog(t *testing.T) {
+	old := GlobalHotkeysMgr
+	GlobalHotkeysMgr = NewHotkeyManager("")
+	defer func() { GlobalHotkeysMgr = old }()
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.showPanels = false
+
+	items := pf.GetMenuBar().Items
+	wantLabels := []string{Msg("Menu.Shell.Files"), Msg("Menu.Shell.Commands"), Msg("Menu.Shell.Options")}
+	if len(items) != len(wantLabels) {
+		t.Fatalf("hidden-panels F9 menu has %d top-level items, want %d: %+v", len(items), len(wantLabels), items)
+	}
+	for i, want := range wantLabels {
+		if items[i].Label != want {
+			t.Errorf("hidden-panels F9 menu %d = %q, want %q", i, items[i].Label, want)
+		}
+	}
+
+	wantTerminalItems := map[string]bool{
+		Msg("Action.Terminal.ViewLog"): false,
+		Msg("Action.Terminal.EditLog"): false,
+	}
+	for _, item := range items[0].SubItems {
+		if _, ok := wantTerminalItems[item.Text]; ok {
+			wantTerminalItems[item.Text] = true
+		}
+	}
+	for label, found := range wantTerminalItems {
+		if !found {
+			t.Errorf("hidden-panels Files menu is missing terminal action %q", label)
+		}
+	}
+
+	pressKey(pf, &vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_F9,
+	})
+	if !pf.menuBar.Active {
+		t.Error("F9 with hidden panels did not activate the main menu")
+	}
+	if pf.menuBar.SelectPos != 0 {
+		t.Errorf("F9 with hidden panels selected menu %d, want Files menu 0", pf.menuBar.SelectPos)
+	}
+}
+
 func TestLayout_F4InternalDialogs_Validity(t *testing.T) {
 	vtui.SetDefaultPalette()
 	pf := NewPanelsFrame()

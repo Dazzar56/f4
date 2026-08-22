@@ -617,12 +617,37 @@ func (pf *PanelsFrame) rightMenu() vtui.MenuBarItem {
 	}}
 }
 
+// appendTerminalMenuItems keeps terminal-specific log commands reachable from
+// the ordinary Files menu while panels are hidden. The terminal actions use
+// their Terminal-area shortcuts, so this changes only menu presentation.
+func appendTerminalMenuItems(items []vtui.MenuBarItem) []vtui.MenuBarItem {
+	terminalItems := BuildMenuBarItems("Terminal")
+	if len(terminalItems) == 0 || len(terminalItems[0].SubItems) == 0 {
+		return items
+	}
+
+	filesLabel := Msg("Menu.Shell.Files")
+	for i := range items {
+		if items[i].Label != filesLabel {
+			continue
+		}
+		if len(items[i].SubItems) > 0 {
+			items[i].SubItems = append(items[i].SubItems, vtui.MenuItem{Separator: true})
+		}
+		items[i].SubItems = append(items[i].SubItems, terminalItems[0].SubItems...)
+		break
+	}
+	return items
+}
+
 // buildMenuItems assembles the main menu: the custom Left/Right panel
 // menus around the Files/Commands/Options menus generated from the
-// action registry. With panels hidden, the Terminal-area menu is shown.
+// action registry. With panels hidden, the ordinary Shell menu remains
+// available so Options and panel actions do not disappear behind the
+// terminal-log menu.
 func (pf *PanelsFrame) buildMenuItems() []vtui.MenuBarItem {
 	if !pf.showPanels {
-		return BuildMenuBarItems("Terminal")
+		return appendTerminalMenuItems(BuildMenuBarItems("Shell"))
 	}
 	items := []vtui.MenuBarItem{pf.leftMenu()}
 	items = append(items, BuildMenuBarItems("Shell")...)
@@ -2588,6 +2613,18 @@ func (pf *PanelsFrame) processMiddleMouseGesture(e *vtinput.InputEvent) (handled
 func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 	// If panels are hidden, route relevant mouse events to PTY immediately
 	if !pf.showPanels {
+		mx, my := int(e.MouseX), int(e.MouseY)
+		if pf.termView != nil && e.WheelDirection == 0 {
+			if changed := pf.termView.UpdateURLHover(mx, my); changed {
+				vtui.FrameManager.Redraw()
+			}
+			if ctrlMouseClick(e) {
+				if rawURL, ok := pf.termView.URLAt(mx, my); ok {
+					openExternalURLAsync(rawURL)
+					return true
+				}
+			}
+		}
 		active := pf.getActivePTY()
 		if active != nil && (pf.termView.MouseTrackingMode != 0 || pf.termView.MouseSGRMode) {
 			seq := TranslateMouseInput(e)

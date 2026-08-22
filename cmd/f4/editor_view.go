@@ -84,6 +84,8 @@ type EditorView struct {
 	rectSelActive    bool
 	rectSelStartLine int
 	rectSelStartCol  int
+	hoverURL         string
+	hoverURLStart    int
 	editSession      int // Unique ID to fence background tasks
 
 	pasting     bool
@@ -1459,6 +1461,7 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 		} else {
 			lineLen = ev.pt.Size() - lineStart
 		}
+		lineLinks := ev.urlLinksForLine(lineStart, lineStart+lineLen)
 
 		// Stateful Highlighting
 		var lineSyntax []uint64
@@ -1580,7 +1583,7 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 
 			_, startVCol := ev.engine.LogicalToVisual(frag.ByteOffsetStart)
 			isCrossRow := (absVRow == crossVRow)
-			ev.renderCells = ev.fillCells(ev.renderCells, ev.renderBytes, bgAttr, selAttr, frag.ByteOffsetStart, ev.selActive, selMin, selMax, ev.fadeSyntax(fragSyntax, bgAttr), startVCol, isCrossRow, crossVCol, horzCrossAttr, vertCrossAttr, absVRow)
+			ev.renderCells = ev.fillCellsWithLinks(ev.renderCells, ev.renderBytes, bgAttr, selAttr, frag.ByteOffsetStart, ev.selActive, selMin, selMax, ev.fadeSyntax(fragSyntax, bgAttr), lineLinks, startVCol, isCrossRow, crossVCol, horzCrossAttr, vertCrossAttr, absVRow)
 
 			scr.Write(ev.X1-ev.ScrollLeft, currY, ev.renderCells)
 
@@ -2475,6 +2478,10 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 }
 
 func (ev *EditorView) fillCells(target []vtui.CharInfo, data []byte, defaultAttr, selAttr uint64, offset int, selActive bool, selMin, selMax int, syntax []uint64, startVisualCol int, isCrossRow bool, crossVCol int, horzCrossAttr, vertCrossAttr uint64, visualRow int) []vtui.CharInfo {
+	return ev.fillCellsWithLinks(target, data, defaultAttr, selAttr, offset, selActive, selMin, selMax, syntax, nil, startVisualCol, isCrossRow, crossVCol, horzCrossAttr, vertCrossAttr, visualRow)
+}
+
+func (ev *EditorView) fillCellsWithLinks(target []vtui.CharInfo, data []byte, defaultAttr, selAttr uint64, offset int, selActive bool, selMin, selMax int, syntax []uint64, links []urlLink, startVisualCol int, isCrossRow bool, crossVCol int, horzCrossAttr, vertCrossAttr uint64, visualRow int) []vtui.CharInfo {
 	target = target[:0]
 	currByte := 0
 	runeIdx := 0
@@ -2510,6 +2517,11 @@ func (ev *EditorView) fillCells(target []vtui.CharInfo, data []byte, defaultAttr
 		attr := defaultAttr
 		if runeIdx < len(syntax) {
 			attr = syntax[runeIdx]
+		}
+		if ev.hoverURL != "" {
+			if link, ok := urlLinkAt(links, offset+currByte); ok && link.URL == ev.hoverURL {
+				attr |= vtui.CommonLvbUnderscore
+			}
 		}
 
 		// Horizontal crosshair line applies to the entire character in the active row
@@ -2747,6 +2759,18 @@ func (ev *EditorView) ProcessMouse(e *vtinput.InputEvent) bool {
 		ev.ensureCursorVisible()
 	}
 
+	if e.WheelDirection == 0 {
+		if changed := ev.updateURLHover(int(e.MouseX), int(e.MouseY)); changed {
+			vtui.FrameManager.Redraw()
+		}
+		if ctrlMouseClick(e) {
+			if link, ok := ev.urlLinkAtMouse(int(e.MouseX), int(e.MouseY)); ok {
+				openExternalURLAsync(link.URL)
+				return true
+			}
+		}
+	}
+
 	if ev.scrollBar != nil && ev.scrollBar.ProcessMouse(e) {
 		return true
 	}
@@ -2837,6 +2861,99 @@ func (ev *EditorView) ProcessMouse(e *vtinput.InputEvent) bool {
 	}
 
 	return false
+}
+
+func (ev *EditorView) urlLinkAtMouse(mx, my int) (urlLink, bool) {
+	link, _, ok := ev.urlLinkLocationAtMouse(mx, my)
+	return link, ok
+}
+
+func (ev *EditorView) urlLinkLocationAtMouse(mx, my int) (urlLink, int, bool) {
+	if ev.HexMode || ev.DecodeMode || mx < ev.X1 || mx > ev.X2 || my < ev.Y1+1 || my > ev.Y2 {
+		return urlLink{}, 0, false
+	}
+	width := ev.X2 - ev.X1 + 1
+	if ev.scrollBar != nil {
+		width--
+	}
+	if mx >= ev.X1+width {
+		return urlLink{}, 0, false
+	}
+	visualCol := mx - ev.X1 + ev.ScrollLeft
+	visualRow := my - (ev.Y1 + 1) + ev.ScrollTopRow
+	offset := ev.engine.VisualToLogical(visualRow, visualCol)
+	line := ev.li.GetLineAtOffset(offset)
+	lineStart := ev.li.GetLineOffset(line)
+	lineEnd := ev.pt.Size()
+	if line+1 < ev.li.LineCount() {
+		lineEnd = ev.li.GetLineOffset(line + 1)
+	}
+	rel := offset - lineStart
+	links := ev.urlLinksNearOffset(lineStart, lineEnd, rel)
+	if link, ok := urlLinkAt(links, rel); ok {
+		return link, lineStart + link.Start, true
+	}
+	if rel > 0 {
+		if link, ok := urlLinkAt(links, rel-1); ok {
+			return link, lineStart + link.Start, true
+		}
+	}
+	return urlLink{}, 0, false
+}
+
+func (ev *EditorView) updateURLHover(mx, my int) bool {
+	var next string
+	start := -1
+	if link, linkStart, ok := ev.urlLinkLocationAtMouse(mx, my); ok {
+		next = link.URL
+		start = linkStart
+	}
+	if next == ev.hoverURL && start == ev.hoverURLStart {
+		ev.hoverURLStart = start
+		return false
+	}
+	ev.hoverURL = next
+	ev.hoverURLStart = start
+	return true
+}
+
+func (ev *EditorView) urlLinksNearOffset(lineStart, lineEnd, rel int) []urlLink {
+	if lineEnd <= lineStart {
+		return nil
+	}
+	readStart, readEnd := lineStart, lineEnd
+	if readEnd-readStart > maxURLScanBytes {
+		readStart = lineStart + rel - 4096
+		if readStart < lineStart {
+			readStart = lineStart
+		}
+		readEnd = readStart + maxURLScanBytes
+		if readEnd > lineEnd {
+			readEnd = lineEnd
+			readStart = readEnd - maxURLScanBytes
+			if readStart < lineStart {
+				readStart = lineStart
+			}
+		}
+	}
+	data, err := ev.pt.GetRange(readStart, readEnd-readStart)
+	if err != nil {
+		return nil
+	}
+	links := findURLLinks(string(data))
+	base := readStart - lineStart
+	for i := range links {
+		links[i].Start += base
+		links[i].End += base
+	}
+	return links
+}
+
+func (ev *EditorView) urlLinksForLine(lineStart, lineEnd int) []urlLink {
+	if ev.hoverURL == "" || ev.hoverURLStart < lineStart || ev.hoverURLStart >= lineEnd {
+		return nil
+	}
+	return ev.urlLinksNearOffset(lineStart, lineEnd, ev.hoverURLStart-lineStart)
 }
 
 func (ev *EditorView) SetPosition(x1, y1, x2, y2 int) {
