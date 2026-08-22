@@ -128,6 +128,30 @@ func EventToFarString(e *vtinput.InputEvent) string {
 	return sb.String()
 }
 
+// EventToHotkeyString preserves an otherwise normalized Right Ctrl modifier
+// for configurable hotkeys. Macros intentionally keep treating Left Ctrl and
+// Right Ctrl as the same key, while actions such as AI.TogglePanel may be
+// rebound or explicitly unbound on the RCtrl spelling.
+func EventToHotkeyString(e *vtinput.InputEvent) string {
+	key := EventToFarString(e)
+	mods := e.ControlKeyState
+	if mods.Contains(vtinput.RightCtrlPressed) && !mods.Contains(vtinput.LeftCtrlPressed) && strings.HasPrefix(key, "Ctrl") {
+		return "RCtrl" + key[len("Ctrl"):]
+	}
+	return key
+}
+
+// configuredHotkeyAction gives an explicit RCtrl binding precedence while
+// preserving the historical behavior that a plain Ctrl binding also responds
+// to the physical Right Ctrl key when no RCtrl-specific binding exists.
+func configuredHotkeyAction(hm *HotkeyManager, area, key string) string {
+	action := hm.GetAction(area, key)
+	if action == "" && strings.HasPrefix(key, "RCtrl") {
+		return hm.GetAction(area, "Ctrl"+strings.TrimPrefix(key, "RCtrl"))
+	}
+	return action
+}
+
 func ParseFarKey(s string) *vtinput.InputEvent {
 	e := &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true}
 	orig := s
@@ -334,9 +358,9 @@ func (m *MacroManager) Filter(e *vtinput.InputEvent) bool {
 	// neither captured in the macro buffer nor shadowed by macro playback.
 	if e.KeyDown {
 		currentArea := m.GetCurrentArea()
-		keyStr := EventToFarString(e)
+		hotkeyStr := EventToHotkeyString(e)
 		if hm := GlobalHotkeysMgr; hm != nil {
-			if actionName := hm.GetAction(currentArea, keyStr); strings.EqualFold(actionName, commandPaletteActionName) {
+			if actionName := configuredHotkeyAction(hm, currentArea, hotkeyStr); strings.EqualFold(actionName, commandPaletteActionName) {
 				RunAction(actionName)
 				return true
 			}
@@ -432,7 +456,8 @@ func (m *MacroManager) Filter(e *vtinput.InputEvent) bool {
 
 	// Hotkey Manager evaluation (System actions)
 	if hm := GlobalHotkeysMgr; hm != nil {
-		if actionName := hm.GetAction(currentArea, keyStr); actionName != "" {
+		keyStr := EventToHotkeyString(e)
+		if actionName := configuredHotkeyAction(hm, currentArea, keyStr); actionName != "" {
 			if strings.EqualFold(actionName, "none") {
 				return true // Intercept and silence (explicitly unbound)
 			}
@@ -480,12 +505,12 @@ func (m *MacroManager) LookupHotkey(e *vtinput.InputEvent) bool {
 	if hm == nil {
 		return false
 	}
-	keyStr := EventToFarString(e)
+	keyStr := EventToHotkeyString(e)
 	if keyStr == "" {
 		return false
 	}
 	area := m.GetCurrentArea()
-	actionName := hm.GetAction(area, keyStr)
+	actionName := configuredHotkeyAction(hm, area, keyStr)
 	if actionName == "" {
 		return false
 	}

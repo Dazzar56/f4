@@ -1464,15 +1464,8 @@ func (pf *PanelsFrame) InterceptPluginKey(e *vtinput.InputEvent) bool {
 		return false
 	}
 	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
-	rctrl := (e.ControlKeyState & vtinput.RightCtrlPressed) != 0
 	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
-
-	// RCtrl+A: Toggle AI Panel
-	if e.VirtualKeyCode == 'A' && rctrl && !alt && !shift {
-		aiTogglePanel(pf)
-		return true
-	}
 
 	// Arkanoid easter egg: Ctrl+Alt+A
 	if e.VirtualKeyCode == 'A' && alt && ctrl {

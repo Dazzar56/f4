@@ -1525,6 +1525,50 @@ func TestCtrlBracketsIgnoreDialogsWithoutFocusedEdit(t *testing.T) {
 	}
 }
 
+func TestPanelsFrame_AIHotkeyCanBeUnbound(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	oldHotkeys := GlobalHotkeysMgr
+	oldGlobalHotkeys := GlobalHotkeys
+	oldMacroMgr := MacroMgr
+	t.Cleanup(func() {
+		GlobalHotkeysMgr = oldHotkeys
+		GlobalHotkeys = oldGlobalHotkeys
+		MacroMgr = oldMacroMgr
+	})
+	GlobalHotkeys = nil
+	hm := NewHotkeyManager("")
+	hm.Bind("Shell", "RCtrlA", "None")
+	GlobalHotkeysMgr = hm
+	MacroMgr = NewMacroManager("")
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	pf.showPanels = true
+	vtui.FrameManager.Push(pf)
+
+	if _, ok := pf.panels[1].(*FileSystemPanel).vfs.(*aiVFSWrapper); ok {
+		t.Fatal("test setup unexpectedly started with an AI panel")
+	}
+	e := &vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  'A',
+		ControlKeyState: vtinput.RightCtrlPressed,
+	}
+	if pf.InterceptPluginKey(e) {
+		t.Fatal("unbound RCtrl+A was intercepted before the hotkey manager")
+	}
+	if !MacroMgr.Filter(e) {
+		t.Fatal("unbound RCtrl+A was not consumed by the hotkey manager")
+	}
+	if _, ok := pf.panels[1].(*FileSystemPanel).vfs.(*aiVFSWrapper); ok {
+		t.Fatal("unbound RCtrl+A toggled the AI panel")
+	}
+}
+
 func TestPanelsFrame_CtrlArrows_CommandLineNavigation(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	SetDefaultF4Palette()

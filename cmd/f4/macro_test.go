@@ -213,6 +213,35 @@ func TestKeyNormalization(t *testing.T) {
 	}
 }
 
+func TestEventToHotkeyStringPreservesRightCtrl(t *testing.T) {
+	left := &vtinput.InputEvent{VirtualKeyCode: vtinput.VK_A, ControlKeyState: vtinput.LeftCtrlPressed}
+	right := &vtinput.InputEvent{VirtualKeyCode: vtinput.VK_A, ControlKeyState: vtinput.RightCtrlPressed}
+	rightAlt := &vtinput.InputEvent{VirtualKeyCode: vtinput.VK_A, ControlKeyState: vtinput.RightCtrlPressed | vtinput.LeftAltPressed}
+
+	if got := EventToHotkeyString(left); got != "CtrlA" {
+		t.Fatalf("left Ctrl hotkey = %q, want CtrlA", got)
+	}
+	if got := EventToHotkeyString(right); got != "RCtrlA" {
+		t.Fatalf("right Ctrl hotkey = %q, want RCtrlA", got)
+	}
+	if got := EventToHotkeyString(rightAlt); got != "RCtrlAltA" {
+		t.Fatalf("right Ctrl+Alt hotkey = %q, want RCtrlAltA", got)
+	}
+}
+
+func TestConfiguredHotkeyActionRightCtrlFallback(t *testing.T) {
+	hm := NewHotkeyManager("")
+
+	if got := configuredHotkeyAction(hm, "Shell", "RCtrlF3"); got != "Panel.SortByName" {
+		t.Fatalf("right Ctrl should fall back to Ctrl binding: got %q, want Panel.SortByName", got)
+	}
+
+	hm.Bind("Shell", "RCtrlF3", "None")
+	if got := configuredHotkeyAction(hm, "Shell", "RCtrlF3"); got != "None" {
+		t.Fatalf("explicit RCtrl unbind should win over fallback: got %q, want None", got)
+	}
+}
+
 func TestPanelBookmarkHotkeysKeepRightCtrlDistinct(t *testing.T) {
 	tests := []struct {
 		name string
