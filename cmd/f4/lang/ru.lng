@@ -553,6 +553,7 @@ PanelSettings.ScrollbarsMinimal=Минимальные
 PanelSettings.ScrollbarsFull=Полные
 PanelSettings.SavePaths=Сохранять &пути панелей при выходе
 PanelSettings.AutoSave=Автоматически сохранять настройки
+PanelSettings.UseTrash=Использовать &корзину при удалении по F8
 PanelSettings.KeepCursor=Не трогать стиль &курсора терминала
 PanelSettings.Navigation=&Навигация:
 PanelSettings.NavigationClassic=&Классическая
@@ -748,7 +749,6 @@ ConfirmationsSettings.Title= Подтверждения
 ConfirmationsSettings.Copy=Подтверждать &копирование
 ConfirmationsSettings.Move=Подтверждать &перенос
 ConfirmationsSettings.Delete=Подтверждать &удаление
-ConfirmationsSettings.UseTrash=Использовать &корзину при удалении по F8
 ConfirmationsSettings.DeleteCancelFocused=Фокусировать «&Отмена» в подтверждении удаления
 ConfirmationsSettings.Exit=Подтверждать в&ыход
 
