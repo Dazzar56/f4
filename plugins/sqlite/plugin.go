@@ -1,0 +1,350 @@
+// Package sqlite provides a small local SQLite browser/editor for f4.
+package sqlite
+
+import (
+	"context"
+	"database/sql"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"path/filepath"
+	"strings"
+	"sync"
+	"time"
+	"unicode/utf8"
+
+	"github.com/ncruces/go-sqlite3/driver"
+	"github.com/unxed/f4/vfs"
+	"github.com/unxed/vtui"
+)
+
+const sqliteCommandID = "f4.sqlite.open"
+
+// Plugin exposes the SQLite browser/editor as an in-process f4 plugin.
+type Plugin struct {
+	mu           sync.Mutex
+	registration vfs.Registration
+	initialized  bool
+}
+
+// NewPlugin constructs the built-in SQLite plugin.
+func NewPlugin() *Plugin { return &Plugin{} }
+
+func (p *Plugin) GetName() string { return "SQLite" }
+
+func (p *Plugin) Init(api vfs.HostAPI) error {
+	if api == nil {
+		return errors.New("SQLite: nil host API")
+	}
+	host, ok := api.(vfs.ContributionHost)
+	if !ok {
+		return errors.New("SQLite: host does not support plugin contributions")
+	}
+
+	p.mu.Lock()
+	if p.initialized {
+		p.mu.Unlock()
+		return errors.New("SQLite: plugin is already initialized")
+	}
+	p.mu.Unlock()
+
+	registration, err := host.RegisterPluginCommand(vfs.PluginCommand{
+		ID:             sqliteCommandID,
+		Location:       vfs.PluginCommandPanel,
+		Label:          "SQLite client",
+		LabelKey:       "SQLite.Command.Open",
+		MenuPath:       "Files",
+		Description:    "Browse tables and execute SQL against a local SQLite database",
+		DescriptionKey: "SQLite.Command.Open.Desc",
+		Visible: func(app vfs.App) bool {
+			_, ok := selectedSQLitePath(app)
+			return ok
+		},
+		Run: p.openCurrent,
+	})
+	if err != nil {
+		return fmt.Errorf("SQLite: register panel command: %w", err)
+	}
+
+	p.mu.Lock()
+	p.registration = registration
+	p.initialized = true
+	p.mu.Unlock()
+	return nil
+}
+
+func (p *Plugin) Close() error {
+	p.mu.Lock()
+	registration := p.registration
+	p.registration = nil
+	p.initialized = false
+	p.mu.Unlock()
+	if registration != nil {
+		registration.Unregister()
+	}
+	return nil
+}
+
+func selectedSQLitePath(app vfs.App) (string, bool) {
+	if app == nil {
+		return "", false
+	}
+	fs, ok := app.GetActivePanelVFS().(*vfs.OSVFS)
+	if !ok || fs == nil {
+		return "", false
+	}
+	name := app.GetSelectedName()
+	if name == "" || name == ".." || !isSQLiteFilename(name) {
+		return "", false
+	}
+	path, err := fs.Abs(fs.Join(fs.GetPath(), name))
+	if err != nil {
+		return "", false
+	}
+	return filepath.Clean(path), true
+}
+
+func isSQLiteFilename(name string) bool {
+	switch strings.ToLower(filepath.Ext(name)) {
+	case ".db", ".sqlite", ".sqlite3", ".db3":
+		return true
+	default:
+		return false
+	}
+}
+
+type databaseSession struct {
+	db        *sql.DB
+	path      string
+	closeOnce sync.Once
+}
+
+func openDatabase(ctx context.Context, path string) (*databaseSession, []string, error) {
+	db, err := driver.Open(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
+	session := &databaseSession{db: db, path: path}
+	if err := db.PingContext(ctx); err != nil {
+		session.Close()
+		return nil, nil, err
+	}
+	tables, err := session.listTables(ctx)
+	if err != nil {
+		session.Close()
+		return nil, nil, err
+	}
+	return session, tables, nil
+}
+
+func (s *databaseSession) Close() {
+	if s == nil {
+		return
+	}
+	s.closeOnce.Do(func() {
+		if s.db != nil {
+			_ = s.db.Close()
+		}
+	})
+}
+
+func (s *databaseSession) listTables(ctx context.Context) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT name
+		FROM sqlite_master
+		WHERE type IN ('table', 'view') AND name NOT LIKE 'sqlite_%'
+		ORDER BY name`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var names []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		names = append(names, name)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return names, nil
+}
+
+type queryResult struct {
+	Columns      []string
+	Rows         [][]string
+	RowsAffected int64
+	ReturnsRows  bool
+}
+
+func (s *databaseSession) execute(ctx context.Context, statement string) (queryResult, error) {
+	statement = strings.TrimSpace(statement)
+	if statement == "" {
+		return queryResult{}, errors.New("SQL statement is empty")
+	}
+	if !statementReturnsRows(statement) {
+		result, err := s.db.ExecContext(ctx, statement)
+		if err != nil {
+			return queryResult{}, err
+		}
+		rowsAffected, err := result.RowsAffected()
+		if err != nil {
+			return queryResult{}, err
+		}
+		return queryResult{RowsAffected: rowsAffected}, nil
+	}
+
+	rows, err := s.db.QueryContext(ctx, statement)
+	if err != nil {
+		return queryResult{}, err
+	}
+	defer rows.Close()
+	columns, err := rows.Columns()
+	if err != nil {
+		return queryResult{}, err
+	}
+	result := queryResult{Columns: columns, ReturnsRows: true}
+	for rows.Next() {
+		values := make([]any, len(columns))
+		destinations := make([]any, len(values))
+		for i := range values {
+			destinations[i] = &values[i]
+		}
+		if err := rows.Scan(destinations...); err != nil {
+			return queryResult{}, err
+		}
+		cells := make([]string, len(values))
+		for i, value := range values {
+			cells[i] = displayValue(value)
+		}
+		result.Rows = append(result.Rows, cells)
+	}
+	if err := rows.Err(); err != nil {
+		return queryResult{}, err
+	}
+	return result, nil
+}
+
+func statementReturnsRows(statement string) bool {
+	statement = stripSQLComments(strings.TrimSpace(statement))
+	if statement == "" {
+		return false
+	}
+	keyword := strings.ToLower(strings.Fields(statement)[0])
+	switch keyword {
+	case "select", "pragma", "explain", "values":
+		return true
+	case "with":
+		// CTEs may end in SELECT/VALUES or in a write with RETURNING. Treat
+		// them as row-producing statements; SQLite will report a useful error
+		// for a write without RETURNING rather than silently dropping it.
+		return true
+	default:
+		return false
+	}
+}
+
+func stripSQLComments(statement string) string {
+	for {
+		trimmed := strings.TrimSpace(statement)
+		switch {
+		case strings.HasPrefix(trimmed, "--"):
+			if newline := strings.IndexByte(trimmed, '\n'); newline >= 0 {
+				statement = trimmed[newline+1:]
+				continue
+			}
+			return ""
+		case strings.HasPrefix(trimmed, "/*"):
+			if end := strings.Index(trimmed[2:], "*/"); end >= 0 {
+				statement = trimmed[end+4:]
+				continue
+			}
+			return ""
+		default:
+			return trimmed
+		}
+	}
+}
+
+func quoteIdentifier(identifier string) string {
+	return `"` + strings.ReplaceAll(identifier, `"`, `""`) + `"`
+}
+
+func tableSelect(table string) string {
+	return "SELECT * FROM " + quoteIdentifier(table) + " LIMIT 100"
+}
+
+func displayValue(value any) string {
+	var text string
+	switch value := value.(type) {
+	case nil:
+		return "NULL"
+	case []byte:
+		text = "x'" + hex.EncodeToString(value) + "'"
+	case time.Time:
+		text = value.Format(time.RFC3339Nano)
+	case string:
+		if !utf8.ValidString(value) {
+			text = "x'" + hex.EncodeToString([]byte(value)) + "'"
+		} else {
+			text = value
+		}
+	default:
+		text = fmt.Sprint(value)
+	}
+	text = strings.NewReplacer("\r", "\\r", "\n", "\\n", "\t", "\\t").Replace(text)
+	const maxRunes = 512
+	runes := []rune(text)
+	if len(runes) > maxRunes {
+		return string(runes[:maxRunes-1]) + "…"
+	}
+	return text
+}
+
+func (p *Plugin) openCurrent(app vfs.App) {
+	path, ok := selectedSQLitePath(app)
+	if !ok {
+		showSQLiteMessage(app, sqliteText("SQLite.Title", " SQLite ", " SQLite "), sqliteText("SQLite.SelectDatabase", "Select a local .db, .sqlite, .sqlite3, or .db3 file.", "Выберите локальный файл .db, .sqlite, .sqlite3 или .db3."))
+		return
+	}
+	var (
+		session *databaseSession
+		tables  []string
+	)
+	app.RunProgressTask(sqliteText("SQLite.Title", " SQLite ", " SQLite "), sqliteText("SQLite.OpeningDatabase", "Opening database...", "Открытие базы данных..."), false,
+		func(ctx context.Context, update func(string, int)) error {
+			update(sqliteText("SQLite.ReadingSchema", "Reading database schema...", "Чтение схемы базы данных..."), -1)
+			var err error
+			session, tables, err = openDatabase(ctx, path)
+			return err
+		},
+		func(err error) {
+			if err != nil {
+				showSQLiteMessage(app, sqliteText("SQLite.Title", " SQLite ", " SQLite "), fmt.Sprintf(sqliteText("SQLite.OpenFailed", "Could not open %s:\n\n%v", "Не удалось открыть %s:\n\n%v"), path, err))
+				return
+			}
+			if session == nil || vtui.FrameManager == nil {
+				if session != nil {
+					session.Close()
+				}
+				return
+			}
+			browser := newBrowser(app, session, tables)
+			vtui.FrameManager.Push(browser.dialog)
+		})
+}
+
+func showSQLiteMessage(app vfs.App, title, message string) {
+	if vtui.FrameManager == nil {
+		return
+	}
+	if anchor, ok := app.(vtui.Frame); ok {
+		vtui.ShowMessageOn(anchor, title, message, []string{sqliteText("SQLite.OK", "&OK", "&ОК")})
+		return
+	}
+	vtui.ShowMessage(title, message, []string{sqliteText("SQLite.OK", "&OK", "&ОК")})
+}

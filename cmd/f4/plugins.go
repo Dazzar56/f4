@@ -14,6 +14,7 @@ import (
 	iosfs "github.com/unxed/f4/plugins/ios"
 	"github.com/unxed/f4/plugins/mediainfo"
 	"github.com/unxed/f4/plugins/netfox"
+	sqliteplugin "github.com/unxed/f4/plugins/sqlite"
 	"github.com/unxed/f4/plugins/visren"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
@@ -186,6 +187,7 @@ func (pm *PluginManager) loadInternal() {
 		&id3editor.ID3EditorPlugin{},
 		envman.NewPlugin(GetF4ConfigDir()),
 		mediainfo.NewPlugin(GetF4ConfigDir()),
+		sqliteplugin.NewPlugin(),
 	}
 
 	for _, p := range plugins {
