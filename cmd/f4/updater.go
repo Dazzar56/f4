@@ -43,6 +43,10 @@ var (
 	currentOS    = runtime.GOOS
 	currentArch  = runtime.GOARCH
 
+	// zoin-bot: fail a stalled release download instead of leaving the
+	// progress screen without an answer after the network disappears.
+	updateDownloadIdleTimeout = 30 * time.Second
+
 	// sessionDismissedUpdateKey remembers which update the user
 	// declined during the current f4 session, so an interval-driven
 	// auto-check does not re-prompt for the same version this run.
@@ -50,6 +54,37 @@ var (
 	// see #374 — and a manual "Check for updates" always ignores it.
 	sessionDismissedUpdateKey string
 )
+
+type updateReadResult struct {
+	n   int
+	err error
+}
+
+// readUpdateChunk bounds the time spent waiting for the next download chunk.
+// Closing the response body in the caller releases a reader that is still
+// blocked when the timeout or task cancellation wins the select.
+func readUpdateChunk(ctx context.Context, r io.Reader, buf []byte) (int, error) {
+	if updateDownloadIdleTimeout <= 0 {
+		return r.Read(buf)
+	}
+
+	result := make(chan updateReadResult, 1)
+	go func() {
+		n, err := r.Read(buf)
+		result <- updateReadResult{n: n, err: err}
+	}()
+
+	timer := time.NewTimer(updateDownloadIdleTimeout)
+	defer timer.Stop()
+	select {
+	case res := <-result:
+		return res.n, res.err
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	case <-timer.C:
+		return 0, fmt.Errorf("update download stalled for %s", updateDownloadIdleTimeout)
+	}
+}
 
 func getCurrentVersion() string {
 	api := &coreAPI{}
@@ -317,7 +352,7 @@ func performUpdate(pf *PanelsFrame, url, archiveKind, newTag, publishedAt string
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
-			n, readErr := resp.Body.Read(buf)
+			n, readErr := readUpdateChunk(ctx, resp.Body, buf)
 			if n > 0 {
 				archiveData.Write(buf[:n])
 				downloaded += int64(n)
