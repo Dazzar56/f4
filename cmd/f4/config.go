@@ -667,7 +667,7 @@ func saveConfigWithWindowSize(windowSize bool) {
 		ctrlTabMode = "menu"
 	}
 	sb.WriteString(fmt.Sprintf("WorkspaceTabMode = %s\n", workspaceTabMode))
-	sb.WriteString(fmt.Sprintf("WorkspaceTabsOverlay = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.WorkspaceTabsOverlay]))
+	fmt.Fprintf(&sb, "WorkspaceTabsOverlay = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.WorkspaceTabsOverlay])
 	sb.WriteString(fmt.Sprintf("CtrlTabMode = %s\n", ctrlTabMode))
 	sb.WriteString(fmt.Sprintf("AltNumberSwitchesTabs = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.AltNumberSwitchesTabs]))
 	sb.WriteString(fmt.Sprintf("RestoreWorkspaceTabs = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.RestoreWorkspaceTabs]))
