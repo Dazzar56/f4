@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -802,6 +803,11 @@ func TestActionCopyMove_ModeMenuDoesNotCoverButtons(t *testing.T) {
 	}
 
 	assertComboMenuDoesNotCoverButtons(t, dlg, "copy")
+	focusDlg, ok := vtui.FrameManager.GetTopFrame().(dialogFocusContainer)
+	if !ok {
+		t.Fatal("copy dialog does not expose focus traversal")
+	}
+	assertDialogTabOrderMatchesVisualOrder(t, focusDlg, "copy")
 	vtui.FrameManager.Pop()
 }
 
@@ -836,6 +842,47 @@ func assertComboMenuDoesNotCoverButtons(t *testing.T, dlg vtui.Container, name s
 	}
 
 	vtui.FrameManager.Pop()
+}
+
+type dialogFocusContainer interface {
+	vtui.Container
+	GetFocusedItem() vtui.UIElement
+	SetFocusedItem(vtui.UIElement)
+	ProcessKey(*vtinput.InputEvent) bool
+}
+
+func assertDialogTabOrderMatchesVisualOrder(t *testing.T, dlg dialogFocusContainer, name string) {
+	t.Helper()
+
+	var want []vtui.UIElement
+	for _, item := range dlg.GetChildren() {
+		if item.CanFocus() && !item.IsDisabled() {
+			want = append(want, item)
+		}
+	}
+	sort.SliceStable(want, func(i, j int) bool {
+		ix1, iy1, _, _ := want[i].GetPosition()
+		jx1, jy1, _, _ := want[j].GetPosition()
+		if iy1 != jy1 {
+			return iy1 < jy1
+		}
+		return ix1 < jx1
+	})
+	if len(want) == 0 {
+		t.Fatalf("%s dialog has no focusable controls", name)
+	}
+
+	dlg.SetFocusedItem(want[0])
+	for i, expected := range want {
+		if got := dlg.GetFocusedItem(); got != expected {
+			t.Fatalf("%s focus step %d = %T, want %T", name, i, got, expected)
+		}
+		if i+1 < len(want) && !dlg.ProcessKey(&vtinput.InputEvent{
+			Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_TAB,
+		}) {
+			t.Fatalf("%s Tab at focus step %d was not handled", name, i)
+		}
+	}
 }
 
 func TestActionCopy_ShiftF5_Prefill(t *testing.T) {
@@ -2507,6 +2554,11 @@ func TestActionCreateLink_Flow(t *testing.T) {
 	}
 
 	assertComboMenuDoesNotCoverButtons(t, dlg, "link")
+	focusDlg, ok := top.(dialogFocusContainer)
+	if !ok {
+		t.Fatal("link dialog does not expose focus traversal")
+	}
+	assertDialogTabOrderMatchesVisualOrder(t, focusDlg, "link")
 
 	linkPath := filepath.Join(dstDir, "link.txt")
 	editDest.SetText(linkPath)

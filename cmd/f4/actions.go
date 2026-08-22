@@ -1896,7 +1896,6 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 	}
 	comboMode.Menu.SetSelectPos(defMode)
 	comboMode.Edit.SetText(modes[defMode])
-	dlg.AddItem(comboMode)
 
 	btnOk := vtui.NewButton(0, 0, Msg("Copy.Btn"))
 	if isMove {
@@ -1917,6 +1916,7 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
 	btnCancel.OnClick = func() { dlg.Close() }
 	dlg.AddItem(btnCancel)
+	dlg.AddItem(comboMode)
 
 	// Layout Engine
 	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 50-4, 11-4)
@@ -2021,8 +2021,6 @@ func actionCreateLink(pf *PanelsFrame) {
 	comboType.Menu.SetSelectPos(0)
 	comboType.Edit.SetText(linkTypes[0])
 	lblType := vtui.NewLabel(0, 0, Msg("Link.Type"), comboType)
-	dlg.AddItem(lblType)
-	dlg.AddItem(comboType)
 
 	btnOk := vtui.NewButton(0, 0, Msg("Link.Btn"))
 	btnOk.IsDefault = true
@@ -2092,6 +2090,8 @@ func actionCreateLink(pf *PanelsFrame) {
 
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnCancel)
+	dlg.AddItem(lblType)
+	dlg.AddItem(comboType)
 
 	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 52-4, 11-4)
 	vbox.Add(promptLbl, vtui.Margins{}, vtui.AlignLeft)
@@ -2483,7 +2483,6 @@ func actionDeleteWithDisposition(pf *PanelsFrame, disposition vfs.DeleteDisposit
 	}
 	comboMode.Menu.SetSelectPos(defMode)
 	comboMode.Edit.SetText(modes[defMode])
-	dlg.AddItem(comboMode)
 
 	btnDel := vtui.NewButton(0, 0, Msg(buttonKey))
 	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
@@ -2496,6 +2495,7 @@ func actionDeleteWithDisposition(pf *PanelsFrame, disposition vfs.DeleteDisposit
 
 	dlg.AddItem(btnDel)
 	dlg.AddItem(btnCancel)
+	dlg.AddItem(comboMode)
 
 	hbox := vtui.NewHBoxLayout(0, 0, 50-4, 1)
 	hbox.HorizontalAlign = vtui.AlignCenter
@@ -2551,13 +2551,13 @@ func actionMkDir(pf *PanelsFrame) {
 	}
 	comboMode.Menu.SetSelectPos(defMode)
 	comboMode.Edit.SetText(modes[defMode])
-	dlg.AddItem(comboMode)
 
 	btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))
 	btnOk.IsDefault = true
 	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnCancel)
+	dlg.AddItem(comboMode)
 
 	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 40-4, 11-4)
 	vbox.Add(lblPrompt, vtui.Margins{}, vtui.AlignLeft)
