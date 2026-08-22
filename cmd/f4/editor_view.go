@@ -22,7 +22,6 @@ import (
 
 	"github.com/charlievieth/strcase"
 	"github.com/coregx/coregex"
-	"github.com/mattn/go-runewidth"
 	"github.com/unxed/f4/piecetable"
 	"github.com/unxed/f4/textlayout"
 	"github.com/unxed/f4/vfs"
@@ -2087,13 +2086,7 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 		} else {
 			if ev.CursorPos > 0 {
 				lineStart := ev.li.GetLineOffset(ev.CursorLine)
-				data, _ := ev.pt.GetRange(lineStart, ev.CursorPos)
-				if data != nil && len(data) > 0 {
-					_, size := utf8.DecodeLastRune(data)
-					ev.CursorPos -= size
-				} else {
-					ev.CursorPos--
-				}
+				ev.CursorPos = ev.previousGraphemeBoundaryInLine(lineStart, ev.CursorPos)
 			} else if ev.CursorLine > 0 {
 				ev.CursorLine--
 				ev.CursorPos = ev.getLineLength(ev.CursorLine)
@@ -2178,17 +2171,7 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 		} else {
 			if ev.CursorPos < lineLen {
 				lineStart := ev.li.GetLineOffset(ev.CursorLine)
-				peekLen := 4
-				if lineLen-ev.CursorPos < 4 {
-					peekLen = lineLen - ev.CursorPos
-				}
-				data, _ := ev.pt.GetRange(lineStart+ev.CursorPos, peekLen)
-				if data != nil && len(data) > 0 {
-					_, size := utf8.DecodeRune(data)
-					ev.CursorPos += size
-				} else {
-					ev.CursorPos++
-				}
+				ev.CursorPos = ev.nextGraphemeBoundaryInLine(lineStart, lineLen, ev.CursorPos)
 			} else if ev.CursorLine < ev.li.LineCount()-1 {
 				if ev.CursorBeyondEOL {
 					ev.CursorVirtualSpaces++
@@ -2258,14 +2241,16 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 					ev.CursorLine--
 					ev.CursorPos = prevLen
 				} else {
-					// Remove the UTF-8 character before the cursor
+					// Backspace follows the terminal/editor convention used by the
+					// reference text fields: remove one UTF-8 code point. Delete
+					// below is the operation that removes a visual cluster.
 					lineStart := ev.li.GetLineOffset(ev.CursorLine)
 					lineData, _ := ev.pt.GetRange(lineStart, ev.CursorPos)
 					size := 1
-					if lineData != nil {
-						r, rsize := utf8.DecodeLastRune(lineData)
-						if r != utf8.RuneError {
-							size = rsize
+					if lineData != nil && len(lineData) > 0 {
+						_, runeSize := utf8.DecodeLastRune(lineData)
+						if runeSize > 0 {
+							size = runeSize
 						}
 					}
 
@@ -2313,18 +2298,14 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 				ev.noteBufferEdit()
 				ev.saveUndo(opOther)
 				ev.modified = true
-				// Remove the UTF-8 character under the cursor
-				peekLen := 4
-				if ev.pt.Size()-offset < 4 {
-					peekLen = ev.pt.Size() - offset
-				}
-				data, _ := ev.pt.GetRange(offset, peekLen)
+				// Remove the grapheme cluster under the cursor, not just its
+				// first UTF-8 code point.
+				lineStart := ev.li.GetLineOffset(ev.CursorLine)
+				lineLen := ev.getLineLength(ev.CursorLine)
 				size := 1
-				if data != nil {
-					r, rsize := utf8.DecodeRune(data)
-					if r != utf8.RuneError {
-						size = rsize
-					}
+				if ev.CursorPos < lineLen {
+					next := ev.nextGraphemeBoundaryInLine(lineStart, lineLen, ev.CursorPos)
+					size = next - ev.CursorPos
 				}
 
 				ev.pt.Delete(offset, size)
@@ -2455,16 +2436,12 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 		if ev.overtype {
 			lineLen := ev.getLineLength(ev.CursorLine)
 			if ev.CursorPos < lineLen {
-				peekLen := 4
-				if lineLen-ev.CursorPos < 4 {
-					peekLen = lineLen - ev.CursorPos
-				}
-				oldData, _ := ev.pt.GetRange(offset, peekLen)
 				size := 1
-				if oldData != nil && len(oldData) > 0 {
-					_, rsize := utf8.DecodeRune(oldData)
-					if rsize > 0 {
-						size = rsize
+				lineStart := ev.li.GetLineOffset(ev.CursorLine)
+				if ev.CursorPos < lineLen {
+					next := ev.nextGraphemeBoundaryInLine(lineStart, lineLen, ev.CursorPos)
+					if next > ev.CursorPos {
+						size = next - ev.CursorPos
 					}
 				}
 				ev.pt.Delete(offset, size)
@@ -2500,39 +2477,39 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 func (ev *EditorView) fillCells(target []vtui.CharInfo, data []byte, defaultAttr, selAttr uint64, offset int, selActive bool, selMin, selMax int, syntax []uint64, startVisualCol int, isCrossRow bool, crossVCol int, horzCrossAttr, vertCrossAttr uint64, visualRow int) []vtui.CharInfo {
 	target = target[:0]
 	currByte := 0
-	charIdx := 0
+	runeIdx := 0
 	visualCol := startVisualCol
 	tabSize := ev.TabSize
 	if tabSize <= 0 {
 		tabSize = 8
 	}
 
-	for len(data) > 0 {
-		r, size := utf8.DecodeRune(data)
-		data = data[size:]
+	for _, visualCluster := range textlayout.VisualClusters(string(data)) {
+		cluster := visualCluster.Text
+		w := visualCluster.Width
+		size := visualCluster.End - visualCluster.Start
+		r, _ := utf8.DecodeRuneInString(cluster)
 
-		displayRune, w := vtui.SanitizeRune(r)
+		displayCluster, sanitizedWidth := vtui.SanitizeCluster(cluster)
+		if sanitizedWidth == 0 {
+			runeIdx += utf8.RuneCountInString(cluster)
+			currByte += size
+			continue
+		}
+		w = sanitizedWidth
 		if r == '\t' {
 			w = tabSize - (visualCol % tabSize)
-			displayRune = ' '
+			displayCluster = " "
 			if ev.ShowWhitespaces {
-				displayRune = '→'
+				displayCluster = "→"
 			}
 		} else if r == ' ' && ev.ShowWhitespaces {
-			displayRune = '·'
-		} else if r < 0x20 || r == 0x7F {
-			w = 1
-			if !ev.ShowWhitespaces {
-				displayRune = ' '
-			}
-		}
-		if w <= 0 {
-			w = 1
+			displayCluster = "·"
 		}
 
 		attr := defaultAttr
-		if charIdx < len(syntax) {
-			attr = syntax[charIdx]
+		if runeIdx < len(syntax) {
+			attr = syntax[runeIdx]
 		}
 
 		// Horizontal crosshair line applies to the entire character in the active row
@@ -2558,15 +2535,15 @@ func (ev *EditorView) fillCells(target []vtui.CharInfo, data []byte, defaultAttr
 			}
 		} else if selActive {
 			absPos := offset + currByte
-			if absPos >= selMin && absPos < selMax {
+			if absPos < selMax && absPos+size > selMin {
 				attr = selAttr
 			}
 		}
-		charIdx++
+		runeIdx += utf8.RuneCountInString(cluster)
 		currByte += size
 
 		if w > 0 {
-			charVal := uint64(displayRune)
+			charVal := vtui.RegisterCluster(displayCluster)
 			for j := 0; j < w; j++ {
 				cellAttr := attr
 				// Vertical crosshair line: apply ONLY to the specific cell index
@@ -2578,7 +2555,7 @@ func (ev *EditorView) fillCells(target []vtui.CharInfo, data []byte, defaultAttr
 					}
 				}
 				target = append(target, vtui.CharInfo{Char: charVal, Attributes: cellAttr})
-				charVal = uint64(vtui.WideCharFiller)
+				charVal = vtui.WideCharFiller
 				if r == '\t' {
 					charVal = ' '
 				}
@@ -4654,25 +4631,20 @@ func (ev *EditorView) CopySelection() {
 
 			var piece []rune
 			visualCol := 0
-			runes := []rune(string(lineData))
+			clusters := editorGraphemes(lineData)
 			tabSize := ev.TabSize
 			if tabSize <= 0 {
 				tabSize = 8
 			}
 
-			for _, r := range runes {
-				rw := 1
-				if r == '\t' {
+			for _, cluster := range clusters {
+				rw := cluster.width
+				if cluster.text == "\t" {
 					rw = tabSize - (visualCol % tabSize)
-				} else {
-					rw = runewidth.RuneWidth(r)
-					if rw <= 0 {
-						rw = 1
-					}
 				}
 
 				if visualCol >= minX && visualCol < maxX {
-					piece = append(piece, r)
+					piece = append(piece, []rune(cluster.text)...)
 				} else if visualCol < minX && visualCol+rw > minX {
 					piece = append(piece, ' ')
 				}
@@ -4749,7 +4721,7 @@ func (ev *EditorView) PasteRectangular(text string, targetCol int) {
 		lineData, _ := ev.pt.GetRange(lineStart, lineLen)
 
 		visualCol := 0
-		runes := []rune(string(lineData))
+		clusters := editorGraphemes(lineData)
 		tabSize := ev.TabSize
 		if tabSize <= 0 {
 			tabSize = 8
@@ -4758,15 +4730,10 @@ func (ev *EditorView) PasteRectangular(text string, targetCol int) {
 		insertByteOff := -1
 		byteAcc := 0
 
-		for _, r := range runes {
-			rw := 1
-			if r == '\t' {
+		for _, cluster := range clusters {
+			rw := cluster.width
+			if cluster.text == "\t" {
 				rw = tabSize - (visualCol % tabSize)
-			} else {
-				rw = runewidth.RuneWidth(r)
-				if rw <= 0 {
-					rw = 1
-				}
 			}
 
 			if visualCol >= targetCol && insertByteOff == -1 {
@@ -4775,7 +4742,7 @@ func (ev *EditorView) PasteRectangular(text string, targetCol int) {
 			}
 
 			visualCol += rw
-			byteAcc += utf8.RuneLen(r)
+			byteAcc = cluster.end
 		}
 
 		if insertByteOff == -1 {
@@ -4847,7 +4814,6 @@ func (ev *EditorView) DeleteSelection() {
 			lineData, _ := ev.pt.GetRange(lineStart, lineLen)
 
 			visualCol := 0
-			runes := []rune(string(lineData))
 			tabSize := ev.TabSize
 			if tabSize <= 0 {
 				tabSize = 8
@@ -4857,15 +4823,10 @@ func (ev *EditorView) DeleteSelection() {
 			endByte := -1
 			byteAcc := 0
 
-			for _, r := range runes {
-				rw := 1
-				if r == '\t' {
+			for _, cluster := range editorGraphemes(lineData) {
+				rw := cluster.width
+				if cluster.text == "\t" {
 					rw = tabSize - (visualCol % tabSize)
-				} else {
-					rw = runewidth.RuneWidth(r)
-					if rw <= 0 {
-						rw = 1
-					}
 				}
 
 				if visualCol >= minX && startByte == -1 {
@@ -4876,7 +4837,7 @@ func (ev *EditorView) DeleteSelection() {
 				}
 
 				visualCol += rw
-				byteAcc += utf8.RuneLen(r)
+				byteAcc = cluster.end
 			}
 
 			if startByte != -1 {

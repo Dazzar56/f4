@@ -488,6 +488,47 @@ func TestWrapEngine_CacheResilience(t *testing.T) {
 		t.Errorf("Engine did not reset total rows after index change, got %d", total)
 	}
 }
+
+func TestWrapEngine_IndicVisualClusters(t *testing.T) {
+	text := "संस्कृतम्"
+	pt := piecetable.New([]byte(text))
+	li := piecetable.NewLineIndex()
+	li.Rebuild(pt)
+
+	we := NewWrapEngine(pt, li)
+	we.ToggleWrap(false)
+
+	var offsets []int
+	var columns []int
+	offset, column := 0, 0
+	for rest := text; len(rest) > 0; {
+		cluster, width, size := NextVisualCluster(rest)
+		if cluster == "" || size <= 0 {
+			t.Fatalf("invalid cluster result for %q", rest)
+		}
+		offsets = append(offsets, offset)
+		columns = append(columns, column)
+		offset += size
+		column += width
+		rest = rest[size:]
+	}
+	offsets = append(offsets, offset)
+	columns = append(columns, column)
+
+	if got := len(offsets); got != 5 {
+		t.Fatalf("expected four visual clusters plus EOF, got %d", got-1)
+	}
+	for i := range offsets {
+		row, col := we.LogicalToVisual(offsets[i])
+		if row != 0 || col != columns[i] {
+			t.Errorf("logical offset %d: got visual (%d,%d), want (0,%d)", offsets[i], row, col, columns[i])
+		}
+		if got := we.VisualToLogical(0, columns[i]); got != offsets[i] {
+			t.Errorf("visual column %d: got logical offset %d, want %d", columns[i], got, offsets[i])
+		}
+	}
+}
+
 func TestWrapEngine_BoundarySafety(t *testing.T) {
 	pt := piecetable.New([]byte("line1\nline2"))
 	li := piecetable.NewLineIndex()
