@@ -2068,6 +2068,46 @@ func TestActionAppearanceSettingsSavesWorkspaceTabRestoration(t *testing.T) {
 	}
 }
 
+func TestActionAppearanceSettingsSavesWorkspaceTabOverlay(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	oldConfig := AppConfig
+	oldPath := getUserConfigIniPath
+	getUserConfigIniPath = func() string { return filepath.Join(t.TempDir(), "settings.ini") }
+	defer func() {
+		AppConfig = oldConfig
+		getUserConfigIniPath = oldPath
+	}()
+	AppConfig.WorkspaceTabsOverlay = true
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	actionAppearanceSettings(pf)
+	top := vtui.FrameManager.GetTopFrame().(vtui.Container)
+
+	var overlayTabs *vtui.Checkbox
+	for _, child := range top.GetChildren() {
+		checkbox, ok := child.(*vtui.Checkbox)
+		if ok && checkbox.GetText() == Msg("AppearanceSettings.WorkspaceTabsOverlay") {
+			overlayTabs = checkbox
+			break
+		}
+	}
+	if overlayTabs == nil {
+		t.Fatal("workspace tab overlay checkbox not found in Appearance Settings")
+	}
+	if overlayTabs.State != 1 {
+		t.Fatal("workspace tab overlay must be enabled by default")
+	}
+	overlayTabs.Toggle()
+	clickDialogButton(t, top, "Ok")
+	if AppConfig.WorkspaceTabsOverlay {
+		t.Fatal("disabled workspace tab overlay setting was not saved")
+	}
+}
+
 func TestActionAppearanceSettingsSavesWorkspaceTabNumbering(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	SetDefaultF4Palette()

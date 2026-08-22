@@ -3778,7 +3778,7 @@ func actionImportFar2lHistory(pf *PanelsFrame) {
 }
 
 func actionAppearanceSettings(pf *PanelsFrame) {
-	const width, height = 64, 28
+	const width, height = 64, 29
 	dlg := vtui.NewCenteredDialog(width, height, Msg("AppearanceSettings.Title"))
 	dlg.ShowClose = true
 	// Snapshot the whole palette (not just the style name) so a
@@ -3853,6 +3853,10 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 	comboWorkspaceTabs.Menu.SetSelectPos(workspaceTabSelection)
 	comboWorkspaceTabs.Edit.SetText(workspaceTabModes[workspaceTabSelection])
 	lblWorkspaceTabs := vtui.NewLabel(0, 0, Msg("AppearanceSettings.WorkspaceTabs"), comboWorkspaceTabs)
+	chkWorkspaceTabsOverlay := vtui.NewCheckbox(0, 0, Msg("AppearanceSettings.WorkspaceTabsOverlay"), AppConfig.WorkspaceTabsOverlay)
+	if AppConfig.WorkspaceTabsOverlay {
+		chkWorkspaceTabsOverlay.State = 1
+	}
 
 	ctrlTabModes := []string{
 		Msg("AppearanceSettings.CtrlTabDirect"),
@@ -3919,6 +3923,7 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 	dlg.AddItem(editTitle)
 	dlg.AddItem(lblWorkspaceTabs)
 	dlg.AddItem(comboWorkspaceTabs)
+	dlg.AddItem(chkWorkspaceTabsOverlay)
 	dlg.AddItem(lblCtrlTab)
 	dlg.AddItem(comboCtrlTab)
 	dlg.AddItem(chkAltNumberTabs)
@@ -3953,6 +3958,7 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 	rowWorkspaceTabs.Add(lblWorkspaceTabs, vtui.Margins{Right: 1}, vtui.AlignLeft)
 	rowWorkspaceTabs.Add(comboWorkspaceTabs, vtui.Margins{}, vtui.AlignFill)
 	vbox.Add(rowWorkspaceTabs, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Add(chkWorkspaceTabsOverlay, vtui.Margins{}, vtui.AlignLeft)
 
 	rowCtrlTab := vtui.NewHBoxLayout(0, 0, width-4, 1)
 	rowCtrlTab.Add(lblCtrlTab, vtui.Margins{Right: 1}, vtui.AlignLeft)
@@ -4007,6 +4013,7 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 		vtui.ManageCursorStyle = !AppConfig.KeepTerminalCursor
 		AppConfig.EnforceColorCorrection = chkContrast.State == 1
 		AppConfig.WorkspaceTabMode = comboWorkspaceTabs.Menu.SelectPos
+		AppConfig.WorkspaceTabsOverlay = chkWorkspaceTabsOverlay.State == 1
 		AppConfig.CtrlTabShowsMenu = comboCtrlTab.Menu.SelectPos == 1
 		AppConfig.AltNumberSwitchesTabs = chkAltNumberTabs.State == 1
 		AppConfig.RestoreWorkspaceTabs = chkRestoreWorkspaceTabs.State == 1
@@ -4022,6 +4029,7 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 			ctrlTabMode = vtui.WorkspaceCtrlTabMenu
 		}
 		vtui.FrameManager.ConfigureWorkspaceTabs(vtui.WorkspaceTabMode(AppConfig.WorkspaceTabMode), ctrlTabMode)
+		vtui.FrameManager.ConfigureWorkspaceTabOverlay(AppConfig.WorkspaceTabsOverlay)
 		vtui.FrameManager.ConfigureWorkspaceAltNumberSwitch(AppConfig.AltNumberSwitchesTabs)
 
 		if fontChanged {

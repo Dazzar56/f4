@@ -745,6 +745,7 @@ AppearanceSettings.WorkspaceTabsAlways=Always reserve top row
 AppearanceSettings.WorkspaceTabsMultiple=Show when multiple
 AppearanceSettings.WorkspaceTabsCtrl=Show while Ctrl is held
 AppearanceSettings.WorkspaceTabsNever=Never show
+AppearanceSettings.WorkspaceTabsOverlay=Overlay transient tabs over the top panel row
 AppearanceSettings.CtrlTab=&Ctrl+Tab behavior:
 AppearanceSettings.CtrlTabDirect=Switch immediately
 AppearanceSettings.CtrlTabMenu=Show Screens menu

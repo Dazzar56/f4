@@ -734,6 +734,7 @@ AppearanceSettings.WorkspaceTabs=&Вкладки пространств:
 AppearanceSettings.WorkspaceTabsAlways=Всегда резервировать верхнюю строку
 AppearanceSettings.WorkspaceTabsMultiple=Показывать, если больше одного
 AppearanceSettings.WorkspaceTabsCtrl=Показывать, пока нажат Ctrl
+AppearanceSettings.WorkspaceTabsOverlay=Рисовать временные вкладки поверх верхней строки панелей
 AppearanceSettings.CtrlTab=Поведение &Ctrl+Tab:
 AppearanceSettings.CtrlTabDirect=Переключать сразу
 AppearanceSettings.CtrlTabMenu=Показывать меню Screens

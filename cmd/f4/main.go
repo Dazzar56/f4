@@ -560,6 +560,7 @@ func SetupUI() {
 		ctrlTabMode = vtui.WorkspaceCtrlTabMenu
 	}
 	vtui.FrameManager.ConfigureWorkspaceTabs(vtui.WorkspaceTabMode(AppConfig.WorkspaceTabMode), ctrlTabMode)
+	vtui.FrameManager.ConfigureWorkspaceTabOverlay(AppConfig.WorkspaceTabsOverlay)
 	vtui.FrameManager.ConfigureWorkspaceAltNumberSwitch(AppConfig.AltNumberSwitchesTabs)
 	InitLang()
 	if err := ApplyColorStyle(AppConfig.ColorStyle); err != nil {
