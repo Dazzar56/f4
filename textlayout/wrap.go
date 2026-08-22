@@ -2,12 +2,9 @@ package textlayout
 
 import (
 	"sort"
-	"unicode/utf8"
 
 	"github.com/unxed/f4/piecetable"
 	"github.com/unxed/vtui"
-
-	"github.com/mattn/go-runewidth"
 )
 
 // LineFragment описывает один визуальный кусок логической строки после свертки.
@@ -168,25 +165,15 @@ func (we *WrapEngine) GetFragments(logLineIdx int) []LineFragment {
 
 	if !we.wordWrap || we.wrapWidth <= 0 {
 		width := 0
-		tmpData := lineData
-		for len(tmpData) > 0 {
-			b := tmpData[0]
-			if b < 0x80 {
-				if b == '\t' {
-					width += we.tabSize - (width % we.tabSize)
-				} else {
-					width++
-				}
-				tmpData = tmpData[1:]
-				continue
+		for _, cluster := range VisualClusters(string(lineData)) {
+			rw := cluster.Width
+			if cluster.Text == "\t" {
+				rw = we.tabSize - (width % we.tabSize)
 			}
-			r, size := utf8.DecodeRune(tmpData)
-			rw := runewidth.RuneWidth(r)
-			if rw < 0 {
+			if rw <= 0 {
 				rw = 1
 			}
 			width += rw
-			tmpData = tmpData[size:]
 		}
 
 		frag := LineFragment{
@@ -205,57 +192,56 @@ func (we *WrapEngine) GetFragments(logLineIdx int) []LineFragment {
 	var fragments []LineFragment
 	bytePos := 0
 	dataLen := len(lineData)
+	clusters := VisualClusters(string(lineData))
+	clusterPos := 0
 
 	cumulativeVisualWidth := 0
-	for bytePos < dataLen {
+	for bytePos < dataLen && clusterPos < len(clusters) {
 		visualWidth := 0
 		fragStartByte := bytePos
 		lastSpaceEnd := -1
 		lastSpaceWidth := 0
+		lastSpaceClusterPos := -1
 
 		scanPos := bytePos
-		for scanPos < dataLen {
-			b := lineData[scanPos]
-			var r rune
-			var size, w int
-			if b < 0x80 {
-				r = rune(b)
-				size = 1
-				if b == '\t' {
-					w = we.tabSize - ((cumulativeVisualWidth + visualWidth) % we.tabSize)
-				} else {
-					w = 1
-				}
-			} else {
-				r, size = utf8.DecodeRune(lineData[scanPos:])
-				w = runewidth.RuneWidth(r)
-				if w <= 0 {
-					w = 1
-				}
+		scanClusterPos := clusterPos
+		for scanClusterPos < len(clusters) {
+			cluster := clusters[scanClusterPos]
+			w := cluster.Width
+			if cluster.Text == "\t" {
+				w = we.tabSize - ((cumulativeVisualWidth + visualWidth) % we.tabSize)
+			}
+			if w <= 0 {
+				w = 1
 			}
 
 			if visualWidth+w > we.wrapWidth {
-				if r == ' ' {
+				if cluster.Text == " " {
 					// Пробел не влезает, но мы его забираем в конец этой строки
-					scanPos += size
+					scanPos = cluster.End
+					scanClusterPos++
 					visualWidth += w
 				} else if lastSpaceEnd != -1 {
 					// Word Wrap: откатываемся к последнему пробелу
 					scanPos = lastSpaceEnd
+					scanClusterPos = lastSpaceClusterPos
 					visualWidth = lastSpaceWidth
 				} else if scanPos == fragStartByte {
 					// Даже один символ не влез (CJK в узком окне) - поглощаем его
-					scanPos += size
+					scanPos = cluster.End
+					scanClusterPos++
 					visualWidth = w
 				}
 				break
 			}
 
 			visualWidth += w
-			scanPos += size
-			if r == ' ' {
-				lastSpaceEnd = scanPos
+			scanPos = cluster.End
+			scanClusterPos++
+			if cluster.Text == " " {
+				lastSpaceEnd = cluster.End
 				lastSpaceWidth = visualWidth
+				lastSpaceClusterPos = scanClusterPos
 			}
 		}
 
@@ -267,6 +253,7 @@ func (we *WrapEngine) GetFragments(logLineIdx int) []LineFragment {
 		})
 		cumulativeVisualWidth += visualWidth
 		bytePos = scanPos
+		clusterPos = scanClusterPos
 	}
 
 	if len(fragments) == 0 {
@@ -438,21 +425,19 @@ func (we *WrapEngine) LogicalToVisual(byteOffset int) (visualRow, visualCol int)
 			width := 0
 			if byteOffset > frag.ByteOffsetStart {
 				we.tmpBuf = we.tmpBuf[:0]
-				we.tmpBuf, _ = we.pt.AppendRange(we.tmpBuf, frag.ByteOffsetStart, byteOffset-frag.ByteOffsetStart)
-				data := we.tmpBuf
-				for len(data) > 0 {
-					r, size := utf8.DecodeRune(data)
-					rw := 1
-					if r == '\t' {
+				we.tmpBuf, _ = we.pt.AppendRange(we.tmpBuf, frag.ByteOffsetStart, frag.ByteOffsetEnd-frag.ByteOffsetStart)
+				for _, cluster := range VisualClusters(string(we.tmpBuf)) {
+					if frag.ByteOffsetStart+cluster.End > byteOffset {
+						break
+					}
+					rw := cluster.Width
+					if cluster.Text == "\t" {
 						rw = we.tabSize - (width % we.tabSize)
-					} else if r >= 0x7F {
-						rw = runewidth.RuneWidth(r)
 					}
 					if rw <= 0 {
 						rw = 1
 					}
 					width += rw
-					data = data[size:]
 				}
 			}
 			return totalRow + i, width
@@ -494,13 +479,10 @@ func (we *WrapEngine) VisualToLogical(visualRow, visualCol int) int {
 	offset := frag.ByteOffsetStart
 	currentCol := 0
 
-	for len(lineData) > 0 {
-		r, size := utf8.DecodeRune(lineData)
-		rw := 1
-		if r == '\t' {
+	for _, cluster := range VisualClusters(string(lineData)) {
+		rw := cluster.Width
+		if cluster.Text == "\t" {
 			rw = we.tabSize - (currentCol % we.tabSize)
-		} else if r >= 0x7F {
-			rw = runewidth.RuneWidth(r)
 		}
 		if rw <= 0 {
 			rw = 1
@@ -509,8 +491,7 @@ func (we *WrapEngine) VisualToLogical(visualRow, visualCol int) int {
 			return offset
 		}
 		currentCol += rw
-		offset += size
-		lineData = lineData[size:]
+		offset = frag.ByteOffsetStart + cluster.End
 	}
 	return offset
 }

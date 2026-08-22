@@ -380,7 +380,7 @@ func (e *LuaMacroEngine) newFarTable(L *lua.LState) *lua.LTable {
 		case "version":
 			return lua.LString(e.host.Version())
 		case "title":
-			return lua.LString("f4")
+			return lua.LString(e.host.WindowTitle())
 		case "fullscreen", "isuseradmin":
 			return lua.LFalse
 		}

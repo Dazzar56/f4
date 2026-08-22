@@ -1040,6 +1040,35 @@ func (pf *PanelsFrame) reportLocalPTYFailure() {
 	})
 }
 
+// ConfirmClose prevents the last workspace containing file panels from being
+// removed while editor/viewer workspaces remain. FrameManager asks this vetoer
+// before every close path, including its native Ctrl+W fallback; without it,
+// the final panel-less workspace could emit CmQuit without PanelsFrame's exit
+// confirmation policy (issue #531).
+func (pf *PanelsFrame) ConfirmClose() bool {
+	if pf == nil || pf.closed || vtui.FrameManager == nil {
+		return true
+	}
+	for _, screen := range vtui.FrameManager.Screens {
+		if workspaceHasOpenPanels(screen) && workspaceContainsPanelsFrame(screen, pf) {
+			return !isOnlyPanelsWorkspace(screen)
+		}
+	}
+	return true
+}
+
+func workspaceContainsPanelsFrame(screen *vtui.AppScreen, target *PanelsFrame) bool {
+	if screen == nil || target == nil {
+		return false
+	}
+	for _, frame := range screen.Frames {
+		if frame == target {
+			return true
+		}
+	}
+	return false
+}
+
 func (pf *PanelsFrame) Close() {
 	if pf.shellMode == ShellModeHost && pf.isHostConsoleActive() {
 		pf.leaveHostConsole()
@@ -1464,15 +1493,8 @@ func (pf *PanelsFrame) InterceptPluginKey(e *vtinput.InputEvent) bool {
 		return false
 	}
 	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
-	rctrl := (e.ControlKeyState & vtinput.RightCtrlPressed) != 0
 	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
-
-	// RCtrl+A: Toggle AI Panel
-	if e.VirtualKeyCode == 'A' && rctrl && !alt && !shift {
-		aiTogglePanel(pf)
-		return true
-	}
 
 	// Arkanoid easter egg: Ctrl+Alt+A
 	if e.VirtualKeyCode == 'A' && alt && ctrl {
@@ -1990,6 +2012,10 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		commandInputActive := !pf.searchFirstMode() || pf.commandLineFocused || !pf.showPanels
 		if commandInputActive && !pf.cmdLine.IsEmpty() {
 			cmd := pf.cmdLine.Edit.GetText()
+			if commandHasUnmatchedQuote(cmd, runtime.GOOS == "windows") {
+				vtui.ShowMessage(" Error ", "Unmatched quote in command. Close the quote and press Enter again.", []string{"&Ok"})
+				return true
+			}
 			pf.addCommandHistory(cmd)
 			pf.cmdLine.Edit.HistoryPos = -1
 

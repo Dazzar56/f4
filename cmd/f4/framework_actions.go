@@ -217,6 +217,31 @@ func queueFrameInWorkspace(screen *vtui.AppScreen) *QueueFrame {
 	return nil
 }
 
+func workspaceHasOpenPanels(screen *vtui.AppScreen) bool {
+	if screen == nil {
+		return false
+	}
+	for index := len(screen.Frames) - 1; index >= 0; index-- {
+		if panels, ok := screen.Frames[index].(*PanelsFrame); ok && !panels.closed {
+			return true
+		}
+	}
+	return false
+}
+
+func isOnlyPanelsWorkspace(screen *vtui.AppScreen) bool {
+	if !workspaceHasOpenPanels(screen) || vtui.FrameManager == nil || len(vtui.FrameManager.Screens) <= 1 {
+		return false
+	}
+	panelsWorkspaces := 0
+	for _, candidate := range vtui.FrameManager.Screens {
+		if workspaceHasOpenPanels(candidate) {
+			panelsWorkspaces++
+		}
+	}
+	return panelsWorkspaces == 1
+}
+
 // actionWorkspaceCloseNumber resolves the stable workspace number at
 // execution time. Queue may be underneath contextual Help, or the target may
 // be a background workspace selected by a dynamic palette entry; both cases
@@ -225,6 +250,13 @@ func actionWorkspaceCloseNumber(number int) bool {
 	screen := workspaceByNumber(number)
 	if screen == nil {
 		return false
+	}
+	// Keep f4 alive while the only workspace containing file panels exists.
+	// Closing it while editor/viewer workspaces remain leaves the next last
+	// workspace without PanelsFrame, so its final Ctrl+W emits CmQuit directly
+	// and bypasses PanelsFrame's exit-confirmation policy (issue #531).
+	if isOnlyPanelsWorkspace(screen) {
+		return true
 	}
 	if queue := queueFrameInWorkspace(screen); queue != nil && queue.vetoCloseWhileActive() {
 		return true

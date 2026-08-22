@@ -1598,7 +1598,16 @@ func AskOverwrite(ctx context.Context, destPath string, srcStat, dstStat vfs.VFS
 		}
 
 		width := 76
-		height := 13
+		buttons := []*vtui.Button{
+			vtui.NewButton(0, 0, Msg("FileOp.Overwrite")),
+			vtui.NewButton(0, 0, Msg("FileOp.Skip")),
+			vtui.NewButton(0, 0, Msg("FileOp.Rename")),
+			vtui.NewButton(0, 0, Msg("FileOp.Append")),
+			vtui.NewButton(0, 0, Msg("FileOp.Resume")),
+			vtui.NewButton(0, 0, Msg("vtui.Cancel")),
+		}
+		buttonRows := dialogButtonRows(buttons, width-4, 1)
+		height := 11 + 2*len(buttonRows)
 		dlg = vtui.NewCenteredDialog(width, height, Msg("Warning.Title"))
 		dlg.IsWarning = true
 
@@ -1622,13 +1631,9 @@ func AskOverwrite(ctx context.Context, destPath string, srcStat, dstStat vfs.VFS
 
 		sep3 := vtui.NewSeparator(0, 0, width, true, true)
 
-		btnOver := vtui.NewButton(0, 0, Msg("FileOp.Overwrite"))
+		btnOver, btnSkip, btnRen := buttons[0], buttons[1], buttons[2]
+		btnApp, btnRes, btnCan := buttons[3], buttons[4], buttons[5]
 		btnOver.IsDefault = true
-		btnSkip := vtui.NewButton(0, 0, Msg("FileOp.Skip"))
-		btnRen := vtui.NewButton(0, 0, Msg("FileOp.Rename"))
-		btnApp := vtui.NewButton(0, 0, Msg("FileOp.Append"))
-		btnRes := vtui.NewButton(0, 0, Msg("FileOp.Resume"))
-		btnCan := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
 
 		dlg.AddItem(lbl1)
 		dlg.AddItem(lbl2)
@@ -1655,17 +1660,13 @@ func AskOverwrite(ctx context.Context, destPath string, srcStat, dstStat vfs.VFS
 		vbox.Add(chkRem, vtui.Margins{}, vtui.AlignLeft)
 		vbox.Add(sep3, vtui.Margins{Left: -2, Right: -2}, vtui.AlignFill)
 
-		hbox := vtui.NewHBoxLayout(0, 0, width-4, 1)
-		hbox.HorizontalAlign = vtui.AlignCenter
-		hbox.Spacing = 1
-		hbox.Add(btnOver, vtui.Margins{}, vtui.AlignTop)
-		hbox.Add(btnSkip, vtui.Margins{}, vtui.AlignTop)
-		hbox.Add(btnRen, vtui.Margins{}, vtui.AlignTop)
-		hbox.Add(btnApp, vtui.Margins{}, vtui.AlignTop)
-		hbox.Add(btnRes, vtui.Margins{}, vtui.AlignTop)
-		hbox.Add(btnCan, vtui.Margins{}, vtui.AlignTop)
-
-		vbox.Add(hbox, vtui.Margins{}, vtui.AlignFill)
+		for i, row := range buttonRows {
+			margin := vtui.Margins{}
+			if i < len(buttonRows)-1 {
+				margin.Bottom = 1
+			}
+			vbox.Add(row, margin, vtui.AlignFill)
+		}
 		vbox.Apply()
 
 		btnOver.OnClick = func() { resultChan <- 1; rememberChan <- (chkRem.State == 1); dlg.Close() }

@@ -46,6 +46,41 @@ func TestFileContainsText_ChunkOverlap(t *testing.T) {
 	}
 }
 
+func TestFindTextMatcherOptions(t *testing.T) {
+	cases := []struct {
+		name    string
+		data    string
+		pattern string
+		options FindFileOptions
+		want    bool
+	}{
+		{name: "case insensitive", data: "Needle", pattern: "needle", want: true},
+		{name: "case sensitive miss", data: "Needle", pattern: "needle", options: FindFileOptions{CaseSensitive: true}, want: false},
+		{name: "whole word miss", data: "needles", pattern: "needle", options: FindFileOptions{WholeWords: true}, want: false},
+		{name: "whole word hit", data: "a needle here", pattern: "needle", options: FindFileOptions{WholeWords: true}, want: true},
+		{name: "regexp", data: "file-42", pattern: `file-[0-9]+`, options: FindFileOptions{Regex: true, CaseSensitive: true}, want: true},
+		{name: "not containing", data: "nothing here", pattern: "needle", options: FindFileOptions{NotContaining: true}, want: true},
+		{name: "not containing miss", data: "needle here", pattern: "needle", options: FindFileOptions{NotContaining: true}, want: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			matcher, err := newFindTextMatcher(tc.pattern, tc.options)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := matcher.matches([]byte(tc.data)); got != tc.want {
+				t.Fatalf("matches(%q, %q) = %v, want %v", tc.data, tc.pattern, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestFindTextMatcherRejectsInvalidRegexp(t *testing.T) {
+	if _, err := newFindTextMatcher("[", FindFileOptions{Regex: true}); err == nil {
+		t.Fatal("invalid regexp was accepted")
+	}
+}
+
 func TestExecuteFindFile_MaskMatching(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
@@ -56,7 +91,7 @@ func TestExecuteFindFile_MaskMatching(t *testing.T) {
 
 	v := vfs.NewOSVFS(tmpDir)
 
-	ExecuteFindFile(nil, v, tmpDir, "*.go", "package")
+	ExecuteFindFile(nil, v, tmpDir, "*.go", "package", FindFileOptions{})
 
 	// Drain UI tasks to wait for search completion
 	timeout := time.After(2 * time.Second)

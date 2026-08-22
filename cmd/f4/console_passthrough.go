@@ -220,6 +220,9 @@ func (pf *PanelsFrame) drawConsoleOverlay() {
 	if pf.overlayLines() == 0 || !pf.consoleViewActive() {
 		return
 	}
+	// zoin-bot: the console overlay owns the physical bottom rows; leaving the
+	// frame-manager keybar registered would repaint a second copy afterwards.
+	pf.suppressFrameManagerKeyBar()
 	ov := pf.buildConsoleOverlayContent()
 	// The single most useful line in a Wine bug report: which emitter ran and
 	// what geometry it believed in. "Overlay drew at the top of the window"
@@ -234,6 +237,15 @@ func (pf *PanelsFrame) drawConsoleOverlay() {
 		return
 	}
 	pf.emitAnsiConsoleOverlay(ov)
+}
+
+// zoin-bot: suppressFrameManagerKeyBar prevents the normal ScreenBuf renderer from
+// drawing a second keybar while the console overlay paints directly to the
+// host terminal. The next panel redraw registers it again when appropriate.
+func (pf *PanelsFrame) suppressFrameManagerKeyBar() {
+	if vtui.FrameManager != nil && vtui.FrameManager.KeyBar == pf.keyBar {
+		vtui.FrameManager.KeyBar = nil
+	}
 }
 
 // clearConsoleOverlay takes the overlay off the screen and gives the cursor back
@@ -343,6 +355,7 @@ func (pf *PanelsFrame) enterHostConsole() {
 	pf.syncAutoCompleteSuppression()
 
 	pf.SetBusy(true)
+	pf.suppressFrameManagerKeyBar()
 	vtui.SetAltScreen(false)
 
 	n := pf.overlayLines()

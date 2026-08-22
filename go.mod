@@ -177,6 +177,3 @@ replace github.com/ebitengine/hideconsole => ./internal/hideconsole
 
 // replace github.com/unxed/vtui => ../../../dev/vtui
 
-// Use the immutable vtui revision that exposes native GUI window positioning
-// while the upstream API change is reviewed in unxed/vtui#61.
-replace github.com/unxed/vtui => github.com/Zoinen/vtui v0.0.0-20260822034004-98f60ec47660

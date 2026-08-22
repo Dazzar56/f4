@@ -3,9 +3,13 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/mattn/go-runewidth"
 	"github.com/unxed/f4/vfs"
@@ -16,6 +20,23 @@ import (
 type FoundFile struct {
 	Path string
 	Item vfs.VFSItem
+}
+
+// FindFileOptions are the portable Find File options. Archive and alternate
+// stream searches are intentionally not presented here: those are backend
+// capabilities, not properties a generic VFS can promise. Unsupported remote
+// combinations fall back to the ordinary VFS walk so the result stays correct.
+type FindFileOptions struct {
+	CaseSensitive bool
+	WholeWords    bool
+	Regex         bool
+	NotContaining bool
+	FindFolders   bool
+	FindSymlinks  bool
+}
+
+func (o FindFileOptions) usesDefaultSearchEngine() bool {
+	return !o.WholeWords && !o.NotContaining && !o.FindFolders && !o.FindSymlinks
 }
 
 // padLabelTo returns s padded with trailing spaces to at least w display
@@ -36,13 +57,8 @@ func padLabelTo(s string, w int) string {
 	return s + strings.Repeat(" ", pad)
 }
 
-// maxRemoteFindResults caps what a remote search brings back in one answer.
-// The local walk has no such limit because it costs nothing to keep going;
-// a remote one pays for every hit on the wire.
-const maxRemoteFindResults = 10000
-
 // ExecuteFindFile initiates a background search and displays a progress dialog.
-func ExecuteFindFile(pf *PanelsFrame, v vfs.VFS, startDir, mask, text string) {
+func ExecuteFindFile(pf *PanelsFrame, v vfs.VFS, startDir, mask, text string, options FindFileOptions) {
 	dlg := vtui.NewCenteredDialog(60, 9, Msg("FindFile.SearchingTitle"))
 	dlg.AttentionSuppressed = true
 
@@ -98,7 +114,14 @@ func ExecuteFindFile(pf *PanelsFrame, v vfs.VFS, startDir, mask, text string) {
 			masks = []string{"*"}
 		}
 
-		searchTextLower := strings.ToLower(text)
+		matcher, matcherErr := newFindTextMatcher(text, options)
+		if matcherErr != nil {
+			ctx.RunOnUI(func() {
+				dlg.Close()
+				vtui.ShowMessage(" Find File ", fmt.Sprintf("Invalid search pattern:\n%v", matcherErr), []string{"&Ok"})
+			})
+			return
+		}
 		var found []FoundFile
 		var lastUpdate time.Time // Used for throttling UI redraws
 		// A remote finder that supports progress reports intermediate
@@ -164,37 +187,45 @@ func ExecuteFindFile(pf *PanelsFrame, v vfs.VFS, startDir, mask, text string) {
 					}
 
 					itemPath := v.Join(dir, item.Name)
-
-					if item.IsDir {
-						_ = walk(itemPath) // Ignore permissions/read errors to continue walking
-					} else {
-						// 1. Check Mask
-						matched := false
-						for _, m := range masks {
-							if m == "" {
-								continue
-							}
-							match, _ := filepath.Match(m, item.Name)
-							if match {
-								matched = true
-								break
-							}
-						}
-						if !matched {
+					if item.IsSymlink {
+						if !options.FindSymlinks {
 							continue
 						}
-
-						// 2. Check Text Content
-						if text != "" {
-							if !fileContainsText(ctx.Context, v, itemPath, searchTextLower) {
-								continue
-							}
-						}
-
-						// 3. Register Hit
-						found = append(found, FoundFile{Path: itemPath, Item: item})
-						updateUI(dir, false)
+						// Symlinks are search leaves, even when they point to a
+						// directory. Following them can revisit the search root.
+						item.IsDir = false
 					}
+
+					matched := false
+					for _, m := range masks {
+						if m == "" {
+							continue
+						}
+						match, _ := filepath.Match(m, item.Name)
+						if match {
+							matched = true
+							break
+						}
+					}
+
+					if item.IsDir {
+						if options.FindFolders && text == "" && matched {
+							found = append(found, FoundFile{Path: itemPath, Item: item})
+							updateUI(dir, false)
+						}
+						_ = walk(itemPath) // Ignore permissions/read errors to continue walking
+						continue
+					}
+					if !matched {
+						continue
+					}
+
+					if matcher != nil && !fileContainsTextWithMatcher(ctx.Context, v, itemPath, matcher) {
+						continue
+					}
+
+					found = append(found, FoundFile{Path: itemPath, Item: item})
+					updateUI(dir, false)
 				}
 			})
 		}
@@ -204,13 +235,15 @@ func ExecuteFindFile(pf *PanelsFrame, v vfs.VFS, startDir, mask, text string) {
 		// grep instead of downloading every candidate only to reject it.
 		var err error
 		searched := false
-		if finder, ok := v.(vfs.FileFinder); ok {
+		if finder, ok := v.(vfs.FileFinder); ok && options.usesDefaultSearchEngine() {
 			updateUI(startDir, true)
 			hits, findErr := finder.FindFiles(ctx.Context, startDir, vfs.FindQuery{
-				Masks:      masks,
-				Text:       text,
-				IgnoreCase: true,
-				Limit:      maxRemoteFindResults,
+				Masks:        masks,
+				Text:         text,
+				IgnoreCase:   !options.CaseSensitive,
+				Regex:        options.Regex,
+				FindFolders:  options.FindFolders,
+				FindSymlinks: options.FindSymlinks,
 				// A remote finder that supports progress reports the
 				// last path it visited and running counters. Force the
 				// redraw (helper's own P cadence is 300 ms, well above
@@ -253,54 +286,148 @@ func ExecuteFindFile(pf *PanelsFrame, v vfs.VFS, startDir, mask, text string) {
 	})
 }
 
-// fileContainsText scans a file for a substring using chunked reads.
-// It handles overlaps to ensure words crossing chunk boundaries are found.
+type findTextMatcher struct {
+	options FindFileOptions
+	needle  string
+	folded  string
+	regex   *regexp.Regexp
+}
+
+func newFindTextMatcher(pattern string, options FindFileOptions) (*findTextMatcher, error) {
+	if pattern == "" {
+		return nil, nil
+	}
+	m := &findTextMatcher{options: options, needle: pattern}
+	if !options.CaseSensitive {
+		m.folded = strings.ToLower(pattern)
+	}
+	if options.Regex {
+		expression := pattern
+		if !options.CaseSensitive {
+			expression = "(?i:" + expression + ")"
+		}
+		compiled, err := regexp.Compile(expression)
+		if err != nil {
+			return nil, err
+		}
+		m.regex = compiled
+	}
+	return m, nil
+}
+
+func (m *findTextMatcher) matches(data []byte) bool {
+	if m == nil {
+		return true
+	}
+	return m.hasMatch(data) != m.options.NotContaining
+}
+
+func (m *findTextMatcher) hasMatch(data []byte) bool {
+	if m == nil {
+		return false
+	}
+	s := string(data)
+	if m.regex != nil {
+		for _, indexes := range m.regex.FindAllStringIndex(s, -1) {
+			if !m.options.WholeWords || findTextWholeWord(s, indexes[0], indexes[1]) {
+				return true
+			}
+		}
+		return false
+	}
+	haystack, needle := s, m.needle
+	if !m.options.CaseSensitive {
+		haystack, needle = strings.ToLower(s), m.folded
+	}
+	for from := 0; from <= len(haystack); {
+		at := strings.Index(haystack[from:], needle)
+		if at < 0 {
+			break
+		}
+		at += from
+		end := at + len(needle)
+		if !m.options.WholeWords || findTextWholeWord(s, at, end) {
+			return true
+		}
+		from = at + 1
+	}
+	return false
+}
+
+func findTextWholeWord(s string, start, end int) bool {
+	wordBefore := false
+	if start > 0 {
+		r, _ := utf8.DecodeLastRuneInString(s[:start])
+		wordBefore = isFindTextWordRune(r)
+	}
+	wordAfter := false
+	if end < len(s) {
+		r, _ := utf8.DecodeRuneInString(s[end:])
+		wordAfter = isFindTextWordRune(r)
+	}
+	return !wordBefore && !wordAfter
+}
+
+func isFindTextWordRune(r rune) bool {
+	return r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r)
+}
+
 func fileContainsText(ctx context.Context, v vfs.VFS, path string, textLower string) bool {
+	matcher, err := newFindTextMatcher(textLower, FindFileOptions{})
+	if err != nil {
+		return false
+	}
+	return fileContainsTextWithMatcher(ctx, v, path, matcher)
+}
+
+// fileContainsTextWithMatcher scans in chunks while retaining enough of the
+// previous chunk to catch matches crossing a read boundary. Regex searches use
+// a larger carry window because a useful expression may consume more than one
+// literal token around the boundary.
+func fileContainsTextWithMatcher(ctx context.Context, v vfs.VFS, path string, matcher *findTextMatcher) bool {
+	if matcher == nil {
+		return true
+	}
 	f, err := v.Open(ctx, path)
 	if err != nil {
 		return false
 	}
 	defer f.Close()
 
-	buf := make([]byte, 128*1024) // 128KB chunks
-	overlap := len(textLower) - 1
-	if overlap < 0 {
-		overlap = 0
+	overlap := len(matcher.needle) + 4
+	if matcher.regex != nil && overlap < 4096 {
+		overlap = 4096
 	}
-
+	if overlap < 1 {
+		overlap = 1
+	}
+	buf := make([]byte, 128*1024)
 	var tail []byte
-
 	for {
 		if ctx.Err() != nil {
 			return false
 		}
-
-		n, err := f.Read(ctx, buf)
+		n, readErr := f.Read(ctx, buf)
 		if n > 0 {
-			data := buf[:n]
-
-			// Prepend tail from previous chunk
-			if len(tail) > 0 {
-				data = append(tail, data...)
+			data := make([]byte, 0, len(tail)+n)
+			data = append(data, tail...)
+			data = append(data, buf[:n]...)
+			if matcher.hasMatch(data) {
+				return !matcher.options.NotContaining
 			}
-
-			if strings.Contains(strings.ToLower(string(data)), textLower) {
-				return true
-			}
-
-			// Save the tail for the next overlap
 			if len(data) > overlap {
-				// Append to nil to force a new allocation, avoiding memory pinning
-				tail = append([]byte(nil), data[len(data)-overlap:]...)
+				tail = append(tail[:0], data[len(data)-overlap:]...)
 			} else {
-				tail = append([]byte(nil), data...)
+				tail = append(tail[:0], data...)
 			}
 		}
-		if err != nil {
-			break // EOF or error
+		if readErr != nil {
+			if readErr == io.EOF {
+				return matcher.options.NotContaining
+			}
+			return false
 		}
 	}
-	return false
 }
 
 type foundFileRow struct {

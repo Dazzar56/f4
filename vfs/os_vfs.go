@@ -467,7 +467,11 @@ func (v *OSVFS) PatchInPlace(ctx context.Context, path string, pieces []PatchPie
 		}
 		newOffset += p.Length
 	}
-	return nil
+	// In-place patches can replace the file with fewer bytes than it had
+	// before. WriteAt overwrites the prefix but does not remove the old tail,
+	// so truncate after the last piece to make the on-disk result match the
+	// logical piece stream.
+	return f.Truncate(newOffset)
 }
 func (v *OSVFS) GetCapabilities() VFSCapabilities {
 	return VFSCapabilities{
