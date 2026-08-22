@@ -515,6 +515,66 @@ func TestFileOp_PathLogic(t *testing.T) {
 		}
 	})
 }
+
+func TestExecuteFileOp_RenameMaskUsesBasenameForPathSelection(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	srcRoot := t.TempDir()
+	dstRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(srcRoot, "nested"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(srcRoot, "nested", "source.txt"), []byte("payload"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	srcVfs := vfs.NewOSVFS(srcRoot)
+	dstVfs := vfs.NewOSVFS(dstRoot)
+	ExecuteFileOpAt(nil, srcVfs, dstVfs, srcRoot, []string{"nested" + string(filepath.Separator) + "source.txt"}, filepath.Join(dstRoot, "masked", "*.bak"), false, 2, nil)
+
+	want := filepath.Join(dstRoot, "masked", "source.bak")
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(want); err == nil {
+			break
+		}
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		default:
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+	if _, err := os.Stat(want); err != nil {
+		t.Fatalf("masked path selection was not copied to %q: %v", want, err)
+	}
+
+	entries, err := os.ReadDir(filepath.Join(dstRoot, "masked"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "source.bak" {
+		t.Fatalf("masked destination entries = %#v, want only source.bak", entries)
+	}
+
+	ExecuteFileOpAt(nil, srcVfs, dstVfs, srcRoot, []string{"nested"}, filepath.Join(dstRoot, "tree", "*.bak"), false, 2, nil)
+	wantTreeFile := filepath.Join(dstRoot, "tree", "nested.bak", "source.txt")
+	deadline = time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(wantTreeFile); err == nil {
+			break
+		}
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		default:
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+	if _, err := os.Stat(wantTreeFile); err != nil {
+		t.Fatalf("masked directory tree was not copied to %q: %v", wantTreeFile, err)
+	}
+}
+
 func TestExecuteFileOp_RemotePathResolution_Issue74(t *testing.T) {
 	// This test reproduces the bug where a Unix-style absolute path was treated
 	// as relative when running on a Windows host.

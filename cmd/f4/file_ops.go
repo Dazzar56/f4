@@ -306,6 +306,27 @@ func transferItemName(srcVFS vfs.VFS, srcPath string, dstVFS vfs.VFS, fallback s
 	return name
 }
 
+// transferItemNameForMask applies a rename mask to the name that far2l would
+// feed to ConvertWildcards. A selected item can be represented by a path (for
+// example in a search or temporary panel), but the mask is applied to its
+// final component, not to a sanitized representation of that path. Providers
+// still get to supply their exported name, which may differ from the panel
+// label (for example document.gdoc -> document.docx).
+func transferItemNameForMask(srcVFS vfs.VFS, srcPath string, dstVFS vfs.VFS, fallback, mask string) string {
+	if provider, ok := srcVFS.(vfs.TransferNameProvider); ok {
+		if name := provider.TransferName(srcPath, dstVFS); name != "" && isSafeTransferItemName(dstVFS, name) {
+			return applyFileMask(name, mask)
+		}
+	}
+
+	// Do not call transferItemName here: when fallback contains a path it
+	// deliberately adds a hash after sanitizing the whole label to prevent
+	// collisions, while far2l discards that path before applying the mask.
+	base := srcVFS.Base(fallback)
+	base = safeTransferItemName(dstVFS, base)
+	return applyFileMask(base, mask)
+}
+
 func isSafeTransferItemName(dstVFS vfs.VFS, name string) bool {
 	if name == "" || name == "." || name == ".." || strings.ContainsRune(name, '\x00') || strings.ContainsAny(name, `/\\`) {
 		return false
@@ -646,9 +667,11 @@ func ExecuteFileOpAt(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, srcBasePath string
 			srcPath := srcVfs.Join(srcBasePath, name)
 			targetItemPath := destPath
 			if isTargetDir {
-				targetName := transferItemName(srcVfs, srcPath, dstVfs, name)
-				if mask != "" {
-					targetName = applyFileMask(targetName, mask)
+				var targetName string
+				if mask == "" {
+					targetName = transferItemName(srcVfs, srcPath, dstVfs, name)
+				} else {
+					targetName = transferItemNameForMask(srcVfs, srcPath, dstVfs, name, mask)
 				}
 				targetItemPath = dstVfs.Join(destPath, targetName)
 			}
