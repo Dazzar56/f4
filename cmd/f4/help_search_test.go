@@ -78,7 +78,7 @@ func TestHelpSearchRendersHighlightAndHint(t *testing.T) {
 	titleBackground := vtui.GetRGBBack(titleAttr)
 	renderHelpSearch(scr)
 
-	matchCell := scr.GetCell(x1+1+len("before "), y1+1)
+	matchCell := scr.GetCell(x1+2+len("before "), y1+1)
 	if got, want := vtui.GetRGBFore(matchCell.Attributes), uint32(0xFFFF00); got != want {
 		t.Fatalf("current match foreground = %#x, want yellow %#x", got, want)
 	}
@@ -86,7 +86,7 @@ func TestHelpSearchRendersHighlightAndHint(t *testing.T) {
 		t.Fatalf("current match background = %#x, want selected background %#x", got, want)
 	}
 	foundHint := false
-	for x := x1 + 1; x < view.X2-1; x++ {
+	for x := x1 + 2; x < view.X2-1; x++ {
 		if rune(scr.GetCell(x, y2).Char) == 'F' && rune(scr.GetCell(x+1, y2).Char) == '3' {
 			foundHint = true
 			break
@@ -99,7 +99,7 @@ func TestHelpSearchRendersHighlightAndHint(t *testing.T) {
 		t.Fatalf("bottom hint attr = %#x, want title attr %#x", got, titleAttr)
 	}
 	foundHighlightedQuery := false
-	for x := x1 + 1; x < view.X2; x++ {
+	for x := x1 + 2; x < view.X2; x++ {
 		cell := scr.GetCell(x, y1)
 		if rune(cell.Char) == 'n' && vtui.GetRGBFore(cell.Attributes) == vtui.GetRGBFore(vtui.Palette[vtui.ColHelpLink]) {
 			if got := vtui.GetRGBBack(cell.Attributes); got != titleBackground {
@@ -145,26 +145,20 @@ func TestHelpSearchHotkeysRepeatAndBackspace(t *testing.T) {
 	}
 }
 
-func TestHelpSearchEscapeClearsBeforeClosingHelp(t *testing.T) {
+func TestHelpSearchEscapeClosesHelpImmediately(t *testing.T) {
 	view, _ := newSearchableHelpForTest(t, []string{"one needle"})
 	for _, r := range "needle" {
 		handleHelpSearchHotkey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: r})
 	}
-	if !handleHelpSearchHotkey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_ESCAPE}) {
-		t.Fatal("Escape did not clear the active Help search")
+	if handleHelpSearchHotkey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_ESCAPE}) {
+		t.Fatal("Escape was consumed before HelpView could close")
 	}
 	if currentHelpSearch != nil {
-		t.Fatal("Escape left Help search active")
-	}
-	if vtui.FrameManager.GetTopFrame() != view || view.IsDone() {
-		t.Fatal("Escape closed Help while clearing the search")
-	}
-	if handleHelpSearchHotkey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_ESCAPE}) {
-		t.Fatal("Escape without an active search should be passed to Help")
+		t.Fatal("Escape left Help search state active")
 	}
 	view.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_ESCAPE})
-	if !view.IsDone() {
-		t.Fatal("second Escape did not close Help")
+	if vtui.FrameManager.GetTopFrame() != view || !view.IsDone() {
+		t.Fatal("Escape did not close Help while clearing the search")
 	}
 }
 
@@ -202,8 +196,8 @@ func TestHelpSearchHighlightsAllVisibleMatches(t *testing.T) {
 	view.Show(scr)
 	renderHelpSearch(scr)
 	x1, y1, _, _ := view.GetPosition()
-	first := scr.GetCell(x1+1, y1+1)
-	second := scr.GetCell(x1+1+len("needle and "), y1+1)
+	first := scr.GetCell(x1+2, y1+1)
+	second := scr.GetCell(x1+2+len("needle and "), y1+1)
 	if got, want := vtui.GetRGBFore(first.Attributes), uint32(0xFFFF00); got != want {
 		t.Fatalf("current match foreground = %#x, want yellow %#x", got, want)
 	}
@@ -244,7 +238,7 @@ func TestHelpSearchHighlightFollowsManualScrolling(t *testing.T) {
 		t.Fatalf("search scrollTop = %d, actual HelpView scrollTop = %d", currentHelpSearch.scrollTop, scrollTop)
 	}
 	x1, y1, _, _ := view.GetPosition()
-	staleCell := scr.GetCell(x1+1, y1+1)
+	staleCell := scr.GetCell(x1+2, y1+1)
 	if got := vtui.GetRGBFore(staleCell.Attributes); got == vtui.GetRGBFore(vtui.Palette[vtui.ColDialogHighlightText]) || got == vtui.GetRGBFore(vtui.Palette[vtui.ColHelpLink]) {
 		t.Fatal("highlight from the old scroll position remained over the first visible row")
 	}
