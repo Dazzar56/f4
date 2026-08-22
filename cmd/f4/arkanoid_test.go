@@ -34,7 +34,7 @@ func TestArkanoid_PhysicsAndCollisions(t *testing.T) {
 	af := NewArkanoidFrame()
 	af.Close() // Останавливаем фоновый цикл, чтобы избежать конфликтов в тесте
 	time.Sleep(10 * time.Millisecond)
-	af.rng = rand.New(rand.NewSource(1)) // Стабильный рандом для тестов
+	af.rng = rand.New(rand.NewSource(1)) //nolint:gosec // Deterministic randomness only controls the ball's bounce direction in this test.
 
 	height := af.Y2 - af.Y1 - 1
 

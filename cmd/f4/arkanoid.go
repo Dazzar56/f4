@@ -70,7 +70,7 @@ func NewArkanoidFrame() *ArkanoidFrame {
 		lives:      3,
 		multiplier: 1,
 		level:      1,
-		rng:        rand.New(rand.NewSource(time.Now().UnixNano())),
+		rng:        rand.New(rand.NewSource(time.Now().UnixNano())), //nolint:gosec // Randomness only controls the ball's bounce direction.
 	}
 	af.Modal = true
 	af.ShowClose = true
