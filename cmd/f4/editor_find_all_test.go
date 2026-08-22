@@ -252,7 +252,7 @@ func paintFindAll(t *testing.T, frame *findAllFrame) []string {
 	scr.AllocBuf(w, h)
 	frame.Show(scr)
 
-	x1, y1, x2, y2 := frame.VMenu.GetPosition()
+	x1, y1, x2, y2 := frame.GetPosition()
 	rows := make([]string, 0, max(y2-y1-1, 0))
 	for y := y1 + 1; y < y2; y++ {
 		rows = append(rows, strings.TrimRight(vtui.ScreenRow(scr, y, x1+2, x2-1), " "))
@@ -390,15 +390,15 @@ func TestEditorFindAll_F5Zoom(t *testing.T) {
 	ev := newFindAllEditor(t, "Unit 15 The Avenue\nno match here\nUnited Kingdom")
 	frame := openFindAllMenu(t, ev, "unit", false, false, false)
 
-	x1, y1, x2, y2 := frame.VMenu.GetPosition()
+	x1, y1, x2, y2 := frame.GetPosition()
 	frame.ProcessKey(keyEvent(vtinput.VK_F5, 0))
-	zx1, zy1, zx2, zy2 := frame.VMenu.GetPosition()
+	zx1, zy1, zx2, zy2 := frame.GetPosition()
 	if zx2-zx1 <= x2-x1 || zy2-zy1 <= y2-y1 {
 		t.Errorf("F5 should zoom the menu: was (%d,%d)-(%d,%d), got (%d,%d)-(%d,%d)",
 			x1, y1, x2, y2, zx1, zy1, zx2, zy2)
 	}
 	frame.ProcessKey(keyEvent(vtinput.VK_F5, 0))
-	rx1, ry1, rx2, ry2 := frame.VMenu.GetPosition()
+	rx1, ry1, rx2, ry2 := frame.GetPosition()
 	if rx1 != x1 || ry1 != y1 || rx2 != x2 || ry2 != y2 {
 		t.Error("second F5 should restore the original size")
 	}
@@ -554,7 +554,7 @@ func TestEditorFindAll_ResizeConsole(t *testing.T) {
 
 	assertWithin := func(w, h int, when string) {
 		t.Helper()
-		x1, y1, x2, y2 := frame.VMenu.GetPosition()
+		x1, y1, x2, y2 := frame.GetPosition()
 		if x1 < 0 || y1 < 0 || x2 >= w || y2 >= h || x1 > x2 || y1 > y2 {
 			t.Errorf("%s: menu rect (%d,%d)-(%d,%d) outside %dx%d screen", when, x1, y1, x2, y2, w, h)
 		}
@@ -687,7 +687,7 @@ func TestEditorFindAll_MouseClickJumps(t *testing.T) {
 	ev := newFindAllEditor(t, "Unit 15 The Avenue\nno match here\nUnited Kingdom")
 	frame := openFindAllMenu(t, ev, "unit", false, false, false)
 
-	x1, y1, _, _ := frame.VMenu.GetPosition()
+	x1, y1, _, _ := frame.GetPosition()
 	click := &vtinput.InputEvent{
 		Type:        vtinput.MouseEventType,
 		KeyDown:     true,

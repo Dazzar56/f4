@@ -116,7 +116,7 @@ func TestSaveBookmarks_AscendingOrder(t *testing.T) {
 	if i6 < 0 || i8 < 0 || i9 < 0 {
 		t.Fatalf("missing sections, got:\n%s", got)
 	}
-	if !(i6 < i8 && i8 < i9) {
+	if i6 >= i8 || i8 >= i9 {
 		t.Fatalf("sections must be written in ascending order, got:\n%s", got)
 	}
 }

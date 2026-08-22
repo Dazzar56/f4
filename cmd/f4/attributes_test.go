@@ -1044,10 +1044,8 @@ func TestDialogTaskPump_OverlayResilience(t *testing.T) {
 	})
 
 	timeout := time.After(2 * time.Second)
-	for {
-		if target.IsDone() {
-			break
-		}
+	for !target.IsDone() {
+
 		select {
 		case task := <-fm.TaskChan:
 			task()

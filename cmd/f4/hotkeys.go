@@ -500,9 +500,9 @@ func (hm *HotkeyManager) Save() {
 		}
 
 		if len(diffs) > 0 {
-			sb.WriteString(fmt.Sprintf("[%s]\n", area))
+			fmt.Fprintf(&sb, "[%s]\n", area)
 			for key, action := range diffs {
-				sb.WriteString(fmt.Sprintf("%s=%s\n", key, action))
+				fmt.Fprintf(&sb, "%s=%s\n", key, action)
 			}
 			sb.WriteString("\n")
 		}

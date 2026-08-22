@@ -71,15 +71,16 @@ func DecodeBytes(data []byte, cpID int) ([]byte, error) {
 	}
 
 	var decoder *encoding.Decoder
-	if cpID == 11111 {
+	switch cpID {
+	case 11111:
 		if enc := GetSystemANSIEncoding(); enc != nil {
 			decoder = enc.NewDecoder()
 		}
-	} else if cpID == 22222 {
+	case 22222:
 		if enc := GetSystemOEMEncoding(); enc != nil {
 			decoder = enc.NewDecoder()
 		}
-	} else {
+	default:
 		cp, ok := FindCodepage(cpID)
 		if !ok || cp.Enc == nil {
 			return data, fmt.Errorf("unsupported codepage: %d", cpID)
@@ -100,15 +101,16 @@ func EncodeBytes(data []byte, cpID int) ([]byte, error) {
 	}
 
 	var encoder *encoding.Encoder
-	if cpID == 11111 {
+	switch cpID {
+	case 11111:
 		if enc := GetSystemANSIEncoding(); enc != nil {
 			encoder = enc.NewEncoder()
 		}
-	} else if cpID == 22222 {
+	case 22222:
 		if enc := GetSystemOEMEncoding(); enc != nil {
 			encoder = enc.NewEncoder()
 		}
-	} else {
+	default:
 		cp, ok := FindCodepage(cpID)
 		if !ok || cp.Enc == nil {
 			return data, fmt.Errorf("unsupported codepage: %d", cpID)

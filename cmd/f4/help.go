@@ -84,9 +84,7 @@ func appendGeneratedHelpAction(topic *vtui.HelpTopic, keys, desc string) {
 	prefix := fmt.Sprintf("  %-14s - ", keys)
 	prefixWidth := runewidth.StringWidth(prefix)
 	if prefixWidth >= generatedHelpLineWidth {
-		for _, line := range vtui.WrapText(prefix+desc, generatedHelpLineWidth) {
-			topic.Lines = append(topic.Lines, line)
-		}
+		topic.Lines = append(topic.Lines, vtui.WrapText(prefix+desc, generatedHelpLineWidth)...)
 		return
 	}
 

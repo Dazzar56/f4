@@ -710,11 +710,12 @@ func safeCloudPanelName(name, location string) string {
 		}
 	}
 	name = b.String()
-	if name == "." {
+	switch name {
+	case ".":
 		name = "．"
-	} else if name == ".." {
+	case "..":
 		name = "．．"
-	} else if name == "" {
+	case "":
 		name = "unnamed"
 	}
 	if name != original {

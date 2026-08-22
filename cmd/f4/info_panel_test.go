@@ -1291,7 +1291,7 @@ func TestInfoPanel_WrapRowContinuationInheritsSelection(t *testing.T) {
 	// invoking wrapRow via a synthesised call. Simpler: iterate
 	// existing rows for two consecutive rows sharing (section,
 	// label) — that's a wrap. If none exist skip the test.
-	var parentIdx int = -1
+	var parentIdx = -1
 	for i := 0; i+1 < len(ip.rows); i++ {
 		r, next := ip.rows[i], ip.rows[i+1]
 		if r.copyable && !next.copyable && r.label != "" &&

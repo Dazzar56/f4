@@ -474,9 +474,10 @@ func parseTIFFMeta(p *probe, b []byte, im *Image) {
 				addImageEXIF(p, im, "User comment", boundedEXIFComment(p, raw))
 			case 0xa403:
 				if value, ok := tiffFirstInteger(order, raw, typ); ok {
-					if value == 0 {
+					switch value {
+					case 0:
 						addImageEXIF(p, im, "White balance", "Auto")
-					} else if value == 1 {
+					case 1:
 						addImageEXIF(p, im, "White balance", "Manual")
 					}
 				}

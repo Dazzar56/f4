@@ -346,7 +346,7 @@ func ExportColors(path string) error {
 	sb.WriteString("[farcolors]\n")
 
 	for _, group := range ColorGroups {
-		sb.WriteString(fmt.Sprintf("\n# %s\n", group))
+		fmt.Fprintf(&sb, "\n# %s\n", group)
 		var slots []ColorSlot
 		for _, slot := range ColorSlots {
 			if slot.Group == group {

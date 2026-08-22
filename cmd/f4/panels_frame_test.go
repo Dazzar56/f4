@@ -3675,7 +3675,7 @@ func TestDriveMenu_SmartHotkeys(t *testing.T) {
 	}
 
 	// 2. Ищем плагины в пунктах меню
-	var nfIdx, nullIdx int = -1, -1
+	var nfIdx, nullIdx = -1, -1
 	for i, itm := range menu.Items {
 		cleanText := strings.ReplaceAll(itm.Text, "&", "")
 		if strings.Contains(cleanText, "NetFox") {

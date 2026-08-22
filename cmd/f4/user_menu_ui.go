@@ -55,7 +55,7 @@ func (u *userMenuFrame) Show(scr *vtui.ScreenBuf) {
 	if u.bottomHint == "" {
 		return
 	}
-	x1, _, x2, y2 := u.VMenu.GetPosition()
+	x1, _, x2, y2 := u.GetPosition()
 	vtui.NewPainter(scr).DrawTitle(x1, y2, x2, u.bottomHint, vtui.Palette[vtui.ColMenuTitle])
 }
 
@@ -442,9 +442,10 @@ func (s *userMenuState) pushLevel(items []UserMenuItem, title string, initialSel
 			}
 			dlg := vtui.ShowMessage(" User menu ", "Add to menu:", []string{"&Command", "&Submenu", "Cancel"})
 			dlg.OnResult = func(code int) {
-				if code == 0 { // Command
+				switch code {
+				case 0: // Command
 					showEditItemDialog(s, menu, items, insertIdx, true, false)
-				} else if code == 1 { // Submenu
+				case 1: // Submenu
 					showEditItemDialog(s, menu, items, insertIdx, true, true)
 				}
 			}

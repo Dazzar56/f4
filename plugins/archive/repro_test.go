@@ -303,7 +303,7 @@ func TestIssue150_7zDirectoryStructureAndSolid(t *testing.T) {
 
 	// Проверяем, что директории помечены как IsDir() и имеют размер 0 (а не дублируются как файлы)
 	foundDir := false
-	var commonStreamID int = -1
+	var commonStreamID = -1
 
 	for _, file := range zr.File {
 		isDir := file.FileInfo().IsDir()

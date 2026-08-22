@@ -90,13 +90,14 @@ func walkHEIFBoxes(p *probe, st *heifState, start, end int64, depth int, metaChi
 		}
 		size := int64(binary.BigEndian.Uint32(h[:4]))
 		header := int64(8)
-		if size == 1 {
+		switch size {
+		case 1:
 			x, err := p.readAt(pos+8, 8)
 			if err != nil {
 				return err
 			}
 			size, header = int64(binary.BigEndian.Uint64(x)), 16
-		} else if size == 0 {
+		case 0:
 			size = end - pos
 		}
 		if size < header || pos > end-size {

@@ -191,7 +191,7 @@ func (p *probe) readAt(off int64, n int) ([]byte, error) {
 	}
 	b := make([]byte, n)
 	read, err := p.r.ReadAt(b, off)
-	if err != nil && !(err == io.EOF && read == n) {
+	if err != nil && (err != io.EOF || read != n) {
 		return b[:read], err
 	}
 	if read != n {

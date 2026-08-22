@@ -1060,9 +1060,10 @@ func (fp *FileSystemPanel) updateSortColumnTitles() {
 		title := Msg("Panel.Column.Name")
 		switch fp.effectiveViewMode() {
 		case ViewModeWide:
-			if column == 1 {
+			switch column {
+			case 1:
 				title = Msg("Panel.Column.Size")
-			} else if column == 2 {
+			case 2:
 				title = Msg("Panel.Column.Modified")
 			}
 		case ViewModeDetailed:
@@ -2706,7 +2707,7 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 	// Close the shift-selection session on anything other than a
 	// Shift+nav key so the next Shift+nav re-decides its mode
 	// from the row under the cursor.
-	if !(shift && isShiftSelectNavKey(e.VirtualKeyCode)) {
+	if !shift || !isShiftSelectNavKey(e.VirtualKeyCode) {
 		fp.shiftSessionActive = false
 	}
 
@@ -3364,7 +3365,8 @@ func (fp *FileSystemPanel) doFastFind(dir int) {
 		return ok
 	}
 
-	if dir == 0 {
+	switch dir {
+	case 0:
 		for i := startIdx; i < len(fp.entries); i++ {
 			if checkMatch(i) {
 				fp.SetCursorIndex(i)
@@ -3379,7 +3381,7 @@ func (fp *FileSystemPanel) doFastFind(dir int) {
 				return
 			}
 		}
-	} else if dir == 1 {
+	case 1:
 		for i := startIdx + 1; i < len(fp.entries); i++ {
 			if checkMatch(i) {
 				fp.SetCursorIndex(i)
@@ -3394,7 +3396,7 @@ func (fp *FileSystemPanel) doFastFind(dir int) {
 				return
 			}
 		}
-	} else if dir == -1 {
+	case -1:
 		for i := startIdx - 1; i >= 0; i-- {
 			if checkMatch(i) {
 				fp.SetCursorIndex(i)

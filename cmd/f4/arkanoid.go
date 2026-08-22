@@ -445,7 +445,7 @@ func (af *ArkanoidFrame) Show(scr *vtui.ScreenBuf) {
 						syms = double
 					}
 
-					var char rune = syms[1] // ─
+					var char = syms[1] // ─
 					if x == af.X1 || x == af.X2 {
 						char = syms[0]
 					} // │

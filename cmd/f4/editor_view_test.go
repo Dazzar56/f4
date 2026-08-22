@@ -1755,7 +1755,7 @@ func TestEditorView_Indexer_EditInterference(t *testing.T) {
 	// Create a large file with many lines
 	var sb strings.Builder
 	for i := 0; i < 1000; i++ {
-		sb.WriteString(fmt.Sprintf("Line %d\n", i))
+		fmt.Fprintf(&sb, "Line %d\n", i)
 	}
 	tmp := t.TempDir() + "/race_test.txt"
 	os.WriteFile(tmp, []byte(sb.String()), 0644)
@@ -3043,7 +3043,7 @@ type editorStageModeVFS struct {
 
 func (m *editorStageModeVFS) Create(ctx context.Context, p string) (io.WriteCloser, error) {
 	w, err := m.VFS.Create(ctx, p)
-	if err != nil || !strings.HasPrefix(m.VFS.Base(p), ".f4tmp-") {
+	if err != nil || !strings.HasPrefix(m.Base(p), ".f4tmp-") {
 		return w, err
 	}
 	return &editorStageModeWriter{WriteCloser: w, path: p, onWrite: func(mode os.FileMode) {
