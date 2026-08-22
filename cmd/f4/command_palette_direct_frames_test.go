@@ -13,11 +13,11 @@ func (*directPaletteOtherFrame) GetType() vtui.FrameType { return vtui.TypeUser 
 
 func setDirectPaletteTopFrame(t *testing.T, frame vtui.Frame) {
 	t.Helper()
+	t.Cleanup(swapFrameManager(t))
 	scr := vtui.NewSilentScreenBuf()
 	scr.AllocBuf(100, 30)
 	vtui.FrameManager.Init(scr)
 	vtui.FrameManager.Push(frame)
-	t.Cleanup(func() { vtui.FrameManager.Init(vtui.NewSilentScreenBuf()) })
 }
 
 func requireDirectPaletteIDs(t *testing.T, entries []commandPaletteEntry, ids ...string) {

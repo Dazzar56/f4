@@ -175,7 +175,7 @@ func TestSaveSettingsGroupsKeepUnselectedValues(t *testing.T) {
 	getUserConfigIniPath = func() string { return settingsPath }
 	getConfigIniPaths = func() []string { return []string{settingsPath} }
 	getSessionIniPath = func() string { return sessionPath }
-	vtui.FrameManager = nil
+	vtui.FrameManager = vtui.NewFrameManager()
 
 	AppConfig.ColorStyle = "Persisted"
 	AppConfig.GuiCols = 80

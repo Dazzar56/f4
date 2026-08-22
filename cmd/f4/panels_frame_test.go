@@ -309,6 +309,7 @@ func TestPanelsFrame_Layout(t *testing.T) {
 	}
 }
 func TestPanelsFrame_ArkanoidHotkey(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pf := NewPanelsFrame()
 	defer pf.Close()
@@ -350,14 +351,7 @@ func TestPanelsFrame_ArkanoidHotkey(t *testing.T) {
 
 	// Clean up Arkanoid to prevent background loop leak
 	arkFrame := arkScreen.Frames[0].(*ArkanoidFrame)
-	arkFrame.Close()
-	for i := 0; i < 20; i++ {
-		select {
-		case task := <-vtui.FrameManager.TaskChan:
-			task()
-		case <-time.After(10 * time.Millisecond):
-		}
-	}
+	t.Cleanup(arkFrame.Close)
 }
 func TestPanelsFrame_SelectionByMask(t *testing.T) {
 	pf := NewPanelsFrame()
@@ -707,6 +701,10 @@ func TestPanelsFrame_GetActivePTY(t *testing.T) {
 	}
 }
 func TestPanelsFrame_ProcessMouse_DoubleClick(t *testing.T) {
+	oldNavigationMode := AppConfig.NavigationMode
+	AppConfig.NavigationMode = NavigationClassic
+	t.Cleanup(func() { AppConfig.NavigationMode = oldNavigationMode })
+
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
@@ -726,17 +724,16 @@ func TestPanelsFrame_ProcessMouse_DoubleClick(t *testing.T) {
 
 	initialPath := fsp.vfs.GetPath()
 
-	// Double click on ".." in left panel.
-	// Left panel 0..39. Table start Y=1. Header Y=1. Row 0 at Y=2.
+	// Double click on ".." in the left panel. Derive the row from the
+	// table geometry: the menu-bar setting changes the panel's top inset.
 	pf.ProcessMouse(&vtinput.InputEvent{
 		Type:            vtinput.MouseEventType,
 		KeyDown:         true,
-		MouseX:          5,
-		MouseY:          2,
+		MouseX:          checkedMouseCoordinate(t, fsp.table.X1),
+		MouseY:          checkedMouseCoordinate(t, fsp.table.Y1+fsp.table.MarginTop),
 		ButtonState:     vtinput.FromLeft1stButtonPressed,
 		MouseEventFlags: vtinput.DoubleClick,
 	})
-
 	if pf.activeIdx != 0 {
 		t.Errorf("Expected activeIdx 0 after left click, got %d", pf.activeIdx)
 	}
@@ -765,6 +762,11 @@ func setupMockPanelsFrame() *PanelsFrame {
 	return pf
 }
 func TestPanelsFrame_ProcessMouse_DoubleClickFile(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
+	oldNavigationMode := AppConfig.NavigationMode
+	AppConfig.NavigationMode = NavigationClassic
+	t.Cleanup(func() { AppConfig.NavigationMode = oldNavigationMode })
+
 	pf := setupMockPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
@@ -785,17 +787,24 @@ func TestPanelsFrame_ProcessMouse_DoubleClickFile(t *testing.T) {
 
 	// Must init frame manager to catch async tasks from actionExecute
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	vtui.FrameManager.Push(pf)
 
-	// Double click on "run.sh" in left panel.
-	// Panel at (0,0), Table at (1,1), Header at Y=1, Row 0 at Y=2, Row 1 (run.sh) at Y=3.
-	pf.ProcessMouse(&vtinput.InputEvent{
+	// Double click on "run.sh" in the left panel. Derive the second row
+	// from the table geometry instead of assuming a particular top inset.
+	handled := pf.ProcessMouse(&vtinput.InputEvent{
 		Type:            vtinput.MouseEventType,
 		KeyDown:         true,
-		MouseX:          5,
-		MouseY:          3,
+		MouseX:          checkedMouseCoordinate(t, fsp.table.X1),
+		MouseY:          checkedMouseCoordinate(t, fsp.table.Y1+fsp.table.MarginTop+1),
 		ButtonState:     vtinput.FromLeft1stButtonPressed,
 		MouseEventFlags: vtinput.DoubleClick,
 	})
+	if !handled {
+		t.Fatal("double click was not handled")
+	}
+	if got := fsp.GetSelectedName(); got != "run.sh" {
+		t.Fatalf("double click selected %q, want run.sh", got)
+	}
 
 	// Wait for the async task that actually executes the file.
 	// Since other tasks (like ReadDirectory) might be in the queue,
@@ -1082,6 +1091,10 @@ func TestPanelsFrame_KeyHandling(t *testing.T) {
 	}
 }
 func TestPanelsFrame_MenuCommands(t *testing.T) {
+	oldHotkeys := GlobalHotkeysMgr
+	GlobalHotkeysMgr = NewHotkeyManager("")
+	t.Cleanup(func() { GlobalHotkeysMgr = oldHotkeys })
+
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
@@ -1945,6 +1958,10 @@ func TestPanelsFrame_AutoRefresh(t *testing.T) {
 	t.Fatal("AutoRefresh failed to trigger ReadDirectory after MTime change")
 }
 func TestPanelsFrame_ResizingIntegration(t *testing.T) {
+	oldWidthDecrement := AppConfig.WidthDecrement
+	AppConfig.WidthDecrement = 0
+	t.Cleanup(func() { AppConfig.WidthDecrement = oldWidthDecrement })
+
 	vtui.SetDefaultPalette()
 	SetDefaultF4Palette()
 	pf := NewPanelsFrame()
@@ -2026,6 +2043,10 @@ func TestPanelsFrame_ExitWarning_ActiveTasks(t *testing.T) {
 	}
 }
 func TestPanelsFrame_SwapPanels(t *testing.T) {
+	oldWidthDecrement := AppConfig.WidthDecrement
+	AppConfig.WidthDecrement = 0
+	t.Cleanup(func() { AppConfig.WidthDecrement = oldWidthDecrement })
+
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
@@ -2919,6 +2940,7 @@ func TestExecuteFileOp_BackgroundButtonTrigger(t *testing.T) {
 	}
 }
 func TestExecuteDummyOp_HeadlessMode(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	fm := vtui.FrameManager
 	fm.Init(vtui.NewSilentScreenBuf())
 	pf := NewPanelsFrame()
@@ -4716,6 +4738,7 @@ func (m *mockTaskReporter) UpdateTransfer(action, filename string, currentPct in
 func (m *mockTaskReporter) IsCancelled() bool { return false }
 
 func TestPanelsFrame_CaptureCommands(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	vtui.SetDefaultPalette()
 	pf := setupMockPanelsFrame()
@@ -5125,6 +5148,16 @@ func panelHeight(p Panel) int { _, y1, _, y2 := p.GetPosition(); return y2 - y1 
 // shrink/grow the panel-vs-terminal split. Requires empty cmdline;
 // non-empty cmdline must fall through to word-navigation.
 func TestPanelsFrame_CtrlArrows_ResizePanels(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
+	oldW, oldL, oldR := AppConfig.WidthDecrement, AppConfig.LeftHeightDecrement, AppConfig.RightHeightDecrement
+	oldAutoSave := AppConfig.AutoSaveSettings
+	AppConfig.WidthDecrement, AppConfig.LeftHeightDecrement, AppConfig.RightHeightDecrement = 0, 0, 0
+	AppConfig.AutoSaveSettings = false
+	t.Cleanup(func() {
+		AppConfig.WidthDecrement, AppConfig.LeftHeightDecrement, AppConfig.RightHeightDecrement = oldW, oldL, oldR
+		AppConfig.AutoSaveSettings = oldAutoSave
+	})
+
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	send := func(pf *PanelsFrame, vk uint16) {
@@ -5214,6 +5247,16 @@ func TestPanelsFrame_CtrlArrows_ResizePanels(t *testing.T) {
 // (NumPad 5 with NumLock off) zeroes widthDecrement / leftHeightDecrement /
 // rightHeightDecrement in one shot, matching far2l's Ctrl+Clear.
 func TestPanelsFrame_CtrlClear_ResetsLayoutDecrements(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
+	oldW, oldL, oldR := AppConfig.WidthDecrement, AppConfig.LeftHeightDecrement, AppConfig.RightHeightDecrement
+	oldAutoSave := AppConfig.AutoSaveSettings
+	AppConfig.WidthDecrement, AppConfig.LeftHeightDecrement, AppConfig.RightHeightDecrement = 0, 0, 0
+	AppConfig.AutoSaveSettings = false
+	t.Cleanup(func() {
+		AppConfig.WidthDecrement, AppConfig.LeftHeightDecrement, AppConfig.RightHeightDecrement = oldW, oldL, oldR
+		AppConfig.AutoSaveSettings = oldAutoSave
+	})
+
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pf := setupMockPanelsFrame()
 	defer pf.Close()
@@ -5225,12 +5268,6 @@ func TestPanelsFrame_CtrlClear_ResetsLayoutDecrements(t *testing.T) {
 	AppConfig.WidthDecrement = 5
 	AppConfig.LeftHeightDecrement = 3
 	AppConfig.RightHeightDecrement = 4
-	defer func() {
-		AppConfig.WidthDecrement = 0
-		AppConfig.LeftHeightDecrement = 0
-		AppConfig.RightHeightDecrement = 0
-	}()
-
 	pressKey(pf, &vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
 		VirtualKeyCode:  vtinput.VK_CLEAR,
@@ -5273,6 +5310,16 @@ func TestPanelsFrame_LayoutDecrements_InitFromAppConfig(t *testing.T) {
 // decrement, leaving the other panel untouched. Same gate as plain
 // Ctrl+Up/Down (panels visible + cmdline empty).
 func TestPanelsFrame_CtrlShiftArrows_AsymmetricHeight(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
+	oldW, oldL, oldR := AppConfig.WidthDecrement, AppConfig.LeftHeightDecrement, AppConfig.RightHeightDecrement
+	oldAutoSave := AppConfig.AutoSaveSettings
+	AppConfig.WidthDecrement, AppConfig.LeftHeightDecrement, AppConfig.RightHeightDecrement = 0, 0, 0
+	AppConfig.AutoSaveSettings = false
+	t.Cleanup(func() {
+		AppConfig.WidthDecrement, AppConfig.LeftHeightDecrement, AppConfig.RightHeightDecrement = oldW, oldL, oldR
+		AppConfig.AutoSaveSettings = oldAutoSave
+	})
+
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	send := func(pf *PanelsFrame, vk uint16) {
@@ -5312,8 +5359,6 @@ func TestPanelsFrame_CtrlShiftArrows_AsymmetricHeight(t *testing.T) {
 		t.Errorf("AppConfig.RightHeightDecrement=%d, want 1",
 			AppConfig.RightHeightDecrement)
 	}
-	AppConfig.RightHeightDecrement = 0 // cleanup for later tests
-
 	// Ctrl+Shift+Down on active=right undoes it.
 	send(pf, vtinput.VK_DOWN)
 	if pf.rightHeightDecrement != 0 {
@@ -5328,8 +5373,6 @@ func TestPanelsFrame_CtrlShiftArrows_AsymmetricHeight(t *testing.T) {
 		t.Errorf("active=left Ctrl+Shift+Up: got %d/%d, want 1/0",
 			pf.leftHeightDecrement, pf.rightHeightDecrement)
 	}
-	AppConfig.LeftHeightDecrement = 0 // cleanup
-
 	// Clamp: Ctrl+Shift+Down on a zero-decrement panel must not go negative.
 	pf.leftHeightDecrement = 0
 	send(pf, vtinput.VK_DOWN)

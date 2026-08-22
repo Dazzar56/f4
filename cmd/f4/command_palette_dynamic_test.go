@@ -16,12 +16,12 @@ func (*commandPaletteOtherFrame) GetType() vtui.FrameType { return vtui.TypeUser
 
 func setCommandPaletteActivePanelsForTest(t *testing.T, pf *PanelsFrame) {
 	t.Helper()
+	t.Cleanup(swapFrameManager(t))
 	screen := vtui.NewSilentScreenBuf()
 	screen.AllocBuf(100, 30)
 	vtui.FrameManager.Init(screen)
 	vtui.FrameManager.Screens = []*vtui.AppScreen{{Number: 1, Frames: []vtui.Frame{pf}}}
 	vtui.FrameManager.ActiveIdx = 0
-	t.Cleanup(func() { vtui.FrameManager.Init(vtui.NewSilentScreenBuf()) })
 }
 
 func TestCommandPaletteIncludesRecordedAndLuaMacros(t *testing.T) {
@@ -202,11 +202,11 @@ func TestCommandPalettePrefixAndDriveRejectPreviousWorkspace(t *testing.T) {
 }
 
 func TestCommandPaletteKeysAreNotCapturedWhileRecording(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	screen := vtui.NewSilentScreenBuf()
 	screen.AllocBuf(100, 30)
 	vtui.FrameManager.Init(screen)
 	vtui.FrameManager.Push(&commandPaletteOtherFrame{})
-	t.Cleanup(func() { vtui.FrameManager.Init(vtui.NewSilentScreenBuf()) })
 
 	previousHotkeys, previousMacro := GlobalHotkeysMgr, MacroMgr
 	GlobalHotkeysMgr = &HotkeyManager{
@@ -249,11 +249,11 @@ func TestCommandPaletteKeysAreNotCapturedWhileRecording(t *testing.T) {
 }
 
 func TestCommandPaletteOpensInOtherFullScreenAreas(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	screen := vtui.NewSilentScreenBuf()
 	screen.AllocBuf(100, 30)
 	vtui.FrameManager.Init(screen)
 	vtui.FrameManager.Push(&commandPaletteOtherFrame{})
-	t.Cleanup(func() { vtui.FrameManager.Init(vtui.NewSilentScreenBuf()) })
 
 	previousHotkeys, previousMacro := GlobalHotkeysMgr, MacroMgr
 	GlobalHotkeysMgr = &HotkeyManager{

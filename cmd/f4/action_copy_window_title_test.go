@@ -30,7 +30,7 @@ func TestAction_AppCopyWindowTitle(t *testing.T) {
 
 	origTemplate := AppConfig.ConsoleTitleTemplate
 	defer func() { AppConfig.ConsoleTitleTemplate = origTemplate }()
-	defer swapFrameManager(t)()
+	t.Cleanup(swapFrameManager(t))
 
 	scr := vtui.NewScreenBuf()
 	scr.AllocBuf(80, 25)

@@ -15,6 +15,7 @@ func TestEditor_TabBehavior(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pt := piecetable.New(nil)
 	ev := NewEditorView(pt, nil, "test.txt")
+	defer ev.Close()
 	ev.TabSize = 4
 
 	// 1. ExpandTabs = 0 (Insert raw tabs)
@@ -48,6 +49,7 @@ func TestEditor_AutoIndent(t *testing.T) {
 	// Test with spaces
 	pt := piecetable.New([]byte("    line1"))
 	ev := NewEditorView(pt, nil, "test.txt")
+	defer ev.Close()
 	ev.AutoIndent = true
 	ev.CursorLine = 0
 	ev.CursorPos = 9 // End of line
@@ -74,6 +76,7 @@ func TestEditor_CursorBeyondEOL(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pt := piecetable.New([]byte("line"))
 	ev := NewEditorView(pt, nil, "test.txt")
+	defer ev.Close()
 	ev.CursorBeyondEOL = true
 	ev.CursorPos = 4 // End of "line"
 
@@ -139,6 +142,7 @@ tab_width = 4
 	os.WriteFile(goFile, []byte("package main"), 0644)
 
 	evGo := NewEditorView(piecetable.New(nil), v, goFile)
+	defer evGo.Close()
 	if evGo.ExpandTabs != 0 || evGo.TabSize != 4 {
 		t.Errorf("EditorConfig failed for .go: style=%d, size=%d", evGo.ExpandTabs, evGo.TabSize)
 	}
@@ -148,6 +152,7 @@ tab_width = 4
 	os.WriteFile(txtFile, []byte("hello"), 0644)
 
 	evTxt := NewEditorView(piecetable.New(nil), v, txtFile)
+	defer evTxt.Close()
 	if evTxt.ExpandTabs != 1 || evTxt.TabSize != 2 {
 		t.Errorf("EditorConfig failed for .txt: style=%d, size=%d", evTxt.ExpandTabs, evTxt.TabSize)
 	}
@@ -156,6 +161,7 @@ func TestEditor_DeleteLine(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pt := piecetable.New([]byte("line1\nline2\nline3"))
 	ev := NewEditorView(pt, nil, "test.txt")
+	defer ev.Close()
 	ev.CursorLine = 1
 	ev.CursorPos = 2
 
@@ -201,6 +207,7 @@ func TestEditor_Tab_MaterializeBeyondEOL(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pt := piecetable.New([]byte("line"))
 	ev := NewEditorView(pt, nil, "test.txt")
+	defer ev.Close()
 	ev.CursorBeyondEOL = true
 	ev.CursorPos = 4
 	ev.CursorVirtualSpaces = 2 // Virtual cursor at col 6
@@ -222,6 +229,7 @@ func TestEditor_AutoIndent_EmptyLine(t *testing.T) {
 	// Entering Enter on an empty line should not crash and should produce a new empty line
 	pt := piecetable.New(nil)
 	ev := NewEditorView(pt, nil, "test.txt")
+	defer ev.Close()
 	ev.AutoIndent = true
 
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN})

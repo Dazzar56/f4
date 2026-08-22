@@ -1127,11 +1127,21 @@ func TestFileSystemPanel_MultiSelect(t *testing.T) {
 // paint from there onward), and a second swipe over already-
 // selected rows grows the selection instead of flipping it off.
 func TestFileSystemPanel_ShiftMultiStepSwipe(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
 	tmp := t.TempDir()
 	for _, n := range []string{"a", "b", "c", "d", "e"} {
 		os.WriteFile(filepath.Join(tmp, n), []byte(n), 0644)
 	}
 	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(tmp))
+	t.Cleanup(func() {
+		if fp.cancelLoad != nil {
+			fp.cancelLoad()
+		}
+		fp.stopLoadingAnimation()
+	})
+	waitForLoad(t, fp)
 	fp.viewMode = ViewModeDetailed
 	fp.entries = []*fileEntry{
 		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
@@ -1185,11 +1195,21 @@ func TestFileSystemPanel_ShiftMultiStepSwipe(t *testing.T) {
 // Shift-nav event closes the session so the next Shift+nav re-
 // decides.
 func TestFileSystemPanel_ShiftSessionModeDecidedOnFirstKey(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
 	tmp := t.TempDir()
 	for _, n := range []string{"a", "b", "c", "d", "e"} {
 		os.WriteFile(filepath.Join(tmp, n), []byte(n), 0644)
 	}
 	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(tmp))
+	t.Cleanup(func() {
+		if fp.cancelLoad != nil {
+			fp.cancelLoad()
+		}
+		fp.stopLoadingAnimation()
+	})
+	waitForLoad(t, fp)
 	fp.viewMode = ViewModeDetailed
 	fp.entries = []*fileEntry{
 		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
@@ -1257,11 +1277,21 @@ func TestFileSystemPanel_ShiftSessionModeDecidedOnFirstKey(t *testing.T) {
 // Shift+End would always start in "select" mode and there'd be
 // no way to clear the panel selection from that position.
 func TestFileSystemPanel_ShiftSessionDeselectFromParentDir(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
 	tmp := t.TempDir()
 	for _, n := range []string{"a", "b", "c"} {
 		os.WriteFile(filepath.Join(tmp, n), []byte(n), 0644)
 	}
 	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(tmp))
+	t.Cleanup(func() {
+		if fp.cancelLoad != nil {
+			fp.cancelLoad()
+		}
+		fp.stopLoadingAnimation()
+	})
+	waitForLoad(t, fp)
 	fp.viewMode = ViewModeDetailed
 	fp.entries = []*fileEntry{
 		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
@@ -1298,9 +1328,19 @@ func TestFileSystemPanel_ShiftSessionDeselectFromParentDir(t *testing.T) {
 // row is never selected by a shift-sweep, matching the same rule
 // SetItemSelected / ToggleSelection already enforce for Ins.
 func TestFileSystemPanel_ShiftRangeSkipsParentDir(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
 	tmp := t.TempDir()
 	os.WriteFile(filepath.Join(tmp, "a"), []byte("a"), 0644)
 	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(tmp))
+	t.Cleanup(func() {
+		if fp.cancelLoad != nil {
+			fp.cancelLoad()
+		}
+		fp.stopLoadingAnimation()
+	})
+	waitForLoad(t, fp)
 	fp.viewMode = ViewModeDetailed
 	fp.entries = []*fileEntry{
 		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
@@ -4129,6 +4169,7 @@ func TestPanelsFrame_FailedNavigationRestoresCanceledProviderLoadingState(t *tes
 }
 
 func TestFileSystemPanel_CachedEnterStaysResponsiveAndCoalescesRefresh(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	oldConfig := AppConfig
 	AppConfig.SyncPanelLoad = false
@@ -4140,6 +4181,12 @@ func TestFileSystemPanel_CachedEnterStaysResponsiveAndCoalescesRefresh(t *testin
 	defer func() { DisableLoadingAnimationInTests = oldDisable }()
 
 	fp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(t.TempDir()))
+	t.Cleanup(func() {
+		if fp.cancelLoad != nil {
+			fp.cancelLoad()
+		}
+		fp.stopLoadingAnimation()
+	})
 	waitForLoad(t, fp)
 	remote := newQueuedNavigationVFS()
 	t.Cleanup(func() {

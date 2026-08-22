@@ -24,6 +24,7 @@ func screenIndexOfFrame(f vtui.Frame) int {
 // Issue #424: with two workspaces open, actions and hotkey conditions must
 // read the workspace the user is looking at, not the oldest one.
 func TestFindPanelsFrameAnyScreen_PrefersActiveWorkspace(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	first := NewPanelsFrame()
@@ -52,6 +53,7 @@ func TestFindPanelsFrameAnyScreen_PrefersActiveWorkspace(t *testing.T) {
 // The hotkey conditions read state off the frame this function returns, so
 // they follow the active workspace too.
 func TestConditionsFollowActiveWorkspace(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	first := NewPanelsFrame()
@@ -87,6 +89,7 @@ func TestConditionsFollowActiveWorkspace(t *testing.T) {
 // The search must then fall back to the workspace used most recently, which
 // is what keeps Ctrl+[ and friends working from a full-screen editor.
 func TestFindPanelsFrameAnyScreen_FallsBackToMostRecent(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	first := NewPanelsFrame()
@@ -103,7 +106,9 @@ func TestFindPanelsFrameAnyScreen_FallsBackToMostRecent(t *testing.T) {
 	}
 	vtui.FrameManager.SwitchScreen(firstIdx)
 
-	vtui.FrameManager.AddScreenHeadless(NewArkanoidFrame())
+	arkanoid := NewArkanoidFrame()
+	t.Cleanup(arkanoid.Close)
+	vtui.FrameManager.AddScreenHeadless(arkanoid)
 
 	if got := findPanelsFrameAnyScreen(); got != first {
 		t.Fatalf("the fallback must reach the workspace used last, not the oldest one")
@@ -112,6 +117,7 @@ func TestFindPanelsFrameAnyScreen_FallsBackToMostRecent(t *testing.T) {
 
 // A frame already closed is not somewhere the user can be working.
 func TestFindPanelsFrameAnyScreen_SkipsClosedFrame(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	first := NewPanelsFrame()

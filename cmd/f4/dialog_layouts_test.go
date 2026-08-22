@@ -12,6 +12,7 @@ import (
 )
 
 func TestAllDialogs_LayoutValidation(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	skipIfNoRelevantChanges(t, "layouts",
 		"lang/*.lng",
 		"lang/*.txt",

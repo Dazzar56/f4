@@ -912,9 +912,30 @@ func TestTerminalView_EraseDisplay_LogSync(t *testing.T) {
 }
 
 type mockPtyForTerminal struct {
-	bytes.Buffer
+	mu  sync.Mutex
+	buf bytes.Buffer
 }
 
+func (m *mockPtyForTerminal) Write(p []byte) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.buf.Write(p)
+}
+func (m *mockPtyForTerminal) String() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.buf.String()
+}
+func (m *mockPtyForTerminal) Len() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.buf.Len()
+}
+func (m *mockPtyForTerminal) Reset() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.buf.Reset()
+}
 func (m *mockPtyForTerminal) Read(p []byte) (n int, err error)      { return 0, nil }
 func (m *mockPtyForTerminal) Close() error                          { return nil }
 func (m *mockPtyForTerminal) SetSize(cols, rows int)                {}

@@ -403,6 +403,7 @@ func TestFileOps_RefreshAllNoPanic(t *testing.T) {
 }
 
 func TestFileOp_PathLogic(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	tmpSrc := t.TempDir()
 	tmpDst := t.TempDir()
 
@@ -413,25 +414,15 @@ func TestFileOp_PathLogic(t *testing.T) {
 
 	t.Run("Copy and Rename", func(t *testing.T) {
 		os.WriteFile(filepath.Join(tmpSrc, "old.txt"), []byte("data"), 0644)
-		tCtx := vtui.RunAsync(func(c *vtui.TaskContext) {})
 
 		// Target is a new filename, not a directory
-		ExecuteFileOp(nil, srcVfs, dstVfs, []string{"old.txt"}, "new.txt", false, 2, nil)
-
-		// Drain task queue
-		for i := 0; i < 50; i++ {
-			select {
-			case task := <-vtui.FrameManager.TaskChan:
-				task()
-			default:
-				time.Sleep(5 * time.Millisecond)
-			}
-		}
+		done := make(chan struct{})
+		ExecuteFileOp(nil, srcVfs, dstVfs, []string{"old.txt"}, "new.txt", false, 2, func() { close(done) })
+		waitForFileOpTest(t, done)
 
 		if _, err := os.Stat(filepath.Join(tmpSrc, "new.txt")); os.IsNotExist(err) {
 			t.Error("Rename copy failed: new.txt not found")
 		}
-		tCtx.Cancel()
 	})
 
 	t.Run("Multiple files to new directory", func(t *testing.T) {
@@ -439,16 +430,9 @@ func TestFileOp_PathLogic(t *testing.T) {
 		os.WriteFile(filepath.Join(tmpSrc, "f2.txt"), []byte("2"), 0644)
 
 		// Target "new_dir" doesn't exist, but we have multiple files
-		ExecuteFileOp(nil, srcVfs, dstVfs, []string{"f1.txt", "f2.txt"}, "new_dir", false, 2, nil)
-
-		for i := 0; i < 100; i++ {
-			select {
-			case task := <-vtui.FrameManager.TaskChan:
-				task()
-			default:
-				time.Sleep(5 * time.Millisecond)
-			}
-		}
+		done := make(chan struct{})
+		ExecuteFileOp(nil, srcVfs, dstVfs, []string{"f1.txt", "f2.txt"}, "new_dir", false, 2, func() { close(done) })
+		waitForFileOpTest(t, done)
 
 		if stat, err := os.Stat(filepath.Join(tmpSrc, "new_dir")); err != nil || !stat.IsDir() {
 			t.Error("Target directory not created for multi-file copy")
@@ -462,25 +446,11 @@ func TestFileOp_PathLogic(t *testing.T) {
 		os.WriteFile(filepath.Join(tmpSrc, "source.txt"), []byte("content"), 0644)
 
 		// Target: "deep/path/target.txt" (subfolders don't exist)
-		ExecuteFileOp(nil, srcVfs, dstVfs, []string{"source.txt"}, "deep/path/target.txt", false, 2, nil)
+		done := make(chan struct{})
+		ExecuteFileOp(nil, srcVfs, dstVfs, []string{"source.txt"}, "deep/path/target.txt", false, 2, func() { close(done) })
+		waitForFileOpTest(t, done)
 
-		// The copy lands asynchronously; a fixed 250ms budget is not enough
-		// for a loaded CI runner, so pump the queue against a deadline and
-		// stop as soon as the file shows up.
 		finalPath := filepath.Join(tmpSrc, "deep", "path", "target.txt")
-		deadline := time.Now().Add(5 * time.Second)
-		for time.Now().Before(deadline) {
-			if _, err := os.Stat(finalPath); err == nil {
-				break
-			}
-			select {
-			case task := <-vtui.FrameManager.TaskChan:
-				task()
-			default:
-				time.Sleep(5 * time.Millisecond)
-			}
-		}
-
 		if _, err := os.Stat(finalPath); os.IsNotExist(err) {
 			t.Error("Failed to create parent directories during rename-copy")
 		}
@@ -490,33 +460,38 @@ func TestFileOp_PathLogic(t *testing.T) {
 		os.WriteFile(filepath.Join(tmpSrc, "source2.txt"), []byte("content"), 0644)
 
 		// Target: "new_dir/" (trailing slash should force directory creation)
-		ExecuteFileOp(nil, srcVfs, dstVfs, []string{"source2.txt"}, "new_dir"+string(os.PathSeparator), false, 2, nil)
+		done := make(chan struct{})
+		ExecuteFileOp(nil, srcVfs, dstVfs, []string{"source2.txt"}, "new_dir"+string(os.PathSeparator), false, 2, func() { close(done) })
+		waitForFileOpTest(t, done)
 
-		// Windows CI can need more than 250ms for the asynchronous copy to
-		// finish after the destination directory has been created. Wait up to
-		// the same bounded deadline used by the rename-copy case above instead
-		// of making the assertion depend on scheduler timing.
 		finalPath := filepath.Join(tmpSrc, "new_dir", "source2.txt")
-		deadline := time.Now().Add(5 * time.Second)
-		for time.Now().Before(deadline) {
-			if _, err := os.Stat(finalPath); err == nil {
-				break
-			}
-			select {
-			case task := <-vtui.FrameManager.TaskChan:
-				task()
-			default:
-				time.Sleep(5 * time.Millisecond)
-			}
-		}
-
 		if _, err := os.Stat(finalPath); err != nil {
 			t.Error("Trailing slash did not complete the single-file copy into a directory")
 		}
 	})
 }
 
+func waitForFileOpTest(t *testing.T, done <-chan struct{}) {
+	t.Helper()
+	timer := time.NewTimer(5 * time.Second)
+	t.Cleanup(func() { timer.Stop() })
+	for {
+		select {
+		case <-done:
+			return
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			if top := vtui.FrameManager.GetTopFrame(); top != nil && top.IsDone() {
+				vtui.FrameManager.Pop()
+			}
+		case <-timer.C:
+			t.Fatal("timeout waiting for ExecuteFileOp to finish")
+		}
+	}
+}
+
 func TestExecuteFileOp_RenameMaskUsesBasenameForPathSelection(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	srcRoot := t.TempDir()
 	dstRoot := t.TempDir()
@@ -529,21 +504,11 @@ func TestExecuteFileOp_RenameMaskUsesBasenameForPathSelection(t *testing.T) {
 
 	srcVfs := vfs.NewOSVFS(srcRoot)
 	dstVfs := vfs.NewOSVFS(dstRoot)
-	ExecuteFileOpAt(nil, srcVfs, dstVfs, srcRoot, []string{"nested" + string(filepath.Separator) + "source.txt"}, filepath.Join(dstRoot, "masked", "*.bak"), false, 2, nil)
+	done := make(chan struct{})
+	ExecuteFileOpAt(nil, srcVfs, dstVfs, srcRoot, []string{"nested" + string(filepath.Separator) + "source.txt"}, filepath.Join(dstRoot, "masked", "*.bak"), false, 2, func() { close(done) })
+	waitForFileOpTest(t, done)
 
 	want := filepath.Join(dstRoot, "masked", "source.bak")
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		if _, err := os.Stat(want); err == nil {
-			break
-		}
-		select {
-		case task := <-vtui.FrameManager.TaskChan:
-			task()
-		default:
-			time.Sleep(5 * time.Millisecond)
-		}
-	}
 	if _, err := os.Stat(want); err != nil {
 		t.Fatalf("masked path selection was not copied to %q: %v", want, err)
 	}
@@ -556,20 +521,10 @@ func TestExecuteFileOp_RenameMaskUsesBasenameForPathSelection(t *testing.T) {
 		t.Fatalf("masked destination entries = %#v, want only source.bak", entries)
 	}
 
-	ExecuteFileOpAt(nil, srcVfs, dstVfs, srcRoot, []string{"nested"}, filepath.Join(dstRoot, "tree", "*.bak"), false, 2, nil)
+	done = make(chan struct{})
+	ExecuteFileOpAt(nil, srcVfs, dstVfs, srcRoot, []string{"nested"}, filepath.Join(dstRoot, "tree", "*.bak"), false, 2, func() { close(done) })
+	waitForFileOpTest(t, done)
 	wantTreeFile := filepath.Join(dstRoot, "tree", "nested.bak", "source.txt")
-	deadline = time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		if _, err := os.Stat(wantTreeFile); err == nil {
-			break
-		}
-		select {
-		case task := <-vtui.FrameManager.TaskChan:
-			task()
-		default:
-			time.Sleep(5 * time.Millisecond)
-		}
-	}
 	if _, err := os.Stat(wantTreeFile); err != nil {
 		t.Fatalf("masked directory tree was not copied to %q: %v", wantTreeFile, err)
 	}
@@ -578,6 +533,7 @@ func TestExecuteFileOp_RenameMaskUsesBasenameForPathSelection(t *testing.T) {
 func TestExecuteFileOp_RemotePathResolution_Issue74(t *testing.T) {
 	// This test reproduces the bug where a Unix-style absolute path was treated
 	// as relative when running on a Windows host.
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	tmpSrc := t.TempDir()
@@ -593,7 +549,9 @@ func TestExecuteFileOp_RemotePathResolution_Issue74(t *testing.T) {
 
 	// We expect the file to land exactly at /remote/target/data.txt,
 	// NOT at /remote/current/remote/target/data.txt
-	ExecuteFileOp(nil, srcVfs, dstVfs, []string{"data.txt"}, remoteTarget, false, 2, nil)
+	done := make(chan struct{})
+	ExecuteFileOp(nil, srcVfs, dstVfs, []string{"data.txt"}, remoteTarget, false, 2, func() { close(done) })
+	waitForFileOpTest(t, done)
 
 	// In NullVFS, we can't check disk, but we check the resulting destPath logic
 	// indirectly by ensuring that if we provided an absolute path, it didn't
@@ -1520,6 +1478,7 @@ pump3:
 }
 
 func TestFileOps_ForkedWorkspace(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pf := NewPanelsFrame()
 	defer pf.Close()

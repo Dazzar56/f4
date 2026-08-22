@@ -279,9 +279,18 @@ func (w *providerSpoolWriter) Abort() error {
 	return err
 }
 
-func (w *providerSpoolWriter) finishClose() error {
-	defer func() { _ = os.Remove(w.path) }()
-	defer func() { _ = w.file.Close() }()
+func (w *providerSpoolWriter) finishClose() (result error) {
+	defer func() {
+		closeErr := w.file.Close()
+		removeErr := os.Remove(w.path)
+		if errors.Is(removeErr, os.ErrNotExist) {
+			removeErr = nil
+		}
+		// The upload already committed on success, so deliberately ignore local cleanup errors.
+		if cleanupErr := errors.Join(closeErr, removeErr); result != nil && cleanupErr != nil {
+			result = errors.Join(result, cleanupErr)
+		}
+	}()
 	w.mu.Lock()
 	writeErr := w.writeErr
 	w.mu.Unlock()

@@ -37,8 +37,8 @@ func TestWorkspaceSessionSerializationPreservesOrderNumbersAndActiveTab(t *testi
 }
 
 func TestCaptureWorkspaceSessionsUsesTabOrderAndActiveIndex(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	t.Cleanup(func() { vtui.FrameManager.Init(vtui.NewSilentScreenBuf()) })
 
 	newPanels := func(leftPath, rightPath string) *PanelsFrame {
 		return &PanelsFrame{
@@ -71,8 +71,8 @@ func TestCaptureWorkspaceSessionsUsesTabOrderAndActiveIndex(t *testing.T) {
 }
 
 func TestCaptureWorkspaceSessionPreservesPendingProviderPath(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	t.Cleanup(func() { vtui.FrameManager.Init(vtui.NewSilentScreenBuf()) })
 
 	pf := &PanelsFrame{
 		panels: [2]Panel{
@@ -91,8 +91,8 @@ func TestCaptureWorkspaceSessionPreservesPendingProviderPath(t *testing.T) {
 }
 
 func TestApplyWorkspaceSessionInitializesFreshPanelsFrame(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	t.Cleanup(func() { vtui.FrameManager.Init(vtui.NewSilentScreenBuf()) })
 
 	pf := NewPanelsFrame()
 	t.Cleanup(func() { pf.Close() })
@@ -150,8 +150,8 @@ func TestWorkspaceSessionsForRestore(t *testing.T) {
 }
 
 func TestRenumberWorkspaceScreensFollowsCurrentOrder(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	t.Cleanup(func() { vtui.FrameManager.Init(vtui.NewSilentScreenBuf()) })
 	vtui.FrameManager.Screens = []*vtui.AppScreen{
 		{Number: 7},
 		{Number: 2},

@@ -1026,6 +1026,7 @@ func TestAttributesDialog_SecurityButton(t *testing.T) {
 	fm.Pop()
 }
 func TestDialogTaskPump_OverlayResilience(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	fm := vtui.FrameManager
 	fm.Init(vtui.NewSilentScreenBuf())
 

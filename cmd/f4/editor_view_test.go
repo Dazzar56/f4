@@ -1044,6 +1044,10 @@ func TestEditorView_F3_ToggleWordWrap(t *testing.T) {
 }
 
 func TestEditorView_Labels(t *testing.T) {
+	oldHotkeys := GlobalHotkeysMgr
+	GlobalHotkeysMgr = NewHotkeyManager("")
+	t.Cleanup(func() { GlobalHotkeysMgr = oldHotkeys })
+
 	pt := piecetable.New([]byte(""))
 	ev := NewEditorView(pt, nil, "test.txt")
 	defer ev.Close()
@@ -1359,8 +1363,8 @@ func requireUnsavedChangesConfirm(t *testing.T) vtui.Frame {
 }
 
 func TestEditorView_CtrlWConfirmsUnsavedChanges(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	t.Cleanup(func() { vtui.FrameManager.Init(vtui.NewSilentScreenBuf()) })
 	vtui.FrameManager.Push(vtui.NewDesktop())
 
 	ev := NewEditorView(piecetable.New([]byte("test")), nil, "file.txt")
@@ -1386,8 +1390,8 @@ func TestEditorView_CtrlWConfirmsUnsavedChanges(t *testing.T) {
 }
 
 func TestEditorView_CtrlWClosesCleanEditor(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	t.Cleanup(func() { vtui.FrameManager.Init(vtui.NewSilentScreenBuf()) })
 	vtui.FrameManager.Push(vtui.NewDesktop())
 
 	ev := NewEditorView(piecetable.New([]byte("test")), nil, "file.txt")
@@ -1405,8 +1409,8 @@ func TestEditorView_CtrlWClosesCleanEditor(t *testing.T) {
 }
 
 func TestEditorView_CloseEntryPointsSharePendingConfirm(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	t.Cleanup(func() { vtui.FrameManager.Init(vtui.NewSilentScreenBuf()) })
 	vtui.FrameManager.Push(vtui.NewDesktop())
 
 	ev := NewEditorView(piecetable.New([]byte("test")), nil, "file.txt")
@@ -1430,8 +1434,8 @@ func TestEditorView_CloseEntryPointsSharePendingConfirm(t *testing.T) {
 }
 
 func TestEditorView_WorkspaceCloseActionConfirmsUnsavedChanges(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	t.Cleanup(func() { vtui.FrameManager.Init(vtui.NewSilentScreenBuf()) })
 	vtui.FrameManager.Push(vtui.NewDesktop())
 
 	ev := NewEditorView(piecetable.New([]byte("test")), nil, "file.txt")
@@ -1456,8 +1460,8 @@ func TestEditorView_WorkspaceCloseActionConfirmsUnsavedChanges(t *testing.T) {
 }
 
 func TestEditorView_BackgroundWorkspaceCloseAnchorsUnsavedChangesConfirm(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	t.Cleanup(func() { vtui.FrameManager.Init(vtui.NewSilentScreenBuf()) })
 	vtui.FrameManager.Push(vtui.NewDesktop())
 	previouslyActive := vtui.FrameManager.Screens[vtui.FrameManager.ActiveIdx]
 
@@ -1488,8 +1492,8 @@ func TestEditorView_BackgroundWorkspaceCloseAnchorsUnsavedChangesConfirm(t *test
 }
 
 func TestEditorView_HexModeCtrlWConfirmsUnsavedChanges(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	t.Cleanup(func() { vtui.FrameManager.Init(vtui.NewSilentScreenBuf()) })
 	vtui.FrameManager.Push(vtui.NewDesktop())
 
 	ev := NewEditorView(piecetable.New([]byte("test")), nil, "file.txt")
@@ -1507,8 +1511,8 @@ func TestEditorView_HexModeCtrlWConfirmsUnsavedChanges(t *testing.T) {
 }
 
 func TestEditorView_WorkspaceCloseActionClosesCleanEditor(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	t.Cleanup(func() { vtui.FrameManager.Init(vtui.NewSilentScreenBuf()) })
 	vtui.FrameManager.Push(vtui.NewDesktop())
 
 	ev := NewEditorView(piecetable.New([]byte("test")), nil, "file.txt")
@@ -5656,6 +5660,7 @@ func TestEditor_OverwriteMode(t *testing.T) {
 func TestDeleteLinePreservesVisualColumn(t *testing.T) {
 	pt := piecetable.New([]byte("line 1 text\nline 2\nline 3 standard"))
 	ev := NewEditorView(pt, nil, "test.txt")
+	defer ev.Close()
 	ev.CursorBeyondEOL = true
 
 	// Position cursor at line 1 (0-based index 0), column 20 (beyond end of "line 1 text" which is 11 chars)
@@ -5687,6 +5692,7 @@ func TestDeleteLinePreservesVisualColumn(t *testing.T) {
 }
 
 func TestEditorViewInsertOverwriteCursorShape(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.SetDefaultPalette()
 	SetDefaultF4Palette()
 
@@ -5696,6 +5702,7 @@ func TestEditorViewInsertOverwriteCursorShape(t *testing.T) {
 
 	pt := piecetable.New([]byte("hello world"))
 	ev := NewEditorView(pt, nil, "test.txt")
+	defer ev.Close()
 	ev.ResizeConsole(80, 25)
 
 	vtui.FrameManager.Push(desktopWindowWrapper{ev})
