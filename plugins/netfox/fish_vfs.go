@@ -14,7 +14,6 @@ import (
 	"sync"
 
 	"golang.org/x/crypto/ssh"
-	"golang.org/x/crypto/ssh/agent"
 
 	"github.com/unxed/f4/internal/netproxy"
 	"github.com/unxed/f4/plugins/netfox/fishplus"
@@ -452,13 +451,6 @@ func sshFishDialerWith(host, port, user, pass string, timeout int, px netproxy.S
 		if err != nil {
 			client.Close()
 			return nil, nil, nil, err
-		}
-		if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
-			if err := agent.RequestAgentForwarding(sess); err != nil {
-				vtui.DebugLog("SSH: Failed to request agent forwarding: %v", err)
-			} else {
-				vtui.DebugLog("SSH: Requested agent forwarding")
-			}
 		}
 		shell := &sshShell{sess: sess, client: client}
 		stdin, err := sess.StdinPipe()
