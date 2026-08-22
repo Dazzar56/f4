@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"time"
 
@@ -191,18 +192,55 @@ func (f4MacroHost) CallPlugin(ctx context.Context, id string, args []any) ([]any
 // the equivalent of Far's Macros/scripts. A missing directory is not an error:
 // most users have no macros, and they should pay nothing for the feature.
 func (m *MacroManager) LoadLuaMacros(dir string) {
-	engine, err := NewLuaMacroEngine(f4MacroHost{})
+	count, err := m.ReloadLuaMacros(dir)
 	if err != nil {
-		vtui.DebugLog("MACRO: cannot start the Lua macro engine: %v", err)
-		return
-	}
-	if err := engine.LoadDir(dir); err != nil {
 		vtui.DebugLog("MACRO: %v", err)
 	}
-	if engine.Count() == 0 {
-		engine.Close()
-		return
+	if count > 0 {
+		vtui.DebugLog("MACRO: loaded %d Lua macro(s) from %s", count, dir)
 	}
-	vtui.DebugLog("MACRO: loaded %d Lua macro(s) from %s", engine.Count(), dir)
-	m.Lua = engine
+}
+
+// ReloadLuaMacros builds a fresh interpreter from disk, then swaps it in as a
+// single pointer update. A macro already running on the old interpreter is
+// allowed to finish; closing that interpreter happens asynchronously so a
+// reload cannot deadlock while the old macro is waiting for the UI goroutine.
+func (m *MacroManager) ReloadLuaMacros(dir string) (int, error) {
+	engine, err := NewLuaMacroEngine(f4MacroHost{})
+	if err != nil {
+		return 0, fmt.Errorf("cannot start the Lua macro engine: %w", err)
+	}
+	loadErr := engine.LoadDir(dir)
+	count := engine.Count()
+
+	old := m.Lua
+	if count == 0 {
+		m.Lua = nil
+		_ = engine.Close()
+	} else {
+		m.Lua = engine
+	}
+	if old != nil {
+		go func() {
+			if closeErr := old.Close(); closeErr != nil {
+				vtui.DebugLog("MACRO: closing replaced Lua engine: %v", closeErr)
+			}
+		}()
+	}
+	return count, loadErr
+}
+
+func actionReloadLuaMacros() bool {
+	if MacroMgr == nil {
+		return false
+	}
+	dir := filepath.Join(GetF4ConfigDir(), "Macros", "scripts")
+	count, err := MacroMgr.ReloadLuaMacros(dir)
+	if err != nil {
+		vtui.DebugLog("MACRO: reload: %v", err)
+		vtui.ShowToast(fmt.Sprintf("%s (%d loaded)", Msg("Macro.ReloadFailed"), count), 3*time.Second)
+		return true
+	}
+	vtui.ShowToast(fmt.Sprintf(Msg("Macro.Reloaded"), count), 3*time.Second)
+	return true
 }

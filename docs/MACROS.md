@@ -26,6 +26,9 @@ configuration directory, on Linux usually:
 
 Subdirectories are read too. Files are read once, at startup. A file with a
 syntax error is reported in the debug log and skipped; the rest still load.
+Use `Ctrl+Alt+Shift+M`, or search for **Reload Lua macros** in the Command
+Palette (`Ctrl+Shift+P`), to reread this directory without restarting f4.
+Loaded Lua macros are also listed in the Command Palette and can be run there.
 
 ## Your first macro
 
