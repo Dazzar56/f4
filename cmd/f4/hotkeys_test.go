@@ -55,6 +55,36 @@ CtrlU=None
 		t.Errorf("Expected CtrlU to still be None after reload, got %q", action)
 	}
 }
+
+func TestHotkeyManager_CloneForEditIsTransactional(t *testing.T) {
+	iniPath := filepath.Join(t.TempDir(), "hotkeys.ini")
+	original := NewHotkeyManager(iniPath)
+	draft := original.CloneForEdit()
+
+	draft.Bind("Shell", "F8", "None")
+	draft.Bind("Shell", "CtrlAltT", "Panel.Toggle")
+
+	if got := original.GetAction("Shell", "F8"); got != "File.Delete" {
+		t.Fatalf("editing the draft changed the runtime binding: got %q", got)
+	}
+	if got := original.GetAction("Shell", "CtrlAltT"); got != "" {
+		t.Fatalf("editing the draft added a runtime binding: got %q", got)
+	}
+	if _, err := os.Stat(iniPath); !os.IsNotExist(err) {
+		t.Fatalf("editing the draft persisted hotkeys before Save: stat error = %v", err)
+	}
+
+	original.ReplaceBindingsFrom(draft)
+	original.Save()
+	reloaded := NewHotkeyManager(iniPath)
+	if got := reloaded.GetAction("Shell", "F8"); got != "None" {
+		t.Errorf("committed removal = %q, want None", got)
+	}
+	if got := reloaded.GetAction("Shell", "CtrlAltT"); got != "Panel.Toggle" {
+		t.Errorf("committed addition = %q, want Panel.Toggle", got)
+	}
+}
+
 func TestHotkeyManager_GetActiveBindings(t *testing.T) {
 	hm := NewHotkeyManager("")
 	hm.initDefaults()
