@@ -2588,6 +2588,18 @@ func (pf *PanelsFrame) processMiddleMouseGesture(e *vtinput.InputEvent) (handled
 func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 	// If panels are hidden, route relevant mouse events to PTY immediately
 	if !pf.showPanels {
+		mx, my := int(e.MouseX), int(e.MouseY)
+		if pf.termView != nil && e.WheelDirection == 0 {
+			if changed := pf.termView.UpdateURLHover(mx, my); changed {
+				vtui.FrameManager.Redraw()
+			}
+			if ctrlMouseClick(e) {
+				if rawURL, ok := pf.termView.URLAt(mx, my); ok {
+					openExternalURLAsync(rawURL)
+					return true
+				}
+			}
+		}
 		active := pf.getActivePTY()
 		if active != nil && (pf.termView.MouseTrackingMode != 0 || pf.termView.MouseSGRMode) {
 			seq := TranslateMouseInput(e)
