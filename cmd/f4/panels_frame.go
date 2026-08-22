@@ -2019,6 +2019,10 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		commandInputActive := !pf.searchFirstMode() || pf.commandLineFocused || !pf.showPanels
 		if commandInputActive && !pf.cmdLine.IsEmpty() {
 			cmd := pf.cmdLine.Edit.GetText()
+			if commandHasUnmatchedQuote(cmd, runtime.GOOS == "windows") {
+				vtui.ShowMessage(" Error ", "Unmatched quote in command. Close the quote and press Enter again.", []string{"&Ok"})
+				return true
+			}
 			pf.addCommandHistory(cmd)
 			pf.cmdLine.Edit.HistoryPos = -1
 

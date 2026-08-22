@@ -58,7 +58,7 @@ func findCmdToken(cmd string) (start, end int, name string, ok bool) {
 		return -1, -1, "", false
 	}
 
-	if cmd[start] == '"' || cmd[start] == '\'' {
+	if cmd[start] == '"' {
 		quote := cmd[start]
 		close := -1
 		for i := start + 1; i < len(cmd); i++ {
@@ -68,7 +68,7 @@ func findCmdToken(cmd string) (start, end int, name string, ok bool) {
 			}
 		}
 		if close < 0 {
-			close = len(cmd) - 1
+			return -1, -1, "", false
 		}
 		return start, close + 1, cmd[start+1 : close], true
 	}
