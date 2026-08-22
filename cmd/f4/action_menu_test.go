@@ -161,6 +161,7 @@ func TestBuildMenuBarItems_Terminal(t *testing.T) {
 }
 
 func TestBuildMenuBarItems_OnClickRunsAction(t *testing.T) {
+	preserveActionRegistry(t)
 	old := GlobalHotkeysMgr
 	GlobalHotkeysMgr = NewHotkeyManager("")
 	defer func() { GlobalHotkeysMgr = old }()

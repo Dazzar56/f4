@@ -27,8 +27,10 @@ func TestHelpLanguageSwitch(t *testing.T) {
 	// override on its first call from InitHelpSystem.
 	_ = GetF4ConfigDir()
 	oldF4ConfigDir := cachedF4ConfigDir
+	oldHelpLanguage := AppConfig.HelpLanguage
 	cachedF4ConfigDir = tempDir
 	defer func() { cachedF4ConfigDir = oldF4ConfigDir }()
+	t.Cleanup(func() { AppConfig.HelpLanguage = oldHelpLanguage })
 
 	AppConfig.HelpLanguage = "ru"
 	InitHelpSystem()

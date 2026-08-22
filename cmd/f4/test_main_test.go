@@ -40,6 +40,23 @@ func pressKey(f vtui.Frame, e *vtinput.InputEvent) bool {
 	return f.ProcessKey(e)
 }
 
+// preserveActionRegistry keeps tests that register synthetic actions from
+// leaking them into later tests or the next -count iteration.
+func preserveActionRegistry(t *testing.T) {
+	t.Helper()
+	oldRegistry := actionRegistry
+	oldOrder := actionOrder
+	actionRegistry = make(map[string]Action, len(oldRegistry))
+	for key, action := range oldRegistry {
+		actionRegistry[key] = action
+	}
+	actionOrder = append([]string(nil), oldOrder...)
+	t.Cleanup(func() {
+		actionRegistry = oldRegistry
+		actionOrder = oldOrder
+	})
+}
+
 func TestMain(m *testing.M) {
 	vfs.InitSudoClient("/usr/bin/f4", "")
 

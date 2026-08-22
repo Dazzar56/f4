@@ -15,6 +15,7 @@ import (
 // Before the fix, the injected VK_F5 fell through PanelsFrame.ProcessKey
 // unhandled, so clicking F5 in the bottom bar did nothing.
 func TestKeyBarClick_DispatchesHotkeyAction(t *testing.T) {
+	preserveActionRegistry(t)
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	if GlobalHotkeysMgr == nil {
 		GlobalHotkeysMgr = NewHotkeyManager("")
