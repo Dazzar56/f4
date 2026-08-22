@@ -60,7 +60,7 @@ func newSearchableEditor(t *testing.T, content string) (*EditorView, *searchable
 
 	fsys := &searchableVFS{VFS: vfs.NewOSVFS(t.TempDir()), content: content}
 	pt := piecetable.New([]byte(content))
-	ev := newEditorView(pt, fsys, "remote.txt", false, true)
+	ev := newEditorView(pt, fsys, "remote.txt", false)
 	ev.Codepage = 65001
 	return ev, fsys
 }
@@ -184,7 +184,7 @@ func TestSearchDelegation_DeclinesWhatItCannotExpress(t *testing.T) {
 
 	t.Run("file system without the capability", func(t *testing.T) {
 		vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-		ev := newEditorView(piecetable.New([]byte(content)), vfs.NewOSVFS(t.TempDir()), "local.txt", false, true)
+		ev := newEditorView(piecetable.New([]byte(content)), vfs.NewOSVFS(t.TempDir()), "local.txt", false)
 		ev.Codepage = 65001
 		if _, ok := ev.searchDelegation(false, false); ok {
 			t.Error("delegated to a file system that does not search")

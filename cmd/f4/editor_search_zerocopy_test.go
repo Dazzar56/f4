@@ -46,7 +46,7 @@ func TestSearchBuffer_ScansMemoryBufferInPlace(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	content := strings.Repeat("the quick brown fox\n", 200000) // ~4 MB
-	ev := newEditorView(piecetable.New([]byte(content)), nil, "", false, true)
+	ev := newEditorView(piecetable.New([]byte(content)), nil, "", false)
 
 	// Warm anything lazily built on the first pass so the measurement below
 	// sees the steady state.
@@ -92,7 +92,7 @@ func TestSearchBuffer_ReusesSnapshotUntilTheTextChanges(t *testing.T) {
 	// that assembles a snapshot — and used to reassemble it for every pass.
 	content, _, _ := bigSearchCorpus()
 	pt, _ := lazyEditorBuffer(t, content)
-	ev := newEditorView(pt, nil, "", false, true)
+	ev := newEditorView(pt, nil, "", false)
 
 	stop := pumpUITasks()
 	defer stop()
