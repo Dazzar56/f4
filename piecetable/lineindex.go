@@ -306,6 +306,22 @@ func (li *LineIndex) removeLines(from, to int) {
 	}
 }
 
+// AppendNewlineOffsets appends the offset just past every newline in data to
+// dst, counting from base. That offset is where the next line starts, which is
+// what a line index holds — and finding it is the one loop every scanner in
+// the editor runs, so they all run this one.
+func AppendNewlineOffsets(dst []int, data []byte, base int) []int {
+	for pos := 0; pos < len(data); {
+		idx := bytes.IndexByte(data[pos:], '\n')
+		if idx < 0 {
+			break
+		}
+		pos += idx + 1
+		dst = append(dst, base+pos)
+	}
+	return dst
+}
+
 // Rebuild completely reconstructs the line index based on PieceTable.
 func (li *LineIndex) Rebuild(pt *PieceTable) {
 	li.mu.Lock()
@@ -318,18 +334,11 @@ func (li *LineIndex) Rebuild(pt *PieceTable) {
 	}
 
 	absPos := 0
+	offsets := make([]int, 0, 4096)
 	pt.ForEachRange(func(data []byte) error {
-		// IndexByte finds a newline a machine word at a time, where looking at
-		// every byte in turn looks at every byte in turn.
-		pos := 0
-		for pos < len(data) {
-			idx := bytes.IndexByte(data[pos:], '\n')
-			if idx < 0 {
-				break
-			}
-			// Next line starts immediately after the newline character
-			li.appendOffset(absPos + pos + idx + 1)
-			pos += idx + 1
+		offsets = AppendNewlineOffsets(offsets[:0], data, absPos)
+		for _, off := range offsets {
+			li.appendOffset(off)
 		}
 		absPos += len(data)
 		return nil

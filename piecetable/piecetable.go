@@ -368,19 +368,11 @@ func (s TableState) Equals(other TableState) bool {
 func (pt *PieceTable) View(offset, length int) ([]byte, bool) {
 	pt.mu.RLock()
 	defer pt.mu.RUnlock()
-	if offset < 0 || length <= 0 || offset+length > pt.size {
+
+	p, offInPiece, ok := pt.pieceHolding(offset, length)
+	if !ok {
 		return nil, false
 	}
-
-	idx, offInPiece := pt.offsetToPiece(offset)
-	if idx >= len(pt.pieces) {
-		return nil, false
-	}
-	p := pt.pieces[idx]
-	if offInPiece+length > p.Length {
-		return nil, false // the range crosses a piece boundary
-	}
-
 	if p.Buf == Add {
 		start := p.Start + offInPiece
 		return pt.add[start : start+length], true
@@ -391,6 +383,25 @@ func (pt *PieceTable) View(offset, length int) ([]byte, bool) {
 		return nil, false
 	}
 	return v.View(p.Start+offInPiece, length)
+}
+
+// pieceHolding returns the single piece that covers the whole of a range, and
+// how far into it the range starts. It reports false for a range that is out
+// of bounds or that crosses a piece boundary — which is what makes a window
+// onto it possible at all. Callers hold the lock.
+func (pt *PieceTable) pieceHolding(offset, length int) (Piece, int, bool) {
+	if offset < 0 || length <= 0 || offset+length > pt.size {
+		return Piece{}, 0, false
+	}
+	idx, offInPiece := pt.offsetToPiece(offset)
+	if idx >= len(pt.pieces) {
+		return Piece{}, 0, false
+	}
+	p := pt.pieces[idx]
+	if offInPiece+length > p.Length {
+		return Piece{}, 0, false
+	}
+	return p, offInPiece, true
 }
 
 // OriginalRange reports where a stretch of the text sits in the original
@@ -405,16 +416,9 @@ func (pt *PieceTable) View(offset, length int) ([]byte, bool) {
 func (pt *PieceTable) OriginalRange(offset, length int) (int, bool) {
 	pt.mu.RLock()
 	defer pt.mu.RUnlock()
-	if offset < 0 || length <= 0 || offset+length > pt.size {
-		return 0, false
-	}
 
-	idx, offInPiece := pt.offsetToPiece(offset)
-	if idx >= len(pt.pieces) {
-		return 0, false
-	}
-	p := pt.pieces[idx]
-	if p.Buf != Original || offInPiece+length > p.Length {
+	p, offInPiece, ok := pt.pieceHolding(offset, length)
+	if !ok || p.Buf != Original {
 		return 0, false
 	}
 	return p.Start + offInPiece, true
