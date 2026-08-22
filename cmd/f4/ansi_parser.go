@@ -118,7 +118,8 @@ func (p *AnsiParser) exciseWindowsSync(data []byte) []byte {
 			}
 
 			end := tokenEnd
-			if data[end] == '\r' {
+			switch data[end] {
+			case '\r':
 				if end+1 == len(data) {
 					p.pendingWindowsSync = cloneBytes(command)
 					return visible
@@ -127,7 +128,7 @@ func (p *AnsiParser) exciseWindowsSync(data []byte) []byte {
 				if data[end] == '\n' {
 					end++
 				}
-			} else if data[end] == '\n' {
+			case '\n':
 				end++
 			}
 
