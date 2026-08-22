@@ -466,6 +466,43 @@ func TestWorkspaceClosePreservesQueueVetoBelowHelpAndForBackgroundTarget(t *test
 	}
 }
 
+func TestWorkspaceCloseKeepsTheOnlyPanelsWorkspace(t *testing.T) {
+	initFrameworkActionTestScreen(t)
+	panels := setupMockPanelsFrame()
+	vtui.FrameManager.Push(panels)
+	viewer := &frameworkActionTestFrame{title: "Viewer"}
+	vtui.FrameManager.AddScreen(viewer)
+
+	panelsScreen := vtui.FrameManager.Screens[0]
+	if !actionWorkspaceCloseNumber(panelsScreen.Number) {
+		t.Fatal("closing the only panels workspace was not handled")
+	}
+	if len(vtui.FrameManager.Screens) != 2 || panels.IsDone() {
+		t.Fatalf("only panels workspace was closed: screens=%d panelsDone=%v", len(vtui.FrameManager.Screens), panels.IsDone())
+	}
+
+	viewerScreen := vtui.FrameManager.Screens[1]
+	if !actionWorkspaceCloseNumber(viewerScreen.Number) {
+		t.Fatal("viewer workspace did not close while panels workspace remained")
+	}
+	if len(vtui.FrameManager.Screens) != 1 || vtui.FrameManager.Screens[0] != panelsScreen || panels.IsDone() {
+		t.Fatalf("closing viewer changed the wrong workspace: screens=%d panelsDone=%v", len(vtui.FrameManager.Screens), panels.IsDone())
+	}
+}
+
+func TestPanelsFrameCloseVetoProtectsTheOnlyPanelsWorkspace(t *testing.T) {
+	initFrameworkActionTestScreen(t)
+	panels := setupMockPanelsFrame()
+	vtui.FrameManager.Push(panels)
+	vtui.FrameManager.AddScreen(&frameworkActionTestFrame{title: "Editor"})
+	vtui.FrameManager.SwitchScreen(0)
+
+	vtui.FrameManager.CloseActiveScreen()
+	if len(vtui.FrameManager.Screens) != 2 || panels.IsDone() {
+		t.Fatalf("native close path removed the only panels workspace: screens=%d panelsDone=%v", len(vtui.FrameManager.Screens), panels.IsDone())
+	}
+}
+
 func TestWorkspaceNewFindsPanelsBehindFullScreenWorkspace(t *testing.T) {
 	initFrameworkActionTestScreen(t)
 	source := setupMockPanelsFrame()
