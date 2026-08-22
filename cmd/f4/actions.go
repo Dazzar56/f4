@@ -3600,7 +3600,11 @@ func actionUpdateSettings(pf *PanelsFrame) {
 		AppConfig.UpdateInterval = comboInterval.Menu.SelectPos
 		SaveConfig()
 		dlg.Close()
-		CheckForUpdates(pf, true)
+		// Do not hold the UI mouse-dispatch loop while the manual update
+		// check waits for GitHub. The dialog is already closed, so the
+		// network request can safely continue in the background and post
+		// its result back through FrameManager when it completes.
+		go CheckForUpdates(pf, true)
 	}
 
 	vtui.FrameManager.Push(dlg)

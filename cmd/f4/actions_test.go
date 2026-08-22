@@ -3,16 +3,116 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/unxed/f4/vfs"
-	"github.com/unxed/vtinput"
-	"github.com/unxed/vtui"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/unxed/f4/vfs"
+	"github.com/unxed/vtinput"
+	"github.com/unxed/vtui"
 )
+
+func TestActionUpdateSettings_ManualCheckDoesNotBlockMouseDispatch(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	oldCfg := AppConfig
+	oldAPIURL := githubAPIURL
+	oldOS := currentOS
+	oldArch := currentArch
+	t.Cleanup(func() {
+		AppConfig = oldCfg
+		githubAPIURL = oldAPIURL
+		currentOS = oldOS
+		currentArch = oldArch
+	})
+
+	requestStarted := make(chan struct{})
+	allowResponse := make(chan struct{})
+	requestFinished := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(requestStarted)
+		select {
+		case <-allowResponse:
+		case <-r.Context().Done():
+			return
+		}
+		defer close(requestFinished)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"tag_name":"7f1fec5","assets":[{"name":"f4-windows-amd64.zip","browser_download_url":"http://127.0.0.1/update.zip"}]}`))
+	}))
+	defer server.Close()
+
+	githubAPIURL = server.URL + "/repos/unxed/f4/releases"
+	currentOS = "windows"
+	currentArch = "amd64"
+	AppConfig.UpdateChannel = 0
+	AppConfig.UpdateInterval = 0
+
+	actionUpdateSettings(nil)
+	window := vtui.FrameManager.GetTopFrame()
+	if window == nil {
+		t.Fatal("update settings dialog was not opened")
+	}
+	container, ok := window.(interface{ GetChildren() []vtui.UIElement })
+	if !ok {
+		t.Fatal("update settings dialog does not expose its controls")
+	}
+	var buttons []*vtui.Button
+	for _, child := range container.GetChildren() {
+		if button, ok := child.(*vtui.Button); ok {
+			buttons = append(buttons, button)
+		}
+	}
+	if len(buttons) != 3 {
+		t.Fatalf("expected three update-settings buttons, got %d", len(buttons))
+	}
+	checkButton := buttons[1]
+	x, y, _, _ := checkButton.GetPosition()
+
+	window.ProcessMouse(&vtinput.InputEvent{
+		Type:        vtinput.MouseEventType,
+		KeyDown:     true,
+		MouseX:      int16(x),
+		MouseY:      int16(y),
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+	})
+
+	dispatchDone := make(chan struct{})
+	go func() {
+		window.ProcessMouse(&vtinput.InputEvent{
+			Type:        vtinput.MouseEventType,
+			MouseX:      int16(x),
+			MouseY:      int16(y),
+			KeyDown:     false,
+			ButtonState: 0,
+		})
+		close(dispatchDone)
+	}()
+
+	select {
+	case <-dispatchDone:
+	case <-time.After(250 * time.Millisecond):
+		t.Fatal("manual update check blocked mouse dispatch")
+	}
+
+	select {
+	case <-requestStarted:
+	case <-time.After(1 * time.Second):
+		t.Fatal("manual update check did not start in the background")
+	}
+	close(allowResponse)
+	select {
+	case <-requestFinished:
+	case <-time.After(1 * time.Second):
+		t.Fatal("manual update check did not finish after the response was released")
+	}
+}
 
 func TestActionExecute_RemoteRejection(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
