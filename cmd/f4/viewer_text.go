@@ -117,7 +117,7 @@ func viewerTextCells(text string, attr uint64, tabSize, maxWidth int) ([]vtui.Ch
 	offsets := make([]int, 0, len(text))
 	visualCol := 0
 	for _, cluster := range textlayout.VisualClustersInVisualOrder(text) {
-		width := cluster.Width
+		var width int
 		plainSpaces := false
 		displayText, sanitizedWidth := vtui.SanitizeCluster(cluster.Text)
 		if cluster.Text == "\t" {
