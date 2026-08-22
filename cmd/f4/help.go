@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/mattn/go-runewidth"
 	embedded "github.com/unxed/f4"
 	"github.com/unxed/vtui"
 )
@@ -63,7 +64,7 @@ func parseMarkdownToHelpTopic(name string, mdContent string) *vtui.HelpTopic {
 			continue
 		}
 
-		wrapped := vtui.WrapText(line, 70)
+		wrapped := vtui.WrapText(line, generatedHelpLineWidth)
 		for _, wLine := range wrapped {
 			wLine = convertMarkdownLinks(wLine)
 			topic.Lines = append(topic.Lines, wLine)
@@ -76,6 +77,28 @@ func parseMarkdownToHelpTopic(name string, mdContent string) *vtui.HelpTopic {
 // language. Generated key topics use it so their language matches the
 // static .hlf content even when it differs from the UI language.
 var helpActionStrings map[string]string
+
+const generatedHelpLineWidth = 70
+
+func appendGeneratedHelpAction(topic *vtui.HelpTopic, keys, desc string) {
+	prefix := fmt.Sprintf("  %-14s - ", keys)
+	prefixWidth := runewidth.StringWidth(prefix)
+	if prefixWidth >= generatedHelpLineWidth {
+		for _, line := range vtui.WrapText(prefix+desc, generatedHelpLineWidth) {
+			topic.Lines = append(topic.Lines, line)
+		}
+		return
+	}
+
+	continuation := strings.Repeat(" ", prefixWidth)
+	for i, line := range vtui.WrapText(desc, generatedHelpLineWidth-prefixWidth) {
+		if i == 0 {
+			topic.Lines = append(topic.Lines, prefix+line)
+		} else {
+			topic.Lines = append(topic.Lines, continuation+line)
+		}
+	}
+}
 
 // helpMsg resolves an i18n key preferring the help language strings,
 // falling back to the UI language.
@@ -218,7 +241,7 @@ func generateKeysHelpTopic(name, title string, areas []string, navTarget string)
 					desc = s
 				}
 			}
-			topic.Lines = append(topic.Lines, fmt.Sprintf("  %-14s - %s", keys, desc))
+			appendGeneratedHelpAction(topic, keys, desc)
 		}
 		topic.Lines = append(topic.Lines, "")
 	}
