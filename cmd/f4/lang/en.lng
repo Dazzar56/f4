@@ -715,6 +715,7 @@ EditorSettings.CursorBeyondEOL=Cursor beyond end of &line
 EditorSettings.UseEditorConfig=Use .&editorconfig settings files
 EditorSettings.Crosshair=Show cross&hair
 EditorSettings.ColorerBg=Colorer &background
+EditorSettings.SyntaxAnimation=Animate syntax &highlighting
 EditorSettings.UseExternalEditor=Use e&xternal editor
 EditorSettings.ExternalCommand=E&xternal command:
 

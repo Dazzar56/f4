@@ -705,6 +705,7 @@ EditorSettings.CursorBeyondEOL=Курсор за &концом строки
 EditorSettings.UseEditorConfig=Использовать .&editorconfig
 EditorSettings.Crosshair=Показывать к&рест в редакторе
 EditorSettings.ColorerBg=Фон &Colorer
+EditorSettings.SyntaxAnimation=Анимировать &подсветку синтаксиса
 EditorSettings.UseExternalEditor=В&нешний редактор
 EditorSettings.ExternalCommand=Ко&манда запуска:
 
