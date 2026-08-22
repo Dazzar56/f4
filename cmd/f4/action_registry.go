@@ -1992,6 +1992,44 @@ func init() {
 		Handler:     withEditor(func(ev *EditorView) { ev.DeleteCurrentLine() }),
 	})
 	RegisterAction(Action{
+		Name:        "Editor.Base64Menu",
+		Area:        "Editor",
+		Label:       "Base64 Tools",
+		LabelKey:    "Action.Editor.Base64Menu",
+		Description: "Encode or decode the selected text as Base64",
+		DescKey:     "Action.Editor.Base64Menu.Desc",
+		DefaultKeys: []string{"F11"},
+		Handler:     withEditor(func(ev *EditorView) { ev.showBase64Menu() }),
+	})
+	RegisterAction(Action{
+		Name:        "Editor.Base64Encode",
+		Area:        "Editor",
+		Label:       "Encode selection as Base64",
+		LabelKey:    "Action.Editor.Base64Encode",
+		Description: "Replace the selected text with its Base64 encoding",
+		DescKey:     "Action.Editor.Base64Encode.Desc",
+		MenuPath:    "Edit",
+		Handler: withEditor(func(ev *EditorView) {
+			if err := ev.transformBase64Selection(true); err != nil {
+				vtui.ShowMessage(Msg("Editor.Base64.Title"), err.Error(), []string{Msg("vtui.Ok")})
+			}
+		}),
+	})
+	RegisterAction(Action{
+		Name:        "Editor.Base64Decode",
+		Area:        "Editor",
+		Label:       "Decode selection from Base64",
+		LabelKey:    "Action.Editor.Base64Decode",
+		Description: "Replace selected Base64 text with its decoded bytes",
+		DescKey:     "Action.Editor.Base64Decode.Desc",
+		MenuPath:    "Edit",
+		Handler: withEditor(func(ev *EditorView) {
+			if err := ev.transformBase64Selection(false); err != nil {
+				vtui.ShowMessage(Msg("Editor.Base64.Title"), err.Error(), []string{Msg("vtui.Ok")})
+			}
+		}),
+	})
+	RegisterAction(Action{
 		Name:        "Editor.ToggleOvertype",
 		Area:        "Editor",
 		Label:       "Insert/Overtype",
