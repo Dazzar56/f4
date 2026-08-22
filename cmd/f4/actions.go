@@ -3779,8 +3779,10 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 			}
 		}
 	}
-	editFont := vtui.NewEdit(0, 0, 30, AppConfig.GuiFont)
-	lblFont := vtui.NewLabel(0, 0, Msg("AppearanceSettings.Font"), editFont)
+	fontChoices := guiFontChoices(AppConfig.Language, AppConfig.GuiFont)
+	comboFont := vtui.NewComboBox(0, 0, 30, fontChoices)
+	comboFont.Edit.SetText(AppConfig.GuiFont)
+	lblFont := vtui.NewLabel(0, 0, Msg("AppearanceSettings.Font"), comboFont)
 	chkSystemMonospace := vtui.NewCheckbox(0, 0, Msg("AppearanceSettings.UseSystemMonospace"), false)
 	if AppConfig.GuiUseSystemMonospace {
 		chkSystemMonospace.State = 1
@@ -3788,7 +3790,7 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 	updateFontEditor := func() {
 		usePlatformFont := chkSystemMonospace.State == 1 && (runtime.GOOS == "windows" || runtime.GOOS == "darwin")
 		lblFont.SetDisabled(usePlatformFont)
-		editFont.SetDisabled(usePlatformFont)
+		comboFont.SetDisabled(usePlatformFont)
 	}
 	chkSystemMonospace.OnChange = func(int) { updateFontEditor() }
 	updateFontEditor()
@@ -3874,7 +3876,7 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 	dlg.AddItem(comboStyle)
 	dlg.AddItem(chkSystemMonospace)
 	dlg.AddItem(lblFont)
-	dlg.AddItem(editFont)
+	dlg.AddItem(comboFont)
 	dlg.AddItem(lblSize)
 	dlg.AddItem(editSize)
 	dlg.AddItem(lblTitle)
@@ -3901,7 +3903,7 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 
 	vbox.Add(chkSystemMonospace, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(lblFont, vtui.Margins{Top: 1}, vtui.AlignLeft)
-	vbox.Add(editFont, vtui.Margins{}, vtui.AlignFill)
+	vbox.Add(comboFont, vtui.Margins{}, vtui.AlignFill)
 
 	rowSize := vtui.NewHBoxLayout(0, 0, width-4, 1)
 	rowSize.Add(lblSize, vtui.Margins{Right: 1}, vtui.AlignLeft)
@@ -3956,11 +3958,11 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 			AppConfig.ColorStyle = names[comboStyle.Menu.SelectPos]
 		}
 		useSystemMonospace := chkSystemMonospace.State == 1
-		fontChanged := AppConfig.GuiUseSystemMonospace != useSystemMonospace || AppConfig.GuiFont != editFont.GetText() || fmt.Sprintf("%d", AppConfig.GuiFontSize) != editSize.GetText()
+		fontChanged := AppConfig.GuiUseSystemMonospace != useSystemMonospace || AppConfig.GuiFont != comboFont.Edit.GetText() || fmt.Sprintf("%d", AppConfig.GuiFontSize) != editSize.GetText()
 
 		AppConfig.ConsoleTitleTemplate = editTitle.GetText()
 		AppConfig.GuiUseSystemMonospace = useSystemMonospace
-		AppConfig.GuiFont = editFont.GetText()
+		AppConfig.GuiFont = comboFont.Edit.GetText()
 		fmt.Sscanf(editSize.GetText(), "%d", &AppConfig.GuiFontSize)
 		if AppConfig.GuiFontSize <= 0 {
 			AppConfig.GuiFontSize = defaultGuiFontSize(runtime.GOOS)
@@ -4405,8 +4407,10 @@ func actionLanguage(pf *PanelsFrame) {
 	btnOk.OnClick = func() {
 		uiChanged := false
 		helpChanged := false
+		suggestFontChoice := false
 		if idx := comboUI.Menu.SelectPos; idx >= 0 && idx < len(uiLangs) {
 			if AppConfig.Language != uiLangs[idx].code {
+				suggestFontChoice = shouldSuggestFontForLanguage(uiLangs[idx].code, AppConfig.GuiFont)
 				AppConfig.Language = uiLangs[idx].code
 				uiChanged = true
 			}
@@ -4422,7 +4426,9 @@ func actionLanguage(pf *PanelsFrame) {
 			InitLang()
 			InitHelpSystem()
 			vtui.FrameManager.PostTask(func() {
-				if uiChanged {
+				if uiChanged && suggestFontChoice {
+					actionAppearanceSettings(pf)
+				} else if uiChanged {
 					vtui.ShowMessage(Msg("Info.Title"), Msg("Language.Changed"), []string{Msg("vtui.Ok")})
 				}
 				vtui.FrameManager.Redraw()

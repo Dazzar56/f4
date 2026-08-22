@@ -6,8 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"golang.org/x/sys/windows/registry"
 )
 
 type fontEntry struct {
@@ -21,34 +19,7 @@ type fontEntry struct {
 // CascadiaMono.ttf and silently fall back to Consolas. Returns "" if the
 // family is not found; callers then keep the original name.
 func windowsFontFile(fontName string) string {
-	key, err := registry.OpenKey(registry.LOCAL_MACHINE,
-		`SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts`, registry.QUERY_VALUE)
-	if err != nil {
-		return ""
-	}
-	defer key.Close()
-
-	names, err := key.ReadValueNames(-1)
-	if err != nil {
-		return ""
-	}
-
-	var entries []fontEntry
-	for _, n := range names {
-		file, _, err := key.GetStringValue(n)
-		if err != nil {
-			continue
-		}
-		switch strings.ToLower(filepath.Ext(file)) {
-		case ".ttf", ".ttc", ".otf":
-		default:
-			continue
-		}
-		base := strings.TrimSpace(strings.TrimSuffix(n, " (TrueType)"))
-		base = strings.TrimSpace(strings.TrimSuffix(base, " (OpenType)"))
-		entries = append(entries, fontEntry{base: base, file: file})
-	}
-	return matchWindowsFontFamily(fontName, entries)
+	return matchWindowsFontFamily(fontName, windowsFontEntries())
 }
 
 func matchWindowsFontFamily(fontName string, entries []fontEntry) string {
