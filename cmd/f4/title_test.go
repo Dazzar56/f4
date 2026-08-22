@@ -95,7 +95,7 @@ func TestBuildVersionOverridesVCSMetadata(t *testing.T) {
 	}
 	if got := getLongVersionInfo(); !strings.HasPrefix(got, buildVersion) {
 		t.Fatalf("getLongVersionInfo() = %q, want it to start with %q", got, buildVersion)
-  }
+	}
 }
 
 func TestCurrentWindowTitleMatchesRenderedTitle(t *testing.T) {
