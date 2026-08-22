@@ -120,6 +120,15 @@ type VFSCapabilities struct {
 	HasWrite bool
 }
 
+// ConcurrentVFS marks a backend whose independent VFS calls may run at the
+// same time. The FUSE bridge serializes calls by default because most VFS
+// implementations were designed around one UI-thread conversation. A
+// backend may opt in only after its client, session state, and file handles
+// have been checked for concurrent use.
+type ConcurrentVFS interface {
+	SupportsConcurrentCalls() bool
+}
+
 // VFS is the core interface for file operations in f4.
 type VFS interface {
 	IsAtRoot() bool

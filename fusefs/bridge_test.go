@@ -28,6 +28,26 @@ type fakeVFS struct {
 	statErr  bool
 }
 
+type concurrentStatVFS struct {
+	*fakeVFS
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (*concurrentStatVFS) SupportsConcurrentCalls() bool { return true }
+
+func (f *concurrentStatVFS) Stat(ctx context.Context, p string) (vfs.VFSItem, error) {
+	f.entered <- struct{}{}
+	<-f.release
+	if f.dirs[p] {
+		return vfs.VFSItem{Name: path.Base(p), IsDir: true}, nil
+	}
+	if data, ok := f.files[p]; ok {
+		return vfs.VFSItem{Name: path.Base(p), Size: int64(len(data))}, nil
+	}
+	return vfs.VFSItem{}, os.ErrNotExist
+}
+
 func newFakeVFS(random bool) *fakeVFS {
 	return &fakeVFS{
 		files: map[string]string{
@@ -314,6 +334,41 @@ func TestCloseReleasesTheBackend(t *testing.T) {
 	}
 	if _, err := b.readDir(context.Background(), "/root"); !errors.Is(err, errClosed) {
 		t.Fatalf("readDir after close = %v, want errClosed", err)
+	}
+}
+
+func TestConcurrentBackendReadsOverlap(t *testing.T) {
+	fake := &concurrentStatVFS{
+		fakeVFS: newFakeVFS(true),
+		entered: make(chan struct{}, 2),
+		release: make(chan struct{}),
+	}
+	b := newBridge(fake, "/root", Options{})
+	defer b.close()
+
+	results := make(chan error, 2)
+	go func() {
+		_, err := b.stat(context.Background(), "/root/a.txt")
+		results <- err
+	}()
+	go func() {
+		_, err := b.stat(context.Background(), "/root/sub/c.txt")
+		results <- err
+	}()
+
+	for i := 0; i < 2; i++ {
+		select {
+		case <-fake.entered:
+		case <-time.After(time.Second):
+			close(fake.release)
+			t.Fatalf("concurrent backend call %d did not overlap", i+1)
+		}
+	}
+	close(fake.release)
+	for i := 0; i < 2; i++ {
+		if err := <-results; err != nil {
+			t.Fatalf("stat %d: %v", i+1, err)
+		}
 	}
 }
 
