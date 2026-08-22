@@ -32,6 +32,65 @@ func TestArchiveVFS_PathSlashes(t *testing.T) {
 	}
 }
 
+func TestArchiveVFS_SkipsExplicitRootEntryDuringScan(t *testing.T) {
+	tmpDir := t.TempDir()
+	tarPath := filepath.Join(tmpDir, "root-entry.tar")
+	f, err := os.Create(tarPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tw := tar.NewWriter(f)
+	entries := []struct {
+		name string
+		mode int64
+		body string
+	}{
+		{name: "./", mode: 0755 | int64(fs.ModeDir)},
+		{name: "./nested/", mode: 0755 | int64(fs.ModeDir)},
+		{name: "./nested/file.txt", mode: 0644, body: "hello"},
+	}
+	for _, entry := range entries {
+		if err := tw.WriteHeader(&tar.Header{Name: entry.name, Mode: entry.mode, Size: int64(len(entry.body))}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := io.WriteString(tw, entry.body); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	archiveVFS, err := NewArchiveVFS(vfs.NewOSVFS(tmpDir), tarPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer archiveVFS.Close()
+
+	var items []vfs.VFSItem
+	if err := archiveVFS.ReadDir(context.Background(), archiveVFS.GetPath(), func(chunk []vfs.VFSItem) {
+		items = append(items, chunk...)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range items {
+		if item.Name == "" || item.Name == "." || item.Name == ".." {
+			t.Fatalf("root placeholder leaked into archive listing: %#v", item)
+		}
+	}
+
+	stats, err := vfs.CalculateStats(context.Background(), archiveVFS, archiveVFS.GetPath(), []string{""}, nil)
+	if err != nil {
+		t.Fatalf("scanning archive with explicit root entry: %v", err)
+	}
+	if stats.Files != 1 || stats.Dirs != 2 || stats.Bytes != int64(len("hello")) {
+		t.Fatalf("archive stats = %+v, want one file, two directories, and five bytes", stats)
+	}
+}
+
 func TestArchiveVFS_PublicFallbackPathsUseNativeSeparators(t *testing.T) {
 	v := &ArchiveVFS{arcPath: filepath.Join("archive-root", "bundle.zip"), innerPath: "."}
 	joined := v.Join("outside", "folder", "file.txt")
