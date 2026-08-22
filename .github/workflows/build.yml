@@ -393,9 +393,36 @@ jobs:
           done
         done
 
+  race:
+    name: Race detector
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # The race detector requires cgo and the Ubuntu runner provides the
+      # native compiler needed by the instrumented test binary.
+      CGO_ENABLED: 1
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v7
+      with:
+        submodules: recursive
+
+    - name: Set up Go
+      uses: actions/setup-go@v7
+      with:
+        go-version: '1.26.x'
+        cache-dependency-path: go.sum
+
+    - name: Run race detector
+      shell: bash
+      run: |
+        # This test mutates shared UI registries by design and is already
+        # isolated in the regular native test job with GOMAXPROCS=1.
+        go test -race -timeout 15m -skip '^TestAllDialogs_LayoutValidation$' ./...
+
   release:
     name: Create Official Release
-    needs: [build, build-win7, test]
+    needs: [build, build-win7, test, race]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
@@ -498,7 +525,7 @@ jobs:
   # Эта джоба обновляет "плавающий" nightly релиз при каждом пуше в main
   nightly:
     name: Update Nightly Release
-    needs: [build, build-win7, test]
+    needs: [build, build-win7, test, race]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
