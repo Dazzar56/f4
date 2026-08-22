@@ -1181,7 +1181,16 @@ func actionSwitchViewerToEditor(vv *ViewerView) {
 		pt = piecetable.New(decoded)
 	}
 
-	editor := NewEditorView(pt, vv.vfs, vv.path)
+	// Same rule as opening from the panel: a file the indexer owns must not be
+	// indexed on the way in, or switching to the editor pays the whole file's
+	// scan on the UI thread before it appears — twenty seconds of it on the
+	// 8 GB test file.
+	var editor *EditorView
+	if mapped != nil || buf != nil {
+		editor = NewEditorViewIndexedLater(pt, vv.vfs, vv.path)
+	} else {
+		editor = NewEditorView(pt, vv.vfs, vv.path)
+	}
 	editor.file = f
 	editor.asyncBuf = buf
 	editor.mapped = mapped

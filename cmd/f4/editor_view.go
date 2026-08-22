@@ -2905,46 +2905,75 @@ func nextIndexPoll(cur time.Duration) time.Duration {
 	return next
 }
 
+// indexScanBuffers holds the read buffers scans borrow, so that resuming after
+// every burst of typing does not allocate a fresh four megabytes each time.
+var indexScanBuffers sync.Pool
+
 // indexReadChunk is how much of the file the scan asks for at a time when it
 // reads the file rather than the mapping. Large enough that the kernel reads
 // ahead of it, small enough that cancelling the scan is still immediate.
 const indexReadChunk = 4 << 20
 
-// readIndexChunk fills dst with the file's own bytes for a stretch of the text,
-// and reports false when the scan should read that stretch through the piece
-// table instead.
+// fileChunkReader fills dst from the file for a stretch of the text, and
+// reports false when that stretch has to be read through the piece table.
+type fileChunkReader func(ctx context.Context, dst []byte, offset, length int) (int, bool)
+
+// chunkReader captures the buffer, the file and the mapping as they stand, and
+// returns a reader that fills dst from the file itself for a stretch of text
+// the piece table says is still the original's — or one that always declines,
+// when the file cannot answer for this buffer.
 //
 // A mapped file can be scanned by walking the mapping, which is what the piece
-// table hands out — but walking it means a page fault per page, and each fault
+// table hands out, but walking it means a page fault per page and each fault
 // waits for its own page. Asking the file for megabytes at a time is the same
-// bytes at the speed the disk can actually deliver them: indexing the 8 GB test
-// file goes from ~18 s to ~4 s, and the difference is entirely the reading.
+// bytes at the speed the disk can deliver them: the 8 GB test file indexes in
+// ~4 s instead of ~18. The mapping is undisturbed; it stays what the paint
+// path reads, where a window onto the file is exactly what is wanted.
 //
-// The mapping is not disturbed. It stays what the paint path and the search
-// scan read, where a window onto the file is exactly what is wanted.
-//
-// The answer is false unless the stretch still sits untouched in the original
-// buffer, so text that has been typed is scanned through the piece table as
-// before, and the offsets keep describing the buffer rather than the file.
-func (ev *EditorView) readIndexChunk(ctx context.Context, dst []byte, offset, length int) (int, bool) {
-	if dst == nil || ev.file == nil || length <= 0 || length > len(dst) {
-		return 0, false
+// Capturing is the point of the closure. A scan runs on its own goroutine
+// while the UI thread may reload the file in another codepage or swap the
+// buffer after a Replace All, and both leave the mapping and the descriptor in
+// place while the text is no longer the file's. Reading the fields per chunk
+// would race, and worse: a position in the new buffer is not a position in the
+// file, so the scan would index one thing's bytes at another thing's offsets
+// and quietly hand back line starts that are in the middle of lines. Hence the
+// identity check — the original buffer has to *be* the mapping.
+func (ev *EditorView) chunkReader() fileChunkReader {
+	decline := func(context.Context, []byte, int, int) (int, bool) { return 0, false }
+
+	pt, file, mapped := ev.pt, ev.file, ev.mapped
+	if pt == nil || file == nil || mapped == nil {
+		return decline
 	}
-	fileOffset, ok := ev.pt.OriginalRange(offset, length)
-	if !ok {
-		return 0, false
+	mapping := mapped.Bytes()
+	orig, ok := pt.GetOriginalBuffer().(piecetable.MemoryBuffer)
+	if !ok || len(mapping) == 0 || len(orig) != len(mapping) || &orig[0] != &mapping[0] {
+		return decline
 	}
-	n, err := ev.file.ReadAt(ctx, dst[:length], int64(fileOffset))
-	if n <= 0 {
-		if err != nil {
-			vtui.DebugLog("EDITOR_INDEX: reading %d bytes at %d failed, scanning the buffer instead: %v",
-				length, fileOffset, err)
+
+	return func(ctx context.Context, dst []byte, offset, length int) (int, bool) {
+		if dst == nil || length <= 0 || length > len(dst) {
+			return 0, false
 		}
-		return 0, false
+		// False for anything that has been typed over, so edited text is
+		// scanned through the piece table and the offsets keep describing the
+		// buffer rather than the file.
+		fileOffset, ok := pt.OriginalRange(offset, length)
+		if !ok {
+			return 0, false
+		}
+		n, err := file.ReadAt(ctx, dst[:length], int64(fileOffset))
+		if err != nil && err != io.EOF && ctx.Err() == nil {
+			vtui.DebugLog("EDITOR_INDEX: reading %d bytes at %d returned %d and %v",
+				length, fileOffset, n, err)
+		}
+		if n <= 0 {
+			return 0, false
+		}
+		// A short read is still progress: the caller takes what arrived and
+		// comes back for the rest.
+		return n, true
 	}
-	// A short read is still progress: the scan takes what arrived and comes
-	// back for the rest.
-	return n, true
 }
 
 func (ev *EditorView) StartIndexing() {
@@ -2978,6 +3007,11 @@ func (ev *EditorView) StartIndexing() {
 		Scanned: int64(ev.li.GetLineOffset(ev.li.LineCount() - 1)),
 		Lines:   ev.li.LineCount(),
 	})
+
+	// Captured here, on the UI thread, so the scan reads one consistent view
+	// of the buffer, the file and the mapping rather than whatever they are
+	// when each chunk comes round.
+	readFromFile := ev.chunkReader()
 
 	go func() {
 		defer ev.guardMapping("indexing")()
@@ -3019,6 +3053,7 @@ func (ev *EditorView) StartIndexing() {
 		poll := indexPollMin
 		buf := ev.asyncBuf
 		li := ev.li
+		pt := ev.pt
 		// The logical size, not the file's: the scan reads the text as it is
 		// now, including whatever has been typed into it.
 		maxSize := ev.pt.Size()
@@ -3100,16 +3135,20 @@ func (ev *EditorView) StartIndexing() {
 		// read still reports having reached the end rather than looking as
 		// though it stopped short.
 		scannedTo.Store(int64(absPos))
-		chunkSize := 256 * 1024 // 256KB chunks to match AsyncBuffer
+		// 256KB chunks to match AsyncBuffer, which is what the piece table
+		// reads through when the file cannot be read directly.
+		const fallbackChunk = 256 * 1024
 
-		// A mapped file is scanned by reading it, not by walking the mapping:
-		// see readIndexChunk. The buffer that read lands in is allocated once
-		// for the whole scan.
-		var scanBuf []byte
-		if ev.mapped != nil && ev.file != nil {
-			chunkSize = indexReadChunk
-			scanBuf = make([]byte, chunkSize)
+		// A file that can be read directly is read in much larger pieces —
+		// see chunkReader. The buffer it lands in is borrowed for the scan
+		// rather than allocated per scan: a resume fires 400 ms after every
+		// burst of typing, and 4 MB a time adds up.
+		scanBuf, _ := indexScanBuffers.Get().(*[]byte)
+		if scanBuf == nil {
+			b := make([]byte, indexReadChunk)
+			scanBuf = &b
 		}
+		defer indexScanBuffers.Put(scanBuf)
 
 		pendingOffsets := make([]int, 0, 10000)
 
@@ -3132,21 +3171,25 @@ func (ev *EditorView) StartIndexing() {
 				// 16 chunks of 256KB = 4MB read-ahead sliding window.
 				readAhead := 16
 				for i := 0; i < readAhead; i++ {
-					p := absPos + i*chunkSize
+					p := absPos + i*fallbackChunk
 					if p < maxSize {
-						_, _ = buf.Read(p, chunkSize)
+						_, _ = buf.Read(p, fallbackChunk)
 					}
 				}
 			}
 			var data []byte
 			var err error
-			take := min(chunkSize, maxSize-absPos)
-			if n, ok := ev.readIndexChunk(ctx, scanBuf, absPos, take); ok {
-				data = scanBuf[:n]
-			} else if view, ok := ev.pt.View(absPos, take); ok {
-				data = view
+			if n, ok := readFromFile(ctx, *scanBuf, absPos, min(indexReadChunk, maxSize-absPos)); ok {
+				data = (*scanBuf)[:n]
 			} else {
-				data, err = ev.pt.GetRange(absPos, take)
+				// Reading through the piece table copies what it hands back,
+				// so it asks for a chunk rather than a whole window.
+				take := min(fallbackChunk, maxSize-absPos)
+				if view, ok := pt.View(absPos, take); ok {
+					data = view
+				} else {
+					data, err = pt.GetRange(absPos, take)
+				}
 			}
 			if err == piecetable.ErrLoading {
 				time.Sleep(poll)
@@ -3159,16 +3202,7 @@ func (ev *EditorView) StartIndexing() {
 				break
 			}
 
-			// Fast SIMD-accelerated newline scanning using bytes.IndexByte
-			scanPos := 0
-			for scanPos < len(data) {
-				idx := bytes.IndexByte(data[scanPos:], '\n')
-				if idx == -1 {
-					break
-				}
-				pendingOffsets = append(pendingOffsets, absPos+scanPos+idx+1)
-				scanPos += idx + 1
-			}
+			pendingOffsets = piecetable.AppendNewlineOffsets(pendingOffsets, data, absPos)
 
 			absPos += len(data)
 			scannedTo.Store(int64(absPos))
@@ -3638,20 +3672,24 @@ func (ev *EditorView) bufferRange(offset, length int) []byte {
 }
 
 // readSearchWindow fills dst with one window of the buffer, preferring the
-// file itself over the mapping for the same reason readIndexChunk does. The
-// result may alias dst or the buffer, and is only valid until the next call.
-func (ev *EditorView) readSearchWindow(ctx context.Context, dst []byte, offset, length int) ([]byte, error) {
-	if n, ok := ev.readIndexChunk(ctx, dst, offset, length); ok {
+// file itself over the mapping for the same reason the scan does. read and pt
+// are the caller's captured view of the buffer, so that a pass over a large
+// file cannot end up mixing two of them. The result may alias dst or the
+// buffer, and is only valid until the next call.
+func (ev *EditorView) readSearchWindow(ctx context.Context, read fileChunkReader,
+	pt *piecetable.PieceTable, dst []byte, offset, length int) ([]byte, error) {
+
+	if n, ok := read(ctx, dst, offset, length); ok {
 		return dst[:n], nil
 	}
-	if view, ok := ev.pt.View(offset, length); ok {
+	if view, ok := pt.View(offset, length); ok {
 		return view, nil
 	}
 	// An edited stretch, or a chunk buffer that has not fetched this yet. The
 	// wait is the one readSearchSnapshot does, for the same reason.
 	deadline := time.Now().Add(searchSnapshotStall)
 	for {
-		data, err := ev.pt.GetRange(offset, length)
+		data, err := pt.GetRange(offset, length)
 		if err == nil {
 			return data, nil
 		}
@@ -3698,14 +3736,7 @@ func (ev *EditorView) ensureIndexedToLine(line int) {
 		if err != nil || len(data) == 0 {
 			break
 		}
-		for i := 0; i < len(data); {
-			idx := bytes.IndexByte(data[i:], '\n')
-			if idx == -1 {
-				break
-			}
-			pending = append(pending, pos+i+idx+1)
-			i += idx + 1
-		}
+		pending = piecetable.AppendNewlineOffsets(pending, data, pos)
 		pos += len(data)
 	}
 	if len(pending) > 0 {
@@ -3743,14 +3774,7 @@ func (ev *EditorView) ensureIndexedTo(offset int) {
 		if err != nil || len(data) == 0 {
 			break
 		}
-		for i := 0; i < len(data); {
-			idx := bytes.IndexByte(data[i:], '\n')
-			if idx == -1 {
-				break
-			}
-			pending = append(pending, pos+i+idx+1)
-			i += idx + 1
-		}
+		pending = piecetable.AppendNewlineOffsets(pending, data, pos)
 		pos += len(data)
 	}
 	if len(pending) > 0 {
@@ -4635,6 +4659,14 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 				ev.retireEditSession()
 				ev.ensureEngineWidth()
 				ev.edited = false
+				// Saving cancels the scan, and the buffer it was reading has
+				// just been replaced by the reopened file. Without this a file
+				// saved while it was still being indexed stays half indexed
+				// for the rest of the session: everything past the point the
+				// scan had reached is simply not there.
+				if !ev.indexIsComplete() {
+					ev.StartIndexing()
+				}
 				if metadataErr != nil {
 					vtui.ShowMessage(" Warning ", fmt.Sprintf("File content was saved, but original metadata could not be restored:\n%v", metadataErr), []string{"&Ok"})
 				}

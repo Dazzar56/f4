@@ -302,3 +302,45 @@ func TestNewEditorViewIndexedLater_LeavesTheIndexToTheScan(t *testing.T) {
 		t.Errorf("an ordinary editor indexed %d lines, want 1001", got)
 	}
 }
+
+// TestMappedEditor_SwappedBufferIsNotReadFromTheFile is the invariant behind
+// reading the file instead of the mapping: a position in the piece table's
+// original buffer is a position in the file only while that buffer *is* the
+// mapping. Reloading in another codepage, or a Replace All, puts a buffer
+// built in memory in its place and leaves the mapping and the descriptor where
+// they were — and reading the file at the new buffer's offsets would hand back
+// line starts that fall in the middle of lines, with nothing to show anything
+// had gone wrong.
+func TestMappedEditor_SwappedBufferIsNotReadFromTheFile(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	drainPendingTasks()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "reload.txt")
+	content := strings.Repeat("a line of the file\n", 500)
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	ev := openMappedEditor(t, dir, path)
+	defer ev.Close()
+
+	dst := make([]byte, 64)
+	const line = "a line of the file\n"
+	n, ok := ev.chunkReader()(context.Background(), dst, len(line), len(line))
+	if !ok {
+		t.Fatal("a mapped file should be read from the file")
+	}
+	if got, want := string(dst[:n]), line; got != want {
+		t.Fatalf("read %q from the file, want %q", got, want)
+	}
+
+	// The editor now holds text that is not what the file holds.
+	ev.SetText(strings.Repeat("text that came from somewhere else entirely\n", 500))
+	if ev.mapped == nil || ev.file == nil {
+		t.Fatal("precondition: the mapping and the descriptor outlive the swap")
+	}
+	if _, ok := ev.chunkReader()(context.Background(), dst, len(line), len(line)); ok {
+		t.Error("the file was read for a buffer it no longer describes")
+	}
+}

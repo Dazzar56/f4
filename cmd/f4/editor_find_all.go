@@ -473,7 +473,13 @@ func (ev *EditorView) collectMatchSpans(ctx *vtui.TaskContext, session int, patt
 		return spans, countMatchLines(ctx, data, spans), nil
 	}
 
-	size := ev.pt.Size()
+	// One view of the buffer for the whole pass: the file may be reloaded or
+	// the buffer swapped underneath a search of an 8 GB file, and half a scan
+	// of each is not a search of either.
+	pt := ev.pt
+	readFromFile := ev.chunkReader()
+
+	size := pt.Size()
 	if size == 0 || pattern == "" {
 		return nil, 0, nil
 	}
@@ -496,7 +502,7 @@ func (ev *EditorView) collectMatchSpans(ctx *vtui.TaskContext, session int, patt
 		if ctx.Err() != nil {
 			return nil, 0, ctx.Err()
 		}
-		win, err := ev.readSearchWindow(ctx, buf, pos, min(len(buf), size-pos))
+		win, err := ev.readSearchWindow(ctx, readFromFile, pt, buf, pos, min(len(buf), size-pos))
 		if err != nil {
 			return nil, 0, fmt.Errorf("%w: %w", errSearchBuffer, err)
 		}
