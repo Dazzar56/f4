@@ -369,14 +369,15 @@ func performUpdate(pf *PanelsFrame, url, archiveKind, newTag, publishedAt string
 		update("Extracting and installing...", -1)
 
 		exeDir := filepath.Dir(exePath)
-		switch archiveKind {
-		case "7z":
-			err = extract7zToDir(archiveData.Bytes(), exeDir)
-		case "targz":
-			err = extractTarGzToDir(archiveData.Bytes(), exeDir)
-		default:
-			// 4 workers: benchmark-optimal.
-			err = extractZipToDirParallel(archiveData.Bytes(), exeDir, min(runtime.GOMAXPROCS(0), 4))
+		if updateDirNeedsElevation(exeDir) {
+			vtui.DebugLog("UPDATER: %q is not writable, requesting UAC elevation", exeDir)
+			err = runElevatedUpdate(archiveData.Bytes(), archiveKind)
+		} else {
+			err = extractUpdateArchive(archiveData.Bytes(), archiveKind, exeDir)
+			if err != nil && isPermissionErrorForUpdate(err) {
+				vtui.DebugLog("UPDATER: extraction needs elevation, retrying through UAC: %v", err)
+				err = runElevatedUpdate(archiveData.Bytes(), archiveKind)
+			}
 		}
 
 		if err != nil {
@@ -407,6 +408,18 @@ func performUpdate(pf *PanelsFrame, url, archiveKind, newTag, publishedAt string
 			}
 		}
 	})
+}
+
+func extractUpdateArchive(data []byte, archiveKind, destDir string) error {
+	switch archiveKind {
+	case "7z":
+		return extract7zToDir(data, destDir)
+	case "targz":
+		return extractTarGzToDir(data, destDir)
+	default:
+		// 4 workers: benchmark-optimal.
+		return extractZipToDirParallel(data, destDir, min(runtime.GOMAXPROCS(0), 4))
+	}
 }
 
 func writeFileSafe(targetPath string, r io.Reader, mode os.FileMode) error {

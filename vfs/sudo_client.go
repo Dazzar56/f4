@@ -40,9 +40,11 @@ func GetSudoClient() *SudoClient {
 
 // IsAvailable checks if the SudoClient has been initialized.
 func (c *SudoClient) IsAvailable() bool {
-	res := c != nil
-	if !res {
+	res := c != nil && sudoClientSupported()
+	if c == nil {
 		vtui.DebugLog("SUDO_CLIENT: IsAvailable() returning FALSE (client is nil)")
+	} else if !sudoClientSupported() {
+		vtui.DebugLog("SUDO_CLIENT: IsAvailable() returning FALSE (platform does not support the Unix dispatcher)")
 	}
 	return res
 }

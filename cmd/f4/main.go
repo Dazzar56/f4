@@ -62,6 +62,17 @@ func openEditFileIn(pf *PanelsFrame, path string) {
 
 func main() {
 	vtui.AppName = "f4"
+	if archivePath, archiveKind, found, err := parseUpdateHelperArgs(os.Args[1:]); found {
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+		if err := runUpdateHelper(archivePath, archiveKind); err != nil {
+			fmt.Fprintf(os.Stderr, "f4 update helper failed: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
 	installConsoleCtrlHandler()
 	var sudoDispatcher string
 

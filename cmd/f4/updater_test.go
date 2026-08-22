@@ -27,6 +27,23 @@ type memoryWriteSeeker struct {
 	off  int64
 }
 
+func TestUpdater_ParseUpdateHelperArgs(t *testing.T) {
+	archive, kind, found, err := parseUpdateHelperArgs([]string{updateHelperFlag, `C:\Users\Test User\f4-update.archive`, "zip"})
+	if err != nil || !found {
+		t.Fatalf("parseUpdateHelperArgs() failed: found=%v err=%v", found, err)
+	}
+	if archive != `C:\Users\Test User\f4-update.archive` || kind != "zip" {
+		t.Fatalf("parseUpdateHelperArgs() = %q, %q; want archive path and zip", archive, kind)
+	}
+
+	if _, _, found, err := parseUpdateHelperArgs([]string{updateHelperFlag, "archive.zip"}); !found || err == nil {
+		t.Fatalf("malformed helper invocation: found=%v err=%v", found, err)
+	}
+	if _, _, found, err := parseUpdateHelperArgs([]string{"--gui=win32"}); found || err != nil {
+		t.Fatalf("normal invocation parsed as update helper: found=%v err=%v", found, err)
+	}
+}
+
 func (w *memoryWriteSeeker) Write(p []byte) (int, error) {
 	end := w.off + int64(len(p))
 	if w.off < 0 || end < w.off {
