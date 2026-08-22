@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 
@@ -129,7 +130,15 @@ func actionHotkeyConfig(pf *PanelsFrame) {
 
 	btnAssign := vtui.NewButton(0, 0, Msg("Hotkeys.BtnAssign"))
 	btnUnbind := vtui.NewButton(0, 0, Msg("Hotkeys.BtnUnbind"))
-	btnClose := vtui.NewButton(0, 0, Msg("Hotkeys.BtnClose"))
+	btnSave := vtui.NewButton(0, 0, Msg("vtui.Save"))
+	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
+	btnSave.IsDefault = true
+
+	if GlobalHotkeysMgr == nil {
+		return
+	}
+	original := GlobalHotkeysMgr
+	draft := original.CloneForEdit()
 
 	dlg, table := vtui.NewTableDialog(w, h, Msg("Hotkeys.Title"), []vtui.TableColumn{
 		{Title: "Command", Width: 23},
@@ -137,7 +146,7 @@ func actionHotkeyConfig(pf *PanelsFrame) {
 		{Title: "Area", Width: 10},
 		{Title: "When", Width: 17},
 		{Title: "Description", Width: 0},
-	}, btnAssign, btnUnbind, btnClose)
+	}, btnAssign, btnUnbind, btnSave, btnCancel)
 	useDialogTableColors(table)
 	table.ShowScrollBar = true
 	table.Sortable = true    // click a column header to sort, again to reverse
@@ -150,7 +159,7 @@ func actionHotkeyConfig(pf *PanelsFrame) {
 		hkRows = nil
 		rows = nil
 
-		activeBinds := GlobalHotkeysMgr.GetActiveBindings()
+		activeBinds := draft.GetActiveBindings()
 		actions := GetActions()
 		assignedActions := make(map[string]bool)
 
@@ -194,7 +203,7 @@ func actionHotkeyConfig(pf *PanelsFrame) {
 				if key == "" || seenNative[displayKey] {
 					continue
 				}
-				if GlobalHotkeysMgr != nil && GlobalHotkeysMgr.GetAction(act.Area, key) != "" {
+				if draft.GetAction(act.Area, key) != "" {
 					continue
 				}
 				seenNative[displayKey] = true
@@ -251,7 +260,7 @@ func actionHotkeyConfig(pf *PanelsFrame) {
 		idx := table.SelectPos
 		if idx >= 0 && idx < len(hkRows) && hkRows[idx].Editable {
 			row := hkRows[idx]
-			showAreaSelectDialog(row.Action, row.Area, row.Condition, refresh)
+			showAreaSelectDialog(draft, row.Action, row.Area, row.Condition, refresh)
 		}
 	}
 
@@ -260,14 +269,25 @@ func actionHotkeyConfig(pf *PanelsFrame) {
 		if idx >= 0 && idx < len(hkRows) && hkRows[idx].Editable {
 			row := hkRows[idx]
 			if row.RawKey != "" && row.Area != "" {
-				GlobalHotkeysMgr.Bind(row.Area, row.RawKey, "None")
-				GlobalHotkeysMgr.Save()
-				refresh()
+				question := fmt.Sprintf("%s %s?", plainLabel(Msg("Hotkeys.BtnUnbind")), row.Key)
+				vtui.ShowMessageOn(dlg, Msg("Hotkeys.Title"), question, []string{Msg("vtui.Ok"), Msg("vtui.Cancel")}).OnResult = func(choice int) {
+					if choice != 0 {
+						return
+					}
+					draft.Bind(row.Area, row.RawKey, "None")
+					refresh()
+				}
 			}
 		}
 	}
 
-	btnClose.OnClick = func() { dlg.Close() }
+	btnSave.OnClick = func() {
+		original.ReplaceBindingsFrom(draft)
+		original.Save()
+		dlg.Close()
+	}
+
+	btnCancel.OnClick = func() { dlg.Close() }
 
 	table.OnAction = func(idx int) {
 		btnAssign.OnClick()
@@ -277,7 +297,7 @@ func actionHotkeyConfig(pf *PanelsFrame) {
 	refresh()
 }
 
-func showAreaSelectDialog(actionName, defaultArea, defaultCond string, onComplete func()) {
+func showAreaSelectDialog(hm *HotkeyManager, actionName, defaultArea, defaultCond string, onComplete func()) {
 	dlg := vtui.NewCenteredDialog(40, 11, Msg("Hotkeys.SelectTitle"))
 	dlg.ShowClose = true
 
@@ -359,7 +379,7 @@ func showAreaSelectDialog(actionName, defaultArea, defaultCond string, onComplet
 
 		dlg.Close()
 		vtui.FrameManager.PostTask(func() {
-			vtui.FrameManager.Push(NewHotkeyAssignFrame(fullName, area, onComplete))
+			vtui.FrameManager.Push(NewHotkeyAssignFrame(hm, fullName, area, onComplete))
 		})
 	}
 	vtui.FrameManager.Push(dlg)
@@ -367,16 +387,18 @@ func showAreaSelectDialog(actionName, defaultArea, defaultCond string, onComplet
 
 type HotkeyAssignFrame struct {
 	*vtui.Window
+	hm         *HotkeyManager
 	actionName string
 	area       string
 	onComplete func()
 }
 
-func NewHotkeyAssignFrame(actionName, area string, onComplete func()) *HotkeyAssignFrame {
+func NewHotkeyAssignFrame(hm *HotkeyManager, actionName, area string, onComplete func()) *HotkeyAssignFrame {
 	width, height := 42, 9
 	base := vtui.NewCenteredDialog(width, height, Msg("Hotkeys.AssignTitle"))
 	f := &HotkeyAssignFrame{
 		Window:     base,
+		hm:         hm,
 		actionName: actionName,
 		area:       area,
 		onComplete: onComplete,
@@ -427,8 +449,9 @@ func (f *HotkeyAssignFrame) ProcessKey(e *vtinput.InputEvent) bool {
 
 	keyStr := EventToFarString(e)
 
-	GlobalHotkeysMgr.Bind(f.area, keyStr, f.actionName)
-	GlobalHotkeysMgr.Save()
+	if f.hm != nil {
+		f.hm.Bind(f.area, keyStr, f.actionName)
+	}
 
 	f.Close()
 	if f.onComplete != nil {
