@@ -20,6 +20,10 @@ var (
 	cachedAdmin   string
 	cachedVersion string
 	cachedPlat    string
+	// buildVersion is set by the release workflow for tagged artifacts. Go's
+	// embedded VCS metadata contains the commit but not the release tag, so
+	// the updater would otherwise mistake a beta build for a development build.
+	buildVersion string
 )
 
 func initTitleCache() {
@@ -113,6 +117,10 @@ func getVCSInfo() (rev string, dirty string, timeStr string) {
 }
 
 func getShortVersionInfo() string {
+	if buildVersion != "" {
+		return buildVersion
+	}
+
 	baseVer := ""
 	if info, ok := debug.ReadBuildInfo(); ok {
 		baseVer = info.Main.Version
@@ -135,6 +143,14 @@ func getShortVersionInfo() string {
 }
 
 func getLongVersionInfo() string {
+	if buildVersion != "" {
+		_, _, timeStr := getVCSInfo()
+		if timeStr != "" {
+			return buildVersion + " [" + timeStr + "]"
+		}
+		return buildVersion
+	}
+
 	baseVer := ""
 	if info, ok := debug.ReadBuildInfo(); ok {
 		baseVer = info.Main.Version

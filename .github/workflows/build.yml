@@ -86,17 +86,24 @@ jobs:
         LDFLAGS="-s -w"
         if [ "$GOOS" = "linux" ]; then LDFLAGS="$LDFLAGS -extldflags '-static'"; fi
 
+        # Go embeds the commit in release artifacts, but not the tag. Keep
+        # prerelease tags such as v0.2.0-beta available to the updater.
+        APP_LDFLAGS="$LDFLAGS"
+        if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+          APP_LDFLAGS="$APP_LDFLAGS -X main.buildVersion=$GITHUB_REF_NAME"
+        fi
+
         GCFLAGS=""
         if [ "$GOOS" = "freebsd" ]; then
           GCFLAGS="-gcflags=github.com/go-webgpu/goffi/internal/fakecgo=-std"
         fi
 
         # Build core
-        go build -trimpath $GCFLAGS -ldflags="$LDFLAGS" -o build/f4$EXT ./cmd/f4
+        go build -trimpath $GCFLAGS -ldflags="$APP_LDFLAGS" -o build/f4$EXT ./cmd/f4
 
         # Build GUI-only binary for Windows (no console flash)
         if [ "$GOOS" = "windows" ]; then
-          go build -trimpath $GCFLAGS -ldflags="$LDFLAGS -H windowsgui" -o build/f4-gui$EXT ./cmd/f4
+          go build -trimpath $GCFLAGS -ldflags="$APP_LDFLAGS -H windowsgui" -o build/f4-gui$EXT ./cmd/f4
         fi
 
         # Copy language and help assets
@@ -305,10 +312,14 @@ jobs:
       run: |
         mkdir -p build/plugins/dummy_internal
         LDFLAGS="-s -w"
+        APP_LDFLAGS="$LDFLAGS"
+        if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+          APP_LDFLAGS="$APP_LDFLAGS -X main.buildVersion=$GITHUB_REF_NAME"
+        fi
 
-        go build -trimpath -ldflags="$LDFLAGS" -o build/f4.exe ./cmd/f4
+        go build -trimpath -ldflags="$APP_LDFLAGS" -o build/f4.exe ./cmd/f4
         # GUI-only binary (no console flash), same as in the main matrix.
-        go build -trimpath -ldflags="$LDFLAGS -H windowsgui" -o build/f4-gui.exe ./cmd/f4
+        go build -trimpath -ldflags="$APP_LDFLAGS -H windowsgui" -o build/f4-gui.exe ./cmd/f4
 
         cp -r cmd/f4/lang cmd/f4/help build/
         mkdir -p build/licenses

@@ -81,3 +81,19 @@ func TestUpdateWindowTitle(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildVersionOverridesVCSMetadata(t *testing.T) {
+	oldBuildVersion := buildVersion
+	defer func() { buildVersion = oldBuildVersion }()
+
+	buildVersion = "v0.2.0-beta"
+	if got := getCurrentVersion(); got != buildVersion {
+		t.Fatalf("getCurrentVersion() = %q, want %q", got, buildVersion)
+	}
+	if got := getShortVersionInfo(); got != buildVersion {
+		t.Fatalf("getShortVersionInfo() = %q, want %q", got, buildVersion)
+	}
+	if got := getLongVersionInfo(); !strings.HasPrefix(got, buildVersion) {
+		t.Fatalf("getLongVersionInfo() = %q, want it to start with %q", got, buildVersion)
+	}
+}
