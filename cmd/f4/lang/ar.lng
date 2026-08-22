@@ -5,20 +5,6 @@ Author=f4 Team
 
 [Strings]
 VisRen.Menu=أداة إعادة التسمية ال&بصرية
-ID3Editor.Menu=م&حرر علامات ID3
-ID3Editor.Title=محرر علامات ID3
-ID3Editor.LocalOnly=محرر علامات ID3 يدعم الملفات المحلية فقط.
-ID3Editor.SelectFile=يرجى تحديد ملف MP3 أولاً.
-ID3Editor.OnlyMP3=الملفات المدعومة هي ملفات MP3 فقط.
-ID3Editor.SaveError=فشل حفظ علامات ID3:\n%v
-ID3Editor.OpenError=فشل فتح ملف MP3:\n%v
-ID3Editor.FieldTitle=العنوان:
-ID3Editor.FieldArtist=الفنان:
-ID3Editor.FieldAlbum=الألبوم:
-ID3Editor.FieldYear=السنة:
-ID3Editor.FieldGenre=النوع:
-ID3Editor.FieldComment=التعليق:
-ID3Editor.FieldVersion=الإصدار:
 VisRen.Title=أداة إعادة التسمية البصرية
 VisRen.HostUnsupported=هذا المضيف لـ F4 لا يوفر جسر واجهة المستخدم VisRen.
 VisRen.LocalOnly=VisRen تعمل فقط على لوحة الملفات المحلية.
@@ -59,184 +45,53 @@ VisRen.WordDivTitle=محددات الكلمات
 VisRen.WordDivPrompt=الرموز التي تفصل بين الكلمات (بحد أقصى 18):
 VisRen.OldName=الاسم القديم
 VisRen.NewName=الاسم الجديد
+
+ID3Editor.Menu=م&حرر علامات ID3
+ID3Editor.Title=محرر علامات ID3
+ID3Editor.LocalOnly=محرر علامات ID3 يدعم الملفات المحلية فقط.
+ID3Editor.SelectFile=يرجى تحديد ملف MP3 أولاً.
+ID3Editor.OnlyMP3=الملفات المدعومة هي ملفات MP3 فقط.
+ID3Editor.SaveError=فشل حفظ علامات ID3:\n%v
+ID3Editor.OpenError=فشل فتح ملف MP3:\n%v
+ID3Editor.FieldTitle=العنوان:
+ID3Editor.FieldArtist=الفنان:
+ID3Editor.FieldAlbum=الألبوم:
+ID3Editor.FieldYear=السنة:
+ID3Editor.FieldGenre=النوع:
+ID3Editor.FieldComment=التعليق:
+ID3Editor.FieldVersion=الإصدار:
+
 vtui.Ok=م&وافق
 vtui.Cancel=إلغاء الأمر
+vtui.Save=ح&فظ
+
 Panel.Other=اللوحة الأ&خرى
 Panel.Column.Name=الاسم
 Panel.Column.Size=الحجم
 Panel.Column.Modified=تاريخ التعديل
 Panel.UpDir=مجلد-أعلى
 Panel.SelectedInfo=البايتات: %s، الملفات: %d، المجلدات: %d
+
 Panels.Prompt=>
+
 Edit.NewFileTitle= إنشاء ملف جديد
 Edit.NewFilePrompt=اس&م الملف:
+
 MakeFolder.Title= إنشاء مجلد
 MakeFolder.Prompt=إنشاء ال&مجلد:
+
 Delete.Title= حذف
 Delete.Confirm=هل تريد بالتأكيد حذف\n%s؟
 Delete.Btn=ح&ذف
+
 Copy.Title= نسخ
 Copy.Prompt=نسخ %d عنصرًا/عناصر إلى:
 Copy.Btn=ن&سخ
+
 Move.Title= نقل
 Move.Prompt=إعادة تسمية أو نقل %d عنصرًا/عناصر إلى:
 Move.Btn=إعادة ت&سمية
-Btn.OverwriteAll=استبدال ال&كل
-Btn.SkipAll=تخ&طي الكل
-Btn.Retry=إعادة الم&حاولة
-Btn.Ignore=ت&جاهل
-Operation.Error=فشلت العملية:\n%s
-Op.ClonePanels=استن&ساخ اللوحات إلى مساحة عمل جديدة
-Op.SwitchHint=Ctrl+Tab للتبديل بين النوافذ
-Op.DummyTitle= عملية وهمية
-Op.DummyText=هذه عملية وهمية مدتها 5 دقائق.\nاختر وضع الخلفية:
-Viewer.Title= عرض
-Viewer.ModeText=نص
-Viewer.ModeHex=ست عشري
-Viewer.SearchTitle= بحث
-Search.CaseSensitive=حساس لحالة الأ&حرف
-Search.Reverse=بحث ع&كسي
-Select.Title= تحديد
-Deselect.Title= إلغاء التحديد
-Quit.Title= خروج
-Quit.Confirm=هل تريد مغادرة f4؟
-Quit.Btn=م&غادرة
-Select.Mask=أدخل قناع الت&حديد:
 
-Arkanoid.HighScores= أعلى النتائج
-PlugRing.Title= f4 PlugRing
-PlugRing.BtnInstall=ت&ثبيت/تحديث
-PlugRing.BtnRemove=إ&زالة
-PlugRing.BtnRefresh=ت&حديث
-PlugRing.BtnClose=إ&غلاق
-
-Attributes.Title= الخصائص
-Attributes.BtnSet=تعيين
-Attributes.BtnSecurity=الأ&مان
-Attributes.Read=قراءة
-Attributes.Write=كتابة
-Attributes.Execute=تنفيذ
-Attributes.ReadOnly=للقراءة &فقط
-Attributes.Hidden=م&خفي
-Attributes.System=ن&ظام
-Attributes.Archive=أ&رشيف
-Permissions.Title= أذونات الإضافات
-Permissions.BtnRevoke=س&حب
-Permissions.BtnClose=إ&غلاق
-
-Search.Prompt=البحث عن:
-Search.WholeWords=كلمات كاملة فقط
-Search.Regex=تعبيرات نمطية
-Search.BtnFind=ب&حث
-Replace.Title= استبدال
-Replace.Prompt=استبدال بـ:
-Replace.BtnReplace=است&بدال
-Replace.BtnReplaceAll=استبدال ال&كل
-Codepage.Title= صفحات الترميز
-Codepage.ConvertTitle= تحويل صفحة الترميز
-
-vtui.Save=ح&فظ
-UserMenu.EditTitle= تعديل قائمة المستخدم
-UserMenu.CreateTitle= إنشاء قائمة المستخدم
-UserMenu.EditSubmenuTitle= تعديل القائمة الفرعية
-UserMenu.CreateSubmenuTitle= إنشاء القائمة الفرعية
-UserMenu.LabelHotkey=مفتاح ال&اختصار:
-UserMenu.LabelLabel=الت&سمية:
-UserMenu.LabelCommand=الأ&مر:
-
-Hotkeys.Title= أداة تكوين مفاتيح الاختصار
-Hotkeys.BtnAssign=ت&عيين
-Hotkeys.BtnUnbind=إ&لغاء التعيين
-Hotkeys.BtnClose=إ&غلاق
-Hotkeys.SelectTitle= تحديد المنطقة والشرط
-Hotkeys.BtnNext=التالي >
-Hotkeys.LabelArea=المنطقة:
-Hotkeys.LabelWhen=الشرط:
-Hotkeys.AssignTitle= تعيين مفتاح الاختصار
-Op.DummyQueue=الانتظار (الافتراضي)
-Op.DummyBackground=نسخ لوحة الخلفية
-Op.DummyForeground=قفل الواجهة
-Op.BtnStart=ب&دء
-Drive.Title= القرص
-
-NetFox.ConnectionTitle= اتصال الموقع
-NetFox.PassiveMode=الوضع الخامل
-NetFox.LabelName=الا&سم:
-NetFox.LabelProtocol=ال&بروتوكول:
-NetFox.LabelHost=الم&ضيف:
-NetFox.LabelPort=الم&نفذ:
-NetFox.LabelUser=المست&خدم:
-NetFox.LabelPassword=كلمة الم&رور:
-NetFox.LabelTimeout=مهلة الا&نتظار:
-NetFox.LabelCodepage=صفحة التر&ميز:
-NetFox.ErrorEmptyName=الاسم لا يمكن أن يكون فارغًا
-NetFox.ErrorReservedName=اسم اتصال محجوز
-
-FileOp.BtnCancel=إ&لغاء الأمر
-FileOp.BtnBackground=ال&خلفية
-Queue.BtnCancel=إل&غاء المهمة
-Queue.BtnClear=مسح الم&كتمل
-Session.Title= تحديد الجلسة
-
-Macro.AssignTitle= تعيين ماكرو
-Macro.AssignPrompt=اضغط على تركيبة المفاتيح المطلوبة
-Macro.AssignCancel=اضغط على Esc للإلغاء
-
-Menu.Language=اللغة
-Menu.HelpLanguage=لغة المساعدة
-Menu.Left=اليسار
-Menu.Files=الملفات
-Menu.Commands=الأوامر
-Menu.Options=الخيارات
-Menu.Right=اليمين
-Menu.Exit=خر&وج
-
-Menu.Files.View=عرض
-Menu.Files.Edit=تحرير
-Menu.Files.Copy=نسخ
-Menu.Files.RenMov=إعادة تسمية أو نقل
-Menu.Files.MkDir=إنشاء مجلد
-Menu.Files.Delete=حذف
-Menu.Left.Brief=موجز
-Menu.Left.Medium=متوسط
-Menu.Left.Detailed=مفصل
-Menu.Left.Wide=عريض
-Menu.Commands.FindFile=البحث عن ملف
-Menu.Commands.FindDuplicates=البحث عن مكررات
-Menu.Commands.BackgroundJobs=المهام الخلفية
-Menu.Commands.RunRemote=تشغيل أمر عن بعد
-RemoteCmd.Title=أمر عن بعد
-RemoteCmd.Prompt=الأمر:
-RemoteCmd.BtnClose=إ&غلاق
-Jobs.Title=المهام الخلفية
-Jobs.BtnShow=ع&رض
-Jobs.BtnCancel=إل&غاء المهمة
-Jobs.BtnClose=إ&غلاق
-Jobs.Empty=لا يوجد شيء قيد التشغيل
-Menu.Commands.Bookmarks=العلامات المرجعية
-Menu.SortName=الاسم
-Menu.SortExt=الامتداد
-Menu.SortTime=الوقت
-Menu.SortSize=الحجم
-Menu.SortUnsorted=غير مرتب
-Sort.Title=ترتيب حسب
-Menu.PanelSettings=إعدادات اللوحة
-Menu.EditorSettings=إعدادات المحرر
-Menu.ColorerSettings=إعدادات ال&ملون
-Menu.AppearanceSettings=إعدادات المظهر
-Menu.ConfirmationsSettings=التأكيدات
-Menu.AutoUpdateSettings=التحديث الت&لقائي
-Menu.Options.Plugins=إدارة الإضافات
-
-Menu.Editor.File=مل&ف
-Menu.Editor.Edit=ت&حرير
-Menu.Editor.Search=ب&حث
-Menu.Editor.Options=خ&يارات
-Menu.Editor.Insert=إد&راج
-Menu.Viewer.File=مل&ف
-Menu.Viewer.View=ع&رض
-Menu.Viewer.Search=ب&حث
-Menu.Viewer.Options=خ&يارات
 Action.App.ScreenGrab=لقطة الشا&شة
 Action.App.ScreenGrab.Desc=تحديد ونسخ منطقة من الشاشة
 Action.Editor.Save=ح&فظ
@@ -299,18 +154,6 @@ Action.Viewer.CodepageNext=صفحة الترميز ال&تالية
 Action.Viewer.CodepageNext.Desc=الانتقال الدائري لصفحة الترميز التالية
 Action.Viewer.CodepageMenu=قائمة صف&حات الترميز
 Action.Viewer.CodepageMenu.Desc=تحديد صفحة الترميز
-Help.ViewerEditor=مفاتيح المستعرض والمحرر
-Help.PanelNav=مفاتيح اللوحة
-Help.NavigationKeys=مفاتيح التنقل
-Help.Area.Shell=اللوحات
-Help.Area.Terminal=الطرفية
-Help.Area.Editor=المحرر
-Help.Area.Viewer=المستعرض
-Help.Area.Common=مشترك
-Menu.Shell.Files=مل&فات
-Menu.Shell.Commands=أوا&مر
-Menu.Shell.Options=خي&ارات
-Menu.Terminal.File=مل&ف
 Action.File.New=ملف جديد
 Action.File.New.Desc=إنشاء ملف جديد وفتحه في المحرر
 Action.File.CopyInPlace=نسخ في نفس المكان
@@ -343,19 +186,6 @@ Action.Panel.UserMenu=قائمة المست&خدم
 Action.Panel.UserMenu.Desc=عرض قائمة المستخدم
 Action.Panel.FileAssociations=ارت&باطات الملفات…
 Action.Panel.FileAssociations.Desc=تكوين الأوامر لكل قناع لمفاتيح Enter و F3 و F4
-FileAssoc.EditorTitle=ارتباطات الملفات
-FileAssoc.EditTitle=تعديل الارتباط
-FileAssoc.NewTitle=ارتباط جديد
-FileAssoc.ErrorTitle=ارتباطات الملفات
-FileAssoc.EmptyHint=لا توجد ارتباطات بعد — اضغط على Ins لإضافة ارتباط
-FileAssoc.EmptyMask=لا يمكن أن يكون قناع الملف فارغًا.
-FileAssoc.MaskLabel=القناع
-FileAssoc.DescLabel=الوصف
-FileAssoc.PickTitle.Open=فتح باستخدام
-FileAssoc.PickTitle.View=عرض باستخدام
-FileAssoc.PickTitle.Edit=تحرير باستخدام
-FileAssoc.DeleteTitle=حذف الارتباط
-FileAssoc.DeleteConfirm=هل تريد حذف الارتباط %q؟
 Action.Panel.Bookmarks.Desc=عرض نافذة العلامات المرجعية للمجلدات
 Action.Panel.PluginMenu=أوامر الإ&ضافات
 Action.Panel.PluginMenu.Desc=عرض قائمة أوامر الإضافات
@@ -442,23 +272,106 @@ Action.Terminal.ViewLog.Desc=فتح سجل الطرفية في المستعرض
 Action.Terminal.EditLog=ت&حرير سجل الطرفية
 Action.Terminal.EditLog.Desc=فتح سجل الطرفية في المحرر
 
-EditorSettings.Title= إعدادات المحرر
-EditorSettings.AutoComplete=تفعيل الإكمال الت&لقائي
-EditorSettings.Mask=نشط لأقنعة المل&فات:
-ColorerSettings.Title= إعدادات الملون
-ColorerSettings.Enabled=تفعيل تمييز ال&ملون
-ColorerSettings.Style=ن&مط الألوان:
-ColorerSettings.BuiltIn=(مدمج)
-ColorerSettings.Cross=إظهار الت&قاطع:
-ColorerSettings.CrossOff=عدم الإظهار
-ColorerSettings.CrossVertical=رأسي
-ColorerSettings.CrossHorizontal=أفقي
-ColorerSettings.CrossBoth=كلاهما
-ColorerSettings.Syntax=تمييز ال&بنية النحوية
-ColorerSettings.Background=تغيير خلفية الم&حرر
-ColorerSettings.Catalog=م&جلد المخططات (catalog.xml):
-ColorerSettings.Reload=إعادة الت&حميل
-ColorerSettings.Download=ت&نزيل المخططات
+Btn.OverwriteAll=استبدال ال&كل
+Btn.SkipAll=تخ&طي الكل
+Btn.Retry=إعادة الم&حاولة
+Btn.Ignore=ت&جاهل
+
+Operation.Error=فشلت العملية:\n%s
+
+Op.ClonePanels=استن&ساخ اللوحات إلى مساحة عمل جديدة
+Op.SwitchHint=Ctrl+Tab للتبديل بين النوافذ
+Op.DummyTitle= عملية وهمية
+Op.DummyText=هذه عملية وهمية مدتها 5 دقائق.\nاختر وضع الخلفية:
+Op.Queue=الانتظار
+Op.Background=نسخ لوحة الخلفية
+Op.Foreground=قفل الواجهة
+Op.PathNameOnly=الاسم فقط
+Op.PathFullPath=المسار الكامل
+Op.PathSrcDst=المصدر -> الهدف
+Op.DummyQueue=الانتظار (الافتراضي)
+Op.DummyBackground=نسخ لوحة الخلفية
+Op.DummyForeground=قفل الواجهة
+Op.BtnStart=ب&دء
+
+Viewer.Title= عرض
+Viewer.ModeText=نص
+Viewer.ModeHex=ست عشري
+Viewer.SearchTitle= بحث
+
+Search.CaseSensitive=حساس لحالة الأ&حرف
+Search.Reverse=بحث ع&كسي
+Search.Prompt=البحث عن:
+Search.WholeWords=كلمات كاملة فقط
+Search.Regex=تعبيرات نمطية
+Search.BtnFind=ب&حث
+
+Select.Title= تحديد
+Select.Mask=أدخل قناع الت&حديد:
+
+Deselect.Title= إلغاء التحديد
+
+Quit.Title= خروج
+Quit.Confirm=هل تريد مغادرة f4؟
+Quit.Btn=م&غادرة
+
+Macro.AssignTitle= تعيين ماكرو
+Macro.AssignPrompt=اضغط على تركيبة المفاتيح المطلوبة
+Macro.AssignCancel=اضغط على Esc للإلغاء
+
+Menu.Language=اللغة
+Menu.HelpLanguage=لغة المساعدة
+Menu.Left=اليسار
+Menu.Files=الملفات
+Menu.Commands=الأوامر
+Menu.Options=الخيارات
+Menu.Right=اليمين
+Menu.Exit=خر&وج
+Menu.Files.View=عرض
+Menu.Files.Edit=تحرير
+Menu.Files.Copy=نسخ
+Menu.Files.RenMov=إعادة تسمية أو نقل
+Menu.Files.MkDir=إنشاء مجلد
+Menu.Files.Delete=حذف
+Menu.Left.Brief=موجز
+Menu.Left.Medium=متوسط
+Menu.Left.Detailed=مفصل
+Menu.Left.Wide=عريض
+Menu.Commands.FindFile=البحث عن ملف
+Menu.Commands.FindDuplicates=البحث عن مكررات
+Menu.Commands.BackgroundJobs=المهام الخلفية
+Menu.Commands.RunRemote=تشغيل أمر عن بعد
+Menu.Commands.Bookmarks=العلامات المرجعية
+Menu.SortName=الاسم
+Menu.SortExt=الامتداد
+Menu.SortTime=الوقت
+Menu.SortSize=الحجم
+Menu.SortUnsorted=غير مرتب
+Menu.PanelSettings=إعدادات اللوحة
+Menu.EditorSettings=إعدادات المحرر
+Menu.ColorerSettings=إعدادات ال&ملون
+Menu.AppearanceSettings=إعدادات المظهر
+Menu.ConfirmationsSettings=التأكيدات
+Menu.AutoUpdateSettings=التحديث الت&لقائي
+Menu.Options.Plugins=إدارة الإضافات
+Menu.Editor.File=مل&ف
+Menu.Editor.Edit=ت&حرير
+Menu.Editor.Search=ب&حث
+Menu.Editor.Options=خ&يارات
+Menu.Editor.Insert=إد&راج
+Menu.Viewer.File=مل&ف
+Menu.Viewer.View=ع&رض
+Menu.Viewer.Search=ب&حث
+Menu.Viewer.Options=خ&يارات
+Menu.Shell.Files=مل&فات
+Menu.Shell.Commands=أوا&مر
+Menu.Shell.Options=خي&ارات
+Menu.Terminal.File=مل&ف
+
+RemoteCmd.Title=أمر عن بعد
+RemoteCmd.Prompt=الأمر:
+RemoteCmd.BtnClose=إ&غلاق
+
 PanelSettings.Title= إعدادات اللوحة
 PanelSettings.ShowHidden=إظهار الملفات المخ&فية وملفات النظام
 PanelSettings.ShowDirPrefix=إظهار البادئة '/' للم&جلدات
@@ -480,6 +393,57 @@ PanelSettings.PathDisplay=مسار الملف قيد المعالجة:
 PanelSettings.InfoPanelCPUGPU=عرض قسم المعالج والرسوميات في لوحة المعلو&مات
 PanelSettings.EscTogglePanels=مفتاح Esc يب&دل رؤية اللوحات
 
+Jobs.Title=المهام الخلفية
+Jobs.BtnShow=ع&رض
+Jobs.BtnCancel=إل&غاء المهمة
+Jobs.BtnClose=إ&غلاق
+Jobs.Empty=لا يوجد شيء قيد التشغيل
+
+Sort.Title=ترتيب حسب
+
+Help.ViewerEditor=مفاتيح المستعرض والمحرر
+Help.PanelNav=مفاتيح اللوحة
+Help.NavigationKeys=مفاتيح التنقل
+Help.Area.Shell=اللوحات
+Help.Area.Terminal=الطرفية
+Help.Area.Editor=المحرر
+Help.Area.Viewer=المستعرض
+Help.Area.Common=مشترك
+Help.SearchHint=البحث: اكتب  التالي: F3/Ctrl+Enter  السابق: Shift+F3/Ctrl+Shift+Enter
+
+FileAssoc.EditorTitle=ارتباطات الملفات
+FileAssoc.EditTitle=تعديل الارتباط
+FileAssoc.NewTitle=ارتباط جديد
+FileAssoc.ErrorTitle=ارتباطات الملفات
+FileAssoc.EmptyHint=لا توجد ارتباطات بعد — اضغط على Ins لإضافة ارتباط
+FileAssoc.EmptyMask=لا يمكن أن يكون قناع الملف فارغًا.
+FileAssoc.MaskLabel=القناع
+FileAssoc.DescLabel=الوصف
+FileAssoc.PickTitle.Open=فتح باستخدام
+FileAssoc.PickTitle.View=عرض باستخدام
+FileAssoc.PickTitle.Edit=تحرير باستخدام
+FileAssoc.DeleteTitle=حذف الارتباط
+FileAssoc.DeleteConfirm=هل تريد حذف الارتباط %q؟
+
+EditorSettings.Title= إعدادات المحرر
+EditorSettings.AutoComplete=تفعيل الإكمال الت&لقائي
+EditorSettings.Mask=نشط لأقنعة المل&فات:
+
+ColorerSettings.Title= إعدادات الملون
+ColorerSettings.Enabled=تفعيل تمييز ال&ملون
+ColorerSettings.Style=ن&مط الألوان:
+ColorerSettings.BuiltIn=(مدمج)
+ColorerSettings.Cross=إظهار الت&قاطع:
+ColorerSettings.CrossOff=عدم الإظهار
+ColorerSettings.CrossVertical=رأسي
+ColorerSettings.CrossHorizontal=أفقي
+ColorerSettings.CrossBoth=كلاهما
+ColorerSettings.Syntax=تمييز ال&بنية النحوية
+ColorerSettings.Background=تغيير خلفية الم&حرر
+ColorerSettings.Catalog=م&جلد المخططات (catalog.xml):
+ColorerSettings.Reload=إعادة الت&حميل
+ColorerSettings.Download=ت&نزيل المخططات
+
 AppearanceSettings.Title= إعدادات المظهر
 AppearanceSettings.Style=ن&مط التطبيق:
 AppearanceSettings.Font=خ&ط واجهة المستخدم الرسومية (المسار/الاسم):
@@ -487,19 +451,23 @@ AppearanceSettings.FontSize=ح&جم خط واجهة المستخدم الرسو�
 AppearanceSettings.TitleTemplate=قالب عن&وان النافذة:
 AppearanceSettings.ExportBtn=ت&صدير النظام المخطط
 AppearanceSettings.ColorCorrection=فرض تصحيح تبا&ين الألوان
+
 ConfirmationsSettings.Title= التأكيدات
 ConfirmationsSettings.Copy=تأكيد عند الن&سخ
 ConfirmationsSettings.Move=تأكيد عند الن&قل
 ConfirmationsSettings.Delete=تأكيد عند الح&ذف
 ConfirmationsSettings.Exit=تأكيد عند الخر&وج
+
 UpdateSettings.Title= التحديث التلقائي
 UpdateSettings.Channel=قناة الت&حديث:
 UpdateSettings.Interval=فترة الف&حص:
 UpdateSettings.BtnCheck=ال&فحص الآن
+
 FindFile.Title= البحث عن ملف
 FindFile.MaskPrompt=قناع ملف أو عدة أقنعة ملفات:
 FindFile.TextPrompt=المحتوى على نص:
 FindFile.BtnFind=ب&حث
+
 History.FoldersTitle= سجل المجلدات
 History.CommandsTitle= سجل الأوامر
 History.SearchModeHint=F2: تبديل البحث عن سلسلة فرعية / بادئة
@@ -507,25 +475,40 @@ History.CommandsHint=فوق/تحت Enter Esc Shift+Del Del Ctrl+C Ctrl+Ins F2
 History.FoldersHint=فوق/تحت Enter Shift+Enter Ctrl+Enter Esc Shift+Del Del Ctrl+C Ctrl+Ins Ctrl+R F2
 History.ConfirmClearAll=هل تريد مسح السجل بالكامل؟
 History.ConfirmPruneMissing=هل تريد إزالة الإدخالات التي لم تعد مساراتها موجودة؟
-Help.SearchHint=البحث: اكتب  التالي: F3/Ctrl+Enter  السابق: Shift+F3/Ctrl+Shift+Enter
+History.Title= السجل
+History.EmptyFolders=سجل المجلدات فارغ.
+History.EmptyCommands=سجل الأوامر فارغ.
+
 UserMenu.LocalMenuTitle=القائمة المحلية
 UserMenu.MainMenuTitle=القائمة الرئيسية
 UserMenu.MainMenuFAR=FAR
+UserMenu.EditTitle= تعديل قائمة المستخدم
+UserMenu.CreateTitle= إنشاء قائمة المستخدم
+UserMenu.EditSubmenuTitle= تعديل القائمة الفرعية
+UserMenu.CreateSubmenuTitle= إنشاء القائمة الفرعية
+UserMenu.LabelHotkey=مفتاح ال&اختصار:
+UserMenu.LabelLabel=الت&سمية:
+UserMenu.LabelCommand=الأ&مر:
+
 Language.Title= اللغات
 Language.Changed=تم تغيير اللغة.\nتتطلب بعض عناصر واجهة المستخدم إعادة تشغيل التطبيق\nلتطبيق اللغة الجديدة بالكامل.
+
 LanguageSettings.Title= إعدادات اللغة
 LanguageSettings.Primary=اللغة الأساسية:
 LanguageSettings.Fallback=اللغة الاحتياطية:
 LanguageSettings.None=<لا يوجد>
+
 HelpLanguage.Title=لغات المساعدة
 HelpLanguage.Changed=تم تغيير لغة المساعدة.
-History.Title= السجل
-History.EmptyFolders=سجل المجلدات فارغ.
-History.EmptyCommands=سجل الأوامر فارغ.
+
 Error.Title= خطأ
+
 Warning.Title= تحذير
+
 Info.Title= معلومات
+
 ExtEdit.TempError=تعذر إنشاء ملف مؤقت: %v
+
 FileOp.AlreadyOpened=الملف مفتوح بالفعل:\n%s
 FileOp.AlreadyOpenedTitle= الملف مفتوح بالفعل
 FileOp.AlreadyViewed=يتم عرض الملف بالفعل:\n%s
@@ -536,19 +519,18 @@ FileOp.BtnNewInstance=مثيل ج&ديد
 FileOp.CannotEditDir=لا يمكن تحرير مجلد.
 FileOp.CannotViewDir=لا يمكن عرض مجلد.
 FileOp.CannotOpenSpecial=لا يمكن فتح الملفات الخاصة (Named Pipes, Sockets, Devices).
+FileOp.BtnCancel=إ&لغاء الأمر
+FileOp.BtnBackground=ال&خلفية
+
 Dialog.RenameTitle= إعادة تسمية
 Dialog.RenamePrompt=إعادة تسمية '%s' إلى:
-Op.Queue=الانتظار
-Op.Background=نسخ لوحة الخلفية
-Op.Foreground=قفل الواجهة
-Op.PathNameOnly=الاسم فقط
-Op.PathFullPath=المسار الكامل
-Op.PathSrcDst=المصدر -> الهدف
+
 Plugins.Title= إدارة الإضافات (RPC)
 Plugins.BtnAdd=إ&ضافة
 Plugins.BtnRemove=إ&زالة
 Plugins.BtnPermissions=الأ&ذونات
 Plugins.BtnClose=إ&غلاق
+
 InfoPanel.Title= المعلومات
 InfoPanel.Computer=اسم الكمبيوتر
 InfoPanel.User=اسم المستخدم
@@ -587,6 +569,7 @@ InfoPanel.GPUWSLVirt=معالج رسومات افتراضي WSL (اسم المض
 InfoPanel.Copied=منسوخ
 InfoPanel.CopiedRows=الصفوف المنسوخة
 InfoPanel.UnitsHint= B: الوحدات   Ins/Shift+↑↓: تحديد   C: نسخ
+
 AndroidInfo.DeviceTitle=جهاز أندرويد
 AndroidInfo.StatusTitle=حالة الجهاز
 AndroidInfo.ConnectionTitle=اتصال ADB
@@ -610,6 +593,7 @@ AndroidInfo.Storage=التخزين
 AndroidInfo.StorageTotal=إجمالي التخزين
 AndroidInfo.StorageAvailable=التخزين المتاح
 AndroidInfo.Protocol=البروتوكول
+
 IOSInfo.DeviceTitle=جهاز آبل المحمول
 IOSInfo.Name=الاسم
 IOSInfo.Model=الموديل
@@ -621,6 +605,7 @@ IOSInfo.Connection=الاتصال
 IOSInfo.State=الحالة
 IOSInfo.Paired=موثوق
 IOSInfo.DeveloperMode=وضع المطور
+
 QuickView.Title= العرض السريع
 QuickView.NoSelection=<لا يوجد تحديد>
 QuickView.ParentDir=المجلد الأعلى
@@ -637,6 +622,7 @@ QuickView.Size=الحجم
 QuickView.Image=<صورة>
 QuickView.Binary=<محتوى ثنائي — عرض ست عشري>
 QuickView.ReadError=فشلت القراءة
+
 Bookmarks.Title= العلامات المرجعية
 Bookmarks.RowPrefix=[RCtrl | Ctrl+Alt] +
 Bookmarks.EmptySlot=<فارغ>
@@ -645,6 +631,7 @@ Bookmarks.LoadError=فشل تحميل العلامات المرجعية:\n%v
 Bookmarks.SaveError=فشل حفظ العلامات المرجعية:\n%v
 Bookmarks.EditTitle= تعديل مسار العلامة المرجعية
 Bookmarks.EditPrompt=ال&مسار:
+
 KeyBar.F1=مساعدة
 KeyBar.F2=القائمة
 KeyBar.F2Wrap=التفاف
@@ -685,3 +672,64 @@ KeyBar.ViewerF4=ست_عشري
 KeyBar.ViewerF7=بحث
 KeyBar.ViewerAltF8=انتقال
 KeyBar.ViewerF10=Quit
+
+Arkanoid.HighScores= أعلى النتائج
+
+PlugRing.Title= f4 PlugRing
+PlugRing.BtnInstall=ت&ثبيت/تحديث
+PlugRing.BtnRemove=إ&زالة
+PlugRing.BtnRefresh=ت&حديث
+PlugRing.BtnClose=إ&غلاق
+
+Attributes.Title= الخصائص
+Attributes.BtnSet=تعيين
+Attributes.BtnSecurity=الأ&مان
+Attributes.Read=قراءة
+Attributes.Write=كتابة
+Attributes.Execute=تنفيذ
+Attributes.ReadOnly=للقراءة &فقط
+Attributes.Hidden=م&خفي
+Attributes.System=ن&ظام
+Attributes.Archive=أ&رشيف
+
+Permissions.Title= أذونات الإضافات
+Permissions.BtnRevoke=س&حب
+Permissions.BtnClose=إ&غلاق
+
+Replace.Title= استبدال
+Replace.Prompt=استبدال بـ:
+Replace.BtnReplace=است&بدال
+Replace.BtnReplaceAll=استبدال ال&كل
+
+Codepage.Title= صفحات الترميز
+Codepage.ConvertTitle= تحويل صفحة الترميز
+
+Hotkeys.Title= أداة تكوين مفاتيح الاختصار
+Hotkeys.BtnAssign=ت&عيين
+Hotkeys.BtnUnbind=إ&لغاء التعيين
+Hotkeys.BtnClose=إ&غلاق
+Hotkeys.SelectTitle= تحديد المنطقة والشرط
+Hotkeys.BtnNext=التالي >
+Hotkeys.LabelArea=المنطقة:
+Hotkeys.LabelWhen=الشرط:
+Hotkeys.AssignTitle= تعيين مفتاح الاختصار
+
+Drive.Title= القرص
+
+NetFox.ConnectionTitle= اتصال الموقع
+NetFox.PassiveMode=الوضع الخامل
+NetFox.LabelName=الا&سم:
+NetFox.LabelProtocol=ال&بروتوكول:
+NetFox.LabelHost=الم&ضيف:
+NetFox.LabelPort=الم&نفذ:
+NetFox.LabelUser=المست&خدم:
+NetFox.LabelPassword=كلمة الم&رور:
+NetFox.LabelTimeout=مهلة الا&نتظار:
+NetFox.LabelCodepage=صفحة التر&ميز:
+NetFox.ErrorEmptyName=الاسم لا يمكن أن يكون فارغًا
+NetFox.ErrorReservedName=اسم اتصال محجوز
+
+Queue.BtnCancel=إل&غاء المهمة
+Queue.BtnClear=مسح الم&كتمل
+
+Session.Title= تحديد الجلسة

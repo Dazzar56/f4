@@ -5,20 +5,6 @@ Author=f4 Team
 
 [Strings]
 VisRen.Menu=&विज़ुअल फ़ाइल रीनेमर
-ID3Editor.Menu=ID3 टैग सं&पादक
-ID3Editor.Title=ID3 टैग संपादक
-ID3Editor.LocalOnly=ID3 टैग संपादक केवल स्थानीय फ़ाइलों का समर्थन करता है।
-ID3Editor.SelectFile=पहले एक MP3 फ़ाइल चुनें।
-ID3Editor.OnlyMP3=केवल MP3 फ़ाइलें समर्थित हैं।
-ID3Editor.SaveError=ID3 टैग सहेजने में विफल:\n%v
-ID3Editor.OpenError=MP3 फ़ाइल खोलने में विफल:\n%v
-ID3Editor.FieldTitle=शीर्षक:
-ID3Editor.FieldArtist=कलाकार:
-ID3Editor.FieldAlbum=एल्बम:
-ID3Editor.FieldYear=वर्ष:
-ID3Editor.FieldGenre=शैली:
-ID3Editor.FieldComment=टिप्पणी:
-ID3Editor.FieldVersion=संस्करण:
 VisRen.Title=विज़ुअल फ़ाइल रीनेमर
 VisRen.HostUnsupported=यह F4 होस्ट VisRen UI ब्रिज प्रदान नहीं करता है।
 VisRen.LocalOnly=VisRen केवल स्थानीय फ़ाइल पैनल पर काम करता है।
@@ -59,184 +45,53 @@ VisRen.WordDivTitle=शब्द विभाजक
 VisRen.WordDivPrompt=शब्दों को अलग करने वाले वर्ण (अधिकतम 18):
 VisRen.OldName=पुराना नाम
 VisRen.NewName=नया नाम
+
+ID3Editor.Menu=ID3 टैग सं&पादक
+ID3Editor.Title=ID3 टैग संपादक
+ID3Editor.LocalOnly=ID3 टैग संपादक केवल स्थानीय फ़ाइलों का समर्थन करता है।
+ID3Editor.SelectFile=पहले एक MP3 फ़ाइल चुनें।
+ID3Editor.OnlyMP3=केवल MP3 फ़ाइलें समर्थित हैं।
+ID3Editor.SaveError=ID3 टैग सहेजने में विफल:\n%v
+ID3Editor.OpenError=MP3 फ़ाइल खोलने में विफल:\n%v
+ID3Editor.FieldTitle=शीर्षक:
+ID3Editor.FieldArtist=कलाकार:
+ID3Editor.FieldAlbum=एल्बम:
+ID3Editor.FieldYear=वर्ष:
+ID3Editor.FieldGenre=शैली:
+ID3Editor.FieldComment=टिप्पणी:
+ID3Editor.FieldVersion=संस्करण:
+
 vtui.Ok=ठी&क है
 vtui.Cancel=रद्द करें
+vtui.Save=सहे&जें
+
 Panel.Other=अन्&य पैनल
 Panel.Column.Name=नाम
 Panel.Column.Size=आकार
 Panel.Column.Modified=संशोधित
 Panel.UpDir=UP-DIR
 Panel.SelectedInfo=बाइट: %s, फ़ाइलें: %d, फ़ोल्डर: %d
+
 Panels.Prompt=>
+
 Edit.NewFileTitle= नई फ़ाइल बनाएं
 Edit.NewFilePrompt=फ़ाइल का &नाम:
+
 MakeFolder.Title= फ़ोल्डर बनाएं
 MakeFolder.Prompt=यह &फ़ोल्डर बनाएं:
+
 Delete.Title= हटाएं
 Delete.Confirm=क्या आप हटाना चाहते हैं\n%s?
 Delete.Btn=&हटाएं
+
 Copy.Title= कॉपी करें
 Copy.Prompt=%d वस्तुओं को यहां कॉपी करें:
 Copy.Btn=&कॉपी करें
+
 Move.Title= स्थानांतरित करें
 Move.Prompt=%d वस्तुओं का नाम बदलें या स्थानांतरित करें:
 Move.Btn=ब&दलें
-Btn.OverwriteAll=सभी को ओ&वरराइट करें
-Btn.SkipAll=सभी को छो&ड़ें
-Btn.Retry=पुनः प्र&यास करें
-Btn.Ignore=अंदे&खा करें
-Operation.Error=ऑपरेशन विफल रहा:\n%s
-Op.ClonePanels=नए कार्यस्थान में पैनल की प्र&तिलिपि बनाएं
-Op.SwitchHint=विंडोज़ बदलने के लिए Ctrl+Tab दबाएं
-Op.DummyTitle= डमी ऑपरेशन
-Op.DummyText=यह एक डमी 5 मिनट का ऑपरेशन है।\nपृष्ठभूमि मोड चुनें:
-Viewer.Title= देखें
-Viewer.ModeText=पाठ
-Viewer.ModeHex=हेक्स
-Viewer.SearchTitle= खोजें
-Search.CaseSensitive=केस संवे&दनशील
-Search.Reverse=विप&रीत खोज
-Select.Title= चुनें
-Deselect.Title= चयन रद्द करें
-Quit.Title= बाहर निकलें
-Quit.Confirm=क्या आप f4 छोड़ना चाहते हैं?
-Quit.Btn=&छोड़ें
-Select.Mask=चयन मा&स्क दर्ज करें:
 
-Arkanoid.HighScores= उच्च स्कोर
-PlugRing.Title= f4 PlugRing
-PlugRing.BtnInstall=&इंस्टॉल/अद्यतन
-PlugRing.BtnRemove=ह&टाएं
-PlugRing.BtnRefresh=ता&ज़ा करें
-PlugRing.BtnClose=बं&द करें
-
-Attributes.Title= विशेषताएं
-Attributes.BtnSet=सेट करें
-Attributes.BtnSecurity=&सुरक्षा
-Attributes.Read=पढ़ना
-Attributes.Write=लिखना
-Attributes.Execute=निष्पादन
-Attributes.ReadOnly=केवल प&ढ़ने के लिए
-Attributes.Hidden=&छिपा हुआ
-Attributes.System=&सिस्टम
-Attributes.Archive=अ&भिलेख
-Permissions.Title= प्लगइन अनुमतियां
-Permissions.BtnRevoke=अधिकार वा&पस लें
-Permissions.BtnClose=बं&द करें
-
-Search.Prompt=खोजें:
-Search.WholeWords=केवल पूरा शब्द
-Search.Regex=नियमित अभिव्यक्ति
-Search.BtnFind=खोजें (&F)
-Replace.Title= बदलें
-Replace.Prompt=इसके साथ बदलें:
-Replace.BtnReplace=बद&लें
-Replace.BtnReplaceAll=सभी को बद&लें
-Codepage.Title= कोडपेज
-Codepage.ConvertTitle= कोडपेज परिवर्तित करें
-
-vtui.Save=सहे&जें
-UserMenu.EditTitle= उपयोगकर्ता मेनू संपादित करें
-UserMenu.CreateTitle= उपयोगकर्ता मेनू बनाएं
-UserMenu.EditSubmenuTitle= उप-मेनू संपादित करें
-UserMenu.CreateSubmenuTitle= उप-मेनू बनाएं
-UserMenu.LabelHotkey=शॉर्ट&कट कुंजी:
-UserMenu.LabelLabel=&लेबल:
-UserMenu.LabelCommand=&कमांड:
-
-Hotkeys.Title= हॉटकी कॉन्फ़िगरेशन
-Hotkeys.BtnAssign=अ&साइन करें
-Hotkeys.BtnUnbind=ह&टाएं
-Hotkeys.BtnClose=बं&द करें
-Hotkeys.SelectTitle= क्षेत्र और शर्त चुनें
-Hotkeys.BtnNext=आगे >
-Hotkeys.LabelArea=क्षेत्र:
-Hotkeys.LabelWhen=शर्त:
-Hotkeys.AssignTitle= शॉर्टकट कुंजी असाइन करें
-Op.DummyQueue=कतार (डिफ़ॉल्ट)
-Op.DummyBackground=पृष्ठभूमि पैनल प्रतिलिपि
-Op.DummyForeground=अग्रभूमि लॉक
-Op.BtnStart=&प्रारंभ
-Drive.Title= ड्राइव
-
-NetFox.ConnectionTitle= कनेक्शन सेटिंग
-NetFox.PassiveMode=निष्क्रिय मोड (Passive)
-NetFox.LabelName=&नाम:
-NetFox.LabelProtocol=प्रोटोकॉ&ल:
-NetFox.LabelHost=होस्&ट:
-NetFox.LabelPort=&पोर्ट:
-NetFox.LabelUser=उपभोक्&ता:
-NetFox.LabelPassword=पासव&र्ड:
-NetFox.LabelTimeout=समय सी&मा:
-NetFox.LabelCodepage=कोडपे&ज:
-NetFox.ErrorEmptyName=नाम खाली नहीं हो सकता
-NetFox.ErrorReservedName=आरक्षित कनेक्शन नाम
-
-FileOp.BtnCancel=रद्द &करें
-FileOp.BtnBackground=पृष्ठ&भूमि
-Queue.BtnCancel=कार्य रद्द &करें
-Queue.BtnClear=पूर्ण कार्यों को सा&फ़ करें
-Session.Title= सत्र चुनें
-
-Macro.AssignTitle= मैक्रो असाइन करें
-Macro.AssignPrompt=वांछित कुंजी संयोजन दबाएं
-Macro.AssignCancel=रद्द करने के लिए Esc दबाएं
-
-Menu.Language=भाषा
-Menu.HelpLanguage=सहायता भाषा
-Menu.Left=बायां
-Menu.Files=फ़ाइलें
-Menu.Commands=कमांड
-Menu.Options=विकल्प
-Menu.Right=दायां
-Menu.Exit=बाहर निक&लें
-
-Menu.Files.View=देखें
-Menu.Files.Edit=संपादित करें
-Menu.Files.Copy=कॉपी करें
-Menu.Files.RenMov=नाम बदलें या स्थानांतरित करें
-Menu.Files.MkDir=फ़ोल्डर बनाएं
-Menu.Files.Delete=हटाएं
-Menu.Left.Brief=संक्षिप्त
-Menu.Left.Medium=मध्यम
-Menu.Left.Detailed=विस्तृत
-Menu.Left.Wide=चौड़ा
-Menu.Commands.FindFile=फ़ाइल खोजें
-Menu.Commands.FindDuplicates=डुप्लिकेट खोजें
-Menu.Commands.BackgroundJobs=पृष्ठभूमि कार्य
-Menu.Commands.RunRemote=रिमोट कमांड चलाएं
-RemoteCmd.Title=रिमोट कमांड
-RemoteCmd.Prompt=कमांड:
-RemoteCmd.BtnClose=बं&द करें
-Jobs.Title=पृष्ठभूमि कार्य
-Jobs.BtnShow=दि&खाएं
-Jobs.BtnCancel=कार्य रद्द &करें
-Jobs.BtnClose=बं&द करें
-Jobs.Empty=कुछ भी नहीं चल रहा है
-Menu.Commands.Bookmarks=बुकमार्क
-Menu.SortName=नाम
-Menu.SortExt=विस्तार
-Menu.SortTime=समय
-Menu.SortSize=आकार
-Menu.SortUnsorted=अक्रमित
-Sort.Title=इसके द्वारा क्रमबद्ध करें
-Menu.PanelSettings=पैनल सेटिंग्स
-Menu.EditorSettings=संपादक सेटिंग्स
-Menu.ColorerSettings=कल&रर सेटिंग्स
-Menu.AppearanceSettings=दिखावट सेटिंग्स
-Menu.ConfirmationsSettings=पुष्टि
-Menu.AutoUpdateSettings=स्वचालित अद्य&तन
-Menu.Options.Plugins=प्लगइन्स प्रबंधित करें
-
-Menu.Editor.File=&फ़ाइल
-Menu.Editor.Edit=&संपादित करें
-Menu.Editor.Search=&खोजें
-Menu.Editor.Options=&विकल्प
-Menu.Editor.Insert=&डालें
-Menu.Viewer.File=&फ़ाइल
-Menu.Viewer.View=&देखें
-Menu.Viewer.Search=&खोजें
-Menu.Viewer.Options=&विकल्प
 Action.App.ScreenGrab=स्क्रीन ग्&रैब
 Action.App.ScreenGrab.Desc=स्क्रीन क्षेत्र का चयन करें और कॉपी करें
 Action.Editor.Save=&सहेजें
@@ -299,18 +154,6 @@ Action.Viewer.CodepageNext=अ&गला कोडपेज
 Action.Viewer.CodepageNext.Desc=अगले कोडपेज पर चक्रित करें
 Action.Viewer.CodepageMenu=कोड&पेज मेनू
 Action.Viewer.CodepageMenu.Desc=कोडपेज चुनें
-Help.ViewerEditor=व्यूअर और संपादक कुंजियां
-Help.PanelNav=पैनल कुंजियां
-Help.NavigationKeys=नेविगेशन कुंजियां
-Help.Area.Shell=पैनल
-Help.Area.Terminal=टर्मिनल
-Help.Area.Editor=संपादक
-Help.Area.Viewer=व्यूअर
-Help.Area.Common=सामान्य
-Menu.Shell.Files=फ़ाइ&लें
-Menu.Shell.Commands=कमां&ड
-Menu.Shell.Options=विक&ल्प
-Menu.Terminal.File=&फ़ाइल
 Action.File.New=नई फ़ाइल
 Action.File.New.Desc=संपादक में एक नई फ़ाइल बनाएं और खोलें
 Action.File.CopyInPlace=स्थान पर कॉपी करें
@@ -343,19 +186,6 @@ Action.Panel.UserMenu=उपयोगकर्&ता मेनू
 Action.Panel.UserMenu.Desc=उपयोगकर्ता मेनू दिखाएं
 Action.Panel.FileAssociations=फ़ाइल सं&बंध…
 Action.Panel.FileAssociations.Desc=Enter, F3 और F4 के लिए प्रति-मास्क कमांड कॉन्फ़िगर करें
-FileAssoc.EditorTitle=फ़ाइल संबंध
-FileAssoc.EditTitle=संबंध संपादित करें
-FileAssoc.NewTitle=नया संबंध
-FileAssoc.ErrorTitle=फ़ाइल संबंध
-FileAssoc.EmptyHint=अभी तक कोई संबंध नहीं है — जोड़ने के लिए Ins दबाएं
-FileAssoc.EmptyMask=फ़ाइल मास्क खाली नहीं हो सकता।
-FileAssoc.MaskLabel=मास्क
-FileAssoc.DescLabel=विवरण
-FileAssoc.PickTitle.Open=इसके साथ खोलें
-FileAssoc.PickTitle.View=इसके साथ देखें
-FileAssoc.PickTitle.Edit=इसके साथ संपादित करें
-FileAssoc.DeleteTitle=संबंध हटाएं
-FileAssoc.DeleteConfirm=क्या संबंध %q हटाना चाहते हैं?
 Action.Panel.Bookmarks.Desc=फ़ोल्डर बुकमार्क संवाद दिखाएं
 Action.Panel.PluginMenu=प्ल&गइन कमांड
 Action.Panel.PluginMenu.Desc=प्लगइन कमांड मेनू दिखाएं
@@ -416,3 +246,200 @@ Action.Panel.QuickView.Desc=त्वरित दृश्य पैनल ट�
 Action.Panel.SplitLeft.Desc=ऊर्ध्वाधर विभाजन को बाईं ओर ले जाएं
 Action.Panel.SplitRight.Desc=ऊर्ध्वाधर विभाजन को दाईं ओर ले जाएं
 Action.Panel.SplitUp.Desc=दोनों पैनलों को लंबवत सिकोड़ें
+
+Btn.OverwriteAll=सभी को ओ&वरराइट करें
+Btn.SkipAll=सभी को छो&ड़ें
+Btn.Retry=पुनः प्र&यास करें
+Btn.Ignore=अंदे&खा करें
+
+Operation.Error=ऑपरेशन विफल रहा:\n%s
+
+Op.ClonePanels=नए कार्यस्थान में पैनल की प्र&तिलिपि बनाएं
+Op.SwitchHint=विंडोज़ बदलने के लिए Ctrl+Tab दबाएं
+Op.DummyTitle= डमी ऑपरेशन
+Op.DummyText=यह एक डमी 5 मिनट का ऑपरेशन है।\nपृष्ठभूमि मोड चुनें:
+Op.DummyQueue=कतार (डिफ़ॉल्ट)
+Op.DummyBackground=पृष्ठभूमि पैनल प्रतिलिपि
+Op.DummyForeground=अग्रभूमि लॉक
+Op.BtnStart=&प्रारंभ
+
+Viewer.Title= देखें
+Viewer.ModeText=पाठ
+Viewer.ModeHex=हेक्स
+Viewer.SearchTitle= खोजें
+
+Search.CaseSensitive=केस संवे&दनशील
+Search.Reverse=विप&रीत खोज
+Search.Prompt=खोजें:
+Search.WholeWords=केवल पूरा शब्द
+Search.Regex=नियमित अभिव्यक्ति
+Search.BtnFind=खोजें (&F)
+
+Select.Title= चुनें
+Select.Mask=चयन मा&स्क दर्ज करें:
+
+Deselect.Title= चयन रद्द करें
+
+Quit.Title= बाहर निकलें
+Quit.Confirm=क्या आप f4 छोड़ना चाहते हैं?
+Quit.Btn=&छोड़ें
+
+Macro.AssignTitle= मैक्रो असाइन करें
+Macro.AssignPrompt=वांछित कुंजी संयोजन दबाएं
+Macro.AssignCancel=रद्द करने के लिए Esc दबाएं
+
+Menu.Language=भाषा
+Menu.HelpLanguage=सहायता भाषा
+Menu.Left=बायां
+Menu.Files=फ़ाइलें
+Menu.Commands=कमांड
+Menu.Options=विकल्प
+Menu.Right=दायां
+Menu.Exit=बाहर निक&लें
+Menu.Files.View=देखें
+Menu.Files.Edit=संपादित करें
+Menu.Files.Copy=कॉपी करें
+Menu.Files.RenMov=नाम बदलें या स्थानांतरित करें
+Menu.Files.MkDir=फ़ोल्डर बनाएं
+Menu.Files.Delete=हटाएं
+Menu.Left.Brief=संक्षिप्त
+Menu.Left.Medium=मध्यम
+Menu.Left.Detailed=विस्तृत
+Menu.Left.Wide=चौड़ा
+Menu.Commands.FindFile=फ़ाइल खोजें
+Menu.Commands.FindDuplicates=डुप्लिकेट खोजें
+Menu.Commands.BackgroundJobs=पृष्ठभूमि कार्य
+Menu.Commands.RunRemote=रिमोट कमांड चलाएं
+Menu.Commands.Bookmarks=बुकमार्क
+Menu.SortName=नाम
+Menu.SortExt=विस्तार
+Menu.SortTime=समय
+Menu.SortSize=आकार
+Menu.SortUnsorted=अक्रमित
+Menu.PanelSettings=पैनल सेटिंग्स
+Menu.EditorSettings=संपादक सेटिंग्स
+Menu.ColorerSettings=कल&रर सेटिंग्स
+Menu.AppearanceSettings=दिखावट सेटिंग्स
+Menu.ConfirmationsSettings=पुष्टि
+Menu.AutoUpdateSettings=स्वचालित अद्य&तन
+Menu.Options.Plugins=प्लगइन्स प्रबंधित करें
+Menu.Editor.File=&फ़ाइल
+Menu.Editor.Edit=&संपादित करें
+Menu.Editor.Search=&खोजें
+Menu.Editor.Options=&विकल्प
+Menu.Editor.Insert=&डालें
+Menu.Viewer.File=&फ़ाइल
+Menu.Viewer.View=&देखें
+Menu.Viewer.Search=&खोजें
+Menu.Viewer.Options=&विकल्प
+Menu.Shell.Files=फ़ाइ&लें
+Menu.Shell.Commands=कमां&ड
+Menu.Shell.Options=विक&ल्प
+Menu.Terminal.File=&फ़ाइल
+
+RemoteCmd.Title=रिमोट कमांड
+RemoteCmd.Prompt=कमांड:
+RemoteCmd.BtnClose=बं&द करें
+
+Jobs.Title=पृष्ठभूमि कार्य
+Jobs.BtnShow=दि&खाएं
+Jobs.BtnCancel=कार्य रद्द &करें
+Jobs.BtnClose=बं&द करें
+Jobs.Empty=कुछ भी नहीं चल रहा है
+
+Sort.Title=इसके द्वारा क्रमबद्ध करें
+
+Help.ViewerEditor=व्यूअर और संपादक कुंजियां
+Help.PanelNav=पैनल कुंजियां
+Help.NavigationKeys=नेविगेशन कुंजियां
+Help.Area.Shell=पैनल
+Help.Area.Terminal=टर्मिनल
+Help.Area.Editor=संपादक
+Help.Area.Viewer=व्यूअर
+Help.Area.Common=सामान्य
+
+FileAssoc.EditorTitle=फ़ाइल संबंध
+FileAssoc.EditTitle=संबंध संपादित करें
+FileAssoc.NewTitle=नया संबंध
+FileAssoc.ErrorTitle=फ़ाइल संबंध
+FileAssoc.EmptyHint=अभी तक कोई संबंध नहीं है — जोड़ने के लिए Ins दबाएं
+FileAssoc.EmptyMask=फ़ाइल मास्क खाली नहीं हो सकता।
+FileAssoc.MaskLabel=मास्क
+FileAssoc.DescLabel=विवरण
+FileAssoc.PickTitle.Open=इसके साथ खोलें
+FileAssoc.PickTitle.View=इसके साथ देखें
+FileAssoc.PickTitle.Edit=इसके साथ संपादित करें
+FileAssoc.DeleteTitle=संबंध हटाएं
+FileAssoc.DeleteConfirm=क्या संबंध %q हटाना चाहते हैं?
+
+UserMenu.EditTitle= उपयोगकर्ता मेनू संपादित करें
+UserMenu.CreateTitle= उपयोगकर्ता मेनू बनाएं
+UserMenu.EditSubmenuTitle= उप-मेनू संपादित करें
+UserMenu.CreateSubmenuTitle= उप-मेनू बनाएं
+UserMenu.LabelHotkey=शॉर्ट&कट कुंजी:
+UserMenu.LabelLabel=&लेबल:
+UserMenu.LabelCommand=&कमांड:
+
+FileOp.BtnCancel=रद्द &करें
+FileOp.BtnBackground=पृष्ठ&भूमि
+
+Arkanoid.HighScores= उच्च स्कोर
+
+PlugRing.Title= f4 PlugRing
+PlugRing.BtnInstall=&इंस्टॉल/अद्यतन
+PlugRing.BtnRemove=ह&टाएं
+PlugRing.BtnRefresh=ता&ज़ा करें
+PlugRing.BtnClose=बं&द करें
+
+Attributes.Title= विशेषताएं
+Attributes.BtnSet=सेट करें
+Attributes.BtnSecurity=&सुरक्षा
+Attributes.Read=पढ़ना
+Attributes.Write=लिखना
+Attributes.Execute=निष्पादन
+Attributes.ReadOnly=केवल प&ढ़ने के लिए
+Attributes.Hidden=&छिपा हुआ
+Attributes.System=&सिस्टम
+Attributes.Archive=अ&भिलेख
+
+Permissions.Title= प्लगइन अनुमतियां
+Permissions.BtnRevoke=अधिकार वा&पस लें
+Permissions.BtnClose=बं&द करें
+
+Replace.Title= बदलें
+Replace.Prompt=इसके साथ बदलें:
+Replace.BtnReplace=बद&लें
+Replace.BtnReplaceAll=सभी को बद&लें
+
+Codepage.Title= कोडपेज
+Codepage.ConvertTitle= कोडपेज परिवर्तित करें
+
+Hotkeys.Title= हॉटकी कॉन्फ़िगरेशन
+Hotkeys.BtnAssign=अ&साइन करें
+Hotkeys.BtnUnbind=ह&टाएं
+Hotkeys.BtnClose=बं&द करें
+Hotkeys.SelectTitle= क्षेत्र और शर्त चुनें
+Hotkeys.BtnNext=आगे >
+Hotkeys.LabelArea=क्षेत्र:
+Hotkeys.LabelWhen=शर्त:
+Hotkeys.AssignTitle= शॉर्टकट कुंजी असाइन करें
+
+Drive.Title= ड्राइव
+
+NetFox.ConnectionTitle= कनेक्शन सेटिंग
+NetFox.PassiveMode=निष्क्रिय मोड (Passive)
+NetFox.LabelName=&नाम:
+NetFox.LabelProtocol=प्रोटोकॉ&ल:
+NetFox.LabelHost=होस्&ट:
+NetFox.LabelPort=&पोर्ट:
+NetFox.LabelUser=उपभोक्&ता:
+NetFox.LabelPassword=पासव&र्ड:
+NetFox.LabelTimeout=समय सी&मा:
+NetFox.LabelCodepage=कोडपे&ज:
+NetFox.ErrorEmptyName=नाम खाली नहीं हो सकता
+NetFox.ErrorReservedName=आरक्षित कनेक्शन नाम
+
+Queue.BtnCancel=कार्य रद्द &करें
+Queue.BtnClear=पूर्ण कार्यों को सा&फ़ करें
+
+Session.Title= सत्र चुनें

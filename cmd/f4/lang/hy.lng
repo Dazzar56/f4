@@ -5,20 +5,6 @@ Author=f4 Team
 
 [Strings]
 VisRen.Menu=Ֆայլերի &վիզուալ անվանափոխում
-ID3Editor.Menu=ID3 տեգերի &խմբագիր
-ID3Editor.Title=ID3 տեգերի խմբագիր
-ID3Editor.LocalOnly=ID3 տեգերի խմբագիրը աջակցում է միայն լոկալ ֆայլերը։
-ID3Editor.SelectFile=Նախ ընտրեք MP3 ֆայլ:
-ID3Editor.OnlyMP3=Աջակցվում են միայն MP3 ֆայլեր։
-ID3Editor.SaveError=Չհաջողվեց պահպանել ID3 տեգերը՝\n%v
-ID3Editor.OpenError=Չհաջողվեց բացել MP3 ֆայլը՝\n%v
-ID3Editor.FieldTitle=Վերնագիր՝
-ID3Editor.FieldArtist=Կատարող՝
-ID3Editor.FieldAlbum=Ալբոմ՝
-ID3Editor.FieldYear=Տարի՝
-ID3Editor.FieldGenre=Ժանր՝
-ID3Editor.FieldComment=Մեկնաբանություն՝
-ID3Editor.FieldVersion=Տարբերակ՝
 VisRen.Title=Ֆայլերի վիզուալ անվանափոխում
 VisRen.HostUnsupported=F4-ի այս հոսթը չի ապահովում VisRen UI կապը։
 VisRen.LocalOnly=VisRen-ը աշխատում է միայն լոկալ ֆայլային վահանակում:
@@ -59,109 +45,52 @@ VisRen.WordDivTitle=Բառերի բաժանարարներ
 VisRen.WordDivPrompt=Բառերը բաժանող նշաններ (առավելագույնը 18)՝
 VisRen.OldName=Հին անուն
 VisRen.NewName=Նոր անուն
+
+ID3Editor.Menu=ID3 տեգերի &խմբագիր
+ID3Editor.Title=ID3 տեգերի խմբագիր
+ID3Editor.LocalOnly=ID3 տեգերի խմբագիրը աջակցում է միայն լոկալ ֆայլերը։
+ID3Editor.SelectFile=Նախ ընտրեք MP3 ֆայլ:
+ID3Editor.OnlyMP3=Աջակցվում են միայն MP3 ֆայլեր։
+ID3Editor.SaveError=Չհաջողվեց պահպանել ID3 տեգերը՝\n%v
+ID3Editor.OpenError=Չհաջողվեց բացել MP3 ֆայլը՝\n%v
+ID3Editor.FieldTitle=Վերնագիր՝
+ID3Editor.FieldArtist=Կատարող՝
+ID3Editor.FieldAlbum=Ալբոմ՝
+ID3Editor.FieldYear=Տարի՝
+ID3Editor.FieldGenre=Ժանր՝
+ID3Editor.FieldComment=Մեկնաբանություն՝
+ID3Editor.FieldVersion=Տարբերակ՝
+
 vtui.Ok=&Լավ
 vtui.Cancel=Չեղարկել
+
 Panel.Other=&Այլ վահանակ
 Panel.Column.Name=Անուն
 Panel.Column.Size=Չափս
 Panel.Column.Modified=Փոփոխված է
 Panel.UpDir=ՎԵՐԻՆ-ԹՂԹԱՊԱՆԱԿ
 Panel.SelectedInfo=Բայթ՝ %s, ֆայլ՝ %d, թղթապանակ՝ %d
+
 Panels.Prompt=>
+
 Edit.NewFileTitle= Ստեղծել նոր ֆայլ
 Edit.NewFilePrompt=Ֆայլի &անունը՝
+
 MakeFolder.Title= Ստեղծել թղթապանակ
 MakeFolder.Prompt=Ստեղծել &թղթապանակ՝
+
 Delete.Title= Ջնջում
 Delete.Confirm=Իսկապե՞ս ցանկանում եք ջնջել\n%s:
 Delete.Btn=&Ջնջել
+
 Copy.Title= Պատճենում
 Copy.Prompt=Պատճենել %d տարրերը այստեղ՝
 Copy.Btn=&Պատճենել
+
 Move.Title= Տեղափոխում
 Move.Prompt=Անվանափոխել կամ տեղափոխել %d տարրերը այստեղ՝
 Move.Btn=&Անվանափոխել
-Btn.OverwriteAll=Վերագրել &բոլորը
-Btn.SkipAll=Բաց &թողնել բոլորը
-Btn.Retry=&Կրկնել
-Btn.Ignore=&Անտեսել
-Operation.Error=Գործողության սխալ՝\n%s
-Op.ClonePanels=&Կլոնավորել վահանակները նոր աշխատանքային տիրույթում
-Op.SwitchHint=Ctrl+Tab պատուհանները փոխելու համար
-Op.DummyTitle= Փորձնական գործողություն
-Op.DummyText=Սա փորձնական 5-րոպեանոց գործողություն է։\nԸնտրեք կատարման ռեժիմը՝
-Viewer.Title= Դիտում
-Viewer.ModeText=Տեքստ
-Viewer.ModeHex=Hex
-Viewer.SearchTitle= Որոնում
-Search.CaseSensitive=&Հաշվի առնել ռեգիստրը
-Search.Reverse=&Հակադարձ որոնում
-Select.Title= Մարկավորել
-Deselect.Title= Մարկավորման չեղարկում
-Quit.Title= Ելք
-Quit.Confirm=Իսկապե՞ս ցանկանում եք դուրս գալ f4-ից։
-Quit.Btn=&Դուրս գալ
-Select.Mask=&Մուտքագրեք մարկավորման նիշքը՝
 
-Macro.AssignTitle= Մակրոսի նշանակում
-Macro.AssignPrompt=Սեղմեք ստեղների ցանկալի համակցությունը
-Macro.AssignCancel=Չեղարկելու համար սեղմեք Esc
-
-Menu.Language=Լեզու (Language)
-Menu.HelpLanguage=Օգնության լեզու (Help Language)
-Menu.Left=Ձախ
-Menu.Files=Ֆայլեր
-Menu.Commands=Հրամաններ
-Menu.Options=Պարամետրեր
-Menu.Right=Աջ
-Menu.Exit=Ե&լք
-
-Menu.Files.View=Դիտել
-Menu.Files.Edit=Խմբագրել
-Menu.Files.Copy=Պատճենել
-Menu.Files.RenMov=Անվանափոխել կամ տեղափոխել
-Menu.Files.MkDir=Ստեղծել թղթապանակ
-Menu.Files.Delete=Ջնջել
-Menu.Left.Brief=Համառոտ
-Menu.Left.Medium=Միջին
-Menu.Left.Detailed=Մանրամասն
-Menu.Left.Wide=Լայն
-Menu.Commands.FindFile=Ֆայլի որոնում
-Menu.Commands.FindDuplicates=Դուբլիկատների որոնում
-Menu.Commands.BackgroundJobs=Ֆոնային առաջադրանքներ
-Menu.Commands.RunRemote=Կատարել հրամանը սերվերում
-RemoteCmd.Title=Հրաման սերվերում
-RemoteCmd.Prompt=Հրաման՝
-RemoteCmd.BtnClose=&Փակել
-Jobs.Title=Ֆոնային առաջադրանքներ
-Jobs.BtnShow=&Ցուցադրել
-Jobs.BtnCancel=&Չեղարկել
-Jobs.BtnClose=&Փակել
-Jobs.Empty=Ոչինչ չի կատարվում
-Menu.Commands.Bookmarks=Սանիշներ
-Menu.SortName=Անուն
-Menu.SortExt=Ընդլայնում
-Menu.SortTime=Ժամանակ
-Menu.SortSize=Չափս
-Menu.SortUnsorted=Առանց տեսակավորման
-Sort.Title=Տեսակավորում
-Menu.PanelSettings=Վահանակների կարգավորումներ
-Menu.EditorSettings=Խմբագրիչի կարգավորումներ
-Menu.ColorerSettings=&Colorer-ի կարգավորումներ
-Menu.AppearanceSettings=Արտաքին տեսք
-Menu.ConfirmationsSettings=Հաստատումներ
-Menu.AutoUpdateSettings=Ավտո&թարմացում
-Menu.Options.Plugins=Փլագինների կառավարում
-
-Menu.Editor.File=&Ֆայլ
-Menu.Editor.Edit=&Խմբագրել
-Menu.Editor.Search=&Որոնել
-Menu.Editor.Options=&Պարամետրեր
-Menu.Editor.Insert=&Ներդրում
-Menu.Viewer.File=&Ֆայլ
-Menu.Viewer.View=&Տեսք
-Menu.Viewer.Search=&Որոնել
-Menu.Viewer.Options=&Պարամետրեր
 Action.App.ScreenGrab=Էկրանի &նկարում
 Action.App.ScreenGrab.Desc=Նշել և պատճենել էկրանի տիրույթը
 Action.Editor.Save=&Պահպանել
@@ -224,18 +153,6 @@ Action.Viewer.CodepageNext=Հաջորդ &կոդավորումը
 Action.Viewer.CodepageNext.Desc=Անցնել հաջորդ կոդավորմանը
 Action.Viewer.CodepageMenu=Կոդավորումների &մենյու
 Action.Viewer.CodepageMenu.Desc=Ընտրել կոդավորումը
-Help.ViewerEditor=Դիտման և Խմբագրման Ստեղներ
-Help.PanelNav=Վահանակի ստեղներ
-Help.NavigationKeys=Նավիգացիայի ստեղներ
-Help.Area.Shell=Վահանակներ
-Help.Area.Terminal=Տերմինալ
-Help.Area.Editor=Խմբագրիչ
-Help.Area.Viewer=Դիտող
-Help.Area.Common=Ընդհանուր
-Menu.Shell.Files=&Ֆայլեր
-Menu.Shell.Commands=&Հրամաններ
-Menu.Shell.Options=&Պարամետրեր
-Menu.Terminal.File=&Ֆայլ
 Action.File.New=Նոր ֆայլ
 Action.File.New.Desc=Ստեղծել և բացել նոր ֆայլ խմբագրիչում
 Action.File.CopyInPlace=Պատճենել այստեղ
@@ -268,19 +185,6 @@ Action.Panel.UserMenu=&Օգտվողի մենյու
 Action.Panel.UserMenu.Desc=Ցույց տալ օգտվողի մենյուն
 Action.Panel.FileAssociations=Ֆայլերի &ասոցիացիաներ…
 Action.Panel.FileAssociations.Desc=Սահմանել հրամաններ ըստ նիշքի Enter, F3 և F4-ի համար
-FileAssoc.EditorTitle=Ֆայլերի ասոցիացիաներ
-FileAssoc.EditTitle=Ասոցիացիայի խմբագրում
-FileAssoc.NewTitle=Նոր ասոցիացիա
-FileAssoc.ErrorTitle=Ֆայլերի ասոցիացիաներ
-FileAssoc.EmptyHint=Դեռ չկան ասոցիացիաներ — սեղմեք Ins ավելացնելու համար
-FileAssoc.EmptyMask=Ֆայլի նիշքը չի կարող դատարկ լինել:
-FileAssoc.MaskLabel=Նիշք
-FileAssoc.DescLabel=Նկարագրություն
-FileAssoc.PickTitle.Open=Բացել օգնությամբ
-FileAssoc.PickTitle.View=Դիտել օգնությամբ
-FileAssoc.PickTitle.Edit=Խմբագրել օգնությամբ
-FileAssoc.DeleteTitle=Ասոցիացիայի ջնջում
-FileAssoc.DeleteConfirm=Ջնջե՞լ %q ասոցիացիան։
 Action.Panel.Bookmarks.Desc=Ցույց տալ թղթապանակների սանիշների դիալոգը
 Action.Panel.PluginMenu=Պլա&գինների հրամաններ
 Action.Panel.PluginMenu.Desc=Ցույց տալ պլագինների հրամանների մենյուն
@@ -367,23 +271,98 @@ Action.Terminal.ViewLog.Desc=Բացել տերմինալի լոգը դիտողո
 Action.Terminal.EditLog=&Լոգի խմբագրում
 Action.Terminal.EditLog.Desc=Բացել տերմինալի լոգը խմբագրիչում
 
-EditorSettings.Title= Խմբագրիչի կարգավորումներ
-EditorSettings.AutoComplete=Միացնել &ավտոլրացումը
-EditorSettings.Mask=Ակտիվ է &ֆայլերի նիշքերի համար՝
-ColorerSettings.Title= Colorer-ի կարգավորումներ
-ColorerSettings.Enabled=Միացնել &Colorer գունանշումը
-ColorerSettings.Style=Գունային &ոճը՝
-ColorerSettings.BuiltIn=(ներկառուցված)
-ColorerSettings.Cross=Ցույց տալ &խաչը՝
-ColorerSettings.CrossOff=Չցուցադրել
-ColorerSettings.CrossVertical=Ուղղահայաց
-ColorerSettings.CrossHorizontal=Հորիզոնական
-ColorerSettings.CrossBoth=Երկուսն էլ
-ColorerSettings.Syntax=Սինտաքսի &գունանշում
-ColorerSettings.Background=Խմբագրիչի &ֆոնը ըստ ոճի
-ColorerSettings.Catalog=Սխեմաների &թղթապանակը (catalog.xml)՝
-ColorerSettings.Reload=Վերա&բեռնել
-ColorerSettings.Download=Ներ&բեռնել սխեմաները
+Btn.OverwriteAll=Վերագրել &բոլորը
+Btn.SkipAll=Բաց &թողնել բոլորը
+Btn.Retry=&Կրկնել
+Btn.Ignore=&Անտեսել
+
+Operation.Error=Գործողության սխալ՝\n%s
+
+Op.ClonePanels=&Կլոնավորել վահանակները նոր աշխատանքային տիրույթում
+Op.SwitchHint=Ctrl+Tab պատուհանները փոխելու համար
+Op.DummyTitle= Փորձնական գործողություն
+Op.DummyText=Սա փորձնական 5-րոպեանոց գործողություն է։\nԸնտրեք կատարման ռեժիմը՝
+Op.Queue=Հերթ
+Op.Background=Վահանակների ֆոնային կլոնավորում
+Op.Foreground=Մոնոպոլ ռեժիմ
+Op.PathNameOnly=Միայն անունը
+Op.PathFullPath=Լրիվ ուղին
+Op.PathSrcDst=Աղբյուր -> Նշանակում
+
+Viewer.Title= Դիտում
+Viewer.ModeText=Տեքստ
+Viewer.ModeHex=Hex
+Viewer.SearchTitle= Որոնում
+
+Search.CaseSensitive=&Հաշվի առնել ռեգիստրը
+Search.Reverse=&Հակադարձ որոնում
+
+Select.Title= Մարկավորել
+Select.Mask=&Մուտքագրեք մարկավորման նիշքը՝
+
+Deselect.Title= Մարկավորման չեղարկում
+
+Quit.Title= Ելք
+Quit.Confirm=Իսկապե՞ս ցանկանում եք դուրս գալ f4-ից։
+Quit.Btn=&Դուրս գալ
+
+Macro.AssignTitle= Մակրոսի նշանակում
+Macro.AssignPrompt=Սեղմեք ստեղների ցանկալի համակցությունը
+Macro.AssignCancel=Չեղարկելու համար սեղմեք Esc
+
+Menu.Language=Լեզու (Language)
+Menu.HelpLanguage=Օգնության լեզու (Help Language)
+Menu.Left=Ձախ
+Menu.Files=Ֆայլեր
+Menu.Commands=Հրամաններ
+Menu.Options=Պարամետրեր
+Menu.Right=Աջ
+Menu.Exit=Ե&լք
+Menu.Files.View=Դիտել
+Menu.Files.Edit=Խմբագրել
+Menu.Files.Copy=Պատճենել
+Menu.Files.RenMov=Անվանափոխել կամ տեղափոխել
+Menu.Files.MkDir=Ստեղծել թղթապանակ
+Menu.Files.Delete=Ջնջել
+Menu.Left.Brief=Համառոտ
+Menu.Left.Medium=Միջին
+Menu.Left.Detailed=Մանրամասն
+Menu.Left.Wide=Լայն
+Menu.Commands.FindFile=Ֆայլի որոնում
+Menu.Commands.FindDuplicates=Դուբլիկատների որոնում
+Menu.Commands.BackgroundJobs=Ֆոնային առաջադրանքներ
+Menu.Commands.RunRemote=Կատարել հրամանը սերվերում
+Menu.Commands.Bookmarks=Սանիշներ
+Menu.SortName=Անուն
+Menu.SortExt=Ընդլայնում
+Menu.SortTime=Ժամանակ
+Menu.SortSize=Չափս
+Menu.SortUnsorted=Առանց տեսակավորման
+Menu.PanelSettings=Վահանակների կարգավորումներ
+Menu.EditorSettings=Խմբագրիչի կարգավորումներ
+Menu.ColorerSettings=&Colorer-ի կարգավորումներ
+Menu.AppearanceSettings=Արտաքին տեսք
+Menu.ConfirmationsSettings=Հաստատումներ
+Menu.AutoUpdateSettings=Ավտո&թարմացում
+Menu.Options.Plugins=Փլագինների կառավարում
+Menu.Editor.File=&Ֆայլ
+Menu.Editor.Edit=&Խմբագրել
+Menu.Editor.Search=&Որոնել
+Menu.Editor.Options=&Պարամետրեր
+Menu.Editor.Insert=&Ներդրում
+Menu.Viewer.File=&Ֆայլ
+Menu.Viewer.View=&Տեսք
+Menu.Viewer.Search=&Որոնել
+Menu.Viewer.Options=&Պարամետրեր
+Menu.Shell.Files=&Ֆայլեր
+Menu.Shell.Commands=&Հրամաններ
+Menu.Shell.Options=&Պարամետրեր
+Menu.Terminal.File=&Ֆայլ
+
+RemoteCmd.Title=Հրաման սերվերում
+RemoteCmd.Prompt=Հրաման՝
+RemoteCmd.BtnClose=&Փակել
+
 PanelSettings.Title= Վահանակների կարգավորումներ
 PanelSettings.ShowHidden=Ցուցադրել &թաքնված և համակարգային ֆայլերը
 PanelSettings.ShowDirPrefix=Ցուցադրել '/' նշանը թղթա&պանակներից առաջ
@@ -404,6 +383,75 @@ PanelSettings.DefaultMode=Գործողության &ռեժիմը՝
 PanelSettings.PathDisplay=Ուղու ցուցադրումը՝
 PanelSettings.InfoPanelCPUGPU=Ցուցադրել CPU/GPU-ն &ինֆո-վահանակում
 PanelSettings.EscTogglePanels=&Esc-ը փոխում է վահանակների հայտնվելը
+PanelSettings.ShowHighlightMarks=Ցուցադրել ֆայլերի &գունանշման նշանները
+PanelSettings.CommandLineAutoComplete=Միացնել հրամանային տողի ավտո&լրացումը
+PanelSettings.AlwaysShowMenuBar=Միշտ ցուցադրել &մենյուի տողը
+PanelSettings.RecordMacrosTo=Մակրոսների գրանցումը՝
+
+Jobs.Title=Ֆոնային առաջադրանքներ
+Jobs.BtnShow=&Ցուցադրել
+Jobs.BtnCancel=&Չեղարկել
+Jobs.BtnClose=&Փակել
+Jobs.Empty=Ոչինչ չի կատարվում
+
+Sort.Title=Տեսակավորում
+
+Help.ViewerEditor=Դիտման և Խմբագրման Ստեղներ
+Help.PanelNav=Վահանակի ստեղներ
+Help.NavigationKeys=Նավիգացիայի ստեղներ
+Help.Area.Shell=Վահանակներ
+Help.Area.Terminal=Տերմինալ
+Help.Area.Editor=Խմբագրիչ
+Help.Area.Viewer=Դիտող
+Help.Area.Common=Ընդհանուր
+Help.SearchHint=Որոնում՝ մուտքագրում  Հաջորդը՝ F3/Ctrl+Enter  Նախորդը՝ Shift+F3/Ctrl+Shift+Enter
+
+FileAssoc.EditorTitle=Ֆայլերի ասոցիացիաներ
+FileAssoc.EditTitle=Ասոցիացիայի խմբագրում
+FileAssoc.NewTitle=Նոր ասոցիացիա
+FileAssoc.ErrorTitle=Ֆայլերի ասոցիացիաներ
+FileAssoc.EmptyHint=Դեռ չկան ասոցիացիաներ — սեղմեք Ins ավելացնելու համար
+FileAssoc.EmptyMask=Ֆայլի նիշքը չի կարող դատարկ լինել:
+FileAssoc.MaskLabel=Նիշք
+FileAssoc.DescLabel=Նկարագրություն
+FileAssoc.PickTitle.Open=Բացել օգնությամբ
+FileAssoc.PickTitle.View=Դիտել օգնությամբ
+FileAssoc.PickTitle.Edit=Խմբագրել օգնությամբ
+FileAssoc.DeleteTitle=Ասոցիացիայի ջնջում
+FileAssoc.DeleteConfirm=Ջնջե՞լ %q ասոցիացիան։
+
+EditorSettings.Title= Խմբագրիչի կարգավորումներ
+EditorSettings.AutoComplete=Միացնել &ավտոլրացումը
+EditorSettings.Mask=Ակտիվ է &ֆայլերի նիշքերի համար՝
+EditorSettings.TabExpandNone=Չփոխարինել տաբուլյացիան պրոբելներով
+EditorSettings.TabExpandNew=Փոխարինել պրոբելներով միայն նոր Tab նիշերը
+EditorSettings.TabExpandAll=Միշտ փոխարինել տաբուլյացիան պրոբելներով
+EditorSettings.ExpandTabs=&Տաբերի բացում՝
+EditorSettings.Highlighter=Գունանշման &ինստրումենտ՝
+EditorSettings.ColorerStyle=Colorer-ի &ոճը՝
+EditorSettings.TabSize=Տաբուլյացիայի &չափը՝
+EditorSettings.AutoIndent=Ավտո&նահանջ
+EditorSettings.CursorBeyondEOL=Կուրսորը տողի վերջից &այն կողմ
+EditorSettings.UseEditorConfig=Օգտագործել .&editorconfig
+EditorSettings.Crosshair=Ցուցադրել &խաչը խմբագրիչում
+EditorSettings.ColorerBg=Colorer &ֆոն
+EditorSettings.UseExternalEditor=Ար&տաքին խմբագրիչ
+EditorSettings.ExternalCommand=Գո&րծարկման հրաման՝
+
+ColorerSettings.Title= Colorer-ի կարգավորումներ
+ColorerSettings.Enabled=Միացնել &Colorer գունանշումը
+ColorerSettings.Style=Գունային &ոճը՝
+ColorerSettings.BuiltIn=(ներկառուցված)
+ColorerSettings.Cross=Ցույց տալ &խաչը՝
+ColorerSettings.CrossOff=Չցուցադրել
+ColorerSettings.CrossVertical=Ուղղահայաց
+ColorerSettings.CrossHorizontal=Հորիզոնական
+ColorerSettings.CrossBoth=Երկուսն էլ
+ColorerSettings.Syntax=Սինտաքսի &գունանշում
+ColorerSettings.Background=Խմբագրիչի &ֆոնը ըստ ոճի
+ColorerSettings.Catalog=Սխեմաների &թղթապանակը (catalog.xml)՝
+ColorerSettings.Reload=Վերա&բեռնել
+ColorerSettings.Download=Ներ&բեռնել սխեմաները
 
 AppearanceSettings.Title= Արտաքին տեսք
 AppearanceSettings.Style=Ձևավորման &ոճը՝
@@ -417,15 +465,33 @@ ConfirmationsSettings.Title= Հաստատումներ
 ConfirmationsSettings.Copy=Հաստատել &պատճենումը
 ConfirmationsSettings.Move=Հաստատել &տեղափոխումը
 ConfirmationsSettings.Delete=Հաստատել &ջնջումը
+ConfirmationsSettings.DeleteCancelFocused=Ջնջելիս ֆոկուսը 'Չեղարկել'-ին
 ConfirmationsSettings.Exit=Հաստատել ե&լքը
+
 UpdateSettings.Title= Թարմացում
 UpdateSettings.Channel=Թարմացման &ալիքը՝
 UpdateSettings.Interval=Ստուգման &ինտերվալը՝
 UpdateSettings.BtnCheck=&Ստուգել հիմա
+UpdateSettings.ChannelStable=Ստաբիլ թողարկումներ
+UpdateSettings.ChannelNightly=Գիշերային հավաքումներ
+UpdateSettings.IntervalNever=Երբեք
+UpdateSettings.IntervalStart=Ամեն անգամ գործարկելիս
+UpdateSettings.IntervalDaily=Օրական
+UpdateSettings.IntervalWeekly=Շաբաթական
+
 FindFile.Title= Ֆայլի որոնում
 FindFile.MaskPrompt=Ֆայլի նիշքը կամ մի քանի նիշքեր՝
 FindFile.TextPrompt=Պարունակում է տեքստը՝
 FindFile.BtnFind=&Որոնել
+FindFile.SearchingTitle= Որոնում...
+FindFile.Scanning=Սկանավորում՝
+FindFile.FoundCount=Գտնվել է՝ %d
+FindFile.SearchResultsTitle= Որոնման արդյունքներ
+FindFile.BtnGoTo=&Անցնել
+FindFile.BtnView=&Դիտում
+FindFile.BtnEdit=&Խմբագր
+FindFile.BtnClose=&Փակել
+
 History.FoldersTitle= Թղթապանակների պատմություն
 History.CommandsTitle= Հրամանների պատմություն
 History.SearchModeHint=F2: փոխարկել ենթատողի որոնումը / սկզբից
@@ -433,22 +499,29 @@ History.CommandsHint=Up/Down Enter Esc Shift+Del Del Ctrl+C Ctrl+Ins F2
 History.FoldersHint=Up/Down Enter Shift+Enter Ctrl+Enter Esc Shift+Del Del Ctrl+C Ctrl+Ins Ctrl+R F2
 History.ConfirmClearAll=Մաքրե՞լ ամբողջ պատմությունը։
 History.ConfirmPruneMissing=Ջնջե՞լ գրանցումները չգոյություն ունեցող ուղիներով։
-Help.SearchHint=Որոնում՝ մուտքագրում  Հաջորդը՝ F3/Ctrl+Enter  Նախորդը՝ Shift+F3/Ctrl+Shift+Enter
+History.Title= Պատմություն
+History.EmptyFolders=Թղթապանակների պատմությունը դատարկ է:
+History.EmptyCommands=Հրամանների պատմությունը դատարկ է:
+
 UserMenu.LocalMenuTitle=Լոկալ մենյու
 UserMenu.MainMenuTitle=Գլխավոր մենյու
 UserMenu.MainMenuFAR=FAR
 
 Language.Title= Լեզուներ (Languages)
 Language.Changed=Լեզուն փոխվել է։\nԻնտերֆեյսի որոշ տարրերի լրիվ թարմացման համար\nկարող է պահանջվել ծրագրի վերագործարկում։
+
+LanguageSettings.Title= Լեզվի կարգավորումներ
+LanguageSettings.Primary=Հիմնական լեզու՝
+LanguageSettings.Fallback=Պահուստային լեզու՝
+LanguageSettings.None=<չկա>
+
 HelpLanguage.Title=Օգնության լեզուներ
 HelpLanguage.Changed=Օգնության լեզուն փոխվել է։
 
-History.Title= Պատմություն
-History.EmptyFolders=Թղթապանակների պատմությունը դատարկ է:
-History.EmptyCommands=Հրամանների պատմությունը դատարկ է:
-
 Error.Title= Սխալ
+
 Warning.Title= Զգուշացում
+
 Info.Title= Ինֆորմացիա
 
 ExtEdit.TempError=Չհաջողվեց ստեղծել ժամանակավոր ֆայլը՝ %v
@@ -463,22 +536,25 @@ FileOp.BtnNewInstance=&Նոր պատճեն
 FileOp.CannotEditDir=Հնարավոր չէ խմբագրել թղթապանակը։
 FileOp.CannotViewDir=Հնարավոր չէ դիտել թղթապանակը։
 FileOp.CannotOpenSpecial=Չհաջողվեց բացել հատուկ ֆայլերը (հոսքեր, սոկետներ, սարքեր)։
+FileOp.DeletionErrors= Ջնջման սխալներ
+FileOp.FileAlreadyExists=Ֆայլն արդեն գոյություն ունի
+FileOp.RememberChoice=Հի&շել ընտրությունը
+FileOp.Overwrite=&Վերագրել
+FileOp.Skip=&Բաց թողնել
+FileOp.Rename=&Անվանափոխել
+FileOp.Append=&Լրացնել
+FileOp.Resume=Վերա&սկսել
 
 Dialog.RenameTitle= Անվանափոխում
 Dialog.RenamePrompt=Անվանափոխել '%s' այսպես՝
-
-Op.Queue=Հերթ
-Op.Background=Վահանակների ֆոնային կլոնավորում
-Op.Foreground=Մոնոպոլ ռեժիմ
-Op.PathNameOnly=Միայն անունը
-Op.PathFullPath=Լրիվ ուղին
-Op.PathSrcDst=Աղբյուր -> Նշանակում
 
 Plugins.Title= Պլագինների կառավարում (RPC)
 Plugins.BtnAdd=&Ավելացնել
 Plugins.BtnRemove=&Ջնջել
 Plugins.BtnPermissions=&Կարգեր
 Plugins.BtnClose=&Փակել
+Plugins.AddTitle= Ավելացնել պլագին
+Plugins.SelectFilePrompt=Ընտրեք պլագինի ֆայլը՝
 
 InfoPanel.Title= Ինֆորմացիա
 InfoPanel.Computer=Համակարգչի անունը
@@ -542,6 +618,7 @@ AndroidInfo.Storage=Պահոց
 AndroidInfo.StorageTotal=Ընդամենը պահոցում
 AndroidInfo.StorageAvailable=Ազատ է պահոցում
 AndroidInfo.Protocol=Կապի արձանագրություն
+
 IOSInfo.DeviceTitle=Apple բջջային սարք
 IOSInfo.Name=Անուն
 IOSInfo.Model=Մոդել
@@ -594,7 +671,6 @@ KeyBar.F9=ՊարՄենյու
 KeyBar.F10=Ելք
 KeyBar.F11=Պլագին
 KeyBar.F12=Էկրան
-
 KeyBar.AltF1=Ձախ
 KeyBar.AltF2=Աջ
 KeyBar.AltF3=Hex
@@ -608,7 +684,6 @@ KeyBar.CtrlF4=Ընդլ
 KeyBar.CtrlF5=Ժամ
 KeyBar.CtrlF6=Չափս
 KeyBar.CtrlF7=ԱռանցՏես
-
 KeyBar.EditorF1=Օգնութ
 KeyBar.EditorF2=Պահպան
 KeyBar.EditorF3=Տողադարձ
@@ -622,54 +697,3 @@ KeyBar.ViewerF4=Hex
 KeyBar.ViewerF7=Որոնում
 KeyBar.ViewerAltF8=Անցնել
 KeyBar.ViewerF10=Ելք
-
-EditorSettings.TabExpandNone=Չփոխարինել տաբուլյացիան պրոբելներով
-EditorSettings.TabExpandNew=Փոխարինել պրոբելներով միայն նոր Tab նիշերը
-EditorSettings.TabExpandAll=Միշտ փոխարինել տաբուլյացիան պրոբելներով
-EditorSettings.ExpandTabs=&Տաբերի բացում՝
-EditorSettings.Highlighter=Գունանշման &ինստրումենտ՝
-EditorSettings.ColorerStyle=Colorer-ի &ոճը՝
-EditorSettings.TabSize=Տաբուլյացիայի &չափը՝
-EditorSettings.AutoIndent=Ավտո&նահանջ
-EditorSettings.CursorBeyondEOL=Կուրսորը տողի վերջից &այն կողմ
-EditorSettings.UseEditorConfig=Օգտագործել .&editorconfig
-EditorSettings.Crosshair=Ցուցադրել &խաչը խմբագրիչում
-EditorSettings.ColorerBg=Colorer &ֆոն
-EditorSettings.UseExternalEditor=Ար&տաքին խմբագրիչ
-EditorSettings.ExternalCommand=Գո&րծարկման հրաման՝
-ConfirmationsSettings.DeleteCancelFocused=Ջնջելիս ֆոկուսը 'Չեղարկել'-ին
-
-PanelSettings.ShowHighlightMarks=Ցուցադրել ֆայլերի &գունանշման նշանները
-PanelSettings.CommandLineAutoComplete=Միացնել հրամանային տողի ավտո&լրացումը
-PanelSettings.AlwaysShowMenuBar=Միշտ ցուցադրել &մենյուի տողը
-PanelSettings.RecordMacrosTo=Մակրոսների գրանցումը՝
-UpdateSettings.ChannelStable=Ստաբիլ թողարկումներ
-UpdateSettings.ChannelNightly=Գիշերային հավաքումներ
-UpdateSettings.IntervalNever=Երբեք
-UpdateSettings.IntervalStart=Ամեն անգամ գործարկելիս
-UpdateSettings.IntervalDaily=Օրական
-UpdateSettings.IntervalWeekly=Շաբաթական
-Plugins.AddTitle= Ավելացնել պլագին
-Plugins.SelectFilePrompt=Ընտրեք պլագինի ֆայլը՝
-
-FindFile.SearchingTitle= Որոնում...
-FindFile.Scanning=Սկանավորում՝
-FindFile.FoundCount=Գտնվել է՝ %d
-FindFile.SearchResultsTitle= Որոնման արդյունքներ
-FindFile.BtnGoTo=&Անցնել
-FindFile.BtnView=&Դիտում
-FindFile.BtnEdit=&Խմբագր
-FindFile.BtnClose=&Փակել
-
-FileOp.DeletionErrors= Ջնջման սխալներ
-FileOp.FileAlreadyExists=Ֆայլն արդեն գոյություն ունի
-FileOp.RememberChoice=Հի&շել ընտրությունը
-FileOp.Overwrite=&Վերագրել
-FileOp.Skip=&Բաց թողնել
-FileOp.Rename=&Անվանափոխել
-FileOp.Append=&Լրացնել
-FileOp.Resume=Վերա&սկսել
-LanguageSettings.Title= Լեզվի կարգավորումներ
-LanguageSettings.Primary=Հիմնական լեզու՝
-LanguageSettings.Fallback=Պահուստային լեզու՝
-LanguageSettings.None=<չկա>

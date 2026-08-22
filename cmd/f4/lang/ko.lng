@@ -5,20 +5,6 @@ Author=f4 Team
 
 [Strings]
 VisRen.Menu=비주얼 파일 이름 변경기(&V)
-ID3Editor.Menu=ID3 태그 편집기(&E)
-ID3Editor.Title=ID3 태그 편집기
-ID3Editor.LocalOnly=ID3 태그 편집기는 로컬 파일만 지원합니다.
-ID3Editor.SelectFile=먼저 MP3 파일을 선택해 주세요.
-ID3Editor.OnlyMP3=MP3 파일만 지원됩니다.
-ID3Editor.SaveError=ID3 태그를 저장하지 못했습니다:\n%v
-ID3Editor.OpenError=MP3 파일을 열지 못했습니다:\n%v
-ID3Editor.FieldTitle=제목:
-ID3Editor.FieldArtist=아티스트:
-ID3Editor.FieldAlbum=앨범:
-ID3Editor.FieldYear=연도:
-ID3Editor.FieldGenre=장르:
-ID3Editor.FieldComment=설명:
-ID3Editor.FieldVersion=버전:
 VisRen.Title=비주얼 파일 이름 변경기
 VisRen.HostUnsupported=이 F4 호스트는 VisRen UI 브리지를 제공하지 않습니다.
 VisRen.LocalOnly=VisRen은 로컬 파일 패널에서만 작동합니다.
@@ -59,109 +45,53 @@ VisRen.WordDivTitle=단어 구분 기호
 VisRen.WordDivPrompt=단어 구분 기호 (최대 18자):
 VisRen.OldName=기존 이름
 VisRen.NewName=새 이름
+
+ID3Editor.Menu=ID3 태그 편집기(&E)
+ID3Editor.Title=ID3 태그 편집기
+ID3Editor.LocalOnly=ID3 태그 편집기는 로컬 파일만 지원합니다.
+ID3Editor.SelectFile=먼저 MP3 파일을 선택해 주세요.
+ID3Editor.OnlyMP3=MP3 파일만 지원됩니다.
+ID3Editor.SaveError=ID3 태그를 저장하지 못했습니다:\n%v
+ID3Editor.OpenError=MP3 파일을 열지 못했습니다:\n%v
+ID3Editor.FieldTitle=제목:
+ID3Editor.FieldArtist=아티스트:
+ID3Editor.FieldAlbum=앨범:
+ID3Editor.FieldYear=연도:
+ID3Editor.FieldGenre=장르:
+ID3Editor.FieldComment=설명:
+ID3Editor.FieldVersion=버전:
+
 vtui.Ok=확인(&O)
 vtui.Cancel=취소
+vtui.Save=저장(&S)
+
 Panel.Other=다른 패널(&O)
 Panel.Column.Name=이름
 Panel.Column.Size=크기
 Panel.Column.Modified=수정됨
 Panel.UpDir=위로
 Panel.SelectedInfo=바이트: %s, 파일: %d, 폴더: %d
+
 Panels.Prompt=>
+
 Edit.NewFileTitle= 새 파일 만들기
 Edit.NewFilePrompt=파일 이름(&N):
+
 MakeFolder.Title= 폴더 만들기
 MakeFolder.Prompt=폴더 만들기(&F):
+
 Delete.Title= 삭제
 Delete.Confirm=정말로 삭제하시겠습니까?\n%s
 Delete.Btn=삭제(&D)
+
 Copy.Title= 복사
 Copy.Prompt=%d개 항목 복사 위치:
 Copy.Btn=복사(&C)
+
 Move.Title= 이동/이름 변경
 Move.Prompt=%d개 항목 이름 변경 또는 이동 위치:
 Move.Btn=이름 변경(&R)
-Btn.OverwriteAll=모두 덮어쓰기(&A)
-Btn.SkipAll=모두 건너뛰기(&K)
-Btn.Retry=재시도(&R)
-Btn.Ignore=무시(&I)
-Operation.Error=작업 실패:\n%s
-Op.ClonePanels=새 작업 공간으로 패널 복제(&C)
-Op.SwitchHint=Ctrl+Tab을 눌러 창 전환
-Op.DummyTitle= 데모 작업
-Op.DummyText=이것은 5분짜리 데모 작업입니다.\n백그라운드 실행 모드를 선택해 주세요:
-Viewer.Title= 보기
-Viewer.ModeText=텍스트
-Viewer.ModeHex=16진수
-Viewer.SearchTitle= 검색
-Search.CaseSensitive=대소문자 구분(&C)
-Search.Reverse=역방향 검색(&R)
-Select.Title= 선택
-Deselect.Title= 선택 취소
-Quit.Title= 종료
-Quit.Confirm=정말로 f4를 종료하시겠습니까?
-Quit.Btn=종료(&L)
-Select.Mask=선택 마스크 입력(&E):
 
-Macro.AssignTitle= 매크로 할당
-Macro.AssignPrompt=원하는 키 조합을 눌러주세요
-Macro.AssignCancel=취소하려면 Esc 키를 누르세요
-
-Menu.Language=언어
-Menu.HelpLanguage=도움말 언어
-Menu.Left=왼쪽
-Menu.Files=파일
-Menu.Commands=명령
-Menu.Options=옵션
-Menu.Right=오른쪽
-Menu.Exit=종료(&X)
-
-Menu.Files.View=보기
-Menu.Files.Edit=편집
-Menu.Files.Copy=복사
-Menu.Files.RenMov=이름 변경 또는 이동
-Menu.Files.MkDir=폴더 만들기
-Menu.Files.Delete=삭제
-Menu.Left.Brief=간단히
-Menu.Left.Medium=중간
-Menu.Left.Detailed=자세히
-Menu.Left.Wide=넓게
-Menu.Commands.FindFile=파일 찾기
-Menu.Commands.FindDuplicates=중복 파일 찾기
-Menu.Commands.BackgroundJobs=백그라운드 작업
-Menu.Commands.RunRemote=원격 명령 실행
-RemoteCmd.Title=원격 명령
-RemoteCmd.Prompt=명령:
-RemoteCmd.BtnClose=닫기(&C)
-Jobs.Title=백그라운드 작업
-Jobs.BtnShow=표시(&S)
-Jobs.BtnCancel=작업 취소(&C)
-Jobs.BtnClose=닫기(&C)
-Jobs.Empty=현재 실행 중인 작업이 없습니다
-Menu.Commands.Bookmarks=북마크
-Menu.SortName=이름
-Menu.SortExt=확장자
-Menu.SortTime=시간
-Menu.SortSize=크기
-Menu.SortUnsorted=정렬 안 함
-Sort.Title=정렬 기준
-Menu.PanelSettings=패널 설정
-Menu.EditorSettings=편집기 설정
-Menu.ColorerSettings=Colorer 설정(&O)
-Menu.AppearanceSettings=외관 설정
-Menu.ConfirmationsSettings=확인 설정
-Menu.AutoUpdateSettings=자동 업데이트(&U)
-Menu.Options.Plugins=플러그인 관리
-
-Menu.Editor.File=파일(&F)
-Menu.Editor.Edit=편집(&E)
-Menu.Editor.Search=검색(&S)
-Menu.Editor.Options=옵션(&O)
-Menu.Editor.Insert=삽입(&I)
-Menu.Viewer.File=파일(&F)
-Menu.Viewer.View=보기(&V)
-Menu.Viewer.Search=검색(&S)
-Menu.Viewer.Options=옵션(&O)
 Action.App.ScreenGrab=화면 캡처(&G)
 Action.App.ScreenGrab.Desc=화면 영역을 선택하고 복사합니다
 Action.Editor.Save=저장(&S)
@@ -224,18 +154,6 @@ Action.Viewer.CodepageNext=다음 코드 페이지(&E)
 Action.Viewer.CodepageNext.Desc=다음 코드 페이지로 로테이션 전환
 Action.Viewer.CodepageMenu=코드 페이지 메뉴(&C)
 Action.Viewer.CodepageMenu.Desc=코드 페이지 선택
-Help.ViewerEditor=뷰어 및 편집기 키
-Help.PanelNav=패널 키
-Help.NavigationKeys=탐색 키
-Help.Area.Shell=패널
-Help.Area.Terminal=터미널
-Help.Area.Editor=편집기
-Help.Area.Viewer=뷰어
-Help.Area.Common=일반
-Menu.Shell.Files=파일(&F)
-Menu.Shell.Commands=명령(&C)
-Menu.Shell.Options=옵션(&O)
-Menu.Terminal.File=파일(&F)
 Action.File.New=새 파일
 Action.File.New.Desc=새 파일을 만들고 편집기에서 엽니다
 Action.File.CopyInPlace=동일 위치에 복사
@@ -268,19 +186,6 @@ Action.Panel.UserMenu=사용자 메뉴(&U)
 Action.Panel.UserMenu.Desc=사용자 정의 메뉴 표시
 Action.Panel.FileAssociations=파일 연결(&A)...
 Action.Panel.FileAssociations.Desc=마스크별 Enter, F3, F4 동작 명령 구성
-FileAssoc.EditorTitle=파일 연결
-FileAssoc.EditTitle=연결 편집
-FileAssoc.NewTitle=새 연결
-FileAssoc.ErrorTitle=파일 연결
-FileAssoc.EmptyHint=연결이 없습니다 - Ins 키를 눌러 새 연결을 추가해 주세요
-FileAssoc.EmptyMask=파일 마스크는 비워 둘 수 없습니다.
-FileAssoc.MaskLabel=마스크
-FileAssoc.DescLabel=설명
-FileAssoc.PickTitle.Open=다음으로 열기
-FileAssoc.PickTitle.View=다음으로 보기
-FileAssoc.PickTitle.Edit=다음으로 편집
-FileAssoc.DeleteTitle=연결 삭제
-FileAssoc.DeleteConfirm=연결 %q을(를) 삭제하시겠습니까?
 Action.Panel.Bookmarks.Desc=폴더 북마크 대화 상자 표시
 Action.Panel.PluginMenu=플러그인 명령(&G)
 Action.Panel.PluginMenu.Desc=플러그인 명령 메뉴 표시
@@ -367,23 +272,106 @@ Action.Terminal.ViewLog.Desc=뷰어에서 터미널 로그 열기
 Action.Terminal.EditLog=터미널 로그 편집(&E)
 Action.Terminal.EditLog.Desc=편집기에서 터미널 로그 열기
 
-EditorSettings.Title= 편집기 설정
-EditorSettings.AutoComplete=자동 완성 활성화(&A)
-EditorSettings.Mask=적용할 파일 마스크(&I):
-ColorerSettings.Title= Colorer 설정
-ColorerSettings.Enabled=Colorer 하이라이트 활성화(&C)
-ColorerSettings.Style=색상 스타일(&S):
-ColorerSettings.BuiltIn=(내장)
-ColorerSettings.Cross=십자선 표시(&R):
-ColorerSettings.CrossOff=표시 안 함
-ColorerSettings.CrossVertical=수직선
-ColorerSettings.CrossHorizontal=수평선
-ColorerSettings.CrossBoth=둘 다 표시
-ColorerSettings.Syntax=구문 강조(&S)
-ColorerSettings.Background=스타일에 따라 편집기 배경색 변경(&B)
-ColorerSettings.Catalog=스키마 폴더 (catalog.xml)(&C):
-ColorerSettings.Reload=재로드(&L)
-ColorerSettings.Download=스키마 다운로드(&D)
+Btn.OverwriteAll=모두 덮어쓰기(&A)
+Btn.SkipAll=모두 건너뛰기(&K)
+Btn.Retry=재시도(&R)
+Btn.Ignore=무시(&I)
+
+Operation.Error=작업 실패:\n%s
+
+Op.ClonePanels=새 작업 공간으로 패널 복제(&C)
+Op.SwitchHint=Ctrl+Tab을 눌러 창 전환
+Op.DummyTitle= 데모 작업
+Op.DummyText=이것은 5분짜리 데모 작업입니다.\n백그라운드 실행 모드를 선택해 주세요:
+Op.Queue=대기열
+Op.Background=백그라운드 패널 복제
+Op.Foreground=전면 단독 실행
+Op.PathNameOnly=이름만
+Op.PathFullPath=전체 경로
+Op.PathSrcDst=원본 경로 -> 대상 경로
+Op.DummyQueue=대기열 (기본값)
+Op.DummyBackground=백그라운드 패널 복제
+Op.DummyForeground=전면 단독 실행
+Op.BtnStart=시작(&S)
+
+Viewer.Title= 보기
+Viewer.ModeText=텍스트
+Viewer.ModeHex=16진수
+Viewer.SearchTitle= 검색
+
+Search.CaseSensitive=대소문자 구분(&C)
+Search.Reverse=역방향 검색(&R)
+Search.Prompt=검색어:
+Search.WholeWords=단어 단위로
+Search.Regex=정규 표현식
+Search.BtnFind=찾기(&F)
+
+Select.Title= 선택
+Select.Mask=선택 마스크 입력(&E):
+
+Deselect.Title= 선택 취소
+
+Quit.Title= 종료
+Quit.Confirm=정말로 f4를 종료하시겠습니까?
+Quit.Btn=종료(&L)
+
+Macro.AssignTitle= 매크로 할당
+Macro.AssignPrompt=원하는 키 조합을 눌러주세요
+Macro.AssignCancel=취소하려면 Esc 키를 누르세요
+
+Menu.Language=언어
+Menu.HelpLanguage=도움말 언어
+Menu.Left=왼쪽
+Menu.Files=파일
+Menu.Commands=명령
+Menu.Options=옵션
+Menu.Right=오른쪽
+Menu.Exit=종료(&X)
+Menu.Files.View=보기
+Menu.Files.Edit=편집
+Menu.Files.Copy=복사
+Menu.Files.RenMov=이름 변경 또는 이동
+Menu.Files.MkDir=폴더 만들기
+Menu.Files.Delete=삭제
+Menu.Left.Brief=간단히
+Menu.Left.Medium=중간
+Menu.Left.Detailed=자세히
+Menu.Left.Wide=넓게
+Menu.Commands.FindFile=파일 찾기
+Menu.Commands.FindDuplicates=중복 파일 찾기
+Menu.Commands.BackgroundJobs=백그라운드 작업
+Menu.Commands.RunRemote=원격 명령 실행
+Menu.Commands.Bookmarks=북마크
+Menu.SortName=이름
+Menu.SortExt=확장자
+Menu.SortTime=시간
+Menu.SortSize=크기
+Menu.SortUnsorted=정렬 안 함
+Menu.PanelSettings=패널 설정
+Menu.EditorSettings=편집기 설정
+Menu.ColorerSettings=Colorer 설정(&O)
+Menu.AppearanceSettings=외관 설정
+Menu.ConfirmationsSettings=확인 설정
+Menu.AutoUpdateSettings=자동 업데이트(&U)
+Menu.Options.Plugins=플러그인 관리
+Menu.Editor.File=파일(&F)
+Menu.Editor.Edit=편집(&E)
+Menu.Editor.Search=검색(&S)
+Menu.Editor.Options=옵션(&O)
+Menu.Editor.Insert=삽입(&I)
+Menu.Viewer.File=파일(&F)
+Menu.Viewer.View=보기(&V)
+Menu.Viewer.Search=검색(&S)
+Menu.Viewer.Options=옵션(&O)
+Menu.Shell.Files=파일(&F)
+Menu.Shell.Commands=명령(&C)
+Menu.Shell.Options=옵션(&O)
+Menu.Terminal.File=파일(&F)
+
+RemoteCmd.Title=원격 명령
+RemoteCmd.Prompt=명령:
+RemoteCmd.BtnClose=닫기(&C)
+
 PanelSettings.Title= 패널 설정
 PanelSettings.ShowHidden=숨김 및 시스템 파일 표시(&H)
 PanelSettings.ShowDirPrefix=폴더 이름 앞에 '/' 표시(&F)
@@ -404,6 +392,75 @@ PanelSettings.DefaultMode=기본 작업 모드(&M):
 PanelSettings.PathDisplay=진행 표시줄에 파일 경로 표시:
 PanelSettings.InfoPanelCPUGPU=정보 패널에 CPU/GPU 정보 표시(&N)
 PanelSettings.EscTogglePanels=Esc 키로 패널 표시 여부 토글(&E)
+PanelSettings.ShowHighlightMarks=강조 표시 마크 표시(&M)
+PanelSettings.CommandLineAutoComplete=명령줄 자동 완성 활성화(&A)
+PanelSettings.AlwaysShowMenuBar=항상 메뉴 모음 표시(&M)
+PanelSettings.RecordMacrosTo=매크로 기록 위치:
+
+Jobs.Title=백그라운드 작업
+Jobs.BtnShow=표시(&S)
+Jobs.BtnCancel=작업 취소(&C)
+Jobs.BtnClose=닫기(&C)
+Jobs.Empty=현재 실행 중인 작업이 없습니다
+
+Sort.Title=정렬 기준
+
+Help.ViewerEditor=뷰어 및 편집기 키
+Help.PanelNav=패널 키
+Help.NavigationKeys=탐색 키
+Help.Area.Shell=패널
+Help.Area.Terminal=터미널
+Help.Area.Editor=편집기
+Help.Area.Viewer=뷰어
+Help.Area.Common=일반
+Help.SearchHint=검색: 문자 입력  다음: F3/Ctrl+Enter  이전: Shift+F3/Ctrl+Shift+Enter
+
+FileAssoc.EditorTitle=파일 연결
+FileAssoc.EditTitle=연결 편집
+FileAssoc.NewTitle=새 연결
+FileAssoc.ErrorTitle=파일 연결
+FileAssoc.EmptyHint=연결이 없습니다 - Ins 키를 눌러 새 연결을 추가해 주세요
+FileAssoc.EmptyMask=파일 마스크는 비워 둘 수 없습니다.
+FileAssoc.MaskLabel=마스크
+FileAssoc.DescLabel=설명
+FileAssoc.PickTitle.Open=다음으로 열기
+FileAssoc.PickTitle.View=다음으로 보기
+FileAssoc.PickTitle.Edit=다음으로 편집
+FileAssoc.DeleteTitle=연결 삭제
+FileAssoc.DeleteConfirm=연결 %q을(를) 삭제하시겠습니까?
+
+EditorSettings.Title= 편집기 설정
+EditorSettings.AutoComplete=자동 완성 활성화(&A)
+EditorSettings.Mask=적용할 파일 마스크(&I):
+EditorSettings.TabExpandNone=탭을 확장하지 않음
+EditorSettings.TabExpandNew=새로 입력된 탭을 공백으로 확장
+EditorSettings.TabExpandAll=모든 탭을 공백으로 확장
+EditorSettings.ExpandTabs=탭 확장(&A):
+EditorSettings.Highlighter=구문 강조(&G):
+EditorSettings.ColorerStyle=Colorer 스타일(&Y):
+EditorSettings.TabSize=탭 크기(&Z):
+EditorSettings.AutoIndent=자동 들여쓰기(&N)
+EditorSettings.CursorBeyondEOL=줄 끝을 넘어서 커서 이동(&L)
+EditorSettings.UseEditorConfig=.&editorconfig 설정 파일 사용
+EditorSettings.Crosshair=십자선 표시(&H)
+EditorSettings.ColorerBg=Colorer 배경색(&B)
+EditorSettings.UseExternalEditor=외부 편집기 사용(&E)
+EditorSettings.ExternalCommand=외부 실행 명령(&X):
+
+ColorerSettings.Title= Colorer 설정
+ColorerSettings.Enabled=Colorer 하이라이트 활성화(&C)
+ColorerSettings.Style=색상 스타일(&S):
+ColorerSettings.BuiltIn=(내장)
+ColorerSettings.Cross=십자선 표시(&R):
+ColorerSettings.CrossOff=표시 안 함
+ColorerSettings.CrossVertical=수직선
+ColorerSettings.CrossHorizontal=수평선
+ColorerSettings.CrossBoth=둘 다 표시
+ColorerSettings.Syntax=구문 강조(&S)
+ColorerSettings.Background=스타일에 따라 편집기 배경색 변경(&B)
+ColorerSettings.Catalog=스키마 폴더 (catalog.xml)(&C):
+ColorerSettings.Reload=재로드(&L)
+ColorerSettings.Download=스키마 다운로드(&D)
 
 AppearanceSettings.Title= 외관 설정
 AppearanceSettings.Style=앱 스타일(&S):
@@ -417,15 +474,33 @@ ConfirmationsSettings.Title= 확인 설정
 ConfirmationsSettings.Copy=복사 전 확인(&C)
 ConfirmationsSettings.Move=이동 전 확인(&M)
 ConfirmationsSettings.Delete=삭제 전 확인(&D)
+ConfirmationsSettings.DeleteCancelFocused=삭제 시 '취소'에 기본 포커스 지정
 ConfirmationsSettings.Exit=종료 전 확인(&E)
+
 UpdateSettings.Title= 자동 업데이트
 UpdateSettings.Channel=업데이트 채널(&C):
 UpdateSettings.Interval=검사 주기(&I):
 UpdateSettings.BtnCheck=지금 검사(&H)
+UpdateSettings.ChannelStable=안정 버전 (Stable)
+UpdateSettings.ChannelNightly=야간 빌드 (Nightly)
+UpdateSettings.IntervalNever=사용 안 함
+UpdateSettings.IntervalStart=시작할 때마다
+UpdateSettings.IntervalDaily=매일
+UpdateSettings.IntervalWeekly=매주
+
 FindFile.Title= 파일 찾기
 FindFile.MaskPrompt=하나 이상의 파일 마스크:
 FindFile.TextPrompt=포함하는 텍스트:
 FindFile.BtnFind=찾기(&F)
+FindFile.SearchingTitle= 검색 중...
+FindFile.Scanning=스캔 중:
+FindFile.FoundCount=찾음: %d
+FindFile.SearchResultsTitle= 검색 결과
+FindFile.BtnGoTo=이동(&G)
+FindFile.BtnView=보기(&V)
+FindFile.BtnEdit=편집(&E)
+FindFile.BtnClose=닫기(&C)
+
 History.FoldersTitle= 폴더 방문 기록
 History.CommandsTitle= 명령줄 실행 기록
 History.SearchModeHint=F2: 부분 문자열/접두사 일치 검색 전환
@@ -433,22 +508,31 @@ History.CommandsHint=상하 키 Enter Esc Shift+Del Del Ctrl+C Ctrl+Ins F2
 History.FoldersHint=상하 키 Enter 좌우 측 Enter 명령줄 Enter Esc Shift+Del Del Ctrl+C Ctrl+Ins Ctrl+R F2
 History.ConfirmClearAll=모든 기록을 삭제하시겠습니까?
 History.ConfirmPruneMissing=더 이상 존재하지 않는 과거 경로를 삭제하시겠습니까?
-Help.SearchHint=검색: 문자 입력  다음: F3/Ctrl+Enter  이전: Shift+F3/Ctrl+Shift+Enter
-UserMenu.LocalMenuTitle=로컬 메뉴
-UserMenu.MainMenuTitle=기본 메뉴
-UserMenu.MainMenuFAR=FAR
-
-Language.Title= 언어
-Language.Changed=언어가 변경되었습니다.\n일부 UI 요소는 애플리케이션을 다시 시작해야\n완전히 적용됩니다.
-HelpLanguage.Title=도움말 언어
-HelpLanguage.Changed=도움말 언어가 변경되었습니다.
-
 History.Title= 기록
 History.EmptyFolders=폴더 방문 기록이 비어 있습니다.
 History.EmptyCommands=명령줄 실행 기록이 비어 있습니다.
 
+UserMenu.LocalMenuTitle=로컬 메뉴
+UserMenu.MainMenuTitle=기본 메뉴
+UserMenu.MainMenuFAR=FAR
+UserMenu.EditTitle= 사용자 메뉴 편집
+UserMenu.CreateTitle= 사용자 메뉴 생성
+UserMenu.EditSubmenuTitle= 하위 메뉴 편집
+UserMenu.CreateSubmenuTitle= 하위 메뉴 생성
+UserMenu.LabelHotkey=단축키(&K):
+UserMenu.LabelLabel=라벨(&L):
+UserMenu.LabelCommand=명령(&C):
+
+Language.Title= 언어
+Language.Changed=언어가 변경되었습니다.\n일부 UI 요소는 애플리케이션을 다시 시작해야\n완전히 적용됩니다.
+
+HelpLanguage.Title=도움말 언어
+HelpLanguage.Changed=도움말 언어가 변경되었습니다.
+
 Error.Title= 오류
+
 Warning.Title= 경고
+
 Info.Title= 정보
 
 ExtEdit.TempError=임시 파일을 만들 수 없습니다: %v
@@ -463,22 +547,27 @@ FileOp.BtnNewInstance=새 인스턴스(&N)
 FileOp.CannotEditDir=디렉터리는 편집할 수 없습니다.
 FileOp.CannotViewDir=디렉터리는 볼 수 없습니다.
 FileOp.CannotOpenSpecial=특수 파일(명명된 파이프, 소켓, 장치)을 열 수 없습니다.
+FileOp.DeletionErrors= 삭제 오류
+FileOp.FileAlreadyExists=파일이 이미 존재합니다
+FileOp.RememberChoice=선택 기억(&M)
+FileOp.Overwrite=덮어쓰기(&O)
+FileOp.Skip=건너뛰기(&S)
+FileOp.Rename=이름 변경(&R)
+FileOp.Append=이어쓰기(&A)
+FileOp.Resume=계속(&U)
+FileOp.BtnCancel=취소(&C)
+FileOp.BtnBackground=백그라운드(&B)
 
 Dialog.RenameTitle= 이름 변경
 Dialog.RenamePrompt=이름 변경 '%s' 대상:
-
-Op.Queue=대기열
-Op.Background=백그라운드 패널 복제
-Op.Foreground=전면 단독 실행
-Op.PathNameOnly=이름만
-Op.PathFullPath=전체 경로
-Op.PathSrcDst=원본 경로 -> 대상 경로
 
 Plugins.Title= 플러그인 관리 (RPC)
 Plugins.BtnAdd=추가(&A)
 Plugins.BtnRemove=제거(&R)
 Plugins.BtnPermissions=권한(&P)
 Plugins.BtnClose=닫기(&C)
+Plugins.AddTitle= 플러그인 추가
+Plugins.SelectFilePrompt=플러그인 파일 선택:
 
 InfoPanel.Title= 정보
 InfoPanel.Computer=컴퓨터 이름
@@ -542,6 +631,7 @@ AndroidInfo.Storage=저장 공간
 AndroidInfo.StorageTotal=총 저장 공간
 AndroidInfo.StorageAvailable=사용 가능한 저장 공간
 AndroidInfo.Protocol=프로토콜
+
 IOSInfo.DeviceTitle=Apple 모바일 장치
 IOSInfo.Name=장치 이름
 IOSInfo.Model=장치 모델
@@ -594,7 +684,6 @@ KeyBar.F9=ConfMenu
 KeyBar.F10=종료
 KeyBar.F11=플러그인
 KeyBar.F12=선택
-
 KeyBar.AltF1=왼쪽
 KeyBar.AltF2=오른쪽
 KeyBar.AltF3=16진수
@@ -608,7 +697,6 @@ KeyBar.CtrlF4=확장자별
 KeyBar.CtrlF5=날짜별
 KeyBar.CtrlF6=크기별
 KeyBar.CtrlF7=정렬 안 함
-
 KeyBar.EditorF1=도움말
 KeyBar.EditorF2=저장
 KeyBar.EditorF3=자동 줄 바꿈
@@ -623,54 +711,8 @@ KeyBar.ViewerF7=검색
 KeyBar.ViewerAltF8=이동
 KeyBar.ViewerF10=종료
 
-EditorSettings.TabExpandNone=탭을 확장하지 않음
-EditorSettings.TabExpandNew=새로 입력된 탭을 공백으로 확장
-EditorSettings.TabExpandAll=모든 탭을 공백으로 확장
-EditorSettings.ExpandTabs=탭 확장(&A):
-EditorSettings.Highlighter=구문 강조(&G):
-EditorSettings.ColorerStyle=Colorer 스타일(&Y):
-EditorSettings.TabSize=탭 크기(&Z):
-EditorSettings.AutoIndent=자동 들여쓰기(&N)
-EditorSettings.CursorBeyondEOL=줄 끝을 넘어서 커서 이동(&L)
-EditorSettings.UseEditorConfig=.&editorconfig 설정 파일 사용
-EditorSettings.Crosshair=십자선 표시(&H)
-EditorSettings.ColorerBg=Colorer 배경색(&B)
-EditorSettings.UseExternalEditor=외부 편집기 사용(&E)
-EditorSettings.ExternalCommand=외부 실행 명령(&X):
-ConfirmationsSettings.DeleteCancelFocused=삭제 시 '취소'에 기본 포커스 지정
-
-PanelSettings.ShowHighlightMarks=강조 표시 마크 표시(&M)
-PanelSettings.CommandLineAutoComplete=명령줄 자동 완성 활성화(&A)
-PanelSettings.AlwaysShowMenuBar=항상 메뉴 모음 표시(&M)
-PanelSettings.RecordMacrosTo=매크로 기록 위치:
-UpdateSettings.ChannelStable=안정 버전 (Stable)
-UpdateSettings.ChannelNightly=야간 빌드 (Nightly)
-UpdateSettings.IntervalNever=사용 안 함
-UpdateSettings.IntervalStart=시작할 때마다
-UpdateSettings.IntervalDaily=매일
-UpdateSettings.IntervalWeekly=매주
-Plugins.AddTitle= 플러그인 추가
-Plugins.SelectFilePrompt=플러그인 파일 선택:
-
-FindFile.SearchingTitle= 검색 중...
-FindFile.Scanning=스캔 중:
-FindFile.FoundCount=찾음: %d
-FindFile.SearchResultsTitle= 검색 결과
-FindFile.BtnGoTo=이동(&G)
-FindFile.BtnView=보기(&V)
-FindFile.BtnEdit=편집(&E)
-FindFile.BtnClose=닫기(&C)
-
-FileOp.DeletionErrors= 삭제 오류
-FileOp.FileAlreadyExists=파일이 이미 존재합니다
-FileOp.RememberChoice=선택 기억(&M)
-FileOp.Overwrite=덮어쓰기(&O)
-FileOp.Skip=건너뛰기(&S)
-FileOp.Rename=이름 변경(&R)
-FileOp.Append=이어쓰기(&A)
-FileOp.Resume=계속(&U)
-
 Arkanoid.HighScores= 최고 기록
+
 PlugRing.Title= f4 PlugRing
 PlugRing.BtnInstall=설치/업데이트(&I)
 PlugRing.BtnRemove=제거(&R)
@@ -687,29 +729,18 @@ Attributes.ReadOnly=읽기 전용(&R)
 Attributes.Hidden=숨김(&H)
 Attributes.System=시스템(&S)
 Attributes.Archive=보관(&A)
+
 Permissions.Title= 플러그인 권한
 Permissions.BtnRevoke=권한 취소(&R)
 Permissions.BtnClose=닫기(&C)
 
-Search.Prompt=검색어:
-Search.WholeWords=단어 단위로
-Search.Regex=정규 표현식
-Search.BtnFind=찾기(&F)
 Replace.Title= 바꾸기
 Replace.Prompt=바꿀 내용:
 Replace.BtnReplace=바꾸기(&R)
 Replace.BtnReplaceAll=모두 바꾸기(&A)
+
 Codepage.Title= 코드 페이지
 Codepage.ConvertTitle= 코드 페이지 변환
-
-vtui.Save=저장(&S)
-UserMenu.EditTitle= 사용자 메뉴 편집
-UserMenu.CreateTitle= 사용자 메뉴 생성
-UserMenu.EditSubmenuTitle= 하위 메뉴 편집
-UserMenu.CreateSubmenuTitle= 하위 메뉴 생성
-UserMenu.LabelHotkey=단축키(&K):
-UserMenu.LabelLabel=라벨(&L):
-UserMenu.LabelCommand=명령(&C):
 
 Hotkeys.Title= 단축키 구성
 Hotkeys.BtnAssign=할당(&A)
@@ -720,10 +751,7 @@ Hotkeys.BtnNext=다음 >
 Hotkeys.LabelArea=영역:
 Hotkeys.LabelWhen=조건:
 Hotkeys.AssignTitle= 단축키 할당
-Op.DummyQueue=대기열 (기본값)
-Op.DummyBackground=백그라운드 패널 복제
-Op.DummyForeground=전면 단독 실행
-Op.BtnStart=시작(&S)
+
 Drive.Title= 드라이브
 
 NetFox.ConnectionTitle= 연결 설정
@@ -739,8 +767,7 @@ NetFox.LabelCodepage=코드 페이지(&C):
 NetFox.ErrorEmptyName=이름을 입력해 주세요
 NetFox.ErrorReservedName=예약된 연결 이름입니다
 
-FileOp.BtnCancel=취소(&C)
-FileOp.BtnBackground=백그라운드(&B)
 Queue.BtnCancel=작업 취소(&C)
 Queue.BtnClear=완료 항목 지우기(&D)
+
 Session.Title= 세션 선택

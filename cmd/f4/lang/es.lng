@@ -5,20 +5,6 @@ Author=f4 Team
 
 [Strings]
 VisRen.Menu=&Renombrador visual de archivos
-ID3Editor.Menu=&Editor de etiquetas ID3
-ID3Editor.Title=Editor de etiquetas ID3
-ID3Editor.LocalOnly=El editor de etiquetas ID3 solo admite archivos locales.
-ID3Editor.SelectFile=Seleccione primero un archivo MP3.
-ID3Editor.OnlyMP3=Solo se admiten archivos MP3.
-ID3Editor.SaveError=No se pudieron guardar las etiquetas ID3:\n%v
-ID3Editor.OpenError=No se pudo abrir el archivo MP3:\n%v
-ID3Editor.FieldTitle=Título:
-ID3Editor.FieldArtist=Artista:
-ID3Editor.FieldAlbum=Álbum:
-ID3Editor.FieldYear=Año:
-ID3Editor.FieldGenre=Género:
-ID3Editor.FieldComment=Comentario:
-ID3Editor.FieldVersion=Versión:
 VisRen.Title=Renombrador visual de archivos
 VisRen.HostUnsupported=Este host F4 no proporciona el puente de interfaz de usuario de VisRen.
 VisRen.LocalOnly=VisRen solo funciona en un panel de archivos locales.
@@ -59,109 +45,53 @@ VisRen.WordDivTitle=Delimitadores de palabras
 VisRen.WordDivPrompt=Caracteres que separan palabras (máximo 18):
 VisRen.OldName=Nombre antiguo
 VisRen.NewName=Nombre nuevo
+
+ID3Editor.Menu=&Editor de etiquetas ID3
+ID3Editor.Title=Editor de etiquetas ID3
+ID3Editor.LocalOnly=El editor de etiquetas ID3 solo admite archivos locales.
+ID3Editor.SelectFile=Seleccione primero un archivo MP3.
+ID3Editor.OnlyMP3=Solo se admiten archivos MP3.
+ID3Editor.SaveError=No se pudieron guardar las etiquetas ID3:\n%v
+ID3Editor.OpenError=No se pudo abrir el archivo MP3:\n%v
+ID3Editor.FieldTitle=Título:
+ID3Editor.FieldArtist=Artista:
+ID3Editor.FieldAlbum=Álbum:
+ID3Editor.FieldYear=Año:
+ID3Editor.FieldGenre=Género:
+ID3Editor.FieldComment=Comentario:
+ID3Editor.FieldVersion=Versión:
+
 vtui.Ok=&Aceptar
 vtui.Cancel=Cancelar
+vtui.Save=&Guardar
+
 Panel.Other=&Otro panel
 Panel.Column.Name=Nombre
 Panel.Column.Size=Tamaño
 Panel.Column.Modified=Modificado
 Panel.UpDir=SUBIR
 Panel.SelectedInfo=Bytes: %s, archivos: %d, carpetas: %d
+
 Panels.Prompt=>
+
 Edit.NewFileTitle= Crear Nuevo Archivo
 Edit.NewFilePrompt=&Nombre del archivo:
+
 MakeFolder.Title= Crear Carpeta
 MakeFolder.Prompt=Crear la &carpeta:
+
 Delete.Title= Eliminar
 Delete.Confirm=¿Desea eliminar\n%s?
 Delete.Btn=&Eliminar
+
 Copy.Title= Copiar
 Copy.Prompt=Copiar %d elemento(s) a:
 Copy.Btn=&Copiar
+
 Move.Title= Mover
 Move.Prompt=Renombrar o mover %d elemento(s) a:
 Move.Btn=&Renombrar
-Btn.OverwriteAll=Sobrescribir &todo
-Btn.SkipAll=O&mitir todo
-Btn.Retry=&Reintentar
-Btn.Ignore=&Ignorar
-Operation.Error=La operación falló:\n%s
-Op.ClonePanels=&Clonar paneles a un nuevo espacio de trabajo
-Op.SwitchHint=Ctrl+Tab para cambiar de ventana
-Op.DummyTitle= Operación de prueba
-Op.DummyText=Esta es una operación de prueba de 5 minutos.\nElija el modo de fondo:
-Viewer.Title= Ver
-Viewer.ModeText=Texto
-Viewer.ModeHex=Hex
-Viewer.SearchTitle= Buscar
-Search.CaseSensitive=&Distinguir mayúsculas
-Search.Reverse=Búsqueda &inversa
-Select.Title= Seleccionar
-Deselect.Title= Deseleccionar
-Quit.Title= Salir
-Quit.Confirm=¿Desea salir de f4?
-Quit.Btn=&Salir
-Select.Mask=&Ingrese la máscara de selección:
 
-Macro.AssignTitle= Asignar Macro
-Macro.AssignPrompt=Presione la combinación de teclas deseada
-Macro.AssignCancel=Presione Esc para cancelar
-
-Menu.Language=Idioma
-Menu.HelpLanguage=Idioma de ayuda
-Menu.Left=Izquierda
-Menu.Files=Archivos
-Menu.Commands=Comandos
-Menu.Options=Opciones
-Menu.Right=Derecha
-Menu.Exit=&Salir
-
-Menu.Files.View=Ver
-Menu.Files.Edit=Editar
-Menu.Files.Copy=Copiar
-Menu.Files.RenMov=Renombrar o mover
-Menu.Files.MkDir=Crear carpeta
-Menu.Files.Delete=Eliminar
-Menu.Left.Brief=Breve
-Menu.Left.Medium=Medio
-Menu.Left.Detailed=Detallado
-Menu.Left.Wide=Ancho
-Menu.Commands.FindFile=Buscar archivo
-Menu.Commands.FindDuplicates=Buscar duplicados
-Menu.Commands.BackgroundJobs=Tareas en segundo plano
-Menu.Commands.RunRemote=Ejecutar comando de forma remota
-RemoteCmd.Title=Comando remoto
-RemoteCmd.Prompt=Comando:
-RemoteCmd.BtnClose=&Cerrar
-Jobs.Title=Tareas en segundo plano
-Jobs.BtnShow=&Mostrar
-Jobs.BtnCancel=&Cancelar tarea
-Jobs.BtnClose=&Cerrar
-Jobs.Empty=No hay ninguna tarea ejecutándose
-Menu.Commands.Bookmarks=Marcadores
-Menu.SortName=Nombre
-Menu.SortExt=Extensión
-Menu.SortTime=Tiempo
-Menu.SortSize=Tamaño
-Menu.SortUnsorted=Sin ordenar
-Sort.Title=Ordenar por
-Menu.PanelSettings=Configuración de panel
-Menu.EditorSettings=Configuración de editor
-Menu.ColorerSettings=Configuración de &Colorer
-Menu.AppearanceSettings=Configuración de apariencia
-Menu.ConfirmationsSettings=Confirmaciones
-Menu.AutoUpdateSettings=Actualización &automática
-Menu.Options.Plugins=Administrar complementos
-
-Menu.Editor.File=&Archivo
-Menu.Editor.Edit=&Editar
-Menu.Editor.Search=&Buscar
-Menu.Editor.Options=&Opciones
-Menu.Editor.Insert=&Insertar
-Menu.Viewer.File=&Archivo
-Menu.Viewer.View=&Ver
-Menu.Viewer.Search=&Buscar
-Menu.Viewer.Options=&Opciones
 Action.App.ScreenGrab=&Captura de pantalla
 Action.App.ScreenGrab.Desc=Seleccionar y copiar una región de la pantalla
 Action.Editor.Save=&Guardar
@@ -224,18 +154,6 @@ Action.Viewer.CodepageNext=Siguiente &página de códigos
 Action.Viewer.CodepageNext.Desc=Cambiar a la siguiente página de códigos
 Action.Viewer.CodepageMenu=Menú de &páginas de códigos
 Action.Viewer.CodepageMenu.Desc=Seleccionar página de códigos
-Help.ViewerEditor=Teclas de Visor y Editor
-Help.PanelNav=Teclas de Panel
-Help.NavigationKeys=Teclas de navegación
-Help.Area.Shell=Paneles
-Help.Area.Terminal=Terminal
-Help.Area.Editor=Editor
-Help.Area.Viewer=Visor
-Help.Area.Common=Común
-Menu.Shell.Files=&Archivos
-Menu.Shell.Commands=&Comandos
-Menu.Shell.Options=&Opciones
-Menu.Terminal.File=&Archivo
 Action.File.New=Nuevo archivo
 Action.File.New.Desc=Crear y abrir un nuevo archivo en el editor
 Action.File.CopyInPlace=Copiar en el lugar
@@ -268,19 +186,6 @@ Action.Panel.UserMenu=Menú de &usuario
 Action.Panel.UserMenu.Desc=Mostrar el menú de usuario
 Action.Panel.FileAssociations=&Asociaciones de archivos…
 Action.Panel.FileAssociations.Desc=Configurar comandos por máscara para Enter, F3 y F4
-FileAssoc.EditorTitle=Asociaciones de archivos
-FileAssoc.EditTitle=Editar asociación
-FileAssoc.NewTitle=Nueva asociación
-FileAssoc.ErrorTitle=Asociaciones de archivos
-FileAssoc.EmptyHint=Aún no hay asociaciones — presione Ins para agregar una
-FileAssoc.EmptyMask=La máscara de archivo no puede estar vacía.
-FileAssoc.MaskLabel=Máscara
-FileAssoc.DescLabel=Descripción
-FileAssoc.PickTitle.Open=Abrir con
-FileAssoc.PickTitle.View=Ver con
-FileAssoc.PickTitle.Edit=Editar con
-FileAssoc.DeleteTitle=Eliminar asociación
-FileAssoc.DeleteConfirm=¿Eliminar la asociación %q?
 Action.Panel.Bookmarks.Desc=Mostrar el diálogo de marcadores de carpetas
 Action.Panel.PluginMenu=Comandos de &complementos
 Action.Panel.PluginMenu.Desc=Mostrar el menú de comandos de complementos
@@ -367,23 +272,106 @@ Action.Terminal.ViewLog.Desc=Abrir el registro del terminal en el visor
 Action.Terminal.EditLog=&Editar registro de terminal
 Action.Terminal.EditLog.Desc=Abrir el registro del terminal en el editor
 
-EditorSettings.Title= Configuración del editor
-EditorSettings.AutoComplete=Habilitar &autocompletado
-EditorSettings.Mask=Activo para &máscaras de archivos:
-ColorerSettings.Title= Configuración de Colorer
-ColorerSettings.Enabled=Habilitar resaltado de &Colorer
-ColorerSettings.Style=Estilo de &color:
-ColorerSettings.BuiltIn=(incorporado)
-ColorerSettings.Cross=Mostrar &retícula:
-ColorerSettings.CrossOff=No mostrar
-ColorerSettings.CrossVertical=Vertical
-ColorerSettings.CrossHorizontal=Horizontal
-ColorerSettings.CrossBoth=Ambos
-ColorerSettings.Syntax=Resaltar s&intaxis
-ColorerSettings.Background=Cambiar &fondo del editor
-ColorerSettings.Catalog=Carpeta de &esquemas (catalog.xml):
-ColorerSettings.Reload=Recar&gar
-ColorerSettings.Download=&Descargar esquemas
+Btn.OverwriteAll=Sobrescribir &todo
+Btn.SkipAll=O&mitir todo
+Btn.Retry=&Reintentar
+Btn.Ignore=&Ignorar
+
+Operation.Error=La operación falló:\n%s
+
+Op.ClonePanels=&Clonar paneles a un nuevo espacio de trabajo
+Op.SwitchHint=Ctrl+Tab para cambiar de ventana
+Op.DummyTitle= Operación de prueba
+Op.DummyText=Esta es una operación de prueba de 5 minutos.\nElija el modo de fondo:
+Op.Queue=Cola
+Op.Background=Clon de panel en segundo plano
+Op.Foreground=Bloqueo en primer plano
+Op.PathNameOnly=Solo nombre
+Op.PathFullPath=Ruta completa
+Op.PathSrcDst=Origen -> Destino
+Op.DummyQueue=Cola (Por defecto)
+Op.DummyBackground=Clon de panel en segundo plano
+Op.DummyForeground=Bloqueo en primer plano
+Op.BtnStart=&Comenzar
+
+Viewer.Title= Ver
+Viewer.ModeText=Texto
+Viewer.ModeHex=Hex
+Viewer.SearchTitle= Buscar
+
+Search.CaseSensitive=&Distinguir mayúsculas
+Search.Reverse=Búsqueda &inversa
+Search.Prompt=Buscar:
+Search.WholeWords=Palabras completas
+Search.Regex=Expresiones regulares
+Search.BtnFind=&Buscar
+
+Select.Title= Seleccionar
+Select.Mask=&Ingrese la máscara de selección:
+
+Deselect.Title= Deseleccionar
+
+Quit.Title= Salir
+Quit.Confirm=¿Desea salir de f4?
+Quit.Btn=&Salir
+
+Macro.AssignTitle= Asignar Macro
+Macro.AssignPrompt=Presione la combinación de teclas deseada
+Macro.AssignCancel=Presione Esc para cancelar
+
+Menu.Language=Idioma
+Menu.HelpLanguage=Idioma de ayuda
+Menu.Left=Izquierda
+Menu.Files=Archivos
+Menu.Commands=Comandos
+Menu.Options=Opciones
+Menu.Right=Derecha
+Menu.Exit=&Salir
+Menu.Files.View=Ver
+Menu.Files.Edit=Editar
+Menu.Files.Copy=Copiar
+Menu.Files.RenMov=Renombrar o mover
+Menu.Files.MkDir=Crear carpeta
+Menu.Files.Delete=Eliminar
+Menu.Left.Brief=Breve
+Menu.Left.Medium=Medio
+Menu.Left.Detailed=Detallado
+Menu.Left.Wide=Ancho
+Menu.Commands.FindFile=Buscar archivo
+Menu.Commands.FindDuplicates=Buscar duplicados
+Menu.Commands.BackgroundJobs=Tareas en segundo plano
+Menu.Commands.RunRemote=Ejecutar comando de forma remota
+Menu.Commands.Bookmarks=Marcadores
+Menu.SortName=Nombre
+Menu.SortExt=Extensión
+Menu.SortTime=Tiempo
+Menu.SortSize=Tamaño
+Menu.SortUnsorted=Sin ordenar
+Menu.PanelSettings=Configuración de panel
+Menu.EditorSettings=Configuración de editor
+Menu.ColorerSettings=Configuración de &Colorer
+Menu.AppearanceSettings=Configuración de apariencia
+Menu.ConfirmationsSettings=Confirmaciones
+Menu.AutoUpdateSettings=Actualización &automática
+Menu.Options.Plugins=Administrar complementos
+Menu.Editor.File=&Archivo
+Menu.Editor.Edit=&Editar
+Menu.Editor.Search=&Buscar
+Menu.Editor.Options=&Opciones
+Menu.Editor.Insert=&Insertar
+Menu.Viewer.File=&Archivo
+Menu.Viewer.View=&Ver
+Menu.Viewer.Search=&Buscar
+Menu.Viewer.Options=&Opciones
+Menu.Shell.Files=&Archivos
+Menu.Shell.Commands=&Comandos
+Menu.Shell.Options=&Opciones
+Menu.Terminal.File=&Archivo
+
+RemoteCmd.Title=Comando remoto
+RemoteCmd.Prompt=Comando:
+RemoteCmd.BtnClose=&Cerrar
+
 PanelSettings.Title= Configuración de panel
 PanelSettings.ShowHidden=Mostrar archivos &ocultos y de sistema
 PanelSettings.ShowDirPrefix=Mostrar prefijo '/' para &carpetas
@@ -404,6 +392,75 @@ PanelSettings.DefaultMode=&Modo predeterminado:
 PanelSettings.PathDisplay=Ver ruta:
 PanelSettings.InfoPanelCPUGPU=Mostrar CPU/GPU en panel de i&nfo
 PanelSettings.EscTogglePanels=&Esc alterna visibilidad de paneles
+PanelSettings.ShowHighlightMarks=Mostrar marcas de &resaltado
+PanelSettings.CommandLineAutoComplete=Habilitar autocompletado de línea de &comandos
+PanelSettings.AlwaysShowMenuBar=Mostrar siempre la barra de &menú
+PanelSettings.RecordMacrosTo=Grabar macros en:
+
+Jobs.Title=Tareas en segundo plano
+Jobs.BtnShow=&Mostrar
+Jobs.BtnCancel=&Cancelar tarea
+Jobs.BtnClose=&Cerrar
+Jobs.Empty=No hay ninguna tarea ejecutándose
+
+Sort.Title=Ordenar por
+
+Help.ViewerEditor=Teclas de Visor y Editor
+Help.PanelNav=Teclas de Panel
+Help.NavigationKeys=Teclas de navegación
+Help.Area.Shell=Paneles
+Help.Area.Terminal=Terminal
+Help.Area.Editor=Editor
+Help.Area.Viewer=Visor
+Help.Area.Common=Común
+Help.SearchHint=Buscar: escriba  Siguiente: F3/Ctrl+Enter  Anterior: Shift+F3/Ctrl+Shift+Enter
+
+FileAssoc.EditorTitle=Asociaciones de archivos
+FileAssoc.EditTitle=Editar asociación
+FileAssoc.NewTitle=Nueva asociación
+FileAssoc.ErrorTitle=Asociaciones de archivos
+FileAssoc.EmptyHint=Aún no hay asociaciones — presione Ins para agregar una
+FileAssoc.EmptyMask=La máscara de archivo no puede estar vacía.
+FileAssoc.MaskLabel=Máscara
+FileAssoc.DescLabel=Descripción
+FileAssoc.PickTitle.Open=Abrir con
+FileAssoc.PickTitle.View=Ver con
+FileAssoc.PickTitle.Edit=Editar con
+FileAssoc.DeleteTitle=Eliminar asociación
+FileAssoc.DeleteConfirm=¿Eliminar la asociación %q?
+
+EditorSettings.Title= Configuración del editor
+EditorSettings.AutoComplete=Habilitar &autocompletado
+EditorSettings.Mask=Activo para &máscaras de archivos:
+EditorSettings.TabExpandNone=No expandir tabulaciones
+EditorSettings.TabExpandNew=Expandir solo nuevas tabulaciones a espacios
+EditorSettings.TabExpandAll=Siempre expandir tabulaciones a espacios
+EditorSettings.ExpandTabs=Ex&pandir tabulaciones:
+EditorSettings.Highlighter=&Resaltador:
+EditorSettings.ColorerStyle=Estilo de &Colorer:
+EditorSettings.TabSize=Tamaño de &tabulación:
+EditorSettings.AutoIndent=Sangría &automática
+EditorSettings.CursorBeyondEOL=Cursor más allá del &fin de línea
+EditorSettings.UseEditorConfig=Usar ajustes de .&editorconfig
+EditorSettings.Crosshair=Mostrar &retícula
+EditorSettings.ColorerBg=&Fondo de Colorer
+EditorSettings.UseExternalEditor=Usar editor &externo
+EditorSettings.ExternalCommand=Co&mando:
+
+ColorerSettings.Title= Configuración de Colorer
+ColorerSettings.Enabled=Habilitar resaltado de &Colorer
+ColorerSettings.Style=Estilo de &color:
+ColorerSettings.BuiltIn=(incorporado)
+ColorerSettings.Cross=Mostrar &retícula:
+ColorerSettings.CrossOff=No mostrar
+ColorerSettings.CrossVertical=Vertical
+ColorerSettings.CrossHorizontal=Horizontal
+ColorerSettings.CrossBoth=Ambos
+ColorerSettings.Syntax=Resaltar s&intaxis
+ColorerSettings.Background=Cambiar &fondo del editor
+ColorerSettings.Catalog=Carpeta de &esquemas (catalog.xml):
+ColorerSettings.Reload=Recar&gar
+ColorerSettings.Download=&Descargar esquemas
 
 AppearanceSettings.Title= Configuración de apariencia
 AppearanceSettings.Style=Estilo de &aplicación:
@@ -417,15 +474,33 @@ ConfirmationsSettings.Title= Confirmaciones
 ConfirmationsSettings.Copy=Confirmar al &copiar
 ConfirmationsSettings.Move=Confirmar al &mover
 ConfirmationsSettings.Delete=Confirmar al &eliminar
+ConfirmationsSettings.DeleteCancelFocused=Foco en 'Cancelar' al eliminar
 ConfirmationsSettings.Exit=Confirmar al &salir
+
 UpdateSettings.Title= Actualización automática
 UpdateSettings.Channel=&Canal:
 UpdateSettings.Interval=&Intervalo:
 UpdateSettings.BtnCheck=Comprobar &ahora
+UpdateSettings.ChannelStable=Versiones estables
+UpdateSettings.ChannelNightly=Compilaciones nocturnas
+UpdateSettings.IntervalNever=Nunca
+UpdateSettings.IntervalStart=Cada inicio
+UpdateSettings.IntervalDaily=Diariamente
+UpdateSettings.IntervalWeekly=Semanalmente
+
 FindFile.Title= Buscar archivo
 FindFile.MaskPrompt=Máscara de archivo (o varias):
 FindFile.TextPrompt=Que contiene el texto:
 FindFile.BtnFind=&Buscar
+FindFile.SearchingTitle= Buscando...
+FindFile.Scanning=Escaneando:
+FindFile.FoundCount=Encontrado: %d
+FindFile.SearchResultsTitle= Resultados de búsqueda
+FindFile.BtnGoTo=&Ir a
+FindFile.BtnView=&Ver
+FindFile.BtnEdit=&Editar
+FindFile.BtnClose=&Cerrar
+
 History.FoldersTitle= Historial de carpetas
 History.CommandsTitle= Historial de comandos
 History.SearchModeHint=F2: cambiar búsqueda de subcadena / prefijo
@@ -433,22 +508,36 @@ History.CommandsHint=Arriba/Abajo Enter Esc Shift+Del Del Ctrl+C Ctrl+Ins F2
 History.FoldersHint=Arriba/Abajo Enter Shift+Enter Ctrl+Enter Esc Shift+Del Del Ctrl+C Ctrl+Ins Ctrl+R F2
 History.ConfirmClearAll=¿Borrar todo el historial?
 History.ConfirmPruneMissing=¿Eliminar entradas cuyas rutas ya no existen?
-Help.SearchHint=Buscar: escriba  Siguiente: F3/Ctrl+Enter  Anterior: Shift+F3/Ctrl+Shift+Enter
-UserMenu.LocalMenuTitle=Menú local
-UserMenu.MainMenuTitle=Menú principal
-UserMenu.MainMenuFAR=FAR
-
-Language.Title= Idiomas
-Language.Changed=Idioma cambiado.\nAlgunos elementos de la interfaz requieren reiniciar la aplicación\npara aplicar completamente el nuevo idioma.
-HelpLanguage.Title=Idiomas de ayuda
-HelpLanguage.Changed=Idioma de ayuda cambiado.
-
 History.Title= Historial
 History.EmptyFolders=El historial de carpetas está vacío.
 History.EmptyCommands=El historial de comandos está vacío.
 
+UserMenu.LocalMenuTitle=Menú local
+UserMenu.MainMenuTitle=Menú principal
+UserMenu.MainMenuFAR=FAR
+UserMenu.EditTitle= Editar menú de usuario
+UserMenu.CreateTitle= Crear menú de usuario
+UserMenu.EditSubmenuTitle= Editar submenú
+UserMenu.CreateSubmenuTitle= Crear submenú
+UserMenu.LabelHotkey=Tecla &rápida:
+UserMenu.LabelLabel=&Etiqueta:
+UserMenu.LabelCommand=&Comando:
+
+Language.Title= Idiomas
+Language.Changed=Idioma cambiado.\nAlgunos elementos de la interfaz requieren reiniciar la aplicación\npara aplicar completamente el nuevo idioma.
+
+LanguageSettings.Title= Configuración de idioma
+LanguageSettings.Primary=Idioma principal:
+LanguageSettings.Fallback=Idioma de reserva:
+LanguageSettings.None=<ninguno>
+
+HelpLanguage.Title=Idiomas de ayuda
+HelpLanguage.Changed=Idioma de ayuda cambiado.
+
 Error.Title= Error
+
 Warning.Title= Advertencia
+
 Info.Title= Información
 
 ExtEdit.TempError=No se puede crear el archivo temporal: %v
@@ -463,22 +552,27 @@ FileOp.BtnNewInstance=&Nueva instancia
 FileOp.CannotEditDir=No se puede editar un directorio.
 FileOp.CannotViewDir=No se puede ver un directorio.
 FileOp.CannotOpenSpecial=No se pueden abrir archivos especiales (Named Pipes, Sockets, Dispositivos).
+FileOp.DeletionErrors= Errores de eliminación
+FileOp.FileAlreadyExists=El archivo ya existe
+FileOp.RememberChoice=Recordar &elección
+FileOp.Overwrite=Sobres&cribir
+FileOp.Skip=&Omitir
+FileOp.Rename=&Renombrar
+FileOp.Append=&Anexar
+FileOp.Resume=Re&anudar
+FileOp.BtnCancel=&Cancelar
+FileOp.BtnBackground=&Segundo plano
 
 Dialog.RenameTitle= Renombrar
 Dialog.RenamePrompt=Renombrar '%s' a:
-
-Op.Queue=Cola
-Op.Background=Clon de panel en segundo plano
-Op.Foreground=Bloqueo en primer plano
-Op.PathNameOnly=Solo nombre
-Op.PathFullPath=Ruta completa
-Op.PathSrcDst=Origen -> Destino
 
 Plugins.Title= Administrar complementos (RPC)
 Plugins.BtnAdd=&Agregar
 Plugins.BtnRemove=&Eliminar
 Plugins.BtnPermissions=&Permisos
 Plugins.BtnClose=&Cerrar
+Plugins.AddTitle= Agregar complemento
+Plugins.SelectFilePrompt=Seleccionar archivo de complemento:
 
 InfoPanel.Title= Información
 InfoPanel.Computer=Nombre del equipo
@@ -542,6 +636,7 @@ AndroidInfo.Storage=Almacenamiento
 AndroidInfo.StorageTotal=Almacenamiento total
 AndroidInfo.StorageAvailable=Almacenamiento disponible
 AndroidInfo.Protocol=Conexión
+
 IOSInfo.DeviceTitle=Dispositivo móvil de Apple
 IOSInfo.Name=Nombre
 IOSInfo.Model=Modelo
@@ -594,7 +689,6 @@ KeyBar.F9=ConfMenu
 KeyBar.F10=Salir
 KeyBar.F11=Plugin
 KeyBar.F12=Pantalla
-
 KeyBar.AltF1=Izq
 KeyBar.AltF2=Der
 KeyBar.AltF3=Hex
@@ -608,7 +702,6 @@ KeyBar.CtrlF4=Ext
 KeyBar.CtrlF5=Tiempo
 KeyBar.CtrlF6=Tamaño
 KeyBar.CtrlF7=SinOrden
-
 KeyBar.EditorF1=Ayuda
 KeyBar.EditorF2=Guardar
 KeyBar.EditorF3=Ajustar
@@ -622,55 +715,9 @@ KeyBar.ViewerF4=Hex
 KeyBar.ViewerF7=Buscar
 KeyBar.ViewerAltF8=IrA
 KeyBar.ViewerF10=Salir
-LanguageSettings.Title= Configuración de idioma
-LanguageSettings.Primary=Idioma principal:
-LanguageSettings.Fallback=Idioma de reserva:
-LanguageSettings.None=<ninguno>
-EditorSettings.TabExpandNone=No expandir tabulaciones
-EditorSettings.TabExpandNew=Expandir solo nuevas tabulaciones a espacios
-EditorSettings.TabExpandAll=Siempre expandir tabulaciones a espacios
-EditorSettings.ExpandTabs=Ex&pandir tabulaciones:
-EditorSettings.Highlighter=&Resaltador:
-EditorSettings.ColorerStyle=Estilo de &Colorer:
-EditorSettings.TabSize=Tamaño de &tabulación:
-EditorSettings.AutoIndent=Sangría &automática
-EditorSettings.CursorBeyondEOL=Cursor más allá del &fin de línea
-EditorSettings.UseEditorConfig=Usar ajustes de .&editorconfig
-EditorSettings.Crosshair=Mostrar &retícula
-EditorSettings.ColorerBg=&Fondo de Colorer
-EditorSettings.UseExternalEditor=Usar editor &externo
-EditorSettings.ExternalCommand=Co&mando:
-ConfirmationsSettings.DeleteCancelFocused=Foco en 'Cancelar' al eliminar
-PanelSettings.ShowHighlightMarks=Mostrar marcas de &resaltado
-PanelSettings.CommandLineAutoComplete=Habilitar autocompletado de línea de &comandos
-PanelSettings.AlwaysShowMenuBar=Mostrar siempre la barra de &menú
-PanelSettings.RecordMacrosTo=Grabar macros en:
-UpdateSettings.ChannelStable=Versiones estables
-UpdateSettings.ChannelNightly=Compilaciones nocturnas
-UpdateSettings.IntervalNever=Nunca
-UpdateSettings.IntervalStart=Cada inicio
-UpdateSettings.IntervalDaily=Diariamente
-UpdateSettings.IntervalWeekly=Semanalmente
-Plugins.AddTitle= Agregar complemento
-Plugins.SelectFilePrompt=Seleccionar archivo de complemento:
-FindFile.SearchingTitle= Buscando...
-FindFile.Scanning=Escaneando:
-FindFile.FoundCount=Encontrado: %d
-FindFile.SearchResultsTitle= Resultados de búsqueda
-FindFile.BtnGoTo=&Ir a
-FindFile.BtnView=&Ver
-FindFile.BtnEdit=&Editar
-FindFile.BtnClose=&Cerrar
-FileOp.DeletionErrors= Errores de eliminación
-FileOp.FileAlreadyExists=El archivo ya existe
-FileOp.RememberChoice=Recordar &elección
-FileOp.Overwrite=Sobres&cribir
-FileOp.Skip=&Omitir
-FileOp.Rename=&Renombrar
-FileOp.Append=&Anexar
-FileOp.Resume=Re&anudar
 
 Arkanoid.HighScores= Puntuaciones
+
 PlugRing.Title= f4 PlugRing
 PlugRing.BtnInstall=&Instalar/Actualizar
 PlugRing.BtnRemove=&Eliminar
@@ -687,29 +734,18 @@ Attributes.ReadOnly=&Solo lectura
 Attributes.Hidden=&Oculto
 Attributes.System=&Sistema
 Attributes.Archive=&Archivo
+
 Permissions.Title= Permisos de complementos
 Permissions.BtnRevoke=&Revocar
 Permissions.BtnClose=&Cerrar
 
-Search.Prompt=Buscar:
-Search.WholeWords=Palabras completas
-Search.Regex=Expresiones regulares
-Search.BtnFind=&Buscar
 Replace.Title= Reemplazar
 Replace.Prompt=Reemplazar con:
 Replace.BtnReplace=&Reemplazar
 Replace.BtnReplaceAll=Reemplazar &todo
+
 Codepage.Title= Páginas de códigos
 Codepage.ConvertTitle= Convertir página de códigos
-
-vtui.Save=&Guardar
-UserMenu.EditTitle= Editar menú de usuario
-UserMenu.CreateTitle= Crear menú de usuario
-UserMenu.EditSubmenuTitle= Editar submenú
-UserMenu.CreateSubmenuTitle= Crear submenú
-UserMenu.LabelHotkey=Tecla &rápida:
-UserMenu.LabelLabel=&Etiqueta:
-UserMenu.LabelCommand=&Comando:
 
 Hotkeys.Title= Configurador de teclas rápidas
 Hotkeys.BtnAssign=&Asignar
@@ -720,10 +756,7 @@ Hotkeys.BtnNext=Siguiente >
 Hotkeys.LabelArea=Área:
 Hotkeys.LabelWhen=Cuando:
 Hotkeys.AssignTitle= Asignar tecla rápida
-Op.DummyQueue=Cola (Por defecto)
-Op.DummyBackground=Clon de panel en segundo plano
-Op.DummyForeground=Bloqueo en primer plano
-Op.BtnStart=&Comenzar
+
 Drive.Title= Unidad
 
 NetFox.ConnectionTitle= Conexión de sitio
@@ -739,8 +772,7 @@ NetFox.LabelCodepage=Pá&gina de códigos:
 NetFox.ErrorEmptyName=El nombre no puede estar vacío
 NetFox.ErrorReservedName=Nombre de conexión reservado
 
-FileOp.BtnCancel=&Cancelar
-FileOp.BtnBackground=&Segundo plano
 Queue.BtnCancel=C&ancelar tarea
 Queue.BtnClear=Limpiar &completadas
+
 Session.Title= Seleccionar sesión

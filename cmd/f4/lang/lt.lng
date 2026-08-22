@@ -5,20 +5,6 @@ Author=f4 Team
 
 [Strings]
 VisRen.Menu=&Vizualusis failų pervardijimas
-ID3Editor.Menu=ID3 tagų &redaktorius
-ID3Editor.Title=ID3 tagų redaktorius
-ID3Editor.LocalOnly=ID3 tagų redaktorius palaiko tik vietinius failus.
-ID3Editor.SelectFile=Pirmiausia pasirinkite MP3 failą.
-ID3Editor.OnlyMP3=Palaikomi tik MP3 failai.
-ID3Editor.SaveError=Nepavyko išsaugoti ID3 tagų:\n%v
-ID3Editor.OpenError=Nepavyko atidaryti MP3 failo:\n%v
-ID3Editor.FieldTitle=Pavadinimas:
-ID3Editor.FieldArtist=Atlikėjas:
-ID3Editor.FieldAlbum=Albumas:
-ID3Editor.FieldYear=Metai:
-ID3Editor.FieldGenre=Žanras:
-ID3Editor.FieldComment=Komentaras:
-ID3Editor.FieldVersion=Versija:
 VisRen.Title=Vizualusis failų pervardijimas
 VisRen.HostUnsupported=Ši F4 versija nepalaiko VisRen sąsajos.
 VisRen.LocalOnly=VisRen veikia tik vietiniame failų skydelyje.
@@ -59,109 +45,53 @@ VisRen.WordDivTitle=Žodžių skirtukai
 VisRen.WordDivPrompt=Žodžius skiriantys simboliai (daugiausiai 18):
 VisRen.OldName=Senas vardas
 VisRen.NewName=Naujas vardas
+
+ID3Editor.Menu=ID3 tagų &redaktorius
+ID3Editor.Title=ID3 tagų redaktorius
+ID3Editor.LocalOnly=ID3 tagų redaktorius palaiko tik vietinius failus.
+ID3Editor.SelectFile=Pirmiausia pasirinkite MP3 failą.
+ID3Editor.OnlyMP3=Palaikomi tik MP3 failai.
+ID3Editor.SaveError=Nepavyko išsaugoti ID3 tagų:\n%v
+ID3Editor.OpenError=Nepavyko atidaryti MP3 failo:\n%v
+ID3Editor.FieldTitle=Pavadinimas:
+ID3Editor.FieldArtist=Atlikėjas:
+ID3Editor.FieldAlbum=Albumas:
+ID3Editor.FieldYear=Metai:
+ID3Editor.FieldGenre=Žanras:
+ID3Editor.FieldComment=Komentaras:
+ID3Editor.FieldVersion=Versija:
+
 vtui.Ok=&Gerai
 vtui.Cancel=Atšaukti
+vtui.Save=&Išsaugoti
+
 Panel.Other=&Kitas skydelis
 Panel.Column.Name=Pavadinimas
 Panel.Column.Size=Dydis
 Panel.Column.Modified=Pakeista
 Panel.UpDir=Į VIRŠŲ
 Panel.SelectedInfo=Baitai: %s, failų: %d, katalogų: %d
+
 Panels.Prompt=>
+
 Edit.NewFileTitle= Create New File
 Edit.NewFilePrompt=Failo &pavadinimas:
+
 MakeFolder.Title= Sukurti katalogą
 MakeFolder.Prompt=Sukurti &katalogą:
+
 Delete.Title= Ištrinti
 Delete.Confirm=Ar tikrai norite ištrinti\n%s?
 Delete.Btn=&Ištrinti
+
 Copy.Title= Kopijuoti
 Copy.Prompt=Kopijuoti %d elementų į:
 Copy.Btn=&Kopijuoti
+
 Move.Title= Perkelti
 Move.Prompt=Pervardyti arba perkelti %d elementų į:
 Move.Btn=&Pervardyti
-Btn.OverwriteAll=Perrašyti &visus
-Btn.SkipAll=Pr&aleisti visus
-Btn.Retry=&Pakartoti
-Btn.Ignore=&Ignoruoti
-Operation.Error=Operacija nepavyko:\n%s
-Op.ClonePanels=&Klonuoti skydelius į noują darbo erdvę
-Op.SwitchHint=Ctrl+Tab perjungti langams
-Op.DummyTitle= Demonstracinė operacija
-Op.DummyText=Tai demonstracinė 5 minučių operacija.\nPasirinkite fono režimą:
-Viewer.Title= Peržiūra
-Viewer.ModeText=Tekstas
-Viewer.ModeHex=Hex
-Viewer.SearchTitle= Paieška
-Search.CaseSensitive=Skirti &registro dydį
-Search.Reverse=At&bulinė paieška
-Select.Title= Pažymėti
-Deselect.Title= Atžymėti
-Quit.Title= Išeiti
-Quit.Confirm=Ar tikrai norite išeiti iš f4?
-Quit.Btn=&Išeiti
-Select.Mask=&Įveskite pažymėjimo maską:
 
-Macro.AssignTitle= Priskirti makrosą
-Macro.AssignPrompt=Paspauskite norimą klavišų kombinaciją
-Macro.AssignCancel=Paspauskite Esc, kad atšauktumėte
-
-Menu.Language=Kalba
-Menu.HelpLanguage=Pagalbos kalba
-Menu.Left=Kairysis
-Menu.Files=Failai
-Menu.Commands=Komandos
-Menu.Options=Nustatymai
-Menu.Right=Dešinysis
-Menu.Exit=Iš&eiti
-
-Menu.Files.View=Peržiūrėti
-Menu.Files.Edit=Redaguoti
-Menu.Files.Copy=Kopijuoti
-Menu.Files.RenMov=Pervardyti arba perkelti
-Menu.Files.MkDir=Sukurti katalogą
-Menu.Files.Delete=Ištrinti
-Menu.Left.Brief=Trumpas
-Menu.Left.Medium=Vidutinis
-Menu.Left.Detailed=Išsamus
-Menu.Left.Wide=Platus
-Menu.Commands.FindFile=Ieškoti failo
-Menu.Commands.FindDuplicates=Ieškoti dublikatų
-Menu.Commands.BackgroundJobs=Fono užduotys
-Menu.Commands.RunRemote=Vykdyti komandą nuotoliniu būdu
-RemoteCmd.Title=Nuotolinė komanda
-RemoteCmd.Prompt=Komanda:
-RemoteCmd.BtnClose=&Uždaryti
-Jobs.Title=Fono užduotys
-Jobs.BtnShow=&Rodyti
-Jobs.BtnCancel=&Atšaukti užduotį
-Jobs.BtnClose=&Uždaryti
-Jobs.Empty=Nieko nevykdoma
-Menu.Commands.Bookmarks=Žymelės
-Menu.SortName=Pavadinimas
-Menu.SortExt=Plėtinys
-Menu.SortTime=Laikas
-Menu.SortSize=Dydis
-Menu.SortUnsorted=Nerūšiuota
-Sort.Title=Rūšiuoti pagal
-Menu.PanelSettings=Skydelių nustatymai
-Menu.EditorSettings=Redaktoriaus nustatymai
-Menu.ColorerSettings=&Colorer nustatymai
-Menu.AppearanceSettings=Išvaizda
-Menu.ConfirmationsSettings=Patvirtinimai
-Menu.AutoUpdateSettings=Automatinis &atnaujinimas
-Menu.Options.Plugins=Įskiepių valdymas
-
-Menu.Editor.File=&Failas
-Menu.Editor.Edit=&Redaguoti
-Menu.Editor.Search=&Paieška
-Menu.Editor.Options=&Nustatymai
-Menu.Editor.Insert=&Įterpti
-Menu.Viewer.File=&Failas
-Menu.Viewer.View=&Rodyti
-Menu.Viewer.Search=&Paieška
-Menu.Viewer.Options=&Nustatymai
 Action.App.ScreenGrab=Ekrano &kopija
 Action.App.ScreenGrab.Desc=Pasirinkti ir nukopijuoti ekrano sritį
 Action.Editor.Save=&Išsaugoti
@@ -224,18 +154,6 @@ Action.Viewer.CodepageNext=Kita &koduotė
 Action.Viewer.CodepageNext.Desc=Perjungti į kitą koduotę
 Action.Viewer.CodepageMenu=Koduočių &meniu
 Action.Viewer.CodepageMenu.Desc=Pasirinkti koduotę
-Help.ViewerEditor=Peržiūros ir redaktoriaus klavišai
-Help.PanelNav=Skydelių klavišai
-Help.NavigationKeys=Navigacijos klavišai
-Help.Area.Shell=Skydeliai
-Help.Area.Terminal=Terminalas
-Help.Area.Editor=Redaktorius
-Help.Area.Viewer=Peržiūra
-Help.Area.Common=Bendri
-Menu.Shell.Files=&Failai
-Menu.Shell.Commands=&Komandos
-Menu.Shell.Options=&Nustatymai
-Menu.Terminal.File=&Failas
 Action.File.New=Naujas failas
 Action.File.New.Desc=Sukurti naują failą ir atidaryti jį redaktoriuje
 Action.File.CopyInPlace=Kopijuoti čia
@@ -268,19 +186,6 @@ Action.Panel.UserMenu=&Naudotojo meniu
 Action.Panel.UserMenu.Desc=Rodyti naudotojo meniu
 Action.Panel.FileAssociations=Failų &asociacijos…
 Action.Panel.FileAssociations.Desc=Konfigūruoti komandas pagal maską klavišams Enter, F3 ir F4
-FileAssoc.EditorTitle=Failų asociacijos
-FileAssoc.EditTitle=Redaguoti asociaciją
-FileAssoc.NewTitle=Nauja asociacija
-FileAssoc.ErrorTitle=Failų asociacijos
-FileAssoc.EmptyHint=Asociacijų dar nėra — paspauskite Ins, kad pridėtumėte
-FileAssoc.EmptyMask=Failo maskė negali būti tuščia.
-FileAssoc.MaskLabel=Maska
-FileAssoc.DescLabel=Aprašymas
-FileAssoc.PickTitle.Open=Atidaryti su
-FileAssoc.PickTitle.View=Peržiūrėti su
-FileAssoc.PickTitle.Edit=Redaguoti su
-FileAssoc.DeleteTitle=Ištrinti asociaciją
-FileAssoc.DeleteConfirm=Ištrinti asociaciją %q?
 Action.Panel.Bookmarks.Desc=Rodyti katalogų nuorodų dialogą
 Action.Panel.PluginMenu=Įskiepių &komandos
 Action.Panel.PluginMenu.Desc=Rodyti įskiepių komandų meniu
@@ -367,23 +272,106 @@ Action.Terminal.ViewLog.Desc=Atidaryti terminalo logą peržiūrai
 Action.Terminal.EditLog=Redaguoti terminalo &logą
 Action.Terminal.EditLog.Desc=Atidaryti terminalo logą redaktoriuje
 
-EditorSettings.Title= Redaktoriaus nustatymai
-EditorSettings.AutoComplete=Įjungti &autoužbaigimą
-EditorSettings.Mask=Aktyvu failų &maskėms:
-ColorerSettings.Title= Colorer nustatymai
-ColorerSettings.Enabled=Įjungti &Colorer paryškinimą
-ColorerSettings.Style=Spalvų &stilius:
-ColorerSettings.BuiltIn=(įmontuotas)
-ColorerSettings.Cross=Rodyti k&ryžių:
-ColorerSettings.CrossOff=Nerodyti
-ColorerSettings.CrossVertical=Vertikalus
-ColorerSettings.CrossHorizontal=Horizontalus
-ColorerSettings.CrossBoth=Abu
-ColorerSettings.Syntax=Paryškinti s&intaksę
-ColorerSettings.Background=Keisti redaktoriaus &foną
-ColorerSettings.Catalog=Schemų &katalogas (catalog.xml):
-ColorerSettings.Reload=Per&krauti
-ColorerSettings.Download=Atsisiųs&ti schemas
+Btn.OverwriteAll=Perrašyti &visus
+Btn.SkipAll=Pr&aleisti visus
+Btn.Retry=&Pakartoti
+Btn.Ignore=&Ignoruoti
+
+Operation.Error=Operacija nepavyko:\n%s
+
+Op.ClonePanels=&Klonuoti skydelius į noują darbo erdvę
+Op.SwitchHint=Ctrl+Tab perjungti langams
+Op.DummyTitle= Demonstracinė operacija
+Op.DummyText=Tai demonstracinė 5 minučių operacija.\nPasirinkite fono režimą:
+Op.Queue=Eilė
+Op.Background=Fono skydelio klonavimas
+Op.Foreground=Monopolinis režimas
+Op.PathNameOnly=Tik pavadinimas
+Op.PathFullPath=Pilnas kelias
+Op.PathSrcDst=Šaltinis -> Tikslas
+Op.DummyQueue=Eilė (Numatytoji)
+Op.DummyBackground=Fono skydelio klonavimas
+Op.DummyForeground=Monopolinis režimas
+Op.BtnStart=&Pradėti
+
+Viewer.Title= Peržiūra
+Viewer.ModeText=Tekstas
+Viewer.ModeHex=Hex
+Viewer.SearchTitle= Paieška
+
+Search.CaseSensitive=Skirti &registro dydį
+Search.Reverse=At&bulinė paieška
+Search.Prompt=Ieškoti:
+Search.WholeWords=Tik pilni žodžiai
+Search.Regex=Reguliarūs reiškiniai
+Search.BtnFind=&Rasti
+
+Select.Title= Pažymėti
+Select.Mask=&Įveskite pažymėjimo maską:
+
+Deselect.Title= Atžymėti
+
+Quit.Title= Išeiti
+Quit.Confirm=Ar tikrai norite išeiti iš f4?
+Quit.Btn=&Išeiti
+
+Macro.AssignTitle= Priskirti makrosą
+Macro.AssignPrompt=Paspauskite norimą klavišų kombinaciją
+Macro.AssignCancel=Paspauskite Esc, kad atšauktumėte
+
+Menu.Language=Kalba
+Menu.HelpLanguage=Pagalbos kalba
+Menu.Left=Kairysis
+Menu.Files=Failai
+Menu.Commands=Komandos
+Menu.Options=Nustatymai
+Menu.Right=Dešinysis
+Menu.Exit=Iš&eiti
+Menu.Files.View=Peržiūrėti
+Menu.Files.Edit=Redaguoti
+Menu.Files.Copy=Kopijuoti
+Menu.Files.RenMov=Pervardyti arba perkelti
+Menu.Files.MkDir=Sukurti katalogą
+Menu.Files.Delete=Ištrinti
+Menu.Left.Brief=Trumpas
+Menu.Left.Medium=Vidutinis
+Menu.Left.Detailed=Išsamus
+Menu.Left.Wide=Platus
+Menu.Commands.FindFile=Ieškoti failo
+Menu.Commands.FindDuplicates=Ieškoti dublikatų
+Menu.Commands.BackgroundJobs=Fono užduotys
+Menu.Commands.RunRemote=Vykdyti komandą nuotoliniu būdu
+Menu.Commands.Bookmarks=Žymelės
+Menu.SortName=Pavadinimas
+Menu.SortExt=Plėtinys
+Menu.SortTime=Laikas
+Menu.SortSize=Dydis
+Menu.SortUnsorted=Nerūšiuota
+Menu.PanelSettings=Skydelių nustatymai
+Menu.EditorSettings=Redaktoriaus nustatymai
+Menu.ColorerSettings=&Colorer nustatymai
+Menu.AppearanceSettings=Išvaizda
+Menu.ConfirmationsSettings=Patvirtinimai
+Menu.AutoUpdateSettings=Automatinis &atnaujinimas
+Menu.Options.Plugins=Įskiepių valdymas
+Menu.Editor.File=&Failas
+Menu.Editor.Edit=&Redaguoti
+Menu.Editor.Search=&Paieška
+Menu.Editor.Options=&Nustatymai
+Menu.Editor.Insert=&Įterpti
+Menu.Viewer.File=&Failas
+Menu.Viewer.View=&Rodyti
+Menu.Viewer.Search=&Paieška
+Menu.Viewer.Options=&Nustatymai
+Menu.Shell.Files=&Failai
+Menu.Shell.Commands=&Komandos
+Menu.Shell.Options=&Nustatymai
+Menu.Terminal.File=&Failas
+
+RemoteCmd.Title=Nuotolinė komanda
+RemoteCmd.Prompt=Komanda:
+RemoteCmd.BtnClose=&Uždaryti
+
 PanelSettings.Title= Skydelių nustatymai
 PanelSettings.ShowHidden=Rodyti &paslėptus ir sisteminius failus
 PanelSettings.ShowDirPrefix=Rodyti '/' prieš &katalogus
@@ -404,6 +392,75 @@ PanelSettings.DefaultMode=Numatytasis &režimas:
 PanelSettings.PathDisplay=Kelio rodymas:
 PanelSettings.InfoPanelCPUGPU=Rodyti CPU/GPU skiltį info s&kydelyje
 PanelSettings.EscTogglePanels=&Esc perjungia skydelių matomumą
+PanelSettings.ShowHighlightMarks=Rodyti failų &pažymėjimo ženklus
+PanelSettings.CommandLineAutoComplete=Įjungti komandų eilutės &autoužbaigimą
+PanelSettings.AlwaysShowMenuBar=Visada rodyti &meniu juostą
+PanelSettings.RecordMacrosTo=Įrašyti makrosus į:
+
+Jobs.Title=Fono užduotys
+Jobs.BtnShow=&Rodyti
+Jobs.BtnCancel=&Atšaukti užduotį
+Jobs.BtnClose=&Uždaryti
+Jobs.Empty=Nieko nevykdoma
+
+Sort.Title=Rūšiuoti pagal
+
+Help.ViewerEditor=Peržiūros ir redaktoriaus klavišai
+Help.PanelNav=Skydelių klavišai
+Help.NavigationKeys=Navigacijos klavišai
+Help.Area.Shell=Skydeliai
+Help.Area.Terminal=Terminalas
+Help.Area.Editor=Redaktorius
+Help.Area.Viewer=Peržiūra
+Help.Area.Common=Bendri
+Help.SearchHint=Paieška: rašykite  Sekantis: F3/Ctrl+Enter  Ankstesnis: Shift+F3/Ctrl+Shift+Enter
+
+FileAssoc.EditorTitle=Failų asociacijos
+FileAssoc.EditTitle=Redaguoti asociaciją
+FileAssoc.NewTitle=Nauja asociacija
+FileAssoc.ErrorTitle=Failų asociacijos
+FileAssoc.EmptyHint=Asociacijų dar nėra — paspauskite Ins, kad pridėtumėte
+FileAssoc.EmptyMask=Failo maskė negali būti tuščia.
+FileAssoc.MaskLabel=Maska
+FileAssoc.DescLabel=Aprašymas
+FileAssoc.PickTitle.Open=Atidaryti su
+FileAssoc.PickTitle.View=Peržiūrėti su
+FileAssoc.PickTitle.Edit=Redaguoti su
+FileAssoc.DeleteTitle=Ištrinti asociaciją
+FileAssoc.DeleteConfirm=Ištrinti asociaciją %q?
+
+EditorSettings.Title= Redaktoriaus nustatymai
+EditorSettings.AutoComplete=Įjungti &autoužbaigimą
+EditorSettings.Mask=Aktyvu failų &maskėms:
+EditorSettings.TabExpandNone=Neišskleisti tabuliacijos
+EditorSettings.TabExpandNew=Išskleisti tik naujus tabuliacijos simbolius į tarpus
+EditorSettings.TabExpandAll=Visada išskleisti tabuliaciją į tarpus
+EditorSettings.ExpandTabs=Išskleisti ta&buliaciją:
+EditorSettings.Highlighter=&Paryškinimas:
+EditorSettings.ColorerStyle=Colorer &stilius:
+EditorSettings.TabSize=Tabuliacijos &dydis:
+EditorSettings.AutoIndent=Automatinis &įtraukimas
+EditorSettings.CursorBeyondEOL=Žymeklis už eilutės &galo
+EditorSettings.UseEditorConfig=Naudoti .&editorconfig
+EditorSettings.Crosshair=Rodyti t&aikinį
+EditorSettings.ColorerBg=Colorer &fonas
+EditorSettings.UseExternalEditor=Iš&orinis redaktorius
+EditorSettings.ExternalCommand=Ka&manda:
+
+ColorerSettings.Title= Colorer nustatymai
+ColorerSettings.Enabled=Įjungti &Colorer paryškinimą
+ColorerSettings.Style=Spalvų &stilius:
+ColorerSettings.BuiltIn=(įmontuotas)
+ColorerSettings.Cross=Rodyti k&ryžių:
+ColorerSettings.CrossOff=Nerodyti
+ColorerSettings.CrossVertical=Vertikalus
+ColorerSettings.CrossHorizontal=Horizontalus
+ColorerSettings.CrossBoth=Abu
+ColorerSettings.Syntax=Paryškinti s&intaksę
+ColorerSettings.Background=Keisti redaktoriaus &foną
+ColorerSettings.Catalog=Schemų &katalogas (catalog.xml):
+ColorerSettings.Reload=Per&krauti
+ColorerSettings.Download=Atsisiųs&ti schemas
 
 AppearanceSettings.Title= Išvaizdos nustatymai
 AppearanceSettings.Style=Programos &stilius:
@@ -417,15 +474,33 @@ ConfirmationsSettings.Title= Patvirtinimai
 ConfirmationsSettings.Copy=Patvirtinti &kopijuojant
 ConfirmationsSettings.Move=Patvirtinti p&erkeliant
 ConfirmationsSettings.Delete=Patvirtinti &ištrinant
+ConfirmationsSettings.DeleteCancelFocused=Trinant sufokusuoti 'Atšaukti'
 ConfirmationsSettings.Exit=Patvirtinti iš&einant
+
 UpdateSettings.Title= Automatinis atnaujinimas
 UpdateSettings.Channel=Atnaujimimų &kanalas:
 UpdateSettings.Interval=Tikrinimo &intervalas:
 UpdateSettings.BtnCheck=Tikrinti &dabar
+UpdateSettings.ChannelStable=Stabilūs leidimai
+UpdateSettings.ChannelNightly=Naktiniai rinkiniai
+UpdateSettings.IntervalNever=Niekada
+UpdateSettings.IntervalStart=Kiekvieną kartą paleidus
+UpdateSettings.IntervalDaily=Kasdien
+UpdateSettings.IntervalWeekly=Kas savaitę
+
 FindFile.Title= Ieškoti failo
 FindFile.MaskPrompt=Failo maskė (arba kelios):
 FindFile.TextPrompt=Turintis tekstą:
 FindFile.BtnFind=&Ieškoti
+FindFile.SearchingTitle= Ieškoma...
+FindFile.Scanning=Skenuojama:
+FindFile.FoundCount=Rasta: %d
+FindFile.SearchResultsTitle= Paieškos rezultatai
+FindFile.BtnGoTo=&Eiti į
+FindFile.BtnView=&Peržiūrėti
+FindFile.BtnEdit=&Redaguoti
+FindFile.BtnClose=&Uždaryti
+
 History.FoldersTitle= Katalogų istorija
 History.CommandsTitle= Komandų istorija
 History.SearchModeHint=F2: perjungti dalinio teksto / prefikso paiešką
@@ -433,22 +508,36 @@ History.CommandsHint=Aukštyn/Žemyn Enter Esc Shift+Del Del Ctrl+C Ctrl+Ins F2
 History.FoldersHint=Aukštyn/Žemyn Enter Shift+Enter Ctrl+Enter Esc Shift+Del Del Ctrl+C Ctrl+Ins Ctrl+R F2
 History.ConfirmClearAll=Išvalyti visą istoriją?
 History.ConfirmPruneMissing=Pašalinti įrašus, kurių keliai nebeegzistuoja?
-Help.SearchHint=Paieška: rašykite  Sekantis: F3/Ctrl+Enter  Ankstesnis: Shift+F3/Ctrl+Shift+Enter
-UserMenu.LocalMenuTitle=Vietinis meniu
-UserMenu.MainMenuTitle=Pagrindinis meniu
-UserMenu.MainMenuFAR=FAR
-
-Language.Title= Kalbos
-Language.Changed=Kalba pakeista.\nKai kuriems sąsajos elementams gali reikėti programos\npaleidimo iš naujo, kad pilnai įsigaliotų pakeitimas.
-HelpLanguage.Title=Pagalbos kalbos
-HelpLanguage.Changed=Pagalbos kalba pakeista.
-
 History.Title= Istorija
 History.EmptyFolders=Katalogų istorija tuščia.
 History.EmptyCommands=Komandų istorija tuščia.
 
+UserMenu.LocalMenuTitle=Vietinis meniu
+UserMenu.MainMenuTitle=Pagrindinis meniu
+UserMenu.MainMenuFAR=FAR
+UserMenu.EditTitle= Redaguoti naudotojo meniu 
+UserMenu.CreateTitle= Sukurti naudotojo meniu 
+UserMenu.EditSubmenuTitle= Redaguoti submeniu 
+UserMenu.CreateSubmenuTitle= Sukurti submeniu 
+UserMenu.LabelHotkey=&Karštasis klavišas:
+UserMenu.LabelLabel=&Etiketė:
+UserMenu.LabelCommand=&Komanda:
+
+Language.Title= Kalbos
+Language.Changed=Kalba pakeista.\nKai kuriems sąsajos elementams gali reikėti programos\npaleidimo iš naujo, kad pilnai įsigaliotų pakeitimas.
+
+LanguageSettings.Title= Kalbos nustatymai
+LanguageSettings.Primary=Pagrindinė kalba:
+LanguageSettings.Fallback=Atsarginė kalba:
+LanguageSettings.None=<nėra>
+
+HelpLanguage.Title=Pagalbos kalbos
+HelpLanguage.Changed=Pagalbos kalba pakeista.
+
 Error.Title= Klaida
+
 Warning.Title= Įspėjimas
+
 Info.Title= Informacija
 
 ExtEdit.TempError=Laikino failo sukurti nepavyko: %v
@@ -463,22 +552,27 @@ FileOp.BtnNewInstance=&Nauja kopija
 FileOp.CannotEditDir=Katalogo redaguoti negalima.
 FileOp.CannotViewDir=Katalogo peržiūrėti negalima.
 FileOp.CannotOpenSpecial=Nepavyko atidaryti specialiųjų failų (kanalų, gniazdų, įrenginių).
+FileOp.DeletionErrors= Trinimo klaidos
+FileOp.FileAlreadyExists=Failas jau egzistuoja
+FileOp.RememberChoice=Įsiminti &pasirinkimą
+FileOp.Overwrite=&Perrašyti
+FileOp.Skip=Pr&aleisti
+FileOp.Rename=&Pervardyti
+FileOp.Append=&Prirašyti
+FileOp.Resume=Tę&sti
+FileOp.BtnCancel=&Atšaukti
+FileOp.BtnBackground=&Fone
 
 Dialog.RenameTitle= Pervardyti
 Dialog.RenamePrompt=Pervardyti '%s' į:
-
-Op.Queue=Eilė
-Op.Background=Fono skydelio klonavimas
-Op.Foreground=Monopolinis režimas
-Op.PathNameOnly=Tik pavadinimas
-Op.PathFullPath=Pilnas kelias
-Op.PathSrcDst=Šaltinis -> Tikslas
 
 Plugins.Title= Įskiepių valdymas (RPC)
 Plugins.BtnAdd=&Pridėti
 Plugins.BtnRemove=&Pašalinti
 Plugins.BtnPermissions=&Leidimai
 Plugins.BtnClose=&Uždaryti
+Plugins.AddTitle= Pridėti įskiepį
+Plugins.SelectFilePrompt=Pasirinkite įskiepio failą:
 
 InfoPanel.Title= Informacija
 InfoPanel.Computer=Kompiuterio vardas
@@ -542,6 +636,7 @@ AndroidInfo.Storage=Talpykla
 AndroidInfo.StorageTotal=Viso talpyklos
 AndroidInfo.StorageAvailable=Prieinama talpykloje
 AndroidInfo.Protocol=Protokolas
+
 IOSInfo.DeviceTitle=Apple mobilusis įrenginys
 IOSInfo.Name=Vardas
 IOSInfo.Model=Modelis
@@ -594,7 +689,6 @@ KeyBar.F9=NustMeniu
 KeyBar.F10=Išeiti
 KeyBar.F11=Įskiepis
 KeyBar.F12=Ekranas
-
 KeyBar.AltF1=Kairysis
 KeyBar.AltF2=Dešinysis
 KeyBar.AltF3=Hex
@@ -608,7 +702,6 @@ KeyBar.CtrlF4=Plėt
 KeyBar.CtrlF5=Laikas
 KeyBar.CtrlF6=Dydis
 KeyBar.CtrlF7=Nesort
-
 KeyBar.EditorF1=Pagalba
 KeyBar.EditorF2=Išsaugoti
 KeyBar.EditorF3=Laužyti
@@ -623,58 +716,8 @@ KeyBar.ViewerF7=Ieškoti
 KeyBar.ViewerAltF8=EitiĮ
 KeyBar.ViewerF10=Išeiti
 
-EditorSettings.TabExpandNone=Neišskleisti tabuliacijos
-EditorSettings.TabExpandNew=Išskleisti tik naujus tabuliacijos simbolius į tarpus
-EditorSettings.TabExpandAll=Visada išskleisti tabuliaciją į tarpus
-EditorSettings.ExpandTabs=Išskleisti ta&buliaciją:
-EditorSettings.Highlighter=&Paryškinimas:
-EditorSettings.ColorerStyle=Colorer &stilius:
-EditorSettings.TabSize=Tabuliacijos &dydis:
-EditorSettings.AutoIndent=Automatinis &įtraukimas
-EditorSettings.CursorBeyondEOL=Žymeklis už eilutės &galo
-EditorSettings.UseEditorConfig=Naudoti .&editorconfig
-EditorSettings.Crosshair=Rodyti t&aikinį
-EditorSettings.ColorerBg=Colorer &fonas
-EditorSettings.UseExternalEditor=Iš&orinis redaktorius
-EditorSettings.ExternalCommand=Ka&manda:
-ConfirmationsSettings.DeleteCancelFocused=Trinant sufokusuoti 'Atšaukti'
-
-PanelSettings.ShowHighlightMarks=Rodyti failų &pažymėjimo ženklus
-PanelSettings.CommandLineAutoComplete=Įjungti komandų eilutės &autoužbaigimą
-PanelSettings.AlwaysShowMenuBar=Visada rodyti &meniu juostą
-PanelSettings.RecordMacrosTo=Įrašyti makrosus į:
-UpdateSettings.ChannelStable=Stabilūs leidimai
-UpdateSettings.ChannelNightly=Naktiniai rinkiniai
-UpdateSettings.IntervalNever=Niekada
-UpdateSettings.IntervalStart=Kiekvieną kartą paleidus
-UpdateSettings.IntervalDaily=Kasdien
-UpdateSettings.IntervalWeekly=Kas savaitę
-Plugins.AddTitle= Pridėti įskiepį
-Plugins.SelectFilePrompt=Pasirinkite įskiepio failą:
-
-FindFile.SearchingTitle= Ieškoma...
-FindFile.Scanning=Skenuojama:
-FindFile.FoundCount=Rasta: %d
-FindFile.SearchResultsTitle= Paieškos rezultatai
-FindFile.BtnGoTo=&Eiti į
-FindFile.BtnView=&Peržiūrėti
-FindFile.BtnEdit=&Redaguoti
-FindFile.BtnClose=&Uždaryti
-
-FileOp.DeletionErrors= Trinimo klaidos
-FileOp.FileAlreadyExists=Failas jau egzistuoja
-FileOp.RememberChoice=Įsiminti &pasirinkimą
-FileOp.Overwrite=&Perrašyti
-FileOp.Skip=Pr&aleisti
-FileOp.Rename=&Pervardyti
-FileOp.Append=&Prirašyti
-FileOp.Resume=Tę&sti
-LanguageSettings.Title= Kalbos nustatymai
-LanguageSettings.Primary=Pagrindinė kalba:
-LanguageSettings.Fallback=Atsarginė kalba:
-LanguageSettings.None=<nėra>
-
 Arkanoid.HighScores= Rekordai 
+
 PlugRing.Title= f4 PlugRing 
 PlugRing.BtnInstall=&Įdiegti/Atnaujinti
 PlugRing.BtnRemove=Pa&šalinti
@@ -691,29 +734,18 @@ Attributes.ReadOnly=Tik &skaitymui
 Attributes.Hidden=Pas&lėptas
 Attributes.System=&Sisteminė
 Attributes.Archive=&Archyvinė
+
 Permissions.Title= Įskiepių leidimai 
 Permissions.BtnRevoke=At&šaukti
 Permissions.BtnClose=&Uždaryti
 
-Search.Prompt=Ieškoti:
-Search.WholeWords=Tik pilni žodžiai
-Search.Regex=Reguliarūs reiškiniai
-Search.BtnFind=&Rasti
 Replace.Title= Pakeisti 
 Replace.Prompt=Pakeisti kuo:
 Replace.BtnReplace=&Pakeisti
 Replace.BtnReplaceAll=Pakeisti &visus
+
 Codepage.Title= Koduočių lentelės 
 Codepage.ConvertTitle= Konvertuoti koduotę 
-
-vtui.Save=&Išsaugoti
-UserMenu.EditTitle= Redaguoti naudotojo meniu 
-UserMenu.CreateTitle= Sukurti naudotojo meniu 
-UserMenu.EditSubmenuTitle= Redaguoti submeniu 
-UserMenu.CreateSubmenuTitle= Sukurti submeniu 
-UserMenu.LabelHotkey=&Karštasis klavišas:
-UserMenu.LabelLabel=&Etiketė:
-UserMenu.LabelCommand=&Komanda:
 
 Hotkeys.Title= Karštųjų klavišų konfiguratorius 
 Hotkeys.BtnAssign=&Priskirti
@@ -724,10 +756,7 @@ Hotkeys.BtnNext=Toliau >
 Hotkeys.LabelArea=Sritis: 
 Hotkeys.LabelWhen=Sąlyga: 
 Hotkeys.AssignTitle= Priskirti karštąjį klavišą 
-Op.DummyQueue=Eilė (Numatytoji)
-Op.DummyBackground=Fono skydelio klonavimas
-Op.DummyForeground=Monopolinis režimas
-Op.BtnStart=&Pradėti
+
 Drive.Title= Diskas 
 
 NetFox.ConnectionTitle= Ryšio kūrimas 
@@ -743,8 +772,7 @@ NetFox.LabelCodepage=Koduotė:
 NetFox.ErrorEmptyName=Pavadinimas negali būti tuščias
 NetFox.ErrorReservedName=Rezervuotas ryšio pavadinimas
 
-FileOp.BtnCancel=&Atšaukti
-FileOp.BtnBackground=&Fone
 Queue.BtnCancel=At&šaukti užduotį
 Queue.BtnClear=Išvalyti &atliktas
+
 Session.Title= Pasirinkite sesiją 

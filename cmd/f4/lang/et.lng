@@ -5,20 +5,6 @@ Author=f4 Team
 
 [Strings]
 VisRen.Menu=Visuaalne &ümbernimetamine
-ID3Editor.Menu=ID3 sildi&de redaktor
-ID3Editor.Title=ID3 siltide redaktor
-ID3Editor.LocalOnly=ID3 siltide redaktor toetab ainult kohalikke faile.
-ID3Editor.SelectFile=Palun vali esmalt MP3-fail.
-ID3Editor.OnlyMP3=Toetatud on ainult MP3-failid.
-ID3Editor.SaveError=ID3 siltide salvestamine ebaõnnestus:\n%v
-ID3Editor.OpenError=MP3-faili avamine ebaõnnestus:\n%v
-ID3Editor.FieldTitle=Pealkiri:
-ID3Editor.FieldArtist=Esitaja:
-ID3Editor.FieldAlbum=Album:
-ID3Editor.FieldYear=Aasta:
-ID3Editor.FieldGenre=Žanr:
-ID3Editor.FieldComment=Kommentaar:
-ID3Editor.FieldVersion=Versioon:
 VisRen.Title=Visuaalne ümbernimetamine
 VisRen.HostUnsupported=See f4 versioon ei toeta VisReni liidest.
 VisRen.LocalOnly=VisRen töötab ainult kohalikus failipaneelis.
@@ -59,109 +45,53 @@ VisRen.WordDivTitle=Sõnaeraldajad
 VisRen.WordDivPrompt=Sõnu eraldavad märgid (maksimaalselt 18):
 VisRen.OldName=Vana nimi
 VisRen.NewName=Uus nimi
+
+ID3Editor.Menu=ID3 sildi&de redaktor
+ID3Editor.Title=ID3 siltide redaktor
+ID3Editor.LocalOnly=ID3 siltide redaktor toetab ainult kohalikke faile.
+ID3Editor.SelectFile=Palun vali esmalt MP3-fail.
+ID3Editor.OnlyMP3=Toetatud on ainult MP3-failid.
+ID3Editor.SaveError=ID3 siltide salvestamine ebaõnnestus:\n%v
+ID3Editor.OpenError=MP3-faili avamine ebaõnnestus:\n%v
+ID3Editor.FieldTitle=Pealkiri:
+ID3Editor.FieldArtist=Esitaja:
+ID3Editor.FieldAlbum=Album:
+ID3Editor.FieldYear=Aasta:
+ID3Editor.FieldGenre=Žanr:
+ID3Editor.FieldComment=Kommentaar:
+ID3Editor.FieldVersion=Versioon:
+
 vtui.Ok=&Olgu
 vtui.Cancel=Tühista
+vtui.Save=&Salvesta
+
 Panel.Other=&Teine paneel
 Panel.Column.Name=Nimi
 Panel.Column.Size=Suurus
 Panel.Column.Modified=Muudetud
 Panel.UpDir=ÜLES
 Panel.SelectedInfo=Baidid: %s, failid: %d, kaustad: %d
+
 Panels.Prompt=>
+
 Edit.NewFileTitle= Create New File
 Edit.NewFilePrompt=Faili &nimi:
+
 MakeFolder.Title= Loo kaust
 MakeFolder.Prompt=Loo &kaust:
+
 Delete.Title= Kustuta
 Delete.Confirm=Kas tõesti soovid kustutada\n%s?
 Delete.Btn=&Kustuta
+
 Copy.Title= Kopeeri
 Copy.Prompt=Kopeeri %d elementi kohta:
 Copy.Btn=&Kopeeri
+
 Move.Title= Teisalda
 Move.Prompt=Nimeta ümber või teisalda %d elementi kohta:
 Move.Btn=&Teisalda
-Btn.OverwriteAll=Kirjuta &kõik üle
-Btn.SkipAll=Jä&ta kaikki vahele
-Btn.Retry=&Proovi uuesti
-Btn.Ignore=&Ignoreeri
-Operation.Error=Toiming ebaõnnestus:\n%s
-Op.ClonePanels=&Klooni paneelid uuele tööalale
-Op.SwitchHint=Ctrl+Tab akende vahetamiseks
-Op.DummyTitle= Demotoiming
-Op.DummyText=See on 5-minutiline demotoiming.\nVali taustarežiim:
-Viewer.Title= Vaade
-Viewer.ModeText=Tekst
-Viewer.ModeHex=Hex
-Viewer.SearchTitle= Otsi
-Search.CaseSensitive=&Tõstutundlik
-Search.Reverse=Ta&gasiotsing
-Select.Title= Vali
-Deselect.Title= Tühista valik
-Quit.Title= Välju
-Quit.Confirm=Kas tõesti soovid f4-st väljuda?
-Quit.Btn=&Välju
-Select.Mask=Sisesta valiku&mask:
 
-Macro.AssignTitle= Määra makro
-Macro.AssignPrompt=Vajuta soovitud klahvikombinatsiooni
-Macro.AssignCancel=Vajuta Esc tühistamiseks
-
-Menu.Language=Keel
-Menu.HelpLanguage=Abikeel
-Menu.Left=Vasak
-Menu.Files=Failid
-Menu.Commands=Käsud
-Menu.Options=Seaded
-Menu.Right=Parem
-Menu.Exit=Väl&ju
-
-Menu.Files.View=Vaata
-Menu.Files.Edit=Redigeeri
-Menu.Files.Copy=Kopeeri
-Menu.Files.RenMov=Nimeta ümber või teisalda
-Menu.Files.MkDir=Loo kaust
-Menu.Files.Delete=Kustuta
-Menu.Left.Brief=Lühike
-Menu.Left.Medium=Keskmine
-Menu.Left.Detailed=Detailne
-Menu.Left.Wide=Lai
-Menu.Commands.FindFile=Otsi faili
-Menu.Commands.FindDuplicates=Otsi duplikaate
-Menu.Commands.BackgroundJobs=Taustatoimingud
-Menu.Commands.RunRemote=Käivita käsk kaugarvutis
-RemoteCmd.Title=Kaugkäsk
-RemoteCmd.Prompt=Käsk:
-RemoteCmd.BtnClose=&Sulge
-Jobs.Title=Taustatoimingud
-Jobs.BtnShow=&Näita
-Jobs.BtnCancel=&Tühista toiming
-Jobs.BtnClose=&Sulge
-Jobs.Empty=Midagi ei tööta
-Menu.Commands.Bookmarks=Järjehoidjad
-Menu.SortName=Nimi
-Menu.SortExt=Laiend
-Menu.SortTime=Aeg
-Menu.SortSize=Suurus
-Menu.SortUnsorted=Sortimata
-Sort.Title=Sortimisalus
-Menu.PanelSettings=Paneeli seaded
-Menu.EditorSettings=Redaktori seaded
-Menu.ColorerSettings=&Colorer seaded
-Menu.AppearanceSettings=Välimus
-Menu.ConfirmationsSettings=Kinnitused
-Menu.AutoUpdateSettings=Automaatne &uuendus
-Menu.Options.Plugins=Hallake pluginaid
-
-Menu.Editor.File=&Fail
-Menu.Editor.Edit=&Redigeeri
-Menu.Editor.Search=&Otsi
-Menu.Editor.Options=&Seaded
-Menu.Editor.Insert=Li&sa
-Menu.Viewer.File=&Fail
-Menu.Viewer.View=&Näita
-Menu.Viewer.Search=&Otsi
-Menu.Viewer.Options=&Seaded
 Action.App.ScreenGrab=Ekraani &tõmmis
 Action.App.ScreenGrab.Desc=Vali ja kopeeri ekraani ala
 Action.Editor.Save=&Salvesta
@@ -224,18 +154,6 @@ Action.Viewer.CodepageNext=Järgmine &kooditabel
 Action.Viewer.CodepageNext.Desc=Lülitu järgmisele kooditabelile
 Action.Viewer.CodepageMenu=Kooditabelite &menüü
 Action.Viewer.CodepageMenu.Desc=Vali kooditabel
-Help.ViewerEditor=Vaataja ja redaktori klahvid
-Help.PanelNav=Paneeli klahvid
-Help.NavigationKeys=Navigatsiooniklahvid
-Help.Area.Shell=Paneelid
-Help.Area.Terminal=Terminal
-Help.Area.Editor=Redaktor
-Help.Area.Viewer=Vaataja
-Help.Area.Common=Ühised
-Menu.Shell.Files=&Failid
-Menu.Shell.Commands=&Käsud
-Menu.Shell.Options=&Seaded
-Menu.Terminal.File=&Fail
 Action.File.New=Uus fail
 Action.File.New.Desc=Loo uus fail ja ava see redaktoris
 Action.File.CopyInPlace=Kopeeri samasse kohta
@@ -268,19 +186,6 @@ Action.Panel.UserMenu=&Kasutaja menüü
 Action.Panel.UserMenu.Desc=Näita kasutaja menüüd
 Action.Panel.FileAssociations=Faili&seosed…
 Action.Panel.FileAssociations.Desc=Konfigureeri maskipõhised käsud Enter, F3 ja F4 klahvidele
-FileAssoc.EditorTitle=Failiseosed
-FileAssoc.EditTitle=Redigeeri seost
-FileAssoc.NewTitle=Uus seos
-FileAssoc.ErrorTitle=Failiseosed
-FileAssoc.EmptyHint=Seoseid veel pole — vajuta Ins lisamiseks
-FileAssoc.EmptyMask=Faili mask ei tohi olla tühi.
-FileAssoc.MaskLabel=Mask
-FileAssoc.DescLabel=Kirjeldus
-FileAssoc.PickTitle.Open=Ava programmiga
-FileAssoc.PickTitle.View=Vaata programmiga
-FileAssoc.PickTitle.Edit=Redigeeri programmiga
-FileAssoc.DeleteTitle=Kustuta seos
-FileAssoc.DeleteConfirm=Kas kustutada seos %q?
 Action.Panel.Bookmarks.Desc=Näita kausta järjehoidjate dialoogi
 Action.Panel.PluginMenu=Pli&gina käsud
 Action.Panel.PluginMenu.Desc=Näita pluginate käskude menüüd
@@ -367,23 +272,106 @@ Action.Terminal.ViewLog.Desc=Ava terminali logi vaatajas
 Action.Terminal.EditLog=Redigeeri terminali &logi
 Action.Terminal.EditLog.Desc=Ava terminali logi redaktoris
 
-EditorSettings.Title= Redaktori seaded
-EditorSettings.AutoComplete=Luba &automaatne lõpetamine
-EditorSettings.Mask=Aktiivne faili&maskidele:
-ColorerSettings.Title= Colorer seaded
-ColorerSettings.Enabled=Luba &Colorer esiletõstmine
-ColorerSettings.Style=Värvi&stiil:
-ColorerSettings.BuiltIn=(sisseehitatud)
-ColorerSettings.Cross=Näita &ristikut:
-ColorerSettings.CrossOff=Ära näita
-ColorerSettings.CrossVertical=Vertikaalne
-ColorerSettings.CrossHorizontal=Horisontaalne
-ColorerSettings.CrossBoth=Mõlemad
-ColorerSettings.Syntax=Tõsta esile s&üntaks
-ColorerSettings.Background=Muuda redaktori &tausta
-ColorerSettings.Catalog=Skeemide &kaust (catalog.xml):
-ColorerSettings.Reload=Laadi &uuesti
-ColorerSettings.Download=Laadi &skeemid alla
+Btn.OverwriteAll=Kirjuta &kõik üle
+Btn.SkipAll=Jä&ta kaikki vahele
+Btn.Retry=&Proovi uuesti
+Btn.Ignore=&Ignoreeri
+
+Operation.Error=Toiming ebaõnnestus:\n%s
+
+Op.ClonePanels=&Klooni paneelid uuele tööalale
+Op.SwitchHint=Ctrl+Tab akende vahetamiseks
+Op.DummyTitle= Demotoiming
+Op.DummyText=See on 5-minutiline demotoiming.\nVali taustarežiim:
+Op.Queue=Järjekord
+Op.Background=Taustapaneeli kloonimine
+Op.Foreground=Esiplaani lukustus
+Op.PathNameOnly=Ainult nimi
+Op.PathFullPath=Täielik tee
+Op.PathSrcDst=Allikas -> Sihtkoht
+Op.DummyQueue=Järjekord (Vaikimisi)
+Op.DummyBackground=Taustapaneeli kloonimine
+Op.DummyForeground=Esiplaani lukustus
+Op.BtnStart=&Alusta
+
+Viewer.Title= Vaade
+Viewer.ModeText=Tekst
+Viewer.ModeHex=Hex
+Viewer.SearchTitle= Otsi
+
+Search.CaseSensitive=&Tõstutundlik
+Search.Reverse=Ta&gasiotsing
+Search.Prompt=Otsi:
+Search.WholeWords=Terviksõnad
+Search.Regex=Regulaaravaldised
+Search.BtnFind=&Otsi
+
+Select.Title= Vali
+Select.Mask=Sisesta valiku&mask:
+
+Deselect.Title= Tühista valik
+
+Quit.Title= Välju
+Quit.Confirm=Kas tõesti soovid f4-st väljuda?
+Quit.Btn=&Välju
+
+Macro.AssignTitle= Määra makro
+Macro.AssignPrompt=Vajuta soovitud klahvikombinatsiooni
+Macro.AssignCancel=Vajuta Esc tühistamiseks
+
+Menu.Language=Keel
+Menu.HelpLanguage=Abikeel
+Menu.Left=Vasak
+Menu.Files=Failid
+Menu.Commands=Käsud
+Menu.Options=Seaded
+Menu.Right=Parem
+Menu.Exit=Väl&ju
+Menu.Files.View=Vaata
+Menu.Files.Edit=Redigeeri
+Menu.Files.Copy=Kopeeri
+Menu.Files.RenMov=Nimeta ümber või teisalda
+Menu.Files.MkDir=Loo kaust
+Menu.Files.Delete=Kustuta
+Menu.Left.Brief=Lühike
+Menu.Left.Medium=Keskmine
+Menu.Left.Detailed=Detailne
+Menu.Left.Wide=Lai
+Menu.Commands.FindFile=Otsi faili
+Menu.Commands.FindDuplicates=Otsi duplikaate
+Menu.Commands.BackgroundJobs=Taustatoimingud
+Menu.Commands.RunRemote=Käivita käsk kaugarvutis
+Menu.Commands.Bookmarks=Järjehoidjad
+Menu.SortName=Nimi
+Menu.SortExt=Laiend
+Menu.SortTime=Aeg
+Menu.SortSize=Suurus
+Menu.SortUnsorted=Sortimata
+Menu.PanelSettings=Paneeli seaded
+Menu.EditorSettings=Redaktori seaded
+Menu.ColorerSettings=&Colorer seaded
+Menu.AppearanceSettings=Välimus
+Menu.ConfirmationsSettings=Kinnitused
+Menu.AutoUpdateSettings=Automaatne &uuendus
+Menu.Options.Plugins=Hallake pluginaid
+Menu.Editor.File=&Fail
+Menu.Editor.Edit=&Redigeeri
+Menu.Editor.Search=&Otsi
+Menu.Editor.Options=&Seaded
+Menu.Editor.Insert=Li&sa
+Menu.Viewer.File=&Fail
+Menu.Viewer.View=&Näita
+Menu.Viewer.Search=&Otsi
+Menu.Viewer.Options=&Seaded
+Menu.Shell.Files=&Failid
+Menu.Shell.Commands=&Käsud
+Menu.Shell.Options=&Seaded
+Menu.Terminal.File=&Fail
+
+RemoteCmd.Title=Kaugkäsk
+RemoteCmd.Prompt=Käsk:
+RemoteCmd.BtnClose=&Sulge
+
 PanelSettings.Title= Paneeli seaded
 PanelSettings.ShowHidden=Kuva &peidetud ja süsteemseid faile
 PanelSettings.ShowDirPrefix=Kuva '/' eesliide &kaustadele
@@ -404,6 +392,75 @@ PanelSettings.DefaultMode=Vaikere&žiim:
 PanelSettings.PathDisplay=Tee kuvamine:
 PanelSettings.InfoPanelCPUGPU=Kuva CPU/GPU sektsiooni info p&aneelil
 PanelSettings.EscTogglePanels=&Esc lülitab paneelide nähtavust
+PanelSettings.ShowHighlightMarks=Kuva &märgised
+PanelSettings.CommandLineAutoComplete=Luba käsurea &automaatne täitmine
+PanelSettings.AlwaysShowMenuBar=Kuva alati &menüüriba
+PanelSettings.RecordMacrosTo=Salvesta makrod:
+
+Jobs.Title=Taustatoimingud
+Jobs.BtnShow=&Näita
+Jobs.BtnCancel=&Tühista toiming
+Jobs.BtnClose=&Sulge
+Jobs.Empty=Midagi ei tööta
+
+Sort.Title=Sortimisalus
+
+Help.ViewerEditor=Vaataja ja redaktori klahvid
+Help.PanelNav=Paneeli klahvid
+Help.NavigationKeys=Navigatsiooniklahvid
+Help.Area.Shell=Paneelid
+Help.Area.Terminal=Terminal
+Help.Area.Editor=Redaktor
+Help.Area.Viewer=Vaataja
+Help.Area.Common=Ühised
+Help.SearchHint=Otsi: trüki  Järgmine: F3/Ctrl+Enter  Eelmine: Shift+F3/Ctrl+Shift+Enter
+
+FileAssoc.EditorTitle=Failiseosed
+FileAssoc.EditTitle=Redigeeri seost
+FileAssoc.NewTitle=Uus seos
+FileAssoc.ErrorTitle=Failiseosed
+FileAssoc.EmptyHint=Seoseid veel pole — vajuta Ins lisamiseks
+FileAssoc.EmptyMask=Faili mask ei tohi olla tühi.
+FileAssoc.MaskLabel=Mask
+FileAssoc.DescLabel=Kirjeldus
+FileAssoc.PickTitle.Open=Ava programmiga
+FileAssoc.PickTitle.View=Vaata programmiga
+FileAssoc.PickTitle.Edit=Redigeeri programmiga
+FileAssoc.DeleteTitle=Kustuta seos
+FileAssoc.DeleteConfirm=Kas kustutada seos %q?
+
+EditorSettings.Title= Redaktori seaded
+EditorSettings.AutoComplete=Luba &automaatne lõpetamine
+EditorSettings.Mask=Aktiivne faili&maskidele:
+EditorSettings.TabExpandNone=Ära laienda tabulaatoreid
+EditorSettings.TabExpandNew=Laienda ainult uued tabulaatorid tühikuteks
+EditorSettings.TabExpandAll=Vienmēr izvērst tabulāciju atstarpēs
+EditorSettings.ExpandTabs=Laienda ta&bulaatoreid:
+EditorSettings.Highlighter=Süntaksi&esiletõst:
+EditorSettings.ColorerStyle=Colorer-&stiil:
+EditorSettings.TabSize=Tabulaatori &suurus:
+EditorSettings.AutoIndent=Automaatne &taane
+EditorSettings.CursorBeyondEOL=Kursor ridadest &väljapoole:
+EditorSettings.UseEditorConfig=Kasuta .&editorconfig seadeid
+EditorSettings.Crosshair=Näita &ristikut
+EditorSettings.ColorerBg=Colorer-&taust
+EditorSettings.UseExternalEditor=Kasuta vä&list redaktorit
+EditorSettings.ExternalCommand=Kä&sk:
+
+ColorerSettings.Title= Colorer seaded
+ColorerSettings.Enabled=Luba &Colorer esiletõstmine
+ColorerSettings.Style=Värvi&stiil:
+ColorerSettings.BuiltIn=(sisseehitatud)
+ColorerSettings.Cross=Näita &ristikut:
+ColorerSettings.CrossOff=Ära näita
+ColorerSettings.CrossVertical=Vertikaalne
+ColorerSettings.CrossHorizontal=Horisontaalne
+ColorerSettings.CrossBoth=Mõlemad
+ColorerSettings.Syntax=Tõsta esile s&üntaks
+ColorerSettings.Background=Muuda redaktori &tausta
+ColorerSettings.Catalog=Skeemide &kaust (catalog.xml):
+ColorerSettings.Reload=Laadi &uuesti
+ColorerSettings.Download=Laadi &skeemid alla
 
 AppearanceSettings.Title= Välimuse seaded
 AppearanceSettings.Style=Rakenduse &stiil:
@@ -417,15 +474,33 @@ ConfirmationsSettings.Title= Kinnitused
 ConfirmationsSettings.Copy=Kinnita &kopeerimisel
 ConfirmationsSettings.Move=Kinnita &teisaldamisel
 ConfirmationsSettings.Delete=Kinnita &kustutamisel
+ConfirmationsSettings.DeleteCancelFocused=Kustutades fokuseeri 'Tühista'
 ConfirmationsSettings.Exit=Kinnita &väljumisel
+
 UpdateSettings.Title= Automaatne värskendus
 UpdateSettings.Channel=Värskendus&kanal:
 UpdateSettings.Interval=Kontrolli &intervalli:
 UpdateSettings.BtnCheck=Kontrolli &nüüd
+UpdateSettings.ChannelStable=Stabiilsed versioonid
+UpdateSettings.ChannelNightly=Öised laidumid
+UpdateSettings.IntervalNever=Mitte kunagi
+UpdateSettings.IntervalStart=Igal käivitamisel
+UpdateSettings.IntervalDaily=Iga päev
+UpdateSettings.IntervalWeekly=Iga nädal
+
 FindFile.Title= Otsi faili
 FindFile.MaskPrompt=Failimask (või mitu):
 FindFile.TextPrompt=Sisaldab teksti:
 FindFile.BtnFind=&Otsi
+FindFile.SearchingTitle= Otsitakse...
+FindFile.Scanning=Skaneerimine:
+FindFile.FoundCount=Leitud: %d
+FindFile.SearchResultsTitle= Otsingutulemused
+FindFile.BtnGoTo=&Mine juurde
+FindFile.BtnView=&Vaata
+FindFile.BtnEdit=&Redigeeri
+FindFile.BtnClose=&Sulge
+
 History.FoldersTitle= Kaustade ajalugu
 History.CommandsTitle= Käskude ajalugu
 History.SearchModeHint=F2: lülita alamstringi / eesliite otsingut
@@ -433,22 +508,36 @@ History.CommandsHint=Üles/Alla Enter Esc Shift+Del Del Ctrl+C Ctrl+Ins F2
 History.FoldersHint=Üles/Alla Enter Shift+Enter Ctrl+Enter Esc Shift+Del Del Ctrl+C Ctrl+Ins Ctrl+R F2
 History.ConfirmClearAll=Puhasta kogu ajalugu?
 History.ConfirmPruneMissing=Eemalda kirjed, mille teed pole enam olemas?
-Help.SearchHint=Otsi: trüki  Järgmine: F3/Ctrl+Enter  Eelmine: Shift+F3/Ctrl+Shift+Enter
-UserMenu.LocalMenuTitle=Kohalik menüü
-UserMenu.MainMenuTitle=Peamenüü
-UserMenu.MainMenuFAR=FAR
-
-Language.Title= Keeled
-Language.Changed=Keel on muudetud.\nMõned liidese elemendid vajavad rakenduse\ntaaskäivitamist muudatuste täielikuks rakendumiseks.
-HelpLanguage.Title=Abikeeled
-HelpLanguage.Changed=Abikeel on muudetud.
-
 History.Title= Ajalugu
 History.EmptyFolders=Kaustade ajalugu on tühi.
 History.EmptyCommands=Käskude ajalugu on tühi.
 
+UserMenu.LocalMenuTitle=Kohalik menüü
+UserMenu.MainMenuTitle=Peamenüü
+UserMenu.MainMenuFAR=FAR
+UserMenu.EditTitle= Muuda kasutaja menüüd
+UserMenu.CreateTitle= Loo kasutaja menüü
+UserMenu.EditSubmenuTitle= Muuda alammenüüd
+UserMenu.CreateSubmenuTitle= Loo alammenüü
+UserMenu.LabelHotkey=Kiir&klahv:
+UserMenu.LabelLabel=&Silt:
+UserMenu.LabelCommand=&Käsk:
+
+Language.Title= Keeled
+Language.Changed=Keel on muudetud.\nMõned liidese elemendid vajavad rakenduse\ntaaskäivitamist muudatuste täielikuks rakendumiseks.
+
+LanguageSettings.Title= Keele seaded
+LanguageSettings.Primary=Põhikeel:
+LanguageSettings.Fallback=Varukeel:
+LanguageSettings.None=<puudub>
+
+HelpLanguage.Title=Abikeeled
+HelpLanguage.Changed=Abikeel on muudetud.
+
 Error.Title= Viga
+
 Warning.Title= Hoiatus
+
 Info.Title= Info
 
 ExtEdit.TempError=Ajutise faili loomine ebaõnnestus: %v
@@ -463,22 +552,27 @@ FileOp.BtnNewInstance=&Uus instants
 FileOp.CannotEditDir=Kataloogi muuta ei saa.
 FileOp.CannotViewDir=Kataloogi vaadata ei saa.
 FileOp.CannotOpenSpecial=Erifailide (kanalite, pistikute, seadmete) avamine ebaõnnestus.
+FileOp.DeletionErrors= Kustutamise vead
+FileOp.FileAlreadyExists=Fail on juba olemas
+FileOp.RememberChoice=Mäleta &valikut
+FileOp.Overwrite=&Kirjuta üle
+FileOp.Skip=Jä&ta vahele
+FileOp.Rename=&Nimeta ümber
+FileOp.Append=Lisa &juurde
+FileOp.Resume=Jä&tka
+FileOp.BtnCancel=&Tühista
+FileOp.BtnBackground=&Taustal
 
 Dialog.RenameTitle= Nimeta ümber
 Dialog.RenamePrompt=Nimeta ümber '%s' nimeks:
-
-Op.Queue=Järjekord
-Op.Background=Taustapaneeli kloonimine
-Op.Foreground=Esiplaani lukustus
-Op.PathNameOnly=Ainult nimi
-Op.PathFullPath=Täielik tee
-Op.PathSrcDst=Allikas -> Sihtkoht
 
 Plugins.Title= Halda pluginaid (RPC)
 Plugins.BtnAdd=&Lisa
 Plugins.BtnRemove=&Eemalda
 Plugins.BtnPermissions=&Õigused
 Plugins.BtnClose=&Sulge
+Plugins.AddTitle= Lisa plugin
+Plugins.SelectFilePrompt=Vali plugina fail:
 
 InfoPanel.Title= Teave
 InfoPanel.Computer=Arvuti nimi
@@ -542,6 +636,7 @@ AndroidInfo.Storage=Salvestusruum
 AndroidInfo.StorageTotal=Kogu salvestusruum
 AndroidInfo.StorageAvailable=Vaba salvestusruum
 AndroidInfo.Protocol=Ühendusviis
+
 IOSInfo.DeviceTitle=Apple mobiilseade
 IOSInfo.Name=Nimi
 IOSInfo.Model=Mudel
@@ -594,7 +689,6 @@ KeyBar.F9=SeadMenu
 KeyBar.F10=Välju
 KeyBar.F11=Plugin
 KeyBar.F12=Ekraan
-
 KeyBar.AltF1=Vasak
 KeyBar.AltF2=Parem
 KeyBar.AltF3=Hex
@@ -608,7 +702,6 @@ KeyBar.CtrlF4=Laiend
 KeyBar.CtrlF5=Aeg
 KeyBar.CtrlF6=Suurus
 KeyBar.CtrlF7=Sortimata
-
 KeyBar.EditorF1=Abi
 KeyBar.EditorF2=Salvesta
 KeyBar.EditorF3=Mähi
@@ -623,58 +716,8 @@ KeyBar.ViewerF7=Otsi
 KeyBar.ViewerAltF8=Siirdu
 KeyBar.ViewerF10=Välju
 
-EditorSettings.TabExpandNone=Ära laienda tabulaatoreid
-EditorSettings.TabExpandNew=Laienda ainult uued tabulaatorid tühikuteks
-EditorSettings.TabExpandAll=Vienmēr izvērst tabulāciju atstarpēs
-EditorSettings.ExpandTabs=Laienda ta&bulaatoreid:
-EditorSettings.Highlighter=Süntaksi&esiletõst:
-EditorSettings.ColorerStyle=Colorer-&stiil:
-EditorSettings.TabSize=Tabulaatori &suurus:
-EditorSettings.AutoIndent=Automaatne &taane
-EditorSettings.CursorBeyondEOL=Kursor ridadest &väljapoole:
-EditorSettings.UseEditorConfig=Kasuta .&editorconfig seadeid
-EditorSettings.Crosshair=Näita &ristikut
-EditorSettings.ColorerBg=Colorer-&taust
-EditorSettings.UseExternalEditor=Kasuta vä&list redaktorit
-EditorSettings.ExternalCommand=Kä&sk:
-ConfirmationsSettings.DeleteCancelFocused=Kustutades fokuseeri 'Tühista'
-
-PanelSettings.ShowHighlightMarks=Kuva &märgised
-PanelSettings.CommandLineAutoComplete=Luba käsurea &automaatne täitmine
-PanelSettings.AlwaysShowMenuBar=Kuva alati &menüüriba
-PanelSettings.RecordMacrosTo=Salvesta makrod:
-UpdateSettings.ChannelStable=Stabiilsed versioonid
-UpdateSettings.ChannelNightly=Öised laidumid
-UpdateSettings.IntervalNever=Mitte kunagi
-UpdateSettings.IntervalStart=Igal käivitamisel
-UpdateSettings.IntervalDaily=Iga päev
-UpdateSettings.IntervalWeekly=Iga nädal
-Plugins.AddTitle= Lisa plugin
-Plugins.SelectFilePrompt=Vali plugina fail:
-
-FindFile.SearchingTitle= Otsitakse...
-FindFile.Scanning=Skaneerimine:
-FindFile.FoundCount=Leitud: %d
-FindFile.SearchResultsTitle= Otsingutulemused
-FindFile.BtnGoTo=&Mine juurde
-FindFile.BtnView=&Vaata
-FindFile.BtnEdit=&Redigeeri
-FindFile.BtnClose=&Sulge
-
-FileOp.DeletionErrors= Kustutamise vead
-FileOp.FileAlreadyExists=Fail on juba olemas
-FileOp.RememberChoice=Mäleta &valikut
-FileOp.Overwrite=&Kirjuta üle
-FileOp.Skip=Jä&ta vahele
-FileOp.Rename=&Nimeta ümber
-FileOp.Append=Lisa &juurde
-FileOp.Resume=Jä&tka
-LanguageSettings.Title= Keele seaded
-LanguageSettings.Primary=Põhikeel:
-LanguageSettings.Fallback=Varukeel:
-LanguageSettings.None=<puudub>
-
 Arkanoid.HighScores= Rekordid
+
 PlugRing.Title= f4 PlugRing
 PlugRing.BtnInstall=&Paigalda/Värskenda
 PlugRing.BtnRemove=&Eemalda
@@ -691,29 +734,18 @@ Attributes.ReadOnly=&Kirjutuskaitstud
 Attributes.Hidden=&Peidetud
 Attributes.System=&Süsteemne
 Attributes.Archive=&Arhiiv
+
 Permissions.Title= Pluginate õigused
 Permissions.BtnRevoke=&Tühista
 Permissions.BtnClose=&Sulge
 
-Search.Prompt=Otsi:
-Search.WholeWords=Terviksõnad
-Search.Regex=Regulaaravaldised
-Search.BtnFind=&Otsi
 Replace.Title= Asenda
 Replace.Prompt=Asenda millega:
 Replace.BtnReplace=&Asenda
 Replace.BtnReplaceAll=Asenda &kõik
+
 Codepage.Title= Kooditabelid
 Codepage.ConvertTitle= Teisenda kooditabel
-
-vtui.Save=&Salvesta
-UserMenu.EditTitle= Muuda kasutaja menüüd
-UserMenu.CreateTitle= Loo kasutaja menüü
-UserMenu.EditSubmenuTitle= Muuda alammenüüd
-UserMenu.CreateSubmenuTitle= Loo alammenüü
-UserMenu.LabelHotkey=Kiir&klahv:
-UserMenu.LabelLabel=&Silt:
-UserMenu.LabelCommand=&Käsk:
 
 Hotkeys.Title= Kiirklahvide konfiguraator
 Hotkeys.BtnAssign=&Määra
@@ -724,10 +756,7 @@ Hotkeys.BtnNext=Edasi >
 Hotkeys.LabelArea=Ala:
 Hotkeys.LabelWhen=Tingimus:
 Hotkeys.AssignTitle= Määra kiirklahv
-Op.DummyQueue=Järjekord (Vaikimisi)
-Op.DummyBackground=Taustapaneeli kloonimine
-Op.DummyForeground=Esiplaani lukustus
-Op.BtnStart=&Alusta
+
 Drive.Title= Ketas
 
 NetFox.ConnectionTitle= Ühenduse loomine
@@ -743,8 +772,7 @@ NetFox.LabelCodepage=Koodi&tabel:
 NetFox.ErrorEmptyName=Nimi ei tohi olla tühi
 NetFox.ErrorReservedName=Reserveeritud ühenduse nimi
 
-FileOp.BtnCancel=&Tühista
-FileOp.BtnBackground=&Taustal
 Queue.BtnCancel=&Tühista toiming
 Queue.BtnClear=Puhasta &tehtud
+
 Session.Title= Vali seanss

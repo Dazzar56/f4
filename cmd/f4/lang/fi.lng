@@ -5,20 +5,6 @@ Author=f4 Team
 
 [Strings]
 VisRen.Menu=Tiedostojen &visuaalinen nimeäminen
-ID3Editor.Menu=ID3-tagi&muokkain
-ID3Editor.Title=ID3-tagimuokkain
-ID3Editor.LocalOnly=ID3-tagimuokkain tukee vain paikallisia tiedostoja.
-ID3Editor.SelectFile=Valitse ensin MP3-tiedosto.
-ID3Editor.OnlyMP3=Vain MP3-tiedostoja tuetaan.
-ID3Editor.SaveError=ID3-tagien tallennus epäonnistui:\n%v
-ID3Editor.OpenError=MP3-tiedoston avaaminen epäonnistui:\n%v
-ID3Editor.FieldTitle=Otsikko:
-ID3Editor.FieldArtist=Artisti:
-ID3Editor.FieldAlbum=Albumi:
-ID3Editor.FieldYear=Vuosi:
-ID3Editor.FieldGenre=Tyylilaji:
-ID3Editor.FieldComment=Kommentti:
-ID3Editor.FieldVersion=Versio:
 VisRen.Title=Tiedostojen visuaalinen nimeäminen
 VisRen.HostUnsupported=Tämä F4-isäntä ei tue VisRen UI -siltaa.
 VisRen.LocalOnly=VisRen toimii vain paikallisessa tiedostopaneelissa.
@@ -59,109 +45,53 @@ VisRen.WordDivTitle=Sanarajojen erottimet
 VisRen.WordDivPrompt=Sanoja erottavat merkit (enintään 18):
 VisRen.OldName=Vanha nimi
 VisRen.NewName=Uusi nimi
+
+ID3Editor.Menu=ID3-tagi&muokkain
+ID3Editor.Title=ID3-tagimuokkain
+ID3Editor.LocalOnly=ID3-tagimuokkain tukee vain paikallisia tiedostoja.
+ID3Editor.SelectFile=Valitse ensin MP3-tiedosto.
+ID3Editor.OnlyMP3=Vain MP3-tiedostoja tuetaan.
+ID3Editor.SaveError=ID3-tagien tallennus epäonnistui:\n%v
+ID3Editor.OpenError=MP3-tiedoston avaaminen epäonnistui:\n%v
+ID3Editor.FieldTitle=Otsikko:
+ID3Editor.FieldArtist=Artisti:
+ID3Editor.FieldAlbum=Albumi:
+ID3Editor.FieldYear=Vuosi:
+ID3Editor.FieldGenre=Tyylilaji:
+ID3Editor.FieldComment=Kommentti:
+ID3Editor.FieldVersion=Versio:
+
 vtui.Ok=&Ok
 vtui.Cancel=Peruuta
+vtui.Save=&Tallenna
+
 Panel.Other=&Toinen paneeli
 Panel.Column.Name=Nimi
 Panel.Column.Size=Koko
 Panel.Column.Modified=Muokattu
 Panel.UpDir=YLÄHAKEMISTO
 Panel.SelectedInfo=Tavuja: %s, tiedostoja: %d, kansioita: %d
+
 Panels.Prompt=>
+
 Edit.NewFileTitle= Luo uusi tiedosto
 Edit.NewFilePrompt=Tiedoston &nimi:
+
 MakeFolder.Title= Luo kansio
 MakeFolder.Prompt=Luo &kansio:
+
 Delete.Title= Poista
 Delete.Confirm=Haluatko varmasti poistaa kohteen\n%s?
 Delete.Btn=&Poista
+
 Copy.Title= Kopioi
 Copy.Prompt=Kopioi %d kohdetta paikkaan:
 Copy.Btn=&Kopioi
+
 Move.Title= Siirrä
 Move.Prompt=Nimeä uudelleen tai siirrä %d kohdetta paikkaan:
 Move.Btn=&Nimeä uudelleen
-Btn.OverwriteAll=Korvaa &kaikki
-Btn.SkipAll=O&hita kaikki
-Btn.Retry=&Yritä uudelleen
-Btn.Ignore=&Ohita
-Operation.Error=Toiminto epäonnistui:\n%s
-Op.ClonePanels=&Kloonaa paneelit uuteen työtilaan
-Op.SwitchHint=Ctrl+Tab vaihtaaksesi ikkunoiden välillä
-Op.DummyTitle= Demotoiminto
-Op.DummyText=Tämä on 5 minuutin demotoiminto.\nValitse taustamuoto:
-Viewer.Title= Katselu
-Viewer.ModeText=Teksti
-Viewer.ModeHex=Hex
-Viewer.SearchTitle= Etsi
-Search.CaseSensitive=Kirjasin&koon huomiointi
-Search.Reverse=&Hae taaksepäin
-Select.Title= Valitse
-Deselect.Title= Poista valinta
-Quit.Title= Poistu
-Quit.Confirm=Haluatko varmasti poistua f4-ohjelmasta?
-Quit.Btn=&Poistu
-Select.Mask=&Anna valintamaskiksi:
 
-Macro.AssignTitle= Määritä makro
-Macro.AssignPrompt=Paina haluamaasi näppäinyhdistelmää
-Macro.AssignCancel=Paina Esc peruuttaaksesi
-
-Menu.Language=Kieli (Language)
-Menu.HelpLanguage=Sivuston kieli (Help Language)
-Menu.Left=Vasen
-Menu.Files=Tiedostot
-Menu.Commands=Komennot
-Menu.Options=Asetukset
-Menu.Right=Oikea
-Menu.Exit=P&oistu
-
-Menu.Files.View=Näytä
-Menu.Files.Edit=Muokkaa
-Menu.Files.Copy=Kopioi
-Menu.Files.RenMov=Nimeä uudelleen tai siirrä
-Menu.Files.MkDir=Luo kansio
-Menu.Files.Delete=Poista
-Menu.Left.Brief=Lyhyt
-Menu.Left.Medium=Keskikokoinen
-Menu.Left.Detailed=Yksityiskohtainen
-Menu.Left.Wide=Leveä
-Menu.Commands.FindFile=Etsi tiedosto
-Menu.Commands.FindDuplicates=Etsi kaksoiskappaleet
-Menu.Commands.BackgroundJobs=Taustatyöt
-Jobs.Title=Taustatyöt
-Jobs.BtnShow=&Näytä
-Jobs.BtnCancel=&Peruuta työ
-Jobs.BtnClose=&Sulje
-Jobs.Empty=Mikään ei ole käynnissä
-Menu.Commands.RunRemote=Suorita komento etänä
-RemoteCmd.Title=Etäkomento
-RemoteCmd.Prompt=Komento:
-RemoteCmd.BtnClose=&Sulje
-Menu.Commands.Bookmarks=Kirjanmerkit
-Menu.SortName=Nimi
-Menu.SortExt=Tarkenne
-Menu.SortTime=Aika
-Menu.SortSize=Koko
-Menu.SortUnsorted=Lajittelematon
-Sort.Title=Lajitteluperuste
-Menu.PanelSettings=Paneelin asetukset
-Menu.EditorSettings=Editorin asetukset
-Menu.ColorerSettings=&Colorer-asetukset
-Menu.AppearanceSettings=Ulkoasu
-Menu.ConfirmationsSettings=Vahvistukset
-Menu.AutoUpdateSettings=Automaattinen &päivitys
-Menu.Options.Plugins=Hallitse liitännäisiä
-
-Menu.Editor.File=&Tiedosto
-Menu.Editor.Edit=&Muokkaa
-Menu.Editor.Search=&Etsi
-Menu.Editor.Options=&Asetukset
-Menu.Editor.Insert=&Lisää
-Menu.Viewer.File=&Tiedosto
-Menu.Viewer.View=&Näytä
-Menu.Viewer.Search=&Etsi
-Menu.Viewer.Options=&Asetukset
 Action.App.ScreenGrab=Kuvakaap&paus
 Action.App.ScreenGrab.Desc=Valitse ja kopioi näytön alue
 Action.Editor.Save=&Tallenna
@@ -224,18 +154,6 @@ Action.Viewer.CodepageNext=Seuraava koodi&sivu
 Action.Viewer.CodepageNext.Desc=Siirry seuraavaan koodisivuun
 Action.Viewer.CodepageMenu=&Koodisivuvalikko
 Action.Viewer.CodepageMenu.Desc=Valitse koodisivu
-Help.ViewerEditor=Katselun & muokkaimen näppäimet
-Help.PanelNav=Paneelin näppäimet
-Help.NavigationKeys=Navigointinäppäimet
-Help.Area.Shell=Paneelit
-Help.Area.Terminal=Terminaali
-Help.Area.Editor=Muokkain
-Help.Area.Viewer=Katselu
-Help.Area.Common=Yhteiset
-Menu.Shell.Files=&Tiedostot
-Menu.Shell.Commands=&Komennot
-Menu.Shell.Options=&Asetukset
-Menu.Terminal.File=&Tiedosto
 Action.File.New=Uusi tiedosto
 Action.File.New.Desc=Luo ja avaa uusi tiedosto muokkaimessa
 Action.File.CopyInPlace=Kopioi paikallisesti
@@ -268,19 +186,6 @@ Action.Panel.UserMenu=&Käyttäjävalikko
 Action.Panel.UserMenu.Desc=Näytä käyttäjävalikko
 Action.Panel.FileAssociations=Tiedosto&kytkennät…
 Action.Panel.FileAssociations.Desc=Määritä maskikohtaiset komennot Enterille, F3:lle ja F4-näppäimelle
-FileAssoc.EditorTitle=Tiedostokytkennät
-FileAssoc.EditTitle=Muokkaa kytkentää
-FileAssoc.NewTitle=Uusi kytkentä
-FileAssoc.ErrorTitle=Tiedostokytkennät
-FileAssoc.EmptyHint=Ei vielä kytkennöjä – lisää painamalla Ins-näppäintä
-FileAssoc.EmptyMask=Tiedostomaski ei voi olla tyhjä.
-FileAssoc.MaskLabel=Maski
-FileAssoc.DescLabel=Kuvaus
-FileAssoc.PickTitle.Open=Avaa sovelluksessa
-FileAssoc.PickTitle.View=Näytä sovelluksessa
-FileAssoc.PickTitle.Edit=Muokkaa sovelluksessa
-FileAssoc.DeleteTitle=Poista kytkentä
-FileAssoc.DeleteConfirm=Poistetaanko kytkentä %q?
 Action.Panel.Bookmarks.Desc=Näytä kansion kirjanmerkit -valintaikkuna
 Action.Panel.PluginMenu=Lii&tännäiskomennot
 Action.Panel.PluginMenu.Desc=Näytä liitännäisten komentovalikko
@@ -367,23 +272,106 @@ Action.Terminal.ViewLog.Desc=Avaa terminaalin loki katselussa
 Action.Terminal.EditLog=&Muokkaa terminaalin lokia
 Action.Terminal.EditLog.Desc=Avaa terminaalin loki muokkaimessa
 
-EditorSettings.Title= Editorin asetukset
-EditorSettings.AutoComplete=Automaattinen &täydennys
-EditorSettings.Mask=Aktiivinen tiedosto&maskeille:
-ColorerSettings.Title= Colorer-asetukset
-ColorerSettings.Enabled=Ota käyttöön &Colorer-korostus
-ColorerSettings.Style=Väri&tyyli:
-ColorerSettings.BuiltIn=(sisäänrakennettu)
-ColorerSettings.Cross=Näytä &hiusristikko:
-ColorerSettings.CrossOff=Älä näytä
-ColorerSettings.CrossVertical=Pystysuora
-ColorerSettings.CrossHorizontal=Vaakasuora
-ColorerSettings.CrossBoth=Molemmat
-ColorerSettings.Syntax=Korosta &syntaksi
-ColorerSettings.Background=Muuta muokkaimen &tausta tyylin mukaan
-ColorerSettings.Catalog=Skeema&kansio (catalog.xml):
-ColorerSettings.Reload=&Lataa uudelleen
-ColorerSettings.Download=Lataa &skeemat
+Btn.OverwriteAll=Korvaa &kaikki
+Btn.SkipAll=O&hita kaikki
+Btn.Retry=&Yritä uudelleen
+Btn.Ignore=&Ohita
+
+Operation.Error=Toiminto epäonnistui:\n%s
+
+Op.ClonePanels=&Kloonaa paneelit uuteen työtilaan
+Op.SwitchHint=Ctrl+Tab vaihtaaksesi ikkunoiden välillä
+Op.DummyTitle= Demotoiminto
+Op.DummyText=Tämä on 5 minuutin demotoiminto.\nValitse taustamuoto:
+Op.Queue=Jono
+Op.Background=Taustapaneelin klooni
+Op.Foreground=Etualalukitus
+Op.PathNameOnly=Vain nimi
+Op.PathFullPath=Koko polku
+Op.PathSrcDst=Lähde -> Kohde
+Op.DummyQueue=Jono (Oletus)
+Op.DummyBackground=Taustapaneelin klooni
+Op.DummyForeground=Etualalukitus
+Op.BtnStart=&Aloita
+
+Viewer.Title= Katselu
+Viewer.ModeText=Teksti
+Viewer.ModeHex=Hex
+Viewer.SearchTitle= Etsi
+
+Search.CaseSensitive=Kirjasin&koon huomiointi
+Search.Reverse=&Hae taaksepäin
+Search.Prompt=Etsi kohteesta:
+Search.WholeWords=Kokonaiset sanat
+Search.Regex=Säännölliset lausekkeet
+Search.BtnFind=&Etsi
+
+Select.Title= Valitse
+Select.Mask=&Anna valintamaskiksi:
+
+Deselect.Title= Poista valinta
+
+Quit.Title= Poistu
+Quit.Confirm=Haluatko varmasti poistua f4-ohjelmasta?
+Quit.Btn=&Poistu
+
+Macro.AssignTitle= Määritä makro
+Macro.AssignPrompt=Paina haluamaasi näppäinyhdistelmää
+Macro.AssignCancel=Paina Esc peruuttaaksesi
+
+Menu.Language=Kieli (Language)
+Menu.HelpLanguage=Sivuston kieli (Help Language)
+Menu.Left=Vasen
+Menu.Files=Tiedostot
+Menu.Commands=Komennot
+Menu.Options=Asetukset
+Menu.Right=Oikea
+Menu.Exit=P&oistu
+Menu.Files.View=Näytä
+Menu.Files.Edit=Muokkaa
+Menu.Files.Copy=Kopioi
+Menu.Files.RenMov=Nimeä uudelleen tai siirrä
+Menu.Files.MkDir=Luo kansio
+Menu.Files.Delete=Poista
+Menu.Left.Brief=Lyhyt
+Menu.Left.Medium=Keskikokoinen
+Menu.Left.Detailed=Yksityiskohtainen
+Menu.Left.Wide=Leveä
+Menu.Commands.FindFile=Etsi tiedosto
+Menu.Commands.FindDuplicates=Etsi kaksoiskappaleet
+Menu.Commands.BackgroundJobs=Taustatyöt
+Menu.Commands.RunRemote=Suorita komento etänä
+Menu.Commands.Bookmarks=Kirjanmerkit
+Menu.SortName=Nimi
+Menu.SortExt=Tarkenne
+Menu.SortTime=Aika
+Menu.SortSize=Koko
+Menu.SortUnsorted=Lajittelematon
+Menu.PanelSettings=Paneelin asetukset
+Menu.EditorSettings=Editorin asetukset
+Menu.ColorerSettings=&Colorer-asetukset
+Menu.AppearanceSettings=Ulkoasu
+Menu.ConfirmationsSettings=Vahvistukset
+Menu.AutoUpdateSettings=Automaattinen &päivitys
+Menu.Options.Plugins=Hallitse liitännäisiä
+Menu.Editor.File=&Tiedosto
+Menu.Editor.Edit=&Muokkaa
+Menu.Editor.Search=&Etsi
+Menu.Editor.Options=&Asetukset
+Menu.Editor.Insert=&Lisää
+Menu.Viewer.File=&Tiedosto
+Menu.Viewer.View=&Näytä
+Menu.Viewer.Search=&Etsi
+Menu.Viewer.Options=&Asetukset
+Menu.Shell.Files=&Tiedostot
+Menu.Shell.Commands=&Komennot
+Menu.Shell.Options=&Asetukset
+Menu.Terminal.File=&Tiedosto
+
+RemoteCmd.Title=Etäkomento
+RemoteCmd.Prompt=Komento:
+RemoteCmd.BtnClose=&Sulje
+
 PanelSettings.Title= Paneelin asetukset
 PanelSettings.ShowHidden=Näytä &piilotetut ja järjestelmätiedostot
 PanelSettings.ShowDirPrefix=Näytä '/' -etuliite &kansioille
@@ -404,6 +392,75 @@ PanelSettings.DefaultMode=Oletus&toimintotila:
 PanelSettings.PathDisplay=Tiedostopolku prosessissa:
 PanelSettings.InfoPanelCPUGPU=Näytä CPU/GPU-osio &tietopaneelissa
 PanelSettings.EscTogglePanels=&Esc vaihtaa paneelien näkyvyyttä
+PanelSettings.ShowHighlightMarks=Näytä &korostusmerkit
+PanelSettings.CommandLineAutoComplete=Ota komentorivin &automaattinen täydennys käyttöön
+PanelSettings.AlwaysShowMenuBar=Näytä aina &valikkorivi
+PanelSettings.RecordMacrosTo=Tallenna makrot kohteeseen:
+
+Jobs.Title=Taustatyöt
+Jobs.BtnShow=&Näytä
+Jobs.BtnCancel=&Peruuta työ
+Jobs.BtnClose=&Sulje
+Jobs.Empty=Mikään ei ole käynnissä
+
+Sort.Title=Lajitteluperuste
+
+Help.ViewerEditor=Katselun & muokkaimen näppäimet
+Help.PanelNav=Paneelin näppäimet
+Help.NavigationKeys=Navigointinäppäimet
+Help.Area.Shell=Paneelit
+Help.Area.Terminal=Terminaali
+Help.Area.Editor=Muokkain
+Help.Area.Viewer=Katselu
+Help.Area.Common=Yhteiset
+Help.SearchHint=Hae: kirjoita  Seuraava: F3/Ctrl+Enter  Edellinen: Shift+F3/Ctrl+Shift+Enter
+
+FileAssoc.EditorTitle=Tiedostokytkennät
+FileAssoc.EditTitle=Muokkaa kytkentää
+FileAssoc.NewTitle=Uusi kytkentä
+FileAssoc.ErrorTitle=Tiedostokytkennät
+FileAssoc.EmptyHint=Ei vielä kytkennöjä – lisää painamalla Ins-näppäintä
+FileAssoc.EmptyMask=Tiedostomaski ei voi olla tyhjä.
+FileAssoc.MaskLabel=Maski
+FileAssoc.DescLabel=Kuvaus
+FileAssoc.PickTitle.Open=Avaa sovelluksessa
+FileAssoc.PickTitle.View=Näytä sovelluksessa
+FileAssoc.PickTitle.Edit=Muokkaa sovelluksessa
+FileAssoc.DeleteTitle=Poista kytkentä
+FileAssoc.DeleteConfirm=Poistetaanko kytkentä %q?
+
+EditorSettings.Title= Editorin asetukset
+EditorSettings.AutoComplete=Automaattinen &täydennys
+EditorSettings.Mask=Aktiivinen tiedosto&maskeille:
+EditorSettings.TabExpandNone=Älä laajenna sarkaimia
+EditorSettings.TabExpandNew=Laajenna vain uudet sarkaimet välilyönneiksi
+EditorSettings.TabExpandAll=Laajenna aina kaikki sarkaimet välilyönneiksi
+EditorSettings.ExpandTabs=Laajenna &sarkaimet:
+EditorSettings.Highlighter=Syntaksi&korostus:
+EditorSettings.ColorerStyle=Colorer-&tyyli:
+EditorSettings.TabSize=Sarkaimen &koko:
+EditorSettings.AutoIndent=Automaattinen &sisennys
+EditorSettings.CursorBeyondEOL=Kurssori rivin lopun &yli
+EditorSettings.UseEditorConfig=Käytä .&editorconfig-tiedostoja
+EditorSettings.Crosshair=Näytä &hiusristikko
+EditorSettings.ColorerBg=Colorer-&tausta
+EditorSettings.UseExternalEditor=Käytä ul&koista muokkainta
+EditorSettings.ExternalCommand=Suorita ko&manto:
+
+ColorerSettings.Title= Colorer-asetukset
+ColorerSettings.Enabled=Ota käyttöön &Colorer-korostus
+ColorerSettings.Style=Väri&tyyli:
+ColorerSettings.BuiltIn=(sisäänrakennettu)
+ColorerSettings.Cross=Näytä &hiusristikko:
+ColorerSettings.CrossOff=Älä näytä
+ColorerSettings.CrossVertical=Pystysuora
+ColorerSettings.CrossHorizontal=Vaakasuora
+ColorerSettings.CrossBoth=Molemmat
+ColorerSettings.Syntax=Korosta &syntaksi
+ColorerSettings.Background=Muuta muokkaimen &tausta tyylin mukaan
+ColorerSettings.Catalog=Skeema&kansio (catalog.xml):
+ColorerSettings.Reload=&Lataa uudelleen
+ColorerSettings.Download=Lataa &skeemat
 
 AppearanceSettings.Title= Ulkoasuasetukset
 AppearanceSettings.Style=Sovelluksen &tyyli:
@@ -417,15 +474,33 @@ ConfirmationsSettings.Title= Vahvistukset
 ConfirmationsSettings.Copy=Vahvista &kopioitaessa
 ConfirmationsSettings.Move=Vahvista &siirrettäessä
 ConfirmationsSettings.Delete=Vahvista &poistettaessa
+ConfirmationsSettings.DeleteCancelFocused=Kohdista 'Peruuta' poistettaessa
 ConfirmationsSettings.Exit=Vahvista &poistuttaessa
+
 UpdateSettings.Title= Automaattinen päivitys
 UpdateSettings.Channel=Päivitys&kanava:
 UpdateSettings.Interval=Tarkistus&väli:
 UpdateSettings.BtnCheck=Tarkista &nyt
+UpdateSettings.ChannelStable=Vakaat versiot
+UpdateSettings.ChannelNightly=Nightly-versiot
+UpdateSettings.IntervalNever=Ei koskaan
+UpdateSettings.IntervalStart=Joka käynnistyksellä
+UpdateSettings.IntervalDaily=Päivittäin
+UpdateSettings.IntervalWeekly=Viikoittain
+
 FindFile.Title= Etsi tiedosto
 FindFile.MaskPrompt=Yksi tai useampi tiedostomaski:
 FindFile.TextPrompt=Sisältää tekstin:
 FindFile.BtnFind=&Etsi
+FindFile.SearchingTitle= Etsitään...
+FindFile.Scanning=Skannaus:
+FindFile.FoundCount=Löytyi: %d
+FindFile.SearchResultsTitle= Hakutulokset
+FindFile.BtnGoTo=&Siirry kohteeseen
+FindFile.BtnView=&Näytä
+FindFile.BtnEdit=&Muokkaa
+FindFile.BtnClose=&Sulje
+
 History.FoldersTitle= Kansiohistoria
 History.CommandsTitle= Komentohistoria
 History.SearchModeHint=F2: vaihda alimerkkijonon / etuliitteen haun välillä
@@ -433,22 +508,36 @@ History.CommandsHint=Up/Down Enter Esc Shift+Del Del Ctrl+C Ctrl+Ins F2
 History.FoldersHint=Up/Down Enter Shift+Enter Ctrl+Enter Esc Shift+Del Del Ctrl+C Ctrl+Ins Ctrl+R F2
 History.ConfirmClearAll=Tyhjennetäänkö koko historia?
 History.ConfirmPruneMissing=Poistetaanko kohteet, joiden polkuja ei enää ole?
-Help.SearchHint=Hae: kirjoita  Seuraava: F3/Ctrl+Enter  Edellinen: Shift+F3/Ctrl+Shift+Enter
-UserMenu.LocalMenuTitle=Paikallinen valikko
-UserMenu.MainMenuTitle=Päävalikko
-UserMenu.MainMenuFAR=FAR
-
-Language.Title= Kielet
-Language.Changed=Kieli on vaihdettu.\nJotkin käyttöliittymän osat edellyttävät ohjelman\nuudelleenkäynnistystä muutoksen täydelliseksi voimaantuloksi.
-HelpLanguage.Title=Ohjekielet
-HelpLanguage.Changed=Ohjekieli on vaihdettu.
-
 History.Title= Historia
 History.EmptyFolders=Kansiohistoria on tyhjä.
 History.EmptyCommands=Komentohistoria on tyhjä.
 
+UserMenu.LocalMenuTitle=Paikallinen valikko
+UserMenu.MainMenuTitle=Päävalikko
+UserMenu.MainMenuFAR=FAR
+UserMenu.EditTitle= Muokkaa käyttäjävalikkoa
+UserMenu.CreateTitle= Luo käyttäjävalikko
+UserMenu.EditSubmenuTitle= Muokkaa alivalikkoa
+UserMenu.CreateSubmenuTitle= Luo alivalikko
+UserMenu.LabelHotkey=Pika&näppäin:
+UserMenu.LabelLabel=&Nimi:
+UserMenu.LabelCommand=&Komento:
+
+Language.Title= Kielet
+Language.Changed=Kieli on vaihdettu.\nJotkin käyttöliittymän osat edellyttävät ohjelman\nuudelleenkäynnistystä muutoksen täydelliseksi voimaantuloksi.
+
+LanguageSettings.Title= Kieliasetukset
+LanguageSettings.Primary=Ensisijainen kieli:
+LanguageSettings.Fallback=Varakieli:
+LanguageSettings.None=<ei mitään>
+
+HelpLanguage.Title=Ohjekielet
+HelpLanguage.Changed=Ohjekieli on vaihdettu.
+
 Error.Title= Virhe
+
 Warning.Title= Varoitus
+
 Info.Title= Info
 
 ExtEdit.TempError=Ei voitu luoda tilapäistä tiedostoa: %v
@@ -463,22 +552,27 @@ FileOp.BtnNewInstance=&Uusi ilmentymä
 FileOp.CannotEditDir=Hakemiston muokkaaminen ei ole mahdollista.
 FileOp.CannotViewDir=Hakemiston katselu ei ole mahdollista.
 FileOp.CannotOpenSpecial=Erityistiedostojen (nimetyt putket, soke-tot, laitteet) avaaminen ei ole mahdollista.
+FileOp.DeletionErrors= Poistovirheet
+FileOp.FileAlreadyExists=Tiedosto on jo olemassa
+FileOp.RememberChoice=Muista valin&ta
+FileOp.Overwrite=&Korvaa
+FileOp.Skip=&Ohita
+FileOp.Rename=&Nimeä uudelleen
+FileOp.Append=&Liitä loppuun
+FileOp.Resume=&Jatka
+FileOp.BtnCancel=&Peruuta
+FileOp.BtnBackground=&Tausta
 
 Dialog.RenameTitle= Nimeä uudelleen
 Dialog.RenamePrompt=Nimeä uudelleen '%s' kohteeksi:
-
-Op.Queue=Jono
-Op.Background=Taustapaneelin klooni
-Op.Foreground=Etualalukitus
-Op.PathNameOnly=Vain nimi
-Op.PathFullPath=Koko polku
-Op.PathSrcDst=Lähde -> Kohde
 
 Plugins.Title= Hallitse liitännäisiä (RPC)
 Plugins.BtnAdd=&Lisää
 Plugins.BtnRemove=&Poista
 Plugins.BtnPermissions=&Oikeudet
 Plugins.BtnClose=&Sulje
+Plugins.AddTitle= Lisää liitännäinen
+Plugins.SelectFilePrompt=Valitse liitännäistiedosto:
 
 InfoPanel.Title= Tietoja
 InfoPanel.Computer=Tietokoneen nimi
@@ -542,6 +636,7 @@ AndroidInfo.Storage=Tallennustila
 AndroidInfo.StorageTotal=Yhteensä tallennustilassa
 AndroidInfo.StorageAvailable=Vapaana tallennustilassa
 AndroidInfo.Protocol=Yhteysprotokolla
+
 IOSInfo.DeviceTitle=Apple-mobiililaite
 IOSInfo.Name=Nimi
 IOSInfo.Model=Malli
@@ -594,7 +689,6 @@ KeyBar.F9=Asetukset
 KeyBar.F10=Lopeta
 KeyBar.F11=Liitänn
 KeyBar.F12=Näyttö
-
 KeyBar.AltF1=Vasen
 KeyBar.AltF2=Oikea
 KeyBar.AltF3=Hex
@@ -608,7 +702,6 @@ KeyBar.CtrlF4=Tark
 KeyBar.CtrlF5=Aika
 KeyBar.CtrlF6=Koko
 KeyBar.CtrlF7=Lajittelematon
-
 KeyBar.EditorF1=Ohje
 KeyBar.EditorF2=Tallenna
 KeyBar.EditorF3=Rivitä
@@ -623,58 +716,8 @@ KeyBar.ViewerF7=Etsi
 KeyBar.ViewerAltF8=Siirry
 KeyBar.ViewerF10=Lopeta
 
-EditorSettings.TabExpandNone=Älä laajenna sarkaimia
-EditorSettings.TabExpandNew=Laajenna vain uudet sarkaimet välilyönneiksi
-EditorSettings.TabExpandAll=Laajenna aina kaikki sarkaimet välilyönneiksi
-EditorSettings.ExpandTabs=Laajenna &sarkaimet:
-EditorSettings.Highlighter=Syntaksi&korostus:
-EditorSettings.ColorerStyle=Colorer-&tyyli:
-EditorSettings.TabSize=Sarkaimen &koko:
-EditorSettings.AutoIndent=Automaattinen &sisennys
-EditorSettings.CursorBeyondEOL=Kurssori rivin lopun &yli
-EditorSettings.UseEditorConfig=Käytä .&editorconfig-tiedostoja
-EditorSettings.Crosshair=Näytä &hiusristikko
-EditorSettings.ColorerBg=Colorer-&tausta
-EditorSettings.UseExternalEditor=Käytä ul&koista muokkainta
-EditorSettings.ExternalCommand=Suorita ko&manto:
-ConfirmationsSettings.DeleteCancelFocused=Kohdista 'Peruuta' poistettaessa
-
-PanelSettings.ShowHighlightMarks=Näytä &korostusmerkit
-PanelSettings.CommandLineAutoComplete=Ota komentorivin &automaattinen täydennys käyttöön
-PanelSettings.AlwaysShowMenuBar=Näytä aina &valikkorivi
-PanelSettings.RecordMacrosTo=Tallenna makrot kohteeseen:
-UpdateSettings.ChannelStable=Vakaat versiot
-UpdateSettings.ChannelNightly=Nightly-versiot
-UpdateSettings.IntervalNever=Ei koskaan
-UpdateSettings.IntervalStart=Joka käynnistyksellä
-UpdateSettings.IntervalDaily=Päivittäin
-UpdateSettings.IntervalWeekly=Viikoittain
-Plugins.AddTitle= Lisää liitännäinen
-Plugins.SelectFilePrompt=Valitse liitännäistiedosto:
-
-FindFile.SearchingTitle= Etsitään...
-FindFile.Scanning=Skannaus:
-FindFile.FoundCount=Löytyi: %d
-FindFile.SearchResultsTitle= Hakutulokset
-FindFile.BtnGoTo=&Siirry kohteeseen
-FindFile.BtnView=&Näytä
-FindFile.BtnEdit=&Muokkaa
-FindFile.BtnClose=&Sulje
-
-FileOp.DeletionErrors= Poistovirheet
-FileOp.FileAlreadyExists=Tiedosto on jo olemassa
-FileOp.RememberChoice=Muista valin&ta
-FileOp.Overwrite=&Korvaa
-FileOp.Skip=&Ohita
-FileOp.Rename=&Nimeä uudelleen
-FileOp.Append=&Liitä loppuun
-FileOp.Resume=&Jatka
-LanguageSettings.Title= Kieliasetukset
-LanguageSettings.Primary=Ensisijainen kieli:
-LanguageSettings.Fallback=Varakieli:
-LanguageSettings.None=<ei mitään>
-
 Arkanoid.HighScores= Ennätykset
+
 PlugRing.Title= f4 PlugRing
 PlugRing.BtnInstall=&Asenna/Päivitä
 PlugRing.BtnRemove=&Poista
@@ -691,29 +734,18 @@ Attributes.ReadOnly=Vain &luku
 Attributes.Hidden=&Piilotettu
 Attributes.System=&Järjestelmä
 Attributes.Archive=&Arkisto
+
 Permissions.Title= Liitännäisten oikeudet
 Permissions.BtnRevoke=&Peruuta
 Permissions.BtnClose=&Sulje
 
-Search.Prompt=Etsi kohteesta:
-Search.WholeWords=Kokonaiset sanat
-Search.Regex=Säännölliset lausekkeet
-Search.BtnFind=&Etsi
 Replace.Title= Korvaa
 Replace.Prompt=Korvaa kohteella:
 Replace.BtnReplace=&Korvaa
 Replace.BtnReplaceAll=Korvaa &kaikki
+
 Codepage.Title= Koodisivut
 Codepage.ConvertTitle= Muunna koodisivu
-
-vtui.Save=&Tallenna
-UserMenu.EditTitle= Muokkaa käyttäjävalikkoa
-UserMenu.CreateTitle= Luo käyttäjävalikko
-UserMenu.EditSubmenuTitle= Muokkaa alivalikkoa
-UserMenu.CreateSubmenuTitle= Luo alivalikko
-UserMenu.LabelHotkey=Pika&näppäin:
-UserMenu.LabelLabel=&Nimi:
-UserMenu.LabelCommand=&Komento:
 
 Hotkeys.Title= Pikanäppäinten määritys
 Hotkeys.BtnAssign=&Määritä
@@ -724,10 +756,7 @@ Hotkeys.BtnNext=Seuraava >
 Hotkeys.LabelArea=Alue:
 Hotkeys.LabelWhen=Ehto:
 Hotkeys.AssignTitle= Määritä pikanäppäin
-Op.DummyQueue=Jono (Oletus)
-Op.DummyBackground=Taustapaneelin klooni
-Op.DummyForeground=Etualalukitus
-Op.BtnStart=&Aloita
+
 Drive.Title= Asema
 
 NetFox.ConnectionTitle= Yhteys
@@ -743,8 +772,7 @@ NetFox.LabelCodepage=Koodi&sivu:
 NetFox.ErrorEmptyName=Nimi ei voi olla tyhjä
 NetFox.ErrorReservedName=Varattu yhteysnimi
 
-FileOp.BtnCancel=&Peruuta
-FileOp.BtnBackground=&Tausta
 Queue.BtnCancel=&Peruuta työ
 Queue.BtnClear=Tyhjennä &valmiit
+
 Session.Title= Valitse istunto
