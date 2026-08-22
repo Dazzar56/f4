@@ -1366,11 +1366,22 @@ func (pf *PanelsFrame) isPtyBusy() bool {
 	return pf.executing
 }
 
+// beginManagedExecution marks a command that carries its own OSC 133 C/D
+// pair, wrapped around it by f4 itself. Its D marker is unambiguous: it is
+// printed by the very command line we sent, so it always ends the execution.
 func (pf *PanelsFrame) beginManagedExecution() {
 	pf.executing = true
-	if !pf.shellPromptReady {
-		pf.ignoreNextPrompt = true
-	}
+	pf.ignoreNextPrompt = false
+}
+
+// beginPromptDrivenExecution marks a command that carries no markers of its
+// own — cmd.exe with the PROMPT f4 injects, or a VFS integration wiring the
+// command for a remote peer. Completion is inferred from the next prompt
+// marker, and a prompt printed at shell startup can still be in flight when
+// the command is sent, so that first stale marker is discarded.
+func (pf *PanelsFrame) beginPromptDrivenExecution() {
+	pf.executing = true
+	pf.ignoreNextPrompt = !pf.shellPromptReady
 }
 
 func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
@@ -2231,7 +2242,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				if integration != nil {
 					if seq := integration.PtyRunCommand(path, cmd); len(seq) > 0 {
 						fullWireCmd = string(seq)
-						pf.beginManagedExecution()
+						pf.beginPromptDrivenExecution()
 						pf.returnToPanels = pf.showPanels
 					}
 				} else if isWindowsShell {
@@ -2241,7 +2252,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 					} else {
 						fullWireCmd = fmt.Sprintf("%s\r", cmd)
 					}
-					pf.beginManagedExecution()
+					pf.beginPromptDrivenExecution()
 					pf.returnToPanels = pf.showPanels
 				} else {
 					// Unix

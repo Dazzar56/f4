@@ -1612,7 +1612,14 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 						pf.termView.PrintCleanCommand(cleanCmd)
 					}
 
-					pf.beginManagedExecution()
+					// Only the Unix template above wraps the command in an
+					// OSC 133 C/D pair; cmd.exe reports completion through
+					// the prompt marker instead.
+					if isWindowsShell {
+						pf.beginPromptDrivenExecution()
+					} else {
+						pf.beginManagedExecution()
+					}
 					pf.returnToPanels = true
 
 					if !isWindowsShell {
