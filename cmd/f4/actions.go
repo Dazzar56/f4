@@ -2137,6 +2137,27 @@ func actionEditorSettings(pf *PanelsFrame) {
 	// Height sized so the 3×2 checkbox grid stacks tight (no blank
 	// rows between rows of the grid). See #298.
 	width, height := 78, 25
+	checkCaptions := []string{
+		Msg("EditorSettings.AutoIndent"),
+		Msg("EditorSettings.CursorBeyondEOL"),
+		Msg("EditorSettings.UseEditorConfig"),
+		Msg("EditorSettings.AutoComplete"),
+		Msg("EditorSettings.Crosshair"),
+		Msg("EditorSettings.ColorerBg"),
+	}
+	maxCheckWidth := 0
+	for _, caption := range checkCaptions {
+		clean, _, _ := vtui.ParseAmpersandString(caption)
+		if checkWidth := 4 + vtui.StringWidth(clean); checkWidth > maxCheckWidth {
+			maxCheckWidth = checkWidth
+		}
+	}
+	checkRows := 3
+	singleCheckColumn := maxCheckWidth > (width-4)/2
+	if singleCheckColumn {
+		checkRows = len(checkCaptions)
+		height += checkRows - 3
+	}
 	dlg := vtui.NewCenteredDialog(width, height, Msg("EditorSettings.Title"))
 	dlg.ShowClose = true
 
@@ -2277,20 +2298,31 @@ func actionEditorSettings(pf *PanelsFrame) {
 	rowTabSize.Add(editTabSize, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(rowTabSize, vtui.Margins{Top: 1}, vtui.AlignFill)
 
-	col1 := vtui.NewVBoxLayout(0, 0, (width-4)/2, 3)
-	col1.Add(chkAutoIndent, vtui.Margins{}, vtui.AlignLeft)
-	col1.Add(chkEditorConfig, vtui.Margins{}, vtui.AlignLeft)
-	col1.Add(chkColorerBg, vtui.Margins{}, vtui.AlignLeft)
+	if singleCheckColumn {
+		checkColumn := vtui.NewVBoxLayout(0, 0, width-4, checkRows)
+		for _, check := range []*vtui.Checkbox{
+			chkAutoIndent, chkCursorEOL, chkEditorConfig,
+			chkAuto, chkCrosshair, chkColorerBg,
+		} {
+			checkColumn.Add(check, vtui.Margins{}, vtui.AlignLeft)
+		}
+		vbox.Add(checkColumn, vtui.Margins{Top: 1}, vtui.AlignFill)
+	} else {
+		col1 := vtui.NewVBoxLayout(0, 0, (width-4)/2, 3)
+		col1.Add(chkAutoIndent, vtui.Margins{}, vtui.AlignLeft)
+		col1.Add(chkEditorConfig, vtui.Margins{}, vtui.AlignLeft)
+		col1.Add(chkColorerBg, vtui.Margins{}, vtui.AlignLeft)
 
-	col2 := vtui.NewVBoxLayout(0, 0, (width-4)/2, 3)
-	col2.Add(chkCursorEOL, vtui.Margins{}, vtui.AlignLeft)
-	col2.Add(chkAuto, vtui.Margins{}, vtui.AlignLeft)
-	col2.Add(chkCrosshair, vtui.Margins{}, vtui.AlignLeft)
+		col2 := vtui.NewVBoxLayout(0, 0, (width-4)/2, 3)
+		col2.Add(chkCursorEOL, vtui.Margins{}, vtui.AlignLeft)
+		col2.Add(chkAuto, vtui.Margins{}, vtui.AlignLeft)
+		col2.Add(chkCrosshair, vtui.Margins{}, vtui.AlignLeft)
 
-	rowChecks := vtui.NewHBoxLayout(0, 0, width-4, 3)
-	rowChecks.Add(col1, vtui.Margins{}, vtui.AlignFill)
-	rowChecks.Add(col2, vtui.Margins{}, vtui.AlignFill)
-	vbox.Add(rowChecks, vtui.Margins{Top: 1}, vtui.AlignFill)
+		rowChecks := vtui.NewHBoxLayout(0, 0, width-4, 3)
+		rowChecks.Add(col1, vtui.Margins{}, vtui.AlignFill)
+		rowChecks.Add(col2, vtui.Margins{}, vtui.AlignFill)
+		vbox.Add(rowChecks, vtui.Margins{Top: 1}, vtui.AlignFill)
+	}
 
 	vbox.Add(lblMask, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(editMask, vtui.Margins{}, vtui.AlignFill)
@@ -3974,16 +4006,28 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 
 func actionManagePlugins(pf *PanelsFrame) {
 	width, height := 60, 16
-	dlg := vtui.NewCenteredDialog(width, height, Msg("Plugins.Title"))
-	dlg.ShowClose = true
-
-	lb := vtui.NewListBox(0, 0, 56, 10, AppConfig.RegisteredPlugins)
-
 	btnAdd := vtui.NewButton(0, 0, Msg("Plugins.BtnAdd"))
 	btnDel := vtui.NewButton(0, 0, Msg("Plugins.BtnRemove"))
 	btnPerms := vtui.NewButton(0, 0, Msg("Plugins.BtnPermissions"))
-	btnPerms.OnClick = func() { actionPluginPermissions(PluginPermissions()) }
 	btnClose := vtui.NewButton(0, 0, Msg("Plugins.BtnClose"))
+	buttonWidth := 0
+	for i, button := range []*vtui.Button{btnAdd, btnDel, btnPerms, btnClose} {
+		x1, _, x2, _ := button.GetPosition()
+		if i > 0 {
+			buttonWidth += 2
+		}
+		buttonWidth += x2 - x1 + 1
+	}
+	if minWidth := buttonWidth + 4; minWidth > width {
+		width = minWidth
+	}
+
+	dlg := vtui.NewCenteredDialog(width, height, Msg("Plugins.Title"))
+	dlg.ShowClose = true
+
+	lb := vtui.NewListBox(0, 0, width-4, 10, AppConfig.RegisteredPlugins)
+
+	btnPerms.OnClick = func() { actionPluginPermissions(PluginPermissions()) }
 
 	dlg.AddItem(lb)
 	dlg.AddItem(btnAdd)
