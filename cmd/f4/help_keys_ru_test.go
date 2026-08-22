@@ -3,6 +3,8 @@ package main
 import (
 	"strings"
 	"testing"
+
+	"github.com/mattn/go-runewidth"
 )
 
 func TestGenerateKeysHelpTopic_Russian(t *testing.T) {
@@ -27,6 +29,35 @@ func TestGenerateKeysHelpTopic_Russian(t *testing.T) {
 	topic2 := generateKeysHelpTopic("ViewerEditor", "t", []string{"Editor"}, "")
 	if !strings.Contains(strings.Join(topic2.Lines, "\n"), "Сохранить файл") {
 		t.Errorf("Expected Russian editor description in generated topic")
+	}
+}
+
+func TestGenerateKeysHelpTopicsFitHelpWidth(t *testing.T) {
+	old := GlobalHotkeysMgr
+	GlobalHotkeysMgr = NewHotkeyManager("")
+	t.Cleanup(func() { GlobalHotkeysMgr = old })
+
+	oldLang := AppConfig.Language
+	t.Cleanup(func() {
+		AppConfig.Language = oldLang
+		InitLang()
+	})
+	AppConfig.Language = "ru"
+	InitLang()
+
+	for _, tc := range []struct {
+		name  string
+		areas []string
+	}{
+		{name: "PanelNav", areas: []string{"Shell", "Terminal", "Common"}},
+		{name: "ViewerEditor", areas: []string{"Editor", "Viewer", "Common"}},
+	} {
+		topic := generateKeysHelpTopic(tc.name, "t", tc.areas, "")
+		for lineNo, line := range topic.Lines {
+			if width := runewidth.StringWidth(line); width > generatedHelpLineWidth {
+				t.Errorf("%s line %d is %d columns wide, want <= %d: %q", tc.name, lineNo, width, generatedHelpLineWidth, line)
+			}
+		}
 	}
 }
 
