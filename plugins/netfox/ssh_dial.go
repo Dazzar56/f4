@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/unxed/f4/internal/netproxy"
-	"github.com/unxed/vtui"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 	"golang.org/x/crypto/ssh/knownhosts"
@@ -35,13 +34,12 @@ func DialSSH(host, port, user, pass string, timeout int, px netproxy.Settings) (
 	}
 
 	auths := []ssh.AuthMethod{}
-	var agentClient agent.Agent
 	var agentConn net.Conn
 
 	if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
 		if conn, err := net.Dial("unix", sock); err == nil {
 			agentConn = conn
-			agentClient = agent.NewClient(conn)
+			agentClient := agent.NewClient(conn)
 			auths = append(auths, ssh.PublicKeysCallback(agentClient.Signers))
 		}
 	}
@@ -79,13 +77,11 @@ func DialSSH(host, port, user, pass string, timeout int, px netproxy.Settings) (
 		}
 		return nil, err
 	}
-	if agentClient != nil {
-		if err := agent.ForwardToAgent(client, agentClient); err != nil {
-			vtui.DebugLog("SSH: Failed to forward agent: %v", err)
-			agentConn.Close()
-		} else {
-			vtui.DebugLog("SSH: Agent forwarding enabled")
-		}
+	if agentConn != nil {
+		// The agent is used only for local authentication. Keeping its socket
+		// open after the SSH handshake would make forwarding tempting and would
+		// hold a needless connection to the user's agent for the whole session.
+		_ = agentConn.Close()
 	}
 	return client, nil
 }
