@@ -71,7 +71,9 @@ func TestDialSSHVerifiesServerKeyBeforeAuthentication(t *testing.T) {
 	if err != nil {
 		t.Fatalf("known server key rejected: %v", err)
 	}
-	client.Close()
+	if err := client.Close(); err != nil {
+		t.Errorf("close SSH client: %v", err)
+	}
 }
 
 func TestDialSSHRejectsChangedServerKey(t *testing.T) {
@@ -84,7 +86,9 @@ func TestDialSSHRejectsChangedServerKey(t *testing.T) {
 
 	client, err := DialSSH("127.0.0.1", port, "user", "pass", 3, netproxy.Settings{})
 	if err == nil {
-		client.Close()
+		if closeErr := client.Close(); closeErr != nil {
+			t.Errorf("close SSH client: %v", closeErr)
+		}
 		t.Fatal("changed server key was accepted")
 	}
 }
@@ -137,7 +141,11 @@ func startTestSSHServer(t *testing.T) (string, ssh.PublicKey) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { listener.Close() })
+	t.Cleanup(func() {
+		if err := listener.Close(); err != nil {
+			t.Errorf("close test SSH listener: %v", err)
+		}
+	})
 	go func() {
 		for {
 			conn, err := listener.Accept()
@@ -147,14 +155,14 @@ func startTestSSHServer(t *testing.T) (string, ssh.PublicKey) {
 			go func() {
 				serverConn, channels, requests, err := ssh.NewServerConn(conn, config)
 				if err != nil {
-					conn.Close()
+					_ = conn.Close()
 					return
 				}
 				go ssh.DiscardRequests(requests)
 				for channel := range channels {
-					channel.Reject(ssh.Prohibited, "test server")
+					_ = channel.Reject(ssh.Prohibited, "test server")
 				}
-				serverConn.Close()
+				_ = serverConn.Close()
 			}()
 		}
 	}()
