@@ -6,6 +6,7 @@ import "testing"
 // a hidden action leaves no item, a visible one still appears, and a menu
 // whose every action is hidden does not show up as an empty group.
 func TestMenuHonoursVisible(t *testing.T) {
+	preserveActionRegistry(t)
 	show := true
 	RegisterAction(Action{
 		Name:     "Test.Visibility.Shown",

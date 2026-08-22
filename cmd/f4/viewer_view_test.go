@@ -672,6 +672,8 @@ func TestViewerView_EndJump_BusyState(t *testing.T) {
 	}
 }
 func TestViewerView_StateRestoration_Modes(t *testing.T) {
+	oldFileState := GlobalFileState
+	t.Cleanup(func() { GlobalFileState = oldFileState })
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	tmp := filepath.Join(t.TempDir(), "test.txt")
 	os.WriteFile(tmp, []byte("data"), 0644)

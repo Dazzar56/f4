@@ -4387,10 +4387,12 @@ func TestPanelsFrame_ShiftF9_SaveSettings(t *testing.T) {
 	tmp.Close()
 
 	oldGetPath := getUserConfigIniPath
+	oldGetPaths := getConfigIniPaths
 	getUserConfigIniPath = func() string { return tmp.Name() }
 	getConfigIniPaths = func() []string { return []string{tmp.Name()} }
 	defer func() {
 		getUserConfigIniPath = oldGetPath
+		getConfigIniPaths = oldGetPaths
 	}()
 
 	pf := NewPanelsFrame()

@@ -8,8 +8,12 @@ import (
 func TestEnforceColorCorrection_ConfigRoundtrip(t *testing.T) {
 	tmpDir := t.TempDir()
 
+	oldCfg := AppConfig
 	oldGetConfig := getUserConfigIniPath
-	defer func() { getUserConfigIniPath = oldGetConfig }()
+	defer func() {
+		AppConfig = oldCfg
+		getUserConfigIniPath = oldGetConfig
+	}()
 	getUserConfigIniPath = func() string {
 		return filepath.Join(tmpDir, "settings.ini")
 	}

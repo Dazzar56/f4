@@ -7,9 +7,11 @@ import (
 
 func TestConfig_FallbackLanguagePersistence(t *testing.T) {
 	tmpDir := t.TempDir()
+	oldCfg := AppConfig
 	oldGetUserConfigIniPath := getUserConfigIniPath
 	oldGetConfigPaths := getConfigIniPaths
 	defer func() {
+		AppConfig = oldCfg
 		getUserConfigIniPath = oldGetUserConfigIniPath
 		getConfigIniPaths = oldGetConfigPaths
 	}()
