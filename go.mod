@@ -176,3 +176,8 @@ replace github.com/ebitengine/hideconsole => ./internal/hideconsole
 // replace github.com/unxed/colorer4go => ../../../dev/colorer4go
 
 // replace github.com/unxed/vtui => ../../../dev/vtui
+
+// Keep the upstream module path while the Windows console resize recovery is
+// reviewed upstream. This immutable fork revision contains the zoin-bot fix
+// for the transient ERROR_PIPE_NOT_CONNECTED input error.
+replace github.com/unxed/vtinput => github.com/Zoinen/vtinput v0.1.5-0.20260822031659-c39a9ab8b09f
