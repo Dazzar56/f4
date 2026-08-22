@@ -1659,7 +1659,13 @@ func actionNewFile(pf *PanelsFrame) {
 			if name == "" {
 				name = "newfile.txt"
 			}
-			path := activeVfs.Join(dir, name)
+			// Shift+F4 also accepts a complete path. Joining an absolute
+			// name to the active directory duplicates the path prefix and
+			// makes an existing file look like a new, empty file.
+			path := name
+			if !activeVfs.IsAbs(name) {
+				path = activeVfs.Join(dir, name)
+			}
 			if AppConfig.UseExternalEditor {
 				actionEditFileExternal(pf, activeVfs, path, 0)
 				return
