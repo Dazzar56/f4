@@ -336,6 +336,18 @@ func isPanelFastFindToggleKey(e *vtinput.InputEvent) bool {
 	return fsp != nil && fsp.fastFindMode
 }
 
+func isPanelFastFindActive() bool {
+	if vtui.FrameManager == nil {
+		return false
+	}
+	pf, ok := vtui.FrameManager.GetTopFrame().(*PanelsFrame)
+	if !ok || !pf.showPanels {
+		return false
+	}
+	fsp := pf.getActivePanel()
+	return fsp != nil && fsp.fastFindMode
+}
+
 func (m *MacroManager) Filter(e *vtinput.InputEvent) bool {
 	if e.Type != vtinput.KeyEventType {
 		return false
@@ -398,6 +410,11 @@ func (m *MacroManager) Filter(e *vtinput.InputEvent) bool {
 	}
 
 	currentArea := m.GetCurrentArea()
+	if currentArea == "Shell" && isPanelFastFindActive() {
+		// zoin-bot: Fast Find is a transient panel input mode, so Shell macros
+		// must not consume keys before PanelsFrame can update its query.
+		return false
+	}
 	if currentArea == "Shell" && (isPanelBookmarkHotkey(e) || isPanelFastFindToggleKey(e)) {
 		return false
 	}
