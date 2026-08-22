@@ -3,6 +3,7 @@ package main
 import (
 	"strings"
 
+	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 )
 
@@ -65,6 +66,32 @@ func BuildMenuBarItems(area string) []vtui.MenuBarItem {
 		m.items = append(m.items, item)
 	}
 
+	appendPluginCommand := func(command vfs.PluginCommand) {
+		m := menus[command.MenuPath]
+		if m == nil {
+			title := Msg("Menu." + area + "." + command.MenuPath)
+			if strings.HasPrefix(title, "{") {
+				title = command.MenuPath
+			}
+			m = &menu{title: title}
+			menus[command.MenuPath] = m
+			order = append(order, command.MenuPath)
+		}
+		text := plainLabel(pluginCommandDisplayLabel(command))
+		if !strings.Contains(text, "&") {
+			text = "&" + text
+		}
+		m.items = append(m.items, vtui.MenuItem{
+			Text:     text,
+			Shortcut: command.Shortcut,
+			OnClick: func() {
+				if pf := findPanelsFrameAnyScreen(); pf != nil {
+					executeRegisteredPluginCommand(vfs.PluginCommandPanel, command.ID, pf)
+				}
+			},
+		})
+	}
+
 	// The area's own actions first (stable registry order).
 	for _, a := range GetOrderedActions() {
 		if a.MenuPath != "" && !a.HideFromMenu && a.Area == area {
@@ -76,6 +103,21 @@ func BuildMenuBarItems(area string) []vtui.MenuBarItem {
 	for _, a := range GetOrderedActions() {
 		if a.MenuPath != "" && !a.HideFromMenu && a.Area == "Common" && menus[a.MenuPath] != nil {
 			appendAction(a)
+		}
+	}
+	// Panel plugins can opt into an existing generated Shell menu. Keep
+	// plugin commands after core actions so the built-in menu remains stable,
+	// while still exposing plugin functionality without requiring F11.
+	if area == "Shell" {
+		// NewPanelsFrame builds its first menu before it is attached to a
+		// frame manager. Do not pass a typed-nil *PanelsFrame as vfs.App to
+		// plugin visibility callbacks: some plugins inspect the panel state.
+		if pf := findPanelsFrameAnyScreen(); pf != nil {
+			for _, command := range pluginCommandsSnapshot(vfs.PluginCommandPanel, pf) {
+				if command.MenuPath != "" {
+					appendPluginCommand(command)
+				}
+			}
 		}
 	}
 
