@@ -26,15 +26,16 @@ const (
 
 // AnsiParser converts a stream of bytes into ScreenBuf operations.
 type AnsiParser struct {
-	State        ParserState
-	Params       []string
-	CurParam     strings.Builder
-	Intermediate string
-	Attr         uint64
-	term         *TerminalView
-	pty          PtyBackend
-	runeBuf      []byte
-	lastRune     rune
+	State              ParserState
+	Params             []string
+	CurParam           strings.Builder
+	Intermediate       string
+	Attr               uint64
+	term               *TerminalView
+	pty                PtyBackend
+	runeBuf            []byte
+	lastRune           rune
+	pendingWindowsSync []byte
 }
 
 func NewAnsiParser(t *TerminalView, p PtyBackend) *AnsiParser {
@@ -43,6 +44,125 @@ func NewAnsiParser(t *TerminalView, p PtyBackend) *AnsiParser {
 		pty:  p,
 		Attr: DefaultTermAttr,
 	}
+}
+
+const maxPendingWindowsSync = 64 * 1024
+
+var (
+	windowsSyncStart = []byte(`cd /d "`)
+	windowsSyncEnd   = []byte(`" & rem f4_sync`)
+	windowsSyncSep   = []byte(`" & `)
+)
+
+func cloneBytes(data []byte) []byte {
+	if len(data) == 0 {
+		return nil
+	}
+	return append([]byte(nil), data...)
+}
+
+func isPartialPrefix(data, prefix []byte) bool {
+	return len(data) > 0 && len(data) < len(prefix) && bytes.Equal(data, prefix[:len(data)])
+}
+
+func longestSuffixPrefix(data, prefix []byte) int {
+	max := len(prefix) - 1
+	if max > len(data) {
+		max = len(data)
+	}
+	for n := max; n > 0; n-- {
+		if bytes.Equal(data[len(data)-n:], prefix[:n]) {
+			return n
+		}
+	}
+	return 0
+}
+
+// exciseWindowsSync removes the command used to synchronize the PTY's current
+// directory. The PTY can split a long command at any byte boundary, so an
+// incomplete command is kept until the next Process call instead of being
+// rendered as terminal output.
+func (p *AnsiParser) exciseWindowsSync(data []byte) []byte {
+	if len(p.pendingWindowsSync) > 0 {
+		combined := make([]byte, 0, len(p.pendingWindowsSync)+len(data))
+		combined = append(combined, p.pendingWindowsSync...)
+		combined = append(combined, data...)
+		data = combined
+		p.pendingWindowsSync = nil
+	}
+
+	var visible []byte
+	for len(data) > 0 {
+		startIdx := bytes.Index(data, windowsSyncStart)
+		if startIdx == -1 {
+			pendingLen := longestSuffixPrefix(data, windowsSyncStart)
+			visible = append(visible, data[:len(data)-pendingLen]...)
+			p.pendingWindowsSync = cloneBytes(data[len(data)-pendingLen:])
+			return visible
+		}
+
+		visible = append(visible, data[:startIdx]...)
+		command := data[startIdx:]
+		endIdx := bytes.Index(command, windowsSyncEnd)
+		separatorIdx := bytes.Index(command, windowsSyncSep)
+
+		if endIdx >= 0 && (separatorIdx < 0 || endIdx <= separatorIdx) {
+			tokenEnd := startIdx + endIdx + len(windowsSyncEnd)
+			if tokenEnd == len(data) {
+				if len(command) > maxPendingWindowsSync {
+					visible = append(visible, command...)
+					return visible
+				}
+				p.pendingWindowsSync = cloneBytes(command)
+				return visible
+			}
+
+			end := tokenEnd
+			switch data[end] {
+			case '\r':
+				if end+1 == len(data) {
+					p.pendingWindowsSync = cloneBytes(command)
+					return visible
+				}
+				end++
+				if data[end] == '\n' {
+					end++
+				}
+			case '\n':
+				end++
+			}
+
+			vtui.DebugLog("ANSI_PARSER: Excising background Windows CD sync")
+			visible = append(visible, []byte("\r\x1b[2K")...)
+			data = data[end:]
+			continue
+		}
+
+		if separatorIdx < 0 {
+			if len(command) > maxPendingWindowsSync {
+				visible = append(visible, command...)
+				return visible
+			}
+			p.pendingWindowsSync = cloneBytes(command)
+			return visible
+		}
+
+		separatorEnd := startIdx + separatorIdx + len(windowsSyncSep)
+		remainder := data[separatorEnd:]
+		if len(remainder) == 0 || isPartialPrefix(remainder, []byte("rem f4_sync")) {
+			if len(command) > maxPendingWindowsSync {
+				visible = append(visible, command...)
+				return visible
+			}
+			p.pendingWindowsSync = cloneBytes(command)
+			return visible
+		}
+
+		// This is another command after a quoted cd, not f4's marker. Keep
+		// the command itself visible while removing only the technical cd.
+		data = data[separatorEnd:]
+	}
+	return visible
 }
 
 func (p *AnsiParser) Process(data []byte) {
@@ -99,48 +219,7 @@ func (p *AnsiParser) Process(data []byte) {
 		break
 	}
 
-	// Windows f4 sync commands excision
-	for {
-		startIdx := bytes.Index(data, []byte("cd /d \""))
-		if startIdx == -1 {
-			break
-		}
-
-		endIdx := bytes.Index(data[startIdx:], []byte("\" & "))
-		if endIdx != -1 {
-			if bytes.HasPrefix(data[startIdx+endIdx:], []byte("\" & rem f4_sync")) {
-				actualEnd := startIdx + endIdx + len("\" & rem f4_sync")
-				if actualEnd < len(data) && data[actualEnd] == '\r' {
-					actualEnd++
-				}
-				if actualEnd < len(data) && data[actualEnd] == '\n' {
-					actualEnd++
-				}
-				if actualEnd < len(data) && data[actualEnd] == '\r' {
-					actualEnd++
-				}
-				if actualEnd < len(data) && data[actualEnd] == '\n' {
-					actualEnd++
-				}
-				vtui.DebugLog("ANSI_PARSER: Excising background Windows CD sync")
-				newData := make([]byte, 0, startIdx+5+len(data)-actualEnd)
-				newData = append(newData, data[:startIdx]...)
-				newData = append(newData, []byte("\r\x1b[2K")...)
-				newData = append(newData, data[actualEnd:]...)
-				data = newData
-				continue
-			} else {
-				actualEnd := startIdx + endIdx + 4
-				vtui.DebugLog("ANSI_PARSER: Excising technical Windows CD sync from buffer")
-				newData := make([]byte, 0, startIdx+len(data)-actualEnd)
-				newData = append(newData, data[:startIdx]...)
-				newData = append(newData, data[actualEnd:]...)
-				data = newData
-				continue
-			}
-		}
-		break
-	}
+	data = p.exciseWindowsSync(data)
 
 	if len(data) == 0 {
 		return
