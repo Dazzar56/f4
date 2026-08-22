@@ -32,6 +32,10 @@ type WrapEngine struct {
 	validUntil int // Index of the last logical line with a valid calculated row offset
 
 	tmpBuf []byte // Reusable buffer for avoiding allocations
+
+	// noWrapCache is deliberately a map rather than fragmentCache: edits in a
+	// huge file must not walk or allocate a slice for every logical line.
+	noWrapCache map[int]noWrapLayout
 }
 
 func NewWrapEngine(pt *piecetable.PieceTable, li *piecetable.LineIndex) *WrapEngine {
@@ -52,6 +56,18 @@ type visualCluster struct {
 	byteEnd    int
 	logicalPos int
 	logicalEnd int
+}
+
+// noWrapLayout caches one logical line's visual clusters and prefix widths.
+// zoin-bot uses it for cursor-column lookups, which otherwise rebuild the
+// complete long line for every key press when word wrapping is disabled.
+type noWrapLayout struct {
+	text         string
+	fragment     LineFragment
+	clusters     []visualCluster
+	prefixWidths []int
+	hasRTL       bool
+	fragments    []LineFragment
 }
 
 // logicalTextClusters keeps zoin-bot's grapheme boundaries in document order.
@@ -338,6 +354,7 @@ func (we *WrapEngine) InvalidateCache() {
 	we.validUntil = -1
 	we.rowOffsets = nil
 	we.totalRows = 0
+	we.noWrapCache = nil
 }
 
 func (we *WrapEngine) InvalidateFrom(logLineIdx int) {
@@ -352,6 +369,11 @@ func (we *WrapEngine) InvalidateFrom(logLineIdx int) {
 	if logLineIdx <= we.validUntil {
 		we.validUntil = logLineIdx - 1
 	}
+	for idx := range we.noWrapCache {
+		if idx >= logLineIdx {
+			delete(we.noWrapCache, idx)
+		}
+	}
 }
 
 // GetFragments возвращает визуальные фрагменты для одной логической строки.
@@ -361,8 +383,12 @@ func (we *WrapEngine) GetFragments(logLineIdx int) []LineFragment {
 		return nil
 	}
 
-	if we.wordWrap && we.fragmentCache != nil && logLineIdx < len(we.fragmentCache) && we.fragmentCache[logLineIdx] != nil {
-		return we.fragmentCache[logLineIdx]
+	if we.wordWrap {
+		if we.fragmentCache != nil && logLineIdx < len(we.fragmentCache) && we.fragmentCache[logLineIdx] != nil {
+			return we.fragmentCache[logLineIdx]
+		}
+	} else if cached, ok := we.noWrapCache[logLineIdx]; ok {
+		return cached.fragments
 	}
 
 	startOffset := we.li.GetLineOffset(logLineIdx)
@@ -417,20 +443,40 @@ func (we *WrapEngine) GetFragments(logLineIdx int) []LineFragment {
 	}
 
 	if !we.wordWrap || we.wrapWidth <= 0 {
-		clusters := visualClusters(string(lineData))
-		widths := visualClusterWidths(clusters, we.tabSize)
-		width := 0
-		for _, clusterWidth := range widths {
-			width += clusterWidth
+		text := string(lineData)
+		clusters := visualClusters(text)
+		prefixWidths := make([]int, len(clusters)+1)
+		for i, cluster := range clusters {
+			width := cluster.width
+			if cluster.text == "\t" {
+				width = we.tabSize - (prefixWidths[i] % we.tabSize)
+			}
+			if width <= 0 {
+				width = 1
+			}
+			prefixWidths[i+1] = prefixWidths[i] + width
 		}
-
 		frag := LineFragment{
 			LogicalLineIdx:  logLineIdx,
 			ByteOffsetStart: startOffset,
 			ByteOffsetEnd:   startOffset + len(lineData),
-			VisualWidth:     width,
+			VisualWidth:     prefixWidths[len(prefixWidths)-1],
 		}
-		return []LineFragment{frag}
+		fragments := []LineFragment{frag}
+		if !truncated {
+			if we.noWrapCache == nil {
+				we.noWrapCache = make(map[int]noWrapLayout)
+			}
+			we.noWrapCache[logLineIdx] = noWrapLayout{
+				text:         text,
+				fragment:     frag,
+				clusters:     clusters,
+				prefixWidths: prefixWidths,
+				hasRTL:       vtui.HasRTL(text),
+				fragments:    fragments,
+			}
+		}
+		return fragments
 	}
 
 	if we.fragmentCache == nil || len(we.fragmentCache) != lineCount {
@@ -664,6 +710,20 @@ func (we *WrapEngine) LogicalToVisual(byteOffset int) (visualRow, visualCol int)
 			// Safety for capped binary lines: if offset is beyond indexed fragments,
 			// snap to the end of the last visible fragment.
 			byteOffset = lastFrag.ByteOffsetEnd
+		}
+	}
+	if !we.wordWrap {
+		if cached, ok := we.noWrapCache[logLineIdx]; ok && !cached.hasRTL {
+			relative := byteOffset - cached.fragment.ByteOffsetStart
+			if relative < 0 {
+				relative = 0
+			} else if relative > cached.fragment.ByteOffsetEnd-cached.fragment.ByteOffsetStart {
+				relative = cached.fragment.ByteOffsetEnd - cached.fragment.ByteOffsetStart
+			}
+			clusterIndex := sort.Search(len(cached.clusters), func(i int) bool {
+				return relative < cached.clusters[i].byteEnd
+			})
+			return totalRow, cached.prefixWidths[clusterIndex]
 		}
 	}
 
