@@ -176,6 +176,3 @@ replace github.com/ebitengine/hideconsole => ./internal/hideconsole
 // replace github.com/unxed/colorer4go => ../../../dev/colorer4go
 
 // replace github.com/unxed/vtui => ../../../dev/vtui
-// Use the immutable vtui revision that preserves EnhancedKey for X11 and
-// Wayland navigation keys while unxed/vtui#62 and unxed/keytrans#4 are reviewed.
-replace github.com/unxed/vtui => github.com/Zoinen/vtui v0.1.238-0.20260822042247-3e65ee53bfbc
