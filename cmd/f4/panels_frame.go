@@ -285,11 +285,12 @@ type PanelsFrame struct {
 	rightHeightDecrement int
 
 	// Integrated Terminal
-	pty        PtyBackend
-	remotePtys map[vfs.VFS]PtyBackend
-	ptyMutex   sync.Mutex
-	termView   *TerminalView
-	parser     *AnsiParser
+	pty            PtyBackend
+	remotePtys     map[vfs.VFS]PtyBackend
+	ptyMutex       sync.Mutex
+	termView       *TerminalView
+	parser         *AnsiParser
+	terminalRedraw *terminalRedrawScheduler
 
 	// Process-environment updates use their own locks so an Apply from a
 	// plugin cannot interleave a private assignment script with user input.
@@ -381,6 +382,7 @@ func (pf *PanelsFrame) Passive() Panel { return pf.panels[1-pf.activeIdx] }
 
 func NewPanelsFrame() *PanelsFrame {
 	pf := &PanelsFrame{activeIdx: 1, widePanel: -1, folderHistoryPos: [2]int{-1, -1}}
+	pf.terminalRedraw = newTerminalRedrawScheduler(func() { vtui.FrameManager.Redraw() })
 	pf.SetHelp("Panels")
 	pf.showKeyBar = true
 	pf.showPanels = true
@@ -1053,7 +1055,7 @@ func (pf *PanelsFrame) initPTY() {
 					}
 				} else {
 					pf.parser.Process(buf[:n])
-					vtui.FrameManager.Redraw()
+					pf.terminalRedraw.request()
 				}
 			}
 		}
@@ -1107,6 +1109,9 @@ func workspaceContainsPanelsFrame(screen *vtui.AppScreen, target *PanelsFrame) b
 }
 
 func (pf *PanelsFrame) Close() {
+	if pf.terminalRedraw != nil {
+		pf.terminalRedraw.stop()
+	}
 	if pf.shellMode == ShellModeHost && pf.isHostConsoleActive() {
 		pf.leaveHostConsole()
 	}
@@ -3771,7 +3776,7 @@ func (pf *PanelsFrame) getActivePTYUnsafe() PtyBackend {
 						if elapsed > 10*time.Millisecond {
 							vtui.DebugLog("PTY_PROFILE(Remote): Parsed %d bytes in %v", n, elapsed)
 						}
-						vtui.FrameManager.Redraw()
+						pf.terminalRedraw.request()
 					}
 				}
 				pty.Close()

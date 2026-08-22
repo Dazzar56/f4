@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -2482,6 +2483,47 @@ func TestPanelsFrame_PTYLockContention(t *testing.T) {
 		// Успех
 	case <-time.After(2 * time.Second):
 		t.Fatal("DEADLOCK DETECTED: getActivePTY blocked by PTY processing loop")
+	}
+}
+
+func TestTerminalRedrawSchedulerCoalescesBurst(t *testing.T) {
+	var mu sync.Mutex
+	redraws := 0
+	scheduler := newTerminalRedrawScheduler(func() {
+		mu.Lock()
+		redraws++
+		mu.Unlock()
+	})
+
+	for i := 0; i < 100; i++ {
+		scheduler.request()
+	}
+
+	time.Sleep(2 * time.Millisecond)
+	mu.Lock()
+	got := redraws
+	mu.Unlock()
+	if got != 1 {
+		t.Fatalf("burst triggered %d redraws, want 1", got)
+	}
+
+	time.Sleep(terminalRedrawInterval + 10*time.Millisecond)
+	scheduler.request()
+	mu.Lock()
+	got = redraws
+	mu.Unlock()
+	if got != 2 {
+		t.Fatalf("redraw after interval counted %d times, want 2", got)
+	}
+
+	scheduler.stop()
+	scheduler.request()
+	time.Sleep(2 * time.Millisecond)
+	mu.Lock()
+	got = redraws
+	mu.Unlock()
+	if got != 2 {
+		t.Fatalf("stopped scheduler triggered %d redraws, want 2", got)
 	}
 }
 func TestPanelsFrame_Clone_Comprehensive(t *testing.T) {
