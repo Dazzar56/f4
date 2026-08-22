@@ -22,6 +22,7 @@ type PluginCommandDescriptor struct {
 	Label                 string
 	Description           string
 	Shortcut              string
+	MenuPath              string
 	LocalizedLabels       map[string]string
 	LocalizedDescriptions map[string]string
 	SearchTerms           []string
@@ -180,6 +181,7 @@ func registerRPCPluginCommands(
 			Label:                 label,
 			Description:           descriptor.Description,
 			Shortcut:              descriptor.Shortcut,
+			MenuPath:              descriptor.MenuPath,
 			LocalizedLabels:       descriptor.LocalizedLabels,
 			LocalizedDescriptions: descriptor.LocalizedDescriptions,
 			SearchTerms:           descriptor.SearchTerms,

@@ -3,6 +3,7 @@ package main
 import (
 	"testing"
 
+	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 )
 
@@ -185,4 +186,89 @@ func TestBuildMenuBarItems_OnClickRunsAction(t *testing.T) {
 	if !clicked {
 		t.Error("OnClick did not run the action handler")
 	}
+}
+
+func TestBuildMenuBarItems_IncludesPluginPanelCommandsInDeclaredMenu(t *testing.T) {
+	oldScreens := vtui.FrameManager.Screens
+	oldActive := vtui.FrameManager.ActiveIdx
+	t.Cleanup(func() {
+		vtui.FrameManager.Screens = oldScreens
+		vtui.FrameManager.ActiveIdx = oldActive
+	})
+	vtui.FrameManager.Screens = []*vtui.AppScreen{{Frames: []vtui.Frame{&PanelsFrame{}}}}
+	vtui.FrameManager.ActiveIdx = 0
+
+	api := &coreAPI{}
+	run := 0
+	registration, err := api.RegisterPluginCommand(vfs.PluginCommand{
+		ID:       "test.menu.archive-command",
+		Location: vfs.PluginCommandPanel,
+		Label:    "Add to archive",
+		MenuPath: "Files",
+		Shortcut: "Shift+F1",
+		Run:      func(vfs.App) { run++ },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(registration.Unregister)
+
+	old := GlobalHotkeysMgr
+	GlobalHotkeysMgr = NewHotkeyManager("")
+	t.Cleanup(func() { GlobalHotkeysMgr = old })
+
+	items := BuildMenuBarItems("Shell")
+	if len(items) == 0 || items[0].Label != "&Files" {
+		t.Fatalf("Files menu is missing: %+v", items)
+	}
+	files := items[0].SubItems
+	var archiveItem *vtui.MenuItem
+	for index := range files {
+		if plainLabel(files[index].Text) == "Add to archive" {
+			archiveItem = &files[index]
+			break
+		}
+	}
+	if archiveItem == nil {
+		t.Fatalf("Files menu has no plugin command: %+v", files)
+	}
+	if archiveItem.Shortcut != "Shift+F1" || archiveItem.OnClick == nil {
+		t.Fatalf("plugin menu item metadata = %+v", *archiveItem)
+	}
+	// The click is intentionally wired through the live registry rather than
+	// retaining a plugin closure in the menu item.
+	archiveItem.OnClick()
+	if run != 1 {
+		t.Fatalf("plugin command ran %d times, want once", run)
+	}
+}
+
+func TestBuildMenuBarItemsSkipsPluginVisibilityBeforePanelsFrameRegistration(t *testing.T) {
+	oldScreens := vtui.FrameManager.Screens
+	oldActive := vtui.FrameManager.ActiveIdx
+	t.Cleanup(func() {
+		vtui.FrameManager.Screens = oldScreens
+		vtui.FrameManager.ActiveIdx = oldActive
+	})
+	vtui.FrameManager.Screens = nil
+	vtui.FrameManager.ActiveIdx = 0
+
+	api := &coreAPI{}
+	registration, err := api.RegisterPluginCommand(vfs.PluginCommand{
+		ID:       "test.menu.startup-visibility",
+		Location: vfs.PluginCommandPanel,
+		Label:    "Startup command",
+		MenuPath: "Files",
+		Visible: func(vfs.App) bool {
+			t.Fatal("plugin visibility callback ran before a PanelsFrame was registered")
+			return false
+		},
+		Run: func(vfs.App) {},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(registration.Unregister)
+
+	BuildMenuBarItems("Shell")
 }

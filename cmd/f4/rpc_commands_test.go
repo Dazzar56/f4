@@ -94,6 +94,7 @@ func TestRPCPluginCommandsRegisterLocalizeExecuteAndUnregister(t *testing.T) {
 		Label:       "Show greeting",
 		Description: "Show the RPC greeting",
 		Shortcut:    "F1",
+		MenuPath:    "Commands",
 		LocalizedLabels: map[string]string{
 			"ru": "Показать RPC-приветствие",
 		},
@@ -123,6 +124,9 @@ func TestRPCPluginCommandsRegisterLocalizeExecuteAndUnregister(t *testing.T) {
 	}
 	if got := pluginCommandDisplayDescription(command); got != "Показать приветствие внешнего плагина" {
 		t.Fatalf("localized description = %q", got)
+	}
+	if command.MenuPath != "Commands" {
+		t.Fatalf("menu path = %q, want Commands", command.MenuPath)
 	}
 	wantSearch := []string{"hello", "привет", "Показать RPC-приветствие", "Показать приветствие внешнего плагина"}
 	if got := pluginCommandSearchTerms(command); !reflect.DeepEqual(got, wantSearch) {

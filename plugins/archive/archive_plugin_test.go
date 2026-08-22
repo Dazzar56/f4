@@ -131,14 +131,15 @@ func TestArchivePluginRegistersDiscoverableCommands(t *testing.T) {
 		id             string
 		label          string
 		labelKey       string
+		menuPath       string
 		descriptionKey string
 	}{
-		{id: archiveAddCommandID, label: "Add to archive", labelKey: "Archive.Command.Add", descriptionKey: "Archive.Command.Add.Desc"},
-		{id: archiveExtractCommandID, label: "Extract files", labelKey: "Archive.Command.Extract", descriptionKey: "Archive.Command.Extract.Desc"},
+		{id: archiveAddCommandID, label: "Add to archive", labelKey: "Archive.Command.Add", menuPath: "Files", descriptionKey: "Archive.Command.Add.Desc"},
+		{id: archiveExtractCommandID, label: "Extract files", labelKey: "Archive.Command.Extract", menuPath: "Files", descriptionKey: "Archive.Command.Extract.Desc"},
 	}
 	for index, expected := range want {
 		command := host.commands[index]
-		if command.ID != expected.id || command.Location != vfs.PluginCommandPanel || command.Label != expected.label ||
+		if command.ID != expected.id || command.Location != vfs.PluginCommandPanel || command.Label != expected.label || command.MenuPath != expected.menuPath ||
 			command.LabelKey != expected.labelKey || command.Description == "" || command.DescriptionKey != expected.descriptionKey ||
 			!reflect.DeepEqual(command.SearchKeys, []string{"Attributes.Archive"}) || command.Shortcut != "" {
 			t.Errorf("command %d = %#v, want id=%q location=Panel label=%q", index, command, expected.id, expected.label)

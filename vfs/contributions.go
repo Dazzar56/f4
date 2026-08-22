@@ -22,6 +22,10 @@ type PluginCommand struct {
 	Location PluginCommandLocation
 	Label    string // English fallback shown when LabelKey is empty or unavailable.
 	LabelKey string // optional host localization key resolved in the active UI language.
+	// MenuPath optionally places a panel command in the generated main menu
+	// (for example, "Files" or "Commands"). Empty keeps it available through
+	// the plugin menu and command palette without adding another main-menu row.
+	MenuPath string
 	// LocalizedLabels optionally carries plugin-owned translations keyed by
 	// language code (for example, "en", "ru", or "pt-BR"). Host catalog
 	// LabelKey translations take precedence; Label remains the final fallback.
