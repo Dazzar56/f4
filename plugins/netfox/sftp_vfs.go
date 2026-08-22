@@ -347,6 +347,12 @@ func (v *SFTPVFS) GetCapabilities() vfs.VFSCapabilities {
 	// the reason the whole feature was worth building.
 	return vfs.VFSCapabilities{HasRandomAccess: true, HasUnixPermissions: true, HasWrite: true}
 }
+
+// The upstream SFTP client multiplexes independent requests safely over one
+// SSH connection. This lets FUSE serve directory listings, stats, and reads
+// concurrently instead of making a remote mount wait behind one operation.
+func (*SFTPVFS) SupportsConcurrentCalls() bool { return true }
+
 func (v *SFTPVFS) Search(ctx context.Context, p, pat string) (chan int64, error) { return nil, nil }
 
 func (v *SFTPVFS) Open(ctx context.Context, p string) (vfs.ReadAtCloser, error) {

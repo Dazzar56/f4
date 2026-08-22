@@ -1,7 +1,9 @@
 package textlayout
 
 import (
+	"math"
 	"sort"
+	"unicode/utf8"
 
 	"github.com/unxed/f4/piecetable"
 	"github.com/unxed/vtui"
@@ -31,6 +33,13 @@ type WrapEngine struct {
 	validUntil int // Index of the last logical line with a valid calculated row offset
 
 	tmpBuf []byte // Reusable buffer for avoiding allocations
+
+	// noWrapCache is deliberately a map rather than fragmentCache: edits in a
+	// huge file must not walk or allocate a slice for every logical line.
+	noWrapCache map[int]noWrapLayout
+	// noWrapCached counts the cluster entries held across noWrapCache so the
+	// cache cannot grow with the number of lines the user has scrolled past.
+	noWrapCached int
 }
 
 func NewWrapEngine(pt *piecetable.PieceTable, li *piecetable.LineIndex) *WrapEngine {
@@ -42,6 +51,275 @@ func NewWrapEngine(pt *piecetable.PieceTable, li *piecetable.LineIndex) *WrapEng
 		fragmentCache: nil,
 		tabSize:       8,
 	}
+}
+
+type visualCluster struct {
+	text       string
+	width      int
+	byteStart  int
+	byteEnd    int
+	logicalPos int
+	logicalEnd int
+}
+
+// noWrapLayout caches what a cursor-column lookup needs for one unwrapped
+// logical line, which otherwise rebuilds the complete long line on every key
+// press. Only the cluster ends and their prefix widths are kept: retaining the
+// line text and the clusters themselves cost roughly seventy times the size of
+// the text, so scrolling through a file was enough to exhaust memory.
+type noWrapLayout struct {
+	fragments    []LineFragment
+	clusterEnds  []int32
+	prefixWidths []int32
+	hasRTL       bool
+}
+
+// noWrapCacheBudget caps the cluster entries kept across all cached lines. At
+// eight bytes per entry this holds the cache to about 8 MB; going over drops it
+// wholesale, which costs one rescan of the lines still on screen.
+const noWrapCacheBudget = 1 << 20
+
+// logicalTextClusters keeps zoin-bot's grapheme boundaries in document order.
+func logicalTextClusters(text string) []visualCluster {
+	base := VisualClusters(text)
+	logical := make([]visualCluster, 0, len(base))
+	for _, cluster := range base {
+		logical = append(logical, visualCluster{
+			text:       cluster.Text,
+			width:      cluster.Width,
+			byteStart:  cluster.Start,
+			byteEnd:    cluster.End,
+			logicalPos: cluster.RuneStart,
+			logicalEnd: cluster.RuneEnd,
+		})
+	}
+	return logical
+}
+
+func visualClusters(text string) []visualCluster {
+	logical := logicalTextClusters(text)
+	if vtui.DefaultBidiMode != vtui.BidiFull || !vtui.HasRTL(text) {
+		return logical
+	}
+
+	byLogical := make(map[int]visualCluster, len(logical))
+	for _, cluster := range logical {
+		byLogical[cluster.logicalPos] = cluster
+	}
+	visualText, logicalPositions := vtui.VisualStringWithRuneMap(text)
+	visual := make([]visualCluster, 0, len(logical))
+	index := 0
+	vtui.ForEachClusterAt(visualText, func(cluster string, width, _, _ int) {
+		if index >= len(logicalPositions) {
+			return
+		}
+		original, ok := byLogical[logicalPositions[index]]
+		if !ok {
+			index++
+			return
+		}
+		original.text = cluster
+		original.width = width
+		visual = append(visual, original)
+		index++
+	})
+	return visual
+}
+
+// VisualClustersInVisualOrder returns grapheme clusters in terminal order.
+// zoin-bot uses this shared mapping for editor painting and hit testing.
+func VisualClustersInVisualOrder(text string) []VisualCluster {
+	clusters := visualClusters(text)
+	result := make([]VisualCluster, 0, len(clusters))
+	for _, cluster := range clusters {
+		result = append(result, VisualCluster{
+			Text:      cluster.text,
+			Width:     cluster.width,
+			Start:     cluster.byteStart,
+			End:       cluster.byteEnd,
+			RuneStart: cluster.logicalPos,
+			RuneEnd:   cluster.logicalEnd,
+		})
+	}
+	return result
+}
+
+func byteOffsetAtRune(text string, runeIndex int) int {
+	if runeIndex <= 0 {
+		return 0
+	}
+	if runeIndex >= utf8.RuneCountInString(text) {
+		return len(text)
+	}
+	return len(string([]rune(text)[:runeIndex]))
+}
+
+func visualClusterWidths(clusters []visualCluster, tabSize int) []int {
+	if tabSize <= 0 {
+		tabSize = 8
+	}
+	widths := make([]int, len(clusters))
+	column := 0
+	for i, cluster := range clusters {
+		width := cluster.width
+		if cluster.text == "\t" {
+			width = tabSize - (column % tabSize)
+		}
+		if width <= 0 {
+			width = 1
+		}
+		widths[i] = width
+		column += width
+	}
+	return widths
+}
+
+func fragmentLogicalToVisual(text string, byteOffset, tabSize int) int {
+	if byteOffset < 0 {
+		byteOffset = 0
+	}
+	if byteOffset > len(text) {
+		byteOffset = len(text)
+	}
+	runeIndex := utf8.RuneCountInString(text[:byteOffset])
+	logical := logicalTextClusters(text)
+	clusters := visualClusters(text)
+	visualPos := 0
+	if vtui.DefaultBidiMode == vtui.BidiFull && vtui.HasRTL(text) {
+		for _, cluster := range logical {
+			if byteOffset < cluster.byteEnd {
+				runeIndex = cluster.logicalPos
+				break
+			}
+		}
+		caret := vtui.BuildCaretMap(text)
+		if runeIndex < len(caret.LogicalToVisual) {
+			visualPos = caret.LogicalToVisual[runeIndex]
+		}
+	} else {
+		for _, cluster := range clusters {
+			if byteOffset < cluster.byteEnd {
+				break
+			}
+			visualPos++
+		}
+	}
+	if visualPos > len(clusters) {
+		visualPos = len(clusters)
+	}
+	widths := visualClusterWidths(clusters, tabSize)
+	width := 0
+	for _, clusterWidth := range widths[:visualPos] {
+		width += clusterWidth
+	}
+	return width
+}
+
+func fragmentVisualToLogical(text string, visualCol, tabSize int) int {
+	clusters := visualClusters(text)
+	widths := visualClusterWidths(clusters, tabSize)
+	visualPos := 0
+	if visualCol > 0 {
+		width := 0
+		for visualPos < len(clusters) && width+widths[visualPos] <= visualCol {
+			width += widths[visualPos]
+			visualPos++
+		}
+	}
+	runeIndex := 0
+	if vtui.DefaultBidiMode == vtui.BidiFull && vtui.HasRTL(text) {
+		caret := vtui.BuildCaretMap(text)
+		if visualPos < len(caret.VisualToLogical) {
+			runeIndex = caret.VisualToLogical[visualPos]
+		} else {
+			runeIndex = utf8.RuneCountInString(text)
+		}
+	} else if visualPos < len(clusters) {
+		runeIndex = clusters[visualPos].logicalPos
+	} else {
+		runeIndex = utf8.RuneCountInString(text)
+	}
+	return byteOffsetAtRune(text, runeIndex)
+}
+
+func fragmentVisualMove(text string, byteOffset, direction int) (int, bool) {
+	clusters := visualClusters(text)
+	if len(clusters) == 0 {
+		return byteOffset, false
+	}
+	runeIndex := utf8.RuneCountInString(text[:byteOffset])
+	visualPos := 0
+	if vtui.DefaultBidiMode == vtui.BidiFull && vtui.HasRTL(text) {
+		for _, cluster := range logicalTextClusters(text) {
+			if byteOffset < cluster.byteEnd {
+				runeIndex = cluster.logicalPos
+				break
+			}
+		}
+		caret := vtui.BuildCaretMap(text)
+		if runeIndex < len(caret.LogicalToVisual) {
+			visualPos = caret.LogicalToVisual[runeIndex]
+		}
+	} else {
+		for _, cluster := range clusters {
+			if byteOffset < cluster.byteEnd {
+				break
+			}
+			visualPos++
+		}
+	}
+	target := visualPos + direction
+	if target < 0 || target > len(clusters) {
+		return byteOffset, false
+	}
+	if vtui.DefaultBidiMode == vtui.BidiFull && vtui.HasRTL(text) {
+		caret := vtui.BuildCaretMap(text)
+		if target < len(caret.VisualToLogical) {
+			runeIndex = caret.VisualToLogical[target]
+		} else {
+			runeIndex = utf8.RuneCountInString(text)
+		}
+	} else if target < len(clusters) {
+		runeIndex = clusters[target].logicalPos
+	} else {
+		runeIndex = utf8.RuneCountInString(text)
+	}
+	return byteOffsetAtRune(text, runeIndex), true
+}
+
+// MoveVisual moves one grapheme cluster in the direction shown on screen.
+// It also crosses wrapped rows, which lets the editor use one navigation rule
+// for LTR, RTL, combining, and wide text.
+func (we *WrapEngine) MoveVisual(byteOffset, direction int) int {
+	if direction == 0 {
+		return byteOffset
+	}
+	visualRow, _ := we.LogicalToVisual(byteOffset)
+	logLineIdx, fragIdx := we.GetLogLineAtVisualRow(visualRow)
+	fragments := we.GetFragments(logLineIdx)
+	if fragIdx < 0 || fragIdx >= len(fragments) {
+		return byteOffset
+	}
+	frag := fragments[fragIdx]
+	we.tmpBuf = we.tmpBuf[:0]
+	we.tmpBuf, _ = we.pt.AppendRange(we.tmpBuf, frag.ByteOffsetStart, frag.ByteOffsetEnd-frag.ByteOffsetStart)
+	rel := byteOffset - frag.ByteOffsetStart
+	if rel < 0 {
+		rel = 0
+	}
+	if rel > len(we.tmpBuf) {
+		rel = len(we.tmpBuf)
+	}
+	if moved, ok := fragmentVisualMove(string(we.tmpBuf), rel, direction); ok && moved != rel {
+		return frag.ByteOffsetStart + moved
+	}
+	if direction < 0 && visualRow > 0 {
+		return we.VisualToLogical(visualRow-1, int(^uint(0)>>1))
+	}
+	if direction > 0 && visualRow+1 < we.GetTotalVisualRows() {
+		return we.VisualToLogical(visualRow+1, 0)
+	}
+	return byteOffset
 }
 
 func (we *WrapEngine) SetTabSize(size int) {
@@ -85,6 +363,8 @@ func (we *WrapEngine) InvalidateCache() {
 	we.validUntil = -1
 	we.rowOffsets = nil
 	we.totalRows = 0
+	we.noWrapCache = nil
+	we.noWrapCached = 0
 }
 
 func (we *WrapEngine) InvalidateFrom(logLineIdx int) {
@@ -99,6 +379,12 @@ func (we *WrapEngine) InvalidateFrom(logLineIdx int) {
 	if logLineIdx <= we.validUntil {
 		we.validUntil = logLineIdx - 1
 	}
+	for idx, cached := range we.noWrapCache {
+		if idx >= logLineIdx {
+			we.noWrapCached -= len(cached.clusterEnds)
+			delete(we.noWrapCache, idx)
+		}
+	}
 }
 
 // GetFragments возвращает визуальные фрагменты для одной логической строки.
@@ -108,8 +394,12 @@ func (we *WrapEngine) GetFragments(logLineIdx int) []LineFragment {
 		return nil
 	}
 
-	if we.wordWrap && we.fragmentCache != nil && logLineIdx < len(we.fragmentCache) && we.fragmentCache[logLineIdx] != nil {
-		return we.fragmentCache[logLineIdx]
+	if we.wordWrap {
+		if we.fragmentCache != nil && logLineIdx < len(we.fragmentCache) && we.fragmentCache[logLineIdx] != nil {
+			return we.fragmentCache[logLineIdx]
+		}
+	} else if cached, ok := we.noWrapCache[logLineIdx]; ok {
+		return cached.fragments
 	}
 
 	startOffset := we.li.GetLineOffset(logLineIdx)
@@ -164,25 +454,47 @@ func (we *WrapEngine) GetFragments(logLineIdx int) []LineFragment {
 	}
 
 	if !we.wordWrap || we.wrapWidth <= 0 {
-		width := 0
-		for _, cluster := range VisualClusters(string(lineData)) {
-			rw := cluster.Width
-			if cluster.Text == "\t" {
-				rw = we.tabSize - (width % we.tabSize)
+		text := string(lineData)
+		clusters := visualClusters(text)
+		clusterEnds := make([]int32, len(clusters))
+		prefixWidths := make([]int32, len(clusters)+1)
+		for i, cluster := range clusters {
+			width := cluster.width
+			if cluster.text == "\t" {
+				width = we.tabSize - (int(prefixWidths[i]) % we.tabSize)
 			}
-			if rw <= 0 {
-				rw = 1
+			if width <= 0 {
+				width = 1
 			}
-			width += rw
+			clusterEnds[i] = int32(cluster.byteEnd)
+			prefixWidths[i+1] = prefixWidths[i] + int32(width)
 		}
-
 		frag := LineFragment{
 			LogicalLineIdx:  logLineIdx,
 			ByteOffsetStart: startOffset,
 			ByteOffsetEnd:   startOffset + len(lineData),
-			VisualWidth:     width,
+			VisualWidth:     int(prefixWidths[len(prefixWidths)-1]),
 		}
-		return []LineFragment{frag}
+		fragments := []LineFragment{frag}
+		if !truncated && len(text) <= math.MaxInt32 {
+			if we.noWrapCache == nil {
+				we.noWrapCache = make(map[int]noWrapLayout)
+			}
+			if previous, ok := we.noWrapCache[logLineIdx]; ok {
+				we.noWrapCached -= len(previous.clusterEnds)
+			} else if we.noWrapCached+len(clusterEnds) > noWrapCacheBudget {
+				we.noWrapCache = make(map[int]noWrapLayout)
+				we.noWrapCached = 0
+			}
+			we.noWrapCache[logLineIdx] = noWrapLayout{
+				fragments:    fragments,
+				clusterEnds:  clusterEnds,
+				prefixWidths: prefixWidths,
+				hasRTL:       vtui.HasRTL(text),
+			}
+			we.noWrapCached += len(clusterEnds)
+		}
+		return fragments
 	}
 
 	if we.fragmentCache == nil || len(we.fragmentCache) != lineCount {
@@ -192,11 +504,11 @@ func (we *WrapEngine) GetFragments(logLineIdx int) []LineFragment {
 	var fragments []LineFragment
 	bytePos := 0
 	dataLen := len(lineData)
-	clusters := VisualClusters(string(lineData))
+	logicalClusters := logicalTextClusters(string(lineData))
 	clusterPos := 0
 
 	cumulativeVisualWidth := 0
-	for bytePos < dataLen && clusterPos < len(clusters) {
+	for bytePos < dataLen && clusterPos < len(logicalClusters) {
 		visualWidth := 0
 		fragStartByte := bytePos
 		lastSpaceEnd := -1
@@ -205,10 +517,11 @@ func (we *WrapEngine) GetFragments(logLineIdx int) []LineFragment {
 
 		scanPos := bytePos
 		scanClusterPos := clusterPos
-		for scanClusterPos < len(clusters) {
-			cluster := clusters[scanClusterPos]
-			w := cluster.Width
-			if cluster.Text == "\t" {
+		for scanClusterPos < len(logicalClusters) {
+			cluster := logicalClusters[scanClusterPos]
+			clusterText := cluster.text
+			w := cluster.width
+			if clusterText == "\t" {
 				w = we.tabSize - ((cumulativeVisualWidth + visualWidth) % we.tabSize)
 			}
 			if w <= 0 {
@@ -216,9 +529,9 @@ func (we *WrapEngine) GetFragments(logLineIdx int) []LineFragment {
 			}
 
 			if visualWidth+w > we.wrapWidth {
-				if cluster.Text == " " {
+				if clusterText == " " {
 					// Пробел не влезает, но мы его забираем в конец этой строки
-					scanPos = cluster.End
+					scanPos = cluster.byteEnd
 					scanClusterPos++
 					visualWidth += w
 				} else if lastSpaceEnd != -1 {
@@ -228,7 +541,7 @@ func (we *WrapEngine) GetFragments(logLineIdx int) []LineFragment {
 					visualWidth = lastSpaceWidth
 				} else if scanPos == fragStartByte {
 					// Даже один символ не влез (CJK в узком окне) - поглощаем его
-					scanPos = cluster.End
+					scanPos = cluster.byteEnd
 					scanClusterPos++
 					visualWidth = w
 				}
@@ -236,10 +549,10 @@ func (we *WrapEngine) GetFragments(logLineIdx int) []LineFragment {
 			}
 
 			visualWidth += w
-			scanPos = cluster.End
+			scanPos = cluster.byteEnd
 			scanClusterPos++
-			if cluster.Text == " " {
-				lastSpaceEnd = cluster.End
+			if clusterText == " " {
+				lastSpaceEnd = scanPos
 				lastSpaceWidth = visualWidth
 				lastSpaceClusterPos = scanClusterPos
 			}
@@ -417,38 +730,31 @@ func (we *WrapEngine) LogicalToVisual(byteOffset int) (visualRow, visualCol int)
 			byteOffset = lastFrag.ByteOffsetEnd
 		}
 	}
+	if !we.wordWrap {
+		if cached, ok := we.noWrapCache[logLineIdx]; ok && !cached.hasRTL {
+			frag := cached.fragments[0]
+			relative := byteOffset - frag.ByteOffsetStart
+			if relative < 0 {
+				relative = 0
+			} else if relative > frag.ByteOffsetEnd-frag.ByteOffsetStart {
+				relative = frag.ByteOffsetEnd - frag.ByteOffsetStart
+			}
+			clusterIndex := sort.Search(len(cached.clusterEnds), func(i int) bool {
+				return int32(relative) < cached.clusterEnds[i]
+			})
+			return totalRow, int(cached.prefixWidths[clusterIndex])
+		}
+	}
 
 	for i, frag := range fragments {
 		isLastFragOfLine := (i == len(fragments)-1)
 		if byteOffset >= frag.ByteOffsetStart && (byteOffset < frag.ByteOffsetEnd || (isLastFragOfLine && byteOffset == frag.ByteOffsetEnd)) {
-			// Вычисляем колонку без аллокаций
-			width := 0
-			if byteOffset > frag.ByteOffsetStart {
-				we.tmpBuf = we.tmpBuf[:0]
-				we.tmpBuf, _ = we.pt.AppendRange(we.tmpBuf, frag.ByteOffsetStart, frag.ByteOffsetEnd-frag.ByteOffsetStart)
-				for _, cluster := range VisualClusters(string(we.tmpBuf)) {
-					if frag.ByteOffsetStart+cluster.End > byteOffset {
-						break
-					}
-					rw := cluster.Width
-					if cluster.Text == "\t" {
-						rw = we.tabSize - (width % we.tabSize)
-					}
-					if rw <= 0 {
-						rw = 1
-					}
-					width += rw
-				}
-			}
-			return totalRow + i, width
+			we.tmpBuf = we.tmpBuf[:0]
+			we.tmpBuf, _ = we.pt.AppendRange(we.tmpBuf, frag.ByteOffsetStart, frag.ByteOffsetEnd-frag.ByteOffsetStart)
+			return totalRow + i, fragmentLogicalToVisual(string(we.tmpBuf), byteOffset-frag.ByteOffsetStart, we.tabSize)
 		}
 	}
 	return totalRow, 0
-}
-
-func (we *WrapEngine) logNav(msg string, offset int, row int, col int) {
-	// Only log if specifically requested to avoid flooding
-	// vtui.DebugLog("LAYOUT_NAV: %s Offset:%d -> VRow:%d VCol:%d", msg, offset, row, col)
 }
 
 // VisualToLogical переводит (строка, колонка) на экране в байтовый оффсет документа.
@@ -469,29 +775,11 @@ func (we *WrapEngine) VisualToLogical(visualRow, visualCol int) int {
 
 	vtui.DebugLog("DEBUG_V2L_START: Row:%d Col:%d -> LogLine:%d Frag:%d StartOff:%d EndOff:%d", visualRow, visualCol, logLineIdx, fragIdx, frag.ByteOffsetStart, frag.ByteOffsetEnd)
 
-	if frag.ByteOffsetStart >= frag.ByteOffsetEnd || visualCol <= 0 {
+	if frag.ByteOffsetStart >= frag.ByteOffsetEnd {
 		return frag.ByteOffsetStart
 	}
 
 	we.tmpBuf = we.tmpBuf[:0]
 	we.tmpBuf, _ = we.pt.AppendRange(we.tmpBuf, frag.ByteOffsetStart, frag.ByteOffsetEnd-frag.ByteOffsetStart)
-	lineData := we.tmpBuf
-	offset := frag.ByteOffsetStart
-	currentCol := 0
-
-	for _, cluster := range VisualClusters(string(lineData)) {
-		rw := cluster.Width
-		if cluster.Text == "\t" {
-			rw = we.tabSize - (currentCol % we.tabSize)
-		}
-		if rw <= 0 {
-			rw = 1
-		}
-		if currentCol+rw > visualCol {
-			return offset
-		}
-		currentCol += rw
-		offset = frag.ByteOffsetStart + cluster.End
-	}
-	return offset
+	return frag.ByteOffsetStart + fragmentVisualToLogical(string(we.tmpBuf), visualCol, we.tabSize)
 }

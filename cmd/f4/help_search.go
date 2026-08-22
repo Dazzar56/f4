@@ -86,9 +86,10 @@ func handleHelpSearchHotkey(e *vtinput.InputEvent) bool {
 	}
 	if e.VirtualKeyCode == vtinput.VK_ESCAPE && !shift && !ctrl && !alt &&
 		currentHelpSearch != nil && currentHelpSearch.frame == frame && len(currentHelpSearch.query) > 0 {
+		// Let HelpView receive Escape so it closes immediately. Clear only the
+		// search overlay state here; Backspace remains the search-editing key.
 		currentHelpSearch = nil
-		vtui.FrameManager.Redraw()
-		return true
+		return false
 	}
 
 	if e.VirtualKeyCode == vtinput.VK_BACK && !shift && !ctrl && !alt {

@@ -249,6 +249,8 @@ type PanelsFrame struct {
 	activeIdx             int    // 0 for left, 1 for right
 	folderHistoryPos      [2]int // position in provider's newest-first folder history
 	executing             bool
+	shellPromptReady      bool
+	ignoreNextPrompt      bool
 	returnToPanels        bool
 	workspaceCommandTitle string
 
@@ -422,7 +424,17 @@ func NewPanelsFrame() *PanelsFrame {
 			if busy {
 				pf.executing = true
 			} else {
-				if pf.executing {
+				pf.shellPromptReady = true
+				ignoredPrompt := pf.executing && pf.ignoreNextPrompt
+				if ignoredPrompt {
+					// A command can be entered before the initial prompt has
+					// finished crossing ConPTY. That prompt belongs to shell
+					// startup, not to the command just sent; consuming it as
+					// completion would return to panels while a batch file is
+					// still running.
+					pf.ignoreNextPrompt = false
+				}
+				if pf.executing && !ignoredPrompt {
 					pf.executing = false
 					pf.workspaceCommandTitle = ""
 					if pf.returnToPanels {
@@ -617,12 +629,37 @@ func (pf *PanelsFrame) rightMenu() vtui.MenuBarItem {
 	}}
 }
 
+// appendTerminalMenuItems keeps terminal-specific log commands reachable from
+// the ordinary Files menu while panels are hidden. The terminal actions use
+// their Terminal-area shortcuts, so this changes only menu presentation.
+func appendTerminalMenuItems(items []vtui.MenuBarItem) []vtui.MenuBarItem {
+	terminalItems := BuildMenuBarItems("Terminal")
+	if len(terminalItems) == 0 || len(terminalItems[0].SubItems) == 0 {
+		return items
+	}
+
+	filesLabel := Msg("Menu.Shell.Files")
+	for i := range items {
+		if items[i].Label != filesLabel {
+			continue
+		}
+		if len(items[i].SubItems) > 0 {
+			items[i].SubItems = append(items[i].SubItems, vtui.MenuItem{Separator: true})
+		}
+		items[i].SubItems = append(items[i].SubItems, terminalItems[0].SubItems...)
+		break
+	}
+	return items
+}
+
 // buildMenuItems assembles the main menu: the custom Left/Right panel
 // menus around the Files/Commands/Options menus generated from the
-// action registry. With panels hidden, the Terminal-area menu is shown.
+// action registry. With panels hidden, the ordinary Shell menu remains
+// available so Options and panel actions do not disappear behind the
+// terminal-log menu.
 func (pf *PanelsFrame) buildMenuItems() []vtui.MenuBarItem {
 	if !pf.showPanels {
-		return BuildMenuBarItems("Terminal")
+		return appendTerminalMenuItems(BuildMenuBarItems("Shell"))
 	}
 	items := []vtui.MenuBarItem{pf.leftMenu()}
 	items = append(items, BuildMenuBarItems("Shell")...)
@@ -1328,6 +1365,25 @@ func (pf *PanelsFrame) isPtyBusy() bool {
 	// Managed execution signal from OSC 133
 	return pf.executing
 }
+
+// beginManagedExecution marks a command that carries its own OSC 133 C/D
+// pair, wrapped around it by f4 itself. Its D marker is unambiguous: it is
+// printed by the very command line we sent, so it always ends the execution.
+func (pf *PanelsFrame) beginManagedExecution() {
+	pf.executing = true
+	pf.ignoreNextPrompt = false
+}
+
+// beginPromptDrivenExecution marks a command that carries no markers of its
+// own — cmd.exe with the PROMPT f4 injects, or a VFS integration wiring the
+// command for a remote peer. Completion is inferred from the next prompt
+// marker, and a prompt printed at shell startup can still be in flight when
+// the command is sent, so that first stale marker is discarded.
+func (pf *PanelsFrame) beginPromptDrivenExecution() {
+	pf.executing = true
+	pf.ignoreNextPrompt = !pf.shellPromptReady
+}
+
 func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 	if pf.shellMode == ShellModeHost && pf.isHostConsoleActive() {
 		return
@@ -2186,7 +2242,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				if integration != nil {
 					if seq := integration.PtyRunCommand(path, cmd); len(seq) > 0 {
 						fullWireCmd = string(seq)
-						pf.executing = true
+						pf.beginPromptDrivenExecution()
 						pf.returnToPanels = pf.showPanels
 					}
 				} else if isWindowsShell {
@@ -2196,7 +2252,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 					} else {
 						fullWireCmd = fmt.Sprintf("%s\r", cmd)
 					}
-					pf.executing = true
+					pf.beginPromptDrivenExecution()
 					pf.returnToPanels = pf.showPanels
 				} else {
 					// Unix
@@ -2215,7 +2271,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 						} else {
 							fullWireCmd = fmt.Sprintf(" { trap \"printf ''\" INT; printf \"\\033]133;C\\007\"; %s ; FARVTRESULT=$?; printf \"\\033]133;D\\007\"; trap - INT; (exit $FARVTRESULT); }\r", cmd)
 						}
-						pf.executing = true
+						pf.beginManagedExecution()
 						pf.returnToPanels = pf.showPanels
 					}
 				}
@@ -2446,8 +2502,39 @@ func (pf *PanelsFrame) hitAltPanel(mx, my int) int {
 // grabbed the mouse via a tracking-mode escape. LMB starts / extends
 // a selection, dbl/triple-click selects word / line, Alt+LMB drag
 // switches to a rectangular block, releasing LMB auto-copies to the
-// clipboard, RMB pastes clipboard content into the PTY. Returns true
-// when it consumed the event.
+// clipboard, RMB pastes clipboard content into the f4 command line when it
+// owns the visible input, or into the PTY otherwise. Returns true when it
+// consumed the event.
+func (pf *PanelsFrame) hiddenConsoleCommandLineOwnsInput() bool {
+	if pf.showPanels || pf.cmdLine == nil || !pf.cmdLine.IsVisible() {
+		return false
+	}
+
+	// zoin-bot: a visible f4 command line must receive mouse paste through
+	// the edit control, otherwise Enter can execute text that was never drawn.
+	switch pf.shellMode {
+	case ShellModeHost:
+		return pf.consoleStyle() == ConsoleViewFar && pf.isHostConsoleActive()
+	case ShellModeSimpleInline:
+		return pf.consoleStyle() == ConsoleViewFar && pf.consoleViewActive()
+	default:
+		return pf.termView != nil && !pf.termView.UseAltScreen && !pf.isPtyBusy()
+	}
+}
+
+func (pf *PanelsFrame) pasteHiddenConsoleText(text string) {
+	if text == "" {
+		return
+	}
+	pf.cmdLine.InsertString(text)
+	pf.cmdLine.SetFocus(true)
+	if pf.shellMode == ShellModeHost {
+		pf.drawHostConsoleOverlay()
+	} else if vtui.FrameManager != nil {
+		vtui.FrameManager.Redraw()
+	}
+}
+
 func (pf *PanelsFrame) handleTerminalMouseSelection(e *vtinput.InputEvent) bool {
 	if e.Type != vtinput.MouseEventType {
 		return false
@@ -2458,9 +2545,13 @@ func (pf *PanelsFrame) handleTerminalMouseSelection(e *vtinput.InputEvent) bool 
 	}
 	mx, my := int(e.MouseX), int(e.MouseY)
 
-	// Right button: paste clipboard into the active PTY. Fires on
-	// button-down so the release doesn't paste a second time.
+	// Right button: paste on button-down so the release doesn't paste a second
+	// time. The visible command line is handled before terminal hit testing.
 	if e.ButtonState == vtinput.RightmostButtonPressed && e.KeyDown {
+		if pf.hiddenConsoleCommandLineOwnsInput() {
+			pf.pasteHiddenConsoleText(tv.readClipboard())
+			return true
+		}
 		if !tv.InTerminalArea(mx, my) {
 			return false
 		}
@@ -2588,6 +2679,18 @@ func (pf *PanelsFrame) processMiddleMouseGesture(e *vtinput.InputEvent) (handled
 func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 	// If panels are hidden, route relevant mouse events to PTY immediately
 	if !pf.showPanels {
+		mx, my := int(e.MouseX), int(e.MouseY)
+		if pf.termView != nil && e.WheelDirection == 0 {
+			if changed := pf.termView.UpdateURLHover(mx, my); changed {
+				vtui.FrameManager.Redraw()
+			}
+			if ctrlMouseClick(e) {
+				if rawURL, ok := pf.termView.URLAt(mx, my); ok {
+					openExternalURLAsync(rawURL)
+					return true
+				}
+			}
+		}
 		active := pf.getActivePTY()
 		if active != nil && (pf.termView.MouseTrackingMode != 0 || pf.termView.MouseSGRMode) {
 			seq := TranslateMouseInput(e)
@@ -3237,14 +3340,12 @@ func (pf *PanelsFrame) showDummyOpDialog() {
 	comboMode.DropdownOnly = true
 	comboMode.Menu.SetSelectPos(0)
 	comboMode.Edit.SetText(comboMode.Menu.Items[0].Text)
-	dlg.AddItem(comboMode)
 
 	btnStart := vtui.NewButton(0, 0, Msg("Op.BtnStart"))
 	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
 	dlg.AddItem(btnStart)
 	dlg.AddItem(btnCancel)
-
-	vbox.Add(comboMode, vtui.Margins{Top: 1}, vtui.AlignCenter)
+	dlg.AddItem(comboMode)
 
 	hbox := vtui.NewHBoxLayout(0, 0, 50-4, 1)
 	hbox.HorizontalAlign = vtui.AlignCenter
@@ -3252,7 +3353,10 @@ func (pf *PanelsFrame) showDummyOpDialog() {
 	hbox.Add(btnStart, vtui.Margins{}, vtui.AlignTop)
 	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
 
+	// Keep the action row above the operation-mode selector. ComboBox.Open()
+	// places its popup below the field, so it cannot cover these buttons.
 	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Add(comboMode, vtui.Margins{Top: 1}, vtui.AlignCenter)
 	vbox.Apply()
 
 	// Set default focus to Start button

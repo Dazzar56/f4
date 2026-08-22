@@ -297,8 +297,10 @@ func TestPanelsFrame_Layout(t *testing.T) {
 	pf.ResizeConsole(80, 25)
 
 	// After hiding KeyBar, CommandLine should move to the bottom row
-	expectedKeyBarY = 24 // Still the last line, but invisible
 	expectedCmdLineY = 24
+	if pf.keyBar.Y1 != expectedKeyBarY {
+		t.Errorf("KeyBar should remain at %d when hidden, got %d", expectedKeyBarY, pf.keyBar.Y1)
+	}
 	if pf.cmdLine.Y1 != expectedCmdLineY {
 		t.Errorf("CommandLine should be at %d when KeyBar hidden, got %d", expectedCmdLineY, pf.cmdLine.Y1)
 	}
@@ -3295,6 +3297,54 @@ func TestPanelsFrame_F9Context(t *testing.T) {
 	}
 }
 
+func TestPanelsFrame_F9HiddenPanels_UsesShellMenuAndKeepsTerminalLog(t *testing.T) {
+	old := GlobalHotkeysMgr
+	GlobalHotkeysMgr = NewHotkeyManager("")
+	defer func() { GlobalHotkeysMgr = old }()
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.showPanels = false
+
+	items := pf.GetMenuBar().Items
+	wantLabels := []string{Msg("Menu.Shell.Files"), Msg("Menu.Shell.Commands"), Msg("Menu.Shell.Options")}
+	if len(items) != len(wantLabels) {
+		t.Fatalf("hidden-panels F9 menu has %d top-level items, want %d: %+v", len(items), len(wantLabels), items)
+	}
+	for i, want := range wantLabels {
+		if items[i].Label != want {
+			t.Errorf("hidden-panels F9 menu %d = %q, want %q", i, items[i].Label, want)
+		}
+	}
+
+	wantTerminalItems := map[string]bool{
+		Msg("Action.Terminal.ViewLog"): false,
+		Msg("Action.Terminal.EditLog"): false,
+	}
+	for _, item := range items[0].SubItems {
+		if _, ok := wantTerminalItems[item.Text]; ok {
+			wantTerminalItems[item.Text] = true
+		}
+	}
+	for label, found := range wantTerminalItems {
+		if !found {
+			t.Errorf("hidden-panels Files menu is missing terminal action %q", label)
+		}
+	}
+
+	pressKey(pf, &vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_F9,
+	})
+	if !pf.menuBar.Active {
+		t.Error("F9 with hidden panels did not activate the main menu")
+	}
+	if pf.menuBar.SelectPos != 0 {
+		t.Errorf("F9 with hidden panels selected menu %d, want Files menu 0", pf.menuBar.SelectPos)
+	}
+}
+
 func TestLayout_F4InternalDialogs_Validity(t *testing.T) {
 	vtui.SetDefaultPalette()
 	pf := NewPanelsFrame()
@@ -3305,12 +3355,21 @@ func TestLayout_F4InternalDialogs_Validity(t *testing.T) {
 		// We need to capture the dialog created by showDummyOpDialog.
 		// Since it pushes to the real FrameManager, we'll initialize it.
 		fm := vtui.FrameManager
-		fm.Init(vtui.NewSilentScreenBuf())
+		scr := vtui.NewSilentScreenBuf()
+		scr.AllocBuf(80, 25)
+		fm.Init(scr)
 
 		pf.showDummyOpDialog()
 		top := fm.GetTopFrame()
 		if dlg, ok := top.(vtui.Container); ok {
 			vtui.AssertLayout(t, dlg)
+			assertComboMenuDoesNotCoverButtons(t, dlg, "dummy operation")
+			focusDlg, ok := top.(dialogFocusContainer)
+			if !ok {
+				t.Fatal("dummy operation dialog does not expose focus traversal")
+			}
+			assertDialogTabOrderMatchesVisualOrder(t, focusDlg, "dummy operation")
+			fm.Pop()
 		} else {
 			t.Fatal("Top frame is not a container")
 		}
@@ -3418,6 +3477,11 @@ func TestLayout_F4ActionDialogs_Validity(t *testing.T) {
 		actionCopyMove(pf, false)
 		dlg := fm.GetTopFrame().(vtui.Container)
 		vtui.AssertLayout(t, dlg)
+		focusDlg, ok := fm.GetTopFrame().(dialogFocusContainer)
+		if !ok {
+			t.Fatal("copy dialog does not expose focus traversal")
+		}
+		assertDialogTabOrderMatchesVisualOrder(t, focusDlg, "copy")
 		fm.Pop()
 	})
 
@@ -3426,6 +3490,11 @@ func TestLayout_F4ActionDialogs_Validity(t *testing.T) {
 		actionCopyMove(pf, true)
 		dlg := fm.GetTopFrame().(vtui.Container)
 		vtui.AssertLayout(t, dlg)
+		focusDlg, ok := fm.GetTopFrame().(dialogFocusContainer)
+		if !ok {
+			t.Fatal("move dialog does not expose focus traversal")
+		}
+		assertDialogTabOrderMatchesVisualOrder(t, focusDlg, "move")
 		fm.Pop()
 	})
 
@@ -3433,6 +3502,12 @@ func TestLayout_F4ActionDialogs_Validity(t *testing.T) {
 		actionMkDir(pf)
 		dlg := fm.GetTopFrame().(vtui.Container)
 		vtui.AssertLayout(t, dlg)
+		assertComboMenuDoesNotCoverButtons(t, dlg, "make directory")
+		focusDlg, ok := fm.GetTopFrame().(dialogFocusContainer)
+		if !ok {
+			t.Fatal("make directory dialog does not expose focus traversal")
+		}
+		assertDialogTabOrderMatchesVisualOrder(t, focusDlg, "make directory")
 		fm.Pop()
 	})
 
@@ -3441,6 +3516,12 @@ func TestLayout_F4ActionDialogs_Validity(t *testing.T) {
 		actionDelete(pf)
 		dlg := fm.GetTopFrame().(vtui.Container)
 		vtui.AssertLayout(t, dlg)
+		assertComboMenuDoesNotCoverButtons(t, dlg, "delete")
+		focusDlg, ok := fm.GetTopFrame().(dialogFocusContainer)
+		if !ok {
+			t.Fatal("delete dialog does not expose focus traversal")
+		}
+		assertDialogTabOrderMatchesVisualOrder(t, focusDlg, "delete")
 		fm.Pop()
 	})
 	t.Run("FindFileDialog", func(t *testing.T) {
@@ -4339,10 +4420,12 @@ func TestPanelsFrame_ShiftF9_SaveSettings(t *testing.T) {
 	tmp.Close()
 
 	oldGetPath := getUserConfigIniPath
+	oldGetPaths := getConfigIniPaths
 	getUserConfigIniPath = func() string { return tmp.Name() }
 	getConfigIniPaths = func() []string { return []string{tmp.Name()} }
 	defer func() {
 		getUserConfigIniPath = oldGetPath
+		getConfigIniPaths = oldGetPaths
 	}()
 
 	pf := NewPanelsFrame()

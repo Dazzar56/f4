@@ -5,20 +5,6 @@ Author=f4 Team
 
 [Strings]
 VisRen.Menu=&ვიზუალური გადარქმევა
-ID3Editor.Menu=ID3 ტეგების &რედაქტორი
-ID3Editor.Title=ID3 ტეგების რედაქტორი
-ID3Editor.LocalOnly=ID3 ტეგების რედაქტორი მხარს უჭერს მხოლოდ ლოკალურ ფაილებს.
-ID3Editor.SelectFile=ჯერ აირჩიეთ MP3 ფაილი.
-ID3Editor.OnlyMP3=მხარდაჭერილია მხოლოდ MP3 ფაილები.
-ID3Editor.SaveError=ვერ მოხერხდა ID3 ტეგების შენახვა:\n%v
-ID3Editor.OpenError=ვერ მოხერხდა MP3 ფაილის გახსნა:\n%v
-ID3Editor.FieldTitle=სათაური:
-ID3Editor.FieldArtist=შემსრულებელი:
-ID3Editor.FieldAlbum=ალბომი:
-ID3Editor.FieldYear=წელი:
-ID3Editor.FieldGenre=ჟანრი:
-ID3Editor.FieldComment=კომენტარი:
-ID3Editor.FieldVersion=ვერსია:
 VisRen.Title=ფაილების ვიზუალური გადარქმევა
 VisRen.HostUnsupported=ეს F4 ჰოსტი არ უზრუნველყოფს VisRen UI ხიდს.
 VisRen.LocalOnly=VisRen მუშაობს მხოლოდ ლოკალურ ფაილების პანელზე.
@@ -59,109 +45,53 @@ VisRen.WordDivTitle=სიტყვის გამყოფები
 VisRen.WordDivPrompt=სიტყვების გამყოფი სიმბოლოები (მაქსიმუმ 18):
 VisRen.OldName=ძველი სახელი
 VisRen.NewName=ახალი სახელი
+
+ID3Editor.Menu=ID3 ტეგების &რედაქტორი
+ID3Editor.Title=ID3 ტეგების რედაქტორი
+ID3Editor.LocalOnly=ID3 ტეგების რედაქტორი მხარს უჭერს მხოლოდ ლოკალურ ფაილებს.
+ID3Editor.SelectFile=ჯერ აირჩიეთ MP3 ფაილი.
+ID3Editor.OnlyMP3=მხარდაჭერილია მხოლოდ MP3 ფაილები.
+ID3Editor.SaveError=ვერ მოხერხდა ID3 ტეგების შენახვა:\n%v
+ID3Editor.OpenError=ვერ მოხერხდა MP3 ფაილის გახსნა:\n%v
+ID3Editor.FieldTitle=სათაური:
+ID3Editor.FieldArtist=შემსრულებელი:
+ID3Editor.FieldAlbum=ალბომი:
+ID3Editor.FieldYear=წელი:
+ID3Editor.FieldGenre=ჟანრი:
+ID3Editor.FieldComment=კომენტარი:
+ID3Editor.FieldVersion=ვერსია:
+
 vtui.Ok=&კარგი
 vtui.Cancel=გაუქმება
+vtui.Save=&შენახვა
+
 Panel.Other=&სხვა პანელი
 Panel.Column.Name=სახელი
 Panel.Column.Size=ზომა
 Panel.Column.Modified=შეცვლილია
 Panel.UpDir=ზედა დირექტორია
 Panel.SelectedInfo=ბაიტი: %s, ფაილი: %d, საქაღალდე: %d
+
 Panels.Prompt=>
+
 Edit.NewFileTitle= ახალი ფაილის შექმნა
 Edit.NewFilePrompt=ფაილის &სახელი:
+
 MakeFolder.Title= საქაღალდის შექმნა
 MakeFolder.Prompt=შექმენით საქა&ღალდე:
+
 Delete.Title= წაშლა
 Delete.Confirm=ნამდვილად გსურთ წაშალოთ\n%s?
 Delete.Btn=&წაშლა
+
 Copy.Title= კოპირება
 Copy.Prompt=დააკოპირეთ %d ელემენტი აქ:
 Copy.Btn=&კოპირება
+
 Move.Title= გადაადგილება
 Move.Prompt=გადაარქვით სახელი ან გადაიტანეთ %d ელემენტი აქ:
 Move.Btn=&გადარქმევა
-Btn.OverwriteAll=ყველას &თავზე გადაწერა
-Btn.SkipAll=ყველას გამო&ტოვება
-Btn.Retry=&გამეორება
-Btn.Ignore=&იგნორირება
-Operation.Error=ოპერაცია ვერ შესრულდა:\n%s
-Op.ClonePanels=&პანელების კლონირება ახალ სამუშაო სივრცეში
-Op.SwitchHint=Ctrl+Tab ფანჯრების გადასართავად
-Op.DummyTitle= სატესტო ოპერაცია
-Op.DummyText=ეს არის სატესტო 5-წუთიანი ოპერაცია.\nაირჩიეთ ფონური რეჟიმი:
-Viewer.Title= ნახვა
-Viewer.ModeText=ტექსტი
-Viewer.ModeHex=Hex
-Viewer.SearchTitle= ძებნა
-Search.CaseSensitive=&რეგისტრის გათვალისწინება
-Search.Reverse=&უკუძებნა
-Select.Title= მონიშვნა
-Deselect.Title= მონიშვნის მოხსნა
-Quit.Title= გამოსვლა
-Quit.Confirm=ნამდვილად გსურთ f4-დან გამოსვლა?
-Quit.Btn=&გამოსვლა
-Select.Mask=&შეიყვანეთ მონიშვნის ნიღაბი:
 
-Macro.AssignTitle= მაკროსის მინიჭება
-Macro.AssignPrompt=დააჭირეთ სასურველ კლავიშთა კომბინაციას
-Macro.AssignCancel=გასაუქმებლად დააჭირეთ Esc-ს
-
-Menu.Language=ენა (Language)
-Menu.HelpLanguage=დახმარების ენა (Help Language)
-Menu.Left=მარცხენა
-Menu.Files=ფაილები
-Menu.Commands=ბრძანებები
-Menu.Options=პარამეტრები
-Menu.Right=მარჯვენა
-Menu.Exit=გა&მოსვლა
-
-Menu.Files.View=ნახვა
-Menu.Files.Edit=რედაქტირება
-Menu.Files.Copy=კოპირება
-Menu.Files.RenMov=გადარქმევა ან გადატანა
-Menu.Files.MkDir=საქაღალდის შექმნა
-Menu.Files.Delete=წაშლა
-Menu.Left.Brief=მოკლე
-Menu.Left.Medium=საშუალო
-Menu.Left.Detailed=დეტალური
-Menu.Left.Wide=ფართო
-Menu.Commands.FindFile=ფაილის ძებნა
-Menu.Commands.FindDuplicates=დუბლიკატების ძებნა
-Menu.Commands.BackgroundJobs=ფონური დავალებები
-Menu.Commands.RunRemote=ბრძანების დისტანციურად გაშვება
-RemoteCmd.Title=დისტანციური ბრძანება
-RemoteCmd.Prompt=ბრძანება:
-RemoteCmd.BtnClose=&დახურვა
-Jobs.Title=ფონური დავალებები
-Jobs.BtnShow=&ჩვენება
-Jobs.BtnCancel=დავალების &გაუქმება
-Jobs.BtnClose=&დახურვა
-Jobs.Empty=არაფერი სრულდება
-Menu.Commands.Bookmarks=სანიშნეები
-Menu.SortName=სახელი
-Menu.SortExt=გაფართოება
-Menu.SortTime=დრო
-Menu.SortSize=ზომა
-Menu.SortUnsorted=დაუხარისხებელი
-Sort.Title=სორტირება
-Menu.PanelSettings=პანელების პარამეტრები
-Menu.EditorSettings=რედაქტორის პარამეტრები
-Menu.ColorerSettings=&Colorer პარამეტრები
-Menu.AppearanceSettings=გარეგნობა
-Menu.ConfirmationsSettings=დადასტურებები
-Menu.AutoUpdateSettings=ავტო&განახლება
-Menu.Options.Plugins=პლაგინების მართვა
-
-Menu.Editor.File=&ფაილი
-Menu.Editor.Edit=&რედაქტირება
-Menu.Editor.Search=&ძებნა
-Menu.Editor.Options=&პარამეტრები
-Menu.Editor.Insert=&ჩასმა
-Menu.Viewer.File=&ფაილი
-Menu.Viewer.View=&ხედი
-Menu.Viewer.Search=&ძებნა
-Menu.Viewer.Options=&პარამეტრები
 Action.App.ScreenGrab=ეკრანის &გადაღება
 Action.App.ScreenGrab.Desc=ეკრანის არეალის მონიშვნა და კოპირება
 Action.Editor.Save=&შენახვა
@@ -224,18 +154,6 @@ Action.Viewer.CodepageNext=შემდეგი &კოდირება
 Action.Viewer.CodepageNext.Desc=შემდეგ კოდირებაზე გადასვლა
 Action.Viewer.CodepageMenu=კოდირების &მენიუ
 Action.Viewer.CodepageMenu.Desc=კოდირების არჩევა
-Help.ViewerEditor=მაყურებლისა და რედაქტორის კლავიშები
-Help.PanelNav=პანელის კლავიშები
-Help.NavigationKeys=ნავიგაციის კლავიშები
-Help.Area.Shell=პანელები
-Help.Area.Terminal=ტერმინალი
-Help.Area.Editor=რედაქტორი
-Help.Area.Viewer=მაყურებელი
-Help.Area.Common=საერთო
-Menu.Shell.Files=&ფაილები
-Menu.Shell.Commands=&ბრძანებები
-Menu.Shell.Options=&პარამეტრები
-Menu.Terminal.File=&ფაილი
 Action.File.New=ახალი ფაილი
 Action.File.New.Desc=ახალი ფაილის შექმნა და გახსნა რედაქტორში
 Action.File.CopyInPlace=კოპირება ადგილზე
@@ -268,19 +186,6 @@ Action.Panel.UserMenu=&მომხმარებლის მენიუ
 Action.Panel.UserMenu.Desc=მომხმარებლის მენიუს ჩვენება
 Action.Panel.FileAssociations=ფაილის &ასოციაციები…
 Action.Panel.FileAssociations.Desc=Enter, F3 და F4 ბრძანებების კონფიგურაცია ნიღბების მიხედვით
-FileAssoc.EditorTitle=ფაილების ასოციაციები
-FileAssoc.EditTitle=ასოციაციის რედაქტირება
-FileAssoc.NewTitle=ახალი ასოციაცია
-FileAssoc.ErrorTitle=ფაილების ასოციაციები
-FileAssoc.EmptyHint=ასოციაციები ჯერ არ არის — დასამატებლად დააჭირეთ Ins-ს
-FileAssoc.EmptyMask=ფაილის ნიღაბი არ შეიძლება იყოს ცარიელი.
-FileAssoc.MaskLabel=ნიღაბი
-FileAssoc.DescLabel=აღწერა
-FileAssoc.PickTitle.Open=გახსნა შემდეგით
-FileAssoc.PickTitle.View=ნახვა შემდეგით
-FileAssoc.PickTitle.Edit=რედაქტირება შემდეგით
-FileAssoc.DeleteTitle=ასოციაციის წაშლა
-FileAssoc.DeleteConfirm=გსურთ წაშალოთ ასოციაცია %q?
 Action.Panel.Bookmarks.Desc=საქაღალდის სანიშნეების დიალოგის ჩვენება
 Action.Panel.PluginMenu=პლა&გინის ბრძანებები
 Action.Panel.PluginMenu.Desc=პლაგინის ბრძანებების მენიუს ჩვენება
@@ -367,23 +272,106 @@ Action.Terminal.ViewLog.Desc=ტერმინალის ლოგის გ�
 Action.Terminal.EditLog=ტერმინალის ლოგის &რედაქტირება
 Action.Terminal.EditLog.Desc=ტერმინალის ლოგის გახსნა რედაქტორში
 
-EditorSettings.Title= რედაქტორის პარამეტრები
-EditorSettings.AutoComplete=ავტო&შევსების ჩართვა
-EditorSettings.Mask=აქტიურია ფაილის &ნიღბებისთვის:
-ColorerSettings.Title= Colorer პარამეტრები
-ColorerSettings.Enabled=Colorer ხაზგასმის ჩა&რთვა
-ColorerSettings.Style=ფერთა &სტილი:
-ColorerSettings.BuiltIn=(ჩაშენებული)
-ColorerSettings.Cross=ჯვ&არის ჩვენება:
-ColorerSettings.CrossOff=არ ჩვენება
-ColorerSettings.CrossVertical=ვერტიკალური
-ColorerSettings.CrossHorizontal=ჰორიზონტალური
-ColorerSettings.CrossBoth=ორივე
-ColorerSettings.Syntax=სინტაქსის ხა&ზგასმა
-ColorerSettings.Background=რედაქტორის &ფონის შეცვლა
-ColorerSettings.Catalog=სქემების &საქაღალდე (catalog.xml):
-ColorerSettings.Reload=განა&ხლება
-ColorerSettings.Download=სქემების ჩა&მოტვირთვა
+Btn.OverwriteAll=ყველას &თავზე გადაწერა
+Btn.SkipAll=ყველას გამო&ტოვება
+Btn.Retry=&გამეორება
+Btn.Ignore=&იგნორირება
+
+Operation.Error=ოპერაცია ვერ შესრულდა:\n%s
+
+Op.ClonePanels=&პანელების კლონირება ახალ სამუშაო სივრცეში
+Op.SwitchHint=Ctrl+Tab ფანჯრების გადასართავად
+Op.DummyTitle= სატესტო ოპერაცია
+Op.DummyText=ეს არის სატესტო 5-წუთიანი ოპერაცია.\nაირჩიეთ ფონური რეჟიმი:
+Op.Queue=რიგი
+Op.Background=ფონური პანელის კლონი
+Op.Foreground=მონოპოლიური რეჟიმი
+Op.PathNameOnly=მხოლოდ სახელი
+Op.PathFullPath=სრული გზა
+Op.PathSrcDst=წყარო -> სამიზნე
+Op.DummyQueue=რიგი (ნაგულისხმევი)
+Op.DummyBackground=ფონური პანელის კლონი
+Op.DummyForeground=მონოპოლიური რეჟიმი
+Op.BtnStart=&დაწყება
+
+Viewer.Title= ნახვა
+Viewer.ModeText=ტექსტი
+Viewer.ModeHex=Hex
+Viewer.SearchTitle= ძებნა
+
+Search.CaseSensitive=&რეგისტრის გათვალისწინება
+Search.Reverse=&უკუძებნა
+Search.Prompt=ძებნა:
+Search.WholeWords=მხოლოდ მთელი სიტყვები
+Search.Regex=რეგულარული გამოსახულებები
+Search.BtnFind=&ძებნა
+
+Select.Title= მონიშვნა
+Select.Mask=&შეიყვანეთ მონიშვნის ნიღაბი:
+
+Deselect.Title= მონიშვნის მოხსნა
+
+Quit.Title= გამოსვლა
+Quit.Confirm=ნამდვილად გსურთ f4-დან გამოსვლა?
+Quit.Btn=&გამოსვლა
+
+Macro.AssignTitle= მაკროსის მინიჭება
+Macro.AssignPrompt=დააჭირეთ სასურველ კლავიშთა კომბინაციას
+Macro.AssignCancel=გასაუქმებლად დააჭირეთ Esc-ს
+
+Menu.Language=ენა (Language)
+Menu.HelpLanguage=დახმარების ენა (Help Language)
+Menu.Left=მარცხენა
+Menu.Files=ფაილები
+Menu.Commands=ბრძანებები
+Menu.Options=პარამეტრები
+Menu.Right=მარჯვენა
+Menu.Exit=გა&მოსვლა
+Menu.Files.View=ნახვა
+Menu.Files.Edit=რედაქტირება
+Menu.Files.Copy=კოპირება
+Menu.Files.RenMov=გადარქმევა ან გადატანა
+Menu.Files.MkDir=საქაღალდის შექმნა
+Menu.Files.Delete=წაშლა
+Menu.Left.Brief=მოკლე
+Menu.Left.Medium=საშუალო
+Menu.Left.Detailed=დეტალური
+Menu.Left.Wide=ფართო
+Menu.Commands.FindFile=ფაილის ძებნა
+Menu.Commands.FindDuplicates=დუბლიკატების ძებნა
+Menu.Commands.BackgroundJobs=ფონური დავალებები
+Menu.Commands.RunRemote=ბრძანების დისტანციურად გაშვება
+Menu.Commands.Bookmarks=სანიშნეები
+Menu.SortName=სახელი
+Menu.SortExt=გაფართოება
+Menu.SortTime=დრო
+Menu.SortSize=ზომა
+Menu.SortUnsorted=დაუხარისხებელი
+Menu.PanelSettings=პანელების პარამეტრები
+Menu.EditorSettings=რედაქტორის პარამეტრები
+Menu.ColorerSettings=&Colorer პარამეტრები
+Menu.AppearanceSettings=გარეგნობა
+Menu.ConfirmationsSettings=დადასტურებები
+Menu.AutoUpdateSettings=ავტო&განახლება
+Menu.Options.Plugins=პლაგინების მართვა
+Menu.Editor.File=&ფაილი
+Menu.Editor.Edit=&რედაქტირება
+Menu.Editor.Search=&ძებნა
+Menu.Editor.Options=&პარამეტრები
+Menu.Editor.Insert=&ჩასმა
+Menu.Viewer.File=&ფაილი
+Menu.Viewer.View=&ხედი
+Menu.Viewer.Search=&ძებნა
+Menu.Viewer.Options=&პარამეტრები
+Menu.Shell.Files=&ფაილები
+Menu.Shell.Commands=&ბრძანებები
+Menu.Shell.Options=&პარამეტრები
+Menu.Terminal.File=&ფაილი
+
+RemoteCmd.Title=დისტანციური ბრძანება
+RemoteCmd.Prompt=ბრძანება:
+RemoteCmd.BtnClose=&დახურვა
+
 PanelSettings.Title= პანელის პარამეტრები
 PanelSettings.ShowHidden=&ფარული და სისტემური ფაილების ჩვენება
 PanelSettings.ShowDirPrefix=PREFIX '/' ჩვენება საქა&ღალდეებისთვის
@@ -404,6 +392,75 @@ PanelSettings.DefaultMode=ოპერაციების &რეჟიმი:
 PanelSettings.PathDisplay=ფაილის გზა პროგრესში:
 PanelSettings.InfoPanelCPUGPU=CPU/GPU განყოფილების ჩვენება &საინფორმაციო პანელზე
 PanelSettings.EscTogglePanels=&Esc პანელების ხილვადობის გადასართავად
+PanelSettings.ShowHighlightMarks=ფაილების &ხაზგასმის ნიშნების ჩვენება
+PanelSettings.CommandLineAutoComplete=ბრძანების ხაზის ავტო&შევსების ჩართვა
+PanelSettings.AlwaysShowMenuBar=მენიუს ხაზის &ყოველთვის ჩვენება
+PanelSettings.RecordMacrosTo=მაკროსების ჩაწერა აქ:
+
+Jobs.Title=ფონური დავალებები
+Jobs.BtnShow=&ჩვენება
+Jobs.BtnCancel=დავალების &გაუქმება
+Jobs.BtnClose=&დახურვა
+Jobs.Empty=არაფერი სრულდება
+
+Sort.Title=სორტირება
+
+Help.ViewerEditor=მაყურებლისა და რედაქტორის კლავიშები
+Help.PanelNav=პანელის კლავიშები
+Help.NavigationKeys=ნავიგაციის კლავიშები
+Help.Area.Shell=პანელები
+Help.Area.Terminal=ტერმინალი
+Help.Area.Editor=რედაქტორი
+Help.Area.Viewer=მაყურებელი
+Help.Area.Common=საერთო
+Help.SearchHint=ძებნა: აკრიფეთ  შემდეგი: F3/Ctrl+Enter  წინა: Shift+F3/Ctrl+Shift+Enter
+
+FileAssoc.EditorTitle=ფაილების ასოციაციები
+FileAssoc.EditTitle=ასოციაციის რედაქტირება
+FileAssoc.NewTitle=ახალი ასოციაცია
+FileAssoc.ErrorTitle=ფაილების ასოციაციები
+FileAssoc.EmptyHint=ასოციაციები ჯერ არ არის — დასამატებლად დააჭირეთ Ins-ს
+FileAssoc.EmptyMask=ფაილის ნიღაბი არ შეიძლება იყოს ცარიელი.
+FileAssoc.MaskLabel=ნიღაბი
+FileAssoc.DescLabel=აღწერა
+FileAssoc.PickTitle.Open=გახსნა შემდეგით
+FileAssoc.PickTitle.View=ნახვა შემდეგით
+FileAssoc.PickTitle.Edit=რედაქტირება შემდეგით
+FileAssoc.DeleteTitle=ასოციაციის წაშლა
+FileAssoc.DeleteConfirm=გსურთ წაშალოთ ასოციაცია %q?
+
+EditorSettings.Title= რედაქტორის პარამეტრები
+EditorSettings.AutoComplete=ავტო&შევსების ჩართვა
+EditorSettings.Mask=აქტიურია ფაილის &ნიღბებისთვის:
+EditorSettings.TabExpandNone=არ ჩაანაცვლო ტაბულაცია პრობელებით
+EditorSettings.TabExpandNew=ტაბულაციის პრობელებით ჩანაცვლება მხოლოდ ახალი Tab-ებისთვის
+EditorSettings.TabExpandAll=ტაბულაციის პრობელებით ჩანაცვლება ყოველთვის
+EditorSettings.ExpandTabs=ტაბულაციის &გაშლა:
+EditorSettings.Highlighter=ხაზგასმის &ინსტრუმენტი:
+EditorSettings.ColorerStyle=Colorer-ის ს&ტილი:
+EditorSettings.TabSize=ტაბულაციის ზ&ომა:
+EditorSettings.AutoIndent=ავტო&გასწორება
+EditorSettings.CursorBeyondEOL=კურსორი ხაზის ბოლოს &მიღმა
+EditorSettings.UseEditorConfig=გამოიყენე .&editorconfig
+EditorSettings.Crosshair=მიზნის ჩ&ვენება რედაქტორში
+EditorSettings.ColorerBg=Colorer &ფონი
+EditorSettings.UseExternalEditor=გა&რე რედაქტორი
+EditorSettings.ExternalCommand=გა&შვების ბრძანება:
+
+ColorerSettings.Title= Colorer პარამეტრები
+ColorerSettings.Enabled=Colorer ხაზგასმის ჩა&რთვა
+ColorerSettings.Style=ფერთა &სტილი:
+ColorerSettings.BuiltIn=(ჩაშენებული)
+ColorerSettings.Cross=ჯვ&არის ჩვენება:
+ColorerSettings.CrossOff=არ ჩვენება
+ColorerSettings.CrossVertical=ვერტიკალური
+ColorerSettings.CrossHorizontal=ჰორიზონტალური
+ColorerSettings.CrossBoth=ორივე
+ColorerSettings.Syntax=სინტაქსის ხა&ზგასმა
+ColorerSettings.Background=რედაქტორის &ფონის შეცვლა
+ColorerSettings.Catalog=სქემების &საქაღალდე (catalog.xml):
+ColorerSettings.Reload=განა&ხლება
+ColorerSettings.Download=სქემების ჩა&მოტვირთვა
 
 AppearanceSettings.Title= გარეგნობის პარამეტრები
 AppearanceSettings.Style=აპლიკაციის &სტილი:
@@ -417,15 +474,33 @@ ConfirmationsSettings.Title= დადასტურებები
 ConfirmationsSettings.Copy=დადასტურება &კოპირებისას
 ConfirmationsSettings.Move=დადასტურება &გადაადგილებისას
 ConfirmationsSettings.Delete=დადასტურება &წაშლისას
+ConfirmationsSettings.DeleteCancelFocused=წაშლისას ფოკუსი იყოს 'გაუქმება'-ზე
 ConfirmationsSettings.Exit=დადასტურება გა&მოსვლისას
+
 UpdateSettings.Title= ავტო განახლება
 UpdateSettings.Channel=განახლების &არხი:
 UpdateSettings.Interval=შემოწმების &ინტერვალი:
 UpdateSettings.BtnCheck=&შემოწმება ახლავე
+UpdateSettings.ChannelStable=სტაბილური ვერსიები
+UpdateSettings.ChannelNightly=ყოველდღიური ვერსიები
+UpdateSettings.IntervalNever=არასოდეს
+UpdateSettings.IntervalStart=ყოველ გაშვებაზე
+UpdateSettings.IntervalDaily=ყოველდღე
+UpdateSettings.IntervalWeekly=ყოველკვირა
+
 FindFile.Title= ფაილის ძებნა
 FindFile.MaskPrompt=ფაილის ნიღაბი ან რამდენიმე ნიღაბი:
 FindFile.TextPrompt=შეიცავს ტექსტს:
 FindFile.BtnFind=&ძებნა
+FindFile.SearchingTitle= ძებნა...
+FindFile.Scanning=სკანირება:
+FindFile.FoundCount=ნაპოვნია: %d
+FindFile.SearchResultsTitle= ძებნის შედეგები
+FindFile.BtnGoTo=&გადასვლა
+FindFile.BtnView=&ნახვა
+FindFile.BtnEdit=&რედაქტირება
+FindFile.BtnClose=&დახურვა
+
 History.FoldersTitle= საქაღალდეების ისტორია
 History.CommandsTitle= ბრძანებების ისტორია
 History.SearchModeHint=F2: ქვე-სტრიქონის / პრეფიქსის ძებნის გადართვა
@@ -433,22 +508,36 @@ History.CommandsHint=Up/Down Enter Esc Shift+Del Del Ctrl+C Ctrl+Ins F2
 History.FoldersHint=Up/Down Enter Shift+Enter Ctrl+Enter Esc Shift+Del Del Ctrl+C Ctrl+Ins Ctrl+R F2
 History.ConfirmClearAll=გსურთ მთელი ისტორიის გასუფთავება?
 History.ConfirmPruneMissing=წაიშალოს ჩანაწერები, რომელთა გზები აღარ არსებობს?
-Help.SearchHint=ძებნა: აკრიფეთ  შემდეგი: F3/Ctrl+Enter  წინა: Shift+F3/Ctrl+Shift+Enter
-UserMenu.LocalMenuTitle=ლოკალური მენიუ
-UserMenu.MainMenuTitle=მთავარი მენიუ
-UserMenu.MainMenuFAR=FAR
-
-Language.Title= ენები
-Language.Changed=ენა შეიცვალა.\nინტერფეისის ზოგიერთი ელემენტის სრულად განახლებისთვის\nშეიძლება საჭირო გახდეს აპლიკაციის გადატვირთვა.
-HelpLanguage.Title=დახმარების ენები
-HelpLanguage.Changed=დახმარების ენა შეიცვალა.
-
 History.Title= ისტორია
 History.EmptyFolders=საქაღალდეების ისტორია ცარიელია.
 History.EmptyCommands=ბრძანებების ისტორია ცარიელია.
 
+UserMenu.LocalMenuTitle=ლოკალური მენიუ
+UserMenu.MainMenuTitle=მთავარი მენიუ
+UserMenu.MainMenuFAR=FAR
+UserMenu.EditTitle= მომხმარებლის მენიუს რედაქტირება
+UserMenu.CreateTitle= მომხმარებლის მენიუს შექმნა
+UserMenu.EditSubmenuTitle= ქვემენიუს რედაქტირება
+UserMenu.CreateSubmenuTitle= ქვემენიუს შექმნა
+UserMenu.LabelHotkey=ცხელი &კლავიში:
+UserMenu.LabelLabel=&იარლიყი:
+UserMenu.LabelCommand=&ბრძანება:
+
+Language.Title= ენები
+Language.Changed=ენა შეიცვალა.\nინტერფეისის ზოგიერთი ელემენტის სრულად განახლებისთვის\nშეიძლება საჭირო გახდეს აპლიკაციის გადატვირთვა.
+
+LanguageSettings.Title= ენის პარამეტრები
+LanguageSettings.Primary=ძირითადი ენა:
+LanguageSettings.Fallback=სარეზერვო ენა:
+LanguageSettings.None=<არცერთი>
+
+HelpLanguage.Title=დახმარების ენები
+HelpLanguage.Changed=დახმარების ენა შეიცვალა.
+
 Error.Title= შეცდომა
+
 Warning.Title= გაფრთხილება
+
 Info.Title= ინფორმაცია
 
 ExtEdit.TempError=ვერ მოხერხდა დროებითი ფაილის შექმნა: %v
@@ -463,22 +552,27 @@ FileOp.BtnNewInstance=&ახალი ასლი
 FileOp.CannotEditDir=დირექტორიის რედაქტირება შეუძლებელია.
 FileOp.CannotViewDir=დირექტორიის ნახვა შეუძლებელია.
 FileOp.CannotOpenSpecial=სპეციალური ფაილების (მილები, სოკეტები, მოწყობილობები) გახსნა შეუძლებელია.
+FileOp.DeletionErrors= წაშლის შეცდომები
+FileOp.FileAlreadyExists=ფაილი უკვე არსებობს
+FileOp.RememberChoice=არჩევნის &დამახსოვრება
+FileOp.Overwrite=&თავზე გადაწერა
+FileOp.Skip=&გამოტოვება
+FileOp.Rename=&გადარქმევა
+FileOp.Append=&მიწერა
+FileOp.Resume=გაგ&რძელება
+FileOp.BtnCancel=&გაუქმება
+FileOp.BtnBackground=&ფონი
 
 Dialog.RenameTitle= გადარქმევა
 Dialog.RenamePrompt=გადაარქვით სახელი '%s' ამად:
-
-Op.Queue=რიგი
-Op.Background=ფონური პანელის კლონი
-Op.Foreground=მონოპოლიური რეჟიმი
-Op.PathNameOnly=მხოლოდ სახელი
-Op.PathFullPath=სრული გზა
-Op.PathSrcDst=წყარო -> სამიზნე
 
 Plugins.Title= პლაგინების მართვა (RPC)
 Plugins.BtnAdd=&დამატება
 Plugins.BtnRemove=&წაშლა
 Plugins.BtnPermissions=&ნებართვები
 Plugins.BtnClose=&დახურვა
+Plugins.AddTitle= პლაგინის დამატება
+Plugins.SelectFilePrompt=აირჩიეთ პლაგინის ფაილი:
 
 InfoPanel.Title= ინფორმაცია
 InfoPanel.Computer=კომპიუტერის სახელი
@@ -542,6 +636,7 @@ AndroidInfo.Storage=საცავი
 AndroidInfo.StorageTotal=სულ საცავში
 AndroidInfo.StorageAvailable=თავისუფალი საცავში
 AndroidInfo.Protocol=პროტოკოლი
+
 IOSInfo.DeviceTitle=Apple მობილური მოწყობილობა
 IOSInfo.Name=სახელი
 IOSInfo.Model=მოდელი
@@ -594,7 +689,6 @@ KeyBar.F9=პარმენ
 KeyBar.F10=გამოსვ
 KeyBar.F11=პლაგინ
 KeyBar.F12=ეკრანი
-
 KeyBar.AltF1=მარცხ
 KeyBar.AltF2=მარჯვ
 KeyBar.AltF3=Hex
@@ -608,7 +702,6 @@ KeyBar.CtrlF4=გაფარ
 KeyBar.CtrlF5=დრო
 KeyBar.CtrlF6=ზომა
 KeyBar.CtrlF7=დაუხ
-
 KeyBar.EditorF1=დახმარ
 KeyBar.EditorF2=შენახვ
 KeyBar.EditorF3=გადატა
@@ -623,58 +716,8 @@ KeyBar.ViewerF7=ძებნა
 KeyBar.ViewerAltF8=გადას
 KeyBar.ViewerF10=გამოსვ
 
-EditorSettings.TabExpandNone=არ ჩაანაცვლო ტაბულაცია პრობელებით
-EditorSettings.TabExpandNew=ტაბულაციის პრობელებით ჩანაცვლება მხოლოდ ახალი Tab-ებისთვის
-EditorSettings.TabExpandAll=ტაბულაციის პრობელებით ჩანაცვლება ყოველთვის
-EditorSettings.ExpandTabs=ტაბულაციის &გაშლა:
-EditorSettings.Highlighter=ხაზგასმის &ინსტრუმენტი:
-EditorSettings.ColorerStyle=Colorer-ის ს&ტილი:
-EditorSettings.TabSize=ტაბულაციის ზ&ომა:
-EditorSettings.AutoIndent=ავტო&გასწორება
-EditorSettings.CursorBeyondEOL=კურსორი ხაზის ბოლოს &მიღმა
-EditorSettings.UseEditorConfig=გამოიყენე .&editorconfig
-EditorSettings.Crosshair=მიზნის ჩ&ვენება რედაქტორში
-EditorSettings.ColorerBg=Colorer &ფონი
-EditorSettings.UseExternalEditor=გა&რე რედაქტორი
-EditorSettings.ExternalCommand=გა&შვების ბრძანება:
-ConfirmationsSettings.DeleteCancelFocused=წაშლისას ფოკუსი იყოს 'გაუქმება'-ზე
-
-PanelSettings.ShowHighlightMarks=ფაილების &ხაზგასმის ნიშნების ჩვენება
-PanelSettings.CommandLineAutoComplete=ბრძანების ხაზის ავტო&შევსების ჩართვა
-PanelSettings.AlwaysShowMenuBar=მენიუს ხაზის &ყოველთვის ჩვენება
-PanelSettings.RecordMacrosTo=მაკროსების ჩაწერა აქ:
-UpdateSettings.ChannelStable=სტაბილური ვერსიები
-UpdateSettings.ChannelNightly=ყოველდღიური ვერსიები
-UpdateSettings.IntervalNever=არასოდეს
-UpdateSettings.IntervalStart=ყოველ გაშვებაზე
-UpdateSettings.IntervalDaily=ყოველდღე
-UpdateSettings.IntervalWeekly=ყოველკვირა
-Plugins.AddTitle= პლაგინის დამატება
-Plugins.SelectFilePrompt=აირჩიეთ პლაგინის ფაილი:
-
-FindFile.SearchingTitle= ძებნა...
-FindFile.Scanning=სკანირება:
-FindFile.FoundCount=ნაპოვნია: %d
-FindFile.SearchResultsTitle= ძებნის შედეგები
-FindFile.BtnGoTo=&გადასვლა
-FindFile.BtnView=&ნახვა
-FindFile.BtnEdit=&რედაქტირება
-FindFile.BtnClose=&დახურვა
-
-FileOp.DeletionErrors= წაშლის შეცდომები
-FileOp.FileAlreadyExists=ფაილი უკვე არსებობს
-FileOp.RememberChoice=არჩევნის &დამახსოვრება
-FileOp.Overwrite=&თავზე გადაწერა
-FileOp.Skip=&გამოტოვება
-FileOp.Rename=&გადარქმევა
-FileOp.Append=&მიწერა
-FileOp.Resume=გაგ&რძელება
-LanguageSettings.Title= ენის პარამეტრები
-LanguageSettings.Primary=ძირითადი ენა:
-LanguageSettings.Fallback=სარეზერვო ენა:
-LanguageSettings.None=<არცერთი>
-
 Arkanoid.HighScores= რეკორდები
+
 PlugRing.Title= f4 PlugRing
 PlugRing.BtnInstall=&დაინსტალირება/განახლება
 PlugRing.BtnRemove=წა&შლა
@@ -691,29 +734,18 @@ Attributes.ReadOnly=მხოლოდ &კითხვისთვის
 Attributes.Hidden=&ფარული
 Attributes.System=&სისტემური
 Attributes.Archive=&არქივი
+
 Permissions.Title= პლაგინების ნებართვები
 Permissions.BtnRevoke=&გაუქმება
 Permissions.BtnClose=&დახურვა
 
-Search.Prompt=ძებნა:
-Search.WholeWords=მხოლოდ მთელი სიტყვები
-Search.Regex=რეგულარული გამოსახულებები
-Search.BtnFind=&ძებნა
 Replace.Title= ჩანაცვლება
 Replace.Prompt=ჩანაცვლება:
 Replace.BtnReplace=&ჩანაცვლება
 Replace.BtnReplaceAll=ჩაანაცვლე &ყველა
+
 Codepage.Title= კოდირებები
 Codepage.ConvertTitle= კოდირების კონვერტაცია
-
-vtui.Save=&შენახვა
-UserMenu.EditTitle= მომხმარებლის მენიუს რედაქტირება
-UserMenu.CreateTitle= მომხმარებლის მენიუს შექმნა
-UserMenu.EditSubmenuTitle= ქვემენიუს რედაქტირება
-UserMenu.CreateSubmenuTitle= ქვემენიუს შექმნა
-UserMenu.LabelHotkey=ცხელი &კლავიში:
-UserMenu.LabelLabel=&იარლიყი:
-UserMenu.LabelCommand=&ბრძანება:
 
 Hotkeys.Title= ცხელი კლავიშების კონფიგურატორი
 Hotkeys.BtnAssign=&მინიჭება
@@ -724,10 +756,7 @@ Hotkeys.BtnNext=შემდეგი >
 Hotkeys.LabelArea=არეალი:
 Hotkeys.LabelWhen=როდის:
 Hotkeys.AssignTitle= ცხელი კლავიშის მინიჭება
-Op.DummyQueue=რიგი (ნაგულისხმევი)
-Op.DummyBackground=ფონური პანელის კლონი
-Op.DummyForeground=მონოპოლიური რეჟიმი
-Op.BtnStart=&დაწყება
+
 Drive.Title= დისკი
 
 NetFox.ConnectionTitle= კავშირის შექმნა
@@ -743,8 +772,7 @@ NetFox.LabelCodepage=&კოდირება:
 NetFox.ErrorEmptyName=სახელი არ შეიძლება იყოს ცარიელი
 NetFox.ErrorReservedName=რეზერვირებული კავშირის სახელი
 
-FileOp.BtnCancel=&გაუქმება
-FileOp.BtnBackground=&ფონი
 Queue.BtnCancel=დავალების &გაუქმება
 Queue.BtnClear=გასუფთავება &შესრულებულების
+
 Session.Title= აირჩიეთ სესია

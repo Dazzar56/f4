@@ -5,20 +5,6 @@ Author=f4 Team
 
 [Strings]
 VisRen.Menu=כלי שינוי שם ויזוא&לי
-ID3Editor.Menu=ע&ורך תגיות ID3
-ID3Editor.Title=עורך תגיות ID3
-ID3Editor.LocalOnly=עורך תגיות ID3 תומך בקבצים מקומיים בלבד.
-ID3Editor.SelectFile=אנא בחר קובץ MP3 תחילה.
-ID3Editor.OnlyMP3=רק קובצי MP3 נתמכים.
-ID3Editor.SaveError=שמירת תגיות ID3 נכשלה:\n%v
-ID3Editor.OpenError=פתיחת קובץ MP3 נכשלה:\n%v
-ID3Editor.FieldTitle=כותרת:
-ID3Editor.FieldArtist=אמן:
-ID3Editor.FieldAlbum=אלבום:
-ID3Editor.FieldYear=שנה:
-ID3Editor.FieldGenre=ז'אנר:
-ID3Editor.FieldComment=הערה:
-ID3Editor.FieldVersion=גרסה:
 VisRen.Title=כלי שינוי שם ויזואלי
 VisRen.HostUnsupported=מארח F4 זה אינו מספק גשר ממשק משתמש VisRen.
 VisRen.LocalOnly=VisRen עובד רק על פאנל קבצים מקומי.
@@ -59,184 +45,53 @@ VisRen.WordDivTitle=מפרידי מילים
 VisRen.WordDivPrompt=תווים המפרידים בין מילים (מקסימום 18):
 VisRen.OldName=שם ישן
 VisRen.NewName=שם חדש
+
+ID3Editor.Menu=ע&ורך תגיות ID3
+ID3Editor.Title=עורך תגיות ID3
+ID3Editor.LocalOnly=עורך תגיות ID3 תומך בקבצים מקומיים בלבד.
+ID3Editor.SelectFile=אנא בחר קובץ MP3 תחילה.
+ID3Editor.OnlyMP3=רק קובצי MP3 נתמכים.
+ID3Editor.SaveError=שמירת תגיות ID3 נכשלה:\n%v
+ID3Editor.OpenError=פתיחת קובץ MP3 נכשלה:\n%v
+ID3Editor.FieldTitle=כותרת:
+ID3Editor.FieldArtist=אמן:
+ID3Editor.FieldAlbum=אלבום:
+ID3Editor.FieldYear=שנה:
+ID3Editor.FieldGenre=ז'אנר:
+ID3Editor.FieldComment=הערה:
+ID3Editor.FieldVersion=גרסה:
+
 vtui.Ok=אי&שור
 vtui.Cancel=ביטול
+vtui.Save=ש&מור
+
 Panel.Other=פאנל א&חר
 Panel.Column.Name=שם
 Panel.Column.Size=גודל
 Panel.Column.Modified=תאריך שינוי
 Panel.UpDir=תיקייה-למעלה
 Panel.SelectedInfo=בתים: %s, קבצים: %d, תיקיות: %d
+
 Panels.Prompt=>
+
 Edit.NewFileTitle= יצירת קובץ חדש
 Edit.NewFilePrompt=ש&ם הקובץ:
+
 MakeFolder.Title= יצירת תיקייה
 MakeFolder.Prompt=צור את ה&תיקייה:
+
 Delete.Title= מחיקה
 Delete.Confirm=האם ברצונך למחוק את\n%s?
 Delete.Btn=מ&חיקה
+
 Copy.Title= העתקה
 Copy.Prompt=העתק %d פריטים אל:
 Copy.Btn=ה&עתק
+
 Move.Title= העברה
 Move.Prompt=שנה שם או העבר %d פריטים אל:
 Move.Btn=שנה ש&ם
-Btn.OverwriteAll=החלף את ה&כל
-Btn.SkipAll=ד&לג על הכל
-Btn.Retry=נ&סה שנית
-Btn.Ignore=ה&תעל
-Operation.Error=הפעולה נכשלה:\n%s
-Op.ClonePanels=ש&כפל פאנלים לסביבת עבודה חדשה
-Op.SwitchHint=Ctrl+Tab למעבר בין חלונות
-Op.DummyTitle= פעולה מדומה
-Op.DummyText=זוהי פעולה מדומה של 5 דקות.\nבחר מצב רקע:
-Viewer.Title= צפייה
-Viewer.ModeText=טקסט
-Viewer.ModeHex=הקסדצימלי
-Viewer.SearchTitle= חיפושים
-Search.CaseSensitive=תואם רי&שיות
-Search.Reverse=חיפושים ה&פוכים
-Select.Title= בחירה
-Deselect.Title= ביטול בחירה
-Quit.Title= יציאה
-Quit.Confirm=האם ברצונך לצאת מ-f4?
-Quit.Btn=י&ציאה
-Select.Mask=ה&כנס מסכת בחירה:
 
-Arkanoid.HighScores= שיאים
-PlugRing.Title= f4 PlugRing
-PlugRing.BtnInstall=&התקנה/עדכון
-PlugRing.BtnRemove=ה&סרה
-PlugRing.BtnRefresh=&רענון
-PlugRing.BtnClose=&סגירה
-
-Attributes.Title= מאפיינים
-Attributes.BtnSet=קבע
-Attributes.BtnSecurity=&אבטחה
-Attributes.Read=קריאה
-Attributes.Write=כתיבה
-Attributes.Execute=הפעלה
-Attributes.ReadOnly=לקריאה &בלבד
-Attributes.Hidden=&מוסתר
-Attributes.System=מ&ערכת
-Attributes.Archive=&ארכיון
-Permissions.Title= הרשאות תוספים
-Permissions.BtnRevoke=&בטל
-Permissions.BtnClose=&סגירה
-
-Search.Prompt=חפש את:
-Search.WholeWords=מילים שלמות בלבד
-Search.Regex=ביטויים רגולריים
-Search.BtnFind=&חפש
-Replace.Title= החלף
-Replace.Prompt=החלף ב-:
-Replace.BtnReplace=&החלף
-Replace.BtnReplaceAll=החלף את ה&כל
-Codepage.Title= דפי קידוד
-Codepage.ConvertTitle= המר דף קידוד
-
-vtui.Save=ש&מור
-UserMenu.EditTitle= עריכת תפריט משתמש
-UserMenu.CreateTitle= יצירת תפריט משתמש
-UserMenu.EditSubmenuTitle= עריכת תפריט משנה
-UserMenu.CreateSubmenuTitle= יצירת תפריט משנה
-UserMenu.LabelHotkey=מקש ק&יצור:
-UserMenu.LabelLabel=&תווית:
-UserMenu.LabelCommand=&פקודה:
-
-Hotkeys.Title= מגדיר מקשי קיצור
-Hotkeys.BtnAssign=&הקצה
-Hotkeys.BtnUnbind=&בטל שיוך
-Hotkeys.BtnClose=&סגירה
-Hotkeys.SelectTitle= בחר אזור ותנאי
-Hotkeys.BtnNext=הבא >
-Hotkeys.LabelArea=אזור:
-Hotkeys.LabelWhen=תנאי:
-Hotkeys.AssignTitle= הקצה מקש קיצור
-Op.DummyQueue=תור (ברירת מחדל)
-Op.DummyBackground=שכפול פאנל ברקע
-Op.DummyForeground=נעילת חזית
-Op.BtnStart=ה&פעל
-Drive.Title= כונן
-
-NetFox.ConnectionTitle= חיבור אתר
-NetFox.PassiveMode=מצב פסיבי
-NetFox.LabelName=&שם:
-NetFox.LabelProtocol=פ&רוטוקול:
-NetFox.LabelHost=&מארח:
-NetFox.LabelPort=&פורט:
-NetFox.LabelUser=&משתמש:
-NetFox.LabelPassword=&סיסמה:
-NetFox.LabelTimeout=פסק &זמן:
-NetFox.LabelCodepage=&דף קידוד:
-NetFox.ErrorEmptyName=השם אינו יכול להיות ריק
-NetFox.ErrorReservedName=שם חיבור שמור
-
-FileOp.BtnCancel=&ביטול
-FileOp.BtnBackground=ב&רקע
-Queue.BtnCancel=ב&טל משימה
-Queue.BtnClear=נקה &הושלמו
-Session.Title= בחר סשן
-
-Macro.AssignTitle= שיוך מאקרו
-Macro.AssignPrompt=לחץ על שילוב המקשים הרצוי
-Macro.AssignCancel=לחץ על Esc לביטול
-
-Menu.Language=שפה
-Menu.HelpLanguage=שפת עזרה
-Menu.Left=שמאל
-Menu.Files=קבצים
-Menu.Commands=פקודות
-Menu.Options=אפשרויות
-Menu.Right=ימין
-Menu.Exit=י&ציאה
-
-Menu.Files.View=צפייה
-Menu.Files.Edit=עריכה
-Menu.Files.Copy=העתקה
-Menu.Files.RenMov=שינוי שם או העברה
-Menu.Files.MkDir=יצירת תיקייה
-Menu.Files.Delete=מחיקה
-Menu.Left.Brief=תמציתי
-Menu.Left.Medium=בינוני
-Menu.Left.Detailed=מפורט
-Menu.Left.Wide=רחב
-Menu.Commands.FindFile=חיפוש קובץ
-Menu.Commands.FindDuplicates=חיפוש כפילויות
-Menu.Commands.BackgroundJobs=משימות רקע
-Menu.Commands.RunRemote=הפעל פקודה מרחוק
-RemoteCmd.Title=פקודה מרחוק
-RemoteCmd.Prompt=פקודה:
-RemoteCmd.BtnClose=ס&גירה
-Jobs.Title=משימות רקע
-Jobs.BtnShow=ה&צג
-Jobs.BtnCancel=ב&טל משימה
-Jobs.BtnClose=ס&גירה
-Jobs.Empty=אין משימות פעילות
-Menu.Commands.Bookmarks=סימניות
-Menu.SortName=שם
-Menu.SortExt=סיומת
-Menu.SortTime=זמן
-Menu.SortSize=גודל
-Menu.SortUnsorted=לא ממוין
-Sort.Title=מיון לפי
-Menu.PanelSettings=הגדרות פאנל
-Menu.EditorSettings=הגדרות עורך
-Menu.ColorerSettings=הגדרות צ&בעים
-Menu.AppearanceSettings=הגדרות מראה
-Menu.ConfirmationsSettings=אישורים
-Menu.AutoUpdateSettings=עדכון או&טומטי
-Menu.Options.Plugins=ניהול תוספים
-
-Menu.Editor.File=קו&בץ
-Menu.Editor.Edit=ע&ריכה
-Menu.Editor.Search=ח&יפוש
-Menu.Editor.Options=א&פשרויות
-Menu.Editor.Insert=ה&כנסה
-Menu.Viewer.File=קו&בץ
-Menu.Viewer.View=ת&צוגה
-Menu.Viewer.Search=ח&יפוש
-Menu.Viewer.Options=א&פשרויות
 Action.App.ScreenGrab=לכידת מ&סך
 Action.App.ScreenGrab.Desc=בחירה והעתקה של אזור מסך
 Action.Editor.Save=ש&מירה
@@ -299,18 +154,6 @@ Action.Viewer.CodepageNext=דף הקידוד הב&א
 Action.Viewer.CodepageNext.Desc=מעבר לדף הקידוד הבא
 Action.Viewer.CodepageMenu=תפריט ד&פי קידוד
 Action.Viewer.CodepageMenu.Desc=בחירת דף קידוד
-Help.ViewerEditor=מקשי צופה ועורך
-Help.PanelNav=מקשי פאנל
-Help.NavigationKeys=מקשי ניווט
-Help.Area.Shell=פאנלים
-Help.Area.Terminal=טרמינל
-Help.Area.Editor=עורך
-Help.Area.Viewer=צופה
-Help.Area.Common=כללי
-Menu.Shell.Files=ק&בצים
-Menu.Shell.Commands=פ&קודות
-Menu.Shell.Options=א&פשרויות
-Menu.Terminal.File=ק&ובץ
 Action.File.New=קובץ חדש
 Action.File.New.Desc=יצירה ופתיחה של קובץ חדש בעורך
 Action.File.CopyInPlace=העתקה במקום
@@ -343,19 +186,6 @@ Action.Panel.UserMenu=תפריט מ&שתמש
 Action.Panel.UserMenu.Desc=הצגת תפריט המשתמש
 Action.Panel.FileAssociations=שיוכי ק&בצים…
 Action.Panel.FileAssociations.Desc=הגדרת פקודות לפי מסכה עבור Enter, F3 ו- F4
-FileAssoc.EditorTitle=שיוכי קבצים
-FileAssoc.EditTitle=עריכת שיוך
-FileAssoc.NewTitle=שיוך חדש
-FileAssoc.ErrorTitle=שיוכי קבצים
-FileAssoc.EmptyHint=אין שיוכים עדיין — לחץ על Ins להוספת שיוך
-FileAssoc.EmptyMask=מסכת הקובץ אינה יכולה להיות ריקה.
-FileAssoc.MaskLabel=מסכה
-FileAssoc.DescLabel=תיאור
-FileAssoc.PickTitle.Open=פתח באמצעות
-FileAssoc.PickTitle.View=צפה באמצעות
-FileAssoc.PickTitle.Edit=ערוך באמצעות
-FileAssoc.DeleteTitle=מחיקת שיוך
-FileAssoc.DeleteConfirm=האם למחוק את השיוך %q?
 Action.Panel.Bookmarks.Desc=הצגת חלון סימניות תיקייה
 Action.Panel.PluginMenu=פקודות ת&וסף
 Action.Panel.PluginMenu.Desc=הצגת תפריט פקודות של תוספים
@@ -442,23 +272,106 @@ Action.Terminal.ViewLog.Desc=פתיחת יומן הטרמינל בצופה
 Action.Terminal.EditLog=ע&ריכת יומן הטרמינל
 Action.Terminal.EditLog.Desc=פתיחת יומן הטרמינל בעורך
 
-EditorSettings.Title= הגדרות עורך
-EditorSettings.AutoComplete=אפשר השלמה או&טומטית
-EditorSettings.Mask=פעיל עבור מסכות ק&בצים:
-ColorerSettings.Title= הגדרות צבעים
-ColorerSettings.Enabled=אפשר הדגשת צ&בעים
-ColorerSettings.Style=ס&גנון צבעים:
-ColorerSettings.BuiltIn=(מובנה)
-ColorerSettings.Cross=הצג ש&תי וערב:
-ColorerSettings.CrossOff=אל תציג
-ColorerSettings.CrossVertical=אנכי
-ColorerSettings.CrossHorizontal=אופקי
-ColorerSettings.CrossBoth=שניהם
-ColorerSettings.Syntax=הדגש ת&חביר
-ColorerSettings.Background=שנה רקע ה&עורך
-ColorerSettings.Catalog=ת&יקיית סכמות (catalog.xml):
-ColorerSettings.Reload=ט&ען מחדש
-ColorerSettings.Download=ה&ורד סכמות
+Btn.OverwriteAll=החלף את ה&כל
+Btn.SkipAll=ד&לג על הכל
+Btn.Retry=נ&סה שנית
+Btn.Ignore=ה&תעל
+
+Operation.Error=הפעולה נכשלה:\n%s
+
+Op.ClonePanels=ש&כפל פאנלים לסביבת עבודה חדשה
+Op.SwitchHint=Ctrl+Tab למעבר בין חלונות
+Op.DummyTitle= פעולה מדומה
+Op.DummyText=זוהי פעולה מדומה של 5 דקות.\nבחר מצב רקע:
+Op.Queue=תור
+Op.Background=שכפול פאנל ברקע
+Op.Foreground=נעילת חזית
+Op.PathNameOnly=שם בלבד
+Op.PathFullPath=נתיב מלא
+Op.PathSrcDst=מקור -> יעד
+Op.DummyQueue=תור (ברירת מחדל)
+Op.DummyBackground=שכפול פאנל ברקע
+Op.DummyForeground=נעילת חזית
+Op.BtnStart=ה&פעל
+
+Viewer.Title= צפייה
+Viewer.ModeText=טקסט
+Viewer.ModeHex=הקסדצימלי
+Viewer.SearchTitle= חיפושים
+
+Search.CaseSensitive=תואם רי&שיות
+Search.Reverse=חיפושים ה&פוכים
+Search.Prompt=חפש את:
+Search.WholeWords=מילים שלמות בלבד
+Search.Regex=ביטויים רגולריים
+Search.BtnFind=&חפש
+
+Select.Title= בחירה
+Select.Mask=ה&כנס מסכת בחירה:
+
+Deselect.Title= ביטול בחירה
+
+Quit.Title= יציאה
+Quit.Confirm=האם ברצונך לצאת מ-f4?
+Quit.Btn=י&ציאה
+
+Macro.AssignTitle= שיוך מאקרו
+Macro.AssignPrompt=לחץ על שילוב המקשים הרצוי
+Macro.AssignCancel=לחץ על Esc לביטול
+
+Menu.Language=שפה
+Menu.HelpLanguage=שפת עזרה
+Menu.Left=שמאל
+Menu.Files=קבצים
+Menu.Commands=פקודות
+Menu.Options=אפשרויות
+Menu.Right=ימין
+Menu.Exit=י&ציאה
+Menu.Files.View=צפייה
+Menu.Files.Edit=עריכה
+Menu.Files.Copy=העתקה
+Menu.Files.RenMov=שינוי שם או העברה
+Menu.Files.MkDir=יצירת תיקייה
+Menu.Files.Delete=מחיקה
+Menu.Left.Brief=תמציתי
+Menu.Left.Medium=בינוני
+Menu.Left.Detailed=מפורט
+Menu.Left.Wide=רחב
+Menu.Commands.FindFile=חיפוש קובץ
+Menu.Commands.FindDuplicates=חיפוש כפילויות
+Menu.Commands.BackgroundJobs=משימות רקע
+Menu.Commands.RunRemote=הפעל פקודה מרחוק
+Menu.Commands.Bookmarks=סימניות
+Menu.SortName=שם
+Menu.SortExt=סיומת
+Menu.SortTime=זמן
+Menu.SortSize=גודל
+Menu.SortUnsorted=לא ממוין
+Menu.PanelSettings=הגדרות פאנל
+Menu.EditorSettings=הגדרות עורך
+Menu.ColorerSettings=הגדרות צ&בעים
+Menu.AppearanceSettings=הגדרות מראה
+Menu.ConfirmationsSettings=אישורים
+Menu.AutoUpdateSettings=עדכון או&טומטי
+Menu.Options.Plugins=ניהול תוספים
+Menu.Editor.File=קו&בץ
+Menu.Editor.Edit=ע&ריכה
+Menu.Editor.Search=ח&יפוש
+Menu.Editor.Options=א&פשרויות
+Menu.Editor.Insert=ה&כנסה
+Menu.Viewer.File=קו&בץ
+Menu.Viewer.View=ת&צוגה
+Menu.Viewer.Search=ח&יפוש
+Menu.Viewer.Options=א&פשרויות
+Menu.Shell.Files=ק&בצים
+Menu.Shell.Commands=פ&קודות
+Menu.Shell.Options=א&פשרויות
+Menu.Terminal.File=ק&ובץ
+
+RemoteCmd.Title=פקודה מרחוק
+RemoteCmd.Prompt=פקודה:
+RemoteCmd.BtnClose=ס&גירה
+
 PanelSettings.Title= הגדרות פאנל
 PanelSettings.ShowHidden=הצג קבצים נס&תרים וקבצי מערכת
 PanelSettings.ShowDirPrefix=הצג תחילית '/' עבור ת&יקיות
@@ -479,6 +392,75 @@ PanelSettings.DefaultMode=מצב פעולה כ&ברירת מחדל:
 PanelSettings.PathDisplay=נתיב קובץ בתהליך:
 PanelSettings.InfoPanelCPUGPU=הצג קטע מעבד/מאיץ גרפי בפאנל המ&ידע
 PanelSettings.EscTogglePanels=מקש Esc מ&חליף נראות פאנלים
+PanelSettings.ShowHighlightMarks=הצג ס&מני הדגשה
+PanelSettings.CommandLineAutoComplete=אפשר השלמה או&טומטית בשורת הפקודה
+PanelSettings.AlwaysShowMenuBar=הצג תמיד את שורת הת&פריטים
+PanelSettings.RecordMacrosTo=הקלט מאקרו אל:
+
+Jobs.Title=משימות רקע
+Jobs.BtnShow=ה&צג
+Jobs.BtnCancel=ב&טל משימה
+Jobs.BtnClose=ס&גירה
+Jobs.Empty=אין משימות פעילות
+
+Sort.Title=מיון לפי
+
+Help.ViewerEditor=מקשי צופה ועורך
+Help.PanelNav=מקשי פאנל
+Help.NavigationKeys=מקשי ניווט
+Help.Area.Shell=פאנלים
+Help.Area.Terminal=טרמינל
+Help.Area.Editor=עורך
+Help.Area.Viewer=צופה
+Help.Area.Common=כללי
+Help.SearchHint=חיפוש: הקלד  הבא: F3/Ctrl+Enter  הקודם: Shift+F3/Ctrl+Shift+Enter
+
+FileAssoc.EditorTitle=שיוכי קבצים
+FileAssoc.EditTitle=עריכת שיוך
+FileAssoc.NewTitle=שיוך חדש
+FileAssoc.ErrorTitle=שיוכי קבצים
+FileAssoc.EmptyHint=אין שיוכים עדיין — לחץ על Ins להוספת שיוך
+FileAssoc.EmptyMask=מסכת הקובץ אינה יכולה להיות ריקה.
+FileAssoc.MaskLabel=מסכה
+FileAssoc.DescLabel=תיאור
+FileAssoc.PickTitle.Open=פתח באמצעות
+FileAssoc.PickTitle.View=צפה באמצעות
+FileAssoc.PickTitle.Edit=ערוך באמצעות
+FileAssoc.DeleteTitle=מחיקת שיוך
+FileAssoc.DeleteConfirm=האם למחוק את השיוך %q?
+
+EditorSettings.Title= הגדרות עורך
+EditorSettings.AutoComplete=אפשר השלמה או&טומטית
+EditorSettings.Mask=פעיל עבור מסכות ק&בצים:
+EditorSettings.TabExpandNone=אל תרחיב טאבים
+EditorSettings.TabExpandNew=הרחב טאבים חדשים לרווחים
+EditorSettings.TabExpandAll=הרחב את כל הטאבים לרווחים
+EditorSettings.ExpandTabs=הרחב ט&אבים:
+EditorSettings.Highlighter=מ&דגיש תרשים:
+EditorSettings.ColorerStyle=ס&גנון צבעים:
+EditorSettings.TabSize=ג&ודל טאב:
+EditorSettings.AutoIndent=הזחה או&טומטית
+EditorSettings.CursorBeyondEOL=סמן מעבר לסוף ה&שורה
+EditorSettings.UseEditorConfig=השתמש בקובץ הגדרות .&editorconfig
+EditorSettings.Crosshair=הצג ש&תי וערב
+EditorSettings.ColorerBg=רקע ה&צבעים
+EditorSettings.UseExternalEditor=השתמש בעורך חי&צוני
+EditorSettings.ExternalCommand=פקודה חי&צונית:
+
+ColorerSettings.Title= הגדרות צבעים
+ColorerSettings.Enabled=אפשר הדגשת צ&בעים
+ColorerSettings.Style=ס&גנון צבעים:
+ColorerSettings.BuiltIn=(מובנה)
+ColorerSettings.Cross=הצג ש&תי וערב:
+ColorerSettings.CrossOff=אל תציג
+ColorerSettings.CrossVertical=אנכי
+ColorerSettings.CrossHorizontal=אופקי
+ColorerSettings.CrossBoth=שניהם
+ColorerSettings.Syntax=הדגש ת&חביר
+ColorerSettings.Background=שנה רקע ה&עורך
+ColorerSettings.Catalog=ת&יקיית סכמות (catalog.xml):
+ColorerSettings.Reload=ט&ען מחדש
+ColorerSettings.Download=ה&ורד סכמות
 
 AppearanceSettings.Title= הגדרות מראה
 AppearanceSettings.Style=ס&גנון יישום:
@@ -487,19 +469,38 @@ AppearanceSettings.FontSize=ג&ודל גופן ממשק משתמש:
 AppearanceSettings.TitleTemplate=תבנית כ&ותרת חלון:
 AppearanceSettings.ExportBtn=י&צא ערכת נושא
 AppearanceSettings.ColorCorrection=כפה תיקון נ&יגודיות צבעים
+
 ConfirmationsSettings.Title= אישורים
 ConfirmationsSettings.Copy=אשר בה&עתקה
 ConfirmationsSettings.Move=אשר בה&עברה
 ConfirmationsSettings.Delete=אשר במ&חיקה
+ConfirmationsSettings.DeleteCancelFocused=התמקדות ב-'ביטול' בעת מחיקה
 ConfirmationsSettings.Exit=אשר בי&ציאה
+
 UpdateSettings.Title= עדכון אוטומטי
 UpdateSettings.Channel=ערוץ ע&דכון:
 UpdateSettings.Interval=מרווח ב&דיקה:
 UpdateSettings.BtnCheck=ב&דוק כעת
+UpdateSettings.ChannelStable=גרסאות יציבות
+UpdateSettings.ChannelNightly=גרסאות פיתוח (Nightly)
+UpdateSettings.IntervalNever=אף פעם
+UpdateSettings.IntervalStart=בכל הפעלה
+UpdateSettings.IntervalDaily=יומי
+UpdateSettings.IntervalWeekly=שבועי
+
 FindFile.Title= חיפוש קובץ
 FindFile.MaskPrompt=מסכת קובץ אחת או יותר:
 FindFile.TextPrompt=מכיל טקסט:
 FindFile.BtnFind=ח&פש
+FindFile.SearchingTitle= מחפש...
+FindFile.Scanning=סורק:
+FindFile.FoundCount=נמצאו: %d
+FindFile.SearchResultsTitle= תוצאות חיפוש
+FindFile.BtnGoTo=ע&בור אל
+FindFile.BtnView=צ&פייה
+FindFile.BtnEdit=ע&ריכה
+FindFile.BtnClose=ס&גירה
+
 History.FoldersTitle= היסטוריית תיקיות
 History.CommandsTitle= היסטוריית פקודות
 History.SearchModeHint=F2: החלפה בין חיפוש תת-מחרוזת / תחילית
@@ -507,25 +508,40 @@ History.CommandsHint=Up/Down Enter Esc Shift+Del Del Ctrl+C Ctrl+Ins F2
 History.FoldersHint=Up/Down Enter Shift+Enter Ctrl+Enter Esc Shift+Del Del Ctrl+C Ctrl+Ins Ctrl+R F2
 History.ConfirmClearAll=האם לנקות את כל ההיסטוריה?
 History.ConfirmPruneMissing=להסיר ערכים שרכיביהם אינם קיימים עוד בנתיב המצוין?
-Help.SearchHint=חיפוש: הקלד  הבא: F3/Ctrl+Enter  הקודם: Shift+F3/Ctrl+Shift+Enter
+History.Title= היסטוריה
+History.EmptyFolders=היסטוריית התיקיות ריקה.
+History.EmptyCommands=היסטוריית הפקודות ריקה.
+
 UserMenu.LocalMenuTitle=תפריט מקומי
 UserMenu.MainMenuTitle=תפריט ראשי
 UserMenu.MainMenuFAR=FAR
+UserMenu.EditTitle= עריכת תפריט משתמש
+UserMenu.CreateTitle= יצירת תפריט משתמש
+UserMenu.EditSubmenuTitle= עריכת תפריט משנה
+UserMenu.CreateSubmenuTitle= יצירת תפריט משנה
+UserMenu.LabelHotkey=מקש ק&יצור:
+UserMenu.LabelLabel=&תווית:
+UserMenu.LabelCommand=&פקודה:
+
 Language.Title= שפות
 Language.Changed=השפה שונתה.\nחלק מרכיבי הממשק דורשים הפעלה מחדש של היישום\nכדי להחיל את השפה החדשה במלואה.
+
 LanguageSettings.Title= הגדרות שפה
 LanguageSettings.Primary=שפה ראשית:
 LanguageSettings.Fallback=שפה משנית:
 LanguageSettings.None=<ללא>
+
 HelpLanguage.Title=שפות עזרה
 HelpLanguage.Changed=שפת העזרה שונתה.
-History.Title= היסטוריה
-History.EmptyFolders=היסטוריית התיקיות ריקה.
-History.EmptyCommands=היסטוריית הפקודות ריקה.
+
 Error.Title= שגיאה
+
 Warning.Title= אזהרה
+
 Info.Title= מידע
+
 ExtEdit.TempError=לא ניתן ליצור קובץ זמני: %v
+
 FileOp.AlreadyOpened=הקובץ כבר פתוח:\n%s
 FileOp.AlreadyOpenedTitle= הקובץ כבר פתוח
 FileOp.AlreadyViewed=הקובץ כבר פתוח לצפייה:\n%s
@@ -536,19 +552,28 @@ FileOp.BtnNewInstance=מופע ח&דש
 FileOp.CannotEditDir=לא ניתן לערוך תיקייה.
 FileOp.CannotViewDir=לא ניתן לצפות בתיקייה.
 FileOp.CannotOpenSpecial=לא ניתן לפתוח קבצים מיוחדים (Named Pipes, Sockets, Devices).
+FileOp.DeletionErrors= שגיאות מחיקה
+FileOp.FileAlreadyExists=הקובץ כבר קים
+FileOp.RememberChoice=ז&כור בחירה
+FileOp.Overwrite=ה&חלף
+FileOp.Skip=ד&לג
+FileOp.Rename=שנה ש&ם
+FileOp.Append=ה&וסף לסוף
+FileOp.Resume=ה&משך
+FileOp.BtnCancel=&ביטול
+FileOp.BtnBackground=ב&רקע
+
 Dialog.RenameTitle= שינוי שם
 Dialog.RenamePrompt=שנה שם '%s' אל:
-Op.Queue=תור
-Op.Background=שכפול פאנל ברקע
-Op.Foreground=נעילת חזית
-Op.PathNameOnly=שם בלבד
-Op.PathFullPath=נתיב מלא
-Op.PathSrcDst=מקור -> יעד
+
 Plugins.Title= ניהול תוספים (RPC)
 Plugins.BtnAdd=הו&ספה
 Plugins.BtnRemove=ה&סרה
 Plugins.BtnPermissions=הר&שאות
 Plugins.BtnClose=ס&גירה
+Plugins.AddTitle= הוספת תוסף
+Plugins.SelectFilePrompt=בחירת קובץ תוסף:
+
 InfoPanel.Title= מידע
 InfoPanel.Computer=שם המחשב
 InfoPanel.User=שם משתמש
@@ -587,6 +612,7 @@ InfoPanel.GPUWSLVirt=מאיץ גרפי וירטואלי של WSL (שם המאר�
 InfoPanel.Copied=הועתק
 InfoPanel.CopiedRows=שורות שהועתקו
 InfoPanel.UnitsHint= B: units   Ins/Shift+↑↓: select   C: copy
+
 AndroidInfo.DeviceTitle=מכשיר אנדרואיד
 AndroidInfo.StatusTitle=מצב המכשיר
 AndroidInfo.ConnectionTitle=חיבור ADB
@@ -610,6 +636,7 @@ AndroidInfo.Storage=אחסון
 AndroidInfo.StorageTotal=סה"כ אחסון
 AndroidInfo.StorageAvailable=אחסון זמין
 AndroidInfo.Protocol=פרוטוקול
+
 IOSInfo.DeviceTitle=מכשיר נייד של אפל
 IOSInfo.Name=שם
 IOSInfo.Model=דגם
@@ -621,6 +648,7 @@ IOSInfo.Connection=חיבור
 IOSInfo.State=מצב
 IOSInfo.Paired=מהימן
 IOSInfo.DeveloperMode=מצב מפתח
+
 QuickView.Title= תצוגה מהירה
 QuickView.NoSelection=<אין בחירה>
 QuickView.ParentDir=תיקיית אב
@@ -637,6 +665,7 @@ QuickView.Size=גודל
 QuickView.Image=<תמונה>
 QuickView.Binary=<תוכן בינארי — תצוגת הקס>
 QuickView.ReadError=קריאה נכשלה
+
 Bookmarks.Title= סימניות
 Bookmarks.RowPrefix=[RCtrl | Ctrl+Alt] +
 Bookmarks.EmptySlot=<ריק>
@@ -645,6 +674,7 @@ Bookmarks.LoadError=טעינת סימניות נכשלה:\n%v
 Bookmarks.SaveError=שמירת סימניות נכשלה:\n%v
 Bookmarks.EditTitle= ערוך נתיב סימנייה
 Bookmarks.EditPrompt=ה&נתיב:
+
 KeyBar.F1=עזרה
 KeyBar.F2=תפריט
 KeyBar.F2Wrap=גלישה
@@ -685,46 +715,64 @@ KeyBar.ViewerF4=הקס
 KeyBar.ViewerF7=חיפוש
 KeyBar.ViewerAltF8=מעבר
 KeyBar.ViewerF10=Quit
-EditorSettings.TabExpandNone=אל תרחיב טאבים
-EditorSettings.TabExpandNew=הרחב טאבים חדשים לרווחים
-EditorSettings.TabExpandAll=הרחב את כל הטאבים לרווחים
-EditorSettings.ExpandTabs=הרחב ט&אבים:
-EditorSettings.Highlighter=מ&דגיש תרשים:
-EditorSettings.ColorerStyle=ס&גנון צבעים:
-EditorSettings.TabSize=ג&ודל טאב:
-EditorSettings.AutoIndent=הזחה או&טומטית
-EditorSettings.CursorBeyondEOL=סמן מעבר לסוף ה&שורה
-EditorSettings.UseEditorConfig=השתמש בקובץ הגדרות .&editorconfig
-EditorSettings.Crosshair=הצג ש&תי וערב
-EditorSettings.ColorerBg=רקע ה&צבעים
-EditorSettings.UseExternalEditor=השתמש בעורך חי&צוני
-EditorSettings.ExternalCommand=פקודה חי&צונית:
-ConfirmationsSettings.DeleteCancelFocused=התמקדות ב-'ביטול' בעת מחיקה
-PanelSettings.ShowHighlightMarks=הצג ס&מני הדגשה
-PanelSettings.CommandLineAutoComplete=אפשר השלמה או&טומטית בשורת הפקודה
-PanelSettings.AlwaysShowMenuBar=הצג תמיד את שורת הת&פריטים
-PanelSettings.RecordMacrosTo=הקלט מאקרו אל:
-UpdateSettings.ChannelStable=גרסאות יציבות
-UpdateSettings.ChannelNightly=גרסאות פיתוח (Nightly)
-UpdateSettings.IntervalNever=אף פעם
-UpdateSettings.IntervalStart=בכל הפעלה
-UpdateSettings.IntervalDaily=יומי
-UpdateSettings.IntervalWeekly=שבועי
-Plugins.AddTitle= הוספת תוסף
-Plugins.SelectFilePrompt=בחירת קובץ תוסף:
-FindFile.SearchingTitle= מחפש...
-FindFile.Scanning=סורק:
-FindFile.FoundCount=נמצאו: %d
-FindFile.SearchResultsTitle= תוצאות חיפוש
-FindFile.BtnGoTo=ע&בור אל
-FindFile.BtnView=צ&פייה
-FindFile.BtnEdit=ע&ריכה
-FindFile.BtnClose=ס&גירה
-FileOp.DeletionErrors= שגיאות מחיקה
-FileOp.FileAlreadyExists=הקובץ כבר קים
-FileOp.RememberChoice=ז&כור בחירה
-FileOp.Overwrite=ה&חלף
-FileOp.Skip=ד&לג
-FileOp.Rename=שנה ש&ם
-FileOp.Append=ה&וסף לסוף
-FileOp.Resume=ה&משך
+
+Arkanoid.HighScores= שיאים
+
+PlugRing.Title= f4 PlugRing
+PlugRing.BtnInstall=&התקנה/עדכון
+PlugRing.BtnRemove=ה&סרה
+PlugRing.BtnRefresh=&רענון
+PlugRing.BtnClose=&סגירה
+
+Attributes.Title= מאפיינים
+Attributes.BtnSet=קבע
+Attributes.BtnSecurity=&אבטחה
+Attributes.Read=קריאה
+Attributes.Write=כתיבה
+Attributes.Execute=הפעלה
+Attributes.ReadOnly=לקריאה &בלבד
+Attributes.Hidden=&מוסתר
+Attributes.System=מ&ערכת
+Attributes.Archive=&ארכיון
+
+Permissions.Title= הרשאות תוספים
+Permissions.BtnRevoke=&בטל
+Permissions.BtnClose=&סגירה
+
+Replace.Title= החלף
+Replace.Prompt=החלף ב-:
+Replace.BtnReplace=&החלף
+Replace.BtnReplaceAll=החלף את ה&כל
+
+Codepage.Title= דפי קידוד
+Codepage.ConvertTitle= המר דף קידוד
+
+Hotkeys.Title= מגדיר מקשי קיצור
+Hotkeys.BtnAssign=&הקצה
+Hotkeys.BtnUnbind=&בטל שיוך
+Hotkeys.BtnClose=&סגירה
+Hotkeys.SelectTitle= בחר אזור ותנאי
+Hotkeys.BtnNext=הבא >
+Hotkeys.LabelArea=אזור:
+Hotkeys.LabelWhen=תנאי:
+Hotkeys.AssignTitle= הקצה מקש קיצור
+
+Drive.Title= כונן
+
+NetFox.ConnectionTitle= חיבור אתר
+NetFox.PassiveMode=מצב פסיבי
+NetFox.LabelName=&שם:
+NetFox.LabelProtocol=פ&רוטוקול:
+NetFox.LabelHost=&מארח:
+NetFox.LabelPort=&פורט:
+NetFox.LabelUser=&משתמש:
+NetFox.LabelPassword=&סיסמה:
+NetFox.LabelTimeout=פסק &זמן:
+NetFox.LabelCodepage=&דף קידוד:
+NetFox.ErrorEmptyName=השם אינו יכול להיות ריק
+NetFox.ErrorReservedName=שם חיבור שמור
+
+Queue.BtnCancel=ב&טל משימה
+Queue.BtnClear=נקה &הושלמו
+
+Session.Title= בחר סשן

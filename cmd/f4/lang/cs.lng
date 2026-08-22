@@ -5,20 +5,6 @@ Author=f4 Team
 
 [Strings]
 VisRen.Menu=&Vizuální přejmenování souborů
-ID3Editor.Menu=Editor ID3 &tagů
-ID3Editor.Title=Editor ID3 tagů
-ID3Editor.LocalOnly=Editor ID3 tagů podporuje pouze lokální soubory.
-ID3Editor.SelectFile=Nejprve vyberte soubor MP3.
-ID3Editor.OnlyMP3=Podporovány jsou pouze soubory MP3.
-ID3Editor.SaveError=Nepodařilo se uložit ID3 tagy:\n%v
-ID3Editor.OpenError=Nepodařilo se otevřít soubor MP3:\n%v
-ID3Editor.FieldTitle=Název:
-ID3Editor.FieldArtist=Interpret:
-ID3Editor.FieldAlbum=Album:
-ID3Editor.FieldYear=Rok:
-ID3Editor.FieldGenre=Žánr:
-ID3Editor.FieldComment=Komentář:
-ID3Editor.FieldVersion=Verze:
 VisRen.Title=Vizuální přejmenování souborů
 VisRen.HostUnsupported=Tento hostitel F4 neposkytuje rozhraní pro VisRen.
 VisRen.LocalOnly=VisRen funguje pouze na panelu lokálních souborů.
@@ -59,109 +45,53 @@ VisRen.WordDivTitle=Oddělovače slov
 VisRen.WordDivPrompt=Znaky oddělující slova (maximálně 18):
 VisRen.OldName=Staré jméno
 VisRen.NewName=Nové jméno
+
+ID3Editor.Menu=Editor ID3 &tagů
+ID3Editor.Title=Editor ID3 tagů
+ID3Editor.LocalOnly=Editor ID3 tagů podporuje pouze lokální soubory.
+ID3Editor.SelectFile=Nejprve vyberte soubor MP3.
+ID3Editor.OnlyMP3=Podporovány jsou pouze soubory MP3.
+ID3Editor.SaveError=Nepodařilo se uložit ID3 tagy:\n%v
+ID3Editor.OpenError=Nepodařilo se otevřít soubor MP3:\n%v
+ID3Editor.FieldTitle=Název:
+ID3Editor.FieldArtist=Interpret:
+ID3Editor.FieldAlbum=Album:
+ID3Editor.FieldYear=Rok:
+ID3Editor.FieldGenre=Žánr:
+ID3Editor.FieldComment=Komentář:
+ID3Editor.FieldVersion=Verze:
+
 vtui.Ok=&Ok
 vtui.Cancel=Zrušit
+vtui.Save=&Uložit
+
 Panel.Other=&Druhý panel
 Panel.Column.Name=Jméno
 Panel.Column.Size=Velikost
 Panel.Column.Modified=Změněno
 Panel.UpDir=NAHORU
 Panel.SelectedInfo=Bajtů: %s, souborů: %d, adresářů: %d
+
 Panels.Prompt=>
+
 Edit.NewFileTitle= Vytvořit nový soubor
 Edit.NewFilePrompt=Název &souboru:
+
 MakeFolder.Title= Vytvořit adresář
 MakeFolder.Prompt=Vytvořit &adresář:
+
 Delete.Title= Smazat
 Delete.Confirm=Opravdu chcete smazat\n%s?
 Delete.Btn=&Smazat
+
 Copy.Title= Kopírovat
 Copy.Prompt=Kopírovat %d položek do:
 Copy.Btn=&Kopírovat
+
 Move.Title= Přesunout
 Move.Prompt=Přejmenovat nebo přesunout %d položek do:
 Move.Btn=&Přesunout
-Btn.OverwriteAll=Přepsat &vše
-Btn.SkipAll=Pře&skočit vše
-Btn.Retry=&Opakovat
-Btn.Ignore=&Ignorovat
-Operation.Error=Operace selhala:\n%s
-Op.ClonePanels=&Klonovat panely do nového pracovního prostoru
-Op.SwitchHint=Ctrl+Tab pro přepínání oken
-Op.DummyTitle= Testovací operace
-Op.DummyText=Toto je testovací 5minutová operace.\nVyberte režim na pozadí:
-Viewer.Title= Zobrazit
-Viewer.ModeText=Text
-Viewer.ModeHex=Hex
-Viewer.SearchTitle= Hledat
-Search.CaseSensitive=Rozlišovat &velikost
-Search.Reverse=&Zpětné vyhledávání
-Select.Title= Vybrat
-Deselect.Title= Zrušit výběr
-Quit.Title= Ukončit
-Quit.Confirm=Opravdu chcete ukončit f4?
-Quit.Btn=&Ukončit
-Select.Mask=Zadejte výběrovou &masku:
 
-Macro.AssignTitle= Přiřadit makro
-Macro.AssignPrompt=Stiskněte požadovanou klávesovou kombinaci
-Macro.AssignCancel=Stiskněte Esc pro zrušení
-
-Menu.Language=Jazyk
-Menu.HelpLanguage=Jazyk nápovědy
-Menu.Left=Levý
-Menu.Files=Soubory
-Menu.Commands=Příkazy
-Menu.Options=Možnosti
-Menu.Right=Pravý
-Menu.Exit=&Konec
-
-Menu.Files.View=Zobrazit
-Menu.Files.Edit=Upravit
-Menu.Files.Copy=Kopírovat
-Menu.Files.RenMov=Přejmenovat nebo přesunout
-Menu.Files.MkDir=Vytvořit adresář
-Menu.Files.Delete=Smazat
-Menu.Left.Brief=Stručný
-Menu.Left.Medium=Střední
-Menu.Left.Detailed=Podrobný
-Menu.Left.Wide=Široký
-Menu.Commands.FindFile=Najít soubor
-Menu.Commands.FindDuplicates=Najít duplikáty
-Menu.Commands.BackgroundJobs=Úlohy na pozadí
-Menu.Commands.RunRemote=Spustit příkaz vzdáleně
-RemoteCmd.Title=Vzdálený příkaz
-RemoteCmd.Prompt=Příkaz:
-RemoteCmd.BtnClose=&Zavřít
-Jobs.Title=Úlohy na pozadí
-Jobs.BtnShow=&Zobrazit
-Jobs.BtnCancel=Zrušit ú&lohu
-Jobs.BtnClose=&Zavřít
-Jobs.Empty=Nic neběží
-Menu.Commands.Bookmarks=Záložky
-Menu.SortName=Jméno
-Menu.SortExt=Přípona
-Menu.SortTime=Čas
-Menu.SortSize=Velikost
-Menu.SortUnsorted=Netříděno
-Sort.Title=Třídit podle
-Menu.PanelSettings=Nastavení panelu
-Menu.EditorSettings=Nastavení editoru
-Menu.ColorerSettings=Nastavení &Coloreru
-Menu.AppearanceSettings=Nastavení vzhledu
-Menu.ConfirmationsSettings=Potvrzení
-Menu.AutoUpdateSettings=Auto-&update
-Menu.Options.Plugins=Správa pluginů
-
-Menu.Editor.File=&Soubor
-Menu.Editor.Edit=&Upravit
-Menu.Editor.Search=&Hledat
-Menu.Editor.Options=&Možnosti
-Menu.Editor.Insert=&Vložit
-Menu.Viewer.File=&Soubor
-Menu.Viewer.View=&Zobrazit
-Menu.Viewer.Search=&Hledat
-Menu.Viewer.Options=&Možnosti
 Action.App.ScreenGrab=Snímek &obrazovky
 Action.App.ScreenGrab.Desc=Vybrat a zkopírovat oblast obrazovky
 Action.Editor.Save=&Uložit
@@ -224,18 +154,6 @@ Action.Viewer.CodepageNext=Další &kódová stránka
 Action.Viewer.CodepageNext.Desc=Přepnout na další kódovou stránku
 Action.Viewer.CodepageMenu=&Nabídka kódových stránek
 Action.Viewer.CodepageMenu.Desc=Vybrat kódovou stránku
-Help.ViewerEditor=Klávesové zkratky prohlížeče a editoru
-Help.PanelNav=Klávesové zkratky panelů
-Help.NavigationKeys=Navigační klávesy
-Help.Area.Shell=Panely
-Help.Area.Terminal=Terminál
-Help.Area.Editor=Editor
-Help.Area.Viewer=Prohlížeč
-Help.Area.Common=Společné
-Menu.Shell.Files=&Soubory
-Menu.Shell.Commands=&Příkazy
-Menu.Shell.Options=&Možnosti
-Menu.Terminal.File=&Soubor
 Action.File.New=Nový soubor
 Action.File.New.Desc=Vytvořit nový soubor a otevřít jej v editoru
 Action.File.CopyInPlace=Kopírovat na místě
@@ -268,19 +186,6 @@ Action.Panel.UserMenu=&Uživatelské menu
 Action.Panel.UserMenu.Desc=Zobrazit uživatelské menu
 Action.Panel.FileAssociations=Asociace &souborů…
 Action.Panel.FileAssociations.Desc=Konfigurace příkazů pro klávesy Enter, F3 a F4 podle masky
-FileAssoc.EditorTitle=Asociace souborů
-FileAssoc.EditTitle=Upravit asociaci
-FileAssoc.NewTitle=Nová asociace
-FileAssoc.ErrorTitle=Asociace souborů
-FileAssoc.EmptyHint=Zatím žádné asociace – stiskněte Ins pro přidání
-FileAssoc.EmptyMask=Maska souboru nesmí být prázdná.
-FileAssoc.MaskLabel=Maska
-FileAssoc.DescLabel=Popis
-FileAssoc.PickTitle.Open=Otevřít v
-FileAssoc.PickTitle.View=Zobrazit v
-FileAssoc.PickTitle.Edit=Upravit v
-FileAssoc.DeleteTitle=Smazat asociaci
-FileAssoc.DeleteConfirm=Smazat asociaci %q?
 Action.Panel.Bookmarks.Desc=Zobrazit dialog záložek adresářů
 Action.Panel.PluginMenu=Příkazy &pluginů
 Action.Panel.PluginMenu.Desc=Zobrazit nabídku příkazů pluginů
@@ -367,23 +272,106 @@ Action.Terminal.ViewLog.Desc=Otevřít protokol terminálu v prohlížeči
 Action.Terminal.EditLog=&Upravit protokol terminálu
 Action.Terminal.EditLog.Desc=Otevřít protokol terminálu v editoru
 
-EditorSettings.Title= Nastavení editoru
-EditorSettings.AutoComplete=Povolit &automatické doplňování
-EditorSettings.Mask=Aktivní pro &masky souborů:
-ColorerSettings.Title= Nastavení Coloreru
-ColorerSettings.Enabled=Povolit zvýrazňování &Colorer
-ColorerSettings.Style=Barevný &styl:
-ColorerSettings.BuiltIn=(integrovaný)
-ColorerSettings.Cross=Zobrazovat &kříž:
-ColorerSettings.CrossOff=Nezobrazovat
-ColorerSettings.CrossVertical=Vertikální
-ColorerSettings.CrossHorizontal=Horizontální
-ColorerSettings.CrossBoth=Oba
-ColorerSettings.Syntax=Zvýrazňovat &syntaxi
-ColorerSettings.Background=Změnit &pozadí editoru
-ColorerSettings.Catalog=Složka se &schématy (catalog.xml):
-ColorerSettings.Reload=Znovu &načíst
-ColorerSettings.Download=Stá&hnout schémata
+Btn.OverwriteAll=Přepsat &vše
+Btn.SkipAll=Pře&skočit vše
+Btn.Retry=&Opakovat
+Btn.Ignore=&Ignorovat
+
+Operation.Error=Operace selhala:\n%s
+
+Op.ClonePanels=&Klonovat panely do nového pracovního prostoru
+Op.SwitchHint=Ctrl+Tab pro přepínání oken
+Op.DummyTitle= Testovací operace
+Op.DummyText=Toto je testovací 5minutová operace.\nVyberte režim na pozadí:
+Op.Queue=Fronta
+Op.Background=Klonování panelu na pozadí
+Op.Foreground=Zámek na popředí
+Op.PathNameOnly=Pouze název
+Op.PathFullPath=Plná cesta
+Op.PathSrcDst=Zdroj -> Cíl
+Op.DummyQueue=Fronta (Výchozí)
+Op.DummyBackground=Klonování panelu na pozadí
+Op.DummyForeground=Zámek na popředí
+Op.BtnStart=&Spustit
+
+Viewer.Title= Zobrazit
+Viewer.ModeText=Text
+Viewer.ModeHex=Hex
+Viewer.SearchTitle= Hledat
+
+Search.CaseSensitive=Rozlišovat &velikost
+Search.Reverse=&Zpětné vyhledávání
+Search.Prompt=Hledat:
+Search.WholeWords=Pouze celá slova
+Search.Regex=Regulární výrazy
+Search.BtnFind=&Najít
+
+Select.Title= Vybrat
+Select.Mask=Zadejte výběrovou &masku:
+
+Deselect.Title= Zrušit výběr
+
+Quit.Title= Ukončit
+Quit.Confirm=Opravdu chcete ukončit f4?
+Quit.Btn=&Ukončit
+
+Macro.AssignTitle= Přiřadit makro
+Macro.AssignPrompt=Stiskněte požadovanou klávesovou kombinaci
+Macro.AssignCancel=Stiskněte Esc pro zrušení
+
+Menu.Language=Jazyk
+Menu.HelpLanguage=Jazyk nápovědy
+Menu.Left=Levý
+Menu.Files=Soubory
+Menu.Commands=Příkazy
+Menu.Options=Možnosti
+Menu.Right=Pravý
+Menu.Exit=&Konec
+Menu.Files.View=Zobrazit
+Menu.Files.Edit=Upravit
+Menu.Files.Copy=Kopírovat
+Menu.Files.RenMov=Přejmenovat nebo přesunout
+Menu.Files.MkDir=Vytvořit adresář
+Menu.Files.Delete=Smazat
+Menu.Left.Brief=Stručný
+Menu.Left.Medium=Střední
+Menu.Left.Detailed=Podrobný
+Menu.Left.Wide=Široký
+Menu.Commands.FindFile=Najít soubor
+Menu.Commands.FindDuplicates=Najít duplikáty
+Menu.Commands.BackgroundJobs=Úlohy na pozadí
+Menu.Commands.RunRemote=Spustit příkaz vzdáleně
+Menu.Commands.Bookmarks=Záložky
+Menu.SortName=Jméno
+Menu.SortExt=Přípona
+Menu.SortTime=Čas
+Menu.SortSize=Velikost
+Menu.SortUnsorted=Netříděno
+Menu.PanelSettings=Nastavení panelu
+Menu.EditorSettings=Nastavení editoru
+Menu.ColorerSettings=Nastavení &Coloreru
+Menu.AppearanceSettings=Nastavení vzhledu
+Menu.ConfirmationsSettings=Potvrzení
+Menu.AutoUpdateSettings=Auto-&update
+Menu.Options.Plugins=Správa pluginů
+Menu.Editor.File=&Soubor
+Menu.Editor.Edit=&Upravit
+Menu.Editor.Search=&Hledat
+Menu.Editor.Options=&Možnosti
+Menu.Editor.Insert=&Vložit
+Menu.Viewer.File=&Soubor
+Menu.Viewer.View=&Zobrazit
+Menu.Viewer.Search=&Hledat
+Menu.Viewer.Options=&Možnosti
+Menu.Shell.Files=&Soubory
+Menu.Shell.Commands=&Příkazy
+Menu.Shell.Options=&Možnosti
+Menu.Terminal.File=&Soubor
+
+RemoteCmd.Title=Vzdálený příkaz
+RemoteCmd.Prompt=Příkaz:
+RemoteCmd.BtnClose=&Zavřít
+
 PanelSettings.Title= Nastavení panelu
 PanelSettings.ShowHidden=Zobrazovat &skryté a systémové soubory
 PanelSettings.ShowDirPrefix=Zobrazovat prefix '/' u &adresářů
@@ -404,6 +392,75 @@ PanelSettings.DefaultMode=Výchozí &režim operací:
 PanelSettings.PathDisplay=Zobrazení cesty v průběhu:
 PanelSettings.InfoPanelCPUGPU=Zobrazit sekci CPU/GPU na &informačním panelu
 PanelSettings.EscTogglePanels=&Esc přepíná viditelnost panelů
+PanelSettings.ShowHighlightMarks=Zobrazovat značky z&výraznění
+PanelSettings.CommandLineAutoComplete=Povolit &automatické doplňování příkazové řádky
+PanelSettings.AlwaysShowMenuBar=Vždy zobrazovat pruh &menu
+PanelSettings.RecordMacrosTo=Zaznamenávat makra do:
+
+Jobs.Title=Úlohy na pozadí
+Jobs.BtnShow=&Zobrazit
+Jobs.BtnCancel=Zrušit ú&lohu
+Jobs.BtnClose=&Zavřít
+Jobs.Empty=Nic neběží
+
+Sort.Title=Třídit podle
+
+Help.ViewerEditor=Klávesové zkratky prohlížeče a editoru
+Help.PanelNav=Klávesové zkratky panelů
+Help.NavigationKeys=Navigační klávesy
+Help.Area.Shell=Panely
+Help.Area.Terminal=Terminál
+Help.Area.Editor=Editor
+Help.Area.Viewer=Prohlížeč
+Help.Area.Common=Společné
+Help.SearchHint=Hledat: pište  Další: F3/Ctrl+Enter  Předchozí: Shift+F3/Ctrl+Shift+Enter
+
+FileAssoc.EditorTitle=Asociace souborů
+FileAssoc.EditTitle=Upravit asociaci
+FileAssoc.NewTitle=Nová asociace
+FileAssoc.ErrorTitle=Asociace souborů
+FileAssoc.EmptyHint=Zatím žádné asociace – stiskněte Ins pro přidání
+FileAssoc.EmptyMask=Maska souboru nesmí být prázdná.
+FileAssoc.MaskLabel=Maska
+FileAssoc.DescLabel=Popis
+FileAssoc.PickTitle.Open=Otevřít v
+FileAssoc.PickTitle.View=Zobrazit v
+FileAssoc.PickTitle.Edit=Upravit v
+FileAssoc.DeleteTitle=Smazat asociaci
+FileAssoc.DeleteConfirm=Smazat asociaci %q?
+
+EditorSettings.Title= Nastavení editoru
+EditorSettings.AutoComplete=Povolit &automatické doplňování
+EditorSettings.Mask=Aktivní pro &masky souborů:
+EditorSettings.TabExpandNone=Nerozbalovat tabulátory
+EditorSettings.TabExpandNew=Rozbalovat nově zadané tabulátory na mezery
+EditorSettings.TabExpandAll=Rozbalovat všechny tabulátory na mezery
+EditorSettings.ExpandTabs=Rozbalovat t&abulátory:
+EditorSettings.Highlighter=Zvýrazňo&vač:
+EditorSettings.ColorerStyle=St&yl Coloreru:
+EditorSettings.TabSize=&Velikost tabulátoru:
+EditorSettings.AutoIndent=Automatické &odsazování
+EditorSettings.CursorBeyondEOL=Kurzor za koncem &řádku
+EditorSettings.UseEditorConfig=Použít .&editorconfig
+EditorSettings.Crosshair=Zobrazovat &nitkový kříž
+EditorSettings.ColorerBg=Pozadí C&oloreru
+EditorSettings.UseExternalEditor=Používat e&xterní editor
+EditorSettings.ExternalCommand=E&xterní příkaz:
+
+ColorerSettings.Title= Nastavení Coloreru
+ColorerSettings.Enabled=Povolit zvýrazňování &Colorer
+ColorerSettings.Style=Barevný &styl:
+ColorerSettings.BuiltIn=(integrovaný)
+ColorerSettings.Cross=Zobrazovat &kříž:
+ColorerSettings.CrossOff=Nezobrazovat
+ColorerSettings.CrossVertical=Vertikální
+ColorerSettings.CrossHorizontal=Horizontální
+ColorerSettings.CrossBoth=Oba
+ColorerSettings.Syntax=Zvýrazňovat &syntaxi
+ColorerSettings.Background=Změnit &pozadí editoru
+ColorerSettings.Catalog=Složka se &schématy (catalog.xml):
+ColorerSettings.Reload=Znovu &načíst
+ColorerSettings.Download=Stá&hnout schémata
 
 AppearanceSettings.Title= Nastavení vzhledu
 AppearanceSettings.Style=Styl &aplikace:
@@ -417,15 +474,33 @@ ConfirmationsSettings.Title= Potvrzení
 ConfirmationsSettings.Copy=Potvrdit při &kopírování
 ConfirmationsSettings.Move=Potvrdit při p&řesunu
 ConfirmationsSettings.Delete=Potvrdit při &mazání
+ConfirmationsSettings.DeleteCancelFocused=Při mazání zaměřit na 'Zrušit'
 ConfirmationsSettings.Exit=Potvrdit při &ukončení
+
 UpdateSettings.Title= Automatické aktualizace
 UpdateSettings.Channel=Kanal &aktualizací:
 UpdateSettings.Interval=Interval &kontrol:
 UpdateSettings.BtnCheck=Zkontrolovat &nyní
+UpdateSettings.ChannelStable=Stabilní vydání
+UpdateSettings.ChannelNightly=Noční sestavení
+UpdateSettings.IntervalNever=Nikdy
+UpdateSettings.IntervalStart=Při každém spuštění
+UpdateSettings.IntervalDaily=Denně
+UpdateSettings.IntervalWeekly=Týdně
+
 FindFile.Title= Najít soubor
 FindFile.MaskPrompt=Maska souboru (nebo více masek):
 FindFile.TextPrompt=Obsahující text:
 FindFile.BtnFind=&Najít
+FindFile.SearchingTitle= Hledání...
+FindFile.Scanning=Skenování:
+FindFile.FoundCount=Nalezeno: %d
+FindFile.SearchResultsTitle= Výsledky hledání
+FindFile.BtnGoTo=Pře&jít na
+FindFile.BtnView=&Zobrazit
+FindFile.BtnEdit=&Upravit
+FindFile.BtnClose=&Zavřít
+
 History.FoldersTitle= Historie adresářů
 History.CommandsTitle= Historie příkazů
 History.SearchModeHint=F2: přepnout vyhledávání podřetězce / prefixu
@@ -433,22 +508,36 @@ History.CommandsHint=Nahoru/Dolů Enter Esc Shift+Del Del Ctrl+C Ctrl+Ins F2
 History.FoldersHint=Nahoru/Dolů Enter Shift+Enter Ctrl+Enter Esc Shift+Del Del Ctrl+C Ctrl+Ins Ctrl+R F2
 History.ConfirmClearAll=Vymazat celou historii?
 History.ConfirmPruneMissing=Odstranit položky, jejichž cesty již neexistují?
-Help.SearchHint=Hledat: pište  Další: F3/Ctrl+Enter  Předchozí: Shift+F3/Ctrl+Shift+Enter
-UserMenu.LocalMenuTitle=Lokální menu
-UserMenu.MainMenuTitle=Hlavní menu
-UserMenu.MainMenuFAR=FAR
-
-Language.Title= Jazyky
-Language.Changed=Jazyk byl změněn.\nNěkteré prvky rozhraní vyžadují restart aplikace,\naby se změna plně projevila.
-HelpLanguage.Title=Jazyky nápovědy
-HelpLanguage.Changed=Jazyk nápovědy byl změněn.
-
 History.Title= Historie
 History.EmptyFolders=Historie adresářů je prázdná.
 History.EmptyCommands=Historie příkazů je prázdná.
 
+UserMenu.LocalMenuTitle=Lokální menu
+UserMenu.MainMenuTitle=Hlavní menu
+UserMenu.MainMenuFAR=FAR
+UserMenu.EditTitle= Upravit uživatelské menu
+UserMenu.CreateTitle= Vytvořit uživatelské menu
+UserMenu.EditSubmenuTitle= Upravit podmenu
+UserMenu.CreateSubmenuTitle= Vytvořit podmenu
+UserMenu.LabelHotkey=Klávesová &zkratka:
+UserMenu.LabelLabel=&Štítek:
+UserMenu.LabelCommand=&Příkaz:
+
+Language.Title= Jazyky
+Language.Changed=Jazyk byl změněn.\nNěkteré prvky rozhraní vyžadují restart aplikace,\naby se změna plně projevila.
+
+LanguageSettings.Title= Nastavení jazyka
+LanguageSettings.Primary=Hlavní jazyk:
+LanguageSettings.Fallback=Záložní jazyk:
+LanguageSettings.None=<žádný>
+
+HelpLanguage.Title=Jazyky nápovědy
+HelpLanguage.Changed=Jazyk nápovědy byl změněn.
+
 Error.Title= Chyba
+
 Warning.Title= Varování
+
 Info.Title= Info
 
 ExtEdit.TempError=Nelze vytvořit dočasný soubor: %v
@@ -463,22 +552,27 @@ FileOp.BtnNewInstance=&Nová instance
 FileOp.CannotEditDir=Nelze upravovat adresář.
 FileOp.CannotViewDir=Nelze zobrazit adresář.
 FileOp.CannotOpenSpecial=Nelze otevřít speciální soubory (Named Pipes, Sockets, Zařízení).
+FileOp.DeletionErrors= Chyby mazání
+FileOp.FileAlreadyExists=Soubor již existuje
+FileOp.RememberChoice=Zapa&matovat si volbu
+FileOp.Overwrite=&Přepsat
+FileOp.Skip=&Přeskočit
+FileOp.Rename=Pře&jmenovat
+FileOp.Append=&Připojit
+FileOp.Resume=&Pokračovat
+FileOp.BtnCancel=&Zrušit
+FileOp.BtnBackground=Na po&zadí
 
 Dialog.RenameTitle= Přejmenovat
 Dialog.RenamePrompt=Přejmenovat '%s' na:
-
-Op.Queue=Fronta
-Op.Background=Klonování panelu na pozadí
-Op.Foreground=Zámek na popředí
-Op.PathNameOnly=Pouze název
-Op.PathFullPath=Plná cesta
-Op.PathSrcDst=Zdroj -> Cíl
 
 Plugins.Title= Správa pluginů (RPC)
 Plugins.BtnAdd=&Přidat
 Plugins.BtnRemove=&Odebrat
 Plugins.BtnPermissions=&Oprávnění
 Plugins.BtnClose=&Zavřít
+Plugins.AddTitle= Přidat plugin
+Plugins.SelectFilePrompt=Vyberte soubor pluginu:
 
 InfoPanel.Title= Informace
 InfoPanel.Computer=Název počítače
@@ -542,6 +636,7 @@ AndroidInfo.Storage=Úložiště
 AndroidInfo.StorageTotal=Úložiště celkem
 AndroidInfo.StorageAvailable=Úložiště dostupné
 AndroidInfo.Protocol=Protokol
+
 IOSInfo.DeviceTitle=Mobilní zařízení Apple
 IOSInfo.Name=Jméno
 IOSInfo.Model=Model
@@ -594,7 +689,6 @@ KeyBar.F9=KonfMenu
 KeyBar.F10=Konec
 KeyBar.F11=Plugin
 KeyBar.F12=Výběr
-
 KeyBar.AltF1=Levý
 KeyBar.AltF2=Pravý
 KeyBar.AltF3=Hex
@@ -608,7 +702,6 @@ KeyBar.CtrlF4=Příp
 KeyBar.CtrlF5=Čas
 KeyBar.CtrlF6=Velikost
 KeyBar.CtrlF7=Netříd
-
 KeyBar.EditorF1=Nápověda
 KeyBar.EditorF2=Uložit
 KeyBar.EditorF3=Zalomit
@@ -623,54 +716,8 @@ KeyBar.ViewerF7=Hledat
 KeyBar.ViewerAltF8=JdiNa
 KeyBar.ViewerF10=Konec
 
-EditorSettings.TabExpandNone=Nerozbalovat tabulátory
-EditorSettings.TabExpandNew=Rozbalovat nově zadané tabulátory na mezery
-EditorSettings.TabExpandAll=Rozbalovat všechny tabulátory na mezery
-EditorSettings.ExpandTabs=Rozbalovat t&abulátory:
-EditorSettings.Highlighter=Zvýrazňo&vač:
-EditorSettings.ColorerStyle=St&yl Coloreru:
-EditorSettings.TabSize=&Velikost tabulátoru:
-EditorSettings.AutoIndent=Automatické &odsazování
-EditorSettings.CursorBeyondEOL=Kurzor za koncem &řádku
-EditorSettings.UseEditorConfig=Použít .&editorconfig
-EditorSettings.Crosshair=Zobrazovat &nitkový kříž
-EditorSettings.ColorerBg=Pozadí C&oloreru
-EditorSettings.UseExternalEditor=Používat e&xterní editor
-EditorSettings.ExternalCommand=E&xterní příkaz:
-ConfirmationsSettings.DeleteCancelFocused=Při mazání zaměřit na 'Zrušit'
-
-PanelSettings.ShowHighlightMarks=Zobrazovat značky z&výraznění
-PanelSettings.CommandLineAutoComplete=Povolit &automatické doplňování příkazové řádky
-PanelSettings.AlwaysShowMenuBar=Vždy zobrazovat pruh &menu
-PanelSettings.RecordMacrosTo=Zaznamenávat makra do:
-UpdateSettings.ChannelStable=Stabilní vydání
-UpdateSettings.ChannelNightly=Noční sestavení
-UpdateSettings.IntervalNever=Nikdy
-UpdateSettings.IntervalStart=Při každém spuštění
-UpdateSettings.IntervalDaily=Denně
-UpdateSettings.IntervalWeekly=Týdně
-Plugins.AddTitle= Přidat plugin
-Plugins.SelectFilePrompt=Vyberte soubor pluginu:
-
-FindFile.SearchingTitle= Hledání...
-FindFile.Scanning=Skenování:
-FindFile.FoundCount=Nalezeno: %d
-FindFile.SearchResultsTitle= Výsledky hledání
-FindFile.BtnGoTo=Pře&jít na
-FindFile.BtnView=&Zobrazit
-FindFile.BtnEdit=&Upravit
-FindFile.BtnClose=&Zavřít
-
-FileOp.DeletionErrors= Chyby mazání
-FileOp.FileAlreadyExists=Soubor již existuje
-FileOp.RememberChoice=Zapa&matovat si volbu
-FileOp.Overwrite=&Přepsat
-FileOp.Skip=&Přeskočit
-FileOp.Rename=Pře&jmenovat
-FileOp.Append=&Připojit
-FileOp.Resume=&Pokračovat
-
 Arkanoid.HighScores= Nejlepší výsledky
+
 PlugRing.Title= f4 PlugRing
 PlugRing.BtnInstall=&Instalovat/Aktualizovat
 PlugRing.BtnRemove=&Odebrat
@@ -687,29 +734,18 @@ Attributes.ReadOnly=Jen pro č&tení
 Attributes.Hidden=&Skrytý
 Attributes.System=&Systémový
 Attributes.Archive=&Archivovat
+
 Permissions.Title= Oprávnění pluginů
 Permissions.BtnRevoke=&Odebrat
 Permissions.BtnClose=&Zavřít
 
-Search.Prompt=Hledat:
-Search.WholeWords=Pouze celá slova
-Search.Regex=Regulární výrazy
-Search.BtnFind=&Najít
 Replace.Title= Nahradit
 Replace.Prompt=Nahradit za:
 Replace.BtnReplace=&Nahradit
 Replace.BtnReplaceAll=Nahradit &vše
+
 Codepage.Title= Kódové stránky
 Codepage.ConvertTitle= Převést kódovou stránku
-
-vtui.Save=&Uložit
-UserMenu.EditTitle= Upravit uživatelské menu
-UserMenu.CreateTitle= Vytvořit uživatelské menu
-UserMenu.EditSubmenuTitle= Upravit podmenu
-UserMenu.CreateSubmenuTitle= Vytvořit podmenu
-UserMenu.LabelHotkey=Klávesová &zkratka:
-UserMenu.LabelLabel=&Štítek:
-UserMenu.LabelCommand=&Příkaz:
 
 Hotkeys.Title= Konfigurace klávesových zkratek
 Hotkeys.BtnAssign=&Přiřadit
@@ -720,10 +756,7 @@ Hotkeys.BtnNext=Další >
 Hotkeys.LabelArea=Oblast:
 Hotkeys.LabelWhen=Když:
 Hotkeys.AssignTitle= Přiřadit klávesovou zkratku
-Op.DummyQueue=Fronta (Výchozí)
-Op.DummyBackground=Klonování panelu na pozadí
-Op.DummyForeground=Zámek na popředí
-Op.BtnStart=&Spustit
+
 Drive.Title= Disk
 
 NetFox.ConnectionTitle= Připojení k webu
@@ -739,12 +772,7 @@ NetFox.LabelCodepage=&Kódová stránka:
 NetFox.ErrorEmptyName=Název nesmí být prázdný
 NetFox.ErrorReservedName=Vyhrazený název připojení
 
-FileOp.BtnCancel=&Zrušit
-FileOp.BtnBackground=Na po&zadí
 Queue.BtnCancel=Z&rušit úlohu
 Queue.BtnClear=Vymazat &hotové
+
 Session.Title= Vybrat relaci
-LanguageSettings.Title= Nastavení jazyka
-LanguageSettings.Primary=Hlavní jazyk:
-LanguageSettings.Fallback=Záložní jazyk:
-LanguageSettings.None=<žádný>

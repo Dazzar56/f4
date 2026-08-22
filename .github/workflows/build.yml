@@ -13,6 +13,7 @@ jobs:
     name: Build (${{ matrix.goos }}/${{ matrix.goarch }})
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         goos: [linux, windows, darwin, freebsd, dragonfly, openbsd, netbsd, illumos, solaris]
         goarch: [amd64, arm64, arm]
@@ -39,8 +40,22 @@ jobs:
             goarch: arm
           - goos: solaris
             goarch: arm
+        # Linux is also cross-built for the additional architectures that
+        # Go supports. vtui's graphical/FFI backends are unavailable there,
+        # so these cells use its ANSI-only noffi configuration.
+        include:
+          - { goos: linux, goarch: 386,     build_tags: noffi }
+          - { goos: linux, goarch: mips,    build_tags: noffi }
+          - { goos: linux, goarch: mipsle,  build_tags: noffi }
+          - { goos: linux, goarch: mips64,  build_tags: noffi }
+          - { goos: linux, goarch: mips64le, build_tags: noffi }
+          - { goos: linux, goarch: riscv64, build_tags: noffi }
+          - { goos: linux, goarch: loong64, build_tags: noffi }
+          - { goos: linux, goarch: ppc64,  build_tags: noffi }
+          - { goos: linux, goarch: ppc64le, build_tags: noffi }
     env:
       CGO_ENABLED: 0
+      BUILD_TAGS: ${{ matrix.build_tags || '' }}
 
     steps:
     - name: Checkout code
@@ -64,6 +79,10 @@ jobs:
           exit 1
         fi
 
+    - name: Check language file formatting
+      if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
+      run: go run ./tools/langfmt -check cmd/f4/lang/*.lng
+
     - name: Verify generated application icons
       if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
       run: |
@@ -82,9 +101,25 @@ jobs:
         EXT=""
         if [ "$GOOS" = "windows" ]; then EXT=".exe"; fi
 
-        # Prepare flags for truly static binary on Linux
+        # Truly static binaries on Linux.
+        #
+        # -extldflags '-static' used to live here and never did anything: it is
+        # forwarded to the external linker, and a CGO_ENABLED=0 build never
+        # invokes one. What actually made these binaries dynamic was goffi's
+        # //go:cgo_import_dynamic directives -- dlopen from libdl.so.2,
+        # __errno_location from libc.so.6, fakecgo's pthread_* from
+        # libpthread.so.0 -- which make the Go linker emit PT_INTERP and
+        # DT_NEEDED whatever the flags say.
+        #
+        # Our goffi fork drops those directives under the goffi_static tag, so
+        # the linker has nothing left to import. FFI goes with them: the GPU,
+        # Wayland and Ebiten backends are unavailable in these builds and vtui
+        # falls back to its pure-Go X11 and ANSI paths. See unxed/f4#693 and
+        # docs/STATIC_BUILDS.md in unxed/goffi.
         LDFLAGS="-s -w"
-        if [ "$GOOS" = "linux" ]; then LDFLAGS="$LDFLAGS -extldflags '-static'"; fi
+        if [ "$GOOS" = "linux" ]; then
+          BUILD_TAGS="${BUILD_TAGS:+$BUILD_TAGS,}goffi_static"
+        fi
 
         # Go embeds the commit in release artifacts, but not the tag. Keep
         # prerelease tags such as v0.2.0-beta available to the updater.
@@ -98,12 +133,17 @@ jobs:
           GCFLAGS="-gcflags=github.com/go-webgpu/goffi/internal/fakecgo=-std"
         fi
 
+        BUILD_TAG_ARGS=()
+        if [ -n "$BUILD_TAGS" ]; then
+          BUILD_TAG_ARGS=(-tags "$BUILD_TAGS")
+        fi
+
         # Build core
-        go build -trimpath $GCFLAGS -ldflags="$APP_LDFLAGS" -o build/f4$EXT ./cmd/f4
+        go build "${BUILD_TAG_ARGS[@]}" -trimpath $GCFLAGS -ldflags="$APP_LDFLAGS" -o build/f4$EXT ./cmd/f4
 
         # Build GUI-only binary for Windows (no console flash)
         if [ "$GOOS" = "windows" ]; then
-          go build -trimpath $GCFLAGS -ldflags="$APP_LDFLAGS -H windowsgui" -o build/f4-gui$EXT ./cmd/f4
+          go build "${BUILD_TAG_ARGS[@]}" -trimpath $GCFLAGS -ldflags="$APP_LDFLAGS -H windowsgui" -o build/f4-gui$EXT ./cmd/f4
         fi
 
         # Copy language and help assets
@@ -129,7 +169,49 @@ jobs:
 
         # Build internal dummy plugin
         cd plugins/dummy_internal
-        go build -trimpath $GCFLAGS -ldflags="$LDFLAGS" -o ../../build/plugins/dummy_internal/f4-internal-dummy-plugin$EXT .
+        go build "${BUILD_TAG_ARGS[@]}" -trimpath $GCFLAGS -ldflags="$LDFLAGS" -o ../../build/plugins/dummy_internal/f4-internal-dummy-plugin$EXT .
+
+    # A cross-built binary nobody ever started is not evidence of anything,
+    # and the release publishes it all the same. Every Linux binary is now
+    # static, so qemu-user runs them with no rootfs and no binfmt setup, and
+    # Go runs every package's init() before main -- so a single --version
+    # call is enough to catch a broken toolchain or an architecture a
+    # dependency cannot actually handle. --version returns before any
+    # terminal setup, so no tty is needed.
+    - name: Smoke test the binary
+      if: matrix.goos == 'linux'
+      run: |
+        set -euo pipefail
+        # GOARCH and qemu-user spell five of these differently.
+        case "${{ matrix.goarch }}" in
+          amd64)    QEMU="" ;;
+          386)      QEMU=i386 ;;
+          arm64)    QEMU=aarch64 ;;
+          mipsle)   QEMU=mipsel ;;
+          mips64le) QEMU=mips64el ;;
+          loong64)  QEMU=loongarch64 ;;
+          *)        QEMU="${{ matrix.goarch }}" ;;
+        esac
+
+        # The claim the release makes about these artifacts, checked rather
+        # than assumed. A binary that grew an interpreter back would still run
+        # here on the runner's own glibc and would fail only later, on Alpine
+        # or in a scratch container, where nobody is watching.
+        if file build/f4 | grep -q 'dynamically linked'; then
+          echo "::error::build/f4 is dynamically linked; the goffi_static tag did not take effect"
+          file build/f4
+          exit 1
+        fi
+
+        if [ -z "$QEMU" ]; then
+          ./build/f4 --version
+          exit 0
+        fi
+
+        # Static, so qemu-user needs no target sysroot: no -L, no libc6-*-cross.
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq qemu-user-static
+        "qemu-$QEMU-static" build/f4 --version
 
     - name: Package
       run: |
@@ -339,6 +421,142 @@ jobs:
         path: f4-windows7-amd64.zip
         retention-days: 7
 
+  # go vet in the quality job below only ever sees the linux build of the tree,
+  # which leaves the 44 windows-only and 8 darwin-only files here unexamined by
+  # any of its analyzers — printf, copylocks, lostcancel, loopclosure and two
+  # dozen more. The build matrix already covers nine GOOS values, so vet them.
+  #
+  # A matrix rather than a loop in one job: a cross-GOOS vet has to build every
+  # dependency for that target from scratch, so each cell costs about as much as
+  # a build (~75s) and running them in sequence would add ten minutes to the
+  # quality job. fail-fast is off so one broken platform does not hide the rest.
+  #
+  # One cell per GOOS, plus one 32-bit cell. Only winepath_{windows,other}.go are
+  # selected by GOARCH, and windows/amd64 and any non-windows target between them
+  # cover both sides, so a second 64-bit arch would vet identical files. Word
+  # size is the exception: the shift analyzer sizes types through the target's
+  # TypesSizes, so a shift that is fine against a 64-bit int is a finding against
+  # a 32-bit one. linux/arm is the matrix's 32-bit cell that builds without the
+  # noffi tag. linux/amd64 is absent because the quality job vets it with the
+  # full analyzer set.
+  #
+  # unsafeptr is the one analyzer that cannot come along. Every one of these
+  # platforms converts a uintptr handed back by a syscall wrapper into a pointer
+  # — the view MapViewOfFile mapped, strings Wine allocated on the process heap,
+  # a pseudoconsole HANDLE, a buffer owned by an NSString — and the analyzer
+  # cannot tell foreign memory from Go's. Those wrappers return uintptr by
+  # signature, and vet accepts a uintptr-to-pointer conversion only for reflect
+  # headers, reflect.Value.Pointer and pointer arithmetic, so moving the
+  # conversion elsewhere only moves the diagnostic. The linux run keeps the full
+  # set, unsafeptr included, so a genuine round trip in portable code still
+  # fails the build.
+  vet:
+    name: Vet (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: windows/amd64 }
+          # Linux release builds carry goffi_static, so vet the files the build
+          # actually compiles -- the stubs, not the dlopen wrappers.
+          - { target: linux/arm, tags: goffi_static }
+          - { target: darwin/arm64 }
+          # goffi's fakecgo shim needs the same flag the build step passes.
+          - { target: freebsd/amd64, gcflags: -gcflags=github.com/go-webgpu/goffi/internal/fakecgo=-std }
+          - { target: openbsd/amd64 }
+          - { target: netbsd/amd64 }
+          - { target: dragonfly/amd64 }
+          - { target: illumos/amd64 }
+          - { target: solaris/amd64 }
+    env:
+      CGO_ENABLED: 0
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v7
+      with:
+        submodules: recursive
+
+    - name: Set up Go
+      uses: actions/setup-go@v7
+      with:
+        go-version: '1.26.x'
+        cache-dependency-path: go.sum
+
+    - name: Run go vet
+      env:
+        TARGET: ${{ matrix.target }}
+        GCFLAGS: ${{ matrix.gcflags }}
+        TAGS: ${{ matrix.tags }}
+      run: |
+        # An array, so the empty GCFLAGS of most cells contributes no argument
+        # rather than an empty one.
+        flags=(-unsafeptr=false)
+        if [ -n "$GCFLAGS" ]; then
+          flags+=("$GCFLAGS")
+        fi
+        if [ -n "$TAGS" ]; then
+          flags+=(-tags "$TAGS")
+        fi
+        GOOS="${TARGET%/*}" GOARCH="${TARGET#*/}" go vet "${flags[@]}" ./...
+
+  quality:
+    name: Quality (vet and incremental lint)
+    runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: 0
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+        submodules: recursive
+
+    - name: Set up Go
+      uses: actions/setup-go@v7
+      with:
+        go-version: '1.26.x'
+        cache-dependency-path: go.sum
+
+    - name: Run go vet
+      run: go vet ./...
+
+    - name: Run incremental golangci-lint
+      uses: golangci/golangci-lint-action@v9.3.0
+      with:
+        version: v2.13.1
+        args: --new-from-rev=origin/main
+
+    # The step above only reports findings on lines a pull request touched, so
+    # everything the linters have to say about existing code stays invisible —
+    # currently around 2450 findings. Rather than leave that permanently
+    # unspoken, each linter graduates here once its backlog is actually zero,
+    # and from then on it is checked across the whole tree and cannot regrow.
+    # Adding a linter to this list means clearing its debt first, in the same
+    # change.
+    - name: Run whole-tree golangci-lint for the linters with no backlog
+      uses: golangci/golangci-lint-action@v9.3.0
+      with:
+        version: v2.13.1
+        args: --config .golangci-strict.yml
+
+    # Unlike the linters above this one is not incremental: it reports only
+    # vulnerabilities the code actually reaches, so the whole tree is in scope
+    # and the finding count stays at zero rather than accumulating a backlog.
+    # The tool version is pinned; the vulnerability database it consults is
+    # fetched at run time, so a newly published advisory turns this red without
+    # any change here — which is the point.
+    # build.yml is approaching 800 lines, most of it shell embedded in run:
+    # blocks that nothing checked. actionlint validates the workflow schema and
+    # every expression, and hands each run: block to shellcheck — which the
+    # ubuntu image already ships, so it needs no setup here. Both classes of
+    # mistake it catches otherwise cost a full CI round trip to discover.
+    - name: Run actionlint
+      run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+
+    - name: Run govulncheck
+      run: go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
+
   # Эта джоба создает постоянные релизы при пуше тэгов v*.*.*
   test:
     name: Test (${{ matrix.target }})
@@ -383,19 +601,103 @@ jobs:
       if: failure()
       shell: bash
       run: |
-        # A crash handler that os.Exit()s bypasses both go test's output and
-        # TestMain's temp-dir cleanup, so the reports it wrote survive here.
-        for base in "${TMPDIR:-/tmp}" "$(cygpath -u "${TEMP:-}" 2>/dev/null)"; do
-          [ -n "$base" ] && [ -d "$base" ] || continue
-          find "$base" -maxdepth 4 -path '*f4-test-config*' -name '*.log' 2>/dev/null | head -20 | while read -r f; do
-            echo "=== $f ==="
-            cat "$f"
+        # Look for crash logs in cache and temp roots (vtui's fallback); never fail.
+        set +e
+        search_roots=()
+        if [ -n "${XDG_CACHE_HOME:-}" ]; then
+          search_roots+=("$XDG_CACHE_HOME/vtui_app/crashes")
+        fi
+        if [ -n "${HOME:-}" ]; then
+          search_roots+=("$HOME/.cache/vtui_app/crashes")
+          search_roots+=("$HOME/Library/Caches/vtui_app/crashes")
+        fi
+        if [ -n "${LOCALAPPDATA:-}" ]; then
+          cache_dir="$LOCALAPPDATA"
+          if command -v cygpath >/dev/null 2>&1; then
+            if converted_cache_dir="$(cygpath -u "$LOCALAPPDATA" 2>/dev/null)"; then
+              cache_dir="$converted_cache_dir"
+            fi
+          fi
+          search_roots+=("$cache_dir/vtui_app/crashes")
+        fi
+        search_roots+=("${TMPDIR:-/tmp}")
+        if [ -n "${TEMP:-}" ]; then
+          temp_dir="$TEMP"
+          if command -v cygpath >/dev/null 2>&1; then
+            if converted_temp_dir="$(cygpath -u "$TEMP" 2>/dev/null)"; then
+              temp_dir="$converted_temp_dir"
+            fi
+          fi
+          search_roots+=("$temp_dir")
+        fi
+        echo "Crash report search roots:"
+        printf '  %s\n' "${search_roots[@]}"
+        report_count=0
+        for _ in {1..20}; do
+          IFS= read -r -d '' report || break
+          report_count=$((report_count + 1))
+          echo "=== $report ==="
+          cat -- "$report"
+        done < <(
+          for base in "${search_roots[@]}"; do
+            [ -d "$base" ] || continue
+            find "$base" -maxdepth 4 -name '*.log' \
+              \( -path '*f4-test-config*' -o -path '*/vtui_app/crashes/*' \) -print0 2>/dev/null
           done
-        done
+        )
+        if [ "$report_count" -eq 0 ]; then
+          echo "No crash reports found."
+        elif [ "$report_count" -eq 20 ]; then
+          echo "Printed 20 crash reports; stopped at the cap."
+        else
+          echo "Printed $report_count crash report(s)."
+        fi
+        exit 0
+
+  race:
+    name: Race detector
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # The race detector requires cgo and the Ubuntu runner provides the
+      # native compiler needed by the instrumented test binary.
+      CGO_ENABLED: 1
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v7
+      with:
+        submodules: recursive
+
+    - name: Set up Go
+      uses: actions/setup-go@v7
+      with:
+        go-version: '1.26.x'
+        cache-dependency-path: go.sum
+
+    - name: Run race detector
+      shell: bash
+      run: |
+        # cmd/f4 tests replace vtui's process-global FrameManager while its
+        # background task pump is alive, so they need a dedicated race-safe
+        # harness before they can run under -race. luaplug's tests call raw
+        # FFI pointers, which Go's checkptr rejects under -race. Keep both
+        # packages in the instrumented compile below and run all other
+        # package tests under the detector.
+        mapfile -t packages < <(go list ./... | grep -Ev '^github.com/unxed/f4/(cmd/f4|luaplug)$')
+        # The bare $packages this replaced failed the step when the list came
+        # out empty, because set -e sees the assignment's exit status. mapfile
+        # swallows it, and go test with no arguments would quietly fall back to
+        # the current directory, so check explicitly.
+        if [ ${#packages[@]} -eq 0 ]; then
+          echo "::error::no packages left to run under the race detector"
+          exit 1
+        fi
+        go test -race -timeout 15m "${packages[@]}"
+        go test -race -run '^$' ./cmd/f4 ./luaplug
 
   release:
     name: Create Official Release
-    needs: [build, build-win7, test]
+    needs: [build, build-win7, test, race]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
@@ -498,7 +800,7 @@ jobs:
   # Эта джоба обновляет "плавающий" nightly релиз при каждом пуше в main
   nightly:
     name: Update Nightly Release
-    needs: [build, build-win7, test]
+    needs: [build, build-win7, test, race]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
@@ -509,8 +811,8 @@ jobs:
 
     - name: Set Release Metadata
       run: |
-        echo "SHORT_SHA=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-        echo "BUILD_TIME=$(date +'%Y-%m-%d %H:%M:%S')" >> $GITHUB_ENV
+        echo "SHORT_SHA=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
+        echo "BUILD_TIME=$(date +'%Y-%m-%d %H:%M:%S')" >> "$GITHUB_ENV"
 
     - name: Download all artifacts
       uses: actions/download-artifact@v8

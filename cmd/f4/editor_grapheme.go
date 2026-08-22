@@ -1,6 +1,9 @@
 package main
 
-import "github.com/unxed/f4/textlayout"
+import (
+	"github.com/unxed/f4/textlayout"
+	"github.com/unxed/vtui"
+)
 
 // editorGrapheme is a byte-addressable grapheme cluster. The editor keeps
 // byte offsets internally, but user-visible cursor operations must stop at
@@ -23,6 +26,34 @@ func editorGraphemes(data []byte) []editorGrapheme {
 		})
 	}
 	return clusters
+}
+
+// lineUsesVisualBidi limits the full visual engine to lines that actually
+// contain RTL text. zoin-bot keeps the common long LTR path bounded by the
+// existing small-window grapheme helpers.
+func (ev *EditorView) lineUsesVisualBidi() bool {
+	if vtui.DefaultBidiMode != vtui.BidiFull {
+		return false
+	}
+	if ev.bidiCacheValid && ev.bidiCacheSession == ev.editSession && ev.bidiCacheLine == ev.CursorLine {
+		return ev.bidiCacheValue
+	}
+	lineLen := ev.getLineLength(ev.CursorLine)
+	if lineLen <= 0 {
+		ev.bidiCacheSession = ev.editSession
+		ev.bidiCacheLine = ev.CursorLine
+		ev.bidiCacheValue = false
+		ev.bidiCacheValid = true
+		return false
+	}
+	lineStart := ev.li.GetLineOffset(ev.CursorLine)
+	data, err := ev.pt.GetRange(lineStart, lineLen)
+	value := err == nil && vtui.HasRTL(string(data))
+	ev.bidiCacheSession = ev.editSession
+	ev.bidiCacheLine = ev.CursorLine
+	ev.bidiCacheValue = value
+	ev.bidiCacheValid = true
+	return value
 }
 
 func nextEditorGraphemeBoundary(data []byte, pos int) int {
@@ -92,7 +123,11 @@ func (ev *EditorView) previousGraphemeBoundaryInLine(lineStart, pos int) int {
 			return pos - 1
 		}
 		if clusters[0].start > 0 || start == 0 {
-			return start + clusters[len(clusters)-1].start
+			last := clusters[len(clusters)-1]
+			if split := textlayout.TrailingModifierStart(last.text); split >= 0 {
+				return start + last.start + split
+			}
+			return start + last.start
 		}
 		take *= 2
 		if take > pos {

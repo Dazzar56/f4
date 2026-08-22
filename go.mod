@@ -23,18 +23,18 @@ require (
 	github.com/mholt/archives v0.1.5
 	github.com/pkg/sftp v1.13.6
 	github.com/tetratelabs/wazero v1.12.0
-	github.com/unxed/archives v0.0.0-20260728171610-555945c76813
+	github.com/unxed/archives v0.0.0-20260822080017-884f4426de54
 	github.com/unxed/colorer4go v0.1.14
 	github.com/unxed/ffibridge v0.1.1
 	github.com/unxed/id3-go v0.1.1
 	github.com/unxed/libwinescape v0.1.5
 	github.com/unxed/localecp v0.1.5
 	github.com/unxed/sevenzip v0.0.0-20260704211908-25d317f8295f
-	github.com/unxed/tar v0.1.126
+	github.com/unxed/tar v0.1.128
 	github.com/unxed/vtinput v0.1.4
-	github.com/unxed/vtui v0.1.260
-	github.com/unxed/zip v0.1.127
-	github.com/unxed/zipper v0.1.145
+	github.com/unxed/vtui v0.1.269
+	github.com/unxed/zip v0.1.129
+	github.com/unxed/zipper v0.1.147
 	github.com/vmihailenco/msgpack/v5 v5.4.1
 	github.com/woozymasta/png v1.2.0
 	github.com/yuin/gopher-lua v1.1.1
@@ -42,12 +42,12 @@ require (
 	github.com/zzl/go-win32api/v2 v2.1.0
 	golang.org/x/arch v0.30.0
 	golang.org/x/crypto v0.54.0
-	golang.org/x/image v0.44.0
+	golang.org/x/image v0.45.0
 	golang.org/x/net v0.57.0
-	golang.org/x/oauth2 v0.34.0
+	golang.org/x/oauth2 v0.36.0
 	golang.org/x/sys v0.47.0
 	golang.org/x/term v0.45.0
-	golang.org/x/text v0.40.0
+	golang.org/x/text v0.41.0
 	google.golang.org/api v0.259.0
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -69,6 +69,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sso v1.33.5 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.38.5 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.45.5 // indirect
+	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/danieljoos/wincred v1.2.3 // indirect
 	github.com/ebitengine/gomobile v0.0.0-20260211053922-3d992dae95d1 // indirect
 	github.com/ebitengine/hideconsole v1.0.0 // indirect
@@ -84,11 +85,11 @@ require (
 	github.com/unxed/kiwi-go v0.1.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.61.0 // indirect
-	go.opentelemetry.io/otel v1.38.0 // indirect
-	go.opentelemetry.io/otel/metric v1.38.0 // indirect
-	go.opentelemetry.io/otel/trace v1.38.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20251222181119-0a764e51fe1b // indirect
-	google.golang.org/grpc v1.78.0 // indirect
+	go.opentelemetry.io/otel v1.44.0 // indirect
+	go.opentelemetry.io/otel/metric v1.44.0 // indirect
+	go.opentelemetry.io/otel/trace v1.44.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260414002931-afd174a4e478 // indirect
+	google.golang.org/grpc v1.82.1 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )
 
@@ -126,7 +127,7 @@ require (
 	github.com/miekg/dns v1.1.57 // indirect
 	github.com/mikelolasagasti/xz v1.0.1 // indirect
 	github.com/minio/minlz v1.1.1 // indirect
-	github.com/ncruces/go-sqlite3 v0.35.2 // indirect
+	github.com/ncruces/go-sqlite3 v0.35.2
 	github.com/ncruces/go-sqlite3-wasm/v3 v3.2.35303 // indirect
 	github.com/ncruces/julianday v1.0.0 // indirect
 	github.com/neurlang/wayland v0.4.2 // indirect
@@ -148,7 +149,7 @@ require (
 	github.com/unxed/xkb-go v0.1.8 // indirect
 	github.com/unxed/xz v0.1.41 // indirect
 	github.com/unxed/zipcharset v0.1.4 // indirect
-	github.com/unxed/zlib4go v0.1.15 // indirect
+	github.com/unxed/zlib4go v0.1.16 // indirect
 	github.com/vishvananda/netlink v1.3.1 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
@@ -176,3 +177,5 @@ replace github.com/ebitengine/hideconsole => ./internal/hideconsole
 // replace github.com/unxed/colorer4go => ../../../dev/colorer4go
 
 // replace github.com/unxed/vtui => ../../../dev/vtui
+
+replace github.com/go-webgpu/goffi => github.com/unxed/goffi v0.1.2

@@ -1645,7 +1645,14 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 						pf.termView.PrintCleanCommand(cleanCmd)
 					}
 
-					pf.executing = true
+					// Only the Unix template above wraps the command in an
+					// OSC 133 C/D pair; cmd.exe reports completion through
+					// the prompt marker instead.
+					if isWindowsShell {
+						pf.beginPromptDrivenExecution()
+					} else {
+						pf.beginManagedExecution()
+					}
 					pf.returnToPanels = true
 
 					if !isWindowsShell {
@@ -1692,7 +1699,13 @@ func actionNewFile(pf *PanelsFrame) {
 			if name == "" {
 				name = "newfile.txt"
 			}
-			path := activeVfs.Join(dir, name)
+			// Shift+F4 also accepts a complete path. Joining an absolute
+			// name to the active directory duplicates the path prefix and
+			// makes an existing file look like a new, empty file.
+			path := name
+			if !activeVfs.IsAbs(name) {
+				path = activeVfs.Join(dir, name)
+			}
 			if AppConfig.UseExternalEditor {
 				actionEditFileExternal(pf, activeVfs, path, 0)
 				return
@@ -1916,7 +1929,6 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 	}
 	comboMode.Menu.SetSelectPos(defMode)
 	comboMode.Edit.SetText(modes[defMode])
-	dlg.AddItem(comboMode)
 
 	btnOk := vtui.NewButton(0, 0, Msg("Copy.Btn"))
 	if isMove {
@@ -1937,12 +1949,12 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
 	btnCancel.OnClick = func() { dlg.Close() }
 	dlg.AddItem(btnCancel)
+	dlg.AddItem(comboMode)
 
 	// Layout Engine
 	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 50-4, 11-4)
 	vbox.Add(promptLbl, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(editDest, vtui.Margins{Top: 1}, vtui.AlignFill)
-	vbox.Add(comboMode, vtui.Margins{Top: 1}, vtui.AlignCenter)
 
 	hbox := vtui.NewHBoxLayout(0, 0, 50-4, 1)
 	hbox.HorizontalAlign = vtui.AlignCenter
@@ -1950,7 +1962,10 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 	hbox.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
 	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
 
+	// Keep the action row above the mode selector. ComboBox.Open() places its
+	// popup below the field, so the popup cannot cover these buttons.
 	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Add(comboMode, vtui.Margins{Top: 1}, vtui.AlignCenter)
 	vbox.Apply()
 	dlg.SetFocusedItem(editDest)
 
@@ -2039,8 +2054,6 @@ func actionCreateLink(pf *PanelsFrame) {
 	comboType.Menu.SetSelectPos(0)
 	comboType.Edit.SetText(linkTypes[0])
 	lblType := vtui.NewLabel(0, 0, Msg("Link.Type"), comboType)
-	dlg.AddItem(lblType)
-	dlg.AddItem(comboType)
 
 	btnOk := vtui.NewButton(0, 0, Msg("Link.Btn"))
 	btnOk.IsDefault = true
@@ -2110,6 +2123,8 @@ func actionCreateLink(pf *PanelsFrame) {
 
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnCancel)
+	dlg.AddItem(lblType)
+	dlg.AddItem(comboType)
 
 	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 52-4, 11-4)
 	vbox.Add(promptLbl, vtui.Margins{}, vtui.AlignLeft)
@@ -2118,7 +2133,6 @@ func actionCreateLink(pf *PanelsFrame) {
 	rowType := vtui.NewHBoxLayout(0, 0, 52-4, 1)
 	rowType.Add(lblType, vtui.Margins{Right: 1}, vtui.AlignLeft)
 	rowType.Add(comboType, vtui.Margins{}, vtui.AlignFill)
-	vbox.Add(rowType, vtui.Margins{Top: 1}, vtui.AlignFill)
 
 	hbox := vtui.NewHBoxLayout(0, 0, 52-4, 1)
 	hbox.HorizontalAlign = vtui.AlignCenter
@@ -2126,7 +2140,10 @@ func actionCreateLink(pf *PanelsFrame) {
 	hbox.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
 	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
 
+	// Keep the action row above the link-type selector. ComboBox.Open() places
+	// its popup below the field, so the popup cannot cover these buttons.
 	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Add(rowType, vtui.Margins{Top: 1}, vtui.AlignFill)
 	vbox.Apply()
 	dlg.SetFocusedItem(editDest)
 
@@ -2170,6 +2187,29 @@ func actionEditorSettings(pf *PanelsFrame) {
 	// Height sized so the 3×2 checkbox grid stacks tight (no blank
 	// rows between rows of the grid). See #298.
 	width, height := 78, 25
+	checkCaptions := []string{
+		Msg("EditorSettings.AutoIndent"),
+		Msg("EditorSettings.CursorBeyondEOL"),
+		Msg("EditorSettings.UseEditorConfig"),
+		Msg("EditorSettings.AutoComplete"),
+		Msg("EditorSettings.Crosshair"),
+		Msg("EditorSettings.ColorerBg"),
+		Msg("EditorSettings.SyntaxAnimation"),
+	}
+	maxCheckWidth := 0
+	for _, caption := range checkCaptions {
+		clean, _, _ := vtui.ParseAmpersandString(caption)
+		if checkWidth := 4 + vtui.StringWidth(clean); checkWidth > maxCheckWidth {
+			maxCheckWidth = checkWidth
+		}
+	}
+	checkRows := (len(checkCaptions) + 1) / 2
+	singleCheckColumn := maxCheckWidth > (width-4)/2
+	height += checkRows - 3
+	if singleCheckColumn {
+		height += len(checkCaptions) - checkRows
+		checkRows = len(checkCaptions)
+	}
 	dlg := vtui.NewCenteredDialog(width, height, Msg("EditorSettings.Title"))
 	dlg.ShowClose = true
 
@@ -2250,6 +2290,11 @@ func actionEditorSettings(pf *PanelsFrame) {
 		chkColorerBg.State = 1
 	}
 
+	chkSyntaxAnimation := vtui.NewCheckbox(0, 0, Msg("EditorSettings.SyntaxAnimation"), false)
+	if AppConfig.EditorSyntaxAnimation {
+		chkSyntaxAnimation.State = 1
+	}
+
 	editMask := vtui.NewEdit(0, 0, 56, AppConfig.EditorAutoCompleteMask)
 	lblMask := vtui.NewLabel(0, 0, Msg("EditorSettings.Mask"), editMask)
 
@@ -2280,6 +2325,7 @@ func actionEditorSettings(pf *PanelsFrame) {
 	dlg.AddItem(chkAuto)
 	dlg.AddItem(chkCrosshair)
 	dlg.AddItem(chkColorerBg)
+	dlg.AddItem(chkSyntaxAnimation)
 	dlg.AddItem(lblMask)
 	dlg.AddItem(editMask)
 	dlg.AddItem(chkExtEdit)
@@ -2310,20 +2356,32 @@ func actionEditorSettings(pf *PanelsFrame) {
 	rowTabSize.Add(editTabSize, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(rowTabSize, vtui.Margins{Top: 1}, vtui.AlignFill)
 
-	col1 := vtui.NewVBoxLayout(0, 0, (width-4)/2, 3)
-	col1.Add(chkAutoIndent, vtui.Margins{}, vtui.AlignLeft)
-	col1.Add(chkEditorConfig, vtui.Margins{}, vtui.AlignLeft)
-	col1.Add(chkColorerBg, vtui.Margins{}, vtui.AlignLeft)
+	if singleCheckColumn {
+		checkColumn := vtui.NewVBoxLayout(0, 0, width-4, checkRows)
+		for _, check := range []*vtui.Checkbox{
+			chkAutoIndent, chkCursorEOL, chkEditorConfig,
+			chkAuto, chkCrosshair, chkColorerBg, chkSyntaxAnimation,
+		} {
+			checkColumn.Add(check, vtui.Margins{}, vtui.AlignLeft)
+		}
+		vbox.Add(checkColumn, vtui.Margins{Top: 1}, vtui.AlignFill)
+	} else {
+		col1 := vtui.NewVBoxLayout(0, 0, (width-4)/2, checkRows)
+		col1.Add(chkAutoIndent, vtui.Margins{}, vtui.AlignLeft)
+		col1.Add(chkEditorConfig, vtui.Margins{}, vtui.AlignLeft)
+		col1.Add(chkColorerBg, vtui.Margins{}, vtui.AlignLeft)
 
-	col2 := vtui.NewVBoxLayout(0, 0, (width-4)/2, 3)
-	col2.Add(chkCursorEOL, vtui.Margins{}, vtui.AlignLeft)
-	col2.Add(chkAuto, vtui.Margins{}, vtui.AlignLeft)
-	col2.Add(chkCrosshair, vtui.Margins{}, vtui.AlignLeft)
+		col2 := vtui.NewVBoxLayout(0, 0, (width-4)/2, checkRows)
+		col2.Add(chkCursorEOL, vtui.Margins{}, vtui.AlignLeft)
+		col2.Add(chkAuto, vtui.Margins{}, vtui.AlignLeft)
+		col2.Add(chkCrosshair, vtui.Margins{}, vtui.AlignLeft)
+		col2.Add(chkSyntaxAnimation, vtui.Margins{}, vtui.AlignLeft)
 
-	rowChecks := vtui.NewHBoxLayout(0, 0, width-4, 3)
-	rowChecks.Add(col1, vtui.Margins{}, vtui.AlignFill)
-	rowChecks.Add(col2, vtui.Margins{}, vtui.AlignFill)
-	vbox.Add(rowChecks, vtui.Margins{Top: 1}, vtui.AlignFill)
+		rowChecks := vtui.NewHBoxLayout(0, 0, width-4, checkRows)
+		rowChecks.Add(col1, vtui.Margins{}, vtui.AlignFill)
+		rowChecks.Add(col2, vtui.Margins{}, vtui.AlignFill)
+		vbox.Add(rowChecks, vtui.Margins{Top: 1}, vtui.AlignFill)
+	}
 
 	vbox.Add(lblMask, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(editMask, vtui.Margins{}, vtui.AlignFill)
@@ -2339,6 +2397,8 @@ func actionEditorSettings(pf *PanelsFrame) {
 	hbox.Spacing = 2
 	hbox.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
 	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
+	// Keep the action row above the operation-mode selector. ComboBox.Open()
+	// places its popup below the field, so it cannot cover these buttons.
 	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
 
 	vbox.Apply()
@@ -2364,6 +2424,7 @@ func actionEditorSettings(pf *PanelsFrame) {
 		AppConfig.EditorAutoComplete = chkAuto.State == 1
 		AppConfig.EditorCrosshair = chkCrosshair.State == 1
 		AppConfig.EditorColorerBackground = chkColorerBg.State == 1
+		AppConfig.EditorSyntaxAnimation = chkSyntaxAnimation.State == 1
 		AppConfig.EditorAutoCompleteMask = editMask.GetText()
 		AppConfig.UseExternalEditor = chkExtEdit.State == 1
 		AppConfig.ExternalEditorCommand = editExtCmd.GetText()
@@ -2455,8 +2516,6 @@ func actionDeleteWithDisposition(pf *PanelsFrame, disposition vfs.DeleteDisposit
 	}
 	comboMode.Menu.SetSelectPos(defMode)
 	comboMode.Edit.SetText(modes[defMode])
-	dlg.AddItem(comboMode)
-	vbox.Add(comboMode, vtui.Margins{Top: 1}, vtui.AlignCenter)
 
 	btnDel := vtui.NewButton(0, 0, Msg(buttonKey))
 	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
@@ -2469,13 +2528,18 @@ func actionDeleteWithDisposition(pf *PanelsFrame, disposition vfs.DeleteDisposit
 
 	dlg.AddItem(btnDel)
 	dlg.AddItem(btnCancel)
+	dlg.AddItem(comboMode)
 
 	hbox := vtui.NewHBoxLayout(0, 0, 50-4, 1)
 	hbox.HorizontalAlign = vtui.AlignCenter
 	hbox.Spacing = 2
 	hbox.Add(btnDel, vtui.Margins{}, vtui.AlignTop)
 	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
+	// Keep the destructive action row above the operation-mode selector.
+	// ComboBox.Open() places its popup below the field, so it cannot cover the
+	// confirmation buttons.
 	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Add(comboMode, vtui.Margins{Top: 1}, vtui.AlignCenter)
 	vbox.Apply()
 
 	btnCancel.OnClick = func() { dlg.Close() }
@@ -2520,18 +2584,17 @@ func actionMkDir(pf *PanelsFrame) {
 	}
 	comboMode.Menu.SetSelectPos(defMode)
 	comboMode.Edit.SetText(modes[defMode])
-	dlg.AddItem(comboMode)
 
 	btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))
 	btnOk.IsDefault = true
 	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnCancel)
+	dlg.AddItem(comboMode)
 
 	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 40-4, 11-4)
 	vbox.Add(lblPrompt, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(editName, vtui.Margins{Top: 1}, vtui.AlignFill)
-	vbox.Add(comboMode, vtui.Margins{Top: 1}, vtui.AlignCenter)
 
 	hbox := vtui.NewHBoxLayout(0, 0, 40-4, 1)
 	hbox.HorizontalAlign = vtui.AlignCenter
@@ -2539,6 +2602,7 @@ func actionMkDir(pf *PanelsFrame) {
 	hbox.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
 	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
 	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Add(comboMode, vtui.Margins{Top: 1}, vtui.AlignCenter)
 	vbox.Apply()
 
 	dlg.SetFocusedItem(editName)
@@ -2893,7 +2957,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 	// display options live in actionPanelAdditionalSettings below. Keeping both
 	// pages as ordinary dialogs means they remain usable on a 25-row terminal
 	// without introducing a second scrolling container for interactive items.
-	dlg := vtui.NewCenteredDialog(60, 23, Msg("PanelSettings.Title"))
+	dlg := vtui.NewCenteredDialog(60, 24, Msg("PanelSettings.Title"))
 	dlg.ShowClose = true
 
 	chkHidden := vtui.NewCheckbox(0, 0, Msg("PanelSettings.ShowHidden"), false)
@@ -2945,6 +3009,10 @@ func actionPanelSettings(pf *PanelsFrame) {
 		chkAutoSave.State = 1
 	}
 
+	chkUseTrash := vtui.NewCheckbox(0, 0, Msg("PanelSettings.UseTrash"), false)
+	if AppConfig.UseTrash {
+		chkUseTrash.State = 1
+	}
 	chkCmdAc := vtui.NewCheckbox(0, 0, Msg("PanelSettings.CommandLineAutoComplete"), false)
 	chkCmdAc.State = 0
 	if AppConfig.CommandLineAutoComplete {
@@ -2986,6 +3054,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 	dlg.AddItem(comboScrollbars)
 	dlg.AddItem(chkPaths)
 	dlg.AddItem(chkAutoSave)
+	dlg.AddItem(chkUseTrash)
 	dlg.AddItem(chkCmdAc)
 	dlg.AddItem(lblNavigation)
 	dlg.AddItem(navigation)
@@ -2994,7 +3063,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnCancel)
 
-	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 56, 19)
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 56, 20)
 	// First checkbox cluster — stack tight, no blank rows between.
 	vbox.Add(chkHidden, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkDirPrefix, vtui.Margins{}, vtui.AlignLeft)
@@ -3010,6 +3079,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 	// Second checkbox cluster.
 	vbox.Add(chkPaths, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(chkAutoSave, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(chkUseTrash, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkCmdAc, vtui.Margins{}, vtui.AlignLeft)
 	// Navigation radio group — its own visual island.
 	vbox.Add(lblNavigation, vtui.Margins{Top: 1}, vtui.AlignLeft)
@@ -3035,6 +3105,7 @@ func actionPanelSettings(pf *PanelsFrame) {
 		AppConfig.PanelScrollbarMode = PanelScrollbarMode(comboScrollbars.Menu.SelectPos)
 		AppConfig.SavePanelPaths = chkPaths.State == 1
 		AppConfig.AutoSaveSettings = chkAutoSave.State == 1
+		AppConfig.UseTrash = chkUseTrash.State == 1
 		AppConfig.CommandLineAutoComplete = chkCmdAc.State == 1
 		pf.cmdLine.Edit.PathHintsEnabled = AppConfig.CommandLineAutoComplete
 		AppConfig.NavigationMode = PanelNavigationMode(navigation.Selected)
@@ -3236,11 +3307,6 @@ func actionConfirmationsSettings(pf *PanelsFrame) {
 		chkDelete.State = 1
 	}
 
-	chkUseTrash := vtui.NewCheckbox(0, 0, Msg("ConfirmationsSettings.UseTrash"), false)
-	if AppConfig.UseTrash {
-		chkUseTrash.State = 1
-	}
-
 	chkExit := vtui.NewCheckbox(0, 0, Msg("ConfirmationsSettings.Exit"), false)
 	chkExit.State = 0
 	if AppConfig.ConfirmExit {
@@ -3260,7 +3326,6 @@ func actionConfirmationsSettings(pf *PanelsFrame) {
 	dlg.AddItem(chkCopy)
 	dlg.AddItem(chkMove)
 	dlg.AddItem(chkDelete)
-	dlg.AddItem(chkUseTrash)
 	dlg.AddItem(chkExit)
 	dlg.AddItem(chkDelFocus)
 	dlg.AddItem(btnOk)
@@ -3270,7 +3335,6 @@ func actionConfirmationsSettings(pf *PanelsFrame) {
 	vbox.Add(chkCopy, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkMove, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkDelete, vtui.Margins{}, vtui.AlignLeft)
-	vbox.Add(chkUseTrash, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkExit, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkDelFocus, vtui.Margins{}, vtui.AlignLeft)
 
@@ -3288,7 +3352,6 @@ func actionConfirmationsSettings(pf *PanelsFrame) {
 		AppConfig.ConfirmCopy = chkCopy.State == 1
 		AppConfig.ConfirmMove = chkMove.State == 1
 		AppConfig.ConfirmDelete = chkDelete.State == 1
-		AppConfig.UseTrash = chkUseTrash.State == 1
 		AppConfig.ConfirmExit = chkExit.State == 1
 		AppConfig.DeleteCancelFocused = chkDelFocus.State == 1
 		SaveConfig()
@@ -3602,7 +3665,11 @@ func actionUpdateSettings(pf *PanelsFrame) {
 		AppConfig.UpdateInterval = comboInterval.Menu.SelectPos
 		SaveConfig()
 		dlg.Close()
-		CheckForUpdates(pf, true)
+		// Do not hold the UI mouse-dispatch loop while the manual update
+		// check waits for GitHub. The dialog is already closed, so the
+		// network request can safely continue in the background and post
+		// its result back through FrameManager when it completes.
+		go CheckForUpdates(pf, true)
 	}
 
 	vtui.FrameManager.Push(dlg)
@@ -3744,7 +3811,7 @@ func actionImportFar2lHistory(pf *PanelsFrame) {
 }
 
 func actionAppearanceSettings(pf *PanelsFrame) {
-	const width, height = 64, 28
+	const width, height = 64, 29
 	dlg := vtui.NewCenteredDialog(width, height, Msg("AppearanceSettings.Title"))
 	dlg.ShowClose = true
 	// Snapshot the whole palette (not just the style name) so a
@@ -3781,8 +3848,10 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 			}
 		}
 	}
-	editFont := vtui.NewEdit(0, 0, 30, AppConfig.GuiFont)
-	lblFont := vtui.NewLabel(0, 0, Msg("AppearanceSettings.Font"), editFont)
+	fontChoices := guiFontChoices(AppConfig.Language, AppConfig.GuiFont)
+	comboFont := vtui.NewComboBox(0, 0, 30, fontChoices)
+	comboFont.Edit.SetText(AppConfig.GuiFont)
+	lblFont := vtui.NewLabel(0, 0, Msg("AppearanceSettings.Font"), comboFont)
 	chkSystemMonospace := vtui.NewCheckbox(0, 0, Msg("AppearanceSettings.UseSystemMonospace"), false)
 	if AppConfig.GuiUseSystemMonospace {
 		chkSystemMonospace.State = 1
@@ -3790,7 +3859,7 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 	updateFontEditor := func() {
 		usePlatformFont := chkSystemMonospace.State == 1 && (runtime.GOOS == "windows" || runtime.GOOS == "darwin")
 		lblFont.SetDisabled(usePlatformFont)
-		editFont.SetDisabled(usePlatformFont)
+		comboFont.SetDisabled(usePlatformFont)
 	}
 	chkSystemMonospace.OnChange = func(int) { updateFontEditor() }
 	updateFontEditor()
@@ -3817,6 +3886,10 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 	comboWorkspaceTabs.Menu.SetSelectPos(workspaceTabSelection)
 	comboWorkspaceTabs.Edit.SetText(workspaceTabModes[workspaceTabSelection])
 	lblWorkspaceTabs := vtui.NewLabel(0, 0, Msg("AppearanceSettings.WorkspaceTabs"), comboWorkspaceTabs)
+	chkWorkspaceTabsOverlay := vtui.NewCheckbox(0, 0, Msg("AppearanceSettings.WorkspaceTabsOverlay"), AppConfig.WorkspaceTabsOverlay)
+	if AppConfig.WorkspaceTabsOverlay {
+		chkWorkspaceTabsOverlay.State = 1
+	}
 
 	ctrlTabModes := []string{
 		Msg("AppearanceSettings.CtrlTabDirect"),
@@ -3876,13 +3949,14 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 	dlg.AddItem(comboStyle)
 	dlg.AddItem(chkSystemMonospace)
 	dlg.AddItem(lblFont)
-	dlg.AddItem(editFont)
+	dlg.AddItem(comboFont)
 	dlg.AddItem(lblSize)
 	dlg.AddItem(editSize)
 	dlg.AddItem(lblTitle)
 	dlg.AddItem(editTitle)
 	dlg.AddItem(lblWorkspaceTabs)
 	dlg.AddItem(comboWorkspaceTabs)
+	dlg.AddItem(chkWorkspaceTabsOverlay)
 	dlg.AddItem(lblCtrlTab)
 	dlg.AddItem(comboCtrlTab)
 	dlg.AddItem(chkAltNumberTabs)
@@ -3903,7 +3977,7 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 
 	vbox.Add(chkSystemMonospace, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(lblFont, vtui.Margins{Top: 1}, vtui.AlignLeft)
-	vbox.Add(editFont, vtui.Margins{}, vtui.AlignFill)
+	vbox.Add(comboFont, vtui.Margins{}, vtui.AlignFill)
 
 	rowSize := vtui.NewHBoxLayout(0, 0, width-4, 1)
 	rowSize.Add(lblSize, vtui.Margins{Right: 1}, vtui.AlignLeft)
@@ -3917,6 +3991,7 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 	rowWorkspaceTabs.Add(lblWorkspaceTabs, vtui.Margins{Right: 1}, vtui.AlignLeft)
 	rowWorkspaceTabs.Add(comboWorkspaceTabs, vtui.Margins{}, vtui.AlignFill)
 	vbox.Add(rowWorkspaceTabs, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Add(chkWorkspaceTabsOverlay, vtui.Margins{}, vtui.AlignLeft)
 
 	rowCtrlTab := vtui.NewHBoxLayout(0, 0, width-4, 1)
 	rowCtrlTab.Add(lblCtrlTab, vtui.Margins{Right: 1}, vtui.AlignLeft)
@@ -3958,11 +4033,11 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 			AppConfig.ColorStyle = names[comboStyle.Menu.SelectPos]
 		}
 		useSystemMonospace := chkSystemMonospace.State == 1
-		fontChanged := AppConfig.GuiUseSystemMonospace != useSystemMonospace || AppConfig.GuiFont != editFont.GetText() || fmt.Sprintf("%d", AppConfig.GuiFontSize) != editSize.GetText()
+		fontChanged := AppConfig.GuiUseSystemMonospace != useSystemMonospace || AppConfig.GuiFont != comboFont.Edit.GetText() || fmt.Sprintf("%d", AppConfig.GuiFontSize) != editSize.GetText()
 
 		AppConfig.ConsoleTitleTemplate = editTitle.GetText()
 		AppConfig.GuiUseSystemMonospace = useSystemMonospace
-		AppConfig.GuiFont = editFont.GetText()
+		AppConfig.GuiFont = comboFont.Edit.GetText()
 		fmt.Sscanf(editSize.GetText(), "%d", &AppConfig.GuiFontSize)
 		if AppConfig.GuiFontSize <= 0 {
 			AppConfig.GuiFontSize = defaultGuiFontSize(runtime.GOOS)
@@ -3971,6 +4046,7 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 		vtui.ManageCursorStyle = !AppConfig.KeepTerminalCursor
 		AppConfig.EnforceColorCorrection = chkContrast.State == 1
 		AppConfig.WorkspaceTabMode = comboWorkspaceTabs.Menu.SelectPos
+		AppConfig.WorkspaceTabsOverlay = chkWorkspaceTabsOverlay.State == 1
 		AppConfig.CtrlTabShowsMenu = comboCtrlTab.Menu.SelectPos == 1
 		AppConfig.AltNumberSwitchesTabs = chkAltNumberTabs.State == 1
 		AppConfig.RestoreWorkspaceTabs = chkRestoreWorkspaceTabs.State == 1
@@ -3986,6 +4062,7 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 			ctrlTabMode = vtui.WorkspaceCtrlTabMenu
 		}
 		vtui.FrameManager.ConfigureWorkspaceTabs(vtui.WorkspaceTabMode(AppConfig.WorkspaceTabMode), ctrlTabMode)
+		vtui.FrameManager.ConfigureWorkspaceTabOverlay(AppConfig.WorkspaceTabsOverlay)
 		vtui.FrameManager.ConfigureWorkspaceAltNumberSwitch(AppConfig.AltNumberSwitchesTabs)
 
 		if fontChanged {
@@ -4007,16 +4084,28 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 
 func actionManagePlugins(pf *PanelsFrame) {
 	width, height := 60, 16
-	dlg := vtui.NewCenteredDialog(width, height, Msg("Plugins.Title"))
-	dlg.ShowClose = true
-
-	lb := vtui.NewListBox(0, 0, 56, 10, AppConfig.RegisteredPlugins)
-
 	btnAdd := vtui.NewButton(0, 0, Msg("Plugins.BtnAdd"))
 	btnDel := vtui.NewButton(0, 0, Msg("Plugins.BtnRemove"))
 	btnPerms := vtui.NewButton(0, 0, Msg("Plugins.BtnPermissions"))
-	btnPerms.OnClick = func() { actionPluginPermissions(PluginPermissions()) }
 	btnClose := vtui.NewButton(0, 0, Msg("Plugins.BtnClose"))
+	buttonWidth := 0
+	for i, button := range []*vtui.Button{btnAdd, btnDel, btnPerms, btnClose} {
+		x1, _, x2, _ := button.GetPosition()
+		if i > 0 {
+			buttonWidth += 2
+		}
+		buttonWidth += x2 - x1 + 1
+	}
+	if minWidth := buttonWidth + 4; minWidth > width {
+		width = minWidth
+	}
+
+	dlg := vtui.NewCenteredDialog(width, height, Msg("Plugins.Title"))
+	dlg.ShowClose = true
+
+	lb := vtui.NewListBox(0, 0, width-4, 10, AppConfig.RegisteredPlugins)
+
+	btnPerms.OnClick = func() { actionPluginPermissions(PluginPermissions()) }
 
 	dlg.AddItem(lb)
 	dlg.AddItem(btnAdd)
@@ -4395,8 +4484,10 @@ func actionLanguage(pf *PanelsFrame) {
 	btnOk.OnClick = func() {
 		uiChanged := false
 		helpChanged := false
+		suggestFontChoice := false
 		if idx := comboUI.Menu.SelectPos; idx >= 0 && idx < len(uiLangs) {
 			if AppConfig.Language != uiLangs[idx].code {
+				suggestFontChoice = shouldSuggestFontForLanguage(uiLangs[idx].code, AppConfig.GuiFont)
 				AppConfig.Language = uiLangs[idx].code
 				uiChanged = true
 			}
@@ -4412,7 +4503,9 @@ func actionLanguage(pf *PanelsFrame) {
 			InitLang()
 			InitHelpSystem()
 			vtui.FrameManager.PostTask(func() {
-				if uiChanged {
+				if uiChanged && suggestFontChoice {
+					actionAppearanceSettings(pf)
+				} else if uiChanged {
 					vtui.ShowMessage(Msg("Info.Title"), Msg("Language.Changed"), []string{Msg("vtui.Ok")})
 				}
 				vtui.FrameManager.Redraw()

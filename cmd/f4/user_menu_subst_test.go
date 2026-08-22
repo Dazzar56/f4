@@ -182,19 +182,19 @@ func TestSubst_PromptUnterminatedPassesThrough(t *testing.T) {
 	}
 }
 
-func TestSubst_EnvExpansion(t *testing.T) {
+func TestSubst_EnvironmentReferencesPassThrough(t *testing.T) {
 	t.Setenv("F4_TEST_VAR", "Hello")
 	r := subst(t, `echo $F4_TEST_VAR ${F4_TEST_VAR}!`, baseCtx())
-	if r.Command != "echo Hello Hello!" {
+	if r.Command != `echo $F4_TEST_VAR ${F4_TEST_VAR}!` {
 		t.Fatalf("got %q", r.Command)
 	}
 }
 
-func TestSubst_EnvAfterTokens(t *testing.T) {
-	// $VAR is expanded AFTER !X! tokens so users can interpolate them.
+func TestSubst_EnvironmentReferencesRemainAfterTokens(t *testing.T) {
+	// Shell variables must remain available after f4's own !X! tokens resolve.
 	t.Setenv("F4_TEST_VAR", "real_main.go")
 	r := subst(t, `cp !.! $F4_TEST_VAR`, baseCtx())
-	if r.Command != "cp main.go real_main.go" {
+	if r.Command != `cp main.go $F4_TEST_VAR` {
 		t.Fatalf("got %q", r.Command)
 	}
 }

@@ -20,7 +20,7 @@ import (
 // master side is closed immediately once the slave is unlocked; nothing in
 // these tests needs it kept open.
 func newMockTTYSlave() (*os.File, error) {
-	masterFd, err := unix.Open("/dev/ptmx", unix.O_RDWR|unix.O_NOCTTY, 0)
+	masterFd, err := unix.Open("/dev/ptmx", unix.O_RDWR|unix.O_NOCTTY|unix.O_CLOEXEC, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -38,7 +38,7 @@ func newMockTTYSlave() (*os.File, error) {
 		return nil, errno
 	}
 
-	slaveFd, err := unix.Open(fmt.Sprintf("/dev/pts/%d", n), unix.O_RDWR|unix.O_NOCTTY, 0)
+	slaveFd, err := unix.Open(fmt.Sprintf("/dev/pts/%d", n), unix.O_RDWR|unix.O_NOCTTY|unix.O_CLOEXEC, 0)
 	if err != nil {
 		master.Close()
 		return nil, err

@@ -500,7 +500,16 @@ func TestFileOp_PathLogic(t *testing.T) {
 		// Target: "new_dir/" (trailing slash should force directory creation)
 		ExecuteFileOp(nil, srcVfs, dstVfs, []string{"source2.txt"}, "new_dir"+string(os.PathSeparator), false, 2, nil)
 
-		for i := 0; i < 50; i++ {
+		// Windows CI can need more than 250ms for the asynchronous copy to
+		// finish after the destination directory has been created. Wait up to
+		// the same bounded deadline used by the rename-copy case above instead
+		// of making the assertion depend on scheduler timing.
+		finalPath := filepath.Join(tmpSrc, "new_dir", "source2.txt")
+		deadline := time.Now().Add(5 * time.Second)
+		for time.Now().Before(deadline) {
+			if _, err := os.Stat(finalPath); err == nil {
+				break
+			}
 			select {
 			case task := <-vtui.FrameManager.TaskChan:
 				task()
@@ -509,12 +518,71 @@ func TestFileOp_PathLogic(t *testing.T) {
 			}
 		}
 
-		finalPath := filepath.Join(tmpSrc, "new_dir", "source2.txt")
-		if _, err := os.Stat(finalPath); os.IsNotExist(err) {
-			t.Error("Trailing slash did not trigger directory creation for single file")
+		if _, err := os.Stat(finalPath); err != nil {
+			t.Error("Trailing slash did not complete the single-file copy into a directory")
 		}
 	})
 }
+
+func TestExecuteFileOp_RenameMaskUsesBasenameForPathSelection(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	srcRoot := t.TempDir()
+	dstRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(srcRoot, "nested"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(srcRoot, "nested", "source.txt"), []byte("payload"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	srcVfs := vfs.NewOSVFS(srcRoot)
+	dstVfs := vfs.NewOSVFS(dstRoot)
+	ExecuteFileOpAt(nil, srcVfs, dstVfs, srcRoot, []string{"nested" + string(filepath.Separator) + "source.txt"}, filepath.Join(dstRoot, "masked", "*.bak"), false, 2, nil)
+
+	want := filepath.Join(dstRoot, "masked", "source.bak")
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(want); err == nil {
+			break
+		}
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		default:
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+	if _, err := os.Stat(want); err != nil {
+		t.Fatalf("masked path selection was not copied to %q: %v", want, err)
+	}
+
+	entries, err := os.ReadDir(filepath.Join(dstRoot, "masked"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "source.bak" {
+		t.Fatalf("masked destination entries = %#v, want only source.bak", entries)
+	}
+
+	ExecuteFileOpAt(nil, srcVfs, dstVfs, srcRoot, []string{"nested"}, filepath.Join(dstRoot, "tree", "*.bak"), false, 2, nil)
+	wantTreeFile := filepath.Join(dstRoot, "tree", "nested.bak", "source.txt")
+	deadline = time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(wantTreeFile); err == nil {
+			break
+		}
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		default:
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+	if _, err := os.Stat(wantTreeFile); err != nil {
+		t.Fatalf("masked directory tree was not copied to %q: %v", wantTreeFile, err)
+	}
+}
+
 func TestExecuteFileOp_RemotePathResolution_Issue74(t *testing.T) {
 	// This test reproduces the bug where a Unix-style absolute path was treated
 	// as relative when running on a Windows host.
@@ -1977,56 +2045,6 @@ func TestRecursiveCopyClosesTheDestinationBeforeSucceeding(t *testing.T) {
 		t.Errorf("Close called %d times, want 1", dstVfs.closes)
 	}
 }
-
-type mockReadAtCloser struct{}
-
-func (m *mockReadAtCloser) ReadAt(ctx context.Context, p []byte, off int64) (n int, err error) {
-	return 0, io.EOF
-}
-func (m *mockReadAtCloser) Read(ctx context.Context, p []byte) (n int, err error) {
-	return 0, io.EOF
-}
-func (m *mockReadAtCloser) Close() error { return nil }
-func (m *mockReadAtCloser) Size() int64  { return 10 }
-
-type mockWriteCloser struct{}
-
-func (m *mockWriteCloser) Write(p []byte) (n int, err error) { return len(p), nil }
-func (m *mockWriteCloser) Close() error                      { return nil }
-
-type mockVFS struct {
-	vfs.VFS
-	onOpen func(ctx context.Context, path string) (vfs.ReadAtCloser, error)
-}
-
-func (m *mockVFS) IsAtRoot() bool            { return true }
-func (m *mockVFS) GetPath() string           { return "/" }
-func (m *mockVFS) IsAbs(path string) bool    { return true }
-func (m *mockVFS) SetPath(path string) error { return nil }
-func (m *mockVFS) Join(elem ...string) string {
-	return strings.Join(elem, "/")
-}
-func (m *mockVFS) Abs(path string) (string, error) { return path, nil }
-func (m *mockVFS) Base(path string) string         { return "file.txt" }
-func (m *mockVFS) Dir(path string) string          { return "/" }
-func (m *mockVFS) Stat(ctx context.Context, path string) (vfs.VFSItem, error) {
-	return vfs.VFSItem{Name: "file.txt", Size: 10, IsDir: false}, nil
-}
-func (m *mockVFS) Open(ctx context.Context, path string) (vfs.ReadAtCloser, error) {
-	if m.onOpen != nil {
-		return m.onOpen(ctx, path)
-	}
-	return &mockReadAtCloser{}, nil
-}
-func (m *mockVFS) Create(ctx context.Context, path string) (io.WriteCloser, error) {
-	return &mockWriteCloser{}, nil
-}
-func (m *mockVFS) Remove(ctx context.Context, path string) error { return nil }
-func (m *mockVFS) GetCapabilities() vfs.VFSCapabilities {
-	return vfs.VFSCapabilities{HasRandomAccess: true}
-}
-func (m *mockVFS) Close() error   { return nil }
-func (m *mockVFS) Clone() vfs.VFS { return m }
 
 type mockReporter struct {
 	lastAction     string

@@ -17,3 +17,8 @@ afailed.*
 .codex-build/
 /build/
 AGENTS.md
+
+# tools/ttytest scratch: the sandbox HOME and a locally built binary
+tools/ttytest/sandbox/
+tools/ttytest/f4
+tools/ttytest/__pycache__/

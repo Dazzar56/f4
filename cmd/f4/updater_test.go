@@ -258,6 +258,14 @@ func TestUpdater_Extractors(t *testing.T) {
 	runtime.KeepAlive(sw)
 }
 
+func TestSanitizeExtractPathRejectsPlatformSeparators(t *testing.T) {
+	for _, name := range []string{`..\\outside`, `folder\\..\\outside`, "nul\x00name"} {
+		if _, err := sanitizeExtractPath(name, t.TempDir()); err == nil {
+			t.Errorf("sanitizeExtractPath(%q) accepted an unsafe archive name", name)
+		}
+	}
+}
+
 func TestUpdater_GetCurrentVersion(t *testing.T) {
 	/*
 		tests := []struct {

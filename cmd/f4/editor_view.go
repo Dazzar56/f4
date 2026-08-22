@@ -30,18 +30,6 @@ import (
 )
 import "golang.org/x/arch/x86/x86asm"
 
-type visualCell struct {
-	info       vtui.CharInfo
-	byteOffset int // Offset in bytes from the start of the logical line
-}
-
-type lineFragment struct {
-	cells           []visualCell
-	startOffset     int // Absolute offset of the fragment start
-	startByteInLine int // Byte in the logical line where the fragment starts
-	endByteInLine   int // Byte where the fragment ends
-}
-
 var (
 	LastEditorSearch          string
 	LastEditorReplace         string
@@ -65,18 +53,19 @@ type EditorView struct {
 	ScrollTopRow int // Индекс первой видимой ВИЗУАЛЬНОЙ строки
 	ScrollLeft   int // Горизонтальный скролл (когда WordWrap=false)
 
-	WordWrap         bool
-	HexMode          bool
-	DecodeMode       bool
-	HexTopOffset     int
-	HexNibble        int // 0 = high nibble, 1 = low nibble
-	DisasmMode       int // 16, 32, or 64
-	overtype         bool
-	modified         bool
-	closeDlg         *vtui.Window
-	CursorLine       int // Текущая логическая строка (для плагинов)
-	CursorPos        int // Позиция в байтах (для плагинов)
-	DesiredVisualCol int // Колонка, в которую мы хотим попасть при навигации Up/Down
+	WordWrap           bool
+	wordWrapSuppressed bool // Unsafe binary/long-line content forbids re-enabling wrapping.
+	HexMode            bool
+	DecodeMode         bool
+	HexTopOffset       int
+	HexNibble          int // 0 = high nibble, 1 = low nibble
+	DisasmMode         int // 16, 32, or 64
+	overtype           bool
+	modified           bool
+	closeDlg           *vtui.Window
+	CursorLine         int // Текущая логическая строка (для плагинов)
+	CursorPos          int // Позиция в байтах (для плагинов)
+	DesiredVisualCol   int // Колонка, в которую мы хотим попасть при навигации Up/Down
 
 	ShowWhitespaces  bool
 	selActive        bool
@@ -84,6 +73,8 @@ type EditorView struct {
 	rectSelActive    bool
 	rectSelStartLine int
 	rectSelStartCol  int
+	hoverURL         string
+	hoverURLStart    int
 	editSession      int // Unique ID to fence background tasks
 
 	pasting     bool
@@ -180,6 +171,14 @@ type EditorView struct {
 	CursorBeyondEOL     bool
 	CursorVirtualSpaces int
 	UseEditorConfig     bool
+
+	// bidiCache avoids rescanning an unchanged long line on every cursor key.
+	// zoin-bot keys it by editSession and logical line, so edits and undo/redo
+	// invalidate the result without making the common LTR path line-sized.
+	bidiCacheSession int
+	bidiCacheLine    int
+	bidiCacheValue   bool
+	bidiCacheValid   bool
 
 	highlighting    bool
 	highlightCancel context.CancelFunc
@@ -1471,6 +1470,7 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 		} else {
 			lineLen = ev.pt.Size() - lineStart
 		}
+		lineLinks := ev.urlLinksForLine(lineStart, lineStart+lineLen)
 
 		// Stateful Highlighting
 		var lineSyntax []uint64
@@ -1590,9 +1590,8 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 			}
 			runesProcessedInLine += fragRuneCount
 
-			_, startVCol := ev.engine.LogicalToVisual(frag.ByteOffsetStart)
 			isCrossRow := (absVRow == crossVRow)
-			ev.renderCells = ev.fillCells(ev.renderCells, ev.renderBytes, bgAttr, selAttr, frag.ByteOffsetStart, ev.selActive, selMin, selMax, ev.fadeSyntax(fragSyntax, bgAttr), startVCol, isCrossRow, crossVCol, horzCrossAttr, vertCrossAttr, absVRow)
+			ev.renderCells = ev.fillCellsWithLinks(ev.renderCells, ev.renderBytes, bgAttr, selAttr, frag.ByteOffsetStart, ev.selActive, selMin, selMax, ev.fadeSyntax(fragSyntax, bgAttr), lineLinks, 0, isCrossRow, crossVCol, horzCrossAttr, vertCrossAttr, absVRow)
 
 			scr.Write(ev.X1-ev.ScrollLeft, currY, ev.renderCells)
 
@@ -2095,6 +2094,13 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 				ev.CursorLine--
 				ev.CursorPos = ev.getLineLength(ev.CursorLine)
 			}
+		} else if ev.lineUsesVisualBidi() {
+			currentOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
+			newOffset := ev.engine.MoveVisual(currentOffset, -1)
+			if newOffset != currentOffset {
+				ev.CursorLine = ev.li.GetLineAtOffset(newOffset)
+				ev.CursorPos = newOffset - ev.li.GetLineOffset(ev.CursorLine)
+			}
 		} else {
 			if ev.CursorPos > 0 {
 				lineStart := ev.li.GetLineOffset(ev.CursorLine)
@@ -2180,6 +2186,16 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 				ev.CursorLine++
 				ev.CursorPos = 0
 			}
+		} else if ev.lineUsesVisualBidi() {
+			currentOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
+			newOffset := ev.engine.MoveVisual(currentOffset, 1)
+			if newOffset != currentOffset {
+				ev.CursorLine = ev.li.GetLineAtOffset(newOffset)
+				ev.CursorPos = newOffset - ev.li.GetLineOffset(ev.CursorLine)
+				ev.CursorVirtualSpaces = 0
+			} else if ev.CursorBeyondEOL {
+				ev.CursorVirtualSpaces++
+			}
 		} else {
 			if ev.CursorPos < lineLen {
 				lineStart := ev.li.GetLineOffset(ev.CursorLine)
@@ -2235,17 +2251,14 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 				ev.saveUndo(opOther)
 				ev.modified = true
 				if ev.CursorPos == 0 {
-					// Merge with the previous line (remove line break)
 					prevLen := ev.getLineLength(ev.CursorLine - 1)
 					delLen := 1
-					// Check for CRLF (\r\n)
 					if offset >= 2 {
 						prefix, _ := ev.pt.GetRange(offset-2, 2)
 						if len(prefix) == 2 && prefix[0] == '\r' && prefix[1] == '\n' {
 							delLen = 2
 						}
 					}
-
 					ev.pt.Delete(offset-delLen, delLen)
 					ev.li.UpdateAfterDelete(offset-delLen, delLen)
 					ev.invalidateStates(ev.CursorLine - 1)
@@ -2253,24 +2266,17 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 					ev.CursorLine--
 					ev.CursorPos = prevLen
 				} else {
-					// Backspace follows the terminal/editor convention used by the
-					// reference text fields: remove one UTF-8 code point. Delete
-					// below is the operation that removes a visual cluster.
-					lineStart := ev.li.GetLineOffset(ev.CursorLine)
-					lineData, _ := ev.pt.GetRange(lineStart, ev.CursorPos)
-					size := 1
-					if lineData != nil && len(lineData) > 0 {
-						_, runeSize := utf8.DecodeLastRune(lineData)
-						if runeSize > 0 {
-							size = runeSize
-						}
+					deleteStart := ev.li.GetLineOffset(ev.CursorLine) + ev.previousGraphemeBoundaryInLine(ev.li.GetLineOffset(ev.CursorLine), ev.CursorPos)
+					if ev.lineUsesVisualBidi() {
+						deleteStart = ev.engine.MoveVisual(offset, -1)
 					}
-
-					ev.pt.Delete(offset-size, size)
-					ev.li.UpdateAfterDelete(offset-size, size)
-					ev.invalidateStates(ev.CursorLine)
-					ev.engine.InvalidateFrom(ev.CursorLine)
-					ev.CursorPos -= size
+					ev.pt.Delete(deleteStart, offset-deleteStart)
+					ev.li.UpdateAfterDelete(deleteStart, offset-deleteStart)
+					ev.CursorLine = ev.li.GetLineAtOffset(deleteStart)
+					ev.CursorPos = deleteStart - ev.li.GetLineOffset(ev.CursorLine)
+					minLine := ev.CursorLine
+					ev.invalidateStates(minLine)
+					ev.engine.InvalidateFrom(minLine)
 				}
 			}
 		}
@@ -2310,18 +2316,18 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 				ev.noteBufferEdit()
 				ev.saveUndo(opOther)
 				ev.modified = true
-				// Remove the grapheme cluster under the cursor, not just its
-				// first UTF-8 code point.
-				lineStart := ev.li.GetLineOffset(ev.CursorLine)
-				lineLen := ev.getLineLength(ev.CursorLine)
-				size := 1
-				if ev.CursorPos < lineLen {
-					next := ev.nextGraphemeBoundaryInLine(lineStart, lineLen, ev.CursorPos)
-					size = next - ev.CursorPos
+				deleteEnd := offset + 1
+				if ev.CursorPos < ev.getLineLength(ev.CursorLine) {
+					if ev.lineUsesVisualBidi() {
+						deleteEnd = ev.engine.MoveVisual(offset, 1)
+					} else {
+						lineStart := ev.li.GetLineOffset(ev.CursorLine)
+						next := ev.nextGraphemeBoundaryInLine(lineStart, ev.getLineLength(ev.CursorLine), ev.CursorPos)
+						deleteEnd = lineStart + next
+					}
 				}
-
-				ev.pt.Delete(offset, size)
-				ev.li.UpdateAfterDelete(offset, size)
+				ev.pt.Delete(offset, deleteEnd-offset)
+				ev.li.UpdateAfterDelete(offset, deleteEnd-offset)
 				ev.invalidateStates(ev.CursorLine)
 				ev.engine.InvalidateFrom(ev.CursorLine)
 			}
@@ -2486,45 +2492,79 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 	return false
 }
 
+type editorTextCluster struct {
+	text      string
+	width     int
+	byteStart int
+	byteEnd   int
+	runeStart int
+	runeEnd   int
+}
+
+// editorVisualClusters uses textlayout's shared grapheme and BiDi order for
+// painting. zoin-bot keeps byte and rune boundaries from the document intact.
+func editorVisualClusters(text string) []editorTextCluster {
+	base := textlayout.VisualClustersInVisualOrder(text)
+	clusters := make([]editorTextCluster, 0, len(base))
+	for _, cluster := range base {
+		clusters = append(clusters, editorTextCluster{
+			text:      cluster.Text,
+			width:     cluster.Width,
+			byteStart: cluster.Start,
+			byteEnd:   cluster.End,
+			runeStart: cluster.RuneStart,
+			runeEnd:   cluster.RuneEnd,
+		})
+	}
+	return clusters
+}
+
 func (ev *EditorView) fillCells(target []vtui.CharInfo, data []byte, defaultAttr, selAttr uint64, offset int, selActive bool, selMin, selMax int, syntax []uint64, startVisualCol int, isCrossRow bool, crossVCol int, horzCrossAttr, vertCrossAttr uint64, visualRow int) []vtui.CharInfo {
+	return ev.fillCellsWithLinks(target, data, defaultAttr, selAttr, offset, selActive, selMin, selMax, syntax, nil, startVisualCol, isCrossRow, crossVCol, horzCrossAttr, vertCrossAttr, visualRow)
+}
+
+func (ev *EditorView) fillCellsWithLinks(target []vtui.CharInfo, data []byte, defaultAttr, selAttr uint64, offset int, selActive bool, selMin, selMax int, syntax []uint64, links []urlLink, startVisualCol int, isCrossRow bool, crossVCol int, horzCrossAttr, vertCrossAttr uint64, visualRow int) []vtui.CharInfo {
 	target = target[:0]
-	currByte := 0
-	runeIdx := 0
+	text := string(data)
+	clusters := editorVisualClusters(text)
 	visualCol := startVisualCol
 	tabSize := ev.TabSize
 	if tabSize <= 0 {
 		tabSize = 8
 	}
 
-	for _, visualCluster := range textlayout.VisualClusters(string(data)) {
-		cluster := visualCluster.Text
-		w := visualCluster.Width
-		size := visualCluster.End - visualCluster.Start
-		r, _ := utf8.DecodeRuneInString(cluster)
-
-		displayCluster, sanitizedWidth := vtui.SanitizeCluster(cluster)
-		if sanitizedWidth == 0 {
-			runeIdx += utf8.RuneCountInString(cluster)
-			currByte += size
-			continue
-		}
-		w = sanitizedWidth
-		if r == '\t' {
+	for _, cluster := range clusters {
+		var w int
+		displayText, sanitizedWidth := vtui.SanitizeCluster(cluster.text)
+		if cluster.text == "\t" {
 			w = tabSize - (visualCol % tabSize)
-			displayCluster = " "
+			displayText = " "
 			if ev.ShowWhitespaces {
-				displayCluster = "→"
+				displayText = "→"
 			}
-		} else if r == ' ' && ev.ShowWhitespaces {
-			displayCluster = "·"
+		} else {
+			if sanitizedWidth == 0 {
+				continue
+			}
+			w = sanitizedWidth
+			if cluster.text == " " && ev.ShowWhitespaces {
+				displayText = "·"
+			}
+		}
+		if w <= 0 {
+			w = 1
 		}
 
 		attr := defaultAttr
-		if runeIdx < len(syntax) {
-			attr = syntax[runeIdx]
+		if cluster.runeStart < len(syntax) {
+			attr = syntax[cluster.runeStart]
+		}
+		if ev.hoverURL != "" {
+			if link, ok := urlLinkAt(links, offset+cluster.byteStart); ok && link.URL == ev.hoverURL {
+				attr |= vtui.CommonLvbUnderscore
+			}
 		}
 
-		// Horizontal crosshair line applies to the entire character in the active row
 		if isCrossRow && horzCrossAttr != 0 {
 			if horzCrossAttr&vtui.IsBgRGB != 0 {
 				attr = vtui.SetRGBBack(attr, vtui.GetRGBBack(horzCrossAttr))
@@ -2542,38 +2582,37 @@ func (ev *EditorView) fillCells(target []vtui.CharInfo, data []byte, defaultAttr
 			if minX > maxX {
 				minX, maxX = maxX, minX
 			}
-			if visualRow >= minY && visualRow <= maxY && visualCol >= minX && visualCol < maxX {
+			if visualRow >= minY && visualRow <= maxY && visualCol < maxX && visualCol+w > minX {
 				attr = selAttr
 			}
 		} else if selActive {
-			absPos := offset + currByte
-			if absPos < selMax && absPos+size > selMin {
+			absStart := offset + cluster.byteStart
+			absEnd := offset + cluster.byteEnd
+			if absStart < selMax && absEnd > selMin {
 				attr = selAttr
 			}
 		}
-		runeIdx += utf8.RuneCountInString(cluster)
-		currByte += size
 
-		if w > 0 {
-			charVal := vtui.RegisterCluster(displayCluster)
-			for j := 0; j < w; j++ {
-				cellAttr := attr
-				// Vertical crosshair line: apply ONLY to the specific cell index
-				if !isCrossRow && (visualCol+j == crossVCol) && vertCrossAttr != 0 {
-					if vertCrossAttr&vtui.IsBgRGB != 0 {
-						cellAttr = vtui.SetRGBBack(cellAttr, vtui.GetRGBBack(vertCrossAttr))
-					} else {
-						cellAttr = vtui.SetIndexBack(cellAttr, vtui.GetIndexBack(vertCrossAttr))
-					}
-				}
-				target = append(target, vtui.CharInfo{Char: charVal, Attributes: cellAttr})
-				charVal = vtui.WideCharFiller
-				if r == '\t' {
-					charVal = ' '
+		cells := vtui.AppendCluster(nil, displayText, w, attr)
+		if displayText == " " && w > 1 {
+			cells = make([]vtui.CharInfo, 0, w)
+			for i := 0; i < w; i++ {
+				cells = append(cells, vtui.CharInfo{Char: ' ', Attributes: attr})
+			}
+		}
+		for i := range cells {
+			cellAttr := cells[i].Attributes
+			if !isCrossRow && visualCol+i == crossVCol && vertCrossAttr != 0 {
+				if vertCrossAttr&vtui.IsBgRGB != 0 {
+					cellAttr = vtui.SetRGBBack(cellAttr, vtui.GetRGBBack(vertCrossAttr))
+				} else {
+					cellAttr = vtui.SetIndexBack(cellAttr, vtui.GetIndexBack(vertCrossAttr))
 				}
 			}
-			visualCol += w
+			cells[i].Attributes = cellAttr
 		}
+		target = append(target, cells...)
+		visualCol += w
 	}
 	return target
 }
@@ -2705,6 +2744,9 @@ func (ev *EditorView) ensureCursorVisible() {
 	if ev.targetLine != -1 {
 		return // Skip clamping and scrolling while waiting for the target line to be indexed
 	}
+	if ev.WordWrap && ev.currentLineUnsafeForWordWrap() {
+		ev.disableUnsafeWordWrap()
+	}
 
 	if ev.HexMode || ev.DecodeMode {
 		height := ev.Y2 - ev.Y1
@@ -2815,6 +2857,18 @@ func (ev *EditorView) ProcessMouse(e *vtinput.InputEvent) bool {
 		ev.ensureCursorVisible()
 	}
 
+	if e.WheelDirection == 0 {
+		if changed := ev.updateURLHover(int(e.MouseX), int(e.MouseY)); changed {
+			vtui.FrameManager.Redraw()
+		}
+		if ctrlMouseClick(e) {
+			if link, ok := ev.urlLinkAtMouse(int(e.MouseX), int(e.MouseY)); ok {
+				openExternalURLAsync(link.URL)
+				return true
+			}
+		}
+	}
+
 	if ev.scrollBar != nil && ev.scrollBar.ProcessMouse(e) {
 		return true
 	}
@@ -2905,6 +2959,99 @@ func (ev *EditorView) ProcessMouse(e *vtinput.InputEvent) bool {
 	}
 
 	return false
+}
+
+func (ev *EditorView) urlLinkAtMouse(mx, my int) (urlLink, bool) {
+	link, _, ok := ev.urlLinkLocationAtMouse(mx, my)
+	return link, ok
+}
+
+func (ev *EditorView) urlLinkLocationAtMouse(mx, my int) (urlLink, int, bool) {
+	if ev.HexMode || ev.DecodeMode || mx < ev.X1 || mx > ev.X2 || my < ev.Y1+1 || my > ev.Y2 {
+		return urlLink{}, 0, false
+	}
+	width := ev.X2 - ev.X1 + 1
+	if ev.scrollBar != nil {
+		width--
+	}
+	if mx >= ev.X1+width {
+		return urlLink{}, 0, false
+	}
+	visualCol := mx - ev.X1 + ev.ScrollLeft
+	visualRow := my - (ev.Y1 + 1) + ev.ScrollTopRow
+	offset := ev.engine.VisualToLogical(visualRow, visualCol)
+	line := ev.li.GetLineAtOffset(offset)
+	lineStart := ev.li.GetLineOffset(line)
+	lineEnd := ev.pt.Size()
+	if line+1 < ev.li.LineCount() {
+		lineEnd = ev.li.GetLineOffset(line + 1)
+	}
+	rel := offset - lineStart
+	links := ev.urlLinksNearOffset(lineStart, lineEnd, rel)
+	if link, ok := urlLinkAt(links, rel); ok {
+		return link, lineStart + link.Start, true
+	}
+	if rel > 0 {
+		if link, ok := urlLinkAt(links, rel-1); ok {
+			return link, lineStart + link.Start, true
+		}
+	}
+	return urlLink{}, 0, false
+}
+
+func (ev *EditorView) updateURLHover(mx, my int) bool {
+	var next string
+	start := -1
+	if link, linkStart, ok := ev.urlLinkLocationAtMouse(mx, my); ok {
+		next = link.URL
+		start = linkStart
+	}
+	if next == ev.hoverURL && start == ev.hoverURLStart {
+		ev.hoverURLStart = start
+		return false
+	}
+	ev.hoverURL = next
+	ev.hoverURLStart = start
+	return true
+}
+
+func (ev *EditorView) urlLinksNearOffset(lineStart, lineEnd, rel int) []urlLink {
+	if lineEnd <= lineStart {
+		return nil
+	}
+	readStart, readEnd := lineStart, lineEnd
+	if readEnd-readStart > maxURLScanBytes {
+		readStart = lineStart + rel - 4096
+		if readStart < lineStart {
+			readStart = lineStart
+		}
+		readEnd = readStart + maxURLScanBytes
+		if readEnd > lineEnd {
+			readEnd = lineEnd
+			readStart = readEnd - maxURLScanBytes
+			if readStart < lineStart {
+				readStart = lineStart
+			}
+		}
+	}
+	data, err := ev.pt.GetRange(readStart, readEnd-readStart)
+	if err != nil {
+		return nil
+	}
+	links := findURLLinks(string(data))
+	base := readStart - lineStart
+	for i := range links {
+		links[i].Start += base
+		links[i].End += base
+	}
+	return links
+}
+
+func (ev *EditorView) urlLinksForLine(lineStart, lineEnd int) []urlLink {
+	if ev.hoverURL == "" || ev.hoverURLStart < lineStart || ev.hoverURLStart >= lineEnd {
+		return nil
+	}
+	return ev.urlLinksNearOffset(lineStart, lineEnd, ev.hoverURLStart-lineStart)
 }
 
 func (ev *EditorView) SetPosition(x1, y1, x2, y2 int) {
@@ -3035,21 +3182,28 @@ func (ev *EditorView) StartIndexing() {
 		ev.targetLine = -1
 		return
 	}
-	// A mapped file has no chunk buffer and needs indexing just the same, so
-	// the question is whether there is any text at all, not how it is backed.
-	if ev.asyncBuf == nil && ev.mapped == nil {
-		// Fully read files (non-UTF-8 codepages) have a complete index and no
-		// scan; resolve a pending restore here or Loading waits forever.
-		ev.restoreTargetPos()
-		ev.resolveTargetOffset()
-		return
-	}
 	if ev.indexCancel != nil {
 		ev.indexCancel()
 	}
-
 	ev.retireEditSession()
 	sessionID := ev.editSession
+	ev.probeUnsafeWordWrap()
+	// Mapped and fully decoded files already have their line index; they still
+	// need the safety scan before wrapping can be enabled.
+	if ev.asyncBuf == nil {
+		// Fully read files (non-UTF-8 codepages) have a complete index and no
+		// line scan; resolve a pending restore here or Loading waits forever.
+		ev.restoreTargetPos()
+		ctx, cancel := context.WithCancel(context.Background())
+		ev.indexCancel = cancel
+		go func() {
+			// zoin-bot keeps mapped-file faults recoverable in the fully-read
+			// indexing path just like in the lazy-buffer indexing goroutine.
+			defer ev.guardMapping("indexing fully-read buffer")()
+			ev.scanFullyReadForUnsafeWordWrap(ctx, sessionID)
+		}()
+		return
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	ev.indexCancel = cancel
@@ -3114,8 +3268,10 @@ func (ev *EditorView) StartIndexing() {
 		if indexer, ok := ev.vfs.(vfs.LineIndexer); ok && ev.Codepage == 65001 {
 			vtui.DebugLog("EDITOR_INDEX: Using remote LineIndexer")
 			var currentLine int64 = int64(li.LineCount() + 1)
+			remoteLineStart := int64(li.GetLineOffset(li.LineCount() - 1))
 			const batchSize = 100000
 			remoteSuccess := true
+			wrapUnsafe := false
 			for {
 				if ctx.Err() != nil || ev.IsDone() {
 					return
@@ -3128,6 +3284,16 @@ func (ev *EditorView) StartIndexing() {
 				}
 
 				if len(res.Offsets) > 0 {
+					for _, off := range res.Offsets {
+						if editorWrapIntervalUnsafe(remoteLineStart, off) {
+							if !wrapUnsafe {
+								ev.postUnsafeWordWrap(sessionID, ctx)
+								wrapUnsafe = true
+							}
+							break
+						}
+						remoteLineStart = off
+					}
 					batchOffsets := make([]int, 0, len(res.Offsets))
 					for _, off := range res.Offsets {
 						batchOffsets = append(batchOffsets, int(off))
@@ -3166,6 +3332,9 @@ func (ev *EditorView) StartIndexing() {
 			}
 
 			if remoteSuccess {
+				if editorWrapIntervalUnsafe(remoteLineStart, int64(maxSize)) && !wrapUnsafe {
+					ev.postUnsafeWordWrap(sessionID, ctx)
+				}
 				scannedTo.Store(int64(maxSize))
 				vtui.FrameManager.PostTask(func() {
 					if ctx.Err() == nil && ev.editSession == sessionID {
@@ -3209,6 +3378,8 @@ func (ev *EditorView) StartIndexing() {
 		defer indexScanBuffers.Put(scanBuf)
 
 		pendingOffsets := make([]int, 0, 10000)
+		lineLen := 0
+		wrapUnsafe := false
 
 		for absPos < maxSize {
 			select {
@@ -3258,6 +3429,12 @@ func (ev *EditorView) StartIndexing() {
 			poll = indexPollMin
 			if err != nil {
 				break
+			}
+			var unsafe bool
+			lineLen, unsafe = scanEditorWrapSafety(data, lineLen)
+			if unsafe && !wrapUnsafe {
+				ev.postUnsafeWordWrap(sessionID, ctx)
+				wrapUnsafe = true
 			}
 
 			pendingOffsets = piecetable.AppendNewlineOffsets(pendingOffsets, data, absPos)
@@ -3920,9 +4097,6 @@ func (ev *EditorView) scheduleIndexResume() {
 	ev.indexResume = time.AfterFunc(indexResumeDelay, func() {
 		vtui.FrameManager.PostTask(func() {
 			if ev.IsDone() || ev.indexing || ev.indexIsComplete() {
-				return
-			}
-			if ev.asyncBuf == nil && ev.mapped == nil {
 				return
 			}
 			ev.StartIndexing()

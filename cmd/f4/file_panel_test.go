@@ -3047,7 +3047,7 @@ func TestFileSystemPanel_TitleDoesNotContainSortIndicator(t *testing.T) {
 	}
 }
 
-func TestFileSystemPanel_CurrentTitleUsesSelectedColor(t *testing.T) {
+func TestFileSystemPanel_CurrentTitleKeepsTheSameColorWhenFocused(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	v := vfs.NewOSVFS(t.TempDir())
 	fp := NewFileSystemPanel(0, 0, 40, 24, v)
@@ -3072,8 +3072,8 @@ func TestFileSystemPanel_CurrentTitleUsesSelectedColor(t *testing.T) {
 
 	fp.SetFocus(true)
 	fp.Show(scr)
-	if got := scr.GetCell(3, 0).Attributes; got != vtui.Palette[ColPanelSelectedTitle] {
-		t.Fatalf("active title attributes = %#x; want %#x", got, vtui.Palette[ColPanelSelectedTitle])
+	if got := scr.GetCell(3, 0).Attributes; got != vtui.Palette[ColPanelTitle] {
+		t.Fatalf("active title attributes = %#x; want %#x", got, vtui.Palette[ColPanelTitle])
 	}
 
 	// Search-first keeps the current panel visually active while the command
@@ -3081,8 +3081,8 @@ func TestFileSystemPanel_CurrentTitleUsesSelectedColor(t *testing.T) {
 	fp.SetFocus(false)
 	fp.showInactiveCursor = true
 	fp.Show(scr)
-	if got := scr.GetCell(3, 0).Attributes; got != vtui.Palette[ColPanelSelectedTitle] {
-		t.Fatalf("current title with command-line focus attributes = %#x; want %#x", got, vtui.Palette[ColPanelSelectedTitle])
+	if got := scr.GetCell(3, 0).Attributes; got != vtui.Palette[ColPanelTitle] {
+		t.Fatalf("current title with command-line focus attributes = %#x; want %#x", got, vtui.Palette[ColPanelTitle])
 	}
 }
 
@@ -3282,6 +3282,23 @@ func TestFileSystemPanel_HeaderClickSortsAndToggles(t *testing.T) {
 	}
 	if !strings.HasSuffix(fp.table.Columns[0].Title, " ↓") {
 		t.Fatalf("reversed Name title has no down arrow: %q", fp.table.Columns[0].Title)
+	}
+
+	// When the active mode is not represented by a visible column, its
+	// right-aligned label is embedded in the Name header. Clicking that label
+	// must toggle the active mode instead of resetting it to Name.
+	release()
+	fp.sortMode = SortExt
+	fp.sortReverse = false
+	fp.updateSortColumnTitles()
+	hiddenTitle := hiddenSortColumnTitle(SortExt, fp.sortIsAscending(), fp.table.Columns[0].Width)
+	hiddenX := fp.table.X1 + fp.table.Columns[0].Width - runewidth.StringWidth(hiddenTitle)
+	if !fp.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: true,
+		MouseX: int16(hiddenX), MouseY: int16(fp.table.Y1),
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+	}) || fp.sortMode != SortExt || !fp.sortReverse {
+		t.Fatalf("hidden Extension header click: mode=%v reverse=%v title=%q", fp.sortMode, fp.sortReverse, fp.table.Columns[0].Title)
 	}
 
 	// Separator clicks do not select either adjacent sort column.

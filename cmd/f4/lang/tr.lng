@@ -5,20 +5,6 @@ Author=f4 Team
 
 [Strings]
 VisRen.Menu=&Görsel Dosya Yeniden Adlandırma
-ID3Editor.Menu=ID3 Etiket &Düzenleyici
-ID3Editor.Title=ID3 Etiket Düzenleyici
-ID3Editor.LocalOnly=ID3 Etiket Düzenleyici yalnızca yerel dosyaları destekler.
-ID3Editor.SelectFile=Önce bir MP3 dosyası seçin.
-ID3Editor.OnlyMP3=Yalnızca MP3 dosyaları desteklenmektedir.
-ID3Editor.SaveError=ID3 etiketleri kaydedilemedi:\n%v
-ID3Editor.OpenError=MP3 dosyası açılamadı:\n%v
-ID3Editor.FieldTitle=Başlık:
-ID3Editor.FieldArtist=Sanatçı:
-ID3Editor.FieldAlbum=Albüm:
-ID3Editor.FieldYear=Yıl:
-ID3Editor.FieldGenre=Tür:
-ID3Editor.FieldComment=Yorum:
-ID3Editor.FieldVersion=Sürüm:
 VisRen.Title=Görsel Dosya Yeniden Adlandırma
 VisRen.HostUnsupported=Bu F4 ana makinesi VisRen arayüzünü desteklemiyor.
 VisRen.LocalOnly=VisRen yalnızca yerel dosya panelinde çalışır.
@@ -59,109 +45,53 @@ VisRen.WordDivTitle=Kelime ayırıcılar
 VisRen.WordDivPrompt=Kelimeleri ayıran karakterler (en fazla 18):
 VisRen.OldName=Eski isim
 VisRen.NewName=Yeni isim
+
+ID3Editor.Menu=ID3 Etiket &Düzenleyici
+ID3Editor.Title=ID3 Etiket Düzenleyici
+ID3Editor.LocalOnly=ID3 Etiket Düzenleyici yalnızca yerel dosyaları destekler.
+ID3Editor.SelectFile=Önce bir MP3 dosyası seçin.
+ID3Editor.OnlyMP3=Yalnızca MP3 dosyaları desteklenmektedir.
+ID3Editor.SaveError=ID3 etiketleri kaydedilemedi:\n%v
+ID3Editor.OpenError=MP3 dosyası açılamadı:\n%v
+ID3Editor.FieldTitle=Başlık:
+ID3Editor.FieldArtist=Sanatçı:
+ID3Editor.FieldAlbum=Albüm:
+ID3Editor.FieldYear=Yıl:
+ID3Editor.FieldGenre=Tür:
+ID3Editor.FieldComment=Yorum:
+ID3Editor.FieldVersion=Sürüm:
+
 vtui.Ok=&Tamam
 vtui.Cancel=İptal
+vtui.Save=Kayde&t
+
 Panel.Other=&Diğer panel
 Panel.Column.Name=İsim
 Panel.Column.Size=Boyut
 Panel.Column.Modified=Değiştirilme
 Panel.UpDir=ÜST-DİZİN
 Panel.SelectedInfo=Bayt: %s, dosya: %d, klasör: %d
+
 Panels.Prompt=>
+
 Edit.NewFileTitle= Yeni Dosya Oluştur
 Edit.NewFilePrompt=Dosya i&smi:
+
 MakeFolder.Title= Klasör Oluştur
 MakeFolder.Prompt=Oluşturulacak &klasör:
+
 Delete.Title= Sil
 Delete.Confirm=Silmek istediğinize emin misiniz:\n%s?
 Delete.Btn=&Sil
+
 Copy.Title= Kopyala
 Copy.Prompt=%d öğeyi şuraya kopyala:
 Copy.Btn=&Kopyala
+
 Move.Title= Taşı
 Move.Prompt=%d öğeyi şuraya taşı veya yeniden adlandır:
 Move.Btn=&Yeniden Adlandır
-Btn.OverwriteAll=Tümünün Üzerine &Yaz
-Btn.SkipAll=Tümünü At&la
-Btn.Retry=&Yeniden dene
-Btn.Ignore=&Yoksay
-Operation.Error=İşlem başarısız oldu:\n%s
-Op.ClonePanels=Panelleri yeni çalışma alanına k&lonla
-Op.SwitchHint=Pencereler arası geçiş için Ctrl+Tab
-Op.DummyTitle= Sahte İşlem
-Op.DummyText=Bu 5 dakikalık sahte bir işlemdir.\nArka plan modunu seçin:
-Viewer.Title= Görünüm
-Viewer.ModeText=Metin
-Viewer.ModeHex=Onaltılık
-Viewer.SearchTitle= Arama
-Search.CaseSensitive=&Büyük/küçük harf duyarlı
-Search.Reverse=&Ters arama
-Select.Title= Seç
-Deselect.Title= Seçimi İptal Et
-Quit.Title= Çıkış
-Quit.Confirm=f4'ten çıkmak istiyor musunuz?
-Quit.Btn=&Çık
-Select.Mask=Seçim maskesini &girin:
 
-Macro.AssignTitle= Makro Ata
-Macro.AssignPrompt=İstediğiniz tuş kombinasyonuna basın
-Macro.AssignCancel=İptal etmek için Esc'ye basın
-
-Menu.Language=Dil
-Menu.HelpLanguage=Yardım Dili
-Menu.Left=Sol
-Menu.Files=Dosyalar
-Menu.Commands=Komutlar
-Menu.Options=Seçenekler
-Menu.Right=Sağ
-Menu.Exit=Çı&kış
-
-Menu.Files.View=Göster
-Menu.Files.Edit=Düzenle
-Menu.Files.Copy=Kopyala
-Menu.Files.RenMov=Yeniden adlandır / Taşı
-Menu.Files.MkDir=Klasör oluştur
-Menu.Files.Delete=Sil
-Menu.Left.Brief=Kısa
-Menu.Left.Medium=Orta
-Menu.Left.Detailed=Detaylı
-Menu.Left.Wide=Geniş
-Menu.Commands.FindFile=Dosya bul
-Menu.Commands.FindDuplicates=Kopyaları bul
-Menu.Commands.BackgroundJobs=Arka plan görevleri
-Menu.Commands.RunRemote=Uzaktan komut çalıştır
-RemoteCmd.Title=Uzaktan komut
-RemoteCmd.Prompt=Komut:
-RemoteCmd.BtnClose=K&apat
-Jobs.Title=Arka Plan Görevleri
-Jobs.BtnShow=&Göster
-Jobs.BtnCancel=Görevi &iptal et
-Jobs.BtnClose=K&apat
-Jobs.Empty=Hiçbir şey çalışmıyor
-Menu.Commands.Bookmarks=Yer İmleri
-Menu.SortName=İsim
-Menu.SortExt=Uzantı
-Menu.SortTime=Zaman
-Menu.SortSize=Boyut
-Menu.SortUnsorted=Sırasız
-Sort.Title=Sıralama ölçütü
-Menu.PanelSettings=Panel ayarları
-Menu.EditorSettings=Düzenleyici ayarları
-Menu.ColorerSettings=&Renklendirici ayarları
-Menu.AppearanceSettings=Görünüm ayarları
-Menu.ConfirmationsSettings=Onaylar
-Menu.AutoUpdateSettings=O&tomatik güncelleme
-Menu.Options.Plugins=Eklentileri yönet
-
-Menu.Editor.File=&Dosya
-Menu.Editor.Edit=Düz&enle
-Menu.Editor.Search=&Ara
-Menu.Editor.Options=&Seçenekler
-Menu.Editor.Insert=Ekl&e
-Menu.Viewer.File=&Dosya
-Menu.Viewer.View=&Görünüm
-Menu.Viewer.Search=&Ara
-Menu.Viewer.Options=&Seçenekler
 Action.App.ScreenGrab=Ekran &yakala
 Action.App.ScreenGrab.Desc=Ekran bölgesini seçin ve kopyalayın
 Action.Editor.Save=Kayde&t
@@ -224,18 +154,6 @@ Action.Viewer.CodepageNext=S&onraki kod sayfası
 Action.Viewer.CodepageNext.Desc=Sonraki kod sayfasına geç
 Action.Viewer.CodepageMenu=Kod s&ayfası menüsü
 Action.Viewer.CodepageMenu.Desc=Kod sayfası seç
-Help.ViewerEditor=Görüntüleyici ve Düzenleyici Tuşları
-Help.PanelNav=Panel Tuşları
-Help.NavigationKeys=Gezinme tuşları
-Help.Area.Shell=Paneller
-Help.Area.Terminal=Terminal
-Help.Area.Editor=Düzenleyici
-Help.Area.Viewer=Görüntüleyici
-Help.Area.Common=Genel
-Menu.Shell.Files=&Dosyalar
-Menu.Shell.Commands=&Komutlar
-Menu.Shell.Options=S&eçenekler
-Menu.Terminal.File=&Dosya
 Action.File.New=Yeni dosya
 Action.File.New.Desc=Yeni dosya oluştur ve düzenleyicide aç
 Action.File.CopyInPlace=Olduğu yere kopyala
@@ -268,19 +186,6 @@ Action.Panel.UserMenu=&Kullanıcı menüsü
 Action.Panel.UserMenu.Desc=Kullanıcı menüsünü göster
 Action.Panel.FileAssociations=Dosya i&lişkilendirmeleri…
 Action.Panel.FileAssociations.Desc=Enter, F3 ve F4 için maskeye göre komutları yapılandır
-FileAssoc.EditorTitle=Dosya ilişkilendirmeleri
-FileAssoc.EditTitle=İlişkiyi düzenle
-FileAssoc.NewTitle=Yeni ilişki
-FileAssoc.ErrorTitle=Dosya ilişkilendirmeleri
-FileAssoc.EmptyHint=Henüz ilişki yok — eklemek için Ins'e basın
-FileAssoc.EmptyMask=Dosya maskesi boş olamaz.
-FileAssoc.MaskLabel=Maske
-FileAssoc.DescLabel=Açıklama
-FileAssoc.PickTitle.Open=Birlikte aç
-FileAssoc.PickTitle.View=Birlikte görüntüle
-FileAssoc.PickTitle.Edit=Birlikte düzenle
-FileAssoc.DeleteTitle=İlişkiyi sil
-FileAssoc.DeleteConfirm=İlişki silinsin mi: %q?
 Action.Panel.Bookmarks.Desc=Klasör yer imleri iletişim kutusunu göster
 Action.Panel.PluginMenu=Eklenti &komutları
 Action.Panel.PluginMenu.Desc=Eklenti komutları menüsünü göster
@@ -367,23 +272,106 @@ Action.Terminal.ViewLog.Desc=Terminal günlüğünü görüntüleyicide aç
 Action.Terminal.EditLog=Terminal günlüğünü düz&enle
 Action.Terminal.EditLog.Desc=Terminal günlüğünü düzenleyicide aç
 
-EditorSettings.Title= Düzenleyici ayarları
-EditorSettings.AutoComplete=Otomati&k tamamlamayı aç
-EditorSettings.Mask=Şu dosya maskeleri için etkin:
-ColorerSettings.Title= Renklendirici ayarları
-ColorerSettings.Enabled=Renklendirici vur&gulamasını etkinleştir
-ColorerSettings.Style=Renk &stili:
-ColorerSettings.BuiltIn=(yerleşik)
-ColorerSettings.Cross=&Artı imlecini göster:
-ColorerSettings.CrossOff=Gösterme
-ColorerSettings.CrossVertical=Dikey
-ColorerSettings.CrossHorizontal=Yatay
-ColorerSettings.CrossBoth=İkisi de
-ColorerSettings.Syntax=Sözdizimini v&urgula
-ColorerSettings.Background=Düzenleyici arka planını de&ğiştir
-ColorerSettings.Catalog=Şe&malar klasörü (catalog.xml):
-ColorerSettings.Reload=Y&eniden yükle
-ColorerSettings.Download=Şemaları in&dir
+Btn.OverwriteAll=Tümünün Üzerine &Yaz
+Btn.SkipAll=Tümünü At&la
+Btn.Retry=&Yeniden dene
+Btn.Ignore=&Yoksay
+
+Operation.Error=İşlem başarısız oldu:\n%s
+
+Op.ClonePanels=Panelleri yeni çalışma alanına k&lonla
+Op.SwitchHint=Pencereler arası geçiş için Ctrl+Tab
+Op.DummyTitle= Sahte İşlem
+Op.DummyText=Bu 5 dakikalık sahte bir işlemdir.\nArka plan modunu seçin:
+Op.Queue=Sıra
+Op.Background=Arka plan
+Op.Foreground=Ön plan kilidi
+Op.PathNameOnly=Yalnızca isim
+Op.PathFullPath=Tam yol
+Op.PathSrcDst=Kaynak -> Hedef
+Op.DummyQueue=Sıra (Varsayılan)
+Op.DummyBackground=Arka plan
+Op.DummyForeground=Ön plan kilidi
+Op.BtnStart=&Başlat
+
+Viewer.Title= Görünüm
+Viewer.ModeText=Metin
+Viewer.ModeHex=Onaltılık
+Viewer.SearchTitle= Arama
+
+Search.CaseSensitive=&Büyük/küçük harf duyarlı
+Search.Reverse=&Ters arama
+Search.Prompt=Aranan:
+Search.WholeWords=Sadece tam kelimeler
+Search.Regex=Düzenli ifadeler
+Search.BtnFind=&Bul
+
+Select.Title= Seç
+Select.Mask=Seçim maskesini &girin:
+
+Deselect.Title= Seçimi İptal Et
+
+Quit.Title= Çıkış
+Quit.Confirm=f4'ten çıkmak istiyor musunuz?
+Quit.Btn=&Çık
+
+Macro.AssignTitle= Makro Ata
+Macro.AssignPrompt=İstediğiniz tuş kombinasyonuna basın
+Macro.AssignCancel=İptal etmek için Esc'ye basın
+
+Menu.Language=Dil
+Menu.HelpLanguage=Yardım Dili
+Menu.Left=Sol
+Menu.Files=Dosyalar
+Menu.Commands=Komutlar
+Menu.Options=Seçenekler
+Menu.Right=Sağ
+Menu.Exit=Çı&kış
+Menu.Files.View=Göster
+Menu.Files.Edit=Düzenle
+Menu.Files.Copy=Kopyala
+Menu.Files.RenMov=Yeniden adlandır / Taşı
+Menu.Files.MkDir=Klasör oluştur
+Menu.Files.Delete=Sil
+Menu.Left.Brief=Kısa
+Menu.Left.Medium=Orta
+Menu.Left.Detailed=Detaylı
+Menu.Left.Wide=Geniş
+Menu.Commands.FindFile=Dosya bul
+Menu.Commands.FindDuplicates=Kopyaları bul
+Menu.Commands.BackgroundJobs=Arka plan görevleri
+Menu.Commands.RunRemote=Uzaktan komut çalıştır
+Menu.Commands.Bookmarks=Yer İmleri
+Menu.SortName=İsim
+Menu.SortExt=Uzantı
+Menu.SortTime=Zaman
+Menu.SortSize=Boyut
+Menu.SortUnsorted=Sırasız
+Menu.PanelSettings=Panel ayarları
+Menu.EditorSettings=Düzenleyici ayarları
+Menu.ColorerSettings=&Renklendirici ayarları
+Menu.AppearanceSettings=Görünüm ayarları
+Menu.ConfirmationsSettings=Onaylar
+Menu.AutoUpdateSettings=O&tomatik güncelleme
+Menu.Options.Plugins=Eklentileri yönet
+Menu.Editor.File=&Dosya
+Menu.Editor.Edit=Düz&enle
+Menu.Editor.Search=&Ara
+Menu.Editor.Options=&Seçenekler
+Menu.Editor.Insert=Ekl&e
+Menu.Viewer.File=&Dosya
+Menu.Viewer.View=&Görünüm
+Menu.Viewer.Search=&Ara
+Menu.Viewer.Options=&Seçenekler
+Menu.Shell.Files=&Dosyalar
+Menu.Shell.Commands=&Komutlar
+Menu.Shell.Options=S&eçenekler
+Menu.Terminal.File=&Dosya
+
+RemoteCmd.Title=Uzaktan komut
+RemoteCmd.Prompt=Komut:
+RemoteCmd.BtnClose=K&apat
+
 PanelSettings.Title= Panel ayarları
 PanelSettings.ShowHidden=&Gizli ve sistem dosyalarını göster
 PanelSettings.ShowDirPrefix=&Klasörler için '/' önekini göster
@@ -404,6 +392,75 @@ PanelSettings.DefaultMode=Varsayılan işlem &modu:
 PanelSettings.PathDisplay=İşlemdeki dosya yolu:
 PanelSettings.InfoPanelCPUGPU=B&ilgi panelinde CPU/GPU bölümünü göster
 PanelSettings.EscTogglePanels=&Esc panellerin görünürlüğünü değiştirir
+PanelSettings.ShowHighlightMarks=&Vurgu işaretlerini göster
+PanelSettings.CommandLineAutoComplete=Komut satırı &otomatik tamamlamayı etkinleştir
+PanelSettings.AlwaysShowMenuBar=Menü çubuğunu &her zaman göster
+PanelSettings.RecordMacrosTo=Makroları şuraya kaydet:
+
+Jobs.Title=Arka Plan Görevleri
+Jobs.BtnShow=&Göster
+Jobs.BtnCancel=Görevi &iptal et
+Jobs.BtnClose=K&apat
+Jobs.Empty=Hiçbir şey çalışmıyor
+
+Sort.Title=Sıralama ölçütü
+
+Help.ViewerEditor=Görüntüleyici ve Düzenleyici Tuşları
+Help.PanelNav=Panel Tuşları
+Help.NavigationKeys=Gezinme tuşları
+Help.Area.Shell=Paneller
+Help.Area.Terminal=Terminal
+Help.Area.Editor=Düzenleyici
+Help.Area.Viewer=Görüntüleyici
+Help.Area.Common=Genel
+Help.SearchHint=Arama: yazın  Sonraki: F3/Ctrl+Enter  Önceki: Shift+F3/Ctrl+Shift+Enter
+
+FileAssoc.EditorTitle=Dosya ilişkilendirmeleri
+FileAssoc.EditTitle=İlişkiyi düzenle
+FileAssoc.NewTitle=Yeni ilişki
+FileAssoc.ErrorTitle=Dosya ilişkilendirmeleri
+FileAssoc.EmptyHint=Henüz ilişki yok — eklemek için Ins'e basın
+FileAssoc.EmptyMask=Dosya maskesi boş olamaz.
+FileAssoc.MaskLabel=Maske
+FileAssoc.DescLabel=Açıklama
+FileAssoc.PickTitle.Open=Birlikte aç
+FileAssoc.PickTitle.View=Birlikte görüntüle
+FileAssoc.PickTitle.Edit=Birlikte düzenle
+FileAssoc.DeleteTitle=İlişkiyi sil
+FileAssoc.DeleteConfirm=İlişki silinsin mi: %q?
+
+EditorSettings.Title= Düzenleyici ayarları
+EditorSettings.AutoComplete=Otomati&k tamamlamayı aç
+EditorSettings.Mask=Şu dosya maskeleri için etkin:
+EditorSettings.TabExpandNone=Sekmeleri genişletme
+EditorSettings.TabExpandNew=Yeni sekmeleri boşluk yap
+EditorSettings.TabExpandAll=Tüm sekmeleri boşluk yap
+EditorSettings.ExpandTabs=Se&kmeleri genişlet:
+EditorSettings.Highlighter=Vur&gulayıcı:
+EditorSettings.ColorerStyle=Renklendirici s&tili:
+EditorSettings.TabSize=Sekme b&oyutu:
+EditorSettings.AutoIndent=O&tomatik girinti
+EditorSettings.CursorBeyondEOL=İmleç satır so&nunun ötesinde
+EditorSettings.UseEditorConfig=.&editorconfig ayarlarını kullan
+EditorSettings.Crosshair=&Artı imlecini göster
+EditorSettings.ColorerBg=Renklendirici &arka planı
+EditorSettings.UseExternalEditor=Harici &düzenleyici kullan
+EditorSettings.ExternalCommand=Harici &komut:
+
+ColorerSettings.Title= Renklendirici ayarları
+ColorerSettings.Enabled=Renklendirici vur&gulamasını etkinleştir
+ColorerSettings.Style=Renk &stili:
+ColorerSettings.BuiltIn=(yerleşik)
+ColorerSettings.Cross=&Artı imlecini göster:
+ColorerSettings.CrossOff=Gösterme
+ColorerSettings.CrossVertical=Dikey
+ColorerSettings.CrossHorizontal=Yatay
+ColorerSettings.CrossBoth=İkisi de
+ColorerSettings.Syntax=Sözdizimini v&urgula
+ColorerSettings.Background=Düzenleyici arka planını de&ğiştir
+ColorerSettings.Catalog=Şe&malar klasörü (catalog.xml):
+ColorerSettings.Reload=Y&eniden yükle
+ColorerSettings.Download=Şemaları in&dir
 
 AppearanceSettings.Title= Görünüm ayarları
 AppearanceSettings.Style=Uygulama &stili:
@@ -412,20 +469,38 @@ AppearanceSettings.FontSize=GUI Yazı Tipi B&oyutu:
 AppearanceSettings.TitleTemplate=Pencere Başlığı Şa&blonu:
 AppearanceSettings.ExportBtn=Temayı Dı&şa Aktar
 AppearanceSettings.ColorCorrection=Renk karşıtlığı dü&zeltmesini zorla
+
 ConfirmationsSettings.Title= Onaylar
 ConfirmationsSettings.Copy=Kop&yalamada onayla
 ConfirmationsSettings.Move=&Taşımada onayla
 ConfirmationsSettings.Delete=&Silmede onayla
-ConfirmationsSettings.Exit=Çı&kışta onayla
 ConfirmationsSettings.DeleteCancelFocused=Silmede 'İptal'e odaklan
+ConfirmationsSettings.Exit=Çı&kışta onayla
+
 UpdateSettings.Title= Otomatik Güncelleme
 UpdateSettings.Channel=Güncelleme &kanalı:
 UpdateSettings.Interval=Kontrol a&ralığı:
 UpdateSettings.BtnCheck=Şimdi k&ontrol et
+UpdateSettings.ChannelStable=Kararlı sürümler
+UpdateSettings.ChannelNightly=Gecelik sürümler
+UpdateSettings.IntervalNever=Asla
+UpdateSettings.IntervalStart=Her başlangıçta
+UpdateSettings.IntervalDaily=Günlük
+UpdateSettings.IntervalWeekly=Haftalık
+
 FindFile.Title= Dosya Bul
 FindFile.MaskPrompt=Bir dosya maskesi veya birden fazla dosya maskesi:
 FindFile.TextPrompt=İçeren metin:
 FindFile.BtnFind=&Bul
+FindFile.SearchingTitle= Aranıyor...
+FindFile.Scanning=Taranıyor:
+FindFile.FoundCount=Bulundu: %d
+FindFile.SearchResultsTitle= Arama Sonuçları
+FindFile.BtnGoTo=&Git
+FindFile.BtnView=&Görüntüle
+FindFile.BtnEdit=Düz&enle
+FindFile.BtnClose=K&apat
+
 History.FoldersTitle= Klasör Geçmişi
 History.CommandsTitle= Komut Geçmişi
 History.SearchModeHint=F2: alt dize / önek aramasını değiştir
@@ -433,25 +508,40 @@ History.CommandsHint=Yukarı/Aşağı Enter Esc Shift+Del Del Ctrl+C Ctrl+Ins F2
 History.FoldersHint=Yukarı/Aşağı Enter Shift+Enter Ctrl+Enter Esc Shift+Del Del Ctrl+C Ctrl+Ins Ctrl+R F2
 History.ConfirmClearAll=Tüm geçmiş silinsin mi?
 History.ConfirmPruneMissing=Yolları artık mevcut olmayan öğeler kaldırılsın mı?
-Help.SearchHint=Arama: yazın  Sonraki: F3/Ctrl+Enter  Önceki: Shift+F3/Ctrl+Shift+Enter
+History.Title= Geçmiş
+History.EmptyFolders=Klasör geçmişi boş.
+History.EmptyCommands=Komut geçmişi boş.
+
 UserMenu.LocalMenuTitle=Yerel menü
 UserMenu.MainMenuTitle=Ana menü
 UserMenu.MainMenuFAR=FAR
+UserMenu.EditTitle= Kullanıcı Menüsünü Düzenle
+UserMenu.CreateTitle= Kullanıcı Menüsü Oluştur
+UserMenu.EditSubmenuTitle= Alt Menüyü Düzenle
+UserMenu.CreateSubmenuTitle= Alt Menü Oluştur
+UserMenu.LabelHotkey=Kısayol &tuşu:
+UserMenu.LabelLabel=&Etiket:
+UserMenu.LabelCommand=&Komut:
+
 Language.Title= Diller
 Language.Changed=Dil değiştirildi.\nBazı arayüz öğelerinin yeni dili tam olarak\nuygulaması için uygulamanın yeniden başlatılması gerekir.
+
 LanguageSettings.Title= Dil Ayarları
 LanguageSettings.Primary=Birincil dil:
 LanguageSettings.Fallback=İkincil dil:
 LanguageSettings.None=<yok>
+
 HelpLanguage.Title=Yardım Dilleri
 HelpLanguage.Changed=Yardım dili değiştirildi.
-History.Title= Geçmiş
-History.EmptyFolders=Klasör geçmişi boş.
-History.EmptyCommands=Komut geçmişi boş.
+
 Error.Title= Hata
+
 Warning.Title= Uyarı
+
 Info.Title= Bilgi
+
 ExtEdit.TempError=Geçici dosya oluşturulamıyor: %v
+
 FileOp.AlreadyOpened=Dosya zaten açık:\n%s
 FileOp.AlreadyOpenedTitle= Dosya zaten açık
 FileOp.AlreadyViewed=Dosya zaten görüntüleniyor:\n%s
@@ -462,19 +552,28 @@ FileOp.BtnNewInstance=Ye&ni kopya
 FileOp.CannotEditDir=Dizin düzenlenemez.
 FileOp.CannotViewDir=Dizin görüntülenemez.
 FileOp.CannotOpenSpecial=Özel dosyalar (Named Pipes, Sockets, Devices) açılamaz.
+FileOp.DeletionErrors= Silme Hataları
+FileOp.FileAlreadyExists=Dosya zaten mevcut
+FileOp.RememberChoice=S&eçimi hatırla
+FileOp.Overwrite=&Üzerine yaz
+FileOp.Skip=&Atla
+FileOp.Rename=Yeniden adlandı&r
+FileOp.Append=S&onuna ekle
+FileOp.Resume=De&vam et
+FileOp.BtnCancel=&İptal
+FileOp.BtnBackground=&Arka plan
+
 Dialog.RenameTitle= Yeniden adlandır
 Dialog.RenamePrompt='%s' şuna yeniden adlandırılsın:
-Op.Queue=Sıra
-Op.Background=Arka plan
-Op.Foreground=Ön plan kilidi
-Op.PathNameOnly=Yalnızca isim
-Op.PathFullPath=Tam yol
-Op.PathSrcDst=Kaynak -> Hedef
+
 Plugins.Title= Eklentileri Yönet (RPC)
 Plugins.BtnAdd=E&kle
 Plugins.BtnRemove=&Kaldır
 Plugins.BtnPermissions=İ&zinler
 Plugins.BtnClose=K&apat
+Plugins.AddTitle= Eklenti Ekle
+Plugins.SelectFilePrompt=Eklenti dosyası seçin:
+
 InfoPanel.Title= Bilgi
 InfoPanel.Computer=Bilgisayar ismi
 InfoPanel.User=Kullanıcı ismi
@@ -513,6 +612,7 @@ InfoPanel.GPUWSLVirt=WSL sanallaştırılmış GPU (ana makine ismi görünmüyo
 InfoPanel.Copied=Kopyalandı
 InfoPanel.CopiedRows=Kopyalanan satırlar
 InfoPanel.UnitsHint= B: birim   Ins/Shift+↑↓: seç   C: kopyala
+
 AndroidInfo.DeviceTitle=Android cihaz
 AndroidInfo.StatusTitle=Cihaz durumu
 AndroidInfo.ConnectionTitle=ADB bağlantısı
@@ -536,6 +636,7 @@ AndroidInfo.Storage=Depolama
 AndroidInfo.StorageTotal=Toplam depolama
 AndroidInfo.StorageAvailable=Mevcut depolama
 AndroidInfo.Protocol=Protokol
+
 IOSInfo.DeviceTitle=Apple mobil cihazı
 IOSInfo.Name=İsim
 IOSInfo.Model=Model
@@ -547,6 +648,7 @@ IOSInfo.Connection=Bağlantı
 IOSInfo.State=Durum
 IOSInfo.Paired=Güvenilir
 IOSInfo.DeveloperMode=Geliştirici Modu
+
 QuickView.Title= Hızlı görünüm
 QuickView.NoSelection=<seçim yok>
 QuickView.ParentDir=Üst dizin
@@ -563,6 +665,7 @@ QuickView.Size=Boyut
 QuickView.Image=<görüntü>
 QuickView.Binary=<ikili içerik — onaltılık görünüm>
 QuickView.ReadError=Okuma başarısız
+
 Bookmarks.Title= Yer İmleri
 Bookmarks.RowPrefix=[RCtrl | Ctrl+Alt] +
 Bookmarks.EmptySlot=<boş>
@@ -571,6 +674,7 @@ Bookmarks.LoadError=Yer imleri yüklenemedi:\n%v
 Bookmarks.SaveError=Yer imleri kaydedilemedi:\n%v
 Bookmarks.EditTitle= Yer imi yolunu düzenle
 Bookmarks.EditPrompt=Y&ol:
+
 KeyBar.F1=Yardım
 KeyBar.F2=Menü
 KeyBar.F2Wrap=Kaydır
@@ -611,50 +715,9 @@ KeyBar.ViewerF4=Onalt
 KeyBar.ViewerF7=Bul
 KeyBar.ViewerAltF8=Git
 KeyBar.ViewerF10=Çıkış
-EditorSettings.TabExpandNone=Sekmeleri genişletme
-EditorSettings.TabExpandNew=Yeni sekmeleri boşluk yap
-EditorSettings.TabExpandAll=Tüm sekmeleri boşluk yap
-EditorSettings.ExpandTabs=Se&kmeleri genişlet:
-EditorSettings.Highlighter=Vur&gulayıcı:
-EditorSettings.ColorerStyle=Renklendirici s&tili:
-EditorSettings.TabSize=Sekme b&oyutu:
-EditorSettings.AutoIndent=O&tomatik girinti
-EditorSettings.CursorBeyondEOL=İmleç satır so&nunun ötesinde
-EditorSettings.UseEditorConfig=.&editorconfig ayarlarını kullan
-EditorSettings.Crosshair=&Artı imlecini göster
-EditorSettings.ColorerBg=Renklendirici &arka planı
-EditorSettings.UseExternalEditor=Harici &düzenleyici kullan
-EditorSettings.ExternalCommand=Harici &komut:
-PanelSettings.ShowHighlightMarks=&Vurgu işaretlerini göster
-PanelSettings.CommandLineAutoComplete=Komut satırı &otomatik tamamlamayı etkinleştir
-PanelSettings.AlwaysShowMenuBar=Menü çubuğunu &her zaman göster
-PanelSettings.RecordMacrosTo=Makroları şuraya kaydet:
-UpdateSettings.ChannelStable=Kararlı sürümler
-UpdateSettings.ChannelNightly=Gecelik sürümler
-UpdateSettings.IntervalNever=Asla
-UpdateSettings.IntervalStart=Her başlangıçta
-UpdateSettings.IntervalDaily=Günlük
-UpdateSettings.IntervalWeekly=Haftalık
-Plugins.AddTitle= Eklenti Ekle
-Plugins.SelectFilePrompt=Eklenti dosyası seçin:
-FindFile.SearchingTitle= Aranıyor...
-FindFile.Scanning=Taranıyor:
-FindFile.FoundCount=Bulundu: %d
-FindFile.SearchResultsTitle= Arama Sonuçları
-FindFile.BtnGoTo=&Git
-FindFile.BtnView=&Görüntüle
-FindFile.BtnEdit=Düz&enle
-FindFile.BtnClose=K&apat
-FileOp.DeletionErrors= Silme Hataları
-FileOp.FileAlreadyExists=Dosya zaten mevcut
-FileOp.RememberChoice=S&eçimi hatırla
-FileOp.Overwrite=&Üzerine yaz
-FileOp.Skip=&Atla
-FileOp.Rename=Yeniden adlandı&r
-FileOp.Append=S&onuna ekle
-FileOp.Resume=De&vam et
 
 Arkanoid.HighScores= En Yüksek Skorlar
+
 PlugRing.Title= f4 PlugRing
 PlugRing.BtnInstall=&Yükle/Güncelle
 PlugRing.BtnRemove=&Kaldır
@@ -671,29 +734,18 @@ Attributes.ReadOnly=Salt &okunur
 Attributes.Hidden=&Gizli
 Attributes.System=&Sistem
 Attributes.Archive=&Arşiv
+
 Permissions.Title= Eklenti İzinleri
 Permissions.BtnRevoke=İzin &İptal
 Permissions.BtnClose=&Kapat
 
-Search.Prompt=Aranan:
-Search.WholeWords=Sadece tam kelimeler
-Search.Regex=Düzenli ifadeler
-Search.BtnFind=&Bul
 Replace.Title= Değiştir
 Replace.Prompt=Şununla değiştir:
 Replace.BtnReplace=&Değiştir
 Replace.BtnReplaceAll=Tümünü de&ğiştir
+
 Codepage.Title= Kod Sayfaları
 Codepage.ConvertTitle= Kod Sayfasını Dönüştür
-
-vtui.Save=Kayde&t
-UserMenu.EditTitle= Kullanıcı Menüsünü Düzenle
-UserMenu.CreateTitle= Kullanıcı Menüsü Oluştur
-UserMenu.EditSubmenuTitle= Alt Menüyü Düzenle
-UserMenu.CreateSubmenuTitle= Alt Menü Oluştur
-UserMenu.LabelHotkey=Kısayol &tuşu:
-UserMenu.LabelLabel=&Etiket:
-UserMenu.LabelCommand=&Komut:
 
 Hotkeys.Title= Kısayol Tuşları Yapılandırması
 Hotkeys.BtnAssign=&Ata
@@ -704,10 +756,7 @@ Hotkeys.BtnNext=Sonraki >
 Hotkeys.LabelArea=Alan:
 Hotkeys.LabelWhen=Koşul:
 Hotkeys.AssignTitle= Kısayol Tuşu Ata
-Op.DummyQueue=Sıra (Varsayılan)
-Op.DummyBackground=Arka plan
-Op.DummyForeground=Ön plan kilidi
-Op.BtnStart=&Başlat
+
 Drive.Title= Sürücü
 
 NetFox.ConnectionTitle= Bağlantı Ayarları
@@ -723,8 +772,7 @@ NetFox.LabelCodepage=&Kod sayfası:
 NetFox.ErrorEmptyName=İsim boş olamaz
 NetFox.ErrorReservedName=Ayrılmış bağlantı ismi
 
-FileOp.BtnCancel=&İptal
-FileOp.BtnBackground=&Arka plan
 Queue.BtnCancel=Görevi &iptal et
 Queue.BtnClear=Hazır olanları &temizle
+
 Session.Title= Seans seçin

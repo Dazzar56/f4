@@ -95,6 +95,7 @@ type TerminalView struct {
 	selEndY    int
 	selBlock   bool
 	showOffset int // last vertical "visual gravity" offset applied in Show
+	hoverURL   string
 }
 
 func NewTerminalView(w, h int) *TerminalView {
@@ -294,8 +295,6 @@ func (tv *TerminalView) rowHasText(y int) bool {
 	}
 	return false
 }
-func (tv *TerminalView) flushLogUnsafe() {}
-
 func (tv *TerminalView) pushRowToGridHistory(y int) {
 	lineCopy := make([]vtui.CharInfo, len(tv.Lines[y]))
 	copy(lineCopy, tv.Lines[y])
@@ -915,7 +914,9 @@ func (tv *TerminalView) Show(scr *vtui.ScreenBuf) {
 		}
 		// Проверка выхода за пределы экрана
 		if drawY >= tv.Y1 && drawY <= tv.Y1+tv.Height-1 {
-			scr.Write(tv.X1, drawY, line)
+			drawLine := append([]vtui.CharInfo(nil), line...)
+			applyURLHoverAttr(drawLine, urlCellRangesFromCells(line), tv.hoverURL)
+			scr.Write(tv.X1, drawY, drawLine)
 		}
 	}
 
@@ -1235,6 +1236,56 @@ func (tv *TerminalView) SelectLineAt(y int) {
 // terminal's visible viewport.
 func (tv *TerminalView) InTerminalArea(x, y int) bool {
 	return x >= tv.X1 && x <= tv.X1+tv.Width-1 && y >= tv.Y1 && y <= tv.Y1+tv.Height-1
+}
+
+func (tv *TerminalView) urlAtScreenCell(x, y int) (urlCellRange, bool) {
+	if !tv.InTerminalArea(x, y) {
+		return urlCellRange{}, false
+	}
+	row := tv.gridRowForScreenY(y)
+	if row < 0 {
+		return urlCellRange{}, false
+	}
+	buf := tv.Lines
+	if tv.UseAltScreen {
+		buf = tv.AltLines
+	}
+	if row >= len(buf) {
+		return urlCellRange{}, false
+	}
+	col := x - tv.X1
+	for _, link := range urlCellRangesFromCells(buf[row]) {
+		if col >= link.Start && col < link.End {
+			return link, true
+		}
+	}
+	return urlCellRange{}, false
+}
+
+// UpdateURLHover tracks the URL under the pointer without changing terminal
+// selection state. It returns true when a repaint is needed.
+func (tv *TerminalView) UpdateURLHover(x, y int) bool {
+	tv.mu.Lock()
+	defer tv.mu.Unlock()
+	var next string
+	if link, ok := tv.urlAtScreenCell(x, y); ok {
+		next = link.URL
+	}
+	if next == tv.hoverURL {
+		return false
+	}
+	tv.hoverURL = next
+	return true
+}
+
+func (tv *TerminalView) URLAt(x, y int) (string, bool) {
+	tv.mu.Lock()
+	defer tv.mu.Unlock()
+	link, ok := tv.urlAtScreenCell(x, y)
+	if !ok {
+		return "", false
+	}
+	return link.URL, true
 }
 
 func (tv *TerminalView) Resize(w, h int) {

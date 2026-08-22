@@ -28,8 +28,10 @@ import (
 //	!/!             current directory path without trailing slash
 //	!:              current drive letter or scheme with colon
 //
-// In addition, $VAR and ${VAR} are expanded via os.ExpandEnv after the
-// far2l-style tokens are resolved.
+// Shell variable references such as $VAR and ${VAR} are intentionally passed
+// through unchanged. The command is expanded by the target shell; resolving
+// them here would make the result depend on f4's environment and would turn
+// an unset variable into an empty command fragment.
 
 // PanelSnapshot is a minimal snapshot of one panel's state, used as input
 // to SubstFileName. Snapshot is taken before the menu opens so a slow
@@ -113,7 +115,6 @@ func SubstFileName(cmd string, ctx *SubstContext) SubstResult {
 				if ctx.AskUser != nil {
 					answered, accepted := ctx.AskUser(title, init)
 					if !accepted {
-						cancelled = true
 						return SubstResult{Cancelled: true}
 					}
 					value = answered
@@ -212,12 +213,10 @@ func SubstFileName(cmd string, ctx *SubstContext) SubstResult {
 		i++
 	}
 
-	// $VAR / ${VAR} after our own tokens, so a user could legitimately
-	// write something like `!\!/${FOO}`.
-	final := os.ExpandEnv(out.String())
-
 	return SubstResult{
-		Command:   final,
+		// zoin-bot: Preserve shell variables for the command interpreter instead
+		// of expanding them in f4 before the command is launched.
+		Command:   out.String(),
 		TempFiles: temp,
 		Cancelled: cancelled,
 		ListFiles: listFiles,

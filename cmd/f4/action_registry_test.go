@@ -7,6 +7,7 @@ import (
 )
 
 func TestActionRegistry(t *testing.T) {
+	preserveActionRegistry(t)
 	called := false
 	testAction := Action{
 		Name:        "Test.Action",

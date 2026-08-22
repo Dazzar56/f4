@@ -36,9 +36,7 @@ func (m *mockCrashingHighlighter) Name() string                                 
 func (m *mockCrashingHighlighter) Match(filename, content string) bool              { return true }
 func (m *mockCrashingHighlighter) Create(filename, content string) vtui.Highlighter { return m }
 
-type mockStatefulHighlighter struct {
-	statesComputed int
-}
+type mockStatefulHighlighter struct{}
 
 func (m *mockStatefulHighlighter) Highlight(line string, prev any, base uint64) ([]uint64, any) {
 	depth := 0
@@ -4725,7 +4723,7 @@ func TestEditorView_ZeroAndDoubleWidthConsistency(t *testing.T) {
 		t.Errorf("Expected an offset inside the a-plus-acute grapheme to map to column 0, got %d", colA)
 	}
 	if colCombining != 1 {
-		t.Errorf("Expected column after the a-plus-acute grapheme to be 1, got %d", colCombining)
+		t.Errorf("Expected column after combining cluster to be 1, got %d", colCombining)
 	}
 	if colCJK != 3 {
 		t.Errorf("Expected column after CJK char to be 3, got %d", colCJK)
@@ -4735,20 +4733,20 @@ func TestEditorView_ZeroAndDoubleWidthConsistency(t *testing.T) {
 	}
 
 	if len(cells) != 4 {
-		t.Errorf("Expected exactly 4 cells rendered (1 for a-plus-acute, 2 for CJK, 1 for b), got %d", len(cells))
+		t.Errorf("Expected exactly 4 cells rendered (1 for the combining cluster, 2 for CJK, 1 for 'b'), got %d", len(cells))
 	}
 
-	if vtui.CellString(cells[0].Char) != "a\u0301" {
-		t.Errorf("Expected cells[0] to carry the a-plus-acute grapheme, got %q", vtui.CellString(cells[0].Char))
+	if got := vtui.CellString(cells[0].Char); got != "a\u0301" {
+		t.Errorf("Expected cells[0] to be the combining cluster, got %q", got)
 	}
-	if vtui.CellString(cells[1].Char) != "世" {
-		t.Errorf("Expected cells[1] to be '世', got %q", vtui.CellString(cells[1].Char))
+	if cells[1].Char != '世' {
+		t.Errorf("Expected cells[1] to be '世', got %c", rune(cells[1].Char))
 	}
 	if cells[2].Char != uint64(vtui.WideCharFiller) {
 		t.Errorf("Expected cells[2] to be WideCharFiller, got %d", cells[2].Char)
 	}
-	if vtui.CellString(cells[3].Char) != "b" {
-		t.Errorf("Expected cells[3] to be 'b', got %q", vtui.CellString(cells[3].Char))
+	if cells[3].Char != 'b' {
+		t.Errorf("Expected cells[3] to be 'b', got %c", rune(cells[3].Char))
 	}
 }
 

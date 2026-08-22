@@ -85,11 +85,7 @@ func SaveMainMenu(path string, items []UserMenuItem) error {
 	first := true
 	writeTree(&buf, items, mainMenuRoot, &first)
 
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, []byte(buf.String()), 0o644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return writeFileAtomically(path, []byte(buf.String()), 0o644)
 }
 
 func buildTree(sections map[string]map[string]string, prefix string) []UserMenuItem {

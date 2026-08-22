@@ -3,16 +3,126 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/unxed/f4/vfs"
-	"github.com/unxed/vtinput"
-	"github.com/unxed/vtui"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/unxed/f4/vfs"
+	"github.com/unxed/vtinput"
+	"github.com/unxed/vtui"
 )
+
+func TestActionUpdateSettings_ManualCheckDoesNotBlockMouseDispatch(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	oldCfg := AppConfig
+	oldAPIURL := githubAPIURL
+	oldOS := currentOS
+	oldArch := currentArch
+	t.Cleanup(func() {
+		AppConfig = oldCfg
+		githubAPIURL = oldAPIURL
+		currentOS = oldOS
+		currentArch = oldArch
+	})
+
+	requestStarted := make(chan struct{})
+	allowResponse := make(chan struct{})
+	requestFinished := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(requestStarted)
+		select {
+		case <-allowResponse:
+		case <-r.Context().Done():
+			return
+		}
+		defer close(requestFinished)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"tag_name":"7f1fec5","assets":[{"name":"f4-windows-amd64.zip","browser_download_url":"http://127.0.0.1/update.zip"}]}`))
+	}))
+	defer server.Close()
+
+	githubAPIURL = server.URL + "/repos/unxed/f4/releases"
+	currentOS = "windows"
+	currentArch = "amd64"
+	AppConfig.UpdateChannel = 0
+	AppConfig.UpdateInterval = 0
+
+	actionUpdateSettings(nil)
+	window := vtui.FrameManager.GetTopFrame()
+	if window == nil {
+		t.Fatal("update settings dialog was not opened")
+	}
+	container, ok := window.(interface{ GetChildren() []vtui.UIElement })
+	if !ok {
+		t.Fatal("update settings dialog does not expose its controls")
+	}
+	var buttons []*vtui.Button
+	for _, child := range container.GetChildren() {
+		if button, ok := child.(*vtui.Button); ok {
+			buttons = append(buttons, button)
+		}
+	}
+	if len(buttons) != 3 {
+		t.Fatalf("expected three update-settings buttons, got %d", len(buttons))
+	}
+	checkButton := buttons[1]
+	x, y, _, _ := checkButton.GetPosition()
+	mx, my := checkedMouseCoordinate(t, x), checkedMouseCoordinate(t, y)
+
+	window.ProcessMouse(&vtinput.InputEvent{
+		Type:        vtinput.MouseEventType,
+		KeyDown:     true,
+		MouseX:      mx,
+		MouseY:      my,
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+	})
+
+	dispatchDone := make(chan struct{})
+	go func() {
+		window.ProcessMouse(&vtinput.InputEvent{
+			Type:        vtinput.MouseEventType,
+			MouseX:      mx,
+			MouseY:      my,
+			KeyDown:     false,
+			ButtonState: 0,
+		})
+		close(dispatchDone)
+	}()
+
+	select {
+	case <-dispatchDone:
+	case <-time.After(250 * time.Millisecond):
+		t.Fatal("manual update check blocked mouse dispatch")
+	}
+
+	select {
+	case <-requestStarted:
+	case <-time.After(1 * time.Second):
+		t.Fatal("manual update check did not start in the background")
+	}
+	close(allowResponse)
+	select {
+	case <-requestFinished:
+	case <-time.After(1 * time.Second):
+		t.Fatal("manual update check did not finish after the response was released")
+	}
+}
+
+func checkedMouseCoordinate(t *testing.T, value int) int16 {
+	t.Helper()
+	if value < -32768 || value > 32767 {
+		t.Fatalf("mouse coordinate %d does not fit in int16", value)
+	}
+	return int16(value) // #nosec G115 -- the range is checked immediately above.
+}
 
 func TestActionExecute_RemoteRejection(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
@@ -668,6 +778,113 @@ func TestActionCopyMove_TrailingSlash(t *testing.T) {
 	top.SetExitCode(-1)
 	vtui.FrameManager.Pop()
 }
+
+func TestActionCopyMove_ModeMenuDoesNotCoverButtons(t *testing.T) {
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+	SetDefaultF4Palette()
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	src := pf.panels[0].(*FileSystemPanel)
+	if err := src.vfs.SetPath(t.TempDir()); err != nil {
+		t.Fatalf("set source path: %v", err)
+	}
+	src.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "test.txt"}}}
+	src.SetCursorIndex(0)
+	pf.activeIdx = 0
+
+	actionCopyMove(pf, false)
+	dlg, ok := vtui.FrameManager.GetTopFrame().(vtui.Container)
+	if !ok {
+		t.Fatal("copy dialog not found on top")
+	}
+
+	assertComboMenuDoesNotCoverButtons(t, dlg, "copy")
+	focusDlg, ok := vtui.FrameManager.GetTopFrame().(dialogFocusContainer)
+	if !ok {
+		t.Fatal("copy dialog does not expose focus traversal")
+	}
+	assertDialogTabOrderMatchesVisualOrder(t, focusDlg, "copy")
+	vtui.FrameManager.Pop()
+}
+
+func assertComboMenuDoesNotCoverButtons(t *testing.T, dlg vtui.Container, name string) {
+	t.Helper()
+
+	var combo *vtui.ComboBox
+	var buttons []*vtui.Button
+	for _, item := range dlg.GetChildren() {
+		switch child := item.(type) {
+		case *vtui.ComboBox:
+			combo = child
+		case *vtui.Button:
+			buttons = append(buttons, child)
+		}
+	}
+	if combo == nil || len(buttons) != 2 {
+		t.Fatalf("%s dialog controls: combo=%v buttons=%d", name, combo != nil, len(buttons))
+	}
+
+	combo.Open()
+	menu, ok := vtui.FrameManager.GetTopFrame().(*vtui.VMenu)
+	if !ok {
+		t.Fatalf("%s menu was not opened", name)
+	}
+	mx1, my1, mx2, my2 := menu.GetPosition()
+	for _, button := range buttons {
+		bx1, by1, bx2, by2 := button.GetPosition()
+		if mx1 <= bx2 && bx1 <= mx2 && my1 <= by2 && by1 <= my2 {
+			t.Fatalf("%s menu (%d,%d)-(%d,%d) overlaps button (%d,%d)-(%d,%d)", name, mx1, my1, mx2, my2, bx1, by1, bx2, by2)
+		}
+	}
+
+	vtui.FrameManager.Pop()
+}
+
+type dialogFocusContainer interface {
+	vtui.Container
+	GetFocusedItem() vtui.UIElement
+	SetFocusedItem(vtui.UIElement)
+	ProcessKey(*vtinput.InputEvent) bool
+}
+
+func assertDialogTabOrderMatchesVisualOrder(t *testing.T, dlg dialogFocusContainer, name string) {
+	t.Helper()
+
+	var want []vtui.UIElement
+	for _, item := range dlg.GetChildren() {
+		if item.CanFocus() && !item.IsDisabled() {
+			want = append(want, item)
+		}
+	}
+	sort.SliceStable(want, func(i, j int) bool {
+		ix1, iy1, _, _ := want[i].GetPosition()
+		jx1, jy1, _, _ := want[j].GetPosition()
+		if iy1 != jy1 {
+			return iy1 < jy1
+		}
+		return ix1 < jx1
+	})
+	if len(want) == 0 {
+		t.Fatalf("%s dialog has no focusable controls", name)
+	}
+
+	dlg.SetFocusedItem(want[0])
+	for i, expected := range want {
+		if got := dlg.GetFocusedItem(); got != expected {
+			t.Fatalf("%s focus step %d = %T, want %T", name, i, got, expected)
+		}
+		if i+1 < len(want) && !dlg.ProcessKey(&vtinput.InputEvent{
+			Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_TAB,
+		}) {
+			t.Fatalf("%s Tab at focus step %d was not handled", name, i)
+		}
+	}
+}
+
 func TestActionCopy_ShiftF5_Prefill(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	SetDefaultF4Palette()
@@ -743,6 +960,69 @@ func TestActionNewFile_Flow(t *testing.T) {
 	top := vtui.FrameManager.GetTopFrame()
 	if top == nil || top.GetTitle() != Msg("Edit.NewFileTitle") {
 		t.Errorf("Expected New File dialog, got %v", top)
+	}
+}
+
+func TestActionNewFile_AbsoluteExistingPath(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	root := t.TempDir()
+	path := filepath.Join(root, "existing.txt")
+	want := []byte("already here\n")
+	if err := os.WriteFile(path, want, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	fsp := pf.panels[0].(*FileSystemPanel)
+	fsp.vfs = vfs.NewOSVFS(root)
+	pvfs := fsp.vfs
+
+	actionNewFile(pf)
+	dlg, ok := vtui.FrameManager.GetTopFrame().(vtui.Container)
+	if !ok {
+		t.Fatalf("New File dialog is not a container: %T", vtui.FrameManager.GetTopFrame())
+	}
+	var edit *vtui.Edit
+	var okButton *vtui.Button
+	for _, child := range dlg.GetChildren() {
+		switch value := child.(type) {
+		case *vtui.Edit:
+			edit = value
+		case *vtui.Button:
+			if strings.Contains(value.GetText(), Msg("vtui.Ok")) {
+				okButton = value
+			}
+		}
+	}
+	if edit == nil || okButton == nil {
+		t.Fatal("New File dialog controls not found")
+	}
+	edit.SetText(path)
+	okButton.OnClick()
+
+	var editor *EditorView
+	deadline := time.After(2 * time.Second)
+	for editor == nil {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			editor, _ = findOpenedEditor(pvfs, path)
+		case <-deadline:
+			t.Fatal("Timeout waiting for existing file editor")
+		}
+	}
+	defer editor.Close()
+
+	got, err := editor.pt.GetRange(0, editor.pt.Size())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(want) {
+		t.Fatalf("opened content = %q, want %q", got, want)
 	}
 }
 func TestDelete_FocusCustomization(t *testing.T) {
@@ -1835,6 +2115,46 @@ func TestActionAppearanceSettingsSavesWorkspaceTabRestoration(t *testing.T) {
 	}
 }
 
+func TestActionAppearanceSettingsSavesWorkspaceTabOverlay(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	oldConfig := AppConfig
+	oldPath := getUserConfigIniPath
+	getUserConfigIniPath = func() string { return filepath.Join(t.TempDir(), "settings.ini") }
+	defer func() {
+		AppConfig = oldConfig
+		getUserConfigIniPath = oldPath
+	}()
+	AppConfig.WorkspaceTabsOverlay = true
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	actionAppearanceSettings(pf)
+	top := vtui.FrameManager.GetTopFrame().(vtui.Container)
+
+	var overlayTabs *vtui.Checkbox
+	for _, child := range top.GetChildren() {
+		checkbox, ok := child.(*vtui.Checkbox)
+		if ok && checkbox.GetText() == Msg("AppearanceSettings.WorkspaceTabsOverlay") {
+			overlayTabs = checkbox
+			break
+		}
+	}
+	if overlayTabs == nil {
+		t.Fatal("workspace tab overlay checkbox not found in Appearance Settings")
+	}
+	if overlayTabs.State != 1 {
+		t.Fatal("workspace tab overlay must be enabled by default")
+	}
+	overlayTabs.Toggle()
+	clickDialogButton(t, top, "Ok")
+	if AppConfig.WorkspaceTabsOverlay {
+		t.Fatal("disabled workspace tab overlay setting was not saved")
+	}
+}
+
 func TestActionAppearanceSettingsSavesWorkspaceTabNumbering(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	SetDefaultF4Palette()
@@ -2272,6 +2592,13 @@ func TestActionCreateLink_Flow(t *testing.T) {
 	if editDest == nil {
 		t.Fatal("Destination edit field not found in dialog")
 	}
+
+	assertComboMenuDoesNotCoverButtons(t, dlg, "link")
+	focusDlg, ok := top.(dialogFocusContainer)
+	if !ok {
+		t.Fatal("link dialog does not expose focus traversal")
+	}
+	assertDialogTabOrderMatchesVisualOrder(t, focusDlg, "link")
 
 	linkPath := filepath.Join(dstDir, "link.txt")
 	editDest.SetText(linkPath)

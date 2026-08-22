@@ -2164,6 +2164,14 @@ func init() {
 		MenuPath:    "Options",
 		Checked:     editorState(func(ev *EditorView) bool { return ev.WordWrap }),
 		Handler: withEditor(func(ev *EditorView) {
+			if ev.wordWrapSuppressed {
+				ev.WordWrap = false
+				return
+			}
+			if !ev.WordWrap && ev.currentLineUnsafeForWordWrap() {
+				ev.disableUnsafeWordWrap()
+				return
+			}
 			ev.WordWrap = !ev.WordWrap
 			ev.ScrollLeft = 0
 			ev.clearCaches()

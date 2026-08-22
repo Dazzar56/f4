@@ -5,20 +5,6 @@ Author=f4 Team
 
 [Strings]
 VisRen.Menu=&Visuelles Umbenennen
-ID3Editor.Menu=ID3-Tag-&Editor
-ID3Editor.Title=ID3-Tag-Editor
-ID3Editor.LocalOnly=Der ID3-Tag-Editor unterstützt nur lokale Dateien.
-ID3Editor.SelectFile=Wählen Sie zuerst eine MP3-Datei aus.
-ID3Editor.OnlyMP3=Es werden nur MP3-Dateien unterstützt.
-ID3Editor.SaveError=Fehler beim Speichern der ID3-Tags:\n%v
-ID3Editor.OpenError=Fehler beim Öffnen der MP3-Datei:\n%v
-ID3Editor.FieldTitle=Titel:
-ID3Editor.FieldArtist=Künstler:
-ID3Editor.FieldAlbum=Album:
-ID3Editor.FieldYear=Jahr:
-ID3Editor.FieldGenre=Genre:
-ID3Editor.FieldComment=Kommentar:
-ID3Editor.FieldVersion=Version:
 VisRen.Title=Visuelles Umbenennen
 VisRen.HostUnsupported=Dieser F4-Host stellt die VisRen-UI-Schnittstelle nicht zur Verfügung.
 VisRen.LocalOnly=VisRen funktioniert nur auf einem lokalen Dateipanel.
@@ -59,109 +45,53 @@ VisRen.WordDivTitle=Worttrennzeichen
 VisRen.WordDivPrompt=Worttrennzeichen (maximal 18):
 VisRen.OldName=Alter Name
 VisRen.NewName=Neuer Name
+
+ID3Editor.Menu=ID3-Tag-&Editor
+ID3Editor.Title=ID3-Tag-Editor
+ID3Editor.LocalOnly=Der ID3-Tag-Editor unterstützt nur lokale Dateien.
+ID3Editor.SelectFile=Wählen Sie zuerst eine MP3-Datei aus.
+ID3Editor.OnlyMP3=Es werden nur MP3-Dateien unterstützt.
+ID3Editor.SaveError=Fehler beim Speichern der ID3-Tags:\n%v
+ID3Editor.OpenError=Fehler beim Öffnen der MP3-Datei:\n%v
+ID3Editor.FieldTitle=Titel:
+ID3Editor.FieldArtist=Künstler:
+ID3Editor.FieldAlbum=Album:
+ID3Editor.FieldYear=Jahr:
+ID3Editor.FieldGenre=Genre:
+ID3Editor.FieldComment=Kommentar:
+ID3Editor.FieldVersion=Version:
+
 vtui.Ok=&Ok
 vtui.Cancel=Abbrechen
+vtui.Save=&Speichern
+
 Panel.Other=&Anderes Panel
 Panel.Column.Name=Name
 Panel.Column.Size=Größe
 Panel.Column.Modified=Geändert
 Panel.UpDir=ÜBER-ORDNER
 Panel.SelectedInfo=Bytes: %s, Dateien: %d, Ordner: %d
+
 Panels.Prompt=>
+
 Edit.NewFileTitle= Neue Datei erstellen
 Edit.NewFilePrompt=Datei&name:
+
 MakeFolder.Title= Ordner erstellen
 MakeFolder.Prompt=&Ordner erstellen:
+
 Delete.Title= Löschen
 Delete.Confirm=Möchten Sie löschen:\n%s?
 Delete.Btn=&Löschen
+
 Copy.Title= Kopieren
 Copy.Prompt=%d Element(e) kopieren nach:
 Copy.Btn=&Kopieren
+
 Move.Title= Verschieben
 Move.Prompt=%d Element(e) umbenennen oder verschieben nach:
 Move.Btn=&Verschieben
-Btn.OverwriteAll=&Alle überschreiben
-Btn.SkipAll=A&lle überspringen
-Btn.Retry=&Wiederholen
-Btn.Ignore=&Ignorieren
-Operation.Error=Operation fehlgeschlagen:\n%s
-Op.ClonePanels=&Panels in neuen Arbeitsbereich klonen
-Op.SwitchHint=Strg+Tab zum Wechseln der Fenster
-Op.DummyTitle= Test-Operation
-Op.DummyText=Dies ist eine 5-minütige Test-Operation.\nWählen Sie den Hintergrundmodus:
-Viewer.Title= Anzeigen
-Viewer.ModeText=Text
-Viewer.ModeHex=Hex
-Viewer.SearchTitle= Suchen
-Search.CaseSensitive=&Groß-/Kleinschreibung
-Search.Reverse=&Rückwärtssuche
-Select.Title= Auswählen
-Deselect.Title= Abwählen
-Quit.Title= Beenden
-Quit.Confirm=Möchten Sie f4 beenden?
-Quit.Btn=&Verlassen
-Select.Mask=Auswahl&maske eingeben:
 
-Macro.AssignTitle= Makro zuweisen
-Macro.AssignPrompt=Drücken Sie die gewünschte Tastenkombination
-Macro.AssignCancel=Drücken Sie Esc zum Abbrechen
-
-Menu.Language=Sprache
-Menu.HelpLanguage=Hilfesprache
-Menu.Left=Links
-Menu.Files=Dateien
-Menu.Commands=Befehle
-Menu.Options=Optionen
-Menu.Right=Rechts
-Menu.Exit=&Beenden
-
-Menu.Files.View=Anzeigen
-Menu.Files.Edit=Bearbeiten
-Menu.Files.Copy=Kopieren
-Menu.Files.RenMov=Umbenennen oder verschieben
-Menu.Files.MkDir=Ordner erstellen
-Menu.Files.Delete=Löschen
-Menu.Left.Brief=Kurz
-Menu.Left.Medium=Mittel
-Menu.Left.Detailed=Detailliert
-Menu.Left.Wide=Breit
-Menu.Commands.FindFile=Datei suchen
-Menu.Commands.FindDuplicates=Duplikate suchen
-Menu.Commands.BackgroundJobs=Hintergrund-Aufgaben
-Menu.Commands.RunRemote=Befehl remote ausführen
-RemoteCmd.Title=Remote-Befehl
-RemoteCmd.Prompt=Befehl:
-RemoteCmd.BtnClose=&Schließen
-Jobs.Title=Hintergrund-Aufgaben
-Jobs.BtnShow=&Anzeigen
-Jobs.BtnCancel=Aufgabe &abbrechen
-Jobs.BtnClose=&Schließen
-Jobs.Empty=Nichts wird ausgeführt
-Menu.Commands.Bookmarks=Lesezeichen
-Menu.SortName=Name
-Menu.SortExt=Erweiterung
-Menu.SortTime=Zeit
-Menu.SortSize=Größe
-Menu.SortUnsorted=Unsortiert
-Sort.Title=Sortieren nach
-Menu.PanelSettings=Panel-Einstellungen
-Menu.EditorSettings=Editor-Einstellungen
-Menu.ColorerSettings=C&olorer-Einstellungen
-Menu.AppearanceSettings=Aussehen-Einstellungen
-Menu.ConfirmationsSettings=Bestätigungen
-Menu.AutoUpdateSettings=Auto-&Update
-Menu.Options.Plugins=Plugins verwalten
-
-Menu.Editor.File=&Datei
-Menu.Editor.Edit=&Bearbeiten
-Menu.Editor.Search=&Suchen
-Menu.Editor.Options=&Optionen
-Menu.Editor.Insert=&Einfügen
-Menu.Viewer.File=&Datei
-Menu.Viewer.View=&Ansicht
-Menu.Viewer.Search=&Suchen
-Menu.Viewer.Options=&Optionen
 Action.App.ScreenGrab=Bildschirm&foto
 Action.App.ScreenGrab.Desc=Wählen Sie einen Bildschirmbereich aus und kopieren Sie ihn
 Action.Editor.Save=&Speichern
@@ -224,18 +154,6 @@ Action.Viewer.CodepageNext=Nächste &Codepage
 Action.Viewer.CodepageNext.Desc=Zur nächsten Codepage wechseln
 Action.Viewer.CodepageMenu=&Codepage-Menü
 Action.Viewer.CodepageMenu.Desc=Codepage auswählen
-Help.ViewerEditor=Viewer- & Editor-Tastenkombinationen
-Help.PanelNav=Panel-Tastenkombinationen
-Help.NavigationKeys=Navigationstasten
-Help.Area.Shell=Panels
-Help.Area.Terminal=Terminal
-Help.Area.Editor=Editor
-Help.Area.Viewer=Viewer
-Help.Area.Common=Allgemein
-Menu.Shell.Files=&Dateien
-Menu.Shell.Commands=&Befehle
-Menu.Shell.Options=&Optionen
-Menu.Terminal.File=&Datei
 Action.File.New=Neue Datei
 Action.File.New.Desc=Eine neue Datei erstellen und im Editor öffnen
 Action.File.CopyInPlace=Kopieren am selben Ort
@@ -268,19 +186,6 @@ Action.Panel.UserMenu=&Benutzermenü
 Action.Panel.UserMenu.Desc=Das Benutzermenü anzeigen
 Action.Panel.FileAssociations=Datei&verknüpfungen…
 Action.Panel.FileAssociations.Desc=Konfiguriert Maskenbefehle für Eingabetaste, F3 und F4
-FileAssoc.EditorTitle=Dateiverknüpfungen
-FileAssoc.EditTitle=Verknüpfung bearbeiten
-FileAssoc.NewTitle=Neue Verknüpfung
-FileAssoc.ErrorTitle=Dateiverknüpfungen
-FileAssoc.EmptyHint=Noch keine Verknüpfungen – drücken Sie Einfg, um eine hinzuzufügen
-FileAssoc.EmptyMask=Die Dateimaske darf nicht leer sein.
-FileAssoc.MaskLabel=Maske
-FileAssoc.DescLabel=Beschreibung
-FileAssoc.PickTitle.Open=Öffnen mit
-FileAssoc.PickTitle.View=Anzeigen mit
-FileAssoc.PickTitle.Edit=Bearbeiten mit
-FileAssoc.DeleteTitle=Verknüpfung löschen
-FileAssoc.DeleteConfirm=Verknüpfung %q löschen?
 Action.Panel.Bookmarks.Desc=Ordner-Lesezeichen-Dialog anzeigen
 Action.Panel.PluginMenu=Plu&gin-Befehle
 Action.Panel.PluginMenu.Desc=Menü für Plugin-Befehle anzeigen
@@ -367,23 +272,106 @@ Action.Terminal.ViewLog.Desc=Terminal-Log im Viewer öffnen
 Action.Terminal.EditLog=Terminal-Log &bearbeiten
 Action.Terminal.EditLog.Desc=Terminal-Log im Editor öffnen
 
-EditorSettings.Title= Editor-Einstellungen
-EditorSettings.AutoComplete=A&uto-Vervollständigung
-EditorSettings.Mask=Aktiv für Dateim&asken:
-ColorerSettings.Title= Colorer-Einstellungen
-ColorerSettings.Enabled=Colorer-Hervorhebung &aktivieren
-ColorerSettings.Style=Farb&stil:
-ColorerSettings.BuiltIn=(integriert)
-ColorerSettings.Cross=K&reuz anzeigen:
-ColorerSettings.CrossOff=Nicht anzeigen
-ColorerSettings.CrossVertical=Vertikal
-ColorerSettings.CrossHorizontal=Horizontal
-ColorerSettings.CrossBoth=Beide
-ColorerSettings.Syntax=S&yntax hervorheben
-ColorerSettings.Background=Editor&hintergrund ändern
-ColorerSettings.Catalog=Schema&ordner (catalog.xml):
-ColorerSettings.Reload=Neu &laden
-ColorerSettings.Download=Schemata &herunterladen
+Btn.OverwriteAll=&Alle überschreiben
+Btn.SkipAll=A&lle überspringen
+Btn.Retry=&Wiederholen
+Btn.Ignore=&Ignorieren
+
+Operation.Error=Operation fehlgeschlagen:\n%s
+
+Op.ClonePanels=&Panels in neuen Arbeitsbereich klonen
+Op.SwitchHint=Strg+Tab zum Wechseln der Fenster
+Op.DummyTitle= Test-Operation
+Op.DummyText=Dies ist eine 5-minütige Test-Operation.\nWählen Sie den Hintergrundmodus:
+Op.Queue=Warteschlange
+Op.Background=Hintergrund-Panel-Kopie
+Op.Foreground=Vordergrund-Sperre
+Op.PathNameOnly=Nur Name
+Op.PathFullPath=Vollständiger Pfad
+Op.PathSrcDst=Quelle -> Ziel
+Op.DummyQueue=Warteschlange (Standard)
+Op.DummyBackground=Hintergrund-Panel-Kopie
+Op.DummyForeground=Vordergrund-Sperre
+Op.BtnStart=&Start
+
+Viewer.Title= Anzeigen
+Viewer.ModeText=Text
+Viewer.ModeHex=Hex
+Viewer.SearchTitle= Suchen
+
+Search.CaseSensitive=&Groß-/Kleinschreibung
+Search.Reverse=&Rückwärtssuche
+Search.Prompt=Suchen nach:
+Search.WholeWords=Nur ganze Wörter
+Search.Regex=Reguläre Ausdrücke
+Search.BtnFind=&Suchen
+
+Select.Title= Auswählen
+Select.Mask=Auswahl&maske eingeben:
+
+Deselect.Title= Abwählen
+
+Quit.Title= Beenden
+Quit.Confirm=Möchten Sie f4 beenden?
+Quit.Btn=&Verlassen
+
+Macro.AssignTitle= Makro zuweisen
+Macro.AssignPrompt=Drücken Sie die gewünschte Tastenkombination
+Macro.AssignCancel=Drücken Sie Esc zum Abbrechen
+
+Menu.Language=Sprache
+Menu.HelpLanguage=Hilfesprache
+Menu.Left=Links
+Menu.Files=Dateien
+Menu.Commands=Befehle
+Menu.Options=Optionen
+Menu.Right=Rechts
+Menu.Exit=&Beenden
+Menu.Files.View=Anzeigen
+Menu.Files.Edit=Bearbeiten
+Menu.Files.Copy=Kopieren
+Menu.Files.RenMov=Umbenennen oder verschieben
+Menu.Files.MkDir=Ordner erstellen
+Menu.Files.Delete=Löschen
+Menu.Left.Brief=Kurz
+Menu.Left.Medium=Mittel
+Menu.Left.Detailed=Detailliert
+Menu.Left.Wide=Breit
+Menu.Commands.FindFile=Datei suchen
+Menu.Commands.FindDuplicates=Duplikate suchen
+Menu.Commands.BackgroundJobs=Hintergrund-Aufgaben
+Menu.Commands.RunRemote=Befehl remote ausführen
+Menu.Commands.Bookmarks=Lesezeichen
+Menu.SortName=Name
+Menu.SortExt=Erweiterung
+Menu.SortTime=Zeit
+Menu.SortSize=Größe
+Menu.SortUnsorted=Unsortiert
+Menu.PanelSettings=Panel-Einstellungen
+Menu.EditorSettings=Editor-Einstellungen
+Menu.ColorerSettings=C&olorer-Einstellungen
+Menu.AppearanceSettings=Aussehen-Einstellungen
+Menu.ConfirmationsSettings=Bestätigungen
+Menu.AutoUpdateSettings=Auto-&Update
+Menu.Options.Plugins=Plugins verwalten
+Menu.Editor.File=&Datei
+Menu.Editor.Edit=&Bearbeiten
+Menu.Editor.Search=&Suchen
+Menu.Editor.Options=&Optionen
+Menu.Editor.Insert=&Einfügen
+Menu.Viewer.File=&Datei
+Menu.Viewer.View=&Ansicht
+Menu.Viewer.Search=&Suchen
+Menu.Viewer.Options=&Optionen
+Menu.Shell.Files=&Dateien
+Menu.Shell.Commands=&Befehle
+Menu.Shell.Options=&Optionen
+Menu.Terminal.File=&Datei
+
+RemoteCmd.Title=Remote-Befehl
+RemoteCmd.Prompt=Befehl:
+RemoteCmd.BtnClose=&Schließen
+
 PanelSettings.Title= Panel-Einstellungen
 PanelSettings.ShowHidden=&Versteckte und Systemdateien anzeigen
 PanelSettings.ShowDirPrefix=Präfix '/' für &Ordner anzeigen
@@ -404,6 +392,75 @@ PanelSettings.DefaultMode=Standard-Operations&modus:
 PanelSettings.PathDisplay=Dateipfad im Fortschritt:
 PanelSettings.InfoPanelCPUGPU=CPU/GPU-Schnittstelle im &Info-Panel anzeigen
 PanelSettings.EscTogglePanels=&Esc schaltet Panel-Sichtbarkeit um
+PanelSettings.ShowHighlightMarks=Hervorhebungs-&Markierungen anzeigen
+PanelSettings.CommandLineAutoComplete=&Auto-Vervollständigung der Befehlszeile
+PanelSettings.AlwaysShowMenuBar=Menüleiste i&mmer anzeigen
+PanelSettings.RecordMacrosTo=Makros aufzeichnen nach:
+
+Jobs.Title=Hintergrund-Aufgaben
+Jobs.BtnShow=&Anzeigen
+Jobs.BtnCancel=Aufgabe &abbrechen
+Jobs.BtnClose=&Schließen
+Jobs.Empty=Nichts wird ausgeführt
+
+Sort.Title=Sortieren nach
+
+Help.ViewerEditor=Viewer- & Editor-Tastenkombinationen
+Help.PanelNav=Panel-Tastenkombinationen
+Help.NavigationKeys=Navigationstasten
+Help.Area.Shell=Panels
+Help.Area.Terminal=Terminal
+Help.Area.Editor=Editor
+Help.Area.Viewer=Viewer
+Help.Area.Common=Allgemein
+Help.SearchHint=Suche: tippen  Nächste: F3/Strg+Eingabe  Vorherige: Umschalt+F3/Strg+Umschalt+Eingabe
+
+FileAssoc.EditorTitle=Dateiverknüpfungen
+FileAssoc.EditTitle=Verknüpfung bearbeiten
+FileAssoc.NewTitle=Neue Verknüpfung
+FileAssoc.ErrorTitle=Dateiverknüpfungen
+FileAssoc.EmptyHint=Noch keine Verknüpfungen – drücken Sie Einfg, um eine hinzuzufügen
+FileAssoc.EmptyMask=Die Dateimaske darf nicht leer sein.
+FileAssoc.MaskLabel=Maske
+FileAssoc.DescLabel=Beschreibung
+FileAssoc.PickTitle.Open=Öffnen mit
+FileAssoc.PickTitle.View=Anzeigen mit
+FileAssoc.PickTitle.Edit=Bearbeiten mit
+FileAssoc.DeleteTitle=Verknüpfung löschen
+FileAssoc.DeleteConfirm=Verknüpfung %q löschen?
+
+EditorSettings.Title= Editor-Einstellungen
+EditorSettings.AutoComplete=A&uto-Vervollständigung
+EditorSettings.Mask=Aktiv für Dateim&asken:
+EditorSettings.TabExpandNone=Tabulatoren nicht expandieren
+EditorSettings.TabExpandNew=Neu eingegebene Tabulatoren zu Leerzeichen expandieren
+EditorSettings.TabExpandAll=Alle Tabulatoren zu Leerzeichen expandieren
+EditorSettings.ExpandTabs=Tabulatoren e&xpandieren:
+EditorSettings.Highlighter=Hi&ghlighter:
+EditorSettings.ColorerStyle=Colorer-St&il:
+EditorSettings.TabSize=Tabulator&größe:
+EditorSettings.AutoIndent=Auto-E&inzug
+EditorSettings.CursorBeyondEOL=Cursor über Zeilenende &hinaus
+EditorSettings.UseEditorConfig=.&editorconfig verwenden
+EditorSettings.Crosshair=Fadenkreuz an&zeigen
+EditorSettings.ColorerBg=Colorer-&Hintergrund
+EditorSettings.UseExternalEditor=E&xternen Editor verwenden
+EditorSettings.ExternalCommand=E&xterner Befehl:
+
+ColorerSettings.Title= Colorer-Einstellungen
+ColorerSettings.Enabled=Colorer-Hervorhebung &aktivieren
+ColorerSettings.Style=Farb&stil:
+ColorerSettings.BuiltIn=(integriert)
+ColorerSettings.Cross=K&reuz anzeigen:
+ColorerSettings.CrossOff=Nicht anzeigen
+ColorerSettings.CrossVertical=Vertikal
+ColorerSettings.CrossHorizontal=Horizontal
+ColorerSettings.CrossBoth=Beide
+ColorerSettings.Syntax=S&yntax hervorheben
+ColorerSettings.Background=Editor&hintergrund ändern
+ColorerSettings.Catalog=Schema&ordner (catalog.xml):
+ColorerSettings.Reload=Neu &laden
+ColorerSettings.Download=Schemata &herunterladen
 
 AppearanceSettings.Title= Aussehen-Einstellungen
 AppearanceSettings.Style=Anwendungs&stil:
@@ -417,15 +474,33 @@ ConfirmationsSettings.Title= Bestätigungen
 ConfirmationsSettings.Copy=Bestätigen beim &Kopieren
 ConfirmationsSettings.Move=Bestätigen beim &Verschieben
 ConfirmationsSettings.Delete=Bestätigen beim &Löschen
+ConfirmationsSettings.DeleteCancelFocused=Fokus beim Löschen auf 'Abbrechen'
 ConfirmationsSettings.Exit=Bestätigen beim &Beenden
+
 UpdateSettings.Title= Auto-Update
 UpdateSettings.Channel=Update-&Kanal:
 UpdateSettings.Interval=Prüf&intervall:
 UpdateSettings.BtnCheck=Jetzt &prüfen
+UpdateSettings.ChannelStable=Stabile Versionen
+UpdateSettings.ChannelNightly=Nightly-Builds
+UpdateSettings.IntervalNever=Nie
+UpdateSettings.IntervalStart=Bei jedem Start
+UpdateSettings.IntervalDaily=Täglich
+UpdateSettings.IntervalWeekly=Wöchentlich
+
 FindFile.Title= Datei suchen
 FindFile.MaskPrompt=Eine Dateimaske oder mehrere Dateimasken:
 FindFile.TextPrompt=Enthaltener Text:
 FindFile.BtnFind=&Suchen
+FindFile.SearchingTitle= Suchen...
+FindFile.Scanning=Scannen:
+FindFile.FoundCount=Gefunden: %d
+FindFile.SearchResultsTitle= Suchergebnisse
+FindFile.BtnGoTo=&Gehe zu
+FindFile.BtnView=&Anzeigen
+FindFile.BtnEdit=&Bearbeiten
+FindFile.BtnClose=&Schließen
+
 History.FoldersTitle= Ordnerverlauf
 History.CommandsTitle= Befehlsverlauf
 History.SearchModeHint=F2: Zwischen Teilstring- und Präfix-Suche wechseln
@@ -433,22 +508,36 @@ History.CommandsHint=Auf/Ab Eingabe Esc Umschalt+Entf Entf Strg+C Strg+Einfg F2
 History.FoldersHint=Auf/Ab Eingabe Umschalt+Eingabe Strg+Eingabe Esc Umschalt+Entf Entf Strg+C Strg+Einfg Strg+R F2
 History.ConfirmClearAll=Ganzes Protokoll löschen?
 History.ConfirmPruneMissing=Einträge entfernen, deren Pfade nicht mehr existieren?
-Help.SearchHint=Suche: tippen  Nächste: F3/Strg+Eingabe  Vorherige: Umschalt+F3/Strg+Umschalt+Eingabe
-UserMenu.LocalMenuTitle=Lokales Menü
-UserMenu.MainMenuTitle=Hauptmenü
-UserMenu.MainMenuFAR=FAR
-
-Language.Title= Sprachen
-Language.Changed=Sprache geändert.\nEinige UI-Elemente erfordern einen Neustart der Anwendung,\num die neue Sprache vollständig anzuwenden.
-HelpLanguage.Title=Hilfesprachen
-HelpLanguage.Changed=Hilfesprache geändert.
-
 History.Title= Verlauf
 History.EmptyFolders=Ordnerverlauf ist leer.
 History.EmptyCommands=Befehlsverlauf ist leer.
 
+UserMenu.LocalMenuTitle=Lokales Menü
+UserMenu.MainMenuTitle=Hauptmenü
+UserMenu.MainMenuFAR=FAR
+UserMenu.EditTitle= Benutzermenü bearbeiten
+UserMenu.CreateTitle= Benutzermenü erstellen
+UserMenu.EditSubmenuTitle= Untermenü bearbeiten
+UserMenu.CreateSubmenuTitle= Untermenü erstellen
+UserMenu.LabelHotkey=Tasten&kombination:
+UserMenu.LabelLabel=&Bezeichnung:
+UserMenu.LabelCommand=&Befehl:
+
+Language.Title= Sprachen
+Language.Changed=Sprache geändert.\nEinige UI-Elemente erfordern einen Neustart der Anwendung,\num die neue Sprache vollständig anzuwenden.
+
+LanguageSettings.Title= Spracheinstellungen
+LanguageSettings.Primary=Hauptsprache:
+LanguageSettings.Fallback=Ersatzsprache:
+LanguageSettings.None=<keine>
+
+HelpLanguage.Title=Hilfesprachen
+HelpLanguage.Changed=Hilfesprache geändert.
+
 Error.Title= Fehler
+
 Warning.Title= Warnung
+
 Info.Title= Info
 
 ExtEdit.TempError=Temporäre Datei kann nicht erstellt werden: %v
@@ -463,22 +552,27 @@ FileOp.BtnNewInstance=&Neue Instanz
 FileOp.CannotEditDir=Ein Verzeichnis kann nicht bearbeitet werden.
 FileOp.CannotViewDir=Ein Verzeichnis kann nicht angezeigt werden.
 FileOp.CannotOpenSpecial=Spezielle Dateien (Named Pipes, Sockets, Geräte) können nicht geöffnet werden.
+FileOp.DeletionErrors= Löschfehler
+FileOp.FileAlreadyExists=Datei existiert bereits
+FileOp.RememberChoice=Auswahl &merken
+FileOp.Overwrite=Über&schreiben
+FileOp.Skip=Über&springen
+FileOp.Rename=&Umbenennen
+FileOp.Append=A&nhängen
+FileOp.Resume=F&ortsetzen
+FileOp.BtnCancel=&Abbrechen
+FileOp.BtnBackground=&Hintergrund
 
 Dialog.RenameTitle= Umbenennen
 Dialog.RenamePrompt='%s' umbenennen in:
-
-Op.Queue=Warteschlange
-Op.Background=Hintergrund-Panel-Kopie
-Op.Foreground=Vordergrund-Sperre
-Op.PathNameOnly=Nur Name
-Op.PathFullPath=Vollständiger Pfad
-Op.PathSrcDst=Quelle -> Ziel
 
 Plugins.Title= Plugins verwalten (RPC)
 Plugins.BtnAdd=&Hinzufügen
 Plugins.BtnRemove=&Löschen
 Plugins.BtnPermissions=&Rechte
 Plugins.BtnClose=&Schließen
+Plugins.AddTitle= Plugin hinzufügen
+Plugins.SelectFilePrompt=Plugin-Datei auswählen:
 
 InfoPanel.Title= Information
 InfoPanel.Computer=Computername
@@ -542,6 +636,7 @@ AndroidInfo.Storage=Speicherplatz
 AndroidInfo.StorageTotal=Speicherplatz gesamt
 AndroidInfo.StorageAvailable=Speicherplatz verfügbar
 AndroidInfo.Protocol=Protokoll
+
 IOSInfo.DeviceTitle=Mobiles Apple-Gerät
 IOSInfo.Name=Name
 IOSInfo.Model=Modell
@@ -594,7 +689,6 @@ KeyBar.F9=KonfMenü
 KeyBar.F10=Beenden
 KeyBar.F11=Plugin
 KeyBar.F12=Auswahl
-
 KeyBar.AltF1=Links
 KeyBar.AltF2=Rechts
 KeyBar.AltF3=Hex
@@ -608,7 +702,6 @@ KeyBar.CtrlF4=Erw
 KeyBar.CtrlF5=Zeit
 KeyBar.CtrlF6=Größe
 KeyBar.CtrlF7=Unsort
-
 KeyBar.EditorF1=Hilfe
 KeyBar.EditorF2=Speichern
 KeyBar.EditorF3=Umbruch
@@ -623,54 +716,8 @@ KeyBar.ViewerF7=Suchen
 KeyBar.ViewerAltF8=GeheZu
 KeyBar.ViewerF10=Beenden
 
-EditorSettings.TabExpandNone=Tabulatoren nicht expandieren
-EditorSettings.TabExpandNew=Neu eingegebene Tabulatoren zu Leerzeichen expandieren
-EditorSettings.TabExpandAll=Alle Tabulatoren zu Leerzeichen expandieren
-EditorSettings.ExpandTabs=Tabulatoren e&xpandieren:
-EditorSettings.Highlighter=Hi&ghlighter:
-EditorSettings.ColorerStyle=Colorer-St&il:
-EditorSettings.TabSize=Tabulator&größe:
-EditorSettings.AutoIndent=Auto-E&inzug
-EditorSettings.CursorBeyondEOL=Cursor über Zeilenende &hinaus
-EditorSettings.UseEditorConfig=.&editorconfig verwenden
-EditorSettings.Crosshair=Fadenkreuz an&zeigen
-EditorSettings.ColorerBg=Colorer-&Hintergrund
-EditorSettings.UseExternalEditor=E&xternen Editor verwenden
-EditorSettings.ExternalCommand=E&xterner Befehl:
-ConfirmationsSettings.DeleteCancelFocused=Fokus beim Löschen auf 'Abbrechen'
-
-PanelSettings.ShowHighlightMarks=Hervorhebungs-&Markierungen anzeigen
-PanelSettings.CommandLineAutoComplete=&Auto-Vervollständigung der Befehlszeile
-PanelSettings.AlwaysShowMenuBar=Menüleiste i&mmer anzeigen
-PanelSettings.RecordMacrosTo=Makros aufzeichnen nach:
-UpdateSettings.ChannelStable=Stabile Versionen
-UpdateSettings.ChannelNightly=Nightly-Builds
-UpdateSettings.IntervalNever=Nie
-UpdateSettings.IntervalStart=Bei jedem Start
-UpdateSettings.IntervalDaily=Täglich
-UpdateSettings.IntervalWeekly=Wöchentlich
-Plugins.AddTitle= Plugin hinzufügen
-Plugins.SelectFilePrompt=Plugin-Datei auswählen:
-
-FindFile.SearchingTitle= Suchen...
-FindFile.Scanning=Scannen:
-FindFile.FoundCount=Gefunden: %d
-FindFile.SearchResultsTitle= Suchergebnisse
-FindFile.BtnGoTo=&Gehe zu
-FindFile.BtnView=&Anzeigen
-FindFile.BtnEdit=&Bearbeiten
-FindFile.BtnClose=&Schließen
-
-FileOp.DeletionErrors= Löschfehler
-FileOp.FileAlreadyExists=Datei existiert bereits
-FileOp.RememberChoice=Auswahl &merken
-FileOp.Overwrite=Über&schreiben
-FileOp.Skip=Über&springen
-FileOp.Rename=&Umbenennen
-FileOp.Append=A&nhängen
-FileOp.Resume=F&ortsetzen
-
 Arkanoid.HighScores= Highscores
+
 PlugRing.Title= f4 PlugRing
 PlugRing.BtnInstall=&Installieren/Aktualisieren
 PlugRing.BtnRemove=&Entfernen
@@ -687,29 +734,18 @@ Attributes.ReadOnly=Schreib&geschützt
 Attributes.Hidden=Verstec&kt
 Attributes.System=&System
 Attributes.Archive=&Archiv
+
 Permissions.Title= Plugin-Berechtigungen
 Permissions.BtnRevoke=&Entziehen
 Permissions.BtnClose=&Schließen
 
-Search.Prompt=Suchen nach:
-Search.WholeWords=Nur ganze Wörter
-Search.Regex=Reguläre Ausdrücke
-Search.BtnFind=&Suchen
 Replace.Title= Ersetzen
 Replace.Prompt=Ersetzen durch:
 Replace.BtnReplace=&Ersetzen
 Replace.BtnReplaceAll=Alle er&setzen
+
 Codepage.Title= Codepages
 Codepage.ConvertTitle= Codepage konvertieren
-
-vtui.Save=&Speichern
-UserMenu.EditTitle= Benutzermenü bearbeiten
-UserMenu.CreateTitle= Benutzermenü erstellen
-UserMenu.EditSubmenuTitle= Untermenü bearbeiten
-UserMenu.CreateSubmenuTitle= Untermenü erstellen
-UserMenu.LabelHotkey=Tasten&kombination:
-UserMenu.LabelLabel=&Bezeichnung:
-UserMenu.LabelCommand=&Befehl:
 
 Hotkeys.Title= Hotkey-Konfigurator
 Hotkeys.BtnAssign=&Zuweisen
@@ -720,10 +756,7 @@ Hotkeys.BtnNext=Weiter >
 Hotkeys.LabelArea=Bereich:
 Hotkeys.LabelWhen=Wenn:
 Hotkeys.AssignTitle= Hotkey zuweisen
-Op.DummyQueue=Warteschlange (Standard)
-Op.DummyBackground=Hintergrund-Panel-Kopie
-Op.DummyForeground=Vordergrund-Sperre
-Op.BtnStart=&Start
+
 Drive.Title= Laufwerk
 
 NetFox.ConnectionTitle= Verbindung herstellen
@@ -739,12 +772,7 @@ NetFox.LabelCodepage=&Codepage:
 NetFox.ErrorEmptyName=Name darf nicht leer sein
 NetFox.ErrorReservedName=Reservierter Verbindungsname
 
-FileOp.BtnCancel=&Abbrechen
-FileOp.BtnBackground=&Hintergrund
 Queue.BtnCancel=Aufgabe &abbrechen
 Queue.BtnClear=Erledigte &löschen
+
 Session.Title= Sitzung auswählen
-LanguageSettings.Title= Spracheinstellungen
-LanguageSettings.Primary=Hauptsprache:
-LanguageSettings.Fallback=Ersatzsprache:
-LanguageSettings.None=<keine>

@@ -149,6 +149,7 @@ type F4Config struct {
 	HelpLanguage             string
 	AlwaysShowMenuBar        bool
 	WorkspaceTabMode         int
+	WorkspaceTabsOverlay     bool
 	CtrlTabShowsMenu         bool
 	AltNumberSwitchesTabs    bool
 	RestoreWorkspaceTabs     bool
@@ -185,6 +186,7 @@ type F4Config struct {
 	ExternalEditorCommand    string
 	EditorAutodetectCodePage bool
 	EditorHighlighter        string
+	EditorSyntaxAnimation    bool
 	EditorColorerScheme      string
 	EditorColorerBackground  bool
 	EditorColorerSyntax      bool
@@ -277,6 +279,7 @@ var AppConfig = F4Config{
 	HelpLanguage:             "en",
 	AlwaysShowMenuBar:        false,
 	WorkspaceTabMode:         int(vtui.WorkspaceTabsAlways),
+	WorkspaceTabsOverlay:     true,
 	CtrlTabShowsMenu:         false,
 	AltNumberSwitchesTabs:    true,
 	RestoreWorkspaceTabs:     true,
@@ -313,6 +316,7 @@ var AppConfig = F4Config{
 	ExternalEditorCommand:    "",
 	EditorAutodetectCodePage: true,
 	EditorHighlighter:        "Chroma",
+	EditorSyntaxAnimation:    false,
 	EditorColorerScheme:      "",
 	EditorColorerBackground:  true,
 	EditorColorerSyntax:      true,
@@ -429,6 +433,7 @@ func LoadConfig() {
 	default:
 		AppConfig.WorkspaceTabMode = int(vtui.WorkspaceTabsMultiple)
 	}
+	AppConfig.WorkspaceTabsOverlay = ini.GetString("Interface", "WorkspaceTabsOverlay", "1") != "0"
 	AppConfig.CtrlTabShowsMenu = strings.EqualFold(ini.GetString("Interface", "CtrlTabMode", "direct"), "menu")
 	AppConfig.AltNumberSwitchesTabs = ini.GetString("Interface", "AltNumberSwitchesTabs", "1") != "0"
 	AppConfig.RestoreWorkspaceTabs = ini.GetString("Interface", "RestoreWorkspaceTabs", "1") != "0"
@@ -542,6 +547,7 @@ func LoadConfig() {
 	AppConfig.EditorAutodetectCodePage = ini.GetString("Editor", "AutodetectCodePage", "1") == "1"
 	AppConfig.EditorMemoryMap = ini.GetString("Editor", "MemoryMap", "1") == "1"
 	AppConfig.EditorHighlighter = normalizeHighlighter(ini.GetString("Editor", "Highlighter", "Chroma"))
+	AppConfig.EditorSyntaxAnimation = ini.GetString("Editor", "SyntaxAnimation", "0") == "1"
 	AppConfig.EditorColorerScheme = ini.GetString("Editor", "ColorerScheme", "")
 	AppConfig.EditorColorerBackground = ini.GetString("Editor", "ColorerBackground", "1") == "1"
 	AppConfig.EditorColorerSyntax = ini.GetString("Editor", "ColorerSyntax", "1") == "1"
@@ -635,7 +641,6 @@ func saveConfigWithWindowSize(windowSize bool) {
 	ApplyProxySettings()
 
 	path := getUserConfigIniPath()
-	os.MkdirAll(filepath.Dir(path), 0755)
 	guiCols, guiRows := AppConfig.GuiCols, AppConfig.GuiRows
 	if !windowSize {
 		guiCols, guiRows = persistedGuiWindowSize()
@@ -662,6 +667,7 @@ func saveConfigWithWindowSize(windowSize bool) {
 		ctrlTabMode = "menu"
 	}
 	sb.WriteString(fmt.Sprintf("WorkspaceTabMode = %s\n", workspaceTabMode))
+	fmt.Fprintf(&sb, "WorkspaceTabsOverlay = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.WorkspaceTabsOverlay])
 	sb.WriteString(fmt.Sprintf("CtrlTabMode = %s\n", ctrlTabMode))
 	sb.WriteString(fmt.Sprintf("AltNumberSwitchesTabs = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.AltNumberSwitchesTabs]))
 	sb.WriteString(fmt.Sprintf("RestoreWorkspaceTabs = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.RestoreWorkspaceTabs]))
@@ -744,6 +750,7 @@ func saveConfigWithWindowSize(windowSize bool) {
 	sb.WriteString(fmt.Sprintf("AutodetectCodePage = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.EditorAutodetectCodePage]))
 	sb.WriteString(fmt.Sprintf("MemoryMap = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.EditorMemoryMap]))
 	sb.WriteString(fmt.Sprintf("Highlighter = %s\n", AppConfig.EditorHighlighter))
+	fmt.Fprintf(&sb, "SyntaxAnimation = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.EditorSyntaxAnimation])
 	sb.WriteString(fmt.Sprintf("ColorerScheme = %s\n", AppConfig.EditorColorerScheme))
 	sb.WriteString(fmt.Sprintf("ColorerBackground = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.EditorColorerBackground]))
 	sb.WriteString(fmt.Sprintf("ColorerSyntax = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.EditorColorerSyntax]))
@@ -802,7 +809,7 @@ func saveConfigWithWindowSize(windowSize bool) {
 		sb.WriteString(fmt.Sprintf("%s=%s\n", k, layoutKeys[k]))
 	}
 
-	err := os.WriteFile(path, []byte(sb.String()), 0644)
+	err := writeFileAtomically(path, []byte(sb.String()), 0644)
 	if err != nil {
 		vtui.DebugLog("CONFIG: Failed to save application settings: %v", err)
 		return

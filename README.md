@@ -8,7 +8,7 @@
 | **Windows** | .zip | [amd64](https://github.com/unxed/f4/releases/download/nightly/f4-windows-amd64.zip) / [arm64](https://github.com/unxed/f4/releases/download/nightly/f4-windows-arm64.zip) |
 | **Windows 7/8/8.1** | .zip | [amd64](https://github.com/unxed/f4/releases/download/nightly/f4-windows7-amd64.zip) |
 | **macOS** | .tar.gz | [amd64](https://github.com/unxed/f4/releases/download/nightly/f4-darwin-amd64.tar.gz) / [arm64](https://github.com/unxed/f4/releases/download/nightly/f4-darwin-arm64.tar.gz) |
-| **Linux** | .tar.gz | [amd64](https://github.com/unxed/f4/releases/download/nightly/f4-linux-amd64.tar.gz) / [arm64](https://github.com/unxed/f4/releases/download/nightly/f4-linux-arm64.tar.gz) / [armv7l](https://github.com/unxed/f4/releases/download/nightly/f4-linux-arm.tar.gz) |
+| **Linux** | .tar.gz | [amd64](https://github.com/unxed/f4/releases/download/nightly/f4-linux-amd64.tar.gz) / [arm64](https://github.com/unxed/f4/releases/download/nightly/f4-linux-arm64.tar.gz) / [armv7l](https://github.com/unxed/f4/releases/download/nightly/f4-linux-arm.tar.gz) / [386](https://github.com/unxed/f4/releases/download/nightly/f4-linux-386.tar.gz) / [mips](https://github.com/unxed/f4/releases/download/nightly/f4-linux-mips.tar.gz) / [mipsle](https://github.com/unxed/f4/releases/download/nightly/f4-linux-mipsle.tar.gz) / [mips64](https://github.com/unxed/f4/releases/download/nightly/f4-linux-mips64.tar.gz) / [mips64le](https://github.com/unxed/f4/releases/download/nightly/f4-linux-mips64le.tar.gz) / [riscv64](https://github.com/unxed/f4/releases/download/nightly/f4-linux-riscv64.tar.gz) / [loong64](https://github.com/unxed/f4/releases/download/nightly/f4-linux-loong64.tar.gz) / [ppc64](https://github.com/unxed/f4/releases/download/nightly/f4-linux-ppc64.tar.gz) / [ppc64le](https://github.com/unxed/f4/releases/download/nightly/f4-linux-ppc64le.tar.gz) |
 | **FreeBSD** | .tar.gz | [amd64](https://github.com/unxed/f4/releases/download/nightly/f4-freebsd-amd64.tar.gz) / [arm64](https://github.com/unxed/f4/releases/download/nightly/f4-freebsd-arm64.tar.gz) |
 | **DragonflyBSD** | .tar.gz | [amd64](https://github.com/unxed/f4/releases/download/nightly/f4-dragonfly-amd64.tar.gz) |
 | **OpenBSD** | .tar.gz | [amd64](https://github.com/unxed/f4/releases/download/nightly/f4-openbsd-amd64.tar.gz) / [arm64](https://github.com/unxed/f4/releases/download/nightly/f4-openbsd-arm64.tar.gz) |
@@ -61,6 +61,22 @@ UI & input libraries are developed separately ([vtui](https://github.com/unxed/v
 *   `--gui=gogpu`: Use the hardware-accelerated (GPU) renderer.
 *   `--gui=x11`: Use native X11 windowing (Linux/BSD/macOS).
 *   `--gui=wayland`: Use native Wayland windowing (Linux/BSD).
+*   `--gui=ebiten`: Use the portable Ebitengine graphical backend (Windows/Linux/macOS).
+*   `--tty=ansi`: Force terminal mode with ANSI input/output.
+*   `--tty=win32`: Force terminal mode with the Windows Console API (`winapi` is an alias).
+
+The available backends and their main characteristics are:
+
+| Backend or mode | Platforms | Characteristics |
+| --- | --- | --- |
+| `--gui=win32` | Windows, Wine | Native Win32 window and GDI rendering; does not require ConPTY. |
+| `--gui=gogpu` | Platforms supported by gogpu | Hardware-accelerated rendering when the required graphics stack is available. |
+| `--gui=x11` | X11 desktops (Linux/BSD/macOS) | Native X11 windowing. |
+| `--gui=wayland` | Linux/BSD with Wayland | Native Wayland windowing. |
+| `--gui=ebiten` | Windows/Linux/macOS | Portable graphical fallback with no gogpu stack requirement. |
+| `--tty=ansi` | ANSI-compatible terminals | Renders through the terminal's byte stream. |
+| `--tty=win32` (`winapi`) | Windows and Wine consoles | Uses the Windows Console API; useful when ConPTY is unavailable. |
+| `Panel.ConsoleMode = host` | Host terminals with PTY support | Sends the shell to the host terminal for native scrollback, selection, and job control; f4 falls back to a simple execution mode when a PTY is unavailable. |
 
 Example:
 ```bash
@@ -70,8 +86,8 @@ Example:
 ### Integrated Terminal & OS Integration
 
 *   **Built-in Terminal:** A fully-fledged built-in terminal running underneath the panels, just like `far2l`.
-*   **VTE Mirror Architecture:** To handle the complex differences between Unix byte-streams and Windows ConPTY 2D-rendering, the terminal uses a custom hybrid grid-and-extrusion engine. Read the [Terminal Architecture Guide](TERMINAL.md) for details.
-*   **Windows Strategy:** Currently, we target recent Windows versions only. Reasons are they support ConPTY and console interfaces working via ESC sequences. At the same time, f4's modular architecture makes it possible to implement rendering via Windows Console API in future (in fact, our Far-compatible internal architecture is ideally suited for this), so if you want f4 to run on your XP box you will not have to write too much code. Similarly, no one is stopping you from writing a layer for f4's built-in terminal that uses winpty instead of conpty to work on older Windows versions.
+*   **VTE Mirror Architecture:** The built-in terminal maintains its own parsed grid, while host-console mode can mirror the same PTY stream directly to the terminal. Read the [Terminal Architecture Guide](TERMINAL.md) for details.
+*   **Windows Strategy:** f4 supports both recent Windows terminals and environments where ConPTY is unavailable. Native Windows console mode uses the Windows Console API, and the Win32/GDI GUI backend works without a host terminal; under Wine, f4 can use the same Win32 GUI path or the `win32`/`winapi` console backend. ConPTY is therefore an optional integration path, not a prerequisite for running f4 on Windows.
 
 ### Plugin Architecture (Out-of-Process RPC)
 

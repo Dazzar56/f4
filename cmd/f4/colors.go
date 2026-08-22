@@ -55,6 +55,7 @@ const (
 
 // SetDefaultF4Palette ensures the palette is large enough and sets f4-specific default colors.
 func SetDefaultF4Palette() {
+	resetColorSources()
 	// Initialize ThemePalette to match the "Tango/Ubuntu" gray theme from far2l
 	vtui.ThemePalette[0] = 0x2E3436 // Default Background (Dark Gray)
 	vtui.ThemePalette[7] = 0xD3D7CF // Default Text (Light Gray)
@@ -254,6 +255,12 @@ var ColorSlots = []ColorSlot{
 // colorMap links farcolors.ini keys to vtui.Palette indices dynamically.
 var colorMap = make(map[string]int)
 
+// colorSourceExpressions keeps the last authored expression for each
+// canonical color key. Several far2l keys intentionally share one runtime
+// palette slot, and contrast correction may adjust an RGB value slightly.
+var colorSourceExpressions = make(map[string]string)
+var colorSourcePalette = make(map[string]uint64)
+
 func init() {
 	for _, slot := range ColorSlots {
 		for _, alias := range slot.Aliases {
@@ -261,6 +268,11 @@ func init() {
 		}
 		colorMap[slot.Canonical] = slot.Index
 	}
+}
+
+func resetColorSources() {
+	colorSourceExpressions = make(map[string]string)
+	colorSourcePalette = make(map[string]uint64)
 }
 
 // InitColors parses the farcolors section and applies it to the vtui.Palette.
@@ -276,17 +288,21 @@ func InitColors(ini *IniFile) {
 // Aliases are applied first so that a canonical key in the same file wins.
 func ApplyColorIni(ini *IniFile) {
 	for _, slot := range ColorSlots {
+		var sourceExpr string
 		for _, alias := range slot.Aliases {
 			expr := ini.GetString("farcolors", alias, "")
 			if expr != "" {
 				vtui.Palette[slot.Index] = ParseFarColor(expr, vtui.Palette[slot.Index])
+				sourceExpr = expr
 			}
 		}
-	}
-	for _, slot := range ColorSlots {
 		expr := ini.GetString("farcolors", slot.Canonical, "")
 		if expr != "" {
 			vtui.Palette[slot.Index] = ParseFarColor(expr, vtui.Palette[slot.Index])
+			sourceExpr = expr
+		}
+		if sourceExpr != "" {
+			colorSourceExpressions[slot.Canonical] = sourceExpr
 		}
 	}
 }
@@ -299,6 +315,11 @@ func FinishColors() {
 	vtui.ThemePalette[0] = vtui.GetRGBBack(vtui.Palette[ColCommandLineUserScreen])
 
 	AdjustContrastLevels()
+	for _, slot := range ColorSlots {
+		if _, ok := colorSourceExpressions[slot.Canonical]; ok {
+			colorSourcePalette[slot.Canonical] = vtui.Palette[slot.Index]
+		}
+	}
 }
 
 // FormatFarColor serializes a vtui palette color attribute to a farcolors.ini string.
@@ -337,7 +358,11 @@ func ExportColors(path string) error {
 		})
 		for _, slot := range slots {
 			attr := vtui.Palette[slot.Index]
-			sb.WriteString(fmt.Sprintf("%s = %s\n", slot.Canonical, FormatFarColor(attr)))
+			value := FormatFarColor(attr)
+			if source, ok := colorSourceExpressions[slot.Canonical]; ok && colorSourcePalette[slot.Canonical] == attr {
+				value = source
+			}
+			fmt.Fprintf(&sb, "%s = %s\n", slot.Canonical, value)
 		}
 	}
 

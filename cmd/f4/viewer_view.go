@@ -36,6 +36,8 @@ type ViewerView struct {
 	// For Text mode: offsets of lines currently on screen
 	lineOffsets         []int64
 	rowCells            []vtui.CharInfo
+	visibleURLRows      [][]urlCellRange
+	hoverURL            string
 	eofVisible          bool
 	lastKnownSize       int64
 	lastSearch          string
@@ -406,11 +408,13 @@ func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, contentHeight int) 
 	attr := vtui.Palette[ColViewerText]
 	currOffset := vv.TopOffset
 	vv.lineOffsets = vv.lineOffsets[:0]
+	vv.visibleURLRows = vv.visibleURLRows[:0]
 	//lastRowWasEOF := false
 
 	for y := 0; y < contentHeight; y++ {
 		vv.lineOffsets = append(vv.lineOffsets, currOffset)
 		if currOffset >= vv.backend.Size() {
+			vv.visibleURLRows = append(vv.visibleURLRows, nil)
 			//lastRowWasEOF = true
 			break
 		}
@@ -418,14 +422,17 @@ func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, contentHeight int) 
 		// Read a generous chunk to handle wrapping
 		data, err := vv.backend.ReadAt(currOffset, width*4)
 		if err == piecetable.ErrLoading {
+			vv.visibleURLRows = append(vv.visibleURLRows, nil)
 			scr.Write(vv.X1, vv.Y1+1+y, vtui.StringToCharInfo(" [ Loading... ] ", attr))
 			break
 		}
 		if err != nil {
+			vv.visibleURLRows = append(vv.visibleURLRows, nil)
 			scr.Write(vv.X1, vv.Y1+1+y, vtui.StringToCharInfo(fmt.Sprintf(" [ Error: %v ] ", err), attr))
 			break
 		}
 		if len(data) == 0 {
+			vv.visibleURLRows = append(vv.visibleURLRows, nil)
 			break
 		}
 
@@ -450,7 +457,7 @@ func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, contentHeight int) 
 				continue
 			}
 
-			rw := 1
+			var rw int
 			if r == '\t' {
 				rw = tabSize - (visualWidth % tabSize)
 			} else {
@@ -470,8 +477,10 @@ func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, contentHeight int) 
 
 		// Build []vtui.CharInfo for the line
 		vv.rowCells = vv.rowCells[:0]
+		cellByteOffsets := make([]int, 0, textLen)
 		lineBytes := data[:textLen]
 		visualCol := 0
+		lineByteOffset := 0
 
 		for len(lineBytes) > 0 {
 			r, size := utf8.DecodeRune(lineBytes)
@@ -481,6 +490,7 @@ func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, contentHeight int) 
 				w := tabSize - (visualCol % tabSize)
 				for i := 0; i < w; i++ {
 					vv.rowCells = append(vv.rowCells, vtui.CharInfo{Char: ' ', Attributes: attr})
+					cellByteOffsets = append(cellByteOffsets, lineByteOffset)
 				}
 				visualCol += w
 			} else {
@@ -492,13 +502,18 @@ func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, contentHeight int) 
 					charVal := uint64(displayRune)
 					for i := 0; i < w; i++ {
 						vv.rowCells = append(vv.rowCells, vtui.CharInfo{Char: charVal, Attributes: attr})
+						cellByteOffsets = append(cellByteOffsets, lineByteOffset)
 						charVal = uint64(vtui.WideCharFiller)
 					}
 					visualCol += w
 				}
 			}
+			lineByteOffset += size
 		}
 
+		rowLinks := urlCellRanges(string(data[:textLen]), cellByteOffsets)
+		applyURLHoverAttr(vv.rowCells, rowLinks, vv.hoverURL)
+		vv.visibleURLRows = append(vv.visibleURLRows, rowLinks)
 		scr.Write(vv.X1, vv.Y1+1+y, vv.rowCells)
 		currOffset += int64(lineLen)
 
@@ -594,7 +609,7 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 						lineLen += size
 						break
 					}
-					rw := 1
+					var rw int
 					if r == '\t' {
 						rw = tabSize - (visualWidth % tabSize)
 					} else {
@@ -846,7 +861,7 @@ func (vv *ViewerView) jumpToEnd() {
 						lineLen += size
 						continue
 					}
-					rw := 1
+					var rw int
 					if r == '\t' {
 						rw = tabSize - (visualWidth % tabSize)
 					} else {
@@ -987,10 +1002,22 @@ func (vv *ViewerView) ProcessMouse(e *vtinput.InputEvent) bool {
 	if e.Type != vtinput.MouseEventType {
 		return false
 	}
+	if e.WheelDirection == 0 {
+		if changed := vv.updateURLHover(int(e.MouseX), int(e.MouseY)); changed {
+			vtui.FrameManager.Redraw()
+		}
+		if ctrlMouseClick(e) {
+			if link, ok := vv.urlLinkAtMouse(int(e.MouseX), int(e.MouseY)); ok {
+				openExternalURLAsync(link.URL)
+				return true
+			}
+		}
+	}
 	if vv.scrollBar != nil && vv.scrollBar.ProcessMouse(e) {
 		return true
 	}
 	if e.WheelDirection != 0 {
+		vv.hoverURL = ""
 		speed := AppConfig.WheelViewerDown
 		vk := uint16(vtinput.VK_DOWN)
 		if e.WheelDirection > 0 {
@@ -1003,6 +1030,35 @@ func (vv *ViewerView) ProcessMouse(e *vtinput.InputEvent) bool {
 		return true
 	}
 	return false
+}
+
+func (vv *ViewerView) urlLinkAtMouse(mx, my int) (urlCellRange, bool) {
+	if vv.HexMode || vv.DecodeMode || mx < vv.X1 || mx > vv.X2 || my < vv.Y1+1 || my > vv.Y2 {
+		return urlCellRange{}, false
+	}
+	row := my - (vv.Y1 + 1)
+	if row < 0 || row >= len(vv.visibleURLRows) {
+		return urlCellRange{}, false
+	}
+	col := mx - vv.X1
+	for _, link := range vv.visibleURLRows[row] {
+		if col >= link.Start && col < link.End {
+			return link, true
+		}
+	}
+	return urlCellRange{}, false
+}
+
+func (vv *ViewerView) updateURLHover(mx, my int) bool {
+	var next string
+	if link, ok := vv.urlLinkAtMouse(mx, my); ok {
+		next = link.URL
+	}
+	if next == vv.hoverURL {
+		return false
+	}
+	vv.hoverURL = next
+	return true
 }
 func (vv *ViewerView) ResizeConsole(w, h int) {
 	vv.SetPosition(0, vtui.FrameManager.WorkspaceTopInset(), w-1, h-2)

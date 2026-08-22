@@ -174,11 +174,7 @@ func SaveAssociations(path string, list []FileAssoc) error {
 		fmt.Fprintf(&buf, "State=%d\n", encodeAssocState(a.Enabled))
 	}
 
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, []byte(buf.String()), 0o644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return writeFileAtomically(path, []byte(buf.String()), 0o644)
 }
 
 func parseAssocState(v string) uint32 {

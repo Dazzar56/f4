@@ -280,10 +280,9 @@ func main() {
 				i++
 			}
 		case "--sudo-dispatcher":
-			if flagVal != "" {
-				sudoDispatcher = flagVal
-			} else if i+1 < len(os.Args) {
-				sudoDispatcher = os.Args[i+1]
+			// Handled before regular argument parsing; still consume its
+			// separate value here so it is not interpreted as another flag.
+			if flagVal == "" && i+1 < len(os.Args) {
 				i++
 			}
 		}
@@ -546,6 +545,7 @@ func InitCore() *vtui.ScreenBuf {
 }
 
 func SetupUI() {
+	configureUnicodeInput()
 	vtui.ConfigDiskLogging(os.Getenv("VTUI_DEBUG") != "")
 	vtui.DebugLog("=== F4 STARTUP [%s] PID:%d ===", getFormattedVersionInfo(), os.Getpid())
 
@@ -559,6 +559,7 @@ func SetupUI() {
 		ctrlTabMode = vtui.WorkspaceCtrlTabMenu
 	}
 	vtui.FrameManager.ConfigureWorkspaceTabs(vtui.WorkspaceTabMode(AppConfig.WorkspaceTabMode), ctrlTabMode)
+	vtui.FrameManager.ConfigureWorkspaceTabOverlay(AppConfig.WorkspaceTabsOverlay)
 	vtui.FrameManager.ConfigureWorkspaceAltNumberSwitch(AppConfig.AltNumberSwitchesTabs)
 	InitLang()
 	if err := ApplyColorStyle(AppConfig.ColorStyle); err != nil {
@@ -724,6 +725,13 @@ func SetupUI() {
 		go CheckForUpdates(panels, false)
 		go CheckForPluginUpdates()
 	}
+}
+
+// configureUnicodeInput enables the full grapheme-aware visual caret mode
+// for every f4 input surface. zoin-bot keeps this explicit at the application
+// boundary so vtui remains backwards-compatible for other applications.
+func configureUnicodeInput() {
+	vtui.DefaultBidiMode = vtui.BidiFull
 }
 
 var getSessionIniPath = func() string {

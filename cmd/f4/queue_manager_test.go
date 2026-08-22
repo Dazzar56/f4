@@ -155,7 +155,8 @@ func TestQueueManager_ConflictDetection(t *testing.T) {
 
 	// 1. Ставим задачу в очередь с текущим состоянием файла
 	task := &QueueTask{
-		Type: "Copy",
+		Type:    "Copy",
+		ResKeys: []string{getResourceKey(v)},
 		Preconditions: []OpPrecondition{
 			{Vfs: v, Path: path, MTime: st.MTime, Size: st.Size, IsDir: false},
 		},
@@ -180,6 +181,7 @@ func TestQueueManager_ConflictDetection(t *testing.T) {
 	qm.mu.Lock()
 	qm.activeKeys = make(map[string]bool)
 	qm.mu.Unlock()
+	qm.signalWorker()
 
 	// Ждем обработки
 	timeout := time.After(2 * time.Second)

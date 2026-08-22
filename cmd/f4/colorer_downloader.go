@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -22,6 +23,8 @@ func SchemasExist() bool {
 }
 
 var colorerDownloadURL = "https://github.com/elfmz/far2l/archive/refs/tags/v_2.8.0.zip"
+
+const maxColorerDownload = 256 << 20
 
 func DownloadColorerSchemas(pf *PanelsFrame, onComplete func(success bool)) {
 	url := colorerDownloadURL
@@ -45,6 +48,9 @@ func DownloadColorerSchemas(pf *PanelsFrame, onComplete func(success bool)) {
 		}
 
 		contentLength := resp.ContentLength
+		if contentLength > maxColorerDownload {
+			return fmt.Errorf("colorer schemas download exceeds %d bytes", maxColorerDownload)
+		}
 		var buf bytes.Buffer
 		tmpBuf := make([]byte, 32*1024)
 		var downloaded int64
@@ -55,6 +61,9 @@ func DownloadColorerSchemas(pf *PanelsFrame, onComplete func(success bool)) {
 			}
 			n, readErr := resp.Body.Read(tmpBuf)
 			if n > 0 {
+				if downloaded+int64(n) > maxColorerDownload {
+					return fmt.Errorf("colorer schemas download exceeds %d bytes", maxColorerDownload)
+				}
 				buf.Write(tmpBuf[:n])
 				downloaded += int64(n)
 				pct := -1
@@ -72,54 +81,7 @@ func DownloadColorerSchemas(pf *PanelsFrame, onComplete func(success bool)) {
 		}
 
 		update("Extracting schemas...", -1)
-		os.RemoveAll(destDir)
-		os.MkdirAll(destDir, 0755)
-
-		zr, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
-		if err != nil {
-			return err
-		}
-
-		prefix := "far2l-v_2.8.0/colorer/configs/"
-		for _, f := range zr.File {
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-			if !strings.HasPrefix(f.Name, prefix) {
-				continue
-			}
-			relPath := strings.TrimPrefix(f.Name, prefix)
-			if relPath == "" {
-				continue
-			}
-
-			targetPath := filepath.Join(destDir, filepath.FromSlash(relPath))
-			if f.FileInfo().IsDir() {
-				os.MkdirAll(targetPath, 0755)
-				continue
-			}
-
-			rc, err := f.Open()
-			if err != nil {
-				return err
-			}
-
-			os.MkdirAll(filepath.Dir(targetPath), 0755)
-			out, err := os.OpenFile(targetPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, f.Mode())
-			if err != nil {
-				rc.Close()
-				return err
-			}
-
-			_, err = io.Copy(out, rc)
-			rc.Close()
-			out.Close()
-			if err != nil {
-				return err
-			}
-		}
-
-		return nil
+		return installColorerSchemas(buf.Bytes(), destDir, ctx)
 	}, func(err error) {
 		if err != nil {
 			vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to download Colorer schemas:\n%v\n\nFalling back to Chroma.", err), []string{"&Ok"})
@@ -131,4 +93,137 @@ func DownloadColorerSchemas(pf *PanelsFrame, onComplete func(success bool)) {
 			onComplete(true)
 		}
 	})
+}
+
+// installColorerSchemas validates and extracts a downloaded schema archive in
+// a fresh sibling directory, then swaps it into place. The old installation
+// is never removed before the new one is complete.
+func installColorerSchemas(data []byte, destDir string, ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		return err
+	}
+	prefix := "far2l-v_2.8.0/colorer/configs/"
+	seen := make(map[string]struct{})
+	for _, f := range zr.File {
+		if !strings.HasPrefix(f.Name, prefix) {
+			continue
+		}
+		relPath := strings.TrimPrefix(f.Name, prefix)
+		if relPath == "" {
+			continue
+		}
+		if _, err := sanitizeExtractPath(relPath, destDir); err != nil {
+			return fmt.Errorf("invalid Colorer archive member %q: %w", f.Name, err)
+		}
+		if f.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("symlink is not allowed in Colorer archive member %q", f.Name)
+		}
+		key := path.Clean(filepath.ToSlash(relPath))
+		if _, exists := seen[key]; exists {
+			return fmt.Errorf("duplicate Colorer archive member %q", f.Name)
+		}
+		seen[key] = struct{}{}
+	}
+
+	parent := filepath.Dir(destDir)
+	if err := os.MkdirAll(parent, 0o755); err != nil {
+		return err
+	}
+	if info, err := os.Lstat(destDir); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("refusing to replace symlink Colorer catalog %q", destDir)
+	}
+	stage, err := os.MkdirTemp(parent, ".f4-colorer-stage-*")
+	if err != nil {
+		return err
+	}
+	stageLive := true
+	defer func() {
+		if stageLive {
+			_ = os.RemoveAll(stage)
+		}
+	}()
+
+	for _, f := range zr.File {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if !strings.HasPrefix(f.Name, prefix) {
+			continue
+		}
+		relPath := strings.TrimPrefix(f.Name, prefix)
+		if relPath == "" {
+			continue
+		}
+		targetPath, err := sanitizeExtractPath(relPath, stage)
+		if err != nil {
+			return err
+		}
+		if f.FileInfo().IsDir() {
+			if err := os.MkdirAll(targetPath, 0o755); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
+			return err
+		}
+		rc, err := f.Open()
+		if err != nil {
+			return err
+		}
+		mode := f.Mode().Perm()
+		if mode == 0 {
+			mode = 0o644
+		}
+		out, err := os.OpenFile(targetPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, mode)
+		if err != nil {
+			_ = rc.Close()
+			return err
+		}
+		_, copyErr := io.Copy(out, rc)
+		closeInErr := rc.Close()
+		if copyErr == nil {
+			copyErr = closeInErr
+		}
+		if copyErr == nil {
+			copyErr = out.Sync()
+		}
+		closeOutErr := out.Close()
+		if copyErr == nil {
+			copyErr = closeOutErr
+		}
+		if copyErr != nil {
+			return copyErr
+		}
+	}
+
+	backup := ""
+	if _, err := os.Lstat(destDir); err == nil {
+		backup, err = os.MkdirTemp(parent, ".f4-colorer-backup-*")
+		if err != nil {
+			return err
+		}
+		_ = os.Remove(backup)
+		if err := os.Rename(destDir, backup); err != nil {
+			_ = os.RemoveAll(backup)
+			return err
+		}
+	}
+	if err := os.Rename(stage, destDir); err != nil {
+		if backup != "" {
+			_ = os.Rename(backup, destDir)
+		}
+		return err
+	}
+	stageLive = false
+	if backup != "" {
+		// Cleanup failure cannot invalidate the newly installed catalog; leave
+		// the backup for recovery and report the successful install.
+		_ = os.RemoveAll(backup)
+	}
+	return nil
 }

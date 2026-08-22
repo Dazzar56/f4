@@ -2,6 +2,7 @@ package netfox
 
 import (
 	"bytes"
+	"context"
 	"github.com/unxed/f4/internal/netproxy"
 	"github.com/unxed/f4/vfs"
 	"net"
@@ -64,6 +65,47 @@ func TestNetFoxVFS_ConfigPersistence(t *testing.T) {
 	nf.Remove(nil, "My Server")
 	if len(nf.getConfigs()) != 0 {
 		t.Error("Config was not removed")
+	}
+}
+
+func TestNetFoxVFS_DamagedConfigIsNeverOverwritten(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "connections.json")
+	original := []byte("{not-json\n")
+	if err := os.WriteFile(dbPath, original, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	nf := NewNetFoxVFS(dbPath)
+	if err := nf.SaveConfig("new", NetFoxConfig{Type: "sftp", Host: "example"}); err == nil {
+		t.Fatal("saving over damaged connections file unexpectedly succeeded")
+	}
+	got, err := os.ReadFile(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(original) {
+		t.Fatalf("damaged file changed after rejected save: %q", got)
+	}
+}
+
+func TestNetFoxVFS_InvalidWriterDoesNotSaveEmptyConfig(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "connections.json")
+	nf := NewNetFoxVFS(dbPath)
+	if err := nf.SaveConfig("existing", NetFoxConfig{Type: "sftp", Host: "example"}); err != nil {
+		t.Fatal(err)
+	}
+	writer, err := nf.Create(context.TODO(), "existing")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writer.Write([]byte("not-json")); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err == nil {
+		t.Fatal("invalid JSON writer unexpectedly succeeded")
+	}
+	configs := nf.getConfigs()
+	if got := configs["existing"].Host; got != "example" {
+		t.Fatalf("invalid writer changed existing profile: %q", got)
 	}
 }
 

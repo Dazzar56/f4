@@ -179,8 +179,14 @@ func findGogpuWindow(pid uint32) uintptr {
 	return search.hwnd
 }
 
-func findGogpuWindowCallback(hwnd, data uintptr) uintptr {
-	search := (*windowSearch)(unsafe.Pointer(data))
+// The lParam arrives as unsafe.Pointer rather than uintptr so the pointer to
+// search never round-trips through an integer. EnumWindows keeps it alive for
+// the duration of the call — Call is //go:uintptrescapes — but a bare uintptr
+// would still lose the provenance that vet's unsafeptr check and the runtime's
+// checkptr instrumentation both look for. syscall.NewCallback accepts any
+// pointer-sized non-float argument, so the signature stays valid.
+func findGogpuWindowCallback(hwnd uintptr, data unsafe.Pointer) uintptr {
+	search := (*windowSearch)(data)
 	var pid uint32
 	procIconGetWindowThreadPID.Call(hwnd, uintptr(unsafe.Pointer(&pid)))
 	if pid != search.pid || windowClassName(hwnd) != gogpuWindowClass {
