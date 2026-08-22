@@ -2672,6 +2672,10 @@ func TestPanelsFrame_CommandLineEnter(t *testing.T) {
 }
 
 func TestPanelsFrame_CommandLineEnterRejectsUnmatchedBacktick(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("backticks are literal in the Windows shell")
+	}
+
 	pf := setupMockPanelsFrame()
 	pty := pf.pty.(*mockPty)
 	defer pf.Close()
