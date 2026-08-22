@@ -235,6 +235,10 @@ func TestArchiveVFS_TempFileLeak(t *testing.T) {
 // TestArchiveVFS_DeferredClose verifies that closing the ArchiveVFS is deferred
 // while there are active readers or writers (grace period of inactivity).
 func TestArchiveVFS_DeferredClose(t *testing.T) {
+	oldIdleTTL := archiveVFSIdleTTL
+	archiveVFSIdleTTL = 50 * time.Millisecond
+	t.Cleanup(func() { archiveVFSIdleTTL = oldIdleTTL })
+
 	tmpDir := t.TempDir()
 	zipPath := filepath.Join(tmpDir, "test.zip")
 
@@ -287,8 +291,8 @@ func TestArchiveVFS_DeferredClose(t *testing.T) {
 	}
 	rc2.Close()
 
-	// 5. Wait for the inactivity timer to expire and perform cleanup (2-second grace period)
-	time.Sleep(2500 * time.Millisecond)
+	// 5. Wait for the shortened test TTL to expire and perform cleanup.
+	time.Sleep(2 * archiveVFSIdleTTL)
 
 	// 6. Try to open the file again. It should fail now as the VFS has been fully cleaned up.
 	_, errRead3 := vArc.Open(context.Background(), vArc.Join(zipPath, "file1.txt"))

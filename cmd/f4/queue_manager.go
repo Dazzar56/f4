@@ -161,6 +161,7 @@ type OpQueueManager struct {
 	tasks          []*QueueTask
 	nextID         int
 	activeKeys     map[string]bool
+	wake           chan struct{}
 	frame          *QueueFrame
 	refreshPending bool
 }
@@ -170,9 +171,27 @@ var GlobalQueueManager *OpQueueManager
 func init() {
 	GlobalQueueManager = &OpQueueManager{
 		activeKeys: make(map[string]bool),
+		wake:       make(chan struct{}, 1),
 	}
 	go GlobalQueueManager.workerLoop()
 }
+
+// signalWorker wakes the scheduler as soon as a task is enqueued or a
+// resource is released. The periodic fallback in workerLoop still repairs a
+// missed notification and keeps zero-value test managers usable.
+func (qm *OpQueueManager) signalWorker() {
+	qm.mu.Lock()
+	if qm.wake == nil {
+		qm.wake = make(chan struct{}, 1)
+	}
+	wake := qm.wake
+	qm.mu.Unlock()
+	select {
+	case wake <- struct{}{}:
+	default:
+	}
+}
+
 func (qm *OpQueueManager) RequestRefresh() {
 	qm.mu.Lock()
 	if qm.refreshPending {
@@ -214,6 +233,7 @@ func (qm *OpQueueManager) Enqueue(task *QueueTask) {
 	task.ctx, task.cancel = context.WithCancel(context.Background())
 	qm.tasks = append(qm.tasks, task)
 	qm.mu.Unlock()
+	qm.signalWorker()
 
 	vtui.FrameManager.PostTask(func() {
 		qm.EnsureQueueWorkspace()
@@ -383,8 +403,18 @@ func (qm *OpQueueManager) postTaskCompletion(t *QueueTask) {
 }
 
 func (qm *OpQueueManager) workerLoop() {
+	qm.mu.Lock()
+	if qm.wake == nil {
+		qm.wake = make(chan struct{}, 1)
+	}
+	wake := qm.wake
+	qm.mu.Unlock()
+
 	for {
-		time.Sleep(200 * time.Millisecond)
+		select {
+		case <-wake:
+		case <-time.After(200 * time.Millisecond):
+		}
 
 		qm.mu.Lock()
 		var toRun *QueueTask
@@ -494,6 +524,7 @@ func (qm *OpQueueManager) executeTask(t *QueueTask) {
 		qm.activeKeys[rk] = false
 	}
 	qm.mu.Unlock()
+	qm.signalWorker()
 
 	vtui.DebugLog("QUEUE_DEBUG: Task %d finalized with state %s (Error: %v). Posting OnComplete.", t.ID, finalState, t.ErrorMsg)
 
