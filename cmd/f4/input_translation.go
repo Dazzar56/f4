@@ -201,8 +201,8 @@ func ctrlCharFromVK(vk uint16) int {
 		return 31 // Ctrl+7 = US
 	case vk == vtinput.VK_8:
 		return 127 // Ctrl+8 = DEL
-	case vk == vtinput.VK_PAUSE:
-		return 3 // Ctrl+Pause/Ctrl+Break (maps to VK_CANCEL) = same as Ctrl+C = ETX
+	case vk == vtinput.VK_PAUSE, vk == vtinput.VK_CANCEL:
+		return 3 // zoin-bot: Ctrl+Pause/Ctrl+Break = same as Ctrl+C = ETX
 	case vk == vtinput.VK_OEM_4:
 		return 27 // Ctrl+[ = ESC
 	case vk == vtinput.VK_OEM_5:
