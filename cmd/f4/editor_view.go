@@ -154,6 +154,12 @@ type EditorView struct {
 	targetPos    int
 	targetTopRow int
 	targetLeft   int
+	// targetOffset is a position known only as a byte offset — where a viewer
+	// was looking, or where a hex cursor sat — for a buffer whose index has
+	// not reached it. The scan turns it into a line and a column when it reads
+	// past it; -1 is none. It is the byte-offset twin of targetLine, and only
+	// one of the two is ever set.
+	targetOffset int
 	Codepage     int
 	// DisplayTitle overrides the temporary filename in frame and top-bar
 	// titles. It is used by internal editor round-trip workflows.
@@ -322,12 +328,28 @@ func (ev *EditorView) Close() {
 }
 
 func NewEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string) *EditorView {
-	return newEditorView(pt, v, path, true)
+	return newEditorView(pt, v, path, true, true)
 }
 
-func newEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string, useEditorConfig bool) *EditorView {
+// NewEditorViewIndexedLater builds an editor with an empty line index, for a
+// file whose index StartIndexing owns: one backed by a mapping or by a chunk
+// buffer.
+//
+// Building it here would mean reading the whole file before the editor can
+// appear, on the thread that would have to draw it — which is what opening a
+// mapped 8 GB file used to do, for twenty seconds. The background scan reads
+// the same bytes without holding the UI, reports progress, and can be
+// cancelled; there is no reason to do the work twice, and every reason not to
+// do it here.
+func NewEditorViewIndexedLater(pt *piecetable.PieceTable, v vfs.VFS, path string) *EditorView {
+	return newEditorView(pt, v, path, true, false)
+}
+
+func newEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string, useEditorConfig, buildIndex bool) *EditorView {
 	li := piecetable.NewLineIndex()
-	li.Rebuild(pt)
+	if buildIndex {
+		li.Rebuild(pt)
+	}
 	ev := &EditorView{
 		pt:              pt,
 		li:              li,
@@ -338,6 +360,7 @@ func newEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string, useEditorC
 		ShowWhitespaces: false,
 		cleanState:      pt.GetState(),
 		targetLine:      -1,
+		targetOffset:    -1,
 		targetPos:       -1,
 		targetTopRow:    -1,
 		targetLeft:      -1,
@@ -471,15 +494,12 @@ func (ev *EditorView) GetTopBar() *TopBar {
 
 // SetText replaces the entire content of the editor.
 func (ev *EditorView) SetText(text string) {
-	if ev.indexCancel != nil {
-		ev.indexCancel()
-		ev.indexCancel = nil
-	}
+	ev.cancelIndexing()
 	ev.edited = true
 	ev.retireEditSession()
 
 	ev.pt = piecetable.New([]byte(text))
-	ev.li.Rebuild(ev.pt)
+	ev.noteIndexRebuilt(ev.li.Rebuild(ev.pt))
 	ev.CursorLine = 0
 	ev.CursorPos = 0
 	ev.engine.SetPointers(ev.pt, ev.li)
@@ -535,12 +555,8 @@ func (ev *EditorView) Undo() {
 		return
 	}
 
-	if !ev.edited {
-		ev.edited = true
-		if ev.indexCancel != nil {
-			ev.indexCancel()
-		}
-	}
+	ev.edited = true
+	ev.cancelIndexing()
 	ev.retireEditSession()
 
 	// Save current state to redo stack
@@ -556,7 +572,7 @@ func (ev *EditorView) Undo() {
 	ev.undoStack = ev.undoStack[:last]
 
 	ev.pt.LoadState(state.table)
-	ev.li.Rebuild(ev.pt)
+	ev.noteIndexRebuilt(ev.li.Rebuild(ev.pt))
 	ev.CursorLine = state.line
 	ev.CursorPos = state.pos
 
@@ -574,12 +590,8 @@ func (ev *EditorView) Redo() {
 		return
 	}
 
-	if !ev.edited {
-		ev.edited = true
-		if ev.indexCancel != nil {
-			ev.indexCancel()
-		}
-	}
+	ev.edited = true
+	ev.cancelIndexing()
 	ev.retireEditSession()
 
 	// Save current state to undo stack
@@ -594,7 +606,7 @@ func (ev *EditorView) Redo() {
 	ev.redoStack = ev.redoStack[:last]
 
 	ev.pt.LoadState(state.table)
-	ev.li.Rebuild(ev.pt)
+	ev.noteIndexRebuilt(ev.li.Rebuild(ev.pt))
 	ev.CursorLine = state.line
 	ev.CursorPos = state.pos
 
@@ -2672,6 +2684,62 @@ func (ev *EditorView) restoreTargetPos() bool {
 	return true
 }
 
+// awaitOffset asks for the cursor to land at a byte offset the index cannot
+// place yet, and reports whether the wait was needed. The alternative, when
+// the index stops short of the offset, is to answer with the last line it
+// knows and a column counted from there — which on a large file is a column
+// measured in gigabytes.
+func (ev *EditorView) awaitOffset(offset int) bool {
+	if offset < 0 {
+		return false
+	}
+	if ev.ensureIndexedTo(offset) {
+		ev.targetOffset = -1
+		line := ev.li.GetLineAtOffset(offset)
+		ev.CursorLine = line
+		ev.CursorPos = offset - ev.li.GetLineOffset(line)
+		ev.updateDesiredVisualCol()
+		return false
+	}
+	// Until the scan gets there the cursor sits at the top rather than
+	// somewhere arbitrary, and the file is readable while it waits.
+	ev.targetOffset = offset
+	ev.targetLine = -1
+	ev.CursorLine = 0
+	ev.CursorPos = 0
+	if !ev.indexing && !ev.indexIsComplete() {
+		ev.StartIndexing()
+	}
+	return true
+}
+
+// resolveTargetOffset places the cursor once the scan has read past the offset
+// it was asked to wait for. The scan's batches call it, as they call
+// restoreTargetPos for a target that was known as a line all along.
+//
+// "Read past" means the index holds a line that starts after the offset, or
+// describes the whole buffer: only then is the line the offset falls in the
+// last word on the subject, rather than the last line the index happens to
+// know.
+func (ev *EditorView) resolveTargetOffset() bool {
+	if ev.targetOffset < 0 {
+		return false
+	}
+	last := ev.li.GetLineOffset(ev.li.LineCount() - 1)
+	if last <= ev.targetOffset && !ev.indexIsComplete() {
+		return false
+	}
+	offset := min(ev.targetOffset, max(ev.pt.Size()-1, 0))
+	ev.targetOffset = -1
+	line := ev.li.GetLineAtOffset(offset)
+	ev.CursorLine = line
+	ev.CursorPos = offset - ev.li.GetLineOffset(line)
+	ev.ensureCursorVisible()
+	ev.updateDesiredVisualCol()
+	vtui.FrameManager.Redraw()
+	return true
+}
+
 func (ev *EditorView) ensureCursorVisible() {
 	if ev.targetLine != -1 {
 		return // Skip clamping and scrolling while waiting for the target line to be indexed
@@ -3036,6 +3104,77 @@ func nextIndexPoll(cur time.Duration) time.Duration {
 	return next
 }
 
+// indexScanBuffers holds the read buffers scans borrow, so that resuming after
+// every burst of typing does not allocate a fresh four megabytes each time.
+var indexScanBuffers sync.Pool
+
+// indexReadChunk is how much of the file the scan asks for at a time when it
+// reads the file rather than the mapping. Large enough that the kernel reads
+// ahead of it, small enough that cancelling the scan is still immediate.
+const indexReadChunk = 4 << 20
+
+// fileChunkReader fills dst from the file for a stretch of the text, and
+// reports false when that stretch has to be read through the piece table.
+type fileChunkReader func(ctx context.Context, dst []byte, offset, length int) (int, bool)
+
+// chunkReader captures the buffer, the file and the mapping as they stand, and
+// returns a reader that fills dst from the file itself for a stretch of text
+// the piece table says is still the original's — or one that always declines,
+// when the file cannot answer for this buffer.
+//
+// A mapped file can be scanned by walking the mapping, which is what the piece
+// table hands out, but walking it means a page fault per page and each fault
+// waits for its own page. Asking the file for megabytes at a time is the same
+// bytes at the speed the disk can deliver them: the 8 GB test file indexes in
+// ~4 s instead of ~18. The mapping is undisturbed; it stays what the paint
+// path reads, where a window onto the file is exactly what is wanted.
+//
+// Capturing is the point of the closure. A scan runs on its own goroutine
+// while the UI thread may reload the file in another codepage or swap the
+// buffer after a Replace All, and both leave the mapping and the descriptor in
+// place while the text is no longer the file's. Reading the fields per chunk
+// would race, and worse: a position in the new buffer is not a position in the
+// file, so the scan would index one thing's bytes at another thing's offsets
+// and quietly hand back line starts that are in the middle of lines. Hence the
+// identity check — the original buffer has to *be* the mapping.
+func (ev *EditorView) chunkReader() fileChunkReader {
+	decline := func(context.Context, []byte, int, int) (int, bool) { return 0, false }
+
+	pt, file, mapped := ev.pt, ev.file, ev.mapped
+	if pt == nil || file == nil || mapped == nil {
+		return decline
+	}
+	mapping := mapped.Bytes()
+	orig, ok := pt.GetOriginalBuffer().(piecetable.MemoryBuffer)
+	if !ok || len(mapping) == 0 || len(orig) != len(mapping) || &orig[0] != &mapping[0] {
+		return decline
+	}
+
+	return func(ctx context.Context, dst []byte, offset, length int) (int, bool) {
+		if dst == nil || length <= 0 || length > len(dst) {
+			return 0, false
+		}
+		// False for anything that has been typed over, so edited text is
+		// scanned through the piece table and the offsets keep describing the
+		// buffer rather than the file.
+		fileOffset, ok := pt.OriginalRange(offset, length)
+		if !ok {
+			return 0, false
+		}
+		n, err := file.ReadAt(ctx, dst[:length], int64(fileOffset))
+		if err != nil && err != io.EOF && ctx.Err() == nil {
+			vtui.DebugLog("EDITOR_INDEX: reading %d bytes at %d returned %d and %v",
+				length, fileOffset, n, err)
+		}
+		if n <= 0 {
+			return 0, false
+		}
+		// A short read is still progress: the caller takes what arrived and
+		// comes back for the rest.
+		return n, true
+	}
+}
+
 func (ev *EditorView) StartIndexing() {
 	// Hex/decode render by byte offset: the index is only needed if the user
 	// switches back to text, and scanning a big binary is a full read.
@@ -3075,6 +3214,11 @@ func (ev *EditorView) StartIndexing() {
 		Scanned: int64(ev.li.GetLineOffset(ev.li.LineCount() - 1)),
 		Lines:   ev.li.LineCount(),
 	})
+
+	// Captured here, on the UI thread, so the scan reads one consistent view
+	// of the buffer, the file and the mapping rather than whatever they are
+	// when each chunk comes round.
+	readFromFile := ev.chunkReader()
 
 	go func() {
 		defer ev.guardMapping("indexing")()
@@ -3116,6 +3260,7 @@ func (ev *EditorView) StartIndexing() {
 		poll := indexPollMin
 		buf := ev.asyncBuf
 		li := ev.li
+		pt := ev.pt
 		// The logical size, not the file's: the scan reads the text as it is
 		// now, including whatever has been typed into it.
 		maxSize := ev.pt.Size()
@@ -3164,6 +3309,10 @@ func (ev *EditorView) StartIndexing() {
 						if ev.targetLine != -1 && (li.LineCount() > ev.targetLine || len(res.Offsets) < batchSize) {
 							ev.restoreTargetPos()
 						}
+						// Unconditional: a position waiting as a byte offset
+						// has no target line to be reached, which is the whole
+						// reason it is waiting.
+						ev.resolveTargetOffset()
 
 						ev.engine.InvalidateFrom(lastLineBefore)
 						if ev.highlighter != nil && !ev.highlighting && len(ev.lineStates) < li.LineCount() {
@@ -3192,6 +3341,7 @@ func (ev *EditorView) StartIndexing() {
 						if ev.restoreTargetPos() {
 							vtui.FrameManager.Redraw()
 						}
+						ev.resolveTargetOffset()
 						if ev.highlighter != nil && !ev.highlighting && len(ev.lineStates) < li.LineCount() {
 							ev.startHighlighting()
 						}
@@ -3212,7 +3362,20 @@ func (ev *EditorView) StartIndexing() {
 		// read still reports having reached the end rather than looking as
 		// though it stopped short.
 		scannedTo.Store(int64(absPos))
-		chunkSize := 256 * 1024 // 256KB chunks to match AsyncBuffer
+		// 256KB chunks to match AsyncBuffer, which is what the piece table
+		// reads through when the file cannot be read directly.
+		const fallbackChunk = 256 * 1024
+
+		// A file that can be read directly is read in much larger pieces —
+		// see chunkReader. The buffer it lands in is borrowed for the scan
+		// rather than allocated per scan: a resume fires 400 ms after every
+		// burst of typing, and 4 MB a time adds up.
+		scanBuf, _ := indexScanBuffers.Get().(*[]byte)
+		if scanBuf == nil {
+			b := make([]byte, indexReadChunk)
+			scanBuf = &b
+		}
+		defer indexScanBuffers.Put(scanBuf)
 
 		pendingOffsets := make([]int, 0, 10000)
 		lineLen := 0
@@ -3237,19 +3400,25 @@ func (ev *EditorView) StartIndexing() {
 				// 16 chunks of 256KB = 4MB read-ahead sliding window.
 				readAhead := 16
 				for i := 0; i < readAhead; i++ {
-					p := absPos + i*chunkSize
+					p := absPos + i*fallbackChunk
 					if p < maxSize {
-						_, _ = buf.Read(p, chunkSize)
+						_, _ = buf.Read(p, fallbackChunk)
 					}
 				}
 			}
 			var data []byte
 			var err error
-			take := min(chunkSize, maxSize-absPos)
-			if view, ok := ev.pt.View(absPos, take); ok {
-				data = view
+			if n, ok := readFromFile(ctx, *scanBuf, absPos, min(indexReadChunk, maxSize-absPos)); ok {
+				data = (*scanBuf)[:n]
 			} else {
-				data, err = ev.pt.GetRange(absPos, take)
+				// Reading through the piece table copies what it hands back,
+				// so it asks for a chunk rather than a whole window.
+				take := min(fallbackChunk, maxSize-absPos)
+				if view, ok := pt.View(absPos, take); ok {
+					data = view
+				} else {
+					data, err = pt.GetRange(absPos, take)
+				}
 			}
 			if err == piecetable.ErrLoading {
 				time.Sleep(poll)
@@ -3268,16 +3437,7 @@ func (ev *EditorView) StartIndexing() {
 				wrapUnsafe = true
 			}
 
-			// Fast SIMD-accelerated newline scanning using bytes.IndexByte
-			scanPos := 0
-			for scanPos < len(data) {
-				idx := bytes.IndexByte(data[scanPos:], '\n')
-				if idx == -1 {
-					break
-				}
-				pendingOffsets = append(pendingOffsets, absPos+scanPos+idx+1)
-				scanPos += idx + 1
-			}
+			pendingOffsets = piecetable.AppendNewlineOffsets(pendingOffsets, data, absPos)
 
 			absPos += len(data)
 			scannedTo.Store(int64(absPos))
@@ -3302,11 +3462,17 @@ func (ev *EditorView) StartIndexing() {
 					if ev.targetLine != -1 && (li.LineCount() > ev.targetLine || batchEnd >= maxSize) {
 						ev.restoreTargetPos()
 					}
+					ev.resolveTargetOffset()
 
 					ev.engine.InvalidateFrom(lastLineBefore)
 					if ev.highlighter != nil && !ev.highlighting && len(ev.lineStates) < li.LineCount() {
 						ev.startHighlighting()
 					}
+					// Say how far it has got. Nothing did, so the status line
+					// held whatever the scan started from — 0% for the whole of
+					// a fresh scan, which on a file big enough to watch reads as
+					// a scan that is stuck rather than one that is working.
+					ev.noteIndexProgress(int64(batchEnd), li.LineCount())
 					vtui.FrameManager.Redraw()
 				})
 			}
@@ -3317,6 +3483,7 @@ func (ev *EditorView) StartIndexing() {
 				if ev.restoreTargetPos() {
 					vtui.FrameManager.Redraw()
 				}
+				ev.resolveTargetOffset()
 				if ev.highlighter != nil && !ev.highlighting && len(ev.lineStates) < li.LineCount() {
 					ev.startHighlighting()
 				}
@@ -3652,6 +3819,10 @@ func (ev *EditorView) Replace(pattern, replacement string, caseSensitive, revers
 // line indexer is canceled and every editSession fence held by an in-flight
 // task goes stale.
 func (ev *EditorView) noteBufferEdit() {
+	// A position waiting on the scan describes the text as it was; typing has
+	// since moved it, and the cursor is where the user put it.
+	ev.targetOffset = -1
+
 	if !ev.edited {
 		ev.edited = true
 	}
@@ -3660,12 +3831,190 @@ func (ev *EditorView) noteBufferEdit() {
 	// The offsets already in the index were moved along with the text by
 	// UpdateAfterInsert and UpdateAfterDelete, and the scan reads the text
 	// through the piece table, so it can pick up from the last line it knows.
+	ev.cancelIndexing()
+	ev.retireEditSession()
+	ev.scheduleIndexResume()
+}
+
+// cancelIndexing stops a running scan and records that nothing is scanning.
+// The scan's own cleanup cannot do that: it is fenced by editSession, and
+// every caller here retires the session next, so the goroutine's deferred
+// "indexing = false" would be refused as stale and the flag would read true
+// for the rest of the session — which made scheduleIndexResume decline to
+// restart and left awaitIndexForResults waiting for a scan that was gone.
+func (ev *EditorView) cancelIndexing() {
 	if ev.indexCancel != nil {
 		ev.indexCancel()
 		ev.indexCancel = nil
 	}
-	ev.retireEditSession()
-	ev.scheduleIndexResume()
+	if !ev.indexing {
+		return
+	}
+	ev.indexing = false
+	if st := ev.indexStatus; st.Phase == IndexScanning {
+		st.Phase = IndexIdle
+		ev.setIndexStatus(st)
+	}
+}
+
+// noteIndexRebuilt records what li.Rebuild managed. A rebuild that walked the
+// whole buffer leaves the index complete and no scan owed; without saying so,
+// a rebuilt index kept the phase of whatever scan it interrupted and the
+// editor went on waiting for a scan that would never come.
+//
+// A rebuild that stopped short — a lazily loaded file with a chunk still on
+// its way — must not be recorded as complete, or every reader of the index
+// believes lines that are not there. That one is handed back to the scan,
+// which resumes from where the rebuild got to.
+func (ev *EditorView) noteIndexRebuilt(complete bool) {
+	ev.indexing = false
+	size := int64(ev.pt.Size())
+	if !complete {
+		ev.setIndexStatus(IndexStatus{
+			Phase:   IndexIdle,
+			Total:   size,
+			Scanned: int64(ev.li.GetLineOffset(ev.li.LineCount() - 1)),
+			Lines:   ev.li.LineCount(),
+		})
+		ev.StartIndexing()
+		return
+	}
+	ev.setIndexStatus(IndexStatus{
+		Phase:   IndexComplete,
+		Total:   size,
+		Scanned: size,
+		Lines:   ev.li.LineCount(),
+	})
+}
+
+// awaitIndexForResults blocks a search task until the line index can answer
+// for offset end: the scan has read past it, the index describes the whole
+// buffer, or nothing is filling it any more.
+//
+// A search reads the whole buffer, but it reports what it found as lines and
+// columns, and those come from the index. Asking an index that stops short
+// about an offset past its end answers with its last line and a column counted
+// from there — so a Find All list opened while a file was still being scanned
+// put every occurrence on line 1, with the whole file as its text. Waiting for
+// the scan that is already reading those bytes is also what keeps the reading
+// off the UI thread: the alternative, counting the gap when the answer is
+// needed, is the freeze this whole change set exists to remove. Waiting only
+// as far as the match, rather than for the whole scan, is what lets a hit on
+// line 3 of an 8 GB file show up before the scan has read the other 8 GB.
+//
+// It reports false when the wait ended for any other reason — the task was
+// cancelled, or the editor closed under it.
+func (ev *EditorView) awaitIndexForResults(ctx *vtui.TaskContext, end int) bool {
+	// Buffered, so that a late notification never blocks the UI thread on a
+	// task that has already given up.
+	ready := make(chan bool, 1)
+
+	ctx.RunOnUI(func() {
+		if ev.IsDone() {
+			ready <- false
+			return
+		}
+		// Nothing scanning means nothing is coming: an editor over a buffer
+		// held in memory has its index built with it and never starts one.
+		reached := func(st IndexStatus) bool {
+			return st.Phase == IndexComplete || !ev.indexing || st.Scanned >= int64(end)
+		}
+		if reached(ev.indexStatus) {
+			ready <- true
+			return
+		}
+		var unsubscribe func()
+		unsubscribe = ev.SubscribeIndex(func(st IndexStatus) {
+			if reached(st) {
+				unsubscribe()
+				ready <- true
+			}
+		})
+	})
+
+	select {
+	case ok := <-ready:
+		return ok
+	case <-ctx.Done():
+		return false
+	}
+}
+
+// bufferRange returns a stretch of the buffer for a caller that only reads it,
+// without copying when the piece table can hand out a window. On a mapped file
+// that window is the file, so reading a line to paint it touches the pages of
+// that line and no others.
+//
+// It answers nil for a range that is not there, which every caller treats as
+// an empty line rather than an error: these are paint paths.
+func (ev *EditorView) bufferRange(offset, length int) []byte {
+	size := ev.pt.Size()
+	if offset < 0 || offset >= size || length <= 0 {
+		return nil
+	}
+	if offset+length > size {
+		length = size - offset
+	}
+	if view, ok := ev.pt.View(offset, length); ok {
+		return view
+	}
+	data, err := ev.pt.GetRange(offset, length)
+	if err != nil {
+		return nil
+	}
+	return data
+}
+
+// readSearchWindow fills dst with one window of the buffer, preferring the
+// file itself over the mapping for the same reason the scan does. read and pt
+// are the caller's captured view of the buffer, so that a pass over a large
+// file cannot end up mixing two of them. The result may alias dst or the
+// buffer, and is only valid until the next call.
+func (ev *EditorView) readSearchWindow(ctx context.Context, read fileChunkReader,
+	pt *piecetable.PieceTable, dst []byte, offset, length int) ([]byte, error) {
+
+	if n, ok := read(ctx, dst, offset, length); ok {
+		return dst[:n], nil
+	}
+	if view, ok := pt.View(offset, length); ok {
+		return view, nil
+	}
+	// An edited stretch, or a chunk buffer that has not fetched this yet. The
+	// wait is the one readSearchSnapshot does, for the same reason.
+	deadline := time.Now().Add(searchSnapshotStall)
+	for {
+		data, err := pt.GetRange(offset, length)
+		if err == nil {
+			return data, nil
+		}
+		if err != piecetable.ErrLoading {
+			return nil, err
+		}
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		if time.Now().After(deadline) {
+			return nil, err
+		}
+		time.Sleep(searchSnapshotPoll)
+	}
+}
+
+// ensureIndexedToLine extends the line index until it describes the given
+// line, when the running scan has not reached it yet. It is ensureIndexedTo
+// asked the other way round, for a caller that knows which line it wants
+// rather than which offset — switching to the viewer, which has to say where
+// in the file the cursor was.
+//
+// A line the user has actually visited is already indexed, so this normally
+// does nothing; it exists for the moment just after opening, when the cursor
+// has been placed by a restored position and the scan is still on its way
+// there.
+func (ev *EditorView) ensureIndexedToLine(line int) {
+	if line < 0 || line < ev.li.LineCount() {
+		return
+	}
+	ev.extendIndexUntil(func(_ int, lines int) bool { return lines > line })
 }
 
 // ensureIndexedTo extends the line index far enough to describe offset, when
@@ -3677,40 +4026,60 @@ func (ev *EditorView) noteBufferEdit() {
 // It runs on the UI thread and only ever covers the gap up to one offset, so
 // the cost is the distance between the scan's position and the match, not the
 // size of the file.
-func (ev *EditorView) ensureIndexedTo(offset int) {
-	if offset < 0 || ev.indexIsComplete() {
-		return
+// It reports whether the index now describes that offset; false means the
+// buffer could not be read that far — a lazily loaded file whose chunk has not
+// arrived — and the caller must not turn the offset into a line.
+func (ev *EditorView) ensureIndexedTo(offset int) bool {
+	if offset < 0 {
+		return false
 	}
-	last := ev.li.LineCount() - 1
-	from := ev.li.GetLineOffset(last)
-	if from < 0 || offset < from {
-		return
+	return ev.extendIndexUntil(func(pos int, _ int) bool { return pos > offset })
+}
+
+// extendIndexUntil counts newlines from the last line the index knows about
+// until done says so, given the position the count has reached and how many
+// lines the index would hold if the pending ones were applied. It reports
+// whether it got there: false means the buffer ran out first, or a chunk of
+// it was still loading, and the index is still short.
+//
+// It reads the buffer on the UI thread, mapping and all, so the fault guard
+// is armed the same as for every other reader of the mapping.
+func (ev *EditorView) extendIndexUntil(done func(pos, lines int) bool) bool {
+	if ev.indexIsComplete() {
+		return true
+	}
+	defer ev.guardMapping("extending the line index")()
+
+	pos := ev.li.GetLineOffset(ev.li.LineCount() - 1)
+	if pos < 0 {
+		return false
 	}
 
 	const step = 256 * 1024
 	pending := make([]int, 0, 1024)
-	for pos := from; pos <= offset; {
+	// An index that already reaches the caller's mark got there without
+	// reading anything, which is still getting there.
+	reached := done(pos, ev.li.LineCount())
+	for !done(pos, ev.li.LineCount()+len(pending)) {
 		take := min(step, ev.pt.Size()-pos)
 		if take <= 0 {
 			break
 		}
 		data, err := ev.pt.GetRange(pos, take)
 		if err != nil || len(data) == 0 {
+			if err == piecetable.ErrLoading {
+				vtui.DebugLog("EDITOR_INDEX: extending the index stopped at %d: chunk still loading", pos)
+			}
 			break
 		}
-		for i := 0; i < len(data); {
-			idx := bytes.IndexByte(data[i:], '\n')
-			if idx == -1 {
-				break
-			}
-			pending = append(pending, pos+i+idx+1)
-			i += idx + 1
-		}
+		pending = piecetable.AppendNewlineOffsets(pending, data, pos)
 		pos += len(data)
+		reached = done(pos, ev.li.LineCount()+len(pending))
 	}
 	if len(pending) > 0 {
 		ev.li.AppendOffsets(pending, ev.pt.Size())
 	}
+	return reached
 }
 
 // indexResumeDelay is how long the editor waits for typing to stop before
@@ -4241,10 +4610,7 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 	vtui.DebugLog("EDITOR: Saving %s...", ev.filePath)
 
 	// Stop indexing to prevent async reads on closed buffers
-	if ev.indexCancel != nil {
-		ev.indexCancel()
-		ev.indexCancel = nil
-	}
+	ev.cancelIndexing()
 
 	// Capture visible offset for preloading before we destroy the current engine
 	visStart := ev.engine.VisualToLogical(ev.ScrollTopRow, 0)
@@ -4587,6 +4953,14 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 				ev.retireEditSession()
 				ev.ensureEngineWidth()
 				ev.edited = false
+				// Saving cancels the scan, and the buffer it was reading has
+				// just been replaced by the reopened file. Without this a file
+				// saved while it was still being indexed stays half indexed
+				// for the rest of the session: everything past the point the
+				// scan had reached is simply not there.
+				if !ev.indexIsComplete() {
+					ev.StartIndexing()
+				}
 				if metadataErr != nil {
 					vtui.ShowMessage(" Warning ", fmt.Sprintf("File content was saved, but original metadata could not be restored:\n%v", metadataErr), []string{"&Ok"})
 				}
@@ -5569,10 +5943,11 @@ func (ev *EditorView) Search(pattern string, caseSensitive, reverse, regexp, who
 					caseSensitive, reverse, next, startOff)
 				logSearchDelegation(ok, searchPattern)
 				if ok {
+					indexed := off == -1 || ev.awaitIndexForResults(ctx, off+mLen)
 					ctx.RunOnUI(func() {
 						canceled := ctx.Err() != nil
 						dlg.Close()
-						if canceled || ev.editSession != session {
+						if canceled || !indexed || ev.editSession != session {
 							return
 						}
 						ev.selectFoundPattern(off, mLen)
@@ -5602,13 +5977,20 @@ func (ev *EditorView) Search(pattern string, caseSensitive, reverse, regexp, who
 				return
 			}
 
+			// The match is about to become a cursor position, which is a line
+			// and a column the index has to answer for.
+			indexed := true
+			if foundOffset != -1 {
+				indexed = ev.awaitIndexForResults(ctx, foundOffset+matchLen)
+			}
+
 			ctx.RunOnUI(func() {
 				// Closing the dialog cancels the task via OnResult, so the
 				// cancellation state must be read first: a search the user
 				// dismissed neither jumps nor complains.
 				canceled := ctx.Err() != nil
 				dlg.Close()
-				if canceled {
+				if canceled || !indexed {
 					return
 				}
 				if foundOffset != -1 {

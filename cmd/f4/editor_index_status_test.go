@@ -33,7 +33,7 @@ func TestIndexRestore_ResolvesForFullyReadFile(t *testing.T) {
 	drainPendingTasks()
 
 	pt := piecetable.New([]byte("line one\nline two\nline three\nline four\nline five\n"))
-	ev := newEditorView(pt, nil, "", false)
+	ev := newEditorView(pt, nil, "", false, true)
 	ev.targetLine = 3
 	ev.targetPos = 2
 	ev.targetTopRow = 3
@@ -58,7 +58,7 @@ func TestIndexStatus_ReachesCompleteAndNotifies(t *testing.T) {
 
 	content, _, _ := bigSearchCorpus()
 	pt, buf := lazyEditorBuffer(t, content)
-	ev := newEditorView(pt, nil, "", false)
+	ev := newEditorView(pt, nil, "", false, true)
 	ev.asyncBuf = buf
 
 	var phases []IndexPhase
@@ -101,7 +101,7 @@ func TestIndexStatus_ResumesAfterAnEdit(t *testing.T) {
 
 	content, _, _ := bigSearchCorpus()
 	pt, buf := lazyEditorBuffer(t, content)
-	ev := newEditorView(pt, nil, "", false)
+	ev := newEditorView(pt, nil, "", false, true)
 	ev.asyncBuf = buf
 
 	ev.StartIndexing()
@@ -141,7 +141,7 @@ func TestEnsureIndexedTo_ResolvesAMatchPastTheScan(t *testing.T) {
 	needleOff := len(content)
 	content += "NEEDLE here\n"
 
-	ev := newEditorView(piecetable.New([]byte(content)), nil, "", false)
+	ev := newEditorView(piecetable.New([]byte(content)), nil, "", false, true)
 	// An index that stopped early, which is what a scan in progress looks like.
 	ev.li.Rebuild(piecetable.New([]byte(content[:1000])))
 	ev.setIndexStatus(IndexStatus{Phase: IndexScanning, Total: int64(len(content))})
@@ -161,5 +161,78 @@ func TestEnsureIndexedTo_ResolvesAMatchPastTheScan(t *testing.T) {
 	}
 	if ev.li.LineCount() <= shortLines {
 		t.Error("the index was not extended to cover the match")
+	}
+}
+
+// TestIndexRebuilt_ShortRebuildIsNotCalledComplete: Undo, Redo and SetText all
+// rebuild the index from the piece table, and on a lazily loaded file that
+// walk stops at the first chunk that has not arrived. Recording that as a
+// complete index is the one answer that must not be given — every reader of
+// the index believes it, so a search would report lines that are not there and
+// nothing would ever go back for the rest.
+func TestIndexRebuilt_ShortRebuildIsNotCalledComplete(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	drainPendingTasks()
+
+	content, _, _ := bigSearchCorpus()
+	pt, buf := lazyEditorBuffer(t, content)
+	ev := newEditorView(pt, nil, "", false, false)
+	ev.asyncBuf = buf
+	t.Cleanup(func() { ev.Close() })
+
+	// Only the prewarmed head is in hand, so the rebuild cannot finish.
+	if complete := ev.li.Rebuild(ev.pt); complete {
+		t.Skip("the whole buffer happened to be loaded; nothing to assert")
+	}
+	ev.noteIndexRebuilt(false)
+
+	if ev.indexIsComplete() {
+		t.Error("a rebuild that stopped short was recorded as a complete index")
+	}
+	if st := ev.IndexState(); st.Lines != ev.li.LineCount() {
+		t.Errorf("status reports %d lines, index holds %d", st.Lines, ev.li.LineCount())
+	}
+	// And the scan it handed the rest to finishes the job.
+	pumpUntil(t, "the scan to finish what the rebuild could not", func() bool { return ev.indexIsComplete() })
+	if got, want := ev.li.LineCount(), strings.Count(content, "\n")+1; got != want {
+		t.Errorf("index holds %d lines after the scan, want %d", got, want)
+	}
+}
+
+// TestAwaitOffset_ScanPlacesThePositionItCouldNotResolve: switching in from
+// the viewer, and leaving hex mode, both know where the cursor belongs only as
+// a byte offset. On a file the index has not reached, that offset cannot be
+// turned into a line yet — and the answer used to be the last line the index
+// knew, with a column counted from there, which on a large file is a column
+// measured in gigabytes. The scan places it instead, when it reads past.
+func TestAwaitOffset_ScanPlacesThePositionItCouldNotResolve(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	drainPendingTasks()
+
+	content, _, _ := bigSearchCorpus()
+	pt, buf := lazyEditorBuffer(t, content)
+	ev := newEditorView(pt, nil, "", false, false)
+	ev.asyncBuf = buf
+	t.Cleanup(func() { ev.Close() })
+
+	// A byte well past anything a prewarmed head can describe.
+	target := len(content) - len(content)/4
+	wanted := strings.Count(content[:target], "\n")
+
+	if !ev.awaitOffset(target) {
+		t.Fatal("precondition: the index should not be able to place that offset yet")
+	}
+	if ev.CursorLine != 0 || ev.CursorPos != 0 {
+		t.Errorf("while waiting the cursor sits at %d,%d; want the top of the file",
+			ev.CursorLine, ev.CursorPos)
+	}
+
+	pumpUntil(t, "the scan to place the waiting position", func() bool { return ev.targetOffset < 0 })
+
+	if got := ev.CursorLine; got != wanted {
+		t.Errorf("cursor landed on line %d, want %d", got, wanted)
+	}
+	if got, want := ev.li.GetLineOffset(ev.CursorLine)+ev.CursorPos, target; got != want {
+		t.Errorf("cursor is at byte %d, want %d", got, want)
 	}
 }
