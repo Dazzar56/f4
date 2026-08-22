@@ -2348,6 +2348,8 @@ func actionEditorSettings(pf *PanelsFrame) {
 	hbox.Spacing = 2
 	hbox.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
 	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
+	// Keep the action row above the operation-mode selector. ComboBox.Open()
+	// places its popup below the field, so it cannot cover these buttons.
 	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
 
 	vbox.Apply()
