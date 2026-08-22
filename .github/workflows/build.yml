@@ -388,6 +388,15 @@ jobs:
         version: v2.13.1
         args: --new-from-rev=origin/main
 
+    # Unlike the linters above this one is not incremental: it reports only
+    # vulnerabilities the code actually reaches, so the whole tree is in scope
+    # and the finding count stays at zero rather than accumulating a backlog.
+    # The tool version is pinned; the vulnerability database it consults is
+    # fetched at run time, so a newly published advisory turns this red without
+    # any change here — which is the point.
+    - name: Run govulncheck
+      run: go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
+
   # Эта джоба создает постоянные релизы при пуше тэгов v*.*.*
   test:
     name: Test (${{ matrix.target }})
