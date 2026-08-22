@@ -2256,9 +2256,6 @@ func (fp *FileSystemPanel) cursorSizeOnBottomBorder() string {
 func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
 	fp.frame.Show(scr)
 	titleAttr := vtui.Palette[ColPanelTitle]
-	if fp.IsFocused() || fp.showInactiveCursor {
-		titleAttr = vtui.Palette[ColPanelSelectedTitle]
-	}
 	if fp.currentTitle != "" {
 		availW := (fp.X2 - fp.X1) - 6
 		if availW < 5 {
