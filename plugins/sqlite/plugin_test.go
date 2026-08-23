@@ -161,3 +161,100 @@ type sqliteTestApp struct {
 }
 
 func (a *sqliteTestApp) GetActivePanelVFS() vfs.VFS { return a.fs }
+
+func TestBrowseTableCarriesRowIDsAndEditsACell(t *testing.T) {
+	path := t.TempDir() + "/edit.db"
+	db, err := driver.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TABLE notes (id INTEGER PRIMARY KEY, note TEXT, size INTEGER)`); err != nil {
+		_ = db.Close()
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO notes VALUES (1, 'first', 10), (2, NULL, 20)`); err != nil {
+		_ = db.Close()
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE VIEW big AS SELECT * FROM notes WHERE size > 5`); err != nil {
+		_ = db.Close()
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	session, _, err := openDatabase(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+
+	result, rowIDs, err := session.browseTable(context.Background(), "notes")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The rowid alias is the browser's business and never reaches the screen.
+	if !reflect.DeepEqual(result.Columns, []string{"id", "note", "size"}) {
+		t.Fatalf("columns = %#v", result.Columns)
+	}
+	if !reflect.DeepEqual(rowIDs, []int64{1, 2}) {
+		t.Fatalf("rowIDs = %#v, want [1 2]", rowIDs)
+	}
+
+	// A view has no rowid: it comes back readable and unwritable.
+	viewResult, viewRowIDs, err := session.browseTable(context.Background(), "big")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if viewRowIDs != nil || len(viewResult.Rows) != 2 {
+		t.Fatalf("view browse = %d row(s) with rowIDs %#v", len(viewResult.Rows), viewRowIDs)
+	}
+
+	affected, err := session.updateCell(context.Background(), "notes", "note", 2, "second")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if affected != 1 {
+		t.Fatalf("updateCell affected %d rows, want 1", affected)
+	}
+	value, err := session.cellValue(context.Background(), "notes", "note", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if text, ok := editableText(value); !ok || text != "second" {
+		t.Fatalf("cell after the edit = %q (editable %t), want %q", text, ok, "second")
+	}
+
+	// Column affinity turns a typed number back into one.
+	if _, err := session.updateCell(context.Background(), "notes", "size", 2, "42"); err != nil {
+		t.Fatal(err)
+	}
+	value, err = session.cellValue(context.Background(), "notes", "size", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if number, ok := value.(int64); !ok || number != 42 {
+		t.Fatalf("size after the edit = %#v, want int64(42)", value)
+	}
+}
+
+func TestEditableTextRefusesWhatALineBoxWouldCorrupt(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		value    any
+		want     string
+		editable bool
+	}{
+		{"NULL edits as an empty line", nil, "", true},
+		{"text passes through", "hello", "hello", true},
+		{"a number is written out", int64(42), "42", true},
+		{"binary is refused", []byte{0, 1, 255}, "", false},
+		{"line breaks are refused", "two\nlines", "", false},
+	} {
+		got, editable := editableText(tc.value)
+		if got != tc.want || editable != tc.editable {
+			t.Errorf("%s: editableText(%#v) = %q, %t; want %q, %t", tc.name, tc.value, got, editable, tc.want, tc.editable)
+		}
+	}
+}

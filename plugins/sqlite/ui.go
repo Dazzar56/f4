@@ -27,6 +27,10 @@ func (w *browserWindow) ProcessKey(e *vtinput.InputEvent) bool {
 		w.browser.runQuery()
 		return true
 	}
+	if e.KeyDown && e.VirtualKeyCode == vtinput.VK_F4 {
+		w.browser.editCell()
+		return true
+	}
 	return w.Window.ProcessKey(e)
 }
 
@@ -36,6 +40,8 @@ type browser struct {
 	path         string
 	tables       []string
 	currentTable string
+	columns      []string
+	rowIDs       []int64
 	dialog       *vtui.Window
 	frame        *browserWindow
 	tableList    *vtui.ListBox
@@ -79,6 +85,7 @@ func newBrowser(app vfs.App, session *databaseSession, tables []string) *browser
 	b.tableList = vtui.NewListBox(leftX, topY+1, leftWidth, dataHeight, b.tables)
 	useDialogListColors(b.tableList)
 	b.resultTable = vtui.NewTable(rightX, topY+1, rightWidth, dataHeight, nil)
+	b.resultTable.CellSelection = true
 	b.resultTable.ShowHeader = true
 	b.resultTable.ShowSeparators = true
 	b.resultTable.ColorTextIdx = vtui.ColDialogText
@@ -156,12 +163,15 @@ func (b *browser) loadTable(table string) {
 	}
 	b.currentTable = table
 	b.query.SetText(tableSelect(table))
-	var result queryResult
+	var (
+		result queryResult
+		rowIDs []int64
+	)
 	b.app.RunProgressTask(sqliteText("SQLite.Title", " SQLite ", " SQLite "), fmt.Sprintf(sqliteText("SQLite.ReadingTable", "Reading %s...", "Чтение %s..."), table), false,
 		func(ctx context.Context, update func(string, int)) error {
 			update(sqliteText("SQLite.ReadingTableProgress", "Reading table...", "Чтение таблицы..."), -1)
 			var err error
-			result, err = b.session.execute(ctx, tableSelect(table))
+			result, rowIDs, err = b.session.browseTable(ctx, table)
 			return err
 		},
 		func(err error) {
@@ -172,6 +182,7 @@ func (b *browser) loadTable(table string) {
 				b.setStatus(fmt.Sprintf(sqliteText("SQLite.ReadFailed", "Could not read %s: %v", "Не удалось прочитать %s: %v"), table, err))
 				return
 			}
+			b.rowIDs = rowIDs
 			b.applyResult(result)
 			b.setStatus(fmt.Sprintf(sqliteText("SQLite.TableRows", "%s: %d row(s)", "%s: %d строк(и)"), table, len(result.Rows)))
 		})
@@ -265,6 +276,9 @@ func (b *browser) runQuery() {
 				return
 			}
 			if result.ReturnsRows {
+				// The rows of a hand written query are not tied to any one
+				// table, so nothing here can be written back.
+				b.rowIDs = nil
 				b.applyResult(result)
 				b.setStatus(fmt.Sprintf(sqliteText("SQLite.Rows", "%d row(s)", "%d строк(и)"), len(result.Rows)))
 				return
@@ -306,6 +320,10 @@ func (b *browser) setTables(tables []string) {
 }
 
 func (b *browser) applyResult(result queryResult) {
+	b.columns = result.Columns
+	if b.resultTable.SelectCol >= len(result.Columns) {
+		b.resultTable.SelectCol = 0
+	}
 	columns := make([]vtui.TableColumn, len(result.Columns))
 	for index, column := range result.Columns {
 		columns[index] = vtui.TableColumn{Title: column, Width: 0, MinWidth: 8}
@@ -316,6 +334,112 @@ func (b *browser) applyResult(result queryResult) {
 	}
 	b.resultTable.Columns = columns
 	b.resultTable.SetRows(rows)
+}
+
+// editCell edits the cell under the cursor and writes it back.
+//
+// Only a table browse can be edited: the rows of a hand written query are not
+// tied to a table, and a view or a WITHOUT ROWID table has no rowid to write
+// against. The value is read again before editing rather than taken off the
+// screen, because what is on screen is escaped and cut at 512 characters.
+func (b *browser) editCell() {
+	if b.closed {
+		return
+	}
+	column, rowID, ok := b.cellUnderCursor()
+	if !ok {
+		b.setStatus(sqliteText("SQLite.NotEditable",
+			"Only a table from the list on the left can be edited, and only one with rowids.",
+			"Редактировать можно только таблицу из списка слева, и только имеющую rowid."))
+		return
+	}
+
+	var value any
+	b.app.RunProgressTask(sqliteText("SQLite.Title", " SQLite ", " SQLite "), sqliteText("SQLite.ReadingValue", "Reading the value...", "Чтение значения..."), false,
+		func(ctx context.Context, update func(string, int)) error {
+			update(sqliteText("SQLite.ReadingValue", "Reading the value...", "Чтение значения..."), -1)
+			var err error
+			value, err = b.session.cellValue(ctx, b.currentTable, column, rowID)
+			return err
+		},
+		func(err error) {
+			if b.closed {
+				return
+			}
+			if err != nil {
+				b.setStatus(fmt.Sprintf(sqliteText("SQLite.SQLError", "SQL error: %v", "Ошибка SQL: %v"), err))
+				return
+			}
+			text, editable := editableText(value)
+			if !editable {
+				b.setStatus(sqliteText("SQLite.CellNotEditable",
+					"This cell holds binary data or line breaks; change it with SQL.",
+					"В ячейке двоичные данные или переводы строк; измените её запросом SQL."))
+				return
+			}
+			b.app.InputBox(
+				sqliteText("SQLite.Title", " SQLite ", " SQLite "),
+				fmt.Sprintf(sqliteText("SQLite.EditPrompt", "New value for %s:", "Новое значение для %s:"), column),
+				text,
+				func(answer string) {
+					// Unchanged means unchanged. Pressing Enter over a NULL
+					// cell must not quietly turn it into an empty string.
+					if answer == text {
+						return
+					}
+					b.writeCell(column, rowID, answer)
+				})
+		})
+}
+
+// cellUnderCursor resolves the table cursor to a column and a rowid.
+func (b *browser) cellUnderCursor() (column string, rowID int64, ok bool) {
+	if b.currentTable == "" || len(b.rowIDs) == 0 {
+		return "", 0, false
+	}
+	row, col := b.resultTable.SelectPos, b.resultTable.SelectCol
+	if row < 0 || row >= len(b.rowIDs) || col < 0 || col >= len(b.columns) {
+		return "", 0, false
+	}
+	return b.columns[col], b.rowIDs[row], true
+}
+
+func (b *browser) writeCell(column string, rowID int64, value string) {
+	if b.closed {
+		return
+	}
+	table := b.currentTable
+	var affected int64
+	b.app.RunProgressTask(sqliteText("SQLite.Title", " SQLite ", " SQLite "), sqliteText("SQLite.WritingValue", "Writing the value...", "Запись значения..."), false,
+		func(ctx context.Context, update func(string, int)) error {
+			update(sqliteText("SQLite.WritingValue", "Writing the value...", "Запись значения..."), -1)
+			var err error
+			affected, err = b.session.updateCell(ctx, table, column, rowID, value)
+			return err
+		},
+		func(err error) {
+			if b.closed {
+				return
+			}
+			if err != nil {
+				message := fmt.Sprintf(sqliteText("SQLite.SQLError", "SQL error: %v", "Ошибка SQL: %v"), err)
+				b.setStatus(message)
+				vtui.ShowMessageOn(b.frame,
+					sqliteText("SQLite.Title", " SQLite ", " SQLite "),
+					message,
+					[]string{sqliteText("SQLite.OK", "&OK", "&ОК")})
+				return
+			}
+			if affected == 0 {
+				b.setStatus(sqliteText("SQLite.RowGone", "That row is no longer there.", "Этой строки больше нет."))
+			} else {
+				b.setStatus(fmt.Sprintf(sqliteText("SQLite.CellUpdated", "%s updated", "Поле %s изменено"), column))
+			}
+			// A trigger or a generated column can change more than the cell
+			// that was written, so the table is read again rather than
+			// patched in place.
+			b.loadTable(table)
+		})
 }
 
 func (b *browser) setStatus(message string) {

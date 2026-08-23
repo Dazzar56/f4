@@ -236,6 +236,114 @@ func (s *databaseSession) execute(ctx context.Context, statement string) (queryR
 	return result, nil
 }
 
+// rowIDColumn is the alias a table browse gives sqlite's rowid. It is dropped
+// before the result is shown: the user sees the table's own columns, while the
+// browser keeps the identifiers that make a cell writable.
+const rowIDColumn = "_f4_rowid"
+
+// browseTable reads a table for the panel on the right, together with the
+// rowid of every row it returns.
+//
+// A view and a WITHOUT ROWID table have no rowid, and the query for one fails;
+// that is not an error but the answer that this table can only be read, so the
+// plain browse runs instead and the rowids come back nil.
+func (s *databaseSession) browseTable(ctx context.Context, table string) (queryResult, []int64, error) {
+	result, rowIDs, err := s.browseWithRowIDs(ctx, table)
+	if err == nil {
+		return result, rowIDs, nil
+	}
+	result, err = s.execute(ctx, tableSelect(table))
+	return result, nil, err
+}
+
+func (s *databaseSession) browseWithRowIDs(ctx context.Context, table string) (queryResult, []int64, error) {
+	statement := "SELECT rowid AS " + quoteIdentifier(rowIDColumn) + ", * FROM " + quoteIdentifier(table) + " LIMIT 100"
+	rows, err := s.db.QueryContext(ctx, statement)
+	if err != nil {
+		return queryResult{}, nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	columns, err := rows.Columns()
+	if err != nil {
+		return queryResult{}, nil, err
+	}
+	if len(columns) < 2 {
+		return queryResult{}, nil, errors.New("SQLite: table has no columns of its own")
+	}
+
+	result := queryResult{Columns: columns[1:], ReturnsRows: true}
+	var rowIDs []int64
+	for rows.Next() {
+		values := make([]any, len(columns))
+		destinations := make([]any, len(values))
+		for i := range values {
+			destinations[i] = &values[i]
+		}
+		if err := rows.Scan(destinations...); err != nil {
+			return queryResult{}, nil, err
+		}
+		rowID, ok := values[0].(int64)
+		if !ok {
+			return queryResult{}, nil, errors.New("SQLite: rows have no usable rowid")
+		}
+		cells := make([]string, len(columns)-1)
+		for i, value := range values[1:] {
+			cells[i] = displayValue(value)
+		}
+		rowIDs = append(rowIDs, rowID)
+		result.Rows = append(result.Rows, cells)
+	}
+	if err := rows.Err(); err != nil {
+		return queryResult{}, nil, err
+	}
+	return result, rowIDs, nil
+}
+
+// cellValue reads one cell as it is stored, not as it is displayed: the shown
+// text is escaped and cut at 512 characters, and writing that back would
+// truncate the value it came from.
+func (s *databaseSession) cellValue(ctx context.Context, table, column string, rowID int64) (any, error) {
+	statement := "SELECT " + quoteIdentifier(column) + " FROM " + quoteIdentifier(table) + " WHERE rowid = ?"
+	var value any
+	if err := s.db.QueryRowContext(ctx, statement, rowID).Scan(&value); err != nil {
+		return nil, err
+	}
+	return value, nil
+}
+
+// updateCell writes one cell. The value travels as a parameter, so nothing the
+// user types is ever parsed as SQL, and column affinity turns "42" back into a
+// number in a column that stores numbers.
+func (s *databaseSession) updateCell(ctx context.Context, table, column string, rowID int64, value string) (int64, error) {
+	statement := "UPDATE " + quoteIdentifier(table) + " SET " + quoteIdentifier(column) + " = ? WHERE rowid = ?"
+	result, err := s.db.ExecContext(ctx, statement, value, rowID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+// editableText is the value as a line the user can edit, and whether editing
+// it in a one line box is safe at all.
+func editableText(value any) (string, bool) {
+	switch typed := value.(type) {
+	case nil:
+		return "", true
+	case []byte:
+		// Binary: a text box would corrupt it on the way back.
+		return "", false
+	case string:
+		if strings.ContainsAny(typed, "\r\n") {
+			return "", false
+		}
+		return typed, true
+	case time.Time:
+		return typed.Format(time.RFC3339Nano), true
+	default:
+		return fmt.Sprint(typed), true
+	}
+}
+
 func statementReturnsRows(statement string) bool {
 	statement = stripSQLComments(strings.TrimSpace(statement))
 	if statement == "" {
