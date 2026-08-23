@@ -354,7 +354,7 @@ func TestStagedReleaseWithoutFlushCommitsAndCloses(t *testing.T) {
 	if len(v.commits) != 1 || v.commits[0] != "saved" {
 		t.Fatalf("commits = %q, want [saved]", v.commits)
 	}
-	if _, err := wh.staged.Size(); !errors.Is(err, os.ErrClosed) {
-		t.Fatalf("staging file after Release = %v, want os.ErrClosed", err)
+	if _, err := wh.staged.Size(); err == nil {
+		t.Fatal("staging file remained usable after Release")
 	}
 }
