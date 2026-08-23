@@ -1789,6 +1789,27 @@ func (fp *FileSystemPanel) consumeFolderHistorySuppression(path string, token ui
 	return true
 }
 
+// shouldRecordFolderHistory prevents an internal path of a nested VFS from
+// leaking into the global OS-folder history. Some providers (notably NetFox)
+// expose an absolute remote path such as /home/user, but that path cannot be
+// reopened after the panel leaves the provider and would otherwise be treated
+// as a local directory. Keep URI and standalone-provider paths, which have a
+// host-level restore route (archives and other persistent virtual paths).
+func shouldRecordFolderHistory(fp *FileSystemPanel, path string) bool {
+	if fp == nil || fp.vfs == nil || path == "" {
+		return false
+	}
+	if fp.vfs.ParentVFS() == nil {
+		return true
+	}
+	if isPersistentURIPath(path) || vfs.FindStandaloneProvider(context.Background(), nil, path) != nil {
+		return true
+	}
+	// filepath.IsAbs does not treat a slash-rooted POSIX path as absolute on
+	// Windows, although a remote Unix VFS can legitimately return one there.
+	return !filepath.IsAbs(path) && !strings.HasPrefix(path, "/") && !strings.HasPrefix(path, "\\")
+}
+
 // showDirectoryError keeps asynchronous refresh failures from stacking modal
 // dialogs. A failed recovery may schedule another read before the user closes
 // the first message; only the first live dialog should remain actionable.
@@ -1857,7 +1878,7 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 		fp.selectionEpoch = make(map[string]uint64)
 	}
 	fp.lastLoadedPath = path
-	if directoryChanged && !suppressFolderHistory {
+	if directoryChanged && !suppressFolderHistory && shouldRecordFolderHistory(fp, path) {
 		// Record accepted navigation in UI order, not in backend completion
 		// order. Otherwise an older slow cloud ReadDir can finish after a newer
 		// visit and move its path to the front of the global MRU history.
