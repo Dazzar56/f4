@@ -172,7 +172,11 @@ func TestArchivePluginKeepsShiftF1MenuWithoutContributionHost(t *testing.T) {
 	if err := plugin.Init(host); err != nil {
 		t.Fatal(err)
 	}
-	defer plugin.Close()
+	t.Cleanup(func() {
+		if err := plugin.Close(); err != nil {
+			t.Errorf("close archive plugin: %v", err)
+		}
+	})
 
 	if host.providers != 1 {
 		t.Fatalf("registered archive providers = %d, want 1", host.providers)

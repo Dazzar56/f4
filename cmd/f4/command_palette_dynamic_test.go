@@ -520,6 +520,8 @@ func TestCommandPaletteIndexesPanelContextAndPlatformDriveCommands(t *testing.T)
 }
 
 func TestCommandPaletteBookmarksRejectPluginOnlyAndStalePanelTargets(t *testing.T) {
+	// Keep unrelated process-wide config users on the TestMain directory.
+	_ = GetF4ConfigDir()
 	configRoot := t.TempDir()
 	oldUserConfigDir := userConfigDir
 	userConfigDir = func() (string, error) { return configRoot, nil }

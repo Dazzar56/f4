@@ -22,8 +22,11 @@ func TestID3Editor_Roundtrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(tempFile.Name())
-	defer tempFile.Close()
+	t.Cleanup(func() {
+		if err := os.Remove(tempFile.Name()); err != nil {
+			t.Errorf("remove temporary MP3: %v", err)
+		}
+	})
 
 	dummyAudio := make([]byte, 100)
 	if _, err := tempFile.Write(dummyAudio); err != nil {
@@ -41,6 +44,9 @@ func TestID3Editor_Roundtrip(t *testing.T) {
 	if _, err := tempFile.Write(tag.Bytes()); err != nil {
 		t.Fatal(err)
 	}
+	if err := tempFile.Close(); err != nil {
+		t.Fatalf("close temporary MP3: %v", err)
+	}
 
 	file, err := id3.Open(tempFile.Name())
 	if err != nil {
@@ -50,7 +56,9 @@ func TestID3Editor_Roundtrip(t *testing.T) {
 	if strings.TrimRight(file.Title(), "\x00") != "Initial Title" {
 		t.Errorf("expected initial title, got %q", file.Title())
 	}
-	file.Close()
+	if err := file.Close(); err != nil {
+		t.Fatalf("close initial tag: %v", err)
+	}
 
 	file2, err := id3.Open(tempFile.Name())
 	if err != nil {
@@ -69,7 +77,7 @@ func TestID3Editor_Roundtrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer file3.Close()
+	defer func() { _ = file3.Close() }()
 
 	title := strings.TrimSpace(strings.TrimRight(file3.Title(), "\x00"))
 	artist := strings.TrimSpace(strings.TrimRight(file3.Artist(), "\x00"))

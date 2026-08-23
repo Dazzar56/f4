@@ -14,8 +14,13 @@ import (
 // next one began. The terminator is that way.
 func TestCancelledRequestKeepsTheSession(t *testing.T) {
 	sess := newMockPeer(t, "ok FISHPLUS 1 dd base64", func(w io.Writer, token string, req mockRequest) {
-		fmt.Fprintf(w, "one line of an answer nobody is waiting for any more\n")
-		fmt.Fprintf(w, ".%s %s ok\n", token, req.ID)
+		if _, err := fmt.Fprintf(w, "one line of an answer nobody is waiting for any more\n"); err != nil {
+			t.Errorf("write canceled response: %v", err)
+			return
+		}
+		if _, err := fmt.Fprintf(w, ".%s %s ok\n", token, req.ID); err != nil {
+			t.Errorf("write canceled response terminator: %v", err)
+		}
 	}, 0)
 	if err := sess.Handshake(context.Background()); err != nil {
 		t.Fatalf("handshake: %v", err)
@@ -53,9 +58,17 @@ func TestCancelledRequestDrainsItsFrames(t *testing.T) {
 		payload[i] = '\n' // the worst possible payload for a line reader
 	}
 	sess := newMockPeer(t, "ok FISHPLUS 1 dd base64", func(w io.Writer, token string, req mockRequest) {
-		fmt.Fprintf(w, "S 300\n#%d\n", len(payload))
-		w.Write(payload)
-		fmt.Fprintf(w, ".%s %s ok\n", token, req.ID)
+		if _, err := fmt.Fprintf(w, "S 300\n#%d\n", len(payload)); err != nil {
+			t.Errorf("write canceled frame header: %v", err)
+			return
+		}
+		if _, err := w.Write(payload); err != nil {
+			t.Errorf("write canceled frame payload: %v", err)
+			return
+		}
+		if _, err := fmt.Fprintf(w, ".%s %s ok\n", token, req.ID); err != nil {
+			t.Errorf("write canceled frame terminator: %v", err)
+		}
 	}, 1)
 	if err := sess.Handshake(context.Background()); err != nil {
 		t.Fatalf("handshake: %v", err)
@@ -104,8 +117,11 @@ func TestDrainGivesUpEventually(t *testing.T) {
 	}()
 
 	err := sess.drainToTerminator(".sometoken 1 ", false)
-	pw.Close()
+	closeErr := pw.Close()
 	<-done
+	if closeErr != nil {
+		t.Fatalf("close endless response pipe: %v", closeErr)
+	}
 	if err == nil {
 		t.Fatal("draining an answer that never ends reported success")
 	}

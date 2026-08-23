@@ -2,6 +2,8 @@ package vtvibe
 
 import (
 	"context"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 )
@@ -11,7 +13,9 @@ func TestSession_Draft(t *testing.T) {
 	if s.Draft() != "" {
 		t.Errorf("expected empty draft, got %q", s.Draft())
 	}
-	s.tree.writeFile("/draft.md", []byte("hello model"))
+	if err := s.tree.writeFile("/draft.md", []byte("hello model")); err != nil {
+		t.Fatalf("write draft: %v", err)
+	}
 	if s.Draft() != "hello model" {
 		t.Errorf("expected draft to be read")
 	}
@@ -23,7 +27,9 @@ func TestSession_Draft(t *testing.T) {
 
 func TestSession_Reset(t *testing.T) {
 	s := NewSession()
-	s.tree.writeFile("/ctx/test.go", []byte("package main"))
+	if err := s.tree.writeFile("/ctx/test.go", []byte("package main")); err != nil {
+		t.Fatalf("write context: %v", err)
+	}
 	s.appendTurn(Turn{Role: "user", Text: "hello"})
 
 	s.Reset(true)
@@ -90,4 +96,43 @@ func TestAIVFS_CreateRedirectsToContextWhenCwdIsChat(t *testing.T) {
 		t.Fatalf("expected Open /chat/status.sh to find /ctx/status.sh, got %v", err)
 	}
 	_ = r.Close()
+}
+
+func TestAIVFS_ConcurrentReset(t *testing.T) {
+	s := NewSession()
+	v := NewVFS(s)
+	ctx := context.Background()
+
+	const iterations = 100
+	start := make(chan struct{})
+	errs := make(chan error, 2)
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		<-start
+		for range iterations {
+			s.Reset(true)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		<-start
+		for range iterations {
+			if _, err := v.Stat(ctx, "/"); err != nil {
+				errs <- fmt.Errorf("Stat root: %w", err)
+				return
+			}
+			if err := v.ReadDir(ctx, "/", nil); err != nil {
+				errs <- fmt.Errorf("ReadDir root: %w", err)
+				return
+			}
+		}
+	}()
+	close(start)
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Error(err)
+	}
 }

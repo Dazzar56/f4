@@ -67,7 +67,9 @@ func TestWriteEncodedRequest(t *testing.T) {
 			t.Errorf("payload line is not base64: %v", err)
 		}
 		gotPayload = string(raw)
-		fmt.Fprintf(w, "D\n.%s %s ok\n", token, req.ID)
+		if _, err := fmt.Fprintf(w, "D\n.%s %s ok\n", token, req.ID); err != nil {
+			t.Errorf("write base64 response: %v", err)
+		}
 	}, 2)
 	if err := sess.Handshake(context.Background()); err != nil {
 		t.Fatalf("handshake: %v", err)
@@ -108,7 +110,9 @@ func TestWriteBreaksSessionWithoutDrainMarker(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			sess := newMockPeer(t, "ok FISHPLUS 1 dd base64 write:b64", func(w io.Writer, token string, req mockRequest) {
-				fmt.Fprintf(w, "%s.%s %s err disk on fire\n", tc.lines, token, req.ID)
+				if _, err := fmt.Fprintf(w, "%s.%s %s err disk on fire\n", tc.lines, token, req.ID); err != nil {
+					t.Errorf("write failure response: %v", err)
+				}
 			}, 2)
 			if err := sess.Handshake(context.Background()); err != nil {
 				t.Fatalf("handshake: %v", err)

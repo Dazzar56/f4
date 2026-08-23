@@ -198,9 +198,15 @@ func TestRPCPlugin_Progress_Cancellation(t *testing.T) {
 }
 func TestRPCPlugin_NativePermissionDenied(t *testing.T) {
 	tmpDir := t.TempDir()
+	_ = GetF4ConfigDir()
+	_ = PluginPermissions()
 	oldConfigDir := cachedF4ConfigDir
+	oldPermissionStore := pluginPermissionStore
 	cachedF4ConfigDir = tmpDir
-	defer func() { cachedF4ConfigDir = oldConfigDir }()
+	t.Cleanup(func() {
+		cachedF4ConfigDir = oldConfigDir
+		pluginPermissionStore = oldPermissionStore
+	})
 
 	pluginPermissionStore = LoadPermissionStore(DefaultPermissionStorePath())
 

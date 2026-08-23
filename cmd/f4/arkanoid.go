@@ -37,6 +37,8 @@ type scorePopup struct {
 type ArkanoidFrame struct {
 	vtui.BaseWindow
 	mu              sync.Mutex
+	stop            chan struct{}
+	stopOnce        sync.Once
 	paddleX         int
 	paddleW         int
 	ballX, ballY    float64
@@ -67,6 +69,7 @@ func NewArkanoidFrame() *ArkanoidFrame {
 
 	af := &ArkanoidFrame{
 		BaseWindow: *vtui.NewBaseWindow(x1, 2, x1+width-1, 2+height-1, " A R K A N O I D "),
+		stop:       make(chan struct{}),
 		lives:      3,
 		multiplier: 1,
 		level:      1,
@@ -119,6 +122,15 @@ func (af *ArkanoidFrame) RunOnUI(fn func()) {
 	}
 }
 
+func (af *ArkanoidFrame) Close() {
+	af.stopOnce.Do(func() {
+		if af.stop != nil {
+			close(af.stop)
+		}
+	})
+	af.BaseWindow.Close()
+}
+
 func (af *ArkanoidFrame) gameLoop() {
 	for !af.IsDone() {
 		// Динамическая задержка на основе autoSpeed
@@ -127,7 +139,13 @@ func (af *ArkanoidFrame) gameLoop() {
 			delay = 5 * time.Millisecond
 		}
 
-		time.Sleep(delay)
+		timer := time.NewTimer(delay)
+		select {
+		case <-timer.C:
+		case <-af.stop:
+			timer.Stop()
+			return
+		}
 		// Авто-пауза при потере фокуса или Game Over
 		if af.gameOver || !af.IsFocused() {
 			continue

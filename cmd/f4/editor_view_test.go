@@ -5269,11 +5269,29 @@ func TestEditorView_CursorScrollbarBoundary(t *testing.T) {
 }
 
 func TestEditorView_SearchPersistence(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	origPattern := LastEditorSearch
+	origCase := LastEditorSearchCase
+	origReverse := LastEditorSearchReverse
+	origRegexp := LastEditorSearchRegexp
+	origWholeWord := LastEditorSearchWholeWord
+	t.Cleanup(func() {
+		LastEditorSearch = origPattern
+		LastEditorSearchCase = origCase
+		LastEditorSearchReverse = origReverse
+		LastEditorSearchRegexp = origRegexp
+		LastEditorSearchWholeWord = origWholeWord
+	})
+	origSessionPath := getSessionIniPath
+	sessionDir := t.TempDir()
+	getSessionIniPath = func() string { return filepath.Join(sessionDir, "session.ini") }
+	t.Cleanup(func() { getSessionIniPath = origSessionPath })
 
 	// 1. Выполняем поиск
-	ev1 := NewEditorView(piecetable.New([]byte("data")), nil, "f1.txt")
-	defer ev1.Close()
+	ev1 := NewEditorView(piecetable.New([]byte("pattern")), nil, "f1.txt")
+	t.Cleanup(ev1.Close)
+	ev1.CursorPos = len("pattern")
 	ev1.Search("pattern", true, true, false, false, false)
 
 	// Дожидаемся завершения асинхронного поиска
@@ -5284,7 +5302,7 @@ func TestEditorView_SearchPersistence(t *testing.T) {
 			task()
 		case <-time.After(10 * time.Millisecond):
 		}
-		if LastEditorSearch == "pattern" {
+		if ev1.selActive {
 			break
 		}
 		select {

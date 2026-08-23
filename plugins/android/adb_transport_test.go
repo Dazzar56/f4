@@ -41,7 +41,9 @@ func (d *scriptedADBDialer) dial(ctx context.Context, network, address string) (
 	d.mu.Unlock()
 	client, server := net.Pipe()
 	go func() {
-		defer server.Close()
+		defer func() {
+			_ = server.Close() // connection cleanup only
+		}()
 		handler(server)
 	}()
 	return client, nil
@@ -186,7 +188,9 @@ func TestOpenServiceSelectsTransportThenService(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenService: %v", err)
 	}
-	defer stream.Close()
+	defer func() {
+		_ = stream.Close() // connection cleanup only
+	}()
 	got := make([]byte, len("service bytes"))
 	if _, err := io.ReadFull(stream, got); err != nil {
 		t.Fatalf("read service: %v", err)
@@ -519,7 +523,9 @@ func TestShellStreamFramesStdin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenShellRaw: %v", err)
 	}
-	defer raw.Close()
+	defer func() {
+		_ = raw.Close() // connection cleanup only
+	}()
 	if _, err := raw.Write([]byte("request")); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
@@ -585,7 +591,9 @@ func TestFailedConnectStartsInstalledADBAndRetries(t *testing.T) {
 		}
 		client, peer := net.Pipe()
 		go func() {
-			defer peer.Close()
+			defer func() {
+				_ = peer.Close() // connection cleanup only
+			}()
 			expectTestRequest(t, peer, "host:devices-l")
 			writeTestHostReply(t, peer, "")
 		}()

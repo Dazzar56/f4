@@ -17,12 +17,16 @@ func TestNetFoxVFS_ConfigPersistence(t *testing.T) {
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test_net.json")
 	// Ensure the file is created for consistency in tests
-	os.WriteFile(dbPath, []byte("{}"), 0644)
+	if err := os.WriteFile(dbPath, []byte("{}"), 0644); err != nil {
+		t.Fatal(err)
+	}
 	nf := NewNetFoxVFS(dbPath)
 
 	// 1. Test Saving
 	cfg := NetFoxConfig{Type: "sftp", Host: "1.2.3.4", User: "root", Pass: "plaintext_secret", Timeout: "15"}
-	nf.SaveConfig("My Server", cfg)
+	if err := nf.SaveConfig("My Server", cfg); err != nil {
+		t.Fatal(err)
+	}
 
 	// Check if password was actually encrypted on disk
 	rawJSON, _ := os.ReadFile(dbPath)
@@ -119,7 +123,9 @@ func TestNetFox_TimeoutAndDial(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to start mock TCP server: %v", err)
 	}
-	defer l.Close()
+	defer func() {
+		_ = l.Close() // listener cleanup only
+	}()
 
 	addr := l.Addr().String()
 	host, port, _ := net.SplitHostPort(addr)
@@ -128,7 +134,9 @@ func TestNetFox_TimeoutAndDial(t *testing.T) {
 	go func() {
 		conn, err := l.Accept()
 		if err == nil {
-			defer conn.Close()
+			defer func() {
+				_ = conn.Close() // connection cleanup only
+			}()
 			time.Sleep(2 * time.Second)
 		}
 	}()

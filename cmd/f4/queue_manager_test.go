@@ -566,7 +566,11 @@ func TestQueueManagerCancelQueuedAndCancelAll(t *testing.T) {
 	queuedCtx, queuedCancel := context.WithCancel(context.Background())
 	runningCtx, runningCancel := context.WithCancel(context.Background())
 	cancellingCtx, cancellingCancel := context.WithCancel(context.Background())
-	queued := &QueueTask{ID: 1, State: "Queued", ctx: queuedCtx, cancel: queuedCancel}
+	queuedComplete := make(chan struct{})
+	queued := &QueueTask{
+		ID: 1, State: "Queued", ctx: queuedCtx, cancel: queuedCancel,
+		OnComplete: func() { close(queuedComplete) },
+	}
 	running := &QueueTask{ID: 2, State: "Running", ctx: runningCtx, cancel: runningCancel}
 	cancelling := &QueueTask{ID: 3, State: "Cancelling", ctx: cancellingCtx, cancel: cancellingCancel}
 	done := &QueueTask{ID: 4, State: "Done"}
@@ -588,6 +592,17 @@ func TestQueueManagerCancelQueuedAndCancelAll(t *testing.T) {
 			t.Fatal("queued cancellation did not finish")
 		}
 		time.Sleep(time.Millisecond)
+	}
+pumpQueuedCompletion:
+	for {
+		select {
+		case <-queuedComplete:
+			break pumpQueuedCompletion
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-time.After(time.Second):
+			t.Fatal("queued cancellation completion callback did not run")
+		}
 	}
 
 	for _, tt := range []struct {

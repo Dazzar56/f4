@@ -11,12 +11,20 @@ func TestConfig_PortableProfile(t *testing.T) {
 
 	// Имитируем путь исполняемого файла в тестовой директории
 	origExeFunc := osExecutable
+	origConfigDir := GetF4ConfigDir()
+	origPortable := cachedF4Portable
+	t.Cleanup(func() {
+		osExecutable = origExeFunc
+		resetConfigDirForTest()
+		cachedF4ConfigDir = origConfigDir
+		cachedF4Portable = origPortable
+		configDirOnce.Do(func() {})
+	})
 	mockExe := filepath.Join(tmpDir, "f4.exe")
 	os.WriteFile(mockExe, []byte(""), 0755)
 	osExecutable = func() (string, error) {
 		return mockExe, nil
 	}
-	defer func() { osExecutable = origExeFunc }()
 
 	// 1. Создаем f4.exe.ini с параметром UseSystemProfiles = 0
 	iniContent := `
@@ -34,7 +42,4 @@ UseSystemProfiles = 0
 	if filepath.Clean(gotDir) != filepath.Clean(wantDir) {
 		t.Errorf("Expected portable profile dir %q, got %q", wantDir, gotDir)
 	}
-
-	// Очищаем состояние для последующих тестов
-	resetConfigDirForTest()
 }
