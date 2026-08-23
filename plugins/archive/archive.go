@@ -32,7 +32,7 @@ func (p *ArchivePlugin) Init(api vfs.HostAPI) error {
 			Label:          "Add to archive",
 			LabelKey:       "Archive.Command.Add",
 			MenuPath:       "Files",
-			Shortcut:       "Alt+F5",
+			Shortcut:       "Shift+F1",
 			Description:    "Create an archive from the selected files",
 			DescriptionKey: "Archive.Command.Add.Desc",
 			SearchKeys:     []string{"Attributes.Archive"},
@@ -48,7 +48,7 @@ func (p *ArchivePlugin) Init(api vfs.HostAPI) error {
 			Label:          "Extract files",
 			LabelKey:       "Archive.Command.Extract",
 			MenuPath:       "Files",
-			Shortcut:       "Alt+F6",
+			Shortcut:       "Shift+F2",
 			Description:    "Extract the selected archive to the passive panel",
 			DescriptionKey: "Archive.Command.Extract.Desc",
 			SearchKeys:     []string{"Attributes.Archive"},
@@ -63,11 +63,12 @@ func (p *ArchivePlugin) Init(api vfs.HostAPI) error {
 
 	api.RegisterVFSProvider(&ArchiveProvider{})
 
-	api.RegisterGlobalHotkey(vtinput.VK_F1, vtinput.ShiftPressed, func(app vfs.App) {
-		actionArchiveCommands(app)
-	})
-	api.RegisterGlobalHotkey(vtinput.VK_F5, vtinput.LeftAltPressed, actionAddArchive)
-	api.RegisterGlobalHotkey(vtinput.VK_F6, vtinput.LeftAltPressed, actionExtractArchive)
+	// Keep far2l's Files-menu shortcuts: direct archive operations are
+	// Shift+F1/Shift+F2, while the legacy two-item archive command menu stays
+	// available on Shift+F3.
+	api.RegisterGlobalHotkey(vtinput.VK_F1, vtinput.ShiftPressed, actionAddArchive)
+	api.RegisterGlobalHotkey(vtinput.VK_F2, vtinput.ShiftPressed, actionExtractArchive)
+	api.RegisterGlobalHotkey(vtinput.VK_F3, vtinput.ShiftPressed, actionArchiveCommands)
 
 	return nil
 }
