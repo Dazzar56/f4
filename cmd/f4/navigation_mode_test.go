@@ -428,10 +428,17 @@ func TestSearchFirstMouseFocusAndInactiveCursor(t *testing.T) {
 
 func TestDetailedHorizontalArrowsMatchPageNavigationExceptVim(t *testing.T) {
 	oldCfg := AppConfig
-	defer func() { AppConfig = oldCfg }()
+	t.Cleanup(func() { AppConfig = oldCfg })
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	fp := NewFileSystemPanel(0, 0, 50, 20, vfs.NewOSVFS(t.TempDir()))
+	t.Cleanup(func() {
+		if fp.cancelLoad != nil {
+			fp.cancelLoad()
+		}
+		fp.stopLoadingAnimation()
+	})
+	waitForLoad(t, fp)
 	fp.SetViewMode(ViewModeDetailed)
 	fp.entries = make([]*fileEntry, 60)
 	for i := range fp.entries {
