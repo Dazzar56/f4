@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
+	"unicode/utf16"
 	"unsafe"
 
 	"github.com/unxed/vtui"
@@ -142,8 +144,10 @@ func (p *PTY) Run(name string, args ...string) error {
 
 	pi := &windows.ProcessInformation{}
 	flags := uint32(windows.EXTENDED_STARTUPINFO_PRESENT | windows.CREATE_UNICODE_ENVIRONMENT)
+	env := utf16.Encode([]rune(strings.Join(terminalChildEnv(), "\x00") + "\x00"))
+	env = append(env, 0)
 
-	err = windows.CreateProcess(nil, cmdLine, nil, nil, false, flags, nil, nil, &si.StartupInfo, pi)
+	err = windows.CreateProcess(nil, cmdLine, nil, nil, false, flags, &env[0], nil, &si.StartupInfo, pi)
 	if err != nil {
 		return err
 	}
