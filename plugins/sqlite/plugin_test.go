@@ -190,25 +190,25 @@ func TestBrowseTableCarriesRowIDsAndEditsACell(t *testing.T) {
 	}
 	defer session.Close()
 
-	result, rowIDs, writable, err := session.browseTable(context.Background(), "notes")
+	browse, err := session.browseTable(context.Background(), "notes")
 	if err != nil {
 		t.Fatal(err)
 	}
 	// The rowid alias is the browser's business and never reaches the screen.
-	if !reflect.DeepEqual(result.Columns, []string{"id", "note", "size"}) {
-		t.Fatalf("columns = %#v", result.Columns)
+	if !reflect.DeepEqual(browse.result.Columns, []string{"id", "note", "size"}) {
+		t.Fatalf("columns = %#v", browse.result.Columns)
 	}
-	if !reflect.DeepEqual(rowIDs, []int64{1, 2}) || !writable {
-		t.Fatalf("rowIDs = %#v, writable = %t", rowIDs, writable)
+	if !reflect.DeepEqual(browse.rowIDs, []int64{1, 2}) || !browse.writable {
+		t.Fatalf("rowIDs = %#v, writable = %t", browse.rowIDs, browse.writable)
 	}
 
 	// A view has no rowid: it comes back readable and unwritable.
-	viewResult, viewRowIDs, viewWritable, err := session.browseTable(context.Background(), "big")
+	view, err := session.browseTable(context.Background(), "big")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if viewRowIDs != nil || viewWritable || len(viewResult.Rows) != 2 {
-		t.Fatalf("view browse = %d row(s), rowIDs %#v, writable %t", len(viewResult.Rows), viewRowIDs, viewWritable)
+	if view.rowIDs != nil || view.writable || len(view.result.Rows) != 2 {
+		t.Fatalf("view browse = %d row(s), rowIDs %#v, writable %t", len(view.result.Rows), view.rowIDs, view.writable)
 	}
 
 	affected, err := session.updateCell(context.Background(), "notes", "note", 2, "second")
@@ -284,24 +284,24 @@ func TestInsertRowAddsADefaultRowAndReportsRefusals(t *testing.T) {
 	defer session.Close()
 
 	// An empty table is still writable: that is where a first row is wanted.
-	result, rowIDs, writable, err := session.browseTable(context.Background(), "notes")
+	empty, err := session.browseTable(context.Background(), "notes")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !writable || len(rowIDs) != 0 || len(result.Rows) != 0 {
-		t.Fatalf("empty browse = %d row(s), rowIDs %#v, writable %t", len(result.Rows), rowIDs, writable)
+	if !empty.writable || len(empty.rowIDs) != 0 || len(empty.result.Rows) != 0 {
+		t.Fatalf("empty browse = %d row(s), rowIDs %#v, writable %t", len(empty.result.Rows), empty.rowIDs, empty.writable)
 	}
 
 	rowID, err := session.insertRow(context.Background(), "notes")
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, rowIDs, _, err = session.browseTable(context.Background(), "notes")
+	filled, err := session.browseTable(context.Background(), "notes")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(rowIDs, []int64{rowID}) {
-		t.Fatalf("rowIDs after the insert = %#v, want [%d]", rowIDs, rowID)
+	if !reflect.DeepEqual(filled.rowIDs, []int64{rowID}) {
+		t.Fatalf("rowIDs after the insert = %#v, want [%d]", filled.rowIDs, rowID)
 	}
 	value, err := session.cellValue(context.Background(), "notes", "note", rowID)
 	if err != nil {

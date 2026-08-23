@@ -165,22 +165,19 @@ func newBrowser(app vfs.App, session *databaseSession, tables []string) *browser
 	return b
 }
 
+// loadTable reads a table into the right hand side.
 func (b *browser) loadTable(table string) {
 	if b.closed {
 		return
 	}
 	b.currentTable = table
 	b.query.SetText(tableSelect(table))
-	var (
-		result   queryResult
-		rowIDs   []int64
-		writable bool
-	)
+	var browse tableBrowse
 	b.app.RunProgressTask(sqliteText("SQLite.Title", " SQLite ", " SQLite "), fmt.Sprintf(sqliteText("SQLite.ReadingTable", "Reading %s...", "Чтение %s..."), table), false,
 		func(ctx context.Context, update func(string, int)) error {
 			update(sqliteText("SQLite.ReadingTableProgress", "Reading table...", "Чтение таблицы..."), -1)
 			var err error
-			result, rowIDs, writable, err = b.session.browseTable(ctx, table)
+			browse, err = b.session.browseTable(ctx, table)
 			return err
 		},
 		func(err error) {
@@ -191,15 +188,13 @@ func (b *browser) loadTable(table string) {
 				b.setStatus(fmt.Sprintf(sqliteText("SQLite.ReadFailed", "Could not read %s: %v", "Не удалось прочитать %s: %v"), table, err))
 				return
 			}
-			b.rowIDs = rowIDs
-			b.writable = writable
-			b.applyResult(result)
-			b.setStatus(fmt.Sprintf(sqliteText("SQLite.TableRows", "%s: %d row(s)", "%s: %d строк(и)"), table, len(result.Rows)))
+			b.applyBrowse(table, browse)
+			b.setStatus(fmt.Sprintf(sqliteText("SQLite.TableRows", "%s: %d row(s)", "%s: %d строк(и)"), table, len(browse.result.Rows)))
 			b.takePendingSelection()
 		})
 }
 
-// refresh re-reads the schema and then the current table.
+// refresh re-reads the schema and then the table being shown.
 //
 // It used to reload the current table and nothing else, so on a database whose
 // tables had changed -- and on a new one, where there is no current table at
@@ -209,12 +204,24 @@ func (b *browser) refresh() {
 	if b.closed {
 		return
 	}
-	var tables []string
+	current := b.currentTable
+	var (
+		tables []string
+		table  string
+		browse tableBrowse
+	)
 	b.app.RunProgressTask(sqliteText("SQLite.Title", " SQLite ", " SQLite "), sqliteText("SQLite.ReadingSchema", "Reading database schema...", "Чтение схемы базы данных..."), false,
 		func(ctx context.Context, update func(string, int)) error {
 			update(sqliteText("SQLite.ReadingSchema", "Reading database schema...", "Чтение схемы базы данных..."), -1)
 			var err error
-			tables, err = b.session.listTables(ctx)
+			if tables, err = b.session.listTables(ctx); err != nil {
+				return err
+			}
+			table = tableToShow(tables, current)
+			if table == "" {
+				return nil
+			}
+			browse, err = b.session.browseTable(ctx, table)
 			return err
 		},
 		func(err error) {
@@ -226,17 +233,29 @@ func (b *browser) refresh() {
 				return
 			}
 			b.setTables(tables)
-			switch {
-			case b.currentTable != "":
-				b.loadTable(b.currentTable)
-			case len(tables) > 0:
-				b.tableList.SetSelectPos(0)
-				b.loadTable(tables[0])
-			default:
+			if table == "" {
 				b.applyResult(queryResult{})
 				b.setStatus(sqliteText("SQLite.NoTables", "The database has no user tables or views.", "В базе нет пользовательских таблиц или представлений."))
+				return
 			}
+			b.selectTableInList(table)
+			b.applyBrowse(table, browse)
+			b.setStatus(fmt.Sprintf(sqliteText("SQLite.TableRows", "%s: %d row(s)", "%s: %d строк(и)"), table, len(browse.result.Rows)))
 		})
+}
+
+// tableToShow keeps the table the user was looking at when it is still there,
+// and otherwise falls back to the first one.
+func tableToShow(tables []string, current string) string {
+	for _, table := range tables {
+		if table == current {
+			return current
+		}
+	}
+	if len(tables) > 0 {
+		return tables[0]
+	}
+	return ""
 }
 
 func (b *browser) runQuery() {
@@ -248,9 +267,12 @@ func (b *browser) runQuery() {
 		b.setStatus(sqliteText("SQLite.EmptySQL", "SQL statement is empty", "SQL-запрос пуст."))
 		return
 	}
+	current := b.currentTable
 	var (
 		result queryResult
 		tables []string
+		table  string
+		browse tableBrowse
 	)
 	b.app.RunProgressTask(sqliteText("SQLite.Title", " SQLite ", " SQLite "), sqliteText("SQLite.ExecutingSQL", "Executing SQL...", "Выполнение SQL..."), false,
 		func(ctx context.Context, update func(string, int)) error {
@@ -259,12 +281,20 @@ func (b *browser) runQuery() {
 			if result, err = b.session.execute(ctx, statement); err != nil {
 				return err
 			}
-			if !result.ReturnsRows {
-				// CREATE, DROP and ALTER change what the list on the left is
-				// showing. Re-read it here, on the same worker, rather than
-				// leaving the user to wonder whether the table was made.
-				tables, err = b.session.listTables(ctx)
+			if result.ReturnsRows {
+				return nil
 			}
+			// CREATE, DROP and ALTER change what the list on the left is
+			// showing, and an INSERT or an UPDATE changes what the right hand
+			// side is showing. Both are re-read here, on the worker that ran
+			// the statement.
+			if tables, err = b.session.listTables(ctx); err != nil {
+				return err
+			}
+			if table = tableToShow(tables, current); table == "" {
+				return nil
+			}
+			browse, err = b.session.browseTable(ctx, table)
 			return err
 		},
 		func(err error) {
@@ -297,21 +327,15 @@ func (b *browser) runQuery() {
 			}
 			b.setTables(tables)
 			b.setStatus(fmt.Sprintf(sqliteText("SQLite.StatementCompleted", "Statement completed; %d row(s) affected", "Запрос выполнен; затронуто строк: %d"), result.RowsAffected))
-			switch {
-			case b.currentTable != "":
-				b.loadTable(b.currentTable)
-			case len(tables) > 0:
-				// A CREATE TABLE on a database that had nothing in it: show
-				// what was just made instead of an empty right hand side.
-				b.tableList.SetSelectPos(0)
-				b.loadTable(tables[0])
+			if table == "" {
+				return
 			}
+			// A CREATE TABLE on a database that had nothing in it shows what
+			// was just made instead of an empty right hand side.
+			b.selectTableInList(table)
+			b.applyBrowse(table, browse)
 		})
 }
-
-// setTables replaces the list on the left after a schema change. A table that
-// has just been dropped stops being the one loaded, so the next refresh does
-// not go looking for it.
 func (b *browser) setTables(tables []string) {
 	b.tables = tables
 	b.tableList.Items = tables
@@ -416,44 +440,6 @@ func (b *browser) cellUnderCursor() (column string, rowID int64, ok bool) {
 	return b.columns[col], b.rowIDs[row], true
 }
 
-func (b *browser) writeCell(column string, rowID int64, value string) {
-	if b.closed {
-		return
-	}
-	table := b.currentTable
-	var affected int64
-	b.app.RunProgressTask(sqliteText("SQLite.Title", " SQLite ", " SQLite "), sqliteText("SQLite.WritingValue", "Writing the value...", "Запись значения..."), false,
-		func(ctx context.Context, update func(string, int)) error {
-			update(sqliteText("SQLite.WritingValue", "Writing the value...", "Запись значения..."), -1)
-			var err error
-			affected, err = b.session.updateCell(ctx, table, column, rowID, value)
-			return err
-		},
-		func(err error) {
-			if b.closed {
-				return
-			}
-			if err != nil {
-				message := fmt.Sprintf(sqliteText("SQLite.SQLError", "SQL error: %v", "Ошибка SQL: %v"), err)
-				b.setStatus(message)
-				vtui.ShowMessageOn(b.frame,
-					sqliteText("SQLite.Title", " SQLite ", " SQLite "),
-					message,
-					[]string{sqliteText("SQLite.OK", "&OK", "&ОК")})
-				return
-			}
-			if affected == 0 {
-				b.setStatus(sqliteText("SQLite.RowGone", "That row is no longer there.", "Этой строки больше нет."))
-			} else {
-				b.setStatus(fmt.Sprintf(sqliteText("SQLite.CellUpdated", "%s updated", "Поле %s изменено"), column))
-			}
-			// A trigger or a generated column can change more than the cell
-			// that was written, so the table is read again rather than
-			// patched in place.
-			b.loadTable(table)
-		})
-}
-
 // insertRow adds a row of defaults to the table being browsed and puts the
 // cursor on it, ready for F4.
 func (b *browser) insertRow() {
@@ -467,16 +453,22 @@ func (b *browser) insertRow() {
 		return
 	}
 	table := b.currentTable
-	var rowID int64
+	var (
+		rowID  int64
+		browse tableBrowse
+	)
 	b.app.RunProgressTask(sqliteText("SQLite.Title", " SQLite ", " SQLite "), sqliteText("SQLite.AddingRow", "Adding a row...", "Добавление строки..."), false,
 		func(ctx context.Context, update func(string, int)) error {
 			update(sqliteText("SQLite.AddingRow", "Adding a row...", "Добавление строки..."), -1)
 			var err error
-			rowID, err = b.session.insertRow(ctx, table)
+			if rowID, err = b.session.insertRow(ctx, table); err != nil {
+				return err
+			}
+			browse, err = b.session.browseTable(ctx, table)
 			return err
 		},
 		func(err error) {
-			if b.closed {
+			if b.closed || b.currentTable != table {
 				return
 			}
 			if err != nil {
@@ -490,13 +482,11 @@ func (b *browser) insertRow() {
 					[]string{sqliteText("SQLite.OK", "&OK", "&ОК")})
 				return
 			}
+			b.applyBrowse(table, browse)
 			b.selectRowID = rowID
-			b.loadTable(table)
+			b.takePendingSelection()
 		})
 }
-
-// takePendingSelection puts the cursor on the row insertRow just made, if the
-// hundred rows on screen reach that far.
 func (b *browser) takePendingSelection() {
 	rowID := b.selectRowID
 	b.selectRowID = 0

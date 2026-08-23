@@ -247,16 +247,24 @@ const rowIDColumn = "_f4_rowid"
 // A view and a WITHOUT ROWID table have no rowid, and the query for one fails;
 // that is not an error but the answer that this table can only be read, so the
 // plain browse runs instead and the rowids come back nil.
-func (s *databaseSession) browseTable(ctx context.Context, table string) (queryResult, []int64, bool, error) {
+func (s *databaseSession) browseTable(ctx context.Context, table string) (tableBrowse, error) {
 	result, rowIDs, err := s.browseWithRowIDs(ctx, table)
 	if err == nil {
 		// Writable is reported separately from the rowids themselves: an
 		// empty table also has none, and it is the one place a new row is
 		// most likely to be wanted.
-		return result, rowIDs, true, nil
+		return tableBrowse{result: result, rowIDs: rowIDs, writable: true}, nil
 	}
 	result, err = s.execute(ctx, tableSelect(table))
-	return result, nil, false, err
+	return tableBrowse{result: result}, err
+}
+
+// tableBrowse is everything one reading of a table produces: the rows to show,
+// the rowid each of them came from, and whether they can be written back.
+type tableBrowse struct {
+	result   queryResult
+	rowIDs   []int64
+	writable bool
 }
 
 // insertRow adds a row of defaults, which is the part a dialog cannot do
