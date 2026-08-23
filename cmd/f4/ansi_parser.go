@@ -22,6 +22,8 @@ const (
 	StateCSI
 	StateOSC
 	StateAPC
+	StateDCS
+	StateDCSPass
 )
 
 // AnsiParser converts a stream of bytes into ScreenBuf operations.
@@ -36,6 +38,13 @@ type AnsiParser struct {
 	runeBuf            []byte
 	lastRune           rune
 	pendingWindowsSync []byte
+
+	// DCS state: the final byte of the introducer and the string that
+	// follows it, kept apart from CurParam because the parameters of the
+	// introducer live there.
+	dcsFinal    byte
+	dcsBody     []byte
+	dcsOverflow bool
 }
 
 func NewAnsiParser(t *TerminalView, p PtyBackend) *AnsiParser {
@@ -260,6 +269,12 @@ func (p *AnsiParser) Process(data []byte) {
 				p.State = StateOSC
 				p.Params = nil
 				p.CurParam.Reset()
+			} else if b == 'P' {
+				p.State = StateDCS
+				p.Params = nil
+				p.CurParam.Reset()
+				p.Intermediate = ""
+				p.dcsFinal = 0
 			} else if b == '_' {
 				p.CurParam.Reset()
 				p.State = StateAPC
@@ -318,9 +333,77 @@ func (p *AnsiParser) Process(data []byte) {
 			default:
 				p.CurParam.WriteByte(b)
 			}
+		case StateDCS:
+			// The introducer of a device control string is shaped
+			// like a CSI: parameters, then intermediates, then one
+			// final byte that says what the string is.
+			if b >= 0x30 && b <= 0x39 {
+				p.CurParam.WriteByte(b)
+			} else if b == ';' {
+				p.Params = append(p.Params, p.CurParam.String())
+				p.CurParam.Reset()
+			} else if b >= 0x3C && b <= 0x3F {
+				p.CurParam.WriteByte(b)
+			} else if b >= 0x20 && b <= 0x2F {
+				p.Intermediate += string(b)
+			} else if b >= 0x40 && b <= 0x7E {
+				p.Params = append(p.Params, p.CurParam.String())
+				p.CurParam.Reset()
+				p.dcsFinal = b
+				p.dcsBody = p.dcsBody[:0]
+				p.dcsOverflow = false
+				p.State = StateDCSPass
+			} else if b == 0x1b {
+				p.State = StateEsc
+			}
+		case StateDCSPass:
+			switch b {
+			case 0x1b: // ESC, expected to be followed by a backslash
+				p.handleDCS()
+				p.State = StateEsc
+			case 0x07: // BEL, which some emitters use instead of ST
+				p.handleDCS()
+				p.State = StateGround
+			default:
+				if len(p.dcsBody) < maxDCSBody {
+					p.dcsBody = append(p.dcsBody, b)
+				} else {
+					// Keep consuming to the terminator, so a
+					// runaway string cannot spill onto the
+					// screen, but stop growing the buffer.
+					p.dcsOverflow = true
+				}
+			}
 		}
 	}
 	p.term.FlushLog()
+}
+
+// maxDCSBody caps the device control string we are willing to buffer. A sixel
+// image of the largest raster we would accept fits comfortably inside it.
+const maxDCSBody = 64 << 20
+
+// handleDCS dispatches a finished device control string. Sixel is the only
+// one we do anything with; the rest are swallowed, which is already better
+// than the alternative, since an unhandled DCS used to spill its body onto
+// the screen as text.
+func (p *AnsiParser) handleDCS() {
+	final := p.dcsFinal
+	body := p.dcsBody
+	overflow := p.dcsOverflow
+	p.dcsFinal = 0
+	p.dcsBody = p.dcsBody[:0]
+	p.dcsOverflow = false
+
+	if final != 'q' || p.Intermediate != "" || overflow {
+		return
+	}
+	args := make([]int, len(p.Params))
+	for i, s := range p.Params {
+		s = strings.TrimLeft(s, "?<=>")
+		args[i], _ = strconv.Atoi(s)
+	}
+	p.term.HandleSixelDCS(args, string(body), p.Attr)
 }
 func (p *AnsiParser) handleEsc(cmd byte) {
 	// vtui.DebugLog("ANSI_PARSER: ESC %c", cmd)
@@ -397,7 +480,12 @@ func (p *AnsiParser) handleCSI(cmd byte) {
 		p.term.SetCursor(0, 0)
 	case 'c':
 		if p.pty != nil {
-			p.pty.Write([]byte("\x1b[?1;2c"))
+			// VT220 with sixel graphics. Programs decide whether to
+			// send pictures by looking for the 4 in this list, so a
+			// terminal that draws them has to say so; the level had
+			// to rise with it, because sixel does not exist below
+			// VT220 and a 4 next to a 1 would just be a puzzle.
+			p.pty.Write([]byte("\x1b[?62;4c"))
 		}
 	case 't':
 		if len(args) > 0 && p.pty != nil {
@@ -423,6 +511,8 @@ func (p *AnsiParser) handleCSI(cmd byte) {
 				p.term.ApplicationCursorKeys = isSet
 			case "7":
 				p.term.AutoWrap = isSet
+			case "80": // DECSDM
+				p.term.SetSixelDisplayMode(isSet)
 			case "1000":
 				if isSet {
 					p.term.MouseTrackingMode = 1000
@@ -478,7 +568,12 @@ func (p *AnsiParser) handleCSI(cmd byte) {
 			n = args[0]
 		}
 		p.term.InsertBlankCharacters(n, p.Attr)
-	case 'S': // Scroll up (text moves up)
+	case 'S':
+		if len(p.Params) > 0 && strings.HasPrefix(p.Params[0], "?") {
+			p.handleGraphicsAttributes(args)
+			return
+		}
+		// Scroll up (text moves up)
 		n := 1
 		if len(args) > 0 && args[0] != 0 {
 			n = args[0]
@@ -856,4 +951,60 @@ func (p *AnsiParser) handleSGR(args []int, i int) int {
 		p.Attr = vtui.SetIndexBack(p.Attr, uint8(n-100+8))
 	}
 	return 1
+}
+
+// sixelColorRegisters is how many colour registers we tell a client we have.
+// It is the number Windows Terminal reports, and the number the VT340 had once
+// its options were fitted. Reporting more would be honest — the decoder grows
+// its palette on demand and has no real limit — but it would also invite an
+// encoder to quantise to a palette of that size, which is slow and pointless:
+// registers are redefinable at any point in the sequence and every band keeps
+// the colour it was drawn with, so 256 registers already buy an unlimited
+// number of colours in one picture. That is how full colour over sixel works
+// in practice.
+const sixelColorRegisters = 256
+
+// handleGraphicsAttributes answers XTSMGRAPHICS, CSI ? Pi ; Pa ; Pv S. Sixel
+// libraries use it to find out how many colours they may use and how large a
+// picture may be, and some of them wait for the answer, so a terminal that
+// claims sixel in its device attributes has to reply to this as well.
+func (p *AnsiParser) handleGraphicsAttributes(args []int) {
+	if p.pty == nil {
+		return
+	}
+	item, action := 0, 0
+	if len(args) > 0 {
+		item = args[0]
+	}
+	if len(args) > 1 {
+		action = args[1]
+	}
+
+	switch item {
+	case 1: // number of colour registers
+		switch action {
+		case 1, 2, 3, 4:
+			p.pty.Write([]byte(fmt.Sprintf("\x1b[?1;0;%dS", sixelColorRegisters)))
+		default:
+			p.pty.Write([]byte("\x1b[?1;2S"))
+		}
+	case 2: // sixel raster geometry
+		switch action {
+		case 1, 2, 3, 4:
+			cw, ch := p.term.CellSize()
+			w, h := p.term.Width*cw, p.term.Height*ch
+			if w > sixelMaxSide {
+				w = sixelMaxSide
+			}
+			if h > sixelMaxSide {
+				h = sixelMaxSide
+			}
+			p.pty.Write([]byte(fmt.Sprintf("\x1b[?2;0;%d;%dS", w, h)))
+		default:
+			p.pty.Write([]byte("\x1b[?2;2S"))
+		}
+	default:
+		// ReGIS geometry, and anything we have never heard of.
+		p.pty.Write([]byte(fmt.Sprintf("\x1b[?%d;1S", item)))
+	}
 }
