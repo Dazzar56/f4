@@ -1,7 +1,7 @@
 # Spreadsheet
 
-`f4` ships with a built-in spreadsheet, reached with `Shift+F11` or from the
-command palette. It is a deliberate re-creation of the spreadsheet that used to
+`f4` ships with a built-in spreadsheet, reached with `Ctrl+Alt+S`, from the
+Commands menu, or from the command palette. It is a deliberate re-creation of the spreadsheet that used to
 live inside Dos Navigator: the same cell model, the same formula language and
 the same key map, so muscle memory carries over.
 

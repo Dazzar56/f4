@@ -10,14 +10,23 @@ import (
 	"github.com/unxed/vtui"
 )
 
-// sheetActionVisible keeps the command out of contexts where a new workspace
-// would make no sense.
-func sheetActionVisible() bool {
+// activePanelsFrame returns the panels frame of the current workspace.
+//
+// It walks the frame stack instead of looking only at the top frame: while a
+// menu dropdown or the command palette is open, that popup is the top frame,
+// and a check against the top frame alone reports that there are no panels
+// exactly when the user is choosing this command.
+func activePanelsFrame() *PanelsFrame {
 	if vtui.FrameManager == nil {
-		return false
+		return nil
 	}
-	_, ok := vtui.FrameManager.GetTopFrame().(*PanelsFrame)
-	return ok
+	frames := vtui.FrameManager.GetActiveFrames(vtui.FrameManager.ActiveIdx)
+	for index := len(frames) - 1; index >= 0; index-- {
+		if pf, ok := frames[index].(*PanelsFrame); ok {
+			return pf
+		}
+	}
+	return nil
 }
 
 // findSheetWorkspace switches to an existing spreadsheet workspace, if any.
@@ -60,8 +69,8 @@ func actionSpreadsheet() bool {
 // selectedSpreadsheetPath returns the panel selection when it looks like a
 // spreadsheet: the native SQLite format, a workbook or a CSV file.
 func selectedSpreadsheetPath() string {
-	pf, ok := vtui.FrameManager.GetTopFrame().(*PanelsFrame)
-	if !ok || pf == nil {
+	pf := activePanelsFrame()
+	if pf == nil {
 		return ""
 	}
 	name := pf.GetSelectedName()
@@ -103,7 +112,6 @@ func init() {
 		// world has already taken.
 		DefaultKeys: []string{"CtrlAltS"},
 		MenuPath:    "Commands",
-		Visible:     sheetActionVisible,
 		Handler:     actionSpreadsheet,
 	})
 }

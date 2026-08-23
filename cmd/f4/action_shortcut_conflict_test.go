@@ -22,12 +22,21 @@ func TestDefaultKeysAreUniquePerArea(t *testing.T) {
 	owners := map[owner][]string{}
 
 	for _, action := range GetOrderedActions() {
-		for _, key := range action.DefaultKeys {
-			if key == "" {
+		// DefaultAreas receive the same bindings as Area, and a key may
+		// carry a ":Condition" suffix that does not change which physical
+		// key is claimed, so both are resolved before comparing.
+		for _, area := range append([]string{action.Area}, action.DefaultAreas...) {
+			if area == "" {
 				continue
 			}
-			id := owner{area: action.Area, key: key}
-			owners[id] = append(owners[id], action.Name)
+			for _, spec := range action.DefaultKeys {
+				key, _, _ := strings.Cut(spec, ":")
+				if key == "" {
+					continue
+				}
+				id := owner{area: area, key: key}
+				owners[id] = append(owners[id], action.Name)
+			}
 		}
 	}
 
