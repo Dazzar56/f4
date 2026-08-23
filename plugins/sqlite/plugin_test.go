@@ -37,7 +37,7 @@ func TestDatabaseSessionReadsAndWritesSQLiteValues(t *testing.T) {
 		t.Fatalf("tables = %#v, want [odd\\\"name]", tables)
 	}
 
-	result, err := session.execute(context.Background(), tableSelect(`odd"name`))
+	result, err := session.execute(context.Background(), tableSelect(`odd"name`, 0))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +59,7 @@ func TestDatabaseSessionReadsAndWritesSQLiteValues(t *testing.T) {
 }
 
 func TestSQLiteSQLClassificationAndIdentifierQuoting(t *testing.T) {
-	if got, want := tableSelect(`a"b`), `SELECT * FROM "a""b" LIMIT 100`; got != want {
+	if got, want := tableSelect(`a"b`, 0), `SELECT * FROM "a""b" LIMIT 100`; got != want {
 		t.Fatalf("tableSelect = %q, want %q", got, want)
 	}
 	for _, statement := range []string{
@@ -190,7 +190,7 @@ func TestBrowseTableCarriesRowIDsAndEditsACell(t *testing.T) {
 	}
 	defer session.Close()
 
-	browse, err := session.browseTable(context.Background(), "notes")
+	browse, err := session.browseTable(context.Background(), "notes", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +203,7 @@ func TestBrowseTableCarriesRowIDsAndEditsACell(t *testing.T) {
 	}
 
 	// A view has no rowid: it comes back readable and unwritable.
-	view, err := session.browseTable(context.Background(), "big")
+	view, err := session.browseTable(context.Background(), "big", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -284,7 +284,7 @@ func TestInsertRowAddsADefaultRowAndReportsRefusals(t *testing.T) {
 	defer session.Close()
 
 	// An empty table is still writable: that is where a first row is wanted.
-	empty, err := session.browseTable(context.Background(), "notes")
+	empty, err := session.browseTable(context.Background(), "notes", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -296,7 +296,7 @@ func TestInsertRowAddsADefaultRowAndReportsRefusals(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	filled, err := session.browseTable(context.Background(), "notes")
+	filled, err := session.browseTable(context.Background(), "notes", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -349,7 +349,7 @@ func TestDeleteRowRemovesOneRowByRowID(t *testing.T) {
 	if affected != 1 {
 		t.Fatalf("deleteRow affected %d rows, want 1", affected)
 	}
-	browse, err := session.browseTable(context.Background(), "notes")
+	browse, err := session.browseTable(context.Background(), "notes", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -364,5 +364,85 @@ func TestDeleteRowRemovesOneRowByRowID(t *testing.T) {
 	}
 	if affected != 0 {
 		t.Fatalf("deleting a missing row affected %d rows, want 0", affected)
+	}
+}
+
+func TestBrowsePagesAreStableAndClamped(t *testing.T) {
+	path := t.TempDir() + "/pages.db"
+	db, err := driver.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TABLE numbers (value INTEGER)`); err != nil {
+		_ = db.Close()
+		t.Fatal(err)
+	}
+	for i := 1; i <= 150; i++ {
+		if _, err := db.Exec(`INSERT INTO numbers VALUES (?)`, i); err != nil {
+			_ = db.Close()
+			t.Fatal(err)
+		}
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	session, _, err := openDatabase(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+
+	first, err := session.browseTable(context.Background(), "numbers", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(first.result.Rows) != browsePageSize || first.offset != 0 || first.total != 150 {
+		t.Fatalf("first page: %d rows, offset %d, total %d", len(first.result.Rows), first.offset, first.total)
+	}
+
+	second, err := session.browseTable(context.Background(), "numbers", browsePageSize)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(second.result.Rows) != 50 || second.offset != browsePageSize {
+		t.Fatalf("second page: %d rows at offset %d", len(second.result.Rows), second.offset)
+	}
+	// Pages are two halves of the same table, not two draws from it: ordered
+	// by rowid, the second page starts where the first one stopped.
+	if second.rowIDs[0] != first.rowIDs[browsePageSize-1]+1 {
+		t.Fatalf("second page starts at rowid %d after a first page ending at %d", second.rowIDs[0], first.rowIDs[browsePageSize-1])
+	}
+
+	// An offset past the end lands on the last page that has rows.
+	past, err := session.browseTable(context.Background(), "numbers", 100000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if past.offset != browsePageSize || len(past.result.Rows) != 50 {
+		t.Fatalf("clamped page: %d rows at offset %d, want 50 at %d", len(past.result.Rows), past.offset, browsePageSize)
+	}
+}
+
+func TestOffsetArithmetic(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		offset, total int64
+		want          int64
+	}{
+		{"empty table", 500, 0, 0},
+		{"negative goes to the start", -100, 150, 0},
+		{"inside stays put on its page", 100, 150, 100},
+		{"past the end lands on the last page", 700, 150, 100},
+		{"exactly full pages", 300, 300, 200},
+	} {
+		if got := clampOffset(tc.offset, tc.total); got != tc.want {
+			t.Errorf("%s: clampOffset(%d, %d) = %d, want %d", tc.name, tc.offset, tc.total, got, tc.want)
+		}
+	}
+	for _, tc := range []struct{ total, want int64 }{{0, 0}, {1, 0}, {100, 0}, {101, 100}, {250, 200}} {
+		if got := lastPageOffset(tc.total); got != tc.want {
+			t.Errorf("lastPageOffset(%d) = %d, want %d", tc.total, got, tc.want)
+		}
 	}
 }

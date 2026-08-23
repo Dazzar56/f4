@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -247,16 +248,40 @@ const rowIDColumn = "_f4_rowid"
 // A view and a WITHOUT ROWID table have no rowid, and the query for one fails;
 // that is not an error but the answer that this table can only be read, so the
 // plain browse runs instead and the rowids come back nil.
-func (s *databaseSession) browseTable(ctx context.Context, table string) (tableBrowse, error) {
-	result, rowIDs, err := s.browseWithRowIDs(ctx, table)
+func (s *databaseSession) browseTable(ctx context.Context, table string, offset int64) (tableBrowse, error) {
+	total, err := s.countRows(ctx, table)
+	if err != nil {
+		return tableBrowse{}, err
+	}
+	offset = clampOffset(offset, total)
+
+	result, rowIDs, err := s.browseWithRowIDs(ctx, table, offset)
 	if err == nil {
 		// Writable is reported separately from the rowids themselves: an
 		// empty table also has none, and it is the one place a new row is
 		// most likely to be wanted.
-		return tableBrowse{result: result, rowIDs: rowIDs, writable: true}, nil
+		return tableBrowse{result: result, rowIDs: rowIDs, writable: true, offset: offset, total: total}, nil
 	}
-	result, err = s.execute(ctx, tableSelect(table))
-	return tableBrowse{result: result}, err
+	result, err = s.execute(ctx, tableSelect(table, offset))
+	return tableBrowse{result: result, offset: offset, total: total}, err
+}
+
+// countRows is what makes paging possible: the page to show has to be chosen
+// against the number of rows there actually are.
+func (s *databaseSession) countRows(ctx context.Context, table string) (int64, error) {
+	var total int64
+	if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+quoteIdentifier(table)).Scan(&total); err != nil {
+		return 0, err
+	}
+	return total, nil
+}
+
+// lastPageOffset is where a row appended to the end of a table can be found.
+func lastPageOffset(total int64) int64 {
+	if total <= 0 {
+		return 0
+	}
+	return ((total - 1) / browsePageSize) * browsePageSize
 }
 
 // tableBrowse is everything one reading of a table produces: the rows to show,
@@ -265,6 +290,11 @@ type tableBrowse struct {
 	result   queryResult
 	rowIDs   []int64
 	writable bool
+	// offset is the page this reading covers, and total the number of rows in
+	// the table it came from, so the client can say which hundred of how many
+	// is on screen.
+	offset int64
+	total  int64
 }
 
 // insertRow adds a row of defaults, which is the part a dialog cannot do
@@ -282,8 +312,11 @@ func (s *databaseSession) insertRow(ctx context.Context, table string) (int64, e
 	return result.LastInsertId()
 }
 
-func (s *databaseSession) browseWithRowIDs(ctx context.Context, table string) (queryResult, []int64, error) {
-	statement := "SELECT rowid AS " + quoteIdentifier(rowIDColumn) + ", * FROM " + quoteIdentifier(table) + " LIMIT 100"
+func (s *databaseSession) browseWithRowIDs(ctx context.Context, table string, offset int64) (queryResult, []int64, error) {
+	// Ordered by rowid so that paging is stable: without an order, two pages
+	// of the same table are not guaranteed to be two different halves of it.
+	statement := "SELECT rowid AS " + quoteIdentifier(rowIDColumn) + ", * FROM " + quoteIdentifier(table) +
+		" ORDER BY rowid LIMIT " + strconv.Itoa(browsePageSize) + " OFFSET " + strconv.FormatInt(offset, 10)
 	rows, err := s.db.QueryContext(ctx, statement)
 	if err != nil {
 		return queryResult{}, nil, err
@@ -425,8 +458,29 @@ func quoteIdentifier(identifier string) string {
 	return `"` + strings.ReplaceAll(identifier, `"`, `""`) + `"`
 }
 
-func tableSelect(table string) string {
-	return "SELECT * FROM " + quoteIdentifier(table) + " LIMIT 100"
+// browsePageSize is how many rows one page of a table browse holds.
+const browsePageSize = 100
+
+func tableSelect(table string, offset int64) string {
+	statement := "SELECT * FROM " + quoteIdentifier(table) + " LIMIT " + strconv.Itoa(browsePageSize)
+	if offset > 0 {
+		statement += " OFFSET " + strconv.FormatInt(offset, 10)
+	}
+	return statement
+}
+
+// clampOffset keeps a page offset inside a table that may have shrunk under
+// it: a row deleted from the last page, or a whole page emptied by a DELETE
+// from the SQL box, lands on the last page that still has rows rather than
+// past the end.
+func clampOffset(offset, total int64) int64 {
+	if offset <= 0 || total <= 0 {
+		return 0
+	}
+	if offset < total {
+		return offset - offset%browsePageSize
+	}
+	return ((total - 1) / browsePageSize) * browsePageSize
 }
 
 func displayValue(value any) string {

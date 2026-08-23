@@ -39,6 +39,15 @@ func (w *browserWindow) ProcessKey(e *vtinput.InputEvent) bool {
 		w.browser.deleteRow()
 		return true
 	}
+	ctrl := e.ControlKeyState&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed) != 0
+	if e.KeyDown && ctrl && e.VirtualKeyCode == vtinput.VK_NEXT {
+		w.browser.turnPage(browsePageSize)
+		return true
+	}
+	if e.KeyDown && ctrl && e.VirtualKeyCode == vtinput.VK_PRIOR {
+		w.browser.turnPage(-browsePageSize)
+		return true
+	}
 	return w.Window.ProcessKey(e)
 }
 
@@ -51,6 +60,8 @@ type browser struct {
 	columns      []string
 	rowIDs       []int64
 	writable     bool
+	offset       int64
+	total        int64
 	// selectRowID moves the cursor onto a row once the table it belongs to
 	// has been read again, which is how a newly inserted row is found.
 	selectRowID int64
@@ -169,19 +180,38 @@ func newBrowser(app vfs.App, session *databaseSession, tables []string) *browser
 	return b
 }
 
-// loadTable reads a table into the right hand side.
+// loadTable reads the first page of a table into the right hand side.
 func (b *browser) loadTable(table string) {
+	b.loadPage(table, 0)
+}
+
+// turnPage moves the browse window by whole pages. A table shorter than one
+// page has nowhere to go, and the last page stops at the end rather than
+// running off it.
+func (b *browser) turnPage(by int64) {
+	if b.closed || b.currentTable == "" {
+		return
+	}
+	offset := clampOffset(b.offset+by, b.total)
+	if offset == b.offset {
+		return
+	}
+	b.loadPage(b.currentTable, offset)
+}
+
+// loadPage reads one page of a table.
+func (b *browser) loadPage(table string, offset int64) {
 	if b.closed {
 		return
 	}
 	b.currentTable = table
-	b.query.SetText(tableSelect(table))
+	b.query.SetText(tableSelect(table, offset))
 	var browse tableBrowse
 	b.app.RunProgressTask(sqliteText("SQLite.Title", " SQLite ", " SQLite "), fmt.Sprintf(sqliteText("SQLite.ReadingTable", "Reading %s...", "Чтение %s..."), table), false,
 		func(ctx context.Context, update func(string, int)) error {
 			update(sqliteText("SQLite.ReadingTableProgress", "Reading table...", "Чтение таблицы..."), -1)
 			var err error
-			browse, err = b.session.browseTable(ctx, table)
+			browse, err = b.session.browseTable(ctx, table, offset)
 			return err
 		},
 		func(err error) {
@@ -193,9 +223,20 @@ func (b *browser) loadTable(table string) {
 				return
 			}
 			b.applyBrowse(table, browse)
-			b.setStatus(fmt.Sprintf(sqliteText("SQLite.TableRows", "%s: %d row(s)", "%s: %d строк(и)"), table, len(browse.result.Rows)))
+			b.setStatus(b.browseStatus(table, browse))
 			b.takePendingSelection()
 		})
+}
+
+// browseStatus says which rows of how many are on screen, because a hundred
+// rows out of a thousand look exactly like all of them otherwise.
+func (b *browser) browseStatus(table string, browse tableBrowse) string {
+	if browse.total == 0 || len(browse.result.Rows) == 0 {
+		return fmt.Sprintf(sqliteText("SQLite.TableRows", "%s: %d row(s)", "%s: %d строк(и)"), table, len(browse.result.Rows))
+	}
+	first := browse.offset + 1
+	last := browse.offset + int64(len(browse.result.Rows))
+	return fmt.Sprintf(sqliteText("SQLite.TableRange", "%s: rows %d-%d of %d", "%s: строки %d-%d из %d"), table, first, last, browse.total)
 }
 
 // applyBrowse shows a reading of a table that a worker has already done.
@@ -209,6 +250,8 @@ func (b *browser) applyBrowse(table string, browse tableBrowse) {
 	b.currentTable = table
 	b.rowIDs = browse.rowIDs
 	b.writable = browse.writable
+	b.offset = browse.offset
+	b.total = browse.total
 	b.applyResult(browse.result)
 }
 
@@ -223,6 +266,9 @@ func (b *browser) refresh() {
 		return
 	}
 	current := b.currentTable
+	// Read on the UI goroutine, before the worker starts: the worker must not
+	// touch the browser's fields.
+	offset := b.offset
 	var (
 		tables []string
 		table  string
@@ -239,7 +285,10 @@ func (b *browser) refresh() {
 			if table == "" {
 				return nil
 			}
-			browse, err = b.session.browseTable(ctx, table)
+			if table != current {
+				offset = 0
+			}
+			browse, err = b.session.browseTable(ctx, table, offset)
 			return err
 		},
 		func(err error) {
@@ -258,7 +307,7 @@ func (b *browser) refresh() {
 			}
 			b.selectTableInList(table)
 			b.applyBrowse(table, browse)
-			b.setStatus(fmt.Sprintf(sqliteText("SQLite.TableRows", "%s: %d row(s)", "%s: %d строк(и)"), table, len(browse.result.Rows)))
+			b.setStatus(b.browseStatus(table, browse))
 		})
 }
 
@@ -296,6 +345,7 @@ func (b *browser) runQuery() {
 		return
 	}
 	current := b.currentTable
+	offset := b.offset
 	var (
 		result queryResult
 		tables []string
@@ -322,7 +372,10 @@ func (b *browser) runQuery() {
 			if table = tableToShow(tables, current); table == "" {
 				return nil
 			}
-			browse, err = b.session.browseTable(ctx, table)
+			if table != current {
+				offset = 0
+			}
+			browse, err = b.session.browseTable(ctx, table, offset)
 			return err
 		},
 		func(err error) {
@@ -492,6 +545,7 @@ func (b *browser) removeRow(table string, rowID int64) {
 	if b.closed {
 		return
 	}
+	offset := b.offset
 	var (
 		affected int64
 		browse   tableBrowse
@@ -503,7 +557,7 @@ func (b *browser) removeRow(table string, rowID int64) {
 			if affected, err = b.session.deleteRow(ctx, table, rowID); err != nil {
 				return err
 			}
-			browse, err = b.session.browseTable(ctx, table)
+			browse, err = b.session.browseTable(ctx, table, offset)
 			return err
 		},
 		func(err error) {
@@ -548,6 +602,7 @@ func (b *browser) writeCell(column string, rowID int64, value string) {
 		return
 	}
 	table := b.currentTable
+	offset := b.offset
 	var (
 		affected int64
 		browse   tableBrowse
@@ -562,7 +617,7 @@ func (b *browser) writeCell(column string, rowID int64, value string) {
 			// A trigger or a generated column can change more than the cell
 			// that was written, so the table is read again -- here, on the
 			// same worker, not from a second task started in the completion.
-			browse, err = b.session.browseTable(ctx, table)
+			browse, err = b.session.browseTable(ctx, table, offset)
 			return err
 		},
 		func(err error) {
@@ -611,7 +666,13 @@ func (b *browser) insertRow() {
 			if rowID, err = b.session.insertRow(ctx, table); err != nil {
 				return err
 			}
-			browse, err = b.session.browseTable(ctx, table)
+			// A rowid table appends: the new row is on the last page, so that
+			// is the page to show, whatever page the browse was on before.
+			total, err := b.session.countRows(ctx, table)
+			if err != nil {
+				return err
+			}
+			browse, err = b.session.browseTable(ctx, table, lastPageOffset(total))
 			return err
 		},
 		func(err error) {
@@ -649,9 +710,10 @@ func (b *browser) takePendingSelection() {
 		b.setStatus(sqliteText("SQLite.RowAdded", "Row added; fill it in with F4.", "Строка добавлена; заполните её по F4."))
 		return
 	}
-	b.setStatus(sqliteText("SQLite.RowAddedBeyondLimit",
-		"Row added, past the 100 rows shown here.",
-		"Строка добавлена, но она за пределами показанных 100 строк."))
+	// The insert path lands on the page that holds the new row, so with rowid
+	// tables this is not reached; it stays for the day something ends up here
+	// without a visible row to stand on.
+	b.setStatus(sqliteText("SQLite.RowAdded", "Row added; fill it in with F4.", "Строка добавлена; заполните её по F4."))
 }
 
 func (b *browser) setStatus(message string) {
