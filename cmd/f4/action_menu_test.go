@@ -100,6 +100,20 @@ func TestBuildMenuBarItems_Shell(t *testing.T) {
 	if files[0].Shortcut != "F3" {
 		t.Errorf("Expected View shortcut 'F3', got %q", files[0].Shortcut)
 	}
+	attrAction, ok := GetAction("File.Attributes")
+	if !ok {
+		t.Fatal("File.Attributes action is not registered")
+	}
+	var foundAttributes bool
+	for _, item := range files {
+		if item.Text == attrAction.DisplayLabel() || item.Text == "&"+attrAction.DisplayLabel() {
+			foundAttributes = true
+			break
+		}
+	}
+	if !foundAttributes {
+		t.Errorf("Files menu is missing %q", attrAction.DisplayLabel())
+	}
 
 	// Options menu honors MenuSeparatorBefore.
 	var sawSeparator bool

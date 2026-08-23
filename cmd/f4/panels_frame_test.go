@@ -2187,12 +2187,13 @@ func TestPanelsFrame_Clone_SelectionPreservation(t *testing.T) {
 		t.Fatal("Timeout waiting for initial load")
 	}
 	// Drain remaining tasks
+drainTasks:
 	for i := 0; i < 10; i++ {
 		select {
 		case task := <-vtui.FrameManager.TaskChan:
 			task()
 		default:
-			break
+			break drainTasks
 		}
 	}
 

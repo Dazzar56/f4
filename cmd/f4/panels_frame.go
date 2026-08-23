@@ -3489,7 +3489,7 @@ func (pf *PanelsFrame) RunAdvancedProgressTask(title string, forked bool, worker
 		}
 	}
 
-	reporter := &DialogReporter{dlg: dlg}
+	reporter := newDialogReporter(dlg)
 
 	vtui.FrameManager.PostTask(func() {
 		if forked && pf != nil {
@@ -3504,6 +3504,7 @@ func (pf *PanelsFrame) RunAdvancedProgressTask(title string, forked bool, worker
 	taskCtx = vtui.RunAsync(func(ctx *vtui.TaskContext) {
 		err := worker(ctx.Context, reporter)
 		ctx.RunOnUI(func() {
+			reporter.Stop()
 			dlg.Close()
 			if onComplete != nil {
 				onComplete(err)

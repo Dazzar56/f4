@@ -219,9 +219,8 @@ func CheckForUpdates(pf *PanelsFrame, manual bool) {
 		}
 	} else {
 		current := getCurrentVersion()
-		if release.TagName != current && release.TagName != AppConfig.LastUpdateVersion {
-			needsUpdate = true
-		}
+		_, _, buildTimeText := getVCSInfo()
+		needsUpdate = stableReleaseNeedsUpdate(release, current, parseUpdateBuildTime(buildTimeText))
 	}
 
 	if !needsUpdate {
@@ -260,6 +259,37 @@ func CheckForUpdates(pf *PanelsFrame, manual bool) {
 			sessionDismissedUpdateKey = updateKey
 		}
 	})
+}
+
+func stableReleaseNeedsUpdate(release githubRelease, current string, buildTime time.Time) bool {
+	if release.TagName == current || release.TagName == AppConfig.LastUpdateVersion {
+		return false
+	}
+
+	// A release tag is an exact version marker. A manually built binary may
+	// instead expose only a commit hash, which cannot be compared lexically to
+	// a semver release tag. In that case compare the commit/build timestamp to
+	// the release publication time, so a newer local checkout is not told to
+	// install an older release.
+	if !isReleaseVersion(current) && !buildTime.IsZero() {
+		published, err := time.Parse(time.RFC3339, release.PublishedAt)
+		if err == nil {
+			return published.After(buildTime)
+		}
+	}
+
+	// If metadata is missing or malformed, preserve the safe historical
+	// behavior and offer the release rather than silently skipping it.
+	return true
+}
+
+func parseUpdateBuildTime(value string) time.Time {
+	for _, layout := range []string{time.RFC3339, "2006-01-02 15:04"} {
+		if parsed, err := time.ParseInLocation(layout, value, time.UTC); err == nil {
+			return parsed
+		}
+	}
+	return time.Time{}
 }
 
 // commitInfoFromReleaseBody pulls the commit hash and build time the
