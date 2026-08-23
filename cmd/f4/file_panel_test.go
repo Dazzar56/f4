@@ -3950,6 +3950,15 @@ func TestFileSystemPanel_OrdinaryDirectoryDoesNotUseFileProvider(t *testing.T) {
 	if got := manager.setPathCalls.Load(); got != 1 {
 		t.Fatalf("ordinary directory made %d SetPath calls, want 1", got)
 	}
+
+	// The SetPath above fails by design, and the panel answers that by posting
+	// an error dialog to the frame manager. The queue is process-wide, so a
+	// dialog left sitting in it surfaces inside whichever test drains next and
+	// fails there instead of here. Take it now.
+	drainUITasks()
+	if top := vtui.FrameManager.GetTopFrame(); top != nil {
+		vtui.FrameManager.Pop()
+	}
 }
 
 func TestFileSystemPanel_HeldEnterDuringProviderOpenIsCoalesced(t *testing.T) {

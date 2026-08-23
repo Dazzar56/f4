@@ -747,11 +747,17 @@ func ExecuteFileOpAt(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, srcBasePath string
 		GlobalQueueManager.Enqueue(task)
 	} else { // Foreground or Background
 		dlg := NewFileOpProgressDialog(dialogTitle)
-		var taskCtx *vtui.TaskContext
+		// RunAsync starts the worker before it returns the context assigned
+		// here, and the worker closes the dialog when it finishes, which runs
+		// OnResult. A plain variable is therefore written and read from two
+		// goroutines with nothing ordering them, so hold it atomically. A nil
+		// read only means the task ended before the assignment landed, and
+		// there is nothing left to cancel in that case.
+		var taskCtx atomic.Pointer[vtui.TaskContext]
 		dlg.btnCancel.OnClick = func() { dlg.SetExitCode(1) }
 		dlg.OnResult = func(code int) {
-			if taskCtx != nil {
-				taskCtx.Cancel()
+			if ctx := taskCtx.Load(); ctx != nil {
+				ctx.Cancel()
 			}
 		}
 
@@ -767,7 +773,7 @@ func ExecuteFileOpAt(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, srcBasePath string
 			}
 		})
 
-		taskCtx = vtui.RunAsync(func(ctx *vtui.TaskContext) {
+		taskCtx.Store(vtui.RunAsync(func(ctx *vtui.TaskContext) {
 			err := runFunc(ctx.Context, reporter, dlg)
 			ctx.RunOnUI(func() {
 				reporter.Stop()
@@ -782,7 +788,7 @@ func ExecuteFileOpAt(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, srcBasePath string
 					vtui.ShowMessage(" Error ", fmt.Sprintf("Operation failed:\n%v", err), []string{"&Ok"})
 				}
 			})
-		})
+		}))
 	}
 }
 
@@ -1023,11 +1029,17 @@ func ExecuteDeleteOpWithDispositionAt(pf *PanelsFrame, activeVfs vfs.VFS, basePa
 		GlobalQueueManager.Enqueue(task)
 	} else {
 		dlg := NewFileOpProgressDialog(" " + strings.TrimSpace(Msg(progressTitleKey)) + " ")
-		var taskCtx *vtui.TaskContext
+		// RunAsync starts the worker before it returns the context assigned
+		// here, and the worker closes the dialog when it finishes, which runs
+		// OnResult. A plain variable is therefore written and read from two
+		// goroutines with nothing ordering them, so hold it atomically. A nil
+		// read only means the task ended before the assignment landed, and
+		// there is nothing left to cancel in that case.
+		var taskCtx atomic.Pointer[vtui.TaskContext]
 		dlg.btnCancel.OnClick = func() { dlg.SetExitCode(1) }
 		dlg.OnResult = func(code int) {
-			if taskCtx != nil {
-				taskCtx.Cancel()
+			if ctx := taskCtx.Load(); ctx != nil {
+				ctx.Cancel()
 			}
 		}
 
@@ -1043,7 +1055,7 @@ func ExecuteDeleteOpWithDispositionAt(pf *PanelsFrame, activeVfs vfs.VFS, basePa
 			}
 		})
 
-		taskCtx = vtui.RunAsync(func(ctx *vtui.TaskContext) {
+		taskCtx.Store(vtui.RunAsync(func(ctx *vtui.TaskContext) {
 			err := runFunc(ctx.Context, reporter, dlg)
 			ctx.RunOnUI(func() {
 				reporter.Stop()
@@ -1058,7 +1070,7 @@ func ExecuteDeleteOpWithDispositionAt(pf *PanelsFrame, activeVfs vfs.VFS, basePa
 					vtui.ShowMessage(" "+strings.TrimSpace(Msg("Error.Title"))+" ", fmt.Sprintf(Msg("Delete.OperationFailed"), err), []string{Msg("vtui.Ok")})
 				}
 			})
-		})
+		}))
 	}
 }
 

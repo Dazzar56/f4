@@ -104,7 +104,11 @@ func (b *AsyncBuffer) Read(offset, length int) ([]byte, error) {
 			missingData = true
 			if !b.fetching[i] {
 				b.fetching[i] = true
-				go b.fetchChunk(i)
+				// Read the global here, on the goroutine that starts the
+				// fetch, rather than inside it: the fetch outlives this call
+				// and would otherwise race anything that reassigns
+				// vtui.FrameManager while it is still in flight.
+				go b.fetchChunk(i, vtui.FrameManager)
 			}
 		}
 	}
@@ -116,7 +120,7 @@ func (b *AsyncBuffer) Read(offset, length int) ([]byte, error) {
 	return res, nil
 }
 
-func (b *AsyncBuffer) fetchChunk(idx int) {
+func (b *AsyncBuffer) fetchChunk(idx int, frames *vtui.FrameManagerType) {
 	off := int64(idx * b.chunkSize)
 	sz := b.chunkSize
 	if off+int64(sz) > int64(b.size) {
@@ -137,7 +141,7 @@ func (b *AsyncBuffer) fetchChunk(idx int) {
 	}
 	b.mu.Unlock()
 
-	vtui.FrameManager.PostTask(func() {
-		vtui.FrameManager.Redraw()
+	frames.PostTask(func() {
+		frames.Redraw()
 	})
 }

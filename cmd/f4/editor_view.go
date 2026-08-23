@@ -848,11 +848,16 @@ func (ev *EditorView) startHighlighting() {
 	ctx, cancel := context.WithCancel(context.Background())
 	ev.highlightCancel = cancel
 
+	// Taken here rather than inside the goroutine below. Highlighting outlives
+	// this call, and reading the global from the worker races anything that
+	// reassigns vtui.FrameManager while the pass is still running.
+	frames := vtui.FrameManager
+
 	go func() {
 		defer func() {
-			vtui.FrameManager.PostTask(func() {
+			frames.PostTask(func() {
 				ev.highlighting = false
-				vtui.FrameManager.Redraw()
+				frames.Redraw()
 			})
 		}()
 
@@ -875,7 +880,7 @@ func (ev *EditorView) startHighlighting() {
 				return
 			}
 
-			vtui.FrameManager.PostTask(func() {
+			frames.PostTask(func() {
 				plan := highlightSlicePlan{done: true}
 				defer func() { plans <- plan }()
 
