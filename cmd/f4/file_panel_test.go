@@ -2521,6 +2521,10 @@ func TestFileSystemPanel_NavigateDown_CursorReset(t *testing.T) {
 	if fp.GetCursorIndex() != 0 {
 		t.Errorf("Cursor did not reset to '..'. Index is %d", fp.GetCursorIndex())
 	}
+	// Pressing Enter above starts an asynchronous load of subdir. Wait for it
+	// before t.TempDir is removed, otherwise the worker can enqueue an error
+	// dialog for the next test after this test has already returned.
+	waitForDirectoryLoads(t)
 }
 func TestFileSystemPanel_FastFind(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())

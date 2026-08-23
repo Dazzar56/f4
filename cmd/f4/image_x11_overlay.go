@@ -137,21 +137,6 @@ func (x *x11ImageOverlay) hide() {
 	x.key = ""
 }
 
-// suspend takes the picture off the screen but leaves the overlay wanting to
-// be there, so the event loop can put it back when the focus returns.
-//
-// The remembered frame goes with it. An unmapped window keeps its pixels only
-// if the server has backing store, and modern Xorg does not: the window comes
-// back blank, and a cache that still believed the right thing was on it would
-// never repaint. That is what turned an alt-tab into an empty viewer.
-func (x *x11ImageOverlay) suspend() {
-	if x == nil {
-		return
-	}
-	x.ov.Suspend()
-	x.key = ""
-}
-
 // overlayCellRect converts a rectangle of character cells into a rectangle of
 // screen pixels. The size of a cell is not asked for: it is the size of the
 // terminal window divided by the number of cells in it, which is exact when

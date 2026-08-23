@@ -211,9 +211,3 @@ func (s *Session) unregisterOverlay(o *Overlay) {
 	s.overlays = kept
 	s.mu.Unlock()
 }
-
-func (s *Session) overlaySnapshot() []*Overlay {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return append([]*Overlay(nil), s.overlays...)
-}
