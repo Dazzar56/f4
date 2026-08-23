@@ -99,6 +99,17 @@ func TestBuildVersionOverridesVCSMetadata(t *testing.T) {
 	}
 }
 
+func TestFormatBuildTimeForDisplayUsesOneClockForVCSAndNightlyMetadata(t *testing.T) {
+	fromVCS := formatBuildTimeForDisplay("2026-08-23T06:49:17Z")
+	fromReleaseBody := formatBuildTimeForDisplay("2026-08-23 06:49:17")
+	if fromVCS != fromReleaseBody {
+		t.Fatalf("VCS time %q and release-body time %q diverged", fromVCS, fromReleaseBody)
+	}
+	if got := formatBuildTimeForDisplay("not a timestamp"); got != "not a timestamp" {
+		t.Fatalf("invalid timestamp = %q, want unchanged input", got)
+	}
+}
+
 func TestCurrentWindowTitleMatchesRenderedTitle(t *testing.T) {
 	origTemplate := AppConfig.ConsoleTitleTemplate
 	defer func() { AppConfig.ConsoleTitleTemplate = origTemplate }()
