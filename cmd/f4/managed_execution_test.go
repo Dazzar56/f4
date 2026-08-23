@@ -7,17 +7,30 @@ import (
 	"github.com/unxed/vtui"
 )
 
-// drainUITasks runs everything queued on the frame manager, the way
-// FrameManager.Run would. The queue is process-wide, so it may also carry
-// leftovers from other tests; draining it is what keeps this one honest.
-func drainUITasks(d time.Duration) {
-	deadline := time.Now().Add(d)
-	for time.Now().Before(deadline) {
+// drainUITasks runs everything the frame manager has queued ahead of this
+// point, the way FrameManager.Run would.
+//
+// The queue is process-wide and outlives FrameManager.Init, so it also carries
+// whatever earlier tests left behind. That backlog is why this cannot be a
+// wall-clock wait: draining for a fixed span races it, and on a loaded runner
+// the leftovers can outlast the window and leave this test's own task still
+// pending when the assertion runs.
+//
+// The queue is FIFO, so a sentinel posted behind the work cannot be reached
+// until the work has run. Draining until the sentinel arrives is therefore
+// exact no matter how long the backlog is, and needs no guess about timing.
+func drainUITasks() {
+	done := make(chan struct{})
+	vtui.FrameManager.PostTask(func() { close(done) })
+	deadline := time.After(30 * time.Second)
+	for {
 		select {
+		case <-done:
+			return
 		case task := <-vtui.FrameManager.TaskChan:
 			task()
-		default:
-			time.Sleep(time.Millisecond)
+		case <-deadline:
+			return
 		}
 	}
 }
@@ -26,13 +39,13 @@ func drainUITasks(d time.Duration) {
 // it posts.
 func runBusyChange(pf *PanelsFrame, busy bool) {
 	pf.termView.OnBusyChange(busy)
-	drainUITasks(50 * time.Millisecond)
+	drainUITasks()
 }
 
 func newExecutionTestFrame(t *testing.T) *PanelsFrame {
 	t.Helper()
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	drainUITasks(10 * time.Millisecond) // discard anything an earlier test queued
+	drainUITasks() // discard anything an earlier test queued
 	pf := NewPanelsFrame()
 	t.Cleanup(pf.Close)
 	pf.showPanels = false
