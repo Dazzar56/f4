@@ -382,7 +382,7 @@ func TestActionDelete_RetrySuccess(t *testing.T) {
 	}
 
 	pf := NewPanelsFrame()
-	defer pf.Close()
+	t.Cleanup(pf.Close)
 	pf.ResizeConsole(80, 25)
 	fsp := pf.panels[0].(*FileSystemPanel)
 	fsp.vfs = mv
@@ -403,17 +403,21 @@ func TestActionDelete_RetrySuccess(t *testing.T) {
 	// 2. Ждем диалог ошибки и жмем Retry
 	timeout := time.After(2 * time.Second)
 	retryClicked := false
+	var progress *FileOpProgressDialog
 Loop:
 	for {
-		if len(mv.deleted) == 1 {
-			break Loop
-		}
 		select {
 		case task := <-fm.TaskChan:
 			task()
+			if top, ok := fm.GetTopFrame().(*FileOpProgressDialog); ok {
+				progress = top
+			}
 			if !retryClicked && fm.GetTopFrameType() == vtui.TypeDialog && fm.GetTopFrame().GetTitle() == " Error " {
 				clickDialogButton(t, fm.GetTopFrame().(vtui.Container), "Retry")
 				retryClicked = true
+			}
+			if progress != nil && progress.IsDone() {
+				break Loop
 			}
 			if fm.GetTopFrame() != nil && fm.GetTopFrame().IsDone() {
 				fm.Pop()
