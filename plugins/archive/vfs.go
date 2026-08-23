@@ -551,22 +551,21 @@ func (w *archiveReadWrapper) Size() int64 {
 }
 
 func (w *archiveReadWrapper) Close() error {
-	var err error
 	w.once.Do(func() {
 		w.mu.Lock()
 		if w.f != nil {
-			w.f.Close()
+			_ = w.f.Close() // The archive member was opened only for reading.
 			w.f = nil
 		}
 		if w.tmpFile != nil {
-			w.tmpFile.Close()
-			os.Remove(w.tmpPath)
+			_ = w.tmpFile.Close()    // Materialization is read-only after it is published.
+			_ = os.Remove(w.tmpPath) // Removing a private read cache is best-effort cleanup.
 			w.tmpFile = nil
 		}
 		w.mu.Unlock()
 		w.v.decrementActive()
 	})
-	return err
+	return nil
 }
 
 func (w *archiveReadWrapper) TempPath() string {
@@ -629,7 +628,7 @@ func (w *archiveReadWrapper) extractToTemp(ctx context.Context) error {
 	tmp, err := os.CreateTemp("", "f4arc-*")
 	if err != nil {
 		if srcCloser != nil {
-			srcCloser.Close()
+			_ = srcCloser.Close() // The fallback archive member is read-only.
 		}
 		w.mu.Lock()
 		w.err = err
@@ -661,26 +660,39 @@ func (w *archiveReadWrapper) extractToTemp(ctx context.Context) error {
 	}
 
 	if srcCloser != nil {
-		srcCloser.Close()
+		_ = srcCloser.Close() // The fallback archive member is read-only.
 	}
 
 	w.mu.Lock()
 	readPos := w.readPos
 	w.mu.Unlock()
 
+	tmpName := tmp.Name()
 	if loopErr == nil {
-		_, loopErr = tmp.Seek(readPos, io.SeekStart)
+		loopErr = tmp.Close()
+	} else {
+		_ = tmp.Close() // The incomplete private materialization will be removed.
+	}
+
+	var readTmp *os.File
+	if loopErr == nil {
+		readTmp, loopErr = os.Open(filepath.Clean(tmpName))
+	}
+	if loopErr == nil {
+		_, loopErr = readTmp.Seek(readPos, io.SeekStart)
 	}
 
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
 	if loopErr != nil {
-		tmp.Close()
-		os.Remove(tmp.Name())
+		if readTmp != nil {
+			_ = readTmp.Close() // The materialized member was reopened only for reading.
+		}
+		_ = os.Remove(tmpName) // Removing the unusable private materialization is best-effort cleanup.
 		if !errors.Is(loopErr, context.Canceled) && !errors.Is(loopErr, context.DeadlineExceeded) {
 			if w.f != nil {
-				w.f.Close()
+				_ = w.f.Close() // The archive member was opened only for reading.
 				w.f = nil
 			}
 			w.err = loopErr
@@ -688,11 +700,11 @@ func (w *archiveReadWrapper) extractToTemp(ctx context.Context) error {
 		return loopErr
 	} else {
 		if w.f != nil {
-			w.f.Close()
+			_ = w.f.Close() // The archive member was opened only for reading.
 			w.f = nil
 		}
-		w.tmpPath = tmp.Name()
-		w.tmpFile = tmp
+		w.tmpPath = tmpName
+		w.tmpFile = readTmp
 		w.extracted = true
 		return nil
 	}
@@ -783,6 +795,16 @@ func formatSize(b int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
+}
+
+func joinArchiveCloseError(primary, closeErr error) error {
+	if primary == nil {
+		return closeErr
+	}
+	if closeErr == nil {
+		return primary
+	}
+	return errors.Join(primary, closeErr)
 }
 
 func extractWithProgress(ctx context.Context, src io.Reader, dst io.Writer, size int64, name string, update vfs.ProgressCallback, reporter vfs.TaskReporter) error {
@@ -1000,32 +1022,43 @@ func (v *ArchiveVFS) Open(ctx context.Context, path string) (vfs.ReadAtCloser, e
 	if update != nil || reporter != nil {
 		tmp, errTemp := os.CreateTemp("", "f4arc-open-*")
 		if errTemp != nil {
-			srcFile.Close()
+			_ = srcFile.Close() // The archive member was opened only for reading.
 			v.decrementActive()
 			return nil, errTemp
 		}
+		tmpName := tmp.Name()
 
 		fileName := "unknown"
 		if info != nil {
 			fileName = info.Name()
 		}
 		errExtract := extractWithProgress(ctx, srcFile, tmp, size, fileName, update, reporter)
-		srcFile.Close()
+		_ = srcFile.Close() // The archive member was opened only for reading.
 
 		if errExtract != nil {
-			tmp.Close()
-			os.Remove(tmp.Name())
+			_ = tmp.Close()        // The incomplete private materialization will be removed.
+			_ = os.Remove(tmpName) // Removing the unusable private materialization is best-effort cleanup.
 			v.decrementActive()
 			return nil, errExtract
 		}
 
-		tmp.Seek(0, 0)
+		if err := tmp.Close(); err != nil {
+			_ = os.Remove(tmpName) // Removing the unusable private materialization is best-effort cleanup.
+			v.decrementActive()
+			return nil, err
+		}
+		tmp, err = os.Open(filepath.Clean(tmpName))
+		if err != nil {
+			_ = os.Remove(tmpName) // Removing the unusable private materialization is best-effort cleanup.
+			v.decrementActive()
+			return nil, err
+		}
 
 		return &archiveReadWrapper{
 			v:         v,
 			size:      size,
 			tmpFile:   tmp,
-			tmpPath:   tmp.Name(),
+			tmpPath:   tmpName,
 			extracted: true,
 		}, nil
 	}
@@ -1137,15 +1170,22 @@ type archiveWriteWrapper struct {
 	tmpFile  *os.File
 	destPath string
 	once     sync.Once
+	err      error
 }
 
 func (w *archiveWriteWrapper) Write(p []byte) (n int, err error) { return w.tmpFile.Write(p) }
 func (w *archiveWriteWrapper) Close() error {
-	var err error
 	w.once.Do(func() {
-		w.tmpFile.Close()
+		defer w.v.decrementActive()
+
 		tmpName := w.tmpFile.Name()
-		defer os.Remove(tmpName)
+		defer func() {
+			_ = os.Remove(tmpName) // The archive no longer depends on its private staging file.
+		}()
+		if err := w.tmpFile.Close(); err != nil {
+			w.err = err
+			return
+		}
 
 		w.v.mu.Lock()
 		isClosed := w.v.isClosed
@@ -1154,25 +1194,34 @@ func (w *archiveWriteWrapper) Close() error {
 		if !isClosed {
 			upd, errUpd := archive.NewUpdater(w.v.activePath(), archive.Options{})
 			if errUpd == nil {
-				defer upd.Close()
-				w.tmpFile, err = os.Open(tmpName)
-				if err == nil {
-					defer w.tmpFile.Close()
-					stat, _ := w.tmpFile.Stat()
-					err = upd.Append(w.destPath, stat.Size(), w.tmpFile)
-					if err == nil {
-						w.v.reloadFS()
+				w.err = func() (retErr error) {
+					defer func() {
+						retErr = joinArchiveCloseError(retErr, upd.Close())
+					}()
+					reader, err := os.Open(filepath.Clean(tmpName))
+					if err != nil {
+						return err
 					}
+					defer func() {
+						_ = reader.Close() // The staging file is read-only after its checked write close.
+					}()
+					stat, err := reader.Stat()
+					if err != nil {
+						return err
+					}
+					return upd.Append(w.destPath, stat.Size(), reader)
+				}()
+				if w.err == nil {
+					w.err = w.v.reloadFS()
 				}
 			} else {
-				err = errUpd
+				w.err = errUpd
 			}
 		} else {
-			err = fmt.Errorf("archive VFS was closed")
+			w.err = fmt.Errorf("archive VFS was closed")
 		}
-		w.v.decrementActive()
 	})
-	return err
+	return w.err
 }
 
 func (v *ArchiveVFS) MkDir(ctx context.Context, path string) error {
@@ -1206,13 +1255,12 @@ func (v *ArchiveVFS) MkDir(ctx context.Context, path string) error {
 	if err != nil {
 		return err
 	}
-	defer upd.Close()
 
-	err = upd.Append(fsPath, 0, nil)
-	if err == nil {
-		v.reloadFS()
+	err = joinArchiveCloseError(upd.Append(fsPath, 0, nil), upd.Close())
+	if err != nil {
+		return err
 	}
-	return err
+	return v.reloadFS()
 }
 
 func (v *ArchiveVFS) Remove(ctx context.Context, path string) error {
@@ -1242,23 +1290,25 @@ func (v *ArchiveVFS) Remove(ctx context.Context, path string) error {
 	if err != nil {
 		return err
 	}
-	defer upd.Close()
 
-	err = upd.Remove(fsPath)
-	if err == nil {
-		v.reloadFS()
+	err = joinArchiveCloseError(upd.Remove(fsPath), upd.Close())
+	if err != nil {
+		return err
 	}
-	return err
+	return v.reloadFS()
 }
 
-func (v *ArchiveVFS) reloadFS() {
-	if v.fsys != nil {
-		v.fsys.Close()
-	}
+func (v *ArchiveVFS) reloadFS() error {
 	newFS, err := archive.OpenFS(v.activePath(), archive.Options{})
-	if err == nil {
-		v.fsys = newFS
+	if err != nil {
+		return err
 	}
+	oldFS := v.fsys
+	v.fsys = newFS
+	if oldFS != nil {
+		_ = oldFS.Close() // The replacement index is already available.
+	}
+	return nil
 }
 
 func (v *ArchiveVFS) Rename(ctx context.Context, o, n string) error { return fmt.Errorf("read-only") }
@@ -1310,7 +1360,9 @@ func (v *ArchiveVFS) startCleanupTimer() {
 		v.mu.Lock()
 		defer v.mu.Unlock()
 		if v.activeCount == 0 && v.isClosed {
-			v.performCleanup()
+			if err := v.performCleanup(); err != nil {
+				vtui.DebugLog("archive VFS cleanup failed for %q: %v", v.arcPath, err)
+			}
 		}
 	})
 }
@@ -1321,13 +1373,13 @@ func (v *ArchiveVFS) performCleanup() error {
 		v.cleanupTimer = nil
 	}
 	if v.fsys != nil {
-		v.fsys.Close()
+		_ = v.fsys.Close() // The archive index is read-only and no longer needed.
 		v.fsys = nil
 	}
 	if v.closer != nil {
 		err := v.closer.Close()
 		if f, ok := v.closer.(*os.File); ok {
-			os.Remove(f.Name())
+			_ = os.Remove(f.Name()) // Removing a private archive backing is best-effort cleanup.
 		}
 		v.closer = nil
 		return err
@@ -1436,7 +1488,9 @@ func (v *ArchiveVFS) CopyBulk(ctx context.Context, srcPaths []string, dstVfs vfs
 	if err != nil {
 		return err
 	}
-	defer archiveFile.Close()
+	defer func() {
+		_ = archiveFile.Close() // CopyBulk opens the archive only for reading.
+	}()
 
 	format := v.format
 	if format == "" {
@@ -1462,6 +1516,20 @@ func (v *ArchiveVFS) openArchiveFile(ctx context.Context) (vfs.ReadAtCloser, err
 		return &vfs.TempFileWrapper{File: f, SizeVal: stat.Size(), TempPath: ""}, nil
 	}
 	return v.parent.Open(ctx, v.arcPath)
+}
+
+func ensureArchiveExtractionDir(ctx context.Context, dstVfs vfs.VFS, dir string) error {
+	if err := dstVfs.MkDir(ctx, dir); err != nil {
+		// MkDir is not uniformly idempotent across VFS implementations. In
+		// particular, a remote backend may report an existing directory as an
+		// error even though it is already suitable as an extraction target.
+		item, statErr := dstVfs.Stat(ctx, dir)
+		if statErr == nil && item.IsDir {
+			return nil
+		}
+		return fmt.Errorf("create extraction directory %q: %w", dir, err)
+	}
+	return nil
 }
 
 func (v *ArchiveVFS) copyBulkZip(ctx context.Context, f vfs.ReadAtCloser, selected map[string]bool, innerPath string, dstVfs vfs.VFS, dstDir string, reporter vfs.TaskReporter) error {
@@ -1517,14 +1585,18 @@ func (v *ArchiveVFS) copyBulkZip(ctx context.Context, f vfs.ReadAtCloser, select
 		}
 
 		if file.FileInfo().IsDir() {
-			dstVfs.MkDir(ctx, targetPath)
+			if err := ensureArchiveExtractionDir(ctx, dstVfs, targetPath); err != nil {
+				return err
+			}
 			if fp, ok := reporter.(vfs.FileProgress); ok {
 				fp.DirDone()
 			}
 			continue
 		}
 
-		dstVfs.MkDir(ctx, dstVfs.Dir(targetPath))
+		if err := ensureArchiveExtractionDir(ctx, dstVfs, dstVfs.Dir(targetPath)); err != nil {
+			return err
+		}
 
 		if fp, ok := reporter.(vfs.FileProgress); ok {
 			fp.StartFile(file.Name, int64(file.UncompressedSize64))
@@ -1544,23 +1616,21 @@ func (v *ArchiveVFS) copyBulkZip(ctx context.Context, f vfs.ReadAtCloser, select
 
 		wc, err := dstVfs.Create(ctx, targetPath)
 		if err != nil {
-			rc.Close()
+			_ = rc.Close() // The archive entry is read-only.
 			return err
 		}
 
 		var copied int64
 		for {
 			if ctx.Err() != nil {
-				rc.Close()
-				wc.Close()
-				return ctx.Err()
+				_ = rc.Close() // The archive entry is read-only.
+				return joinArchiveCloseError(ctx.Err(), wc.Close())
 			}
 			n, rerr := rc.Read(buf)
 			if n > 0 {
 				if _, werr := wc.Write(buf[:n]); werr != nil {
-					rc.Close()
-					wc.Close()
-					return werr
+					_ = rc.Close() // The archive entry is read-only.
+					return joinArchiveCloseError(werr, wc.Close())
 				}
 				if fp, ok := reporter.(vfs.FileProgress); ok {
 					fp.UpdateBytes(n)
@@ -1579,13 +1649,14 @@ func (v *ArchiveVFS) copyBulkZip(ctx context.Context, f vfs.ReadAtCloser, select
 				if rerr == io.EOF {
 					break
 				}
-				rc.Close()
-				wc.Close()
-				return rerr
+				_ = rc.Close() // The archive entry is read-only.
+				return joinArchiveCloseError(rerr, wc.Close())
 			}
 		}
-		rc.Close()
-		wc.Close()
+		_ = rc.Close() // The archive entry is read-only.
+		if err := wc.Close(); err != nil {
+			return err
+		}
 
 		if fp, ok := reporter.(vfs.FileProgress); ok {
 			fp.FileDone()
@@ -1605,7 +1676,7 @@ func (v *ArchiveVFS) copyBulkZip(ctx context.Context, f vfs.ReadAtCloser, select
 			Uid:      -1,
 			Gid:      -1,
 		}
-		dstVfs.SetAttributes(ctx, targetPath, item)
+		_ = dstVfs.SetAttributes(ctx, targetPath, item) // Metadata support is optional across destination VFSes.
 	}
 	return nil
 }
@@ -1667,14 +1738,18 @@ func (v *ArchiveVFS) copyBulkTar(ctx context.Context, f vfs.ReadAtCloser, select
 		}
 
 		if hdr.Typeflag == tar.TypeDir {
-			dstVfs.MkDir(ctx, targetPath)
+			if err := ensureArchiveExtractionDir(ctx, dstVfs, targetPath); err != nil {
+				return err
+			}
 			if fp, ok := reporter.(vfs.FileProgress); ok {
 				fp.DirDone()
 			}
 			continue
 		}
 
-		dstVfs.MkDir(ctx, dstVfs.Dir(targetPath))
+		if err := ensureArchiveExtractionDir(ctx, dstVfs, dstVfs.Dir(targetPath)); err != nil {
+			return err
+		}
 
 		if fp, ok := reporter.(vfs.FileProgress); ok {
 			fp.StartFile(cleanName, hdr.Size)
@@ -1695,14 +1770,12 @@ func (v *ArchiveVFS) copyBulkTar(ctx context.Context, f vfs.ReadAtCloser, select
 		var copied int64
 		for {
 			if ctx.Err() != nil {
-				wc.Close()
-				return ctx.Err()
+				return joinArchiveCloseError(ctx.Err(), wc.Close())
 			}
 			n, rerr := tr.Read(buf)
 			if n > 0 {
 				if _, werr := wc.Write(buf[:n]); werr != nil {
-					wc.Close()
-					return werr
+					return joinArchiveCloseError(werr, wc.Close())
 				}
 				if fp, ok := reporter.(vfs.FileProgress); ok {
 					fp.UpdateBytes(n)
@@ -1721,11 +1794,12 @@ func (v *ArchiveVFS) copyBulkTar(ctx context.Context, f vfs.ReadAtCloser, select
 				if rerr == io.EOF {
 					break
 				}
-				wc.Close()
-				return rerr
+				return joinArchiveCloseError(rerr, wc.Close())
 			}
 		}
-		wc.Close()
+		if err := wc.Close(); err != nil {
+			return err
+		}
 
 		if fp, ok := reporter.(vfs.FileProgress); ok {
 			fp.FileDone()
@@ -1745,7 +1819,7 @@ func (v *ArchiveVFS) copyBulkTar(ctx context.Context, f vfs.ReadAtCloser, select
 			Uid:      -1,
 			Gid:      -1,
 		}
-		dstVfs.SetAttributes(ctx, targetPath, item)
+		_ = dstVfs.SetAttributes(ctx, targetPath, item) // Metadata support is optional across destination VFSes.
 	}
 	return nil
 }
@@ -1762,7 +1836,9 @@ func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, s
 	if err != nil {
 		return err
 	}
-	defer localF.Close()
+	defer func() {
+		_ = localF.Close() // The fallback extractor opens the archive only for reading.
+	}()
 
 	format, _, err := archives.Identify(ctx, localPath, localF)
 	if err != nil {
@@ -1831,14 +1907,18 @@ func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, s
 		}
 
 		if info.IsDir() {
-			dstVfs.MkDir(ctx, targetPath)
+			if err := ensureArchiveExtractionDir(ctx, dstVfs, targetPath); err != nil {
+				return err
+			}
 			if fp, ok := reporter.(vfs.FileProgress); ok {
 				fp.DirDone()
 			}
 			return nil
 		}
 
-		dstVfs.MkDir(ctx, dstVfs.Dir(targetPath))
+		if err := ensureArchiveExtractionDir(ctx, dstVfs, dstVfs.Dir(targetPath)); err != nil {
+			return err
+		}
 
 		if fp, ok := reporter.(vfs.FileProgress); ok {
 			fp.StartFile(cleanName, size)
@@ -1855,24 +1935,25 @@ func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, s
 		if err != nil {
 			return err
 		}
-		defer rc.Close()
+		defer func() {
+			_ = rc.Close() // The fallback archive entry is read-only.
+		}()
 
 		wc, err := dstVfs.Create(ctx, targetPath)
 		if err != nil {
 			return err
 		}
-		defer wc.Close()
 
 		buf := make([]byte, 128*1024)
 		var copied int64
 		for {
 			if ctx.Err() != nil {
-				return ctx.Err()
+				return joinArchiveCloseError(ctx.Err(), wc.Close())
 			}
 			n, rerr := rc.Read(buf)
 			if n > 0 {
 				if _, werr := wc.Write(buf[:n]); werr != nil {
-					return werr
+					return joinArchiveCloseError(werr, wc.Close())
 				}
 				if fp, ok := reporter.(vfs.FileProgress); ok {
 					fp.UpdateBytes(n)
@@ -1891,8 +1972,11 @@ func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, s
 				if rerr == io.EOF {
 					break
 				}
-				return rerr
+				return joinArchiveCloseError(rerr, wc.Close())
 			}
+		}
+		if err := wc.Close(); err != nil {
+			return err
 		}
 
 		if fp, ok := reporter.(vfs.FileProgress); ok {
@@ -1913,7 +1997,7 @@ func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, s
 			Uid:      -1,
 			Gid:      -1,
 		}
-		dstVfs.SetAttributes(ctx, targetPath, item)
+		_ = dstVfs.SetAttributes(ctx, targetPath, item) // Metadata support is optional across destination VFSes.
 		return nil
 	})
 }
