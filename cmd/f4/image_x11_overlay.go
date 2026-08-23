@@ -105,19 +105,18 @@ func newX11ImageOverlay() *x11ImageOverlay {
 	return x
 }
 
-// RenderExternal is vtui's whole-frame call. The screen size comes from the
-// cell size the layer was given, because the layer knows it and the frame does
-// not carry it.
-func (x *x11ImageOverlay) RenderExternal(list []vtui.ImagePlacement, cellW, cellH int) {
-	scr := vtui.FrameManager.Screen()
-	if scr == nil {
-		return
-	}
+// RenderExternal is vtui's whole-frame call.
+//
+// It runs with the screen locked, so nothing here may ask the screen anything
+// — not its size, not its graphics layer. Everything needed is in the
+// arguments, and the first version of this asked for the width and hung f4 on
+// the first frame that carried a picture.
+func (x *x11ImageOverlay) RenderExternal(list []vtui.ImagePlacement, cellW, cellH, cols, rows int) {
 	if len(list) == 0 {
 		x.hide()
 		return
 	}
-	if err := x.showMany(scr, list); err != nil && err != errNotNow {
+	if err := x.showMany(cols, rows, list); err != nil && err != errNotNow {
 		x.hide()
 	}
 }
@@ -207,8 +206,8 @@ var (
 )
 
 // show puts one placement on the screen.
-func (x *x11ImageOverlay) show(scr *vtui.ScreenBuf, p vtui.ImagePlacement) error {
-	return x.showMany(scr, []vtui.ImagePlacement{p})
+func (x *x11ImageOverlay) show(cols, rows int, p vtui.ImagePlacement) error {
+	return x.showMany(cols, rows, []vtui.ImagePlacement{p})
 }
 
 // showMany puts a whole frame's worth of placements on the screen and reports
@@ -218,11 +217,11 @@ func (x *x11ImageOverlay) show(scr *vtui.ScreenBuf, p vtui.ImagePlacement) error
 // shape mask cut to the individual pictures, so that the text between them —
 // the captions under a grid of thumbnails — shows through the gaps. A dozen
 // windows would do the same thing and cost a dozen of everything.
-func (x *x11ImageOverlay) showMany(scr *vtui.ScreenBuf, list []vtui.ImagePlacement) error {
+func (x *x11ImageOverlay) showMany(cols, rows int, list []vtui.ImagePlacement) error {
 	if x == nil {
 		return errNoOverlay
 	}
-	if scr == nil || len(list) == 0 {
+	if cols <= 0 || rows <= 0 || len(list) == 0 {
 		return errNoOverlay
 	}
 	valid := list[:0:0]
@@ -251,7 +250,6 @@ func (x *x11ImageOverlay) showMany(scr *vtui.ScreenBuf, list []vtui.ImagePlaceme
 	}
 	// The window is not the grid: the top of it may be a menu bar and the
 	// right of it a scroll bar. See ttyx_probe.go.
-	cols, rows := scr.Width(), scr.Height()
 	tw, th, known := hostTextSize(cols, rows)
 	term := hostGridRect(win, tw, th, known)
 	term = x.refineGrid(term)

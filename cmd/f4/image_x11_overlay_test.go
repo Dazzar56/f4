@@ -111,7 +111,7 @@ func TestOverlayNilIsSafe(t *testing.T) {
 	var x *x11ImageOverlay
 	x.hide()
 	x.close()
-	if err := x.show(nil, vtui.ImagePlacement{}); err == nil {
+	if err := x.show(80, 25, vtui.ImagePlacement{}); err == nil {
 		t.Error("a nil overlay shows nothing")
 	}
 }
