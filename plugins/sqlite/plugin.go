@@ -373,7 +373,7 @@ func (p *Plugin) openPath(app vfs.App, path string) {
 				return
 			}
 			browser := newBrowser(app, session, tables)
-			vtui.FrameManager.Push(browser.dialog)
+			vtui.FrameManager.Push(browser.frame)
 		})
 }
 
