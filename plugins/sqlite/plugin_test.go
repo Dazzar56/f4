@@ -317,3 +317,52 @@ func TestInsertRowAddsADefaultRowAndReportsRefusals(t *testing.T) {
 		t.Fatal("a NOT NULL column accepted a default row")
 	}
 }
+
+func TestDeleteRowRemovesOneRowByRowID(t *testing.T) {
+	path := t.TempDir() + "/delete.db"
+	db, err := driver.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TABLE notes (id INTEGER PRIMARY KEY, note TEXT)`); err != nil {
+		_ = db.Close()
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO notes VALUES (1, 'first'), (2, 'second')`); err != nil {
+		_ = db.Close()
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	session, _, err := openDatabase(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+
+	affected, err := session.deleteRow(context.Background(), "notes", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if affected != 1 {
+		t.Fatalf("deleteRow affected %d rows, want 1", affected)
+	}
+	browse, err := session.browseTable(context.Background(), "notes")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(browse.rowIDs, []int64{2}) {
+		t.Fatalf("rowIDs after the delete = %#v, want [2]", browse.rowIDs)
+	}
+
+	// Deleting the same row again is not an error, it is a row that is gone.
+	affected, err = session.deleteRow(context.Background(), "notes", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if affected != 0 {
+		t.Fatalf("deleting a missing row affected %d rows, want 0", affected)
+	}
+}

@@ -35,6 +35,10 @@ func (w *browserWindow) ProcessKey(e *vtinput.InputEvent) bool {
 		w.browser.insertRow()
 		return true
 	}
+	if e.KeyDown && e.VirtualKeyCode == vtinput.VK_DELETE {
+		w.browser.deleteRow()
+		return true
+	}
 	return w.Window.ProcessKey(e)
 }
 
@@ -402,6 +406,15 @@ func (b *browser) applyResult(result queryResult) {
 // tied to a table, and a view or a WITHOUT ROWID table has no rowid to write
 // against. The value is read again before editing rather than taken off the
 // screen, because what is on screen is escaped and cut at 512 characters.
+//
+// That read is done here rather than on a progress task. One row by rowid is
+// an indexed lookup on a database that is already open, and a task for it puts
+// a progress dialog on a workspace of its own, which is then torn down before
+// the input box opens: the box ends up on whichever workspace that leaves
+// active, and after it closes the client is no longer the frame the keyboard
+// goes to. Pressing Enter without changing anything is where it showed --
+// nothing was written, so nothing put the client back, and the next F4 went
+// nowhere until something was clicked.
 func (b *browser) editCell() {
 	if b.closed {
 		return
@@ -414,41 +427,106 @@ func (b *browser) editCell() {
 		return
 	}
 
-	var value any
-	b.app.RunProgressTask(sqliteText("SQLite.Title", " SQLite ", " SQLite "), sqliteText("SQLite.ReadingValue", "Reading the value...", "Чтение значения..."), false,
+	value, err := b.session.cellValue(context.Background(), b.currentTable, column, rowID)
+	if err != nil {
+		b.setStatus(fmt.Sprintf(sqliteText("SQLite.SQLError", "SQL error: %v", "Ошибка SQL: %v"), err))
+		return
+	}
+	text, editable := editableText(value)
+	if !editable {
+		b.setStatus(sqliteText("SQLite.CellNotEditable",
+			"This cell holds binary data or line breaks; change it with SQL.",
+			"В ячейке двоичные данные или переводы строк; измените её запросом SQL."))
+		return
+	}
+	// Anchored to the client's own window, so the box opens over it and hands
+	// the keyboard back to it.
+	vtui.InputBoxOn(b.frame,
+		sqliteText("SQLite.Title", " SQLite ", " SQLite "),
+		fmt.Sprintf(sqliteText("SQLite.EditPrompt", "New value for %s:", "Новое значение для %s:"), column),
+		text,
+		func(answer string) {
+			// Unchanged means unchanged. Pressing Enter over a NULL cell must
+			// not quietly turn it into an empty string.
+			if answer == text {
+				return
+			}
+			b.writeCell(column, rowID, answer)
+		})
+}
+
+// deleteRow removes the row under the cursor, after asking.
+func (b *browser) deleteRow() {
+	if b.closed {
+		return
+	}
+	_, rowID, ok := b.cellUnderCursor()
+	if !ok {
+		b.setStatus(sqliteText("SQLite.NotEditable",
+			"Only a table from the list on the left can be edited, and only one with rowids.",
+			"Редактировать можно только таблицу из списка слева, и только имеющую rowid."))
+		return
+	}
+	table := b.currentTable
+	confirm := vtui.ShowMessageOn(b.frame,
+		sqliteText("SQLite.Title", " SQLite ", " SQLite "),
+		fmt.Sprintf(sqliteText("SQLite.DeletePrompt", "Delete this row from %s?", "Удалить эту строку из %s?"), table),
+		[]string{
+			sqliteText("SQLite.Delete", "&Delete", "&Удалить"),
+			sqliteText("SQLite.Cancel", "&Cancel", "О&тмена"),
+		})
+	if confirm == nil {
+		return
+	}
+	// A row is gone for good, and no undo follows it, so the first button is
+	// the one that deletes and Esc is the one that does nothing.
+	confirm.OnResult = func(code int) {
+		if code == 0 {
+			b.removeRow(table, rowID)
+		}
+	}
+}
+
+// removeRow deletes one row and shows the table as it is afterwards.
+func (b *browser) removeRow(table string, rowID int64) {
+	if b.closed {
+		return
+	}
+	var (
+		affected int64
+		browse   tableBrowse
+	)
+	b.app.RunProgressTask(sqliteText("SQLite.Title", " SQLite ", " SQLite "), sqliteText("SQLite.DeletingRow", "Deleting the row...", "Удаление строки..."), false,
 		func(ctx context.Context, update func(string, int)) error {
-			update(sqliteText("SQLite.ReadingValue", "Reading the value...", "Чтение значения..."), -1)
+			update(sqliteText("SQLite.DeletingRow", "Deleting the row...", "Удаление строки..."), -1)
 			var err error
-			value, err = b.session.cellValue(ctx, b.currentTable, column, rowID)
+			if affected, err = b.session.deleteRow(ctx, table, rowID); err != nil {
+				return err
+			}
+			browse, err = b.session.browseTable(ctx, table)
 			return err
 		},
 		func(err error) {
-			if b.closed {
+			if b.closed || b.currentTable != table {
 				return
 			}
 			if err != nil {
-				b.setStatus(fmt.Sprintf(sqliteText("SQLite.SQLError", "SQL error: %v", "Ошибка SQL: %v"), err))
+				// A foreign key with rows depending on this one refuses the
+				// delete, and SQLite says which constraint it was.
+				message := fmt.Sprintf(sqliteText("SQLite.SQLError", "SQL error: %v", "Ошибка SQL: %v"), err)
+				b.setStatus(message)
+				vtui.ShowMessageOn(b.frame,
+					sqliteText("SQLite.Title", " SQLite ", " SQLite "),
+					message,
+					[]string{sqliteText("SQLite.OK", "&OK", "&ОК")})
 				return
 			}
-			text, editable := editableText(value)
-			if !editable {
-				b.setStatus(sqliteText("SQLite.CellNotEditable",
-					"This cell holds binary data or line breaks; change it with SQL.",
-					"В ячейке двоичные данные или переводы строк; измените её запросом SQL."))
+			b.applyBrowse(table, browse)
+			if affected == 0 {
+				b.setStatus(sqliteText("SQLite.RowGone", "That row is no longer there.", "Этой строки больше нет."))
 				return
 			}
-			b.app.InputBox(
-				sqliteText("SQLite.Title", " SQLite ", " SQLite "),
-				fmt.Sprintf(sqliteText("SQLite.EditPrompt", "New value for %s:", "Новое значение для %s:"), column),
-				text,
-				func(answer string) {
-					// Unchanged means unchanged. Pressing Enter over a NULL
-					// cell must not quietly turn it into an empty string.
-					if answer == text {
-						return
-					}
-					b.writeCell(column, rowID, answer)
-				})
+			b.setStatus(sqliteText("SQLite.RowDeleted", "Row deleted.", "Строка удалена."))
 		})
 }
 

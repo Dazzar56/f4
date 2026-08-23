@@ -349,6 +349,16 @@ func (s *databaseSession) updateCell(ctx context.Context, table, column string, 
 	return result.RowsAffected()
 }
 
+// deleteRow removes one row by rowid.
+func (s *databaseSession) deleteRow(ctx context.Context, table string, rowID int64) (int64, error) {
+	statement := "DELETE FROM " + quoteIdentifier(table) + " WHERE rowid = ?"
+	result, err := s.db.ExecContext(ctx, statement, rowID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 // editableText is the value as a line the user can edit, and whether editing
 // it in a one line box is safe at all.
 func editableText(value any) (string, bool) {
