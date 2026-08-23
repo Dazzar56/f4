@@ -190,7 +190,7 @@ func TestBrowseTableCarriesRowIDsAndEditsACell(t *testing.T) {
 	}
 	defer session.Close()
 
-	result, rowIDs, err := session.browseTable(context.Background(), "notes")
+	result, rowIDs, writable, err := session.browseTable(context.Background(), "notes")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -198,17 +198,17 @@ func TestBrowseTableCarriesRowIDsAndEditsACell(t *testing.T) {
 	if !reflect.DeepEqual(result.Columns, []string{"id", "note", "size"}) {
 		t.Fatalf("columns = %#v", result.Columns)
 	}
-	if !reflect.DeepEqual(rowIDs, []int64{1, 2}) {
-		t.Fatalf("rowIDs = %#v, want [1 2]", rowIDs)
+	if !reflect.DeepEqual(rowIDs, []int64{1, 2}) || !writable {
+		t.Fatalf("rowIDs = %#v, writable = %t", rowIDs, writable)
 	}
 
 	// A view has no rowid: it comes back readable and unwritable.
-	viewResult, viewRowIDs, err := session.browseTable(context.Background(), "big")
+	viewResult, viewRowIDs, viewWritable, err := session.browseTable(context.Background(), "big")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if viewRowIDs != nil || len(viewResult.Rows) != 2 {
-		t.Fatalf("view browse = %d row(s) with rowIDs %#v", len(viewResult.Rows), viewRowIDs)
+	if viewRowIDs != nil || viewWritable || len(viewResult.Rows) != 2 {
+		t.Fatalf("view browse = %d row(s), rowIDs %#v, writable %t", len(viewResult.Rows), viewRowIDs, viewWritable)
 	}
 
 	affected, err := session.updateCell(context.Background(), "notes", "note", 2, "second")
@@ -256,5 +256,64 @@ func TestEditableTextRefusesWhatALineBoxWouldCorrupt(t *testing.T) {
 		if got != tc.want || editable != tc.editable {
 			t.Errorf("%s: editableText(%#v) = %q, %t; want %q, %t", tc.name, tc.value, got, editable, tc.want, tc.editable)
 		}
+	}
+}
+
+func TestInsertRowAddsADefaultRowAndReportsRefusals(t *testing.T) {
+	path := t.TempDir() + "/insert.db"
+	db, err := driver.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TABLE notes (id INTEGER PRIMARY KEY, note TEXT)`); err != nil {
+		_ = db.Close()
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TABLE strict (id INTEGER PRIMARY KEY, note TEXT NOT NULL)`); err != nil {
+		_ = db.Close()
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	session, _, err := openDatabase(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+
+	// An empty table is still writable: that is where a first row is wanted.
+	result, rowIDs, writable, err := session.browseTable(context.Background(), "notes")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !writable || len(rowIDs) != 0 || len(result.Rows) != 0 {
+		t.Fatalf("empty browse = %d row(s), rowIDs %#v, writable %t", len(result.Rows), rowIDs, writable)
+	}
+
+	rowID, err := session.insertRow(context.Background(), "notes")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, rowIDs, _, err = session.browseTable(context.Background(), "notes")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(rowIDs, []int64{rowID}) {
+		t.Fatalf("rowIDs after the insert = %#v, want [%d]", rowIDs, rowID)
+	}
+	value, err := session.cellValue(context.Background(), "notes", "note", rowID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value != nil {
+		t.Fatalf("the new row's note = %#v, want NULL", value)
+	}
+
+	// NOT NULL without a default cannot take a row of defaults, and the error
+	// is what the user is shown instead of a guess at the value.
+	if _, err := session.insertRow(context.Background(), "strict"); err == nil {
+		t.Fatal("a NOT NULL column accepted a default row")
 	}
 }

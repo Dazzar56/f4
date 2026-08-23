@@ -247,13 +247,31 @@ const rowIDColumn = "_f4_rowid"
 // A view and a WITHOUT ROWID table have no rowid, and the query for one fails;
 // that is not an error but the answer that this table can only be read, so the
 // plain browse runs instead and the rowids come back nil.
-func (s *databaseSession) browseTable(ctx context.Context, table string) (queryResult, []int64, error) {
+func (s *databaseSession) browseTable(ctx context.Context, table string) (queryResult, []int64, bool, error) {
 	result, rowIDs, err := s.browseWithRowIDs(ctx, table)
 	if err == nil {
-		return result, rowIDs, nil
+		// Writable is reported separately from the rowids themselves: an
+		// empty table also has none, and it is the one place a new row is
+		// most likely to be wanted.
+		return result, rowIDs, true, nil
 	}
 	result, err = s.execute(ctx, tableSelect(table))
-	return result, nil, err
+	return result, nil, false, err
+}
+
+// insertRow adds a row of defaults, which is the part a dialog cannot do
+// better: the columns are filled in afterwards with F4, one cell at a time,
+// through the same path that edits an existing row.
+//
+// A table whose columns are NOT NULL without defaults refuses this, and
+// SQLite names the column that refused; that message is worth showing rather
+// than guessing at values on the user's behalf.
+func (s *databaseSession) insertRow(ctx context.Context, table string) (int64, error) {
+	result, err := s.db.ExecContext(ctx, "INSERT INTO "+quoteIdentifier(table)+" DEFAULT VALUES")
+	if err != nil {
+		return 0, err
+	}
+	return result.LastInsertId()
 }
 
 func (s *databaseSession) browseWithRowIDs(ctx context.Context, table string) (queryResult, []int64, error) {

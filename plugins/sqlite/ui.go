@@ -31,6 +31,10 @@ func (w *browserWindow) ProcessKey(e *vtinput.InputEvent) bool {
 		w.browser.editCell()
 		return true
 	}
+	if e.KeyDown && e.VirtualKeyCode == vtinput.VK_INSERT {
+		w.browser.insertRow()
+		return true
+	}
 	return w.Window.ProcessKey(e)
 }
 
@@ -42,6 +46,10 @@ type browser struct {
 	currentTable string
 	columns      []string
 	rowIDs       []int64
+	writable     bool
+	// selectRowID moves the cursor onto a row once the table it belongs to
+	// has been read again, which is how a newly inserted row is found.
+	selectRowID int64
 	dialog       *vtui.Window
 	frame        *browserWindow
 	tableList    *vtui.ListBox
@@ -164,14 +172,15 @@ func (b *browser) loadTable(table string) {
 	b.currentTable = table
 	b.query.SetText(tableSelect(table))
 	var (
-		result queryResult
-		rowIDs []int64
+		result   queryResult
+		rowIDs   []int64
+		writable bool
 	)
 	b.app.RunProgressTask(sqliteText("SQLite.Title", " SQLite ", " SQLite "), fmt.Sprintf(sqliteText("SQLite.ReadingTable", "Reading %s...", "Чтение %s..."), table), false,
 		func(ctx context.Context, update func(string, int)) error {
 			update(sqliteText("SQLite.ReadingTableProgress", "Reading table...", "Чтение таблицы..."), -1)
 			var err error
-			result, rowIDs, err = b.session.browseTable(ctx, table)
+			result, rowIDs, writable, err = b.session.browseTable(ctx, table)
 			return err
 		},
 		func(err error) {
@@ -183,8 +192,10 @@ func (b *browser) loadTable(table string) {
 				return
 			}
 			b.rowIDs = rowIDs
+			b.writable = writable
 			b.applyResult(result)
 			b.setStatus(fmt.Sprintf(sqliteText("SQLite.TableRows", "%s: %d row(s)", "%s: %d строк(и)"), table, len(result.Rows)))
+			b.takePendingSelection()
 		})
 }
 
@@ -279,6 +290,7 @@ func (b *browser) runQuery() {
 				// The rows of a hand written query are not tied to any one
 				// table, so nothing here can be written back.
 				b.rowIDs = nil
+				b.writable = false
 				b.applyResult(result)
 				b.setStatus(fmt.Sprintf(sqliteText("SQLite.Rows", "%d row(s)", "%d строк(и)"), len(result.Rows)))
 				return
@@ -394,7 +406,7 @@ func (b *browser) editCell() {
 
 // cellUnderCursor resolves the table cursor to a column and a rowid.
 func (b *browser) cellUnderCursor() (column string, rowID int64, ok bool) {
-	if b.currentTable == "" || len(b.rowIDs) == 0 {
+	if !b.writable || b.currentTable == "" || len(b.rowIDs) == 0 {
 		return "", 0, false
 	}
 	row, col := b.resultTable.SelectPos, b.resultTable.SelectCol
@@ -440,6 +452,69 @@ func (b *browser) writeCell(column string, rowID int64, value string) {
 			// patched in place.
 			b.loadTable(table)
 		})
+}
+
+// insertRow adds a row of defaults to the table being browsed and puts the
+// cursor on it, ready for F4.
+func (b *browser) insertRow() {
+	if b.closed {
+		return
+	}
+	if !b.writable || b.currentTable == "" {
+		b.setStatus(sqliteText("SQLite.NotEditable",
+			"Only a table from the list on the left can be edited, and only one with rowids.",
+			"Редактировать можно только таблицу из списка слева, и только имеющую rowid."))
+		return
+	}
+	table := b.currentTable
+	var rowID int64
+	b.app.RunProgressTask(sqliteText("SQLite.Title", " SQLite ", " SQLite "), sqliteText("SQLite.AddingRow", "Adding a row...", "Добавление строки..."), false,
+		func(ctx context.Context, update func(string, int)) error {
+			update(sqliteText("SQLite.AddingRow", "Adding a row...", "Добавление строки..."), -1)
+			var err error
+			rowID, err = b.session.insertRow(ctx, table)
+			return err
+		},
+		func(err error) {
+			if b.closed {
+				return
+			}
+			if err != nil {
+				// SQLite names the column that would not take a default, and
+				// that is the whole answer to why the row was refused.
+				message := fmt.Sprintf(sqliteText("SQLite.SQLError", "SQL error: %v", "Ошибка SQL: %v"), err)
+				b.setStatus(message)
+				vtui.ShowMessageOn(b.frame,
+					sqliteText("SQLite.Title", " SQLite ", " SQLite "),
+					message,
+					[]string{sqliteText("SQLite.OK", "&OK", "&ОК")})
+				return
+			}
+			b.selectRowID = rowID
+			b.loadTable(table)
+		})
+}
+
+// takePendingSelection puts the cursor on the row insertRow just made, if the
+// hundred rows on screen reach that far.
+func (b *browser) takePendingSelection() {
+	rowID := b.selectRowID
+	b.selectRowID = 0
+	if rowID == 0 {
+		return
+	}
+	for index, candidate := range b.rowIDs {
+		if candidate != rowID {
+			continue
+		}
+		b.resultTable.SetSelectPos(index)
+		b.resultTable.SelectCol = 0
+		b.setStatus(sqliteText("SQLite.RowAdded", "Row added; fill it in with F4.", "Строка добавлена; заполните её по F4."))
+		return
+	}
+	b.setStatus(sqliteText("SQLite.RowAddedBeyondLimit",
+		"Row added, past the 100 rows shown here.",
+		"Строка добавлена, но она за пределами показанных 100 строк."))
 }
 
 func (b *browser) setStatus(message string) {
