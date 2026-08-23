@@ -218,6 +218,7 @@ type F4Config struct {
 	PathHintMaxVisible     int  // visible rows cap in the hint list
 	PathHintPerCategory    bool // the cap applies per category (active/passive/history)
 	SlideShowDelay         int
+	ImageX11Overlay        bool
 	ImageExternalTimeout   int
 	ImageDecoderPriority   string
 	RegisteredPlugins      []string
@@ -352,6 +353,7 @@ var AppConfig = F4Config{
 	PathHintMaxVisible:       5,
 	PathHintPerCategory:      true,
 	SlideShowDelay:           defaultSlideShowDelay,
+	ImageX11Overlay:          true,
 	ImageExternalTimeout:     defaultImageExternalTimeout,
 	ImageDecoderPriority:     "",
 	ConfirmCopy:              true,
@@ -626,6 +628,7 @@ func LoadConfig() {
 	if AppConfig.ImageExternalTimeout <= 0 {
 		AppConfig.ImageExternalTimeout = defaultImageExternalTimeout
 	}
+	AppConfig.ImageX11Overlay = ini.GetString("Images", "X11Overlay", "1") == "1"
 	AppConfig.ImageDecoderPriority = ini.GetString("Images", "DecoderPriority", "")
 	SetImageDecoderPriorities(ParseImageDecoderPriorities(AppConfig.ImageDecoderPriority))
 	AppConfig.UseExternalEditor = ini.GetString("Editor", "UseExternalEditor", "0") == "1"

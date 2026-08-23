@@ -67,6 +67,13 @@ type ImageView struct {
 	// picture nobody is touching does not fill it.
 	lastGeom string
 
+	// The X window the picture goes into when the terminal itself cannot
+	// show one. Created on the first frame that needs it and not before,
+	// because connecting to X costs a round trip and almost every terminal
+	// worth using needs none of this.
+	x11      *x11ImageOverlay
+	x11Tried bool
+
 	// Orientation chosen by the reader. The decoded picture stays in
 	// surface; shown carries the turned and mirrored copy and is nil while
 	// the picture is seen exactly as it was decoded.
@@ -766,6 +773,20 @@ func (iv *ImageView) Show(scr *vtui.ScreenBuf) {
 		return
 	}
 	if !scr.SupportsGraphics() {
+		// A terminal with no image protocol is not the end of it: under a
+		// local X session the picture can go in a window over the terminal
+		// instead. See image_x11_overlay.go.
+		if iv.x11 == nil && !iv.x11Tried {
+			iv.x11Tried = true
+			iv.x11 = newX11ImageOverlay()
+		}
+		if iv.x11.show(scr, p) {
+			iv.logGeometry(scr, p)
+			if iv.overlay {
+				iv.drawOverlay(scr)
+			}
+			return
+		}
 		msg := "This backend cannot display images."
 		x := x1 + (x2-x1+1-len(msg))/2
 		if x < x1 {
@@ -922,6 +943,8 @@ func (iv *ImageView) Close() {
 	// leaving the viewer has to hand the bars back.
 	iv.full = false
 	iv.stopSlideShow()
+	iv.x11.close()
+	iv.x11 = nil
 	vtui.FrameManager.HideBars = false
 	iv.BaseFrame.Close()
 	if iv.OnClose != nil {
