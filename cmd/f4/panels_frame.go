@@ -3409,13 +3409,21 @@ func (pf *PanelsFrame) runProgressTaskAfter(delay time.Duration, title, startMsg
 	vbox.Add(btnCancel, vtui.Margins{Top: 1}, vtui.AlignCenter)
 	vbox.Apply()
 
+	var taskCtxMu sync.Mutex // protects taskCtx and cancelPending
 	var taskCtx *vtui.TaskContext
+	cancelPending := false
 	btnCancel.OnClick = func() {
 		dlg.SetExitCode(1)
 	}
 	dlg.OnResult = func(code int) {
-		if taskCtx != nil {
-			taskCtx.Cancel()
+		taskCtxMu.Lock()
+		ctx := taskCtx
+		if ctx == nil {
+			cancelPending = true
+		}
+		taskCtxMu.Unlock()
+		if ctx != nil {
+			ctx.Cancel()
 		}
 	}
 
@@ -3450,7 +3458,7 @@ func (pf *PanelsFrame) runProgressTaskAfter(delay time.Duration, title, startMsg
 		vtui.FrameManager.PostTask(showDialog)
 	}
 
-	taskCtx = vtui.RunAsync(func(ctx *vtui.TaskContext) {
+	ctx := vtui.RunAsync(func(ctx *vtui.TaskContext) {
 		update := func(msg string, percent int) {
 			ctx.RunOnUI(func() {
 				if msg != "" {
@@ -3478,6 +3486,13 @@ func (pf *PanelsFrame) runProgressTaskAfter(delay time.Duration, title, startMsg
 			}
 		})
 	})
+	taskCtxMu.Lock()
+	taskCtx = ctx
+	cancel := cancelPending
+	taskCtxMu.Unlock()
+	if cancel {
+		ctx.Cancel()
+	}
 }
 func (pf *PanelsFrame) RunAdvancedProgressTask(title string, forked bool, worker func(ctx context.Context, reporter vfs.TaskReporter) error, onComplete func(err error)) {
 	dlg := NewFileOpProgressDialog(title)
