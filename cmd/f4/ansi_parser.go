@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"unicode/utf8"
 
 	"github.com/unxed/vtui"
@@ -39,6 +40,7 @@ type AnsiParser struct {
 	lastRune           rune
 	pendingWindowsSync []byte
 	seenWindowsSync    []byte
+	osc52WG            sync.WaitGroup // tracks OSC 52 read goroutines while tests or owners replace clipboard state
 
 	// DCS state: the final byte of the introducer and the string that
 	// follows it, kept apart from CurParam because the parameters of the
@@ -46,6 +48,10 @@ type AnsiParser struct {
 	dcsFinal    byte
 	dcsBody     []byte
 	dcsOverflow bool
+}
+
+func (p *AnsiParser) waitOSC52() {
+	p.osc52WG.Wait()
 }
 
 func NewAnsiParser(t *TerminalView, p PtyBackend) *AnsiParser {
@@ -836,7 +842,9 @@ func (p *AnsiParser) handleOSC() {
 		if len(subparts) == 2 {
 			if subparts[1] == "?" {
 				if p.pty != nil {
+					p.osc52WG.Add(1)
 					go func(subCmd string) {
+						defer p.osc52WG.Done()
 						allowed := false
 						if vtui.GlobalClipboardAccessManager != nil {
 							auth := vtui.GlobalClipboardAccessManager.Authorize("Terminal_OSC52_Read")

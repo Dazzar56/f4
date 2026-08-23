@@ -565,6 +565,7 @@ func TestQueueManagerCancelRunningWaitsForRunToUnwind(t *testing.T) {
 }
 
 func TestQueueManagerCancelQueuedAndCancelAll(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	queuedCtx, queuedCancel := context.WithCancel(context.Background())

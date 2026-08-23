@@ -266,6 +266,7 @@ func TestEditor_StatefulHighlighting_BackgroundCatchUpAfterEdit(t *testing.T) {
 	}
 }
 func TestEditor_BackgroundHighlighting_FullCoverage(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	var sb strings.Builder
@@ -286,16 +287,20 @@ func TestEditor_BackgroundHighlighting_FullCoverage(t *testing.T) {
 	ev.indexing = true
 	ev.startHighlighting()
 
-	// Finish indexing after a short delay
-	go func() {
-		time.Sleep(50 * time.Millisecond)
-		vtui.FrameManager.PostTask(func() {
-			ev.indexing = false
-		})
-	}()
-
 	timeout := time.After(2 * time.Second)
-	for len(ev.lineStates) < 500 {
+	// Run one highlighting slice while indexing is still active, then queue
+	// indexing completion on the same UI task stream.
+	select {
+	case task := <-vtui.FrameManager.TaskChan:
+		task()
+	case <-timeout:
+		t.Fatal("Background highlighting did not start")
+	}
+	vtui.FrameManager.PostTask(func() {
+		ev.indexing = false
+	})
+
+	for len(ev.lineStates) < 500 || ev.highlighting {
 		select {
 		case task := <-vtui.FrameManager.TaskChan:
 			task()
