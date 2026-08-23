@@ -28,6 +28,8 @@ X11 backend already depends on.
 - `GrabKeys` — the key combinations a TTY cannot carry, taken from the X server
   and delivered as ordinary `vtinput` events.
 - `image_x11_overlay.go` in `cmd/f4` — the image viewer's use of the overlay.
+- `ttyx_keys.go` in `cmd/f4` — the configured combinations, forwarded into the
+  stream the frame manager dispatches from.
 
 **The clipboard is not here, deliberately.** Issue #599 decided that all
 clipboard work belongs in [goclip](https://github.com/unxed/goclip), and a
@@ -35,8 +37,9 @@ second implementation in f4 would be exactly the fragmentation that issue was
 written to stop. What was found instead: goclip's native X11 driver did not
 work at all — see section 6.
 
-**What is left of #662** is the last hop: the key events reach `Session.Keys()`
-but nothing in f4 reads that channel yet. See section 5.
+**#662 is done in both halves**, the clipboard through goclip and the keyboard
+through here. What is left is judgement rather than code: which combinations
+are worth taking from the desktop. See section 7.
 
 ## 2. Finding the terminal window
 
@@ -163,24 +166,54 @@ stood:
   serving goroutine was blocked in `WaitForEvent` on the same connection, so
   either could swallow what the other was waiting for.
 
-All four are fixed in the goclip patch that goes with this, along with
-outgoing `INCR`, so a large copy works in both directions. Eight tests run it
-against a real server.
+All four are fixed in goclip as of v0.1.1, along with outgoing `INCR`, so a
+large copy works in both directions. Eight tests run it against a real server.
 
-## 7. What #662 still needs
+vtui's `clipboard_unix.go` now goes through goclip instead of shelling out to
+`xclip`, `xsel` and `wl-copy` itself — those remain, as goclip's own fallback,
+which is what #599 asked for. One thing there is worth not undoing: **the file
+backed driver goclip falls back to last is deliberately skipped.** It always
+succeeds, and a success in `setOSClipboard` is what stops `SetClipboard`
+falling through to OSC 52 — the only thing that works in a terminal with no
+graphical session behind it at all.
 
-One hop. `Session.GrabKeys` takes the combinations and `Session.Keys()`
-delivers them as `vtinput.InputEvent` values, translated by `keytrans` — the
-same translator vtui's X11 backend uses, so a key arriving this way is
-indistinguishable from one arriving in GUI mode. What is missing is that
-nothing in f4 reads that channel: the events would have to be merged into the
-input stream `vtui.FrameManager` dispatches from, and vtui has no exported way
-to inject one. A small hook there — the equivalent of the `dispatchEvent` it
-already has internally — and the rest of #662 is wiring.
+## 7. The keyboard, and why it is off by default
 
-Which combinations to ask for is the other open question, and it is a policy
-question rather than a technical one. A blanket grab is antisocial; the honest
-set is the combinations f4 has bindings for and the TTY cannot deliver.
+`Session.GrabKeys` takes a set of combinations named by keysym — so the caller
+needs to know nothing about the layout, and the set survives the user
+switching one — and `Session.Keys()` delivers them as `vtinput.InputEvent`
+values, translated by `keytrans`, the same translator vtui's X11 backend uses.
+A key arriving this way is indistinguishable from one arriving in GUI mode.
+
+`cmd/f4/ttyx_keys.go` reads the configuration, asks for the combinations and
+forwards the events onto `vtui.FrameManager.EventChan`, which is the same
+channel the terminal's own keys arrive on. Past that point nothing can tell
+the two apart, and no change to vtui was needed: the channel was already
+exported.
+
+```ini
+[TTYXi]
+Keys=1
+KeyList=Ctrl+Shift+Up, Ctrl+Enter, Ctrl+Tab
+```
+
+`Keys` is `0` by default and should be. **A grab is shared state on the X
+server**: every combination taken here is one the rest of the desktop stops
+receiving while f4 has the focus. Which ones are worth that is a judgement
+about the user's whole desktop and not only about f4, so it is theirs. The
+built-in list is what f4 binds and a plain TTY cannot distinguish from
+something simpler, and nothing a desktop is likely to want for itself.
+
+Three rules the wiring keeps:
+
+- **A bare key is never grabbed.** `F5` on its own is delivered perfectly well
+  by every terminal, and taking it from the desktop would be pure loss. The
+  parser refuses an entry with no modifier.
+- **A guessed window is never grabbed on.** Same rule as the overlay, for a
+  sharper reason: a grab on the wrong window takes those keys from whoever
+  really owns it.
+- **One typo does not cost the rest of the list.** An entry that names nothing
+  known is skipped and logged.
 
 ## 8. Testing
 

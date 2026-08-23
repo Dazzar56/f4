@@ -219,6 +219,8 @@ type F4Config struct {
 	PathHintPerCategory    bool // the cap applies per category (active/passive/history)
 	SlideShowDelay         int
 	ImageX11Overlay        bool
+	TTYXKeys               bool
+	TTYXKeyList            string
 	ImageExternalTimeout   int
 	ImageDecoderPriority   string
 	RegisteredPlugins      []string
@@ -354,6 +356,7 @@ var AppConfig = F4Config{
 	PathHintPerCategory:      true,
 	SlideShowDelay:           defaultSlideShowDelay,
 	ImageX11Overlay:          true,
+	TTYXKeyList:              defaultTTYXKeyList,
 	ImageExternalTimeout:     defaultImageExternalTimeout,
 	ImageDecoderPriority:     "",
 	ConfirmCopy:              true,
@@ -629,6 +632,8 @@ func LoadConfig() {
 		AppConfig.ImageExternalTimeout = defaultImageExternalTimeout
 	}
 	AppConfig.ImageX11Overlay = ini.GetString("Images", "X11Overlay", "1") == "1"
+	AppConfig.TTYXKeys = ini.GetString("TTYXi", "Keys", "0") == "1"
+	AppConfig.TTYXKeyList = ini.GetString("TTYXi", "KeyList", defaultTTYXKeyList)
 	AppConfig.ImageDecoderPriority = ini.GetString("Images", "DecoderPriority", "")
 	SetImageDecoderPriorities(ParseImageDecoderPriorities(AppConfig.ImageDecoderPriority))
 	AppConfig.UseExternalEditor = ini.GetString("Editor", "UseExternalEditor", "0") == "1"

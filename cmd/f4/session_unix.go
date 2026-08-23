@@ -501,9 +501,16 @@ func runServer(sockPath string) {
 			}
 		}
 
+		// The key combinations a TTY cannot carry, taken from the X
+		// server if the user asked for that. Off unless they did: every
+		// combination grabbed is one the rest of the desktop stops
+		// receiving. See docs/TTYX.md.
+		ttyxKeys := startTTYXKeyboard()
+
 		vtui.DebugLog("SERVER: Entering fm.Run()...")
 		vtui.FrameManager.Run(reader)
 		vtui.DebugLog("SERVER: fm.Run() EXITED.")
+		ttyxKeys.Close()
 
 		// Ensure any active host console is cleanly left before restoring terminal
 		for _, s := range vtui.FrameManager.Screens {
