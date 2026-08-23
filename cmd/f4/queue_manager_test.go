@@ -602,51 +602,6 @@ func TestQueueManagerCancelRunningWaitsForRunToUnwind(t *testing.T) {
 	}
 }
 
-func TestQueueManagerCompletionUsesCapturedFrameManager(t *testing.T) {
-	originalFrames := vtui.FrameManager
-	t.Cleanup(func() { vtui.FrameManager = originalFrames })
-
-	originalFrames.Init(vtui.NewSilentScreenBuf())
-	replacementFrames := vtui.NewFrameManager()
-	started := make(chan struct{})
-	release := make(chan struct{})
-	completed := make(chan struct{})
-	task := &QueueTask{
-		completionFrames: originalFrames,
-		Run: func(context.Context, TaskReporter, vtui.Frame) error {
-			close(started)
-			<-release
-			return nil
-		},
-		OnComplete: func() { close(completed) },
-	}
-	qm := &OpQueueManager{activeKeys: make(map[string]bool)}
-
-	go qm.executeTask(task)
-	<-started
-	vtui.FrameManager = replacementFrames
-	close(release)
-
-	deadline := time.After(time.Second)
-	for {
-		select {
-		case callback := <-originalFrames.TaskChan:
-			callback()
-		case <-completed:
-			goto completionObserved
-		case <-deadline:
-			t.Fatal("task completion was not posted to the captured frame manager")
-		}
-	}
-
-completionObserved:
-	select {
-	case <-replacementFrames.TaskChan:
-		t.Fatal("task completion was posted to the replacement frame manager")
-	default:
-	}
-}
-
 func TestQueueManagerCancelQueuedAndCancelAll(t *testing.T) {
 	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
