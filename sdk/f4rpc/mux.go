@@ -3,6 +3,7 @@ package f4rpc
 import (
 	"fmt"
 	"io"
+	"log"
 	"sync"
 	"sync/atomic"
 
@@ -150,6 +151,9 @@ func (s *Session) handleRequest(req *Message) {
 	}
 
 	s.mu.Lock()
-	s.enc.Encode(resp)
+	err := s.enc.Encode(resp)
 	s.mu.Unlock()
+	if err != nil {
+		log.Printf("f4rpc: response %d was not sent: %v", req.ID, err)
+	}
 }

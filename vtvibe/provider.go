@@ -197,7 +197,7 @@ func (c Config) do(ctx context.Context, method, url string, body []byte) ([]byte
 			continue
 		}
 		data, readErr := io.ReadAll(io.LimitReader(resp.Body, 32<<20))
-		resp.Body.Close()
+		_ = resp.Body.Close() // Response-body cleanup is best effort.
 		if readErr != nil {
 			lastErr = readErr
 			continue

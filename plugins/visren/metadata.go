@@ -56,7 +56,7 @@ func readID3(path string) (Metadata, error) {
 	if err != nil {
 		return Metadata{}, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }() // The metadata file is read-only.
 	stat, err := f.Stat()
 	if err != nil {
 		return Metadata{}, err
@@ -250,7 +250,7 @@ func readImageMetadata(path string, mtime time.Time) (Metadata, error) {
 	if err != nil {
 		return Metadata{}, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }() // The image file is read-only.
 	cfg, _, err := image.DecodeConfig(f)
 	if err != nil {
 		return Metadata{}, err
@@ -370,7 +370,7 @@ func readPEVersion(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }() // The executable file is read-only.
 	for _, section := range f.Sections {
 		if section.Name != ".rsrc" {
 			continue
