@@ -64,6 +64,7 @@ type TerminalView struct {
 	KittyFlags            int
 	KittyFlagsStack       []int
 	AutoWrap              bool
+	SixelDisplayMode      bool
 	MouseTrackingMode     int
 	MouseSGRMode          bool
 
@@ -219,6 +220,9 @@ func (tv *TerminalView) ResetBuffer(w, h int) {
 		tv.lastAttr = DefaultTermAttr
 	}
 	tv.engine.SetWidth(w)
+
+	// A reset puts sixel scrolling back on, which is its default state.
+	tv.SixelDisplayMode = false
 
 	// Создание сеток (Grid)
 	makeBuf := func() [][]vtui.CharInfo {

@@ -49,6 +49,13 @@ type terminalImage struct {
 
 	Z   int
 	Alt bool
+
+	// Sixel marks a placement that came from a sixel sequence. Those have
+	// no image id and no way of being addressed after the fact, so the id
+	// and number forms of the kitty delete command must not sweep them up
+	// on their way past: without the flag every one of them would answer
+	// to i=0, which is what an a=d,d=I with no i asks for.
+	Sixel bool
 }
 
 // covers reports whether the placement paints over the given grid cell.
@@ -238,6 +245,10 @@ func (tv *TerminalView) kittyDelete(cmd kittyCommand) []uint32 {
 	kept := make([]terminalImage, 0, len(tv.images))
 	var hit []uint32
 	for _, p := range tv.images {
+		if p.Sixel && (what == 'i' || what == 'n') {
+			kept = append(kept, p)
+			continue
+		}
 		match := false
 		switch what {
 		case 'a':
