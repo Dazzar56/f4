@@ -113,6 +113,7 @@ func TestQuickView_TextFilePreview(t *testing.T) {
 	}
 
 	fsp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(tmp))
+	waitForLoad(t, fsp)
 	fsp.entries = []*fileEntry{
 		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
 		{VFSItem: vfs.VFSItem{Name: "hello.txt", Size: 23}},
@@ -158,6 +159,7 @@ func TestQuickView_ScrollAndWrap(t *testing.T) {
 	}
 
 	fsp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(tmp))
+	waitForLoad(t, fsp)
 	fsp.entries = []*fileEntry{
 		{VFSItem: vfs.VFSItem{Name: "long.txt", Size: int64(b.Len())}},
 	}
@@ -300,6 +302,7 @@ func TestQuickView_MouseWheelScrolls(t *testing.T) {
 		t.Fatal(err)
 	}
 	fsp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(tmp))
+	waitForLoad(t, fsp)
 	fsp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "many.txt", Size: int64(b.Len())}}}
 	fsp.cursorIdx = 0
 	fsp.Refresh()
@@ -376,6 +379,7 @@ func TestQuickView_DirScan_PopulatesRecursive(t *testing.T) {
 	}
 
 	fsp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(tmp))
+	waitForLoad(t, fsp)
 	fsp.entries = []*fileEntry{
 		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
 		{VFSItem: vfs.VFSItem{Name: "dir", IsDir: true}},
@@ -449,6 +453,7 @@ func TestQuickView_DotDot_ScansCurrentDir(t *testing.T) {
 	}
 
 	fsp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(tmp))
+	waitForLoad(t, fsp)
 	fsp.entries = []*fileEntry{
 		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
 		{VFSItem: vfs.VFSItem{Name: "one.bin", Size: 200}},
@@ -504,6 +509,7 @@ func TestQuickView_DirScan_CancelsOnSelectionChange(t *testing.T) {
 	}
 
 	fsp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(tmp))
+	waitForLoad(t, fsp)
 	fsp.entries = []*fileEntry{
 		{VFSItem: vfs.VFSItem{Name: "A", IsDir: true}},
 		{VFSItem: vfs.VFSItem{Name: "B", IsDir: true}},
@@ -613,6 +619,7 @@ func TestQuickView_ImageFilePreview(t *testing.T) {
 	}
 
 	fsp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(tmp))
+	waitForLoad(t, fsp)
 	fsp.entries = []*fileEntry{
 		{VFSItem: vfs.VFSItem{Name: "image.qoi", Size: int64(len(qoiBytes))}},
 	}
@@ -660,6 +667,7 @@ func TestQuickView_ImageGraphicsNotSupported(t *testing.T) {
 	vtui.FrameManager.Init(scr)
 
 	fsp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(t.TempDir()))
+	waitForLoad(t, fsp)
 	fsp.entries = []*fileEntry{
 		{VFSItem: vfs.VFSItem{Name: "dummy.png", Size: 100}},
 	}

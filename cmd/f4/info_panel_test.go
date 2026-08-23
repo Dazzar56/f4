@@ -263,6 +263,7 @@ func TestInfoPanel_ShowRenders(t *testing.T) {
 
 	tmp := t.TempDir()
 	fsp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(tmp))
+	waitForLoad(t, fsp)
 	fsp.entries = []*fileEntry{
 		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
 	}
@@ -1088,6 +1089,7 @@ func TestInfoPanel_CursorSkipsNonCopyable(t *testing.T) {
 
 	tmp := t.TempDir()
 	fsp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(tmp))
+	waitForLoad(t, fsp)
 	fsp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
 	fsp.Refresh()
 
@@ -1140,6 +1142,7 @@ func TestInfoPanel_CopyCopiesValue(t *testing.T) {
 
 	tmp := t.TempDir()
 	fsp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(tmp))
+	waitForLoad(t, fsp)
 	fsp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
 	fsp.Refresh()
 
@@ -1174,6 +1177,7 @@ func TestInfoPanel_ProcessKey_UnfocusedIgnoresC(t *testing.T) {
 
 	tmp := t.TempDir()
 	fsp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(tmp))
+	waitForLoad(t, fsp)
 	fsp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
 	fsp.Refresh()
 
@@ -1203,6 +1207,7 @@ func TestInfoPanel_ShiftUpDownSelectsAndCCopiesLabelValue(t *testing.T) {
 
 	tmp := t.TempDir()
 	fsp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(tmp))
+	waitForLoad(t, fsp)
 	fsp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
 	fsp.Refresh()
 
@@ -1278,6 +1283,7 @@ func TestInfoPanel_WrapRowContinuationInheritsSelection(t *testing.T) {
 
 	tmp := t.TempDir()
 	fsp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(tmp))
+	waitForLoad(t, fsp)
 	fsp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
 	fsp.Refresh()
 
@@ -1331,6 +1337,7 @@ func TestInfoPanel_InsTogglesSelectionAndMoves(t *testing.T) {
 
 	tmp := t.TempDir()
 	fsp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(tmp))
+	waitForLoad(t, fsp)
 	fsp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
 	fsp.Refresh()
 
@@ -1365,6 +1372,7 @@ func TestInfoPanel_CPUSectionRespectsOption(t *testing.T) {
 
 	tmp := t.TempDir()
 	fsp := NewFileSystemPanel(0, 0, 60, 40, vfs.NewOSVFS(tmp))
+	waitForLoad(t, fsp)
 	fsp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
 	fsp.Refresh()
 

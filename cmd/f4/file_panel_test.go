@@ -103,6 +103,7 @@ NormalColor = foreground:#FFFFFF
 
 func TestFileSystemPanel_FocusLoss_FastFind(t *testing.T) {
 	fp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(t.TempDir()))
+	waitForLoad(t, fp)
 	fp.fastFindMode = true
 	fp.fastFindStr = "test"
 
@@ -613,6 +614,7 @@ func TestFileSystemPanel_NavigateUp_Selection(t *testing.T) {
 	}
 
 	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(sub))
+	waitForLoad(t, fp)
 
 	// Drain tasks to finish loading the initial directory
 	timeout := time.After(1 * time.Second)
@@ -764,6 +766,7 @@ func TestFileSystemPanel_HiddenInfoShowsCursorFileSizeOnMulticolumnBorder(t *tes
 	vtui.FrameManager.Init(scr)
 
 	fp := NewFileSystemPanel(0, 0, 80, 12, vfs.NewOSVFS(t.TempDir()))
+	waitForLoad(t, fp)
 	if fp.cancelLoad != nil {
 		fp.cancelLoad()
 	}
@@ -1001,6 +1004,7 @@ func TestFileSystemPanel_InfoLineRendering(t *testing.T) {
 	vtui.FrameManager.Init(scr)
 
 	fp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(t.TempDir()))
+	waitForLoad(t, fp)
 	// Force sync items for deterministic state
 	fp.entries = []*fileEntry{
 		{VFSItem: vfs.VFSItem{Name: ".."}},
@@ -1413,6 +1417,7 @@ func TestFileSystemPanel_SelectionClearedOnDirChange(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(a))
+	waitForLoad(t, fp)
 	fp.viewMode = ViewModeDetailed
 	// Simulate a completed load of directory `a` with "same" selected.
 	fp.entries = []*fileEntry{
@@ -1591,6 +1596,7 @@ func TestFileSystemPanel_DrawFastFindMatches(t *testing.T) {
 	AppConfig.SeparateFileExtensions = false
 
 	fp := NewFileSystemPanel(0, 0, 40, 12, vfs.NewOSVFS(t.TempDir()))
+	waitForLoad(t, fp)
 	fp.viewMode = ViewModeDetailed
 	fp.entries = []*fileEntry{
 		{VFSItem: vfs.VFSItem{Name: "alpha.txt"}},
@@ -1638,6 +1644,7 @@ func TestFileSystemPanel_DrawFastFindMatchesInEveryGridColumn(t *testing.T) {
 
 	for _, mode := range []ViewMode{ViewModeBrief, ViewModeMedium} {
 		fp := NewFileSystemPanel(0, 0, 60, 12, vfs.NewOSVFS(t.TempDir()))
+		waitForLoad(t, fp)
 		fp.viewMode = mode
 		fp.Resize(60, 12)
 		height := fp.table.ViewHeight
@@ -2478,6 +2485,7 @@ func TestFileSystemPanel_NavigateDown_CursorReset(t *testing.T) {
 	}
 
 	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(tmp))
+	waitForLoad(t, fp)
 
 	// Mock that we are standing on "subdir" (index 1, as index 0 is "..")
 	fp.entries = []*fileEntry{
@@ -2517,6 +2525,7 @@ func TestFileSystemPanel_NavigateDown_CursorReset(t *testing.T) {
 func TestFileSystemPanel_FastFind(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(t.TempDir()))
+	waitForLoad(t, fp)
 	fp.entries = []*fileEntry{
 		{VFSItem: vfs.VFSItem{Name: ".."}},
 		{VFSItem: vfs.VFSItem{Name: "apple"}},
@@ -2659,6 +2668,7 @@ func TestFileSystemPanel_FastFind_Rendering(t *testing.T) {
 	vtui.FrameManager.Init(scr)
 
 	fp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(t.TempDir()))
+	waitForLoad(t, fp)
 	fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "test-file.txt"}}}
 	fp.Refresh()
 	fp.fastFindMode = true
@@ -2728,6 +2738,7 @@ func TestFileSystemPanel_FastFind_LongString(t *testing.T) {
 	scr.AllocBuf(80, 25)
 
 	fp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(t.TempDir()))
+	waitForLoad(t, fp)
 	fp.fastFindMode = true
 	// Строка длиной 26 символов. Окно вмещает 20.
 	// Ожидаемый результат после обрезки слева: "D_chars_to_scroll_TAIL"
@@ -2767,6 +2778,7 @@ func TestFileSystemPanel_FastFind_LongString(t *testing.T) {
 func TestFileSystemPanel_FastFind_XLat(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(t.TempDir()))
+	waitForLoad(t, fp)
 	fp.entries = []*fileEntry{
 		{VFSItem: vfs.VFSItem{Name: "readme.txt"}},
 		{VFSItem: vfs.VFSItem{Name: "заметка.txt"}},
@@ -2798,6 +2810,7 @@ func TestFileSystemPanel_FastFind_XLat(t *testing.T) {
 func TestFileSystemPanel_FastFindStartsAtCurrentItem(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(t.TempDir()))
+	waitForLoad(t, fp)
 	fp.entries = []*fileEntry{
 		{VFSItem: vfs.VFSItem{Name: "match-before.txt"}},
 		{VFSItem: vfs.VFSItem{Name: "other.txt"}},
@@ -2835,27 +2848,7 @@ func TestFileSystemPanel_ForkDuplication(t *testing.T) {
 	}
 
 	fp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(tmp))
-
-	// Wait for initial load
-	timeout := time.After(1 * time.Second)
-	for fp.isLoading {
-		select {
-		case task := <-vtui.FrameManager.TaskChan:
-			task()
-		case <-timeout:
-			t.Fatal("timeout")
-		}
-	}
-	// Drain remaining tasks
-	for {
-		select {
-		case task := <-vtui.FrameManager.TaskChan:
-			task()
-		default:
-			goto done1
-		}
-	}
-done1:
+	waitForLoad(t, fp)
 
 	initialCount := len(fp.entries)
 	if initialCount != 3 { // "..", "file1.txt", "file2.txt"
@@ -2864,6 +2857,7 @@ done1:
 
 	// Simulate what Clone() does
 	cloneFsp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(tmp))
+	waitForLoad(t, cloneFsp)
 	// Copy entries like Clone()
 	cloneFsp.entries = make([]*fileEntry, len(fp.entries))
 	for j, e := range fp.entries {
@@ -2873,27 +2867,7 @@ done1:
 
 	// Call readDirectoryEx(true) like Clone()
 	cloneFsp.readDirectoryEx(true)
-
-	// Wait for clone load
-	timeout = time.After(1 * time.Second)
-	for cloneFsp.isLoading {
-		select {
-		case task := <-vtui.FrameManager.TaskChan:
-			task()
-		case <-timeout:
-			t.Fatal("timeout")
-		}
-	}
-	// Drain remaining tasks
-	for {
-		select {
-		case task := <-vtui.FrameManager.TaskChan:
-			task()
-		default:
-			goto done2
-		}
-	}
-done2:
+	waitForLoad(t, cloneFsp)
 
 	if len(cloneFsp.entries) != initialCount {
 		t.Errorf("Duplication bug! Expected %d entries, got %d", initialCount, len(cloneFsp.entries))
@@ -2901,6 +2875,7 @@ done2:
 }
 func TestFileSystemPanel_FastFind_MouseDeactivation(t *testing.T) {
 	fp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(t.TempDir()))
+	waitForLoad(t, fp)
 	fp.fastFindMode = true
 
 	// Клик мышкой (любой кнопкой) должен выключать поиск
@@ -3005,6 +2980,7 @@ func TestFileSystemPanelShowsStandaloneCacheBeforeProviderOpen(t *testing.T) {
 	separator := string(os.PathSeparator)
 	target := "cloud.example:" + separator + "Photos"
 	fp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(t.TempDir()))
+	waitForLoad(t, fp)
 	if fp.cancelLoad != nil {
 		fp.cancelLoad()
 		fp.cancelLoad = nil
@@ -3358,6 +3334,7 @@ func TestFileSystemPanel_SortColumnIndicators(t *testing.T) {
 func TestFileSystemPanel_HeaderClickSortsAndToggles(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(t.TempDir()))
+	waitForLoad(t, fp)
 	fp.SetViewMode(ViewModeDetailed)
 	fp.sortMode = SortUnsorted
 	fp.sortReverse = false
@@ -4764,6 +4741,7 @@ func TestFileSystemPanel_BottomFrameShowsCursorEntry(t *testing.T) {
 	t.Cleanup(func() { AppConfig.ShowPanelFileInfo = was })
 
 	fp := NewFileSystemPanel(0, 0, 60, 20, vfs.NewOSVFS(t.TempDir()))
+	waitForLoad(t, fp)
 	fp.entries = []*fileEntry{
 		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
 		{VFSItem: vfs.VFSItem{Name: "sub", IsDir: true}},

@@ -67,7 +67,9 @@ func newSearchFirstTestFrame(t *testing.T) (*PanelsFrame, *FileSystemPanel, *Fil
 	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	left := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(t.TempDir()))
+	waitForLoad(t, left)
 	right := NewFileSystemPanel(40, 0, 40, 20, vfs.NewOSVFS(t.TempDir()))
+	waitForLoad(t, right)
 	left.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "alpha.txt"}}, {VFSItem: vfs.VFSItem{Name: "beta.txt"}}}
 	right.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "right.txt"}}}
 	left.Refresh()
