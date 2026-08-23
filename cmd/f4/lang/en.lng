@@ -379,6 +379,9 @@ Action.Settings.Proxy.Desc=Configure the proxy used for updates, plugins and net
 ; --- Spreadsheet ---
 Action.App.Spreadsheet=Spreadsheet
 Action.App.Spreadsheet.Desc=Open the spreadsheet workspace
+; --- SQLite ---
+Action.App.SQLite=SQLite &client
+Action.App.SQLite.Desc=Open the SQLite client on the database under the cursor
 
 Link.Title= Link
 Link.Prompt=Create link to %s in:

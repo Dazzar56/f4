@@ -48,19 +48,26 @@ func (p *Plugin) Init(api vfs.HostAPI) error {
 	}
 	p.mu.Unlock()
 
+	// No MenuPath and no Visible predicate.
+	//
+	// The main-menu row and the Ctrl+Alt+D binding belong to the host action
+	// App.SQLite: a plugin command cannot own a hotkey, and two rows for one
+	// command is one too many. The plugin menu and the command palette list
+	// this registration as they always did.
+	//
+	// The predicate is gone because it asked what the panel cursor was on,
+	// and the answer decided whether the command existed at all. Anywhere but
+	// on a .db file it removed itself from every menu that could have led the
+	// user to it. openCurrent already explains which files it takes, which is
+	// the better place to say so.
 	registration, err := host.RegisterPluginCommand(vfs.PluginCommand{
 		ID:             sqliteCommandID,
 		Location:       vfs.PluginCommandPanel,
 		Label:          "SQLite client",
 		LabelKey:       "SQLite.Command.Open",
-		MenuPath:       "Files",
 		Description:    "Browse tables and execute SQL against a local SQLite database",
 		DescriptionKey: "SQLite.Command.Open.Desc",
-		Visible: func(app vfs.App) bool {
-			_, ok := selectedSQLitePath(app)
-			return ok
-		},
-		Run: p.openCurrent,
+		Run:            p.openCurrent,
 	})
 	if err != nil {
 		return fmt.Errorf("SQLite: register panel command: %w", err)

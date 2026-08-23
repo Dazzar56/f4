@@ -98,8 +98,14 @@ func TestPluginRegistersLocalizedPanelCommand(t *testing.T) {
 	if err := plugin.Init(host); err != nil {
 		t.Fatal(err)
 	}
-	if host.command.ID != sqliteCommandID || host.command.Location != vfs.PluginCommandPanel || host.command.MenuPath != "Files" || host.command.Run == nil {
+	if host.command.ID != sqliteCommandID || host.command.Location != vfs.PluginCommandPanel || host.command.Run == nil {
 		t.Fatalf("command metadata = %#v", host.command)
+	}
+	// The main-menu row belongs to the host action App.SQLite, and the
+	// command is offered wherever the cursor happens to be: a predicate on
+	// the panel selection took the entry out of the menus that lead to it.
+	if host.command.MenuPath != "" || host.command.Visible != nil {
+		t.Fatalf("command hides itself: MenuPath = %q, Visible set = %t", host.command.MenuPath, host.command.Visible != nil)
 	}
 	if host.command.Label != "SQLite client" || host.command.LabelKey != "SQLite.Command.Open" || host.command.DescriptionKey != "SQLite.Command.Open.Desc" {
 		t.Fatalf("localization metadata = %#v", host.command)

@@ -373,6 +373,9 @@ Action.Settings.Proxy.Desc=Настроить прокси для обновле
 ; --- Электронные таблицы ---
 Action.App.Spreadsheet=Электронные таблицы
 Action.App.Spreadsheet.Desc=Открыть рабочее пространство электронных таблиц
+; --- SQLite ---
+Action.App.SQLite=&Клиент SQLite
+Action.App.SQLite.Desc=Открыть клиент SQLite для базы данных под курсором
 
 Link.Title= Ссылка
 Link.Prompt=Создать ссылку на %s в:
