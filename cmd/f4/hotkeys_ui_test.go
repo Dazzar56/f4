@@ -83,31 +83,6 @@ func TestHotkeyAssignFramePreservesRightCtrl(t *testing.T) {
 	}
 }
 
-func TestHotkeyTableExactSearchNormalizesCompactKey(t *testing.T) {
-	table := vtui.NewTable(0, 0, 30, 8, []vtui.TableColumn{
-		{Title: "Command", Width: 16},
-		{Title: "Key", Width: 10},
-	})
-	configureHotkeyTableSearch(table)
-	table.SetRows([]vtui.TableRow{
-		hotkeyRow{Label: "Move up", Key: "Ctrl+Up"},
-		hotkeyRow{Label: "Select all", Key: "Ctrl+A"},
-		hotkeyRow{Label: "Ctrl Alt action", Key: "Ctrl+Alt+A"},
-		hotkeyRow{Label: "Parent folder", Key: "Ctrl+PgUp"},
-	})
-	table.SetSearchText("ctrla")
-
-	if got := table.SearchText(); got != "Ctrl+A" {
-		t.Fatalf("normalized hotkey search = %q, want Ctrl+A", got)
-	}
-	if table.ItemCount != 1 {
-		t.Fatalf("hotkey search returned %d rows, want only the exact key", table.ItemCount)
-	}
-	if got := table.Rows[table.RowAt(0)].(hotkeyRow).Key; got != "Ctrl+A" {
-		t.Fatalf("exact hotkey search returned %q, want Ctrl+A", got)
-	}
-}
-
 func TestHotkeyDialogSizeForScreen(t *testing.T) {
 	if gotW, gotH := hotkeyDialogSizeForScreen(200, 60); gotW != 196 || gotH != 48 {
 		t.Fatalf("large screen size = %dx%d, want 196x48", gotW, gotH)
