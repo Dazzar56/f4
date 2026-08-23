@@ -215,7 +215,7 @@ func (plugin *Plugin) analyzePath(ctx context.Context, fs vfs.VFS, path string, 
 	if err != nil {
 		return Report{}, err
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }() // The media source is read-only.
 	size := reader.Size()
 	if size < 0 {
 		size = item.Size

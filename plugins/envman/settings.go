@@ -138,7 +138,7 @@ func loadConfigFile(path string, opts EngineOptions) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }() // The settings file is read-only.
 
 	data, err := io.ReadAll(io.LimitReader(file, maxSettingsBytes+1))
 	if err != nil {

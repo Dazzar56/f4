@@ -23,6 +23,10 @@ type Handler func(data msgpack.RawMessage) (any, error)
 
 // Session multiplexes concurrent requests and responses over an io.Reader and io.Writer.
 type Session struct {
+	// OnError is called when an asynchronous response cannot be sent and may be called from a serving goroutine.
+	// It is nil by default; if set, it must be set before Serve is called and be safe to call from serving goroutines.
+	OnError func(error)
+
 	enc      *msgpack.Encoder
 	dec      *msgpack.Decoder
 	mu       sync.Mutex
@@ -150,6 +154,9 @@ func (s *Session) handleRequest(req *Message) {
 	}
 
 	s.mu.Lock()
-	s.enc.Encode(resp)
+	err := s.enc.Encode(resp)
 	s.mu.Unlock()
+	if err != nil && s.OnError != nil {
+		s.OnError(fmt.Errorf("response %d was not sent: %w", req.ID, err))
+	}
 }
