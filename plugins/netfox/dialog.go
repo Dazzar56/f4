@@ -259,10 +259,16 @@ func showConnectionDialog(app vfs.App, nf *NetFoxVFS, oldName string) {
 			save()
 		}
 
-		if oldName != "" && oldName != newName {
-			nf.Remove(context.Background(), oldName)
+		if err := nf.SaveConfig(newName, cfg); err != nil {
+			vtui.ShowMessageOn(dlg, vtui.Msg("Error.Title"), "Could not save connection:\n"+err.Error(), []string{vtui.Msg("vtui.Ok")})
+			return
 		}
-		nf.SaveConfig(newName, cfg)
+		if oldName != "" && oldName != newName {
+			if err := nf.Remove(context.Background(), oldName); err != nil {
+				vtui.ShowMessageOn(dlg, vtui.Msg("Error.Title"), "The renamed connection was saved, but the old connection could not be removed:\n"+err.Error(), []string{vtui.Msg("vtui.Ok")})
+				return
+			}
+		}
 
 		dlg.Close()
 		app.RefreshAll()

@@ -100,7 +100,7 @@ func NewSFTPVFS(parent vfs.VFS, host, port, user, pass string, timeout int, cp s
 
 	sftpClient, err := sftp.NewClient(sshClient)
 	if err != nil {
-		sshClient.Close()
+		_ = sshClient.Close() // Preserve the SFTP startup failure.
 		return nil, err
 	}
 	vtui.DebugLog("NET: SFTP session established successfully")
@@ -363,7 +363,7 @@ func (v *SFTPVFS) Open(ctx context.Context, p string) (vfs.ReadAtCloser, error) 
 	}
 	info, err := f.Stat()
 	if err != nil {
-		f.Close()
+		_ = f.Close() // Preserve the remote stat failure.
 		return nil, err
 	}
 	return &sftpFileWrapper{File: f, size: info.Size()}, nil
@@ -410,7 +410,9 @@ func (v *SFTPVFS) OpenPty(cols, rows int) (any, error) {
 		return nil, err
 	}
 	pty.SetSize(cols, rows)
-	pty.Run("")
+	if err := pty.Run(""); err != nil {
+		return nil, fmt.Errorf("sftp: start SSH PTY: %w", errors.Join(err, pty.Close()))
+	}
 	return pty, nil
 }
 
@@ -530,7 +532,7 @@ func runSFTPCommandSessionWithCodec(
 	cb func(line string),
 	codec sftpCommandCodec,
 ) (int, error) {
-	defer session.Close()
+	defer func() { _ = session.Close() }() // Command status comes from Wait.
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
@@ -695,9 +697,11 @@ func (p *sftpProvider) CanOpen(ctx context.Context, parent vfs.VFS, pth string) 
 	if err != nil {
 		return false
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }() // The configuration file is read-only.
 	var cfg NetFoxConfig
-	json.NewDecoder(ctxReader{f, ctx}).Decode(&cfg)
+	if err := json.NewDecoder(ctxReader{f, ctx}).Decode(&cfg); err != nil {
+		return false
+	}
 	return cfg.Type == "sftp" || cfg.Type == ""
 }
 func (p *sftpProvider) Open(ctx context.Context, parent vfs.VFS, pth string) (vfs.VFS, error) {
@@ -706,9 +710,11 @@ func (p *sftpProvider) Open(ctx context.Context, parent vfs.VFS, pth string) (vf
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }() // The configuration file is read-only.
 	var cfg NetFoxConfig
-	json.NewDecoder(ctxReader{f, ctx}).Decode(&cfg)
+	if err := json.NewDecoder(ctxReader{f, ctx}).Decode(&cfg); err != nil {
+		return nil, fmt.Errorf("netfox: decode SFTP connection: %w", err)
+	}
 	port := cfg.Port
 	if port == "" {
 		port = "22"

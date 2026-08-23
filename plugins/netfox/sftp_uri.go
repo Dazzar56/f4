@@ -59,7 +59,7 @@ func (p *sftpURIProvider) OpenURI(ctx context.Context, current vfs.VFS, raw stri
 	}
 	if p := strings.TrimSpace(u.Path); p != "" && p != "/" {
 		if err := v.SetPath(p); err != nil {
-			v.Close()
+			_ = v.Close() // Preserve the invalid-path error.
 			return nil, err
 		}
 	}
