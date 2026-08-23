@@ -203,7 +203,7 @@ func (s *Server) openServiceConn(ctx context.Context, serial, service string) (n
 	defer func() {
 		stop()
 		if !ok {
-			conn.Close()
+			_ = conn.Close() // Preserve the service-selection error.
 		}
 	}()
 	if err := requestService(conn, "host:transport:"+serial); err != nil {
@@ -286,7 +286,7 @@ func (s *Server) runLegacyShellStream(ctx context.Context, serial, command strin
 	if err != nil {
 		return -1, err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }() // The shell connection is read-only here.
 	stop := interruptConnOnCancel(ctx, conn)
 	defer stop()
 
@@ -376,7 +376,7 @@ func (s *Server) runShellV2Stream(ctx context.Context, serial, command string, c
 	if err != nil {
 		return -1, err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }() // The shell connection is read-only here.
 	stop := interruptConnOnCancel(ctx, conn)
 	defer stop()
 
@@ -448,7 +448,7 @@ func (s *Server) runShell(ctx context.Context, serial, command string, maxStdout
 		if openErr != nil {
 			return nil, nil, -1, openErr
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }() // The shell connection is read-only here.
 		stop := interruptConnOnCancel(ctx, conn)
 		defer stop()
 		out, readErr := readAllWithLimit(conn, maxStdout)
@@ -464,7 +464,7 @@ func (s *Server) runShell(ctx context.Context, serial, command string, maxStdout
 	if openErr != nil {
 		return nil, nil, -1, openErr
 	}
-	defer stream.Close()
+	defer func() { _ = stream.Close() }() // The shell stream is read-only here.
 	stop := stream.InterruptOnCancel(ctx)
 	defer stop()
 	out, readErr := readAllWithLimit(stream, maxStdout)
@@ -500,7 +500,7 @@ func (s *Server) hostQuery(ctx context.Context, service string) ([]byte, error) 
 	if err != nil {
 		return nil, err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }() // The query result determines success.
 	stop := interruptConnOnCancel(ctx, conn)
 	defer stop()
 	if err := requestService(conn, service); err != nil {

@@ -195,7 +195,7 @@ func (c *SyncClient) List(ctx context.Context, path string) ([]SyncEntry, error)
 	if err != nil {
 		return nil, err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }() // The protocol response determines metadata success.
 
 	v2 := c.hasFeature("ls_v2")
 	requestID := syncIDListV1
@@ -265,7 +265,7 @@ func (c *SyncClient) stat(ctx context.Context, path, requestID string) (SyncEntr
 	if err != nil {
 		return SyncEntry{}, err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }() // The protocol response determines metadata success.
 
 	if err := writeSyncRequest(conn, requestID, path); err != nil {
 		return SyncEntry{}, syncContextError(ctx, fmt.Errorf("adb sync stat request: %w", err))
@@ -325,7 +325,7 @@ func (c *SyncClient) Receive(ctx context.Context, path string) (*SyncReceiveRead
 		requestID = syncIDRecvV2
 	}
 	if err := writeSyncRequest(conn, requestID, path); err != nil {
-		conn.Close()
+		_ = conn.Close() // Preserve the receive-request failure.
 		return nil, syncContextError(ctx, fmt.Errorf("adb sync receive request: %w", err))
 	}
 	if v2 {
@@ -333,7 +333,7 @@ func (c *SyncClient) Receive(ctx context.Context, path string) (*SyncReceiveRead
 		copy(setup[:4], syncIDRecvV2)
 		// flags remains zero: no compression is requested.
 		if err := writeSyncFull(conn, setup[:]); err != nil {
-			conn.Close()
+			_ = conn.Close() // Preserve the receive-setup failure.
 			return nil, syncContextError(ctx, fmt.Errorf("adb sync receive setup: %w", err))
 		}
 	}
@@ -381,7 +381,7 @@ func (c *SyncClient) Send(ctx context.Context, path string, mode uint32, mtime t
 		return nil, err
 	}
 	if err := writeSyncRequest(conn, requestID, payload); err != nil {
-		conn.Close()
+		_ = conn.Close() // Preserve the send-request failure.
 		return nil, syncContextError(ctx, fmt.Errorf("adb sync send request: %w", err))
 	}
 	if v2 {
@@ -390,7 +390,7 @@ func (c *SyncClient) Send(ctx context.Context, path string, mode uint32, mtime t
 		binary.LittleEndian.PutUint32(setup[4:8], mode)
 		// flags remains zero: no compression and no dry-run.
 		if err := writeSyncFull(conn, setup[:]); err != nil {
-			conn.Close()
+			_ = conn.Close() // Preserve the send-setup failure.
 			return nil, syncContextError(ctx, fmt.Errorf("adb sync send setup: %w", err))
 		}
 	}
