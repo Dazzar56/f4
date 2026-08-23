@@ -31,8 +31,12 @@ func TestOSVFS_Mutations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}
-	wc.Write([]byte("VFS Test Data"))
-	wc.Close()
+	if _, err := wc.Write([]byte("VFS Test Data")); err != nil {
+		t.Fatalf("Write failed: %v", err)
+	}
+	if err := wc.Close(); err != nil {
+		t.Fatalf("Close writer failed: %v", err)
+	}
 
 	rc, err := vfs.Open(context.Background(), filePath)
 	if err != nil {
@@ -45,7 +49,9 @@ func TestOSVFS_Mutations(t *testing.T) {
 
 	buf := make([]byte, 4)
 	n, err := rc.ReadAt(context.Background(), buf, 4)
-	rc.Close()
+	if closeErr := rc.Close(); closeErr != nil {
+		t.Fatalf("Close reader failed: %v", closeErr)
+	}
 	if err != nil || string(buf[:n]) != "Test" {
 		t.Errorf("ReadAt failed. Expected 'Test', got %q", string(buf[:n]))
 	}
@@ -89,7 +95,9 @@ func TestOSVFS_Symlinks(t *testing.T) {
 
 	// 1. Create a real directory
 	targetDir := filepath.Join(tmpDir, "real_folder")
-	os.Mkdir(targetDir, 0755)
+	if err := os.Mkdir(targetDir, 0755); err != nil {
+		t.Fatalf("Failed to create target directory: %v", err)
+	}
 
 	// 2. Create a symlink to that directory
 	linkPath := filepath.Join(tmpDir, "link_folder")
@@ -127,10 +135,14 @@ func TestOSVFS_Lstat(t *testing.T) {
 	v := NewOSVFS(tmpDir)
 
 	targetFile := filepath.Join(tmpDir, "target.txt")
-	os.WriteFile(targetFile, []byte("hello world"), 0644)
+	if err := os.WriteFile(targetFile, []byte("hello world"), 0644); err != nil {
+		t.Fatalf("Failed to create target file: %v", err)
+	}
 
 	linkFile := filepath.Join(tmpDir, "link.txt")
-	os.Symlink(targetFile, linkFile)
+	if err := os.Symlink(targetFile, linkFile); err != nil {
+		t.Fatalf("Failed to create symlink: %v", err)
+	}
 
 	statItem, err := v.Stat(context.Background(), linkFile)
 	if err != nil {
@@ -176,7 +188,10 @@ func TestOSVFS_ReadDir_Cancellation(t *testing.T) {
 	tmpDir := t.TempDir()
 	// Create 100 files to ensure multiple chunks/iterations
 	for i := 0; i < 100; i++ {
-		os.WriteFile(filepath.Join(tmpDir, fmt.Sprintf("file%d.txt", i)), []byte("data"), 0644)
+		file := filepath.Join(tmpDir, fmt.Sprintf("file%d.txt", i))
+		if err := os.WriteFile(file, []byte("data"), 0644); err != nil {
+			t.Fatalf("Failed to create %s: %v", file, err)
+		}
 	}
 
 	v := NewOSVFS(tmpDir)
@@ -203,7 +218,9 @@ func TestOSVFS_SetPath_Validation(t *testing.T) {
 
 	// 1. Existing dir -> Success
 	sub := filepath.Join(tmpDir, "exist")
-	os.Mkdir(sub, 0755)
+	if err := os.Mkdir(sub, 0755); err != nil {
+		t.Fatalf("Failed to create test directory: %v", err)
+	}
 	if err := v.SetPath(sub); err != nil {
 		t.Errorf("SetPath failed for existing dir: %v", err)
 	}
@@ -215,7 +232,9 @@ func TestOSVFS_SetPath_Validation(t *testing.T) {
 
 	// 3. Path is a file -> Error
 	file := filepath.Join(tmpDir, "file.txt")
-	os.WriteFile(file, []byte("data"), 0644)
+	if err := os.WriteFile(file, []byte("data"), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
 	if err := v.SetPath(file); err == nil {
 		t.Error("SetPath should fail if path is a file")
 	}
@@ -224,7 +243,9 @@ func TestOSVFS_Abs_Consistency(t *testing.T) {
 	// Test that Abs is relative to the VFS path, not process CWD
 	tmp := t.TempDir()
 	vfsPath := filepath.Join(tmp, "vfs_root")
-	os.Mkdir(vfsPath, 0755)
+	if err := os.Mkdir(vfsPath, 0755); err != nil {
+		t.Fatalf("Failed to create VFS root: %v", err)
+	}
 
 	v := NewOSVFS(vfsPath)
 
@@ -243,7 +264,9 @@ func TestOSVFS_Abs_CWD_Independence(t *testing.T) {
 	// Create a folder structure: /tmp/root/subdir
 	tmp := t.TempDir()
 	vfsRoot := filepath.Join(tmp, "vfs_root")
-	os.MkdirAll(vfsRoot, 0755)
+	if err := os.MkdirAll(vfsRoot, 0755); err != nil {
+		t.Fatalf("Failed to create VFS root: %v", err)
+	}
 
 	v := NewOSVFS(vfsRoot)
 
@@ -266,7 +289,9 @@ func TestOSVFS_Abs_CWD_Independence(t *testing.T) {
 func TestOSVFS_SetPath_Relative(t *testing.T) {
 	tmpDir := t.TempDir()
 	subDir := "my_sub_folder"
-	os.Mkdir(filepath.Join(tmpDir, subDir), 0755)
+	if err := os.Mkdir(filepath.Join(tmpDir, subDir), 0755); err != nil {
+		t.Fatalf("Failed to create subdirectory: %v", err)
+	}
 
 	v := NewOSVFS(tmpDir)
 

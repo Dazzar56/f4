@@ -11,7 +11,9 @@ func TestSession_Draft(t *testing.T) {
 	if s.Draft() != "" {
 		t.Errorf("expected empty draft, got %q", s.Draft())
 	}
-	s.tree.writeFile("/draft.md", []byte("hello model"))
+	if err := s.tree.writeFile("/draft.md", []byte("hello model")); err != nil {
+		t.Fatalf("write draft: %v", err)
+	}
 	if s.Draft() != "hello model" {
 		t.Errorf("expected draft to be read")
 	}
@@ -23,7 +25,9 @@ func TestSession_Draft(t *testing.T) {
 
 func TestSession_Reset(t *testing.T) {
 	s := NewSession()
-	s.tree.writeFile("/ctx/test.go", []byte("package main"))
+	if err := s.tree.writeFile("/ctx/test.go", []byte("package main")); err != nil {
+		t.Fatalf("write context: %v", err)
+	}
 	s.appendTurn(Turn{Role: "user", Text: "hello"})
 
 	s.Reset(true)

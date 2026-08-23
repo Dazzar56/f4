@@ -224,7 +224,11 @@ func TestUnsafeStdlibOptIn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	defer r.Close()
+	t.Cleanup(func() {
+		if err := r.Close(); err != nil {
+			t.Errorf("close runtime: %v", err)
+		}
+	})
 
 	if err := r.LoadString("plugin", "has_os = os ~= nil"); err != nil {
 		t.Fatalf("LoadString: %v", err)
@@ -244,7 +248,11 @@ func TestRuntimeTimeout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	defer r.Close()
+	t.Cleanup(func() {
+		if err := r.Close(); err != nil {
+			t.Errorf("close runtime: %v", err)
+		}
+	})
 
 	start := time.Now()
 	err = r.LoadString("spin", "while true do end")

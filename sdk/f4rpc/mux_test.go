@@ -27,8 +27,24 @@ func TestSession_CallAndServe(t *testing.T) {
 	})
 
 	// Запускаем слушателей в фоне
-	go server.Serve()
-	go client.Serve()
+	serverErr := make(chan error, 1)
+	clientErr := make(chan error, 1)
+	go func() { serverErr <- server.Serve() }()
+	go func() { clientErr <- client.Serve() }()
+	t.Cleanup(func() {
+		if err := c2sW.Close(); err != nil {
+			t.Errorf("close client pipe: %v", err)
+		}
+		if err := s2cW.Close(); err != nil {
+			t.Errorf("close server pipe: %v", err)
+		}
+		if err := <-serverErr; err != nil {
+			t.Errorf("server Serve: %v", err)
+		}
+		if err := <-clientErr; err != nil {
+			t.Errorf("client Serve: %v", err)
+		}
+	})
 
 	// Выполняем синхронный вызов с клиента на сервер
 	var res string
@@ -49,8 +65,24 @@ func TestSession_MethodNotFound(t *testing.T) {
 	client := NewSession(s2cR, c2sW)
 	server := NewSession(c2sR, s2cW)
 
-	go server.Serve()
-	go client.Serve()
+	serverErr := make(chan error, 1)
+	clientErr := make(chan error, 1)
+	go func() { serverErr <- server.Serve() }()
+	go func() { clientErr <- client.Serve() }()
+	t.Cleanup(func() {
+		if err := c2sW.Close(); err != nil {
+			t.Errorf("close client pipe: %v", err)
+		}
+		if err := s2cW.Close(); err != nil {
+			t.Errorf("close server pipe: %v", err)
+		}
+		if err := <-serverErr; err != nil {
+			t.Errorf("server Serve: %v", err)
+		}
+		if err := <-clientErr; err != nil {
+			t.Errorf("client Serve: %v", err)
+		}
+	})
 
 	err := client.Call("Unknown.Method", nil, nil)
 	if err == nil {
@@ -73,8 +105,24 @@ func TestSession_Concurrency(t *testing.T) {
 		return "Pong", nil
 	})
 
-	go server.Serve()
-	go client.Serve()
+	serverErr := make(chan error, 1)
+	clientErr := make(chan error, 1)
+	go func() { serverErr <- server.Serve() }()
+	go func() { clientErr <- client.Serve() }()
+	t.Cleanup(func() {
+		if err := c2sW.Close(); err != nil {
+			t.Errorf("close client pipe: %v", err)
+		}
+		if err := s2cW.Close(); err != nil {
+			t.Errorf("close server pipe: %v", err)
+		}
+		if err := <-serverErr; err != nil {
+			t.Errorf("server Serve: %v", err)
+		}
+		if err := <-clientErr; err != nil {
+			t.Errorf("client Serve: %v", err)
+		}
+	})
 
 	done := make(chan bool)
 	for i := 0; i < 50; i++ {
