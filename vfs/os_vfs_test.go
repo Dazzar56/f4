@@ -135,7 +135,7 @@ func TestOSVFS_Lstat(t *testing.T) {
 	v := NewOSVFS(tmpDir)
 
 	targetFile := filepath.Join(tmpDir, "target.txt")
-	if err := os.WriteFile(targetFile, []byte("hello world"), 0644); err != nil {
+	if err := os.WriteFile(targetFile, []byte("hello world"), 0600); err != nil {
 		t.Fatalf("Failed to create target file: %v", err)
 	}
 
@@ -189,7 +189,7 @@ func TestOSVFS_ReadDir_Cancellation(t *testing.T) {
 	// Create 100 files to ensure multiple chunks/iterations
 	for i := 0; i < 100; i++ {
 		file := filepath.Join(tmpDir, fmt.Sprintf("file%d.txt", i))
-		if err := os.WriteFile(file, []byte("data"), 0644); err != nil {
+		if err := os.WriteFile(file, []byte("data"), 0600); err != nil {
 			t.Fatalf("Failed to create %s: %v", file, err)
 		}
 	}
@@ -232,7 +232,7 @@ func TestOSVFS_SetPath_Validation(t *testing.T) {
 
 	// 3. Path is a file -> Error
 	file := filepath.Join(tmpDir, "file.txt")
-	if err := os.WriteFile(file, []byte("data"), 0644); err != nil {
+	if err := os.WriteFile(file, []byte("data"), 0600); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 	if err := v.SetPath(file); err == nil {

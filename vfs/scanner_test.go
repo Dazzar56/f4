@@ -46,10 +46,10 @@ func TestGenericScan_FlatFiles(t *testing.T) {
 	tmpDir := t.TempDir()
 	v := NewOSVFS(tmpDir)
 
-	if err := os.WriteFile(filepath.Join(tmpDir, "f1.txt"), []byte("abc"), 0644); err != nil { // 3 bytes
+	if err := os.WriteFile(filepath.Join(tmpDir, "f1.txt"), []byte("abc"), 0600); err != nil { // 3 bytes
 		t.Fatalf("Failed to create f1.txt: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(tmpDir, "f2.txt"), []byte("defg"), 0644); err != nil { // 4 bytes
+	if err := os.WriteFile(filepath.Join(tmpDir, "f2.txt"), []byte("defg"), 0600); err != nil { // 4 bytes
 		t.Fatalf("Failed to create f2.txt: %v", err)
 	}
 
@@ -85,10 +85,10 @@ func TestGenericScan_Recursive(t *testing.T) {
 		t.Fatalf("Failed to create scan directories: %v", err)
 	}
 
-	if err := os.WriteFile(filepath.Join(rootDir, "file1.txt"), make([]byte, 5), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(rootDir, "file1.txt"), make([]byte, 5), 0600); err != nil {
 		t.Fatalf("Failed to create file1.txt: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(subDir, "file2.txt"), make([]byte, 10), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(subDir, "file2.txt"), make([]byte, 10), 0600); err != nil {
 		t.Fatalf("Failed to create file2.txt: %v", err)
 	}
 

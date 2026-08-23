@@ -108,13 +108,13 @@ func TestActionAddArchive_OverwriteWarning(t *testing.T) {
 	v := vfs.NewOSVFS(tmpDir)
 
 	dummyFile := v.Join(tmpDir, "file_to_archive.txt")
-	if err := os.WriteFile(dummyFile, []byte("some content"), 0644); err != nil {
+	if err := os.WriteFile(dummyFile, []byte("some content"), 0600); err != nil {
 		t.Fatal(err)
 	}
 
 	archiveName := v.Base(tmpDir) + ".zip"
 	existingArchive := v.Join(tmpDir, archiveName)
-	if err := os.WriteFile(existingArchive, []byte("existing zip content"), 0644); err != nil {
+	if err := os.WriteFile(existingArchive, []byte("existing zip content"), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -201,7 +201,7 @@ func TestArchivePlugin_ConcurrentOperationWarning(t *testing.T) {
 	v := vfs.NewOSVFS(tmpDir)
 
 	dummyFile := filepath.Join(tmpDir, "test.zip")
-	if err := os.WriteFile(dummyFile, []byte("dummy zip content"), 0644); err != nil {
+	if err := os.WriteFile(dummyFile, []byte("dummy zip content"), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -235,10 +235,10 @@ func TestIssue150_Concurrent7zReadDir(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(srcDir, "dir1/dir2"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(srcDir, "dir1/file1.txt"), []byte("data1"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(srcDir, "dir1/file1.txt"), []byte("data1"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(srcDir, "dir1/dir2/file2.txt"), []byte("data2"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(srcDir, "dir1/dir2/file2.txt"), []byte("data2"), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -305,10 +305,10 @@ func TestIssue150_7zDirectoryStructureAndSolid(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(srcDir, "empty_dir"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(srcDir, "file1.txt"), []byte("solid content 1"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(srcDir, "file1.txt"), []byte("solid content 1"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(srcDir, "file2.txt"), []byte("solid content 2"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(srcDir, "file2.txt"), []byte("solid content 2"), 0600); err != nil {
 		t.Fatal(err)
 	}
 

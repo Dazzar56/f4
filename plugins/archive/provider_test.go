@@ -27,7 +27,7 @@ func TestArchiveProvider_CanOpen(t *testing.T) {
 
 	// 1. Valid formats (e.g. .zip)
 	tmpZip := filepath.Join(t.TempDir(), "test.zip")
-	if err := os.WriteFile(tmpZip, []byte("PK\x03\x04..."), 0644); err != nil { // Zip magic bytes
+	if err := os.WriteFile(tmpZip, []byte("PK\x03\x04..."), 0600); err != nil { // Zip magic bytes
 		t.Fatal(err)
 	}
 	if !p.CanOpen(ctx, nil, tmpZip) {
@@ -36,7 +36,7 @@ func TestArchiveProvider_CanOpen(t *testing.T) {
 
 	// 2. Invalid formats (e.g. .txt)
 	tmpTxt := filepath.Join(t.TempDir(), "test.txt")
-	if err := os.WriteFile(tmpTxt, []byte("plain text"), 0644); err != nil {
+	if err := os.WriteFile(tmpTxt, []byte("plain text"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if p.CanOpen(ctx, nil, tmpTxt) {
@@ -51,7 +51,7 @@ func TestArchiveProvider_Open(t *testing.T) {
 	tmpDir := t.TempDir()
 	zipPath := filepath.Join(tmpDir, "empty.zip")
 	// Write empty zip structure (22 bytes EOCD)
-	if err := os.WriteFile(zipPath, []byte("\x50\x4b\x05\x06\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"), 0644); err != nil {
+	if err := os.WriteFile(zipPath, []byte("\x50\x4b\x05\x06\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"), 0600); err != nil {
 		t.Fatal(err)
 	}
 
