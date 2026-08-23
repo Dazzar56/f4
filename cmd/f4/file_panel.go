@@ -15,6 +15,8 @@ import (
 	"unicode"
 
 	"github.com/mattn/go-runewidth"
+	"golang.org/x/text/collate"
+	"golang.org/x/text/language"
 
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
@@ -762,6 +764,15 @@ func (fp *FileSystemPanel) sortEntries() {
 		return
 	}
 
+	// far2l uses a string collation order for panel names: punctuation such as
+	// '_' sorts before digits and letters, unlike Go's byte/code-point order.
+	// Keep the collator local because collate.Collator reuses iterator state and
+	// is not safe for concurrent use.
+	nameCollator := collate.New(language.Und, collate.IgnoreCase, collate.Force)
+	compareName := func(left, right string) int {
+		return nameCollator.CompareString(left, right)
+	}
+
 	sort.Slice(fp.entries, func(i, j int) bool {
 		ei, ej := fp.entries[i], fp.entries[j]
 
@@ -778,30 +789,39 @@ func (fp *FileSystemPanel) sortEntries() {
 			return ei.IsDir
 		}
 
-		res := false
+		cmp := 0
 		switch fp.sortMode {
 		case SortName:
-			res = strings.ToLower(ei.Name) < strings.ToLower(ej.Name)
+			cmp = compareName(ei.Name, ej.Name)
 		case SortExt:
-			extI := strings.ToLower(filepath.Ext(ei.Name))
-			extJ := strings.ToLower(filepath.Ext(ej.Name))
-			if extI != extJ {
-				res = extI < extJ
-			} else {
-				res = strings.ToLower(ei.Name) < strings.ToLower(ej.Name)
+			cmp = compareName(filepath.Ext(ei.Name), filepath.Ext(ej.Name))
+			if cmp == 0 {
+				cmp = compareName(ei.Name, ej.Name)
 			}
 		case SortTime:
-			res = ei.MTime.After(ej.MTime)
+			if ei.MTime.After(ej.MTime) {
+				cmp = -1
+			} else if ei.MTime.Before(ej.MTime) {
+				cmp = 1
+			}
 		case SortSize:
-			res = ei.Size > ej.Size
+			if ei.Size > ej.Size {
+				cmp = -1
+			} else if ei.Size < ej.Size {
+				cmp = 1
+			}
 		default:
-			res = strings.ToLower(ei.Name) < strings.ToLower(ej.Name)
+			cmp = compareName(ei.Name, ej.Name)
 		}
 
-		if fp.sortReverse {
-			return !res
+		// Keep equal primary keys deterministic and match far2l's name tie-break.
+		if cmp == 0 {
+			cmp = compareName(ei.Name, ej.Name)
 		}
-		return res
+		if fp.sortReverse {
+			cmp = -cmp
+		}
+		return cmp < 0
 	})
 }
 
