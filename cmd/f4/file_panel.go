@@ -511,6 +511,11 @@ type FileSystemPanel struct {
 
 var DisableLoadingAnimationInTests = true
 
+// directoryLoadWorkers counts every directory-load worker alive in the
+// process, across all panels. See enqueueDirectoryLoad for why a per-panel
+// WaitGroup is not enough on its own.
+var directoryLoadWorkers sync.WaitGroup
+
 func NewFileSystemPanel(x, y, w, h int, vfs vfs.VFS) *FileSystemPanel {
 	path := vfs.GetPath()
 
@@ -1599,9 +1604,18 @@ func (fp *FileSystemPanel) enqueueDirectoryLoad(load func()) {
 	}
 	fp.loadWorkerActive = true
 	fp.loadWorkerWG.Add(1)
+	// Every worker is also counted process-wide. A worker reads globals while
+	// it runs -- AppConfig and vtui.FrameManager, and the frame manager's task
+	// queue when it posts back -- so anything that replaces one of those has to
+	// know whether a worker is still out there. Panels are created deep inside
+	// PanelsFrame.ResizeConsole as well as directly, so a per-panel WaitGroup
+	// alone leaves no way to ask that question about the panels a caller never
+	// sees. Production only counts; the tests are what wait.
+	directoryLoadWorkers.Add(1)
 	fp.loadQueueMu.Unlock()
 
 	go func() {
+		defer directoryLoadWorkers.Done()
 		defer fp.loadWorkerWG.Done()
 		next := load
 		for next != nil {
@@ -1950,6 +1964,18 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 		vtui.FrameManager.Redraw()
 	}
 
+	// The worker below runs after this function has returned, so it must not
+	// reach for process-wide state as it goes. AppConfig and vtui.FrameManager
+	// can both be replaced while it is still running -- tests do exactly that,
+	// and the race detector reports it against whichever test did the
+	// replacing rather than against the load that was left behind. Taking the
+	// values here also makes each load self-consistent: it renders under the
+	// settings that were in force when it was asked for, instead of switching
+	// halfway through if something toggles them.
+	loadSyncPanel := AppConfig.SyncPanelLoad
+	loadShowHidden := AppConfig.ShowHiddenFiles
+	loadFrames := vtui.FrameManager
+
 	fp.enqueueDirectoryLoad(func() {
 		if ctx.Err() != nil {
 			return
@@ -1970,14 +1996,14 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 			// atomically, in the completion task. Rendering partial real chunks
 			// would make the panel jump and could overwrite user interaction with
 			// a stale pendingSelection.
-			if AppConfig.SyncPanelLoad || hasCache {
+			if loadSyncPanel || hasCache {
 				return
 			}
 
 			newEntries := make([]*fileEntry, 0, len(chunk))
 			for _, item := range chunk {
 				// Hide hidden files if configured, but never hide '..'
-				if !AppConfig.ShowHiddenFiles && item.Name != ".." && item.IsHidden {
+				if !loadShowHidden && item.Name != ".." && item.IsHidden {
 					continue
 				}
 				entry := &fileEntry{VFSItem: item}
@@ -1988,7 +2014,7 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 				return
 			}
 
-			vtui.FrameManager.PostTask(func() {
+			loadFrames.PostTask(func() {
 				if ctx.Err() != nil || fp.loadCtx != ctx {
 					return
 				}
@@ -2043,7 +2069,7 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 
 				fp.Refresh()
 
-				vtui.FrameManager.Redraw() // Рисуем каждый чанк!
+				loadFrames.Redraw() // Рисуем каждый чанк!
 			})
 		})
 
@@ -2078,7 +2104,7 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 		if ctx.Err() != nil {
 			return
 		}
-		vtui.FrameManager.PostTask(func() {
+		loadFrames.PostTask(func() {
 			if ctx.Err() != nil || fp.loadCtx != ctx {
 				// This completion no longer owns the panel. Do not dereference the
 				// current VFS here: another navigation may already have closed it.
@@ -2127,7 +2153,7 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 				}
 
 				for _, item := range accumulated {
-					if !AppConfig.ShowHiddenFiles && item.Name != ".." && item.IsHidden {
+					if !loadShowHidden && item.Name != ".." && item.IsHidden {
 						continue
 					}
 					entry := &fileEntry{VFSItem: item}
@@ -2168,7 +2194,7 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 				fp.SetCursorIndex(newCursorIndex)
 				fp.pendingSelection = ""
 				isFirstChunk = false
-			} else if AppConfig.SyncPanelLoad && err == nil {
+			} else if loadSyncPanel && err == nil {
 				fp.entries = nil
 				if showUpEntry {
 					upItem := vfs.VFSItem{Name: "..", IsDir: true}
@@ -2185,7 +2211,7 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 
 				newEntries := make([]*fileEntry, 0, len(accumulated))
 				for _, item := range accumulated {
-					if !AppConfig.ShowHiddenFiles && item.Name != ".." && item.IsHidden {
+					if !loadShowHidden && item.Name != ".." && item.IsHidden {
 						continue
 					}
 					entry := &fileEntry{VFSItem: item}
@@ -2289,7 +2315,7 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 				fp.pendingSelection = ""
 			}
 			fp.Refresh()
-			vtui.FrameManager.Redraw()
+			loadFrames.Redraw()
 		})
 	})
 }

@@ -71,12 +71,18 @@ func (b *ViewerBackend) Close() error {
 }
 
 func (b *ViewerBackend) Size() int64 {
+	// The write below was already locked, but the read that follows it was
+	// not, so a viewer drawing on the UI goroutine raced a background task
+	// refreshing the size -- jumpToEnd runs Size through RunAsync while Show
+	// is calling it too. Both go through the mutex now.
 	if b.file != nil {
 		newSize := b.file.Size()
 		b.mu.Lock()
 		b.size = newSize
 		b.mu.Unlock()
 	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	return b.size
 }
 
