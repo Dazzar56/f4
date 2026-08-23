@@ -15,6 +15,7 @@ import (
 	"github.com/unxed/f4/internal/netproxy"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
+	"golang.org/x/crypto/ssh/knownhosts"
 )
 
 func TestDialSSHDoesNotForwardAgent(t *testing.T) {
@@ -22,7 +23,8 @@ func TestDialSSHDoesNotForwardAgent(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("SSH_AUTH_SOCK", startTestSSHAgent(t))
-	port, forwarded := startAgentObservationSSHServer(t)
+	port, publicKey, forwarded := startAgentObservationSSHServer(t)
+	writeKnownHosts(t, home, knownhosts.Normalize("127.0.0.1:"+port), publicKey)
 
 	client, err := DialSSH("127.0.0.1", port, "user", "pass", 3, netproxy.Settings{})
 	if err != nil {
@@ -35,8 +37,12 @@ func TestDialSSHDoesNotForwardAgent(t *testing.T) {
 }
 
 func TestSSHFishDialerDoesNotRequestAgentForwarding(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("SSH_AUTH_SOCK", "agent-present")
-	port, forwarded := startAgentObservationSSHServer(t)
+	port, publicKey, forwarded := startAgentObservationSSHServer(t)
+	writeKnownHosts(t, home, knownhosts.Normalize("127.0.0.1:"+port), publicKey)
 	dial := sshFishDialerWith("127.0.0.1", port, "user", "pass", 3, netproxy.Settings{}, func(session *ssh.Session) error {
 		return session.Shell()
 	})
@@ -88,7 +94,7 @@ func startTestSSHAgent(t *testing.T) string {
 	return path
 }
 
-func startAgentObservationSSHServer(t *testing.T) (string, <-chan struct{}) {
+func startAgentObservationSSHServer(t *testing.T) (string, ssh.PublicKey, <-chan struct{}) {
 	t.Helper()
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -127,7 +133,7 @@ func startAgentObservationSSHServer(t *testing.T) (string, <-chan struct{}) {
 		}
 	}()
 	port := strconv.Itoa(listener.Addr().(*net.TCPAddr).Port)
-	return port, forwarded
+	return port, signer.PublicKey(), forwarded
 }
 
 func observeAgentForwarding(conn net.Conn, config *ssh.ServerConfig, forwarded chan<- struct{}) {
