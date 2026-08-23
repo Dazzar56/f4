@@ -137,7 +137,9 @@ func actionExtractArchive(app vfs.App) {
 		if err != nil {
 			return err
 		}
-		defer ex.Close()
+		defer func() {
+			_ = ex.Close() // Extraction is complete; the archive input is read-only.
+		}()
 
 		done := make(chan struct{})
 		defer close(done)
@@ -251,7 +253,7 @@ func actionAddArchive(app vfs.App) {
 				}
 			}
 
-			app.RunAdvancedProgressTask(" Archiving... ", false, func(ctx context.Context, reporter vfs.TaskReporter) error {
+			app.RunAdvancedProgressTask(" Archiving... ", false, func(ctx context.Context, reporter vfs.TaskReporter) (retErr error) {
 				if waitLock {
 					reporter.UpdateTransfer("Waiting", "in queue...", -1, "", -1, "")
 					vfs.GlobalArchiveLockManager.Lock(absArcPath)
@@ -270,15 +272,18 @@ func actionAddArchive(app vfs.App) {
 					fullPath := activeVfs.Join(activeVfs.GetPath(), n)
 					if osvfs, ok := activeVfs.(*vfs.OSVFS); ok {
 						absPath, _ := osvfs.Abs(fullPath)
-						filepath.Walk(absPath, func(p string, fi os.FileInfo, e error) error {
-							if e == nil {
-								fileMap[p] = fi
-								if !fi.IsDir() {
-									totalBytes += fi.Size()
-								}
+						if err := filepath.Walk(absPath, func(p string, fi os.FileInfo, e error) error {
+							if e != nil {
+								return e
+							}
+							fileMap[p] = fi
+							if !fi.IsDir() {
+								totalBytes += fi.Size()
 							}
 							return nil
-						})
+						}); err != nil {
+							return fmt.Errorf("scan %q for archiving: %w", n, err)
+						}
 					}
 				}
 
@@ -286,7 +291,9 @@ func actionAddArchive(app vfs.App) {
 				if err != nil {
 					return err
 				}
-				defer a.Close()
+				defer func() {
+					retErr = joinArchiveCloseError(retErr, a.Close())
+				}()
 
 				done := make(chan struct{})
 				defer close(done)
