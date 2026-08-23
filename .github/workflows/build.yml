@@ -935,7 +935,10 @@ jobs:
     - name: Set Release Metadata
       run: |
         echo "SHORT_SHA=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
-        echo "BUILD_TIME=$(date +'%Y-%m-%d %H:%M:%S')" >> "$GITHUB_ENV"
+        # Go embeds the commit timestamp as vcs.time in every nightly binary.
+        # Publish that same timestamp so the updater and F1's Help Index use
+        # one source instead of comparing the workflow clock with commit time.
+        echo "BUILD_TIME=$(date -u -d "@$(git show -s --format='%ct' HEAD)" +'%Y-%m-%d %H:%M:%S')" >> "$GITHUB_ENV"
 
     - name: Download all artifacts
       uses: actions/download-artifact@v8

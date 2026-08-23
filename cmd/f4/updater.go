@@ -201,14 +201,7 @@ func CheckForUpdates(pf *PanelsFrame, manual bool) {
 		// post-update version line agree. See #343.
 		if commit, builtOn := commitInfoFromReleaseBody(release.Body); commit != "" {
 			if builtOn != "" {
-				// The nightly workflow records BUILD_TIME with `date` on
-				// a UTC GitHub runner and without a zone suffix, so it is
-				// UTC. Treat it as such and show the user's local time so
-				// the prompt agrees with the asset-timestamp path above
-				// and never regresses to UTC. See f4 issue #343.
-				if t, err := time.ParseInLocation("2006-01-02 15:04:05", builtOn, time.UTC); err == nil {
-					builtOn = t.Local().Format("2006-01-02 15:04")
-				}
+				builtOn = formatBuildTimeForDisplay(builtOn)
 				displayVersion = "Nightly (" + commit + " [" + builtOn + "])"
 			} else {
 				displayVersion = "Nightly (" + commit + ")"
