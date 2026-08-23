@@ -1422,6 +1422,20 @@ func runProgressTicker(ctx context.Context, done chan struct{}, reporter vfs.Tas
 		}
 	}
 }
+
+func startProgressTicker(ctx context.Context, reporter vfs.TaskReporter, getStatus func() (action, file string, pct int)) func() {
+	done := make(chan struct{})
+	tickerDone := make(chan struct{})
+	go func() {
+		defer close(tickerDone)
+		runProgressTicker(ctx, done, reporter, getStatus)
+	}()
+	return func() {
+		close(done)
+		<-tickerDone
+	}
+}
+
 func (v *ArchiveVFS) CopyBulk(ctx context.Context, srcPaths []string, dstVfs vfs.VFS, dstDir string, reporter vfs.TaskReporter) error {
 	if err := archiveOperationCancelled(ctx, reporter); err != nil {
 		return err
@@ -1543,14 +1557,12 @@ func (v *ArchiveVFS) copyBulkZip(ctx context.Context, f vfs.ReadAtCloser, select
 	lastFile := "Archive data"
 	lastPct := -1
 
-	done := make(chan struct{})
-	defer close(done)
-
-	go runProgressTicker(ctx, done, reporter, func() (string, string, int) {
+	stopProgressTicker := startProgressTicker(ctx, reporter, func() (string, string, int) {
 		mu.Lock()
 		defer mu.Unlock()
 		return lastAction, lastFile, lastPct
 	})
+	defer stopProgressTicker()
 
 	buf := make([]byte, 128*1024)
 	for _, file := range zr.File {
@@ -1688,14 +1700,12 @@ func (v *ArchiveVFS) copyBulkTar(ctx context.Context, f vfs.ReadAtCloser, select
 	lastFile := "Archive data"
 	lastPct := -1
 
-	done := make(chan struct{})
-	defer close(done)
-
-	go runProgressTicker(ctx, done, reporter, func() (string, string, int) {
+	stopProgressTicker := startProgressTicker(ctx, reporter, func() (string, string, int) {
 		mu.Lock()
 		defer mu.Unlock()
 		return lastAction, lastFile, lastPct
 	})
+	defer stopProgressTicker()
 
 	buf := make([]byte, 128*1024)
 
@@ -1859,14 +1869,12 @@ func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, s
 	lastFile := "Archive data"
 	lastPct := -1
 
-	done := make(chan struct{})
-	defer close(done)
-
-	go runProgressTicker(ctx, done, reporter, func() (string, string, int) {
+	stopProgressTicker := startProgressTicker(ctx, reporter, func() (string, string, int) {
 		mu.Lock()
 		defer mu.Unlock()
 		return lastAction, lastFile, lastPct
 	})
+	defer stopProgressTicker()
 
 	return ex.Extract(ctx, localF, func(ctx context.Context, info archives.FileInfo) error {
 		if ctx.Err() != nil {
