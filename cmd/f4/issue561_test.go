@@ -18,7 +18,8 @@ func (*issue561ViewportRenderer) Flush()                                        
 
 func TestIssue561PanelSettingsRequestsViewportLargeEnoughForDialog(t *testing.T) {
 	oldConfig := AppConfig
-	defer func() { AppConfig = oldConfig }()
+	t.Cleanup(func() { AppConfig = oldConfig })
+	t.Cleanup(swapFrameManager(t))
 
 	scr := vtui.NewSilentScreenBuf()
 	scr.AllocBuf(100, 30)
@@ -27,6 +28,7 @@ func TestIssue561PanelSettingsRequestsViewportLargeEnoughForDialog(t *testing.T)
 	vtui.FrameManager.Init(scr)
 
 	pf := NewPanelsFrame()
+	t.Cleanup(pf.Close)
 	vtui.FrameManager.Push(pf)
 	actionPanelSettings(pf)
 

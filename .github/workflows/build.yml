@@ -713,7 +713,11 @@ jobs:
     - name: Run Tests
       shell: bash
       run: |
-        go test -timeout 15m -skip '^TestAllDialogs_LayoutValidation$' ./...
+        # Shuffle tests and subtests to expose order dependencies. Go prints
+        # the seed on every run, so reproduce a failure with -shuffle=<seed>.
+        # The seed selects a permutation of the test set, so it only reproduces
+        # while that set remains unchanged.
+        go test -shuffle=on -timeout 15m -skip '^TestAllDialogs_LayoutValidation$' ./...
         # Layout validation mutates shared UI registries from parallel
         # subtests. Go 1.26 schedules them aggressively enough to expose the
         # upstream race, so isolate that test in a single-threaded process.
@@ -814,7 +818,7 @@ jobs:
           echo "::error::no packages left to run under the race detector"
           exit 1
         fi
-        go test -race -timeout 15m "${packages[@]}"
+        go test -race -shuffle=on -timeout 15m "${packages[@]}"
         go test -race -run '^$' ./cmd/f4 ./luaplug
 
   release:
