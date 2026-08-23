@@ -9,6 +9,11 @@ import (
 	"golang.org/x/sys/windows/registry"
 )
 
+func init() {
+	platformGuiFontDisplayChoices = windowsGuiFontDisplayChoices
+	platformGuiFontDisplayName = windowsGuiFontDisplayName
+}
+
 func windowsFontEntries() []fontEntry {
 	var entries []fontEntry
 	for _, hive := range []registry.Key{registry.LOCAL_MACHINE, registry.CURRENT_USER} {

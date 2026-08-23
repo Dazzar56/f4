@@ -36,24 +36,30 @@ func guiFontChoices(language, current string) []string {
 	return choices
 }
 
+// platformGuiFontDisplayChoices and platformGuiFontDisplayName are indirection
+// variables so the non-Windows build never references the Windows-only font
+// name helpers: those live in the //go:build windows file and override these
+// from init there. The defaults keep the previous path-based behaviour.
+var platformGuiFontDisplayChoices = func(language, current string) []string {
+	return guiFontChoices(language, current)
+}
+
+var platformGuiFontDisplayName = func(value string) string {
+	return value
+}
+
 // guiFontDisplayChoices returns the strings shown in the font picker. On
 // Windows these are font family names (e.g. "Cascadia Mono") instead of file
 // paths; elsewhere the platform catalog has no name metadata, so the paths are
 // returned as before.
 func guiFontDisplayChoices(language, current string) []string {
-	if runtime.GOOS != "windows" {
-		return guiFontChoices(language, current)
-	}
-	return windowsGuiFontDisplayChoices(language, current)
+	return platformGuiFontDisplayChoices(language, current)
 }
 
 // guiFontDisplayName maps a stored font value to its picker label, resolving a
 // Windows font file path back to its family name when possible.
 func guiFontDisplayName(value string) string {
-	if runtime.GOOS != "windows" {
-		return value
-	}
-	return windowsGuiFontDisplayName(value)
+	return platformGuiFontDisplayName(value)
 }
 
 func sameGuiFontValue(left, right string) bool {
