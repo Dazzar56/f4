@@ -675,9 +675,14 @@ func init() {
 		MenuPath:    "Files",
 		Handler: withPF(func(pf *PanelsFrame) {
 			if fsp := pf.getActivePanel(); fsp != nil {
-				vtui.InputBox(Msg("Select.Title"), Msg("Select.Mask"), "*", func(mask string) {
+				var maskEdit *vtui.Edit
+				dlg := vtui.InputBox(Msg("Select.Title"), Msg("Select.Mask"), "*", func(mask string) {
+					commitHistory(maskEdit, mask)
 					fsp.ApplyMaskSelection(mask, true)
 				})
+				// Plain DIF_HISTORY, as in far2l: the dialog opens on "*"
+				// rather than on whatever was selected last time.
+				maskEdit = attachHistory(inputBoxEdit(dlg), fileMasksHistoryID)
 			}
 		}),
 	})
@@ -692,9 +697,12 @@ func init() {
 		MenuPath:    "Files",
 		Handler: withPF(func(pf *PanelsFrame) {
 			if fsp := pf.getActivePanel(); fsp != nil {
-				vtui.InputBox(Msg("Deselect.Title"), Msg("Select.Mask"), "*", func(mask string) {
+				var maskEdit *vtui.Edit
+				dlg := vtui.InputBox(Msg("Deselect.Title"), Msg("Select.Mask"), "*", func(mask string) {
+					commitHistory(maskEdit, mask)
 					fsp.ApplyMaskSelection(mask, false)
 				})
+				maskEdit = attachHistory(inputBoxEdit(dlg), fileMasksHistoryID)
 			}
 		}),
 	})

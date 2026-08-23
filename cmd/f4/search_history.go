@@ -52,17 +52,23 @@ func commitHistory(edit *vtui.Edit, value string) {
 	edit.AddHistory(value)
 }
 
-// attachInputBoxHistory wires history into a dialog built by vtui.InputBox,
-// which has no history support of its own, and returns the field it found so
-// the caller can commit to it. InputBox lays out exactly one Edit.
-func attachInputBoxHistory(dlg *vtui.Window, historyID string) *vtui.Edit {
+// inputBoxEdit returns the single Edit laid out by vtui.InputBox, which has no
+// history support of its own. Locating the field here beats forking InputBox
+// in vtui just to thread a history name through it.
+func inputBoxEdit(dlg *vtui.Window) *vtui.Edit {
 	if dlg == nil {
 		return nil
 	}
 	for _, child := range dlg.GetChildren() {
 		if edit, ok := child.(*vtui.Edit); ok {
-			return attachHistoryUseLast(edit, historyID)
+			return edit
 		}
 	}
 	return nil
+}
+
+// attachInputBoxHistory wires history into an InputBox dialog and returns the
+// field it found, so the caller can commit to it.
+func attachInputBoxHistory(dlg *vtui.Window, historyID string) *vtui.Edit {
+	return attachHistoryUseLast(inputBoxEdit(dlg), historyID)
 }

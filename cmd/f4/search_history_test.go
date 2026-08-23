@@ -206,3 +206,49 @@ func TestViewerSearchDialog_AttachesHistory(t *testing.T) {
 		t.Errorf("viewer search history not loaded: %v", edit.History)
 	}
 }
+
+func TestSelectGroupDialog_UsesMaskHistory(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+	store := useStubHistory(t)
+	store["Masks"] = []string{"*.go"}
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	vtui.FrameManager.Push(pf)
+	defer vtui.FrameManager.Pop()
+
+	for _, action := range []string{"Panel.SelectGroup", "Panel.DeselectGroup"} {
+		t.Run(action, func(t *testing.T) {
+			if !RunAction(action) {
+				t.Fatalf("action %q did not run", action)
+			}
+			dlg := vtui.FrameManager.GetTopFrame().(vtui.Container)
+			defer vtui.FrameManager.Pop()
+
+			edit := findHistoryEdit(t, dlg, fileMasksHistoryID)
+			if len(edit.History) != 1 || edit.History[0] != "*.go" {
+				t.Errorf("mask history not loaded: %v", edit.History)
+			}
+			// far2l opens this dialog on "*", not on the last used mask.
+			if got := edit.GetText(); got != "*" {
+				t.Errorf("dialog opened on %q, want %q", got, "*")
+			}
+		})
+	}
+}
+
+func TestAssocEditor_SharesMaskHistory(t *testing.T) {
+	store := useStubHistory(t)
+	store["Masks"] = []string{"*.md"}
+
+	edit := attachHistory(vtui.NewEdit(0, 0, 20, "*.txt"), fileMasksHistoryID)
+	if len(edit.History) != 1 || edit.History[0] != "*.md" {
+		t.Errorf("association mask field does not share the Masks bucket: %v", edit.History)
+	}
+	commitHistory(edit, "*.txt")
+	if got := store["Masks"]; len(got) != 2 || got[0] != "*.txt" {
+		t.Errorf("saved mask not pushed to the shared bucket: %v", got)
+	}
+}

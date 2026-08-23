@@ -271,6 +271,7 @@ func (s *assocEditorState) editAt(idx int, isCreate bool) {
 	dlg.ShowClose = true
 
 	editMask := vtui.NewEdit(0, 0, width-4, work.Mask)
+	attachHistory(editMask, fileMasksHistoryID)
 	editDesc := vtui.NewEdit(0, 0, width-4, work.Description)
 
 	// One (checkbox, edit) per slot. Checkbox label is the far2l key
@@ -351,6 +352,7 @@ func (s *assocEditorState) editAt(idx int, isCreate bool) {
 			Mask:        mask,
 			Description: strings.TrimSpace(editDesc.GetText()),
 		}
+		commitHistory(editMask, mask)
 		for k := 0; k < assocKindCount; k++ {
 			newAssoc.Commands[k] = slotEdits[k].GetText()
 			newAssoc.Enabled[k] = slotChecks[k].State != 0
