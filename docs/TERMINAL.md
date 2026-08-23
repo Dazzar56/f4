@@ -176,6 +176,18 @@ the same APC channel as everything else, and the kitty receiver is never
 reached at all. Before that channel was answered, far2l running inside f4 said
 "backend doesn't support graphics", which was true.
 
+Two fields of that protocol carry two different things depending on a flag.
+`WP_IMG_PIXEL_OFFSET`, which far2l's image viewer sets on **every** send, means
+the picture is not scaled and the far corner of the area is a pixel offset
+rather than a coordinate. Reading it as a coordinate is not a small error: the
+viewer sends `area={44:6 10:16}`, and ten as a right-hand column against
+forty-four as a left-hand one is a picture minus thirty three cells wide. It
+was refused, and the viewer reported that it had failed to send the image to
+the terminal.
+
+The offset is applied in whole cells and the remainder dropped, a placement
+starting on a cell boundary. The most that costs is the last cell of a pan.
+
 ### 4. Known deviations and defects
 
 Read this list before concluding that something is broken.

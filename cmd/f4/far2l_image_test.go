@@ -213,3 +213,70 @@ func TestFar2lImageTransformRefused(t *testing.T) {
 		t.Errorf("got %d, want a refusal", got)
 	}
 }
+
+// The numbers far2l's image viewer actually sends. Its log line was
+//
+//	OnSetConsoleImage: id='image_viewer' flags=0x100001 area={44:6 10:16}
+//	                   width=1280 height=980
+//	SendWholeImage: error at 0 of 980
+//
+// and the reason for the error was reading 10 and 16 as the far corner of the
+// area rather than as a pixel offset: the picture came out minus thirty three
+// cells wide and was refused.
+func TestFar2lImageViewerSendIsAccepted(t *testing.T) {
+	e := newSixelEnv(t)
+	const w, h = 128, 98 // the same shape, small enough for a test
+
+	req := far2lRequest(1, 's', func(stk *vtinput.Far2lStack) {
+		stk.PushBytes(make([]byte, w*h*3))
+		stk.PushU32(h)
+		stk.PushU32(w)
+		stk.PushU16(16) // bottom: a pixel offset, not a row
+		stk.PushU16(10) // right: a pixel offset, not a column
+		stk.PushU16(6)  // top
+		stk.PushU16(44) // left
+		stk.PushU64(wpImgPixelOffset | wpImgRGB)
+		stk.PushString("image_viewer")
+	})
+	if got := far2lSend(t, e, req).PopU8(); got != 1 {
+		t.Fatalf("the viewer's own send was refused: %d", got)
+	}
+
+	if len(e.tv.images) != 1 {
+		t.Fatalf("expected one placement, got %d", len(e.tv.images))
+	}
+	p := e.tv.images[0]
+	// Not scaled: the picture is its own size in cells, which at ten by
+	// twenty is 13 by 5, put down at the corner and shifted by the offset
+	// in whole cells — one column across, none down.
+	if p.Col != 45 || p.Row != 6 {
+		t.Errorf("corner: got %d,%d, want 45,6", p.Col, p.Row)
+	}
+	if p.Cols != 13 || p.Rows != 5 {
+		t.Errorf("size: got %dx%d cells, want 13x5", p.Cols, p.Rows)
+	}
+}
+
+// Without the flag the far corner is a corner and the picture is scaled to
+// cover the area, which is the other half of the same field.
+func TestFar2lImageScaledToArea(t *testing.T) {
+	e := newSixelEnv(t)
+	req := far2lRequest(1, 's', func(stk *vtinput.Far2lStack) {
+		stk.PushBytes(make([]byte, 8*8*3))
+		stk.PushU32(8)
+		stk.PushU32(8)
+		stk.PushU16(16) // bottom row
+		stk.PushU16(10) // right column
+		stk.PushU16(6)
+		stk.PushU16(4)
+		stk.PushU64(wpImgRGB)
+		stk.PushString("image_viewer")
+	})
+	if got := far2lSend(t, e, req).PopU8(); got != 1 {
+		t.Fatalf("refused: %d", got)
+	}
+	p := e.tv.images[0]
+	if p.Col != 4 || p.Row != 6 || p.Cols != 7 || p.Rows != 11 {
+		t.Errorf("got %d,%d %dx%d, want 4,6 7x11", p.Col, p.Row, p.Cols, p.Rows)
+	}
+}

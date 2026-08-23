@@ -34,6 +34,12 @@ const (
 	wpImgRGBA    = 0
 	wpImgRGB     = 1
 
+	// wpImgPixelOffset changes what the far corner of the area means: the
+	// picture is not scaled to the area, and Right and Bottom carry a
+	// pixel offset instead of a coordinate. far2l's image viewer sets it
+	// on every send, so this is the ordinary case and not the exotic one.
+	wpImgPixelOffset = 0x100000
+
 	// far2lNoCoord is the -1 a SMALL_RECT field carries when the sender
 	// wants the terminal to choose.
 	far2lNoCoord = 0xFFFF
@@ -130,15 +136,35 @@ func (tv *TerminalView) far2lImageSet(stk *vtinput.Far2lStack) uint8 {
 	if top == far2lNoCoord {
 		row = tv.CursorY
 	}
+	// The far corner means one of two things, and reading it as the wrong
+	// one is not a small error: far2l's viewer sends area={44:6 10:16} with
+	// the pixel offset flag, and treating 10 as a right-hand column gives a
+	// picture minus thirty three cells wide. That was the whole of why the
+	// viewer said it had failed to send the image.
 	cols := kittyCeilDiv(int64(width), int64(cw))
 	rows := kittyCeilDiv(int64(height), int64(ch))
-	if right != far2lNoCoord {
-		cols = int(right) - col + 1
-	}
-	if bottom != far2lNoCoord {
-		rows = int(bottom) - row + 1
+	if flags&wpImgPixelOffset != 0 {
+		// Not scaled: the picture is its own size, put down at the
+		// corner and shifted by the offset. The shift is applied in
+		// whole cells and the remainder is dropped, because a placement
+		// starts on a cell boundary; the most that costs is the last
+		// cell of a pan.
+		if right != far2lNoCoord {
+			col += int(right) / cw
+		}
+		if bottom != far2lNoCoord {
+			row += int(bottom) / ch
+		}
+	} else {
+		if right != far2lNoCoord {
+			cols = int(right) - col + 1
+		}
+		if bottom != far2lNoCoord {
+			rows = int(bottom) - row + 1
+		}
 	}
 	if cols <= 0 || rows <= 0 {
+		vtui.DebugLog("FAR2L_IMAGE: %dx%d cells at %d,%d is not a picture", cols, rows, col, row)
 		return 0
 	}
 
