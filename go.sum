@@ -274,8 +274,8 @@ github.com/unxed/sevenzip v0.0.0-20260704211908-25d317f8295f h1:OyhyHEqaaG+a8vgM
 github.com/unxed/sevenzip v0.0.0-20260704211908-25d317f8295f/go.mod h1:rJcnGhhJlfN86AE3R5PX9BxAIwYlx1cT6SR/9d8T03M=
 github.com/unxed/tar v0.1.128 h1:bZlTfutkerCpfTzIa9NI+shYmGN0Kkmbm7ajiv8x/2I=
 github.com/unxed/tar v0.1.128/go.mod h1:r5i7gm2krYXoWnH4hPM5hBHMx4jp00aPonAJnpF1Eso=
-github.com/unxed/vtui v0.1.279 h1:Sm3sEWyQ6P+MTBWpBkZhHI6fDmedWT/74Ej1Eqg4Hd4=
-github.com/unxed/vtui v0.1.279/go.mod h1:0nokT7u2IAmZ3SgdQ8O/yjLrBsIC3O+YfKxd8CGAhCE=
+github.com/unxed/vtui v0.1.280 h1:2yW6dkMuyAGQqUL9E1QanKrNexbqdFyrQm706F/rGGk=
+github.com/unxed/vtui v0.1.280/go.mod h1:AW7SKncqNx4W+teoezVFy4+DJev31QjiELXPFG5v/5Q=
 github.com/unxed/winkeys v0.1.1 h1:CeRhzQLrZtO2aVq8C8gPX1ySdbbvPombbUZ15cRjFTI=
 github.com/unxed/winkeys v0.1.1/go.mod h1:eCDbEJFdYcii0Fd4O9u+CAqjJ4SkkhWDkhikNFwBCd4=
 github.com/unxed/xkb-go v0.1.8 h1:hqPI2wJw2LQ7YOqghNYat/TJF3pFamCCPjhxI5I3lhU=
