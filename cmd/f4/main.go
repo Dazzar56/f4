@@ -396,6 +396,7 @@ see in vtinput project: https://github.com/unxed/vtinput
 	} else {
 		SelectedTTYBackend = vtui.DefaultConsoleBackend()
 	}
+	configureNestedInputMode()
 
 	// The probe runs after backend selection (so it can report what f4 would
 	// really use) and before any renderer exists (so it cannot disturb the
@@ -758,6 +759,25 @@ func SetupUI() {
 // boundary so vtui remains backwards-compatible for other applications.
 func configureUnicodeInput() {
 	vtui.DefaultBidiMode = vtui.BidiFull
+}
+
+// nestedInputMode selects the reader for f4 launched inside its own terminal.
+// Windows ConPTY converts SGR mouse bytes sent to a native console reader into
+// lossy MOUSE_EVENT records, so a nested f4 must parse the bytes directly.
+// An explicit --input choice always wins, and Unix keeps its normal reader.
+func nestedInputMode(explicit string, nested, windows bool) string {
+	if explicit != "" || !nested || !windows {
+		return explicit
+	}
+	return "ansi"
+}
+
+func configureNestedInputMode() {
+	nested := os.Getenv("F4_NESTED") != ""
+	vtinput.InputMode = nestedInputMode(vtinput.InputMode, nested, runtime.GOOS == "windows")
+	if nested && runtime.GOOS == "windows" && vtinput.InputMode == "ansi" {
+		vtui.DebugLog("INPUT: nested f4 uses ANSI reader to preserve ConPTY mouse buttons")
+	}
 }
 
 var getSessionIniPath = func() string {
