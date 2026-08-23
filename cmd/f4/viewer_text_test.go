@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/unxed/f4/textlayout"
 	"github.com/unxed/vtui"
 )
 
@@ -43,6 +44,26 @@ func TestViewerTextCellsKeepsRTLClustersAndOffsets(t *testing.T) {
 		if offsets[i] != want[i] {
 			t.Fatalf("visual cell %d offset = %d, want %d", i, offsets[i], want[i])
 		}
+	}
+}
+
+func TestViewerTextCellsKeepsIndicClustersInsideBidiParagraph(t *testing.T) {
+	oldMode := vtui.DefaultBidiMode
+	t.Cleanup(func() { vtui.DefaultBidiMode = oldMode })
+	vtui.DefaultBidiMode = vtui.BidiFull
+
+	text := "संस्कृतम् ދިވެހިބަސް"
+	clusters := textlayout.VisualClustersInVisualOrder(text)
+	cells, offsets := viewerTextCells(text, 0, 8, 100)
+	if len(cells) != len(clusters) || len(offsets) != len(clusters) {
+		t.Fatalf("rendered %d cells/%d offsets for %d clusters", len(cells), len(offsets), len(clusters))
+	}
+	seen := make(map[int]bool, len(offsets))
+	for _, offset := range offsets {
+		seen[offset] = true
+	}
+	if len(seen) != len(clusters) {
+		t.Fatalf("rendered offsets covered %d clusters, want %d", len(seen), len(clusters))
 	}
 }
 

@@ -898,6 +898,34 @@ func TestEditorMouseOffsetSnapsToClusterBoundary(t *testing.T) {
 	}
 }
 
+func TestEditorShiftLeftKeepsIndicConjunctsAtomic(t *testing.T) {
+	oldMode := vtui.DefaultBidiMode
+	vtui.DefaultBidiMode = vtui.BidiFull
+	t.Cleanup(func() { vtui.DefaultBidiMode = oldMode })
+
+	text := "संस्कृतम्"
+	pt := piecetable.New([]byte(text))
+	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
+	ev.SetPosition(0, 0, 79, 24)
+	ev.CursorPos = len([]byte(text))
+
+	want := []string{"म्", "तम्", "स्कृतम्", "संस्कृतम्"}
+	for i, expected := range want {
+		ev.ProcessKey(&vtinput.InputEvent{
+			Type:            vtinput.KeyEventType,
+			KeyDown:         true,
+			VirtualKeyCode:  vtinput.VK_LEFT,
+			ControlKeyState: vtinput.ShiftPressed,
+		})
+		min, max := ev.getSelectionRange()
+		got := pt.String()[min:max]
+		if got != expected {
+			t.Fatalf("shift-left %d selected %q, want %q (range %d:%d)", i, got, expected, min, max)
+		}
+	}
+}
+
 func TestEditorView_BracketedPaste(t *testing.T) {
 	pt := piecetable.New([]byte("Start-"))
 	ev := NewEditorView(pt, nil, "")
