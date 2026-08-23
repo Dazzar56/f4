@@ -3,12 +3,65 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/unxed/f4/sheet"
+	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 )
+
+// sheetDirectory is where a name typed without a directory belongs: whatever
+// the active file panel is showing.
+//
+// The frame stack is searched across workspaces rather than only on top,
+// because a spreadsheet lives in a workspace of its own and has no panels
+// under it, and because a dialog is what sits on top while a path is typed.
+// An empty result means there is no local panel to speak of.
+func sheetDirectory() string {
+	pf := findPanelsFrameAnyScreen()
+	if pf == nil {
+		return ""
+	}
+	fs, ok := pf.GetActivePanelVFS().(*vfs.OSVFS)
+	if !ok || fs == nil {
+		return ""
+	}
+	dir, err := fs.Abs(fs.GetPath())
+	if err != nil {
+		return ""
+	}
+	return dir
+}
+
+// sheetPathIn resolves a typed sheet path against dir.
+//
+// Nothing used to resolve these names at all, so a relative one reached the
+// SQLite and XLSX writers as typed and landed in the working directory f4 was
+// started from. The sheet reported "Saved as sheet.f4s" and the panel the user
+// was looking at never showed a file.
+//
+// An empty dir keeps the old destination, made explicit: a name with no panel
+// behind it resolves against the process working directory.
+func sheetPathIn(dir, path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" || filepath.IsAbs(path) {
+		return path
+	}
+	if dir != "" {
+		return filepath.Join(dir, path)
+	}
+	if abs, err := filepath.Abs(path); err == nil {
+		return abs
+	}
+	return path
+}
+
+// sheetResolvePath is sheetPathIn against the directory of the active panel.
+func sheetResolvePath(path string) string {
+	return sheetPathIn(sheetDirectory(), path)
+}
 
 // loadSheetCSV reads a CSV file into a fresh sheet.
 func loadSheetCSV(path string) (*sheet.Sheet, error) {
@@ -90,7 +143,13 @@ func askSheetPath(title, label, initial string, accept func(string)) {
 }
 
 func showSheetOpenDialog(sf *SheetFrame) {
-	askSheetPath(Msg("Sheet.Title"), Msg("Sheet.OpenPrompt"), sf.Path(), func(path string) {
+	initial := sf.Path()
+	if initial == "" {
+		if dir := sheetDirectory(); dir != "" {
+			initial = dir + string(filepath.Separator)
+		}
+	}
+	askSheetPath(Msg("Sheet.Title"), Msg("Sheet.OpenPrompt"), initial, func(path string) {
 		sheetOpen(sf, path)
 	})
 }
@@ -98,7 +157,7 @@ func showSheetOpenDialog(sf *SheetFrame) {
 func showSheetSaveAsDialog(sf *SheetFrame) {
 	initial := sf.Path()
 	if initial == "" {
-		initial = Msg("Sheet.DefaultFileName")
+		initial = sheetResolvePath(Msg("Sheet.DefaultFileName"))
 	}
 	askSheetPath(Msg("Sheet.Title"), Msg("Sheet.SavePrompt"), initial, func(path string) {
 		sheetSave(sf, path)
@@ -143,7 +202,7 @@ func showSheetExportDialog(sf *SheetFrame) {
 	box.Apply()
 
 	btnOk.OnClick = func() {
-		path := strings.TrimSpace(edit.GetText())
+		path := sheetResolvePath(edit.GetText())
 		selected := format.Selected
 		dlg.Close()
 		if path == "" {
@@ -182,7 +241,7 @@ func exportExtension(selected int) string {
 func defaultExportName(sf *SheetFrame, extension string) string {
 	base := sf.Path()
 	if base == "" {
-		return "sheet" + extension
+		return sheetResolvePath("sheet" + extension)
 	}
 	if dot := strings.LastIndex(base, "."); dot > strings.LastIndexAny(base, `/\`) {
 		base = base[:dot]

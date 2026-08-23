@@ -614,11 +614,16 @@ func sheetNew(sf *SheetFrame) {
 }
 
 // sheetSave writes the sheet, choosing the format from the file extension.
+//
+// The path is resolved against the active panel before anything is written:
+// a name typed without a directory belongs where the user is looking, not in
+// the directory f4 happens to have been started from.
 func sheetSave(sf *SheetFrame, path string) {
 	if path == "" {
 		showSheetSaveAsDialog(sf)
 		return
 	}
+	path = sheetResolvePath(path)
 	var err error
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".xlsx":
@@ -637,6 +642,7 @@ func sheetSave(sf *SheetFrame, path string) {
 
 // sheetOpen loads a sheet from disk, picking the reader by extension.
 func sheetOpen(sf *SheetFrame, path string) {
+	path = sheetResolvePath(path)
 	var (
 		loaded *sheet.Sheet
 		err    error

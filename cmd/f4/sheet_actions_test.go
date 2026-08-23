@@ -1,6 +1,7 @@
 package main
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -71,5 +72,38 @@ func TestSpreadsheetPathLookupIgnoresPopups(t *testing.T) {
 	vtui.FrameManager.Push(popup)
 	if activePanelsFrame() != pf {
 		t.Error("the panels frame was not found while a popup was on top")
+	}
+}
+
+// TestSheetPathResolution covers where a name typed in a sheet dialog lands.
+//
+// Nothing resolved these names before, so a relative one reached the writers
+// as typed and the file appeared in the directory f4 was started from while
+// the status line said it had been saved.
+func TestSheetPathResolution(t *testing.T) {
+	separator := string(filepath.Separator)
+	panelDir := filepath.Join(separator+"tmp", "panel")
+	absolute := filepath.Join(separator+"tmp", "elsewhere", "book.xlsx")
+
+	for _, tc := range []struct {
+		name string
+		dir  string
+		path string
+		want string
+	}{
+		{"relative name lands in the panel directory", panelDir, "sheet.f4s", filepath.Join(panelDir, "sheet.f4s")},
+		{"surrounding blanks are not part of the name", panelDir, "  sheet.f4s  ", filepath.Join(panelDir, "sheet.f4s")},
+		{"a typed absolute path is left alone", panelDir, absolute, absolute},
+		{"an empty name stays empty", panelDir, "   ", ""},
+	} {
+		if got := sheetPathIn(tc.dir, tc.path); got != tc.want {
+			t.Errorf("%s: sheetPathIn(%q, %q) = %q, want %q", tc.name, tc.dir, tc.path, got, tc.want)
+		}
+	}
+
+	// With no panel behind it the destination is the old one, only spelled out.
+	got := sheetPathIn("", "sheet.f4s")
+	if !filepath.IsAbs(got) || filepath.Base(got) != "sheet.f4s" {
+		t.Errorf("sheetPathIn(\"\", \"sheet.f4s\") = %q, want an absolute path ending in sheet.f4s", got)
 	}
 }
