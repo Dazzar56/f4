@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"time"
 
 	"github.com/tetratelabs/wazero"
@@ -41,7 +42,7 @@ type WasmPlugin struct {
 	cancel       context.CancelFunc
 	toGuest      *io.PipeWriter
 	done         chan struct{}
-	closing      bool
+	closing      atomic.Bool // read by guest/session exit goroutines to suppress expected shutdown errors
 	bridge       *ffibridge.Bridge
 	registration vfs.Registration
 	// identity is who this plugin is to the permission model, taken from
@@ -129,7 +130,7 @@ func (p *WasmPlugin) Init(api vfs.HostAPI) error {
 		guestStdout.Close()
 		hostToGuest.Close()
 
-		if runErr != nil && !p.closing && !isCleanWasmExit(runErr) {
+		if runErr != nil && !p.closing.Load() && !isCleanWasmExit(runErr) {
 			vtui.DebugLog("WASM Plugin %q terminated: %v", p.path, runErr)
 		}
 	}()
@@ -140,7 +141,7 @@ func (p *WasmPlugin) Init(api vfs.HostAPI) error {
 	p.bridge = newGatedFFIBridge(newPluginGate(p.permissionIdentity()))
 
 	registration, err := startPluginSession(p.sess, api, p.path, p.bridge, func(err error) {
-		if !p.closing {
+		if !p.closing.Load() {
 			vtui.DebugLog("WASM Plugin %q session ended: %v", p.path, err)
 		}
 	})
@@ -153,7 +154,7 @@ func (p *WasmPlugin) Init(api vfs.HostAPI) error {
 }
 
 func (p *WasmPlugin) Close() error {
-	p.closing = true
+	p.closing.Store(true)
 	if p.registration != nil {
 		p.registration.Unregister()
 		p.registration = nil

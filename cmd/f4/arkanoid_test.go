@@ -3,7 +3,6 @@ package main
 import (
 	"math/rand"
 	"testing"
-	"time"
 
 	"github.com/unxed/vtui"
 )
@@ -34,8 +33,7 @@ func TestArkanoid_PhysicsAndCollisions(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	af := NewArkanoidFrame()
-	af.Close() // Останавливаем фоновый цикл, чтобы избежать конфликтов в тесте
-	time.Sleep(10 * time.Millisecond)
+	af.Close()                           // Останавливаем фоновый цикл, чтобы избежать конфликтов в тесте
 	af.rng = rand.New(rand.NewSource(1)) //nolint:gosec // Deterministic randomness only controls the ball's bounce direction in this test.
 
 	height := af.Y2 - af.Y1 - 1
@@ -106,7 +104,6 @@ func TestArkanoid_AutoplayAI(t *testing.T) {
 
 	af := NewArkanoidFrame()
 	af.Close()
-	time.Sleep(10 * time.Millisecond)
 
 	af.autoPlay = true
 	af.paddleX = 5

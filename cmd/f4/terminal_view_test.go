@@ -1175,6 +1175,7 @@ func TestIssue117_OSC52_Read_SecurityDenial(t *testing.T) {
 	}
 
 	parser1.Process([]byte("\x1b]52;c;?\x07"))
+	parser1.waitOSC52()
 	if pty1.Len() > 0 {
 		t.Errorf("Security leak: OSC 52 read responded to PTY even though access was Denied! Output: %q", pty1.String())
 	}
@@ -1185,6 +1186,7 @@ func TestIssue117_OSC52_Read_SecurityDenial(t *testing.T) {
 	vtui.GlobalClipboardAccessManager = &mockDenyingAuth{retVal: -1}
 
 	parser2.Process([]byte("\x1b]52;c;?\x07"))
+	parser2.waitOSC52()
 	if pty2.Len() > 0 {
 		t.Errorf("Security leak: OSC 52 read responded to PTY in Local Mode! Output: %q", pty2.String())
 	}

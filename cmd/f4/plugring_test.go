@@ -187,6 +187,7 @@ func TestGetInstalledPlugRingItems(t *testing.T) {
 	}
 }
 func TestCheckForPluginUpdates(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	tmpDir := t.TempDir()
@@ -270,8 +271,21 @@ func TestCheckForPluginUpdates(t *testing.T) {
 			t.Fatal("Timeout waiting for update toast")
 		}
 	}
+
+	// The toast owns a timer goroutine. Its second redraw is the completion
+	// signal; wait for it before restoring the global frame manager.
+	select {
+	case <-vtui.FrameManager.RedrawChan:
+	default:
+	}
+	select {
+	case <-vtui.FrameManager.RedrawChan:
+	case <-time.After(time.Second):
+		t.Fatal("Timeout waiting for update toast to expire")
+	}
 }
 func TestPlugRing_InstallAndRemove_EndToEnd(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	tmpConfig := t.TempDir()

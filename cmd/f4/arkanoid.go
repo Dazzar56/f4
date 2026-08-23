@@ -38,6 +38,7 @@ type ArkanoidFrame struct {
 	vtui.BaseWindow
 	mu              sync.Mutex
 	stop            chan struct{}
+	done            chan struct{} // closed after gameLoop stops touching the frame and game state
 	stopOnce        sync.Once
 	paddleX         int
 	paddleW         int
@@ -70,6 +71,7 @@ func NewArkanoidFrame() *ArkanoidFrame {
 	af := &ArkanoidFrame{
 		BaseWindow: *vtui.NewBaseWindow(x1, 2, x1+width-1, 2+height-1, " A R K A N O I D "),
 		stop:       make(chan struct{}),
+		done:       make(chan struct{}),
 		lives:      3,
 		multiplier: 1,
 		level:      1,
@@ -127,12 +129,16 @@ func (af *ArkanoidFrame) Close() {
 		if af.stop != nil {
 			close(af.stop)
 		}
+		if af.done != nil {
+			<-af.done
+		}
+		af.BaseWindow.Close()
 	})
-	af.BaseWindow.Close()
 }
 
 func (af *ArkanoidFrame) gameLoop() {
-	for !af.IsDone() {
+	defer close(af.done)
+	for {
 		// Динамическая задержка на основе autoSpeed
 		delay := gameRate + time.Duration(af.autoSpeed*-8)*time.Millisecond
 		if delay < 5*time.Millisecond {
@@ -691,7 +697,9 @@ func (af *ArkanoidFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		}
 		return true
 	case vtinput.VK_ESCAPE:
+		af.mu.Unlock()
 		af.Close()
+		af.mu.Lock()
 		return true
 	}
 	return af.BaseWindow.ProcessKey(e)
