@@ -3646,9 +3646,12 @@ func (pf *PanelsFrame) Message(title, msg string, buttons []string) int {
 	return <-resChan
 }
 
-func (pf *PanelsFrame) InputBox(title, prompt, history string, callback func(string)) {
+// InputBox prompts the user. The third argument is the text the field opens
+// with, not a history bucket name -- matching Host.InputBox in the SDK, where
+// the same value travels as InputBoxReq.Default.
+func (pf *PanelsFrame) InputBox(title, prompt, defaultText string, callback func(string)) {
 	vtui.FrameManager.PostTask(func() {
-		vtui.InputBox(title, prompt, history, callback)
+		vtui.InputBox(title, prompt, defaultText, callback)
 	})
 }
 

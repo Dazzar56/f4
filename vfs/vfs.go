@@ -28,7 +28,7 @@ type App interface {
 	RunAdvancedProgressTask(title string, forked bool, worker func(ctx context.Context, reporter TaskReporter) error, onComplete func(err error))
 	// UI Bridge
 	Message(title, msg string, buttons []string) int
-	InputBox(title, prompt, history string, callback func(string))
+	InputBox(title, prompt, defaultText string, callback func(string))
 	Menu(title string, items []string, callback func(int))
 }
 

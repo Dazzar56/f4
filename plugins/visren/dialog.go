@@ -790,7 +790,7 @@ func fixedLines(value string, width, count int) []string {
 }
 
 func (d *Dialog) editWordDiv() {
-	d.host.InputBox(tr("VisRen.WordDivTitle", "Word delimiters"), tr("VisRen.WordDivPrompt", "Characters separating words (maximum 18):"), "VisRenWordDiv", func(value string) {
+	d.host.InputBox(tr("VisRen.WordDivTitle", "Word delimiters"), tr("VisRen.WordDivPrompt", "Characters separating words (maximum 18):"), d.wordDiv, func(value string) {
 		runes := []rune(value)
 		if len(runes) > 18 {
 			runes = runes[:18]
