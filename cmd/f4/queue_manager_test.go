@@ -407,6 +407,7 @@ func TestQueueManager_BackgroundWorkspace(t *testing.T) {
 }
 
 func TestQueueFrame_InputLock(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	qf := NewQueueFrame()
 
@@ -633,6 +634,7 @@ pumpQueuedCompletion:
 }
 
 func TestQueueManagerCancelQueuedCompletesExactlyOnce(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	ctx, cancel := context.WithCancel(context.Background())
