@@ -2572,16 +2572,19 @@ func TestActionEditFile_DirectoryRedirectsToAttributes(t *testing.T) {
 	}
 }
 func TestActionCreateLink_Flow(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	SetDefaultF4Palette()
 
 	pf := NewPanelsFrame()
-	defer pf.Close()
+	t.Cleanup(pf.Close)
 	pf.ResizeConsole(80, 25)
 
 	tmpDir := t.TempDir()
 	fspSrc := pf.panels[0].(*FileSystemPanel)
 	fspDst := pf.panels[1].(*FileSystemPanel)
+	waitForLoad(t, fspSrc)
+	waitForLoad(t, fspDst)
 
 	srcDir := filepath.Join(tmpDir, "src")
 	dstDir := filepath.Join(tmpDir, "dst")
@@ -2630,6 +2633,8 @@ func TestActionCreateLink_Flow(t *testing.T) {
 	linkPath := filepath.Join(dstDir, "link.txt")
 	editDest.SetText(linkPath)
 
+	srcGeneration := fspSrc.loadingGeneration
+	dstGeneration := fspDst.loadingGeneration
 	clickDialogButton(t, dlg, "Create link")
 
 	// Drain task queue to execute async creation task
@@ -2651,6 +2656,18 @@ func TestActionCreateLink_Flow(t *testing.T) {
 	if _, err := os.Lstat(linkPath); err != nil {
 		t.Fatalf("Link was not created at %s: %v", linkPath, err)
 	}
+
+	timeout = time.After(2 * time.Second)
+	for fspSrc.loadingGeneration == srcGeneration || fspDst.loadingGeneration == dstGeneration {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Timeout waiting for link completion refresh")
+		}
+	}
+	waitForLoad(t, fspSrc)
+	waitForLoad(t, fspDst)
 }
 func TestActionSwitchEditorToViewerAndBack(t *testing.T) {
 	scr := vtui.NewSilentScreenBuf()

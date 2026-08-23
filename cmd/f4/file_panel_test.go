@@ -2230,8 +2230,16 @@ func TestFileSystemPanel_RightDoubleClickAppliesToWholePanel(t *testing.T) {
 }
 
 func TestFileSystemPanel_IncrementalInteraction(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(t.TempDir()))
+	t.Cleanup(func() {
+		if fp.cancelLoad != nil {
+			fp.cancelLoad()
+		}
+		fp.stopLoadingAnimation()
+	})
+	waitForLoad(t, fp)
 
 	// Ensure we have '..' as initial state
 	fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
@@ -2862,6 +2870,12 @@ func TestFileSystemPanel_DirectoryCache(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	v := vfs.NewOSVFS(t.TempDir())
 	fp := NewFileSystemPanel(0, 0, 40, 20, v)
+	t.Cleanup(func() {
+		if fp.cancelLoad != nil {
+			fp.cancelLoad()
+		}
+		fp.stopLoadingAnimation()
+	})
 
 	// 1. Manually populate cache
 	items := []vfs.VFSItem{
@@ -2889,6 +2903,7 @@ func TestFileSystemPanel_DirectoryCache(t *testing.T) {
 	if !found {
 		t.Error("Cached file not found in panel entries")
 	}
+	waitForLoad(t, fp)
 }
 
 func TestFileSystemPanel_DirectoryCacheIsScopedBySession(t *testing.T) {
