@@ -195,6 +195,7 @@ func panelsFrameWithMouseSelect(t *testing.T) (*PanelsFrame, *fakePTY) {
 	pf.ResizeConsole(80, 25)
 	pf.showPanels = false
 	pf.termView.SetPosition(0, 0, 79, 22)
+	pf.termView.clipboardWriter = func(string) {}
 	// zoin-bot: these tests exercise the terminal/PTy mouse path. A visible
 	// f4 command line has its own paste path and is covered separately below.
 	pf.cmdLine.SetVisible(false)

@@ -481,13 +481,21 @@ func TestActionDelete_Abort(t *testing.T) {
 
 	// Ждем ошибку и жмем Abort
 	timeout := time.After(2 * time.Second)
+	abortClicked := false
+	var progress *FileOpProgressDialog
 Loop:
 	for {
 		select {
 		case task := <-fm.TaskChan:
 			task()
-			if fm.GetTopFrameType() == vtui.TypeDialog && fm.GetTopFrame().GetTitle() == " Error " {
+			if top, ok := fm.GetTopFrame().(*FileOpProgressDialog); ok {
+				progress = top
+			}
+			if !abortClicked && fm.GetTopFrameType() == vtui.TypeDialog && fm.GetTopFrame().GetTitle() == " Error " {
 				clickDialogButton(t, fm.GetTopFrame().(vtui.Container), "Abort")
+				abortClicked = true
+			}
+			if progress != nil && progress.IsDone() {
 				break Loop
 			}
 			if fm.GetTopFrame() != nil && fm.GetTopFrame().IsDone() {
