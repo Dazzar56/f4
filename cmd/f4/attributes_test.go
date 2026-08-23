@@ -701,7 +701,9 @@ func TestAttributesDialog_SetFlow(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "file.txt")
-	os.WriteFile(path, []byte(""), 0644)
+	if err := os.WriteFile(path, []byte(""), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	baseVfs := vfs.NewOSVFS(tmpDir)
 	var capturedItem vfs.VFSItem

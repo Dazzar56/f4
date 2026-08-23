@@ -124,7 +124,9 @@ func TestAllDialogs_LayoutValidation(t *testing.T) {
 	// 3. Create a dummy file in the temp directory so file operations (Copy, Edit, etc.)
 	// have a valid target and will naturally display their progress/confirmation dialogs.
 	srcFile := filepath.Join(tmpDir, "test.txt")
-	os.WriteFile(srcFile, []byte("dummy content"), 0644)
+	if err := os.WriteFile(srcFile, []byte("dummy content"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	oldHotkeys := GlobalHotkeysMgr
 	oldMacro := MacroMgr

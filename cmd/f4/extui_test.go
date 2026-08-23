@@ -35,10 +35,11 @@ func TestExtUiProtocolRoundTrip(t *testing.T) {
 
 func TestExtUi_HandshakeScaling(t *testing.T) {
 	c, s := net.Pipe()
-	defer c.Close()
-	defer s.Close()
+	defer func() { _ = c.Close() }() // Pipe cleanup errors do not affect the assertions.
+	defer func() { _ = s.Close() }() // Pipe cleanup errors do not affect the assertions.
 
 	nonce := "testnonce"
+	sendErr := make(chan error, 1)
 
 	go func() {
 		msg := map[string]any{
@@ -49,12 +50,15 @@ func TestExtUi_HandshakeScaling(t *testing.T) {
 			"cellWidth":   10,
 			"cellHeight":  20,
 		}
-		extUiSendMessage(c, msg)
+		sendErr <- extUiSendMessage(c, msg)
 	}()
 
 	hello, err := extUiReadMessage(s)
 	if err != nil {
 		t.Fatalf("failed to read hello: %v", err)
+	}
+	if err := <-sendErr; err != nil {
+		t.Fatalf("failed to send hello: %v", err)
 	}
 
 	cols := 100

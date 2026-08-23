@@ -117,18 +117,33 @@ func TestIssue149_Reproduction(t *testing.T) {
 	tmpDir := t.TempDir()
 	zipPath := filepath.Join(tmpDir, "test_skip.zip")
 
-	f, _ := os.Create(zipPath)
+	f, err := os.Create(zipPath)
+	if err != nil {
+		t.Fatal(err)
+	}
 	zw := zip.NewWriter(f)
 	for i := 0; i < 10; i++ {
-		w, _ := zw.Create(fmt.Sprintf("file_%d.txt", i))
-		w.Write([]byte("data"))
+		w, err := zw.Create(fmt.Sprintf("file_%d.txt", i))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Write([]byte("data")); err != nil {
+			t.Fatal(err)
+		}
 	}
-	zw.Close()
-	f.Close()
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	parentVFS := vfs.NewOSVFS(tmpDir)
-	arcVfs, _ := archive.NewArchiveVFS(parentVFS, zipPath)
-	defer arcVfs.Close()
+	arcVfs, err := archive.NewArchiveVFS(parentVFS, zipPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = arcVfs.Close() }()
 
 	dstVFS := vfs.NewOSVFS(tmpDir)
 
@@ -147,7 +162,7 @@ func TestIssue149_Reproduction(t *testing.T) {
 
 	ctx := archive.WithAutoQueue(context.Background())
 
-	err := arcVfs.CopyBulk(ctx, names, dstVFS, tmpDir, rep)
+	err = arcVfs.CopyBulk(ctx, names, dstVFS, tmpDir, rep)
 	if err != nil {
 		t.Fatalf("CopyBulk failed: %v", err)
 	}
@@ -204,19 +219,34 @@ func TestIssue149_LocatingStatusReporting(t *testing.T) {
 	tmpDir := t.TempDir()
 	zipPath := filepath.Join(tmpDir, "test_locating.zip")
 
-	f, _ := os.Create(zipPath)
+	f, err := os.Create(zipPath)
+	if err != nil {
+		t.Fatal(err)
+	}
 	zw := zip.NewWriter(f)
 	// Create 50 files
 	for i := 0; i < 50; i++ {
-		w, _ := zw.Create(fmt.Sprintf("file_%d.txt", i))
-		w.Write([]byte("data"))
+		w, err := zw.Create(fmt.Sprintf("file_%d.txt", i))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Write([]byte("data")); err != nil {
+			t.Fatal(err)
+		}
 	}
-	zw.Close()
-	f.Close()
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	parentVFS := vfs.NewOSVFS(tmpDir)
-	arcVfs, _ := archive.NewArchiveVFS(parentVFS, zipPath)
-	defer arcVfs.Close()
+	arcVfs, err := archive.NewArchiveVFS(parentVFS, zipPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = arcVfs.Close() }()
 
 	dstVFS := vfs.NewOSVFS(tmpDir)
 
@@ -354,23 +384,29 @@ func TestArchiveReadWrapper_MixedReadAndReadAt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create zip entry: %v", err)
 	}
-	w.Write(testData)
-	zw.Close()
-	f.Close()
+	if _, err := w.Write(testData); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	parentVFS := vfs.NewOSVFS(tmpDir)
 	arcVFS, err := archive.NewArchiveVFS(parentVFS, zipPath)
 	if err != nil {
 		t.Fatalf("Failed to open ArchiveVFS: %v", err)
 	}
-	defer arcVFS.Close()
+	defer func() { _ = arcVFS.Close() }()
 
 	ctx := context.Background()
 	reader, err := arcVFS.Open(ctx, "large_file.bin")
 	if err != nil {
 		t.Fatalf("Failed to Open file in ArchiveVFS: %v", err)
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	// 1. First sequential Read of 128KB
 	chunk1 := make([]byte, 128*1024)
@@ -429,19 +465,27 @@ func TestIssue149_F5_Extraction_Integrity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create entry: %v", err)
 	}
-	w.Write(testData)
-	zw.Close()
-	f.Close()
+	if _, err := w.Write(testData); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	parentVFS := vfs.NewOSVFS(tmpDir)
 	arcVFS, err := archive.NewArchiveVFS(parentVFS, zipPath)
 	if err != nil {
 		t.Fatalf("Failed to open ArchiveVFS: %v", err)
 	}
-	defer arcVFS.Close()
+	defer func() { _ = arcVFS.Close() }()
 
 	dstDir := filepath.Join(tmpDir, "out")
-	os.MkdirAll(dstDir, 0755)
+	if err := os.MkdirAll(dstDir, 0755); err != nil {
+		t.Fatal(err)
+	}
 	dstVFS := vfs.NewOSVFS(dstDir)
 
 	rep := &globalAwareReporter{
@@ -479,24 +523,36 @@ func TestIssue149_NoQuadraticDecompression(t *testing.T) {
 	zipPath := filepath.Join(tmpDir, "test_speed.zip")
 
 	// Create 100 small files
-	f, _ := os.Create(zipPath)
+	f, err := os.Create(zipPath)
+	if err != nil {
+		t.Fatal(err)
+	}
 	zw := zip.NewWriter(f)
 	for i := 0; i < 100; i++ {
-		w, _ := zw.Create(fmt.Sprintf("file_%d.txt", i))
-		w.Write([]byte("some data"))
+		w, err := zw.Create(fmt.Sprintf("file_%d.txt", i))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Write([]byte("some data")); err != nil {
+			t.Fatal(err)
+		}
 	}
-	zw.Close()
-	f.Close()
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	parentVFS := vfs.NewOSVFS(tmpDir)
 	arcVfs, _ := archive.NewArchiveVFS(parentVFS, zipPath)
-	defer arcVfs.Close()
+	defer func() { _ = arcVfs.Close() }()
 
 	dstVFS := vfs.NewOSVFS(tmpDir)
 
 	// Measure time to extract only the last file
 	start := time.Now()
-	err := arcVfs.CopyBulk(context.Background(), []string{"file_99.txt"}, dstVFS, tmpDir, &DummyReporter{})
+	err = arcVfs.CopyBulk(context.Background(), []string{"file_99.txt"}, dstVFS, tmpDir, &DummyReporter{})
 	if err != nil {
 		t.Fatalf("CopyBulk failed: %v", err)
 	}
@@ -605,7 +661,7 @@ func TestIssue149_7z_MultiBlock_Solid_Integrity(t *testing.T) {
 		if err != nil {
 			t.Fatalf("NewArchiveVFS failed: %v", err)
 		}
-		defer arcVFS.Close()
+		defer func() { _ = arcVFS.Close() }()
 
 		dstDir := filepath.Join(tmpDir, "out_f5_nested")
 		if err := os.MkdirAll(dstDir, 0755); err != nil {
@@ -635,7 +691,7 @@ func TestIssue149_7z_MultiBlock_Solid_Integrity(t *testing.T) {
 		if err != nil {
 			t.Fatalf("NewArchiveVFS failed: %v", err)
 		}
-		defer arcVFS.Close()
+		defer func() { _ = arcVFS.Close() }()
 
 		dstDir := filepath.Join(tmpDir, "out_f5_root")
 		if err := os.MkdirAll(dstDir, 0755); err != nil {
@@ -663,7 +719,7 @@ func TestIssue149_7z_MultiBlock_Solid_Integrity(t *testing.T) {
 		if err != nil {
 			t.Fatalf("NewArchiveVFS failed: %v", err)
 		}
-		defer arcVFS.Close()
+		defer func() { _ = arcVFS.Close() }()
 
 		dstDir := filepath.Join(tmpDir, "out_seq_open")
 		if err := os.MkdirAll(dstDir, 0755); err != nil {
@@ -681,12 +737,12 @@ func TestIssue149_7z_MultiBlock_Solid_Integrity(t *testing.T) {
 
 			outPath := filepath.Join(dstDir, filepath.FromSlash(spec.relPath))
 			if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {
-				reader.Close()
+				_ = reader.Close() // Reader cleanup is secondary to the setup failure.
 				t.Fatalf("Failed to create out dir: %v", err)
 			}
 			outFile, err := os.Create(outPath)
 			if err != nil {
-				reader.Close()
+				_ = reader.Close() // Reader cleanup is secondary to the setup failure.
 				t.Fatalf("Create out file failed: %v", err)
 			}
 
@@ -694,19 +750,31 @@ func TestIssue149_7z_MultiBlock_Solid_Integrity(t *testing.T) {
 			for {
 				n, errRead := reader.Read(ctx, buf)
 				if n > 0 {
-					outFile.Write(buf[:n])
+					if _, err := outFile.Write(buf[:n]); err != nil {
+						if closeErr := outFile.Close(); closeErr != nil {
+							t.Errorf("close partial output file: %v", closeErr)
+						}
+						_ = reader.Close() // Reader cleanup is secondary to the write failure.
+						t.Fatal(err)
+					}
 				}
 				if errRead != nil {
 					if errRead == io.EOF {
 						break
 					}
-					outFile.Close()
-					reader.Close()
+					if closeErr := outFile.Close(); closeErr != nil {
+						t.Errorf("close partial output file: %v", closeErr)
+					}
+					_ = reader.Close() // Reader cleanup is secondary to the read failure.
 					t.Fatalf("Read failed on %s: %v", spec.relPath, errRead)
 				}
 			}
-			outFile.Close()
-			reader.Close()
+			if err := outFile.Close(); err != nil {
+				t.Fatal(err)
+			}
+			if err := reader.Close(); err != nil {
+				t.Fatal(err)
+			}
 
 			verifyFile(t, outPath, spec.relPath)
 		}

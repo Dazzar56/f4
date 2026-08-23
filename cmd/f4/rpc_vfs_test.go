@@ -2,27 +2,22 @@ package main
 
 import (
 	"context"
-	"io"
 	"path/filepath"
 	"testing"
 
-	"github.com/unxed/f4/sdk/f4rpc"
 	"github.com/unxed/f4/vfs"
 	"github.com/vmihailenco/msgpack/v5"
 )
 
 func TestRPCVFS_ReadDir(t *testing.T) {
-	// Используем пайпы для эмуляции связи "ядро <-> плагин"
-	c2sR, c2sW := io.Pipe()
-	s2cR, s2cW := io.Pipe()
-
-	clientSess := f4rpc.NewSession(s2cR, c2sW) // Для ядра f4
-	serverSess := f4rpc.NewSession(c2sR, s2cW) // Для "плагина"
+	clientSess, serverSess := setupTestSessions(t)
 
 	// Мокаем ответ от плагина
 	serverSess.Register("VFS.ReadDir", func(data msgpack.RawMessage) (any, error) {
 		var req map[string]string
-		msgpack.Unmarshal(data, &req)
+		if err := msgpack.Unmarshal(data, &req); err != nil {
+			return nil, err
+		}
 
 		// Проверяем, что запрос пришел в правильный драйв и путь
 		if req["Drive"] == "dummy_drive" && req["Path"] == "/test" {
@@ -32,9 +27,6 @@ func TestRPCVFS_ReadDir(t *testing.T) {
 		}
 		return []vfs.VFSItem{}, nil
 	})
-
-	go serverSess.Serve()
-	go clientSess.Serve()
 
 	// Инициализируем VFS-адаптер на стороне ядра
 	v := NewRPCVFS(clientSess, "dummy_drive")
@@ -64,7 +56,9 @@ func TestRPCVFS_PathResolution(t *testing.T) {
 		t.Error("Should be at root initially")
 	}
 
-	v.SetPath("/folder/sub")
+	if err := v.SetPath("/folder/sub"); err != nil {
+		t.Fatal(err)
+	}
 
 	if v.IsAtRoot() {
 		t.Error("Should not be at root after SetPath")
@@ -88,7 +82,9 @@ func TestRPCVFS_PathResolution(t *testing.T) {
 
 func TestRPCVFS_NativeSlashes(t *testing.T) {
 	v := NewRPCVFS(nil, "dummy")
-	v.SetPath("/linux/style/path")
+	if err := v.SetPath("/linux/style/path"); err != nil {
+		t.Fatal(err)
+	}
 
 	path := v.GetPath()
 	expected := filepath.FromSlash("/linux/style/path")

@@ -13,12 +13,24 @@ import (
 func setupPathHintDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	os.Mkdir(filepath.Join(dir, "subdir1"), 0755)
-	os.Mkdir(filepath.Join(dir, "subdir2"), 0755)
-	os.WriteFile(filepath.Join(dir, "subdir1", "inner.txt"), []byte("x"), 0644)
-	os.WriteFile(filepath.Join(dir, "alpha.txt"), []byte("x"), 0644)
-	os.WriteFile(filepath.Join(dir, "beta.exe"), []byte("x"), 0644)
-	os.WriteFile(filepath.Join(dir, "gamma.log"), []byte("x"), 0644)
+	if err := os.Mkdir(filepath.Join(dir, "subdir1"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(dir, "subdir2"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "subdir1", "inner.txt"), []byte("x"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "alpha.txt"), []byte("x"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "beta.exe"), []byte("x"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "gamma.log"), []byte("x"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	return dir
 }
 
@@ -212,10 +224,18 @@ func TestPathHintProvider_BothPanels(t *testing.T) {
 
 	dirA := t.TempDir() // active panel
 	dirB := t.TempDir() // passive panel
-	os.Mkdir(filepath.Join(dirA, "sub"), 0755)
-	os.Mkdir(filepath.Join(dirB, "sub"), 0755)
-	os.WriteFile(filepath.Join(dirA, "sub", "active.txt"), []byte("x"), 0644)
-	os.WriteFile(filepath.Join(dirB, "sub", "passive.txt"), []byte("x"), 0644)
+	if err := os.Mkdir(filepath.Join(dirA, "sub"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(dirB, "sub"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dirA, "sub", "active.txt"), []byte("x"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dirB, "sub", "passive.txt"), []byte("x"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	pf := setupMockPanelsFrame()
 	defer pf.Close()
@@ -266,8 +286,12 @@ func TestPathHintProvider_DisabledWhenCommandLineAutoCompleteOff(t *testing.T) {
 	SetDefaultF4Palette()
 
 	dir := t.TempDir()
-	os.Mkdir(filepath.Join(dir, "sub"), 0755)
-	os.WriteFile(filepath.Join(dir, "sub", "file.txt"), []byte("x"), 0644)
+	if err := os.Mkdir(filepath.Join(dir, "sub"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "sub", "file.txt"), []byte("x"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	pf := setupMockPanelsFrame()
 	defer pf.Close()

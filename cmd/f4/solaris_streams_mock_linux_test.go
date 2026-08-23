@@ -28,19 +28,19 @@ func newMockTTYSlave() (*os.File, error) {
 
 	var n uint32
 	if _, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(masterFd), unix.TIOCGPTN, uintptr(unsafe.Pointer(&n))); errno != 0 {
-		master.Close()
+		_ = master.Close() // Cleanup is secondary to the ioctl failure.
 		return nil, errno
 	}
 
 	var unlock int
 	if _, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(masterFd), unix.TIOCSPTLCK, uintptr(unsafe.Pointer(&unlock))); errno != 0 {
-		master.Close()
+		_ = master.Close() // Cleanup is secondary to the ioctl failure.
 		return nil, errno
 	}
 
 	slaveFd, err := unix.Open(fmt.Sprintf("/dev/pts/%d", n), unix.O_RDWR|unix.O_NOCTTY|unix.O_CLOEXEC, 0)
 	if err != nil {
-		master.Close()
+		_ = master.Close() // Cleanup is secondary to the slave-open failure.
 		return nil, err
 	}
 

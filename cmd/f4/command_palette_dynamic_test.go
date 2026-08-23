@@ -32,7 +32,9 @@ func TestCommandPaletteIncludesRecordedAndLuaMacros(t *testing.T) {
 			action = function() Keys("F7") end }
 	`)
 	t.Cleanup(func() {
-		engine.Close()
+		if err := engine.Close(); err != nil {
+			t.Errorf("close Lua macro engine: %v", err)
+		}
 		MacroMgr = previous
 	})
 	MacroMgr = &MacroManager{

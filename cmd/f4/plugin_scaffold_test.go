@@ -83,7 +83,11 @@ func TestScaffoldedPluginActuallyRuns(t *testing.T) {
 	if err := plugin.Init(api); err != nil {
 		t.Fatalf("the scaffolded plugin did not load: %v", err)
 	}
-	defer plugin.Close()
+	t.Cleanup(func() {
+		if err := plugin.Close(); err != nil {
+			t.Errorf("close scaffolded plugin: %v", err)
+		}
+	})
 
 	factory, ok := api.drives["notes"]
 	if !ok {
@@ -107,7 +111,7 @@ func TestScaffoldedPluginActuallyRuns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open(%q): %v", items[0].Name, err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	buf := make([]byte, file.Size())
 	n, err := file.ReadAt(ctx, buf, 0)
@@ -138,7 +142,11 @@ func TestRunNewPluginPrintsNextSteps(t *testing.T) {
 	if err := os.Chdir(base); err != nil {
 		t.Fatalf("chdir: %v", err)
 	}
-	defer os.Chdir(wd)
+	t.Cleanup(func() {
+		if err := os.Chdir(wd); err != nil {
+			t.Errorf("restore working directory: %v", err)
+		}
+	})
 
 	var out, errOut bytes.Buffer
 	if code := RunNewPlugin("notes", &out, &errOut); code != 0 {

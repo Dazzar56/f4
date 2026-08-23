@@ -17,7 +17,11 @@ func TestOpenSolarisPTY_AllocationSequence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSolarisPTY failed: %v", err)
 	}
-	defer pty.Close()
+	t.Cleanup(func() {
+		if err := pty.Close(); err != nil {
+			t.Errorf("close Solaris PTY: %v", err)
+		}
+	})
 
 	// 1. Проверяем правильность полученного имени слейва
 	if pty.Name != "/dev/pts/42" {
@@ -63,7 +67,7 @@ func TestOpenSolarisPTY_RequiresGrant(t *testing.T) {
 
 	pty, err := OpenSolarisPTY(mock)
 	if err == nil {
-		pty.Close()
+		_ = pty.Close() // Cleanup is secondary to the unexpected allocation success.
 		t.Fatal("OpenSolarisPTY succeeded without grantpt; the kernel would have refused with EACCES")
 	}
 	if !errors.Is(err, unix.EACCES) {
@@ -79,7 +83,7 @@ func TestOpenSolarisPTY_RequiresUnlock(t *testing.T) {
 
 	pty, err := OpenSolarisPTY(mock)
 	if err == nil {
-		pty.Close()
+		_ = pty.Close() // Cleanup is secondary to the unexpected allocation success.
 		t.Fatal("OpenSolarisPTY succeeded without unlockpt; ptsopen() would have refused with EAGAIN")
 	}
 	if !errors.Is(err, unix.EAGAIN) {

@@ -216,7 +216,9 @@ func TestUserMenu_ExecuteCommands(t *testing.T) {
 	// Создаем временную папку и файл на панели
 	fsp := pf.panels[pf.activeIdx].(*FileSystemPanel)
 	tmpDir := t.TempDir()
-	fsp.vfs.SetPath(tmpDir)
+	if err := fsp.vfs.SetPath(tmpDir); err != nil {
+		t.Fatal(err)
+	}
 	fsp.entries = []*fileEntry{
 		{VFSItem: vfs.VFSItem{Name: ".."}},
 		{VFSItem: vfs.VFSItem{Name: "file.go"}},
@@ -256,7 +258,9 @@ func TestUserMenu_ExecuteMultipleCommands(t *testing.T) {
 
 	fsp := pf.panels[pf.activeIdx].(*FileSystemPanel)
 	tmpDir := t.TempDir()
-	fsp.vfs.SetPath(tmpDir)
+	if err := fsp.vfs.SetPath(tmpDir); err != nil {
+		t.Fatal(err)
+	}
 	fsp.entries = []*fileEntry{
 		{VFSItem: vfs.VFSItem{Name: ".."}},
 		{VFSItem: vfs.VFSItem{Name: "file.go"}},

@@ -20,7 +20,7 @@ import (
 func TestZZZPTYLeakCheck(t *testing.T) {
 	if n := LivePTYCount(); n != 0 {
 		msg := fmt.Sprintf("PTY leak guard: %d pseudo-terminal(s) opened via NewPTY were never Close()'d by the time this ran", n)
-		fmt.Fprintln(os.Stderr, "WARNING:", msg)
+		_, _ = fmt.Fprintln(os.Stderr, "WARNING:", msg)
 		t.Log(msg)
 	}
 }

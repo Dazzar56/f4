@@ -32,10 +32,20 @@ func jpegWithThumbnail(t *testing.T, outer, thumb []byte) []byte {
 	t.Helper()
 
 	var tiff bytes.Buffer
-	put16 := func(v uint16) { binary.Write(&tiff, binary.LittleEndian, v) }
-	put32 := func(v uint32) { binary.Write(&tiff, binary.LittleEndian, v) }
+	put16 := func(v uint16) {
+		if err := binary.Write(&tiff, binary.LittleEndian, v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	put32 := func(v uint32) {
+		if err := binary.Write(&tiff, binary.LittleEndian, v); err != nil {
+			t.Fatal(err)
+		}
+	}
 
-	tiff.WriteString("II")
+	if _, err := tiff.WriteString("II"); err != nil {
+		t.Fatal(err)
+	}
 	put16(42)
 	put32(8) // the first directory follows the header
 
@@ -59,7 +69,9 @@ func jpegWithThumbnail(t *testing.T, outer, thumb []byte) []byte {
 	if tiff.Len() != thumbOffset {
 		t.Fatalf("the test built a %d byte header, expected %d", tiff.Len(), thumbOffset)
 	}
-	tiff.Write(thumb)
+	if _, err := tiff.Write(thumb); err != nil {
+		t.Fatal(err)
+	}
 
 	payload := append([]byte("Exif\x00\x00"), tiff.Bytes()...)
 

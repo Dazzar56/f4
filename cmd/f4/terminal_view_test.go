@@ -893,7 +893,9 @@ func TestTerminalView_EraseDisplay_LogSync(t *testing.T) {
 	for _, row := range tv.GridHistory {
 		var sb strings.Builder
 		for _, ci := range row {
-			sb.WriteRune(rune(ci.Char))
+			if _, err := sb.WriteRune(vtui.CellBaseRune(ci.Char)); err != nil {
+				t.Fatal(err)
+			}
 		}
 		if strings.Contains(sb.String(), "content") {
 			foundInGridHistory = true

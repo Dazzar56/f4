@@ -142,7 +142,9 @@ func TestQueueManager_ConflictDetection(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	tmp := t.TempDir()
 	path := filepath.Join(tmp, "conflict.txt")
-	os.WriteFile(path, []byte("ver1"), 0644)
+	if err := os.WriteFile(path, []byte("ver1"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	v := vfs.NewOSVFS(tmp)
 	st, _ := v.Stat(context.Background(), path)
@@ -175,7 +177,9 @@ func TestQueueManager_ConflictDetection(t *testing.T) {
 
 	// 2. Изменяем файл на диске
 	time.Sleep(100 * time.Millisecond)
-	os.WriteFile(path, []byte("ver2-changed"), 0644)
+	if err := os.WriteFile(path, []byte("ver2-changed"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	// 3. Разблокируем очередь
 	qm.mu.Lock()

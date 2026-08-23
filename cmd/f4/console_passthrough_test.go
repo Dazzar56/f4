@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"os"
 	"strings"
 	"testing"
 
@@ -110,9 +109,7 @@ func TestChildEnv_HostModeLeavesTERMUntouched(t *testing.T) {
 	defer func() { AppConfig = oldCfg }()
 	AppConfig.ConsoleMode = "host"
 
-	origTerm := os.Getenv("TERM")
-	defer os.Setenv("TERM", origTerm)
-	os.Setenv("TERM", "xterm-256color")
+	t.Setenv("TERM", "xterm-256color")
 
 	env := terminalChildEnv()
 	if envHasKey(env, "KITTY_WINDOW_ID") {

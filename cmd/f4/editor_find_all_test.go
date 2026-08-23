@@ -762,13 +762,20 @@ func openMappedFindAllEditor(t *testing.T, content string) *EditorView {
 
 // findAllCorpus is big enough that the scan of it is still running when the
 // search over it finishes, which is the case the waiting exists for.
-func findAllCorpus() string {
+func findAllCorpus(t *testing.T) string {
+	t.Helper()
 	var sb strings.Builder
-	sb.WriteString("Unit 15 The Avenue\nno match here\nUnited Kingdom\n")
-	for sb.Len() < 16<<20 {
-		sb.WriteString("filler line with nothing of interest in it\n")
+	if _, err := sb.WriteString("Unit 15 The Avenue\nno match here\nUnited Kingdom\n"); err != nil {
+		t.Fatal(err)
 	}
-	sb.WriteString("unit again\n")
+	for sb.Len() < 16<<20 {
+		if _, err := sb.WriteString("filler line with nothing of interest in it\n"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := sb.WriteString("unit again\n"); err != nil {
+		t.Fatal(err)
+	}
 	return sb.String()
 }
 
@@ -778,7 +785,7 @@ func findAllCorpus() string {
 // running reported every occurrence on line 1, with the whole file as the text
 // of the line.
 func TestEditorFindAll_WaitsForTheLineIndex(t *testing.T) {
-	content := findAllCorpus()
+	content := findAllCorpus(t)
 	ev := openMappedFindAllEditor(t, content)
 	ev.StartIndexing() // as showEditor does, and then straight into the search
 
@@ -870,24 +877,39 @@ func taskContextForTest(t *testing.T) *vtui.TaskContext {
 // findAllSeamCorpus is built so that matches land on, before and after every
 // seam for a range of window sizes, and so that folding changes a match's byte
 // length (K U+212A folds to "k") right where a window might be cut.
-func findAllSeamCorpus() string {
+func findAllSeamCorpus(t *testing.T) string {
+	t.Helper()
 	var sb strings.Builder
 	for i := 0; sb.Len() < 40000; i++ {
 		switch i % 7 {
 		case 0:
-			sb.WriteString("needle in a line\n")
+			if _, err := sb.WriteString("needle in a line\n"); err != nil {
+				t.Fatal(err)
+			}
 		case 1:
-			sb.WriteString("NEEDLE shouting\n")
+			if _, err := sb.WriteString("NEEDLE shouting\n"); err != nil {
+				t.Fatal(err)
+			}
 		case 2:
-			sb.WriteString("nothing here at all, just filler to move the seam along\n")
+			if _, err := sb.WriteString("nothing here at all, just filler to move the seam along\n"); err != nil {
+				t.Fatal(err)
+			}
 		case 3:
-			sb.WriteString("two needle and needle on one line\n")
+			if _, err := sb.WriteString("two needle and needle on one line\n"); err != nil {
+				t.Fatal(err)
+			}
 		case 4:
-			sb.WriteString("Kneedle after a kelvin sign\n")
+			if _, err := sb.WriteString("Kneedle after a kelvin sign\n"); err != nil {
+				t.Fatal(err)
+			}
 		case 5:
-			sb.WriteString("needle")
+			if _, err := sb.WriteString("needle"); err != nil {
+				t.Fatal(err)
+			}
 		default:
-			sb.WriteString("tail\n")
+			if _, err := sb.WriteString("tail\n"); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 	return sb.String()
@@ -898,7 +920,7 @@ func findAllSeamCorpus() string {
 // line count must be exactly what one pass over the whole buffer produces,
 // including for matches that straddle a seam.
 func TestCollectMatchSpans_WindowsMatchTheWholeBuffer(t *testing.T) {
-	content := findAllSeamCorpus()
+	content := findAllSeamCorpus(t)
 	data := []byte(content)
 
 	for _, caseSensitive := range []bool{true, false} {

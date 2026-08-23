@@ -85,7 +85,7 @@ func TestTerminalLogVFS_ReadOperations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open failed: %v", err)
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 
 	// 1. Проверяем размер лога
 	if rc.Size() != int64(len(expectedContent)) {

@@ -106,8 +106,12 @@ func TestPanelsFrame_CD_QuotedParsing(t *testing.T) {
 	// Мокаем VFS, чтобы не ходить на реальный диск
 	tmp := t.TempDir()
 	targetDir := filepath.Join(tmp, "dir with space's")
-	os.MkdirAll(targetDir, 0755)
-	fsp.vfs.SetPath(tmp)
+	if err := os.MkdirAll(targetDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := fsp.vfs.SetPath(tmp); err != nil {
+		t.Fatal(err)
+	}
 
 	// Симулируем ввод команды cd в одинарных кавычках (Unix-style)
 	// Для Windows этот тест тоже должен работать, так как мы добавили поддержку '' и там.
@@ -138,10 +142,14 @@ func TestPanelsFrame_PTY_SyncEscaping(t *testing.T) {
 	tmp := t.TempDir()
 	dirName := "space 'n' quotes"
 	targetDir := filepath.Join(tmp, dirName)
-	os.MkdirAll(targetDir, 0755)
+	if err := os.MkdirAll(targetDir, 0755); err != nil {
+		t.Fatal(err)
+	}
 
 	fsp := pf.panels[pf.activeIdx].(*FileSystemPanel)
-	fsp.vfs.SetPath(tmp)
+	if err := fsp.vfs.SetPath(tmp); err != nil {
+		t.Fatal(err)
+	}
 
 	// Вводим команду перехода
 	pf.cmdLine.Edit.SetText("cd \"" + dirName + "\"")

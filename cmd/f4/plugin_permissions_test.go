@@ -161,7 +161,11 @@ func TestGatedBridgeRefusesWhenDenied(t *testing.T) {
 
 	gate := NewPermissionGate(PluginIdentity{Key: "notes"}, newTestStore(t), &fakePrompt{answer: false})
 	bridge := ffibridge.New(ffibridge.Options{Allow: gate.FFIHook()})
-	defer bridge.Close()
+	t.Cleanup(func() {
+		if err := bridge.Close(); err != nil {
+			t.Errorf("close FFI bridge: %v", err)
+		}
+	})
 
 	if _, err := bridge.OpenLibC(); err == nil {
 		t.Fatal("a denied plugin opened a library")
@@ -175,7 +179,11 @@ func TestGatedBridgeWorksWhenAllowed(t *testing.T) {
 
 	gate := NewPermissionGate(PluginIdentity{Key: "notes"}, newTestStore(t), &fakePrompt{answer: true})
 	bridge := ffibridge.New(ffibridge.Options{Allow: gate.FFIHook()})
-	defer bridge.Close()
+	t.Cleanup(func() {
+		if err := bridge.Close(); err != nil {
+			t.Errorf("close FFI bridge: %v", err)
+		}
+	})
 
 	if _, err := bridge.OpenLibC(); err != nil {
 		t.Skipf("no system C library available: %v", err)

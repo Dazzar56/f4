@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
@@ -83,8 +84,16 @@ func TestMain(m *testing.M) {
 		// XDG_CONFIG_HOME/APPDATA cover Linux and Windows; os.UserConfigDir
 		// ignores both on darwin, so the seam is what actually isolates the
 		// suite from the developer's real profile there.
-		os.Setenv("XDG_CONFIG_HOME", tmpDir)
-		os.Setenv("APPDATA", tmpDir)
+		if setErr := os.Setenv("XDG_CONFIG_HOME", tmpDir); setErr != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "set XDG_CONFIG_HOME: %v\n", setErr)
+			_ = os.RemoveAll(tmpDir) // Process exit makes cleanup failure uninteresting.
+			os.Exit(1)
+		}
+		if setErr := os.Setenv("APPDATA", tmpDir); setErr != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "set APPDATA: %v\n", setErr)
+			_ = os.RemoveAll(tmpDir) // Process exit makes cleanup failure uninteresting.
+			os.Exit(1)
+		}
 		userConfigDir = func() (string, error) { return tmpDir, nil }
 		resetConfigDirForTest()
 	}
@@ -92,7 +101,10 @@ func TestMain(m *testing.M) {
 	result := m.Run()
 
 	if err == nil {
-		os.RemoveAll(tmpDir)
+		if removeErr := os.RemoveAll(tmpDir); removeErr != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "remove test config directory: %v\n", removeErr)
+			result = 1
+		}
 	}
 
 	os.Exit(result)

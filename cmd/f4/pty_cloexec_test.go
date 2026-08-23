@@ -34,7 +34,11 @@ func TestPTYDescriptorsAreCloseOnExec(t *testing.T) {
 	if err != nil {
 		t.Skipf("PTY allocation unavailable in this environment: %v", err)
 	}
-	defer pty.Close()
+	t.Cleanup(func() {
+		if err := pty.Close(); err != nil {
+			t.Errorf("close PTY: %v", err)
+		}
+	})
 
 	for _, d := range []struct {
 		name string
@@ -70,7 +74,11 @@ func TestPTYChildDoesNotInheritMaster(t *testing.T) {
 	if err != nil {
 		t.Skipf("PTY allocation unavailable in this environment: %v", err)
 	}
-	defer pty.Close()
+	t.Cleanup(func() {
+		if err := pty.Close(); err != nil {
+			t.Errorf("close PTY: %v", err)
+		}
+	})
 
 	// A bare sleep keeps the child parked without a shell of its own, so
 	// every descriptor it holds came from the exec, not from job control.

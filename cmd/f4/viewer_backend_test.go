@@ -56,14 +56,16 @@ var _ vfs.ReadAtCloser = (*failingViewerFile)(nil)
 func TestViewerBackend_ReadAndFindLineStart(t *testing.T) {
 	tmp := filepath.Join(t.TempDir(), "test.txt")
 	content := "line1\nline2\nline3"
-	os.WriteFile(tmp, []byte(content), 0644)
+	if err := os.WriteFile(tmp, []byte(content), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	v := vfs.NewOSVFS(t.TempDir())
 	vb, err := NewViewerBackend(context.Background(), v, tmp)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer vb.Close()
+	defer func() { _ = vb.Close() }()
 
 	if vb.Size() != int64(len(content)) {
 		t.Fatalf("Expected size %d, got %d", len(content), vb.Size())
@@ -138,7 +140,7 @@ func TestViewerBackendLineStartFromEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer vb.Close()
+	defer func() { _ = vb.Close() }()
 
 	off, ok := vb.LineStartFromEnd(context.Background(), 2)
 	if !ok {
@@ -179,7 +181,7 @@ func TestViewerBackendLineStartFromEndFallsBack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer plain.Close()
+	defer func() { _ = plain.Close() }()
 	if _, ok := plain.LineStartFromEnd(context.Background(), 1); ok {
 		t.Error("a file system without the interface claimed to have an index")
 	}
@@ -190,7 +192,7 @@ func TestViewerBackendLineStartFromEndFallsBack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer vb.Close()
+	defer func() { _ = vb.Close() }()
 	if _, ok := vb.LineStartFromEnd(context.Background(), 1); ok {
 		t.Error("a failing index was treated as an answer")
 	}
@@ -237,7 +239,7 @@ func TestViewerBackendSearchFrom(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer vb.Close()
+	defer func() { _ = vb.Close() }()
 
 	if at, searched := vb.SearchFrom(context.Background(), "needle", 0); !searched || at != 0 {
 		t.Errorf("SearchFrom(0) = %d, %v; want 0, true", at, searched)
@@ -267,7 +269,7 @@ func TestViewerBackendSearchFrom(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer local.Close()
+	defer func() { _ = local.Close() }()
 	if _, searched := local.SearchFrom(context.Background(), "needle", 0); searched {
 		t.Error("a file system without HasSearch claimed to have searched")
 	}
@@ -278,7 +280,7 @@ func TestViewerBackendSearchFrom(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer vb2.Close()
+	defer func() { _ = vb2.Close() }()
 	if _, searched := vb2.SearchFrom(context.Background(), "needle", 0); searched {
 		t.Error("a failed search was taken for an answer")
 	}
@@ -340,7 +342,9 @@ func TestViewerBackendLineStart(t *testing.T) {
 					name, tc.line, got, ok, tc.want, tc.ok)
 			}
 		}
-		vb.Close()
+		if err := vb.Close(); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if indexed.calls == 0 {
 		t.Error("the index was never asked")
@@ -357,7 +361,7 @@ func TestViewerBackendLineStartWithoutTrailingNewline(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer vb.Close()
+	defer func() { _ = vb.Close() }()
 
 	if got, ok := vb.LineStart(context.Background(), 2); !ok || got != 6 {
 		t.Errorf("LineStart(2) = %d, %v; want 6, true", got, ok)
