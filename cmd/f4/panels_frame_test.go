@@ -2595,11 +2595,23 @@ func TestTerminalRedrawSchedulerCoalescesBurst(t *testing.T) {
 		t.Fatalf("burst triggered %d redraws, want 1", got)
 	}
 
-	time.Sleep(terminalRedrawInterval + 10*time.Millisecond)
-	scheduler.request()
-	mu.Lock()
-	got = redraws
-	mu.Unlock()
+	// The interval is cleared by a timer of its own, and a sleep of interval
+	// plus a fixed margin is not a guarantee that the timer has run: on a
+	// loaded machine, and under the race detector, it regularly has not. Ask
+	// again until it does. A request made while the burst is still suppressed
+	// is exactly what the first half of this test asserts costs nothing, so
+	// asking repeatedly cannot inflate the count.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		scheduler.request()
+		mu.Lock()
+		got = redraws
+		mu.Unlock()
+		if got == 2 || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
 	if got != 2 {
 		t.Fatalf("redraw after interval counted %d times, want 2", got)
 	}
