@@ -70,8 +70,14 @@ func (s *Session) pump() {
 func (s *Session) dispatch(ev xgb.Event) {
 	switch e := ev.(type) {
 	case xproto.FocusInEvent:
+		if !focusEventIsReal(e.Mode, e.Detail) {
+			return
+		}
 		s.setFocused(true)
 	case xproto.FocusOutEvent:
+		if !focusEventIsReal(e.Mode, e.Detail) {
+			return
+		}
 		s.setFocused(false)
 
 	case xproto.ConfigureNotifyEvent:
@@ -97,6 +103,25 @@ func (s *Session) dispatch(ev xgb.Event) {
 	case xproto.KeyReleaseEvent:
 		s.onKey(e.Detail, e.State, false)
 	}
+}
+
+// focusEventIsReal filters the focus events that are not about the focus.
+//
+// The X server reports a focus change whenever a grab begins or ends, because
+// from the keyboard's point of view the focus really has moved — to the
+// grabbing client and back. Taking those at face value is a trap with teeth:
+// this package grabs keys, so every grabbed key produced a FocusOut, the
+// grabs were handed back on the spot, and the next press of that combination
+// went to the terminal as if the feature had never been switched on. It
+// looked exactly like a key that was never grabbed at all.
+//
+// A focus that moved to a child of our window has not left it either.
+func focusEventIsReal(mode, detail byte) bool {
+	switch mode {
+	case xproto.NotifyModeGrab, xproto.NotifyModeUngrab:
+		return false
+	}
+	return detail != xproto.NotifyDetailInferior
 }
 
 func (s *Session) setFocused(v bool) {

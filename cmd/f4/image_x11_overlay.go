@@ -68,26 +68,16 @@ func newX11ImageOverlay() *x11ImageOverlay {
 	if !AppConfig.ImageX11Overlay {
 		return nil
 	}
-	sess, err := ttyx.Open()
-	if err != nil {
-		vtui.DebugLog("X11_OVERLAY: no session: %v", err)
-		return nil
-	}
-	if !sess.Source().Trusted() {
-		// The window was a guess. Drawing over it would be drawing over
-		// whatever the user happened to be looking at.
-		vtui.DebugLog("X11_OVERLAY: the terminal window was only guessed (%v), standing down", sess.Source())
-		sess.Close()
+	sess := sharedTTYXSession()
+	if sess == nil {
 		return nil
 	}
 	ov, err := sess.NewOverlay()
 	if err != nil {
-		vtui.DebugLog("X11_OVERLAY: no overlay window: %v", err)
-		sess.Close()
+		vtui.DebugLog("TTYX: no overlay window: %v", err)
 		return nil
 	}
-	vtui.DebugLog("X11_OVERLAY: window %d found through %v, mouse passes through: %v",
-		sess.Window(), sess.Source(), ov.PassesInput())
+	vtui.DebugLog("TTYX: overlay ready, mouse passes through: %v", ov.PassesInput())
 	return &x11ImageOverlay{sess: sess, ov: ov}
 }
 
@@ -109,11 +99,17 @@ func (x *x11ImageOverlay) hide() {
 
 // suspend takes the picture off the screen but leaves the overlay wanting to
 // be there, so the event loop can put it back when the focus returns.
+//
+// The remembered frame goes with it. An unmapped window keeps its pixels only
+// if the server has backing store, and modern Xorg does not: the window comes
+// back blank, and a cache that still believed the right thing was on it would
+// never repaint. That is what turned an alt-tab into an empty viewer.
 func (x *x11ImageOverlay) suspend() {
 	if x == nil {
 		return
 	}
 	x.ov.Suspend()
+	x.key = ""
 }
 
 // overlayCellRect converts a rectangle of character cells into a rectangle of
@@ -214,9 +210,9 @@ func (x *x11ImageOverlay) showMany(scr *vtui.ScreenBuf, list []vtui.ImagePlaceme
 	}
 	// The window is not the grid: the top of it may be a menu bar and the
 	// right of it a scroll bar. See ttyx_probe.go.
-	tw, th, known := hostTextArea()
-	term := hostGridRect(win, tw, th, known)
 	cols, rows := scr.Width(), scr.Height()
+	tw, th, known := hostTextSize(cols, rows)
+	term := hostGridRect(win, tw, th, known)
 
 	// One window over everything that has to be drawn, so the placements
 	// are positioned inside it rather than each getting a window.

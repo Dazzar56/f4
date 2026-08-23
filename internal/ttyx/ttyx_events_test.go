@@ -258,3 +258,72 @@ func TestOverlayBoundsCutGaps(t *testing.T) {
 		t.Error("an empty set must restore the whole window")
 	}
 }
+
+// The X server reports a focus change whenever a grab begins or ends. Taking
+// those at face value meant every grabbed key handed the grabs straight back,
+// and the next press of that combination went to the terminal instead — which
+// looks exactly like a key that was never grabbed.
+func TestFocusEventsFromGrabsAreIgnored(t *testing.T) {
+	cases := []struct {
+		name   string
+		mode   byte
+		detail byte
+		real   bool
+	}{
+		{"a window really lost the focus", xproto.NotifyModeNormal, xproto.NotifyDetailNonlinear, true},
+		{"the pointer moved while the focus stayed", xproto.NotifyModeNormal, xproto.NotifyDetailPointer, true},
+		{"a grab began", xproto.NotifyModeGrab, xproto.NotifyDetailNonlinear, false},
+		{"a grab ended", xproto.NotifyModeUngrab, xproto.NotifyDetailNonlinear, false},
+		{"the focus went to a child of ours", xproto.NotifyModeNormal, xproto.NotifyDetailInferior, false},
+	}
+	for _, c := range cases {
+		if got := focusEventIsReal(c.mode, c.detail); got != c.real {
+			t.Errorf("%s: got %v, want %v", c.name, got, c.real)
+		}
+	}
+}
+
+// A grabbed key must not cost the grabs. This drives the whole path: grab,
+// synthesise the key, and check the grabs are still held afterwards.
+func TestGrabsSurviveTheirOwnKey(t *testing.T) {
+	f := newXFixture(t)
+	if err := xtest.Init(f.conn); err != nil {
+		t.Skipf("no XTEST on this server: %v", err)
+	}
+	s := f.openOn(t)
+	f.focus(t, f.term)
+	waitFor(t, "the focus", s.Focused)
+
+	const xkF5 = 0xFFC2
+	if err := s.GrabKeys([]Combo{{Keysym: xkF5}}); err != nil {
+		t.Fatalf("grab: %v", err)
+	}
+	defer s.UngrabKeys()
+	waitFor(t, "the grab to be taken", s.grabsHeld)
+
+	code, err := s.keycodesFor([]Combo{{Keysym: xkF5}})
+	if err != nil || len(code) == 0 || code[0] == 0 {
+		t.Skipf("this keyboard map has no F5: %v", err)
+	}
+	for i := 0; i < 3; i++ {
+		xtest.FakeInput(f.conn, xproto.KeyPress, byte(code[0]), 0, f.root, 0, 0, 0)
+		xtest.FakeInput(f.conn, xproto.KeyRelease, byte(code[0]), 0, f.root, 0, 0, 0)
+	}
+	f.conn.Sync()
+
+	// Three presses, three arrivals: a grab that had been handed back would
+	// deliver the first and lose the rest.
+	for i := 0; i < 3; i++ {
+		select {
+		case <-s.Keys():
+		case <-time.After(3 * time.Second):
+			t.Fatalf("press %d never arrived; grabs held: %v", i+1, s.grabsHeld())
+		}
+	}
+	if !s.grabsHeld() {
+		t.Error("the grabs must still be held after their own keys")
+	}
+	if !s.Focused() {
+		t.Error("a grab is not a loss of focus")
+	}
+}

@@ -142,15 +142,66 @@ func TestHostGridRect(t *testing.T) {
 	}
 }
 
-func TestParseTextAreaResponse(t *testing.T) {
-	w, h, ok := parseTextAreaResponse("\x1b[4;600;790t")
+func TestParseXTWinOps(t *testing.T) {
+	// CSI 14 t comes back as the text area, CSI 16 t as one cell.
+	w, h, ok := parseXTWinOps("\x1b[4;600;790t", "\x1b[4;")
 	if !ok || w != 790 || h != 600 {
-		t.Errorf("got %dx%d ok=%v, want 790x600", w, h, ok)
+		t.Errorf("text area: got %dx%d ok=%v, want 790x600", w, h, ok)
 	}
-	// A terminal that answers something else, or nothing.
-	for _, s := range []string{"", "\x1b[6;20;10t", "\x1b[4;t", "garbage"} {
-		if _, _, ok := parseTextAreaResponse(s); ok {
-			t.Errorf("%q must not parse as a text area", s)
+	cw, ch, ok := parseXTWinOps("\x1b[6;20;10t", "\x1b[6;")
+	if !ok || cw != 10 || ch != 20 {
+		t.Errorf("cell: got %dx%d ok=%v, want 10x20", cw, ch, ok)
+	}
+	// An answer to the other question must not be read as this one.
+	if _, _, ok := parseXTWinOps("\x1b[6;20;10t", "\x1b[4;"); ok {
+		t.Error("a cell answer is not a text area answer")
+	}
+	for _, s := range []string{"", "\x1b[4;t", "garbage"} {
+		if _, _, ok := parseXTWinOps(s, "\x1b[4;"); ok {
+			t.Errorf("%q must not parse", s)
 		}
+	}
+}
+
+// The cell is preferred over the reported text area, because multiplied by the
+// grid it is the text area exactly and owes nothing to what the terminal
+// chooses to call padding.
+func TestHostTextSizePrefersTheCell(t *testing.T) {
+	saveCell := func() func() {
+		hostTextMu.Lock()
+		cw, chh, ck := hostCellW, hostCellH, hostCellKnown
+		tw, th, tk := hostTextW, hostTextH, hostTextKnown
+		hostTextMu.Unlock()
+		return func() {
+			hostTextMu.Lock()
+			hostCellW, hostCellH, hostCellKnown = cw, chh, ck
+			hostTextW, hostTextH, hostTextKnown = tw, th, tk
+			hostTextMu.Unlock()
+		}
+	}()
+	defer saveCell()
+
+	hostTextMu.Lock()
+	hostCellW, hostCellH, hostCellKnown = 10, 20, true
+	hostTextW, hostTextH, hostTextKnown = 999, 999, true
+	hostTextMu.Unlock()
+	if w, h, ok := hostTextSize(80, 25); !ok || w != 800 || h != 500 {
+		t.Errorf("with a cell: got %dx%d ok=%v, want 800x500", w, h, ok)
+	}
+
+	// Without a cell the reported text area is all there is.
+	hostTextMu.Lock()
+	hostCellKnown = false
+	hostTextMu.Unlock()
+	if w, h, ok := hostTextSize(80, 25); !ok || w != 999 || h != 999 {
+		t.Errorf("without a cell: got %dx%d ok=%v", w, h, ok)
+	}
+
+	// And without either, nothing is known.
+	hostTextMu.Lock()
+	hostTextKnown = false
+	hostTextMu.Unlock()
+	if _, _, ok := hostTextSize(80, 25); ok {
+		t.Error("nothing was measured, so nothing is known")
 	}
 }

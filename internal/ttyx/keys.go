@@ -12,6 +12,7 @@ package ttyx
 // here has to be remembered by the caller.
 
 import (
+	"errors"
 	"os"
 	"sync"
 
@@ -54,6 +55,30 @@ type keyState struct {
 	events  chan *vtinput.InputEvent
 	tr      keytrans.Translator
 	dropped uint64
+	report  []GrabResult
+}
+
+// GrabResult is what the X server said to one request. A grab is the one thing
+// here that can be refused for a reason outside f4 — another client holding
+// the same combination — and a refusal is silent unless it is asked for.
+type GrabResult struct {
+	Keysym uint32
+	Mods   Modifier
+	Code   xproto.Keycode
+	Err    error
+}
+
+// GrabReport is the outcome of the last set of grabs.
+func (s *Session) GrabReport() []GrabResult {
+	s.mu.Lock()
+	ks := s.keys
+	s.mu.Unlock()
+	if ks == nil {
+		return nil
+	}
+	ks.mu.Lock()
+	defer ks.mu.Unlock()
+	return append([]GrabResult(nil), ks.report...)
 }
 
 // Keys is the stream of key events taken from the X server. It is nil until
@@ -221,18 +246,32 @@ func (s *Session) regrabKeys() {
 	if ks.held || len(ks.codes) == 0 {
 		return
 	}
+	ks.report = ks.report[:0]
 	for i, code := range ks.codes {
+		res := GrabResult{Keysym: ks.combos[i].Keysym, Mods: ks.combos[i].Mods, Code: code}
 		if code == 0 {
+			res.Err = errNoKeycode
+			ks.report = append(ks.report, res)
 			continue
 		}
 		base := ks.combos[i].Mods.xmask()
 		for _, lock := range lockMasks {
-			xproto.GrabKey(conn, true, win, base|lock, code,
-				xproto.GrabModeAsync, xproto.GrabModeAsync)
+			// Checked, because an unchecked grab that the server
+			// refuses is a combination that silently keeps going to
+			// the terminal instead — which looks from the outside
+			// exactly like the feature not being there.
+			if err := xproto.GrabKeyChecked(conn, true, win, base|lock, code,
+				xproto.GrabModeAsync, xproto.GrabModeAsync).Check(); err != nil && res.Err == nil {
+				res.Err = err
+			}
 		}
+		ks.report = append(ks.report, res)
 	}
 	ks.held = true
 }
+
+// errNoKeycode means the keysym asked for is not on this keyboard.
+var errNoKeycode = errors.New("this keysym is not on the keyboard")
 
 // releaseKeys gives the grabs back. It is called the moment the terminal
 // loses the focus: a grab held by a window nobody is typing into takes those

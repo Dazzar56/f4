@@ -147,29 +147,29 @@ func startTTYXKeyboard() *ttyxKeyboard {
 		return nil
 	}
 
-	sess, err := ttyx.Open()
-	if err != nil {
-		vtui.DebugLog("TTYX_KEYS: no session: %v", err)
-		return nil
-	}
-	if !sess.Source().Trusted() {
-		// The window was a guess, and a grab on the wrong window takes
-		// those keys from whoever really owns it.
-		vtui.DebugLog("TTYX_KEYS: the terminal window was only guessed (%v), standing down", sess.Source())
-		sess.Close()
+	sess := sharedTTYXSession()
+	if sess == nil {
 		return nil
 	}
 	if err := sess.GrabKeys(combos); err != nil {
 		vtui.DebugLog("TTYX_KEYS: %v", err)
-		sess.Close()
 		return nil
+	}
+	// GrabKeys reports what the X server said to each request, because a
+	// grab is the one thing here that can be refused for reasons outside
+	// f4 — another application holding the same combination, most often a
+	// desktop shortcut.
+	for _, r := range sess.GrabReport() {
+		if r.Err != nil {
+			vtui.DebugLog("TTYX_KEYS: keysym %#x mods %d refused: %v", r.Keysym, r.Mods, r.Err)
+		} else {
+			vtui.DebugLog("TTYX_KEYS: keysym %#x mods %d taken as keycode %d", r.Keysym, r.Mods, r.Code)
+		}
 	}
 
 	k := &ttyxKeyboard{sess: sess, stop: make(chan struct{})}
 	go k.forward()
-	go k.watch()
-	vtui.DebugLog("TTYX_KEYS: %d combinations taken on window %d via %v",
-		len(combos), sess.Window(), sess.Source())
+	vtui.DebugLog("TTYX_KEYS: %d combinations asked for on window %d", len(combos), sess.Window())
 	return k
 }
 
@@ -202,22 +202,6 @@ func (k *ttyxKeyboard) forward() {
 	}
 }
 
-// watch redraws when the X session reports that something moved. Without it
-// the frame that was on the screen when the terminal lost the focus stays
-// there — including, until it learned better, an apology for not being able
-// to show a picture that had only gone out of sight.
-func (k *ttyxKeyboard) watch() {
-	changed := k.sess.Changed()
-	for {
-		select {
-		case <-k.stop:
-			return
-		case <-changed:
-			vtui.FrameManager.Redraw()
-		}
-	}
-}
-
 // Close gives the grabs back to the desktop.
 func (k *ttyxKeyboard) Close() {
 	if k == nil {
@@ -225,8 +209,9 @@ func (k *ttyxKeyboard) Close() {
 	}
 	k.once.Do(func() {
 		close(k.stop)
+		// The session belongs to the process, not to the keyboard, so
+		// only the grabs go back.
 		k.sess.UngrabKeys()
-		k.sess.Close()
 	})
 }
 

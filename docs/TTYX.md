@@ -137,7 +137,18 @@ What it buys:
 - `Changed()` carries a token whenever any of that changes, for an application
   that draws on demand and needs to know when to draw.
 
-Two things learned the hard way here, each of which cost a hang or a crash:
+**A grab is reported as a change of focus.** The X server sends `FocusOut` and
+`FocusIn` with mode `NotifyGrab`/`NotifyUngrab` whenever a grab begins or ends,
+because from the keyboard's point of view the focus really has moved — to the
+grabbing client and back. Taking that at face value is a trap with teeth here
+of all places: this package grabs keys, so every grabbed key produced a
+`FocusOut`, the grabs were handed straight back, and the next press of that
+combination went to the terminal as an unqualified one. It looked exactly like
+a key that had never been grabbed. `focusEventIsReal` drops those, and a
+`FocusOut` whose detail is `NotifyInferior`, which only means the focus moved
+to a child of our own window.
+
+Three things learned the hard way here, each of which cost a hang or a crash:
 
 - **A method that takes the lock must not be called from one that holds it.**
   `watch` asked `focusedNow` for the focus while holding the mutex, and the
@@ -257,7 +268,35 @@ Three rules the wiring keeps:
 - **One typo does not cost the rest of the list.** An entry that names nothing
   known is skipped and logged.
 
-## 8. Testing
+## 8. When it does not work
+
+None of this can be seen from outside, and all of it can fail for reasons that
+depend on the window manager, on the terminal, and on how f4 was started. Every
+decision is therefore written to the debug log under one prefix:
+
+```sh
+VTUI_DEBUG=1 f4
+grep TTYX ~/.config/f4/debug.log
+```
+
+What to look for, in the order it happens:
+
+- `TTYX: no session` — no display, or nothing on it could be identified.
+- `the terminal window was only guessed` — neither `$WINDOWID` nor
+  `_NET_WM_PID` matched, so everything stands down on purpose. This is what a
+  detached session looks like from the inside: the process that owns the
+  window is not an ancestor of the process asking.
+- `window N found through ...` — the identification worked, with which method
+  and what the geometry is.
+- `CSI 16 t -> cell WxH, CSI 14 t -> text area WxH` — what the terminal
+  answered about its own size. Both `false` means the picture is placed by
+  treating the window as the grid, which is wrong by whatever furniture the
+  window has.
+- `keysym 0xNN mods N taken as keycode N` or `refused` — one line per
+  combination. A refusal is another client already holding it; a keycode of
+  zero is a keysym that is not on this keyboard.
+
+## 9. Testing
 
 `internal/ttyx` tests run against a real X server, which on a machine without
 one is no server at all:
