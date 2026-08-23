@@ -1019,11 +1019,12 @@ func (p *AnsiParser) handleGraphicsAttributes(args []int) {
 		action = args[1]
 	}
 
+	// PTY replies are best effort: a dead pty is reported by the read side.
 	switch item {
 	case 1: // number of colour registers
 		switch action {
 		case 1, 2, 3, 4:
-			p.pty.Write([]byte(fmt.Sprintf("\x1b[?1;0;%dS", sixelColorRegisters)))
+			_, _ = fmt.Fprintf(p.pty, "\x1b[?1;0;%dS", sixelColorRegisters)
 		default:
 			p.pty.Write([]byte("\x1b[?1;2S"))
 		}
@@ -1038,12 +1039,12 @@ func (p *AnsiParser) handleGraphicsAttributes(args []int) {
 			if h > sixelMaxSide {
 				h = sixelMaxSide
 			}
-			p.pty.Write([]byte(fmt.Sprintf("\x1b[?2;0;%d;%dS", w, h)))
+			_, _ = fmt.Fprintf(p.pty, "\x1b[?2;0;%d;%dS", w, h)
 		default:
 			p.pty.Write([]byte("\x1b[?2;2S"))
 		}
 	default:
 		// ReGIS geometry, and anything we have never heard of.
-		p.pty.Write([]byte(fmt.Sprintf("\x1b[?%d;1S", item)))
+		_, _ = fmt.Fprintf(p.pty, "\x1b[?%d;1S", item)
 	}
 }
