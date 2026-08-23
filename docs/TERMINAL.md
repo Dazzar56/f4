@@ -123,7 +123,7 @@ is gone. `kitty_placements.go` owns that list and every protocol feeds it.
 | :--- | :--- | :--- |
 | `ESC _ G ... ESC \` | kitty graphics | `kitty_graphics.go` |
 | `ESC P ... q ... ESC \` | sixel | `sixel_decode.go` |
-| `ESC _ far2l... ESC \` | far2l interact | `HandleFar2lAPC` (images not yet) |
+| `ESC _ far2l... ESC \` | far2l interact | `HandleFar2lAPC`, images in `far2l_image.go` |
 
 Any other device control string is parsed and dropped. Before sixel support
 there were no DCS states at all: `ESC P` was swallowed by `handleEsc` and the
@@ -159,6 +159,22 @@ past the picture scrolls a line away to make room for a cursor the client never
 asked to move. xterm and mlterm each invented their own algorithm and do not
 agree with each other either. A client that wants its text below the image
 sends a line feed.
+
+### 3a. far2l inside f4 uses neither sixel nor kitty
+
+far2l's TTY backend decides how to show a picture like this:
+
+```c
+if (_tty_caps.kind == TTYCaps::FAR2L) { ...ask over the far2l channel... }
+else if (CheckKittyImagesSupport()) { ... }
+```
+
+So the moment f4 answers the far2l extension handshake — which it does, and
+which is what buys the keyboard and the clipboard — far2l stops looking for
+anything else. Its images arrive as `FARTTY_INTERACT_IMAGE`, raw pixels over
+the same APC channel as everything else, and the kitty receiver is never
+reached at all. Before that channel was answered, far2l running inside f4 said
+"backend doesn't support graphics", which was true.
 
 ### 4. Known deviations and defects
 

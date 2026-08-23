@@ -56,6 +56,11 @@ type terminalImage struct {
 	// on their way past: without the flag every one of them would answer
 	// to i=0, which is what an a=d,d=I with no i asks for.
 	Sixel bool
+
+	// Far2lID is the name far2l gave the picture over its own channel.
+	// That protocol, unlike sixel, can address a picture after the fact,
+	// which is what its delete command needs.
+	Far2lID string
 }
 
 // covers reports whether the placement paints over the given grid cell.

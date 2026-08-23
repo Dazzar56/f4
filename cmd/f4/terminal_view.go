@@ -1675,9 +1675,8 @@ func (tv *TerminalView) ProcessFar2lInteract(data []byte) {
 	case 'p': // Palette info
 		reply.PushU8(0)  // reserved
 		reply.PushU8(24) // bits
-	case 'i': // Image operations (stub)
-		_ = stk.PopU8() // subcmd
-		reply.PushU8(0)
+	case 'i': // FARTTY_INTERACT_IMAGE, see far2l_image.go
+		tv.handleFar2lImage(stk, &reply)
 	}
 
 	if len(reply) > 0 || id != 0 {

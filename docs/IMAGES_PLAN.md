@@ -218,9 +218,13 @@ its child when `GetConsoleImageCaps` reports RGBA support; take it into account
 in `detectGraphicsProtocol` in `vtui/terminal_env.go` so that f4 running inside
 far2l turns kitty on.
 
-**11. far2l's own protocol in f4's built-in terminal.** Accept
-`FARTTY_INTERACT_IMAGE_*` (see `far2l/WinPort/FarTTY.h`) in `HandleFar2lAPC`,
-so that far2l running inside f4 can hand pictures over through its own channel.
+**11. Done.** far2l's own image channel is answered in `far2l_image.go`.
+This turned out not to be an optional extra: far2l's TTY backend asks over the
+far2l channel *instead of* probing kitty the moment the far2l extension is
+answered, so f4's kitty receiver was never reached and far2l's image viewer
+said the backend had no graphics. Caps, set and delete are implemented;
+transformation is refused and therefore never asked for, because the
+capabilities do not claim it.
 
 **12a. Done.** The overlay is installed as vtui's external graphics renderer,
 so quick view, the thumbnail grid, the file viewer and the pictures a program
