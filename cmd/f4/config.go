@@ -217,6 +217,7 @@ type F4Config struct {
 	PathHintSource         int  // 0 = active panel, 1 = passive panel, 2 = both
 	PathHintMaxVisible     int  // visible rows cap in the hint list
 	PathHintPerCategory    bool // the cap applies per category (active/passive/history)
+	DialogAutoComplete     bool // drop-down while typing in fields that have history
 	SlideShowDelay         int
 	ImageX11Overlay        bool
 	VideoPauseOnFocusLoss  bool
@@ -357,6 +358,7 @@ var AppConfig = F4Config{
 	PathHintSource:           2,
 	PathHintMaxVisible:       5,
 	PathHintPerCategory:      true,
+	DialogAutoComplete:       true,
 	SlideShowDelay:           defaultSlideShowDelay,
 	ImageX11Overlay:          true,
 	TTYXKeys:                 true,
@@ -625,6 +627,7 @@ func LoadConfig() {
 		AppConfig.PathHintMaxVisible = 1
 	}
 	AppConfig.PathHintPerCategory = ini.GetString("PathHints", "PerCategory", "1") == "1"
+	AppConfig.DialogAutoComplete = ini.GetString("PathHints", "DialogAutoComplete", "1") == "1"
 	AppConfig.SlideShowDelay = defaultSlideShowDelay
 	fmt.Sscanf(ini.GetString("Images", "SlideShowDelay", "5"), "%d", &AppConfig.SlideShowDelay)
 	if AppConfig.SlideShowDelay <= 0 {
@@ -832,6 +835,7 @@ func saveConfigWithWindowSize(windowSize bool) {
 	fmt.Fprintf(&sb, "Source = %d\n", AppConfig.PathHintSource)
 	fmt.Fprintf(&sb, "MaxVisible = %d\n", AppConfig.PathHintMaxVisible)
 	fmt.Fprintf(&sb, "PerCategory = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.PathHintPerCategory])
+	fmt.Fprintf(&sb, "DialogAutoComplete = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.DialogAutoComplete])
 	sb.WriteString("\n[Images]\n")
 	fmt.Fprintf(&sb, "SlideShowDelay = %d\n", AppConfig.SlideShowDelay)
 	fmt.Fprintf(&sb, "ExternalTimeout = %d\n", AppConfig.ImageExternalTimeout)

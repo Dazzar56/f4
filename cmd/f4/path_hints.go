@@ -21,6 +21,10 @@ const (
 func applyPathHintSettings() {
 	vtui.SetAutoCompleteMaxVisible(AppConfig.PathHintMaxVisible)
 	vtui.SetAutoCompletePerCategory(AppConfig.PathHintPerCategory)
+	// Subtractive only, like Opt.Dialogs.AutoComplete in Far: this cannot
+	// bring the drop-down to a field that has neither history nor path
+	// hints, it only takes it away from the fields that qualify.
+	vtui.AutoCompleteEnabled = AppConfig.DialogAutoComplete
 }
 
 // pathHintProvider is installed as vtui.PathHintProvider. It resolves the

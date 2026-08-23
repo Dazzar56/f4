@@ -3620,7 +3620,7 @@ func actionMouseWheelSettings(pf *PanelsFrame) {
 	vtui.FrameManager.Push(dlg)
 }
 func actionPathHintSettings(pf *PanelsFrame) {
-	const width, height = 56, 18
+	const width, height = 56, 19
 	dlg := vtui.NewCenteredDialog(width, height, Msg("PathHints.Title"))
 	dlg.ShowClose = true
 
@@ -3650,6 +3650,11 @@ func actionPathHintSettings(pf *PanelsFrame) {
 		chkPerCategory.State = 1
 	}
 
+	chkDialogAutoComplete := vtui.NewCheckbox(0, 0, Msg("PathHints.DialogAutoComplete"), false)
+	if AppConfig.DialogAutoComplete {
+		chkDialogAutoComplete.State = 1
+	}
+
 	lblNote := vtui.NewText(0, 0, Msg("PathHints.MarkersNote"), 0)
 
 	btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))
@@ -3665,6 +3670,7 @@ func actionPathHintSettings(pf *PanelsFrame) {
 	dlg.AddItem(lblMaxVisible)
 	dlg.AddItem(editMaxVisible)
 	dlg.AddItem(chkPerCategory)
+	dlg.AddItem(chkDialogAutoComplete)
 	dlg.AddItem(lblNote)
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnCancel)
@@ -3689,6 +3695,7 @@ func actionPathHintSettings(pf *PanelsFrame) {
 	vbox.Add(rowMaxVisible, vtui.Margins{}, vtui.AlignFill)
 
 	vbox.Add(chkPerCategory, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(chkDialogAutoComplete, vtui.Margins{}, vtui.AlignLeft)
 
 	vbox.Add(lblNote, vtui.Margins{Top: 1}, vtui.AlignLeft)
 
@@ -3718,6 +3725,7 @@ func actionPathHintSettings(pf *PanelsFrame) {
 		}
 		AppConfig.PathHintMaxVisible = maxVisible
 		AppConfig.PathHintPerCategory = chkPerCategory.State == 1
+		AppConfig.DialogAutoComplete = chkDialogAutoComplete.State == 1
 		applyPathHintSettings()
 		SaveConfig()
 		dlg.Close()
