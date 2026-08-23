@@ -28,6 +28,9 @@ var pluginInitTimeout = 15 * time.Second
 // else.
 func startPluginSession(sess *f4rpc.Session, api vfs.HostAPI, name string, bridge *ffibridge.Bridge, onServeExit func(error)) (vfs.Registration, error) {
 	registrations := &pluginSessionRegistrations{}
+	sess.OnError = func(err error) {
+		vtui.DebugLog("RPC Plugin %q: %v", name, err)
+	}
 	for method, handler := range newHostMethods(api, sess, name, bridge) {
 		sess.Register(method, handler)
 	}

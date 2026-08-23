@@ -210,6 +210,9 @@ type Plugin interface {
 // Run attaches the plugin to stdin/stdout and starts the RPC server loop.
 func Run(p Plugin) {
 	sess := f4rpc.NewSession(os.Stdin, os.Stdout)
+	sess.OnError = func(err error) {
+		_, _ = fmt.Fprintf(os.Stderr, "f4rpc: %v\n", err)
+	}
 	host := &Host{sess: sess}
 
 	sess.Register("Plugin.Init", func(data msgpack.RawMessage) (any, error) {

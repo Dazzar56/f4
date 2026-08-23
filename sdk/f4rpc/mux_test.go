@@ -1,6 +1,7 @@
 package f4rpc
 
 import (
+	"errors"
 	"io"
 	"strings"
 	"testing"
@@ -145,4 +146,28 @@ func TestSession_Concurrency(t *testing.T) {
 			t.Fatal("Timeout waiting for concurrent calls to finish")
 		}
 	}
+}
+
+func TestSession_ResponseEncodeError(t *testing.T) {
+	encodeErr := errors.New("encode failed")
+	sess := NewSession(strings.NewReader(""), errorWriter{err: encodeErr})
+
+	var got error
+	sess.OnError = func(err error) { got = err }
+	sess.handleRequest(&Message{ID: 42, Method: "missing"})
+
+	if !errors.Is(got, encodeErr) {
+		t.Fatalf("OnError error = %v, want %v", got, encodeErr)
+	}
+	if !strings.Contains(got.Error(), "response 42 was not sent") {
+		t.Fatalf("OnError error = %q, want response ID", got)
+	}
+}
+
+type errorWriter struct {
+	err error
+}
+
+func (w errorWriter) Write([]byte) (int, error) {
+	return 0, w.err
 }
