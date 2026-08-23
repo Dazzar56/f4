@@ -214,6 +214,10 @@ type QueueTask struct {
 	OpenDetails func(anchor vtui.Frame)
 	Finalize    func()
 	OnComplete  func()
+	// completionFrames is captured when the task is enqueued so a worker that
+	// outlives a test's UI swap does not read the process-global FrameManager
+	// while it is being replaced.
+	completionFrames *vtui.FrameManagerType
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -365,6 +369,7 @@ func getResourceKey(v vfs.VFS) string {
 }
 
 func (qm *OpQueueManager) Enqueue(task *QueueTask) {
+	frames := vtui.FrameManager
 	qm.mu.Lock()
 	qm.nextID++
 	task.ID = qm.nextID
@@ -372,11 +377,12 @@ func (qm *OpQueueManager) Enqueue(task *QueueTask) {
 	task.State = "Queued"
 	task.mu.Unlock()
 	task.ctx, task.cancel = context.WithCancel(context.Background())
+	task.completionFrames = frames
 	qm.tasks = append(qm.tasks, task)
 	qm.mu.Unlock()
 	qm.signalWorker()
 
-	vtui.FrameManager.PostTask(func() {
+	frames.PostTask(func() {
 		qm.EnsureQueueWorkspace()
 		qm.RefreshUI()
 	})
@@ -608,6 +614,12 @@ func (qm *OpQueueManager) workerLoop() {
 }
 
 func (qm *OpQueueManager) executeTask(t *QueueTask) {
+	frames := t.completionFrames
+	if frames == nil {
+		// Direct unit tests may call executeTask without Enqueue. Production
+		// tasks always receive a snapshot in Enqueue.
+		frames = vtui.FrameManager
+	}
 	vtui.DebugLog("QUEUE_DEBUG: Executing Task %d (%s)", t.ID, t.Type)
 	var taskErr error
 	if t.Run == nil {
@@ -685,7 +697,7 @@ func (qm *OpQueueManager) executeTask(t *QueueTask) {
 
 	vtui.DebugLog("QUEUE_DEBUG: Task %d finalized with state %s (Error: %v). Posting OnComplete.", t.ID, finalState, finalError)
 
-	qm.postTaskCompletion(t)
+	qm.postTaskCompletionOn(t, frames)
 }
 
 type QueueFrame struct {
