@@ -4644,6 +4644,7 @@ func TestFileSystemPanel_PendingSelectionPriority(t *testing.T) {
 	// имеет приоритет над текущим положением курсора при прилете чанков данных.
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	fp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewNullVFS(0))
+	waitForLoad(t, fp)
 
 	// Устанавливаем цель (новое имя файла после ренейма)
 	fp.pendingSelection = "new_name.txt"
