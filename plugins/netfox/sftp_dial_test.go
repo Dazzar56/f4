@@ -27,7 +27,7 @@ func TestNetFoxProvidersFailedDialReturnPlainNil(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			manager := NewNetFoxVFS(filepath.Join(t.TempDir(), "NetFox.json"))
-			manager.SaveConfig("unreachable", NetFoxConfig{
+			if err := manager.SaveConfig("unreachable", NetFoxConfig{
 				Type:      tt.typeName,
 				Host:      "127.0.0.1",
 				Port:      deadTCPPort(t),
@@ -35,7 +35,9 @@ func TestNetFoxProvidersFailedDialReturnPlainNil(t *testing.T) {
 				Pass:      "",
 				Timeout:   "1",
 				ProxyMode: netproxy.ModeDirect,
-			})
+			}); err != nil {
+				t.Fatal(err)
+			}
 
 			parent := &netFoxVFSWrapper{NetFoxVFS: manager}
 			opened, err := tt.provider.Open(context.Background(), parent, "unreachable")

@@ -56,8 +56,12 @@ func TestTrailingDotsSupport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to Create file with trailing dot: %v", err)
 	}
-	f.Write([]byte("test"))
-	f.Close()
+	if _, err := f.Write([]byte("test")); err != nil {
+		t.Fatalf("Failed to write file with trailing dot: %v", err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatalf("Failed to close file with trailing dot: %v", err)
+	}
 
 	// 3. Test ReadDir and Stat
 	stat, err := vfs.Stat(ctx, dotFilePath)

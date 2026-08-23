@@ -269,7 +269,7 @@ func TestReadRandomAccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	defer h.release()
+	defer func() { _ = h.release() }()
 
 	buf := make([]byte, 3)
 	n, err := h.readAt(context.Background(), buf, 2)
@@ -290,7 +290,7 @@ func TestSequentialBackendIsSpooled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	defer h.release()
+	defer func() { _ = h.release() }()
 
 	if h.tmp == nil {
 		t.Fatalf("a backend without random access must be spooled")
@@ -317,8 +317,12 @@ func TestReleaseIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	h.release()
-	h.release()
+	if err := h.release(); err != nil {
+		t.Fatalf("first release: %v", err)
+	}
+	if err := h.release(); err != nil {
+		t.Fatalf("second release: %v", err)
+	}
 	if _, err := h.readAt(context.Background(), make([]byte, 1), 0); !errors.Is(err, errClosed) {
 		t.Fatalf("read after release = %v, want errClosed", err)
 	}
@@ -484,7 +488,13 @@ func TestMountAndUnmount(t *testing.T) {
 		// FUSE mounts can fail in environments without /dev/fuse access (like CI)
 		t.Skipf("Mount failed (missing FUSE privileges?): %v", err)
 	}
-	defer m.Unmount()
+	t.Cleanup(func() {
+		if m.Active() {
+			if err := m.Unmount(); err != nil {
+				t.Errorf("cleanup unmount: %v", err)
+			}
+		}
+	})
 
 	if m.MountPoint != mountPoint {
 		t.Errorf("expected mount point %s, got %s", mountPoint, m.MountPoint)

@@ -57,16 +57,18 @@ func TestHelperAgainstLocalPwsh(t *testing.T) {
 	}
 	sess := NewSession(stdin, stdout, stdin)
 	t.Cleanup(func() {
-		sess.Close()
+		if err := sess.Close(); err != nil {
+			t.Errorf("close shell session: %v", err)
+		}
 		done := make(chan struct{})
 		go func() {
-			cmd.Wait()
+			_ = cmd.Wait() // process cleanup only
 			close(done)
 		}()
 		select {
 		case <-done:
 		case <-time.After(5 * time.Second):
-			cmd.Process.Kill()
+			_ = cmd.Process.Kill() // process cleanup only
 		}
 	})
 
@@ -196,13 +198,18 @@ func TestHelperAgainstLocalPwshEnumAndRead(t *testing.T) {
 	}
 	sess := NewSession(stdin, stdout, stdin)
 	t.Cleanup(func() {
-		sess.Close()
+		if err := sess.Close(); err != nil {
+			t.Errorf("close shell session: %v", err)
+		}
 		done := make(chan struct{})
-		go func() { cmd.Wait(); close(done) }()
+		go func() {
+			_ = cmd.Wait() // process cleanup only
+			close(done)
+		}()
 		select {
 		case <-done:
 		case <-time.After(5 * time.Second):
-			cmd.Process.Kill()
+			_ = cmd.Process.Kill() // process cleanup only
 		}
 	})
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -314,13 +321,18 @@ func TestHelperAgainstLocalPwshFind(t *testing.T) {
 	}
 	sess := NewSession(stdin, stdout, stdin)
 	t.Cleanup(func() {
-		sess.Close()
+		if err := sess.Close(); err != nil {
+			t.Errorf("close shell session: %v", err)
+		}
 		done := make(chan struct{})
-		go func() { cmd.Wait(); close(done) }()
+		go func() {
+			_ = cmd.Wait() // process cleanup only
+			close(done)
+		}()
 		select {
 		case <-done:
 		case <-time.After(5 * time.Second):
-			cmd.Process.Kill()
+			_ = cmd.Process.Kill() // process cleanup only
 		}
 	})
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

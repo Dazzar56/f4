@@ -79,7 +79,7 @@ func readWebDAVFile(t *testing.T, backend *webDAVBackend, location string) strin
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer r.Close()
+	defer func() { _ = r.Close() }()
 	data := make([]byte, r.Size())
 	if len(data) == 0 {
 		return ""
@@ -1163,7 +1163,7 @@ func TestWebDAVRangeReaderContinuesShortPartialResponses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer r.Close()
+	defer func() { _ = r.Close() }()
 	buffer := make([]byte, 6)
 	if n, err := r.ReadAt(context.Background(), buffer, 2); err != nil || n != 6 || string(buffer) != "234567" {
 		t.Fatalf("short-part continuation = %d, %v, %q", n, err, buffer)
@@ -1186,7 +1186,7 @@ func TestWebDAVRangeReaderDetectsChangedSizeFrom416(t *testing.T) {
 	defer server.Close()
 	readerCtx, cancel := context.WithCancel(context.Background())
 	reader := &webDAVRangeReader{client: server.Client(), url: server.URL, size: 5, etag: `"one"`, ctx: readerCtx, cancel: cancel}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 	if _, err := reader.ReadAt(context.Background(), make([]byte, 1), 0); !errors.Is(err, ErrRemoteObjectChanged) {
 		t.Fatalf("416 after size change = %v", err)
 	}

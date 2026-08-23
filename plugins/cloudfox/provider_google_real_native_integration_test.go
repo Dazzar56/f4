@@ -532,7 +532,7 @@ func assertRealGoogleBytes(t *testing.T, ctx context.Context, backend Backend, l
 	if err != nil {
 		t.Fatalf("reopen Google Drive shortcut target: %v", err)
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 	if len(expected) != 0 {
 		buffer := make([]byte, min(17, len(expected)))
 		n, readErr := reader.ReadAt(ctx, buffer, int64(len(expected)-len(buffer)))
