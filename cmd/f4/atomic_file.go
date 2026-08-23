@@ -59,12 +59,29 @@ func writeFileAtomically(path string, data []byte, mode os.FileMode) (returnErr 
 	closed = true
 	// The deferred Close is now harmless and the temp name is removed only if
 	// publication fails.
+	// Publication is a same-directory rename, atomic where it matters. On
+	// Windows it still fails transiently: MoveFileEx reports access denied
+	// while another writer is replacing the same target, and again while a
+	// scanner holds the freshly closed temporary file open. Both clear on
+	// their own, so this waits them out.
+	//
+	// A flat twenty attempts five milliseconds apart gave up after a tenth of
+	// a second, which sixteen concurrent writers on a loaded runner outlast --
+	// fourteen of them failed at once. The pause widens instead, so the common
+	// case still costs a millisecond while the contended one gets seconds.
 	var renameErr error
-	for attempt := 0; attempt < 20; attempt++ {
+	deadline := time.Now().Add(5 * time.Second)
+	for pause := time.Millisecond; ; {
 		if renameErr = os.Rename(tmpPath, path); renameErr == nil {
 			break
 		}
-		time.Sleep(5 * time.Millisecond)
+		if !time.Now().Before(deadline) {
+			break
+		}
+		time.Sleep(pause)
+		if pause < 50*time.Millisecond {
+			pause *= 2
+		}
 	}
 	if renameErr != nil {
 		return renameErr
