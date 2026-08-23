@@ -8,20 +8,18 @@ package main
 // too large and an origin that is slightly too high — which is exactly what
 // put a picture a row and a bit above the space meant for it in gnome-terminal.
 //
-// The terminal itself knows. CSI 14 t answers with the size of the text area
-// in pixels, and that is the missing measurement: the grid is that size, and
-// what is left over is furniture.
+// The terminal knows. It carries the pixel size of its text area in the window
+// size ioctl, and answers for it over the wire as well, and that is the missing
+// measurement: the grid is that size and what is left over is furniture.
 //
-// It has to be asked before the input reader starts, because afterwards the
-// answer is just another escape sequence arriving on standard input and the
-// reader eats it. So it is asked once, at startup, and remembered.
+// The questions asked over the wire have to be asked before the input reader
+// starts, because afterwards the answer is just another escape sequence
+// arriving on standard input and the reader eats it. So all of it happens
+// once, at startup, and is remembered.
 
 import (
 	"os"
-	"strconv"
-	"strings"
 	"sync"
-	"time"
 
 	"github.com/unxed/f4/internal/ttyx"
 	"github.com/unxed/vtui"
@@ -37,24 +35,66 @@ var (
 	hostCellKnown bool
 )
 
-// ProbeHostTextArea asks the terminal how large its text area is. It must be
-// called before anything else starts reading standard input.
+// ProbeHostTextArea works out how large the terminal's text area is. It must
+// be called before anything else starts reading standard input.
 //
-// Two questions are asked because terminals differ about which they answer.
-// CSI 16 t gives the size of one cell, which multiplied by the size of the
-// grid is the text area exactly and owes nothing to padding. CSI 14 t gives
-// the text area directly. The first is preferred where both come back; where
-// neither does, the caller falls back to treating the window as the grid.
+// Three ways, cheapest first.
+//
+// The window size ioctl carries the text area in pixels alongside the size in
+// characters, and every terminal worth the name fills it in. It costs a system
+// call, it cannot be lost, and it cannot eat a keystroke — which the other two
+// can, being questions asked over the wire and answered on standard input.
+//
+// Failing that, CSI 16 t gives the size of one cell, which multiplied by the
+// grid is the text area exactly and owes nothing to padding, and CSI 14 t
+// gives the text area directly.
+//
+// Failing all three the caller treats the window as the grid, which is right
+// for a terminal with no furniture and wrong by the height of a menu bar for
+// one with.
 func ProbeHostTextArea() {
+	if w, h, ok := hostPixelsFromIoctl(os.Stdin); ok {
+		vtui.DebugLog("TTYX: TIOCGWINSZ -> text area %dx%d", w, h)
+		hostTextMu.Lock()
+		hostTextW, hostTextH, hostTextKnown = w, h, true
+		hostCellKnown = false
+		hostTextMu.Unlock()
+		publishCellSize()
+		return
+	}
+
 	cw, ch, cellOK := queryPixels("\x1b[16t", "\x1b[6;")
 	tw, th, areaOK := queryPixels("\x1b[14t", "\x1b[4;")
-	vtui.DebugLog("TTYX: CSI 16 t -> cell %dx%d (%v), CSI 14 t -> text area %dx%d (%v)",
+	vtui.DebugLog("TTYX: no TIOCGWINSZ pixels; CSI 16 t -> cell %dx%d (%v), CSI 14 t -> text area %dx%d (%v)",
 		cw, ch, cellOK, tw, th, areaOK)
 
 	hostTextMu.Lock()
 	hostCellW, hostCellH, hostCellKnown = cw, ch, cellOK
 	hostTextW, hostTextH, hostTextKnown = tw, th, areaOK
 	hostTextMu.Unlock()
+	publishCellSize()
+}
+
+// publishCellSize tells vtui the real size of a character cell. Without it the
+// graphics layer answers zero, everything that lays a picture out falls back
+// to a guessed eight by sixteen, and a picture ends up the wrong shape as well
+// as in the wrong place — the cell of a terminal is nothing like square.
+func publishCellSize() {
+	scr := vtui.FrameManager.Screen()
+	if scr == nil {
+		return
+	}
+	cols, rows := scr.Width(), scr.Height()
+	w, h, ok := hostTextSize(cols, rows)
+	if !ok || cols <= 0 || rows <= 0 {
+		return
+	}
+	cw, ch := w/cols, h/rows
+	if cw <= 0 || ch <= 0 {
+		return
+	}
+	vtui.DebugLog("TTYX: the cell is %dx%d pixels", cw, ch)
+	scr.Graphics().SetCellSize(cw, ch)
 }
 
 // hostCellSize is the pixel size of one cell as the terminal reported it.
@@ -68,61 +108,6 @@ func hostTextArea() (w, h int, ok bool) {
 	hostTextMu.Lock()
 	defer hostTextMu.Unlock()
 	return hostTextW, hostTextH, hostTextKnown
-}
-
-// queryPixels sends one XTWINOPS question and reads the answer with the given
-// prefix. Standard input and output are used rather than /dev/tty: where f4
-// runs as a server the terminal is the pair of descriptors the client handed
-// over, and /dev/tty in that process is either nothing or somebody else's.
-//
-// A terminal that never answers costs the budget below and nothing else.
-func queryPixels(ask, prefix string) (int, int, bool) {
-	in, out := os.Stdin, os.Stdout
-	if err := in.SetReadDeadline(time.Now().Add(300 * time.Millisecond)); err != nil {
-		return 0, 0, false
-	}
-	defer in.SetReadDeadline(time.Time{})
-	if _, err := out.WriteString(ask); err != nil {
-		return 0, 0, false
-	}
-
-	var sb strings.Builder
-	buf := make([]byte, 128)
-	for {
-		n, err := in.Read(buf)
-		if n > 0 {
-			sb.Write(buf[:n])
-			if strings.HasSuffix(sb.String(), "t") && strings.Contains(sb.String(), prefix) {
-				break
-			}
-		}
-		if err != nil {
-			break
-		}
-	}
-	return parseXTWinOps(sb.String(), prefix)
-}
-
-// parseXTWinOps decodes "<prefix>height;width t".
-func parseXTWinOps(s, prefix string) (int, int, bool) {
-	i := strings.Index(s, prefix)
-	if i < 0 {
-		return 0, 0, false
-	}
-	rest := s[i+len(prefix):]
-	if j := strings.IndexByte(rest, 't'); j >= 0 {
-		rest = rest[:j]
-	}
-	parts := strings.Split(rest, ";")
-	if len(parts) < 2 {
-		return 0, 0, false
-	}
-	h, errH := strconv.Atoi(strings.TrimSpace(parts[0]))
-	w, errW := strconv.Atoi(strings.TrimSpace(parts[1]))
-	if errH != nil || errW != nil || w <= 0 || h <= 0 {
-		return 0, 0, false
-	}
-	return w, h, true
 }
 
 // hostTextSize is the size of the character grid in pixels, worked out from

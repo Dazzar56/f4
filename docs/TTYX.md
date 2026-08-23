@@ -78,16 +78,35 @@ without it the server would expect a repaint on `Expose`.
 and the right of it a scroll bar, and dividing the window by the number of
 cells in it therefore gives a cell slightly too large and an origin slightly
 too high — which put a picture a row and a bit above its own space in
-gnome-terminal. The terminal knows better: `CSI 14 t` answers with the size of
-its text area in pixels, and the grid is placed against the **bottom left** of
-the window at that size, because a menu bar is at the top and a scroll bar is
-on the right and neither is ever at the bottom left. A terminal with a
-symmetric border is out by that border, which is a pixel or two.
+gnome-terminal. The terminal knows better, and `ProbeHostTextArea` asks it
+three ways, cheapest first:
 
-The question is asked once, at startup, in `ProbeHostTextArea`, and it has to
-be: afterwards the answer is just another escape sequence arriving on standard
-input and the input reader eats it. A terminal that does not answer gets the
-old behaviour, which is right for one with no furniture at all.
+1. **`TIOCGWINSZ`.** The window size ioctl carries the pixel size of the text
+   area beside the size in characters, and nearly every terminal fills it in.
+   One system call, nothing to lose on the wire, and no chance of swallowing a
+   keystroke.
+2. **`CSI 16 t`**, the size of one cell, which multiplied by the grid is the
+   text area exactly and owes nothing to padding.
+3. **`CSI 14 t`**, the text area directly.
+
+The grid is then placed against the **bottom left** of the window at that size,
+because a menu bar is at the top and a scroll bar is on the right and neither
+is ever at the bottom left. A terminal with a symmetric border is out by that
+border, which is a pixel or two.
+
+The two questions asked over the wire have to be asked before the input reader
+starts: afterwards the answer is just another escape sequence arriving on
+standard input and the reader eats it. **And they have to be waited for by
+hand.** A descriptor passed from another process — which is exactly what a
+session attached to a running server reads from — arrives in blocking mode,
+the runtime does not poll it, and `SetReadDeadline` refuses. Giving up there
+meant the question was never even asked and both answers came back in the same
+millisecond, which is what the debug log showed and how this was found.
+
+The measured cell is handed to `GraphicsLayer.SetCellSize`. Without that the
+layer answers zero, everything that lays a picture out falls back to a guessed
+eight by sixteen, and the picture comes out the wrong shape as well as in the
+wrong place: the cell of a terminal is nothing like square.
 
 A whole frame goes into **one window with the gaps cut out of it**. The window
 covers the rectangle that holds every picture and a SHAPE bounding mask is cut
@@ -288,10 +307,12 @@ What to look for, in the order it happens:
   window is not an ancestor of the process asking.
 - `window N found through ...` — the identification worked, with which method
   and what the geometry is.
-- `CSI 16 t -> cell WxH, CSI 14 t -> text area WxH` — what the terminal
-  answered about its own size. Both `false` means the picture is placed by
-  treating the window as the grid, which is wrong by whatever furniture the
-  window has.
+- `TIOCGWINSZ -> text area WxH`, or failing that `CSI 16 t -> cell ...,
+  CSI 14 t -> text area ...` — how the terminal was measured. All of them
+  failing means the picture is placed by treating the window as the grid,
+  which is wrong by whatever furniture the window has.
+- `the cell is WxH pixels` — what was handed to the graphics layer. A missing
+  line here means everything is laid out on a guessed eight by sixteen.
 - `keysym 0xNN mods N taken as keycode N` or `refused` — one line per
   combination. A refusal is another client already holding it; a keycode of
   zero is a keysym that is not on this keyboard.

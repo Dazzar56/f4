@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"testing"
 
 	"github.com/unxed/f4/internal/ttyx"
@@ -203,5 +204,43 @@ func TestHostTextSizePrefersTheCell(t *testing.T) {
 	hostTextMu.Unlock()
 	if _, _, ok := hostTextSize(80, 25); ok {
 		t.Error("nothing was measured, so nothing is known")
+	}
+}
+
+// The window size ioctl is where the pixel size of the text area comes from
+// on a real terminal. A pipe is not a terminal and must say so rather than
+// answering with zeros that look like an answer.
+func TestHostPixelsFromIoctlOnAPipe(t *testing.T) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Skipf("no pipe: %v", err)
+	}
+	defer r.Close()
+	defer w.Close()
+
+	if _, _, ok := hostPixelsFromIoctl(r); ok {
+		t.Error("a pipe has no text area")
+	}
+	if _, _, ok := hostPixelsFromIoctl(nil); ok {
+		t.Error("neither has nothing at all")
+	}
+}
+
+// The answer is only complete once its terminating t has arrived, so a reply
+// that is still being read is not mistaken for one that is short.
+func TestAnswerComplete(t *testing.T) {
+	cases := []struct {
+		in   string
+		want bool
+	}{
+		{"\x1b[4;600;790t", true},
+		{"\x1b[4;600;79", false},
+		{"\x1b[6;20;10t", false},
+		{"", false},
+	}
+	for _, c := range cases {
+		if got := answerComplete(c.in, "\x1b[4;"); got != c.want {
+			t.Errorf("%q: got %v, want %v", c.in, got, c.want)
+		}
 	}
 }
