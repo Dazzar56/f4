@@ -4542,6 +4542,13 @@ func TestFileSystemPanel_LiveSelectionPreservation(t *testing.T) {
 
 	// 1. Setup: Panel with cached data
 	fp := NewFileSystemPanel(0, 0, 40, 20, v)
+	t.Cleanup(func() {
+		if fp.cancelLoad != nil {
+			fp.cancelLoad()
+		}
+		fp.stopLoadingAnimation()
+	})
+	waitForLoad(t, fp)
 	fp.entries = []*fileEntry{
 		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
 		{VFSItem: vfs.VFSItem{Name: "item1"}, IsCached: true, Selected: true}, // Selected initially
