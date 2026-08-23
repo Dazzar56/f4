@@ -2,9 +2,47 @@ package main
 
 import (
 	"testing"
+	"time"
 
 	"github.com/unxed/vtui"
 )
+
+func TestPanelsFrame_MenuFitsSmallScreenAndScrolls(t *testing.T) {
+	defer swapFrameManager(t)()
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 10)
+	vtui.FrameManager.Init(scr)
+
+	pf := &PanelsFrame{lastW: 80, lastH: 10}
+	items := make([]string, 30)
+	for i := range items {
+		items[i] = "Item"
+	}
+	pf.Menu("Long plugin menu", items, nil)
+
+	select {
+	case task := <-vtui.FrameManager.TaskChan:
+		task()
+	case <-time.After(time.Second):
+		t.Fatal("menu task was not posted")
+	}
+
+	menu, ok := vtui.FrameManager.GetTopFrame().(*vtui.VMenu)
+	if !ok {
+		t.Fatalf("top frame = %T, want *vtui.VMenu", vtui.FrameManager.GetTopFrame())
+	}
+	if menu.Y1 < 0 || menu.Y2 >= scr.Height() {
+		t.Fatalf("menu bounds = (%d,%d)-(%d,%d), screen height = %d", menu.X1, menu.Y1, menu.X2, menu.Y2, scr.Height())
+	}
+	if menu.ViewHeight >= len(items) || !menu.ShowScrollBar || menu.ScrollBar == nil {
+		t.Fatalf("menu viewport = %d items=%d scrollbar=%v bar=%v", menu.ViewHeight, len(items), menu.ShowScrollBar, menu.ScrollBar != nil)
+	}
+	menu.SetSelectPos(len(items) - 1)
+	if menu.TopPos == 0 {
+		t.Fatal("selecting the last item did not scroll the menu")
+	}
+	menu.Close()
+}
 
 func TestPanelsFrame_SideMenusExposeDriveHotkeys(t *testing.T) {
 	pf := &PanelsFrame{}
