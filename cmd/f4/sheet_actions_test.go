@@ -107,3 +107,27 @@ func TestSheetPathResolution(t *testing.T) {
 		t.Errorf("sheetPathIn(\"\", \"sheet.f4s\") = %q, want an absolute path ending in sheet.f4s", got)
 	}
 }
+
+// TestSheetNativeNamesAreSQLiteNames covers the double extension: the offered
+// name must end in .sqlite so other tools open the file, and the base name
+// helper must treat the pair as one extension.
+func TestSheetNativeNamesAreSQLiteNames(t *testing.T) {
+	if !strings.HasSuffix(sheetNativeExtension, ".sqlite") {
+		t.Fatalf("sheetNativeExtension = %q, want it to end in .sqlite", sheetNativeExtension)
+	}
+	if offered := Msg("Sheet.DefaultFileName"); !strings.HasSuffix(strings.ToLower(offered), sheetNativeExtension) {
+		t.Errorf("the Save As dialog offers %q, want a %s name", offered, sheetNativeExtension)
+	}
+
+	for _, tc := range []struct{ path, want string }{
+		{"/tmp/book.f4s.sqlite", "/tmp/book"},
+		{"/tmp/book.F4S.SQLITE", "/tmp/book"},
+		{"/tmp/book.f4s", "/tmp/book"},
+		{"/tmp/book.xlsx", "/tmp/book"},
+		{"/tmp/book", "/tmp/book"},
+	} {
+		if got := sheetBaseName(tc.path); got != tc.want {
+			t.Errorf("sheetBaseName(%q) = %q, want %q", tc.path, got, tc.want)
+		}
+	}
+}

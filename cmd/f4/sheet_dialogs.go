@@ -12,6 +12,29 @@ import (
 	"github.com/unxed/vtui"
 )
 
+// sheetNativeExtension is the suffix of the native format.
+//
+// It is a double extension on purpose. The native format has always been an
+// ordinary SQLite database, but a file named .f4s said so to nothing: every
+// other SQLite tool goes by the extension, f4's own client among them, and
+// they all declined to open it. Ending the name in .sqlite makes the file
+// what it already was, while .f4s in front of it keeps a sheet recognisable
+// as a sheet.
+const sheetNativeExtension = ".f4s.sqlite"
+
+// sheetBaseName drops the extension from a sheet path, counting the native
+// double extension as one so an export beside book.f4s.sqlite is book.csv
+// rather than book.f4s.csv.
+func sheetBaseName(path string) string {
+	if strings.HasSuffix(strings.ToLower(path), sheetNativeExtension) {
+		return path[:len(path)-len(sheetNativeExtension)]
+	}
+	if dot := strings.LastIndex(path, "."); dot > strings.LastIndexAny(path, `/\`) {
+		return path[:dot]
+	}
+	return path
+}
+
 // sheetDirectory is where a name typed without a directory belongs: whatever
 // the active file panel is showing.
 //
@@ -243,10 +266,7 @@ func defaultExportName(sf *SheetFrame, extension string) string {
 	if base == "" {
 		return sheetResolvePath("sheet" + extension)
 	}
-	if dot := strings.LastIndex(base, "."); dot > strings.LastIndexAny(base, `/\`) {
-		base = base[:dot]
-	}
-	return base + extension
+	return sheetBaseName(base) + extension
 }
 
 // showSheetGotoDialog jumps to a cell entered by name.

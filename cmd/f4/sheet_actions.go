@@ -89,6 +89,8 @@ func selectedSpreadsheetPath() string {
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".xlsx", ".csv":
 		return path
+	// .f4s is what the native format used to be called. Sheets written under
+	// the old name keep opening; IsSheetFile is what decides in every case.
 	case ".f4s", ".db", ".sqlite", ".sqlite3":
 		if sheet.IsSheetFile(context.Background(), path) {
 			return path

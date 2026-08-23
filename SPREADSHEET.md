@@ -12,7 +12,11 @@ nothing here derives from Turbo Vision.
 ## Files
 
 The native format is a SQLite database, since `f4` already depends on
-`ncruces/go-sqlite3`. A sheet is a plain `.f4s` file holding three tables:
+`ncruces/go-sqlite3`. A sheet is a plain `.f4s.sqlite` file holding three
+tables. The extension is double on purpose: the second half is what makes every
+SQLite tool -- f4's own client included -- open the file without being told,
+and the first half keeps a sheet recognisable as a sheet. Files written under
+the earlier `.f4s` name still open.
 
 | table           | contents                                              |
 | --------------- | ----------------------------------------------------- |
