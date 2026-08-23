@@ -34,6 +34,23 @@ type concurrentStatVFS struct {
 	release chan struct{}
 }
 
+type closeErrorVFS struct {
+	*fakeVFS
+	err    error
+	closes int
+}
+
+func (v *closeErrorVFS) Close() error {
+	v.closed = true
+	v.closes++
+	return v.err
+}
+
+type immediateMountServer struct{}
+
+func (immediateMountServer) Unmount() error { return nil }
+func (immediateMountServer) Wait()          {}
+
 func (*concurrentStatVFS) SupportsConcurrentCalls() bool { return true }
 
 func (f *concurrentStatVFS) Stat(ctx context.Context, p string) (vfs.VFSItem, error) {
@@ -338,6 +355,40 @@ func TestCloseReleasesTheBackend(t *testing.T) {
 	}
 	if _, err := b.readDir(context.Background(), "/root"); !errors.Is(err, errClosed) {
 		t.Fatalf("readDir after close = %v, want errClosed", err)
+	}
+}
+
+func TestMountVFSEarlyFailureClosesVFSOnce(t *testing.T) {
+	v := &closeErrorVFS{fakeVFS: newFakeVFS(true)}
+	if _, err := MountVFS(context.Background(), v, Options{}); err == nil {
+		t.Fatal("MountVFS without a mount point succeeded")
+	}
+	if v.closes != 1 {
+		t.Fatalf("early MountVFS failure closed the VFS %d times, want once", v.closes)
+	}
+}
+
+func TestCleanupErrorReachesOnExitButNotUnmount(t *testing.T) {
+	want := errors.New("backend close failed")
+	v := &closeErrorVFS{fakeVFS: newFakeVFS(true), err: want}
+	var exitErr error
+	m := &Mount{
+		ID:     "cleanup-error-test",
+		server: immediateMountServer{},
+		bridge: newBridge(v, "/root", Options{}),
+		done:   make(chan struct{}),
+		onExit: func(_ *Mount, err error) { exitErr = err },
+	}
+
+	m.watch()
+	if !errors.Is(exitErr, want) {
+		t.Fatalf("OnExit error = %v, want backend close error", exitErr)
+	}
+	if err := m.Unmount(); err != nil {
+		t.Fatalf("Unmount after successful detach = %v, want nil", err)
+	}
+	if v.closes != 1 {
+		t.Fatalf("watch closed the VFS %d times, want once", v.closes)
 	}
 }
 

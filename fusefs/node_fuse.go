@@ -97,13 +97,12 @@ var (
 )
 
 // writeFileHandle is one open handle on a file being written. The data goes
-// into the staging file shared by every handle on that path, and reaches the
-// backend once, when the last of them closes.
+// into the write handle shared by every FUSE open on that path. Flush makes
+// the current data durable; Release performs the same work if Flush was
+// skipped.
 type writeFileHandle struct {
-	b         *bridge
-	wh        *writeHandle
-	path      string
-	committed bool
+	b  *bridge
+	wh *writeHandle
 }
 
 // Create makes a new file. The file exists in the mount immediately — the
@@ -123,11 +122,11 @@ func (n *node) Create(ctx context.Context, name string, flags uint32, mode uint3
 	fillAttr(&out.Attr, item, childPath)
 	stable := fs.StableAttr{Ino: inodeOf(childPath), Mode: typeBits(item)}
 	inode := n.NewInode(ctx, &node{b: n.b, path: childPath}, stable)
-	return inode, &writeFileHandle{b: n.b, wh: wh, path: childPath}, 0, 0
+	return inode, &writeFileHandle{b: n.b, wh: wh}, 0, 0
 }
 
 func (f *writeFileHandle) Write(ctx context.Context, data []byte, off int64) (uint32, syscall.Errno) {
-	written, err := f.wh.writeAt(data, off)
+	written, err := f.wh.writeAt(ctx, f.b, data, off)
 	if err != nil {
 		return uint32(written), errnoOf(err)
 	}
@@ -145,46 +144,11 @@ func (f *writeFileHandle) Fsync(ctx context.Context, flags uint32) syscall.Errno
 // program that wrote the file, so the commit happens here when this is the
 // last handle. Release does it again only if Flush never ran.
 func (f *writeFileHandle) Flush(ctx context.Context) syscall.Errno {
-	if !f.wh.needsCommit() || f.committed || !f.b.isLastWriter(f.wh) {
-		return 0
-	}
-	if errno := f.commit(ctx); errno != 0 {
-		return errno
-	}
-	return 0
+	return errnoOf(f.b.flushWriter(ctx, f.wh))
 }
 
 func (f *writeFileHandle) Release(ctx context.Context) syscall.Errno {
-	last := f.b.releaseWriter(f.wh)
-	if last {
-		if f.wh.needsCommit() && !f.committed {
-			f.commit(ctx)
-		}
-		f.wh.close()
-		if !f.wh.needsCommit() {
-			// A direct write never went through commit(), which is
-			// where the parent listing is normally dropped.
-			f.b.invalidate(f.b.parentOf(f.path))
-		}
-	}
-	return 0
-}
-
-func (f *writeFileHandle) commit(ctx context.Context) syscall.Errno {
-	r, err := f.wh.staged.Reader()
-	if err != nil {
-		return errnoOf(err)
-	}
-	if err := f.b.commit(ctx, f.path, r); err != nil {
-		return errnoOf(err)
-	}
-	f.committed = true
-	// The kernel may still be holding attributes from before the write, and
-	// AttrTimeout is measured in seconds. Dropping the entry the file was
-	// listed under is the cheap half of the answer; the Getattr override
-	// above is the other half, for as long as the handle is open.
-	f.b.invalidate(f.b.parentOf(f.path))
-	return 0
+	return errnoOf(f.b.finishWriter(ctx, f.wh))
 }
 
 // writeRefusal reports why a write cannot happen, or 0 when it can. The mount
@@ -349,8 +313,7 @@ func (f *fileHandle) Read(ctx context.Context, dest []byte, off int64) (fuse.Rea
 }
 
 func (f *fileHandle) Release(ctx context.Context) syscall.Errno {
-	f.h.release()
-	return 0
+	return errnoOf(f.h.release())
 }
 
 func typeBits(item vfs.VFSItem) uint32 {
@@ -499,9 +462,9 @@ func (n *node) openForWrite(ctx context.Context, flags uint32) (fs.FileHandle, u
 		return nil, 0, errnoOf(err)
 	}
 	if flags&uint32(syscall.O_TRUNC) != 0 {
-		if err := wh.truncate(0); err != nil {
+		if err := wh.truncate(ctx, n.b, 0); err != nil {
 			if n.b.releaseWriter(wh) {
-				wh.close()
+				err = errors.Join(err, wh.close())
 			}
 			return nil, 0, errnoOf(err)
 		}
@@ -517,13 +480,13 @@ func (n *node) openForWrite(ctx context.Context, flags uint32) (fs.FileHandle, u
 				// commit a file with a hole where the old
 				// contents should have been.
 				if n.b.releaseWriter(wh) {
-					wh.close()
+					err = errors.Join(err, wh.close())
 				}
 				return nil, 0, errnoOf(err)
 			}
 		}
 	}
-	return &writeFileHandle{b: n.b, wh: wh, path: n.path}, 0, 0
+	return &writeFileHandle{b: n.b, wh: wh}, 0, 0
 }
 
 // Setattr answers chmod and touch. Size is not handled here yet: truncating
@@ -575,9 +538,9 @@ func (n *node) Setattr(ctx context.Context, f fs.FileHandle, in *fuse.SetAttrIn,
 // file closed — `truncate -s 0 x`, or a shell redirect onto an existing
 // file — the whole round trip happens here, because there is no close coming
 // that would otherwise do it.
-func (n *node) truncate(ctx context.Context, size int64) syscall.Errno {
+func (n *node) truncate(ctx context.Context, size int64) (errno syscall.Errno) {
 	if wh := n.b.writerFor(n.path); wh != nil {
-		if err := wh.truncate(size); err != nil {
+		if err := wh.truncate(ctx, n.b, size); err != nil {
 			return errnoOf(err)
 		}
 		return 0
@@ -589,14 +552,16 @@ func (n *node) truncate(ctx context.Context, size int64) syscall.Errno {
 	}
 	defer func() {
 		if n.b.releaseWriter(wh) {
-			wh.close()
+			if err := wh.close(); errno == 0 {
+				errno = errnoOf(err)
+			}
 		}
 	}()
 
 	// A backend written at an offset resizes its own file; there is nothing
 	// to fetch and nothing to send back.
 	if !wh.needsCommit() {
-		if err := wh.truncate(size); err != nil {
+		if err := wh.truncate(ctx, n.b, size); err != nil {
 			return errnoOf(err)
 		}
 		n.b.invalidate(n.b.parentOf(n.path))
@@ -613,7 +578,7 @@ func (n *node) truncate(ctx context.Context, size int64) syscall.Errno {
 			}
 		}
 	}
-	if err := wh.staged.Truncate(size); err != nil {
+	if err := wh.truncate(ctx, n.b, size); err != nil {
 		return errnoOf(err)
 	}
 	r, err := wh.staged.Reader()

@@ -35,9 +35,10 @@ var errClosed = errors.New("mount is closed")
 // implement vfs.ConcurrentVFS may overlap independent read-side calls; all
 // mutations and bridge shutdown remain exclusive.
 type bridge struct {
-	mu     sync.RWMutex
-	v      vfs.VFS
-	closed bool
+	mu       sync.RWMutex
+	v        vfs.VFS
+	closed   bool
+	closeErr error
 	// A backend must opt in before read-side calls can overlap. Writes and
 	// close remain exclusive even for concurrent backends.
 	parallel bool
@@ -140,6 +141,7 @@ func (b *bridge) statsReport() string {
 type writeHandle struct {
 	path string
 	refs int
+	ioMu sync.Mutex
 
 	// staged is where the writes land when the backend can only be handed a
 	// whole file. Exactly one of staged and direct is set.
@@ -147,31 +149,131 @@ type writeHandle struct {
 	// direct is the backend's own file, written at the offset the kernel
 	// asked for. No staging, no download on open, no commit on close.
 	direct vfs.WriterAtCloser
+
+	// A direct writer is closed by Flush so that close errors reach the
+	// caller. A later write through a dup'd descriptor reopens it. Staged
+	// files stay open until Release and can be committed more than once.
+	closed    bool
+	finished  bool
+	committed bool
 }
 
 // needsCommit says whether closing this handle still has to send anything.
 // A directly written file is already in the backend; a staged one is not.
-func (h *writeHandle) needsCommit() bool { return h.direct == nil }
+func (h *writeHandle) needsCommit() bool { return h.staged != nil }
 
-func (h *writeHandle) writeAt(p []byte, off int64) (int, error) {
+func (h *writeHandle) writeAt(ctx context.Context, b *bridge, p []byte, off int64) (int, error) {
+	h.ioMu.Lock()
+	defer h.ioMu.Unlock()
+	if h.finished {
+		return 0, os.ErrClosed
+	}
 	if h.direct != nil {
+		if h.closed {
+			direct, err := b.openDirectWriter(ctx, h.path)
+			if err != nil {
+				return 0, err
+			}
+			h.direct = direct
+			h.closed = false
+		}
 		return h.direct.WriteAt(p, off)
 	}
-	return h.staged.WriteAt(p, off)
+	n, err := h.staged.WriteAt(p, off)
+	if n > 0 {
+		h.committed = false
+	}
+	return n, err
 }
 
-func (h *writeHandle) truncate(size int64) error {
+func (h *writeHandle) truncate(ctx context.Context, b *bridge, size int64) error {
+	h.ioMu.Lock()
+	defer h.ioMu.Unlock()
+	if h.finished {
+		return os.ErrClosed
+	}
 	if h.direct != nil {
+		if h.closed {
+			direct, err := b.openDirectWriter(ctx, h.path)
+			if err != nil {
+				return err
+			}
+			h.direct = direct
+			h.closed = false
+		}
 		return h.direct.Truncate(size)
 	}
-	return h.staged.Truncate(size)
+	if err := h.staged.Truncate(size); err != nil {
+		return err
+	}
+	h.committed = false
+	return nil
 }
 
 func (h *writeHandle) close() error {
+	h.ioMu.Lock()
+	defer h.ioMu.Unlock()
+	if h.finished {
+		return nil
+	}
+	h.finished = true
+	if h.closed {
+		return nil
+	}
+	h.closed = true
 	if h.direct != nil {
 		return h.direct.Close()
 	}
 	return h.staged.Close()
+}
+
+func (h *writeHandle) flushLocked(ctx context.Context, b *bridge) error {
+	if h.finished || h.closed {
+		return nil
+	}
+	if h.staged != nil {
+		if h.committed {
+			return nil
+		}
+		return h.commitLocked(ctx, b)
+	}
+	err := h.direct.Close()
+	h.closed = true
+	b.invalidate(b.parentOf(h.path))
+	return err
+}
+
+func (h *writeHandle) finishLocked(ctx context.Context, b *bridge) error {
+	if h.finished {
+		return nil
+	}
+	var err error
+	if h.staged != nil && !h.committed {
+		err = h.commitLocked(ctx, b)
+	}
+	if !h.closed {
+		if h.direct != nil {
+			err = errors.Join(err, h.direct.Close())
+			b.invalidate(b.parentOf(h.path))
+		} else {
+			err = errors.Join(err, h.staged.Close())
+		}
+		h.closed = true
+	}
+	h.finished = true
+	return err
+}
+
+func (h *writeHandle) commitLocked(ctx context.Context, b *bridge) error {
+	r, err := h.staged.Reader()
+	if err != nil {
+		return err
+	}
+	if err := b.commit(ctx, h.path, r); err != nil {
+		return err
+	}
+	h.committed = true
+	return nil
 }
 
 // stagedFile is a file being assembled on local disk before it is handed to
@@ -183,9 +285,9 @@ func (h *writeHandle) close() error {
 // failed transfer leaves the backend's copy untouched rather than half
 // rewritten.
 //
-// The file is unlinked immediately after creation, exactly like the read-side
-// spool, so it disappears with the process even on a crash and never shows up
-// in anybody's temp directory listing.
+// The file is unlinked immediately after creation when the host permits it,
+// exactly like the read-side spool. Failure is survivable: the open file still
+// works, so inability to hide its name must not make a mount unusable.
 type stagedFile struct {
 	f *os.File
 }
@@ -195,7 +297,7 @@ func newStagedFile() (*stagedFile, error) {
 	if err != nil {
 		return nil, err
 	}
-	os.Remove(f.Name())
+	_ = os.Remove(f.Name()) // Best effort: the open file remains usable if unlink is unavailable.
 	return &stagedFile{f: f}, nil
 }
 
@@ -333,12 +435,22 @@ func (b *bridge) close() {
 	v := b.v
 	b.mu.Unlock()
 
+	var closeErr error
 	if v != nil {
-		v.Close()
+		closeErr = v.Close()
 	}
+	b.mu.Lock()
+	b.closeErr = closeErr
+	b.mu.Unlock()
 	b.cacheMu.Lock()
 	b.dirCache = make(map[string]dirCacheEntry)
 	b.cacheMu.Unlock()
+}
+
+func (b *bridge) closeError() error {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return b.closeErr
 }
 
 // join maps a name inside dirPath to a VFS-native path. Paths are whatever
@@ -545,8 +657,7 @@ func (b *bridge) open(ctx context.Context, itemPath string, size int64) (*handle
 	}
 
 	if err := h.spool(ctx); err != nil {
-		h.release()
-		return nil, err
+		return nil, errors.Join(err, h.release())
 	}
 	return h, nil
 }
@@ -559,14 +670,13 @@ func (h *handle) spool(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	os.Remove(tmp.Name())
+	_ = os.Remove(tmp.Name()) // Best effort: spooling still works while the file remains open.
 
 	buf := make([]byte, spoolChunk)
 	var total int64
 	for {
 		if err := ctx.Err(); err != nil {
-			tmp.Close()
-			return err
+			return errors.Join(err, tmp.Close())
 		}
 		// The lock is taken per chunk rather than held for the whole
 		// transfer. Backends are still one conversation at a time, but a
@@ -575,8 +685,7 @@ func (h *handle) spool(ctx context.Context) error {
 		// chunks. Writing to the local spool needs no lock at all.
 		_, unlock, err := h.b.beginReadCall()
 		if err != nil {
-			tmp.Close()
-			return err
+			return errors.Join(err, tmp.Close())
 		}
 		doneChunk := h.b.track("Read(spool)")
 		n, readErr := h.r.Read(ctx, buf)
@@ -584,8 +693,7 @@ func (h *handle) spool(ctx context.Context) error {
 		unlock()
 		if n > 0 {
 			if _, err := tmp.Write(buf[:n]); err != nil {
-				tmp.Close()
-				return err
+				return errors.Join(err, tmp.Close())
 			}
 			total += int64(n)
 		}
@@ -593,8 +701,7 @@ func (h *handle) spool(ctx context.Context) error {
 			break
 		}
 		if readErr != nil {
-			tmp.Close()
-			return readErr
+			return errors.Join(readErr, tmp.Close())
 		}
 		if n == 0 {
 			break
@@ -607,7 +714,7 @@ func (h *handle) spool(ctx context.Context) error {
 	// The source has been consumed to the end; releasing it now lets the
 	// backend drop its own temporary state while the mount keeps serving.
 	if h.r != nil {
-		h.r.Close()
+		_ = h.r.Close() // This handle was opened only for reading; its data is already spooled.
 		h.r = nil
 	}
 	return nil
@@ -661,21 +768,22 @@ func (h *handle) release() error {
 	h.r, h.tmp = nil, nil
 	h.mu.Unlock()
 
+	var closeErr error
 	if tmp != nil {
 		h.ioMu.Lock()
-		tmp.Close()
+		closeErr = tmp.Close()
 		h.ioMu.Unlock()
 	}
 	if reader != nil {
 		h.ioMu.Lock()
 		_, unlock, err := h.b.beginReadCall()
 		if err == nil {
-			reader.Close()
+			_ = reader.Close() // This backend handle was opened only for reading.
 			unlock()
 		}
 		h.ioMu.Unlock()
 	}
-	return nil
+	return closeErr
 }
 
 // inodeOf derives a stable inode number from a path. Real inode numbers are
@@ -766,17 +874,8 @@ func (b *bridge) acquireWriteHandle(ctx context.Context, itemPath string) (h *wr
 
 	// A backend that can write at an offset gets written at an offset. The
 	// staging file is the fallback, not the design.
-	if rw, ok := b.v.(vfs.RandomWriteVFS); ok {
-		b.mu.Lock()
-		closed := b.closed
-		var f vfs.WriterAtCloser
-		if !closed {
-			f, err = rw.OpenWriteAt(ctx, itemPath)
-		}
-		b.mu.Unlock()
-		if closed {
-			return nil, false, errClosed
-		}
+	if _, ok := b.v.(vfs.RandomWriteVFS); ok {
+		f, err := b.openDirectWriter(ctx, itemPath)
 		if err != nil {
 			// Staging would not rescue this: committing goes through
 			// Create on the same backend and would fail the same way,
@@ -797,6 +896,19 @@ func (b *bridge) acquireWriteHandle(ctx context.Context, itemPath string) (h *wr
 	return h, true, nil
 }
 
+func (b *bridge) openDirectWriter(ctx context.Context, itemPath string) (vfs.WriterAtCloser, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.closed {
+		return nil, errClosed
+	}
+	rw, ok := b.v.(vfs.RandomWriteVFS)
+	if !ok {
+		return nil, errors.New("backend no longer supports positional writes")
+	}
+	return rw.OpenWriteAt(ctx, itemPath)
+}
+
 // loadStaged fills a staging file with what the backend already holds. This
 // is the read-modify-write an editor's save needs: FUSE may write two bytes
 // in the middle of a file, and the commit sends the whole thing back, so what
@@ -814,22 +926,51 @@ func (b *bridge) loadStaged(ctx context.Context, itemPath string, s *stagedFile)
 	if err != nil {
 		return err
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }() // This backend handle was opened only for reading.
 	// Like the read spool: the lock is taken per chunk, so opening a large
 	// file for writing does not stall every other request for the length of
 	// the download.
 	return s.LoadFrom(ctx, b, rc)
 }
 
-// isLastWriter reports whether h is the only handle left on its file, which
-// is how a close knows it is the one that has to commit.
-func (b *bridge) isLastWriter(h *writeHandle) bool {
+// flushWriter keeps the last-writer check and the handle state transition in
+// one critical section. An open racing with Flush either becomes visible to
+// the check or waits for the flush and then uses the resulting handle state.
+func (b *bridge) flushWriter(ctx context.Context, h *writeHandle) error {
 	if h == nil {
-		return false
+		return nil
 	}
 	b.writeMu.Lock()
-	defer b.writeMu.Unlock()
-	return h.refs <= 1
+	h.ioMu.Lock()
+	if h.refs > 1 {
+		h.ioMu.Unlock()
+		b.writeMu.Unlock()
+		return nil
+	}
+	b.writeMu.Unlock()
+	err := h.flushLocked(ctx, b)
+	h.ioMu.Unlock()
+	return err
+}
+
+// finishWriter drops a FUSE open reference and, for the final one, commits
+// and closes the shared writer. Release is the fallback when Flush never ran.
+func (b *bridge) finishWriter(ctx context.Context, h *writeHandle) error {
+	if h == nil {
+		return nil
+	}
+	b.writeMu.Lock()
+	h.refs--
+	if h.refs > 0 {
+		b.writeMu.Unlock()
+		return nil
+	}
+	h.ioMu.Lock()
+	delete(b.writers, h.path)
+	b.writeMu.Unlock()
+	err := h.finishLocked(ctx, b)
+	h.ioMu.Unlock()
+	return err
 }
 
 // commit hands the staged file to the backend in one sequential pass, which
@@ -844,9 +985,7 @@ func (b *bridge) commit(ctx context.Context, itemPath string, r io.Reader) error
 	w, err := b.v.Create(ctx, itemPath)
 	if err == nil {
 		_, err = io.Copy(w, r)
-		if cerr := w.Close(); err == nil {
-			err = cerr
-		}
+		err = errors.Join(err, w.Close())
 	}
 	b.mu.Unlock()
 	b.invalidate(path.Dir(itemPath))
