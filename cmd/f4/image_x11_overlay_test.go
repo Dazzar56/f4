@@ -244,3 +244,48 @@ func TestAnswerComplete(t *testing.T) {
 		}
 	}
 }
+
+// The terminal answers in logical pixels and the X server reports the window
+// in device pixels, and on a display at double scale those are not the same
+// number. These are the figures out of the debug log that showed it: a text
+// area of 640x408 inside a window of 1312x868, which put the picture at half
+// size in the bottom left corner.
+func TestHostScaleFindsAScaledDisplay(t *testing.T) {
+	win := ttyx.Rect{X: 862, Y: 337, W: 1312, H: 868}
+	if got := hostScale(win, 640, 408); got != 2 {
+		t.Errorf("scale: got %d, want 2", got)
+	}
+
+	grid := hostGridRect(win, 640, 408, true)
+	want := ttyx.Rect{X: 862, Y: 337 + 868 - 816, W: 1280, H: 816}
+	if grid != want {
+		t.Errorf("grid: got %+v, want %+v", grid, want)
+	}
+	// Sixteen by thirty four, which is what the terminal really draws with.
+	if cw, ch := grid.W/80, grid.H/24; cw != 16 || ch != 34 {
+		t.Errorf("cell: got %dx%d, want 16x34", cw, ch)
+	}
+}
+
+// An unscaled display must be left alone: the text area is nearly the window
+// already, and doubling it would not fit.
+func TestHostScaleLeavesAnUnscaledDisplayAlone(t *testing.T) {
+	win := ttyx.Rect{X: 0, Y: 0, W: 1312, H: 868}
+	if got := hostScale(win, 1280, 816); got != 1 {
+		t.Errorf("scale: got %d, want 1", got)
+	}
+	if got := hostGridRect(win, 1280, 816, true); got.W != 1280 || got.H != 816 {
+		t.Errorf("grid: got %+v", got)
+	}
+}
+
+// Nonsense must not be scaled into worse nonsense.
+func TestHostScaleRefusesNonsense(t *testing.T) {
+	win := ttyx.Rect{W: 800, H: 600}
+	if got := hostScale(win, 0, 0); got != 1 {
+		t.Errorf("nothing measured: got %d", got)
+	}
+	if got := hostScale(win, 9000, 9000); got != 1 {
+		t.Errorf("larger than the window: got %d", got)
+	}
+}

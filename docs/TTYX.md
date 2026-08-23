@@ -89,6 +89,16 @@ three ways, cheapest first:
    text area exactly and owes nothing to padding.
 3. **`CSI 14 t`**, the text area directly.
 
+**Those answers are not in the same units as the window.** GTK answers in
+logical pixels and the X server reports the window in device pixels, so on a
+display at double scale the terminal says its text area is 640x408 while its
+window is 1312x868 — half of it, which put the picture at half size in the
+bottom left corner. Nothing in either answer says which units it is in, so the
+factor is worked out: `hostScale` takes the largest whole number of text areas
+that still fits inside the window. It cannot be fooled by a terminal with a lot
+of furniture, because choosing two would need the menu bar and the scroll bar
+together to be as large as the text between them.
+
 The grid is then placed against the **bottom left** of the window at that size,
 because a menu bar is at the top and a scroll bar is on the right and neither
 is ever at the bottom left. A terminal with a symmetric border is out by that
@@ -311,8 +321,11 @@ What to look for, in the order it happens:
   CSI 14 t -> text area ...` — how the terminal was measured. All of them
   failing means the picture is placed by treating the window as the grid,
   which is wrong by whatever furniture the window has.
-- `the cell is WxH pixels` — what was handed to the graphics layer. A missing
-  line here means everything is laid out on a guessed eight by sixteen.
+- `the cell is WxH pixels (scale N)` — what was handed to the graphics layer,
+  in device pixels, and the logical-to-device factor that was worked out. A
+  missing line means everything is laid out on a guessed eight by sixteen; a
+  scale of 1 on a HiDPI desktop means the factor was not found and the picture
+  will be half the size it should be.
 - `keysym 0xNN mods N taken as keycode N` or `refused` — one line per
   combination. A refusal is another client already holding it; a keycode of
   zero is a keysym that is not on this keyboard.

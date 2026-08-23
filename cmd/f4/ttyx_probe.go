@@ -89,11 +89,22 @@ func publishCellSize() {
 	if !ok || cols <= 0 || rows <= 0 {
 		return
 	}
-	cw, ch := w/cols, h/rows
+	// In device pixels, which is what everything downstream measures in.
+	// The session may not be up yet, in which case the scale cannot be
+	// worked out and the cell is published in whatever units the terminal
+	// answered in; the shape of it is right either way, and the shape is
+	// what the layout depends on.
+	scale := 1
+	if sess := sharedTTYXSession(); sess != nil {
+		if win, err := sess.Geometry(); err == nil {
+			scale = hostScale(win, w, h)
+		}
+	}
+	cw, ch := w*scale/cols, h*scale/rows
 	if cw <= 0 || ch <= 0 {
 		return
 	}
-	vtui.DebugLog("TTYX: the cell is %dx%d pixels", cw, ch)
+	vtui.DebugLog("TTYX: the cell is %dx%d pixels (scale %d)", cw, ch, scale)
 	scr.Graphics().SetCellSize(cw, ch)
 }
 
@@ -121,6 +132,33 @@ func hostTextSize(cols, rows int) (int, int, bool) {
 	return hostTextArea()
 }
 
+// hostScale finds the factor between a text area the terminal reported and the
+// window the X server reported.
+//
+// They are not in the same units on a scaled desktop. GTK answers CSI 14 t in
+// logical pixels, X reports the window in device pixels, and on a display at
+// double scale the terminal says its text area is 640x408 while its window is
+// 1312x868 — half of it, and the picture came out half size in the bottom left
+// corner. Nothing in either answer says which units it is in, so the factor is
+// worked out: the largest whole number of text areas that still fits inside
+// the window.
+//
+// It cannot be fooled by a terminal with a lot of furniture, because choosing
+// two would need the menu bar and the scroll bar together to be as large as
+// the text between them.
+func hostScale(win ttyx.Rect, textW, textH int) int {
+	if textW <= 0 || textH <= 0 {
+		return 1
+	}
+	best := 1
+	for s := 2; s <= 4; s++ {
+		if textW*s <= win.W && textH*s <= win.H {
+			best = s
+		}
+	}
+	return best
+}
+
 // hostGridRect works out where the character grid sits inside the terminal
 // window, given where the window is.
 //
@@ -136,6 +174,9 @@ func hostTextSize(cols, rows int) (int, int, bool) {
 func hostGridRect(win ttyx.Rect, textW, textH int, known bool) ttyx.Rect {
 	if !known || textW <= 0 || textH <= 0 {
 		return win
+	}
+	if s := hostScale(win, textW, textH); s > 1 {
+		textW, textH = textW*s, textH*s
 	}
 	if textW > win.W {
 		textW = win.W
