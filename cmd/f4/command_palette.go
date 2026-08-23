@@ -60,11 +60,6 @@ func ShowCommandPalette() bool {
 	if _, alreadyOpen := vtui.FrameManager.GetTopFrame().(*commandPaletteDialog); alreadyOpen {
 		return true
 	}
-	if top := vtui.FrameManager.GetTopFrame(); top != nil && top.IsModal() && !commandPaletteModalFrameSupported(top) {
-		// Unknown modal owners keep their complete input contract. Consume the
-		// palette chord without stacking an unrelated dialog above them.
-		return true
-	}
 	if menu := vtui.FrameManager.GetActiveMenuBar(); menu != nil && menu.Active {
 		// vtui's VMenu fires a clicked item's OnClick synchronously, before the
 		// menu bar closes itself (VMenu.FireAction runs ahead of SetExitCode),
@@ -72,6 +67,11 @@ func ShowCommandPalette() bool {
 		// Defer and retry once the current input dispatch (and the menu close
 		// it triggers) has completed, instead of silently swallowing the click.
 		vtui.FrameManager.PostTask(func() { ShowCommandPalette() })
+		return true
+	}
+	if top := vtui.FrameManager.GetTopFrame(); top != nil && top.IsModal() && !commandPaletteModalFrameSupported(top) {
+		// Unknown modal owners keep their complete input contract. Consume the
+		// palette chord without stacking an unrelated dialog above them.
 		return true
 	}
 	area := (&MacroManager{}).GetCurrentArea()
