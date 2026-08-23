@@ -3,6 +3,7 @@ package main
 import (
 	"testing"
 
+	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
 
@@ -44,6 +45,41 @@ func TestHotkeyRow(t *testing.T) {
 	}
 	if row.GetCellText(4) != "Description" {
 		t.Errorf("Expected Description")
+	}
+}
+
+func TestHotkeyAssignFramePreservesRightCtrl(t *testing.T) {
+	previous := GlobalHotkeysMgr
+	t.Cleanup(func() { GlobalHotkeysMgr = previous })
+
+	hm := NewHotkeyManager("")
+	f := NewHotkeyAssignFrame(hm, "File.Attributes", "Shell", nil)
+	ctrlABefore, ctrlAExists := hm.Bindings["Shell"]["CtrlA"]
+
+	rightCtrlA := &vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_A,
+		ControlKeyState: vtinput.RightCtrlPressed,
+	}
+	if !f.ProcessKey(rightCtrlA) {
+		t.Fatal("Right Ctrl+A was not consumed by the assignment dialog")
+	}
+	if got := hm.Bindings["Shell"]["RCtrlA"]; got != "File.Attributes" {
+		t.Fatalf("captured Right Ctrl+A = %q, want File.Attributes under RCtrlA", got)
+	}
+	if got, exists := hm.Bindings["Shell"]["CtrlA"]; exists != ctrlAExists || (exists && got != ctrlABefore) {
+		t.Fatalf("Right Ctrl+A changed the normalized CtrlA binding from %q to %q", ctrlABefore, got)
+	}
+
+	left := NewHotkeyAssignFrame(hm, "File.Attributes", "Shell", nil)
+	leftCtrlA := *rightCtrlA
+	leftCtrlA.ControlKeyState = vtinput.LeftCtrlPressed
+	if !left.ProcessKey(&leftCtrlA) {
+		t.Fatal("Left Ctrl+A was not consumed by the assignment dialog")
+	}
+	if got := hm.Bindings["Shell"]["CtrlA"]; got != "File.Attributes" {
+		t.Fatalf("captured Left Ctrl+A = %q, want File.Attributes under CtrlA", got)
 	}
 }
 
