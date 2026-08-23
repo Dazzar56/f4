@@ -396,7 +396,7 @@ func TestActionFileAttributesUsesAllSelectedEntries(t *testing.T) {
 
 	base := t.TempDir()
 	for _, name := range []string{"first.txt", "second.txt"} {
-		if err := os.WriteFile(filepath.Join(base, name), []byte(name), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(base, name), []byte(name), 0600); err != nil {
 			t.Fatal(err)
 		}
 	}
