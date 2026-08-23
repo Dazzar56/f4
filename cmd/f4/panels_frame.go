@@ -3660,9 +3660,16 @@ func (pf *PanelsFrame) Menu(title string, items []string, callback func(int)) {
 		}
 
 		h := len(items) + 2
-		if h > 15 {
-			h = 15
-		} // Max height limit
+		maxH := 15 // Keep generic plugin menus compact on normal screens.
+		if screenH := vtui.FrameManager.GetScreenHeight(); screenH > 0 && maxH > screenH {
+			maxH = screenH
+		}
+		if maxH < 3 {
+			maxH = 3
+		}
+		if h > maxH {
+			h = maxH
+		}
 
 		// Center relative to the PanelsFrame size
 		x := (pf.lastW - maxW) / 2

@@ -61,3 +61,30 @@ main rather than changed speculatively.
 Implement the common vtui fix plus the f4-side deterministic shortcut,
 archive, and autosave changes. Leave the disputed settings layout and already
 working GUI/Command-palette items unchanged.
+
+## Follow-up review after the reporter's retest
+
+The retest used a commit that already contained PR #740, so the remaining
+failures were checked against current `upstream/main` rather than assumed to be
+stale.
+
+1. **Generic plugin menus:** cap `PanelsFrame.Menu` by both its normal compact
+   limit and the actual screen height, then let `vtui.VMenu` scroll the rows.
+2. **Generic plugin menus:** keep the fixed 15-row height. Rejected because a
+   10-row terminal still receives a 15-row menu and loses its bottom rows.
+3. **Generic plugin menus:** paginate in every caller. Rejected because the
+   reusable `VMenu` already supplies the required viewport and scrollbar.
+
+1. **Archive shortcuts:** match far2l's Files menu with Shift+F1 for Add and
+   Shift+F2 for Extract; keep the legacy two-command menu on Shift+F3.
+2. **Archive shortcuts:** keep Alt+F5/Alt+F6 and only change the displayed
+   labels. Rejected because the actual keys would still differ from the
+   expected Files-menu behavior.
+3. **Archive shortcuts:** remove the legacy command menu. Rejected because it
+   would remove an existing entry point without helping the requested actions.
+
+The follow-up is covered by a small-screen `PanelsFrame.Menu` regression and
+updated archive registration/hotkey tests. The remaining startup-mode,
+deterministic drive-menu display, and Command-palette paths are already
+represented by current code and focused tests; the native Windows ANSI run
+also exercised the current menu and exit paths before reporting completion.
