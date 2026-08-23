@@ -250,6 +250,11 @@ func (o *Overlay) SetBounds(rects []Rect) bool {
 	return err == nil
 }
 
+// Window is the X window the overlay draws into. It is exported so that a
+// program which draws for us — a video player handed the window through
+// --wid — can be pointed at it.
+func (o *Overlay) Window() xproto.Window { return o.win }
+
 // Rect is where the overlay currently is. It is not necessarily where it was
 // last put: the event loop moves it when the terminal window moves.
 func (o *Overlay) Rect() Rect {

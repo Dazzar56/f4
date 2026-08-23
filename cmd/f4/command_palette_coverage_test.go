@@ -92,6 +92,9 @@ var commandPaletteProcessKeyAudit = map[string]commandPaletteSurfaceAudit{
 	"cmd/f4/image_view.go:(*ImageView).ProcessKey": {
 		class: paletteAuditFrameProvider, rationale: "image-viewer commands are supplied by commandPaletteImageEntries",
 	},
+	"cmd/f4/video_view.go:(*VideoView).ProcessKey": {
+		class: paletteAuditModalLocal, rationale: "the video player is a modal frame over a window of its own; play, seek and volume are local primitives sent down mpv's socket",
+	},
 	"cmd/f4/info_panel.go:(*InfoPanel).ProcessKey": {
 		class: paletteAuditPanelProvider, rationale: "the focused information-panel command is supplied by the panel-context palette provider",
 	},

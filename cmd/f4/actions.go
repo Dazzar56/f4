@@ -1279,6 +1279,34 @@ func actionSwitchViewerToEditor(vv *ViewerView) {
 // tryOpenImageViewer opens the picture viewer when the file looks like an
 // image and the backend can actually show one. It returns false to let the
 // ordinary viewer handle the file.
+// tryOpenVideoPlayer offers to play a video. It comes before the picture
+// viewer because a file is one or the other, and before the text viewer
+// because a hex dump of an mp4 is not what anybody asked for.
+func tryOpenVideoPlayer(pf *PanelsFrame, v vfs.VFS, path string) bool {
+	if pf == nil || !IsVideoFile(path) {
+		return false
+	}
+	// Video is a local business: the frames of it never fit down a
+	// terminal, and the player draws into a window of f4's own on the
+	// screen the terminal is on.
+	if sharedTTYXSession() == nil {
+		return false
+	}
+	if !toolMPV.Available() {
+		vtui.ShowMessage(" Video ", toolMPV.MissingMessage(), []string{"&Ok"})
+		return true
+	}
+
+	vv, err := NewVideoView(v, path)
+	if err != nil {
+		vtui.DebugLog("VIDEO: %v", err)
+		return false
+	}
+	vv.ResizeConsole(pf.lastW, pf.lastH)
+	vtui.FrameManager.AddScreen(vv)
+	return true
+}
+
 func tryOpenImageViewer(pf *PanelsFrame, v vfs.VFS, path string) bool {
 	if pf == nil || !IsImageFile(path) {
 		return false
@@ -1360,6 +1388,9 @@ func imageSiblingPaths(pf *PanelsFrame, v vfs.VFS, path string) ([]string, int) 
 }
 
 func openViewerInternal(pf *PanelsFrame, v vfs.VFS, path string) {
+	if tryOpenVideoPlayer(pf, v, path) {
+		return
+	}
 	if tryOpenImageViewer(pf, v, path) {
 		return
 	}

@@ -228,10 +228,9 @@ prints into the built-in terminal all reach it without any of them being routed
 anywhere. That last one is issue #273: a program that prints sixel or kitty
 into f4's own terminal was decoded correctly and then had nowhere to be drawn.
 
-**12. Video.** A second source of frames on top of the same placement layer:
-decode through an external `ffmpeg` into a stream of RGBA, a frame timer, and
-controls from the viewer (`Right`/`Left` for ±10 seconds, `Up`/`Down` for
-volume).
+**12. Video.** Started, as mpv drawing into f4's own overlay window; see
+`VIDEO.md`. What is left is the ffmpeg path that decodes into the overlay
+ourselves, and it is written up there rather than here.
 
 **13. Text over a sixel picture.** On the hardware and in Windows Terminal the
 screen is one bitmap, so writing a character clears the cell it lands in and

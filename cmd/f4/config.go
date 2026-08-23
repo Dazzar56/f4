@@ -219,6 +219,7 @@ type F4Config struct {
 	PathHintPerCategory    bool // the cap applies per category (active/passive/history)
 	SlideShowDelay         int
 	ImageX11Overlay        bool
+	VideoPauseOnFocusLoss  bool
 	ImageX11OffsetX        int
 	ImageX11OffsetY        int
 	TTYXKeys               bool
@@ -635,6 +636,7 @@ func LoadConfig() {
 		AppConfig.ImageExternalTimeout = defaultImageExternalTimeout
 	}
 	AppConfig.ImageX11Overlay = ini.GetString("Images", "X11Overlay", "1") == "1"
+	AppConfig.VideoPauseOnFocusLoss = ini.GetString("Video", "PauseOnFocusLoss", "0") == "1"
 	AppConfig.ImageX11OffsetX, AppConfig.ImageX11OffsetY = 0, 0
 	fmt.Sscanf(ini.GetString("Images", "X11OverlayOffsetX", "0"), "%d", &AppConfig.ImageX11OffsetX)
 	fmt.Sscanf(ini.GetString("Images", "X11OverlayOffsetY", "0"), "%d", &AppConfig.ImageX11OffsetY)
