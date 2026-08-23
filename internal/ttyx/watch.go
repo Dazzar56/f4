@@ -94,7 +94,8 @@ func (s *Session) dispatch(ev xgb.Event) {
 			s.mu.Lock()
 			s.alive = false
 			s.mu.Unlock()
-			s.hideOverlays()
+			// The terminal window is gone, and every overlay was a
+			// child of it, so the server has already destroyed them.
 			s.notify()
 		}
 
@@ -133,13 +134,16 @@ func (s *Session) setFocused(v bool) {
 		return
 	}
 	if v {
-		s.restoreOverlays()
 		s.regrabKeys()
 	} else {
-		// Nothing in X will take an override-redirect window off the
-		// screen for us, and a grab held by a window nobody is typing
-		// into takes those keys away from the whole desktop.
-		s.hideOverlays()
+		// A grab held by a window nobody is typing into takes those keys
+		// away from the whole desktop.
+		//
+		// The overlays are not touched. They are children of the
+		// terminal's window, so the server hides them with it and stacks
+		// anything above the terminal above them; a picture that vanished
+		// whenever the terminal was not on top would be a picture behaving
+		// like nothing else on the screen.
 		s.releaseKeys()
 	}
 	s.notify()
@@ -160,9 +164,15 @@ func (s *Session) refreshGeometry() {
 	s.mu.Unlock()
 
 	if had && (old.X != r.X || old.Y != r.Y) {
+		// The window moved and the server moved its children with it, so
+		// nothing has to be reconfigured — only the record of where each
+		// overlay is on the screen, which has moved by the same amount.
+		// Reconfiguring here would move the picture *inside* the
+		// terminal, which is the one thing a window that moved must not
+		// do to what is drawn in it.
 		dx, dy := r.X-old.X, r.Y-old.Y
 		for _, o := range overlays {
-			o.shift(dx, dy)
+			o.followedParent(dx, dy)
 		}
 	}
 	s.notify()
@@ -206,16 +216,4 @@ func (s *Session) overlaySnapshot() []*Overlay {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]*Overlay(nil), s.overlays...)
-}
-
-func (s *Session) hideOverlays() {
-	for _, o := range s.overlaySnapshot() {
-		o.Suspend()
-	}
-}
-
-func (s *Session) restoreOverlays() {
-	for _, o := range s.overlaySnapshot() {
-		o.resume()
-	}
 }

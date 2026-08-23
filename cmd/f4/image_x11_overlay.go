@@ -234,15 +234,6 @@ func (x *x11ImageOverlay) showMany(cols, rows int, list []vtui.ImagePlacement) e
 		return errNoOverlay
 	}
 	list = valid
-	if !x.sess.Focused() {
-		// Somebody else is on top of the terminal now, and an
-		// override-redirect window would be on top of them. The picture
-		// is not unavailable, only out of sight, and the event loop puts
-		// it back when the focus returns.
-		x.suspend()
-		return errNotNow
-	}
-
 	win, err := x.sess.Geometry()
 	if err != nil {
 		x.hide()

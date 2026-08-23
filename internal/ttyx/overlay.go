@@ -17,23 +17,25 @@ import (
 // to. Its input region is emptied through the SHAPE extension, so the mouse
 // goes straight through it to the terminal underneath and selecting text
 // keeps working while a picture is up.
-//
-// The obvious consequence of an override-redirect window is that it is above
-// everything, including the applications the user switches to. Nothing in X
-// will hide it; the caller has to, which is what Session.Focused is for.
 type Overlay struct {
 	s      *Session
 	win    xproto.Window
 	gc     xproto.Gcontext
-	rect   Rect
 	mapped bool
 	shaped bool
 	buf    []byte
 
-	// wanted is what the caller asked for, which is not the same as what is
-	// on the screen: the event loop takes the overlay down while the
-	// terminal has no focus and puts it back afterwards without the caller
-	// having to ask again.
+	// rect is where the caller asked for the picture, on the screen.
+	// local is the same place measured from the terminal's corner, which
+	// is what the server is told, because the window is a child of the
+	// terminal's. Keeping both means a terminal that moves does not have
+	// to be reconfigured: the server has already moved the child, and the
+	// next Place works out the same local rectangle and does nothing.
+	rect  Rect
+	local Rect
+
+	// wanted is what the caller asked for, which is not always what is on
+	// the screen.
 	wanted bool
 }
 
@@ -49,18 +51,35 @@ func (s *Session) NewOverlay() (*Overlay, error) {
 	if err != nil {
 		return nil, fmt.Errorf("no window id for the overlay: %w", err)
 	}
+	// A child of the terminal's own window, not a window of its own over
+	// the top of everything. That one decision settles most of what an
+	// overlay has to get right, and settles it in the X server rather than
+	// in this package:
+	//
+	//   - it moves with the terminal, because the server moves children;
+	//   - it is clipped to the terminal, so it cannot spill past the edge
+	//     of the window it belongs to;
+	//   - anything the window manager puts above the terminal — the alt-tab
+	//     switcher, a notification — is above it too, instead of being
+	//     covered by a picture that outranked the whole desktop;
+	//   - it is not a top-level window, so no task list and no alt-tab ever
+	//     offer it;
+	//   - it dies with the connection, so leaving f4 leaves nothing behind.
+	//
+	// It also stops feeling like a separate window and starts feeling like
+	// part of the terminal, which is the point of the thing.
+	//
 	// The value list follows the order of the mask bits: background pixel,
-	// backing store, override redirect, event mask.
+	// backing store, event mask.
 	//
 	// Backing store is asked for because nothing here runs an event loop:
 	// without it the server would expect us to repaint on Expose and the
 	// picture would go blank the first time something passed over it. A
 	// server is free to ignore the request, which is why the caller is
 	// still told to redraw when it redraws everything else.
-	mask := uint32(xproto.CwBackPixel | xproto.CwBackingStore |
-		xproto.CwOverrideRedirect | xproto.CwEventMask)
-	values := []uint32{0, xproto.BackingStoreAlways, 1, uint32(xproto.EventMaskExposure)}
-	err = xproto.CreateWindowChecked(s.conn, s.depth, win, s.root,
+	mask := uint32(xproto.CwBackPixel | xproto.CwBackingStore | xproto.CwEventMask)
+	values := []uint32{0, xproto.BackingStoreAlways, uint32(xproto.EventMaskExposure)}
+	err = xproto.CreateWindowChecked(s.conn, s.depth, win, s.win,
 		0, 0, 1, 1, 0, xproto.WindowClassInputOutput, s.visual, mask, values).Check()
 	if err != nil {
 		return nil, fmt.Errorf("the overlay window could not be created: %w", err)
@@ -138,7 +157,12 @@ func (o *Overlay) Place(r Rect) error {
 		return nil
 	}
 
-	if r != o.rect {
+	// The caller says where on the screen the picture goes; the window it
+	// lives in is the terminal's, so the server wants that same place
+	// measured from the terminal's corner.
+	local := Rect{X: r.X - o.s.geom.X, Y: r.Y - o.s.geom.Y, W: r.W, H: r.H}
+
+	if local != o.local {
 		// The value list follows the order of the mask bits: x, y, width,
 		// height, stack mode.
 		err := xproto.ConfigureWindowChecked(o.s.conn, o.win,
@@ -146,15 +170,16 @@ func (o *Overlay) Place(r Rect) error {
 				xproto.ConfigWindowWidth|xproto.ConfigWindowHeight|
 				xproto.ConfigWindowStackMode,
 			[]uint32{
-				uint32(int32(r.X)), uint32(int32(r.Y)),
-				uint32(r.W), uint32(r.H),
+				uint32(int32(local.X)), uint32(int32(local.Y)),
+				uint32(local.W), uint32(local.H),
 				xproto.StackModeAbove,
 			}).Check()
 		if err != nil {
 			return fmt.Errorf("the overlay could not be placed: %w", err)
 		}
-		o.rect = r
+		o.rect, o.local = r, local
 	} else {
+		o.rect = r
 		xproto.ConfigureWindow(o.s.conn, o.win, xproto.ConfigWindowStackMode,
 			[]uint32{xproto.StackModeAbove})
 	}
@@ -195,19 +220,16 @@ func (o *Overlay) resume() {
 	o.mapped = true
 }
 
-// shift moves the overlay by the same amount the terminal window moved, so
-// that a picture stays over the terminal while it is being dragged.
-func (o *Overlay) shift(dx, dy int) {
+// followedParent records that the terminal window moved and took the overlay
+// with it. Nothing is sent to the server: the child is already in the right
+// place, and only its screen coordinates have changed.
+func (o *Overlay) followedParent(dx, dy int) {
 	o.s.mu.Lock()
 	defer o.s.mu.Unlock()
-	if o.s.conn == nil || !o.wanted || (dx == 0 && dy == 0) {
-		return
+	if o.rect.W > 0 && o.rect.H > 0 {
+		o.rect.X += dx
+		o.rect.Y += dy
 	}
-	o.rect.X += dx
-	o.rect.Y += dy
-	xproto.ConfigureWindow(o.s.conn, o.win,
-		xproto.ConfigWindowX|xproto.ConfigWindowY,
-		[]uint32{uint32(int32(o.rect.X)), uint32(int32(o.rect.Y))})
 }
 
 // SetBounds limits the overlay to a set of rectangles given relative to its

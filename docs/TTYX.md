@@ -147,6 +147,24 @@ grid of thumbnails — shows through. A window per picture would do the same and
 cost a dozen of everything. A server with no SHAPE extension cannot do it and
 gets one opaque rectangle, which is a worse picture rather than a broken one.
 
+**The overlay is a child of the terminal's own window**, not a window of its
+own over the top of everything. That one argument to `CreateWindow` settles
+most of what an overlay has to get right, and settles it in the X server:
+
+- it moves with the terminal, because the server moves children;
+- it is clipped to the terminal, so a picture cannot spill past the edge of the
+  window it belongs to;
+- anything the window manager raises above the terminal — the alt-tab switcher,
+  a notification — is above it too. An override-redirect window outranked the
+  whole desktop and covered the switcher in Cinnamon;
+- it is not a top-level window, so no task list and no alt-tab ever offers it;
+- it dies with the connection, so leaving f4 leaves nothing behind.
+
+It also stops feeling like a separate window and starts feeling like part of
+the terminal, which is the point. **Nothing takes it down when the terminal
+loses the focus** any more, and nothing should: a picture drawn in a window
+does not disappear because the window is not on top.
+
 Two rules keep this from being a menace, and neither is optional:
 
 - **The window has to have been identified, not guessed.** An

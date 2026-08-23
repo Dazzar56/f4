@@ -87,8 +87,33 @@ func TestSessionGeometryFollowsTheWindow(t *testing.T) {
 }
 
 // An override-redirect window is above everything, so it must not be on the
-// screen while somebody else is.
-func TestOverlayHidesWhileTheTerminalIsNotFocused(t *testing.T) {
+
+// The overlay is a child of the terminal's own window. Everything else here
+// follows from that, and it is worth asserting directly because it is one
+// argument to CreateWindow and nothing else would notice if it changed.
+func TestOverlayIsAChildOfTheTerminal(t *testing.T) {
+	f := newXFixture(t)
+	s := f.openOn(t)
+
+	ov, err := s.NewOverlay()
+	if err != nil {
+		t.Fatalf("overlay: %v", err)
+	}
+	defer ov.Close()
+
+	tree, err := xproto.QueryTree(f.conn, ov.Window()).Reply()
+	if err != nil || tree == nil {
+		t.Fatalf("query tree: %v", err)
+	}
+	if tree.Parent != f.term {
+		t.Errorf("parent is %d, want the terminal window %d", tree.Parent, f.term)
+	}
+}
+
+// Being a child means being clipped to the terminal, so a picture cannot
+// spill past the edge of the window it belongs to — which is what an
+// override-redirect window over the top of everything did.
+func TestOverlayIsClippedToTheTerminal(t *testing.T) {
 	f := newXFixture(t)
 	s := f.openOn(t)
 	f.focus(t, f.term)
@@ -99,18 +124,69 @@ func TestOverlayHidesWhileTheTerminalIsNotFocused(t *testing.T) {
 		t.Fatalf("overlay: %v", err)
 	}
 	defer ov.Close()
-	if err := ov.Place(Rect{X: 50, Y: 70, W: 20, H: 20}); err != nil {
+
+	// The fixture window is at 40,60 and 400x300. Hang the overlay off its
+	// right-hand edge.
+	if err := ov.Place(Rect{X: 400, Y: 100, W: 80, H: 40}); err != nil {
+		t.Fatalf("place: %v", err)
+	}
+	pix := make([]byte, 80*40*4)
+	for i := 0; i < len(pix); i += 4 {
+		pix[i], pix[i+1], pix[i+2], pix[i+3] = 0, 0, 255, 255
+	}
+	if err := ov.Draw(pix, 80, 40, 80*4); err != nil {
+		t.Fatalf("draw: %v", err)
+	}
+	f.conn.Sync()
+
+	// Inside the terminal the picture is there; past its edge, at 440, the
+	// server has clipped it away.
+	if !f.pixelIsBlue(t, 420, 110) {
+		t.Error("the part inside the terminal must be drawn")
+	}
+	if f.pixelIsBlue(t, 445, 110) {
+		t.Error("nothing may be drawn past the edge of the terminal window")
+	}
+}
+
+// pixelIsBlue reads one pixel off the screen.
+func (f *xFixture) pixelIsBlue(t *testing.T, x, y int) bool {
+	t.Helper()
+	reply, err := xproto.GetImage(f.conn, xproto.ImageFormatZPixmap,
+		xproto.Drawable(f.root), int16(x), int16(y), 1, 1, 0xFFFFFFFF).Reply()
+	if err != nil || reply == nil || len(reply.Data) < 4 {
+		t.Fatalf("read back at %d,%d: %v", x, y, err)
+	}
+	return reply.Data[0] == 0xFF && reply.Data[1] == 0 && reply.Data[2] == 0
+}
+
+// A picture drawn in a window does not disappear because the window is not on
+// top: the alt-tab switcher, and anything else the window manager raises, is
+// above the terminal and therefore above its children. Taking the overlay
+// down by hand used to be necessary and is now the wrong thing.
+func TestOverlayStaysWhenTheTerminalLosesFocus(t *testing.T) {
+	f := newXFixture(t)
+	s := f.openOn(t)
+	f.focus(t, f.term)
+	waitFor(t, "the focus", s.Focused)
+
+	ov, err := s.NewOverlay()
+	if err != nil {
+		t.Fatalf("overlay: %v", err)
+	}
+	defer ov.Close()
+	if err := ov.Place(Rect{X: 100, Y: 100, W: 40, H: 40}); err != nil {
 		t.Fatalf("place: %v", err)
 	}
 	if !ov.Visible() {
-		t.Fatal("a placed overlay over a focused terminal is on the screen")
+		t.Fatal("the overlay must be up to begin with")
 	}
 
 	f.focus(t, f.root)
-	waitFor(t, "the overlay to come down", func() bool { return !ov.Visible() })
-
-	f.focus(t, f.term)
-	waitFor(t, "the overlay to come back", ov.Visible)
+	waitFor(t, "the focus to leave", func() bool { return !s.Focused() })
+	if !ov.Visible() {
+		t.Error("the picture must stay where it was drawn")
+	}
 }
 
 // A picture has to stay over the terminal while the terminal is dragged.
