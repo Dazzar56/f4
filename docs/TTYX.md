@@ -20,13 +20,23 @@ Issues: [#662](https://github.com/unxed/f4/issues/662) (keys and clipboard),
 XGB, which speaks the X protocol over a socket in plain Go and which vtui's own
 X11 backend already depends on.
 
-- `Session` — the connection, the terminal window, its geometry and its focus.
-- `Overlay` — an override-redirect window over the terminal that shows pixels.
-- `image_x11_overlay.go` in `cmd/f4` — the image viewer's use of both.
+- `Session` — the connection, the terminal window, its geometry, its focus, and
+  the event loop that keeps all three up to date.
+- `Overlay` — an override-redirect window over the terminal that shows pixels,
+  which follows the terminal when it moves and comes down when it loses the
+  focus.
+- `GrabKeys` — the key combinations a TTY cannot carry, taken from the X server
+  and delivered as ordinary `vtinput` events.
+- `image_x11_overlay.go` in `cmd/f4` — the image viewer's use of the overlay.
 
-**Not done:** the keys and the clipboard of #662. The connection and the window
-identity they need are here; the grabbing itself is not, and belongs in
-`vtinput` rather than in f4. See section 5.
+**The clipboard is not here, deliberately.** Issue #599 decided that all
+clipboard work belongs in [goclip](https://github.com/unxed/goclip), and a
+second implementation in f4 would be exactly the fragmentation that issue was
+written to stop. What was found instead: goclip's native X11 driver did not
+work at all — see section 6.
+
+**What is left of #662** is the last hop: the key events reach `Session.Keys()`
+but nothing in f4 reads that channel yet. See section 5.
 
 ## 2. Finding the terminal window
 
@@ -73,22 +83,53 @@ Two rules keep this from being a menace, and neither is optional:
   wrong means painting over a stranger's application, so `SourceActive` stands
   down.
 - **It comes down when the terminal loses the focus.** Nothing in X will take
-  it down for us. `Session.Focused()` is checked on every frame the viewer
-  draws.
+  it down for us. The event loop does it; see section 4.
 
 Switched off with `[Images] X11Overlay=0`. On by default, because it only ever
 runs where the alternative is an apology.
 
-## 4. Known limits
+## 4. The event loop
 
-- **The focus is only checked when the viewer draws.** Alt-tab away from a
-  terminal showing a picture and the picture stays up until something makes f4
-  redraw. A proper fix is an event loop on the X connection — `FocusOut` on the
-  terminal window — which is also what #662 needs, so it is worth doing once
-  and for both.
-- **The overlay does not follow the window while it moves.** Same reason: the
-  geometry is read when the frame is drawn, not when `ConfigureNotify` says it
-  changed.
+`Open` selects `FocusChange` and `StructureNotify` on the terminal window and
+starts one goroutine that reads them. It is the only reader of the connection,
+and it never holds the lock while it waits, so a request from another goroutine
+is never stuck behind an event that has not arrived.
+
+What it buys:
+
+- `Focused()` and `Geometry()` are reads of cached values rather than round
+  trips, so they can be asked on every frame.
+- The overlay comes down the moment the terminal loses the focus and goes back
+  up when it returns, without the caller having to notice. Nothing else in X
+  will move an override-redirect window out of the way.
+- The overlay moves with the terminal window while it is dragged.
+- The key grabs are taken on focus and released on focus loss, which is not a
+  nicety: a grab held by a window nobody is typing into takes that combination
+  away from every other application on the desktop.
+- `Changed()` carries a token whenever any of that changes, for an application
+  that draws on demand and needs to know when to draw.
+
+Two things learned the hard way here, each of which cost a hang or a crash:
+
+- **A method that takes the lock must not be called from one that holds it.**
+  `watch` asked `focusedNow` for the focus while holding the mutex, and the
+  package deadlocked on the first connection it ever made.
+- **The event goroutine must hold its own copy of the connection.** `Close`
+  sets the field to nil, and a goroutine blocked in `WaitForEvent` would then
+  read that nil rather than the connection it was waiting on. Closing the
+  connection is what ends the wait, whatever the field says.
+
+There is also a trap in XGB itself, worth knowing before adding another
+extension: `shape.Init` and its siblings write two package level maps that
+xgb's own reader goroutine reads for every event, without a lock. Initialising
+an extension while any connection is live is therefore a data race inside the
+library, and a concurrent map access in Go is a crash rather than a warning.
+`registerShape` in `overlay.go` sidesteps it by registering only the
+per-connection opcode, which is the only thing `shape.Rectangles` needs and
+which lives in a map that does have a lock.
+
+## 5. Known limits
+
 - **A terminal with padding around its grid puts the picture out by a few
   pixels.** The division that finds the cell size cannot see the padding. `CSI
   16 t` would be exact where it is answered, and could be preferred when it is.
@@ -99,28 +140,49 @@ runs where the alternative is an apology.
 - **The identification runs once, at the first picture.** A session that is
   detached and reattached elsewhere keeps pointing at the old window.
 
-## 5. What #662 still needs
+## 6. The clipboard lives in goclip, and did not work
 
-The keyboard half is the larger one and it belongs in `vtinput`, next to the
-kitty keyboard protocol and Win32 input mode it would sit beside:
+Issue #599 says the clipboard is goclip's job and that anything missing there
+gets fixed there. Measuring it first turned out to be the whole story: goclip's
+pure-Go X11 driver created its window as `InputOnly` with the root depth, and
+an `InputOnly` window must have depth zero and the `CopyFromParent` visual.
+Every call therefore failed with `BadMatch` on `CreateWindow`, the native path
+never ran once on any server, and every copy and paste fell through to `xclip`
+— which #599 opens by pointing out is not installed by default anywhere.
 
-1. **Reading the keyboard.** `XGrabKey` on the combinations the terminal
-   swallows, or an `XInput2` passive grab on the terminal window, translated
-   into `vtinput.InputEvent` through `keytrans`, which already talks to X for
-   layouts. Grabs are shared state on the X server: whatever is taken has to be
-   released the moment the terminal loses the focus, or the rest of the desktop
-   loses those keys.
-2. **The clipboard.** X selections through the same connection, which removes
-   the OSC 52 round trip and the terminals that refuse it. `PRIMARY` and
-   `CLIPBOARD`, `INCR` for anything large.
-3. **The event loop.** Both of the above need one, and so do the two limits in
-   section 4. It should live in the session and deliver focus changes,
-   geometry changes and key events on channels.
+Three more defects were behind it, none of which could show while the first one
+stood:
 
-The order matters: the event loop first, because everything else is built on
-it, and because it turns the two known limits of the overlay into fixed ones.
+- **No `INCR`.** An owner answering a large paste sends a handshake and then the
+  value in pieces. goclip read the handshake and returned it as if it were the
+  text, so a paste from a browser or an office suite produced four bytes of
+  binary rather than the document.
+- **`BytesAfter` ignored.** Even a value that came whole was truncated at
+  whatever the server chose to put in the first reply.
+- **Two readers of one event stream.** `ReadText` polled for events while the
+  serving goroutine was blocked in `WaitForEvent` on the same connection, so
+  either could swallow what the other was waiting for.
 
-## 6. Testing
+All four are fixed in the goclip patch that goes with this, along with
+outgoing `INCR`, so a large copy works in both directions. Eight tests run it
+against a real server.
+
+## 7. What #662 still needs
+
+One hop. `Session.GrabKeys` takes the combinations and `Session.Keys()`
+delivers them as `vtinput.InputEvent` values, translated by `keytrans` — the
+same translator vtui's X11 backend uses, so a key arriving this way is
+indistinguishable from one arriving in GUI mode. What is missing is that
+nothing in f4 reads that channel: the events would have to be merged into the
+input stream `vtui.FrameManager` dispatches from, and vtui has no exported way
+to inject one. A small hook there — the equivalent of the `dispatchEvent` it
+already has internally — and the rest of #662 is wiring.
+
+Which combinations to ask for is the other open question, and it is a policy
+question rather than a technical one. A blanket grab is antisocial; the honest
+set is the combinations f4 has bindings for and the TTY cannot deliver.
+
+## 8. Testing
 
 `internal/ttyx` tests run against a real X server, which on a machine without
 one is no server at all:

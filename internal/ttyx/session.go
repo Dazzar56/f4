@@ -94,6 +94,18 @@ type Session struct {
 	source Source
 
 	atoms map[string]xproto.Atom
+
+	// State kept up to date by the event loop, so that asking is free and
+	// so that something can be told when it changes.
+	alive   bool
+	focused bool
+	geom    Rect
+	geomOK  bool
+	changed chan struct{}
+
+	overlays []*Overlay
+
+	keys *keyState
 }
 
 // Open connects to the X server and works out which window we are in. It
@@ -114,11 +126,13 @@ func open(env func(string) string, ancestors []uint32) (*Session, error) {
 	setup := xproto.Setup(conn)
 	screen := setup.DefaultScreen(conn)
 	s := &Session{
-		conn:   conn,
-		root:   screen.Root,
-		depth:  screen.RootDepth,
-		visual: screen.RootVisual,
-		atoms:  make(map[string]xproto.Atom),
+		conn:    conn,
+		root:    screen.Root,
+		depth:   screen.RootDepth,
+		visual:  screen.RootVisual,
+		atoms:   make(map[string]xproto.Atom),
+		alive:   true,
+		changed: make(chan struct{}, 1),
 	}
 
 	s.win, s.source = s.locate(env, ancestors)
@@ -126,6 +140,8 @@ func open(env func(string) string, ancestors []uint32) (*Session, error) {
 		conn.Close()
 		return nil, ErrNoTerminal
 	}
+
+	s.watch()
 	return s, nil
 }
 
@@ -137,6 +153,7 @@ func (s *Session) Close() {
 	if s.conn != nil {
 		s.conn.Close()
 		s.conn = nil
+		s.alive = false
 	}
 }
 
@@ -150,7 +167,23 @@ func (s *Session) Source() Source { return s.source }
 // the window's own, so it includes whatever padding the terminal leaves
 // around its character grid and excludes the decoration the window manager
 // puts around it.
+//
+// The event loop keeps this up to date, so it is a read of two integers and
+// not a round trip to the server; the round trip only happens before the
+// first ConfigureNotify has arrived.
 func (s *Session) Geometry() (Rect, error) {
+	s.mu.Lock()
+	if s.geomOK {
+		r := s.geom
+		s.mu.Unlock()
+		return r, nil
+	}
+	s.mu.Unlock()
+	return s.geometryNow()
+}
+
+// geometryNow asks the server rather than the cache.
+func (s *Session) geometryNow() (Rect, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.conn == nil {
@@ -183,7 +216,16 @@ func (s *Session) Geometry() (Rect, error) {
 // a window manager may or may not follow — and because the window a terminal
 // puts its focus on is often a child of the one it registered with the window
 // manager, which the walk handles and a comparison would not.
+// The event loop keeps the answer up to date, so this costs nothing to ask
+// and can be asked on every frame.
 func (s *Session) Focused() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.alive && s.focused
+}
+
+// focusedNow asks the server rather than the cache. The caller holds no lock.
+func (s *Session) focusedNow() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.conn == nil {
@@ -223,8 +265,13 @@ func (s *Session) atom(name string) xproto.Atom {
 		return a
 	}
 	a := xproto.Atom(0)
-	// onlyIfExists: we never want to create an atom, only to find one.
-	if reply, err := xproto.InternAtom(s.conn, true, uint16(len(name)), name).Reply(); err == nil && reply != nil {
+	// The atom is created if it is not there. Refusing to create one was
+	// the first version and it was wrong: CLIPBOARD does not exist on a
+	// server nobody has copied anything on yet, and a selection cannot be
+	// taken by a name that has no atom. Interning a name that is never used
+	// costs one entry in a table; the alternative was a clipboard that
+	// worked everywhere except on a fresh session.
+	if reply, err := xproto.InternAtom(s.conn, false, uint16(len(name)), name).Reply(); err == nil && reply != nil {
 		a = reply.Atom
 	}
 	s.atoms[name] = a

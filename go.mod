@@ -144,7 +144,7 @@ require (
 	github.com/stangelandcl/ppmd v0.1.1 // indirect
 	github.com/tadglines/go-pkgs v0.0.0-20210623144937-b983b20f54f9 // indirect
 	github.com/ulikunitz/xz v0.5.15 // indirect
-	github.com/unxed/keytrans v0.1.32 // indirect
+	github.com/unxed/keytrans v0.1.32
 	github.com/unxed/par2 v0.1.2 // indirect
 	github.com/unxed/winkeys v0.1.1 // indirect
 	github.com/unxed/xkb-go v0.1.8 // indirect

@@ -3,6 +3,7 @@ package ttyx
 import (
 	"fmt"
 
+	"github.com/jezek/xgb"
 	"github.com/jezek/xgb/shape"
 	"github.com/jezek/xgb/xproto"
 )
@@ -28,6 +29,12 @@ type Overlay struct {
 	mapped bool
 	shaped bool
 	buf    []byte
+
+	// wanted is what the caller asked for, which is not the same as what is
+	// on the screen: the event loop takes the overlay down while the
+	// terminal has no focus and puts it back afterwards without the caller
+	// having to ask again.
+	wanted bool
 }
 
 // NewOverlay creates the window. It is not shown until it is placed.
@@ -71,6 +78,7 @@ func (s *Session) NewOverlay() (*Overlay, error) {
 
 	o := &Overlay{s: s, win: win, gc: gc}
 	o.clearInputRegion()
+	s.overlays = append(s.overlays, o)
 	return o, nil
 }
 
@@ -78,7 +86,7 @@ func (s *Session) NewOverlay() (*Overlay, error) {
 // without the SHAPE extension leaves the overlay swallowing clicks, which is
 // a nuisance rather than a failure, so it is not an error.
 func (o *Overlay) clearInputRegion() {
-	if err := shape.Init(o.s.conn); err != nil {
+	if !registerShape(o.s.conn) {
 		return
 	}
 	err := shape.RectanglesChecked(o.s.conn, shape.SoSet, shape.SkInput,
@@ -86,8 +94,36 @@ func (o *Overlay) clearInputRegion() {
 	o.shaped = err == nil
 }
 
+// registerShape tells this connection about the SHAPE extension, which is all
+// that Rectangles needs.
+//
+// It deliberately does not call shape.Init. That function also writes two
+// package level maps in xgb, xgb.NewEventFuncs and xgb.NewErrorFuncs, without
+// holding a lock, and the reader goroutine of every open connection reads
+// xgb.NewEventFuncs for every event that arrives. Initialising an extension
+// while any connection is live is therefore a data race inside the library,
+// and a concurrent map access in Go is a crash and not merely a warning. The
+// per connection opcode is kept in a map that does have a lock, and it is
+// exported, so registering only that is both sufficient and safe: the only
+// thing the global maps buy is the ability to receive ShapeNotify, which we
+// never ask for.
+func registerShape(conn *xgb.Conn) bool {
+	reply, err := xproto.QueryExtension(conn, 5, "SHAPE").Reply()
+	if err != nil || reply == nil || !reply.Present {
+		return false
+	}
+	conn.ExtLock.Lock()
+	conn.Extensions["SHAPE"] = reply.MajorOpcode
+	conn.ExtLock.Unlock()
+	return true
+}
+
 // PassesInput reports whether the mouse goes through the overlay.
-func (o *Overlay) PassesInput() bool { return o.shaped }
+func (o *Overlay) PassesInput() bool {
+	o.s.mu.Lock()
+	defer o.s.mu.Unlock()
+	return o.shaped
+}
 
 // Place moves the overlay to a rectangle of the screen, raises it and shows
 // it. An empty rectangle hides it instead.
@@ -123,15 +159,63 @@ func (o *Overlay) Place(r Rect) error {
 			[]uint32{xproto.StackModeAbove})
 	}
 
-	if !o.mapped {
+	o.wanted = true
+	if !o.mapped && o.s.focused {
 		xproto.MapWindow(o.s.conn, o.win)
 		o.mapped = true
 	}
 	return nil
 }
 
-// Rect is where the overlay currently is.
-func (o *Overlay) Rect() Rect { return o.rect }
+// suspend takes the overlay off the screen without forgetting that the caller
+// wants it there. The event loop calls it when the terminal loses the focus,
+// because an override-redirect window is above everything and nothing else in
+// X will move it out of the way.
+func (o *Overlay) suspend() {
+	o.s.mu.Lock()
+	defer o.s.mu.Unlock()
+	if o.s.conn == nil || !o.mapped {
+		return
+	}
+	xproto.UnmapWindow(o.s.conn, o.win)
+	o.mapped = false
+}
+
+// resume puts it back when the focus comes back.
+func (o *Overlay) resume() {
+	o.s.mu.Lock()
+	defer o.s.mu.Unlock()
+	if o.s.conn == nil || o.mapped || !o.wanted || o.rect.W <= 0 || o.rect.H <= 0 {
+		return
+	}
+	xproto.ConfigureWindow(o.s.conn, o.win, xproto.ConfigWindowStackMode,
+		[]uint32{xproto.StackModeAbove})
+	xproto.MapWindow(o.s.conn, o.win)
+	o.mapped = true
+}
+
+// shift moves the overlay by the same amount the terminal window moved, so
+// that a picture stays over the terminal while it is being dragged.
+func (o *Overlay) shift(dx, dy int) {
+	o.s.mu.Lock()
+	defer o.s.mu.Unlock()
+	if o.s.conn == nil || !o.wanted || (dx == 0 && dy == 0) {
+		return
+	}
+	o.rect.X += dx
+	o.rect.Y += dy
+	xproto.ConfigureWindow(o.s.conn, o.win,
+		xproto.ConfigWindowX|xproto.ConfigWindowY,
+		[]uint32{uint32(int32(o.rect.X)), uint32(int32(o.rect.Y))})
+}
+
+// Rect is where the overlay currently is. It is not necessarily where it was
+// last put: the event loop moves it when the terminal window moves.
+func (o *Overlay) Rect() Rect {
+	o.s.mu.Lock()
+	defer o.s.mu.Unlock()
+	return o.rect
+}
 
 // Draw puts straight RGBA pixels into the overlay, at its top left corner.
 // The caller has already scaled them: an overlay does no scaling, because
@@ -197,6 +281,7 @@ func (o *Overlay) Hide() {
 }
 
 func (o *Overlay) hide() {
+	o.wanted = false
 	if o.s.conn == nil || !o.mapped {
 		return
 	}
@@ -204,13 +289,21 @@ func (o *Overlay) hide() {
 	o.mapped = false
 }
 
-// Visible reports whether the overlay is currently on the screen.
-func (o *Overlay) Visible() bool { return o.mapped }
+// Visible reports whether the overlay is currently on the screen, which is not
+// the same as whether it was asked for: the event loop takes it down while the
+// terminal has no focus.
+func (o *Overlay) Visible() bool {
+	o.s.mu.Lock()
+	defer o.s.mu.Unlock()
+	return o.mapped
+}
 
 // Close destroys the window.
 func (o *Overlay) Close() {
+	o.s.unregisterOverlay(o)
 	o.s.mu.Lock()
 	defer o.s.mu.Unlock()
+	o.wanted = false
 	if o.s.conn == nil {
 		return
 	}

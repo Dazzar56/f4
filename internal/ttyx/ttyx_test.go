@@ -266,21 +266,13 @@ func TestSessionFocus(t *testing.T) {
 	}
 	defer s.Close()
 
-	if err := xproto.SetInputFocusChecked(f.conn, xproto.InputFocusParent,
-		f.term, xproto.TimeCurrentTime).Check(); err != nil {
-		t.Fatalf("set focus: %v", err)
-	}
-	if !s.Focused() {
-		t.Error("the terminal window has the focus and must be reported as focused")
-	}
+	// Focused is answered from what the event loop last saw, so the answer
+	// arrives when the event does and not when the request returns.
+	f.focus(t, f.term)
+	waitFor(t, "the focus to arrive", s.Focused)
 
-	if err := xproto.SetInputFocusChecked(f.conn, xproto.InputFocusParent,
-		f.root, xproto.TimeCurrentTime).Check(); err != nil {
-		t.Fatalf("clear focus: %v", err)
-	}
-	if s.Focused() {
-		t.Error("the focus is on the root and the terminal must not claim it")
-	}
+	f.focus(t, f.root)
+	waitFor(t, "the focus to leave", func() bool { return !s.Focused() })
 }
 
 // The overlay has to actually put the pixels it was given on the screen, so
@@ -296,6 +288,14 @@ func TestOverlayDrawsPixels(t *testing.T) {
 		t.Fatalf("open: %v", err)
 	}
 	defer s.Close()
+
+	// An overlay only goes on the screen while the terminal has the focus,
+	// so the focus has to be there before anything can be read back.
+	if err := xproto.SetInputFocusChecked(f.conn, xproto.InputFocusParent,
+		f.term, xproto.TimeCurrentTime).Check(); err != nil {
+		t.Fatalf("set focus: %v", err)
+	}
+	waitFor(t, "the focus", s.Focused)
 
 	ov, err := s.NewOverlay()
 	if err != nil {
