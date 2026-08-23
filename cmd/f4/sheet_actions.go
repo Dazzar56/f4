@@ -96,7 +96,12 @@ func init() {
 		LabelKey:    "Action.App.Spreadsheet",
 		Description: "Open the spreadsheet workspace",
 		DescKey:     "Action.App.Spreadsheet.Desc",
-		DefaultKeys: []string{"ShiftF11"},
+		// Shift+F11 belongs to Settings.PluginConfiguration, which is in this
+		// same area, so binding it here took the shortcut away from it and
+		// left it with none. Alt+F9 is no good either: window managers claim
+		// it for resize, and the registry knows nothing about what the outside
+		// world has already taken.
+		DefaultKeys: []string{"CtrlAltS"},
 		MenuPath:    "Commands",
 		Visible:     sheetActionVisible,
 		Handler:     actionSpreadsheet,
