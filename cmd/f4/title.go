@@ -8,6 +8,7 @@ import (
 	"runtime/debug"
 	"strings"
 	"sync"
+	"time"
 	"unicode"
 
 	"github.com/unxed/vtui"
@@ -81,10 +82,7 @@ func getGitFallback() (rev string, dirty string, timeStr string) {
 	}
 	timeOut, err := exec.Command("git", "log", "-1", "--format=%cI").Output()
 	if err == nil {
-		tStr := strings.TrimSpace(string(timeOut))
-		if len(tStr) >= 16 {
-			timeStr = strings.Replace(tStr[:16], "T", " ", 1)
-		}
+		timeStr = strings.TrimSpace(string(timeOut))
 	}
 	return rev, dirty, timeStr
 }
@@ -104,9 +102,6 @@ func getVCSInfo() (rev string, dirty string, timeStr string) {
 				}
 			case "vcs.time":
 				timeStr = s.Value
-				if len(timeStr) >= 16 {
-					timeStr = strings.Replace(timeStr[:16], "T", " ", 1)
-				}
 			}
 		}
 	}
@@ -146,7 +141,7 @@ func getLongVersionInfo() string {
 	if buildVersion != "" {
 		_, _, timeStr := getVCSInfo()
 		if timeStr != "" {
-			return buildVersion + " [" + timeStr + "]"
+			return buildVersion + " [" + formatBuildTimeForDisplay(timeStr) + "]"
 		}
 		return buildVersion
 	}
@@ -172,9 +167,31 @@ func getLongVersionInfo() string {
 		sb.WriteString(baseVer)
 	}
 	if timeStr != "" {
-		sb.WriteString(" [" + timeStr + "]")
+		sb.WriteString(" [" + formatBuildTimeForDisplay(timeStr) + "]")
 	}
 	return sb.String()
+}
+
+// formatBuildTimeForDisplay converts the UTC timestamp embedded by Go in
+// release binaries to the user's local time. Nightly release metadata uses
+// the same commit timestamp, so the updater and F1's Help Index show one
+// value instead of one UTC value and one local value.
+func formatBuildTimeForDisplay(value string) string {
+	for _, layout := range []string{time.RFC3339, "2006-01-02 15:04:05", "2006-01-02 15:04"} {
+		var (
+			parsed time.Time
+			err    error
+		)
+		if layout == time.RFC3339 {
+			parsed, err = time.Parse(layout, value)
+		} else {
+			parsed, err = time.ParseInLocation(layout, value, time.UTC)
+		}
+		if err == nil {
+			return parsed.Local().Format("2006-01-02 15:04")
+		}
+	}
+	return value
 }
 
 func UpdateWindowTitle(scr *vtui.ScreenBuf) {
