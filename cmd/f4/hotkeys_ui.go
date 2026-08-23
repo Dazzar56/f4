@@ -447,7 +447,7 @@ func (f *HotkeyAssignFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return false
 	}
 
-	keyStr := EventToFarString(e)
+	keyStr := EventToHotkeyString(e)
 
 	if f.hm != nil {
 		f.hm.Bind(f.area, keyStr, f.actionName)
