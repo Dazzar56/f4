@@ -251,11 +251,17 @@ func (iv *ImageView) open(path string) {
 
 	iv.loading = true
 	v := iv.vfs
+	// Read the pipeline here rather than inside the worker. The decode
+	// outlives this call, and reading the global from the goroutine races
+	// anything that reassigns ImagePipe while the picture is still arriving.
+	// A decode also belongs to the pipeline it was started on: finishing
+	// against a different one would answer with a picture nobody asked for.
+	pipe := ImagePipe
 	vtui.RunAsync(func(ctx *vtui.TaskContext) {
-		if res, ok := ImagePipe.PreviewSync(ctx.Context, v, path); ok {
+		if res, ok := pipe.PreviewSync(ctx.Context, v, path); ok {
 			ctx.RunOnUI(func() { iv.accept(gen, res) })
 		}
-		res := ImagePipe.LoadSync(ctx.Context, v, path)
+		res := pipe.LoadSync(ctx.Context, v, path)
 		ctx.RunOnUI(func() { iv.accept(gen, res) })
 	})
 }

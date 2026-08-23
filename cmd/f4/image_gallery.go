@@ -170,12 +170,15 @@ func (iv *ImageView) requestThumb(path string) {
 	g.asked[path] = true
 
 	v := iv.vfs
+	// Taken here for the same reason as in open: the decode outlives this
+	// call, and reading the global from the worker races a reassignment.
+	pipe := ImagePipe
 	vtui.RunAsync(func(ctx *vtui.TaskContext) {
-		res, ok := ImagePipe.PreviewSync(ctx.Context, v, path)
+		res, ok := pipe.PreviewSync(ctx.Context, v, path)
 		if !ok {
 			// No thumbnail inside the file: decoding it whole is the only
 			// way this tile will ever show anything.
-			res = ImagePipe.LoadSync(ctx.Context, v, path)
+			res = pipe.LoadSync(ctx.Context, v, path)
 			if res.Err != nil {
 				return
 			}
