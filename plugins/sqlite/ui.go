@@ -194,6 +194,20 @@ func (b *browser) loadTable(table string) {
 		})
 }
 
+// applyBrowse shows a reading of a table that a worker has already done.
+//
+// Everything that changes a table -- an edit, an insert, a statement from the
+// SQL box -- reads it again on its own worker and ends here, rather than
+// starting a second progress task from inside the first one's completion. A
+// nested task left the rows on screen out of step with the rowids behind them
+// until the user pressed Refresh, and one gesture is one task.
+func (b *browser) applyBrowse(table string, browse tableBrowse) {
+	b.currentTable = table
+	b.rowIDs = browse.rowIDs
+	b.writable = browse.writable
+	b.applyResult(browse.result)
+}
+
 // refresh re-reads the schema and then the table being shown.
 //
 // It used to reload the current table and nothing else, so on a database whose
@@ -256,6 +270,16 @@ func tableToShow(tables []string, current string) string {
 		return tables[0]
 	}
 	return ""
+}
+
+// selectTableInList moves the cursor of the list on the left onto table.
+func (b *browser) selectTableInList(table string) {
+	for index, candidate := range b.tables {
+		if candidate == table {
+			b.tableList.SetSelectPos(index)
+			return
+		}
+	}
 }
 
 func (b *browser) runQuery() {
@@ -438,6 +462,51 @@ func (b *browser) cellUnderCursor() (column string, rowID int64, ok bool) {
 		return "", 0, false
 	}
 	return b.columns[col], b.rowIDs[row], true
+}
+
+// writeCell stores one edited value and shows the table as it is afterwards.
+func (b *browser) writeCell(column string, rowID int64, value string) {
+	if b.closed {
+		return
+	}
+	table := b.currentTable
+	var (
+		affected int64
+		browse   tableBrowse
+	)
+	b.app.RunProgressTask(sqliteText("SQLite.Title", " SQLite ", " SQLite "), sqliteText("SQLite.WritingValue", "Writing the value...", "Запись значения..."), false,
+		func(ctx context.Context, update func(string, int)) error {
+			update(sqliteText("SQLite.WritingValue", "Writing the value...", "Запись значения..."), -1)
+			var err error
+			if affected, err = b.session.updateCell(ctx, table, column, rowID, value); err != nil {
+				return err
+			}
+			// A trigger or a generated column can change more than the cell
+			// that was written, so the table is read again -- here, on the
+			// same worker, not from a second task started in the completion.
+			browse, err = b.session.browseTable(ctx, table)
+			return err
+		},
+		func(err error) {
+			if b.closed || b.currentTable != table {
+				return
+			}
+			if err != nil {
+				message := fmt.Sprintf(sqliteText("SQLite.SQLError", "SQL error: %v", "Ошибка SQL: %v"), err)
+				b.setStatus(message)
+				vtui.ShowMessageOn(b.frame,
+					sqliteText("SQLite.Title", " SQLite ", " SQLite "),
+					message,
+					[]string{sqliteText("SQLite.OK", "&OK", "&ОК")})
+				return
+			}
+			b.applyBrowse(table, browse)
+			if affected == 0 {
+				b.setStatus(sqliteText("SQLite.RowGone", "That row is no longer there.", "Этой строки больше нет."))
+				return
+			}
+			b.setStatus(fmt.Sprintf(sqliteText("SQLite.CellUpdated", "%s updated", "Поле %s изменено"), column))
+		})
 }
 
 // insertRow adds a row of defaults to the table being browsed and puts the
