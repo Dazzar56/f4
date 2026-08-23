@@ -67,7 +67,7 @@ func TestDialSSHVerifiesServerKeyBeforeAuthentication(t *testing.T) {
 	port, publicKey := startTestSSHServer(t)
 	writeKnownHosts(t, home, knownhosts.Normalize("127.0.0.1:"+port), publicKey)
 
-	client, err := DialSSH("127.0.0.1", port, "user", "pass", 3, netproxy.Settings{})
+	client, err := DialSSH("127.0.0.1", port, "user", "pass", "", 3, netproxy.Settings{})
 	if err != nil {
 		t.Fatalf("known server key rejected: %v", err)
 	}
@@ -84,7 +84,7 @@ func TestDialSSHRejectsChangedServerKey(t *testing.T) {
 	port, _ := startTestSSHServer(t)
 	writeKnownHosts(t, home, knownhosts.Normalize("127.0.0.1:"+port), testSSHHostKey(t))
 
-	client, err := DialSSH("127.0.0.1", port, "user", "pass", 3, netproxy.Settings{})
+	client, err := DialSSH("127.0.0.1", port, "user", "pass", "", 3, netproxy.Settings{})
 	if err == nil {
 		if closeErr := client.Close(); closeErr != nil {
 			t.Errorf("close SSH client: %v", closeErr)

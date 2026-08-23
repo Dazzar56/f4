@@ -81,7 +81,7 @@ func deadTCPPort(t *testing.T) string {
 // so and hands back nothing to close. A closer returned alongside an error
 // would be leaked by every caller, since none of them expect one.
 func TestSSHFishDialerReportsAFailedDial(t *testing.T) {
-	dial := sshFishDialer("127.0.0.1", deadTCPPort(t), "nobody", "", 1, netproxy.Settings{})
+	dial := sshFishDialer("127.0.0.1", deadTCPPort(t), "nobody", "", "", 1, netproxy.Settings{})
 	stdin, stdout, closer, err := dial(context.Background())
 	if err == nil {
 		if closer != nil {
@@ -100,7 +100,7 @@ func TestSSHFishDialerReportsAFailedDial(t *testing.T) {
 func TestSSHFishDialerHonoursACancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	dial := sshFishDialer("127.0.0.1", deadTCPPort(t), "nobody", "", 1, netproxy.Settings{})
+	dial := sshFishDialer("127.0.0.1", deadTCPPort(t), "nobody", "", "", 1, netproxy.Settings{})
 	_, _, closer, err := dial(ctx)
 	if !errors.Is(err, context.Canceled) {
 		if closer != nil {
@@ -117,7 +117,7 @@ func TestSSHFishDialerHonoursACancelledContext(t *testing.T) {
 // opens through a dialer, and a host that cannot be reached must still fail at
 // open time rather than at the first request.
 func TestNewFishVFSReportsAFailedDial(t *testing.T) {
-	v, err := NewFishVFS(nil, "127.0.0.1", deadTCPPort(t), "nobody", "", 1, netproxy.Settings{})
+	v, err := NewFishVFS(nil, "127.0.0.1", deadTCPPort(t), "nobody", "", "", 1, netproxy.Settings{})
 	if err == nil {
 		_ = v.Close() // unexpected open cleanup only
 		t.Fatal("opening a site on a dead port succeeded")

@@ -767,6 +767,7 @@ NetFox.LabelHost=&Хост:
 NetFox.LabelPort=&Порт:
 NetFox.LabelUser=&Користувач:
 NetFox.LabelPassword=&Пароль:
+NetFox.LabelKeyPath=Файл SSH-&ключа:
 NetFox.LabelTimeout=&Таймаут:
 NetFox.LabelCodepage=&Кодування:
 NetFox.ErrorEmptyName=Ім'я не може бути порожнім

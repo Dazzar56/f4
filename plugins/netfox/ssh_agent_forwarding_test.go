@@ -26,7 +26,7 @@ func TestDialSSHDoesNotForwardAgent(t *testing.T) {
 	port, publicKey, forwarded := startAgentObservationSSHServer(t)
 	writeKnownHosts(t, home, knownhosts.Normalize("127.0.0.1:"+port), publicKey)
 
-	client, err := DialSSH("127.0.0.1", port, "user", "pass", 3, netproxy.Settings{})
+	client, err := DialSSH("127.0.0.1", port, "user", "pass", "", 3, netproxy.Settings{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func TestSSHFishDialerDoesNotRequestAgentForwarding(t *testing.T) {
 	t.Setenv("SSH_AUTH_SOCK", "agent-present")
 	port, publicKey, forwarded := startAgentObservationSSHServer(t)
 	writeKnownHosts(t, home, knownhosts.Normalize("127.0.0.1:"+port), publicKey)
-	dial := sshFishDialerWith("127.0.0.1", port, "user", "pass", 3, netproxy.Settings{}, func(session *ssh.Session) error {
+	dial := sshFishDialerWith("127.0.0.1", port, "user", "pass", "", 3, netproxy.Settings{}, func(session *ssh.Session) error {
 		return session.Shell()
 	})
 

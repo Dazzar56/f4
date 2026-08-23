@@ -91,9 +91,9 @@ func (v *SFTPVFS) encodePath(p string) string {
 	return p
 }
 
-func NewSFTPVFS(parent vfs.VFS, host, port, user, pass string, timeout int, cp string, px netproxy.Settings) (*SFTPVFS, error) {
+func NewSFTPVFS(parent vfs.VFS, host, port, user, pass, keyPath string, timeout int, cp string, px netproxy.Settings) (*SFTPVFS, error) {
 	vtui.DebugLog("NET: Initiating SFTP connection to %s:%s (user: %s)", host, port, user)
-	sshClient, err := DialSSH(host, port, user, pass, timeout, px)
+	sshClient, err := DialSSH(host, port, user, pass, keyPath, timeout, px)
 	if err != nil {
 		return nil, err
 	}
@@ -725,7 +725,7 @@ func (p *sftpProvider) Open(ctx context.Context, parent vfs.VFS, pth string) (vf
 			timeout = t
 		}
 	}
-	res, err := NewSFTPVFS(parent, cfg.Host, port, cfg.User, cfg.Pass, timeout, cfg.Codepage, cfg.Proxy())
+	res, err := NewSFTPVFS(parent, cfg.Host, port, cfg.User, cfg.Pass, cfg.KeyPath, timeout, cfg.Codepage, cfg.Proxy())
 	if err != nil {
 		return nil, err
 	}

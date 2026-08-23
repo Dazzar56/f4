@@ -671,7 +671,7 @@ func TestSSHTimeoutDefaults(t *testing.T) {
 }
 
 func TestDialSSHFailsOnAClosedPort(t *testing.T) {
-	client, err := DialSSH("127.0.0.1", "1", "nobody", "", 2, netproxy.Settings{})
+	client, err := DialSSH("127.0.0.1", "1", "nobody", "", "", 2, netproxy.Settings{})
 	if err == nil {
 		_ = client.Close() // unexpected dial cleanup only
 		t.Fatal("dialing a closed port succeeded")
