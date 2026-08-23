@@ -209,6 +209,46 @@ func (o *Overlay) shift(dx, dy int) {
 		[]uint32{uint32(int32(o.rect.X)), uint32(int32(o.rect.Y))})
 }
 
+// SetBounds limits the overlay to a set of rectangles given relative to its
+// own top left corner, so that everything outside them stays the terminal's.
+// It is what lets a grid of thumbnails be one window rather than a dozen: the
+// captions between the tiles show through the gaps.
+//
+// An empty set restores the whole window. A server without the SHAPE
+// extension cannot do this, and says so, in which case the caller has to fall
+// back to covering the lot.
+func (o *Overlay) SetBounds(rects []Rect) bool {
+	o.s.mu.Lock()
+	defer o.s.mu.Unlock()
+	if o.s.conn == nil || !o.shaped {
+		return false
+	}
+
+	if len(rects) == 0 {
+		// A mask of None is the way of saying "the whole window".
+		err := shape.MaskChecked(o.s.conn, shape.SoSet, shape.SkBounding,
+			o.win, 0, 0, xproto.PixmapNone).Check()
+		return err == nil
+	}
+
+	list := make([]xproto.Rectangle, 0, len(rects))
+	for _, r := range rects {
+		if r.W <= 0 || r.H <= 0 {
+			continue
+		}
+		list = append(list, xproto.Rectangle{
+			X: int16(r.X), Y: int16(r.Y),
+			Width: uint16(r.W), Height: uint16(r.H),
+		})
+	}
+	if len(list) == 0 {
+		return false
+	}
+	err := shape.RectanglesChecked(o.s.conn, shape.SoSet, shape.SkBounding,
+		xproto.ClipOrderingUnsorted, o.win, 0, 0, list).Check()
+	return err == nil
+}
+
 // Rect is where the overlay currently is. It is not necessarily where it was
 // last put: the event loop moves it when the terminal window moves.
 func (o *Overlay) Rect() Rect {

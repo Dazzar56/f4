@@ -79,6 +79,13 @@ window divided by the number of cells in it — exact when the terminal leaves n
 padding, close enough when it does, and unlike `CSI 16 t` it needs no
 cooperation from a terminal that has already shown it cooperates with nothing.
 
+A whole frame goes into **one window with the gaps cut out of it**. The window
+covers the rectangle that holds every picture and a SHAPE bounding mask is cut
+to the individual pictures, so the text between them — the captions under a
+grid of thumbnails — shows through. A window per picture would do the same and
+cost a dozen of everything. A server with no SHAPE extension cannot do it and
+gets one opaque rectangle, which is a worse picture rather than a broken one.
+
 Two rules keep this from being a menace, and neither is optional:
 
 - **The window has to have been identified, not guessed.** An
@@ -87,6 +94,14 @@ Two rules keep this from being a menace, and neither is optional:
   down.
 - **It comes down when the terminal loses the focus.** Nothing in X will take
   it down for us. The event loop does it; see section 4.
+
+There is **one overlay per process**, not one per viewer: the connection
+carries the event loop that keeps the focus and the geometry warm, two viewers
+would fight over which window is on top, and the answer to "can pictures be
+shown at all" has to exist before any viewer does. That last one is not
+theoretical — `tryOpenImageViewer` refuses to open the viewer when nothing can
+show a picture, and until it learned to ask about the overlay, F3 on a PNG in
+gnome-terminal opened the hex viewer.
 
 Switched off with `[Images] X11Overlay=0`. On by default, because it only ever
 runs where the alternative is an apology.
@@ -136,10 +151,12 @@ which lives in a map that does have a lock.
 - **A terminal with padding around its grid puts the picture out by a few
   pixels.** The division that finds the cell size cannot see the padding. `CSI
   16 t` would be exact where it is answered, and could be preferred when it is.
-- **Only the viewer uses it.** Quick view, the gallery and the built-in
-  terminal's own placements still go through `vtui.GraphicsLayer`. Wiring the
-  overlay in as a `GraphicsProtocol` backend would cover all of them at once,
-  and would belong in vtui.
+- **Quick view and the built-in terminal still show nothing.** Both go
+  straight to `vtui.GraphicsLayer`, which a terminal with no protocol turns
+  off. The viewer and its thumbnail grid are routed through `drawImage`
+  instead and reach the overlay; the other two would need the same treatment,
+  or, better, the overlay wired into vtui as a `GraphicsProtocol` backend so
+  that nothing has to be routed at all.
 - **The identification runs once, at the first picture.** A session that is
   detached and reattached elsewhere keeps pointing at the old window.
 

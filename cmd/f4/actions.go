@@ -1284,7 +1284,13 @@ func tryOpenImageViewer(pf *PanelsFrame, v vfs.VFS, path string) bool {
 		return false
 	}
 	scr := vtui.FrameManager.Screen()
-	if scr == nil || !scr.SupportsGraphics() {
+	// A terminal with no image protocol is not the end of it: under a local
+	// X session the picture goes in a window over the terminal instead. The
+	// question has to be asked here and not inside the viewer, because this
+	// is where F3 decides between showing the picture and showing the bytes
+	// — and answering it wrong is how gnome-terminal used to get a hex dump
+	// of a PNG.
+	if scr == nil || (!scr.SupportsGraphics() && !x11ImagesAvailable()) {
 		return false
 	}
 

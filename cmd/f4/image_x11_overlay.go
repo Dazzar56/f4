@@ -15,11 +15,18 @@ package main
 // terminal loses the focus, because nothing in X will take it down for us.
 
 import (
+	"strings"
+	"sync"
+
 	"github.com/unxed/f4/internal/ttyx"
 	"github.com/unxed/vtui"
 )
 
-// x11ImageOverlay owns the connection and the window for one viewer.
+// x11ImageOverlay owns the connection and the window. There is one per
+// process rather than one per viewer: the connection carries an event loop
+// that keeps the focus and the geometry warm, two viewers would fight over
+// which window is on top, and the answer to "can pictures be shown at all"
+// has to be available before any viewer exists.
 type x11ImageOverlay struct {
 	sess *ttyx.Session
 	ov   *ttyx.Overlay
@@ -28,6 +35,30 @@ type x11ImageOverlay struct {
 	// not rescaled and resent on every frame.
 	key string
 }
+
+var (
+	x11OverlayMu    sync.Mutex
+	x11OverlayInst  *x11ImageOverlay
+	x11OverlayTried bool
+)
+
+// sharedX11Overlay connects on the first call and remembers the answer,
+// including a negative one: probing costs a round trip and almost every
+// terminal worth using needs none of this.
+func sharedX11Overlay() *x11ImageOverlay {
+	x11OverlayMu.Lock()
+	defer x11OverlayMu.Unlock()
+	if !x11OverlayTried {
+		x11OverlayTried = true
+		x11OverlayInst = newX11ImageOverlay()
+	}
+	return x11OverlayInst
+}
+
+// x11ImagesAvailable reports whether a picture can be put on the screen even
+// though the terminal itself cannot show one. The viewer is opened on the
+// strength of it, so it is asked before the viewer exists.
+func x11ImagesAvailable() bool { return sharedX11Overlay() != nil }
 
 // newX11ImageOverlay connects and creates the window, or returns nil when
 // there is nothing to connect to, when the terminal window could not be
@@ -118,12 +149,32 @@ func overlayCellRect(term ttyx.Rect, cols, rows, x1, y1, x2, y2 int) (ttyx.Rect,
 	}, true
 }
 
-// show puts the placement on the screen and reports whether it managed to.
-// The caller falls back to its apology when it did not.
+// show puts one placement on the screen.
 func (x *x11ImageOverlay) show(scr *vtui.ScreenBuf, p vtui.ImagePlacement) bool {
-	if x == nil || scr == nil || !p.Surface.Valid() {
+	return x.showMany(scr, []vtui.ImagePlacement{p})
+}
+
+// showMany puts a whole frame's worth of placements on the screen and reports
+// whether it managed to. The caller falls back to its apology when it did not.
+//
+// They go into one window covering the rectangle that holds them all, with a
+// shape mask cut to the individual pictures, so that the text between them —
+// the captions under a grid of thumbnails — shows through the gaps. A dozen
+// windows would do the same thing and cost a dozen of everything.
+func (x *x11ImageOverlay) showMany(scr *vtui.ScreenBuf, list []vtui.ImagePlacement) bool {
+	if x == nil || scr == nil || len(list) == 0 {
 		return false
 	}
+	valid := list[:0:0]
+	for _, p := range list {
+		if p.Surface.Valid() && p.Cols > 0 && p.Rows > 0 {
+			valid = append(valid, p)
+		}
+	}
+	if len(valid) == 0 {
+		return false
+	}
+	list = valid
 	if !x.sess.Focused() {
 		// Somebody else is on top of the terminal now, and an
 		// override-redirect window would be on top of them.
@@ -137,37 +188,79 @@ func (x *x11ImageOverlay) show(scr *vtui.ScreenBuf, p vtui.ImagePlacement) bool 
 		return false
 	}
 	cols, rows := scr.Width(), scr.Height()
-	rect, ok := overlayCellRect(term, cols, rows, p.Col, p.Row, p.Col+p.Cols-1, p.Row+p.Rows-1)
+
+	// One window over everything that has to be drawn, so the placements
+	// are positioned inside it rather than each getting a window.
+	c1, r1, c2, r2 := list[0].Col, list[0].Row, list[0].Col+list[0].Cols-1, list[0].Row+list[0].Rows-1
+	for _, p := range list[1:] {
+		c1 = minInt(c1, p.Col)
+		r1 = minInt(r1, p.Row)
+		c2 = maxInt(c2, p.Col+p.Cols-1)
+		r2 = maxInt(r2, p.Row+p.Rows-1)
+	}
+	rect, ok := overlayCellRect(term, cols, rows, c1, r1, c2, r2)
 	if !ok {
 		x.hide()
 		return false
 	}
+
+	// Nothing has moved and nothing has changed: the window is already
+	// showing the right thing and redrawing it would only cost bandwidth.
+	key := overlayFrameKey(list, rect)
+	if key == x.key && x.ov.Visible() {
+		return true
+	}
+
 	if err := x.ov.Place(rect); err != nil {
 		vtui.DebugLog("X11_OVERLAY: %v", err)
 		x.hide()
 		return false
 	}
 
-	sx, sy, sw, sh := p.SrcX, p.SrcY, p.SrcW, p.SrcH
-	if sw <= 0 || sh <= 0 {
-		sw, sh = p.Surface.Width, p.Surface.Height
-		sx, sy = 0, 0
-	}
-	key := overlayKey(p.Surface.Hash(), sx, sy, sw, sh, rect)
-	if key == x.key {
-		return true
-	}
+	buf := make([]byte, rect.W*rect.H*4)
+	bounds := make([]ttyx.Rect, 0, len(list))
+	for _, p := range list {
+		sub, ok := overlayCellRect(term, cols, rows, p.Col, p.Row, p.Col+p.Cols-1, p.Row+p.Rows-1)
+		if !ok {
+			continue
+		}
+		// Inside the window rather than on the screen.
+		sub.X -= rect.X
+		sub.Y -= rect.Y
 
-	src := p.Surface
-	if sx != 0 || sy != 0 || sw != src.Width || sh != src.Height {
-		src = src.Crop(sx, sy, sw, sh)
+		sx, sy, sw, sh := p.SrcX, p.SrcY, p.SrcW, p.SrcH
+		if sw <= 0 || sh <= 0 {
+			sw, sh = p.Surface.Width, p.Surface.Height
+			sx, sy = 0, 0
+		}
+		src := p.Surface
+		if sx != 0 || sy != 0 || sw != src.Width || sh != src.Height {
+			src = src.Crop(sx, sy, sw, sh)
+		}
+		scaled := vtui.ScaleSurface(src, sub.W, sub.H)
+		if !scaled.Valid() {
+			continue
+		}
+		blitInto(buf, rect.W, rect.H, scaled.Pix, scaled.Width, scaled.Height, scaled.Stride, sub.X, sub.Y)
+		bounds = append(bounds, sub)
 	}
-	scaled := vtui.ScaleSurface(src, rect.W, rect.H)
-	if !scaled.Valid() {
+	if len(bounds) == 0 {
 		x.hide()
 		return false
 	}
-	if err := x.ov.Draw(scaled.Pix, scaled.Width, scaled.Height, scaled.Stride); err != nil {
+
+	// Everything outside the pictures goes back to the terminal, so the
+	// captions between a grid of thumbnails stay readable. A server with no
+	// SHAPE extension cannot do it and the window covers the lot, which is
+	// a worse picture rather than a broken one.
+	if len(bounds) == 1 && bounds[0].X == 0 && bounds[0].Y == 0 &&
+		bounds[0].W == rect.W && bounds[0].H == rect.H {
+		x.ov.SetBounds(nil)
+	} else {
+		x.ov.SetBounds(bounds)
+	}
+
+	if err := x.ov.Draw(buf, rect.W, rect.H, rect.W*4); err != nil {
 		vtui.DebugLog("X11_OVERLAY: %v", err)
 		x.hide()
 		return false
@@ -176,21 +269,66 @@ func (x *x11ImageOverlay) show(scr *vtui.ScreenBuf, p vtui.ImagePlacement) bool 
 	return true
 }
 
-func overlayKey(hash uint64, sx, sy, sw, sh int, r ttyx.Rect) string {
-	var buf []byte
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+// blitInto copies one scaled picture into the frame buffer at an offset,
+// clipped to it.
+func blitInto(dst []byte, dstW, dstH int, src []byte, srcW, srcH, srcStride, atX, atY int) {
+	for y := 0; y < srcH; y++ {
+		dy := atY + y
+		if dy < 0 || dy >= dstH {
+			continue
+		}
+		for x := 0; x < srcW; x++ {
+			dx := atX + x
+			if dx < 0 || dx >= dstW {
+				continue
+			}
+			s := y*srcStride + x*4
+			d := (dy*dstW + dx) * 4
+			copy(dst[d:d+4], src[s:s+4])
+		}
+	}
+}
+
+// overlayFrameKey is what was last drawn: every picture, where it came from
+// and where it went. A frame nobody is touching is not rescaled and resent.
+func overlayFrameKey(list []vtui.ImagePlacement, rect ttyx.Rect) string {
+	var sb strings.Builder
 	add := func(v int) {
-		buf = append(buf, byte(v), byte(v>>8), byte(v>>16), byte(v>>24))
+		var b [4]byte
+		b[0], b[1], b[2], b[3] = byte(v), byte(v>>8), byte(v>>16), byte(v>>24)
+		sb.Write(b[:])
 	}
-	for i := 0; i < 8; i++ {
-		buf = append(buf, byte(hash>>(8*i)))
+	add(rect.X)
+	add(rect.Y)
+	add(rect.W)
+	add(rect.H)
+	for _, p := range list {
+		h := p.Surface.Hash()
+		for i := 0; i < 8; i++ {
+			sb.WriteByte(byte(h >> (8 * i)))
+		}
+		add(p.Col)
+		add(p.Row)
+		add(p.Cols)
+		add(p.Rows)
+		add(p.SrcX)
+		add(p.SrcY)
+		add(p.SrcW)
+		add(p.SrcH)
 	}
-	add(sx)
-	add(sy)
-	add(sw)
-	add(sh)
-	add(r.X)
-	add(r.Y)
-	add(r.W)
-	add(r.H)
-	return string(buf)
+	return sb.String()
 }

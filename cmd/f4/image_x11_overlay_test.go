@@ -54,24 +54,53 @@ func TestOverlayCellRectRefusesNonsense(t *testing.T) {
 	}
 }
 
-// The cache key has to move when anything that changes the picture on screen
+// The frame key has to move when anything that changes the picture on screen
 // moves, and to stay put when nothing does.
-func TestOverlayKey(t *testing.T) {
-	base := overlayKey(1234, 0, 0, 100, 50, ttyx.Rect{X: 1, Y: 2, W: 3, H: 4})
-	if base != overlayKey(1234, 0, 0, 100, 50, ttyx.Rect{X: 1, Y: 2, W: 3, H: 4}) {
-		t.Fatal("the same picture in the same place must key the same")
+func TestOverlayFrameKey(t *testing.T) {
+	surf := vtui.NewImageSurface(4, 4)
+	surf.SetPixel(0, 0, 1, 2, 3, 255)
+	other := vtui.NewImageSurface(4, 4)
+	other.SetPixel(0, 0, 9, 9, 9, 255)
+
+	base := []vtui.ImagePlacement{{Surface: surf, Col: 1, Row: 2, Cols: 3, Rows: 4}}
+	rect := ttyx.Rect{X: 1, Y: 2, W: 30, H: 40}
+	key := overlayFrameKey(base, rect)
+	if key != overlayFrameKey(base, rect) {
+		t.Fatal("the same frame in the same place must key the same")
 	}
-	others := []string{
-		overlayKey(1235, 0, 0, 100, 50, ttyx.Rect{X: 1, Y: 2, W: 3, H: 4}),
-		overlayKey(1234, 1, 0, 100, 50, ttyx.Rect{X: 1, Y: 2, W: 3, H: 4}),
-		overlayKey(1234, 0, 0, 101, 50, ttyx.Rect{X: 1, Y: 2, W: 3, H: 4}),
-		overlayKey(1234, 0, 0, 100, 50, ttyx.Rect{X: 9, Y: 2, W: 3, H: 4}),
-		overlayKey(1234, 0, 0, 100, 50, ttyx.Rect{X: 1, Y: 2, W: 3, H: 5}),
-	}
-	for i, o := range others {
-		if o == base {
-			t.Errorf("variant %d keys the same as the original", i)
+
+	moved := []vtui.ImagePlacement{{Surface: surf, Col: 5, Row: 2, Cols: 3, Rows: 4}}
+	swapped := []vtui.ImagePlacement{{Surface: other, Col: 1, Row: 2, Cols: 3, Rows: 4}}
+	grew := append(append([]vtui.ImagePlacement(nil), base...), base[0])
+
+	for name, variant := range map[string][]vtui.ImagePlacement{
+		"moved": moved, "different picture": swapped, "one more picture": grew,
+	} {
+		if overlayFrameKey(variant, rect) == key {
+			t.Errorf("%s must key differently", name)
 		}
+	}
+	if overlayFrameKey(base, ttyx.Rect{X: 9, Y: 2, W: 30, H: 40}) == key {
+		t.Error("a window somewhere else must key differently")
+	}
+}
+
+// A grid of thumbnails goes into one window with gaps cut out of it, so every
+// picture has to land at its own offset inside the frame buffer.
+func TestBlitIntoPlacesAndClips(t *testing.T) {
+	dst := make([]byte, 4*4*4)
+	src := []byte{1, 2, 3, 4, 5, 6, 7, 8}
+
+	blitInto(dst, 4, 4, src, 2, 1, 8, 1, 1)
+	if dst[(1*4+1)*4] != 1 || dst[(1*4+2)*4] != 5 {
+		t.Errorf("the pixels did not land at the offset: %v", dst[16:32])
+	}
+
+	// Anything past the edge is dropped rather than wrapping onto the next
+	// row or running off the end of the buffer.
+	blitInto(dst, 4, 4, src, 2, 1, 8, 3, 3)
+	if dst[(3*4+3)*4] != 1 {
+		t.Error("the pixel inside the buffer must still land")
 	}
 }
 

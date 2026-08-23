@@ -222,13 +222,14 @@ far2l turns kitty on.
 `FARTTY_INTERACT_IMAGE_*` (see `far2l/WinPort/FarTTY.h`) in `HandleFar2lAPC`,
 so that far2l running inside f4 can hand pictures over through its own channel.
 
-**12a. The overlay for everything, not only the viewer.** Issue #663 is done
-for `ImageView` and nothing else: quick view, the gallery and the built-in
-terminal's own placements still go through `vtui.GraphicsLayer` and still show
-nothing in a terminal without a protocol. Wiring `internal/ttyx` in as a
-`GraphicsProtocol` backend would cover all of them at once, and would belong in
-vtui rather than here. It needs the placement list, a z order and clipping, all
-of which the layer already has and the viewer's one rectangle did not need.
+**12a. The overlay for quick view and the built-in terminal.** The viewer and
+its thumbnail grid reach the overlay through `ImageView.drawImage`; quick view
+and the terminal's own placements go straight to `vtui.GraphicsLayer`, which a
+terminal with no protocol turns off, and still show nothing. Routing them the
+same way would work and would be the third and fourth special case; wiring
+`internal/ttyx` into vtui as a `GraphicsProtocol` backend would cover
+everything at once and would end the routing. It needs the placement list, a z
+order and clipping, all of which the layer already has.
 
 **12. Video.** A second source of frames on top of the same placement layer:
 decode through an external `ffmpeg` into a stream of RGBA, a frame timer, and

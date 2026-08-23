@@ -229,3 +229,32 @@ func TestGrabKeysWithoutADisplay(t *testing.T) {
 		t.Errorf("a session with no connection cannot grab: %v", err)
 	}
 }
+
+// A grid of thumbnails is one window with the gaps cut out of it, so that the
+// captions between the tiles stay the terminal's.
+func TestOverlayBoundsCutGaps(t *testing.T) {
+	f := newXFixture(t)
+	s := f.openOn(t)
+	f.focus(t, f.term)
+	waitFor(t, "the focus", s.Focused)
+
+	ov, err := s.NewOverlay()
+	if err != nil {
+		t.Fatalf("overlay: %v", err)
+	}
+	defer ov.Close()
+	if !ov.PassesInput() {
+		t.Skip("no SHAPE extension on this server")
+	}
+	if err := ov.Place(Rect{X: 100, Y: 100, W: 40, H: 40}); err != nil {
+		t.Fatalf("place: %v", err)
+	}
+
+	if !ov.SetBounds([]Rect{{X: 0, Y: 0, W: 10, H: 10}, {X: 20, Y: 20, W: 10, H: 10}}) {
+		t.Fatal("the bounding shape was refused")
+	}
+	// And back to the whole window, which is what a single picture wants.
+	if !ov.SetBounds(nil) {
+		t.Error("an empty set must restore the whole window")
+	}
+}
