@@ -244,17 +244,7 @@ func TestAttributesDialog_UnixSetAll(t *testing.T) {
 		btnSet.OnClick()
 	}
 
-	// Wait for async SetAttributes call to happen with a 2-second timeout.
-	// We check UnixMode because it's initially 0 in capturedItem and becomes 0755 on success.
-	deadline := time.Now().Add(2 * time.Second)
-	for capturedItem.UnixMode == 0 && time.Now().Before(deadline) {
-		select {
-		case task := <-fm.TaskChan:
-			task()
-		default:
-			time.Sleep(10 * time.Millisecond)
-		}
-	}
+	runUITasksUntil(t, fm.TaskChan, dlg.(vtui.Frame).IsDone)
 
 	if capturedItem.UnixMode != 0755 {
 		t.Errorf("Unix mode not set. Expected 0755, got %04o", capturedItem.UnixMode)
@@ -309,16 +299,7 @@ func TestAttributesDialog_WindowsSetFlags(t *testing.T) {
 		btnSet.OnClick()
 	}
 
-	// Wait for async SetAttributes call with a 2-second timeout
-	deadline := time.Now().Add(2 * time.Second)
-	for capturedItem.Name == "" && time.Now().Before(deadline) {
-		select {
-		case task := <-fm.TaskChan:
-			task()
-		default:
-			time.Sleep(10 * time.Millisecond)
-		}
-	}
+	runUITasksUntil(t, fm.TaskChan, dlg.(vtui.Frame).IsDone)
 
 	// Verify the VFS call was made
 	if capturedItem.Name == "" {
@@ -371,15 +352,7 @@ func TestAttributesDialog_WindowsSetFlagsForSelectedTargets(t *testing.T) {
 	chkHidden.State = 1
 	setButton.OnClick()
 
-	deadline := time.Now().Add(2 * time.Second)
-	for len(calls) < len(targets) && time.Now().Before(deadline) {
-		select {
-		case task := <-fm.TaskChan:
-			task()
-		default:
-			time.Sleep(10 * time.Millisecond)
-		}
-	}
+	runUITasksUntil(t, fm.TaskChan, dlg.(vtui.Frame).IsDone)
 	if len(calls) != 2 {
 		t.Fatalf("SetAttributes called %d times, want 2", len(calls))
 	}
@@ -420,40 +393,27 @@ func TestActionFileAttributesUsesAllSelectedEntries(t *testing.T) {
 	fsp.SetItemSelected(1, true)
 
 	actionFileAttributes(pf)
+	runUITasksUntil(t, fm.TaskChan, func() bool {
+		top := fm.GetTopFrame()
+		return top != nil && strings.Contains(top.GetTitle(), "Attributes")
+	})
+	attributesDialog := fm.GetTopFrame()
 	var setButton *vtui.Button
-	deadline := time.Now().Add(2 * time.Second)
-	for setButton == nil && time.Now().Before(deadline) {
-		select {
-		case task := <-fm.TaskChan:
-			task()
-		default:
-			time.Sleep(10 * time.Millisecond)
-		}
-		if top := fm.GetTopFrame(); top != nil {
-			if element, ok := top.(vtui.UIElement); ok {
-				walkUI(element, func(el vtui.UIElement) bool {
-					if b, ok := el.(*vtui.Button); ok && strings.Contains(b.GetText(), "Set") {
-						setButton = b
-					}
-					return true
-				})
-			}
+	if top := fm.GetTopFrame(); top != nil {
+		if element, ok := top.(vtui.UIElement); ok {
+			walkUI(element, func(el vtui.UIElement) bool {
+				if b, ok := el.(*vtui.Button); ok && strings.Contains(b.GetText(), "Set") {
+					setButton = b
+				}
+				return true
+			})
 		}
 	}
 	if setButton == nil {
 		t.Fatal("attributes dialog did not open for selected entries")
 	}
 	setButton.OnClick()
-
-	deadline = time.Now().Add(2 * time.Second)
-	for len(calls) < 2 && time.Now().Before(deadline) {
-		select {
-		case task := <-fm.TaskChan:
-			task()
-		default:
-			time.Sleep(10 * time.Millisecond)
-		}
-	}
+	runUITasksUntil(t, fm.TaskChan, attributesDialog.IsDone)
 	if len(calls) != 2 {
 		t.Fatalf("SetAttributes called for %d selected entries, want 2: %v", len(calls), calls)
 	}
@@ -489,6 +449,7 @@ func TestAttributesDialog_InvalidTime(t *testing.T) {
 	editMTime.SetText("99.99.9999 25:61:99")
 
 	if btnSet.OnClick != nil {
+		t.Cleanup(func() { runUITasksUntil(t, fm.TaskChan, dlg.(vtui.Frame).IsDone) })
 		btnSet.OnClick()
 	}
 
@@ -511,6 +472,19 @@ func walkUI(el vtui.UIElement, fn func(vtui.UIElement) bool) bool {
 		}
 	}
 	return true
+}
+
+func runUITasksUntil(t *testing.T, taskChan <-chan func(), done func() bool) {
+	t.Helper()
+	timeout := time.After(2 * time.Second)
+	for !done() {
+		select {
+		case task := <-taskChan:
+			task()
+		case <-timeout:
+			t.Fatal("timeout waiting for UI task")
+		}
+	}
 }
 
 func TestAttributesDialog_Layout(t *testing.T) {
@@ -587,16 +561,7 @@ func TestAttributesDialog_WindowsCheckboxes(t *testing.T) {
 		btnSet.OnClick()
 	}
 
-	// Wait for async task
-	timeout := time.After(2 * time.Second)
-	for capturedItem.Name == "" {
-		select {
-		case task := <-fm.TaskChan:
-			task()
-		case <-timeout:
-			t.Fatal("Timeout waiting for SetAttributes")
-		}
-	}
+	runUITasksUntil(t, fm.TaskChan, dlg.(vtui.Frame).IsDone)
 
 	// New WinAttrs should have Hidden (2) and Archive (32), but NOT ReadOnly (1). Total 34.
 	if capturedItem.WinAttrs != 34 {
@@ -829,15 +794,7 @@ func TestAttributesDialog_UnixNameResolution(t *testing.T) {
 
 	btnSet.OnClick()
 
-	deadline := time.Now().Add(1 * time.Second)
-	for capturedItem.Uid != 2000 && time.Now().Before(deadline) {
-		select {
-		case task := <-fm.TaskChan:
-			task()
-		default:
-			time.Sleep(10 * time.Millisecond)
-		}
-	}
+	runUITasksUntil(t, fm.TaskChan, dlg.(vtui.Frame).IsDone)
 
 	if capturedItem.Uid != 2000 || capturedItem.Gid != 3000 {
 		t.Errorf("ID resolution failed. Got UID:%d GID:%d", capturedItem.Uid, capturedItem.Gid)
@@ -1069,15 +1026,7 @@ func TestAttributesDialog_WindowsSetTime(t *testing.T) {
 	editTime.SetText(newTimeStr)
 	btnSet.OnClick()
 
-	deadline := time.Now().Add(1 * time.Second)
-	for capturedItem.Name == "" && time.Now().Before(deadline) {
-		select {
-		case task := <-fm.TaskChan:
-			task()
-		default:
-			time.Sleep(10 * time.Millisecond)
-		}
-	}
+	runUITasksUntil(t, fm.TaskChan, dlg.(vtui.Frame).IsDone)
 
 	expected, _ := time.ParseInLocation("02.01.2006 15:04:05", newTimeStr, time.Local)
 	if !capturedItem.MTime.Equal(expected) {
