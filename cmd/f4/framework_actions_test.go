@@ -472,6 +472,8 @@ func TestWorkspaceClosePreservesQueueVetoBelowHelpAndForBackgroundTarget(t *test
 func TestWorkspaceCloseKeepsTheOnlyPanelsWorkspace(t *testing.T) {
 	initFrameworkActionTestScreen(t)
 	panels := setupMockPanelsFrame()
+	waitForLoad(t, panels.panels[0].(*FileSystemPanel))
+	waitForLoad(t, panels.panels[1].(*FileSystemPanel))
 	vtui.FrameManager.Push(panels)
 	viewer := &frameworkActionTestFrame{title: "Viewer"}
 	vtui.FrameManager.AddScreen(viewer)
@@ -496,6 +498,8 @@ func TestWorkspaceCloseKeepsTheOnlyPanelsWorkspace(t *testing.T) {
 func TestPanelsFrameCloseVetoProtectsTheOnlyPanelsWorkspace(t *testing.T) {
 	initFrameworkActionTestScreen(t)
 	panels := setupMockPanelsFrame()
+	waitForLoad(t, panels.panels[0].(*FileSystemPanel))
+	waitForLoad(t, panels.panels[1].(*FileSystemPanel))
 	vtui.FrameManager.Push(panels)
 	vtui.FrameManager.AddScreen(&frameworkActionTestFrame{title: "Editor"})
 	vtui.FrameManager.SwitchScreen(0)

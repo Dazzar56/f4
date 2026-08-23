@@ -160,8 +160,12 @@ func TestAllDialogs_LayoutValidation(t *testing.T) {
 				localVFS := vfs.NewOSVFS(tmpDir)
 				_ = localVFS.SetPath(tmpDir)
 				pf := NewPanelsFrame()
-				pf.panels[0] = NewFileSystemPanel(0, 0, 40, 20, localVFS)
-				pf.panels[1] = NewFileSystemPanel(40, 0, 40, 20, localVFS.Clone())
+				left := NewFileSystemPanel(0, 0, 40, 20, localVFS)
+				right := NewFileSystemPanel(40, 0, 40, 20, localVFS.Clone())
+				waitForLoad(t, left)
+				waitForLoad(t, right)
+				pf.panels[0] = left
+				pf.panels[1] = right
 				pf.ResizeConsole(120, 60)
 				vtui.FrameManager.Push(pf)
 

@@ -179,15 +179,19 @@ func TestCommandPaletteSearchFirstFocusToggleIsStateSpecific(t *testing.T) {
 }
 
 func TestCommandPaletteAISendDraftOnlyForCurrentNonEmptyInput(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	left := NewFileSystemPanel(0, 0, 40, 20, vfs.NewNullVFS(0))
 	right := NewFileSystemPanel(40, 0, 80, 20, vfs.NewNullVFS(0))
+	waitForLoad(t, left)
+	waitForLoad(t, right)
 	pf := newDirectPalettePanelsFrame(left, right)
 	chat := NewAIChatPanel(left)
 	chat.SetFocus(true)
 	chat.focusedLinkIdx = -1
 	chat.input.SetText("review this patch")
 	pf.altPanels[0] = chat
-	setDirectPaletteTopFrame(t, pf)
+	vtui.FrameManager.Push(pf)
 
 	entry, found := commandPaletteTestEntryByID(commandPalettePanelsContextEntries(pf), "AI.SendDraft")
 	if !found || entry.Description != Msg("CommandPalette.AI.SendDraft.Desc") {
