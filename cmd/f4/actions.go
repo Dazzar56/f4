@@ -1762,6 +1762,7 @@ func actionNewFile(pf *PanelsFrame) {
 			}
 			actionOpenEditor(pf, activeVfs, path)
 		})
+		inputBoxEdit(dlg).PathHintsEnabled = true
 		// Plain DIF_HISTORY, as in far2l's dlgOpenEditor: the prompt opens
 		// empty rather than on the last file that was created this way.
 		nameEdit = attachHistory(inputBoxEdit(dlg), newEditHistoryID)
@@ -2358,6 +2359,7 @@ func actionEditorSettings(pf *PanelsFrame) {
 	}
 
 	editExtCmd := vtui.NewEdit(0, 0, 20, AppConfig.ExternalEditorCommand)
+	editExtCmd.PathHintsEnabled = true
 	attachHistory(editExtCmd, externalEditorHistoryID)
 	lblExtCmd := vtui.NewLabel(0, 0, Msg("EditorSettings.ExternalCommand"), editExtCmd)
 
@@ -2627,6 +2629,7 @@ func actionMkDir(pf *PanelsFrame) {
 	dlg.ShowClose = true
 
 	editName := vtui.NewEdit(0, 0, 10, "")
+	editName.PathHintsEnabled = true
 	attachHistoryUseLast(editName, newFolderHistoryID)
 	lblPrompt := vtui.NewLabel(0, 0, Msg("MakeFolder.Prompt"), editName)
 	dlg.AddItem(lblPrompt)
@@ -3492,8 +3495,9 @@ func actionConfirmationsSettings(pf *PanelsFrame) {
 
 	vtui.FrameManager.Push(dlg)
 }
+
 func actionMouseWheelSettings(pf *PanelsFrame) {
-	const width, height = 56, 17
+	const width, height = 46, 22
 	dlg := vtui.NewCenteredDialog(width, height, Msg("MouseWheel.Title"))
 	dlg.ShowClose = true
 
@@ -3501,33 +3505,33 @@ func actionMouseWheelSettings(pf *PanelsFrame) {
 	lblHint := vtui.NewText(0, 0, Msg("MouseWheel.Hint"), 0)
 
 	lblPanels := vtui.NewText(0, 0, Msg("MouseWheel.Panels"), 0)
-	editPanelUp := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelPanelUp))
+	editPanelUp   := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelPanelUp))
 	editPanelDown := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelPanelDown))
-	lblPanelUp := vtui.NewLabel(0, 0, Msg("MouseWheel.Up"), editPanelUp)
+	lblPanelUp   := vtui.NewLabel(0, 0, Msg("MouseWheel.Up"), editPanelUp)
 	lblPanelDown := vtui.NewLabel(0, 0, Msg("MouseWheel.Down"), editPanelDown)
 
 	lblEditor := vtui.NewText(0, 0, Msg("MouseWheel.Editor"), 0)
-	editEditorUp := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelEditorUp))
+	editEditorUp   := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelEditorUp))
 	editEditorDown := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelEditorDown))
-	lblEditorUp := vtui.NewLabel(0, 0, Msg("MouseWheel.Up"), editEditorUp)
+	lblEditorUp   := vtui.NewLabel(0, 0, Msg("MouseWheel.Up"), editEditorUp)
 	lblEditorDown := vtui.NewLabel(0, 0, Msg("MouseWheel.Down"), editEditorDown)
 
 	lblViewer := vtui.NewText(0, 0, Msg("MouseWheel.Viewer"), 0)
-	editViewerUp := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelViewerUp))
+	editViewerUp   := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelViewerUp))
 	editViewerDown := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelViewerDown))
-	lblViewerUp := vtui.NewLabel(0, 0, Msg("MouseWheel.Up"), editViewerUp)
+	lblViewerUp   := vtui.NewLabel(0, 0, Msg("MouseWheel.Up"), editViewerUp)
 	lblViewerDown := vtui.NewLabel(0, 0, Msg("MouseWheel.Down"), editViewerDown)
 
 	lblMenus := vtui.NewText(0, 0, Msg("MouseWheel.Menus"), 0)
-	editMenuUp := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelMenuUp))
+	editMenuUp   := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelMenuUp))
 	editMenuDown := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelMenuDown))
-	lblMenuUp := vtui.NewLabel(0, 0, Msg("MouseWheel.Up"), editMenuUp)
+	lblMenuUp   := vtui.NewLabel(0, 0, Msg("MouseWheel.Up"), editMenuUp)
 	lblMenuDown := vtui.NewLabel(0, 0, Msg("MouseWheel.Down"), editMenuDown)
 
 	lblTables := vtui.NewText(0, 0, Msg("MouseWheel.Tables"), 0)
-	editTableUp := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelTableUp))
+	editTableUp   := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelTableUp))
 	editTableDown := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelTableDown))
-	lblTableUp := vtui.NewLabel(0, 0, Msg("MouseWheel.Up"), editTableUp)
+	lblTableUp   := vtui.NewLabel(0, 0, Msg("MouseWheel.Up"), editTableUp)
 	lblTableDown := vtui.NewLabel(0, 0, Msg("MouseWheel.Down"), editTableDown)
 
 	btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))
@@ -3568,15 +3572,20 @@ func actionMouseWheelSettings(pf *PanelsFrame) {
 	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, width-4, height-4)
 	vbox.Add(lblHint, vtui.Margins{}, vtui.AlignLeft)
 
-	addWheelRow := func(area *vtui.Text, lblUp, lblDown *vtui.Text, editUp, editDown *vtui.Edit) {
+	addWheelRow := func(area, lblUp, lblDown *vtui.Text, editUp, editDown *vtui.Edit) {
+		sep := vtui.NewSeparator(0, 0, width-4, false, false)
+		dlg.AddItem(sep)
+		vbox.Add(sep, vtui.Margins{Right: 1}, vtui.AlignLeft)
+		vbox.Add(area, vtui.Margins{}, vtui.AlignLeft)
+
 		row := vtui.NewHBoxLayout(0, 0, width-4, 1)
-		row.Add(area, vtui.Margins{Right: 2}, vtui.AlignLeft)
-		row.Add(lblUp, vtui.Margins{Right: 1}, vtui.AlignLeft)
-		row.Add(editUp, vtui.Margins{Right: 2}, vtui.AlignLeft)
-		row.Add(lblDown, vtui.Margins{Right: 1}, vtui.AlignLeft)
-		row.Add(editDown, vtui.Margins{}, vtui.AlignLeft)
-		vbox.Add(row, vtui.Margins{Top: 1}, vtui.AlignFill)
+		row.Add(lblUp,    vtui.Margins{Right: 1}, vtui.AlignRight)
+		row.Add(editUp,   vtui.Margins{Right: 2}, vtui.AlignRight)
+		row.Add(lblDown,  vtui.Margins{Right: 1}, vtui.AlignRight)
+		row.Add(editDown, vtui.Margins{}, vtui.AlignRight)
+		vbox.Add(row, vtui.Margins{}, vtui.AlignFill)
 	}
+
 	addWheelRow(lblPanels, lblPanelUp, lblPanelDown, editPanelUp, editPanelDown)
 	addWheelRow(lblEditor, lblEditorUp, lblEditorDown, editEditorUp, editEditorDown)
 	addWheelRow(lblViewer, lblViewerUp, lblViewerDown, editViewerUp, editViewerDown)
@@ -3619,6 +3628,7 @@ func actionMouseWheelSettings(pf *PanelsFrame) {
 
 	vtui.FrameManager.Push(dlg)
 }
+
 func actionPathHintSettings(pf *PanelsFrame) {
 	const width, height = 56, 18
 	dlg := vtui.NewCenteredDialog(width, height, Msg("PathHints.Title"))
