@@ -327,3 +327,69 @@ func TestGrabsSurviveTheirOwnKey(t *testing.T) {
 		t.Error("a grab is not a loss of focus")
 	}
 }
+
+// Where a terminal draws its grid into a window of its own, the X server knows
+// exactly where that is and nothing has to be worked out from the frame.
+func TestInnerWindowFound(t *testing.T) {
+	f := newXFixture(t)
+	s := f.openOn(t)
+
+	// A child the size of the text area, inset the way a menu bar insets it.
+	child, err := xproto.NewWindowId(f.conn)
+	if err != nil {
+		t.Fatalf("window id: %v", err)
+	}
+	err = xproto.CreateWindowChecked(f.conn, 0, child, f.term,
+		0, 40, 390, 250, 0, xproto.WindowClassInputOnly,
+		0, 0, nil).Check()
+	if err != nil {
+		t.Fatalf("child: %v", err)
+	}
+	defer xproto.DestroyWindow(f.conn, child)
+	if err := xproto.MapWindowChecked(f.conn, child).Check(); err != nil {
+		t.Fatalf("map: %v", err)
+	}
+
+	// The fixture window is at 40,60 and 400x300, so the child is at 40,100.
+	got, ok := s.InnerWindow(Rect{X: 40, Y: 100, W: 392, H: 252}, 12)
+	if !ok {
+		t.Fatal("a child of about the right size must be found")
+	}
+	want := Rect{X: 40, Y: 100, W: 390, H: 250}
+	if got != want {
+		t.Errorf("got %+v, want %+v", got, want)
+	}
+}
+
+// A child that is nothing like the expected size is not the text area, and
+// believing it would put the picture over some other part of the screen.
+func TestInnerWindowRefusesTheWrongChild(t *testing.T) {
+	f := newXFixture(t)
+	s := f.openOn(t)
+
+	child, err := xproto.NewWindowId(f.conn)
+	if err != nil {
+		t.Fatalf("window id: %v", err)
+	}
+	err = xproto.CreateWindowChecked(f.conn, 0, child, f.term,
+		0, 0, 20, 20, 0, xproto.WindowClassInputOnly, 0, 0, nil).Check()
+	if err != nil {
+		t.Fatalf("child: %v", err)
+	}
+	defer xproto.DestroyWindow(f.conn, child)
+	xproto.MapWindow(f.conn, child)
+
+	if _, ok := s.InnerWindow(Rect{X: 40, Y: 60, W: 400, H: 300}, 12); ok {
+		t.Error("a scrollbar is not a text area")
+	}
+}
+
+// And a terminal with no child window at all keeps whatever was worked out
+// from the frame.
+func TestInnerWindowWithNoChildren(t *testing.T) {
+	f := newXFixture(t)
+	s := f.openOn(t)
+	if _, ok := s.InnerWindow(Rect{X: 40, Y: 60, W: 400, H: 300}, 12); ok {
+		t.Error("there is no child to find")
+	}
+}

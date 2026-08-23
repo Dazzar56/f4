@@ -219,6 +219,8 @@ type F4Config struct {
 	PathHintPerCategory    bool // the cap applies per category (active/passive/history)
 	SlideShowDelay         int
 	ImageX11Overlay        bool
+	ImageX11OffsetX        int
+	ImageX11OffsetY        int
 	TTYXKeys               bool
 	TTYXKeyList            string
 	ImageExternalTimeout   int
@@ -633,6 +635,9 @@ func LoadConfig() {
 		AppConfig.ImageExternalTimeout = defaultImageExternalTimeout
 	}
 	AppConfig.ImageX11Overlay = ini.GetString("Images", "X11Overlay", "1") == "1"
+	AppConfig.ImageX11OffsetX, AppConfig.ImageX11OffsetY = 0, 0
+	fmt.Sscanf(ini.GetString("Images", "X11OverlayOffsetX", "0"), "%d", &AppConfig.ImageX11OffsetX)
+	fmt.Sscanf(ini.GetString("Images", "X11OverlayOffsetY", "0"), "%d", &AppConfig.ImageX11OffsetY)
 	AppConfig.TTYXKeys = ini.GetString("TTYXi", "Keys", "1") == "1"
 	AppConfig.TTYXKeyList = ini.GetString("TTYXi", "KeyList", defaultTTYXKeyList)
 	AppConfig.ImageDecoderPriority = ini.GetString("Images", "DecoderPriority", "")

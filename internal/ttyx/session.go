@@ -296,6 +296,67 @@ func (s *Session) property32(win xproto.Window, name string) []uint32 {
 	return out
 }
 
+// InnerWindow looks for a child window of the terminal that is the text area
+// itself, and returns where it is on the screen.
+//
+// Some terminals draw their grid into a window of their own, in which case
+// the X server knows exactly where it is and nothing has to be worked out
+// from the size of the frame around it. Many do not — a GTK application
+// usually draws every widget into the one window of the toplevel — so this
+// answers false as often as not.
+//
+// A candidate is only believed when it is already about the size the caller
+// expected. Getting this wrong means drawing over the wrong part of the
+// screen, and a tolerance of a few pixels is enough for the thing it is meant
+// to find while being far too tight for anything else in the tree.
+func (s *Session) InnerWindow(want Rect, tolerance int) (Rect, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.conn == nil {
+		return Rect{}, false
+	}
+
+	near := func(a, b int) bool {
+		d := a - b
+		if d < 0 {
+			d = -d
+		}
+		return d <= tolerance
+	}
+
+	// Two levels are enough for the shapes this occurs in, and a walk of
+	// the whole tree would be a walk of the whole desktop.
+	parents := []xproto.Window{s.win}
+	for depth := 0; depth < 2; depth++ {
+		var next []xproto.Window
+		for _, parent := range parents {
+			tree, err := xproto.QueryTree(s.conn, parent).Reply()
+			if err != nil || tree == nil {
+				continue
+			}
+			for _, child := range tree.Children {
+				geo, err := xproto.GetGeometry(s.conn, xproto.Drawable(child)).Reply()
+				if err != nil || geo == nil {
+					continue
+				}
+				if near(int(geo.Width), want.W) && near(int(geo.Height), want.H) {
+					pos, err := xproto.TranslateCoordinates(s.conn, child, s.root, 0, 0).Reply()
+					if err != nil || pos == nil {
+						continue
+					}
+					return Rect{
+						X: int(pos.DstX), Y: int(pos.DstY),
+						W: int(geo.Width), H: int(geo.Height),
+					}, true
+				}
+				next = append(next, child)
+			}
+		}
+		parents = next
+	}
+	return Rect{}, false
+}
+
 func (s *Session) exists(w xproto.Window) bool {
 	geo, err := xproto.GetGeometry(s.conn, xproto.Drawable(w)).Reply()
 	return err == nil && geo != nil

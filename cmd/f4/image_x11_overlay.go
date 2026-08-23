@@ -213,6 +213,7 @@ func (x *x11ImageOverlay) showMany(scr *vtui.ScreenBuf, list []vtui.ImagePlaceme
 	cols, rows := scr.Width(), scr.Height()
 	tw, th, known := hostTextSize(cols, rows)
 	term := hostGridRect(win, tw, th, known)
+	term = x.refineGrid(term)
 
 	// One window over everything that has to be drawn, so the placements
 	// are positioned inside it rather than each getting a window.
@@ -330,6 +331,38 @@ func blitInto(dst []byte, dstW, dstH int, src []byte, srcW, srcH, srcStride, atX
 
 // overlayFrameKey is what was last drawn: every picture, where it came from
 // and where it went. A frame nobody is touching is not rescaled and resent.
+// refineGrid replaces the grid worked out from the frame with the real thing
+// where the terminal draws its text into a window of its own, and applies the
+// nudge for the terminals where it does not.
+//
+// The remaining error where nothing can be found is the padding a terminal
+// keeps between its widget and its grid. Nobody reports it: the widget size is
+// what CSI 14 t answers with, the grid is somewhere inside it, and the
+// difference is a couple of pixels of theme. Hence the setting, which is the
+// only way anyone can supply a number nothing else knows.
+func (x *x11ImageOverlay) refineGrid(grid ttyx.Rect) ttyx.Rect {
+	if inner, ok := x.sess.InnerWindow(grid, overlayGridTolerance); ok {
+		if inner != grid {
+			vtui.DebugLog("X11_OVERLAY: the text area is a window of its own: %+v", inner)
+		}
+		grid = inner
+	}
+	return nudgeGrid(grid)
+}
+
+// nudgeGrid applies the setting, and is separate so that the arithmetic can be
+// tested without a display.
+func nudgeGrid(grid ttyx.Rect) ttyx.Rect {
+	grid.X += AppConfig.ImageX11OffsetX
+	grid.Y += AppConfig.ImageX11OffsetY
+	return grid
+}
+
+// overlayGridTolerance is how far a child window may be from the grid worked
+// out from the frame and still be believed to be it. Wide enough for the
+// padding of any theme, far too tight for anything else in the window tree.
+const overlayGridTolerance = 12
+
 func overlayFrameKey(list []vtui.ImagePlacement, rect ttyx.Rect) string {
 	var sb strings.Builder
 	add := func(v int) {

@@ -101,8 +101,20 @@ together to be as large as the text between them.
 
 The grid is then placed against the **bottom left** of the window at that size,
 because a menu bar is at the top and a scroll bar is on the right and neither
-is ever at the bottom left. A terminal with a symmetric border is out by that
-border, which is a pixel or two.
+is ever at the bottom left.
+
+Two things narrow the last couple of pixels. Where the terminal draws its grid
+into a window of its own, the X server knows exactly where that window is and
+nothing has to be worked out from the frame at all; `Session.InnerWindow`
+looks for it and believes a candidate only when it is already about the size
+that was worked out, because getting this wrong means drawing over some other
+part of the screen. Many terminals have no such window — a GTK application
+usually draws every widget into the one window of its toplevel — and there the
+error that remains is the padding the terminal keeps between its widget and
+its grid, which **is reported nowhere**: `CSI 14 t` answers with the widget,
+the grid is somewhere inside it, and the difference is a couple of pixels of
+theme. `[Images] X11OverlayOffsetX` and `X11OverlayOffsetY` are the way to
+supply a number that nothing else knows. They default to zero.
 
 The two questions asked over the wire have to be asked before the input reader
 starts: afterwards the answer is just another escape sequence arriving on

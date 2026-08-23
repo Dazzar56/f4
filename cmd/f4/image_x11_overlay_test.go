@@ -289,3 +289,25 @@ func TestHostScaleRefusesNonsense(t *testing.T) {
 		t.Errorf("larger than the window: got %d", got)
 	}
 }
+
+// The nudge is the only way anyone can supply a number nothing else knows:
+// the padding a terminal keeps between its widget and its grid is reported
+// nowhere. Zero by default, so it changes nothing unless it is set.
+func TestOverlayOffsetIsAppliedAndDefaultsToNothing(t *testing.T) {
+	if AppConfig.ImageX11OffsetX != 0 || AppConfig.ImageX11OffsetY != 0 {
+		t.Errorf("the nudge must default to nothing: %d,%d",
+			AppConfig.ImageX11OffsetX, AppConfig.ImageX11OffsetY)
+	}
+
+	saveX, saveY := AppConfig.ImageX11OffsetX, AppConfig.ImageX11OffsetY
+	defer func() { AppConfig.ImageX11OffsetX, AppConfig.ImageX11OffsetY = saveX, saveY }()
+
+	// A nil overlay has no session to ask, so this exercises the arithmetic
+	// on its own: the grid moves by the nudge and by nothing else.
+	AppConfig.ImageX11OffsetX, AppConfig.ImageX11OffsetY = 3, -2
+	grid := ttyx.Rect{X: 100, Y: 200, W: 800, H: 600}
+	want := ttyx.Rect{X: 103, Y: 198, W: 800, H: 600}
+	if got := nudgeGrid(grid); got != want {
+		t.Errorf("got %+v, want %+v", got, want)
+	}
+}
