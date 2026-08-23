@@ -533,7 +533,7 @@ func TestS3HTTPClientNeverFollowsRedirects(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			resp.Body.Close()
+			_ = resp.Body.Close() // response body cleanup only
 			if resp.StatusCode != status {
 				t.Fatalf("status = %d, want redirect %d", resp.StatusCode, status)
 			}
@@ -1058,7 +1058,7 @@ func TestS3RangeReaderRejectsInvalidInputsAndContentRange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 	if n, err := reader.ReadAt(context.Background(), nil, 0); n != 0 || err != nil {
 		t.Fatalf("zero-length ReadAt = %d, %v", n, err)
 	}
@@ -1078,7 +1078,7 @@ func TestS3SequentialReadReportsSourceDownloadThroughTaskReporter(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 	capture := &productionProgressCapture{}
 	ctx := context.WithValue(context.Background(), vfs.ReporterKey, capture)
 	buffer := make([]byte, len(key))
@@ -1102,7 +1102,7 @@ func TestS3OpenWithoutValidatorUsesSingleSnapshotDownload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 	buf := make([]byte, 5)
 	if n, err := reader.ReadAt(context.Background(), buf, 5); n != len(buf) || err != nil {
 		t.Fatalf("snapshot ReadAt = %d, %v", n, err)
@@ -1123,7 +1123,7 @@ func TestS3RangeReaderRejectsChangedResponseGeneration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 	if n, err := reader.ReadAt(context.Background(), make([]byte, 2), 0); n != 0 || !errors.Is(err, ErrRemoteObjectChanged) {
 		t.Fatalf("changed-generation ReadAt = %d, %v", n, err)
 	}

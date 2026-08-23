@@ -193,10 +193,21 @@ func TestTargetDirsUsesOneRequestAndPreservesPathEncoding(t *testing.T) {
 	seen := make(chan mockRequest, 1)
 	sess := newMockPeer(t, "ok FISHPLUS 1 stat", func(w io.Writer, token string, req mockRequest) {
 		seen <- req
-		fmt.Fprintln(w, "1")
-		fmt.Fprintln(w, "0")
-		fmt.Fprintln(w, "0")
-		fmt.Fprintf(w, ".%s %s ok\n", token, req.ID)
+		if _, err := fmt.Fprintln(w, "1"); err != nil {
+			t.Errorf("write target-dir response: %v", err)
+			return
+		}
+		if _, err := fmt.Fprintln(w, "0"); err != nil {
+			t.Errorf("write target-dir response: %v", err)
+			return
+		}
+		if _, err := fmt.Fprintln(w, "0"); err != nil {
+			t.Errorf("write target-dir response: %v", err)
+			return
+		}
+		if _, err := fmt.Fprintf(w, ".%s %s ok\n", token, req.ID); err != nil {
+			t.Errorf("write target-dir terminator: %v", err)
+		}
 	}, len(paths))
 	if err := sess.Handshake(context.Background()); err != nil {
 		t.Fatalf("handshake: %v", err)
@@ -236,9 +247,14 @@ func TestTargetDirsRejectsMalformedAnswers(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			sess := newMockPeer(t, "ok FISHPLUS 1 stat", func(w io.Writer, token string, req mockRequest) {
 				for _, line := range tc.lines {
-					fmt.Fprintln(w, line)
+					if _, err := fmt.Fprintln(w, line); err != nil {
+						t.Errorf("write malformed target-dir response: %v", err)
+						return
+					}
 				}
-				fmt.Fprintf(w, ".%s %s ok\n", token, req.ID)
+				if _, err := fmt.Fprintf(w, ".%s %s ok\n", token, req.ID); err != nil {
+					t.Errorf("write malformed target-dir terminator: %v", err)
+				}
 			}, 2)
 			if err := sess.Handshake(context.Background()); err != nil {
 				t.Fatalf("handshake: %v", err)
@@ -287,16 +303,18 @@ func newLocalShellClientEnv(t *testing.T, extraEnv ...string) *Client {
 	}
 	sess := NewSession(stdin, stdout, stdin)
 	t.Cleanup(func() {
-		sess.Close()
+		if err := sess.Close(); err != nil {
+			t.Errorf("close shell session: %v", err)
+		}
 		done := make(chan struct{})
 		go func() {
-			cmd.Wait()
+			_ = cmd.Wait() // process cleanup only
 			close(done)
 		}()
 		select {
 		case <-done:
 		case <-time.After(5 * time.Second):
-			cmd.Process.Kill()
+			_ = cmd.Process.Kill() // process cleanup only
 		}
 	})
 	if err := sess.Handshake(context.Background()); err != nil {

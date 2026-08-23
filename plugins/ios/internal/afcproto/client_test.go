@@ -36,7 +36,9 @@ func openResponse(handle uint64) packet {
 func runServer(conn net.Conn, steps []serverStep) <-chan error {
 	done := make(chan error, 1)
 	go func() {
-		defer conn.Close()
+		defer func() {
+			_ = conn.Close() // connection cleanup only
+		}()
 		for i, step := range steps {
 			number := uint64(i + 1)
 			req, err := readPacket(conn, number)
@@ -300,7 +302,9 @@ func TestMalformedResponsesPoisonConnection(t *testing.T) {
 			client := New(clientConn)
 			done := make(chan error, 1)
 			go func() {
-				defer serverConn.Close()
+				defer func() {
+					_ = serverConn.Close() // connection cleanup only
+				}()
 				if _, err := readPacket(serverConn, 1); err != nil {
 					done <- err
 					return
@@ -327,8 +331,12 @@ func TestMalformedResponsesPoisonConnection(t *testing.T) {
 func TestUnsafePathsAndDirectoryEntries(t *testing.T) {
 	clientConn, serverConn := net.Pipe()
 	client := New(clientConn)
-	defer client.Close()
-	defer serverConn.Close()
+	defer func(c *Client) {
+		_ = c.Close() // connection cleanup only
+	}(client)
+	defer func() {
+		_ = serverConn.Close() // connection cleanup only
+	}()
 	for _, call := range []func() error{
 		func() error { _, err := client.List(context.Background(), "/safe/../secret"); return err },
 		func() error { return client.Remove(context.Background(), "/") },
@@ -344,7 +352,9 @@ func TestUnsafePathsAndDirectoryEntries(t *testing.T) {
 		t.Fatalf("out-of-range mtime error = %v", err)
 	}
 
-	client.Close()
+	if err := client.Close(); err != nil {
+		t.Fatalf("close validation client: %v", err)
+	}
 	client, done := newScriptedClient(t, []serverStep{{op: opReadDir, response: dataResponse(nulDict("safe", "nested/name"))}})
 	_, err := client.List(context.Background(), "/")
 	if !IsConnectionLost(err) || !errors.Is(err, ErrProtocol) {
@@ -383,7 +393,9 @@ func TestCancellationClosesAndPoisonsConnection(t *testing.T) {
 	client := New(clientConn)
 	requestRead := make(chan error, 1)
 	go func() {
-		defer serverConn.Close()
+		defer func() {
+			_ = serverConn.Close() // connection cleanup only
+		}()
 		_, err := readPacket(serverConn, 1)
 		requestRead <- err
 		if err == nil {
@@ -415,7 +427,9 @@ func TestClientSerializesWholeExchange(t *testing.T) {
 	client := New(clientConn)
 	serverDone := make(chan error, 1)
 	go func() {
-		defer serverConn.Close()
+		defer func() {
+			_ = serverConn.Close() // connection cleanup only
+		}()
 		if _, err := readPacket(serverConn, 1); err != nil {
 			serverDone <- err
 			return

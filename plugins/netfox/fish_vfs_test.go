@@ -95,8 +95,8 @@ func TestFishVFSReadDirResolvesAllSymlinksInOneRequest(t *testing.T) {
 	clientR, peerW := io.Pipe()
 	sess := fishplus.NewSession(clientW, clientR, nil)
 	t.Cleanup(func() {
-		clientW.Close()
-		peerW.Close()
+		_ = clientW.Close() // pipe cleanup only
+		_ = peerW.Close()   // pipe cleanup only
 	})
 
 	done := make(chan error, 1)
@@ -115,11 +115,26 @@ func TestFishVFSReadDirResolvesAllSymlinksInOneRequest(t *testing.T) {
 			done <- fmt.Errorf("enum path = %q, want /", scanner.Text())
 			return
 		}
-		fmt.Fprintln(peerW, "M stat")
-		fmt.Fprintln(peerW, "a1ff 8 1 1 1 0 0 /directory-link")
-		fmt.Fprintln(peerW, "a1ff 8 1 1 1 0 0 /file-link")
-		fmt.Fprintln(peerW, "81a4 1 1 1 1 0 0 /ordinary")
-		fmt.Fprintf(peerW, ".%s %s ok\n", sess.Token(), enumHeader[0])
+		if _, err := fmt.Fprintln(peerW, "M stat"); err != nil {
+			done <- err
+			return
+		}
+		if _, err := fmt.Fprintln(peerW, "a1ff 8 1 1 1 0 0 /directory-link"); err != nil {
+			done <- err
+			return
+		}
+		if _, err := fmt.Fprintln(peerW, "a1ff 8 1 1 1 0 0 /file-link"); err != nil {
+			done <- err
+			return
+		}
+		if _, err := fmt.Fprintln(peerW, "81a4 1 1 1 1 0 0 /ordinary"); err != nil {
+			done <- err
+			return
+		}
+		if _, err := fmt.Fprintf(peerW, ".%s %s ok\n", sess.Token(), enumHeader[0]); err != nil {
+			done <- err
+			return
+		}
 
 		if !scanner.Scan() {
 			done <- fmt.Errorf("missing isdirs header: %v", scanner.Err())
@@ -137,9 +152,18 @@ func TestFishVFSReadDirResolvesAllSymlinksInOneRequest(t *testing.T) {
 				return
 			}
 		}
-		fmt.Fprintln(peerW, "1")
-		fmt.Fprintln(peerW, "0")
-		fmt.Fprintf(peerW, ".%s %s ok\n", sess.Token(), batchHeader[0])
+		if _, err := fmt.Fprintln(peerW, "1"); err != nil {
+			done <- err
+			return
+		}
+		if _, err := fmt.Fprintln(peerW, "0"); err != nil {
+			done <- err
+			return
+		}
+		if _, err := fmt.Fprintf(peerW, ".%s %s ok\n", sess.Token(), batchHeader[0]); err != nil {
+			done <- err
+			return
+		}
 		done <- nil
 	}()
 
@@ -200,23 +224,25 @@ func newLocalFishVFSWithTitle(t *testing.T, title string) *FishVFS {
 	}
 	v, err := NewFishVFSOnStream(context.Background(), nil, stdin, stdout, stdin, title)
 	if err != nil {
-		cmd.Process.Kill()
+		_ = cmd.Process.Kill() // process cleanup only
 		if strings.Contains(err.Error(), "base64") {
 			t.Skipf("no base64 on this host: %v", err)
 		}
 		t.Fatalf("handshake: %v", err)
 	}
 	t.Cleanup(func() {
-		v.Close()
+		if err := v.Close(); err != nil {
+			t.Errorf("close local FISH+ filesystem: %v", err)
+		}
 		done := make(chan struct{})
 		go func() {
-			cmd.Wait()
+			_ = cmd.Wait() // process cleanup only
 			close(done)
 		}()
 		select {
 		case <-done:
 		case <-time.After(5 * time.Second):
-			cmd.Process.Kill()
+			_ = cmd.Process.Kill() // process cleanup only
 		}
 	})
 	return v
@@ -344,7 +370,7 @@ func TestFishVFSStatAndOpen(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	if f.Size() != int64(len(body)) {
 		t.Errorf("Size = %d, want %d", f.Size(), len(body))
 	}
@@ -647,7 +673,7 @@ func TestSSHTimeoutDefaults(t *testing.T) {
 func TestDialSSHFailsOnAClosedPort(t *testing.T) {
 	client, err := DialSSH("127.0.0.1", "1", "nobody", "", 2, netproxy.Settings{})
 	if err == nil {
-		client.Close()
+		_ = client.Close() // unexpected dial cleanup only
 		t.Fatal("dialing a closed port succeeded")
 	}
 }
@@ -924,7 +950,11 @@ func TestFishVFSServerSideCopyAndMove(t *testing.T) {
 
 	// Test SameSession helper
 	v2 := v1.Clone()
-	defer v2.Close()
+	defer func() {
+		if err := v2.Close(); err != nil {
+			t.Errorf("close FISH+ filesystem: %v", err)
+		}
+	}()
 
 	if !vfs.SameSession(v1, v2) {
 		t.Error("expected SameSession to be true for clones")
@@ -932,7 +962,11 @@ func TestFishVFSServerSideCopyAndMove(t *testing.T) {
 
 	// Test different session (with different titles)
 	v3 := newLocalFishVFSWithTitle(t, "local-diff")
-	defer v3.Close()
+	defer func() {
+		if err := v3.Close(); err != nil {
+			t.Errorf("close FISH+ filesystem: %v", err)
+		}
+	}()
 
 	if vfs.SameSession(v1, v3) {
 		t.Error("expected SameSession to be false for distinct sessions with different titles")
@@ -941,7 +975,11 @@ func TestFishVFSServerSideCopyAndMove(t *testing.T) {
 
 func TestFishVFSServerToServerInfo(t *testing.T) {
 	v1 := newLocalFishVFS(t)
-	defer v1.Close()
+	defer func() {
+		if err := v1.Close(); err != nil {
+			t.Errorf("close FISH+ filesystem: %v", err)
+		}
+	}()
 
 	v1.host = "runcity.org"
 	v1.port = "22"
@@ -958,7 +996,11 @@ func TestFishVFSServerToServerInfo(t *testing.T) {
 	}
 
 	v2 := v1.Clone().(*FishVFS)
-	defer v2.Close()
+	defer func() {
+		if err := v2.Close(); err != nil {
+			t.Errorf("close FISH+ filesystem: %v", err)
+		}
+	}()
 
 	h2, p2, u2, ok2 := interface{}(v2).(vfs.ConnectionInfoProvider).ConnectionInfo()
 	if !ok2 || h2 != h || p2 != p || u2 != u {

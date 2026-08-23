@@ -24,13 +24,21 @@ func TestFishReconnectRepointsEveryView(t *testing.T) {
 		}
 		t.Fatalf("open: %v", err)
 	}
-	defer v.Close()
+	defer func() {
+		if err := v.Close(); err != nil {
+			t.Errorf("close FISH+ filesystem: %v", err)
+		}
+	}()
 
 	other, ok := v.Clone().(*FishVFS)
 	if !ok {
 		t.Fatal("Clone did not hand back a FishVFS")
 	}
-	defer other.Close()
+	defer func() {
+		if err := other.Close(); err != nil {
+			t.Errorf("close FISH+ filesystem: %v", err)
+		}
+	}()
 
 	dead := v.Client()
 	dead.Session().MarkBroken()
@@ -63,7 +71,9 @@ func deadTCPPort(t *testing.T) string {
 		t.Skipf("no loopback listener available: %v", err)
 	}
 	port := ln.Addr().(*net.TCPAddr).Port
-	ln.Close()
+	if err := ln.Close(); err != nil {
+		t.Fatalf("close port probe listener: %v", err)
+	}
 	return strconv.Itoa(port)
 }
 
@@ -75,7 +85,7 @@ func TestSSHFishDialerReportsAFailedDial(t *testing.T) {
 	stdin, stdout, closer, err := dial(context.Background())
 	if err == nil {
 		if closer != nil {
-			closer.Close()
+			_ = closer.Close() // unexpected dial cleanup only
 		}
 		t.Fatal("dialling a dead port succeeded")
 	}
@@ -94,7 +104,7 @@ func TestSSHFishDialerHonoursACancelledContext(t *testing.T) {
 	_, _, closer, err := dial(ctx)
 	if !errors.Is(err, context.Canceled) {
 		if closer != nil {
-			closer.Close()
+			_ = closer.Close() // unexpected dial cleanup only
 		}
 		t.Fatalf("dialler answered %v, want context.Canceled", err)
 	}
@@ -109,7 +119,7 @@ func TestSSHFishDialerHonoursACancelledContext(t *testing.T) {
 func TestNewFishVFSReportsAFailedDial(t *testing.T) {
 	v, err := NewFishVFS(nil, "127.0.0.1", deadTCPPort(t), "nobody", "", 1, netproxy.Settings{})
 	if err == nil {
-		v.Close()
+		_ = v.Close() // unexpected open cleanup only
 		t.Fatal("opening a site on a dead port succeeded")
 	}
 	if v != nil {

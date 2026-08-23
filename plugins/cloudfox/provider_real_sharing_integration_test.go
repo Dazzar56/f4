@@ -545,7 +545,9 @@ func probeRealAnonymousShare(ctx context.Context, client *http.Client, rawURL st
 		}
 		return false, errRealAnonymousShareProbe
 	}
-	defer response.Body.Close()
+	defer func() {
+		_ = response.Body.Close() // response body cleanup only
+	}()
 	body, err := io.ReadAll(io.LimitReader(response.Body, 512<<10))
 	if err != nil {
 		return false, errRealAnonymousShareProbe

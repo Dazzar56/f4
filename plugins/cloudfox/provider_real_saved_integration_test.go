@@ -490,8 +490,12 @@ func TestRealRetryTCPDialContextRetriesOnlyUnestablishedTCPConnections(t *testin
 
 	calls = 0
 	connected, peer := net.Pipe()
-	defer connected.Close()
-	defer peer.Close()
+	defer func() {
+		_ = connected.Close() // connection cleanup only
+	}()
+	defer func() {
+		_ = peer.Close() // connection cleanup only
+	}()
 	dial = realRetryTCPDialContext(func(context.Context, string, string) (net.Conn, error) {
 		calls++
 		return connected, wantErr
