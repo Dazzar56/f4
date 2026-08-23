@@ -75,12 +75,21 @@ var processEnvironmentPayloadPreparer = prepareProcessEnvironmentShellPayload
 var (
 	processEnvironmentRuntimeOnce sync.Once
 	processEnvironmentRuntimeDir  string
+	processEnvironmentRuntimeRoot string
 	processEnvironmentRuntimeErr  error
 )
 
 func initializeProcessEnvironmentRuntime() error {
 	processEnvironmentRuntimeOnce.Do(func() {
 		root := filepath.Join(GetF4ConfigDir(), "plugins", ".envman-runtime")
+		// The session is created once and lives for the whole process, so the
+		// root it was created under has to be remembered rather than worked
+		// out again later. GetF4ConfigDir's answer is not a constant: the
+		// config directory is a package variable that tests swap for a
+		// temporary one, and shutdown recomputing the root would then compare
+		// the session against a directory it was never in, decide the path was
+		// unexpected and refuse to remove it.
+		processEnvironmentRuntimeRoot = filepath.Clean(root)
 		processEnvironmentRuntimeDir, processEnvironmentRuntimeErr = createProcessEnvironmentRuntimeSession(root)
 	})
 	if processEnvironmentRuntimeErr == nil && processEnvironmentRuntimeDir != "" {
@@ -200,7 +209,7 @@ func shutdownProcessEnvironmentRuntime() {
 	if processEnvironmentRuntimeDir == "" {
 		return
 	}
-	root := filepath.Clean(filepath.Join(GetF4ConfigDir(), "plugins", ".envman-runtime"))
+	root := processEnvironmentRuntimeRoot
 	dir := filepath.Clean(processEnvironmentRuntimeDir)
 	pid, validName := parseProcessEnvironmentRuntimeSessionName(filepath.Base(dir))
 	if filepath.Dir(dir) != root || !validName || pid != os.Getpid() {
