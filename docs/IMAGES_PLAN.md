@@ -137,6 +137,16 @@ text and drops what left the buffer for good; `kittyRecomputeSpans` works out
 again the side of a span the client left to us, both after a resize and after
 a cell changes size. Leaving the alternate screen now drops its pictures.
 
+**8a. Sixel in the built-in terminal.** Issue #610. `sixel_decode.go` turns
+the body of a `DCS ... q` sequence into a surface and `sixel_terminal.go` puts
+it on the grid through the placement list the kitty receiver already uses, so
+scrolling, resizing, clipping and erasing come for free. The parser grew the
+two states a device control string needs, which it never had: `ESC P` used to
+be swallowed and the body of the sequence spilled onto the screen as text.
+Alongside it: `DECSDM` (private mode 80), `XTSMGRAPHICS`, and a primary device
+attributes answer that contains the 4 without which no client will even try to
+send a picture.
+
 **R1. Picking and walking in the single picture view.** Asked for on the
 issue: `Ins` and `Del` pick and unpick the picture on screen and move on to
 the next, exactly as they do in the grid, and the title bar turns the colour a
@@ -181,9 +191,9 @@ PNG) and `GraphicsSixel` (DCS, up to 256 palette colours, dithering) to
 `graphics.go`; detect them from `TERM_PROGRAM=iTerm.app` and from a `CSI c`
 answer containing 4. Test the shape of the sequences, not the pixels.
 
-**8. Accepting iTerm2 and sixel in the built-in terminal.** Symmetrical to the
-kitty side: OSC 1337 in `handleOSC`, sixel DCS in the parser, both feeding the
-same placement layer.
+**8. Accepting iTerm2 in the built-in terminal.** OSC 1337 in `handleOSC`,
+feeding the same placement layer. The sixel half of this step is done; see
+entry 8a in section 4.
 
 **9. Fixing the kitty receiver in far2l.** In `far2l/src/vt/vtansi_kitty.cpp`:
 
@@ -275,6 +285,40 @@ the other way round.
   client gave in `c` or `r` is a promise about the layout of the screen and
   stands through everything; only the side we chose for it, and the clamp to
   the size of the screen, are worked out again.
+- **The sixel cursor rule is Windows Terminal's, not xterm's.** After a
+  picture the text cursor is left at the sixel active position: the column the
+  picture started in, and the row the sixel cursor reached. A dump that ends in
+  a graphics new line therefore leaves the next line of text below the picture
+  and one that ends in data leaves it on top of the picture. That second case
+  looks like a defect and is reported as one about once a year, but it is the
+  only rule under which a program can print an image on the bottom row at all:
+  any rule that moves the cursor past the picture scrolls a line away to make
+  room for a cursor the client never asked to move. xterm and mlterm both use
+  their own algorithms, and they do not agree with each other either. A client
+  that wants the text below the image sends a line feed.
+- **256 colour registers are reported, and that is what full colour needs.**
+  The decoder resolves a register at the moment it is used, so redefining one
+  between bands gives every band the colour it was drawn with. An encoder can
+  therefore paint an unlimited number of colours through 256 registers, which
+  is how full colour over sixel actually works and what Windows Terminal does.
+  Reporting a larger number through `XTSMGRAPHICS` would be true of our
+  decoder — the palette grows on demand — but it would invite an encoder to
+  quantise to a palette of that size for no gain.
+- **The receiver uses the real cell size, not the VT340's 10x20.** Windows
+  Terminal rasterises sixel into a fixed virtual cell to emulate the hardware.
+  We cannot: `CSI 16 t` already tells the child what our cell really is, and a
+  client that asks and then finds its picture drawn to a different scale has
+  been lied to. It also has to match what vtui's encoder does on Linux, or f4
+  inside f4 would draw itself at the wrong size.
+- **Raster attributes truncate the picture.** A client that declares `Ph` and
+  `Pv` gets exactly that raster, and data past it is dropped. It bounds the
+  allocation before the data is read, and it stops a last band padded with
+  empty sixels from making the image taller than the client advertised. Data
+  with no raster attributes still grows freely, which is what level 1 sixel is.
+- **A sixel placement carries no image id.** Sixel has no server side store,
+  so there is nothing to address. The placements are flagged instead, and the
+  id and number forms of the kitty delete command skip them: every one of them
+  would otherwise answer to the zero that `a=d,d=I` defaults to.
 - **A shared memory name is one path component.** `shm_open(3)` allows nothing
   else, and a name with a separator in it would turn `t=s` into a way of
   reading any file on the machine. It is refused before it reaches the file
