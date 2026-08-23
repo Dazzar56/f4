@@ -1037,6 +1037,12 @@ func RequestSaveConfig() {
 	if saveConfigTimer != nil {
 		saveConfigTimer.Stop()
 	}
+	// Taken here, on the goroutine that arms the timer, rather than inside it.
+	// The timer outlives whatever scheduled it -- half a second is a long time
+	// in a test suite -- and reading the global from the callback races
+	// anything that reassigns vtui.FrameManager in the meantime, which in the
+	// tests is the next test to call swapFrameManager.
+	frames := vtui.FrameManager
 	saveConfigTimer = time.AfterFunc(saveConfigDebounce, func() {
 		// AfterFunc runs this on a goroutine of its own, and everything below
 		// reads AppConfig -- the flags here, then SaveConfig and the proxy
@@ -1044,7 +1050,10 @@ func RequestSaveConfig() {
 		// goes on editing it while the timer counts down, so reading it from
 		// here is a race against whoever is changing settings. Hand the work
 		// back to the UI instead; the delay is the debounce, not the thread.
-		vtui.FrameManager.PostTask(func() {
+		if frames == nil {
+			return
+		}
+		frames.PostTask(func() {
 			if AppConfig.AutoSaveSettings && AppConfig.AutoSaveDialogSettings {
 				SaveConfig()
 			}

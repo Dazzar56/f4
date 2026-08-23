@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/unxed/vtui"
 )
@@ -879,5 +880,50 @@ func TestConfig_MouseWheelRoundTrip(t *testing.T) {
 		if got[i] != want[i] {
 			t.Errorf("wheel config field %d: expected %d, got %d", i, want[i], got[i])
 		}
+	}
+}
+
+// TestRequestSaveConfigPostsToTheFrameManagerItWasArmedWith is the regression
+// for the second race of this shape the race job reported.
+//
+// The debounced save reads vtui.FrameManager half a second after it is armed,
+// from the timer's own goroutine. Nothing keeps a test alive that long, so the
+// read lands in whichever test is running by then, and the write it races is
+// that test's swapFrameManager -- which is why the report names a test that has
+// nothing to do with saving settings.
+func TestRequestSaveConfigPostsToTheFrameManagerItWasArmedWith(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	arming := vtui.FrameManager
+
+	oldConfig := AppConfig
+	t.Cleanup(func() { AppConfig = oldConfig })
+	AppConfig.AutoSaveSettings = true
+	AppConfig.AutoSaveDialogSettings = true
+
+	RequestSaveConfig()
+	t.Cleanup(func() {
+		saveConfigTimerMu.Lock()
+		if saveConfigTimer != nil {
+			saveConfigTimer.Stop()
+		}
+		saveConfigTimerMu.Unlock()
+	})
+
+	// What the next test does while the timer is still counting down.
+	replacement := vtui.NewFrameManager()
+	vtui.FrameManager = replacement
+
+	deadline := time.NewTimer(5 * time.Second)
+	defer deadline.Stop()
+	select {
+	case task := <-arming.TaskChan:
+		// Not run: SaveConfig would write the real configuration file. That it
+		// arrived here rather than on the replacement is the whole point.
+		_ = task
+	case <-replacement.TaskChan:
+		t.Fatal("the debounced save posted to the frame manager that replaced it")
+	case <-deadline.C:
+		t.Fatal("the debounced save never reached the frame manager it was armed with")
 	}
 }
