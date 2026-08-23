@@ -134,6 +134,9 @@ var commandPaletteProcessKeyAudit = map[string]commandPaletteSurfaceAudit{
 	"plugins/netfox/dialog.go:(*protoUIContainer).ProcessKey": {
 		class: paletteAuditPluginLocal, rationale: "NetFox protocol controls consume keys inside the connection dialog",
 	},
+	"plugins/sqlite/ui.go:(*browserWindow).ProcessKey": {
+		class: paletteAuditPluginLocal, rationale: "the SQLite client owns F9 inside its modal browser window, which is reached through its own command",
+	},
 	"plugins/visren/dialog.go:(*Dialog).ProcessKey": {
 		class: paletteAuditPluginLocal, rationale: "VisRen owns these keys inside the rename dialog, reached through its rich command",
 	},
