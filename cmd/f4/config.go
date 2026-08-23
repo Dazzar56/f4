@@ -1038,9 +1038,17 @@ func RequestSaveConfig() {
 		saveConfigTimer.Stop()
 	}
 	saveConfigTimer = time.AfterFunc(saveConfigDebounce, func() {
-		if AppConfig.AutoSaveSettings && AppConfig.AutoSaveDialogSettings {
-			SaveConfig()
-		}
+		// AfterFunc runs this on a goroutine of its own, and everything below
+		// reads AppConfig -- the flags here, then SaveConfig and the proxy
+		// settings it applies. AppConfig belongs to the UI goroutine, which
+		// goes on editing it while the timer counts down, so reading it from
+		// here is a race against whoever is changing settings. Hand the work
+		// back to the UI instead; the delay is the debounce, not the thread.
+		vtui.FrameManager.PostTask(func() {
+			if AppConfig.AutoSaveSettings && AppConfig.AutoSaveDialogSettings {
+				SaveConfig()
+			}
+		})
 	})
 }
 
