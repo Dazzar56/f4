@@ -478,6 +478,10 @@ func runServer(sockPath string) {
 		// the answer is just another escape sequence and the reader
 		// eats it. See ttyx_probe.go.
 		ProbeHostTextArea()
+		// And the window over the terminal, for a terminal that cannot
+		// show a picture itself. Before the first frame, because every
+		// gate on it is asked from inside one.
+		InstallX11Overlay()
 		reader := vtinput.NewReader(os.Stdin, false)
 
 		// Re-enter host console for the new client if active workspace had panels hidden

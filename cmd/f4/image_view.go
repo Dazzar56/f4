@@ -67,12 +67,6 @@ type ImageView struct {
 	// picture nobody is touching does not fill it.
 	lastGeom string
 
-	// Placements collected for the X overlay while the terminal itself has
-	// no way of showing a picture. They are gathered during the frame and
-	// go over in one piece at the end of it; the overlay itself belongs to
-	// the process rather than to the viewer, see image_x11_overlay.go.
-	pending []vtui.ImagePlacement
-
 	// Orientation chosen by the reader. The decoded picture stays in
 	// surface; shown carries the turned and mirrored copy and is nil while
 	// the picture is seen exactly as it was decoded.
@@ -764,64 +758,27 @@ func (iv *ImageView) Show(scr *vtui.ScreenBuf) {
 	scr.FillRect(x1, top, x2, y2, ' ', imageViewBackAttr)
 	if iv.gal != nil {
 		iv.showGallery(scr)
-		iv.flushPending(scr, x1, x2, top, y2)
 		return
 	}
 
 	p, ok := iv.placementFor(scr)
 	if !ok {
-		iv.flushPending(scr, x1, x2, top, y2)
 		return
 	}
-	iv.drawImage(scr, iv.gfxKey, p)
+	if !scr.SupportsGraphics() {
+		msg := "This backend cannot display images."
+		x := x1 + (x2-x1+1-len(msg))/2
+		if x < x1 {
+			x = x1
+		}
+		scr.Write(x, (top+y2)/2, vtui.StringToCharInfo(msg, imageViewBackAttr))
+		return
+	}
+	scr.Graphics().DrawImage(iv.gfxKey, p)
 	iv.logGeometry(scr, p)
 	if iv.overlay {
 		iv.drawOverlay(scr)
 	}
-	iv.flushPending(scr, x1, x2, top, y2)
-}
-
-// drawImage sends one placement to whichever layer can show it: the terminal's
-// own, or the X overlay when the terminal has none.
-func (iv *ImageView) drawImage(scr *vtui.ScreenBuf, key string, p vtui.ImagePlacement) {
-	if scr.SupportsGraphics() {
-		scr.Graphics().DrawImage(key, p)
-		return
-	}
-	iv.pending = append(iv.pending, p)
-}
-
-// flushPending hands the frame to the overlay, or says why there is nothing to
-// look at. It runs at the end of every frame, including the ones that
-// collected nothing, so that a picture left over from the frame before does
-// not stay on the screen.
-func (iv *ImageView) flushPending(scr *vtui.ScreenBuf, x1, x2, top, y2 int) {
-	if scr.SupportsGraphics() {
-		return
-	}
-	list := iv.pending
-	iv.pending = iv.pending[:0]
-
-	if len(list) == 0 {
-		sharedX11Overlay().hide()
-		return
-	}
-	switch err := sharedX11Overlay().showMany(scr, list); err {
-	case nil:
-		return
-	case errNotNow:
-		// The reader is looking at another window. Saying the terminal
-		// cannot show pictures would be a lie, and it is the lie that
-		// used to survive on the screen after switching back.
-		return
-	}
-	sharedX11Overlay().hide()
-	msg := "This backend cannot display images."
-	x := x1 + (x2-x1+1-len(msg))/2
-	if x < x1 {
-		x = x1
-	}
-	scr.Write(x, (top+y2)/2, vtui.StringToCharInfo(msg, imageViewBackAttr))
 }
 
 func (iv *ImageView) ProcessKey(e *vtinput.InputEvent) bool {
@@ -965,9 +922,6 @@ func (iv *ImageView) Close() {
 	// leaving the viewer has to hand the bars back.
 	iv.full = false
 	iv.stopSlideShow()
-	// The overlay outlives the viewer — there is one per process — so
-	// leaving only takes the picture off the screen.
-	sharedX11Overlay().hide()
 	vtui.FrameManager.HideBars = false
 	iv.BaseFrame.Close()
 	if iv.OnClose != nil {

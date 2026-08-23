@@ -130,6 +130,16 @@ layer answers zero, everything that lays a picture out falls back to a guessed
 eight by sixteen, and the picture comes out the wrong shape as well as in the
 wrong place: the cell of a terminal is nothing like square.
 
+The overlay is installed as **vtui's external graphics renderer**, not called
+by whoever happens to be drawing a picture. `GraphicsExternal` is a protocol
+like kitty or sixel as far as the layer is concerned, so a terminal with no
+image protocol of its own reports itself as supporting graphics after all, and
+the file viewer, the thumbnail grid, quick view and the pictures a program
+prints into the built-in terminal arrive here together, once a frame, without
+any of them knowing. A terminal that does have a protocol keeps it: this is the
+last resort and not a preference. Issue #273 is what the built-in terminal half
+of that closes.
+
 A whole frame goes into **one window with the gaps cut out of it**. The window
 covers the rectangle that holds every picture and a SHAPE bounding mask is cut
 to the individual pictures, so the text between them — the captions under a
@@ -213,12 +223,8 @@ which lives in a map that does have a lock.
 - **A terminal that answers no `CSI 14 t` puts the picture out by its
   furniture.** There is nothing else to measure with, and the fallback assumes
   there is no furniture.
-- **Quick view and the built-in terminal still show nothing.** Both go
-  straight to `vtui.GraphicsLayer`, which a terminal with no protocol turns
-  off. The viewer and its thumbnail grid are routed through `drawImage`
-  instead and reach the overlay; the other two would need the same treatment,
-  or, better, the overlay wired into vtui as a `GraphicsProtocol` backend so
-  that nothing has to be routed at all.
+- **A picture is only as good as the guess about where the grid is.** See
+  section 3 for what is measured and what is not.
 - **The identification runs once, at the first picture.** A session that is
   detached and reattached elsewhere keeps pointing at the old window.
 

@@ -251,13 +251,17 @@ func (iv *ImageView) showTile(scr *vtui.ScreenBuf, idx, col, row, cw, ch int) {
 		iv.requestThumb(path)
 		return
 	}
+	if !scr.SupportsGraphics() {
+		return
+	}
+
 	boxCols, boxRows := imageTileCols-2, imageTileRows-2
 	w, h := vtui.FitInside(surface.Width, surface.Height, boxCols*cw, boxRows*ch)
 	p := vtui.ImagePlacement{Surface: surface}
 	p.Cols, p.Rows = cellsFor(w, cw, boxCols), cellsFor(h, ch, boxRows)
 	p.Col = col + 1 + (boxCols-p.Cols)/2
 	p.Row = row + (boxRows-p.Rows)/2
-	iv.drawImage(scr, fmt.Sprintf("%s#%d", iv.gfxKey, idx), p)
+	scr.Graphics().DrawImage(fmt.Sprintf("%s#%d", iv.gfxKey, idx), p)
 }
 
 // galleryKey handles the grid. Anything it does not know falls through to the

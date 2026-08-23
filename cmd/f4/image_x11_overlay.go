@@ -56,10 +56,22 @@ func sharedX11Overlay() *x11ImageOverlay {
 	return x11OverlayInst
 }
 
-// x11ImagesAvailable reports whether a picture can be put on the screen even
-// though the terminal itself cannot show one. The viewer is opened on the
-// strength of it, so it is asked before the viewer exists.
-func x11ImagesAvailable() bool { return sharedX11Overlay() != nil }
+// InstallX11Overlay puts the overlay in as the screen's graphics renderer,
+// for a terminal that has no image protocol of its own. It is done at startup
+// rather than when the first picture is wanted, because everything that shows
+// one asks whether the screen supports graphics before it tries, and the
+// answer has to be right by then — including in quick view and in the
+// built-in terminal, neither of which would ever have asked for an overlay.
+//
+// A terminal that does have a protocol keeps it: this is the last resort and
+// not a preference.
+func InstallX11Overlay() {
+	scr := vtui.FrameManager.Screen()
+	if scr == nil || scr.Graphics().Protocol() != vtui.GraphicsNone {
+		return
+	}
+	sharedX11Overlay()
+}
 
 // newX11ImageOverlay connects and creates the window, or returns nil when
 // there is nothing to connect to, when the terminal window could not be
@@ -78,7 +90,36 @@ func newX11ImageOverlay() *x11ImageOverlay {
 		return nil
 	}
 	vtui.DebugLog("TTYX: overlay ready, mouse passes through: %v", ov.PassesInput())
-	return &x11ImageOverlay{sess: sess, ov: ov}
+	x := &x11ImageOverlay{sess: sess, ov: ov}
+
+	// Installed as vtui's external graphics renderer rather than called by
+	// whoever happens to be drawing a picture. The layer then reports
+	// itself supported, every gate on SupportsGraphics opens at once, and
+	// the file viewer, the thumbnail grid, quick view and the pictures a
+	// program prints into the built-in terminal all arrive here together,
+	// once a frame, without any of them knowing there is no image protocol
+	// in the terminal.
+	if scr := vtui.FrameManager.Screen(); scr != nil {
+		scr.Graphics().SetExternalGraphics(x)
+	}
+	return x
+}
+
+// RenderExternal is vtui's whole-frame call. The screen size comes from the
+// cell size the layer was given, because the layer knows it and the frame does
+// not carry it.
+func (x *x11ImageOverlay) RenderExternal(list []vtui.ImagePlacement, cellW, cellH int) {
+	scr := vtui.FrameManager.Screen()
+	if scr == nil {
+		return
+	}
+	if len(list) == 0 {
+		x.hide()
+		return
+	}
+	if err := x.showMany(scr, list); err != nil && err != errNotNow {
+		x.hide()
+	}
 }
 
 func (x *x11ImageOverlay) close() {

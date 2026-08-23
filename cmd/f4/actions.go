@@ -1284,13 +1284,12 @@ func tryOpenImageViewer(pf *PanelsFrame, v vfs.VFS, path string) bool {
 		return false
 	}
 	scr := vtui.FrameManager.Screen()
-	// A terminal with no image protocol is not the end of it: under a local
-	// X session the picture goes in a window over the terminal instead. The
-	// question has to be asked here and not inside the viewer, because this
-	// is where F3 decides between showing the picture and showing the bytes
-	// — and answering it wrong is how gnome-terminal used to get a hex dump
-	// of a PNG.
-	if scr == nil || (!scr.SupportsGraphics() && !x11ImagesAvailable()) {
+	// One question, and the X overlay is inside the answer: it is installed
+	// as the screen's graphics renderer at startup, so a terminal with no
+	// image protocol of its own still supports graphics when there is a
+	// local X session behind it. Asking anything else here is how F3 on a
+	// PNG in gnome-terminal used to open the hex viewer.
+	if scr == nil || !scr.SupportsGraphics() {
 		return false
 	}
 

@@ -222,14 +222,11 @@ far2l turns kitty on.
 `FARTTY_INTERACT_IMAGE_*` (see `far2l/WinPort/FarTTY.h`) in `HandleFar2lAPC`,
 so that far2l running inside f4 can hand pictures over through its own channel.
 
-**12a. The overlay for quick view and the built-in terminal.** The viewer and
-its thumbnail grid reach the overlay through `ImageView.drawImage`; quick view
-and the terminal's own placements go straight to `vtui.GraphicsLayer`, which a
-terminal with no protocol turns off, and still show nothing. Routing them the
-same way would work and would be the third and fourth special case; wiring
-`internal/ttyx` into vtui as a `GraphicsProtocol` backend would cover
-everything at once and would end the routing. It needs the placement list, a z
-order and clipping, all of which the layer already has.
+**12a. Done.** The overlay is installed as vtui's external graphics renderer,
+so quick view, the thumbnail grid, the file viewer and the pictures a program
+prints into the built-in terminal all reach it without any of them being routed
+anywhere. That last one is issue #273: a program that prints sixel or kitty
+into f4's own terminal was decoded correctly and then had nowhere to be drawn.
 
 **12. Video.** A second source of frames on top of the same placement layer:
 decode through an external `ffmpeg` into a stream of RGBA, a frame timer, and
