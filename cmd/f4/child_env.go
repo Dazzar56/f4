@@ -18,6 +18,14 @@ import (
 // kittyGraphicsEnv is the variable kitty exports and image tools look for.
 const kittyGraphicsEnv = "KITTY_WINDOW_ID"
 
+// kittyPidEnv is the other one kitty exports, and the one that actually gets
+// chafa to find the protocol on its own. Its terminal table matches kitty on
+// TERM being exactly xterm-kitty *or* on this being set, and looks at
+// KITTY_WINDOW_ID not at all — so a machine without the kitty terminfo entry
+// installed, which is most machines that do not have kitty, saw nothing to go
+// on and drew characters. See chafa/chafa-term-db.c.
+const kittyPidEnv = "KITTY_PID"
+
 // kittyTermName is the terminal type a program looks up when it wants to
 // know whether it may draw pictures. Tools written before terminals could be
 // asked directly, chafa 1.14 among them, know no other way to find out.
@@ -52,7 +60,9 @@ func buildChildEnv(env []string, graphics, kittyTerm bool) []string {
 	for _, kv := range env {
 		// Whatever we inherited describes the terminal that started f4; the
 		// program we are about to start talks to us instead.
-		if strings.HasPrefix(kv, kittyGraphicsEnv+"=") || strings.HasPrefix(kv, "TERM_PROGRAM=") {
+		if strings.HasPrefix(kv, kittyGraphicsEnv+"=") ||
+			strings.HasPrefix(kv, kittyPidEnv+"=") ||
+			strings.HasPrefix(kv, "TERM_PROGRAM=") {
 			continue
 		}
 		if kittyTerm && strings.HasPrefix(kv, "TERM=") {
@@ -64,10 +74,13 @@ func buildChildEnv(env []string, graphics, kittyTerm bool) []string {
 
 	if graphics {
 		// The built-in terminal speaks the kitty graphics protocol, so it
-		// says so the way kitty itself does. Claiming it while the screen
-		// f4 draws on cannot show a picture would only make programs
-		// produce output nobody sees.
+		// says so the way kitty itself does — both variables, because
+		// different tools look at different ones and the one chafa looks
+		// at is the pid. Claiming either while the screen f4 draws on
+		// cannot show a picture would only make programs produce output
+		// nobody sees.
 		out = append(out, kittyGraphicsEnv+"=1")
+		out = append(out, kittyPidEnv+"="+strconv.Itoa(os.Getpid()))
 	}
 	if kittyTerm {
 		out = append(out, "TERM="+kittyTermName)

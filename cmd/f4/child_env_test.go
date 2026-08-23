@@ -3,6 +3,8 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -108,5 +110,53 @@ func TestTerminfoExists(t *testing.T) {
 	}
 	if !terminfoExists("xterm-kitty") {
 		t.Error("an installed description must be found by its hex directory")
+	}
+}
+
+// chafa matches kitty on TERM being exactly xterm-kitty or on KITTY_PID being
+// set, and does not look at KITTY_WINDOW_ID at all. A machine without the
+// kitty terminfo entry installed — which is most machines that do not have
+// kitty — therefore had nothing to go on and chafa drew characters until it
+// was told "-f kitty" by hand. See chafa/chafa-term-db.c.
+func TestChildEnvAnnouncesKittyPid(t *testing.T) {
+	env := buildChildEnv([]string{"PATH=/usr/bin"}, true, false)
+
+	var pid string
+	for _, kv := range env {
+		if strings.HasPrefix(kv, "KITTY_PID=") {
+			pid = strings.TrimPrefix(kv, "KITTY_PID=")
+		}
+	}
+	if pid == "" {
+		t.Fatalf("KITTY_PID must be announced: %v", env)
+	}
+	if pid != strconv.Itoa(os.Getpid()) {
+		t.Errorf("KITTY_PID = %q, want this process", pid)
+	}
+	// Both, because different tools look at different ones.
+	if !slices.Contains(env, "KITTY_WINDOW_ID=1") {
+		t.Errorf("KITTY_WINDOW_ID must still be announced: %v", env)
+	}
+}
+
+// Claiming it where no picture can be shown would only make programs produce
+// output nobody sees.
+func TestChildEnvWithoutGraphicsClaimsNothing(t *testing.T) {
+	env := buildChildEnv([]string{"PATH=/usr/bin"}, false, false)
+	for _, kv := range env {
+		if strings.HasPrefix(kv, "KITTY_PID=") || strings.HasPrefix(kv, "KITTY_WINDOW_ID=") {
+			t.Errorf("nothing may be claimed: %q", kv)
+		}
+	}
+}
+
+// Whatever was inherited describes the terminal that started f4; the program
+// about to start talks to us instead.
+func TestChildEnvDropsInheritedKittyPid(t *testing.T) {
+	env := buildChildEnv([]string{"KITTY_PID=999", "KITTY_WINDOW_ID=7", "PATH=/usr/bin"}, false, false)
+	for _, kv := range env {
+		if strings.HasPrefix(kv, "KITTY_PID=") || strings.HasPrefix(kv, "KITTY_WINDOW_ID=") {
+			t.Errorf("the inherited value must not survive: %q", kv)
+		}
 	}
 }
