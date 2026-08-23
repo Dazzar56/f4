@@ -167,11 +167,12 @@ func (o *Overlay) Place(r Rect) error {
 	return nil
 }
 
-// suspend takes the overlay off the screen without forgetting that the caller
-// wants it there. The event loop calls it when the terminal loses the focus,
-// because an override-redirect window is above everything and nothing else in
-// X will move it out of the way.
-func (o *Overlay) suspend() {
+// Suspend takes the overlay off the screen without forgetting that the caller
+// wants it there, so that resume can put it back. The event loop calls it when
+// the terminal loses the focus, because an override-redirect window is above
+// everything and nothing else in X will move it out of the way; a caller that
+// notices the same thing first can call it too.
+func (o *Overlay) Suspend() {
 	o.s.mu.Lock()
 	defer o.s.mu.Unlock()
 	if o.s.conn == nil || !o.mapped {

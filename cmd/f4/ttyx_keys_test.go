@@ -88,17 +88,37 @@ func TestDefaultTTYXKeyListParses(t *testing.T) {
 	}
 }
 
-// Nothing may happen unless the user asked for it: a grab changes the
-// behaviour of the whole desktop.
-func TestTTYXKeyboardOffByDefault(t *testing.T) {
+// Switching it off has to switch it off: it is the way out for whoever
+// disagrees about which combinations are worth taking from the desktop.
+func TestTTYXKeyboardCanBeSwitchedOff(t *testing.T) {
 	saved := AppConfig.TTYXKeys
 	AppConfig.TTYXKeys = false
 	defer func() { AppConfig.TTYXKeys = saved }()
 
 	if k := startTTYXKeyboard(); k != nil {
 		k.Close()
-		t.Error("the keyboard must stay off until it is switched on")
+		t.Error("Keys=0 must stop it starting at all")
 	}
+}
+
+// It is on unless it is turned off, because a Ctrl+Enter that only works after
+// the user has found a setting does not work.
+func TestTTYXKeyboardOnByDefault(t *testing.T) {
+	if !AppConfig.TTYXKeys {
+		t.Error("the default must be on")
+	}
+}
+
+// Ctrl+Enter is the combination this exists for, so it has to be in the list
+// that is asked for when nobody says otherwise.
+func TestDefaultTTYXKeyListHasCtrlEnter(t *testing.T) {
+	got, _ := parseTTYXCombos(defaultTTYXKeyList)
+	for _, c := range got {
+		if c.Keysym == 0xFF0D && c.Mods == ttyx.ModCtrl {
+			return
+		}
+	}
+	t.Errorf("Ctrl+Enter is missing from the built-in list: %+v", got)
 }
 
 // Every method has to survive being called on a nil keyboard, because that is

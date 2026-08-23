@@ -473,6 +473,11 @@ func runServer(sockPath string) {
 		}(notifyPipeWriteEnd, fds[0])
 
 		vtui.DebugLog("SERVER: PRE-RUN: Stdin FD: %d, Stdout FD: %d", os.Stdin.Fd(), os.Stdout.Fd())
+		// The terminal is asked how large its text area is before
+		// anything starts reading standard input, because afterwards
+		// the answer is just another escape sequence and the reader
+		// eats it. See ttyx_probe.go.
+		ProbeHostTextArea()
 		reader := vtinput.NewReader(os.Stdin, false)
 
 		// Re-enter host console for the new client if active workspace had panels hidden
@@ -502,9 +507,7 @@ func runServer(sockPath string) {
 		}
 
 		// The key combinations a TTY cannot carry, taken from the X
-		// server if the user asked for that. Off unless they did: every
-		// combination grabbed is one the rest of the desktop stops
-		// receiving. See docs/TTYX.md.
+		// server. See docs/TTYX.md.
 		ttyxKeys := startTTYXKeyboard()
 
 		vtui.DebugLog("SERVER: Entering fm.Run()...")

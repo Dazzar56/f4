@@ -802,13 +802,20 @@ func (iv *ImageView) flushPending(scr *vtui.ScreenBuf, x1, x2, top, y2 int) {
 	list := iv.pending
 	iv.pending = iv.pending[:0]
 
-	if len(list) > 0 && sharedX11Overlay().showMany(scr, list) {
+	if len(list) == 0 {
+		sharedX11Overlay().hide()
+		return
+	}
+	switch err := sharedX11Overlay().showMany(scr, list); err {
+	case nil:
+		return
+	case errNotNow:
+		// The reader is looking at another window. Saying the terminal
+		// cannot show pictures would be a lie, and it is the lie that
+		// used to survive on the screen after switching back.
 		return
 	}
 	sharedX11Overlay().hide()
-	if len(list) == 0 {
-		return
-	}
 	msg := "This backend cannot display images."
 	x := x1 + (x2-x1+1-len(msg))/2
 	if x < x1 {

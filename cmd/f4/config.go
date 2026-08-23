@@ -356,6 +356,7 @@ var AppConfig = F4Config{
 	PathHintPerCategory:      true,
 	SlideShowDelay:           defaultSlideShowDelay,
 	ImageX11Overlay:          true,
+	TTYXKeys:                 true,
 	TTYXKeyList:              defaultTTYXKeyList,
 	ImageExternalTimeout:     defaultImageExternalTimeout,
 	ImageDecoderPriority:     "",
@@ -632,7 +633,7 @@ func LoadConfig() {
 		AppConfig.ImageExternalTimeout = defaultImageExternalTimeout
 	}
 	AppConfig.ImageX11Overlay = ini.GetString("Images", "X11Overlay", "1") == "1"
-	AppConfig.TTYXKeys = ini.GetString("TTYXi", "Keys", "0") == "1"
+	AppConfig.TTYXKeys = ini.GetString("TTYXi", "Keys", "1") == "1"
 	AppConfig.TTYXKeyList = ini.GetString("TTYXi", "KeyList", defaultTTYXKeyList)
 	AppConfig.ImageDecoderPriority = ini.GetString("Images", "DecoderPriority", "")
 	SetImageDecoderPriorities(ParseImageDecoderPriorities(AppConfig.ImageDecoderPriority))

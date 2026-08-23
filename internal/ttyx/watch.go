@@ -191,7 +191,7 @@ func (s *Session) overlaySnapshot() []*Overlay {
 
 func (s *Session) hideOverlays() {
 	for _, o := range s.overlaySnapshot() {
-		o.suspend()
+		o.Suspend()
 	}
 }
 

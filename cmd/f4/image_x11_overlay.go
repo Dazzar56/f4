@@ -15,6 +15,7 @@ package main
 // terminal loses the focus, because nothing in X will take it down for us.
 
 import (
+	"errors"
 	"strings"
 	"sync"
 
@@ -106,6 +107,15 @@ func (x *x11ImageOverlay) hide() {
 	x.key = ""
 }
 
+// suspend takes the picture off the screen but leaves the overlay wanting to
+// be there, so the event loop can put it back when the focus returns.
+func (x *x11ImageOverlay) suspend() {
+	if x == nil {
+		return
+	}
+	x.ov.Suspend()
+}
+
 // overlayCellRect converts a rectangle of character cells into a rectangle of
 // screen pixels. The size of a cell is not asked for: it is the size of the
 // terminal window divided by the number of cells in it, which is exact when
@@ -149,8 +159,18 @@ func overlayCellRect(term ttyx.Rect, cols, rows, x1, y1, x2, y2 int) (ttyx.Rect,
 	}, true
 }
 
+// errNoOverlay means there is no way to show a picture at all, and errNotNow
+// means there is one but the terminal is not on top of the screen. The
+// difference is the whole of the difference between telling the reader that
+// their terminal cannot do this and saying nothing while they look at another
+// window.
+var (
+	errNoOverlay = errors.New("no overlay")
+	errNotNow    = errors.New("the terminal is not focused")
+)
+
 // show puts one placement on the screen.
-func (x *x11ImageOverlay) show(scr *vtui.ScreenBuf, p vtui.ImagePlacement) bool {
+func (x *x11ImageOverlay) show(scr *vtui.ScreenBuf, p vtui.ImagePlacement) error {
 	return x.showMany(scr, []vtui.ImagePlacement{p})
 }
 
@@ -161,9 +181,12 @@ func (x *x11ImageOverlay) show(scr *vtui.ScreenBuf, p vtui.ImagePlacement) bool 
 // shape mask cut to the individual pictures, so that the text between them —
 // the captions under a grid of thumbnails — shows through the gaps. A dozen
 // windows would do the same thing and cost a dozen of everything.
-func (x *x11ImageOverlay) showMany(scr *vtui.ScreenBuf, list []vtui.ImagePlacement) bool {
-	if x == nil || scr == nil || len(list) == 0 {
-		return false
+func (x *x11ImageOverlay) showMany(scr *vtui.ScreenBuf, list []vtui.ImagePlacement) error {
+	if x == nil {
+		return errNoOverlay
+	}
+	if scr == nil || len(list) == 0 {
+		return errNoOverlay
 	}
 	valid := list[:0:0]
 	for _, p := range list {
@@ -172,21 +195,27 @@ func (x *x11ImageOverlay) showMany(scr *vtui.ScreenBuf, list []vtui.ImagePlaceme
 		}
 	}
 	if len(valid) == 0 {
-		return false
+		return errNoOverlay
 	}
 	list = valid
 	if !x.sess.Focused() {
 		// Somebody else is on top of the terminal now, and an
-		// override-redirect window would be on top of them.
-		x.hide()
-		return false
+		// override-redirect window would be on top of them. The picture
+		// is not unavailable, only out of sight, and the event loop puts
+		// it back when the focus returns.
+		x.suspend()
+		return errNotNow
 	}
 
-	term, err := x.sess.Geometry()
+	win, err := x.sess.Geometry()
 	if err != nil {
 		x.hide()
-		return false
+		return errNoOverlay
 	}
+	// The window is not the grid: the top of it may be a menu bar and the
+	// right of it a scroll bar. See ttyx_probe.go.
+	tw, th, known := hostTextArea()
+	term := hostGridRect(win, tw, th, known)
 	cols, rows := scr.Width(), scr.Height()
 
 	// One window over everything that has to be drawn, so the placements
@@ -201,20 +230,20 @@ func (x *x11ImageOverlay) showMany(scr *vtui.ScreenBuf, list []vtui.ImagePlaceme
 	rect, ok := overlayCellRect(term, cols, rows, c1, r1, c2, r2)
 	if !ok {
 		x.hide()
-		return false
+		return errNoOverlay
 	}
 
 	// Nothing has moved and nothing has changed: the window is already
 	// showing the right thing and redrawing it would only cost bandwidth.
 	key := overlayFrameKey(list, rect)
 	if key == x.key && x.ov.Visible() {
-		return true
+		return nil
 	}
 
 	if err := x.ov.Place(rect); err != nil {
 		vtui.DebugLog("X11_OVERLAY: %v", err)
 		x.hide()
-		return false
+		return errNoOverlay
 	}
 
 	buf := make([]byte, rect.W*rect.H*4)
@@ -246,7 +275,7 @@ func (x *x11ImageOverlay) showMany(scr *vtui.ScreenBuf, list []vtui.ImagePlaceme
 	}
 	if len(bounds) == 0 {
 		x.hide()
-		return false
+		return errNoOverlay
 	}
 
 	// Everything outside the pictures goes back to the terminal, so the
@@ -263,10 +292,10 @@ func (x *x11ImageOverlay) showMany(scr *vtui.ScreenBuf, list []vtui.ImagePlaceme
 	if err := x.ov.Draw(buf, rect.W, rect.H, rect.W*4); err != nil {
 		vtui.DebugLog("X11_OVERLAY: %v", err)
 		x.hide()
-		return false
+		return errNoOverlay
 	}
 	x.key = key
-	return true
+	return nil
 }
 
 func minInt(a, b int) int {

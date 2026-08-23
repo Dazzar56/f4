@@ -74,10 +74,20 @@ mouse passes through it and selecting text keeps working underneath a picture.
 **Backing store** is asked for, because nothing here runs an event loop and
 without it the server would expect a repaint on `Expose`.
 
-The size of a character cell is not queried. It is the size of the terminal
-window divided by the number of cells in it — exact when the terminal leaves no
-padding, close enough when it does, and unlike `CSI 16 t` it needs no
-cooperation from a terminal that has already shown it cooperates with nothing.
+**The window is not the grid.** The top of a terminal window may be a menu bar
+and the right of it a scroll bar, and dividing the window by the number of
+cells in it therefore gives a cell slightly too large and an origin slightly
+too high — which put a picture a row and a bit above its own space in
+gnome-terminal. The terminal knows better: `CSI 14 t` answers with the size of
+its text area in pixels, and the grid is placed against the **bottom left** of
+the window at that size, because a menu bar is at the top and a scroll bar is
+on the right and neither is ever at the bottom left. A terminal with a
+symmetric border is out by that border, which is a pixel or two.
+
+The question is asked once, at startup, in `ProbeHostTextArea`, and it has to
+be: afterwards the answer is just another escape sequence arriving on standard
+input and the input reader eats it. A terminal that does not answer gets the
+old behaviour, which is right for one with no furniture at all.
 
 A whole frame goes into **one window with the gaps cut out of it**. The window
 covers the rectangle that holds every picture and a SHAPE bounding mask is cut
@@ -148,9 +158,9 @@ which lives in a map that does have a lock.
 
 ## 5. Known limits
 
-- **A terminal with padding around its grid puts the picture out by a few
-  pixels.** The division that finds the cell size cannot see the padding. `CSI
-  16 t` would be exact where it is answered, and could be preferred when it is.
+- **A terminal that answers no `CSI 14 t` puts the picture out by its
+  furniture.** There is nothing else to measure with, and the fallback assumes
+  there is no furniture.
 - **Quick view and the built-in terminal still show nothing.** Both go
   straight to `vtui.GraphicsLayer`, which a terminal with no protocol turns
   off. The viewer and its thumbnail grid are routed through `drawImage`
@@ -214,12 +224,27 @@ Keys=1
 KeyList=Ctrl+Shift+Up, Ctrl+Enter, Ctrl+Tab
 ```
 
-`Keys` is `0` by default and should be. **A grab is shared state on the X
-server**: every combination taken here is one the rest of the desktop stops
-receiving while f4 has the focus. Which ones are worth that is a judgement
-about the user's whole desktop and not only about f4, so it is theirs. The
-built-in list is what f4 binds and a plain TTY cannot distinguish from
-something simpler, and nothing a desktop is likely to want for itself.
+`Keys` is **`1` by default**. A Ctrl+Enter that only works after the user has
+found a setting does not work, and far2l asks nobody either. The setting is the
+way out for whoever disagrees about which combinations are worth taking.
+
+### Why a grab, and why only while focused
+
+A grab is shared state on the X server, and this uses one deliberately, for two
+reasons.
+
+**It is what stops the key arriving twice.** A grabbed key does not reach the
+terminal at all, so no second and blunter copy of it comes up through the TTY:
+f4 sees `Ctrl+Enter`, not `Ctrl+Enter` followed by a bare `Enter`. Selecting
+key events on the terminal's window instead — which is not exclusive in X and
+would work — would leave both copies arriving, and the bare `Enter` would run
+the command line under the filename `Ctrl+Enter` had just inserted.
+
+**It is held exactly when the keys are wanted**, which is while f4's terminal
+has the focus. It is released when the focus leaves, and that is the only thing
+the release is for: while another application is being typed into, a grab held
+by f4 would take those combinations away from it. Nothing is taken from f4
+itself at any point.
 
 Three rules the wiring keeps:
 

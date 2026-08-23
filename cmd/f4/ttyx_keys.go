@@ -10,11 +10,21 @@ package main
 // the real key is still available — from the X server, over the head of the
 // terminal.
 //
-// This is off by default and it should be. A grab is shared state on the X
-// server: every combination taken here is a combination the rest of the
-// desktop stops receiving while f4 has the focus. Which ones to take is a
-// judgement about the user's whole desktop and not only about f4, so it is
-// theirs to make.
+// This is on by default, because a file manager whose Ctrl+Enter only works
+// after the user has found a setting is a file manager whose Ctrl+Enter does
+// not work. far2l does the same and asks nobody.
+//
+// A grab is still shared state on the X server, so two things bound it. It is
+// held only while f4's terminal has the focus — which is exactly when those
+// keys are wanted, and no other application is reading the keyboard then
+// anyway — and it covers only the combinations a TTY genuinely cannot carry.
+// The set is a setting for whoever disagrees about which those are.
+//
+// The grab is also what keeps the key from arriving twice. A grabbed key does
+// not reach the terminal at all, so there is no second, blunter copy of it
+// coming up through the TTY: f4 sees Ctrl+Enter and not Ctrl+Enter followed
+// by a bare Enter. Selecting key events on the terminal's window instead
+// would leave both.
 
 import (
 	"strings"
@@ -157,6 +167,7 @@ func startTTYXKeyboard() *ttyxKeyboard {
 
 	k := &ttyxKeyboard{sess: sess, stop: make(chan struct{})}
 	go k.forward()
+	go k.watch()
 	vtui.DebugLog("TTYX_KEYS: %d combinations taken on window %d via %v",
 		len(combos), sess.Window(), sess.Source())
 	return k
@@ -187,6 +198,22 @@ func (k *ttyxKeyboard) forward() {
 			case <-k.stop:
 				return
 			}
+		}
+	}
+}
+
+// watch redraws when the X session reports that something moved. Without it
+// the frame that was on the screen when the terminal lost the focus stays
+// there — including, until it learned better, an apology for not being able
+// to show a picture that had only gone out of sight.
+func (k *ttyxKeyboard) watch() {
+	changed := k.sess.Changed()
+	for {
+		select {
+		case <-k.stop:
+			return
+		case <-changed:
+			vtui.FrameManager.Redraw()
 		}
 	}
 }

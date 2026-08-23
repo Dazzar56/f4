@@ -110,7 +110,47 @@ func TestOverlayNilIsSafe(t *testing.T) {
 	var x *x11ImageOverlay
 	x.hide()
 	x.close()
-	if x.show(nil, vtui.ImagePlacement{}) {
+	if err := x.show(nil, vtui.ImagePlacement{}); err == nil {
 		t.Error("a nil overlay shows nothing")
+	}
+}
+
+// The window is not the grid. A terminal with a menu bar on top and a scroll
+// bar on the right hands back a text area smaller than its window, and the
+// grid sits against the bottom left of it — which is what stops a picture
+// landing a row and a bit too high.
+func TestHostGridRect(t *testing.T) {
+	win := ttyx.Rect{X: 100, Y: 200, W: 800, H: 630}
+
+	// Thirty pixels of menu bar at the top, ten of scroll bar on the right.
+	got := hostGridRect(win, 790, 600, true)
+	want := ttyx.Rect{X: 100, Y: 230, W: 790, H: 600}
+	if got != want {
+		t.Errorf("measured: got %+v, want %+v", got, want)
+	}
+
+	// Nothing measured: the grid is the whole window, which is what this
+	// did before it could measure anything.
+	if got := hostGridRect(win, 0, 0, false); got != win {
+		t.Errorf("unmeasured: got %+v, want %+v", got, win)
+	}
+
+	// A text area larger than the window is nonsense and is clamped rather
+	// than trusted.
+	if got := hostGridRect(win, 9000, 9000, true); got != win {
+		t.Errorf("clamped: got %+v, want %+v", got, win)
+	}
+}
+
+func TestParseTextAreaResponse(t *testing.T) {
+	w, h, ok := parseTextAreaResponse("\x1b[4;600;790t")
+	if !ok || w != 790 || h != 600 {
+		t.Errorf("got %dx%d ok=%v, want 790x600", w, h, ok)
+	}
+	// A terminal that answers something else, or nothing.
+	for _, s := range []string{"", "\x1b[6;20;10t", "\x1b[4;t", "garbage"} {
+		if _, _, ok := parseTextAreaResponse(s); ok {
+			t.Errorf("%q must not parse as a text area", s)
+		}
 	}
 }
