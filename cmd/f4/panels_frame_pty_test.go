@@ -69,7 +69,9 @@ func TestPanelsFrame_PTYHandoverRacesThePublisher(t *testing.T) {
 		}()
 
 		if pty := pf.takeLocalPTY(); pty != nil {
-			pty.Close()
+			if err := pty.Close(); err != nil {
+				t.Fatal(err)
+			}
 		}
 		<-published
 	}

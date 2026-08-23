@@ -16,7 +16,7 @@ import "os"
 func newMockTTYSlave() (*os.File, error) {
 	f, err := os.CreateTemp("", "mock_pts_*")
 	if err == nil {
-		os.Remove(f.Name()) // Unlink immediately to prevent leaks
+		_ = os.Remove(f.Name()) // The caller closes this best-effort unlinked temp file.
 	}
 	return f, err
 }

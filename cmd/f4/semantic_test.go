@@ -150,7 +150,9 @@ func TestSemantic_ViewerViewActions(t *testing.T) {
 	vtui.SetDefaultPalette()
 	tmp := t.TempDir()
 	path := filepath.Join(tmp, "view.txt")
-	os.WriteFile(path, []byte("line1\nline2\nline3\n"), 0644)
+	if err := os.WriteFile(path, []byte("line1\nline2\nline3\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	v := vfs.NewOSVFS(tmp)
 	viewer, err := NewViewerView(context.Background(), v, path)

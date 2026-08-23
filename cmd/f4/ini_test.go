@@ -7,7 +7,11 @@ import (
 
 func TestIniFile_LoadAndGet(t *testing.T) {
 	tmpFile := "test_config.ini"
-	defer os.Remove(tmpFile)
+	t.Cleanup(func() {
+		if err := os.Remove(tmpFile); err != nil && !os.IsNotExist(err) {
+			t.Errorf("remove temporary config: %v", err)
+		}
+	})
 	content := `
 [Settings]
 Theme = Dark
@@ -16,7 +20,9 @@ ShowHidden = 1
 [Colors]
 PanelText = F_WHITE | B_BLACK
 `
-	os.WriteFile(tmpFile, []byte(content), 0644)
+	if err := os.WriteFile(tmpFile, []byte(content), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	ini := LoadIni(tmpFile)
 	if ini.GetString("Settings", "Theme", "Light") != "Dark" {
@@ -68,11 +74,17 @@ func TestIniFile_EnvOverride(t *testing.T) {
 
 func TestIniFile_UTF8BOM(t *testing.T) {
 	tmpFile := "test_config_bom.ini"
-	defer os.Remove(tmpFile)
+	t.Cleanup(func() {
+		if err := os.Remove(tmpFile); err != nil && !os.IsNotExist(err) {
+			t.Errorf("remove temporary config: %v", err)
+		}
+	})
 
 	// Prepend UTF-8 BOM \xef\xbb\xbf
 	content := "\xef\xbb\xbf[Settings]\nTheme = Dark\n"
-	os.WriteFile(tmpFile, []byte(content), 0644)
+	if err := os.WriteFile(tmpFile, []byte(content), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	ini := LoadIni(tmpFile)
 	if ini.GetString("Settings", "Theme", "Light") != "Dark" {

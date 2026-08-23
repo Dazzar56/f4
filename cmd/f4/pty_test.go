@@ -38,7 +38,9 @@ func TestPTY_Lifecycle(t *testing.T) {
 	}
 
 	// Close PTY
-	pty.Close()
+	if err := pty.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	// Wait a bit for OS to clean up
 	time.Sleep(100 * time.Millisecond)

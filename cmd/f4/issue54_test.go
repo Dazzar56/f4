@@ -20,7 +20,9 @@ func TestIssue54_History(t *testing.T) {
 	tmpDir := t.TempDir()
 	scriptName := "runme.sh"
 	scriptPath := filepath.Join(tmpDir, scriptName)
-	os.WriteFile(scriptPath, []byte("#!/bin/sh\necho 1"), 0755)
+	if err := os.WriteFile(scriptPath, []byte("#!/bin/sh\necho 1"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	pf := NewPanelsFrame()
 	defer pf.Close()

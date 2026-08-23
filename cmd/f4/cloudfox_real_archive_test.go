@@ -211,7 +211,7 @@ func validateRealCloudFoxLocalArchive(t *testing.T, fixture *realCloudFoxArchive
 	t.Helper()
 	provider := &archiveplugin.ArchiveProvider{}
 	osvfs := vfs.NewOSVFS(filepath.Dir(fixture.localPath))
-	defer osvfs.Close()
+	defer func() { _ = osvfs.Close() }() // The local VFS has no teardown state.
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 	defer cancel()
 	if !provider.CanOpen(ctx, osvfs, fixture.localPath) {
@@ -221,7 +221,7 @@ func validateRealCloudFoxLocalArchive(t *testing.T, fixture *realCloudFoxArchive
 	if err != nil {
 		t.Fatalf("open local .7z fixture through production archive provider: %v", err)
 	}
-	defer archiveVFS.Close()
+	defer func() { _ = archiveVFS.Close() }()
 	markerPath, err := resolveRealCloudFoxArchiveMarker(ctx, archiveVFS, archiveVFS.GetPath(), fixture.marker, fixture.markerSize)
 	if err != nil {
 		t.Fatalf("locate expected marker in local .7z fixture: %v", err)
@@ -272,7 +272,7 @@ func runRealCloudFoxArchiveProvider(t *testing.T, host *realCloudFoxUIHost, arch
 	if manager == nil {
 		t.Fatal("production CloudFox drive factory returned nil for archive test")
 	}
-	defer manager.Close()
+	defer func() { _ = manager.Close() }() // Connection cleanup errors do not affect the assertions.
 	managerItems, err := readRealCloudFoxUIDir(ctx, manager, manager.GetPath(), connection.Provider)
 	if err != nil {
 		t.Fatalf("list production CloudFox manager for archive test: %v", err)
@@ -303,7 +303,7 @@ func runRealCloudFoxArchiveProvider(t *testing.T, host *realCloudFoxUIHost, arch
 	if mounted == nil {
 		t.Fatal("no production CloudFox provider mounted the saved archive-test connection")
 	}
-	defer mounted.Close()
+	defer func() { _ = mounted.Close() }() // Connection cleanup errors do not affect the assertions.
 
 	writeRoot := mounted
 	if connection.Provider == cloudfox.ProviderGoogleDrive {
@@ -359,7 +359,7 @@ func runRealCloudFoxArchiveProvider(t *testing.T, host *realCloudFoxUIHost, arch
 	if workspace == nil || workspace == writeRoot {
 		t.Fatal("CloudVFS did not provide an independent archive workspace clone")
 	}
-	defer workspace.Close()
+	defer func() { _ = workspace.Close() }() // Connection cleanup errors do not affect the assertions.
 	if err := workspace.SetPath(workspacePath); err != nil {
 		t.Fatalf("enter isolated real archive workspace: %v", err)
 	}
@@ -423,7 +423,7 @@ func runRealCloudFoxArchiveProvider(t *testing.T, host *realCloudFoxUIHost, arch
 	if err != nil {
 		t.Fatalf("reopen unchanged .7z in the same CloudFox session: %s", redactRealCloudFoxError(err))
 	}
-	defer secondArchive.Close()
+	defer func() { _ = secondArchive.Close() }()
 	secondRoot := usableRealCloudFoxArchiveRoot(t, secondArchive, remotePath)
 	secondMarker, err := resolveRealCloudFoxArchiveMarker(ctx, secondArchive, secondRoot, fixture.marker, fixture.markerSize)
 	if err != nil {
@@ -449,7 +449,7 @@ func uploadRealCloudFoxArchive(ctx context.Context, workspace vfs.VFS, remotePat
 	if err != nil {
 		return err
 	}
-	defer local.Close()
+	defer func() { _ = local.Close() }()
 	remote, err := workspace.Create(ctx, remotePath)
 	if err != nil {
 		return err

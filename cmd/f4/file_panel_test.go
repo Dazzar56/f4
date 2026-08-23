@@ -556,8 +556,12 @@ func TestFileSystemPanel_ShowHiddenFiles(t *testing.T) {
 	defer func() { AppConfig = oldCfg }()
 
 	tmp := t.TempDir()
-	os.WriteFile(filepath.Join(tmp, "normal.txt"), []byte(""), 0644)
-	os.WriteFile(filepath.Join(tmp, ".hidden.txt"), []byte(""), 0644)
+	if err := os.WriteFile(filepath.Join(tmp, "normal.txt"), []byte(""), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmp, ".hidden.txt"), []byte(""), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	v := vfs.NewOSVFS(tmp)
 
@@ -600,8 +604,12 @@ func TestFileSystemPanel_NavigateUp_Selection(t *testing.T) {
 
 	tmp := t.TempDir()
 	sub := filepath.Join(tmp, "target_folder")
-	os.Mkdir(sub, 0755)
-	os.WriteFile(filepath.Join(tmp, "other.txt"), []byte(""), 0644)
+	if err := os.Mkdir(sub, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmp, "other.txt"), []byte(""), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(sub))
 
@@ -697,7 +705,9 @@ func TestFileSystemPanel_SelectedInfo(t *testing.T) {
 	for x := 0; x < 80; x++ {
 		cell := scr.GetCell(x, 23)
 		if cell.Char != 0 && cell.Char != ' ' {
-			sb.WriteRune(rune(cell.Char))
+			if _, err := sb.WriteRune(vtui.CellBaseRune(cell.Char)); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 
@@ -1062,9 +1072,15 @@ func TestFileSystemPanel_SelectName(t *testing.T) {
 func TestFileSystemPanel_MultiSelect(t *testing.T) {
 	// 1. Setup real TempDir with files
 	tmp := t.TempDir()
-	os.WriteFile(filepath.Join(tmp, "file1.txt"), []byte("1"), 0644)
-	os.WriteFile(filepath.Join(tmp, "file2.txt"), []byte("2"), 0644)
-	os.WriteFile(filepath.Join(tmp, "file3.txt"), []byte("3"), 0644)
+	if err := os.WriteFile(filepath.Join(tmp, "file1.txt"), []byte("1"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmp, "file2.txt"), []byte("2"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmp, "file3.txt"), []byte("3"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(tmp))
 	fp.viewMode = ViewModeDetailed
@@ -1132,7 +1148,9 @@ func TestFileSystemPanel_ShiftMultiStepSwipe(t *testing.T) {
 
 	tmp := t.TempDir()
 	for _, n := range []string{"a", "b", "c", "d", "e"} {
-		os.WriteFile(filepath.Join(tmp, n), []byte(n), 0644)
+		if err := os.WriteFile(filepath.Join(tmp, n), []byte(n), 0600); err != nil {
+			t.Fatal(err)
+		}
 	}
 	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(tmp))
 	t.Cleanup(func() {
@@ -1200,7 +1218,9 @@ func TestFileSystemPanel_ShiftSessionModeDecidedOnFirstKey(t *testing.T) {
 
 	tmp := t.TempDir()
 	for _, n := range []string{"a", "b", "c", "d", "e"} {
-		os.WriteFile(filepath.Join(tmp, n), []byte(n), 0644)
+		if err := os.WriteFile(filepath.Join(tmp, n), []byte(n), 0600); err != nil {
+			t.Fatal(err)
+		}
 	}
 	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(tmp))
 	t.Cleanup(func() {
@@ -1282,7 +1302,9 @@ func TestFileSystemPanel_ShiftSessionDeselectFromParentDir(t *testing.T) {
 
 	tmp := t.TempDir()
 	for _, n := range []string{"a", "b", "c"} {
-		os.WriteFile(filepath.Join(tmp, n), []byte(n), 0644)
+		if err := os.WriteFile(filepath.Join(tmp, n), []byte(n), 0600); err != nil {
+			t.Fatal(err)
+		}
 	}
 	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(tmp))
 	t.Cleanup(func() {
@@ -1332,7 +1354,9 @@ func TestFileSystemPanel_ShiftRangeSkipsParentDir(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	tmp := t.TempDir()
-	os.WriteFile(filepath.Join(tmp, "a"), []byte("a"), 0644)
+	if err := os.WriteFile(filepath.Join(tmp, "a"), []byte("a"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(tmp))
 	t.Cleanup(func() {
 		if fp.cancelLoad != nil {
@@ -1370,10 +1394,18 @@ func TestFileSystemPanel_SelectionClearedOnDirChange(t *testing.T) {
 	parent := t.TempDir()
 	a := filepath.Join(parent, "a")
 	b := filepath.Join(parent, "b")
-	os.MkdirAll(a, 0755)
-	os.MkdirAll(b, 0755)
-	os.WriteFile(filepath.Join(a, "same"), []byte("a"), 0644)
-	os.WriteFile(filepath.Join(b, "same"), []byte("b"), 0644)
+	if err := os.MkdirAll(a, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(b, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(a, "same"), []byte("a"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(b, "same"), []byte("b"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
@@ -1391,7 +1423,9 @@ func TestFileSystemPanel_SelectionClearedOnDirChange(t *testing.T) {
 	// Now navigate to sibling `b`. readDirectoryEx should notice
 	// the path changed and drop the persistent selection so the
 	// "same" file in `b` starts unselected.
-	fp.vfs.SetPath(b)
+	if err := fp.vfs.SetPath(b); err != nil {
+		t.Fatal(err)
+	}
 	fp.ReadDirectory()
 
 	// Drain any async loader tasks the ReadDirectory scheduled.
@@ -2430,7 +2464,9 @@ func TestFileSystemPanel_NavigateDown_CursorReset(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	tmp := t.TempDir()
 	sub := filepath.Join(tmp, "subdir")
-	os.Mkdir(sub, 0755)
+	if err := os.Mkdir(sub, 0755); err != nil {
+		t.Fatal(err)
+	}
 
 	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(tmp))
 
@@ -2782,8 +2818,12 @@ func TestFileSystemPanel_FastFindStartsAtCurrentItem(t *testing.T) {
 func TestFileSystemPanel_ForkDuplication(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	tmp := t.TempDir()
-	os.WriteFile(filepath.Join(tmp, "file1.txt"), []byte("data"), 0644)
-	os.WriteFile(filepath.Join(tmp, "file2.txt"), []byte("data"), 0644)
+	if err := os.WriteFile(filepath.Join(tmp, "file1.txt"), []byte("data"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmp, "file2.txt"), []byte("data"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	fp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(tmp))
 
@@ -3551,7 +3591,9 @@ func TestFileSystemPanel_SyncPanelLoad(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	v := vfs.NewOSVFS(tmpDir)
-	os.WriteFile(filepath.Join(tmpDir, "file_sync.txt"), []byte("data"), 0644)
+	if err := os.WriteFile(filepath.Join(tmpDir, "file_sync.txt"), []byte("data"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	fp := NewFileSystemPanel(0, 0, 40, 20, v)
 
@@ -3625,8 +3667,12 @@ func TestFileSystemPanel_Cache_FullCycle(t *testing.T) {
 	v := vfs.NewOSVFS(tmpDir)
 
 	// 1. Initial setup
-	os.WriteFile(filepath.Join(tmpDir, "a.txt"), []byte("a"), 0644)
-	os.WriteFile(filepath.Join(tmpDir, "b.txt"), []byte("b"), 0644)
+	if err := os.WriteFile(filepath.Join(tmpDir, "a.txt"), []byte("a"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "b.txt"), []byte("b"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	fp := NewFileSystemPanel(0, 0, 40, 20, v)
 
@@ -3648,8 +3694,12 @@ func TestFileSystemPanel_Cache_FullCycle(t *testing.T) {
 
 	// 4. Set cursor and modify backend
 	fp.SelectName("b.txt")
-	os.WriteFile(filepath.Join(tmpDir, "c.txt"), []byte("c"), 0644)
-	os.Remove(filepath.Join(tmpDir, "a.txt"))
+	if err := os.WriteFile(filepath.Join(tmpDir, "c.txt"), []byte("c"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(tmpDir, "a.txt")); err != nil {
+		t.Fatal(err)
+	}
 
 	// 5. Trigger cached read
 	fp.readDirectoryEx(false)
@@ -4555,7 +4605,9 @@ func TestFileSystemPanel_ReadDir_ContextCancel(t *testing.T) {
 	fp := NewFileSystemPanel(0, 0, 40, 20, v)
 
 	// Запускаем чтение сценария IOPS (10 000 файлов)
-	v.SetPath("/scenarios/iops")
+	if err := v.SetPath("/scenarios/iops"); err != nil {
+		t.Fatal(err)
+	}
 	fp.ReadDirectory()
 
 	if !fp.isLoading {

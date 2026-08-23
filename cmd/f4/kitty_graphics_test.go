@@ -156,7 +156,9 @@ func TestKittyCompressedPayload(t *testing.T) {
 	if _, err := zw.Write(pix); err != nil {
 		t.Fatalf("zlib write: %v", err)
 	}
-	zw.Close()
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	e := newKittyEnv(t)
 	e.send("a=t,i=12,f=32,s=4,v=4,o=z", kittyB64(buf.Bytes()))

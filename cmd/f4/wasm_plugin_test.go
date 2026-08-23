@@ -62,7 +62,7 @@ func TestNewPluginForEntrypointResolvesAgainstDir(t *testing.T) {
 func TestWasmPluginMissingFile(t *testing.T) {
 	plugin := NewWasmPlugin(filepath.Join(t.TempDir(), "absent.wasm"))
 	if err := plugin.Init(newLuaTestHostAPI()); err == nil {
-		plugin.Close()
+		_ = plugin.Close() // Cleanup is secondary to the unexpected initialization success.
 		t.Fatal("a missing module was loaded successfully")
 	}
 }
@@ -73,7 +73,7 @@ func TestWasmPluginRejectsGarbage(t *testing.T) {
 	plugin := NewWasmPlugin(path)
 	err := plugin.Init(newLuaTestHostAPI())
 	if err == nil {
-		plugin.Close()
+		_ = plugin.Close() // Cleanup is secondary to the unexpected initialization success.
 		t.Fatal("an invalid module was loaded successfully")
 	}
 	if !strings.Contains(err.Error(), "compiling") {
@@ -94,7 +94,7 @@ func TestWasmPluginSilentModuleDoesNotHang(t *testing.T) {
 	elapsed := time.Since(start)
 
 	if err == nil {
-		plugin.Close()
+		_ = plugin.Close() // Cleanup is secondary to the unexpected initialization success.
 		t.Fatal("a module that never answers was accepted")
 	}
 	// A module that exits without ever speaking either trips the handshake

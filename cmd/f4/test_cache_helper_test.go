@@ -34,8 +34,12 @@ func skipIfNoRelevantChanges(t *testing.T, cacheName string, globPatterns ...str
 		}
 		b, err := os.ReadFile(f)
 		if err == nil {
-			h.Write([]byte(f))
-			h.Write(b)
+			if _, err := h.Write([]byte(f)); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := h.Write(b); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 
@@ -53,7 +57,7 @@ func skipIfNoRelevantChanges(t *testing.T, cacheName string, globPatterns ...str
 
 	t.Cleanup(func() {
 		if !t.Failed() {
-			_ = os.WriteFile(cacheFile, []byte(currentHash), 0644)
+			_ = os.WriteFile(cacheFile, []byte(currentHash), 0600) // The change-detection cache is best effort.
 		}
 	})
 }

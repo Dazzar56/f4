@@ -34,7 +34,9 @@ func seedPanelForCopyName(t *testing.T, path string) *PanelsFrame {
 
 	fsp := pf.getActivePanel()
 	fsp.vfs = vfs.NewOSVFS(path)
-	fsp.vfs.SetPath(path)
+	if err := fsp.vfs.SetPath(path); err != nil {
+		t.Fatal(err)
+	}
 
 	fsp.entries = []*fileEntry{
 		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},

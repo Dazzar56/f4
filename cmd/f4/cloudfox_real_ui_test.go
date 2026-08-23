@@ -466,7 +466,7 @@ func runRealCloudFoxUIProvider(t *testing.T, host *realCloudFoxUIHost, connectio
 	}
 	workspacePath = workspace.GetPath()
 
-	initial := realCloudFoxUITextFixture(connection.Provider)
+	initial := realCloudFoxUITextFixture(t, connection.Provider)
 	fileName := "viewer-editor.txt"
 	fileCandidate := workspace.Join(workspace.GetPath(), fileName)
 	if err := writeRealCloudFoxUIFile(ctx, workspace, fileCandidate, initial); err != nil {
@@ -488,13 +488,20 @@ func runRealCloudFoxUIProvider(t *testing.T, host *realCloudFoxUIHost, connectio
 	})
 }
 
-func realCloudFoxUITextFixture(provider cloudfox.ProviderType) []byte {
+func realCloudFoxUITextFixture(t *testing.T, provider cloudfox.ProviderType) []byte {
+	t.Helper()
 	var b strings.Builder
-	b.WriteString("CloudFox real headless viewer/editor fixture\n")
-	for line := 0; line < 1800; line++ {
-		_, _ = fmt.Fprintf(&b, "%04d provider=%s abcdefghijklmnopqrstuvwxyz 0123456789\n", line, provider)
+	if _, err := b.WriteString("CloudFox real headless viewer/editor fixture\n"); err != nil {
+		t.Fatal(err)
 	}
-	b.WriteString("fixture-tail\n")
+	for line := 0; line < 1800; line++ {
+		if _, err := fmt.Fprintf(&b, "%04d provider=%s abcdefghijklmnopqrstuvwxyz 0123456789\n", line, provider); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := b.WriteString("fixture-tail\n"); err != nil {
+		t.Fatal(err)
+	}
 	return []byte(b.String())
 }
 
@@ -664,7 +671,7 @@ func runRealCloudFoxEditor(t *testing.T, host *realCloudFoxUIHost, filesystem vf
 	if err != nil {
 		t.Fatalf("restore edited workspace through production visual-path provider: %v", err)
 	}
-	defer reopened.Close()
+	defer func() { _ = reopened.Close() }() // Connection cleanup errors do not affect the assertions.
 	reopenedPath := requireRealCloudFoxUIFile(t, verifyCtx, reopened, provider, name, int64(len(expected)))
 
 	actionOpenEditor(pf, reopened, reopenedPath)
@@ -712,8 +719,8 @@ func runRealCloudFoxF5RoundTrip(t *testing.T, workspace vfs.VFS, provider cloudf
 	if cloudPanelVFS == nil || cloudPanelVFS == workspace {
 		t.Fatal("CloudVFS did not clone for the F5 passive panel")
 	}
-	defer local.Close()
-	defer cloudPanelVFS.Close()
+	defer func() { _ = local.Close() }()         // The local VFS has no teardown state.
+	defer func() { _ = cloudPanelVFS.Close() }() // Connection cleanup errors do not affect the assertions.
 
 	pf := realCloudFoxUIPanels(t, local, cloudPanelVFS)
 	defer pf.Close()
@@ -762,7 +769,7 @@ func readRealCloudFoxUIFile(t *testing.T, filesystem vfs.VFS, path string) []byt
 	if err != nil {
 		t.Fatalf("open copied real UI file: %s", redactRealCloudFoxError(err))
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	data := make([]byte, f.Size())
 	n, err := f.ReadAt(ctx, data, 0)
 	if err != nil && !errors.Is(err, io.EOF) {

@@ -18,12 +18,22 @@ func TestAsyncBuffer_LoadingCycle(t *testing.T) {
 	content := []byte("This is a test file content for async buffer.")
 	tmp := filepath.Join(t.TempDir(), "test.txt")
 	v := vfs.NewOSVFS(t.TempDir())
-	wc, _ := v.Create(context.Background(), tmp)
-	wc.Write(content)
-	wc.Close()
+	wc, err := v.Create(context.Background(), tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := wc.Write(content); err != nil {
+		t.Fatal(err)
+	}
+	if err := wc.Close(); err != nil {
+		t.Fatal(err)
+	}
 
-	f, _ := v.Open(context.Background(), tmp)
-	defer f.Close()
+	f, err := v.Open(context.Background(), tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = f.Close() }()
 	// Create buffer with very small chunks (10 bytes) to trigger multi-chunk logic
 	buf := NewAsyncBuffer(context.Background(), f)
 	buf.chunkSize = 10
@@ -78,11 +88,16 @@ func TestAsyncBuffer_BoundaryRead(t *testing.T) {
 	// Content: 0123456789ABCDEFGHIJ (20 bytes)
 	content := []byte("0123456789ABCDEFGHIJ")
 	tmp := filepath.Join(t.TempDir(), "boundary.txt")
-	os.WriteFile(tmp, content, 0644)
+	if err := os.WriteFile(tmp, content, 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	v := vfs.NewOSVFS(t.TempDir())
-	f, _ := v.Open(context.Background(), tmp)
-	defer f.Close()
+	f, err := v.Open(context.Background(), tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = f.Close() }()
 
 	// Chunk size 10.
 	buf := NewAsyncBuffer(context.Background(), f)
@@ -122,11 +137,16 @@ func TestAsyncBuffer_PartialChunkAtEOF(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	content := []byte("Short") // 5 bytes
 	tmp := filepath.Join(t.TempDir(), "eof.txt")
-	os.WriteFile(tmp, content, 0644)
+	if err := os.WriteFile(tmp, content, 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	v := vfs.NewOSVFS(t.TempDir())
-	f, _ := v.Open(context.Background(), tmp)
-	defer f.Close()
+	f, err := v.Open(context.Background(), tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = f.Close() }()
 
 	buf := NewAsyncBuffer(context.Background(), f)
 	buf.chunkSize = 100 // Chunk is larger than file
@@ -167,11 +187,16 @@ func TestAsyncBuffer_ConcurrentAccess(t *testing.T) {
 	}
 
 	tmp := filepath.Join(t.TempDir(), "concurrent.bin")
-	os.WriteFile(tmp, content, 0644)
+	if err := os.WriteFile(tmp, content, 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	v := vfs.NewOSVFS(t.TempDir())
-	f, _ := v.Open(context.Background(), tmp)
-	defer f.Close()
+	f, err := v.Open(context.Background(), tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = f.Close() }()
 
 	buf := NewAsyncBuffer(context.Background(), f)
 	buf.chunkSize = 64 * 1024 // 64KB chunks
@@ -230,9 +255,14 @@ func TestAsyncBuffer_CancellationMidFetch(t *testing.T) {
 
 	v := vfs.NewOSVFS(t.TempDir())
 	tmp := filepath.Join(t.TempDir(), "cancel.txt")
-	os.WriteFile(tmp, []byte("some content"), 0644)
-	f, _ := v.Open(context.Background(), tmp)
-	defer f.Close()
+	if err := os.WriteFile(tmp, []byte("some content"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	f, err := v.Open(context.Background(), tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = f.Close() }()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	buf := NewAsyncBuffer(ctx, f)
@@ -240,7 +270,7 @@ func TestAsyncBuffer_CancellationMidFetch(t *testing.T) {
 	defer buf.Close()
 
 	// 1. Trigger fetch
-	_, err := buf.Read(0, 5)
+	_, err = buf.Read(0, 5)
 	if err != piecetable.ErrLoading {
 		t.Fatal("Expected ErrLoading")
 	}
@@ -273,9 +303,14 @@ func TestAsyncBuffer_RedundantFetchPrevention(t *testing.T) {
 
 	v := vfs.NewOSVFS(t.TempDir())
 	tmp := filepath.Join(t.TempDir(), "redundant.txt")
-	os.WriteFile(tmp, make([]byte, 1000), 0644)
-	f, _ := v.Open(context.Background(), tmp)
-	defer f.Close()
+	if err := os.WriteFile(tmp, make([]byte, 1000), 0600); err != nil {
+		t.Fatal(err)
+	}
+	f, err := v.Open(context.Background(), tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = f.Close() }()
 
 	buf := NewAsyncBuffer(context.Background(), f)
 	buf.chunkSize = 100
@@ -312,9 +347,14 @@ func TestAsyncBuffer_ContextRace(t *testing.T) {
 	content := []byte("Race test content")
 	v := vfs.NewOSVFS(t.TempDir())
 	tmp := filepath.Join(t.TempDir(), "race.txt")
-	os.WriteFile(tmp, content, 0644)
-	f, _ := v.Open(context.Background(), tmp)
-	defer f.Close()
+	if err := os.WriteFile(tmp, content, 0600); err != nil {
+		t.Fatal(err)
+	}
+	f, err := v.Open(context.Background(), tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = f.Close() }()
 
 	iterations := 20 // Reduced from 100 to speed up the test
 	for i := 0; i < iterations; i++ {

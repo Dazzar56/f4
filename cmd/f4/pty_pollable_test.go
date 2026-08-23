@@ -20,7 +20,11 @@ func TestPTYMasterPollable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPTY: %v", err)
 	}
-	defer p.Close()
+	t.Cleanup(func() {
+		if err := p.Close(); err != nil {
+			t.Errorf("close PTY: %v", err)
+		}
+	})
 
 	// SetReadDeadline only works on poller-registered files.
 	if err := p.Master.SetReadDeadline(time.Now().Add(50 * time.Millisecond)); err != nil {

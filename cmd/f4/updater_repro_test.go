@@ -48,24 +48,41 @@ func TestUpdateFailureMessageRepro(t *testing.T) {
 		// We also make the file itself read-only, because if rename fails, writeFileSafe
 		// will fall back to truncating the existing file, which would otherwise succeed
 		// if the file itself is writable.
-		os.Chmod(exePath, 0444)
-		os.Chmod(tmpDir, 0555)
-		defer func() {
-			os.Chmod(tmpDir, 0755)
-			os.Chmod(exePath, 0755)
-		}()
+		if err := os.Chmod(exePath, 0444); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(tmpDir, 0555); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() {
+			if err := os.Chmod(tmpDir, 0755); err != nil {
+				t.Errorf("restore temporary directory permissions: %v", err)
+			}
+			if err := os.Chmod(exePath, 0755); err != nil {
+				t.Errorf("restore executable permissions: %v", err)
+			}
+		})
 	}
 
 	// 3. Setup a mock update server
 	var zipBuf bytes.Buffer
 	zw := zip.NewWriter(&zipBuf)
-	f, _ := zw.Create(exeName)
-	f.Write([]byte("new binary content"))
-	zw.Close()
+	f, err := zw.Create(exeName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Write([]byte("new binary content")); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/zip")
-		w.Write(zipBuf.Bytes())
+		if _, err := w.Write(zipBuf.Bytes()); err != nil {
+			t.Errorf("write update response: %v", err)
+		}
 	}))
 	defer ts.Close()
 

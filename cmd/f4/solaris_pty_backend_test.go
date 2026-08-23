@@ -54,7 +54,9 @@ func TestSolarisPTY_IdleState_And_SetSize(t *testing.T) {
 	}
 
 	// 1. Тестируем вызов SetSize
-	pty.SetSize(120, 43)
+	if err := pty.SetSize(120, 43); err != nil {
+		t.Fatal(err)
+	}
 	if mock.lastCols != 120 || mock.lastRows != 43 {
 		t.Errorf("SetSize failed to forward parameters. Got cols=%d, rows=%d", mock.lastCols, mock.lastRows)
 	}
@@ -89,7 +91,11 @@ func TestSolarisPTY_RawIO(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSolarisPTY failed: %v", err)
 	}
-	defer pty.Close()
+	t.Cleanup(func() {
+		if err := pty.Close(); err != nil {
+			t.Errorf("close Solaris PTY: %v", err)
+		}
+	})
 
 	// Запись в мастер-дескриптор
 	inputData := []byte("test-data-io")

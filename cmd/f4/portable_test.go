@@ -21,7 +21,9 @@ func TestConfig_PortableProfile(t *testing.T) {
 		configDirOnce.Do(func() {})
 	})
 	mockExe := filepath.Join(tmpDir, "f4.exe")
-	os.WriteFile(mockExe, []byte(""), 0755)
+	if err := os.WriteFile(mockExe, []byte(""), 0600); err != nil {
+		t.Fatal(err)
+	}
 	osExecutable = func() (string, error) {
 		return mockExe, nil
 	}
@@ -31,7 +33,9 @@ func TestConfig_PortableProfile(t *testing.T) {
 [General]
 UseSystemProfiles = 0
 `
-	os.WriteFile(mockExe+".ini", []byte(iniContent), 0644)
+	if err := os.WriteFile(mockExe+".ini", []byte(iniContent), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	// Сбрасываем кэш путей
 	resetConfigDirForTest()

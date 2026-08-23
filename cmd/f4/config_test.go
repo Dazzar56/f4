@@ -612,8 +612,12 @@ ShowHiddenFiles = 1
 [Editor]
 Crosshair = 1
 `
-	os.WriteFile(globalPath, []byte(globalContent), 0644)
-	os.WriteFile(userPath, []byte(userContent), 0644)
+	if err := os.WriteFile(globalPath, []byte(globalContent), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(userPath, []byte(userContent), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	// Mock paths
 	origPathsFunc := getConfigIniPaths

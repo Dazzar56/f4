@@ -171,7 +171,9 @@ func TestParseFarMenu_UTF16LEWithBOM(t *testing.T) {
 	body := "a:  Яблоко\r\n    cmd\r\n"
 	u16 := utf16.Encode([]rune(body))
 	var buf bytes.Buffer
-	buf.Write([]byte{0xFF, 0xFE})
+	if _, err := buf.Write([]byte{0xFF, 0xFE}); err != nil {
+		t.Fatal(err)
+	}
 	for _, w := range u16 {
 		_ = binary.Write(&buf, binary.LittleEndian, w)
 	}
@@ -188,7 +190,9 @@ func TestParseFarMenu_UTF16BEWithBOM(t *testing.T) {
 	body := "a:  X\r\n"
 	u16 := utf16.Encode([]rune(body))
 	var buf bytes.Buffer
-	buf.Write([]byte{0xFE, 0xFF})
+	if _, err := buf.Write([]byte{0xFE, 0xFF}); err != nil {
+		t.Fatal(err)
+	}
 	for _, w := range u16 {
 		_ = binary.Write(&buf, binary.BigEndian, w)
 	}
@@ -203,7 +207,9 @@ func TestParseFarMenu_UTF32LEWithBOM(t *testing.T) {
 	// emitted as a single 4-byte wchar_t. Looks like FF FE 00 00 ... .
 	body := "c:  code\r\n    code .\r\n"
 	var buf bytes.Buffer
-	buf.Write([]byte{0xFF, 0xFE, 0x00, 0x00})
+	if _, err := buf.Write([]byte{0xFF, 0xFE, 0x00, 0x00}); err != nil {
+		t.Fatal(err)
+	}
 	for _, r := range body {
 		_ = binary.Write(&buf, binary.LittleEndian, uint32(r))
 	}
@@ -220,7 +226,9 @@ func TestParseFarMenu_UTF32LEWithBOM(t *testing.T) {
 func TestParseFarMenu_UTF32LEWithCyrillic(t *testing.T) {
 	body := "a:  Яблоко\r\n"
 	var buf bytes.Buffer
-	buf.Write([]byte{0xFF, 0xFE, 0x00, 0x00})
+	if _, err := buf.Write([]byte{0xFF, 0xFE, 0x00, 0x00}); err != nil {
+		t.Fatal(err)
+	}
 	for _, r := range body {
 		_ = binary.Write(&buf, binary.LittleEndian, uint32(r))
 	}
@@ -233,7 +241,9 @@ func TestParseFarMenu_UTF32LEWithCyrillic(t *testing.T) {
 func TestParseFarMenu_UTF32BEWithBOM(t *testing.T) {
 	body := "a:  X\r\n"
 	var buf bytes.Buffer
-	buf.Write([]byte{0x00, 0x00, 0xFE, 0xFF})
+	if _, err := buf.Write([]byte{0x00, 0x00, 0xFE, 0xFF}); err != nil {
+		t.Fatal(err)
+	}
 	for _, r := range body {
 		_ = binary.Write(&buf, binary.BigEndian, uint32(r))
 	}
@@ -251,7 +261,9 @@ func TestParseFarMenu_UTF32BEWithBOM(t *testing.T) {
 func TestParseFarMenu_UTF32LE_NotMistakenForUTF16LE(t *testing.T) {
 	body := "a:  Apple\r\n"
 	var buf bytes.Buffer
-	buf.Write([]byte{0xFF, 0xFE, 0x00, 0x00})
+	if _, err := buf.Write([]byte{0xFF, 0xFE, 0x00, 0x00}); err != nil {
+		t.Fatal(err)
+	}
 	for _, r := range body {
 		_ = binary.Write(&buf, binary.LittleEndian, uint32(r))
 	}

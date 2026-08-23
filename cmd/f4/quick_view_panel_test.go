@@ -145,8 +145,12 @@ func TestQuickView_ScrollAndWrap(t *testing.T) {
 	// and horizontal scroll have something to move against.
 	var b strings.Builder
 	for i := 0; i < 50; i++ {
-		b.WriteString(strings.Repeat("abcdefghij", 20)) // 200 cols per line
-		b.WriteByte('\n')
+		if _, err := b.WriteString(strings.Repeat("abcdefghij", 20)); err != nil { // 200 cols per line
+			t.Fatal(err)
+		}
+		if err := b.WriteByte('\n'); err != nil {
+			t.Fatal(err)
+		}
 	}
 	path := filepath.Join(tmp, "long.txt")
 	if err := os.WriteFile(path, []byte(b.String()), 0644); err != nil {
@@ -240,9 +244,13 @@ func TestPanelsFrame_QuickViewWheel_ActivePanelScrolls(t *testing.T) {
 	tmp := t.TempDir()
 	var b strings.Builder
 	for i := 0; i < 200; i++ {
-		b.WriteString("line\n")
+		if _, err := b.WriteString("line\n"); err != nil {
+			t.Fatal(err)
+		}
 	}
-	os.WriteFile(filepath.Join(tmp, "big.txt"), []byte(b.String()), 0644)
+	if err := os.WriteFile(filepath.Join(tmp, "big.txt"), []byte(b.String()), 0600); err != nil {
+		t.Fatal(err)
+	}
 	fsp := pf.panels[1].(*FileSystemPanel)
 	fsp.vfs = vfs.NewOSVFS(tmp)
 	fsp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "big.txt", Size: int64(b.Len())}}}
@@ -283,7 +291,9 @@ func TestQuickView_MouseWheelScrolls(t *testing.T) {
 	tmp := t.TempDir()
 	var b strings.Builder
 	for i := 0; i < 100; i++ {
-		b.WriteString("line\n")
+		if _, err := b.WriteString("line\n"); err != nil {
+			t.Fatal(err)
+		}
 	}
 	path := filepath.Join(tmp, "many.txt")
 	if err := os.WriteFile(path, []byte(b.String()), 0644); err != nil {

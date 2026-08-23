@@ -50,15 +50,27 @@ func TestArchiveIndex_AutoOp(t *testing.T) {
 	oldIdx, _ := tar.GetStandardIndexPath(absOld)
 
 	// Ensure cache directory exists and create dummy index
-	os.MkdirAll(filepath.Dir(oldIdx), 0755)
-	os.WriteFile(oldIdx, []byte("fake index"), 0644)
-	defer os.Remove(oldIdx)
+	if err := os.MkdirAll(filepath.Dir(oldIdx), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(oldIdx, []byte("fake index"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Remove(oldIdx); err != nil && !os.IsNotExist(err) {
+			t.Errorf("remove source archive index: %v", err)
+		}
+	})
 
 	t.Run("Copy Index", func(t *testing.T) {
 		newArchiveName := "copied.tar.gz"
 		absNew, _ := dstVfs.Abs(newArchiveName)
 		newIdx, _ := tar.GetStandardIndexPath(absNew)
-		defer os.Remove(newIdx)
+		t.Cleanup(func() {
+			if err := os.Remove(newIdx); err != nil && !os.IsNotExist(err) {
+				t.Errorf("remove copied archive index: %v", err)
+			}
+		})
 
 		handleArchiveIndexOp(srcVfs, archiveName, dstVfs, newArchiveName, false)
 
@@ -74,10 +86,16 @@ func TestArchiveIndex_AutoOp(t *testing.T) {
 		newArchiveName := "moved.tar.gz"
 		absNew, _ := dstVfs.Abs(newArchiveName)
 		newIdx, _ := tar.GetStandardIndexPath(absNew)
-		defer os.Remove(newIdx)
+		t.Cleanup(func() {
+			if err := os.Remove(newIdx); err != nil && !os.IsNotExist(err) {
+				t.Errorf("remove moved archive index: %v", err)
+			}
+		})
 
 		// Restore old index if previous test cleaned it
-		os.WriteFile(oldIdx, []byte("fake index"), 0644)
+		if err := os.WriteFile(oldIdx, []byte("fake index"), 0600); err != nil {
+			t.Fatal(err)
+		}
 
 		handleArchiveIndexOp(srcVfs, archiveName, dstVfs, newArchiveName, true)
 
@@ -96,11 +114,17 @@ func TestArchiveIndex_AutoDelete(t *testing.T) {
 
 	t.Run("Delete single file index", func(t *testing.T) {
 		name := "to_delete.tgz"
-		os.WriteFile(filepath.Join(tmp, name), []byte("arc"), 0644)
+		if err := os.WriteFile(filepath.Join(tmp, name), []byte("arc"), 0600); err != nil {
+			t.Fatal(err)
+		}
 		abs, _ := v.Abs(name)
 		idx, _ := tar.GetStandardIndexPath(abs)
-		os.MkdirAll(filepath.Dir(idx), 0755)
-		os.WriteFile(idx, []byte("idx"), 0644)
+		if err := os.MkdirAll(filepath.Dir(idx), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(idx, []byte("idx"), 0600); err != nil {
+			t.Fatal(err)
+		}
 
 		handleArchiveIndexDelete(context.Background(), v, v.Join(v.GetPath(), name))
 
@@ -110,12 +134,18 @@ func TestArchiveIndex_AutoDelete(t *testing.T) {
 	})
 
 	t.Run("Recursive delete index", func(t *testing.T) {
-		os.MkdirAll(filepath.Join(tmp, "subdir"), 0755)
+		if err := os.MkdirAll(filepath.Join(tmp, "subdir"), 0755); err != nil {
+			t.Fatal(err)
+		}
 		name := "subdir/nested.tar.zst"
-		os.WriteFile(filepath.Join(tmp, name), []byte("arc"), 0644)
+		if err := os.WriteFile(filepath.Join(tmp, name), []byte("arc"), 0600); err != nil {
+			t.Fatal(err)
+		}
 		abs, _ := v.Abs(name)
 		idx, _ := tar.GetStandardIndexPath(abs)
-		os.WriteFile(idx, []byte("idx"), 0644)
+		if err := os.WriteFile(idx, []byte("idx"), 0600); err != nil {
+			t.Fatal(err)
+		}
 
 		handleArchiveIndexDelete(context.Background(), v, v.Join(v.GetPath(), "subdir"))
 
@@ -133,12 +163,22 @@ func TestExecuteFileOp_ArchiveIndexMigration(t *testing.T) {
 	dstVfs := vfs.NewOSVFS(tmpDst)
 
 	name := "migrate.tar.gz"
-	os.WriteFile(filepath.Join(tmpSrc, name), []byte("content"), 0644)
+	if err := os.WriteFile(filepath.Join(tmpSrc, name), []byte("content"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	absOld, _ := srcVfs.Abs(name)
 	oldIdx, _ := tar.GetStandardIndexPath(absOld)
-	os.MkdirAll(filepath.Dir(oldIdx), 0755)
-	os.WriteFile(oldIdx, []byte("index-data"), 0644)
-	defer os.Remove(oldIdx)
+	if err := os.MkdirAll(filepath.Dir(oldIdx), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(oldIdx, []byte("index-data"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Remove(oldIdx); err != nil && !os.IsNotExist(err) {
+			t.Errorf("remove source archive index: %v", err)
+		}
+	})
 
 	done := make(chan struct{})
 	ExecuteFileOp(nil, srcVfs, dstVfs, []string{name}, tmpDst, true, 2, func() { close(done) })
@@ -158,7 +198,11 @@ loop:
 
 	absNew, _ := dstVfs.Abs(name)
 	newIdx, _ := tar.GetStandardIndexPath(absNew)
-	defer os.Remove(newIdx)
+	t.Cleanup(func() {
+		if err := os.Remove(newIdx); err != nil && !os.IsNotExist(err) {
+			t.Errorf("remove migrated archive index: %v", err)
+		}
+	})
 
 	if _, err := os.Stat(newIdx); os.IsNotExist(err) {
 		t.Error("Archive index did not migrate during ExecuteFileOp (Move)")

@@ -136,7 +136,9 @@ func TestEnsureIndexedTo_ResolvesAMatchPastTheScan(t *testing.T) {
 	const lines = 4000
 	var sb strings.Builder
 	for i := 0; i < lines; i++ {
-		sb.WriteString("a line of text\n")
+		if _, err := sb.WriteString("a line of text\n"); err != nil {
+			t.Fatal(err)
+		}
 	}
 	content := sb.String()
 	needleOff := len(content)

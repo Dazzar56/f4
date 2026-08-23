@@ -69,7 +69,7 @@ func TestMapEditorFile_DeclinesWhatItShouldNotMap(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 
 		if _, err := MapEditorFile(v, f); err != errNotMappable {
 			t.Errorf("err = %v, want errNotMappable", err)
@@ -103,7 +103,7 @@ func TestMapEditorFile_DeclinesWhatItShouldNotMap(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 
 		fd, ok := f.(fileDescriptor)
 		if !ok || fd.Fd() == 0 || fd.Fd() == ^uintptr(0) {

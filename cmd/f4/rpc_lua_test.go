@@ -106,5 +106,7 @@ func TestLuaPluginIntegration(t *testing.T) {
 		t.Error("Host.Log callback from Lua was not captured by Go side")
 	}
 
-	p.Close()
+	if err := p.Close(); err != nil {
+		t.Fatal(err)
+	}
 }

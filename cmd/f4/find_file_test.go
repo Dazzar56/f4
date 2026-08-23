@@ -29,7 +29,9 @@ func TestFileContainsText_ChunkOverlap(t *testing.T) {
 	}
 
 	data := append(padding, []byte("SECRETPASSWORD")...)
-	os.WriteFile(path, data, 0644)
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	v := vfs.NewOSVFS(tmpDir)
 
@@ -85,9 +87,15 @@ func TestExecuteFindFile_MaskMatching(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	tmpDir := t.TempDir()
-	os.WriteFile(filepath.Join(tmpDir, "test1.go"), []byte("package main"), 0644)
-	os.WriteFile(filepath.Join(tmpDir, "test2.txt"), []byte("hello"), 0644)
-	os.WriteFile(filepath.Join(tmpDir, "test3.go"), []byte("package test"), 0644)
+	if err := os.WriteFile(filepath.Join(tmpDir, "test1.go"), []byte("package main"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "test2.txt"), []byte("hello"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "test3.go"), []byte("package test"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	v := vfs.NewOSVFS(tmpDir)
 

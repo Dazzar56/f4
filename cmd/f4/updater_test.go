@@ -148,7 +148,9 @@ func TestUpdater_CheckForUpdates_API(t *testing.T) {
 					{Name: "f4-linux-amd64.tar.gz", BrowserDownloadURL: "http://mock/download"},
 				},
 			}
-			json.NewEncoder(w).Encode(resp)
+			if err := json.NewEncoder(w).Encode(resp); err != nil {
+				t.Errorf("encode release response: %v", err)
+			}
 		} else {
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -204,18 +206,40 @@ func TestUpdater_Extractors(t *testing.T) {
 
 	var zipBuf bytes.Buffer
 	zw := zip.NewWriter(&zipBuf)
-	f1, _ := zw.Create("f4.exe")
-	f1.Write(binaryContent)
-	f2, _ := zw.Create("plugins/dummy.dll")
-	f2.Write(pluginContent)
-	fBad1, _ := zw.Create(badAbsPath)
-	fBad1.Write([]byte("hacked"))
-	fBad2, _ := zw.Create(badRelPath)
-	fBad2.Write([]byte("hacked"))
-	zw.Close()
+	f1, err := zw.Create("f4.exe")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f1.Write(binaryContent); err != nil {
+		t.Fatal(err)
+	}
+	f2, err := zw.Create("plugins/dummy.dll")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f2.Write(pluginContent); err != nil {
+		t.Fatal(err)
+	}
+	fBad1, err := zw.Create(badAbsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fBad1.Write([]byte("hacked")); err != nil {
+		t.Fatal(err)
+	}
+	fBad2, err := zw.Create(badRelPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fBad2.Write([]byte("hacked")); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	destZip := t.TempDir()
-	err := extractZipToDir(zipBuf.Bytes(), destZip)
+	err = extractZipToDir(zipBuf.Bytes(), destZip)
 	if err != nil {
 		t.Fatalf("extractZipToDir failed: %v", err)
 	}
@@ -231,16 +255,36 @@ func TestUpdater_Extractors(t *testing.T) {
 	var tgzBuf bytes.Buffer
 	gw := gzip.NewWriter(&tgzBuf)
 	tw := tar.NewWriter(gw)
-	tw.WriteHeader(&tar.Header{Name: "f4", Size: int64(len(binaryContent)), Mode: 0755})
-	tw.Write(binaryContent)
-	tw.WriteHeader(&tar.Header{Name: "plugins/dummy.so", Size: int64(len(pluginContent)), Mode: 0755})
-	tw.Write(pluginContent)
-	tw.WriteHeader(&tar.Header{Name: badAbsPath, Size: 6, Mode: 0644})
-	tw.Write([]byte("hacked"))
-	tw.WriteHeader(&tar.Header{Name: badRelPath, Size: 6, Mode: 0644})
-	tw.Write([]byte("hacked"))
-	tw.Close()
-	gw.Close()
+	if err := tw.WriteHeader(&tar.Header{Name: "f4", Size: int64(len(binaryContent)), Mode: 0755}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tw.Write(binaryContent); err != nil {
+		t.Fatal(err)
+	}
+	if err := tw.WriteHeader(&tar.Header{Name: "plugins/dummy.so", Size: int64(len(pluginContent)), Mode: 0755}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tw.Write(pluginContent); err != nil {
+		t.Fatal(err)
+	}
+	if err := tw.WriteHeader(&tar.Header{Name: badAbsPath, Size: 6, Mode: 0644}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tw.Write([]byte("hacked")); err != nil {
+		t.Fatal(err)
+	}
+	if err := tw.WriteHeader(&tar.Header{Name: badRelPath, Size: 6, Mode: 0644}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tw.Write([]byte("hacked")); err != nil {
+		t.Fatal(err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gw.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	destTar := t.TempDir()
 	err = extractTarGzToDir(tgzBuf.Bytes(), destTar)
@@ -262,20 +306,32 @@ func TestUpdater_Extractors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sf1.Write(binaryContent)
-	sf1.Close()
+	if _, err := sf1.Write(binaryContent); err != nil {
+		t.Fatal(err)
+	}
+	if err := sf1.Close(); err != nil {
+		t.Fatal(err)
+	}
 	sf2, err := sw.Create("plugins/dummy.dll")
 	if err != nil {
 		t.Fatal(err)
 	}
-	sf2.Write(pluginContent)
-	sf2.Close()
+	if _, err := sf2.Write(pluginContent); err != nil {
+		t.Fatal(err)
+	}
+	if err := sf2.Close(); err != nil {
+		t.Fatal(err)
+	}
 	sfBad, err := sw.Create(badAbsPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	sfBad.Write([]byte("hacked"))
-	sfBad.Close()
+	if _, err := sfBad.Write([]byte("hacked")); err != nil {
+		t.Fatal(err)
+	}
+	if err := sfBad.Close(); err != nil {
+		t.Fatal(err)
+	}
 	if err := sw.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -345,7 +401,9 @@ func TestUpdater_NetworkErrors(t *testing.T) {
 
 	// Test bad JSON
 	tsBadJSON := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{bad json`))
+		if _, err := w.Write([]byte(`{bad json`)); err != nil {
+			t.Errorf("write malformed response: %v", err)
+		}
 	}))
 	defer tsBadJSON.Close()
 
@@ -434,7 +492,9 @@ func TestUpdater_UserDeclinesUpdate(t *testing.T) {
 				{Name: "f4-windows-amd64.zip", BrowserDownloadURL: "http://mock"},
 			},
 		}
-		json.NewEncoder(w).Encode(resp)
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			t.Errorf("encode release response: %v", err)
+		}
 	}))
 	defer ts.Close()
 
@@ -511,7 +571,9 @@ func TestUpdater_ManualCheckIgnoresSessionDismiss(t *testing.T) {
 				{Name: "f4-windows-amd64.zip", BrowserDownloadURL: "http://mock"},
 			},
 		}
-		json.NewEncoder(w).Encode(resp)
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			t.Errorf("encode release response: %v", err)
+		}
 	}))
 	defer ts.Close()
 
@@ -567,7 +629,9 @@ func TestUpdater_AutoCheckSkipsSessionDismiss(t *testing.T) {
 				{Name: "f4-windows-amd64.zip", BrowserDownloadURL: "http://mock"},
 			},
 		}
-		json.NewEncoder(w).Encode(resp)
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			t.Errorf("encode release response: %v", err)
+		}
 	}))
 	defer ts.Close()
 
@@ -664,7 +728,9 @@ func TestUpdater_PerformUpdate(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	mockExe := filepath.Join(tmpDir, "f4_mock_exe")
-	os.WriteFile(mockExe, []byte("old_binary"), 0755)
+	if err := os.WriteFile(mockExe, []byte("old_binary"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	origExeFunc := osExecutable
 	osExecutable = func() (string, error) {
@@ -675,13 +741,23 @@ func TestUpdater_PerformUpdate(t *testing.T) {
 	var tgzBuf bytes.Buffer
 	gw := gzip.NewWriter(&tgzBuf)
 	tw := tar.NewWriter(gw)
-	tw.WriteHeader(&tar.Header{Name: filepath.Base(mockExe), Size: int64(len("new_binary")), Mode: 0755})
-	tw.Write([]byte("new_binary"))
-	tw.Close()
-	gw.Close()
+	if err := tw.WriteHeader(&tar.Header{Name: filepath.Base(mockExe), Size: int64(len("new_binary")), Mode: 0755}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tw.Write([]byte("new_binary")); err != nil {
+		t.Fatal(err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gw.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write(tgzBuf.Bytes())
+		if _, err := w.Write(tgzBuf.Bytes()); err != nil {
+			t.Errorf("write update archive: %v", err)
+		}
 	}))
 	defer ts.Close()
 
@@ -736,7 +812,11 @@ func TestUpdater_WriteFileSafe_SudoElevationFallback(t *testing.T) {
 	if err := os.Mkdir(protectedDir, 0555); err != nil {
 		t.Fatalf("failed to create read-only dir: %v", err)
 	}
-	defer os.Chmod(protectedDir, 0755) // Гарантируем очистку
+	t.Cleanup(func() {
+		if err := os.Chmod(protectedDir, 0755); err != nil {
+			t.Errorf("restore protected directory permissions: %v", err)
+		}
+	})
 
 	targetPath := filepath.Join(protectedDir, "binary.exe")
 

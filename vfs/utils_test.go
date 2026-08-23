@@ -15,7 +15,7 @@ func TestIsTerminalRunnable(t *testing.T) {
 
 	// 1. Regular text file
 	txtFile := filepath.Join(tmpDir, "test.txt")
-	if err := os.WriteFile(txtFile, []byte("hello"), 0644); err != nil {
+	if err := os.WriteFile(txtFile, []byte("hello"), 0600); err != nil {
 		t.Fatalf("Failed to create text file: %v", err)
 	}
 	if IsTerminalRunnable(ctx, v, txtFile) {
@@ -24,7 +24,7 @@ func TestIsTerminalRunnable(t *testing.T) {
 
 	// 2. Shell script by extension
 	shFile := filepath.Join(tmpDir, "test.sh")
-	if err := os.WriteFile(shFile, []byte("echo hi"), 0644); err != nil {
+	if err := os.WriteFile(shFile, []byte("echo hi"), 0600); err != nil {
 		t.Fatalf("Failed to create shell script: %v", err)
 	}
 	if !IsTerminalRunnable(ctx, v, shFile) {
@@ -33,7 +33,7 @@ func TestIsTerminalRunnable(t *testing.T) {
 
 	// 3. File with shebang
 	sbFile := filepath.Join(tmpDir, "myscript")
-	if err := os.WriteFile(sbFile, []byte("#!/usr/bin/env python\nprint('hi')"), 0644); err != nil {
+	if err := os.WriteFile(sbFile, []byte("#!/usr/bin/env python\nprint('hi')"), 0600); err != nil {
 		t.Fatalf("Failed to create shebang script: %v", err)
 	}
 	if !IsTerminalRunnable(ctx, v, sbFile) {
@@ -81,7 +81,7 @@ func TestIsTerminalRunnable_ShebangVariations(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			path := filepath.Join(tmpDir, "script_"+tt.name)
-			if err := os.WriteFile(path, []byte(tt.content), 0644); err != nil {
+			if err := os.WriteFile(path, []byte(tt.content), 0600); err != nil {
 				t.Fatalf("Failed to create test script: %v", err)
 			}
 			if got := IsTerminalRunnable(ctx, v, path); got != tt.want {

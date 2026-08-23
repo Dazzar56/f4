@@ -18,7 +18,7 @@ func TestConPTYAvailable_DoesNotPanic(t *testing.T) {
 		pty, err := NewPTY()
 		if err == nil {
 			if pty != nil {
-				pty.Close()
+				_ = pty.Close() // Cleanup is secondary to the unexpected allocation success.
 			}
 			t.Fatal("NewPTY succeeded when conPTYAvailable() reported false")
 		}

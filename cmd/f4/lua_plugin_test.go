@@ -125,7 +125,11 @@ func TestLuaPluginMountsADrive(t *testing.T) {
 	if err := plugin.Init(api); err != nil {
 		t.Fatalf("Init: %v", err)
 	}
-	defer plugin.Close()
+	t.Cleanup(func() {
+		if err := plugin.Close(); err != nil {
+			t.Errorf("close Lua plugin: %v", err)
+		}
+	})
 
 	factory, ok := api.drives["Lua Test Drive"]
 	if !ok {
@@ -165,7 +169,7 @@ func TestLuaPluginMountsADrive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	if file.Size() != 5 {
 		t.Errorf("Size = %d, want 5", file.Size())
@@ -194,7 +198,11 @@ func TestLuaPluginReportsHostVersion(t *testing.T) {
 	if err := plugin.Init(api); err != nil {
 		t.Fatalf("Init: %v", err)
 	}
-	defer plugin.Close()
+	t.Cleanup(func() {
+		if err := plugin.Close(); err != nil {
+			t.Errorf("close Lua plugin: %v", err)
+		}
+	})
 
 	if _, ok := api.drives["test-version"]; !ok {
 		t.Fatalf("Host.GetVersion did not reach the plugin, drives = %v", api.drives)
@@ -206,7 +214,7 @@ func TestLuaPluginWithoutInitFails(t *testing.T) {
 
 	plugin := NewLuaPlugin(path)
 	if err := plugin.Init(newLuaTestHostAPI()); err == nil {
-		plugin.Close()
+		_ = plugin.Close() // Cleanup is secondary to the unexpected initialization success.
 		t.Fatal("a plugin without Plugin.Init was loaded successfully")
 	}
 }
@@ -216,7 +224,7 @@ func TestLuaPluginWithBrokenScriptFails(t *testing.T) {
 
 	plugin := NewLuaPlugin(path)
 	if err := plugin.Init(newLuaTestHostAPI()); err == nil {
-		plugin.Close()
+		_ = plugin.Close() // Cleanup is secondary to the unexpected initialization success.
 		t.Fatal("a syntactically invalid plugin was loaded successfully")
 	}
 }

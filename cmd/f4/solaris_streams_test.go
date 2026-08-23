@@ -15,7 +15,11 @@ func TestMockSolarisStreams_Lifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to open mock master: %v", err)
 	}
-	defer master.Close()
+	t.Cleanup(func() {
+		if err := master.Close(); err != nil {
+			t.Errorf("close mock master: %v", err)
+		}
+	})
 
 	// 2. Передаем слейв во владение пользователю и снимаем блокировку.
 	// Без этих двух шагов ядро не даст открыть /dev/pts/N.
@@ -40,7 +44,11 @@ func TestMockSolarisStreams_Lifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to open mock slave: %v", err)
 	}
-	defer slave.Close()
+	t.Cleanup(func() {
+		if err := slave.Close(); err != nil {
+			t.Errorf("close mock slave: %v", err)
+		}
+	})
 
 	// 5. Пушим STREAMS модули (как это делает Illumos)
 	err = mock.IoctlPush(slave, "ptem")

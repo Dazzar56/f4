@@ -717,7 +717,9 @@ func TestPanelsFrame_ProcessMouse_DoubleClick(t *testing.T) {
 
 	tmp := t.TempDir()
 	fsp := pf.panels[0].(*FileSystemPanel)
-	fsp.vfs.SetPath(tmp)
+	if err := fsp.vfs.SetPath(tmp); err != nil {
+		t.Fatal(err)
+	}
 
 	// Bypass async load
 	fsp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
@@ -774,11 +776,15 @@ func TestPanelsFrame_ProcessMouse_DoubleClickFile(t *testing.T) {
 
 	tmp := t.TempDir()
 	runnablePath := filepath.Join(tmp, "run.sh")
-	os.WriteFile(runnablePath, []byte("echo"), 0755)
+	if err := os.WriteFile(runnablePath, []byte("echo"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	fsp := pf.panels[0].(*FileSystemPanel)
 	fsp.SetViewMode(ViewModeDetailed)
-	fsp.vfs.SetPath(tmp)
+	if err := fsp.vfs.SetPath(tmp); err != nil {
+		t.Fatal(err)
+	}
 
 	fsp.entries = []*fileEntry{
 		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
@@ -836,12 +842,16 @@ func TestPanelsFrame_ProcessMouse_AltPanelSwallowsClicks(t *testing.T) {
 
 	tmp := t.TempDir()
 	runnablePath := filepath.Join(tmp, "run.sh")
-	os.WriteFile(runnablePath, []byte("echo"), 0755)
+	if err := os.WriteFile(runnablePath, []byte("echo"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	// Left panel holds the runnable; right is active by default.
 	fsp := pf.panels[0].(*FileSystemPanel)
 	fsp.SetViewMode(ViewModeDetailed)
-	fsp.vfs.SetPath(tmp)
+	if err := fsp.vfs.SetPath(tmp); err != nil {
+		t.Fatal(err)
+	}
 	fsp.entries = []*fileEntry{
 		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
 		{VFSItem: vfs.VFSItem{Name: "run.sh", IsDir: false}},
@@ -904,10 +914,14 @@ func TestPanelsFrame_ProcessMouse_MiddleClickOverAltPanel(t *testing.T) {
 	pf.ResizeConsole(80, 25)
 
 	tmp := t.TempDir()
-	os.WriteFile(filepath.Join(tmp, "run.sh"), []byte("echo"), 0755)
+	if err := os.WriteFile(filepath.Join(tmp, "run.sh"), []byte("echo"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	fsp := pf.panels[0].(*FileSystemPanel)
 	fsp.SetViewMode(ViewModeDetailed)
-	fsp.vfs.SetPath(tmp)
+	if err := fsp.vfs.SetPath(tmp); err != nil {
+		t.Fatal(err)
+	}
 	fsp.entries = []*fileEntry{
 		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
 		{VFSItem: vfs.VFSItem{Name: "run.sh", IsDir: false}},
@@ -1429,11 +1443,19 @@ func TestPanelsFrame_CtrlBrackets_Insertion(t *testing.T) {
 	tmp := t.TempDir()
 	leftPath := filepath.Join(tmp, "left")
 	rightPath := filepath.Join(tmp, "right")
-	os.MkdirAll(leftPath, 0755)
-	os.MkdirAll(rightPath, 0755)
+	if err := os.MkdirAll(leftPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(rightPath, 0755); err != nil {
+		t.Fatal(err)
+	}
 
-	lp.vfs.SetPath(leftPath)
-	rp.vfs.SetPath(rightPath)
+	if err := lp.vfs.SetPath(leftPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := rp.vfs.SetPath(rightPath); err != nil {
+		t.Fatal(err)
+	}
 
 	// 1. Тест Ctrl+[ (Путь левой панели)
 	pf.cmdLine.Clear()
@@ -1899,7 +1921,9 @@ func TestPanelsFrame_ManualRefresh(t *testing.T) {
 	// Setup a mock directory
 	tmp := t.TempDir()
 	fsp := pf.panels[0].(*FileSystemPanel)
-	fsp.vfs.SetPath(tmp)
+	if err := fsp.vfs.SetPath(tmp); err != nil {
+		t.Fatal(err)
+	}
 
 	// Press Ctrl+R
 	handled := pressKey(pf, &vtinput.InputEvent{
@@ -1928,12 +1952,16 @@ func TestPanelsFrame_AutoRefresh(t *testing.T) {
 	// Setup a mock directory
 	tmp := t.TempDir()
 	fsp := pf.panels[0].(*FileSystemPanel)
-	fsp.vfs.SetPath(tmp)
+	if err := fsp.vfs.SetPath(tmp); err != nil {
+		t.Fatal(err)
+	}
 
 	// Emulate an initial read that populates MTime
 	fsp.lastDirMTime = time.Now().Add(-10 * time.Minute)
 	// Write a file to update actual directory MTime
-	os.WriteFile(filepath.Join(tmp, "test.txt"), []byte("data"), 0644)
+	if err := os.WriteFile(filepath.Join(tmp, "test.txt"), []byte("data"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	// Emulate the timer expiration
 	pf.lastAutoRefresh = time.Now().Add(-5 * time.Second)
@@ -2054,14 +2082,22 @@ func TestPanelsFrame_SwapPanels(t *testing.T) {
 
 	pathL := filepath.Join(t.TempDir(), "left")
 	pathR := filepath.Join(t.TempDir(), "right")
-	os.MkdirAll(pathL, 0755)
-	os.MkdirAll(pathR, 0755)
+	if err := os.MkdirAll(pathL, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(pathR, 0755); err != nil {
+		t.Fatal(err)
+	}
 
 	fspL := pf.panels[0].(*FileSystemPanel)
 	fspR := pf.panels[1].(*FileSystemPanel)
 
-	fspL.vfs.SetPath(pathL)
-	fspR.vfs.SetPath(pathR)
+	if err := fspL.vfs.SetPath(pathL); err != nil {
+		t.Fatal(err)
+	}
+	if err := fspR.vfs.SetPath(pathR); err != nil {
+		t.Fatal(err)
+	}
 	fspL.SetViewMode(ViewModeDetailed)
 	fspR.SetViewMode(ViewModeMedium)
 
@@ -2103,13 +2139,21 @@ func TestPanelsFrame_VisualLeftRightFollowSwap(t *testing.T) {
 
 	pathL := filepath.Join(t.TempDir(), "left")
 	pathR := filepath.Join(t.TempDir(), "right")
-	os.MkdirAll(pathL, 0755)
-	os.MkdirAll(pathR, 0755)
+	if err := os.MkdirAll(pathL, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(pathR, 0755); err != nil {
+		t.Fatal(err)
+	}
 
 	fspL := pf.panels[0].(*FileSystemPanel)
 	fspR := pf.panels[1].(*FileSystemPanel)
-	fspL.vfs.SetPath(pathL)
-	fspR.vfs.SetPath(pathR)
+	if err := fspL.vfs.SetPath(pathL); err != nil {
+		t.Fatal(err)
+	}
+	if err := fspR.vfs.SetPath(pathR); err != nil {
+		t.Fatal(err)
+	}
 
 	// Baseline: unswapped — visual-left is the panel we set to
 	// pathL, visual-right the one at pathR.
@@ -2160,14 +2204,20 @@ func TestPanelsFrame_Clone_SelectionPreservation(t *testing.T) {
 	SetDefaultF4Palette()
 
 	tmp := t.TempDir()
-	os.WriteFile(filepath.Join(tmp, "selected.txt"), []byte("data"), 0644)
-	os.WriteFile(filepath.Join(tmp, "normal.txt"), []byte("data"), 0644)
+	if err := os.WriteFile(filepath.Join(tmp, "selected.txt"), []byte("data"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmp, "normal.txt"), []byte("data"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 	fsp := pf.panels[0].(*FileSystemPanel)
-	fsp.vfs.SetPath(tmp)
+	if err := fsp.vfs.SetPath(tmp); err != nil {
+		t.Fatal(err)
+	}
 	fsp.ReadDirectory()
 
 	// Wait for initial load
@@ -2313,7 +2363,9 @@ func TestPanelsFrameCloudPathSurfacesUseVisualAddressOnly(t *testing.T) {
 	var promptText strings.Builder
 	for _, cell := range prompt {
 		if cell.Char != vtui.WideCharFiller {
-			promptText.WriteRune(rune(cell.Char))
+			if _, err := promptText.WriteRune(vtui.CellBaseRune(cell.Char)); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 	for surface, text := range map[string]string{
@@ -2353,7 +2405,9 @@ func TestPanelsFramePendingCloudHistoryUsesVisualTargetImmediately(t *testing.T)
 	var prompt strings.Builder
 	for _, cell := range pf.buildPrompt() {
 		if cell.Char != vtui.WideCharFiller {
-			prompt.WriteRune(rune(cell.Char))
+			if _, err := prompt.WriteRune(vtui.CellBaseRune(cell.Char)); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 	for surface, value := range map[string]string{
@@ -2375,11 +2429,19 @@ func TestPanelsFrame_GetPaths(t *testing.T) {
 	tmp := t.TempDir()
 	pathL := filepath.Join(tmp, "left")
 	pathR := filepath.Join(tmp, "right")
-	os.MkdirAll(pathL, 0755)
-	os.MkdirAll(pathR, 0755)
+	if err := os.MkdirAll(pathL, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(pathR, 0755); err != nil {
+		t.Fatal(err)
+	}
 
-	pf.panels[0].(*FileSystemPanel).vfs.SetPath(pathL)
-	pf.panels[1].(*FileSystemPanel).vfs.SetPath(pathR)
+	if err := pf.panels[0].(*FileSystemPanel).vfs.SetPath(pathL); err != nil {
+		t.Fatal(err)
+	}
+	if err := pf.panels[1].(*FileSystemPanel).vfs.SetPath(pathR); err != nil {
+		t.Fatal(err)
+	}
 
 	l, r := pf.GetPaths()
 	if l != pathL || r != pathR {
@@ -2417,7 +2479,9 @@ func TestPanelsFrame_CloneIndependence(t *testing.T) {
 	// Set path in original
 	fsp := pf.panels[0].(*FileSystemPanel)
 	origPath := t.TempDir()
-	fsp.vfs.SetPath(origPath)
+	if err := fsp.vfs.SetPath(origPath); err != nil {
+		t.Fatal(err)
+	}
 
 	// Clone
 	clone := pf.Clone()
@@ -2425,7 +2489,9 @@ func TestPanelsFrame_CloneIndependence(t *testing.T) {
 
 	// Change path in clone
 	newPath := t.TempDir()
-	clone.panels[0].(*FileSystemPanel).vfs.SetPath(newPath)
+	if err := clone.panels[0].(*FileSystemPanel).vfs.SetPath(newPath); err != nil {
+		t.Fatal(err)
+	}
 
 	// Verify original is unchanged
 	if pf.panels[0].(*FileSystemPanel).vfs.GetPath() != origPath {
@@ -2613,28 +2679,36 @@ func TestIsTerminalRunnable(t *testing.T) {
 
 	// 1. Обычный текстовый файл -> false
 	txtFile := filepath.Join(tmpDir, "test.txt")
-	os.WriteFile(txtFile, []byte("hello"), 0644)
+	if err := os.WriteFile(txtFile, []byte("hello"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	if vfs.IsTerminalRunnable(context.Background(), v, txtFile) {
 		t.Error("Text file should not be terminal-runnable")
 	}
 
 	// 2. Файл с расширением .sh -> true
 	shFile := filepath.Join(tmpDir, "test.sh")
-	os.WriteFile(shFile, []byte("echo hi"), 0644)
+	if err := os.WriteFile(shFile, []byte("echo hi"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	if !vfs.IsTerminalRunnable(context.Background(), v, shFile) {
 		t.Error(".sh file should be terminal-runnable")
 	}
 
 	// 3. Файл с шебангом без расширения -> true
 	binFile := filepath.Join(tmpDir, "my-tool")
-	os.WriteFile(binFile, []byte("#!/usr/bin/env bash\necho hi"), 0644)
+	if err := os.WriteFile(binFile, []byte("#!/usr/bin/env bash\necho hi"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	if !vfs.IsTerminalRunnable(context.Background(), v, binFile) {
 		t.Error("File with shebang should be terminal-runnable")
 	}
 
 	// 4. Директория -> false
 	subDir := filepath.Join(tmpDir, "folder")
-	os.Mkdir(subDir, 0755)
+	if err := os.Mkdir(subDir, 0755); err != nil {
+		t.Fatal(err)
+	}
 	if vfs.IsTerminalRunnable(context.Background(), v, subDir) {
 		t.Error("Directory should not be terminal-runnable")
 	}
@@ -2642,7 +2716,12 @@ func TestIsTerminalRunnable(t *testing.T) {
 	// 5. Unix Executable Bit (если не на Windows)
 	if runtime.GOOS != "windows" {
 		execFile := filepath.Join(tmpDir, "compiled-bin")
-		os.WriteFile(execFile, []byte{0x7f, 'E', 'L', 'F'}, 0755)
+		if err := os.WriteFile(execFile, []byte{0x7f, 'E', 'L', 'F'}, 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(execFile, 0700); err != nil {
+			t.Fatal(err)
+		}
 		if !vfs.IsTerminalRunnable(context.Background(), v, execFile) {
 			t.Error("File with executable bit should be terminal-runnable on Unix")
 		}
@@ -2657,11 +2736,15 @@ func TestPanelsFrame_ReturnExecution(t *testing.T) {
 	// Создаем временный запускаемый файл
 	tmp := t.TempDir()
 	runnablePath := filepath.Join(tmp, "runme.sh")
-	os.WriteFile(runnablePath, []byte("echo 1"), 0755)
+	if err := os.WriteFile(runnablePath, []byte("echo 1"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	// Настраиваем VFS и выбираем этот файл на панели
 	fsp := pf.panels[1].(*FileSystemPanel)
-	fsp.vfs.SetPath(tmp)
+	if err := fsp.vfs.SetPath(tmp); err != nil {
+		t.Fatal(err)
+	}
 
 	fsp.entries = []*fileEntry{
 		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
@@ -2872,10 +2955,14 @@ func TestPanelsFrame_DirectoryEnter(t *testing.T) {
 	pf.ResizeConsole(80, 25)
 	tmp := t.TempDir()
 	sub := filepath.Join(tmp, "work_dir")
-	os.Mkdir(sub, 0755)
+	if err := os.Mkdir(sub, 0755); err != nil {
+		t.Fatal(err)
+	}
 
 	fsp := pf.panels[1].(*FileSystemPanel)
-	fsp.vfs.SetPath(tmp)
+	if err := fsp.vfs.SetPath(tmp); err != nil {
+		t.Fatal(err)
+	}
 
 	fsp.entries = []*fileEntry{
 		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
@@ -2915,10 +3002,14 @@ func TestPanelsFrame_NonRunnableOpen(t *testing.T) {
 	pf.ResizeConsole(80, 25)
 	tmp := t.TempDir()
 	docPath := filepath.Join(tmp, "readme.txt")
-	os.WriteFile(docPath, []byte("some text"), 0644)
+	if err := os.WriteFile(docPath, []byte("some text"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	fsp := pf.panels[1].(*FileSystemPanel)
-	fsp.vfs.SetPath(tmp)
+	if err := fsp.vfs.SetPath(tmp); err != nil {
+		t.Fatal(err)
+	}
 
 	fsp.entries = []*fileEntry{
 		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
@@ -3288,10 +3379,14 @@ func TestPanelsFrame_ProcessMouse_RightDoubleClickNoEnter(t *testing.T) {
 
 	tmp := t.TempDir()
 	runnablePath := filepath.Join(tmp, "run.sh")
-	os.WriteFile(runnablePath, []byte("echo"), 0755)
+	if err := os.WriteFile(runnablePath, []byte("echo"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	fsp := pf.Left().(*FileSystemPanel)
-	fsp.vfs.SetPath(tmp)
+	if err := fsp.vfs.SetPath(tmp); err != nil {
+		t.Fatal(err)
+	}
 
 	fsp.entries = []*fileEntry{
 		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
@@ -3670,8 +3765,12 @@ func TestPanelsFrame_DriveMenu_OtherPanel(t *testing.T) {
 	pf.ResizeConsole(80, 25)
 
 	pathR := filepath.Join(t.TempDir(), "right")
-	os.MkdirAll(pathR, 0755)
-	pf.panels[1].(*FileSystemPanel).vfs.SetPath(pathR)
+	if err := os.MkdirAll(pathR, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := pf.panels[1].(*FileSystemPanel).vfs.SetPath(pathR); err != nil {
+		t.Fatal(err)
+	}
 
 	// Open Alt+F1 (Left panel drive menu)
 	pf.showDriveMenu(0)
@@ -3907,7 +4006,9 @@ func TestPanelsFrame_PromptTruncation(t *testing.T) {
 	t.Run("Short Path No Truncation", func(t *testing.T) {
 		// Use NullVFS to bypass real disk checks in tests
 		fsp.vfs = vfs.NewNullVFS(0)
-		fsp.vfs.SetPath(filepath.FromSlash("/home/user"))
+		if err := fsp.vfs.SetPath(filepath.FromSlash("/home/user")); err != nil {
+			t.Fatal(err)
+		}
 		prompt := pf.buildPrompt()
 
 		visibleLen := 0
@@ -3942,7 +4043,9 @@ func TestPanelsFrame_PromptTruncation(t *testing.T) {
 		defer func() { osHostname = oldHostname }()
 
 		fsp.vfs = vfs.NewNullVFS(0)
-		fsp.vfs.SetPath(filepath.FromSlash("/very/long/directory/path/that/exceeds/the/limit/of/forty/characters"))
+		if err := fsp.vfs.SetPath(filepath.FromSlash("/very/long/directory/path/that/exceeds/the/limit/of/forty/characters")); err != nil {
+			t.Fatal(err)
+		}
 		prompt := pf.buildPrompt()
 
 		visibleLen := 0
@@ -3962,7 +4065,9 @@ func TestPanelsFrame_PromptTruncation(t *testing.T) {
 		// Use NullVFS to bypass real disk checks in tests
 		fsp.vfs = vfs.NewNullVFS(0)
 		longPath := "/very/long/directory/path/that/exceeds/the/limit/of/forty/characters/definitely/and/must/be/shortened"
-		fsp.vfs.SetPath(filepath.FromSlash(longPath))
+		if err := fsp.vfs.SetPath(filepath.FromSlash(longPath)); err != nil {
+			t.Fatal(err)
+		}
 		prompt := pf.buildPrompt()
 
 		visibleLen := 0
@@ -4208,10 +4313,8 @@ func createTestZipForNav(t *testing.T, path string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
 
 	zw := zip.NewWriter(f)
-	defer zw.Close()
 
 	_, err = zw.Create("inner_dir/")
 	if err != nil {
@@ -4222,7 +4325,15 @@ func createTestZipForNav(t *testing.T, path string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	w.Write([]byte("hello"))
+	if _, err := w.Write([]byte("hello")); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestPanelsFrame_NavigateToPath(t *testing.T) {
@@ -4319,15 +4430,31 @@ func TestArchiveBulkExtract_ProgressTracking(t *testing.T) {
 	zw := zip.NewWriter(f)
 
 	// Directory
-	_, _ = zw.Create("dir/")
+	if _, err := zw.Create("dir/"); err != nil {
+		t.Fatal(err)
+	}
 	// File 1 (10 bytes)
-	w1, _ := zw.Create("dir/file1.txt")
-	w1.Write([]byte("0123456789"))
+	w1, err := zw.Create("dir/file1.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w1.Write([]byte("0123456789")); err != nil {
+		t.Fatal(err)
+	}
 	// File 2 (20 bytes)
-	w2, _ := zw.Create("dir/file2.txt")
-	w2.Write([]byte("01234567890123456789"))
-	zw.Close()
-	f.Close()
+	w2, err := zw.Create("dir/file2.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w2.Write([]byte("01234567890123456789")); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	// 1. Setup VFS
 	parentVFS := vfs.NewOSVFS(tmpDir)
@@ -4335,10 +4462,12 @@ func TestArchiveBulkExtract_ProgressTracking(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to open archive VFS: %v", err)
 	}
-	defer arcVFS.Close()
+	defer func() { _ = arcVFS.Close() }()
 
 	destDir := filepath.Join(tmpDir, "extracted")
-	os.MkdirAll(destDir, 0755)
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		t.Fatal(err)
+	}
 	dstVFS := vfs.NewOSVFS(destDir)
 
 	// 2. Pre-calculate stats (this mimics ExecuteFileOp's scan phase)
@@ -4523,8 +4652,10 @@ func TestPanelsFrame_ShiftF9_SaveSettings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmp.Name())
-	tmp.Close()
+	t.Cleanup(func() { _ = os.Remove(tmp.Name()) }) // Temporary file cleanup failure is uninteresting.
+	if err := tmp.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	oldGetPath := getUserConfigIniPath
 	oldGetPaths := getConfigIniPaths
@@ -4630,8 +4761,12 @@ func TestPanelsFrame_CtrlBackslash_GoesToRoot(t *testing.T) {
 	fsp := pf.panels[pf.activeIdx].(*FileSystemPanel)
 	tmp := t.TempDir()
 	sub := filepath.Join(tmp, "a", "b", "c")
-	os.MkdirAll(sub, 0755)
-	fsp.vfs.SetPath(sub)
+	if err := os.MkdirAll(sub, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := fsp.vfs.SetPath(sub); err != nil {
+		t.Fatal(err)
+	}
 
 	// Отправляем Ctrl+\
 	ev := &vtinput.InputEvent{
@@ -4668,8 +4803,12 @@ func TestPanelsFrame_CtrlPgUp_GoesToParentOrDriveMenu(t *testing.T) {
 	fsp := pf.panels[pf.activeIdx].(*FileSystemPanel)
 	tmp := t.TempDir()
 	sub := filepath.Join(tmp, "sub")
-	os.MkdirAll(sub, 0755)
-	fsp.vfs.SetPath(sub)
+	if err := os.MkdirAll(sub, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := fsp.vfs.SetPath(sub); err != nil {
+		t.Fatal(err)
+	}
 
 	// Отправляем Ctrl+PgUp
 	ev := &vtinput.InputEvent{
@@ -4722,8 +4861,12 @@ func TestPanelsFrame_CtrlPgDn_EntersDir(t *testing.T) {
 	fsp := pf.panels[pf.activeIdx].(*FileSystemPanel)
 	tmp := t.TempDir()
 	sub := filepath.Join(tmp, "sub")
-	os.MkdirAll(sub, 0755)
-	fsp.vfs.SetPath(tmp)
+	if err := os.MkdirAll(sub, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := fsp.vfs.SetPath(tmp); err != nil {
+		t.Fatal(err)
+	}
 
 	fsp.entries = []*fileEntry{
 		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
@@ -4897,11 +5040,17 @@ func TestPanelsFrame_ShiftEnter_ExplorerLaunch(t *testing.T) {
 
 	lp := pf.panels[0].(*FileSystemPanel)
 	tmp := t.TempDir()
-	lp.vfs.SetPath(tmp)
+	if err := lp.vfs.SetPath(tmp); err != nil {
+		t.Fatal(err)
+	}
 
 	// Create dummy file and folder
-	os.WriteFile(filepath.Join(tmp, "doc.txt"), []byte("data"), 0644)
-	os.Mkdir(filepath.Join(tmp, "sub"), 0755)
+	if err := os.WriteFile(filepath.Join(tmp, "doc.txt"), []byte("data"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(tmp, "sub"), 0755); err != nil {
+		t.Fatal(err)
+	}
 
 	lp.entries = []*fileEntry{
 		{VFSItem: vfs.VFSItem{Name: ".."}},
