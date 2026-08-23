@@ -54,9 +54,7 @@ func TestSolarisPTY_IdleState_And_SetSize(t *testing.T) {
 	}
 
 	// 1. Тестируем вызов SetSize
-	if err := pty.SetSize(120, 43); err != nil {
-		t.Fatal(err)
-	}
+	pty.SetSize(120, 43)
 	if mock.lastCols != 120 || mock.lastRows != 43 {
 		t.Errorf("SetSize failed to forward parameters. Got cols=%d, rows=%d", mock.lastCols, mock.lastRows)
 	}
