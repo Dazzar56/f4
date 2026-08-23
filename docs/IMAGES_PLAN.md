@@ -240,9 +240,9 @@ between bands would lift that limit entirely, and f4's receiver already honours
 it — the two halves of the protocol are asymmetric until this is done. Note
 that this is the vtui repository, not f4.
 
-**15. Answering DA1 when the chunk ends on the `c`.** See the trap in section
-7. The feature does not work for a client that queries device attributes and
-gets nothing back, which is most of them.
+**15. Nothing.** The device attributes answer used to be swallowed when a
+chunk ended on its final byte, which kept every client from ever asking for a
+picture. Fixed; see the trap in section 7.
 
 Note that steps 9 to 11 exist because **kitty images do not work in either
 direction between f4 and far2l today**: not when f4 runs inside far2l, and not
@@ -372,22 +372,25 @@ f4 can tell them apart — the information is not in the event. Hence the plain
 currently matched by `Char` with the Alt flag set; that has not been confirmed
 on a real terminal.
 
-**A chunk that ends exactly at the `c` of `CSI c` is never answered.** This one
-is a live defect and it is the first thing to check when sixel appears not to
-work at all. `AnsiParser.exciseWindowsSync` hides the background `cd` command
-that keeps the panel and the shell in step; to survive a chunk boundary it
-holds back any tail of the incoming data that could be the start of `cd /d "`,
-and a lone `c` qualifies. The byte is prepended to the next chunk, so nothing
-is lost — except that a client which has just sent `CSI c` is now blocked
-waiting for the reply and will send nothing else. It times out and concludes
-the terminal has no sixel. The behaviour predates this work; sixel is what made
-it matter, because every sixel client opens with device attributes.
-`\x1b[c` alone answers nothing, `\x1b[c` twice answers once, and a probe test
-confirms both. `XTSMGRAPHICS` and the `CSI ... t` queries end in `S` and `t`
-and are unaffected. Whatever the fix is, it has to keep the excision working
-across a split inside the real command; refusing to hold back a suffix shorter
-than three bytes is the cheapest version and costs at most a few stray
-characters in a case that needs the split to land inside `cd /d`.
+**Never hold a byte of child output back on a guess.** This one cost a day of
+not understanding why no client would send a picture.
+`AnsiParser.exciseWindowsSync` hides the background `cd` command that keeps the
+panel and the shell in step, and it used to survive a chunk boundary by
+withholding any tail of the incoming data that could be the start of `cd /d "`.
+A lone `c` qualifies. So a child that had just sent `CSI c` and was waiting for
+its device attributes never got them: the byte would have been released by the
+next chunk, and a child waiting for an answer sends no next chunk. It timed
+out and concluded the terminal has no sixel. Every sixel client opens with that
+query, so the whole feature was dead while looking implemented.
+
+The fix is to print those bytes and only remember them, in `seenWindowsSync`,
+so the next chunk can still match across the split; the erase-line the excision
+already emits then wipes the fragment off the screen together with the rest of
+the command. `TestWindowsSyncExcisedAtEveryChunkBoundary` walks every split
+point of the command and `TestAnsiQueryAtChunkEndIsAnswered` walks the queries.
+The rule to carry forward: the parser may defer a byte once it has seen the
+whole seven byte marker, never on a partial one, and the same goes for any
+heuristic added later.
 
 **The primary device attributes answer changed, and it is not only about
 sixel.** It was `CSI ? 1 ; 2 c`, a VT100 with an advanced video option; it is

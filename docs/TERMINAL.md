@@ -174,16 +174,18 @@ Read this list before concluding that something is broken.
     negative z index, which vtui cannot express yet (see the entry in
     `IMAGES_PLAN.md` section 8), or per-row image slices of the kind Windows
     Terminal keeps.
-*   **A chunk that ends exactly at the `c` of `CSI c` is not answered.**
+*   **No byte of child output is ever held back, and that shapes a heuristic.**
     `exciseWindowsSync` hides the background `cd` command that keeps the panel
-    and the shell in step, and to survive a chunk boundary it holds back any
-    tail of the data that could be the beginning of `cd /d "` — which a lone
-    `c` is. The byte is released when the next chunk arrives, but a client that
-    sent `CSI c` and is waiting for the reply sends nothing else, so it waits
-    until its own timeout and then decides the terminal has no sixel. This is
-    not new, but sixel made it matter: every sixel client starts with DA1.
-    `XTSMGRAPHICS` and the `CSI ... t` queries end in `S` and `t` and are not
-    affected.
+    and the shell in step. It used to survive a chunk boundary by withholding
+    any tail of the data that could begin `cd /d "` — which a lone `c` can, so
+    a chunk ending on the `c` of `CSI c` was never answered and every sixel
+    client, all of which open with that query, timed out and decided the
+    terminal had no graphics. Those bytes are now printed and only remembered
+    for matching; when the command does complete, the erase-line the excision
+    already writes takes the fragment off the screen with the rest of it. A
+    fragment can therefore be visible for one frame, which is the price. The
+    rule to keep: **the parser may defer a byte only once it has seen the whole
+    seven byte marker, never on a guess.**
 *   **A DECRQSS query gets silence.** It used to get its own text printed onto
     the screen, which was worse, but neither is an answer.
 *   **The cell size is the real one, not a virtual 10x20.** Windows Terminal

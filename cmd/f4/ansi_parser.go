@@ -38,6 +38,7 @@ type AnsiParser struct {
 	runeBuf            []byte
 	lastRune           rune
 	pendingWindowsSync []byte
+	seenWindowsSync    []byte
 
 	// DCS state: the final byte of the introducer and the string that
 	// follows it, kept apart from CurParam because the parameters of the
@@ -88,9 +89,22 @@ func longestSuffixPrefix(data, prefix []byte) int {
 }
 
 // exciseWindowsSync removes the command used to synchronize the PTY's current
-// directory. The PTY can split a long command at any byte boundary, so an
-// incomplete command is kept until the next Process call instead of being
-// rendered as terminal output.
+// directory. The PTY can split a long command at any byte boundary, so a
+// command that has begun but not finished is kept until the next Process call
+// instead of being rendered as terminal output.
+//
+// A few bytes that merely *could* be the beginning of that command are a
+// different matter, and they are not held back. They cannot be: a chunk that
+// ends on the c of CSI c looks exactly like the start of cd, and holding that
+// byte back means never answering the query — the child is waiting for the
+// answer and so sends nothing that would release it. It waits until its own
+// timeout and concludes the terminal has no sixel, which is how this surfaced.
+//
+// So those bytes go to the screen and are only remembered, in seenWindowsSync,
+// so that the next chunk can still match the command across the split. When it
+// does match, the excision writes a carriage return and an erase line, which
+// wipes the fragment that reached the screen along with the rest of the
+// command. The cost is that the fragment can be visible for one frame.
 func (p *AnsiParser) exciseWindowsSync(data []byte) []byte {
 	if len(p.pendingWindowsSync) > 0 {
 		combined := make([]byte, 0, len(p.pendingWindowsSync)+len(data))
@@ -100,17 +114,39 @@ func (p *AnsiParser) exciseWindowsSync(data []byte) []byte {
 		p.pendingWindowsSync = nil
 	}
 
+	// Bytes already sent to the screen last time, prepended for matching and
+	// skipped on the way out so that nothing is printed twice.
+	skip := len(p.seenWindowsSync)
+	if skip > 0 {
+		combined := make([]byte, 0, skip+len(data))
+		combined = append(combined, p.seenWindowsSync...)
+		combined = append(combined, data...)
+		data = combined
+		p.seenWindowsSync = nil
+	}
+
 	var visible []byte
+	emit := func(b []byte) {
+		if skip > 0 {
+			if len(b) <= skip {
+				skip -= len(b)
+				return
+			}
+			b = b[skip:]
+			skip = 0
+		}
+		visible = append(visible, b...)
+	}
+
 	for len(data) > 0 {
 		startIdx := bytes.Index(data, windowsSyncStart)
 		if startIdx == -1 {
-			pendingLen := longestSuffixPrefix(data, windowsSyncStart)
-			visible = append(visible, data[:len(data)-pendingLen]...)
-			p.pendingWindowsSync = cloneBytes(data[len(data)-pendingLen:])
+			emit(data)
+			p.seenWindowsSync = cloneBytes(data[len(data)-longestSuffixPrefix(data, windowsSyncStart):])
 			return visible
 		}
 
-		visible = append(visible, data[:startIdx]...)
+		emit(data[:startIdx])
 		command := data[startIdx:]
 		endIdx := bytes.Index(command, windowsSyncEnd)
 		separatorIdx := bytes.Index(command, windowsSyncSep)
@@ -119,7 +155,7 @@ func (p *AnsiParser) exciseWindowsSync(data []byte) []byte {
 			tokenEnd := startIdx + endIdx + len(windowsSyncEnd)
 			if tokenEnd == len(data) {
 				if len(command) > maxPendingWindowsSync {
-					visible = append(visible, command...)
+					emit(command)
 					return visible
 				}
 				p.pendingWindowsSync = cloneBytes(command)
@@ -142,6 +178,9 @@ func (p *AnsiParser) exciseWindowsSync(data []byte) []byte {
 			}
 
 			vtui.DebugLog("ANSI_PARSER: Excising background Windows CD sync")
+			// The erase takes the whole line, so whatever part of the
+			// command already reached the screen goes with it.
+			skip = 0
 			visible = append(visible, []byte("\r\x1b[2K")...)
 			data = data[end:]
 			continue
@@ -149,7 +188,7 @@ func (p *AnsiParser) exciseWindowsSync(data []byte) []byte {
 
 		if separatorIdx < 0 {
 			if len(command) > maxPendingWindowsSync {
-				visible = append(visible, command...)
+				emit(command)
 				return visible
 			}
 			p.pendingWindowsSync = cloneBytes(command)
@@ -160,7 +199,7 @@ func (p *AnsiParser) exciseWindowsSync(data []byte) []byte {
 		remainder := data[separatorEnd:]
 		if len(remainder) == 0 || isPartialPrefix(remainder, []byte("rem f4_sync")) {
 			if len(command) > maxPendingWindowsSync {
-				visible = append(visible, command...)
+				emit(command)
 				return visible
 			}
 			p.pendingWindowsSync = cloneBytes(command)
