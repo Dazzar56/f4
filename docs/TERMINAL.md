@@ -108,3 +108,94 @@ In addition to the default built-in terminal emulator (`ShellModeOwn`), `f4` pro
 ### 2. Graceful Degradation Modes
 * **`ShellModeSimpleInline`:** Used when PTY/ConPTY is unavailable on Windows (e.g. running under Wine in console). Runs commands with inherited `stdio` via `vtui.Suspend()` / `exec` / `vtui.Resume()` and a keypress pause.
 * **`ShellModeSimpleCaptured`:** Used in GUI and non-TTY environments when PTY is unavailable. Runs commands via `LocalCommandRunner` and streams output into an `f4` dialog.
+
+## 8. Graphics in the Built-in Terminal
+
+The built-in terminal accepts pictures from the program running inside it. What
+arrives becomes a *placement*: a rectangle of pixels anchored to a row of the
+grid, which scrolls with the text around it, follows a resize, is clipped at
+the edges of the terminal, and disappears when the row it was printed next to
+is gone. `kitty_placements.go` owns that list and every protocol feeds it.
+
+### 1. What is accepted
+
+| Sequence | Protocol | Receiver |
+| :--- | :--- | :--- |
+| `ESC _ G ... ESC \` | kitty graphics | `kitty_graphics.go` |
+| `ESC P ... q ... ESC \` | sixel | `sixel_decode.go` |
+| `ESC _ far2l... ESC \` | far2l interact | `HandleFar2lAPC` (images not yet) |
+
+Any other device control string is parsed and dropped. Before sixel support
+there were no DCS states at all: `ESC P` was swallowed by `handleEsc` and the
+body of the sequence then printed itself onto the screen as text.
+
+### 2. What is answered
+
+A program decides whether to send pictures by asking, so the answers matter as
+much as the receivers:
+
+*   **`CSI c` (DA1)** → `CSI ? 62 ; 4 c`. The `4` is what advertises sixel; no
+    client will send a picture without it. The level rose from the old `1;2`
+    at the same time, because sixel does not exist below VT220.
+*   **`CSI 14 t` / `CSI 16 t` / `CSI 18 t`** → the text area in pixels, the
+    cell in pixels, the screen in cells.
+*   **`CSI ? Pi ; Pa ; Pv S` (XTSMGRAPHICS)** → 256 colour registers, and the
+    sixel raster geometry. Some libraries block on this answer.
+*   **`CSI ? 80 h` / `l` (DECSDM)** → sixel scrolling off / on. Set disables
+    scrolling, which is the way round the hardware behaved and the way round
+    xterm settled on after years of the opposite. Reset is the default.
+
+### 3. Where the cursor ends up after a sixel image
+
+At the sixel active position: the column the picture started in, and the row
+the sixel cursor reached. A dump ending in a graphics new line (`-`) therefore
+leaves the next line of text below the picture; a dump ending in data leaves it
+**on top of** the picture.
+
+This is Windows Terminal's rule, chosen deliberately. It looks like a defect
+and is regularly reported as one, but it is the only rule under which a program
+can print an image on the bottom row at all: anything that moves the cursor
+past the picture scrolls a line away to make room for a cursor the client never
+asked to move. xterm and mlterm each invented their own algorithm and do not
+agree with each other either. A client that wants its text below the image
+sends a line feed.
+
+### 4. Known deviations and defects
+
+Read this list before concluding that something is broken.
+
+*   **Text does not punch a hole in a picture; the picture covers the text.**
+    On the hardware, and in Windows Terminal, the screen is one bitmap and
+    writing a character clears the cell it lands in, so text output over an
+    image erases that part of the image. Here a placement is drawn *over* the
+    cells at z index 0, so the text goes under it instead. Combined with the
+    cursor rule above, a shell prompt that lands on the last row of an image is
+    invisible rather than punched through. Fixing it properly means either a
+    negative z index, which vtui cannot express yet (see the entry in
+    `IMAGES_PLAN.md` section 8), or per-row image slices of the kind Windows
+    Terminal keeps.
+*   **A chunk that ends exactly at the `c` of `CSI c` is not answered.**
+    `exciseWindowsSync` hides the background `cd` command that keeps the panel
+    and the shell in step, and to survive a chunk boundary it holds back any
+    tail of the data that could be the beginning of `cd /d "` — which a lone
+    `c` is. The byte is released when the next chunk arrives, but a client that
+    sent `CSI c` and is waiting for the reply sends nothing else, so it waits
+    until its own timeout and then decides the terminal has no sixel. This is
+    not new, but sixel made it matter: every sixel client starts with DA1.
+    `XTSMGRAPHICS` and the `CSI ... t` queries end in `S` and `t` and are not
+    affected.
+*   **A DECRQSS query gets silence.** It used to get its own text printed onto
+    the screen, which was worse, but neither is an answer.
+*   **The cell size is the real one, not a virtual 10x20.** Windows Terminal
+    rasterises sixel into a fixed cell to emulate a VT340. We cannot: `CSI 16 t`
+    already tells the child what our cell is, and it has to agree with what
+    vtui's sixel encoder assumes, or f4 running inside f4 would draw itself at
+    the wrong size.
+*   **One sequence, one picture.** Sixel on the hardware writes into a screen
+    wide bitmap that later sequences keep drawing into. Here each sequence
+    produces its own placement. Paging (`DECGRA`), rectangular copy between
+    pages, and a palette shared across images are all consequences of the
+    bitmap model and none of them are implemented.
+*   **Rule 2 of section 5 applies to the cursor as well.** A fresh terminal
+    starts with the cursor at `(0, height-1)`, so a picture printed before
+    anything else is placed on the bottom row and scrolls the screen.

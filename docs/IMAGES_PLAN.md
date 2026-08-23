@@ -4,8 +4,9 @@ This file is the entry point for the work on issue #186 (viewing pictures in
 f4). It is written so that the work can be continued with nothing but the
 repository at hand. Read it first, then, as needed:
 
-- `TERMINAL.md` — the built-in terminal, including the kitty graphics protocol
-  it accepts from child processes.
+- `TERMINAL.md` — the built-in terminal. Section 8 covers the graphics it
+  accepts from child processes, the queries it answers, and the list of known
+  deviations and defects worth reading before filing one.
 - `../vtui/GRAPHICS.md` — the graphics layer: `ImageSurface`, `ImagePlacement`,
   the protocol backends, cell size negotiation.
 - `PLUGIN_PLAN.md` — unrelated work, but the same kind of document, and a good
@@ -223,6 +224,26 @@ decode through an external `ffmpeg` into a stream of RGBA, a frame timer, and
 controls from the viewer (`Right`/`Left` for ±10 seconds, `Up`/`Down` for
 volume).
 
+**13. Text over a sixel picture.** On the hardware and in Windows Terminal the
+screen is one bitmap, so writing a character clears the cell it lands in and
+punches a hole in whatever image was there. Here a placement is drawn over the
+cells, so the text goes under the picture instead. It shows immediately: the
+cursor rule leaves a prompt on the last row of an image, and that prompt is
+then invisible. Either the graphics layer learns a z index that puts a picture
+under the glyphs — see the entry in section 8, which is the same blocker as
+kitty's negative `z` — or the receiver has to keep per row slices and erase
+them as cells are written, which is what `ImageSlice` does in Windows Terminal.
+
+**14. A full colour sixel encoder in vtui.** `graphics_sixel.go` quantises to a
+median cut palette of 255 colours for the whole picture. Redefining registers
+between bands would lift that limit entirely, and f4's receiver already honours
+it — the two halves of the protocol are asymmetric until this is done. Note
+that this is the vtui repository, not f4.
+
+**15. Answering DA1 when the chunk ends on the `c`.** See the trap in section
+7. The feature does not work for a client that queries device attributes and
+gets nothing back, which is most of them.
+
 Note that steps 9 to 11 exist because **kitty images do not work in either
 direction between f4 and far2l today**: not when f4 runs inside far2l, and not
 the other way round.
@@ -351,6 +372,48 @@ f4 can tell them apart — the information is not in the event. Hence the plain
 currently matched by `Char` with the Alt flag set; that has not been confirmed
 on a real terminal.
 
+**A chunk that ends exactly at the `c` of `CSI c` is never answered.** This one
+is a live defect and it is the first thing to check when sixel appears not to
+work at all. `AnsiParser.exciseWindowsSync` hides the background `cd` command
+that keeps the panel and the shell in step; to survive a chunk boundary it
+holds back any tail of the incoming data that could be the start of `cd /d "`,
+and a lone `c` qualifies. The byte is prepended to the next chunk, so nothing
+is lost — except that a client which has just sent `CSI c` is now blocked
+waiting for the reply and will send nothing else. It times out and concludes
+the terminal has no sixel. The behaviour predates this work; sixel is what made
+it matter, because every sixel client opens with device attributes.
+`\x1b[c` alone answers nothing, `\x1b[c` twice answers once, and a probe test
+confirms both. `XTSMGRAPHICS` and the `CSI ... t` queries end in `S` and `t`
+and are unaffected. Whatever the fix is, it has to keep the excision working
+across a split inside the real command; refusing to hold back a suffix shorter
+than three bytes is the cheapest version and costs at most a few stray
+characters in a case that needs the split to land inside `cd /d`.
+
+**The primary device attributes answer changed, and it is not only about
+sixel.** It was `CSI ? 1 ; 2 c`, a VT100 with an advanced video option; it is
+now `CSI ? 62 ; 4 c`, a VT220 with sixel. The `4` had to be added because
+nothing sends a picture without it, and the level had to rise with it because
+sixel does not exist below VT220. But the level is what programs use to decide
+which sequences they may send at all, so the blast radius is wider than the
+graphics path, and anything that starts behaving differently in the built-in
+terminal should be checked against this before anything else. The string in
+`console_passthrough_test.go` is a payload for a muted-PTY test and not an
+assertion about the answer, so nothing in the suite guards the old value.
+
+**A fresh terminal has its cursor on the bottom row.** Rule 2 in
+`TERMINAL.md`: a terminal inside a file manager initialises at `(0, height-1)`
+so that output sticks to the bottom. A test that prints something and then
+looks at row zero finds spaces, and a test that prints a picture without
+setting the cursor first places it on the last row and scrolls the screen. Both
+mistakes were made while writing `sixel_terminal_test.go`.
+
+**A repeat introducer paints a run that a raster attribute may cut short.**
+`!30~` inside a raster declared ten wide advances the active position by
+thirty and paints ten. The position is what the end of the sequence reports,
+so the two have to be tracked separately; conflating them makes the cursor
+land in the wrong column on any picture whose data runs past its declared
+width.
+
 ## 8. Open questions and rough edges
 
 None of these are bugs; they are places where a decision was made without
@@ -400,3 +463,51 @@ asking, and the user may want a different one.
   animated `webp` arrives as its first frame. Animation belongs with step 12.
 - `ExternalTimeout` and `DecoderPriority` are read and written but do not
   appear in the settings dialog, same as `SlideShowDelay`.
+Sixel, added with issue #610:
+
+- **The cursor rule is Windows Terminal's, and it was asked for by name.** It
+  leaves the text cursor on top of the picture when the dump does not end in a
+  graphics new line. The alternative rules — xterm's, mlterm's, the one the
+  VT330 manual describes — all move the cursor past the picture and so make it
+  impossible to print an image on the bottom row without scrolling a line away.
+  The choice interacts badly with the placement model, though: see item 13 in
+  section 5, because in Windows Terminal the text that lands on the image
+  punches through it and here it does not.
+- **256 colour registers is a report, not a limit.** The decoder's palette
+  grows on demand up to 65535 registers and the number reported through
+  `XTSMGRAPHICS` is a separate constant, `sixelColorRegisters`. It is set to
+  what Windows Terminal reports on the reasoning in section 6; if some encoder
+  turns out to need a larger number to take its full colour path, changing the
+  constant is the whole of the change.
+- **The HLS conversion is derived, not verified against hardware.** DEC's wheel
+  is the familiar one turned by 240 degrees — hue 0 blue, 120 red, 240 green —
+  and the code follows from that. The tests check the primaries. Nobody has
+  compared a gradient against a VT340, and almost nothing emits HLS anyway:
+  libsixel and vtui both write RGB.
+- **The pixel aspect ratio from P1 is honoured.** Data with no raster
+  attributes and no `P1` is drawn at two pixel rows per sixel row, which is
+  what the table says and what Windows Terminal does — the arithmetic in the
+  examples on microsoft/terminal#18134 only works out if it does. Every modern
+  encoder overrides it with `"1;1`, so the path is rarely walked, and a file
+  that expects square pixels without saying so will look twice as tall. That
+  is also true in xterm.
+- **A register that was never defined falls back to the default palette
+  modulo sixteen.** The protocol leaves it undefined. Repeating the VT340 map
+  is what xterm does and at least keeps such an image visible instead of black
+  on black, but it is a guess.
+- **An image taller or wider than the screen is cropped, not scrolled
+  through.** The hardware scrolls as the sixel cursor advances and you end up
+  looking at the bottom of the picture; here the top is kept and the rest is
+  dropped. Doing it the other way would mean scrolling a row of history away
+  per band, which for a picture near the pixel budget is a lot of rows for
+  nothing.
+- **Erasing a line does not erase the picture over it.** `EraseDisplay(2)`
+  drops the placements of the screen, because that path already existed for
+  kitty, but `EraseLine` and the rectangular erases do not touch them. On the
+  hardware every one of those clears pixels too. It is the same missing
+  machinery as item 13.
+- **The decoder walks the body twice and holds the whole body in memory.**
+  `AnsiParser` buffers up to 64 MB of device control string before the decoder
+  sees any of it, where a streaming decoder would need neither the buffer nor
+  the second pass. It has not been measured; the pass itself is cheap next to
+  painting, and the buffer is bounded.
