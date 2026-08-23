@@ -3003,6 +3003,7 @@ func TestPanelsFrame_Clone_CachePreservation(t *testing.T) {
 }
 
 func TestExecuteFileOp_BackgroundButtonTrigger(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	// This test ensures that the logic inside Background button click works
 	fm := vtui.FrameManager
 	fm.Init(vtui.NewSilentScreenBuf())
@@ -3016,6 +3017,7 @@ func TestExecuteFileOp_BackgroundButtonTrigger(t *testing.T) {
 
 	// Simulate what Background button does:
 	fork := pf.Clone()
+	t.Cleanup(fork.Close)
 	fm.AddScreen(fork)
 
 	if len(fm.Screens) != initialScreens+1 {

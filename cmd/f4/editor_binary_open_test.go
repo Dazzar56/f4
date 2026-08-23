@@ -56,6 +56,7 @@ func TestStartIndexingSkipsHexAndDecodeModes(t *testing.T) {
 // A binary file opened for editing goes straight into hex on the lazy chunked
 // path (codepage 65001) without a background scan.
 func TestShowEditorBinaryOpensInHex(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	drainPendingTasks()
 
@@ -68,8 +69,21 @@ func TestShowEditorBinaryOpensInHex(t *testing.T) {
 	localVFS := vfs.NewOSVFS(dir)
 	_ = localVFS.SetPath(dir)
 	pf := NewPanelsFrame()
-	pf.panels[0] = NewFileSystemPanel(0, 0, 40, 20, localVFS)
-	pf.panels[1] = NewFileSystemPanel(40, 0, 40, 20, localVFS.Clone())
+	t.Cleanup(pf.Close)
+	for _, panel := range pf.panels {
+		if fsp, ok := panel.(*FileSystemPanel); ok {
+			if fsp.cancelLoad != nil {
+				fsp.cancelLoad()
+			}
+			fsp.stopLoadingAnimation()
+		}
+	}
+	left := NewFileSystemPanel(0, 0, 40, 20, localVFS)
+	right := NewFileSystemPanel(40, 0, 40, 20, localVFS.Clone())
+	pf.panels[0] = left
+	pf.panels[1] = right
+	waitForLoad(t, left)
+	waitForLoad(t, right)
 	pf.ResizeConsole(120, 60)
 	vtui.FrameManager.Push(pf)
 
@@ -83,7 +97,7 @@ func TestShowEditorBinaryOpensInHex(t *testing.T) {
 	if ev == nil {
 		t.Fatal("editor was not opened")
 	}
-	defer ev.Close()
+	t.Cleanup(ev.Close)
 	if !ev.HexMode || ev.Codepage != 65001 {
 		t.Errorf("binary file must open in hex with codepage 65001, got hex=%v cp=%d", ev.HexMode, ev.Codepage)
 	}
