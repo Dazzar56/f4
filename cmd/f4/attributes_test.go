@@ -18,10 +18,11 @@ import (
 // mockMetadataVFS allows intercepting Stat and SetAttributes for testing.
 type mockMetadataVFS struct {
 	vfs.VFS
-	onSetAttr    func(vfs.VFSItem)
-	statErr      error
-	setAttrErr   error
-	statToReturn vfs.VFSItem
+	onSetAttr     func(vfs.VFSItem)
+	onSetAttrPath func(string, vfs.VFSItem)
+	statErr       error
+	setAttrErr    error
+	statToReturn  vfs.VFSItem
 }
 
 type lstatMetadataVFS struct {
@@ -49,6 +50,9 @@ func (m *mockMetadataVFS) SetAttributes(ctx context.Context, path string, item v
 	}
 	if m.onSetAttr != nil {
 		m.onSetAttr(item)
+	}
+	if m.onSetAttrPath != nil {
+		m.onSetAttrPath(path, item)
 	}
 	return nil
 }
@@ -319,6 +323,142 @@ func TestAttributesDialog_WindowsSetFlags(t *testing.T) {
 	// Verify the VFS call was made
 	if capturedItem.Name == "" {
 		t.Error("SetAttributes was not called after clicking Save in Windows attributes dialog")
+	}
+}
+
+func TestAttributesDialog_WindowsSetFlagsForSelectedTargets(t *testing.T) {
+	fm := vtui.FrameManager
+	fm.Init(vtui.NewSilentScreenBuf())
+
+	type attrCall struct {
+		path string
+		item vfs.VFSItem
+	}
+	var calls []attrCall
+	mockVFS := &mockMetadataVFS{
+		VFS: vfs.NewOSVFS(t.TempDir()),
+		onSetAttrPath: func(path string, item vfs.VFSItem) {
+			calls = append(calls, attrCall{path: path, item: item})
+		},
+	}
+	targets := []attributesTarget{
+		{path: "first.txt", item: vfs.VFSItem{Name: "first.txt", WinAttrs: 0x10 | 1, MTime: time.Now()}},
+		{path: "second.txt", item: vfs.VFSItem{Name: "second.txt", WinAttrs: 0x10 | 2, MTime: time.Now().Add(-time.Hour)}},
+	}
+
+	showAttributesWindowsForTargets(nil, mockVFS, targets)
+	dlg := fm.GetTopFrame().(vtui.Container)
+	var chkRO, chkHidden *vtui.Checkbox
+	var setButton *vtui.Button
+	walkUI(dlg.(vtui.UIElement), func(el vtui.UIElement) bool {
+		if c, ok := el.(*vtui.Checkbox); ok {
+			switch {
+			case strings.Contains(c.GetText(), "Read only"):
+				chkRO = c
+			case strings.Contains(c.GetText(), "Hidden"):
+				chkHidden = c
+			}
+		}
+		if b, ok := el.(*vtui.Button); ok && strings.Contains(b.GetText(), "Set") {
+			setButton = b
+		}
+		return true
+	})
+	if chkRO == nil || chkHidden == nil || setButton == nil {
+		t.Fatal("Windows multi-target dialog controls not found")
+	}
+	chkRO.State = 0
+	chkHidden.State = 1
+	setButton.OnClick()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for len(calls) < len(targets) && time.Now().Before(deadline) {
+		select {
+		case task := <-fm.TaskChan:
+			task()
+		default:
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	if len(calls) != 2 {
+		t.Fatalf("SetAttributes called %d times, want 2", len(calls))
+	}
+	for _, call := range calls {
+		if call.item.WinAttrs != 0x12 {
+			t.Errorf("%s attributes = %#x, want %#x", call.path, call.item.WinAttrs, uint32(0x12))
+		}
+	}
+}
+
+func TestActionFileAttributesUsesAllSelectedEntries(t *testing.T) {
+	fm := vtui.FrameManager
+	fm.Init(vtui.NewSilentScreenBuf())
+
+	base := t.TempDir()
+	for _, name := range []string{"first.txt", "second.txt"} {
+		if err := os.WriteFile(filepath.Join(base, name), []byte(name), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var calls []string
+	mockVFS := &mockMetadataVFS{
+		VFS:           vfs.NewOSVFS(base),
+		onSetAttrPath: func(path string, _ vfs.VFSItem) { calls = append(calls, path) },
+	}
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	fsp := pf.getActivePanel()
+	fsp.vfs = mockVFS
+	fsp.entries = []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: "first.txt"}},
+		{VFSItem: vfs.VFSItem{Name: "second.txt"}},
+	}
+	fsp.SetCursorIndex(0)
+	fsp.SetItemSelected(0, true)
+	fsp.SetItemSelected(1, true)
+
+	actionFileAttributes(pf)
+	var setButton *vtui.Button
+	deadline := time.Now().Add(2 * time.Second)
+	for setButton == nil && time.Now().Before(deadline) {
+		select {
+		case task := <-fm.TaskChan:
+			task()
+		default:
+			time.Sleep(10 * time.Millisecond)
+		}
+		if top := fm.GetTopFrame(); top != nil {
+			if element, ok := top.(vtui.UIElement); ok {
+				walkUI(element, func(el vtui.UIElement) bool {
+					if b, ok := el.(*vtui.Button); ok && strings.Contains(b.GetText(), "Set") {
+						setButton = b
+					}
+					return true
+				})
+			}
+		}
+	}
+	if setButton == nil {
+		t.Fatal("attributes dialog did not open for selected entries")
+	}
+	setButton.OnClick()
+
+	deadline = time.Now().Add(2 * time.Second)
+	for len(calls) < 2 && time.Now().Before(deadline) {
+		select {
+		case task := <-fm.TaskChan:
+			task()
+		default:
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	if len(calls) != 2 {
+		t.Fatalf("SetAttributes called for %d selected entries, want 2: %v", len(calls), calls)
+	}
+	if !strings.HasSuffix(calls[0], "first.txt") || !strings.HasSuffix(calls[1], "second.txt") {
+		t.Errorf("SetAttributes paths = %v, want first.txt then second.txt", calls)
 	}
 }
 

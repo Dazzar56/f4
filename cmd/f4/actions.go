@@ -4373,25 +4373,39 @@ func showPluginFileDialog(parent *vtui.Window, startPath string, onSelect func(s
 
 func actionFileAttributes(pf *PanelsFrame) {
 	fsp := pf.getActivePanel()
-	if fsp == nil {
+	if fsp == nil || fsp.vfs == nil {
 		return
 	}
 
-	name := fsp.getRawSelectedName()
-	if name == "" || name == ".." {
+	names := fsp.GetSelectedNames()
+	if len(names) == 0 {
 		return
 	}
 
-	fullPath := fsp.vfs.Join(fsp.vfs.GetPath(), name)
+	paths := make([]string, 0, len(names))
+	for _, name := range names {
+		if name != "" && name != ".." {
+			paths = append(paths, fsp.vfs.Join(fsp.vfs.GetPath(), name))
+		}
+	}
+	if len(paths) == 0 {
+		return
+	}
 
 	vtui.RunAsync(func(ctx *vtui.TaskContext) {
-		item, err := vfs.Lstat(ctx.Context, fsp.vfs, fullPath)
-		ctx.RunOnUI(func() {
+		targets := make([]attributesTarget, 0, len(paths))
+		for _, path := range paths {
+			item, err := vfs.Lstat(ctx.Context, fsp.vfs, path)
 			if err != nil {
-				vtui.ShowMessage(" Error ", err.Error(), []string{"&Ok"})
+				ctx.RunOnUI(func() {
+					vtui.ShowMessage(" Error ", err.Error(), []string{"&Ok"})
+				})
 				return
 			}
-			ShowAttributesDialog(pf, fsp.vfs, fullPath, item)
+			targets = append(targets, attributesTarget{path: path, item: item})
+		}
+		ctx.RunOnUI(func() {
+			showAttributesDialogForTargets(pf, fsp.vfs, targets)
 		})
 	})
 }
