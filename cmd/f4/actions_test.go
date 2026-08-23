@@ -597,7 +597,9 @@ func TestActionExecute_PtyCommandFormatting(t *testing.T) {
 		fileName = "app.sh"
 	}
 	filePath := filepath.Join(tmp, fileName)
-	os.WriteFile(filePath, []byte("#!/bin/sh\nexit 0"), 0755)
+	if err := os.WriteFile(filePath, []byte("#!/bin/sh\nexit 0"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	v := vfs.NewOSVFS(tmp)
 
@@ -642,7 +644,9 @@ func TestActionExecute_HistoryQuoting(t *testing.T) {
 	tmp := t.TempDir()
 	fileName := "name with spaces.exe"
 	filePath := filepath.Join(tmp, fileName)
-	os.WriteFile(filePath, []byte(""), 0755)
+	if err := os.WriteFile(filePath, []byte(""), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	v := vfs.NewOSVFS(tmp)
 	actionExecute(pf, v, tmp, fileName, filePath)
@@ -671,7 +675,9 @@ Extras="/dir1\n/dir2\n/dir3"
 Locks=100
 Times=804c4587aa28dd01 004e237daa28dd01 0021f27baa28dd01
 `
-	os.WriteFile(hstPath, []byte(content), 0644)
+	if err := os.WriteFile(hstPath, []byte(content), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	recs, err := importFar2lHistory(hstPath)
 	if err != nil {
@@ -696,12 +702,16 @@ func TestActionDelete_SuccessorLogic(t *testing.T) {
 
 	tmp := t.TempDir()
 	fsp := pf.panels[0].(*FileSystemPanel)
-	fsp.vfs.SetPath(tmp)
+	if err := fsp.vfs.SetPath(tmp); err != nil {
+		t.Fatal(err)
+	}
 
 	// Создаем 4 файла: f1, f2, f3, f4
 	files := []string{"f1.txt", "f2.txt", "f3.txt", "f4.txt"}
 	for _, f := range files {
-		os.WriteFile(filepath.Join(tmp, f), []byte("data"), 0644)
+		if err := os.WriteFile(filepath.Join(tmp, f), []byte("data"), 0600); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	// 1. Удаляем f2 и f3 (выделенные)
@@ -744,11 +754,15 @@ func TestActionCopyMove_TrailingSlash(t *testing.T) {
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
-	// Ensure predictable paths for the test
+	// Ensure valid paths for the test
 	fspSrc := pf.panels[0].(*FileSystemPanel)
 	fspDst := pf.panels[1].(*FileSystemPanel)
-	fspSrc.vfs.SetPath(filepath.FromSlash("/src/dir"))
-	fspDst.vfs.SetPath(filepath.FromSlash("/dst/dir"))
+	if err := fspSrc.vfs.SetPath(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	if err := fspDst.vfs.SetPath(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
 
 	// Manually add an entry so actionCopyMove doesn't exit early
 	fspSrc.entries = []*fileEntry{
@@ -908,7 +922,9 @@ func TestActionCopy_ShiftF5_Prefill(t *testing.T) {
 	// Setup actual existing paths using t.TempDir()
 	tmpDir := t.TempDir()
 	srcPath := filepath.Join(tmpDir, "src")
-	os.MkdirAll(srcPath, 0755)
+	if err := os.MkdirAll(srcPath, 0755); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := fspSrc.vfs.SetPath(srcPath); err != nil {
 		t.Fatalf("Failed to set src VFS path: %v", err)
@@ -1129,7 +1145,9 @@ func TestActionOpenEditor_AlreadyOpened(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "test.txt")
-	os.WriteFile(path, []byte("content"), 0644)
+	if err := os.WriteFile(path, []byte("content"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	v := vfs.NewOSVFS(tmpDir)
 	pf := NewPanelsFrame()
@@ -1203,7 +1221,9 @@ func TestActionOpenViewer_AlreadyOpened(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "test_view.txt")
-	os.WriteFile(path, []byte("content"), 0644)
+	if err := os.WriteFile(path, []byte("content"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	v := vfs.NewOSVFS(tmpDir)
 	pf := NewPanelsFrame()
@@ -1283,7 +1303,9 @@ func TestActionOpenEditor_LockedFile(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "locked.txt")
-	os.WriteFile(path, []byte("data"), 0644)
+	if err := os.WriteFile(path, []byte("data"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	v := &mockLockedVFS{VFS: vfs.NewOSVFS(tmpDir)}
 	pf := NewPanelsFrame()
@@ -1321,7 +1343,9 @@ func TestActionViewerSearch_EmptyFile(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	tmp := filepath.Join(t.TempDir(), "empty.txt")
-	os.WriteFile(tmp, []byte(""), 0644)
+	if err := os.WriteFile(tmp, []byte(""), 0600); err != nil {
+		t.Fatal(err)
+	}
 	v := vfs.NewOSVFS(t.TempDir())
 
 	vv, err := NewViewerView(context.Background(), v, tmp)
@@ -1724,7 +1748,9 @@ func TestActionManagePlugins_Flow(t *testing.T) {
 	// 2. Test Add (simulating SelectFileDialog callback)
 	tmpDir := t.TempDir()
 	testFile := "my_plugin.sh"
-	os.WriteFile(filepath.Join(tmpDir, testFile), []byte("#!/bin/sh"), 0755)
+	if err := os.WriteFile(filepath.Join(tmpDir, testFile), []byte("#!/bin/sh"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	newPath := filepath.Join(tmpDir, testFile)
 	AppConfig.RegisteredPlugins = append(AppConfig.RegisteredPlugins, newPath)
@@ -1742,7 +1768,9 @@ func TestActionRename_CacheAndSelection(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "old.txt")
-	os.WriteFile(path, []byte("data"), 0644)
+	if err := os.WriteFile(path, []byte("data"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	pf := NewPanelsFrame()
 	defer pf.Close()
@@ -1765,7 +1793,9 @@ func TestActionRename_CacheAndSelection(t *testing.T) {
 	newPath := fsp.vfs.Join(fsp.vfs.GetPath(), newName)
 
 	// Симулируем успешный асинхронный ответ
-	fsp.vfs.Rename(context.Background(), oldPath, newPath)
+	if err := fsp.vfs.Rename(context.Background(), oldPath, newPath); err != nil {
+		t.Fatal(err)
+	}
 
 	// Выполняем UI-часть из actionRename (успех)
 	delete(fsp.dirCache, fsp.cacheKey(fsp.vfs.GetPath()))
@@ -2418,7 +2448,9 @@ func TestExecuteFileOp_ContextualTitles(t *testing.T) {
 	SetDefaultF4Palette()
 
 	srcDir := t.TempDir()
-	os.WriteFile(filepath.Join(srcDir, "data.txt"), []byte("data"), 0644)
+	if err := os.WriteFile(filepath.Join(srcDir, "data.txt"), []byte("data"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	parent := vfs.NewOSVFS(srcDir)
 	srcVfs := &mockExtractionVFS{VFS: parent, parent: parent}
@@ -2592,11 +2624,17 @@ func TestActionCreateLink_Flow(t *testing.T) {
 
 	srcDir := filepath.Join(tmpDir, "src")
 	dstDir := filepath.Join(tmpDir, "dst")
-	os.MkdirAll(srcDir, 0755)
-	os.MkdirAll(dstDir, 0755)
+	if err := os.MkdirAll(srcDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(dstDir, 0755); err != nil {
+		t.Fatal(err)
+	}
 
 	targetFile := filepath.Join(srcDir, "target.txt")
-	os.WriteFile(targetFile, []byte("link target content"), 0644)
+	if err := os.WriteFile(targetFile, []byte("link target content"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	fspSrc.vfs = vfs.NewOSVFS(srcDir)
 	fspDst.vfs = vfs.NewOSVFS(dstDir)
@@ -2682,7 +2720,9 @@ func TestActionSwitchEditorToViewerAndBack(t *testing.T) {
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "switch_test.txt")
 	content := "Line 0\nLine 1\nLine 2\nLine 3\nLine 4\n"
-	os.WriteFile(filePath, []byte(content), 0644)
+	if err := os.WriteFile(filePath, []byte(content), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	v := vfs.NewOSVFS(tmpDir)
 	pf := NewPanelsFrame()
@@ -2783,7 +2823,9 @@ func TestActionSwitchEditorToViewer_ModifiedFilePrompt(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "modified_switch.txt")
-	os.WriteFile(filePath, []byte("Original Content"), 0644)
+	if err := os.WriteFile(filePath, []byte("Original Content"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	v := vfs.NewOSVFS(tmpDir)
 	pf := NewPanelsFrame()
@@ -2878,7 +2920,9 @@ func TestActionSwitchEditorViewer_HeightPreserved(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "resize_test.txt")
-	os.WriteFile(filePath, []byte("Content\n"), 0644)
+	if err := os.WriteFile(filePath, []byte("Content\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	v := vfs.NewOSVFS(tmpDir)
 	pf := NewPanelsFrame()

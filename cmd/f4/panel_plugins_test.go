@@ -77,7 +77,7 @@ func TestPanelProviderOpensInActiveSlotAndReceivesContext(t *testing.T) {
 }
 
 func TestRPCPanelProviderOpensVUIAndForwardsEvent(t *testing.T) {
-	coreSess, pluginSess := setupTestSessions()
+	coreSess, pluginSess := setupTestSessions(t)
 
 	document := []byte(`{"vuiVersion":1,"root":{"type":"Dialog","props":{"title":"Panel"}}}`)
 	pluginSess.Register("Plugin.OpenPanel", func(data msgpack.RawMessage) (any, error) {

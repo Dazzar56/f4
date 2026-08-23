@@ -2,16 +2,19 @@ package main
 
 import (
 	"context"
+	"io"
+	"strings"
+	"testing"
+
 	"github.com/unxed/f4/sdk/f4rpc"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 	"github.com/vmihailenco/msgpack/v5"
-	"io"
-	"strings"
-	"testing"
 )
 
-func setupTestSessions() (coreSess, pluginSess *f4rpc.Session) {
+func setupTestSessions(t *testing.T) (coreSess, pluginSess *f4rpc.Session) {
+	t.Helper()
+
 	// coreSess: reads from p2cR, writes to c2pW
 	// pluginSess: reads from c2pR, writes to p2cW
 	c2pR, c2pW := io.Pipe()
@@ -20,13 +23,27 @@ func setupTestSessions() (coreSess, pluginSess *f4rpc.Session) {
 	coreSess = f4rpc.NewSession(p2cR, c2pW)
 	pluginSess = f4rpc.NewSession(c2pR, p2cW)
 
-	go coreSess.Serve()
-	go pluginSess.Serve()
+	serveErrs := make(chan error, 2)
+	go func() { serveErrs <- coreSess.Serve() }()
+	go func() { serveErrs <- pluginSess.Serve() }()
+	t.Cleanup(func() {
+		if err := c2pW.Close(); err != nil {
+			t.Errorf("close core-to-plugin pipe: %v", err)
+		}
+		if err := p2cW.Close(); err != nil {
+			t.Errorf("close plugin-to-core pipe: %v", err)
+		}
+		for range 2 {
+			if err := <-serveErrs; err != nil {
+				t.Errorf("serve test RPC session: %v", err)
+			}
+		}
+	})
 	return
 }
 
 func TestRPCPlugin_Handshake(t *testing.T) {
-	coreSess, pluginSess := setupTestSessions()
+	coreSess, pluginSess := setupTestSessions(t)
 
 	pluginSess.Register("Plugin.Init", func(data msgpack.RawMessage) (any, error) {
 		return map[string]any{"Drives": []string{"TestDrive"}}, nil
@@ -48,7 +65,7 @@ func TestRPCPlugin_Handshake(t *testing.T) {
 }
 
 func TestRPCPlugin_VFS_Proxy(t *testing.T) {
-	coreSess, pluginSess := setupTestSessions()
+	coreSess, pluginSess := setupTestSessions(t)
 
 	wrapper := &rpcFileWrapper{
 		sess: coreSess,
@@ -58,7 +75,9 @@ func TestRPCPlugin_VFS_Proxy(t *testing.T) {
 
 	pluginSess.Register("VFS.ReadAt", func(data msgpack.RawMessage) (any, error) {
 		var req ReadAtReq
-		msgpack.Unmarshal(data, &req)
+		if err := msgpack.Unmarshal(data, &req); err != nil {
+			return nil, err
+		}
 		if req.ID == 1 {
 			return []byte("data"), nil
 		}
@@ -76,7 +95,7 @@ func TestRPCPlugin_VFS_Proxy(t *testing.T) {
 }
 
 func TestRPCPlugin_Highlighter_Proxy(t *testing.T) {
-	coreSess, pluginSess := setupTestSessions()
+	coreSess, pluginSess := setupTestSessions(t)
 
 	h := &rpcHighlighter{transport: coreSess}
 
@@ -91,7 +110,7 @@ func TestRPCPlugin_Highlighter_Proxy(t *testing.T) {
 }
 
 func TestRPCPlugin_Hotkey_Proxy(t *testing.T) {
-	coreSess, pluginSess := setupTestSessions()
+	coreSess, pluginSess := setupTestSessions(t)
 
 	hotkeyTriggered := false
 	pluginSess.Register("Plugin.OnHotkey", func(data msgpack.RawMessage) (any, error) {
@@ -112,14 +131,16 @@ func TestRPCPlugin_Hotkey_Proxy(t *testing.T) {
 }
 
 func TestRPCPlugin_Progress_Proxy(t *testing.T) {
-	coreSess, pluginSess := setupTestSessions()
+	coreSess, pluginSess := setupTestSessions(t)
 
 	updateMsg := ""
 	updatePct := -1
 
 	coreSess.Register("Host.UpdateProgress", func(data msgpack.RawMessage) (any, error) {
 		var req ProgressUpdateReq
-		msgpack.Unmarshal(data, &req)
+		if err := msgpack.Unmarshal(data, &req); err != nil {
+			return nil, err
+		}
 		updateMsg = req.Msg
 		updatePct = req.Percent
 		return nil, nil
@@ -136,7 +157,7 @@ func TestRPCPlugin_Progress_Proxy(t *testing.T) {
 	}
 }
 func TestRPCPlugin_InputBox_Proxy(t *testing.T) {
-	coreSess, pluginSess := setupTestSessions()
+	coreSess, pluginSess := setupTestSessions(t)
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	coreSess.Register("Host.InputBox", func(data msgpack.RawMessage) (any, error) {
@@ -154,14 +175,16 @@ func TestRPCPlugin_InputBox_Proxy(t *testing.T) {
 }
 
 func TestRPCPlugin_SetAttributes_Proxy(t *testing.T) {
-	coreSess, pluginSess := setupTestSessions()
+	coreSess, pluginSess := setupTestSessions(t)
 
 	v := &RPCVFS{sess: coreSess, driveName: "TestDrive"}
 	item := vfs.VFSItem{Name: "file", UnixMode: 0644}
 
 	var capturedReq SetAttrReq
 	pluginSess.Register("VFS.SetAttributes", func(data msgpack.RawMessage) (any, error) {
-		msgpack.Unmarshal(data, &capturedReq)
+		if err := msgpack.Unmarshal(data, &capturedReq); err != nil {
+			return nil, err
+		}
 		return nil, nil
 	})
 
@@ -174,7 +197,7 @@ func TestRPCPlugin_SetAttributes_Proxy(t *testing.T) {
 	}
 }
 func TestRPCPlugin_Progress_Cancellation(t *testing.T) {
-	coreSess, pluginSess := setupTestSessions()
+	coreSess, pluginSess := setupTestSessions(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	// Inject a mock task context into core side manually

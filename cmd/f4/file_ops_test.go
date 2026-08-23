@@ -23,9 +23,15 @@ func TestRecursiveCopy(t *testing.T) {
 	// 1. Create source structure:
 	// /folder1/file1.txt
 	// /file2.txt
-	os.Mkdir(filepath.Join(tmpSrc, "folder1"), 0755)
-	os.WriteFile(filepath.Join(tmpSrc, "file2.txt"), []byte("file2 content"), 0644)
-	os.WriteFile(filepath.Join(tmpSrc, "folder1", "file1.txt"), []byte("file1 content"), 0644)
+	if err := os.Mkdir(filepath.Join(tmpSrc, "folder1"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpSrc, "file2.txt"), []byte("file2 content"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpSrc, "folder1", "file1.txt"), []byte("file1 content"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	srcVfs := vfs.NewOSVFS(tmpSrc)
 	dstVfs := vfs.NewOSVFS(tmpDst)
@@ -61,7 +67,9 @@ func TestRecursiveCopy_Cancel(t *testing.T) {
 	tmpDst := t.TempDir()
 	largeFile := filepath.Join(tmpSrc, "large.bin")
 	// Create 1MB file
-	os.WriteFile(largeFile, make([]byte, 1024*1024), 0644)
+	if err := os.WriteFile(largeFile, make([]byte, 1024*1024), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	srcVfs := vfs.NewOSVFS(tmpSrc)
 	dstVfs := vfs.NewOSVFS(tmpDst)
@@ -82,7 +90,9 @@ func TestRecursiveCopy_Cancel(t *testing.T) {
 
 func TestRecursiveCopy_SelfCopy(t *testing.T) {
 	tmp := t.TempDir()
-	os.MkdirAll(filepath.Join(tmp, "src_folder"), 0755)
+	if err := os.MkdirAll(filepath.Join(tmp, "src_folder"), 0755); err != nil {
+		t.Fatal(err)
+	}
 
 	srcVfs := vfs.NewOSVFS(tmp)
 	tCtx := vtui.RunAsync(func(c *vtui.TaskContext) {})
@@ -105,8 +115,12 @@ func TestRecursiveCopy_ConflictTypeMismatch(t *testing.T) {
 
 	// Create folder in source, file with same name in destination
 	name := "mismatch"
-	os.Mkdir(filepath.Join(tmpSrc, name), 0755)
-	os.WriteFile(filepath.Join(tmpDst, name), []byte("i am a file"), 0644)
+	if err := os.Mkdir(filepath.Join(tmpSrc, name), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDst, name), []byte("i am a file"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	srcVfs := vfs.NewOSVFS(tmpSrc)
 	dstVfs := vfs.NewOSVFS(tmpDst)
@@ -129,7 +143,9 @@ func TestRecursiveCopy_MoveCrossVFS(t *testing.T) {
 
 	name := "move_me.txt"
 	srcFile := filepath.Join(tmpSrc, name)
-	os.WriteFile(srcFile, []byte("payload"), 0644)
+	if err := os.WriteFile(srcFile, []byte("payload"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	srcVfs := vfs.NewOSVFS(tmpSrc)
 	dstVfs := vfs.NewOSVFS(tmpDst)
@@ -162,8 +178,12 @@ func TestRecursiveCopy_FileOverFolderMismatch(t *testing.T) {
 	tmpDst := t.TempDir()
 
 	name := "conflict"
-	os.WriteFile(filepath.Join(tmpSrc, name), []byte("file"), 0644)
-	os.Mkdir(filepath.Join(tmpDst, name), 0755)
+	if err := os.WriteFile(filepath.Join(tmpSrc, name), []byte("file"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(tmpDst, name), 0755); err != nil {
+		t.Fatal(err)
+	}
 
 	srcVfs := vfs.NewOSVFS(tmpSrc)
 	dstVfs := vfs.NewOSVFS(tmpDst)
@@ -194,8 +214,12 @@ func TestRecursiveCopy_OverwriteAllState(t *testing.T) {
 
 	tmpSrc := t.TempDir()
 	tmpDst := t.TempDir()
-	os.WriteFile(filepath.Join(tmpSrc, "f1.txt"), []byte("new"), 0644)
-	os.WriteFile(filepath.Join(tmpDst, "f1.txt"), []byte("old"), 0644)
+	if err := os.WriteFile(filepath.Join(tmpSrc, "f1.txt"), []byte("new"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDst, "f1.txt"), []byte("old"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	srcVfs := vfs.NewOSVFS(tmpSrc)
 	dstVfs := vfs.NewOSVFS(tmpDst)
@@ -221,8 +245,12 @@ func TestRecursiveCopy_SkipAllState(t *testing.T) {
 	tmpSrc := t.TempDir()
 	tmpDst := t.TempDir()
 	fileName := "skip.txt"
-	os.WriteFile(filepath.Join(tmpSrc, fileName), []byte("source content"), 0644)
-	os.WriteFile(filepath.Join(tmpDst, fileName), []byte("target content"), 0644)
+	if err := os.WriteFile(filepath.Join(tmpSrc, fileName), []byte("source content"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDst, fileName), []byte("target content"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	srcVfs := vfs.NewOSVFS(tmpSrc)
 	dstVfs := vfs.NewOSVFS(tmpDst)
@@ -244,7 +272,9 @@ func TestRecursiveCopy_CancelCleanup(t *testing.T) {
 	tmpDst := t.TempDir()
 
 	srcFile := filepath.Join(tmpSrc, "source.txt")
-	os.WriteFile(srcFile, []byte("some large content here"), 0644)
+	if err := os.WriteFile(srcFile, []byte("some large content here"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	dstFile := filepath.Join(tmpDst, "source.txt")
 
@@ -299,7 +329,9 @@ func TestRecursiveCopy_S2SProbing(t *testing.T) {
 	tmpDst := t.TempDir()
 
 	srcFile := filepath.Join(tmpSrc, "s2s.bin")
-	os.WriteFile(srcFile, []byte("s2s_data"), 0644)
+	if err := os.WriteFile(srcFile, []byte("s2s_data"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	dstFile := filepath.Join(tmpDst, "s2s.bin")
 
 	var pushedCmd string
@@ -374,7 +406,9 @@ func TestMkDir_ErrorHandling(t *testing.T) {
 	v := vfs.NewOSVFS(tmp)
 
 	// Try to create a folder where a file already exists
-	os.WriteFile(filepath.Join(tmp, "blocked"), []byte("data"), 0644)
+	if err := os.WriteFile(filepath.Join(tmp, "blocked"), []byte("data"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	err := v.MkDir(context.Background(), filepath.Join(tmp, "blocked"))
 	if err == nil {
@@ -413,7 +447,9 @@ func TestFileOp_PathLogic(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	t.Run("Copy and Rename", func(t *testing.T) {
-		os.WriteFile(filepath.Join(tmpSrc, "old.txt"), []byte("data"), 0644)
+		if err := os.WriteFile(filepath.Join(tmpSrc, "old.txt"), []byte("data"), 0600); err != nil {
+			t.Fatal(err)
+		}
 
 		// Target is a new filename, not a directory
 		done := make(chan struct{})
@@ -426,8 +462,12 @@ func TestFileOp_PathLogic(t *testing.T) {
 	})
 
 	t.Run("Multiple files to new directory", func(t *testing.T) {
-		os.WriteFile(filepath.Join(tmpSrc, "f1.txt"), []byte("1"), 0644)
-		os.WriteFile(filepath.Join(tmpSrc, "f2.txt"), []byte("2"), 0644)
+		if err := os.WriteFile(filepath.Join(tmpSrc, "f1.txt"), []byte("1"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(tmpSrc, "f2.txt"), []byte("2"), 0600); err != nil {
+			t.Fatal(err)
+		}
 
 		// Target "new_dir" doesn't exist, but we have multiple files
 		done := make(chan struct{})
@@ -443,7 +483,9 @@ func TestFileOp_PathLogic(t *testing.T) {
 	})
 
 	t.Run("Single file to new subfolder with rename", func(t *testing.T) {
-		os.WriteFile(filepath.Join(tmpSrc, "source.txt"), []byte("content"), 0644)
+		if err := os.WriteFile(filepath.Join(tmpSrc, "source.txt"), []byte("content"), 0600); err != nil {
+			t.Fatal(err)
+		}
 
 		// Target: "deep/path/target.txt" (subfolders don't exist)
 		done := make(chan struct{})
@@ -457,7 +499,9 @@ func TestFileOp_PathLogic(t *testing.T) {
 	})
 
 	t.Run("Single file to new subfolder with trailing slash", func(t *testing.T) {
-		os.WriteFile(filepath.Join(tmpSrc, "source2.txt"), []byte("content"), 0644)
+		if err := os.WriteFile(filepath.Join(tmpSrc, "source2.txt"), []byte("content"), 0600); err != nil {
+			t.Fatal(err)
+		}
 
 		// Target: "new_dir/" (trailing slash should force directory creation)
 		done := make(chan struct{})
@@ -538,11 +582,15 @@ func TestExecuteFileOp_RemotePathResolution_Issue74(t *testing.T) {
 
 	tmpSrc := t.TempDir()
 	srcVfs := vfs.NewOSVFS(tmpSrc)
-	os.WriteFile(filepath.Join(tmpSrc, "data.txt"), []byte("payload"), 0644)
+	if err := os.WriteFile(filepath.Join(tmpSrc, "data.txt"), []byte("payload"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	// Simulate a remote destination (like SFTP) using NullVFS which uses path.IsAbs
 	dstVfs := vfs.NewNullVFS(0)
-	dstVfs.SetPath("/remote/current")
+	if err := dstVfs.SetPath("/remote/current"); err != nil {
+		t.Fatal(err)
+	}
 
 	// Target is an absolute path on the remote system
 	remoteTarget := "/remote/target"
@@ -571,9 +619,13 @@ func TestExecuteFileOp_DirFileConflict(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	// Source: folder 'item'
-	os.Mkdir(filepath.Join(tmpSrc, "item"), 0755)
+	if err := os.Mkdir(filepath.Join(tmpSrc, "item"), 0755); err != nil {
+		t.Fatal(err)
+	}
 	// Destination: file 'item'
-	os.WriteFile(filepath.Join(tmpDst, "item"), []byte("blocking"), 0644)
+	if err := os.WriteFile(filepath.Join(tmpDst, "item"), []byte("blocking"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	tCtx := vtui.RunAsync(func(c *vtui.TaskContext) {})
 	defer tCtx.Cancel()
@@ -591,10 +643,18 @@ func TestExecuteFileOp_StateTransitions(t *testing.T) {
 	tmpDst := t.TempDir()
 
 	// Create two files in source, and two existing files in dest to trigger conflicts
-	os.WriteFile(filepath.Join(tmpSrc, "a.txt"), []byte("new"), 0644)
-	os.WriteFile(filepath.Join(tmpSrc, "b.txt"), []byte("new"), 0644)
-	os.WriteFile(filepath.Join(tmpDst, "a.txt"), []byte("old"), 0644)
-	os.WriteFile(filepath.Join(tmpDst, "b.txt"), []byte("old"), 0644)
+	if err := os.WriteFile(filepath.Join(tmpSrc, "a.txt"), []byte("new"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpSrc, "b.txt"), []byte("new"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDst, "a.txt"), []byte("old"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDst, "b.txt"), []byte("old"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	srcVfs := vfs.NewOSVFS(tmpSrc)
 	dstVfs := vfs.NewOSVFS(tmpDst)
@@ -634,8 +694,12 @@ func TestExecuteFileOp_OptimizedRenameConflict(t *testing.T) {
 	tmp := t.TempDir()
 	v := vfs.NewOSVFS(tmp)
 
-	os.WriteFile(filepath.Join(tmp, "src.txt"), []byte("source"), 0644)
-	os.WriteFile(filepath.Join(tmp, "dst.txt"), []byte("destination"), 0644)
+	if err := os.WriteFile(filepath.Join(tmp, "src.txt"), []byte("source"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmp, "dst.txt"), []byte("destination"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	// Execute Move
 	done := make(chan struct{})
@@ -698,10 +762,18 @@ func TestExecuteFileOp_SkipAll_Integrity(t *testing.T) {
 
 	// src: file1, file2
 	// dst: file1 (conflict), file2 (should be skipped if SkipAll is active)
-	os.WriteFile(filepath.Join(tmpSrc, "f1.txt"), []byte("src1"), 0644)
-	os.WriteFile(filepath.Join(tmpSrc, "f2.txt"), []byte("src2"), 0644)
-	os.WriteFile(filepath.Join(tmpDst, "f1.txt"), []byte("dst1"), 0644)
-	os.WriteFile(filepath.Join(tmpDst, "f2.txt"), []byte("dst2"), 0644)
+	if err := os.WriteFile(filepath.Join(tmpSrc, "f1.txt"), []byte("src1"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpSrc, "f2.txt"), []byte("src2"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDst, "f1.txt"), []byte("dst1"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDst, "f2.txt"), []byte("dst2"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	srcVfs := vfs.NewOSVFS(tmpSrc)
 	dstVfs := vfs.NewOSVFS(tmpDst)
@@ -739,14 +811,24 @@ func TestExecuteFileOp_Move_Skip_NoDataLoss(t *testing.T) {
 	tmpDst := t.TempDir()
 
 	srcFolder := filepath.Join(tmpSrc, "my_folder")
-	os.Mkdir(srcFolder, 0755)
-	os.WriteFile(filepath.Join(srcFolder, "f1.txt"), []byte("src1"), 0644)
-	os.WriteFile(filepath.Join(srcFolder, "f2.txt"), []byte("src2"), 0644)
+	if err := os.Mkdir(srcFolder, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(srcFolder, "f1.txt"), []byte("src1"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(srcFolder, "f2.txt"), []byte("src2"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	// Pre-create destination to cause conflict and skip
 	dstFolder := filepath.Join(tmpDst, "my_folder")
-	os.Mkdir(dstFolder, 0755)
-	os.WriteFile(filepath.Join(dstFolder, "f1.txt"), []byte("dst1"), 0644)
+	if err := os.Mkdir(dstFolder, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dstFolder, "f1.txt"), []byte("dst1"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	srcVfs := vfs.NewOSVFS(tmpSrc)
 	dstVfs := vfs.NewOSVFS(tmpDst)
@@ -761,7 +843,9 @@ func TestExecuteFileOp_Move_Skip_NoDataLoss(t *testing.T) {
 
 	// Simulate the ExecuteFileOp deletion logic
 	if state.SkippedCount == 0 {
-		srcVfs.Remove(context.Background(), srcFolder)
+		if err := srcVfs.Remove(context.Background(), srcFolder); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	// Assertion: The source folder MUST STILL EXIST because a file was skipped!
@@ -781,7 +865,9 @@ func TestExecuteFileOp_MoveAcrossVFS_Fallback(t *testing.T) {
 	dstVfs := vfs.NewOSVFS(tmpDst)
 
 	fileName := "cross_vfs.txt"
-	os.WriteFile(filepath.Join(tmpSrc, fileName), []byte("payload"), 0644)
+	if err := os.WriteFile(filepath.Join(tmpSrc, fileName), []byte("payload"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	// Use ExecuteFileOp with isMove=true.
 	// Since they are different OSVFS instances (simulating different volumes/servers),
@@ -822,7 +908,9 @@ func TestExecuteFileOp_LargeFileIntegrity(t *testing.T) {
 		data[i] = byte(i % 256)
 	}
 	fileName := "massive.bin"
-	os.WriteFile(filepath.Join(tmpSrc, fileName), data, 0644)
+	if err := os.WriteFile(filepath.Join(tmpSrc, fileName), data, 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	srcVfs := vfs.NewOSVFS(tmpSrc)
 	dstVfs := vfs.NewOSVFS(tmpDst)
@@ -871,16 +959,24 @@ func TestExecuteFileOp_DeepIntegrity(t *testing.T) {
 	// /root/file1.txt
 	// /root/sub1/file2.txt
 	// /root/sub1/sub2/large.bin (4MB)
-	os.MkdirAll(filepath.Join(srcBase, "root", "sub1", "sub2"), 0755)
+	if err := os.MkdirAll(filepath.Join(srcBase, "root", "sub1", "sub2"), 0755); err != nil {
+		t.Fatal(err)
+	}
 
 	largeData := make([]byte, 4*1024*1024)
 	for i := range largeData {
 		largeData[i] = byte(i % 251)
 	} // Prime to avoid simple patterns
 
-	os.WriteFile(filepath.Join(srcBase, "root", "file1.txt"), []byte("f1"), 0644)
-	os.WriteFile(filepath.Join(srcBase, "root", "sub1", "file2.txt"), []byte("f2"), 0644)
-	os.WriteFile(filepath.Join(srcBase, "root", "sub1", "sub2", "large.bin"), largeData, 0644)
+	if err := os.WriteFile(filepath.Join(srcBase, "root", "file1.txt"), []byte("f1"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(srcBase, "root", "sub1", "file2.txt"), []byte("f2"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(srcBase, "root", "sub1", "sub2", "large.bin"), largeData, 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	srcVfs := vfs.NewOSVFS(srcBase)
 	dstVfs := vfs.NewOSVFS(dstBase)
@@ -940,11 +1036,19 @@ func TestExecuteFileOp_Move_PermissionDenied_Recovery(t *testing.T) {
 	dstDir := t.TempDir()
 
 	srcFile := filepath.Join(srcDir, "protected.txt")
-	os.WriteFile(srcFile, []byte("secret"), 0644)
+	if err := os.WriteFile(srcFile, []byte("secret"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	// Make destination dir read-only
-	os.Chmod(dstDir, 0444)
-	defer os.Chmod(dstDir, 0755)
+	if err := os.Chmod(dstDir, 0444); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chmod(dstDir, 0755); err != nil {
+			t.Errorf("restore destination directory permissions: %v", err)
+		}
+	})
 
 	done := make(chan struct{})
 	v := vfs.NewOSVFS("/")
@@ -985,7 +1089,9 @@ func TestExecuteFileOp_MoveIntoSelf_Circular(t *testing.T) {
 	tmp := t.TempDir()
 	parent := filepath.Join(tmp, "parent")
 	child := filepath.Join(parent, "child")
-	os.MkdirAll(child, 0755)
+	if err := os.MkdirAll(child, 0755); err != nil {
+		t.Fatal(err)
+	}
 
 	v := vfs.NewOSVFS("/")
 	tCtx := &vtui.TaskContext{Context: context.Background()}
@@ -1004,7 +1110,9 @@ func TestRecursiveCopy_SelfAndSubfolderProtection(t *testing.T) {
 
 	// 1. Folder self-copy
 	folderPath := filepath.Join(tmpDir, "myfolder")
-	os.MkdirAll(folderPath, 0755)
+	if err := os.MkdirAll(folderPath, 0755); err != nil {
+		t.Fatal(err)
+	}
 
 	err := recursiveCopy(tCtx.Context, v, folderPath, v, folderPath, &FileOpState{}, 0)
 	if err == nil || !strings.Contains(err.Error(), "folder into itself") {
@@ -1020,7 +1128,9 @@ func TestRecursiveCopy_SelfAndSubfolderProtection(t *testing.T) {
 
 	// 3. File self-copy
 	filePath := filepath.Join(tmpDir, "myfile.txt")
-	os.WriteFile(filePath, []byte("data"), 0644)
+	if err := os.WriteFile(filePath, []byte("data"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	err = recursiveCopy(tCtx.Context, v, filePath, v, filePath, &FileOpState{}, 0)
 	if err == nil || !strings.Contains(err.Error(), "file onto itself") {
@@ -1042,8 +1152,12 @@ func TestRecursiveCopy_SubfolderDeepRecursion(t *testing.T) {
 	// Create /parent/child
 	parent := filepath.Join(tmp, "parent")
 	child := filepath.Join(parent, "child")
-	os.MkdirAll(child, 0755)
-	os.WriteFile(filepath.Join(parent, "file.txt"), []byte("data"), 0644)
+	if err := os.MkdirAll(child, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(parent, "file.txt"), []byte("data"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	v := vfs.NewOSVFS("/")
 	tCtx := &vtui.TaskContext{Context: context.Background()}
@@ -1078,12 +1192,18 @@ func TestRecursiveCopy_SymlinkLoop(t *testing.T) {
 	tmp := t.TempDir()
 
 	src := filepath.Join(tmp, "source")
-	os.Mkdir(src, 0755)
-	os.WriteFile(filepath.Join(src, "data.txt"), []byte("hi"), 0644)
+	if err := os.Mkdir(src, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "data.txt"), []byte("hi"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	// Create a symlink INSIDE src that points to tmp (parent)
 	loopLink := filepath.Join(src, "loop")
-	os.Symlink(tmp, loopLink)
+	if err := os.Symlink(tmp, loopLink); err != nil {
+		t.Fatal(err)
+	}
 
 	v := vfs.NewOSVFS("/")
 	tCtx := &vtui.TaskContext{Context: context.Background()}
@@ -1140,8 +1260,12 @@ func TestRecursiveCopy_ByteProgress(t *testing.T) {
 		srcVfs := vfs.NewOSVFS(tmpSrc)
 		dstVfs := vfs.NewOSVFS(tmpDst)
 
-		os.WriteFile(filepath.Join(tmpSrc, "f1.txt"), []byte("Hello"), 0644)
-		os.WriteFile(filepath.Join(tmpSrc, "f2.txt"), []byte("World!"), 0644)
+		if err := os.WriteFile(filepath.Join(tmpSrc, "f1.txt"), []byte("Hello"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(tmpSrc, "f2.txt"), []byte("World!"), 0600); err != nil {
+			t.Fatal(err)
+		}
 
 		ctx := context.Background()
 		callCount := 0
@@ -1350,10 +1474,18 @@ func TestFileOps_UI_RememberOverwrite(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	tmpSrc := t.TempDir()
 	tmpDst := t.TempDir()
-	os.WriteFile(filepath.Join(tmpSrc, "f1.txt"), []byte("new1"), 0644)
-	os.WriteFile(filepath.Join(tmpSrc, "f2.txt"), []byte("new2"), 0644)
-	os.WriteFile(filepath.Join(tmpDst, "f1.txt"), []byte("old1"), 0644)
-	os.WriteFile(filepath.Join(tmpDst, "f2.txt"), []byte("old2"), 0644)
+	if err := os.WriteFile(filepath.Join(tmpSrc, "f1.txt"), []byte("new1"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpSrc, "f2.txt"), []byte("new2"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDst, "f1.txt"), []byte("old1"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDst, "f2.txt"), []byte("old2"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	done := make(chan struct{})
 	ExecuteFileOp(nil, vfs.NewOSVFS(tmpSrc), vfs.NewOSVFS(tmpDst), []string{"f1.txt", "f2.txt"}, tmpDst, false, 2, func() { close(done) })
@@ -1397,9 +1529,15 @@ func TestFileOps_UI_RenameAndAppendUnsupported(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	tmpSrc := t.TempDir()
 	tmpDst := t.TempDir()
-	os.WriteFile(filepath.Join(tmpSrc, "f1.txt"), []byte("source"), 0644)
-	os.WriteFile(filepath.Join(tmpDst, "f1.txt"), []byte("dest1"), 0644)
-	os.WriteFile(filepath.Join(tmpDst, "f2.txt"), []byte("dest2"), 0644)
+	if err := os.WriteFile(filepath.Join(tmpSrc, "f1.txt"), []byte("source"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDst, "f1.txt"), []byte("dest1"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDst, "f2.txt"), []byte("dest2"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	done := make(chan struct{})
 	ExecuteFileOp(nil, vfs.NewOSVFS(tmpSrc), vfs.NewOSVFS(tmpDst), []string{"f1.txt"}, tmpDst, false, 2, func() { close(done) })
@@ -1449,8 +1587,12 @@ func TestFileOps_UI_MoveSkip(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	tmpSrc := t.TempDir()
 	tmpDst := t.TempDir()
-	os.WriteFile(filepath.Join(tmpSrc, "f1.txt"), []byte("source"), 0644)
-	os.WriteFile(filepath.Join(tmpDst, "f1.txt"), []byte("dest"), 0644)
+	if err := os.WriteFile(filepath.Join(tmpSrc, "f1.txt"), []byte("source"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDst, "f1.txt"), []byte("dest"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	done := make(chan struct{})
 	// isMove = true
@@ -1487,7 +1629,9 @@ func TestFileOps_ForkedWorkspace(t *testing.T) {
 
 	tmpSrc := t.TempDir()
 	tmpDst := t.TempDir()
-	os.WriteFile(filepath.Join(tmpSrc, "f1.txt"), []byte("data"), 0644)
+	if err := os.WriteFile(filepath.Join(tmpSrc, "f1.txt"), []byte("data"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	done := make(chan struct{})
 	// forked = true
@@ -1519,11 +1663,19 @@ func TestFileOps_UI_ConcurrentConflicts(t *testing.T) {
 	tmpSrc1, tmpDst1 := t.TempDir(), t.TempDir()
 	tmpSrc2, tmpDst2 := t.TempDir(), t.TempDir()
 
-	os.WriteFile(filepath.Join(tmpSrc1, "f1.txt"), []byte("src1"), 0644)
-	os.WriteFile(filepath.Join(tmpDst1, "f1.txt"), []byte("dst1"), 0644)
+	if err := os.WriteFile(filepath.Join(tmpSrc1, "f1.txt"), []byte("src1"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDst1, "f1.txt"), []byte("dst1"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
-	os.WriteFile(filepath.Join(tmpSrc2, "f2.txt"), []byte("src2"), 0644)
-	os.WriteFile(filepath.Join(tmpDst2, "f2.txt"), []byte("dst2"), 0644)
+	if err := os.WriteFile(filepath.Join(tmpSrc2, "f2.txt"), []byte("src2"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDst2, "f2.txt"), []byte("dst2"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	done1, done2 := make(chan struct{}), make(chan struct{})
 
@@ -1593,8 +1745,12 @@ func TestFileOps_UI_CancelDuringMove(t *testing.T) {
 	srcFile := filepath.Join(tmpSrc, "f1.txt")
 	dstFile := filepath.Join(tmpDst, "f1.txt")
 
-	os.WriteFile(srcFile, []byte("source_data"), 0644)
-	os.WriteFile(dstFile, []byte("target_data"), 0644)
+	if err := os.WriteFile(srcFile, []byte("source_data"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(dstFile, []byte("target_data"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	done := make(chan struct{})
 	// isMove = true
@@ -1641,8 +1797,12 @@ func TestFileOps_UI_RenameToEmpty(t *testing.T) {
 	tmpSrc := t.TempDir()
 	tmpDst := t.TempDir()
 
-	os.WriteFile(filepath.Join(tmpSrc, "f.txt"), []byte("src"), 0644)
-	os.WriteFile(filepath.Join(tmpDst, "f.txt"), []byte("dst"), 0644)
+	if err := os.WriteFile(filepath.Join(tmpSrc, "f.txt"), []byte("src"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDst, "f.txt"), []byte("dst"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	done := make(chan struct{})
 	ExecuteFileOp(nil, vfs.NewOSVFS(tmpSrc), vfs.NewOSVFS(tmpDst), []string{"f.txt"}, tmpDst, true, 2, func() { close(done) })
@@ -1679,7 +1839,9 @@ func TestFileOps_SameFile_Protection(t *testing.T) {
 	tmp := t.TempDir()
 
 	targetFile := filepath.Join(tmp, "critical.txt")
-	os.WriteFile(targetFile, []byte("PRECIOUS_DATA"), 0644)
+	if err := os.WriteFile(targetFile, []byte("PRECIOUS_DATA"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	v := vfs.NewOSVFS(tmp)
 
@@ -1725,7 +1887,9 @@ func TestFileOps_PathDisplay(t *testing.T) {
 	srcVfs := vfs.NewOSVFS(tmpSrc)
 	dstVfs := vfs.NewOSVFS(tmpDst)
 
-	os.WriteFile(filepath.Join(tmpSrc, "display.txt"), []byte("data"), 0644)
+	if err := os.WriteFile(filepath.Join(tmpSrc, "display.txt"), []byte("data"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	orig := AppConfig.FileOpPathDisplay
 	defer func() { AppConfig.FileOpPathDisplay = orig }()
@@ -1777,9 +1941,15 @@ func TestFileOps_PathDisplay(t *testing.T) {
 func TestFileOps_CalculateStats_Integration(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	tmp := t.TempDir()
-	os.MkdirAll(filepath.Join(tmp, "a/b"), 0755)
-	os.WriteFile(filepath.Join(tmp, "a/f1.txt"), []byte("123"), 0644)
-	os.WriteFile(filepath.Join(tmp, "a/b/f2.txt"), []byte("4567"), 0644)
+	if err := os.MkdirAll(filepath.Join(tmp, "a/b"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmp, "a/f1.txt"), []byte("123"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmp, "a/b/f2.txt"), []byte("4567"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	v := vfs.NewOSVFS(tmp)
 	stats, err := vfs.CalculateStats(context.Background(), v, tmp, []string{"a"}, nil)
@@ -1836,7 +2006,9 @@ func TestExecuteFileOp_Move_FinalizeFailure(t *testing.T) {
 	tmpDst := t.TempDir()
 
 	srcFile := filepath.Join(tmpSrc, "ghost.txt")
-	os.WriteFile(srcFile, []byte("data"), 0644)
+	if err := os.WriteFile(srcFile, []byte("data"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	// VFS который имитирует успех Copy, но провал Remove
 	srcVfs := &mockFailingRemoveVFS{VFS: vfs.NewOSVFS(tmpSrc)}
@@ -1878,7 +2050,9 @@ func TestExecuteFileOp_ForegroundIntegrity(t *testing.T) {
 
 	tmpSrc := t.TempDir()
 	tmpDst := t.TempDir()
-	os.WriteFile(filepath.Join(tmpSrc, "direct.txt"), []byte("data"), 0644)
+	if err := os.WriteFile(filepath.Join(tmpSrc, "direct.txt"), []byte("data"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	srcVfs := vfs.NewOSVFS(tmpSrc)
 	dstVfs := vfs.NewOSVFS(tmpDst)
@@ -1960,7 +2134,9 @@ func (w *closeErrWriter) Write(p []byte) (int, error) { return w.w.Write(p) }
 
 func (w *closeErrWriter) Close() error {
 	w.owner.closes++
-	w.w.Close()
+	if err := w.w.Close(); err != nil {
+		return err
+	}
 	return w.owner.closeErr
 }
 

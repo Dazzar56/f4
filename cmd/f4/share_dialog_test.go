@@ -441,8 +441,12 @@ func TestGooglePublishedExposureNoticeIsVisibleAndActionable(t *testing.T) {
 	defer d.dialog.Close()
 	var visible strings.Builder
 	for _, line := range d.noticeLines {
-		visible.WriteString(line.GetText())
-		visible.WriteByte(' ')
+		if _, err := visible.WriteString(line.GetText()); err != nil {
+			t.Fatal(err)
+		}
+		if err := visible.WriteByte(' '); err != nil {
+			t.Fatal(err)
+		}
 	}
 	wantRunes := []rune(Msg("Share.Notice.GooglePublished"))
 	wantPrefix := string(wantRunes[:min(24, len(wantRunes))])

@@ -519,7 +519,7 @@ func hashRealCrossCloudFile(ctx context.Context, filesystem vfs.VFS, path string
 	if err != nil {
 		return zero, 0, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	hash := sha256.New()
 	buffer := make([]byte, 128*1024)
 	var total int64
@@ -668,8 +668,8 @@ func runRealCrossCloudF5(t *testing.T, source, destination *realCrossCloudEndpoi
 	if sourceVFS == nil || sourceVFS == source.workspace || destinationVFS == nil || destinationVFS == destination.workspace {
 		return errors.New("CloudVFS did not clone for production cross-cloud F5 panels")
 	}
-	defer sourceVFS.Close()
-	defer destinationVFS.Close()
+	defer func() { _ = sourceVFS.Close() }()      // Connection cleanup errors do not affect the operation result.
+	defer func() { _ = destinationVFS.Close() }() // Connection cleanup errors do not affect the operation result.
 
 	pf := realCloudFoxUIPanels(t, sourceVFS, destinationVFS)
 	defer pf.Close()

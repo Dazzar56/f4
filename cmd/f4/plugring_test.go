@@ -72,7 +72,9 @@ func TestFetchCatalog_Success(t *testing.T) {
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/x-yaml")
-		w.Write([]byte(mockYaml))
+		if _, err := w.Write([]byte(mockYaml)); err != nil {
+			t.Errorf("write catalog response: %v", err)
+		}
 	}))
 	defer ts.Close()
 
@@ -114,7 +116,9 @@ func TestFetchCatalog_Errors(t *testing.T) {
 
 	t.Run("Bad YAML", func(t *testing.T) {
 		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Write([]byte(`- id: "test" \n invalid_yaml: {`))
+			if _, err := w.Write([]byte(`- id: "test" \n invalid_yaml: {`)); err != nil {
+				t.Errorf("write malformed catalog response: %v", err)
+			}
 		}))
 		defer ts.Close()
 
@@ -135,7 +139,9 @@ func TestFetchCatalog_Dependencies(t *testing.T) {
 `
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/x-yaml")
-		w.Write([]byte(mockYaml))
+		if _, err := w.Write([]byte(mockYaml)); err != nil {
+			t.Errorf("write catalog response: %v", err)
+		}
 	}))
 	defer ts.Close()
 
@@ -163,10 +169,14 @@ func TestGetInstalledPlugRingItems(t *testing.T) {
 	cfgDir := GetF4ConfigDir()
 	plugringDir := filepath.Join(cfgDir, "plugring")
 	pluginPath := filepath.Join(plugringDir, "test-id")
-	os.MkdirAll(pluginPath, 0755)
+	if err := os.MkdirAll(pluginPath, 0755); err != nil {
+		t.Fatal(err)
+	}
 
 	manifest := `{"id": "test-id", "version": "1.0.0"}`
-	os.WriteFile(filepath.Join(pluginPath, "manifest.json"), []byte(manifest), 0644)
+	if err := os.WriteFile(filepath.Join(pluginPath, "manifest.json"), []byte(manifest), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	installed := GetInstalledPlugRingItems()
 	if len(installed) != 1 {
@@ -189,11 +199,15 @@ func TestCheckForPluginUpdates(t *testing.T) {
 	cfgDir := GetF4ConfigDir()
 	plugringDir := filepath.Join(cfgDir, "plugring")
 	pluginPath := filepath.Join(plugringDir, "test-plugin")
-	os.MkdirAll(pluginPath, 0755)
+	if err := os.MkdirAll(pluginPath, 0755); err != nil {
+		t.Fatal(err)
+	}
 
 	// Local manifest has version 1.0
 	manifest := `{"id": "test-plugin", "version": "1.0"}`
-	os.WriteFile(filepath.Join(pluginPath, "manifest.json"), []byte(manifest), 0644)
+	if err := os.WriteFile(filepath.Join(pluginPath, "manifest.json"), []byte(manifest), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	// Remote catalog has newer version 2.0
 	mockYaml := `
@@ -203,7 +217,9 @@ func TestCheckForPluginUpdates(t *testing.T) {
 `
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/x-yaml")
-		w.Write([]byte(mockYaml))
+		if _, err := w.Write([]byte(mockYaml)); err != nil {
+			t.Errorf("write catalog response: %v", err)
+		}
 	}))
 	defer ts.Close()
 
@@ -259,8 +275,8 @@ func TestPlugRing_InstallAndRemove_EndToEnd(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	tmpConfig := t.TempDir()
-	os.Setenv("XDG_CONFIG_HOME", tmpConfig)
-	os.Setenv("APPDATA", tmpConfig)
+	t.Setenv("XDG_CONFIG_HOME", tmpConfig)
+	t.Setenv("APPDATA", tmpConfig)
 	resetConfigDirForTest()
 
 	// 1. Setup mock single-file plugin
@@ -268,7 +284,9 @@ func TestPlugRing_InstallAndRemove_EndToEnd(t *testing.T) {
 echo "running"
 `
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(pluginContent))
+		if _, err := w.Write([]byte(pluginContent)); err != nil {
+			t.Errorf("write plugin response: %v", err)
+		}
 	}))
 	defer ts.Close()
 

@@ -60,10 +60,13 @@ func (m *mockSlowHighlighter) Highlight(line string, prev any, base uint64) ([]u
 	return make([]uint64, len(line)), depth + 1
 }
 
-func buildLinesPT(n int) *piecetable.PieceTable {
+func buildLinesPT(t *testing.T, n int) *piecetable.PieceTable {
+	t.Helper()
 	var sb strings.Builder
 	for i := 0; i < n; i++ {
-		fmt.Fprintf(&sb, "line %d\n", i)
+		if _, err := fmt.Fprintf(&sb, "line %d\n", i); err != nil {
+			t.Fatal(err)
+		}
 	}
 	return piecetable.New([]byte(sb.String()))
 }
@@ -137,7 +140,7 @@ func TestEditor_HighlightSlice_StopsOnBudget(t *testing.T) {
 
 	const perLine = time.Millisecond
 
-	ev := NewEditorView(buildLinesPT(5000), nil, "test.txt")
+	ev := NewEditorView(buildLinesPT(t, 5000), nil, "test.txt")
 	defer ev.Close()
 	ev.SetPosition(0, 0, 80, 10)
 	ev.highlighter = &mockSlowHighlighter{perLine: perLine, clock: clock}
@@ -164,7 +167,7 @@ func TestEditor_HighlightSlice_YieldsWhileIndexing(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	clock := installFakeHLClock(t)
 
-	ev := NewEditorView(buildLinesPT(5000), nil, "test.txt")
+	ev := NewEditorView(buildLinesPT(t, 5000), nil, "test.txt")
 	defer ev.Close()
 	ev.SetPosition(0, 0, 80, 10)
 	ev.highlighter = &mockSlowHighlighter{perLine: 200 * time.Microsecond, clock: clock}
@@ -204,7 +207,7 @@ func TestEditor_BackgroundWalker_NoLongUIStalls(t *testing.T) {
 	const perLine = 50 * time.Microsecond
 	maxLines := hlSliceLines(perLine)
 
-	ev := NewEditorView(buildLinesPT(total), nil, "test.txt")
+	ev := NewEditorView(buildLinesPT(t, total), nil, "test.txt")
 	defer ev.Close()
 	ev.SetPosition(0, 0, 80, 10)
 	ev.highlighter = &mockSlowHighlighter{perLine: perLine, clock: clock}
@@ -255,7 +258,7 @@ func TestEditor_HighlightWalker_SkipsColorer(t *testing.T) {
 		t.Error("no highlighter, nothing to walk")
 	}
 
-	ev := NewEditorView(buildLinesPT(5000), nil, "test.txt")
+	ev := NewEditorView(buildLinesPT(t, 5000), nil, "test.txt")
 	defer ev.Close()
 	ev.SetPosition(0, 0, 80, 10)
 	ev.highlighter = &ColorerHighlighter{}

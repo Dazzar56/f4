@@ -18,7 +18,9 @@ F5=My.Custom.Copy
 F9=Custom.Action
 CtrlU=None
 `
-	os.WriteFile(iniPath, []byte(content), 0644)
+	if err := os.WriteFile(iniPath, []byte(content), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	hm := NewHotkeyManager(iniPath)
 

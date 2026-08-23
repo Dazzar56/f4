@@ -502,7 +502,9 @@ func TestAnsiParser_APC_Reset(t *testing.T) {
 	tv := NewTerminalView(80, 24)
 	defer tv.Close()
 	p := NewAnsiParser(tv, nil)
-	p.CurParam.WriteString("old_garbage")
+	if _, err := p.CurParam.WriteString("old_garbage"); err != nil {
+		t.Fatal(err)
+	}
 	p.Process([]byte("\x1b_")) // Enter StateAPC
 	if p.CurParam.Len() != 0 {
 		t.Error("CurParam was not reset when entering APC state")

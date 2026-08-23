@@ -61,7 +61,9 @@ func setupPanelWithFile(t *testing.T, name string) (*PanelsFrame, *mockPty) {
 	pf.ResizeConsole(80, 25)
 
 	fsp := pf.panels[pf.activeIdx].(*FileSystemPanel)
-	fsp.vfs.SetPath(tmpDir)
+	if err := fsp.vfs.SetPath(tmpDir); err != nil {
+		t.Fatal(err)
+	}
 	fsp.entries = []*fileEntry{
 		{VFSItem: vfs.VFSItem{Name: ".."}},
 		{VFSItem: vfs.VFSItem{Name: name}},

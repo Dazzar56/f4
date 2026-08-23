@@ -133,13 +133,17 @@ indent_size = 2
 indent_style = tab
 tab_width = 4
 `
-	os.WriteFile(filepath.Join(tmpDir, ".editorconfig"), []byte(config), 0644)
+	if err := os.WriteFile(filepath.Join(tmpDir, ".editorconfig"), []byte(config), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	v := vfs.NewOSVFS(tmpDir)
 
 	// 1. Test .go file (should use tabs)
 	goFile := filepath.Join(tmpDir, "main.go")
-	os.WriteFile(goFile, []byte("package main"), 0644)
+	if err := os.WriteFile(goFile, []byte("package main"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	evGo := NewEditorView(piecetable.New(nil), v, goFile)
 	defer evGo.Close()
@@ -149,7 +153,9 @@ tab_width = 4
 
 	// 2. Test other file (should use 2 spaces)
 	txtFile := filepath.Join(tmpDir, "readme.txt")
-	os.WriteFile(txtFile, []byte("hello"), 0644)
+	if err := os.WriteFile(txtFile, []byte("hello"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	evTxt := NewEditorView(piecetable.New(nil), v, txtFile)
 	defer evTxt.Close()

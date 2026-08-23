@@ -18,7 +18,9 @@ DisableOutput=0x1
 Sequence=Up Up CtrlEnter Esc F5 Down ShiftF5 Esc Esc
 `
 	tmpFile := filepath.Join(t.TempDir(), "far2l_macros.ini")
-	os.WriteFile(tmpFile, []byte(iniContent), 0644)
+	if err := os.WriteFile(tmpFile, []byte(iniContent), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	mgr := NewMacroManager(tmpFile)
 
@@ -140,7 +142,11 @@ func TestMacroRecordingAndPlayback(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	tmpFile := "test_macros.ini"
-	defer os.Remove(tmpFile)
+	t.Cleanup(func() {
+		if err := os.Remove(tmpFile); err != nil && !os.IsNotExist(err) {
+			t.Errorf("remove temporary macro file: %v", err)
+		}
+	})
 
 	mgr := NewMacroManager(tmpFile)
 
@@ -879,15 +885,29 @@ func TestMacro_ReassignAndCleanup(t *testing.T) {
 	mgr.Save()
 
 	host := newFakeMacroHost()
-	engine, _ := NewLuaMacroEngine(host)
+	engine, err := NewLuaMacroEngine(host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := engine.Close(); err != nil {
+			t.Errorf("close Lua macro engine: %v", err)
+		}
+	})
 	mgr.Lua = engine
 
 	scriptDir := filepath.Join(GetF4ConfigDir(), "Macros", "scripts")
-	os.MkdirAll(scriptDir, 0755)
+	if err := os.MkdirAll(scriptDir, 0755); err != nil {
+		t.Fatal(err)
+	}
 	scriptPath := filepath.Join(scriptDir, RecordedMacroFileName("Common", key))
-	os.WriteFile(scriptPath, []byte(""), 0644)
+	if err := os.WriteFile(scriptPath, []byte(""), 0600); err != nil {
+		t.Fatal(err)
+	}
 
-	_ = engine.LoadString("test", `Macro { area = "Common"; key = "F3"; action = function() end }`)
+	if err := engine.LoadString("test", `Macro { area = "Common"; key = "F3"; action = function() end }`); err != nil {
+		t.Fatal(err)
+	}
 
 	mgr.Buffer = nil
 	assignFrame := NewMacroAssignFrame(mgr)

@@ -48,12 +48,16 @@ func TestClearNonBlock_ClearsFlag(t *testing.T) {
 		t.Fatalf("pipe: %v", err)
 	}
 	readEnd, writeEnd := p[0], p[1]
-	defer syscall.Close(writeEnd)
+	t.Cleanup(func() {
+		if err := syscall.Close(writeEnd); err != nil {
+			t.Errorf("close pipe write end: %v", err)
+		}
+	})
 	// os.NewFile takes ownership of readEnd. Closing the raw descriptor while
 	// leaving f to its finalizer can later close an unrelated, reused fd.
 	f := os.NewFile(uintptr(readEnd), "pipe-read")
 	if f == nil {
-		syscall.Close(readEnd)
+		_ = syscall.Close(readEnd) // Cleanup is secondary to os.NewFile failing.
 		t.Fatal("os.NewFile returned nil for pipe read end")
 	}
 	defer func() {
@@ -104,7 +108,11 @@ func TestSetCloseOnExec_NotInheritedByChild(t *testing.T) {
 		t.Fatalf("pipe: %v", err)
 	}
 	readEnd, writeEnd := p[0], p[1]
-	defer syscall.Close(readEnd)
+	t.Cleanup(func() {
+		if err := syscall.Close(readEnd); err != nil {
+			t.Errorf("close pipe read end: %v", err)
+		}
+	})
 
 	setCloseOnExec([]int{writeEnd})
 
@@ -116,8 +124,8 @@ func TestSetCloseOnExec_NotInheritedByChild(t *testing.T) {
 		t.Fatalf("StartProcess: %v", err)
 	}
 	defer func() {
-		proc.Kill()
-		proc.Wait()
+		_ = proc.Kill()    // The cleanup child may have already exited.
+		_, _ = proc.Wait() // Waiting only reaps the cleanup child.
 	}()
 
 	// We are now the only process that should hold writeEnd open. Closing it
@@ -151,7 +159,11 @@ func TestListSessions_PurgesMissingSockets(t *testing.T) {
 	if err := os.WriteFile(staleJSON, data, 0600); err != nil {
 		t.Fatalf("write stale json: %v", err)
 	}
-	defer os.Remove(staleJSON)
+	t.Cleanup(func() {
+		if err := os.Remove(staleJSON); err != nil && !os.IsNotExist(err) {
+			t.Errorf("remove stale session metadata: %v", err)
+		}
+	})
 
 	sessions := listSessions()
 	for _, s := range sessions {
@@ -171,7 +183,11 @@ func TestWatchdog_DetectsClientDisconnect(t *testing.T) {
 		t.Fatalf("pipe: %v", err)
 	}
 	readEnd, writeEnd := p[0], p[1]
-	defer syscall.Close(writeEnd)
+	t.Cleanup(func() {
+		if err := syscall.Close(writeEnd); err != nil {
+			t.Errorf("close pipe write end: %v", err)
+		}
+	})
 
 	// Initially, both ends are open: poll should not report hangup/error.
 	// POLLOUT must be requested: macOS reports nothing for Events: 0, so
@@ -187,7 +203,9 @@ func TestWatchdog_DetectsClientDisconnect(t *testing.T) {
 	}
 
 	// Close client read end
-	syscall.Close(readEnd)
+	if err := syscall.Close(readEnd); err != nil {
+		t.Fatal(err)
+	}
 
 	// Now poll on writeEnd must report POLLERR, POLLHUP, or POLLNVAL
 	pfds = []unix.PollFd{{Fd: int32(writeEnd), Events: unix.POLLOUT}}

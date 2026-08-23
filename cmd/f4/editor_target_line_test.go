@@ -64,7 +64,9 @@ func TestEditorView_IndexerRestoresTargetLineAfterLateDrain(t *testing.T) {
 
 	var sb strings.Builder
 	for i := 0; i < lineCount; i++ {
-		fmt.Fprintf(&sb, "L%06d\n", i)
+		if _, err := fmt.Fprintf(&sb, "L%06d\n", i); err != nil {
+			t.Fatal(err)
+		}
 	}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "restore.txt")

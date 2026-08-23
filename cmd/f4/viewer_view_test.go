@@ -153,7 +153,9 @@ func TestViewerView_NavigationAndEOF(t *testing.T) {
 	vtui.SetDefaultPalette()
 	tmpDir := t.TempDir()
 	tmp := filepath.Join(tmpDir, "test.txt")
-	os.WriteFile(tmp, []byte("L1\nL2\nL3\nL4\nL5"), 0644) // 5 lines total
+	if err := os.WriteFile(tmp, []byte("L1\nL2\nL3\nL4\nL5"), 0600); err != nil { // 5 lines total
+		t.Fatal(err)
+	}
 
 	v := vfs.NewOSVFS(tmpDir)
 	vv, err := NewViewerView(context.Background(), v, tmp)
@@ -294,7 +296,9 @@ func TestViewerView_MouseScrollbar(t *testing.T) {
 	content := "L1\nL2\nL3\nL4\nL5\nL6\nL7\nL8\nL9\nL10\n" // 10 lines, 33 bytes (3 per line + 1 for last \n)
 	tmpDir := t.TempDir()
 	tmp := filepath.Join(tmpDir, "test_mouse.txt")
-	os.WriteFile(tmp, []byte(content), 0644)
+	if err := os.WriteFile(tmp, []byte(content), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	v := vfs.NewOSVFS(tmpDir)
 	vv, err := NewViewerView(context.Background(), v, tmp)
@@ -417,7 +421,9 @@ func TestViewerBar_Content(t *testing.T) {
 	SetDefaultF4Palette()
 	tmpDir := t.TempDir()
 	tmp := filepath.Join(tmpDir, "bar_test.txt")
-	os.WriteFile(tmp, []byte("Some content"), 0644)
+	if err := os.WriteFile(tmp, []byte("Some content"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	v := vfs.NewOSVFS(tmpDir)
 	vv, err := NewViewerView(context.Background(), v, tmp)
@@ -491,7 +497,9 @@ func TestViewerView_GetTitle(t *testing.T) {
 	// For a simple title test, creating a temp file is easiest.
 	tmpDir := t.TempDir()
 	tmp := tmpDir + "/doc.txt"
-	os.WriteFile(tmp, []byte(""), 0644)
+	if err := os.WriteFile(tmp, []byte(""), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	v := vfs.NewOSVFS(tmpDir)
 	vv, err := NewViewerView(context.Background(), v, tmp)
@@ -514,7 +522,9 @@ func TestViewerView_GetTitle(t *testing.T) {
 func TestLayout_ViewerSearchDialog_Validity(t *testing.T) {
 	vtui.SetDefaultPalette()
 	tmp := filepath.Join(t.TempDir(), "search_layout.txt")
-	os.WriteFile(tmp, []byte("data"), 0644)
+	if err := os.WriteFile(tmp, []byte("data"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	fm := vtui.FrameManager
 	fm.Init(vtui.NewSilentScreenBuf())
@@ -550,7 +560,9 @@ func TestViewerView_HexModeToggle(t *testing.T) {
 	for i := range data {
 		data[i] = byte(i)
 	}
-	os.WriteFile(tmp, data, 0644)
+	if err := os.WriteFile(tmp, data, 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	v := vfs.NewOSVFS(tmpDir)
 	vv, err := NewViewerView(context.Background(), v, tmp)
@@ -591,7 +603,9 @@ func TestViewerView_TabRendering(t *testing.T) {
 	tmpDir := t.TempDir()
 	tmp := filepath.Join(tmpDir, "tab.txt")
 	// "a\tb" -> tab should expand to spaces
-	os.WriteFile(tmp, []byte("a\tb"), 0644)
+	if err := os.WriteFile(tmp, []byte("a\tb"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	v := vfs.NewOSVFS(tmpDir)
 	vv, err := NewViewerView(context.Background(), v, tmp)
@@ -644,7 +658,9 @@ func TestViewerView_EndJump_BusyState(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	tmp := filepath.Join(t.TempDir(), "large.txt")
 	// Создаем файл, гарантированно превышающий размер окна
-	os.WriteFile(tmp, []byte(strings.Repeat("line\n", 1000)), 0644)
+	if err := os.WriteFile(tmp, []byte(strings.Repeat("line\n", 1000)), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	v := vfs.NewOSVFS(t.TempDir())
 	vv, err := NewViewerView(context.Background(), v, tmp)
@@ -682,7 +698,9 @@ func TestViewerView_StateRestoration_Modes(t *testing.T) {
 	t.Cleanup(func() { GlobalFileState = oldFileState })
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	tmp := filepath.Join(t.TempDir(), "test.txt")
-	os.WriteFile(tmp, []byte("data"), 0644)
+	if err := os.WriteFile(tmp, []byte("data"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	v := vfs.NewOSVFS(t.TempDir())
 
 	GlobalFileState = &F4FileStateProvider{Data: make(map[string]*FileState), Limit: 10}
@@ -719,7 +737,9 @@ func TestViewerView_ScrollbarEOFAlignment(t *testing.T) {
 	for i := 0; i < 50; i++ {
 		content += "this is a test line for scrollbar alignment\n"
 	}
-	os.WriteFile(tmp, []byte(content), 0644)
+	if err := os.WriteFile(tmp, []byte(content), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	v := vfs.NewOSVFS(tmpDir)
 	vv, err := NewViewerView(context.Background(), v, tmp)
@@ -782,7 +802,9 @@ func TestViewerView_ScrollbarStability(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	tmp := filepath.Join(tmpDir, "stability_test.txt")
-	os.WriteFile(tmp, []byte(strings.Repeat("line\n", 200)), 0644)
+	if err := os.WriteFile(tmp, []byte(strings.Repeat("line\n", 200)), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	v := vfs.NewOSVFS(tmpDir)
 	vv, err := NewViewerView(context.Background(), v, tmp)
@@ -824,7 +846,9 @@ func TestViewerView_Codepages_Load(t *testing.T) {
 	path := filepath.Join(tmpDir, "oem.txt")
 
 	raw := []byte{0x8f, 0xe0, 0xa8, 0xa2, 0xa5, 0xe2}
-	os.WriteFile(path, raw, 0644)
+	if err := os.WriteFile(path, raw, 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	oldDefault := AppConfig.ViewerDefaultCodePage
 	AppConfig.ViewerDefaultCodePage = 866
@@ -873,7 +897,9 @@ func TestViewerView_Codepages_AutoDetect(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "auto_view.txt")
-	os.WriteFile(path, []byte("plain ascii is valid utf8"), 0644)
+	if err := os.WriteFile(path, []byte("plain ascii is valid utf8"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	v := vfs.NewOSVFS(tmpDir)
 	vv, err := NewViewerView(context.Background(), v, path)
@@ -894,7 +920,9 @@ func TestViewerView_Codepages_AutoDetect(t *testing.T) {
 func TestViewerView_Codepages_KeyBarLabel(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "dummy_view.txt")
-	os.WriteFile(path, []byte("content"), 0644)
+	if err := os.WriteFile(path, []byte("content"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	v := vfs.NewOSVFS(tmpDir)
 	vv, err := NewViewerView(context.Background(), v, path)
@@ -920,7 +948,9 @@ func TestViewerView_Codepages_MultipleSwitchNoCrash(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "switch_test.txt")
-	os.WriteFile(path, []byte("Test content for codepage switch"), 0644)
+	if err := os.WriteFile(path, []byte("Test content for codepage switch"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	v := vfs.NewOSVFS(tmpDir)
 	vv, err := NewViewerView(context.Background(), v, path)

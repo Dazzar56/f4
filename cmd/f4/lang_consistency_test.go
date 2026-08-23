@@ -64,7 +64,9 @@ func writeLangCoverageBaseline(path string, coverage map[string]int) error {
 
 	var builder strings.Builder
 	for _, code := range codes {
-		fmt.Fprintf(&builder, "%s=%d\n", code, coverage[code])
+		if _, err := fmt.Fprintf(&builder, "%s=%d\n", code, coverage[code]); err != nil {
+			return err
+		}
 	}
 	return os.WriteFile(path, []byte(builder.String()), 0644)
 }

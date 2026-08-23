@@ -251,13 +251,19 @@ func TestColorer_DownloadColorerSchemas(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create zip entry: %v", err)
 	}
-	_, _ = f.Write([]byte("<catalog></catalog>"))
+	if _, err := f.Write([]byte("<catalog></catalog>")); err != nil {
+		t.Fatal(err)
+	}
 
-	zw.Close()
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/zip")
-		w.Write(buf.Bytes())
+		if _, err := w.Write(buf.Bytes()); err != nil {
+			t.Errorf("write schema archive response: %v", err)
+		}
 	}))
 	defer ts.Close()
 

@@ -109,7 +109,11 @@ func newTestMacroEngine(t *testing.T, host MacroHost, source string) *LuaMacroEn
 	if err != nil {
 		t.Fatalf("NewLuaMacroEngine: %v", err)
 	}
-	t.Cleanup(func() { engine.Close() })
+	t.Cleanup(func() {
+		if err := engine.Close(); err != nil {
+			t.Errorf("close Lua macro engine: %v", err)
+		}
+	})
 
 	if source != "" {
 		if err := engine.LoadString("test", source); err != nil {

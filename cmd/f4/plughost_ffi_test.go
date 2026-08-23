@@ -29,10 +29,14 @@ func newFFITestMethods(t *testing.T, back PluginTransport) (map[string]f4rpc.Han
 
 	bridge := ffibridge.New(ffibridge.Options{})
 	if _, err := bridge.OpenLibC(); err != nil {
-		bridge.Close()
+		_ = bridge.Close() // Cleanup is secondary when the host library is unavailable.
 		t.Skipf("no system C library available: %v", err)
 	}
-	t.Cleanup(func() { bridge.Close() })
+	t.Cleanup(func() {
+		if err := bridge.Close(); err != nil {
+			t.Errorf("close FFI bridge: %v", err)
+		}
+	})
 
 	return newFFIHostMethods(bridge, back), bridge
 }
@@ -120,7 +124,11 @@ func TestFFIMethodsPresentWithABridge(t *testing.T) {
 		t.Skip("ffibridge: FFI is disabled in this build")
 	}
 	bridge := ffibridge.New(ffibridge.Options{})
-	defer bridge.Close()
+	t.Cleanup(func() {
+		if err := bridge.Close(); err != nil {
+			t.Errorf("close FFI bridge: %v", err)
+		}
+	})
 
 	methods := newHostMethods(newLuaTestHostAPI(), &ffiTestTransport{}, "test", bridge)
 	for _, method := range []string{"Host.FFI.Open", "Host.FFI.Call", "Host.FFI.Alloc"} {

@@ -127,7 +127,9 @@ func TestEditor_StatefulHighlighting_InstantDistantJump(t *testing.T) {
 
 	var sb strings.Builder
 	for i := 0; i < 2500; i++ {
-		fmt.Fprintf(&sb, "line %d\n", i)
+		if _, err := fmt.Fprintf(&sb, "line %d\n", i); err != nil {
+			t.Fatal(err)
+		}
 	}
 	pt := piecetable.New([]byte(sb.String()))
 	ev := NewEditorView(pt, nil, "test.txt")
@@ -167,7 +169,9 @@ func TestEditor_StatefulHighlighting_DynamicCatchUpSpeed(t *testing.T) {
 
 	var sb strings.Builder
 	for i := 0; i < 5000; i++ {
-		fmt.Fprintf(&sb, "line %d\n", i)
+		if _, err := fmt.Fprintf(&sb, "line %d\n", i); err != nil {
+			t.Fatal(err)
+		}
 	}
 	pt := piecetable.New([]byte(sb.String()))
 	ev := NewEditorView(pt, nil, "test.txt")
@@ -200,7 +204,9 @@ func TestEditorView_ScrollBarOnScrollAdjustsCursor(t *testing.T) {
 
 	var sb strings.Builder
 	for i := 0; i < 500; i++ {
-		fmt.Fprintf(&sb, "line %d\n", i)
+		if _, err := fmt.Fprintf(&sb, "line %d\n", i); err != nil {
+			t.Fatal(err)
+		}
 	}
 	pt := piecetable.New([]byte(sb.String()))
 	ev := NewEditorView(pt, nil, "test.txt")
@@ -223,7 +229,9 @@ func TestEditor_StatefulHighlighting_BackgroundCatchUpAfterEdit(t *testing.T) {
 
 	var sb strings.Builder
 	for i := 0; i < 1500; i++ {
-		fmt.Fprintf(&sb, "line %d\n", i)
+		if _, err := fmt.Fprintf(&sb, "line %d\n", i); err != nil {
+			t.Fatal(err)
+		}
 	}
 	pt := piecetable.New([]byte(sb.String()))
 	ev := NewEditorView(pt, nil, "test.txt")
@@ -262,7 +270,9 @@ func TestEditor_BackgroundHighlighting_FullCoverage(t *testing.T) {
 
 	var sb strings.Builder
 	for i := 0; i < 500; i++ {
-		fmt.Fprintf(&sb, "line %d\n", i)
+		if _, err := fmt.Fprintf(&sb, "line %d\n", i); err != nil {
+			t.Fatal(err)
+		}
 	}
 	pt := piecetable.New([]byte(sb.String()))
 	ev := NewEditorView(pt, nil, "test.txt")
@@ -430,7 +440,11 @@ func TestEditorView_StickyColumn(t *testing.T) {
 func TestEditorView_SaveFile(t *testing.T) {
 	// 1. Create a temporary file
 	tmpFile := "test_save.txt"
-	defer os.Remove(tmpFile)
+	t.Cleanup(func() {
+		if err := os.Remove(tmpFile); err != nil && !os.IsNotExist(err) {
+			t.Errorf("remove temporary save file: %v", err)
+		}
+	})
 	err := os.WriteFile(tmpFile, []byte("Original"), 0644)
 	if err != nil {
 		t.Fatal(err)
@@ -1647,11 +1661,13 @@ func (m *mockRemoteIndexerVFS) LineIndex(ctx context.Context, path string, first
 func TestEditorView_StartIndexing_UsesRemoteIndexer(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	tmp := filepath.Join(t.TempDir(), "remote_idx.txt")
-	os.WriteFile(tmp, []byte("Line 1\nLine 2\nLine 3"), 0644)
+	if err := os.WriteFile(tmp, []byte("Line 1\nLine 2\nLine 3"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	mv := &mockRemoteIndexerVFS{VFS: vfs.NewOSVFS(filepath.Dir(tmp))}
 	f, _ := mv.Open(context.Background(), tmp)
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	buf := NewAsyncBuffer(context.Background(), f)
 	pt := piecetable.NewWithBuffer(buf)
@@ -1685,7 +1701,9 @@ func TestEditorView_AsyncIndexing(t *testing.T) {
 
 	content := "Line 1\nLine 2\nLine 3"
 	tmp := t.TempDir() + "/idx_test.txt"
-	os.WriteFile(tmp, []byte(content), 0644)
+	if err := os.WriteFile(tmp, []byte(content), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	v := vfs.NewOSVFS(t.TempDir())
 	f, err := v.Open(context.Background(), tmp)
@@ -1730,17 +1748,21 @@ func TestEditorView_StartIndexing_TargetLineImmediateBatch(t *testing.T) {
 
 	var sb strings.Builder
 	for i := 0; i < 10000; i++ {
-		fmt.Fprintf(&sb, "Line %d\n", i)
+		if _, err := fmt.Fprintf(&sb, "Line %d\n", i); err != nil {
+			t.Fatal(err)
+		}
 	}
 	tmp := filepath.Join(t.TempDir(), "target_fast.txt")
-	os.WriteFile(tmp, []byte(sb.String()), 0644)
+	if err := os.WriteFile(tmp, []byte(sb.String()), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	v := vfs.NewOSVFS(t.TempDir())
 	f, err := v.Open(context.Background(), tmp)
 	if err != nil {
 		t.Fatalf("Failed to open file: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	buf := NewAsyncBuffer(context.Background(), f)
 	pt := piecetable.NewWithBuffer(buf)
@@ -1772,10 +1794,14 @@ func TestEditorView_Indexer_EditInterference(t *testing.T) {
 	// Create a large file with many lines
 	var sb strings.Builder
 	for i := 0; i < 1000; i++ {
-		fmt.Fprintf(&sb, "Line %d\n", i)
+		if _, err := fmt.Fprintf(&sb, "Line %d\n", i); err != nil {
+			t.Fatal(err)
+		}
 	}
 	tmp := t.TempDir() + "/race_test.txt"
-	os.WriteFile(tmp, []byte(sb.String()), 0644)
+	if err := os.WriteFile(tmp, []byte(sb.String()), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	v := vfs.NewOSVFS(t.TempDir())
 	f, err := v.Open(context.Background(), tmp)
@@ -1830,12 +1856,14 @@ func TestEditorView_StartIndexing_RestartSafety(t *testing.T) {
 
 	// Create a dummy file
 	tmp := t.TempDir() + "/restart.txt"
-	os.WriteFile(tmp, []byte("line1\nline2"), 0644)
+	if err := os.WriteFile(tmp, []byte("line1\nline2"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	f, err := v.Open(context.Background(), tmp)
 	if err != nil {
 		t.Fatalf("Failed to open file: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	buf := NewAsyncBuffer(context.Background(), f)
 	pt := piecetable.NewWithBuffer(buf)
@@ -1907,7 +1935,9 @@ func TestEditorView_Indexer_BatchingIntegrity(t *testing.T) {
 
 	content := "L1\nL2\nL3\nL4\nL5\n"
 	tmpFile := filepath.Join(t.TempDir(), "batch.txt")
-	os.WriteFile(tmpFile, []byte(content), 0644)
+	if err := os.WriteFile(tmpFile, []byte(content), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	v := vfs.NewOSVFS(t.TempDir())
 	f, err := v.Open(context.Background(), tmpFile)
@@ -2755,7 +2785,9 @@ func TestEditorView_SaveFailure_NoDataLoss(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	tmpFile := filepath.Join(t.TempDir(), "important.txt")
-	os.WriteFile(tmpFile, []byte("Original"), 0644)
+	if err := os.WriteFile(tmpFile, []byte("Original"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	// Use our failing VFS
 	baseVfs := vfs.NewOSVFS(filepath.Dir(tmpFile))
@@ -2830,7 +2862,9 @@ func TestEditorView_Save_DiskFullSimulation(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	tmpFile := filepath.Join(t.TempDir(), "important.txt")
-	os.WriteFile(tmpFile, []byte("Stable Content"), 0644)
+	if err := os.WriteFile(tmpFile, []byte("Stable Content"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	baseVfs := vfs.NewOSVFS(filepath.Dir(tmpFile))
 	failingVfs := &mockFailingWriteVFS{VFS: baseVfs}
@@ -2882,7 +2916,9 @@ func TestEditorView_LargePaste_Consistency(t *testing.T) {
 	// Create 1MB block with many newlines
 	var sb strings.Builder
 	for i := 0; i < 5000; i++ {
-		sb.WriteString("pasted line content\n")
+		if _, err := sb.WriteString("pasted line content\n"); err != nil {
+			t.Fatal(err)
+		}
 	}
 	pasteData := sb.String()
 
@@ -3687,7 +3723,9 @@ func TestEditorView_Save_IOErrorRecovery(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "persist.txt")
-	os.WriteFile(path, []byte("Initial Data"), 0644)
+	if err := os.WriteFile(path, []byte("Initial Data"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	// Mock VFS that allows Open/Stat/Rename but returns a failing writer for Create
 	baseVfs := vfs.NewOSVFS(tmpDir)
@@ -3701,7 +3739,7 @@ func TestEditorView_Save_IOErrorRecovery(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to open file: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	ev.file = f
 
 	// 1. Modify the content
@@ -3740,7 +3778,9 @@ func TestEditorView_Save_CreateFailure(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "locked.txt")
-	os.WriteFile(path, []byte("Original Content"), 0644)
+	if err := os.WriteFile(path, []byte("Original Content"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	// Mock VFS that allows everything except the Create
 	baseVfs := vfs.NewOSVFS(tmpDir)
@@ -3796,7 +3836,9 @@ func TestEditorView_Save_CreateFailure_Recovery_DataPreservation(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "persist.txt")
-	os.WriteFile(path, []byte("Original"), 0644)
+	if err := os.WriteFile(path, []byte("Original"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	// Mock VFS that fails Create
 	baseVfs := vfs.NewOSVFS(tmpDir)
@@ -3934,14 +3976,16 @@ func TestEditorView_FragmentationDataIntegrity(t *testing.T) {
 
 	// 1. Initial content
 	initial := []byte("Initial Content\n")
-	os.WriteFile(path, initial, 0644)
+	if err := os.WriteFile(path, initial, 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	v := vfs.NewOSVFS(tmpDir)
 	f, err := v.Open(context.Background(), path)
 	if err != nil {
 		t.Fatalf("Failed to open file: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	buf := NewAsyncBuffer(context.Background(), f)
 	pt := piecetable.NewWithBuffer(buf)
@@ -4029,7 +4073,9 @@ func TestEditorView_Save_NoTrailingNewline_Integrity(t *testing.T) {
 
 	tmpFile := filepath.Join(t.TempDir(), "nonewline.txt")
 	content := []byte("Line 1\nLine 2 (no newline at end)")
-	os.WriteFile(tmpFile, content, 0644)
+	if err := os.WriteFile(tmpFile, content, 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	v := vfs.NewOSVFS(filepath.Dir(tmpFile))
 	pt := piecetable.New(content)
@@ -4040,7 +4086,7 @@ func TestEditorView_Save_NoTrailingNewline_Integrity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to open file: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	ev.file = f
 
@@ -4075,7 +4121,9 @@ func TestEditorView_Save_RetryAfterFailure(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "retry.txt")
-	os.WriteFile(path, []byte("Initial"), 0644)
+	if err := os.WriteFile(path, []byte("Initial"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	baseVfs := vfs.NewOSVFS(tmpDir)
 	// mockFailingVFS is defined in the same test file usually
@@ -4089,7 +4137,7 @@ func TestEditorView_Save_RetryAfterFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to open file: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	ev.file = f
 
@@ -4146,7 +4194,9 @@ func TestEditorView_Save_MetadataIntegrity(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "meta.txt")
-	os.WriteFile(path, []byte("Original"), 0644)
+	if err := os.WriteFile(path, []byte("Original"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	// Mock metadata
 	expectedMeta := vfs.VFSItem{
@@ -4179,7 +4229,7 @@ func TestEditorView_Save_MetadataIntegrity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to open file: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	ev.file = f
 
 	// 1. Modify and Save
@@ -4212,7 +4262,9 @@ func TestEditorView_Save_Atomic_Cleanup(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "unlucky.txt")
-	os.WriteFile(path, []byte("Untouched"), 0644)
+	if err := os.WriteFile(path, []byte("Untouched"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	// VFS that fails during writing
 	mock := &mockFailingWriteVFS{VFS: vfs.NewOSVFS(tmpDir)}
@@ -4224,7 +4276,7 @@ func TestEditorView_Save_Atomic_Cleanup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to open file: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	ev.file = f
 
@@ -5134,7 +5186,9 @@ func TestEditorView_CtrlUpDownScrollsTextUnderCursor(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	var sb strings.Builder
 	for i := 0; i < 30; i++ {
-		fmt.Fprintf(&sb, "line %02d\n", i)
+		if _, err := fmt.Fprintf(&sb, "line %02d\n", i); err != nil {
+			t.Fatal(err)
+		}
 	}
 	pt := piecetable.New([]byte(strings.TrimSuffix(sb.String(), "\n")))
 	ev := NewEditorView(pt, nil, "scroll.txt")
@@ -5981,7 +6035,9 @@ func TestEditorView_Codepages_LoadSave(t *testing.T) {
 	path := filepath.Join(tmpDir, "cyrillic.txt")
 
 	raw := []byte{0xcf, 0xf0, 0xe8, 0xe2, 0xe5, 0xf2}
-	os.WriteFile(path, raw, 0644)
+	if err := os.WriteFile(path, raw, 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	v := vfs.NewOSVFS(tmpDir)
 	f, err := v.Open(context.Background(), path)
@@ -5992,7 +6048,9 @@ func TestEditorView_Codepages_LoadSave(t *testing.T) {
 	size := f.Size()
 	fullData := make([]byte, size)
 	_, _ = f.ReadAt(context.Background(), fullData, 0)
-	f.Close()
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	decoded, err := vfs.DecodeBytes(fullData, 1251)
 	if err != nil {
@@ -6038,7 +6096,9 @@ func TestEditorView_Codepages_PreserveEditsOnSwitch(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "edit_cp.txt")
-	os.WriteFile(path, []byte("Initial text"), 0644)
+	if err := os.WriteFile(path, []byte("Initial text"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	v := vfs.NewOSVFS(tmpDir)
 	pt := piecetable.New([]byte("Initial text"))
@@ -6086,14 +6146,16 @@ func TestEditorView_Codepages_AutoDetect(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "auto_cp.txt")
-	os.WriteFile(path, []byte{0xcf, 0xf0, 0xe8, 0xe2, 0xe5, 0xf2}, 0644) // "Привет" in CP1251
+	if err := os.WriteFile(path, []byte{0xcf, 0xf0, 0xe8, 0xe2, 0xe5, 0xf2}, 0600); err != nil { // "Привет" in CP1251
+		t.Fatal(err)
+	}
 
 	v := vfs.NewOSVFS(tmpDir)
 	f, err := v.Open(context.Background(), path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	pt := piecetable.New([]byte("Initial"))
 	ev := NewEditorView(pt, v, path)
@@ -6287,7 +6349,9 @@ func TestEditor_ColorerDrawsWithoutAStateChain(t *testing.T) {
 
 	var sb strings.Builder
 	for i := 0; i < 5000; i++ {
-		fmt.Fprintf(&sb, "line %d\n", i)
+		if _, err := fmt.Fprintf(&sb, "line %d\n", i); err != nil {
+			t.Fatal(err)
+		}
 	}
 	ev := NewEditorView(piecetable.New([]byte(sb.String())), nil, "test.txt")
 	defer ev.Close()
