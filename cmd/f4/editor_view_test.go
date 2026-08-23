@@ -252,7 +252,7 @@ func TestEditor_StatefulHighlighting_BackgroundCatchUpAfterEdit(t *testing.T) {
 	ev.Show(scr)
 
 	timeout := time.After(2 * time.Second)
-	for len(ev.lineStates) < 1400 {
+	for len(ev.lineStates) < 1400 || ev.highlighting {
 		select {
 		case task := <-vtui.FrameManager.TaskChan:
 			task()

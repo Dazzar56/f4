@@ -434,7 +434,7 @@ func TestEditorFindAll_NotFound(t *testing.T) {
 		if _, ok := f.(*findAllFrame); ok {
 			t.Fatal("no occurrences menu expected for a miss")
 		}
-		return f != nil && f.GetType() == vtui.TypeDialog
+		return f != nil && f.GetTitle() == Msg("Search.Title")
 	})
 	if ev.selActive {
 		t.Error("a miss must not create a selection")

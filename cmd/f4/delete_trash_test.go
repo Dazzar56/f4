@@ -74,6 +74,9 @@ func TestQueuedTrashUsesActionBoundaryPathSnapshot(t *testing.T) {
 	if err := task.Run(context.Background(), &DummyReporter{}, nil); err != nil {
 		t.Fatal(err)
 	}
+	task.mu.Lock()
+	task.State = "Done"
+	task.mu.Unlock()
 	want := probe.Join(basePath, "item.txt")
 	if len(probe.trashed) != 1 || probe.trashed[0] != want {
 		t.Fatalf("trashed paths = %v, want %q", probe.trashed, want)
@@ -93,6 +96,9 @@ func TestDeleteDoesNotRetryPartialRemoteMutation(t *testing.T) {
 	task := queue.tasks[0]
 	queue.mu.Unlock()
 	err := task.Run(context.Background(), &DummyReporter{}, nil)
+	task.mu.Lock()
+	task.State = "Done"
+	task.mu.Unlock()
 	if !errors.Is(err, vfs.ErrOperationPartial) {
 		t.Fatalf("Run error = %v, want partial operation", err)
 	}
