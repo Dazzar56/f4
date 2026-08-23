@@ -122,6 +122,17 @@ func hotkeyTableColumns(rows []hotkeyRow, dialogWidth int) []vtui.TableColumn {
 	return columns
 }
 
+func selectedHotkeyRow(table *vtui.Table, rows []hotkeyRow) (hotkeyRow, bool) {
+	if table == nil {
+		return hotkeyRow{}, false
+	}
+	idx := table.RowAt(table.SelectPos)
+	if idx < 0 || idx >= len(rows) {
+		return hotkeyRow{}, false
+	}
+	return rows[idx], true
+}
+
 func actionHotkeyConfig(pf *PanelsFrame) {
 	w, h := 120, 48
 	if vtui.FrameManager != nil {
@@ -257,17 +268,13 @@ func actionHotkeyConfig(pf *PanelsFrame) {
 	}
 
 	btnAssign.OnClick = func() {
-		idx := table.SelectPos
-		if idx >= 0 && idx < len(hkRows) && hkRows[idx].Editable {
-			row := hkRows[idx]
+		if row, ok := selectedHotkeyRow(table, hkRows); ok && row.Editable {
 			showAreaSelectDialog(draft, row.Action, row.Area, row.Condition, refresh)
 		}
 	}
 
 	btnUnbind.OnClick = func() {
-		idx := table.SelectPos
-		if idx >= 0 && idx < len(hkRows) && hkRows[idx].Editable {
-			row := hkRows[idx]
+		if row, ok := selectedHotkeyRow(table, hkRows); ok && row.Editable {
 			if row.RawKey != "" && row.Area != "" {
 				question := fmt.Sprintf("%s %s?", plainLabel(Msg("Hotkeys.BtnUnbind")), row.Key)
 				vtui.ShowMessageOn(dlg, Msg("Hotkeys.Title"), question, []string{Msg("vtui.Ok"), Msg("vtui.Cancel")}).OnResult = func(choice int) {

@@ -108,6 +108,31 @@ func TestHotkeyTableColumnsFitContentWhenSpaceAllows(t *testing.T) {
 	}
 }
 
+func TestSelectedHotkeyRowUsesDisplayedTablePosition(t *testing.T) {
+	rows := []hotkeyRow{
+		{Label: "Zulu action"},
+		{Label: "Alpha action"},
+		{Label: "Middle action"},
+	}
+	table := vtui.NewTable(0, 0, 80, 10, []vtui.TableColumn{{Title: "Command", Width: 40}})
+	table.Sortable = true
+	table.SetRows([]vtui.TableRow{rows[0], rows[1], rows[2]})
+	table.SetSort(0, true)
+
+	row, ok := selectedHotkeyRow(table, rows)
+	if !ok || row.Label != "Alpha action" {
+		t.Fatalf("sorted display row selected %q, want Alpha action", row.Label)
+	}
+
+	table.QuickSearch = true
+	table.SetSearchText("middle")
+	table.SelectPos = 0
+	row, ok = selectedHotkeyRow(table, rows)
+	if !ok || row.Label != "Middle action" {
+		t.Fatalf("filtered display row selected %q, want Middle action", row.Label)
+	}
+}
+
 func TestNativeHotkeyInventory(t *testing.T) {
 	selectAction, ok := GetAction("Panel.SelectNavigation")
 	if !ok {
