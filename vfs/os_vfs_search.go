@@ -232,7 +232,9 @@ func (v *OSVFS) findFileContains(ctx context.Context, path string, matcher *find
 	if err != nil {
 		return false, err
 	}
-	defer f.Close()
+	defer func() {
+		_ = f.Close() // Search opens the handle only for reading.
+	}()
 
 	overlap := len(matcher.needle) + 4
 	if matcher.regex != nil && overlap < 4096 {

@@ -2,6 +2,7 @@ package vfs
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
 	"time"
@@ -442,7 +443,7 @@ func (v *OSVFS) SetAttributes(ctx context.Context, path string, item VFSItem) er
 	return errPlat
 }
 
-func (v *OSVFS) PatchInPlace(ctx context.Context, path string, pieces []PatchPiece) error {
+func (v *OSVFS) PatchInPlace(ctx context.Context, path string, pieces []PatchPiece) (returnErr error) {
 	// Before the first byte goes out: a patch this cannot express has to be
 	// refused while the file is still intact.
 	if err := ValidateInPlacePieces(pieces); err != nil {
@@ -453,7 +454,9 @@ func (v *OSVFS) PatchInPlace(ctx context.Context, path string, pieces []PatchPie
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() {
+		returnErr = errors.Join(returnErr, f.Close())
+	}()
 
 	var newOffset int64 = 0
 	for _, p := range pieces {
@@ -536,9 +539,11 @@ func (v *OSVFS) Open(ctx context.Context, path string) (ReadAtCloser, error) {
 				info, _ := sudoF.Stat()
 				size := info.Size()
 				if info.Mode()&(os.ModeDevice|os.ModeCharDevice) != 0 {
-					if pos, err := sudoF.Seek(0, io.SeekEnd); err == nil && pos > 0 {
-						size = pos
-						sudoF.Seek(0, io.SeekStart)
+					if probedSize, found, err := probeSeekSize(sudoF); err != nil {
+						_ = sudoF.Close() // The read handle cannot be returned at the wrong offset.
+						return nil, err
+					} else if found {
+						size = probedSize
 					}
 				}
 				vtui.DebugLog("VFS: Sudo Open(%q) SUCCESS, size: %d", path, size)
@@ -550,14 +555,16 @@ func (v *OSVFS) Open(ctx context.Context, path string) (ReadAtCloser, error) {
 	}
 	info, err := f.Stat()
 	if err != nil {
-		f.Close()
+		_ = f.Close() // No writes occurred before the failed metadata read.
 		return nil, err
 	}
 	size := info.Size()
 	if info.Mode()&(os.ModeDevice|os.ModeCharDevice) != 0 {
-		if pos, err := f.Seek(0, io.SeekEnd); err == nil && pos > 0 {
-			size = pos
-			f.Seek(0, io.SeekStart)
+		if probedSize, found, err := probeSeekSize(f); err != nil {
+			_ = f.Close() // The handle cannot be returned at the wrong offset.
+			return nil, err
+		} else if found {
+			size = probedSize
 		}
 	}
 	return &osFileWrapper{File: f, size: size}, nil
