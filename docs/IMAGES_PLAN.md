@@ -226,6 +226,11 @@ said the backend had no graphics. Caps, set and delete are implemented;
 transformation is refused and therefore never asked for, because the
 capabilities do not claim it.
 
+**12b. A window over the Windows console.** Done for conhost, where `cmd.exe`
+lives and no image protocol exists; see `WINCON.md`. Windows Terminal is
+deliberately not covered, because it renders sixel and that is the better
+answer. Written but not yet run on Windows.
+
 **12a. Done.** The overlay is installed as vtui's external graphics renderer,
 so quick view, the thumbnail grid, the file viewer and the pictures a program
 prints into the built-in terminal all reach it without any of them being routed

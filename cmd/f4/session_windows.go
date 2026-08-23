@@ -51,6 +51,12 @@ func ManageSessions() {
 	// itself no-ops when -e wasn't given.
 	openDashEFileIfRequested()
 
+	// The window over the console, for a console that cannot show a picture
+	// itself — which is conhost, where cmd.exe lives. Windows Terminal
+	// renders sixel and is left alone. Before the first frame, because
+	// every gate on it is asked from inside one.
+	InstallConsoleOverlay()
+
 	reader := vtinput.NewReader(os.Stdin, false)
 	vtui.FrameManager.Run(reader)
 }
