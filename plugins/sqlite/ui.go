@@ -50,13 +50,13 @@ type browser struct {
 	// selectRowID moves the cursor onto a row once the table it belongs to
 	// has been read again, which is how a newly inserted row is found.
 	selectRowID int64
-	dialog       *vtui.Window
-	frame        *browserWindow
-	tableList    *vtui.ListBox
-	resultTable  *vtui.Table
-	query        *vtui.MultiLineEdit
-	status       *vtui.Text
-	closed       bool
+	dialog      *vtui.Window
+	frame       *browserWindow
+	tableList   *vtui.ListBox
+	resultTable *vtui.Table
+	query       *vtui.MultiLineEdit
+	status      *vtui.Text
+	closed      bool
 }
 
 func newBrowser(app vfs.App, session *databaseSession, tables []string) *browser {
