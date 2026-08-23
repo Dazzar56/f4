@@ -193,10 +193,9 @@ func (o *Overlay) Place(r Rect) error {
 }
 
 // Suspend takes the overlay off the screen without forgetting that the caller
-// wants it there, so that resume can put it back. The event loop calls it when
-// the terminal loses the focus, because an override-redirect window is above
-// everything and nothing else in X will move it out of the way; a caller that
-// notices the same thing first can call it too.
+// wants it there. The event loop calls it when the terminal loses the focus,
+// because an override-redirect window is above everything and nothing else in
+// X will move it out of the way.
 func (o *Overlay) Suspend() {
 	o.s.mu.Lock()
 	defer o.s.mu.Unlock()
@@ -205,19 +204,6 @@ func (o *Overlay) Suspend() {
 	}
 	xproto.UnmapWindow(o.s.conn, o.win)
 	o.mapped = false
-}
-
-// resume puts it back when the focus comes back.
-func (o *Overlay) resume() {
-	o.s.mu.Lock()
-	defer o.s.mu.Unlock()
-	if o.s.conn == nil || o.mapped || !o.wanted || o.rect.W <= 0 || o.rect.H <= 0 {
-		return
-	}
-	xproto.ConfigureWindow(o.s.conn, o.win, xproto.ConfigWindowStackMode,
-		[]uint32{xproto.StackModeAbove})
-	xproto.MapWindow(o.s.conn, o.win)
-	o.mapped = true
 }
 
 // followedParent records that the terminal window moved and took the overlay
