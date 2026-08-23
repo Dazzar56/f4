@@ -97,6 +97,24 @@ func windowsGuiFontDisplayChoices(language, current string) []string {
 		choices = append(choices, value)
 	}
 
+	// Sort the catalog with CJK fonts first when relevant, but keep the
+	// current value pinned at the top so it stays selectable as the active
+	// choice (mirrors the old guiFontChoices ordering).
+	if isCJKLanguage(language) {
+		sort.SliceStable(names, func(i, j int) bool {
+			iCJK := looksLikeCJKFontName(names[i])
+			jCJK := looksLikeCJKFontName(names[j])
+			if iCJK != jCJK {
+				return iCJK
+			}
+			return strings.ToLower(names[i]) < strings.ToLower(names[j])
+		})
+	} else {
+		sort.SliceStable(names, func(i, j int) bool {
+			return strings.ToLower(names[i]) < strings.ToLower(names[j])
+		})
+	}
+
 	// Show the current value by its family name when it resolves, otherwise
 	// keep it verbatim (a manual path or custom family the catalog lacks).
 	if current != "" {
@@ -112,20 +130,6 @@ func windowsGuiFontDisplayChoices(language, current string) []string {
 		appendUnique(name)
 	}
 
-	if isCJKLanguage(language) {
-		sort.SliceStable(choices, func(i, j int) bool {
-			iCJK := looksLikeCJKFontName(choices[i])
-			jCJK := looksLikeCJKFontName(choices[j])
-			if iCJK != jCJK {
-				return iCJK
-			}
-			return strings.ToLower(choices[i]) < strings.ToLower(choices[j])
-		})
-	} else {
-		sort.SliceStable(choices, func(i, j int) bool {
-			return strings.ToLower(choices[i]) < strings.ToLower(choices[j])
-		})
-	}
 	return choices
 }
 
