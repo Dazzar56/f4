@@ -123,6 +123,9 @@ func TestApplyColorStyleModernAndClassic(t *testing.T) {
 	if got := vtui.GetRGBBack(vtui.Palette[ColPanelText]); got != 0x0000A0 {
 		t.Fatalf("classic panel background: got %06X", got)
 	}
+	if got := vtui.GetRGBBack(vtui.Palette[ColPanelSelectedText]); got != 0x0000A0 {
+		t.Fatalf("classic selected panel background: got %06X, want 0000A0", got)
+	}
 	if got := vtui.GetRGBBack(vtui.Palette[vtui.ColKeyBarNum]); got != 0x000000 {
 		t.Fatalf("classic key bar gap background: got %06X", got)
 	}
