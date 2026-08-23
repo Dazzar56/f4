@@ -474,6 +474,11 @@ func (qm *OpQueueManager) Cancel(id int) bool {
 	}
 	if complete != nil {
 		qm.RequestRefresh()
+		// Read here, on the goroutine that starts the finalizer rather than
+		// inside it. The finalizer outlives this call, and a task cancelled
+		// during shutdown is regularly still in flight when whatever comes
+		// next reassigns vtui.FrameManager -- in the tests, the next test.
+		frames := vtui.FrameManager
 		// Plugin/VFS teardown can block. Keep the task active as Cancelling and
 		// finish it off-thread so CancelAll can signal every task promptly and
 		// the UI never waits inside a button or quit callback.
@@ -484,7 +489,7 @@ func (qm *OpQueueManager) Cancel(id int) bool {
 			complete.State = "Cancelled"
 			complete.ErrorMsg = nil
 			complete.mu.Unlock()
-			qm.postTaskCompletion(complete)
+			qm.postTaskCompletionOn(complete, frames)
 		}()
 	} else if found {
 		qm.RequestRefresh()
@@ -526,10 +531,19 @@ func (qm *OpQueueManager) RefreshUI() {
 // In particular, Cancel and workerLoop race while a task is Queued: whichever
 // path claims it is responsible for completion, and completionOnce protects
 // against any future path accidentally posting the callback a second time.
+//
+// Callers that are about to hand the task to a goroutine of their own use
+// postTaskCompletionOn instead, so the callback lands on the frame manager
+// their work was started against rather than on whichever one is current by
+// the time they finish.
 func (qm *OpQueueManager) postTaskCompletion(t *QueueTask) {
+	qm.postTaskCompletionOn(t, vtui.FrameManager)
+}
+
+func (qm *OpQueueManager) postTaskCompletionOn(t *QueueTask, frames *vtui.FrameManagerType) {
 	t.finalize()
 	t.completionOnce.Do(func() {
-		vtui.FrameManager.PostTask(func() {
+		frames.PostTask(func() {
 			if t.OnComplete != nil {
 				t.OnComplete()
 			}

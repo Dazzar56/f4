@@ -867,3 +867,61 @@ func contextError(ctx context.Context) error {
 func errorsAreSame(ctx context.Context, want error) bool {
 	return contextError(ctx) == want
 }
+
+// TestQueueCancelFinalizesOnTheFrameManagerItStartedWith is the regression for
+// a race the CI race job reported against TestSimpleInline_CommandExecution.
+//
+// The blamed test only swapped the process-wide frame manager in. The write
+// raced a read from a goroutine an earlier test had left running:
+// TestCancelOperationsForShutdownCancelsQueueAndBackgroundJobs cancels a queued
+// task, Cancel finishes such a task off-thread, and that finalizer read
+// vtui.FrameManager to post the completion callback. Shutdown deliberately does
+// not wait for it, so the goroutine outlives the test that started it.
+//
+// Cancel now reads the frame manager where it starts the finalizer, so the
+// callback lands on the one the task was cancelled against no matter what the
+// global holds by then.
+func TestQueueCancelFinalizesOnTheFrameManagerItStartedWith(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	starting := vtui.FrameManager
+
+	ctx, cancel := context.WithCancel(context.Background())
+	completed := false
+	task := &QueueTask{
+		ID:         1,
+		State:      "Queued",
+		ctx:        ctx,
+		cancel:     cancel,
+		OnComplete: func() { completed = true },
+	}
+	qm := &OpQueueManager{
+		tasks:      []*QueueTask{task},
+		activeKeys: make(map[string]bool),
+	}
+
+	if !qm.Cancel(task.ID) {
+		t.Fatal("Cancel did not find the queued task")
+	}
+
+	// What the next test does while the finalizer is still in flight.
+	replacement := vtui.NewFrameManager()
+	vtui.FrameManager = replacement
+
+	deadline := time.NewTimer(5 * time.Second)
+	defer deadline.Stop()
+	for !completed {
+		select {
+		case uiTask := <-starting.TaskChan:
+			uiTask()
+		case <-deadline.C:
+			t.Fatal("the cancelled task never completed on the frame manager it started with")
+		}
+	}
+
+	select {
+	case <-replacement.TaskChan:
+		t.Fatal("the finalizer posted to the frame manager that replaced it")
+	default:
+	}
+}
