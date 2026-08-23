@@ -1600,7 +1600,7 @@ func (r *s3RangeReader) ReadAt(ctx context.Context, p []byte, off int64) (int, e
 	if output == nil || output.Body == nil {
 		return 0, errors.New("cloudfox: S3 GetObject returned no response body")
 	}
-	defer output.Body.Close()
+	defer func() { _ = output.Body.Close() }() // Response-body cleanup is best effort.
 	if r.etag != "" && strings.TrimSpace(aws.ToString(output.ETag)) != r.etag {
 		return 0, ErrRemoteObjectChanged
 	}
@@ -1689,7 +1689,7 @@ func (b *s3Backend) openS3Snapshot(ctx context.Context, target s3Target) (_ vfs.
 	if output == nil || output.Body == nil {
 		return nil, errors.New("cloudfox: S3 GetObject returned no response body")
 	}
-	defer output.Body.Close()
+	defer func() { _ = output.Body.Close() }() // Response-body cleanup is best effort.
 
 	file, err := os.CreateTemp("", "f4-cloudfox-s3-read-*")
 	if err != nil {

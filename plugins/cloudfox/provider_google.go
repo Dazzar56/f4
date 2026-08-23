@@ -1630,7 +1630,7 @@ func (r *googleRangeReader) ReadAt(ctx context.Context, p []byte, off int64) (in
 		}
 		return local.ReadAt(ctx, p, off)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }() // Response-body cleanup is best effort.
 	if resp.StatusCode != http.StatusPartialContent {
 		return 0, errors.New("cloudfox: Google Drive stopped honoring byte ranges")
 	}
@@ -1659,28 +1659,24 @@ func (r *googleRangeReader) Read(ctx context.Context, p []byte) (int, error) {
 }
 
 func googleResponseToTemp(ctx context.Context, resp *http.Response, displayName string) (*providerTempReader, error) {
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }() // Response-body cleanup is best effort.
 	f, err := os.CreateTemp("", "f4-cloudfox-google-export-*")
 	if err != nil {
 		return nil, err
 	}
 	name := f.Name()
-	cleanup := func() {
-		f.Close()
-		os.Remove(name)
+	cleanup := func() error {
+		return errors.Join(f.Close(), os.Remove(name))
 	}
 	if err := f.Chmod(0o600); err != nil {
-		cleanup()
-		return nil, err
+		return nil, errors.Join(err, cleanup())
 	}
 	written, err := copyGoogleResponse(ctx, f, resp.Body, resp.ContentLength, displayName)
 	if err != nil {
-		cleanup()
-		return nil, err
+		return nil, errors.Join(err, cleanup())
 	}
 	if _, err := f.Seek(0, io.SeekStart); err != nil {
-		cleanup()
-		return nil, err
+		return nil, errors.Join(err, cleanup())
 	}
 	return newProviderTempReader(f, name, written), nil
 }

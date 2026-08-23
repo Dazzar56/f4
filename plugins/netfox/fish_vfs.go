@@ -148,14 +148,14 @@ func (c *fishConn) reconnect(ctx context.Context, dead *fishplus.Client) (*fishp
 	// One round trip before anything is promised: a handshake that answered
 	// says the helper is there, and a noop says the request loop is running.
 	if err := sess.Noop(ctx); err != nil {
-		sess.Close()
+		_ = sess.Close() // Preserve the failed readiness check.
 		return nil, err
 	}
 
 	c.mu.Lock()
 	if c.closed {
 		c.mu.Unlock()
-		sess.Close()
+		_ = sess.Close() // Preserve the connection-closed result.
 		return nil, fishplus.ErrBroken
 	}
 	if dead != nil && c.client != dead {
@@ -163,7 +163,7 @@ func (c *fishConn) reconnect(ctx context.Context, dead *fishplus.Client) (*fishp
 		// good as this one and is already in use, so this one is dropped.
 		fresh := c.client
 		c.mu.Unlock()
-		sess.Close()
+		_ = sess.Close() // The concurrently installed session remains authoritative.
 		return fresh, nil
 	}
 	old, oldKA := c.client, c.ka
@@ -180,7 +180,7 @@ func (c *fishConn) reconnect(ctx context.Context, dead *fishplus.Client) (*fishp
 
 	oldKA.Stop()
 	if old != nil {
-		old.Session().Close() // This also closes its session's closer automatically
+		_ = old.Session().Close() // The replaced broken session is best-effort cleanup.
 	}
 	return client, nil
 }
@@ -260,7 +260,7 @@ func NewFishVFSOnDialers(ctx context.Context, parent vfs.VFS, dial FishDialer, o
 func newFishVFSOnStream(ctx context.Context, parent vfs.VFS, stdin io.Writer, stdout io.Reader, closer io.Closer, title string, dial FishDialer, opts fishplus.HandshakeOptions) (*FishVFS, error) {
 	sess := fishplus.NewSession(stdin, stdout, closer)
 	if err := sess.HandshakeWithOptions(ctx, opts); err != nil {
-		sess.Close()
+		_ = sess.Close() // Preserve the handshake failure.
 		return nil, err
 	}
 	return newFishVFSFromSession(parent, sess, closer, title, dial, opts, nil, fishplus.HandshakeOptions{}), nil
@@ -302,7 +302,7 @@ func establishSession(ctx context.Context, dial FishDialer, opts fishplus.Handsh
 	}
 	sess := fishplus.NewSession(stdin, stdout, closer)
 	if err := sess.HandshakeWithOptions(ctx, opts); err != nil {
-		sess.Close()
+		_ = sess.Close() // Preserve the handshake failure.
 		return nil, nil, err
 	}
 	return sess, closer, nil
@@ -378,8 +378,7 @@ type sshShell struct {
 }
 
 func (s *sshShell) Close() error {
-	s.sess.Close()
-	return s.client.Close()
+	return errors.Join(s.sess.Close(), s.client.Close())
 }
 
 func (s *sshShell) OpenPty(cols, rows int) (any, error) {
@@ -388,7 +387,9 @@ func (s *sshShell) OpenPty(cols, rows int) (any, error) {
 		return nil, err
 	}
 	pty.SetSize(cols, rows)
-	pty.Run("")
+	if err := pty.Run(""); err != nil {
+		return nil, fmt.Errorf("fishplus: start SSH PTY: %w", errors.Join(err, pty.Close()))
+	}
 	return pty, nil
 }
 
@@ -449,27 +450,27 @@ func sshFishDialerWith(host, port, user, pass string, timeout int, px netproxy.S
 		}
 		sess, err := client.NewSession()
 		if err != nil {
-			client.Close()
+			_ = client.Close() // Preserve the session-creation failure.
 			return nil, nil, nil, err
 		}
 		shell := &sshShell{sess: sess, client: client}
 		stdin, err := sess.StdinPipe()
 		if err != nil {
-			shell.Close()
+			_ = shell.Close() // Preserve the pipe-creation failure.
 			return nil, nil, nil, err
 		}
 		stdout, err := sess.StdoutPipe()
 		if err != nil {
-			shell.Close()
+			_ = shell.Close() // Preserve the pipe-creation failure.
 			return nil, nil, nil, err
 		}
 		sess.Stderr = io.Discard
 		if err := startShell(sess); err != nil {
-			shell.Close()
+			_ = shell.Close() // Preserve the remote-shell startup failure.
 			return nil, nil, nil, err
 		}
 		if err := ctx.Err(); err != nil {
-			shell.Close()
+			_ = shell.Close() // Preserve cancellation as the primary error.
 			return nil, nil, nil, err
 		}
 		return stdin, stdout, shell, nil
@@ -1312,7 +1313,7 @@ func netFoxConfigAt(ctx context.Context, parent vfs.VFS, pth string) (NetFoxConf
 	if err != nil {
 		return NetFoxConfig{}, false
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }() // The configuration file is read-only.
 	var cfg NetFoxConfig
 	if err := json.NewDecoder(ctxReader{f, ctx}).Decode(&cfg); err != nil {
 		return NetFoxConfig{}, false

@@ -73,7 +73,7 @@ func DialSSH(host, port, user, pass string, timeout int, px netproxy.Settings) (
 	client, err := dialSSHVia(px, host+":"+port, config)
 	if err != nil {
 		if agentConn != nil {
-			agentConn.Close()
+			_ = agentConn.Close() // Preserve the SSH dial failure.
 		}
 		return nil, err
 	}
@@ -142,7 +142,7 @@ func dialSSHVia(px netproxy.Settings, addr string, config *ssh.ClientConfig) (*s
 	}
 	c, chans, reqs, err := ssh.NewClientConn(conn, addr, config)
 	if err != nil {
-		conn.Close()
+		_ = conn.Close() // Preserve the SSH handshake failure.
 		return nil, err
 	}
 	_ = conn.SetDeadline(time.Time{})
