@@ -136,14 +136,29 @@ func actionPlugRing(pf *PanelsFrame) {
 	// shown[i] is the plugin on row i, or nil when row i is a category
 	// heading.
 	var shown []*PlugRingItem
+	var refreshTask *vtui.TaskContext
+	dlg.OnResult = func(int) {
+		if refreshTask != nil {
+			refreshTask.Cancel()
+		}
+	}
 
 	refresh := func() {
+		if refreshTask != nil {
+			refreshTask.Cancel()
+		}
 		table.SetRows(nil)
 		vtui.FrameManager.Redraw()
 
-		vtui.RunAsync(func(ctx *vtui.TaskContext) {
+		refreshTask = vtui.RunAsync(func(ctx *vtui.TaskContext) {
 			fetched, err := FetchCatalog(ctx.Context)
+			if ctx.Err() != nil {
+				return
+			}
 			ctx.RunOnUI(func() {
+				if ctx.Err() != nil || dlg.IsDone() {
+					return
+				}
 				if err != nil {
 					vtui.ShowMessageOn(dlg, " Error ", fmt.Sprintf("Failed to fetch catalog:\n%v", err), []string{"&Ok"})
 					return

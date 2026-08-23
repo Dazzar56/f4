@@ -19,6 +19,7 @@ import (
 )
 
 func TestActionUpdateSettings_ManualCheckDoesNotBlockMouseDispatch(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	SetDefaultF4Palette()
 
@@ -118,6 +119,16 @@ func TestActionUpdateSettings_ManualCheckDoesNotBlockMouseDispatch(t *testing.T)
 	case <-requestFinished:
 	case <-time.After(1 * time.Second):
 		t.Fatal("manual update check did not finish after the response was released")
+	}
+
+	// CheckForUpdates posts exactly one result after it has finished reading
+	// the overridden platform globals. Running that task joins the background
+	// check before Cleanup restores them.
+	select {
+	case task := <-vtui.FrameManager.TaskChan:
+		task()
+	case <-time.After(1 * time.Second):
+		t.Fatal("manual update check did not post its result")
 	}
 }
 

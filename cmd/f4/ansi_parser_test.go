@@ -824,6 +824,7 @@ func TestAnsiParser_OSC52_Read_Security(t *testing.T) {
 	// Test 1: Denied access
 	vtui.GlobalClipboardAccessManager = &mockClipAuthManager{authorized: false}
 	parser.Process([]byte("\x1b]52;c;?\x07"))
+	parser.waitOSC52()
 
 	if pty.Len() > 0 {
 		t.Errorf("Expected no output when clipboard read is denied, got %q", pty.String())
@@ -840,15 +841,9 @@ func TestAnsiParser_OSC52_Read_Security(t *testing.T) {
 	}
 
 	parser.Process([]byte("\x1b]52;c;?\x07"))
+	parser.waitOSC52()
 
-	var out string
-	for start := time.Now(); time.Since(start) < 2*time.Second; {
-		out = pty.String()
-		if strings.Contains(out, "\x1b]52;c;") {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	out := pty.String()
 
 	if !strings.Contains(out, "\x1b]52;c;") {
 		t.Errorf("Expected OSC 52 reply containing clipboard data, got %q", out)

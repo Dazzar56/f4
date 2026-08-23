@@ -204,8 +204,9 @@ func TestAsyncBuffer_ConcurrentAccess(t *testing.T) {
 
 	// Spin up a worker to constantly pump the UI task queue (simulating fm.Run)
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	pumpDone := make(chan struct{})
 	go func() {
+		defer close(pumpDone)
 		for {
 			select {
 			case <-ctx.Done():
@@ -215,6 +216,10 @@ func TestAsyncBuffer_ConcurrentAccess(t *testing.T) {
 			}
 		}
 	}()
+	t.Cleanup(func() {
+		cancel()
+		<-pumpDone
+	})
 
 	// Fire 50 concurrent reads across different overlapping chunks
 	done := make(chan bool)

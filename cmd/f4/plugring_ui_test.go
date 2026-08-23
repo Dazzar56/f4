@@ -7,25 +7,28 @@ import (
 )
 
 func TestPlugRingDialog_Layout(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.SetDefaultPalette()
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	pf := NewPanelsFrame()
-	defer pf.Close()
+	t.Cleanup(pf.Close)
 
 	actionPlugRing(pf)
 
 	top := vtui.FrameManager.GetTopFrame()
+	t.Cleanup(func() {
+		if top != nil {
+			top.Close()
+			vtui.FrameManager.RemoveFrame(top)
+		}
+	})
 	dlg, ok := top.(vtui.Container)
 	if !ok {
 		t.Fatalf("Expected vtui.Container, got %T", top)
 	}
 
 	vtui.AssertLayout(t, dlg)
-
-	// Clean up
-	top.SetExitCode(-1)
-	vtui.FrameManager.Pop()
 }
 
 func TestPlugRingRowColorsFollowDialogTheme(t *testing.T) {
