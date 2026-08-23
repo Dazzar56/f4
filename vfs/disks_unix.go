@@ -4,13 +4,21 @@ package vfs
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
 )
+
+func parseSysfsBlockSize(data []byte) (int64, bool) {
+	sectors, err := strconv.ParseInt(strings.TrimSpace(string(data)), 10, 64)
+	if err != nil || sectors <= 0 || sectors > int64(1<<63-1)/512 {
+		return 0, false
+	}
+	return sectors * 512, true
+}
 
 func resolveDevicePath(name string) string {
 	if !strings.HasPrefix(name, "/dev/") {
@@ -36,12 +44,10 @@ func getPlatformBlockDevices(ctx context.Context) []VFSItem {
 			if err != nil {
 				continue
 			}
-			var sectors int64
-			fmt.Sscanf(strings.TrimSpace(string(sizeData)), "%d", &sectors)
-			if sectors <= 0 {
+			size, ok := parseSysfsBlockSize(sizeData)
+			if !ok {
 				continue
 			}
-			size := sectors * 512
 
 			displayName := name
 			if dmName, err := os.ReadFile("/sys/class/block/" + name + "/dm/name"); err == nil {
@@ -76,9 +82,13 @@ func getPlatformBlockDevices(ctx context.Context) []VFSItem {
 			// can block forever (macOS tty.* waits for carrier, and every
 			// Mac ships /dev/tty.Bluetooth-Incoming-Port).
 			if err == nil && info.Mode()&os.ModeDevice != 0 && info.Mode()&os.ModeCharDevice == 0 {
+				size, sizeErr := getDeviceSize("/dev/"+e.Name(), nil)
+				if sizeErr != nil {
+					continue
+				}
 				items = append(items, VFSItem{
 					Name:      e.Name(),
-					Size:      getDeviceSize("/dev/"+e.Name(), nil),
+					Size:      size,
 					SizeKnown: true,
 					MTime:     info.ModTime(),
 				})
@@ -88,21 +98,20 @@ func getPlatformBlockDevices(ctx context.Context) []VFSItem {
 	return items
 }
 
-func getDeviceSize(devPath string, f *os.File) int64 {
+func getDeviceSize(devPath string, f *os.File) (int64, error) {
 	if f != nil {
-		if pos, err := f.Seek(0, io.SeekEnd); err == nil && pos > 0 {
-			f.Seek(0, io.SeekStart)
-			return pos
+		if size, found, err := probeSeekSize(f); err != nil {
+			return 0, err
+		} else if found {
+			return size, nil
 		}
 	}
 	// Try sysfs lookup if devPath is /dev/xxx
 	sysName := strings.TrimPrefix(devPath, "/dev/")
 	sysName = strings.TrimPrefix(sysName, "mapper/")
 	if sizeData, err := os.ReadFile("/sys/class/block/" + sysName + "/size"); err == nil {
-		var sectors int64
-		fmt.Sscanf(strings.TrimSpace(string(sizeData)), "%d", &sectors)
-		if sectors > 0 {
-			return sectors * 512
+		if size, ok := parseSysfsBlockSize(sizeData); ok {
+			return size, nil
 		}
 	}
 	// Direct open seek fallback
@@ -110,11 +119,13 @@ func getDeviceSize(devPath string, f *os.File) int64 {
 		// O_NONBLOCK: never wait for a device to become ready just to
 		// measure it; a probe must not hang on carrier or DTR.
 		if localF, err := os.OpenFile(devPath, os.O_RDONLY|syscall.O_NONBLOCK, 0); err == nil {
-			defer localF.Close()
+			defer func() {
+				_ = localF.Close() // The probe handle is read-only.
+			}()
 			if pos, err := localF.Seek(0, io.SeekEnd); err == nil && pos > 0 {
-				return pos
+				return pos, nil
 			}
 		}
 	}
-	return 0
+	return 0, nil
 }

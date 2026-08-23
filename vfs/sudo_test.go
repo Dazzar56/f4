@@ -3,10 +3,12 @@
 package vfs
 
 import (
+	"errors"
 	"io"
 	"net"
 	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
 )
 
@@ -150,10 +152,7 @@ func TestSudoClient_IPCProtocol(t *testing.T) {
 		t.Fatalf("ResolveUnixAddr failed: %v", err)
 	}
 
-	l, err := net.ListenUnix("unix", addr)
-	if err != nil {
-		t.Fatalf("ListenUnix failed: %v", err)
-	}
+	l := listenUnixForTest(t, addr)
 	defer func() {
 		_ = l.Close() // listener cleanup errors are uninteresting
 	}()
@@ -267,10 +266,7 @@ func TestSudoClient_DisconnectRecovery(t *testing.T) {
 	sockPath := filepath.Join(tmpDir, "sudo-recovery.sock")
 
 	addr, _ := net.ResolveUnixAddr("unix", sockPath)
-	l, err := net.ListenUnix("unix", addr)
-	if err != nil {
-		t.Fatalf("ListenUnix failed: %v", err)
-	}
+	l := listenUnixForTest(t, addr)
 	defer func() {
 		_ = l.Close() // listener cleanup errors are uninteresting
 	}()
@@ -326,4 +322,16 @@ func shortSocketDir(t *testing.T) string {
 		}
 	})
 	return dir
+}
+
+func listenUnixForTest(t *testing.T, addr *net.UnixAddr) *net.UnixListener {
+	t.Helper()
+	l, err := net.ListenUnix("unix", addr)
+	if errors.Is(err, syscall.EPERM) {
+		t.Skipf("sandbox does not permit Unix socket bind: %v", err)
+	}
+	if err != nil {
+		t.Fatalf("ListenUnix failed: %v", err)
+	}
+	return l
 }

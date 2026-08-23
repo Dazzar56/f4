@@ -893,7 +893,9 @@ func (w *TempFileWrapper) Read(ctx context.Context, p []byte) (int, error) {
 
 func (w *TempFileWrapper) Close() error {
 	err := w.File.Close()
-	os.Remove(w.TempPath)
+	if w.TempPath != "" {
+		err = errors.Join(err, os.Remove(w.TempPath))
+	}
 	return err
 }
 
