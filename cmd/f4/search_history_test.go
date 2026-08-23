@@ -252,3 +252,70 @@ func TestAssocEditor_SharesMaskHistory(t *testing.T) {
 		t.Errorf("saved mask not pushed to the shared bucket: %v", got)
 	}
 }
+
+func TestMkDirDialog_PreFillsFromNewFolderHistory(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+	store := useStubHistory(t)
+	store["NewFolder"] = []string{"build"}
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	vtui.FrameManager.Push(pf)
+	defer vtui.FrameManager.Pop()
+
+	actionMkDir(pf)
+	dlg := vtui.FrameManager.GetTopFrame().(vtui.Container)
+	defer vtui.FrameManager.Pop()
+
+	edit := findHistoryEdit(t, dlg, newFolderHistoryID)
+	// far2l's mkdir field carries DIF_USELASTHISTORY, so the empty prompt
+	// opens on the last folder that was created.
+	if got := edit.GetText(); got != "build" {
+		t.Errorf("folder name field is %q, want %q", got, "build")
+	}
+	edit.InsertString("dist")
+	if got := edit.GetText(); got != "dist" {
+		t.Errorf("typing over the pre-filled name gave %q, want %q", got, "dist")
+	}
+}
+
+func TestCopyDialog_KeepsPathHintsAlongsideHistory(t *testing.T) {
+	store := useStubHistory(t)
+	store["Copy"] = []string{"/tmp/backup"}
+
+	// The destination field already opts into path completion; history must
+	// ride on top of it rather than replace it.
+	edit := vtui.NewEdit(0, 0, 20, "/mnt/passive/")
+	edit.PathHintsEnabled = true
+	attachHistoryUseLast(edit, copyDestHistoryID)
+
+	if !edit.PathHintsEnabled {
+		t.Error("path hints were switched off by the history wiring")
+	}
+	if len(edit.History) != 1 || edit.History[0] != "/tmp/backup" {
+		t.Errorf("Copy history not loaded: %v", edit.History)
+	}
+	// The passive panel path wins over DIF_USELASTHISTORY when it is present.
+	if got := edit.GetText(); got != "/mnt/passive/" {
+		t.Errorf("destination was overwritten by history: %q", got)
+	}
+}
+
+func TestNewEditPrompt_DoesNotStorePlaceholderName(t *testing.T) {
+	store := useStubHistory(t)
+
+	edit := attachHistory(vtui.NewEdit(0, 0, 20, ""), newEditHistoryID)
+	// An empty prompt falls back to "newfile.txt"; that placeholder is not
+	// something the user typed, so it must not reach the bucket.
+	commitHistory(edit, "")
+	if len(store) != 0 {
+		t.Errorf("placeholder leaked into history: %v", store)
+	}
+
+	commitHistory(edit, "notes.md")
+	if got := store["NewEdit"]; len(got) != 1 || got[0] != "notes.md" {
+		t.Errorf("typed name not stored: %v", got)
+	}
+}

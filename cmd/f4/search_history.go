@@ -9,6 +9,11 @@ const (
 	searchTextHistoryID  = "SearchText"
 	replaceTextHistoryID = "ReplaceText"
 	fileMasksHistoryID   = "Masks"
+
+	copyDestHistoryID       = "Copy"
+	newFolderHistoryID      = "NewFolder"
+	newEditHistoryID        = "NewEdit"
+	externalEditorHistoryID = "ExternalEditor"
 )
 
 // attachHistory turns a plain dialog input into a history backed one, the

@@ -1741,7 +1741,11 @@ func actionNewFile(pf *PanelsFrame) {
 			return
 		}
 		activeVfs := fsp.vfs
-		vtui.InputBox(Msg("Edit.NewFileTitle"), Msg("Edit.NewFilePrompt"), "", func(name string) {
+		var nameEdit *vtui.Edit
+		dlg := vtui.InputBox(Msg("Edit.NewFileTitle"), Msg("Edit.NewFilePrompt"), "", func(name string) {
+			// Record what was actually typed, before the fallback below
+			// turns an empty prompt into a placeholder name.
+			commitHistory(nameEdit, name)
 			if name == "" {
 				name = "newfile.txt"
 			}
@@ -1758,6 +1762,9 @@ func actionNewFile(pf *PanelsFrame) {
 			}
 			actionOpenEditor(pf, activeVfs, path)
 		})
+		// Plain DIF_HISTORY, as in far2l's dlgOpenEditor: the prompt opens
+		// empty rather than on the last file that was created this way.
+		nameEdit = attachHistory(inputBoxEdit(dlg), newEditHistoryID)
 	}
 }
 
@@ -1963,6 +1970,7 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 
 	editDest := vtui.NewEdit(0, 0, 10, initialDest)
 	editDest.PathHintsEnabled = true
+	attachHistoryUseLast(editDest, copyDestHistoryID)
 	dlg.AddItem(editDest)
 
 	modes := []string{Msg("Op.Queue"), Msg("Op.Background"), Msg("Op.Foreground")}
@@ -1986,6 +1994,7 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 		mode := comboMode.Menu.SelectPos
 		dlg.Close()
 		if dest != "" {
+			commitHistory(editDest, dest)
 			go ExecuteFileOpAt(pf, srcVfs, dstVfs, srcBasePath, names, dest, isMove, mode, onCompleteWithClear)
 		}
 	}
@@ -2349,6 +2358,7 @@ func actionEditorSettings(pf *PanelsFrame) {
 	}
 
 	editExtCmd := vtui.NewEdit(0, 0, 20, AppConfig.ExternalEditorCommand)
+	attachHistory(editExtCmd, externalEditorHistoryID)
 	lblExtCmd := vtui.NewLabel(0, 0, Msg("EditorSettings.ExternalCommand"), editExtCmd)
 
 	btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))
@@ -2473,6 +2483,7 @@ func actionEditorSettings(pf *PanelsFrame) {
 		AppConfig.EditorAutoCompleteMask = editMask.GetText()
 		AppConfig.UseExternalEditor = chkExtEdit.State == 1
 		AppConfig.ExternalEditorCommand = editExtCmd.GetText()
+		commitHistory(editExtCmd, AppConfig.ExternalEditorCommand)
 		SaveConfig()
 		dlg.Close()
 	}
@@ -2616,6 +2627,7 @@ func actionMkDir(pf *PanelsFrame) {
 	dlg.ShowClose = true
 
 	editName := vtui.NewEdit(0, 0, 10, "")
+	attachHistoryUseLast(editName, newFolderHistoryID)
 	lblPrompt := vtui.NewLabel(0, 0, Msg("MakeFolder.Prompt"), editName)
 	dlg.AddItem(lblPrompt)
 	dlg.AddItem(editName)
@@ -2660,6 +2672,7 @@ func actionMkDir(pf *PanelsFrame) {
 		if name == "" {
 			return
 		}
+		commitHistory(editName, name)
 		fullPath := activeVfs.Join(activeVfs.GetPath(), name)
 
 		desc := fmt.Sprintf("Create folder %s", name)
