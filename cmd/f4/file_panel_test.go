@@ -2894,6 +2894,7 @@ func TestFileSystemPanel_DirectoryCache(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	v := vfs.NewOSVFS(t.TempDir())
 	fp := NewFileSystemPanel(0, 0, 40, 20, v)
+	waitForLoad(t, fp)
 	t.Cleanup(func() {
 		if fp.cancelLoad != nil {
 			fp.cancelLoad()
@@ -3099,6 +3100,7 @@ func TestFileSystemPanel_TitleDoesNotContainSortIndicator(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	v := vfs.NewOSVFS(t.TempDir())
 	fp := NewFileSystemPanel(0, 0, 40, 24, v)
+	waitForLoad(t, fp)
 	fp.currentTitle = "C:\\work"
 
 	scr := vtui.NewSilentScreenBuf()
@@ -3131,6 +3133,7 @@ func TestFileSystemPanel_CurrentTitleKeepsTheSameColorWhenFocused(t *testing.T) 
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	v := vfs.NewOSVFS(t.TempDir())
 	fp := NewFileSystemPanel(0, 0, 40, 24, v)
+	waitForLoad(t, fp)
 	fp.currentTitle = "C:\\work"
 
 	scr := vtui.NewSilentScreenBuf()
@@ -3171,6 +3174,7 @@ func TestFileSystemPanel_FastFind_Visibility(t *testing.T) {
 	// Создаем много файлов, чтобы список мог скроллиться
 	v := vfs.NewOSVFS(t.TempDir())
 	fp := NewFileSystemPanel(0, 0, 40, 10, v)
+	waitForLoad(t, fp)
 	fp.viewMode = ViewModeDetailed
 
 	for i := 0; i < 20; i++ {
@@ -3201,6 +3205,7 @@ func TestFileSystemPanel_Sorting(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	v := vfs.NewOSVFS(t.TempDir())
 	fp := NewFileSystemPanel(0, 0, 80, 24, v)
+	waitForLoad(t, fp)
 
 	t1 := time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC)
 	t2 := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
@@ -3388,6 +3393,7 @@ func TestFileSystemPanel_HeaderClickSortsAndToggles(t *testing.T) {
 	if _, ok := fp.headerSortModeAt(separatorX, fp.table.Y1); ok {
 		t.Fatal("column separator was treated as a sortable header")
 	}
+	waitForLoad(t, fp)
 }
 
 func TestFileSystemPanel_HeaderSortMappingAllViewModes(t *testing.T) {
@@ -3577,6 +3583,7 @@ func TestFileSystemPanel_CacheLoadPreservesSelection(t *testing.T) {
 	if !found {
 		t.Error("keep.txt not found in panel after cache reload")
 	}
+	waitForLoad(t, fp)
 }
 
 func TestFileSystemPanel_SyncPanelLoad(t *testing.T) {

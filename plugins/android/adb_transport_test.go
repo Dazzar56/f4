@@ -621,22 +621,19 @@ func TestFailedConnectStartsInstalledADBAndRetries(t *testing.T) {
 }
 
 func TestCancelledHostRequestUnblocksRead(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	server, dialer := testServer(t, func(conn net.Conn) {
 		expectTestRequest(t, conn, "host:devices-l")
+		cancel()
 		_, _ = io.Copy(io.Discard, conn)
 	})
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
-	defer cancel()
-	started := time.Now()
 	_, err := server.Devices(ctx)
 	if err == nil {
 		t.Fatal("Devices unexpectedly succeeded")
 	}
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("Devices error = %v, want context deadline", err)
-	}
-	if time.Since(started) > time.Second {
-		t.Fatalf("cancellation took %v", time.Since(started))
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Devices error = %v, want context canceled", err)
 	}
 	dialer.assertDone()
 }

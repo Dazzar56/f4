@@ -4473,11 +4473,17 @@ func TestEditorView_Search_Reverse_StartAtZero(t *testing.T) {
 	ev.Search("match", false, true, false, false, false)
 
 	timeout := time.After(2 * time.Second)
-	select {
-	case task := <-vtui.FrameManager.TaskChan:
-		task()
-	case <-timeout:
-		t.Fatal("Reverse search at offset 0 hung")
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			if result := vtui.FrameManager.GetTopFrame(); result != nil && result.GetTitle() == Msg("Search.Title") {
+				vtui.FrameManager.RemoveFrame(result)
+				return
+			}
+		case <-timeout:
+			t.Fatal("Reverse search at offset 0 hung")
+		}
 	}
 }
 

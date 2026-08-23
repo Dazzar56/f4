@@ -60,6 +60,7 @@ func preserveActionRegistry(t *testing.T) {
 }
 
 func TestMain(m *testing.M) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	vfs.InitSudoClient("/usr/bin/f4", "")
 
 	// Unit tests must never hand control to the user's desktop. Individual
