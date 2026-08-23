@@ -50,7 +50,7 @@ func TestZipCompression_Deflate(t *testing.T) {
 
 	data := []byte(strings.Repeat("A", 1000))
 	filePath := filepath.Join(tmpDir, "data.txt")
-	if err := os.WriteFile(filePath, data, 0644); err != nil {
+	if err := os.WriteFile(filePath, data, 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -216,7 +216,7 @@ func TestActionAddArchive_ProgressUpdates(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	tmpDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(tmpDir, "file1.txt"), []byte("data"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmpDir, "file1.txt"), []byte("data"), 0600); err != nil {
 		t.Fatal(err)
 	}
 

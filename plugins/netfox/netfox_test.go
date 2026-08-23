@@ -17,7 +17,7 @@ func TestNetFoxVFS_ConfigPersistence(t *testing.T) {
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test_net.json")
 	// Ensure the file is created for consistency in tests
-	if err := os.WriteFile(dbPath, []byte("{}"), 0644); err != nil {
+	if err := os.WriteFile(dbPath, []byte("{}"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	nf := NewNetFoxVFS(dbPath)

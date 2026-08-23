@@ -156,7 +156,7 @@ func TestArchiveVFS_AtomicWrite(t *testing.T) {
 	tmp := t.TempDir()
 	arcPath := filepath.Join(tmp, "test.zip")
 
-	if err := os.WriteFile(arcPath, []byte("PK\x05\x06\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"), 0644); err != nil {
+	if err := os.WriteFile(arcPath, []byte("PK\x05\x06\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	origInfo, _ := os.Stat(arcPath)
