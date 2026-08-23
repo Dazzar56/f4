@@ -315,9 +315,41 @@ func displayValue(value any) string {
 func (p *Plugin) openCurrent(app vfs.App) {
 	path, ok := selectedSQLitePath(app)
 	if !ok {
-		showSQLiteMessage(app, sqliteText("SQLite.Title", " SQLite ", " SQLite "), sqliteText("SQLite.SelectDatabase", "Select a local .db, .sqlite, .sqlite3, or .db3 file.", "Выберите локальный файл .db, .sqlite, .sqlite3 или .db3."))
+		// Nothing usable under the cursor is not a dead end: ask for a name.
+		// SQLite creates a database on first open, so the same prompt covers
+		// starting an empty one and reaching a file the extension list would
+		// have turned away.
+		app.InputBox(
+			sqliteText("SQLite.Title", " SQLite ", " SQLite "),
+			sqliteText("SQLite.PathPrompt", "Database file to open or create:", "Файл базы данных (открыть или создать):"),
+			sqliteText("SQLite.NewFileName", "database.sqlite", "database.sqlite"),
+			func(answer string) {
+				if answer = strings.TrimSpace(answer); answer != "" {
+					p.openPath(app, databasePathIn(app, answer))
+				}
+			})
 		return
 	}
+	p.openPath(app, path)
+}
+
+// databasePathIn resolves a typed name against the directory of the active
+// panel, so a bare name means a database next to what the user is looking at.
+func databasePathIn(app vfs.App, path string) string {
+	if !filepath.IsAbs(path) {
+		if fs, ok := app.GetActivePanelVFS().(*vfs.OSVFS); ok && fs != nil {
+			if abs, err := fs.Abs(fs.Join(fs.GetPath(), path)); err == nil {
+				return filepath.Clean(abs)
+			}
+		}
+		if abs, err := filepath.Abs(path); err == nil {
+			return filepath.Clean(abs)
+		}
+	}
+	return filepath.Clean(path)
+}
+
+func (p *Plugin) openPath(app vfs.App, path string) {
 	var (
 		session *databaseSession
 		tables  []string

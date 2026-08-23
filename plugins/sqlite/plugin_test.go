@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -114,3 +115,49 @@ func TestPluginRegistersLocalizedPanelCommand(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestDatabasePathIsResolvedAgainstThePanel(t *testing.T) {
+	dir := t.TempDir()
+	app := &sqliteTestApp{fs: vfs.NewOSVFS(dir)}
+	if err := app.fs.SetPath(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	got := databasePathIn(app, "new.sqlite")
+	if want := filepath.Join(dir, "new.sqlite"); got != want {
+		t.Fatalf("databasePathIn = %q, want %q", got, want)
+	}
+
+	absolute := filepath.Join(dir, "elsewhere.sqlite")
+	if got := databasePathIn(app, absolute); got != absolute {
+		t.Fatalf("databasePathIn(absolute) = %q, want %q", got, absolute)
+	}
+
+	// A database the client created is a database it can open again.
+	session, tables, err := openDatabase(context.Background(), filepath.Join(dir, "new.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	if len(tables) != 0 {
+		t.Fatalf("a fresh database reported tables: %#v", tables)
+	}
+	if _, err := session.execute(context.Background(), `CREATE TABLE t (id INTEGER PRIMARY KEY)`); err != nil {
+		t.Fatal(err)
+	}
+	tables, err = session.listTables(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tables) != 1 || tables[0] != "t" {
+		t.Fatalf("tables after CREATE TABLE = %#v", tables)
+	}
+}
+
+// sqliteTestApp is the slice of vfs.App this plugin reads: the active panel.
+type sqliteTestApp struct {
+	vfs.App
+	fs *vfs.OSVFS
+}
+
+func (a *sqliteTestApp) GetActivePanelVFS() vfs.VFS { return a.fs }
