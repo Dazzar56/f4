@@ -1453,16 +1453,21 @@ func actionViewerSearch(vv *ViewerView) {
 }
 
 func actionViewerSearchDirection(vv *ViewerView, reverse bool) {
-	vtui.InputBox(Msg("Viewer.SearchTitle"), "Search for:", vv.lastSearch, func(pattern string) {
+	var searchEdit *vtui.Edit
+	dlg := vtui.InputBox(Msg("Viewer.SearchTitle"), "Search for:", vv.lastSearch, func(pattern string) {
 		if pattern == "" {
 			return
 		}
+		commitHistory(searchEdit, pattern)
 		if pattern != vv.lastSearch {
 			vv.lastSearchFound = false
 		}
 		vv.lastSearch = pattern
 		runViewerSearch(vv, pattern, reverse)
 	})
+	// The dialog only runs the callback above once the user submits it, which
+	// cannot happen before this assignment returns.
+	searchEdit = attachInputBoxHistory(dlg, searchTextHistoryID)
 }
 
 func actionViewerSearchAgain(vv *ViewerView, reverse bool) {
@@ -2853,11 +2858,13 @@ func actionFindFile(pf *PanelsFrame) {
 
 	lblMask := vtui.NewLabel(0, 0, Msg("FindFile.MaskPrompt"), nil)
 	editMask := vtui.NewEdit(0, 0, 20, LastFindFileMask)
+	attachHistory(editMask, fileMasksHistoryID)
 	lblMask.FocusLink = editMask
 	dlg.SetFocusedItem(editMask)
 
 	lblText := vtui.NewLabel(0, 0, Msg("FindFile.TextPrompt"), nil)
 	editText := vtui.NewEdit(0, 0, 20, LastFindFileText)
+	attachHistory(editText, searchTextHistoryID)
 	lblText.FocusLink = editText
 
 	chkCase := vtui.NewCheckbox(0, 0, Msg("FindFile.CaseSensitive"), false)
@@ -2922,6 +2929,8 @@ func actionFindFile(pf *PanelsFrame) {
 	btnFind.OnClick = func() {
 		LastFindFileMask = editMask.GetText()
 		LastFindFileText = editText.GetText()
+		commitHistory(editMask, LastFindFileMask)
+		commitHistory(editText, LastFindFileText)
 		LastFindFileCaseSensitive = chkCase.State == 1
 		LastFindFileWholeWords = chkWhole.State == 1
 		LastFindFileRegexp = chkRegexp.State == 1
