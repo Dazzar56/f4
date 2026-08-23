@@ -737,11 +737,15 @@ func (d *shareLinkDialog) scheduleExpiryRefresh() {
 	}
 	expiry := d.info.Link.ExpiresAt
 	linkURL := d.info.Link.URL
+	// Read on the goroutine that starts this work, not inside it: the
+	// work outlives the call, and reading the global from it races
+	// anything that reassigns vtui.FrameManager meanwhile.
+	frames := vtui.FrameManager
 	d.expiryTimer = time.AfterFunc(delay, func() {
-		if vtui.FrameManager == nil {
+		if frames == nil {
 			return
 		}
-		vtui.FrameManager.PostTask(func() {
+		frames.PostTask(func() {
 			if !d.expiryTimerStillCurrent(generation, linkURL, expiry, time.Now()) {
 				return
 			}

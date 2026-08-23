@@ -3238,6 +3238,10 @@ func (ev *EditorView) StartIndexing() {
 	readFromFile := ev.chunkReader()
 
 	ev.indexWG.Add(1)
+	// Read on the goroutine that starts this work, not inside it: the
+	// work outlives the call, and reading the global from it races
+	// anything that reassigns vtui.FrameManager meanwhile.
+	uiFrames := vtui.FrameManager
 	go func() {
 		defer ev.indexWG.Done()
 		defer ev.guardMapping("indexing")()
@@ -3253,7 +3257,7 @@ func (ev *EditorView) StartIndexing() {
 		// highlight walker throttles on can never stay stuck at true.
 		defer func() {
 			reached := scannedTo.Load()
-			vtui.FrameManager.PostTask(func() {
+			uiFrames.PostTask(func() {
 				if ev.editSession == sessionID {
 					ev.indexing = false
 					st := ev.indexStatus
@@ -3318,7 +3322,7 @@ func (ev *EditorView) StartIndexing() {
 						batchOffsets = append(batchOffsets, int(off))
 					}
 
-					vtui.FrameManager.PostTask(func() {
+					uiFrames.PostTask(func() {
 						if ctx.Err() != nil || ev.editSession != sessionID {
 							return
 						}
@@ -3337,7 +3341,7 @@ func (ev *EditorView) StartIndexing() {
 						if ev.highlighter != nil && !ev.highlighting && len(ev.lineStates) < li.LineCount() {
 							ev.startHighlighting()
 						}
-						vtui.FrameManager.Redraw()
+						uiFrames.Redraw()
 					})
 
 					indexed += len(batchOffsets)
@@ -3355,10 +3359,10 @@ func (ev *EditorView) StartIndexing() {
 					ev.postUnsafeWordWrap(sessionID, ctx)
 				}
 				scannedTo.Store(int64(maxSize))
-				vtui.FrameManager.PostTask(func() {
+				uiFrames.PostTask(func() {
 					if ctx.Err() == nil && ev.editSession == sessionID {
 						if ev.restoreTargetPos() {
-							vtui.FrameManager.Redraw()
+							uiFrames.Redraw()
 						}
 						ev.resolveTargetOffset()
 						if ev.highlighter != nil && !ev.highlighting && len(ev.lineStates) < li.LineCount() {
@@ -3469,7 +3473,7 @@ func (ev *EditorView) StartIndexing() {
 				batches++
 				pendingOffsets = make([]int, 0, 10000)
 
-				vtui.FrameManager.PostTask(func() {
+				uiFrames.PostTask(func() {
 					if ctx.Err() != nil || ev.editSession != sessionID {
 						return
 					}
@@ -3492,15 +3496,15 @@ func (ev *EditorView) StartIndexing() {
 					// a fresh scan, which on a file big enough to watch reads as
 					// a scan that is stuck rather than one that is working.
 					ev.noteIndexProgress(int64(batchEnd), li.LineCount())
-					vtui.FrameManager.Redraw()
+					uiFrames.Redraw()
 				})
 			}
 		}
 
-		vtui.FrameManager.PostTask(func() {
+		uiFrames.PostTask(func() {
 			if ctx.Err() == nil && ev.editSession == sessionID {
 				if ev.restoreTargetPos() {
-					vtui.FrameManager.Redraw()
+					uiFrames.Redraw()
 				}
 				ev.resolveTargetOffset()
 				if ev.highlighter != nil && !ev.highlighting && len(ev.lineStates) < li.LineCount() {
@@ -4114,8 +4118,12 @@ func (ev *EditorView) scheduleIndexResume() {
 	if ev.indexResume != nil {
 		ev.indexResume.Stop()
 	}
+	// Read on the goroutine that starts this work, not inside it: the
+	// work outlives the call, and reading the global from it races
+	// anything that reassigns vtui.FrameManager meanwhile.
+	uiFrames := vtui.FrameManager
 	ev.indexResume = time.AfterFunc(indexResumeDelay, func() {
-		vtui.FrameManager.PostTask(func() {
+		uiFrames.PostTask(func() {
 			if ev.IsDone() || ev.indexing || ev.indexIsComplete() {
 				return
 			}

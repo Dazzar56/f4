@@ -433,6 +433,10 @@ func (q *QuickViewPanel) startDirScan(fullPath string) {
 	name := source.Base(fullPath)
 	q.scanMu.Unlock()
 
+	// Read on the goroutine that starts this work, not inside it: the
+	// work outlives the call, and reading the global from it races
+	// anything that reassigns vtui.FrameManager meanwhile.
+	frames := vtui.FrameManager
 	go func() {
 		defer close(done)
 		// fsInfo() is a syscall that may block on stuck network
@@ -464,7 +468,7 @@ func (q *QuickViewPanel) startDirScan(fullPath string) {
 			}
 			q.scanMu.Unlock()
 			if redraw {
-				vtui.FrameManager.PostTask(vtui.FrameManager.HardRefresh)
+				frames.PostTask(frames.HardRefresh)
 			}
 		})
 		q.scanMu.Lock()
@@ -476,7 +480,7 @@ func (q *QuickViewPanel) startDirScan(fullPath string) {
 			q.scanDone = true
 		}
 		q.scanMu.Unlock()
-		vtui.FrameManager.PostTask(vtui.FrameManager.HardRefresh)
+		frames.PostTask(frames.HardRefresh)
 	}()
 }
 
@@ -789,6 +793,10 @@ func (q *QuickViewPanel) startFilePreview(key quickViewSelectionKey, request vfs
 	gen := q.previewGen
 	q.cacheLoading = true
 
+	// Read on the goroutine that starts this work, not inside it: the
+	// work outlives the call, and reading the global from it races
+	// anything that reassigns vtui.FrameManager meanwhile.
+	frames := vtui.FrameManager
 	go func() {
 		var loaded quickViewFileResult
 		handled := false
@@ -816,13 +824,13 @@ func (q *QuickViewPanel) startFilePreview(key quickViewSelectionKey, request vfs
 			return
 		}
 
-		vtui.FrameManager.PostTask(func() {
+		frames.PostTask(func() {
 			if q.previewGen != gen || !q.cacheValid || q.cacheKey != key {
 				return
 			}
 			q.previewCancel = nil
 			q.applyFilePreview(loaded)
-			vtui.FrameManager.HardRefresh()
+			frames.HardRefresh()
 		})
 	}()
 }

@@ -43,6 +43,10 @@ func (iv *ImageView) ToggleSlideShow() {
 	iv.slideStop = stop
 	interval := slideShowInterval()
 
+	// Read on the goroutine that starts this work, not inside it: the
+	// work outlives the call, and reading the global from it races
+	// anything that reassigns vtui.FrameManager meanwhile.
+	frames := vtui.FrameManager
 	go func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
@@ -51,7 +55,7 @@ func (iv *ImageView) ToggleSlideShow() {
 			case <-stop:
 				return
 			case <-ticker.C:
-				vtui.FrameManager.PostTask(func() {
+				frames.PostTask(func() {
 					// The reader may have stopped the show between the tick
 					// and this task reaching the UI thread.
 					if iv.slideStop == stop {

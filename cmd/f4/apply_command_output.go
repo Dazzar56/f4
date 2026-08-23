@@ -122,14 +122,18 @@ func (m *applyBatchViewModel) requestRefresh() {
 	}
 	m.refreshPending = true
 	m.mu.Unlock()
+	// Read on the goroutine that starts this work, not inside it: the
+	// work outlives the call, and reading the global from it races
+	// anything that reassigns vtui.FrameManager meanwhile.
+	frames := vtui.FrameManager
 	time.AfterFunc(50*time.Millisecond, func() {
-		if vtui.FrameManager == nil {
+		if frames == nil {
 			m.mu.Lock()
 			m.refreshPending = false
 			m.mu.Unlock()
 			return
 		}
-		vtui.FrameManager.PostTask(func() {
+		frames.PostTask(func() {
 			m.mu.Lock()
 			m.refreshPending = false
 			views := make([]*applyOutputView, 0, len(m.views))
@@ -140,7 +144,7 @@ func (m *applyBatchViewModel) requestRefresh() {
 			for _, view := range views {
 				view.refresh()
 			}
-			vtui.FrameManager.Redraw()
+			frames.Redraw()
 		})
 	})
 }

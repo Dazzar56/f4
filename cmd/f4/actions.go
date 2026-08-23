@@ -856,11 +856,15 @@ func actionOpenEditor(pf *PanelsFrame, v vfs.VFS, path string) {
 
 func openEditorInternal(pf *PanelsFrame, v vfs.VFS, path string) {
 	if AppConfig.EditorHighlighter == "Colorer" && !SchemasExist() {
+		// Read on the goroutine that starts this work, not inside it: the
+		// work outlives the call, and reading the global from it races
+		// anything that reassigns vtui.FrameManager meanwhile.
+		uiFrames := vtui.FrameManager
 		go func() {
 			msg := "Colorer syntax highlighting schemas are missing.\nWould you like to download them from elfmz/far2l GitHub?"
 			if pf.Message(" Download Colorer Schemas ", msg, []string{"&Yes", "&No"}) == 0 {
 				DownloadColorerSchemas(pf, func(success bool) {
-					vtui.FrameManager.PostTask(func() {
+					uiFrames.PostTask(func() {
 						if !success {
 							AppConfig.EditorHighlighter = "Chroma"
 							SaveConfig()
@@ -869,7 +873,7 @@ func openEditorInternal(pf *PanelsFrame, v vfs.VFS, path string) {
 					})
 				})
 			} else {
-				vtui.FrameManager.PostTask(func() {
+				uiFrames.PostTask(func() {
 					AppConfig.EditorHighlighter = "Chroma"
 					openEditorInternal(pf, v, path)
 				})

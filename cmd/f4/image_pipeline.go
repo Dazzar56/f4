@@ -100,7 +100,12 @@ func NewImagePipeline() *ImagePipeline {
 		previews: make(map[imageCacheKey]ImageResult),
 		load:     LoadImage,
 		preview:  imageQuickPreview,
-		dispatch: func(fn func()) { vtui.FrameManager.PostTask(fn) },
+		// dispatch is left nil on purpose. The default is the frame manager
+		// read where a job is started rather than one read from inside the
+		// worker: a decode outlives the call that asked for it, and reading
+		// the global from the worker races anything that reassigns
+		// vtui.FrameManager while the picture is still being decoded. Tests
+		// set this field to run the callbacks inline.
 	}
 }
 
@@ -315,7 +320,9 @@ func (p *ImagePipeline) pump() {
 			return
 		}
 		p.busy++
-		go p.run(job)
+		// Read here: pump runs on the goroutine that asked for the picture,
+		// while p.run is the worker that outlives it.
+		go p.run(job, vtui.FrameManager)
 	}
 }
 
@@ -336,7 +343,7 @@ func (p *ImagePipeline) nextJob() *imageJob {
 	return job
 }
 
-func (p *ImagePipeline) run(job *imageJob) {
+func (p *ImagePipeline) run(job *imageJob, frames *vtui.FrameManagerType) {
 	surf, decoder, err := p.load(context.Background(), job.v, job.path)
 	res := ImageResult{Path: job.path, Surface: surf, Decoder: decoder, Err: err}
 
@@ -360,7 +367,15 @@ func (p *ImagePipeline) run(job *imageJob) {
 		w.fn(res)
 	}
 	if len(onUI) > 0 {
-		p.dispatch(func() {
+		dispatch := p.dispatch
+		if dispatch == nil {
+			dispatch = func(fn func()) {
+				if frames != nil {
+					frames.PostTask(fn)
+				}
+			}
+		}
+		dispatch(func() {
 			for _, w := range onUI {
 				w.fn(res)
 			}

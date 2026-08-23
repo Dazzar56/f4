@@ -366,6 +366,10 @@ func newColorerHighlighter(ev *EditorView, filename, firstLine string, fallback 
 		ch.SetLineSource(ev.lineTextForHighlight)
 	}
 
+	// Read on the goroutine that starts this work, not inside it: the
+	// work outlives the call, and reading the global from it races
+	// anything that reassigns vtui.FrameManager meanwhile.
+	frames := vtui.FrameManager
 	go func() {
 		session, err := acquireColorerSession(ch.configsDir)
 		if err != nil {
@@ -391,7 +395,7 @@ func newColorerHighlighter(ev *EditorView, filename, firstLine string, fallback 
 			return
 		}
 
-		vtui.FrameManager.PostTask(func() {
+		frames.PostTask(func() {
 			if ch.closed {
 				releaseColorerSession(session, ch.configsDir)
 				return
@@ -411,7 +415,7 @@ func newColorerHighlighter(ev *EditorView, filename, firstLine string, fallback 
 			if ev != nil {
 				ev.invalidateStates(0)
 			}
-			vtui.FrameManager.Redraw()
+			frames.Redraw()
 		})
 	}()
 

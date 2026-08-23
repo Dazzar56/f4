@@ -68,9 +68,13 @@ func (vv *VideoView) start(scr *vtui.ScreenBuf) bool {
 		return false
 	}
 	vv.player = p
+	// Read on the goroutine that starts this work, not inside it: the
+	// work outlives the call, and reading the global from it races
+	// anything that reassigns vtui.FrameManager meanwhile.
+	frames := vtui.FrameManager
 	go func() {
 		<-p.Done()
-		vtui.FrameManager.Redraw()
+		frames.Redraw()
 	}()
 	return true
 }

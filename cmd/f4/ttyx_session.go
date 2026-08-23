@@ -59,9 +59,13 @@ func sharedTTYXSession() *ttyx.Session {
 	// One watcher for the process: a redraw when anything moves, so that the
 	// frame drawn while the terminal had no focus does not survive the
 	// return of it.
+	// Read on the goroutine that starts this work, not inside it: the
+	// work outlives the call, and reading the global from it races
+	// anything that reassigns vtui.FrameManager meanwhile.
+	frames := vtui.FrameManager
 	go func() {
 		for range sess.Changed() {
-			vtui.FrameManager.Redraw()
+			frames.Redraw()
 		}
 	}()
 	return ttyxSessionInst

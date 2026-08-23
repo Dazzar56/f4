@@ -116,6 +116,10 @@ func GetInstalledPlugRingItems() map[string]PlugRingItem {
 
 // CheckForPluginUpdates checks for available updates of installed plugins in background.
 func CheckForPluginUpdates() {
+	// Read on the goroutine that starts this work, not inside it: the
+	// work outlives the call, and reading the global from it races
+	// anything that reassigns vtui.FrameManager meanwhile.
+	frames := vtui.FrameManager
 	go func() {
 		// Let the application UI initialize completely before checking
 		time.Sleep(5 * time.Second)
@@ -139,7 +143,7 @@ func CheckForPluginUpdates() {
 		}
 
 		if updateCount > 0 {
-			vtui.FrameManager.PostTask(func() {
+			frames.PostTask(func() {
 				vtui.ShowToast(fmt.Sprintf("PlugRing: %d plugin update(s) available!", updateCount), 5*time.Second)
 			})
 		}

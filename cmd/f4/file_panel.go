@@ -926,8 +926,12 @@ func (fp *FileSystemPanel) dragAutoScrollStep(direction int) bool {
 }
 
 func (fp *FileSystemPanel) scheduleDragAutoScroll(generation uint64) {
+	// Read on the goroutine that starts this work, not inside it: the
+	// work outlives the call, and reading the global from it races
+	// anything that reassigns vtui.FrameManager meanwhile.
+	frames := vtui.FrameManager
 	fp.dragScrollTimer = time.AfterFunc(panelDragScrollInterval, func() {
-		vtui.FrameManager.PostTask(func() {
+		frames.PostTask(func() {
 			if generation != fp.dragScrollGeneration || fp.dragScrollDirection == 0 {
 				return
 			}
@@ -1555,14 +1559,18 @@ func (fp *FileSystemPanel) startLoadingAnimation() {
 	generation := fp.loadingGeneration
 	var scheduleNext func()
 	scheduleNext = func() {
+		// Read on the goroutine that starts this work, not inside it: the
+		// work outlives the call, and reading the global from it races
+		// anything that reassigns vtui.FrameManager meanwhile.
+		frames := vtui.FrameManager
 		fp.loadingTimer = time.AfterFunc(panelLoadingPulseInterval, func() {
-			vtui.FrameManager.PostTask(func() {
+			frames.PostTask(func() {
 				if !fp.isLoading || fp.loadingGeneration != generation {
 					return
 				}
 				fp.loadingFrame = (fp.loadingFrame + 1) % len(panelLoadingPulse)
 				fp.updateTitle(nil)
-				vtui.FrameManager.Redraw()
+				frames.Redraw()
 				scheduleNext()
 			})
 		})

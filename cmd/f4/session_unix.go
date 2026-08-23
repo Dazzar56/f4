@@ -330,6 +330,10 @@ func runServer(sockPath string) {
 
 	// Acceptor goroutine: continuously reads ATTACH datagrams so incoming
 	// clients are received even while FrameManager.Run() is executing.
+	// Read on the goroutine that starts this work, not inside it: the
+	// work outlives the call, and reading the global from it races
+	// anything that reassigns vtui.FrameManager meanwhile.
+	frames := vtui.FrameManager
 	go func() {
 		for {
 			// 4096 (not the old 32-byte "ATTACH"-only size) so "ATTACH
@@ -380,7 +384,7 @@ func runServer(sockPath string) {
 			}
 
 			// Preempt the current attached session (if any) so the new client takes over.
-			vtui.FrameManager.Stop()
+			frames.Stop()
 
 			attachChan <- req
 		}
@@ -440,6 +444,10 @@ func runServer(sockPath string) {
 		// Watchdog goroutine: polls notifyPipeWriteEnd and stdin to detect when
 		// the client terminal dies or closes abruptly (e.g. closing window on macOS).
 		watchStop := make(chan struct{})
+		// Read on the goroutine that starts this work, not inside it: the
+		// work outlives the call, and reading the global from it races
+		// anything that reassigns vtui.FrameManager meanwhile.
+		frames := vtui.FrameManager
 		go func(pipeWriteFD int, inFD int) {
 			ticker := time.NewTicker(250 * time.Millisecond)
 			defer ticker.Stop()
@@ -464,7 +472,7 @@ func runServer(sockPath string) {
 						inDead := (pfds[1].Revents & (unix.POLLHUP | unix.POLLNVAL)) != 0
 						if pipeDead || inDead {
 							vtui.DebugLog("SERVER: Watchdog detected disconnected client (pipeRevents=%x, inRevents=%x). Stopping FrameManager.", pfds[0].Revents, pfds[1].Revents)
-							vtui.FrameManager.Stop()
+							frames.Stop()
 							return
 						}
 					}

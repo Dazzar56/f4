@@ -974,6 +974,10 @@ func (pf *PanelsFrame) initPTY() {
 		return
 	}
 
+	// Read on the goroutine that starts this work, not inside it: the
+	// work outlives the call, and reading the global from it races
+	// anything that reassigns vtui.FrameManager meanwhile.
+	uiFrames := vtui.FrameManager
 	go func() {
 		pf.ptyMutex.Lock()
 		if pf.closed {
@@ -1024,10 +1028,10 @@ func (pf *PanelsFrame) initPTY() {
 			pf.ptyMutex.Unlock()
 			pf.localShellStarted(inheritedEnvironmentGeneration)
 
-			vtui.FrameManager.PostTask(func() {
+			uiFrames.PostTask(func() {
 				pf.ResizeConsole(pf.lastW, pf.lastH)
 				pf.RefreshAll()
-				vtui.FrameManager.Redraw()
+				uiFrames.Redraw()
 			})
 		}
 
@@ -3449,8 +3453,12 @@ func (pf *PanelsFrame) runProgressTaskAfter(delay time.Duration, title, startMsg
 
 	var showTimer *time.Timer
 	if delay > 0 {
+		// Read on the goroutine that starts this work, not inside it: the
+		// work outlives the call, and reading the global from it races
+		// anything that reassigns vtui.FrameManager meanwhile.
+		uiFrames := vtui.FrameManager
 		showTimer = time.AfterFunc(delay, func() {
-			vtui.FrameManager.PostTask(showDialog)
+			uiFrames.PostTask(showDialog)
 		})
 	} else {
 		// Preserve the existing immediate-dialog contract for callers that do
