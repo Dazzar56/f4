@@ -131,8 +131,14 @@ func (s *dialogProgressScheduler) stop() {
 
 func newDialogReporter(dlg *FileOpProgressDialog) *DialogReporter {
 	r := &DialogReporter{dlg: dlg}
+	// Taken once, here, rather than inside the closures below. The scheduler
+	// posts and redraws from a timer goroutine that keeps running for as long
+	// as the operation does, and reading the global from there races anything
+	// that reassigns vtui.FrameManager meanwhile -- in the tests, the next
+	// test's swapFrameManager, including the one in its cleanup.
+	frames := vtui.FrameManager
 	r.scheduler = newDialogProgressScheduler(
-		func(task func()) { vtui.FrameManager.PostTask(task) },
+		func(task func()) { frames.PostTask(task) },
 		func(delay time.Duration, task func()) { time.AfterFunc(delay, task) },
 		dialogProgressUpdateInterval,
 		func(update dialogProgressUpdate) {
@@ -145,7 +151,7 @@ func newDialogReporter(dlg *FileOpProgressDialog) *DialogReporter {
 			case dialogProgressTransfer:
 				r.dlg.UpdateTransfer(update.action, update.filename, update.currentPct, update.totalText, update.totalPct, update.speedText)
 			}
-			vtui.FrameManager.Redraw()
+			frames.Redraw()
 		},
 	)
 	return r

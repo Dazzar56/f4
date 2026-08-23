@@ -121,6 +121,12 @@ func (b *ViewerBackend) ReadAt(offset int64, length int) ([]byte, error) {
 			fetchLen = int(b.size - fetchOff)
 		}
 
+		// Read here, on the goroutine that starts the fetch. The fetch
+		// outlives this call and posts its result when it lands, so reading
+		// the global from inside it races anything that reassigns
+		// vtui.FrameManager while the read is still in flight -- in the tests,
+		// the next test to swap one in.
+		frames := vtui.FrameManager
 		go func() {
 			buf := make([]byte, fetchLen)
 			n, err := b.file.ReadAt(b.ctx, buf, fetchOff)
@@ -139,7 +145,7 @@ func (b *ViewerBackend) ReadAt(offset int64, length int) ([]byte, error) {
 				}
 			}
 
-			vtui.FrameManager.PostTask(func() {
+			frames.PostTask(func() {
 				b.mu.Lock()
 				if b.ctx.Err() == nil {
 					if err == nil || err == io.EOF {
@@ -151,7 +157,7 @@ func (b *ViewerBackend) ReadAt(offset int64, length int) ([]byte, error) {
 				}
 				b.isFetching = false
 				b.mu.Unlock()
-				vtui.FrameManager.Redraw()
+				frames.Redraw()
 			})
 		}()
 	}
