@@ -771,6 +771,11 @@ func TestPanelsFrameEnvironmentFailureKeepsInputUntilSuccessfulRetry(t *testing.
 
 func TestPanelsFrameEnvironmentAcknowledgementTimeoutKeepsDeferredInput(t *testing.T) {
 	runProcessEnvironmentUIInline(t)
+	timeoutDone := make(chan struct{})
+	processEnvironmentRunOnUI = func(task func()) {
+		task()
+		close(timeoutDone)
+	}
 	oldTimeout := processEnvironmentAcknowledgementTimeout
 	processEnvironmentAcknowledgementTimeout = 15 * time.Millisecond
 	defer func() { processEnvironmentAcknowledgementTimeout = oldTimeout }()
@@ -802,6 +807,11 @@ func TestPanelsFrameEnvironmentAcknowledgementTimeoutKeepsDeferredInput(t *testi
 	}
 	if writes := local.snapshotWrites(); len(writes) != 1 {
 		t.Fatalf("timeout released held input: %q", writes)
+	}
+	select {
+	case <-timeoutDone:
+	case <-time.After(time.Second):
+		t.Fatal("timeout callback did not finish")
 	}
 	pf.closeProcessEnvironmentShell()
 }

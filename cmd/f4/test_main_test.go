@@ -7,6 +7,7 @@ import (
 	"github.com/unxed/vtui"
 	"os"
 	"testing"
+	"time"
 )
 
 // pressKey dispatches a key through the production input path: the
@@ -78,6 +79,7 @@ func TestMain(m *testing.M) {
 	// for its own scope.
 	vtui.SkipOSClipboard(true)
 	vtui.DisableTerminalClipboard()
+	queueShowToast = func(string, time.Duration) {}
 
 	tmpDir, err := os.MkdirTemp("", "f4-test-config-*")
 	if err == nil {

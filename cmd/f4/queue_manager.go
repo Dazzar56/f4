@@ -188,6 +188,8 @@ func (r *DummyReporter) UpdateTransfer(action, filename string, currentPct int, 
 func (r *DummyReporter) IsCancelled() bool { return false }
 
 type QueueTask struct {
+	// mu owns State, Progress, TotalText, Speed, CurrentFile, ErrorMsg,
+	// and queuedFinalizing.
 	mu          sync.Mutex
 	ID          int
 	Type        string
@@ -286,6 +288,7 @@ func queueTaskCancellable(state string) bool {
 }
 
 type OpQueueManager struct {
+	// When both manager and task state are needed, lock mu before QueueTask.mu.
 	mu             sync.Mutex
 	tasks          []*QueueTask
 	nextID         int
@@ -296,6 +299,7 @@ type OpQueueManager struct {
 }
 
 var GlobalQueueManager *OpQueueManager
+var queueShowToast = vtui.ShowToast
 
 func init() {
 	GlobalQueueManager = &OpQueueManager{
@@ -358,7 +362,9 @@ func (qm *OpQueueManager) Enqueue(task *QueueTask) {
 	qm.mu.Lock()
 	qm.nextID++
 	task.ID = qm.nextID
+	task.mu.Lock()
 	task.State = "Queued"
+	task.mu.Unlock()
 	task.ctx, task.cancel = context.WithCancel(context.Background())
 	qm.tasks = append(qm.tasks, task)
 	qm.mu.Unlock()
@@ -372,18 +378,19 @@ func (qm *OpQueueManager) Enqueue(task *QueueTask) {
 	go func(id int) {
 		time.Sleep(500 * time.Millisecond)
 		qm.mu.Lock()
-		defer qm.mu.Unlock()
+		active := false
 		for _, t := range qm.tasks {
 			if t.ID != id {
 				continue
 			}
 			t.mu.Lock()
-			active := queueTaskActive(t.State)
+			active = queueTaskActive(t.State)
 			t.mu.Unlock()
-			if active {
-				vtui.ShowToast("Background operation started. Press Ctrl+Tab for Queue.", 4*time.Second)
-			}
 			break
+		}
+		qm.mu.Unlock()
+		if active {
+			queueShowToast("Background operation started. Press Ctrl+Tab for Queue.", 4*time.Second)
 		}
 	}(task.ID)
 }
@@ -646,6 +653,7 @@ func (qm *OpQueueManager) executeTask(t *QueueTask) {
 		t.ErrorMsg = nil
 	}
 	finalState := t.State
+	finalError := t.ErrorMsg
 	t.mu.Unlock()
 
 	qm.mu.Lock()
@@ -655,7 +663,7 @@ func (qm *OpQueueManager) executeTask(t *QueueTask) {
 	qm.mu.Unlock()
 	qm.signalWorker()
 
-	vtui.DebugLog("QUEUE_DEBUG: Task %d finalized with state %s (Error: %v). Posting OnComplete.", t.ID, finalState, t.ErrorMsg)
+	vtui.DebugLog("QUEUE_DEBUG: Task %d finalized with state %s (Error: %v). Posting OnComplete.", t.ID, finalState, finalError)
 
 	qm.postTaskCompletion(t)
 }
@@ -852,7 +860,7 @@ func (qf *QueueFrame) vetoCloseWhileActive() bool {
 	if !queueHasActiveTasks() {
 		return false
 	}
-	vtui.ShowToast("Cannot close queue while operations are active. Use Ctrl+Tab to switch.", 3*time.Second)
+	queueShowToast("Cannot close queue while operations are active. Use Ctrl+Tab to switch.", 3*time.Second)
 	return true
 }
 

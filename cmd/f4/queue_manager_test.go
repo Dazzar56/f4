@@ -26,6 +26,7 @@ func TestQueueManager_Lifecycle(t *testing.T) {
 	qm.mu.Unlock()
 
 	executed := false
+	completed := make(chan struct{})
 	task := &QueueTask{
 		Type:    "Test",
 		Desc:    "Dummy",
@@ -34,6 +35,7 @@ func TestQueueManager_Lifecycle(t *testing.T) {
 			executed = true
 			return nil
 		},
+		OnComplete: func() { close(completed) },
 	}
 
 	qm.Enqueue(task)
@@ -41,13 +43,9 @@ func TestQueueManager_Lifecycle(t *testing.T) {
 	// Wait for worker to execute
 	timeout := time.After(1 * time.Second)
 	for {
-		qm.mu.Lock()
-		if len(qm.tasks) == 0 {
-			qm.mu.Unlock()
-			continue
-		}
-		state := qm.tasks[0].State
-		qm.mu.Unlock()
+		task.mu.Lock()
+		state := task.State
+		task.mu.Unlock()
 		if state == "Done" {
 			break
 		}
@@ -60,6 +58,7 @@ func TestQueueManager_Lifecycle(t *testing.T) {
 			time.Sleep(10 * time.Millisecond)
 		}
 	}
+	waitForQueueCompletion(t, completed)
 
 	if !executed {
 		t.Error("Task was not executed")
@@ -88,12 +87,14 @@ func TestQueueManager_ConcurrencyLimit(t *testing.T) {
 	}
 
 	task2Started := false
+	task2Completed := make(chan struct{})
 	task2 := &QueueTask{
 		ResKeys: []string{"shared_res"},
 		Run: func(ctx context.Context, r TaskReporter, a vtui.Frame) error {
 			task2Started = true
 			return nil
 		},
+		OnComplete: func() { close(task2Completed) },
 	}
 
 	qm.Enqueue(task1)
@@ -103,9 +104,9 @@ func TestQueueManager_ConcurrencyLimit(t *testing.T) {
 
 	time.Sleep(300 * time.Millisecond)
 
-	qm.mu.Lock()
+	task2.mu.Lock()
 	state2 := task2.State
-	qm.mu.Unlock()
+	task2.mu.Unlock()
 
 	if state2 != "Queued" {
 		t.Errorf("Task 2 should be Queued because resource is locked, but is %s", state2)
@@ -118,9 +119,9 @@ func TestQueueManager_ConcurrencyLimit(t *testing.T) {
 
 	timeout := time.After(1 * time.Second)
 	for {
-		qm.mu.Lock()
+		task2.mu.Lock()
 		s2 := task2.State
-		qm.mu.Unlock()
+		task2.mu.Unlock()
 		if s2 == "Done" {
 			break
 		}
@@ -133,6 +134,7 @@ func TestQueueManager_ConcurrencyLimit(t *testing.T) {
 			time.Sleep(10 * time.Millisecond)
 		}
 	}
+	waitForQueueCompletion(t, task2Completed)
 
 	if !task2Started {
 		t.Error("Task 2 never started")
@@ -156,13 +158,15 @@ func TestQueueManager_ConflictDetection(t *testing.T) {
 	qm.mu.Unlock()
 
 	// 1. Ставим задачу в очередь с текущим состоянием файла
+	completed := make(chan struct{})
 	task := &QueueTask{
 		Type:    "Copy",
 		ResKeys: []string{getResourceKey(v)},
 		Preconditions: []OpPrecondition{
 			{Vfs: v, Path: path, MTime: st.MTime, Size: st.Size, IsDir: false},
 		},
-		Run: func(ctx context.Context, r TaskReporter, a vtui.Frame) error { return nil },
+		Run:        func(ctx context.Context, r TaskReporter, a vtui.Frame) error { return nil },
+		OnComplete: func() { close(completed) },
 	}
 
 	// Блокируем очередь, чтобы задача не запустилась мгновенно
@@ -190,9 +194,9 @@ func TestQueueManager_ConflictDetection(t *testing.T) {
 	// Ждем обработки
 	timeout := time.After(2 * time.Second)
 	for {
-		qm.mu.Lock()
+		task.mu.Lock()
 		state := task.State
-		qm.mu.Unlock()
+		task.mu.Unlock()
 		if state == "Error" || state == "Done" {
 			break
 		}
@@ -205,6 +209,7 @@ func TestQueueManager_ConflictDetection(t *testing.T) {
 			time.Sleep(10 * time.Millisecond)
 		}
 	}
+	waitForQueueCompletion(t, completed)
 
 	task.mu.Lock()
 	state, taskErr := task.State, task.ErrorMsg
@@ -222,6 +227,7 @@ func TestQueueManager_ResourceIndependence(t *testing.T) {
 	qm.mu.Unlock()
 
 	start := make(chan bool, 2)
+	completed := make(chan bool, 2)
 
 	task1 := &QueueTask{
 		ResKeys: []string{"disk_A"},
@@ -230,6 +236,7 @@ func TestQueueManager_ResourceIndependence(t *testing.T) {
 			time.Sleep(200 * time.Millisecond)
 			return nil
 		},
+		OnComplete: func() { completed <- true },
 	}
 	task2 := &QueueTask{
 		ResKeys: []string{"disk_B"}, // Другой ресурс!
@@ -237,6 +244,7 @@ func TestQueueManager_ResourceIndependence(t *testing.T) {
 			start <- true
 			return nil
 		},
+		OnComplete: func() { completed <- true },
 	}
 
 	qm.Enqueue(task1)
@@ -255,6 +263,34 @@ Loop:
 		case <-timeout:
 			t.Fatalf("Only %d tasks started, expected 2 (independence check)", count)
 			break Loop
+		}
+	}
+	completionTimeout := time.NewTimer(time.Second)
+	defer completionTimeout.Stop()
+	for count = 0; count < 2; {
+		select {
+		case <-completed:
+			count++
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-completionTimeout.C:
+			t.Fatalf("Only %d tasks completed, expected 2", count)
+		}
+	}
+}
+
+func waitForQueueCompletion(t *testing.T, completed <-chan struct{}) {
+	t.Helper()
+	timer := time.NewTimer(time.Second)
+	defer timer.Stop()
+	for {
+		select {
+		case <-completed:
+			return
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timer.C:
+			t.Fatal("queue completion callback did not run")
 		}
 	}
 }
@@ -411,9 +447,10 @@ func TestQueueFrame_InputLock(t *testing.T) {
 	qf := NewQueueFrame()
 
 	qm := GlobalQueueManager
+	task := &QueueTask{ID: 1, State: "Running"}
 	qm.mu.Lock()
 	// Имитируем активную задачу
-	qm.tasks = []*QueueTask{{ID: 1, State: "Running"}}
+	qm.tasks = []*QueueTask{task}
 	qm.mu.Unlock()
 
 	// Попытка нажать Esc
@@ -441,9 +478,9 @@ func TestQueueFrame_InputLock(t *testing.T) {
 	}
 
 	// Завершаем задачи
-	qm.mu.Lock()
-	qm.tasks[0].State = "Done"
-	qm.mu.Unlock()
+	task.mu.Lock()
+	task.State = "Done"
+	task.mu.Unlock()
 
 	// Теперь Esc не должен поглощаться самим фреймом (вернет false или обработает BaseWindow)
 	if qf.ProcessKey(ev) {
