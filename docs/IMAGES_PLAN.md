@@ -7,6 +7,9 @@ repository at hand. Read it first, then, as needed:
 - `TERMINAL.md` — the built-in terminal. Section 8 covers the graphics it
   accepts from child processes, the queries it answers, and the list of known
   deviations and defects worth reading before filing one.
+- `TTYX.md` — the X connection behind the terminal: how the terminal window is
+  identified, and the overlay window that shows a picture where no image
+  protocol exists at all.
 - `../vtui/GRAPHICS.md` — the graphics layer: `ImageSurface`, `ImagePlacement`,
   the protocol backends, cell size negotiation.
 - `PLUGIN_PLAN.md` — unrelated work, but the same kind of document, and a good
@@ -218,6 +221,14 @@ far2l turns kitty on.
 **11. far2l's own protocol in f4's built-in terminal.** Accept
 `FARTTY_INTERACT_IMAGE_*` (see `far2l/WinPort/FarTTY.h`) in `HandleFar2lAPC`,
 so that far2l running inside f4 can hand pictures over through its own channel.
+
+**12a. The overlay for everything, not only the viewer.** Issue #663 is done
+for `ImageView` and nothing else: quick view, the gallery and the built-in
+terminal's own placements still go through `vtui.GraphicsLayer` and still show
+nothing in a terminal without a protocol. Wiring `internal/ttyx` in as a
+`GraphicsProtocol` backend would cover all of them at once, and would belong in
+vtui rather than here. It needs the placement list, a z order and clipping, all
+of which the layer already has and the viewer's one rectangle did not need.
 
 **12. Video.** A second source of frames on top of the same placement layer:
 decode through an external `ffmpeg` into a stream of RGBA, a frame timer, and
