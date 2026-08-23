@@ -20,6 +20,7 @@ require (
 	github.com/go-webgpu/goffi v0.6.3
 	github.com/google/uuid v1.6.0
 	github.com/hanwen/go-fuse/v2 v2.11.0
+	github.com/jezek/xgb v1.3.1
 	github.com/jlaffaye/ftp v0.2.0
 	github.com/mattn/go-runewidth v0.0.15
 	github.com/mholt/archives v0.1.5
@@ -121,7 +122,6 @@ require (
 	github.com/hashicorp/errwrap v1.0.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
-	github.com/jezek/xgb v1.3.1 // indirect
 	github.com/klauspost/compress v1.19.2 // indirect
 	github.com/klauspost/pgzip v1.2.6
 	github.com/kr/fs v0.1.0 // indirect
