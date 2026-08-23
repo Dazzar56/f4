@@ -190,12 +190,6 @@ func (s *Session) Alive() bool {
 	return s.alive && s.conn != nil
 }
 
-func (s *Session) registerOverlay(o *Overlay) {
-	s.mu.Lock()
-	s.overlays = append(s.overlays, o)
-	s.mu.Unlock()
-}
-
 func (s *Session) unregisterOverlay(o *Overlay) {
 	s.mu.Lock()
 	kept := s.overlays[:0]

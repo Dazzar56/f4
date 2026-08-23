@@ -55,6 +55,9 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
+// The upstream archives fix is under review in unxed/archives#1.
+replace github.com/unxed/archives => github.com/Zoinen/archives v0.0.0-20260823102249-509798dabcdc
+
 require (
 	cloud.google.com/go/auth v0.18.0 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect
@@ -179,5 +182,10 @@ replace github.com/ebitengine/hideconsole => ./internal/hideconsole
 // replace github.com/unxed/colorer4go => ../../../dev/colorer4go
 
 // replace github.com/unxed/vtui => ../../../dev/vtui
+
+// Keep the upstream module path while the Windows console resize recovery is
+// reviewed upstream. This immutable fork revision contains the fix for the
+// transient ERROR_PIPE_NOT_CONNECTED input error.
+replace github.com/unxed/vtinput => github.com/Zoinen/vtinput v0.1.5-0.20260822031659-c39a9ab8b09f
 
 replace github.com/go-webgpu/goffi => github.com/unxed/goffi v0.1.4
