@@ -803,12 +803,10 @@ jobs:
     - name: Run race detector
       shell: bash
       run: |
-        # cmd/f4 tests replace vtui's process-global FrameManager while its
-        # background task pump is alive, so they need a dedicated race-safe
-        # harness before they can run under -race. luaplug's tests call raw
-        # FFI pointers, which Go's checkptr rejects under -race. Keep both
-        # packages in the instrumented compile below and run all other
-        # package tests under the detector.
+        # luaplug's FFI tests call raw pointers, which Go's checkptr rejects
+        # under -race. Keep that package in the instrumented compile below,
+        # while running the complete cmd/f4 suite and all other packages under
+        # the detector.
         mapfile -t packages < <(go list ./... | grep -Ev '^github.com/unxed/f4/(cmd/f4|luaplug)$')
         # The bare $packages this replaced failed the step when the list came
         # out empty, because set -e sees the assignment's exit status. mapfile
@@ -819,7 +817,8 @@ jobs:
           exit 1
         fi
         go test -race -shuffle=on -timeout 15m "${packages[@]}"
-        go test -race -run '^$' ./cmd/f4 ./luaplug
+        go test -race -shuffle=on -timeout 15m ./cmd/f4
+        go test -race -run '^$' ./luaplug
 
   release:
     name: Create Official Release
