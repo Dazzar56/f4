@@ -523,7 +523,7 @@ func (b *browser) editCell() {
 			if answer == text {
 				return
 			}
-			b.writeCell(column, rowID, answer)
+			b.confirmAffinity(column, rowID, answer)
 		})
 }
 
@@ -601,6 +601,42 @@ func (b *browser) removeRow(table string, rowID int64) {
 			}
 			b.setStatus(sqliteText("SQLite.RowDeleted", "Row deleted.", "Строка удалена."))
 		})
+}
+
+// confirmAffinity asks before a value goes into a column whose declared type
+// it does not match, and writes it when the user says so.
+//
+// SQLite would take it silently either way: its column types are affinities,
+// so an int column converts "42" and stores "тест" as the text it is. The
+// database is not wrong and the client does not overrule it -- a STRICT table
+// refuses on its own, and that refusal is shown as it stands -- but a typed
+// value that misses the declared type is usually a slip worth one question.
+func (b *browser) confirmAffinity(column string, rowID int64, value string) {
+	declared, err := b.session.columnDeclaredType(context.Background(), b.currentTable, column)
+	if err != nil || declared == "" || !storedAsTextInstead(typeAffinity(declared), value) {
+		// A pragma that failed is no reason to block an edit; the write
+		// itself will say what is wrong with it.
+		b.writeCell(column, rowID, value)
+		return
+	}
+	confirm := vtui.ShowMessageOn(b.frame,
+		sqliteText("SQLite.Title", " SQLite ", " SQLite "),
+		fmt.Sprintf(sqliteText("SQLite.AffinityPrompt",
+			"%s is declared %s; %q is not a number and will be stored as text. Write it?",
+			"Столбец %s объявлен как %s; %q — не число и будет сохранено как текст. Записать?"),
+			column, declared, value),
+		[]string{
+			sqliteText("SQLite.Write", "&Write", "&Записать"),
+			sqliteText("SQLite.Cancel", "&Cancel", "О&тмена"),
+		})
+	if confirm == nil {
+		return
+	}
+	confirm.OnResult = func(code int) {
+		if code == 0 {
+			b.writeCell(column, rowID, value)
+		}
+	}
 }
 
 // cellUnderCursor resolves the table cursor to a column and a rowid.

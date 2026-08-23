@@ -392,6 +392,76 @@ func (s *databaseSession) deleteRow(ctx context.Context, table string, rowID int
 	return result.RowsAffected()
 }
 
+// columnDeclaredType is the type a column was declared with, empty when the
+// column was declared without one.
+func (s *databaseSession) columnDeclaredType(ctx context.Context, table, column string) (string, error) {
+	rows, err := s.db.QueryContext(ctx, "PRAGMA table_info("+quoteIdentifier(table)+")")
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var (
+			cid       int
+			name      string
+			declared  string
+			notNull   int
+			dfltValue any
+			pk        int
+		)
+		if err := rows.Scan(&cid, &name, &declared, &notNull, &dfltValue, &pk); err != nil {
+			return "", err
+		}
+		if strings.EqualFold(name, column) {
+			return declared, nil
+		}
+	}
+	return "", rows.Err()
+}
+
+// typeAffinity is the affinity SQLite derives from a declared type, by the
+// five rules of its documentation, in their order: INT anywhere in the name
+// wins, then CHAR, CLOB and TEXT, then BLOB or no type at all, then REAL,
+// FLOA and DOUB, and NUMERIC for everything else.
+func typeAffinity(declared string) string {
+	upper := strings.ToUpper(declared)
+	switch {
+	case strings.Contains(upper, "INT"):
+		return "INTEGER"
+	case strings.Contains(upper, "CHAR"), strings.Contains(upper, "CLOB"), strings.Contains(upper, "TEXT"):
+		return "TEXT"
+	case upper == "", strings.Contains(upper, "BLOB"):
+		return "BLOB"
+	case strings.Contains(upper, "REAL"), strings.Contains(upper, "FLOA"), strings.Contains(upper, "DOUB"):
+		return "REAL"
+	default:
+		return "NUMERIC"
+	}
+}
+
+// storedAsTextInstead reports whether a value typed for this column would be
+// kept as text although the column was declared for numbers.
+//
+// SQLite types are affinities, not checks: a column declared int converts
+// "42" to the number 42 and stores anything that does not read as a number --
+// "тест", say -- as the text it is, without a word. That is the documented
+// behaviour of the database and the client does not forbid it; it asks first,
+// because a typed value that misses the column's declared type is usually a
+// slip, and a STRICT table would have refused it outright.
+func storedAsTextInstead(affinity, value string) bool {
+	switch affinity {
+	case "INTEGER", "REAL", "NUMERIC":
+	default:
+		return false
+	}
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return true
+	}
+	_, err := strconv.ParseFloat(trimmed, 64)
+	return err != nil
+}
+
 // editableText is the value as a line the user can edit, and whether editing
 // it in a one line box is safe at all.
 func editableText(value any) (string, bool) {

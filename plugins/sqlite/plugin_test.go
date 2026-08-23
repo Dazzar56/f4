@@ -446,3 +446,85 @@ func TestOffsetArithmetic(t *testing.T) {
 		}
 	}
 }
+
+func TestTypeAffinityFollowsTheFiveRules(t *testing.T) {
+	for _, tc := range []struct{ declared, want string }{
+		{"INT", "INTEGER"},
+		{"int", "INTEGER"},
+		{"BIGINT", "INTEGER"},
+		{"POINT", "INTEGER"}, // INT anywhere wins, per the documentation
+		{"VARCHAR(80)", "TEXT"},
+		{"clob", "TEXT"},
+		{"TEXT", "TEXT"},
+		{"", "BLOB"},
+		{"BLOB", "BLOB"},
+		{"REAL", "REAL"},
+		{"DOUBLE PRECISION", "REAL"},
+		{"FLOAT", "REAL"},
+		{"DECIMAL(10,5)", "NUMERIC"},
+		{"BOOLEAN", "NUMERIC"},
+		{"DATE", "NUMERIC"},
+	} {
+		if got := typeAffinity(tc.declared); got != tc.want {
+			t.Errorf("typeAffinity(%q) = %q, want %q", tc.declared, got, tc.want)
+		}
+	}
+}
+
+func TestStoredAsTextInsteadFlagsOnlyRealMismatches(t *testing.T) {
+	for _, tc := range []struct {
+		affinity, value string
+		want            bool
+	}{
+		{"INTEGER", "42", false},
+		{"INTEGER", " 42 ", false},
+		{"INTEGER", "-4.2e1", false},
+		{"INTEGER", "тест", true},
+		{"INTEGER", "", true},
+		{"INTEGER", "0x1A", true}, // SQLite does not convert hex text either
+		{"REAL", "3.14", false},
+		{"NUMERIC", "abc", true},
+		{"TEXT", "тест", false},
+		{"BLOB", "whatever", false},
+	} {
+		if got := storedAsTextInstead(tc.affinity, tc.value); got != tc.want {
+			t.Errorf("storedAsTextInstead(%q, %q) = %t, want %t", tc.affinity, tc.value, got, tc.want)
+		}
+	}
+}
+
+func TestColumnDeclaredTypeReadsThePragma(t *testing.T) {
+	path := t.TempDir() + "/types.db"
+	db, err := driver.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TABLE things (id int, note, "weird name" VARCHAR(5))`); err != nil {
+		_ = db.Close()
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	session, _, err := openDatabase(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+
+	for _, tc := range []struct{ column, want string }{
+		{"id", "int"},
+		{"ID", "int"}, // column names compare without case
+		{"note", ""},
+		{"weird name", "VARCHAR(5)"},
+	} {
+		declared, err := session.columnDeclaredType(context.Background(), "things", tc.column)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if declared != tc.want {
+			t.Errorf("columnDeclaredType(%q) = %q, want %q", tc.column, declared, tc.want)
+		}
+	}
+}
