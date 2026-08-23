@@ -466,6 +466,7 @@ type FileSystemPanel struct {
 
 	loadingGeneration          uint64
 	loadQueueMu                sync.Mutex
+	loadWorkerWG               sync.WaitGroup // joins the single directory-load queue worker
 	loadWorkerActive           bool
 	pendingDirectoryLoad       func()
 	providerOpenTask           *vtui.TaskContext
@@ -1597,9 +1598,11 @@ func (fp *FileSystemPanel) enqueueDirectoryLoad(load func()) {
 		return
 	}
 	fp.loadWorkerActive = true
+	fp.loadWorkerWG.Add(1)
 	fp.loadQueueMu.Unlock()
 
 	go func() {
+		defer fp.loadWorkerWG.Done()
 		next := load
 		for next != nil {
 			next()
