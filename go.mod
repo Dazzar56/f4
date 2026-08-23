@@ -55,6 +55,9 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
+// The upstream archives fix is under review in unxed/archives#1.
+replace github.com/unxed/archives => github.com/Zoinen/archives v0.0.0-20260823102249-509798dabcdc
+
 require (
 	cloud.google.com/go/auth v0.18.0 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect
