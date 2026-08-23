@@ -174,16 +174,6 @@ func VisualClustersInVisualOrder(text string) []VisualCluster {
 	return result
 }
 
-func byteOffsetAtRune(text string, runeIndex int) int {
-	if runeIndex <= 0 {
-		return 0
-	}
-	if runeIndex >= utf8.RuneCountInString(text) {
-		return len(text)
-	}
-	return len(string([]rune(text)[:runeIndex]))
-}
-
 // visualCaretMap is the caret equivalent of visualClusters. vtui's public
 // caret map is based on its UAX #29 clusters, while f4 extends those
 // boundaries for terminal-shaped Indic conjuncts; using the two maps
