@@ -37,11 +37,23 @@ The built-in help pages for key bindings are generated from the same registry, s
    and `lang/ru.lng` (`Action.<Name>` and `Action.<Name>.Desc`).
    `Label`/`Description` remain the English fallbacks. Menus get a
    first-letter hotkey automatically unless the label carries its own
-   `&` marker.
-4. **Do not add a hardcoded key handler** in any `ProcessKey`. If the
+   `&` marker. New keys belong inside their namespace group, not at the
+   end of the file; run `go run ./tools/langfmt -w cmd/f4/lang/*.lng`
+   afterwards, because CI runs the same tool with `-check` and a block
+   appended at the end fails it. See [I18N.md](I18N.md).
+4. **Guard the shortcut and the menu entry, not the top frame.**
+   `DefaultKeys` must not repeat a key another action already claims in
+   the same `Area`: only one of them wins the binding and the other is
+   left with no shortcut at all, silently
+   (`TestDefaultKeysAreUniquePerArea` catches this). If the action needs
+   a `Visible` predicate, do not write it against the top frame — an
+   open dropdown is the top frame while the menu is being rebuilt, so
+   such a predicate hides the item from the very menu the user is
+   reading. Search the frame stack instead.
+5. **Do not add a hardcoded key handler** in any `ProcessKey`. If the
    key must lose to a modal input state (fast find, autocomplete),
    extend that frame's `VetoActionKey` instead.
-5. **Tests**: drive keys through the `pressKey` test helper (filter →
+6. **Tests**: drive keys through the `pressKey` test helper (filter →
    ProcessKey), never through a bare `ProcessKey` call for action keys.
    Menus, KeyBar labels and the generated help topics pick the new
    action up for free — assert them instead of duplicating key tables.

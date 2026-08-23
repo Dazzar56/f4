@@ -67,6 +67,16 @@ type Action struct {
 	// what the panel is showing right now: an action the current file
 	// system cannot perform is better left out than offered and refused.
 	// It does not affect key bindings, which reach the handler regardless.
+	//
+	// It must not test the top frame. Menus are rebuilt on every
+	// GetMenuBar call, and by the time the user is reading a dropdown that
+	// dropdown is itself the top frame, so a predicate asking for panels
+	// (or an editor, or a viewer) on top answers "no" precisely while the
+	// menu it belongs to is on screen, and the item deletes itself from
+	// the list being drawn. Walk the frame stack instead:
+	// GetActiveFrames(FrameManager.ActiveIdx) holds the workspace below
+	// the popup. A top-frame test is only safe on a HideFromMenu action,
+	// where Visible is consulted by the command palette alone.
 	Visible func() bool
 	Handler func() bool
 }
