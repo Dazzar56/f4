@@ -27,6 +27,8 @@ func commandPaletteFrameEntries() []commandPaletteEntry {
 		return commandPaletteGrabberEntries(frame)
 	case *ArkanoidFrame:
 		return commandPaletteArkanoidEntries(frame)
+	case *SheetFrame:
+		return commandPaletteSheetEntries(frame)
 	default:
 		return nil
 	}
