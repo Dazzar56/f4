@@ -175,8 +175,14 @@ func main() {
 	var cpuprofile string
 	var guiMode bool
 	var guiBackend string
+	var guiBackendGiven bool
 	var ttyMode bool
 	var ttyBackend string
+	var ttyBackendGiven bool
+	// startupChoiceGiven records that this run already said which renderer
+	// family to use -- through --gui, --tty, or a GUI-named executable. The
+	// configured startup mode only applies when it did not.
+	var startupChoiceGiven bool
 	var version bool
 	var print_help bool
 	var attachedMode bool
@@ -186,6 +192,7 @@ func main() {
 	exeName := filepath.Base(absExecPath)
 	if strings.Contains(strings.ToLower(exeName), "gui") {
 		guiMode = true
+		startupChoiceGiven = true
 	}
 
 	for i := 1; i < len(os.Args); i++ {
@@ -208,10 +215,13 @@ func main() {
 			os.Setenv("VTUI_DEBUG", "1")
 		case "--gui":
 			guiMode = true
+			startupChoiceGiven = true
 			if flagVal != "" {
 				guiBackend = flagVal
+				guiBackendGiven = true
 			} else if i+1 < len(os.Args) && !strings.HasPrefix(os.Args[i+1], "-") {
 				guiBackend = os.Args[i+1]
+				guiBackendGiven = true
 				i++
 			}
 		case "--log":
@@ -264,10 +274,13 @@ func main() {
 			return
 		case "--tty":
 			ttyMode = true
+			startupChoiceGiven = true
 			if flagVal != "" {
 				ttyBackend = flagVal
+				ttyBackendGiven = true
 			} else if i+1 < len(os.Args) && !strings.HasPrefix(os.Args[i+1], "-") {
 				ttyBackend = os.Args[i+1]
+				ttyBackendGiven = true
 				i++
 			}
 		case "--attached":
@@ -338,8 +351,10 @@ The following switches may be used in the command line:
                          testing where interactive navigation is unreliable)
  --gui [Backend]        Force run in GUI-mode
                          [Backend] values: "win32" (or "winapi", "gdi"),
-                         "gogpu", "ebiten", "x11", "wayland",
-                         if Backend omited, f4 try to use the most suitable
+                         "gogpu", "ebiten", "x11", "wayland", "auto",
+                         if Backend omited, the configured default is used
+                         ([Startup] GuiBackend), or the most suitable one;
+                         "auto" ignores the configured default for this run
  --input [InputMode]    Defines the preferred vtinput parser method;
                          [InputMode] values: "", "ansi", "ConPTY"
  --log [logfile]        If =1 or =true uses "debug.log", otherwise logfile
@@ -347,9 +362,14 @@ The following switches may be used in the command line:
  --server [serverPath]
  -test-plugins          Plugin test mode
  --tty [Backend]        Force run in TTY-mode
-                         [Backend] values: "ansi", "winapi" (or "win32")
+                         [Backend] values: "ansi", "winapi" (or "win32"),
+                         "auto"; if Backend omited, the configured default
+                         is used ([Startup] TTYBackend)
  --wine-probe           Print console/terminal environment facts and exit
                          (renderer backend, console geometry, shell mode)
+
+Without --gui and --tty, f4 starts in the mode set by [Startup] Mode in
+settings.ini ("auto", "tty" or "gui"); see Options > Startup settings.
 
 Details see in build-in help (via key F1 inside f4)
 and in project home: https://github.com/unxed/f4
@@ -391,6 +411,24 @@ see in vtinput project: https://github.com/unxed/vtinput
 		defer pprof.StopCPUProfile()
 	}
 
+	// Settings.ini supplies whatever this run did not (issue #601). The
+	// startup mode and the two backends are independent: the mode says which
+	// renderer family f4 opens, each backend says which renderer that family
+	// uses once opened.
+	if !startupChoiceGiven {
+		switch AppConfig.StartupMode {
+		case StartupModeTTY:
+			ttyMode = true
+		case StartupModeGui:
+			guiMode = true
+		}
+	}
+	guiBackendFromConfig := !guiBackendGiven && normalizeStartupGuiBackend(AppConfig.GuiBackend) != ""
+	guiBackend = resolveStartupBackend(guiBackend, guiBackendGiven, AppConfig.GuiBackend, normalizeStartupGuiBackend)
+	ttyBackend = resolveStartupBackend(ttyBackend, ttyBackendGiven, AppConfig.TTYBackend, normalizeStartupTTYBackend)
+	vtui.DebugLog("MAIN: startup mode=%s guiMode=%v ttyMode=%v guiBackend=%q ttyBackend=%q",
+		AppConfig.StartupMode, guiMode, ttyMode, guiBackend, ttyBackend)
+
 	if ttyBackend != "" {
 		SelectedTTYBackend = ttyBackend
 	} else {
@@ -419,16 +457,9 @@ see in vtinput project: https://github.com/unxed/vtinput
 
 	if guiMode {
 		checkAndDetach(attachedMode)
-		if guiBackend != "" {
-			if err := RunGui(guiBackend); err != nil {
-				fmt.Fprintf(os.Stderr, "\n[f4] FATAL GUI ERROR: %v\n", err)
-				os.Exit(1)
-			}
-		} else {
-			if err := tryRunDefaultGui(); err != nil {
-				fmt.Fprintf(os.Stderr, "\n[f4] FATAL GUI ERROR: %v\n", err)
-				os.Exit(1)
-			}
+		if err := runGuiBackend(guiBackend, guiBackendFromConfig); err != nil {
+			fmt.Fprintf(os.Stderr, "\n[f4] FATAL GUI ERROR: %v\n", err)
+			os.Exit(1)
 		}
 		return
 	}
@@ -436,7 +467,7 @@ see in vtinput project: https://github.com/unxed/vtinput
 	// Default auto-detect mode (neither --gui nor --tty specified)
 	if shouldTryGui() {
 		checkAndDetach(attachedMode)
-		if err := tryRunDefaultGui(); err != nil {
+		if err := runGuiBackend(guiBackend, guiBackendFromConfig); err != nil {
 			vtui.DebugLog("MAIN: GUI auto-detect failed after detach: %v", err)
 			os.Exit(1)
 		}
@@ -445,6 +476,30 @@ see in vtinput project: https://github.com/unxed/vtinput
 
 	vtui.DebugLog("MAIN: Falling back to console mode")
 	ManageSessions()
+}
+
+// runGuiBackend starts the GUI on a named backend, or on the best available
+// one when the name is empty.
+//
+// A backend that came from settings.ini is a preference, not an instruction:
+// when it fails -- a static build without FFI, a machine whose GPU stack is
+// gone, a display server that is not running -- f4 falls back to automatic
+// selection rather than refusing to start over a setting the user may have
+// saved on a different machine. A backend named on the command line keeps the
+// strict behavior, because there the user asked for that one and is watching.
+func runGuiBackend(backend string, fromConfig bool) error {
+	if backend == "" {
+		return tryRunDefaultGui()
+	}
+	err := RunGui(backend)
+	if err == nil || !fromConfig {
+		return err
+	}
+	vtui.DebugLog("MAIN: configured GUI backend %q failed (%v), falling back to automatic selection", backend, err)
+	if fallbackErr := tryRunDefaultGui(); fallbackErr != nil {
+		return fmt.Errorf("configured GUI backend %q failed: %v; automatic selection also failed: %v", backend, err, fallbackErr)
+	}
+	return nil
 }
 
 func shouldTryGui() bool {

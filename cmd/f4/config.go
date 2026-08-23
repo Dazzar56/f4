@@ -243,6 +243,12 @@ type F4Config struct {
 	GuiPosX                int
 	GuiPosY                int
 	GuiPositionSaved       bool
+	// StartupMode, GuiBackend and TTYBackend answer "what should plain `f4`
+	// do?". They are only defaults: --gui/--tty still win on any single run.
+	// An empty backend means automatic selection.
+	StartupMode            StartupMode
+	GuiBackend             string
+	TTYBackend             string
 	ConsoleTitleTemplate   string
 	UpdateChannel          int // 0 = Stable, 1 = Nightly
 	UpdateInterval         int // 0 = Never, 1 = Every start, 2 = Daily, 3 = Weekly
@@ -369,6 +375,9 @@ var AppConfig = F4Config{
 	GuiPosX:                  0,
 	GuiPosY:                  0,
 	GuiPositionSaved:         false,
+	StartupMode:              StartupModeAuto,
+	GuiBackend:               "",
+	TTYBackend:               "",
 	ConsoleTitleTemplate:     "f4 %Ver %Platform %Admin - %State",
 	UpdateChannel:            0,
 	ProxyMode:                netproxy.ModeSystem,
@@ -536,6 +545,9 @@ func LoadConfig() {
 		AppConfig.GuiPosX = 0
 		AppConfig.GuiPosY = 0
 	}
+	AppConfig.StartupMode = ParseStartupMode(ini.GetString("Startup", "Mode", "auto"))
+	AppConfig.GuiBackend = normalizeStartupGuiBackend(ini.GetString("Startup", "GuiBackend", ""))
+	AppConfig.TTYBackend = normalizeStartupTTYBackend(ini.GetString("Startup", "TTYBackend", ""))
 	AppConfig.EnforceColorCorrection = ini.GetString("Dialogs", "EnforceColorCorrection", "1") == "1"
 	fmt.Sscanf(ini.GetString("Appearance", "HighlightPriority", "0"), "%d", &AppConfig.HighlightPriority)
 	fmt.Sscanf(ini.GetString("Update", "Channel", "0"), "%d", &AppConfig.UpdateChannel)
@@ -743,6 +755,11 @@ func saveConfigWithWindowSize(windowSize bool) {
 		fmt.Fprintf(&sb, "GuiPosY = %d\n", AppConfig.GuiPosY)
 	}
 	fmt.Fprintf(&sb, "HighlightPriority = %d\n", AppConfig.HighlightPriority)
+
+	sb.WriteString("\n[Startup]\n")
+	fmt.Fprintf(&sb, "Mode = %s\n", AppConfig.StartupMode.String())
+	fmt.Fprintf(&sb, "GuiBackend = %s\n", AppConfig.GuiBackend)
+	fmt.Fprintf(&sb, "TTYBackend = %s\n", AppConfig.TTYBackend)
 
 	sb.WriteString("\n[Update]\n")
 	fmt.Fprintf(&sb, "Channel = %d\n", AppConfig.UpdateChannel)

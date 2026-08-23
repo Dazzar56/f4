@@ -1176,6 +1176,16 @@ func init() {
 		Handler:     withPF(func(pf *PanelsFrame) { actionAppearanceSettings(pf) }),
 	})
 	RegisterAction(Action{
+		Name:        "Settings.Startup",
+		Area:        "Shell",
+		Label:       "Startup Settings",
+		LabelKey:    "Menu.StartupSettings",
+		Description: "Choose the startup mode and the renderer backends f4 uses by default",
+		DescKey:     "Action.Settings.Startup.Desc",
+		MenuPath:    "Options",
+		Handler:     withPF(func(pf *PanelsFrame) { actionStartupSettings(pf) }),
+	})
+	RegisterAction(Action{
 		Name:        "Settings.Confirmations",
 		Area:        "Shell",
 		Label:       "Confirmations Settings",

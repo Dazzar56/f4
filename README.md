@@ -64,6 +64,7 @@ UI & input libraries are developed separately ([vtui](https://github.com/unxed/v
 *   `--gui=ebiten`: Use the portable Ebitengine graphical backend (Windows/Linux/macOS).
 *   `--tty=ansi`: Force terminal mode with ANSI input/output.
 *   `--tty=win32`: Force terminal mode with the Windows Console API (`winapi` is an alias).
+*   `--gui=auto` / `--tty=auto`: Ignore the configured default backend for this run and detect one.
 
 The available backends and their main characteristics are:
 
@@ -82,6 +83,25 @@ Example:
 ```bash
 ./f4 --gui=gogpu
 ```
+
+**Configured defaults:**
+
+To avoid repeating the same switch on every start, the choice can be saved in
+`settings.ini` under `Options > Startup settings` (or by hand):
+
+```ini
+[Startup]
+Mode = gui          ; auto (detect, the default), tty, or gui
+GuiBackend = gogpu  ; empty means detect; win32, gogpu, ebiten, x11, wayland
+TTYBackend =        ; empty means detect; ansi, winapi
+```
+
+`Mode` decides which renderer family f4 opens when neither `--gui` nor `--tty`
+is given, and the two backend keys say which renderer that family uses. They
+are only defaults: the command line still wins on any individual run, and
+`--gui=auto` / `--tty=auto` fall back to detection for that run. A configured
+backend that turns out to be unusable on the current machine falls back to
+automatic selection rather than preventing f4 from starting.
 
 ### Integrated Terminal & OS Integration
 
