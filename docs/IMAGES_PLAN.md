@@ -233,8 +233,12 @@ anywhere. That last one is issue #273: a program that prints sixel or kitty
 into f4's own terminal was decoded correctly and then had nowhere to be drawn.
 
 **12. Video.** Started, as mpv drawing into f4's own overlay window; see
-`VIDEO.md`. What is left is the ffmpeg path that decodes into the overlay
-ourselves, and it is written up there rather than here.
+`VIDEO.md`. That covers X11 and only X11, and mpv never hands f4 a frame, so
+what is left is not merely a second decoder: a frame source everything can
+consume, and a ladder of renderers below the overlay — terminal graphics, ANSI
+half-blocks, a poster frame — so that `F3` on a video has a useful answer on
+every cell of the build matrix. Written up there rather than here, including
+why the GPU and wasm routes were looked at and set aside.
 
 **13. Text over a sixel picture.** On the hardware and in Windows Terminal the
 screen is one bitmap, so writing a character clears the cell it lands in and
