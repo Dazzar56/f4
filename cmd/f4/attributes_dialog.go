@@ -54,21 +54,70 @@ func isLocalOSVFS(v any) bool {
 	return false
 }
 
+type attributesTarget struct {
+	path string
+	item vfs.VFSItem
+}
+
 func ShowAttributesDialog(pf *PanelsFrame, v vfs.VFS, path string, item vfs.VFSItem) {
 	if litem, err := vfs.Lstat(context.Background(), v, path); err == nil && litem.IsSymlink {
 		item = litem
 	}
+	showAttributesDialogForTargets(pf, v, []attributesTarget{{path: path, item: item}})
+}
+
+func showAttributesDialogForTargets(pf *PanelsFrame, v vfs.VFS, targets []attributesTarget) {
+	if v == nil || len(targets) == 0 {
+		return
+	}
 	caps := v.GetCapabilities()
 	if !caps.HasUnixPermissions {
-		showAttributesWindows(pf, v, path, item)
+		showAttributesWindowsForTargets(pf, v, targets)
 	} else {
-		showAttributesUnix(pf, v, path, item)
+		showAttributesUnixForTargets(pf, v, targets)
 	}
 }
 
+func setUnixAttributesForTargets(ctx context.Context, v vfs.VFS, targets []attributesTarget, edited vfs.VFSItem) error {
+	for _, target := range targets {
+		item := target.item
+		item.Uid = edited.Uid
+		item.Gid = edited.Gid
+		item.UnixMode = edited.UnixMode
+		item.MTime = edited.MTime
+		if err := v.SetAttributes(ctx, target.path, item); err != nil {
+			return fmt.Errorf("%s: %w", target.path, err)
+		}
+	}
+	return nil
+}
+
+func setWindowsAttributesForTargets(ctx context.Context, v vfs.VFS, targets []attributesTarget, edited vfs.VFSItem) error {
+	const editableWinAttrs = uint32(1 | 2 | 4 | 32)
+	for _, target := range targets {
+		item := target.item
+		item.MTime = edited.MTime
+		item.UnixMode = edited.UnixMode
+		// The dialog edits only the four ordinary Windows flags. Keep
+		// directory/reparse/compression and other provider-specific flags from
+		// each target instead of copying those of the first selected object.
+		item.WinAttrs = (item.WinAttrs &^ editableWinAttrs) | (edited.WinAttrs & editableWinAttrs)
+		if err := v.SetAttributes(ctx, target.path, item); err != nil {
+			return fmt.Errorf("%s: %w", target.path, err)
+		}
+	}
+	return nil
+}
+
 func showAttributesUnix(pf *PanelsFrame, v vfs.VFS, path string, item vfs.VFSItem) {
+	showAttributesUnixForTargets(pf, v, []attributesTarget{{path: path, item: item}})
+}
+
+func showAttributesUnixForTargets(pf *PanelsFrame, v vfs.VFS, targets []attributesTarget) {
+	path := targets[0].path
+	item := targets[0].item
 	width, height := 70, 24
-	if item.IsSymlink {
+	if item.IsSymlink && len(targets) == 1 {
 		height = 26
 	}
 
@@ -91,7 +140,7 @@ func showAttributesUnix(pf *PanelsFrame, v vfs.VFS, path string, item vfs.VFSIte
 	}
 
 	var editTarget *vtui.Edit
-	if item.IsSymlink {
+	if item.IsSymlink && len(targets) == 1 {
 		targetVal, _ := vfs.Readlink(context.Background(), v, path)
 		editTarget = vtui.NewEdit(0, 0, 35, targetVal)
 		lblTarget := vtui.NewLabel(0, 0, padLabel("T&arget:"), editTarget)
@@ -267,7 +316,7 @@ func showAttributesUnix(pf *PanelsFrame, v vfs.VFS, path string, item vfs.VFSIte
 	}
 
 	btnSet.OnClick = func() {
-		if item.IsSymlink && editTarget != nil {
+		if item.IsSymlink && editTarget != nil && len(targets) == 1 {
 			newTarget := editTarget.GetText()
 			oldTarget, _ := vfs.Readlink(context.Background(), v, path)
 			if newTarget != "" && newTarget != oldTarget {
@@ -302,13 +351,15 @@ func showAttributesUnix(pf *PanelsFrame, v vfs.VFS, path string, item vfs.VFSIte
 			item.MTime = t
 		}
 		vtui.RunAsync(func(ctx *vtui.TaskContext) {
-			err := v.SetAttributes(ctx.Context, path, item)
+			err := setUnixAttributesForTargets(ctx.Context, v, targets, item)
 			ctx.RunOnUI(func() {
 				if err != nil {
 					vtui.ShowMessage(" Error ", err.Error(), []string{"&Ok"})
 				} else {
 					dlg.Close()
-					pf.RefreshAll()
+					if pf != nil {
+						pf.RefreshAll()
+					}
 				}
 			})
 		})
@@ -318,7 +369,11 @@ func showAttributesUnix(pf *PanelsFrame, v vfs.VFS, path string, item vfs.VFSIte
 }
 
 func showAttributesWindows(pf *PanelsFrame, v vfs.VFS, path string, item vfs.VFSItem) {
-	showAttributesWindowsWithProperties(pf, v, path, item, defaultNativePropertiesOpener)
+	showAttributesWindowsForTargets(pf, v, []attributesTarget{{path: path, item: item}})
+}
+
+func showAttributesWindowsForTargets(pf *PanelsFrame, v vfs.VFS, targets []attributesTarget) {
+	showAttributesWindowsWithPropertiesForTargets(pf, v, targets, defaultNativePropertiesOpener)
 }
 
 var defaultNativePropertiesOpener = showNativePropertiesOS
@@ -334,6 +389,17 @@ func showAttributesWindowsWithProperties(
 	item vfs.VFSItem,
 	openProperties func(string) error,
 ) {
+	showAttributesWindowsWithPropertiesForTargets(pf, v, []attributesTarget{{path: path, item: item}}, openProperties)
+}
+
+func showAttributesWindowsWithPropertiesForTargets(
+	pf *PanelsFrame,
+	v vfs.VFS,
+	targets []attributesTarget,
+	openProperties func(string) error,
+) {
+	path := targets[0].path
+	item := targets[0].item
 	width, height := 60, 22
 	dlg := vtui.NewCenteredDialog(width, height, Msg("Attributes.Title"))
 	dlg.ShowClose = true
@@ -520,8 +586,17 @@ func showAttributesWindowsWithProperties(
 		}
 
 		vtui.RunAsync(func(ctx *vtui.TaskContext) {
-			v.SetAttributes(ctx.Context, path, item)
-			ctx.RunOnUI(func() { dlg.Close(); pf.RefreshAll() })
+			err := setWindowsAttributesForTargets(ctx.Context, v, targets, item)
+			ctx.RunOnUI(func() {
+				if err != nil {
+					vtui.ShowMessage(" Error ", err.Error(), []string{"&Ok"})
+					return
+				}
+				dlg.Close()
+				if pf != nil {
+					pf.RefreshAll()
+				}
+			})
 		})
 	}
 	btnCancel.OnClick = func() { dlg.Close() }
