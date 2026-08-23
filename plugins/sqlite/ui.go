@@ -48,6 +48,18 @@ func (w *browserWindow) ProcessKey(e *vtinput.InputEvent) bool {
 		w.browser.turnPage(-browsePageSize)
 		return true
 	}
+	alt := e.ControlKeyState&(vtinput.LeftAltPressed|vtinput.RightAltPressed) != 0
+	shift := e.ControlKeyState&vtinput.ShiftPressed != 0
+	if e.KeyDown && !ctrl && !alt && !shift && e.VirtualKeyCode == vtinput.VK_RETURN &&
+		w.browser.dialog.GetFocusedItem() == vtui.UIElement(w.browser.resultTable) {
+		// Enter on the grid is the same gesture as F4. Before this it fell
+		// through to the dialog's default button, which is Run, and Run on
+		// the prefilled SELECT re-read the same rows as a hand written query
+		// -- one without rowids -- so the table quietly stopped being
+		// editable until Refresh put the identities back.
+		w.browser.editCell()
+		return true
+	}
 	return w.Window.ProcessKey(e)
 }
 
@@ -342,6 +354,13 @@ func (b *browser) runQuery() {
 	statement := strings.TrimSpace(b.query.GetText())
 	if statement == "" {
 		b.setStatus(sqliteText("SQLite.EmptySQL", "SQL statement is empty", "SQL-запрос пуст."))
+		return
+	}
+	if b.currentTable != "" && statement == tableSelect(b.currentTable, b.offset) {
+		// The box still holds exactly what loadPage put there. Running it as
+		// a hand written query would return the same rows stripped of their
+		// rowids and turn editing off; reading the page keeps them.
+		b.loadPage(b.currentTable, b.offset)
 		return
 	}
 	current := b.currentTable
