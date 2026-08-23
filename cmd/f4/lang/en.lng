@@ -376,6 +376,9 @@ Action.AI.ViewMem.Desc=Switch AI panel to memory view
 Action.AI.ApplyPatch=Apply AP Patch
 Action.AI.ApplyPatch.Desc=Apply the ap patch from the last answer to the folder in the other panel
 Action.Settings.Proxy.Desc=Configure the proxy used for updates, plugins and network connections
+; --- Spreadsheet ---
+Action.App.Spreadsheet=Spreadsheet
+Action.App.Spreadsheet.Desc=Open the spreadsheet workspace
 
 Link.Title= Link
 Link.Prompt=Create link to %s in:
@@ -1201,6 +1204,16 @@ KeyBar.ViewerF4=Hex
 KeyBar.ViewerF7=Search
 KeyBar.ViewerAltF8=Goto
 KeyBar.ViewerF10=Quit
+KeyBar.SheetF1=Help
+KeyBar.SheetF2=Save
+KeyBar.SheetF3=Open
+KeyBar.SheetF4=New
+KeyBar.SheetF5=Recalc
+KeyBar.SheetF6=Goto
+KeyBar.SheetF7=Search
+KeyBar.SheetF10=Menu
+KeyBar.SheetShiftF2=SaveAs
+KeyBar.SheetShiftF3=Export
 
 Arkanoid.HighScores= High Scores
 
@@ -1521,19 +1534,6 @@ CloudFox.YandexAuthorizationTitle=Yandex authorization
 CloudFox.YandexAuthorizationCode=Authorization &code:
 CloudFox.Continue=&Continue
 
-; --- Spreadsheet ---
-Action.App.Spreadsheet=Spreadsheet
-Action.App.Spreadsheet.Desc=Open the spreadsheet workspace
-KeyBar.SheetF1=Help
-KeyBar.SheetF2=Save
-KeyBar.SheetF3=Open
-KeyBar.SheetF4=New
-KeyBar.SheetF5=Recalc
-KeyBar.SheetF6=Goto
-KeyBar.SheetF7=Search
-KeyBar.SheetF10=Menu
-KeyBar.SheetShiftF2=SaveAs
-KeyBar.SheetShiftF3=Export
 Sheet.Title= Spreadsheet 
 Sheet.Untitled=Untitled
 Sheet.DefaultFileName=sheet.f4s

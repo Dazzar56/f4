@@ -370,6 +370,9 @@ Action.AI.ViewMem.Desc=Переключить панель ИИ в режим п
 Action.AI.ApplyPatch=Применить патч AP
 Action.AI.ApplyPatch.Desc=Применить AP-патч из последнего ответа к папке в другой панели
 Action.Settings.Proxy.Desc=Настроить прокси для обновлений, плагинов и сетевых соединений
+; --- Электронные таблицы ---
+Action.App.Spreadsheet=Электронные таблицы
+Action.App.Spreadsheet.Desc=Открыть рабочее пространство электронных таблиц
 
 Link.Title= Ссылка
 Link.Prompt=Создать ссылку на %s в:
@@ -1190,6 +1193,16 @@ KeyBar.ViewerF4=Hex
 KeyBar.ViewerF7=Поиск
 KeyBar.ViewerAltF8=Перейти
 KeyBar.ViewerF10=Выход
+KeyBar.SheetF1=Помощь
+KeyBar.SheetF2=Запись
+KeyBar.SheetF3=Открыть
+KeyBar.SheetF4=Новая
+KeyBar.SheetF5=Пересчёт
+KeyBar.SheetF6=Переход
+KeyBar.SheetF7=Поиск
+KeyBar.SheetF10=Меню
+KeyBar.SheetShiftF2=Записать как
+KeyBar.SheetShiftF3=Экспорт
 
 Arkanoid.HighScores= Рекорды
 
@@ -1508,19 +1521,6 @@ CloudFox.YandexAuthorizationTitle=Авторизация в Яндексе
 CloudFox.YandexAuthorizationCode=Код &авторизации:
 CloudFox.Continue=&Продолжить
 
-; --- Электронные таблицы ---
-Action.App.Spreadsheet=Электронные таблицы
-Action.App.Spreadsheet.Desc=Открыть рабочее пространство электронных таблиц
-KeyBar.SheetF1=Помощь
-KeyBar.SheetF2=Запись
-KeyBar.SheetF3=Открыть
-KeyBar.SheetF4=Новая
-KeyBar.SheetF5=Пересчёт
-KeyBar.SheetF6=Переход
-KeyBar.SheetF7=Поиск
-KeyBar.SheetF10=Меню
-KeyBar.SheetShiftF2=Записать как
-KeyBar.SheetShiftF3=Экспорт
 Sheet.Title= Электронные таблицы 
 Sheet.Untitled=Без имени
 Sheet.DefaultFileName=таблица.f4s
