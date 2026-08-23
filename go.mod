@@ -26,7 +26,7 @@ require (
 	github.com/mholt/archives v0.1.5
 	github.com/pkg/sftp v1.13.6
 	github.com/tetratelabs/wazero v1.12.0
-	github.com/unxed/archives v0.0.0-20260822080017-884f4426de54
+	github.com/unxed/archives v0.0.0-20260823114533-1b3acbd05f79
 	github.com/unxed/colorer4go v0.1.14
 	github.com/unxed/ffibridge v0.1.2
 	github.com/unxed/id3-go v0.1.1
@@ -37,7 +37,7 @@ require (
 	github.com/unxed/vtinput v0.1.5
 	github.com/unxed/vtui v0.1.280
 	github.com/unxed/zip v0.1.129
-	github.com/unxed/zipper v0.1.147
+	github.com/unxed/zipper v0.1.149
 	github.com/vmihailenco/msgpack/v5 v5.4.1
 	github.com/woozymasta/png v1.2.0
 	github.com/yuin/gopher-lua v1.1.1
@@ -54,9 +54,6 @@ require (
 	google.golang.org/api v0.259.0
 	gopkg.in/yaml.v3 v3.0.1
 )
-
-// The upstream archives fix is under review in unxed/archives#1.
-replace github.com/unxed/archives => github.com/Zoinen/archives v0.0.0-20260823102249-509798dabcdc
 
 require (
 	cloud.google.com/go/auth v0.18.0 // indirect
@@ -182,10 +179,5 @@ replace github.com/ebitengine/hideconsole => ./internal/hideconsole
 // replace github.com/unxed/colorer4go => ../../../dev/colorer4go
 
 // replace github.com/unxed/vtui => ../../../dev/vtui
-
-// Keep the upstream module path while the Windows console resize recovery is
-// reviewed upstream. This immutable fork revision contains the fix for the
-// transient ERROR_PIPE_NOT_CONNECTED input error.
-replace github.com/unxed/vtinput => github.com/Zoinen/vtinput v0.1.5-0.20260822031659-c39a9ab8b09f
 
 replace github.com/go-webgpu/goffi => github.com/unxed/goffi v0.1.4
