@@ -81,9 +81,12 @@ func TestSpreadsheetPathLookupIgnoresPopups(t *testing.T) {
 // as typed and the file appeared in the directory f4 was started from while
 // the status line said it had been saved.
 func TestSheetPathResolution(t *testing.T) {
-	separator := string(filepath.Separator)
-	panelDir := filepath.Join(separator+"tmp", "panel")
-	absolute := filepath.Join(separator+"tmp", "elsewhere", "book.xlsx")
+	// Built from TempDir rather than spelled out. "\\tmp\\panel" is not an
+	// absolute path on Windows -- filepath.IsAbs wants the volume -- so a
+	// literal POSIX path made the absolute case fail there while the code
+	// under test was doing exactly the right thing with a real C:\ path.
+	panelDir := t.TempDir()
+	absolute := filepath.Join(t.TempDir(), "book.xlsx")
 
 	for _, tc := range []struct {
 		name string
