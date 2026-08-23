@@ -2480,7 +2480,7 @@ func TestExecuteFileOp_ContextualTitles(t *testing.T) {
 		close(done)
 	})
 
-	timeout := time.After(2 * time.Second)
+	appeared := time.After(10 * time.Second)
 	var dlg *FileOpProgressDialog
 	for dlg == nil {
 		select {
@@ -2490,21 +2490,36 @@ func TestExecuteFileOp_ContextualTitles(t *testing.T) {
 			if top != nil && strings.Contains(top.GetTitle(), "Extracting") {
 				dlg = top.(*FileOpProgressDialog)
 			}
-		case <-timeout:
+		case <-appeared:
 			t.Fatal("Timeout waiting for Extracting dialog to appear")
 		}
 	}
 
-	for vtui.FrameManager.GetTopFrame() != nil {
+	// Wait for the dialog this test created, not for the frame stack to empty.
+	// The stack is process-wide, so a frame another test left on it would make
+	// the loop below spin until it timed out, and the two phases used to share
+	// a single deadline as well: a slow first phase left the second almost
+	// none of it.
+	completed := time.After(10 * time.Second)
+	for !dlg.IsDone() {
 		select {
 		case task := <-vtui.FrameManager.TaskChan:
 			task()
-			if top := vtui.FrameManager.GetTopFrame(); top != nil && top.IsDone() {
-				vtui.FrameManager.Pop()
-			}
-		case <-timeout:
+		case <-completed:
 			t.Fatal("Timeout waiting for copy operation to complete")
 		}
+	}
+	if vtui.FrameManager.GetTopFrame() == vtui.Frame(dlg) {
+		vtui.FrameManager.Pop()
+	}
+
+	// ExecuteFileOp runs on its own goroutine and reads the temporary
+	// directories above. Returning before it exits leaves it running into
+	// whatever test comes next, reading directories t.TempDir has removed.
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("Timeout waiting for the file operation goroutine to exit")
 	}
 }
 
