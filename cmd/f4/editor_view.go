@@ -2272,10 +2272,11 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 					ev.CursorLine--
 					ev.CursorPos = prevLen
 				} else {
-					deleteStart := ev.li.GetLineOffset(ev.CursorLine) + ev.previousGraphemeBoundaryInLine(ev.li.GetLineOffset(ev.CursorLine), ev.CursorPos)
-					if ev.lineUsesVisualBidi() {
-						deleteStart = ev.engine.MoveVisual(offset, -1)
-					}
+					deleteStart := ev.li.GetLineOffset(ev.CursorLine) + ev.previousDeletionBoundaryInLine(ev.li.GetLineOffset(ev.CursorLine), ev.CursorPos)
+					// Backspace deletes the preceding logical text, even when the
+					// line is painted right-to-left. A visual-left move from the
+					// logical end of an RTL line is already at the screen edge and
+					// therefore cannot identify the character Backspace must remove.
 					ev.pt.Delete(deleteStart, offset-deleteStart)
 					ev.li.UpdateAfterDelete(deleteStart, offset-deleteStart)
 					ev.CursorLine = ev.li.GetLineAtOffset(deleteStart)
@@ -2324,13 +2325,12 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 				ev.modified = true
 				deleteEnd := offset + 1
 				if ev.CursorPos < ev.getLineLength(ev.CursorLine) {
-					if ev.lineUsesVisualBidi() {
-						deleteEnd = ev.engine.MoveVisual(offset, 1)
-					} else {
-						lineStart := ev.li.GetLineOffset(ev.CursorLine)
-						next := ev.nextGraphemeBoundaryInLine(lineStart, ev.getLineLength(ev.CursorLine), ev.CursorPos)
-						deleteEnd = lineStart + next
-					}
+					// Delete follows the logical text direction. A visual-right
+					// move from the logical start of an RTL line is already at the
+					// screen edge and would turn this into a no-op.
+					lineStart := ev.li.GetLineOffset(ev.CursorLine)
+					next := ev.nextGraphemeBoundaryInLine(lineStart, ev.getLineLength(ev.CursorLine), ev.CursorPos)
+					deleteEnd = lineStart + next
 				}
 				ev.pt.Delete(offset, deleteEnd-offset)
 				ev.li.UpdateAfterDelete(offset, deleteEnd-offset)

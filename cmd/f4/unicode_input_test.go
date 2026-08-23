@@ -83,3 +83,39 @@ func TestEditorUnicodeInputBackspaceRemovesGraphemeCluster(t *testing.T) {
 		t.Fatalf("second backspace left the combining cluster: %q", got)
 	}
 }
+
+func TestEditorUnicodeInputBackspaceKeepsTerminalModifierRuleInBidiMode(t *testing.T) {
+	oldMode := vtui.DefaultBidiMode
+	vtui.DefaultBidiMode = vtui.BidiFull
+	t.Cleanup(func() { vtui.DefaultBidiMode = oldMode })
+
+	text := "ދިވެހިބަސް"
+	ev := NewEditorView(piecetable.New([]byte(text)), nil, "divehi.txt")
+	defer ev.Close()
+	ev.SetPosition(0, 0, 80, 12)
+	ev.CursorPos = len([]byte(text))
+	ev.SetFocus(true)
+	ev.ProcessKey(unicodeKey(vtinput.VK_BACK, 0))
+	data, _ := ev.pt.Bytes()
+	if got, want := string(data), "ދިވެހިބަސ"; got != want {
+		t.Fatalf("backspace in BidiFull mode = %q, want %q", got, want)
+	}
+}
+
+func TestEditorUnicodeInputDeleteKeepsLogicalDirectionInBidiMode(t *testing.T) {
+	oldMode := vtui.DefaultBidiMode
+	vtui.DefaultBidiMode = vtui.BidiFull
+	t.Cleanup(func() { vtui.DefaultBidiMode = oldMode })
+
+	text := "ދިވެހިބަސް"
+	ev := NewEditorView(piecetable.New([]byte(text)), nil, "divehi.txt")
+	defer ev.Close()
+	ev.SetPosition(0, 0, 80, 12)
+	ev.CursorPos = 0
+	ev.SetFocus(true)
+	ev.ProcessKey(unicodeKey(vtinput.VK_DELETE, 0))
+	data, _ := ev.pt.Bytes()
+	if got, want := string(data), "ވެހިބަސް"; got != want {
+		t.Fatalf("delete in BidiFull mode = %q, want %q", got, want)
+	}
+}

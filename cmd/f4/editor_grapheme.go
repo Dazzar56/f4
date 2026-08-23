@@ -160,15 +160,32 @@ func (ev *EditorView) previousGraphemeBoundaryInLine(lineStart, pos int) int {
 			return pos - 1
 		}
 		if clusters[0].start > 0 || start == 0 {
-			last := clusters[len(clusters)-1]
-			if split := textlayout.TrailingModifierStart(last.text); split >= 0 {
-				return start + last.start + split
-			}
-			return start + last.start
+			return start + clusters[len(clusters)-1].start
 		}
 		take *= 2
 		if take > pos {
 			take = pos
 		}
 	}
+}
+
+// previousDeletionBoundaryInLine preserves the editor's established
+// backspace behavior for a trailing Indic virama or Thaana mark. Cursor
+// movement and Shift+Left must use the complete grapheme cluster, however:
+// splitting a modifier there makes a reverse selection start in the middle of
+// the visible symbol (for example, Shift+Left on the final म् selected only
+// the virama). Keep the deletion-only compatibility rule separate.
+func (ev *EditorView) previousDeletionBoundaryInLine(lineStart, pos int) int {
+	boundary := ev.previousGraphemeBoundaryInLine(lineStart, pos)
+	if boundary >= pos {
+		return boundary
+	}
+	data, err := ev.pt.GetRange(lineStart+boundary, pos-boundary)
+	if err != nil || len(data) == 0 {
+		return boundary
+	}
+	if split := textlayout.TrailingModifierStart(string(data)); split >= 0 {
+		return boundary + split
+	}
+	return boundary
 }

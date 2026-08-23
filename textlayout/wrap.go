@@ -7,6 +7,7 @@ import (
 
 	"github.com/unxed/f4/piecetable"
 	"github.com/unxed/vtui"
+	"golang.org/x/text/unicode/bidi"
 )
 
 // LineFragment описывает один визуальный кусок логической строки после свертки.
@@ -102,27 +103,56 @@ func visualClusters(text string) []visualCluster {
 		return logical
 	}
 
-	byLogical := make(map[int]visualCluster, len(logical))
-	for _, cluster := range logical {
-		byLogical[cluster.logicalPos] = cluster
-	}
-	visualText, logicalPositions := vtui.VisualStringWithRuneMap(text)
 	visual := make([]visualCluster, 0, len(logical))
-	index := 0
-	vtui.ForEachClusterAt(visualText, func(cluster string, width, _, _ int) {
-		if index >= len(logicalPositions) {
-			return
+
+	// vtui.VisualStringWithRuneMap performs bidi reordering over the UAX #29
+	// clusters supplied by uniseg. VisualClusters deliberately has one extra
+	// terminal-facing rule for Indic conjuncts (for example, it joins the
+	// virama in स् to the following क), so consuming vtui's reordered string
+	// here loses or duplicates clusters when the two segmentations differ.
+	// Reorder the already-normalized clusters directly instead. This keeps the
+	// byte/rune boundaries used by wrapping, painting, hit testing, and caret
+	// movement identical.
+	p := bidi.Paragraph{}
+	if _, err := p.SetString(text); err != nil {
+		return logical
+	}
+	order, err := p.Order()
+	if err != nil {
+		return logical
+	}
+
+	for runIndex := 0; runIndex < order.NumRuns(); runIndex++ {
+		run := order.Run(runIndex)
+		start, end := run.Pos()
+		runClusters := make([]visualCluster, 0, len(logical))
+		for _, cluster := range logical {
+			if cluster.logicalPos >= start && cluster.logicalPos <= end {
+				runClusters = append(runClusters, cluster)
+			}
 		}
-		original, ok := byLogical[logicalPositions[index]]
-		if !ok {
-			index++
-			return
+		if len(runClusters) == 0 {
+			continue
 		}
-		original.text = cluster
-		original.width = width
-		visual = append(visual, original)
-		index++
-	})
+
+		if run.Direction() == bidi.RightToLeft {
+			for i, j := 0, len(runClusters)-1; i < j; i, j = i+1, j-1 {
+				runClusters[i], runClusters[j] = runClusters[j], runClusters[i]
+			}
+			for i := range runClusters {
+				if utf8.RuneCountInString(runClusters[i].text) == 1 {
+					runClusters[i].text = bidi.ReverseString(runClusters[i].text)
+				}
+			}
+		}
+		visual = append(visual, runClusters...)
+	}
+	if len(visual) != len(logical) {
+		// A bidi implementation must not make a text cluster disappear. Keep
+		// the safe logical layout if a future Unicode table creates a run
+		// boundary inside one of our extended clusters.
+		return logical
+	}
 	return visual
 }
 
@@ -154,6 +184,92 @@ func byteOffsetAtRune(text string, runeIndex int) int {
 	return len(string([]rune(text)[:runeIndex]))
 }
 
+// visualCaretMap is the caret equivalent of visualClusters. vtui's public
+// caret map is based on its UAX #29 clusters, while f4 extends those
+// boundaries for terminal-shaped Indic conjuncts; using the two maps
+// together lets a caret land at a different logical boundary than the one
+// that was painted.
+type visualCaretMap struct {
+	VisualToLogical []int
+	LogicalToVisual []int
+}
+
+func buildVisualCaretMap(text string) visualCaretMap {
+	logical := logicalTextClusters(text)
+	n := len(logical)
+	identity := func() visualCaretMap {
+		visualToLogical := make([]int, n+1)
+		logicalToVisual := make([]int, n+1)
+		for i := 0; i <= n; i++ {
+			visualToLogical[i] = i
+			logicalToVisual[i] = i
+		}
+		return visualCaretMap{VisualToLogical: visualToLogical, LogicalToVisual: logicalToVisual}
+	}
+	if vtui.DefaultBidiMode != vtui.BidiFull || !vtui.HasRTL(text) || n == 0 {
+		return identity()
+	}
+
+	p := bidi.Paragraph{}
+	if _, err := p.SetString(text); err != nil {
+		return identity()
+	}
+	order, err := p.Order()
+	if err != nil {
+		return identity()
+	}
+
+	logicalToVisual := make([]int, n+1)
+	visualClusterIndex := 0
+	for runIndex := 0; runIndex < order.NumRuns(); runIndex++ {
+		run := order.Run(runIndex)
+		start, end := run.Pos()
+		runIndices := make([]int, 0, n)
+		for logicalIndex, cluster := range logical {
+			if cluster.logicalPos >= start && cluster.logicalPos <= end {
+				runIndices = append(runIndices, logicalIndex)
+			}
+		}
+		if len(runIndices) == 0 {
+			continue
+		}
+		runEnd := runIndices[len(runIndices)-1]
+		if run.Direction() == bidi.RightToLeft {
+			for i, logicalIndex := range runIndices {
+				logicalToVisual[logicalIndex] = visualClusterIndex + len(runIndices) - i
+			}
+			logicalToVisual[runEnd+1] = visualClusterIndex
+		} else {
+			for i, logicalIndex := range runIndices {
+				logicalToVisual[logicalIndex] = visualClusterIndex + i
+			}
+			logicalToVisual[runEnd+1] = visualClusterIndex + len(runIndices)
+		}
+		visualClusterIndex += len(runIndices)
+	}
+	if visualClusterIndex != n {
+		return identity()
+	}
+
+	visualToLogical := make([]int, n+1)
+	for logicalIndex, visualIndex := range logicalToVisual {
+		if visualIndex < 0 || visualIndex > n {
+			return identity()
+		}
+		visualToLogical[visualIndex] = logicalIndex
+	}
+	return visualCaretMap{VisualToLogical: visualToLogical, LogicalToVisual: logicalToVisual}
+}
+
+func logicalClusterIndexAtByte(clusters []visualCluster, byteOffset int) int {
+	for index, cluster := range clusters {
+		if byteOffset <= cluster.byteStart || byteOffset < cluster.byteEnd {
+			return index
+		}
+	}
+	return len(clusters)
+}
+
 func visualClusterWidths(clusters []visualCluster, tabSize int) []int {
 	if tabSize <= 0 {
 		tabSize = 8
@@ -181,20 +297,13 @@ func fragmentLogicalToVisual(text string, byteOffset, tabSize int) int {
 	if byteOffset > len(text) {
 		byteOffset = len(text)
 	}
-	runeIndex := utf8.RuneCountInString(text[:byteOffset])
-	logical := logicalTextClusters(text)
 	clusters := visualClusters(text)
 	visualPos := 0
 	if vtui.DefaultBidiMode == vtui.BidiFull && vtui.HasRTL(text) {
-		for _, cluster := range logical {
-			if byteOffset < cluster.byteEnd {
-				runeIndex = cluster.logicalPos
-				break
-			}
-		}
-		caret := vtui.BuildCaretMap(text)
-		if runeIndex < len(caret.LogicalToVisual) {
-			visualPos = caret.LogicalToVisual[runeIndex]
+		logicalIndex := logicalClusterIndexAtByte(logicalTextClusters(text), byteOffset)
+		caret := buildVisualCaretMap(text)
+		if logicalIndex < len(caret.LogicalToVisual) {
+			visualPos = caret.LogicalToVisual[logicalIndex]
 		}
 	} else {
 		for _, cluster := range clusters {
@@ -226,20 +335,22 @@ func fragmentVisualToLogical(text string, visualCol, tabSize int) int {
 			visualPos++
 		}
 	}
-	runeIndex := 0
 	if vtui.DefaultBidiMode == vtui.BidiFull && vtui.HasRTL(text) {
-		caret := vtui.BuildCaretMap(text)
+		logical := logicalTextClusters(text)
+		caret := buildVisualCaretMap(text)
+		logicalIndex := len(logical)
 		if visualPos < len(caret.VisualToLogical) {
-			runeIndex = caret.VisualToLogical[visualPos]
-		} else {
-			runeIndex = utf8.RuneCountInString(text)
+			logicalIndex = caret.VisualToLogical[visualPos]
 		}
+		if logicalIndex < len(logical) {
+			return logical[logicalIndex].byteStart
+		}
+		return len(text)
 	} else if visualPos < len(clusters) {
-		runeIndex = clusters[visualPos].logicalPos
+		return clusters[visualPos].byteStart
 	} else {
-		runeIndex = utf8.RuneCountInString(text)
+		return len(text)
 	}
-	return byteOffsetAtRune(text, runeIndex)
 }
 
 func fragmentVisualMove(text string, byteOffset, direction int) (int, bool) {
@@ -247,18 +358,12 @@ func fragmentVisualMove(text string, byteOffset, direction int) (int, bool) {
 	if len(clusters) == 0 {
 		return byteOffset, false
 	}
-	runeIndex := utf8.RuneCountInString(text[:byteOffset])
 	visualPos := 0
 	if vtui.DefaultBidiMode == vtui.BidiFull && vtui.HasRTL(text) {
-		for _, cluster := range logicalTextClusters(text) {
-			if byteOffset < cluster.byteEnd {
-				runeIndex = cluster.logicalPos
-				break
-			}
-		}
-		caret := vtui.BuildCaretMap(text)
-		if runeIndex < len(caret.LogicalToVisual) {
-			visualPos = caret.LogicalToVisual[runeIndex]
+		logicalIndex := logicalClusterIndexAtByte(logicalTextClusters(text), byteOffset)
+		caret := buildVisualCaretMap(text)
+		if logicalIndex < len(caret.LogicalToVisual) {
+			visualPos = caret.LogicalToVisual[logicalIndex]
 		}
 	} else {
 		for _, cluster := range clusters {
@@ -273,18 +378,21 @@ func fragmentVisualMove(text string, byteOffset, direction int) (int, bool) {
 		return byteOffset, false
 	}
 	if vtui.DefaultBidiMode == vtui.BidiFull && vtui.HasRTL(text) {
-		caret := vtui.BuildCaretMap(text)
+		logical := logicalTextClusters(text)
+		caret := buildVisualCaretMap(text)
+		logicalIndex := len(logical)
 		if target < len(caret.VisualToLogical) {
-			runeIndex = caret.VisualToLogical[target]
-		} else {
-			runeIndex = utf8.RuneCountInString(text)
+			logicalIndex = caret.VisualToLogical[target]
 		}
+		if logicalIndex < len(logical) {
+			return logical[logicalIndex].byteStart, true
+		}
+		return len(text), true
 	} else if target < len(clusters) {
-		runeIndex = clusters[target].logicalPos
+		return clusters[target].byteStart, true
 	} else {
-		runeIndex = utf8.RuneCountInString(text)
+		return len(text), true
 	}
-	return byteOffsetAtRune(text, runeIndex), true
 }
 
 // MoveVisual moves one grapheme cluster in the direction shown on screen.

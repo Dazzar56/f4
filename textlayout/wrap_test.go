@@ -578,6 +578,37 @@ func TestWrapEngine_BoundarySafety(t *testing.T) {
 		}
 	})
 }
+
+func TestVisualClustersInVisualOrderPreservesTerminalClustersInBidiParagraph(t *testing.T) {
+	oldMode := vtui.DefaultBidiMode
+	vtui.DefaultBidiMode = vtui.BidiFull
+	defer func() { vtui.DefaultBidiMode = oldMode }()
+
+	text := "संस्कृतम् ދިވެހިބަސް"
+	logical := VisualClusters(text)
+	visual := VisualClustersInVisualOrder(text)
+	if len(visual) != len(logical) {
+		t.Fatalf("visual cluster count = %d, want %d", len(visual), len(logical))
+	}
+
+	wantStarts := make(map[int]bool, len(logical))
+	for _, cluster := range logical {
+		wantStarts[cluster.Start] = true
+	}
+	seen := make(map[int]bool, len(visual))
+	for _, cluster := range visual {
+		if !wantStarts[cluster.Start] {
+			t.Fatalf("visual cluster starts at unexpected byte %d", cluster.Start)
+		}
+		if seen[cluster.Start] {
+			t.Fatalf("visual cluster start %d was emitted twice", cluster.Start)
+		}
+		seen[cluster.Start] = true
+	}
+	if len(seen) != len(wantStarts) {
+		t.Fatalf("visual clusters covered %d logical starts, want %d", len(seen), len(wantStarts))
+	}
+}
 func TestWrapEngine_LogicalToVisual_CappedLine(t *testing.T) {
 	// Tests safety when a logical line is massive (binary) and indexing is capped at 64KB.
 	// Create 100KB of data with NO newlines.
