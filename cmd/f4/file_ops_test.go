@@ -1426,17 +1426,28 @@ func getCleanText(item vtui.UIElement) string {
 
 func clickDialogButton(t *testing.T, dlg vtui.Container, btnText string) {
 	t.Helper()
+	var buttons []string
+	var message []string
 	for _, itm := range dlg.GetChildren() {
 		if b, ok := itm.(*vtui.Button); ok {
-			if getCleanText(b) == btnText {
+			text := getCleanText(b)
+			buttons = append(buttons, text)
+			if text == btnText {
 				if b.OnClick != nil {
 					b.OnClick()
 					return
 				}
 			}
 		}
+		if line, ok := itm.(*vtui.Text); ok {
+			message = append(message, line.GetText())
+		}
 	}
-	t.Fatalf("Button %q not found in dialog", btnText)
+	title := ""
+	if titled, ok := dlg.(interface{ GetTitle() string }); ok {
+		title = titled.GetTitle()
+	}
+	t.Fatalf("Button %q not found in dialog %q; message: %q; buttons: %q", btnText, title, message, buttons)
 }
 
 func setDialogCheckbox(t *testing.T, dlg vtui.Container, chkText string, state int) {
