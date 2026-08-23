@@ -1426,6 +1426,14 @@ func TestSession_DiskPersistence(t *testing.T) {
 		LastShowPanels, LastShowLeft, LastShowRight = oldShowPanels, oldShowLeft, oldShowRight
 	})
 	AppConfig.AutoSaveSettings = true
+	// SaveSession passes these through to saveSessionWithOptions, and the panel
+	// group is what writes ViewMode, SortMode, SortReverse and the Show* keys.
+	// They are process-wide settings that another test may have left switched
+	// off, and inheriting that leaves those keys out of the file: the load
+	// below then returns defaults and the assertions on them fail while the
+	// ones on paths and the cursor still pass.
+	AppConfig.AutoSavePanelSettings = true
+	AppConfig.AutoSaveCurrentPanel = true
 
 	// Перехватываем путь к ini файлу (в реальном коде он завязан на os.UserConfigDir)
 	// Для теста мы просто вручную вызовем SaveSession и проверим результат в файле.
