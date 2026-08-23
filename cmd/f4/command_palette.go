@@ -69,6 +69,18 @@ func ShowCommandPalette() bool {
 		vtui.FrameManager.PostTask(func() { ShowCommandPalette() })
 		return true
 	}
+	if top := vtui.FrameManager.GetTopFrame(); top != nil && top.GetType() == vtui.TypeMenu && top.IsDone() {
+		// The retry posted by the branch above can run in the gap between a
+		// clicked menu marking itself done and the frame manager removing it:
+		// the menu bar is inactive by then, so the branch above lets the call
+		// through, and the dead menu is still the top frame. It is a modal
+		// VMenu and not a supported owner, so the branch below consumed the
+		// retry and the palette never opened. A menu that is done is not an
+		// owner to protect; it is a frame on its way out, so go around once
+		// more and look again after the cleanup.
+		vtui.FrameManager.PostTask(func() { ShowCommandPalette() })
+		return true
+	}
 	if top := vtui.FrameManager.GetTopFrame(); top != nil && top.IsModal() && !commandPaletteModalFrameSupported(top) {
 		// Unknown modal owners keep their complete input contract. Consume the
 		// palette chord without stacking an unrelated dialog above them.
