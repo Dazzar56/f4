@@ -523,6 +523,7 @@ func TestFileSystemPanel_UpdateTitle_WithProvider(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	v := &mockTitleVFS{OSVFS: *vfs.NewOSVFS("/tmp"), title: "user@host"}
 	fp := NewFileSystemPanel(0, 0, 40, 20, v)
+	waitForLoad(t, fp)
 
 	// Reset loading flag to avoid the spinner suffix.
 	fp.isLoading = false
@@ -677,9 +678,7 @@ func TestFileSystemPanel_SelectedInfo(t *testing.T) {
 	vtui.FrameManager.Init(scr)
 
 	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(t.TempDir()))
-	if fp.cancelLoad != nil {
-		fp.cancelLoad()
-	}
+	waitForLoad(t, fp)
 	fp.isLoading = false
 	if fp.loadingTimer != nil {
 		fp.loadingTimer.Stop()
@@ -834,6 +833,7 @@ func TestFileSystemPanel_Initialization(t *testing.T) {
 	// Verify that NewFileSystemPanel initializes with valid geometry to prevent collapsed panels
 	x, y, w, h := 10, 5, 40, 20
 	fp := NewFileSystemPanel(x, y, w, h, vfs.NewOSVFS("."))
+	waitForLoad(t, fp)
 
 	if fp.X1 != x || fp.Y1 != y || fp.X2 != x+w-1 || fp.Y2 != y+h-1 {
 		t.Errorf("Panel coordinates not initialized correctly: got (%d,%d)-(%d,%d)", fp.X1, fp.Y1, fp.X2, fp.Y2)
@@ -1015,6 +1015,7 @@ func TestFileSystemPanel_InfoLineRendering(t *testing.T) {
 }
 func TestFileSystemPanel_CursorMapping(t *testing.T) {
 	fp := NewFileSystemPanel(0, 0, 80, 12, vfs.NewOSVFS("."))
+	waitForLoad(t, fp)
 
 	// Simulate 20 items manually so Refresh() doesn't wipe them
 	fp.entries = make([]*fileEntry, 20)
@@ -1047,6 +1048,7 @@ func TestFileSystemPanel_CursorMapping(t *testing.T) {
 
 func TestFileSystemPanel_SelectName(t *testing.T) {
 	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS("."))
+	waitForLoad(t, fp)
 	fp.SetViewMode(ViewModeDetailed)
 
 	// Mock entries
@@ -1083,6 +1085,7 @@ func TestFileSystemPanel_MultiSelect(t *testing.T) {
 	}
 
 	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(tmp))
+	waitForLoad(t, fp)
 	fp.viewMode = ViewModeDetailed
 
 	// Bypass async ReadDirectory for precise testing
@@ -1452,6 +1455,7 @@ drain:
 
 func TestFileSystemPanel_ProcessMouse(t *testing.T) {
 	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS("."))
+	waitForLoad(t, fp)
 	fp.SetViewMode(ViewModeDetailed)
 
 	fp.entries = []*fileEntry{
@@ -2074,6 +2078,7 @@ func TestFileSystemPanel_CursorColorsColumnSeparators(t *testing.T) {
 
 func TestFileSystemPanel_MouseClick_Edges(t *testing.T) {
 	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS("."))
+	waitForLoad(t, fp)
 	fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: ".."}}}
 	fp.SetCursorIndex(0)
 
@@ -2098,6 +2103,7 @@ func TestFileSystemPanel_MouseClick_Edges(t *testing.T) {
 
 func TestFileSystemPanel_RightClick_ResetOnRelease(t *testing.T) {
 	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS("."))
+	waitForLoad(t, fp)
 	fp.viewMode = ViewModeDetailed
 	fp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "f1"}}}
 
@@ -2125,6 +2131,7 @@ func TestFileSystemPanel_RightClick_ResetOnRelease(t *testing.T) {
 
 func TestFileSystemPanel_RightDragAppliesToSkippedRows(t *testing.T) {
 	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS("."))
+	waitForLoad(t, fp)
 	fp.SetViewMode(ViewModeDetailed)
 	fp.entries = []*fileEntry{
 		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
@@ -2174,6 +2181,7 @@ func TestFileSystemPanel_RightDragAppliesToSkippedRows(t *testing.T) {
 
 func TestFileSystemPanel_RightDragTracksGridColumn(t *testing.T) {
 	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS("."))
+	waitForLoad(t, fp)
 	fp.SetViewMode(ViewModeMedium)
 
 	height := fp.table.ViewHeight
@@ -2212,6 +2220,7 @@ func TestFileSystemPanel_RightDragTracksGridColumn(t *testing.T) {
 
 func TestFileSystemPanel_RightDoubleClickAppliesToWholePanel(t *testing.T) {
 	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS("."))
+	waitForLoad(t, fp)
 	fp.SetViewMode(ViewModeDetailed)
 	fp.entries = []*fileEntry{
 		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
@@ -3459,14 +3468,26 @@ func waitForLoad(t *testing.T, fp *FileSystemPanel) {
 		}
 	}
 	// Drain any final UI tasks after isLoading becomes false
+drain:
 	for i := 0; i < 5; i++ {
 		select {
 		case task := <-vtui.FrameManager.TaskChan:
 			task()
 		default:
-			return
+			break drain
 		}
 	}
+
+	// isLoading is cleared by the final UI task just before the directory
+	// worker returns to its queue loop. Enqueue a sentinel and join the worker
+	// so it cannot keep reading globals used by the next test.
+	fp.enqueueDirectoryLoad(func() {})
+	done := make(chan struct{})
+	go func() {
+		fp.loadWorkerWG.Wait()
+		close(done)
+	}()
+	waitForPanelSignal(t, done, "directory worker to stop")
 }
 
 func TestFileSystemPanel_PermissionFailureRestoresAbsoluteParentWithoutDialogLoop(t *testing.T) {

@@ -3,6 +3,7 @@ package netfox
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -93,7 +94,7 @@ func NewFTPVFS(parent vfs.VFS, host, port, user, pass string, timeout int, optio
 
 	err = c.Login(user, pass)
 	if err != nil {
-		c.Quit()
+		_ = c.Quit() // Preserve the authentication failure.
 		return nil, err
 	}
 	vtui.DebugLog("NET: FTP logged in successfully")
@@ -271,12 +272,22 @@ func (v *FTPVFS) Open(ctx context.Context, p string) (vfs.ReadAtCloser, error) {
 	if err != nil {
 		return nil, err
 	}
-	tmp, _ := os.CreateTemp("", "f4ftp-*")
-	io.Copy(tmp, &ioCtxReader{r: resp, ctx: ctx})
-	resp.Close()
-	tmp.Seek(0, 0)
-	stat, _ := tmp.Stat()
-	return &ftpFileWrapper{File: tmp, size: stat.Size(), path: tmp.Name()}, nil
+	tmp, err := os.CreateTemp("", "f4ftp-*")
+	if err != nil {
+		_ = resp.Close() // Preserve the temp-file creation failure.
+		return nil, err
+	}
+	cleanup := func() error {
+		return errors.Join(tmp.Close(), os.Remove(tmp.Name()))
+	}
+	size, copyErr := io.Copy(tmp, &ioCtxReader{r: resp, ctx: ctx})
+	if err := errors.Join(copyErr, resp.Close()); err != nil {
+		return nil, errors.Join(err, cleanup())
+	}
+	if _, err := tmp.Seek(0, io.SeekStart); err != nil {
+		return nil, errors.Join(err, cleanup())
+	}
+	return &ftpFileWrapper{File: tmp, size: size, path: tmp.Name()}, nil
 }
 
 func (v *FTPVFS) Create(ctx context.Context, p string) (io.WriteCloser, error) {
@@ -316,9 +327,11 @@ func (p *ftpProvider) CanOpen(ctx context.Context, parent vfs.VFS, pth string) b
 	if err != nil {
 		return false
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }() // The configuration file is read-only.
 	var cfg NetFoxConfig
-	json.NewDecoder(ctxReader{f, ctx}).Decode(&cfg)
+	if err := json.NewDecoder(ctxReader{f, ctx}).Decode(&cfg); err != nil {
+		return false
+	}
 	return cfg.Type == "ftp"
 }
 func (p *ftpProvider) Open(ctx context.Context, parent vfs.VFS, pth string) (vfs.VFS, error) {
@@ -327,9 +340,11 @@ func (p *ftpProvider) Open(ctx context.Context, parent vfs.VFS, pth string) (vfs
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }() // The configuration file is read-only.
 	var cfg NetFoxConfig
-	json.NewDecoder(ctxReader{f, ctx}).Decode(&cfg)
+	if err := json.NewDecoder(ctxReader{f, ctx}).Decode(&cfg); err != nil {
+		return nil, fmt.Errorf("netfox: decode FTP connection: %w", err)
+	}
 	port := cfg.Port
 	if port == "" {
 		port = "21"
@@ -393,4 +408,4 @@ func (w *ftpFileWrapper) ReadAt(ctx context.Context, p []byte, off int64) (int, 
 	return w.File.ReadAt(p, off)
 }
 func (w *ftpFileWrapper) Read(ctx context.Context, p []byte) (int, error) { return w.File.Read(p) }
-func (w *ftpFileWrapper) Close() error                                    { w.File.Close(); return os.Remove(w.path) }
+func (w *ftpFileWrapper) Close() error                                    { return errors.Join(w.File.Close(), os.Remove(w.path)) }

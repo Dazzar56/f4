@@ -308,10 +308,10 @@ func (t *webDAVDigestTransport) RoundTrip(req *http.Request) (*http.Response, er
 	}
 	parsed, parseErr := parseDigestChallenge(resp.Header.Values("WWW-Authenticate"))
 	if parseErr != nil {
-		resp.Body.Close()
+		_ = resp.Body.Close() // Response-body cleanup is best effort.
 		return nil, parseErr
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close() // Response-body cleanup is best effort.
 	t.setChallenge(parsed)
 	challenge, nonceCount = t.cachedChallenge()
 	return t.roundTrip(req, challenge, nonceCount, !hadChallenge)
@@ -1282,7 +1282,7 @@ func (b *webDAVBackend) propfind(ctx context.Context, location, depth string, ac
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }() // Response-body cleanup is best effort.
 	if resp.StatusCode != http.StatusMultiStatus {
 		return mapWebDAVHTTPError(resp, readSmallResponse(resp))
 	}
@@ -1438,7 +1438,7 @@ func (b *webDAVBackend) MkDir(ctx context.Context, location string) error {
 		}
 		_, canonicalCollection := webDAVTrailingSlashRedirect(resp)
 		if resp.StatusCode == http.StatusMethodNotAllowed || canonicalCollection {
-			resp.Body.Close()
+			_ = resp.Body.Close() // Response-body cleanup is best effort.
 			entry, statErr := b.Stat(ctx, current)
 			if statErr != nil {
 				if canonicalCollection {
@@ -1453,10 +1453,10 @@ func (b *webDAVBackend) MkDir(ctx context.Context, location string) error {
 		}
 		if resp.StatusCode != http.StatusCreated {
 			message := readSmallResponse(resp)
-			resp.Body.Close()
+			_ = resp.Body.Close() // Response-body cleanup is best effort.
 			return failure(current, webDAVHTTPMutationError("WebDAV MKCOL", resp, message))
 		}
-		resp.Body.Close()
+		_ = resp.Body.Close() // Response-body cleanup is best effort.
 		created = append(created, current)
 	}
 	return nil
@@ -1478,7 +1478,7 @@ func (b *webDAVBackend) mutation(ctx context.Context, method, location string, h
 	if err != nil {
 		return &vfs.UnknownOperationStateError{Operation: "WebDAV " + method, Err: safeWebDAVMutationTransportError(err)}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }() // Response-body cleanup is best effort.
 	if resp.Request != nil && resp.Request.Method != method {
 		return &vfs.UnknownOperationStateError{
 			Operation: "WebDAV " + method,
@@ -1744,7 +1744,7 @@ func (r *webDAVRangeReader) readRange(ctx context.Context, p []byte, start, requ
 	if err != nil {
 		return 0, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }() // Response-body cleanup is best effort.
 	if resp.StatusCode == http.StatusPreconditionFailed {
 		return 0, ErrRemoteObjectChanged
 	}
@@ -1897,13 +1897,11 @@ func responseToTempReader(ctx context.Context, resp *http.Response, displayName 
 		return nil, err
 	}
 	tempPath := f.Name()
-	cleanup := func() {
-		f.Close()
-		os.Remove(tempPath)
+	cleanup := func() error {
+		return errors.Join(f.Close(), os.Remove(tempPath))
 	}
 	if err := f.Chmod(0o600); err != nil {
-		cleanup()
-		return nil, err
+		return nil, errors.Join(err, cleanup())
 	}
 	total := resp.ContentLength
 	if total < 0 {
@@ -1921,16 +1919,13 @@ func responseToTempReader(ctx context.Context, resp *http.Response, displayName 
 	}
 	written, err := copyWebDAVResponse(ctx, f, &contextReader{ctx: ctx, r: body}, total, displayName)
 	if err != nil {
-		cleanup()
-		return nil, err
+		return nil, errors.Join(err, cleanup())
 	}
 	if requireExpectedSize && written != expectedSize {
-		cleanup()
-		return nil, fmt.Errorf("%w: WebDAV response size changed from %d to %d bytes", ErrRemoteObjectChanged, expectedSize, written)
+		return nil, errors.Join(fmt.Errorf("%w: WebDAV response size changed from %d to %d bytes", ErrRemoteObjectChanged, expectedSize, written), cleanup())
 	}
 	if _, err := f.Seek(0, io.SeekStart); err != nil {
-		cleanup()
-		return nil, err
+		return nil, errors.Join(err, cleanup())
 	}
 	if reporter, ok := ctx.Value(vfs.ReporterKey).(vfs.TaskReporter); ok {
 		reporter.UpdateTransfer("Downloading", displayName, 100, "", 100, "")
@@ -1972,7 +1967,7 @@ func (b *webDAVBackend) Open(ctx context.Context, location string) (vfs.ReadAtCl
 		return nil, err
 	}
 	if resp.StatusCode == http.StatusPreconditionFailed {
-		resp.Body.Close()
+		_ = resp.Body.Close() // Response-body cleanup is best effort.
 		return nil, ErrRemoteObjectChanged
 	}
 	if resp.StatusCode == http.StatusRequestedRangeNotSatisfiable {
@@ -1980,7 +1975,7 @@ func (b *webDAVBackend) Open(ctx context.Context, location string) (vfs.ReadAtCl
 		if strings.HasPrefix(strings.ToLower(contentRange), "bytes */") {
 			actualSize, sizeErr := strconv.ParseInt(strings.TrimSpace(contentRange[len("bytes */"):]), 10, 64)
 			if sizeErr == nil && entry.SizeKnown && actualSize != entry.Size {
-				resp.Body.Close()
+				_ = resp.Body.Close() // Response-body cleanup is best effort.
 				return nil, ErrRemoteObjectChanged
 			}
 		}
@@ -1988,15 +1983,15 @@ func (b *webDAVBackend) Open(ctx context.Context, location string) (vfs.ReadAtCl
 	if resp.StatusCode == http.StatusPartialContent {
 		probeStart, probeEnd, probeTotal, rangeErr := parseContentRange(resp.Header.Get("Content-Range"))
 		if rangeErr == nil && probeTotal != entry.Size {
-			resp.Body.Close()
+			_ = resp.Body.Close() // Response-body cleanup is best effort.
 			return nil, ErrRemoteObjectChanged
 		}
 		if rangeErr != nil || probeStart != 0 || probeEnd != 0 {
-			resp.Body.Close()
+			_ = resp.Body.Close() // Response-body cleanup is best effort.
 			return nil, fmt.Errorf("cloudfox: Content-Range %q does not match WebDAV range probe bytes 0-0/%d", resp.Header.Get("Content-Range"), entry.Size)
 		}
 		probe, readErr := io.ReadAll(io.LimitReader(resp.Body, 2))
-		resp.Body.Close()
+		_ = resp.Body.Close() // Response-body cleanup is best effort.
 		if readErr != nil || len(probe) != 1 {
 			if readErr == nil {
 				readErr = fmt.Errorf("received %d bytes, want 1", len(probe))
@@ -2031,7 +2026,7 @@ func (b *webDAVBackend) Open(ctx context.Context, location string) (vfs.ReadAtCl
 		if err != nil {
 			return nil, err
 		}
-		defer fullResp.Body.Close()
+		defer func() { _ = fullResp.Body.Close() }() // Response-body cleanup is best effort.
 		if fullResp.StatusCode != http.StatusOK {
 			return nil, mapWebDAVHTTPError(fullResp, readSmallResponse(fullResp))
 		}
@@ -2046,10 +2041,10 @@ func (b *webDAVBackend) Open(ctx context.Context, location string) (vfs.ReadAtCl
 		return b.downloads.install(entry.Location, cacheFingerprint, temp)
 	}
 	if resp.StatusCode != http.StatusOK {
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }() // Response-body cleanup is best effort.
 		return nil, mapWebDAVHTTPError(resp, readSmallResponse(resp))
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }() // Response-body cleanup is best effort.
 	cacheFingerprint, fingerprintErr := webDAVFullResponseFingerprint(entry.Revision, fingerprint, resp.Header.Get("ETag"))
 	if fingerprintErr != nil {
 		return nil, fingerprintErr
@@ -2108,7 +2103,7 @@ func (b *webDAVBackend) Create(ctx context.Context, location string) (io.WriteCl
 		if err != nil {
 			return &vfs.UnknownOperationStateError{Operation: "WebDAV PUT", Err: safeWebDAVMutationTransportError(err)}
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }() // Response-body cleanup is best effort.
 		if resp.Request != nil && resp.Request.Method != http.MethodPut {
 			return &vfs.UnknownOperationStateError{
 				Operation: "WebDAV PUT",
