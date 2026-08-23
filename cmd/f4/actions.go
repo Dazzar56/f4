@@ -3917,9 +3917,9 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 			}
 		}
 	}
-	fontChoices := guiFontChoices(AppConfig.Language, AppConfig.GuiFont)
+	fontChoices := guiFontDisplayChoices(AppConfig.Language, AppConfig.GuiFont)
 	comboFont := vtui.NewComboBox(0, 0, 30, fontChoices)
-	comboFont.Edit.SetText(AppConfig.GuiFont)
+	comboFont.Edit.SetText(guiFontDisplayName(AppConfig.GuiFont))
 	lblFont := vtui.NewLabel(0, 0, Msg("AppearanceSettings.Font"), comboFont)
 	chkSystemMonospace := vtui.NewCheckbox(0, 0, Msg("AppearanceSettings.UseSystemMonospace"), false)
 	if AppConfig.GuiUseSystemMonospace {
