@@ -4259,7 +4259,10 @@ func (pf *PanelsFrame) showDriveMenu(panelIdx int) {
 // land on that drive, otherwise keep the historic default — the "Other panel"
 // entry at row 0.
 func (pf *PanelsFrame) driveMenuDefaultPos(panelIdx int) int {
-	fsp := pf.panels[panelIdx].(*FileSystemPanel)
+	fsp, ok := pf.panels[panelIdx].(*FileSystemPanel)
+	if !ok {
+		return 0
+	}
 	osVFS, ok := fsp.vfs.(*vfs.OSVFS)
 	if !ok {
 		return 0
