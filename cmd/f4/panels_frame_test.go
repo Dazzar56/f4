@@ -612,6 +612,27 @@ func bookmarkRow(t *testing.T, menu *vtui.VMenu) int {
 	return -1
 }
 
+// wantDriveMenuRow re-derives from the rendered menu the row the cursor is
+// supposed to open on for a panel sitting at cur: the drive entry that owns
+// cur when the menu lists one (Windows drive letters), otherwise the "Other
+// panel" entry at row 0. Deliberately independent of driveMenuDefaultPos, so
+// the assertions still test something, and independent of the platform, so
+// the runner's drive layout cannot flip them -- GitHub's Windows images check
+// the tree out on D:, which is what made this a hard-coded 0 no longer true.
+func wantDriveMenuRow(menu *vtui.VMenu, cur string) int {
+	vol := strings.ToUpper(filepath.VolumeName(cur))
+	if vol == "" {
+		return 0
+	}
+	for i, it := range menu.Items {
+		text := strings.ToUpper(strings.ReplaceAll(it.Text, "&", ""))
+		if strings.HasPrefix(text, vol) {
+			return i
+		}
+	}
+	return 0
+}
+
 func TestPanelsFrame_DriveMenuBookmarkKeys(t *testing.T) {
 	cfg := t.TempDir()
 	// os.UserConfigDir ignores XDG_CONFIG_HOME on darwin; go through the seam.
@@ -3824,14 +3845,15 @@ func TestPanelsFrame_DriveMenu_OtherPanel(t *testing.T) {
 		t.Fatal("Drive menu not opened")
 	}
 
-	// Ensure "Other panel" is at index 0. On Windows the cursor instead
-	// lands on the drive the active panel currently shows (see
-	// driveMenuDefaultPos), so only assert the default selection off-Windows.
+	// "Other panel" stays at index 0, but the cursor now opens on the drive
+	// the panel currently shows when the menu lists it (driveMenuDefaultPos,
+	// far2l parity), so the expected row depends on where the panel sits.
 	if menu.GetTitle() != Msg("Drive.Title") {
 		t.Errorf("Menu title invalid: %q", menu.GetTitle())
 	}
-	if runtime.GOOS != "windows" && menu.SelectPos != 0 {
-		t.Errorf("Menu state invalid: pos=%d, want 0", menu.SelectPos)
+	cur := pf.panels[0].(*FileSystemPanel).vfs.GetPath()
+	if want := wantDriveMenuRow(menu, cur); menu.SelectPos != want {
+		t.Errorf("Menu state invalid: pos=%d, want %d (panel at %q)", menu.SelectPos, want, cur)
 	}
 
 	// Trigger "Other panel" (idx 0)
@@ -3923,9 +3945,11 @@ func TestDriveMenu_SmartHotkeys(t *testing.T) {
 		t.Fatalf("Expected VMenu on top, got %T", top)
 	}
 
-	// 1. Проверка фокуса (Other panel по умолчанию)
-	if menu.SelectPos != 0 {
-		t.Errorf("Expected 'Other panel' (index 0) to be focused, got index %d", menu.SelectPos)
+	// 1. Проверка фокуса: "Other panel" по умолчанию, но если панель стоит
+	// на диске, который есть в меню, курсор садится на него (Windows).
+	cur := pf.panels[0].(*FileSystemPanel).vfs.GetPath()
+	if want := wantDriveMenuRow(menu, cur); menu.SelectPos != want {
+		t.Errorf("Expected row %d to be focused, got index %d (panel at %q)", want, menu.SelectPos, cur)
 	}
 
 	// 2. Ищем плагины в пунктах меню
