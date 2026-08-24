@@ -272,6 +272,14 @@ between bands would lift that limit entirely, and f4's receiver already honours
 it — the two halves of the protocol are asymmetric until this is done. Note
 that this is the vtui repository, not f4.
 
+Konsole's sixel decoder is not compatible with that full-colour form: it keeps
+indexed pixels and mutates the shared palette when a later band redefines a
+register, recolouring bands that were already decoded. f4 therefore selects
+vtui's existing kitty transport for Konsole 22.04 and later, where the terminal
+supports the raw RGB/RGBA subset used by the image viewer. This leaves the
+full-colour sixel path unchanged for terminals that handle it correctly, and a
+valid `VTUI_GRAPHICS` override still takes precedence.
+
 **15. Nothing.** The device attributes answer used to be swallowed when a
 chunk ended on its final byte, which kept every client from ever asking for a
 picture. Fixed; see the trap in section 7.
