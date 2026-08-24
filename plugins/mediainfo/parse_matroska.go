@@ -104,6 +104,10 @@ func walkEBML(p *probe, st *ebmlState, start, end int64, depth int, ctx ebmlCont
 			return &ParseError{Format: "Matroska", Offset: pos, Err: e}
 		}
 		data := pos + int64(idn+szn)
+		if sz > math.MaxInt64 {
+			return &ParseError{Format: "Matroska", Offset: pos, Err: errors.New("element size exceeds the supported range")}
+		}
+		// #nosec G115 -- the explicit MaxInt64 check above makes this conversion lossless.
 		size := int64(sz)
 		if unknown {
 			size = end - data
@@ -197,6 +201,22 @@ func parseEBMLLeaf(p *probe, st *ebmlState, id uint64, off, size int64, ctx *ebm
 	u := func() uint64 { return uintValue }
 	str := func() string { return textValue }
 	flt := func() float64 { return floatValue }
+	integer := func(field string) (int, error) {
+		value := u()
+		converted, ok := metadataInt(value)
+		if !ok {
+			return 0, &ParseError{Format: "Matroska", Offset: off, Err: fmt.Errorf("%s value %d exceeds the supported integer range", field, value)}
+		}
+		return converted, nil
+	}
+	duration := func(field string) (time.Duration, error) {
+		value := u()
+		converted, ok := metadataDuration(value)
+		if !ok {
+			return 0, &ParseError{Format: "Matroska", Offset: off, Err: fmt.Errorf("%s value %d exceeds the supported duration range", field, value)}
+		}
+		return converted, nil
+	}
 	switch id {
 	case 0x4282:
 		st.docType = str()
@@ -253,19 +273,35 @@ func parseEBMLLeaf(p *probe, st *ebmlState, id uint64, off, size int64, ctx *ebm
 		}
 	case 0xb0:
 		if ctx.track != nil {
-			ensureVideo(ctx.track).Width = int(u())
+			value, err := integer("PixelWidth")
+			if err != nil {
+				return err
+			}
+			ensureVideo(ctx.track).Width = value
 		}
 	case 0xba:
 		if ctx.track != nil {
-			ensureVideo(ctx.track).Height = int(u())
+			value, err := integer("PixelHeight")
+			if err != nil {
+				return err
+			}
+			ensureVideo(ctx.track).Height = value
 		}
 	case 0x54b0:
 		if ctx.track != nil {
-			ensureVideo(ctx.track).DisplayWidth = int(u())
+			value, err := integer("DisplayWidth")
+			if err != nil {
+				return err
+			}
+			ensureVideo(ctx.track).DisplayWidth = value
 		}
 	case 0x54ba:
 		if ctx.track != nil {
-			ensureVideo(ctx.track).DisplayHeight = int(u())
+			value, err := integer("DisplayHeight")
+			if err != nil {
+				return err
+			}
+			ensureVideo(ctx.track).DisplayHeight = value
 		}
 	case 0x9a:
 		if ctx.track != nil && u() != 0 {
@@ -289,7 +325,11 @@ func parseEBMLLeaf(p *probe, st *ebmlState, id uint64, off, size int64, ctx *ebm
 		}
 	case 0x55b2:
 		if ctx.track != nil {
-			ensureVideo(ctx.track).BitDepth = int(u())
+			value, err := integer("BitsPerChannel")
+			if err != nil {
+				return err
+			}
+			ensureVideo(ctx.track).BitDepth = value
 		}
 	case 0xb5:
 		if ctx.track != nil {
@@ -297,11 +337,19 @@ func parseEBMLLeaf(p *probe, st *ebmlState, id uint64, off, size int64, ctx *ebm
 		}
 	case 0x9f:
 		if ctx.track != nil {
-			ensureAudio(ctx.track).Channels = int(u())
+			value, err := integer("Channels")
+			if err != nil {
+				return err
+			}
+			ensureAudio(ctx.track).Channels = value
 		}
 	case 0x6264:
 		if ctx.track != nil {
-			ensureAudio(ctx.track).BitDepth = int(u())
+			value, err := integer("BitDepth")
+			if err != nil {
+				return err
+			}
+			ensureAudio(ctx.track).BitDepth = value
 		}
 	case 0x45a3:
 		ctx.tagName = str()
@@ -319,11 +367,19 @@ func parseEBMLLeaf(p *probe, st *ebmlState, id uint64, off, size int64, ctx *ebm
 		}
 	case 0x91:
 		if ctx.chapter != nil {
-			ctx.chapter.Start = time.Duration(u())
+			value, err := duration("ChapterTimeStart")
+			if err != nil {
+				return err
+			}
+			ctx.chapter.Start = value
 		}
 	case 0x92:
 		if ctx.chapter != nil {
-			ctx.chapter.End = time.Duration(u())
+			value, err := duration("ChapterTimeEnd")
+			if err != nil {
+				return err
+			}
+			ctx.chapter.End = value
 		}
 	case 0x85:
 		if ctx.chapter != nil {

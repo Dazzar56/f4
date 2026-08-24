@@ -13,6 +13,7 @@ package ttyx
 
 import (
 	"errors"
+	"math"
 	"os"
 	"sync"
 
@@ -190,7 +191,12 @@ func (s *Session) keycodesFor(combos []Combo) ([]xproto.Keycode, error) {
 
 	setup := xproto.Setup(s.conn)
 	first := setup.MinKeycode
-	count := byte(setup.MaxKeycode - setup.MinKeycode + 1)
+	keycodeCount := int(setup.MaxKeycode) - int(setup.MinKeycode) + 1
+	if keycodeCount <= 0 || keycodeCount > math.MaxUint8 {
+		return nil, ErrNoDisplay
+	}
+	// #nosec G115 -- the explicit MaxUint8 check above makes this conversion lossless.
+	count := byte(keycodeCount)
 	mapping, err := xproto.GetKeyboardMapping(s.conn, first, count).Reply()
 	if err != nil || mapping == nil || mapping.KeysymsPerKeycode == 0 {
 		return nil, ErrNoDisplay
@@ -203,6 +209,7 @@ func (s *Session) keycodesFor(combos []Combo) ([]xproto.Keycode, error) {
 			found := false
 			for j := 0; j < per; j++ {
 				if uint32(mapping.Keysyms[k*per+j]) == c.Keysym {
+					// #nosec G115 -- k is bounded by the validated keycode span beginning at first.
 					out[i] = xproto.Keycode(int(first) + k)
 					found = true
 					break

@@ -1,6 +1,7 @@
 package luaplug
 
 import (
+	"math"
 	"runtime"
 	"strings"
 
@@ -52,7 +53,12 @@ func (r *Runtime) openFFI(L *lua.LState) {
 // are doubles: exact below 2^53, and every address on every platform f4 targets
 // is far below that.
 func checkAddr(L *lua.LState, index int) uintptr {
-	return uintptr(int64(L.CheckNumber(index)))
+	value := float64(L.CheckNumber(index))
+	if math.IsNaN(value) || math.IsInf(value, 0) || value < 0 || value > float64(^uintptr(0)) || math.Trunc(value) != value {
+		L.ArgError(index, "address must be a non-negative, exactly representable pointer value")
+		return 0
+	}
+	return uintptr(value)
 }
 
 // collectArgs turns the trailing arguments of a call into host values.
@@ -327,17 +333,17 @@ func narrowCallbackValue(k ffibridge.Kind, v any) any {
 	p, _ := v.(uintptr)
 	switch k {
 	case ffibridge.KindI8:
-		return int8(uint8(p))
+		return int8(uint8(p)) // #nosec G115 -- callback ABI narrowing intentionally preserves the low 8 bits and their signed interpretation.
 	case ffibridge.KindU8:
-		return uint8(p)
+		return uint8(p) // #nosec G115 -- callback ABI narrowing intentionally preserves the low 8 bits.
 	case ffibridge.KindI16:
-		return int16(uint16(p))
+		return int16(uint16(p)) // #nosec G115 -- callback ABI narrowing intentionally preserves the low 16 bits and their signed interpretation.
 	case ffibridge.KindU16:
-		return uint16(p)
+		return uint16(p) // #nosec G115 -- callback ABI narrowing intentionally preserves the low 16 bits.
 	case ffibridge.KindI32:
-		return int32(uint32(p))
+		return int32(uint32(p)) // #nosec G115 -- callback ABI narrowing intentionally preserves the low 32 bits and their signed interpretation.
 	case ffibridge.KindU32:
-		return uint32(p)
+		return uint32(p) // #nosec G115 -- callback ABI narrowing intentionally preserves the low 32 bits.
 	case ffibridge.KindBool:
 		return p != 0
 	}

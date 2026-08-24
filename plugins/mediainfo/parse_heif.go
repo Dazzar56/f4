@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"path/filepath"
 	"strings"
 )
@@ -96,7 +97,12 @@ func walkHEIFBoxes(p *probe, st *heifState, start, end int64, depth int, metaChi
 			if err != nil {
 				return err
 			}
-			size, header = int64(binary.BigEndian.Uint64(x)), 16
+			extendedSize := binary.BigEndian.Uint64(x)
+			if extendedSize > math.MaxInt64 {
+				return &ParseError{Format: "HEIF", Offset: pos, Err: fmt.Errorf("invalid %q box size", string(h[4:8]))}
+			}
+			// #nosec G115 -- the explicit MaxInt64 check above makes this conversion lossless.
+			size, header = int64(extendedSize), 16
 		case 0:
 			size = end - pos
 		}

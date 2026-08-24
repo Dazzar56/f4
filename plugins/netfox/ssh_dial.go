@@ -76,6 +76,7 @@ func DialSSH(host, port, user, pass, keyPath string, timeout int, px netproxy.Se
 	var agentConn net.Conn
 
 	if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
+		// #nosec G704 -- SSH_AUTH_SOCK is an explicit user-session Unix socket, not a network URL or remotely supplied address.
 		if conn, err := net.Dial("unix", sock); err == nil {
 			agentConn = conn
 			agentClient := agent.NewClient(conn)

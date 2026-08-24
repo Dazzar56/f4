@@ -140,7 +140,8 @@ func parseMPEGAudio(p *probe, head []byte) error {
 	frames, audioBytes := parseXingVBRI(first, mh)
 	if frames > 0 {
 		stream.FrameCount = int64(frames)
-		stream.Duration = durationFromUnits(uint64(frames*mh.samples), uint64(mh.sampleRate))
+		// #nosec G115 -- frames comes from uint32 metadata, while samples and sampleRate are bounded MPEG-header table values.
+		stream.Duration = durationFromUnits(uint64(frames)*uint64(mh.samples), uint64(mh.sampleRate))
 		stream.BitRateMode = "VBR"
 		if audioBytes > 0 && stream.Duration > 0 {
 			stream.BitRate = int64(float64(audioBytes*8) / stream.Duration.Seconds())
@@ -349,9 +350,10 @@ func parseVorbisComments(p *probe, b []byte) {
 		return
 	}
 	vendorSize := uint64(binary.LittleEndian.Uint32(b[:4]))
-	if vendorSize > uint64(len(b)-8) {
+	if vendorSize > uint64(len(b)-8) { // #nosec G115 -- len(b)-8 is non-negative because the header length was checked above.
 		return
 	}
+	// #nosec G115 -- vendorSize was checked against the in-memory slice length above.
 	vendorLen := int(vendorSize)
 	vendor := b[4 : 4+vendorLen]
 	if len(vendor) > p.opts.MaxValueBytes {
@@ -583,7 +585,12 @@ func findLastOggGranule(p *probe, serial uint32) int64 {
 	}
 	for i := len(b) - 27; i >= 0; i-- {
 		if string(b[i:i+4]) == "OggS" && binary.LittleEndian.Uint32(b[i+14:i+18]) == serial {
-			return int64(binary.LittleEndian.Uint64(b[i+6 : i+14]))
+			granule := binary.LittleEndian.Uint64(b[i+6 : i+14])
+			if granule > math.MaxInt64 {
+				return 0
+			}
+			// #nosec G115 -- the explicit MaxInt64 check above makes this conversion lossless.
+			return int64(granule)
 		}
 	}
 	return 0
@@ -623,8 +630,12 @@ func parseAIFF(p *probe, _ []byte) error {
 				s.Audio.Channels = int(binary.BigEndian.Uint16(b[:2]))
 				frames := binary.BigEndian.Uint32(b[2:6])
 				s.Audio.BitDepth = int(binary.BigEndian.Uint16(b[6:8]))
-				s.Audio.SampleRate = int(extended80(b[8:18]))
-				s.Duration = durationFromUnits(uint64(frames), uint64(s.Audio.SampleRate))
+				sampleRate := extended80(b[8:18])
+				if math.IsNaN(sampleRate) || math.IsInf(sampleRate, 0) || sampleRate <= 0 || sampleRate > float64(^uint(0)>>1) {
+					return &ParseError{Format: form, Offset: data + 8, Err: errors.New("invalid AIFF sample rate")}
+				}
+				s.Audio.SampleRate = int(sampleRate)
+				s.Duration = durationFromUnits(uint64(frames), uint64(sampleRate))
 				if form == "AIFC" && len(b) >= 22 {
 					s.CodecID = fourCC(b[18:22])
 					s.Format = aiffCodec(s.CodecID)

@@ -70,8 +70,8 @@ type visualCluster struct {
 // the text, so scrolling through a file was enough to exhaust memory.
 type noWrapLayout struct {
 	fragments    []LineFragment
-	clusterEnds  []int32
-	prefixWidths []int32
+	clusterEnds  []int
+	prefixWidths []int
 	hasRTL       bool
 }
 
@@ -554,8 +554,8 @@ func (we *WrapEngine) GetFragments(logLineIdx int) []LineFragment {
 	if !we.wordWrap || we.wrapWidth <= 0 {
 		text := string(lineData)
 		clusters := visualClusters(text)
-		clusterEnds := make([]int32, len(clusters))
-		prefixWidths := make([]int32, len(clusters)+1)
+		clusterEnds := make([]int, len(clusters))
+		prefixWidths := make([]int, len(clusters)+1)
 		for i, cluster := range clusters {
 			width := cluster.width
 			if cluster.text == "\t" {
@@ -564,14 +564,14 @@ func (we *WrapEngine) GetFragments(logLineIdx int) []LineFragment {
 			if width <= 0 {
 				width = 1
 			}
-			clusterEnds[i] = int32(cluster.byteEnd)
-			prefixWidths[i+1] = prefixWidths[i] + int32(width)
+			clusterEnds[i] = cluster.byteEnd
+			prefixWidths[i+1] = prefixWidths[i] + width
 		}
 		frag := LineFragment{
 			LogicalLineIdx:  logLineIdx,
 			ByteOffsetStart: startOffset,
 			ByteOffsetEnd:   startOffset + len(lineData),
-			VisualWidth:     int(prefixWidths[len(prefixWidths)-1]),
+			VisualWidth:     prefixWidths[len(prefixWidths)-1],
 		}
 		fragments := []LineFragment{frag}
 		if !truncated && len(text) <= math.MaxInt32 {
@@ -838,9 +838,9 @@ func (we *WrapEngine) LogicalToVisual(byteOffset int) (visualRow, visualCol int)
 				relative = frag.ByteOffsetEnd - frag.ByteOffsetStart
 			}
 			clusterIndex := sort.Search(len(cached.clusterEnds), func(i int) bool {
-				return int32(relative) < cached.clusterEnds[i]
+				return relative < cached.clusterEnds[i]
 			})
-			return totalRow, int(cached.prefixWidths[clusterIndex])
+			return totalRow, cached.prefixWidths[clusterIndex]
 		}
 	}
 

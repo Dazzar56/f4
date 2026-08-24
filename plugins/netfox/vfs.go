@@ -293,6 +293,7 @@ func (v *NetFoxVFS) Open(ctx context.Context, p string) (vfs.ReadAtCloser, error
 	if !ok {
 		return nil, os.ErrNotExist
 	}
+	// #nosec G117 -- this user-opened virtual connection file intentionally exposes the owning user's editable connection fields.
 	data, _ := json.MarshalIndent(cfg, "", "  ")
 	return &bufferReadAtCloser{Reader: bytes.NewReader(data)}, nil
 }

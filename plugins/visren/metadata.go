@@ -391,6 +391,7 @@ func fixedFileVersion(data []byte) string {
 	}
 	ms := binary.LittleEndian.Uint32(data[idx+8 : idx+12])
 	ls := binary.LittleEndian.Uint32(data[idx+12 : idx+16])
+	// #nosec G115 -- VS_FIXEDFILEINFO stores each version component in an intentional 16-bit half-word.
 	parts := []uint16{uint16(ms >> 16), uint16(ms), uint16(ls >> 16), uint16(ls)}
 	if parts[0]|parts[1]|parts[2]|parts[3] == 0 {
 		return ""
