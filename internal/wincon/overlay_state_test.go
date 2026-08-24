@@ -40,7 +40,7 @@ func TestAChangeDuringApplyGetsItsOwnWakeUp(t *testing.T) {
 	var s overlayState
 	s.place(Rect{W: 8, H: 8})
 	s.take()
-	if !s.place(Rect{W: 9, H: 9}) {
+	if post, _ := s.place(Rect{W: 9, H: 9}); !post {
 		t.Fatal("the move that arrived during apply would be lost")
 	}
 	if ops := s.take(); !ops.Move || ops.Rect.W != 9 {
