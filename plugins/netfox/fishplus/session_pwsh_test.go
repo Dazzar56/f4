@@ -178,7 +178,7 @@ func TestHelperAgainstLocalPwshEnumAndRead(t *testing.T) {
 	// carries the length, the read brings back the bytes.
 	const body = "one two three\nfour five six\n"
 	fp := filepath.Join(dir, "sample.txt")
-	if err := os.WriteFile(fp, []byte(body), 0644); err != nil {
+	if err := os.WriteFile(fp, []byte(body), 0600); err != nil {
 		t.Fatalf("write sample: %v", err)
 	}
 
@@ -292,16 +292,16 @@ func TestHelperAgainstLocalPwshFind(t *testing.T) {
 	}
 	dir := t.TempDir()
 	sub := filepath.Join(dir, "subdir")
-	if err := os.MkdirAll(sub, 0755); err != nil {
+	if err := os.MkdirAll(sub, 0700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "one.txt"), []byte("needle here\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "one.txt"), []byte("needle here\n"), 0600); err != nil {
 		t.Fatalf("write one: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(sub, "two.txt"), []byte("other text\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(sub, "two.txt"), []byte("other text\n"), 0600); err != nil {
 		t.Fatalf("write two: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(sub, "skip.bin"), []byte("needle binary\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(sub, "skip.bin"), []byte("needle binary\n"), 0600); err != nil {
 		t.Fatalf("write skip: %v", err)
 	}
 

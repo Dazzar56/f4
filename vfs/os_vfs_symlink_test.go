@@ -9,7 +9,7 @@ import (
 func TestOSVFS_SymlinkPreservation(t *testing.T) {
 	tmpDir := t.TempDir()
 	realDir := filepath.Join(tmpDir, "real_dir")
-	if err := os.MkdirAll(realDir, 0755); err != nil {
+	if err := os.MkdirAll(realDir, 0700); err != nil {
 		t.Fatalf("Failed to create real directory: %v", err)
 	}
 

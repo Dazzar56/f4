@@ -516,8 +516,8 @@ func fileRequest(values ...uint64) func(packet) error {
 	}
 }
 
-func seekRequest(handle uint64, offset int64) func(packet) error {
-	return fileRequest(handle, uint64(io.SeekStart), uint64(offset))
+func seekRequest(handle, offset uint64) func(packet) error {
+	return fileRequest(handle, io.SeekStart, offset)
 }
 
 func payloadLength(want int) func(packet) error {

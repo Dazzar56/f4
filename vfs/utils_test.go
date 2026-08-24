@@ -42,7 +42,7 @@ func TestIsTerminalRunnable(t *testing.T) {
 
 	// 4. Directory should not be runnable
 	subDir := filepath.Join(tmpDir, "folder")
-	if err := os.Mkdir(subDir, 0755); err != nil {
+	if err := os.Mkdir(subDir, 0700); err != nil {
 		t.Fatalf("Failed to create directory: %v", err)
 	}
 	if IsTerminalRunnable(ctx, v, subDir) {
@@ -52,7 +52,7 @@ func TestIsTerminalRunnable(t *testing.T) {
 	// 5. Unix Executable Bit
 	if runtime.GOOS != "windows" {
 		binFile := filepath.Join(tmpDir, "mybin")
-		if err := os.WriteFile(binFile, []byte{0x7f, 'E', 'L', 'F'}, 0755); err != nil {
+		if err := os.WriteFile(binFile, []byte{0x7f, 'E', 'L', 'F'}, 0700); err != nil { // #nosec G306 -- the executable bit is the behavior under test.
 			t.Fatalf("Failed to create executable: %v", err)
 		}
 		if !IsTerminalRunnable(ctx, v, binFile) {

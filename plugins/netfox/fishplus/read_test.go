@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math/rand"
 	"os"
 	"path/filepath"
 	"testing"
@@ -75,14 +74,13 @@ func TestReadAgainstLocalShell(t *testing.T) {
 	// Keep the length odd. Plain dd must not fall back to bs=1 when a read
 	// reaches EOF merely because the final byte count has no useful divisor.
 	blob := make([]byte, 300001)
-	rng := rand.New(rand.NewSource(7))
-	rng.Read(blob)
+	rng := fillDeterministicBytes(t, 7, blob)
 	blobPath := filepath.Join(dir, "a blob.bin")
-	if err := os.WriteFile(blobPath, blob, 0644); err != nil {
+	if err := os.WriteFile(blobPath, blob, 0600); err != nil {
 		t.Fatal(err)
 	}
 	emptyPath := filepath.Join(dir, "empty")
-	if err := os.WriteFile(emptyPath, nil, 0644); err != nil {
+	if err := os.WriteFile(emptyPath, nil, 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -185,9 +183,9 @@ func TestFileReadAtAndCache(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 	blob := make([]byte, 200000)
-	rand.New(rand.NewSource(11)).Read(blob)
+	fillDeterministicBytes(t, 11, blob)
 	p := filepath.Join(dir, "handle.bin")
-	if err := os.WriteFile(p, blob, 0644); err != nil {
+	if err := os.WriteFile(p, blob, 0600); err != nil {
 		t.Fatal(err)
 	}
 

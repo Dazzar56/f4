@@ -47,7 +47,7 @@ func TestRealSavedCloudConnectionSemantics(t *testing.T) {
 	if configDir == "" || !filepath.IsAbs(configDir) {
 		t.Fatal("real CloudFox semantics require an absolute config directory")
 	}
-	info, err := os.Stat(configDir)
+	info, err := os.Stat(configDir) // #nosec G703 -- the doubly opted-in semantics test intentionally loads the operator-supplied absolute config directory.
 	if err != nil || !info.IsDir() {
 		t.Fatal("real CloudFox config directory is unavailable")
 	}

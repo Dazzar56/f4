@@ -232,7 +232,7 @@ func TestIssue150_Concurrent7zReadDir(t *testing.T) {
 
 	// 1. Создаем тестовое дерево папок и файлов
 	srcDir := filepath.Join(tmpDir, "src")
-	if err := os.MkdirAll(filepath.Join(srcDir, "dir1/dir2"), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(srcDir, "dir1/dir2"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(srcDir, "dir1/file1.txt"), []byte("data1"), 0600); err != nil {
@@ -302,7 +302,7 @@ func TestIssue150_7zDirectoryStructureAndSolid(t *testing.T) {
 	archivePath := filepath.Join(tmpDir, "test_structure.7z")
 
 	srcDir := filepath.Join(tmpDir, "src")
-	if err := os.MkdirAll(filepath.Join(srcDir, "empty_dir"), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(srcDir, "empty_dir"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(srcDir, "file1.txt"), []byte("solid content 1"), 0600); err != nil {

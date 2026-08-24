@@ -326,7 +326,7 @@ func openRealSavedGoogleBackend(t *testing.T) *googleDriveBackend {
 	if !filepath.IsAbs(configDir) {
 		t.Fatal("real CloudFox config directory must be absolute")
 	}
-	info, err := os.Stat(configDir)
+	info, err := os.Stat(configDir) // #nosec G703 -- the opted-in real-provider test intentionally loads the operator-supplied absolute config directory.
 	if err != nil || !info.IsDir() {
 		t.Fatal("real CloudFox config directory is unavailable")
 	}

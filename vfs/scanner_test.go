@@ -81,7 +81,7 @@ func TestGenericScan_Recursive(t *testing.T) {
 
 	rootDir := filepath.Join(tmpDir, "root_dir")
 	subDir := filepath.Join(rootDir, "sub_dir")
-	if err := os.MkdirAll(subDir, 0755); err != nil {
+	if err := os.MkdirAll(subDir, 0700); err != nil {
 		t.Fatalf("Failed to create scan directories: %v", err)
 	}
 
@@ -131,7 +131,7 @@ func TestGenericScan_Cancellation(t *testing.T) {
 	tmpDir := t.TempDir()
 	v := NewOSVFS(tmpDir)
 
-	if err := os.MkdirAll(filepath.Join(tmpDir, "dir1", "dir2", "dir3"), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(tmpDir, "dir1", "dir2", "dir3"), 0700); err != nil {
 		t.Fatalf("Failed to create scan tree: %v", err)
 	}
 
@@ -294,13 +294,13 @@ func (m *mockFastVFS) Scan(ctx context.Context, basePath string, names []string,
 func TestGenericScan_SymlinkDirLeafVsFollow(t *testing.T) {
 	tmp := t.TempDir()
 	real := filepath.Join(tmp, "real")
-	if err := os.Mkdir(real, 0755); err != nil {
+	if err := os.Mkdir(real, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(real, "a.bin"), make([]byte, 100), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(real, "a.bin"), make([]byte, 100), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(real, "b.bin"), make([]byte, 50), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(real, "b.bin"), make([]byte, 50), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Symlink(real, filepath.Join(tmp, "link")); err != nil {
@@ -359,7 +359,7 @@ func TestGenericScan_FileSymlinkDoesNotDoublePhysical(t *testing.T) {
 	// 64 KiB — big enough that a duplicate contribution is unmistakable
 	// against the noise of a symlink's own inode blocks.
 	const targetSize = 64 * 1024
-	if err := os.WriteFile(target, make([]byte, targetSize), 0644); err != nil {
+	if err := os.WriteFile(target, make([]byte, targetSize), 0600); err != nil {
 		t.Fatal(err)
 	}
 	v := NewOSVFS(tmp)
@@ -402,7 +402,7 @@ func TestGenericScan_FileSymlinkDoesNotDoublePhysical(t *testing.T) {
 func TestGenericScan_HardLinkDedup(t *testing.T) {
 	tmp := t.TempDir()
 	orig := filepath.Join(tmp, "original")
-	if err := os.WriteFile(orig, make([]byte, 8192), 0644); err != nil {
+	if err := os.WriteFile(orig, make([]byte, 8192), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Link(orig, filepath.Join(tmp, "link1")); err != nil {

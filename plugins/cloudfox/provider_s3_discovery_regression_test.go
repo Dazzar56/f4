@@ -125,7 +125,7 @@ func (f *s3SignedRegionFixture) ServeHTTP(writer http.ResponseWriter, request *h
 	}
 	writer.Header().Set("Content-Type", "application/xml")
 	writer.WriteHeader(http.StatusBadRequest)
-	_, _ = fmt.Fprintf(writer, `<Error><Code>UnexpectedRequest</Code><Message>%s %s</Message></Error>`, request.Method, request.URL.RequestURI())
+	_, _ = fmt.Fprintf(writer, `<Error><Code>UnexpectedRequest</Code><Message>%s %s</Message></Error>`, request.Method, request.URL.RequestURI()) // #nosec G705 -- this closed httptest server reflects only its controlled regression-test request in an error body.
 }
 
 type s3HistoryRegressionFactory struct {
@@ -219,7 +219,7 @@ func (f *s3DiscoveryHTTPFixture) ServeHTTP(writer http.ResponseWriter, request *
 	}
 	writer.Header().Set("Content-Type", "application/xml")
 	writer.WriteHeader(http.StatusBadRequest)
-	_, _ = fmt.Fprintf(writer, `<Error><Code>UnexpectedRequest</Code><Message>%s %s</Message></Error>`, request.Method, request.URL.RequestURI())
+	_, _ = fmt.Fprintf(writer, `<Error><Code>UnexpectedRequest</Code><Message>%s %s</Message></Error>`, request.Method, request.URL.RequestURI()) // #nosec G705 -- this closed httptest server reflects only its controlled regression-test request in an error body.
 }
 
 func openS3DiscoveryRegressionBackend(t *testing.T, server *httptest.Server, bucket string) *s3Backend {

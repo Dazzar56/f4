@@ -45,7 +45,7 @@ func TestAncestorPIDsOfThisProcess(t *testing.T) {
 	if len(got) == 0 {
 		t.Skip("no /proc on this system")
 	}
-	if got[0] != uint32(os.Getpid()) {
+	if got[0] != uint32(os.Getpid()) { // #nosec G115 -- OS process IDs are positive and represented as uint32 by the X11 API.
 		t.Errorf("the walk must start at us: %v", got)
 	}
 }
@@ -118,10 +118,11 @@ func newXFixture(t *testing.T) *xFixture {
 	if err != nil {
 		t.Fatalf("window id: %v", err)
 	}
+	const structureNotifyMask uint32 = xproto.EventMaskStructureNotify
 	err = xproto.CreateWindowChecked(conn, screen.RootDepth, win, screen.Root,
 		40, 60, 400, 300, 0, xproto.WindowClassInputOutput, screen.RootVisual,
 		xproto.CwBackPixel|xproto.CwEventMask,
-		[]uint32{0x00202020, uint32(xproto.EventMaskStructureNotify)}).Check()
+		[]uint32{0x00202020, structureNotifyMask}).Check()
 	if err != nil {
 		t.Fatalf("the stand-in terminal window could not be created: %v", err)
 	}
@@ -135,7 +136,7 @@ func newXFixture(t *testing.T) *xFixture {
 
 func (f *xFixture) intern(t *testing.T, name string) xproto.Atom {
 	t.Helper()
-	reply, err := xproto.InternAtom(f.conn, false, uint16(len(name)), name).Reply()
+	reply, err := xproto.InternAtom(f.conn, false, uint16(len(name)), name).Reply() // #nosec G115 -- test atom names are fixed short strings.
 	if err != nil || reply == nil {
 		t.Fatalf("intern %s: %v", name, err)
 	}
