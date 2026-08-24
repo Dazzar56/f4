@@ -3824,9 +3824,14 @@ func TestPanelsFrame_DriveMenu_OtherPanel(t *testing.T) {
 		t.Fatal("Drive menu not opened")
 	}
 
-	// Ensure "Other panel" is at index 0 and selected
-	if menu.GetTitle() != Msg("Drive.Title") || menu.SelectPos != 0 {
-		t.Errorf("Menu state invalid: title=%q, pos=%d", menu.GetTitle(), menu.SelectPos)
+	// Ensure "Other panel" is at index 0. On Windows the cursor instead
+	// lands on the drive the active panel currently shows (see
+	// driveMenuDefaultPos), so only assert the default selection off-Windows.
+	if menu.GetTitle() != Msg("Drive.Title") {
+		t.Errorf("Menu title invalid: %q", menu.GetTitle())
+	}
+	if runtime.GOOS != "windows" && menu.SelectPos != 0 {
+		t.Errorf("Menu state invalid: pos=%d, want 0", menu.SelectPos)
 	}
 
 	// Trigger "Other panel" (idx 0)

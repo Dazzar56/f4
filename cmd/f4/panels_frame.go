@@ -17,6 +17,7 @@ import (
 
 	"github.com/mattn/go-runewidth"
 
+	"github.com/unxed/f4/vfs/hostmode"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
@@ -4248,7 +4249,44 @@ func (pf *PanelsFrame) showPluginMenu() {
 }
 
 func (pf *PanelsFrame) showDriveMenu(panelIdx int) {
-	pf.showDriveMenuAt(panelIdx, 0)
+	pf.showDriveMenuAt(panelIdx, pf.driveMenuDefaultPos(panelIdx))
+}
+
+// driveMenuDefaultPos returns the drive-menu row the cursor should land on
+// when the menu opens. far2l positions the cursor on the drive the active
+// panel currently shows; for f4 that means: if the panel is on a real
+// filesystem drive that appears in the menu (e.g. a Windows drive letter),
+// land on that drive, otherwise keep the historic default — the "Other panel"
+// entry at row 0.
+func (pf *PanelsFrame) driveMenuDefaultPos(panelIdx int) int {
+	fsp := pf.panels[panelIdx].(*FileSystemPanel)
+	osVFS, ok := fsp.vfs.(*vfs.OSVFS)
+	if !ok {
+		return 0
+	}
+	cur := osVFS.GetPath()
+	for i, drv := range getPlatformDrives() {
+		if driveMatchesPath(drv, cur) {
+			// platform drives begin at menu row 1 (row 0 is "Other panel")
+			return i + 1
+		}
+	}
+	return 0
+}
+
+// driveMatchesPath reports whether the platform drive entry drv is the one
+// the path cur currently belongs to. Only the Windows drive-letter case is
+// matched (the menu entries there carry letters, as the user expects); in
+// posix/UNIX mode the default "Other panel" row stays selected.
+func driveMatchesPath(drv DriveEntry, cur string) bool {
+	if runtime.GOOS != "windows" || hostmode.Posix() {
+		return false
+	}
+	vol := filepath.VolumeName(cur)
+	if vol == "" {
+		return false
+	}
+	return strings.HasPrefix(strings.ToUpper(drv.Name), strings.ToUpper(vol))
 }
 
 // showDriveMenuAt opens the drive menu with the cursor on selectPos. The
