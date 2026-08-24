@@ -197,7 +197,7 @@ func TestImageViewWalksItsSiblings(t *testing.T) {
 	iv.SetSiblings([]string{"a.png", "b.png", "c.png"}, 1)
 
 	// Decode them all first, so that stepping is answered from the cache.
-	for _, name := range []string{"a.png", "c.png"} {
+	for _, name := range []string{"a.png", "b.png", "c.png"} {
 		if res := ImagePipe.LoadSync(context.Background(), nil, name); res.Err != nil {
 			t.Fatalf("%s: %v", name, res.Err)
 		}
@@ -236,7 +236,7 @@ func TestImageViewArrowsWalkWhenThereIsNothingToPan(t *testing.T) {
 	iv := newTestImageView(t, 100, 100)
 	iv.path = "b.png"
 	iv.SetSiblings([]string{"a.png", "b.png", "c.png"}, 1)
-	for _, name := range []string{"a.png", "c.png"} {
+	for _, name := range []string{"a.png", "b.png", "c.png"} {
 		if res := ImagePipe.LoadSync(context.Background(), nil, name); res.Err != nil {
 			t.Fatalf("%s: %v", name, res.Err)
 		}

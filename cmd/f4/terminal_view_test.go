@@ -272,6 +272,7 @@ Loop:
 	if !foundToast {
 		t.Error("Notification APC did not result in a Toast")
 	}
+	waitForToastExpiry(t, 4*time.Second)
 }
 
 func TestTerminalView_ProcessFar2lInteract_FKeys(t *testing.T) {

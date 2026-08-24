@@ -321,7 +321,10 @@ func (ev *EditorView) Close() {
 	ev.renderBytes = nil
 	ev.renderCells = nil
 	ev.pasteBuffer = nil
-	ev.searchSnapshot = nil
+	// searchSnapMu owns searchSnapshot: a search pass still assembling its
+	// buffer writes it from its own goroutine, so clearing it bare races that
+	// write even when the search is on its way out.
+	ev.dropSearchSnapshot()
 	ev.fadeBuf = nil
 	ev.scrollBar = nil
 	ev.BaseFrame.Close()

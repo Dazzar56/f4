@@ -68,8 +68,8 @@ func TestApplyCommandActionUsesActivePanelWorkspace(t *testing.T) {
 	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
-	pfA := setupMockPanelsFrame()
-	pfB := setupMockPanelsFrame()
+	pfA := setupMockPanelsFrame(t)
+	pfB := setupMockPanelsFrame(t)
 	defer pfA.Close()
 	defer pfB.Close()
 	pfA.ResizeConsole(80, 25)

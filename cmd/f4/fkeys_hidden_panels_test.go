@@ -51,7 +51,7 @@ func TestHotkeys_ShellActions_TerminalArea_GatedByAltScreen_Issue354(t *testing.
 	// Reset the global frame manager and register a hidden-panels PanelsFrame
 	// with an AltScreen app active — that's the state where the condition must fail.
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 	pf.showPanels = false
@@ -85,9 +85,21 @@ func TestHotkeys_ShellActions_TerminalArea_GatedByAltScreen_Issue354(t *testing.
 // half of the issue #354 fix: with panels hidden, pressing F2 must
 // push the user-menu frame onto the top of the stack.
 func TestPanelsFrame_F2_OpensUserMenu_WhenPanelsHidden_Issue354(t *testing.T) {
+	// The assertion below compares the top frame type before and after F2, so a
+	// menu left on the shared manager by an earlier test makes the push
+	// invisible. Start from a manager of our own.
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	SetDefaultF4Palette()
-	pf := setupMockPanelsFrame()
+	previousHotkeys := GlobalHotkeysMgr
+	previousMacros := MacroMgr
+	GlobalHotkeysMgr = NewHotkeyManager("")
+	MacroMgr = NewMacroManager("")
+	t.Cleanup(func() {
+		GlobalHotkeysMgr = previousHotkeys
+		MacroMgr = previousMacros
+	})
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 	pf.showPanels = false
@@ -117,7 +129,7 @@ func TestPanelsFrame_F2_OpensUserMenu_WhenPanelsHidden_Issue354(t *testing.T) {
 // slot so the info panel is actually visible.
 func TestPanelsFrame_CtrlL_RevealsHiddenPassivePanel_Issue354(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 

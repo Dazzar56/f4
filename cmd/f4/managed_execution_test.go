@@ -44,8 +44,8 @@ func runBusyChange(pf *PanelsFrame, busy bool) {
 
 func newExecutionTestFrame(t *testing.T) *PanelsFrame {
 	t.Helper()
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	drainUITasks() // discard anything an earlier test queued
 	pf := NewPanelsFrame()
 	t.Cleanup(pf.Close)
 	pf.showPanels = false

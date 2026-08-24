@@ -193,6 +193,8 @@ func panelsFrameWithMouseSelect(t *testing.T) (*PanelsFrame, *fakePTY) {
 	SetDefaultF4Palette()
 	pf := NewPanelsFrame()
 	pf.ResizeConsole(80, 25)
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 	pf.showPanels = false
 	pf.termView.SetPosition(0, 0, 79, 22)
 	pf.termView.clipboardWriter = func(string) {}

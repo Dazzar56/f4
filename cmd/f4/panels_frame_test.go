@@ -358,6 +358,8 @@ func TestPanelsFrame_SelectionByMask(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 
 	fsp := pf.panels[1].(*FileSystemPanel)
 	pf.activeIdx = 1
@@ -434,6 +436,8 @@ func TestPanelsFrame_DriveMenuListsAssignedBookmarks(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 	vtui.FrameManager.Push(pf)
 
 	pf.showDriveMenu(1)
@@ -514,6 +518,8 @@ func TestPanelsFrame_DriveMenuExpandsBookmarkPath(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 	vtui.FrameManager.Push(pf)
 	fsp := pf.panels[1].(*FileSystemPanel)
 
@@ -539,6 +545,7 @@ func TestPanelsFrame_DriveMenuExpandsBookmarkPath(t *testing.T) {
 			if got := fsp.vfs.GetPath(); got != tc.want {
 				t.Errorf("bookmark %q navigated to %q, want %q", tc.path, got, tc.want)
 			}
+			waitForLoad(t, fsp)
 			vtui.FrameManager.RemoveFrame(menu)
 		})
 	}
@@ -746,7 +753,11 @@ func TestPanelsFrame_ProcessMouse_DoubleClick(t *testing.T) {
 	}
 }
 
-func setupMockPanelsFrame() *PanelsFrame {
+func setupMockPanelsFrame(t *testing.T) *PanelsFrame {
+	t.Helper()
+	if vtui.FrameManager.TaskChan == nil {
+		vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	}
 	pf := &PanelsFrame{activeIdx: 1, showPanels: true, showKeyBar: true, showLeftPanel: true, showRightPanel: true}
 	pf.pty = &mockPty{}
 	pf.termView = NewTerminalView(80, 24)
@@ -761,6 +772,8 @@ func setupMockPanelsFrame() *PanelsFrame {
 	// Use OSVFS because tests create real files in t.TempDir()
 	pf.panels[0] = NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS("."))
 	pf.panels[1] = NewFileSystemPanel(40, 0, 40, 20, vfs.NewOSVFS("."))
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 	pf.initPTY()
 	return pf
 }
@@ -770,7 +783,7 @@ func TestPanelsFrame_ProcessMouse_DoubleClickFile(t *testing.T) {
 	AppConfig.NavigationMode = NavigationClassic
 	t.Cleanup(func() { AppConfig.NavigationMode = oldNavigationMode })
 
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
@@ -836,7 +849,7 @@ func TestPanelsFrame_ProcessMouse_DoubleClickFile(t *testing.T) {
 // a file the user can't even see. Also verifies that a click on
 // the passive-side alt panel activates that side.
 func TestPanelsFrame_ProcessMouse_AltPanelSwallowsClicks(t *testing.T) {
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
@@ -909,7 +922,7 @@ drain:
 // click lands on an alt panel; otherwise the file under the alt
 // still gets launched despite the fix.
 func TestPanelsFrame_ProcessMouse_MiddleClickOverAltPanel(t *testing.T) {
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
@@ -970,7 +983,7 @@ drain:
 // running. Non-empty command line keeps the existing ESC-clears-
 // cmdLine behaviour.
 func TestPanelsFrame_EscTogglesPanels(t *testing.T) {
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
@@ -1023,7 +1036,7 @@ func TestPanelsFrame_EscTogglesPanels(t *testing.T) {
 // shortcut can be turned off — with EscTogglePanels=false, ESC
 // on visible panels + empty cmdLine is a no-op instead of hiding.
 func TestPanelsFrame_EscTogglePanels_RespectsOption(t *testing.T) {
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
@@ -1160,7 +1173,7 @@ func TestPanelsFrame_MenuCommands(t *testing.T) {
 
 func TestPanelsFrame_SortCommandsUseDefaultDirection(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 
 	left := pf.panels[0].(*FileSystemPanel)
@@ -1383,6 +1396,8 @@ func TestPanelsFrame_Clone(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(100, 30)
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 
 	// Use a real temp directory that exists on all platforms
 	tmpDir := t.TempDir()
@@ -1428,6 +1443,8 @@ func TestPanelsFrame_Clone(t *testing.T) {
 	if pf.activeIdx == 1 {
 		t.Error("Clone should be independent from its parent")
 	}
+	waitForLoad(t, clone.panels[0].(*FileSystemPanel))
+	waitForLoad(t, clone.panels[1].(*FileSystemPanel))
 }
 
 func TestPanelsFrame_CtrlBrackets_Insertion(t *testing.T) {
@@ -1846,6 +1863,8 @@ func TestPanelsFrame_AltScreenTerminalHeight(t *testing.T) {
 	// 1. Normal mode: terminal should leave space for KeyBar
 	pf.termView.UseAltScreen = false
 	pf.ResizeConsole(80, height)
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 	// termY2 should be h-2 (23)
 	if pf.termView.Y2 != 23 {
 		t.Errorf("Normal mode: expected terminal Y2=23, got %d", pf.termView.Y2)
@@ -1870,6 +1889,9 @@ func TestPanelsFrame_KeyBarSuppression(t *testing.T) {
 	defer pf.Close()
 	pf.showKeyBar = true
 	pf.ResizeConsole(80, 25)
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
+	pf.lastAutoRefresh = time.Now()
 
 	// We need to simulate the frame being on top to trigger the logic
 	vtui.FrameManager.Push(pf)
@@ -1948,6 +1970,8 @@ func TestPanelsFrame_AutoRefresh(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 
 	// Setup a mock directory
 	tmp := t.TempDir()
@@ -1971,20 +1995,20 @@ func TestPanelsFrame_AutoRefresh(t *testing.T) {
 	scr.AllocBuf(80, 25)
 	pf.Show(scr)
 
-	// Pump the TaskChan to execute RunAsync and RunOnUI
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
+	// Pump both stat callbacks; the changed side starts a directory load.
+	timeout := time.After(2 * time.Second)
+	for pf.panels[0].(*FileSystemPanel).isCheckingRefresh || pf.panels[1].(*FileSystemPanel).isCheckingRefresh {
 		select {
 		case task := <-vtui.FrameManager.TaskChan:
 			task()
-		default:
-			time.Sleep(5 * time.Millisecond)
-		}
-		if fsp.isLoading {
-			return // Success: it triggered a refresh
+		case <-timeout:
+			t.Fatal("AutoRefresh stat check did not finish")
 		}
 	}
-	t.Fatal("AutoRefresh failed to trigger ReadDirectory after MTime change")
+	if !fsp.isLoading {
+		t.Fatal("AutoRefresh failed to trigger ReadDirectory after MTime change")
+	}
+	waitForLoad(t, fsp)
 }
 func TestPanelsFrame_ResizingIntegration(t *testing.T) {
 	oldWidthDecrement := AppConfig.WidthDecrement
@@ -2035,14 +2059,20 @@ func TestPanelsFrame_ResizingIntegration(t *testing.T) {
 func TestPanelsFrame_ExitWarning_ActiveTasks(t *testing.T) {
 	fm := vtui.FrameManager
 	fm.Init(vtui.NewSilentScreenBuf())
-	pf := NewPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	fm.Push(pf)
 
 	qm := GlobalQueueManager
 	qm.mu.Lock()
-	qm.tasks = []*QueueTask{{ID: 1, State: "Queued"}}
+	oldTasks := append([]*QueueTask(nil), qm.tasks...)
+	qm.tasks = []*QueueTask{{ID: 1, State: "Running"}}
 	qm.mu.Unlock()
+	t.Cleanup(func() {
+		qm.mu.Lock()
+		qm.tasks = oldTasks
+		qm.mu.Unlock()
+	})
 
 	// Триггерим выход
 	pf.HandleCommand(vtui.CmQuit, nil)
@@ -2214,38 +2244,14 @@ func TestPanelsFrame_Clone_SelectionPreservation(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 	fsp := pf.panels[0].(*FileSystemPanel)
 	if err := fsp.vfs.SetPath(tmp); err != nil {
 		t.Fatal(err)
 	}
 	fsp.ReadDirectory()
-
-	// Wait for initial load
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		select {
-		case task := <-vtui.FrameManager.TaskChan:
-			task()
-		default:
-			time.Sleep(5 * time.Millisecond)
-		}
-		if !fsp.isLoading {
-			break
-		}
-	}
-	if fsp.isLoading {
-		t.Fatal("Timeout waiting for initial load")
-	}
-	// Drain remaining tasks
-drainTasks:
-	for i := 0; i < 10; i++ {
-		select {
-		case task := <-vtui.FrameManager.TaskChan:
-			task()
-		default:
-			break drainTasks
-		}
-	}
+	waitForLoad(t, fsp)
 
 	// Select "selected.txt"
 	found := false
@@ -2264,23 +2270,8 @@ drainTasks:
 	clone := pf.Clone()
 	defer clone.Close()
 	cloneFsp := clone.panels[0].(*FileSystemPanel)
-
-	// Wait for clone load
-	deadline = time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		select {
-		case task := <-vtui.FrameManager.TaskChan:
-			task()
-		default:
-			time.Sleep(5 * time.Millisecond)
-		}
-		if !cloneFsp.isLoading {
-			break
-		}
-	}
-	if cloneFsp.isLoading {
-		t.Fatal("Timeout waiting for clone load")
-	}
+	waitForLoad(t, cloneFsp)
+	waitForLoad(t, clone.panels[1].(*FileSystemPanel))
 
 	// Verify preservation
 	foundInClone := false
@@ -2472,9 +2463,13 @@ func TestPanelsFrame_StateCapture(t *testing.T) {
 	}
 }
 func TestPanelsFrame_CloneIndependence(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 
 	// Set path in original
 	fsp := pf.panels[0].(*FileSystemPanel)
@@ -2486,6 +2481,8 @@ func TestPanelsFrame_CloneIndependence(t *testing.T) {
 	// Clone
 	clone := pf.Clone()
 	defer clone.Close()
+	waitForLoad(t, clone.panels[0].(*FileSystemPanel))
+	waitForLoad(t, clone.panels[1].(*FileSystemPanel))
 
 	// Change path in clone
 	newPath := t.TempDir()
@@ -2534,7 +2531,7 @@ func TestPanelsFrame_PTYLockContention(t *testing.T) {
 	// Этот тест проверяет, что тяжелый парсинг в PTY-потоке не блокирует
 	// доступ UI-потока к методу getActivePTY (регрессия дедлока).
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 
 	// Симулируем "забитую" очередь задач
@@ -2741,7 +2738,7 @@ func TestIsTerminalRunnable(t *testing.T) {
 }
 
 func TestPanelsFrame_ReturnExecution(t *testing.T) {
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
@@ -2806,7 +2803,7 @@ func TestPanelsFrame_ReturnExecution(t *testing.T) {
 	}
 }
 func TestPanelsFrame_CommandLineEnter(t *testing.T) {
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	pty := pf.pty.(*mockPty)
 	defer pf.Close()
 
@@ -2835,7 +2832,7 @@ func TestPanelsFrame_CommandLineEnterRejectsUnmatchedBacktick(t *testing.T) {
 		t.Skip("backticks are literal in the Windows shell")
 	}
 
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	pty := pf.pty.(*mockPty)
 	defer pf.Close()
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
@@ -2887,7 +2884,7 @@ func (v *commandRunnerPanelVFS) RunCommand(_ context.Context, dir, command strin
 
 func TestPanelsFrame_CommandLineUsesRemoteRunnerWithoutPTY(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 
 	runner := &commandRunnerPanelVFS{
@@ -2924,6 +2921,32 @@ func TestPanelsFrame_CommandLineUsesRemoteRunnerWithoutPTY(t *testing.T) {
 	if !pf.cmdLine.IsEmpty() {
 		t.Fatalf("command line was not cleared: %q", pf.cmdLine.Edit.GetText())
 	}
+	deadline := time.After(time.Second)
+	for {
+		top, ok := vtui.FrameManager.GetTopFrame().(*vtui.Window)
+		finished := false
+		if ok {
+			for _, child := range top.GetChildren() {
+				if list, ok := child.(*vtui.ListBox); ok {
+					for _, item := range list.Items {
+						if item == "[exit status 0]" {
+							finished = true
+							break
+						}
+					}
+				}
+			}
+		}
+		if finished {
+			break
+		}
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-deadline:
+			t.Fatal("remote command completion did not reach the output frame")
+		}
+	}
 	if top := vtui.FrameManager.GetTopFrame(); top == nil || !strings.Contains(top.GetTitle(), Msg("RemoteCmd.Title")) {
 		t.Fatalf("remote command output frame = %T %q", top, func() string {
 			if top != nil {
@@ -2935,7 +2958,7 @@ func TestPanelsFrame_CommandLineUsesRemoteRunnerWithoutPTY(t *testing.T) {
 }
 
 func TestPanelsFrame_CommandLineEnter_WhenBusy(t *testing.T) {
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	pty := pf.pty.(*mockPty)
 	defer pf.Close()
 
@@ -3122,6 +3145,10 @@ func TestExecuteFileOp_BackgroundButtonTrigger(t *testing.T) {
 	fork := pf.Clone()
 	t.Cleanup(fork.Close)
 	fm.AddScreen(fork)
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
+	waitForLoad(t, fork.panels[0].(*FileSystemPanel))
+	waitForLoad(t, fork.panels[1].(*FileSystemPanel))
 
 	if len(fm.Screens) != initialScreens+1 {
 		t.Errorf("Backgrounding failed to create a new screen. Got %d, want %d", len(fm.Screens), initialScreens+1)
@@ -3138,7 +3165,7 @@ func TestExecuteDummyOp_HeadlessMode(t *testing.T) {
 	initialScreens := len(fm.Screens)
 
 	// Trigger Mode Foreground (2)
-	go pf.ExecuteDummyOp(2)
+	pf.ExecuteDummyOp(2)
 
 	// Manually process the task queue (since we are not in fm.Run loop)
 	timeout := time.After(1 * time.Second)
@@ -3162,18 +3189,18 @@ func TestExecuteDummyOp_HeadlessMode(t *testing.T) {
 	if !newScreen.Transparent {
 		t.Error("Headless screen should be transparent")
 	}
-
-	// Clean up and cancel the task to prevent background leak
-	dlg := newScreen.Frames[0].(*vtui.Window)
-	dlg.SetExitCode(1) // Cancels the taskCtx
-	if dlg.OnResult != nil {
-		dlg.OnResult(1)
+	dlg, ok := newScreen.Frames[0].(*vtui.Window)
+	if !ok {
+		t.Fatalf("headless frame = %T, want progress dialog", newScreen.Frames[0])
 	}
-	for i := 0; i < 20; i++ {
+	dlg.OnResult(1)
+	timeout = time.After(2 * time.Second)
+	for !dlg.IsDone() {
 		select {
 		case task := <-fm.TaskChan:
 			task()
-		case <-time.After(10 * time.Millisecond):
+		case <-timeout:
+			t.Fatal("cancelled dummy operation did not finish")
 		}
 	}
 }
@@ -3349,6 +3376,10 @@ func TestPanelsFrame_ForkFromTerminalOpensPanelsInNewWorkspace(t *testing.T) {
 	if clone.GetTitle() == "cmd.exe" || clone.GetTitle() == "Terminal" {
 		t.Errorf("forked workspace title still looks like a terminal: %q", clone.GetTitle())
 	}
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
+	waitForLoad(t, clone.panels[0].(*FileSystemPanel))
+	waitForLoad(t, clone.panels[1].(*FileSystemPanel))
 }
 func TestPanelsFrame_FilesMenuLabels(t *testing.T) {
 	old := GlobalHotkeysMgr
@@ -4132,7 +4163,7 @@ func (m *mockSlowStatVFS) Stat(ctx context.Context, p string) (vfs.VFSItem, erro
 
 func TestPanelsFrame_AutoRefresh_Locking(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
@@ -4238,6 +4269,7 @@ func TestPanelsFrame_VimHotkeys_Comprehensive(t *testing.T) {
 
 	oldCfg := AppConfig
 	AppConfig.NavigationMode = NavigationVim
+	AppConfig.AutoSaveSettings = false
 	defer func() { AppConfig = oldCfg }()
 
 	pf := NewPanelsFrame()
@@ -4595,7 +4627,7 @@ func TestPanelsFrame_ShiftF5_KeyInterception(t *testing.T) {
 	vtui.FrameManager.Pop()
 }
 func TestPanelsFrame_MouseForwarding_ToPTY(t *testing.T) {
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	pty := pf.pty.(*mockPty)
 	defer pf.Close()
 
@@ -4626,7 +4658,7 @@ func TestPanelsFrame_MouseForwarding_ToPTY(t *testing.T) {
 	}
 }
 func TestPanelsFrame_NoCtrlOInterception_InAltScreen(t *testing.T) {
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	pty := pf.pty.(*mockPty)
 	defer pf.Close()
 
@@ -4681,6 +4713,8 @@ func TestPanelsFrame_ShiftF9_SaveSettings(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 	vtui.FrameManager.Push(pf)
 
 	// Отправляем хоткей Shift+F9
@@ -4704,6 +4738,11 @@ func TestPanelsFrame_ShiftF9_SaveSettings(t *testing.T) {
 	} else {
 		t.Fatalf("Shift+F9 top frame = %T, want save-settings dialog", vtui.FrameManager.GetTopFrame())
 	}
+
+	// ShowToast posts its setup and owns a timer goroutine. Join it before this
+	// test lets another test reuse the manager.
+	pumpUntilToastActive(t)
+	waitForToastExpiry(t, 3*time.Second)
 
 	// Проверяем, что файл настроек действительно был записан на диск
 	info, err := os.Stat(tmp.Name())
@@ -4734,15 +4773,15 @@ func TestPanelsFrame_MiddleClick_LaunchesFile(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 	vtui.FrameManager.Push(pf)
 
 	// Подставляем стабильный mockUpdateVFS для панели
 	fsp := pf.panels[pf.activeIdx].(*FileSystemPanel)
 	fsp.vfs = &mockUpdateVFS{}
 	fsp.ReadDirectory()
-
-	// Даем немного времени асинхронной горутине на наполнение
-	time.Sleep(50 * time.Millisecond)
+	waitForLoad(t, fsp)
 	fsp.SetCursorIndex(0)
 
 	// Симулируем клик колесом мыши по первой строке
@@ -4756,6 +4795,15 @@ func TestPanelsFrame_MiddleClick_LaunchesFile(t *testing.T) {
 
 	if !pf.ProcessMouse(ev) {
 		t.Error("Expected PanelsFrame to handle middle click mouse event")
+	}
+	timeout := time.After(time.Second)
+	for vtui.FrameManager.GetTopFrameType() != vtui.TypeDialog {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("middle-click execution result did not reach the UI")
+		}
 	}
 }
 
@@ -4981,7 +5029,7 @@ func TestPanelsFrame_CaptureCommands(t *testing.T) {
 	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	vtui.SetDefaultPalette()
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 
 	vtui.SetClipboard("")
@@ -5033,6 +5081,10 @@ func TestPanelsFrame_CaptureCommands(t *testing.T) {
 	if !found {
 		t.Error("Output was not copied to clipboard")
 	}
+	pumpUntilToastActive(t)
+	waitForToastExpiry(t, 4*time.Second)
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 }
 func TestPanelsFrame_ShiftEnter_ExplorerLaunch(t *testing.T) {
 	if _, _, supported := systemFileManagerCommand("test", true); !supported {
@@ -5236,7 +5288,7 @@ func TestPanelsFrame_CtrlP_TogglesPassivePanel(t *testing.T) {
 	}
 
 	// Active = right (setupMockPanelsFrame's default), Ctrl+P hides left.
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	if pf.activeIdx != 1 || !pf.showLeftPanel || !pf.showRightPanel || !pf.showPanels {
 		t.Fatalf("mock frame precondition: activeIdx=%d L=%v R=%v show=%v",
@@ -5294,7 +5346,7 @@ func TestPanelsFrame_CtrlP_TogglesPassivePanel(t *testing.T) {
 }
 func TestPanelsFrame_TabWithSinglePanelDoesNotEnablePassivePanel(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 
 	// Active = right (1), hide left panel
@@ -5321,7 +5373,7 @@ func TestPanelsFrame_TabWithSinglePanelDoesNotEnablePassivePanel(t *testing.T) {
 
 func TestPanelsFrame_CtrlOAndCtrlPSequence(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 
 	sendCtrlO := func() {
@@ -5417,7 +5469,7 @@ func TestPanelsFrame_CtrlArrows_ResizePanels(t *testing.T) {
 	// Width: Ctrl+Left moves the split to the left (widthDecrement +1,
 	// left panel shrinks, right grows) — arrow follows the boundary,
 	// matching far2l / Far3 / far2m. Ctrl+Right does the reverse.
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 	baseLeft := panelWidth(pf.panels[0])
@@ -5504,7 +5556,7 @@ func TestPanelsFrame_CtrlClear_ResetsLayoutDecrements(t *testing.T) {
 	})
 
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
@@ -5576,7 +5628,7 @@ func TestPanelsFrame_CtrlShiftArrows_AsymmetricHeight(t *testing.T) {
 		})
 	}
 
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 

@@ -28,7 +28,7 @@ func waitForCopyNameClipboard(t *testing.T, want string) string {
 func seedPanelForCopyName(t *testing.T, path string) *PanelsFrame {
 	t.Helper()
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	t.Cleanup(func() { pf.Close() })
 	pf.ResizeConsole(80, 25)
 

@@ -1661,6 +1661,19 @@ pump4:
 			t.Fatalf("Timeout")
 		}
 	}
+	for _, screen := range vtui.FrameManager.Screens {
+		for _, frame := range screen.Frames {
+			clone, ok := frame.(*PanelsFrame)
+			if !ok {
+				continue
+			}
+			for _, panel := range clone.panels {
+				if fsp, ok := panel.(*FileSystemPanel); ok {
+					waitForLoad(t, fsp)
+				}
+			}
+		}
+	}
 
 	// We expect that a new screen was created during the operation
 	if len(vtui.FrameManager.Screens) != initialScreens+1 {

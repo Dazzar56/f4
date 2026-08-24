@@ -329,6 +329,7 @@ func TestQuickViewImagePreviewPrecedesRegisteredProviders(t *testing.T) {
 	qoi := []byte{'q', 'o', 'i', 'f', 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 0xff, 0xff, 0, 0, 0xff}
 	quickView, _, screen := newQuickViewProviderFixture(t, map[string][]byte{"image.qoi": qoi})
 	quickView.Show(screen)
+	waitForQuickView(t, func() bool { return quickView.imageSurf != nil })
 	if !quickView.cacheImage || calls.Load() != 0 {
 		t.Fatalf("image precedence: cacheImage=%t provider calls=%d", quickView.cacheImage, calls.Load())
 	}

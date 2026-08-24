@@ -635,7 +635,11 @@ func TestEditorFindAll_LargeListOpensWithoutMaterializing(t *testing.T) {
 		t.Fatal("occurrences menu did not open")
 	}
 	defer frame.Close()
-	if elapsed > 200*time.Millisecond {
+	// Under the race detector every access is instrumented, so this measures
+	// the instrumentation, not the lazy open. The assertions below prove the
+	// same property structurally: nothing is materialized, yet the count is
+	// right.
+	if !raceEnabled && elapsed > 200*time.Millisecond {
 		t.Errorf("opening a %d-occurrence list took %v; it should not scale with the list", n, elapsed)
 	}
 	if len(frame.Items) != 0 {

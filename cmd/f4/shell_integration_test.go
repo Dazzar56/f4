@@ -57,7 +57,7 @@ func TestPanelsFrame_CtrlEnter_Escaping(t *testing.T) {
 
 func TestPanelsFrame_CtrlEnterOnDirectoryInsertsWithoutEntering(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 
 	tmp := t.TempDir()
@@ -134,7 +134,7 @@ func TestPanelsFrame_CD_QuotedParsing(t *testing.T) {
 }
 
 func TestPanelsFrame_PTY_SyncEscaping(t *testing.T) {
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 	pty := pf.pty.(*mockPty)

@@ -209,7 +209,7 @@ func TestDragOutRemotePanel(t *testing.T) {
 	defer vtui.SetDragBackend(nil)
 	vtui.SetDragBackend(dragBackendStub{})
 
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 

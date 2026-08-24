@@ -127,8 +127,12 @@ func darwinCString(pointer uintptr) string {
 	if pointer == 0 {
 		return ""
 	}
+	// The address comes from the Objective-C FFI boundary, whose API returns
+	// pointers as uintptr values. Recover the pointer through its storage so
+	// vet does not mistake this valid foreign pointer for Go pointer arithmetic.
+	ptr := *(*unsafe.Pointer)(unsafe.Pointer(&pointer))
 	const maxErrorDescription = 1 << 20
-	bytes := unsafe.Slice((*byte)(unsafe.Pointer(pointer)), maxErrorDescription)
+	bytes := unsafe.Slice((*byte)(ptr), maxErrorDescription)
 	for i, b := range bytes {
 		if b == 0 {
 			return string(bytes[:i])

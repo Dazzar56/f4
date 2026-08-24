@@ -21,6 +21,14 @@ func screenIndexOfFrame(f vtui.Frame) int {
 	return -1
 }
 
+func waitForWorkspacePanels(t *testing.T, frames ...*PanelsFrame) {
+	t.Helper()
+	for _, frame := range frames {
+		waitForLoad(t, frame.panels[0].(*FileSystemPanel))
+		waitForLoad(t, frame.panels[1].(*FileSystemPanel))
+	}
+}
+
 // Issue #424: with two workspaces open, actions and hotkey conditions must
 // read the workspace the user is looking at, not the oldest one.
 func TestFindPanelsFrameAnyScreen_PrefersActiveWorkspace(t *testing.T) {
@@ -34,6 +42,7 @@ func TestFindPanelsFrameAnyScreen_PrefersActiveWorkspace(t *testing.T) {
 	second := NewPanelsFrame()
 	defer second.Close()
 	vtui.FrameManager.AddScreen(second)
+	waitForWorkspacePanels(t, first, second)
 
 	if got := findPanelsFrameAnyScreen(); got != second {
 		t.Fatalf("after Ctrl+N the new workspace is active, got %v", got == first)
@@ -63,6 +72,7 @@ func TestConditionsFollowActiveWorkspace(t *testing.T) {
 	second := NewPanelsFrame()
 	defer second.Close()
 	vtui.FrameManager.AddScreen(second)
+	waitForWorkspacePanels(t, first, second)
 
 	second.cmdLine.Edit.SetText("ls -la")
 
@@ -99,6 +109,7 @@ func TestFindPanelsFrameAnyScreen_FallsBackToMostRecent(t *testing.T) {
 	second := NewPanelsFrame()
 	defer second.Close()
 	vtui.FrameManager.AddScreen(second)
+	waitForWorkspacePanels(t, first, second)
 
 	firstIdx := screenIndexOfFrame(first)
 	if firstIdx < 0 {
@@ -127,6 +138,7 @@ func TestFindPanelsFrameAnyScreen_SkipsClosedFrame(t *testing.T) {
 	second := NewPanelsFrame()
 	defer second.Close()
 	vtui.FrameManager.AddScreen(second)
+	waitForWorkspacePanels(t, first, second)
 
 	second.closed = true
 
