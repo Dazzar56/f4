@@ -80,11 +80,6 @@ func guiFontDisplayChoices(language, current string) []string {
 	return platformGuiFontDisplayChoices(language, current)
 }
 
-// guiFontDisplayName maps a stored font value to its platform-specific label.
-func guiFontDisplayName(value string) string {
-	return platformGuiFontDisplayName(value)
-}
-
 // guiFontDisplayValue shortens discovered file paths for the picker but keeps
 // an unknown manually entered path intact. The latter is important: replacing
 // a custom path with its basename would make merely opening and accepting the
