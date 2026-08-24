@@ -585,6 +585,15 @@ func runServer(sockPath string) {
 	}
 }
 
+const sessionPickerDialogPreferredWidth = 100
+
+func sessionPickerDialogWidth(screenWidth int) int {
+	if screenWidth > 0 && screenWidth < sessionPickerDialogPreferredWidth {
+		return screenWidth
+	}
+	return sessionPickerDialogPreferredWidth
+}
+
 func runSessionPicker(sessions []SessionInfo) *SessionInfo {
 	restore, err := vtui.PrepareTerminal()
 	if err != nil {
@@ -592,13 +601,15 @@ func runSessionPicker(sessions []SessionInfo) *SessionInfo {
 	}
 	defer restore()
 
-	width, height, _ := term.GetSize(0)
+	screenWidth, screenHeight, _ := term.GetSize(0)
 	scr := vtui.NewScreenBuf()
-	scr.AllocBuf(width, height)
+	scr.AllocBuf(screenWidth, screenHeight)
 	vtui.FrameManager.Init(scr)
 	SetDefaultF4Palette()
 
-	dlg := vtui.NewCenteredDialog(50, 15, Msg("Session.Title"))
+	const dialogHeight = 15
+	dialogWidth := sessionPickerDialogWidth(screenWidth)
+	dlg := vtui.NewCenteredDialog(dialogWidth, dialogHeight, Msg("Session.Title"))
 
 	var items []string
 	for _, s := range sessions {
@@ -625,10 +636,10 @@ func runSessionPicker(sessions []SessionInfo) *SessionInfo {
 	dlg.AddItem(btnCancel)
 
 	// Layout Engine
-	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 50-4, 15-4)
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, dialogWidth-4, dialogHeight-4)
 	vbox.Add(lb, vtui.Margins{}, vtui.AlignFill)
 
-	hbox := vtui.NewHBoxLayout(0, 0, 50-4, 1)
+	hbox := vtui.NewHBoxLayout(0, 0, dialogWidth-4, 1)
 	hbox.HorizontalAlign = vtui.AlignCenter
 	hbox.Spacing = 2
 	hbox.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
