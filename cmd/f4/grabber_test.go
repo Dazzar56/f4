@@ -66,7 +66,7 @@ func TestGrabber_SnapshotOnFirstShow(t *testing.T) {
 	if g.snapW != testGrabberW || g.snapH != testGrabberH {
 		t.Fatalf("snapshot dims %dx%d, want %dx%d", g.snapW, g.snapH, testGrabberW, testGrabberH)
 	}
-	if rune(g.snap[0][0].Char) != 'h' {
+	if testRune(g.snap[0][0].Char) != 'h' {
 		t.Fatalf("snap[0][0]=%v, want 'h'", g.snap[0][0].Char)
 	}
 	// Cursor starts collapsed at (0,0) — anchor==cur.

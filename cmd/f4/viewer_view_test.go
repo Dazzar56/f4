@@ -643,14 +643,14 @@ func TestViewerView_TabRendering(t *testing.T) {
 	// "b" should be at col 4.
 	cell := scr.GetCell(4, 1) // Y=1 is content row
 	if cell.Char != 'b' {
-		t.Errorf("Tab expansion failed. Expected 'b' at column 4, got '%c' (U+%04X)", rune(cell.Char), cell.Char)
+		t.Errorf("Tab expansion failed. Expected 'b' at column 4, got '%c' (U+%04X)", testRune(cell.Char), cell.Char)
 	}
 
 	// Columns 1, 2, 3 should be empty spaces (' ')
 	for x := 1; x <= 3; x++ {
 		c := scr.GetCell(x, 1)
 		if c.Char != ' ' {
-			t.Errorf("Expected space at col %d, got '%c'", x, rune(c.Char))
+			t.Errorf("Expected space at col %d, got '%c'", x, testRune(c.Char))
 		}
 	}
 }

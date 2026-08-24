@@ -23,7 +23,7 @@ func TestRecursiveCopy(t *testing.T) {
 	// 1. Create source structure:
 	// /folder1/file1.txt
 	// /file2.txt
-	if err := os.Mkdir(filepath.Join(tmpSrc, "folder1"), 0755); err != nil {
+	if err := os.Mkdir(filepath.Join(tmpSrc, "folder1"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(tmpSrc, "file2.txt"), []byte("file2 content"), 0600); err != nil {
@@ -90,7 +90,7 @@ func TestRecursiveCopy_Cancel(t *testing.T) {
 
 func TestRecursiveCopy_SelfCopy(t *testing.T) {
 	tmp := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(tmp, "src_folder"), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(tmp, "src_folder"), 0700); err != nil {
 		t.Fatal(err)
 	}
 
@@ -115,7 +115,7 @@ func TestRecursiveCopy_ConflictTypeMismatch(t *testing.T) {
 
 	// Create folder in source, file with same name in destination
 	name := "mismatch"
-	if err := os.Mkdir(filepath.Join(tmpSrc, name), 0755); err != nil {
+	if err := os.Mkdir(filepath.Join(tmpSrc, name), 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(tmpDst, name), []byte("i am a file"), 0600); err != nil {
@@ -181,7 +181,7 @@ func TestRecursiveCopy_FileOverFolderMismatch(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(tmpSrc, name), []byte("file"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Mkdir(filepath.Join(tmpDst, name), 0755); err != nil {
+	if err := os.Mkdir(filepath.Join(tmpDst, name), 0700); err != nil {
 		t.Fatal(err)
 	}
 
@@ -539,10 +539,10 @@ func TestExecuteFileOp_RenameMaskUsesBasenameForPathSelection(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	srcRoot := t.TempDir()
 	dstRoot := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(srcRoot, "nested"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(srcRoot, "nested"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(srcRoot, "nested", "source.txt"), []byte("payload"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(srcRoot, "nested", "source.txt"), []byte("payload"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -619,7 +619,7 @@ func TestExecuteFileOp_DirFileConflict(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	// Source: folder 'item'
-	if err := os.Mkdir(filepath.Join(tmpSrc, "item"), 0755); err != nil {
+	if err := os.Mkdir(filepath.Join(tmpSrc, "item"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	// Destination: file 'item'
@@ -811,7 +811,7 @@ func TestExecuteFileOp_Move_Skip_NoDataLoss(t *testing.T) {
 	tmpDst := t.TempDir()
 
 	srcFolder := filepath.Join(tmpSrc, "my_folder")
-	if err := os.Mkdir(srcFolder, 0755); err != nil {
+	if err := os.Mkdir(srcFolder, 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(srcFolder, "f1.txt"), []byte("src1"), 0600); err != nil {
@@ -823,7 +823,7 @@ func TestExecuteFileOp_Move_Skip_NoDataLoss(t *testing.T) {
 
 	// Pre-create destination to cause conflict and skip
 	dstFolder := filepath.Join(tmpDst, "my_folder")
-	if err := os.Mkdir(dstFolder, 0755); err != nil {
+	if err := os.Mkdir(dstFolder, 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dstFolder, "f1.txt"), []byte("dst1"), 0600); err != nil {
@@ -959,7 +959,7 @@ func TestExecuteFileOp_DeepIntegrity(t *testing.T) {
 	// /root/file1.txt
 	// /root/sub1/file2.txt
 	// /root/sub1/sub2/large.bin (4MB)
-	if err := os.MkdirAll(filepath.Join(srcBase, "root", "sub1", "sub2"), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(srcBase, "root", "sub1", "sub2"), 0700); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1041,11 +1041,11 @@ func TestExecuteFileOp_Move_PermissionDenied_Recovery(t *testing.T) {
 	}
 
 	// Make destination dir read-only
-	if err := os.Chmod(dstDir, 0444); err != nil {
+	if err := os.Chmod(dstDir, 0444); err != nil { // #nosec G302 -- a non-writable destination is the behavior under test.
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		if err := os.Chmod(dstDir, 0755); err != nil {
+		if err := os.Chmod(dstDir, 0755); err != nil { // #nosec G302 -- cleanup must restore access to the deliberately locked directory.
 			t.Errorf("restore destination directory permissions: %v", err)
 		}
 	})
@@ -1089,7 +1089,7 @@ func TestExecuteFileOp_MoveIntoSelf_Circular(t *testing.T) {
 	tmp := t.TempDir()
 	parent := filepath.Join(tmp, "parent")
 	child := filepath.Join(parent, "child")
-	if err := os.MkdirAll(child, 0755); err != nil {
+	if err := os.MkdirAll(child, 0700); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1110,7 +1110,7 @@ func TestRecursiveCopy_SelfAndSubfolderProtection(t *testing.T) {
 
 	// 1. Folder self-copy
 	folderPath := filepath.Join(tmpDir, "myfolder")
-	if err := os.MkdirAll(folderPath, 0755); err != nil {
+	if err := os.MkdirAll(folderPath, 0700); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1152,7 +1152,7 @@ func TestRecursiveCopy_SubfolderDeepRecursion(t *testing.T) {
 	// Create /parent/child
 	parent := filepath.Join(tmp, "parent")
 	child := filepath.Join(parent, "child")
-	if err := os.MkdirAll(child, 0755); err != nil {
+	if err := os.MkdirAll(child, 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(parent, "file.txt"), []byte("data"), 0600); err != nil {
@@ -1192,7 +1192,7 @@ func TestRecursiveCopy_SymlinkLoop(t *testing.T) {
 	tmp := t.TempDir()
 
 	src := filepath.Join(tmp, "source")
-	if err := os.Mkdir(src, 0755); err != nil {
+	if err := os.Mkdir(src, 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(src, "data.txt"), []byte("hi"), 0600); err != nil {
@@ -1965,7 +1965,7 @@ func TestFileOps_PathDisplay(t *testing.T) {
 func TestFileOps_CalculateStats_Integration(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	tmp := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(tmp, "a/b"), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(tmp, "a/b"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(tmp, "a/f1.txt"), []byte("123"), 0600); err != nil {
@@ -2194,7 +2194,7 @@ func TestRecursiveCopyFailsWhenTheDestinationCloseFails(t *testing.T) {
 	tmpSrc := t.TempDir()
 	tmpDst := t.TempDir()
 	srcFile := filepath.Join(tmpSrc, "file.txt")
-	if err := os.WriteFile(srcFile, []byte("some content"), 0644); err != nil {
+	if err := os.WriteFile(srcFile, []byte("some content"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	dstFile := filepath.Join(tmpDst, "file.txt")
@@ -2221,7 +2221,7 @@ func TestRecursiveCopyClosesTheDestinationBeforeSucceeding(t *testing.T) {
 	tmpDst := t.TempDir()
 	srcFile := filepath.Join(tmpSrc, "file.txt")
 	content := []byte("some content")
-	if err := os.WriteFile(srcFile, content, 0644); err != nil {
+	if err := os.WriteFile(srcFile, content, 0600); err != nil {
 		t.Fatal(err)
 	}
 	dstFile := filepath.Join(tmpDst, "file.txt")

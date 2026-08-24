@@ -49,7 +49,7 @@ func TestEditorSave_InPlacePatchDoesNotRenameAMissingStage(t *testing.T) {
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "aa.txt")
-	if err := os.WriteFile(path, []byte("hello world\nsecond line\n"), 0644); err != nil {
+	if err := os.WriteFile(path, []byte("hello world\nsecond line\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -89,7 +89,7 @@ func TestEditorSave_UnmodifiedBufferCompletes(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "untouched.txt")
 	content := strings.Repeat("line of text\n", 100)
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -123,7 +123,7 @@ func TestEditorSave_InsertionStillStages(t *testing.T) {
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "grown.txt")
-	if err := os.WriteFile(path, []byte("hello world\n"), 0644); err != nil {
+	if err := os.WriteFile(path, []byte("hello world\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -156,7 +156,7 @@ func TestEditorSave_ShrinkingEditStillTruncates(t *testing.T) {
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "shrunk.txt")
-	if err := os.WriteFile(path, []byte("aGVsbG8gd29ybGQ=\n"), 0644); err != nil {
+	if err := os.WriteFile(path, []byte("aGVsbG8gd29ybGQ=\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 

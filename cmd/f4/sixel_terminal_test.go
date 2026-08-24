@@ -51,7 +51,7 @@ func sixelBody(w, h int) string {
 func sixelLineText(tv *TerminalView, row int) string {
 	var sb strings.Builder
 	for _, c := range tv.Lines[row] {
-		sb.WriteRune(rune(c.Char))
+		sb.WriteRune(testRune(c.Char))
 	}
 	return sb.String()
 }

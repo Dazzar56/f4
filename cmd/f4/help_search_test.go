@@ -87,7 +87,7 @@ func TestHelpSearchRendersHighlightAndHint(t *testing.T) {
 	}
 	foundHint := false
 	for x := x1 + 2; x < view.X2-1; x++ {
-		if rune(scr.GetCell(x, y2).Char) == 'F' && rune(scr.GetCell(x+1, y2).Char) == '3' {
+		if testRune(scr.GetCell(x, y2).Char) == 'F' && testRune(scr.GetCell(x+1, y2).Char) == '3' {
 			foundHint = true
 			break
 		}
@@ -101,7 +101,7 @@ func TestHelpSearchRendersHighlightAndHint(t *testing.T) {
 	foundHighlightedQuery := false
 	for x := x1 + 2; x < view.X2; x++ {
 		cell := scr.GetCell(x, y1)
-		if rune(cell.Char) == 'n' && vtui.GetRGBFore(cell.Attributes) == vtui.GetRGBFore(vtui.Palette[vtui.ColHelpLink]) {
+		if testRune(cell.Char) == 'n' && vtui.GetRGBFore(cell.Attributes) == vtui.GetRGBFore(vtui.Palette[vtui.ColHelpLink]) {
 			if got := vtui.GetRGBBack(cell.Attributes); got != titleBackground {
 				t.Fatalf("query changed title background to %#x, want %#x", got, titleBackground)
 			}
@@ -265,12 +265,12 @@ func TestHelpShowsZoomButtonAndRestoresPreviousBounds(t *testing.T) {
 		t.Fatal("Help zoom support was not enabled")
 	}
 	x1, y1, x2, y2 := view.GetPosition()
-	if got := rune(scr.GetCell(x2-6, y1).Char); got != vtui.UIStrings.ZoomSymbol {
+	if got := testRune(scr.GetCell(x2-6, y1).Char); got != vtui.UIStrings.ZoomSymbol {
 		t.Fatalf("zoom button symbol = %q, want %q", got, vtui.UIStrings.ZoomSymbol)
 	}
 	if !handleHelpSearchHotkey(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: true,
-		ButtonState: vtinput.FromLeft1stButtonPressed, MouseX: int16(x2 - 6), MouseY: int16(y1),
+		ButtonState: vtinput.FromLeft1stButtonPressed, MouseX: testInt16(x2 - 6), MouseY: testInt16(y1),
 	}) {
 		t.Fatal("zoom button click was not handled")
 	}
@@ -281,7 +281,7 @@ func TestHelpShowsZoomButtonAndRestoresPreviousBounds(t *testing.T) {
 	_, _, zoomedX2, _ := view.GetPosition()
 	if !handleHelpSearchHotkey(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: true,
-		ButtonState: vtinput.FromLeft1stButtonPressed, MouseX: int16(zoomedX2 - 6), MouseY: 0,
+		ButtonState: vtinput.FromLeft1stButtonPressed, MouseX: testInt16(zoomedX2 - 6), MouseY: 0,
 	}) {
 		t.Fatal("restore button click was not handled")
 	}

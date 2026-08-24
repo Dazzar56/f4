@@ -34,8 +34,8 @@ func TestTopBar_Show(t *testing.T) {
 	expectedText := "My Test Status"
 	for i, r := range expectedText {
 		cell := scr.GetCell(i, 0)
-		if cell.Char != uint64(r) {
-			t.Errorf("Expected char %q at x=%d, got %q", r, i, rune(cell.Char))
+		if cell.Char != testUint64Rune(r) {
+			t.Errorf("Expected char %q at x=%d, got %q", r, i, testRune(cell.Char))
 		}
 	}
 }
@@ -108,8 +108,8 @@ func TestTopBar_LeftRightAlignment(t *testing.T) {
 	leftText := "LeftPart"
 	for i, r := range leftText {
 		cell := scr.GetCell(i, 0)
-		if cell.Char != uint64(r) {
-			t.Errorf("Expected char %q at x=%d, got %q", r, i, rune(cell.Char))
+		if cell.Char != testUint64Rune(r) {
+			t.Errorf("Expected char %q at x=%d, got %q", r, i, testRune(cell.Char))
 		}
 	}
 
@@ -118,8 +118,8 @@ func TestTopBar_LeftRightAlignment(t *testing.T) {
 	rightStart := 40 - len(rightText)
 	for i, r := range rightText {
 		cell := scr.GetCell(rightStart+i, 0)
-		if cell.Char != uint64(r) {
-			t.Errorf("Expected char %q at x=%d, got %q", r, rightStart+i, rune(cell.Char))
+		if cell.Char != testUint64Rune(r) {
+			t.Errorf("Expected char %q at x=%d, got %q", r, rightStart+i, testRune(cell.Char))
 		}
 	}
 }
@@ -146,8 +146,8 @@ func TestTopBar_Truncation(t *testing.T) {
 	expectedLeft := "VeryLongLeftP…"
 	for i, r := range expectedLeft {
 		cell := scr.GetCell(i, 0)
-		if cell.Char != uint64(r) {
-			t.Errorf("Expected truncated char %q at x=%d, got %q", r, i, rune(cell.Char))
+		if cell.Char != testUint64Rune(r) {
+			t.Errorf("Expected truncated char %q at x=%d, got %q", r, i, testRune(cell.Char))
 		}
 	}
 
@@ -155,8 +155,8 @@ func TestTopBar_Truncation(t *testing.T) {
 	rightStart := 20 - len(expectedRight)
 	for i, r := range expectedRight {
 		cell := scr.GetCell(rightStart+i, 0)
-		if cell.Char != uint64(r) {
-			t.Errorf("Expected right char %q at x=%d, got %q", r, rightStart+i, rune(cell.Char))
+		if cell.Char != testUint64Rune(r) {
+			t.Errorf("Expected right char %q at x=%d, got %q", r, rightStart+i, testRune(cell.Char))
 		}
 	}
 }

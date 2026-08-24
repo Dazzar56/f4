@@ -211,7 +211,7 @@ func TestParseFarMenu_UTF32LEWithBOM(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, r := range body {
-		_ = binary.Write(&buf, binary.LittleEndian, uint32(r))
+		_ = binary.Write(&buf, binary.LittleEndian, testUint32Rune(r))
 	}
 	got, err := ParseFarMenu(&buf)
 	if err != nil {
@@ -230,7 +230,7 @@ func TestParseFarMenu_UTF32LEWithCyrillic(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, r := range body {
-		_ = binary.Write(&buf, binary.LittleEndian, uint32(r))
+		_ = binary.Write(&buf, binary.LittleEndian, testUint32Rune(r))
 	}
 	got, _ := ParseFarMenu(&buf)
 	if len(got) != 1 || got[0].Label != "Яблоко" {
@@ -245,7 +245,7 @@ func TestParseFarMenu_UTF32BEWithBOM(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, r := range body {
-		_ = binary.Write(&buf, binary.BigEndian, uint32(r))
+		_ = binary.Write(&buf, binary.BigEndian, testUint32Rune(r))
 	}
 	got, _ := ParseFarMenu(&buf)
 	if len(got) != 1 || got[0].HotKey != "a" || got[0].Label != "X" {
@@ -265,7 +265,7 @@ func TestParseFarMenu_UTF32LE_NotMistakenForUTF16LE(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, r := range body {
-		_ = binary.Write(&buf, binary.LittleEndian, uint32(r))
+		_ = binary.Write(&buf, binary.LittleEndian, testUint32Rune(r))
 	}
 	got, _ := ParseFarMenu(&buf)
 	if len(got) != 1 || got[0].Label != "Apple" {

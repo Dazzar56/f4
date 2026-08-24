@@ -203,7 +203,7 @@ func TestSaveSettingsGroupsKeepUnselectedValues(t *testing.T) {
 		t.Fatal(err)
 	}
 	data = append(data, []byte("\n[ThirdParty]\nKeep=1\n")...)
-	if err := os.WriteFile(settingsPath, data, 0644); err != nil {
+	if err := os.WriteFile(settingsPath, data, 0600); err != nil { // #nosec G703 -- settingsPath is a fixed fixture name beneath t.TempDir().
 		t.Fatal(err)
 	}
 	AppConfig.ColorStyle = "Not persisted"
@@ -465,7 +465,7 @@ func TestConfig_PanelFileInfoDefaultsHiddenWhenKeyIsAbsent(t *testing.T) {
 func TestConfig_ApplyCommandParallelismDefaultsToLogicalCPUs(t *testing.T) {
 	tmpDir := t.TempDir()
 	userIniPath := filepath.Join(tmpDir, "settings.ini")
-	if err := os.WriteFile(userIniPath, []byte("[Panel]\n"), 0o644); err != nil {
+	if err := os.WriteFile(userIniPath, []byte("[Panel]\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	origPathsFunc := getConfigIniPaths
@@ -482,7 +482,7 @@ func TestConfig_ApplyCommandParallelismDefaultsToLogicalCPUs(t *testing.T) {
 func TestConfig_MinimalPanelScrollbarsByDefault(t *testing.T) {
 	tmpDir := t.TempDir()
 	userIniPath := filepath.Join(tmpDir, "settings.ini")
-	if err := os.WriteFile(userIniPath, []byte("[Panel]\n"), 0644); err != nil {
+	if err := os.WriteFile(userIniPath, []byte("[Panel]\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -507,7 +507,7 @@ func TestConfig_MinimalPanelScrollbarsByDefault(t *testing.T) {
 func TestConfig_PanelScrollbarBooleanMigration(t *testing.T) {
 	tmpDir := t.TempDir()
 	userIniPath := filepath.Join(tmpDir, "settings.ini")
-	if err := os.WriteFile(userIniPath, []byte("[Panel]\nShowPanelScrollbars = 1\n"), 0644); err != nil {
+	if err := os.WriteFile(userIniPath, []byte("[Panel]\nShowPanelScrollbars = 1\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -531,7 +531,7 @@ func TestConfig_PanelScrollbarBooleanMigration(t *testing.T) {
 func TestConfig_DisabledPanelScrollbarBooleanMigration(t *testing.T) {
 	tmpDir := t.TempDir()
 	userIniPath := filepath.Join(tmpDir, "settings.ini")
-	if err := os.WriteFile(userIniPath, []byte("[Panel]\nShowPanelScrollbars = 0\n"), 0644); err != nil {
+	if err := os.WriteFile(userIniPath, []byte("[Panel]\nShowPanelScrollbars = 0\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -766,7 +766,7 @@ func TestConfig_LayoutRoundTrip(t *testing.T) {
 		"RightHeightDecrement=7\n" +
 		"FullscreenHelp=1\n" +
 		"PanelsDisposition=2\n"
-	if err := os.WriteFile(iniPath, []byte(seed), 0644); err != nil {
+	if err := os.WriteFile(iniPath, []byte(seed), 0600); err != nil {
 		t.Fatalf("write seed: %v", err)
 	}
 

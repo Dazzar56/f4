@@ -18,7 +18,7 @@ func mapTestFile(t *testing.T, content string) (*MappedFile, string, vfs.VFS, vf
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "mapped.txt")
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
 		t.Fatal(err)
 	}
 	v := vfs.NewOSVFS(dir)
@@ -61,7 +61,7 @@ func TestMapEditorFile_DeclinesWhatItShouldNotMap(t *testing.T) {
 
 	t.Run("empty file", func(t *testing.T) {
 		path := filepath.Join(dir, "empty.txt")
-		if err := os.WriteFile(path, nil, 0644); err != nil {
+		if err := os.WriteFile(path, nil, 0600); err != nil {
 			t.Fatal(err)
 		}
 		v := vfs.NewOSVFS(dir)
@@ -95,7 +95,7 @@ func TestMapEditorFile_DeclinesWhatItShouldNotMap(t *testing.T) {
 	})
 	t.Run("osvfs file exposes valid descriptor", func(t *testing.T) {
 		path := filepath.Join(dir, "desc_check.txt")
-		if err := os.WriteFile(path, []byte("data"), 0644); err != nil {
+		if err := os.WriteFile(path, []byte("data"), 0600); err != nil {
 			t.Fatal(err)
 		}
 		v := vfs.NewOSVFS(dir)

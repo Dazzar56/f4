@@ -669,15 +669,15 @@ func TestUpdater_WriteFileSafe_FallbackOldName(t *testing.T) {
 	targetPath := filepath.Join(tmpDir, "binary.exe")
 	oldPath := targetPath + ".old"
 
-	if err := os.WriteFile(targetPath, []byte("v1"), 0755); err != nil {
+	if err := os.WriteFile(targetPath, []byte("v1"), 0755); err != nil { // #nosec G306 -- the updater fixture represents an executable binary.
 		t.Fatal(err)
 	}
 
 	// Make os.Remove(oldPath) fail by creating a non-empty directory
-	if err := os.Mkdir(oldPath, 0755); err != nil {
+	if err := os.Mkdir(oldPath, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(oldPath, "lock"), []byte("lock"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(oldPath, "lock"), []byte("lock"), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -809,11 +809,11 @@ func TestUpdater_WriteFileSafe_SudoElevationFallback(t *testing.T) {
 
 	// Создаем директорию с ограниченными правами доступа (только чтение и выполнение)
 	protectedDir := filepath.Join(tmpDir, "protected_dir")
-	if err := os.Mkdir(protectedDir, 0555); err != nil {
+	if err := os.Mkdir(protectedDir, 0555); err != nil { // #nosec G301 -- the read-only directory is the behavior under test.
 		t.Fatalf("failed to create read-only dir: %v", err)
 	}
 	t.Cleanup(func() {
-		if err := os.Chmod(protectedDir, 0755); err != nil {
+		if err := os.Chmod(protectedDir, 0755); err != nil { // #nosec G302 -- cleanup must restore access to the deliberately locked directory.
 			t.Errorf("restore protected directory permissions: %v", err)
 		}
 	})

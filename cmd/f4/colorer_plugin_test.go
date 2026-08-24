@@ -23,16 +23,16 @@ func TestColorer_EnsureRadiolaSchema(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	baseDir := filepath.Join(tmpDir, "base")
-	_ = os.MkdirAll(baseDir, 0755)
-	_ = os.WriteFile(filepath.Join(baseDir, "catalog.xml"), []byte("<catalog/>"), 0644)
+	_ = os.MkdirAll(baseDir, 0700)
+	_ = os.WriteFile(filepath.Join(baseDir, "catalog.xml"), []byte("<catalog/>"), 0600)
 
 	hrdDir := filepath.Join(baseDir, "hrd")
-	_ = os.MkdirAll(hrdDir, 0755)
+	_ = os.MkdirAll(hrdDir, 0700)
 
 	catalogRGBContent := `        <hrd class="rgb" name="default" description="far2l default">
             <location link="&hrd;/rgb/default.hrd"/>
         </hrd>`
-	_ = os.WriteFile(filepath.Join(hrdDir, "catalog-rgb.xml"), []byte(catalogRGBContent), 0644)
+	_ = os.WriteFile(filepath.Join(hrdDir, "catalog-rgb.xml"), []byte(catalogRGBContent), 0600)
 
 	ensureRadiolaSchema(tmpDir)
 
@@ -317,7 +317,7 @@ Loop:
 
 func TestColorer_StagedInstallRejectsTraversalAndPreservesExistingTree(t *testing.T) {
 	dest := filepath.Join(t.TempDir(), "colorer", "configs")
-	if err := os.MkdirAll(filepath.Join(dest, "base"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dest, "base"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	catalog := filepath.Join(dest, "base", "catalog.xml")

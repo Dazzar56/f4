@@ -169,7 +169,7 @@ func TestGetInstalledPlugRingItems(t *testing.T) {
 	cfgDir := GetF4ConfigDir()
 	plugringDir := filepath.Join(cfgDir, "plugring")
 	pluginPath := filepath.Join(plugringDir, "test-id")
-	if err := os.MkdirAll(pluginPath, 0755); err != nil {
+	if err := os.MkdirAll(pluginPath, 0700); err != nil {
 		t.Fatal(err)
 	}
 
@@ -200,7 +200,7 @@ func TestCheckForPluginUpdates(t *testing.T) {
 	cfgDir := GetF4ConfigDir()
 	plugringDir := filepath.Join(cfgDir, "plugring")
 	pluginPath := filepath.Join(plugringDir, "test-plugin")
-	if err := os.MkdirAll(pluginPath, 0755); err != nil {
+	if err := os.MkdirAll(pluginPath, 0700); err != nil {
 		t.Fatal(err)
 	}
 

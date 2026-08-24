@@ -63,7 +63,7 @@ func seedMarkedPanel(t *testing.T, path string, names []string, markCount int) *
 func TestAction_PanelCopySelectedNames(t *testing.T) {
 	tmp := t.TempDir()
 	for _, n := range []string{"a.txt", "b.txt", "c.txt"} {
-		if err := os.WriteFile(filepath.Join(tmp, n), []byte("x"), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(tmp, n), []byte("x"), 0600); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -82,7 +82,7 @@ func TestAction_PanelCopySelectedNames(t *testing.T) {
 func TestAction_PanelCopySelectedNames_NoMarkedFallsBackToCursor(t *testing.T) {
 	tmp := t.TempDir()
 	for _, n := range []string{"a.txt", "b.txt"} {
-		if err := os.WriteFile(filepath.Join(tmp, n), []byte("x"), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(tmp, n), []byte("x"), 0600); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -104,7 +104,7 @@ func TestAction_PanelCopySelectedNames_NoMarkedFallsBackToCursor(t *testing.T) {
 func TestAction_PanelCopySelectedPaths(t *testing.T) {
 	tmp := t.TempDir()
 	for _, n := range []string{"a.txt", "b.txt"} {
-		if err := os.WriteFile(filepath.Join(tmp, n), []byte("x"), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(tmp, n), []byte("x"), 0600); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -125,7 +125,7 @@ func TestAction_PanelCopySelectedPaths(t *testing.T) {
 
 func TestAction_PanelCopySelectedPaths_CursorOnParentUsesCurrentDir(t *testing.T) {
 	tmp := t.TempDir()
-	if err := os.WriteFile(filepath.Join(tmp, "a.txt"), []byte("x"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmp, "a.txt"), []byte("x"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	pf := seedMarkedPanel(t, tmp, []string{"a.txt"}, 0)
@@ -150,7 +150,7 @@ func TestAction_PanelCopySelectedRealPaths_CursorOnParentUsesCurrentDir(t *testi
 	tmp := t.TempDir()
 	realDir := filepath.Join(tmp, "real")
 	linkDir := filepath.Join(tmp, "link")
-	if err := os.Mkdir(realDir, 0755); err != nil {
+	if err := os.Mkdir(realDir, 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Symlink(realDir, linkDir); err != nil {
@@ -182,10 +182,10 @@ func TestAction_PanelCopySelectedRealPaths_ResolvesSymlink(t *testing.T) {
 	tmp := t.TempDir()
 	realDir := filepath.Join(tmp, "real")
 	linkDir := filepath.Join(tmp, "link")
-	if err := os.Mkdir(realDir, 0755); err != nil {
+	if err := os.Mkdir(realDir, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(realDir, "target.txt"), []byte("x"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(realDir, "target.txt"), []byte("x"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Symlink(realDir, linkDir); err != nil {

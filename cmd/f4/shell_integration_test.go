@@ -61,7 +61,7 @@ func TestPanelsFrame_CtrlEnterOnDirectoryInsertsWithoutEntering(t *testing.T) {
 	defer pf.Close()
 
 	tmp := t.TempDir()
-	if err := os.Mkdir(filepath.Join(tmp, "subdir"), 0755); err != nil {
+	if err := os.Mkdir(filepath.Join(tmp, "subdir"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	fsp := pf.panels[0].(*FileSystemPanel)
@@ -106,7 +106,7 @@ func TestPanelsFrame_CD_QuotedParsing(t *testing.T) {
 	// Мокаем VFS, чтобы не ходить на реальный диск
 	tmp := t.TempDir()
 	targetDir := filepath.Join(tmp, "dir with space's")
-	if err := os.MkdirAll(targetDir, 0755); err != nil {
+	if err := os.MkdirAll(targetDir, 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := fsp.vfs.SetPath(tmp); err != nil {
@@ -142,7 +142,7 @@ func TestPanelsFrame_PTY_SyncEscaping(t *testing.T) {
 	tmp := t.TempDir()
 	dirName := "space 'n' quotes"
 	targetDir := filepath.Join(tmp, dirName)
-	if err := os.MkdirAll(targetDir, 0755); err != nil {
+	if err := os.MkdirAll(targetDir, 0700); err != nil {
 		t.Fatal(err)
 	}
 

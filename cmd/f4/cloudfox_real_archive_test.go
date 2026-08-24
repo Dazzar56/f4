@@ -159,7 +159,7 @@ func loadRealCloudFoxArchiveFixture(t *testing.T) realCloudFoxArchiveFixture {
 	if !strings.EqualFold(filepath.Ext(localPath), ".7z") {
 		t.Fatal("real CloudFox archive fixture must have the .7z extension")
 	}
-	info, err := os.Stat(localPath)
+	info, err := os.Stat(localPath) // #nosec G703 -- this opt-in integration fixture must be an operator-supplied absolute path.
 	if err != nil || !info.Mode().IsRegular() || info.Size() <= 0 {
 		t.Fatal("real CloudFox archive fixture is not an available non-empty regular file")
 	}
@@ -200,7 +200,7 @@ func requireRealCloudFoxArchiveConfigDir(t *testing.T) string {
 	if configDir == "" || !filepath.IsAbs(configDir) {
 		t.Fatal("real CloudFox archive config directory must be an explicit absolute path")
 	}
-	info, err := os.Stat(configDir)
+	info, err := os.Stat(configDir) // #nosec G703 -- this opt-in integration config must be an operator-supplied absolute directory.
 	if err != nil || !info.IsDir() {
 		t.Fatal("real CloudFox archive config directory is unavailable")
 	}

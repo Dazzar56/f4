@@ -483,7 +483,7 @@ func TestIssue149_F5_Extraction_Integrity(t *testing.T) {
 	defer func() { _ = arcVFS.Close() }()
 
 	dstDir := filepath.Join(tmpDir, "out")
-	if err := os.MkdirAll(dstDir, 0755); err != nil {
+	if err := os.MkdirAll(dstDir, 0700); err != nil {
 		t.Fatal(err)
 	}
 	dstVFS := vfs.NewOSVFS(dstDir)
@@ -607,21 +607,21 @@ func TestIssue149_7z_MultiBlock_Solid_Integrity(t *testing.T) {
 
 	for _, spec := range fileSpecs {
 		fullPath := filepath.Join(srcDir, filepath.FromSlash(spec.relPath))
-		if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(fullPath), 0700); err != nil {
 			t.Fatalf("Failed to create dir for %s: %v", spec.relPath, err)
 		}
 
 		// Generate uncompressible pseudo-random data to force multi-block solid LZMA2 stream
 		data := make([]byte, spec.size)
 		for i := range data {
-			data[i] = byte((int64(i)*13 + spec.seed*37) % 251)
+			data[i] = testByteInt64((int64(i)*13 + spec.seed*37) % 251)
 			if data[i] == 0 {
 				data[i] = 1
 			}
 		}
 		originalData[spec.relPath] = data
 
-		if err := os.WriteFile(fullPath, data, 0644); err != nil {
+		if err := os.WriteFile(fullPath, data, 0600); err != nil {
 			t.Fatalf("Failed to write test file %s: %v", spec.relPath, err)
 		}
 	}
@@ -664,7 +664,7 @@ func TestIssue149_7z_MultiBlock_Solid_Integrity(t *testing.T) {
 		defer func() { _ = arcVFS.Close() }()
 
 		dstDir := filepath.Join(tmpDir, "out_f5_nested")
-		if err := os.MkdirAll(dstDir, 0755); err != nil {
+		if err := os.MkdirAll(dstDir, 0700); err != nil {
 			t.Fatalf("Failed to create out_f5_nested: %v", err)
 		}
 		dstVFS := vfs.NewOSVFS(dstDir)
@@ -694,7 +694,7 @@ func TestIssue149_7z_MultiBlock_Solid_Integrity(t *testing.T) {
 		defer func() { _ = arcVFS.Close() }()
 
 		dstDir := filepath.Join(tmpDir, "out_f5_root")
-		if err := os.MkdirAll(dstDir, 0755); err != nil {
+		if err := os.MkdirAll(dstDir, 0700); err != nil {
 			t.Fatalf("Failed to create out_f5_root: %v", err)
 		}
 		dstVFS := vfs.NewOSVFS(dstDir)
@@ -722,7 +722,7 @@ func TestIssue149_7z_MultiBlock_Solid_Integrity(t *testing.T) {
 		defer func() { _ = arcVFS.Close() }()
 
 		dstDir := filepath.Join(tmpDir, "out_seq_open")
-		if err := os.MkdirAll(dstDir, 0755); err != nil {
+		if err := os.MkdirAll(dstDir, 0700); err != nil {
 			t.Fatalf("Failed to create out_seq_open: %v", err)
 		}
 
@@ -736,7 +736,7 @@ func TestIssue149_7z_MultiBlock_Solid_Integrity(t *testing.T) {
 			}
 
 			outPath := filepath.Join(dstDir, filepath.FromSlash(spec.relPath))
-			if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {
+			if err := os.MkdirAll(filepath.Dir(outPath), 0700); err != nil {
 				_ = reader.Close() // Reader cleanup is secondary to the setup failure.
 				t.Fatalf("Failed to create out dir: %v", err)
 			}

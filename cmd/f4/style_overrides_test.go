@@ -12,7 +12,7 @@ func withOverrides(t *testing.T, body string) {
 	t.Helper()
 	dir := t.TempDir()
 	if body != "" {
-		if err := os.WriteFile(filepath.Join(dir, "farcolors.ini"), []byte(body), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, "farcolors.ini"), []byte(body), 0600); err != nil {
 			t.Fatalf("write overrides: %v", err)
 		}
 	}

@@ -45,7 +45,7 @@ func TestPanelNavigationModeConfigRoundTripAndMigration(t *testing.T) {
 		t.Fatalf("round trip got mode=%v stay=%v", AppConfig.NavigationMode, AppConfig.SearchCommandStayFocused)
 	}
 
-	if err := os.WriteFile(iniPath, []byte("[Panel]\nVimHotkeys = 1\n"), 0644); err != nil {
+	if err := os.WriteFile(iniPath, []byte("[Panel]\nVimHotkeys = 1\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	LoadConfig()
@@ -53,7 +53,7 @@ func TestPanelNavigationModeConfigRoundTripAndMigration(t *testing.T) {
 		t.Fatalf("legacy VimHotkeys migration got %v", AppConfig.NavigationMode)
 	}
 
-	if err := os.WriteFile(iniPath, []byte("[Panel]\nNavigationMode = classic\nVimHotkeys = 1\n"), 0644); err != nil {
+	if err := os.WriteFile(iniPath, []byte("[Panel]\nNavigationMode = classic\nVimHotkeys = 1\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	LoadConfig()
@@ -486,7 +486,7 @@ func TestDetailedArrowRoutingByNavigationFocus(t *testing.T) {
 		return &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vk}
 	}
 	typeChar := func(r rune) *vtinput.InputEvent {
-		return &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: r, VirtualKeyCode: uint16(r)}
+		return &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: r, VirtualKeyCode: testUint16Rune(r)}
 	}
 
 	AppConfig.NavigationMode = NavigationClassic
