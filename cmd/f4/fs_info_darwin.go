@@ -36,6 +36,7 @@ func int8SliceToString(s []int8) string {
 	}
 	b := make([]byte, n)
 	for i := 0; i < n; i++ {
+		// #nosec G115 -- this intentionally preserves the raw bits of Darwin's C char buffer, including bytes >= 0x80.
 		b[i] = byte(s[i])
 	}
 	return string(b)

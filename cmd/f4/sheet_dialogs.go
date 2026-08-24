@@ -386,8 +386,30 @@ func showSheetFormatDialog(sf *SheetFrame) {
 		if err != nil || places < 0 || places > 20 {
 			places = int(sheet.DefaultDecimals)
 		}
-		selectedDisplay := sheet.Display(display.Selected)
-		selectedJustify := sheet.Justify(justify.Selected)
+		selectedDisplay := sheet.DisplayAsIs
+		switch display.Selected {
+		case 1:
+			selectedDisplay = sheet.DisplayDecimal
+		case 2:
+			selectedDisplay = sheet.DisplayComma
+		case 3:
+			selectedDisplay = sheet.DisplayExponent
+		case 4:
+			selectedDisplay = sheet.DisplayLogical
+		case 5:
+			selectedDisplay = sheet.DisplayCurrency
+		case 6:
+			selectedDisplay = sheet.DisplayPercent
+		case 7:
+			selectedDisplay = sheet.DisplayHidden
+		}
+		selectedJustify := sheet.JustifyLeft
+		switch justify.Selected {
+		case 1:
+			selectedJustify = sheet.JustifyRight
+		case 2:
+			selectedJustify = sheet.JustifyCenter
+		}
 		isProtected := protected.State == 1
 		dlg.Close()
 		sf.Document().Format(sf.Block(), selectedDisplay, selectedJustify, uint8(places), isProtected)

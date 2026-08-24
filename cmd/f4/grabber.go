@@ -231,19 +231,11 @@ func (g *GrabberFrame) copyText() string {
 	l, r, t, b := g.rect()
 	var sb strings.Builder
 	for y := t; y <= b; y++ {
-		line := make([]rune, 0, r-l+1)
+		var line strings.Builder
 		for x := l; x <= r; x++ {
-			ci := g.snap[y][x]
-			if ci.Char == vtui.WideCharFiller {
-				continue
-			}
-			ch := rune(ci.Char)
-			if ch == 0 {
-				ch = ' '
-			}
-			line = append(line, ch)
+			line.WriteString(vtui.CellString(g.snap[y][x].Char))
 		}
-		sb.WriteString(strings.TrimRight(string(line), " "))
+		sb.WriteString(strings.TrimRight(line.String(), " "))
 		if y < b {
 			sb.WriteByte('\n')
 		}

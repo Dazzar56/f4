@@ -130,9 +130,7 @@ func (pf *PanelsFrame) buildConsoleOverlayContent() consoleOverlayContent {
 
 	var sb strings.Builder
 	for _, ci := range pf.buildPrompt() {
-		if ci.Char != vtui.WideCharFiller {
-			sb.WriteRune(rune(ci.Char))
-		}
+		sb.WriteString(vtui.CellString(ci.Char))
 	}
 	if pf.cmdLine != nil && pf.cmdLine.Edit != nil {
 		sb.WriteString(pf.cmdLine.Edit.GetText())

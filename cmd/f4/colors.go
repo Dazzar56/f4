@@ -366,7 +366,10 @@ func ExportColors(path string) error {
 		}
 	}
 
-	return os.WriteFile(path, []byte(sb.String()), 0644)
+	if err := os.WriteFile(path, []byte(sb.String()), 0600); err != nil {
+		return err
+	}
+	return os.Chmod(path, 0600)
 }
 func GetColorRGBBoth(attr uint64) (fg uint32, bg uint32) {
 	if attr&vtui.IsFgRGB != 0 {

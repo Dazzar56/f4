@@ -124,7 +124,8 @@ func ScaffoldPlugin(dir, name string) ([]string, error) {
 	if err := ensureEmptyDir(dir); err != nil {
 		return nil, err
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	// #nosec G703 -- dir is the complete destination explicitly entered by the user, not an untrusted child component.
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
 
@@ -145,7 +146,8 @@ func ScaffoldPlugin(dir, name string) ([]string, error) {
 	created := make([]string, 0, len(contents))
 	for _, entry := range contents {
 		path := filepath.Join(dir, entry.file)
-		if err := os.WriteFile(path, []byte(entry.body), 0o644); err != nil {
+		// #nosec G703 -- entry.file comes only from the fixed three-name table above; dir is the user-selected destination root.
+		if err := os.WriteFile(path, []byte(entry.body), 0o600); err != nil {
 			return created, err
 		}
 		created = append(created, path)

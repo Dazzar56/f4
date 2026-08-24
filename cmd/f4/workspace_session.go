@@ -221,7 +221,12 @@ func workspaceSessionsForRestore(states []workspaceSessionState, active int, res
 	if active < 0 || active >= len(states) {
 		active = 0
 	}
-	return []workspaceSessionState{states[active]}, 0
+	for i, state := range states {
+		if i == active {
+			return []workspaceSessionState{state}, 0
+		}
+	}
+	return nil, 0
 }
 
 func renumberWorkspaceScreens() {

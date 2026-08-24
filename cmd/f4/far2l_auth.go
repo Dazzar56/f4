@@ -63,8 +63,9 @@ func (a *F4ClipboardAuth) Authorize(clientID string) int {
 		a.mu.Lock()
 		a.autheds[clientID] = true
 		a.mu.Unlock()
-		f, _ := os.OpenFile(a.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		f, _ := os.OpenFile(a.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 		if f != nil {
+			_ = f.Chmod(0600)
 			f.WriteString(clientID + "\n")
 			f.Close()
 		}

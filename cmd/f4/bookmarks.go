@@ -59,7 +59,7 @@ func LoadBookmarks(path string) (BookmarkSet, error) {
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
 
-	slot := -1
+	var slot *Bookmark
 	for scanner.Scan() {
 		line := strings.TrimRight(scanner.Text(), "\r\n")
 		trimmed := strings.TrimSpace(line)
@@ -67,10 +67,10 @@ func LoadBookmarks(path string) (BookmarkSet, error) {
 			continue
 		}
 		if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
-			slot = bookmarkSlot(trimmed[1 : len(trimmed)-1])
+			slot = bookmarkSection(&set, trimmed[1:len(trimmed)-1])
 			continue
 		}
-		if slot < 0 {
+		if slot == nil {
 			continue
 		}
 		eq := strings.IndexByte(line, '=')
@@ -81,13 +81,13 @@ func LoadBookmarks(path string) (BookmarkSet, error) {
 		val := strings.TrimSpace(line[eq+1:])
 		switch key {
 		case "Path":
-			set[slot].Path = val
+			slot.Path = val
 		case "Plugin":
-			set[slot].Plugin = val
+			slot.Plugin = val
 		case "PluginData":
-			set[slot].PluginData = val
+			slot.PluginData = val
 		case "PluginFile":
-			set[slot].PluginFile = val
+			slot.PluginFile = val
 		}
 	}
 	if err := scanner.Err(); err != nil {
@@ -103,7 +103,7 @@ func LoadBookmarks(path string) (BookmarkSet, error) {
 // missing section is what marks a slot as free.
 func SaveBookmarks(path string, s BookmarkSet) error {
 	if dir := filepath.Dir(path); dir != "" && dir != "." {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return err
 		}
 	}
@@ -140,7 +140,7 @@ func SaveBookmarks(path string, s BookmarkSet) error {
 		buf.WriteByte('\n')
 	}
 
-	return writeFileAtomically(path, []byte(buf.String()), 0o644)
+	return writeFileAtomically(path, []byte(buf.String()), 0o600)
 }
 
 // truncPathLeft shortens path to at most width display cells by dropping
@@ -165,11 +165,13 @@ func truncPathLeft(path string, width int) string {
 	return ellipsis
 }
 
-// bookmarkSlot maps a section name to its slot index, or -1 when the
-// section is not one of far2l's [0]..[9] bookmark sections.
-func bookmarkSlot(name string) int {
-	if len(name) != 1 || name[0] < '0' || name[0] > '9' {
-		return -1
+// bookmarkSection maps a section name to its slot, or nil when the section is
+// not one of far2l's [0]..[9] bookmark sections.
+func bookmarkSection(set *BookmarkSet, name string) *Bookmark {
+	for i := range set {
+		if name == strconv.Itoa(i) {
+			return &set[i]
+		}
 	}
-	return int(name[0] - '0')
+	return nil
 }

@@ -76,7 +76,7 @@ func LoadMainMenu(path string) ([]UserMenuItem, error) {
 // Parent directories are created as needed.
 func SaveMainMenu(path string, items []UserMenuItem) error {
 	if dir := filepath.Dir(path); dir != "" && dir != "." {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return err
 		}
 	}
@@ -85,7 +85,7 @@ func SaveMainMenu(path string, items []UserMenuItem) error {
 	first := true
 	writeTree(&buf, items, mainMenuRoot, &first)
 
-	return writeFileAtomically(path, []byte(buf.String()), 0o644)
+	return writeFileAtomically(path, []byte(buf.String()), 0o600)
 }
 
 func buildTree(sections map[string]map[string]string, prefix string) []UserMenuItem {

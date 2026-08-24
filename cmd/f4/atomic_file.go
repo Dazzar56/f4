@@ -15,7 +15,7 @@ func writeFileAtomically(path string, data []byte, mode os.FileMode) (returnErr 
 	if dir == "" {
 		dir = "."
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
 

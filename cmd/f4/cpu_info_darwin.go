@@ -36,13 +36,17 @@ func readStaticDarwinCPU() CPUInfo {
 		info.Model = s
 	}
 	if n, ok := sysctlUint64("hw.physicalcpu"); ok {
-		info.PhysicalCores = int(n)
+		if cores, fits := boundedUint64ToInt(n); fits {
+			info.PhysicalCores = cores
+		}
 	}
 	// hw.cpufrequency returns nominal clock in Hz on Intel; on Apple
 	// Silicon this key is absent (fixed-frequency P/E cores with
 	// on-die scaling — no meaningful single number). Skip on error.
 	if hz, ok := sysctlUint64("hw.cpufrequency"); ok && hz > 0 {
-		info.FreqMHz = int(hz / 1_000_000)
+		if mhz, fits := boundedUint64ToInt(hz / 1_000_000); fits {
+			info.FreqMHz = mhz
+		}
 	}
 	// L1i and L1d live under separate keys — sum them into L1.
 	l1i, _ := sysctlUint64("hw.l1icachesize")

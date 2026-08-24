@@ -116,6 +116,9 @@ func loadHelpLangStrings(code string) map[string]string {
 	if code == "" || code == "en" || code == "eng" {
 		return nil
 	}
+	if !safeLanguageCode(code) {
+		return nil
+	}
 	exeDir := filepath.Dir(os.Args[0])
 	userDir := filepath.Join(GetF4ConfigDir(), "lang")
 	candidates := []string{
@@ -124,6 +127,7 @@ func loadHelpLangStrings(code string) map[string]string {
 		filepath.Join("lang", code+".lng"),
 	}
 	for _, cand := range candidates {
+		// #nosec G703 -- safeLanguageCode rejects separators and ".." before code is used as a path component.
 		if _, err := os.Stat(cand); err == nil {
 			return loadLangMapFromINI(LoadIni(cand))
 		}

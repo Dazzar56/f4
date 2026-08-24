@@ -63,6 +63,7 @@ func NewPTY() (*PTY, error) {
 	}
 
 	ptyName := make([]byte, 128)
+	// #nosec G103 -- ioctl writes at most the 128-byte ptyName buffer during this synchronous syscall.
 	if _, _, e := syscall.Syscall(syscall.SYS_IOCTL, uintptr(masterFd), unix.TIOCPTYGNAME, uintptr(unsafe.Pointer(&ptyName[0]))); e != 0 {
 		master.Close()
 		return nil, e
@@ -151,6 +152,7 @@ func (p *PTY) IsBusy() bool {
 		return false
 	}
 	var pgrp int32
+	// #nosec G103 -- ioctl writes one int32 into this live stack variable during the synchronous syscall.
 	_, _, err := syscall.Syscall(syscall.SYS_IOCTL, p.Master.Fd(), unix.TIOCGPGRP, uintptr(unsafe.Pointer(&pgrp)))
 	if err != 0 {
 		return false
@@ -168,8 +170,9 @@ func (p *PTY) SetSizePixels(cols, rows, xpixel, ypixel int) {
 	size := struct {
 		Row, Col, Xpixel, Ypixel uint16
 	}{
-		Row: uint16(rows), Col: uint16(cols), Xpixel: ptyPixels(xpixel), Ypixel: ptyPixels(ypixel),
+		Row: ptyPixels(rows), Col: ptyPixels(cols), Xpixel: ptyPixels(xpixel), Ypixel: ptyPixels(ypixel),
 	}
+	// #nosec G103 -- ioctl reads this fixed-size winsize-compatible stack struct only during the synchronous syscall.
 	_, _, _ = syscall.Syscall(syscall.SYS_IOCTL, p.Master.Fd(), unix.TIOCSWINSZ, uintptr(unsafe.Pointer(&size)))
 }
 

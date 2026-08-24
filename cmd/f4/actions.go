@@ -68,6 +68,16 @@ func extractNames(recs []HistoryRecord) []string {
 	}
 	return res
 }
+
+func choiceText(choices []string, selected int) string {
+	for i, choice := range choices {
+		if i == selected {
+			return choice
+		}
+	}
+	return ""
+}
+
 func actionFoldersHistory(pf *PanelsFrame) {
 	if vtui.GlobalHistoryProvider == nil {
 		return
@@ -1981,7 +1991,7 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 		defMode = 0
 	}
 	comboMode.Menu.SetSelectPos(defMode)
-	comboMode.Edit.SetText(modes[defMode])
+	comboMode.Edit.SetText(choiceText(modes, defMode))
 
 	btnOk := vtui.NewButton(0, 0, Msg("Copy.Btn"))
 	if isMove {
@@ -2571,7 +2581,7 @@ func actionDeleteWithDisposition(pf *PanelsFrame, disposition vfs.DeleteDisposit
 		defMode = 0
 	}
 	comboMode.Menu.SetSelectPos(defMode)
-	comboMode.Edit.SetText(modes[defMode])
+	comboMode.Edit.SetText(choiceText(modes, defMode))
 
 	btnDel := vtui.NewButton(0, 0, Msg(buttonKey))
 	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
@@ -2640,7 +2650,7 @@ func actionMkDir(pf *PanelsFrame) {
 		defMode = 0
 	}
 	comboMode.Menu.SetSelectPos(defMode)
-	comboMode.Edit.SetText(modes[defMode])
+	comboMode.Edit.SetText(choiceText(modes, defMode))
 
 	btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))
 	btnOk.IsDefault = true
@@ -3823,6 +3833,9 @@ func decodeFar2lTime(hexStr string) (time.Time, error) {
 		return time.Time{}, err
 	}
 	val := binary.LittleEndian.Uint64(b)
+	// FILETIME's maximum uint64 value becomes at most 1.85e12 seconds
+	// after division, far below int64's limit.
+	// #nosec G115 -- division by 10,000,000 bounds the result to int64.
 	sec := int64(val / 10000000)
 	nsec := int64(val%10000000) * 100
 	sec -= 11644473600
@@ -4023,7 +4036,7 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 		workspaceTabSelection = int(vtui.WorkspaceTabsMultiple)
 	}
 	comboWorkspaceTabs.Menu.SetSelectPos(workspaceTabSelection)
-	comboWorkspaceTabs.Edit.SetText(workspaceTabModes[workspaceTabSelection])
+	comboWorkspaceTabs.Edit.SetText(choiceText(workspaceTabModes, workspaceTabSelection))
 	lblWorkspaceTabs := vtui.NewLabel(0, 0, Msg("AppearanceSettings.WorkspaceTabs"), comboWorkspaceTabs)
 	chkWorkspaceTabsOverlay := vtui.NewCheckbox(0, 0, Msg("AppearanceSettings.WorkspaceTabsOverlay"), AppConfig.WorkspaceTabsOverlay)
 	if AppConfig.WorkspaceTabsOverlay {
@@ -4064,7 +4077,7 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 		workspaceNumberingSelection = int(WorkspaceTabNumbersAlways)
 	}
 	comboWorkspaceNumbering.Menu.SetSelectPos(workspaceNumberingSelection)
-	comboWorkspaceNumbering.Edit.SetText(workspaceNumberingModes[workspaceNumberingSelection])
+	comboWorkspaceNumbering.Edit.SetText(choiceText(workspaceNumberingModes, workspaceNumberingSelection))
 	lblWorkspaceNumbering := vtui.NewLabel(0, 0, Msg("AppearanceSettings.WorkspaceNumbers"), comboWorkspaceNumbering)
 
 	chkCursor := vtui.NewCheckbox(0, 0, Msg("PanelSettings.KeepCursor"), false)
@@ -4678,6 +4691,9 @@ func getLanguageName(code string) string {
 	if code == "en" || code == "eng" {
 		return "English"
 	}
+	if !safeLanguageCode(code) {
+		return strings.ToUpper(code)
+	}
 	exeDir := filepath.Dir(os.Args[0])
 	userDir := filepath.Join(GetF4ConfigDir(), "lang")
 	candidates := []string{
@@ -4686,6 +4702,7 @@ func getLanguageName(code string) string {
 		filepath.Join("lang", code+".lng"),
 	}
 	for _, cand := range candidates {
+		// #nosec G703 -- safeLanguageCode rejects separators and ".." before code is used as a path component.
 		if _, err := os.Stat(cand); err == nil {
 			ini := LoadIni(cand)
 			if name := ini.GetString("Language", "Name", ""); name != "" {

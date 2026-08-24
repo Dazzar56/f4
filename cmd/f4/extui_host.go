@@ -24,6 +24,7 @@ import (
 const (
 	extUiProtocolVersion = 2
 	extUiMaxMessageSize  = 64 * 1024 * 1024
+	extUiMaxDimension    = 1<<15 - 1
 )
 
 func extUiNewNonce() (string, error) {
@@ -44,6 +45,7 @@ func extUiSendMessage(w io.Writer, msg map[string]any) error {
 	}
 
 	var hdr [4]byte
+	// #nosec G115 -- payload was limited to 64 MiB above, well inside uint32.
 	binary.BigEndian.PutUint32(hdr[:], uint32(len(payload)))
 	if _, err := w.Write(hdr[:]); err != nil {
 		return err
@@ -103,33 +105,71 @@ func extUiBool(msg map[string]any, key string) bool {
 }
 
 func extUiInt(msg map[string]any, key string) int {
-	return extUiAnyInt(msg[key])
+	value, _ := extUiAnyInt(msg[key])
+	return value
 }
 
-func extUiAnyInt(v any) int {
+func extUiAnyInt(v any) (int, bool) {
 	switch n := v.(type) {
 	case int:
-		return n
+		return n, true
 	case int8:
-		return int(n)
+		return int(n), true
 	case int16:
-		return int(n)
+		return int(n), true
 	case int32:
-		return int(n)
+		return int(n), true
 	case int64:
-		return int(n)
+		return boundedInt64ToInt(n)
 	case uint:
-		return int(n)
+		return boundedUint64ToInt(uint64(n))
 	case uint8:
-		return int(n)
+		return int(n), true
 	case uint16:
-		return int(n)
+		return int(n), true
 	case uint32:
-		return int(n)
+		return boundedUint64ToInt(uint64(n))
 	case uint64:
-		return int(n)
+		return boundedUint64ToInt(n)
 	}
-	return 0
+	return 0, false
+}
+
+func extUiDimension(msg map[string]any, key string) (int, bool) {
+	value, ok := extUiAnyInt(msg[key])
+	return value, ok && value > 0 && value <= extUiMaxDimension
+}
+
+func extUiInt16(msg map[string]any, key string) (int16, bool) {
+	value, ok := extUiAnyInt(msg[key])
+	if !ok {
+		return 0, false
+	}
+	return boundedInt16(value)
+}
+
+func extUiUint16(msg map[string]any, key string) (uint16, bool) {
+	value, ok := extUiAnyInt(msg[key])
+	if !ok {
+		return 0, false
+	}
+	return boundedUint16(value)
+}
+
+func extUiUint32(msg map[string]any, key string) (uint32, bool) {
+	value, ok := extUiAnyInt(msg[key])
+	if !ok {
+		return 0, false
+	}
+	return boundedUint32(value)
+}
+
+func extUiRune(msg map[string]any, key string) (rune, bool) {
+	value, ok := extUiAnyInt(msg[key])
+	if !ok {
+		return 0, false
+	}
+	return boundedRune(value)
 }
 
 type ExtUiRenderer struct {
@@ -390,10 +430,10 @@ func RunExternalUI(cols, rows int, execPath string, args []string) error {
 		clientRows = pixelH / cellH
 	}
 
-	if clientCols > 0 {
+	if clientCols > 0 && clientCols <= extUiMaxDimension {
 		cols = clientCols
 	}
-	if clientRows > 0 {
+	if clientRows > 0 && clientRows <= extUiMaxDimension {
 		rows = clientRows
 	}
 
@@ -452,8 +492,9 @@ func (h *ExtUiHost) readLoop() {
 func (h *ExtUiHost) handleMessage(msg map[string]any) {
 	switch extUiString(msg, "type") {
 	case "resize":
-		cols, rows := extUiInt(msg, "cols"), extUiInt(msg, "rows")
-		if cols <= 0 || rows <= 0 {
+		cols, colsOK := extUiDimension(msg, "cols")
+		rows, rowsOK := extUiDimension(msg, "rows")
+		if !colsOK || !rowsOK {
 			return
 		}
 		h.mu.Lock()
@@ -464,42 +505,66 @@ func (h *ExtUiHost) handleMessage(msg map[string]any) {
 			h.sendEvent(&vtinput.InputEvent{Type: vtinput.ResizeEventType, InputSource: "extui"})
 		}
 	case "key":
+		vk, vkOK := extUiUint16(msg, "vk")
+		char, charOK := extUiRune(msg, "char")
+		mods, modsOK := extUiUint32(msg, "mods")
+		if !vkOK || !charOK || !modsOK {
+			return
+		}
 		h.sendEvent(&vtinput.InputEvent{
 			Type:            vtinput.KeyEventType,
 			KeyDown:         extUiBool(msg, "down"),
-			VirtualKeyCode:  uint16(extUiInt(msg, "vk")),
-			Char:            rune(extUiInt(msg, "char")),
-			ControlKeyState: vtinput.ControlKeyState(uint32(extUiInt(msg, "mods"))),
+			VirtualKeyCode:  vk,
+			Char:            char,
+			ControlKeyState: vtinput.ControlKeyState(mods),
 			InputSource:     "extui",
 		})
 	case "text":
+		mods, ok := extUiUint32(msg, "mods")
+		if !ok {
+			return
+		}
 		for _, r := range extUiString(msg, "text") {
 			h.sendEvent(&vtinput.InputEvent{
 				Type:            vtinput.KeyEventType,
 				KeyDown:         true,
 				Char:            r,
-				ControlKeyState: vtinput.ControlKeyState(uint32(extUiInt(msg, "mods"))),
+				ControlKeyState: vtinput.ControlKeyState(mods),
 				InputSource:     "extui_text",
 			})
 		}
 	case "mouse":
+		x, xOK := extUiInt16(msg, "x")
+		y, yOK := extUiInt16(msg, "y")
+		button, buttonOK := extUiUint32(msg, "button")
+		flags, flagsOK := extUiUint32(msg, "flags")
+		mods, modsOK := extUiUint32(msg, "mods")
+		if !xOK || !yOK || !buttonOK || !flagsOK || !modsOK {
+			return
+		}
 		h.sendEvent(&vtinput.InputEvent{
 			Type:            vtinput.MouseEventType,
-			MouseX:          int16(extUiInt(msg, "x")),
-			MouseY:          int16(extUiInt(msg, "y")),
-			ButtonState:     uint32(extUiInt(msg, "button")),
-			MouseEventFlags: uint32(extUiInt(msg, "flags")),
+			MouseX:          x,
+			MouseY:          y,
+			ButtonState:     button,
+			MouseEventFlags: flags,
 			KeyDown:         extUiBool(msg, "down"),
-			ControlKeyState: vtinput.ControlKeyState(uint32(extUiInt(msg, "mods"))),
+			ControlKeyState: vtinput.ControlKeyState(mods),
 			InputSource:     "extui",
 		})
 	case "wheel":
+		x, xOK := extUiInt16(msg, "x")
+		y, yOK := extUiInt16(msg, "y")
+		mods, modsOK := extUiUint32(msg, "mods")
+		if !xOK || !yOK || !modsOK {
+			return
+		}
 		h.sendEvent(&vtinput.InputEvent{
 			Type:            vtinput.MouseEventType,
-			MouseX:          int16(extUiInt(msg, "x")),
-			MouseY:          int16(extUiInt(msg, "y")),
+			MouseX:          x,
+			MouseY:          y,
 			WheelDirection:  extUiInt(msg, "dir"),
-			ControlKeyState: vtinput.ControlKeyState(uint32(extUiInt(msg, "mods"))),
+			ControlKeyState: vtinput.ControlKeyState(mods),
 			InputSource:     "extui",
 		})
 	case "paste":
@@ -561,6 +626,9 @@ func findExtUiPath(backend string) (string, error) {
 	binName := "f4-qt-host"
 	if backend != "qt" {
 		binName = strings.TrimPrefix(backend, "ext:")
+		if binName == "" || strings.Contains(binName, "..") || strings.ContainsAny(binName, `/\`) {
+			return "", fmt.Errorf("invalid external UI executable name %q", binName)
+		}
 	}
 	if runtime.GOOS == "windows" && !strings.HasSuffix(binName, ".exe") {
 		binName += ".exe"
@@ -603,6 +671,7 @@ func extUiFileExists(path string) bool {
 	if path == "" {
 		return false
 	}
+	// #nosec G703 -- callers pass either the explicit F4_EXT_UI_PATH override or a path built from a separator-free executable name.
 	st, err := os.Stat(path)
 	return err == nil && !st.IsDir()
 }

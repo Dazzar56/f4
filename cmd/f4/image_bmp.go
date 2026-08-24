@@ -27,7 +27,11 @@ func decodeBMP(data []byte) (*vtui.ImageSurface, error) {
 		return nil, fmt.Errorf("unsupported BMP header of %d bytes", headerSize)
 	}
 
+	// BMP stores dimensions as signed 32-bit two's-complement fields even
+	// though binary.ByteOrder exposes only unsigned readers.
+	// #nosec G115 -- the conversion reinterprets the specified signed BMP field.
 	width := int(int32(le.Uint32(data[18:22])))
+	// #nosec G115 -- the conversion reinterprets the specified signed BMP field.
 	height := int(int32(le.Uint32(data[22:26])))
 	bits := int(le.Uint16(data[28:30]))
 	compression := le.Uint32(data[30:34])
@@ -141,6 +145,10 @@ func decodeBMP(data []byte) (*vtui.ImageSurface, error) {
 
 // bmpScale5 stretches a five bit channel over the whole byte.
 func bmpScale5(v uint16) byte {
+	if v > 0x1F {
+		v = 0x1F
+	}
+	// #nosec G115 -- a clamped five-bit channel scales to at most 255.
 	return byte((int(v)*255 + 15) / 31)
 }
 

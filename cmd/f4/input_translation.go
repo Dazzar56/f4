@@ -267,11 +267,15 @@ func TranslateInput(e *vtinput.InputEvent, win32Mode bool, kittyFlags int, appCu
 	// child never receives Ctrl+C and e.g. `dir /s` cannot be interrupted.
 	if ctrl && e.Char == 0 {
 		if ch := ctrlCharFromVK(e.VirtualKeyCode); ch >= 0 {
+			controlRune, ok := boundedRune(ch)
+			if !ok {
+				return ""
+			}
 			out := ""
 			if alt {
 				out += "\x1b"
 			}
-			out += string(rune(ch))
+			out += string(controlRune)
 			return out
 		}
 	}

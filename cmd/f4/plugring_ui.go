@@ -220,6 +220,10 @@ func entrypointNeedsInterpreterOnPath(entrypoint string) bool {
 }
 
 func actionInstallPlugRingItem(pf *PanelsFrame, parent *vtui.Window, item PlugRingItem, refresh func()) {
+	if !safePlugRingID(item.ID) {
+		vtui.ShowMessageOn(parent, " Error ", "Plugin catalog contains an invalid ID.", []string{"&Ok"})
+		return
+	}
 	// 0. The distribution policy, enforced rather than merely documented.
 	// An entry that breaks it is not installed silently; the user is told
 	// exactly what is wrong and may insist, because the catalog in the wild
@@ -321,8 +325,12 @@ func actionInstallPlugRingItem(pf *PanelsFrame, parent *vtui.Window, item PlugRi
 
 		update("Extracting files...", -1)
 
-		os.RemoveAll(pluginDir)
-		os.MkdirAll(pluginDir, 0755)
+		if err := os.RemoveAll(pluginDir); err != nil {
+			return fmt.Errorf("failed to replace existing plugin: %w", err)
+		}
+		if err := os.MkdirAll(pluginDir, 0700); err != nil {
+			return fmt.Errorf("failed to create plugin directory: %w", err)
+		}
 
 		if isArchive {
 			var err error
@@ -337,7 +345,8 @@ func actionInstallPlugRingItem(pf *PanelsFrame, parent *vtui.Window, item PlugRi
 			}
 		} else {
 			filename := filepath.Base(url)
-			err := os.WriteFile(filepath.Join(pluginDir, filename), archiveBytes, 0755)
+			// #nosec G306 G703 -- downloaded plugins may be native executables; mode 0700 is owner-only, safePlugRingID rejected traversal, and filename is reduced with filepath.Base.
+			err := os.WriteFile(filepath.Join(pluginDir, filename), archiveBytes, 0700)
 			if err != nil {
 				os.RemoveAll(pluginDir)
 				return fmt.Errorf("failed to save plugin file: %w", err)
@@ -373,6 +382,10 @@ func actionInstallPlugRingItem(pf *PanelsFrame, parent *vtui.Window, item PlugRi
 }
 
 func actionRemovePlugRingItem(pf *PanelsFrame, parent *vtui.Window, item PlugRingItem, refresh func()) {
+	if !safePlugRingID(item.ID) {
+		vtui.ShowMessageOn(parent, " Error ", "Plugin catalog contains an invalid ID.", []string{"&Ok"})
+		return
+	}
 	plugringDir := filepath.Join(GetF4ConfigDir(), "plugring")
 	pluginDir := filepath.Join(plugringDir, item.ID)
 
@@ -401,4 +414,20 @@ func actionRemovePlugRingItem(pf *PanelsFrame, parent *vtui.Window, item PlugRin
 			}
 		}
 	}
+}
+
+// safePlugRingID accepts only a single, clean path element. The ID arrives from
+// a remote catalog and names the directory install replaces and remove deletes,
+// so anything that could resolve somewhere else is refused rather than cleaned.
+// "." is the trap the obvious check misses: it holds no separator and no "..",
+// yet it names the plugring directory itself, so removing it would take every
+// installed plugin with it.
+func safePlugRingID(id string) bool {
+	if id == "" || id == "." {
+		return false
+	}
+	if strings.Contains(id, "..") || strings.ContainsAny(id, "/\\\x00") {
+		return false
+	}
+	return filepath.Clean(id) == id
 }
