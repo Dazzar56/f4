@@ -492,6 +492,7 @@ func runServer(sockPath string) {
 		// the answer is just another escape sequence and the reader
 		// eats it. See ttyx_probe.go.
 		ProbeHostTextArea()
+		PreferCompatibleGraphicsProtocol(scr)
 		// And the window over the terminal, for a terminal that cannot
 		// show a picture itself. Before the first frame, because every
 		// gate on it is asked from inside one.
